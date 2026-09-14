@@ -115,9 +115,11 @@ class Engine:
         return st
 
     # --- the alert ----------------------------------------------------------
-    async def handle_alert(self, payload: dict) -> dict:
+    async def handle_alert(self, payload: dict, *, force_window: bool = False) -> dict:
         """Validated-payload entry point (the server has already checked the
-        webhook secret). Returns a dict the HTTP layer can serialize."""
+        webhook secret). Returns a dict the HTTP layer can serialize.
+        `force_window` skips the accept-window check — used ONLY by the
+        dashboard's test button, which the server refuses while armed."""
         name = str(payload.get("strategy") or "")
         cfg = self.cfg.strategies.get(name)
         if cfg is None or not cfg.enabled:
@@ -131,7 +133,8 @@ class Engine:
             return {"ok": False, "reason": f"already acted today (status={st.status})"}
 
         now = self.now_et().time()
-        if not (_hhmm(cfg.accept_from_et) <= now <= _hhmm(cfg.accept_until_et)):
+        if not force_window and \
+                not (_hhmm(cfg.accept_from_et) <= now <= _hhmm(cfg.accept_until_et)):
             self.journal("alert_refused", strategy=name, reason="outside_window",
                          at=str(now))
             return {"ok": False, "reason": f"outside accept window at {now}"}

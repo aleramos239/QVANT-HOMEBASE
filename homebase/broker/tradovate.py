@@ -95,7 +95,7 @@ class TradovateAdapter(BrokerAdapter):
         if not creds or not creds.get("username") or not creds.get("password"):
             raise RuntimeError(
                 f"no credentials in keychain for key {self.keyring_key!r} — run: "
-                f"python -m onyx.secrets_store set {self.keyring_key}"
+                f"python -m homebase.secrets_store set {self.keyring_key}"
             )
         await asyncio.to_thread(self._auth.login, creds["username"], creds["password"])
         self._ws = TradovateWS(token=self._auth.access_token, environment=self.env)

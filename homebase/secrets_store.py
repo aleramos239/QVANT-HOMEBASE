@@ -15,9 +15,9 @@ permission click and it's done).
 Each account references a ``keyring_key``; the value stored is a small dict,
 e.g. {"username": ..., "password": ...}.
 
-    python -m onyx.secrets_store set tv-main
-    python -m onyx.secrets_store check tv-main
-    python -m onyx.secrets_store delete tv-main
+    python -m homebase.secrets_store set tv-main
+    python -m homebase.secrets_store check tv-main
+    python -m homebase.secrets_store delete tv-main
 """
 from __future__ import annotations
 
@@ -146,10 +146,10 @@ def _cli() -> None:
         print("\n".join(keys) if keys else "(no stored credentials)")
     else:
         print("usage:")
-        print("  python -m onyx.secrets_store set <keyring_key>")
-        print("  python -m onyx.secrets_store check <keyring_key>")
-        print("  python -m onyx.secrets_store list")
-        print("  python -m onyx.secrets_store delete <keyring_key>")
+        print("  python -m homebase.secrets_store set <keyring_key>")
+        print("  python -m homebase.secrets_store check <keyring_key>")
+        print("  python -m homebase.secrets_store list")
+        print("  python -m homebase.secrets_store delete <keyring_key>")
 
 
 if __name__ == "__main__":

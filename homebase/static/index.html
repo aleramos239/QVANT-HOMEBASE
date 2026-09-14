@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ramos Quant · Homebase</title>
+<style>
+  :root {
+    --bg: #0b0b0d; --panel: #121216; --line: #26262c; --text: #e8e8ea;
+    --dim: #8b8b93; --faint: #55555c; --green: #3ddc84; --amber: #e0b34c;
+    --red: #ff5d5d; --mono: "SF Mono", ui-monospace, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.45 -apple-system, "Helvetica Neue", sans-serif; }
+  .wrap { max-width: 1060px; margin: 0 auto; padding: 20px 22px 60px; }
+
+  header { display: flex; align-items: center; gap: 14px; padding: 6px 0 18px; }
+  .brand { font-weight: 700; letter-spacing: .14em; font-size: 13px; }
+  .brand span { color: var(--dim); font-weight: 400; }
+  .spacer { flex: 1; }
+  .clock { font-family: var(--mono); color: var(--dim); font-size: 12px; }
+  .pill { border: 1px solid var(--line); border-radius: 999px; padding: 5px 14px;
+          font-size: 11px; letter-spacing: .12em; cursor: pointer;
+          background: none; color: var(--dim); }
+  .pill.armed { border-color: var(--green); color: var(--green); }
+  .pill.kill { border-color: var(--red); color: var(--red); }
+  .pill:hover { filter: brightness(1.35); }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line);
+           border-radius: 10px; padding: 14px 16px; }
+  .panel.full { grid-column: 1 / -1; }
+  .ptitle { font-size: 10px; letter-spacing: .16em; color: var(--dim);
+            margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+  .ptitle .right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+
+  .badge { font-size: 10px; letter-spacing: .1em; padding: 2px 8px;
+           border-radius: 4px; border: 1px solid var(--line); color: var(--dim); }
+  .badge.placed { color: var(--amber); border-color: var(--amber); }
+  .badge.live { color: var(--green); border-color: var(--green);
+                animation: pulse 1.6s infinite; }
+  .badge.done { color: var(--faint); }
+  .badge.error { color: var(--red); border-color: var(--red); }
+  @keyframes pulse { 50% { opacity: .45; } }
+
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red);
+         display: inline-block; }
+  .dot.on { background: var(--green); }
+
+  .kv { display: grid; grid-template-columns: 110px 1fr; gap: 3px 12px;
+        font-family: var(--mono); font-size: 12.5px; }
+  .kv b { color: var(--dim); font-weight: 400; font-size: 11px;
+          letter-spacing: .08em; align-self: center; }
+  .num { font-family: var(--mono); }
+  .green { color: var(--green); } .amber { color: var(--amber); }
+  .red { color: var(--red); } .dim { color: var(--dim); }
+
+  .spec { color: var(--dim); font-family: var(--mono); font-size: 12px;
+          margin: 2px 0 10px; }
+  .times { margin-top: 10px; color: var(--faint); font-size: 11px;
+           font-family: var(--mono); }
+  .test { border: 1px solid var(--line); background: none; color: var(--dim);
+          border-radius: 6px; font-size: 10px; letter-spacing: .1em;
+          padding: 3px 10px; cursor: pointer; }
+  .test:hover { color: var(--text); }
+
+  .journal { font-family: var(--mono); font-size: 12px; max-height: 320px;
+             overflow-y: auto; }
+  .jrow { display: flex; gap: 12px; padding: 2.5px 0;
+          border-bottom: 1px solid #1a1a1f; }
+  .jrow .t { color: var(--faint); flex: 0 0 66px; }
+  .jrow .e { flex: 0 0 150px; }
+  .jrow .d { color: var(--dim); overflow-wrap: anywhere; }
+  .unavailable { color: var(--amber); font-family: var(--mono); font-size: 12px; }
+  #toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+           background: #1c1c22; border: 1px solid var(--line); border-radius: 8px;
+           padding: 10px 16px; font-size: 12.5px; display: none; max-width: 80%;
+           font-family: var(--mono); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">RAMOS&nbsp;QUANT <span>/ HOMEBASE</span></div>
+    <div class="spacer"></div>
+    <div class="clock" id="clock">—</div>
+    <button class="pill" id="armBtn">…</button>
+    <button class="pill kill" id="killBtn">KILL</button>
+  </header>
+
+  <div class="grid" id="grid">
+    <div class="panel full"><div class="ptitle">LOADING…</div></div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+let ST = null;
+
+function toast(msg, ms = 3800) {
+  const t = $("#toast");
+  t.textContent = msg; t.style.display = "block";
+  clearTimeout(t._h); t._h = setTimeout(() => t.style.display = "none", ms);
+}
+async function post(url, body) {
+  const r = await fetch(url, {method: "POST", headers: {"Content-Type": "application/json"},
+                              body: JSON.stringify(body || {})});
+  return r.json();
+}
+const fmt = (v, d = 2) => v == null ? "—" : Number(v).toFixed(d);
+
+function strategyCard(name, s) {
+  const st = s.state, c = s.cfg;
+  const badge = `<span class="badge ${st.status}">${st.status.toUpperCase()}</span>`;
+  const enabled = c.enabled ? "" : `<span class="badge">DISABLED</span>`;
+  const test = (ST && !ST.armed && c.enabled)
+    ? `<button class="test" onclick="testFire('${name}')">TEST FIRE · DRY</button>` : "";
+  let rows = `
+    <b>ENTRY STOPS</b><span>${st.upper_px ? fmt(st.upper_px) + " ▲ / " + fmt(st.lower_px) + " ▼" : "—"}</span>`;
+  if (st.entry_side) {
+    const slip = (st.entry_fill != null && st.entry_anchor != null)
+      ? ` <span class="${st.entry_fill - st.entry_anchor ? "amber" : "green"}">(${fmt(st.entry_fill - st.entry_anchor)} vs anchor)</span>` : "";
+    rows += `<b>ENTRY</b><span>${st.entry_side} @ ${fmt(st.entry_fill)}${slip}</span>`;
+  }
+  if (st.exit_reason) {
+    const cls = st.exit_reason === "tp" ? "green" : (st.exit_reason === "sl" ? "red" : "dim");
+    rows += `<b>EXIT</b><span class="${cls}">${st.exit_reason.toUpperCase()}${st.exit_fill ? " @ " + fmt(st.exit_fill) : ""}</span>`;
+  }
+  if (st.note) rows += `<b>NOTE</b><span class="amber">${st.note}</span>`;
+  return `<div class="panel">
+    <div class="ptitle">${name.toUpperCase()} · ${c.symbol}
+      <div class="right">${enabled}${badge}</div></div>
+    <div class="spec">±${c.offset_pts} off · SL ${c.sl_pts} / TP ${c.tp_pts} · ${c.qty}x</div>
+    <div class="kv">${rows}</div>
+    <div class="times">cancel ${c.cancel_et} ET · flat ${c.flat_et} ET
+      &nbsp; ${test}</div>
+  </div>`;
+}
+
+function brokerPanel(b) {
+  const dot = `<span class="dot ${b.connected ? "on" : ""}"></span>`;
+  let body;
+  if (!b.connected && b.error)
+    body = `<div class="unavailable">unavailable: ${b.error}</div>`;
+  else body = `<div class="kv">
+    <b>ACCOUNT</b><span>${b.account ?? "—"}</span>
+    <b>BALANCE</b><span>${b.balance != null ? "$" + fmt(b.balance) : "—"}</span>
+    <b>DAY P&amp;L</b><span class="${(b.realized_pnl ?? 0) >= 0 ? "green" : "red"}">${b.realized_pnl != null ? "$" + fmt(b.realized_pnl) : "—"}</span>
+    <b>POSITIONS</b><span>${(b.open_positions || []).map(p => p.symbol + " " + p.net).join(", ") || "flat"}</span>
+    <b>WORKING</b><span>${b.working_orders ?? "—"}</span></div>`;
+  return `<div class="panel">
+    <div class="ptitle">BROKER · TRADOVATE <div class="right">${dot}</div></div>
+    ${body}</div>`;
+}
+
+function journalPanel(j) {
+  const rows = (j || []).map(r => {
+    const {ts, et, event, ...rest} = r;
+    const kv = Object.entries(rest).map(([k, v]) =>
+      `${k}=${typeof v === "object" ? JSON.stringify(v) : v}`).join(" ");
+    return `<div class="jrow"><span class="t">${(et || "").slice(11, 19)}</span>
+      <span class="e">${event}</span><span class="d">${kv}</span></div>`;
+  }).join("");
+  return `<div class="panel full"><div class="ptitle">JOURNAL</div>
+    <div class="journal">${rows || '<span class="dim">empty — nothing has happened yet today</span>'}</div></div>`;
+}
+
+function render() {
+  const s = ST;
+  $("#clock").textContent = s.et_now.replace("T", " · ").slice(0, 21) + " ET";
+  const a = $("#armBtn");
+  a.textContent = s.armed ? "ARMED" : "DISARMED";
+  a.className = "pill" + (s.armed ? " armed" : "");
+  $("#grid").innerHTML =
+    Object.entries(s.strategies).map(([n, v]) => strategyCard(n, v)).join("") +
+    brokerPanel(s.broker) + journalPanel(s.journal);
+}
+
+async function refresh() {
+  try { ST = await (await fetch("/api/status")).json(); render(); }
+  catch { $("#clock").textContent = "server unreachable"; }
+}
+
+$("#armBtn").onclick = async () => {
+  const to = !ST.armed;
+  const word = to ? "ARM" : "DISARM";
+  if (!confirm(`${word} the desk? ${to ? "Alerts will place REAL orders on the configured account." : "Alerts will be journaled only."}`)) return;
+  await post("/api/arm", {armed: to}); refresh();
+};
+$("#killBtn").onclick = async () => {
+  if (!confirm("KILL: cancel all orders, flatten all positions, disarm. Proceed?")) return;
+  const r = await post("/api/kill");
+  toast("kill: " + JSON.stringify(r.results)); refresh();
+};
+async function testFire(name) {
+  const r = await post("/api/test-alert", {strategy: name});
+  toast((r.result && r.result.ok ? "dry-run ok — " : "refused — ") +
+        JSON.stringify(r.result || r)); refresh();
+}
+
+refresh(); setInterval(refresh, 2500);
+</script>
+</body>
+</html>
