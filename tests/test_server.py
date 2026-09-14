@@ -16,13 +16,16 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr("homebase.paths.state_dir", lambda: tmp_path)
     monkeypatch.setattr("homebase.engine.state_dir", lambda: tmp_path)
     monkeypatch.setattr("homebase.server.state_dir", lambda: tmp_path)
+    monkeypatch.setattr("homebase.secrets_store.state_dir", lambda: tmp_path)
     monkeypatch.setattr(config_mod, "config_path", lambda: tmp_path / "config.json")
     cfg = AppCfg(armed=False, webhook_secret="tv-secret", account=AccountCfg(),
                  strategies={"nq930": StrategyCfg(symbol="NQ", qty=3,
                                                   offset_pts=10.0, sl_pts=5.0,
                                                   tp_pts=15.0, enabled=True)})
-    app = create_app(cfg, FakeAdapter(), background=False)
+    app = create_app(cfg, FakeAdapter(), background=False,
+                     adapter_factory=lambda c: FakeAdapter())
     with TestClient(app) as c:
+        c.app = app
         c.adapter = app_adapter(app)
         yield c
 
@@ -75,6 +78,25 @@ def test_test_alert_dry_run_places_nothing(client):
     assert body["result"]["ok"] is True and body["result"]["armed"] is False
     assert body["sent"]["upper"] - body["sent"]["lower"] == 20.0
     assert client.adapter.brackets == []
+
+
+def test_connect_stores_demo_login_and_reconnects(client):
+    r = client.post("/api/connect", json={"username": "Demo", "password": "x",
+                                          "account_name": "ACC1"}).json()
+    assert r["ok"] is True
+    import homebase.secrets_store as ss
+    assert ss.get_credentials("tv:demo:demo")["username"] == "Demo"
+    cfg = client.app.state.cfg
+    assert cfg.account.keyring_key == "tv:demo:demo"
+    assert cfg.account.live is False          # /api/connect can never go live
+    assert client.app.state.engine.adapter is not client.adapter  # swapped
+
+
+def test_tv_setup_shape(client):
+    d = client.get("/api/tv-setup").json()
+    assert d["hook_path"] == "/hook" and d["secret"] == "tv-secret"
+    assert "nq930" in d["strategies"]
+    assert "24510" in d["strategies"]["nq930"]["alert_body_example"]
 
 
 def test_kill_disarms_and_clears(client):

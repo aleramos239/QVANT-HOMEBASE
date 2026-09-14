@@ -3,3 +3,4 @@ uvicorn
 websockets
 pytest
 httpx
+certifi

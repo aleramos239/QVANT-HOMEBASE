@@ -32,6 +32,7 @@ class StrategyCfg:
 class AccountCfg:
     keyring_key: str = "tradovate:demo"  # credentials key in secrets_store
     live: bool = False                   # False = Tradovate demo environment
+    account_name: str = ""               # pin one account under the login
 
 
 @dataclass

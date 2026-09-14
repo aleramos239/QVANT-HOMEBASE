@@ -5,8 +5,9 @@
     GET  /api/status      everything the dashboard renders
     POST /api/arm         {"armed": true|false} — the master switch
     POST /api/kill        cancel everything + flatten + disarm
-    POST /api/test-alert  synthetic valid-geometry alert through the real
-                          validation path; REFUSED while armed
+    POST /api/test-alert  synthetic valid-geometry alert; REFUSED while armed
+    POST /api/connect     store a Tradovate DEMO login + reconnect in place
+    GET  /api/tv-setup    webhook URL pieces + per-strategy alert JSON for TV
 
 Binds to localhost; reach it from the laptop over Tailscale (or the tunnel
 for /hook). UI endpoints carry no auth of their own — exposure is the
@@ -14,6 +15,8 @@ network boundary, so never port-forward this to the open internet.
 
 Runs fine with no broker credentials: the adapter panel reports its own
 failure loudly and the engine still validates + journals (dry run).
+The /api/connect flow only ever writes DEMO logins; going live is a
+deliberate hand-edit of config.json, not a click.
 """
 from __future__ import annotations
 
@@ -21,13 +24,23 @@ import asyncio
 import contextlib
 import hmac
 import json
+import os
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+# python.org macOS builds ship no CA bundle for urllib; point the stdlib at
+# certifi's (present via requirements) so the Tradovate TLS handshake verifies.
+try:
+    import certifi
+    os.environ.setdefault("SSL_CERT_FILE", certifi.where())
+except ImportError:  # pragma: no cover — certifi rides in via requirements
+    pass
+
 from . import config as config_mod
+from . import secrets_store
 from .broker.base import BrokerAdapter
 from .broker.tradovate import TradovateAdapter
 from .engine import Engine
@@ -41,17 +54,28 @@ JOURNAL_TAIL = 60
 
 def build_adapter(cfg: config_mod.AppCfg) -> BrokerAdapter:
     env = "live" if cfg.account.live else "demo"
-    return TradovateAdapter(cfg.account.keyring_key, env=env,
-                            keyring_key=cfg.account.keyring_key)
+    sel = {"account_name": cfg.account.account_name} \
+        if cfg.account.account_name else None
+    return TradovateAdapter("tradovate", env=env,
+                            keyring_key=cfg.account.keyring_key,
+                            account_selector=sel)
 
 
 def create_app(cfg: config_mod.AppCfg | None = None,
                adapter: BrokerAdapter | None = None,
-               *, background: bool = True) -> FastAPI:
+               *, background: bool = True,
+               adapter_factory=build_adapter) -> FastAPI:
     cfg = cfg or config_mod.load()
-    adapter = adapter or build_adapter(cfg)
-    engine = Engine(cfg, adapter)
+    box = {"adapter": adapter or adapter_factory(cfg)}
+    engine = Engine(cfg, box["adapter"])
     broker_status: dict = {"connected": False, "error": "not connected yet"}
+
+    async def _try_connect() -> None:
+        ad = box["adapter"]
+        await ad.connect()
+        await ad.observe_fills(engine.on_fill)
+        broker_status.update(connected=True, error=None)
+        engine.journal("broker_connected", account=ad.account_id)
 
     async def _clock_loop():
         while True:
@@ -63,12 +87,9 @@ def create_app(cfg: config_mod.AppCfg | None = None,
 
     async def _broker_loop():
         while True:
-            if not adapter.connected:
+            if not box["adapter"].connected:
                 try:
-                    await adapter.connect()
-                    await adapter.observe_fills(engine.on_fill)
-                    broker_status.update(connected=True, error=None)
-                    engine.journal("broker_connected", account=adapter.account_id)
+                    await _try_connect()
                 except Exception as e:  # noqa: BLE001 — report, retry later
                     broker_status.update(connected=False, error=str(e))
             await asyncio.sleep(RECONNECT_INTERVAL_S)
@@ -85,7 +106,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             for t in tasks:
                 t.cancel()
             with contextlib.suppress(Exception):
-                await adapter.close()
+                await box["adapter"].close()
 
     app = FastAPI(title="Ramos Quant Homebase", lifespan=lifespan)
     app.state.engine = engine
@@ -114,7 +135,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
     @app.get("/api/status")
     async def status():
         try:
-            metrics = await adapter.get_metrics()
+            metrics = await box["adapter"].get_metrics()
         except Exception as e:  # noqa: BLE001 — dashboard must render anyway
             metrics = {"connected": False, "error": f"metrics: {e}"}
         if broker_status.get("error") and not metrics.get("error"):
@@ -127,6 +148,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         return {
             "armed": cfg.armed,
             "et_now": engine.now_et().isoformat(timespec="seconds"),
+            "account_env": "live" if cfg.account.live else "demo",
             "broker": metrics,
             "strategies": {
                 name: {
@@ -155,7 +177,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         results = {}
         for call in ("cancel_all", "flatten_all"):
             try:
-                r = await getattr(adapter, call)()
+                r = await getattr(box["adapter"], call)()
                 results[call] = {"ok": r.ok, "error": r.error}
             except Exception as e:  # noqa: BLE001 — kill must always finish
                 results[call] = {"ok": False, "error": str(e)}
@@ -177,6 +199,62 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                    "lower": base - s.offset_pts}
         out = await engine.handle_alert(payload, force_window=True)
         return {"sent": payload, "result": out}
+
+    # ------------------------------------------------------------ setup
+    @app.post("/api/connect")
+    async def connect(request: Request):
+        """Store a Tradovate DEMO login and reconnect in place. The password
+        goes straight into the local secrets store (gitignored); it is never
+        echoed back. Live trading is deliberately NOT reachable from here."""
+        body = await request.json()
+        username = str(body.get("username") or "").strip()
+        password = str(body.get("password") or "")
+        account_name = str(body.get("account_name") or "").strip()
+        if not username or not password:
+            raise HTTPException(400, "username and password required")
+        key = f"tv:demo:{username.lower()}"
+        secrets_store.set_credentials(key, username=username, password=password)
+        cfg.account.keyring_key = key
+        cfg.account.account_name = account_name
+        cfg.account.live = False
+        config_mod.save(cfg)
+        with contextlib.suppress(Exception):
+            await box["adapter"].close()
+        box["adapter"] = adapter_factory(cfg)
+        engine.adapter = box["adapter"]
+        try:
+            await _try_connect()
+        except Exception as e:  # noqa: BLE001 — surface the reason to the UI
+            broker_status.update(connected=False, error=str(e))
+            return {"ok": False, "error": str(e)}
+        m = await box["adapter"].get_metrics()
+        return {"ok": True, "account": m.get("account")}
+
+    @app.get("/api/tv-setup")
+    async def tv_setup():
+        """Everything TradingView needs, ready to paste. The Pine script
+        builds the alert body itself; the secret rides in a script INPUT so
+        it never sits in the Pine source or the TV alert dialog."""
+        return {
+            "hook_path": "/hook",
+            "secret": cfg.webhook_secret,
+            "strategies": {
+                name: {
+                    "symbol": s.symbol,
+                    "alert_body_example": json.dumps({
+                        "secret": cfg.webhook_secret, "strategy": name,
+                        "upper": 24500 + s.offset_pts,
+                        "lower": 24500 - s.offset_pts}),
+                    "steps": [
+                        f"Open the {s.symbol} 15s chart with the strategy script",
+                        "Paste the webhook secret into the script's input",
+                        "Create alert: condition = the script, 'Any alert() "
+                        "function call', open-ended, webhook URL = this "
+                        "server's /hook",
+                    ],
+                } for name, s in cfg.strategies.items()
+            },
+        }
 
     return app
 
