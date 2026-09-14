@@ -99,6 +99,43 @@ def test_tv_setup_shape(client):
     assert "24510" in d["strategies"]["nq930"]["alert_body_example"]
 
 
+def test_logins_list_and_delete(client):
+    import homebase.secrets_store as ss
+    ss.set_credentials("tv:demo:abc", username="abc", password="x")
+    d = client.get("/api/logins").json()
+    keys = [l["key"] for l in d["logins"]]
+    assert "tv:demo:abc" in keys
+    assert client.post("/api/logins/delete", json={"key": "tv:demo:abc"}).json()["ok"]
+    assert ss.get_credentials("tv:demo:abc") is None
+
+
+def test_connect_with_saved_key(client):
+    import homebase.secrets_store as ss
+    ss.set_credentials("tv:demo:saved", username="saved", password="x")
+    r = client.post("/api/connect", json={"saved_key": "tv:demo:saved"}).json()
+    assert r["ok"] is True and "accounts" in r
+    assert client.app.state.cfg.account.keyring_key == "tv:demo:saved"
+
+
+def test_select_account_pins_and_reconnects(client):
+    r = client.post("/api/select-account", json={"account_name": "ACC9"}).json()
+    assert r["ok"] is True
+    assert client.app.state.cfg.account.account_name == "ACC9"
+
+
+def test_calendar_close_over_close(client, tmp_path):
+    from homebase import server as S
+    for date, eq in [("2026-09-09", 50000.0), ("2026-09-10", 50250.0),
+                     ("2026-09-11", 50100.0)]:
+        S.record_equity("ACC1", eq, date)
+    d = client.get("/api/calendar", params={"month": "2026-09",
+                                            "account": "ACC1"}).json()
+    assert d["days"]["2026-09-10"] == 250.0
+    assert d["days"]["2026-09-11"] == -150.0
+    assert "2026-09-09" not in d["days"]     # first day has no prior close
+    assert d["total"] == 100.0
+
+
 def test_kill_disarms_and_clears(client):
     client.post("/api/arm", json={"armed": True})
     r = client.post("/api/kill").json()

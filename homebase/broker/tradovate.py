@@ -67,6 +67,7 @@ class TradovateAdapter(BrokerAdapter):
         self._ws: Optional[TradovateWS] = None
         self._acct_num: Optional[int] = None
         self._acct_name: str = ""
+        self._all_accounts: list = []   # every account the login exposes
         self._contracts: dict[int, str] = {}     # contractId -> symbol name
         self._orders: dict[int, dict] = {}        # orderId -> order entity
         self._order_versions: dict[int, dict] = {}  # orderId -> latest orderVersion
@@ -161,7 +162,14 @@ class TradovateAdapter(BrokerAdapter):
                 self._mark_seen(f["id"])   # historical fills must not be copied
         self._resolve_account(sync.get("accounts", []) or [])
 
+    def list_accounts(self) -> list[dict]:
+        """Every account under the connected login (for the connect wizard)."""
+        return [{"id": a.get("id"),
+                 "name": a.get("name") or a.get("nickname") or str(a.get("id")),
+                 "active": a.get("active", True)} for a in self._all_accounts]
+
     def _resolve_account(self, accounts: list) -> None:
+        self._all_accounts = list(accounts)
         if not accounts:
             raise RuntimeError(f"{self.account_id}: login exposes no accounts")
         sel = self.account_selector

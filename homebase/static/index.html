@@ -126,6 +126,77 @@
   .field input:focus{ outline:2px solid var(--ring); outline-offset:1px; }
   .modal .row-btns{ display:flex; justify-content:flex-end; gap:10px; margin-top:16px; }
 
+  /* connect wizard */
+  .wsteps{ display:flex; align-items:center; gap:10px; margin-bottom:18px; }
+  .wsteps .st{ display:flex; align-items:center; gap:7px; font-size:13px;
+    color:var(--muted-foreground); font-weight:500; }
+  .wsteps .st .n{ width:22px; height:22px; border-radius:9999px; display:inline-flex;
+    align-items:center; justify-content:center; font-size:11.5px;
+    background:var(--secondary); color:var(--secondary-foreground); }
+  .wsteps .st.cur{ color:var(--foreground); }
+  .wsteps .st.cur .n,.wsteps .st.done .n{ background:var(--primary); color:var(--primary-foreground); }
+  .wsteps .ln{ flex:1; height:1px; background:var(--border); }
+  .opt{ display:flex; align-items:center; gap:12px; border:1px solid var(--border);
+    border-radius:var(--radius-lg); padding:13px 14px; cursor:pointer; margin-bottom:10px; }
+  .opt:hover{ background:var(--secondary); }
+  .opt.sel{ background:var(--primary); color:var(--primary-foreground); border-color:var(--primary); }
+  .opt.sel .sub{ color:inherit; opacity:.75; }
+  .opt.disabled{ opacity:.45; cursor:not-allowed; }
+  .opt .glyph{ width:34px; height:34px; border-radius:var(--radius-md); background:var(--primary);
+    color:var(--primary-foreground); display:inline-flex; align-items:center; justify-content:center;
+    font-weight:700; font-size:12px; flex-shrink:0; }
+  .opt.sel .glyph{ background:var(--primary-foreground); color:var(--primary); }
+  .opt .t{ font-weight:600; font-size:14px; }
+  .opt .sub{ font-size:12px; color:var(--muted-foreground); }
+  .opt .spacer{ flex:1; }
+  .opt .radio{ width:16px; height:16px; border-radius:9999px; border:1.5px solid var(--muted-foreground); }
+  .opt.sel .radio{ border-color:var(--primary-foreground); box-shadow:inset 0 0 0 4px var(--primary-foreground); }
+  .seg{ display:flex; border:1px solid var(--border); border-radius:var(--radius-lg);
+    overflow:hidden; margin:14px 0 8px; }
+  .seg button{ flex:1; padding:9px 0; background:none; border:none; font-size:13.5px;
+    color:var(--muted-foreground); cursor:pointer; font-weight:500; }
+  .seg button.sel{ background:var(--secondary); color:var(--foreground);
+    outline:1px solid var(--foreground); outline-offset:-1px; border-radius:var(--radius-lg); }
+  .seg button:disabled{ opacity:.5; cursor:not-allowed; }
+  .wnote{ font-size:12.5px; color:var(--muted-foreground); margin:8px 0 0; }
+  .slabel{ font-size:11px; letter-spacing:.08em; font-weight:600;
+    color:var(--muted-foreground); margin:14px 0 8px; }
+  .opt .x{ border:none; background:none; color:var(--muted-foreground);
+    font-size:15px; cursor:pointer; padding:2px 6px; }
+  .opt .x:hover{ color:var(--neg); }
+
+  /* accounts */
+  .acct{ display:flex; align-items:center; gap:14px; padding:13px 16px; }
+  .acct .nm{ font-weight:600; font-size:14px; }
+  .acct .kvi{ font-family:var(--font-mono); font-size:13px; font-variant-numeric:tabular-nums; }
+  .acct .lbl{ font-size:11px; color:var(--muted-foreground); display:block; }
+  .acct .spacer{ flex:1; }
+  .kvi.pos{ color:var(--pos); } .kvi.neg{ color:var(--neg); }
+  .kvi.pos .lbl,.kvi.neg .lbl{ color:var(--muted-foreground); }
+
+  /* calendar modal */
+  .cal-head{ display:flex; align-items:center; gap:10px; margin-bottom:12px; }
+  .cal-head .m{ font-weight:600; font-size:15px; min-width:130px; text-align:center; }
+  .cal-nav{ border:1px solid var(--border); background:none; color:var(--foreground);
+    border-radius:var(--radius-md); width:28px; height:28px; cursor:pointer; font-size:15px; }
+  .cal-grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
+  .cal-grid .dow{ font-size:10.5px; letter-spacing:.06em; color:var(--muted-foreground);
+    text-align:center; padding:4px 0 6px; font-weight:600; }
+  .cal-cell{ border:1px solid var(--border); border-radius:var(--radius-sm);
+    min-height:46px; padding:4px 5px; font-size:11px; color:var(--muted-foreground); }
+  .cal-cell.blank{ border-color:transparent; }
+  .cal-cell .pnl{ display:block; margin-top:4px; font-family:var(--font-mono);
+    font-size:11px; font-weight:600; }
+  .cal-cell.up{ background:color-mix(in oklch, var(--pos) 13%, transparent);
+    border-color:color-mix(in oklch, var(--pos) 30%, transparent); }
+  .cal-cell.up .pnl{ color:var(--pos); }
+  .cal-cell.down{ background:color-mix(in oklch, var(--neg) 13%, transparent);
+    border-color:color-mix(in oklch, var(--neg) 30%, transparent); }
+  .cal-cell.down .pnl{ color:var(--neg); }
+  .cal-foot{ display:flex; align-items:center; margin-top:12px; font-size:12.5px;
+    color:var(--muted-foreground); }
+  .cal-foot .tot{ margin-left:auto; font-family:var(--font-mono); font-weight:600; }
+
   /* setup cards */
   .setup-grid{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
   @media (max-width:760px){ .setup-grid{ grid-template-columns:1fr; } }
@@ -195,6 +266,13 @@
       </div>
 
       <div class="sec-head">
+        <span class="h">Accounts</span>
+        <span class="hint">the account alerts trade on — click Calendar for its monthly P&amp;L</span>
+      </div>
+      <div id="accounts"><div class="card"><div class="acct">
+        <span class="dot off"></span><span class="nm dim">no account connected</span></div></div></div>
+
+      <div class="sec-head" style="margin-top:26px">
         <span class="h">Strategies</span>
         <span class="hint">one alert a day each — unfilled entries die at 12:55, everything is flat by 15:55 ET</span>
       </div>
@@ -234,21 +312,86 @@
 </div>
 
 <div class="overlay" id="connectOverlay">
-  <div class="modal">
-    <h2>Connect Tradovate</h2>
-    <p class="sub">Demo environment. The login is stored in the app's local
-      secrets file on this machine and nowhere else. Going live is a
-      config-file decision, never a click here.</p>
-    <div class="field"><label>Username</label>
-      <input id="cUser" autocomplete="off" spellcheck="false"></div>
-    <div class="field"><label>Password</label>
-      <input id="cPass" type="password" autocomplete="off"></div>
-    <div class="field"><label>Account (optional — pin one, e.g. LFF0506…43)</label>
-      <input id="cAcct" autocomplete="off" spellcheck="false"></div>
-    <div class="row-btns">
-      <button class="btn btn-outline" onclick="closeConnect()">Cancel</button>
-      <button class="btn btn-default" id="cGo" onclick="doConnect()">Connect</button>
+  <div class="modal" style="width:440px">
+    <div class="wsteps">
+      <span class="st" id="ws1"><span class="n">1</span>Broker</span><span class="ln"></span>
+      <span class="st" id="ws2"><span class="n">2</span>Log in</span><span class="ln"></span>
+      <span class="st" id="ws3"><span class="n">3</span>Accounts</span>
     </div>
+
+    <div id="wstep1">
+      <h2>Where do you trade?</h2>
+      <p class="sub">Log in once — we'll find every account under it.</p>
+      <div class="opt sel" id="optTv"><span class="glyph">Tv</span>
+        <span><span class="t">Tradovate</span><br><span class="sub">Username &amp; password</span></span>
+        <span class="spacer"></span><span class="radio"></span></div>
+      <div class="opt disabled" title="Not wired into Homebase yet"><span class="glyph">Tx</span>
+        <span><span class="t">TopstepX</span><br><span class="sub">Not wired into Homebase yet</span></span>
+        <span class="spacer"></span><span class="radio"></span></div>
+      <div class="opt disabled" title="Not wired into Homebase yet"><span class="glyph">Nt</span>
+        <span><span class="t">NinjaTrader</span><br><span class="sub">Not wired into Homebase yet</span></span>
+        <span class="spacer"></span><span class="radio"></span></div>
+      <div class="seg">
+        <button class="sel" type="button">Demo — practice money</button>
+        <button type="button" disabled
+          title="Live stays a config-file decision until after the demo proving period">Live — real money</button>
+      </div>
+      <p class="wnote">Demo is the safe default. Live is deliberately not a
+        click here — it stays a config-file decision.</p>
+      <div class="row-btns">
+        <button class="btn btn-outline" onclick="closeConnect()">Cancel</button>
+        <button class="btn btn-default" onclick="wizGoto(2)">Continue</button>
+      </div>
+    </div>
+
+    <div id="wstep2" style="display:none">
+      <h2>Log in to Tradovate</h2>
+      <p class="sub">Your login is saved securely on this Mac (so you never
+        retype it) and only used to place your orders.</p>
+      <div class="slabel">SAVED LOGINS</div>
+      <div id="savedLogins"></div>
+      <div class="opt" id="optNew" onclick="pickLogin(null)">
+        <span><span class="t">Type a new login…</span><br>
+        <span class="sub">it's remembered for next time</span></span>
+        <span class="spacer"></span><span class="radio"></span></div>
+      <div id="newLoginFields" style="display:none">
+        <div class="field"><label>Username</label>
+          <input id="cUser" autocomplete="off" spellcheck="false"></div>
+        <div class="field"><label>Password</label>
+          <input id="cPass" type="password" autocomplete="off"></div>
+      </div>
+      <div class="row-btns">
+        <button class="btn btn-outline" onclick="wizGoto(1)">&larr; Back</button>
+        <button class="btn btn-default" id="cGo" onclick="doConnect()">Find my accounts</button>
+      </div>
+    </div>
+
+    <div id="wstep3" style="display:none">
+      <h2>Pick the account</h2>
+      <p class="sub">Every alert trades exactly one account. You can come back
+        and switch any time.</p>
+      <div id="acctList"></div>
+      <div class="row-btns">
+        <button class="btn btn-outline" onclick="wizGoto(2)">&larr; Back</button>
+        <button class="btn btn-default" id="cUse" onclick="useAccount()">Use this account</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="calOverlay">
+  <div class="modal" style="width:460px">
+    <div class="cal-head">
+      <span style="font-weight:600" id="calAcct">—</span>
+      <span class="spacer" style="flex:1"></span>
+      <button class="cal-nav" onclick="calStep(-1)">&lsaquo;</button>
+      <span class="m" id="calMonth">—</span>
+      <button class="cal-nav" onclick="calStep(1)">&rsaquo;</button>
+      <button class="cal-nav" onclick="closeCal()" title="Close">&times;</button>
+    </div>
+    <div class="cal-grid" id="calGrid"></div>
+    <div class="cal-foot"><span id="calNote"></span>
+      <span class="tot" id="calTotal"></span></div>
   </div>
 </div>
 <div id="toast"></div>
@@ -356,6 +499,7 @@ function render() {
   $("#st_pos").textContent = pos.length ? pos.map(p => p.symbol + " " + p.net).join("  ") : "flat";
   $("#st_wrk").textContent = b.working_orders ?? "—";
 
+  renderAccounts(b);
   $("#strats").innerHTML = Object.entries(s.strategies)
     .map(([n, v]) => stratCard(n, v)).join("");
 
@@ -393,21 +537,150 @@ async function testFire(name) {
         JSON.stringify(r.result || r)); refresh();
 }
 
-/* ---- connect modal ---- */
-function openConnect() { $("#connectOverlay").classList.add("open"); $("#cUser").focus(); }
-function closeConnect() { $("#connectOverlay").classList.remove("open"); $("#cPass").value = ""; }
+/* ---- accounts section ---- */
+function renderAccounts(b) {
+  const el = $("#accounts");
+  if (!b.account) {
+    el.innerHTML = `<div class="card"><div class="acct">
+      <span class="dot off"></span><span class="nm dim">no account connected</span>
+      <span class="spacer"></span>
+      <button class="btn btn-outline btn-sm" onclick="openConnect()">Connect broker</button>
+    </div></div>`;
+    return;
+  }
+  const pnl = b.realized_pnl;
+  el.innerHTML = `<div class="card"><div class="acct">
+    <span class="dot ${b.connected ? "on" : "off"}"></span>
+    <span class="nm">${b.account}</span>
+    <span class="pill idle">demo</span>
+    <span class="spacer"></span>
+    <span class="kvi"><span class="lbl">Balance</span>${usd(b.balance)}</span>
+    <span class="kvi ${pnl > 0 ? "pos" : pnl < 0 ? "neg" : ""}" style="min-width:86px">
+      <span class="lbl">Day P&amp;L</span>${usd(pnl)}</span>
+    <span class="kvi"><span class="lbl">Open</span>${(b.open_positions || []).length ? b.open_positions.map(p => p.symbol + " " + p.net).join(" ") : "flat"}</span>
+    <button class="btn btn-outline btn-sm" onclick="openCal('${b.account}')">Calendar</button>
+  </div></div>`;
+}
+
+/* ---- connect wizard ---- */
+let WIZ = {saved: null, accounts: [], pick: null};
+function openConnect() { wizGoto(1); $("#connectOverlay").classList.add("open"); }
+function closeConnect() {
+  $("#connectOverlay").classList.remove("open");
+  const p = $("#cPass"); if (p) p.value = "";
+}
+function wizGoto(n) {
+  for (const i of [1, 2, 3]) {
+    $("#wstep" + i).style.display = i === n ? "" : "none";
+    const st = $("#ws" + i);
+    st.className = "st" + (i === n ? " cur" : i < n ? " done" : "");
+  }
+  if (n === 2) loadLogins();
+}
+async function loadLogins() {
+  const d = await (await fetch("/api/logins")).json();
+  const box = $("#savedLogins");
+  if (!d.logins.length) { box.innerHTML =
+    `<p class="wnote" style="margin:0 0 10px">none yet — type a login below</p>`;
+    pickLogin(null); return; }
+  box.innerHTML = d.logins.map(l => `
+    <div class="opt ${WIZ.saved === l.key ? "sel" : ""}" onclick="pickLogin('${l.key}')">
+      <span><span class="t">${l.label}</span><br>
+      <span class="sub">${l.env}${l.in_use ? " · connected now" : ""}</span></span>
+      <span class="spacer"></span>
+      <button class="x" onclick="event.stopPropagation();delLogin('${l.key}')" title="Forget this login">&times;</button>
+      <span class="radio"></span>
+    </div>`).join("");
+  if (WIZ.saved === null && d.logins.length) pickLogin(d.logins[0].key);
+}
+function pickLogin(key) {
+  WIZ.saved = key;
+  $("#newLoginFields").style.display = key === null ? "" : "none";
+  $("#optNew").classList.toggle("sel", key === null);
+  loadLoginsPaint();
+  if (key === null) $("#cUser").focus();
+}
+function loadLoginsPaint() {
+  document.querySelectorAll("#savedLogins .opt").forEach(el => {
+    const k = el.getAttribute("onclick").match(/'([^']*)'/)[1];
+    el.classList.toggle("sel", WIZ.saved === k);
+  });
+}
+async function delLogin(key) {
+  const r = await post("/api/logins/delete", {key});
+  if (r.ok) { if (WIZ.saved === key) WIZ.saved = null; loadLogins(); }
+  else toast("Can't delete — " + (r.detail || "in use"), 5000);
+}
 async function doConnect() {
   const btn = $("#cGo"); btn.disabled = true; btn.textContent = "Connecting…";
   try {
-    const r = await post("/api/connect", {username: $("#cUser").value,
-      password: $("#cPass").value, account_name: $("#cAcct").value});
-    if (r.ok) { toast("Connected — " + (r.account || "account resolved")); closeConnect(); }
-    else toast("Connect failed — " + (r.error || "unknown"), 6000);
-  } finally { btn.disabled = false; btn.textContent = "Connect"; refresh(); }
+    const body = WIZ.saved ? {saved_key: WIZ.saved}
+      : {username: $("#cUser").value, password: $("#cPass").value};
+    const r = await post("/api/connect", body);
+    if (r.ok) {
+      WIZ.accounts = r.accounts || []; WIZ.pick = r.account || null;
+      renderAcctList(); wizGoto(3);
+    } else toast("Connect failed — " + (r.error || r.detail || "unknown"), 6000);
+  } finally { btn.disabled = false; btn.textContent = "Find my accounts"; refresh(); }
+}
+function renderAcctList() {
+  const el = $("#acctList");
+  if (!WIZ.accounts.length) { el.innerHTML =
+    `<p class="wnote">connected as ${WIZ.pick || "?"} — the login exposed no
+     account list, so that account stays selected.</p>`; return; }
+  el.innerHTML = WIZ.accounts.map(a => `
+    <div class="opt ${WIZ.pick === a.name ? "sel" : ""}" onclick="WIZ.pick='${a.name}';renderAcctList()">
+      <span><span class="t">${a.name}</span><br>
+      <span class="sub">${a.active === false ? "inactive" : "active"}</span></span>
+      <span class="spacer"></span><span class="radio"></span>
+    </div>`).join("");
+}
+async function useAccount() {
+  const btn = $("#cUse"); btn.disabled = true; btn.textContent = "Connecting…";
+  try {
+    const r = await post("/api/select-account", {account_name: WIZ.pick || ""});
+    if (r.ok) { toast("Connected — " + (r.account || WIZ.pick)); closeConnect(); }
+    else toast("Failed — " + (r.error || "unknown"), 6000);
+  } finally { btn.disabled = false; btn.textContent = "Use this account"; refresh(); }
 }
 $("#connectOverlay").addEventListener("click", (e) => {
   if (e.target === e.currentTarget) closeConnect();
 });
+
+/* ---- P&L calendar ---- */
+let CAL = {account: "", d: new Date()};
+function openCal(account) {
+  CAL.account = account; CAL.d = new Date();
+  $("#calOverlay").classList.add("open"); loadCal();
+}
+function closeCal() { $("#calOverlay").classList.remove("open"); }
+function calStep(n) { CAL.d.setMonth(CAL.d.getMonth() + n); loadCal(); }
+$("#calOverlay").addEventListener("click", (e) => {
+  if (e.target === e.currentTarget) closeCal();
+});
+async function loadCal() {
+  const y = CAL.d.getFullYear(), m = CAL.d.getMonth();
+  const month = y + "-" + String(m + 1).padStart(2, "0");
+  const d = await (await fetch(`/api/calendar?month=${month}&account=${encodeURIComponent(CAL.account)}`)).json();
+  $("#calAcct").textContent = d.account || CAL.account;
+  $("#calMonth").textContent = CAL.d.toLocaleString("en-US", {month: "long", year: "numeric"});
+  const grid = $("#calGrid");
+  let html = ["S", "M", "T", "W", "T", "F", "S"].map(x => `<div class="dow">${x}</div>`).join("");
+  const first = new Date(y, m, 1), days = new Date(y, m + 1, 0).getDate();
+  for (let i = 0; i < first.getDay(); i++) html += `<div class="cal-cell blank"></div>`;
+  for (let day = 1; day <= days; day++) {
+    const key = month + "-" + String(day).padStart(2, "0");
+    const pnl = d.days[key];
+    const cls = pnl > 0 ? " up" : pnl < 0 ? " down" : "";
+    html += `<div class="cal-cell${cls}">${day}` +
+      (pnl != null ? `<span class="pnl">${usd(pnl)}</span>` : "") + `</div>`;
+  }
+  grid.innerHTML = html;
+  $("#calTotal").textContent = Object.keys(d.days).length ? "Month " + usd(d.total) : "";
+  $("#calNote").textContent = Object.keys(d.days).length ? "" :
+    (d.history_since ? "no closed days this month yet" :
+     "history starts today — equity snapshots began when the app first ran");
+}
 
 /* ---- TV setup card ---- */
 function copyText(id) {

@@ -49,7 +49,50 @@ from .paths import state_dir
 STATIC = Path(__file__).resolve().parent / "static"
 CLOCK_INTERVAL_S = 5
 RECONNECT_INTERVAL_S = 30
+EQUITY_INTERVAL_S = 60
 JOURNAL_TAIL = 60
+
+
+def _equity_path() -> Path:
+    return state_dir() / "equity.jsonl"
+
+
+def record_equity(account: str, equity: float, date: str) -> None:
+    """Append today's equity for an account. Last line per (date, account)
+    wins on read, so polling just keeps appending — the day's final value is
+    the day's close, same reconstruction the copier's journal used."""
+    with open(_equity_path(), "a") as f:
+        f.write(json.dumps({"date": date, "account": account,
+                            "equity": equity}) + "\n")
+
+
+def equity_by_day(account: str) -> dict[str, float]:
+    out: dict[str, float] = {}
+    p = _equity_path()
+    if not p.exists():
+        return out
+    for line in p.read_text().splitlines():
+        try:
+            r = json.loads(line)
+        except ValueError:
+            continue
+        if r.get("account") == account and r.get("equity") is not None:
+            out[r["date"]] = float(r["equity"])
+    return dict(sorted(out.items()))
+
+
+def daily_pnl(account: str, month: str) -> dict:
+    """{'days': {date: pnl}, 'total': x} for one YYYY-MM month — equity
+    close-over-close, so the first ever day has no P&L (no prior close)."""
+    eq = equity_by_day(account)
+    days, prev, total = {}, None, 0.0
+    for date, e in eq.items():
+        if prev is not None and date.startswith(month):
+            pnl = round(e - prev, 2)
+            days[date] = pnl
+            total += pnl
+        prev = e
+    return {"days": days, "total": round(total, 2)}
 
 
 def build_adapter(cfg: config_mod.AppCfg) -> BrokerAdapter:
@@ -94,12 +137,28 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                     broker_status.update(connected=False, error=str(e))
             await asyncio.sleep(RECONNECT_INTERVAL_S)
 
+    async def _equity_loop():
+        """Snapshot account equity once a minute while connected — the raw
+        material for the P&L calendar (last snapshot of a day = its close)."""
+        while True:
+            try:
+                ad = box["adapter"]
+                if ad.connected:
+                    m = await ad.get_metrics()
+                    if m.get("balance") is not None and m.get("account"):
+                        record_equity(str(m["account"]), float(m["balance"]),
+                                      engine.now_et().date().isoformat())
+            except Exception:  # noqa: BLE001 — snapshots must never crash
+                pass
+            await asyncio.sleep(EQUITY_INTERVAL_S)
+
     @contextlib.asynccontextmanager
     async def lifespan(_app):
         tasks = []
         if background:
             tasks = [asyncio.create_task(_clock_loop()),
-                     asyncio.create_task(_broker_loop())]
+                     asyncio.create_task(_broker_loop()),
+                     asyncio.create_task(_equity_loop())]
         try:
             yield
         finally:
@@ -201,23 +260,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         return {"sent": payload, "result": out}
 
     # ------------------------------------------------------------ setup
-    @app.post("/api/connect")
-    async def connect(request: Request):
-        """Store a Tradovate DEMO login and reconnect in place. The password
-        goes straight into the local secrets store (gitignored); it is never
-        echoed back. Live trading is deliberately NOT reachable from here."""
-        body = await request.json()
-        username = str(body.get("username") or "").strip()
-        password = str(body.get("password") or "")
-        account_name = str(body.get("account_name") or "").strip()
-        if not username or not password:
-            raise HTTPException(400, "username and password required")
-        key = f"tv:demo:{username.lower()}"
-        secrets_store.set_credentials(key, username=username, password=password)
-        cfg.account.keyring_key = key
-        cfg.account.account_name = account_name
-        cfg.account.live = False
-        config_mod.save(cfg)
+    async def _rebuild_and_connect() -> dict:
         with contextlib.suppress(Exception):
             await box["adapter"].close()
         box["adapter"] = adapter_factory(cfg)
@@ -227,8 +270,80 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         except Exception as e:  # noqa: BLE001 — surface the reason to the UI
             broker_status.update(connected=False, error=str(e))
             return {"ok": False, "error": str(e)}
-        m = await box["adapter"].get_metrics()
-        return {"ok": True, "account": m.get("account")}
+        ad = box["adapter"]
+        m = await ad.get_metrics()
+        accounts = ad.list_accounts() if hasattr(ad, "list_accounts") else []
+        return {"ok": True, "account": m.get("account"), "accounts": accounts}
+
+    @app.get("/api/logins")
+    async def logins():
+        """Saved broker logins — key names and metadata only, never values."""
+        out = []
+        for key in secrets_store._load_all():
+            parts = key.split(":")
+            out.append({"key": key,
+                        "label": (parts[-1] or key).upper(),
+                        "env": parts[1] if len(parts) == 3 else "demo",
+                        "in_use": key == cfg.account.keyring_key})
+        return {"logins": out}
+
+    @app.post("/api/logins/delete")
+    async def logins_delete(request: Request):
+        body = await request.json()
+        key = str(body.get("key") or "")
+        if key == cfg.account.keyring_key:
+            raise HTTPException(409, "that login is in use — connect another first")
+        secrets_store.delete_credentials(key)
+        return {"ok": True}
+
+    @app.post("/api/connect")
+    async def connect(request: Request):
+        """Connect with a saved login (key only) or a new Tradovate DEMO
+        login. A new password goes straight into the local secrets store
+        (gitignored) and is never echoed back. Live trading is deliberately
+        NOT reachable from here — that stays a config-file decision."""
+        body = await request.json()
+        saved = str(body.get("saved_key") or "")
+        if saved:
+            if not secrets_store.get_credentials(saved):
+                raise HTTPException(404, f"no saved login {saved!r}")
+            key = saved
+        else:
+            username = str(body.get("username") or "").strip()
+            password = str(body.get("password") or "")
+            if not username or not password:
+                raise HTTPException(400, "username and password required")
+            key = f"tv:demo:{username.lower()}"
+            secrets_store.set_credentials(key, username=username,
+                                          password=password)
+        if key != cfg.account.keyring_key:
+            cfg.account.account_name = ""      # new login: pin nothing yet
+        cfg.account.keyring_key = key
+        cfg.account.live = False
+        config_mod.save(cfg)
+        return await _rebuild_and_connect()
+
+    @app.post("/api/select-account")
+    async def select_account(request: Request):
+        """Pin one account under the connected login and reconnect to it."""
+        body = await request.json()
+        cfg.account.account_name = str(body.get("account_name") or "").strip()
+        config_mod.save(cfg)
+        return await _rebuild_and_connect()
+
+    @app.get("/api/calendar")
+    async def calendar(month: str, account: str = ""):
+        """Monthly P&L calendar for one account (default: the connected one),
+        from the app's own daily equity snapshots."""
+        if not account:
+            try:
+                m = await box["adapter"].get_metrics()
+                account = str(m.get("account") or "")
+            except Exception:  # noqa: BLE001
+                account = ""
+        d = daily_pnl(account, month)
+        return {"account": account, "month": month, **d,
+                "history_since": next(iter(equity_by_day(account)), None)}
 
     @app.get("/api/tv-setup")
     async def tv_setup():
