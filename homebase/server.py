@@ -25,6 +25,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from . import config as config_mod
 from .broker.base import BrokerAdapter
@@ -89,6 +90,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
     app = FastAPI(title="Ramos Quant Homebase", lifespan=lifespan)
     app.state.engine = engine
     app.state.cfg = cfg
+    app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
     # ------------------------------------------------------------ webhook
     @app.post("/hook")

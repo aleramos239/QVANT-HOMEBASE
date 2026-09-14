@@ -1,98 +1,188 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Ramos Quant · Homebase</title>
+<title>Homebase</title>
+<script>
+  // Apply the saved theme before first paint (no flash). Default: light.
+  try{
+    var _t = localStorage.getItem('hb_theme');
+    document.documentElement.setAttribute('data-theme', (_t==='light'||_t==='dark') ? _t : 'light');
+  }catch(_){ document.documentElement.setAttribute('data-theme','light'); }
+</script>
+<link rel="stylesheet" href="/static/shadcn.css">
 <style>
-  :root {
-    --bg: #0b0b0d; --panel: #121216; --line: #26262c; --text: #e8e8ea;
-    --dim: #8b8b93; --faint: #55555c; --green: #3ddc84; --amber: #e0b34c;
-    --red: #ff5d5d; --mono: "SF Mono", ui-monospace, Menlo, monospace;
+  /* Page chrome — same language as the TradeCopier app: B&W chrome, the only
+     hues are --pos/--neg for P&L-grade data, shadcn tokens for everything. */
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--background); color: var(--foreground);
+         font-family: var(--font-sans); font-size: 14px; line-height: 1.45; }
+
+  .app-shell{ display:flex; height:100vh; overflow:hidden; background:var(--background); }
+  .app-main{ flex:1; min-width:0; display:flex; flex-direction:column; overflow:hidden; }
+  .inset-topbar{ display:flex; align-items:center; gap:10px; height:52px; padding:0 20px;
+    border-bottom:1px solid var(--border); flex-shrink:0; }
+  .scroll{ flex:1; overflow:auto; padding:22px 24px 48px; }
+  .view-wrap{ max-width:980px; margin:0 auto; }
+  .spacer{ flex:1; }
+
+  .pill{ display:inline-flex; align-items:center; gap:4px; white-space:nowrap;
+    border:1px solid transparent; border-radius:var(--radius-sm); padding:2px 8px;
+    font-size:0.75rem; font-weight:500; line-height:1.2;
+    background:var(--secondary); color:var(--secondary-foreground); }
+  .pill.live{ background:var(--primary); color:var(--primary-foreground); font-weight:600; letter-spacing:.02em; }
+  .pill.idle{ background:transparent; border-color:var(--border); color:var(--muted-foreground); }
+  .pill.won{ background:color-mix(in oklch, var(--pos) 15%, transparent); color:var(--pos); border-color:color-mix(in oklch, var(--pos) 30%, transparent); }
+  .pill.lost{ background:color-mix(in oklch, var(--neg) 15%, transparent); color:var(--neg); border-color:color-mix(in oklch, var(--neg) 30%, transparent); }
+
+  .dot{ display:inline-block; width:9px; height:9px; border-radius:9999px; background:var(--muted-foreground); flex:0 0 auto; }
+  .dot.on{ background:var(--foreground); box-shadow:0 0 0 3px var(--secondary); }
+  .dot.off{ background:transparent; border:1.5px solid var(--muted-foreground); }
+
+  /* hero — big status + the two controls */
+  .hero{ display:flex; align-items:center; gap:16px; margin:14px 0 26px; }
+  .hero .dot{ width:13px; height:13px; }
+  .hero h1{ font-size:1.5rem; font-weight:600; letter-spacing:-.02em; margin:0; }
+  .hero p{ margin:2px 0 0; color:var(--muted-foreground); font-size:13px; max-width:420px; }
+  .hero .actions{ margin-left:auto; display:flex; gap:10px; }
+
+  /* hold-to-confirm (red/black fill sweeps while held) — copier pattern */
+  .holdbtn{ position:relative; overflow:hidden; }
+  .holdbtn .holdfill{ position:absolute; left:0; top:0; bottom:0; width:0;
+    background:var(--text); opacity:.22; transition:width 150ms linear; }
+  .holdbtn.holding .holdfill{ width:100%; transition:width 1.1s linear; }
+  .holdbtn .hold-lbl{ position:relative; }
+  .holdbtn small{ font-weight:500; opacity:.7; }
+
+  .warn-banner{ border:1px solid color-mix(in oklch, var(--neg) 30%, transparent);
+    background:color-mix(in oklch, var(--neg) 8%, transparent); color:var(--neg);
+    border-radius:var(--radius-md); padding:9px 14px; font-size:12.5px;
+    margin:0 0 18px; font-family:var(--font-mono); }
+
+  .fleetbar{ display:flex; gap:0; margin:2px 0 26px; }
+  .fleetbar .stat{ flex:1; min-width:0; padding:2px 22px; border-right:1px solid var(--border); }
+  .fleetbar .stat:first-child{ padding-left:0; }
+  .fleetbar .stat:last-child{ border-right:none; padding-right:0; }
+  .fleetbar .k{ font-size:11.5px; color:var(--muted-foreground); font-weight:400; }
+  .fleetbar .v{ font-size:20px; font-weight:500; margin-top:9px; font-variant-numeric:tabular-nums;
+    letter-spacing:-.02em; font-family:var(--font-mono); }
+  .fleetbar .v.pos{ color:var(--pos); } .fleetbar .v.neg{ color:var(--neg); }
+  .fleetbar .s{ font-size:11.5px; color:var(--muted-foreground); margin-top:3px;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  @media (max-width:720px){
+    .fleetbar{ flex-wrap:wrap; }
+    .fleetbar .stat{ flex:1 0 50%; padding:10px 0; border-right:none; border-bottom:1px solid var(--border); }
   }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text);
-         font: 14px/1.45 -apple-system, "Helvetica Neue", sans-serif; }
-  .wrap { max-width: 1060px; margin: 0 auto; padding: 20px 22px 60px; }
 
-  header { display: flex; align-items: center; gap: 14px; padding: 6px 0 18px; }
-  .brand { font-weight: 700; letter-spacing: .14em; font-size: 13px; }
-  .brand span { color: var(--dim); font-weight: 400; }
-  .spacer { flex: 1; }
-  .clock { font-family: var(--mono); color: var(--dim); font-size: 12px; }
-  .pill { border: 1px solid var(--line); border-radius: 999px; padding: 5px 14px;
-          font-size: 11px; letter-spacing: .12em; cursor: pointer;
-          background: none; color: var(--dim); }
-  .pill.armed { border-color: var(--green); color: var(--green); }
-  .pill.kill { border-color: var(--red); color: var(--red); }
-  .pill:hover { filter: brightness(1.35); }
+  .sec-head{ display:flex; align-items:center; gap:10px; margin:6px 0 12px; }
+  .sec-head .h{ font-size:12.5px; color:var(--muted-foreground); font-weight:600; }
+  .sec-head .hint{ font-size:12px; color:var(--muted-foreground); opacity:.8; }
 
-  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-  @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
-  .panel { background: var(--panel); border: 1px solid var(--line);
-           border-radius: 10px; padding: 14px 16px; }
-  .panel.full { grid-column: 1 / -1; }
-  .ptitle { font-size: 10px; letter-spacing: .16em; color: var(--dim);
-            margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
-  .ptitle .right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .strat{ margin-bottom:14px; }
+  .strat .card-header{ flex-direction:row; align-items:center; gap:10px; }
+  .strat .card-title{ font-size:0.9375rem; }
+  .strat .spec{ font-family:var(--font-mono); font-size:12px; color:var(--muted-foreground); }
+  .strat .card-header .right{ margin-left:auto; display:flex; gap:8px; align-items:center; }
+  .rows{ display:flex; flex-direction:column; }
+  .row{ display:flex; align-items:baseline; gap:14px; padding:7px 0;
+    border-bottom:1px solid var(--border); font-size:13px; }
+  .row:last-child{ border-bottom:none; }
+  .row .k{ flex:0 0 110px; color:var(--muted-foreground); font-size:12px; }
+  .row .v{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; }
+  .v.pos{ color:var(--pos); } .v.neg{ color:var(--neg); }
+  .strat .card-footer{ justify-content:space-between; color:var(--muted-foreground);
+    font-size:12px; font-family:var(--font-mono); }
+  .strat .card-footer .btn{ font-family:var(--font-sans); }
 
-  .badge { font-size: 10px; letter-spacing: .1em; padding: 2px 8px;
-           border-radius: 4px; border: 1px solid var(--line); color: var(--dim); }
-  .badge.placed { color: var(--amber); border-color: var(--amber); }
-  .badge.live { color: var(--green); border-color: var(--green);
-                animation: pulse 1.6s infinite; }
-  .badge.done { color: var(--faint); }
-  .badge.error { color: var(--red); border-color: var(--red); }
-  @keyframes pulse { 50% { opacity: .45; } }
+  .feed{ font-family:var(--font-mono); font-size:12.5px; max-height:340px; overflow-y:auto; }
+  .feed-row{ padding:5px 0; border-bottom:1px solid var(--border); white-space:pre-wrap; display:flex; gap:9px; }
+  .feed-row:last-child{ border-bottom:none; }
+  .feed .t{ color:var(--muted-foreground); flex:0 0 62px; }
+  .feed .e{ flex:0 0 150px; font-weight:600; }
+  .feed .d{ color:var(--muted-foreground); overflow-wrap:anywhere; }
+  .feed-empty{ color:var(--muted-foreground); font-size:13px; padding:18px 0; }
 
-  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red);
-         display: inline-block; }
-  .dot.on { background: var(--green); }
+  .clock{ font-family:var(--font-mono); font-size:12px; color:var(--muted-foreground); }
+  #toast{ position:fixed; bottom:18px; left:50%; transform:translateX(-50%);
+    background:var(--card); color:var(--card-foreground); border:1px solid var(--border);
+    border-radius:var(--radius-md); padding:10px 16px; font-size:12.5px; display:none;
+    max-width:80%; font-family:var(--font-mono); box-shadow:0 4px 24px rgb(0 0 0 / .18); }
 
-  .kv { display: grid; grid-template-columns: 110px 1fr; gap: 3px 12px;
-        font-family: var(--mono); font-size: 12.5px; }
-  .kv b { color: var(--dim); font-weight: 400; font-size: 11px;
-          letter-spacing: .08em; align-self: center; }
-  .num { font-family: var(--mono); }
-  .green { color: var(--green); } .amber { color: var(--amber); }
-  .red { color: var(--red); } .dim { color: var(--dim); }
+  #themeToggle .ic-moon{ display:none; }
+  :root[data-theme="light"] #themeToggle .ic-sun{ display:none; }
+  :root[data-theme="light"] #themeToggle .ic-moon{ display:block; }
 
-  .spec { color: var(--dim); font-family: var(--mono); font-size: 12px;
-          margin: 2px 0 10px; }
-  .times { margin-top: 10px; color: var(--faint); font-size: 11px;
-           font-family: var(--mono); }
-  .test { border: 1px solid var(--line); background: none; color: var(--dim);
-          border-radius: 6px; font-size: 10px; letter-spacing: .1em;
-          padding: 3px 10px; cursor: pointer; }
-  .test:hover { color: var(--text); }
-
-  .journal { font-family: var(--mono); font-size: 12px; max-height: 320px;
-             overflow-y: auto; }
-  .jrow { display: flex; gap: 12px; padding: 2.5px 0;
-          border-bottom: 1px solid #1a1a1f; }
-  .jrow .t { color: var(--faint); flex: 0 0 66px; }
-  .jrow .e { flex: 0 0 150px; }
-  .jrow .d { color: var(--dim); overflow-wrap: anywhere; }
-  .unavailable { color: var(--amber); font-family: var(--mono); font-size: 12px; }
-  #toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
-           background: #1c1c22; border: 1px solid var(--line); border-radius: 8px;
-           padding: 10px 16px; font-size: 12.5px; display: none; max-width: 80%;
-           font-family: var(--mono); }
+  @media (prefers-reduced-motion: reduce){
+    *,*::before,*::after{ animation-duration:.01ms !important; transition-duration:.01ms !important; }
+  }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <div class="brand">RAMOS&nbsp;QUANT <span>/ HOMEBASE</span></div>
-    <div class="spacer"></div>
-    <div class="clock" id="clock">—</div>
-    <button class="pill" id="armBtn">…</button>
-    <button class="pill kill" id="killBtn">KILL</button>
-  </header>
 
-  <div class="grid" id="grid">
-    <div class="panel full"><div class="ptitle">LOADING…</div></div>
-  </div>
+<div class="app-shell">
+  <main class="app-main">
+    <header class="inset-topbar">
+      <span style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:var(--radius-md);background:var(--primary);color:var(--primary-foreground);flex-shrink:0">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 9.5V21h14V9.5"/></svg>
+      </span>
+      <span style="font-weight:600;font-size:0.9375rem;letter-spacing:-.01em">Homebase</span>
+      <span class="pill idle" style="margin-left:2px">Ramos Quant</span>
+      <span class="spacer"></span>
+      <span class="clock" id="clock">—</span>
+      <span id="statusPill" class="pill idle">connecting…</span>
+      <button class="btn btn-outline btn-sm btn-icon" type="button" id="themeToggle" title="Toggle theme" aria-label="Toggle theme">
+        <svg class="ic-sun" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/></svg>
+        <svg class="ic-moon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A7.5 7.5 0 1 1 9.5 4a6 6 0 0 0 10.5 10.5z"/></svg>
+      </button>
+    </header>
+
+    <div class="scroll">
+    <div class="view-wrap">
+
+      <div class="hero">
+        <span class="dot off" id="heroDot"></span>
+        <div>
+          <h1 id="heroTitle">—</h1>
+          <p id="heroSub"></p>
+        </div>
+        <div class="actions">
+          <button class="btn btn-default holdbtn" id="armBtn" style="display:none">
+            <span class="holdfill"></span><span class="hold-lbl">Arm <small>· hold</small></span>
+          </button>
+          <button class="btn btn-outline" id="disarmBtn" style="display:none">Disarm</button>
+          <button class="btn btn-destructive holdbtn" id="killBtn">
+            <span class="holdfill"></span><span class="hold-lbl">Kill <small>· hold</small></span>
+          </button>
+        </div>
+      </div>
+
+      <div class="warn-banner" id="brokerWarn" style="display:none"></div>
+
+      <div class="fleetbar">
+        <div class="stat"><div class="k">Day P&amp;L</div><div class="v" id="st_pnl">—</div><div class="s">realized, broker-reported</div></div>
+        <div class="stat"><div class="k">Balance</div><div class="v" id="st_bal">—</div><div class="s" id="st_bal_sub">account cash</div></div>
+        <div class="stat"><div class="k">Open positions</div><div class="v" id="st_pos">—</div><div class="s" id="st_pos_sub">across strategies</div></div>
+        <div class="stat"><div class="k">Working orders</div><div class="v" id="st_wrk">—</div><div class="s">resting at the broker</div></div>
+      </div>
+
+      <div class="sec-head">
+        <span class="h">Strategies</span>
+        <span class="hint">one alert a day each — unfilled entries die at 12:55, everything is flat by 15:55 ET</span>
+      </div>
+      <div id="strats"></div>
+
+      <div class="sec-head" style="margin-top:26px">
+        <span class="h">Activity</span>
+        <span class="hint">every alert, order, fill and safety event as it happens</span>
+      </div>
+      <div class="card"><div class="card-content" style="padding-top:14px">
+        <div id="feed" class="feed"><div class="feed-empty">Waiting for events…</div></div>
+      </div></div>
+
+    </div>
+    </div>
+  </main>
 </div>
 <div id="toast"></div>
 
@@ -100,7 +190,7 @@
 const $ = (s) => document.querySelector(s);
 let ST = null;
 
-function toast(msg, ms = 3800) {
+function toast(msg, ms = 4200) {
   const t = $("#toast");
   t.textContent = msg; t.style.display = "block";
   clearTimeout(t._h); t._h = setTimeout(() => t.style.display = "none", ms);
@@ -110,73 +200,107 @@ async function post(url, body) {
                               body: JSON.stringify(body || {})});
   return r.json();
 }
-const fmt = (v, d = 2) => v == null ? "—" : Number(v).toFixed(d);
+const fmt = (v, d = 2) => v == null ? "—" : Number(v).toLocaleString("en-US",
+  {minimumFractionDigits: d, maximumFractionDigits: d});
+const usd = (v) => v == null ? "—" : (v < 0 ? "-$" : "$") + fmt(Math.abs(v));
 
-function strategyCard(name, s) {
+/* ---- theme ---- */
+$("#themeToggle").onclick = () => {
+  const cur = document.documentElement.getAttribute("data-theme");
+  const next = cur === "dark" ? "light" : "dark";
+  document.documentElement.setAttribute("data-theme", next);
+  try { localStorage.setItem("hb_theme", next); } catch (_) {}
+};
+
+/* ---- hold-to-confirm ---- */
+function holdify(btn, fn, ms = 1100) {
+  let t = null;
+  const start = (e) => { e.preventDefault(); btn.classList.add("holding");
+    t = setTimeout(() => { btn.classList.remove("holding"); t = null; fn(); }, ms); };
+  const cancel = () => { btn.classList.remove("holding");
+    if (t) { clearTimeout(t); t = null; } };
+  btn.addEventListener("pointerdown", start);
+  ["pointerup", "pointerleave", "pointercancel"].forEach(ev =>
+    btn.addEventListener(ev, cancel));
+}
+
+/* ---- render ---- */
+const STATUS_PILL = {idle: "pill idle", placed: "pill", live: "pill live",
+                     done: "pill idle", error: "pill lost"};
+
+function stratCard(name, s) {
   const st = s.state, c = s.cfg;
-  const badge = `<span class="badge ${st.status}">${st.status.toUpperCase()}</span>`;
-  const enabled = c.enabled ? "" : `<span class="badge">DISABLED</span>`;
+  const pill = `<span class="${STATUS_PILL[st.status] || "pill idle"}">${st.status}</span>`;
+  const disabled = c.enabled ? "" : `<span class="pill idle">disabled</span>`;
   const test = (ST && !ST.armed && c.enabled)
-    ? `<button class="test" onclick="testFire('${name}')">TEST FIRE · DRY</button>` : "";
-  let rows = `
-    <b>ENTRY STOPS</b><span>${st.upper_px ? fmt(st.upper_px) + " ▲ / " + fmt(st.lower_px) + " ▼" : "—"}</span>`;
+    ? `<button class="btn btn-outline btn-sm" onclick="testFire('${name}')">Test fire · dry</button>`
+    : "";
+  let rows = `<div class="row"><span class="k">Entry stops</span>
+    <span class="v">${st.upper_px ? fmt(st.upper_px) + " ▲ &nbsp;·&nbsp; " + fmt(st.lower_px) + " ▼" : "—"}</span></div>`;
   if (st.entry_side) {
-    const slip = (st.entry_fill != null && st.entry_anchor != null)
-      ? ` <span class="${st.entry_fill - st.entry_anchor ? "amber" : "green"}">(${fmt(st.entry_fill - st.entry_anchor)} vs anchor)</span>` : "";
-    rows += `<b>ENTRY</b><span>${st.entry_side} @ ${fmt(st.entry_fill)}${slip}</span>`;
+    const dv = (st.entry_fill != null && st.entry_anchor != null)
+      ? st.entry_fill - st.entry_anchor : null;
+    rows += `<div class="row"><span class="k">Entry</span>
+      <span class="v">${st.entry_side} @ ${fmt(st.entry_fill)}${dv == null ? "" :
+        ` <span class="${dv ? "neg" : "pos"}">(${dv >= 0 ? "+" : ""}${fmt(dv)} vs anchor)</span>`}</span></div>`;
   }
   if (st.exit_reason) {
-    const cls = st.exit_reason === "tp" ? "green" : (st.exit_reason === "sl" ? "red" : "dim");
-    rows += `<b>EXIT</b><span class="${cls}">${st.exit_reason.toUpperCase()}${st.exit_fill ? " @ " + fmt(st.exit_fill) : ""}</span>`;
+    const cls = st.exit_reason === "tp" ? "pos" : (st.exit_reason === "sl" ? "neg" : "");
+    rows += `<div class="row"><span class="k">Exit</span>
+      <span class="v ${cls}">${st.exit_reason}${st.exit_fill ? " @ " + fmt(st.exit_fill) : ""}</span></div>`;
   }
-  if (st.note) rows += `<b>NOTE</b><span class="amber">${st.note}</span>`;
-  return `<div class="panel">
-    <div class="ptitle">${name.toUpperCase()} · ${c.symbol}
-      <div class="right">${enabled}${badge}</div></div>
-    <div class="spec">±${c.offset_pts} off · SL ${c.sl_pts} / TP ${c.tp_pts} · ${c.qty}x</div>
-    <div class="kv">${rows}</div>
-    <div class="times">cancel ${c.cancel_et} ET · flat ${c.flat_et} ET
-      &nbsp; ${test}</div>
+  if (st.note) rows += `<div class="row"><span class="k">Note</span><span class="v">${st.note}</span></div>`;
+  return `<div class="card strat">
+    <div class="card-header">
+      <span class="card-title">${name.toUpperCase()}</span>
+      <span class="spec">${c.symbol} · ±${c.offset_pts} off · SL ${c.sl_pts} / TP ${c.tp_pts} · ${c.qty}×</span>
+      <span class="right">${disabled}${pill}</span>
+    </div>
+    <div class="card-content"><div class="rows">${rows}</div></div>
+    <div class="card-footer"><span>cancel ${c.cancel_et} · flat ${c.flat_et} ET</span>${test}</div>
   </div>`;
-}
-
-function brokerPanel(b) {
-  const dot = `<span class="dot ${b.connected ? "on" : ""}"></span>`;
-  let body;
-  if (!b.connected && b.error)
-    body = `<div class="unavailable">unavailable: ${b.error}</div>`;
-  else body = `<div class="kv">
-    <b>ACCOUNT</b><span>${b.account ?? "—"}</span>
-    <b>BALANCE</b><span>${b.balance != null ? "$" + fmt(b.balance) : "—"}</span>
-    <b>DAY P&amp;L</b><span class="${(b.realized_pnl ?? 0) >= 0 ? "green" : "red"}">${b.realized_pnl != null ? "$" + fmt(b.realized_pnl) : "—"}</span>
-    <b>POSITIONS</b><span>${(b.open_positions || []).map(p => p.symbol + " " + p.net).join(", ") || "flat"}</span>
-    <b>WORKING</b><span>${b.working_orders ?? "—"}</span></div>`;
-  return `<div class="panel">
-    <div class="ptitle">BROKER · TRADOVATE <div class="right">${dot}</div></div>
-    ${body}</div>`;
-}
-
-function journalPanel(j) {
-  const rows = (j || []).map(r => {
-    const {ts, et, event, ...rest} = r;
-    const kv = Object.entries(rest).map(([k, v]) =>
-      `${k}=${typeof v === "object" ? JSON.stringify(v) : v}`).join(" ");
-    return `<div class="jrow"><span class="t">${(et || "").slice(11, 19)}</span>
-      <span class="e">${event}</span><span class="d">${kv}</span></div>`;
-  }).join("");
-  return `<div class="panel full"><div class="ptitle">JOURNAL</div>
-    <div class="journal">${rows || '<span class="dim">empty — nothing has happened yet today</span>'}</div></div>`;
 }
 
 function render() {
   const s = ST;
   $("#clock").textContent = s.et_now.replace("T", " · ").slice(0, 21) + " ET";
-  const a = $("#armBtn");
-  a.textContent = s.armed ? "ARMED" : "DISARMED";
-  a.className = "pill" + (s.armed ? " armed" : "");
-  $("#grid").innerHTML =
-    Object.entries(s.strategies).map(([n, v]) => strategyCard(n, v)).join("") +
-    brokerPanel(s.broker) + journalPanel(s.journal);
+  const pill = $("#statusPill");
+  pill.textContent = s.armed ? "ARMED" : "DISARMED";
+  pill.className = s.armed ? "pill live" : "pill idle";
+  $("#heroDot").className = "dot " + (s.armed ? "on" : "off");
+  $("#heroTitle").textContent = s.armed ? "Armed" : "Disarmed";
+  $("#heroSub").textContent = s.armed
+    ? "Alerts place real orders on the configured account. SL/TP ride broker-side on every entry."
+    : "Alerts are validated and journaled — nothing is placed until you arm the desk.";
+  $("#armBtn").style.display = s.armed ? "none" : "";
+  $("#disarmBtn").style.display = s.armed ? "" : "none";
+
+  const b = s.broker || {};
+  const warn = $("#brokerWarn");
+  if (!b.connected && b.error) {
+    warn.style.display = ""; warn.textContent = "Broker unavailable — " + b.error;
+  } else warn.style.display = "none";
+  const pnl = b.realized_pnl;
+  const pv = $("#st_pnl"); pv.textContent = usd(pnl);
+  pv.className = "v" + (pnl > 0 ? " pos" : pnl < 0 ? " neg" : "");
+  $("#st_bal").textContent = usd(b.balance);
+  $("#st_bal_sub").textContent = b.account ? String(b.account) : "account cash";
+  const pos = b.open_positions || [];
+  $("#st_pos").textContent = pos.length ? pos.map(p => p.symbol + " " + p.net).join("  ") : "flat";
+  $("#st_wrk").textContent = b.working_orders ?? "—";
+
+  $("#strats").innerHTML = Object.entries(s.strategies)
+    .map(([n, v]) => stratCard(n, v)).join("");
+
+  const feed = $("#feed");
+  const rows = (s.journal || []).map(r => {
+    const {ts, et, event, ...rest} = r;
+    const kv = Object.entries(rest).map(([k, v]) =>
+      `${k}=${typeof v === "object" ? JSON.stringify(v) : v}`).join("  ");
+    return `<div class="feed-row"><span class="t">${(et || "").slice(11, 19)}</span>
+      <span class="e">${event}</span><span class="d">${kv}</span></div>`;
+  }).join("");
+  feed.innerHTML = rows || '<div class="feed-empty">Waiting for events…</div>';
 }
 
 async function refresh() {
@@ -184,20 +308,21 @@ async function refresh() {
   catch { $("#clock").textContent = "server unreachable"; }
 }
 
-$("#armBtn").onclick = async () => {
-  const to = !ST.armed;
-  const word = to ? "ARM" : "DISARM";
-  if (!confirm(`${word} the desk? ${to ? "Alerts will place REAL orders on the configured account." : "Alerts will be journaled only."}`)) return;
-  await post("/api/arm", {armed: to}); refresh();
+holdify($("#armBtn"), async () => {
+  await post("/api/arm", {armed: true}); refresh();
+  toast("Armed — alerts now place real orders.");
+});
+$("#disarmBtn").onclick = async () => {
+  await post("/api/arm", {armed: false}); refresh();
+  toast("Disarmed — dry-run journaling only.");
 };
-$("#killBtn").onclick = async () => {
-  if (!confirm("KILL: cancel all orders, flatten all positions, disarm. Proceed?")) return;
+holdify($("#killBtn"), async () => {
   const r = await post("/api/kill");
-  toast("kill: " + JSON.stringify(r.results)); refresh();
-};
+  toast("Kill: " + JSON.stringify(r.results)); refresh();
+});
 async function testFire(name) {
   const r = await post("/api/test-alert", {strategy: name});
-  toast((r.result && r.result.ok ? "dry-run ok — " : "refused — ") +
+  toast((r.result && r.result.ok ? "Dry run ok — " : "Refused — ") +
         JSON.stringify(r.result || r)); refresh();
 }
 
