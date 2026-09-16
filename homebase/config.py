@@ -67,6 +67,7 @@ def _defaults() -> AppCfg:
                              "t": "5.04", "avg/trade/mini": "$79.0",
                              "maxDD/mini": "−$1,135", "green months": "10/10"},
                     "caveat": "does not cover live fill quality — the edge is 2–4 ticks deep",
+                    "equity_file": "nq930_equity.json",
                 }),
             # YM 9:30 straddle (OOS-passed 2026-09-13), unfiltered. Disabled
             # until the user sizes and enables it.

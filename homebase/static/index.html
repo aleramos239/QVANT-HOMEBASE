@@ -403,6 +403,21 @@
   </div>
 </div>
 
+<div class="overlay" id="resOverlay">
+  <div class="modal" style="width:600px">
+    <div class="cal-head">
+      <span style="font-weight:600" id="resName">—</span>
+      <span style="font-size:12px;color:var(--muted-foreground)" id="resSource"></span>
+      <span class="spacer" style="flex:1"></span>
+      <button class="cal-nav" onclick="closeRes()" title="Close">&times;</button>
+    </div>
+    <div id="resStrip"></div>
+    <div class="mcap warn" id="resCaveat" style="margin-bottom:10px"></div>
+    <div id="resChart"></div>
+    <div class="mcap" id="resChartCap"></div>
+  </div>
+</div>
+
 <div class="overlay" id="calOverlay">
   <div class="modal" style="width:460px">
     <div class="cal-head">
@@ -472,12 +487,15 @@ function stratCard(name, s) {
     ? `<button class="btn btn-outline btn-sm" onclick="testFire('${name}')">Test fire · dry</button>`
     : "";
 
-  // research strip (the honest exam record)
+  // research: one compact subtitle + Details popup
   let research = "";
   if (s.research && s.research.rows) {
-    research = `<div class="slabel2">RESEARCH — ${s.research.source || ""}</div>` +
-      mstrip(s.research.rows) +
-      (s.research.caveat ? `<div class="mcap warn">⚠ ${s.research.caveat}</div>` : "");
+    const sub = Object.entries(s.research.rows)
+      .map(([k, v]) => k === "trades" ? `${v} trades` : `${v} ${k}`).join(" · ");
+    research = `<div class="mcap" style="display:flex;align-items:center;gap:10px;margin:2px 0 0">
+      <span style="font-family:var(--font-mono)">Backtest — ${sub}</span>
+      <button class="btn btn-ghost btn-sm" style="font-size:11px;height:22px;padding:0 8px"
+        onclick="openRes('${name}')">Details</button></div>`;
   }
   // live strip (earned from the journal, real fills only)
   const lv = s.live;
@@ -835,6 +853,52 @@ async function useAccount() {
 }
 $("#connectOverlay").addEventListener("click", (e) => {
   if (e.target === e.currentTarget) closeConnect();
+});
+
+/* ---- research details popup ---- */
+function equitySvg(points, w = 560, h = 190) {
+  const vals = points.map(p => p[1]);
+  const min = Math.min(0, ...vals), max = Math.max(0, ...vals);
+  const X = i => 4 + (i / (points.length - 1)) * (w - 8);
+  const Y = v => h - 10 - ((v - min) / ((max - min) || 1)) * (h - 20);
+  const path = points.map((p, i) =>
+    (i ? "L" : "M") + X(i).toFixed(1) + "," + Y(p[1]).toFixed(1)).join("");
+  const fin = vals[vals.length - 1];
+  return `<svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;display:block">
+    <line x1="0" x2="${w}" y1="${Y(0)}" y2="${Y(0)}" stroke="var(--border)"/>
+    <path d="${path}" fill="none" stroke="var(--foreground)" stroke-width="1.4"/>
+    <text x="${w - 4}" y="${Math.max(12, Y(fin) - 6)}" text-anchor="end"
+      fill="var(--${fin >= 0 ? "pos" : "neg"})"
+      style="font:600 12px var(--font-mono)">${usd(fin)}</text></svg>`;
+}
+async function openRes(name) {
+  const s = (ST.strategies || {})[name] || {};
+  const r = s.research || {};
+  $("#resName").textContent = name.toUpperCase();
+  $("#resSource").textContent = r.source || "";
+  $("#resStrip").innerHTML = r.rows ? mstrip(r.rows) : "";
+  $("#resCaveat").textContent = r.caveat ? "⚠ " + r.caveat : "";
+  $("#resChart").innerHTML = `<div class="mcap">loading curve…</div>`;
+  $("#resChartCap").textContent = "";
+  $("#resOverlay").classList.add("open");
+  try {
+    const d = await (await fetch("/api/research-equity?strategy=" +
+                                 encodeURIComponent(name))).json();
+    if (d.points && d.points.length > 1) {
+      $("#resChart").innerHTML = equitySvg(d.points);
+      $("#resChartCap").textContent = (d.label || "") +
+        (d.note ? " — " + d.note : "");
+    } else {
+      $("#resChart").innerHTML =
+        `<div class="mcap">no equity curve on file — attach the exam export to add one</div>`;
+    }
+  } catch (_) {
+    $("#resChart").innerHTML = `<div class="mcap">curve unavailable</div>`;
+  }
+}
+function closeRes() { $("#resOverlay").classList.remove("open"); }
+$("#resOverlay").addEventListener("click", (e) => {
+  if (e.target === e.currentTarget) closeRes();
 });
 
 /* ---- P&L calendar ---- */

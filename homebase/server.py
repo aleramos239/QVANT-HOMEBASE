@@ -479,6 +479,17 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             },
         }
 
+    @app.get("/api/research-equity")
+    async def research_equity(strategy: str):
+        """The strategy's backtest equity curve — a committed research
+        artifact (real export), or nothing. Never synthesized."""
+        s = cfg.strategies.get(strategy)
+        fname = (s.metrics or {}).get("equity_file") if s else None
+        p = STATIC.parent / "research" / fname if fname else None
+        if not p or not p.exists():
+            return {"points": None}
+        return json.loads(p.read_text())
+
     @app.get("/api/calendar")
     async def calendar(month: str, account: str = ""):
         if not account:
