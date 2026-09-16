@@ -136,6 +136,13 @@ def build(path: Path) -> None:
         f"{green_m}/{len(msum)} ({pct(green_m / len(msum))})")
     add("Stability", "best month", f"{best_m} {money(msum[best_m])}")
     add("Stability", "worst month", f"{worst_m} {money(msum[worst_m])}")
+    mwr = {m: sum(1 for p in v if p > 0) / len(v) for m, v in mrows.items()}
+    if mwr:
+        bw, ww = max(mwr, key=mwr.get), min(mwr, key=mwr.get)
+        add("Stability", "best month WR",
+            f"{bw} {pct(mwr[bw])} ({len(mrows[bw])} trades)")
+        add("Stability", "worst month WR",
+            f"{ww} {pct(mwr[ww])} ({len(mrows[ww])} trades)")
 
     # ---- prop sim: the house engine on this exact ledger ----
     sys.path.insert(0, ONYX)
