@@ -207,10 +207,15 @@
     padding:4px 8px; font-size:12.5px; }
   .asg input{ width:52px; font-family:var(--font-mono); }
 
-  /* accounts */
-  .acct{ display:flex; align-items:center; gap:14px; padding:13px 16px; }
-  .acct .nm{ font-weight:600; font-size:14px; }
-  .acct .kvi{ font-family:var(--font-mono); font-size:13px; font-variant-numeric:tabular-nums; }
+  /* accounts — one dense list, hairline rows */
+  .acct{ display:flex; align-items:center; gap:12px; padding:9px 16px;
+    border-bottom:1px solid var(--border); }
+  .acct:last-child{ border-bottom:none; }
+  .acct .nm{ font-weight:600; font-size:13.5px; }
+  .acct .strats{ font-family:var(--font-mono); font-size:11.5px;
+    color:var(--muted-foreground); }
+  .acct .kvi{ font-family:var(--font-mono); font-size:13px;
+    font-variant-numeric:tabular-nums; min-width:92px; text-align:right; }
   .acct .lbl{ font-size:11px; color:var(--muted-foreground); display:block; }
   .acct .spacer{ flex:1; }
   .kvi.pos{ color:var(--pos); } .kvi.neg{ color:var(--neg); }
@@ -782,23 +787,26 @@ function renderAccounts(accts) {
     </div></div>`;
     return;
   }
-  el.innerHTML = ids.map(id => {
+  const runningOn = (id) => Object.entries(ST.book || {})
+    .filter(([, rows]) => (rows || []).some(a => a.account === id))
+    .map(([n, rows]) => n + " ×" + rows.find(a => a.account === id).qty)
+    .join(" · ");
+  el.innerHTML = `<div class="card">` + ids.map(id => {
     const a = accts[id];
     const pnl = a.realized_pnl;
     const err = (!a.connected && a.error)
-      ? `<span class="kvi neg" style="font-size:11.5px">${String(a.error).slice(0, 60)}${String(a.error).length > 60 ? "…" : ""}</span>` : "";
-    return `<div class="card" style="margin-bottom:10px"><div class="acct">
+      ? `<span class="kvi neg" style="font-size:11.5px;text-align:left;min-width:0">${String(a.error).slice(0, 60)}${String(a.error).length > 60 ? "…" : ""}</span>` : "";
+    return `<div class="acct">
       <span class="dot ${a.connected ? "on" : "off"}"></span>
       <span class="nm">${a.label}</span>
-      <span class="pill idle">${a.env}</span>
+      ${a.env === "live" ? '<span class="pill live" style="font-size:10px">LIVE</span>' : ""}
+      <span class="strats">${runningOn(id) || "no strategy assigned"}</span>
       ${err}<span class="spacer"></span>
-      <span class="kvi"><span class="lbl">Balance</span>${usd(a.balance)}</span>
-      <span class="kvi ${pnl > 0 ? "pos" : pnl < 0 ? "neg" : ""}" style="min-width:86px">
-        <span class="lbl">Day P&amp;L</span>${usd(pnl)}</span>
-      <span class="kvi"><span class="lbl">Open</span>${(a.open_positions || []).length ? a.open_positions.map(p => p.symbol + " " + p.net).join(" ") : "flat"}</span>
+      <span class="kvi">${usd(a.balance)}</span>
+      <span class="kvi ${pnl > 0 ? "pos" : pnl < 0 ? "neg" : ""}">${pnl > 0 ? "+" : ""}${usd(pnl)}</span>
       <button class="btn btn-outline btn-sm" onclick="openCal('${a.account || a.label}')">Calendar</button>
-    </div></div>`;
-  }).join("") + `<div style="margin-top:2px">
+    </div>`;
+  }).join("") + `</div><div style="margin-top:8px">
     <button class="btn btn-outline btn-sm" onclick="openConnect()">+ Add account</button></div>`;
 }
 
