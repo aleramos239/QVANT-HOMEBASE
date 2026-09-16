@@ -79,14 +79,25 @@ def build(path: Path) -> None:
         dd_days = max(dd_days, (dt.date.fromisoformat(dates[-1])
                                 - dt.date.fromisoformat(cur_dd_start)).days)
 
-    # streaks
+    # streaks — max AND average length of completed win/loss streaks
     mx_w = mx_l = cw = cl = 0
+    wstreaks, lstreaks = [], []
     for p in pnl:
         if p > 0:
+            if cl:
+                lstreaks.append(cl)
             cw, cl = cw + 1, 0
         elif p < 0:
+            if cw:
+                wstreaks.append(cw)
             cl, cw = cl + 1, 0
         mx_w, mx_l = max(mx_w, cw), max(mx_l, cl)
+    if cw:
+        wstreaks.append(cw)
+    if cl:
+        lstreaks.append(cl)
+    avg_ws = sum(wstreaks) / len(wstreaks) if wstreaks else 0.0
+    avg_ls = sum(lstreaks) / len(lstreaks) if lstreaks else 0.0
 
     # monthly stability — the house wr_stability phi (chi2/df vs one coin)
     months: dict[str, list[float]] = {}
@@ -131,6 +142,8 @@ def build(path: Path) -> None:
     add("Risk", "Sharpe (daily, ann.)", f"{sharpe:.2f}")
     add("Streaks", "max win streak", str(mx_w))
     add("Streaks", "max loss streak", str(mx_l))
+    add("Streaks", "avg win streak", f"{avg_ws:.2f}")
+    add("Streaks", "avg loss streak", f"{avg_ls:.2f}")
     add("Stability", "WR stability φ", f"{phi:.2f} ({verdict})")
     add("Stability", "green months",
         f"{green_m}/{len(msum)} ({pct(green_m / len(msum))})")
@@ -144,31 +157,44 @@ def build(path: Path) -> None:
         add("Stability", "worst month WR",
             f"{ww} {pct(mwr[ww])} ({len(mrows[ww])} trades)")
 
-    # ---- Monte Carlo: its own full section — the SAME metrics, but as
-    # median [5–95%] across 10,000 bootstrap resamples of the trade list.
-    # Calendar-tied rows (months, green days, daily Sharpe, stability φ)
-    # have no meaning under reshuffling and are deliberately absent.
+    # ---- Monte Carlo: full parallel metric set, 3 columns per row
+    # (metric, median, 5-95% of runs) across 10,000 bootstrap resamples.
+    # Sharpe is exact here because this strategy is one trade per day.
+    # phi is computed on consecutive 20-trade blocks (pseudo-months).
     import random
     rng = random.Random(11)
     N = 10000
-    ks = ("wr", "net", "avg", "t", "pf", "avgw", "avgl", "rr",
-          "dd", "runup", "ddlen", "ws", "ls")
+    ks = ("wr", "net", "avg", "t", "pf", "avgw", "avgl", "rr", "dd",
+          "runup", "ddlen", "ws", "ls", "aws", "als", "sharpe", "phi")
     mc = {k: [] for k in ks}
+    B = 20                      # phi block size (trades)
     for _ in range(N):
         s = s2 = wsum = lsum = 0.0
         wn = ln = 0
         peak_ = trough_ = dd_ = ru_ = 0.0
         cw = cl = mw = ml = 0
+        wst_n = wst_sum = lst_n = lst_sum = 0
         cur = 0.0
         dl = mdl = 0
+        blocks = []
+        bw = bn = 0
         for _ in range(n):
             p = pnl[rng.randrange(n)]
             s += p
             s2 += p * p
+            bw += 1 if p > 0 else 0
+            bn += 1
+            if bn == B:
+                blocks.append(bw)
+                bw = bn = 0
             if p > 0:
+                if cl:
+                    lst_n += 1; lst_sum += cl
                 wsum += p; wn += 1
                 cw += 1; cl = 0
             elif p < 0:
+                if cw:
+                    wst_n += 1; wst_sum += cw
                 lsum += p; ln += 1
                 cl += 1; cw = 0
             mw = cw if cw > mw else mw
@@ -186,12 +212,19 @@ def build(path: Path) -> None:
                 trough_ = cur
             if cur - trough_ > ru_:
                 ru_ = cur - trough_
+        if cw:
+            wst_n += 1; wst_sum += cw
+        if cl:
+            lst_n += 1; lst_sum += cl
         avg_ = s / n
         var_ = (s2 - n * avg_ * avg_) / (n - 1)
         std_ = math.sqrt(var_) if var_ > 0 else 0.0
         aw = wsum / wn if wn else 0.0
         al = lsum / ln if ln else 0.0
-        mc["wr"].append(wn / n)
+        wr_ = wn / n
+        chi2_ = sum(B * ((b / B) - wr_) ** 2 / (wr_ * (1 - wr_))
+                    for b in blocks) if 0 < wr_ < 1 else 0.0
+        mc["wr"].append(wr_)
         mc["net"].append(s)
         mc["avg"].append(avg_)
         mc["t"].append(avg_ / std_ * math.sqrt(n) if std_ else 0.0)
@@ -204,34 +237,47 @@ def build(path: Path) -> None:
         mc["ddlen"].append(mdl)
         mc["ws"].append(mw)
         mc["ls"].append(ml)
+        mc["aws"].append(wst_sum / wst_n if wst_n else 0.0)
+        mc["als"].append(lst_sum / lst_n if lst_n else 0.0)
+        mc["sharpe"].append(avg_ / std_ * math.sqrt(252) if std_ else 0.0)
+        mc["phi"].append(chi2_ / (len(blocks) - 1) if len(blocks) > 1 else 0.0)
     for k in ks:
         mc[k].sort()
     q = lambda a, p: a[min(len(a) - 1, int(p * len(a)))]  # noqa: E731
-    band = lambda a, f: f"{f(q(a, 0.5))}  [{f(q(a, 0.05))} … {f(q(a, 0.95))}]"  # noqa: E731
     num = lambda v: f"{v:.2f}"  # noqa: E731
     whole = lambda v: str(int(v))  # noqa: E731
+    def mrow(sec, label, key, f):
+        a = mc[key]
+        return [sec, label, f(q(a, 0.5)), f"{f(q(a, 0.05))} … {f(q(a, 0.95))}"]
     MC = [
-        ["win rate", band(mc["wr"], pct)],
-        ["net", band(mc["net"], money)],
-        ["avg / trade", band(mc["avg"], money)],
-        ["t-stat (trades)", band(mc["t"], num)],
-        ["profit factor", band(mc["pf"], num)],
-        ["avg win", band(mc["avgw"], money)],
-        ["avg loss", band(mc["avgl"], money)],
-        ["realized RR", band(mc["rr"], lambda v: f"1:{v:.2f}")],
-        ["max drawdown", band(mc["dd"], money)],
-        ["longest drawdown (trades)", band(mc["ddlen"], whole)],
-        ["max runup", band(mc["runup"], money)],
-        ["max win streak", band(mc["ws"], whole)],
-        ["max loss streak", band(mc["ls"], whole)],
-        ["P(net ≤ 0)", pct(sum(1 for v in mc["net"] if v <= 0) / N)],
-        ["maxDD worst resample", money(mc["dd"][0])],
+        mrow("Trades", "win rate", "wr", pct),
+        mrow("P&L", "net", "net", money),
+        mrow("P&L", "avg / trade", "avg", money),
+        mrow("P&L", "t-stat (trades)", "t", num),
+        mrow("P&L", "profit factor", "pf", num),
+        mrow("P&L", "avg win", "avgw", money),
+        mrow("P&L", "avg loss", "avgl", money),
+        mrow("P&L", "realized RR", "rr", lambda v: f"1:{v:.2f}"),
+        mrow("Risk", "max drawdown", "dd", money),
+        mrow("Risk", "longest drawdown (trades)", "ddlen", whole),
+        mrow("Risk", "max runup", "runup", money),
+        mrow("Risk", "Sharpe (ann., 1 trade/day)", "sharpe", num),
+        ["Risk", "P(net ≤ 0)", pct(sum(1 for v in mc["net"] if v <= 0) / N), ""],
+        ["Risk", "maxDD, worst resample", money(mc["dd"][0]), ""],
+        mrow("Streaks", "max win streak", "ws", whole),
+        mrow("Streaks", "max loss streak", "ls", whole),
+        mrow("Streaks", "avg win streak", "aws", num),
+        mrow("Streaks", "avg loss streak", "als", num),
+        mrow("Stability", "WR stability φ (20-trade blocks)", "phi", num),
     ]
     art["mc_table"] = MC
-    art["mc_note"] = (f"{N:,} bootstrap resamples of the trade list (i.i.d., "
-                      "order shuffled) — each row: median [5–95% band]. "
-                      "Calendar-based rows (months, daily Sharpe, stability) "
-                      "have no meaning under reshuffling and are omitted.")
+    art["mc_note"] = (f"{N:,} bootstrap resamples of the trade list (order "
+                      "shuffled, i.i.d.). Median = the typical run; the band "
+                      "holds 90% of runs. Example: max loss streak median 7, "
+                      "band 5…11 = half the runs saw a worst losing streak of "
+                      "7+, and only 5% saw worse than 11. Sharpe uses 1 "
+                      "trade = 1 day (exact for this strategy); φ uses "
+                      "20-trade blocks as pseudo-months.")
 
     # ---- prop sim: the house engine on this exact ledger ----
     sys.path.insert(0, ONYX)
@@ -247,23 +293,25 @@ def build(path: Path) -> None:
                       sweep=(), degradation=())
     ev, fu = sim["eval"], sim["funded"]
     md = lambda t: (t or {}).get("median")  # noqa: E731
-    add("Prop sim", "ruleset", "Lucid Flex 50K")
-    add("Prop sim", "eval pass", pct(ev["p"]))
-    add("Prop sim", "median days to pass", str(md(ev.get("days"))))
-    add("Prop sim", "eval bust", pct(ev["bust_p"]))
-    add("Prop sim", "funded payout", pct(fu["payout_p"]))
-    add("Prop sim", "median days to payout", str(md(fu.get("days"))))
-    add("Prop sim", "funded bust", pct(fu["bust_p"]))
+    P = []
+    P.append(["ruleset", "Lucid Flex 50K"])
+    P.append(["eval pass", pct(ev["p"])])
+    P.append(["median days to pass", str(md(ev.get("days")))])
+    P.append(["eval bust", pct(ev["bust_p"])])
+    P.append(["funded payout", pct(fu["payout_p"])])
+    P.append(["median days to payout", str(md(fu.get("days")))])
+    P.append(["funded bust", pct(fu["bust_p"])])
     if "max_payout_p" in fu:
-        add("Prop sim", "max payout reached", pct(fu["max_payout_p"]))
+        P.append(["max payout reached", pct(fu["max_payout_p"])])
+    art["prop_table"] = P
+    art.pop("prop_note", None)
 
     art["table"] = T
-    art["table_note"] = ("every number computed from this export's trade list; "
-                        "prop sim = the house engine on the same ledger")
+    art["table_note"] = "every number computed from this export's trade list"
     path.write_text(json.dumps(art) + "\n")
-    print(f"{path.name}: {len(T)} metrics + {len(MC)} Monte Carlo rows")
-    for l, v in MC:
-        print(f"  MC {l:28} {v}")
+    print(f"{path.name}: {len(T)} metrics, {len(MC)} MC rows, {len(P)} prop rows")
+    for sec, l, m, b in MC:
+        print(f"  MC {sec:9} {l:30} {m:>14}  {b}")
 
 
 if __name__ == "__main__":
