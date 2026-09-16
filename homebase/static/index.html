@@ -209,6 +209,18 @@
     border:1px solid var(--input); border-radius:var(--radius-md);
     padding:4px 8px; font-size:12.5px; }
   .asg input{ width:52px; font-family:var(--font-mono); }
+  .amenu{ position:absolute; top:calc(100% + 6px); left:0; z-index:40;
+    background:var(--card); border:1px solid var(--border);
+    border-radius:var(--radius-md); box-shadow:0 6px 24px rgb(0 0 0 / .14);
+    min-width:200px; padding:4px; }
+  .amenu .mi2{ display:block; width:100%; text-align:left; border:none;
+    background:none; color:var(--foreground); font-size:13px; padding:7px 10px;
+    border-radius:var(--radius-sm); cursor:pointer; }
+  .amenu .mi2:hover{ background:var(--secondary); }
+  .qty-edit{ cursor:pointer; border-bottom:1px dashed var(--muted-foreground); }
+  .qty-input{ width:44px; font-family:var(--font-mono); font-size:12px;
+    background:var(--background); color:var(--foreground);
+    border:1px solid var(--input); border-radius:var(--radius-sm); padding:1px 4px; }
 
   /* accounts — one dense list, hairline rows */
   .acct{ display:flex; align-items:center; gap:12px; padding:9px 16px;
@@ -526,13 +538,13 @@ function stratCard(name, s) {
   const accts = ST.accounts || {};
   const asg = (ST.book && ST.book[name]) || [];
   const rows = asg.map(a => acctRow(a.account, {qty: a.qty, strategy: name})).join("");
-  const opts = Object.keys(accts).filter(id => !asg.some(a => a.account === id))
-    .map(id => `<option value="${id}">${accts[id].label || id}</option>`).join("");
+  const free = Object.keys(accts).filter(id => !asg.some(a => a.account === id));
   const addForm = Object.keys(accts).length
-    ? (opts ? `<div class="asg" style="margin-top:6px">
-        <select id="asel-${name}">${opts}</select>
-        <input id="aqty-${name}" type="number" min="1" value="${c.qty}">
-        <button class="btn btn-outline btn-sm" onclick="addAsg('${name}')">Assign</button></div>` : "")
+    ? (free.length ? `<div style="position:relative;display:inline-block;margin-top:8px">
+        <button class="btn btn-outline btn-sm" onclick="toggleAsgMenu('${name}')">+ Assign</button>
+        <div class="amenu" id="amenu-${name}" hidden>` +
+        free.map(id => `<button class="mi2" onclick="pickAsg('${name}','${id}',${c.qty})">
+          ${accts[id].label || id}</button>`).join("") + `</div></div>` : "")
     : `<div class="mcap">add an account to run this strategy</div>`;
   const book = `<div class="slabel2">ACCOUNTS</div>${rows || ""}${addForm}`;
 
@@ -583,6 +595,7 @@ function render() {
 }
 
 async function refresh() {
+  if (FREEZE) return;             // don't wipe an open menu or qty edit
   if (DEMO) { ST = demoStatus(); render(); return; }
   try { ST = await (await fetch("/api/status")).json(); render(); }
   catch { $("#clock").textContent = "server unreachable"; }
@@ -742,7 +755,10 @@ function acctRow(id, extra) {
     <span class="dot ${a.connected ? "on" : "off"}" style="width:7px;height:7px"></span>
     <span class="nm" style="font-size:13px">${a.label}</span>
     ${a.env === "live" ? '<span class="pill live" style="font-size:10px">LIVE</span>' : ""}
-    ${extra.qty ? `<span class="strats">×${extra.qty}</span>` : ""}
+    ${extra.qty ? (extra.strategy
+      ? `<span class="strats qty-edit" title="Click to change size"
+           onclick="editQty(event,'${extra.strategy}','${id}',${extra.qty})">×${extra.qty}</span>`
+      : `<span class="strats">×${extra.qty}</span>`) : ""}
     ${err}<span class="spacer"></span>
     <span class="kvi">${usd(a.balance)}</span>
     <span class="kvi ${pnl > 0 ? "pos" : pnl < 0 ? "neg" : ""}">${pnl > 0 ? "+" : ""}${usd(pnl)}</span>
@@ -762,13 +778,48 @@ function removeAsg(strategy, account) {
   const cur = (ST.book[strategy] || []).filter(a => a.account !== account);
   setBook(strategy, cur);
 }
-function addAsg(strategy) {
-  const sel = $("#asel-" + strategy), q = $("#aqty-" + strategy);
-  if (!sel.value) return;
-  const cur = (ST.book[strategy] || []).filter(a => a.account !== sel.value);
-  cur.push({account: sel.value, qty: parseInt(q.value || "1", 10)});
+let FREEZE = false;               // pause re-render while a menu/edit is open
+function toggleAsgMenu(strategy) {
+  const m = $("#amenu-" + strategy);
+  const open = m.hidden;
+  document.querySelectorAll(".amenu").forEach(x => x.hidden = true);
+  m.hidden = !open;
+  FREEZE = !m.hidden;
+}
+function pickAsg(strategy, account, qty) {
+  FREEZE = false;
+  const cur = (ST.book[strategy] || []).filter(a => a.account !== account);
+  cur.push({account, qty});
   setBook(strategy, cur);
 }
+function editQty(ev, strategy, account, qty) {
+  ev.stopPropagation();
+  const span = ev.currentTarget;
+  FREEZE = true;
+  span.outerHTML = `<input class="qty-input" id="qedit" type="number" min="1" value="${qty}">`;
+  const inp = $("#qedit");
+  inp.focus(); inp.select();
+  const commit = () => {
+    FREEZE = false;
+    const v = parseInt(inp.value || "0", 10);
+    if (v > 0 && v !== qty) {
+      const cur = (ST.book[strategy] || []).map(a =>
+        a.account === account ? {account, qty: v} : a);
+      setBook(strategy, cur);
+    } else refresh();
+  };
+  inp.addEventListener("blur", commit);
+  inp.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") inp.blur();
+    if (e.key === "Escape") { inp.value = qty; inp.blur(); }
+  });
+}
+document.addEventListener("click", (e) => {
+  if (!e.target.closest(".amenu") && !String(e.target.getAttribute?.("onclick") || "").includes("toggleAsgMenu")) {
+    document.querySelectorAll(".amenu").forEach(x => x.hidden = true);
+    if (!document.getElementById("qedit")) FREEZE = false;
+  }
+});
 function mstrip(rows) {
   return `<div class="mstrip">` + Object.entries(rows).map(([k, v]) =>
     `<span class="mi"><b>${k}</b>${v}</span>`).join("") + `</div>`;
