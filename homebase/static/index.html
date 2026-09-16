@@ -314,15 +314,10 @@
       </div>
 
       <div class="sec-head">
-        <span class="h">Accounts</span>
-        <span class="hint">the pool — assign them to strategies below; Calendar shows each one's monthly P&amp;L</span>
-      </div>
-      <div id="accounts"><div class="card"><div class="acct">
-        <span class="dot off"></span><span class="nm dim">no account connected</span></div></div></div>
-
-      <div class="sec-head" style="margin-top:26px">
         <span class="h">Portfolio</span>
-        <span class="hint">each strategy: the exam record, the live record, and which accounts run it at what size</span>
+        <span class="hint">each strategy: the exam record, the live record, and the accounts running it</span>
+        <span class="spacer"></span>
+        <button class="btn btn-outline btn-sm" onclick="openConnect()">+ Add account</button>
       </div>
       <div id="strats"></div>
 
@@ -512,44 +507,27 @@ function stratCard(name, s) {
               "days": lv.days})
     : `<div class="mcap">no live trades yet — this strip earns itself</div>`);
 
-  // the book: assignment chips + add form
+  // the accounts running this strategy — full rows, balance + P&L + Calendar
   const accts = ST.accounts || {};
   const asg = (ST.book && ST.book[name]) || [];
-  const chips = asg.map(a => `<span class="chip">${(accts[a.account] || {}).label || a.account} × ${a.qty}
-      <button class="x" onclick="removeAsg('${name}','${a.account}')" title="Unassign">&times;</button></span>`).join("");
-  const opts = Object.keys(accts).map(id =>
-    `<option value="${id}">${accts[id].label || id}</option>`).join("");
+  const rows = asg.map(a => acctRow(a.account, {qty: a.qty, strategy: name})).join("");
+  const opts = Object.keys(accts).filter(id => !asg.some(a => a.account === id))
+    .map(id => `<option value="${id}">${accts[id].label || id}</option>`).join("");
   const addForm = Object.keys(accts).length
-    ? `<select id="asel-${name}">${opts}</select>
-       <input id="aqty-${name}" type="number" min="1" value="${c.qty}">
-       <button class="btn btn-outline btn-sm" onclick="addAsg('${name}')">Assign</button>`
-    : `<span class="mcap">add an account to assign it here</span>`;
-  const book = `<div class="slabel2">ACCOUNTS ON THIS STRATEGY</div>
-    <div class="asg">${chips}${addForm}</div>`;
+    ? (opts ? `<div class="asg" style="margin-top:6px">
+        <select id="asel-${name}">${opts}</select>
+        <input id="aqty-${name}" type="number" min="1" value="${c.qty}">
+        <button class="btn btn-outline btn-sm" onclick="addAsg('${name}')">Assign</button></div>` : "")
+    : `<div class="mcap">add an account to run this strategy</div>`;
+  const book = `<div class="slabel2">ACCOUNTS</div>${rows || ""}${addForm}`;
 
-  // today, per account
-  let rows = "";
-  for (const st of (s.accounts || [])) {
-    const bits = [];
-    if (st.upper_px) bits.push(`${fmt(st.upper_px)} ▲ / ${fmt(st.lower_px)} ▼`);
-    if (st.entry_side) {
-      const dv = (st.entry_fill != null && st.entry_anchor != null)
-        ? st.entry_fill - st.entry_anchor : null;
-      bits.push(`${st.entry_side} @ ${fmt(st.entry_fill)}` +
-        (dv == null ? "" : ` (${dv >= 0 ? "+" : ""}${fmt(dv)} slip)`));
-    }
-    if (st.exit_reason) bits.push(st.exit_reason +
-      (st.pnl != null ? ` ${usd(st.pnl)}` : ""));
-    if (st.note) bits.push(st.note);
-    rows += `<div class="row"><span class="k">${(accts[st.account] || {}).label || st.account}</span>
-      <span class="v">${st.status}${bits.length ? " · " + bits.join(" · ") : ""}</span></div>`;
-  }
+  // gate/self-fire, one footer line
   const tm = ST.timer && ST.timer.strategies && ST.timer.strategies[name];
+  let gate = "";
   if (tm) {
     const g = tm.gate === true ? `gate TREND${tm.adx != null ? " (ADX " + tm.adx + ")" : ""}`
       : tm.gate === false ? `gate CHOP${tm.adx != null ? " (ADX " + tm.adx + ")" : ""}` : "gate pending";
-    const cls = tm.stage === "error" ? "neg" : "";
-    rows += `<div class="row"><span class="k">Self-fire</span><span class="v ${cls}">${g} · ${tm.stage}${tm.anchor ? " @ " + fmt(tm.anchor) : ""}${tm.error ? " — " + String(tm.error).slice(0, 70) : ""}</span></div>`;
+    gate = `<span class="${tm.stage === "error" ? "neg" : ""}">${g} · ${tm.stage}${tm.anchor ? " @ " + fmt(tm.anchor) : ""}${tm.error ? " — " + String(tm.error).slice(0, 60) : ""}</span> · `;
   }
   return `<div class="card strat">
     <div class="card-header">
@@ -557,11 +535,8 @@ function stratCard(name, s) {
       <span class="spec">${c.symbol} · ±${c.offset_pts} off · SL ${c.sl_pts} / TP ${c.tp_pts}</span>
       <span class="right">${disabled}${pill}</span>
     </div>
-    <div class="card-content">
-      ${research}${live}${book}
-      ${rows ? `<div class="slabel2">TODAY</div><div class="rows">${rows}</div>` : ""}
-    </div>
-    <div class="card-footer"><span>cancel ${c.cancel_et} · flat ${c.flat_et} ET</span>${test}</div>
+    <div class="card-content">${research}${live}${book}</div>
+    <div class="card-footer"><span>${gate}cancel ${c.cancel_et} · flat ${c.flat_et} ET</span>${test}</div>
   </div>`;
 }
 
@@ -609,8 +584,6 @@ function render() {
   const pos = ids.flatMap(id => accts[id].open_positions || []);
   $("#st_pos").textContent = pos.length ? pos.map(p => p.symbol + " " + p.net).join("  ") : "flat";
   $("#st_wrk").textContent = sum("working_orders") ?? "—";
-
-  renderAccounts(accts);
   $("#strats").innerHTML = Object.entries(s.strategies)
     .map(([n, v]) => stratCard(n, v)).join("");
 
@@ -775,39 +748,24 @@ async function testFire(name) {
         JSON.stringify(r.result || r)); refresh();
 }
 
-/* ---- accounts section ---- */
-function renderAccounts(accts) {
-  const el = $("#accounts");
-  const ids = Object.keys(accts || {});
-  if (!ids.length) {
-    el.innerHTML = `<div class="card"><div class="acct">
-      <span class="dot off"></span><span class="nm dim">no accounts yet</span>
-      <span class="spacer"></span>
-      <button class="btn btn-outline btn-sm" onclick="openConnect()">Add account</button>
-    </div></div>`;
-    return;
-  }
-  const runningOn = (id) => Object.entries(ST.book || {})
-    .filter(([, rows]) => (rows || []).some(a => a.account === id))
-    .map(([n, rows]) => n + " ×" + rows.find(a => a.account === id).qty)
-    .join(" · ");
-  el.innerHTML = `<div class="card">` + ids.map(id => {
-    const a = accts[id];
-    const pnl = a.realized_pnl;
-    const err = (!a.connected && a.error)
-      ? `<span class="kvi neg" style="font-size:11.5px;text-align:left;min-width:0">${String(a.error).slice(0, 60)}${String(a.error).length > 60 ? "…" : ""}</span>` : "";
-    return `<div class="acct">
-      <span class="dot ${a.connected ? "on" : "off"}"></span>
-      <span class="nm">${a.label}</span>
-      ${a.env === "live" ? '<span class="pill live" style="font-size:10px">LIVE</span>' : ""}
-      <span class="strats">${runningOn(id) || "no strategy assigned"}</span>
-      ${err}<span class="spacer"></span>
-      <span class="kvi">${usd(a.balance)}</span>
-      <span class="kvi ${pnl > 0 ? "pos" : pnl < 0 ? "neg" : ""}">${pnl > 0 ? "+" : ""}${usd(pnl)}</span>
-      <button class="btn btn-outline btn-sm" onclick="openCal('${a.account || a.label}')">Calendar</button>
-    </div>`;
-  }).join("") + `</div><div style="margin-top:8px">
-    <button class="btn btn-outline btn-sm" onclick="openConnect()">+ Add account</button></div>`;
+/* ---- account row (rendered inside strategy cards) ---- */
+function acctRow(id, extra) {
+  const a = (ST.accounts || {})[id] || {label: id};
+  const pnl = a.realized_pnl;
+  const err = (!a.connected && a.error)
+    ? `<span class="kvi neg" style="font-size:11px;text-align:left;min-width:0">${String(a.error).slice(0, 46)}…</span>` : "";
+  return `<div class="acct" style="padding:7px 0">
+    <span class="dot ${a.connected ? "on" : "off"}" style="width:7px;height:7px"></span>
+    <span class="nm" style="font-size:13px">${a.label}</span>
+    ${a.env === "live" ? '<span class="pill live" style="font-size:10px">LIVE</span>' : ""}
+    ${extra.qty ? `<span class="strats">×${extra.qty}</span>` : ""}
+    ${err}<span class="spacer"></span>
+    <span class="kvi">${usd(a.balance)}</span>
+    <span class="kvi ${pnl > 0 ? "pos" : pnl < 0 ? "neg" : ""}">${pnl > 0 ? "+" : ""}${usd(pnl)}</span>
+    <button class="btn btn-outline btn-sm" onclick="openCal('${a.account || a.label}')">Calendar</button>
+    ${extra.strategy ? `<button class="x" style="border:none;background:none;color:var(--muted-foreground);cursor:pointer;font-size:14px"
+      onclick="removeAsg('${extra.strategy}','${id}')" title="Unassign">&times;</button>` : ""}
+  </div>`;
 }
 
 /* ---- the book (assignments) ---- */
