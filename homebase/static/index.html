@@ -426,6 +426,7 @@
     <div id="resChart"></div>
     <div class="mcap" id="resChartCap"></div>
     <div id="resTable"></div>
+    <div id="resMc"></div>
   </div>
 </div>
 
@@ -913,6 +914,17 @@ async function openRes(name) {
         ).join("") + `</div>` +
         (d.table_note ? `<div class="mcap" style="margin-top:8px">${d.table_note}</div>` : "");
     } else $("#resTable").innerHTML = "";
+    if (d.mc_table && d.mc_table.length) {
+      $("#resMc").innerHTML =
+        `<div style="border-top:2px solid var(--border);margin-top:16px;padding-top:12px">
+          <div class="slabel2" style="font-size:11.5px">MONTE CARLO — SAME METRICS, 10,000 RESAMPLES · median [5–95%]</div>
+          <div class="rtable">` +
+        d.mc_table.map(([k, v]) =>
+          `<div class="rrow"><span class="k">${k}</span><span class="v">${v}</span></div>`
+        ).join("") + `</div>` +
+        (d.mc_note ? `<div class="mcap" style="margin-top:8px">${d.mc_note}</div>` : "") +
+        `</div>`;
+    } else $("#resMc").innerHTML = "";
   } catch (_) {
     $("#resChart").innerHTML = `<div class="mcap">curve unavailable</div>`;
   }

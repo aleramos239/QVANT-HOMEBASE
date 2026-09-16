@@ -144,41 +144,94 @@ def build(path: Path) -> None:
         add("Stability", "worst month WR",
             f"{ww} {pct(mwr[ww])} ({len(mrows[ww])} trades)")
 
-    # ---- Monte Carlo: 10,000 bootstrap resamples of the trade list ----
+    # ---- Monte Carlo: its own full section — the SAME metrics, but as
+    # median [5–95%] across 10,000 bootstrap resamples of the trade list.
+    # Calendar-tied rows (months, green days, daily Sharpe, stability φ)
+    # have no meaning under reshuffling and are deliberately absent.
     import random
     rng = random.Random(11)
     N = 10000
-    nets, dds, mstreaks = [], [], []
+    ks = ("wr", "net", "avg", "t", "pf", "avgw", "avgl", "rr",
+          "dd", "runup", "ddlen", "ws", "ls")
+    mc = {k: [] for k in ks}
     for _ in range(N):
-        s = peak_ = dd_ = 0.0
-        cl = mxl = 0
+        s = s2 = wsum = lsum = 0.0
+        wn = ln = 0
+        peak_ = trough_ = dd_ = ru_ = 0.0
+        cw = cl = mw = ml = 0
+        cur = 0.0
+        dl = mdl = 0
         for _ in range(n):
             p = pnl[rng.randrange(n)]
             s += p
-            if s > peak_:
-                peak_ = s
-            elif peak_ - s > dd_:
-                dd_ = peak_ - s
-            cl = cl + 1 if p < 0 else 0
-            if cl > mxl:
-                mxl = cl
-        nets.append(s)
-        dds.append(dd_)
-        mstreaks.append(mxl)
-    nets.sort(); dds.sort(); mstreaks.sort()
+            s2 += p * p
+            if p > 0:
+                wsum += p; wn += 1
+                cw += 1; cl = 0
+            elif p < 0:
+                lsum += p; ln += 1
+                cl += 1; cw = 0
+            mw = cw if cw > mw else mw
+            ml = cl if cl > ml else ml
+            cur += p
+            if cur > peak_:
+                peak_ = cur
+                dl = 0
+            else:
+                dl += 1
+                mdl = dl if dl > mdl else mdl
+            if peak_ - cur > dd_:
+                dd_ = peak_ - cur
+            if cur < trough_:
+                trough_ = cur
+            if cur - trough_ > ru_:
+                ru_ = cur - trough_
+        avg_ = s / n
+        var_ = (s2 - n * avg_ * avg_) / (n - 1)
+        std_ = math.sqrt(var_) if var_ > 0 else 0.0
+        aw = wsum / wn if wn else 0.0
+        al = lsum / ln if ln else 0.0
+        mc["wr"].append(wn / n)
+        mc["net"].append(s)
+        mc["avg"].append(avg_)
+        mc["t"].append(avg_ / std_ * math.sqrt(n) if std_ else 0.0)
+        mc["pf"].append(wsum / -lsum if lsum else float("inf"))
+        mc["avgw"].append(aw)
+        mc["avgl"].append(al)
+        mc["rr"].append(aw / -al if al else float("inf"))
+        mc["dd"].append(-dd_)
+        mc["runup"].append(ru_)
+        mc["ddlen"].append(mdl)
+        mc["ws"].append(mw)
+        mc["ls"].append(ml)
+    for k in ks:
+        mc[k].sort()
     q = lambda a, p: a[min(len(a) - 1, int(p * len(a)))]  # noqa: E731
-    add("Monte Carlo", "method",
-        f"{N:,} bootstrap resamples")
-    add("Monte Carlo", "net, median", money(q(nets, 0.5)))
-    add("Monte Carlo", "net, 5–95% band",
-        f"{money(q(nets, 0.05))} … {money(q(nets, 0.95))}")
-    add("Monte Carlo", "P(net ≤ 0)", pct(sum(1 for v in nets if v <= 0) / N))
-    add("Monte Carlo", "maxDD, median", money(-q(dds, 0.5)))
-    add("Monte Carlo", "maxDD, p95 / p99",
-        f"{money(-q(dds, 0.95))} / {money(-q(dds, 0.99))}")
-    add("Monte Carlo", "maxDD, worst resample", money(-dds[-1]))
-    add("Monte Carlo", "loss streak, median / p95",
-        f"{q(mstreaks, 0.5)} / {q(mstreaks, 0.95)}")
+    band = lambda a, f: f"{f(q(a, 0.5))}  [{f(q(a, 0.05))} … {f(q(a, 0.95))}]"  # noqa: E731
+    num = lambda v: f"{v:.2f}"  # noqa: E731
+    whole = lambda v: str(int(v))  # noqa: E731
+    MC = [
+        ["win rate", band(mc["wr"], pct)],
+        ["net", band(mc["net"], money)],
+        ["avg / trade", band(mc["avg"], money)],
+        ["t-stat (trades)", band(mc["t"], num)],
+        ["profit factor", band(mc["pf"], num)],
+        ["avg win", band(mc["avgw"], money)],
+        ["avg loss", band(mc["avgl"], money)],
+        ["realized RR", band(mc["rr"], lambda v: f"1:{v:.2f}")],
+        ["max drawdown", band(mc["dd"], money)],
+        ["longest drawdown (trades)", band(mc["ddlen"], whole)],
+        ["max runup", band(mc["runup"], money)],
+        ["max win streak", band(mc["ws"], whole)],
+        ["max loss streak", band(mc["ls"], whole)],
+        ["P(net ≤ 0)", pct(sum(1 for v in mc["net"] if v <= 0) / N)],
+        ["maxDD worst resample", money(mc["dd"][0])],
+    ]
+    art["mc_table"] = MC
+    art["mc_note"] = (f"{N:,} bootstrap resamples of the trade list (i.i.d., "
+                      "order shuffled) — each row: median [5–95% band]. "
+                      "Calendar-based rows (months, daily Sharpe, stability) "
+                      "have no meaning under reshuffling and are omitted.")
 
     # ---- prop sim: the house engine on this exact ledger ----
     sys.path.insert(0, ONYX)
@@ -208,9 +261,9 @@ def build(path: Path) -> None:
     art["table_note"] = ("every number computed from this export's trade list; "
                         "prop sim = the house engine on the same ledger")
     path.write_text(json.dumps(art) + "\n")
-    print(f"{path.name}: {len(T)} metrics written")
-    for s, l, v in T:
-        print(f"  {s:10} {l:24} {v}")
+    print(f"{path.name}: {len(T)} metrics + {len(MC)} Monte Carlo rows")
+    for l, v in MC:
+        print(f"  MC {l:28} {v}")
 
 
 if __name__ == "__main__":
