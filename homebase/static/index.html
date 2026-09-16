@@ -560,9 +560,7 @@ function stratCard(name, s) {
   if (s.research && s.research.rows) {
     research += `<button class="btn btn-outline btn-sm" onclick="openRes('${name}')">Backtest metrics</button>`;
   }
-  if (c.pine_file) {
-    research += `<button class="btn btn-outline btn-sm" onclick="openPine('${name}')">Pine script</button>`;
-  }
+  research += `<button class="btn btn-outline btn-sm" onclick="openPine('${name}')">Pine script</button>`;
   research += `</div>`;
   // live strip (earned from the journal, real fills only)
   const lv = s.live;
