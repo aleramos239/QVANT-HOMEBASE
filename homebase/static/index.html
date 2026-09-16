@@ -121,7 +121,9 @@
   .feed .d{ color:var(--muted-foreground); overflow-wrap:anywhere; }
   .feed-empty{ color:var(--muted-foreground); font-size:13px; padding:18px 0; }
 
-  .clock{ font-family:var(--font-mono); font-size:12px; color:var(--muted-foreground); }
+  .clock{ font-family:var(--font-mono); font-size:12px; color:var(--muted-foreground);
+    white-space:nowrap; }
+  @media (max-width:860px){ .clock{ display:none; } }
   #toast{ position:fixed; bottom:18px; left:50%; transform:translateX(-50%);
     background:var(--card); color:var(--card-foreground); border:1px solid var(--border);
     border-radius:var(--radius-md); padding:10px 16px; font-size:12.5px; display:none;
@@ -276,7 +278,13 @@
       <span class="spacer"></span>
       <span class="clock" id="clock">—</span>
       <span id="statusPill" class="pill idle">connecting…</span>
-      <button class="btn btn-outline btn-sm" type="button" onclick="openConnect()">Connect broker</button>
+      <button class="btn btn-default btn-sm holdbtn" id="armBtn" style="display:none">
+        <span class="holdfill"></span><span class="hold-lbl">Arm <small>· hold</small></span>
+      </button>
+      <button class="btn btn-outline btn-sm" id="disarmBtn" style="display:none">Disarm</button>
+      <button class="btn btn-destructive btn-sm holdbtn" id="killBtn">
+        <span class="holdfill"></span><span class="hold-lbl">Kill <small>· hold</small></span>
+      </button>
       <button class="btn btn-outline btn-sm btn-icon" type="button" id="themeToggle" title="Toggle theme" aria-label="Toggle theme">
         <svg class="ic-sun" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/></svg>
         <svg class="ic-moon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A7.5 7.5 0 1 1 9.5 4a6 6 0 0 0 10.5 10.5z"/></svg>
@@ -286,34 +294,9 @@
     <div class="scroll">
     <div class="view-wrap">
 
-      <div class="hero">
-        <span class="dot off" id="heroDot"></span>
-        <div>
-          <h1 id="heroTitle">—</h1>
-          <p id="heroSub"></p>
-        </div>
-        <div class="actions">
-          <button class="btn btn-default holdbtn" id="armBtn" style="display:none">
-            <span class="holdfill"></span><span class="hold-lbl">Arm <small>· hold</small></span>
-          </button>
-          <button class="btn btn-outline" id="disarmBtn" style="display:none">Disarm</button>
-          <button class="btn btn-destructive holdbtn" id="killBtn">
-            <span class="holdfill"></span><span class="hold-lbl">Kill <small>· hold</small></span>
-          </button>
-        </div>
-      </div>
+      <div class="ready notready" id="readyStrip" style="display:none"></div>
 
-      <div class="ready" id="readyStrip" style="display:none"></div>
-      <div class="warn-banner" id="brokerWarn" style="display:none"></div>
-
-      <div class="fleetbar">
-        <div class="stat"><div class="k">Day P&amp;L</div><div class="v" id="st_pnl">—</div><div class="s">realized, broker-reported</div></div>
-        <div class="stat"><div class="k">Balance</div><div class="v" id="st_bal">—</div><div class="s" id="st_bal_sub">account cash</div></div>
-        <div class="stat"><div class="k">Open positions</div><div class="v" id="st_pos">—</div><div class="s" id="st_pos_sub">across strategies</div></div>
-        <div class="stat"><div class="k">Working orders</div><div class="v" id="st_wrk">—</div><div class="s">resting at the broker</div></div>
-      </div>
-
-      <div class="sec-head">
+      <div class="sec-head" style="margin-top:8px">
         <span class="h">Portfolio</span>
         <span class="hint">each strategy: the exam record, the live record, and the accounts running it</span>
         <span class="spacer"></span>
@@ -544,46 +527,23 @@ function render() {
   const s = ST;
   $("#clock").textContent = s.et_now.replace("T", " · ").slice(0, 21) + " ET";
   const pill = $("#statusPill");
-  pill.textContent = s.armed ? "ARMED" : "DISARMED";
+  pill.textContent = s.armed ? "ARMED" : "SHADOW";
   pill.className = s.armed ? "pill live" : "pill idle";
-  $("#heroDot").className = "dot " + (s.armed ? "on" : "off");
-  $("#heroTitle").textContent = s.armed ? "Armed" : "Disarmed";
-  $("#heroSub").textContent = s.armed
-    ? "Alerts place real orders on the configured account. SL/TP ride broker-side on every entry."
-    : "Alerts are validated and journaled — nothing is placed until you arm the desk.";
+  pill.title = s.armed ? "Signals place real orders — SL/TP ride broker-side"
+    : "Signals are validated and journaled only";
   $("#armBtn").style.display = s.armed ? "none" : "";
   $("#disarmBtn").style.display = s.armed ? "" : "none";
 
+  // readiness: silent when everything is fine, loud when it is not
   const r = s.readiness;
-  if (r) {
-    const strip = $("#readyStrip");
+  const strip = $("#readyStrip");
+  if (r && !r.ready) {
     strip.style.display = "";
-    strip.className = "ready" + (r.ready ? "" : " notready");
-    strip.innerHTML = `<span class="headline">${r.ready ? "Ready for the open" : "Not ready"}</span>` +
-      r.checks.map(c => `<span class="ri ${c.level}">
+    strip.innerHTML = `<span class="headline">Not ready</span>` +
+      r.checks.filter(c => c.level === "bad" || c.level === "warn")
+        .map(c => `<span class="ri ${c.level}">
         <span class="rd ${c.level}"></span><b>${c.label}</b> ${c.detail}</span>`).join("");
-  }
-
-  const accts = s.accounts || {};
-  const ids = Object.keys(accts);
-  const errs = ids.filter(id => !accts[id].connected && accts[id].error);
-  const warn = $("#brokerWarn");
-  if (errs.length) {
-    warn.style.display = "";
-    warn.textContent = errs.map(id =>
-      accts[id].label + " — " + accts[id].error).join("   ·   ");
-  } else warn.style.display = "none";
-  const sum = (k) => ids.reduce((t, id) => accts[id][k] == null ? t
-    : (t ?? 0) + Number(accts[id][k]), null);
-  const pnl = sum("realized_pnl");
-  const pv = $("#st_pnl"); pv.textContent = usd(pnl);
-  pv.className = "v" + (pnl > 0 ? " pos" : pnl < 0 ? " neg" : "");
-  $("#st_bal").textContent = usd(sum("balance"));
-  $("#st_bal_sub").textContent = ids.length ? ids.length + " account" +
-    (ids.length > 1 ? "s" : "") : "account cash";
-  const pos = ids.flatMap(id => accts[id].open_positions || []);
-  $("#st_pos").textContent = pos.length ? pos.map(p => p.symbol + " " + p.net).join("  ") : "flat";
-  $("#st_wrk").textContent = sum("working_orders") ?? "—";
+  } else strip.style.display = "none";
   $("#strats").innerHTML = Object.entries(s.strategies)
     .map(([n, v]) => stratCard(n, v)).join("");
 
