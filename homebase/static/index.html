@@ -246,6 +246,16 @@
     color:var(--muted-foreground); }
   .cal-foot .tot{ margin-left:auto; font-family:var(--font-mono); font-weight:600; }
 
+  /* research metrics table (popup) */
+  .rtable{ columns:2; column-gap:28px; margin-top:6px; }
+  .rtable .slabel2{ break-inside:avoid; column-span:none; }
+  .rrow{ display:flex; justify-content:space-between; gap:12px; padding:3.5px 0;
+    border-bottom:1px solid var(--border); break-inside:avoid; font-size:12px; }
+  .rrow .k{ color:var(--muted-foreground); }
+  .rrow .v{ font-family:var(--font-mono); font-variant-numeric:tabular-nums;
+    text-align:right; white-space:nowrap; }
+  .modal{ max-height:86vh; overflow-y:auto; }
+
   /* setup cards */
   .setup-grid{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
   @media (max-width:760px){ .setup-grid{ grid-template-columns:1fr; } }
@@ -415,6 +425,7 @@
     <div class="mcap warn" id="resCaveat" style="margin-bottom:10px"></div>
     <div id="resChart"></div>
     <div class="mcap" id="resChartCap"></div>
+    <div id="resTable"></div>
   </div>
 </div>
 
@@ -892,6 +903,16 @@ async function openRes(name) {
       $("#resChart").innerHTML =
         `<div class="mcap">no equity curve on file — attach the exam export to add one</div>`;
     }
+    if (d.table && d.table.length) {
+      let last = "";
+      $("#resTable").innerHTML = `<div class="rtable">` +
+        d.table.map(([sec, k, v]) =>
+          (sec !== last ? ((last = sec),
+            `<div class="slabel2">${sec.toUpperCase()}</div>`) : "") +
+          `<div class="rrow"><span class="k">${k}</span><span class="v">${v}</span></div>`
+        ).join("") + `</div>` +
+        (d.table_note ? `<div class="mcap" style="margin-top:8px">${d.table_note}</div>` : "");
+    } else $("#resTable").innerHTML = "";
   } catch (_) {
     $("#resChart").innerHTML = `<div class="mcap">curve unavailable</div>`;
   }
