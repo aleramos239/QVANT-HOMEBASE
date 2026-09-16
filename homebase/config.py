@@ -1,10 +1,12 @@
-"""Homebase config: which strategies run, at what size, when the clock steps in.
+"""Homebase config: strategies, accounts, and the BOOK that joins them.
 
-The frozen strategy geometry (offset / SL / TP / qty) lives HERE, server-side.
-A TradingView alert only carries the two entry prices; anything the wire says
-is validated against this file before an order exists. Edit config.json (or
-this file's defaults for a fresh install), never the alert payload, to change
-what runs.
+The frozen strategy geometry (offset / SL / TP / times) lives HERE,
+server-side. A signal only carries prices; anything the wire says is
+validated against this file before an order exists.
+
+The book is the portfolio: strategy -> [{account, qty}, ...]. One signal
+fans out to every assigned account at that account's qty. One account may
+appear under many strategies.
 """
 from __future__ import annotations
 
@@ -16,8 +18,8 @@ from .paths import config_path
 
 @dataclass
 class StrategyCfg:
-    symbol: str                  # canonical, e.g. "NQ" (adapter resolves front month)
-    qty: int
+    symbol: str                  # canonical, e.g. "NQ" (front month resolved live)
+    qty: int                     # spec/default size — the BOOK sets per-account qty
     offset_pts: float            # entry stops sit this far off the anchor close
     sl_pts: float                # protective stop, points from entry trigger
     tp_pts: float                # target, points from entry trigger
@@ -26,27 +28,27 @@ class StrategyCfg:
     accept_from_et: str = "09:29"   # alerts outside this ET window are refused
     accept_until_et: str = "09:45"
     enabled: bool = False
-    gated: bool = False             # True = a no-alert day can be the regime
-                                    # gate (expected), not a broken pipe
-    self_fire: bool = False         # app fires at 9:30 from its own feed
-                                    # (TV alert stays a cross-check)
+    gated: bool = False          # True = a no-alert day can be the regime gate
+    self_fire: bool = False      # app fires at 9:30 from its own feed
+    metrics: dict = field(default_factory=dict)   # research record, display-only
 
 
 @dataclass
 class AccountCfg:
-    keyring_key: str = "tradovate:demo"  # credentials key in secrets_store
-    live: bool = False                   # False = Tradovate demo environment
-    account_name: str = ""               # pin one account under the login
+    keyring_key: str = ""        # credentials key in secrets_store
+    account_name: str = ""       # pin one account under the login
+    live: bool = False           # False = demo environment
+    label: str = ""              # display name (defaults to account_name)
 
 
 @dataclass
 class AppCfg:
     armed: bool = False          # master switch: disarmed = journal-only dry run
     webhook_secret: str = ""     # shared secret the TV alert must carry
-    hook_port: int = 8851        # hook-ONLY listener — the only port a tunnel
-                                 # may expose; dashboard/arm/kill stay private
+    hook_port: int = 8851        # hook-ONLY listener — the only tunneled port
     public_hook_url: str = ""    # the tunnel's public origin, once one is up
-    account: AccountCfg = field(default_factory=AccountCfg)
+    accounts: dict[str, AccountCfg] = field(default_factory=dict)
+    book: dict[str, list] = field(default_factory=dict)   # strategy -> [{account, qty}]
     strategies: dict[str, StrategyCfg] = field(default_factory=dict)
 
 
@@ -54,21 +56,37 @@ def _defaults() -> AppCfg:
     return AppCfg(
         strategies={
             # NQ 9:30 straddle — the approved champion (spec 2026-09-09,
-            # OOS-passed 2026-09-10): off ±10 / SL 5 / TP 15, 3 minis.
-            # The TREND gate lives in the Pine script: no alert on CHOP days.
-            "nq930": StrategyCfg(symbol="NQ", qty=3, offset_pts=10.0,
-                                 sl_pts=5.0, tp_pts=15.0, enabled=True,
-                                 gated=True, self_fire=True),
-            # YM 9:30 straddle (OOS-passed 2026-09-13): off ±20 / SL 5 / TP 15,
-            # unfiltered. Disabled until the user sets the size and enables it.
-            "ym930": StrategyCfg(symbol="YM", qty=1, offset_pts=20.0,
-                                 sl_pts=5.0, tp_pts=15.0, enabled=False),
+            # OOS-passed 2026-09-10). The TREND gate runs in-app (self_fire)
+            # and in the Pine script alike.
+            "nq930": StrategyCfg(
+                symbol="NQ", qty=3, offset_pts=10.0, sl_pts=5.0, tp_pts=15.0,
+                enabled=True, gated=True, self_fire=True,
+                metrics={
+                    "source": "one-shot sealed-year OOS exam · 2025-07-08→2026-07-07 · TV 15s",
+                    "rows": {"trades": "167", "WR": "47.3%", "PF": "2.34",
+                             "t": "5.04", "avg/trade/mini": "$79.0",
+                             "maxDD/mini": "−$1,135", "green months": "10/10"},
+                    "caveat": "does not cover live fill quality — the edge is 2–4 ticks deep",
+                }),
+            # YM 9:30 straddle (OOS-passed 2026-09-13), unfiltered. Disabled
+            # until the user sizes and enables it.
+            "ym930": StrategyCfg(
+                symbol="YM", qty=1, offset_pts=20.0, sl_pts=5.0, tp_pts=15.0,
+                enabled=False, gated=False, self_fire=False,
+                metrics={
+                    "source": "one-shot OOS exam · 2025-01-07→2026-09-10 · TV 15s",
+                    "rows": {"trades": "434", "WR": "50.7%", "PF": "1.76",
+                             "t": "5.76", "avg/trade": "$14.51",
+                             "maxDD": "−$316", "green months": "19/21"},
+                    "caveat": "modeled friction is already 56% of the $25 risk — thin book",
+                }),
         },
     )
 
 
 def load() -> AppCfg:
-    """Defaults overlaid with config.json (missing keys keep their default)."""
+    """Defaults overlaid with config.json. Migrates the pre-book single
+    'account' layout into accounts{main} + a book assignment."""
     cfg = _defaults()
     p = config_path()
     if not p.exists():
@@ -76,14 +94,36 @@ def load() -> AppCfg:
     data = json.loads(p.read_text())
     cfg.armed = bool(data.get("armed", cfg.armed))
     cfg.webhook_secret = str(data.get("webhook_secret", cfg.webhook_secret))
-    if isinstance(data.get("account"), dict):
-        cfg.account = AccountCfg(**{**asdict(cfg.account), **data["account"]})
+    cfg.hook_port = int(data.get("hook_port", cfg.hook_port))
+    cfg.public_hook_url = str(data.get("public_hook_url", cfg.public_hook_url))
+    for aid, a in (data.get("accounts") or {}).items():
+        base = asdict(AccountCfg())
+        cfg.accounts[aid] = AccountCfg(**{**base, **a})
     for name, s in (data.get("strategies") or {}).items():
         base = asdict(cfg.strategies[name]) if name in cfg.strategies else {}
-        merged = {**base, **s}
-        cfg.strategies[name] = StrategyCfg(**merged)
+        cfg.strategies[name] = StrategyCfg(**{**base, **s})
+    cfg.book = {k: list(v) for k, v in (data.get("book") or {}).items()}
+
+    # ---- migration: single-account era ("account": {...}) ----
+    legacy = data.get("account")
+    if legacy and not cfg.accounts and legacy.get("keyring_key"):
+        cfg.accounts["main"] = AccountCfg(
+            keyring_key=legacy.get("keyring_key", ""),
+            account_name=legacy.get("account_name", ""),
+            live=bool(legacy.get("live", False)),
+            label=legacy.get("account_name", "main"))
+        if not cfg.book:
+            cfg.book = {n: [{"account": "main", "qty": s.qty}]
+                        for n, s in cfg.strategies.items() if s.enabled}
     return cfg
 
 
 def save(cfg: AppCfg) -> None:
-    config_path().write_text(json.dumps(asdict(cfg), indent=2) + "\n")
+    config_path().write_text(json.dumps(asdict(cfg), indent=2,
+                                        ensure_ascii=False) + "\n")
+
+
+def assignments(cfg: AppCfg, strategy: str) -> list[dict]:
+    """The strategy's book rows, restricted to accounts that exist."""
+    return [a for a in cfg.book.get(strategy, [])
+            if a.get("account") in cfg.accounts and int(a.get("qty", 0)) > 0]

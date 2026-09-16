@@ -135,11 +135,11 @@ class SelfTimer:
                 self.engine.journal("timer_error", strategy=name,
                                     error=st["error"])
                 return
-            eng_state = self.engine._state(name)
-            if eng_state.status != "idle":
+            day = self.engine.day_status(name)
+            if day != "idle":
                 st["stage"] = "done"        # something (TV?) already acted
                 self.engine.journal("timer_deferred", strategy=name,
-                                    status=eng_state.status)
+                                    status=day)
                 return
             import time as _t
             md = self._md

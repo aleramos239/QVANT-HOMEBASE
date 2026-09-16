@@ -35,11 +35,15 @@ class FakeMD:
 
 def mk(tmp_path, *, last_trade=24500.0, clock=None):
     clock = clock or Clock()
-    cfg = AppCfg(armed=False, webhook_secret="s", account=AccountCfg(),
+    cfg = AppCfg(armed=False, webhook_secret="s",
+                 accounts={"main": AccountCfg(keyring_key="k",
+                                              account_name="MAIN")},
+                 book={"nq930": [{"account": "main", "qty": 3}]},
                  strategies={"nq930": StrategyCfg(
                      symbol="NQ", qty=3, offset_pts=10.0, sl_pts=5.0,
                      tp_pts=15.0, enabled=True, gated=True, self_fire=True)})
-    engine = Engine(cfg, FakeAdapter(), now_fn=clock, root=tmp_path)
+    engine = Engine(cfg, {"main": FakeAdapter("main")}, now_fn=clock,
+                    root=tmp_path)
     md = FakeMD(last_trade=last_trade)
     timer = SelfTimer(cfg, engine, md_factory=lambda: md, now_fn=clock)
     return timer, engine, md, clock
@@ -97,7 +101,7 @@ def test_timer_refuses_stale_anchor(tmp_path):
 
 def test_timer_defers_when_day_already_acted(tmp_path):
     timer, engine, md, clock = mk(tmp_path)
-    engine._state("nq930").status = "placed"              # e.g. TV won the race
+    engine._state("nq930", "main").status = "placed"      # e.g. TV won the race
     _drive_to_fire(timer, clock)
     assert timer.status()["strategies"]["nq930"]["stage"] == "done"
     assert any(e["event"] == "timer_deferred" for e in events(tmp_path))

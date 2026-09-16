@@ -183,6 +183,30 @@
     font-size:15px; cursor:pointer; padding:2px 6px; }
   .opt .x:hover{ color:var(--neg); }
 
+  /* metric strips (research + live) */
+  .mstrip{ display:flex; flex-wrap:wrap; gap:4px 18px; padding:8px 0 2px; }
+  .mstrip .mi{ font-family:var(--font-mono); font-size:12.5px;
+    font-variant-numeric:tabular-nums; }
+  .mstrip .mi b{ display:block; font-family:var(--font-sans); font-weight:400;
+    font-size:10.5px; color:var(--muted-foreground); letter-spacing:.02em; }
+  .mcap{ font-size:11px; color:var(--muted-foreground); margin-top:6px; }
+  .mcap.warn{ color:color-mix(in oklch, var(--neg) 70%, var(--muted-foreground)); }
+  .slabel2{ font-size:10.5px; letter-spacing:.08em; font-weight:600;
+    color:var(--muted-foreground); margin:12px 0 2px; }
+
+  /* assignments */
+  .asg{ display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-top:8px; }
+  .asg .chip{ display:inline-flex; align-items:center; gap:7px;
+    border:1px solid var(--border); border-radius:var(--radius-md);
+    padding:4px 6px 4px 10px; font-size:12.5px; font-family:var(--font-mono); }
+  .asg .chip .x{ border:none; background:none; color:var(--muted-foreground);
+    cursor:pointer; font-size:13px; padding:0 3px; }
+  .asg .chip .x:hover{ color:var(--neg); }
+  .asg select,.asg input{ background:var(--background); color:var(--foreground);
+    border:1px solid var(--input); border-radius:var(--radius-md);
+    padding:4px 8px; font-size:12.5px; }
+  .asg input{ width:52px; font-family:var(--font-mono); }
+
   /* accounts */
   .acct{ display:flex; align-items:center; gap:14px; padding:13px 16px; }
   .acct .nm{ font-weight:600; font-size:14px; }
@@ -286,14 +310,14 @@
 
       <div class="sec-head">
         <span class="h">Accounts</span>
-        <span class="hint">the account alerts trade on — click Calendar for its monthly P&amp;L</span>
+        <span class="hint">the pool — assign them to strategies below; Calendar shows each one's monthly P&amp;L</span>
       </div>
       <div id="accounts"><div class="card"><div class="acct">
         <span class="dot off"></span><span class="nm dim">no account connected</span></div></div></div>
 
       <div class="sec-head" style="margin-top:26px">
-        <span class="h">Strategies</span>
-        <span class="hint">one alert a day each — unfilled entries die at 12:55, everything is flat by 15:55 ET</span>
+        <span class="h">Portfolio</span>
+        <span class="hint">each strategy: the exam record, the live record, and which accounts run it at what size</span>
       </div>
       <div id="strats"></div>
 
@@ -386,13 +410,13 @@
     </div>
 
     <div id="wstep3" style="display:none">
-      <h2>Pick the account</h2>
-      <p class="sub">Every alert trades exactly one account. You can come back
-        and switch any time.</p>
+      <h2>Add an account</h2>
+      <p class="sub">Pick one to add to the pool — run the wizard again to add
+        more. You assign accounts to strategies from the portfolio.</p>
       <div id="acctList"></div>
       <div class="row-btns">
         <button class="btn btn-outline" onclick="wizGoto(2)">&larr; Back</button>
-        <button class="btn btn-default" id="cUse" onclick="useAccount()">Use this account</button>
+        <button class="btn btn-default" id="cUse" onclick="useAccount()">Add this account</button>
       </div>
     </div>
   </div>
@@ -458,41 +482,78 @@ const STATUS_PILL = {idle: "pill idle", placed: "pill", live: "pill live",
                      done: "pill idle", error: "pill lost"};
 
 function stratCard(name, s) {
-  const st = s.state, c = s.cfg;
-  const pill = `<span class="${STATUS_PILL[st.status] || "pill idle"}">${st.status}</span>`;
+  const c = s.cfg;
+  const pill = `<span class="${STATUS_PILL[s.day_status] || "pill idle"}">${s.day_status}</span>`;
   const disabled = c.enabled ? "" : `<span class="pill idle">disabled</span>`;
   const test = (ST && !ST.armed && c.enabled)
     ? `<button class="btn btn-outline btn-sm" onclick="testFire('${name}')">Test fire · dry</button>`
     : "";
-  let rows = `<div class="row"><span class="k">Entry stops</span>
-    <span class="v">${st.upper_px ? fmt(st.upper_px) + " ▲ &nbsp;·&nbsp; " + fmt(st.lower_px) + " ▼" : "—"}</span></div>`;
-  if (st.entry_side) {
-    const dv = (st.entry_fill != null && st.entry_anchor != null)
-      ? st.entry_fill - st.entry_anchor : null;
-    rows += `<div class="row"><span class="k">Entry</span>
-      <span class="v">${st.entry_side} @ ${fmt(st.entry_fill)}${dv == null ? "" :
-        ` <span class="${dv ? "neg" : "pos"}">(${dv >= 0 ? "+" : ""}${fmt(dv)} vs anchor)</span>`}</span></div>`;
+
+  // research strip (the honest exam record)
+  let research = "";
+  if (s.research && s.research.rows) {
+    research = `<div class="slabel2">RESEARCH — ${s.research.source || ""}</div>` +
+      mstrip(s.research.rows) +
+      (s.research.caveat ? `<div class="mcap warn">⚠ ${s.research.caveat}</div>` : "");
   }
-  if (st.exit_reason) {
-    const cls = st.exit_reason === "tp" ? "pos" : (st.exit_reason === "sl" ? "neg" : "");
-    rows += `<div class="row"><span class="k">Exit</span>
-      <span class="v ${cls}">${st.exit_reason}${st.exit_fill ? " @ " + fmt(st.exit_fill) : ""}</span></div>`;
+  // live strip (earned from the journal, real fills only)
+  const lv = s.live;
+  const live = `<div class="slabel2">LIVE</div>` + (lv && lv.trades
+    ? mstrip({"trades": lv.trades, "WR": lv.win_rate + "%",
+              "net": usd(lv.net), "avg/trade": usd(lv.avg_trade),
+              "avg slip": (lv.avg_slip_pts ?? "—") + " pts",
+              "days": lv.days})
+    : `<div class="mcap">no live trades yet — this strip earns itself</div>`);
+
+  // the book: assignment chips + add form
+  const accts = ST.accounts || {};
+  const asg = (ST.book && ST.book[name]) || [];
+  const chips = asg.map(a => `<span class="chip">${(accts[a.account] || {}).label || a.account} × ${a.qty}
+      <button class="x" onclick="removeAsg('${name}','${a.account}')" title="Unassign">&times;</button></span>`).join("");
+  const opts = Object.keys(accts).map(id =>
+    `<option value="${id}">${accts[id].label || id}</option>`).join("");
+  const addForm = Object.keys(accts).length
+    ? `<select id="asel-${name}">${opts}</select>
+       <input id="aqty-${name}" type="number" min="1" value="${c.qty}">
+       <button class="btn btn-outline btn-sm" onclick="addAsg('${name}')">Assign</button>`
+    : `<span class="mcap">add an account to assign it here</span>`;
+  const book = `<div class="slabel2">ACCOUNTS ON THIS STRATEGY</div>
+    <div class="asg">${chips}${addForm}</div>`;
+
+  // today, per account
+  let rows = "";
+  for (const st of (s.accounts || [])) {
+    const bits = [];
+    if (st.upper_px) bits.push(`${fmt(st.upper_px)} ▲ / ${fmt(st.lower_px)} ▼`);
+    if (st.entry_side) {
+      const dv = (st.entry_fill != null && st.entry_anchor != null)
+        ? st.entry_fill - st.entry_anchor : null;
+      bits.push(`${st.entry_side} @ ${fmt(st.entry_fill)}` +
+        (dv == null ? "" : ` (${dv >= 0 ? "+" : ""}${fmt(dv)} slip)`));
+    }
+    if (st.exit_reason) bits.push(st.exit_reason +
+      (st.pnl != null ? ` ${usd(st.pnl)}` : ""));
+    if (st.note) bits.push(st.note);
+    rows += `<div class="row"><span class="k">${(accts[st.account] || {}).label || st.account}</span>
+      <span class="v">${st.status}${bits.length ? " · " + bits.join(" · ") : ""}</span></div>`;
   }
-  if (st.note) rows += `<div class="row"><span class="k">Note</span><span class="v">${st.note}</span></div>`;
   const tm = ST.timer && ST.timer.strategies && ST.timer.strategies[name];
   if (tm) {
     const g = tm.gate === true ? `gate TREND${tm.adx != null ? " (ADX " + tm.adx + ")" : ""}`
       : tm.gate === false ? `gate CHOP${tm.adx != null ? " (ADX " + tm.adx + ")" : ""}` : "gate pending";
     const cls = tm.stage === "error" ? "neg" : "";
-    rows += `<div class="row"><span class="k">Self-fire</span><span class="v ${cls}">${g} · ${tm.stage}${tm.anchor ? " @ " + fmt(tm.anchor) : ""}${tm.error ? " — " + tm.error : ""}</span></div>`;
+    rows += `<div class="row"><span class="k">Self-fire</span><span class="v ${cls}">${g} · ${tm.stage}${tm.anchor ? " @ " + fmt(tm.anchor) : ""}${tm.error ? " — " + String(tm.error).slice(0, 70) : ""}</span></div>`;
   }
   return `<div class="card strat">
     <div class="card-header">
       <span class="card-title">${name.toUpperCase()}</span>
-      <span class="spec">${c.symbol} · ±${c.offset_pts} off · SL ${c.sl_pts} / TP ${c.tp_pts} · ${c.qty}×</span>
+      <span class="spec">${c.symbol} · ±${c.offset_pts} off · SL ${c.sl_pts} / TP ${c.tp_pts}</span>
       <span class="right">${disabled}${pill}</span>
     </div>
-    <div class="card-content"><div class="rows">${rows}</div></div>
+    <div class="card-content">
+      ${research}${live}${book}
+      ${rows ? `<div class="slabel2">TODAY</div><div class="rows">${rows}</div>` : ""}
+    </div>
     <div class="card-footer"><span>cancel ${c.cancel_et} · flat ${c.flat_et} ET</span>${test}</div>
   </div>`;
 }
@@ -521,21 +582,28 @@ function render() {
         <span class="rd ${c.level}"></span><b>${c.label}</b> ${c.detail}</span>`).join("");
   }
 
-  const b = s.broker || {};
+  const accts = s.accounts || {};
+  const ids = Object.keys(accts);
+  const errs = ids.filter(id => !accts[id].connected && accts[id].error);
   const warn = $("#brokerWarn");
-  if (!b.connected && b.error) {
-    warn.style.display = ""; warn.textContent = "Broker unavailable — " + b.error;
+  if (errs.length) {
+    warn.style.display = "";
+    warn.textContent = errs.map(id =>
+      accts[id].label + " — " + accts[id].error).join("   ·   ");
   } else warn.style.display = "none";
-  const pnl = b.realized_pnl;
+  const sum = (k) => ids.reduce((t, id) => accts[id][k] == null ? t
+    : (t ?? 0) + Number(accts[id][k]), null);
+  const pnl = sum("realized_pnl");
   const pv = $("#st_pnl"); pv.textContent = usd(pnl);
   pv.className = "v" + (pnl > 0 ? " pos" : pnl < 0 ? " neg" : "");
-  $("#st_bal").textContent = usd(b.balance);
-  $("#st_bal_sub").textContent = b.account ? String(b.account) : "account cash";
-  const pos = b.open_positions || [];
+  $("#st_bal").textContent = usd(sum("balance"));
+  $("#st_bal_sub").textContent = ids.length ? ids.length + " account" +
+    (ids.length > 1 ? "s" : "") : "account cash";
+  const pos = ids.flatMap(id => accts[id].open_positions || []);
   $("#st_pos").textContent = pos.length ? pos.map(p => p.symbol + " " + p.net).join("  ") : "flat";
-  $("#st_wrk").textContent = b.working_orders ?? "—";
+  $("#st_wrk").textContent = sum("working_orders") ?? "—";
 
-  renderAccounts(b);
+  renderAccounts(accts);
   $("#strats").innerHTML = Object.entries(s.strategies)
     .map(([n, v]) => stratCard(n, v)).join("");
 
@@ -574,32 +642,61 @@ async function testFire(name) {
 }
 
 /* ---- accounts section ---- */
-function renderAccounts(b) {
+function renderAccounts(accts) {
   const el = $("#accounts");
-  if (!b.account) {
+  const ids = Object.keys(accts || {});
+  if (!ids.length) {
     el.innerHTML = `<div class="card"><div class="acct">
-      <span class="dot off"></span><span class="nm dim">no account connected</span>
+      <span class="dot off"></span><span class="nm dim">no accounts yet</span>
       <span class="spacer"></span>
-      <button class="btn btn-outline btn-sm" onclick="openConnect()">Connect broker</button>
+      <button class="btn btn-outline btn-sm" onclick="openConnect()">Add account</button>
     </div></div>`;
     return;
   }
-  const pnl = b.realized_pnl;
-  el.innerHTML = `<div class="card"><div class="acct">
-    <span class="dot ${b.connected ? "on" : "off"}"></span>
-    <span class="nm">${b.account}</span>
-    <span class="pill idle">demo</span>
-    <span class="spacer"></span>
-    <span class="kvi"><span class="lbl">Balance</span>${usd(b.balance)}</span>
-    <span class="kvi ${pnl > 0 ? "pos" : pnl < 0 ? "neg" : ""}" style="min-width:86px">
-      <span class="lbl">Day P&amp;L</span>${usd(pnl)}</span>
-    <span class="kvi"><span class="lbl">Open</span>${(b.open_positions || []).length ? b.open_positions.map(p => p.symbol + " " + p.net).join(" ") : "flat"}</span>
-    <button class="btn btn-outline btn-sm" onclick="openCal('${b.account}')">Calendar</button>
-  </div></div>`;
+  el.innerHTML = ids.map(id => {
+    const a = accts[id];
+    const pnl = a.realized_pnl;
+    const err = (!a.connected && a.error)
+      ? `<span class="kvi neg" style="font-size:11.5px">${String(a.error).slice(0, 60)}${String(a.error).length > 60 ? "…" : ""}</span>` : "";
+    return `<div class="card" style="margin-bottom:10px"><div class="acct">
+      <span class="dot ${a.connected ? "on" : "off"}"></span>
+      <span class="nm">${a.label}</span>
+      <span class="pill idle">${a.env}</span>
+      ${err}<span class="spacer"></span>
+      <span class="kvi"><span class="lbl">Balance</span>${usd(a.balance)}</span>
+      <span class="kvi ${pnl > 0 ? "pos" : pnl < 0 ? "neg" : ""}" style="min-width:86px">
+        <span class="lbl">Day P&amp;L</span>${usd(pnl)}</span>
+      <span class="kvi"><span class="lbl">Open</span>${(a.open_positions || []).length ? a.open_positions.map(p => p.symbol + " " + p.net).join(" ") : "flat"}</span>
+      <button class="btn btn-outline btn-sm" onclick="openCal('${a.account || a.label}')">Calendar</button>
+    </div></div>`;
+  }).join("") + `<div style="margin-top:2px">
+    <button class="btn btn-outline btn-sm" onclick="openConnect()">+ Add account</button></div>`;
+}
+
+/* ---- the book (assignments) ---- */
+async function setBook(strategy, assignments) {
+  const r = await post("/api/book", {strategy, assignments});
+  if (!r.ok) toast("Book update failed — " + (r.detail || "unknown"), 5000);
+  refresh();
+}
+function removeAsg(strategy, account) {
+  const cur = (ST.book[strategy] || []).filter(a => a.account !== account);
+  setBook(strategy, cur);
+}
+function addAsg(strategy) {
+  const sel = $("#asel-" + strategy), q = $("#aqty-" + strategy);
+  if (!sel.value) return;
+  const cur = (ST.book[strategy] || []).filter(a => a.account !== sel.value);
+  cur.push({account: sel.value, qty: parseInt(q.value || "1", 10)});
+  setBook(strategy, cur);
+}
+function mstrip(rows) {
+  return `<div class="mstrip">` + Object.entries(rows).map(([k, v]) =>
+    `<span class="mi"><b>${k}</b>${v}</span>`).join("") + `</div>`;
 }
 
 /* ---- connect wizard ---- */
-let WIZ = {saved: null, accounts: [], pick: null};
+let WIZ = {saved: null, key: null, accounts: [], pick: null};
 function openConnect() { wizGoto(1); $("#connectOverlay").classList.add("open"); }
 function closeConnect() {
   $("#connectOverlay").classList.remove("open");
@@ -654,7 +751,9 @@ async function doConnect() {
       : {username: $("#cUser").value, password: $("#cPass").value};
     const r = await post("/api/connect", body);
     if (r.ok) {
-      WIZ.accounts = r.accounts || []; WIZ.pick = r.account || null;
+      WIZ.key = r.key;
+      WIZ.accounts = r.accounts || [];
+      WIZ.pick = WIZ.accounts.length ? WIZ.accounts[0].name : null;
       renderAcctList(); wizGoto(3);
     } else toast("Connect failed — " + (r.error || r.detail || "unknown"), 6000);
   } finally { btn.disabled = false; btn.textContent = "Find my accounts"; refresh(); }
@@ -662,22 +761,32 @@ async function doConnect() {
 function renderAcctList() {
   const el = $("#acctList");
   if (!WIZ.accounts.length) { el.innerHTML =
-    `<p class="wnote">connected as ${WIZ.pick || "?"} — the login exposed no
-     account list, so that account stays selected.</p>`; return; }
-  el.innerHTML = WIZ.accounts.map(a => `
-    <div class="opt ${WIZ.pick === a.name ? "sel" : ""}" onclick="WIZ.pick='${a.name}';renderAcctList()">
+    `<p class="wnote">the login verified but exposed no account list — if it
+     should have accounts, check the login on the broker side.</p>`; return; }
+  const have = Object.keys((ST && ST.accounts) || {});
+  el.innerHTML = WIZ.accounts.map(a => {
+    const added = have.includes(String(a.name).toLowerCase());
+    return `
+    <div class="opt ${WIZ.pick === a.name ? "sel" : ""} ${added ? "disabled" : ""}"
+         onclick="${added ? "" : `WIZ.pick='${a.name}';renderAcctList()`}">
       <span><span class="t">${a.name}</span><br>
-      <span class="sub">${a.active === false ? "inactive" : "active"}</span></span>
+      <span class="sub">${added ? "already in the pool" :
+        (a.active === false ? "inactive" : "active")}</span></span>
       <span class="spacer"></span><span class="radio"></span>
-    </div>`).join("");
+    </div>`;
+  }).join("");
 }
 async function useAccount() {
-  const btn = $("#cUse"); btn.disabled = true; btn.textContent = "Connecting…";
+  const btn = $("#cUse"); btn.disabled = true; btn.textContent = "Adding…";
   try {
-    const r = await post("/api/select-account", {account_name: WIZ.pick || ""});
-    if (r.ok) { toast("Connected — " + (r.account || WIZ.pick)); closeConnect(); }
-    else toast("Failed — " + (r.error || "unknown"), 6000);
-  } finally { btn.disabled = false; btn.textContent = "Use this account"; refresh(); }
+    const r = await post("/api/accounts/add",
+                         {key: WIZ.key, account_name: WIZ.pick || ""});
+    if (r.ok) {
+      toast(r.connected ? "Added and connected — " + r.account
+            : "Added — connecting: " + (r.error || ""), 5000);
+      closeConnect();
+    } else toast("Failed — " + (r.error || r.detail || "unknown"), 6000);
+  } finally { btn.disabled = false; btn.textContent = "Add this account"; refresh(); }
 }
 $("#connectOverlay").addEventListener("click", (e) => {
   if (e.target === e.currentTarget) closeConnect();
