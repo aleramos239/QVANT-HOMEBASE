@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.ramosquant.homebase</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__REPO__/.venv/bin/python</string>
+    <string>-m</string><string>uvicorn</string>
+    <string>homebase.server:app</string>
+    <string>--app-dir</string><string>__REPO__</string>
+    <string>--host</string><string>127.0.0.1</string>
+    <string>--port</string><string>8850</string>
+    <string>--log-level</string><string>warning</string>
+  </array>
+  <key>WorkingDirectory</key><string>__REPO__</string>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>__REPO__/homebase/.state/service.log</string>
+  <key>StandardErrorPath</key><string>__REPO__/homebase/.state/service.log</string>
+</dict>
+</plist>
