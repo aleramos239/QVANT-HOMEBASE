@@ -297,8 +297,6 @@
       <div class="ready notready" id="readyStrip" style="display:none"></div>
 
       <div class="sec-head" style="margin-top:8px">
-        <span class="h">Portfolio</span>
-        <span class="hint">each strategy: the exam record, the live record, and the accounts running it</span>
         <span class="spacer"></span>
         <button class="btn btn-outline btn-sm" onclick="openConnect()">+ Add account</button>
       </div>
@@ -504,14 +502,6 @@ function stratCard(name, s) {
     : `<div class="mcap">add an account to run this strategy</div>`;
   const book = `<div class="slabel2">ACCOUNTS</div>${rows || ""}${addForm}`;
 
-  // gate/self-fire, one footer line
-  const tm = ST.timer && ST.timer.strategies && ST.timer.strategies[name];
-  let gate = "";
-  if (tm) {
-    const g = tm.gate === true ? `gate TREND${tm.adx != null ? " (ADX " + tm.adx + ")" : ""}`
-      : tm.gate === false ? `gate CHOP${tm.adx != null ? " (ADX " + tm.adx + ")" : ""}` : "gate pending";
-    gate = `<span class="${tm.stage === "error" ? "neg" : ""}">${g} · ${tm.stage}${tm.anchor ? " @ " + fmt(tm.anchor) : ""}${tm.error ? " — " + String(tm.error).slice(0, 60) : ""}</span> · `;
-  }
   return `<div class="card strat">
     <div class="card-header">
       <span class="card-title">${name.toUpperCase()}</span>
@@ -519,7 +509,7 @@ function stratCard(name, s) {
       <span class="right">${disabled}${pill}</span>
     </div>
     <div class="card-content">${research}${live}${book}</div>
-    <div class="card-footer"><span>${gate}cancel ${c.cancel_et} · flat ${c.flat_et} ET</span>${test}</div>
+    <div class="card-footer"><span>cancel ${c.cancel_et} · flat ${c.flat_et} ET</span>${test}</div>
   </div>`;
 }
 
