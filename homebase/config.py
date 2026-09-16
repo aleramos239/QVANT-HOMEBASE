@@ -26,6 +26,8 @@ class StrategyCfg:
     accept_from_et: str = "09:29"   # alerts outside this ET window are refused
     accept_until_et: str = "09:45"
     enabled: bool = False
+    gated: bool = False             # True = a no-alert day can be the regime
+                                    # gate (expected), not a broken pipe
 
 
 @dataclass
@@ -50,7 +52,8 @@ def _defaults() -> AppCfg:
             # OOS-passed 2026-09-10): off ±10 / SL 5 / TP 15, 3 minis.
             # The TREND gate lives in the Pine script: no alert on CHOP days.
             "nq930": StrategyCfg(symbol="NQ", qty=3, offset_pts=10.0,
-                                 sl_pts=5.0, tp_pts=15.0, enabled=True),
+                                 sl_pts=5.0, tp_pts=15.0, enabled=True,
+                                 gated=True),
             # YM 9:30 straddle (OOS-passed 2026-09-13): off ±20 / SL 5 / TP 15,
             # unfiltered. Disabled until the user sets the size and enables it.
             "ym930": StrategyCfg(symbol="YM", qty=1, offset_pts=20.0,

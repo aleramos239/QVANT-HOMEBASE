@@ -95,6 +95,58 @@ def daily_pnl(account: str, month: str) -> dict:
     return {"days": days, "total": round(total, 2)}
 
 
+READINESS_FROM = (9, 25)   # journal a not-ready state once, at 9:25 ET
+
+
+def compute_readiness(now_et, cfg: config_mod.AppCfg, states: dict,
+                      broker_connected: bool, broker_error: str | None) -> dict:
+    """Every check the desk needs before the open, across ALL strategies.
+    levels: ok | info | warn | bad — 'ready' means no 'bad'."""
+    import datetime as dt
+    checks = []
+    checks.append({"level": "ok" if broker_connected else "bad",
+                   "label": "Broker",
+                   "detail": "connected" if broker_connected
+                   else (broker_error or "not connected")})
+    checks.append({"level": "ok" if cfg.webhook_secret else "bad",
+                   "label": "Webhook secret",
+                   "detail": "set" if cfg.webhook_secret else "missing — TV alerts would be rejected"})
+    enabled = {n: s for n, s in cfg.strategies.items() if s.enabled}
+    checks.append({"level": "ok" if enabled else "warn",
+                   "label": "Strategies",
+                   "detail": (", ".join(enabled) or "none enabled")})
+    weekday = now_et.weekday() < 5
+    for name, s in enabled.items():
+        st = states.get(name)
+        status = getattr(st, "status", "idle")
+        h, m = s.accept_until_et.split(":")
+        after_window = now_et.time() > dt.time(int(h), int(m))
+        if weekday and after_window and status == "idle":
+            if s.gated:
+                checks.append({"level": "warn", "label": name,
+                               "detail": "no alert today — gated day (expected) "
+                                         "or the TV alert is broken"})
+            else:
+                checks.append({"level": "bad", "label": name,
+                               "detail": "no alert arrived — this strategy "
+                                         "trades every day, check the TV alert"})
+        elif status != "idle":
+            checks.append({"level": "ok", "label": name, "detail": status})
+    checks.append({"level": "info", "label": "Mode",
+                   "detail": "ARMED — alerts place real orders" if cfg.armed
+                   else "shadow — alerts journal only"})
+    return {"ready": not any(c["level"] == "bad" for c in checks),
+            "checks": checks}
+
+
+def should_fire_readiness(now_et, fired_date: str | None) -> bool:
+    """True once per weekday, in the 9:25-9:30 ET slot."""
+    if now_et.weekday() >= 5 or fired_date == now_et.date().isoformat():
+        return False
+    t = now_et.time()
+    return t.hour == READINESS_FROM[0] and t.minute >= READINESS_FROM[1]
+
+
 def build_adapter(cfg: config_mod.AppCfg) -> BrokerAdapter:
     env = "live" if cfg.account.live else "demo"
     sel = {"account_name": cfg.account.account_name} \
@@ -120,10 +172,23 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         broker_status.update(connected=True, error=None)
         engine.journal("broker_connected", account=ad.account_id)
 
+    readiness_fired = {"date": None}
+
     async def _clock_loop():
         while True:
             try:
                 await engine.clock_tick()
+                now = engine.now_et()
+                if should_fire_readiness(now, readiness_fired["date"]):
+                    readiness_fired["date"] = now.date().isoformat()
+                    r = compute_readiness(now, cfg, engine.states,
+                                          box["adapter"].connected,
+                                          broker_status.get("error"))
+                    engine.journal(
+                        "morning_readiness", ready=r["ready"],
+                        problems=[c["label"] + ": " + c["detail"]
+                                  for c in r["checks"]
+                                  if c["level"] in ("bad", "warn")])
             except Exception as e:  # noqa: BLE001 — the clock must never die
                 engine.journal("clock_error", error=str(e))
             await asyncio.sleep(CLOCK_INTERVAL_S)
@@ -208,6 +273,9 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             "armed": cfg.armed,
             "et_now": engine.now_et().isoformat(timespec="seconds"),
             "account_env": "live" if cfg.account.live else "demo",
+            "readiness": compute_readiness(
+                engine.now_et(), cfg, engine.states,
+                metrics.get("connected", False), metrics.get("error")),
             "broker": metrics,
             "strategies": {
                 name: {

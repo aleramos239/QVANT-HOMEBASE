@@ -136,6 +136,32 @@ def test_calendar_close_over_close(client, tmp_path):
     assert d["total"] == 100.0
 
 
+def test_readiness_in_status_and_logic(client):
+    d = client.get("/api/status").json()
+    r = d["readiness"]
+    assert r["ready"] is False                      # FakeAdapter not connected
+    assert any(c["label"] == "Broker" and c["level"] == "bad" for c in r["checks"])
+
+    import datetime as dt
+    from homebase.server import compute_readiness, should_fire_readiness
+    from homebase.config import StrategyCfg
+    cfg = client.app.state.cfg
+    cfg.strategies["ym"] = StrategyCfg(symbol="YM", qty=1, offset_pts=20,
+                                       sl_pts=5, tp_pts=15, enabled=True)
+    cfg.strategies["nq930"].gated = True
+    ten_am = dt.datetime(2026, 9, 14, 10, 0)       # Monday, after window
+    r2 = compute_readiness(ten_am, cfg, {}, True, None)
+    by = {c["label"]: c["level"] for c in r2["checks"]}
+    assert by["ym"] == "bad"                        # unfiltered: missed alert
+    assert by["nq930"] == "warn"                    # gated: could be the gate
+    assert r2["ready"] is False
+
+    assert should_fire_readiness(dt.datetime(2026, 9, 14, 9, 26), None) is True
+    assert should_fire_readiness(dt.datetime(2026, 9, 14, 9, 26), "2026-09-14") is False
+    assert should_fire_readiness(dt.datetime(2026, 9, 13, 9, 26), None) is False  # Sunday
+    assert should_fire_readiness(dt.datetime(2026, 9, 14, 9, 10), None) is False
+
+
 def test_kill_disarms_and_clears(client):
     client.post("/api/arm", json={"armed": True})
     r = client.post("/api/kill").json()

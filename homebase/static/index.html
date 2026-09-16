@@ -55,6 +55,24 @@
   .holdbtn .hold-lbl{ position:relative; }
   .holdbtn small{ font-weight:500; opacity:.7; }
 
+  /* readiness strip */
+  .ready{ display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+    border:1px solid var(--border); border-radius:var(--radius-md);
+    padding:8px 14px; margin:0 0 14px; font-size:12.5px;
+    color:var(--muted-foreground); }
+  .ready .ri{ display:inline-flex; align-items:center; gap:6px; white-space:nowrap; }
+  .ready .rd{ width:8px; height:8px; border-radius:9999px; flex:0 0 auto; }
+  .ready .rd.ok{ background:var(--foreground); }
+  .ready .rd.info{ background:transparent; border:1.5px solid var(--muted-foreground); }
+  .ready .rd.warn{ background:transparent; border:1.5px solid var(--foreground); border-radius:2px; }
+  .ready .rd.bad{ background:var(--neg); }
+  .ready .ri.bad{ color:var(--neg); }
+  .ready .ri b{ color:var(--foreground); font-weight:600; }
+  .ready .ri.bad b{ color:var(--neg); }
+  .ready .headline{ font-weight:600; color:var(--foreground); }
+  .ready.notready{ border-color:color-mix(in oklch, var(--neg) 35%, transparent); }
+  .ready.notready .headline{ color:var(--neg); }
+
   .warn-banner{ border:1px solid color-mix(in oklch, var(--neg) 30%, transparent);
     background:color-mix(in oklch, var(--neg) 8%, transparent); color:var(--neg);
     border-radius:var(--radius-md); padding:9px 14px; font-size:12.5px;
@@ -256,6 +274,7 @@
         </div>
       </div>
 
+      <div class="ready" id="readyStrip" style="display:none"></div>
       <div class="warn-banner" id="brokerWarn" style="display:none"></div>
 
       <div class="fleetbar">
@@ -484,6 +503,16 @@ function render() {
     : "Alerts are validated and journaled — nothing is placed until you arm the desk.";
   $("#armBtn").style.display = s.armed ? "none" : "";
   $("#disarmBtn").style.display = s.armed ? "" : "none";
+
+  const r = s.readiness;
+  if (r) {
+    const strip = $("#readyStrip");
+    strip.style.display = "";
+    strip.className = "ready" + (r.ready ? "" : " notready");
+    strip.innerHTML = `<span class="headline">${r.ready ? "Ready for the open" : "Not ready"}</span>` +
+      r.checks.map(c => `<span class="ri ${c.level}">
+        <span class="rd ${c.level}"></span><b>${c.label}</b> ${c.detail}</span>`).join("");
+  }
 
   const b = s.broker || {};
   const warn = $("#brokerWarn");
