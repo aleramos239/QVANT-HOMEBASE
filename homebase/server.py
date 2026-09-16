@@ -221,9 +221,14 @@ def create_app(cfg: config_mod.AppCfg | None = None,
     async def lifespan(_app):
         tasks = []
         if background:
+            import uvicorn  # noqa: PLC0415 — only the real server needs it
+            hook_server = uvicorn.Server(uvicorn.Config(
+                hook_app, host="127.0.0.1", port=cfg.hook_port,
+                log_level="warning"))
             tasks = [asyncio.create_task(_clock_loop()),
                      asyncio.create_task(_broker_loop()),
-                     asyncio.create_task(_equity_loop())]
+                     asyncio.create_task(_equity_loop()),
+                     asyncio.create_task(hook_server.serve())]
         try:
             yield
         finally:
@@ -238,8 +243,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
     # ------------------------------------------------------------ webhook
-    @app.post("/hook")
-    async def hook(request: Request):
+    async def _handle_hook(request: Request):
         try:
             payload = json.loads(await request.body())
         except Exception:
@@ -250,6 +254,14 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             engine.journal("hook_rejected", reason="bad_secret")
             raise HTTPException(401, "bad secret")
         return await engine.handle_alert(payload)
+
+    app.post("/hook")(_handle_hook)
+
+    # The tunnel-facing app: ONE route, nothing else. A tunnel pointed at
+    # hook_port can never reach the dashboard, arm, kill, or connect.
+    hook_app = FastAPI(title="Homebase hook")
+    hook_app.post("/hook")(_handle_hook)
+    app.state.hook_app = hook_app
 
     # ------------------------------------------------------------ dashboard
     @app.get("/")
@@ -413,6 +425,15 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         return {"account": account, "month": month, **d,
                 "history_since": next(iter(equity_by_day(account)), None)}
 
+    @app.post("/api/hook-url")
+    async def set_hook_url(request: Request):
+        """Record the tunnel's public origin so the TV card shows the real
+        URL to paste (a quick tunnel's origin changes on every restart)."""
+        body = await request.json()
+        cfg.public_hook_url = str(body.get("url") or "").rstrip("/")
+        config_mod.save(cfg)
+        return {"ok": True, "public_hook_url": cfg.public_hook_url}
+
     @app.get("/api/tv-setup")
     async def tv_setup():
         """Everything TradingView needs, ready to paste. The Pine script
@@ -420,6 +441,8 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         it never sits in the Pine source or the TV alert dialog."""
         return {
             "hook_path": "/hook",
+            "public_hook_url": (cfg.public_hook_url + "/hook")
+            if cfg.public_hook_url else None,
             "secret": cfg.webhook_secret,
             "strategies": {
                 name: {

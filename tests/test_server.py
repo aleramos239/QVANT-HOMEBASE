@@ -136,6 +136,24 @@ def test_calendar_close_over_close(client, tmp_path):
     assert d["total"] == 100.0
 
 
+def test_hook_app_exposes_only_the_hook(client):
+    hook_app = client.app.state.hook_app
+    paths = {r.path for r in hook_app.routes if hasattr(r, "path")}
+    assert "/hook" in paths
+    assert not any(p.startswith("/api") or p == "/" for p in paths)
+    hc = TestClient(hook_app)
+    r = hc.post("/hook", json={"secret": "tv-secret", "strategy": "nq930",
+                               "upper": 24510.0, "lower": 24490.0})
+    assert r.status_code == 200                     # same gate, same engine
+    assert hc.get("/api/status").status_code == 404
+
+
+def test_hook_url_persists_into_tv_setup(client):
+    client.post("/api/hook-url", json={"url": "https://x.trycloudflare.com/"})
+    d = client.get("/api/tv-setup").json()
+    assert d["public_hook_url"] == "https://x.trycloudflare.com/hook"
+
+
 def test_readiness_in_status_and_logic(client):
     d = client.get("/api/status").json()
     r = d["readiness"]

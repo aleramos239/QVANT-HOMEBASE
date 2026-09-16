@@ -41,6 +41,9 @@ class AccountCfg:
 class AppCfg:
     armed: bool = False          # master switch: disarmed = journal-only dry run
     webhook_secret: str = ""     # shared secret the TV alert must carry
+    hook_port: int = 8851        # hook-ONLY listener — the only port a tunnel
+                                 # may expose; dashboard/arm/kill stay private
+    public_hook_url: str = ""    # the tunnel's public origin, once one is up
     account: AccountCfg = field(default_factory=AccountCfg)
     strategies: dict[str, StrategyCfg] = field(default_factory=dict)
 

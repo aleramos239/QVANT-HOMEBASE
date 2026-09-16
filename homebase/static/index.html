@@ -719,7 +719,8 @@ function copyText(id) {
 async function loadTvSetup() {
   try {
     const d = await (await fetch("/api/tv-setup")).json();
-    $("#tvUrl").textContent = window.location.origin + d.hook_path;
+    $("#tvUrl").textContent = d.public_hook_url ||
+      (window.location.origin + d.hook_path + "  (local only — no tunnel yet)");
     $("#tvSecret").textContent = d.secret || "— (set webhook_secret in config.json)";
     const steps = Object.entries(d.strategies).filter(([, s]) => s.steps)
       .map(([n, s]) => s.steps.map(x => `<li>${x}</li>`).join("")).shift() || "";
