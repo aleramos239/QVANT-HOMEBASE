@@ -479,6 +479,13 @@ function stratCard(name, s) {
       <span class="v ${cls}">${st.exit_reason}${st.exit_fill ? " @ " + fmt(st.exit_fill) : ""}</span></div>`;
   }
   if (st.note) rows += `<div class="row"><span class="k">Note</span><span class="v">${st.note}</span></div>`;
+  const tm = ST.timer && ST.timer.strategies && ST.timer.strategies[name];
+  if (tm) {
+    const g = tm.gate === true ? `gate TREND${tm.adx != null ? " (ADX " + tm.adx + ")" : ""}`
+      : tm.gate === false ? `gate CHOP${tm.adx != null ? " (ADX " + tm.adx + ")" : ""}` : "gate pending";
+    const cls = tm.stage === "error" ? "neg" : "";
+    rows += `<div class="row"><span class="k">Self-fire</span><span class="v ${cls}">${g} · ${tm.stage}${tm.anchor ? " @ " + fmt(tm.anchor) : ""}${tm.error ? " — " + tm.error : ""}</span></div>`;
+  }
   return `<div class="card strat">
     <div class="card-header">
       <span class="card-title">${name.toUpperCase()}</span>

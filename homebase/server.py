@@ -44,7 +44,9 @@ from . import secrets_store
 from .broker.base import BrokerAdapter
 from .broker.tradovate import TradovateAdapter
 from .engine import Engine
+from .marketdata import TradovateMD
 from .paths import state_dir
+from .timer import SelfTimer
 
 STATIC = Path(__file__).resolve().parent / "static"
 CLOCK_INTERVAL_S = 5
@@ -164,6 +166,8 @@ def create_app(cfg: config_mod.AppCfg | None = None,
     box = {"adapter": adapter or adapter_factory(cfg)}
     engine = Engine(cfg, box["adapter"])
     broker_status: dict = {"connected": False, "error": "not connected yet"}
+    timer = SelfTimer(cfg, engine, md_factory=lambda: TradovateMD(
+        cfg.account.keyring_key, "live" if cfg.account.live else "demo"))
 
     async def _try_connect() -> None:
         ad = box["adapter"]
@@ -228,6 +232,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             tasks = [asyncio.create_task(_clock_loop()),
                      asyncio.create_task(_broker_loop()),
                      asyncio.create_task(_equity_loop()),
+                     asyncio.create_task(timer.loop()),
                      asyncio.create_task(hook_server.serve())]
         try:
             yield
@@ -288,6 +293,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             "readiness": compute_readiness(
                 engine.now_et(), cfg, engine.states,
                 metrics.get("connected", False), metrics.get("error")),
+            "timer": timer.status(),
             "broker": metrics,
             "strategies": {
                 name: {

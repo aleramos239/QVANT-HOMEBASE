@@ -115,7 +115,8 @@ class Engine:
         return st
 
     # --- the alert ----------------------------------------------------------
-    async def handle_alert(self, payload: dict, *, force_window: bool = False) -> dict:
+    async def handle_alert(self, payload: dict, *, force_window: bool = False,
+                           source: str = "tv") -> dict:
         """Validated-payload entry point (the server has already checked the
         webhook secret). Returns a dict the HTTP layer can serialize.
         `force_window` skips the accept-window check — used ONLY by the
@@ -159,11 +160,13 @@ class Engine:
 
         legs = self._legs(cfg, upper, lower)
         if not self.cfg.armed:
-            self.journal("dry_run", strategy=name, would_place=[asdict(r) for r in legs])
+            self.journal("dry_run", strategy=name, source=source,
+                         upper=upper, lower=lower,
+                         would_place=[asdict(r) for r in legs])
             return {"ok": True, "armed": False,
                     "note": "disarmed — journaled only", "would_place": len(legs)}
 
-        return await self._place(name, cfg, st, upper, lower, legs)
+        return await self._place(name, cfg, st, upper, lower, legs, source)
 
     @staticmethod
     def _legs(cfg: StrategyCfg, upper: float, lower: float) -> list[OrderRequest]:
@@ -182,7 +185,7 @@ class Engine:
 
     async def _place(self, name: str, cfg: StrategyCfg, st: DayState,
                      upper: float, lower: float,
-                     legs: list[OrderRequest]) -> dict:
+                     legs: list[OrderRequest], source: str = "tv") -> dict:
         buy, sell = legs
         r_up = await self.adapter.place_bracket(buy)
         if not r_up.ok:
@@ -204,7 +207,8 @@ class Engine:
         st.upper_id, st.lower_id = r_up.order_id, r_dn.order_id
         st.upper_px, st.lower_px = upper, lower
         self._save()
-        self.journal("placed", strategy=name, upper=upper, lower=lower,
+        self.journal("placed", strategy=name, source=source,
+                     upper=upper, lower=lower,
                      qty=cfg.qty, upper_id=st.upper_id, lower_id=st.lower_id)
         return {"ok": True, "armed": True, "upper_id": st.upper_id,
                 "lower_id": st.lower_id}

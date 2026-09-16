@@ -70,7 +70,30 @@ def to_tradovate(symbol: str) -> str:
     return f"{root}{MONTH_TO_CODE[month]}{year % 10}"
 
 
-def to_ninjatrader(symbol: str) -> str:
+QUARTERLY = (3, 6, 9, 12)
+
+
+def _third_friday(year: int, month: int):
+    from datetime import date, timedelta
+    d = date(year, month, 15)          # 3rd Friday is always the 15th-21st
+    return d + timedelta(days=(4 - d.weekday()) % 7)
+
+
+def front_month(root: str, today=None) -> str:
+    """Front quarterly contract for an index root, e.g. front_month("NQ") ->
+    "NQZ6". Rolls one week before the 3rd-Friday expiry (the volume roll),
+    so we never subscribe a dying contract."""
+    from datetime import date, timedelta
+    today = today or date.today()
+    year = today.year
+    for _ in range(3):                 # scan up to ~15 months of quarterlies
+        for m in QUARTERLY:
+            if (year, m) < (today.year, today.month):
+                continue
+            if today < _third_friday(year, m) - timedelta(days=7):
+                return f"{root}{MONTH_TO_CODE[m]}{year % 10}"
+        year += 1
+    raise ValueError(f"no front month found for {root!r}")
     """Tradovate-native -> NinjaTrader instrument string. 'ESH6' -> 'ES 03-26'."""
     root, month, year = parse_tradovate_symbol(symbol)
     return f"{root} {month:02d}-{year % 100:02d}"
