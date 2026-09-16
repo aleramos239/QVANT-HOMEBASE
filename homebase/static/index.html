@@ -12,6 +12,7 @@
   }catch(_){ document.documentElement.setAttribute('data-theme','light'); }
 </script>
 <link rel="stylesheet" href="/static/shadcn.css">
+<script src="/static/vendor/lightweight-charts.js"></script>
 <style>
   /* Page chrome — same language as the TradeCopier app: B&W chrome, the only
      hues are --pos/--neg for P&L-grade data, shadcn tokens for everything. */
@@ -430,7 +431,6 @@
       <span class="spacer" style="flex:1"></span>
       <button class="cal-nav" onclick="closeRes()" title="Close">&times;</button>
     </div>
-    <div id="resStrip"></div>
     <div class="mcap warn" id="resCaveat" style="margin-bottom:10px"></div>
     <div id="resChart"></div>
     <div class="mcap" id="resChartCap"></div>
@@ -888,12 +888,69 @@ function equitySvg(points, w = 560, h = 190) {
       fill="var(--${fin >= 0 ? "pos" : "neg"})"
       style="font:600 12px var(--font-mono)">${usd(fin)}</text></svg>`;
 }
+let RESCHART = null;
+function cssColor(v) {
+  // resolve var() -> oklch -> plain rgb (the chart's parser needs rgb)
+  const el = document.createElement("span");
+  el.style.color = `var(${v})`;
+  document.body.appendChild(el);
+  const c = getComputedStyle(el).color;
+  el.remove();
+  const cv = document.createElement("canvas");
+  cv.width = cv.height = 1;
+  const ctx = cv.getContext("2d");
+  ctx.fillStyle = c;
+  ctx.fillRect(0, 0, 1, 1);
+  const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+  return `rgb(${r}, ${g}, ${b})`;
+}
+function lwTime(t) {
+  return typeof t === "string" ? t : !t ? "" :
+    `${t.year}-${String(t.month).padStart(2, "0")}-${String(t.day).padStart(2, "0")}`;
+}
+function renderEquityChart(points) {
+  const box = $("#resChart");
+  if (RESCHART) { try { RESCHART.remove(); } catch (_) {} RESCHART = null; }
+  if (!window.LightweightCharts) { box.innerHTML = equitySvg(points); return; }
+  box.innerHTML = `<div id="resLw" style="height:280px"></div>
+    <div id="resTip" style="font-family:var(--font-mono);font-size:12px;height:18px;
+      margin-top:4px;color:var(--foreground)"></div>`;
+  const fg = cssColor("--foreground"), mut = cssColor("--muted-foreground"),
+    grid = cssColor("--border");
+  const fill = fg.replace("rgb", "rgba").replace(")", ", 0.07)");
+  const chart = LightweightCharts.createChart(document.getElementById("resLw"), {
+    layout: {background: {type: "solid", color: "transparent"}, textColor: mut,
+             fontFamily: getComputedStyle(document.body).fontFamily, fontSize: 11},
+    grid: {vertLines: {color: grid}, horzLines: {color: grid}},
+    rightPriceScale: {visible: false},
+    leftPriceScale: {visible: true, borderColor: grid},
+    timeScale: {borderColor: grid},
+    autoSize: true,
+  });
+  const series = chart.addAreaSeries({
+    priceScaleId: "left",
+    lineColor: fg, lineWidth: 2,
+    topColor: fill, bottomColor: "rgba(0,0,0,0)",
+    priceFormat: {type: "custom", minMove: 1,
+                  formatter: (v) => (v < 0 ? "-$" : "$") +
+                    Math.abs(Math.round(v)).toLocaleString("en-US")},
+  });
+  const seen = new Set();
+  series.setData(points.filter(([d]) =>
+    seen.has(d) ? false : seen.add(d)).map(([d, v]) => ({time: d, value: v})));
+  chart.timeScale().fitContent();
+  const tip = document.getElementById("resTip");
+  chart.subscribeCrosshairMove((p) => {
+    const d = p && p.seriesData && p.seriesData.get(series);
+    tip.textContent = d ? `${lwTime(p.time)}   ·   ${usd(d.value)}` : "";
+  });
+  RESCHART = chart;
+}
 async function openRes(name) {
   const s = (ST.strategies || {})[name] || {};
   const r = s.research || {};
   $("#resName").textContent = name.toUpperCase();
   $("#resSource").textContent = r.source || "";
-  $("#resStrip").innerHTML = r.rows ? mstrip(r.rows) : "";
   $("#resCaveat").textContent = r.caveat ? "⚠ " + r.caveat : "";
   $("#resChart").innerHTML = `<div class="mcap">loading curve…</div>`;
   $("#resChartCap").textContent = "";
@@ -902,7 +959,7 @@ async function openRes(name) {
     const d = await (await fetch("/api/research-equity?strategy=" +
                                  encodeURIComponent(name))).json();
     if (d.points && d.points.length > 1) {
-      $("#resChart").innerHTML = equitySvg(d.points);
+      renderEquityChart(d.points);
       $("#resChartCap").textContent = (d.label || "") +
         (d.note ? " — " + d.note : "");
     } else {
