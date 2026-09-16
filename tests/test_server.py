@@ -175,6 +175,18 @@ def test_calendar_close_over_close(client, tmp_path):
     assert d["total"] == 100.0
 
 
+def test_strategy_toggle(client):
+    r = client.post("/api/strategy", json={"strategy": "nq930",
+                                           "enabled": False}).json()
+    assert r["ok"] is True and r["enabled"] is False
+    assert client.app.state.cfg.strategies["nq930"].enabled is False
+    out = client.post("/api/test-alert", json={"strategy": "nq930"}).json()
+    assert out["result"]["ok"] is False          # disabled ignores signals
+    client.post("/api/strategy", json={"strategy": "nq930", "enabled": True})
+    assert client.post("/api/strategy",
+                       json={"strategy": "nope", "enabled": True}).status_code == 404
+
+
 def test_kill_disarms_and_clears_every_account(client):
     client.post("/api/arm", json={"armed": True})
     r = client.post("/api/kill").json()
