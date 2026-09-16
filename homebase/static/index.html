@@ -450,6 +450,21 @@
   </div>
 </div>
 
+<div class="overlay" id="pineOverlay">
+  <div class="modal" style="width:680px">
+    <div class="cal-head">
+      <span style="font-weight:600" id="pineName">—</span>
+      <span style="font-size:12px;color:var(--muted-foreground);font-family:var(--font-mono)" id="pineFile"></span>
+      <span class="spacer" style="flex:1"></span>
+      <button class="btn btn-outline btn-sm" onclick="copyPine()">Copy</button>
+      <button class="cal-nav" onclick="closePine()" title="Close">&times;</button>
+    </div>
+    <pre id="pineSrc" style="font-family:var(--font-mono);font-size:11.5px;line-height:1.5;
+      background:var(--secondary);border:1px solid var(--border);border-radius:var(--radius-md);
+      padding:12px;overflow:auto;max-height:62vh;white-space:pre;margin:0"></pre>
+  </div>
+</div>
+
 <div class="overlay" id="calOverlay">
   <div class="modal" style="width:460px">
     <div class="cal-head">
@@ -519,12 +534,15 @@ function stratCard(name, s) {
     ? `<button class="btn btn-outline btn-sm" onclick="testFire('${name}')">Test fire · dry</button>`
     : "";
 
-  // research: one bubble, everything lives in the popup
-  let research = "";
+  // bubbles: backtest popup + pine source popup
+  let research = `<div style="margin:4px 0 2px;display:flex;gap:8px">`;
   if (s.research && s.research.rows) {
-    research = `<div style="margin:4px 0 2px">
-      <button class="btn btn-outline btn-sm" onclick="openRes('${name}')">Backtest metrics</button></div>`;
+    research += `<button class="btn btn-outline btn-sm" onclick="openRes('${name}')">Backtest metrics</button>`;
   }
+  if (c.pine_file) {
+    research += `<button class="btn btn-outline btn-sm" onclick="openPine('${name}')">Pine script</button>`;
+  }
+  research += `</div>`;
   // live strip (earned from the journal, real fills only)
   const lv = s.live;
   const live = `<div class="slabel2">LIVE</div>` + (lv && lv.trades
@@ -548,14 +566,17 @@ function stratCard(name, s) {
     : `<div class="mcap">add an account to run this strategy</div>`;
   const book = `<div class="slabel2">ACCOUNTS</div>${rows || ""}${addForm}`;
 
+  const exec = c.self_fire
+    ? `<span class="pill" title="The app computes and fires this signal itself">APP</span>`
+    : `<span class="pill idle" title="A TradingView Pine alert feeds this strategy">PINE</span>`;
   return `<div class="card strat">
     <div class="card-header">
       <span class="card-title">${name.toUpperCase()}</span>
       <span class="spec">${c.symbol} · ±${c.offset_pts} off · SL ${c.sl_pts} / TP ${c.tp_pts}</span>
-      <span class="right">${disabled}${pill}</span>
+      <span class="right">${exec}${disabled}${pill}</span>
     </div>
     <div class="card-content">${research}${live}${book}</div>
-    <div class="card-footer"><span>cancel ${c.cancel_et} · flat ${c.flat_et} ET</span>${test}</div>
+    ${test ? `<div class="card-footer" style="justify-content:flex-end">${test}</div>` : ""}
   </div>`;
 }
 
@@ -1056,6 +1077,29 @@ async function openRes(name) {
 function closeRes() { $("#resOverlay").classList.remove("open"); }
 $("#resOverlay").addEventListener("click", (e) => {
   if (e.target === e.currentTarget) closeRes();
+});
+
+/* ---- pine source popup ---- */
+async function openPine(name) {
+  $("#pineName").textContent = name.toUpperCase();
+  $("#pineFile").textContent = "";
+  $("#pineSrc").textContent = "loading…";
+  $("#pineOverlay").classList.add("open");
+  try {
+    const d = await (await fetch("/api/pine?strategy=" +
+                                 encodeURIComponent(name))).json();
+    $("#pineFile").textContent = d.name || "";
+    $("#pineSrc").textContent = d.source ||
+      "no Pine source on file for this strategy";
+  } catch (_) { $("#pineSrc").textContent = "source unavailable"; }
+}
+function closePine() { $("#pineOverlay").classList.remove("open"); }
+function copyPine() {
+  navigator.clipboard.writeText($("#pineSrc").textContent)
+    .then(() => toast("Pine source copied — paste into the TradingView editor."));
+}
+$("#pineOverlay").addEventListener("click", (e) => {
+  if (e.target === e.currentTarget) closePine();
 });
 
 /* ---- P&L calendar ---- */

@@ -29,7 +29,9 @@ class StrategyCfg:
     accept_until_et: str = "09:45"
     enabled: bool = False
     gated: bool = False          # True = a no-alert day can be the regime gate
-    self_fire: bool = False      # app fires at 9:30 from its own feed
+    self_fire: bool = False      # True: the APP computes and fires the signal;
+                                 # False: a Pine alert feeds /hook
+    pine_file: str = ""          # committed Pine source (homebase/research/)
     metrics: dict = field(default_factory=dict)   # research record, display-only
 
 
@@ -60,7 +62,7 @@ def _defaults() -> AppCfg:
             # and in the Pine script alike.
             "nq930": StrategyCfg(
                 symbol="NQ", qty=3, offset_pts=10.0, sl_pts=5.0, tp_pts=15.0,
-                enabled=True, gated=True, self_fire=True,
+                enabled=True, gated=True, self_fire=True, pine_file="nq930.pine",
                 metrics={
                     "source": "one-shot sealed-year OOS exam · 2025-07-08→2026-07-07 · TV 15s",
                     "rows": {"trades": "167", "WR": "47.3%", "PF": "2.34",
@@ -73,7 +75,7 @@ def _defaults() -> AppCfg:
             # until the user sizes and enables it.
             "ym930": StrategyCfg(
                 symbol="YM", qty=1, offset_pts=20.0, sl_pts=5.0, tp_pts=15.0,
-                enabled=False, gated=False, self_fire=False,
+                enabled=False, gated=False, self_fire=False, pine_file="ym930.pine",
                 metrics={
                     "source": "one-shot OOS exam · 2025-01-07→2026-09-10 · TV 15s",
                     "rows": {"trades": "434", "WR": "50.7%", "PF": "1.76",

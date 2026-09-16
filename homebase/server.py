@@ -302,7 +302,8 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                             "offset_pts": s.offset_pts, "sl_pts": s.sl_pts,
                             "tp_pts": s.tp_pts, "cancel_et": s.cancel_et,
                             "flat_et": s.flat_et, "enabled": s.enabled,
-                            "gated": s.gated, "self_fire": s.self_fire},
+                            "gated": s.gated, "self_fire": s.self_fire,
+                            "pine_file": getattr(s, "pine_file", "")},
                     "research": s.metrics,
                     "live": live.get(name),
                     "day_status": engine.day_status(name),
@@ -489,6 +490,16 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         if not p or not p.exists():
             return {"points": None}
         return json.loads(p.read_text())
+
+    @app.get("/api/pine")
+    async def pine_source(strategy: str):
+        """The strategy's committed Pine source (research artifact)."""
+        s = cfg.strategies.get(strategy)
+        fname = getattr(s, "pine_file", "") if s else ""
+        p = STATIC.parent / "research" / fname if fname else None
+        if not p or not p.exists():
+            return {"source": None}
+        return {"name": fname, "source": p.read_text()}
 
     @app.get("/api/calendar")
     async def calendar(month: str, account: str = ""):
