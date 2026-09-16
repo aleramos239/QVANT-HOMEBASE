@@ -508,15 +508,11 @@ function stratCard(name, s) {
     ? `<button class="btn btn-outline btn-sm" onclick="testFire('${name}')">Test fire · dry</button>`
     : "";
 
-  // research: one compact subtitle + Details popup
+  // research: one bubble, everything lives in the popup
   let research = "";
   if (s.research && s.research.rows) {
-    const sub = Object.entries(s.research.rows)
-      .map(([k, v]) => k === "trades" ? `${v} trades` : `${v} ${k}`).join(" · ");
-    research = `<div class="mcap" style="display:flex;align-items:center;gap:10px;margin:2px 0 0">
-      <span style="font-family:var(--font-mono)">Backtest — ${sub}</span>
-      <button class="btn btn-ghost btn-sm" style="font-size:11px;height:22px;padding:0 8px"
-        onclick="openRes('${name}')">Details</button></div>`;
+    research = `<div style="margin:4px 0 2px">
+      <button class="btn btn-outline btn-sm" onclick="openRes('${name}')">Backtest metrics</button></div>`;
   }
   // live strip (earned from the journal, real fills only)
   const lv = s.live;
@@ -571,7 +567,7 @@ function render() {
     strip.innerHTML = `<span class="headline">Not ready</span>` +
       r.checks.filter(c => c.level === "bad" || c.level === "warn")
         .map(c => `<span class="ri ${c.level}">
-        <span class="rd ${c.level}"></span><b>${c.label}</b> ${c.detail}</span>`).join("");
+        <span class="rd ${c.level}"></span><b>${c.label}</b> ${String(c.detail).slice(0, 70)}${String(c.detail).length > 70 ? "…" : ""}</span>`).join("");
   } else strip.style.display = "none";
   $("#strats").innerHTML = Object.entries(s.strategies)
     .map(([n, v]) => stratCard(n, v)).join("");
