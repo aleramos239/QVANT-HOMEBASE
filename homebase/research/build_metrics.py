@@ -144,6 +144,42 @@ def build(path: Path) -> None:
         add("Stability", "worst month WR",
             f"{ww} {pct(mwr[ww])} ({len(mrows[ww])} trades)")
 
+    # ---- Monte Carlo: 10,000 bootstrap resamples of the trade list ----
+    import random
+    rng = random.Random(11)
+    N = 10000
+    nets, dds, mstreaks = [], [], []
+    for _ in range(N):
+        s = peak_ = dd_ = 0.0
+        cl = mxl = 0
+        for _ in range(n):
+            p = pnl[rng.randrange(n)]
+            s += p
+            if s > peak_:
+                peak_ = s
+            elif peak_ - s > dd_:
+                dd_ = peak_ - s
+            cl = cl + 1 if p < 0 else 0
+            if cl > mxl:
+                mxl = cl
+        nets.append(s)
+        dds.append(dd_)
+        mstreaks.append(mxl)
+    nets.sort(); dds.sort(); mstreaks.sort()
+    q = lambda a, p: a[min(len(a) - 1, int(p * len(a)))]  # noqa: E731
+    add("Monte Carlo", "method",
+        f"{N:,} bootstrap resamples")
+    add("Monte Carlo", "net, median", money(q(nets, 0.5)))
+    add("Monte Carlo", "net, 5–95% band",
+        f"{money(q(nets, 0.05))} … {money(q(nets, 0.95))}")
+    add("Monte Carlo", "P(net ≤ 0)", pct(sum(1 for v in nets if v <= 0) / N))
+    add("Monte Carlo", "maxDD, median", money(-q(dds, 0.5)))
+    add("Monte Carlo", "maxDD, p95 / p99",
+        f"{money(-q(dds, 0.95))} / {money(-q(dds, 0.99))}")
+    add("Monte Carlo", "maxDD, worst resample", money(-dds[-1]))
+    add("Monte Carlo", "loss streak, median / p95",
+        f"{q(mstreaks, 0.5)} / {q(mstreaks, 0.95)}")
+
     # ---- prop sim: the house engine on this exact ledger ----
     sys.path.insert(0, ONYX)
     from onyx.report import ledger as L  # noqa: PLC0415
@@ -158,7 +194,7 @@ def build(path: Path) -> None:
                       sweep=(), degradation=())
     ev, fu = sim["eval"], sim["funded"]
     md = lambda t: (t or {}).get("median")  # noqa: E731
-    add("Prop sim", "ruleset", rules_name + " · i.i.d. weekday bootstrap · 20k paths")
+    add("Prop sim", "ruleset", "Lucid Flex 50K")
     add("Prop sim", "eval pass", pct(ev["p"]))
     add("Prop sim", "median days to pass", str(md(ev.get("days"))))
     add("Prop sim", "eval bust", pct(ev["bust_p"]))
