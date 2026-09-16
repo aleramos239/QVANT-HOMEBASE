@@ -431,8 +431,7 @@
       <span class="spacer" style="flex:1"></span>
       <button class="cal-nav" onclick="closeRes()" title="Close">&times;</button>
     </div>
-    <div class="mcap warn" id="resCaveat" style="margin-bottom:10px"></div>
-    <div id="resChart"></div>
+    <div id="resChart" style="margin-top:8px"></div>
     <div class="mcap" id="resChartCap"></div>
     <div id="resTable"></div>
     <div id="resMc"></div>
@@ -952,7 +951,6 @@ async function openRes(name) {
   const r = s.research || {};
   $("#resName").textContent = name.toUpperCase();
   $("#resSource").textContent = r.source || "";
-  $("#resCaveat").textContent = r.caveat ? "⚠ " + r.caveat : "";
   $("#resChart").innerHTML = `<div class="mcap">loading curve…</div>`;
   $("#resChartCap").textContent = "";
   $("#resOverlay").classList.add("open");
