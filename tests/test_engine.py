@@ -25,6 +25,7 @@ class FakeAdapter(BrokerAdapter):
     def __init__(self, account_id="fake-acct"):
         super().__init__(account_id)
         self._connected = True
+        self.orders: list[OrderRequest] = []
         self.brackets: list[OrderRequest] = []
         self.cancelled: list[str] = []
         self.cancel_all_calls = 0
@@ -42,7 +43,8 @@ class FakeAdapter(BrokerAdapter):
     async def observe_fills(self, on_fill): ...
     async def get_balance(self): return {}
 
-    async def place_order(self, req):  # pragma: no cover
+    async def place_order(self, req):
+        self.orders.append(req)
         return OrderResult(ok=True, order_id="plain")
 
     async def place_bracket(self, req: OrderRequest) -> OrderResult:
@@ -268,6 +270,29 @@ def test_clock_flattens_after_1555(tmp_path):
     run(eng.clock_tick())
     assert st.status == "done" and st.exit_reason == "flat"
     assert ad.flatten_calls == 1 and ad.cancel_all_calls == 1
+
+
+def test_flatten_strategy_cancels_and_flattens(tmp_path):
+    eng, ad, _ = mkengine(tmp_path)
+    st = _place(eng, ad)
+    run(eng.on_fill(FillEvent(account_id="main", symbol="NQZ6", side="Buy",
+                              qty=3, price=24510.25,
+                              raw={"orderId": st.upper_id})))
+    ad.net = 3                                     # live long 3
+    res = run(eng.flatten_strategy("nq930"))
+    assert st.status == "done" and st.exit_reason == "manual_flat"
+    flat = [o for o in ad.orders if o.order_type == "Market"]
+    assert len(flat) == 1 and flat[0].side == "Sell" and flat[0].qty == 3
+    assert "main" in res
+
+
+def test_flatten_strategy_cancels_unfilled(tmp_path):
+    eng, ad, _ = mkengine(tmp_path)
+    st = _place(eng, ad)                           # placed, nothing filled
+    res = run(eng.flatten_strategy("nq930"))
+    assert st.upper_id in ad.cancelled and st.lower_id in ad.cancelled
+    assert st.status == "done" and st.exit_reason == "manual_flat"
+    assert not any(o.order_type == "Market" for o in ad.orders)
 
 
 def test_restart_recovers_state(tmp_path):

@@ -444,6 +444,20 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         return {"ok": True, "strategy": name,
                 "enabled": cfg.strategies[name].enabled}
 
+    @app.post("/api/strategy-flatten")
+    async def strategy_flatten(request: Request):
+        """Flatten one strategy everywhere it acted today AND switch it off."""
+        body = await request.json()
+        name = str(body.get("strategy") or "")
+        if name not in cfg.strategies:
+            raise HTTPException(404, f"unknown strategy {name!r}")
+        results = await engine.flatten_strategy(name)
+        cfg.strategies[name].enabled = False
+        config_mod.save(cfg)
+        engine.journal("strategy_toggled", strategy=name, enabled=False,
+                       cause="manual_flatten")
+        return {"ok": True, "enabled": False, "results": results}
+
     @app.post("/api/book")
     async def set_book(request: Request):
         """Set one strategy's assignments: [{account, qty}, ...]."""

@@ -187,6 +187,12 @@ def test_strategy_toggle(client):
                        json={"strategy": "nope", "enabled": True}).status_code == 404
 
 
+def test_strategy_flatten_disables(client):
+    r = client.post("/api/strategy-flatten", json={"strategy": "nq930"}).json()
+    assert r["ok"] is True and r["enabled"] is False
+    assert client.app.state.cfg.strategies["nq930"].enabled is False
+
+
 def test_kill_disarms_and_clears_every_account(client):
     client.post("/api/arm", json={"armed": True})
     r = client.post("/api/kill").json()

@@ -313,6 +313,42 @@ class Engine:
         pv = point_value(cfg.symbol) or 0.0
         return round(sign * (st.exit_fill - st.entry_fill) * pv * st.qty, 2)
 
+    async def flatten_strategy(self, name: str) -> dict:
+        """Manual flatten for ONE strategy: cancel its resting entries and
+        market-flatten its symbol on every account it acted on today.
+        Note: the position flatten is symbol-scoped per account — another
+        strategy holding the same symbol on the same account would be
+        flattened too (journaled)."""
+        cfg = self.cfg.strategies.get(name)
+        results: dict = {}
+        for st in self.day_states(name):
+            ad = self.adapters.get(st.account)
+            if ad is None or cfg is None:
+                continue
+            acts = []
+            if st.status == "placed":
+                for oid in (st.upper_id, st.lower_id):
+                    if oid:
+                        r = await ad.cancel_order_by_id(oid)
+                        acts.append(f"cancel {oid}: {'ok' if r.ok else r.error}")
+            if st.status in ("placed", "live", "error"):
+                try:
+                    net = await ad.get_net_position(cfg.symbol)
+                except Exception as e:  # noqa: BLE001
+                    net, _ = 0, acts.append(f"net check failed: {e}")
+                if net:
+                    side = "Sell" if net > 0 else "Buy"
+                    r = await ad.place_order(OrderRequest(
+                        symbol=cfg.symbol, side=side, qty=abs(net),
+                        order_type="Market", text="homebase:manual-flat"))
+                    acts.append(f"flatten {net}: {'ok' if r.ok else r.error}")
+            if st.status in ("placed", "live"):
+                st.status, st.exit_reason = "done", "manual_flat"
+            results[st.account] = acts
+        self._save()
+        self.journal("manual_flatten", strategy=name, results=results)
+        return results
+
     # --- the clock ------------------------------------------------------------
     async def clock_tick(self) -> None:
         now = self.now_et().time()
