@@ -629,15 +629,24 @@ function render() {
   $("#armBtn").style.display = s.armed ? "none" : "";
   $("#disarmBtn").style.display = s.armed ? "" : "none";
 
-  // readiness: silent when everything is fine, loud when it is not
+  // readiness: silent when fine, loud when not; dismissable — but a
+  // dismissed strip returns the moment the SET of problems changes
   const r = s.readiness;
   const strip = $("#readyStrip");
-  if (r && !r.ready) {
+  const probs = r ? r.checks.filter(c => c.level === "bad" || c.level === "warn") : [];
+  const sig = JSON.stringify(probs.map(c => c.label + "|" + c.detail));
+  let dismissed = "";
+  try { dismissed = localStorage.getItem("hb_ready_dismiss") || ""; } catch (_) {}
+  window.READY_SIG = sig;
+  if (r && !r.ready && sig !== dismissed) {
     strip.style.display = "";
     strip.innerHTML = `<span class="headline">Not ready</span>` +
-      r.checks.filter(c => c.level === "bad" || c.level === "warn")
-        .map(c => `<span class="ri ${c.level}">
-        <span class="rd ${c.level}"></span><b>${c.label}</b> ${String(c.detail).slice(0, 70)}${String(c.detail).length > 70 ? "…" : ""}</span>`).join("");
+      probs.map(c => `<span class="ri ${c.level}">
+        <span class="rd ${c.level}"></span><b>${c.label}</b> ${String(c.detail).slice(0, 70)}${String(c.detail).length > 70 ? "…" : ""}</span>`).join("") +
+      `<span class="spacer"></span>
+       <button class="x" style="border:none;background:none;color:var(--muted-foreground);cursor:pointer;font-size:15px;padding:0 2px"
+         title="Dismiss — reappears if the problems change"
+         onclick="dismissReady()">&times;</button>`;
   } else strip.style.display = "none";
   $("#strats").innerHTML = Object.entries(s.strategies)
     .map(([n, v]) => stratCard(n, v)).join("");
@@ -1122,6 +1131,11 @@ function closeRes() { $("#resOverlay").classList.remove("open"); }
 $("#resOverlay").addEventListener("click", (e) => {
   if (e.target === e.currentTarget) closeRes();
 });
+
+function dismissReady() {
+  try { localStorage.setItem("hb_ready_dismiss", window.READY_SIG || ""); } catch (_) {}
+  $("#readyStrip").style.display = "none";
+}
 
 /* ---- strategy on/off + flatten ---- */
 async function toggleStrat(name, enabled) {
