@@ -22,7 +22,7 @@ from typing import Callable, Optional
 from zoneinfo import ZoneInfo
 
 from .config import AppCfg
-from .engine import Engine
+from .engine import Engine, _hhmm
 from .gate import trend_gate
 
 ET = ZoneInfo("America/New_York")
@@ -90,8 +90,24 @@ class SelfTimer:
                 self.engine.journal("timer_error", strategy=name, error=str(e))
 
     async def _advance(self, name, s, st, t, date) -> None:
+        # HARD upper bound. Without it every stage test is "t >= <time>",
+        # which is true at 11pm too: a restart any time after 9:30 would
+        # stage and fire immediately on a stale anchor. (The engine's accept
+        # window catches it, but the timer must not try in the first place.)
+        end = _hhmm(s.accept_until_et)
+        if t > end:
+            if st["stage"] in ("idle", "gated", "staged"):
+                st["stage"] = "missed"
+                self.engine.journal("timer_missed", strategy=name,
+                                    at=str(t), window_end=s.accept_until_et)
+            if self._sub is not None and self._md is not None:
+                md, sub = self._md, self._sub
+                self._sub = None
+                await md.unsubscribe_quote(sub)
+            return
+
         stage = st["stage"]
-        if stage in ("fired", "skipped", "done", "error"):
+        if stage in ("fired", "skipped", "done", "error", "missed"):
             if stage == "error" and t < STAGE_T:
                 st["stage"] = "idle"        # errors before staging retry
             elif t >= DONE_T and self._sub:

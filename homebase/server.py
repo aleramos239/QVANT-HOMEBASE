@@ -154,11 +154,21 @@ def create_app(cfg: config_mod.AppCfg | None = None,
     engine = Engine(cfg, adapters)
     acct_status: dict[str, dict] = {}
 
+    def _md_token() -> str:
+        """The md token from any already-connected adapter — no extra login."""
+        for ad in adapters.values():
+            auth = getattr(ad, "_auth", None)
+            tok = getattr(getattr(auth, "tokens", None), "md_access_token", "")
+            if tok and ad.connected:
+                return tok
+        return ""
+
     def _md_factory():
         for a in cfg.accounts.values():
             if a.keyring_key:
                 return TradovateMD(a.keyring_key,
-                                   "live" if a.live else "demo")
+                                   "live" if a.live else "demo",
+                                   token_provider=_md_token)
         raise RuntimeError("no accounts configured for market data")
 
     timer = SelfTimer(cfg, engine, md_factory=_md_factory)

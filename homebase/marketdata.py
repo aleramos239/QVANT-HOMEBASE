@@ -28,9 +28,14 @@ ET = ZoneInfo("America/New_York")
 class TradovateMD:
     """Quote stream + daily bars. One instance per session; fails loudly."""
 
-    def __init__(self, keyring_key: str, env: str = "demo"):
+    def __init__(self, keyring_key: str, env: str = "demo",
+                 token_provider=None):
+        # token_provider: () -> md token from an ALREADY-authenticated adapter.
+        # Reusing it avoids a second login (Tradovate rate-limits auth at ~5/h,
+        # and 9:20 is the worst possible moment to spend one).
         self.keyring_key = keyring_key
         self.env = env
+        self._token_provider = token_provider
         sd = state_dir()
         # own token cache — never race the trading adapter's file
         self._auth = TradovateAuth(
@@ -46,13 +51,20 @@ class TradovateMD:
         return self._ws is not None and self._ws.connected
 
     async def connect(self) -> None:
-        creds = get_credentials(self.keyring_key)
-        if not creds or not creds.get("username"):
-            raise RuntimeError(f"no credentials for {self.keyring_key!r}")
-        await asyncio.to_thread(self._auth.login, creds["username"],
-                                creds["password"])
-        md_token = getattr(self._auth.tokens, "md_access_token", "") or \
-            self._auth.access_token
+        md_token = ""
+        if self._token_provider is not None:
+            try:
+                md_token = self._token_provider() or ""
+            except Exception:  # noqa: BLE001 — fall through to a real login
+                md_token = ""
+        if not md_token:
+            creds = get_credentials(self.keyring_key)
+            if not creds or not creds.get("username"):
+                raise RuntimeError(f"no credentials for {self.keyring_key!r}")
+            await asyncio.to_thread(self._auth.login, creds["username"],
+                                    creds["password"])
+            md_token = getattr(self._auth.tokens, "md_access_token", "") or \
+                self._auth.access_token
         ws = TradovateWS(md_token, self.env)
         ws.url = MD_LIVE if self.env == "live" else MD_DEMO
         await ws.connect()

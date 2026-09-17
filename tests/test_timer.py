@@ -107,6 +107,32 @@ def test_timer_defers_when_day_already_acted(tmp_path):
     assert any(e["event"] == "timer_deferred" for e in events(tmp_path))
 
 
+def test_timer_never_fires_outside_the_window(tmp_path):
+    """A restart at any hour must not stage/fire on a stale anchor."""
+    import datetime as _dt
+    cases = [(11, 0), (14, 30), (19, 15)]
+    for hh, mm in cases:
+        clock = Clock()
+        timer, engine, md, _ = mk(tmp_path, clock=clock)
+        clock.set_et(hh, mm)
+        run(timer.tick())
+        st = timer.status()["strategies"]["nq930"]
+        assert st["stage"] == "missed", f"{hh}:{mm} -> {st['stage']}"
+        assert st["anchor"] is None
+        assert md.subs == []                       # never even subscribed
+        assert not any(e["event"] in ("timer_fired", "dry_run")
+                       for e in events(tmp_path))
+
+    # and the exact case seen in production: 23:03 ET (= 03:03 UTC next day)
+    clock = Clock()
+    timer, engine, md, _ = mk(tmp_path, clock=clock)
+    clock.dt = _dt.datetime(2026, 9, 15, 3, 3,
+                            tzinfo=_dt.timezone.utc)          # Mon 23:03 ET
+    run(timer.tick())
+    assert timer.status()["strategies"]["nq930"]["stage"] == "missed"
+    assert md.subs == []
+
+
 def test_timer_quiet_on_weekend(tmp_path):
     timer, engine, md, clock = mk(tmp_path)
     clock.dt = clock.dt.replace(day=13)                   # Sunday 2026-09-13
