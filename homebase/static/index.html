@@ -416,7 +416,14 @@
         <div class="field"><label>Username</label>
           <input id="cUser" autocomplete="off" spellcheck="false"></div>
         <div class="field"><label>Password</label>
-          <input id="cPass" type="password" autocomplete="off"></div>
+          <div style="position:relative">
+            <input id="cPass" type="password" autocomplete="off" style="padding-right:34px">
+            <button type="button" onclick="const p=$('#cPass');p.type=p.type==='password'?'text':'password';"
+              title="Show/hide password"
+              style="position:absolute;right:6px;top:50%;transform:translateY(-50%);border:none;background:none;cursor:pointer;color:var(--muted-foreground);padding:4px">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div></div>
       </div>
       <div class="row-btns">
         <button class="btn btn-outline" onclick="wizGoto(1)">&larr; Back</button>
