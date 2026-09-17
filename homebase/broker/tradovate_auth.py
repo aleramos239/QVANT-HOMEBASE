@@ -227,8 +227,9 @@ class TradovateAuth:
         url = f"{self.base_url}/auth/accesstokenrequest"
         resp = http_post_json(url, payload)
         if not resp.get("accessToken"):
-            err = resp.get("errorText") or resp.get("p-ticket") or json.dumps(resp)[:500]
-            raise RuntimeError(f"Login failed: {err}")
+            # keep the WHOLE response visible: errorText alone hides the
+            # p-ticket / p-captcha / p-time anti-bot flags
+            raise RuntimeError(f"Login failed: {json.dumps(resp)[:400]}")
         self.tokens = TradovateTokens(
             access_token=resp["accessToken"],
             md_access_token=resp.get("mdAccessToken", ""),

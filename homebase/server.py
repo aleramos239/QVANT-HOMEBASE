@@ -389,7 +389,9 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             key = saved
         else:
             username = str(body.get("username") or "").strip()
-            password = str(body.get("password") or "")
+            # newlines/CRs are never valid in a password but ride along with
+            # clipboard pastes; spaces are preserved (could be legitimate)
+            password = str(body.get("password") or "").strip("\r\n")
             if not username or not password:
                 raise HTTPException(400, "username and password required")
             key = f"tv:demo:{username.lower()}"
