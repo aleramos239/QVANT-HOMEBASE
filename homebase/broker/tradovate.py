@@ -335,7 +335,7 @@ class TradovateAdapter(BrokerAdapter):
     async def place_order(self, req: OrderRequest) -> OrderResult:
         if self._ws is None or self._acct_num is None:
             return OrderResult(ok=False, error="adapter not connected")
-        sym = symbols.to_tradovate(req.symbol)
+        sym = symbols.resolve_contract(req.symbol)
         if self.live:
             _log(f"{self.account_id}: LIVE ORDER {req.side} {req.qty} {sym}")
         try:
@@ -364,7 +364,7 @@ class TradovateAdapter(BrokerAdapter):
             return OrderResult(ok=False, error="adapter not connected")
         if req.stop_price is None and req.tp_price is None:
             return await self.place_order(req)
-        sym = symbols.to_tradovate(req.symbol)
+        sym = symbols.resolve_contract(req.symbol)
         if self.live:
             _log(f"{self.account_id}: LIVE BRACKET {req.side} {req.qty} {sym} "
                  f"stop={req.stop_price} tp={req.tp_price}")
@@ -395,7 +395,7 @@ class TradovateAdapter(BrokerAdapter):
         if self._ws is None or self._acct_num is None:
             return []
         try:
-            c = await self._ws.contract_find(symbols.to_tradovate(symbol))
+            c = await self._ws.contract_find(symbols.resolve_contract(symbol))
         except Exception:
             c = None
         cid = (c or {}).get("id")
@@ -467,7 +467,7 @@ class TradovateAdapter(BrokerAdapter):
         if self._ws is None or self._acct_num is None:
             return 0
         try:
-            c = await self._ws.contract_find(symbols.to_tradovate(symbol))
+            c = await self._ws.contract_find(symbols.resolve_contract(symbol))
             cid = (c or {}).get("id")
             if cid is None:
                 return 0

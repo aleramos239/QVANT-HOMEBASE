@@ -92,10 +92,7 @@ class TradovateMD:
     @staticmethod
     def resolve(canonical: str) -> str:
         """Canonical root -> tradable front-month contract (NQ -> NQZ6)."""
-        s = symbols.to_tradovate(canonical)
-        if not any(ch.isdigit() for ch in s):
-            s = symbols.front_month(s)
-        return s
+        return symbols.resolve_contract(canonical)
 
     async def subscribe_quote(self, canonical: str) -> str:
         sym = self.resolve(canonical)

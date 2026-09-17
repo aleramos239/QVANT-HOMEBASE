@@ -70,6 +70,20 @@ def to_tradovate(symbol: str) -> str:
     return f"{root}{MONTH_TO_CODE[month]}{year % 10}"
 
 
+def resolve_contract(symbol: str) -> str:
+    """Canonical root OR explicit contract -> a TRADABLE Tradovate contract.
+
+    "NQ" -> "NQZ6" (front month), "NQZ6" -> "NQZ6" (unchanged).
+    Order endpoints need a real contract: a bare product root is rejected
+    with a generic "Access is denied", which looks exactly like a
+    permissions problem and is not one.
+    """
+    s = to_tradovate(symbol)
+    if not any(ch.isdigit() for ch in s):
+        s = front_month(s)
+    return s
+
+
 QUARTERLY = (3, 6, 9, 12)
 
 

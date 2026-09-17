@@ -558,18 +558,54 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         if ad is None or not ad.connected:
             raise HTTPException(409, "account not connected")
         symbol = str(body.get("symbol") or "NQ")
-        offset = max(300.0, float(body.get("offset_pts") or 1000))
+        offset = max(20.0, float(body.get("offset_pts") or 1000))
+        plain = bool(body.get("plain"))      # single order, no bracket
         ref = body.get("ref_price")
         if ref is None:
             raise HTTPException(400, "ref_price required (a recent market price)")
         entry = round(float(ref) + offset, 2)
         trace: dict = {"symbol": symbol, "entry_stop": entry, "qty": 1,
-                       "offset_pts": offset}
+                       "offset_pts": offset, "mode": "plain" if plain else "bracket"}
         req = OrderRequest(symbol=symbol, side="Buy", qty=1, order_type="Stop",
-                           price=entry, stop_price=entry - 5, tp_price=entry + 15,
+                           price=entry,
+                           stop_price=None if plain else entry - 5,
+                           tp_price=None if plain else entry + 15,
                            text="homebase:selftest")
-        r = await ad.place_bracket(req)
-        trace["placed"] = {"ok": r.ok, "order_id": r.order_id, "error": r.error}
+        if str(body.get("transport") or "ws") == "rest":
+            # Same account, same token, completely different transport — tells
+            # us whether the refusal is the socket path or the account itself.
+            import urllib.request, urllib.error  # noqa: PLC0415
+            host = "live" if cfg.accounts[aid].live else "demo"
+            url = f"https://{host}.tradovateapi.com/v1/order/placeorder"
+            payload = {"accountSpec": getattr(ad, "_acct_name", ""),
+                       "accountId": getattr(ad, "_acct_num", 0),
+                       "action": "Buy", "symbol": TradovateMD.resolve(symbol),
+                       "orderQty": 1, "orderType": "Stop", "stopPrice": entry,
+                       "timeInForce": "Day", "isAutomated": True,
+                       "text": "homebase:selftest"}
+            tok = getattr(getattr(ad, "_auth", None), "access_token", "")
+            rq = urllib.request.Request(
+                url, data=json.dumps(payload).encode(),
+                headers={"Content-Type": "application/json",
+                         "Accept": "application/json",
+                         "Authorization": f"Bearer {tok}"})
+            def _post():
+                try:
+                    with urllib.request.urlopen(rq, timeout=20) as resp:
+                        return resp.status, resp.read().decode()[:600]
+                except urllib.error.HTTPError as e:
+                    return e.code, e.read().decode()[:600]
+                except Exception as e:  # noqa: BLE001
+                    return -1, str(e)[:300]
+            st, txt = await asyncio.to_thread(_post)
+            trace["rest"] = {"url": url, "http_status": st, "response": txt,
+                             "sent": {k: v for k, v in payload.items()
+                                      if k != "accountSpec"}}
+            engine.journal("selftest_order_rest", account=aid, **trace["rest"])
+            return {"ok": st == 200, "trace": trace}
+        r = await ad.place_order(req) if plain else await ad.place_bracket(req)
+        trace["placed"] = {"ok": r.ok, "order_id": r.order_id, "error": r.error,
+                           "raw": r.raw}      # full broker response, verbatim
         try:
             if r.ok and r.order_id:
                 await asyncio.sleep(1.5)
@@ -590,6 +626,13 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                 try:
                     m2 = await ad.get_metrics()
                     trace["working_orders_after_cancel"] = m2.get("working_orders")
+                    # safety: a close-to-market test stop could fill before the
+                    # cancel lands — never leave a position behind
+                    net = await ad.get_net_position(symbol)
+                    trace["net_after_cancel"] = net
+                    if net:
+                        f = await ad.flatten_all()
+                        trace["emergency_flatten"] = {"ok": f.ok, "error": f.error}
                 except Exception as e:  # noqa: BLE001
                     trace["final_readback_error"] = str(e)
         engine.journal("selftest_order", account=aid, **trace)
