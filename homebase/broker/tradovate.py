@@ -311,7 +311,10 @@ class TradovateAdapter(BrokerAdapter):
             qty=qty,
             price=ent.get("price"),
             ts=time.time(),
-            raw=ent,
+            # always carry the RESOLVED order id: real-time fill pushes are
+            # partial and may omit it, and the engine matches the straddle's
+            # entry legs on raw["orderId"] to cancel the sibling.
+            raw={**ent, "orderId": order_id} if order_id is not None else ent,
         )
 
     async def _lookup_order(self, order_id) -> Optional[dict]:

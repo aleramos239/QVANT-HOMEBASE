@@ -211,6 +211,18 @@ def test_entry_fill_cancels_sibling(tmp_path):
     assert "entry_fill" in journal_events(tmp_path)
 
 
+def test_entry_fill_without_order_id_still_cancels_sibling(tmp_path):
+    """Tradovate fill pushes are sometimes partial. A fill with no usable
+    order id must NOT leave the opposite entry resting."""
+    eng, ad, _ = mkengine(tmp_path)
+    st = _place(eng, ad)
+    run(eng.on_fill(FillEvent(account_id="main", symbol="NQZ6", side="Buy",
+                              qty=3, price=24510.25, raw={})))   # no orderId
+    assert st.status == "live" and st.entry_side == "Buy"
+    assert st.lower_id in ad.cancelled
+    assert "fill_matched_by_side" in journal_events(tmp_path)
+
+
 def test_both_filled_flattens_that_account(tmp_path):
     eng, ad, _ = mkengine(tmp_path)
     st = _place(eng, ad)

@@ -260,7 +260,20 @@ class Engine:
             ad = self.adapters.get(st.account)
             if cfg is None or ad is None:
                 continue
-            if st.status == "placed" and oid in (st.upper_id, st.lower_id):
+            matches_leg = oid in (st.upper_id, st.lower_id)
+            # Fallback: a partial fill push with no usable order id would
+            # otherwise leave the opposite entry resting. If it is our symbol,
+            # our account and an entry side, attribute it by side — cancelling
+            # the wrong sibling only costs a trade, leaving one costs a
+            # position.
+            if st.status == "placed" and not matches_leg and not oid \
+                    and ev.symbol and cfg.symbol.upper() in ev.symbol.upper() \
+                    and ev.side in ("Buy", "Sell"):
+                oid = st.upper_id if ev.side == "Buy" else st.lower_id
+                matches_leg = bool(oid)
+                self.journal("fill_matched_by_side", strategy=st.strategy,
+                             account=st.account, side=ev.side, order_id=oid)
+            if st.status == "placed" and matches_leg:
                 sibling = st.lower_id if oid == st.upper_id else st.upper_id
                 st.status = "live"
                 st.entry_side = "Buy" if oid == st.upper_id else "Sell"
