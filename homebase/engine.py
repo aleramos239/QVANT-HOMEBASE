@@ -192,9 +192,10 @@ class Engine:
                     "note": "disarmed — journaled only", "accounts": len(asg)}
 
         results = {}
+        t0 = time.time()
         for a in asg:
             results[a["account"]] = await self._place(
-                name, cfg, a["account"], int(a["qty"]), upper, lower, source)
+                name, cfg, a["account"], int(a["qty"]), upper, lower, source, t0)
         ok = any(r.get("ok") for r in results.values())
         return {"ok": ok, "armed": True, "accounts": results}
 
@@ -213,7 +214,8 @@ class Engine:
         ]
 
     async def _place(self, name: str, cfg: StrategyCfg, account: str, qty: int,
-                     upper: float, lower: float, source: str) -> dict:
+                     upper: float, lower: float, source: str,
+                     t0: float | None = None) -> dict:
         st = self._state(name, account)
         ad = self.adapters.get(account)
         if ad is None or not ad.connected:
@@ -247,7 +249,11 @@ class Engine:
         self._save()
         self.journal("placed", strategy=name, account=account, source=source,
                      upper=upper, lower=lower, qty=qty,
-                     upper_id=st.upper_id, lower_id=st.lower_id)
+                     upper_id=st.upper_id, lower_id=st.lower_id,
+                     # anchor -> both legs acknowledged by the broker; the
+                     # only latency the strategy is actually exposed to
+                     place_ms=(None if t0 is None
+                               else round((time.time() - t0) * 1000)))
         return {"ok": True, "upper_id": st.upper_id, "lower_id": st.lower_id}
 
     # --- broker fills ---------------------------------------------------------
