@@ -27,10 +27,10 @@ from typing import Optional
 # ----------------------------------------------------------------------------
 # Constants extracted from trader.tradovate.com (2026-05-26)
 # ----------------------------------------------------------------------------
-HMAC_KEY = "035a1259-11e7-485a-aeae-9b6016579351"
+HMAC_KEY = "035a1259-11e7-485a-aeae-9b6016579351"   # verified live 2026-09-16
 CID = "1"
 APP_ID = "tradovate_trader(web)"
-APP_VERSION = "3.260522.0"
+APP_VERSION = "3.260911.0"   # re-extracted 2026-09-16 (was 3.260522.0)
 # The five fields concatenated to form the HMAC message, in this exact order:
 HMAC_FIELDS = ["chl", "deviceId", "name", "password", "appId"]
 
@@ -218,6 +218,12 @@ class TradovateAuth:
         payload["sec"] = compute_sec(payload)
         payload["password"] = encrypt_password(username, password)
         payload["enc"] = True
+        # fields the 2026-09 web client also sends (all optional per its own
+        # validators, but match it byte-for-byte; sec covers only HMAC_FIELDS)
+        payload["userAgent"] = USER_AGENT
+        payload["locale"] = "en"
+        payload["organization"] = ""
+        payload["hibpCheck"] = False
         return payload
 
     def login(self, username: str, password: str) -> TradovateTokens:

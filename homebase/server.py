@@ -174,15 +174,28 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         engine.journal("broker_connected", account=aid,
                        broker_account=a.account_name)
 
+    _login_cooldown: dict[str, float] = {}   # account id -> unix ts of next try
+
     async def _broker_loop():
+        import time as _t
         while True:
             for aid in list(cfg.accounts):
                 ad = adapters.get(aid)
-                if ad is None or not ad.connected:
-                    try:
-                        await _connect_account(aid)
-                    except Exception as e:  # noqa: BLE001 — report, retry
-                        acct_status[aid] = {"connected": False, "error": str(e)}
+                if ad is not None and ad.connected:
+                    continue
+                if _t.time() < _login_cooldown.get(aid, 0):
+                    continue
+                try:
+                    await _connect_account(aid)
+                    _login_cooldown.pop(aid, None)
+                except Exception as e:  # noqa: BLE001 — report, back off
+                    msg = str(e)
+                    acct_status[aid] = {"connected": False, "error": msg}
+                    # NEVER hammer the login endpoint: auth rejections and
+                    # rate-limit tickets wait 30 min; anything else 5 min.
+                    slow = ("Login failed" in msg or "p-ticket" in msg
+                            or "p-captcha" in msg)
+                    _login_cooldown[aid] = _t.time() + (1800 if slow else 300)
             await asyncio.sleep(RECONNECT_INTERVAL_S)
 
     async def _equity_loop():
