@@ -1,10 +1,16 @@
 //@version=6
-// NQ 09:30 open-volatility straddle — OCO stop entries (2026-09-15, r6)
+// NQ 09:30 open-volatility straddle — OCO stop entries (2026-09-16, r7)
+//
+// r7 = SPEC AMENDMENT 2026-09-16: the TREND regime gate default is now OFF
+//   (trade every weekday). User decision on the aligned-year comparison
+//   (OFF n=230 $62.8k t 6.81 PF 2.63 vs ON n=139 $34.2k t 4.76 PF 2.40,
+//   same maxDD). NOTE: the sealed-year exam validated the GATED variant;
+//   the toggle remains for comparison exports. Everything else = r6/r5.
 //
 // r6 = r5 + Homebase webhook: paste the app's secret into the "Webhook
 //   secret" input, create ONE TV alert on this strategy with condition
 //   "Any alert() function call" (open-ended) and the app's /hook URL.
-//   Fires once at 9:30:00 on TREND days with the exact trigger prices.
+//   Fires once at 9:30:00 with the exact trigger prices.
 //   Strategy logic is byte-identical to r5 (the validated champion).
 //
 // r5 = the APPROVED champion as defaults (spec 2026-09-09):
@@ -38,7 +44,7 @@ strategy("NQ 9:30 Straddle", overlay = true,
 offPts = input.float(10.0, "Entry offset (points from 9:29 close)", minval = 1, step = 5)
 slPts  = input.float(5.0,  "Stop loss (points from entry)",         minval = 1, step = 5)
 tpPts  = input.float(15.0, "Take profit (points from entry)",       minval = 1, step = 5)
-gateT  = input.bool(true,  "Trade TREND days only (approved gate)")
+gateT  = input.bool(false, "Trade TREND days only (removed from spec 2026-09-16)")
 adxTh  = input.float(20.0, "ADX trend threshold (daily)",           minval = 5, step = 1)
 bandLo = input.float(0.85, "Regime LOW band (ratio below)",         minval = 0.1, step = 0.05)
 bandHi = input.float(1.15, "Regime HIGH band (ratio above)",        minval = 1.0, step = 0.05)
