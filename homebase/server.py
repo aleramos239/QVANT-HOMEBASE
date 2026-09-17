@@ -458,6 +458,38 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                        cause="manual_flatten")
         return {"ok": True, "enabled": False, "results": results}
 
+    @app.post("/api/accounts/remove")
+    async def accounts_remove(request: Request):
+        """Remove an account from the pool: unassign it from every strategy,
+        close its adapter, drop it. Refused while it holds an open position."""
+        body = await request.json()
+        aid = str(body.get("account") or "")
+        if aid not in cfg.accounts:
+            raise HTTPException(404, f"unknown account {aid!r}")
+        ad = adapters.get(aid)
+        if ad is not None and ad.connected:
+            try:
+                for s in cfg.strategies.values():
+                    if await ad.get_net_position(s.symbol):
+                        raise HTTPException(409, "account has an open position "
+                                            "— flatten first")
+            except HTTPException:
+                raise
+            except Exception:  # noqa: BLE001 — can't read = allow removal
+                pass
+        for name in list(cfg.book):
+            cfg.book[name] = [a for a in cfg.book[name]
+                              if a.get("account") != aid]
+        cfg.accounts.pop(aid)
+        config_mod.save(cfg)
+        acct_status.pop(aid, None)
+        old = adapters.pop(aid, None)
+        if old is not None:
+            with contextlib.suppress(Exception):
+                await old.close()
+        engine.journal("account_removed", account=aid)
+        return {"ok": True, "removed": aid}
+
     @app.post("/api/book")
     async def set_book(request: Request):
         """Set one strategy's assignments: [{account, qty}, ...]."""

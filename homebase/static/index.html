@@ -1158,12 +1158,23 @@ function openAccts() {
     ? ids.map(id => {
         const running = runningOn(id);
         return acctRow(id, {}).replace('<span class="spacer"></span>',
-          `<span class="strats">${running || "no strategy assigned"}</span><span class="spacer"></span>`);
+          `<span class="strats">${running || "no strategy assigned"}</span><span class="spacer"></span>`)
+          .replace("</div>", `<button class="x" style="border:none;background:none;color:var(--muted-foreground);cursor:pointer;font-size:14px"
+            onclick="removeAcct('${id}')" title="Remove this account">&times;</button></div>`);
       }).join("")
     : `<div class="mcap" style="padding:14px 0">no accounts yet — add one to start</div>`;
   $("#acctOverlay").classList.add("open");
 }
 function closeAccts() { $("#acctOverlay").classList.remove("open"); }
+async function removeAcct(id) {
+  closeAccts();
+  if (!await confirmDlg("Remove " + id + "?",
+      "Unassigns it from every strategy and drops it from the pool. Refused if it holds an open position.",
+      "Remove", true)) return;
+  const r = await post("/api/accounts/remove", {account: id});
+  toast(r.ok ? id + " removed." : "Refused — " + (r.detail || "unknown"), 5000);
+  refresh();
+}
 $("#acctOverlay").addEventListener("click", (e) => {
   if (e.target === e.currentTarget) closeAccts();
 });

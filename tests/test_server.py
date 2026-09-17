@@ -193,6 +193,17 @@ def test_strategy_flatten_disables(client):
     assert client.app.state.cfg.strategies["nq930"].enabled is False
 
 
+def test_accounts_remove_unassigns_and_drops(client):
+    r = client.post("/api/accounts/remove", json={"account": "main"}).json()
+    assert r["ok"] is True
+    cfg = client.app.state.cfg
+    assert "main" not in cfg.accounts
+    assert cfg.book["nq930"] == []
+    assert "main" not in client.app.state.adapters
+    assert client.post("/api/accounts/remove",
+                       json={"account": "nope"}).status_code == 404
+
+
 def test_kill_disarms_and_clears_every_account(client):
     client.post("/api/arm", json={"armed": True})
     r = client.post("/api/kill").json()
