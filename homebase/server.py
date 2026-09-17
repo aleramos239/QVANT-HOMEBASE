@@ -32,7 +32,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import config as config_mod
 from . import secrets_store
-from .broker.base import BrokerAdapter
+from .broker.base import BrokerAdapter, OrderRequest
 from .broker.tradovate import TradovateAdapter
 from .engine import Engine
 from .marketdata import TradovateMD
@@ -514,6 +514,86 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                 await old.close()
         engine.journal("account_removed", account=aid)
         return {"ok": True, "removed": aid}
+
+    @app.get("/api/diag-permissions")
+    async def diag_permissions(account: str):
+        """Read-only: what the broker says this login may do. No orders."""
+        ad = adapters.get(account)
+        if ad is None or not ad.connected:
+            raise HTTPException(409, "account not connected")
+        ws = getattr(ad, "_ws", None)
+        if ws is None:
+            raise HTTPException(409, "no socket")
+        out: dict = {}
+        try:
+            sync = await ad._ws.user_sync()
+            out["userPlugins"] = sync.get("userPlugins")
+            out["accountRiskStatuses"] = sync.get("accountRiskStatuses")
+            out["userProperties"] = sync.get("userProperties")
+            out["users"] = [{k: v for k, v in u.items()
+                             if k in ("id", "name", "status", "professional",
+                                      "organizationId", "userType")}
+                            for u in (sync.get("users") or [])]
+        except Exception as e:  # noqa: BLE001
+            out["sync_error"] = str(e)
+        for label, ep in (("tradingPermissions", "tradingPermission/list"),):
+            try:
+                out[label] = await ws.request(ep, "")
+            except Exception as e:  # noqa: BLE001
+                out[label] = f"ERROR: {e}"
+        return out
+
+    @app.post("/api/selftest-order")
+    async def selftest_order(request: Request):
+        """Prove the REAL order path end to end: place one bracketed stop
+        entry far from the market, confirm the broker accepted it, then
+        cancel it. qty is forced to 1 and the offset has a hard floor, so
+        it cannot fill. Parent is a Day order, so even a failed cancel
+        expires at the session end."""
+        body = await request.json()
+        aid = str(body.get("account") or "")
+        if aid not in cfg.accounts:
+            raise HTTPException(404, f"unknown account {aid!r}")
+        ad = adapters.get(aid)
+        if ad is None or not ad.connected:
+            raise HTTPException(409, "account not connected")
+        symbol = str(body.get("symbol") or "NQ")
+        offset = max(300.0, float(body.get("offset_pts") or 1000))
+        ref = body.get("ref_price")
+        if ref is None:
+            raise HTTPException(400, "ref_price required (a recent market price)")
+        entry = round(float(ref) + offset, 2)
+        trace: dict = {"symbol": symbol, "entry_stop": entry, "qty": 1,
+                       "offset_pts": offset}
+        req = OrderRequest(symbol=symbol, side="Buy", qty=1, order_type="Stop",
+                           price=entry, stop_price=entry - 5, tp_price=entry + 15,
+                           text="homebase:selftest")
+        r = await ad.place_bracket(req)
+        trace["placed"] = {"ok": r.ok, "order_id": r.order_id, "error": r.error}
+        try:
+            if r.ok and r.order_id:
+                await asyncio.sleep(1.5)
+                try:
+                    m = await ad.get_metrics()
+                    trace["working_orders_after_place"] = m.get("working_orders")
+                    trace["net_position"] = await ad.get_net_position(symbol)
+                except Exception as e:  # noqa: BLE001
+                    trace["readback_error"] = str(e)
+        finally:
+            if r.ok and r.order_id:
+                c = await ad.cancel_order_by_id(r.order_id)
+                trace["cancelled"] = {"ok": c.ok, "error": c.error}
+                if not c.ok:
+                    ca = await ad.cancel_all()
+                    trace["cancel_all_fallback"] = {"ok": ca.ok, "error": ca.error}
+                await asyncio.sleep(1.0)
+                try:
+                    m2 = await ad.get_metrics()
+                    trace["working_orders_after_cancel"] = m2.get("working_orders")
+                except Exception as e:  # noqa: BLE001
+                    trace["final_readback_error"] = str(e)
+        engine.journal("selftest_order", account=aid, **trace)
+        return {"ok": bool(r.ok), "trace": trace}
 
     @app.post("/api/book")
     async def set_book(request: Request):

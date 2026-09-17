@@ -182,8 +182,15 @@ class TradovateWS:
         price: Optional[float] = None,
         stop_price: Optional[float] = None,
         text: str = "Onyx",
+        account_spec: Optional[str] = None,
     ) -> dict:
         body = {
+            # accountSpec (the account NAME) is the first field of the web
+            # client's order payload. Required when the account is owned by
+            # another user and you trade it under a trading permission (the
+            # prop-firm/CTA case) — without it Tradovate answers
+            # "Access is denied".
+            **({"accountSpec": account_spec} if account_spec else {}),
             "accountId": account_id,
             "action": "Buy" if side.lower() == "buy" else "Sell",
             "symbol": symbol,
@@ -193,10 +200,23 @@ class TradovateWS:
             "isAutomated": True,
             "text": text,
         }
-        if price is not None:
-            body["price"] = price
-        if stop_price is not None:
-            body["stopPrice"] = stop_price
+        # Tradovate validates price fields per order type: a Stop order needs
+        # stopPrice (the trigger) and must NOT carry price. Callers use
+        # OrderRequest.price for a Stop's trigger (entry legs) and
+        # OrderRequest.stop_price for protective stops, so normalize here.
+        ot = (order_type or "Market").lower()
+        if ot == "stop":
+            trigger = price if price is not None else stop_price
+            if trigger is not None:
+                body["stopPrice"] = trigger
+        elif ot == "stoplimit":
+            if price is not None:
+                body["price"] = price
+            if stop_price is not None:
+                body["stopPrice"] = stop_price
+        elif ot == "limit":
+            if price is not None:
+                body["price"] = price
         return await self.request("order/placeorder", body)
 
     async def place_oso(
@@ -211,6 +231,7 @@ class TradovateWS:
         entry_price: Optional[float] = None,  # Limit price, or Stop trigger
         time_in_force: str = "Day",
         text: str = "Onyx",
+        account_spec: Optional[str] = None,
     ) -> dict:
         """Place a One-Sends-Other bracketed order: entry + protective stop
         and/or target. Tradovate auto-cancels the surviving bracket when its
@@ -221,6 +242,7 @@ class TradovateWS:
         opposite = "Sell" if side.lower() == "buy" else "Buy"
         parent_action = "Buy" if side.lower() == "buy" else "Sell"
         body = {
+            **({"accountSpec": account_spec} if account_spec else {}),
             "accountId": account_id,
             "action": parent_action,
             "symbol": symbol,
@@ -247,7 +269,9 @@ class TradovateWS:
         else:
             body["bracket1"] = {"action": opposite, "orderType": "Limit",
                                 "price": tp_price, "timeInForce": "GTC"}
-        return await self.request("order/placeOSO", body)
+        # lowercase: matches the web client exactly ("order/placeoso").
+        # The camelCase spelling answers "Access is denied".
+        return await self.request("order/placeoso", body)
 
     async def cancel_order(self, order_id: int) -> dict:
         return await self.request("order/cancelorder", {"orderId": order_id})

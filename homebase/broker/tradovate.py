@@ -343,6 +343,7 @@ class TradovateAdapter(BrokerAdapter):
                 account_id=self._acct_num, symbol=sym, side=req.side,
                 qty=req.qty, order_type=req.order_type, price=req.price,
                 stop_price=req.stop_price, text=req.text,
+                account_spec=self._acct_name or None,
             )
             oid = d.get("orderId") if isinstance(d, dict) else None
             if oid is None:
@@ -371,7 +372,8 @@ class TradovateAdapter(BrokerAdapter):
             d = await self._ws.place_oso(
                 account_id=self._acct_num, symbol=sym, side=req.side,
                 qty=req.qty, stop_price=req.stop_price, tp_price=req.tp_price,
-                entry_type=req.order_type, entry_price=req.price, text=req.text)
+                entry_type=req.order_type, entry_price=req.price, text=req.text,
+                account_spec=self._acct_name or None)
             oid = d.get("orderId") if isinstance(d, dict) else None
             if oid is None:
                 # A 200 with no orderId is a logical OSO reject; leg it instead.
