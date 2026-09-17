@@ -21,10 +21,12 @@ cat > "$APP/Contents/Info.plist" <<'EOF'
   <key>NSHighResolutionCapable</key><true/>
   <key>NSAppTransportSecurity</key>
   <dict><key>NSAllowsLocalNetworking</key><true/></dict>
+  <key>CFBundleIconFile</key><string>Homebase</string>
 </dict>
 </plist>
 EOF
 
+cp "$HERE/Homebase.icns" "$APP/Contents/Resources/Homebase.icns"
 swiftc -O "$HERE/main.swift" -o "$APP/Contents/MacOS/Homebase" \
   -framework Cocoa -framework WebKit
 codesign --force --sign - "$APP" 2>/dev/null || true
