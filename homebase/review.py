@@ -119,6 +119,28 @@ def review(date: str) -> str:
         for e in exits:
             add(f"  {e['et'][11:19]}  {e.get('account')}  {str(e.get('reason')).upper()} "
                 f"@ {e.get('fill')}  →  ${e.get('pnl'):,.2f} gross")
+            # EXIT slippage: a triggered stop becomes a market order, so this
+            # is where real slippage lives. Compare to the bracket's level.
+            ent = next((f for f in fills if f.get("account") == e.get("account")), None)
+            name = e.get("strategy", "")
+            scfg = cfg.strategies.get(name)
+            if ent and scfg and e.get("fill") is not None and ent.get("anchor") is not None:
+                sym = scfg.symbol
+                ts_, pv_ = tick_size(sym), point_value(sym) or 0
+                sgn = 1 if ent.get("side") == "Buy" else -1
+                reason = str(e.get("reason"))
+                level = (ent["anchor"] - sgn * scfg.sl_pts if reason == "sl" else
+                         ent["anchor"] + sgn * scfg.tp_pts if reason == "tp" else None)
+                if level is not None and ts_:
+                    # adverse = worse than the level, from the position's view
+                    adverse = (level - e["fill"]) * sgn
+                    ticks = adverse / ts_
+                    qty = next((p.get("qty") for p in placed
+                                if p.get("account") == e.get("account")), 1) or 1
+                    verdict = ("as modelled" if abs(ticks) <= 1.01 else
+                               "WORSE than modelled" if ticks > 1 else "better")
+                    add(f"           {reason.upper()} level {level} · slippage "
+                        f"{ticks:+.1f} ticks → ${abs(adverse) * pv_ * qty:,.2f} · {verdict}")
         for e in by("cancelled_unfilled"):
             add(f"  {e['et'][11:19]}  {e.get('account')}  no fill — entries cancelled")
         for e in by("clock_flat"):
@@ -137,7 +159,8 @@ def review(date: str) -> str:
     total = sum(float(e.get("pnl") or 0) for e in exits)
     if exits:
         add(f"\nNET (gross, before commissions): ${total:,.2f}")
-    add("\nNote: pnl is gross — fees (~$4/RT/contract) are not deducted here.")
+    add("\nNote: pnl is gross. Measured Apex fees: ~$3.10/contract round turn "
+        "(2026-09-18); the research assumed $4.00.")
     return "\n".join(L)
 
 

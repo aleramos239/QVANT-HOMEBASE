@@ -233,6 +233,7 @@
     font-variant-numeric:tabular-nums; min-width:92px; text-align:right; }
   .acct .lbl{ font-size:11px; color:var(--muted-foreground); display:block; }
   .acct .spacer{ flex:1; }
+  #acctList2 .acct{ flex-wrap:wrap; row-gap:6px; }
   .kvi.pos{ color:var(--pos); } .kvi.neg{ color:var(--neg); }
   .kvi.pos .lbl,.kvi.neg .lbl{ color:var(--muted-foreground); }
 
@@ -471,7 +472,7 @@
 </div>
 
 <div class="overlay" id="acctOverlay">
-  <div class="modal" style="width:560px">
+  <div class="modal" style="width:780px;max-width:94vw">
     <div class="cal-head">
       <span style="font-weight:600">Accounts</span>
       <span style="font-size:12px;color:var(--muted-foreground)" id="acctCount"></span>
@@ -650,8 +651,11 @@ function render() {
     strip.innerHTML = `<span class="headline">Not ready</span>` +
       probs.map(c => `<span class="ri ${c.level}">
         <span class="rd ${c.level}"></span><b>${c.label}</b> ${String(c.detail).slice(0, 70)}${String(c.detail).length > 70 ? "…" : ""}</span>`).join("") +
-      `<span class="spacer"></span>
-       <button class="x" style="border:none;background:none;color:var(--muted-foreground);cursor:pointer;font-size:15px;padding:0 2px"
+      `<span class="spacer"></span>` +
+      (Object.values(s.accounts || {}).some(a => !a.connected)
+        ? `<button class="btn btn-outline btn-sm" onclick="reconnectAcct('')"
+             title="Rebuild every broker connection">Reconnect</button>` : "") +
+      `<button class="x" style="border:none;background:none;color:var(--muted-foreground);cursor:pointer;font-size:15px;padding:0 2px"
          title="Dismiss — reappears if the problems change"
          onclick="dismissReady()">&times;</button>`;
   } else strip.style.display = "none";
@@ -1144,6 +1148,21 @@ function dismissReady() {
   $("#readyStrip").style.display = "none";
 }
 
+/* ---- reconnect ---- */
+async function reconnectAcct(id) {
+  toast("Reconnecting" + (id ? " " + id : " all accounts") + "…", 8000);
+  const r = await post("/api/accounts/reconnect", id ? {account: id} : {});
+  const res = (r && r.results) || {};
+  const bad = Object.entries(res).filter(([, v]) => !v.ok);
+  if (r && r.ok) {
+    const modes = [...new Set(Object.values(res).map(v => v.mode))].join(", ");
+    toast("Reconnected (" + modes + ").");
+  } else if (bad.length) {
+    toast("Reconnect failed — " + bad.map(([k, v]) => k + ": " + v.error).join(" · "), 9000);
+  }
+  refresh();
+}
+
 /* ---- strategy on/off + flatten ---- */
 async function toggleStrat(name, enabled) {
   const ok = await confirmDlg(
@@ -1180,7 +1199,9 @@ function openAccts() {
         const running = runningOn(id);
         return acctRow(id, {}).replace('<span class="spacer"></span>',
           `<span class="strats">${running || "no strategy assigned"}</span><span class="spacer"></span>`)
-          .replace("</div>", `<button class="x" style="border:none;background:none;color:var(--muted-foreground);cursor:pointer;font-size:14px"
+          .replace("</div>", `<button class="btn btn-outline btn-sm" onclick="reconnectAcct('${id}')"
+            title="Rebuild this account's broker connection">Reconnect</button>
+            <button class="x" style="border:none;background:none;color:var(--muted-foreground);cursor:pointer;font-size:14px"
             onclick="removeAcct('${id}')" title="Remove this account">&times;</button></div>`);
       }).join("")
     : `<div class="mcap" style="padding:14px 0">no accounts yet — add one to start</div>`;

@@ -42,7 +42,7 @@ from .timer import SelfTimer
 
 STATIC = Path(__file__).resolve().parent / "static"
 CLOCK_INTERVAL_S = 5
-RECONNECT_INTERVAL_S = 30
+RECONNECT_INTERVAL_S = 5   # cheap now: reconnects reuse the token
 EQUITY_INTERVAL_S = 60
 JOURNAL_TAIL = 60
 READINESS_FROM = (9, 25)
@@ -173,16 +173,36 @@ def create_app(cfg: config_mod.AppCfg | None = None,
 
     timer = SelfTimer(cfg, engine, md_factory=_md_factory)
 
-    async def _connect_account(aid: str) -> None:
+    async def _connect_account(aid: str, force_login: bool = False) -> str:
+        """(Re)connect one account. Prefers an in-place reconnect on the token
+        it already holds — no login spent — and only falls back to a full
+        login. A drop used to cost a full login every time: ~20/hour on a
+        sleeping laptop against Tradovate's ~5/hour limit."""
         a = cfg.accounts[aid]
         ad = adapters.get(aid)
         if ad is None:
             ad = adapters[aid] = adapter_factory(aid, a)
-        await ad.connect()
+        mode = "login"
+        has_token = bool(getattr(getattr(ad, "_auth", None), "tokens", None))
+        if has_token and not force_login and hasattr(ad, "reconnect"):
+            try:
+                await ad.reconnect()
+                mode = "reconnect"
+            except Exception as e:  # noqa: BLE001 — fall back to a real login
+                engine.journal("reconnect_fell_back_to_login", account=aid,
+                               error=str(e)[:200])
+                await ad.connect()
+        else:
+            await ad.connect()
         await ad.observe_fills(engine.on_fill)
         acct_status[aid] = {"connected": True, "error": None}
         engine.journal("broker_connected", account=aid,
-                       broker_account=a.account_name)
+                       broker_account=a.account_name, mode=mode)
+        try:
+            await engine.reconcile_account(aid)
+        except Exception as e:  # noqa: BLE001 — never block the connect on it
+            engine.journal("reconcile_error", account=aid, error=str(e)[:200])
+        return mode
 
     _login_cooldown: dict[str, float] = {}   # account id -> unix ts of next try
 
@@ -482,6 +502,32 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         engine.journal("strategy_toggled", strategy=name, enabled=False,
                        cause="manual_flatten")
         return {"ok": True, "enabled": False, "results": results}
+
+    @app.post("/api/accounts/reconnect")
+    async def accounts_reconnect(request: Request):
+        """Manual reconnect for one account (or all). Clears any login backoff —
+        the user is explicitly asking — and reconciles positions afterwards."""
+        try:
+            body = await request.json()
+        except Exception:  # noqa: BLE001 — empty body = all accounts
+            body = {}
+        only = str(body.get("account") or "")
+        targets = [only] if only else list(cfg.accounts)
+        results = {}
+        for aid in targets:
+            if aid not in cfg.accounts:
+                results[aid] = {"ok": False, "error": "unknown account"}
+                continue
+            _login_cooldown.pop(aid, None)
+            try:
+                mode = await _connect_account(aid)
+                results[aid] = {"ok": True, "mode": mode}
+            except Exception as e:  # noqa: BLE001 — surface the reason
+                acct_status[aid] = {"connected": False, "error": str(e)}
+                results[aid] = {"ok": False, "error": str(e)[:200]}
+        engine.journal("manual_reconnect", results=results)
+        return {"ok": all(r["ok"] for r in results.values()) if results else False,
+                "results": results}
 
     @app.post("/api/accounts/remove")
     async def accounts_remove(request: Request):

@@ -106,6 +106,10 @@ class TradovateAdapter(BrokerAdapter):
         sync = await self._ws.user_sync()
         self._ingest_sync(sync)
         self._connected = True
+        # a repeat connect() used to stack a new keepalive on top of the old one
+        # every time — a night of drops leaked dozens of them
+        if self._keepalive is not None and not self._keepalive.done():
+            self._keepalive.cancel()
         self._keepalive = asyncio.create_task(self._keepalive_loop())
         self.audit({"event": "adapter_connected", "account": self.account_id,
                     "platform": self.platform, "env": self.env,
@@ -132,6 +136,8 @@ class TradovateAdapter(BrokerAdapter):
         self._connected = True
         if self._consumer is None or self._consumer.done():
             self._consumer = asyncio.create_task(self._consume_fills())
+        if self._keepalive is None or self._keepalive.done():
+            self._keepalive = asyncio.create_task(self._keepalive_loop())
         self.audit({"event": "adapter_reconnected", "account": self.account_id})
 
     async def close(self) -> None:

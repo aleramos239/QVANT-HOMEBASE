@@ -223,6 +223,41 @@ def test_entry_fill_without_order_id_still_cancels_sibling(tmp_path):
     assert "fill_matched_by_side" in journal_events(tmp_path)
 
 
+def test_reconcile_recovers_entry_filled_while_disconnected(tmp_path):
+    """Socket down during the entry fill: the fill is never dispatched, so the
+    opposite stop would keep resting. Reconnect must find it from the
+    broker's position and cancel the sibling."""
+    eng, ad, _ = mkengine(tmp_path)
+    st = _place(eng, ad)                       # placed, no fill event seen
+    ad.net = -3                                # broker says: short 3
+    out = run(eng.reconcile_account("main"))
+    assert out == {"nq930": "entry_recovered"}
+    assert st.status == "live" and st.entry_side == "Sell"
+    assert st.upper_id in ad.cancelled         # the BUY stop is gone
+    assert "fill_recovered_on_reconnect" in journal_events(tmp_path)
+
+
+def test_reconcile_recovers_exit_while_disconnected(tmp_path):
+    eng, ad, _ = mkengine(tmp_path)
+    st = _place(eng, ad)
+    run(eng.on_fill(FillEvent(account_id="main", symbol="NQZ6", side="Buy",
+                              qty=3, price=24510.0,
+                              raw={"orderId": st.upper_id})))
+    ad.net = 0                                 # bracket closed it while away
+    out = run(eng.reconcile_account("main"))
+    assert out == {"nq930": "exit_recovered"}
+    assert st.status == "done"
+    assert st.exit_reason == "closed_while_disconnected"
+
+
+def test_reconcile_leaves_quiet_state_alone(tmp_path):
+    eng, ad, _ = mkengine(tmp_path)
+    st = _place(eng, ad)
+    ad.net = 0                                 # still waiting, nothing filled
+    assert run(eng.reconcile_account("main")) == {}
+    assert st.status == "placed" and ad.cancelled == []
+
+
 def test_both_filled_flattens_that_account(tmp_path):
     eng, ad, _ = mkengine(tmp_path)
     st = _place(eng, ad)

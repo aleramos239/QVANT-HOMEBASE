@@ -368,6 +368,53 @@ class Engine:
         self.journal("manual_flatten", strategy=name, results=results)
         return results
 
+    async def reconcile_account(self, account: str) -> dict:
+        """Run after every (re)connect. A fill that lands while the socket is
+        down arrives in the reconnect's user sync, where it is marked seen and
+        NEVER dispatched — so on_fill never hears of it and the opposite entry
+        stop would keep resting. Ask the broker for the real position instead.
+
+        placed + position   -> an entry filled while we were away: adopt it
+                               and cancel the sibling (the dangerous case)
+        live   + flat       -> the bracket closed it while we were away
+        """
+        ad = self.adapters.get(account)
+        out: dict = {}
+        if ad is None:
+            return out
+        for st in list(self.day_states_for_account(account)):
+            cfg = self.cfg.strategies.get(st.strategy)
+            if cfg is None or st.status not in ("placed", "live"):
+                continue
+            net = await ad.get_net_position(cfg.symbol)
+            if st.status == "placed" and net:
+                side = "Buy" if net > 0 else "Sell"
+                entry_id = st.upper_id if side == "Buy" else st.lower_id
+                sibling = st.lower_id if side == "Buy" else st.upper_id
+                r = await ad.cancel_order_by_id(sibling) if sibling else None
+                st.status, st.entry_side = "live", side
+                st.entry_anchor = st.upper_px if side == "Buy" else st.lower_px
+                st.note = "entry filled while disconnected — recovered on reconnect"
+                self._save()
+                self.journal("fill_recovered_on_reconnect", strategy=st.strategy,
+                             account=account, side=side, net=net,
+                             entry_id=entry_id, sibling_cancelled=bool(r and r.ok),
+                             sibling_error=(r.error if r else None))
+                out[st.strategy] = "entry_recovered"
+            elif st.status == "live" and not net:
+                st.status = "done"
+                st.exit_reason = st.exit_reason or "closed_while_disconnected"
+                self._save()
+                self.journal("exit_recovered_on_reconnect", strategy=st.strategy,
+                             account=account)
+                out[st.strategy] = "exit_recovered"
+        return out
+
+    def day_states_for_account(self, account: str) -> list[DayState]:
+        today = self._today()
+        return [s for s in self.states.values()
+                if s.account == account and s.date == today]
+
     # --- the clock ------------------------------------------------------------
     async def clock_tick(self) -> None:
         now = self.now_et().time()

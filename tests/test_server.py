@@ -204,6 +204,15 @@ def test_accounts_remove_unassigns_and_drops(client):
                        json={"account": "nope"}).status_code == 404
 
 
+def test_manual_reconnect_endpoint(client):
+    r = client.post("/api/accounts/reconnect", json={"account": "main"}).json()
+    assert r["ok"] is True and r["results"]["main"]["ok"] is True
+    all_ = client.post("/api/accounts/reconnect", json={}).json()
+    assert "main" in all_["results"]
+    bad = client.post("/api/accounts/reconnect", json={"account": "nope"}).json()
+    assert bad["results"]["nope"]["ok"] is False
+
+
 def test_kill_disarms_and_clears_every_account(client):
     client.post("/api/arm", json={"armed": True})
     r = client.post("/api/kill").json()
