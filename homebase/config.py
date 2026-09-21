@@ -82,6 +82,7 @@ def _defaults() -> AppCfg:
                              "t": "5.76", "avg/trade": "$14.51",
                              "maxDD": "−$316", "green months": "19/21"},
                     "caveat": "modeled friction is already 56% of the $25 risk — thin book",
+                    "equity_file": "ym930_equity.json",
                 }),
         },
     )

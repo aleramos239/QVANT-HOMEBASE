@@ -484,6 +484,24 @@
   </div>
 </div>
 
+<div class="overlay" id="liveOverlay">
+  <div class="modal" style="width:640px;max-width:94vw">
+    <div class="cal-head">
+      <span style="font-weight:600" id="liveName">—</span>
+      <span style="font-size:12px;color:var(--muted-foreground)" id="liveSince"></span>
+      <span class="spacer" style="flex:1"></span>
+      <button class="cal-nav" onclick="liveStep(-1)">&lsaquo;</button>
+      <span class="m" id="liveMonth">—</span>
+      <button class="cal-nav" onclick="liveStep(1)">&rsaquo;</button>
+      <button class="cal-nav" onclick="closeLive()" title="Close">&times;</button>
+    </div>
+    <div class="cal-grid" id="liveGrid"></div>
+    <div class="cal-foot"><span id="liveNote"></span><span class="tot" id="liveTotal"></span></div>
+    <div id="liveTable"></div>
+    <div id="liveTrades"></div>
+  </div>
+</div>
+
 <div class="overlay" id="pineOverlay">
   <div class="modal" style="width:680px">
     <div class="cal-head">
@@ -585,6 +603,7 @@ function stratCard(name, s) {
   if (s.research && s.research.rows) {
     research += `<button class="btn btn-outline btn-sm" onclick="openRes('${name}')">Backtest metrics</button>`;
   }
+  research += `<button class="btn btn-outline btn-sm" onclick="openLive('${name}')">Live calendar</button>`;
   research += `<button class="btn btn-outline btn-sm" onclick="openPine('${name}')">Pine script</button>`;
   research += `</div>`;
   // live strip (earned from the journal, real fills only)
@@ -1220,6 +1239,68 @@ async function removeAcct(id) {
 $("#acctOverlay").addEventListener("click", (e) => {
   if (e.target === e.currentTarget) closeAccts();
 });
+
+/* ---- strategy LIVE popup: calendar + metrics + trade log ---- */
+let LIVE = {name: "", d: new Date(), data: null};
+async function openLive(name) {
+  LIVE.name = name; LIVE.d = new Date(); LIVE.data = null;
+  $("#liveName").textContent = name.toUpperCase() + " · LIVE";
+  $("#liveOverlay").classList.add("open");
+  renderLive();
+  try {
+    const r = await fetch("/api/strategy-live?strategy=" + encodeURIComponent(name));
+    LIVE.data = r.ok ? await r.json() : {days: {}, trades: [], table: [], error: true};
+  } catch (_) { LIVE.data = {days: {}, trades: [], table: [], error: true}; }
+  renderLive();
+}
+function liveStep(n) { LIVE.d.setMonth(LIVE.d.getMonth() + n); renderLive(); }
+function closeLive() { $("#liveOverlay").classList.remove("open"); }
+$("#liveOverlay").addEventListener("click", (e) => {
+  if (e.target === e.currentTarget) closeLive();
+});
+function fmtTicks(x) { return x == null ? "—" : (x > 0 ? "+" : "") + Number(x).toFixed(1); }
+function renderLive() {
+  const d = LIVE.data || {days: {}, trades: [], table: []};
+  const y = LIVE.d.getFullYear(), m = LIVE.d.getMonth();
+  const month = y + "-" + String(m + 1).padStart(2, "0");
+  $("#liveMonth").textContent = LIVE.d.toLocaleString("en-US", {month: "long", year: "numeric"});
+  $("#liveSince").textContent = !LIVE.data ? "loading…" :
+    d.trades.length ? "since " + d.trades[0].date : "no live trades yet";
+  let html = ["S", "M", "T", "W", "T", "F", "S"].map(x => `<div class="dow">${x}</div>`).join("");
+  const first = new Date(y, m, 1), n = new Date(y, m + 1, 0).getDate();
+  for (let i = 0; i < first.getDay(); i++) html += `<div class="cal-cell blank"></div>`;
+  let mnet = 0, mtr = 0;
+  for (let day = 1; day <= n; day++) {
+    const v = d.days[month + "-" + String(day).padStart(2, "0")];
+    if (v) { mnet += v.net; mtr += v.trades; }
+    const cls = v ? (v.net > 0 ? " up" : v.net < 0 ? " down" : "") : "";
+    html += `<div class="cal-cell${cls}">${day}` +
+      (v ? `<span class="pnl">${usd(v.net)}</span>` : "") + `</div>`;
+  }
+  $("#liveGrid").innerHTML = html;
+  $("#liveTotal").textContent = mtr ? "Month " + usd(mnet) : "";
+  $("#liveNote").textContent = mtr ? `${mtr} trade${mtr > 1 ? "s" : ""} · est. net after fees`
+    : (LIVE.data ? "no trades this month" : "");
+
+  let last = "";
+  $("#liveTable").innerHTML = d.table.length
+    ? `<div class="rtable" style="margin-top:14px">` + d.table.map(([sec, k, v]) =>
+        (sec !== last ? ((last = sec), `<div class="slabel2">${sec.toUpperCase()}</div>`) : "") +
+        `<div class="rrow"><span class="k">${k}</span><span class="v">${v}</span></div>`).join("") +
+      `</div><div class="mcap" style="margin-top:8px">${d.fee_note || ""}` +
+      (d.unknown_exits ? ` · ⚠ ${d.unknown_exits} trade(s) closed while disconnected — P&L not in these totals` : "") +
+      `</div>`
+    : "";
+
+  $("#liveTrades").innerHTML = d.trades.length
+    ? `<div class="slabel2" style="margin-top:14px">TRADES · slippage in ticks (entry / exit)</div>` +
+      d.trades.slice().reverse().map(t =>
+        `<div class="rrow"><span class="k">${t.date} · ${t.side || "?"} ${t.entry} → ${t.exit} · ${String(t.reason).toUpperCase()}</span>` +
+        `<span class="v ${t.net > 0 ? "pos" : t.net < 0 ? "neg" : ""}">${usd(t.net)}` +
+        ` <span style="color:var(--muted-foreground)">${fmtTicks(t.entry_slip_ticks)} / ${fmtTicks(t.exit_slip_ticks)}</span></span></div>`
+      ).join("")
+    : "";
+}
 
 /* ---- pine source popup ---- */
 async function openPine(name) {

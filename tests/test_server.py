@@ -213,6 +213,44 @@ def test_manual_reconnect_endpoint(client):
     assert bad["results"]["nope"]["ok"] is False
 
 
+def test_strategy_live_detail_from_real_fills_only(client, tmp_path):
+    import json as _j
+    j = tmp_path / "journal.jsonl"
+    rows = [
+        # a dry run and a self-test must NOT count
+        {"et": "2026-09-16T09:30:00", "event": "dry_run", "strategy": "nq930"},
+        {"et": "2026-09-16T23:00:00", "event": "selftest_order", "account": "main"},
+        # day 1: short, stopped out, no slippage
+        {"et": "2026-09-17T09:30:00", "event": "placed", "strategy": "nq930",
+         "account": "main", "qty": 3},
+        {"et": "2026-09-17T09:30:07", "event": "entry_fill", "strategy": "nq930",
+         "account": "main", "side": "Sell", "fill": 29718.0, "anchor": 29718.0},
+        {"et": "2026-09-17T09:30:09", "event": "exit_fill", "strategy": "nq930",
+         "account": "main", "reason": "sl", "fill": 29723.0, "pnl": -300.0},
+        # day 2: long, target, 2 ticks of exit slippage
+        {"et": "2026-09-18T09:30:00", "event": "placed", "strategy": "nq930",
+         "account": "main", "qty": 3},
+        {"et": "2026-09-18T09:30:01", "event": "entry_fill", "strategy": "nq930",
+         "account": "main", "side": "Buy", "fill": 29824.0, "anchor": 29824.0},
+        {"et": "2026-09-18T09:31:00", "event": "exit_fill", "strategy": "nq930",
+         "account": "main", "reason": "tp", "fill": 29838.5, "pnl": 870.0},
+    ]
+    j.write_text("".join(_j.dumps(r) + "\n" for r in rows))
+    d = client.get("/api/strategy-live", params={"strategy": "nq930"}).json()
+    assert len(d["trades"]) == 2
+    assert d["days"]["2026-09-17"]["gross"] == -300.0
+    assert d["days"]["2026-09-18"]["wins"] == 1
+    t2 = d["trades"][1]
+    assert t2["entry_slip_ticks"] == 0.0
+    assert t2["exit_slip_ticks"] == 2.0          # TP level 29839.0, filled 29838.5
+    assert t2["net"] == round(870.0 - 3.10 * 3, 2)
+    table = {k: v for _, k, v in d["table"]}
+    assert table["win rate"] == "50.0%"
+    assert table["trades"] == "2"
+    assert client.get("/api/strategy-live",
+                      params={"strategy": "nope"}).status_code == 404
+
+
 def test_kill_disarms_and_clears_every_account(client):
     client.post("/api/arm", json={"armed": True})
     r = client.post("/api/kill").json()

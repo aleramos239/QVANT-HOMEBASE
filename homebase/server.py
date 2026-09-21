@@ -36,7 +36,7 @@ from .broker.base import BrokerAdapter, OrderRequest
 from .broker.tradovate import TradovateAdapter
 from .engine import Engine
 from .marketdata import TradovateMD
-from .metrics import live_metrics
+from .metrics import live_metrics, strategy_live_detail
 from .paths import state_dir
 from .timer import SelfTimer
 
@@ -755,6 +755,14 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         if not p or not p.exists():
             return {"source": None}
         return {"name": fname, "source": p.read_text()}
+
+    @app.get("/api/strategy-live")
+    async def strategy_live(strategy: str):
+        """One strategy's live record — calendar days, metrics, trade log —
+        summed across every account running it, from real fills only."""
+        if strategy not in cfg.strategies:
+            raise HTTPException(404, f"unknown strategy {strategy!r}")
+        return strategy_live_detail(state_dir() / "journal.jsonl", strategy, cfg)
 
     @app.get("/api/calendar")
     async def calendar(month: str, account: str = ""):
