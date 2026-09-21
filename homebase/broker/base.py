@@ -190,6 +190,11 @@ class BrokerAdapter(abc.ABC):
         """Cancel a single resting order by its broker id. Default: unsupported."""
         return OrderResult(ok=False, error="cancel_order_by_id not supported")
 
+    async def get_order_status(self, order_id: str) -> Optional[str]:
+        """Broker status of one order ("Working", "Filled", ...); None if
+        unknown. Default: unknown."""
+        return None
+
     async def cancel_protective_orders(self, symbol: str) -> OrderResult:
         """Cancel the protective orders WE placed for `symbol` (best-effort).
         Called by the engine when the copied leg goes flat, so a surviving Stop

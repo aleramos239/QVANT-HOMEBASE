@@ -41,7 +41,7 @@ from .paths import state_dir
 from .timer import SelfTimer
 
 STATIC = Path(__file__).resolve().parent / "static"
-CLOCK_INTERVAL_S = 5
+CLOCK_INTERVAL_S = 1       # also paces the sibling-cancel backstop (cache reads)
 RECONNECT_INTERVAL_S = 5   # cheap now: reconnects reuse the token
 EQUITY_INTERVAL_S = 60
 JOURNAL_TAIL = 60

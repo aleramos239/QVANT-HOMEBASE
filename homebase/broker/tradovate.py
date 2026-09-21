@@ -71,6 +71,7 @@ class TradovateAdapter(BrokerAdapter):
         self._contracts: dict[int, str] = {}     # contractId -> symbol name
         self._orders: dict[int, dict] = {}        # orderId -> order entity
         self._order_versions: dict[int, dict] = {}  # orderId -> latest orderVersion
+        self._order_symbols: dict[int, str] = {}  # orderId -> contract, orders WE placed
         self._seen_fills: set[int] = set()
         self._seen_order: deque = deque(maxlen=_SEEN_FILL_CAP)
         self._on_fill: Optional[FillCallback] = None
@@ -294,6 +295,12 @@ class TradovateAdapter(BrokerAdapter):
             return None  # fill belongs to another account under the same login
 
         symbol = self._contracts.get(contract_id, "") if contract_id is not None else ""
+        if not symbol and order_id is not None:
+            # An order WE placed names its own contract — the sibling cancel
+            # never waits on (or dies with) a network lookup.
+            symbol = self._order_symbols.get(order_id, "")
+            if symbol and contract_id is not None:
+                self._contracts[contract_id] = symbol
         if not symbol and contract_id is not None:
             try:
                 c = await self._ws.contract_item(contract_id)
@@ -303,10 +310,12 @@ class TradovateAdapter(BrokerAdapter):
             except Exception as e:
                 _log(f"{self.account_id}: contract/item {contract_id} failed: {e}")
         if not symbol:
+            # Deliver it anyway: the engine matches its entry legs on the
+            # order id, not the name. Dropping it here is how the 2026-09-21
+            # sell stop kept resting after the buy stop filled.
             _log(f"{self.account_id}: unresolved symbol for fill {fid} "
                  f"(contractId={contract_id}, orderId={order_id}, "
-                 f"keys={sorted(ent.keys())})")
-            return None
+                 f"keys={sorted(ent.keys())}) — delivering by order id")
         qty = int(ent.get("qty") or 0)
         if qty <= 0:
             return None
@@ -360,6 +369,7 @@ class TradovateAdapter(BrokerAdapter):
                 _log(f"{self.account_id}: order rejected: {reason}")
                 return OrderResult(ok=False, error=reason,
                                    raw=d if isinstance(d, dict) else {})
+            self._order_symbols[int(oid)] = sym
             return OrderResult(ok=True, order_id=str(oid),
                                raw=d if isinstance(d, dict) else {})
         except Exception as e:
@@ -391,6 +401,7 @@ class TradovateAdapter(BrokerAdapter):
                 return await super().place_bracket(req)
             # The OSO's brackets are broker-managed OCO — no local id tracking
             # needed; flattening the position cancels them server-side.
+            self._order_symbols[int(oid)] = sym
             return OrderResult(ok=True, order_id=str(oid),
                                raw=d if isinstance(d, dict) else {})
         except Exception as e:
@@ -486,6 +497,23 @@ class TradovateAdapter(BrokerAdapter):
         except Exception:
             pass
         return 0
+
+    async def get_order_status(self, order_id: str) -> Optional[str]:
+        """ordStatus (Working / Filled / Canceled / ...) of one order: the
+        pushed entity cache first, else one order/item read, cached after."""
+        try:
+            oid = int(order_id)
+        except (TypeError, ValueError):
+            return None
+        o = self._orders.get(oid) or {}
+        if not o.get("ordStatus") and self._ws is not None:
+            try:
+                full = await self._ws.order_item(oid)
+            except Exception:
+                return None
+            if isinstance(full, dict) and "id" in full:
+                o = self._orders[oid] = {**full, **o}
+        return o.get("ordStatus")
 
     async def get_balance(self) -> dict:
         if self._ws is None or self._acct_num is None:

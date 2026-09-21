@@ -32,6 +32,7 @@ class FakeAdapter(BrokerAdapter):
         self.flatten_calls = 0
         self.fail_leg: str | None = None
         self.net = 0
+        self.order_status: dict[str, str] = {}
         self._next_id = 100
 
     @property
@@ -68,6 +69,9 @@ class FakeAdapter(BrokerAdapter):
 
     async def get_net_position(self, symbol):
         return self.net
+
+    async def get_order_status(self, order_id):
+        return self.order_status.get(str(order_id))
 
 
 class Clock:
@@ -248,6 +252,78 @@ def test_reconcile_recovers_exit_while_disconnected(tmp_path):
     assert out == {"nq930": "exit_recovered"}
     assert st.status == "done"
     assert st.exit_reason == "closed_while_disconnected"
+
+
+def test_reconcile_catches_a_trade_that_opened_and_closed_while_away(tmp_path):
+    """Entry AND exit both happened in the gap: the position is flat again,
+    only the entry ORDER shows the fill. The sibling must still go."""
+    eng, ad, _ = mkengine(tmp_path)
+    st = _place(eng, ad)
+    ad.net = 0
+    ad.order_status[st.lower_id] = "Filled"
+    assert run(eng.reconcile_account("main")) == {"nq930": "entry_recovered"}
+    assert st.entry_side == "Sell" and st.upper_id in ad.cancelled
+
+
+def test_clock_check_cancels_sibling_when_the_fill_push_is_lost(tmp_path):
+    """2026-09-21: the buy stop filled but on_fill never heard of it, and
+    the sell stop kept resting. The clock's order-status check must find
+    the fill and cancel the sell stop."""
+    eng, ad, _ = mkengine(tmp_path)
+    st = _place(eng, ad)
+    ad.order_status.update({st.upper_id: "Filled", st.lower_id: "Working"})
+    run(eng.clock_tick())
+    assert st.status == "live" and st.entry_side == "Buy"
+    assert st.lower_id in ad.cancelled
+    assert "entry_found_by_check" in journal_events(tmp_path)
+
+
+def test_clock_check_catches_a_trade_that_already_went_flat(tmp_path):
+    """Entry and target inside one tick: flat again, so a position check
+    sees nothing — the order status still shows the fill."""
+    eng, ad, _ = mkengine(tmp_path)
+    st = _place(eng, ad)
+    ad.net = 0
+    ad.order_status[st.lower_id] = "Filled"
+    run(eng.clock_tick())
+    assert st.status == "live" and st.entry_side == "Sell"
+    assert st.upper_id in ad.cancelled
+
+
+def test_clock_check_quiet_while_both_entries_work(tmp_path):
+    eng, ad, _ = mkengine(tmp_path)
+    st = _place(eng, ad)
+    ad.order_status.update({st.upper_id: "Working", st.lower_id: "Working"})
+    run(eng.clock_tick())
+    assert st.status == "placed" and ad.cancelled == []
+
+
+def test_clock_check_both_filled_flattens(tmp_path):
+    eng, ad, _ = mkengine(tmp_path)
+    st = _place(eng, ad)
+    ad.order_status.update({st.upper_id: "Filled", st.lower_id: "Filled"})
+    run(eng.clock_tick())
+    assert st.status == "error" and st.exit_reason == "both_filled"
+    assert ad.cancel_all_calls == 1 and ad.flatten_calls == 1
+
+
+def test_late_fill_push_after_the_check_keeps_the_real_prices(tmp_path):
+    """The check adopted the entry first; the push that follows must still
+    record the fill price so the exit grades and the P&L journals."""
+    eng, ad, _ = mkengine(tmp_path)
+    st = _place(eng, ad)
+    ad.order_status[st.upper_id] = "Filled"
+    run(eng.clock_tick())
+    run(eng.on_fill(FillEvent(account_id="main", symbol="NQZ6", side="Buy",
+                              qty=3, price=24510.25,
+                              raw={"orderId": st.upper_id})))
+    assert st.entry_fill == 24510.25
+    run(eng.on_fill(FillEvent(account_id="main", symbol="NQZ6", side="Sell",
+                              qty=3, price=24525.0,
+                              raw={"orderId": "tp-child"})))
+    assert st.status == "done" and st.exit_reason == "tp"
+    assert st.pnl == round((24525.0 - 24510.25) * 20 * 3, 2)
+    assert ad.cancelled.count(st.lower_id) == 1      # once, not twice
 
 
 def test_reconcile_leaves_quiet_state_alone(tmp_path):

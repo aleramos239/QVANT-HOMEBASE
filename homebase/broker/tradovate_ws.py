@@ -5,7 +5,10 @@ from TradovateAuth. No browser required.
 
 Protocol (SockJS-style, decoded from the web app):
     - frames: 'o'=open, 'h'=heartbeat, 'a[...]'=array of messages
-    - request:  f"{endpoint}\\n{id}\\n\\n{body}"   (body is a JSON string or '')
+    - request:  f"{endpoint}\\n{id}\\n{query}\\n{body}"   (body is a JSON string or '')
+      GET-style lookups (*/item, contract/find) carry their params in the
+      QUERY line; sent in the body line Tradovate answers 404 (verified live
+      2026-09-21 — it silently dropped that morning's entry fill).
     - response: {"s":200,"i":<id>,"d":<data>}
     - unsolicited push (entity updates): {"e":"props","d":{...}}  (no "i")
     - client heartbeat: send '[]' every ~2.5s
@@ -113,14 +116,14 @@ class TradovateWS:
             # adapter (and the dashboard) stop reporting a phantom connection.
             self.connected = False
 
-    async def request(self, endpoint: str, body: Any = "") -> Any:
+    async def request(self, endpoint: str, body: Any = "", query: str = "") -> Any:
         """Send a request, await the matching response, return its `.d` payload."""
         if not self.ws or _ws_is_closed(self.ws):
             raise RuntimeError("websocket not connected")
         self._next_id += 1
         mid = self._next_id
         body_str = body if isinstance(body, str) else json.dumps(body)
-        frame = f"{endpoint}\n{mid}\n\n{body_str}"
+        frame = f"{endpoint}\n{mid}\n{query}\n{body_str}"
         fut = asyncio.get_running_loop().create_future()
         self._pending[mid] = fut
         await self.ws.send(frame)
@@ -159,16 +162,16 @@ class TradovateWS:
         return await self.request("cashBalance/list", "")
 
     async def contract_find(self, name: str) -> dict:
-        return await self.request("contract/find", f"name={name}")
+        return await self.request("contract/find", query=f"name={name}")
 
     async def contract_item(self, contract_id: int) -> dict:
-        return await self.request("contract/item", f"id={contract_id}")
+        return await self.request("contract/item", query=f"id={contract_id}")
 
     async def order_item(self, order_id: int) -> dict:
-        return await self.request("order/item", f"id={order_id}")
+        return await self.request("order/item", query=f"id={order_id}")
 
     async def fill_item(self, fill_id: int) -> dict:
-        return await self.request("fill/item", f"id={fill_id}")
+        return await self.request("fill/item", query=f"id={fill_id}")
 
     # ---- writes ----
     async def place_order(

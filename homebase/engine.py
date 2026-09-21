@@ -293,6 +293,18 @@ class Engine:
                                              else round(ev.price - st.entry_anchor, 4)),
                              sibling_cancelled=r.ok, sibling_error=r.error)
                 return
+            if st.status == "live" and oid and oid == self._entry_id(st) \
+                    and st.entry_fill is None:
+                # the order-status check adopted this entry first; keep the
+                # real fill so the exit still grades and the P&L journals
+                st.entry_fill = ev.price
+                self._save()
+                self.journal("entry_fill", strategy=st.strategy, account=st.account,
+                             side=st.entry_side, fill=ev.price, anchor=st.entry_anchor,
+                             fill_vs_anchor=(None if ev.price is None or st.entry_anchor is None
+                                             else round(ev.price - st.entry_anchor, 4)),
+                             late=True)
+                return
             if st.status == "live" and oid and oid in (st.upper_id, st.lower_id) \
                     and oid != self._entry_id(st):
                 st.status, st.exit_reason = "error", "both_filled"
@@ -368,14 +380,57 @@ class Engine:
         self.journal("manual_flatten", strategy=name, results=results)
         return results
 
+    async def _guard_placed(self, st: DayState, cfg: StrategyCfg,
+                            ad: BrokerAdapter, *, check_position: bool,
+                            event: str, note: str) -> Optional[str]:
+        """Backstop for the sibling cancel. on_fill is the fast path, but it
+        only fires if the fill PUSH arrives and parses — on 2026-09-21 it
+        arrived, was dropped, and the sell stop kept resting after the buy
+        stop filled. Ask the broker instead: an entry ORDER that reads Filled
+        means that side is in, even if the trade already went flat again
+        (which a position check alone would miss). check_position adds the
+        net-position read. Returns "entry_recovered", "both_filled" or None."""
+        up = await ad.get_order_status(st.upper_id) if st.upper_id else None
+        dn = await ad.get_order_status(st.lower_id) if st.lower_id else None
+        side, net = None, None
+        if up == "Filled" and dn == "Filled":
+            if st.status != "placed":
+                return None
+            st.status, st.exit_reason = "error", "both_filled"
+            self._save()
+            await ad.cancel_all()
+            await ad.flatten_all()
+            self.journal("both_filled_emergency", strategy=st.strategy,
+                         account=st.account, found_by=event)
+            return "both_filled"
+        if "Filled" in (up, dn):
+            side = "Buy" if up == "Filled" else "Sell"
+        elif check_position:
+            net = await ad.get_net_position(cfg.symbol)
+            if net:
+                side = "Buy" if net > 0 else "Sell"
+        if side is None or st.status != "placed":   # on_fill may have won meanwhile
+            return None
+        entry_id = st.upper_id if side == "Buy" else st.lower_id
+        sibling = st.lower_id if side == "Buy" else st.upper_id
+        st.status, st.entry_side = "live", side
+        st.entry_anchor = st.upper_px if side == "Buy" else st.lower_px
+        st.note = note
+        self._save()
+        r = await ad.cancel_order_by_id(sibling) if sibling else None
+        self.journal(event, strategy=st.strategy, account=st.account, side=side,
+                     net=net, entry_id=entry_id, sibling_cancelled=bool(r and r.ok),
+                     sibling_error=(r.error if r else None))
+        return "entry_recovered"
+
     async def reconcile_account(self, account: str) -> dict:
         """Run after every (re)connect. A fill that lands while the socket is
         down arrives in the reconnect's user sync, where it is marked seen and
         NEVER dispatched — so on_fill never hears of it and the opposite entry
-        stop would keep resting. Ask the broker for the real position instead.
+        stop would keep resting. Ask the broker instead.
 
-        placed + position   -> an entry filled while we were away: adopt it
-                               and cancel the sibling (the dangerous case)
+        placed + filled entry / position -> an entry filled while we were
+                               away: adopt it and cancel the sibling
         live   + flat       -> the bracket closed it while we were away
         """
         ad = self.adapters.get(account)
@@ -386,22 +441,14 @@ class Engine:
             cfg = self.cfg.strategies.get(st.strategy)
             if cfg is None or st.status not in ("placed", "live"):
                 continue
-            net = await ad.get_net_position(cfg.symbol)
-            if st.status == "placed" and net:
-                side = "Buy" if net > 0 else "Sell"
-                entry_id = st.upper_id if side == "Buy" else st.lower_id
-                sibling = st.lower_id if side == "Buy" else st.upper_id
-                r = await ad.cancel_order_by_id(sibling) if sibling else None
-                st.status, st.entry_side = "live", side
-                st.entry_anchor = st.upper_px if side == "Buy" else st.lower_px
-                st.note = "entry filled while disconnected — recovered on reconnect"
-                self._save()
-                self.journal("fill_recovered_on_reconnect", strategy=st.strategy,
-                             account=account, side=side, net=net,
-                             entry_id=entry_id, sibling_cancelled=bool(r and r.ok),
-                             sibling_error=(r.error if r else None))
-                out[st.strategy] = "entry_recovered"
-            elif st.status == "live" and not net:
+            if st.status == "placed":
+                got = await self._guard_placed(
+                    st, cfg, ad, check_position=True,
+                    event="fill_recovered_on_reconnect",
+                    note="entry filled while disconnected — recovered on reconnect")
+                if got:
+                    out[st.strategy] = got
+            elif not await ad.get_net_position(cfg.symbol):
                 st.status = "done"
                 st.exit_reason = st.exit_reason or "closed_while_disconnected"
                 self._save()
@@ -423,7 +470,13 @@ class Engine:
             ad = self.adapters.get(st.account)
             if cfg is None or ad is None or st.date != self._today():
                 continue
-            if st.status == "placed" and now >= _hhmm(cfg.cancel_et):
+            if st.status == "placed" and now < _hhmm(cfg.cancel_et):
+                if ad.connected:   # a dead socket's cache is stale; reconnect reconciles
+                    await self._guard_placed(
+                        st, cfg, ad, check_position=False,
+                        event="entry_found_by_check",
+                        note="fill push missed — entry found by the order-status check")
+            elif st.status == "placed" and now >= _hhmm(cfg.cancel_et):
                 for oid in (st.upper_id, st.lower_id):
                     if oid:
                         await ad.cancel_order_by_id(oid)
