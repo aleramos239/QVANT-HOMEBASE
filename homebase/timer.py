@@ -31,6 +31,7 @@ GATE_T = dt.time(9, 20)
 STAGE_T = dt.time(9, 28, 30)
 FIRE_T = dt.time(9, 30, 0)
 DONE_T = dt.time(9, 31)
+TICK_S = 0.2
 QUOTE_MAX_AGE_S = 15.0     # anchor must come from a trade this fresh
 GATE_RETRY_S = 60.0
 GATE_BARS = 250            # ask for plenty; Tradovate serves ~120 dailies
@@ -173,10 +174,22 @@ class SelfTimer:
                                 result=out.get("ok"),
                                 note=out.get("reason") or out.get("note"))
 
+    def _sleep_s(self) -> float:
+        """One tick — except when a strategy is staged and 9:30:00 is closer
+        than that: then exactly the time left, so the fire lands on
+        9:30:00.000 instead of up to a tick late (and the anchor is the last
+        trade BEFORE the open, as in the research, not one after it)."""
+        now = self.now_et()
+        staged = any(st.get("stage") == "staged"
+                     for st in self.days.get(now.date().isoformat(), {}).values())
+        left = (dt.datetime.combine(now.date(), FIRE_T, tzinfo=ET)
+                - now).total_seconds()
+        return left if staged and 0 < left < TICK_S else TICK_S
+
     async def loop(self) -> None:
         while True:
             try:
                 await self.tick()
             except Exception as e:  # noqa: BLE001
                 self.engine.journal("timer_loop_error", error=str(e))
-            await asyncio.sleep(0.2)
+            await asyncio.sleep(self._sleep_s())

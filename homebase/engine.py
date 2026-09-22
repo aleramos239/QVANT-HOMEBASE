@@ -26,6 +26,7 @@ be aggregated straight from the journal. State survives restarts.
 """
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import json
 import time
@@ -33,7 +34,7 @@ from dataclasses import asdict, dataclass
 from typing import Callable, Optional
 from zoneinfo import ZoneInfo
 
-from .broker.base import BrokerAdapter, FillEvent, OrderRequest
+from .broker.base import BrokerAdapter, FillEvent, OrderRequest, OrderResult
 from .config import AppCfg, StrategyCfg, assignments
 from .contracts import point_value
 from .paths import state_dir
@@ -227,21 +228,23 @@ class Engine:
             return {"ok": False, "reason": "account not connected"}
         st.qty = qty
         buy, sell = self._legs(cfg, upper, lower, qty)
-        r_up = await ad.place_bracket(buy)
-        if not r_up.ok:
-            st.status, st.exit_reason, st.note = "error", "error", f"upper leg: {r_up.error}"
+        # Both legs go out together — the second no longer waits a full round
+        # trip for the first. A leg that raises counts as rejected.
+        r_up, r_dn = [r if isinstance(r, OrderResult) else OrderResult(ok=False, error=str(r))
+                      for r in await asyncio.gather(ad.place_bracket(buy),
+                                                    ad.place_bracket(sell),
+                                                    return_exceptions=True)]
+        if not (r_up.ok and r_dn.ok):
+            # never leave half a straddle: cancel whichever leg did go in
+            leg, err = ("upper", r_up.error) if not r_up.ok else ("lower", r_dn.error)
+            survivor = r_dn if not r_up.ok else r_up
+            if survivor.ok:
+                await ad.cancel_order_by_id(survivor.order_id)
+            st.status, st.exit_reason, st.note = "error", "error", f"{leg} leg: {err}"
             self._save()
-            self.journal("place_failed", strategy=name, account=account,
-                         leg="upper", error=r_up.error)
-            return {"ok": False, "reason": f"upper leg rejected: {r_up.error}"}
-        r_dn = await ad.place_bracket(sell)
-        if not r_dn.ok:
-            await ad.cancel_order_by_id(r_up.order_id)
-            st.status, st.exit_reason, st.note = "error", "error", f"lower leg: {r_dn.error}"
-            self._save()
-            self.journal("place_failed", strategy=name, account=account,
-                         leg="lower", error=r_dn.error, cancelled_upper=r_up.order_id)
-            return {"ok": False, "reason": f"lower leg rejected: {r_dn.error}"}
+            self.journal("place_failed", strategy=name, account=account, leg=leg,
+                         error=err, cancelled=survivor.order_id if survivor.ok else None)
+            return {"ok": False, "reason": f"{leg} leg rejected: {err}"}
 
         st.status = "placed"
         st.upper_id, st.lower_id = r_up.order_id, r_dn.order_id

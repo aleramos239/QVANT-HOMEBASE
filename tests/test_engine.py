@@ -204,6 +204,52 @@ def _place(eng, ad):
     return st_of(eng)
 
 
+def test_both_legs_go_out_together(tmp_path):
+    """The second leg no longer waits a round trip for the first."""
+    eng, ad, _ = mkengine(tmp_path)
+    orig, seen = ad.place_bracket, {"now": 0, "max": 0}
+
+    async def slow(req):
+        seen["now"] += 1
+        seen["max"] = max(seen["max"], seen["now"])
+        await asyncio.sleep(0.01)                  # a broker round trip
+        seen["now"] -= 1
+        return await orig(req)
+
+    ad.place_bracket = slow
+    assert run(eng.handle_alert(dict(ALERT)))["ok"]
+    assert seen["max"] == 2                        # both in flight at once
+    assert st_of(eng).status == "placed"
+
+
+def test_lone_survivor_cancelled_when_first_leg_fails(tmp_path):
+    """Both legs are in flight together now, so the SELL can already be
+    working when the BUY is rejected — it must be cancelled, never left."""
+    eng, ad, _ = mkengine(tmp_path)
+    ad.fail_leg = "Buy"
+    out = run(eng.handle_alert(dict(ALERT)))
+    assert not out["ok"]
+    assert [b.side for b in ad.brackets] == ["Sell"]
+    assert ad.cancelled == ["main-101"]
+    assert st_of(eng).status == "error"
+
+
+def test_a_leg_that_raises_counts_as_rejected(tmp_path):
+    eng, ad, _ = mkengine(tmp_path)
+    orig = ad.place_bracket
+
+    async def boom(req):
+        if req.side == "Buy":
+            raise RuntimeError("socket died")
+        return await orig(req)
+
+    ad.place_bracket = boom
+    out = run(eng.handle_alert(dict(ALERT)))
+    assert not out["ok"] and "socket died" in out["accounts"]["main"]["reason"]
+    assert ad.cancelled == ["main-101"]            # the sell that went in
+    assert st_of(eng).status == "error"
+
+
 def test_entry_fill_cancels_sibling(tmp_path):
     eng, ad, _ = mkengine(tmp_path)
     st = _place(eng, ad)

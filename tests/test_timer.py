@@ -139,3 +139,16 @@ def test_timer_quiet_on_weekend(tmp_path):
     clock.set_et(9, 30); clock.dt = clock.dt.replace(day=13)
     run(timer.tick())
     assert timer.status()["strategies"] == {}
+
+
+def test_timer_sleeps_exactly_to_the_930_fire(tmp_path):
+    """Staged and 9:30:00 under a tick away: sleep exactly the time left,
+    so the fire lands on 9:30:00.000 — not up to 200 ms after it."""
+    timer, engine, md, clock = mk(tmp_path)
+    assert timer._sleep_s() == 0.2                   # nothing staged yet
+    clock.set_et(9, 21); run(timer.tick())
+    clock.set_et(9, 29); run(timer.tick())           # staged
+    clock.dt = clock.dt.replace(second=59, microsecond=950000)
+    assert abs(timer._sleep_s() - 0.05) < 1e-6       # 9:29:59.950 -> 50 ms
+    clock.dt = clock.dt.replace(second=0, microsecond=0)
+    assert timer._sleep_s() == 0.2                   # 9:29:00 -> normal tick
