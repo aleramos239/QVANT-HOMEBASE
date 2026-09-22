@@ -260,8 +260,11 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                 engine.journal("feed_started", watching=list(f.status()["watching"]))
             except Exception as e:  # noqa: BLE001 — retry, never die
                 feed_box["error"] = str(e)[:200]
-                feed_box["retry_at"] = _t.time() + FEED_RETRY_S
-                engine.journal("feed_error", error=str(e)[:200])
+                # a rate-limit penalty ("180 requests per hour") means every
+                # retry costs budget: rest 5 minutes, not 30 seconds
+                penalized = "p-ticket" in str(e) or "Rate limit" in str(e)
+                feed_box["retry_at"] = _t.time() + (300 if penalized else FEED_RETRY_S)
+                engine.journal("feed_error", error=str(e)[:200], penalized=penalized)
                 return []
         for s in strategies.values():           # a strategy enabled after start
             if (s.symbol, int(s.bar_minutes)) not in f.watching():
