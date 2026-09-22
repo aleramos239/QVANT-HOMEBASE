@@ -22,8 +22,8 @@ class FakeMD:
     def __init__(self, bars=None, last_trade=None):
         self.connected = True
         self.bars = bars if bars is not None else FIX["bars"]
-        self.last_trade = last_trade
-        self.last_trade_ts = time.time()
+        self.last_trade = last_trade          # default price for any feed
+        self.prices: dict = {}                # per-feed prices, if set
         self.subs = []
 
     async def connect(self): ...
@@ -31,6 +31,10 @@ class FakeMD:
     async def subscribe_quote(self, symbol):
         self.subs.append(symbol); return symbol
     async def unsubscribe_quote(self, sym): self.subs.remove(sym)
+
+    def last(self, sym):
+        px = self.prices.get(sym, self.last_trade)
+        return (px, time.time()) if px is not None else (None, 0.0)
 
 
 def mk(tmp_path, *, last_trade=24500.0, clock=None):
@@ -152,3 +156,44 @@ def test_timer_sleeps_exactly_to_the_930_fire(tmp_path):
     assert abs(timer._sleep_s() - 0.05) < 1e-6       # 9:29:59.950 -> 50 ms
     clock.dt = clock.dt.replace(second=0, microsecond=0)
     assert timer._sleep_s() == 0.2                   # 9:29:00 -> normal tick
+
+
+def _add_ym(engine):
+    engine.cfg.strategies["ym930"] = StrategyCfg(
+        symbol="YM", qty=9, offset_pts=20.0, sl_pts=5.0, tp_pts=15.0,
+        enabled=True, gated=False, self_fire=True)
+    engine.cfg.book["ym930"] = [{"account": "main", "qty": 9}]
+
+
+def test_each_strategy_is_anchored_on_its_own_symbol(tmp_path):
+    """NQ and YM both on the app timer: each gets its own quote feed and is
+    anchored on its OWN last trade — YM must never be priced off NQ."""
+    timer, engine, md, clock = mk(tmp_path)
+    _add_ym(engine)
+    md.prices = {"NQ": 24500.0, "YM": 46000.0}
+    _drive_to_fire(timer, clock)
+    assert sorted(md.subs) == ["NQ", "YM"]
+    dry = {e["strategy"]: e for e in events(tmp_path) if e["event"] == "dry_run"}
+    assert (dry["nq930"]["upper"], dry["nq930"]["lower"]) == (24510.0, 24490.0)
+    assert (dry["ym930"]["upper"], dry["ym930"]["lower"]) == (46020.0, 45980.0)
+
+
+def test_due_strategies_fire_together(tmp_path):
+    """At 9:30 no strategy waits on another's broker round trip."""
+    timer, engine, md, clock = mk(tmp_path)
+    _add_ym(engine)
+    md.prices = {"NQ": 24500.0, "YM": 46000.0}
+    orig, seen = engine.handle_alert, {"now": 0, "max": 0}
+
+    async def slow(payload, **kw):
+        seen["now"] += 1
+        seen["max"] = max(seen["max"], seen["now"])
+        await asyncio.sleep(0.01)                  # a broker round trip
+        seen["now"] -= 1
+        return await orig(payload, **kw)
+
+    engine.handle_alert = slow
+    _drive_to_fire(timer, clock)
+    assert seen["max"] == 2
+    st = timer.status()["strategies"]
+    assert st["nq930"]["stage"] == st["ym930"]["stage"] == "fired"

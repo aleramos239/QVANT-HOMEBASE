@@ -71,11 +71,11 @@ def _defaults() -> AppCfg:
                     "caveat": "does not cover live fill quality — the edge is 2–4 ticks deep",
                     "equity_file": "nq930_equity.json",
                 }),
-            # YM 9:30 straddle (OOS-passed 2026-09-13), unfiltered. Disabled
-            # until the user sizes and enables it.
+            # YM 9:30 straddle (OOS-passed 2026-09-13), unfiltered, app-timed
+            # like NQ. Disabled until the user sizes and enables it.
             "ym930": StrategyCfg(
                 symbol="YM", qty=1, offset_pts=20.0, sl_pts=5.0, tp_pts=15.0,
-                enabled=False, gated=False, self_fire=False, pine_file="ym930.pine",
+                enabled=False, gated=False, self_fire=True, pine_file="ym930.pine",
                 metrics={
                     "source": "one-shot OOS exam · 2025-01-07→2026-09-10 · TV 15s",
                     "rows": {"trades": "434", "WR": "50.7%", "PF": "1.76",

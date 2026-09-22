@@ -43,8 +43,8 @@ class TradovateMD:
             token_persist_path=sd / "tradovate-md.tokens.json",
             device_persist_path=sd / "tradovate.device.json")
         self._ws: Optional[TradovateWS] = None
-        self.last_trade: Optional[float] = None    # latest trade price
-        self.last_trade_ts: float = 0.0            # unix time we saw it
+        self._trades: dict[str, tuple[float, float]] = {}  # contract -> (price, unix ts)
+        self._cid_sym: dict[int, str] = {}                  # contractId -> contract
 
     @property
     def connected(self) -> bool:
@@ -85,9 +85,14 @@ class TradovateMD:
         for q in (msg.get("d") or {}).get("quotes", []) or []:
             tr = (q.get("entries") or {}).get("Trade") or {}
             px = tr.get("price")
-            if px is not None:
-                self.last_trade = float(px)
-                self.last_trade_ts = time.time()
+            sym = self._cid_sym.get(q.get("contractId"))
+            if px is not None and sym:
+                self._trades[sym] = (float(px), time.time())
+
+    def last(self, sym: str) -> tuple[Optional[float], float]:
+        """(latest trade price, unix time seen) for one subscribed contract —
+        never another contract's price."""
+        return self._trades.get(sym, (None, 0.0))
 
     @staticmethod
     def resolve(canonical: str) -> str:
@@ -99,6 +104,12 @@ class TradovateMD:
         d = await self._ws.request("md/subscribeQuote", {"symbol": sym})
         if isinstance(d, dict) and d.get("errorText"):
             raise RuntimeError(f"subscribeQuote {sym}: {d['errorText']}")
+        # the reply's subscriptionId is the contractId every quote push carries
+        # (verified live 2026-09-21: NQZ6 -> 3267315, YMZ6 -> 4706811)
+        cid = d.get("subscriptionId") if isinstance(d, dict) else None
+        if cid is None:
+            raise RuntimeError(f"subscribeQuote {sym}: no subscriptionId in {d!r}")
+        self._cid_sym[int(cid)] = sym
         return sym
 
     async def unsubscribe_quote(self, sym: str) -> None:

@@ -5,7 +5,8 @@ Per enabled strategy with self_fire (all times ET, weekdays only):
     9:20        gate — daily bars from market data, house ADX(14) TREND test
                 (ungated strategies skip straight to staged)
     9:28:30     prestage — subscribe the live quote, warm everything
-    9:30:00     anchor = last trade → engine.handle_alert(source="timer")
+    9:30:00     anchor = last trade OF ITS OWN SYMBOL → engine.handle_alert(
+                source="timer"); every strategy due fires at the same moment
     9:31        unsubscribe, done
 
 Fail-safe by construction: no gate reading → no fire; stale quote → no
@@ -18,7 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
-from typing import Callable, Optional
+from typing import Callable
 from zoneinfo import ZoneInfo
 
 from .config import AppCfg
@@ -48,7 +49,7 @@ class SelfTimer:
         self._md_factory = md_factory
         self._now = now_fn or (lambda: dt.datetime.now(dt.timezone.utc))
         self._md = None
-        self._sub: Optional[str] = None
+        self._subs: dict[str, str] = {}   # strategy symbol -> quote feed (contract)
         self._gate_attempt: float = 0.0
         self.days: dict = {}          # date -> {strategy: state dict}
 
@@ -78,19 +79,34 @@ class SelfTimer:
         date = now.date().isoformat()
         day = self._day(date)
         t = now.time()
+        fires = []
         for name, s in self.cfg.strategies.items():
             if not (s.enabled and getattr(s, "self_fire", False)):
                 continue
             st = day.setdefault(name, {"stage": "idle", "gate": None,
                                        "adx": None, "anchor": None})
             try:
-                await self._advance(name, s, st, t, date)
+                fire = await self._advance(name, s, st, t, date)
             except Exception as e:  # noqa: BLE001 — journal, never die
                 st["stage"] = "error"
                 st["error"] = str(e)
                 self.engine.journal("timer_error", strategy=name, error=str(e))
+                continue
+            if fire is not None:
+                fires.append((name, st, fire))
+        # everything due at 9:30 fires together — no strategy waits on
+        # another's broker round trip
+        results = await asyncio.gather(*(f for _, _, f in fires),
+                                       return_exceptions=True)
+        for (name, st, _), r in zip(fires, results):
+            if isinstance(r, Exception):
+                st["stage"] = "error"
+                st["error"] = str(r)
+                self.engine.journal("timer_error", strategy=name, error=str(r))
 
-    async def _advance(self, name, s, st, t, date) -> None:
+    async def _advance(self, name, s, st, t, date):
+        """Move one strategy along its stages; at 9:30 return its fire
+        (a coroutine) so tick() can launch every due fire at once."""
         # HARD upper bound. Without it every stage test is "t >= <time>",
         # which is true at 11pm too: a restart any time after 9:30 would
         # stage and fire immediately on a stale anchor. (The engine's accept
@@ -101,20 +117,17 @@ class SelfTimer:
                 st["stage"] = "missed"
                 self.engine.journal("timer_missed", strategy=name,
                                     at=str(t), window_end=s.accept_until_et)
-            if self._sub is not None and self._md is not None:
-                md, sub = self._md, self._sub
-                self._sub = None
-                await md.unsubscribe_quote(sub)
+            sub = self._subs.pop(s.symbol, None)
+            if sub is not None and self._md is not None:
+                await self._md.unsubscribe_quote(sub)
             return
 
         stage = st["stage"]
         if stage in ("fired", "skipped", "done", "error", "missed"):
             if stage == "error" and t < STAGE_T:
                 st["stage"] = "idle"        # errors before staging retry
-            elif t >= DONE_T and self._sub:
-                md, sub = self._md, self._sub
-                self._sub = None
-                await md.unsubscribe_quote(sub)
+            elif t >= DONE_T and s.symbol in self._subs:
+                await self._md.unsubscribe_quote(self._subs.pop(s.symbol))
             else:
                 return
 
@@ -137,8 +150,8 @@ class SelfTimer:
 
         if st["stage"] == "gated" and t >= STAGE_T:
             md = await self._ensure_md()
-            if self._sub is None:
-                self._sub = await md.subscribe_quote(s.symbol)
+            if s.symbol not in self._subs:
+                self._subs[s.symbol] = await md.subscribe_quote(s.symbol)
             st["stage"] = "staged"
 
         if st["stage"] == "staged" and t >= FIRE_T:
@@ -159,20 +172,23 @@ class SelfTimer:
                                     status=day)
                 return
             import time as _t
-            md = self._md
-            px = md.last_trade if md else None
-            if px is None or _t.time() - md.last_trade_ts > QUOTE_MAX_AGE_S:
+            px, seen = (self._md.last(self._subs.get(s.symbol))
+                        if self._md else (None, 0.0))
+            if px is None or _t.time() - seen > QUOTE_MAX_AGE_S:
                 st.update(stage="error", error="no fresh trade for the anchor")
                 self.engine.journal("timer_error", strategy=name,
                                     error=st["error"])
                 return
             st.update(anchor=px, stage="fired")
-            out = await self.engine.handle_alert(
-                {"strategy": name, "upper": px + s.offset_pts,
-                 "lower": px - s.offset_pts}, source="timer")
-            self.engine.journal("timer_fired", strategy=name, anchor=px,
-                                result=out.get("ok"),
-                                note=out.get("reason") or out.get("note"))
+            return self._fire(name, s, px)      # tick() fires all due at once
+
+    async def _fire(self, name, s, px) -> None:
+        out = await self.engine.handle_alert(
+            {"strategy": name, "upper": px + s.offset_pts,
+             "lower": px - s.offset_pts}, source="timer")
+        self.engine.journal("timer_fired", strategy=name, anchor=px,
+                            result=out.get("ok"),
+                            note=out.get("reason") or out.get("note"))
 
     def _sleep_s(self) -> float:
         """One tick — except when a strategy is staged and 9:30:00 is closer
