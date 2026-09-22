@@ -6,7 +6,7 @@
     POST /api/arm            {"armed": true|false} — the master switch
     POST /api/kill           cancel + flatten EVERY account + disarm
     POST /api/test-alert     synthetic dry-run signal; REFUSED while armed
-    POST /api/connect        validate a DEMO login, return its accounts
+    POST /api/connect        validate a login (demo or live), return its accounts
     POST /api/accounts/add   add one broker account to the pool
     POST /api/book           set a strategy's account assignments
     GET  /api/tv-setup       webhook URL/secret + per-strategy alert steps
@@ -138,6 +138,35 @@ def should_fire_readiness(now_et, fired_date: str | None) -> bool:
     return t.hour == READINESS_FROM[0] and t.minute >= READINESS_FROM[1]
 
 
+def _key_env(key: str) -> str:
+    """A login key is 'tv:<env>:<user>' — the env it was verified on."""
+    parts = key.split(":")
+    return "live" if len(parts) == 3 and parts[1] == "live" else "demo"
+
+
+def _md_token_of(ad) -> str:
+    tok = getattr(getattr(getattr(ad, "_auth", None), "tokens", None),
+                  "md_access_token", "")
+    return tok if (tok and ad.connected) else ""
+
+
+def md_source(cfg: config_mod.AppCfg, adapters: dict):
+    """Market data rides ONE login: its env's md host AND its md token — a
+    token only works on its own env's host. Demo first: the proven feed, and
+    a live account then needs no md subscription of its own. Returns
+    (keyring_key, env, token_provider)."""
+    ranked = sorted(cfg.accounts.items(), key=lambda kv: kv[1].live)
+    for aid, a in ranked:
+        ad = adapters.get(aid)
+        if a.keyring_key and ad is not None and _md_token_of(ad):
+            return (a.keyring_key, "live" if a.live else "demo",
+                    lambda ad=ad: _md_token_of(ad))
+    for aid, a in ranked:            # nothing connected: that login logs in
+        if a.keyring_key:
+            return a.keyring_key, "live" if a.live else "demo", None
+    raise RuntimeError("no accounts configured for market data")
+
+
 def build_adapter(account_id: str, a: config_mod.AccountCfg) -> BrokerAdapter:
     env = "live" if a.live else "demo"
     sel = {"account_name": a.account_name} if a.account_name else None
@@ -154,22 +183,9 @@ def create_app(cfg: config_mod.AppCfg | None = None,
     engine = Engine(cfg, adapters)
     acct_status: dict[str, dict] = {}
 
-    def _md_token() -> str:
-        """The md token from any already-connected adapter — no extra login."""
-        for ad in adapters.values():
-            auth = getattr(ad, "_auth", None)
-            tok = getattr(getattr(auth, "tokens", None), "md_access_token", "")
-            if tok and ad.connected:
-                return tok
-        return ""
-
     def _md_factory():
-        for a in cfg.accounts.values():
-            if a.keyring_key:
-                return TradovateMD(a.keyring_key,
-                                   "live" if a.live else "demo",
-                                   token_provider=_md_token)
-        raise RuntimeError("no accounts configured for market data")
+        key, env, provider = md_source(cfg, adapters)
+        return TradovateMD(key, env, token_provider=provider)
 
     timer = SelfTimer(cfg, engine, md_factory=_md_factory)
 
@@ -421,15 +437,16 @@ def create_app(cfg: config_mod.AppCfg | None = None,
 
     @app.post("/api/connect")
     async def connect(request: Request):
-        """Validate a DEMO login (saved or new) with a throwaway probe and
-        return every account under it. Nothing is added to the pool yet —
-        that is /api/accounts/add, one click per account."""
+        """Validate a login (saved or new; demo by default, live on request)
+        with a throwaway probe and return every account under it. Nothing is
+        added to the pool yet — that is /api/accounts/add, one per account."""
         body = await request.json()
+        env = "live" if str(body.get("env") or "").lower() == "live" else "demo"
         saved = str(body.get("saved_key") or "")
         if saved:
             if not secrets_store.get_credentials(saved):
                 raise HTTPException(404, f"no saved login {saved!r}")
-            key = saved
+            key, env = saved, _key_env(saved)
         else:
             username = str(body.get("username") or "").strip()
             # newlines/CRs are never valid in a password but ride along with
@@ -437,10 +454,11 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             password = str(body.get("password") or "").strip("\r\n")
             if not username or not password:
                 raise HTTPException(400, "username and password required")
-            key = f"tv:demo:{username.lower()}"
+            key = f"tv:{env}:{username.lower()}"
             secrets_store.set_credentials(key, username=username,
                                           password=password)
-        probe = adapter_factory("probe", config_mod.AccountCfg(keyring_key=key))
+        probe = adapter_factory("probe", config_mod.AccountCfg(
+            keyring_key=key, live=(env == "live")))
         try:
             await probe.connect()
             accounts = probe.list_accounts() if hasattr(probe, "list_accounts") else []
@@ -449,11 +467,13 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         finally:
             with contextlib.suppress(Exception):
                 await probe.close()
-        return {"ok": True, "key": key, "accounts": accounts}
+        return {"ok": True, "key": key, "env": env, "accounts": accounts}
 
     @app.post("/api/accounts/add")
     async def accounts_add(request: Request):
-        """Add one broker account to the pool (demo only) and connect it."""
+        """Add one broker account to the pool and connect it. Demo or live is
+        the login's (verified) env — never a client flag. A new account is
+        never assigned to a strategy: it trades only once the user assigns it."""
         body = await request.json()
         key = str(body.get("key") or "")
         account_name = str(body.get("account_name") or "").strip()
@@ -462,10 +482,12 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         if not account_name:
             raise HTTPException(400, "account_name required")
         aid = account_name.lower()
+        live = _key_env(key) == "live"
         cfg.accounts[aid] = config_mod.AccountCfg(
-            keyring_key=key, account_name=account_name, live=False,
+            keyring_key=key, account_name=account_name, live=live,
             label=str(body.get("label") or account_name))
         config_mod.save(cfg)
+        engine.journal("account_added", account=aid, live=live)
         try:
             await _connect_account(aid)
         except Exception as e:  # noqa: BLE001

@@ -210,11 +210,15 @@ class Engine:
             return {"ok": True, "armed": False,
                     "note": "disarmed — journaled only", "accounts": len(asg)}
 
-        results = {}
         t0 = time.time()
-        for a in asg:
-            results[a["account"]] = await self._place(
-                name, cfg, a["account"], int(a["qty"]), upper, lower, source, t0)
+        # every account at once — none waits behind another's round trip
+        outs = await asyncio.gather(
+            *(self._place(name, cfg, a["account"], int(a["qty"]), upper, lower,
+                          source, t0) for a in asg),
+            return_exceptions=True)
+        results = {a["account"]: (o if isinstance(o, dict) else
+                                  {"ok": False, "reason": str(o)})
+                   for a, o in zip(asg, outs)}
         ok = any(r.get("ok") for r in results.values())
         return {"ok": ok, "armed": True, "accounts": results}
 

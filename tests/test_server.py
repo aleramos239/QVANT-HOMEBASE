@@ -26,12 +26,20 @@ def client(tmp_path, monkeypatch):
                                                   offset_pts=10.0, sl_pts=5.0,
                                                   tp_pts=15.0, enabled=True)})
     adapters = {"main": FakeAdapter("main")}
-    app = create_app(cfg, adapters, background=False,
-                     adapter_factory=lambda aid, a: FakeAdapter(aid))
+    created = []                       # every adapter the app builds (probes too)
+
+    def factory(aid, a):
+        ad = FakeAdapter(aid)
+        ad.cfg = a
+        created.append(ad)
+        return ad
+
+    app = create_app(cfg, adapters, background=False, adapter_factory=factory)
     with TestClient(app) as c:
         c.app = app
         c.adapters = adapters
         c.adapter = adapters["main"]
+        c.created = created
         yield c
 
 
@@ -269,6 +277,45 @@ def test_exit_slippage_measured_from_the_moved_brackets(client, tmp_path):
     (tmp_path / "journal.jsonl").write_text("".join(_j.dumps(r) + "\n" for r in rows))
     t = client.get("/api/strategy-live", params={"strategy": "nq930"}).json()["trades"][0]
     assert t["entry_slip_ticks"] == 1.0 and t["exit_slip_ticks"] == 0.0
+
+
+def test_live_login_probes_live_and_the_account_is_live(client):
+    r = client.post("/api/connect", json={"username": "RealMe", "password": "x",
+                                          "env": "live"}).json()
+    assert r["ok"] is True and r["key"] == "tv:live:realme"
+    assert client.created[-1].cfg.live is True          # the probe logged in LIVE
+    add = client.post("/api/accounts/add", json={"key": "tv:live:realme",
+                                                 "account_name": "LIVE123"}).json()
+    assert add["ok"] is True
+    assert client.app.state.cfg.accounts["live123"].live is True
+    # never auto-assigned: it trades only once the user assigns it
+    assert client.app.state.cfg.book["nq930"] == [{"account": "main", "qty": 3}]
+    # a saved live login stays live on the next connect
+    again = client.post("/api/connect", json={"saved_key": "tv:live:realme"}).json()
+    assert again["ok"] and client.created[-1].cfg.live is True
+
+
+def test_demo_stays_the_default_login(client):
+    r = client.post("/api/connect", json={"username": "Guy", "password": "x"}).json()
+    assert r["key"] == "tv:demo:guy" and client.created[-1].cfg.live is False
+
+
+def test_market_data_takes_host_and_token_from_one_login():
+    """The md token only works on its own env's md host. Demo first (the
+    proven feed); never a live host with the demo login's token."""
+    from types import SimpleNamespace as NS
+    from homebase.server import md_source
+    cfg = AppCfg(accounts={
+        "live1": AccountCfg(keyring_key="tv:live:me", account_name="L", live=True),
+        "main": AccountCfg(keyring_key="tv:demo:me", account_name="M")})
+    demo, live = FakeAdapter("main"), FakeAdapter("live1")
+    demo._auth = NS(tokens=NS(md_access_token="demo-md"))
+    live._auth = NS(tokens=NS(md_access_token="live-md"))
+    key, env, tok = md_source(cfg, {"main": demo, "live1": live})
+    assert (key, env, tok()) == ("tv:demo:me", "demo", "demo-md")
+    demo._connected = False
+    key, env, tok = md_source(cfg, {"main": demo, "live1": live})
+    assert (key, env, tok()) == ("tv:live:me", "live", "live-md")
 
 
 def test_kill_disarms_and_clears_every_account(client):

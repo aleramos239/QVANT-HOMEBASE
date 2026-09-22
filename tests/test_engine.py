@@ -583,3 +583,25 @@ def test_second_signal_during_placement_is_refused(tmp_path):
     assert run(eng.handle_alert(dict(ALERT)))["ok"]
     assert second["out"]["ok"] is False and "already" in second["out"]["reason"]
     assert len(ad.brackets) == 2                    # one straddle, not two
+
+
+def test_every_account_is_placed_at_the_same_time(tmp_path):
+    """Apex x3 + live x1: the live account's orders must not wait behind the
+    Apex's broker round trip."""
+    cfg = mkcfg(book={"nq930": [{"account": "main", "qty": 3},
+                                {"account": "live1", "qty": 1}]})
+    cfg.accounts["live1"] = AccountCfg(keyring_key="k2", account_name="L1", live=True)
+    adapters = {aid: FakeAdapter(aid) for aid in cfg.accounts}
+    seen = {"now": 0, "max": 0}
+    for ad in adapters.values():
+        async def slow(req, orig=ad.place_bracket):
+            seen["now"] += 1
+            seen["max"] = max(seen["max"], seen["now"])
+            await asyncio.sleep(0.01)
+            seen["now"] -= 1
+            return await orig(req)
+        ad.place_bracket = slow
+    eng = Engine(cfg, adapters, now_fn=Clock(), root=tmp_path)
+    assert run(eng.handle_alert(dict(ALERT)))["ok"]
+    assert seen["max"] == 4                         # 2 accounts x 2 legs at once
+    assert [b.qty for b in adapters["live1"].brackets] == [1, 1]

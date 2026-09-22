@@ -391,20 +391,18 @@
         <span><span class="t">NinjaTrader</span><br><span class="sub">Not wired into Homebase yet</span></span>
         <span class="spacer"></span><span class="radio"></span></div>
       <div class="seg">
-        <button class="sel" type="button">Demo — practice money</button>
-        <button type="button" disabled
-          title="Live stays a config-file decision until after the demo proving period">Live — real money</button>
+        <button class="sel" type="button" id="envDemo" onclick="setEnv('demo')">Demo — practice money</button>
+        <button type="button" id="envLive" onclick="setEnv('live')">Live — real money</button>
       </div>
-      <p class="wnote">Demo is the safe default. Live is deliberately not a
-        click here — it stays a config-file decision.</p>
+      <p class="wnote" id="envNote">Demo is the safe default.</p>
       <div class="row-btns">
         <button class="btn btn-outline" onclick="closeConnect()">Cancel</button>
-        <button class="btn btn-default" onclick="wizGoto(2)">Continue</button>
+        <button class="btn btn-default" onclick="wizNext1()">Continue</button>
       </div>
     </div>
 
     <div id="wstep2" style="display:none">
-      <h2>Log in to Tradovate</h2>
+      <h2>Log in to Tradovate <span id="envTag2"></span></h2>
       <p class="sub">Your login is saved securely on this Mac (so you never
         retype it) and only used to place your orders.</p>
       <div class="slabel">SAVED LOGINS</div>
@@ -585,7 +583,7 @@ $("#confirmOverlay").addEventListener("click", (e) => {
 });
 
 /* ---- render ---- */
-const STATUS_PILL = {idle: "pill idle", placed: "pill", live: "pill live",
+const STATUS_PILL = {idle: "pill idle", placing: "pill", placed: "pill", live: "pill live",
                      done: "pill idle", error: "pill lost"};
 
 function stratCard(name, s) {
@@ -930,8 +928,30 @@ function mstrip(rows) {
 }
 
 /* ---- connect wizard ---- */
-let WIZ = {saved: null, key: null, accounts: [], pick: null};
-function openConnect() { wizGoto(1); $("#connectOverlay").classList.add("open"); }
+let WIZ = {saved: null, key: null, accounts: [], pick: null, env: "demo"};
+function openConnect() {
+  setEnv("demo"); wizGoto(1); $("#connectOverlay").classList.add("open");
+}
+function setEnv(env) {
+  if (WIZ.env !== env) WIZ.saved = null;          // saved logins are per env
+  WIZ.env = env;
+  $("#envDemo").classList.toggle("sel", env === "demo");
+  $("#envLive").classList.toggle("sel", env === "live");
+  const n = $("#envNote");
+  n.textContent = env === "live"
+    ? "LIVE — real money. Orders on a live account are real. It won't trade until you assign it to a strategy."
+    : "Demo is the safe default.";
+  n.style.color = env === "live" ? "var(--destructive)" : "";
+  $("#envTag2").innerHTML = env === "live"
+    ? '<span class="pill live" style="font-size:11px;vertical-align:middle">LIVE</span>' : "";
+}
+async function wizNext1() {
+  if (WIZ.env === "live" && !(await confirmDlg("Connect a LIVE account?",
+      "This account trades real money. Adding it does not start trading — it " +
+      "only trades after you assign it to a strategy.", "Yes, connect live", true)))
+    return;
+  wizGoto(2);
+}
 function closeConnect() {
   $("#connectOverlay").classList.remove("open");
   const p = $("#cPass"); if (p) p.value = "";
@@ -946,6 +966,7 @@ function wizGoto(n) {
 }
 async function loadLogins() {
   const d = await (await fetch("/api/logins")).json();
+  d.logins = d.logins.filter(l => l.env === WIZ.env);   // demo OR live logins
   const box = $("#savedLogins");
   if (!d.logins.length) { box.innerHTML =
     `<p class="wnote" style="margin:0 0 10px">none yet — type a login below</p>`;
@@ -982,7 +1003,7 @@ async function doConnect() {
   const btn = $("#cGo"); btn.disabled = true; btn.textContent = "Connecting…";
   try {
     const body = WIZ.saved ? {saved_key: WIZ.saved}
-      : {username: $("#cUser").value, password: $("#cPass").value};
+      : {username: $("#cUser").value, password: $("#cPass").value, env: WIZ.env};
     const r = await post("/api/connect", body);
     if (r.ok) {
       WIZ.key = r.key;
@@ -1016,8 +1037,9 @@ async function useAccount() {
     const r = await post("/api/accounts/add",
                          {key: WIZ.key, account_name: WIZ.pick || ""});
     if (r.ok) {
-      toast(r.connected ? "Added and connected — " + r.account
-            : "Added — connecting: " + (r.error || ""), 5000);
+      toast((r.connected ? "Added and connected — " + r.account
+            : "Added — connecting: " + (r.error || "")) +
+            (WIZ.env === "live" ? " · LIVE — assign it to a strategy to trade" : ""), 6000);
       closeConnect();
     } else toast("Failed — " + (r.error || r.detail || "unknown"), 6000);
   } finally { btn.disabled = false; btn.textContent = "Add this account"; refresh(); }
