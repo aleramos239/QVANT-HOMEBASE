@@ -139,8 +139,10 @@ def should_fire_readiness(now_et, fired_date: str | None) -> bool:
 
 
 def _key_env(key: str) -> str:
-    """A login key is 'tv:<env>:<user>' — the env it was verified on."""
-    parts = key.split(":")
+    """A login key is 'tv:<env>:<user>' — the env it was verified on. The
+    user part may itself hold colons (Google-linked logins are
+    'Google:1012...'), so split twice at most."""
+    parts = key.split(":", 2)
     return "live" if len(parts) == 3 and parts[1] == "live" else "demo"
 
 
@@ -384,6 +386,9 @@ def create_app(cfg: config_mod.AppCfg | None = None,
     async def kill():
         cfg.armed = False
         config_mod.save(cfg)
+        # every strategy's own orders first, with the proven per-order calls;
+        # then the account-wide calls sweep up anything else
+        strategies = await engine.flatten_today()
         results = {}
         for aid, ad in adapters.items():
             r = {}
@@ -394,8 +399,9 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                 except Exception as e:  # noqa: BLE001 — kill always finishes
                     r[call] = {"ok": False, "error": str(e)}
             results[aid] = r
-        engine.journal("kill_switch", results=results)
-        return {"ok": True, "armed": False, "results": results}
+        engine.journal("kill_switch", results=results, strategies=strategies)
+        return {"ok": True, "armed": False, "results": results,
+                "strategies": strategies}
 
     @app.post("/api/test-alert")
     async def test_alert(request: Request):
@@ -420,9 +426,8 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         in_use = {a.keyring_key for a in cfg.accounts.values()}
         out = []
         for key in secrets_store._load_all():
-            parts = key.split(":")
-            out.append({"key": key, "label": (parts[-1] or key).upper(),
-                        "env": parts[1] if len(parts) == 3 else "demo",
+            out.append({"key": key, "label": (key.split(":", 2)[-1] or key).upper(),
+                        "env": _key_env(key),
                         "in_use": key in in_use})
         return {"logins": out}
 
@@ -568,8 +573,9 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                                             "— flatten first")
             except HTTPException:
                 raise
-            except Exception:  # noqa: BLE001 — can't read = allow removal
-                pass
+            except Exception as e:  # noqa: BLE001 — unreadable is NOT flat
+                raise HTTPException(409, f"can't read the position ({e}) — "
+                                    "try again once it's connected")
         for name in list(cfg.book):
             cfg.book[name] = [a for a in cfg.book[name]
                               if a.get("account") != aid]

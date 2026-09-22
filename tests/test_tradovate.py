@@ -254,3 +254,53 @@ def test_engine_and_adapter_move_the_brackets_on_the_wire(tmp_path):
                                   "orderQty": 3, "stopPrice": 30226.75}) in sent
     assert ("order/modifyorder", {"orderId": 663695020151, "orderType": "Limit",
                                   "orderQty": 3, "price": 30246.75}) in sent
+
+
+# --- never leg a stop entry; rejects and read errors are not success ----------
+def _sent_endpoints(ad):
+    return [f.split("\n", 1)[0] for f in ad._ws.ws.sent]
+
+
+def test_oso_reject_never_legs_a_stop_entry(tmp_path):
+    """The old fallback placed a plain stop entry AND rested its stop at once
+    on the wrong side of price — an instant, unwanted trade."""
+    def rejects(endpoint, query, body):
+        if endpoint == "order/placeoso":
+            return {"failureReason": "UnknownReason", "failureText": "Rejected"}
+        return {}
+    ad = mkadapter(tmp_path, rejects)
+    r = run(ad.place_bracket(BUY_STOP))
+    assert not r.ok and "Rejected" in r.error
+    assert "order/placeorder" not in _sent_endpoints(ad)
+
+
+def test_oso_error_never_legs_a_stop_entry(tmp_path):
+    def errors(endpoint, query, body):
+        return None if endpoint == "order/placeoso" else {}   # 404 on the OSO
+    ad = mkadapter(tmp_path, errors)
+    r = run(ad.place_bracket(BUY_STOP))
+    assert not r.ok
+    assert "order/placeorder" not in _sent_endpoints(ad)
+
+
+def test_cancel_reports_a_logical_reject(tmp_path):
+    def rejects(endpoint, query, body):
+        if endpoint == "order/cancelorder":
+            return {"failureReason": "UnknownReason", "failureText": "Already filled"}
+        return None
+    ad = mkadapter(tmp_path, rejects)
+    r = run(ad.cancel_order_by_id("663695020169"))
+    assert not r.ok and "Already filled" in r.error
+
+
+def test_a_failed_position_read_is_not_flat(tmp_path):
+    """A read error used to come back as 0 — 'flat' — which is how the 404
+    hid for a week, and would let a flatten cancel a live position's stop."""
+    import pytest
+    def broken(endpoint, query, body):
+        if endpoint == "contract/find":
+            return {"id": 3267315, "name": "NQZ6"}
+        return None                                   # position/list 404s
+    ad = mkadapter(tmp_path, broken)
+    with pytest.raises(Exception):
+        run(ad.get_net_position("NQ"))

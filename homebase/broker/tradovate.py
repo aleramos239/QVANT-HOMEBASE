@@ -378,7 +378,10 @@ class TradovateAdapter(BrokerAdapter):
     async def place_bracket(self, req: OrderRequest) -> OrderResult:
         """Entry + protective stop/target as a single Tradovate OSO, so the
         broker manages the one-cancels-other and the protection survives a
-        disconnect. Falls back to legged resting orders if OSO is rejected."""
+        disconnect. NEVER legs: the old legged fallback rested the protective
+        stop at once — for a stop ENTRY that is the wrong side of price, an
+        instant unwanted trade. A failed OSO is a failed leg; the engine then
+        cancels the other leg."""
         if self._ws is None or self._acct_num is None:
             return OrderResult(ok=False, error="adapter not connected")
         if req.stop_price is None and req.tp_price is None:
@@ -395,10 +398,11 @@ class TradovateAdapter(BrokerAdapter):
                 account_spec=self._acct_name or None)
             oid = d.get("orderId") if isinstance(d, dict) else None
             if oid is None:
-                # A 200 with no orderId is a logical OSO reject; leg it instead.
-                _log(f"{self.account_id}: OSO rejected ({_reject_reason(d) or 'no orderId'}); "
-                     "legging bracket instead")
-                return await super().place_bracket(req)
+                # a 200 with no orderId is a logical reject
+                reason = _reject_reason(d) or "OSO rejected (no orderId returned)"
+                _log(f"{self.account_id}: OSO rejected: {reason}")
+                return OrderResult(ok=False, error=reason,
+                                   raw=d if isinstance(d, dict) else {})
             # The OSO's brackets are broker-managed OCO. Their ids ride back so
             # the engine can re-price them to the actual fill: bracket1 is the
             # stop when there is one (see place_oso).
@@ -409,8 +413,9 @@ class TradovateAdapter(BrokerAdapter):
             return OrderResult(ok=True, order_id=str(oid),
                                raw={**raw, "sl_order_id": sl_id, "tp_order_id": tp_id})
         except Exception as e:
-            _log(f"{self.account_id}: OSO rejected ({e}); legging bracket instead")
-            return await super().place_bracket(req)
+            # incl. a timeout, where the OSO may exist at the broker — loud
+            _log(f"{self.account_id}: OSO failed: {e}")
+            return OrderResult(ok=False, error=f"OSO failed: {e}")
 
     async def get_protective_orders(self, symbol: str) -> list[dict]:
         """Resting Stop/Limit orders on this account for `symbol`, read from the
@@ -449,10 +454,15 @@ class TradovateAdapter(BrokerAdapter):
         if self._ws is None:
             return OrderResult(ok=False, error="adapter not connected")
         try:
-            await self._ws.cancel_order(int(order_id))
-            return OrderResult(ok=True)
+            d = await self._ws.cancel_order(int(order_id))
         except Exception as e:
             return OrderResult(ok=False, error=str(e))
+        # a 200 carrying a failure text is a refused cancel, not a success
+        raw = d if isinstance(d, dict) else {}
+        reason = _reject_reason(raw) or str(raw.get("errorText") or "").strip()
+        if reason:
+            return OrderResult(ok=False, error=reason, raw=raw)
+        return OrderResult(ok=True, raw=raw)
 
     async def modify_order(self, order_id: str, order_type: str, *,
                            price: Optional[float] = None,
@@ -515,18 +525,18 @@ class TradovateAdapter(BrokerAdapter):
 
     # ------------------------------------------------------------ reads
     async def get_net_position(self, symbol: str) -> int:
+        """Net position in `symbol`. RAISES when it can't be read: an
+        unreadable position is not flat (a swallowed 404 once read as 0 for a
+        week, and would let a flatten cancel a live position's stop)."""
         if self._ws is None or self._acct_num is None:
-            return 0
-        try:
-            c = await self._ws.contract_find(symbols.resolve_contract(symbol))
-            cid = (c or {}).get("id")
-            if cid is None:
-                return 0
-            for p in await self._ws.position_list():
-                if p.get("accountId") == self._acct_num and p.get("contractId") == cid:
-                    return int(p.get("netPos") or 0)
-        except Exception:
-            pass
+            raise RuntimeError("adapter not connected")
+        c = await self._ws.contract_find(symbols.resolve_contract(symbol))
+        cid = (c or {}).get("id")
+        if cid is None:
+            raise RuntimeError(f"no contract found for {symbol}")
+        for p in await self._ws.position_list():
+            if p.get("accountId") == self._acct_num and p.get("contractId") == cid:
+                return int(p.get("netPos") or 0)
         return 0
 
     async def get_order_status(self, order_id: str) -> Optional[str]:

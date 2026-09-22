@@ -42,6 +42,8 @@ from .paths import state_dir
 
 ET = ZoneInfo("America/New_York")
 SPREAD_TOL_PTS = 0.05
+WORKING = {"Working", "PendingNew", "Pending", "Suspended", "PendingReplace"}
+SIBLING_RETRY_S = 2.0
 
 
 def _hhmm(s: str) -> dt.time:
@@ -100,6 +102,7 @@ class Engine:
         self._root = root or state_dir()
         self.states: dict[str, DayState] = {}   # "strategy@account" -> state
         self._early: list[FillEvent] = []   # fills that beat the placement acks
+        self._retry_at: dict[str, float] = {}   # last sibling-cancel attempt
         self._load_today()
 
     # --- time & persistence -------------------------------------------------
@@ -331,6 +334,8 @@ class Engine:
                 r, *moved = await asyncio.gather(*jobs, return_exceptions=True)
                 if isinstance(r, Exception):
                     r = OrderResult(ok=False, error=str(r))
+                if r.ok:        # let the broker confirm before the backstop re-checks
+                    self._retry_at[f"sib:{st.strategy}@{st.account}"] = time.time()
                 self.journal("entry_fill", strategy=st.strategy, account=st.account,
                              side=st.entry_side, fill=ev.price, anchor=st.entry_anchor,
                              fill_vs_anchor=(None if ev.price is None or st.entry_anchor is None
@@ -367,10 +372,9 @@ class Engine:
                     and oid != self._entry_id(st):
                 st.status, st.exit_reason = "error", "both_filled"
                 self._save()
-                await ad.cancel_all()
-                await ad.flatten_all()
+                _, acts = await self._flatten_state(st, cfg, ad)
                 self.journal("both_filled_emergency", strategy=st.strategy,
-                             account=st.account, order_id=oid)
+                             account=st.account, order_id=oid, actions=acts)
                 return
             if st.status == "live" and ev.symbol and cfg.symbol.upper() in ev.symbol.upper() \
                     and ev.side != st.entry_side:
@@ -443,40 +447,96 @@ class Engine:
         return round(sign * (st.exit_fill - st.entry_fill) * pv * st.qty, 2)
 
     async def flatten_strategy(self, name: str) -> dict:
-        """Manual flatten for ONE strategy: cancel its resting entries and
-        market-flatten its symbol on every account it acted on today.
-        Note: the position flatten is symbol-scoped per account — another
-        strategy holding the same symbol on the same account would be
-        flattened too (journaled)."""
+        """Manual flatten for ONE strategy on every account it acted on today
+        (see _flatten_state). Symbol-scoped per account: another strategy
+        holding the same symbol on the same account would be flattened too."""
         cfg = self.cfg.strategies.get(name)
         results: dict = {}
         for st in self.day_states(name):
             ad = self.adapters.get(st.account)
-            if ad is None or cfg is None:
+            if ad is None or cfg is None or st.status == "idle":
                 continue
-            acts = []
-            if st.status == "placed":
-                for oid in (st.upper_id, st.lower_id):
-                    if oid:
-                        r = await ad.cancel_order_by_id(oid)
-                        acts.append(f"cancel {oid}: {'ok' if r.ok else r.error}")
-            if st.status in ("placed", "live", "error"):
-                try:
-                    net = await ad.get_net_position(cfg.symbol)
-                except Exception as e:  # noqa: BLE001
-                    net, _ = 0, acts.append(f"net check failed: {e}")
-                if net:
-                    side = "Sell" if net > 0 else "Buy"
-                    r = await ad.place_order(OrderRequest(
-                        symbol=cfg.symbol, side=side, qty=abs(net),
-                        order_type="Market", text="homebase:manual-flat"))
-                    acts.append(f"flatten {net}: {'ok' if r.ok else r.error}")
-            if st.status in ("placed", "live"):
+            flat, results[st.account] = await self._flatten_state(st, cfg, ad)
+            if flat and st.status in ("placing", "placed", "live"):
                 st.status, st.exit_reason = "done", "manual_flat"
-            results[st.account] = acts
         self._save()
         self.journal("manual_flatten", strategy=name, results=results)
         return results
+
+    async def flatten_today(self) -> dict:
+        """Kill switch: every strategy's footprint today, proven calls only."""
+        out: dict = {}
+        for st in list(self.states.values()):
+            cfg = self.cfg.strategies.get(st.strategy)
+            ad = self.adapters.get(st.account)
+            if cfg is None or ad is None or st.date != self._today() \
+                    or st.status == "idle":
+                continue
+            flat, out[f"{st.strategy}@{st.account}"] = await self._flatten_state(st, cfg, ad)
+            if flat and st.status in ("placing", "placed", "live"):
+                st.status, st.exit_reason = "done", "killed"
+        self._save()
+        return out
+
+    async def _flatten_state(self, st: DayState, cfg: StrategyCfg,
+                             ad: BrokerAdapter) -> tuple[bool, list[str]]:
+        """Close ONE strategy's footprint on one account using only calls
+        proven live (position read, market order, single cancels). Market out
+        of the net position FIRST — the stop/target keep protecting until the
+        position is gone — then cancel every order this strategy placed: both
+        entries and both legs' stop/target (GTC: a leftover could open a new
+        position days later). Position unreadable or the market order refused
+        -> NOTHING is cancelled; the stop/target stay working."""
+        try:
+            net = await ad.get_net_position(cfg.symbol)
+        except Exception as e:  # noqa: BLE001 — unreadable is NOT flat
+            return False, [f"position unreadable ({e}) — stop/target left working"]
+        acts: list[str] = []
+        if net:
+            side = "Sell" if net > 0 else "Buy"
+            r = await ad.place_order(OrderRequest(
+                symbol=cfg.symbol, side=side, qty=abs(net), order_type="Market",
+                text="homebase:flat"))
+            acts.append(f"market {side} {abs(net)}: {'ok' if r.ok else r.error}")
+            if not r.ok:
+                acts.append("not flat — stop/target left working")
+                return False, acts
+        ids = [i for i in (st.upper_id, st.lower_id, st.up_sl_id, st.up_tp_id,
+                           st.dn_sl_id, st.dn_tp_id) if i]
+        res = await asyncio.gather(*(ad.cancel_order_by_id(i) for i in ids),
+                                   return_exceptions=True)
+        for i, r in zip(ids, res):
+            ok = not isinstance(r, Exception) and r.ok
+            acts.append(f"cancel {i}: " + ("ok" if ok else
+                        str(r if isinstance(r, Exception) else r.error)))
+        return True, acts
+
+    async def _guard_sibling(self, st: DayState, cfg: StrategyCfg,
+                             ad: BrokerAdapter) -> None:
+        """After the entry the OTHER stop must be gone. Still working -> the
+        cancel was refused or raced: cancel again (every 2 s at most). Filled
+        -> it opened a second, unmanaged position (even after the trade
+        ended): close it and every bracket."""
+        sib = st.lower_id if st.entry_side == "Buy" else st.upper_id
+        if not sib:
+            return
+        status = await ad.get_order_status(sib)
+        if status == "Filled":
+            st.status, st.exit_reason = "error", "both_filled"
+            self._save()
+            _, acts = await self._flatten_state(st, cfg, ad)
+            self.journal("both_filled_emergency", strategy=st.strategy,
+                         account=st.account, order_id=sib,
+                         found_by="sibling_check", actions=acts)
+            return
+        if status in WORKING:
+            key = f"sib:{st.strategy}@{st.account}"
+            if time.time() - self._retry_at.get(key, 0.0) < SIBLING_RETRY_S:
+                return
+            self._retry_at[key] = time.time()
+            r = await ad.cancel_order_by_id(sib)
+            self.journal("sibling_cancel_retry", strategy=st.strategy,
+                         account=st.account, order_id=sib, ok=r.ok, error=r.error)
 
     async def _guard_placed(self, st: DayState, cfg: StrategyCfg,
                             ad: BrokerAdapter, *, check_position: bool,
@@ -496,10 +556,9 @@ class Engine:
                 return None
             st.status, st.exit_reason = "error", "both_filled"
             self._save()
-            await ad.cancel_all()
-            await ad.flatten_all()
+            _, acts = await self._flatten_state(st, cfg, ad)
             self.journal("both_filled_emergency", strategy=st.strategy,
-                         account=st.account, found_by=event)
+                         account=st.account, found_by=event, actions=acts)
             return "both_filled"
         if "Filled" in (up, dn):
             side = "Buy" if up == "Filled" else "Sell"
@@ -590,8 +649,15 @@ class Engine:
                                  account=st.account, net=net)
                 self._save()
             elif st.status == "live" and now >= _hhmm(cfg.flat_et):
-                await ad.cancel_all()
-                await ad.flatten_all()
-                st.status, st.exit_reason = "done", st.exit_reason or "flat"
-                self._save()
-                self.journal("clock_flat", strategy=st.strategy, account=st.account)
+                key = f"flat:{st.strategy}@{st.account}"
+                if time.time() - self._retry_at.get(key, 0.0) < 5.0:
+                    continue                          # a failed flat retries every 5 s
+                self._retry_at[key] = time.time()
+                flat, acts = await self._flatten_state(st, cfg, ad)
+                if flat:
+                    st.status, st.exit_reason = "done", st.exit_reason or "flat"
+                    self._save()
+                self.journal("clock_flat" if flat else "clock_flat_failed",
+                             strategy=st.strategy, account=st.account, actions=acts)
+            if st.status in ("live", "done") and st.entry_side and ad.connected:
+                await self._guard_sibling(st, cfg, ad)

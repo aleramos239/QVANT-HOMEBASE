@@ -35,6 +35,9 @@ class FakeAdapter(BrokerAdapter):
         self.order_status: dict[str, str] = {}
         self.modified: list[tuple] = []
         self.fail_modify = False
+        self.fail_market = False
+        self.net_error = False
+        self.fail_cancel_ids: set = set()        # each fails once, then works
         self._next_id = 100
 
     @property
@@ -48,6 +51,8 @@ class FakeAdapter(BrokerAdapter):
 
     async def place_order(self, req):
         self.orders.append(req)
+        if self.fail_market and req.order_type == "Market":
+            return OrderResult(ok=False, error="market rejected by test")
         return OrderResult(ok=True, order_id="plain")
 
     async def place_bracket(self, req: OrderRequest) -> OrderResult:
@@ -69,6 +74,9 @@ class FakeAdapter(BrokerAdapter):
 
     async def cancel_order_by_id(self, order_id: str) -> OrderResult:
         self.cancelled.append(str(order_id))
+        if str(order_id) in self.fail_cancel_ids:
+            self.fail_cancel_ids.discard(str(order_id))
+            return OrderResult(ok=False, error="cancel rejected by test")
         return OrderResult(ok=True)
 
     async def cancel_all(self):
@@ -80,6 +88,8 @@ class FakeAdapter(BrokerAdapter):
         return OrderResult(ok=True)
 
     async def get_net_position(self, symbol):
+        if self.net_error:
+            raise RuntimeError("position read failed")
         return self.net
 
     async def get_order_status(self, order_id):
@@ -362,7 +372,8 @@ def test_clock_check_both_filled_flattens(tmp_path):
     ad.order_status.update({st.upper_id: "Filled", st.lower_id: "Filled"})
     run(eng.clock_tick())
     assert st.status == "error" and st.exit_reason == "both_filled"
-    assert ad.cancel_all_calls == 1 and ad.flatten_calls == 1
+    # long 3 + short 3 nets to 0 but leaves FOUR GTC brackets: all cancelled
+    assert {f"{st.upper_id}-sl", f"{st.upper_id}-tp", f"{st.lower_id}-sl", f"{st.lower_id}-tp"} <= set(ad.cancelled)
 
 
 def test_late_fill_push_after_the_check_keeps_the_real_prices(tmp_path):
@@ -402,7 +413,7 @@ def test_both_filled_flattens_that_account(tmp_path):
                               qty=3, price=24490.0,
                               raw={"orderId": st.lower_id})))
     assert st.status == "error" and st.exit_reason == "both_filled"
-    assert ad.cancel_all_calls == 1 and ad.flatten_calls == 1
+    assert {f"{st.upper_id}-sl", f"{st.upper_id}-tp", f"{st.lower_id}-sl", f"{st.lower_id}-tp"} <= set(ad.cancelled)
 
 
 def test_exit_fill_graded_tp_with_pnl(tmp_path):
@@ -447,10 +458,13 @@ def test_clock_flattens_after_1555(tmp_path):
     run(eng.on_fill(FillEvent(account_id="main", symbol="NQZ6", side="Buy",
                               qty=3, price=24510.25,
                               raw={"orderId": st.upper_id})))
+    ad.net = 3                                     # still long 3 at 15:56
     clock.set_et(15, 56)
     run(eng.clock_tick())
     assert st.status == "done" and st.exit_reason == "flat"
-    assert ad.flatten_calls == 1 and ad.cancel_all_calls == 1
+    flat = [o for o in ad.orders if o.order_type == "Market"]
+    assert len(flat) == 1 and flat[0].side == "Sell" and flat[0].qty == 3
+    assert {f"{st.upper_id}-sl", f"{st.upper_id}-tp"} <= set(ad.cancelled)
 
 
 def test_flatten_strategy_cancels_and_flattens(tmp_path):
@@ -464,7 +478,60 @@ def test_flatten_strategy_cancels_and_flattens(tmp_path):
     assert st.status == "done" and st.exit_reason == "manual_flat"
     flat = [o for o in ad.orders if o.order_type == "Market"]
     assert len(flat) == 1 and flat[0].side == "Sell" and flat[0].qty == 3
+    # the GTC stop/target must not outlive the position
+    assert {f"{st.upper_id}-sl", f"{st.upper_id}-tp"} <= set(ad.cancelled)
     assert "main" in res
+
+
+def test_flatten_leaves_the_brackets_if_the_market_order_fails(tmp_path):
+    eng, ad, _ = mkengine(tmp_path)
+    st = _place(eng, ad)
+    _fill(eng, st, "Buy", 3, 24510.0)
+    ad.net, ad.fail_market = 3, True
+    run(eng.flatten_strategy("nq930"))
+    assert f"{st.upper_id}-sl" not in ad.cancelled    # still protected
+
+
+def test_flatten_leaves_the_brackets_if_the_position_cant_be_read(tmp_path):
+    eng, ad, _ = mkengine(tmp_path)
+    st = _place(eng, ad)
+    _fill(eng, st, "Buy", 3, 24510.0)
+    ad.net_error = True
+    run(eng.flatten_strategy("nq930"))
+    assert not any(o.order_type == "Market" for o in ad.orders)
+    assert f"{st.upper_id}-sl" not in ad.cancelled
+
+
+def test_failed_sibling_cancel_is_retried(tmp_path):
+    """The sibling cancel is refused once: the clock sees the sell stop still
+    working and cancels it again."""
+    eng, ad, _ = mkengine(tmp_path)
+    st = _place(eng, ad)
+    ad.fail_cancel_ids = {st.lower_id}
+    _fill(eng, st, "Buy", 3, 24510.0)
+    assert ad.cancelled.count(st.lower_id) == 1        # refused
+    ad.order_status[st.lower_id] = "Working"
+    run(eng.clock_tick())
+    assert ad.cancelled.count(st.lower_id) == 2        # retried
+    assert "sibling_cancel_retry" in journal_events(tmp_path)
+
+
+def test_sibling_that_fills_after_the_exit_is_flattened(tmp_path):
+    """The sell stop outlived the trade and filled later — a new, unmanaged
+    short. The clock must close it and cancel its brackets."""
+    eng, ad, _ = mkengine(tmp_path)
+    st = _place(eng, ad)
+    ad.fail_cancel_ids = {st.lower_id}
+    _fill(eng, st, "Buy", 3, 24510.0)
+    _fill(eng, st, "Sell", 3, 24525.0, oid="tp-child")   # target: done
+    assert st.status == "done"
+    ad.order_status[st.lower_id] = "Filled"
+    ad.net = -3
+    run(eng.clock_tick())
+    assert st.status == "error" and st.exit_reason == "both_filled"
+    flat = [o for o in ad.orders if o.order_type == "Market"]
+    assert len(flat) == 1 and flat[0].side == "Buy" and flat[0].qty == 3
+    assert {f"{st.lower_id}-sl", f"{st.lower_id}-tp"} <= set(ad.cancelled)
 
 
 def test_flatten_strategy_cancels_unfilled(tmp_path):

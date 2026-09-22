@@ -295,6 +295,20 @@ def test_live_login_probes_live_and_the_account_is_live(client):
     assert again["ok"] and client.created[-1].cfg.live is True
 
 
+def test_live_login_with_a_colon_in_the_username_stays_live(client):
+    """2026-09-21: a Google-linked login is 'Google:1012...'. The key
+    'tv:live:google:1012...' has FOUR colon parts; it was read as demo, the
+    account connected to demo and found no accounts."""
+    r = client.post("/api/connect", json={"username": "Google:1012", "password": "x",
+                                          "env": "live"}).json()
+    assert r["key"] == "tv:live:google:1012" and client.created[-1].cfg.live is True
+    client.post("/api/accounts/add", json={"key": "tv:live:google:1012",
+                                           "account_name": "1552885"})
+    assert client.app.state.cfg.accounts["1552885"].live is True
+    envs = {l["key"]: l["env"] for l in client.get("/api/logins").json()["logins"]}
+    assert envs["tv:live:google:1012"] == "live"
+
+
 def test_demo_stays_the_default_login(client):
     r = client.post("/api/connect", json={"username": "Guy", "password": "x"}).json()
     assert r["key"] == "tv:demo:guy" and client.created[-1].cfg.live is False
