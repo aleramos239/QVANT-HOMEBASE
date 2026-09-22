@@ -7,7 +7,8 @@ book (a second signal is refused even if only some accounts placed).
 
 Per (strategy, account), all times ET:
 
-    idle --signal(armed)--> placed --entry fill--> live --SL/TP/flat--> done
+    idle --signal(armed)--> placing --acks--> placed --entry fill--> live
+         --SL/TP/flat--> done       (live: SL/TP re-priced to the actual fill)
                       \\--cancel_et, no fill--> done
 
 Safety invariants (unchanged from the single-account engine):
@@ -36,7 +37,7 @@ from zoneinfo import ZoneInfo
 
 from .broker.base import BrokerAdapter, FillEvent, OrderRequest, OrderResult
 from .config import AppCfg, StrategyCfg, assignments
-from .contracts import point_value
+from .contracts import point_value, tick_size
 from .paths import state_dir
 
 ET = ZoneInfo("America/New_York")
@@ -48,13 +49,23 @@ def _hhmm(s: str) -> dt.time:
     return dt.time(int(h), int(m))
 
 
+def _to_tick(px: float, tick: float) -> float:
+    return round(round(px / tick) * tick, 6)
+
+
+def _bracket_ids(r: OrderResult) -> tuple[Optional[str], Optional[str]]:
+    raw = r.raw or {}
+    return tuple(str(raw[k]) if raw.get(k) is not None else None   # type: ignore
+                 for k in ("sl_order_id", "tp_order_id"))
+
+
 @dataclass
 class DayState:
     strategy: str
     account: str
     date: str
     qty: int = 0
-    status: str = "idle"               # idle|placed|live|done|error
+    status: str = "idle"               # idle|placing|placed|live|done|error
     upper_id: Optional[str] = None
     lower_id: Optional[str] = None
     upper_px: Optional[float] = None
@@ -66,6 +77,12 @@ class DayState:
     exit_fill: Optional[float] = None
     pnl: Optional[float] = None        # gross $, set at exit
     note: str = ""
+    entry_qty: int = 0                 # entry contracts filled so far
+    up_sl_id: Optional[str] = None     # each leg's OSO stop / target order,
+    up_tp_id: Optional[str] = None     # re-priced to the actual fill
+    dn_sl_id: Optional[str] = None
+    dn_tp_id: Optional[str] = None
+    brackets_moved: bool = False
 
 
 class Engine:
@@ -82,6 +99,7 @@ class Engine:
         self._now = now_fn or (lambda: dt.datetime.now(dt.timezone.utc))
         self._root = root or state_dir()
         self.states: dict[str, DayState] = {}   # "strategy@account" -> state
+        self._early: list[FillEvent] = []   # fills that beat the placement acks
         self._load_today()
 
     # --- time & persistence -------------------------------------------------
@@ -130,7 +148,7 @@ class Engine:
         """Aggregate day status across the book, for the one-per-day rule
         and the timer: idle only when NOTHING has happened yet today."""
         stats = {s.status for s in self.day_states(strategy)}
-        for s in ("error", "live", "placed", "done"):
+        for s in ("error", "live", "placing", "placed", "done"):
             if s in stats:
                 return s
         return "idle"
@@ -227,6 +245,9 @@ class Engine:
                          error="account not connected")
             return {"ok": False, "reason": "account not connected"}
         st.qty = qty
+        # from here a second signal is refused, and an entry fill that beats
+        # the acks is held instead of dropped (on_fill -> _replay_early)
+        st.status = "placing"
         buy, sell = self._legs(cfg, upper, lower, qty)
         # Both legs go out together — the second no longer waits a full round
         # trip for the first. A leg that raises counts as rejected.
@@ -244,10 +265,13 @@ class Engine:
             self._save()
             self.journal("place_failed", strategy=name, account=account, leg=leg,
                          error=err, cancelled=survivor.order_id if survivor.ok else None)
+            await self._replay_early(account)
             return {"ok": False, "reason": f"{leg} leg rejected: {err}"}
 
         st.status = "placed"
         st.upper_id, st.lower_id = r_up.order_id, r_dn.order_id
+        st.up_sl_id, st.up_tp_id = _bracket_ids(r_up)
+        st.dn_sl_id, st.dn_tp_id = _bracket_ids(r_dn)
         st.upper_px, st.lower_px = upper, lower
         self._save()
         self.journal("placed", strategy=name, account=account, source=source,
@@ -257,7 +281,15 @@ class Engine:
                      # only latency the strategy is actually exposed to
                      place_ms=(None if t0 is None
                                else round((time.time() - t0) * 1000)))
+        await self._replay_early(account)
         return {"ok": True, "upper_id": st.upper_id, "lower_id": st.lower_id}
+
+    async def _replay_early(self, account: str) -> None:
+        """Entry fills that arrived before this account's acks: run them now."""
+        mine = [e for e in self._early if e.account_id == account]
+        self._early = [e for e in self._early if e.account_id != account]
+        for ev in mine:
+            await self.on_fill(ev)
 
     # --- broker fills ---------------------------------------------------------
     async def on_fill(self, ev: FillEvent) -> None:
@@ -287,26 +319,45 @@ class Engine:
                 st.status = "live"
                 st.entry_side = "Buy" if oid == st.upper_id else "Sell"
                 st.entry_anchor = st.upper_px if oid == st.upper_id else st.lower_px
-                st.entry_fill = ev.price
+                st.entry_fill, st.entry_qty = ev.price, ev.qty
                 self._save()
-                r = await ad.cancel_order_by_id(sibling)
+                jobs = [ad.cancel_order_by_id(sibling)]
+                if st.entry_qty >= st.qty:          # whole entry in: SL/TP to the fill
+                    jobs.append(self._move_brackets(st, cfg, ad))
+                r, *moved = await asyncio.gather(*jobs, return_exceptions=True)
+                if isinstance(r, Exception):
+                    r = OrderResult(ok=False, error=str(r))
                 self.journal("entry_fill", strategy=st.strategy, account=st.account,
                              side=st.entry_side, fill=ev.price, anchor=st.entry_anchor,
                              fill_vs_anchor=(None if ev.price is None or st.entry_anchor is None
                                              else round(ev.price - st.entry_anchor, 4)),
+                             qty_filled=st.entry_qty,
                              sibling_cancelled=r.ok, sibling_error=r.error)
+                if moved:
+                    self._journal_moved(st, moved[0])
                 return
             if st.status == "live" and oid and oid == self._entry_id(st) \
-                    and st.entry_fill is None:
-                # the order-status check adopted this entry first; keep the
-                # real fill so the exit still grades and the P&L journals
-                st.entry_fill = ev.price
+                    and st.entry_qty < st.qty:
+                # the rest of a split entry, or the push after the order-status
+                # check adopted it: keep the AVERAGE fill, as the research does,
+                # and re-price SL/TP once the whole entry is in
+                n = st.entry_qty + ev.qty
+                if ev.price is not None:
+                    st.entry_fill = (ev.price if st.entry_fill is None else
+                                     (st.entry_fill * st.entry_qty + ev.price * ev.qty) / n)
+                st.entry_qty = n
                 self._save()
                 self.journal("entry_fill", strategy=st.strategy, account=st.account,
-                             side=st.entry_side, fill=ev.price, anchor=st.entry_anchor,
-                             fill_vs_anchor=(None if ev.price is None or st.entry_anchor is None
-                                             else round(ev.price - st.entry_anchor, 4)),
-                             late=True)
+                             side=st.entry_side, fill=st.entry_fill, anchor=st.entry_anchor,
+                             fill_vs_anchor=(None if st.entry_fill is None or st.entry_anchor is None
+                                             else round(st.entry_fill - st.entry_anchor, 4)),
+                             qty_filled=n)
+                if n >= st.qty and not st.brackets_moved:
+                    try:
+                        moved = await self._move_brackets(st, cfg, ad)
+                    except Exception as e:  # noqa: BLE001 — the fill is already in
+                        moved = e
+                    self._journal_moved(st, moved)
                 return
             if st.status == "live" and oid and oid in (st.upper_id, st.lower_id) \
                     and oid != self._entry_id(st):
@@ -327,6 +378,46 @@ class Engine:
                 self.journal("exit_fill", strategy=st.strategy, account=st.account,
                              reason=st.exit_reason, fill=ev.price, pnl=st.pnl)
                 return
+        # Nothing matched. An entry fill can beat the placement acks — the
+        # order is live at the broker before we know its id — so while this
+        # account is placing, hold it; _place replays it once the ids are in.
+        if any(s.status == "placing" and s.account == ev.account_id
+               for s in self.states.values()):
+            self._early.append(ev)
+
+    async def _move_brackets(self, st: DayState, cfg: StrategyCfg,
+                             ad: BrokerAdapter) -> dict:
+        """The research measures SL/TP from the ACTUAL (average) fill, not the
+        trigger. Once the whole entry is in, move both brackets there. A fill
+        at the trigger moves nothing; a failed move leaves the trigger
+        brackets working — still protected, just not re-priced."""
+        st.brackets_moved = True                  # once per trade
+        if st.entry_fill is None:
+            return {"moved": False, "error": "no fill price"}
+        sign = 1 if st.entry_side == "Buy" else -1
+        tick = tick_size(cfg.symbol) or 0.25
+        sl = _to_tick(st.entry_fill - sign * cfg.sl_pts, tick)
+        tp = _to_tick(st.entry_fill + sign * cfg.tp_pts, tick)
+        out = {"fill": round(st.entry_fill, 6), "sl": sl, "tp": tp}
+        if st.entry_anchor is not None and abs(st.entry_fill - st.entry_anchor) < tick / 2:
+            return {**out, "moved": "not needed — filled at the trigger"}
+        sl_id, tp_id = ((st.up_sl_id, st.up_tp_id) if st.entry_side == "Buy"
+                        else (st.dn_sl_id, st.dn_tp_id))
+        if not (sl_id and tp_id):
+            return {**out, "moved": False, "error": "bracket order ids unknown"}
+        res = await asyncio.gather(
+            ad.modify_order(sl_id, "Stop", stop_price=sl, qty=st.qty),
+            ad.modify_order(tp_id, "Limit", price=tp, qty=st.qty),
+            return_exceptions=True)
+        errs = [f"{k}: {r if isinstance(r, Exception) else r.error}"
+                for k, r in zip(("sl", "tp"), res)
+                if isinstance(r, Exception) or not r.ok]
+        return {**out, "moved": not errs, **({"error": "; ".join(errs)} if errs else {})}
+
+    def _journal_moved(self, st: DayState, moved) -> None:
+        if isinstance(moved, Exception):
+            moved = {"moved": False, "error": str(moved)}
+        self.journal("brackets_moved", strategy=st.strategy, account=st.account, **moved)
 
     def _entry_id(self, st: DayState) -> Optional[str]:
         return st.upper_id if st.entry_side == "Buy" else st.lower_id

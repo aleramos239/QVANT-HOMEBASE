@@ -279,6 +279,20 @@ class TradovateWS:
     async def cancel_order(self, order_id: int) -> dict:
         return await self.request("order/cancelorder", {"orderId": order_id})
 
+    async def modify_order(self, order_id: int, *, order_type: str, qty: int,
+                           price: Optional[float] = None,
+                           stop_price: Optional[float] = None) -> dict:
+        """Re-price a resting order in place (keeps its id). orderType AND
+        orderQty are required even when unchanged (learned live in the
+        copier: without them Tradovate answers 'missing required field')."""
+        body: dict = {"orderId": order_id, "orderType": order_type,
+                      "orderQty": int(qty)}
+        if price is not None:
+            body["price"] = price
+        if stop_price is not None:
+            body["stopPrice"] = stop_price
+        return await self.request("order/modifyorder", body)
+
     async def liquidate_position(self, *, account_id: int, contract_id: int,
                                  admin: bool = False) -> dict:
         return await self.request("order/liquidateposition", {

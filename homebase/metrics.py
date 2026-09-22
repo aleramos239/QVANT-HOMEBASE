@@ -63,7 +63,7 @@ def strategy_live_detail(journal_path: Path, strategy: str, cfg) -> dict:
     scfg = cfg.strategies.get(strategy)
     sym = getattr(scfg, "symbol", "NQ")
     ts = tick_size(sym)
-    placed, entries, trades, unknown = {}, {}, [], 0
+    placed, entries, levels, trades, unknown = {}, {}, {}, [], 0
     if journal_path.exists():
         for line in journal_path.read_text().splitlines():
             try:
@@ -80,6 +80,8 @@ def strategy_live_detail(journal_path: Path, strategy: str, cfg) -> dict:
                 entries[key] = r
             elif ev == "exit_recovered_on_reconnect":
                 unknown += 1
+            elif ev == "brackets_moved" and r.get("sl") is not None:
+                levels[key] = (r["sl"], r["tp"])     # SL/TP re-priced to the fill
             elif ev == "exit_fill" and r.get("pnl") is not None:
                 ent = entries.get(key, {})
                 qty = int((placed.get(key) or {}).get("qty") or 1)
@@ -91,7 +93,9 @@ def strategy_live_detail(journal_path: Path, strategy: str, cfg) -> dict:
                 exit_slip = None
                 if anchor is not None and scfg is not None and ts \
                         and r.get("fill") is not None and reason in ("sl", "tp"):
-                    level = (anchor - sgn * scfg.sl_pts if reason == "sl"
+                    lv = levels.get(key)
+                    level = ((lv[0] if reason == "sl" else lv[1]) if lv else
+                             anchor - sgn * scfg.sl_pts if reason == "sl"
                              else anchor + sgn * scfg.tp_pts)
                     exit_slip = round((level - r["fill"]) * sgn / ts, 1) + 0.0
                 gross = float(r["pnl"])

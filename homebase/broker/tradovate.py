@@ -399,11 +399,15 @@ class TradovateAdapter(BrokerAdapter):
                 _log(f"{self.account_id}: OSO rejected ({_reject_reason(d) or 'no orderId'}); "
                      "legging bracket instead")
                 return await super().place_bracket(req)
-            # The OSO's brackets are broker-managed OCO — no local id tracking
-            # needed; flattening the position cancels them server-side.
+            # The OSO's brackets are broker-managed OCO. Their ids ride back so
+            # the engine can re-price them to the actual fill: bracket1 is the
+            # stop when there is one (see place_oso).
             self._order_symbols[int(oid)] = sym
+            raw = d if isinstance(d, dict) else {}
+            b1, b2 = raw.get("oso1Id"), raw.get("oso2Id")
+            sl_id, tp_id = (b1, b2) if req.stop_price is not None else (None, b1)
             return OrderResult(ok=True, order_id=str(oid),
-                               raw=d if isinstance(d, dict) else {})
+                               raw={**raw, "sl_order_id": sl_id, "tp_order_id": tp_id})
         except Exception as e:
             _log(f"{self.account_id}: OSO rejected ({e}); legging bracket instead")
             return await super().place_bracket(req)
@@ -449,6 +453,33 @@ class TradovateAdapter(BrokerAdapter):
             return OrderResult(ok=True)
         except Exception as e:
             return OrderResult(ok=False, error=str(e))
+
+    async def modify_order(self, order_id: str, order_type: str, *,
+                           price: Optional[float] = None,
+                           stop_price: Optional[float] = None,
+                           qty: Optional[int] = None) -> OrderResult:
+        """Re-price one resting order. The qty sent is the order's OWN, from
+        its pushed version, so a bracket is never resized by accident; `qty`
+        is only the fallback. A 200 carrying a failure text is a reject."""
+        if self._ws is None:
+            return OrderResult(ok=False, error="adapter not connected")
+        try:
+            oid = int(order_id)
+        except (TypeError, ValueError):
+            return OrderResult(ok=False, error=f"bad order id {order_id!r}")
+        q = (self._order_versions.get(oid) or {}).get("orderQty") or qty
+        if not q:
+            return OrderResult(ok=False, error="order qty unknown — not modifying")
+        try:
+            d = await self._ws.modify_order(oid, order_type=order_type, qty=int(q),
+                                            price=price, stop_price=stop_price)
+        except Exception as e:
+            return OrderResult(ok=False, error=str(e))
+        raw = d if isinstance(d, dict) else {}
+        reason = _reject_reason(raw) or str(raw.get("errorText") or "").strip()
+        if reason:
+            return OrderResult(ok=False, error=reason, raw=raw)
+        return OrderResult(ok=True, order_id=str(oid), raw=raw)
 
     async def flatten_all(self) -> OrderResult:
         if self._ws is None or self._acct_num is None:

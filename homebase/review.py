@@ -94,7 +94,8 @@ def review(date: str) -> str:
             ts, pv = tick_size(sym), point_value(sym) or 0
             slip = e.get("fill_vs_anchor")
             qty = next((p.get("qty") for p in placed
-                        if p.get("account") == e.get("account")), 1) or 1
+                        if p.get("account") == e.get("account")
+                        and p.get("strategy") == name), 1) or 1
             add(f"  {e['et'][11:19]}  {e.get('account')}  {e.get('side')} "
                 f"@ {e.get('fill')}  (anchor {e.get('anchor')})")
             if slip is not None and ts:
@@ -106,8 +107,15 @@ def review(date: str) -> str:
                            "WORSE than modelled" if signed > 1 else "better than modelled")
                 add(f"           slippage {slip:+.2f} pts = {signed:+.1f} ticks "
                     f"→ ${cost:,.2f} on {qty} · {verdict}")
-            add(f"           sibling cancelled: {e.get('sibling_cancelled')}"
-                + (f" ({e.get('sibling_error')})" if e.get("sibling_error") else ""))
+            if "sibling_cancelled" in e:        # the first fill only
+                add(f"           sibling cancelled: {e.get('sibling_cancelled')}"
+                    + (f" ({e.get('sibling_error')})" if e.get("sibling_error") else ""))
+    for e in by("brackets_moved"):
+        mv = e.get("moved")
+        add(f"  {e['et'][11:19]}  SL/TP to the fill ({e.get('fill')}): "
+            f"SL {e.get('sl')} · TP {e.get('tp')} · "
+            + ("moved" if mv is True else str(mv) if mv else
+               f"NOT MOVED — {e.get('error')} (trigger brackets still protect)"))
     for e in by("fill_matched_by_side"):
         add(f"  ⚠ {e['et'][11:19]}  fill had no order id — matched by side "
             f"({e.get('side')})")
@@ -121,22 +129,28 @@ def review(date: str) -> str:
                 f"@ {e.get('fill')}  →  ${e.get('pnl'):,.2f} gross")
             # EXIT slippage: a triggered stop becomes a market order, so this
             # is where real slippage lives. Compare to the bracket's level.
-            ent = next((f for f in fills if f.get("account") == e.get("account")), None)
             name = e.get("strategy", "")
+            mine = lambda x: (x.get("account") == e.get("account")  # noqa: E731
+                              and x.get("strategy") == name)
+            ent = next((f for f in reversed(fills) if mine(f)), None)
+            mv = next((m for m in reversed(by("brackets_moved"))
+                       if mine(m) and m.get("sl") is not None), None)
             scfg = cfg.strategies.get(name)
             if ent and scfg and e.get("fill") is not None and ent.get("anchor") is not None:
                 sym = scfg.symbol
                 ts_, pv_ = tick_size(sym), point_value(sym) or 0
                 sgn = 1 if ent.get("side") == "Buy" else -1
                 reason = str(e.get("reason"))
-                level = (ent["anchor"] - sgn * scfg.sl_pts if reason == "sl" else
-                         ent["anchor"] + sgn * scfg.tp_pts if reason == "tp" else None)
+                if mv and reason in ("sl", "tp"):     # re-priced to the fill
+                    level = mv["sl"] if reason == "sl" else mv["tp"]
+                else:
+                    level = (ent["anchor"] - sgn * scfg.sl_pts if reason == "sl" else
+                             ent["anchor"] + sgn * scfg.tp_pts if reason == "tp" else None)
                 if level is not None and ts_:
                     # adverse = worse than the level, from the position's view
                     adverse = (level - e["fill"]) * sgn
                     ticks = adverse / ts_
-                    qty = next((p.get("qty") for p in placed
-                                if p.get("account") == e.get("account")), 1) or 1
+                    qty = next((p.get("qty") for p in placed if mine(p)), 1) or 1
                     verdict = ("as modelled" if abs(ticks) <= 1.01 else
                                "WORSE than modelled" if ticks > 1 else "better")
                     add(f"           {reason.upper()} level {level} · slippage "

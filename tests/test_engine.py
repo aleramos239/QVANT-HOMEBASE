@@ -33,6 +33,8 @@ class FakeAdapter(BrokerAdapter):
         self.fail_leg: str | None = None
         self.net = 0
         self.order_status: dict[str, str] = {}
+        self.modified: list[tuple] = []
+        self.fail_modify = False
         self._next_id = 100
 
     @property
@@ -53,7 +55,17 @@ class FakeAdapter(BrokerAdapter):
             return OrderResult(ok=False, error="rejected by test")
         self.brackets.append(req)
         self._next_id += 1
-        return OrderResult(ok=True, order_id=f"{self.account_id}-{self._next_id}")
+        oid = f"{self.account_id}-{self._next_id}"
+        return OrderResult(ok=True, order_id=oid,
+                           raw={"sl_order_id": f"{oid}-sl", "tp_order_id": f"{oid}-tp"})
+
+    async def modify_order(self, order_id, order_type, *, price=None,
+                           stop_price=None, qty=None):
+        self.modified.append((str(order_id), order_type,
+                              stop_price if stop_price is not None else price))
+        if self.fail_modify:
+            return OrderResult(ok=False, error="modify rejected by test")
+        return OrderResult(ok=True, order_id=str(order_id))
 
     async def cancel_order_by_id(self, order_id: str) -> OrderResult:
         self.cancelled.append(str(order_id))
@@ -473,3 +485,101 @@ def test_restart_recovers_state(tmp_path):
                   root=tmp_path)
     assert eng2._state("nq930", "main").status == "placed"
     assert eng2._state("nq930", "main").upper_id == st.upper_id
+
+
+# --- SL/TP measured from the ACTUAL fill, like the research -------------------
+def _fill(eng, st, side, qty, price, oid=None):
+    run(eng.on_fill(FillEvent(account_id="main", symbol="NQZ6", side=side,
+                              qty=qty, price=price,
+                              raw={"orderId": oid or (st.upper_id if side == "Buy"
+                                                      else st.lower_id)})))
+
+
+def test_buy_fill_moves_brackets_to_the_fill(tmp_path):
+    """Buy stop 24510 fills 1 tick worse at 24510.25: SL/TP move to
+    24505.25 / 24525.25 — 5 and 15 points from where price actually filled."""
+    eng, ad, _ = mkengine(tmp_path)
+    st = _place(eng, ad)
+    _fill(eng, st, "Buy", 3, 24510.25)
+    assert ad.modified == [(f"{st.upper_id}-sl", "Stop", 24505.25),
+                           (f"{st.upper_id}-tp", "Limit", 24525.25)]
+    assert st.lower_id in ad.cancelled
+    assert "brackets_moved" in journal_events(tmp_path)
+
+
+def test_sell_fill_moves_brackets_to_the_fill(tmp_path):
+    eng, ad, _ = mkengine(tmp_path)
+    st = _place(eng, ad)
+    _fill(eng, st, "Sell", 3, 24489.75)             # sell stop 24490, 1 tick worse
+    assert ad.modified == [(f"{st.lower_id}-sl", "Stop", 24494.75),
+                           (f"{st.lower_id}-tp", "Limit", 24474.75)]
+
+
+def test_fill_at_the_trigger_moves_nothing(tmp_path):
+    eng, ad, _ = mkengine(tmp_path)
+    st = _place(eng, ad)
+    _fill(eng, st, "Buy", 3, 24510.0)
+    assert ad.modified == []
+
+
+def test_split_entry_moves_once_from_the_average_fill(tmp_path):
+    """3 lots fill as 1 @ 24510.25 + 2 @ 24510.50: nothing moves on the first
+    piece; once all 3 are in, SL/TP sit off the average (24510.4167), rounded
+    to a real tick."""
+    eng, ad, _ = mkengine(tmp_path)
+    st = _place(eng, ad)
+    _fill(eng, st, "Buy", 1, 24510.25)
+    assert ad.modified == []                        # entry not complete yet
+    _fill(eng, st, "Buy", 2, 24510.50)
+    assert ad.modified == [(f"{st.upper_id}-sl", "Stop", 24505.5),
+                           (f"{st.upper_id}-tp", "Limit", 24525.5)]
+    assert round(st.entry_fill, 4) == 24510.4167 and st.entry_qty == 3
+
+
+def test_failed_move_keeps_the_trigger_brackets(tmp_path):
+    eng, ad, _ = mkengine(tmp_path)
+    ad.fail_modify = True
+    st = _place(eng, ad)
+    _fill(eng, st, "Buy", 3, 24510.25)
+    assert st.status == "live" and st.lower_id in ad.cancelled
+    moved = [json.loads(l) for l in (tmp_path / "journal.jsonl").read_text().splitlines()
+             if json.loads(l)["event"] == "brackets_moved"][0]
+    assert moved["moved"] is False and "rejected" in moved["error"]
+
+
+def test_entry_fill_that_beats_the_acks_is_kept(tmp_path):
+    """The BUY fills while the SELL's ack is still in flight (9:30 open):
+    the fill is held and replayed once both legs are placed — sibling
+    cancelled, brackets moved."""
+    eng, ad, _ = mkengine(tmp_path)
+    orig = ad.place_bracket
+
+    async def racing(req):
+        r = await orig(req)
+        if req.side == "Sell":                      # BUY already accepted
+            await eng.on_fill(FillEvent(account_id="main", symbol="NQZ6",
+                                        side="Buy", qty=3, price=24510.25,
+                                        raw={"orderId": "main-101"}))
+        return r
+
+    ad.place_bracket = racing
+    assert run(eng.handle_alert(dict(ALERT)))["ok"]
+    st = st_of(eng)
+    assert st.status == "live" and st.entry_side == "Buy"
+    assert st.lower_id in ad.cancelled
+    assert (f"{st.upper_id}-sl", "Stop", 24505.25) in ad.modified
+
+
+def test_second_signal_during_placement_is_refused(tmp_path):
+    eng, ad, _ = mkengine(tmp_path)
+    orig, second = ad.place_bracket, {}
+
+    async def racing(req):
+        if req.side == "Buy" and not second:
+            second["out"] = await eng.handle_alert(dict(ALERT))
+        return await orig(req)
+
+    ad.place_bracket = racing
+    assert run(eng.handle_alert(dict(ALERT)))["ok"]
+    assert second["out"]["ok"] is False and "already" in second["out"]["reason"]
+    assert len(ad.brackets) == 2                    # one straddle, not two

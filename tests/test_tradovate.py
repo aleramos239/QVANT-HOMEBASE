@@ -9,6 +9,7 @@ The engine never heard of the entry, so the sell stop was never cancelled.
 from __future__ import annotations
 
 import asyncio
+import json
 
 from homebase.broker.base import OrderRequest
 from homebase.broker.tradovate import TradovateAdapter
@@ -48,9 +49,12 @@ def tradovate_like(endpoint, query, body):
         return {"id": 663695020149, "accountId": 66121477, "ordStatus": "Filled"}
     if endpoint == "position/list":
         return [{"accountId": 66121477, "contractId": 3267315, "netPos": 3}]
-    if endpoint == "order/placeoso":
-        return {"orderId": 663695020149}
+    if endpoint == "order/placeoso":                # the real reply shape
+        return {"orderId": 663695020149, "oso1Id": 663695020150,
+                "oso2Id": 663695020151}
     if endpoint == "order/cancelorder":
+        return {}
+    if endpoint == "order/modifyorder":
         return {}
     return None
 
@@ -66,6 +70,7 @@ def mkadapter(tmp_path, answer) -> TradovateAdapter:
     ad = TradovateAdapter("acct", env="demo", keyring_key="k", state_dir=tmp_path)
     ws = TradovateWS(token="t")
     ws.ws = FakeSocket(ws, answer)
+    ws.connected = True                         # as after the 'o' open frame
     ad._ws, ad._acct_num, ad._acct_name, ad._connected = ws, 66121477, "APEX", True
     return ad
 
@@ -172,3 +177,80 @@ def test_order_status_from_cache_then_lookup(tmp_path):
     assert run(ad.get_order_status("663695020149")) == "Filled"    # order/item
     assert ad._orders[663695020149]["ordStatus"] == "Filled"        # cached now
     assert run(ad.get_order_status("")) is None
+
+
+# --- re-pricing the brackets to the fill -------------------------------------
+def test_bracket_result_names_its_stop_and_target(tmp_path):
+    ad = mkadapter(tmp_path, tradovate_like)
+    r = run(ad.place_bracket(BUY_STOP))
+    assert (r.raw["sl_order_id"], r.raw["tp_order_id"]) == (663695020150, 663695020151)
+
+
+def test_modify_sends_type_and_the_orders_own_qty(tmp_path):
+    """Tradovate rejects a modify without orderType or orderQty; the qty
+    comes from the order's own pushed version, never a guess."""
+    ad = mkadapter(tmp_path, tradovate_like)
+    ad._order_versions[663695020150] = {"orderId": 663695020150, "orderQty": 3}
+    r = run(ad.modify_order("663695020150", "Stop", stop_price=30226.75, qty=9))
+    assert r.ok
+    endpoint, _, query, body = ad._ws.ws.sent[-1].split("\n", 3)
+    assert endpoint == "order/modifyorder" and query == ""
+    assert json.loads(body) == {"orderId": 663695020150, "orderType": "Stop",
+                                "orderQty": 3, "stopPrice": 30226.75}
+
+
+def test_modify_reports_a_logical_reject(tmp_path):
+    def rejects(endpoint, query, body):
+        if endpoint == "order/modifyorder":
+            return {"failureReason": "UnknownReason", "failureText": "Too late"}
+        return None
+    ad = mkadapter(tmp_path, rejects)
+    r = run(ad.modify_order("663695020150", "Stop", stop_price=1.0, qty=3))
+    assert not r.ok and "Too late" in r.error
+
+
+def test_engine_and_adapter_move_the_brackets_on_the_wire(tmp_path):
+    """Real engine + real adapter, fake wire. Today's 9:30 replayed: the buy
+    stop 30231.5 fills 1 tick worse at 30231.75 — on the wire the sell stop is
+    cancelled and the SL/TP are re-priced 5/15 points from the FILL."""
+    from homebase.engine import Engine
+    from tests.test_engine import Clock, mkcfg
+
+    ids = iter([(663695020149, 663695020150, 663695020151),
+                (663695020169, 663695020170, 663695020171)])
+
+    def wire(endpoint, query, body):
+        if endpoint == "order/placeoso":
+            o, s1, s2 = next(ids)
+            return {"orderId": o, "oso1Id": s1, "oso2Id": s2}
+        if endpoint in ("order/cancelorder", "order/modifyorder"):
+            return {}
+        return None                                 # lookups 404, as on 09-21
+
+    ad = mkadapter(tmp_path, wire)
+    cfg = mkcfg()
+    cfg.accounts = {"acct": cfg.accounts["main"]}
+    cfg.book = {"nq930": [{"account": "acct", "qty": 3}]}
+    eng = Engine(cfg, {"acct": ad}, now_fn=Clock(), root=tmp_path)
+
+    async def scenario():
+        await ad.observe_fills(eng.on_fill)
+        assert (await eng.handle_alert({"strategy": "nq930", "upper": 30231.5,
+                                        "lower": 30211.5}))["ok"]
+        ad._on_ws_event(fill_push(663695020149, "Buy", 3, 30231.75, 663695020156))
+        for _ in range(100):
+            if eng._state("nq930", "acct").brackets_moved:
+                break
+            await asyncio.sleep(0.01)
+        await asyncio.sleep(0.05)
+        await ad.close()
+
+    run(scenario())
+    sent = [(e, json.loads(b)) for e, _, _, b in
+            (f.split("\n", 3) for f in ad._ws.ws.sent)
+            if e in ("order/cancelorder", "order/modifyorder")]
+    assert ("order/cancelorder", {"orderId": 663695020169}) in sent
+    assert ("order/modifyorder", {"orderId": 663695020150, "orderType": "Stop",
+                                  "orderQty": 3, "stopPrice": 30226.75}) in sent
+    assert ("order/modifyorder", {"orderId": 663695020151, "orderType": "Limit",
+                                  "orderQty": 3, "price": 30246.75}) in sent

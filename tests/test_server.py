@@ -251,6 +251,26 @@ def test_strategy_live_detail_from_real_fills_only(client, tmp_path):
                       params={"strategy": "nope"}).status_code == 404
 
 
+def test_exit_slippage_measured_from_the_moved_brackets(client, tmp_path):
+    """SL/TP re-priced to the fill: the TP at 24525.25 filling at 24525.25 is
+    0 ticks of slippage — not '1 better' against the old trigger level."""
+    import json as _j
+    rows = [
+        {"et": "2026-09-22T09:30:00", "event": "placed", "strategy": "nq930",
+         "account": "main", "qty": 3},
+        {"et": "2026-09-22T09:30:01", "event": "entry_fill", "strategy": "nq930",
+         "account": "main", "side": "Buy", "fill": 24510.25, "anchor": 24510.0},
+        {"et": "2026-09-22T09:30:01", "event": "brackets_moved", "strategy": "nq930",
+         "account": "main", "fill": 24510.25, "sl": 24505.25, "tp": 24525.25,
+         "moved": True},
+        {"et": "2026-09-22T09:31:00", "event": "exit_fill", "strategy": "nq930",
+         "account": "main", "reason": "tp", "fill": 24525.25, "pnl": 900.0},
+    ]
+    (tmp_path / "journal.jsonl").write_text("".join(_j.dumps(r) + "\n" for r in rows))
+    t = client.get("/api/strategy-live", params={"strategy": "nq930"}).json()["trades"][0]
+    assert t["entry_slip_ticks"] == 1.0 and t["exit_slip_ticks"] == 0.0
+
+
 def test_kill_disarms_and_clears_every_account(client):
     client.post("/api/arm", json={"armed": True})
     r = client.post("/api/kill").json()

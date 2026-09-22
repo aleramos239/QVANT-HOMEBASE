@@ -190,6 +190,13 @@ class BrokerAdapter(abc.ABC):
         """Cancel a single resting order by its broker id. Default: unsupported."""
         return OrderResult(ok=False, error="cancel_order_by_id not supported")
 
+    async def modify_order(self, order_id: str, order_type: str, *,
+                           price: Optional[float] = None,
+                           stop_price: Optional[float] = None,
+                           qty: Optional[int] = None) -> OrderResult:
+        """Re-price one resting order in place. Default: unsupported."""
+        return OrderResult(ok=False, error="modify_order not supported")
+
     async def get_order_status(self, order_id: str) -> Optional[str]:
         """Broker status of one order ("Working", "Filled", ...); None if
         unknown. Default: unknown."""
