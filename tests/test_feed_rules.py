@@ -229,3 +229,25 @@ def test_feed_step_runs_the_rule_on_a_closed_bar(tmp_path, monkeypatch):
         # outside the window the feed is closed
         assert run(app.state.feed_step(dt.datetime(2026, 9, 22, 17, 0, tzinfo=ET))) == []
         assert app.state.feed_box["feed"] is None
+
+
+def test_watch_bars_clears_a_penalty_with_its_ticket():
+    """A rate-limit penalty is a state: plain requests stay refused until one
+    is resent WITH the p-ticket after p-time. watch_bars must do that dance."""
+    f = MarketFeed("k", "demo", token_provider=lambda: "t")
+    sent = []
+
+    class W:
+        connected = True
+
+        async def request(self, ep, body):
+            sent.append(body)
+            if body.get("p-ticket") == "TKT":
+                return {"mode": "RealTime", "historicalId": 9, "realtimeId": 9}
+            return {"p-ticket": "TKT", "p-time": 0, "p-message": "Rate limit exceeded"}
+
+    f._ws = W()
+    sym = run(f.watch_bars("NQ", 1, warmup=5))
+    assert sym.startswith("NQ")
+    assert len(sent) == 2 and sent[0].get("p-ticket") is None and sent[1]["p-ticket"] == "TKT"
+    assert f._watch[9] == ("NQ", 1)

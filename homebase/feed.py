@@ -64,6 +64,7 @@ class MarketFeed(TradovateMD):
     # ----------------------------------------------------------- subscribe
     async def watch_bars(self, root: str, minutes: int, warmup: int = 60) -> str:
         """History warm-up + live updates for one (root, minutes)."""
+        import asyncio
         key = (root, minutes)
         if key in self._watch.values():
             return self.resolve(root)
@@ -71,11 +72,19 @@ class MarketFeed(TradovateMD):
         self._warming.add(key)
         self._hist.setdefault(key, [])
         self._cur.setdefault(key, None)
-        d = await self._ws.request("md/getChart", {
+        body = {
             "symbol": sym,
             "chartDescription": {"underlyingType": "MinuteBar", "elementSize": minutes,
                                  "elementSizeUnit": "UnderlyingUnits", "withHistogram": False},
-            "timeRange": {"asMuchAsElements": warmup + 1}})
+            "timeRange": {"asMuchAsElements": warmup + 1}}
+        d = await self._ws.request("md/getChart", body)
+        if isinstance(d, dict) and d.get("p-ticket"):
+            # A rate-limit penalty is a STATE, not a timer: plain requests stay
+            # refused until one is resent WITH the ticket after p-time
+            # (verified live 2026-09-22 — a plain retry was still refused
+            # 90 minutes after the burst; the ticket resend cleared at once).
+            await asyncio.sleep(float(d.get("p-time") or 1) + 0.5)
+            d = await self._ws.request("md/getChart", {**body, "p-ticket": d["p-ticket"]})
         if not isinstance(d, dict) or d.get("realtimeId") is None:
             self._warming.discard(key)
             raise RuntimeError(f"getChart {sym} {minutes}m: no subscription in {d!r}")
