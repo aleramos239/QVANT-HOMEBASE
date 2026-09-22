@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.ramosquant.homebase-ticks</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__REPO__/.venv/bin/python</string>
+    <string>-m</string>
+    <string>homebase.ticks</string>
+  </array>
+  <key>WorkingDirectory</key><string>__REPO__</string>
+  <!-- after the 17:00 ET session close, plus an early catch-up in case the
+       machine was asleep (a missed calendar run fires on wake). Paced to the
+       feed's 180 requests/hour and hard-stopped at 08:00 ET by the script. -->
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict><key>Hour</key><integer>17</integer><key>Minute</key><integer>20</integer></dict>
+    <dict><key>Hour</key><integer>5</integer><key>Minute</key><integer>30</integer></dict>
+  </array>
+  <key>StandardOutPath</key><string>__REPO__/homebase/.state/ticks.log</string>
+  <key>StandardErrorPath</key><string>__REPO__/homebase/.state/ticks.log</string>
+</dict>
+</plist>

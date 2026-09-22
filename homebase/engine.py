@@ -80,6 +80,9 @@ class DayState:
     pnl: Optional[float] = None        # gross $, set at exit
     note: str = ""
     entry_qty: int = 0                 # entry contracts filled so far
+    sl_px: Optional[float] = None      # bars strategies: absolute stop / target
+    tp_px: Optional[float] = None
+    tp_rr: Optional[float] = None      # bars: TP re-derived from the fill at this RR
     up_sl_id: Optional[str] = None     # each leg's OSO stop / target order,
     up_tp_id: Optional[str] = None     # re-priced to the actual fill
     dn_sl_id: Optional[str] = None
@@ -164,6 +167,9 @@ class Engine:
         if cfg is None or not cfg.enabled:
             self.journal("alert_refused", strategy=name, reason="unknown_or_disabled")
             return {"ok": False, "reason": f"unknown or disabled strategy: {name!r}"}
+        if getattr(cfg, "kind", "straddle") != "straddle":
+            self.journal("alert_refused", strategy=name, reason="not_a_straddle")
+            return {"ok": False, "reason": f"{name} runs off the price feed, not alerts"}
 
         if self.day_status(name) != "idle":
             self.journal("alert_refused", strategy=name, reason="already_traded",
@@ -203,15 +209,17 @@ class Engine:
             return {"ok": False,
                     "reason": "no accounts assigned to this strategy in the book"}
 
-        if not self.cfg.armed:
+        if not self.cfg.armed or getattr(cfg, "shadow", False):
+            ev = "shadow_signal" if (self.cfg.armed and cfg.shadow) else "dry_run"
             for a in asg:
-                self.journal("dry_run", strategy=name, source=source,
+                self.journal(ev, strategy=name, source=source,
                              account=a["account"], qty=int(a["qty"]),
                              upper=upper, lower=lower,
                              would_place=[asdict(r) for r in
                                           self._legs(cfg, upper, lower, int(a["qty"]))])
             return {"ok": True, "armed": False,
-                    "note": "disarmed — journaled only", "accounts": len(asg)}
+                    "note": ("shadow — journaled only" if ev == "shadow_signal"
+                             else "disarmed — journaled only"), "accounts": len(asg)}
 
         t0 = time.time()
         # every account at once — none waits behind another's round trip
@@ -224,6 +232,103 @@ class Engine:
                    for a, o in zip(asg, outs)}
         ok = any(r.get("ok") for r in results.values())
         return {"ok": ok, "armed": True, "accounts": results}
+
+    async def handle_signal(self, name: str, sig, *, source: str = "feed") -> dict:
+        """A price-action rule's Signal -> ONE bracketed leg per assigned
+        account (entry Market or Stop, absolute SL/TP). Same guards as an
+        alert: enabled, one per day, the accept window, the book. Shadow or
+        disarmed -> journaled only."""
+        cfg = self.cfg.strategies.get(name)
+        if cfg is None or not cfg.enabled:
+            self.journal("signal_refused", strategy=name, reason="unknown_or_disabled")
+            return {"ok": False, "reason": f"unknown or disabled strategy: {name!r}"}
+        if self.day_status(name) != "idle":
+            self.journal("signal_refused", strategy=name, reason="already_traded",
+                         status=self.day_status(name), source=source)
+            return {"ok": False, "reason": f"already acted today ({self.day_status(name)})"}
+        now = self.now_et().time()
+        if not (_hhmm(cfg.accept_from_et) <= now <= _hhmm(cfg.accept_until_et)):
+            self.journal("signal_refused", strategy=name, reason="outside_window",
+                         at=str(now), source=source)
+            return {"ok": False, "reason": f"outside accept window at {now}"}
+        if sig.side not in ("Buy", "Sell") or not sig.sl_px or not sig.tp_px:
+            self.journal("signal_refused", strategy=name, reason="bad_signal",
+                         signal=asdict(sig))
+            return {"ok": False, "reason": "signal needs a side, a stop and a target"}
+        sign = 1 if sig.side == "Buy" else -1
+        ref = sig.ref_px if sig.ref_px is not None else sig.entry_price
+        if ref is not None and not (sign * (ref - sig.sl_px) > 0 and sign * (sig.tp_px - ref) > 0):
+            self.journal("signal_refused", strategy=name, reason="levels_wrong_side",
+                         signal=asdict(sig))
+            return {"ok": False, "reason": "stop/target on the wrong side of the entry"}
+        asg = assignments(self.cfg, name)
+        if not asg:
+            self.journal("signal_refused", strategy=name, reason="no_assignments",
+                         source=source)
+            return {"ok": False, "reason": "no accounts assigned to this strategy in the book"}
+        pv = point_value(cfg.symbol) or 0.0
+        if not self.cfg.armed or cfg.shadow:
+            ev = "shadow_signal" if (self.cfg.armed and cfg.shadow) else "dry_run"
+            for a in asg:
+                self.journal(ev, strategy=name, source=source, account=a["account"],
+                             qty=int(a["qty"]), side=sig.side, entry=sig.entry,
+                             entry_price=sig.entry_price, ref_px=ref,
+                             sl=sig.sl_px, tp=sig.tp_px,
+                             risk_usd=(round(abs(ref - sig.sl_px) * pv * int(a["qty"]), 2)
+                                       if ref is not None else None),
+                             **{f"rule_{k}": v for k, v in (sig.note or {}).items()})
+            return {"ok": True, "armed": False,
+                    "note": ("shadow — journaled only" if ev == "shadow_signal"
+                             else "disarmed — journaled only"), "accounts": len(asg)}
+        t0 = time.time()
+        outs = await asyncio.gather(
+            *(self._place_one(name, cfg, a["account"], int(a["qty"]), sig, source, t0)
+              for a in asg), return_exceptions=True)
+        results = {a["account"]: (o if isinstance(o, dict) else {"ok": False, "reason": str(o)})
+                   for a, o in zip(asg, outs)}
+        return {"ok": any(r.get("ok") for r in results.values()), "armed": True,
+                "accounts": results}
+
+    async def _place_one(self, name: str, cfg: StrategyCfg, account: str, qty: int,
+                         sig, source: str, t0: float) -> dict:
+        st = self._state(name, account)
+        ad = self.adapters.get(account)
+        if ad is None or not ad.connected:
+            st.status, st.exit_reason, st.note = "error", "error", "account not connected"
+            self._save()
+            self.journal("place_failed", strategy=name, account=account,
+                         error="account not connected")
+            return {"ok": False, "reason": "account not connected"}
+        st.qty, st.status = qty, "placing"
+        req = OrderRequest(symbol=cfg.symbol, side=sig.side, qty=qty,
+                           order_type=sig.entry, price=sig.entry_price,
+                           stop_price=sig.sl_px, tp_price=sig.tp_px, text="homebase:entry")
+        try:
+            r = await ad.place_bracket(req)
+        except Exception as e:  # noqa: BLE001 — a raise is a reject
+            r = OrderResult(ok=False, error=str(e))
+        if not r.ok:
+            st.status, st.exit_reason, st.note = "error", "error", f"entry: {r.error}"
+            self._save()
+            self.journal("place_failed", strategy=name, account=account, error=r.error)
+            await self._replay_early(account)
+            return {"ok": False, "reason": f"entry rejected: {r.error}"}
+        ref = sig.ref_px if sig.ref_px is not None else sig.entry_price
+        if sig.side == "Buy":
+            st.upper_id, st.upper_px = r.order_id, ref
+            st.up_sl_id, st.up_tp_id = _bracket_ids(r)
+        else:
+            st.lower_id, st.lower_px = r.order_id, ref
+            st.dn_sl_id, st.dn_tp_id = _bracket_ids(r)
+        st.sl_px, st.tp_px, st.tp_rr = sig.sl_px, sig.tp_px, sig.tp_rr
+        st.status = "placed"
+        self._save()
+        self.journal("placed", strategy=name, account=account, source=source, kind="bars",
+                     side=sig.side, entry=sig.entry, entry_price=sig.entry_price,
+                     ref_px=ref, sl=sig.sl_px, tp=sig.tp_px, qty=qty, order_id=r.order_id,
+                     place_ms=round((time.time() - t0) * 1000))
+        await self._replay_early(account)
+        return {"ok": True, "order_id": r.order_id}
 
     @staticmethod
     def _legs(cfg: StrategyCfg, upper: float, lower: float,
@@ -328,13 +433,14 @@ class Engine:
                 st.entry_anchor = st.upper_px if oid == st.upper_id else st.lower_px
                 st.entry_fill, st.entry_qty = ev.price, ev.qty
                 self._save()
-                jobs = [ad.cancel_order_by_id(sibling)]
+                jobs = [ad.cancel_order_by_id(sibling) if sibling
+                        else asyncio.sleep(0, result=OrderResult(ok=True))]
                 if st.entry_qty >= st.qty:          # whole entry in: SL/TP to the fill
                     jobs.append(self._move_brackets(st, cfg, ad))
                 r, *moved = await asyncio.gather(*jobs, return_exceptions=True)
                 if isinstance(r, Exception):
                     r = OrderResult(ok=False, error=str(r))
-                if r.ok:        # let the broker confirm before the backstop re-checks
+                if r.ok and sibling:   # let the broker confirm before the backstop re-checks
                     self._retry_at[f"sib:{st.strategy}@{st.account}"] = time.time()
                 self.journal("entry_fill", strategy=st.strategy, account=st.account,
                              side=st.entry_side, fill=ev.price, anchor=st.entry_anchor,
@@ -404,13 +510,29 @@ class Engine:
             return {"moved": False, "error": "no fill price"}
         sign = 1 if st.entry_side == "Buy" else -1
         tick = tick_size(cfg.symbol) or 0.25
+        sl_id, tp_id = ((st.up_sl_id, st.up_tp_id) if st.entry_side == "Buy"
+                        else (st.dn_sl_id, st.dn_tp_id))
+        if st.sl_px is not None:
+            # a rule's absolute stop stays; the target follows the fill at the
+            # rule's RR (a rule without tp_rr keeps its absolute target too)
+            if st.tp_rr is None:
+                return {"fill": round(st.entry_fill, 6), "sl": st.sl_px, "tp": st.tp_px,
+                        "moved": "not needed — absolute levels"}
+            tp = _to_tick(st.entry_fill + sign * st.tp_rr * abs(st.entry_fill - st.sl_px), tick)
+            out = {"fill": round(st.entry_fill, 6), "sl": st.sl_px, "tp": tp}
+            if abs(tp - (st.tp_px or 0)) < tick / 2:
+                return {**out, "moved": "not needed — target unchanged"}
+            if not tp_id:
+                return {**out, "moved": False, "error": "target order id unknown"}
+            st.tp_px = tp
+            self._save()
+            r = await ad.modify_order(tp_id, "Limit", price=tp, qty=st.qty)
+            return {**out, "moved": r.ok, **({"error": r.error} if not r.ok else {})}
         sl = _to_tick(st.entry_fill - sign * cfg.sl_pts, tick)
         tp = _to_tick(st.entry_fill + sign * cfg.tp_pts, tick)
         out = {"fill": round(st.entry_fill, 6), "sl": sl, "tp": tp}
         if st.entry_anchor is not None and abs(st.entry_fill - st.entry_anchor) < tick / 2:
             return {**out, "moved": "not needed — filled at the trigger"}
-        sl_id, tp_id = ((st.up_sl_id, st.up_tp_id) if st.entry_side == "Buy"
-                        else (st.dn_sl_id, st.dn_tp_id))
         if not (sl_id and tp_id):
             return {**out, "moved": False, "error": "bracket order ids unknown"}
         res = await asyncio.gather(
@@ -432,7 +554,11 @@ class Engine:
 
     def _grade_exit(self, st: DayState, px: Optional[float]) -> str:
         cfg = self.cfg.strategies[st.strategy]
-        if px is None or st.entry_anchor is None:
+        if px is None:
+            return "exit"
+        if st.sl_px is not None and st.tp_px is not None:
+            return "tp" if abs(px - st.tp_px) <= abs(px - st.sl_px) else "sl"
+        if st.entry_anchor is None:
             return "exit"
         sign = 1 if st.entry_side == "Buy" else -1
         tp = st.entry_anchor + sign * cfg.tp_pts

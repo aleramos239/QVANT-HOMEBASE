@@ -6,7 +6,7 @@
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 AGENTS="$HOME/Library/LaunchAgents"
-LABELS=(com.ramosquant.homebase com.ramosquant.homebase-tunnel com.ramosquant.homebase-awake)
+LABELS=(com.ramosquant.homebase com.ramosquant.homebase-tunnel com.ramosquant.homebase-awake com.ramosquant.homebase-ticks)
 
 if [ "${1:-}" = "remove" ]; then
   for l in "${LABELS[@]}"; do
@@ -24,7 +24,7 @@ fi
 mkdir -p "$AGENTS" "$REPO/homebase/.state"
 chmod +x "$REPO/deploy/tunnel-run.sh"
 
-for l in com.ramosquant.homebase com.ramosquant.homebase-tunnel; do
+for l in com.ramosquant.homebase com.ramosquant.homebase-tunnel com.ramosquant.homebase-ticks; do
   sed "s|__REPO__|$REPO|g" "$REPO/deploy/$l.plist.template" > "$AGENTS/$l.plist"
 done
 

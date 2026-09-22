@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import datetime as dt
 import hmac
 import json
 import os
@@ -35,7 +36,9 @@ from . import secrets_store
 from .broker.base import BrokerAdapter, OrderRequest
 from .broker.tradovate import TradovateAdapter
 from .engine import Engine
+from .feed import MarketFeed
 from .marketdata import TradovateMD
+from .rules import RULES
 from .metrics import live_metrics, strategy_live_detail
 from .paths import state_dir
 from .timer import SelfTimer
@@ -46,6 +49,9 @@ RECONNECT_INTERVAL_S = 5   # cheap now: reconnects reuse the token
 EQUITY_INTERVAL_S = 60
 JOURNAL_TAIL = 60
 READINESS_FROM = (9, 25)
+FEED_FROM = (8, 55)        # the price feed runs through the RTH day, weekdays
+FEED_UNTIL = (16, 10)
+FEED_RETRY_S = 30
 
 
 def _equity_path() -> Path:
@@ -85,8 +91,15 @@ def daily_pnl(account: str, month: str) -> dict:
     return {"days": days, "total": round(total, 2)}
 
 
+def feed_window(now_et) -> bool:
+    if now_et.weekday() >= 5:
+        return False
+    import datetime as dt
+    return dt.time(*FEED_FROM) <= now_et.time() <= dt.time(*FEED_UNTIL)
+
+
 def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
-                      acct_status: dict) -> dict:
+                      acct_status: dict, feed_status: dict | None = None) -> dict:
     """Every check the desk needs before the open, across ALL strategies
     and ALL accounts. levels: ok | info | warn | bad; ready = no bad."""
     import datetime as dt
@@ -109,10 +122,20 @@ def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
             checks.append({"level": "warn", "label": name,
                            "detail": "enabled but no accounts assigned"})
     weekday = now_et.weekday() < 5
+    bars = [n for n, s in enabled.items() if getattr(s, "kind", "straddle") == "bars"]
+    if bars and weekday and feed_window(now_et):
+        up = bool((feed_status or {}).get("connected"))
+        checks.append({"level": "ok" if up else "bad", "label": "Price feed",
+                       "detail": ("live bars flowing" if up else
+                                  "down — " + ", ".join(bars) + " cannot see price")})
     for name, s in enabled.items():
         status = engine.day_status(name)
         h, m = s.accept_until_et.split(":")
         after_window = now_et.time() > dt.time(int(h), int(m))
+        if getattr(s, "kind", "straddle") == "bars":
+            if status != "idle":
+                checks.append({"level": "ok", "label": name, "detail": status})
+            continue                     # a rule with no setup today is normal
         if weekday and after_window and status == "idle":
             if s.gated:
                 checks.append({"level": "warn", "label": name,
@@ -176,10 +199,15 @@ def build_adapter(account_id: str, a: config_mod.AccountCfg) -> BrokerAdapter:
                             account_selector=sel)
 
 
+def build_feed(cfg: config_mod.AppCfg, adapters: dict) -> MarketFeed:
+    key, env, provider = md_source(cfg, adapters)
+    return MarketFeed(key, env, token_provider=provider)
+
+
 def create_app(cfg: config_mod.AppCfg | None = None,
                adapters: dict[str, BrokerAdapter] | None = None,
                *, background: bool = True,
-               adapter_factory=build_adapter) -> FastAPI:
+               adapter_factory=build_adapter, feed_factory=build_feed) -> FastAPI:
     cfg = cfg or config_mod.load()
     adapters: dict[str, BrokerAdapter] = adapters if adapters is not None else {}
     engine = Engine(cfg, adapters)
@@ -190,6 +218,82 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         return TradovateMD(key, env, token_provider=provider)
 
     timer = SelfTimer(cfg, engine, md_factory=_md_factory)
+    feed_box: dict = {"feed": None, "retry_at": 0.0, "error": None}
+
+    def _bars_strategies() -> dict[str, config_mod.StrategyCfg]:
+        return {n: s for n, s in cfg.strategies.items()
+                if s.enabled and getattr(s, "kind", "straddle") == "bars"}
+
+    async def _feed_close(reason: str) -> None:
+        f = feed_box["feed"]
+        feed_box["feed"] = None
+        if f is not None:
+            with contextlib.suppress(Exception):
+                await f.close()
+            engine.journal("feed_stopped", reason=reason)
+
+    async def feed_step(now_et=None) -> list[dict]:
+        """One step of the price feed: keep it up (only) while a bars
+        strategy is enabled and the market window is open; drain closed
+        bars into the rules; hand signals to the engine. Returns what the
+        rules produced (for tests / the log)."""
+        import time as _t
+        now_et = now_et or engine.now_et()
+        strategies = _bars_strategies()
+        if not strategies or not feed_window(now_et):
+            if feed_box["feed"] is not None:
+                await _feed_close("window closed" if strategies else "no bars strategy enabled")
+            return []
+        f = feed_box["feed"]
+        if f is None or not f.connected:
+            if _t.time() < feed_box["retry_at"]:
+                return []
+            try:
+                if f is not None:
+                    with contextlib.suppress(Exception):
+                        await f.close()
+                f = feed_box["feed"] = feed_factory(cfg, adapters)
+                await f.connect()
+                for s in strategies.values():
+                    await f.watch_bars(s.symbol, int(s.bar_minutes), int(s.warmup_bars))
+                feed_box["error"] = None
+                engine.journal("feed_started", watching=list(f.status()["watching"]))
+            except Exception as e:  # noqa: BLE001 — retry, never die
+                feed_box["error"] = str(e)[:200]
+                feed_box["retry_at"] = _t.time() + FEED_RETRY_S
+                engine.journal("feed_error", error=str(e)[:200])
+                return []
+        for s in strategies.values():           # a strategy enabled after start
+            if (s.symbol, int(s.bar_minutes)) not in f.watching():
+                try:
+                    await f.watch_bars(s.symbol, int(s.bar_minutes), int(s.warmup_bars))
+                except Exception as e:  # noqa: BLE001
+                    engine.journal("feed_error", error=str(e)[:200])
+        out = []
+        for root, minutes, bar in f.tick(now_et.astimezone(dt.timezone.utc)):
+            for name, s in strategies.items():
+                if s.symbol != root or int(s.bar_minutes) != minutes:
+                    continue
+                rule = RULES.get(s.rule)
+                if rule is None:
+                    engine.journal("feed_error", strategy=name, error=f"unknown rule {s.rule!r}")
+                    continue
+                try:
+                    sig = rule(f.bars(root, minutes), now_et, s)
+                except Exception as e:  # noqa: BLE001 — a rule bug is journaled, not fatal
+                    engine.journal("rule_error", strategy=name, error=str(e)[:200])
+                    continue
+                if sig is None:
+                    continue
+                res = await engine.handle_signal(name, sig, source="feed")
+                out.append({"strategy": name, "signal": sig, "result": res})
+        return out
+
+    def feed_status() -> dict:
+        f = feed_box["feed"]
+        st = f.status() if f is not None else {"connected": False, "watching": {}}
+        return {**st, "error": feed_box["error"],
+                "window": feed_window(engine.now_et())}
 
     async def _connect_account(aid: str, force_login: bool = False) -> str:
         """(Re)connect one account. Prefers an in-place reconnect on the token
@@ -261,6 +365,14 @@ def create_app(cfg: config_mod.AppCfg | None = None,
 
     readiness_fired = {"date": None}
 
+    async def _feed_loop():
+        while True:
+            try:
+                await feed_step()
+            except Exception as e:  # noqa: BLE001 — the feed loop must never die
+                engine.journal("feed_loop_error", error=str(e)[:200])
+            await asyncio.sleep(1.0)
+
     async def _clock_loop():
         while True:
             try:
@@ -268,7 +380,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                 now = engine.now_et()
                 if should_fire_readiness(now, readiness_fired["date"]):
                     readiness_fired["date"] = now.date().isoformat()
-                    r = compute_readiness(now, cfg, engine, acct_status)
+                    r = compute_readiness(now, cfg, engine, acct_status, feed_status())
                     engine.journal(
                         "morning_readiness", ready=r["ready"],
                         problems=[c["label"] + ": " + c["detail"]
@@ -290,12 +402,14 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                      asyncio.create_task(_broker_loop()),
                      asyncio.create_task(_equity_loop()),
                      asyncio.create_task(timer.loop()),
+                     asyncio.create_task(_feed_loop()),
                      asyncio.create_task(hook_server.serve())]
         try:
             yield
         finally:
             for t in tasks:
                 t.cancel()
+            await _feed_close("shutdown")
             for ad in adapters.values():
                 with contextlib.suppress(Exception):
                     await ad.close()
@@ -304,6 +418,8 @@ def create_app(cfg: config_mod.AppCfg | None = None,
     app.state.engine = engine
     app.state.cfg = cfg
     app.state.adapters = adapters
+    app.state.feed_step = feed_step
+    app.state.feed_box = feed_box
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
     # ------------------------------------------------------------ webhook
@@ -353,8 +469,9 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             "armed": cfg.armed,
             "et_now": engine.now_et().isoformat(timespec="seconds"),
             "readiness": compute_readiness(engine.now_et(), cfg, engine,
-                                           acct_status),
+                                           acct_status, feed_status()),
             "timer": timer.status(),
+            "feed": feed_status(),
             "accounts": accounts,
             "book": cfg.book,
             "strategies": {
@@ -364,7 +481,11 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                             "tp_pts": s.tp_pts, "cancel_et": s.cancel_et,
                             "flat_et": s.flat_et, "enabled": s.enabled,
                             "gated": s.gated, "self_fire": s.self_fire,
-                            "pine_file": getattr(s, "pine_file", "")},
+                            "pine_file": getattr(s, "pine_file", ""),
+                            "kind": getattr(s, "kind", "straddle"),
+                            "shadow": getattr(s, "shadow", False),
+                            "rule": getattr(s, "rule", ""),
+                            "bar_minutes": getattr(s, "bar_minutes", 1)},
                     "research": s.metrics,
                     "live": live.get(name),
                     "day_status": engine.day_status(name),

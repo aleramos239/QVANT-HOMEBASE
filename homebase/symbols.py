@@ -85,6 +85,12 @@ def resolve_contract(symbol: str) -> str:
 
 
 QUARTERLY = (3, 6, 9, 12)
+# Metals trade a different cycle and roll ahead of first notice (the last
+# business day before the contract month), not on a 3rd Friday. The active
+# months by volume (verified 2026-09-22: GCZ6 124k vs GCV6 4k; SIZ6 33k):
+METALS = {"GC": (2, 4, 6, 8, 12), "MGC": (2, 4, 6, 8, 12),
+          "SI": (3, 5, 7, 9, 12), "SIL": (3, 5, 7, 9, 12)}
+METALS_ROLL_DAY = 24               # of the month BEFORE the contract month
 
 
 def _third_friday(year: int, month: int):
@@ -94,17 +100,24 @@ def _third_friday(year: int, month: int):
 
 
 def front_month(root: str, today=None) -> str:
-    """Front quarterly contract for an index root, e.g. front_month("NQ") ->
-    "NQZ6". Rolls one week before the 3rd-Friday expiry (the volume roll),
-    so we never subscribe a dying contract."""
+    """Front contract for a root, e.g. front_month("NQ") -> "NQZ6".
+    Index roots: quarterlies, rolled one week before the 3rd-Friday expiry
+    (the volume roll). Metals: their own cycle, rolled on the 24th of the
+    month before the contract month. Never a dying contract."""
     from datetime import date, timedelta
     today = today or date.today()
     year = today.year
-    for _ in range(3):                 # scan up to ~15 months of quarterlies
-        for m in QUARTERLY:
+    cycle = METALS.get(root.upper(), QUARTERLY)
+    for _ in range(3):                 # scan up to ~15 months ahead
+        for m in cycle:
             if (year, m) < (today.year, today.month):
                 continue
-            if today < _third_friday(year, m) - timedelta(days=7):
+            if root.upper() in METALS:
+                py, pm = (year, m - 1) if m > 1 else (year - 1, 12)
+                still_front = today < date(py, pm, METALS_ROLL_DAY)
+            else:
+                still_front = today < _third_friday(year, m) - timedelta(days=7)
+            if still_front:
                 return f"{root}{MONTH_TO_CODE[m]}{year % 10}"
         year += 1
     raise ValueError(f"no front month found for {root!r}")

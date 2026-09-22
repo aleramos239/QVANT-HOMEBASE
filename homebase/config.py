@@ -33,6 +33,13 @@ class StrategyCfg:
                                  # False: a Pine alert feeds /hook
     pine_file: str = ""          # committed Pine source (homebase/research/)
     metrics: dict = field(default_factory=dict)   # research record, display-only
+    kind: str = "straddle"       # "straddle": two stop legs at the anchor (timer/Pine)
+                                 # "bars": a price-action RULE on closed bars (feed)
+    shadow: bool = False         # True: signals are journaled, never placed —
+                                 # even when the app is armed (forward paper)
+    rule: str = ""               # bars: name in rules.RULES
+    bar_minutes: int = 1         # bars: the rule's timeframe
+    warmup_bars: int = 60        # bars: history loaded before the rule runs
 
 
 @dataclass
@@ -83,6 +90,22 @@ def _defaults() -> AppCfg:
                              "maxDD": "−$316", "green months": "19/21"},
                     "caveat": "modeled friction is already 56% of the $25 risk — thin book",
                     "equity_file": "ym930_equity.json",
+                }),
+            # 10am NQ continuation — a CANDIDATE (spec 2026-09-06, unvalidated).
+            # The first price-action strategy on the app's own feed: runs in
+            # SHADOW (journals what it would do, places nothing) so the path is
+            # proven and forward evidence accrues. Arming it is a user decision.
+            "nq10am": StrategyCfg(
+                symbol="NQ", qty=1, offset_pts=0.0, sl_pts=0.0, tp_pts=0.0,
+                accept_from_et="09:59", accept_until_et="10:05",
+                enabled=True, shadow=True, self_fire=True, kind="bars",
+                rule="nq_10am_continuation", bar_minutes=1, warmup_bars=60,
+                metrics={
+                    "source": "candidate · 2023-07-07→2025-07-07 · 1m · $300 risk · UNVALIDATED",
+                    "rows": {"trades": "264", "TP rate": "59.5%", "RR": "1:0.81",
+                             "t": "2.76 (uncorrected)", "net": "+$10,574",
+                             "maxDD": "−$1,447", "days green": "63.6%"},
+                    "caveat": "post-hoc filter, ~130 cells on one window — shadow only",
                 }),
         },
     )

@@ -602,7 +602,7 @@ function stratCard(name, s) {
     research += `<button class="btn btn-outline btn-sm" onclick="openRes('${name}')">Backtest metrics</button>`;
   }
   research += `<button class="btn btn-outline btn-sm" onclick="openLive('${name}')">Live calendar</button>`;
-  research += `<button class="btn btn-outline btn-sm" onclick="openPine('${name}')">Pine script</button>`;
+  if (c.pine_file) research += `<button class="btn btn-outline btn-sm" onclick="openPine('${name}')">Pine script</button>`;
   research += `</div>`;
   // live strip (earned from the journal, real fills only)
   const lv = s.live;
@@ -627,13 +627,19 @@ function stratCard(name, s) {
     : `<div class="mcap">add an account to run this strategy</div>`;
   const book = `<div class="slabel2">ACCOUNTS</div>${rows || ""}${addForm}`;
 
-  const exec = c.self_fire
+  const exec = (c.kind === "bars"
+    ? `<span class="pill" title="A price-action rule on the app's own live bars">APP · bars</span>`
+    : c.self_fire
     ? `<span class="pill" title="The app computes and fires this signal itself">APP</span>`
-    : `<span class="pill idle" title="A TradingView Pine alert feeds this strategy">PINE</span>`;
+    : `<span class="pill idle" title="A TradingView Pine alert feeds this strategy">PINE</span>`)
+    + (c.shadow ? `<span class="pill idle" title="Signals are journaled only — nothing is placed, even when armed">SHADOW</span>` : "");
+  const spec = c.kind === "bars"
+    ? `${c.symbol} · ${c.bar_minutes}m bars · ${c.rule}`
+    : `${c.symbol} · ±${c.offset_pts} off · SL ${c.sl_pts} / TP ${c.tp_pts}`;
   return `<div class="card strat">
     <div class="card-header">
       <span class="card-title">${name.toUpperCase()}</span>
-      <span class="spec">${c.symbol} · ±${c.offset_pts} off · SL ${c.sl_pts} / TP ${c.tp_pts}</span>
+      <span class="spec">${spec}</span>
       <span class="right">${exec}${pill}${onoff}</span>
     </div>
     <div class="card-content">${research}${live}${book}</div>

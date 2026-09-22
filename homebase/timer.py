@@ -81,8 +81,9 @@ class SelfTimer:
         t = now.time()
         fires = []
         for name, s in self.cfg.strategies.items():
-            if not (s.enabled and getattr(s, "self_fire", False)):
-                continue
+            if not (s.enabled and getattr(s, "self_fire", False)
+                    and getattr(s, "kind", "straddle") == "straddle"):
+                continue                     # bars strategies run off the feed
             st = day.setdefault(name, {"stage": "idle", "gate": None,
                                        "adx": None, "anchor": None})
             try:
