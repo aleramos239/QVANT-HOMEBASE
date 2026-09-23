@@ -251,3 +251,23 @@ def test_session_fetch_survives_a_dead_socket(monkeypatch):
 
     got, stats = run(T.fetch_session(conn, "NQZ6", start, end, page_fn=pager))
     assert len(got) == 30 and conn.reconnects == 1 and len(built) == 1
+
+
+def test_partial_capture_never_replaces_a_full_backfill_file(tmp_path, monkeypatch):
+    NoWait(monkeypatch)
+    end = dt.datetime(2026, 9, 22, 17, 0, tzinfo=ET)
+    e = int(end.timestamp() * 1000)
+    rows = [{"ts_ms": e - i * 60_000, "price": 1.0, "size": 1, "bid": 0.75, "ask": 1.0,
+             "bid_size": 1, "ask_size": 1, "id": i} for i in range(12)]   # last 12 min only
+    rows.sort(key=lambda r: r["ts_ms"])
+
+    async def pager(ws, contract, before_ms, n=T.PAGE, timeout_s=0, ticket=None):
+        return await _fake_pager(rows, page=50)(ws, contract, before_ms)
+
+    monkeypatch.setattr(T, "fetch_page", pager)
+    p = T.archive_path("NQ", dt.date(2026, 9, 22), "NQZ6", tmp_path)
+    p.parent.mkdir(parents=True)
+    p.write_bytes(b"massive-full-session")
+    p.with_suffix("").with_suffix(".json").write_text(json.dumps({"source": "massive"}))
+    out = run(T.record(roots=("NQ",), dates=[dt.date(2026, 9, 22)], base=tmp_path, ws=object()))
+    assert out == [] and p.read_bytes() == b"massive-full-session"

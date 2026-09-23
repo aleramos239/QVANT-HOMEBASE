@@ -360,6 +360,12 @@ async def record(roots=ROOTS, dates: list[dt.date] | None = None,
             if not rows:
                 log(f"{root} {date} {contract}: no ticks served (buffer gone or holiday) — skipped")
                 continue
+            if path.exists() and not stats.get("complete"):
+                # a Massive file is the whole session; our partial capture
+                # would only shorten it (a late run last night did exactly that)
+                log(f"{root} {date} {contract}: only a PARTIAL capture and a full "
+                    "backfill file is on disk — keeping the backfill")
+                continue
             m = write_session(rows, path, root=root, contract=contract, date=date,
                               start=start, end=end, stats=stats)
             done.append(m)
