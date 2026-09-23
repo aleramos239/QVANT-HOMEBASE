@@ -91,6 +91,31 @@ def daily_pnl(account: str, month: str) -> dict:
     return {"days": days, "total": round(total, 2)}
 
 
+_POWER_CACHE: dict = {"ts": 0.0, "out": None}
+
+
+def power_status() -> dict | None:
+    """{'ac': bool, 'pct': int|None, 'discharging': bool} from pmset, cached
+    60 s so /api/status never waits on a subprocess. None off-macOS."""
+    import re
+    import subprocess
+    import time as _t
+    if _t.time() - _POWER_CACHE["ts"] < 60:
+        return _POWER_CACHE["out"]
+    try:
+        txt = subprocess.run(["pmset", "-g", "batt"], capture_output=True,
+                             text=True, timeout=3).stdout
+    except Exception:  # noqa: BLE001 — not macOS / pmset missing
+        txt = ""
+    out = None
+    if txt:
+        m = re.search(r"(\d+)%", txt)
+        out = {"ac": "AC Power" in txt, "pct": int(m.group(1)) if m else None,
+               "discharging": "discharging" in txt}
+    _POWER_CACHE.update(ts=_t.time(), out=out)
+    return out
+
+
 def feed_window(now_et) -> bool:
     if now_et.weekday() >= 5:
         return False
@@ -99,7 +124,9 @@ def feed_window(now_et) -> bool:
 
 
 def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
-                      acct_status: dict, feed_status: dict | None = None) -> dict:
+                      acct_status: dict, feed_status: dict | None = None,
+                      timer_status: dict | None = None,
+                      power: dict | None = None) -> dict:
     """Every check the desk needs before the open, across ALL strategies
     and ALL accounts. levels: ok | info | warn | bad; ready = no bad."""
     import datetime as dt
@@ -116,18 +143,65 @@ def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
     checks.append({"level": "ok" if cfg.webhook_secret else "bad",
                    "label": "Webhook secret",
                    "detail": "set" if cfg.webhook_secret else "missing"})
+    if power is not None:
+        if power.get("discharging") and (power.get("pct") or 100) < 25:
+            checks.append({"level": "bad", "label": "Power",
+                           "detail": f"battery {power.get('pct')}% and unplugged — "
+                                     "the laptop will die"})
+        elif power.get("discharging"):
+            checks.append({"level": "warn", "label": "Power",
+                           "detail": f"on battery ({power.get('pct')}%) — plug in"})
+        else:
+            checks.append({"level": "ok", "label": "Power", "detail": "on power"})
     enabled = {n: s for n, s in cfg.strategies.items() if s.enabled}
     for name, s in enabled.items():
         if not config_mod.assignments(cfg, name):
             checks.append({"level": "warn", "label": name,
                            "detail": "enabled but no accounts assigned"})
     weekday = now_et.weekday() < 5
+    live_strats = [n for n, s in enabled.items()
+                   if not getattr(s, "shadow", False)
+                   and config_mod.assignments(cfg, n)]
+    if timer_status is not None and weekday \
+            and dt.time(9, 21) <= now_et.time() < dt.time(9, 30):
+        # by 9:21 every enabled self-fire straddle must have gated (ungated
+        # ones gate instantly at 9:20) — idle here means the 9:30 fire is
+        # NOT coming; error carries the reason (e.g. no market data)
+        tstat = timer_status.get("strategies") or {}
+        for name, sc in enabled.items():
+            if getattr(sc, "kind", "straddle") != "straddle" \
+                    or not getattr(sc, "self_fire", False):
+                continue
+            stage = (tstat.get(name) or {}).get("stage")
+            if stage in (None, "idle"):
+                checks.append({"level": "bad", "label": name,
+                               "detail": "timer has not gated — the 9:30 fire "
+                                         "is not armed"})
+            elif stage == "error":
+                checks.append({"level": "bad", "label": name,
+                               "detail": "timer error: " +
+                                         str((tstat.get(name) or {}).get("error"))[:80]})
     bars = [n for n, s in enabled.items() if getattr(s, "kind", "straddle") == "bars"]
     if bars and weekday and feed_window(now_et):
         up = bool((feed_status or {}).get("connected"))
-        checks.append({"level": "ok" if up else "bad", "label": "Price feed",
-                       "detail": ("live bars flowing" if up else
-                                  "down — " + ", ".join(bars) + " cannot see price")})
+        if up:
+            import datetime as _dt
+            closes = [w.get("last_close") for w in
+                      ((feed_status or {}).get("watching") or {}).values()]
+            closes = [c for c in closes if c]
+            age = None
+            if closes:
+                newest = max(_dt.datetime.fromisoformat(c) for c in closes)
+                age = (now_et.astimezone(_dt.timezone.utc) - newest).total_seconds()
+            if age is not None and age > 240:
+                checks.append({"level": "bad", "label": "Price feed",
+                               "detail": f"stale — last bar closed {age / 60:.0f} min ago"})
+            else:
+                checks.append({"level": "ok", "label": "Price feed",
+                               "detail": "live bars flowing"})
+        else:
+            checks.append({"level": "bad", "label": "Price feed",
+                           "detail": "down — " + ", ".join(bars) + " cannot see price"})
     for name, s in enabled.items():
         status = engine.day_status(name)
         h, m = s.accept_until_et.split(":")
@@ -147,9 +221,17 @@ def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
                                          "trades every day"})
         elif status != "idle":
             checks.append({"level": "ok", "label": name, "detail": status})
-    checks.append({"level": "info", "label": "Mode",
-                   "detail": "ARMED — signals place real orders" if cfg.armed
-                   else "shadow — signals journal only"})
+    if cfg.armed:
+        checks.append({"level": "info", "label": "Mode",
+                       "detail": "ARMED — signals place real orders"})
+    else:
+        # disarmed with a live book on a weekday = the algo will NOT trade
+        checks.append({"level": "warn" if (weekday and live_strats) else "info",
+                       "label": "Mode",
+                       "detail": ("DISARMED — " + ", ".join(live_strats) +
+                                  " will journal only, no orders")
+                       if (weekday and live_strats)
+                       else "shadow — signals journal only"})
     return {"ready": not any(c["level"] == "bad" for c in checks),
             "checks": checks}
 
@@ -383,7 +465,8 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                 now = engine.now_et()
                 if should_fire_readiness(now, readiness_fired["date"]):
                     readiness_fired["date"] = now.date().isoformat()
-                    r = compute_readiness(now, cfg, engine, acct_status, feed_status())
+                    r = compute_readiness(now, cfg, engine, acct_status,
+                                          feed_status(), timer.status(), power_status())
                     engine.journal(
                         "morning_readiness", ready=r["ready"],
                         problems=[c["label"] + ": " + c["detail"]
@@ -472,7 +555,8 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             "armed": cfg.armed,
             "et_now": engine.now_et().isoformat(timespec="seconds"),
             "readiness": compute_readiness(engine.now_et(), cfg, engine,
-                                           acct_status, feed_status()),
+                                           acct_status, feed_status(),
+                                           timer.status(), power_status()),
             "timer": timer.status(),
             "feed": feed_status(),
             "accounts": accounts,

@@ -131,6 +131,21 @@
     max-width:80%; font-family:var(--font-mono); box-shadow:0 4px 24px rgb(0 0 0 / .18); }
 
   /* connect modal */
+  .bulb{ width:13px; height:13px; border-radius:50%; display:inline-block;
+    cursor:pointer; background:var(--muted-foreground); opacity:.5;
+    vertical-align:middle; flex:none; }
+  .bulb.ok{ background:#22c55e; opacity:1; box-shadow:0 0 7px rgb(34 197 94 / .8); }
+  .bulb.warn{ background:#f59e0b; opacity:1; box-shadow:0 0 7px rgb(245 158 11 / .8); }
+  .bulb.bad{ background:#ef4444; opacity:1; box-shadow:0 0 8px rgb(239 68 68 / .9);
+    animation:bulbpulse 1.2s ease-in-out infinite; }
+  @keyframes bulbpulse{ 50%{ opacity:.45; } }
+  .chk{ display:flex; gap:10px; align-items:baseline; padding:7px 2px;
+    border-bottom:1px solid var(--border); font-size:13.5px; }
+  .chk:last-child{ border-bottom:none; }
+  .chk .dot{ width:9px; height:9px; border-radius:50%; flex:none;
+    align-self:center; }
+  .chk .lbl{ font-weight:600; min-width:150px; }
+  .chk .det{ color:var(--muted-foreground); }
   .overlay{ position:fixed; inset:0; background:rgb(0 0 0 / .45); display:none;
     align-items:center; justify-content:center; z-index:50; }
   .overlay.open{ display:flex; }
@@ -310,6 +325,7 @@
       <span class="pill idle" style="margin-left:2px">Ramos Quant</span>
       <span class="spacer"></span>
       <span class="clock" id="clock">—</span>
+      <span class="bulb" id="bulb" onclick="openChecks()" title="connecting…"></span>
       <span id="statusPill" class="pill idle">connecting…</span>
       <button class="btn btn-default btn-sm" id="armBtn" style="display:none">Arm</button>
       <button class="btn btn-outline btn-sm" id="disarmBtn" style="display:none">Disarm</button>
@@ -500,6 +516,20 @@
   </div>
 </div>
 
+<div class="overlay" id="checksOverlay">
+  <div class="modal" style="width:560px">
+    <div class="cal-head">
+      <span class="bulb" id="bulbBig" style="cursor:default"></span>
+      <span style="font-weight:600" id="checksTitle">System checks</span>
+      <span class="spacer" style="flex:1"></span>
+      <button class="cal-nav" onclick="closeChecks()" title="Close">&times;</button>
+    </div>
+    <div id="checksList" style="margin-top:6px"></div>
+    <p class="mcap" style="margin:10px 0 0">Green = ready to trade. Amber = attention,
+      not blocking. Red = the algo cannot run right — fix before the open.</p>
+  </div>
+</div>
+
 <div class="overlay" id="pineOverlay">
   <div class="modal" style="width:680px">
     <div class="cal-head">
@@ -580,6 +610,40 @@ function cfDone(v) {
 }
 $("#confirmOverlay").addEventListener("click", (e) => {
   if (e.target === e.currentTarget) cfDone(false);
+});
+
+/* ---- the bulb ---- */
+const CHK_COLOR = {ok: "#22c55e", info: "#94a3b8", warn: "#f59e0b", bad: "#ef4444"};
+function bulbLevel(r) {
+  if (!r) return null;
+  if (r.checks.some(c => c.level === "bad")) return "bad";
+  if (r.checks.some(c => c.level === "warn")) return "warn";
+  return "ok";
+}
+function renderBulb(r) {
+  const b = $("#bulb");
+  const lvl = bulbLevel(r);
+  b.className = "bulb" + (lvl ? " " + lvl : "");
+  const probs = r ? r.checks.filter(c => c.level === "bad" || c.level === "warn") : [];
+  b.title = !lvl ? "connecting…" : lvl === "ok" ? "All good — ready to trade"
+    : probs.map(c => c.label + ": " + c.detail).join("\n");
+  if ($("#checksOverlay").classList.contains("open")) renderChecks();
+}
+function renderChecks() {
+  const r = ST && ST.readiness;
+  if (!r) return;
+  const lvl = bulbLevel(r);
+  $("#bulbBig").className = "bulb" + (lvl ? " " + lvl : "");
+  $("#checksTitle").textContent = lvl === "ok" ? "All good — ready to trade"
+    : lvl === "warn" ? "Attention" : "Not ready";
+  $("#checksList").innerHTML = r.checks.map(c => `
+    <div class="chk"><span class="dot" style="background:${CHK_COLOR[c.level] || "#94a3b8"}"></span>
+      <span class="lbl">${c.label}</span><span class="det">${c.detail}</span></div>`).join("");
+}
+function openChecks() { renderChecks(); $("#checksOverlay").classList.add("open"); }
+function closeChecks() { $("#checksOverlay").classList.remove("open"); }
+$("#checksOverlay").addEventListener("click", (e) => {
+  if (e.target === e.currentTarget) closeChecks();
 });
 
 /* ---- render ---- */
@@ -663,6 +727,7 @@ function render() {
   // readiness: silent when fine, loud when not; dismissable — but a
   // dismissed strip returns the moment the SET of problems changes
   const r = s.readiness;
+  renderBulb(r);
   const strip = $("#readyStrip");
   const probs = r ? r.checks.filter(c => c.level === "bad" || c.level === "warn") : [];
   const sig = JSON.stringify(probs.map(c => c.label + "|" + c.detail));

@@ -339,3 +339,83 @@ def test_kill_disarms_and_clears_every_account(client):
     ad = client.adapter
     assert ad.cancel_all_calls == 1 and ad.flatten_calls == 1
     assert "main" in r["results"]
+
+
+def _readiness(now_et_hhmm, *, armed=True, timer_stage=None, feed=None, power=None,
+               shadow=False):
+    import datetime as dt
+    from zoneinfo import ZoneInfo
+    from homebase.engine import Engine
+    from homebase.server import compute_readiness
+    h, m = now_et_hhmm
+    now = dt.datetime(2026, 9, 23, h, m, tzinfo=ZoneInfo("America/New_York"))  # Wed
+    cfg = AppCfg(armed=armed, webhook_secret="s",
+                 accounts={"main": AccountCfg(keyring_key="k", account_name="MAIN")},
+                 book={"nq930": [{"account": "main", "qty": 3}]},
+                 strategies={"nq930": StrategyCfg(
+                     symbol="NQ", qty=3, offset_pts=10.0, sl_pts=5.0, tp_pts=15.0,
+                     enabled=True, self_fire=True, shadow=shadow)})
+    eng = Engine(cfg, {"main": FakeAdapter("main")},
+                 now_fn=lambda: now.astimezone(dt.timezone.utc),
+                 root=__import__("pathlib").Path("/tmp"))
+    timer = ({"date": "2026-09-23", "strategies": {"nq930": {"stage": timer_stage}}}
+             if timer_stage is not None else None)
+    r = compute_readiness(now, cfg, eng, {"main": {"connected": True}},
+                          feed, timer, power)
+    return {c["label"]: c for c in r["checks"]}, r["ready"]
+
+
+def test_readiness_power_levels():
+    by, ready = _readiness((9, 0), power={"ac": False, "pct": 18, "discharging": True})
+    assert by["Power"]["level"] == "bad" and not ready
+    by, ready = _readiness((9, 0), power={"ac": False, "pct": 60, "discharging": True})
+    assert by["Power"]["level"] == "warn" and ready
+    by, _ = _readiness((9, 0), power={"ac": True, "pct": 60, "discharging": False})
+    assert by["Power"]["level"] == "ok"
+
+
+def test_readiness_timer_must_be_gated_before_the_open():
+    by, ready = _readiness((9, 25), timer_stage="idle")
+    assert by["nq930"]["level"] == "bad" and "9:30 fire" in by["nq930"]["detail"]
+    assert not ready
+    _, ready = _readiness((9, 25), timer_stage="staged")
+    assert ready
+    _, ready = _readiness((9, 15), timer_stage="idle")     # before 9:21: quiet
+    assert ready
+    _, ready = _readiness((9, 25), timer_stage=None)       # no timer handed in
+    assert ready
+
+
+def test_readiness_disarmed_is_a_warning_not_a_red():
+    by, ready = _readiness((9, 0), armed=False)
+    assert by["Mode"]["level"] == "warn" and "DISARMED" in by["Mode"]["detail"]
+    assert ready
+    by, _ = _readiness((9, 0), armed=False, shadow=True)   # shadow-only book: fine
+    assert "DISARMED" not in by.get("Mode", {}).get("detail", "")
+
+
+def test_readiness_feed_freshness():
+    import datetime as dt
+    from homebase.config import StrategyCfg as SC
+    # add a bars strategy via feed check: reuse _readiness cfg? simpler: stale ages
+    fresh = (dt.datetime(2026, 9, 23, 14, 58, tzinfo=dt.timezone.utc)).isoformat()
+    old = (dt.datetime(2026, 9, 23, 13, 0, tzinfo=dt.timezone.utc)).isoformat()
+    from zoneinfo import ZoneInfo
+    from homebase.engine import Engine
+    from homebase.server import compute_readiness
+    now = dt.datetime(2026, 9, 23, 11, 0, tzinfo=ZoneInfo("America/New_York"))
+    cfg = AppCfg(armed=True, webhook_secret="s",
+                 accounts={"main": AccountCfg(keyring_key="k", account_name="MAIN")},
+                 book={"pa": [{"account": "main", "qty": 1}]},
+                 strategies={"pa": SC(symbol="NQ", qty=1, offset_pts=0, sl_pts=0,
+                                      tp_pts=0, enabled=True, kind="bars",
+                                      rule="nq_10am_continuation")})
+    eng = Engine(cfg, {"main": FakeAdapter("main")},
+                 now_fn=lambda: now.astimezone(dt.timezone.utc),
+                 root=__import__("pathlib").Path("/tmp"))
+    for close, want in ((fresh, "ok"), (old, "bad")):
+        r = compute_readiness(now, cfg, eng, {"main": {"connected": True}},
+                              {"connected": True,
+                               "watching": {"NQ/1m": {"last_close": close}}})
+        by = {c["label"]: c for c in r["checks"]}
+        assert by["Price feed"]["level"] == want, (close, want)
