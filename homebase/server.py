@@ -156,7 +156,10 @@ def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
     enabled = {n: s for n, s in cfg.strategies.items() if s.enabled}
     for name, s in enabled.items():
         if not config_mod.assignments(cfg, name):
-            checks.append({"level": "warn", "label": name,
+            # a SHADOW strategy with no account is a normal resting state —
+            # it must not hold the bulb amber forever
+            checks.append({"level": "info" if getattr(s, "shadow", False) else "warn",
+                           "label": name,
                            "detail": "enabled but no accounts assigned"})
     weekday = now_et.weekday() < 5
     live_strats = [n for n, s in enabled.items()
