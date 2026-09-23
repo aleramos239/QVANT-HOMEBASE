@@ -43,6 +43,18 @@ def test_metal_front_months_by_cycle():
     assert front_month("SI", dt.date(2026, 11, 24)) == "SIH7"
     assert front_month("RTY", dt.date(2026, 9, 22)) == "RTYZ6"
     assert front_month("ES", dt.date(2026, 12, 14)) == "ESH7"
+    # verified by volume 2026-09-22: CLX6 307k vs CLV6 11k; NGX6 103k vs
+    # NGV6 93k (mid-roll); ZNZ6 2.3M; HGZ6 37k
+    assert front_month("CL", dt.date(2026, 9, 22)) == "CLX6"
+    assert front_month("CL", dt.date(2026, 9, 10)) == "CLV6"
+    assert front_month("CL", dt.date(2026, 12, 20)) == "CLG7"     # Jan crude gone mid-Dec
+    assert front_month("NG", dt.date(2026, 9, 22)) == "NGX6"
+    assert front_month("NG", dt.date(2026, 9, 10)) == "NGV6"
+    assert front_month("ZN", dt.date(2026, 9, 22)) == "ZNZ6"
+    assert front_month("ZN", dt.date(2026, 8, 20)) == "ZNU6"
+    assert front_month("ZN", dt.date(2026, 11, 24)) == "ZNH7"
+    assert front_month("HG", dt.date(2026, 9, 22)) == "HGZ6"
+    assert front_month("HG", dt.date(2026, 11, 24)) == "HGH7"
 
 
 def test_unpack_prices_from_offsets():
@@ -179,3 +191,63 @@ def test_deadline_stops_a_fetch_before_the_open(monkeypatch):
     end = dt.datetime(2026, 9, 22, 17, 0, tzinfo=ET)
     got, stats = run(T.fetch_session(None, "NQZ6", start, end, page_fn=_fake_pager([])))
     assert got == [] and stats["pages"] == 0
+
+
+def test_recorder_replaces_a_massive_file_but_keeps_its_own(tmp_path, monkeypatch):
+    NoWait(monkeypatch)
+    start = dt.datetime(2026, 9, 21, 18, 0, tzinfo=ET)
+    s = int(start.timestamp() * 1000)
+    rows = [{"ts_ms": s + i * 1000, "price": 1.0, "size": 1, "bid": 0.75, "ask": 1.0,
+             "bid_size": 1, "ask_size": 1, "id": i} for i in range(20)]
+
+    async def pager(ws, contract, before_ms, n=T.PAGE, timeout_s=0, ticket=None):
+        return await _fake_pager(rows, page=50)(ws, contract, before_ms)
+
+    monkeypatch.setattr(T, "fetch_page", pager)
+    p = T.archive_path("NQ", dt.date(2026, 9, 22), "NQZ6", tmp_path)
+    p.parent.mkdir(parents=True)
+    p.write_bytes(b"massive")
+    p.with_suffix("").with_suffix(".json").write_text(json.dumps({"source": "massive"}))
+    out = run(T.record(roots=("NQ",), dates=[dt.date(2026, 9, 22)], base=tmp_path, ws=object()))
+    assert len(out) == 1 and out[0]["ticks"] == 20            # replaced
+    assert run(T.record(roots=("NQ",), dates=[dt.date(2026, 9, 22)], base=tmp_path,
+                        ws=object())) == []                     # ours now: kept
+
+
+def test_session_fetch_survives_a_dead_socket(monkeypatch):
+    """A run of hours outlives its token: the socket closes and a page
+    raises 'websocket not connected'. The connection holder must rebuild
+    the socket and the fetch must carry on from the same page."""
+    NoWait(monkeypatch)
+    start = dt.datetime(2026, 9, 21, 18, 0, tzinfo=ET)
+    end = dt.datetime(2026, 9, 22, 17, 0, tzinfo=ET)
+    s = int(start.timestamp() * 1000)
+    rows = [{"ts_ms": s + i * 60_000, "price": 1.0, "size": 1, "bid": 0.75, "ask": 1.0,
+             "bid_size": 1, "ask_size": 1, "id": i} for i in range(30)]
+
+    class Sock:
+        def __init__(self, alive=True):
+            self.connected = alive
+
+        async def close(self):
+            self.connected = False
+
+    built = []
+
+    async def fake_connect():
+        built.append(Sock())
+        return built[-1]
+
+    monkeypatch.setattr(T, "connect_md", fake_connect)
+    conn = T.MDConn(Sock())
+    calls = {"n": 0}
+
+    async def pager(ws, contract, before_ms, n=T.PAGE, timeout_s=0, ticket=None):
+        calls["n"] += 1
+        if calls["n"] == 2:                       # the token expired mid-run
+            ws.connected = False
+            raise RuntimeError("websocket not connected")
+        return await _fake_pager(rows, page=10)(ws, contract, before_ms)
+
+    got, stats = run(T.fetch_session(conn, "NQZ6", start, end, page_fn=pager))
+    assert len(got) == 30 and conn.reconnects == 1 and len(built) == 1

@@ -42,7 +42,9 @@ from .marketdata import MD_DEMO, MD_LIVE
 from .paths import state_dir
 
 ET = ZoneInfo("America/New_York")
-ROOTS = ("NQ", "ES", "YM", "RTY", "GC", "SI")
+# priority order: if the 08:00 deadline cuts a night short, the important
+# ones are done first
+ROOTS = ("NQ", "ES", "YM", "RTY", "GC", "SI", "CL", "ZN", "NG", "HG")
 ARCHIVE = Path.home() / "futures_ticks"
 PAGE = 4096                 # the feed caps a tick request at about this
 MAX_PAGES = 3000            # ~12M ticks — far above any session
@@ -181,9 +183,18 @@ async def fetch_session(ws: TradovateWS, contract: str, start: dt.datetime,
         if pages and gap > 0:
             await sleep(gap)
         last_req = time.monotonic()
+        if isinstance(ws, MDConn):
+            sock = await ws.ensure()
+        else:
+            sock = ws
         try:
-            page = await page_fn(ws, contract, before)
+            page = await page_fn(sock, contract, before)
             penalties = 0
+        except (RuntimeError, ConnectionError, OSError) as e:
+            if isinstance(ws, MDConn) and "not connected" in str(e) and pages < MAX_PAGES:
+                await sleep(2)                      # rebuilt on the next loop
+                continue
+            raise
         except Penalty as pen:
             penalties += 1
             if penalties > PENALTY_MAX:
@@ -191,7 +202,7 @@ async def fetch_session(ws: TradovateWS, contract: str, start: dt.datetime,
             log(f"{contract}: {pen} — waiting {pen.wait_s + 1:.0f}s, resending with its ticket")
             await sleep(pen.wait_s + 1)
             try:
-                page = await page_fn(ws, contract, before, ticket=pen.ticket)
+                page = await page_fn(sock, contract, before, ticket=pen.ticket)
             except Penalty as again:
                 await sleep(max(60.0, again.wait_s))    # budget gone: rest a minute
                 continue
@@ -286,6 +297,37 @@ async def connect_md() -> TradovateWS:
     return ws
 
 
+class MDConn:
+    """The md socket for a whole run. A run of several hours outlives the
+    token it started with: the socket then closes and, without this, every
+    later session fails "websocket not connected" (2026-09-22 17:20 run:
+    GC, SI and all of that day's sessions lost). ensure() rebuilds the
+    socket on the freshest token on disk (the desk renews it)."""
+
+    def __init__(self, ws: TradovateWS | None = None):
+        self.ws = ws
+        self.reconnects = 0
+
+    async def ensure(self) -> TradovateWS:
+        if self.ws is None or not getattr(self.ws, "connected", True):
+            if self.ws is not None:
+                self.reconnects += 1
+                log(f"md socket down — reconnecting ({self.reconnects})")
+                try:
+                    await self.ws.close()
+                except Exception:  # noqa: BLE001
+                    pass
+            self.ws = await connect_md()
+        return self.ws
+
+    async def close(self) -> None:
+        if self.ws is not None:
+            try:
+                await self.ws.close()
+            except Exception:  # noqa: BLE001
+                pass
+
+
 # ------------------------------------------------------------------ the run
 async def record(roots=ROOTS, dates: list[dt.date] | None = None,
                  base: Path = ARCHIVE, ws: TradovateWS | None = None,
@@ -297,21 +339,21 @@ async def record(roots=ROOTS, dates: list[dt.date] | None = None,
         for root in roots:
             contract = symbols.front_month(root, date)
             path = archive_path(root, date, contract, base)
-            if path.exists():
-                continue
+            if path.exists() and not from_massive(path):
+                continue                  # our own (bid/ask) recording stays
             todo.append((date, root, contract, path))
     if not todo:
         log("nothing to record — every complete session is on disk")
         return []
+    conn = ws if isinstance(ws, MDConn) else MDConn(ws)
     own = ws is None
-    ws = ws or await connect_md()
     done = []
     try:
         for date, root, contract, path in todo:
             start, end = session_bounds(date)
             t0 = time.perf_counter()
             try:
-                rows, stats = await fetch_session(ws, contract, start, end)
+                rows, stats = await fetch_session(conn, contract, start, end)
             except Exception as e:  # noqa: BLE001 — one bad symbol must not stop the rest
                 log(f"{root} {date} {contract}: FAILED {e}")
                 continue
@@ -326,8 +368,18 @@ async def record(roots=ROOTS, dates: list[dt.date] | None = None,
                 + ("" if m["complete"] else " — PARTIAL (buffer did not reach the open)"))
     finally:
         if own:
-            await ws.close()
+            await conn.close()
     return done
+
+
+def from_massive(path: Path) -> bool:
+    """True if the file on disk came from the Massive backfill (no bid/ask):
+    the recorder's own capture is richer and may replace it."""
+    m = path.with_suffix("").with_suffix(".json")
+    try:
+        return json.loads(m.read_text()).get("source") == "massive"
+    except (OSError, ValueError):
+        return False
 
 
 def main(argv=None) -> int:

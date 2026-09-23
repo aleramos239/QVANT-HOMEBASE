@@ -85,12 +85,21 @@ def resolve_contract(symbol: str) -> str:
 
 
 QUARTERLY = (3, 6, 9, 12)
-# Metals trade a different cycle and roll ahead of first notice (the last
-# business day before the contract month), not on a 3rd Friday. The active
-# months by volume (verified 2026-09-22: GCZ6 124k vs GCV6 4k; SIZ6 33k):
-METALS = {"GC": (2, 4, 6, 8, 12), "MGC": (2, 4, 6, 8, 12),
-          "SI": (3, 5, 7, 9, 12), "SIL": (3, 5, 7, 9, 12)}
-METALS_ROLL_DAY = 24               # of the month BEFORE the contract month
+MONTHLY = tuple(range(1, 13))
+# Roots that do not roll on a 3rd Friday: (active months, roll day). The
+# contract stays front while today < that day of the month BEFORE its
+# contract month. Verified by volume 2026-09-22: GCZ6 124k vs GCV6 4k;
+# SIZ6 33k; HGZ6 37k vs HGH7 1k; ZNZ6 2.3M vs ZNH7 2; CLX6 307k vs CLV6 11k
+# (Oct crude expires ~the 22nd of Sept, volume leaves it a week earlier);
+# NGX6 103k vs NGV6 93k mid-roll on the 22nd.
+CYCLE_ROLL = {
+    "GC": ((2, 4, 6, 8, 12), 24), "MGC": ((2, 4, 6, 8, 12), 24),
+    "SI": ((3, 5, 7, 9, 12), 24), "SIL": ((3, 5, 7, 9, 12), 24),
+    "HG": ((3, 5, 7, 9, 12), 24), "MHG": ((3, 5, 7, 9, 12), 24),
+    "ZN": (QUARTERLY, 24), "ZB": (QUARTERLY, 24), "ZF": (QUARTERLY, 24),
+    "CL": (MONTHLY, 15), "MCL": (MONTHLY, 15),
+    "NG": (MONTHLY, 22), "MNG": (MONTHLY, 22),
+}
 
 
 def _third_friday(year: int, month: int):
@@ -102,19 +111,20 @@ def _third_friday(year: int, month: int):
 def front_month(root: str, today=None) -> str:
     """Front contract for a root, e.g. front_month("NQ") -> "NQZ6".
     Index roots: quarterlies, rolled one week before the 3rd-Friday expiry
-    (the volume roll). Metals: their own cycle, rolled on the 24th of the
-    month before the contract month. Never a dying contract."""
+    (the volume roll). CYCLE_ROLL roots (metals, treasuries, energy): their
+    own months, rolled on a fixed day of the month before the contract
+    month. Never a dying contract."""
     from datetime import date, timedelta
     today = today or date.today()
     year = today.year
-    cycle = METALS.get(root.upper(), QUARTERLY)
+    cycle, roll_day = CYCLE_ROLL.get(root.upper(), (QUARTERLY, None))
     for _ in range(3):                 # scan up to ~15 months ahead
         for m in cycle:
             if (year, m) < (today.year, today.month):
                 continue
-            if root.upper() in METALS:
+            if roll_day is not None:
                 py, pm = (year, m - 1) if m > 1 else (year - 1, 12)
-                still_front = today < date(py, pm, METALS_ROLL_DAY)
+                still_front = today < date(py, pm, roll_day)
             else:
                 still_front = today < _third_friday(year, m) - timedelta(days=7)
             if still_front:
