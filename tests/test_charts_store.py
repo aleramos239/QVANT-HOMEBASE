@@ -63,3 +63,24 @@ def test_sessions_lists_every_dated_file(tmp_path):
     write_gz(tmp_path / "NQ" / "2026" / f"{D}_NQZ6.live.csv.gz", rows(session_ms(D, 9, 30), [1.0]))
     assert TickStore(tmp_path).sessions("NQ") == [p, D]
     assert TickStore(tmp_path).load("ES", D) is None
+
+
+def test_files_skips_a_dangling_symlink_next_to_a_real_file(tmp_path):
+    write_archive(tmp_path, "NQ", D, "NQZ6", rows(session_ms(D, 9, 30), [1.0, 2.0]))
+    (tmp_path / "NQ" / "2026" / f"{D}_NQZ6.live.csv.gz").symlink_to(tmp_path / "gone.csv.gz")
+    st = TickStore(tmp_path)
+    fs = st.files("NQ", D)
+    assert len(fs) == 1 and fs[0].live is False and fs[0].contract == "NQZ6"
+    f = st.pick("NQ", D)
+    assert f is not None and f.live is False and f.complete
+    s = st.load("NQ", D)
+    assert s is not None and s.source == "archive" and len(s.ticks) == 2
+
+
+def test_pick_and_load_are_none_when_only_file_is_a_dangling_symlink(tmp_path):
+    (tmp_path / "NQ" / "2026").mkdir(parents=True)
+    (tmp_path / "NQ" / "2026" / f"{D}_NQZ6.live.csv.gz").symlink_to(tmp_path / "gone.csv.gz")
+    st = TickStore(tmp_path)
+    assert st.files("NQ", D) == []
+    assert st.pick("NQ", D) is None
+    assert st.load("NQ", D) is None

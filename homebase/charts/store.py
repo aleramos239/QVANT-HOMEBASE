@@ -116,16 +116,23 @@ class TickStore:
         for p in sorted((self.base / root / str(d.year)).glob(f"{tag}_*.csv.gz")):
             contract = p.name[len(tag) + 1:].split(".")[0]
             if p.name.endswith(LIVE_SUFFIX):
-                out.append(SessionFile(p, contract, True, False, p.stat().st_size, True))
+                try:
+                    size = p.stat().st_size
+                except OSError:
+                    continue                      # vanished between glob() and here
+                out.append(SessionFile(p, contract, True, False, size, True))
                 continue
             man: dict = {}
             try:
                 man = json.loads(p.with_name(p.name[:-len(".csv.gz")] + ".json").read_text())
             except (OSError, ValueError):
                 pass
+            try:
+                ticks = int(man.get("ticks") or p.stat().st_size)
+            except OSError:
+                continue                          # vanished between glob() and here
             out.append(SessionFile(p, contract, False, bool(man.get("complete")),
-                                   int(man.get("ticks") or p.stat().st_size),
-                                   bool(man.get("bid_ask", True))))
+                                   ticks, bool(man.get("bid_ask", True))))
         return out
 
     def pick(self, root: str, d: dt.date) -> SessionFile | None:
