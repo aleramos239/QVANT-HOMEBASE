@@ -267,14 +267,15 @@ def write_session(rows: list[dict], path: Path, *, root: str, contract: str,
 
 
 # ------------------------------------------------------------------ token
-def md_token() -> tuple[str, str]:
+def md_token(prefer_live: bool = True) -> tuple[str, str]:
     """(md token, env) from an account the desk already logged in — never a
-    login of its own (logins are rate-limited and precious). The LIVE login
-    first: bulk paging spends that login's 180/hour md budget, and the demo
-    login (the one the 9:30 feed rides) stays clean."""
+    login of its own (logins are rate-limited and precious). prefer_live
+    (the default, for bulk paging) takes the LIVE login first so the demo
+    login the 9:30 feed rides stays clean; the chart service may prefer the
+    demo (Apex eval) login instead."""
     cfg = config_mod.load()
     now = dt.datetime.now(dt.timezone.utc)
-    for aid, a in sorted(cfg.accounts.items(), key=lambda kv: not kv[1].live):
+    for aid, a in sorted(cfg.accounts.items(), key=lambda kv: kv[1].live != prefer_live):
         p = state_dir() / f"{aid}.tokens.json"
         if not p.exists():
             continue
@@ -288,8 +289,8 @@ def md_token() -> tuple[str, str]:
     raise RuntimeError("no valid md token on disk — is the desk running and connected?")
 
 
-async def connect_md() -> TradovateWS:
-    tok, env = md_token()
+async def connect_md(prefer_live: bool = True) -> TradovateWS:
+    tok, env = md_token(prefer_live)
     ws = TradovateWS(tok, env)
     ws.url = MD_LIVE if env == "live" else MD_DEMO
     await ws.connect()
