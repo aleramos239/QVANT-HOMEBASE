@@ -82,18 +82,27 @@ paging the broker. The nightly `homebase.ticks` job is unchanged in Build 1
 (it stays the source of truth; replacing it with the recorder is a later,
 separate decision).
 
-**Restart gap.** On start mid-session, the gap since the last recorded tick
-is refilled with a paced Tick-history request (≈ gap/4,096 pages). If the gap
-would cost more than 20 pages, candles for the gap come from ONE `MinuteBar`
-request instead and the gap is marked **no footprint** on the chart.
+**Restart gap.** On (re)connect mid-session, the gap since the last recorded
+tick is refilled by paging tick history backwards from now, paced like
+`ticks.py` (21 s/page), at most 20 pages, and only while this process has
+spent < 60 chart requests this hour (the other 120 stay free for the trading
+process). No refill 09:20–09:35 ET — it waits. Whatever the 20 pages don't
+reach is recorded as a **gap** (`<date>_<contract>.gaps.json`) and shaded on
+the chart; the nightly archive fills it for later sessions.
 
-**History.** Past sessions come from the local archive only (zero broker
-cost). First read of a session builds a cache (numpy arrays, side already
-classified) under `homebase/.state/charts/cache/`; later reads are instant.
-New dependency: `numpy`.
+**History.** Past sessions come from the local files only (zero broker
+cost). Per session ONE source is used, never a merge (Massive and Tradovate
+tick ids are different spaces): a complete archive file beats the live file,
+which beats an incomplete archive file; on a roll day the contract with the
+most ticks wins. The first read of a session builds its 1-minute bars
+(with footprint) into a pickle cache under `homebase/.state/charts/cache/`;
+every time bar ≥ 1 m is resampled from that cache, so a 60-session daily
+chart never re-reads ticks. No new dependencies.
 
-**Trade side (buy/sell aggressor).** price ≥ ask → buy; price ≤ bid → sell;
-otherwise the tick rule (up-tick buy, down-tick sell, same → previous side).
+**Trade side (buy/sell aggressor).** With a sane quote (bid ≤ ask): price ≥
+ask → buy, price ≤ bid → sell. Inside the spread, no quote, or a crossed quote
+(the feed does send bid > ask — seen in the 2026-09-24 NQ file) → tick rule
+(up-tick buy, down-tick sell, same → previous side).
 Massive-backfilled sessions have no bid/ask → tick rule only, and the chart
 labels footprint/delta on those sessions as **approximate**.
 
@@ -124,8 +133,16 @@ roll stitches contracts by session with no back-adjustment in Build 1.
   used this hour — so a stale chart is never mistaken for a quiet market.
 
 Footprint renders only when zoomed in far enough to read it (else normal
-candles). Lightweight Charts is already vendored; the footprint is a custom
-canvas drawn over the time scale.
+candles). The charts page vendors **Lightweight Charts v5** (panes for
+volume/delta/ADX; series primitives for footprint and profile); the
+dashboard keeps its v4 copy. Tick/volume/range bars are drawn on an evenly
+spaced axis (many can share one second) with real times in the labels.
+Times display in ET.
+
+**Replay mode.** `python -m homebase.charts --replay 2026-09-24 --speed 20`
+plays an archived session through the exact live path (classifier → bars →
+studies → websocket) with a replay clock and NO recording — for testing now
+and on weekends.
 
 ## Failure handling
 
