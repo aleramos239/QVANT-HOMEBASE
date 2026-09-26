@@ -101,7 +101,8 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
     conns: set[Conn] = set()
     start_last: dict[str, int | None] = {}
     refill_lock = asyncio.Lock()          # one refill fetches at a time, across every root
-    refill_pending: dict[str, dict] = {}  # root -> {frm, contract} while a refill for it is in flight
+    refill_pending: dict[str, dict] = {}  # root -> {frm, contract} while WAITING for the lock
+    refill_running: set[str] = set()      # roots whose runner loop is alive (waiting or fetching)
 
     def reseed(root: str) -> None:
         """Rebuild today's tape for root from disk (after a refill). Runs on
@@ -135,47 +136,61 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         budget. Serialized behind one lock, so the budget check made just
         before spending is never stale across roots (concurrent (re)connects
         can no longer all pass a check based on the same unspent number).
-        Coalesced per root: a request for a root already pending or running
-        widens its window (the smaller frm, the latest contract) instead of
-        racing it — no root ever refills twice concurrently, no stretch is
-        dropped."""
+
+        Coalesced per root, but only while the request is still WAITING for
+        the lock (widens it: the smaller frm, the latest contract — one
+        fetch ends up covering both). A request that arrives once that
+        root's refill is already RUNNING (holding the lock, mid-fetch)
+        cannot be absorbed into it — that fetch's `to` was already fixed
+        before this new request existed, so anything the new request needs
+        after that `to` would otherwise be silently lost. Instead it becomes
+        a follow-up: the same coroutine that started the run loops to pick
+        it up once the current fetch finishes, with a fresh frm/contract/to
+        of its own. Either way, no root ever runs two fetches concurrently."""
         d = session_date(clock())
         s0, _ = session_range_ms(d)
         frm = since_ms if since_ms is not None else (start_last.get(root) or s0)
-        pending = refill_pending.get(root)
-        if pending is not None:
-            pending["frm"] = min(pending["frm"], frm)
-            pending["contract"] = contract
+        waiting = refill_pending.get(root)
+        if waiting is not None:
+            waiting["frm"] = min(waiting["frm"], frm)
+            waiting["contract"] = contract
             return
-        entry = refill_pending[root] = {"frm": frm, "contract": contract}
+        refill_pending[root] = {"frm": frm, "contract": contract}
+        if root in refill_running:
+            return                      # a runner is already active for this root; it
+                                         # will pick up this follow-up itself once it loops
+        refill_running.add(root)
         try:
-            await _quiet_wait()                     # covers page 1 (later pages: _paced_sleep)
-            async with refill_lock:
-                frm, contract = entry["frm"], entry["contract"]
-                to = clock()
-                if to - frm < 2000:
-                    return
-                rows: list[dict] = []
-                reached = to
-                pages = min(REFILL_MAX_PAGES, REFILL_BUDGET - feed.budget_used())
-                if pages > 0:
-                    try:
-                        rows, reached = await refill(feed.ws, contract, frm, to, max_pages=pages,
-                                                       sleep=_paced_sleep, on_request=feed.count_request)
-                    except Exception as e:  # noqa: BLE001 — the missing stretch becomes a marked gap
-                        log(f"{root}: refill failed: {e}")
-                else:
-                    log(f"{root}: refill skipped — md budget {feed.budget_used()}/h")
-                recorder.append(root, contract, rows)
-                # a request coalesced in WHILE we fetched widens the stretch too -- still not lost
-                frm = min(frm, entry["frm"])
-                if reached > frm:
-                    recorder.mark_gap(root, d, contract, frm, reached)
-                log(f"{root}: refilled {len(rows)} ticks"
-                    + (f", gap {(reached - frm) / 1000:.0f}s marked" if reached > frm else ""))
-                reseed(root)
+            while root in refill_pending:
+                entry = refill_pending[root]
+                await _quiet_wait()                     # covers page 1 (later pages: _paced_sleep)
+                async with refill_lock:
+                    del refill_pending[root]            # now RUNNING: a new request becomes a follow-up
+                    await _quiet_wait()                 # may have queued past 09:20 for the lock
+                    frm, contract = entry["frm"], entry["contract"]
+                    to = clock()
+                    if to - frm < 2000:
+                        continue
+                    rows: list[dict] = []
+                    reached = to
+                    pages = min(REFILL_MAX_PAGES, REFILL_BUDGET - feed.budget_used())
+                    if pages > 0:
+                        try:
+                            rows, reached = await refill(feed.ws, contract, frm, to, max_pages=pages,
+                                                           sleep=_paced_sleep, on_request=feed.count_request)
+                        except Exception as e:  # noqa: BLE001 — the missing stretch becomes a marked gap
+                            log(f"{root}: refill failed: {e}")
+                    else:
+                        log(f"{root}: refill skipped — md budget {feed.budget_used()}/h")
+                    recorder.append(root, contract, rows)
+                    if reached > frm:
+                        recorder.mark_gap(root, d, contract, frm, reached)
+                    log(f"{root}: refilled {len(rows)} ticks"
+                        + (f", gap {(reached - frm) / 1000:.0f}s marked" if reached > frm else ""))
+                    reseed(root)
         finally:
-            del refill_pending[root]
+            refill_running.discard(root)
+            refill_pending.pop(root, None)   # never leave a follow-up orphaned if we exit abnormally
 
     # the feed is built AFTER reseed/_refill exist (it takes _refill as its
     # callback); every function above only touches feed/hub/clock when called
@@ -297,11 +312,22 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         conn.send({"type": "status", **status()})
         try:
             while True:
+                # Only a framing/decoding problem is swallowed here. Receiving
+                # itself is NOT wrapped in a broad except: after an app-side
+                # close (Conn._close(), on a SEND_QUEUE_MAX overflow), starlette
+                # raises WebSocketDisconnect OR a RuntimeError SYNCHRONOUSLY --
+                # before any await -- so a broad `except Exception: continue`
+                # around the receive call would never yield control back to the
+                # loop, spinning it at 100% CPU forever instead of ending here.
                 try:
-                    msg = await sock.receive_json()
-                except WebSocketDisconnect:
+                    raw = await sock.receive_text()
+                except (WebSocketDisconnect, RuntimeError):
                     raise
-                except Exception:  # noqa: BLE001 — a non-JSON frame is ignored, not fatal
+                except Exception:  # noqa: BLE001 — a non-text (binary) frame is skipped
+                    continue
+                try:
+                    msg = json.loads(raw)
+                except ValueError:
                     continue
                 if not isinstance(msg, dict):
                     continue
@@ -325,6 +351,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                                         # never kills the connection
                     conn.send({"type": "error", "id": cid, "error": str(e)})
                     continue
+                s = None
                 try:
                     hub.unsubscribe((conn, cid))
                     s = hub.streams.get((root, spec.key))
@@ -338,6 +365,13 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                                         # stream must not drop every chart on the page either
                     log(f"sub {cid} ({root} {spec.key}): {type(e).__name__}: {e}\n{traceback.format_exc()}")
                     conn.send({"type": "error", "id": cid, "error": str(e)})
+                    # never leave this id subscribed to a stream it only got an
+                    # error for (the pump would keep sending it `update`s for
+                    # an id that never got `history`), and never leave a
+                    # freshly attached, now-subscriberless stream in hub.streams
+                    hub.unsubscribe((conn, cid))
+                    if s is not None and not s.subs and hub.streams.get(s.key) is s:
+                        del hub.streams[s.key]
                     continue
         except (WebSocketDisconnect, RuntimeError):
             # RuntimeError: starlette raises this on the receive loop if Conn's

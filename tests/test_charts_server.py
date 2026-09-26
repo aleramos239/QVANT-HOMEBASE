@@ -7,10 +7,11 @@ import json
 import queue
 import time
 
+from fastapi import WebSocket, WebSocketDisconnect
 from fastapi.testclient import TestClient
 
-from homebase.charts.hub import Hub
-from homebase.charts.server import QUIET, create_app
+from homebase.charts.hub import Hub, Stream
+from homebase.charts.server import QUIET, Conn, create_app
 from homebase.charts.store import read_table
 from tests.charts_util import D, ET, rows, session_ms, write_archive
 
@@ -371,3 +372,238 @@ def test_flush_runs_even_when_chart_work_raises(tmp_path, monkeypatch):
 
     header, recs = read_table(live)
     assert [r[header.index("id")] for r in recs] == ["1", "2"]
+
+
+def test_ws_handler_ends_cleanly_after_close_mid_prepare(tmp_path, monkeypatch):
+    """A queue-overflow close (Conn._close()) landing while prepare() runs in
+    its own worker thread must not spin the receive loop forever. After an
+    app-side close, starlette's receive_json()/receive_text() raise a
+    RuntimeError SYNCHRONOUSLY (before any await -- checked against
+    application_state before ever touching the transport), so a broad
+    `except Exception: continue` around that call never yields control back
+    to the loop, freezing the pump (and everything else on it) at 100% CPU.
+    Reproduces the reviewer's own probe technique (probe_ws_spin.py)."""
+    app = create_app(roots=["NQ"], base=archive(tmp_path), replay=D, speed=1,
+                     start_et=dt.time(9, 30), state=tmp_path / "state")
+
+    cap: dict = {}
+    orig_conn_init = Conn.__init__
+
+    def conn_init(self, ws):
+        orig_conn_init(self, ws)
+        cap["conn"], cap["loop"] = self, asyncio.get_running_loop()
+
+    monkeypatch.setattr(Conn, "__init__", conn_init)
+
+    orig_prepare = Hub.prepare
+
+    def prepare(self, root, spec, keys):
+        # close the socket app-side exactly when the (worker-thread) history
+        # build would be running -- a SEND_QUEUE_MAX overflow could land here
+        asyncio.run_coroutine_threadsafe(cap["conn"]._close(), cap["loop"]).result(timeout=5)
+        return orig_prepare(self, root, spec, keys)
+
+    monkeypatch.setattr(Hub, "prepare", prepare)
+
+    pump_ticks = [0]
+    orig_on_clock = Hub.on_clock
+
+    def on_clock(self, now_ms):
+        pump_ticks[0] += 1
+        return orig_on_clock(self, now_ms)
+
+    monkeypatch.setattr(Hub, "on_clock", on_clock)
+
+    # Safety net for a RED run against a genuinely spinning handler: force a
+    # clean disconnect once 1.5s of wall time has passed since the second
+    # receive attempt, so a bug here fails this test in bounded time instead
+    # of hanging the suite. Wraps BOTH receive_json (what the pre-fix code
+    # calls) and receive_text (what the fix calls), sharing one counter, so
+    # the same test is meaningful before and after the fix.
+    calls = [0]
+    marks: dict = {}
+
+    def wrap(orig):
+        async def wrapper(self, *a, **k):
+            calls[0] += 1
+            if calls[0] == 2:
+                marks["t0"] = time.perf_counter()
+            if "t0" in marks and time.perf_counter() - marks["t0"] > 1.5:
+                raise WebSocketDisconnect(4000)
+            return await orig(self, *a, **k)
+        return wrapper
+
+    monkeypatch.setattr(WebSocket, "receive_json", wrap(WebSocket.receive_json))
+    monkeypatch.setattr(WebSocket, "receive_text", wrap(WebSocket.receive_text))
+
+    with TestClient(app) as client:
+        with client.websocket_connect("/ws") as ws:
+            ws.send_json({"op": "sub", "id": "a", "root": "NQ", "spec": "time:60"})
+            time.sleep(2.0)
+
+    assert calls[0] < 1000, f"receive spun {calls[0]} times in ~2s -- the handler did not end cleanly"
+    assert pump_ticks[0] > 0, "the pump never ticked -- the event loop was starved"
+
+
+def test_refill_running_gets_a_followup_not_absorbed(tmp_path, monkeypatch):
+    """A request for a root whose refill is already RUNNING (holding the
+    lock, mid-fetch) must not be absorbed into it: the running fetch's `to`
+    was already fixed before the new request existed, so absorbing would
+    silently lose whatever the new request needed after that `to`. It must
+    become a follow-up instead -- a second fetch, with its own fresh `to`.
+    Reproduces the reviewer's probe_coalesce_running.py scenario: refill #1
+    (missed 09:40->09:45) is running when the md socket flaps and TickFeed
+    resubscribes with since=09:45:30."""
+    clock_ms = [session_ms(D, 9, 45)]
+    calls: list = []
+
+    async def fake_refill(ws, contract, frm, to, *, max_pages, sleep=None, on_request=None):
+        calls.append((contract, frm, to))
+        await asyncio.sleep(0.3)          # paging (real time); a flap can land meanwhile
+        return [], frm                     # the whole requested stretch was covered
+
+    monkeypatch.setattr("homebase.charts.server.refill", fake_refill)
+
+    class FakeFeed:
+        def __init__(self, roots, on_ticks, on_subscribed=None):
+            self.on_subscribed, self.ws = on_subscribed, None
+
+        def count_request(self):
+            pass
+
+        def budget_used(self):
+            return 0
+
+        async def run(self):
+            asyncio.create_task(self.on_subscribed("NQ", "NQZ6", session_ms(D, 9, 40)))
+            await asyncio.sleep(0.1)               # refill #1 now holds the lock, mid-fetch
+            clock_ms[0] = session_ms(D, 9, 46)     # reconnected; last tick seen 09:45:30
+            asyncio.create_task(self.on_subscribed("NQ", "NQZ6", session_ms(D, 9, 45, 30)))
+            while True:
+                await asyncio.sleep(0.01)
+
+        def stop(self):
+            pass
+
+        def status(self):
+            return {"mode": "live", "connected": True, "error": None, "roots": {},
+                    "budget_hour": 0, "reconnects": 0}
+
+    base = tmp_path / "ticks"
+    app = create_app(roots=["NQ"], base=base, feed_factory=FakeFeed,
+                     now_ms=lambda: clock_ms[0], state=tmp_path / "state")
+    with TestClient(app):
+        deadline = time.time() + 5
+        while len(calls) < 2 and time.time() < deadline:
+            time.sleep(0.02)
+        time.sleep(0.1)
+
+    assert len(calls) == 2, calls
+    assert calls[0] == ("NQZ6", session_ms(D, 9, 40), session_ms(D, 9, 45))
+    assert calls[1][0] == "NQZ6" and calls[1][1] == session_ms(D, 9, 45, 30)
+    assert calls[1][2] >= session_ms(D, 9, 46)          # fresh `to`, read after it arrived
+    gp = base / "NQ" / str(D.year) / f"{D.isoformat()}_NQZ6.gaps.json"
+    gaps = json.loads(gp.read_text()) if gp.exists() else []
+    lo, hi = session_ms(D, 9, 45, 30), session_ms(D, 9, 46)
+    covered = any(a <= lo and b >= hi for _, a, b in calls) or any(a <= lo and b >= hi for a, b in gaps)
+    assert covered, "the 09:45:30 -> 09:46:00 stretch was neither fetched nor marked as a gap"
+
+
+def test_refill_rechecks_quiet_window_after_the_lock(tmp_path, monkeypatch):
+    """The pre-lock _quiet_wait() can be stale by the time the lock is
+    actually granted (another root's fetch can run long enough to cross into
+    09:20); page 0 has no pre-sleep of its own. Reproduces the reviewer's
+    probe_quiet_after_lock.py: ES sends page 0 at 09:19:58 and releases the
+    lock at 09:20:01; the queued NQ refill must not then send its own page 0
+    at 09:20:01."""
+    clock_ms = [session_ms(D, 9, 19, 58)]
+
+    async def fake_sleep(s):
+        clock_ms[0] += int(s * 1000)
+
+    monkeypatch.setattr("homebase.charts.server.sleep", fake_sleep)
+
+    reqs: list = []
+
+    async def fake_refill(ws, contract, frm, to, *, max_pages, sleep=None, on_request=None):
+        reqs.append((contract, clock_ms[0]))          # page 0: refill() sends it with no pre-sleep
+        await asyncio.sleep(0.05)                       # real yield: the other root queues on the lock
+        clock_ms[0] += 3000                              # round trip + unpack; one page covered the gap
+        return [], frm
+
+    monkeypatch.setattr("homebase.charts.server.refill", fake_refill)
+
+    class FakeFeed:
+        def __init__(self, roots, on_ticks, on_subscribed=None):
+            self.on_subscribed, self.ws = on_subscribed, None
+
+        def count_request(self):
+            pass
+
+        def budget_used(self):
+            return 0
+
+        async def run(self):
+            asyncio.create_task(self.on_subscribed("ES", "ESZ6", session_ms(D, 9, 19, 0)))
+            asyncio.create_task(self.on_subscribed("NQ", "NQZ6", session_ms(D, 9, 19, 0)))
+            while True:
+                await asyncio.sleep(0.01)
+
+        def stop(self):
+            pass
+
+        def status(self):
+            return {"mode": "live", "connected": True, "error": None, "roots": {},
+                    "budget_hour": 0, "reconnects": 0}
+
+    app = create_app(roots=["ES", "NQ"], base=tmp_path / "ticks", feed_factory=FakeFeed,
+                     now_ms=lambda: clock_ms[0], state=tmp_path / "state")
+    with TestClient(app):
+        deadline = time.time() + 5
+        while len(reqs) < 2 and time.time() < deadline:
+            time.sleep(0.02)
+        time.sleep(0.1)
+
+    assert len(reqs) == 2, reqs
+
+    def in_quiet(ms):
+        t = dt.datetime.fromtimestamp(ms / 1000, ET).time()
+        return QUIET[0] <= t < QUIET[1]
+
+    assert not any(in_quiet(ms) for _, ms in reqs), reqs
+
+
+def test_a_failed_subscribe_leaves_no_orphaned_stream_or_pending_update(tmp_path, monkeypatch):
+    """If s.payload() raises AFTER hub.subscribe() has already registered the
+    sub, it must not stay registered -- otherwise the pump keeps sending
+    `update`s for an id that only ever received `error`, never `history`."""
+    orig_payload = Stream.payload
+    calls = [0]
+
+    def payload(self, fp=True):
+        calls[0] += 1
+        if calls[0] == 1:
+            raise RuntimeError("payload boom")
+        return orig_payload(self, fp)
+
+    monkeypatch.setattr(Stream, "payload", payload)
+
+    sent: list = []
+    orig_send = Conn.send
+
+    def send(self, msg):
+        sent.append(dict(msg))
+        return orig_send(self, msg)
+
+    monkeypatch.setattr(Conn, "send", send)
+
+    app = create_app(roots=["NQ"], base=archive(tmp_path), replay=D, speed=50,
+                     start_et=dt.time(9, 30), state=tmp_path / "state")
+    with TestClient(app) as client, client.websocket_connect("/ws") as ws:
+        ws.send_json({"op": "sub", "id": "a", "root": "NQ", "spec": "time:60"})
+        assert next_of(ws, "error")["id"] == "a"
+        ws.send_json({"op": "sub", "id": "b", "root": "NQ", "spec": "time:60"})
+        assert next_of(ws, "history")["id"] == "b"
+        time.sleep(0.6)
+
+    assert not any(m.get("type") == "update" and m.get("id") == "a" for m in sent), sent
