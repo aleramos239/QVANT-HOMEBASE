@@ -201,3 +201,18 @@ test('the swatch palette: 10 hues x 6 shades, all distinct, with the chart\'s up
   assert.equal(new Set(S.PALETTE.flat()).size, 60);
   assert.ok(S.PALETTE.flat().includes('#089981') && S.PALETTE.flat().includes('#F23645'));
 });
+
+test('the Events fields: High and Medium on, USD, lines on; currencies cleaned and sorted', () => {
+  const d = S.DEFAULTS;
+  assert.deepEqual([d.evHigh, d.evMedium, d.evLow, d.evHoliday, d.evLines], [true, true, false, false, true]);
+  assert.deepEqual(d.evCountries, ['USD']);
+  assert.deepEqual(S.normalize({ evCountries: ['eur', 'USD', 'usd', 'All', 7, 'toolong', ' gbp '] }).evCountries,
+    ['ALL', 'EUR', 'GBP', 'USD']);
+  assert.deepEqual(S.normalize({ evCountries: 'USD' }).evCountries, ['USD']);
+  assert.deepEqual(S.normalize({ evCountries: [] }).evCountries, []);
+  assert.deepEqual(S.overrides({ evCountries: ['usd'] }), {});
+  assert.deepEqual(S.overrides({ evCountries: ['USD', 'EUR'], evLow: true }), { evLow: true, evCountries: ['EUR', 'USD'] });
+  const n = S.normalize({});
+  n.evCountries.push('JPY');                                       // a copy: the defaults never change
+  assert.deepEqual(S.DEFAULTS.evCountries, ['USD']);
+});

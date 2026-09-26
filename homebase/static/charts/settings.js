@@ -48,6 +48,10 @@ const FIELDS = [
   bool('watermark', true), color('watermarkColor'),
   // Canvas · SCALES
   color('scaleText'), int('scaleFont', 12, 10, 16), color('scaleLines'),
+  // Events (the economic calendar)
+  bool('evHigh', true), bool('evMedium', true), bool('evLow', false), bool('evHoliday', false),
+  { key: 'evCountries', type: 'list', def: Object.freeze(['USD']) },   // currency codes, upper-case, sorted
+  bool('evLines', true),
 ];
 const DEFAULTS = Object.freeze(Object.fromEntries(FIELDS.map((f) => [f.key, f.def])));
 /* The colours that follow the theme while never changed, and the HBCell.palette() key each takes. */
@@ -96,6 +100,10 @@ function normalize(obj) {
     if (f.type === 'bool') { if (typeof v === 'boolean') x = v; }
     else if (f.type === 'choice') { if (f.choices.includes(v)) x = v; }
     else if (f.type === 'color') { const c = canon(v); if (c) x = c; }
+    else if (f.type === 'list') {
+      x = Array.isArray(v) ? [...new Set(v.filter((c) => typeof c === 'string').map((c) => c.trim().toUpperCase())
+        .filter((c) => /^[A-Z]{2,5}$/.test(c)))].sort() : [...f.def];
+    }
     else if (v !== null) {
       const n = num(v);
       if (Number.isFinite(n)) {
@@ -110,7 +118,10 @@ function normalize(obj) {
 /* What a layout or a template stores: only the values that differ from the defaults. */
 function overrides(full) {
   const n = normalize(full), out = {};
-  for (const f of FIELDS) if (n[f.key] !== f.def) out[f.key] = n[f.key];
+  for (const f of FIELDS) {
+    const same = Array.isArray(f.def) ? JSON.stringify(n[f.key]) === JSON.stringify(f.def) : n[f.key] === f.def;
+    if (!same) out[f.key] = n[f.key];
+  }
   return out;
 }
 

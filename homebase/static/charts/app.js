@@ -36,6 +36,8 @@ const drawings = new window.HBDrawings.Store({ onError: (root, msg) => sbNote(`$
 let magnet = loadMagnet();   // the rail's magnet {on, mode}, per viewer (localStorage hb_charts_magnet)
 let menuRight = false;       // the open menu is a rail flyout: it opens to the right of its button
 let replayClock = null;   // {etMs, at, speed, done}: a replay's clock from its last status (live: null)
+let calendar = [];   // every stored calendar event (GET /api/calendar), by time
+let calendarAt;   // the service's calendar.fetched_at they came with (undefined: never loaded)
 
 const $ = (s, root = document) => root.querySelector(s);
 const iso = (t) => new Date(t * 1000).toISOString();
@@ -85,6 +87,7 @@ function hostFor(id) {
     toolDone() { setTool('cursor'); },
     drawings,
     magnet: () => magnet,
+    events: () => calendar,
   };
 }
 
@@ -640,6 +643,7 @@ function chartSettings() {
     cell: c,
     cells: () => cells,
     templates,
+    countries: () => [...new Set(calendar.map((e) => e.country))].sort(),
     toggleMenu(anchor, cls, fill) {   // menus and popovers open inside the dialog (above its backdrop)
       if (menuAnchor === anchor) { closeMenu(); return; }
       fill(openMenu(anchor, cls, { root: box }));
@@ -735,10 +739,38 @@ function magnetMenu() {
   }
 }
 
+/* ---- economic calendar ---- */
+/* The calendar from the chart service: loaded once, then again whenever the service fetched anew. */
+async function loadCalendar() {
+  try {
+    const r = await fetch('/api/calendar');
+    if (!r.ok) return;
+    const v = await r.json();
+    calendar = Array.isArray(v) ? v : [];
+  } catch (_) { return; }
+  for (const c of cells) c.redrawEvents();
+  renderNextEvent();
+}
+
+/* Now in epoch ms: a replay's clock in a replay (so its "Next" matches its charts), else the browser's. */
+function clockMs() {
+  const et = clockEt();
+  return replayClock ? et - S.zoneOffsetMs('America/New_York', et) : Date.now();
+}
+
+/* The status bar's "Next USD: CPI m/m 08:30 (in 2h 14m)": the next event the selected chart shows. */
+function renderNextEvent() {
+  const el = $('#sbEvent'), c = cur(), E = window.HBEvents;
+  const n = c ? E.nextText(E.shown(calendar, c.R), clockMs()) : null;
+  el.hidden = !n;
+  if (n) { el.textContent = n.text; el.style.color = n.color; }
+}
+
 /* ---- bottom bar ---- */
 function showStatus(s) {
   if (s.mode === 'replay') replayClock = { etMs: (s.clock_s || 0) * 1000, at: Date.now(), speed: s.speed || 1, done: !!s.done };
   else if (s.mode === 'live') replayClock = null;
+  if (s.calendar && s.calendar.fetched_at !== calendarAt) { calendarAt = s.calendar.fetched_at; loadCalendar(); }
   const now = etNow(), f = C.feedSummary(s, now.weekday, now.minutes), rec = s.recorder;
   $('#sbDot').className = 'sb-dot' + (f.dot ? ' ' + f.dot : '');
   $('#sbMode').textContent = s.mode === 'replay'
@@ -782,6 +814,7 @@ function tick() {
   greyIfStale();
   const et = clockEt();
   for (const c of cells) c.tickSecond(et);
+  renderNextEvent();
 }
 
 /* ---- the chart service ---- */

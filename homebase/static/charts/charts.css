@@ -268,3 +268,11 @@ a { color: inherit; }
 }
 .tpl-btn { display: inline-flex; align-items: center; gap: 6px; }
 .menu-tpl { min-width: 240px; }
+.sb-event { font-weight: 600; }
+.ev-tip { position: absolute; z-index: 7; padding: 6px 8px; border-radius: 6px; background: var(--tip); color: #FFFFFF;
+  font-size: 12px; line-height: 16px; white-space: nowrap; pointer-events: none; font-variant-numeric: tabular-nums; }
+.set-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; }
+.set-row.tall { height: auto; min-height: 40px; padding: 8px 0; align-items: start; }
+.set-chips { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px 12px; }
+.set-chip { display: inline-flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
+.set-chip input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }

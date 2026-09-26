@@ -4,8 +4,8 @@
    history/update handling. The page (app.js) owns the websocket, the toolbar
    and selection, and gives each cell a `host`:
      {id, send(msg) -> bool, onPick(cell), onLoaded(cell), onRefused(cell, tried, text), onSettings(cell, uid),
-      onPosition(cell, d), changed(), tool(), toolDone(), drawings, magnet()}   (the last four: the drawing tools,
-      HBDrawings.Controller)
+      onPosition(cell, d), changed(), tool(), toolDone(), drawings, magnet(), events()}   (the drawings/tool/magnet
+      four: the drawing tools, HBDrawings.Controller; events(): every stored calendar event)
    Bar times arrive as ET wall-clock seconds, so the axis reads ET; tick,
    volume and range bars sit on an evenly spaced synthetic axis (many can
    share a second) and are labelled with their real times.
@@ -17,7 +17,7 @@ const LW = window.LightweightCharts;
 const C = window.HBCatalog;
 const S = window.HBSettings;
 const CANDLE_KEYS = ['prevClose', 'body', 'bodyUp', 'bodyDown', 'borders', 'borderUp', 'borderDown', 'wick', 'wickUp', 'wickDown'];
-const { Footprint, Profile, Gaps, EthBg, Countdown } = window.HBLayers;
+const { Footprint, Profile, Gaps, EthBg, Countdown, EventFlags } = window.HBLayers;
 const NO_SCALE = () => null;   // autoscaleInfoProvider: the series takes no part in autoscale
 const FAKE0 = 946684800;    // synthetic-axis origin for tick/volume/range bars
 const FONT = '-apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif';
@@ -87,6 +87,7 @@ class Cell {
     this.noteTimer = 0; this.noteOn = false;   // noteOn: the legend message is still a note()
     this.dc = null;   // the drawing controller of the current chart
     this.eth = this.cd = null; this.clockEt = null;   // the hours background, the countdown, now (ET wall ms)
+    this.evl = null;   // the economic-calendar flags layer
     this.magnetXhair = false;   // the rail's magnet is on with a tool picked (MagnetOHLC crosshair)
     this.R = S.resolve(cfg.settings || {}, palette());   // the chart's settings, concrete for the theme
     this.fpHide = false;   // the footprint is readable: candle bodies and borders step aside
@@ -98,13 +99,17 @@ class Cell {
         <div class="lg-title"><span class="lg-name"></span><span class="badge" hidden>approx. flow</span><span class="lg-msg" role="status"></span></div>
         <div class="lg-ohlc"></div>
         <div class="lg-inds"></div>
-      </div>`;
+      </div>
+      <div class="ev-tip" role="tooltip" hidden></div>`;
     this.box = slot.querySelector('.chart');
+    this.evTip = slot.querySelector('.ev-tip');
     this.lg = { name: slot.querySelector('.lg-name'), badge: slot.querySelector('.badge'), msg: slot.querySelector('.lg-msg'),
       ohlc: slot.querySelector('.lg-ohlc'), inds: slot.querySelector('.lg-inds') };
     this.lg.badge.title = 'Part of this history has no bid/ask: buys and sells there are split by the tick rule';
     slot.addEventListener('pointerdown', () => host.onPick(this), true);
     this.lg.inds.addEventListener('click', (e) => this.onLegendClick(e));
+    this.box.addEventListener('pointermove', (e) => this.onEventHover(e));
+    this.box.addEventListener('pointerleave', () => { this.evTip.hidden = true; });
     this.title();
     this.subscribe();
   }
@@ -174,6 +179,7 @@ class Cell {
     }
     this.syncEth();
     if (this.cd) this.cd.redraw();
+    this.redrawEvents();
     this.legendRows();
     this.legend(this.hover);
   }
@@ -215,6 +221,33 @@ class Cell {
     if (left <= 0) return null;
     const prev = n > 1 ? this.bars[n - 2] : null, up = last.c >= (R.prevClose && prev ? prev.c : last.o);
     return { text: S.fmtCountdown(left), price: last.c, color: up ? R.bodyUp : R.bodyDown, font: R.scaleFont };
+  }
+
+  /* What the calendar layer draws now: the events this chart shows (its Events settings) and where. A tick,
+     volume or range chart has no place for an event outside its bars. */
+  eventsNow() {
+    const n = this.bars.length;
+    if (!n || !this.chart) return null;
+    const ts = this.chart.timeScale(), time = this.isTime(), first = this.bars[0].ms, last = this.bars[n - 1].ms;
+    const ctx = { bars: this.bars, isTime: time, barMs: this.barMs(), coord: (i) => ts.logicalToCoordinate(i) };
+    const xOf = (t) => (!time && (t < first || t > last) ? null : window.HBDrawings.timeToX(t, ctx));
+    return { events: window.HBEvents.shown(this.host.events(), this.R), xOf, lines: this.R.evLines };
+  }
+
+  redrawEvents() { if (this.evl) this.evl.redraw(); }
+
+  /* Hovering a calendar flag: its events in a tooltip above it (times in the chart's zone). */
+  onEventHover(e) {
+    const tip = this.evTip, L = this.evl;
+    if (!L || e.buttons || !L.flags.length) { tip.hidden = true; return; }
+    const r = this.box.getBoundingClientRect();
+    const g = window.HBEvents.flagAt(L.flags, { x: e.clientX - r.left, y: e.clientY - r.top }, L.flagY);
+    if (!g) { tip.hidden = true; return; }
+    tip.replaceChildren(...window.HBEvents.tipLines(g, this.R.timezone).map((s) => mk('div', '', s)));
+    tip.hidden = false;
+    const w = tip.offsetWidth, h = tip.offsetHeight;
+    tip.style.left = `${Math.max(4, Math.min(g.x - w / 2, this.box.clientWidth - w - 4))}px`;
+    tip.style.top = `${Math.max(4, L.flagY - 12 - h)}px`;
   }
 
   /* Once a second, from the page: now as ET wall-clock ms (a replay's own clock in a replay). */
@@ -350,6 +383,7 @@ class Cell {
       vertAlign: 'center', lines: [this.wmLine()] });
     this.fp = new Footprint(P); this.prof = new Profile(P); this.gaps = new Gaps(P);
     this.eth = new EthBg(P); this.cd = new Countdown(P, () => this.countdownNow());
+    this.evl = new EventFlags(P, () => this.eventsNow());
     const fp = this.fp;   // pin the instance this callback belongs to
     fp.onReadableChange = (on) => {   // fired async from Footprint.updateAllViews(), after layout
       if (this.fp !== fp || !this.chart) return;
@@ -357,9 +391,9 @@ class Cell {
       this.candles.applyOptions(this.candleOpts());
       if (this.R.prevClose) this.resetCandles();   // per-bar colours ride in the data
     };
-    for (const l of [this.eth, this.gaps, this.prof, this.fp, this.cd]) this.candles.attachPrimitive(l);
+    for (const l of [this.eth, this.gaps, this.prof, this.fp, this.cd, this.evl]) this.candles.attachPrimitive(l);
     this.lines = []; this.levelLines = {}; this.colorOf = {}; this.hover = null;
-    this.chart.timeScale().subscribeVisibleLogicalRangeChange(() => this.syncFootprint());
+    this.chart.timeScale().subscribeVisibleLogicalRangeChange(() => { this.syncFootprint(); this.evTip.hidden = true; });
     this.chart.subscribeCrosshairMove((p) => {
       this.hover = p && p.logical != null ? Math.round(p.logical) : null;
       this.legend(this.hover);
@@ -371,7 +405,7 @@ class Cell {
     if (!this.chart) return;
     this.chart.remove();
     this.chart = this.candles = this.markers = this.fp = this.prof = this.gaps = this.wm = null;   // stale async callbacks can tell
-    this.eth = this.cd = null;
+    this.eth = this.cd = this.evl = null;
   }
 
   /* One series per drawn part of each indicator instance, in instance order. */

@@ -7,6 +7,7 @@ import datetime as dt
 import uvicorn
 
 from . import DEFAULT_ROOTS, PORT
+from .calendar import http_get
 from .server import create_app
 
 
@@ -22,7 +23,7 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
     app = create_app(roots=[r for r in a.roots.split(",") if r],
                      replay=dt.date.fromisoformat(a.replay) if a.replay else None,
-                     speed=a.speed, start_et=dt.time.fromisoformat(a.start))
+                     speed=a.speed, start_et=dt.time.fromisoformat(a.start), calendar_fetch=http_get)
     uvicorn.run(app, host=a.host, port=a.port, log_level="warning")
     return 0
 

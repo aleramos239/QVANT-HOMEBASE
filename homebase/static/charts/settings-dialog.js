@@ -4,7 +4,8 @@
    Ok keeps the changes. Browser only: the model is HBSettings (settings.js); the page (app.js) owns the
    dialog frame and the menus and hands them over as `host`:
      {cell, cells(), toggleMenu(anchor, cls, fill(menuEl)), closeMenu(), placeMenu(), commit(changed), cancel(),
-      templates: {list(), save(name, settings), remove(name)}} */
+      templates: {list(), save(name, settings), remove(name)}, countries()}   (countries(): every currency code
+      seen in the loaded calendar, for the Events tab's chips) */
 (() => {
 'use strict';
 const S = window.HBSettings, I = window.HBIcons;
@@ -15,8 +16,8 @@ const asNumber = (v) => Number(v);
 const asPrecision = (v) => (v === '' ? null : Number(v));
 
 /* The tabs, in TradingView's order. A row: {label, check?: key (a checkbox before the label), colors?: [[key,
-   what]] (a swatch each), select?: {key, choices: [[value, text]], parse?}, number?: {key, min, max, unit?}}.
-   Task 8 adds Events. */
+   what]] (a swatch each), select?: {key, choices: [[value, text]], parse?}, number?: {key, min, max, unit?},
+   dot?: colour (a colour dot before the label, no swatch), chips?: key (a multi-select of host.countries())}. */
 const TABS = [
   { id: 'symbol', label: 'Symbol', icon: 'candles', sections: [
     ['CANDLES', [
@@ -71,6 +72,16 @@ const TABS = [
       { label: 'Text colour', colors: [['scaleText', '']] },
       { label: 'Text size', select: { key: 'scaleFont', choices: FONT_SIZES, parse: asNumber } },
       { label: 'Lines colour', colors: [['scaleLines', '']] },
+    ]],
+  ] },
+  { id: 'events', label: 'Events', icon: 'calendar', sections: [
+    ['ECONOMIC CALENDAR', [
+      { label: 'High', check: 'evHigh', dot: '#F23645' },
+      { label: 'Medium', check: 'evMedium', dot: '#FF9800' },
+      { label: 'Low', check: 'evLow', dot: '#F7C600' },
+      { label: 'Holiday', check: 'evHoliday', dot: '#9598A1' },
+      { label: 'Currencies', chips: 'evCountries' },
+      { label: 'Vertical lines for high impact', check: 'evLines' },
     ]],
   ] },
 ];
@@ -139,6 +150,7 @@ function mount(box, host) {
       cb.onchange = () => set(r.check, cb.checked);
       name.append(cb);
     }
+    if (r.dot) { const d = mk('i', 'set-dot'); d.style.background = r.dot; name.append(d); }
     name.append(mk('span', '', r.label));
     for (const [key, what] of r.colors || []) {
       const b = button('swatch'), i = mk('i'), tip = `${r.label}${what ? ` ${what}` : ''} colour`;
@@ -167,6 +179,21 @@ function mount(box, host) {
       n.onchange = () => { n.value = String(work[key]); };   // shows the clamped value
       ctl.append(n);
       if (unit) ctl.append(mk('span', 'set-unit', unit));
+    }
+    if (r.chips) {   // a multi-select: one checkbox per currency in the feed (plus any already picked)
+      const key = r.chips, picked = new Set(work[key]), wrap = mk('div', 'set-chips');
+      const all = [...new Set([...(host.countries ? host.countries() : []), ...work[key]])].sort();
+      for (const c of all) {
+        const lab = mk('label', 'set-chip'), cb = mk('input');
+        cb.type = 'checkbox';
+        cb.checked = picked.has(c);
+        cb.onchange = () => set(key, cb.checked ? [...work[key], c] : work[key].filter((x) => x !== c));
+        lab.append(cb, mk('span', '', c));
+        wrap.append(lab);
+      }
+      if (!all.length) wrap.append(mk('span', 'set-unit', 'No calendar loaded yet'));
+      ctl.append(wrap);
+      el.classList.add('tall');
     }
     el.append(name, ctl);
     return el;

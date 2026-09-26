@@ -191,5 +191,52 @@ class Countdown extends Layer {
   }
 }
 
-window.HBLayers = { Footprint, Profile, Gaps, Layer, EthBg, Countdown };
+/* The economic calendar: a 10 px flag per event time at the bottom of the price pane (ForexFactory's folder
+   colours) and, for High events, a 1 px dotted line in the event's colour through the pane. read() -> {events,
+   xOf, lines} | null is asked before every render (the bars and settings live in the cell); `flags` and
+   `flagY` stay for the page's hover test. Layout and colours: HBEvents. */
+class EventFlags extends Layer {
+  constructor(P, read) {
+    super(P);
+    this.read = read; this.flags = []; this.lines = false; this.flagY = 0;
+    this._views = [
+      { zOrder: () => 'bottom', renderer: () => ({ draw: (t) => this.drawLines(t) }) },
+      { zOrder: () => 'top', renderer: () => ({ draw: (t) => this.drawFlags(t) }) },
+    ];
+  }
+  updateAllViews() {
+    const r = this.chart ? this.read() : null;
+    this.lines = !!(r && r.lines);
+    this.flags = r ? window.HBEvents.layout(r.events, r.xOf, this.chart.timeScale().width()) : [];
+  }
+  drawLines(target) {
+    if (!this.lines || !this.flags.some((g) => g.line)) return;
+    target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = window.HBEvents.COLORS.High;
+      ctx.setLineDash([1, 3]);
+      for (const g of this.flags) {
+        if (!g.line) continue;
+        const x = Math.round(g.x) + 0.5;
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, mediaSize.height); ctx.stroke();
+      }
+      ctx.setLineDash([]);
+    });
+  }
+  drawFlags(target) {
+    if (!this.flags.length) return;
+    target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
+      const r = window.HBEvents.FLAG / 2;
+      this.flagY = mediaSize.height - r - 3;
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = this.P.bg;
+      for (const g of this.flags) {
+        ctx.beginPath(); ctx.arc(g.x, this.flagY, r, 0, Math.PI * 2);
+        ctx.fillStyle = g.color; ctx.fill(); ctx.stroke();
+      }
+    });
+  }
+}
+
+window.HBLayers = { Footprint, Profile, Gaps, Layer, EthBg, Countdown, EventFlags };
 })();

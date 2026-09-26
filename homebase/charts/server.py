@@ -26,6 +26,7 @@ from .. import symbols
 from ..paths import state_dir
 from . import DEFAULT_ROOTS, QUIET      # QUIET: never refill across the 9:30 fire
 from .bars import BarSpec
+from .calendar import Calendar
 from .history import History
 from .hub import Hub
 from .recorder import REFILL_MAX_PAGES, LiveRecorder, refill
@@ -209,13 +210,15 @@ class Conn:
 
 def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | None = None,
                speed: float = 10.0, start_et: dt.time = dt.time(9, 25), feed_factory=None,
-               now_ms=None, state: Path | None = None) -> FastAPI:
+               now_ms=None, state: Path | None = None, calendar_fetch=None) -> FastAPI:
     roots = [r.upper() for r in roots]
     sd = Path(state) if state else state_dir() / "charts"
     sd.mkdir(parents=True, exist_ok=True)
     layouts_path = sd / "layouts.json"
     drawings_path = sd / "drawings.json"
     templates_path = sd / "templates.json"
+    # ForexFactory's calendar; calendar_fetch None never fetches (tests); python -m homebase.charts passes http_get
+    cal = Calendar(sd / "calendar", fetch=calendar_fetch)
     store = TickStore(base)
     history = History(store, cache_dir=sd / "cache")
     recorder = None if replay else LiveRecorder(base)
@@ -366,6 +369,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             "written": recorder.written, "buffered": recorder.buffered, "error": recorder.error}
         st["streams"] = len(hub.streams)
         st["clients"] = len(conns)
+        st["calendar"] = cal.status()
         return st
 
     async def pump() -> None:
@@ -398,6 +402,15 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                 except Exception as e:  # noqa: BLE001
                     log(f"pump status: {type(e).__name__}: {e}")
 
+    async def calendar_loop() -> None:
+        """The calendar at startup, then hourly (30 min after a failure); never faster: FF blocks polling."""
+        while True:
+            try:
+                await asyncio.to_thread(cal.refresh)
+            except Exception as e:  # noqa: BLE001 — the calendar must never take the service down
+                log(f"calendar: {type(e).__name__}: {e}")
+            await asyncio.sleep(max(cal.wait_s(), 60.0))    # not the `sleep` seam: tests patch it to 0
+
     @asynccontextmanager
     async def lifespan(_app):
         if replay:
@@ -416,6 +429,8 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                 start_last[r] = last
                 reseed(r)
         tasks = [asyncio.create_task(pump()), asyncio.create_task(feed.run())]
+        if calendar_fetch is not None:
+            tasks.append(asyncio.create_task(calendar_loop()))
         log(f"up — {'replay ' + replay.isoformat() if replay else 'live'} · {', '.join(roots)}")
         try:
             yield
@@ -546,6 +561,16 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         all_.pop(name, None)
         write_json(templates_path, all_)
         return {"ok": True}
+
+    @app.get("/api/calendar")
+    async def api_calendar(request: Request):
+        q = request.query_params
+        try:
+            frm, to = int(q.get("from", 0)), int(q.get("to", 2 ** 62))
+        except ValueError:
+            raise HTTPException(400, "from / to: epoch ms") from None
+        countries = [c.strip() for c in q.get("countries", "").split(",") if c.strip()]
+        return cal.events(frm, to, countries or None)
 
     @app.websocket("/ws")
     async def ws_endpoint(sock: WebSocket):
