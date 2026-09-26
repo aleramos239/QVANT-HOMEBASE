@@ -96,10 +96,15 @@ def check(rng: Range, holdout: dict | None) -> str | None:
 
 
 def record_spend(path: Path, *, strategy: str, inputs: dict, rng: Range, reason: str,
-                 ts: str | None = None) -> dict:
-    """Append ONE spend line (never rewrites)."""
+                 run_id: str | None = None, ts: str | None = None) -> dict:
+    """Append ONE spend line (never rewrites). `run_id`, when given, lets a later
+    caller (execute()'s Item 5 dedup) recognize a spend it already logged for this
+    run — it is left out of the record entirely when not given, matching every
+    spend logged before Item 5 existed."""
     rec = {"ts": ts or dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
            "strategy": strategy, "inputs": inputs, "range": rng.to_dict(), "reason": reason}
+    if run_id is not None:
+        rec["run_id"] = run_id
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "a", encoding="utf-8") as f:
         f.write(json.dumps(rec, separators=(",", ":")) + "\n")

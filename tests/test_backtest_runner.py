@@ -136,6 +136,29 @@ def test_execute_refuses_a_tampered_request_reaching_the_holdout(tmp_path):
         execute(tmp_path / "runs" / rid, TapeStore(tmp_path / "ticks", tmp_path / "cache"))
 
 
+def test_execute_logs_exactly_one_spend_for_a_hand_edited_holdout_reason(tmp_path):
+    """Item 5 (discipline edge): a request.json hand-edited to reach holdout data
+    AFTER prepare() already ran (so prepare()'s own spend-on-accept never saw it)
+    must still be logged when `execute()` (a script's `runner exec run_dir`, not
+    the normal submit path) re-checks and finds a valid holdout reason -- exactly
+    once, even if execute() runs on the same bundle again."""
+    store = TapeStore(nq_archive(tmp_path / "ticks"), tmp_path / "cache")
+    rid = prepare(body(), tmp_path)                     # an ordinary, non-holdout range
+    assert not (tmp_path / "spends.jsonl").exists()
+    p = tmp_path / "runs" / rid / "request.json"
+    req = read_json(p)
+    req["range"] = {"kind": "custom", "start": "2024-12-01", "end": "2025-03-01"}
+    req["holdout"] = {"reason": "hand-edited forward check"}
+    p.write_text(json.dumps(req))
+    execute(tmp_path / "runs" / rid, store)
+    lines = (tmp_path / "spends.jsonl").read_text().splitlines()
+    assert len(lines) == 1
+    spend = json.loads(lines[0])
+    assert spend["run_id"] == rid and spend["reason"] == "hand-edited forward check"
+    execute(tmp_path / "runs" / rid, store)              # running it again must not double-log
+    assert len((tmp_path / "spends.jsonl").read_text().splitlines()) == 1
+
+
 def test_manager_runs_a_child_process_to_done(tmp_path):
     m = RunManager(tmp_path / "t", archive=nq_archive(tmp_path / "ticks"), cache=tmp_path / "cache")
     rid = m.submit(body())

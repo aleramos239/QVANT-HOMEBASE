@@ -61,3 +61,12 @@ def test_a_spend_line_is_appended_never_rewritten(tmp_path):
     assert got[0] == a == {"ts": "T1", "strategy": "nq930", "inputs": {"offset_pts": 5.0},
                            "range": r.to_dict(), "reason": "why"}
     assert [s["strategy"] for s in got] == ["nq930", "ym930"]
+
+
+def test_a_spend_records_its_run_id_when_given(tmp_path):
+    """Item 5: execute()'s discipline-edge dedup keys off run_id, so a spend that
+    carries one lets a later caller recognize it was already logged for this run."""
+    p = tmp_path / "tester" / "spends.jsonl"
+    r = parse_range({"kind": "custom", "start": "2025-01-01", "end": "2025-06-30"})
+    a = record_spend(p, strategy="nq930", inputs={}, rng=r, reason="why", run_id="RID1", ts="T1")
+    assert a["run_id"] == "RID1" and spends(p)[0]["run_id"] == "RID1"

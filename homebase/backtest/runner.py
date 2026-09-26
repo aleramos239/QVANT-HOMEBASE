@@ -121,7 +121,8 @@ def prepare(body, base: Path) -> str:
                                    "done": 0, "total": 0, "updated": _now()})
     if req["holdout"]:                     # accepted (validate/check already passed) -> it's a spend
         discipline.record_spend(base / "spends.jsonl", strategy=req["strategy"], inputs=req["inputs"],
-                                rng=discipline.parse_range(req["range"]), reason=req["holdout"]["reason"])
+                                rng=discipline.parse_range(req["range"]), reason=req["holdout"]["reason"],
+                                run_id=rid)
     return rid
 
 
@@ -152,6 +153,16 @@ def execute(run_dir: Path, store: TapeStore) -> dict:
     cls = strategies.get(req["strategy"])
     rng = discipline.parse_range(req["range"])
     reason = discipline.check(rng, req.get("holdout"))            # defence in depth
+    if reason is not None:
+        # Item 5 (discipline edge): prepare() already logged this run's spend for
+        # the ordinary path, but a hand-edited request.json (e.g. a range widened
+        # to holdout data after prepare() ran, then `runner exec` invoked on it
+        # directly) never went through prepare() at all -- re-check here and log
+        # the spend exactly once per run id, never a second time for the normal path.
+        spends_path = run_dir.parent.parent / "spends.jsonl"
+        if not any(s.get("run_id") == req["id"] for s in discipline.spends(spends_path)):
+            discipline.record_spend(spends_path, strategy=req["strategy"], inputs=req["inputs"],
+                                    rng=rng, reason=reason, run_id=req["id"])
     strat = cls(req["inputs"])             # one instance: on_session resets its day state
     days = [d for d in store.sessions(cls.root, rng.start, rng.end)
             if rng.includes(d) and strat.trades_on(d)]
