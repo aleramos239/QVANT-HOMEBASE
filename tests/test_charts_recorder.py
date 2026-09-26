@@ -117,6 +117,41 @@ def test_a_failing_repair_on_open_degrades_like_a_failing_flush(tmp_path, monkey
     assert [t.id for t in s.ticks] == [1, 2, 3, 4, 6]
 
 
+def test_flush_retries_a_pending_repair_with_no_buffered_rows(tmp_path, monkeypatch):
+    setup = LiveRecorder(tmp_path)
+    setup.append("NQ", "NQZ6", rows(M, [100.0, 100.25]))
+    setup.flush()                                            # member 1: ids 1, 2 (good)
+    setup.append("NQ", "NQZ6", rows(M + 2_000, [100.5, 100.75], first_id=3))
+    setup.flush()                                            # member 2: ids 3, 4 (good)
+    nq_p = setup.path("NQ", D, "NQZ6")
+    torn = gzip.compress(f"{M + 5_000},101.0,1,,,,,5\n".encode())
+    with open(nq_p, "ab") as fh:
+        fh.write(torn[: len(torn) // 2])                     # a torn third member (crash)
+
+    def fail_replace(*a, **kw):
+        raise OSError(28, "No space left on device")
+
+    rec = LiveRecorder(tmp_path)                             # fresh: no cached state for the NQ path
+
+    with monkeypatch.context() as m:
+        m.setattr(os, "replace", fail_replace)
+
+        assert rec.last_ts("NQ", D, "NQZ6") == M + 3_000      # repair fails; nothing buffered for NQ
+        assert rec.error is not None
+        assert rec.buffered == 0
+
+        rec.append("ES", "ESZ6", rows(M, [4_500.0]))          # an unrelated, healthy contract
+        assert rec.flush() == 1                               # the ES row is written
+        assert rec.error is not None                          # the NQ path is still torn -- must not clear
+
+    assert rec.flush() == 0                                   # nothing buffered; only a pending repair to retry
+    assert rec.error is None
+    assert not rec._needs_repair
+    gzip.decompress(nq_p.read_bytes())                        # now one clean member, no torn tail
+    s = TickStore(tmp_path).load("NQ", D)
+    assert [t.id for t in s.ticks] == [1, 2, 3, 4]
+
+
 def test_a_failed_write_mid_member_is_repaired_next_flush(tmp_path, monkeypatch):
     rec = LiveRecorder(tmp_path)
     rec.append("NQ", "NQZ6", rows(M, [100.0, 100.25]))

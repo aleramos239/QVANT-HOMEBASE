@@ -121,6 +121,15 @@ class LiveRecorder:
 
     def flush(self) -> int:
         n, failed = 0, None
+        for p in list(self._needs_repair):
+            if self._buf.get(p):
+                continue                       # has rows to write: repaired alongside them, below
+            try:
+                self._repair(p)
+            except OSError as e:
+                failed = f"{p.name}: {e}"      # still torn; retried again next flush
+                continue
+            self._needs_repair.discard(p)
         for p, rows in self._buf.items():
             if not rows:
                 continue
@@ -142,6 +151,10 @@ class LiveRecorder:
             self._needs_repair.discard(p)
             n += len(rows)
             rows.clear()
+        if failed is None and self._needs_repair:
+            # defensive: every path above should already have been retried
+            # this call, but never report "healthy" while one is still torn
+            failed = f"{next(iter(self._needs_repair)).name}: still needs repair"
         self.error = failed
         self.written += n
         return n
