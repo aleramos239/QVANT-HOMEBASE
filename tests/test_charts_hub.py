@@ -431,3 +431,61 @@ def test_older_also_bounds_the_time_it_spends_on_a_cold_chunk(tmp_path, monkeypa
     elapsed = time.monotonic() - t0
     assert elapsed < 2.0
     assert ans["bars"] != [] or ans["done"] is True   # never silently nothing without a reason
+
+
+# ---- Fix round 2: a budget cutoff must never leave a HOLE -- it must drop the OLDEST end, not the newest ----
+def test_a_cold_subscribe_fills_newest_first_and_stays_contiguous(tmp_path, monkeypatch):
+    """A mix of cached (warmed ahead of time) and uncached sessions, with a tiny budget: the sessions that
+    make it into the history are a CONTIGUOUS block ending at the newest completed session. The old bug
+    built oldest-first and stopped at the budget, dropping the most recent months instead of the oldest."""
+    hub, days = deep(tmp_path, n=20)
+    spec = BarSpec("time", 86400)
+    for d in days[:10]:                      # warm the OLDEST half; the newest half stays cold (slow to build)
+        hub.history.bars("NQ", spec, d)
+    real_bars = History.bars
+
+    def slow_bars(self, root, spec, d, memo=True):
+        if not self.cached(root, d):
+            time.sleep(0.03)
+        return real_bars(self, root, spec, d, memo=memo)
+
+    monkeypatch.setattr(History, "bars", slow_bars)
+    monkeypatch.setattr(hub_mod, "BUILD_BUDGET_S", 0.05)
+    s = open_stream(hub, spec=spec, keys=())
+    got = [x["date"] for x in s.sessions if x["date"] != D.isoformat()]     # exclude today's own entry
+    all_dates = [d.isoformat() for d in days]
+    assert 0 < len(got) < len(all_dates)
+    assert got == all_dates[len(all_dates) - len(got):]        # contiguous, ends at the newest session
+    assert s.partial is True
+
+
+def test_older_walks_newest_first_and_stays_contiguous_across_two_calls(tmp_path, monkeypatch):
+    """A mix of cached (already on the chart) and uncached sessions further back, with a tiny budget: each
+    older() chunk is contiguous, and a second call continues it with no gap in between."""
+    hub, days = deep(tmp_path, n=300)
+    spec = BarSpec("time", 86400)
+    s = open_stream(hub, spec=spec, keys=())     # loads (and so caches) the newest 250 of 300, real archive
+    first_loaded = dt.date.fromisoformat(s.bars[0].session)
+    idx = days.index(first_loaded)               # everything before `idx` is still uncached
+    real_bars = History.bars
+
+    def slow_bars(self, root, spec, d, memo=True):
+        if not self.cached(root, d):
+            time.sleep(0.02)
+        return real_bars(self, root, spec, d, memo=memo)
+
+    monkeypatch.setattr(History, "bars", slow_bars)
+    monkeypatch.setattr(hub_mod, "BUILD_BUDGET_S", 0.05)
+    expected_tail = [d.isoformat() for d in days[:idx]]    # oldest -> newest, right up to the chart's own
+
+    a = hub.older(s, s.bars[0].t)
+    a_dates = [x["date"] for x in a["sessions"]]
+    assert a_dates
+    assert a_dates == expected_tail[len(expected_tail) - len(a_dates):]     # contiguous, ends just before idx
+    assert a["done"] is False                    # the budget cut it short: more remain further back
+
+    b = hub.older(s, a["bars"][0]["ms"])
+    b_dates = [x["date"] for x in b["sessions"]]
+    assert b_dates
+    cut = len(expected_tail) - len(a_dates)
+    assert b_dates == expected_tail[max(0, cut - len(b_dates)):cut]         # continues with no gap

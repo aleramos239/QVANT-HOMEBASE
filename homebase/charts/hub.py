@@ -67,6 +67,8 @@ class Stream:
     subs: dict = field(default_factory=dict)       # (conn, chart_id) -> bars already sent
     dirty: bool = False
     reset: bool = False
+    partial: bool = False   # prepare() hit BUILD_BUDGET_S before loading every completed session it wanted;
+                            # the page should ask `older` right away rather than wait for the user to scroll
 
     @property
     def key(self) -> tuple[str, str]:
@@ -106,7 +108,7 @@ class Stream:
         return {"root": self.root, "spec": self.spec.key, "tick_size": ts, "point_value": point_value(self.root),
                 "bars": bars, "live": live is not None, "studies": studies,
                 "profile": self.profile.value(live) if self.profile is not None else None,
-                "sessions": self.sessions}
+                "sessions": self.sessions, "partial": self.partial}
 
     def update_since(self, cursor: int) -> dict:
         ts, live = self.tick_size, self.builder.cur
@@ -193,18 +195,27 @@ class Hub:
         be 250 (a daily chart); building a session that is not already cached reads and parses its raw
         ticks, which is slow. BUILD_BUDGET_S bounds how long this spends on sessions still to be built, so
         a cold subscribe answers with what it managed rather than blocking the connection until every
-        session is built -- the rest is exactly what scroll-back (`older`) is for."""
+        session is built. It walks NEWEST first, so a budget cutoff always drops sessions off the OLD end,
+        never the new one -- the result is always a contiguous block ending at the latest completed session
+        (built oldest-to-newest into the stream once decided). The sessions left out are exactly what
+        scroll-back (`older`) is for; s.partial says so, so the page can ask for them right away instead of
+        waiting for the user to scroll."""
         ts = tick_size(root)
         today_date = self.today_date.get(root)
         today = today_date or session_date(self.now_ms(), root)
         s = Stream(root, spec, ts, BarBuilder(spec, ts, root))
         dates = [d for d in self.store.sessions(root) if d < today][-sessions_back(spec):]
+        newest_first = list(reversed(dates))
         t0 = time.monotonic()
-        for i, d in enumerate(dates):
-            s.bars.extend(self.history.bars(root, spec, d))
-            s.sessions.append(self.history.info(root, d))
-            if i + 1 < len(dates) and time.monotonic() - t0 > BUILD_BUDGET_S:
-                break        # the rest stay unloaded: at least one session is always built and included
+        chunks = []
+        for i, d in enumerate(newest_first):
+            chunks.append((self.history.bars(root, spec, d), self.history.info(root, d)))
+            if i + 1 < len(newest_first) and time.monotonic() - t0 > BUILD_BUDGET_S:
+                break        # the OLDER remainder stays unloaded: at least one session is always built
+        for bars_d, info_d in reversed(chunks):     # oldest first again, for the stream's own order
+            s.bars.extend(bars_d)
+            s.sessions.append(info_d)
+        s.partial = len(chunks) < len(newest_first)
         tape = self.today.get(root)              # None: root has no tape yet (not [] — see attach)
         upto = len(tape) if tape else 0
         if tape is not None:

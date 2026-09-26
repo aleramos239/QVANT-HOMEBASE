@@ -344,6 +344,11 @@ class Cell {
     this.bars = []; this.realT = new Map();
     m.bars.forEach((b, i) => { b.sv = {}; for (const k in m.studies) b.sv[k] = m.studies[k][i]; this.append(b); });
     this.build(view);
+    // partial: the server's BUILD_BUDGET_S cut the initial load short (a cold, deep chart). It already
+    // dropped the OLDEST sessions, never the newest, so what's on screen is right -- but there may be far
+    // fewer bars than this bar type's default depth. Ask for the rest right away rather than waiting for
+    // the user to scroll into the left edge.
+    if (m.partial) this.askOlder({ from: 0, to: this.bars.length });
     if (!this.noteOn) this.message('');
     this.host.onLoaded(this);
   }
