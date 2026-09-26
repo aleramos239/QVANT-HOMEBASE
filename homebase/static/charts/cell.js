@@ -17,6 +17,7 @@ const FAKE0 = 946684800;    // synthetic-axis origin for tick/volume/range bars
 const FONT = '-apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif';
 const LEVELS = [['pdh', 'PDH'], ['pdl', 'PDL'], ['pdc', 'PDC'], ['onh', 'ONH'], ['onl', 'ONL'], ['rth_open', 'Open']];
 const PANE_H = 90;          // px: the delta / cumulative delta / ADX panes
+const WHOLE = { type: 'price', precision: 0, minMove: 1 };   // contract counts: -25, not -25.00
 const NOTE_MS = 8000;       // a refused change's reason stays this long in the legend
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -309,11 +310,11 @@ class Cell {
           break;
         }
         case 'delta':
-          add(inst, '__delta', null, LW.HistogramSeries, { lastValueVisible: true }, ++pane);
+          add(inst, '__delta', null, LW.HistogramSeries, { lastValueVisible: true, priceFormat: { ...WHOLE } }, ++pane);
           break;
         case 'cumdelta':
           this.colorOf[inst.uid] = P.cum;
-          line(inst, k, null, P.cum, 2, ++pane);
+          line(inst, k, null, P.cum, 2, ++pane, { priceFormat: { ...WHOLE } });
           break;
         default:   // levels, footprint, profile, big prints: price lines, layers and markers
           break;

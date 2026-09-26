@@ -124,6 +124,11 @@ function moveDrawing(d, dBars, dPrice, tick, ctx) {
     : { t: shiftTime(q.t, dBars, ctx), p: roundToTick(q.p + dPrice, tick) })) };
 }
 
+/* Do two versions of a drawing sit on exactly the same points? */
+function samePoints(a, b) {
+  return a.points.length === b.points.length && a.points.every((q, i) => q.t === b.points[i].t && q.p === b.points[i].p);
+}
+
 function fmtDuration(ms) {
   const s = Math.round(Math.abs(ms) / 1000);
   if (s < 60) return `${s}s`;
@@ -227,7 +232,7 @@ class Store {
 }
 
 /* ---------------- browser half: canvas primitive + pointer controller ---------------- */
-const MOVE_PX = 4;   // a press that moves less than this is a click, not a drag
+const MOVE_PX = 4;   // a press that moves less than this is a click, not a drag (placing, moving, reshaping)
 
 /* Draws one chart's trend lines and rectangles, the drawing being placed,
    the selected drawing's handles and the measure box, as a series
@@ -317,7 +322,7 @@ class Controller {
     this.measure = null;   // {a, b, done}
     this.mode = null;      // placing: 'drag' (button held since the first point) | 'click' (waiting for the 2nd click)
     this.downAt = null;    // pane point of the press that started placing
-    this.drag = null;      // moving / reshaping: {orig, part, index, from, cur}
+    this.drag = null;      // moving / reshaping: {orig, part, index, from, down, moving, cur}
     this.owned = false;    // this gesture switched the chart's panning off
     this.hlines = new Map();   // drawing id -> its price line
     this.prim = new Primitive(this);
@@ -450,7 +455,7 @@ class Controller {
     if (!d) { if (this.sel) { this.sel = null; this.refresh(); } return; }   // empty chart: deselect, let it pan
     this.own(e);
     this.sel = d.id;
-    this.drag = { orig: d, part: hit.part, index: hit.index, from: this.at(pt), cur: null };
+    this.drag = { orig: d, part: hit.part, index: hit.index, from: this.at(pt), down: pt, moving: false, cur: null };
     this.setCursor('grabbing');
     this.refresh();
   }
@@ -468,9 +473,12 @@ class Controller {
       return;
     }
     if (!this.drag || !this.drag.from) return;
-    const at = this.at(this.local(e));
+    const pt = this.local(e), { orig, part, index, from, down } = this.drag;
+    // a press that has not left the press point by MOVE_PX is a click (select): a jitter never moves a drawing
+    if (!this.drag.moving && Math.hypot(pt.x - down.x, pt.y - down.y) < MOVE_PX) return;
+    this.drag.moving = true;
+    const at = this.at(pt);
     if (!at) return;
-    const { orig, part, index, from } = this.drag;
     this.drag.cur = part === 'handle' ? setPoint(orig, index, at.t, at.p)
       : moveDrawing(orig, Math.round(at.L) - Math.round(from.L), at.p - from.p, this.cell.tick, this.ctx());
     this.refresh();
@@ -487,11 +495,12 @@ class Controller {
       return;
     }
     if (!this.drag) return;
-    const moved = this.drag.cur;
+    const { orig, cur } = this.drag;
     this.drag = null;
     this.release();
     this.setCursor(null);
-    if (moved) this.host.drawings.replace(this.root, moved); else this.refresh();
+    // saved only when a point really moved: a drag that ends where it started PUTs nothing
+    if (cur && !samePoints(orig, cur)) this.host.drawings.replace(this.root, cur); else this.refresh();
   }
 
   finish(at) {
@@ -575,7 +584,8 @@ class Controller {
 }
 
 const api = { barIndexAt, logicalOf, xOfLogical, timeToX, snapTime, roundToTick, distToSegment, handlePoints, hitTest,
-  setPoint, shiftTime, moveDrawing, fmtDuration, measureLabel, newId, Store, Primitive, Controller, HANDLE_TOL, LINE_TOL };
+  setPoint, shiftTime, moveDrawing, samePoints, fmtDuration, measureLabel, newId, Store, Primitive, Controller, HANDLE_TOL,
+  LINE_TOL };
 if (typeof window !== 'undefined') window.HBDrawings = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

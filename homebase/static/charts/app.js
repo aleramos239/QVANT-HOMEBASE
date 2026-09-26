@@ -330,6 +330,8 @@ async function layoutMenu(saveAsFirst = false) {
     const go = async () => {
       const name = input.value.trim(), saving = layout;
       if (!name) { input.focus(); return; }
+      // the browser resolves /api/layouts/. and /.. as path steps: the PUT would miss the layout
+      if (name === '.' || name === '..') { fail('“.” and “..” cannot be layout names'); input.focus(); return; }
       const why = await putLayout(name);
       if (why) { fail(why); return; }
       if (layout === saving) { layout.name = name; saveLast(); renderToolbar(); }   // not a layout loaded meanwhile
@@ -361,7 +363,8 @@ async function layoutMenu(saveAsFirst = false) {
       const f = box.contains(document.activeElement), near = box.nextElementSibling || box.previousElementSibling;
       box.remove();
       if (layout.name === name) { layout.name = ''; saveLast(); renderToolbar(); }
-      if (!list.querySelector('.menu-row')) list.replaceChildren(mk('div', 'menu-empty', 'No saved layouts yet'));
+      // a row waiting in its own delete confirm is still a saved layout
+      if (!list.querySelector('.menu-row, .menu-confirm')) list.replaceChildren(mk('div', 'menu-empty', 'No saved layouts yet'));
       if (f) { const to = (near && near.querySelector('.menu-i')) || m.querySelector('.menu-i, .menu-input'); if (to) to.focus(); }
     };
   }
@@ -576,39 +579,22 @@ function clearDrawings() {
 }
 
 /* ---- bottom bar ---- */
-function fmtAge(a) {
-  if (a == null) return '—';
-  if (a < 60) return `${a.toFixed(1)}s`;
-  if (a < 3600) return `${Math.round(a / 60)}m`;
-  if (a < 86400) return `${Math.round(a / 3600)}h`;
-  return `${Math.round(a / 86400)}d`;
-}
-
 function showStatus(s) {
-  const roots = s.roots || {}, rec = s.recorder, recErr = rec && rec.error, recBusy = !!(rec && rec.buffered >= 5000);
-  const now = etNow(), open = (r) => C.marketOpen(r, now.weekday, now.minutes);
-  const refused = Object.entries(roots).filter(([, x]) => x.error);
-  const stale = Object.entries(roots).filter(([r, x]) => !x.error && open(r) && (x.last_tick_age_s ?? 0) > 30)
-    .sort((a, b) => b[1].last_tick_age_s - a[1].last_tick_age_s);
-  $('#sbDot').className = 'sb-dot ' + (!s.connected || s.error || recErr ? 'bad'
-    : stale.length || refused.length || recBusy ? 'warn' : 'ok');
+  const now = etNow(), f = C.feedSummary(s, now.weekday, now.minutes), rec = s.recorder;
+  $('#sbDot').className = 'sb-dot' + (f.dot ? ' ' + f.dot : '');
   $('#sbMode').textContent = s.mode === 'replay'
     ? `Replay ${s.date} ×${s.speed} · ${iso(s.clock_s || 0).slice(11, 19)} ET${s.done ? ' · done' : ''}`
     : s.mode === 'live' ? `Live · md ${s.md || ''}` : 'Disconnected';
   const feed = $('#sbFeed');
-  feed.textContent = s.error || (recErr ? `recorder: ${recErr}` : '') || (!s.connected ? 'connecting…' : '')
-    || [...refused.map(([r]) => `${r} unavailable`),
-      ...stale.slice(0, 2).map(([r, x]) => `${r} stale ${fmtAge(x.last_tick_age_s)}`)].join(' · ')
-    || (Object.keys(roots).length ? 'feeds ok' : '');
-  feed.title = Object.entries(roots).map(([r, x]) => `${r} ${x.error ? `unavailable: ${x.error}`
-    : open(r) ? fmtAge(x.last_tick_age_s) : 'closed'}`).join('  ·  ');
-  feed.classList.toggle('bad', !!(s.error || recErr));
+  feed.textContent = f.text;
+  feed.title = f.title;
+  feed.className = 'sb-feed' + (f.textClass ? ' ' + f.textClass : '');
   const budget = $('#sbBudget');
   budget.textContent = s.mode === 'live' ? `md ${s.budget_hour ?? 0}/180` : '';
   budget.title = s.mode === 'live' ? `Chart requests this hour on the md login (limit 180) · ${s.clients ?? 0} page(s)` : '';
   const recEl = $('#sbRec');
   recEl.textContent = s.mode === 'live' && rec ? `rec buffered ${rec.buffered.toLocaleString('en-US')}` : '';
-  recEl.classList.toggle('warn', recBusy);
+  recEl.classList.toggle('warn', !!(rec && rec.buffered >= C.REC_BUSY));
   statusLine = feed.textContent;
 }
 

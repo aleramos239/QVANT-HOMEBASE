@@ -261,3 +261,59 @@ test('a failed save is reported and the drawings stay on screen', async (t) => {
   assert.deepEqual(s.list('NQ'), [H1]);
   assert.deepEqual(errors, [['NQ', 'save failed (400): type: trend, hline or rect']]);
 });
+
+test('samePoints: two versions of a drawing on exactly the same points', () => {
+  assert.equal(D.samePoints(trend, { ...trend, points: trend.points.map((q) => ({ ...q })) }), true);
+  assert.equal(D.samePoints(trend, D.moveDrawing(trend, 0, 0.25, 0.25, TIME)), false);
+  assert.equal(D.samePoints(trend, D.moveDrawing(trend, 1, 0, 0.25, TIME)), false);
+  assert.equal(D.samePoints(hline, { ...hline, points: [{ p: 875 }] }), true);
+  assert.equal(D.samePoints(hline, { ...hline, points: [{ p: 875.25 }] }), false);
+});
+
+/* The pointer controller on a chart that needs no browser: the price pane
+   is 400 x 1000 px at the page origin, bar i at x = 100 + 10 i, price p at
+   y = 1000 - p (so one pixel is four 0.25 ticks). */
+function pointerRig(saved) {
+  globalThis.window = { addEventListener() {}, removeEventListener() {} };
+  const chart = { applyOptions() {}, priceScale: () => ({ width: () => 60 }), panes: () => [{ getHeight: () => 1000 }],
+    timeScale: () => ({ logicalToCoordinate: (i) => 100 + i * 10, coordinateToLogical: (x) => (x - 100) / 10 }) };
+  const cell = { shown: { root: 'NQ' }, el: { dataset: {} }, P: { accent: '#2962FF' }, chart, bars, tick: 0.25,
+    isTime: () => true, barMs: () => MIN,
+    box: { clientWidth: 460, getBoundingClientRect: () => ({ left: 0, top: 0 }), addEventListener() {}, removeEventListener() {} },
+    candles: { attachPrimitive() {}, priceToCoordinate: (p) => 1000 - p, coordinateToPrice: (y) => 1000 - y } };
+  const f = fakeFetch((url, method) => (method === 'GET' ? { status: 200, body: saved } : null));
+  const store = new D.Store({ fetchFn: f, delay: 0 });
+  const ctl = new D.Controller(cell, { tool: () => 'cursor', toolDone() {}, drawings: store });
+  const ev = (x, y, buttons = 1) => ({ button: 0, buttons, ctrlKey: false, clientX: x, clientY: y,
+    preventDefault() {}, stopPropagation() {} });
+  const gesture = async (path) => {   // press at path[0], move through the rest, release at the last point
+    ctl.onDown(ev(...path[0]));
+    for (const p of path.slice(1)) ctl.onMove(ev(...p));
+    ctl.onUp(ev(...path.at(-1), 0));
+    await new Promise((r) => setTimeout(r, 5));   // the store's (0 ms) save debounce
+    await flush();
+  };
+  return { ctl, store, gesture, puts: () => f.calls.filter((c) => c.method === 'PUT'), done() { ctl.destroy(); } };
+}
+
+test('a click on a drawing selects it and never nudges it; a real drag moves it and saves once', async (t) => {
+  const had = globalThis.window;
+  t.after(() => { if (had === undefined) delete globalThis.window; else globalThis.window = had; });
+  const R = pointerRig([trend]);
+  await R.store.ensure('NQ');
+  await R.gesture([[120, 120], [121, 121]]);                       // a 1-px jitter on the line's body
+  assert.equal(R.ctl.sel, 'a');
+  assert.deepEqual(R.store.list('NQ'), [trend]);
+  assert.equal(R.puts().length, 0);
+  await R.gesture([[100, 100], [102, 101]]);                       // the same on a handle
+  assert.deepEqual(R.store.list('NQ'), [trend]);
+  assert.equal(R.puts().length, 0);
+  await R.gesture([[120, 120], [130, 130], [120, 120]]);           // dragged away and back: nothing changed
+  assert.deepEqual(R.store.list('NQ'), [trend]);
+  assert.equal(R.puts().length, 0);
+  await R.gesture([[120, 120], [122, 121], [130, 130]]);           // a real move: +1 bar, -10.00
+  const moved = { ...trend, points: [{ t: bars[1].ms, p: 890 }, { t: bars[4].ms + MIN, p: 850 }] };
+  assert.deepEqual(R.store.list('NQ'), [moved]);
+  assert.deepEqual(R.puts().map((c) => c.body), [[moved]]);
+  R.done();
+});

@@ -223,3 +223,82 @@ test('dialog filtering by name and group', () => {
   assert.equal(C.filter('').length, C.CATALOG.length);
   assert.deepEqual(C.GROUPS, ['All', 'VWAP', 'Moving averages', 'Trend', 'Levels', 'Volume', 'Order flow']);
 });
+
+test('a saved spec is normalised on migration (a Build-1 tick:0750 is tick:750)', () => {
+  assert.equal(C.migrate({ root: 'NQ', spec: 'tick:0750', st: {} }).spec, 'tick:750');
+  assert.equal(C.migrate({ root: 'NQ', spec: ' TIME:300 ', indicators: [] }).spec, 'time:300');
+  assert.equal(C.migrate({ root: 'NQ', spec: 'bogus', indicators: [] }).spec, 'time:60');
+  assert.equal(C.migrate({ root: 'NQ', spec: 'time:0', indicators: [] }).spec, 'time:60');
+  assert.equal(C.migrateLayout({ grid: 1, cells: [{ root: 'NQ', spec: 'range:08' }] }).cells[0].spec, 'range:8');
+});
+
+test('ages read as s / m / h / d', () => {
+  assert.equal(C.fmtAge(null), '—');
+  assert.equal(C.fmtAge(undefined), '—');
+  assert.equal(C.fmtAge(5), '5.0s');
+  assert.equal(C.fmtAge(59.94), '59.9s');
+  assert.equal(C.fmtAge(90), '2m');
+  assert.equal(C.fmtAge(7200), '2h');
+  assert.equal(C.fmtAge(200000), '2d');
+});
+
+/* feedSummary(status, ET weekday, ET minute of the day) — the bottom bar's dot, text and tooltip. */
+const SAT_NOON = [6, 12 * 60], WED_10 = [3, 10 * 60];
+const live = (roots, extra = {}) => ({ mode: 'live', connected: true, error: null, roots,
+  recorder: { written: 0, buffered: 0, error: null }, ...extra });
+const tick = (age) => ({ contract: 'X', last_tick_age_s: age, error: null });
+
+test('status: a weekend with Bitcoin fresh and the Globex futures closed is fine', () => {
+  const f = C.feedSummary(live({ BTC: tick(2), NQ: tick(180000) }), ...SAT_NOON);
+  assert.deepEqual(f, { dot: 'ok', text: 'feeds ok', textClass: '', title: 'BTC 2.0s  ·  NQ closed' });
+});
+
+test('status: a stale open market is amber, the stalest first, two at most', () => {
+  const f = C.feedSummary(live({ NQ: tick(45), ES: tick(0.5), YM: tick(90), RTY: tick(31) }), ...WED_10);
+  assert.equal(f.dot, 'warn');
+  assert.equal(f.text, 'YM stale 2m · NQ stale 45.0s');
+  assert.equal(f.textClass, 'warn');
+  assert.equal(f.title, 'NQ 45.0s  ·  ES 0.5s  ·  YM 2m  ·  RTY 31.0s');
+});
+
+test('status: a refused symbol reads "unavailable" in amber, whatever the market hours, with the reason in the tooltip', () => {
+  const s = live({ BTC: { contract: null, last_tick_age_s: null, error: 'BTCV6: getChart refused: None' }, NQ: tick(1) });
+  for (const at of [WED_10, SAT_NOON]) {
+    const f = C.feedSummary(s, ...at);
+    assert.equal(f.dot, 'warn');
+    assert.equal(f.text, 'BTC unavailable');
+    assert.equal(f.textClass, 'warn');
+    assert.ok(f.title.startsWith('BTC unavailable: BTCV6: getChart refused: None  ·  NQ '), f.title);
+  }
+});
+
+test('status: an open market that has not ticked yet is not "feeds ok" — neutral text, grey dot', () => {
+  const sat = C.feedSummary(live({ BTC: tick(null), NQ: tick(null) }), ...SAT_NOON);
+  assert.deepEqual(sat, { dot: '', text: 'BTC no ticks yet', textClass: '', title: 'BTC no ticks yet  ·  NQ closed' });
+  const wed = C.feedSummary(live({ NQ: tick(null), ES: tick(null), YM: tick(null), BTC: tick(1) }), ...WED_10);
+  assert.equal(wed.text, 'NQ no ticks yet · ES no ticks yet');
+  assert.equal(wed.dot, '');
+  assert.equal(wed.textClass, '');
+  const mixed = C.feedSummary(live({ NQ: tick(45), BTC: tick(null) }), ...WED_10);   // a warning wins the dot and the colour
+  assert.deepEqual([mixed.dot, mixed.text, mixed.textClass], ['warn', 'NQ stale 45.0s · BTC no ticks yet', 'warn']);
+});
+
+test('status: not connected reads "connecting…", never "feeds ok"', () => {
+  const f = C.feedSummary(live({ NQ: tick(1) }, { connected: false }), ...WED_10);
+  assert.deepEqual([f.dot, f.text, f.textClass], ['bad', 'connecting…', '']);
+});
+
+test('status: an error is red and says what failed', () => {
+  const f = C.feedSummary({ connected: false, error: 'chart service unreachable — retrying' }, ...WED_10);
+  assert.deepEqual(f, { dot: 'bad', text: 'chart service unreachable — retrying', textClass: 'bad', title: '' });
+  const feed = C.feedSummary(live({ NQ: tick(1) }, { error: 'Refused: every symbol refused' }), ...WED_10);
+  assert.deepEqual([feed.dot, feed.text, feed.textClass], ['bad', 'Refused: every symbol refused', 'bad']);
+  const rec = C.feedSummary(live({ NQ: tick(1) }, { recorder: { written: 0, buffered: 0, error: 'disk full' } }), ...WED_10);
+  assert.deepEqual([rec.dot, rec.text, rec.textClass], ['bad', 'recorder: disk full', 'bad']);
+});
+
+test('status: a backed-up recorder turns the dot amber and leaves the feed text alone', () => {
+  const f = C.feedSummary(live({ NQ: tick(1) }, { recorder: { written: 0, buffered: C.REC_BUSY, error: null } }), ...WED_10);
+  assert.deepEqual([f.dot, f.text, f.textClass], ['warn', 'feeds ok', '']);
+  assert.equal(C.feedSummary(live({}), ...WED_10).text, '');
+});

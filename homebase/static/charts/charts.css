@@ -168,6 +168,7 @@ a { color: inherit; }
 .dlg-search:focus-within { border-color: var(--accent); }
 .dlg-search .ic { color: var(--text-2); }
 .dlg-search input { flex: 1; min-width: 0; border: 0; background: none; font-size: 16px; }
+.dlg-search input:focus-visible { outline: none; }   /* the box's focus-within border is the one ring */
 .dlg-body { flex: 1; min-height: 0; display: flex; border-top: 1px solid var(--border); }
 .dlg-groups { flex: none; width: 180px; padding: 8px 0; overflow: auto; border-right: 1px solid var(--border); }
 .dlg-group { width: 100%; height: 32px; padding: 0 20px; text-align: left; color: var(--text); }
@@ -202,6 +203,7 @@ a { color: inherit; }
 .sb-mode { color: var(--text); }
 .sb-feed { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .sb-feed.bad, .sb-note { color: var(--down); }
+.sb-feed.warn { color: var(--warn); }
 .sb-spacer { flex: 1; }
 #sbRec.warn { color: var(--warn); }
 .sb-credit { color: var(--text-2); text-decoration: none; }

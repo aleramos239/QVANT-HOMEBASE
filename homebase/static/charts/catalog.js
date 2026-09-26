@@ -56,6 +56,8 @@ const INTERVAL_GROUPS = [
 const ST0 = { vwap: true, vwapAnchor: 'eth', vwapBands: false, ema1: 0, ema2: 0, sma: 0, vwma: 0, levels: true,
   volume: true, delta: false, cumdelta: false, adx: 0, footprint: true, imbalance: 3, profile: false, bigMin: 0 };
 const UNITS = [[86400, 'D', 'day'], [3600, 'h', 'hour'], [60, 'm', 'minute'], [1, 's', 'second']];
+const STALE_S = 30;       // an open market's symbol without a tick for this long is stale
+const REC_BUSY = 5000;    // the recorder's buffer this full turns the status amber
 
 let seq = 0;
 function uid() { return 'i' + Date.now().toString(36) + (seq++).toString(36) + Math.random().toString(36).slice(2, 6); }
@@ -97,11 +99,12 @@ function serverKey(inst) {
 
 function serverKeys(list) { return [...new Set((list || []).map(serverKey).filter(Boolean))]; }
 
-/* A saved chart config of any vintage as {root, spec, indicators}. */
+/* A saved chart config of any vintage as {root, spec, indicators}. The spec is
+   normalised as the server answers it (a Build-1 "tick:0750" is "tick:750"). */
 function migrate(cfg) {
   const c = cfg && typeof cfg === 'object' ? cfg : {};
   const root = typeof c.root === 'string' && c.root ? c.root.toUpperCase() : 'NQ';
-  const spec = typeof c.spec === 'string' && c.spec ? c.spec : 'time:60';
+  const spec = toSpec(c.spec) || 'time:60';
   if (Array.isArray(c.indicators)) {
     const indicators = c.indicators.filter((x) => x && def(x.id)).map((x) => ({
       uid: typeof x.uid === 'string' && x.uid ? x.uid : uid(), id: x.id,
@@ -226,6 +229,38 @@ function toSpec(text) {
 
 function rootName(root) { return ROOT_NAMES[root] || ''; }
 
+/* An age in seconds as the bottom bar shows it: 12.3s · 4m · 2h · 3d. */
+function fmtAge(a) {
+  if (a == null) return '—';
+  if (a < 60) return `${a.toFixed(1)}s`;
+  if (a < 3600) return `${Math.round(a / 60)}m`;
+  if (a < 86400) return `${Math.round(a / 3600)}h`;
+  return `${Math.round(a / 86400)}d`;
+}
+
+/* The bottom bar's feed summary for a status message, at this ET weekday
+   (0 = Sunday) and minute of the day: the dot ('ok' | 'warn' | 'bad', or ''
+   = grey: an open market has not ticked yet), a one-phrase text with its
+   class ('' | 'warn' | 'bad') and the per-root tooltip. A closed market is
+   never stale; a refused root is unavailable whatever the hours. */
+function feedSummary(s, weekday, minutes) {
+  const roots = Object.entries(s.roots || {}), rec = s.recorder, recErr = rec && rec.error;
+  const open = (r) => marketOpen(r, weekday, minutes), age = (x) => x.last_tick_age_s;
+  const refused = roots.filter(([, x]) => x.error), live = roots.filter(([r, x]) => !x.error && open(r));
+  const silent = live.filter(([, x]) => age(x) == null);
+  const stale = live.filter(([, x]) => age(x) != null && age(x) > STALE_S).sort((a, b) => age(b[1]) - age(a[1]));
+  const title = roots.map(([r, x]) => `${r} ${x.error ? `unavailable: ${x.error}`
+    : !open(r) ? 'closed' : age(x) == null ? 'no ticks yet' : fmtAge(age(x))}`).join('  ·  ');
+  if (s.error || recErr) return { dot: 'bad', text: s.error || `recorder: ${recErr}`, textClass: 'bad', title };
+  if (!s.connected) return { dot: 'bad', text: 'connecting…', textClass: '', title };
+  const warn = refused.length > 0 || stale.length > 0;
+  const text = [...refused.map(([r]) => `${r} unavailable`),
+    ...stale.slice(0, 2).map(([r, x]) => `${r} stale ${fmtAge(age(x))}`),
+    ...silent.slice(0, 2).map(([r]) => `${r} no ticks yet`)].join(' · ') || (roots.length ? 'feeds ok' : '');
+  const dot = warn || (rec && rec.buffered >= REC_BUSY) ? 'warn' : silent.length ? '' : 'ok';
+  return { dot, text, textClass: warn ? 'warn' : '', title };
+}
+
 function filter(query, group = 'All') {
   const q = String(query || '').trim().toLowerCase();
   return CATALOG.filter((d) => (group === 'All' || d.group === group)
@@ -234,7 +269,8 @@ function filter(query, group = 'All') {
 
 const api = { CATALOG, GROUPS, ROOT_NAMES, FAVOURITES, INTERVAL_GROUPS, LINE_COLORS, uid, def, clampParams, instance,
   defaults, serverKey, serverKeys, migrate, migrateLayout, label, legendValues, decimals, fmtPrice, fmtCompact,
-  fmtSigned, change, parseSpec, specLabel, longLabel, toSpec, rootName, filter, ALWAYS_OPEN, marketOpen };
+  fmtSigned, change, parseSpec, specLabel, longLabel, toSpec, rootName, filter, ALWAYS_OPEN, marketOpen, fmtAge,
+  feedSummary, REC_BUSY };
 if (typeof window !== 'undefined') window.HBCatalog = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();
