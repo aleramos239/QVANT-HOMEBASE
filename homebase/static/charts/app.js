@@ -212,7 +212,22 @@ class Cell {
     this.legend(null);
   }
 
-  addStudySeries() {}          // Task 11
+  addStudySeries(keys) {
+    const P = this.P, st = this.cfg.st;
+    let ci = 0;
+    for (const key of keys) {
+      const name = key.split(':')[0];
+      if (name === 'ema' || name === 'sma' || name === 'vwma') this.line(key, P.lines[ci++ % P.lines.length]);
+      else if (name === 'vwap') {
+        this.line(key, P.vwap, 2);
+        if (st.vwapBands) for (const b of ['u1', 'l1', 'u2', 'l2']) this.line(`${key}#${b}`, P.band, 1, 0, 2);
+      } else if (name === 'cumdelta') this.line(key, P.lines[1], 1, this.pane('cumdelta'));
+      else if (name === 'adx') {
+        const p = this.pane('adx');
+        this.line(key, P.text, 2, p); this.line(`${key}#p`, P.up, 1, p); this.line(`${key}#m`, P.down, 1, p);
+      }
+    }
+  }
 
   redrawAll() {
     for (const [key, s] of Object.entries(this.series)) s.setData(this.bars.map((b) => this.point(key, b)));
@@ -236,8 +251,28 @@ class Cell {
     this.legend(null);
   }
 
-  drawMarkers() {}             // Task 11
-  drawLevels() {}              // Task 11
+  drawMarkers() {
+    const min = +this.cfg.st.bigMin || 0, P = this.P;
+    if (!min) { this.markers.setMarkers([]); return; }
+    const out = [];
+    for (const b of this.bars) for (const [, , size, side] of (b.big || [])) {
+      if (size >= min) out.push({ time: b.tt, position: side > 0 ? 'belowBar' : 'aboveBar',
+        color: side > 0 ? P.up : P.down, shape: 'circle', size: 0.6, text: String(size) });
+    }
+    this.markers.setMarkers(out.slice(-600));
+  }
+
+  drawLevels() {
+    const last = this.bars[this.bars.length - 1], lv = last && last.sv ? last.sv.levels : null;
+    for (const [k, title] of LEVELS) {
+      const px = lv ? lv[k] : null, cur = this.levelLines[k];
+      if (px == null) { if (cur) { this.candles.removePriceLine(cur); delete this.levelLines[k]; } continue; }
+      if (cur) { if (cur.options().price !== px) cur.applyOptions({ price: px }); continue; }
+      this.levelLines[k] = this.candles.createPriceLine({ price: px, color: this.P.level, lineWidth: 1,
+        lineStyle: LW.LineStyle.Dashed, axisLabelVisible: true, title });
+    }
+  }
+
   drawGaps() {}                // Task 13
   syncFootprint() {}           // Task 12
 
