@@ -179,6 +179,21 @@ def test_the_roll_resets_the_side_classifier_to_match_a_reload(tmp_path):
     assert [x["date"] for x in s.sessions][-1] == nxt.isoformat()
 
 
+def test_a_24_7_root_rolls_into_its_saturday_session(tmp_path):
+    """Bitcoin trades 24/7: its 17:00 hour is still Friday's session and a
+    Saturday print opens Saturday's own session. A classic root still
+    files a weekend print into Monday."""
+    hub, _, _ = setup(tmp_path)
+    fri, sat, mon = (D + dt.timedelta(days=n) for n in (1, 2, 4))
+    hub.start_today("BTC", fri, [])
+    hub.on_ticks("BTC", rows(session_ms(fri, 17, 30), [100_000.0], first_id=1)
+                 + rows(session_ms(sat, 10, 0), [100_005.0], first_id=2))
+    assert hub.today_date["BTC"] == sat and [t.id for t in hub.today["BTC"]] == [2]
+    hub.start_today("NQ", mon, [])
+    hub.on_ticks("NQ", rows(session_ms(sat, 10, 0), [200.0], first_id=3))
+    assert hub.today_date["NQ"] == mon and [t.id for t in hub.today["NQ"]] == [3]
+
+
 def test_a_previous_session_straggler_never_rolls_the_tape_back(tmp_path):
     """Only a FORWARD session change is a roll. A print from an older
     session (the one historical trade a weekend subscribe returns; an

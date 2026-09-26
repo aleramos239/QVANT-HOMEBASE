@@ -1,7 +1,10 @@
 """CME session maths for the chart engine (and later the backtester).
 
 Session D runs 18:00 ET on D-1 -> 17:00 ET on D (Monday's opens Sunday
-18:00) — the convention of homebase.ticks.session_bounds, reused here.
+18:00) — the convention of homebase.ticks.session_bounds, reused here. A
+24/7 root (CME crypto since 2026-05-30) has a session EVERY day, weekends
+included: 18:00 ET on D-1 -> 18:00 ET on D. The open is 18:00 either way,
+so bar anchoring, the ETH VWAP reset and the levels read the same.
 """
 from __future__ import annotations
 
@@ -16,19 +19,32 @@ RTH_OPEN = dt.time(9, 30)
 _DAY = dt.timedelta(days=1)
 
 
-def session_date(ts_ms: int) -> dt.date:
-    """The session a trade at ts_ms belongs to."""
+ALWAYS_OPEN = frozenset({"BTC", "MBT", "ETH", "MET"})   # CME crypto: 24/7 since 2026-05-30
+
+
+def always_open(root: str | None) -> bool:
+    return (root or "").upper() in ALWAYS_OPEN
+
+
+def session_date(ts_ms: int, root: str | None = None) -> dt.date:
+    """The session a trade at ts_ms belongs to. Classic roots file a weekend
+    print into Monday; 24/7 roots have their own weekend sessions."""
     t = dt.datetime.fromtimestamp(ts_ms / 1000, ET)
     d = t.date() + _DAY if t.time() >= dt.time(18, 0) else t.date()
-    while d.weekday() >= 5:
-        d += _DAY
+    if not always_open(root):
+        while d.weekday() >= 5:
+            d += _DAY
     return d
 
 
 @lru_cache(maxsize=4096)
-def session_range_ms(d: dt.date) -> tuple[int, int]:
+def session_range_ms(d: dt.date, root: str | None = None) -> tuple[int, int]:
     """(open, close) of session d in epoch ms."""
-    s, e = session_bounds(d)
+    if always_open(root):
+        s = dt.datetime.combine(d - _DAY, dt.time(18, 0), ET)
+        e = dt.datetime.combine(d, dt.time(18, 0), ET)
+    else:
+        s, e = session_bounds(d)
     return int(s.timestamp() * 1000), int(e.timestamp() * 1000)
 
 

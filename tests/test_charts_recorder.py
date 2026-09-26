@@ -51,6 +51,19 @@ def test_rows_file_by_their_own_session(tmp_path):
     assert rec.path("NQ", D, "NQZ6").exists() and rec.path("NQ", nxt, "NQZ6").exists()
 
 
+def test_a_24_7_trade_is_filed_under_its_own_weekend_session(tmp_path):
+    """Bitcoin trades 24/7: a Saturday trade is Saturday's session. A
+    classic root still files a weekend print into Monday."""
+    sat = D + dt.timedelta(days=2)
+    rec = LiveRecorder(tmp_path)
+    rec.append("BTC", "BTCV6", rows(session_ms(sat, 10, 0), [100_000.0]))
+    rec.append("NQ", "NQZ6", rows(session_ms(sat, 10, 0), [200.0], first_id=2))
+    rec.flush()
+    header, recs = read_table(tmp_path / "BTC" / "2026" / "2026-09-26_BTCV6.live.csv.gz")
+    assert [r[header.index("id")] for r in recs] == ["1"]
+    assert (tmp_path / "NQ" / "2026" / "2026-09-28_NQZ6.live.csv.gz").exists()
+
+
 def test_a_restart_remembers_ids_and_the_last_tick(tmp_path):
     rec = LiveRecorder(tmp_path)
     rec.append("NQ", "NQZ6", rows(M, [100.0, 100.25]))

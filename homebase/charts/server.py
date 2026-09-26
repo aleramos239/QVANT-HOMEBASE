@@ -178,7 +178,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         places no orders."""
         if recorder is not None:
             recorder.flush()
-        d = session_date(clock())
+        d = session_date(clock(), root)
         sess = store.load(root, d)
         ticks = sess.ticks if sess else []
         hub.start_today(root, d, ticks, {
@@ -215,8 +215,8 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         a follow-up: the same coroutine that started the run loops to pick
         it up once the current fetch finishes, with a fresh frm/contract/to
         of its own. Either way, no root ever runs two fetches concurrently."""
-        d = session_date(clock())
-        s0, _ = session_range_ms(d)
+        d = session_date(clock(), root)
+        s0, _ = session_range_ms(d, root)
         # never page back past this session's open: a `since` from the previous
         # session (a weekend straggler, a drop before the 17:00 close) would
         # file that session's ticks as its live file
@@ -278,8 +278,8 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             # trade a weekend subscribe returns) is neither recorded nor charted:
             # it would file a 1-tick stub for that session, which store.pick
             # prefers to an incomplete archive. Refill rows never come this way.
-            today = session_date(clock())
-            rows = [r for r in rows if session_date(int(r["ts_ms"])) >= today]
+            today = session_date(clock(), root)
+            rows = [r for r in rows if session_date(int(r["ts_ms"]), root) >= today]
             hub.on_ticks(root, recorder.append(root, contract, rows))
 
         feed = (feed_factory or TickFeed)(roots, on_live, on_subscribed=_refill)
@@ -335,9 +335,8 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                     "date": replay.isoformat(), "contract": feed.contracts.get(r),
                     "source": "replay", "approx": False, "gaps": []})
         else:
-            d = session_date(clock())
             for r in roots:
-                start_last[r] = recorder.last_ts(r, d, symbols.resolve_contract(r))
+                start_last[r] = recorder.last_ts(r, session_date(clock(), r), symbols.resolve_contract(r))
                 reseed(r)
         tasks = [asyncio.create_task(pump()), asyncio.create_task(feed.run())]
         log(f"up — {'replay ' + replay.isoformat() if replay else 'live'} · {', '.join(roots)}")

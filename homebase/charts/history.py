@@ -37,7 +37,7 @@ class History:
         s = self.store.load(root, d)
         if s is None:
             return []
-        closed, cur = build(s.ticks, spec, tick_size(root))
+        closed, cur = build(s.ticks, spec, tick_size(root), root)
         if cur is not None:
             cur.closed = True
             closed.append(cur)

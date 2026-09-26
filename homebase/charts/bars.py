@@ -129,9 +129,10 @@ class Bar:
 
 
 class BarBuilder:
-    def __init__(self, spec: BarSpec, tick_size: float):
+    def __init__(self, spec: BarSpec, tick_size: float, root: str | None = None):
         self.spec = spec
         self.tick_size = tick_size
+        self.root = root        # picks the trading day (session.always_open); None = classic
         self.cur: Bar | None = None
         self._sess: str | None = None
         self._s0 = self._s1 = 0
@@ -140,9 +141,9 @@ class BarBuilder:
     def _enter_session(self, ts: int) -> None:
         if self._sess is not None and self._s0 <= ts < self._s1:
             return
-        d = session_date(ts)
+        d = session_date(ts, self.root)
         self._sess = d.isoformat()
-        self._s0, self._s1 = session_range_ms(d)
+        self._s0, self._s1 = session_range_ms(d, self.root)
         self._floor = 0
 
     def _bucket(self, ts: int) -> int:
@@ -200,9 +201,9 @@ class BarBuilder:
         return b
 
 
-def build(ticks, spec: BarSpec, tick_size: float) -> tuple[list[Bar], Bar | None]:
+def build(ticks, spec: BarSpec, tick_size: float, root: str | None = None) -> tuple[list[Bar], Bar | None]:
     """All bars of a tick sequence: (closed, developing)."""
-    bb = BarBuilder(spec, tick_size)
+    bb = BarBuilder(spec, tick_size, root)
     closed: list[Bar] = []
     for tk in ticks:
         closed.extend(bb.add(tk))

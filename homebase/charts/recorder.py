@@ -138,7 +138,7 @@ class LiveRecorder:
         new = []
         for r in rows:
             ts = int(r["ts_ms"])
-            d = session_date(ts)
+            d = session_date(ts, root)
             if self._newest is None or d > self._newest:
                 if self._newest is not None:
                     self._forget_before(self._newest)

@@ -14,11 +14,12 @@ import pytest
 from fastapi import WebSocket, WebSocketDisconnect
 from fastapi.testclient import TestClient
 
+from homebase import symbols
 from homebase.charts.hub import Hub, Stream
 from homebase.charts.server import MAX_DRAWINGS, QUIET, Conn, check_drawings, create_app
 from homebase.charts.session import session_range_ms
 from homebase.charts.store import read_table
-from tests.charts_util import D, ET, rows, session_ms, write_archive
+from tests.charts_util import D, ET, rows, session_ms, write_archive, write_gz
 
 P = D - dt.timedelta(days=1)
 
@@ -731,6 +732,76 @@ def test_a_refill_never_pages_back_past_the_session_open(tmp_path, monkeypatch):
         while not calls and time.time() < deadline:
             time.sleep(0.02)
     assert calls == [session_range_ms(D)[0]]                 # 18:00 ET the evening before D
+
+
+def test_live_mode_keeps_a_24_7_weekend_print_and_drops_a_classic_straggler(tmp_path):
+    """Saturday 10:00: Bitcoin (24/7) is in its own Saturday session, so its
+    print is recorded under Saturday; NQ's today is still Monday, so its
+    Friday straggler is dropped as before."""
+    fri, sat = D + dt.timedelta(days=1), D + dt.timedelta(days=2)
+    base = tmp_path / "ticks"
+    q: queue.Queue = queue.Queue()
+    delivered: list = []
+    app = create_app(roots=["NQ", "BTC"], base=base, feed_factory=QueueFeed(q, delivered),
+                     now_ms=lambda: session_ms(sat, 10, 0), state=tmp_path / "state")
+    with TestClient(app):
+        q.put(("BTC", "BTCV6", rows(session_ms(sat, 9, 59, 59), [100_000.0], first_id=7)))
+        q.put(("NQ", "NQZ6", rows(session_ms(fri, 16, 59), [200.0], first_id=8)))
+        deadline = time.time() + 5
+        while len(delivered) < 2 and time.time() < deadline:
+            time.sleep(0.02)
+        assert len(delivered) == 2
+    header, recs = read_table(base / "BTC" / "2026" / f"{sat}_BTCV6.live.csv.gz")
+    assert [r[header.index("id")] for r in recs] == ["7"]
+    assert not list((base / "NQ").rglob("*.live.csv.gz"))
+
+
+def test_a_24_7_restart_refills_from_its_own_last_recorded_tick(tmp_path, monkeypatch):
+    """A restart's first refill starts at the last tick recorded in the
+    root's OWN session: on a Saturday that is Bitcoin's Saturday file.
+    Looking in Monday's (the classic weekend rule) found nothing and
+    re-paged the whole session from its open."""
+    sat = D + dt.timedelta(days=2)
+    contract = symbols.resolve_contract("BTC")
+    base = tmp_path / "ticks"
+    write_gz(base / "BTC" / "2026" / f"{sat}_{contract}.live.csv.gz", rows(session_ms(sat, 9, 0), [100_000.0]))
+    calls: list = []
+
+    async def fake_refill(ws, contract, frm, to, *, max_pages, sleep=None, on_request=None):
+        calls.append(frm)
+        return [], frm
+
+    monkeypatch.setattr("homebase.charts.server.refill", fake_refill)
+
+    class FakeFeed:
+        def __init__(self, roots, on_ticks, on_subscribed=None):
+            self.on_subscribed, self.ws = on_subscribed, None
+
+        def count_request(self):
+            pass
+
+        def budget_used(self):
+            return 0
+
+        async def run(self):
+            asyncio.create_task(self.on_subscribed("BTC", contract, None))    # first subscribe: no since
+            while True:
+                await asyncio.sleep(0.01)
+
+        def stop(self):
+            pass
+
+        def status(self):
+            return {"mode": "live", "connected": True, "error": None, "roots": {},
+                    "budget_hour": 0, "reconnects": 0}
+
+    app = create_app(roots=["BTC"], base=base, feed_factory=FakeFeed,
+                     now_ms=lambda: session_ms(sat, 10, 0), state=tmp_path / "state")
+    with TestClient(app):
+        deadline = time.time() + 5
+        while not calls and time.time() < deadline:
+            time.sleep(0.02)
+    assert calls == [session_ms(sat, 9, 0)]
 
 
 def replay_app(tmp_path):

@@ -142,10 +142,10 @@ class Hub:
         if not rows:
             return
         if root not in self.clf:
-            self.start_today(root, session_date(int(rows[0]["ts_ms"])), [])
+            self.start_today(root, session_date(int(rows[0]["ts_ms"]), root), [])
         streams = [s for s in self.streams.values() if s.root == root]
         for r in rows:
-            d = session_date(int(r["ts_ms"]))
+            d = session_date(int(r["ts_ms"]), root)
             if d < self.today_date[root]:
                 continue        # an older session's straggler: charts only roll FORWARD
             if d > self.today_date[root]:               # 18:00 roll: the old session is on disk
@@ -175,8 +175,8 @@ class Hub:
         """Worker thread: past sessions + today's bars from a snapshot of the tape."""
         ts = tick_size(root)
         today_date = self.today_date.get(root)
-        today = today_date or session_date(self.now_ms())
-        s = Stream(root, spec, ts, BarBuilder(spec, ts))
+        today = today_date or session_date(self.now_ms(), root)
+        s = Stream(root, spec, ts, BarBuilder(spec, ts, root))
         for d in [d for d in self.store.sessions(root) if d < today][-sessions_back(spec):]:
             s.bars.extend(self.history.bars(root, spec, d))
             s.sessions.append(self.history.info(root, d))
