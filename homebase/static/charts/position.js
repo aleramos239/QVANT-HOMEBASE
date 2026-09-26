@@ -163,8 +163,55 @@ function validate(type, entry, target, stop, qty, tick) {
   return '';
 }
 
+/* ---------------- page only: the canvas drawing ---------------- */
+/* One box on the price pane (media coordinates), TradingView's look: the profit and loss zones (no borders),
+   the entry line across the box, the outcome's dashed path, a 1px outline when selected, and three labels
+   centred on the box (target outside the profit zone, stop outside the loss zone, the centre two lines on the
+   entry line), each kept inside the pane. P = HBCell.palette(); pctx = {tick, pv, bars, size: {width,
+   height}, font, selected}. The handle dots are drawn by the drawings primitive. */
+function drawPosition(ctx, d, geo, P, pctx) {
+  const hs = handles(d, geo);
+  if (!hs) return;
+  const [[x0, yE], [, yT], [, yS], [x1]] = hs, long = d.type === 'long';
+  const left = Math.min(x0, x1), w = Math.max(1, Math.abs(x1 - x0)), top = Math.min(yT, yS), bot = Math.max(yT, yS);
+  ctx.fillStyle = P.profitZone;
+  ctx.fillRect(left, Math.min(yE, yT), w, Math.abs(yT - yE));
+  ctx.fillStyle = P.lossZone;
+  ctx.fillRect(left, Math.min(yE, yS), w, Math.abs(yS - yE));
+  ctx.strokeStyle = P.text2;
+  ctx.lineWidth = 1;
+  const ye = Math.round(yE) + 0.5;
+  ctx.beginPath(); ctx.moveTo(left, ye); ctx.lineTo(left + w, ye); ctx.stroke();
+  const out = outcome(d, pctx.bars, pctx.pv, pctx.tick);
+  if (out.path) {
+    const ax = geo.x(out.path.a.t), bx = geo.x(out.path.b.t), ay = geo.y(out.path.a.p), by = geo.y(out.path.b.p);
+    if (ax != null && bx != null && ay != null && by != null) {
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+  if (pctx.selected) ctx.strokeRect(Math.round(left) + 0.5, Math.round(top) + 0.5, Math.round(w), Math.round(bot - top));
+  const lab = labels(d, pctx.pv, pctx.tick), cx = left + w / 2, GAP = 4;
+  ctx.font = pctx.font;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const label = (lines, bg, yAt) => {   // yAt(height) -> the label's top before clamping
+    const bw = Math.max(...lines.map((s) => ctx.measureText(s).width)) + 16, bh = lines.length * 16 + 4;
+    const bx = Math.max(2, Math.min(cx - bw / 2, pctx.size.width - bw - 2));
+    const by = Math.max(2, Math.min(yAt(bh), pctx.size.height - bh - 2));
+    ctx.fillStyle = bg;
+    ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 4); ctx.fill();
+    ctx.fillStyle = P.onAccent;
+    lines.forEach((s, i) => ctx.fillText(s, bx + bw / 2, by + 10 + i * 16));
+  };
+  label([lab.target], P.up, (h) => (long ? top - GAP - h : bot + GAP));
+  label([lab.stop], P.down, (h) => (long ? bot + GAP : top - GAP - h));
+  label([lab.center, out.text], P.text2, (h) => yE - h / 2);
+}
+
 const api = { WIDTH_BARS, RISK_PANE, MIN_RISK_TICKS, QTY_MAX, MINUS, isPosition, risk, create, handles, hitTest,
-  setHandle, fmtUsd, fmtPnl, rr, labels, outcome, validate };
+  setHandle, fmtUsd, fmtPnl, rr, labels, outcome, validate, drawPosition };
 if (typeof window !== 'undefined') window.HBPosition = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

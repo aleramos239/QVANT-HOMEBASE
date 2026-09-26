@@ -195,6 +195,8 @@ a { color: inherit; }
 .field input[type="number"] { width: 96px; height: 32px; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px;
   background: var(--panel); font-variant-numeric: tabular-nums; }
 .field input[type="number"]:focus { border-color: var(--accent); }
+.field input.price { width: 128px; }
+.dlg-err { padding: 0 20px 4px; color: var(--down); font-size: 12px; }
 .field input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
 .seg { display: inline-flex; padding: 2px; border-radius: 6px; background: var(--hover); }
 .seg button { height: 28px; padding: 0 12px; border-radius: 4px; color: var(--text-2); }

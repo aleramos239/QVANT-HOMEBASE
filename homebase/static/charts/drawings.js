@@ -6,14 +6,23 @@
 
    The browser half, below the store: the canvas primitive that draws one
    chart's drawings, and the pointer controller that places, selects,
-   moves and deletes them (with the rail's magnet). No browser globals at
-   load time (only inside functions that run in the page): the Node tests
-   load this file directly. */
+   moves and deletes them (with the rail's magnet), and long/short boxes
+   (HBPosition). No browser globals at load time (only inside functions
+   that run in the page): the Node tests load this file directly. */
 (function () {
 'use strict';
 const Cat = (typeof window !== 'undefined' && window.HBCatalog) || (typeof require === 'function' ? require('./catalog.js') : null);
 const HANDLE_TOL = 6;   // px: a handle this close is grabbed
 const LINE_TOL = 5;     // px: a line this close is hit
+
+/* Long / short boxes live in HBPosition (position.js loads after this file and builds on it), looked up when
+   first needed; Node requires it. */
+let PosLib = null;
+function Pos() {
+  if (!PosLib) PosLib = (typeof window !== 'undefined' && window.HBPosition) || (typeof require === 'function' ? require('./position.js') : null);
+  return PosLib;
+}
+const isPos = (d) => d.type === 'long' || d.type === 'short';
 
 /* The index of the last bar starting at or before t (bars ascending by ms), else -1. */
 function barIndexAt(bars, t) {
@@ -74,6 +83,7 @@ function distToSegment(px, py, ax, ay, bx, by) {
    cannot be placed: trend 0/1 = its points; rect 0 (t0,p0), 1 (t1,p1),
    2 (t0,p1), 3 (t1,p0); hline 0 = the middle of the pane. */
 function handlePoints(d, geo) {
+  if (isPos(d)) return Pos().handles(d, geo);
   const P = d.points;
   if (d.type === 'hline') {
     const y = geo.y(P[0].p);
@@ -86,6 +96,7 @@ function handlePoints(d, geo) {
 
 /* What of drawing d is under pt: a handle (by index), the body, or nothing. */
 function hitTest(d, pt, geo) {
+  if (isPos(d)) return Pos().hitTest(d, pt, geo);
   const hs = handlePoints(d, geo);
   if (!hs) return null;
   for (let i = 0; i < hs.length; i++) {
@@ -100,8 +111,11 @@ function hitTest(d, pt, geo) {
 }
 
 /* d with handle k moved to (t, p); a rectangle's side corners (2, 3) take
-   their time from one stored point and their price from the other. */
-function setPoint(d, k, t, p) {
+   their time from one stored point and their price from the other; a long /
+   short box's handles are clamped by HBPosition.setHandle (ctx = the chart's
+   {bars, isTime, barMs, tick}). */
+function setPoint(d, k, t, p, ctx) {
+  if (isPos(d)) return Pos().setHandle(d, k, t, p, ctx);
   if (d.type === 'hline') return { ...d, points: [{ p }] };
   const [a, b] = d.points;
   let points;
@@ -289,7 +303,11 @@ class Primitive {
     if (!geo) return;
     const P = c.cell.P;
     target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
-      for (const d of c.items()) if (d.type !== 'hline') drawShape(ctx, d, geo, P);
+      const pc = { tick: c.cell.tick, pv: c.cell.pv, bars: c.cell.bars, size: mediaSize, font: `12px ${window.HBCell.FONT}` };
+      for (const d of c.items()) {
+        if (isPos(d)) Pos().drawPosition(ctx, d, geo, P, { ...pc, selected: d.id === c.sel });
+        else if (d.type !== 'hline') drawShape(ctx, d, geo, P);
+      }
       if (c.place) drawShape(ctx, c.place, geo, P);
       const sel = c.selectedDrawing(), hs = sel && handlePoints(sel, geo);
       if (hs) {
@@ -363,10 +381,11 @@ class Controller {
     this.prim = new Primitive(this);
     cell.candles.attachPrimitive(this.prim);
     this.on = { down: (e) => this.onDown(e), move: (e) => this.onMove(e), up: (e) => this.onUp(e),
-      hover: (e) => this.onHover(e), leave: () => this.setCursor(null), lost: () => this.abort() };
+      hover: (e) => this.onHover(e), leave: () => this.setCursor(null), lost: () => this.abort(), dbl: (e) => this.onDbl(e) };
     this.box.addEventListener('pointerdown', this.on.down, true);
     this.box.addEventListener('pointermove', this.on.hover);
     this.box.addEventListener('pointerleave', this.on.leave);
+    this.box.addEventListener('dblclick', this.on.dbl, true);
     window.addEventListener('pointermove', this.on.move, true);
     window.addEventListener('pointerup', this.on.up, true);
     window.addEventListener('pointercancel', this.on.lost, true);
@@ -381,6 +400,7 @@ class Controller {
     this.box.removeEventListener('pointerdown', this.on.down, true);
     this.box.removeEventListener('pointermove', this.on.hover);
     this.box.removeEventListener('pointerleave', this.on.leave);
+    this.box.removeEventListener('dblclick', this.on.dbl, true);
     window.removeEventListener('pointermove', this.on.move, true);
     window.removeEventListener('pointerup', this.on.up, true);
     window.removeEventListener('pointercancel', this.on.lost, true);
@@ -477,6 +497,7 @@ class Controller {
       this.own(e);
       if (this.mode === 'click') { this.finish(at); return; }
       if (tool === 'hline') { this.commit({ type: 'hline', points: [{ p: at.p }] }); return; }
+      if (tool === 'long' || tool === 'short') { this.commit(this.newPosition(tool, at)); return; }
       const start = { t: at.t, p: at.p };
       if (tool === 'measure') this.measure = { a: start, b: start, done: false };
       else this.place = { type: tool, points: [start, start] };
@@ -522,7 +543,7 @@ class Controller {
     this.drag.moving = true;
     const at = this.at(pt, part === 'handle' ? e : null);
     if (!at) return;
-    this.drag.cur = part === 'handle' ? setPoint(orig, index, at.t, at.p)
+    this.drag.cur = part === 'handle' ? setPoint(orig, index, at.t, at.p, this.ctx())
       : moveDrawing(orig, Math.round(at.L) - Math.round(from.L), at.p - from.p, this.cell.tick, this.ctx());
     this.refresh();
   }
@@ -570,6 +591,33 @@ class Controller {
     this.release();
     this.host.drawings.add(this.root, full);   // every chart of this symbol refreshes
     this.host.toolDone();
+  }
+
+  /* A new long/short box at the pointer: risk = the price distance of 8% of the price pane's height (on the
+     tick grid, at least 4 ticks), target at 2R (RR 1:2), 20 bars wide (time bars extrapolate past the last
+     bar, others stop at it). The entry is `at`, already on the magnet. */
+  newPosition(type, at) {
+    const c = this.cell, P = Pos();
+    const span = Math.abs(c.candles.coordinateToPrice(0) - c.candles.coordinateToPrice(P.RISK_PANE * this.paneH()));
+    return P.create(type, at.t, shiftTime(at.t, P.WIDTH_BARS, this.ctx()), at.p, P.risk(span, c.tick), c.tick);
+  }
+
+  /* Double-click on a long/short box (cursor mode): select it and open its settings (host.onPosition).
+     Captured before Lightweight Charts sees it: its own double-click would reset the price scale. */
+  onDbl(e) {
+    if (this.host.tool() !== 'cursor' || !this.cell.chart) return;
+    const pt = this.local(e), geo = this.geo();
+    if (!geo || !this.inPane(pt)) return;
+    const all = this.items();
+    for (let i = all.length - 1; i >= 0; i--) {
+      if (!isPos(all[i]) || !hitTest(all[i], pt, geo)) continue;
+      e.preventDefault();
+      e.stopPropagation();
+      this.sel = all[i].id;
+      this.refresh();
+      this.host.onPosition(this.cell, all[i]);
+      return;
+    }
   }
 
   toolChanged() {

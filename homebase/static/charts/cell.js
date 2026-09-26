@@ -3,8 +3,9 @@
    instances (HBCatalog), the DOM legend, the watermark, and the
    history/update handling. The page (app.js) owns the websocket, the toolbar
    and selection, and gives each cell a `host`:
-     {id, send(msg) -> bool, onPick(cell), onLoaded(cell), onRefused(cell, tried, text), onSettings(cell, uid), changed(),
-      tool(), toolDone(), drawings, magnet()}   (the last four: the drawing tools, HBDrawings.Controller)
+     {id, send(msg) -> bool, onPick(cell), onLoaded(cell), onRefused(cell, tried, text), onSettings(cell, uid),
+      onPosition(cell, d), changed(), tool(), toolDone(), drawings, magnet()}   (the last four: the drawing tools,
+      HBDrawings.Controller)
    Bar times arrive as ET wall-clock seconds, so the axis reads ET; tick,
    volume and range bars sit on an evenly spaced synthetic axis (many can
    share a second) and are labelled with their real times. */
@@ -29,7 +30,8 @@ function palette() {
   const P = { up: '#089981', down: '#F23645', upA: 'rgba(8,153,129,.5)', downA: 'rgba(242,54,69,.5)', accent: '#2962FF',
     lines: C.LINE_COLORS, vwap: '#9C27B0', band: 'rgba(156,39,176,.45)', cum: '#FF6D00', poc: '#F7A600',
     gap: 'rgba(120,123,134,.14)', cross: '#9598A1', crossLabel: '#131722',
-    handleFill: '#FFFFFF', onAccent: '#FFFFFF' };   // drawing handles: white dots in both themes; text on accent / down fills
+    handleFill: '#FFFFFF', onAccent: '#FFFFFF',   // drawing handles: white dots in both themes; text on accent / down fills
+    profitZone: 'rgba(8,153,129,.20)', lossZone: 'rgba(242,54,69,.20)' };
   return Object.assign(P, dark
     ? { bg: '#0F0F0F', text: '#DBDBDB', text2: '#8C8C8C', grid: '#1C1C1C', border: '#2E2E2E', accentSoft: 'rgba(41,98,255,.20)',
         downSoft: 'rgba(242,54,69,.18)', watermark: 'rgba(219,219,219,.06)', level: '#8C8C8C', fpText: '#DBDBDB',
@@ -71,6 +73,7 @@ class Cell {
     this.el = slot; this.cfg = cfg; this.host = host; this.id = host.id;
     this.chart = null; this.candles = null; this.markers = null; this.P = null;
     this.bars = []; this.realT = new Map(); this.devel = false; this.sessions = []; this.tick = 0.25;
+    this.pv = null;   // USD per 1.00 of price for one contract (the history's point_value; null: unknown)
     this.profile = null; this.keys = new Set(); this.lines = []; this.rows = []; this.colorOf = {}; this.levelLines = {};
     this.shown = null;      // {root, spec} of the bars on screen
     this.lastGood = null;   // the config the server last answered with a history
@@ -174,7 +177,7 @@ class Cell {
     if (this.inflight.length) return;
     const s = this.shown, view = entry && entry.view && s && s.root === m.root && s.spec === m.spec ? entry.view : null;
     this.shown = { root: m.root, spec: m.spec };
-    this.tick = m.tick_size; this.sessions = m.sessions || []; this.devel = !!m.live;
+    this.tick = m.tick_size; this.pv = m.point_value ?? null; this.sessions = m.sessions || []; this.devel = !!m.live;
     this.keys = new Set(Object.keys(m.studies || {}));
     this.profile = m.profile || null;
     this.bars = []; this.realT = new Map();

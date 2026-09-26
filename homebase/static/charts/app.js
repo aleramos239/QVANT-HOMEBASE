@@ -65,6 +65,7 @@ function hostFor(id) {
     onLoaded,
     onRefused,
     onSettings(cell, uid) { settingsDialog(cell, uid); },
+    onPosition(cell, d) { positionDialog(cell, d); },
     changed() { saveLast(); renderToolbar(); },
     tool: () => tool,
     toolDone() { setTool('cursor'); },
@@ -544,6 +545,50 @@ function settingsDialog(cell, uid) {
   box.append(form, foot);
   const first = form.querySelector('input, button');
   if (first) first.focus();
+}
+
+/* Double-click on a long/short box: Entry, Target, Stop (rounded to the tick) and Qty. OK checks the order for
+   the type; a wrong one shows why under the fields and saves nothing. */
+function positionDialog(cell, d) {
+  const Pos = window.HBPosition, D = window.HBDrawings, tick = cell.tick, root = cell.dc ? cell.dc.root : cell.cfg.root;
+  const box = openDialog(d.type === 'long' ? 'Long position' : 'Short position', 'small');
+  const form = mk('div', 'dlg-fields'), err = mk('div', 'dlg-err'), inputs = {};
+  err.hidden = true;
+  err.setAttribute('role', 'alert');
+  const [E, T, S] = d.points;
+  for (const [key, label, v] of [['entry', 'Entry', E.p], ['target', 'Target', T.p], ['stop', 'Stop', S.p], ['qty', 'Qty', d.qty || 1]]) {
+    const row = mk('div', 'field'), id = `pos-${key}`, lab = mk('label', '', label), ctl = mk('input', key === 'qty' ? '' : 'price');
+    ctl.type = 'number';
+    ctl.id = id;
+    ctl.step = key === 'qty' ? '1' : String(tick);
+    if (key === 'qty') { ctl.min = '1'; ctl.max = String(Pos.QTY_MAX); }
+    ctl.value = String(v);
+    lab.htmlFor = id;
+    row.append(lab, ctl);
+    form.appendChild(row);
+    inputs[key] = ctl;
+  }
+  const foot = mk('div', 'dlg-foot'), cancel = mk('button', 'btn btn-ghost', 'Cancel'), ok = mk('button', 'btn btn-primary', 'OK');
+  cancel.type = 'button';
+  ok.type = 'button';
+  cancel.onclick = closeDialog;
+  ok.onclick = () => {
+    const num = (k) => (inputs[k].value.trim() === '' ? NaN : Number(inputs[k].value));
+    const entry = D.roundToTick(num('entry'), tick), target = D.roundToTick(num('target'), tick);
+    const stop = D.roundToTick(num('stop'), tick), qty = num('qty');
+    const why = Pos.validate(d.type, entry, target, stop, qty, tick);
+    if (why) { err.textContent = why; err.hidden = false; return; }
+    const now = drawings.list(root).find((x) => x.id === d.id);
+    closeDialog();
+    if (!now) return;   // removed meanwhile (on another chart of this symbol)
+    drawings.replace(root, { ...now, qty, points: [{ t: now.points[0].t, p: entry }, { t: now.points[1].t, p: target },
+      { t: now.points[2].t, p: stop }] });
+  };
+  form.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') ok.click(); });
+  foot.append(cancel, ok);
+  box.append(form, err, foot);
+  inputs.entry.focus();
+  inputs.entry.select();
 }
 
 /* ---- drawing rail ---- */

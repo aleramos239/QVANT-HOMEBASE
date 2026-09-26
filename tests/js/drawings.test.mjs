@@ -275,7 +275,7 @@ test('samePoints: two versions of a drawing on exactly the same points', () => {
    y = 1000 - p (so one pixel is four 0.25 ticks). opts: the rail's tool (it
    returns to the cursor after a placement, as on the page), the magnet, and
    the chart's bars (OHLC ones for the magnet). */
-function pointerRig(saved, { tool = 'cursor', magnet = { on: false, mode: 'weak' }, rigBars = bars } = {}) {
+function pointerRig(saved, { tool = 'cursor', magnet = { on: false, mode: 'weak' }, rigBars = bars, onPosition = () => {} } = {}) {
   globalThis.window = { addEventListener() {}, removeEventListener() {} };
   const chart = { applyOptions() {}, priceScale: () => ({ width: () => 60 }), panes: () => [{ getHeight: () => 1000 }],
     timeScale: () => ({ logicalToCoordinate: (i) => 100 + i * 10, coordinateToLogical: (x) => (x - 100) / 10 }) };
@@ -287,7 +287,7 @@ function pointerRig(saved, { tool = 'cursor', magnet = { on: false, mode: 'weak'
   const store = new D.Store({ fetchFn: f, delay: 0 });
   let now = tool;
   const ctl = new D.Controller(cell, { tool: () => now, toolDone() { now = 'cursor'; }, drawings: store,
-    magnet: () => magnet });
+    magnet: () => magnet, onPosition });
   const ev = (x, y, buttons = 1, metaKey = false) => ({ button: 0, buttons, ctrlKey: false, metaKey, clientX: x, clientY: y,
     preventDefault() {}, stopPropagation() {} });
   const gesture = async (path, metaKey = false) => {   // press at path[0], move through the rest, release at the last point
@@ -397,5 +397,58 @@ test('dragging a handle takes the magnet; moving a whole drawing never does', as
   assert.deepEqual(R.store.list('NQ')[0].points, [{ t: bars[1].ms, p: 906 }, { t: bars[3].ms, p: 866 }]);
   await R.gesture([[110, 94], [120, 80], [120, 85]]);                 // handle 0 onto bar 2 near 915: its high, 912
   assert.deepEqual(R.store.list('NQ')[0].points, [{ t: bars[2].ms, p: 912 }, { t: bars[3].ms, p: 866 }]);
+  R.done();
+});
+
+/* ---- long / short boxes ---- */
+const Pos = require('../../homebase/static/charts/position.js');
+const posBox = { id: 'p', type: 'long', qty: 1,
+  points: [{ t: bars[1].ms, p: 900 }, { t: bars[3].ms, p: 920 }, { t: bars[3].ms, p: 890 }] };   // x 110..130, y 80..110
+
+test('long/short boxes go to HBPosition for handles, hits and handle drags; a move shifts all three points', () => {
+  assert.deepEqual(D.handlePoints(posBox, geo), Pos.handles(posBox, geo));
+  assert.deepEqual(D.hitTest(posBox, { x: 131, y: 100 }, geo), { part: 'handle', index: 3 });
+  assert.deepEqual(D.hitTest(posBox, { x: 120, y: 90 }, geo), { part: 'body' });
+  assert.deepEqual(D.setPoint(posBox, 1, bars[0].ms, 880, { ...TIME, tick: 0.25 }).points[1], { t: bars[3].ms, p: 900.25 });
+  const moved = D.moveDrawing(posBox, 1, 5, 0.25, TIME);
+  assert.deepEqual(moved.points, [{ t: bars[2].ms, p: 905 }, { t: bars[4].ms, p: 925 }, { t: bars[4].ms, p: 895 }]);
+  assert.equal(moved.qty, 1);
+  assert.equal(D.samePoints(posBox, moved), false);
+});
+
+test('the long tool places a 1:2 box: risk 8% of the pane, 20 bars wide, the entry on the magnet', async (t) => {
+  withWindow(t);
+  const R = pointerRig([], { tool: 'long', magnet: { on: true, mode: 'weak' }, rigBars: ohlc });
+  await R.store.ensure('NQ');
+  await R.gesture([[120, 85], [150, 60]]);           // press-drag-release places at the press: the drag is ignored
+  const [d] = R.store.list('NQ');
+  const t1 = bars[4].ms + 18 * MIN;                   // bar 2 + 20 bars, past the last bar: extrapolated
+  assert.deepEqual({ type: d.type, qty: d.qty, points: d.points },
+    { type: 'long', qty: 1, points: [{ t: bars[2].ms, p: 912 }, { t: t1, p: 1072 }, { t: t1, p: 832 }] });   // 8% of 1000 px = 80.00
+  assert.equal(R.ctl.sel, d.id);
+  assert.equal(R.tool(), 'cursor');
+  assert.equal(R.puts().length, 1);
+  R.done();
+});
+
+test('the short tool mirrors it', async (t) => {
+  withWindow(t);
+  const R = pointerRig([], { tool: 'short', rigBars: ohlc });
+  await R.store.ensure('NQ');
+  await R.gesture([[120, 85]]);
+  assert.deepEqual(R.store.list('NQ')[0].points.map((q) => q.p), [915, 755, 995]);
+  R.done();
+});
+
+test('a double-click on a box opens its settings; on empty chart it does nothing', async (t) => {
+  withWindow(t);
+  const opened = [];
+  const R = pointerRig([posBox], { onPosition: (cell, d) => opened.push(d.id) });
+  await R.store.ensure('NQ');
+  const dbl = (x, y) => R.ctl.onDbl({ clientX: x, clientY: y, preventDefault() {}, stopPropagation() {} });
+  dbl(120, 95);
+  dbl(300, 95);
+  assert.deepEqual(opened, ['p']);
+  assert.equal(R.ctl.sel, 'p');
   R.done();
 });
