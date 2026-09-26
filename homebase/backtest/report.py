@@ -159,6 +159,21 @@ def periods(trades: list[dict], width: int, skipped: list[dict] | None = None) -
     return out
 
 
+def to_ms(trades: list[dict]) -> list[dict]:
+    """Item 6: trades.json is JS-facing -- `entry_ns`/`exit_ns` (int64 epoch
+    nanoseconds, e.g. ~1.7e18 for a 2024 date) blow past Number.MAX_SAFE_INTEGER
+    (2**53 ~= 9e15) and are not safe to round-trip through JSON in a browser.
+    Replaces them with `entry_ms`/`exit_ms`; `ts_ns` stays internal to the
+    engine/report and is never written to the bundle."""
+    out = []
+    for t in trades:
+        d = dict(t)
+        d["entry_ms"] = d.pop("entry_ns") // 1_000_000
+        d["exit_ms"] = d.pop("exit_ns") // 1_000_000
+        out.append(d)
+    return out
+
+
 def equity(trades: list[dict]) -> dict:
     t_ms, eq, dd = [], [], []
     run = peak = 0.0

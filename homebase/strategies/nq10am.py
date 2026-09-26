@@ -8,6 +8,7 @@ RR 1:0.75. The rule has no tunable inputs, so neither does this strategy.
 from __future__ import annotations
 
 import datetime as dt
+from dataclasses import asdict
 from zoneinfo import ZoneInfo
 
 from ..feed import Bar as FeedBar
@@ -52,3 +53,10 @@ class NQ10am(Strategy):
     def on_time(self, ctx, et_time: str) -> None:
         if et_time == self.cfg.flat_et:
             ctx.flatten("time")
+
+    def provenance(self) -> dict:
+        """Item 4: the rule this run called plus the whole desk config.json
+        StrategyCfg it resolved at call time (flat_et, warmup_bars, etc.) --
+        R12 gives this strategy no tunable inputs, so this is its only runtime
+        configuration, and a bundle needs it to be reproducible."""
+        return {"flat_et": self.cfg.flat_et, "rule": self.cfg.rule, "desk_cfg": asdict(self.cfg)}

@@ -118,6 +118,14 @@ class Strategy:
         """True = ctx.daily must carry the completed daily bars before today."""
         return False
 
+    def provenance(self) -> dict:
+        """The resolved runtime configuration a run actually used -- cancel/flat
+        times, any config.json-derived geometry, a bars strategy's rule config --
+        so a bundle stays reproducible even after config.json (or the frozen
+        defaults) later change. Base default: nothing beyond the run's own
+        `inputs`, which the bundle already stores separately."""
+        return {}
+
     def on_session(self, ctx) -> None:
         pass
 

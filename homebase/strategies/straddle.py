@@ -9,7 +9,7 @@ position is flattened at flat_et.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 
 from ..gate import THRESHOLD, trend_gate
 from .base import Input, Strategy
@@ -79,6 +79,12 @@ class OpenStraddle(Strategy):
         elif et_time == self.flat_et:
             ctx.flatten("time")
 
+    def provenance(self) -> dict:
+        """Item 4: the times a run actually fired/cancelled/flattened at -- the
+        base class values for a research-only straddle (gc_nfpcpi); DeskStraddle
+        overrides with the desk's config.json-resolved times."""
+        return {"fire": self.fire, "cancel_et": self.cancel_et, "flat_et": self.flat_et}
+
 
 class DeskStraddle(OpenStraddle):
     """A straddle the desk runs: defaults, cancel and flat come from its config."""
@@ -88,7 +94,14 @@ class DeskStraddle(OpenStraddle):
     def __init__(self, params: dict | None = None):
         cfg = desk_cfg(self.desk_key)
         self.cancel_et, self.flat_et = cfg.cancel_et, cfg.flat_et
+        self._desk_cfg = cfg
         super().__init__(params)
+
+    def provenance(self) -> dict:
+        """Item 4: OpenStraddle's fire/cancel/flat times, plus the full desk
+        config.json StrategyCfg this run resolved at call time -- everything
+        `desk_cfg` read that is not already in the run's own `inputs`."""
+        return {**super().provenance(), "desk_cfg": asdict(self._desk_cfg)}
 
     @classmethod
     def inputs(cls) -> list[Input]:

@@ -95,7 +95,12 @@ def validate(body) -> dict:
     reason = discipline.check(rng, body.get("holdout"))
     prop_rules_id = body.get("prop_rules", propsim.DEFAULT_RULES)
     prop_rules_data = propsim.load_rules(prop_rules_id)     # ValueError "prop_rules: one of ..." when unknown
+    # Item 4 (provenance): the resolved runtime config -- cancel/flat times, the
+    # nq10am rule config, anything else read from config.json at call time -- so
+    # the bundle stays reproducible even after config.json later changes.
+    strategy_config = cls(inputs).provenance()
     return {"strategy": cls.id, "inputs": inputs, "range": rng.to_dict(),
+            "strategy_config": strategy_config,
             "qty": _num(body, "qty", 1, 1, 100, integer=True),
             "commission": _num(body, "commission", 4.00, 0.0, 100.0),
             "slippage_ticks": _num(body, "slippage_ticks", 1.0, 0.0, 20.0),
@@ -212,7 +217,8 @@ def execute(run_dir: Path, store: TapeStore) -> dict:
     meta = {"id": req["id"], "created": req["created"], "finished": _now(),
             "engine": ENGINE_VERSION, "fill_law": "tick replay",
             "strategy": {"id": cls.id, "name": cls.name, "root": cls.root},
-            "inputs": req["inputs"], "range": req["range"], "qty": req["qty"],
+            "inputs": req["inputs"], "strategy_config": req.get("strategy_config", {}),
+            "range": req["range"], "qty": req["qty"],
             "commission": req["commission"], "slippage_ticks": req["slippage_ticks"],
             "capital": req["capital"], "holdout": reason is not None, "holdout_reason": reason,
             "prop_rules": req["prop_rules"], "propsim_error": prop_error,
@@ -222,8 +228,8 @@ def execute(run_dir: Path, store: TapeStore) -> dict:
                          "skipped_by_data": rep["skipped_by_data"]},
             "report": rep}
     trades.sort(key=lambda t: (t["exit_ns"], t["entry_ns"]))
-    write_json(run_dir / "trades.json", trades)
-    write_json(run_dir / "equity.json", report.equity(trades))
+    write_json(run_dir / "equity.json", report.equity(trades))       # needs ts_ns; ms conversion is last
+    write_json(run_dir / "trades.json", report.to_ms(trades))        # Item 6: entry_ns/exit_ns -> _ms
     write_json(run_dir / "plots.json", {"plots": plots, "hlines": hlines})
     write_json(run_dir / "propsim.json", prop)
     write_json(run_dir / "run.json", meta)

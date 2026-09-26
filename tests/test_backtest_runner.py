@@ -91,11 +91,19 @@ def test_execute_writes_the_bundle_and_lists_skipped_sessions(tmp_path):
     [t] = read_json(d / "trades.json")
     assert (t["date"], t["side"], t["qty"], t["exit_reason"]) == (D1.isoformat(), "long", 2, "tp")
     assert t["net"] == round(15 * 20 * 2 - 8.0, 2)
+    # Item 6: trades.json is JS-facing -- ms timestamps, no raw ts_ns.
+    assert "entry_ns" not in t and "exit_ns" not in t
+    assert t["entry_ms"] < t["exit_ms"] and t["exit_ms"] < 10 ** 15   # Number.MAX_SAFE_INTEGER headroom
     assert meta["report"]["summary"]["all"]["net_profit"] == t["net"]
     assert meta["report"]["skipped_by_error"] == 0 and meta["report"]["skipped_by_data"] == 1
     assert read_json(d / "equity.json")["equity"] == [t["net"]]
     assert read_json(d / "plots.json")["hlines"][0]["name"] == "anchor"
     assert read_json(d / "status.json")["status"] == "done"
+    # Item 4: the resolved strategy config is snapshotted in BOTH request.json and
+    # run.json, so a bundle is reproducible even after config.json later changes.
+    req = read_json(d / "request.json")
+    assert req["strategy_config"]["fire"] == "09:30:00" and "desk_cfg" in req["strategy_config"]
+    assert meta["strategy_config"] == req["strategy_config"]
 
 
 def half_day_archive(base):

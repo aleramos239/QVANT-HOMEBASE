@@ -4,6 +4,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 from array import array
+from dataclasses import asdict
 from pathlib import Path
 
 import pytest
@@ -58,6 +59,33 @@ def test_defaults_follow_the_desk_config_file(desk_file):
                                                               "flat_et": "15:50"}}}))
     s = NQ930()
     assert s.p["offset_pts"] == 5.0 and s.p["adx_gate"] is False and s.flat_et == "15:50"
+
+
+# Item 4 (provenance): every strategy's runtime config -- as it actually resolved,
+# not just its `inputs` -- must be reproducible from what a run stores.
+
+@pytest.mark.parametrize("cls", [NQ930, YM930])
+def test_desk_straddle_provenance_carries_times_and_the_full_desk_cfg(cls, desk_file):
+    desk_file.write_text(json.dumps({"strategies": {cls.desk_key: {"flat_et": "15:50"}}}))
+    cfg = desk_config.load().strategies[cls.desk_key]
+    s = cls()
+    prov = s.provenance()
+    assert (prov["fire"], prov["cancel_et"], prov["flat_et"]) == ("09:30:00", cfg.cancel_et, "15:50")
+    assert prov["desk_cfg"] == asdict(cfg)
+
+
+def test_gc_provenance_carries_its_own_times_with_no_desk_cfg():
+    prov = GCNfpCpi().provenance()
+    assert prov == {"fire": "08:30:00", "cancel_et": "08:45", "flat_et": "09:55"}
+
+
+def test_nq10am_provenance_carries_the_rule_and_the_full_desk_cfg(desk_file):
+    desk_file.write_text(json.dumps({"strategies": {"nq10am": {"flat_et": "15:50"}}}))
+    cfg = desk_config.load().strategies["nq10am"]
+    prov = NQ10am().provenance()
+    assert prov["flat_et"] == "15:50" == cfg.flat_et
+    assert prov["rule"] == "nq_10am_continuation" == cfg.rule
+    assert prov["desk_cfg"] == asdict(cfg)
 
 
 @pytest.mark.parametrize("cls", [NQ930, YM930])
