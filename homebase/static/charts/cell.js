@@ -4,7 +4,7 @@
    history/update handling. The page (app.js) owns the websocket, the toolbar
    and selection, and gives each cell a `host`:
      {id, send(msg) -> bool, onPick(cell), onLoaded(cell), onRefused(cell, tried, text), onSettings(cell, uid), changed(),
-      tool(), toolDone(), drawings}   (the last three: the drawing tools, HBDrawings.Controller)
+      tool(), toolDone(), drawings, magnet()}   (the last four: the drawing tools, HBDrawings.Controller)
    Bar times arrive as ET wall-clock seconds, so the axis reads ET; tick,
    volume and range bars sit on an evenly spaced synthetic axis (many can
    share a second) and are labelled with their real times. */
@@ -78,6 +78,7 @@ class Cell {
     this.hover = null;      // bar index under the crosshair (null: the last bar)
     this.noteTimer = 0; this.noteOn = false;   // noteOn: the legend message is still a note()
     this.dc = null;   // the drawing controller of the current chart
+    this.magnetXhair = false;   // the rail's magnet is on with a tool picked (MagnetOHLC crosshair)
     slot.className = 'panel';
     slot.innerHTML = `
       <div class="chart"></div>
@@ -122,6 +123,15 @@ class Cell {
     this.noteTimer = setTimeout(() => { if (this.noteOn) this.message(''); }, NOTE_MS);
   }
   setSelected(on) { this.el.classList.toggle('selected', on); }
+
+  /* The rail's magnet with a drawing tool picked, on the selected chart: the crosshair snaps to O/H/L/C too
+     (when this Lightweight Charts has MagnetOHLC); otherwise the normal crosshair. Kept across rebuilds. */
+  setMagnetCrosshair(on) {
+    const m = !!on && LW.CrosshairMode.MagnetOHLC !== undefined;
+    if (this.magnetXhair === m) return;
+    this.magnetXhair = m;
+    if (this.chart) this.chart.applyOptions({ crosshair: { mode: m ? LW.CrosshairMode.MagnetOHLC : LW.CrosshairMode.Normal } });
+  }
 
   /* Send the chart's config; keepView: restore the view on screen when the
      answer is for the same root + interval. "Loading…" while it asks for
@@ -241,7 +251,7 @@ class Cell {
       timeScale: { borderColor: P.border, timeVisible: true, secondsVisible: sub, rightOffset: 6,
         tickMarkFormatter: (t, type) => tickLabel(this.real(t), type) },
       localization: { timeFormatter: (t) => this.fullTime(t) },
-      crosshair: { mode: LW.CrosshairMode.Normal,
+      crosshair: { mode: this.magnetXhair ? LW.CrosshairMode.MagnetOHLC : LW.CrosshairMode.Normal,
         vertLine: { color: P.cross, width: 1, style: LW.LineStyle.Dashed, labelBackgroundColor: P.crossLabel },
         horzLine: { color: P.cross, width: 1, style: LW.LineStyle.Dashed, labelBackgroundColor: P.crossLabel } },
     });

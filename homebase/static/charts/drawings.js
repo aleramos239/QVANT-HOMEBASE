@@ -6,8 +6,9 @@
 
    The browser half, below the store: the canvas primitive that draws one
    chart's drawings, and the pointer controller that places, selects,
-   moves and deletes them. No browser globals at load time (only inside
-   functions that run in the page): the Node tests load this file directly. */
+   moves and deletes them (with the rail's magnet). No browser globals at
+   load time (only inside functions that run in the page): the Node tests
+   load this file directly. */
 (function () {
 'use strict';
 const Cat = (typeof window !== 'undefined' && window.HBCatalog) || (typeof require === 'function' ? require('./catalog.js') : null);
@@ -152,6 +153,40 @@ function measureLabel(a, b, ctx) {
 
 let seq = 0;
 function newId() { return 'd' + Date.now().toString(36) + (seq++).toString(36) + Math.random().toString(36).slice(2, 6); }
+
+/* ---- the magnet (the rail's Weak / Strong): drawing points snap to a candle's prices ---- */
+const MAGNET_PX = 12;   // weak: an O/H/L/C this close (px) to the pointer takes the point
+const MAGNET_OFF = Object.freeze({ on: false, mode: 'weak' });
+
+/* The magnet as saved in localStorage (hb_charts_magnet): {on, mode}; anything unreadable is off / weak. */
+function parseMagnet(text) {
+  let v = null;
+  try { v = JSON.parse(text); } catch (_) { /* unreadable: off */ }
+  if (!v || typeof v !== 'object') return { ...MAGNET_OFF };
+  return { on: v.on === true, mode: v.mode === 'strong' ? 'strong' : 'weak' };
+}
+
+/* The magnet for one pointer event: 'weak' | 'strong' | null (off). ⌘ held inverts it (TradingView's Ctrl/Cmd). */
+function magnetMode(state, meta) {
+  const s = state || MAGNET_OFF, on = meta ? !s.on : s.on;
+  return on ? (s.mode === 'strong' ? 'strong' : 'weak') : null;
+}
+
+/* A drawing point's price under the magnet. The candidates are the O, H, L, C of `bar`, the bar the point's
+   time snaps to (null beyond the loaded bars: no snap). Strong: the candidate nearest the pointer's y. Weak:
+   that candidate only within MAGNET_PX, else the pointer's own tick-rounded price p. yOf(price) = its y. */
+function snapPrice(bar, y, p, mode, yOf) {
+  if (!mode || !bar) return p;
+  let best = null, bestD = Infinity;
+  for (const q of [bar.o, bar.h, bar.l, bar.c]) {
+    const qy = q == null ? null : yOf(q);
+    if (qy == null) continue;
+    const dist = Math.abs(qy - y);
+    if (dist < bestD) { best = q; bestD = dist; }
+  }
+  if (best == null) return p;
+  return mode === 'strong' || bestD <= MAGNET_PX ? best : p;
+}
 
 /* Drawings per symbol, shared by every chart of that symbol, saved to the
    server as the symbol's whole list, debounced. */
@@ -377,11 +412,19 @@ class Controller {
   local(e) { const r = this.box.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
   inPane(pt) { return pt.x >= 0 && pt.x < this.paneW() && pt.y >= 0 && pt.y < this.paneH(); }
 
-  /* The bar-snapped time and tick-rounded price under a pane point. */
-  at(pt) {
-    const c = this.cell, L = c.chart.timeScale().coordinateToLogical(pt.x), p = c.candles.coordinateToPrice(pt.y);
-    if (L == null || p == null || !c.bars.length) return null;
-    return { t: snapTime(L, c.bars, c.isTime(), c.barMs()), p: roundToTick(p, c.tick), L };
+  /* The bar a snapped time lands on (null beyond the loaded bars). */
+  barAt(t) { const b = this.cell.bars, i = barIndexAt(b, t); return i >= 0 && b[i].ms === t ? b[i] : null; }
+
+  /* The bar-snapped time and tick-rounded price under a pane point. Given the pointer event `e` (placing a
+     point, dragging a handle) the magnet may move the price to the bar's O/H/L/C, and ⌘ in `e` inverts it;
+     without `e` (moving a whole drawing) it never does. */
+  at(pt, e = null) {
+    const c = this.cell, L = c.chart.timeScale().coordinateToLogical(pt.x), raw = c.candles.coordinateToPrice(pt.y);
+    if (L == null || raw == null || !c.bars.length) return null;
+    const t = snapTime(L, c.bars, c.isTime(), c.barMs());
+    let p = roundToTick(raw, c.tick);
+    if (e) p = snapPrice(this.barAt(t), pt.y, p, magnetMode(this.host.magnet(), e.metaKey), (q) => c.candles.priceToCoordinate(q));
+    return { t, p, L };
   }
 
   setCursor(kind) {
@@ -429,7 +472,7 @@ class Controller {
     if (this.measure && this.measure.done) { this.measure = null; this.prim.redraw(); }
     if (!this.inPane(pt)) return;
     if (tool !== 'cursor') {
-      const at = this.at(pt);
+      const at = this.at(pt, e);
       if (!at) return;
       this.own(e);
       if (this.mode === 'click') { this.finish(at); return; }
@@ -464,7 +507,7 @@ class Controller {
     if (!this.cell.chart) return;
     if (this.held() && !(e.buttons & 1)) { this.abort(); return; }   // the button is up, but its release never reached us
     if (this.place || (this.measure && !this.measure.done)) {
-      const at = this.at(this.local(e));
+      const at = this.at(this.local(e), e);
       if (!at) return;
       const end = { t: at.t, p: at.p };
       if (this.place) this.place = { ...this.place, points: [this.place.points[0], end] };
@@ -477,7 +520,7 @@ class Controller {
     // a press that has not left the press point by MOVE_PX is a click (select): a jitter never moves a drawing
     if (!this.drag.moving && Math.hypot(pt.x - down.x, pt.y - down.y) < MOVE_PX) return;
     this.drag.moving = true;
-    const at = this.at(pt);
+    const at = this.at(pt, part === 'handle' ? e : null);
     if (!at) return;
     this.drag.cur = part === 'handle' ? setPoint(orig, index, at.t, at.p)
       : moveDrawing(orig, Math.round(at.L) - Math.round(from.L), at.p - from.p, this.cell.tick, this.ctx());
@@ -490,7 +533,7 @@ class Controller {
       if (this.mode !== 'drag') return;
       const pt = this.local(e);
       if (Math.hypot(pt.x - this.downAt.x, pt.y - this.downAt.y) < MOVE_PX) { this.mode = 'click'; this.release(); return; }
-      const at = this.at(pt);
+      const at = this.at(pt, e);
       if (at) this.finish(at);
       return;
     }
@@ -584,8 +627,8 @@ class Controller {
 }
 
 const api = { barIndexAt, logicalOf, xOfLogical, timeToX, snapTime, roundToTick, distToSegment, handlePoints, hitTest,
-  setPoint, shiftTime, moveDrawing, samePoints, fmtDuration, measureLabel, newId, Store, Primitive, Controller, HANDLE_TOL,
-  LINE_TOL };
+  setPoint, shiftTime, moveDrawing, samePoints, fmtDuration, measureLabel, newId, MAGNET_PX, MAGNET_OFF, parseMagnet,
+  magnetMode, snapPrice, Store, Primitive, Controller, HANDLE_TOL, LINE_TOL };
 if (typeof window !== 'undefined') window.HBDrawings = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

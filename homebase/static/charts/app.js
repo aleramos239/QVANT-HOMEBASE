@@ -1,8 +1,8 @@
 /* Homebase Charts — the page: layout and selection, the top toolbar (it
-   acts on the selected chart), menus, the drawing rail (the tool and the
-   per-symbol drawings store), the websocket to the chart service (:8852)
-   and the bottom bar. Each grid slot is an HBCell.Cell; the server
-   computes everything, the page only draws. */
+   acts on the selected chart), menus, the drawing rail (the tool, the
+   magnet and the per-symbol drawings store), the websocket to the chart
+   service (:8852) and the bottom bar. Each grid slot is an HBCell.Cell;
+   the server computes everything, the page only draws. */
 (() => {
 'use strict';
 const C = window.HBCatalog, I = window.HBIcons, { Cell } = window.HBCell;
@@ -33,6 +33,8 @@ let dlg = null;   // the open dialog: {back, box, focus}
 let tool = 'cursor';
 let noteTimer = 0, armTimer = 0, armRoot = null;   // armRoot: the symbol the armed remove-all names
 const drawings = new window.HBDrawings.Store({ onError: (root, msg) => sbNote(`${root} drawings: ${msg}`) });
+let magnet = loadMagnet();   // the rail's magnet {on, mode}, per viewer (localStorage hb_charts_magnet)
+let menuRight = false;       // the open menu is a rail flyout: it opens to the right of its button
 
 const $ = (s, root = document) => root.querySelector(s);
 const iso = (t) => new Date(t * 1000).toISOString();
@@ -67,6 +69,7 @@ function hostFor(id) {
     tool: () => tool,
     toolDone() { setTool('cursor'); },
     drawings,
+    magnet: () => magnet,
   };
 }
 
@@ -92,6 +95,7 @@ function select(i) {
   selected = i;
   cells.forEach((c, k) => c.setSelected(k === i));
   renderToolbar();
+  syncCrosshair();
 }
 
 /* ---- toolbar ---- */
@@ -125,20 +129,27 @@ function renderToolbar() {
   $('#tbLayoutName').textContent = layout.name || 'Unsaved';
 }
 
-/* One popup menu at a time, under its toolbar button. */
-function openMenu(anchor, cls) {
+/* One popup menu at a time, under its toolbar button (right: to the right of a rail button). */
+function openMenu(anchor, cls, { right = false } = {}) {
   closeMenu();
   const m = mk('div', 'menu' + (cls ? ' ' + cls : ''));
   m.setAttribute('role', 'menu');
   $('#menuRoot').appendChild(m);
-  menuEl = m; menuAnchor = anchor;
+  menuEl = m; menuAnchor = anchor; menuRight = right;
   anchor.classList.add('open');
   anchor.setAttribute('aria-expanded', 'true');
   return m;
 }
 function placeMenu() {
   if (!menuEl) return;
-  const r = menuAnchor.getBoundingClientRect(), w = menuEl.offsetWidth;
+  const w = menuEl.offsetWidth, h = menuEl.offsetHeight;
+  if (menuRight) {
+    const r = (menuAnchor.closest('.rail-split') || menuAnchor).getBoundingClientRect();
+    menuEl.style.left = (r.right + 8) + 'px';
+    menuEl.style.top = Math.max(4, Math.min(r.top, window.innerHeight - h - 4)) + 'px';
+    return;
+  }
+  const r = menuAnchor.getBoundingClientRect();
   menuEl.style.left = Math.max(4, Math.min(r.left, window.innerWidth - w - 4)) + 'px';
   menuEl.style.top = (r.bottom + 4) + 'px';
 }
@@ -540,6 +551,7 @@ function setTool(t) {
   tool = t;
   for (const b of document.querySelectorAll('#rail [data-tool]')) b.setAttribute('aria-pressed', String(b.dataset.tool === t));
   for (const c of cells) if (c.dc) c.dc.toolChanged();
+  syncCrosshair();
 }
 
 function sbNote(text) {
@@ -576,6 +588,41 @@ function clearDrawings() {
   armRoot = root;
   showTip(btn, `Click again to remove ${n} drawing${n === 1 ? '' : 's'} on ${root}`);
   armTimer = setTimeout(disarm, 3000);
+}
+
+/* ---- magnet ---- */
+function loadMagnet() {
+  try { return window.HBDrawings.parseMagnet(localStorage.getItem('hb_charts_magnet')); }
+  catch (_) { return { ...window.HBDrawings.MAGNET_OFF }; }
+}
+function setMagnet(next) {
+  magnet = { on: !!next.on, mode: next.mode === 'strong' ? 'strong' : 'weak' };
+  try { localStorage.setItem('hb_charts_magnet', JSON.stringify(magnet)); } catch (_) { /* storage off */ }
+  renderMagnet();
+  syncCrosshair();
+}
+function renderMagnet() {
+  const b = $('#railMagnet'), tip = magnet.on ? `Magnet (${magnet.mode})` : 'Magnet off';
+  b.setAttribute('aria-pressed', String(magnet.on));
+  b.title = tip;
+  b.setAttribute('aria-label', tip);
+}
+/* The selected chart's crosshair snaps like the magnet while it is on and a drawing tool is picked. */
+function syncCrosshair() {
+  cells.forEach((c, k) => c.setMagnetCrosshair(magnet.on && tool !== 'cursor' && k === selected));
+}
+/* The corner triangle's flyout: Weak / Strong, a check on the current mode; picking one turns the magnet on. */
+function magnetMenu() {
+  const m = openMenu($('#railMagnetMore'), 'menu-magnet', { right: true });
+  for (const [mode, text] of [['weak', 'Weak magnet'], ['strong', 'Strong magnet']]) {
+    const b = menuItem(text, '', () => { closeMenu(); setMagnet({ on: true, mode }); }, false), ck = icon('check');
+    ck.classList.add('menu-ck');
+    if (magnet.mode !== mode) ck.style.visibility = 'hidden';
+    b.setAttribute('role', 'menuitemradio');
+    b.setAttribute('aria-checked', String(magnet.mode === mode));
+    b.prepend(ck);
+    m.appendChild(b);
+  }
 }
 
 /* ---- bottom bar ---- */
@@ -664,6 +711,9 @@ async function init() {
     b.onclick = () => setTool(b.dataset.tool === tool && tool !== 'cursor' ? 'cursor' : b.dataset.tool);
   }
   $('#railClear').onclick = clearDrawings;
+  $('#railMagnet').onclick = () => setMagnet({ ...magnet, on: !magnet.on });
+  $('#railMagnetMore').onclick = () => toggleMenu($('#railMagnetMore'), magnetMenu);
+  renderMagnet();
   document.addEventListener('pointerdown', (e) => {
     if (menuEl && !menuEl.contains(e.target) && !menuAnchor.contains(e.target)) closeMenu();
   }, true);

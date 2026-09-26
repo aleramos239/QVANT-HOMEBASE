@@ -74,6 +74,14 @@ a { color: inherit; }
 .rail-btn[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); }
 .rail-btn.arm { color: var(--down); background: var(--down-soft); }
 .rail-sep { width: 28px; height: 1px; margin: 4px 0; background: var(--border); }
+.rail-split { position: relative; }
+/* the magnet's mode flyout: a 6px triangle in the button's bottom-right corner */
+.rail-corner { position: absolute; right: 0; bottom: 0; width: 12px; height: 12px; border-radius: 0 0 4px 0; color: var(--text-2); }
+.rail-corner::after { content: ""; position: absolute; right: 2px; bottom: 2px; border-style: solid; border-width: 0 0 6px 6px;
+  border-color: transparent transparent currentColor transparent; }
+.rail-corner:hover, .rail-corner.open { color: var(--text); background: var(--hover); }
+.menu-ck { width: 16px; color: var(--accent); }
+.menu-ck .ic { width: 16px; height: 16px; }
 .rail-tip { position: fixed; z-index: 40; padding: 6px 10px; border-radius: 6px; background: var(--tip); color: #FFFFFF;
   font-size: 12px; white-space: nowrap; pointer-events: none; }
 .grid { flex: 1; min-width: 0; display: grid; gap: 4px; }

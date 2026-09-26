@@ -1,7 +1,7 @@
 /* Homebase Charts — the page's icons, inlined SVG strings.
    Lucide (https://lucide.dev), lucide-static@1.48.0: house, chevron-down, search,
    square-function, mouse-pointer-2, git-commit-horizontal, rectangle-horizontal, ruler,
-   trash-2, eye, eye-off, settings, x, check, sun, moon.
+   trash-2, eye, eye-off, settings, x, check, sun, moon, magnet.
 
    ISC License
 
@@ -45,5 +45,6 @@ window.HBIcons = {
   check: svg('<path d="M20 6 9 17l-5-5"/>'),
   sun: svg('<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>'),
   moon: svg('<path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/>'),
+  magnet: svg('<path d="m12 15 4 4"/><path d="M2.352 10.648a1.205 1.205 0 0 0 0 1.704l2.296 2.296a1.205 1.205 0 0 0 1.704 0l6.029-6.029a1 1 0 1 1 3 3l-6.029 6.029a1.205 1.205 0 0 0 0 1.704l2.296 2.296a1.205 1.205 0 0 0 1.704 0l6.365-6.367A1 1 0 0 0 8.716 4.282z"/><path d="m5 8 4 4"/>'),
 };
 })();

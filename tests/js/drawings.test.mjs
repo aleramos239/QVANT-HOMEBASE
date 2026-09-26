@@ -272,28 +272,33 @@ test('samePoints: two versions of a drawing on exactly the same points', () => {
 
 /* The pointer controller on a chart that needs no browser: the price pane
    is 400 x 1000 px at the page origin, bar i at x = 100 + 10 i, price p at
-   y = 1000 - p (so one pixel is four 0.25 ticks). */
-function pointerRig(saved) {
+   y = 1000 - p (so one pixel is four 0.25 ticks). opts: the rail's tool (it
+   returns to the cursor after a placement, as on the page), the magnet, and
+   the chart's bars (OHLC ones for the magnet). */
+function pointerRig(saved, { tool = 'cursor', magnet = { on: false, mode: 'weak' }, rigBars = bars } = {}) {
   globalThis.window = { addEventListener() {}, removeEventListener() {} };
   const chart = { applyOptions() {}, priceScale: () => ({ width: () => 60 }), panes: () => [{ getHeight: () => 1000 }],
     timeScale: () => ({ logicalToCoordinate: (i) => 100 + i * 10, coordinateToLogical: (x) => (x - 100) / 10 }) };
-  const cell = { shown: { root: 'NQ' }, el: { dataset: {} }, P: { accent: '#2962FF' }, chart, bars, tick: 0.25,
+  const cell = { shown: { root: 'NQ' }, el: { dataset: {} }, P: { accent: '#2962FF' }, chart, bars: rigBars, tick: 0.25,
     isTime: () => true, barMs: () => MIN,
     box: { clientWidth: 460, getBoundingClientRect: () => ({ left: 0, top: 0 }), addEventListener() {}, removeEventListener() {} },
     candles: { attachPrimitive() {}, priceToCoordinate: (p) => 1000 - p, coordinateToPrice: (y) => 1000 - y } };
   const f = fakeFetch((url, method) => (method === 'GET' ? { status: 200, body: saved } : null));
   const store = new D.Store({ fetchFn: f, delay: 0 });
-  const ctl = new D.Controller(cell, { tool: () => 'cursor', toolDone() {}, drawings: store });
-  const ev = (x, y, buttons = 1) => ({ button: 0, buttons, ctrlKey: false, clientX: x, clientY: y,
+  let now = tool;
+  const ctl = new D.Controller(cell, { tool: () => now, toolDone() { now = 'cursor'; }, drawings: store,
+    magnet: () => magnet });
+  const ev = (x, y, buttons = 1, metaKey = false) => ({ button: 0, buttons, ctrlKey: false, metaKey, clientX: x, clientY: y,
     preventDefault() {}, stopPropagation() {} });
-  const gesture = async (path) => {   // press at path[0], move through the rest, release at the last point
-    ctl.onDown(ev(...path[0]));
-    for (const p of path.slice(1)) ctl.onMove(ev(...p));
-    ctl.onUp(ev(...path.at(-1), 0));
+  const gesture = async (path, metaKey = false) => {   // press at path[0], move through the rest, release at the last point
+    ctl.onDown(ev(...path[0], 1, metaKey));
+    for (const p of path.slice(1)) ctl.onMove(ev(...p, 1, metaKey));
+    ctl.onUp(ev(...path.at(-1), 0, metaKey));
     await new Promise((r) => setTimeout(r, 5));   // the store's (0 ms) save debounce
     await flush();
   };
-  return { ctl, store, gesture, puts: () => f.calls.filter((c) => c.method === 'PUT'), done() { ctl.destroy(); } };
+  return { ctl, store, gesture, tool: () => now, puts: () => f.calls.filter((c) => c.method === 'PUT'),
+    done() { ctl.destroy(); } };
 }
 
 test('a click on a drawing selects it and never nudges it; a real drag moves it and saves once', async (t) => {
@@ -315,5 +320,82 @@ test('a click on a drawing selects it and never nudges it; a real drag moves it 
   const moved = { ...trend, points: [{ t: bars[1].ms, p: 890 }, { t: bars[4].ms + MIN, p: 850 }] };
   assert.deepEqual(R.store.list('NQ'), [moved]);
   assert.deepEqual(R.puts().map((c) => c.body), [[moved]]);
+  R.done();
+});
+
+/* ---- the magnet ---- */
+test('the magnet state reads back from storage; anything else is off / weak', () => {
+  assert.deepEqual(D.parseMagnet('{"on":true,"mode":"strong"}'), { on: true, mode: 'strong' });
+  assert.deepEqual(D.parseMagnet('{"on":1,"mode":"x"}'), { on: false, mode: 'weak' });
+  assert.deepEqual(D.parseMagnet(null), { on: false, mode: 'weak' });
+  assert.deepEqual(D.parseMagnet('not json'), { on: false, mode: 'weak' });
+  assert.deepEqual(D.MAGNET_OFF, { on: false, mode: 'weak' });
+  assert.equal(D.MAGNET_PX, 12);
+});
+
+test('⌘ inverts the magnet for one event', () => {
+  assert.equal(D.magnetMode({ on: true, mode: 'weak' }, false), 'weak');
+  assert.equal(D.magnetMode({ on: true, mode: 'strong' }, false), 'strong');
+  assert.equal(D.magnetMode({ on: true, mode: 'strong' }, true), null);
+  assert.equal(D.magnetMode({ on: false, mode: 'strong' }, true), 'strong');
+  assert.equal(D.magnetMode({ on: false, mode: 'weak' }, false), null);
+  assert.equal(D.magnetMode(null, false), null);
+});
+
+const BAR = { ms: T0, o: 900, h: 910, l: 880, c: 905 };
+const yOf = (p) => 1000 - p;     // one px per 1.00
+
+test('weak magnet: the nearest O/H/L/C within 12 px, else the pointer\'s price', () => {
+  assert.equal(D.snapPrice(BAR, yOf(912), 912, 'weak', yOf), 910);          // 2 px from H
+  assert.equal(D.snapPrice(BAR, yOf(922), 922, 'weak', yOf), 910);          // exactly 12 px
+  assert.equal(D.snapPrice(BAR, yOf(922.25), 922.25, 'weak', yOf), 922.25); // 12.25 px: too far
+  assert.equal(D.snapPrice(BAR, yOf(903), 903, 'weak', yOf), 905);          // C (2 px) beats O (3 px)
+});
+
+test('strong magnet: always the nearest O/H/L/C', () => {
+  assert.equal(D.snapPrice(BAR, yOf(960), 960, 'strong', yOf), 910);
+  assert.equal(D.snapPrice(BAR, yOf(850), 850, 'strong', yOf), 880);
+});
+
+test('no magnet, no bar (beyond the data) or no placeable candidate: the pointer\'s price', () => {
+  assert.equal(D.snapPrice(BAR, 88, 912, null, yOf), 912);
+  assert.equal(D.snapPrice(null, 88, 912, 'strong', yOf), 912);
+  assert.equal(D.snapPrice(BAR, 88, 912, 'strong', () => null), 912);
+});
+
+/* OHLC bars for the magnet: bar i opens 900, closes 905, high 910 + i, low 880 - i. */
+const ohlc = bars.map((b, i) => ({ ...b, o: 900, h: 910 + i, l: 880 - i, c: 905 }));
+function withWindow(t) {   // the rig installs a fake window: put the real one (none, in Node) back after the test
+  const had = globalThis.window;
+  t.after(() => { if (had === undefined) delete globalThis.window; else globalThis.window = had; });
+}
+
+test('placing snaps each point to its bar\'s O/H/L/C: weak within 12 px, strong always, ⌘ inverts', async (t) => {
+  withWindow(t);
+  const place = async (magnet, meta = false) => {
+    const R = pointerRig([], { tool: 'trend', magnet, rigBars: ohlc });
+    await R.store.ensure('NQ');
+    // bar 2 at 915 (its high, 912, is 3 px away); bar 4 at 930 (its high, 914, is 16 px away)
+    await R.gesture([[120, 85], [140, 70]], meta);
+    const [d] = R.store.list('NQ');
+    R.done();
+    return d.points.map((q) => q.p);
+  };
+  assert.deepEqual(await place({ on: true, mode: 'weak' }), [912, 930]);
+  assert.deepEqual(await place({ on: true, mode: 'strong' }), [912, 914]);
+  assert.deepEqual(await place({ on: false, mode: 'strong' }), [915, 930]);
+  assert.deepEqual(await place({ on: false, mode: 'strong' }, true), [912, 914]);   // ⌘: an off magnet works, in its mode
+  assert.deepEqual(await place({ on: true, mode: 'strong' }, true), [915, 930]);    // ⌘: an on magnet is off
+});
+
+test('dragging a handle takes the magnet; moving a whole drawing never does', async (t) => {
+  withWindow(t);
+  const line = { id: 'm', type: 'trend', points: [{ t: bars[1].ms, p: 900 }, { t: bars[3].ms, p: 860 }] };   // (110,100)-(130,140)
+  const R = pointerRig([line], { magnet: { on: true, mode: 'strong' }, rigBars: ohlc });
+  await R.store.ensure('NQ');
+  await R.gesture([[120, 120], [120, 116], [120, 114]]);               // the body, 6 px up: +6.00, no snap
+  assert.deepEqual(R.store.list('NQ')[0].points, [{ t: bars[1].ms, p: 906 }, { t: bars[3].ms, p: 866 }]);
+  await R.gesture([[110, 94], [120, 80], [120, 85]]);                 // handle 0 onto bar 2 near 915: its high, 912
+  assert.deepEqual(R.store.list('NQ')[0].points, [{ t: bars[2].ms, p: 912 }, { t: bars[3].ms, p: 866 }]);
   R.done();
 });

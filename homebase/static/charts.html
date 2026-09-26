@@ -9,7 +9,7 @@
     document.documentElement.setAttribute('data-theme', (_t === 'light' || _t === 'dark') ? _t : 'light');
   } catch (_) { document.documentElement.setAttribute('data-theme', 'light'); }
 </script>
-<link rel="stylesheet" href="/static/charts/charts.css?v=2">
+<link rel="stylesheet" href="/static/charts/charts.css?v=3">
 </head>
 <body>
 <header class="toolbar" role="toolbar" aria-label="Chart toolbar">
@@ -38,6 +38,10 @@
     <button class="rail-btn" type="button" data-tool="rect" title="Rectangle" aria-pressed="false"><span class="icw" data-icon="rect"></span></button>
     <button class="rail-btn" type="button" data-tool="measure" title="Measure" aria-pressed="false"><span class="icw" data-icon="measure"></span></button>
     <span class="rail-sep"></span>
+    <div class="rail-split">
+      <button class="rail-btn" type="button" id="railMagnet" title="Magnet off" aria-label="Magnet off" aria-pressed="false"><span class="icw" data-icon="magnet"></span></button>
+      <button class="rail-corner" type="button" id="railMagnetMore" title="Magnet mode" aria-label="Magnet mode" aria-haspopup="menu" aria-expanded="false"></button>
+    </div>
     <button class="rail-btn" type="button" id="railClear" title="Remove drawings"><span class="icw" data-icon="trash"></span></button>
   </nav>
   <div class="grid" id="grid"></div>
@@ -53,11 +57,11 @@
 <div id="dialogRoot"></div>
 <div class="rail-tip" id="railTip" role="status" hidden></div>
 <script src="/static/vendor/lightweight-charts-5.2.1.js"></script>
-<script src="/static/charts/icons.js?v=2"></script>
+<script src="/static/charts/icons.js?v=3"></script>
 <script src="/static/charts/catalog.js?v=2"></script>
 <script src="/static/charts/primitives.js?v=2"></script>
-<script src="/static/charts/drawings.js?v=2"></script>
-<script src="/static/charts/cell.js?v=2"></script>
-<script src="/static/charts/app.js?v=2"></script>
+<script src="/static/charts/drawings.js?v=3"></script>
+<script src="/static/charts/cell.js?v=3"></script>
+<script src="/static/charts/app.js?v=3"></script>
 </body>
 </html>
