@@ -22,7 +22,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         wv.autoresizingMask = [.width, .height]
         wv.navigationDelegate = self
         win.contentView!.addSubview(wv)
-        wv.load(URLRequest(url: URL(string: "http://localhost:8850")!))
+        // Start from the servers' current pages. The dashboard sends no cache
+        // headers, and WebKit's heuristic cache otherwise keeps serving a page
+        // (and its scripts) from before an upgrade (2026-09-26: the old chart
+        // page kept showing after the charts redesign went live). Cookies and
+        // localStorage (theme, chart layout) are kept.
+        let caches: Set<String> = [WKWebsiteDataTypeDiskCache, WKWebsiteDataTypeMemoryCache]
+        WKWebsiteDataStore.default().removeData(ofTypes: caches,
+                                                modifiedSince: Date(timeIntervalSince1970: 0)) {
+            wv.load(URLRequest(url: URL(string: "http://localhost:8850")!))
+        }
 
         win.makeKeyAndOrderFront(nil)
         window = win
@@ -43,8 +52,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ s: NSApplication) -> Bool { true }
 
+    // ⌘R reloads what is on screen (the desk or the charts) from the server,
+    // never from the cache
     @objc func reloadPage() {
-        webView.load(URLRequest(url: URL(string: "http://localhost:8850")!))
+        if webView.url != nil {
+            webView.reloadFromOrigin()
+        } else {
+            webView.load(URLRequest(url: URL(string: "http://localhost:8850")!))
+        }
     }
 
     private func buildMenu() {
