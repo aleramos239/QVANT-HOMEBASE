@@ -298,3 +298,75 @@ def test_no_time_left_skips_the_read_and_fires_as_before(tmp_path):
             ["too close to the fire"]
         assert not any(e["event"] == "timer_skipped" for e in ev)
         assert [e["account"] for e in ev if e["event"] == "dry_run"] == ["a1"]
+
+
+# --- controller rulings on the Task 6 concerns ---------------------------------------------
+def test_a_failing_journal_never_changes_the_decision(tmp_path, monkeypatch, capsys):
+    """Ruling 1: every journal write inside the check fails -> the skipped
+    account is still skipped, the others still fire; the failure goes to stderr."""
+    timer, engine, clock = mk2(tmp_path, {"a1": 0, "a2": 2, "a3": "error"})
+    real = Engine.journal
+
+    def flaky(self, event, **data):
+        if event in ("timer_skipped", "prestage_check_failed"):
+            raise OSError("disk full")
+        return real(self, event, **data)
+    monkeypatch.setattr(Engine, "journal", flaky)
+    _drive_to_fire(timer, clock)
+    ev = events(tmp_path)
+    st = timer.status()["strategies"]["nq930"]
+    assert st["stage"] == "fired" and st["skipped_accounts"] == {"a2": 2}
+    assert engine.skipped_today("nq930") == {"a2"}
+    assert sorted(e["account"] for e in ev if e["event"] == "dry_run") == ["a1", "a3"]
+    err = capsys.readouterr().err
+    assert "timer_skipped" in err and "prestage_check_failed" in err and "disk full" in err
+
+
+def test_an_unreadable_position_with_a_cached_manual_order_skips(tmp_path, monkeypatch):
+    """Ruling 2: the position read fails but the cache shows a resting NQ
+    order -> skipped, manual_order, position_unreadable."""
+    monkeypatch.setattr(OrderAdapter, "view_orders", {"a1": [_order("5", "MNQZ6")]})
+    timer, engine, clock = mk2(tmp_path, {"a1": "error", "a2": 0}, adapter_cls=OrderAdapter)
+    _drive_to_fire(timer, clock)
+    ev = events(tmp_path)
+    assert any(e["event"] == "prestage_check_failed" and e.get("account") == "a1" for e in ev)
+    skips = [e for e in ev if e["event"] == "timer_skipped"]
+    assert [{k: e.get(k) for k in ("reason", "account", "net", "orders", "position_unreadable")}
+            for e in skips] == [{"reason": "manual_order", "account": "a1", "net": 0,
+                                 "orders": ["5"], "position_unreadable": True}]
+    assert [e["account"] for e in ev if e["event"] == "dry_run"] == ["a2"]
+    assert timer.status()["strategies"]["nq930"]["skipped_orders"] == {"a1": ["5"]}
+
+
+def test_an_unreadable_position_without_a_manual_order_fires_as_before(tmp_path, monkeypatch):
+    """Ruling 2, other half: only an ES order cached -> fire as before."""
+    monkeypatch.setattr(OrderAdapter, "view_orders", {"a1": [_order("5", "ESZ6")]})
+    timer, engine, clock = mk2(tmp_path, {"a1": "error", "a2": 0}, adapter_cls=OrderAdapter)
+    _drive_to_fire(timer, clock)
+    ev = events(tmp_path)
+    assert any(e["event"] == "prestage_check_failed" and e.get("account") == "a1" for e in ev)
+    assert not any(e["event"] == "timer_skipped" for e in ev)
+    assert sorted(e["account"] for e in ev if e["event"] == "dry_run") == ["a1", "a2"]
+
+
+def test_a_timed_out_or_skipped_read_still_honours_a_cached_manual_order(tmp_path, monkeypatch):
+    """A hung read (timeout) and a stage with no time left are unreadable
+    positions too: a cached manual order still skips, the flat account fires."""
+    class HangingOrders(HangingAdapter, OrderAdapter):
+        pass
+    monkeypatch.setattr(OrderAdapter, "view_orders", {"a1": [_order("5", "NQZ6")]})
+    for when in (dt.datetime(2026, 9, 14, 13, 29, 59, 550000, tzinfo=UTC),   # 0.05 s budget
+                 dt.datetime(2026, 9, 14, 13, 29, 59, 900000, tzinfo=UTC)):  # no time left
+        root = tmp_path / when.strftime("%H%M%S%f")
+        root.mkdir()
+        timer, engine, clock = mk2(root, {"a1": 0, "a2": 0}, adapter_cls=HangingOrders)
+        clock.set_et(9, 21)
+        run(timer.tick())
+        clock.dt = when
+        run(timer.tick())
+        clock.set_et(9, 30)
+        run(timer.tick())
+        ev = events(root)
+        assert [(e["account"], e["reason"], e.get("position_unreadable")) for e in ev
+                if e["event"] == "timer_skipped"] == [("a1", "manual_order", True)], when
+        assert [e["account"] for e in ev if e["event"] == "dry_run"] == ["a2"], when

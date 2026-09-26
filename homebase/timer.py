@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import sys
 from typing import Callable
 from zoneinfo import ZoneInfo
 
@@ -192,72 +193,88 @@ class SelfTimer:
         the day — and so is one with a working order resting in it (ruling
         P1: it could fill inside the bot's window). Otherwise the bot would
         net against those contracts at its 12:55/15:55 flatten and could
-        misattribute their fills. Positions are the broker's
-        (get_net_position), read concurrently; orders are the adapter's
-        cached view (trade_view, no broker call), matched by the engine's
-        substring rule (NQ also claims MNQZ6). The read takes at most
-        PRESTAGE_READ_S and always ends PRESTAGE_MARGIN_S before 09:30:00
-        (ruling P6). Unreadable, timed out, no time left, or an order whose
-        contract is unresolved -> the account fires as before (journaled).
-        Never raises: the stage must not fail on this check."""
-        now = self.now_et()
-        left = (dt.datetime.combine(now.date(), FIRE_T, tzinfo=ET)
-                - now).total_seconds() - PRESTAGE_MARGIN_S
-        budget = min(PRESTAGE_READ_S, left)
-        if budget <= 0:
-            self.engine.journal("prestage_check_failed", strategy=name,
-                                error="too close to the fire")
-            return
-        sym = s.symbol.upper()
+        misattribute their fills.
 
-        async def read(aid):
+        Orders are the adapter's cached view (trade_view, no broker call),
+        matched by the engine's substring rule (NQ also claims MNQZ6); they
+        are read first and always. Positions are the broker's
+        (get_net_position), read concurrently, at most PRESTAGE_READ_S and
+        always ending PRESTAGE_MARGIN_S before 09:30:00 (ruling P6). A
+        position that cannot be read (error, timeout, no time left) fires as
+        before — unless a manual order is cached: then the account is skipped
+        (`position_unreadable`). An order whose contract is unresolved never
+        skips by itself. Every decision is journaled, but a failing journal
+        write never changes one (logged to stderr instead). Never raises on
+        a read: the stage must not fail on this check."""
+        def jnl(event, **kw):
+            try:
+                self.engine.journal(event, strategy=name, **kw)
+            except Exception as e:  # noqa: BLE001 — the decision stands
+                print(f"homebase timer: journal {event} for {name} failed: {e!r} {kw}",
+                      file=sys.stderr)
+
+        sym = s.symbol.upper()
+        accounts = [a["account"] for a in assignments(self.cfg, name)]
+
+        def cached_orders(aid):
             ad = self.engine.adapters.get(aid)
-            if ad is None or not ad.connected:
-                return aid, None, [], None, "not connected"
             try:
-                net = await ad.get_net_position(s.symbol)
-            except Exception as e:  # noqa: BLE001
-                return aid, None, [], None, str(e)[:120] or type(e).__name__
-            mine, problem = [], None
-            try:
-                view = ad.trade_view()          # cache only; None = no order view
-                unresolved = []
+                view = ad.trade_view() if ad is not None else None  # None = no view
+                mine, unresolved = [], []
                 for o in ((view or {}).get("orders") or []):
                     if o.get("symbol") is None:
                         unresolved.append(str(o.get("order_id")))
                     elif sym in str(o["symbol"]).upper():
                         mine.append(str(o.get("order_id")))
-                if unresolved:
-                    problem = (f"working order(s) {', '.join(unresolved)}: "
-                               "contract unresolved")
+                return mine, (f"working order(s) {', '.join(unresolved)}: contract unresolved"
+                              if unresolved else None)
             except Exception as e:  # noqa: BLE001
-                mine, problem = [], "order view: " + (str(e)[:120] or type(e).__name__)
-            return aid, net, mine, problem, None
+                return [], "order view: " + (str(e)[:120] or type(e).__name__)
 
-        try:
-            got = await asyncio.wait_for(
-                asyncio.gather(*(read(a["account"]) for a in assignments(self.cfg, name))),
-                budget)
-        except Exception as e:  # noqa: BLE001 — incl. the timeout: fire as before
-            self.engine.journal("prestage_check_failed", strategy=name,
-                                error=str(e)[:200] or type(e).__name__)
-            return
+        orders = {aid: cached_orders(aid) for aid in accounts}
+
+        async def read(aid):
+            ad = self.engine.adapters.get(aid)
+            if ad is None or not ad.connected:
+                return aid, None, "not connected"
+            try:
+                return aid, await ad.get_net_position(s.symbol), None
+            except Exception as e:  # noqa: BLE001
+                return aid, None, str(e)[:120] or type(e).__name__
+
+        now = self.now_et()
+        left = (dt.datetime.combine(now.date(), FIRE_T, tzinfo=ET)
+                - now).total_seconds() - PRESTAGE_MARGIN_S
+        budget = min(PRESTAGE_READ_S, left)
+        nets: dict = {}                   # account -> (net, error); absent = not read
+        if budget <= 0:
+            jnl("prestage_check_failed", error="too close to the fire")
+        else:
+            try:
+                got = await asyncio.wait_for(asyncio.gather(*(read(a) for a in accounts)),
+                                             budget)
+                nets = {aid: (net, err) for aid, net, err in got}
+            except Exception as e:  # noqa: BLE001 — incl. the timeout
+                jnl("prestage_check_failed", error=str(e)[:200] or type(e).__name__)
+
         skipped, skipped_orders = {}, {}
-        for aid, net, orders, problem, err in got:
+        for aid in accounts:
+            net, err = nets.get(aid, (None, None))
+            mine, problem = orders[aid]
             if err is not None:
-                self.engine.journal("prestage_check_failed", strategy=name, account=aid, error=err)
-                continue
+                jnl("prestage_check_failed", account=aid, error=err)
             if problem is not None:
-                self.engine.journal("prestage_check_failed", strategy=name, account=aid,
-                                    error=problem)
-            if net or orders:
-                skipped[aid] = int(net or 0)
-                if orders:
-                    skipped_orders[aid] = orders
-                self.engine.skip_today(name, aid)
-                self.engine.journal("timer_skipped", strategy=name,
-                                    reason="manual_position" if net else "manual_order",
-                                    account=aid, net=int(net or 0), orders=orders)
+                jnl("prestage_check_failed", account=aid, error=problem)
+            unreadable = aid not in nets or err is not None
+            if not (net or mine):
+                continue                      # flat / unreadable, no manual order: fire
+            skipped[aid] = int(net or 0)
+            if mine:
+                skipped_orders[aid] = mine
+            self.engine.skip_today(name, aid)
+            jnl("timer_skipped", reason="manual_position" if net else "manual_order",
+                account=aid, net=int(net or 0), orders=mine,
+                **({"position_unreadable": True} if unreadable else {}))
         if skipped:
             st["skipped_accounts"] = skipped
         if skipped_orders:
