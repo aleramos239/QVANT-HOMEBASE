@@ -330,13 +330,15 @@ function showStatus(s) {
     return `${r} ${a == null ? '—' : a < 60 ? a.toFixed(1) + 's' : Math.round(a / 60) + 'm'}`;
   });
   const worst = Math.max(0, ...Object.values(roots).map((x) => x.last_tick_age_s ?? 0));
-  const recErr = s.recorder && s.recorder.error;
-  dot.className = 'dot ' + (!s.connected || s.error || recErr ? 'bad' : worst > 30 ? 'warn' : 'ok');
+  const rec = s.recorder, recErr = rec && rec.error, recBusy = rec && rec.buffered >= 5000;
+  dot.className = 'dot ' + (!s.connected || s.error || recErr ? 'bad' : worst > 30 || recBusy ? 'warn' : 'ok');
   const mode = s.mode === 'replay'
     ? `replay ${s.date} ×${s.speed} · ${iso(s.clock_s || 0).slice(11, 19)} ET${s.done ? ' · done' : ''}`
     : s.mode === 'live' ? `live · md ${s.md || ''}` : '';
   txt.textContent = [mode, ...ages, s.error || '', recErr ? 'recorder: ' + recErr : ''].filter(Boolean).join('  ·  ');
-  bud.textContent = s.mode === 'live' ? `md budget ${s.budget_hour ?? 0}/180 this hour · ${s.clients ?? 0} page(s)` : '';
+  bud.textContent = s.mode === 'live'
+    ? `md budget ${s.budget_hour ?? 0}/180 this hour` + (rec ? ` · rec buffered ${rec.buffered.toLocaleString()}` : '') + ` · ${s.clients ?? 0} page(s)`
+    : '';
 }
 
 async function loadLayouts(select) {
@@ -348,10 +350,23 @@ async function loadLayouts(select) {
 }
 
 async function saveLayout() {
-  const input = $('#layoutName'), name = input.value.trim();
+  const input = $('#layoutName'), name = input.value.trim(), msg = $('#layoutMsg');
   if (!name) { input.focus(); return; }
-  await fetch('/api/layouts/' + encodeURIComponent(name), { method: 'PUT',
-    headers: { 'content-type': 'application/json' }, body: JSON.stringify(layout) });
+  let r;
+  try {
+    r = await fetch('/api/layouts/' + encodeURIComponent(name), { method: 'PUT',
+      headers: { 'content-type': 'application/json' }, body: JSON.stringify(layout) });
+  } catch (e) {
+    msg.textContent = 'save failed: ' + (e && e.message ? e.message : 'network error');
+    return;
+  }
+  if (!r.ok) {
+    let detail = '';
+    try { detail = (await r.json()).detail || ''; } catch (_) {}
+    msg.textContent = `save failed (${r.status})` + (detail ? ': ' + detail : '');
+    return;
+  }
+  msg.textContent = '';
   input.value = '';
   loadLayouts(name);
 }

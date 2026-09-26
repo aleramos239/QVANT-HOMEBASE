@@ -38,6 +38,7 @@
             font-size: 12px; color: var(--muted-foreground); }
   .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; background: var(--muted-foreground); }
   .dot.ok { background: #16a34a; } .dot.warn { background: #d97706; } .dot.bad { background: #dc2626; }
+  #layoutMsg { font-size: 12px; color: var(--destructive); }
 </style>
 </head>
 <body>
@@ -53,6 +54,7 @@
   <select id="layoutSel" class="btn btn-outline btn-sm"></select>
   <input id="layoutName" size="12" placeholder="layout name">
   <button class="btn btn-outline btn-sm" id="saveLayout" type="button">Save layout</button>
+  <span id="layoutMsg"></span>
   <button class="btn btn-outline btn-sm" id="themeToggle" type="button">Theme</button>
 </header>
 <div id="grid"></div>

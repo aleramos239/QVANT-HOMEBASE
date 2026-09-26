@@ -6,6 +6,7 @@ import datetime as dt
 import json
 import queue
 import time
+from urllib.parse import quote
 
 from fastapi import WebSocket, WebSocketDisconnect
 from fastapi.testclient import TestClient
@@ -86,6 +87,17 @@ def test_layouts_roundtrip(tmp_path):
         assert client.put("/api/layouts/main", json=lay).status_code == 200
         assert client.get("/api/layouts").json() == {"main": lay}
         client.delete("/api/layouts/main")
+        assert client.get("/api/layouts").json() == {}
+
+        # A name with "/" and a space -- exactly what the page's own
+        # encodeURIComponent(name) produces and sends. Starlette decodes %2F to "/"
+        # before routing, so a single-segment {name} path parameter 404s here;
+        # {name:path} is required for any name to round-trip.
+        name = "NQ/ES 2x2"
+        url = "/api/layouts/" + quote(name, safe="")
+        assert client.put(url, json=lay).status_code == 200
+        assert client.get("/api/layouts").json() == {name: lay}
+        assert client.delete(url).status_code == 200
         assert client.get("/api/layouts").json() == {}
 
 

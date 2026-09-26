@@ -287,7 +287,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
     async def get_layouts():
         return read_layouts()
 
-    @app.put("/api/layouts/{name}")
+    @app.put("/api/layouts/{name:path}")
     async def put_layout(name: str, request: Request):
         body = await request.json()
         if not isinstance(body, dict) or not isinstance(body.get("cells"), list):
@@ -297,7 +297,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         layouts_path.write_text(json.dumps(all_, indent=2))
         return {"ok": True}
 
-    @app.delete("/api/layouts/{name}")
+    @app.delete("/api/layouts/{name:path}")
     async def delete_layout(name: str):
         all_ = read_layouts()
         all_.pop(name, None)

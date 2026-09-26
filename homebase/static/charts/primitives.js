@@ -123,9 +123,14 @@ class Gaps extends Layer {
     target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
       ctx.font = '10px system-ui, sans-serif'; ctx.textAlign = 'center';
       for (const i of this.idx) {
-        const x = ts.logicalToCoordinate(i + 0.5); if (x == null) continue;
+        // v5's logicalToCoordinate returns 0 (not null) for a fractional logical --
+        // it only resolves real bar coordinates at integers -- so the band must be
+        // placed at the midpoint of the two integer bar coordinates either side of it.
+        const x0 = ts.logicalToCoordinate(i), x1 = ts.logicalToCoordinate(i + 1);
+        if (x0 == null || x1 == null) continue;
+        const x = (x0 + x1) / 2;
         ctx.fillStyle = this.P.gap; ctx.fillRect(x - sp / 2, 0, sp, mediaSize.height);
-        ctx.fillStyle = this.P.text; ctx.fillText('no data', x, 12);
+        ctx.fillStyle = this.P.text; ctx.fillText('no data', x, 30);
       }
     });
   }
