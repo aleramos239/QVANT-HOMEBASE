@@ -18,7 +18,8 @@ from typing import Callable, Optional
 from .. import symbols
 from ..paths import state_dir as _default_state_dir
 from ..secrets_store import get_credentials
-from .base import BrokerAdapter, FillCallback, FillEvent, OrderRequest, OrderResult
+from .base import (AccountNotOnLogin, BrokerAdapter, FillCallback, FillEvent,
+                   OrderRequest, OrderResult)
 from .tradovate_auth import TradovateAuth
 from .tradovate_ws import TradovateWS, _ws_is_closed
 
@@ -199,7 +200,8 @@ class TradovateAdapter(BrokerAdapter):
             self._acct_num, self._acct_name, self.pinned_ok = None, "", False
             have = ", ".join(str(a.get("name") or a.get("nickname") or a.get("id"))
                              for a in accounts)
-            raise RuntimeError(f"account {want_name or want_id} not on this login (has: {have})")
+            raise AccountNotOnLogin(
+                f"account {want_name or want_id} not on this login (has: {have})")
         pinned = chosen is not None
         if chosen is None:
             active = [a for a in accounts if a.get("active", True)]

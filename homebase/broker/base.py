@@ -11,6 +11,12 @@ from dataclasses import dataclass, field
 from typing import Awaitable, Callable, Optional
 
 
+class AccountNotOnLogin(RuntimeError):
+    """A pinned account (by id or name) is not exposed by this login's
+    account list. Permanent until the config pin or the login itself
+    changes — never a signal to retry with a fresh username/password login."""
+
+
 @dataclass
 class FillEvent:
     """A normalized fill observed on a master account."""

@@ -33,7 +33,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import config as config_mod
 from . import secrets_store
-from .broker.base import BrokerAdapter, OrderRequest
+from .broker.base import AccountNotOnLogin, BrokerAdapter, OrderRequest
 from .broker.tradovate import TradovateAdapter
 from .engine import Engine
 from .feed import MarketFeed
@@ -398,6 +398,12 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             try:
                 await ad.reconnect()
                 mode = "reconnect"
+            except AccountNotOnLogin:
+                # Permanent: the pin is wrong for THIS login, not a dropped
+                # socket. A full login would just burn the shared keyring
+                # login (other pins on it need it) chasing a pin that will
+                # never be there — never retry it as a transient drop.
+                raise
             except Exception as e:  # noqa: BLE001 — fall back to a real login
                 engine.journal("reconnect_fell_back_to_login", account=aid,
                                error=str(e)[:200])
@@ -431,9 +437,12 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                 except Exception as e:  # noqa: BLE001 — report, back off
                     msg = str(e)
                     acct_status[aid] = {"connected": False, "error": msg}
-                    # NEVER hammer the login endpoint: auth rejections and
-                    # rate-limit tickets wait 30 min; anything else 5 min.
-                    slow = ("Login failed" in msg or "p-ticket" in msg
+                    # NEVER hammer the login endpoint: auth rejections,
+                    # rate-limit tickets, and a pin missing from the login
+                    # (permanent until the config or the login changes) wait
+                    # 30 min; anything else 5 min.
+                    slow = (isinstance(e, AccountNotOnLogin)
+                            or "Login failed" in msg or "p-ticket" in msg
                             or "p-captcha" in msg)
                     _login_cooldown[aid] = _t.time() + (1800 if slow else 300)
             await asyncio.sleep(RECONNECT_INTERVAL_S)
@@ -508,6 +517,11 @@ def create_app(cfg: config_mod.AppCfg | None = None,
     app.state.cfg = cfg
     app.state.adapters = adapters
     app.state.feed_step = feed_step
+    # test-only hooks onto the broker reconnect loop (never called by the
+    # app itself outside `background=True`'s lifespan task)
+    app.state.connect_account = _connect_account
+    app.state.broker_loop = _broker_loop
+    app.state.login_cooldown = _login_cooldown
     app.state.feed_box = feed_box
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
