@@ -62,10 +62,9 @@ class Cell {
     this.profile = null; this.keys = new Set(); this.lines = []; this.rows = []; this.colorOf = {}; this.levelLines = {};
     this.shown = null;      // {root, spec} of the bars on screen
     this.lastGood = null;   // the config the server last answered with a history
-    this.pending = null;    // the config of the subscription in flight
-    this.keepView = null;   // the view to restore when that history arrives
+    this.inflight = [];     // subs sent, not answered yet, oldest first: {cfg, view}; the server answers each once, in order
     this.hover = null;      // bar index under the crosshair (null: the last bar)
-    this.noteTimer = 0; this.noteUntil = 0;
+    this.noteTimer = 0; this.noteOn = false;   // noteOn: the legend message is still a note()
     slot.className = 'panel';
     slot.innerHTML = `
       <div class="chart"></div>
@@ -101,34 +100,41 @@ class Cell {
     const { root, spec } = this.cfg;
     this.lg.name.textContent = [root, C.rootName(root), C.specLabel(spec)].filter(Boolean).join(' · ');
   }
-  message(text, err = false) { this.lg.msg.textContent = text || ''; this.lg.msg.classList.toggle('err', !!err); }
-  note(text) {   // a refused change: its reason in red for a while
+  message(text, err = false) { this.noteOn = false; this.lg.msg.textContent = text || ''; this.lg.msg.classList.toggle('err', !!err); }
+  note(text) {   // a refused change: its reason in red for a while (then cleared, if nothing replaced it)
     this.message(text, true);
-    this.noteUntil = Date.now() + NOTE_MS;
+    this.noteOn = true;
     clearTimeout(this.noteTimer);
-    this.noteTimer = setTimeout(() => this.message(''), NOTE_MS);
+    this.noteTimer = setTimeout(() => { if (this.noteOn) this.message(''); }, NOTE_MS);
   }
   setSelected(on) { this.el.classList.toggle('selected', on); }
 
+  /* Send the chart's config; keepView: restore the view on screen when the
+     answer is for the same root + interval. "Loading…" while it asks for
+     another root or interval than the bars on screen. */
   subscribe(keepView = false) {
-    this.keepView = keepView && this.chart ? this.viewNow() : null;
-    this.pending = this.cfgNow();
-    const sent = this.host.send({ op: 'sub', id: this.id, root: this.cfg.root, spec: this.cfg.spec,
-      studies: C.serverKeys(this.cfg.indicators), fp: true });
-    if (sent && !this.chart) this.message('Loading…');
+    const cfg = this.cfgNow(), view = keepView && this.chart ? this.viewNow() : null;
+    if (!this.host.send({ op: 'sub', id: this.id, root: cfg.root, spec: cfg.spec, studies: C.serverKeys(cfg.indicators), fp: true })) return;
+    this.inflight.push({ cfg, view });
+    const s = this.shown;
+    if (!s || s.root !== cfg.root || s.spec !== cfg.spec) this.message('Loading…');
   }
+
+  /* The socket (re)opened: nothing sent on the old one will be answered. */
+  clearInflight() { this.inflight = []; }
 
   /* A change from the toolbar or a dialog. A new symbol or interval reloads
      the chart at the latest bar; indicator changes rebuild it in place and
      resubscribe (keeping the view) only when they need a study the stream
-     does not carry yet. */
+     does not carry yet, or when a sub is still in flight (its answer would
+     otherwise land on top of this change). */
   update(patch) {
     const was = this.shown;
     Object.assign(this.cfg, patch);
     this.title();
     this.host.changed();
     const same = !!was && was.root === this.cfg.root && was.spec === this.cfg.spec;
-    if (same && this.chart && C.serverKeys(this.cfg.indicators).every((k) => this.keys.has(k))) {
+    if (same && this.chart && !this.inflight.length && C.serverKeys(this.cfg.indicators).every((k) => this.keys.has(k))) {
       this.lastGood = this.cfgNow();
       this.restyle();
       return;
@@ -136,11 +142,13 @@ class Cell {
     this.subscribe(same);
   }
 
+  /* The answer to the oldest sub in flight. Only the answer to the newest
+     one is drawn: an older one just records what the server accepted. */
   onHistory(m) {
-    const answers = this.pending && this.pending.root === m.root && this.pending.spec === m.spec;
-    if (answers || !this.pending) { this.lastGood = answers ? this.pending : this.cfgNow(); this.pending = null; }
-    const view = this.keepView && this.shown && this.shown.root === m.root && this.shown.spec === m.spec ? this.keepView : null;
-    this.keepView = null;
+    const entry = this.inflight.shift();
+    if (entry) this.lastGood = entry.cfg;
+    if (this.inflight.length) return;
+    const s = this.shown, view = entry && entry.view && s && s.root === m.root && s.spec === m.spec ? entry.view : null;
     this.shown = { root: m.root, spec: m.spec };
     this.tick = m.tick_size; this.sessions = m.sessions || []; this.devel = !!m.live;
     this.keys = new Set(Object.keys(m.studies || {}));
@@ -148,22 +156,24 @@ class Cell {
     this.bars = []; this.realT = new Map();
     m.bars.forEach((b, i) => { b.sv = {}; for (const k in m.studies) b.sv[k] = m.studies[k][i]; this.append(b); });
     this.build(view);
-    if (Date.now() >= this.noteUntil) this.message('');
+    if (!this.noteOn) this.message('');
     this.host.onLoaded(this);
   }
 
-  /* The server refused a subscription. A change it refused goes back to the
-     last config it accepted (resubscribed: a refusal can drop the old
-     stream); the page shows why. Anything else is shown in the legend. */
+  /* The server refused the oldest sub in flight. If a newer one is on its
+     way, that one supersedes it: only say why. Else the chart goes back to
+     the last config the server accepted (resubscribed: a refusal can drop
+     the old stream) and the page shows why; with none accepted yet, the
+     reason stays in the legend. */
   onError(text) {
-    const tried = this.pending;
-    this.pending = null;
+    const entry = this.inflight.shift(), tried = entry ? entry.cfg : null;
+    if (this.inflight.length) { this.note(text); return; }
     if (tried && this.lastGood && JSON.stringify(tried) !== JSON.stringify(this.lastGood)) {
       Object.assign(this.cfg, clone(this.lastGood));
       this.title();
       this.host.changed();
-      this.host.onRefused(this, tried, text);
       this.subscribe(true);
+      this.host.onRefused(this, tried, text);   // after subscribe(): the reason replaces its "Loading…"
       return;
     }
     this.message(text, true);
@@ -177,9 +187,10 @@ class Cell {
     this.drawMarkers(); this.drawLevels(); this.drawGaps(); this.syncFootprint(); this.syncProfile();
     // Pane heights as px-sized stretch factors. Not setHeight(): it spreads each change using the laid-out
     // heights, and panes added this pass are still 0 px, so with 2+ sub-panes only the last one got PANE_H.
+    // Pane 0 still holds the whole plot here; on a small panel it keeps at least half of it.
     const panes = this.chart.panes(), subs = panes.length - 1;
     if (subs) {
-      panes[0].setStretchFactor(Math.max(PANE_H, panes[0].getHeight() - subs * PANE_H));   // pane 0 still holds the whole plot
+      panes[0].setStretchFactor(Math.max(panes[0].getHeight() - subs * PANE_H, subs * PANE_H));
       for (let i = 1; i <= subs; i++) panes[i].setStretchFactor(PANE_H);
     }
     if (view) this.setView(view); else this.chart.timeScale().scrollToRealTime();
@@ -321,8 +332,10 @@ class Cell {
     }
   }
 
+  /* Ignored while a sub is in flight: the bars on screen may belong to a
+     stream this chart is leaving, and the answer's history carries it all. */
   onUpdate(m) {
-    if (!this.chart) return;
+    if (!this.chart || this.inflight.length) return;
     const touched = [];
     const vals = (i, live) => { const o = {}; for (const k in m.studies) o[k] = live ? m.studies[k].live : m.studies[k].closed[i]; return o; };
     m.closed.forEach((b, i) => { b.sv = vals(i, false); if (i === 0 && this.devel) this.replaceLast(b); else this.append(b); touched.push(b); });

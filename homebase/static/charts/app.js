@@ -84,16 +84,22 @@ function renderToolbar() {
   const { root, spec } = c.cfg;
   $('#tbSymbolText').textContent = root;
   $('#tbSymbol').title = `${root} · ${C.rootName(root) || 'symbol'} — change symbol`;
-  const favs = C.FAVOURITES.slice();
+  const favs = C.FAVOURITES.slice(), box = $('#tbFavs');
   if (!favs.some(([, s]) => s === spec)) favs.push([C.specLabel(spec), spec]);
-  $('#tbFavs').replaceChildren(...favs.map(([label, s]) => {
+  const had = box.contains(document.activeElement) ? document.activeElement.dataset.spec : null;   // keyboard focus
+  box.replaceChildren(...favs.map(([label, s]) => {
     const b = mk('button', 'tb-btn iv' + (s === spec ? ' active' : ''), label);
     b.type = 'button';
+    b.dataset.spec = s;
     b.title = C.longLabel(s);
     b.setAttribute('aria-pressed', String(s === spec));
     b.onclick = () => { if (cur().cfg.spec !== s) cur().update({ spec: s }); };
     return b;
   }));
+  if (had) {
+    const b = [...box.children].find((x) => x.dataset.spec === had) || box.querySelector('.active');
+    if (b) b.focus();
+  }
   const dark = document.documentElement.getAttribute('data-theme') === 'dark', th = $('#tbTheme');
   th.replaceChildren(icon(dark ? 'sun' : 'moon'));
   th.title = dark ? 'Light theme' : 'Dark theme';
@@ -118,11 +124,13 @@ function placeMenu() {
 }
 function closeMenu() {
   if (!menuEl) return;
+  const back = menuEl.contains(document.activeElement) ? menuAnchor : null;   // keyboard focus goes back to the button
   menuEl.remove();
   menuAnchor.classList.remove('open');
   menuAnchor.setAttribute('aria-expanded', 'false');
   menuEl = menuAnchor = null;
   customWait = null;
+  if (back) back.focus();
 }
 function toggleMenu(anchor, fill) {
   if (menuAnchor === anchor) { closeMenu(); return; }
@@ -137,6 +145,12 @@ function menuItem(text, sub, onPick, active) {
   if (sub) b.appendChild(mk('span', 'menu-sub', sub));
   b.onclick = onPick;
   return b;
+}
+/* An error line in a menu: shown, and scrolled into the menu's view. */
+function menuErr(el, text) {
+  el.textContent = text;
+  el.hidden = false;
+  el.scrollIntoView({ block: 'nearest' });
 }
 
 function symbolMenu() {
@@ -177,7 +191,7 @@ function intervalMenu() {
   apply.type = 'button';
   const go = () => {
     const s = C.toSpec(input.value);
-    if (!s) { err.textContent = 'Use e.g. 45s, 2m, 4h, 1D, 750T, 3000V, 8R or tick:750'; err.hidden = false; return; }
+    if (!s) { menuErr(err, 'Use e.g. 45s, 2m, 4h, 1D, 750T, 3000V, 8R or tick:750'); return; }
     err.hidden = true;
     if (s === c.cfg.spec) { closeMenu(); return; }
     customWait = { cell: c, spec: s, err };
@@ -189,9 +203,9 @@ function intervalMenu() {
   m.append(row, err);
 }
 
-/* A custom interval the open menu sent loaded: close the menu. */
+/* A custom interval the open menu sent is on screen: close the menu. */
 function onLoaded(cell) {
-  if (customWait && customWait.cell === cell && cell.cfg.spec === customWait.spec) closeMenu();
+  if (customWait && customWait.cell === cell && cell.shown.spec === customWait.spec) closeMenu();
 }
 
 /* The server refused a change (the cell already went back to its last good
@@ -199,8 +213,7 @@ function onLoaded(cell) {
    from, else in the chart's legend. */
 function onRefused(cell, tried, text) {
   if (customWait && customWait.cell === cell && menuEl) {
-    customWait.err.textContent = text;
-    customWait.err.hidden = false;
+    menuErr(customWait.err, text);
     customWait = null;
     return;
   }
@@ -228,8 +241,9 @@ function showStatus(s) {
     : s.mode === 'live' ? `Live · md ${s.md || ''}` : 'Disconnected';
   const feed = $('#sbFeed');
   feed.textContent = s.error || (recErr ? `recorder: ${recErr}` : '')
-    || (stale.length ? stale.slice(0, 2).map(([r, x]) => `${r} stale ${fmtAge(x.last_tick_age_s)}`).join(' · ') : '')
-    || (Object.keys(roots).length ? 'feeds ok' : '');
+    || (!s.connected ? 'connecting…'
+      : stale.length ? stale.slice(0, 2).map(([r, x]) => `${r} stale ${fmtAge(x.last_tick_age_s)}`).join(' · ')
+        : Object.keys(roots).length ? 'feeds ok' : '');
   feed.title = Object.entries(roots).map(([r, x]) => `${r} ${fmtAge(x.last_tick_age_s)}`).join('  ·  ');
   feed.classList.toggle('bad', !!(s.error || recErr));
   const budget = $('#sbBudget');
@@ -258,7 +272,7 @@ function tick() { $('#sbClock').textContent = `${ET_CLOCK.format(new Date())} ET
 /* ---- the chart service ---- */
 function connect() {
   ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
-  ws.onopen = () => { statusAt = Date.now(); for (const c of cells) c.subscribe(true); };
+  ws.onopen = () => { statusAt = Date.now(); for (const c of cells) { c.clearInflight(); c.subscribe(true); } };
   ws.onmessage = (e) => {
     let m;
     try { m = JSON.parse(e.data); } catch (_) { return; }
