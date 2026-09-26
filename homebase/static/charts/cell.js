@@ -8,11 +8,15 @@
       HBDrawings.Controller)
    Bar times arrive as ET wall-clock seconds, so the axis reads ET; tick,
    volume and range bars sit on an evenly spaced synthetic axis (many can
-   share a second) and are labelled with their real times. */
+   share a second) and are labelled with their real times.
+   Its settings (HBSettings: candle colours, precision, time zone, scales, canvas…) live in `cfg.settings` as
+   overrides of the defaults and are applied in place. */
 (() => {
 'use strict';
 const LW = window.LightweightCharts;
 const C = window.HBCatalog;
+const S = window.HBSettings;
+const CANDLE_KEYS = ['prevClose', 'body', 'bodyUp', 'bodyDown', 'borders', 'borderUp', 'borderDown', 'wick', 'wickUp', 'wickDown'];
 const { Footprint, Profile, Gaps } = window.HBLayers;
 const FAKE0 = 946684800;    // synthetic-axis origin for tick/volume/range bars
 const FONT = '-apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif';
@@ -82,6 +86,9 @@ class Cell {
     this.noteTimer = 0; this.noteOn = false;   // noteOn: the legend message is still a note()
     this.dc = null;   // the drawing controller of the current chart
     this.magnetXhair = false;   // the rail's magnet is on with a tool picked (MagnetOHLC crosshair)
+    this.R = S.resolve(cfg.settings || {}, palette());   // the chart's settings, concrete for the theme
+    this.fpHide = false;   // the footprint is readable: candle bodies and borders step aside
+    this.wm = null;        // the watermark (its colour and visibility follow the settings)
     slot.className = 'panel';
     slot.innerHTML = `
       <div class="chart"></div>
@@ -135,6 +142,55 @@ class Cell {
     this.magnetXhair = m;
     if (this.chart) this.chart.applyOptions({ crosshair: { mode: m ? LW.CrosshairMode.MagnetOHLC : LW.CrosshairMode.Normal } });
   }
+
+  /* The chart's settings as the layout stores them: what differs from the defaults (a copy). */
+  settings() { return { ...(this.cfg.settings || {}) }; }
+
+  /* New settings (the dialog's live preview, Ok, Cancel, Apply to all): kept in the chart's config (none when
+     all are defaults) and applied in place. Saving the layout is the page's job (on Ok). */
+  setSettings(over) {
+    const o = S.overrides(over);
+    if (Object.keys(o).length) this.cfg.settings = o; else delete this.cfg.settings;
+    this.applySettings();
+  }
+
+  /* Apply cfg.settings to the chart in place: the dialog previews every change live, and rebuilding the chart
+     would flash. A new time zone re-times every bar and rebuilds. */
+  applySettings() {
+    const was = this.R, R = this.R = S.resolve(this.cfg.settings || {}, this.P || palette());
+    this.title();
+    if (!this.chart) return;
+    if (was.timezone !== R.timezone) { this.retime(); this.restyle(); return; }
+    const o = S.chartOptions(R);
+    this.chart.applyOptions({ ...o, rightPriceScale: { ...o.rightPriceScale, scaleMargins: S.scaleMargins(R) } });
+    this.candles.applyOptions(this.candleOpts());
+    this.wm.applyOptions({ visible: R.watermark, lines: [this.wmLine()] });
+    if ((R.prevClose || was.prevClose) && CANDLE_KEYS.some((k) => R[k] !== was[k])) this.resetCandles();
+    this.legendRows();
+    this.legend(this.hover);
+  }
+
+  /* The candle series' options for the settings; while the footprint is readable, bodies and borders step
+     aside (its numbers sit where the bodies are). */
+  candleOpts() {
+    const o = S.candleOptions(this.R, this.tick);
+    return this.fpHide ? { ...o, upColor: S.CLEAR, downColor: S.CLEAR, borderVisible: false } : o;
+  }
+
+  /* The watermark line: "NQ, 1m" in the settings' colour. */
+  wmLine() {
+    const s = this.shown || this.cfg;
+    return { text: `${s.root}, ${C.specLabel(s.spec)}`, color: this.R.watermarkColor, fontSize: 48, fontFamily: FONT };
+  }
+
+  /* The price step the legend shows: the tick size, or the Precision setting's 10^-n. */
+  dtick() { return this.R.precision == null ? this.tick : 10 ** -this.R.precision; }
+
+  /* A bar's axis time: its start on the chart time zone's wall clock (by default ET: the server's own t). */
+  wall(b) { return this.R.timezone === 'exchange' ? b.t : S.wallSeconds(b.ms, this.R.timezone); }
+
+  /* The time zone changed: every bar's axis time again. */
+  retime() { const bars = this.bars; this.bars = []; this.realT = new Map(); for (const b of bars) this.append(b); }
 
   /* Send the chart's config; keepView: restore the view on screen when the
      answer is for the same root + interval. "Loading…" while it asks for
@@ -209,7 +265,7 @@ class Cell {
   build(view) {
     const sel = this.dc && this.shown && this.dc.root === this.shown.root ? this.dc.sel : null;
     this.makeChart();
-    this.candles.setData(this.bars.map((b) => this.candle(b)));
+    this.candles.setData(this.candleData());
     this.buildSeries();
     for (const l of this.lines) l.s.setData(this.bars.map((b) => this.point(l, b)));
     this.drawMarkers(); this.drawLevels(); this.drawGaps(); this.syncFootprint(); this.syncProfile();
@@ -244,31 +300,33 @@ class Cell {
   makeChart() {
     this.teardown();
     const P = this.P = palette(), sub = this.isTime() && this.barMs() < 60000;
+    const R = this.R = S.resolve(this.cfg.settings || {}, P), o = S.chartOptions(R);
+    this.fpHide = false;
     this.chart = LW.createChart(this.box, {
       autoSize: true,
-      layout: { background: { type: 'solid', color: P.bg }, textColor: P.text2, fontSize: 12, fontFamily: FONT,
+      layout: { ...o.layout, fontFamily: FONT,
         attributionLogo: false,   // the credit lives once in the bottom bar
         panes: { separatorColor: P.border, separatorHoverColor: P.accentSoft, enableResize: true } },
-      grid: { vertLines: { color: P.grid }, horzLines: { color: P.grid } },
-      rightPriceScale: { borderColor: P.border, scaleMargins: { top: 0.1, bottom: 0.15 } },
-      timeScale: { borderColor: P.border, timeVisible: true, secondsVisible: sub, rightOffset: 6,
+      grid: o.grid,
+      rightPriceScale: { ...o.rightPriceScale, scaleMargins: S.scaleMargins(R) },
+      timeScale: { ...o.timeScale, timeVisible: true, secondsVisible: sub,
         tickMarkFormatter: (t, type) => tickLabel(this.real(t), type) },
       localization: { timeFormatter: (t) => this.fullTime(t) },
       crosshair: { mode: this.magnetXhair ? LW.CrosshairMode.MagnetOHLC : LW.CrosshairMode.Normal,
-        vertLine: { color: P.cross, width: 1, style: LW.LineStyle.Dashed, labelBackgroundColor: P.crossLabel },
-        horzLine: { color: P.cross, width: 1, style: LW.LineStyle.Dashed, labelBackgroundColor: P.crossLabel } },
+        vertLine: { ...o.crosshair.vertLine, labelBackgroundColor: P.crossLabel },
+        horzLine: { ...o.crosshair.horzLine, labelBackgroundColor: P.crossLabel } },
     });
-    this.candles = this.chart.addSeries(LW.CandlestickSeries, { upColor: P.up, downColor: P.down, wickUpColor: P.up,
-      wickDownColor: P.down, borderVisible: false, priceLineStyle: LW.LineStyle.Dotted,
-      priceFormat: { type: 'price', precision: C.decimals(this.tick), minMove: this.tick } });
+    this.candles = this.chart.addSeries(LW.CandlestickSeries, this.candleOpts());
     this.markers = LW.createSeriesMarkers(this.candles, []);
-    LW.createTextWatermark(this.chart.panes()[0], { horzAlign: 'center', vertAlign: 'center',
-      lines: [{ text: `${this.shown.root}, ${C.specLabel(this.shown.spec)}`, color: P.watermark, fontSize: 48, fontFamily: FONT }] });
+    this.wm = LW.createTextWatermark(this.chart.panes()[0], { visible: R.watermark, horzAlign: 'center',
+      vertAlign: 'center', lines: [this.wmLine()] });
     this.fp = new Footprint(P); this.prof = new Profile(P); this.gaps = new Gaps(P);
     const fp = this.fp;   // pin the instance this callback belongs to
     fp.onReadableChange = (on) => {   // fired async from Footprint.updateAllViews(), after layout
       if (this.fp !== fp || !this.chart) return;
-      this.candles.applyOptions(on ? { upColor: 'rgba(0,0,0,0)', downColor: 'rgba(0,0,0,0)' } : { upColor: P.up, downColor: P.down });
+      this.fpHide = on;
+      this.candles.applyOptions(this.candleOpts());
+      if (this.R.prevClose) this.resetCandles();   // per-bar colours ride in the data
     };
     for (const l of [this.gaps, this.prof, this.fp]) this.candles.attachPrimitive(l);
     this.lines = []; this.levelLines = {}; this.colorOf = {}; this.hover = null;
@@ -283,7 +341,7 @@ class Cell {
     if (this.dc) { this.dc.destroy(); this.dc = null; }
     if (!this.chart) return;
     this.chart.remove();
-    this.chart = this.candles = this.markers = this.fp = this.prof = this.gaps = null;   // stale async callbacks can tell
+    this.chart = this.candles = this.markers = this.fp = this.prof = this.gaps = this.wm = null;   // stale async callbacks can tell
   }
 
   /* One series per drawn part of each indicator instance, in instance order. */
@@ -382,15 +440,16 @@ class Cell {
     const n = this.bars.length;
     if (!n || !this.P) { this.lg.ohlc.replaceChildren(); return; }
     const k = i == null ? n - 1 : Math.max(0, Math.min(i, n - 1)), b = this.bars[k], prev = k > 0 ? this.bars[k - 1] : null;
-    const P = this.P, col = b.c >= b.o ? P.up : P.down, ch = C.change(b, prev, this.tick);
+    const P = this.P, R = this.R, dt = this.dtick();
+    const up = b.c >= (R.prevClose && prev ? prev.c : b.o), col = up ? R.bodyUp : R.bodyDown, ch = C.change(b, prev, dt);
     this.lg.ohlc.replaceChildren(
-      ...[['O', b.o], ['H', b.h], ['L', b.l], ['C', b.c]].map(([key, v]) => kv(key, C.fmtPrice(v, this.tick), col)),
-      val(ch.text, ch.up ? P.up : P.down),
+      ...[['O', b.o], ['H', b.h], ['L', b.l], ['C', b.c]].map(([key, v]) => kv(key, C.fmtPrice(v, dt), col)),
+      val(ch.text, ch.up ? R.bodyUp : R.bodyDown),
       kv('Vol', C.fmtCompact(b.v), col),
       kv('Δ', C.fmtSigned(b.d), b.d >= 0 ? P.up : P.down));
     const colors = { text: P.text, up: P.up, down: P.down, vwap: P.vwap, cum: P.cum };
     for (const r of this.rows) {
-      const vs = C.legendValues(r.inst, b, { ...colors, line: this.colorOf[r.inst.uid] || P.accent }, this.tick);
+      const vs = C.legendValues(r.inst, b, { ...colors, line: this.colorOf[r.inst.uid] || P.accent }, dt);
       r.vals.replaceChildren(...vs.map((x) => val(x.text, x.color)));
     }
   }
@@ -405,7 +464,8 @@ class Cell {
     if (m.live) { m.live.sv = vals(0, true); if (!m.closed.length && this.devel) this.replaceLast(m.live); else this.append(m.live); touched.push(m.live); }
     this.devel = !!m.live;
     for (const b of touched) {
-      this.candles.update(this.candle(b));
+      const i = this.bars.lastIndexOf(b);
+      this.candles.update(this.candle(b, i > 0 ? this.bars[i - 1] : null));
       for (const l of this.lines) l.s.update(this.point(l, b));
     }
     if (m.profile !== undefined) { this.profile = m.profile; this.syncProfile(); }
@@ -416,20 +476,34 @@ class Cell {
 
   append(b) {
     const last = this.bars[this.bars.length - 1];
-    b.tt = this.isTime() ? b.t : FAKE0 + this.bars.length * 60;
+    b.tt = this.isTime() ? this.wall(b) : FAKE0 + this.bars.length * 60;
     if (last && b.tt <= last.tt) b.tt = last.tt + 1;
-    if (!this.isTime()) this.realT.set(b.tt, b.t);
+    if (!this.isTime()) this.realT.set(b.tt, this.wall(b));
     this.bars.push(b);
   }
 
   replaceLast(b) {
     const i = this.bars.length - 1;
     b.tt = this.bars[i].tt;
-    if (!this.isTime()) this.realT.set(b.tt, b.t);
+    if (!this.isTime()) this.realT.set(b.tt, this.wall(b));
     this.bars[i] = b;
   }
 
-  candle(b) { return { time: b.tt, open: b.o, high: b.h, low: b.l, close: b.c }; }
+  /* One candle; with "Colour bars based on previous close" it carries its own colours (up/down against the
+     previous close), hidden like the series' while the footprint is readable. */
+  candle(b, prev) {
+    const c = { time: b.tt, open: b.o, high: b.h, low: b.l, close: b.c };
+    if (!this.R.prevClose) return c;
+    const k = S.barColor(b, prev, this.R);
+    return { ...c, color: this.fpHide ? S.CLEAR : k.color, borderColor: k.borderColor, wickColor: k.wickColor };
+  }
+  candleData() { return this.bars.map((b, i) => this.candle(b, i ? this.bars[i - 1] : null)); }
+  /* Every candle again (per-bar colours changed), the view kept where it is. */
+  resetCandles() {
+    const v = this.viewNow();
+    this.candles.setData(this.candleData());
+    if (v) this.setView(v);
+  }
 
   point(l, b) {
     const P = this.P, time = b.tt;

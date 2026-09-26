@@ -5,7 +5,7 @@
    the server computes everything, the page only draws. */
 (() => {
 'use strict';
-const C = window.HBCatalog, I = window.HBIcons, { Cell } = window.HBCell;
+const C = window.HBCatalog, I = window.HBIcons, S = window.HBSettings, { Cell } = window.HBCell;
 const GRIDS = { 1: [1, 1], 2: [2, 1], 4: [2, 2], 6: [3, 2] };
 const GRID_NAMES = { 1: '1 chart', 2: '2 charts side by side', 4: '2 × 2 charts', 6: '3 × 2 charts' };
 const STATUS_STALE_S = 6;   // the server sends a status every 2 s: this long without one = it is stuck
@@ -22,7 +22,7 @@ function etNow() {
 
 let meta = { roots: ['NQ'], timeframes: [] };
 let ws = null;
-let layout = { grid: 4, cells: [], name: '' };
+let layout = { grid: 4, cells: [], name: '', dirty: false };
 let cells = [];
 let selected = 0;
 let nextId = 1;
@@ -53,8 +53,21 @@ function saveLast() { try { localStorage.setItem('hb_charts_last', JSON.stringif
 function loadLast() {
   try {
     const v = JSON.parse(localStorage.getItem('hb_charts_last') || 'null');
-    if (v && Array.isArray(v.cells)) layout = { ...C.migrateLayout(v), name: typeof v.name === 'string' ? v.name : '' };
+    if (v && Array.isArray(v.cells)) {
+      layout = { ...readLayout(v), name: typeof v.name === 'string' ? v.name : '', dirty: v.dirty === true };
+    }
   } catch (_) { /* unreadable: start fresh */ }
+}
+
+/* A saved layout (localStorage or the server) as the page runs it: HBCatalog.migrateLayout gives each chart's
+   {root, spec, indicators}; each chart's settings (HBSettings overrides, cleaned) are kept beside them. */
+function readLayout(v) {
+  const lay = C.migrateLayout(v), raw = v && Array.isArray(v.cells) ? v.cells : [];
+  lay.cells.forEach((c, i) => {
+    const s = raw[i] && raw[i].settings, o = S.overrides(s && typeof s === 'object' ? s : {});
+    if (Object.keys(o).length) c.settings = o;
+  });
+  return lay;
 }
 
 function hostFor(id) {
@@ -127,15 +140,15 @@ function renderToolbar() {
   th.title = dark ? 'Light theme' : 'Dark theme';
   thumb(layout.grid, $('#tbGridThumb'));
   $('#tbGrid').title = `Chart layout: ${GRID_NAMES[layout.grid]}`;
-  $('#tbLayoutName').textContent = layout.name || 'Unsaved';
+  $('#tbLayoutName').textContent = !layout.name ? 'Unsaved' : layout.dirty ? `${layout.name} · Unsaved` : layout.name;
 }
 
 /* One popup menu at a time, under its toolbar button (right: to the right of a rail button). */
-function openMenu(anchor, cls, { right = false } = {}) {
+function openMenu(anchor, cls, { right = false, root = null } = {}) {
   closeMenu();
   const m = mk('div', 'menu' + (cls ? ' ' + cls : ''));
   m.setAttribute('role', 'menu');
-  $('#menuRoot').appendChild(m);
+  (root || $('#menuRoot')).appendChild(m);
   menuEl = m; menuAnchor = anchor; menuRight = right;
   anchor.classList.add('open');
   anchor.setAttribute('aria-expanded', 'true');
@@ -150,9 +163,10 @@ function placeMenu() {
     menuEl.style.top = Math.max(4, Math.min(r.top, window.innerHeight - h - 4)) + 'px';
     return;
   }
-  const r = menuAnchor.getBoundingClientRect();
+  const r = menuAnchor.getBoundingClientRect(), below = r.bottom + 4;
   menuEl.style.left = Math.max(4, Math.min(r.left, window.innerWidth - w - 4)) + 'px';
-  menuEl.style.top = (r.bottom + 4) + 'px';
+  // no room below (a dialog footer's menu, a swatch near the bottom): above the anchor instead
+  menuEl.style.top = (below + h > window.innerHeight - 4 && r.top - 4 - h >= 4 ? r.top - 4 - h : below) + 'px';
 }
 function closeMenu() {
   if (!menuEl) return;
@@ -290,7 +304,8 @@ async function fetchLayouts() {
 
 /* PUT the current layout under `name`: '' when saved, else the reason. */
 async function putLayout(name) {
-  const body = { grid: layout.grid, cells: layout.cells.map(({ root, spec, indicators }) => ({ root, spec, indicators })) };
+  const body = { grid: layout.grid, cells: layout.cells.map(({ root, spec, indicators, settings }) =>
+    (settings && Object.keys(settings).length ? { root, spec, indicators, settings } : { root, spec, indicators })) };
   let r;
   try {
     r = await fetch('/api/layouts/' + encodeURIComponent(name), { method: 'PUT',
@@ -315,11 +330,12 @@ function saveMsg(text, err = false) {
 async function save() {
   if (!layout.name) { if (menuAnchor !== $('#tbLayout')) toggleMenu($('#tbLayout'), () => layoutMenu(true)); return; }
   const why = await putLayout(layout.name);
+  if (!why && layout.dirty) { layout.dirty = false; saveLast(); renderToolbar(); }
   saveMsg(why || 'Saved', !!why);
 }
 
 function loadLayout(name, saved) {
-  layout = { ...C.migrateLayout(saved), name };
+  layout = { ...readLayout(saved), name, dirty: false };
   saveLast();
   selected = 0;
   buildGrid();
@@ -346,7 +362,7 @@ async function layoutMenu(saveAsFirst = false) {
       if (name === '.' || name === '..') { fail('“.” and “..” cannot be layout names'); input.focus(); return; }
       const why = await putLayout(name);
       if (why) { fail(why); return; }
-      if (layout === saving) { layout.name = name; saveLast(); renderToolbar(); }   // not a layout loaded meanwhile
+      if (layout === saving) { layout.name = name; layout.dirty = false; saveLast(); renderToolbar(); }   // not a layout loaded meanwhile
       if (menuEl === m) closeMenu();
       saveMsg('Saved');
     };
@@ -425,14 +441,16 @@ function openDialog(title, cls) {
 
 function closeDialog() {
   if (!dlg) return;
-  const { back, focus } = dlg;
+  closeMenu();   // a menu or swatch popover open inside the dialog goes with it
+  const { back, focus, onClose } = dlg;
   dlg = null;
   back.remove();
+  if (onClose) onClose();   // the Settings dialog puts every chart back unless Ok was pressed
   if (focus && typeof focus.focus === 'function' && document.contains(focus)) focus.focus();
 }
 
 function trapTab(e) {   // Tab stays inside the open dialog
-  const f = [...dlg.box.querySelectorAll('button, input')].filter((x) => !x.disabled && x.offsetParent !== null);
+  const f = [...dlg.box.querySelectorAll('button, input, select')].filter((x) => !x.disabled && x.offsetParent !== null);
   if (!f.length) return;
   const first = f[0], last = f[f.length - 1], at = document.activeElement;
   if (!dlg.box.contains(at)) { e.preventDefault(); (e.shiftKey ? last : first).focus(); }   // focus fell out (e.g. to body)
@@ -591,6 +609,30 @@ function positionDialog(cell, d) {
   inputs.entry.select();
 }
 
+/* The toolbar gear: the chart Settings dialog for the selected chart (settings-dialog.js). */
+function chartSettings() {
+  const c = cur();
+  if (!c) return;
+  const box = openDialog('Settings', 'settings');
+  const ctl = window.HBSettingsDialog.mount(box, {
+    cell: c,
+    cells: () => cells,
+    toggleMenu(anchor, cls, fill) {   // menus and popovers open inside the dialog (above its backdrop)
+      if (menuAnchor === anchor) { closeMenu(); return; }
+      fill(openMenu(anchor, cls, { root: box }));
+      placeMenu();
+    },
+    closeMenu,
+    placeMenu,
+    commit(changed) {   // Ok: the layout keeps the changes and reads Unsaved until saved
+      if (changed) { layout.dirty = true; saveLast(); renderToolbar(); }
+      closeDialog();
+    },
+    cancel: closeDialog,
+  });
+  dlg.onClose = ctl.revert;   // Cancel, ×, Esc, a backdrop click: every chart back (a no-op after Ok)
+}
+
 /* ---- drawing rail ---- */
 function setTool(t) {
   tool = t;
@@ -725,7 +767,7 @@ function connect() {
 /* ---- keyboard ---- */
 function onKey(e) {
   if (dlg) {
-    if (e.key === 'Escape') { e.preventDefault(); closeDialog(); }
+    if (e.key === 'Escape') { e.preventDefault(); if (menuEl) closeMenu(); else closeDialog(); }
     else if (e.key === 'Tab') trapTab(e);
     return;
   }
@@ -751,6 +793,7 @@ async function init() {
   $('#tbGrid').onclick = () => toggleMenu($('#tbGrid'), gridMenu);
   $('#tbLayout').onclick = () => toggleMenu($('#tbLayout'), () => layoutMenu(false));
   $('#tbSave').onclick = save;
+  $('#tbSettings').onclick = chartSettings;
   $('#tbTheme').onclick = toggleTheme;
   for (const b of document.querySelectorAll('#rail [data-tool]')) {
     b.onclick = () => setTool(b.dataset.tool === tool && tool !== 'cursor' ? 'cursor' : b.dataset.tool);
