@@ -162,6 +162,10 @@ Defaults equal the desk's live geometry; a pytest pins that.
 - Portfolios of strategies.
 - A live-versus-backtest overlay of the desk's real fills (follow-up).
 - Level 2 based strategies.
+- The ADX trend gate reads daily H/L/C from the tape cache (our own archive), not
+  the broker's own daily bars the way the desk's running gate does; the two can
+  disagree on a day the two sources price differently (known limit, final fix
+  wave 2026-09-26).
 
 ## Prop-eval pass rate (added 2026-09-26, user picked it: "lets add … 5")
 
