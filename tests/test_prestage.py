@@ -561,3 +561,40 @@ def test_a_timed_out_or_skipped_read_still_honours_a_cached_manual_order(tmp_pat
         assert [(e["account"], e["reason"], e.get("position_unreadable")) for e in ev
                 if e["event"] == "timer_skipped"] == [("a1", "manual_order", True)], when
         assert [e["account"] for e in ev if e["event"] == "dry_run"] == ["a2"], when
+
+
+# --- no false prestage skip after a restart ---------------------------------------------
+def test_prestage_skip_noops_once_the_day_already_acted(tmp_path):
+    """A desk restart between 09:30 and 09:45 replays gate -> stage on a
+    fresh SelfTimer with no in-memory `st`, but the engine's own DayState
+    survives (Engine._load_today() re-reads day-<date>.json). The bot's own
+    fill from before the restart now SHOWS as a position at the 09:28:30
+    prestage -- that must never be mistaken for a manual one and skipped:
+    _prestage_skip is a no-op (no skip, no journal, no readiness change)
+    whenever the strategy's day is no longer idle."""
+    for status in ("placed", "live", "done"):
+        root = tmp_path / status
+        root.mkdir()
+        timer, engine, clock = mk2(root, {"a1": 2})   # a1 holds +2 -- its own fill
+        engine._state("nq930", "a1").status = status
+        clock.set_et(9, 21); run(timer.tick())        # gate
+        clock.set_et(9, 29); run(timer.tick())        # stage -- _prestage_skip runs here
+        st = timer.status()["strategies"]["nq930"]
+        assert "skipped_accounts" not in st, status
+        assert "skipped_orders" not in st, status
+        assert "skipped_unreadable" not in st, status
+        assert engine.skipped_today("nq930") == set(), status
+        assert not any(e["event"] == "timer_skipped" for e in events(root)), status
+        assert not any(e["event"] in ("prestage_check_failed",) for e in events(root)), status
+
+
+def test_prestage_skip_still_runs_when_the_day_is_idle(tmp_path):
+    """Current behaviour, unchanged: idle (nothing has happened yet today)
+    still runs the full manual-position/order check at 09:28:30."""
+    timer, engine, clock = mk2(tmp_path, {"a1": 2})
+    clock.set_et(9, 21); run(timer.tick())
+    clock.set_et(9, 29); run(timer.tick())
+    st = timer.status()["strategies"]["nq930"]
+    assert st["skipped_accounts"] == {"a1": 2}
+    assert engine.skipped_today("nq930") == {"a1"}
+    assert any(e["event"] == "timer_skipped" for e in events(tmp_path))

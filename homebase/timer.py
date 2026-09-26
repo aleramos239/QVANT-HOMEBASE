@@ -209,7 +209,17 @@ class SelfTimer:
         (`position_unreadable`). An order whose contract is unresolved never
         skips by itself. Every decision is journaled, but a failing journal
         write never changes one (logged to stderr instead). Never raises on
-        a read: the stage must not fail on this check."""
+        a read: the stage must not fail on this check.
+
+        Ruling (2026-09-26): if the strategy's day is no longer idle —
+        already placed, live, done, or errored, e.g. a desk restart between
+        09:30 and 09:45 replays gate -> stage on a fresh SelfTimer with no
+        in-memory `st` — the bot's OWN fill now shows as a position at this
+        same check and must never be mistaken for a manual one. No-op
+        entirely: no skip, no journal, no readiness change."""
+        if self.engine.day_status(name) != "idle":
+            return
+
         def jnl(event, **kw):
             try:
                 self.engine.journal(event, strategy=name, **kw)
