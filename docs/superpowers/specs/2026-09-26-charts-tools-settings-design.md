@@ -358,3 +358,38 @@ Why: the user wants to see USD red / orange / grey "folder" news on the charts.
 - **Tests**: pytest — parsing (ISO offsets → ms, all impact values), the 30-min floor, keeping last good
   data on failure, per-week storage + range merge, `countries` filter; Node — flag layout/grouping, the
   countdown text; browser — flags, tooltip, line, Events tab toggles.
+
+## 7 · Chart context menu + moving indicators between panes (added 2026-09-26, user request with TradingView screenshots)
+
+User: "i also want to be able to double click the chart and see some options, and to be able to either remove or
+add these to the big chart" — screenshots: TradingView's chart right-click menu, and our Delta / Cumulative delta
+panes below the price chart.
+
+- **Chart menu** (menu styling from the redesign spec; opens at the pointer, clamped inside the window; Esc /
+  outside click closes; arrow keys + Enter): opened by **right-click** anywhere in a chart's price pane, and by a
+  **double-click on empty chart space** (a double-click on a drawing keeps its own behaviour, e.g. position
+  settings). Items, in order, with dividers like TradingView:
+  1. `Reset chart view` (⌥R) — fit content + reset the price scale to auto;
+  2. `Copy price 30,878.00` — the price under the pointer, tick-rounded, to the clipboard (try/catch;
+     silent failure);
+  3. *(trading items, inserted later by the chart-trading page build: Buy/Sell limit/stop at the price)* — leave
+     an extension point `HBChartMenu.register(section, itemsFn)` so that build adds them without editing this code;
+  4. `Remove N drawings` (only when N > 0; same double-confirm rule as the rail's Remove all) and
+     `Remove N indicators` (only when N > 0; removes all indicators of this chart, one undo-free click);
+  5. `Settings…` — opens the chart Settings dialog (§3) for this chart.
+  Items that do not exist yet (alerts, object tree, table view, chart templates submenu) are **not** shown.
+- **Move indicators between panes**: every indicator that can live in its own pane (Delta, Cumulative delta,
+  and any other pane-type indicator in the catalog) gets a `pane` placement in the indicator model
+  (`{uid, id, params, visible, pane: 'own'|'main'}`, default = today's placement; migrated layouts keep today's
+  placement). On `main`, the series overlays the price pane on its own hidden overlay price scale pinned to the
+  bottom (scaleMargins like Volume: top ≈ .75, bottom 0), never affecting the price autoscale. On `own`, it gets
+  its own pane below (today's behaviour, stretch factors as today). Price-pane-only indicators (VWAP, MAs,
+  levels) do not offer the move.
+- **Where the move lives**: the indicator's legend row gets a `⋯` (Lucide `ellipsis`) menu next to eye / gear /
+  × with `Move to main chart` or `Move to new pane below`, and `Remove`; right-clicking inside an indicator's own
+  pane opens the same three items (not the chart menu).
+- Placement is saved with the layout (the indicator object) and survives reload / symbol change.
+- **Tests**: Node — the migrate default for `pane`, the menu item list for N drawings / N indicators = 0 or > 0,
+  the extension-point ordering; browser — right-click and empty-space double-click open the menu, Reset / Copy /
+  Remove / Settings work, Delta moves to the main chart and back, the price autoscale ignores it on main, a saved
+  layout restores the placement.
