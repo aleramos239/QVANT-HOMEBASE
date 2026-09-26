@@ -355,6 +355,26 @@
       <div id="strats"></div>
 
       <div class="sec-head" style="margin-top:26px">
+        <span class="h">Chart trading</span>
+        <span class="hint">orders from the chart page — off by default; the Kill switches it off</span>
+      </div>
+      <div class="card"><div class="card-content" style="padding-top:14px">
+        <div class="acct" style="padding:4px 0;gap:12px;flex-wrap:wrap">
+          <button class="switch" id="ctSwitch" aria-checked="false"
+            title="OFF — the chart page cannot trade"></button>
+          <span class="nm" id="ctState" style="font-size:13px">Off</span>
+          <span class="spacer"></span>
+          <label class="hint" for="ctMaxOrder">Max per order</label>
+          <input id="ctMaxOrder" type="number" min="1" max="50" step="1"
+            style="width:64px;padding:5px 8px;border:1px solid var(--input);border-radius:var(--radius-md);background:var(--background);color:var(--foreground)">
+          <label class="hint" for="ctMaxPos">Max position</label>
+          <input id="ctMaxPos" type="number" min="1" max="100" step="1"
+            style="width:64px;padding:5px 8px;border:1px solid var(--input);border-radius:var(--radius-md);background:var(--background);color:var(--foreground)">
+          <button class="btn btn-outline btn-sm" id="ctSave">Save limits</button>
+        </div>
+      </div></div>
+
+      <div class="sec-head" style="margin-top:26px">
         <span class="h">Activity</span>
         <span class="hint">every alert, order, fill and safety event as it happens</span>
       </div>
@@ -725,6 +745,7 @@ function render() {
     : "Signals are validated and journaled only";
   $("#armBtn").style.display = s.armed ? "none" : "";
   $("#disarmBtn").style.display = s.armed ? "" : "none";
+  renderChartTrading(s.chart_trading);
 
   // readiness: silent when fine, loud when not; dismissable — but a
   // dismissed strip returns the moment the SET of problems changes
@@ -793,6 +814,7 @@ function demoStatus() {
     date: "2026-09-16", qty: 3, status, ...extra});
   return {
     armed: true,
+    chart_trading: {enabled: false, max_order_qty: 10, max_position_qty: 20},
     et_now: "2026-09-16T11:42:07-04:00",
     readiness: {ready: true, checks: [
       {level: "ok", label: "Lucid Funded", detail: "connected"},
@@ -914,6 +936,41 @@ $("#killBtn").onclick = async () => {
   const r = await post("/api/kill");
   toast("Kill: " + JSON.stringify(r.results)); refresh();
 };
+
+/* ---- chart trading (orders from the chart page; the desk decides) ---- */
+function renderChartTrading(ct) {
+  if (!ct) return;
+  const sw = $("#ctSwitch");
+  sw.setAttribute("aria-checked", String(!!ct.enabled));
+  sw.title = ct.enabled ? "ON — the chart page can place real orders"
+                        : "OFF — the chart page cannot trade";
+  $("#ctState").textContent = ct.enabled ? "On — the chart page can place orders" : "Off";
+  for (const [id, v] of [["ctMaxOrder", ct.max_order_qty], ["ctMaxPos", ct.max_position_qty]]) {
+    const el = $("#" + id);
+    if (document.activeElement !== el) el.value = v;       // never overwrite a value being typed
+  }
+}
+async function setChartTrading(enabled) {
+  const ct = (ST && ST.chart_trading) || {};
+  if (enabled && !await confirmDlg("Turn chart trading ON?",
+      `The chart page can then place REAL orders on the accounts you tick there — at most ${ct.max_order_qty} per order and ${ct.max_position_qty} per position. The 9:30 bot's symbol stays locked 09:20–09:35 ET on its accounts. The desk's Kill switches it off.`,
+      "Turn on", false)) { refresh(); return; }
+  const r = await post("/api/chart-trading", {enabled});
+  toast(r.ok ? (enabled ? "Chart trading is ON." : "Chart trading is OFF.")
+             : "Refused — " + (r.detail || "unknown"), 5000);
+  refresh();
+}
+$("#ctSwitch").onclick = () =>
+  setChartTrading(!(ST && ST.chart_trading && ST.chart_trading.enabled));
+$("#ctSave").onclick = async () => {
+  const body = {max_order_qty: parseInt($("#ctMaxOrder").value, 10),
+                max_position_qty: parseInt($("#ctMaxPos").value, 10)};
+  const r = await post("/api/chart-trading", body);
+  toast(r.ok ? `Limits saved — ${body.max_order_qty} per order, ${body.max_position_qty} per position.`
+             : "Refused — " + (r.detail || "unknown"), 5000);
+  refresh();
+};
+
 async function testFire(name) {
   const r = await post("/api/test-alert", {strategy: name});
   toast((r.result && r.result.ok ? "Dry run ok — " : "Refused — ") +
