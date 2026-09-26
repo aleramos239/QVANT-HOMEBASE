@@ -162,3 +162,19 @@ Defaults equal the desk's live geometry; a pytest pins that.
 - Portfolios of strategies.
 - A live-versus-backtest overlay of the desk's real fills (follow-up).
 - Level 2 based strategies.
+
+## Prop-eval pass rate (added 2026-09-26, user picked it: "lets add … 5")
+
+- **Engine**: vendor `~/ONYX TRADING/onyx/report/propsim.py` (pure stdlib, seeded, deterministic) and its rules
+  directory into `homebase/backtest/propsim/` with a provenance header — Monte Carlo i.i.d. day bootstrap over
+  the weekday grid of the run's **daily net P&L** (0-trade weekdays included), Wilson CIs, eval pass / bust /
+  timeout, days-to-pass percentiles, funded payout + expected cheque. The "days drawn independently"
+  caveat is shown on every result (it is the friendly end of the band).
+- **Rule sets**: `lucid-flex-50k@2026-08.json` (confirmed by the account holder 2026-08-01, shipped as is) and
+  an **Apex 50K** set whose numbers the user confirms before it is marked confirmed — until then the page labels
+  it `unconfirmed rules`. Rule files are JSON, selectable per run.
+- **Report**: a `Prop eval` block in the Overview tab — tiles `Eval pass %` (with 95% CI), `Bust %`, `Median days
+  to pass`, `Funded: expected cheque $` — plus the rule set name; computed in the runner after the backtest
+  (≤ 3 s at the notebook's default path count), stored in the bundle (`propsim.json`).
+- **Tests**: the vendored module's determinism (same seed → same numbers); a hand-built ledger that must
+  always pass / always bust; rule-file loading and the unconfirmed label.
