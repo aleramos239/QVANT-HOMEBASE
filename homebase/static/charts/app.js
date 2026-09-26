@@ -12,6 +12,13 @@ const STATUS_STALE_S = 6;   // the server sends a status every 2 s: this long wi
 const START = [['NQ', 'time:60'], ['NQ', 'time:300'], ['ES', 'time:60'], ['YM', 'time:60'], ['NQ', 'tick:1000'], ['NQ', 'time:900']];
 const ET_CLOCK = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit',
   second: '2-digit', hourCycle: 'h23' });
+const ET_PARTS = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short', hour: '2-digit',
+  minute: '2-digit', hourCycle: 'h23' });
+const WEEKDAY = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+function etNow() {
+  const p = Object.fromEntries(ET_PARTS.formatToParts(new Date()).map((x) => [x.type, x.value]));
+  return { weekday: WEEKDAY[p.weekday], minutes: +p.hour * 60 + +p.minute };
+}
 
 let meta = { roots: ['NQ'], timeframes: [] };
 let ws = null;
@@ -569,22 +576,32 @@ function clearDrawings() {
 }
 
 /* ---- bottom bar ---- */
-function fmtAge(a) { return a == null ? '—' : a < 60 ? `${a.toFixed(1)}s` : `${Math.round(a / 60)}m`; }
+function fmtAge(a) {
+  if (a == null) return '—';
+  if (a < 60) return `${a.toFixed(1)}s`;
+  if (a < 3600) return `${Math.round(a / 60)}m`;
+  if (a < 86400) return `${Math.round(a / 3600)}h`;
+  return `${Math.round(a / 86400)}d`;
+}
 
 function showStatus(s) {
   const roots = s.roots || {}, rec = s.recorder, recErr = rec && rec.error, recBusy = !!(rec && rec.buffered >= 5000);
-  const stale = Object.entries(roots).filter(([, x]) => (x.last_tick_age_s ?? 0) > 30)
+  const now = etNow(), open = (r) => C.marketOpen(r, now.weekday, now.minutes);
+  const refused = Object.entries(roots).filter(([, x]) => x.error);
+  const stale = Object.entries(roots).filter(([r, x]) => !x.error && open(r) && (x.last_tick_age_s ?? 0) > 30)
     .sort((a, b) => b[1].last_tick_age_s - a[1].last_tick_age_s);
-  $('#sbDot').className = 'sb-dot ' + (!s.connected || s.error || recErr ? 'bad' : stale.length || recBusy ? 'warn' : 'ok');
+  $('#sbDot').className = 'sb-dot ' + (!s.connected || s.error || recErr ? 'bad'
+    : stale.length || refused.length || recBusy ? 'warn' : 'ok');
   $('#sbMode').textContent = s.mode === 'replay'
     ? `Replay ${s.date} ×${s.speed} · ${iso(s.clock_s || 0).slice(11, 19)} ET${s.done ? ' · done' : ''}`
     : s.mode === 'live' ? `Live · md ${s.md || ''}` : 'Disconnected';
   const feed = $('#sbFeed');
-  feed.textContent = s.error || (recErr ? `recorder: ${recErr}` : '')
-    || (!s.connected ? 'connecting…'
-      : stale.length ? stale.slice(0, 2).map(([r, x]) => `${r} stale ${fmtAge(x.last_tick_age_s)}`).join(' · ')
-        : Object.keys(roots).length ? 'feeds ok' : '');
-  feed.title = Object.entries(roots).map(([r, x]) => `${r} ${fmtAge(x.last_tick_age_s)}`).join('  ·  ');
+  feed.textContent = s.error || (recErr ? `recorder: ${recErr}` : '') || (!s.connected ? 'connecting…' : '')
+    || [...refused.map(([r]) => `${r} unavailable`),
+      ...stale.slice(0, 2).map(([r, x]) => `${r} stale ${fmtAge(x.last_tick_age_s)}`)].join(' · ')
+    || (Object.keys(roots).length ? 'feeds ok' : '');
+  feed.title = Object.entries(roots).map(([r, x]) => `${r} ${x.error ? `unavailable: ${x.error}`
+    : open(r) ? fmtAge(x.last_tick_age_s) : 'closed'}`).join('  ·  ');
   feed.classList.toggle('bad', !!(s.error || recErr));
   const budget = $('#sbBudget');
   budget.textContent = s.mode === 'live' ? `md ${s.budget_hour ?? 0}/180` : '';
