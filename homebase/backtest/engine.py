@@ -28,6 +28,10 @@ and can trigger from the print AFTER the entry print.
     otherwise reject a real print sitting exactly at that level.
   * A strategy callback that raises is caught for that session only: the session
     is recorded as skipped (`skip = "strategy error: <msg>"`), not propagated.
+    Every working order is cancelled and any open position is flattened AT THE
+    CURRENT PRINT (not run to end of day) so the crash cannot keep trading; the
+    session's trades are then dropped from the result entirely (Item 3) — a
+    crashed session is counted under `skipped_by_error`, never as a quiet trade.
 
 Stdlib only (array + bisect): the desk's venv carries no numpy.
 """
@@ -427,7 +431,13 @@ def run_session(strategy, tape, costs: Costs, qty: int = 1, daily: list | None =
                 strategy.on_time(ctx, arg)
         except Exception as e:                      # noqa: BLE001 - one bad session, not a crashed run
             sim.res.skip = f"strategy error: {e}"
-            break
+            # Cancel every working order and flatten any open position AT THE CURRENT
+            # PRINT (sim.i, not end of day) -- the crash must not keep trading. The
+            # whole session is skipped, so its trades (including this cleanup close)
+            # are dropped from the ledger; the runner counts it under skipped_by_error.
+            sim.flatten("strategy error")
+            sim.res.trades = []
+            return sim.res
     sim.advance(hi)
     sim.i = hi
     sim.flatten("eod")

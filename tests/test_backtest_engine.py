@@ -303,6 +303,24 @@ def test_missing_last_price_at_fire_time_is_caught_and_recorded_as_skip():
         assert res.skip is not None and res.skip.startswith("strategy error:")
 
 
+# Final fix wave, Item 3: a crash with an OPEN POSITION must cancel every working
+# order and flatten at the CURRENT print (not run on to end of day), and the whole
+# session's trades -- including that cleanup close -- must be dropped from the
+# ledger, since the session is separately counted as skipped_by_error.
+
+def test_strategy_crash_with_an_open_position_flattens_at_the_current_print_and_drops_the_ledger():
+    def enter(ctx, s):
+        ctx.market("long", sl=90.0, tp=120.0)
+
+    def boom(ctx, s):
+        raise ValueError("boom")
+
+    rows = [("09:29:59", 100.0), ("09:30:05", 101.0), ("09:31:00", 102.0), ("09:32:00", 103.0)]
+    res = run(rows, plan={"09:30:00": enter, "09:31:00": boom})
+    assert res.trades == []                                    # dropped, not a quiet "eod" trade
+    assert res.skip == "strategy error: boom"
+
+
 # Item 4: short-side coverage for gross P&L and MAE/MFE (previously long-only).
 
 def test_stop_loss_is_touch_and_pays_slip_and_gap_short_side():
