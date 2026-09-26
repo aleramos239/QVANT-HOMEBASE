@@ -6,6 +6,7 @@ import datetime as dt
 import json
 import queue
 import time
+from pathlib import Path
 from urllib.parse import quote
 
 import pytest
@@ -782,3 +783,25 @@ def test_subscriptions_are_bounded(tmp_path):
         for spec in ("time:5", "volume:100", "range:2"):
             ws.send_json({"op": "sub", "id": spec, "root": "NQ", "spec": spec})
             assert first_answer(ws, spec)["type"] == "history"
+
+
+def test_a_failed_layout_write_leaves_the_saved_layouts_intact(tmp_path, monkeypatch):
+    """layouts.json was rewritten in place: a crash or a full disk mid-write
+    left it torn, it read back as {}, and the next save wiped every layout.
+    Writes go to a temp file that atomically replaces the old one."""
+    lay = {"grid": 2, "cells": [{"root": "NQ", "spec": "time:60", "st": {}}]}
+    real_write_text = Path.write_text
+
+    def torn(self, data, *a, **k):
+        real_write_text(self, data[: len(data) // 2], *a, **k)
+        raise OSError(28, "No space left on device")
+
+    with TestClient(replay_app(tmp_path)) as client:
+        assert client.put("/api/layouts/main", json=lay).status_code == 200
+        with monkeypatch.context() as m:
+            m.setattr(Path, "write_text", torn)
+            with pytest.raises(OSError):
+                client.put("/api/layouts/other", json=lay)
+            with pytest.raises(OSError):
+                client.delete("/api/layouts/main")
+        assert client.get("/api/layouts").json() == {"main": lay}

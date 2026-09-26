@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import json
+import os
 import time
 import traceback
 from contextlib import asynccontextmanager
@@ -310,6 +311,14 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         except (OSError, ValueError):
             return {}
 
+    def write_layouts(all_: dict) -> None:
+        """Via a temp file + atomic rename: a crash or a full disk mid-write
+        must never tear layouts.json (torn, it reads back as {} and the next
+        save would wipe every layout)."""
+        tmp = layouts_path.with_name(layouts_path.name + ".tmp")
+        tmp.write_text(json.dumps(all_, indent=2))
+        os.replace(tmp, layouts_path)
+
     @app.get("/api/layouts")
     async def get_layouts():
         return read_layouts()
@@ -321,14 +330,14 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             raise HTTPException(400, "a layout is {grid, cells: [...]}")
         all_ = read_layouts()
         all_[name] = body
-        layouts_path.write_text(json.dumps(all_, indent=2))
+        write_layouts(all_)
         return {"ok": True}
 
     @app.delete("/api/layouts/{name:path}")
     async def delete_layout(name: str):
         all_ = read_layouts()
         all_.pop(name, None)
-        layouts_path.write_text(json.dumps(all_, indent=2))
+        write_layouts(all_)
         return {"ok": True}
 
     @app.websocket("/ws")
