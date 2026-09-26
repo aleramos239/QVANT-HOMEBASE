@@ -6,7 +6,7 @@
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 AGENTS="$HOME/Library/LaunchAgents"
-LABELS=(com.ramosquant.homebase com.ramosquant.homebase-tunnel com.ramosquant.homebase-awake com.ramosquant.homebase-ticks)
+LABELS=(com.ramosquant.homebase com.ramosquant.homebase-tunnel com.ramosquant.homebase-awake com.ramosquant.homebase-ticks com.ramosquant.homebase-charts)
 
 if [ "${1:-}" = "remove" ]; then
   for l in "${LABELS[@]}"; do
@@ -24,7 +24,7 @@ fi
 mkdir -p "$AGENTS" "$REPO/homebase/.state"
 chmod +x "$REPO/deploy/tunnel-run.sh"
 
-for l in com.ramosquant.homebase com.ramosquant.homebase-tunnel com.ramosquant.homebase-ticks; do
+for l in com.ramosquant.homebase com.ramosquant.homebase-tunnel com.ramosquant.homebase-ticks com.ramosquant.homebase-charts; do
   sed "s|__REPO__|$REPO|g" "$REPO/deploy/$l.plist.template" > "$AGENTS/$l.plist"
 done
 
@@ -50,4 +50,4 @@ for l in "${LABELS[@]}"; do
 done
 sleep 2
 launchctl list | grep ramosquant || true
-echo "installed — dashboard: http://localhost:8850"
+echo "installed — dashboard: http://localhost:8850 · charts: http://localhost:8852"

@@ -47,3 +47,17 @@ Server + dashboard: coming next (`homebase/server.py`, uvicorn).
 
 Planned: `git clone` → venv → launchd keepalive → Tailscale for the UI →
 Cloudflare Tunnel for the TradingView webhook. Documented here once built.
+
+## Charts
+
+`python -m homebase.charts` (launchd `com.ramosquant.homebase-charts`, port 8852) is the chart half
+of the terminal: multi-chart layouts on live ticks — time/tick/volume/range bars, VWAP/EMA/SMA/VWMA/ADX,
+session levels, footprint, delta, cumulative delta, big prints, volume profile. Its OWN process: it
+cannot place orders and cannot slow the trading app. It records every live tick to
+`~/futures_ticks/<ROOT>/<YYYY>/<date>_<contract>.live.csv.gz`; past sessions come from the archive.
+
+- Replay any archived session (records nothing): `python -m homebase.charts --replay 2026-09-24 --speed 20 --port 8853`
+- md login: the Apex eval by default; `HOMEBASE_CHARTS_MD=live` switches to the live login.
+- Budget: one chart request per root per connection; gap refills ≤ 60/hour, never 09:20–09:35 ET.
+- Over Tailscale, serve port 8852 alongside 8850.
+- Spec/plan: `docs/superpowers/specs/2026-09-25-live-charts-design.md`, `docs/superpowers/plans/2026-09-25-live-charts.md`.

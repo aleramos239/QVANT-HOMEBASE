@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.ramosquant.homebase-charts</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__REPO__/.venv/bin/python</string>
+    <string>-m</string>
+    <string>homebase.charts</string>
+  </array>
+  <key>WorkingDirectory</key><string>__REPO__</string>
+  <!-- the chart half of the terminal: its OWN process so chart work can never
+       delay an order or take the trading app down. Records live ticks. -->
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <key>StandardOutPath</key><string>__REPO__/homebase/.state/charts.log</string>
+  <key>StandardErrorPath</key><string>__REPO__/homebase/.state/charts.log</string>
+</dict>
+</plist>
