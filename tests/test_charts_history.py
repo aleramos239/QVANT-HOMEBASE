@@ -62,7 +62,7 @@ def test_info_labels_the_session(tmp_path):
                                "approx": False, "gaps": []}
     live = write_gz(tmp_path / "ticks" / "ES" / "2026" / f"{D}_ESZ6.live.csv.gz",
                     rows(session_ms(D, 9, 30), [1.0]))
-    live.with_name(f"{D}_ESZ6.gaps.json").write_text(f"[[{session_ms(D, 9, 0)}, {session_ms(D, 9, 5)}]]")
+    live.with_name(f"{D}_ESZ6.live.gaps").write_text(f"[[{session_ms(D, 9, 0)}, {session_ms(D, 9, 5)}]]")
     info = h.info("ES", D)
     assert info["source"] == "live" and len(info["gaps"]) == 1
     assert info["gaps"][0][1] - info["gaps"][0][0] == 300

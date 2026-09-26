@@ -4,7 +4,7 @@ Two kinds of file live side by side under ~/futures_ticks/<ROOT>/<YYYY>/:
   <date>_<contract>.csv.gz       the nightly archive (manifest .json beside
                                  it; Massive backfills carry no bid/ask)
   <date>_<contract>.live.csv.gz  the chart service's own live recording
-                                 (+ <date>_<contract>.gaps.json)
+                                 (+ <date>_<contract>.live.gaps)
 
 Per session ONE file is used, never a merge (Massive and Tradovate ids are
 different spaces): complete archive > live > incomplete archive; on a roll
@@ -67,8 +67,10 @@ def read_table(path: Path) -> tuple[list[str], list[list[str]]]:
 
 
 def gaps_path(path: Path) -> Path:
+    """<date>_<contract>.live.gaps (a JSON list). Deliberately NOT *.json:
+    research loaders glob <ROOT>/*/*.json as the archive's manifests."""
     stem = path.name.replace(LIVE_SUFFIX, "").replace(".csv.gz", "")
-    return path.with_name(stem + ".gaps.json")
+    return path.with_name(stem + ".live.gaps")
 
 
 def ticks_from_table(header: list[str], recs: list[list[str]],

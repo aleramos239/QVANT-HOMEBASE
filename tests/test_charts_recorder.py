@@ -4,13 +4,14 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import gzip
+import json
 import os
 
 from homebase import ticks as T
 from homebase.charts import recorder as recorder_module
 from homebase.charts.recorder import LiveRecorder, refill
 from homebase.charts.store import TickStore, read_table
-from tests.charts_util import D, rows, session_ms
+from tests.charts_util import D, rows, session_ms, write_archive
 
 M = session_ms(D, 9, 30)
 
@@ -204,6 +205,21 @@ def test_mark_gap_is_read_back_by_the_store(tmp_path):
     rec.mark_gap("NQ", D, "NQZ6", 1, 2)
     rec.mark_gap("NQ", D, "NQZ6", 3, 4)
     assert TickStore(tmp_path).load("NQ", D).gaps == [[1, 2], [3, 4]]
+
+
+def test_the_gaps_sidecar_is_never_taken_for_an_archive_manifest(tmp_path):
+    """Research loaders (research/flow.py) glob <ROOT>/*/*.json as the
+    nightly archive's manifests and call .get() on each: a gaps list saved
+    as .json broke load_flow for that root after the first marked gap."""
+    write_archive(tmp_path, "NQ", D - dt.timedelta(days=1), "NQZ6", rows(M, [1.0]))
+    rec = LiveRecorder(tmp_path)
+    rec.append("NQ", "NQZ6", rows(M, [100.0]))
+    rec.flush()
+    rec.mark_gap("NQ", D, "NQZ6", 1, 2)
+    manifests = list((tmp_path / "NQ").glob("*/*.json"))
+    assert all(isinstance(json.loads(m.read_text()), dict) for m in manifests)
+    assert len(manifests) == 1
+    assert rec.path("NQ", D, "NQZ6").with_name(f"{D}_NQZ6.live.gaps").exists()
 
 
 def pager(all_rows, page=3, penalty_first=False):

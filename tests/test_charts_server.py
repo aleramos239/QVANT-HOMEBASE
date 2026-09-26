@@ -210,7 +210,7 @@ def test_refill_budget_is_serialized_and_never_exceeded(tmp_path, monkeypatch):
     skipped = {"NQ", "ES", "YM"} - {c["root"] for c in calls}
     assert len(skipped) == 1, skipped
     root = next(iter(skipped))
-    gp = base / root / str(D.year) / f"{D.isoformat()}_{root}.gaps.json"
+    gp = base / root / str(D.year) / f"{D.isoformat()}_{root}.live.gaps"
     assert json.loads(gp.read_text())
 
 
@@ -515,7 +515,7 @@ def test_refill_running_gets_a_followup_not_absorbed(tmp_path, monkeypatch):
     assert calls[0] == ("NQZ6", session_ms(D, 9, 40), session_ms(D, 9, 45))
     assert calls[1][0] == "NQZ6" and calls[1][1] == session_ms(D, 9, 45, 30)
     assert calls[1][2] >= session_ms(D, 9, 46)          # fresh `to`, read after it arrived
-    gp = base / "NQ" / str(D.year) / f"{D.isoformat()}_NQZ6.gaps.json"
+    gp = base / "NQ" / str(D.year) / f"{D.isoformat()}_NQZ6.live.gaps"
     gaps = json.loads(gp.read_text()) if gp.exists() else []
     lo, hi = session_ms(D, 9, 45, 30), session_ms(D, 9, 46)
     covered = any(a <= lo and b >= hi for _, a, b in calls) or any(a <= lo and b >= hi for a, b in gaps)

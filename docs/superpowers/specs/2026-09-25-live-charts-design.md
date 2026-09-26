@@ -87,7 +87,8 @@ tick is refilled by paging tick history backwards from now, paced like
 `ticks.py` (21 s/page), at most 20 pages, and only while this process has
 spent < 60 chart requests this hour (the other 120 stay free for the trading
 process). No refill 09:20–09:35 ET — it waits. Whatever the 20 pages don't
-reach is recorded as a **gap** (`<date>_<contract>.gaps.json`) and shaded on
+reach is recorded as a **gap** (`<date>_<contract>.live.gaps`, a JSON list; not
+`.json`, which research loaders glob as archive manifests) and shaded on
 the chart; the nightly archive fills it for later sessions.
 
 **History.** Past sessions come from the local files only (zero broker
