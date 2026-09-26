@@ -30,6 +30,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import json
+import sys
 import time
 from dataclasses import asdict, dataclass
 from typing import Callable, Optional
@@ -136,27 +137,40 @@ class Engine:
         account that already holds the bot's symbol. `_skips` is otherwise
         only in memory, so rebuild it from today's `timer_skipped` journal
         lines (the only durable record); a missing/unreadable journal just
-        means no skips are known yet."""
-        p = self._root / "journal.jsonl"
-        if not p.exists():
-            return
-        today = self._today()
+        means no skips are known yet.
+
+        A malformed journal must never crash construction — the desk must
+        still start. A per-line JSON error (including a line that parses to
+        something other than an object: a bare number, null, a list) is
+        skipped; a non-UTF-8 byte is replaced, never raised; and anything
+        else unexpected here is logged and yields no skips for today,
+        rather than raising into __init__."""
         try:
-            lines = p.read_text().splitlines()
-        except OSError:
-            return
-        for line in lines:
+            p = self._root / "journal.jsonl"
+            if not p.exists():
+                return
+            today = self._today()
             try:
-                rec = json.loads(line)
-            except (json.JSONDecodeError, ValueError):
-                continue
-            if rec.get("event") != "timer_skipped":
-                continue
-            if not str(rec.get("et", "")).startswith(today):
-                continue
-            strategy, account = rec.get("strategy"), rec.get("account")
-            if strategy and account:            # gate_chop skips carry no account
-                self._skips.setdefault((today, strategy), set()).add(account)
+                lines = p.read_text(errors="replace").splitlines()
+            except (OSError, ValueError, UnicodeError):
+                return
+            for line in lines:
+                try:
+                    rec = json.loads(line)
+                except (json.JSONDecodeError, ValueError):
+                    continue
+                if not isinstance(rec, dict):
+                    continue
+                if rec.get("event") != "timer_skipped":
+                    continue
+                if not str(rec.get("et", "")).startswith(today):
+                    continue
+                strategy, account = rec.get("strategy"), rec.get("account")
+                if strategy and account:        # gate_chop skips carry no account
+                    self._skips.setdefault((today, strategy), set()).add(account)
+        except Exception as e:  # noqa: BLE001 — the desk must still start
+            print(f"homebase engine: _load_skips_from_journal failed: {e!r}",
+                  file=sys.stderr)
 
     def _save(self) -> None:
         p = self._day_path(self._today())

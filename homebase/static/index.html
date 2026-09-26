@@ -955,9 +955,13 @@ async function setChartTrading(enabled) {
   if (enabled && !await confirmDlg("Turn chart trading ON?",
       `The chart page can then place REAL orders on the accounts you tick there — at most ${ct.max_order_qty} per order and ${ct.max_position_qty} per position. The 9:30 bot's symbol stays locked 09:20–09:35 ET on its accounts. The desk's Kill switches it off.`,
       "Turn on", false)) { refresh(); return; }
-  const r = await post("/api/chart-trading", {enabled});
-  toast(r.ok ? (enabled ? "Chart trading is ON." : "Chart trading is OFF.")
-             : "Refused — " + (r.detail || "unknown"), 5000);
+  try {
+    const r = await post("/api/chart-trading", {enabled});
+    toast(r.ok ? (enabled ? "Chart trading is ON." : "Chart trading is OFF.")
+               : "Refused — " + (r.detail || r.error || "unknown"), 5000);
+  } catch (e) {
+    toast("Couldn't reach the desk", 5000);
+  }
   refresh();
 }
 $("#ctSwitch").onclick = () =>
@@ -965,9 +969,13 @@ $("#ctSwitch").onclick = () =>
 $("#ctSave").onclick = async () => {
   const body = {max_order_qty: parseInt($("#ctMaxOrder").value, 10),
                 max_position_qty: parseInt($("#ctMaxPos").value, 10)};
-  const r = await post("/api/chart-trading", body);
-  toast(r.ok ? `Limits saved — ${body.max_order_qty} per order, ${body.max_position_qty} per position.`
-             : "Refused — " + (r.detail || "unknown"), 5000);
+  try {
+    const r = await post("/api/chart-trading", body);
+    toast(r.ok ? `Limits saved — ${body.max_order_qty} per order, ${body.max_position_qty} per position.`
+               : "Refused — " + (r.detail || r.error || "unknown"), 5000);
+  } catch (e) {
+    toast("Couldn't reach the desk", 5000);
+  }
   refresh();
 };
 

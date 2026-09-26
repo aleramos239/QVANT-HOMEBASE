@@ -234,38 +234,66 @@ class SelfTimer:
                 return None, "cached view: " + (str(e)[:120] or type(e).__name__)
 
         def orders_in(view):
-            mine, unresolved = [], []
+            mine, unresolved, bad = [], [], 0
             for o in ((view or {}).get("orders") or []):
-                if o.get("symbol") is None:
-                    unresolved.append(str(o.get("order_id")))
-                elif sym in str(o["symbol"]).upper():
-                    mine.append(str(o.get("order_id")))
-            return mine, (f"working order(s) {', '.join(unresolved)}: contract unresolved"
-                          if unresolved else None)
+                try:
+                    if o.get("symbol") is None:
+                        unresolved.append(str(o.get("order_id")))
+                    elif sym in str(o["symbol"]).upper():
+                        mine.append(str(o.get("order_id")))
+                except Exception:  # noqa: BLE001 — one bad cached order must not hide the rest
+                    bad += 1
+            problems = []
+            if unresolved:
+                problems.append(f"working order(s) {', '.join(unresolved)}: contract unresolved")
+            if bad:
+                problems.append(f"{bad} malformed cached order(s) ignored")
+            return mine, ("; ".join(problems) if problems else None)
 
         def positions_in(view):
             """The same substring rule as orders_in, on the adapter's cached
             positions (trade_view()["positions"]): a naked MNQ position, or a
             different-expiry NQ position, is caught even when the pinned
-            contract's own broker-read net (below) is flat."""
-            total, unresolved = 0, []
+            contract's own broker-read net (below) is flat. NEVER summed
+            across contracts — a hedged MNQZ6 +1 / MNQH6 -1 book still holds
+            a position in the bot's symbol, so any single matching contract
+            with a non-zero net is enough; the reported net is that
+            contract's own value (the first non-zero match)."""
+            net, unresolved, bad = 0, [], 0
             for p in ((view or {}).get("positions") or []):
-                net_p = int(p.get("net") or 0)
-                if not net_p:
-                    continue
-                if p.get("symbol") is None:
-                    unresolved.append(str(p.get("contract_id")))
-                elif sym in str(p["symbol"]).upper():
-                    total += net_p
-            return total, (f"position(s) {', '.join(unresolved)}: contract unresolved"
-                           if unresolved else None)
+                try:
+                    net_p = int(p.get("net") or 0)
+                    if not net_p:
+                        continue
+                    if p.get("symbol") is None:
+                        unresolved.append(str(p.get("contract_id")))
+                    elif sym in str(p["symbol"]).upper() and not net:
+                        net = net_p
+                except Exception:  # noqa: BLE001 — one bad cached position must not hide the rest
+                    bad += 1
+            problems = []
+            if unresolved:
+                problems.append(f"position(s) {', '.join(unresolved)}: contract unresolved")
+            if bad:
+                problems.append(f"{bad} malformed cached position(s) ignored")
+            return net, ("; ".join(problems) if problems else None)
 
         views = {aid: cached_view(aid) for aid in accounts}
         orders, cached_nets, view_errors = {}, {}, {}
         for aid, (view, verr) in views.items():
             view_errors[aid] = verr
-            orders[aid] = ([], None) if verr is not None else orders_in(view)
-            cached_nets[aid] = (0, None) if verr is not None else positions_in(view)
+            if verr is not None:
+                orders[aid] = ([], None)
+                cached_nets[aid] = (0, None)
+                continue
+            try:
+                orders[aid] = orders_in(view)
+            except Exception as e:  # noqa: BLE001 — a malformed cache must not crash the stage
+                orders[aid] = ([], "order view: " + (str(e)[:120] or type(e).__name__))
+            try:
+                cached_nets[aid] = positions_in(view)
+            except Exception as e:  # noqa: BLE001
+                cached_nets[aid] = (0, "position view: " + (str(e)[:120] or type(e).__name__))
 
         async def read(aid):
             ad = self.engine.adapters.get(aid)

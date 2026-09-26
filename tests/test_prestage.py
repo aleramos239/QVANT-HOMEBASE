@@ -309,6 +309,81 @@ def test_a_broken_view_journals_once_not_twice_per_account(tmp_path, monkeypatch
     assert [e["account"] for e in failed] == ["a1", "a2"]      # exactly one each
 
 
+def test_a_malformed_cached_position_never_crashes_the_stage(tmp_path, monkeypatch):
+    """Fix round 1 item 2: a bad cached entry (net: '1.0', not parseable by
+    int()) sits inside a view whose OTHER checks are fine — it must be
+    ignored and journaled prestage_check_failed, not raise into the stage
+    (which would leave it 'error' and the bot would not fire)."""
+    monkeypatch.setattr(OrderAdapter, "view_positions",
+                        {"a1": [{"contract_id": "1", "symbol": "NQZ6", "net": "1.0"}]})
+    timer, engine, clock = mk2(tmp_path, {"a1": 0, "a2": 0}, adapter_cls=OrderAdapter)
+    _drive_to_fire(timer, clock)
+    st = timer.status()["strategies"]["nq930"]
+    assert st["stage"] == "fired"                    # never "error"
+    ev = events(tmp_path)
+    failed = [e for e in ev if e["event"] == "prestage_check_failed"]
+    assert any(e["account"] == "a1" and "malformed" in e["error"] for e in failed)
+    assert not any(e["event"] == "timer_skipped" for e in ev)   # ignored -> fires as before
+    assert sorted(e["account"] for e in ev if e["event"] == "dry_run") == ["a1", "a2"]
+
+
+def test_a_malformed_cached_order_never_crashes_the_stage(tmp_path, monkeypatch):
+    """Same as above, for a cached order that isn't a dict at all."""
+    monkeypatch.setattr(OrderAdapter, "view_orders", {"a1": ["not-a-dict"]})
+    timer, engine, clock = mk2(tmp_path, {"a1": 0, "a2": 0}, adapter_cls=OrderAdapter)
+    _drive_to_fire(timer, clock)
+    st = timer.status()["strategies"]["nq930"]
+    assert st["stage"] == "fired"
+    ev = events(tmp_path)
+    failed = [e for e in ev if e["event"] == "prestage_check_failed"]
+    assert any(e["account"] == "a1" and "malformed" in e["error"] for e in failed)
+    assert not any(e["event"] == "timer_skipped" for e in ev)
+    assert sorted(e["account"] for e in ev if e["event"] == "dry_run") == ["a1", "a2"]
+
+
+def test_a_malformed_entry_does_not_hide_a_good_one(tmp_path, monkeypatch):
+    """The malformed entry is ignored, not the whole cached view — a good
+    order alongside it still skips the account."""
+    monkeypatch.setattr(OrderAdapter, "view_orders",
+                        {"a1": ["not-a-dict", _order("9", "NQZ6")]})
+    timer, engine, clock = mk2(tmp_path, {"a1": 0, "a2": 0}, adapter_cls=OrderAdapter)
+    _drive_to_fire(timer, clock)
+    ev = events(tmp_path)
+    assert [(e["account"], e["reason"], e["orders"])
+            for e in ev if e["event"] == "timer_skipped"] == [("a1", "manual_order", ["9"])]
+    assert any(e["event"] == "prestage_check_failed" and e["account"] == "a1" for e in ev)
+
+
+def test_cached_positions_across_contracts_are_not_summed(tmp_path, monkeypatch):
+    """Fix round 1 item 3: MNQZ6 +1 and MNQH6 -1 must still skip — summing
+    them to zero would hide a real (hedged) position in the bot's symbol."""
+    monkeypatch.setattr(OrderAdapter, "view_positions",
+                        {"a2": [_position("1", "MNQZ6", 1), _position("2", "MNQH6", -1)]})
+    timer, engine, clock = mk2(tmp_path, {"a1": 0, "a2": 0}, adapter_cls=OrderAdapter)
+    _drive_to_fire(timer, clock)
+    ev = events(tmp_path)
+    skips = [e for e in ev if e["event"] == "timer_skipped"]
+    assert [(e["account"], e["reason"]) for e in skips] == [("a2", "manual_position")]
+    assert skips[0]["net"] != 0
+    assert engine.skipped_today("nq930") == {"a2"}
+
+
+def test_an_unreadable_broker_position_with_a_cached_net_skips_manual_position(
+        tmp_path, monkeypatch):
+    """Fix round 1 item 4: the broker read fails but the cache shows a real
+    net of 3 -> skip, manual_position, position_unreadable (the broker
+    couldn't confirm it, but the cache did)."""
+    monkeypatch.setattr(OrderAdapter, "view_positions", {"a1": [_position("1", "NQZ6", 3)]})
+    timer, engine, clock = mk2(tmp_path, {"a1": "error", "a2": 0}, adapter_cls=OrderAdapter)
+    _drive_to_fire(timer, clock)
+    ev = events(tmp_path)
+    skips = [e for e in ev if e["event"] == "timer_skipped"]
+    assert [{k: e.get(k) for k in ("reason", "account", "net", "position_unreadable")}
+            for e in skips] == [{"reason": "manual_position", "account": "a1", "net": 3,
+                                 "position_unreadable": True}]
+    assert engine.skipped_today("nq930") == {"a1"}
+
+
 def test_no_order_view_fires_as_before(tmp_path):
     """The base adapter's trade_view() is None (every test fake): positions only."""
     timer, engine, clock = mk2(tmp_path, {"a1": 0, "a2": 0})
