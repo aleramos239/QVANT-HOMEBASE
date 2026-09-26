@@ -11,6 +11,7 @@ const LW = window.LightweightCharts;
 const { Footprint, Profile, Gaps } = window.HBLayers;
 const FAKE0 = 946684800;
 const GRIDS = { 1: [1, 1], 2: [2, 1], 4: [2, 2], 6: [3, 2] };
+const STATUS_STALE_S = 6;   // the server sends a status every 2 s: this long without one = it is stuck
 const ST0 = { vwap: true, vwapAnchor: 'eth', vwapBands: false, ema1: 0, ema2: 0, sma: 0, vwma: 0,
   levels: true, volume: true, delta: false, cumdelta: false, adx: 0,
   footprint: true, imbalance: 3, profile: false, bigMin: 0 };
@@ -30,6 +31,7 @@ let ws = null;
 let layout = { grid: 4, cells: CELLS0.map((c) => JSON.parse(JSON.stringify(c))) };
 const cells = new Map();
 let nextId = 1;
+let statusAt = 0, statusLine = '';   // when the server's last status arrived, and its rendered line
 
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -339,6 +341,19 @@ function showStatus(s) {
   bud.textContent = s.mode === 'live'
     ? `md budget ${s.budget_hour ?? 0}/180 this hour` + (rec ? ` · rec buffered ${rec.buffered.toLocaleString()}` : '') + ` · ${s.clients ?? 0} page(s)`
     : '';
+  statusLine = txt.textContent;
+}
+
+/* The socket is open but no status came for STATUS_STALE_S (the chart
+   service is stuck, or its status broadcast is failing): grey the strip so
+   a stale chart is never mistaken for a quiet market. A 'bad' dot stays bad. */
+function greyIfStale() {
+  if (!statusAt || !ws || ws.readyState !== 1) return;
+  const age = (Date.now() - statusAt) / 1000;
+  if (age < STATUS_STALE_S) return;
+  const dot = $('#feedDot');
+  if (!dot.classList.contains('bad')) dot.className = 'dot warn';
+  $('#feedText').textContent = `no status for ${Math.round(age)}s` + (statusLine ? `  ·  ${statusLine}` : '');
 }
 
 async function loadLayouts(select) {
@@ -375,10 +390,10 @@ function loadLast() { try { const v = JSON.parse(localStorage.getItem('hb_charts
 
 function connect() {
   ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
-  ws.onopen = () => { for (const c of cells.values()) c.subscribe(); };
+  ws.onopen = () => { statusAt = Date.now(); for (const c of cells.values()) c.subscribe(); };
   ws.onmessage = (e) => {
     const m = JSON.parse(e.data);
-    if (m.type === 'status') { showStatus(m); return; }
+    if (m.type === 'status') { statusAt = Date.now(); showStatus(m); return; }
     const c = cells.get(m.id); if (!c) return;
     if (m.type === 'history') c.onHistory(m);
     else if (m.type === 'update') c.onUpdate(m);
@@ -401,6 +416,7 @@ async function init() {
     for (const c of cells.values()) c.subscribe();
   };
   buildGrid(); loadLayouts(); connect();
+  setInterval(greyIfStale, 1000);
 }
 
 window.HBCharts = { Cell, cells, palette, studyKeys, LEVELS, get layout() { return layout; }, set layout(v) { layout = v; },

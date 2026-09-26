@@ -36,6 +36,7 @@ from .tickfeed import TickFeed
 
 STATIC = Path(__file__).resolve().parent.parent / "static"
 PUMP_S = 0.25                 # <= 4 updates a second per chart
+STATUS_S = 2.0                # a status to every page this often (the page greys it after 6 s without)
 CLOSE_GRACE_MS = 1500         # a time bar closes this long after its end if no tick closed it
 REFILL_BUDGET = 60            # this process's own chart requests per hour
 QUIET = (dt.time(9, 20), dt.time(9, 35))    # never refill across the 9:30 fire
@@ -234,9 +235,12 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
 
         feed = (feed_factory or TickFeed)(roots, on_live, on_subscribed=_refill)
     hub = Hub(history, clock)
+    chart_error: list[str | None] = [None]     # the pump's chart work, failing right now
 
     def status() -> dict:
         st = dict(feed.status())
+        if chart_error[0] and not st.get("error"):
+            st["error"] = f"charts: {chart_error[0]}"   # the charts are frozen: say so
         st["recorder"] = None if recorder is None else {
             "written": recorder.written, "buffered": recorder.buffered, "error": recorder.error}
         st["streams"] = len(hub.streams)
@@ -258,13 +262,20 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                 hub.on_clock(clock() - CLOSE_GRACE_MS)
                 for (conn, cid), msg in hub.drain():
                     conn.send({**msg, "id": cid})
-                if wall - last_status >= 2.0:
-                    last_status = wall
+                chart_error[0] = None
+            except Exception as e:  # noqa: BLE001 — the pump must never die
+                chart_error[0] = f"{type(e).__name__}: {e}"
+                log(f"pump: {chart_error[0]}")
+            if wall - last_status >= STATUS_S:
+                # its own try: a persistent chart failure above must not freeze
+                # every page's status strip on its last (green) message
+                last_status = wall
+                try:
                     st = {"type": "status", **status()}
                     for c in list(conns):
                         c.send(st)
-            except Exception as e:  # noqa: BLE001 — the pump must never die
-                log(f"pump: {type(e).__name__}: {e}")
+                except Exception as e:  # noqa: BLE001
+                    log(f"pump status: {type(e).__name__}: {e}")
 
     @asynccontextmanager
     async def lifespan(_app):

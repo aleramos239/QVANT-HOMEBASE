@@ -805,3 +805,28 @@ def test_a_failed_layout_write_leaves_the_saved_layouts_intact(tmp_path, monkeyp
             with pytest.raises(OSError):
                 client.delete("/api/layouts/main")
         assert client.get("/api/layouts").json() == {"main": lay}
+
+
+def test_status_keeps_flowing_and_says_so_while_chart_work_fails(tmp_path, monkeypatch):
+    """The status broadcast shared the pump's try with on_clock/drain: a
+    persistent chart failure froze every page's status strip on its last
+    (green) message. It runs in its own try, and names the failure."""
+    def boom_drain(self):
+        raise RuntimeError("drain boom")
+
+    monkeypatch.setattr(Hub, "drain", boom_drain)
+    monkeypatch.setattr("homebase.charts.server.STATUS_S", 0.05)
+    sent: list = []
+    orig_send = Conn.send
+
+    def send(self, msg):
+        sent.append(dict(msg))
+        return orig_send(self, msg)
+
+    monkeypatch.setattr(Conn, "send", send)
+    with TestClient(replay_app(tmp_path)) as client, client.websocket_connect("/ws") as ws:
+        assert ws.receive_json()["type"] == "status"        # the one sent on connect
+        time.sleep(0.8)
+    statuses = [m for m in sent if m.get("type") == "status"]
+    assert len(statuses) >= 3, statuses
+    assert "drain boom" in (statuses[-1].get("error") or ""), statuses[-1]
