@@ -104,6 +104,21 @@ def test_a_rebinding_host_is_refused_on_writes_and_the_bundle(tmp_path):
         assert c.get(f"/api/tester/run/{rid}/bundle").status_code == 200
 
 
+def test_a_rebinding_host_is_refused_on_every_get_route(tmp_path):
+    """Ruling (broader scope): the Host allowlist applies to EVERY tester
+    route, not just the writes and the bundle — none of these GETs is
+    secret, but the DNS-rebinding defence is applied uniformly rather than
+    routed around it. A rebinding Host gets 403 even though Origin is
+    absent (as a same-site XHR from the rebound page would send)."""
+    with client(tmp_path) as c:
+        rid = c.post("/api/tester/run", json=RUN).json()["id"]
+        poll(c, rid)
+        for path in ("/api/tester/strategies", "/api/tester/prop-rules",
+                     f"/api/tester/run/{rid}", f"/api/tester/run/{rid}/bundle", "/api/tester/runs"):
+            assert c.get(path, headers=REBIND_HOST).status_code == 403, path
+            assert c.get(path).status_code == 200, path   # the same route, genuine Host
+
+
 def test_shutdown_terminates_an_in_flight_runner_child(tmp_path, monkeypatch):
     """Review amendment: the chart service must stop the runner's child on
     its own shutdown (lifespan) rather than orphan it. Fakes the child
