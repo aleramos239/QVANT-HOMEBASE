@@ -518,8 +518,8 @@ def test_two_concurrent_reverses_only_one_proceeds(tmp_path):
     assert ads["a1"].flattened == [NQC] and len(ads["a1"].orders) == 1
 
 
-def test_a_reservation_clears_when_the_cache_shows_the_order(tmp_path):
-    desk, eng, ads, *_ = mkdesk(tmp_path)
+def test_a_reservation_counts_only_while_the_cache_does_not_show_the_order(tmp_path):
+    desk, eng, ads, clock, mono, _ = mkdesk(tmp_path)
     ads["a1"].view["positions"] = [{"contract_id": 1, "symbol": NQC, "net": 5, "avg_price": 100.0}]
     ads["a1"].place_order = lambda req: _ok("501")
     assert order(desk, cid="b1", qty=10)["a1"]["ok"] is True
@@ -528,8 +528,55 @@ def test_a_reservation_clears_when_the_cache_shows_the_order(tmp_path):
                                  "side": "Buy", "price": None}]
     # counted once (the cache), not twice (cache + reservation = 31)
     assert order(desk, cid="b3", qty=6)["a1"]["error"].endswith("to 21 contracts (limit 20)")
-    ads["a1"].view["orders"] = []                       # the order is gone: nothing reserved any more
-    assert order(desk, cid="b4", qty=6)["a1"]["ok"] is True
+    # it filled: gone from the orders, but the position update has not come in
+    # yet (still 5) — the reservation counts again instead of vanishing
+    ads["a1"].view["orders"] = []
+    assert order(desk, cid="b4", qty=6)["a1"]["error"].endswith("to 21 contracts (limit 20)")
+    mono.t += 10.1                                      # kept the full 10 s, then gone
+    assert order(desk, cid="b5", qty=6)["a1"]["ok"] is True
+
+
+def test_flatten_also_cancels_chart_orders_the_cache_does_not_show_yet(tmp_path):
+    """An order the broker accepted a moment ago, not in the cache yet, would
+    survive the adapter's symbol flatten (it cancels what the cache shows)
+    and could fill after it: the desk cancels those ids itself, first."""
+    desk, eng, ads, clock, mono, _ = mkdesk(tmp_path)
+    a = ads["a1"]
+    calls: list = []
+    ids = iter(["601", "603"])
+
+    async def place(req):
+        return OrderResult(ok=True, order_id=next(ids))
+    a.place_order = place
+    assert order(desk, cid="o1")["a1"]["ok"] is True                        # NQ 601, not cached
+    assert order(desk, cid="o2", type="Limit", price=99.0, sl_price=95.0,
+                 tp_price=110.0)["a1"]["ok"] is True                        # NQ bracket a1-101
+    assert order(desk, cid="o3", root="ES")["a1"]["ok"] is True             # ES 603, not cached
+    a.view["orders"] = [{**WORKING, "order_id": "a1-101"}]                  # the entry is cached
+    a.fail_cancel_ids = {"601"}                                             # e.g. it just filled
+    cancel, flat = a.cancel_order_by_id, a.flatten_symbol
+
+    async def c(oid):
+        calls.append(("cancel", oid))
+        return await cancel(oid)
+
+    async def f(sym):
+        calls.append(("flatten", sym))
+        return await flat(sym)
+    a.cancel_order_by_id, a.flatten_symbol = c, f
+    r = run(desk.flatten({"client_id": "fl", "accounts": ["a1"], "root": "NQ"}))["results"]["a1"]
+    assert r["ok"] is True                                   # a failed cancel never stops the flatten
+    assert calls == [("cancel", "601"), ("cancel", "a1-101-sl"), ("cancel", "a1-101-tp"),
+                     ("flatten", NQC)]                       # cancels first; ES untouched
+    ev = next(e for e in journal(tmp_path) if e["event"] == "manual_flatten")
+    assert ev["reserved_cancels"] == {
+        "601": {"ok": False, "error": "cancel rejected by test"},
+        "a1-101-sl": {"ok": True, "error": None}, "a1-101-tp": {"ok": True, "error": None}}
+    assert "strategy" not in ev
+    calls.clear()
+    mono.t += 10.1                                           # the reservations lapsed
+    run(desk.flatten({"client_id": "fl2", "accounts": ["a1"], "root": "NQ"}))
+    assert calls == [("flatten", NQC)]
 
 
 def test_a_reservation_clears_after_ten_seconds(tmp_path):

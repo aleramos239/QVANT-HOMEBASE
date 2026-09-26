@@ -31,8 +31,11 @@ Guards, per account (a refusal is one sentence the page shows as-is):
      guards 1 and 4 before its flatten and again before its open.
   3. quantity: 1..max_order_qty per order; the worst-case |net| in the
      contract (position + every working order on that side + chart orders
-     the broker accepted that the cache does not show yet, for up to 10 s +
-     this order; an order of unknown side counts both ways) <= max_position_qty
+     the broker accepted in the last 10 s whose id the cache does not show
+     — yet, or any more: one that filled before its position update counts
+     again — + this order; an order of unknown side counts both ways)
+     <= max_position_qty. A flatten also cancels those not-shown ids in its
+     contract first (the adapter's symbol flatten only sees the cache).
   An account runs one action at a time (a per-account asyncio.Lock over its
   guards and broker calls), so two quick clicks cannot both pass guard 3 on
   the same stale cache; different accounts still run concurrently. An
@@ -444,6 +447,10 @@ class ChartDesk:
                 "bot": self.bot_view()}
 
     # --- controller ruling P2: protect the 9:30 fire from view work ------------
+    def views_paused(self) -> bool:
+        """Public: desk_api's stream holds its serialization on this (P2)."""
+        return self._views_paused()
+
     def _views_paused(self) -> bool:
         """True while view refresh must yield the loop to the bot fire: the
         narrow window around 09:30:00 ET on weekdays, or while any bot day
@@ -678,15 +685,26 @@ class ChartDesk:
         return self.engine.now_et().timestamp()
 
     # --- reservations: accepted chart orders the cache does not show yet -------------------
-    def _reservations(self, aid: str, view: dict) -> list:
-        """Drop the ones the cache now shows (by order id) or older than
-        RESERVE_S; return what is left."""
-        shown = {str(o.get("order_id")) for o in view.get("orders", [])}
+    def _kept_reservations(self, aid: str) -> list:
+        """Every accepted chart order of the last RESERVE_S (older ones dropped)."""
         now = self._mono()
-        keep = [r for r in self._reserved.get(aid, [])
-                if now - r["t"] < RESERVE_S and (r["order_id"] is None or r["order_id"] not in shown)]
+        keep = [r for r in self._reserved.get(aid, []) if now - r["t"] < RESERVE_S]
         self._reserved[aid] = keep
         return keep
+
+    @staticmethod
+    def _shown(view: dict) -> set:
+        return {str(o.get("order_id")) for o in view.get("orders", [])}
+
+    def _reservations(self, aid: str, view: dict) -> list:
+        """The reservations that COUNT: kept the full RESERVE_S, counted only
+        while the cache does not show their order id. Shown, the cached order
+        counts instead; gone again (it filled before its position update
+        came in), the reservation counts again rather than the order
+        vanishing from the limit for a moment."""
+        shown = self._shown(view)
+        return [r for r in self._kept_reservations(aid)
+                if r["order_id"] is None or r["order_id"] not in shown]
 
     def _placed(self, aid: str, contract: str, side: str, qty: int, r: OrderResult) -> None:
         """After the broker's ok: reserve the qty and remember the ids as
@@ -701,7 +719,9 @@ class ChartDesk:
                 known.pop(next(iter(known)))
             self._reserved.setdefault(aid, []).append(
                 {"order_id": str(r.order_id) if r.order_id else None, "contract": contract,
-                 "side": side, "qty": qty, "t": self._mono()})
+                 "side": side, "qty": qty, "t": self._mono(),
+                 "ids": [str(i) for i in (r.order_id, raw.get("sl_order_id"),
+                                          raw.get("tp_order_id")) if i]})
         except Exception as e:  # noqa: BLE001
             _log(f"{aid}: reservation bookkeeping failed: {type(e).__name__}: {e}")
 
@@ -934,9 +954,24 @@ class ChartDesk:
         return self._result(r.ok, None, r.error, jerr)
 
     async def _do_flatten(self, cid, aid, ad, view, contract, label) -> dict:
+        """The adapter's symbol flatten cancels what the cache shows; a chart
+        order the broker accepted in the last RESERVE_S whose id (or bracket
+        leg id) the cache does not show would survive it and could fill
+        after. Those are cancelled first; a failed cancel (e.g. it already
+        filled — the flatten's own position read then covers it) never stops
+        the flatten."""
+        shown = self._shown(view)
+        pending = list(dict.fromkeys(
+            i for rv in self._kept_reservations(aid) if rv["contract"] == contract
+            for i in rv.get("ids", ()) if i not in shown))
+        cancels = {}
+        if pending:
+            outs = await asyncio.gather(*(_call(ad.cancel_order_by_id(i)) for i in pending))
+            cancels = {i: {"ok": c.ok, "error": c.error} for i, c in zip(pending, outs)}
         r = await _call(ad.flatten_symbol(contract))
+        extra = {"reserved_cancels": cancels} if cancels else {}
         jerr = self._jsafe("manual_flatten", source="chart", client_id=cid, account=aid,
-                           contract=contract, ok=r.ok, error=r.error, detail=r.raw)
+                           contract=contract, ok=r.ok, error=r.error, detail=r.raw, **extra)
         return self._result(r.ok, None, r.error, jerr)
 
     def _still_allowed(self, aid: str, contract: str, label: str, done: str) -> None:
