@@ -8,6 +8,7 @@
       runs/<id>/log.txt         the child's stdout/stderr
       runs/<id>/run.json        meta + inputs + range + coverage + report   (when done)
       runs/<id>/trades.json | equity.json | plots.json                      (when done)
+      runs/<id>/propsim.json    the prop-eval Monte Carlo on the run's daily net P&L (when done)
 
 status: queued -> running -> done | error | cancelled. The chart service owns a
 RunManager (submit / status / cancel / runs / bundle) that launches
@@ -36,12 +37,13 @@ from pathlib import Path
 
 from .. import strategies
 from ..paths import repo_root, state_dir
-from . import discipline, report
+from . import discipline, propsim, report
 from .engine import ENGINE_VERSION, Costs, run_session
 from .tape import ARCHIVE, CACHE, TapeStore, coverage_reason, missing_hours
 
 RUN_ID = re.compile(r"^\d{8}-\d{6}-[a-z0-9_]+-[0-9a-f]{4}$")
-FIELDS = {"strategy", "inputs", "range", "qty", "commission", "slippage_ticks", "capital", "holdout"}
+FIELDS = {"strategy", "inputs", "range", "qty", "commission", "slippage_ticks", "capital", "holdout",
+          "prop_rules"}
 FINAL = {"done", "error", "cancelled"}
 PROGRESS_S = 0.5
 DAILY_LOOKBACK = dt.timedelta(days=400)     # > 250 sessions of daily bars for the ADX gate
@@ -96,7 +98,13 @@ def validate(body) -> dict:
             "commission": _num(body, "commission", 4.00, 0.0, 100.0),
             "slippage_ticks": _num(body, "slippage_ticks", 1.0, 0.0, 20.0),
             "capital": _num(body, "capital", 50_000.0, 1.0, 1e9),
-            "holdout": {"reason": reason} if reason else None}
+            "holdout": {"reason": reason} if reason else None,
+            "prop_rules": _prop_rules(body.get("prop_rules", propsim.DEFAULT_RULES))}
+
+
+def _prop_rules(rule_id) -> str:
+    propsim.load_rules(rule_id)             # ValueError "prop_rules: one of ..." when unknown
+    return rule_id
 
 
 def prepare(body, base: Path) -> str:
@@ -174,12 +182,16 @@ def execute(run_dir: Path, store: TapeStore) -> dict:
     # zero (carried from Task 5/6 review).
     all_skipped = skipped + no_trade
     rep = report.build(trades, req["capital"], skipped=all_skipped)
+    status.update(phase="prop sim", done=len(days), updated=_now())
+    write_json(run_dir / "status.json", status)
+    prop = propsim.evaluate(trades, req["prop_rules"], n_paths=propsim.N_PATHS)
     meta = {"id": req["id"], "created": req["created"], "finished": _now(),
             "engine": ENGINE_VERSION, "fill_law": "tick replay",
             "strategy": {"id": cls.id, "name": cls.name, "root": cls.root},
             "inputs": req["inputs"], "range": req["range"], "qty": req["qty"],
             "commission": req["commission"], "slippage_ticks": req["slippage_ticks"],
             "capital": req["capital"], "holdout": reason is not None, "holdout_reason": reason,
+            "prop_rules": req["prop_rules"],
             "coverage": {"sessions": len(days), "used": len(days) - len(skipped),
                          "skipped": skipped, "skipped_by_reason": by_reason, "no_trade": no_trade,
                          "skipped_by_error": rep["skipped_by_error"],
@@ -189,6 +201,7 @@ def execute(run_dir: Path, store: TapeStore) -> dict:
     write_json(run_dir / "trades.json", trades)
     write_json(run_dir / "equity.json", report.equity(trades))
     write_json(run_dir / "plots.json", {"plots": plots, "hlines": hlines})
+    write_json(run_dir / "propsim.json", prop)
     write_json(run_dir / "run.json", meta)
     status.update(status="done", phase="done", done=len(days), updated=_now())
     write_json(run_dir / "status.json", status)
@@ -310,7 +323,8 @@ class RunManager:
         if st.get("status") != "done":
             raise ValueError(f"run {rid} is {st.get('status')}, not done")
         return {"run": read_json(d / "run.json"), "trades": read_json(d / "trades.json"),
-                "equity": read_json(d / "equity.json"), "plots": read_json(d / "plots.json")}
+                "equity": read_json(d / "equity.json"), "plots": read_json(d / "plots.json"),
+                "propsim": read_json(d / "propsim.json")}
 
     def _loop(self) -> None:
         while True:
