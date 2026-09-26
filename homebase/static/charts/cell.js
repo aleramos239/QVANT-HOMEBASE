@@ -3,7 +3,7 @@
    instances (HBCatalog), the DOM legend, the watermark, and the
    history/update handling. The page (app.js) owns the websocket, the toolbar
    and selection, and gives each cell a `host`:
-     {id, send(msg) -> bool, onPick(cell), onLoaded(cell), onRefused(cell, tried, text), changed()}
+     {id, send(msg) -> bool, onPick(cell), onLoaded(cell), onRefused(cell, tried, text), onSettings(cell, uid), changed()}
    Bar times arrive as ET wall-clock seconds, so the axis reads ET; tick,
    volume and range bars sit on an evenly spaced synthetic axis (many can
    share a second) and are labelled with their real times. */
@@ -44,6 +44,15 @@ function mk(tag, cls, text) {
 }
 function val(text, color) { const s = mk('span', 'v', text); s.style.color = color; return s; }
 function kv(k, v, color) { const s = mk('span', 'kv'); s.append(mk('span', 'k', k), val(v, color)); return s; }
+function iconButton(name, title, act) {
+  const b = mk('button', 'ib');
+  b.type = 'button';
+  b.title = title;
+  b.dataset.act = act;
+  b.setAttribute('aria-label', title);
+  b.innerHTML = window.HBIcons[name] || '';   // our own static SVG strings
+  return b;
+}
 
 /* Time-axis labels like TradingView's: year, month name, day of month, HH:MM(:SS). */
 function tickLabel(t, type) {
@@ -78,6 +87,7 @@ class Cell {
       ohlc: slot.querySelector('.lg-ohlc'), inds: slot.querySelector('.lg-inds') };
     this.lg.badge.title = 'Part of this history has no bid/ask: buys and sells there are split by the tick rule';
     slot.addEventListener('pointerdown', () => host.onPick(this), true);
+    this.lg.inds.addEventListener('click', (e) => this.onLegendClick(e));
     this.title();
     this.subscribe();
   }
@@ -306,12 +316,44 @@ class Cell {
 
   legendRows() {
     this.rows = this.cfg.indicators.map((inst) => {
-      const row = mk('div', 'lg-row' + (inst.visible === false ? ' off' : '')), vals = mk('span', 'lg-vals');
+      const off = inst.visible === false, row = mk('div', 'lg-row' + (off ? ' off' : '')), vals = mk('span', 'lg-vals');
+      const btns = mk('span', 'lg-btns');
+      btns.append(iconButton(off ? 'eyeOff' : 'eye', off ? 'Show' : 'Hide', 'eye'));
+      if (C.def(inst.id).params.length) btns.append(iconButton('gear', 'Settings', 'gear'));
+      btns.append(iconButton('x', 'Remove', 'x'));
       row.dataset.uid = inst.uid;
-      row.append(mk('span', 'lg-label', C.label(inst)), vals);
+      row.append(mk('span', 'lg-label', C.label(inst)), vals, btns);
       return { inst, row, vals };
     });
     this.lg.inds.replaceChildren(...this.rows.map((r) => r.row));
+  }
+
+  onLegendClick(e) {
+    const b = e.target.closest('button[data-act]');
+    if (!b) return;
+    const uid = b.closest('.lg-row').dataset.uid, inst = this.cfg.indicators.find((x) => x.uid === uid);
+    if (!inst) return;
+    if (b.dataset.act === 'eye') this.setVisible(uid, inst.visible === false);
+    else if (b.dataset.act === 'gear') this.host.onSettings(this, uid);
+    else this.update({ indicators: this.cfg.indicators.filter((x) => x.uid !== uid) });
+  }
+
+  /* Client-only: the stream keeps computing a hidden study, so the toggle is instant. */
+  setVisible(uid, on) {
+    const inst = this.cfg.indicators.find((x) => x.uid === uid);
+    if (!inst) return;
+    inst.visible = on;
+    const good = this.lastGood && this.lastGood.indicators.find((x) => x.uid === uid);
+    if (good) good.visible = on;   // a later revert must not undo a hide/show
+    for (const e of this.inflight) {   // nor may an answer to a subscription already in flight
+      const q = e.cfg.indicators.find((x) => x.uid === uid);
+      if (q) q.visible = on;
+    }
+    this.host.changed();
+    for (const l of this.lines) if (l.uid === uid) l.s.applyOptions({ visible: on });
+    this.drawLevels(); this.drawMarkers(); this.syncFootprint(); this.syncProfile();
+    this.legendRows();
+    this.legend(this.hover);
   }
 
   /* The OHLC row and every indicator row for bar i (null: the last bar). */
