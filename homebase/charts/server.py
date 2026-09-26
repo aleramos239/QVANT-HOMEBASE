@@ -205,12 +205,13 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                             log(f"{root}: refill failed: {e}")
                     else:
                         log(f"{root}: refill skipped — md budget {feed.budget_used()}/h")
-                    recorder.append(root, contract, rows)
+                    added = recorder.append(root, contract, rows)
                     if reached > frm:
                         recorder.mark_gap(root, d, contract, frm, reached)
                     log(f"{root}: refilled {len(rows)} ticks"
                         + (f", gap {(reached - frm) / 1000:.0f}s marked" if reached > frm else ""))
-                    reseed(root)
+                    if added or reached > frm:
+                        reseed(root)            # else nothing changed: no reload for every open chart
         finally:
             refill_running.discard(root)
             refill_pending.pop(root, None)   # never leave a follow-up orphaned if we exit abnormally

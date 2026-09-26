@@ -830,3 +830,58 @@ def test_status_keeps_flowing_and_says_so_while_chart_work_fails(tmp_path, monke
     statuses = [m for m in sent if m.get("type") == "status"]
     assert len(statuses) >= 3, statuses
     assert "drain boom" in (statuses[-1].get("error") or ""), statuses[-1]
+
+
+def test_a_refill_that_changed_nothing_does_not_reload_the_charts(tmp_path, monkeypatch):
+    """Every token-expiry reconnect refills each root. A refill that added no
+    tick and marked no gap must not reseed: that resets and reloads every
+    open chart of the root for nothing."""
+    seeds: list = []
+    orig_start_today = Hub.start_today
+
+    def start_today(self, root, d, ticks, info=None):
+        seeds.append(root)
+        return orig_start_today(self, root, d, ticks, info)
+
+    monkeypatch.setattr(Hub, "start_today", start_today)
+    calls: list = []
+
+    async def fake_refill(ws, contract, frm, to, *, max_pages, sleep=None, on_request=None):
+        calls.append(frm)
+        got = [] if len(calls) == 1 else rows(session_ms(D, 9, 44), [100.0], first_id=42)
+        return got, frm                                      # the stretch is covered either way
+
+    monkeypatch.setattr("homebase.charts.server.refill", fake_refill)
+
+    class FakeFeed:
+        def __init__(self, roots, on_ticks, on_subscribed=None):
+            self.on_subscribed, self.ws = on_subscribed, None
+
+        def count_request(self):
+            pass
+
+        def budget_used(self):
+            return 0
+
+        async def run(self):
+            await self.on_subscribed("NQ", "NQZ6", session_ms(D, 9, 40))    # nothing was missed
+            await self.on_subscribed("NQ", "NQZ6", session_ms(D, 9, 43))    # one tick was missed
+            while True:
+                await asyncio.sleep(0.01)
+
+        def stop(self):
+            pass
+
+        def status(self):
+            return {"mode": "live", "connected": True, "error": None, "roots": {},
+                    "budget_hour": 0, "reconnects": 0}
+
+    app = create_app(roots=["NQ"], base=tmp_path / "ticks", feed_factory=FakeFeed,
+                     now_ms=lambda: session_ms(D, 9, 45), state=tmp_path / "state")
+    with TestClient(app):
+        deadline = time.time() + 5
+        while len(calls) < 2 and time.time() < deadline:
+            time.sleep(0.02)
+        time.sleep(0.2)
+    assert len(calls) == 2
+    assert seeds == ["NQ", "NQ"]                             # startup + the refill that added a tick
