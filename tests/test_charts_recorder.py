@@ -333,3 +333,27 @@ def test_a_failing_repair_is_retried_at_most_every_30_s(tmp_path, monkeypatch):
     later(monkeypatch, 2 * recorder_module.REPAIR_RETRY_S)   # the disk has room again
     assert rec.flush() == 1 and rec.error is None and len(attempts) == 3
     assert [t.id for t in TickStore(tmp_path).load("NQ", D).ticks] == [1, 2, 3, 4, 6]
+
+
+def test_a_new_session_forgets_sessions_older_than_the_previous_one(tmp_path):
+    """Per-file state (every tick id of a session: ~40 MB for one NQ day)
+    used to live as long as the process -- ~2 GB a month under KeepAlive.
+    When a new session starts, the state of sessions older than the
+    previous one is dropped, except rows still waiting for the disk; a
+    dropped file is re-read if it is ever needed again."""
+    tue, wed = D - dt.timedelta(days=2), D - dt.timedelta(days=1)
+    rec = LiveRecorder(tmp_path)
+    rec.append("NQ", "NQZ6", rows(session_ms(tue, 10, 0), [1.0, 2.0]))
+    rec.flush()
+    rec.append("ES", "ESZ6", rows(session_ms(tue, 10, 0), [9.0], first_id=50))      # not flushed yet
+    rec.append("NQ", "NQZ6", rows(session_ms(wed, 10, 0), [3.0], first_id=10))     # Wednesday starts
+    rec.append("NQ", "NQZ6", rows(session_ms(D, 10, 0), [4.0], first_id=20))       # Thursday starts
+
+    def held():
+        return {p.name for p in [*rec._seen, *rec._last, *rec._buf, *rec._needs_repair]}
+
+    assert held() == {f"{tue}_ESZ6.live.csv.gz", f"{wed}_NQZ6.live.csv.gz", f"{D}_NQZ6.live.csv.gz"}
+    assert rec.flush() == 3                                  # ES's Tuesday row was kept, and lands
+    assert [t.id for t in TickStore(tmp_path).load("ES", tue).ticks] == [50]
+    assert rec.last_ts("NQ", tue, "NQZ6") == session_ms(tue, 10, 0) + 1000        # re-read on demand
+    assert rec.append("NQ", "NQZ6", rows(session_ms(tue, 10, 0), [1.0, 2.0])) == []  # still deduped

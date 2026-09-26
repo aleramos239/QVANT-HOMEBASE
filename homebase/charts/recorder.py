@@ -55,6 +55,7 @@ class LiveRecorder:
         # Such a file is retried (repair, then its buffered rows) at most every
         # REPAIR_RETRY_S: each attempt re-reads the whole day's file on the loop.
         self._needs_repair: dict[Path, tuple[float, str]] = {}
+        self._newest: dt.date | None = None      # the newest session appended to
         self.error: str | None = None
         self.written = 0
 
@@ -117,12 +118,32 @@ class LiveRecorder:
         self._seen[p] = seen
         return seen
 
+    def _forget_before(self, keep: dt.date) -> None:
+        """A new session started: drop the per-file state of sessions older
+        than the previous one (`keep`). One NQ session's tick ids alone are
+        ~40 MB, and a KeepAlive process would otherwise hold every day's. A
+        file whose rows still wait for the disk keeps its state (until a
+        later session start); _open() re-reads a dropped file if a refill
+        ever needs it again."""
+        for p in {*self._seen, *self._last, *self._buf, *self._needs_repair}:
+            if self._buf.get(p) or dt.date.fromisoformat(p.name[:10]) >= keep:
+                continue
+            self._seen.pop(p, None)
+            self._last.pop(p, None)
+            self._buf.pop(p, None)
+            self._needs_repair.pop(p, None)
+
     def append(self, root: str, contract: str, rows: list[dict]) -> list[dict]:
         """Buffer the rows not held yet; returns exactly those."""
         new = []
         for r in rows:
             ts = int(r["ts_ms"])
-            p = self.path(root, session_date(ts), contract)
+            d = session_date(ts)
+            if self._newest is None or d > self._newest:
+                if self._newest is not None:
+                    self._forget_before(self._newest)
+                self._newest = d
+            p = self.path(root, d, contract)
             seen = self._open(p)
             tid = r.get("id")
             if tid not in (None, ""):
