@@ -1,4 +1,4 @@
-"""The chart service: FastAPI on :8852 — the page, the websocket, layouts,
+"""The chart service: FastAPI on :8852 — the page, the websocket, layouts, drawings,
 status. Its own process; the trading app on :8850 only links to it.
 
     python -m homebase.charts                      # live, from the md feed
@@ -9,7 +9,9 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import json
+import math
 import os
+import re
 import time
 import traceback
 from contextlib import asynccontextmanager
@@ -49,6 +51,9 @@ TIMEFRAMES = [["5s", "time:5"], ["15s", "time:15"], ["30s", "time:30"], ["1m", "
 MIN_BAR = {"time": 5, "tick": 100, "volume": 100, "range": 2}   # finer bars cost too much to build/ship
 MAX_STUDIES = 16              # per subscription
 LOCAL_HOSTS = ("localhost", "127.0.0.1")
+MAX_DRAWINGS = 500            # per symbol
+DRAWING_POINTS = {"trend": 2, "rect": 2, "hline": 1}
+_HEX_COLOR = re.compile(r"#[0-9A-Fa-f]{6}")
 
 
 def log(msg: str) -> None:
@@ -71,6 +76,48 @@ def origin_ok(origin: str | None, host: str | None) -> bool:
     except ValueError:                  # e.g. a malformed IPv6 literal
         return False
     return o is not None and (o in LOCAL_HOSTS or o == h)
+
+
+def _finite(v) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+
+
+def check_drawings(body) -> list:
+    """The page's drawings for one symbol, validated and stripped to what
+    the page draws: [{id, type, points: [{t?, p}], color?}]. ValueError
+    (with a message for the page) on anything else."""
+    if not isinstance(body, list) or len(body) > MAX_DRAWINGS:
+        raise ValueError(f"drawings are a list of at most {MAX_DRAWINGS}")
+    out = []
+    for d in body:
+        if not isinstance(d, dict):
+            raise ValueError("each drawing is an object")
+        did, kind, pts = d.get("id"), d.get("type"), d.get("points")
+        if not isinstance(did, str) or not 1 <= len(did) <= 40:
+            raise ValueError("id: a string of 1-40 characters")
+        n = DRAWING_POINTS.get(kind)
+        if n is None:
+            raise ValueError("type: trend, hline or rect")
+        if not isinstance(pts, list) or len(pts) != n or not all(isinstance(p, dict) for p in pts):
+            raise ValueError(f"a {kind} has exactly {n} point(s)")
+        clean = []
+        for p in pts:
+            if not _finite(p.get("p")):
+                raise ValueError("a point's p is a finite number")
+            if kind == "hline":
+                clean.append({"p": p["p"]})
+                continue
+            t = p.get("t")
+            if not isinstance(t, int) or isinstance(t, bool):
+                raise ValueError("a point's t is an integer (epoch ms)")
+            clean.append({"t": t, "p": p["p"]})
+        item = {"id": did, "type": kind, "points": clean}
+        if "color" in d:
+            if not isinstance(d["color"], str) or not _HEX_COLOR.fullmatch(d["color"]):
+                raise ValueError("color: #RRGGBB")
+            item["color"] = d["color"]
+        out.append(item)
+    return out
 
 
 class Conn:
@@ -115,6 +162,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
     sd = Path(state) if state else state_dir() / "charts"
     sd.mkdir(parents=True, exist_ok=True)
     layouts_path = sd / "layouts.json"
+    drawings_path = sd / "drawings.json"
     store = TickStore(base)
     history = History(store, cache_dir=sd / "cache")
     recorder = None if replay else LiveRecorder(base)
@@ -317,40 +365,78 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
     async def api_symbols():
         return {"roots": roots, "timeframes": TIMEFRAMES}
 
-    def read_layouts() -> dict:
+    def read_json(path: Path) -> dict:
         try:
-            return json.loads(layouts_path.read_text())
+            v = json.loads(path.read_text())
         except (OSError, ValueError):
             return {}
+        return v if isinstance(v, dict) else {}
 
-    def write_layouts(all_: dict) -> None:
+    def write_json(path: Path, data: dict) -> None:
         """Via a temp file + atomic rename: a crash or a full disk mid-write
-        must never tear layouts.json (torn, it reads back as {} and the next
-        save would wipe every layout)."""
-        tmp = layouts_path.with_name(layouts_path.name + ".tmp")
-        tmp.write_text(json.dumps(all_, indent=2))
-        os.replace(tmp, layouts_path)
+        must never tear the file (torn, it reads back as {} and the next
+        save would wipe everything in it)."""
+        tmp = path.with_name(path.name + ".tmp")
+        tmp.write_text(json.dumps(data, indent=2))
+        os.replace(tmp, path)
+
+    def browser_write_ok(request: Request) -> None:
+        """Browsers send a cross-site PUT/DELETE after a preflight that this
+        app never answers, but a simple no-CORS request could still reach
+        us; refuse any write from a page that is not this service's own
+        (same rule as the /ws handshake)."""
+        if not origin_ok(request.headers.get("origin"), request.headers.get("host")):
+            raise HTTPException(403, "writes from another site are refused")
+
+    def known_root(root: str) -> str:
+        r = root.upper()
+        if r not in roots:
+            raise HTTPException(404, f"{root!r} is not a charted symbol")
+        return r
 
     @app.get("/api/layouts")
     async def get_layouts():
-        return read_layouts()
+        return read_json(layouts_path)
 
     @app.put("/api/layouts/{name:path}")
     async def put_layout(name: str, request: Request):
+        browser_write_ok(request)
         body = await request.json()
         if not isinstance(body, dict) or not isinstance(body.get("cells"), list):
             raise HTTPException(400, "a layout is {grid, cells: [...]}")
-        all_ = read_layouts()
+        all_ = read_json(layouts_path)
         all_[name] = body
-        write_layouts(all_)
+        write_json(layouts_path, all_)
         return {"ok": True}
 
     @app.delete("/api/layouts/{name:path}")
-    async def delete_layout(name: str):
-        all_ = read_layouts()
+    async def delete_layout(name: str, request: Request):
+        browser_write_ok(request)
+        all_ = read_json(layouts_path)
         all_.pop(name, None)
-        write_layouts(all_)
+        write_json(layouts_path, all_)
         return {"ok": True}
+
+    @app.get("/api/drawings/{root}")
+    async def get_drawings(root: str):
+        return read_json(drawings_path).get(known_root(root), [])
+
+    @app.put("/api/drawings/{root}")
+    async def put_drawings(root: str, request: Request):
+        browser_write_ok(request)
+        r = known_root(root)
+        try:
+            body = await request.json()
+        except ValueError:
+            raise HTTPException(400, "the body is not JSON") from None
+        try:
+            clean = check_drawings(body)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+        all_ = read_json(drawings_path)
+        all_[r] = clean
+        write_json(drawings_path, all_)
+        return {"ok": True, "count": len(clean)}
 
     @app.websocket("/ws")
     async def ws_endpoint(sock: WebSocket):

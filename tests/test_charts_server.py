@@ -15,7 +15,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 from fastapi.testclient import TestClient
 
 from homebase.charts.hub import Hub, Stream
-from homebase.charts.server import QUIET, Conn, create_app
+from homebase.charts.server import MAX_DRAWINGS, QUIET, Conn, check_drawings, create_app
 from homebase.charts.session import session_range_ms
 from homebase.charts.store import read_table
 from tests.charts_util import D, ET, rows, session_ms, write_archive
@@ -894,3 +894,118 @@ def test_the_charts_job_yields_the_cpu_to_the_trading_app():
     tpl = Path(__file__).resolve().parent.parent / "deploy" / "com.ramosquant.homebase-charts.plist.template"
     job = plistlib.loads(tpl.read_bytes().replace(b"__REPO__", b"/repo"))
     assert job["Label"] == "com.ramosquant.homebase-charts" and job.get("Nice") == 5
+
+
+TREND = {"id": "d1", "type": "trend", "color": "#2962FF",
+         "points": [{"t": 1790000000000, "p": 30900.25}, {"t": 1790000600000, "p": 30950.0}]}
+HLINE = {"id": "d2", "type": "hline", "points": [{"p": 30925.5}]}
+RECT = {"id": "d3", "type": "rect",
+        "points": [{"t": 1790000000000, "p": 30900}, {"t": 1790000300000, "p": 30880.75}]}
+
+
+def test_drawings_roundtrip_per_root(tmp_path):
+    state = tmp_path / "state"
+    state.mkdir()
+    (state / "drawings.json").write_text(json.dumps({"ES": [HLINE]}))   # another root's drawings
+    with TestClient(replay_app(tmp_path)) as client:
+        assert client.get("/api/drawings/NQ").json() == []
+        r = client.put("/api/drawings/NQ", json=[TREND, HLINE, RECT])
+        assert r.status_code == 200 and r.json() == {"ok": True, "count": 3}
+        assert client.get("/api/drawings/NQ").json() == [TREND, HLINE, RECT]
+        assert client.get("/api/drawings/nq").json() == [TREND, HLINE, RECT]
+        assert json.loads((state / "drawings.json").read_text()) == {"ES": [HLINE], "NQ": [TREND, HLINE, RECT]}
+        assert client.put("/api/drawings/NQ", json=[]).status_code == 200
+        assert client.get("/api/drawings/NQ").json() == []
+        assert client.get("/api/drawings/ZZ").status_code == 404
+        assert client.put("/api/drawings/ZZ", json=[]).status_code == 404
+
+
+def test_drawings_keep_only_what_the_page_draws():
+    """Unknown keys are dropped; a horizontal line keeps only its price."""
+    body = [{"id": "a", "type": "hline", "points": [{"p": 1.5, "t": 7, "x": 1}], "junk": True},
+            {"id": "b", "type": "trend", "points": [{"t": 1, "p": 2, "q": 0}, {"t": 3, "p": 4}]}]
+    assert check_drawings(body) == [{"id": "a", "type": "hline", "points": [{"p": 1.5}]},
+                                    {"id": "b", "type": "trend", "points": [{"t": 1, "p": 2}, {"t": 3, "p": 4}]}]
+
+
+H1 = {"id": "a", "type": "hline", "points": [{"p": 1}]}
+BAD = [
+    ("not a list", {"id": "x"}),
+    ("item not an object", ["x"]),
+    ("id missing", [{"type": "hline", "points": [{"p": 1}]}]),
+    ("id empty", [{**H1, "id": ""}]),
+    ("id too long", [{**H1, "id": "x" * 41}]),
+    ("id not a string", [{**H1, "id": 7}]),
+    ("unknown type", [{**H1, "type": "fib"}]),
+    ("trend with one point", [{"id": "a", "type": "trend", "points": [{"t": 1, "p": 1}]}]),
+    ("hline with two points", [{**H1, "points": [{"p": 1}, {"p": 2}]}]),
+    ("points not a list", [{**H1, "points": {"p": 1}}]),
+    ("point not an object", [{**H1, "points": [1]}]),
+    ("t missing", [{"id": "a", "type": "rect", "points": [{"p": 1}, {"t": 2, "p": 2}]}]),
+    ("t a float", [{"id": "a", "type": "trend", "points": [{"t": 1.5, "p": 1}, {"t": 2, "p": 2}]}]),
+    ("t a bool", [{"id": "a", "type": "trend", "points": [{"t": True, "p": 1}, {"t": 2, "p": 2}]}]),
+    ("p missing", [{**H1, "points": [{}]}]),
+    ("p a string", [{**H1, "points": [{"p": "1"}]}]),
+    ("p a bool", [{**H1, "points": [{"p": False}]}]),
+    ("p not finite", [{**H1, "points": [{"p": float("inf")}]}]),
+    ("colour a name", [{**H1, "color": "red"}]),
+    ("colour too short", [{**H1, "color": "#12345"}]),
+]
+
+
+@pytest.mark.parametrize("why,body", BAD, ids=[b[0] for b in BAD])
+def test_check_drawings_refuses_malformed_bodies(why, body):
+    with pytest.raises(ValueError):
+        check_drawings(body)
+
+
+def test_check_drawings_caps_the_list():
+    assert len(check_drawings([H1] * MAX_DRAWINGS)) == MAX_DRAWINGS
+    with pytest.raises(ValueError):
+        check_drawings([H1] * (MAX_DRAWINGS + 1))
+
+
+def test_a_bad_drawings_body_is_a_400_and_saves_nothing(tmp_path):
+    with TestClient(replay_app(tmp_path)) as client:
+        assert client.put("/api/drawings/NQ", json=[H1]).status_code == 200
+        r = client.put("/api/drawings/NQ", json=[{**H1, "type": "fib"}])
+        assert r.status_code == 400 and "type" in r.json()["detail"]
+        nan = '[{"id": "a", "type": "hline", "points": [{"p": NaN}]}]'
+        assert client.put("/api/drawings/NQ", content=nan,
+                          headers={"content-type": "application/json"}).status_code == 400
+        assert client.put("/api/drawings/NQ", content="not json",
+                          headers={"content-type": "application/json"}).status_code == 400
+        assert client.get("/api/drawings/NQ").json() == [H1]
+
+
+def test_browser_writes_from_another_site_are_refused(tmp_path):
+    """Any page open in the desk machine's browser could otherwise rewrite
+    or delete saved layouts and drawings (same rule as the /ws handshake)."""
+    lay = {"grid": 2, "cells": [{"root": "NQ", "spec": "time:60", "indicators": []}]}
+    evil = {"origin": "https://evil.example"}
+    with TestClient(replay_app(tmp_path)) as client:
+        assert client.put("/api/layouts/main", json=lay, headers=evil).status_code == 403
+        assert client.put("/api/drawings/NQ", json=[H1], headers=evil).status_code == 403
+        assert client.put("/api/layouts/main", json=lay).status_code == 200            # no Origin: not a browser
+        assert client.delete("/api/layouts/main", headers=evil).status_code == 403
+        assert client.get("/api/layouts").json() == {"main": lay}
+        assert client.get("/api/drawings/NQ").json() == []
+        for ok in ("http://localhost:8852", "http://127.0.0.1:8852", "http://testserver"):
+            assert client.put("/api/drawings/NQ", json=[H1], headers={"origin": ok}).status_code == 200
+        assert client.delete("/api/layouts/main", headers={"origin": "http://localhost:8852"}).status_code == 200
+
+
+def test_a_failed_drawings_write_leaves_the_saved_drawings_intact(tmp_path, monkeypatch):
+    real_write_text = Path.write_text
+
+    def torn(self, data, *a, **k):
+        real_write_text(self, data[: len(data) // 2], *a, **k)
+        raise OSError(28, "No space left on device")
+
+    with TestClient(replay_app(tmp_path)) as client:
+        assert client.put("/api/drawings/NQ", json=[H1]).status_code == 200
+        with monkeypatch.context() as m:
+            m.setattr(Path, "write_text", torn)
+            with pytest.raises(OSError):
+                client.put("/api/drawings/NQ", json=[TREND])
+        assert client.get("/api/drawings/NQ").json() == [H1]
