@@ -280,7 +280,15 @@ class Cell {
     }
   }
 
-  drawGaps() {}                // Task 13
+  drawGaps() {
+    const idx = [];
+    for (const s of this.sessions) for (const [a] of (s.gaps || [])) {
+      let i = -1;
+      for (let j = 0; j < this.bars.length && this.bars[j].t <= a; j++) i = j;
+      if (i >= 0 && i < this.bars.length - 1) idx.push(i);
+    }
+    this.gaps.set(idx);
+  }
   syncFootprint() {
     if (!this.fp) return;
     this.fp.set(this.bars, !!this.cfg.st.footprint, +this.cfg.st.imbalance || 0, this.tick);
@@ -314,9 +322,39 @@ function buildGrid() {
   $('#gridSel').value = String(layout.grid);
 }
 
-function showStatus() {}         // Task 13
-function loadLayouts() {}        // Task 13
-function saveLayout() {}         // Task 13
+function showStatus(s) {
+  const dot = $('#feedDot'), txt = $('#feedText'), bud = $('#budgetText');
+  const roots = s.roots || {};
+  const ages = Object.entries(roots).map(([r, x]) => {
+    const a = x.last_tick_age_s;
+    return `${r} ${a == null ? '—' : a < 60 ? a.toFixed(1) + 's' : Math.round(a / 60) + 'm'}`;
+  });
+  const worst = Math.max(0, ...Object.values(roots).map((x) => x.last_tick_age_s ?? 0));
+  const recErr = s.recorder && s.recorder.error;
+  dot.className = 'dot ' + (!s.connected || s.error || recErr ? 'bad' : worst > 30 ? 'warn' : 'ok');
+  const mode = s.mode === 'replay'
+    ? `replay ${s.date} ×${s.speed} · ${iso(s.clock_s || 0).slice(11, 19)} ET${s.done ? ' · done' : ''}`
+    : s.mode === 'live' ? `live · md ${s.md || ''}` : '';
+  txt.textContent = [mode, ...ages, s.error || '', recErr ? 'recorder: ' + recErr : ''].filter(Boolean).join('  ·  ');
+  bud.textContent = s.mode === 'live' ? `md budget ${s.budget_hour ?? 0}/180 this hour · ${s.clients ?? 0} page(s)` : '';
+}
+
+async function loadLayouts(select) {
+  let all = {};
+  try { const r = await fetch('/api/layouts'); if (r.ok) all = await r.json(); } catch (_) {}
+  const sel = $('#layoutSel');
+  sel.innerHTML = '<option value="">Layouts…</option>' + Object.keys(all).map((n) => `<option ${n === select ? 'selected' : ''}>${esc(n)}</option>`).join('');
+  sel.onchange = () => { if (all[sel.value]) { layout = JSON.parse(JSON.stringify(all[sel.value])); saveLast(); buildGrid(); } };
+}
+
+async function saveLayout() {
+  const input = $('#layoutName'), name = input.value.trim();
+  if (!name) { input.focus(); return; }
+  await fetch('/api/layouts/' + encodeURIComponent(name), { method: 'PUT',
+    headers: { 'content-type': 'application/json' }, body: JSON.stringify(layout) });
+  input.value = '';
+  loadLayouts(name);
+}
 function saveLast() { try { localStorage.setItem('hb_charts_last', JSON.stringify(layout)); } catch (_) {} }
 function loadLast() { try { const v = JSON.parse(localStorage.getItem('hb_charts_last') || 'null'); if (v && Array.isArray(v.cells)) layout = v; } catch (_) {} }
 
