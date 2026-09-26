@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import time
 
 import homebase.charts.hub as hub_mod
 from homebase.charts.bars import Bar, BarBuilder, BarSpec
@@ -389,3 +390,44 @@ def test_a_chart_finds_its_stream(tmp_path):
     hub, _ = deep(tmp_path, n=2)
     s = open_stream(hub, sub=("conn", "c9"))
     assert hub.stream_of(("conn", "c9")) is s and hub.stream_of(("conn", "nope")) is None
+
+
+# ---- Fix round 1: a cold subscribe must never hang (deep history / warm-up bug) ----
+def test_a_cold_subscribe_bounds_the_time_it_spends_building_fresh_sessions(tmp_path, monkeypatch):
+    """time:86400 asks for 250 sessions (sessions_back). None are cached here, and each build is slow
+    (a big or freshly-refilled archive file): prepare() must still answer promptly, with whatever it
+    managed, instead of blocking on all 250 one by one -- the rest is what scroll-back is for."""
+    hub, days = deep(tmp_path, n=300)
+    real_bars = History.bars
+
+    def slow_bars(self, root, spec, d, memo=True):
+        time.sleep(0.01)
+        return real_bars(self, root, spec, d, memo=memo)
+
+    monkeypatch.setattr(History, "bars", slow_bars)
+    monkeypatch.setattr(hub_mod, "BUILD_BUDGET_S", 0.05)
+    t0 = time.monotonic()
+    s = open_stream(hub, spec=BarSpec("time", 86400), keys=())
+    elapsed = time.monotonic() - t0
+    assert elapsed < 2.0                    # bounded: NOT anywhere near 300 * 0.01s = 3s
+    assert 0 < len(s.sessions) < 250         # answered with what it had time to build, never nothing
+
+
+def test_older_also_bounds_the_time_it_spends_on_a_cold_chunk(tmp_path, monkeypatch):
+    """The same slow-archive scenario during scroll-back: older() answers within bounded time (done can
+    stay False -- the page just asks again for the rest) rather than blocking on the whole chunk."""
+    hub, days = deep(tmp_path, n=600)               # far more than one chunk's worth still behind the first
+    s = open_stream(hub, spec=BarSpec("time", 86400), keys=())
+    real_bars = History.bars
+
+    def slow_bars(self, root, spec, d, memo=True):
+        time.sleep(0.01)
+        return real_bars(self, root, spec, d, memo=memo)
+
+    monkeypatch.setattr(History, "bars", slow_bars)
+    monkeypatch.setattr(hub_mod, "BUILD_BUDGET_S", 0.05)
+    t0 = time.monotonic()
+    ans = hub.older(s, s.bars[0].t)
+    elapsed = time.monotonic() - t0
+    assert elapsed < 2.0
+    assert ans["bars"] != [] or ans["done"] is True   # never silently nothing without a reason

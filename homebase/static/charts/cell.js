@@ -89,7 +89,8 @@ class Cell {
     this.eth = this.cd = null; this.clockEt = null;   // the hours background, the countdown, now (ET wall ms)
     this.evl = null;   // the economic-calendar flags layer
     this.back = new window.HBScrollBack.ScrollBack();   // scroll-back: older history on demand
-    this.start = null;   // the "Start of data" layer
+    this.start = null;   // the "Start of data" / "History limit reached" layer
+    this.capped = false;   // this.bars hit the 200,000-bar client cap: scroll-back has stopped asking
     this.magnetXhair = false;   // the rail's magnet is on with a tool picked (MagnetOHLC crosshair)
     this.R = S.resolve(cfg.settings || {}, palette());   // the chart's settings, concrete for the theme
     this.fpHide = false;   // the footprint is readable: candle bodies and borders step aside
@@ -256,24 +257,32 @@ class Cell {
   tickSecond(nowEt) { this.clockEt = nowEt; if (this.cd) this.cd.redraw(); }
 
   /* TradingView's scroll-back: the view's left edge near the first loaded bar asks the server for the next
-     chunk of older sessions (one request at a time; none while a subscription is in flight). */
+     chunk of older sessions (one request at a time; none while a subscription is in flight; none once the
+     200,000-bar client cap is hit -- capped stays until the next full history). */
   askOlder(r) {
-    if (!this.chart || this.inflight.length || !this.bars.length) return;
+    if (!this.chart || this.inflight.length || !this.bars.length || this.capped) return;
     const req = this.back.want(r, this.bars[0].ms);
     if (req && this.host.send({ op: 'older', id: this.id, before: req.before })) this.back.sent(req);
   }
 
   /* Older sessions in front of the chart: the bars, their studies (and the repaired first bars) and session
      labels merged, every series re-set in place (no rebuild: no flash, a drag goes on), the view shifted by
-     the bars added so it does not move. done: "Start of data" at the first bar. */
+     the bars added so it does not move. The chunk is cropped to the 200,000-bar cap (no eviction: only the
+     incoming chunk is trimmed, never the chart's own bars). done or capped: the label at the first bar
+     ("Start of data" / "History limit reached"), and scroll-back stops asking. */
   onOlder(m) {
     if (!this.back.take(m) || !this.chart || this.inflight.length) return;
-    const k = (m.bars || []).length;
+    const { bars: merged, capped } = window.HBScrollBack.capPrepend(this.bars, m);
+    if (capped) this.capped = true;
+    const k = merged.length - this.bars.length;
     if (k) {
-      const r = this.chart.timeScale().getVisibleLogicalRange(), all = window.HBScrollBack.prepend(this.bars, m);
-      this.sessions = window.HBScrollBack.mergeSessions(m.sessions, this.sessions);
+      const r = this.chart.timeScale().getVisibleLogicalRange();
+      // a cropped chunk drops its oldest bars: drop their session labels too, so no gap band or approx.-flow
+      // badge ever points at a session that never actually landed on the chart
+      const kept = new Set(merged.slice(0, k).map((b) => b.s));
+      this.sessions = window.HBScrollBack.mergeSessions((m.sessions || []).filter((x) => kept.has(x.date)), this.sessions);
       this.bars = []; this.realT = new Map();
-      for (const b of all) this.append(b);   // axis times again: tick/volume/range bars sit on an index axis
+      for (const b of merged) this.append(b);   // axis times again: tick/volume/range bars sit on an index axis
       this.candles.setData(this.candleData());
       for (const l of this.lines) l.s.setData(this.bars.map((b) => this.point(l, b)));
       if (r) this.chart.timeScale().setVisibleLogicalRange({ from: r.from + k, to: r.to + k });
@@ -283,7 +292,7 @@ class Cell {
       this.legend(this.hover);
       if (this.dc) this.dc.refresh();
     }
-    this.start.set(this.back.done);
+    this.start.set(this.back.done || this.capped, this.capped ? 'History limit reached' : 'Start of data');
   }
 
   /* Send the chart's config; keepView: restore the view on screen when the
@@ -326,6 +335,7 @@ class Cell {
     if (entry) this.lastGood = entry.cfg;
     if (this.inflight.length) return;
     this.back.reset();
+    this.capped = false;
     const s = this.shown, view = entry && entry.view && s && s.root === m.root && s.spec === m.spec ? entry.view : null;
     this.shown = { root: m.root, spec: m.spec };
     this.tick = m.tick_size; this.pv = m.point_value ?? null; this.sessions = m.sessions || []; this.devel = !!m.live;
@@ -376,7 +386,7 @@ class Cell {
     this.lg.badge.hidden = !this.sessions.some((s) => s.approx);
     this.legendRows();
     this.legend(null);
-    this.start.set(this.back.done);
+    this.start.set(this.back.done || this.capped, this.capped ? 'History limit reached' : 'Start of data');
     this.dc = new window.HBDrawings.Controller(this, this.host);
     if (sel) { this.dc.sel = sel; this.dc.refresh(); }
   }

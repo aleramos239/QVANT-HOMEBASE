@@ -241,14 +241,19 @@ class EventFlags extends Layer {
 /* "Start of data": once scroll-back has reached the archive's first bar, a dashed line just before it with
    the words beside it (left of the line when they fit, else right). */
 class Start extends Layer {
-  constructor(P) { super(P); this.on = false; }
+  constructor(P) { super(P); this.on = false; this.text = 'Start of data'; }
   z() { return 'bottom'; }
-  set(on) { if (this.on !== on) { this.on = on; this.redraw(); } }
+  /* text defaults to "Start of data" (the archive's first bar); the 200,000-bar client cap reuses this same
+     layer with "History limit reached" instead. */
+  set(on, text = 'Start of data') {
+    if (this.on !== on || this.text !== text) { this.on = on; this.text = text; this.redraw(); }
+  }
   draw(target) {
     if (!this.on || !this.chart) return;
     const x0 = this.chart.timeScale().logicalToCoordinate(0);   // bar 0: an integer logical (v5)
     if (x0 == null) return;
     const x = Math.round(x0 - Math.max(this.spacing(), 2) / 2) + 0.5;
+    const text = this.text;
     target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
       if (x < 0 || x > mediaSize.width) return;
       ctx.strokeStyle = this.P.text2;
@@ -259,9 +264,9 @@ class Start extends Layer {
       ctx.font = '11px -apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif';
       ctx.fillStyle = this.P.text2;
       ctx.textBaseline = 'middle';
-      const left = x - 8 - ctx.measureText('Start of data').width >= 4;
+      const left = x - 8 - ctx.measureText(text).width >= 4;
       ctx.textAlign = left ? 'right' : 'left';
-      ctx.fillText('Start of data', left ? x - 8 : x + 8, 30);
+      ctx.fillText(text, left ? x - 8 : x + 8, 30);
     });
   }
 }

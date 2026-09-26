@@ -13,6 +13,7 @@ Everything else runs on the event loop only.
 from __future__ import annotations
 
 import datetime as dt
+import time
 from dataclasses import dataclass, field
 
 from ..contracts import point_value, tick_size
@@ -23,6 +24,13 @@ from .studies import Profile, make
 from .tick import BUY, SideClassifier, Tick, from_row
 
 HISTORY_MAX = 20_000    # a history message carries at most this many bars: the most recent
+BUILD_BUDGET_S = 2.0    # a subscribe or scroll-back chunk spends at most this long BUILDING sessions that
+                        # are not already cached (a cold 1-minute cache, from raw ticks, is slow -- see
+                        # warm.py). Past the budget it stops asking for more and answers with what it has:
+                        # a subscribe (sessions_back can be 250, for a daily chart) or a scroll-back chunk
+                        # must never block the connection until every session is built, only until it can
+                        # answer. Checked between sessions, never mid-build, so one still-building session
+                        # is always finished and included.
 
 
 def sessions_back(spec: BarSpec) -> int:
@@ -181,14 +189,22 @@ class Hub:
 
     # ------------------------------------------------------------ streams
     def prepare(self, root: str, spec: BarSpec, study_keys: list[str]) -> Prepared:
-        """Worker thread: past sessions + today's bars from a snapshot of the tape."""
+        """Worker thread: past sessions + today's bars from a snapshot of the tape. sessions_back(spec) can
+        be 250 (a daily chart); building a session that is not already cached reads and parses its raw
+        ticks, which is slow. BUILD_BUDGET_S bounds how long this spends on sessions still to be built, so
+        a cold subscribe answers with what it managed rather than blocking the connection until every
+        session is built -- the rest is exactly what scroll-back (`older`) is for."""
         ts = tick_size(root)
         today_date = self.today_date.get(root)
         today = today_date or session_date(self.now_ms(), root)
         s = Stream(root, spec, ts, BarBuilder(spec, ts, root))
-        for d in [d for d in self.store.sessions(root) if d < today][-sessions_back(spec):]:
+        dates = [d for d in self.store.sessions(root) if d < today][-sessions_back(spec):]
+        t0 = time.monotonic()
+        for i, d in enumerate(dates):
             s.bars.extend(self.history.bars(root, spec, d))
             s.sessions.append(self.history.info(root, d))
+            if i + 1 < len(dates) and time.monotonic() - t0 > BUILD_BUDGET_S:
+                break        # the rest stay unloaded: at least one session is always built and included
         tape = self.today.get(root)              # None: root has no tape yet (not [] — see attach)
         upto = len(tape) if tape else 0
         if tape is not None:
@@ -233,11 +249,13 @@ class Hub:
     def older(self, s: Stream, before_ms: int) -> dict:
         """Worker thread: scroll-back. The next chunk of COMPLETED sessions strictly before before_ms (the
         page's first bar), newest first, until sessions_back(spec) sessions or HISTORY_MAX bars (a session
-        that does not fit gives its newest bars; the next request continues before them). Built as a history
-        message's bars are, but never memoized. Its studies run over it from a fresh start, as a history
-        message's do, then on across the join through the page's first bars for as long as a study remembers
-        what came before ("repair": the page overwrites those values). done: nothing older is left. Never
-        today's session."""
+        that does not fit gives its newest bars; the next request continues before them), or BUILD_BUDGET_S
+        of building sessions that are not already cached -- past it, this stops and answers with the chunk
+        so far (done can still be False: the page just asks again for the rest, instead of this call
+        blocking the connection on a cold chunk). Built as a history message's bars are, but never
+        memoized. Its studies run over it from a fresh start, as a history message's do, then on across the
+        join through the page's first bars for as long as a study remembers what came before ("repair": the
+        page overwrites those values). done: nothing older is left. Never today's session."""
         root, spec = s.root, s.spec
         keys = list(s.studies)
         today = self.today_date.get(root) or session_date(self.now_ms(), root)
@@ -247,7 +265,10 @@ class Hub:
         chunk: list[Bar] = []
         infos: list[dict] = []
         taken, trimmed, i = 0, False, len(back)
+        t0 = time.monotonic()
         while i > 0 and taken < sessions_back(spec) and len(chunk) < HISTORY_MAX:
+            if taken and time.monotonic() - t0 > BUILD_BUDGET_S:
+                break        # at least one session is always built; the rest is the next `older` request's
             i -= 1
             bs = [b for b in self.history.bars(root, spec, back[i], memo=False) if b.t < before_ms]
             if not bs:

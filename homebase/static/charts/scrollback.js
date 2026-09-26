@@ -6,6 +6,7 @@
 'use strict';
 const EDGE = 50;          // bars: the view's left edge this close to the first loaded bar asks for more
 const RETRY_MS = 10000;   // after a failed answer, no new request for this long
+const CAP = 200000;       // bars per chart, total: past it, scroll-back stops asking for more (no eviction)
 
 class ScrollBack {
   constructor({ edge = EDGE, retryMs = RETRY_MS, now = () => Date.now() } = {}) {
@@ -59,7 +60,23 @@ function mergeSessions(older, sessions) {
   return (older || []).filter((s) => !have.has(s.date)).concat(sessions || []);
 }
 
-const api = { ScrollBack, prepend, mergeSessions, EDGE, RETRY_MS };
+/* prepend(), never letting the chart grow past `cap` bars total. No eviction: the chart's own bars are never
+   dropped, only an older chunk that would overflow the cap is cropped to its newest end (still the bars
+   immediately before the chart's own — the crop just leaves out the ones further back). capped: true once
+   the cap has been reached (whether by this call or an earlier one already at the limit) — the caller stops
+   asking for more and shows "History limit reached" instead of "Start of data". */
+function capPrepend(bars, m, cap = CAP) {
+  const room = cap - bars.length;
+  if (room <= 0) return { bars, capped: true };
+  const raw = m.bars || [];
+  if (raw.length <= room) return { bars: prepend(bars, m), capped: false };
+  const studies = {};
+  for (const k in (m.studies || {})) studies[k] = m.studies[k].slice(raw.length - room);
+  const cropped = { ...m, bars: raw.slice(raw.length - room), studies };
+  return { bars: prepend(bars, cropped), capped: true };
+}
+
+const api = { ScrollBack, prepend, mergeSessions, capPrepend, EDGE, RETRY_MS, CAP };
 if (typeof window !== 'undefined') window.HBScrollBack = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

@@ -55,3 +55,30 @@ test('session labels: the older ones in front, one per date', () => {
   assert.deepEqual(got.map((s) => s.date), ['2026-09-18', '2026-09-21', '2026-09-22']);
   assert.equal(got[1].approx, undefined);                               // the chart's own label wins
 });
+
+// ---- Fix round 1: the 200,000-bar client memory cap ----
+test('the bar cap: an older chunk that would overflow it is cropped to fit, and capped becomes true', () => {
+  assert.equal(SB.CAP, 200000);
+  const mine = Array.from({ length: 199998 }, (_, i) => ({ ms: 1000 + i }));
+  const m = { bars: [{ ms: 100 }, { ms: 200 }, { ms: 300 }], studies: { ema: [1, 2, 3] } };
+  const a = SB.capPrepend(mine, m);
+  assert.equal(a.bars.length, 200000);                                  // never over the cap
+  assert.equal(a.capped, true);
+  assert.deepEqual(a.bars.slice(0, 2).map((b) => b.ms), [200, 300]);    // cropped to the chunk's newest end
+  assert.deepEqual(a.bars.slice(0, 2).map((b) => b.sv.ema), [2, 3]);    // studies cropped along with it
+  assert.equal(a.bars[2], mine[0]);                                     // the chart's own bars: never touched
+});
+
+test('the bar cap: room for the whole chunk leaves capped false', () => {
+  const mine = Array.from({ length: 100 }, (_, i) => ({ ms: i }));
+  const a = SB.capPrepend(mine, { bars: [{ ms: -1 }], studies: {} });
+  assert.equal(a.capped, false);
+  assert.equal(a.bars.length, 101);
+});
+
+test('the bar cap: already at the cap refuses outright, no eviction', () => {
+  const mine = Array.from({ length: 200000 }, (_, i) => ({ ms: i }));
+  const a = SB.capPrepend(mine, { bars: [{ ms: -1 }], studies: {} });
+  assert.equal(a.capped, true);
+  assert.equal(a.bars, mine);                                           // untouched: nothing added, nothing dropped
+});
