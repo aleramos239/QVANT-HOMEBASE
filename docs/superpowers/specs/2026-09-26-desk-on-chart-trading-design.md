@@ -207,3 +207,4 @@ row has its action (close, cancel).
 - Options.
 - Alerts.
 - Sending a Long/Short drawing as an order.
+- Known limit: Kill cannot recall a chart order already in flight at the broker; it lands and is then covered by Kill's flatten only if it arrives first.

@@ -536,6 +536,8 @@ def create_app(cfg: config_mod.AppCfg | None = None,
     app.state.desk = desk
     app.include_router(desk_api.trade_router(desk), prefix="/api/trade")
     app.include_router(desk_api.settings_router(desk))
+    # Task 5b: every write needs an allowed Host/Origin and a JSON body (main app only)
+    app.add_middleware(desk_api.WriteGuard, hosts=lambda: cfg.allowed_hosts)
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
     # ------------------------------------------------------------ webhook

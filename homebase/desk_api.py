@@ -9,15 +9,26 @@
   * every route needs X-Homebase-Key = the hex secret in
     homebase/.state/desk.key (created 0600 at startup); a browser cannot send
     that header cross-origin without a preflight this app never answers.
-POST /api/chart-trading is the desk page's own switch + limits: a local Host,
-JSON only, and an Origin (when present) on localhost / 127.0.0.1.
+POST /api/chart-trading is the desk page's own switch + limits: an allowed
+Host, JSON only, and an Origin (when present) on the same allowlist
+(netguard: loopback + cfg.allowed_hosts).
+
+WriteGuard (Task 5b) is the desk-wide version of that check, on the main
+app only (never the tunneled hook app): every request that is not
+GET/HEAD/OPTIONS needs an allowed Host (403), an allowed Origin when one is
+sent (403) and Content-Type: application/json (415) — a web page cannot arm,
+kill or place a self-test order with a CORS "simple request". It skips
+/api/trade/*, whose own gate above is stricter (loopback Host only, ANY
+Origin refused, the desk key).
 
 The SSE stream (/api/trade/stream) obeys ChartDesk's P2 pause (09:29:50-
 09:30:30 ET, or any bot `placing`): nothing but fills and the heartbeat is
 serialized then; what was held goes out when the pause ends. It ends — and
 the desk forgets the reader — when the client disconnects, when it falls
-SUB_QUEUE_MAX events behind, or when the server cancels the request (uvicorn
+SUB_QUEUE_MAX events behind, when the pause holds more than HELD_MAX events
+for it, or when the server cancels the request (uvicorn
 --timeout-graceful-shutdown): a client that never reads blocks nothing.
+GET /api/trade/state answers 503 in the pause (no snapshot is built then).
 """
 from __future__ import annotations
 
@@ -31,21 +42,25 @@ import secrets
 import time
 from pathlib import Path
 from typing import Optional
-from urllib.parse import urlsplit
 
 import anyio
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
+
+from . import netguard
 
 KEY_FILE = "desk.key"
 BODY_MAX = 16 * 1024
 SETTINGS_BODY_MAX = 1024
 HEARTBEAT_S = 15.0
 PAUSE_POLL_S = 0.25               # how often a stream holding events re-checks the pause
-LOCAL_HOSTS = ("localhost", "127.0.0.1")
+HELD_MAX = 200                    # events a stream may hold in the pause before it ends
+TRADE_HOSTS = frozenset({"localhost", "127.0.0.1"})   # /api/trade/*: the chart service only
+SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+PAUSED = "paused around the 9:30 fire"
+END_HELD = ": end: more than %d events held in the 9:30 pause; reconnect for a fresh state\n\n"
 VIEW_EVENTS = ("state", "account", "bot")   # a fresh snapshot supersedes all three
 _KEY = re.compile(r"[0-9a-f]{64}")
-_LOCAL_HOST = re.compile(r"(?:127\.0\.0\.1|localhost)(?::([0-9]{1,5}))?")
 
 
 def ensure_key(path: Path) -> tuple[Optional[str], Optional[str]]:
@@ -76,9 +91,9 @@ def ensure_key(path: Path) -> tuple[Optional[str], Optional[str]]:
 def host_is_local(host: Optional[str]) -> bool:
     """The Host header is exactly 127.0.0.1 or localhost, with an optional
     port (P4: DNS rebinding). Hostnames are case-insensitive; nothing else
-    — no other loopback spelling, no suffix, no whitespace — passes."""
-    m = _LOCAL_HOST.fullmatch(host.lower()) if host else None
-    return m is not None and (m.group(1) is None or int(m.group(1)) <= 65535)
+    — no other loopback spelling, no suffix, no whitespace, no configured
+    allowed_hosts — passes: the trade routes serve the local chart service."""
+    return netguard.host_allowed(host, TRADE_HOSTS)
 
 
 def local_host_only(request: Request) -> None:
@@ -145,6 +160,11 @@ async def event_stream(desk, *, heartbeat_s: float = HEARTBEAT_S,
                 need_state = True
             else:
                 held.append((event, data))
+                if len(held) > HELD_MAX:
+                    # an SSE comment: no parser makes an event of it; the
+                    # client reconnects and its first event is a fresh state
+                    yield END_HELD % HELD_MAX
+                    return
     finally:
         desk.unsubscribe(q)
 
@@ -205,6 +225,8 @@ def trade_router(desk) -> APIRouter:
     @r.get("/state")
     async def trade_state(request: Request):
         check(request)
+        if desk.views_paused():             # P2: no snapshot is built around the fire
+            return JSONResponse({"error": PAUSED}, 503)
         return desk.snapshot()
 
     @r.get("/stream")
@@ -232,23 +254,18 @@ def trade_router(desk) -> APIRouter:
     return r
 
 
-def same_origin_json(request: Request) -> None:
-    """The desk page's own POSTs: a local Host (P4 — the Origin check alone
-    compares Origin to Host, and a rebound page has both = its own name),
-    JSON only (a cross-site form cannot send it without a preflight), and an
-    Origin, when present, on localhost / 127.0.0.1."""
-    local_host_only(request)
-    ctype = request.headers.get("content-type", "").split(";")[0].strip().lower()
-    if ctype != "application/json":
+def same_origin_json(request: Request, allowed: frozenset) -> None:
+    """The desk page's own POSTs: an allowed Host (P4 — the Origin check
+    alone compares Origin to Host, and a rebound page has both = its own
+    name), JSON only (a cross-site form cannot send it without a preflight),
+    and an Origin, when present, on the same allowlist (netguard)."""
+    if not netguard.host_allowed(request.headers.get("host"), allowed):
+        raise HTTPException(403, "the desk does not answer to that Host")
+    if not netguard.is_json(request.headers.get("content-type")):
         raise HTTPException(415, "send JSON (Content-Type: application/json)")
     origin = request.headers.get("origin")
-    if origin is not None:
-        try:
-            o = urlsplit(origin).hostname
-        except ValueError:
-            o = None
-        if o not in LOCAL_HOSTS:
-            raise HTTPException(403, "changes from another site are refused")
+    if origin is not None and not netguard.origin_allowed(origin, allowed):
+        raise HTTPException(403, "changes from another site are refused")
 
 
 def settings_router(desk) -> APIRouter:
@@ -256,7 +273,7 @@ def settings_router(desk) -> APIRouter:
 
     @r.post("/api/chart-trading")
     async def chart_trading(request: Request):
-        same_origin_json(request)
+        same_origin_json(request, netguard.allowlist(desk.cfg.allowed_hosts))
         body = await read_json(request, SETTINGS_BODY_MAX)
         try:
             out = desk.set_settings(body)
@@ -265,3 +282,47 @@ def settings_router(desk) -> APIRouter:
         return {"ok": True, "chart_trading": out}
 
     return r
+
+
+class WriteGuard:
+    """Pure-ASGI write protection for the desk's MAIN app (Task 5b). Every
+    request that is not GET/HEAD/OPTIONS, except /api/trade/* (stricter
+    gate of its own), needs, in this order:
+      * a Host on the allowlist            -> else 403 {"error": "host not allowed"}
+      * an Origin on it, when one is sent  -> else 403 {"error": "origin not allowed"}
+      * Content-Type: application/json     -> else 415
+    A header sent twice is ambiguous and refused. `hosts()` returns the
+    configured allowed_hosts, read per request. Pure ASGI (not
+    BaseHTTPMiddleware): reads, the SSE stream and its disconnect watch pass
+    straight through, untouched."""
+
+    def __init__(self, app, hosts):
+        self.app, self.hosts = app, hosts
+
+    async def __call__(self, scope, receive, send) -> None:
+        if (scope["type"] != "http" or scope["method"] in SAFE_METHODS
+                or scope["path"].startswith("/api/trade/")):
+            await self.app(scope, receive, send)
+            return
+        refusal = self.refusal(scope["headers"], netguard.allowlist(self.hosts()))
+        if refusal is None:
+            await self.app(scope, receive, send)
+            return
+        status, error = refusal
+        await JSONResponse({"error": error}, status)(scope, receive, send)
+
+    @staticmethod
+    def refusal(headers, allowed: frozenset) -> Optional[tuple[int, str]]:
+        seen: dict[bytes, list[str]] = {b"host": [], b"origin": [], b"content-type": []}
+        for k, v in headers:
+            k = k.lower()
+            if k in seen:
+                seen[k].append(v.decode("latin-1"))
+        host, origin, ctype = seen[b"host"], seen[b"origin"], seen[b"content-type"]
+        if len(host) != 1 or not netguard.host_allowed(host[0], allowed):
+            return 403, "host not allowed"
+        if origin and (len(origin) != 1 or not netguard.origin_allowed(origin[0], allowed)):
+            return 403, "origin not allowed"
+        if len(ctype) != 1 or not netguard.is_json(ctype[0]):
+            return 415, "send JSON (Content-Type: application/json)"
+        return None

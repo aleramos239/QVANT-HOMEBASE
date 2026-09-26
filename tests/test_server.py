@@ -35,7 +35,8 @@ def client(tmp_path, monkeypatch):
         return ad
 
     app = create_app(cfg, adapters, background=False, adapter_factory=factory)
-    with TestClient(app) as c:
+    # the desk as its page reaches it (Task 5b: writes need an allowed Host)
+    with TestClient(app, base_url="http://127.0.0.1:8850") as c:
         c.app = app
         c.adapters = adapters
         c.adapter = adapters["main"]
@@ -334,7 +335,7 @@ def test_market_data_takes_host_and_token_from_one_login():
 
 def test_kill_disarms_and_clears_every_account(client):
     client.post("/api/arm", json={"armed": True})
-    r = client.post("/api/kill").json()
+    r = client.post("/api/kill", json={}).json()           # as the page sends it
     assert r["armed"] is False
     ad = client.adapter
     assert ad.cancel_all_calls == 1 and ad.flatten_calls == 1

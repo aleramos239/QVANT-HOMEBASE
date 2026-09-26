@@ -31,6 +31,8 @@ def desk_client(tmp_path, monkeypatch):
     monkeypatch.setattr("homebase.server.state_dir", lambda: tmp_path)
     monkeypatch.setattr("homebase.secrets_store.state_dir", lambda: tmp_path)
     monkeypatch.setattr(config_mod, "config_path", lambda: tmp_path / "config.json")
+    # the real clock would pause the views at 09:29:50-09:30:30 ET: never flake then
+    monkeypatch.setattr("homebase.trading.ChartDesk._views_paused", lambda self: False)
     cfg = AppCfg(armed=False, webhook_secret="s",
                  accounts={"a1": AccountCfg(keyring_key="k", account_name="A1", label="A1")},
                  book={},                                  # nothing booked: never bot-locked
@@ -121,6 +123,26 @@ def test_state_is_the_cached_snapshot(desk_client):
     assert d["enabled"] is True and d["accounts"][0]["id"] == "a1" and "bot" in d
 
 
+def test_the_fixture_never_pauses_whatever_the_clock(desk_client):
+    """The desk_client never flakes at 09:29:50-09:30:30 ET (Task 5 review)."""
+    import datetime as dt
+    from zoneinfo import ZoneInfo
+    at_930 = dt.datetime(2026, 9, 28, 9, 30, 0, tzinfo=ZoneInfo("America/New_York"))
+    desk_client.app.state.engine._now = lambda: at_930       # a Monday, inside the window
+    assert desk_client.app.state.desk.views_paused() is False
+    assert desk_client.post("/api/chart-trading", json={"max_order_qty": 4}).status_code == 200
+
+
+def test_state_answers_503_in_the_930_pause(desk_client, monkeypatch):
+    c = desk_client
+    monkeypatch.setattr(c.app.state.desk, "_views_paused", lambda: True)
+    r = c.get("/api/trade/state", headers=c.H)
+    assert (r.status_code, r.json()) == (503, {"error": "paused around the 9:30 fire"})
+    assert c.get("/api/trade/state").status_code == 401          # the gate still comes first
+    monkeypatch.setattr(c.app.state.desk, "_views_paused", lambda: False)
+    assert c.get("/api/trade/state", headers=c.H).status_code == 200
+
+
 def test_order_route_validates_then_answers_per_account(desk_client):
     c = desk_client
     good = {"client_id": "c", "accounts": ["a1"], "root": "NQ", "side": "Buy", "qty": 1,
@@ -171,7 +193,7 @@ def test_settings_route_refuses_a_rebinding_host_even_with_a_matching_origin(des
 
 def test_kill_switches_chart_trading_off(desk_client):
     c = desk_client
-    c.post("/api/kill")
+    c.post("/api/kill", json={})                             # as the page sends it
     assert c.get("/api/status").json()["chart_trading"]["enabled"] is False
     assert any(e["event"] == "chart_trading_set" and e.get("cause") == "kill"
                for e in journal(c.tmp))
@@ -216,6 +238,34 @@ def test_stream_ends_when_the_reader_was_dropped(tmp_path, monkeypatch):
             await gen.__anext__()
 
     run(go())
+
+
+def test_stream_ends_with_a_marker_when_the_pause_holds_too_much(tmp_path):
+    """More than HELD_MAX events held in the pause: the stream ends with an
+    SSE comment (no parser turns it into an event), the reader is dropped,
+    and the client reconnects for a fresh state."""
+    from homebase.desk_api import HELD_MAX
+    assert HELD_MAX == 200
+    desk, eng, ads, clock, *_ = mkdesk(tmp_path)
+
+    async def go():
+        gen = event_stream(desk, heartbeat_s=5, poll_s=0.01)
+        await gen.__anext__()                                # the state
+        clock.set_et(9, 30)
+        for i in range(HELD_MAX):
+            desk.publish("result", {"i": i})
+        nxt = asyncio.ensure_future(gen.__anext__())
+        await asyncio.sleep(0.1)
+        assert not nxt.done()                                # 200 held: still open
+        desk.publish("result", {"i": HELD_MAX})              # the 201st
+        end = await asyncio.wait_for(nxt, 1.0)
+        with pytest.raises(StopAsyncIteration):
+            await gen.__anext__()
+        return end, len(desk._subs)
+
+    end, subs = run(go())
+    assert end.startswith(":") and end.endswith("\n\n") and "\nevent:" not in end
+    assert "data:" not in end and subs == 0
 
 
 def _count_snapshots(desk) -> list:
