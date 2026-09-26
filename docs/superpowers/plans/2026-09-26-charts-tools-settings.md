@@ -4781,3 +4781,816 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Zero console errors, and no errors in the chart service's log.
 
 ---
+
+### Task 10: Chart context menu + moving indicators between panes
+
+Spec §7 ("Chart context menu + moving indicators between panes", added 2026-09-26). It runs after Tasks 1–9 and builds on their code: Task 6's `openMenu(…, {root})`, `chartSettings()` and `closeDialog`; Task 7's `buildSeries` `add` helper (`overlay`, `NO_SCALE`) and `legendRows`; Task 9's `onOlder`, which re-sets every series in `this.lines` (series placed on the price pane are in `this.lines` too, so scroll-back needs no change).
+
+**Files:**
+- Create: `homebase/static/charts/chartmenu.js` (`HBChartMenu`, pure: the menu's items, sections and dividers, the extension point, the indicator menu's items, arrow-key stepping)
+- Create: `tests/js/chartmenu.test.mjs`
+- Modify: `homebase/static/charts/catalog.js` (`pane` in the indicator model: `movable`, `placement`, `instance`, `migrate`)
+- Modify: `tests/js/catalog.test.mjs` (append the `pane` tests)
+- Modify: `homebase/static/charts/cell.js` (placement in `buildSeries`, `paneUid`, `onMenu`, `paneAt`, `resetView`, `setPlacement`, `removeIndicator`, the legend's `⋯`)
+- Modify: `homebase/static/charts/drawings.js` (`Controller.onDbl`: empty space opens the chart menu)
+- Modify: `homebase/static/charts/app.js` (menus at the pointer, `chartMenu`, `indicatorMenu`, `MENU_ACTS`, the host callbacks, arrow keys and ⌥R)
+- Modify: `homebase/static/charts.html`, `homebase/static/charts/charts.css`, `homebase/static/charts/icons.js`
+
+**Interfaces:**
+- Consumes:
+  - Task 6: `openMenu(anchor, cls, {right, root})`, `placeMenu()` (flips above), `closeMenu()`, `closeDialog()` (closes a menu first), `chartSettings()` (opens Settings for `cur()`), `readLayout(v)` (runs `C.migrateLayout`, so a saved `pane` survives once `migrate` keeps it), `putLayout` (saves each indicator object whole).
+  - Task 7: `buildSeries`'s `add(inst, src, part, type, opts, where)` with `overlay = where === 0 && !opts.priceScaleId` and `NO_SCALE`; `legendRows()` with `S.legendFlags` / `S.legendLabel`; `Cell.R`.
+  - Task 9: `Cell.onOlder` (re-sets `this.lines`), `Cell.askOlder` (the range subscription). Neither changes.
+  - Task 4: `Controller.onDbl` (a double-click on a long/short box opens its settings; it keeps doing that).
+  - Existing: `Cell.update(patch)`, `restyle()`, `build(view)` (stretch factors for however many sub-panes exist), `setVisible`, `onLegendClick`, `iconButton`, `host.onPick`; `drawings.list(root)`, `drawings.clear(root)`; `menuItem(text, sub, onPick, active)`, `select(i)`, `cur()`, `sbNote(text)`, `onKey`, `hostFor(id)`; `HBDrawings.roundToTick(p, tick)`; `HBCatalog.decimals`, `fmtPrice`, `def`, `instance`, `migrate`.
+- Produces:
+  - `HBCatalog.movable(id) -> bool`, `HBCatalog.placement(inst) -> 'main'|'own'|null`, `HBCatalog.PANES = ['main', 'own']`. Catalog defs of pane-type indicators carry `pane` (their default): `volume: 'main'`, `adx`, `delta`, `cumdelta: 'own'`. `instance(id)` and `migrate(cfg)` give a movable indicator `pane` and give no other indicator the key.
+  - `window.HBChartMenu` (and `module.exports`):
+    - `SECTIONS = ['view', 'copy', 'trading', 'remove', 'settings']` (top to bottom).
+    - `register(section, itemsFn) -> unregister()`: `itemsFn(ctx) -> item[]`, where an extension's item is `{text, sub?, run(ctx)}`. Throws `Error('unknown chart menu section: …')` for an unknown section and `TypeError` for a non-function. **This is the extension point the chart-trading build uses:** `HBChartMenu.register('trading', (ctx) => [{text: 'Buy 1 NQ @ 30,878.00 limit', run(ctx) {…}}, …])`, loaded after `chartmenu.js` and before or after `app.js`; the menu reads the registry every time it opens.
+    - `items(ctx) -> (item | {sep: true})[]`: every section's items in order, each stamped with `section`, and one divider between two non-empty sections (never leading, trailing or doubled). A throwing `itemsFn` is skipped, and so is an item without a non-empty `text` or without `run`/`act`.
+    - `createRegistry() -> {register, items}` and `builtins(reg) -> reg` (tests build their own registry this way).
+    - Built-in items `{act, text, sub?, copy?}`: `reset` (`Reset chart view`, sub `⌥R`), `copy` (`Copy price 30,878.00`, `copy: '30878.00'`), `removeDrawings` (`Remove N drawing(s)`), `removeIndicators` (`Remove N indicator(s)`), `settings` (`Settings…`).
+    - `ctx` (built by the page) = `{cell, root, price, tick, nDrawings, nIndicators}`; `price` is tick-rounded, or `null` when the pointer is off the price scale.
+    - `paneItems(inst) -> [{act: 'move', pane, text}?, {act: 'remove', text: 'Remove'}]`.
+    - `copyText(price, tick)`, `copyLabel(price, tick)`, `armText(n, root)`, `step(i, n, key) -> index`.
+  - `Cell.paneUid` (pane index → the uid of the indicator in its own pane; `[null]` for the price pane), `Cell.onMenu(e, dbl = false)`, `Cell.paneAt(clientY) -> index | -1`, `Cell.resetView()`, `Cell.setPlacement(uid, pane)`, `Cell.removeIndicator(uid)`.
+  - Host callbacks: `onChartMenu(cell, {x, y, price})`, `onIndicatorMenu(cell, uid, {anchor} | {at: {x, y}})`.
+  - Page: `openMenu(anchor | null, cls, {right, root, at: {x, y}})`, where `at` opens the menu at the pointer (then `anchor` is `null`); `menuAt`; `chartMenu(cell, at)`; `indicatorMenu(cell, uid, opts)`; `MENU_ACTS`.
+
+**Task-level rulings (spec §7's open points):**
+- **T10-R1 · Reset chart view** is TradingView's reset: `timeScale().resetTimeScale()` (default bar spacing, the latest bar at the right margin) plus `autoScale: true` on every pane's right price scale. The spec says "fit content", but with Task 9's deep history the loaded range can be tens of thousands of bars, and `fitContent()` would squeeze them all into the panel and trigger a scroll-back request.
+- **T10-R2 · Which indicators move:** the catalog's pane-type indicators, which are ADX, Delta and Cumulative delta (default `own`), plus Volume (default `main`, which is where it sits today; it can be moved to its own pane, as on TradingView). VWAP, EMA/SMA/VWMA, Session levels, Footprint, Volume profile and Big prints are drawn on the candles and never move.
+- **T10-R3 · On `main`:** the series goes on an overlay price scale of its own (`priceScaleId: 'ind:<uid>'`, which has no visible axis) with `scaleMargins {top: 0.75, bottom: 0}` and `lastValueVisible: false`, as Volume is drawn today. It therefore never takes part in the price scale's autoscale, whatever "Scale price chart only" says. Volume on `main` keeps today's `'vol'` scale at `top: 0.8`. Several indicators on `main` share the bottom quarter and overlap, as overlays do on TradingView.
+- **T10-R4 · The `⋯` button** appears only on rows of movable indicators, last in the row: eye · gear · × · ⋯ (TradingView's legend order). Right-clicking inside an indicator's own pane opens the same menu.
+- **T10-R5 · Where each gesture opens a menu:**
+  - Right-click anywhere in the price pane opens the chart menu, even over a drawing (drawing menus are out of scope). Right-click in an indicator's own pane opens that indicator's menu. Right-click on the price or time axis opens no menu.
+  - The browser's own menu never shows over a chart.
+  - A double-click opens the chart menu only on empty price-pane space with the cursor tool. On any drawing it keeps the drawing's own behaviour: position settings for long/short boxes, and nothing for the others. It never opens a menu in an indicator pane, or while a drawing tool is picked (those clicks place points).
+- **T10-R6 · Copy price:** the menu row reads `Copy price 30,878.00`, while the clipboard gets `30878.00` (no thousands separator, the instrument's decimals), so the value pastes into an order ticket or a number field.
+- **T10-R7 · Counts** are singular for one: `Remove 1 drawing`, `Remove 1 indicator`. `N indicators` counts every indicator on the chart (Volume, VWAP, levels, footprint…), which is what the item removes. `N drawings` counts the drawings of the chart's symbol, which is what the rail's Remove all removes. The armed text is the rail's own: `Click again to remove 3 drawings on NQ` (3 s; the menu stays open while armed).
+- **T10-R8 · A move re-creates the series; it does not call `moveToPane`.** The vendored Lightweight Charts 5.2.1 has `ISeriesApi.moveToPane(index)`: it creates the pane at `index` if needed and drops the pane the series left once it is empty. It also has `IPaneApi.moveTo(index)`, `chart.removePane(index)` and `chart.priceScale(id, paneIndex)`. A move, however, renumbers the panes below and leaves their stretch factors, `paneUid`, the overlay scale margins and Task 7's autoscale flags stale. All of those are computed in one place, `build()`. So a placement change goes through `Cell.update({indicators})`, which calls `restyle()` → `build(viewNow())` (the view is kept), as the legend's × already does.
+- **T10-R9 · `catalog.js` is edited here.** The Execution notes keep it off-limits because another agent was editing it; that work has landed (`e3efed2`, the status-bar staleness fix). The indicator model lives in `catalog.js`, and Task 6's page-side re-attach trick (`readLayout`) would have to be repeated in `instance`, `migrate` and every `C.migrate` path. Step 1 checks that no one else is editing it.
+- **T10-R10 · Arrow keys** walk the items of any open menu (↓/↑ wrap, Home/End jump), except while a text field in the menu has focus. Enter and Space press the focused item, because items are native buttons. A menu opened at the pointer takes focus itself (`tabindex=-1`), so the first ↓ lands on its first item. ⌥R (`e.code === 'KeyR'` with Alt: on macOS `e.key` is `®`) resets the selected chart's view.
+
+- [ ] **Step 1: Check that `catalog.js` is free**
+
+Run: `git status --short homebase/static/charts/catalog.js tests/js/catalog.test.mjs`
+Expected: no output. If either file shows as modified, another agent is editing it again: STOP and report. Do not edit or stash it.
+
+- [ ] **Step 2: Write the failing catalog tests.** Append to `tests/js/catalog.test.mjs`:
+
+```js
+// ---- pane placement (spec §7) ----
+test('pane-type indicators carry a placement with today as the default; price-pane-only ones carry none', () => {
+  assert.deepEqual(C.PANES, ['main', 'own']);
+  assert.equal(C.instance('volume').pane, 'main');
+  for (const id of ['delta', 'cumdelta', 'adx']) {
+    assert.equal(C.instance(id).pane, 'own', id);
+    assert.equal(C.movable(id), true, id);
+  }
+  assert.equal(C.movable('volume'), true);
+  for (const id of ['vwap', 'ema', 'sma', 'vwma', 'levels', 'footprint', 'profile', 'bigprints']) {
+    assert.equal('pane' in C.instance(id), false, id);
+    assert.equal(C.movable(id), false, id);
+  }
+  assert.equal(C.movable('nope'), false);
+});
+
+test('placement: a valid saved pane, else the default; null for what cannot move', () => {
+  assert.equal(C.placement({ id: 'delta' }), 'own');
+  assert.equal(C.placement({ id: 'delta', pane: 'main' }), 'main');
+  assert.equal(C.placement({ id: 'volume', pane: 'own' }), 'own');
+  assert.equal(C.placement({ id: 'cumdelta', pane: 'sideways' }), 'own');
+  assert.equal(C.placement({ id: 'ema', pane: 'own' }), null);
+  assert.equal(C.placement({ id: 'nope', pane: 'main' }), null);
+  assert.equal(C.placement(null), null);
+});
+
+test('migrate keeps a saved placement and gives a missing or bad one today\'s', () => {
+  const m = C.migrate({ root: 'NQ', spec: 'time:60', indicators: [
+    { uid: 'a', id: 'delta', params: {}, visible: true, pane: 'main' },
+    { uid: 'b', id: 'cumdelta', params: {} },
+    { uid: 'c', id: 'volume', params: {}, pane: 'sideways' },
+    { uid: 'd', id: 'adx', params: { length: 14 }, pane: 'own' },
+    { uid: 'e', id: 'ema', params: { length: 9 }, pane: 'own' }] });
+  assert.deepEqual(m.indicators.map((x) => [x.uid, x.pane]),
+    [['a', 'main'], ['b', 'own'], ['c', 'main'], ['d', 'own'], ['e', undefined]]);
+  assert.equal('pane' in m.indicators[4], false);
+});
+
+test('Build-1 charts migrate with today\'s placement', () => {
+  const m = C.migrate({ root: 'NQ', spec: 'time:60', st: { volume: true, delta: true, cumdelta: true, adx: 14 } });
+  const by = Object.fromEntries(m.indicators.map((x) => [x.id, x.pane]));
+  assert.equal(by.volume, 'main');
+  assert.equal(by.delta, 'own');
+  assert.equal(by.cumdelta, 'own');
+  assert.equal(by.adx, 'own');
+  assert.equal(by.vwap, undefined);
+});
+
+test('a saved layout round-trips each placement', () => {
+  const lay = { grid: 1, cells: [{ root: 'NQ', spec: 'time:60', indicators: [
+    { uid: 'a', id: 'delta', params: {}, visible: true, pane: 'main' },
+    { uid: 'b', id: 'volume', params: {}, visible: true, pane: 'own' }] }] };
+  const back = C.migrateLayout(JSON.parse(JSON.stringify(C.migrateLayout(lay))));
+  assert.deepEqual(back.cells[0].indicators.map((x) => x.pane), ['main', 'own']);
+});
+```
+
+- [ ] **Step 3: Write the failing menu tests** — `tests/js/chartmenu.test.mjs`:
+
+```js
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+const M = require('../../homebase/static/charts/chartmenu.js');
+
+const texts = (list) => list.map((x) => (x.sep ? '—' : x.text));
+const CTX = { price: 30878, tick: 0.25, nDrawings: 0, nIndicators: 0 };
+const fresh = () => M.builtins(M.createRegistry());
+const noop = () => {};
+
+test('no drawings and no indicators: Reset, Copy price, Settings, each in its own section', () => {
+  assert.deepEqual(M.SECTIONS, ['view', 'copy', 'trading', 'remove', 'settings']);
+  assert.deepEqual(texts(fresh().items(CTX)), ['Reset chart view', '—', 'Copy price 30,878.00', '—', 'Settings…']);
+});
+
+test('Remove N drawings / Remove N indicators only when N > 0, drawings first, singular for one', () => {
+  const reg = fresh();
+  assert.deepEqual(texts(reg.items({ ...CTX, nDrawings: 3, nIndicators: 1 })),
+    ['Reset chart view', '—', 'Copy price 30,878.00', '—', 'Remove 3 drawings', 'Remove 1 indicator', '—', 'Settings…']);
+  assert.deepEqual(texts(reg.items({ ...CTX, nDrawings: 1 })).slice(4, 5), ['Remove 1 drawing']);
+  assert.deepEqual(texts(reg.items({ ...CTX, nIndicators: 4 })).slice(4, 5), ['Remove 4 indicators']);
+});
+
+test('each built-in names its action; Reset shows ⌥R; Copy carries the plain price', () => {
+  const list = fresh().items({ ...CTX, nDrawings: 2, nIndicators: 2 }).filter((x) => !x.sep);
+  assert.deepEqual(list.map((x) => x.act), ['reset', 'copy', 'removeDrawings', 'removeIndicators', 'settings']);
+  assert.deepEqual(list.map((x) => x.section), ['view', 'copy', 'remove', 'remove', 'settings']);
+  assert.equal(list[0].sub, '⌥R');
+  assert.equal(list[1].copy, '30878.00');
+});
+
+test('Copy price is tick-rounded; no price (the pointer off the scale) = no Copy item and no stray divider', () => {
+  const reg = fresh();
+  const at = reg.items({ ...CTX, price: 30878.13 }).find((x) => x.act === 'copy');
+  assert.equal(at.text, 'Copy price 30,878.25');
+  assert.equal(at.copy, '30878.25');
+  assert.deepEqual(texts(reg.items({ ...CTX, price: null })), ['Reset chart view', '—', 'Settings…']);
+  assert.deepEqual(texts(reg.items({ ...CTX, price: NaN })), ['Reset chart view', '—', 'Settings…']);
+  assert.equal(M.copyText(2650.34, 0.1), '2650.3');
+  assert.equal(M.copyLabel(2650.34, 0.1), 'Copy price 2,650.3');
+});
+
+test('the extension point: a trading section between Copy and Remove, dividers around it, ctx passed in', () => {
+  const reg = fresh();
+  let seen = null;
+  const off = reg.register('trading', (ctx) => {
+    seen = ctx;
+    return [{ text: `Buy 1 NQ @ ${ctx.price} limit`, run: noop }, { text: 'Sell 1 NQ @ stop', run: noop }];
+  });
+  const ctx = { ...CTX, nDrawings: 2 };
+  const list = reg.items(ctx);
+  assert.deepEqual(texts(list), ['Reset chart view', '—', 'Copy price 30,878.00', '—', 'Buy 1 NQ @ 30878 limit',
+    'Sell 1 NQ @ stop', '—', 'Remove 2 drawings', '—', 'Settings…']);
+  assert.equal(seen, ctx);
+  assert.equal(list[4].section, 'trading');
+  assert.equal(typeof list[4].run, 'function');
+  off();
+  assert.deepEqual(texts(reg.items(ctx)),
+    ['Reset chart view', '—', 'Copy price 30,878.00', '—', 'Remove 2 drawings', '—', 'Settings…']);
+  off();   // a second call is harmless
+});
+
+test('registrations keep their order in a section; an extension comes after the built-ins of its section', () => {
+  const reg = fresh();
+  reg.register('trading', () => [{ text: 'A', run: noop }]);
+  reg.register('trading', () => [{ text: 'B', run: noop }]);
+  reg.register('remove', () => [{ text: 'Remove alerts', run: noop }]);
+  assert.deepEqual(texts(reg.items({ ...CTX, nDrawings: 1 })), ['Reset chart view', '—', 'Copy price 30,878.00', '—',
+    'A', 'B', '—', 'Remove 1 drawing', 'Remove alerts', '—', 'Settings…']);
+});
+
+test('unknown sections and non-functions are refused; a throwing or junk extension is skipped', () => {
+  const reg = fresh();
+  assert.throws(() => reg.register('orders', () => []), /unknown chart menu section: orders/);
+  assert.throws(() => reg.register('trading', 5), TypeError);
+  reg.register('trading', () => { throw new Error('broken'); });
+  reg.register('trading', () => [null, 'junk', { text: '', run: noop }, { text: 'no action' }]);
+  reg.register('trading', () => 'not a list');
+  assert.deepEqual(texts(reg.items(CTX)), texts(fresh().items(CTX)));
+});
+
+test('the page-wide HBChartMenu has the built-ins and the same extension point', () => {
+  assert.deepEqual(texts(M.items(CTX)), texts(fresh().items(CTX)));
+  const off = M.register('trading', () => [{ text: 'Buy', run: noop }]);
+  assert.ok(texts(M.items(CTX)).includes('Buy'));
+  off();
+  assert.ok(!texts(M.items(CTX)).includes('Buy'));
+});
+
+test('the indicator menu: move to the other placement, then Remove; Remove only for what cannot move', () => {
+  assert.deepEqual(M.paneItems({ id: 'delta', pane: 'own' }),
+    [{ act: 'move', pane: 'main', text: 'Move to main chart' }, { act: 'remove', text: 'Remove' }]);
+  assert.deepEqual(M.paneItems({ id: 'cumdelta', pane: 'main' }),
+    [{ act: 'move', pane: 'own', text: 'Move to new pane below' }, { act: 'remove', text: 'Remove' }]);
+  assert.deepEqual(M.paneItems({ id: 'volume' }).map((x) => x.text), ['Move to new pane below', 'Remove']);
+  assert.deepEqual(M.paneItems({ id: 'ema', params: { length: 9 } }), [{ act: 'remove', text: 'Remove' }]);
+});
+
+test('the armed Remove-drawings text is the rail\'s', () => {
+  assert.equal(M.armText(3, 'NQ'), 'Click again to remove 3 drawings on NQ');
+  assert.equal(M.armText(1, 'ES'), 'Click again to remove 1 drawing on ES');
+});
+
+test('arrow keys walk the items and wrap; Home/End jump; nothing to walk = -1', () => {
+  assert.equal(M.step(-1, 3, 'ArrowDown'), 0);
+  assert.equal(M.step(0, 3, 'ArrowDown'), 1);
+  assert.equal(M.step(2, 3, 'ArrowDown'), 0);
+  assert.equal(M.step(-1, 3, 'ArrowUp'), 2);
+  assert.equal(M.step(0, 3, 'ArrowUp'), 2);
+  assert.equal(M.step(1, 3, 'Home'), 0);
+  assert.equal(M.step(1, 3, 'End'), 2);
+  assert.equal(M.step(1, 3, 'Tab'), 1);
+  assert.equal(M.step(-1, 0, 'ArrowDown'), -1);
+});
+```
+
+- [ ] **Step 4: Run them to verify they fail**
+
+Run: `node --test tests/js/catalog.test.mjs tests/js/chartmenu.test.mjs`
+Expected: FAIL. `chartmenu.test.mjs` fails with "Cannot find module …/chartmenu.js", and the new catalog tests fail on `C.PANES` / `C.movable` / `C.placement` (the old catalog tests still pass).
+
+- [ ] **Step 5: `catalog.js`, the `pane` placement.** In `CATALOG`, give the four pane-type defs their default placement (the rest stay as they are):
+
+```js
+  { id: 'volume', group: 'Volume', name: 'Volume', params: [], pane: 'main' },
+```
+```js
+  { id: 'adx', group: 'Trend', name: 'ADX / DMI', params: [LENGTH(14)], pane: 'own' },
+```
+```js
+  { id: 'delta', group: 'Order flow', name: 'Delta', params: [], pane: 'own' },
+  { id: 'cumdelta', group: 'Order flow', name: 'Cumulative delta', params: [], pane: 'own' },
+```
+
+After `function def(id) { … }`, add:
+
+```js
+/* Where an indicator that can live in its own pane is drawn (spec §7): 'own' = a pane of its own below the price
+   pane, 'main' = on the price pane (an overlay at the bottom, out of the price autoscale). A catalog def's `pane`
+   is its default, i.e. where it was drawn before placements existed; the price-pane-only ones (VWAP, MAs,
+   levels, footprint, profile, big prints) have none and never move. */
+const PANES = ['main', 'own'];
+function movable(id) { const d = def(id); return !!(d && d.pane); }
+function placement(inst) {
+  const d = inst && def(inst.id);
+  if (!d || !d.pane) return null;
+  return PANES.includes(inst.pane) ? inst.pane : d.pane;
+}
+```
+
+Replace `instance`:
+
+```js
+function instance(id, params) {
+  const d = def(id);
+  if (!d) return null;
+  const inst = { uid: uid(), id, params: clampParams(id, params), visible: true };
+  if (d.pane) inst.pane = d.pane;
+  return inst;
+}
+```
+
+In `migrate`, replace the new-form `map`:
+
+```js
+    const indicators = c.indicators.filter((x) => x && def(x.id)).map((x) => {
+      const o = { uid: typeof x.uid === 'string' && x.uid ? x.uid : uid(), id: x.id,
+        params: clampParams(x.id, x.params), visible: x.visible !== false };
+      if (movable(x.id)) o.pane = placement(x);
+      return o;
+    });
+```
+
+(The Build-1 `st` form goes through `instance()`, so it gets the defaults.) Add `PANES, movable, placement` to `api`.
+
+- [ ] **Step 6: `chartmenu.js`** (new, pure):
+
+```js
+/* Homebase Charts — the chart's context menu (TradingView's right-click menu), pure: which items a chart's menu
+   shows, in which order, with dividers; the extension point other builds add items through; the items of an
+   indicator's own menu; arrow-key stepping. The page (app.js) renders the items and runs them. No browser
+   globals at load time: the Node tests load this file directly.
+
+   An item is {text, sub?, act, …} (a built-in: the page runs MENU_ACTS[act]) or {text, sub?, run(ctx)} (an
+   extension's: the page calls run). ctx is the page's {cell, root, price, tick, nDrawings, nIndicators}; price
+   is tick-rounded, or null when the pointer is off the price scale. This file reads only price, tick, nDrawings
+   and nIndicators.
+
+   The chart-trading build adds its Buy/Sell items without editing this file:
+     HBChartMenu.register('trading', (ctx) => [{ text: 'Buy 1 NQ @ 30,878.00 limit', run(ctx) { … } }]); */
+(function () {
+'use strict';
+const Cat = (typeof window !== 'undefined' && window.HBCatalog) || (typeof require === 'function' ? require('./catalog.js') : null);
+
+/* The menu's sections, top to bottom, with a divider between two that have items. 'trading' stays empty until
+   the chart-trading build registers its items. */
+const SECTIONS = ['view', 'copy', 'trading', 'remove', 'settings'];
+const SEP = Object.freeze({ sep: true });
+
+function roundTick(p, tick) { return tick > 0 ? +(Math.round(p / tick) * tick).toFixed(Cat.decimals(tick)) : p; }
+/* What Copy price puts on the clipboard: the plain number, e.g. 30878.00 (it pastes into any number field). */
+function copyText(price, tick) { return roundTick(price, tick).toFixed(Cat.decimals(tick)); }
+/* The menu row: Copy price 30,878.00. */
+function copyLabel(price, tick) { return `Copy price ${Cat.fmtPrice(roundTick(price, tick), tick)}`; }
+function count(n, word) { return `${n} ${word}${n === 1 ? '' : 's'}`; }
+/* The armed Remove-drawings row: the rail's Remove-all text. */
+function armText(n, root) { return `Click again to remove ${count(n, 'drawing')} on ${root}`; }
+
+/* A registry of item providers per section. register() returns its own unregister. */
+function createRegistry() {
+  const fns = Object.fromEntries(SECTIONS.map((s) => [s, []]));
+  function register(section, itemsFn) {
+    if (!SECTIONS.includes(section)) throw new Error(`unknown chart menu section: ${section}`);
+    if (typeof itemsFn !== 'function') throw new TypeError('HBChartMenu.register: itemsFn must be a function');
+    const entry = { fn: itemsFn };   // its own object: one function registered twice is two entries
+    fns[section].push(entry);
+    return () => { const i = fns[section].indexOf(entry); if (i >= 0) fns[section].splice(i, 1); };
+  }
+  function items(ctx) {
+    const out = [];
+    for (const s of SECTIONS) {
+      const got = [];
+      for (const { fn } of fns[s]) {
+        let list;
+        try { list = fn(ctx); } catch (_) { continue; }   // a broken extension never takes the menu down
+        for (const it of Array.isArray(list) ? list : []) {
+          const ok = it && typeof it === 'object' && typeof it.text === 'string' && it.text
+            && (typeof it.run === 'function' || typeof it.act === 'string');
+          if (ok) got.push({ ...it, section: s });
+        }
+      }
+      if (got.length) { if (out.length) out.push(SEP); out.push(...got); }
+    }
+    return out;
+  }
+  return { register, items };
+}
+
+/* The built-in items (spec §7), registered like any extension. */
+function builtins(reg) {
+  reg.register('view', () => [{ act: 'reset', text: 'Reset chart view', sub: '⌥R' }]);
+  reg.register('copy', (ctx) => (ctx.price == null || !Number.isFinite(ctx.price) ? []
+    : [{ act: 'copy', text: copyLabel(ctx.price, ctx.tick), copy: copyText(ctx.price, ctx.tick) }]));
+  reg.register('remove', (ctx) => [
+    ...(ctx.nDrawings > 0 ? [{ act: 'removeDrawings', text: `Remove ${count(ctx.nDrawings, 'drawing')}` }] : []),
+    ...(ctx.nIndicators > 0 ? [{ act: 'removeIndicators', text: `Remove ${count(ctx.nIndicators, 'indicator')}` }] : [])]);
+  reg.register('settings', () => [{ act: 'settings', text: 'Settings…' }]);
+  return reg;
+}
+
+/* An indicator's own menu (its legend ⋯, or a right-click in its pane): move it to the other placement, then
+   Remove. An indicator that cannot move gets Remove only. */
+function paneItems(inst) {
+  const where = Cat.placement(inst), out = [];
+  if (where === 'own') out.push({ act: 'move', pane: 'main', text: 'Move to main chart' });
+  if (where === 'main') out.push({ act: 'move', pane: 'own', text: 'Move to new pane below' });
+  out.push({ act: 'remove', text: 'Remove' });
+  return out;
+}
+
+/* The item the arrow keys go to from item i of n (-1: none focused yet); ↓/↑ wrap, Home/End jump. */
+function step(i, n, key) {
+  if (n <= 0) return -1;
+  if (key === 'Home') return 0;
+  if (key === 'End') return n - 1;
+  if (key === 'ArrowDown') return i < 0 ? 0 : (i + 1) % n;
+  if (key === 'ArrowUp') return i < 0 ? n - 1 : (i - 1 + n) % n;
+  return i;
+}
+
+const main = builtins(createRegistry());   // the page's menu
+const api = { SECTIONS, createRegistry, builtins, register: main.register, items: main.items, paneItems, copyText,
+  copyLabel, armText, step };
+if (typeof window !== 'undefined') window.HBChartMenu = api;
+if (typeof module !== 'undefined' && module.exports) module.exports = api;
+})();
+```
+
+- [ ] **Step 7: Run the Node tests to verify they pass**
+
+Run: `node --test tests/js/catalog.test.mjs tests/js/chartmenu.test.mjs`, then `node --test tests/js/*.test.mjs`
+Expected: PASS, with every earlier test still green.
+
+- [ ] **Step 8: `cell.js`, placement, the menus, reset.**
+
+In the header comment, extend the host list with `onChartMenu(cell, {x, y, price}), onIndicatorMenu(cell, uid, {anchor} | {at})` (the chart menu and an indicator's menu, app.js), and add the sentence: "Indicators that can live in their own pane (HBCatalog.placement) are drawn there or on the price pane on an overlay scale of their own."
+
+Next to `PANE_H`, add:
+
+```js
+const VOL_TOP = 0.8;    // Volume on the price pane: its bars in the bottom 20%
+const MAIN_TOP = 0.75;  // another pane-type indicator on the price pane: the bottom quarter, on its own scale
+```
+
+Constructor fields (before `slot.className = 'panel'`): `this.paneUid = [null];   // pane index -> the uid of the indicator in its own pane (0: the price pane)`.
+
+After `this.lg.inds.addEventListener('click', …)`, add:
+
+```js
+    this.box.addEventListener('contextmenu', (e) => this.onMenu(e));
+```
+
+Replace `buildSeries()`. It keeps Task 7's `add` helper as it is, and places every pane-type indicator by `C.placement`:
+
+```js
+  /* One series per drawn part of each indicator instance, in instance order. A pane-type indicator goes where
+     its placement says: 'own' = the next pane below; 'main' = the price pane, on an overlay scale of its own
+     pinned to the bottom (as Volume), so it never moves the price autoscale. */
+  buildSeries() {
+    const P = this.P;
+    let ci = 0, pane = 0;
+    this.paneUid = [null];
+    const add = (inst, src, part, type, opts, where) => {
+      const overlay = where === 0 && !opts.priceScaleId;   // on the price pane's own scale (not the volume overlay)
+      const auto = overlay && this.R.scalePriceOnly ? { autoscaleInfoProvider: NO_SCALE } : {};
+      const s = this.chart.addSeries(type, { priceLineVisible: false, visible: inst.visible !== false, ...opts, ...auto }, where);
+      this.lines.push({ uid: inst.uid, s, src, part, overlay });
+      return s;
+    };
+    const line = (inst, src, part, color, width, where = 0, extra = {}) => add(inst, src, part, LW.LineSeries,
+      { color, lineWidth: width, lastValueVisible: true, crosshairMarkerVisible: false, title: '', ...extra }, where);
+    // {where, scale}: the pane index, and the series options that put it on its overlay scale when on 'main'
+    const spot = (inst) => {
+      if (C.placement(inst) === 'own') { this.paneUid.push(inst.uid); return { where: ++pane, scale: {} }; }
+      return { where: 0, scale: { priceScaleId: 'ind:' + inst.uid, lastValueVisible: false } };
+    };
+    const pin = (s, where, top) => { if (where === 0) s.priceScale().applyOptions({ scaleMargins: { top, bottom: 0 } }); };
+    for (const inst of this.cfg.indicators) {
+      const k = C.serverKey(inst);
+      switch (inst.id) {
+        case 'volume': {
+          const { where } = spot(inst);
+          const s = add(inst, '__vol', null, LW.HistogramSeries, { priceFormat: { type: 'volume' },
+            ...(where === 0 ? { priceScaleId: 'vol', lastValueVisible: false } : { lastValueVisible: true }) }, where);
+          pin(s, where, VOL_TOP);
+          break;
+        }
+        case 'vwap':
+          this.colorOf[inst.uid] = P.vwap;
+          line(inst, k, null, P.vwap, 2);
+          if (inst.params.bands) {
+            for (const b of ['u1', 'l1', 'u2', 'l2']) line(inst, k, b, P.band, 1, 0, { lineStyle: LW.LineStyle.Dashed, lastValueVisible: false });
+          }
+          break;
+        case 'ema': case 'sma': case 'vwma': {
+          const color = P.lines[ci++ % P.lines.length];
+          this.colorOf[inst.uid] = color;
+          line(inst, k, null, color, 1);
+          break;
+        }
+        case 'adx': {
+          const { where, scale } = spot(inst);
+          const a = line(inst, k, null, P.text, 2, where, scale);
+          line(inst, k, 'p', P.up, 1, where, scale); line(inst, k, 'm', P.down, 1, where, scale);
+          pin(a, where, MAIN_TOP);   // the three lines share the one scale
+          break;
+        }
+        case 'delta': {
+          const { where, scale } = spot(inst);
+          pin(add(inst, '__delta', null, LW.HistogramSeries, { lastValueVisible: true, priceFormat: { ...WHOLE }, ...scale }, where),
+            where, MAIN_TOP);
+          break;
+        }
+        case 'cumdelta': {
+          this.colorOf[inst.uid] = P.cum;
+          const { where, scale } = spot(inst);
+          pin(line(inst, k, null, P.cum, 2, where, { priceFormat: { ...WHOLE }, ...scale }), where, MAIN_TOP);
+          break;
+        }
+        default:   // levels, footprint, profile, big prints: price lines, layers and markers
+          break;
+      }
+    }
+  }
+```
+
+`build()` needs no change: its stretch-factor loop already sizes however many sub-panes `buildSeries` made. Task 9's `onOlder` re-sets every entry of `this.lines`, including the ones on the price pane.
+
+In `legendRows()` (Task 7's version), after `btns.append(iconButton('x', 'Remove', 'x'));`, add:
+
+```js
+      if (C.movable(inst.id)) {   // TradingView's "More": move to the price pane / to a pane below
+        const more = iconButton('ellipsis', 'More', 'more');
+        more.setAttribute('aria-haspopup', 'menu');
+        more.setAttribute('aria-expanded', 'false');
+        btns.append(more);
+      }
+```
+
+In `onLegendClick`, replace the last two branches with:
+
+```js
+    else if (b.dataset.act === 'gear') this.host.onSettings(this, uid);
+    else if (b.dataset.act === 'more') this.host.onIndicatorMenu(this, uid, { anchor: b });
+    else this.removeIndicator(uid);
+```
+
+Add these methods after `setVisible`:
+
+```js
+  removeIndicator(uid) { this.update({ indicators: this.cfg.indicators.filter((x) => x.uid !== uid) }); }
+
+  /* Move a pane-type indicator to 'main' (the price pane) or 'own' (a pane below). The chart is rebuilt
+     through update() (view kept, no resubscribe: the studies are the same), as the legend's × does. */
+  setPlacement(uid, pane) {
+    const inst = this.cfg.indicators.find((x) => x.uid === uid);
+    if (!inst || !C.movable(inst.id) || !C.PANES.includes(pane) || C.placement(inst) === pane) return;
+    this.update({ indicators: this.cfg.indicators.map((x) => (x.uid === uid ? { ...x, pane } : x)) });
+  }
+
+  /* The pane under a viewport y: its index, or -1 (a separator, outside the chart). */
+  paneAt(clientY) {
+    const panes = this.chart ? this.chart.panes() : [];
+    for (let i = 0; i < panes.length; i++) {
+      const el = panes[i].getHTMLElement();
+      if (!el) continue;
+      const r = el.getBoundingClientRect();
+      if (clientY >= r.top && clientY < r.bottom) return i;
+    }
+    return -1;
+  }
+
+  /* Right-click (and, from the drawing controller, a double-click on empty price-pane space: dbl): the chart
+     menu on the price pane with the tick-rounded price under the pointer; an indicator's own menu in its pane
+     (right-click only); nothing on the axes. The browser's own menu never shows over a chart. */
+  onMenu(e, dbl = false) {
+    e.preventDefault();
+    if (!this.chart || !this.bars.length) return;
+    const r = this.box.getBoundingClientRect(), x = e.clientX - r.left;
+    if (x < 0 || x >= this.box.clientWidth - this.chart.priceScale('right').width()) return;   // the price axis
+    const i = this.paneAt(e.clientY), at = { x: e.clientX, y: e.clientY };
+    if (i === 0) {
+      const top = this.chart.panes()[0].getHTMLElement().getBoundingClientRect().top;
+      const raw = this.candles.coordinateToPrice(e.clientY - top);
+      this.host.onChartMenu(this, { ...at, price: raw == null ? null : window.HBDrawings.roundToTick(raw, this.tick) });
+    } else if (i > 0 && !dbl && this.paneUid[i]) {
+      this.host.onIndicatorMenu(this, this.paneUid[i], { at });
+    }
+  }
+
+  /* Reset chart view (the menu, ⌥R): the default bar spacing with the latest bar at the right margin, and every
+     pane's price scale back to auto (T10-R1). */
+  resetView() {
+    if (!this.chart) return;
+    this.chart.timeScale().resetTimeScale();
+    this.chart.panes().forEach((_, i) => this.chart.priceScale('right', i).applyOptions({ autoScale: true }));
+  }
+```
+
+- [ ] **Step 9: `drawings.js`, a double-click on empty space.** In `Controller.onDbl`, keep the position loop, and after it (before the method's closing brace) add:
+
+```js
+    // on any other drawing: its own behaviour (none yet), no menu
+    if (all.some((d) => hitTest(d, pt, geo))) return;
+    // empty chart space: the chart menu (spec §7), and not Lightweight Charts' own double-click
+    e.stopPropagation();
+    this.cell.onMenu(e, true);
+```
+
+Update the method's comment to: `/* Double-click (cursor mode): on a long/short box, select it and open its settings (host.onPosition); on empty price-pane space, the chart menu (Cell.onMenu). Captured before Lightweight Charts sees it: its own double-click would reset the price scale. */`. The early returns (a drawing tool picked, outside the price pane) stay, so neither case opens a menu.
+
+- [ ] **Step 10: `app.js`, menus at the pointer, the chart menu, the indicator menu, keys.**
+
+Next to `let menuRight = false;`, add `let menuAt = null;   // the open menu is a context menu at this viewport point {x, y}`.
+
+Replace `openMenu` (Task 6's version) and `closeMenu`, and add the pointer branch at the top of `placeMenu`:
+
+```js
+/* One popup menu at a time: under its toolbar button, right of a rail button (right), or at the pointer (at: a
+   context menu, anchor null). root: the element it is appended to (a dialog's box for in-dialog menus). */
+function openMenu(anchor, cls, { right = false, root = null, at = null } = {}) {
+  closeMenu();
+  const m = mk('div', 'menu' + (cls ? ' ' + cls : ''));
+  m.setAttribute('role', 'menu');
+  (root || $('#menuRoot')).appendChild(m);
+  menuEl = m; menuAnchor = anchor; menuRight = right; menuAt = at;
+  if (anchor) { anchor.classList.add('open'); anchor.setAttribute('aria-expanded', 'true'); }
+  return m;
+}
+```
+
+```js
+function placeMenu() {
+  if (!menuEl) return;
+  const w = menuEl.offsetWidth, h = menuEl.offsetHeight;
+  if (menuAt) {   // a context menu: at the pointer, kept inside the window
+    menuEl.style.left = Math.max(4, Math.min(menuAt.x, window.innerWidth - w - 4)) + 'px';
+    menuEl.style.top = Math.max(4, Math.min(menuAt.y, window.innerHeight - h - 4)) + 'px';
+    return;
+  }
+  // … the rest of Task 6's placeMenu, unchanged (the menuRight branch, then below / flipped above the anchor)
+}
+```
+
+```js
+function closeMenu() {
+  if (!menuEl) return;
+  const back = menuAnchor && menuEl.contains(document.activeElement) ? menuAnchor : null;   // keyboard focus goes back to the button
+  menuEl.remove();
+  if (menuAnchor) { menuAnchor.classList.remove('open'); menuAnchor.setAttribute('aria-expanded', 'false'); }
+  menuEl = menuAnchor = menuAt = null;
+  customWait = null;
+  if (back) back.focus();
+}
+```
+
+In `init()`, the outside-click listener becomes:
+
+```js
+  document.addEventListener('pointerdown', (e) => {
+    if (menuEl && !menuEl.contains(e.target) && !(menuAnchor && menuAnchor.contains(e.target))) closeMenu();
+  }, true);
+```
+
+(A right-click's pointerdown closes an open menu before its `contextmenu` opens the new one.)
+
+In `hostFor`, add:
+
+```js
+    onChartMenu(cell, at) { chartMenu(cell, at); },
+    onIndicatorMenu(cell, uid, o) { indicatorMenu(cell, uid, o); },
+```
+
+Add after `chartSettings()`:
+
+```js
+/* ---- the chart's context menu (spec §7) ---- */
+/* The built-in items' actions (HBChartMenu items carry `act`; an extension's carry their own run). */
+const MENU_ACTS = {
+  reset: (ctx) => ctx.cell.resetView(),
+  copy: (ctx, it) => {   // silent when the clipboard is unavailable or refused
+    try { navigator.clipboard.writeText(it.copy).catch(() => {}); } catch (_) { /* no clipboard */ }
+  },
+  removeDrawings: (ctx) => drawings.clear(ctx.root),
+  removeIndicators: (ctx) => ctx.cell.update({ indicators: [] }),
+  settings: () => chartSettings(),
+};
+
+/* Right-click on a chart's price pane, or a double-click on its empty space: the chart menu at the pointer, for
+   that chart (it becomes the selected one). Remove N drawings asks twice, like the rail's Remove all: the first
+   click arms it for 3 s (the menu stays open), the second removes. */
+function chartMenu(cell, at) {
+  const i = cells.indexOf(cell);
+  if (i < 0) return;
+  select(i);
+  const root = cell.shown ? cell.shown.root : cell.cfg.root;
+  const ctx = { cell, root, price: at.price, tick: cell.tick, nDrawings: drawings.list(root).length,
+    nIndicators: cell.cfg.indicators.length };
+  const m = openMenu(null, 'menu-chart', { at });
+  let armed = 0;
+  for (const it of window.HBChartMenu.items(ctx)) {
+    if (it.sep) { m.appendChild(mk('div', 'menu-sep')); continue; }
+    const b = menuItem(it.text, it.sub || '', () => {
+      if (it.act === 'removeDrawings' && !armed) {
+        b.classList.add('arm');
+        b.querySelector('.menu-t').textContent = window.HBChartMenu.armText(ctx.nDrawings, root);
+        armed = setTimeout(() => { armed = 0; b.classList.remove('arm'); b.querySelector('.menu-t').textContent = it.text; }, 3000);
+        return;
+      }
+      clearTimeout(armed);
+      closeMenu();
+      if (it.run) {
+        try { it.run(ctx); } catch (e) { sbNote(`menu: ${e && e.message ? e.message : e}`); }
+        return;
+      }
+      if (MENU_ACTS[it.act]) MENU_ACTS[it.act](ctx, it);
+    });
+    m.appendChild(b);
+  }
+  placeMenu();
+  m.tabIndex = -1;   // the arrow keys start from the menu
+  m.focus({ preventScroll: true });
+}
+
+/* An indicator's own menu: from its legend ⋯ (anchor; a second click closes it) or a right-click in its pane (at). */
+function indicatorMenu(cell, uid, { anchor = null, at = null } = {}) {
+  if (anchor && menuAnchor === anchor) { closeMenu(); return; }
+  const inst = cell.cfg.indicators.find((x) => x.uid === uid), i = cells.indexOf(cell);
+  if (!inst || i < 0) return;
+  select(i);
+  const m = openMenu(anchor, 'menu-ind', { at });
+  for (const it of window.HBChartMenu.paneItems(inst)) {
+    m.appendChild(menuItem(it.text, '', () => {
+      closeMenu();
+      if (it.act === 'move') cell.setPlacement(uid, it.pane); else cell.removeIndicator(uid);
+    }));
+  }
+  placeMenu();
+  if (at) { m.tabIndex = -1; m.focus({ preventScroll: true }); }
+}
+```
+
+In `onKey`, right after `const c = cur();`, add:
+
+```js
+  if (menuEl && ['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) {   // walk the open menu's items
+    const items = [...menuEl.querySelectorAll('.menu-i')].filter((b) => !b.disabled && b.offsetParent !== null);
+    const k = window.HBChartMenu.step(items.indexOf(document.activeElement), items.length, e.key);
+    if (k >= 0) { e.preventDefault(); items[k].focus(); }
+    return;
+  }
+  if (e.altKey && !e.metaKey && !e.ctrlKey && e.code === 'KeyR') {   // ⌥R: Reset chart view (e.key is ® on macOS)
+    e.preventDefault();
+    if (c) c.resetView();
+    return;
+  }
+```
+
+These run after the input/textarea check, so a menu's search or name field keeps its own arrow keys, and a dialog's keys never reach them (the dialog branch returns first).
+
+- [ ] **Step 11: Shell, styles, icons.**
+
+`icons.js`: add `ellipsis` to the header's Lucide list and add:
+
+```js
+  ellipsis: svg('<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>'),
+```
+
+`charts.html`:
+- Add `<script src="/static/charts/chartmenu.js?v=3"></script>` right before the `app.js` script tag (after `settings-dialog.js`).
+- Set `catalog.js` to `?v=3` if it is not already.
+
+The script order becomes: lightweight-charts, icons, catalog, primitives, drawings, position, settings, events, scrollback, cell, settings-dialog, chartmenu, app.
+
+`charts.css`: change `.lg-row:hover .lg-btns, .lg-row:focus-within .lg-btns { display: inline-flex; }` to
+
+```css
+.lg-row:hover .lg-btns, .lg-row:focus-within .lg-btns, .lg-btns:has(.ib.open) { display: inline-flex; }
+```
+
+(the ⋯ stays visible while its menu is open), and append:
+
+```css
+/* ---- the chart's context menu and an indicator's menu (chartmenu.js) ---- */
+.menu:focus { outline: none; }   /* a context menu takes focus itself; its items show the focus ring */
+.menu-chart { min-width: 240px; }
+.menu-chart .menu-sub { font-variant-numeric: tabular-nums; }
+.menu-i.arm .menu-t { color: var(--down); }
+.ib.open { background: var(--border); }
+```
+
+- [ ] **Step 12: Syntax-check and run the suites**
+
+Run: `for f in homebase/static/charts/*.js; do node --check "$f" || echo "FAIL $f"; done`, then `node --test tests/js/*.test.mjs`, then `.venv/bin/python -m pytest -q`
+Expected: no `FAIL`; all green. `tests/test_charts_js.py` picks up `chartmenu.test.mjs` by itself.
+
+- [ ] **Step 13: Commit**
+
+```bash
+git add homebase/static/charts/chartmenu.js tests/js/chartmenu.test.mjs homebase/static/charts/catalog.js tests/js/catalog.test.mjs homebase/static/charts/cell.js homebase/static/charts/drawings.js homebase/static/charts/app.js homebase/static/charts.html homebase/static/charts/charts.css homebase/static/charts/icons.js
+git commit -m "feat(charts): chart context menu (right-click / double-click: Reset view, Copy price, Remove drawings/indicators, Settings) with an extension point for trading items; Volume, Delta, Cumulative delta and ADX move between their own pane and the price chart
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+**Controller browser check (replay :8854; a 2×2 layout; NQ 1m with Volume, VWAP, Delta and Cumulative delta):**
+- Opening the chart menu:
+  - Right-click in the price pane opens the menu at the pointer, with no browser menu. Near the window's right or bottom edge it stays inside the window.
+  - The chart under the pointer becomes the selected one.
+  - Order and dividers: `Reset chart view ⌥R` │ `Copy price 30,878.00` │ `Remove N drawings` · `Remove N indicators` │ `Settings…`.
+  - With no drawings on the symbol, `Remove … drawings` is absent; with no indicators, `Remove … indicators` is absent. Neither case leaves a doubled divider.
+  - Right-click on the price axis or the time axis opens no menu (and no browser menu).
+- Double-click:
+  - On empty price-pane space with the cursor tool, it opens the same menu.
+  - On a long/short box, it still opens the position settings, not the menu.
+  - On a trend line, it opens no menu.
+  - With a drawing tool picked, a double-click places points and opens no menu.
+- Closing and keys: Esc and an outside click close the menu. ↓/↑ walk the items and wrap, Home/End jump, and Enter runs the focused item. Every item shows the 2px `--accent` focus ring.
+- The actions:
+  - `Reset chart view` returns a zoomed and panned chart to the default spacing at the latest bar, with each pane's scale on auto. ⌥R does the same on the selected chart.
+  - `Copy price`: the row's price matches the crosshair's axis label (tick-rounded). Pasting in a text field gives `30878.00`.
+  - `Remove 3 drawings`: the first click turns the row red with `Click again to remove 3 drawings on NQ` and keeps the menu open; a second click within 3 s removes them on every chart of NQ; waiting 3 s restores the row.
+  - `Remove N indicators` removes all of them in one click.
+  - `Settings…` opens the chart Settings dialog (Task 6) for this chart.
+- Moving indicators:
+  - Hovering Delta's legend row shows eye · × · ⋯. VWAP's row has no ⋯.
+  - ⋯ → `Move to main chart`: Delta's pane disappears, and its histogram sits in the bottom quarter of the price pane. The price scale's range does not change (compare the axis before and after), and zooming out does not stretch the price scale to fit Delta.
+  - ⋯ → `Move to new pane below` brings the pane back at 90 px.
+  - The same works for Cumulative delta and ADX.
+  - Volume's ⋯ offers `Move to new pane below`; in its own pane its histogram has a visible axis.
+  - Right-clicking inside Cumulative delta's pane opens its menu (Move to main chart / Remove), not the chart menu.
+  - `Remove` in that menu removes the indicator.
+- Persistence:
+  - Save the layout and reload the page: every placement is restored.
+  - Change the symbol and the interval: placements are kept.
+  - An old saved layout without `pane` loads as before (Volume on the price pane; Delta, Cumulative delta and ADX in panes).
+- Deep history (Task 9): with Delta on the main chart, scroll back. Delta's bars continue into the older sessions, and the view does not jump.
+- The extension point: in the console, run `HBChartMenu.register('trading', (ctx) => [{ text: 'Buy test @ ' + ctx.price, run: (c) => console.log('buy', c.price) }])`, then right-click. A new section appears between Copy price and Remove, and clicking it logs the price. Reload afterwards; the registration is not persisted.
+- Dark theme: the menu and the ⋯ button follow the tokens. Zero console errors.
+
+---
