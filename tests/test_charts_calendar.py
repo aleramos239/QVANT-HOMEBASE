@@ -10,6 +10,7 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
+from homebase.charts import calendar as calendar_module
 from homebase.charts.calendar import EVERY_S, FF_URL, IMPACTS, MIN_GAP_S, Calendar, parse, week_start
 from homebase.charts.server import create_app
 from tests.charts_util import D, rows, session_ms, write_archive
@@ -163,3 +164,51 @@ def test_without_a_fetch_function_the_service_never_fetches(tmp_path):
     with TestClient(app(tmp_path)) as client:
         assert client.get("/api/status").json()["calendar"] == {"ok": False, "fetched_at": None, "error": None}
         assert client.get("/api/calendar").json() == []
+
+
+class FakeResponse:
+    """A urlopen() context manager reading from an in-memory buffer, chunked like a real socket read()."""
+
+    def __init__(self, data: bytes):
+        self.data = data
+
+    def read(self, n=-1):
+        if n is None or n < 0:
+            n = len(self.data)
+        chunk, self.data = self.data[:n], self.data[n:]
+        return chunk
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def test_http_get_reads_at_most_2mb_and_a_bigger_response_is_a_failure(monkeypatch):
+    body = [b""]
+
+    def fake_urlopen(req, timeout=None, context=None):
+        return FakeResponse(body[0])
+
+    monkeypatch.setattr(calendar_module.urllib.request, "urlopen", fake_urlopen)
+
+    assert calendar_module.MAX_RESPONSE_BYTES == 2_000_000
+    body[0] = b"{" + b" " * (calendar_module.MAX_RESPONSE_BYTES - 2) + b"}"
+    assert calendar_module.http_get("https://example.test") == body[0]         # right at the cap: fine
+
+    body[0] = b"x" * (calendar_module.MAX_RESPONSE_BYTES + 1)
+    with pytest.raises(ValueError, match="2000000 bytes"):
+        calendar_module.http_get("https://example.test")
+
+
+def test_an_oversized_feed_response_is_treated_as_a_failed_fetch(tmp_path):
+    """refresh() calls the injected fetch function; one that raises (as http_get now does for an
+    oversized response) must land exactly like any other failed fetch -- the last good week kept,
+    ok=False, and the error recorded."""
+    def huge(url):
+        raise ValueError("response over 2000000 bytes")
+
+    cal = Calendar(tmp_path / "calendar", fetch=huge, now=lambda: T0)
+    assert cal.refresh() is False
+    assert cal.ok is False and "2000000 bytes" in cal.error

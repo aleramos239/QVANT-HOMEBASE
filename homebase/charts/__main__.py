@@ -23,7 +23,9 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
     app = create_app(roots=[r for r in a.roots.split(",") if r],
                      replay=dt.date.fromisoformat(a.replay) if a.replay else None,
-                     speed=a.speed, start_et=dt.time.fromisoformat(a.start), calendar_fetch=http_get)
+                     speed=a.speed, start_et=dt.time.fromisoformat(a.start),
+                     # a replay never fetches ForexFactory: the cached weeks on disk are served as is
+                     calendar_fetch=None if a.replay else http_get)
     uvicorn.run(app, host=a.host, port=a.port, log_level="warning")
     return 0
 

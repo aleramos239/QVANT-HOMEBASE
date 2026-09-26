@@ -26,6 +26,7 @@ FF_URL = "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
 EVERY_S = 3600          # a good fetch is refreshed an hour later
 MIN_GAP_S = 1800        # never two requests within 30 minutes (a failed one is retried at this floor)
 TIMEOUT_S = 10
+MAX_RESPONSE_BYTES = 2_000_000   # a feed answering with more than this is treated as a failure, never buffered whole
 USER_AGENT = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) "
               "Chrome/128.0 Safari/537.36")
 IMPACTS = ("High", "Medium", "Low", "Holiday", "Non-Economic")
@@ -34,13 +35,18 @@ WEEK_FILES = "????-??-??.json"
 
 
 def http_get(url: str) -> bytes:
-    """One GET as a browser sends it, 10 s timeout. certifi's CA bundle: a python.org build ships none."""
+    """One GET as a browser sends it, 10 s timeout. certifi's CA bundle: a python.org build ships none. Reads at
+    most MAX_RESPONSE_BYTES: a feed answering with more (never expected from ForexFactory's own weekly JSON) is a
+    failure, not a giant buffer kept in memory."""
     import certifi   # noqa: PLC0415 — declared in requirements.txt; only the live service ever fetches
 
     ctx = ssl.create_default_context(cafile=certifi.where())
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
     with urllib.request.urlopen(req, timeout=TIMEOUT_S, context=ctx) as r:
-        return r.read()
+        data = r.read(MAX_RESPONSE_BYTES + 1)
+    if len(data) > MAX_RESPONSE_BYTES:
+        raise ValueError(f"response over {MAX_RESPONSE_BYTES} bytes")
+    return data
 
 
 def _text(v) -> str:
