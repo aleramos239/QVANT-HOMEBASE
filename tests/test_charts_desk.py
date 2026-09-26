@@ -12,7 +12,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.testclient import TestClient
 
 import homebase.charts
-from homebase.charts.desk import NO_LINK, DeskLink, Fanout, Quotes, SSEParser, register
+from homebase.charts.desk import LINE_MAX, NO_LINK, PAUSED, DeskLink, Fanout, Quotes, SSEParser, register
 from homebase.charts.server import origin_ok
 
 
@@ -100,6 +100,31 @@ def test_link_backs_off_1_to_30_s_and_resets_after_a_state(tmp_path):
         "desk unreachable: ConnectError: refused",       # announced once, not per retry
         "the desk closed the stream",
         "desk unreachable: ConnectError: refused"]
+
+
+def test_an_oversized_line_or_event_drops_it_and_reconnects(tmp_path):
+    huge = "x" * (LINE_MAX + 1)
+    link, fanned, seen, slept = mklink(tmp_path, [(200, ["event: state", f"data: {huge}", ""])])
+    run(link.run())
+    assert fanned == [{"type": "desk", "down": "desk stream line too large (over 256 KB) — reconnecting"}]
+    assert slept == [1]
+
+    # under the per-line cap individually, but their joined data is not
+    chunks = [f"data: {'y' * 60000}" for _ in range(5)]
+    link, fanned, seen, slept = mklink(tmp_path, [(200, ["event: state", *chunks, ""])])
+    run(link.run())
+    assert fanned == [{"type": "desk",
+                       "down": "desk stream event too large (over 256 KB) — reconnecting"}]
+
+
+def test_a_deliberate_pause_close_is_paused_not_down(tmp_path):
+    """desk_api.py's END_HELD comment (more than HELD_MAX events held across the
+    9:29:50-09:30:30 pause) ends the stream on purpose; the page must not be
+    told the desk is "down" for what is an expected, momentary pause."""
+    end_held = ": end: more than 200 events held in the 9:30 pause; reconnect for a fresh state"
+    link, fanned, seen, slept = mklink(tmp_path, [(200, STATE + [end_held, ""])])
+    run(link.run())
+    assert fanned[-1] == {"type": "desk", "down": PAUSED}
 
 
 def test_a_refused_stream_and_a_missing_key_are_down_with_the_reason(tmp_path):
@@ -228,9 +253,11 @@ def test_a_slow_page_drops_its_oldest_and_resyncs_with_a_full_state():
     assert len(fan._boxes[slow].q) == 3                    # bounded
     slow.room = True
     fan.flush()                                            # e.g. the pump's next tick
-    # it lost messages: a fresh full state first (it carries every account
-    # update), then only what a state does not carry — no stale view events
-    assert slow.got == [{"type": "desk", "event": "state", "data": {"n": 10}}]
+    # it lost every stale "account" (a fresh state carries them all instead);
+    # the "fill" is not dropped, because a view event is always evicted first
+    # while any is left to give -- it survives to follow the resync
+    assert slow.got == [{"type": "desk", "event": "state", "data": {"n": 10}},
+                        {"type": "desk", "event": "fill", "data": {"id": "f"}}]
 
 
 def test_a_dropped_notice_is_lost_but_a_kept_one_follows_the_resync():
@@ -243,6 +270,22 @@ def test_a_dropped_notice_is_lost_but_a_kept_one_follows_the_resync():
     fan.flush()
     assert p.got == [{"type": "desk", "event": "state", "data": {}},
                      {"type": "desk", "event": "fill", "data": 1}]
+
+
+def test_once_only_notices_remain_the_oldest_notice_is_dropped():
+    fan = Fanout(hello=lambda: {"type": "desk", "event": "state", "data": {}}, maxlen=2)
+    p = Page(room=False)
+    fan.attach(p, p.send, lambda: p.room)
+    for m in ({"event": "fill", "data": 1}, {"event": "fill", "data": 2},
+             {"event": "fill", "data": 3}):
+        fan.publish({"type": "desk", **m})
+    p.room = True
+    fan.flush()
+    # both slots already held notices (nothing to evict but a notice), so
+    # the third fill dropped the oldest one -- 1 is gone, 2 and 3 survive
+    assert p.got == [{"type": "desk", "event": "state", "data": {}},
+                     {"type": "desk", "event": "fill", "data": 2},
+                     {"type": "desk", "event": "fill", "data": 3}]
 
 
 def test_a_page_whose_send_raises_is_dropped_and_the_others_still_get_it():
@@ -350,6 +393,17 @@ def test_proxy_requires_json_and_caps_the_body(tmp_path):
     assert c.post("/api/desk/order", content=b"{nope", headers=j).status_code == 400
     assert c.post("/api/desk/bogus", json={}).status_code == 404
     assert len(posted) == 1
+
+
+def test_proxy_rejects_nan_and_infinity(tmp_path):
+    """json.loads accepts NaN/Infinity/-Infinity by default (non-standard
+    JSON); the desk's own body parsing must not silently pass one through."""
+    c, posted = proxy_app(tmp_path)
+    j = {"content-type": "application/json"}
+    for bad in (b'{"x": NaN}', b'{"x": Infinity}', b'{"x": -Infinity}'):
+        r = c.post("/api/desk/order", content=bad, headers=j)
+        assert r.status_code == 400 and r.json()["detail"] == "invalid number", bad
+    assert posted == []
 
 
 def test_proxy_without_a_link_or_a_key_answers_503(tmp_path):

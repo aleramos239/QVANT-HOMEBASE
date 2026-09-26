@@ -46,6 +46,7 @@ from .. import netguard
 DESK_URL = "http://127.0.0.1:8850"
 ACTIONS = ("order", "modify", "cancel", "cancel-symbol", "flatten", "reverse")
 BODY_MAX = 4096
+LINE_MAX = 256 * 1024          # an SSE line, or one event's joined data, over this: drop + reconnect
 BACKOFF_S = (1, 2, 4, 8, 16, 30)
 READ_TIMEOUT_S = 45.0          # three missed 15 s heartbeats = the desk is gone
 POST_TIMEOUT_S = 20.0
@@ -53,11 +54,25 @@ DESK_QUEUE_MAX = 64            # desk messages held per page before its oldest a
 NOTICES = ("fill", "result")   # events a fresh state does not carry: kept across a resync
 NO_LINK = "chart trading is not available here (replay, or started without the desk link)"
 UNAVAILABLE = "desk link unavailable"
+PAUSED = "desk paused around 9:30 — reconnecting"
+# the desk_api.py END_HELD comment's prefix (": end: more than %d events held in the 9:30
+# pause; reconnect for a fresh state"): the ONLY case where a clean stream end is not "down"
+_PAUSE_MARK = ": end: more than "
 _KEY = re.compile(r"[0-9a-f]{64}")
 
 
 class DeskDown(Exception):
     """The desk cannot be reached or refused us; str(e) is shown to the page."""
+
+
+class _NonFiniteNumber(ValueError):
+    """Raised by _reject_nonfinite so the proxy answers 400 "invalid number",
+    not the generic "the body is not JSON" (json.loads otherwise accepts the
+    non-standard NaN/Infinity/-Infinity tokens as float values)."""
+
+
+def _reject_nonfinite(token: str):
+    raise _NonFiniteNumber(token)
 
 
 def _f(v) -> Optional[float]:
@@ -72,18 +87,24 @@ def _f(v) -> Optional[float]:
 
 class SSEParser:
     """text/event-stream, line by line: `event:` and `data:` fields, a blank
-    line ends one event, `:` lines are comments; data lines join with \\n."""
+    line ends one event, `:` lines are comments; data lines join with \\n.
+    A line, or one event's joined data, over LINE_MAX raises DeskDown: the
+    event is dropped and the caller (DeskLink.run) reconnects rather than
+    holding an unbounded buffer for a runaway or hostile stream."""
 
     def __init__(self):
-        self._event, self._data = "message", []
+        self._event, self._data, self._size = "message", [], 0
 
     def feed(self, line: str):
+        if len(line) > LINE_MAX:
+            self._event, self._data, self._size = "message", [], 0
+            raise DeskDown("desk stream line too large (over 256 KB) — reconnecting")
         if line == "":
             if not self._data:
                 self._event = "message"
                 return None
             out = (self._event, "\n".join(self._data))
-            self._event, self._data = "message", []
+            self._event, self._data, self._size = "message", [], 0
             return out
         if line.startswith(":"):
             return None
@@ -93,6 +114,10 @@ class SSEParser:
         if field == "event":
             self._event = value
         elif field == "data":
+            self._size += len(value) + 1
+            if self._size > LINE_MAX:
+                self._event, self._data, self._size = "message", [], 0
+                raise DeskDown("desk stream event too large (over 256 KB) — reconnecting")
             self._data.append(value)
         return None
 
@@ -139,7 +164,15 @@ class _Outbox:
 
     def put(self, msg: dict) -> None:
         if len(self.q) >= self.maxlen:
-            self.q.popleft()
+            # drop the oldest VIEW event (state/account/bot/down) first -- a
+            # fresh state at the next resync replaces it anyway. A fill or
+            # result notice is dropped only once nothing else is left to give.
+            for i, m in enumerate(self.q):
+                if m.get("event") not in NOTICES:
+                    del self.q[i]
+                    break
+            else:
+                self.q.popleft()
             self.resync = True
         self.q.append(msg)
 
@@ -286,16 +319,19 @@ class DeskLink:
     async def run(self) -> None:
         attempt = 0
         while not self._stop:
+            paused = False        # the desk's END_HELD comment: a deliberate close, not a failure
             try:
                 key = self.key()
                 parser = SSEParser()
                 async for line in self._lines(key):
+                    if line.startswith(_PAUSE_MARK):
+                        paused = True
                     got = parser.feed(line)
                     if got is not None:
                         self.on_event(*got)
                         if got[0] == "state":
                             attempt = 0
-                reason = "the desk closed the stream"
+                reason = PAUSED if paused else "the desk closed the stream"
             except DeskDown as e:
                 reason = str(e)
             except Exception as e:  # noqa: BLE001 — any failure: down, then retry with backoff
@@ -356,7 +392,9 @@ def register(app, *, link: Optional[DeskLink], quotes: Quotes, browser_write_ok,
             if len(raw) > BODY_MAX:
                 raise HTTPException(413, "request too large (4 KB max)")
         try:
-            body = json.loads(raw)
+            body = json.loads(raw, parse_constant=_reject_nonfinite)
+        except _NonFiniteNumber:
+            raise HTTPException(400, "invalid number") from None
         except ValueError:
             raise HTTPException(400, "the body is not JSON") from None
         if not isinstance(body, dict):

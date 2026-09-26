@@ -26,6 +26,7 @@ from .. import symbols
 from ..paths import state_dir
 from . import DEFAULT_ROOTS, QUIET      # QUIET: never refill across the 9:30 fire
 from .bars import BarSpec
+from .desk import Fanout, Quotes, register as register_desk
 from .history import History
 from .hub import Hub
 from .recorder import REFILL_MAX_PAGES, LiveRecorder, refill
@@ -170,7 +171,7 @@ class Conn:
 
 def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | None = None,
                speed: float = 10.0, start_et: dt.time = dt.time(9, 25), feed_factory=None,
-               now_ms=None, state: Path | None = None) -> FastAPI:
+               now_ms=None, state: Path | None = None, desk_factory=None) -> FastAPI:
     roots = [r.upper() for r in roots]
     sd = Path(state) if state else state_dir() / "charts"
     sd.mkdir(parents=True, exist_ok=True)
@@ -180,6 +181,17 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
     history = History(store, cache_dir=sd / "cache")
     recorder = None if replay else LiveRecorder(base)
     conns: set[Conn] = set()
+    quotes = Quotes()                     # bid/ask per root for the Buy/Sell buttons (desk.py)
+    desk_fan = Fanout()                   # desk events fanned out to every page, bounded per page
+
+    def fan(msg: dict) -> None:
+        for c in list(conns):
+            c.send(msg)
+
+    # the desk link: never in replay (a replayed price must never reach an order)
+    link = desk_factory(desk_fan.publish) if (desk_factory is not None and not replay) else None
+    if link is not None:
+        desk_fan.hello = link.hello
     start_last: dict[str, int | None] = {}
     refill_lock = asyncio.Lock()          # one refill fetches at a time, across every root
     refill_pending: dict[str, dict] = {}  # root -> {frm, contract} while WAITING for the lock
@@ -312,6 +324,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                 now -= ROLL_GRACE_MS
             today = session_date(now, root)
             rows = [r for r in rows if session_date(int(r["ts_ms"]), root) >= today]
+            quotes.note(root, rows)
             hub.on_ticks(root, recorder.append(root, contract, rows))
 
         feed = (feed_factory or TickFeed)(roots, on_live, on_subscribed=_refill)
@@ -343,6 +356,9 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                 hub.on_clock(clock() - CLOSE_GRACE_MS)
                 for (conn, cid), msg in hub.drain():
                     conn.send({**msg, "id": cid})
+                for m in quotes.drain():
+                    fan(m)
+                desk_fan.flush()
                 chart_error[0] = None
             except Exception as e:  # noqa: BLE001 — the pump must never die
                 chart_error[0] = f"{type(e).__name__}: {e}"
@@ -376,11 +392,16 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                 start_last[r] = last
                 reseed(r)
         tasks = [asyncio.create_task(pump()), asyncio.create_task(feed.run())]
+        if link is not None:
+            tasks.append(asyncio.create_task(link.run()))
         log(f"up — {'replay ' + replay.isoformat() if replay else 'live'} · {', '.join(roots)}")
         try:
             yield
         finally:
             feed.stop()
+            if link is not None:
+                link.stop()             # stop() alone can't interrupt a blocked read; the
+                                         # cancel below (link.run() is in `tasks`) does that
             for t in tasks:
                 t.cancel()
             if recorder is not None:
@@ -429,6 +450,8 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         if r not in roots:
             raise HTTPException(404, f"{root!r} is not a charted symbol")
         return r
+
+    register_desk(app, link=link, quotes=quotes, browser_write_ok=browser_write_ok)
 
     @app.get("/api/layouts")
     async def get_layouts():
@@ -483,6 +506,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         conn = Conn(sock)
         conns.add(conn)
         conn.send({"type": "status", **status()})
+        desk_fan.attach(conn, conn.send, lambda: not conn.dead and conn.q.qsize() < SEND_QUEUE_MAX // 2)
         try:
             while True:
                 # Only a framing/decoding problem is swallowed here. Receiving
@@ -558,6 +582,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             pass
         finally:
             conns.discard(conn)
+            desk_fan.detach(conn)
             hub.drop_conn(conn)
             conn.task.cancel()
 

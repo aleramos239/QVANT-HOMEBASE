@@ -6,7 +6,9 @@ import datetime as dt
 
 import uvicorn
 
+from ..paths import state_dir
 from . import DEFAULT_ROOTS, PORT
+from .desk import DeskLink
 from .server import create_app
 
 
@@ -22,7 +24,9 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
     app = create_app(roots=[r for r in a.roots.split(",") if r],
                      replay=dt.date.fromisoformat(a.replay) if a.replay else None,
-                     speed=a.speed, start_et=dt.time.fromisoformat(a.start))
+                     speed=a.speed, start_et=dt.time.fromisoformat(a.start),
+                     desk_factory=None if a.replay else (
+                         lambda fan: DeskLink(fan, key_path=state_dir() / "desk.key")))
     uvicorn.run(app, host=a.host, port=a.port, log_level="warning")
     return 0
 
