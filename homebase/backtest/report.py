@@ -10,8 +10,9 @@ Conventions (stated once):
   * t-stat = the per-trade mean over its standard error (sample sd / sqrt(n));
   * RR = avg win / |avg loss|, shown as "1:X";
   * % figures are against `capital` (the run's account size, default $50,000):
-    net % = net / capital, drawdown % = the worst fall from an equity peak,
-    equity = capital + cumulative net.
+    net % = net / capital, drawdown % = the worst fall from an equity peak.
+    `equity()` is CUMULATIVE NET starting at 0 (not capital-based): it is a
+    P&L curve, not an account balance — add `capital` yourself for a balance.
 
 Skips: a session the engine could not trade (a strategy exception, caught and
 recorded as `skip = "strategy error: <msg>"`; or a coverage/data gap) never
@@ -146,4 +147,5 @@ def build(trades: list[dict], capital: float = 50_000.0, skipped: list[dict] | N
     return {"capital": capital, "summary": summary(trades, capital),
             "by_year": periods(trades, 4), "by_month": periods(trades, 7),
             "skipped": skipped, "skipped_by_error": by_error,
-            "skipped_by_data": len(skipped) - by_error}
+            "skipped_by_data": len(skipped) - by_error,
+            "sharpe_basis": "trading days (daily net ×√252)"}

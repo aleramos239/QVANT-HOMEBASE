@@ -373,6 +373,3 @@ def test_resize_scales_cost_with_the_position():
     assert out[0].pnl == pytest.approx(500.0)
     assert out[0].cost == pytest.approx(10.0)     # half the size, half the fees
 
-
-# --- propsim horizons -------------------------------------------------------
-
