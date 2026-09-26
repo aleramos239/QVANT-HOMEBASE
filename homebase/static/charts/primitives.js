@@ -40,6 +40,7 @@ class Footprint extends Layer {
     if (!this.readable()) return;
     const ts = this.chart.timeScale(), r = ts.getVisibleLogicalRange(); if (!r) return;
     const i0 = Math.max(0, Math.floor(r.from)), i1 = Math.min(this.bars.length - 1, Math.ceil(r.to));
+    if (i1 < i0) return;   // visible range holds no bars (panned past either end)
     const w = this.spacing() * 0.86, P = this.P, tick = this.tick;
     target.useMediaCoordinateSpace(({ context: ctx }) => {
       const rh = this.rowH(this.bars[i1].c, tick);
