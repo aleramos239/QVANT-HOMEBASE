@@ -1375,3 +1375,48 @@ def test_a_chart_scrolls_back_over_the_socket(tmp_path):
         ws.send_json({"op": "older", "id": "c1", "before": "yesterday"})
         bad = next_of(ws, "older")
         assert bad["before"] == "yesterday" and "epoch ms" in bad["error"]
+
+
+def test_a_second_older_request_while_one_builds_gets_busy_not_silence(tmp_path, monkeypatch):
+    """A scroll-back chunk while the same chart's previous one is still being built used to be
+    dropped silently, so the page's pending request never resolved and the chart could never
+    scroll back again. It must instead answer {"error": "busy"} so the page can retry. Switching
+    the chart to a new interval (a new stream) must not be blocked by the old stream's still-running
+    chunk -- the busy key is (conn, cid, stream), not just (conn, cid)."""
+    gate = threading.Event()
+    orig_older = Hub.older
+
+    def slow_older(self, s, before):
+        gate.wait(2)
+        return orig_older(self, s, before)
+
+    monkeypatch.setattr(Hub, "older", slow_older)
+
+    base, days = tmp_path / "ticks", weekdays_before(D, 7)
+    for k, d in enumerate(days):
+        write_archive(base, "NQ", d, "NQZ6", rows(session_ms(d, 9, 30), [100.0 + k + 0.25 * (i % 4) for i in range(9)],
+                                                  step_ms=20_000, first_id=1000 * (k + 1)))
+    write_archive(base, "NQ", D, "NQZ6", rows(session_ms(D, 9, 29), [200.0] * 120, first_id=90_000))
+    app = create_app(roots=["NQ"], base=base, replay=D, speed=1, start_et=dt.time(9, 30), state=tmp_path / "state")
+    with TestClient(app) as client, client.websocket_connect("/ws") as ws:
+        ws.send_json({"op": "sub", "id": "c1", "root": "NQ", "spec": "time:60"})
+        first60 = next_of(ws, "history")["bars"][0]
+        ws.send_json({"op": "older", "id": "c1", "before": first60["ms"]})
+        time.sleep(0.2)   # the chunk is now blocked inside slow_older, holding the busy key
+        ws.send_json({"op": "older", "id": "c1", "before": first60["ms"]})
+        busy = next_of(ws, "older")
+        assert busy["id"] == "c1" and busy["before"] == first60["ms"] and busy["error"] == "busy"
+
+        # switching intervals subscribes a new stream under the same chart id -- its own
+        # scroll-back is a different generation and must not read as busy
+        ws.send_json({"op": "sub", "id": "c1", "root": "NQ", "spec": "time:120"})
+        first120 = next_of(ws, "history")["bars"][0]
+        ws.send_json({"op": "older", "id": "c1", "before": first120["ms"]})
+        time.sleep(0.2)
+        ws.send_json({"op": "older", "id": "c1", "before": first120["ms"]})
+        busy2 = next_of(ws, "older")
+        assert busy2["error"] == "busy"       # busy again, but on the NEW stream's own chunk
+
+        gate.set()
+        answers = [next_of(ws, "older"), next_of(ws, "older")]
+        assert all(a.get("done") is True for a in answers), answers

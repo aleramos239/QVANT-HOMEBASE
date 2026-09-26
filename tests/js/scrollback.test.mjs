@@ -39,6 +39,35 @@ test('the archive\'s start ends the requests until a new history; a failure wait
   assert.equal(s.want({ from: 0, to: 10 }, undefined), null);
 });
 
+test('a "busy" answer clears pending (never stuck) and retries after 2 s, sooner than an ordinary failure', () => {
+  let now = 0;
+  const s = new SB.ScrollBack({ now: () => now });
+  const req = s.want({ from: 0, to: 10 }, 1000);
+  s.sent(req);
+  assert.equal(s.take({ before: 1000, error: 'busy' }), false);
+  assert.equal(s.pending, null);                                        // cleared, not left stuck
+  assert.equal(s.want({ from: 0, to: 10 }, 1000), null);                 // still cooling down
+  now = SB.BUSY_RETRY_MS - 1;
+  assert.equal(s.want({ from: 0, to: 10 }, 1000), null);
+  now = SB.BUSY_RETRY_MS;
+  assert.equal(SB.BUSY_RETRY_MS < SB.RETRY_MS, true);
+  assert.deepEqual(s.want({ from: 0, to: 10 }, 1000), { before: 1000 }); // free again, well before a plain failure would be
+});
+
+test('a pending request with no answer at all for 30 s is given up on, so scroll-back never deadlocks', () => {
+  let now = 0;
+  const s = new SB.ScrollBack({ now: () => now });
+  const req = s.want({ from: 0, to: 10 }, 1000);
+  s.sent(req);
+  now = SB.PENDING_TIMEOUT_MS - 1;
+  assert.equal(s.want({ from: 0, to: 10 }, 1000), null);                 // still within the window: held
+  now = SB.PENDING_TIMEOUT_MS;
+  assert.deepEqual(s.want({ from: 0, to: 10 }, 1000), { before: 1000 }); // no answer ever came: free to ask again
+  s.sent({ before: 1000 });
+  now += SB.PENDING_TIMEOUT_MS - 1;
+  assert.equal(s.take({ before: 1000, bars: [], done: true }), true);    // a late answer still lands if it beats the timeout
+});
+
 test('prepend: the older bars in front with their study values; the chart\'s first bars take the repair', () => {
   const mine = [{ ms: 300, sv: { ema: 1, vwap: 9 } }, { ms: 400, sv: { ema: 2, vwap: 9 } }, { ms: 500, sv: { ema: 3 } }];
   const m = { bars: [{ ms: 100 }, { ms: 200 }], studies: { ema: [0.1, 0.2], vwap: [5, 6] }, repair: { ema: [1.5, 2.5] } };

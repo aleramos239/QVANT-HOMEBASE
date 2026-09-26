@@ -372,34 +372,40 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         st["calendar"] = cal.status()
         return st
 
-    older_busy: set = set()     # (conn, chart id) with a scroll-back chunk being built
+    older_busy: set = set()     # (conn, chart id, stream identity) with a scroll-back chunk being built --
+                                # keyed by the STREAM (not just conn/cid) so a fresh subscription after an
+                                # interval switch is never blocked by the old stream's still-running chunk
     older_tasks: set = set()    # the answering tasks, referenced until they finish
 
     def ask_older(conn: Conn, cid: str, before) -> None:
         """A chart scrolled back to its first bar ({"op": "older", "id", "before": that bar's ms}): build the
         next chunk of older sessions off the loop and answer {"type": "older", "id", "before", "bars",
         "studies", "repair", "sessions", "done"}, or with an "error" (the page waits, then may ask again).
-        One at a time per chart; it never touches the broker."""
+        One at a time per chart+stream; it never touches the broker. A request that lands while the
+        previous one for the same chart+stream is still building answers {"error": "busy"} rather than
+        being silently dropped, so the page can retry instead of the chart losing scroll-back forever."""
         s = hub.stream_of((conn, cid))
         if s is None or not isinstance(before, int) or isinstance(before, bool):
             conn.send({"type": "older", "id": cid, "before": before,
                        "error": "not subscribed" if s is None else "before: the first bar's time (epoch ms)"})
             return
-        if (conn, cid) in older_busy:
+        key = (conn, cid, id(s))
+        if key in older_busy:
+            conn.send({"type": "older", "id": cid, "before": before, "error": "busy"})
             return
-        older_busy.add((conn, cid))
-        task = asyncio.create_task(answer_older(conn, cid, s, before))
+        older_busy.add(key)
+        task = asyncio.create_task(answer_older(conn, cid, key, s, before))
         older_tasks.add(task)
         task.add_done_callback(older_tasks.discard)
 
-    async def answer_older(conn: Conn, cid: str, s: Stream, before: int) -> None:
+    async def answer_older(conn: Conn, cid: str, key: tuple, s: Stream, before: int) -> None:
         try:
             ans = await asyncio.to_thread(hub.older, s, before)
         except Exception as e:  # noqa: BLE001 — a failed chunk is the page's to retry, never the socket's end
             log(f"older {cid} ({s.root} {s.spec.key}): {type(e).__name__}: {e}")
             ans = {"error": str(e) or type(e).__name__}
         finally:
-            older_busy.discard((conn, cid))
+            older_busy.discard(key)
         conn.send({"type": "older", "id": cid, "before": before, **ans})
 
     async def pump() -> None:

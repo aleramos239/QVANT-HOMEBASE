@@ -6,33 +6,41 @@
 'use strict';
 const EDGE = 50;          // bars: the view's left edge this close to the first loaded bar asks for more
 const RETRY_MS = 10000;   // after a failed answer, no new request for this long
+const BUSY_RETRY_MS = 2000;      // after a "busy" answer (the server was already building a chunk), retry sooner
+const PENDING_TIMEOUT_MS = 30000; // a request with no answer at all for this long is given up on, not held forever
 const CAP = 200000;       // bars per chart, total: past it, scroll-back stops asking for more (no eviction)
 
 class ScrollBack {
-  constructor({ edge = EDGE, retryMs = RETRY_MS, now = () => Date.now() } = {}) {
-    this.edge = edge; this.retryMs = retryMs; this.now = now;
+  constructor({ edge = EDGE, retryMs = RETRY_MS, busyRetryMs = BUSY_RETRY_MS,
+                pendingTimeoutMs = PENDING_TIMEOUT_MS, now = () => Date.now() } = {}) {
+    this.edge = edge; this.retryMs = retryMs; this.busyRetryMs = busyRetryMs;
+    this.pendingTimeoutMs = pendingTimeoutMs; this.now = now;
     this.reset();
   }
 
   /* A new history on the chart: nothing pending, the archive's start not known. */
-  reset() { this.pending = null; this.done = false; this.retryAt = 0; }
+  reset() { this.pending = null; this.pendingAt = 0; this.done = false; this.retryAt = 0; }
 
   /* The request for this visible logical range (the first loaded bar is logical 0): {before: firstMs} when
      the left edge is within `edge` bars of it and nothing holds it back, else null. The caller sends it and
-     then calls sent(). */
+     then calls sent(). A pending request that never got an answer (dropped connection, a server that never
+     replied) is given up on after `pendingTimeoutMs`, so the chart is not stuck waiting on it forever. */
   want(range, firstMs) {
+    if (this.pending && this.now() - this.pendingAt >= this.pendingTimeoutMs) this.pending = null;
     if (!range || firstMs == null || this.pending || this.done || this.now() < this.retryAt) return null;
     return range.from <= this.edge ? { before: firstMs } : null;
   }
 
-  sent(req) { this.pending = req; }
+  sent(req) { this.pending = req; this.pendingAt = this.now(); }
 
   /* An answer: true when it answers the pending request and is to be applied (bars, or the archive's
-     start); false when stale (a reload came between) or failed (then a pause before asking again). */
+     start); false when stale (a reload came between) or failed (then a pause before asking again). Cleared
+     on ANY answer -- including an error -- so a "busy" (the server was already building the previous
+     chunk) never leaves the request stuck pending; "busy" retries sooner than an ordinary failure. */
   take(m) {
     if (!this.pending || !m || m.before !== this.pending.before) return false;
     this.pending = null;
-    if (m.error) { this.retryAt = this.now() + this.retryMs; return false; }
+    if (m.error) { this.retryAt = this.now() + (m.error === 'busy' ? this.busyRetryMs : this.retryMs); return false; }
     if (m.done) this.done = true;
     return true;
   }
@@ -76,7 +84,7 @@ function capPrepend(bars, m, cap = CAP) {
   return { bars: prepend(bars, cropped), capped: true };
 }
 
-const api = { ScrollBack, prepend, mergeSessions, capPrepend, EDGE, RETRY_MS, CAP };
+const api = { ScrollBack, prepend, mergeSessions, capPrepend, EDGE, RETRY_MS, BUSY_RETRY_MS, PENDING_TIMEOUT_MS, CAP };
 if (typeof window !== 'undefined') window.HBScrollBack = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();
