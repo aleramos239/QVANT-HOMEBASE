@@ -33,6 +33,7 @@ class Footprint extends Layer {
     super(P);
     this.bars = []; this.ratio = 0; this.tick = 0.25; this.on = false;
     this.onReadableChange = null; this._readable = false;   // last value reported to the callback
+    this._timer = null;   // pending setTimeout id for the not-yet-delivered flip, if any
   }
   set(bars, on, ratio, tick) { this.bars = bars; this.on = on; this.ratio = ratio; this.tick = tick; this.redraw(); }
   readable() {
@@ -40,16 +41,26 @@ class Footprint extends Layer {
     const last = this.bars[this.bars.length - 1];
     return this.spacing() >= 56 && this.rowH(last.c, this.tick) >= 9;
   }
+  /* Cancel any pending flip and drop the callback: a torn-down primitive must
+     never dispatch into whatever it used to be attached to. */
+  detached() {
+    super.detached();
+    clearTimeout(this._timer); this._timer = null;
+    this.onReadableChange = null;
+  }
   /* Lightweight Charts calls this before every render, once layout for the
      new range/zoom/price-scale is settled — so, unlike a subscribe*Change
      event (which fires BEFORE relayout), readable() here sees current
      numbers. Only report on change, and only asynchronously: never call
-     chart/series-mutating APIs (applyOptions etc.) from inside a render pass. */
+     chart/series-mutating APIs (applyOptions etc.) from inside a render pass.
+     A flip that arrives before the previous one was delivered replaces it --
+     only the latest value is ever sent. */
   updateAllViews() {
     const on = this.readable();
     if (on === this._readable) return;
     this._readable = on;
-    if (this.onReadableChange) setTimeout(() => this.onReadableChange && this.onReadableChange(on), 0);
+    clearTimeout(this._timer);
+    this._timer = setTimeout(() => { this._timer = null; if (this.onReadableChange) this.onReadableChange(on); }, 0);
   }
   draw(target) {
     if (!this.readable()) return;

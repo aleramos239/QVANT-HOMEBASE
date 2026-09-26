@@ -120,6 +120,7 @@ class Cell {
   destroy() {
     if (ws && ws.readyState === 1) ws.send(JSON.stringify({ op: 'unsub', id: this.id }));
     if (this.chart) this.chart.remove();
+    this.chart = this.candles = this.fp = null;   // so a stale async callback can tell this cell is gone
     cells.delete(this.id);
   }
 
@@ -146,7 +147,9 @@ class Cell {
       wickUpColor: P.up, wickDownColor: P.down, borderVisible: false });
     this.markers = LW.createSeriesMarkers(this.candles, []);
     this.fp = new Footprint(P); this.prof = new Profile(P); this.gaps = new Gaps(P);
+    const fp = this.fp;   // pin the instance this callback was made for
     this.fp.onReadableChange = (on) => {   // fired async from Footprint.updateAllViews(), post-layout
+      if (this.fp !== fp || !this.chart) return;   // stale: this cell moved on to a different chart/footprint
       this.fpShown = on;       // footprint visible: hide candle bodies, keep the wicks
       this.candles.applyOptions(on ? { upColor: 'rgba(0,0,0,0)', downColor: 'rgba(0,0,0,0)' } : { upColor: this.P.up, downColor: this.P.down });
     };
