@@ -16,7 +16,8 @@ The chart service charts and records ten CME roots (NQ ES YM RTY GC SI CL ZN NG 
    - session D = 18:00 ET on D-1 → 18:00 ET on D, weekends included;
    - `session_date(ts, root)` and `session_range_ms(d, root)` take the root, and every chart-engine call site passes it: bars, history, hub, recorder, server;
    - classic roots are unchanged, including their weekend-print → Monday rule;
-   - the session open stays 18:00 for both, so time-bar anchoring, the 18:00 VWAP reset, levels, the refill floor and 1m→Nm resampling behave the same.
+   - the session open stays 18:00 for both, so time-bar anchoring, the 18:00 VWAP reset, levels and 1m→Nm resampling behave the same;
+   - a 24/7 root has no dead hour at its 18:00 roll, so for it: a live print up to 60 s older than the clock's session still counts (`ROLL_GRACE_MS`); a refill may reach back to the PREVIOUS session's open (classic roots: the current session's open); gaps are marked per session (`split_by_session`); a restart resumes from the previous session's last tick; and a refill that adds rows to an older session clears History's in-memory bars.
 2. **One refused symbol never takes the others down.** A root the md feed refuses is recorded as that root's error and the other roots carry on.
    - "Refused" covers two cases: `md/getChart` answers without a `realtimeId`, or the contract cannot be resolved.
    - The page shows "BTC unavailable" in amber with the reason in a tooltip.
