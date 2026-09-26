@@ -10,16 +10,22 @@ const ROOT_NAMES = { NQ: 'E-mini Nasdaq-100', ES: 'E-mini S&P 500', YM: 'E-mini 
   GC: 'Gold', SI: 'Silver', CL: 'Crude Oil', ZN: '10-Year T-Note', NG: 'Natural Gas', HG: 'Copper', BTC: 'Bitcoin' };
 const ALWAYS_OPEN = new Set(['BTC', 'MBT', 'ETH', 'MET']);   // CME crypto: 24/7 since 2026-05-30
 
-/* Is root's market open at this ET weekday (0 = Sunday) and minute of the
-   day? CME Globex: Sunday 18:00 to Friday 17:00 with a daily 17:00-18:00
-   break; crypto never closes. Exchange holidays are not modelled. */
-function marketOpen(root, weekday, minutes) {
-  if (ALWAYS_OPEN.has(root)) return true;
+/* CME Globex classic hours: Sunday 18:00 to Friday 17:00 with a daily
+   17:00-18:00 break. Exchange holidays are not modelled. Factored out of
+   marketOpen so the 24/7-root staleness rule (staleAfter) can ask "is the
+   classic market open right now" without the ALWAYS_OPEN shortcut. */
+function classicOpen(weekday, minutes) {
   if (weekday === 6) return false;
   if (weekday === 0) return minutes >= 18 * 60;
   if (minutes >= 17 * 60 && minutes < 18 * 60) return false;
   if (weekday === 5) return minutes < 17 * 60;
   return true;
+}
+
+/* Is root's market open at this ET weekday (0 = Sunday) and minute of the
+   day? Crypto never closes; every other root follows classicOpen. */
+function marketOpen(root, weekday, minutes) {
+  return ALWAYS_OPEN.has(root) || classicOpen(weekday, minutes);
 }
 const GROUPS = ['All', 'VWAP', 'Moving averages', 'Trend', 'Levels', 'Volume', 'Order flow'];
 const LENGTH = (def) => ({ key: 'length', label: 'Length', type: 'int', min: 1, max: 1000, def });
@@ -56,7 +62,14 @@ const INTERVAL_GROUPS = [
 const ST0 = { vwap: true, vwapAnchor: 'eth', vwapBands: false, ema1: 0, ema2: 0, sma: 0, vwma: 0, levels: true,
   volume: true, delta: false, cumdelta: false, adx: 0, footprint: true, imbalance: 3, profile: false, bigMin: 0 };
 const UNITS = [[86400, 'D', 'day'], [3600, 'h', 'hour'], [60, 'm', 'minute'], [1, 's', 'second']];
-const STALE_S = 30;       // an open market's symbol without a tick for this long is stale
+// Stale thresholds (2026-09-23 tick study, 10 roots): RTH should never go
+// quiet this long; ETH is looser because thin overnight roots (ZN, NG) idle
+// past 30 s routinely; 24/7 roots are looser still and measured only against
+// the classic market they share md capacity with — see staleAfter/sinceOpen
+// above feedSummary.
+const RTH_STALE_S = 120;
+const ETH_STALE_S = 300;
+const CRYPTO_STALE_S = 900;
 const REC_BUSY = 5000;    // the recorder's buffer this full turns the status amber
 
 let seq = 0;
@@ -238,17 +251,38 @@ function fmtAge(a) {
   return `${Math.round(a / 86400)}d`;
 }
 
+/* Seconds without a tick before `root` counts as stale at this ET weekday /
+   minute-of-day. Classic roots: RTH (Mon-Fri 09:30-16:00 ET) is tight, every
+   other open hour (ETH) is looser. A 24/7 root (ALWAYS_OPEN) is looser
+   still, and only while the classic Globex market it shares md capacity
+   with is open — never stale across a weekend or the daily break, when a
+   silent feed means nothing traded, not that the feed died. */
+function staleAfter(root, weekday, minutes) {
+  if (ALWAYS_OPEN.has(root)) return classicOpen(weekday, minutes) ? CRYPTO_STALE_S : Infinity;
+  const rth = weekday >= 1 && weekday <= 5 && minutes >= 9 * 60 + 30 && minutes < 16 * 60;
+  return rth ? RTH_STALE_S : ETH_STALE_S;
+}
+
+/* Seconds since the most recent 18:00 ET session reopen (the Sunday open, or
+   a daily reopen after the 17:00-18:00 break). Clamping an age to this
+   before comparing it with staleAfter means a market that just reopened is
+   never flagged for ticks it could not have had while closed. */
+function sinceOpen(minutes) { return ((minutes - 18 * 60 + 1440) % 1440) * 60; }
+
 /* The bottom bar's feed summary for a status message, at this ET weekday
    (0 = Sunday) and minute of the day: the dot ('ok' | 'warn' | 'bad', or ''
    = grey: an open market has not ticked yet), a one-phrase text with its
    class ('' | 'warn' | 'bad') and the per-root tooltip. A closed market is
-   never stale; a refused root is unavailable whatever the hours. */
+   never stale; a refused root is unavailable whatever the hours. Staleness
+   itself is root- and session-aware — see staleAfter/sinceOpen. */
 function feedSummary(s, weekday, minutes) {
   const roots = Object.entries(s.roots || {}), rec = s.recorder, recErr = rec && rec.error;
   const open = (r) => marketOpen(r, weekday, minutes), age = (x) => x.last_tick_age_s;
   const refused = roots.filter(([, x]) => x.error), live = roots.filter(([r, x]) => !x.error && open(r));
   const silent = live.filter(([, x]) => age(x) == null);
-  const stale = live.filter(([, x]) => age(x) != null && age(x) > STALE_S).sort((a, b) => age(b[1]) - age(a[1]));
+  const clamped = (x) => Math.min(age(x), sinceOpen(minutes));
+  const stale = live.filter(([r, x]) => age(x) != null && clamped(x) > staleAfter(r, weekday, minutes))
+    .sort((a, b) => age(b[1]) - age(a[1]));
   const title = roots.map(([r, x]) => `${r} ${x.error ? `unavailable: ${x.error}`
     : !open(r) ? 'closed' : age(x) == null ? 'no ticks yet' : fmtAge(age(x))}`).join('  ·  ');
   if (s.error || recErr) return { dot: 'bad', text: s.error || `recorder: ${recErr}`, textClass: 'bad', title };
@@ -270,7 +304,7 @@ function filter(query, group = 'All') {
 const api = { CATALOG, GROUPS, ROOT_NAMES, FAVOURITES, INTERVAL_GROUPS, LINE_COLORS, uid, def, clampParams, instance,
   defaults, serverKey, serverKeys, migrate, migrateLayout, label, legendValues, decimals, fmtPrice, fmtCompact,
   fmtSigned, change, parseSpec, specLabel, longLabel, toSpec, rootName, filter, ALWAYS_OPEN, marketOpen, fmtAge,
-  feedSummary, REC_BUSY };
+  feedSummary, REC_BUSY, staleAfter, sinceOpen };
 if (typeof window !== 'undefined') window.HBCatalog = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();
