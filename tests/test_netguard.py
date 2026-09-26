@@ -432,3 +432,37 @@ def test_the_desk_page_sends_every_post_as_json():
     helper = re.search(r"async function post\(url, body\) \{(.*?)\n\}", html, re.S).group(1)
     assert '"Content-Type": "application/json"' in helper
     assert "JSON.stringify(body || {})" in helper
+
+
+# --- WebSockets on the main app (Task 5b re-review, carried to Task 6) -----------------------
+def test_websocket_scopes_get_the_host_and_origin_checks(desk):
+    """The main app mounts no WebSocket today, but the guard must not let a
+    websocket scope through unchecked the day one is added: a cross-site page
+    can open a WebSocket with no CORS at all. Host on the allowlist always;
+    an Origin, when sent (every browser sends one), on the allowlist too.
+    A refusal closes the handshake with 1008 before accept (HTTP 403)."""
+    from starlette.websockets import WebSocketDisconnect
+
+    async def echo(ws):
+        await ws.accept()
+        await ws.send_text("hello")
+        await ws.close()
+    desk.app.router.add_websocket_route("/ws-probe", echo)
+    LOCAL = {"host": "127.0.0.1:8850"}        # TestClient sockets default to Host: testserver
+    for host in REBOUND:
+        with pytest.raises(WebSocketDisconnect) as e:
+            with desk.websocket_connect("/ws-probe", headers={"host": host}):
+                pass
+        assert (e.value.code, e.value.reason) == (1008, "host not allowed"), host
+    for origin in ("https://evil.example", "null", "http://localhost.evil.com:8850"):
+        with pytest.raises(WebSocketDisconnect) as e:
+            with desk.websocket_connect("/ws-probe", headers={**LOCAL, "origin": origin}):
+                pass
+        assert (e.value.code, e.value.reason) == (1008, "origin not allowed"), origin
+    with pytest.raises(WebSocketDisconnect):          # /api/trade/* is not exempt for sockets
+        with desk.websocket_connect("/api/trade/ws", headers={"host": "evil.example"}):
+            pass
+    for headers in (LOCAL, {**LOCAL, "origin": DESK},
+                    {"host": f"{TS}:8850", "origin": f"https://{TS}"}):
+        with desk.websocket_connect("/ws-probe", headers=headers) as ws:
+            assert ws.receive_text() == "hello", headers

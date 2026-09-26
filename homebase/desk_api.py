@@ -47,6 +47,7 @@ from typing import Optional
 import anyio
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
+from starlette.websockets import WebSocketClose
 
 from . import netguard
 
@@ -294,12 +295,24 @@ class WriteGuard:
     method, ANY Origin refused, the desk key). `hosts()` returns the
     configured allowed_hosts, read per request. Pure ASGI (not
     BaseHTTPMiddleware): what passes goes straight through, the SSE stream
-    and its disconnect watch untouched."""
+    and its disconnect watch untouched.
+
+    WebSocket scopes (none mounted today) get the Host + Origin checks on
+    EVERY path, /api/trade/* included: a cross-site page can open a socket
+    with no CORS at all. A refusal closes the handshake (1008 -> HTTP 403)."""
 
     def __init__(self, app, hosts):
         self.app, self.hosts = app, hosts
 
     async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] == "websocket":
+            refused = netguard.refusal("WEBSOCKET", scope["headers"],
+                                       netguard.allowlist(self.hosts()), require_json=False)
+            if refused is None:
+                await self.app(scope, receive, send)
+            else:
+                await WebSocketClose(code=1008, reason=refused[1])(scope, receive, send)
+            return
         if scope["type"] != "http" or scope["path"].startswith("/api/trade/"):
             await self.app(scope, receive, send)
             return
