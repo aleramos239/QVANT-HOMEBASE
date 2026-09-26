@@ -8,6 +8,7 @@ import queue
 import time
 from urllib.parse import quote
 
+import pytest
 from fastapi import WebSocket, WebSocketDisconnect
 from fastapi.testclient import TestClient
 
@@ -64,15 +65,15 @@ def test_bad_requests_get_an_error_not_a_crash(tmp_path):
         assert "bad bar type" in next_of(ws, "error")["error"]
         ws.send_json({"op": "sub", "id": "c", "root": "NQ", "spec": "time:60", "studies": ["nope"]})
         assert "unknown study" in next_of(ws, "error")["error"]
-        # Ruling 2: make("ema:20:30") raises TypeError (too many args), not ValueError —
-        # the handler must catch it too, answer with an error, and keep the socket alive.
+        # Ruling 2: make("ema:20:30") (too many args; once a TypeError, a ValueError since
+        # FW-I4) must answer with an error and keep the socket alive.
         ws.send_json({"op": "sub", "id": "d", "root": "NQ", "spec": "time:60", "studies": ["ema:20:30"]})
         assert next_of(ws, "error")["id"] == "d"
         ws.send_json({"op": "sub", "id": "e", "root": "NQ", "spec": "time:60"})
         assert next_of(ws, "history")["id"] == "e"
-        # Fix round 1, item 3: make("adx:0") raises ZeroDivisionError (1.0/n with n=0) --
-        # past (ValueError, TypeError) too. And a frame that isn't valid JSON must be
-        # ignored, not fatal. The socket must still be usable after both.
+        # Fix round 1, item 3: make("adx:0") (once a ZeroDivisionError, 1.0/n with n=0; a
+        # ValueError since FW-I4) answers an error too. And a frame that isn't valid JSON
+        # must be ignored, not fatal. The socket must still be usable after both.
         ws.send_json({"op": "sub", "id": "f", "root": "NQ", "spec": "time:60", "studies": ["adx:0"]})
         assert next_of(ws, "error")["id"] == "f"
         ws.send_text("not valid json {")
@@ -728,3 +729,56 @@ def test_a_refill_never_pages_back_past_the_session_open(tmp_path, monkeypatch):
         while not calls and time.time() < deadline:
             time.sleep(0.02)
     assert calls == [session_range_ms(D)[0]]                 # 18:00 ET the evening before D
+
+
+def replay_app(tmp_path):
+    return create_app(roots=["NQ"], base=archive(tmp_path), replay=D, speed=1,
+                      start_et=dt.time(9, 30), state=tmp_path / "state")
+
+
+def test_ws_refuses_a_page_from_another_site(tmp_path):
+    """Browsers apply no CORS to websocket handshakes: any page open in the
+    desk machine's browser could open /ws and queue chart work. A handshake
+    whose Origin is neither this service's host nor localhost is refused; no
+    Origin at all (not a browser: scripts, tests) is allowed."""
+    with TestClient(replay_app(tmp_path)) as client:
+        for origin in ("https://evil.example", "http://testserver.evil.example", "null"):
+            with pytest.raises(WebSocketDisconnect):
+                with client.websocket_connect("/ws", headers={"origin": origin}) as ws:
+                    ws.receive_json()
+        for origin in ("http://testserver", "http://localhost:3000", "http://127.0.0.1:8852"):
+            with client.websocket_connect("/ws", headers={"origin": origin}) as ws:
+                assert ws.receive_json()["type"] == "status"
+        with client.websocket_connect("/ws") as ws:
+            assert ws.receive_json()["type"] == "status"
+
+
+def first_answer(ws, cid, limit=200):
+    """The history or error that answers subscription `cid`."""
+    for _ in range(limit):
+        m = ws.receive_json()
+        if m.get("id") == cid and m.get("type") in ("history", "error"):
+            return m
+    raise AssertionError(f"no answer for {cid!r}")
+
+
+def test_subscriptions_are_bounded(tmp_path):
+    """tick:1 cost ~4 s of payload on the event loop and ~185 MB of JSON per
+    session, and study counts were unbounded. Bars finer than time:5 /
+    tick:100 / volume:100 / range:2, or more than 16 studies, answer an
+    error (the page shows it in the chart)."""
+    with TestClient(replay_app(tmp_path)) as client, client.websocket_connect("/ws") as ws:
+        for spec in ("time:4", "tick:99", "volume:99", "range:1", "tick:1"):
+            ws.send_json({"op": "sub", "id": spec, "root": "NQ", "spec": spec})
+            m = first_answer(ws, spec)
+            assert m["type"] == "error" and "minimum" in m["error"], m
+        emas = [f"ema:{n}" for n in range(1, 18)]
+        ws.send_json({"op": "sub", "id": "17", "root": "NQ", "spec": "time:60", "studies": emas})
+        assert first_answer(ws, "17")["type"] == "error"
+        ws.send_json({"op": "sub", "id": "long", "root": "NQ", "spec": "time:60", "studies": ["sma:1001"]})
+        assert first_answer(ws, "long")["type"] == "error"
+        ws.send_json({"op": "sub", "id": "16", "root": "NQ", "spec": "tick:100", "studies": emas[:16]})
+        assert first_answer(ws, "16")["type"] == "history"
+        for spec in ("time:5", "volume:100", "range:2"):
+            ws.send_json({"op": "sub", "id": spec, "root": "NQ", "spec": spec})
+            assert first_answer(ws, spec)["type"] == "history"

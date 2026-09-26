@@ -3,9 +3,9 @@ from __future__ import annotations
 
 import datetime as dt
 
-from homebase.charts.bars import BarSpec
+from homebase.charts.bars import Bar, BarBuilder, BarSpec
 from homebase.charts.history import History
-from homebase.charts.hub import Hub
+from homebase.charts.hub import Hub, Stream
 from homebase.charts.store import TickStore
 from homebase.charts.tick import SideClassifier, from_row
 from tests.charts_util import D, rows, session_ms, write_archive
@@ -194,3 +194,29 @@ def test_a_previous_session_straggler_never_rolls_the_tape_back(tmp_path):
     assert hub.today_date["NQ"] == D and hub.today["NQ"] == tape
     assert len(s.bars) == bars and s.builder.cur.session == D.isoformat()
     assert s.sessions == sessions and hub.history.memo == memo
+
+
+def test_the_history_message_carries_the_most_recent_20000_bars(tmp_path):
+    """A fine bar type over a long history was unbounded work on the event
+    loop (tick:1: ~4 s of payload and ~185 MB of JSON per session): history
+    carries the most recent 20,000 bars (the live one included), each
+    study's values sliced to stay aligned; updates continue from the
+    stream's own cursor as before."""
+    hub, _, _ = setup(tmp_path)
+    s = Stream("NQ", M1, 0.25, BarBuilder(M1, 0.25))
+    s.add_study("ema:3")
+    t0 = session_ms(D, 9, 30)
+    for i in range(20_050):
+        s.commit(Bar.open_at(t0 + i * 60_000, D.isoformat(), 100.0 + i % 7))
+    s.builder.cur = Bar.open_at(t0 + 20_050 * 60_000, D.isoformat(), 105.0)
+    p = s.payload()
+    assert len(p["bars"]) == 20_000 and p["live"] is True
+    assert p["bars"][0]["ms"] == s.bars[51].t and p["bars"][-2]["ms"] == s.bars[-1].t
+    assert p["studies"]["ema:3"] == s.values["ema:3"][51:] + [s.studies["ema:3"].preview(s.builder.cur)]
+    hub.streams[s.key] = s
+    hub.subscribe(s, ("conn", "c1"))
+    assert s.subs[("conn", "c1")] == 20_050
+    s.commit(s.builder.cur)
+    s.builder.cur, s.dirty = None, True
+    [(_, up)] = hub.drain()
+    assert len(up["closed"]) == 1 and up["closed"][0]["ms"] == t0 + 20_050 * 60_000

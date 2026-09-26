@@ -177,14 +177,24 @@ class Levels(Study):
 
 REGISTRY = {"sma": SMA, "ema": EMA, "vwma": VWMA, "vwap": VWAP, "adx": ADX,
             "cumdelta": CumDelta, "levels": Levels}
+LENGTHS = range(1, 1001)        # the length a windowed study may be given
 
 
 def make(key: str) -> Study:
+    """A Study from its wire key. ValueError on anything malformed: an
+    unknown name, a length outside LENGTHS, or a parameter too many."""
     name, *args = str(key).split(":")
     cls = REGISTRY.get(name)
     if cls is None:
         raise ValueError(f"unknown study {key!r} (have {', '.join(sorted(REGISTRY))}, profile)")
-    return cls(*[int(a) if a.isdigit() else a for a in args])
+    if cls in (SMA, EMA, VWMA, ADX):
+        if len(args) > 1 or (args and not (args[0].isdecimal() and int(args[0]) in LENGTHS)):
+            raise ValueError(f"bad study {key!r}: {name} takes one length "
+                             f"{LENGTHS[0]}..{LENGTHS[-1]}, e.g. {name}:20")
+        return cls(*map(int, args))
+    if len(args) > (1 if cls is VWAP else 0):
+        raise ValueError(f"bad study {key!r}: too many parameters")
+    return cls(*args)
 
 
 def profile_from(vol: dict, tick_size: float, va: float = 0.70) -> dict | None:

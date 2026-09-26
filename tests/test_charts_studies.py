@@ -123,3 +123,15 @@ def test_make_parses_keys():
     for bad in ("nope", "vwap:xyz"):
         with pytest.raises(ValueError):
             make(bad)
+
+
+def test_make_bounds_lengths_and_rejects_extra_parameters():
+    """A study length is 1..1000 and a study takes only its own parameters;
+    anything else is a ValueError (sma:0 built a window that never trims,
+    ema:20:30 / levels:3 raised TypeError, adx:0 ZeroDivisionError, and a
+    million-bar window was free CPU/memory for any page on the desk)."""
+    for bad in ("sma:0", "ema:1001", "vwma:-5", "adx:0", "ema:20:30", "sma:1.5",
+                "vwap:rth:x", "levels:3", "cumdelta:1", "ema:"):
+        with pytest.raises(ValueError):
+            make(bad)
+    assert make("sma:1").n == 1 and make("ema:1000").n == 1000 and make("adx").n == 14

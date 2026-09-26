@@ -13,6 +13,7 @@ import time
 import traceback
 from contextlib import asynccontextmanager
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
@@ -43,6 +44,9 @@ TIMEFRAMES = [["5s", "time:5"], ["15s", "time:15"], ["30s", "time:30"], ["1m", "
               ["15m", "time:900"], ["30m", "time:1800"], ["1h", "time:3600"], ["4h", "time:14400"],
               ["1D", "time:86400"], ["500T", "tick:500"], ["1000T", "tick:1000"],
               ["2000V", "volume:2000"], ["10R", "range:10"], ["20R", "range:20"]]
+MIN_BAR = {"time": 5, "tick": 100, "volume": 100, "range": 2}   # finer bars cost too much to build/ship
+MAX_STUDIES = 16              # per subscription
+LOCAL_HOSTS = ("localhost", "127.0.0.1")
 
 
 def log(msg: str) -> None:
@@ -51,6 +55,20 @@ def log(msg: str) -> None:
 
 async def sleep(s: float) -> None:      # one seam for the tests to remove the waits
     await asyncio.sleep(s)
+
+
+def origin_ok(origin: str | None, host: str | None) -> bool:
+    """May a page from `origin` open /ws on `host`? Browsers apply no CORS
+    to websocket handshakes, so without this any site open in the desk
+    machine's browser could drive the chart process. Allowed: this
+    service's own host, localhost, and no Origin at all (not a browser)."""
+    if origin is None:
+        return True
+    try:
+        o, h = urlsplit(origin).hostname, urlsplit("//" + (host or "")).hostname
+    except ValueError:                  # e.g. a malformed IPv6 literal
+        return False
+    return o is not None and (o in LOCAL_HOSTS or o == h)
 
 
 class Conn:
@@ -315,6 +333,9 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
 
     @app.websocket("/ws")
     async def ws_endpoint(sock: WebSocket):
+        if not origin_ok(sock.headers.get("origin"), sock.headers.get("host")):
+            await sock.close(code=1008)     # before accept(): the handshake is refused (403)
+            return
         await sock.accept()
         conn = Conn(sock)
         conns.add(conn)
@@ -351,13 +372,18 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                     if root not in roots:
                         raise ValueError(f"{root!r} is not recorded (have {', '.join(roots)})")
                     spec = BarSpec.parse(msg.get("spec", ""))
-                    keys = [str(k) for k in msg.get("studies") or []]
+                    if spec.size < MIN_BAR[spec.kind]:
+                        raise ValueError(f"{spec.key} is too fine for the live charts "
+                                         f"(minimum {spec.kind}:{MIN_BAR[spec.kind]})")
+                    studies = msg.get("studies") or []
+                    if len(studies) > MAX_STUDIES:
+                        raise ValueError(f"{len(studies)} studies on one chart (at most {MAX_STUDIES})")
+                    keys = [str(k) for k in studies]
                     for k in keys:
                         if k != "profile":
-                            make(k)
-                except Exception as e:  # noqa: BLE001 — a malformed sub (bad root/spec/study,
-                                        # e.g. adx:0 -> ZeroDivisionError) answers an error,
-                                        # never kills the connection
+                            make(k)     # ValueError on an unknown study or a length outside 1..1000
+                except Exception as e:  # noqa: BLE001 — a malformed sub (bad root/spec/study, too
+                                        # fine, too many) answers an error, never kills the connection
                     conn.send({"type": "error", "id": cid, "error": str(e)})
                     continue
                 s = None

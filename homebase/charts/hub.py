@@ -22,6 +22,8 @@ from .session import session_date
 from .studies import Profile, make
 from .tick import BUY, SideClassifier, Tick, from_row
 
+HISTORY_MAX = 20_000    # a history message carries at most this many bars: the most recent
+
 
 def sessions_back(spec: BarSpec) -> int:
     """Completed sessions loaded behind today, per bar type."""
@@ -74,11 +76,15 @@ class Stream:
         self.values[key] = [st.push(b) for b in self.bars]
 
     def payload(self, fp: bool = True) -> dict:
+        """The history message: the most recent HISTORY_MAX bars, every
+        study's values sliced to match. A subscriber's cursor is still
+        len(self.bars), so its updates continue where this ends."""
         ts, live = self.tick_size, self.builder.cur
-        bars = [b.wire(ts, fp) for b in self.bars]
+        first = max(0, len(self.bars) + (live is not None) - HISTORY_MAX)
+        bars = [b.wire(ts, fp) for b in self.bars[first:]]
         if live is not None:
             bars.append(live.wire(ts, fp))
-        studies = {k: self.values[k] + ([st.preview(live)] if live is not None else [])
+        studies = {k: self.values[k][first:] + ([st.preview(live)] if live is not None else [])
                    for k, st in self.studies.items()}
         return {"root": self.root, "spec": self.spec.key, "tick_size": ts, "bars": bars,
                 "live": live is not None, "studies": studies,
