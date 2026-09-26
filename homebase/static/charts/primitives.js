@@ -121,7 +121,7 @@ class Gaps extends Layer {
     if (!this.chart || !this.idx.length) return;
     const ts = this.chart.timeScale(), sp = Math.max(this.spacing(), 2);
     target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
-      ctx.font = '10px system-ui, sans-serif'; ctx.textAlign = 'center';
+      ctx.font = '11px -apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif'; ctx.textAlign = 'center';
       for (const i of this.idx) {
         // v5's logicalToCoordinate returns 0 (not null) for a fractional logical --
         // it only resolves real bar coordinates at integers -- so the band must be
@@ -130,7 +130,7 @@ class Gaps extends Layer {
         if (x0 == null || x1 == null) continue;
         const x = (x0 + x1) / 2;
         ctx.fillStyle = this.P.gap; ctx.fillRect(x - sp / 2, 0, sp, mediaSize.height);
-        ctx.fillStyle = this.P.text; ctx.fillText('no data', x, 30);
+        ctx.fillStyle = this.P.text2; ctx.fillText('no data', x, 30);
       }
     });
   }

@@ -1,426 +1,302 @@
-/* Homebase Charts — the page. One websocket to the chart service (:8852);
-   each grid cell is a Cell that subscribes one (root, bar type, studies)
-   stream. The server computes everything (bars, footprint, studies,
-   profile); this file only draws. Bar times arrive as ET wall-clock
-   seconds, so the axis reads ET. Tick/volume/range bars sit on an evenly
-   spaced synthetic axis (many can share one second) and are labelled with
-   their real times. */
+/* Homebase Charts — the page: layout and selection, the top toolbar (it
+   acts on the selected chart), menus, the websocket to the chart service
+   (:8852) and the bottom bar. Each grid slot is an HBCell.Cell; the server
+   computes everything, the page only draws. */
 (() => {
 'use strict';
-const LW = window.LightweightCharts;
-const { Footprint, Profile, Gaps } = window.HBLayers;
-const FAKE0 = 946684800;
+const C = window.HBCatalog, I = window.HBIcons, { Cell } = window.HBCell;
 const GRIDS = { 1: [1, 1], 2: [2, 1], 4: [2, 2], 6: [3, 2] };
 const STATUS_STALE_S = 6;   // the server sends a status every 2 s: this long without one = it is stuck
-const ST0 = { vwap: true, vwapAnchor: 'eth', vwapBands: false, ema1: 0, ema2: 0, sma: 0, vwma: 0,
-  levels: true, volume: true, delta: false, cumdelta: false, adx: 0,
-  footprint: true, imbalance: 3, profile: false, bigMin: 0 };
-const CELLS0 = [['NQ', 'time:60'], ['NQ', 'time:300'], ['ES', 'time:60'], ['YM', 'time:60'],
-  ['NQ', 'tick:1000'], ['NQ', 'time:900']].map(([root, spec]) => ({ root, spec, st: { ...ST0 } }));
-const FORM = [
-  ['vwap', 'VWAP', 'check'], ['vwapAnchor', 'VWAP anchor', 'select', ['eth', 'rth']], ['vwapBands', 'VWAP 1σ / 2σ bands', 'check'],
-  ['ema1', 'EMA', 'num'], ['ema2', 'EMA', 'num'], ['sma', 'SMA', 'num'], ['vwma', 'VWMA', 'num'],
-  ['levels', 'Session levels', 'check'], ['volume', 'Volume', 'check'], ['delta', 'Delta', 'check'],
-  ['cumdelta', 'Cum. delta', 'check'], ['adx', 'ADX', 'num'], ['footprint', 'Footprint', 'check'],
-  ['imbalance', 'Imbalance ×', 'num'], ['profile', 'Volume profile', 'check'], ['bigMin', 'Big prints ≥', 'num'],
-];
-const LEVELS = [['pdh', 'PDH'], ['pdl', 'PDL'], ['pdc', 'PDC'], ['onh', 'ONH'], ['onl', 'ONL'], ['rth_open', 'Open']];
+const START = [['NQ', 'time:60'], ['NQ', 'time:300'], ['ES', 'time:60'], ['YM', 'time:60'], ['NQ', 'tick:1000'], ['NQ', 'time:900']];
+const ET_CLOCK = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit',
+  second: '2-digit', hourCycle: 'h23' });
 
-let meta = { roots: ['NQ'], timeframes: [['1m', 'time:60']] };
+let meta = { roots: ['NQ'], timeframes: [] };
 let ws = null;
-let layout = { grid: 4, cells: CELLS0.map((c) => JSON.parse(JSON.stringify(c))) };
-const cells = new Map();
+let layout = { grid: 4, cells: [], name: '' };
+let cells = [];
+let selected = 0;
 let nextId = 1;
-let statusAt = 0, statusLine = '';   // when the server's last status arrived, and its rendered line
+let statusAt = 0, statusLine = '';
+let menuEl = null, menuAnchor = null;
+let customWait = null;   // {cell, spec, err}: a custom interval sent from the open interval menu, awaiting the server
 
-const $ = (s, el = document) => el.querySelector(s);
-const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const $ = (s, root = document) => root.querySelector(s);
 const iso = (t) => new Date(t * 1000).toISOString();
+function mk(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+}
+function icon(name) { const s = mk('span', 'icw'); s.innerHTML = I[name] || ''; return s; }   // our own static SVG strings
+const cur = () => cells[selected];
 
-function palette() {
-  const dark = document.documentElement.getAttribute('data-theme') === 'dark';
-  return dark
-    ? { bg: '#0a0a0a', text: '#a1a1aa', grid: '#1c1c1f', up: '#22c55e', down: '#ef4444',
-        upA: 'rgba(34,197,94,.5)', downA: 'rgba(239,68,68,.5)', lines: ['#60a5fa', '#f59e0b', '#c084fc', '#2dd4bf'],
-        vwap: '#e879f9', band: 'rgba(232,121,249,.45)', level: '#94a3b8', fpText: '#d4d4d8', fpBg: 'rgba(255,255,255,.06)',
-        poc: '#fbbf24', va: 'rgba(96,165,250,.14)', vaIn: 'rgba(96,165,250,.30)', gap: 'rgba(148,163,184,.16)' }
-    : { bg: '#ffffff', text: '#52525b', grid: '#f1f1f3', up: '#16a34a', down: '#dc2626',
-        upA: 'rgba(22,163,74,.45)', downA: 'rgba(220,38,38,.45)', lines: ['#2563eb', '#d97706', '#9333ea', '#0d9488'],
-        vwap: '#c026d3', band: 'rgba(192,38,211,.4)', level: '#64748b', fpText: '#27272a', fpBg: 'rgba(0,0,0,.05)',
-        poc: '#d97706', va: 'rgba(37,99,235,.10)', vaIn: 'rgba(37,99,235,.22)', gap: 'rgba(100,116,139,.14)' };
+/* ---- layout + selection ---- */
+function starter(i) { const [root, spec] = START[i % START.length]; return { root, spec, indicators: C.defaults() }; }
+function saveLast() { try { localStorage.setItem('hb_charts_last', JSON.stringify(layout)); } catch (_) { /* storage off */ } }
+function loadLast() {
+  try {
+    const v = JSON.parse(localStorage.getItem('hb_charts_last') || 'null');
+    if (v && Array.isArray(v.cells)) layout = { ...C.migrateLayout(v), name: typeof v.name === 'string' ? v.name : '' };
+  } catch (_) { /* unreadable: start fresh */ }
 }
 
-function studyKeys(st) {
-  const k = [];
-  if (st.vwap) k.push(st.vwapAnchor === 'rth' ? 'vwap:rth' : 'vwap');
-  for (const [f, name] of [['ema1', 'ema'], ['ema2', 'ema'], ['sma', 'sma'], ['vwma', 'vwma']]) if (+st[f] > 0) k.push(`${name}:${+st[f]}`);
-  if (st.levels) k.push('levels');
-  if (st.cumdelta) k.push('cumdelta');
-  if (+st.adx > 0) k.push(`adx:${+st.adx}`);
-  if (st.profile) k.push('profile');
-  return [...new Set(k)];
-}
-
-class Cell {
-  constructor(el, cfg) {
-    this.el = el; this.cfg = cfg; this.id = 'c' + (nextId++); cells.set(this.id, this);
-    this.bars = []; this.devel = false; this.chart = null; this.sessions = [];
-    this.el.innerHTML = `
-      <div class="cell-bar">
-        <select class="root"></select><select class="spec"></select>
-        <input class="custom" size="9" placeholder="tick:750" title="Custom bar type: time:SECONDS, tick:TRADES, volume:CONTRACTS, range:TICKS">
-        <span class="spacer"></span>
-        <span class="approx pill idle" hidden title="Part of this history has no bid/ask: the buy/sell split there is by tick rule">≈ flow</span>
-        <button class="btn btn-outline btn-sm st-btn" type="button">Studies</button>
-      </div>
-      <div class="cell-chart"><div class="legend"></div><div class="cell-msg">connecting…</div></div>
-      <div class="studies-pop"></div>`;
-    this.fillControls();
-    this.subscribe();
-  }
-
-  isTime() { return this.cfg.spec.startsWith('time:'); }
-
-  fillControls() {
-    const root = $('.root', this.el), spec = $('.spec', this.el), custom = $('.custom', this.el);
-    root.innerHTML = meta.roots.map((r) => `<option ${r === this.cfg.root ? 'selected' : ''}>${esc(r)}</option>`).join('');
-    const known = meta.timeframes.some(([, v]) => v === this.cfg.spec);
-    spec.innerHTML = meta.timeframes.map(([l, v]) => `<option value="${esc(v)}" ${v === this.cfg.spec ? 'selected' : ''}>${esc(l)}</option>`).join('')
-      + (known ? '' : `<option value="${esc(this.cfg.spec)}" selected>${esc(this.cfg.spec)}</option>`);
-    root.onchange = () => { this.cfg.root = root.value; this.changed(); };
-    spec.onchange = () => { this.cfg.spec = spec.value; this.changed(); };
-    custom.onkeydown = (e) => {
-      if (e.key !== 'Enter' || !custom.value.trim()) return;
-      this.cfg.spec = custom.value.trim(); custom.value = ''; this.fillControls(); this.changed();
-    };
-    const pop = $('.studies-pop', this.el);
-    pop.innerHTML = FORM.map(([k, label, kind, opts]) => {
-      const v = this.cfg.st[k];
-      if (kind === 'check') return `<label><input type="checkbox" data-k="${k}" ${v ? 'checked' : ''}> ${label}</label>`;
-      if (kind === 'num') return `<label>${label} <input type="number" min="0" data-k="${k}" value="${+v || 0}"> <small>0 = off</small></label>`;
-      return `<label>${label} <select data-k="${k}">${opts.map((o) => `<option ${o === v ? 'selected' : ''}>${o}</option>`).join('')}</select></label>`;
-    }).join('');
-    pop.onchange = (e) => {
-      const k = e.target.dataset.k; if (!k) return;
-      this.cfg.st[k] = e.target.type === 'checkbox' ? e.target.checked : (e.target.type === 'number' ? +e.target.value : e.target.value);
-      this.changed();
-    };
-    $('.st-btn', this.el).onclick = () => pop.classList.toggle('open');
-  }
-
-  changed() { saveLast(); this.subscribe(); }
-
-  msg(text) { const m = $('.cell-msg', this.el); m.textContent = text || ''; m.hidden = !text; }
-
-  subscribe() {
-    if (!ws || ws.readyState !== 1) return;
-    this.msg('loading…');
-    ws.send(JSON.stringify({ op: 'sub', id: this.id, root: this.cfg.root, spec: this.cfg.spec,
-      studies: studyKeys(this.cfg.st), fp: true }));
-  }
-
-  destroy() {
-    if (ws && ws.readyState === 1) ws.send(JSON.stringify({ op: 'unsub', id: this.id }));
-    if (this.chart) this.chart.remove();
-    this.chart = this.candles = this.fp = null;   // so a stale async callback can tell this cell is gone
-    cells.delete(this.id);
-  }
-
-  real(tt) { return this.isTime() ? tt : (this.realT.get(tt) ?? tt); }
-  fullTime(tt) { return iso(this.real(tt)).slice(0, 19).replace('T', ' ') + ' ET'; }
-  specLabel() { const t = meta.timeframes.find(([, v]) => v === this.cfg.spec); return t ? t[0] : this.cfg.spec; }
-
-  makeChart() {
-    if (this.chart) this.chart.remove();
-    const P = this.P = palette(), box = $('.cell-chart', this.el);
-    const sub = this.isTime() && +this.cfg.spec.split(':')[1] < 60;
-    this.chart = LW.createChart(box, {
-      autoSize: true,
-      // attribution lives once in the footer (#lwcCredit) instead of on every chart
-      layout: { background: { type: 'solid', color: P.bg }, textColor: P.text, fontSize: 11,
-        attributionLogo: false, panes: { separatorColor: P.grid, enableResize: true } },
-      grid: { vertLines: { color: P.grid }, horzLines: { color: P.grid } },
-      rightPriceScale: { borderColor: P.grid },
-      timeScale: { borderColor: P.grid, timeVisible: true, secondsVisible: sub,
-        tickMarkFormatter: (t, type) => { const s = iso(this.real(t)); return type <= 2 ? s.slice(5, 10) : (type === 4 ? s.slice(11, 19) : s.slice(11, 16)); } },
-      localization: { timeFormatter: (t) => this.fullTime(t) },
-      crosshair: { mode: LW.CrosshairMode.Normal },
-    });
-    this.candles = this.chart.addSeries(LW.CandlestickSeries, { upColor: P.up, downColor: P.down,
-      wickUpColor: P.up, wickDownColor: P.down, borderVisible: false });
-    this.markers = LW.createSeriesMarkers(this.candles, []);
-    this.fp = new Footprint(P); this.prof = new Profile(P); this.gaps = new Gaps(P);
-    const fp = this.fp;   // pin the instance this callback was made for
-    this.fp.onReadableChange = (on) => {   // fired async from Footprint.updateAllViews(), post-layout
-      if (this.fp !== fp || !this.chart) return;   // stale: this cell moved on to a different chart/footprint
-      this.fpShown = on;       // footprint visible: hide candle bodies, keep the wicks
-      this.candles.applyOptions(on ? { upColor: 'rgba(0,0,0,0)', downColor: 'rgba(0,0,0,0)' } : { upColor: this.P.up, downColor: this.P.down });
-    };
-    for (const l of [this.gaps, this.prof, this.fp]) this.candles.attachPrimitive(l);
-    this.series = {}; this.levelLines = {}; this.paneOf = {}; this.panes = 0; this.fpShown = false;
-    this.chart.timeScale().subscribeVisibleLogicalRangeChange(() => this.syncFootprint());
-    this.chart.subscribeCrosshairMove((p) => this.legend(p && p.logical != null ? Math.round(p.logical) : null));
-  }
-
-  pane(name) { if (!(name in this.paneOf)) this.paneOf[name] = ++this.panes; return this.paneOf[name]; }
-
-  line(key, color, width = 1, pane = 0, style = 0) {
-    const s = this.chart.addSeries(LW.LineSeries, { color, lineWidth: width, lineStyle: style,
-      priceLineVisible: false, lastValueVisible: pane > 0, crosshairMarkerVisible: false }, pane);
-    this.series[key] = s; return s;
-  }
-
-  append(b) {
-    const last = this.bars[this.bars.length - 1];
-    b.tt = this.isTime() ? b.t : FAKE0 + this.bars.length * 60;
-    if (last && b.tt <= last.tt) b.tt = last.tt + 1;
-    if (!this.isTime()) this.realT.set(b.tt, b.t);
-    this.bars.push(b);
-  }
-
-  replaceLast(b) {
-    const i = this.bars.length - 1;
-    b.tt = this.bars[i].tt;
-    if (!this.isTime()) this.realT.set(b.tt, b.t);
-    this.bars[i] = b;
-  }
-
-  candle(b) { return { time: b.tt, open: b.o, high: b.h, low: b.l, close: b.c }; }
-
-  point(key, b) {
-    const P = this.P, time = b.tt;
-    if (key === '__vol') return { time, value: b.v, color: b.d >= 0 ? P.upA : P.downA };
-    if (key === '__delta') return { time, value: b.d, color: b.d >= 0 ? P.upA : P.downA };
-    const [base, part] = key.split('#');
-    const v = b.sv ? b.sv[base] : null;
-    if (v == null) return { time };
-    if (typeof v === 'number') return { time, value: v };
-    if (base.startsWith('vwap')) {
-      if (v.vwap == null) return { time };
-      return { time, value: v.vwap + ({ u1: 1, l1: -1, u2: 2, l2: -2 }[part] || 0) * v.sd };
-    }
-    if (base.startsWith('adx')) { const x = part === 'p' ? v.pdi : part === 'm' ? v.mdi : v.adx; return x == null ? { time } : { time, value: x }; }
-    return { time };
-  }
-
-  onHistory(m) {
-    this.makeChart();
-    this.tick = m.tick_size; this.sessions = m.sessions || [];
-    this.bars = []; this.realT = new Map(); this.devel = !!m.live;
-    m.bars.forEach((b, i) => { b.sv = {}; for (const k in m.studies) b.sv[k] = m.studies[k][i]; this.append(b); });
-    this.candles.setData(this.bars.map((b) => this.candle(b)));
-    const st = this.cfg.st;
-    if (st.volume) this.series.__vol = this.chart.addSeries(LW.HistogramSeries, { priceFormat: { type: 'volume' }, priceLineVisible: false, lastValueVisible: false }, this.pane('volume'));
-    if (st.delta) this.series.__delta = this.chart.addSeries(LW.HistogramSeries, { priceLineVisible: false }, this.pane('delta'));
-    this.addStudySeries(Object.keys(m.studies || {}));
-    this.redrawAll();
-    for (const [name, idx] of Object.entries(this.paneOf)) { const pane = this.chart.panes()[idx]; if (pane) pane.setHeight(name === 'volume' ? 70 : 90); }
-    $('.approx', this.el).hidden = !this.sessions.some((s) => s.approx);
-    this.prof.set(m.profile, this.tick);
-    this.msg('');
-    this.chart.timeScale().scrollToRealTime();
-    this.legend(null);
-  }
-
-  addStudySeries(keys) {
-    const P = this.P, st = this.cfg.st;
-    let ci = 0;
-    for (const key of keys) {
-      const name = key.split(':')[0];
-      if (name === 'ema' || name === 'sma' || name === 'vwma') this.line(key, P.lines[ci++ % P.lines.length]);
-      else if (name === 'vwap') {
-        this.line(key, P.vwap, 2);
-        if (st.vwapBands) for (const b of ['u1', 'l1', 'u2', 'l2']) this.line(`${key}#${b}`, P.band, 1, 0, 2);
-      } else if (name === 'cumdelta') this.line(key, P.lines[1], 1, this.pane('cumdelta'));
-      else if (name === 'adx') {
-        const p = this.pane('adx');
-        this.line(key, P.text, 2, p); this.line(`${key}#p`, P.up, 1, p); this.line(`${key}#m`, P.down, 1, p);
-      }
-    }
-  }
-
-  redrawAll() {
-    for (const [key, s] of Object.entries(this.series)) s.setData(this.bars.map((b) => this.point(key, b)));
-    this.drawMarkers(); this.drawLevels(); this.drawGaps(); this.syncFootprint();
-  }
-
-  onUpdate(m) {
-    if (!this.chart) return;
-    const touched = [];
-    const vals = (i, live) => { const o = {}; for (const k in m.studies) o[k] = live ? m.studies[k].live : m.studies[k].closed[i]; return o; };
-    m.closed.forEach((b, i) => { b.sv = vals(i, false); if (i === 0 && this.devel) this.replaceLast(b); else this.append(b); touched.push(b); });
-    if (m.live) { m.live.sv = vals(0, true); if (!m.closed.length && this.devel) this.replaceLast(m.live); else this.append(m.live); touched.push(m.live); }
-    this.devel = !!m.live;
-    for (const b of touched) {
-      this.candles.update(this.candle(b));
-      for (const [key, s] of Object.entries(this.series)) s.update(this.point(key, b));
-    }
-    if (m.profile !== undefined) this.prof.set(m.profile, this.tick);
-    if (touched.some((b) => b.big && b.big.length)) this.drawMarkers();
-    this.drawLevels(); this.syncFootprint();
-    this.legend(null);
-  }
-
-  drawMarkers() {
-    const min = +this.cfg.st.bigMin || 0, P = this.P;
-    if (!min) { this.markers.setMarkers([]); return; }
-    const out = [];
-    for (const b of this.bars) for (const [, , size, side] of (b.big || [])) {
-      if (size >= min) out.push({ time: b.tt, position: side > 0 ? 'belowBar' : 'aboveBar',
-        color: side > 0 ? P.up : P.down, shape: 'circle', size: 0.6, text: String(size) });
-    }
-    this.markers.setMarkers(out.slice(-600));
-  }
-
-  drawLevels() {
-    const last = this.bars[this.bars.length - 1], lv = last && last.sv ? last.sv.levels : null;
-    for (const [k, title] of LEVELS) {
-      const px = lv ? lv[k] : null, cur = this.levelLines[k];
-      if (px == null) { if (cur) { this.candles.removePriceLine(cur); delete this.levelLines[k]; } continue; }
-      if (cur) { if (cur.options().price !== px) cur.applyOptions({ price: px }); continue; }
-      this.levelLines[k] = this.candles.createPriceLine({ price: px, color: this.P.level, lineWidth: 1,
-        lineStyle: LW.LineStyle.Dashed, axisLabelVisible: true, title });
-    }
-  }
-
-  drawGaps() {
-    const idx = [];
-    for (const s of this.sessions) for (const [a] of (s.gaps || [])) {
-      let i = -1;
-      for (let j = 0; j < this.bars.length && this.bars[j].t <= a; j++) i = j;
-      if (i >= 0 && i < this.bars.length - 1) idx.push(i);
-    }
-    this.gaps.set(idx);
-  }
-  syncFootprint() {
-    if (!this.fp) return;
-    this.fp.set(this.bars, !!this.cfg.st.footprint, +this.cfg.st.imbalance || 0, this.tick);
-    // readability (and the candle-hide toggle) is decided by the layer itself,
-    // at render time, via onReadableChange -- see makeChart().
-  }
-
-  legend(i) {
-    const el = $('.legend', this.el);
-    const b = i == null ? this.bars[this.bars.length - 1] : this.bars[Math.max(0, Math.min(i, this.bars.length - 1))];
-    if (!b) { el.textContent = ''; return; }
-    el.textContent = `${this.cfg.root} ${this.specLabel()}  ${this.fullTime(b.tt)}  O ${b.o}  H ${b.h}  L ${b.l}  C ${b.c}  V ${b.v}  Δ ${b.d > 0 ? '+' : ''}${b.d}`;
-  }
+function hostFor(id) {
+  return {
+    id,
+    send(msg) { if (!ws || ws.readyState !== 1) return false; ws.send(JSON.stringify(msg)); return true; },
+    onPick(cell) { select(cells.indexOf(cell)); },
+    onLoaded,
+    onRefused,
+    changed() { saveLast(); renderToolbar(); },
+  };
 }
 
 function buildGrid() {
-  for (const c of [...cells.values()]) c.destroy();
-  const grid = $('#grid'), [cols, rows] = GRIDS[layout.grid] || GRIDS[4];
+  for (const c of cells) c.destroy();
+  cells = [];
+  const grid = $('#grid'), [cols, rows] = GRIDS[layout.grid] || GRIDS[4], n = cols * rows;
   grid.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
   grid.style.gridTemplateRows = `repeat(${rows}, minmax(0, 1fr))`;
-  grid.innerHTML = '';
-  while (layout.cells.length < cols * rows) {
-    const c = CELLS0[layout.cells.length % CELLS0.length];
-    layout.cells.push({ root: c.root, spec: c.spec, st: { ...ST0 } });
+  grid.dataset.count = String(n);
+  grid.replaceChildren();
+  while (layout.cells.length < n) layout.cells.push(starter(layout.cells.length));
+  for (let i = 0; i < n; i++) {
+    const slot = mk('div');
+    grid.appendChild(slot);
+    cells.push(new Cell(slot, layout.cells[i], hostFor('c' + (nextId++))));
   }
-  for (let i = 0; i < cols * rows; i++) {
-    const el = document.createElement('div'); el.className = 'cell'; grid.appendChild(el);
-    layout.cells[i].st = { ...ST0, ...(layout.cells[i].st || {}) };
-    new Cell(el, layout.cells[i]);
-  }
-  $('#gridSel').value = String(layout.grid);
+  select(Math.min(selected, n - 1));
 }
 
+function select(i) {
+  if (i < 0 || i >= cells.length) return;
+  selected = i;
+  cells.forEach((c, k) => c.setSelected(k === i));
+  renderToolbar();
+}
+
+/* ---- toolbar ---- */
+function renderToolbar() {
+  const c = cur();
+  if (!c) return;
+  const { root, spec } = c.cfg;
+  $('#tbSymbolText').textContent = root;
+  $('#tbSymbol').title = `${root} · ${C.rootName(root) || 'symbol'} — change symbol`;
+  const favs = C.FAVOURITES.slice();
+  if (!favs.some(([, s]) => s === spec)) favs.push([C.specLabel(spec), spec]);
+  $('#tbFavs').replaceChildren(...favs.map(([label, s]) => {
+    const b = mk('button', 'tb-btn iv' + (s === spec ? ' active' : ''), label);
+    b.type = 'button';
+    b.title = C.longLabel(s);
+    b.setAttribute('aria-pressed', String(s === spec));
+    b.onclick = () => { if (cur().cfg.spec !== s) cur().update({ spec: s }); };
+    return b;
+  }));
+  const dark = document.documentElement.getAttribute('data-theme') === 'dark', th = $('#tbTheme');
+  th.replaceChildren(icon(dark ? 'sun' : 'moon'));
+  th.title = dark ? 'Light theme' : 'Dark theme';
+}
+
+/* One popup menu at a time, under its toolbar button. */
+function openMenu(anchor, cls) {
+  closeMenu();
+  const m = mk('div', 'menu' + (cls ? ' ' + cls : ''));
+  m.setAttribute('role', 'menu');
+  $('#menuRoot').appendChild(m);
+  menuEl = m; menuAnchor = anchor;
+  anchor.classList.add('open');
+  anchor.setAttribute('aria-expanded', 'true');
+  return m;
+}
+function placeMenu() {
+  if (!menuEl) return;
+  const r = menuAnchor.getBoundingClientRect(), w = menuEl.offsetWidth;
+  menuEl.style.left = Math.max(4, Math.min(r.left, window.innerWidth - w - 4)) + 'px';
+  menuEl.style.top = (r.bottom + 4) + 'px';
+}
+function closeMenu() {
+  if (!menuEl) return;
+  menuEl.remove();
+  menuAnchor.classList.remove('open');
+  menuAnchor.setAttribute('aria-expanded', 'false');
+  menuEl = menuAnchor = null;
+  customWait = null;
+}
+function toggleMenu(anchor, fill) {
+  if (menuAnchor === anchor) { closeMenu(); return; }
+  fill();
+  placeMenu();
+}
+function menuItem(text, sub, onPick, active) {
+  const b = mk('button', 'menu-i' + (active ? ' active' : ''));
+  b.type = 'button';
+  b.setAttribute('role', 'menuitem');
+  b.appendChild(mk('span', 'menu-t', text));
+  if (sub) b.appendChild(mk('span', 'menu-sub', sub));
+  b.onclick = onPick;
+  return b;
+}
+
+function symbolMenu() {
+  const m = openMenu($('#tbSymbol'), 'menu-sym'), input = mk('input', 'menu-input'), list = mk('div');
+  input.type = 'text'; input.placeholder = 'Search'; input.spellcheck = false;
+  input.setAttribute('aria-label', 'Search symbols');
+  const render = () => {
+    const q = input.value.trim().toUpperCase(), c = cur();
+    const hits = meta.roots.filter((r) => !q || r.includes(q) || C.rootName(r).toUpperCase().includes(q));
+    list.replaceChildren(...hits.map((r) => menuItem(r, C.rootName(r), () => {
+      closeMenu();
+      if (c.cfg.root !== r) c.update({ root: r });
+    }, r === c.cfg.root)));
+    if (!hits.length) list.appendChild(mk('div', 'menu-empty', 'No matching symbol'));
+  };
+  input.oninput = render;
+  input.onkeydown = (e) => { if (e.key === 'Enter') { const first = list.querySelector('.menu-i'); if (first) first.click(); } };
+  m.append(input, list);
+  render();
+  input.focus();
+}
+
+function intervalMenu() {
+  const m = openMenu($('#tbIntervals'), 'menu-iv'), c = cur(), spec = c.cfg.spec;
+  for (const [group, specs] of C.INTERVAL_GROUPS) {
+    m.appendChild(mk('div', 'menu-h', group));
+    for (const s of specs) {
+      m.appendChild(menuItem(C.longLabel(s), '', () => { closeMenu(); if (c.cfg.spec !== s) c.update({ spec: s }); }, s === spec));
+    }
+  }
+  m.appendChild(mk('div', 'menu-h', 'Custom'));
+  const row = mk('div', 'menu-custom'), input = mk('input', 'menu-input'), apply = mk('button', 'btn btn-primary', 'Apply');
+  const err = mk('div', 'menu-err');
+  err.hidden = true;
+  err.setAttribute('role', 'alert');
+  input.type = 'text'; input.placeholder = 'e.g. 45s, 750T, tick:750'; input.spellcheck = false;
+  input.setAttribute('aria-label', 'Custom interval');
+  apply.type = 'button';
+  const go = () => {
+    const s = C.toSpec(input.value);
+    if (!s) { err.textContent = 'Use e.g. 45s, 2m, 4h, 1D, 750T, 3000V, 8R or tick:750'; err.hidden = false; return; }
+    err.hidden = true;
+    if (s === c.cfg.spec) { closeMenu(); return; }
+    customWait = { cell: c, spec: s, err };
+    c.update({ spec: s });
+  };
+  apply.onclick = go;
+  input.onkeydown = (e) => { if (e.key === 'Enter') go(); };
+  row.append(input, apply);
+  m.append(row, err);
+}
+
+/* A custom interval the open menu sent loaded: close the menu. */
+function onLoaded(cell) {
+  if (customWait && customWait.cell === cell && cell.cfg.spec === customWait.spec) closeMenu();
+}
+
+/* The server refused a change (the cell already went back to its last good
+   config): say why inline in the interval menu if that is where it came
+   from, else in the chart's legend. */
+function onRefused(cell, tried, text) {
+  if (customWait && customWait.cell === cell && menuEl) {
+    customWait.err.textContent = text;
+    customWait.err.hidden = false;
+    customWait = null;
+    return;
+  }
+  cell.note(text);
+}
+
+function toggleTheme() {
+  const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  try { localStorage.setItem('hb_theme', next); } catch (_) { /* storage off */ }
+  for (const c of cells) c.restyle();
+  renderToolbar();
+}
+
+/* ---- bottom bar ---- */
+function fmtAge(a) { return a == null ? '—' : a < 60 ? `${a.toFixed(1)}s` : `${Math.round(a / 60)}m`; }
+
 function showStatus(s) {
-  const dot = $('#feedDot'), txt = $('#feedText'), bud = $('#budgetText');
-  const roots = s.roots || {};
-  const ages = Object.entries(roots).map(([r, x]) => {
-    const a = x.last_tick_age_s;
-    return `${r} ${a == null ? '—' : a < 60 ? a.toFixed(1) + 's' : Math.round(a / 60) + 'm'}`;
-  });
-  const worst = Math.max(0, ...Object.values(roots).map((x) => x.last_tick_age_s ?? 0));
-  const rec = s.recorder, recErr = rec && rec.error, recBusy = rec && rec.buffered >= 5000;
-  dot.className = 'dot ' + (!s.connected || s.error || recErr ? 'bad' : worst > 30 || recBusy ? 'warn' : 'ok');
-  const mode = s.mode === 'replay'
-    ? `replay ${s.date} ×${s.speed} · ${iso(s.clock_s || 0).slice(11, 19)} ET${s.done ? ' · done' : ''}`
-    : s.mode === 'live' ? `live · md ${s.md || ''}` : '';
-  txt.textContent = [mode, ...ages, s.error || '', recErr ? 'recorder: ' + recErr : ''].filter(Boolean).join('  ·  ');
-  bud.textContent = s.mode === 'live'
-    ? `md budget ${s.budget_hour ?? 0}/180 this hour` + (rec ? ` · rec buffered ${rec.buffered.toLocaleString()}` : '') + ` · ${s.clients ?? 0} page(s)`
-    : '';
-  statusLine = txt.textContent;
+  const roots = s.roots || {}, rec = s.recorder, recErr = rec && rec.error, recBusy = !!(rec && rec.buffered >= 5000);
+  const stale = Object.entries(roots).filter(([, x]) => (x.last_tick_age_s ?? 0) > 30)
+    .sort((a, b) => b[1].last_tick_age_s - a[1].last_tick_age_s);
+  $('#sbDot').className = 'sb-dot ' + (!s.connected || s.error || recErr ? 'bad' : stale.length || recBusy ? 'warn' : 'ok');
+  $('#sbMode').textContent = s.mode === 'replay'
+    ? `Replay ${s.date} ×${s.speed} · ${iso(s.clock_s || 0).slice(11, 19)} ET${s.done ? ' · done' : ''}`
+    : s.mode === 'live' ? `Live · md ${s.md || ''}` : 'Disconnected';
+  const feed = $('#sbFeed');
+  feed.textContent = s.error || (recErr ? `recorder: ${recErr}` : '')
+    || (stale.length ? stale.slice(0, 2).map(([r, x]) => `${r} stale ${fmtAge(x.last_tick_age_s)}`).join(' · ') : '')
+    || (Object.keys(roots).length ? 'feeds ok' : '');
+  feed.title = Object.entries(roots).map(([r, x]) => `${r} ${fmtAge(x.last_tick_age_s)}`).join('  ·  ');
+  feed.classList.toggle('bad', !!(s.error || recErr));
+  const budget = $('#sbBudget');
+  budget.textContent = s.mode === 'live' ? `md ${s.budget_hour ?? 0}/180` : '';
+  budget.title = s.mode === 'live' ? `Chart requests this hour on the md login (limit 180) · ${s.clients ?? 0} page(s)` : '';
+  const recEl = $('#sbRec');
+  recEl.textContent = s.mode === 'live' && rec ? `rec buffered ${rec.buffered.toLocaleString('en-US')}` : '';
+  recEl.classList.toggle('warn', recBusy);
+  statusLine = feed.textContent;
 }
 
 /* The socket is open but no status came for STATUS_STALE_S (the chart
-   service is stuck, or its status broadcast is failing): grey the strip so
-   a stale chart is never mistaken for a quiet market. A 'bad' dot stays bad. */
+   service is stuck, or its status broadcast is failing): grey the bar so a
+   stale chart is never mistaken for a quiet market. A 'bad' dot stays bad. */
 function greyIfStale() {
   if (!statusAt || !ws || ws.readyState !== 1) return;
   const age = (Date.now() - statusAt) / 1000;
   if (age < STATUS_STALE_S) return;
-  const dot = $('#feedDot');
-  if (!dot.classList.contains('bad')) dot.className = 'dot warn';
-  $('#feedText').textContent = `no status for ${Math.round(age)}s` + (statusLine ? `  ·  ${statusLine}` : '');
+  const dot = $('#sbDot');
+  if (!dot.classList.contains('bad')) dot.className = 'sb-dot warn';
+  $('#sbFeed').textContent = `no status for ${Math.round(age)}s` + (statusLine ? ` · ${statusLine}` : '');
 }
 
-async function loadLayouts(select) {
-  let all = {};
-  try { const r = await fetch('/api/layouts'); if (r.ok) all = await r.json(); } catch (_) {}
-  const sel = $('#layoutSel');
-  sel.innerHTML = '<option value="">Layouts…</option>' + Object.keys(all).map((n) => `<option ${n === select ? 'selected' : ''}>${esc(n)}</option>`).join('');
-  sel.onchange = () => { if (all[sel.value]) { layout = JSON.parse(JSON.stringify(all[sel.value])); saveLast(); buildGrid(); } };
-}
+function tick() { $('#sbClock').textContent = `${ET_CLOCK.format(new Date())} ET`; greyIfStale(); }
 
-async function saveLayout() {
-  const input = $('#layoutName'), name = input.value.trim(), msg = $('#layoutMsg');
-  if (!name) { input.focus(); return; }
-  let r;
-  try {
-    r = await fetch('/api/layouts/' + encodeURIComponent(name), { method: 'PUT',
-      headers: { 'content-type': 'application/json' }, body: JSON.stringify(layout) });
-  } catch (e) {
-    msg.textContent = 'save failed: ' + (e && e.message ? e.message : 'network error');
-    return;
-  }
-  if (!r.ok) {
-    let detail = '';
-    try { detail = (await r.json()).detail || ''; } catch (_) {}
-    msg.textContent = `save failed (${r.status})` + (detail ? ': ' + detail : '');
-    return;
-  }
-  msg.textContent = '';
-  input.value = '';
-  loadLayouts(name);
-}
-function saveLast() { try { localStorage.setItem('hb_charts_last', JSON.stringify(layout)); } catch (_) {} }
-function loadLast() { try { const v = JSON.parse(localStorage.getItem('hb_charts_last') || 'null'); if (v && Array.isArray(v.cells)) layout = v; } catch (_) {} }
-
+/* ---- the chart service ---- */
 function connect() {
   ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
-  ws.onopen = () => { statusAt = Date.now(); for (const c of cells.values()) c.subscribe(); };
+  ws.onopen = () => { statusAt = Date.now(); for (const c of cells) c.subscribe(true); };
   ws.onmessage = (e) => {
-    const m = JSON.parse(e.data);
+    let m;
+    try { m = JSON.parse(e.data); } catch (_) { return; }
     if (m.type === 'status') { statusAt = Date.now(); showStatus(m); return; }
-    const c = cells.get(m.id); if (!c) return;
+    const c = cells.find((x) => x.id === m.id);
+    if (!c) return;
     if (m.type === 'history') c.onHistory(m);
     else if (m.type === 'update') c.onUpdate(m);
-    else if (m.type === 'reset') c.subscribe();
-    else if (m.type === 'error') c.msg(m.error);
+    else if (m.type === 'reset') c.subscribe(true);
+    else if (m.type === 'error') c.onError(m.error);
   };
   ws.onclose = () => { showStatus({ connected: false, error: 'chart service unreachable — retrying' }); setTimeout(connect, 2000); };
 }
 
-async function init() {
-  $('#navDesk').href = `${location.protocol}//${location.hostname}:8850/`;
-  try { const r = await fetch('/api/symbols'); if (r.ok) meta = await r.json(); } catch (_) {}
-  loadLast();
-  $('#gridSel').onchange = (e) => { layout.grid = +e.target.value; saveLast(); buildGrid(); };
-  $('#saveLayout').onclick = () => saveLayout();
-  $('#themeToggle').onclick = () => {
-    const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-    document.documentElement.setAttribute('data-theme', next);
-    try { localStorage.setItem('hb_theme', next); } catch (_) {}
-    for (const c of cells.values()) c.subscribe();
-  };
-  buildGrid(); loadLayouts(); connect();
-  setInterval(greyIfStale, 1000);
+/* ---- keyboard ---- */
+function onKey(e) {
+  if (e.key === 'Escape' && menuEl) { e.preventDefault(); closeMenu(); }
 }
 
-window.HBCharts = { Cell, cells, palette, studyKeys, LEVELS, get layout() { return layout; }, set layout(v) { layout = v; },
-  buildGrid, saveLast, get ws() { return ws; } };
+async function init() {
+  for (const n of document.querySelectorAll('[data-icon]')) n.innerHTML = I[n.dataset.icon] || '';
+  $('#tbDesk').href = `${location.protocol}//${location.hostname}:8850/`;
+  try { const r = await fetch('/api/symbols'); if (r.ok) meta = await r.json(); } catch (_) { /* keep the fallback */ }
+  loadLast();
+  $('#tbSymbol').onclick = () => toggleMenu($('#tbSymbol'), symbolMenu);
+  $('#tbIntervals').onclick = () => toggleMenu($('#tbIntervals'), intervalMenu);
+  $('#tbTheme').onclick = toggleTheme;
+  document.addEventListener('pointerdown', (e) => {
+    if (menuEl && !menuEl.contains(e.target) && !menuAnchor.contains(e.target)) closeMenu();
+  }, true);
+  window.addEventListener('resize', closeMenu);
+  document.addEventListener('keydown', onKey);
+  buildGrid();
+  connect();
+  tick();
+  setInterval(tick, 1000);
+}
+
+window.HBCharts = { get cells() { return cells; }, get layout() { return layout; }, get selected() { return selected; }, select, buildGrid };
 init();
 })();
