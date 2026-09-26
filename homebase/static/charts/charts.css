@@ -94,6 +94,13 @@ a { color: inherit; }
 .panel[data-cursor="move"] .chart * { cursor: move !important; }
 .panel[data-cursor="grabbing"] .chart * { cursor: grabbing !important; }
 
+/* the per-chart gear, in the axis corner; shown on hover (TradingView) */
+.cell-gear { position: absolute; right: 0; bottom: 0; z-index: 7; display: grid; place-items: center; opacity: 0;
+  color: var(--text-2); background: var(--panel); border-radius: 0 0 6px 0; transition: opacity .12s; }
+.cell-gear .ic { width: 16px; height: 16px; }
+.panel:hover .cell-gear, .cell-gear:focus-visible { opacity: 1; }
+.cell-gear:hover { color: var(--text); background: var(--hover); }
+
 /* ---- legend: DOM over the chart; only the badge and indicator rows take the mouse ---- */
 .legend { position: absolute; left: 8px; top: 7px; right: 80px; z-index: 5; display: flex; flex-direction: column;
   align-items: flex-start; gap: 1px; font-size: 13px; line-height: 20px; pointer-events: none; }

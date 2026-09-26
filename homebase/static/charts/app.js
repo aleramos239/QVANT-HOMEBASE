@@ -103,6 +103,7 @@ function hostFor(id) {
     onLoaded,
     onRefused,
     onSettings(cell, uid) { settingsDialog(cell, uid); },
+    onChartSettings(cell) { chartSettings(cell); },
     onPosition(cell, d) { positionDialog(cell, d); },
     onChartMenu(cell, at) { chartMenu(cell, at); },
     onIndicatorMenu(cell, uid, o) { indicatorMenu(cell, uid, o); },
@@ -666,10 +667,11 @@ function positionDialog(cell, d) {
   inputs.entry.select();
 }
 
-/* The toolbar gear: the chart Settings dialog for the selected chart (settings-dialog.js). */
-function chartSettings() {
-  const c = cur();
+/* The chart Settings dialog (settings-dialog.js): the toolbar gear opens it for the selected chart, a per-chart
+   gear or the chart menu's Settings… for that chart. */
+function chartSettings(c = cur()) {
   if (!c) return;
+  select(cells.indexOf(c));
   const box = openDialog('Settings', 'settings');
   const ctl = window.HBSettingsDialog.mount(box, {
     cell: c,
@@ -706,7 +708,7 @@ const MENU_ACTS = {
     ctx.cell.update({ indicators: ctx.cell.cfg.indicators.map((x) => ({ ...x, visible: show })) });
     markDirty();
   },
-  settings: () => chartSettings(),
+  settings: (ctx) => chartSettings(ctx.cell),
 };
 
 /* Right-click on a chart's price pane, or a double-click on its empty space: the chart menu at the pointer, for
@@ -1072,7 +1074,7 @@ async function init() {
   $('#tbGrid').onclick = () => toggleMenu($('#tbGrid'), gridMenu);
   $('#tbLayout').onclick = () => toggleMenu($('#tbLayout'), () => layoutMenu(false));
   $('#tbSave').onclick = save;
-  $('#tbSettings').onclick = chartSettings;
+  $('#tbSettings').onclick = () => chartSettings();
   $('#tbTheme').onclick = toggleTheme;
   for (const b of document.querySelectorAll('#rail [data-tool]')) {
     b.onclick = () => setTool(b.dataset.tool === tool && tool !== 'cursor' ? 'cursor' : b.dataset.tool);

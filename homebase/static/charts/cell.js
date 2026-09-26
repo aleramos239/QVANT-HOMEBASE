@@ -4,7 +4,7 @@
    history/update handling. The page (app.js) owns the websocket, the toolbar
    and selection, and gives each cell a `host`:
      {id, send(msg) -> bool, onPick(cell), onLoaded(cell), onRefused(cell, tried, text), onSettings(cell, uid),
-      onPosition(cell, d), onChartMenu(cell, {x, y, price}), onIndicatorMenu(cell, uid, {anchor} | {at}),
+      onChartSettings(cell), onPosition(cell, d), onChartMenu(cell, {x, y, price}), onIndicatorMenu(cell, uid, {anchor} | {at}),
       changed(), tool(), toolDone(), drawings, magnet(), events(), legendFolded(cell), toggleLegendFolded(cell)}
      (the drawings/tool/magnet four: the drawing tools, HBDrawings.Controller; events(): every stored calendar
       event; the chart/indicator menus: app.js; legendFolded/toggleLegendFolded: the legend's collapse-chevron
@@ -113,9 +113,12 @@ class Cell {
         <div class="lg-fold-wrap"></div>
         <div class="lg-inds"></div>
       </div>
-      <div class="ev-tip" role="tooltip" hidden></div>`;
+      <div class="ev-tip" role="tooltip" hidden></div>
+      <button class="cell-gear" type="button" title="Chart settings" aria-label="Chart settings"></button>`;
     this.box = slot.querySelector('.chart');
     this.evTip = slot.querySelector('.ev-tip');
+    this.gear = slot.querySelector('.cell-gear');
+    this.gear.innerHTML = window.HBIcons.gear;
     this.lg = { name: slot.querySelector('.lg-name'), badge: slot.querySelector('.badge'), msg: slot.querySelector('.lg-msg'),
       ohlc: slot.querySelector('.lg-ohlc'), inds: slot.querySelector('.lg-inds'),
       fold: iconButton('chevron', 'Hide indicators', 'fold') };
@@ -129,6 +132,7 @@ class Cell {
     this.box.addEventListener('contextmenu', (e) => this.onMenu(e));
     this.box.addEventListener('pointermove', (e) => this.onEventHover(e));
     this.box.addEventListener('pointerleave', () => { this.evTip.hidden = true; });
+    this.gear.addEventListener('click', (e) => { e.stopPropagation(); host.onChartSettings(this); });
     this.title();
     this.subscribe();
   }
@@ -160,6 +164,16 @@ class Cell {
     this.noteTimer = setTimeout(() => { if (this.noteOn) this.message(''); }, NOTE_MS);
   }
   setSelected(on) { this.el.classList.toggle('selected', on); }
+
+  /* The gear sits in the chart's axis corner (TradingView's): as wide as the price axis, as tall as the time axis.
+     Both are 0 before the first layout, so this runs again on every size change. */
+  placeGear() {
+    if (!this.chart) return;
+    const w = this.chart.priceScale('right').width(), h = this.chart.timeScale().height();
+    this.gear.hidden = !(w > 0 && h > 0);
+    this.gear.style.width = `${w}px`;
+    this.gear.style.height = `${h}px`;
+  }
 
   /* The rail's magnet with a drawing tool picked, on the selected chart: the crosshair snaps to O/H/L/C too
      (when this Lightweight Charts has MagnetOHLC); otherwise the normal crosshair. Kept across rebuilds. */
@@ -422,6 +436,7 @@ class Cell {
     this.start.set(this.back.done || this.capped, this.capped ? 'History limit reached' : 'Start of data');
     this.dc = new window.HBDrawings.Controller(this, this.host);
     if (sel) { this.dc.sel = sel; this.dc.refresh(); }
+    requestAnimationFrame(() => this.placeGear());
   }
 
   restyle() { if (this.chart) this.build(this.viewNow()); }
@@ -477,6 +492,7 @@ class Cell {
       this.hover = p && p.logical != null ? Math.round(p.logical) : null;
       this.legend(this.hover);
     });
+    this.chart.timeScale().subscribeSizeChange(() => this.placeGear());
   }
 
   teardown() {
