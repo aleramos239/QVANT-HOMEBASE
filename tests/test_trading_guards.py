@@ -26,6 +26,10 @@ WORKING = {"order_id": "77", "symbol": NQC, "side": "Buy", "type": "Limit", "qty
            "price": 99.0, "stop_price": None, "status": "Working"}
 
 
+async def _ok(oid):
+    return OrderResult(ok=True, order_id=oid)
+
+
 # --- parsing ---------------------------------------------------------------------
 @pytest.mark.parametrize("patch,msg", [
     ({"side": "buy"}, "side: Buy or Sell"),
@@ -294,7 +298,12 @@ def test_modify_refuses_bot_orders_unknown_orders_and_wrong_side_stops(tmp_path)
 
 
 def test_cancel_by_id_stays_allowed_in_the_window_but_never_for_bot_orders(tmp_path):
-    desk, eng, ads, *_ = mkdesk(tmp_path, et=(9, 25))
+    # fix round 1: while the bot is busy only an order placed FROM THE CHART
+    # is positively manual, so "77" is placed through the desk at 09:00 first
+    desk, eng, ads, clock, *_ = mkdesk(tmp_path, et=(9, 0))
+    ads["a1"].place_order = lambda req: _ok("77")
+    assert order(desk, type="Limit", price=99.0, cid="p77")["a1"]["order_id"] == "77"
+    clock.set_et(9, 25)
     st = eng._state("nq930", "a1")
     st.status, st.upper_id = "placed", "60"
     ads["a1"].view["orders"] = [dict(WORKING), {**WORKING, "order_id": "60", "type": "Stop"}]
@@ -309,7 +318,7 @@ def test_cancel_by_id_stays_allowed_in_the_window_but_never_for_bot_orders(tmp_p
     assert c("x3", "77")["error"].startswith(f"{NQC} on A1 belongs to the nq930 bot right now (placing)")
     assert ads["a1"].cancelled == ["77"]
     assert [e["event"] for e in journal(tmp_path) if e["event"].startswith("manual_")] == \
-        ["manual_cancel", "manual_refused", "manual_refused"]
+        ["manual_order", "manual_cancel", "manual_refused", "manual_refused"]
 
 
 # --- flatten / cancel-symbol / reverse ------------------------------------------------------------
@@ -455,3 +464,206 @@ def test_a_repeated_client_id_in_flight_waits_for_the_first_and_never_places_twi
 
     a, b, calls = run(go())
     assert len(calls) == 1 and a == b and a["results"]["a1"]["order_id"] == "once"
+
+
+# === fix round 1 ====================================================================================
+BUY10 = {"accounts": ["a1"], "root": "NQ", "side": "Buy", "qty": 10, "type": "Market"}
+
+
+def _slow_orders(ad):
+    """place_order that yields to the loop before the broker 'answers'."""
+    async def slow(req):
+        ad.orders.append(req)
+        for _ in range(3):
+            await asyncio.sleep(0)
+        return OrderResult(ok=True, order_id=str(500 + len(ad.orders)))
+    ad.place_order = slow
+
+
+def test_two_concurrent_orders_cannot_both_pass_the_position_limit(tmp_path):
+    desk, eng, ads, *_ = mkdesk(tmp_path)
+    ads["a1"].view["positions"] = [{"contract_id": 1, "symbol": NQC, "net": 10, "avg_price": 100.0}]
+    _slow_orders(ads["a1"])
+
+    async def go():
+        return await asyncio.gather(desk.order({**BUY10, "client_id": "k1"}),
+                                    desk.order({**BUY10, "client_id": "k2"}))
+
+    rs = [r["results"]["a1"] for r in run(go())]
+    assert sorted(r["ok"] for r in rs) == [False, True] and len(ads["a1"].orders) == 1
+    bad = next(r for r in rs if not r["ok"])
+    assert bad["error"] == f"that could take {NQC} on A1 to 30 contracts (limit 20)"
+
+
+def test_two_concurrent_reverses_only_one_proceeds(tmp_path):
+    desk, eng, ads, *_ = mkdesk(tmp_path)
+    ads["a1"].net = 2
+    _slow_orders(ads["a1"])
+    flat = ads["a1"].flatten_symbol
+
+    async def slow_flat(symbol):
+        await asyncio.sleep(0)
+        return await flat(symbol)
+    ads["a1"].flatten_symbol = slow_flat
+
+    async def go():
+        b = {"accounts": ["a1"], "root": "NQ"}
+        return await asyncio.gather(desk.reverse({**b, "client_id": "r1"}),
+                                    desk.reverse({**b, "client_id": "r2"}))
+
+    rs = [r["results"]["a1"] for r in run(go())]
+    assert [r["ok"] for r in rs] == [True, False]
+    assert rs[1]["error"] == (f"an order sent from the chart in {NQC} on A1 is not confirmed "
+                              "yet — try again in a moment")
+    assert ads["a1"].flattened == [NQC] and len(ads["a1"].orders) == 1
+
+
+def test_a_reservation_clears_when_the_cache_shows_the_order(tmp_path):
+    desk, eng, ads, *_ = mkdesk(tmp_path)
+    ads["a1"].view["positions"] = [{"contract_id": 1, "symbol": NQC, "net": 5, "avg_price": 100.0}]
+    ads["a1"].place_order = lambda req: _ok("501")
+    assert order(desk, cid="b1", qty=10)["a1"]["ok"] is True
+    assert order(desk, cid="b2", qty=6)["a1"]["error"].endswith("to 21 contracts (limit 20)")
+    ads["a1"].view["orders"] = [{**WORKING, "order_id": "501", "type": "Market", "qty": 10,
+                                 "side": "Buy", "price": None}]
+    # counted once (the cache), not twice (cache + reservation = 31)
+    assert order(desk, cid="b3", qty=6)["a1"]["error"].endswith("to 21 contracts (limit 20)")
+    ads["a1"].view["orders"] = []                       # the order is gone: nothing reserved any more
+    assert order(desk, cid="b4", qty=6)["a1"]["ok"] is True
+
+
+def test_a_reservation_clears_after_ten_seconds(tmp_path):
+    desk, eng, ads, clock, mono, _ = mkdesk(tmp_path)
+    ads["a1"].view["positions"] = [{"contract_id": 1, "symbol": NQC, "net": 5, "avg_price": 100.0}]
+    assert order(desk, cid="t1", qty=10)["a1"]["ok"] is True
+    mono.t += 9.9
+    assert order(desk, cid="t2", qty=6)["a1"]["error"].endswith("to 21 contracts (limit 20)")
+    mono.t += 0.2
+    assert order(desk, cid="t3", qty=6)["a1"]["ok"] is True
+
+
+def test_kill_during_a_reverse_stops_it_before_the_open(tmp_path):
+    desk, eng, ads, *_ = mkdesk(tmp_path)
+    ads["a1"].net = 2
+    flat = ads["a1"].flatten_symbol
+
+    async def flat_then_kill(symbol):
+        r = await flat(symbol)
+        desk.disable(cause="kill")                     # the desk's Kill lands mid-reverse
+        return r
+    ads["a1"].flatten_symbol = flat_then_kill
+    r = run(desk.reverse({"client_id": "r", "accounts": ["a1"], "root": "NQ"}))["results"]["a1"]
+    assert r["ok"] is False and r["refused"]
+    assert r["error"] == "chart trading was switched off during the reverse — flattened only"
+    assert ads["a1"].flattened == [NQC] and ads["a1"].orders == []
+
+
+def test_a_reverse_that_runs_into_the_lock_window_does_not_open(tmp_path):
+    desk, eng, ads, clock, *_ = mkdesk(tmp_path)
+    clock.dt = dt.datetime(2026, 9, 14, 13, 19, 59, 800000, tzinfo=UTC)   # 09:19:59.8 ET
+    ads["a1"].net = 2
+    flat = ads["a1"].flatten_symbol
+
+    async def slow_flat(symbol):
+        clock.dt += dt.timedelta(milliseconds=500)     # the flatten takes the clock past 09:20
+        return await flat(symbol)
+    ads["a1"].flatten_symbol = slow_flat
+    r = run(desk.reverse({"client_id": "r", "accounts": ["a1"], "root": "NQ"}))["results"]["a1"]
+    assert r["error"] == f"{NQC} on A1 is locked 09:20-09:35 ET for the nq930 bot — flattened only"
+    assert ads["a1"].flattened == [NQC] and ads["a1"].orders == []
+
+
+def test_an_unknown_id_bot_stop_cannot_be_cancelled_while_the_bot_is_live(tmp_path):
+    desk, eng, ads, *_ = mkdesk(tmp_path)
+    ads["a1"].place_order = lambda req: _ok("4242")
+    assert order(desk, cid="p", type="Limit", price=90.0)["a1"]["ok"] is True   # a chart order
+    st = eng._state("nq930", "a1")
+    st.status = "live"                                  # its leg ids are NOT known to the desk
+    stop = {**WORKING, "order_id": "88", "type": "Stop", "side": "Sell", "price": None,
+            "stop_price": 95.0}
+    ads["a1"].view["orders"] = [stop, {**WORKING, "order_id": "4242"}]
+
+    def c(cid, oid):
+        return run(desk.cancel({"client_id": cid, "account": "a1", "order_id": oid}))["results"]["a1"]
+
+    assert c("x1", "88")["error"] == (
+        f"order 88 on A1 was not placed from the chart and the nq930 bot is live in {NQC} "
+        "— it may be one of the bot's; use the desk's Kill in an emergency")
+    assert c("x2", "4242")["ok"] is True                # positively manual: still cancellable
+    ads["a1"].view["orders"] = [{**stop, "symbol": None}]
+    assert "was not placed from the chart" in c("x3", "88")["error"]   # unresolved contract too
+    assert ads["a1"].cancelled == ["4242"]
+
+
+def test_a_journal_failure_after_the_broker_accepted_still_reports_the_order(tmp_path):
+    desk, eng, ads, *_ = mkdesk(tmp_path)
+    real = eng.journal
+
+    def broken(event, **data):
+        if event == "manual_order":
+            raise OSError("disk full")
+        real(event, **data)
+    eng.journal = broken
+    r = order(desk)["a1"]
+    assert r["ok"] is True and r["order_id"] == "plain" and r["journal_error"] == "OSError: disk full"
+
+
+def test_an_unexpected_error_is_journaled_as_manual_error(tmp_path):
+    desk, eng, ads, *_ = mkdesk(tmp_path)
+
+    def boom():
+        raise RuntimeError("cache exploded")
+    ads["a1"].trade_view = boom
+    r = order(desk)["a1"]
+    assert r["ok"] is False and r["error"] == "internal error: RuntimeError: cache exploded"
+    ev = [e for e in journal(tmp_path) if e["event"] == "manual_error"]
+    assert len(ev) == 1 and ev[0]["source"] == "chart" and "strategy" not in ev[0]
+    assert ads["a1"].orders == []
+
+
+def test_a_quote_from_the_future_is_not_fresh(tmp_path):
+    desk, eng, ads, clock, mono, _ = mkdesk(tmp_path)
+    assert "no trade" in order(desk, cid="q1", type="Stop", price=101.0,
+                               quotes=quote(clock, last=100.0, age_s=-5.1))["a1"]["error"]
+    assert order(desk, cid="q2", type="Stop", price=101.0,
+                 quotes=quote(clock, last=100.0, age_s=-4.9))["a1"]["ok"] is True
+
+
+def test_an_account_pinned_twice_in_config_is_refused_on_both(tmp_path):
+    desk, eng, ads, *_ = mkdesk(tmp_path)
+    desk.cfg.accounts["a2"].account_name = "a1"         # same login ("k"), same account, any case
+    r = order(desk, accounts=["a1", "a2"])
+    assert r["a1"]["error"] == "A1: account pinned twice in config — chart trading refuses it"
+    assert r["a2"]["error"].endswith("account pinned twice in config — chart trading refuses it")
+    assert ads["a1"].orders == [] and ads["a2"].orders == []
+    assert [a["tradable"] for a in desk.snapshot()["accounts"]] == [False, False]
+
+
+def test_an_order_with_an_unknown_side_counts_as_worst_case(tmp_path):
+    desk, eng, ads, clock, mono, _ = mkdesk(tmp_path)
+    ads["a1"].view["orders"] = [{**WORKING, "side": None, "qty": 15}]
+    assert order(desk, cid="u1", qty=6)["a1"]["error"].endswith("to 21 contracts (limit 20)")
+    assert order(desk, cid="u2", qty=6, side="Sell")["a1"]["error"].endswith("to 21 contracts (limit 20)")
+    assert order(desk, cid="u3", qty=5)["a1"]["ok"] is True
+
+
+def test_reverse_refuses_an_unreadable_position(tmp_path):
+    desk, eng, ads, *_ = mkdesk(tmp_path)
+    ads["a1"].net_error = True
+    r = run(desk.reverse({"client_id": "r", "accounts": ["a1"], "root": "NQ"}))["results"]["a1"]
+    assert r["error"] == f"the {NQC} position on A1 is unreadable (position read failed) — nothing done"
+    assert ads["a1"].flattened == [] and ads["a1"].orders == []
+
+
+def test_modify_refuses_a_market_order_and_an_unresolved_contract(tmp_path):
+    desk, eng, ads, clock, mono, _ = mkdesk(tmp_path)
+    ads["a1"].view["orders"] = [{**WORKING, "order_id": "70", "type": "Market", "price": None},
+                                {**WORKING, "order_id": "71", "symbol": None}]
+
+    def m(cid, oid):
+        body = {"client_id": cid, "account": "a1", "order_id": oid, "price": 99.0}
+        return run(desk.modify(body))["results"]["a1"]
+
+    assert m("m1", "70")["error"] == "only Limit and Stop orders can be moved (this one is Market)"
+    assert m("m2", "71")["error"] == "that order's contract is not resolved yet — try again in a moment"
+    assert ads["a1"].modified == []
