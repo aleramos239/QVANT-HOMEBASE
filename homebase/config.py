@@ -50,6 +50,35 @@ class AccountCfg:
     label: str = ""              # display name (defaults to account_name)
 
 
+HARD_MAX_ORDER_QTY = 50        # the desk page cannot set chart-trading limits above these
+HARD_MAX_POSITION_QTY = 100
+
+
+@dataclass
+class ChartTradingCfg:
+    enabled: bool = False        # orders from the chart page; off until switched on
+    max_order_qty: int = 10      # per order, per account
+    max_position_qty: int = 20   # worst-case |net| per contract, per account
+
+
+def chart_trading_from(d) -> ChartTradingCfg:
+    """config.json's chart_trading block; anything malformed -> the safe
+    defaults (off). `enabled` must be the JSON literal true."""
+    base = ChartTradingCfg()
+    if not isinstance(d, dict):
+        return base
+    try:
+        c = ChartTradingCfg(enabled=d.get("enabled") is True,
+                            max_order_qty=int(d.get("max_order_qty", base.max_order_qty)),
+                            max_position_qty=int(d.get("max_position_qty", base.max_position_qty)))
+    except (TypeError, ValueError):
+        return base
+    if not (1 <= c.max_order_qty <= HARD_MAX_ORDER_QTY
+            and 1 <= c.max_position_qty <= HARD_MAX_POSITION_QTY):
+        return base
+    return c
+
+
 @dataclass
 class AppCfg:
     armed: bool = False          # master switch: disarmed = journal-only dry run
@@ -59,6 +88,7 @@ class AppCfg:
     accounts: dict[str, AccountCfg] = field(default_factory=dict)
     book: dict[str, list] = field(default_factory=dict)   # strategy -> [{account, qty}]
     strategies: dict[str, StrategyCfg] = field(default_factory=dict)
+    chart_trading: ChartTradingCfg = field(default_factory=ChartTradingCfg)
 
 
 def _defaults() -> AppCfg:
@@ -130,6 +160,7 @@ def load() -> AppCfg:
         base = asdict(cfg.strategies[name]) if name in cfg.strategies else {}
         cfg.strategies[name] = StrategyCfg(**{**base, **s})
     cfg.book = {k: list(v) for k, v in (data.get("book") or {}).items()}
+    cfg.chart_trading = chart_trading_from(data.get("chart_trading"))
 
     # ---- migration: single-account era ("account": {...}) ----
     legacy = data.get("account")
