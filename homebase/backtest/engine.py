@@ -17,6 +17,17 @@ Scheduled events (session start, bar closes, on_time) run BEFORE the first print
 at or after their time; ctx.cancel / ctx.flatten act at once, so a flat fills on
 that first print at or after the time. A position's SL/TP ride on the entry (OSO)
 and can trigger from the print AFTER the entry print.
+  * MAE/MFE are measured against the entry PRINT (the segment starts at
+    `pos.entry_i`, the fill's own index), not the (slipped) fill price -- a stop
+    entry's MAE therefore always includes at least the entry print's own slippage.
+  * Every order/SL/TP price is snapped to the tick grid with `to_tick` when it is
+    created or re-priced, and every `>=`/`<=` price comparison (touch, 1-tick
+    penetration) is epsilon-tolerant (see `tick_cmp`) -- raw float64 arithmetic on
+    a non-power-of-two tick (CL 0.01, GC 0.1, SI 0.005) routinely lands a hair off
+    the clean grid value (e.g. `64.01 + 0.01 == 64.02000000000001`), which would
+    otherwise reject a real print sitting exactly at that level.
+  * A strategy callback that raises is caught for that session only: the session
+    is recorded as skipped (`skip = "strategy error: <msg>"`), not propagated.
 
 Stdlib only (array + bisect): the desk's venv carries no numpy.
 """
@@ -38,27 +49,40 @@ def to_tick(px: float, tick: float) -> float:
     return round(round(px / tick) * tick, 6)
 
 
-def first_at_or_above(px, level: float, a: int, b: int) -> int:
-    """First index k in [a, b) with px[k] >= level, else b."""
+def tick_cmp(a: float, b: float, tick: float) -> int:
+    """Compare a to b on a tick grid, tolerant of float64 noise (eps = tick*1e-6):
+    -1 if a < b, 0 if equal within eps, 1 if a > b. Every >=/<= price comparison
+    in the fill law goes through this (a raw `a >= b` breaks on grids like CL's
+    0.01 or GC's 0.1, where `64.01 + 0.01 == 64.02000000000001`)."""
+    eps = tick * 1e-6
+    if a > b + eps:
+        return 1
+    if a < b - eps:
+        return -1
+    return 0
+
+
+def first_at_or_above(px, level: float, a: int, b: int, tick: float) -> int:
+    """First index k in [a, b) with px[k] >= level (tick-grid tolerant), else b."""
     k = a
     while k < b:
         e = min(k + CHUNK, b)
-        if max(px[k:e]) >= level:
+        if tick_cmp(max(px[k:e]), level, tick) >= 0:
             for i in range(k, e):
-                if px[i] >= level:
+                if tick_cmp(px[i], level, tick) >= 0:
                     return i
         k = e
     return b
 
 
-def first_at_or_below(px, level: float, a: int, b: int) -> int:
-    """First index k in [a, b) with px[k] <= level, else b."""
+def first_at_or_below(px, level: float, a: int, b: int, tick: float) -> int:
+    """First index k in [a, b) with px[k] <= level (tick-grid tolerant), else b."""
     k = a
     while k < b:
         e = min(k + CHUNK, b)
-        if min(px[k:e]) <= level:
+        if tick_cmp(min(px[k:e]), level, tick) <= 0:
             for i in range(k, e):
-                if px[i] <= level:
+                if tick_cmp(px[i], level, tick) <= 0:
                     return i
         k = e
     return b
@@ -176,6 +200,10 @@ class Ctx:
     def _entry(self, kind, side, price, qty, sl, tp, tp_rr, ref) -> Order:
         if side not in SIDE:
             raise ValueError(f"side must be 'long' or 'short', not {side!r}")
+        tick = self._s.tick
+        price = None if price is None else to_tick(price, tick)
+        sl = None if sl is None else to_tick(sl, tick)
+        tp = None if tp is None else to_tick(tp, tick)
         return self._s.new_order(SIDE[side], kind, price, int(qty or self.qty),
                                  sl=sl, tp=tp, tp_rr=tp_rr, ref=ref)
 
@@ -246,17 +274,21 @@ class _Sim:
         if o.kind == "market":
             return a
         if o.kind == "stop":
-            return (first_at_or_above(self.px, o.price, a, b) if o.side > 0
-                    else first_at_or_below(self.px, o.price, a, b))
-        return (first_at_or_below(self.px, o.price - self.tick, a, b) if o.side > 0
-                else first_at_or_above(self.px, o.price + self.tick, a, b))
+            return (first_at_or_above(self.px, o.price, a, b, self.tick) if o.side > 0
+                    else first_at_or_below(self.px, o.price, a, b, self.tick))
+        lvl = (to_tick(o.price - self.tick, self.tick) if o.side > 0
+               else to_tick(o.price + self.tick, self.tick))
+        return (first_at_or_below(self.px, lvl, a, b, self.tick) if o.side > 0
+                else first_at_or_above(self.px, lvl, a, b, self.tick))
 
     def _fill_price(self, o: Order, p: float) -> float:
         if o.kind == "limit":
             return o.price
         if o.kind == "stop":
-            return max(o.price, p) + self.slip if o.side > 0 else min(o.price, p) - self.slip
-        return p + o.side * self.slip
+            raw = max(o.price, p) + self.slip if o.side > 0 else min(o.price, p) - self.slip
+        else:
+            raw = p + o.side * self.slip
+        return to_tick(raw, self.tick)
 
     def advance(self, j: int) -> None:
         """Process prints [i, j): fill whatever triggers, earliest print first."""
@@ -287,12 +319,17 @@ class _Sim:
                 self.cancel(x)
         pos = Position(o.side, o.qty, fill, k, o.price)
         sl, tp = o.sl, o.tp
-        if o.tp_rr is not None and sl is not None:
-            tp = to_tick(fill + o.side * o.tp_rr * abs(fill - sl), self.tick)
-        elif self._ctx.move_brackets_to_fill and o.ref is not None:
+        # Fix round 1 ruling: the SL moves FIRST (keeping its distance to `ref`),
+        # independent of tp_rr; only then is a tp_rr target derived, from the
+        # fill and that (possibly moved) SL's distance -- not from the raw entry
+        # sl and an unrelated gap-affected fill.
+        if self._ctx.move_brackets_to_fill and o.ref is not None:
             d = fill - o.ref
             sl = None if sl is None else to_tick(sl + d, self.tick)
-            tp = None if tp is None else to_tick(tp + d, self.tick)
+            if o.tp_rr is None:
+                tp = None if tp is None else to_tick(tp + d, self.tick)
+        if o.tp_rr is not None and sl is not None:
+            tp = to_tick(fill + o.side * o.tp_rr * abs(fill - sl), self.tick)
         self._ids += 1
         if sl is not None:
             pos.sl = Order(self._ids, -o.side, "stop", sl, o.qty, k + 1, role="sl", pos=pos)
@@ -337,7 +374,7 @@ class _Sim:
         if k < self.i:
             reason = "eod"
         for pos in list(self.positions):
-            self._close(pos, self.px[k] - pos.side * self.slip, k, reason)
+            self._close(pos, to_tick(self.px[k] - pos.side * self.slip, self.tick), k, reason)
 
 
 def build_bars(ts, px, size, lo: int, hi: int, t0: int, t1: int, minutes: int) -> list[Bar]:
@@ -381,12 +418,16 @@ def run_session(strategy, tape, costs: Costs, qty: int = 1, daily: list | None =
             break
         sim.advance(bisect_left(ts, t, sim.i, hi))
         sim.now = t
-        if kind == "session":
-            strategy.on_session(ctx)
-        elif kind == "bar":
-            strategy.on_bar(ctx, arg)
-        else:
-            strategy.on_time(ctx, arg)
+        try:
+            if kind == "session":
+                strategy.on_session(ctx)
+            elif kind == "bar":
+                strategy.on_bar(ctx, arg)
+            else:
+                strategy.on_time(ctx, arg)
+        except Exception as e:                      # noqa: BLE001 - one bad session, not a crashed run
+            sim.res.skip = f"strategy error: {e}"
+            break
     sim.advance(hi)
     sim.i = hi
     sim.flatten("eod")

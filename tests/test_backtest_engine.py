@@ -64,9 +64,12 @@ def flat(ctx, s):
 PLAN = lambda **kw: {"09:30:00": straddle(**kw), "12:55": cancel, "15:55": flat}  # noqa: E731
 
 
-def one(rows, plan=None, slip=1.0, comm=4.0, **kw):
-    res = run_session(Script(plan or PLAN(), **kw), tape(rows), Costs(comm, slip), qty=1)
-    return res.trades
+def run(rows, plan=None, slip=1.0, comm=4.0, root="NQ", **kw):
+    return run_session(Script(plan or PLAN(), **kw), tape(rows, root=root), Costs(comm, slip), qty=1)
+
+
+def one(rows, plan=None, slip=1.0, comm=4.0, root="NQ", **kw):
+    return run(rows, plan, slip, comm, root, **kw).trades
 
 
 def test_gap_through_stop_entry_pays_the_gap_plus_slip():
@@ -156,13 +159,31 @@ def test_mae_mfe_bars_and_seconds():
 
 
 def test_market_entry_with_rr_target_rederived_from_the_fill():
+    # Fix round 1, ruling on tp_rr + move_brackets_to_fill: the SL moves FIRST (keeping
+    # its distance to `ref`), then TP is derived from the fill and the MOVED SL's
+    # distance -- so this no longer matches the old (pre-fix) mutually-exclusive
+    # tp_rr-vs-move behaviour; the numbers below are the corrected ones.
     def go(ctx, s):
         ctx.market("short", sl=110.0, tp=95.0, tp_rr=0.75, ref=100.0)
-    t, = one([("09:59:59", 100.0), ("10:00:00.100", 101.0), ("10:05", 93.5)],
+    t, = one([("09:59:59", 100.0), ("10:00:00.100", 101.0), ("10:05", 93.0)],
              plan={"10:00": go, "15:55": flat})
     assert t.entry_price == 100.75                     # first print after 85 ms, minus 1 tick
-    assert t.sl == 110.0 and t.tp == to_tick(100.75 - 0.75 * (110.0 - 100.75), TICK) == 93.75
-    assert t.exit_reason == "tp" and t.exit_price == 93.75
+    d = t.entry_price - 100.0                          # ref
+    assert t.sl == to_tick(110.0 + d, TICK) == 110.75   # SL moved first, same distance to ref
+    assert t.tp == to_tick(t.entry_price - 0.75 * abs(100.0 - 110.0), TICK) == 93.25
+    assert t.exit_reason == "tp" and t.exit_price == 93.25
+
+
+def test_tp_rr_moves_the_sl_first_then_derives_tp_from_its_distance():
+    """Fix round 1, reviewer's worked case: stop entry long at 110, sl=105, tp_rr=3,
+    move on, print gaps to 112 -> fill 112.25 -> SL 107.25, TP 127.25."""
+    def go(ctx, s):
+        ctx.stop_entry("long", 110.0, sl=105.0, tp_rr=3.0)
+    t, = one([("09:29:59", 100.0), ("09:30:01", 112.0), ("09:31", 130.0)],
+             plan={"09:30:00": go, "15:55": flat})
+    assert t.entry_price == 112.25
+    assert t.sl == 107.25 and t.tp == 127.25
+    assert t.exit_reason == "tp" and t.exit_price == 127.25
 
 
 def test_limit_entry_needs_penetration():
@@ -201,3 +222,102 @@ def test_bars_close_before_the_next_print_and_are_built_from_ticks():
     s = Script({}, bars=1)
     run_session(s, tp, Costs())
     assert [b.c for b in s.seen] == [101.0, 99.0]
+
+
+# ---- Fix round 1 -----------------------------------------------------------
+# Item 1: float tick-grid comparisons must be snapped + epsilon-tolerant. Raw
+# float64 arithmetic on non-power-of-two ticks (CL 0.01, GC 0.1, SI 0.005)
+# routinely lands a hair off the clean grid value, which then rejects a real
+# print sitting exactly at that level.
+
+def test_cl_tp_penetration_survives_tick_grid_float_noise():
+    """CL tick 0.01: a long's `tp=64.01` needs a print >= 64.01 + 0.01, which in raw
+    float64 is 64.02000000000001 -- a real print at exactly 64.02 must still fill
+    it (this hits ~11.5% of CL levels). Mirrored for the short side."""
+    t, = one([("09:29:59", 63.80), ("09:30:01", 63.90), ("09:31", 64.02)],
+             plan={"09:30:00": lambda ctx, s: ctx.stop_entry("long", 63.90, sl=63.80, tp=64.01),
+                   "15:55": flat},
+             root="CL", move=False)
+    assert t.entry_price == 63.91 and t.tp == 64.01
+    assert t.exit_reason == "tp" and t.exit_price == 64.01
+
+    t, = one([("09:29:59", 64.20), ("09:30:01", 64.10), ("09:31", 64.01)],
+             plan={"09:30:00": lambda ctx, s: ctx.stop_entry("short", 64.10, sl=64.20, tp=64.02),
+                   "15:55": flat},
+             root="CL", move=False)
+    assert t.entry_price == 64.09 and t.tp == 64.02
+    assert t.exit_reason == "tp" and t.exit_price == 64.02
+
+
+def test_gc_stop_entry_price_survives_anchor_offset_float_noise():
+    """GC tick 0.1: a strategy's own `anchor + offset` arithmetic (2047.9 + 0.3) lands
+    on 2048.2000000000003 in raw float64 -- an exact touch at 2048.2, never exceeded
+    again, must still trigger the stop (not be silently missed). Mirrored short."""
+    def go_long(ctx, s):
+        a = ctx.last_price
+        ctx.stop_entry("long", a + 0.3, sl=a - 0.3, tp=a + 5.0)
+    t, = one([("09:29:59", 2047.9), ("09:30:01", 2048.2)], plan={"09:30:00": go_long},
+             root="GC", move=False)
+    assert t.order_price == 2048.2
+    assert t.entry_price == 2048.3                      # touch + 1 tick slip
+    assert t.exit_reason == "eod" and t.exit_price == 2048.1
+
+    def go_short(ctx, s):
+        a = ctx.last_price
+        ctx.stop_entry("short", a - 0.2, sl=a + 0.3, tp=a - 5.0)
+    t, = one([("09:29:59", 2000.1), ("09:30:01", 1999.9)], plan={"09:30:00": go_short},
+             root="GC", move=False)
+    assert t.order_price == 1999.9
+    assert t.entry_price == 1999.8                      # touch - 1 tick slip
+    assert t.exit_reason == "eod" and t.exit_price == 2000.0
+
+
+def test_si_stop_entry_price_survives_anchor_offset_float_noise():
+    """SI tick 0.005: same anchor+offset float noise, on a third (smaller) grid."""
+    def go_long(ctx, s):
+        a = ctx.last_price
+        ctx.stop_entry("long", a + 0.01, sl=a - 0.01, tp=a + 0.05)
+    t, = one([("09:29:59", 18.01), ("09:30:01", 18.02)], plan={"09:30:00": go_long},
+             root="SI", move=False)
+    assert t.order_price == 18.02
+    assert t.entry_price == 18.025                      # touch + 1 tick slip
+    assert t.exit_reason == "eod" and t.exit_price == 18.015
+
+    def go_short(ctx, s):
+        a = ctx.last_price
+        ctx.stop_entry("short", a - 0.01, sl=a + 0.01, tp=a - 0.05)
+    t, = one([("09:29:59", 18.005), ("09:30:01", 17.995)], plan={"09:30:00": go_short},
+             root="SI", move=False)
+    assert t.order_price == 17.995
+    assert t.entry_price == 17.99                       # touch - 1 tick slip
+    assert t.exit_reason == "eod" and t.exit_price == 18.0
+
+
+# Item 3: a strategy callback that crashes (e.g. `ctx.last_price` is None with no
+# print before the fire time) must not blow up the run -- it records a skip.
+
+def test_missing_last_price_at_fire_time_is_caught_and_recorded_as_skip():
+    for rows in ([], [("09:30:01", 100.0), ("09:31", 101.0)]):
+        res = run(rows)
+        assert res.trades == []
+        assert res.skip is not None and res.skip.startswith("strategy error:")
+
+
+# Item 4: short-side coverage for gross P&L and MAE/MFE (previously long-only).
+
+def test_stop_loss_is_touch_and_pays_slip_and_gap_short_side():
+    t, = one([("09:29:59", 100.0), ("09:30:01", 90.0), ("09:31", 94.75)])
+    assert (t.entry_price, t.sl) == (89.75, 94.75)
+    assert t.exit_reason == "sl" and t.exit_price == 95.0
+    t, = one([("09:29:59", 100.0), ("09:30:01", 90.0), ("09:31", 96.0)])
+    assert t.exit_price == 96.25
+    assert t.gross == round((89.75 - 96.25) * 20, 2) and t.net == t.gross - 4.0
+
+
+def test_mae_mfe_short_side():
+    t, = one([("09:29:59", 100.0), ("09:30:01", 90.0), ("09:31:30", 92.0), ("09:32", 80.0),
+              ("09:33", 74.5)])
+    assert t.side == "short"
+    assert (t.mae_pts, t.mfe_pts) == (2.25, 15.25)
+    assert (t.mae_usd, t.mfe_usd) == (45.0, 305.0)
+    assert t.bars == 4 and t.seconds == 179.0
