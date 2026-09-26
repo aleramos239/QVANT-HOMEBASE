@@ -29,12 +29,27 @@ class Layer {
    tick below; sells at P vs buys one tick above) at `ratio`:1. Drawn only
    when zoomed in far enough to read. */
 class Footprint extends Layer {
-  constructor(P) { super(P); this.bars = []; this.ratio = 0; this.tick = 0.25; this.on = false; }
+  constructor(P) {
+    super(P);
+    this.bars = []; this.ratio = 0; this.tick = 0.25; this.on = false;
+    this.onReadableChange = null; this._readable = false;   // last value reported to the callback
+  }
   set(bars, on, ratio, tick) { this.bars = bars; this.on = on; this.ratio = ratio; this.tick = tick; this.redraw(); }
   readable() {
     if (!this.on || !this.chart || !this.series || !this.bars.length) return false;
     const last = this.bars[this.bars.length - 1];
     return this.spacing() >= 56 && this.rowH(last.c, this.tick) >= 9;
+  }
+  /* Lightweight Charts calls this before every render, once layout for the
+     new range/zoom/price-scale is settled — so, unlike a subscribe*Change
+     event (which fires BEFORE relayout), readable() here sees current
+     numbers. Only report on change, and only asynchronously: never call
+     chart/series-mutating APIs (applyOptions etc.) from inside a render pass. */
+  updateAllViews() {
+    const on = this.readable();
+    if (on === this._readable) return;
+    this._readable = on;
+    if (this.onReadableChange) setTimeout(() => this.onReadableChange && this.onReadableChange(on), 0);
   }
   draw(target) {
     if (!this.readable()) return;

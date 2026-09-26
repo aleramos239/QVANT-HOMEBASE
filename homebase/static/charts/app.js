@@ -146,6 +146,10 @@ class Cell {
       wickUpColor: P.up, wickDownColor: P.down, borderVisible: false });
     this.markers = LW.createSeriesMarkers(this.candles, []);
     this.fp = new Footprint(P); this.prof = new Profile(P); this.gaps = new Gaps(P);
+    this.fp.onReadableChange = (on) => {   // fired async from Footprint.updateAllViews(), post-layout
+      this.fpShown = on;       // footprint visible: hide candle bodies, keep the wicks
+      this.candles.applyOptions(on ? { upColor: 'rgba(0,0,0,0)', downColor: 'rgba(0,0,0,0)' } : { upColor: this.P.up, downColor: this.P.down });
+    };
     for (const l of [this.gaps, this.prof, this.fp]) this.candles.attachPrimitive(l);
     this.series = {}; this.levelLines = {}; this.paneOf = {}; this.panes = 0; this.fpShown = false;
     this.chart.timeScale().subscribeVisibleLogicalRangeChange(() => this.syncFootprint());
@@ -277,11 +281,8 @@ class Cell {
   syncFootprint() {
     if (!this.fp) return;
     this.fp.set(this.bars, !!this.cfg.st.footprint, +this.cfg.st.imbalance || 0, this.tick);
-    const on = this.fp.readable(), P = this.P;
-    if (on !== this.fpShown) {
-      this.fpShown = on;       // footprint visible: hide candle bodies, keep the wicks
-      this.candles.applyOptions(on ? { upColor: 'rgba(0,0,0,0)', downColor: 'rgba(0,0,0,0)' } : { upColor: P.up, downColor: P.down });
-    }
+    // readability (and the candle-hide toggle) is decided by the layer itself,
+    // at render time, via onReadableChange -- see makeChart().
   }
 
   legend(i) {
