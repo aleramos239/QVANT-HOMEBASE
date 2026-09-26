@@ -83,6 +83,9 @@ class TradovateAdapter(BrokerAdapter):
         self._positions: dict[int, dict] = {}     # contractId -> position, THIS account only
         self._cash: dict = {}                     # cashBalance, THIS account only
         self._contract_lookups: set = set()       # contract ids being resolved in the background
+        self._lookup_tasks: set = set()           # their tasks, cancelled by close()
+        self._pos_pushed: set = set()             # contract ids pushed while a seed read is in flight
+        self._cash_pushed = False                 # a cashBalance push landed while the seed read it
         self._seed_task: Optional[asyncio.Task] = None
         self._seed_sleep = asyncio.sleep          # the seed's retry backoff (tests replace it)
         self.caches_seeded = False                # position/cash read after the last (re)connect
@@ -156,9 +159,11 @@ class TradovateAdapter(BrokerAdapter):
     async def close(self) -> None:
         self._connected = False
         self.caches_seeded = False
-        for t in (self._keepalive, self._consumer, self._seed_task):
+        for t in (self._keepalive, self._consumer, self._seed_task, *self._lookup_tasks):
             if t:
                 t.cancel()
+        self._lookup_tasks.clear()
+        self._contract_lookups.clear()      # a reconnect may look them up again
         if self._ws:
             try:
                 await self._ws.close()
@@ -316,6 +321,7 @@ class TradovateAdapter(BrokerAdapter):
         if self._acct_num is None or ent.get("accountId") != self._acct_num or cid is None:
             return False
         self._positions[cid] = {**self._positions.get(cid, {}), **ent}
+        self._pos_pushed.add(cid)
         if cid not in self._contracts:
             self._want_contract(cid)
         return True
@@ -324,6 +330,7 @@ class TradovateAdapter(BrokerAdapter):
         if self._acct_num is None or ent.get("accountId") != self._acct_num:
             return False
         self._cash = {**self._cash, **ent}
+        self._cash_pushed = True
         return True
 
     def _want_contract(self, cid) -> None:
@@ -337,7 +344,9 @@ class TradovateAdapter(BrokerAdapter):
         except RuntimeError:
             return
         self._contract_lookups.add(cid)
-        loop.create_task(self._lookup_contract(cid))
+        t = loop.create_task(self._lookup_contract(cid))
+        self._lookup_tasks.add(t)
+        t.add_done_callback(self._lookup_tasks.discard)
 
     async def _lookup_contract(self, cid, *, announce: bool = True) -> None:
         try:
@@ -388,17 +397,25 @@ class TradovateAdapter(BrokerAdapter):
             attempt += 1
             try:
                 if not pos_done:
+                    self._pos_pushed.clear()
                     positions = await ws.position_list()
                     me = self._acct_num
-                    self._positions = {p["contractId"]: p for p in positions or []
-                                       if isinstance(p, dict) and p.get("accountId") == me
-                                       and p.get("contractId") is not None}
+                    snap = {p["contractId"]: p for p in positions or []
+                            if isinstance(p, dict) and p.get("accountId") == me
+                            and p.get("contractId") is not None}
+                    # a push that landed while the read was in flight is NEWER
+                    # than the snapshot: keep it (a fill must never read flat)
+                    snap.update({c: self._positions[c] for c in self._pos_pushed
+                                 if c in self._positions})
+                    self._positions = snap
                     pos_done = True
                 if not cash_done:
+                    self._cash_pushed = False
                     cash = await ws.cash_balance_list()
                     me = self._acct_num
-                    self._cash = next((b for b in cash or []
-                                       if isinstance(b, dict) and b.get("accountId") == me), {})
+                    if not self._cash_pushed:
+                        self._cash = next((b for b in cash or []
+                                           if isinstance(b, dict) and b.get("accountId") == me), {})
                     cash_done = True
                 break
             except Exception as e:  # noqa: BLE001
@@ -681,32 +698,44 @@ class TradovateAdapter(BrokerAdapter):
                 "positions": sorted(positions, key=lambda p: str(p["symbol"])),
                 "orders": sorted(orders, key=lambda o: o["order_id"])}
 
-    async def cancel_symbol(self, symbol: str) -> OrderResult:
+    async def cancel_symbol(self, symbol: str, *, exclude=()) -> OrderResult:
         """Cancel THIS account's working orders in ONE contract (from the
-        pushed order cache). An order whose contract is unknown is left alone
-        and counted in raw["unknown_contract"]."""
+        pushed order cache), except the ids in `exclude`. An order with no
+        contract id is matched by the contract WE placed it on; one still
+        unknown is left alone, counted in raw["unknown_contract"], and makes
+        the result not ok (it may be this contract's)."""
         if self._ws is None or self._acct_num is None:
             return OrderResult(ok=False, error="adapter not connected")
         try:
             cid = await self.contract_id(symbol)
         except Exception as e:  # noqa: BLE001
             return OrderResult(ok=False, error=f"no contract for {symbol}: {e}")
+        name = self._contracts.get(cid)
+        skip = {str(x) for x in exclude}
         ids, unknown = [], 0
         for oid, o in list(self._orders.items()):
             if o.get("accountId") != self._acct_num \
-                    or o.get("ordStatus") not in self._WORKING_STATUSES:
+                    or o.get("ordStatus") not in self._WORKING_STATUSES \
+                    or str(oid) in skip:
                 continue
             o_cid = o.get("contractId") or self._order_versions.get(oid, {}).get("contractId")
             if o_cid is None:
-                unknown += 1
+                placed_on = self._order_symbols.get(oid)
+                if placed_on is None:
+                    unknown += 1
+                elif placed_on == name:
+                    ids.append(oid)
             elif o_cid == cid:
                 ids.append(oid)
         res = await asyncio.gather(*(self.cancel_order_by_id(str(i)) for i in ids),
                                    return_exceptions=True)
         errors = [f"{i}: {r if isinstance(r, Exception) else r.error}"
                   for i, r in zip(ids, res) if isinstance(r, Exception) or not r.ok]
+        failed = len(errors)
+        if unknown:
+            errors.append(f"{unknown} working order(s) with an unknown contract left working")
         return OrderResult(ok=not errors, error="; ".join(errors) or None,
-                           raw={"cancelled": len(ids) - len(errors),
+                           raw={"cancelled": len(ids) - failed,
                                 "ids": [str(i) for i in ids], "unknown_contract": unknown})
 
     async def flatten_symbol(self, symbol: str) -> OrderResult:
@@ -729,7 +758,8 @@ class TradovateAdapter(BrokerAdapter):
             if not r.ok:
                 return OrderResult(ok=False, raw=raw,
                                    error=f"flatten order refused: {r.error} — orders left working")
-        c = await self.cancel_symbol(symbol)
+        own = [r.order_id] if net and r.order_id else []
+        c = await self.cancel_symbol(symbol, exclude=own)   # never its own market order
         raw["cancel"] = {"ok": c.ok, "error": c.error, **(c.raw or {})}
         return OrderResult(ok=c.ok, error=c.error, raw=raw)
 

@@ -344,7 +344,8 @@ def test_flatten_symbol_markets_out_then_cancels_only_that_contract(tmp_path):
     ad = mkadapter(tmp_path, answer)
     orders_nq_es(ad)
     r = run(ad.flatten_symbol("NQ"))
-    assert r.ok is True and r.raw["net_before"] == 3
+    assert r.raw["net_before"] == 3 and r.raw["market"]["ok"] is True
+    assert r.ok is False and r.error == "1 working order(s) with an unknown contract left working"
     eps = [e for e, _, _ in sent]
     placed = [b for e, _, b in sent if e == "order/placeorder"]
     assert len(placed) == 1
@@ -378,7 +379,8 @@ def test_cancel_symbol_touches_only_this_accounts_working_orders_in_that_contrac
     ad = mkadapter(tmp_path, answer)
     orders_nq_es(ad)
     r = run(ad.cancel_symbol("ES"))
-    assert r.ok is True and r.raw == {"cancelled": 1, "ids": ["2"], "unknown_contract": 1}
+    assert r.raw == {"cancelled": 1, "ids": ["2"], "unknown_contract": 1}
+    assert r.ok is False and r.error == "1 working order(s) with an unknown contract left working"
     assert [b["orderId"] for e, _, b in sent if e == "order/cancelorder"] == [2]
 
 
@@ -404,3 +406,83 @@ def test_reconnect_cancels_the_old_sockets_seed_before_anything_else(tmp_path, m
 
     old = run(go())
     assert old.cancelled() and ad.caches_seeded is False
+
+
+# --- fix round 1 -------------------------------------------------------------------
+def test_a_position_push_during_the_seed_read_survives_the_older_snapshot(tmp_path):
+    holder = {}
+    base, _ = broker(positions=[{"accountId": ME, "contractId": CID[NQC], "netPos": 0},
+                                {"accountId": ME, "contractId": CID[ESC], "netPos": 2}],
+                     cash=[{"accountId": ME, "amount": 100.0}])
+
+    def answer(endpoint, query, body):
+        ad = holder["ad"]
+        if endpoint == "position/list":          # the NQ fill lands while the read is in flight
+            push(ad, "position", {"id": 7, "accountId": ME, "contractId": CID[NQC],
+                                  "netPos": 1, "netPrice": 30000.0})
+        if endpoint == "cashBalance/list":
+            push(ad, "cashBalance", {"id": 1, "accountId": ME, "amount": 95.0})
+        return base(endpoint, query, body)
+
+    ad = holder["ad"] = mkadapter(tmp_path, answer)
+    run(ad._seed_caches())
+    v = ad.trade_view()
+    assert {p["symbol"]: p["net"] for p in v["positions"]} == {NQC: 1, ESC: 2}
+    assert v["balance"] == 95.0
+
+
+def test_a_push_before_the_seed_read_is_replaced_by_the_snapshot(tmp_path):
+    answer, _ = broker(positions=[{"accountId": ME, "contractId": CID[NQC], "netPos": 0}])
+    ad = mkadapter(tmp_path, answer)
+    push(ad, "position", {"id": 7, "accountId": ME, "contractId": CID[NQC], "netPos": 4})
+    push(ad, "cashBalance", {"id": 1, "accountId": ME, "amount": 1.0})
+    run(ad._seed_caches())
+    assert ad.trade_view()["positions"] == [] and ad.trade_view()["balance"] is None
+
+
+def test_flatten_never_cancels_its_own_market_order(tmp_path):
+    holder = {}
+    base, sent = broker(positions=[{"accountId": ME, "contractId": CID[NQC], "netPos": 2}],
+                        place={"orderId": 900})
+
+    def answer(endpoint, query, body):
+        if endpoint == "order/placeorder":       # its push is cached before the reply returns
+            push(holder["ad"], "order", working(900, CID[NQC], status="PendingNew"))
+        return base(endpoint, query, body)
+
+    ad = holder["ad"] = mkadapter(tmp_path, answer)
+    ad._contracts.update({CID[NQC]: NQC, CID[ESC]: ESC})
+    ad._orders.update({1: working(1, CID[NQC]), 2: working(2, CID[ESC], action="Buy")})
+    r = run(ad.flatten_symbol("NQ"))
+    assert r.ok is True and r.raw["market"]["order_id"] == "900"
+    assert [b["orderId"] for e, _, b in sent if e == "order/cancelorder"] == [1]
+
+
+def test_cancel_symbol_cancels_our_own_unnamed_order_by_what_we_placed(tmp_path):
+    answer, sent = broker()
+    ad = mkadapter(tmp_path, answer)
+    ad._contracts.update({CID[NQC]: NQC, CID[ESC]: ESC})
+    ad._orders.update({6: {"id": 6, "accountId": ME, "ordStatus": "Working"},    # ours, NQ
+                       7: {"id": 7, "accountId": ME, "ordStatus": "Working"},    # ours, ES
+                       2: working(2, CID[ESC], action="Buy")})
+    ad._order_symbols.update({6: NQC, 7: ESC})
+    r = run(ad.cancel_symbol("ES"))
+    assert r.ok is True and (r.raw["cancelled"], r.raw["unknown_contract"]) == (2, 0)
+    assert sorted(r.raw["ids"]) == ["2", "7"]
+    assert sorted(b["orderId"] for e, _, b in sent if e == "order/cancelorder") == [2, 7]
+
+
+def test_close_cancels_pending_contract_lookups_so_a_reconnect_can_retry(tmp_path):
+    answer, _ = broker()
+    ad = mkadapter(tmp_path, answer)
+
+    async def go():
+        push(ad, "order", working(21, CID[ESC]))
+        tasks = set(ad._lookup_tasks)
+        await ad.close()
+        await asyncio.sleep(0)
+        return tasks
+
+    tasks = run(go())
+    assert len(tasks) == 1 and all(t.cancelled() for t in tasks)
+    assert ad._lookup_tasks == set() and ad._contract_lookups == set()
