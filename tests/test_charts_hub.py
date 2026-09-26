@@ -177,3 +177,20 @@ def test_the_roll_resets_the_side_classifier_to_match_a_reload(tmp_path):
     hub.on_ticks("NQ", opening)
     assert [t.side for t in hub.today["NQ"]] == [t.side for t in ticks_of(opening)]
     assert [x["date"] for x in s.sessions][-1] == nxt.isoformat()
+
+
+def test_a_previous_session_straggler_never_rolls_the_tape_back(tmp_path):
+    """Only a FORWARD session change is a roll. A print from an older
+    session (the one historical trade a weekend subscribe returns; an
+    undeduped straggler) used to 'roll' the hub back: today's tape wiped,
+    a bogus old-session bar on every open chart, History cleared -- and the
+    next of today's ticks rolled it forward again, wiping the tape twice."""
+    hub, today, _ = setup(tmp_path)
+    hub.start_today("NQ", D, ticks_of(today))
+    s = open_stream(hub)
+    tape, bars, sessions = list(hub.today["NQ"]), len(s.bars), list(s.sessions)
+    memo = dict(hub.history.memo)
+    hub.on_ticks("NQ", rows(session_ms(P, 16, 59), [123.0], first_id=77_777))
+    assert hub.today_date["NQ"] == D and hub.today["NQ"] == tape
+    assert len(s.bars) == bars and s.builder.cur.session == D.isoformat()
+    assert s.sessions == sessions and hub.history.memo == memo

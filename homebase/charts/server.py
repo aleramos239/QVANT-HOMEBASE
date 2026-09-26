@@ -149,7 +149,10 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         of its own. Either way, no root ever runs two fetches concurrently."""
         d = session_date(clock())
         s0, _ = session_range_ms(d)
-        frm = since_ms if since_ms is not None else (start_last.get(root) or s0)
+        # never page back past this session's open: a `since` from the previous
+        # session (a weekend straggler, a drop before the 17:00 close) would
+        # file that session's ticks as its live file
+        frm = max(since_ms if since_ms is not None else (start_last.get(root) or s0), s0)
         waiting = refill_pending.get(root)
         if waiting is not None:
             waiting["frm"] = min(waiting["frm"], frm)
@@ -202,6 +205,12 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         clock = now_ms or (lambda: int(time.time() * 1000))
 
         def on_live(root: str, contract: str, rows: list[dict]) -> None:
+            # a print from an older session than the clock's (the one historical
+            # trade a weekend subscribe returns) is neither recorded nor charted:
+            # it would file a 1-tick stub for that session, which store.pick
+            # prefers to an incomplete archive. Refill rows never come this way.
+            today = session_date(clock())
+            rows = [r for r in rows if session_date(int(r["ts_ms"])) >= today]
             hub.on_ticks(root, recorder.append(root, contract, rows))
 
         feed = (feed_factory or TickFeed)(roots, on_live, on_subscribed=_refill)

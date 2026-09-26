@@ -140,7 +140,9 @@ class Hub:
         streams = [s for s in self.streams.values() if s.root == root]
         for r in rows:
             d = session_date(int(r["ts_ms"]))
-            if d != self.today_date[root]:              # 18:00 roll: the old session is on disk
+            if d < self.today_date[root]:
+                continue        # an older session's straggler: charts only roll FORWARD
+            if d > self.today_date[root]:               # 18:00 roll: the old session is on disk
                 info = dict(self.today_info[root], date=d.isoformat(), gaps=[])
                 self.today[root] = []
                 self.today_date[root] = d

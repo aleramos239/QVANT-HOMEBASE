@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 
 from homebase.charts.hub import Hub, Stream
 from homebase.charts.server import QUIET, Conn, create_app
+from homebase.charts.session import session_range_ms
 from homebase.charts.store import read_table
 from tests.charts_util import D, ET, rows, session_ms, write_archive
 
@@ -619,3 +620,111 @@ def test_a_failed_subscribe_leaves_no_orphaned_stream_or_pending_update(tmp_path
         time.sleep(0.6)
 
     assert not any(m.get("type") == "update" and m.get("id") == "a" for m in sent), sent
+
+
+class QueueFeed:
+    """A live feed the test drives: every item put on `q` is delivered to
+    on_ticks; `delivered` counts the ones that were."""
+
+    def __init__(self, q, delivered):
+        self.q, self.delivered = q, delivered
+
+    def __call__(self, roots, on_ticks, on_subscribed=None):
+        self.on_ticks, self.ws = on_ticks, None
+        return self
+
+    async def run(self):
+        while True:
+            try:
+                self.on_ticks(*self.q.get_nowait())
+                self.delivered.append(1)
+            except queue.Empty:
+                await asyncio.sleep(0.01)
+
+    def stop(self):
+        pass
+
+    def budget_used(self):
+        return 0
+
+    def count_request(self):
+        pass
+
+    def status(self):
+        return {"mode": "live", "connected": True, "error": None, "roots": {},
+                "budget_hour": 0, "reconnects": 0}
+
+
+def test_a_previous_session_print_is_neither_recorded_nor_charted(tmp_path):
+    """Weekend start (the first install): the subscribe's one historical
+    trade is Friday's last print. It used to file a 1-tick Friday live file
+    (which store.pick prefers to an INCOMPLETE archive, permanently) and
+    roll the charts back to Friday (Friday = one bar of one lot). A chart
+    opened afterwards must show Friday's whole session, and nothing may be
+    recorded."""
+    thu, fri = dt.date(2026, 9, 24), dt.date(2026, 9, 25)
+    sat_10 = int(dt.datetime(2026, 9, 26, 10, 0, tzinfo=ET).timestamp() * 1000)
+    base = tmp_path / "ticks"
+    write_archive(base, "NQ", thu, "NQZ6", rows(session_ms(thu, 9, 30), [100.0 + 0.25 * (i % 4) for i in range(600)]))
+    fri_rows = rows(session_ms(fri, 9, 30), [200.0 + 0.25 * (i % 4) for i in range(600)], first_id=5000)
+    write_archive(base, "NQ", fri, "NQZ6", fri_rows, complete=False)
+    q: queue.Queue = queue.Queue()
+    delivered: list = []
+    app = create_app(roots=["NQ"], base=base, feed_factory=QueueFeed(q, delivered),
+                     now_ms=lambda: sat_10, state=tmp_path / "state")
+    with TestClient(app) as client:
+        q.put(("NQ", "NQZ6", [dict(fri_rows[-1], id=987_654_321)]))    # a Tradovate id
+        deadline = time.time() + 5
+        while not delivered and time.time() < deadline:
+            time.sleep(0.02)
+        assert delivered
+        with client.websocket_connect("/ws") as ws:
+            ws.send_json({"op": "sub", "id": "a", "root": "NQ", "spec": "time:60"})
+            hist = next_of(ws, "history")
+    fri_bars = [b for b in hist["bars"] if b["s"] == fri.isoformat()]
+    assert len(fri_bars) == 10 and sum(b["v"] for b in fri_bars) == 600
+    assert not list(base.rglob("*.live.csv.gz"))
+
+
+def test_a_refill_never_pages_back_past_the_session_open(tmp_path, monkeypatch):
+    """A reconnect's `since` can be the previous session's last tick (a
+    weekend straggler, a socket that dropped before the 17:00 close). The
+    refill starts at the current session's open: paging back into the
+    previous session would file its ticks as that session's live file."""
+    calls: list = []
+
+    async def fake_refill(ws, contract, frm, to, *, max_pages, sleep=None, on_request=None):
+        calls.append(frm)
+        return [], frm
+
+    monkeypatch.setattr("homebase.charts.server.refill", fake_refill)
+
+    class FakeFeed:
+        def __init__(self, roots, on_ticks, on_subscribed=None):
+            self.on_subscribed, self.ws = on_subscribed, None
+
+        def count_request(self):
+            pass
+
+        def budget_used(self):
+            return 0
+
+        async def run(self):
+            asyncio.create_task(self.on_subscribed("NQ", "NQZ6", session_ms(P, 16, 0)))
+            while True:
+                await asyncio.sleep(0.01)
+
+        def stop(self):
+            pass
+
+        def status(self):
+            return {"mode": "live", "connected": True, "error": None, "roots": {},
+                    "budget_hour": 0, "reconnects": 0}
+
+    app = create_app(roots=["NQ"], base=tmp_path / "ticks", feed_factory=FakeFeed,
+                     now_ms=lambda: session_ms(D, 9, 45), state=tmp_path / "state")
+    with TestClient(app):
+        deadline = time.time() + 5
+        while not calls and time.time() < deadline:
+            time.sleep(0.02)
+    assert calls == [session_range_ms(D)[0]]                 # 18:00 ET the evening before D
