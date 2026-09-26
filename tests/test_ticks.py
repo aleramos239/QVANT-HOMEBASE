@@ -271,3 +271,72 @@ def test_partial_capture_never_replaces_a_full_backfill_file(tmp_path, monkeypat
     p.with_suffix("").with_suffix(".json").write_text(json.dumps({"source": "massive"}))
     out = run(T.record(roots=("NQ",), dates=[dt.date(2026, 9, 22)], base=tmp_path, ws=object()))
     assert out == [] and p.read_bytes() == b"massive-full-session"
+
+
+class ChartSocket:
+    """An md socket with TradovateWS's dispatch semantics: every chart
+    packet goes to every event handler, and packets for a getChart can land
+    BEFORE its reply resolves. `before`/`after` are the packets delivered
+    around the getChart reply; each packet is a dict of the charts array."""
+
+    def __init__(self, reply, before=(), after=()):
+        self.event_handlers, self.sent = [], []
+        self.reply, self.before, self.after = reply, list(before), list(after)
+
+    def emit(self, ch):
+        for h in list(self.event_handlers):
+            h({"e": "chart", "d": {"charts": [ch]}})
+
+    async def request(self, ep, body=""):
+        self.sent.append((ep, body))
+        if ep == "md/cancelChart":
+            return {}
+        for ch in self.before:
+            self.emit(ch)
+        loop = asyncio.get_running_loop()
+        for ch in self.after:
+            loop.call_soon(self.emit, ch)
+        return self.reply
+
+
+def _pkt(cid, bp, ts_list, first_id):
+    return {"id": cid, "bp": bp, "bt": ts_list[0], "ts": 0.25,
+            "tks": [{"t": t - ts_list[0], "p": 0, "s": 1, "b": -1, "a": 0, "id": first_id + i}
+                    for i, t in enumerate(ts_list)]}
+
+
+def test_fetch_page_on_its_own_socket_returns_the_page_oldest_first():
+    """The nightly job's case: the socket carries only this page's chart."""
+    t0 = 1_790_000_000_000
+    ws = ChartSocket({"historicalId": 11, "realtimeId": 11},
+                     after=[_pkt(11, 80_000, [t0 + 2000, t0 + 3000], 3),
+                            _pkt(11, 80_000, [t0, t0 + 1000], 1),
+                            {"id": 11, "eoh": True}])
+    got = asyncio.run(T.fetch_page(ws, "NQZ6", t0 + 3000, timeout_s=1))
+    assert [r["id"] for r in got] == [1, 2, 3, 4] and got[0]["price"] == 20_000.0
+    assert ws.sent[-1] == ("md/cancelChart", {"subscriptionId": 11})
+    assert ws.event_handlers == []
+
+
+def test_fetch_page_on_a_shared_socket_keeps_only_its_own_chart():
+    """The chart service pages history on the md socket its live Tick
+    subscriptions ride: another root's resubscribe delivers its latest trade
+    and an end-of-history, and live ticks keep flowing, while this page is in
+    flight. Only this getChart's ids may land in the page, and only ITS
+    end-of-history may end it (a foreign one used to cut the page short and
+    hand its rows to the next root's page)."""
+    t0 = 1_790_000_000_000
+    other = 77                                               # e.g. ES's live subscription
+    ws = ChartSocket(
+        {"historicalId": 11, "realtimeId": 12},
+        before=[_pkt(other, 23_200, [t0 + 500], 900),        # another root's latest trade
+                {"id": other, "eoh": True},                  # ... and its end-of-history
+                _pkt(11, 80_000, [t0, t0 + 1000], 1)],       # ours, ahead of the reply
+        after=[_pkt(other, 23_200, [t0 + 2500], 901),        # another root's live tick
+               _pkt(11, 80_000, [t0 + 2000, t0 + 3000], 3),  # the rest of ours
+               _pkt(12, 80_000, [t0 + 4000], 5),             # ours, on the realtime id
+               {"id": 11, "eoh": True}])
+    got = asyncio.run(T.fetch_page(ws, "NQZ6", t0 + 3000, timeout_s=1))
+    assert [r["id"] for r in got] == [1, 2, 3, 4, 5]         # no foreign row, none missing
+    assert {r["price"] for r in got} == {20_000.0}
+    assert ws.sent[-1] == ("md/cancelChart", {"subscriptionId": 12})

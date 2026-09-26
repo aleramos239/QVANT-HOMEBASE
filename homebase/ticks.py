@@ -121,8 +121,19 @@ async def fetch_page(ws: TradovateWS, contract: str, before_ms: int,
                      n: int = PAGE, timeout_s: float = 20.0,
                      ticket: str | None = None) -> list[dict]:
     """Up to n ticks ending at `before_ms` (inclusive), oldest first.
-    Raises Penalty on a rate-limit reply (retry with its ticket)."""
-    packets, done = [], asyncio.get_running_loop().create_future()
+    Raises Penalty on a rate-limit reply (retry with its ticket).
+
+    Only this request's own chart counts. The socket may carry other
+    subscriptions too (the chart service pages its gap refills on the socket
+    its live Tick charts ride), so packets are kept WITH their subscription
+    id and filtered to this getChart's {historicalId, realtimeId} once the
+    reply names them (packets can land before the reply does), and only an
+    end-of-history for those ids ends the page. On a socket that carries
+    nothing else (the nightly job's) this changes nothing."""
+    packets: list[dict] = []
+    ended: set = set()              # subscription ids whose end-of-history arrived
+    mine: set = set()               # this request's ids, known once getChart answers
+    done = asyncio.get_running_loop().create_future()
 
     def on(msg):
         if msg.get("e") != "chart":
@@ -130,8 +141,10 @@ async def fetch_page(ws: TradovateWS, contract: str, before_ms: int,
         for ch in (msg.get("d") or {}).get("charts", []) or []:
             if ch.get("tks"):
                 packets.append(ch)
-            if ch.get("eoh") and not done.done():
-                done.set_result(True)
+            if ch.get("eoh"):
+                ended.add(ch.get("id"))
+                if ch.get("id") in mine and not done.done():
+                    done.set_result(True)
 
     ws.event_handlers.append(on)
     try:
@@ -149,10 +162,13 @@ async def fetch_page(ws: TradovateWS, contract: str, before_ms: int,
             raise Penalty(d)
         if not isinstance(d, dict) or d.get("realtimeId") is None:
             raise RuntimeError(f"{contract}: getChart refused: {d!r}")
+        mine.update(int(d[k]) for k in ("historicalId", "realtimeId") if d.get(k) is not None)
+        if mine & ended and not done.done():
+            done.set_result(True)            # our end-of-history beat the reply
         try:
             await asyncio.wait_for(done, timeout_s)
         except asyncio.TimeoutError:
-            if not packets:
+            if not any(p.get("id") in mine for p in packets):
                 raise RuntimeError(f"{contract}: no tick data before timeout")
         rt = (d or {}).get("realtimeId")
         if rt is not None:
@@ -162,7 +178,7 @@ async def fetch_page(ws: TradovateWS, contract: str, before_ms: int,
                 pass
     finally:
         ws.event_handlers.remove(on)
-    rows = [r for p in packets for r in _unpack(p)]
+    rows = [r for p in packets if p.get("id") in mine for r in _unpack(p)]
     rows.sort(key=lambda r: (r["ts_ms"], r["id"] or 0))
     return rows
 
