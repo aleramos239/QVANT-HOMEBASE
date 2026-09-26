@@ -34,6 +34,7 @@ from .session import ET, always_open, et_wall_s, session_date, session_range_ms,
 from .store import ARCHIVE, TickStore
 from .studies import make
 from .tick import SideClassifier, from_row
+from .tester_api import tester_router
 from .tickfeed import TickFeed
 
 STATIC = Path(__file__).resolve().parent.parent / "static"
@@ -385,6 +386,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                 t.cancel()
             if recorder is not None:
                 recorder.flush()
+            tester.manager.shutdown()   # never leave a runner child orphaned
 
     app = FastAPI(title="Homebase Charts", lifespan=lifespan)
     app.mount("/static", RevalidatedFiles(directory=STATIC), name="static")
@@ -429,6 +431,9 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         if r not in roots:
             raise HTTPException(404, f"{root!r} is not a charted symbol")
         return r
+
+    tester = tester_router(browser_write_ok, base, Path(state) / "tester" if state else None)
+    app.include_router(tester)
 
     @app.get("/api/layouts")
     async def get_layouts():
