@@ -244,6 +244,9 @@ test('ages read as s / m / h / d', () => {
 
 /* feedSummary(status, ET weekday, ET minute of the day) — the bottom bar's dot, text and tooltip. */
 const SAT_NOON = [6, 12 * 60], WED_10 = [3, 10 * 60];
+const WED_2 = [3, 2 * 60], TUE_3 = [2, 3 * 60];
+const SUN_1803 = [0, 18 * 60 + 3], TUE_1803 = [2, 18 * 60 + 3];
+const FRI_1659 = [5, 16 * 60 + 59], WED_1730 = [3, 17 * 60 + 30];
 const live = (roots, extra = {}) => ({ mode: 'live', connected: true, error: null, roots,
   recorder: { written: 0, buffered: 0, error: null }, ...extra });
 const tick = (age) => ({ contract: 'X', last_tick_age_s: age, error: null });
@@ -254,11 +257,11 @@ test('status: a weekend with Bitcoin fresh and the Globex futures closed is fine
 });
 
 test('status: a stale open market is amber, the stalest first, two at most', () => {
-  const f = C.feedSummary(live({ NQ: tick(45), ES: tick(0.5), YM: tick(90), RTY: tick(31) }), ...WED_10);
+  const f = C.feedSummary(live({ NQ: tick(180), ES: tick(2), YM: tick(360), RTY: tick(124) }), ...WED_10);
   assert.equal(f.dot, 'warn');
-  assert.equal(f.text, 'YM stale 2m · NQ stale 45.0s');
+  assert.equal(f.text, 'YM stale 6m · NQ stale 3m');
   assert.equal(f.textClass, 'warn');
-  assert.equal(f.title, 'NQ 45.0s  ·  ES 0.5s  ·  YM 2m  ·  RTY 31.0s');
+  assert.equal(f.title, 'NQ 3m  ·  ES 2.0s  ·  YM 6m  ·  RTY 2m');
 });
 
 test('status: a refused symbol reads "unavailable" in amber, whatever the market hours, with the reason in the tooltip', () => {
@@ -279,8 +282,8 @@ test('status: an open market that has not ticked yet is not "feeds ok" — neutr
   assert.equal(wed.text, 'NQ no ticks yet · ES no ticks yet');
   assert.equal(wed.dot, '');
   assert.equal(wed.textClass, '');
-  const mixed = C.feedSummary(live({ NQ: tick(45), BTC: tick(null) }), ...WED_10);   // a warning wins the dot and the colour
-  assert.deepEqual([mixed.dot, mixed.text, mixed.textClass], ['warn', 'NQ stale 45.0s · BTC no ticks yet', 'warn']);
+  const mixed = C.feedSummary(live({ NQ: tick(150), BTC: tick(null) }), ...WED_10);   // a warning wins the dot and the colour
+  assert.deepEqual([mixed.dot, mixed.text, mixed.textClass], ['warn', 'NQ stale 3m · BTC no ticks yet', 'warn']);
 });
 
 test('status: not connected reads "connecting…", never "feeds ok"', () => {
@@ -301,4 +304,46 @@ test('status: a backed-up recorder turns the dot amber and leaves the feed text 
   const f = C.feedSummary(live({ NQ: tick(1) }, { recorder: { written: 0, buffered: C.REC_BUSY, error: null } }), ...WED_10);
   assert.deepEqual([f.dot, f.text, f.textClass], ['warn', 'feeds ok', '']);
   assert.equal(C.feedSummary(live({}), ...WED_10).text, '');
+});
+
+test('status: RTH is tighter than ETH for a classic root', () => {
+  assert.equal(C.feedSummary(live({ NQ: tick(150) }), ...WED_10).text, 'NQ stale 3m');
+  assert.equal(C.feedSummary(live({ NQ: tick(100) }), ...WED_10).text, 'feeds ok');
+});
+
+test('status: ETH is looser than RTH for a classic root', () => {
+  assert.equal(C.feedSummary(live({ ZN: tick(200) }), ...WED_2).text, 'feeds ok');
+  assert.equal(C.feedSummary(live({ ZN: tick(400) }), ...WED_2).text, 'ZN stale 7m');
+});
+
+test('status: a 24/7 root does not go stale on a quiet weekend', () => {
+  const f = C.feedSummary(live({ BTC: tick(3600) }), ...SAT_NOON);
+  assert.equal(f.dot, 'ok');
+  assert.equal(f.text, 'feeds ok');
+  assert.ok(f.title.includes('BTC 1h'), f.title);
+});
+
+test('status: a 24/7 root still goes stale after 900 s while the classic market is open', () => {
+  assert.equal(C.feedSummary(live({ BTC: tick(1000) }), ...TUE_3).text, 'BTC stale 17m');
+  assert.equal(C.feedSummary(live({ BTC: tick(600) }), ...TUE_3).text, 'feeds ok');
+});
+
+test('status: the session-open clamp protects a fresh Sunday reopen', () => {
+  const nq = C.feedSummary(live({ NQ: tick(180000) }), ...SUN_1803);     // Friday's last tick
+  assert.equal(nq.text, 'feeds ok');    // clamped to 180 s; ETH threshold is 300
+  const btc = C.feedSummary(live({ BTC: tick(7200) }), ...SUN_1803);
+  assert.equal(btc.text, 'feeds ok');   // clamped to 180 s; the 24/7-while-open threshold is 900
+});
+
+test('status: the daily 18:00 reopen clamp applies on a weekday too', () => {
+  assert.equal(C.feedSummary(live({ NQ: tick(3780) }), ...TUE_1803).text, 'feeds ok');
+});
+
+test('staleAfter: RTH, ETH and 24/7 thresholds', () => {
+  assert.equal(C.staleAfter('NQ', ...WED_10), 120);            // RTH
+  assert.equal(C.staleAfter('ZN', ...WED_2), 300);             // ETH
+  assert.equal(C.staleAfter('NQ', ...FRI_1659), 300);          // ETH, one minute before the Friday close
+  assert.equal(C.staleAfter('BTC', ...TUE_3), 900);            // 24/7, classic market open
+  assert.equal(C.staleAfter('BTC', ...SAT_NOON), Infinity);    // 24/7, weekend
+  assert.equal(C.staleAfter('BTC', ...WED_1730), Infinity);    // 24/7, classic daily break
 });
