@@ -54,3 +54,13 @@ def write_archive(base: Path, root: str, d: dt.date, contract: str, rows_: list[
         man["bid_ask"] = False
     p.with_name(p.name[:-len(".csv.gz")] + ".json").write_text(json.dumps(man))
     return p
+
+
+def weekdays_before(d: dt.date, n: int) -> list[dt.date]:
+    """The n weekdays before d, oldest first (a classic root files weekend prints into Monday)."""
+    out, x = [], d
+    while len(out) < n:
+        x -= dt.timedelta(days=1)
+        if x.weekday() < 5:
+            out.append(x)
+    return out[::-1]

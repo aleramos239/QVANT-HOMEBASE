@@ -3,12 +3,14 @@ from __future__ import annotations
 
 import datetime as dt
 
+import homebase.charts.hub as hub_mod
 from homebase.charts.bars import Bar, BarBuilder, BarSpec
 from homebase.charts.history import History
-from homebase.charts.hub import Hub, Stream
+from homebase.charts.hub import Hub, Stream, sessions_back, warm_bars
 from homebase.charts.store import TickStore
+from homebase.charts.studies import make
 from homebase.charts.tick import SideClassifier, from_row
-from tests.charts_util import D, rows, session_ms, write_archive
+from tests.charts_util import D, rows, session_ms, weekdays_before, write_archive
 
 P = D - dt.timedelta(days=1)
 M1 = BarSpec("time", 60)
@@ -279,3 +281,111 @@ def test_the_history_message_carries_the_point_value(tmp_path):
     assert open_stream(hub).payload()["point_value"] == 20.0
     unknown = Stream("ZZ", M1, 0.25, BarBuilder(M1, 0.25, "ZZ"))
     assert unknown.payload()["point_value"] is None
+
+
+# ---- deep history: scroll-back chunks (spec §5) ----
+def deep(tmp_path, n=8):
+    """A hub over n completed weekday sessions before D (3 one-minute bars each, 09:30-09:32; session k
+    trades around 100 + k) with D's first minutes as today's tape."""
+    base = tmp_path / "ticks"
+    days = weekdays_before(D, n)
+    for k, d in enumerate(days):
+        write_archive(base, "NQ", d, "NQZ6", rows(session_ms(d, 9, 30), [100 + k + 0.25 * (i % 4) for i in range(9)],
+                                                  step_ms=20_000, first_id=1000 * (k + 1)))
+    hub = Hub(History(TickStore(base), cache_dir=tmp_path / "cache"), lambda: session_ms(D, 9, 31))
+    hub.start_today("NQ", D, ticks_of(rows(session_ms(D, 9, 30), [200 + 0.25 * (i % 5) for i in range(30)],
+                                           first_id=90_000)))
+    return hub, days
+
+
+def test_the_default_depth_per_bar_type():
+    assert [sessions_back(BarSpec(k, n)) for k, n in (("time", 5), ("time", 30), ("tick", 500), ("volume", 2000),
+                                                        ("range", 10))] == [1, 1, 1, 1, 1]
+    assert [sessions_back(BarSpec("time", n)) for n in (60, 300, 600, 3600, 14400, 86400)] == [5, 5, 20, 20, 250, 250]
+    assert [warm_bars(k) for k in ("sma:50", "vwma:20", "ema:20", "adx:14", "vwap", "vwap:rth", "cumdelta",
+                                   "levels")] == [50, 20, 100, 140, 0, 0, 0, 0]
+
+
+def test_older_is_the_next_chunk_strictly_before_the_first_bar_and_ends_at_the_archive_start(tmp_path):
+    hub, days = deep(tmp_path)                       # 8 sessions: the chart loads the newest 5
+    s = open_stream(hub, keys=("ema:3", "vwap"))
+    first = s.bars[0]
+    assert first.session == days[3].isoformat()
+    ans = hub.older(s, first.t)
+    assert [x["date"] for x in ans["sessions"]] == [d.isoformat() for d in days[:3]]
+    assert [b["s"] for b in ans["bars"]] == [d.isoformat() for d in days[:3] for _ in range(3)]
+    assert all(b["ms"] < first.t for b in ans["bars"]) and ans["done"] is True
+    assert set(ans["studies"]) == {"ema:3", "vwap"} and len(ans["studies"]["vwap"]) == 9
+
+
+def test_older_walks_back_one_chunk_at_a_time(tmp_path):
+    hub, days = deep(tmp_path, n=12)
+    s = open_stream(hub)
+    a = hub.older(s, s.bars[0].t)
+    assert [x["date"] for x in a["sessions"]] == [d.isoformat() for d in days[2:7]] and a["done"] is False
+    b = hub.older(s, a["bars"][0]["ms"])
+    assert [x["date"] for x in b["sessions"]] == [d.isoformat() for d in days[:2]] and b["done"] is True
+    c = hub.older(s, b["bars"][0]["ms"])
+    assert c["bars"] == [] and c["sessions"] == [] and c["done"] is True
+
+
+def test_older_respects_history_max_and_repairs_a_session_it_cuts(tmp_path, monkeypatch):
+    hub, days = deep(tmp_path)
+    s = open_stream(hub, keys=("vwap",))
+    monkeypatch.setattr(hub_mod, "HISTORY_MAX", 4)
+    a = hub.older(s, s.bars[0].t)                    # all of days[2] + the newest bar of days[1]
+    assert [b["s"] for b in a["bars"]] == [days[1].isoformat()] + [days[2].isoformat()] * 3
+    assert [x["date"] for x in a["sessions"]] == [days[1].isoformat(), days[2].isoformat()] and a["done"] is False
+    b = hub.older(s, a["bars"][0]["ms"])             # the rest of days[1], then the newest 2 bars of days[0]
+    assert [x["s"] for x in b["bars"]] == [days[0].isoformat()] * 2 + [days[1].isoformat()] * 2
+    # the join is inside days[1]: its VWAP restarts only at the session's open, so the chart's days[1] bar
+    # (which came first, alone) gets the value a whole-session run gives it
+    vwap = make("vwap")
+    want = [vwap.push(x) for x in hub.history.bars("NQ", M1, days[1])]
+    assert b["repair"]["vwap"] == want[2:3]
+
+
+def test_older_studies_run_on_across_the_join(tmp_path):
+    """The chunk's values are a fresh run over it; `repair` continues that run through the chart's first bars
+    for as long as a study remembers (ema:3 -> 15 bars; the longest wins): together, a full reload of the
+    longer range."""
+    hub, days = deep(tmp_path)
+    s = open_stream(hub, keys=("ema:3", "sma:2", "vwap"))
+    ans = hub.older(s, s.bars[0].t)
+    every = [b for d in days for b in hub.history.bars("NQ", M1, d)]     # all 8 completed sessions, oldest first
+    for key in ("ema:3", "sma:2", "vwap"):
+        st = make(key)
+        want = [st.push(b) for b in every]
+        assert ans["studies"][key] == want[:9], key
+        assert ans["repair"][key] == want[9:24], key
+
+
+def test_older_tick_bars_come_one_session_at_a_time(tmp_path):
+    hub, days = deep(tmp_path)
+    s = open_stream(hub, spec=BarSpec("tick", 5), keys=())
+    assert s.bars[0].session == days[-1].isoformat()             # tick bars load one session back
+    ans = hub.older(s, s.bars[0].t)
+    assert [x["date"] for x in ans["sessions"]] == [days[-2].isoformat()]
+    assert [b["n"] for b in ans["bars"]] == [5, 4] and ans["done"] is False
+
+
+def test_older_never_returns_todays_session(tmp_path):
+    hub, days = deep(tmp_path, n=3)
+    s = open_stream(hub)
+    ans = hub.older(s, session_ms(D, 9, 45))                     # a `before` inside today's session
+    assert D.isoformat() not in {b["s"] for b in ans["bars"]}
+    assert [x["date"] for x in ans["sessions"]] == [d.isoformat() for d in days] and ans["done"] is True
+
+
+def test_older_leaves_the_history_memo_alone(tmp_path):
+    hub, days = deep(tmp_path, n=12)
+    s = open_stream(hub)
+    kept = set(hub.history.memo)
+    hub.older(s, s.bars[0].t)
+    assert set(hub.history.memo) == kept
+
+
+def test_a_chart_finds_its_stream(tmp_path):
+    hub, _ = deep(tmp_path, n=2)
+    s = open_stream(hub, sub=("conn", "c9"))
+    assert hub.stream_of(("conn", "c9")) is s and hub.stream_of(("conn", "nope")) is None

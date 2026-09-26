@@ -17,7 +17,7 @@ const LW = window.LightweightCharts;
 const C = window.HBCatalog;
 const S = window.HBSettings;
 const CANDLE_KEYS = ['prevClose', 'body', 'bodyUp', 'bodyDown', 'borders', 'borderUp', 'borderDown', 'wick', 'wickUp', 'wickDown'];
-const { Footprint, Profile, Gaps, EthBg, Countdown, EventFlags } = window.HBLayers;
+const { Footprint, Profile, Gaps, EthBg, Countdown, EventFlags, Start } = window.HBLayers;
 const NO_SCALE = () => null;   // autoscaleInfoProvider: the series takes no part in autoscale
 const FAKE0 = 946684800;    // synthetic-axis origin for tick/volume/range bars
 const FONT = '-apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif';
@@ -88,6 +88,8 @@ class Cell {
     this.dc = null;   // the drawing controller of the current chart
     this.eth = this.cd = null; this.clockEt = null;   // the hours background, the countdown, now (ET wall ms)
     this.evl = null;   // the economic-calendar flags layer
+    this.back = new window.HBScrollBack.ScrollBack();   // scroll-back: older history on demand
+    this.start = null;   // the "Start of data" layer
     this.magnetXhair = false;   // the rail's magnet is on with a tool picked (MagnetOHLC crosshair)
     this.R = S.resolve(cfg.settings || {}, palette());   // the chart's settings, concrete for the theme
     this.fpHide = false;   // the footprint is readable: candle bodies and borders step aside
@@ -253,6 +255,37 @@ class Cell {
   /* Once a second, from the page: now as ET wall-clock ms (a replay's own clock in a replay). */
   tickSecond(nowEt) { this.clockEt = nowEt; if (this.cd) this.cd.redraw(); }
 
+  /* TradingView's scroll-back: the view's left edge near the first loaded bar asks the server for the next
+     chunk of older sessions (one request at a time; none while a subscription is in flight). */
+  askOlder(r) {
+    if (!this.chart || this.inflight.length || !this.bars.length) return;
+    const req = this.back.want(r, this.bars[0].ms);
+    if (req && this.host.send({ op: 'older', id: this.id, before: req.before })) this.back.sent(req);
+  }
+
+  /* Older sessions in front of the chart: the bars, their studies (and the repaired first bars) and session
+     labels merged, every series re-set in place (no rebuild: no flash, a drag goes on), the view shifted by
+     the bars added so it does not move. done: "Start of data" at the first bar. */
+  onOlder(m) {
+    if (!this.back.take(m) || !this.chart || this.inflight.length) return;
+    const k = (m.bars || []).length;
+    if (k) {
+      const r = this.chart.timeScale().getVisibleLogicalRange(), all = window.HBScrollBack.prepend(this.bars, m);
+      this.sessions = window.HBScrollBack.mergeSessions(m.sessions, this.sessions);
+      this.bars = []; this.realT = new Map();
+      for (const b of all) this.append(b);   // axis times again: tick/volume/range bars sit on an index axis
+      this.candles.setData(this.candleData());
+      for (const l of this.lines) l.s.setData(this.bars.map((b) => this.point(l, b)));
+      if (r) this.chart.timeScale().setVisibleLogicalRange({ from: r.from + k, to: r.to + k });
+      if (this.hover != null) this.hover += k;
+      this.drawMarkers(); this.drawGaps(); this.syncFootprint(); this.syncEth();
+      this.lg.badge.hidden = !this.sessions.some((s) => s.approx);
+      this.legend(this.hover);
+      if (this.dc) this.dc.refresh();
+    }
+    this.start.set(this.back.done);
+  }
+
   /* Send the chart's config; keepView: restore the view on screen when the
      answer is for the same root + interval. "Loading…" while it asks for
      another root or interval than the bars on screen. */
@@ -292,6 +325,7 @@ class Cell {
     const entry = this.inflight.shift();
     if (entry) this.lastGood = entry.cfg;
     if (this.inflight.length) return;
+    this.back.reset();
     const s = this.shown, view = entry && entry.view && s && s.root === m.root && s.spec === m.spec ? entry.view : null;
     this.shown = { root: m.root, spec: m.spec };
     this.tick = m.tick_size; this.pv = m.point_value ?? null; this.sessions = m.sessions || []; this.devel = !!m.live;
@@ -342,6 +376,7 @@ class Cell {
     this.lg.badge.hidden = !this.sessions.some((s) => s.approx);
     this.legendRows();
     this.legend(null);
+    this.start.set(this.back.done);
     this.dc = new window.HBDrawings.Controller(this, this.host);
     if (sel) { this.dc.sel = sel; this.dc.refresh(); }
   }
@@ -384,6 +419,7 @@ class Cell {
     this.fp = new Footprint(P); this.prof = new Profile(P); this.gaps = new Gaps(P);
     this.eth = new EthBg(P); this.cd = new Countdown(P, () => this.countdownNow());
     this.evl = new EventFlags(P, () => this.eventsNow());
+    this.start = new Start(P);
     const fp = this.fp;   // pin the instance this callback belongs to
     fp.onReadableChange = (on) => {   // fired async from Footprint.updateAllViews(), after layout
       if (this.fp !== fp || !this.chart) return;
@@ -391,9 +427,9 @@ class Cell {
       this.candles.applyOptions(this.candleOpts());
       if (this.R.prevClose) this.resetCandles();   // per-bar colours ride in the data
     };
-    for (const l of [this.eth, this.gaps, this.prof, this.fp, this.cd, this.evl]) this.candles.attachPrimitive(l);
+    for (const l of [this.eth, this.gaps, this.start, this.prof, this.fp, this.cd, this.evl]) this.candles.attachPrimitive(l);
     this.lines = []; this.levelLines = {}; this.colorOf = {}; this.hover = null;
-    this.chart.timeScale().subscribeVisibleLogicalRangeChange(() => { this.syncFootprint(); this.evTip.hidden = true; });
+    this.chart.timeScale().subscribeVisibleLogicalRangeChange((r) => { this.syncFootprint(); this.evTip.hidden = true; this.askOlder(r); });
     this.chart.subscribeCrosshairMove((p) => {
       this.hover = p && p.logical != null ? Math.round(p.logical) : null;
       this.legend(this.hover);
@@ -405,7 +441,7 @@ class Cell {
     if (!this.chart) return;
     this.chart.remove();
     this.chart = this.candles = this.markers = this.fp = this.prof = this.gaps = this.wm = null;   // stale async callbacks can tell
-    this.eth = this.cd = this.evl = null;
+    this.eth = this.cd = this.evl = this.start = null;
   }
 
   /* One series per drawn part of each indicator instance, in instance order. */

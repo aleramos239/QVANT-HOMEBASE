@@ -238,5 +238,33 @@ class EventFlags extends Layer {
   }
 }
 
-window.HBLayers = { Footprint, Profile, Gaps, Layer, EthBg, Countdown, EventFlags };
+/* "Start of data": once scroll-back has reached the archive's first bar, a dashed line just before it with
+   the words beside it (left of the line when they fit, else right). */
+class Start extends Layer {
+  constructor(P) { super(P); this.on = false; }
+  z() { return 'bottom'; }
+  set(on) { if (this.on !== on) { this.on = on; this.redraw(); } }
+  draw(target) {
+    if (!this.on || !this.chart) return;
+    const x0 = this.chart.timeScale().logicalToCoordinate(0);   // bar 0: an integer logical (v5)
+    if (x0 == null) return;
+    const x = Math.round(x0 - Math.max(this.spacing(), 2) / 2) + 0.5;
+    target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
+      if (x < 0 || x > mediaSize.width) return;
+      ctx.strokeStyle = this.P.text2;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, mediaSize.height); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.font = '11px -apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif';
+      ctx.fillStyle = this.P.text2;
+      ctx.textBaseline = 'middle';
+      const left = x - 8 - ctx.measureText('Start of data').width >= 4;
+      ctx.textAlign = left ? 'right' : 'left';
+      ctx.fillText('Start of data', left ? x - 8 : x + 8, 30);
+    });
+  }
+}
+
+window.HBLayers = { Footprint, Profile, Gaps, Layer, EthBg, Countdown, EventFlags, Start };
 })();

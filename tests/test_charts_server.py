@@ -21,7 +21,7 @@ from homebase.charts.server import (MAX_DRAWINGS, MAX_TEMPLATE_BYTES, QUIET, Con
                                     check_template_name, create_app)
 from homebase.charts.session import session_range_ms
 from homebase.charts.store import read_table
-from tests.charts_util import D, ET, rows, session_ms, write_archive, write_gz
+from tests.charts_util import D, ET, rows, session_ms, weekdays_before, write_archive, write_gz
 
 P = D - dt.timedelta(days=1)
 
@@ -1352,3 +1352,26 @@ def test_template_writes_from_another_site_are_refused(tmp_path):
         assert client.get("/api/templates").json() == {"t": TPL}
         assert client.delete("/api/templates/t", headers={"origin": "http://127.0.0.1:8852"}).status_code == 200
         assert client.get("/api/templates").json() == {}
+
+
+def test_a_chart_scrolls_back_over_the_socket(tmp_path):
+    base, days = tmp_path / "ticks", weekdays_before(D, 7)
+    for k, d in enumerate(days):
+        write_archive(base, "NQ", d, "NQZ6", rows(session_ms(d, 9, 30), [100.0 + k + 0.25 * (i % 4) for i in range(9)],
+                                                  step_ms=20_000, first_id=1000 * (k + 1)))
+    write_archive(base, "NQ", D, "NQZ6", rows(session_ms(D, 9, 29), [200.0] * 120, first_id=90_000))
+    app = create_app(roots=["NQ"], base=base, replay=D, speed=1, start_et=dt.time(9, 30), state=tmp_path / "state")
+    with TestClient(app) as client, client.websocket_connect("/ws") as ws:
+        ws.send_json({"op": "sub", "id": "c1", "root": "NQ", "spec": "time:60", "studies": ["ema:3"]})
+        first = next_of(ws, "history")["bars"][0]
+        assert first["s"] == days[2].isoformat()                      # the newest 5 of the 7 sessions
+        ws.send_json({"op": "older", "id": "c1", "before": first["ms"]})
+        ans = next_of(ws, "older")
+        assert ans["id"] == "c1" and ans["before"] == first["ms"] and ans["done"] is True
+        assert [b["s"] for b in ans["bars"]] == [days[0].isoformat()] * 3 + [days[1].isoformat()] * 3
+        assert len(ans["studies"]["ema:3"]) == 6 and len(ans["repair"]["ema:3"]) == 15
+        ws.send_json({"op": "older", "id": "nope", "before": first["ms"]})
+        assert next_of(ws, "older")["error"] == "not subscribed"
+        ws.send_json({"op": "older", "id": "c1", "before": "yesterday"})
+        bad = next_of(ws, "older")
+        assert bad["before"] == "yesterday" and "epoch ms" in bad["error"]

@@ -26,14 +26,23 @@ HISTORY_MAX = 20_000    # a history message carries at most this many bars: the 
 
 
 def sessions_back(spec: BarSpec) -> int:
-    """Completed sessions loaded behind today, per bar type."""
+    """Completed sessions loaded behind today, per bar type; also the size of one scroll-back chunk."""
     if spec.kind != "time" or spec.size < 60:
         return 1
     if spec.size <= 300:
-        return 3
+        return 5
     if spec.size <= 3600:
-        return 10
-    return 60
+        return 20
+    return 250
+
+
+def warm_bars(key: str) -> int:
+    """How many bars after a join a study's value still depends on the bars before it: a window's length, or
+    long enough for an EMA's (5n) / a Wilder ADX's (10n) memory to fade below e^-10. 0: the study restarts
+    every session (VWAP, cumulative delta, levels)."""
+    name, _, n = str(key).partition(":")
+    n = int(n) if n.isdecimal() else 0
+    return {"sma": n, "vwma": n, "ema": 5 * n, "adx": 10 * n}.get(name, 0)
 
 
 @dataclass
@@ -216,6 +225,58 @@ class Hub:
         for k, s in list(self.streams.items()):
             if s.subs.pop(sub, None) is not None and not s.subs:
                 del self.streams[k]
+
+    def stream_of(self, sub: tuple) -> Stream | None:
+        """The stream a chart (conn, chart id) is subscribed to."""
+        return next((s for s in self.streams.values() if sub in s.subs), None)
+
+    def older(self, s: Stream, before_ms: int) -> dict:
+        """Worker thread: scroll-back. The next chunk of COMPLETED sessions strictly before before_ms (the
+        page's first bar), newest first, until sessions_back(spec) sessions or HISTORY_MAX bars (a session
+        that does not fit gives its newest bars; the next request continues before them). Built as a history
+        message's bars are, but never memoized. Its studies run over it from a fresh start, as a history
+        message's do, then on across the join through the page's first bars for as long as a study remembers
+        what came before ("repair": the page overwrites those values). done: nothing older is left. Never
+        today's session."""
+        root, spec = s.root, s.spec
+        keys = list(s.studies)
+        today = self.today_date.get(root) or session_date(self.now_ms(), root)
+        cut = session_date(before_ms, root)
+        dates = [d for d in self.store.sessions(root) if d < today]
+        back = [d for d in dates if d <= cut]
+        chunk: list[Bar] = []
+        infos: list[dict] = []
+        taken, trimmed, i = 0, False, len(back)
+        while i > 0 and taken < sessions_back(spec) and len(chunk) < HISTORY_MAX:
+            i -= 1
+            bs = [b for b in self.history.bars(root, spec, back[i], memo=False) if b.t < before_ms]
+            if not bs:
+                continue
+            room = HISTORY_MAX - len(chunk)
+            if len(bs) > room:
+                bs, trimmed = bs[-room:], True
+            chunk[:0] = bs
+            infos.insert(0, self.history.info(root, back[i]))
+            taken += 1
+        # across the join: the page's first bars, as far as a study still remembers the chunk, and all of a
+        # session the chunk ends inside (VWAP and cumulative delta restart only at a session's open)
+        ahead: list[Bar] = []
+        if chunk:
+            mid = chunk[-1].session == cut.isoformat()
+            rest = [b for b in self.history.bars(root, spec, cut, memo=False) if b.t >= before_ms] if mid else []
+            span = min(max(len(rest), max((warm_bars(k) for k in keys), default=0)), HISTORY_MAX)
+            for d in (x for x in dates if x >= cut):
+                if len(ahead) >= span:
+                    break
+                ahead.extend(b for b in self.history.bars(root, spec, d, memo=False) if b.t >= before_ms)
+            ahead = ahead[:span]
+        studies, repair = {}, {}
+        for k in keys:
+            st = make(k)
+            studies[k] = [st.push(b) for b in chunk]
+            repair[k] = [st.push(b) for b in ahead]
+        return {"bars": [b.wire(s.tick_size) for b in chunk], "studies": studies, "repair": repair,
+                "sessions": infos, "done": i == 0 and not trimmed}
 
     def drop_conn(self, conn) -> None:
         for k, s in list(self.streams.items()):

@@ -44,12 +44,25 @@ class History:
             closed.append(cur)
         return closed
 
+    def _cache_file(self, root: str, d: dt.date, f) -> Path:
+        return self.cache_dir / (f"v{CACHE_VERSION}_{root}_{d.isoformat()}_{f.contract}_"
+                                 f"{'live' if f.live else 'arch'}.m1.pkl")
+
+    def cached(self, root: str, d: dt.date) -> bool:
+        """Is session d's 1-minute cache built and current (no older than its tick file)? True with no file."""
+        f = self.store.pick(root, d)
+        if f is None:
+            return True
+        try:
+            return self._cache_file(root, d, f).stat().st_mtime_ns >= f.path.stat().st_mtime_ns
+        except OSError:
+            return False
+
     def minutes(self, root: str, d: dt.date) -> list[Bar]:
         f = self.store.pick(root, d)
         if f is None:
             return []
-        cp = self.cache_dir / (f"v{CACHE_VERSION}_{root}_{d.isoformat()}_{f.contract}_"
-                               f"{'live' if f.live else 'arch'}.m1.pkl")
+        cp = self._cache_file(root, d, f)
         src_ns = None
         try:
             src_ns = f.path.stat().st_mtime_ns          # the source BEFORE its ticks are read
@@ -70,7 +83,9 @@ class History:
         os.replace(tmp, cp)
         return bars
 
-    def bars(self, root: str, spec: BarSpec, d: dt.date) -> list[Bar]:
+    def bars(self, root: str, spec: BarSpec, d: dt.date, memo: bool = True) -> list[Bar]:
+        """Session d's bars of this type. memo=False (scroll-back): a memoized session is used, but a new
+        build is not kept, so a deep scroll-back never evicts the open charts' sessions."""
         key = (root, spec.key, d)
         with self._lock:
             hit = self.memo.get(key)
@@ -79,11 +94,12 @@ class History:
                 return hit
             gen = self._gen
         out = resample(self.minutes(root, d), spec) if spec.from_minutes else self._from_ticks(root, spec, d)
-        with self._lock:
-            if gen == self._gen:        # else a clear() landed mid-build: its file may have changed
-                self.memo[key] = out
-                while len(self.memo) > self.memo_max:
-                    self.memo.popitem(last=False)
+        if memo:
+            with self._lock:
+                if gen == self._gen:        # else a clear() landed mid-build: its file may have changed
+                    self.memo[key] = out
+                    while len(self.memo) > self.memo_max:
+                        self.memo.popitem(last=False)
         return out
 
     def info(self, root: str, d: dt.date) -> dict:
