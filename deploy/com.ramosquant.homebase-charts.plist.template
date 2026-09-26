@@ -15,6 +15,8 @@
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
   <key>ThrottleInterval</key><integer>10</integer>
+  <!-- nice 5: at the 09:30 burst the trading app wins the CPU over chart work -->
+  <key>Nice</key><integer>5</integer>
   <key>StandardOutPath</key><string>__REPO__/homebase/.state/charts.log</string>
   <key>StandardErrorPath</key><string>__REPO__/homebase/.state/charts.log</string>
 </dict>

@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import json
+import plistlib
 import queue
 import time
 from pathlib import Path
@@ -885,3 +886,11 @@ def test_a_refill_that_changed_nothing_does_not_reload_the_charts(tmp_path, monk
         time.sleep(0.2)
     assert len(calls) == 2
     assert seeds == ["NQ", "NQ"]                             # startup + the refill that added a tick
+
+
+def test_the_charts_job_yields_the_cpu_to_the_trading_app():
+    """At 09:30 the trading process must win the CPU over chart work: the
+    charts launchd job runs at nice 5."""
+    tpl = Path(__file__).resolve().parent.parent / "deploy" / "com.ramosquant.homebase-charts.plist.template"
+    job = plistlib.loads(tpl.read_bytes().replace(b"__REPO__", b"/repo"))
+    assert job["Label"] == "com.ramosquant.homebase-charts" and job.get("Nice") == 5
