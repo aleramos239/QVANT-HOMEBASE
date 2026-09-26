@@ -80,6 +80,10 @@ def test_bad_requests_and_unknown_runs(tmp_path):
                                                                "end": "2025-02-01"}})
         assert r.status_code == 400 and "Holdout" in r.json()["detail"]
         assert c.post("/api/tester/run", json={**RUN, "strategy": "zz"}).status_code == 400
+        # Item 7: a non-dict `inputs` is a 400 (a bad request), never a 500.
+        for bad_inputs in (["sl_pts"], 5, "sl_pts", True):
+            r = c.post("/api/tester/run", json={**RUN, "inputs": bad_inputs})
+            assert r.status_code == 400 and "inputs" in r.json()["detail"]
         assert c.get("/api/tester/run/20260926-120000-nq930-abcd").status_code == 404
         assert c.get("/api/tester/run/..%2F..%2Fetc").status_code == 404
         assert c.post("/api/tester/run/20260926-120000-nq930-abcd/cancel").status_code == 404

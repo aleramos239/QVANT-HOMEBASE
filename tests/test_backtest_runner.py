@@ -41,7 +41,9 @@ def test_validate_fills_defaults_and_refuses_bad_requests():
     for bad, msg in (({"strategy": "zz"}, "unknown strategy"), (body(qty=0), "qty"),
                      (body(qty=1.5), "whole"), (body(commission=-1), "commission"),
                      (body(slippage_ticks="1"), "number"), (body(extra=1), "unknown field"),
-                     (body(inputs={"sl_pts": -1}), "sl_pts"), ("x", "JSON object")):
+                     (body(inputs={"sl_pts": -1}), "sl_pts"), ("x", "JSON object"),
+                     (body(inputs=["sl_pts"]), "inputs"), (body(inputs=5), "inputs"),
+                     (body(inputs="sl_pts"), "inputs"), (body(inputs=True), "inputs")):
         with pytest.raises(ValueError, match=msg):
             validate(bad)
 

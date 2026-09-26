@@ -89,6 +89,13 @@ def validate(body) -> dict:
     extra = sorted(set(body) - FIELDS)
     if extra:
         raise ValueError(f"unknown field(s): {', '.join(extra)}")
+    # Item 7: a non-dict `inputs` (a list, a string, a number, ...) must fail the
+    # same controlled way as any other bad field -- ValueError -> 400 -- rather
+    # than let resolve_inputs()'s `dict(values or {})` throw an uncaught TypeError
+    # (a bare int/bool/list) or a ValueError with a confusing message (a string) that
+    # would otherwise bubble up as a 500.
+    if "inputs" in body and body["inputs"] is not None and not isinstance(body["inputs"], dict):
+        raise ValueError("inputs: a JSON object")
     cls = strategies.get(str(body.get("strategy", "")))
     inputs = strategies.resolve_inputs(cls.inputs(), body.get("inputs") or {})
     rng = discipline.parse_range(body.get("range"))
