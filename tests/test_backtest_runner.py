@@ -1,6 +1,7 @@
 """Runner: validation + spends, the bundle, one-at-a-time child processes, cancel, recovery."""
 from __future__ import annotations
 
+import datetime as dt
 import fcntl
 import json
 import time
@@ -11,9 +12,11 @@ from homebase.backtest import runner
 from homebase.backtest.discipline import DisciplineError
 from homebase.backtest.runner import RunManager, execute, prepare, read_json, validate
 from homebase.backtest.tape import TapeStore
-from tests.backtest_util import D1, D2, nq_archive
+from tests.backtest_util import D1, D2, ms, nq_archive
+from tests.charts_util import rows, write_archive
 
 RANGE = {"kind": "custom", "start": "2024-03-01", "end": "2024-03-31"}
+D_HALF = dt.date(2024, 12, 24)     # a Tuesday: Dec 24 half day (Item 2)
 
 
 def body(**kw):
@@ -93,6 +96,26 @@ def test_execute_writes_the_bundle_and_lists_skipped_sessions(tmp_path):
     assert read_json(d / "equity.json")["equity"] == [t["net"]]
     assert read_json(d / "plots.json")["hlines"][0]["name"] == "anchor"
     assert read_json(d / "status.json")["status"] == "done"
+
+
+def half_day_archive(base):
+    """A CME half day (Item 2): NQ trades a normal morning but the tape ends at
+    the equity index's 13:15 ET early close -- no afternoon, and that must not
+    be read as a coverage hole."""
+    span_s = int((dt.datetime.combine(D_HALF, dt.time(13, 14))
+                 - dt.datetime.combine(D_HALF, dt.time(9, 25))).total_seconds())
+    day = rows(ms(D_HALF, "09:25:00"), [100.0] * (span_s // 10 + 1), step_ms=10_000)
+    write_archive(base, "NQ", D_HALF, "NQZ4", day)
+    return base
+
+
+def test_a_half_day_tape_ending_at_the_early_close_is_used_not_skipped(tmp_path):
+    store = TapeStore(half_day_archive(tmp_path / "ticks"), tmp_path / "cache")
+    b = body(range={"kind": "custom", "start": D_HALF.isoformat(), "end": D_HALF.isoformat()})
+    rid = prepare(b, tmp_path / "t")
+    meta = execute(tmp_path / "t" / "runs" / rid, store)
+    cov = meta["coverage"]
+    assert cov["sessions"] == 1 and cov["used"] == 1 and cov["skipped"] == []
 
 
 def test_execute_refuses_a_tampered_request_reaching_the_holdout(tmp_path):

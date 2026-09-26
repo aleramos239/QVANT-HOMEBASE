@@ -125,3 +125,35 @@ def test_missing_hours_lists_runs_of_empty_clock_hours(tmp_path):
     assert coverage_reason(gaps) == "missing 13:00–15:00 ET"
     assert missing_hours(t.ts, D, ("09:25", "13:00")) == []
     assert missing_hours(t.ts, D, ("08:20", "09:56")) == [("08:20", "09:00")]
+
+
+# Item 2: half days -- the day after Thanksgiving, and Dec 24 / Jul 3 when they land
+# on a weekday -- shorten equity-index trading to 13:15 ET; that empty afternoon is
+# an early close, not a coverage hole.
+
+def test_the_early_close_calendar_has_the_expected_dates():
+    assert dt.date(2024, 11, 29) in tape_mod.EARLY_CLOSES     # day after Thanksgiving 2024 (Fri)
+    assert dt.date(2021, 11, 26) in tape_mod.EARLY_CLOSES     # day after Thanksgiving 2021 (Fri)
+    assert dt.date(2024, 12, 24) in tape_mod.EARLY_CLOSES     # a Tuesday
+    assert dt.date(2022, 12, 24) not in tape_mod.EARLY_CLOSES  # a Saturday: not even a session
+    assert dt.date(2023, 7, 3) in tape_mod.EARLY_CLOSES       # a Monday
+    assert dt.date(2021, 7, 2) in tape_mod.EARLY_CLOSES       # observed: Jul 4, 2021 was a Sunday
+    assert dt.date(2022, 7, 1) not in tape_mod.EARLY_CLOSES   # Jul 4, 2022 was a Monday: no half day
+
+
+def test_early_close_et_is_scoped_to_equity_index_roots():
+    assert tape_mod.early_close_et("NQ", dt.date(2024, 12, 24)) == "13:15"
+    assert tape_mod.early_close_et("YM", dt.date(2024, 12, 24)) == "13:15"
+    assert tape_mod.early_close_et("GC", dt.date(2024, 12, 24)) is None      # no time for metals here
+    assert tape_mod.early_close_et("NQ", dt.date(2024, 3, 5)) is None        # an ordinary day
+
+
+def test_effective_session_window_clamps_to_the_early_close():
+    assert tape_mod.effective_session_window("NQ", dt.date(2024, 12, 24),
+                                              ("09:25", "16:00")) == ("09:25", "13:15")
+    assert tape_mod.effective_session_window("NQ", D, ("09:25", "16:00")) == ("09:25", "16:00")
+    assert tape_mod.effective_session_window("GC", dt.date(2024, 12, 24),
+                                              ("08:20", "09:56")) == ("08:20", "09:56")
+    # a strategy whose ordinary window already ends before the early close is unaffected
+    assert tape_mod.effective_session_window("NQ", dt.date(2024, 12, 24),
+                                              ("09:25", "10:00")) == ("09:25", "10:00")

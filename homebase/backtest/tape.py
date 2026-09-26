@@ -16,6 +16,15 @@ already sorted (prints sharing a nanosecond keep their row order).
 
 Coverage: any clock hour inside a strategy's session window with zero prints
 means the session is skipped and listed ("missing 13:00–15:00 ET").
+
+Half days (Item 2): CME shortens equity-index trading to 13:15 ET on a handful
+of sessions a year -- the day after Thanksgiving, and (when they fall on a
+weekday) Jul 3 and Dec 24. That empty afternoon is a normal early close, not a
+coverage hole: `effective_session_window` clamps a strategy's window to the
+early close on those dates so coverage is checked against the shortened day and
+the runner's per-session window (which the strategy's flat/cancel times ride)
+ends there too -- a flat/cancel time scheduled after the early close simply
+never fires, because the session's own last event time already has.
 """
 from __future__ import annotations
 
@@ -124,6 +133,67 @@ def missing_hours(ts, d: dt.date, window: tuple[str, str]) -> list[tuple[str, st
 
 def coverage_reason(gaps: list[tuple[str, str]]) -> str:
     return "missing " + ", ".join(f"{a}–{b}" for a, b in gaps) + " ET"
+
+
+# ---- half days (Item 2) ----
+# CME's published holiday calendar (cmegroup.com/tools-information/holiday-calendar.html)
+# shortens equity-index trading (ES/MES, NQ/MNQ, YM/MYM, RTY/M2K, NKD) to 13:15 ET on:
+#   * the day after Thanksgiving (always a Friday: the 4th Thursday of November + 1 day);
+#   * Dec 24, when it falls on a weekday (a weekend Dec 24 is simply not a trading day);
+#   * Jul 3, when it falls on a weekday, OR -- when Jul 3 is a weekend day -- whichever
+#     weekday actually carries the reduced session ahead of the Jul 4th long weekend.
+#     2021 is the only such case in this window: Jul 4, 2021 was a Sunday (the holiday was
+#     observed Monday Jul 5), so the reduced session fell on the preceding Friday, Jul 2;
+#     in 2022 Jul 4 fell on a Monday, so Jul 1 (Friday) was an ordinary full session and
+#     there was no separate half day that year.
+EQUITY_INDEX_ROOTS = {"ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "NKD"}
+EQUITY_EARLY_CLOSE_ET = "13:15"
+
+_JULY_HALF_DAY_OR_OBSERVED: dict[int, dt.date | None] = {
+    2021: dt.date(2021, 7, 2), 2022: None, 2023: dt.date(2023, 7, 3),
+    2024: dt.date(2024, 7, 3), 2025: dt.date(2025, 7, 3), 2026: dt.date(2026, 7, 3),
+}
+
+
+def _thanksgiving_friday(year: int) -> dt.date:
+    """The day after the 4th Thursday of November."""
+    nov1 = dt.date(year, 11, 1)
+    first_thu = nov1 + dt.timedelta(days=(3 - nov1.weekday()) % 7)
+    return first_thu + dt.timedelta(weeks=3, days=1)
+
+
+def _build_early_closes(years) -> frozenset[dt.date]:
+    out = set()
+    for y in years:
+        out.add(_thanksgiving_friday(y))
+        dec24 = dt.date(y, 12, 24)
+        if dec24.weekday() < 5:
+            out.add(dec24)
+        jul = _JULY_HALF_DAY_OR_OBSERVED.get(y)
+        if jul is not None:
+            out.add(jul)
+    return frozenset(out)
+
+
+EARLY_CLOSES = _build_early_closes(range(2021, 2027))    # the research window + a margin
+
+
+def early_close_et(root: str, d: dt.date) -> str | None:
+    """The ET wall-clock time trading ends on an early-close session for `root`, or
+    None on an ordinary day (or a root/asset class this calendar has no time for)."""
+    if d in EARLY_CLOSES and root in EQUITY_INDEX_ROOTS:
+        return EQUITY_EARLY_CLOSE_ET
+    return None
+
+
+def effective_session_window(root: str, d: dt.date, window: tuple[str, str]) -> tuple[str, str]:
+    """`window` clamped to an early close: on a half day an equity-index root's
+    session ends at `early_close_et` instead of its ordinary close. Coverage is
+    checked against this shortened window (the empty afternoon is not a hole), and
+    the runner also feeds it to the engine as that day's session_window, so a
+    flat/cancel time scheduled past the early close never fires."""
+    close = early_close_et(root, d)
+    return (window[0], close) if close is not None and close < window[1] else window
 
 
 class TapeStore:

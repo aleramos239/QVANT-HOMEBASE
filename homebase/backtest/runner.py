@@ -39,7 +39,7 @@ from .. import strategies
 from ..paths import repo_root, state_dir
 from . import discipline, propsim, report
 from .engine import ENGINE_VERSION, Costs, run_session
-from .tape import ARCHIVE, CACHE, TapeStore, coverage_reason, missing_hours
+from .tape import ARCHIVE, CACHE, TapeStore, coverage_reason, effective_session_window, missing_hours
 
 RUN_ID = re.compile(r"^\d{8}-\d{6}-[a-z0-9_]+-[0-9a-f]{4}$")
 FIELDS = {"strategy", "inputs", "range", "qty", "commission", "slippage_ticks", "capital", "holdout",
@@ -178,10 +178,16 @@ def execute(run_dir: Path, store: TapeStore) -> dict:
         if tape is None:
             skipped.append({"date": d.isoformat(), "reason": "no tape"})
             continue
-        gaps = missing_hours(tape.ts, d, cls.session_window)
+        # Item 2: a CME half day shortens the session -- clamp the window BEFORE
+        # checking coverage (the empty afternoon is an early close, not a hole),
+        # and feed the same clamped window to the engine so the day's flat/cancel
+        # times past the early close never fire.
+        window = effective_session_window(cls.root, d, cls.session_window)
+        gaps = missing_hours(tape.ts, d, window)
         if gaps:
             skipped.append({"date": d.isoformat(), "reason": coverage_reason(gaps)})
             continue
+        strat.session_window = window
         prior = dailies[:bisect_left(daily_dates, d.isoformat())]
         res = run_session(strat, tape, costs, qty=req["qty"], daily=prior)
         trades += [t.to_dict() for t in res.trades]
