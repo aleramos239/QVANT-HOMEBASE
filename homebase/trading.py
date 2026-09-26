@@ -40,8 +40,14 @@ weekdays, and also while ANY bot day state is `placing` (a broker ack is
 outstanding on this same loop). Fill events still publish immediately
 during the pause — `_on_entity` never rebuilds a view inline, so it stays
 O(1) regardless of the pause; a slow listener would delay the adapter's
-websocket reader. `disable()` (the desk's Kill) is never paused: an
-emergency switch-off must always take effect immediately.
+websocket reader. A settings change (`set_settings`: a disk write, a
+rebuild and a publish) is refused in the same pause, except one whose only
+effect is switching chart trading off. `disable()` (the desk's Kill) is
+never paused: an emergency switch-off must always take effect immediately.
+
+Guard 2 reads the adapter's pushed cache (`trade_view`), never the broker:
+an account whose cache is missing or not seeded yet (the seed still
+retrying after a (re)connect) is refused — never read as flat.
 """
 from __future__ import annotations
 
@@ -80,6 +86,8 @@ _ORDER_ID = re.compile(r"[0-9]{1,20}")
 # asyncio loop. View refresh (periodic + push-triggered) is paused in this
 # narrow window, on weekdays, regardless of what else is going on.
 VIEW_PAUSE_FROM, VIEW_PAUSE_UNTIL = dt.time(9, 29, 50), dt.time(9, 30, 30)
+SETTINGS_PAUSED = ("settings can't change 09:29:50–09:30:30 or while the bot is placing "
+                   "— try again in a moment")
 
 
 def _log(msg: str) -> None:
@@ -110,7 +118,189 @@ def state_view(st, s) -> dict:
             "exit_reason": st.exit_reason, "pnl": st.pnl, "note": st.note}
 
 
-# --- request parsing + pure guards (added in Task 4) ---
+# --- request parsing (ValueError -> HTTP 400 in desk_api) --------------------------
+def _finite(v) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+
+
+def _price(v, name: str, *, required: bool = False) -> Optional[float]:
+    if v is None:
+        if required:
+            raise ValueError(f"{name} is required")
+        return None
+    if not _finite(v) or v <= 0:
+        raise ValueError(f"{name}: a positive number")
+    return float(v)
+
+
+def _obj(body) -> dict:
+    if not isinstance(body, dict):
+        raise ValueError("the body is a JSON object")
+    return body
+
+
+def _client_id(body: dict) -> str:
+    cid = body.get("client_id")
+    if not isinstance(cid, str) or not 1 <= len(cid) <= 64:
+        raise ValueError("client_id: a string of 1-64 characters")
+    return cid
+
+
+def _account(body: dict) -> str:
+    a = body.get("account")
+    if not isinstance(a, str) or not 1 <= len(a) <= 64:
+        raise ValueError("account: an account id")
+    return a
+
+
+def _accounts(body: dict) -> tuple:
+    a = body.get("accounts")
+    if not isinstance(a, list) or not 1 <= len(a) <= 20 \
+            or not all(isinstance(x, str) and 1 <= len(x) <= 64 for x in a):
+        raise ValueError("accounts: a list of 1-20 account ids")
+    return tuple(dict.fromkeys(a))                    # de-duplicated, order kept
+
+
+def _root(body: dict) -> str:
+    r = body.get("root")
+    if not isinstance(r, str) or not _ROOT.fullmatch(r.upper()):
+        raise ValueError("root: a symbol root such as NQ")
+    return r.upper()
+
+
+def _order_id(body: dict) -> str:
+    o = body.get("order_id")
+    if isinstance(o, int) and not isinstance(o, bool):
+        o = str(o)
+    if not isinstance(o, str) or not _ORDER_ID.fullmatch(o):
+        raise ValueError("order_id: the broker's numeric order id")
+    return o
+
+
+@dataclass(frozen=True)
+class OrderIntent:
+    client_id: str
+    accounts: tuple
+    root: str
+    side: str
+    qty: int
+    type: str
+    price: Optional[float]
+    sl_price: Optional[float]
+    tp_price: Optional[float]
+
+
+def parse_order(body) -> OrderIntent:
+    body = _obj(body)
+    side, typ, qty = body.get("side"), body.get("type"), body.get("qty")
+    if side not in SIDES:
+        raise ValueError("side: Buy or Sell")
+    if typ not in TYPES:
+        raise ValueError("type: Market, Limit or Stop")
+    if isinstance(qty, bool) or not isinstance(qty, int):
+        raise ValueError("qty: a whole number")
+    price = _price(body.get("price"), "price", required=typ != "Market")
+    if typ == "Market" and price is not None:
+        raise ValueError("a Market order carries no price")
+    return OrderIntent(_client_id(body), _accounts(body), _root(body), side, qty, typ, price,
+                       _price(body.get("sl_price"), "sl_price"),
+                       _price(body.get("tp_price"), "tp_price"))
+
+
+def parse_modify(body) -> tuple:
+    body = _obj(body)
+    return (_client_id(body), _account(body), _order_id(body),
+            _price(body.get("price"), "price", required=True))
+
+
+def parse_cancel(body) -> tuple:
+    body = _obj(body)
+    return _client_id(body), _account(body), _order_id(body)
+
+
+def parse_symbol_action(body) -> tuple:
+    body = _obj(body)
+    return _client_id(body), _accounts(body), _root(body)
+
+
+# --- pure guards ---------------------------------------------------------------------
+def in_lock_window(now_et: dt.datetime) -> bool:
+    """09:20:00 <= t < 09:35:00 ET on a weekday. `now_et` is ET-aware
+    (engine.now_et()), so DST is the zone's business, not ours."""
+    return now_et.weekday() < 5 and LOCK_FROM <= now_et.time() < LOCK_UNTIL
+
+
+def contract_matches(strategy_symbol: str, contract: str) -> bool:
+    """engine.on_fill gives a fill to a strategy when the strategy's symbol
+    is a SUBSTRING of the fill's contract (NQ claims MNQZ6). The lock uses
+    the same rule, never a narrower one."""
+    return bool(strategy_symbol) and strategy_symbol.upper() in str(contract or "").upper()
+
+
+def fresh_quote(body: dict, root: str, now_s: float) -> Optional[dict]:
+    """The chart service's latest quote for `root` (body["quotes"]), if its
+    last trade is at most QUOTE_MAX_AGE_S old; else None."""
+    qs = body.get("quotes") if isinstance(body, dict) else None
+    q = qs.get(root) if isinstance(qs, dict) else None
+    if not isinstance(q, dict):
+        return None
+    last, ts = q.get("last"), q.get("ts_ms")
+    if not _finite(last) or not _finite(ts) or now_s - ts / 1000.0 > QUOTE_MAX_AGE_S:
+        return None
+    return {"last": float(last),
+            "bid": float(q["bid"]) if _finite(q.get("bid")) else None,
+            "ask": float(q["ask"]) if _finite(q.get("ask")) else None}
+
+
+def check_prices(side: str, typ: str, price, sl, tp, contract: str,
+                 quote: Optional[dict]) -> tuple:
+    """Tick-round every price; refuse a stop on the wrong side of the last
+    trade, and a bracket whose stop/target sit on the wrong side of the
+    entry. Returns (price, sl, tp) rounded."""
+    def rnd(p):
+        return None if p is None else round_to_tick(contract, p)
+
+    price, sl, tp = rnd(price), rnd(sl), rnd(tp)
+    last = quote["last"] if quote else None
+    fresh = f"no trade in {contract} in the last {QUOTE_MAX_AGE_S:.0f} s"
+    if typ == "Stop":
+        if last is None:
+            raise Refused(f"{fresh} — a stop order needs a fresh price")
+        if side == "Buy" and price <= last:
+            raise Refused(f"a buy stop must be above the last price ({last:,})")
+        if side == "Sell" and price >= last:
+            raise Refused(f"a sell stop must be below the last price ({last:,})")
+    if sl is not None or tp is not None:
+        ref = price if typ != "Market" else last
+        if ref is None:
+            raise Refused(f"{fresh} — a bracket on a market order needs a fresh price")
+        sign = 1 if side == "Buy" else -1
+        if sl is not None and not sign * (ref - sl) > 0:
+            raise Refused("the stop loss must be on the losing side of the entry")
+        if tp is not None and not sign * (tp - ref) > 0:
+            raise Refused("the target must be on the winning side of the entry")
+    return price, sl, tp
+
+
+def worst_net(view: dict, contract: str, side: str, qty: int) -> int:
+    """Worst-case |net| in `contract` if this order AND every working order
+    on its side fill. An OCO pair counts twice (conservative)."""
+    net = sum(int(p.get("net") or 0) for p in view.get("positions", [])
+              if p.get("symbol") == contract)
+    mine = [o for o in view.get("orders", []) if o.get("symbol") == contract]
+    buys = sum(int(o.get("qty") or 0) for o in mine if o.get("side") == "Buy")
+    sells = sum(int(o.get("qty") or 0) for o in mine if o.get("side") == "Sell")
+    up = net + buys + (qty if side == "Buy" else 0)
+    dn = net - sells - (qty if side == "Sell" else 0)
+    return max(abs(up), abs(dn))
+
+
+async def _call(coro) -> OrderResult:
+    """A broker call whose raise is a failed result, never an exception."""
+    try:
+        return await coro
+    except Exception as e:  # noqa: BLE001
+        return OrderResult(ok=False, error=str(e))
 
 
 class ChartDesk:
@@ -124,6 +314,7 @@ class ChartDesk:
         self._mono = mono
         self._hits: dict[str, deque] = {}              # account -> recent action times
         self._done: dict[tuple, tuple[float, dict]] = {}   # (action, client_id) -> (t, result)
+        self._inflight: dict[tuple, asyncio.Future] = {}   # (action, client_id) -> running action
         self._fills: dict[str, deque] = {}             # account -> recent fill views
         self._subs: set[asyncio.Queue] = set()
         self._attached: dict[str, object] = {}
@@ -315,7 +506,11 @@ class ChartDesk:
     # --- settings (the desk page) ----------------------------------------------
     def set_settings(self, body) -> dict:
         """{enabled?, max_order_qty?, max_position_qty?} -> the new settings.
-        ValueError (the page shows it) on anything malformed; nothing changes then."""
+        ValueError (the page shows it) on anything malformed; nothing changes then.
+        Inside the P2 pause (09:29:50-09:30:30 ET weekdays, or any bot
+        `placing`) a change is refused unwritten and unpublished, except one
+        whose only effect is switching chart trading off: like the Kill,
+        that always applies at once."""
         if not isinstance(body, dict):
             raise ValueError("the body is a JSON object")
         ct = self.cfg.chart_trading
@@ -332,6 +527,10 @@ class ChartDesk:
                 if isinstance(v, bool) or not isinstance(v, int) or not 1 <= v <= hi:
                     raise ValueError(f"{k}: a whole number 1-{hi}")
                 setattr(new, k, v)
+        switch_off_only = (not new.enabled and new.max_order_qty == ct.max_order_qty
+                           and new.max_position_qty == ct.max_position_qty)
+        if not switch_off_only and self._views_paused():
+            raise ValueError(SETTINGS_PAUSED)
         self.cfg.chart_trading = new
         self._save(self.cfg)
         self.engine.journal("chart_trading_set", **asdict(new))
@@ -354,4 +553,278 @@ class ChartDesk:
         except Exception as e:  # noqa: BLE001
             _log(f"disable: {type(e).__name__}: {e}")
 
-    # --- actions: guards + order/modify/cancel/cancel-symbol/flatten/reverse (added in Task 4) ---
+    # --- guards -------------------------------------------------------------------
+    def _gate(self, aid: str) -> tuple:
+        """Guards 1, 2 and 5. Returns (adapter, live view, label)."""
+        if not self.cfg.chart_trading.enabled:
+            raise Refused("chart trading is off — switch it on on the desk page")
+        a = self.cfg.accounts.get(aid)
+        if a is None:
+            raise Refused(f"unknown account {aid!r}")
+        label = self._label(aid)
+        now = self._mono()
+        hits = self._hits.setdefault(aid, deque())
+        while hits and now - hits[0] >= RATE_WINDOW_S:
+            hits.popleft()
+        if len(hits) >= RATE_N:
+            raise Refused(f"too fast — at most {RATE_N} actions a second on {label}")
+        hits.append(now)
+        ad = self.adapters.get(aid)
+        if ad is None or not ad.connected:
+            err = (self.acct_status.get(aid) or {}).get("error")
+            raise Refused(f"{label} is not connected" + (f" ({err})" if err else ""))
+        if not a.account_name or not getattr(ad, "pinned_ok", False):
+            raise Refused(f"{label} is not on its own pinned broker account — "
+                          "chart trading refuses it")
+        view = ad.trade_view()
+        if not view or not view.get("seeded"):
+            raise Refused(f"{label}'s positions are not loaded yet — try again in a moment")
+        return ad, view, label
+
+    def _contract(self, root: str) -> str:
+        if not spec_for(root).known:
+            raise Refused(f"{root} has no contract spec on the desk — not tradable from the chart")
+        try:
+            return symbols.resolve_contract(root)
+        except ValueError as e:
+            raise Refused(f"{root}: no front contract ({e})") from None
+
+    def _day_state(self, aid: str, name: str):
+        return next((s for s in self.engine.day_states_for_account(aid) if s.strategy == name), None)
+
+    def _lock(self, aid: str, contract: str, label: str, *, cancel_by_id: bool = False) -> None:
+        """Guard 4. A cancel by id of a non-bot order is only refused while
+        a bot is placing (its new orders are not yet known by id)."""
+        for name, s in self.cfg.strategies.items():
+            if not contract_matches(s.symbol, contract):
+                continue
+            st = self._day_state(aid, name)
+            if st is not None and st.status in BOT_BUSY \
+                    and not (cancel_by_id and st.status != "placing"):
+                raise Refused(f"{contract} on {label} belongs to the {name} bot right now "
+                              f"({st.status}) — use the desk's Kill in an emergency")
+            if cancel_by_id:
+                continue
+            if in_lock_window(self.engine.now_et()) \
+                    and any(r.get("account") == aid for r in assignments(self.cfg, name)):
+                raise Refused(f"{contract} on {label} is locked 09:20-09:35 ET for the {name} bot")
+
+    @staticmethod
+    def _unresolved(view: dict) -> None:
+        if any(p.get("symbol") is None for p in view.get("positions", [])) \
+                or any(o.get("symbol") is None for o in view.get("orders", [])):
+            raise Refused("a position or order's contract is not resolved yet — try again in a moment")
+
+    def _not_bot_order(self, aid: str, oid: str) -> None:
+        owner = self._bot_orders(aid).get(oid)
+        if owner:
+            raise Refused(f"order {oid} belongs to the {owner} bot — it cannot be changed from the chart")
+
+    def _now_s(self) -> float:
+        return self.engine.now_et().timestamp()
+
+    # --- bookkeeping ------------------------------------------------------------------
+    def _dedup(self, action: str, cid: str) -> Optional[dict]:
+        now = self._mono()
+        for k in [k for k, (t, _) in self._done.items() if now - t > DEDUP_TTL_S]:
+            del self._done[k]
+        hit = self._done.get((action, cid))
+        return hit[1] if hit else None
+
+    async def _once(self, action: str, cid: str, work) -> dict:
+        """Run `work()` once per (action, client_id): a repeat gets the first
+        result, and a repeat that arrives while the first is still at the
+        broker (a double click, a proxy retry) waits for it instead of
+        placing again. Shielded: a caller that goes away does not cancel an
+        action already at the broker."""
+        hit = self._dedup(action, cid)
+        if hit is not None:
+            return hit
+        key = (action, cid)
+        task = self._inflight.get(key)
+        if task is None:
+            task = asyncio.ensure_future(work())
+            self._inflight[key] = task
+            task.add_done_callback(lambda _t, key=key: self._inflight.pop(key, None))
+        return await asyncio.shield(task)
+
+    def _finish(self, action: str, cid: str, results: dict) -> dict:
+        out = {"results": results}
+        self._done[(action, cid)] = (self._mono(), out)
+        self.publish("result", {"client_id": cid, "action": action, **out})
+        return out
+
+    def _refuse(self, action: str, cid: str, aid: str, reason: str) -> dict:
+        self.engine.journal("manual_refused", source="chart", action=action, client_id=cid,
+                            account=aid, reason=reason)
+        return {"ok": False, "order_id": None, "error": reason, "refused": True}
+
+    @staticmethod
+    def _gathered(accounts: tuple, outs: list) -> dict:
+        return {aid: (o if isinstance(o, dict) else
+                      {"ok": False, "order_id": None, "error": f"internal error: {o}"})
+                for aid, o in zip(accounts, outs)}
+
+    # --- order ------------------------------------------------------------------------
+    async def order(self, body) -> dict:
+        it = parse_order(body)
+
+        async def work():
+            quote = fresh_quote(body, it.root, self._now_s())
+            outs = await asyncio.gather(*(self._order_one(it, aid, quote) for aid in it.accounts),
+                                        return_exceptions=True)
+            return self._finish("order", it.client_id, self._gathered(it.accounts, outs))
+
+        return await self._once("order", it.client_id, work)
+
+    async def _order_one(self, it: OrderIntent, aid: str, quote: Optional[dict]) -> dict:
+        try:
+            ad, view, label = self._gate(aid)
+            contract = self._contract(it.root)
+            self._lock(aid, contract, label)
+            lim = self.cfg.chart_trading
+            if not 1 <= it.qty <= lim.max_order_qty:
+                raise Refused(f"quantity must be 1-{lim.max_order_qty}")
+            self._unresolved(view)
+            worst = worst_net(view, contract, it.side, it.qty)
+            if worst > lim.max_position_qty:
+                raise Refused(f"that could take {contract} on {label} to {worst} contracts "
+                              f"(limit {lim.max_position_qty})")
+            price, sl, tp = check_prices(it.side, it.type, it.price, it.sl_price, it.tp_price,
+                                         contract, quote)
+        except Refused as e:
+            return self._refuse("order", it.client_id, aid, str(e))
+        req = OrderRequest(symbol=contract, side=it.side, qty=it.qty, order_type=it.type,
+                           price=price, stop_price=sl, tp_price=tp, text="homebase:chart")
+        bracket = sl is not None or tp is not None
+        r = await _call(ad.place_bracket(req) if bracket else ad.place_order(req))
+        self.engine.journal("manual_order", source="chart", client_id=it.client_id, account=aid,
+                            root=it.root, contract=contract, side=it.side, qty=it.qty,
+                            type=it.type, price=price, sl=sl, tp=tp, ok=r.ok,
+                            order_id=r.order_id, error=r.error)
+        return {"ok": r.ok, "order_id": r.order_id, "error": r.error}
+
+    # --- modify / cancel (one account, one order) ---------------------------------------
+    def _find_order(self, view: dict, oid: str, label: str) -> dict:
+        o = next((o for o in view.get("orders", []) if str(o.get("order_id")) == oid), None)
+        if o is None:
+            raise Refused(f"order {oid} is not working on {label}")
+        return o
+
+    async def modify(self, body) -> dict:
+        cid, aid, oid, price = parse_modify(body)
+        return await self._once("modify", cid, lambda: self._modify(body, cid, aid, oid, price))
+
+    async def _modify(self, body, cid: str, aid: str, oid: str, price: float) -> dict:
+        try:
+            ad, view, label = self._gate(aid)
+            o = self._find_order(view, oid, label)
+            self._not_bot_order(aid, oid)
+            contract = o.get("symbol")
+            if not contract:
+                raise Refused("that order's contract is not resolved yet — try again in a moment")
+            self._lock(aid, contract, label)
+            typ = o.get("type")
+            if typ not in ("Limit", "Stop"):
+                raise Refused(f"only Limit and Stop orders can be moved (this one is {typ})")
+            px = round_to_tick(contract, price)
+            if typ == "Stop":
+                check_prices(o.get("side"), "Stop", px, None, None, contract,
+                             fresh_quote(body, root_of(contract), self._now_s()))
+        except Refused as e:
+            return self._finish("modify", cid, {aid: self._refuse("modify", cid, aid, str(e))})
+        r = await _call(ad.modify_order(oid, typ,
+                                        price=px if typ == "Limit" else None,
+                                        stop_price=px if typ == "Stop" else None,
+                                        qty=int(o.get("qty") or 0) or None))
+        self.engine.journal("manual_modify", source="chart", client_id=cid, account=aid,
+                            order_id=oid, contract=contract, type=typ, price=px,
+                            ok=r.ok, error=r.error)
+        return self._finish("modify", cid, {aid: {"ok": r.ok, "order_id": oid, "error": r.error}})
+
+    async def cancel(self, body) -> dict:
+        cid, aid, oid = parse_cancel(body)
+        return await self._once("cancel", cid, lambda: self._cancel(cid, aid, oid))
+
+    async def _cancel(self, cid: str, aid: str, oid: str) -> dict:
+        try:
+            ad, view, label = self._gate(aid)
+            o = self._find_order(view, oid, label)
+            self._not_bot_order(aid, oid)
+            contract = o.get("symbol")
+            if contract:
+                self._lock(aid, contract, label, cancel_by_id=True)
+            elif any(s.status == "placing" for s in self.engine.day_states_for_account(aid)):
+                raise Refused("a bot is placing on this account — try again in a second")
+        except Refused as e:
+            return self._finish("cancel", cid, {aid: self._refuse("cancel", cid, aid, str(e))})
+        r = await _call(ad.cancel_order_by_id(oid))
+        self.engine.journal("manual_cancel", source="chart", scope="order", client_id=cid,
+                            account=aid, order_id=oid, contract=contract, ok=r.ok, error=r.error)
+        return self._finish("cancel", cid, {aid: {"ok": r.ok, "order_id": oid, "error": r.error}})
+
+    # --- per-symbol actions (many accounts) -------------------------------------------------
+    async def _per_symbol(self, action: str, body, fn) -> dict:
+        cid, accounts, root = parse_symbol_action(body)
+
+        async def work():
+            outs = await asyncio.gather(*(self._symbol_one(action, cid, aid, root, fn)
+                                          for aid in accounts), return_exceptions=True)
+            return self._finish(action, cid, self._gathered(accounts, outs))
+
+        return await self._once(action, cid, work)
+
+    async def _symbol_one(self, action: str, cid: str, aid: str, root: str, fn) -> dict:
+        try:
+            ad, view, label = self._gate(aid)
+            contract = self._contract(root)
+            self._lock(aid, contract, label)
+            return await fn(cid, aid, ad, contract, label)
+        except Refused as e:
+            return self._refuse(action, cid, aid, str(e))
+
+    async def cancel_symbol(self, body) -> dict:
+        return await self._per_symbol("cancel-symbol", body, self._do_cancel_symbol)
+
+    async def flatten(self, body) -> dict:
+        return await self._per_symbol("flatten", body, self._do_flatten)
+
+    async def reverse(self, body) -> dict:
+        return await self._per_symbol("reverse", body, self._do_reverse)
+
+    async def _do_cancel_symbol(self, cid, aid, ad, contract, label) -> dict:
+        r = await _call(ad.cancel_symbol(contract))
+        self.engine.journal("manual_cancel", source="chart", scope="symbol", client_id=cid,
+                            account=aid, contract=contract, ok=r.ok, error=r.error,
+                            cancelled=(r.raw or {}).get("cancelled"))
+        return {"ok": r.ok, "order_id": None, "error": r.error}
+
+    async def _do_flatten(self, cid, aid, ad, contract, label) -> dict:
+        r = await _call(ad.flatten_symbol(contract))
+        self.engine.journal("manual_flatten", source="chart", client_id=cid, account=aid,
+                            contract=contract, ok=r.ok, error=r.error, detail=r.raw)
+        return {"ok": r.ok, "order_id": None, "error": r.error}
+
+    async def _do_reverse(self, cid, aid, ad, contract, label) -> dict:
+        try:
+            net = await ad.get_net_position(contract)
+        except Exception as e:  # noqa: BLE001 — unreadable is not flat
+            raise Refused(f"the {contract} position on {label} is unreadable ({e}) — nothing done") from None
+        if not net:
+            raise Refused(f"no {contract} position on {label} to reverse")
+        lim = self.cfg.chart_trading
+        if abs(net) > lim.max_order_qty or abs(net) > lim.max_position_qty:
+            raise Refused(f"reversing {abs(net)} is over the per-order limit ({lim.max_order_qty})")
+        f = await _call(ad.flatten_symbol(contract))
+        self.engine.journal("manual_reverse", source="chart", step="flatten", client_id=cid,
+                            account=aid, contract=contract, net_before=net, ok=f.ok, error=f.error)
+        if not f.ok:
+            return {"ok": False, "order_id": None, "error": f"flatten failed: {f.error} — not reversed"}
+        side = "Sell" if net > 0 else "Buy"
+        r = await _call(ad.place_order(OrderRequest(symbol=contract, side=side, qty=abs(net),
+                                                    order_type="Market",
+                                                    text="homebase:chart-reverse")))
+        self.engine.journal("manual_reverse", source="chart", step="open", client_id=cid,
+                            account=aid, contract=contract, side=side, qty=abs(net), ok=r.ok,
+                            order_id=r.order_id, error=r.error)
+        return {"ok": r.ok, "order_id": r.order_id, "error": r.error}
