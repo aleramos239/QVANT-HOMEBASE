@@ -3,7 +3,8 @@
    selected chart; Cancel, ×, Esc or a backdrop click put every chart back as it was when the dialog opened;
    Ok keeps the changes. Browser only: the model is HBSettings (settings.js); the page (app.js) owns the
    dialog frame and the menus and hands them over as `host`:
-     {cell, cells(), toggleMenu(anchor, cls, fill(menuEl)), closeMenu(), placeMenu(), commit(changed), cancel()} */
+     {cell, cells(), toggleMenu(anchor, cls, fill(menuEl)), closeMenu(), placeMenu(), commit(changed), cancel(),
+      templates: {list(), save(name, settings), remove(name)}} */
 (() => {
 'use strict';
 const S = window.HBSettings, I = window.HBIcons;
@@ -15,7 +16,7 @@ const asPrecision = (v) => (v === '' ? null : Number(v));
 
 /* The tabs, in TradingView's order. A row: {label, check?: key (a checkbox before the label), colors?: [[key,
    what]] (a swatch each), select?: {key, choices: [[value, text]], parse?}, number?: {key, min, max, unit?}}.
-   Task 7 inserts Status line and Scales and lines, and the hours-background row; Task 8 adds Events. */
+   Task 8 adds Events. */
 const TABS = [
   { id: 'symbol', label: 'Symbol', icon: 'candles', sections: [
     ['CANDLES', [
@@ -27,6 +28,34 @@ const TABS = [
     ['DATA', [
       { label: 'Precision', select: { key: 'precision', choices: PRECISION, parse: asPrecision } },
       { label: 'Timezone', select: { key: 'timezone', choices: S.TIMEZONES.map(([k, text]) => [k, text]) } },
+      { label: 'Electronic trading hours background', check: 'ethBg', colors: [['ethBgColor', '']] },
+    ]],
+  ] },
+  { id: 'status', label: 'Status line', icon: 'list', sections: [
+    ['SYMBOL', [
+      { label: 'Symbol title', check: 'title', select: { key: 'titleMode',
+        choices: [['ticker', 'Ticker'], ['description', 'Description'], ['both', 'Ticker and description']] } },
+      { label: 'OHLC values', check: 'ohlc' },
+      { label: 'Bar change values', check: 'barChange' },
+      { label: 'Volume', check: 'volume' },
+    ]],
+    ['INDICATORS', [
+      { label: 'Indicator titles', check: 'indTitles' },
+      { label: 'Indicator arguments', check: 'indArgs' },
+      { label: 'Indicator values', check: 'indValues' },
+    ]],
+  ] },
+  { id: 'scales', label: 'Scales and lines', icon: 'measure', sections: [
+    ['PRICE SCALE', [
+      { label: 'Scale price chart only', check: 'scalePriceOnly' },
+      { label: 'Symbol last price label', check: 'lastLabel' },
+      { label: 'Symbol last price line', check: 'lastLine', select: { key: 'lastLineStyle', choices: LINE } },
+      { label: 'Countdown to bar close', check: 'countdown' },
+      { label: 'Top margin', number: { key: 'marginTop', min: 0, max: 40, unit: '%' } },
+      { label: 'Bottom margin', number: { key: 'marginBottom', min: 0, max: 40, unit: '%' } },
+    ]],
+    ['TIME SCALE', [
+      { label: 'Right margin', number: { key: 'rightOffset', min: 0, max: 100, unit: 'bars' } },
     ]],
   ] },
   { id: 'canvas', label: 'Canvas', icon: 'paintbrush', sections: [
@@ -192,6 +221,75 @@ function mount(box, host) {
     });
   }
 
+  /* A template or "Apply defaults": the dialog's settings become it, previewed live. */
+  function applyTemplate(o) { work = S.normalize(o); renderPane(); preview(); }
+  function menuBtn(text) {
+    const b = button('menu-i');
+    b.setAttribute('role', 'menuitem');
+    b.append(mk('span', 'menu-t', text));
+    return b;
+  }
+
+  /* Template ▾: Save as… (an inline name field, Enter saves), Apply defaults, then the saved templates (a click
+     applies one to the dialog; × deletes it after an inline "Delete?"). Every error shows inline. */
+  function templateMenu(anchor) {
+    host.toggleMenu(anchor, 'menu-tpl', (m) => {
+      const list = mk('div'), err = mk('div', 'menu-err'), saveAs = menuBtn('Save as…'), defaults = menuBtn('Apply defaults');
+      err.hidden = true;
+      err.setAttribute('role', 'alert');
+      m.append(saveAs, defaults, mk('div', 'menu-sep'), list, err);
+      const fail = (text) => { err.textContent = text; err.hidden = false; host.placeMenu(); };
+      defaults.onclick = () => { host.closeMenu(); applyTemplate({}); };
+      saveAs.onclick = () => {
+        const rowEl = mk('div', 'menu-custom'), input = mk('input', 'menu-input'), go = button('btn btn-primary', 'Save');
+        input.type = 'text'; input.placeholder = 'Template name'; input.maxLength = 40; input.spellcheck = false;
+        input.setAttribute('aria-label', 'Template name');
+        const save = async () => {
+          const name = input.value.trim(), why = S.templateNameError(name);
+          if (why) { fail(why); input.focus(); return; }
+          const res = await host.templates.save(name, S.overrides(work));
+          if (res) { fail(res); return; }
+          host.closeMenu();
+        };
+        go.onclick = save;
+        input.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } };
+        rowEl.append(input, go);
+        saveAs.replaceWith(rowEl);
+        input.focus();
+      };
+      list.append(mk('div', 'menu-empty', 'Loading…'));
+      host.templates.list().then((all) => {
+        if (!m.isConnected) return;   // closed meanwhile
+        if (!all) { list.replaceChildren(); fail('could not load the templates'); return; }
+        const names = Object.keys(all).sort((a, b) => a.localeCompare(b));
+        list.replaceChildren(...(names.length ? names.map((n) => tplRow(n, all[n])) : [mk('div', 'menu-empty', 'No saved templates')]));
+        host.placeMenu();
+      });
+      function tplRow(name, settings) {
+        const r = mk('div', 'menu-row'), pick = menuBtn(name), del = button('menu-del');
+        del.title = `Delete ${name}`;
+        del.setAttribute('aria-label', `Delete ${name}`);
+        del.innerHTML = I.x;   // our own static SVG string
+        pick.onclick = () => { host.closeMenu(); applyTemplate(settings); };
+        del.onclick = () => {
+          const ask = mk('div', 'menu-confirm'), yes = button('btn btn-danger', 'Delete'), no = button('btn btn-ghost', 'Cancel');
+          ask.append(mk('span', '', `Delete “${name}”?`), yes, no);
+          r.replaceWith(ask);
+          no.focus();
+          no.onclick = () => { ask.replaceWith(r); del.focus(); };
+          yes.onclick = async () => {
+            const res = await host.templates.remove(name);
+            if (res) { ask.replaceWith(r); fail(res); return; }
+            ask.remove();
+            if (!list.querySelector('.menu-row, .menu-confirm')) list.replaceChildren(mk('div', 'menu-empty', 'No saved templates'));
+          };
+        };
+        r.append(pick, del);
+        return r;
+      }
+    });
+  }
+
   /* ---- footer ---- */
   const grow = mk('span', 'grow'), cancel = button('btn btn-ghost', 'Cancel'), ok = button('btn btn-solid', 'Ok');
   cancel.onclick = () => host.cancel();
@@ -201,7 +299,18 @@ function mount(box, host) {
     done = true;
     host.commit(host.cells().some((c) => JSON.stringify(c.settings()) !== JSON.stringify(atOpen.get(c) || {})));
   };
-  foot.append(grow, cancel, ok);
+  const tpl = button('btn btn-ghost tpl-btn'), chev = mk('span', 'icw sm'), applyAll = button('btn btn-ghost', 'Apply to all');
+  chev.innerHTML = I.chevron;
+  tpl.append(mk('span', '', 'Template'), chev);
+  tpl.setAttribute('aria-haspopup', 'menu');
+  tpl.onclick = () => templateMenu(tpl);
+  applyAll.title = 'Copy these settings to every chart in the layout';
+  applyAll.onclick = () => {   // live on every chart; the dialog stays open (Cancel puts them all back)
+    flush();
+    const o = S.overrides(work);
+    for (const c of host.cells()) c.setSettings(o);
+  };
+  foot.append(tpl, grow, applyAll, cancel, ok);
 
   renderTabs();
   renderPane();

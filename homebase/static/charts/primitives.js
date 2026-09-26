@@ -136,5 +136,60 @@ class Gaps extends Layer {
   }
 }
 
-window.HBLayers = { Footprint, Profile, Gaps, Layer };
+/* Electronic (outside regular) trading hours shaded behind the bars: every bar starting outside
+   09:30-16:00 ET, merged into runs. set(bars, on, color, isEth(etWallSeconds)). */
+class EthBg extends Layer {
+  constructor(P) { super(P); this.bars = []; this.on = false; this.color = ''; this.isEth = () => false; }
+  z() { return 'bottom'; }
+  set(bars, on, color, isEth) { this.bars = bars; this.on = on; this.color = color; this.isEth = isEth; this.redraw(); }
+  draw(target) {
+    if (!this.on || !this.chart || !this.bars.length) return;
+    const ts = this.chart.timeScale(), r = ts.getVisibleLogicalRange();
+    if (!r) return;
+    const i0 = Math.max(0, Math.floor(r.from)), i1 = Math.min(this.bars.length - 1, Math.ceil(r.to));
+    if (i1 < i0) return;
+    const half = Math.max(this.spacing(), 1) / 2;
+    target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
+      ctx.fillStyle = this.color;
+      let run = null;   // [left, right] of consecutive shaded bars
+      const flush = () => { if (run) { ctx.fillRect(run[0], 0, run[1] - run[0], mediaSize.height); run = null; } };
+      for (let i = i0; i <= i1; i++) {
+        const x = ts.logicalToCoordinate(i);   // integer logicals only (v5)
+        if (x == null || !this.isEth(this.bars[i].t)) { flush(); continue; }
+        if (run) run[1] = x + half; else run = [x - half, x + half];
+      }
+      flush();
+    });
+  }
+}
+
+/* The time left in the last bar, as a price-axis label just below the last-price label (TradingView's
+   countdown). read() -> {text, price, color, font} | null is asked before every render; the page asks for a
+   render once a second. priceAxisViews() returns ONE stable array: Lightweight Charts caches its wrapper by
+   the array's identity and calls these methods at every render. */
+class Countdown extends Layer {
+  constructor(P, read) {
+    super(P);
+    this.read = read;
+    this.cur = null;
+    this.axis = [{
+      coordinate: () => { const y = this.y(); return y == null ? -100 : y; },
+      text: () => (this.cur ? this.cur.text : ''),
+      textColor: () => this.P.onAccent,
+      backColor: () => (this.cur ? this.cur.color : 'rgba(0,0,0,0)'),
+      visible: () => this.y() != null,
+      tickVisible: () => false,
+    }];
+  }
+  paneViews() { return []; }
+  priceAxisViews() { return this.axis; }
+  updateAllViews() { this.cur = this.read(); }
+  y() {
+    if (!this.cur || !this.series) return null;
+    const y = this.series.priceToCoordinate(this.cur.price);
+    return y == null ? null : y + Math.round((this.cur.font * 4) / 3) + 2;   // one axis label below the last price
+  }
+}
+
+window.HBLayers = { Footprint, Profile, Gaps, Layer, EthBg, Countdown };
 })();

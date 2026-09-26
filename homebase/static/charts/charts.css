@@ -266,3 +266,5 @@ a { color: inherit; }
   .set-tabs { width: 60px; }
   .set-tab span:last-child { display: none; }
 }
+.tpl-btn { display: inline-flex; align-items: center; gap: 6px; }
+.menu-tpl { min-width: 240px; }

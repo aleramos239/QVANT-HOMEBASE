@@ -2,7 +2,7 @@
    Lucide (https://lucide.dev), lucide-static@1.48.0: house, chevron-down, search,
    square-function, mouse-pointer-2, git-commit-horizontal, rectangle-horizontal, ruler,
    trash-2, eye, eye-off, settings, x, check, sun, moon, magnet, trending-up, trending-down,
-   chart-candlestick, paintbrush.
+   chart-candlestick, paintbrush, list.
 
    ISC License
 
@@ -20,7 +20,7 @@
    ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
    OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-   check, chevron-down, moon, search, trash-2, trending-up, trending-down and x derive from Feather:
+   check, chevron-down, moon, search, trash-2, trending-up, trending-down, list and x derive from Feather:
    The MIT License (MIT), Copyright (c) 2013-present Cole Bemis.
 
    `trend` (a segment between two handles) is drawn for this page in the same style. */
@@ -51,5 +51,6 @@ window.HBIcons = {
   short: svg('<path d="M16 17h6v-6"/><path d="m22 17-8.5-8.5-5 5L2 7"/>'),
   candles: svg('<path d="M9 5v4"/><rect width="4" height="6" x="7" y="9" rx="1"/><path d="M9 15v2"/><path d="M17 3v2"/><rect width="4" height="8" x="15" y="5" rx="1"/><path d="M17 13v3"/><path d="M3 3v16a2 2 0 0 0 2 2h16"/>'),
   paintbrush: svg('<path d="m14.622 17.897-10.68-2.913"/><path d="M18.376 2.622a1 1 0 1 1 3.002 3.002L17.36 9.643a.5.5 0 0 0 0 .707l.944.944a2.41 2.41 0 0 1 0 3.408l-.944.944a.5.5 0 0 1-.707 0L8.354 7.348a.5.5 0 0 1 0-.707l.944-.944a2.41 2.41 0 0 1 3.408 0l.944.944a.5.5 0 0 0 .707 0z"/><path d="M9 8c-1.804 2.71-3.97 3.46-6.583 3.948a.507.507 0 0 0-.302.819l7.32 8.883a1 1 0 0 0 1.185.204C12.735 20.405 16 16.792 16 15"/>'),
+  list: svg('<path d="M3 5h.01"/><path d="M3 12h.01"/><path d="M3 19h.01"/><path d="M8 5h13"/><path d="M8 12h13"/><path d="M8 19h13"/>'),
 };
 })();

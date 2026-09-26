@@ -17,7 +17,8 @@ const LW = window.LightweightCharts;
 const C = window.HBCatalog;
 const S = window.HBSettings;
 const CANDLE_KEYS = ['prevClose', 'body', 'bodyUp', 'bodyDown', 'borders', 'borderUp', 'borderDown', 'wick', 'wickUp', 'wickDown'];
-const { Footprint, Profile, Gaps } = window.HBLayers;
+const { Footprint, Profile, Gaps, EthBg, Countdown } = window.HBLayers;
+const NO_SCALE = () => null;   // autoscaleInfoProvider: the series takes no part in autoscale
 const FAKE0 = 946684800;    // synthetic-axis origin for tick/volume/range bars
 const FONT = '-apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif';
 const LEVELS = [['pdh', 'PDH'], ['pdl', 'PDL'], ['pdc', 'PDC'], ['onh', 'ONH'], ['onl', 'ONL'], ['rth_open', 'Open']];
@@ -85,6 +86,7 @@ class Cell {
     this.hover = null;      // bar index under the crosshair (null: the last bar)
     this.noteTimer = 0; this.noteOn = false;   // noteOn: the legend message is still a note()
     this.dc = null;   // the drawing controller of the current chart
+    this.eth = this.cd = null; this.clockEt = null;   // the hours background, the countdown, now (ET wall ms)
     this.magnetXhair = false;   // the rail's magnet is on with a tool picked (MagnetOHLC crosshair)
     this.R = S.resolve(cfg.settings || {}, palette());   // the chart's settings, concrete for the theme
     this.fpHide = false;   // the footprint is readable: candle bodies and borders step aside
@@ -122,8 +124,9 @@ class Cell {
   }
 
   title() {
-    const { root, spec } = this.cfg;
-    this.lg.name.textContent = [root, C.rootName(root), C.specLabel(spec)].filter(Boolean).join(' · ');
+    const { root, spec } = this.cfg, F = S.legendFlags(this.R);
+    this.lg.name.hidden = !F.title;
+    this.lg.name.textContent = S.titleText(root, C.rootName(root), C.specLabel(spec), F.titleMode);
   }
   message(text, err = false) { this.noteOn = false; this.lg.msg.textContent = text || ''; this.lg.msg.classList.toggle('err', !!err); }
   note(text) {   // a refused change: its reason in red for a while (then cleared, if nothing replaced it)
@@ -166,6 +169,11 @@ class Cell {
     this.candles.applyOptions(this.candleOpts());
     this.wm.applyOptions({ visible: R.watermark, lines: [this.wmLine()] });
     if ((R.prevClose || was.prevClose) && CANDLE_KEYS.some((k) => R[k] !== was[k])) this.resetCandles();
+    if (R.scalePriceOnly !== was.scalePriceOnly) {   // "Scale price chart only": the price pane's lines leave autoscale
+      for (const l of this.lines) if (l.overlay) l.s.applyOptions({ autoscaleInfoProvider: R.scalePriceOnly ? NO_SCALE : undefined });
+    }
+    this.syncEth();
+    if (this.cd) this.cd.redraw();
     this.legendRows();
     this.legend(this.hover);
   }
@@ -191,6 +199,26 @@ class Cell {
 
   /* The time zone changed: every bar's axis time again. */
   retime() { const bars = this.bars; this.bars = []; this.realT = new Map(); for (const b of bars) this.append(b); }
+
+  /* The electronic-hours background: intraday time charts only. */
+  syncEth() {
+    if (!this.eth) return;
+    this.eth.set(this.bars, this.R.ethBg && this.isTime() && this.barMs() < 86400000, this.R.ethBgColor, S.outsideRth);
+  }
+
+  /* The countdown under the last-price label: {text, price, color, font}, or null when it is off, the label is
+     off, the chart is not a time chart, no clock came yet, or the last bar already closed. */
+  countdownNow() {
+    const R = this.R, n = this.bars.length, ms = this.barMs();
+    if (!R.countdown || !R.lastLabel || !ms || !n || this.clockEt == null || !this.shown) return null;
+    const last = this.bars[n - 1], left = S.barCloseEt(last, ms, C.ALWAYS_OPEN.has(this.shown.root)) - this.clockEt;
+    if (left <= 0) return null;
+    const prev = n > 1 ? this.bars[n - 2] : null, up = last.c >= (R.prevClose && prev ? prev.c : last.o);
+    return { text: S.fmtCountdown(left), price: last.c, color: up ? R.bodyUp : R.bodyDown, font: R.scaleFont };
+  }
+
+  /* Once a second, from the page: now as ET wall-clock ms (a replay's own clock in a replay). */
+  tickSecond(nowEt) { this.clockEt = nowEt; if (this.cd) this.cd.redraw(); }
 
   /* Send the chart's config; keepView: restore the view on screen when the
      answer is for the same root + interval. "Loading…" while it asks for
@@ -268,7 +296,7 @@ class Cell {
     this.candles.setData(this.candleData());
     this.buildSeries();
     for (const l of this.lines) l.s.setData(this.bars.map((b) => this.point(l, b)));
-    this.drawMarkers(); this.drawLevels(); this.drawGaps(); this.syncFootprint(); this.syncProfile();
+    this.drawMarkers(); this.drawLevels(); this.drawGaps(); this.syncFootprint(); this.syncProfile(); this.syncEth();
     // Pane heights as px-sized stretch factors. Not setHeight(): it spreads each change using the laid-out
     // heights, and panes added this pass are still 0 px, so with 2+ sub-panes only the last one got PANE_H.
     // Pane 0 still holds the whole plot here; on a small panel it keeps at least half of it.
@@ -321,6 +349,7 @@ class Cell {
     this.wm = LW.createTextWatermark(this.chart.panes()[0], { visible: R.watermark, horzAlign: 'center',
       vertAlign: 'center', lines: [this.wmLine()] });
     this.fp = new Footprint(P); this.prof = new Profile(P); this.gaps = new Gaps(P);
+    this.eth = new EthBg(P); this.cd = new Countdown(P, () => this.countdownNow());
     const fp = this.fp;   // pin the instance this callback belongs to
     fp.onReadableChange = (on) => {   // fired async from Footprint.updateAllViews(), after layout
       if (this.fp !== fp || !this.chart) return;
@@ -328,7 +357,7 @@ class Cell {
       this.candles.applyOptions(this.candleOpts());
       if (this.R.prevClose) this.resetCandles();   // per-bar colours ride in the data
     };
-    for (const l of [this.gaps, this.prof, this.fp]) this.candles.attachPrimitive(l);
+    for (const l of [this.eth, this.gaps, this.prof, this.fp, this.cd]) this.candles.attachPrimitive(l);
     this.lines = []; this.levelLines = {}; this.colorOf = {}; this.hover = null;
     this.chart.timeScale().subscribeVisibleLogicalRangeChange(() => this.syncFootprint());
     this.chart.subscribeCrosshairMove((p) => {
@@ -342,6 +371,7 @@ class Cell {
     if (!this.chart) return;
     this.chart.remove();
     this.chart = this.candles = this.markers = this.fp = this.prof = this.gaps = this.wm = null;   // stale async callbacks can tell
+    this.eth = this.cd = null;
   }
 
   /* One series per drawn part of each indicator instance, in instance order. */
@@ -349,8 +379,10 @@ class Cell {
     const P = this.P;
     let ci = 0, pane = 0;
     const add = (inst, src, part, type, opts, where) => {
-      const s = this.chart.addSeries(type, { priceLineVisible: false, visible: inst.visible !== false, ...opts }, where);
-      this.lines.push({ uid: inst.uid, s, src, part });
+      const overlay = where === 0 && !opts.priceScaleId;   // on the price pane's own scale (not the volume overlay)
+      const auto = overlay && this.R.scalePriceOnly ? { autoscaleInfoProvider: NO_SCALE } : {};
+      const s = this.chart.addSeries(type, { priceLineVisible: false, visible: inst.visible !== false, ...opts, ...auto }, where);
+      this.lines.push({ uid: inst.uid, s, src, part, overlay });
       return s;
     };
     const line = (inst, src, part, color, width, where = 0, extra = {}) => add(inst, src, part, LW.LineSeries,
@@ -394,14 +426,15 @@ class Cell {
   }
 
   legendRows() {
+    const F = S.legendFlags(this.R);
     this.rows = this.cfg.indicators.map((inst) => {
       const off = inst.visible === false, row = mk('div', 'lg-row' + (off ? ' off' : '')), vals = mk('span', 'lg-vals');
-      const btns = mk('span', 'lg-btns');
+      const btns = mk('span', 'lg-btns'), hasParams = C.def(inst.id).params.length > 0;
       btns.append(iconButton(off ? 'eyeOff' : 'eye', off ? 'Show' : 'Hide', 'eye'));
-      if (C.def(inst.id).params.length) btns.append(iconButton('gear', 'Settings', 'gear'));
+      if (hasParams) btns.append(iconButton('gear', 'Settings', 'gear'));
       btns.append(iconButton('x', 'Remove', 'x'));
       row.dataset.uid = inst.uid;
-      row.append(mk('span', 'lg-label', C.label(inst)), vals, btns);
+      row.append(mk('span', 'lg-label', S.legendLabel(C.label(inst), hasParams, F)), vals, btns);
       return { inst, row, vals };
     });
     this.lg.inds.replaceChildren(...this.rows.map((r) => r.row));
@@ -442,14 +475,14 @@ class Cell {
     const k = i == null ? n - 1 : Math.max(0, Math.min(i, n - 1)), b = this.bars[k], prev = k > 0 ? this.bars[k - 1] : null;
     const P = this.P, R = this.R, dt = this.dtick();
     const up = b.c >= (R.prevClose && prev ? prev.c : b.o), col = up ? R.bodyUp : R.bodyDown, ch = C.change(b, prev, dt);
-    this.lg.ohlc.replaceChildren(
-      ...[['O', b.o], ['H', b.h], ['L', b.l], ['C', b.c]].map(([key, v]) => kv(key, C.fmtPrice(v, dt), col)),
-      val(ch.text, ch.up ? R.bodyUp : R.bodyDown),
-      kv('Vol', C.fmtCompact(b.v), col),
-      kv('Δ', C.fmtSigned(b.d), b.d >= 0 ? P.up : P.down));
+    const F = S.legendFlags(R), parts = [];
+    if (F.ohlc) parts.push(...[['O', b.o], ['H', b.h], ['L', b.l], ['C', b.c]].map(([key, v]) => kv(key, C.fmtPrice(v, dt), col)));
+    if (F.change) parts.push(val(ch.text, ch.up ? R.bodyUp : R.bodyDown));
+    if (F.volume) parts.push(kv('Vol', C.fmtCompact(b.v), col), kv('Δ', C.fmtSigned(b.d), b.d >= 0 ? P.up : P.down));
+    this.lg.ohlc.replaceChildren(...parts);
     const colors = { text: P.text, up: P.up, down: P.down, vwap: P.vwap, cum: P.cum };
     for (const r of this.rows) {
-      const vs = C.legendValues(r.inst, b, { ...colors, line: this.colorOf[r.inst.uid] || P.accent }, dt);
+      const vs = F.indValues ? C.legendValues(r.inst, b, { ...colors, line: this.colorOf[r.inst.uid] || P.accent }, dt) : [];
       r.vals.replaceChildren(...vs.map((x) => val(x.text, x.color)));
     }
   }

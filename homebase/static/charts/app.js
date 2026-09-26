@@ -35,6 +35,7 @@ let noteTimer = 0, armTimer = 0, armRoot = null;   // armRoot: the symbol the ar
 const drawings = new window.HBDrawings.Store({ onError: (root, msg) => sbNote(`${root} drawings: ${msg}`) });
 let magnet = loadMagnet();   // the rail's magnet {on, mode}, per viewer (localStorage hb_charts_magnet)
 let menuRight = false;       // the open menu is a rail flyout: it opens to the right of its button
+let replayClock = null;   // {etMs, at, speed, done}: a replay's clock from its last status (live: null)
 
 const $ = (s, root = document) => root.querySelector(s);
 const iso = (t) => new Date(t * 1000).toISOString();
@@ -416,6 +417,27 @@ async function layoutMenu(saveAsFirst = false) {
   placeMenu();
 }
 
+/* ---- chart-settings templates (shared by every chart, saved on the server) ---- */
+const templates = {
+  /* {name: settings}, or null when they could not be read. */
+  async list() { try { const r = await fetch('/api/templates'); return r.ok ? await r.json() : null; } catch (_) { return null; } },
+  /* '' when saved / deleted, else the reason. */
+  save: (name, settings) => writeTemplate('PUT', name, settings),
+  remove: (name) => writeTemplate('DELETE', name),
+};
+async function writeTemplate(method, name, body) {
+  const what = method === 'PUT' ? 'save' : 'delete';
+  let r;
+  try {
+    r = await fetch('/api/templates/' + encodeURIComponent(name), body === undefined ? { method }
+      : { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  } catch (_) { return `${what} failed: network error`; }
+  if (r.ok) return '';
+  let detail = '';
+  try { detail = (await r.json()).detail || ''; } catch (_) { /* no JSON body */ }
+  return `${what} failed (${r.status})` + (detail ? ': ' + detail : '');
+}
+
 /* ---- dialogs ---- */
 function openDialog(title, cls) {
   closeMenu();
@@ -617,6 +639,7 @@ function chartSettings() {
   const ctl = window.HBSettingsDialog.mount(box, {
     cell: c,
     cells: () => cells,
+    templates,
     toggleMenu(anchor, cls, fill) {   // menus and popovers open inside the dialog (above its backdrop)
       if (menuAnchor === anchor) { closeMenu(); return; }
       fill(openMenu(anchor, cls, { root: box }));
@@ -714,6 +737,8 @@ function magnetMenu() {
 
 /* ---- bottom bar ---- */
 function showStatus(s) {
+  if (s.mode === 'replay') replayClock = { etMs: (s.clock_s || 0) * 1000, at: Date.now(), speed: s.speed || 1, done: !!s.done };
+  else if (s.mode === 'live') replayClock = null;
   const now = etNow(), f = C.feedSummary(s, now.weekday, now.minutes), rec = s.recorder;
   $('#sbDot').className = 'sb-dot' + (f.dot ? ' ' + f.dot : '');
   $('#sbMode').textContent = s.mode === 'replay'
@@ -744,7 +769,20 @@ function greyIfStale() {
   $('#sbFeed').textContent = `no status for ${Math.round(age)}s` + (statusLine ? ` · ${statusLine}` : '');
 }
 
-function tick() { $('#sbClock').textContent = `${ET_CLOCK.format(new Date())} ET`; greyIfStale(); }
+/* Now as ET wall-clock ms: a replay's own clock (run on at its speed between its 2 s status messages), else
+   the browser's. The charts' countdowns run on it. */
+function clockEt() {
+  if (replayClock) return replayClock.etMs + (replayClock.done ? 0 : (Date.now() - replayClock.at) * replayClock.speed);
+  const now = Date.now();
+  return now + S.zoneOffsetMs('America/New_York', now);
+}
+
+function tick() {
+  $('#sbClock').textContent = `${ET_CLOCK.format(new Date())} ET`;
+  greyIfStale();
+  const et = clockEt();
+  for (const c of cells) c.tickSecond(et);
+}
 
 /* ---- the chart service ---- */
 function connect() {
