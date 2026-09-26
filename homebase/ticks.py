@@ -50,7 +50,7 @@ PAGE = 4096                 # the feed caps a tick request at about this
 MAX_PAGES = 3000            # ~12M ticks — far above any session
 SESSION_GRACE_MIN = 5       # record a session this long after its close
 LOOKBACK_DAYS = 3           # sessions to check on every run
-PAGE_INTERVAL_S = 21.0      # <= 171 requests/hour against the 180/hour limit
+PAGE_INTERVAL_S = 36.0      # <= 100 requests/hour: the chart service shares this login's 180/hour (its refills <= 60/h + a start-up burst of one getChart per root)
 PENALTY_MAX = 6             # give up a session after this many penalties in a row
 DEADLINE_ET = dt.time(8, 0)  # never still fetching this close to the open
 FIELDS = ("ts_ms", "price", "size", "bid", "ask", "bid_size", "ask_size", "id")
