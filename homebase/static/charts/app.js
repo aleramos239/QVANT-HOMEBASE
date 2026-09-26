@@ -136,8 +136,9 @@ class Cell {
     const sub = this.isTime() && +this.cfg.spec.split(':')[1] < 60;
     this.chart = LW.createChart(box, {
       autoSize: true,
+      // attribution lives once in the footer (#lwcCredit) instead of on every chart
       layout: { background: { type: 'solid', color: P.bg }, textColor: P.text, fontSize: 11,
-        panes: { separatorColor: P.grid, enableResize: true } },
+        attributionLogo: false, panes: { separatorColor: P.grid, enableResize: true } },
       grid: { vertLines: { color: P.grid }, horzLines: { color: P.grid } },
       rightPriceScale: { borderColor: P.grid },
       timeScale: { borderColor: P.grid, timeVisible: true, secondsVisible: sub,
