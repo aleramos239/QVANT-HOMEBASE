@@ -734,37 +734,148 @@ def test_a_refill_never_pages_back_past_the_session_open(tmp_path, monkeypatch):
     assert calls == [session_range_ms(D)[0]]                 # 18:00 ET the evening before D
 
 
+def et_ms(*a) -> int:
+    """Epoch ms of an ET wall time: et_ms(2026, 9, 25, 18, 0, 0, 500_000) = Fri 18:00:00.5."""
+    return int(dt.datetime(*a, tzinfo=ET).timestamp() * 1000)
+
+
+class SubscribeFeed:
+    """A live feed that reports one (re)subscribe -- on_subscribed(root,
+    contract, since) -- and then idles: for the refill tests."""
+
+    def __init__(self, root, contract, since):
+        self.sub = (root, contract, since)
+
+    def __call__(self, roots, on_ticks, on_subscribed=None):
+        self.on_subscribed, self.ws = on_subscribed, None
+        return self
+
+    async def run(self):
+        self.task = asyncio.create_task(self.on_subscribed(*self.sub))
+        while True:
+            await asyncio.sleep(0.01)
+
+    def stop(self):
+        pass
+
+    def budget_used(self):
+        return 0
+
+    def count_request(self):
+        pass
+
+    def status(self):
+        return {"mode": "live", "connected": True, "error": None, "roots": {},
+                "budget_hour": 0, "reconnects": 0}
+
+
 def test_live_mode_keeps_a_24_7_weekend_print_and_drops_a_classic_straggler(tmp_path):
-    """Saturday 10:00: Bitcoin (24/7) is in its own Saturday session, so its
-    print is recorded under Saturday; NQ's today is still Monday, so its
-    Friday straggler is dropped as before."""
-    fri, sat = D + dt.timedelta(days=1), D + dt.timedelta(days=2)
+    """Sunday 10:00: the live filter reads each root's own trading day.
+    Bitcoin's Sunday print is today's session and is recorded under Sunday;
+    its Saturday straggler (an older Bitcoin session, though the classic
+    rule would call it Monday's) is dropped; NQ's today is still Monday, so
+    its Friday straggler is dropped as before."""
     base = tmp_path / "ticks"
     q: queue.Queue = queue.Queue()
     delivered: list = []
     app = create_app(roots=["NQ", "BTC"], base=base, feed_factory=QueueFeed(q, delivered),
-                     now_ms=lambda: session_ms(sat, 10, 0), state=tmp_path / "state")
+                     now_ms=lambda: et_ms(2026, 9, 27, 10, 0), state=tmp_path / "state")
     with TestClient(app):
-        q.put(("BTC", "BTCV6", rows(session_ms(sat, 9, 59, 59), [100_000.0], first_id=7)))
-        q.put(("NQ", "NQZ6", rows(session_ms(fri, 16, 59), [200.0], first_id=8)))
+        q.put(("BTC", "BTCV6", rows(et_ms(2026, 9, 27, 9, 59, 59), [100_000.0], first_id=7)))
+        q.put(("BTC", "BTCV6", rows(et_ms(2026, 9, 26, 12, 0), [99_000.0], first_id=6)))
+        q.put(("NQ", "NQZ6", rows(et_ms(2026, 9, 25, 16, 59), [200.0], first_id=8)))
+        deadline = time.time() + 5
+        while len(delivered) < 3 and time.time() < deadline:
+            time.sleep(0.02)
+        assert len(delivered) == 3
+    header, recs = read_table(base / "BTC" / "2026" / "2026-09-27_BTCV6.live.csv.gz")
+    assert [r[header.index("id")] for r in recs] == ["7"]
+    assert not (base / "BTC" / "2026" / "2026-09-26_BTCV6.live.csv.gz").exists()
+    assert not list((base / "NQ").rglob("*.live.csv.gz"))
+
+
+def test_live_mode_records_a_24_7_print_that_lands_just_after_the_roll(tmp_path):
+    """No dead hour at a 24/7 root's 18:00 roll: a trade stamped 17:59:59.9
+    that reaches us at 18:00:00.5 is the old session's last print and is
+    recorded under it (ROLL_GRACE_MS). A classic root's straggler across
+    the same Friday roll is still dropped: its session closed at 17:00."""
+    base = tmp_path / "ticks"
+    q: queue.Queue = queue.Queue()
+    delivered: list = []
+    app = create_app(roots=["NQ", "BTC"], base=base, feed_factory=QueueFeed(q, delivered),
+                     now_ms=lambda: et_ms(2026, 9, 25, 18, 0, 0, 500_000), state=tmp_path / "state")
+    with TestClient(app):
+        q.put(("BTC", "BTCV6", rows(et_ms(2026, 9, 25, 17, 59, 59, 900_000), [100_000.0], first_id=7)))
+        q.put(("NQ", "NQZ6", rows(et_ms(2026, 9, 25, 16, 59, 30), [200.0], first_id=8)))
         deadline = time.time() + 5
         while len(delivered) < 2 and time.time() < deadline:
             time.sleep(0.02)
         assert len(delivered) == 2
-    header, recs = read_table(base / "BTC" / "2026" / f"{sat}_BTCV6.live.csv.gz")
+    header, recs = read_table(base / "BTC" / "2026" / "2026-09-25_BTCV6.live.csv.gz")
     assert [r[header.index("id")] for r in recs] == ["7"]
     assert not list((base / "NQ").rglob("*.live.csv.gz"))
 
 
-def test_a_24_7_restart_refills_from_its_own_last_recorded_tick(tmp_path, monkeypatch):
-    """A restart's first refill starts at the last tick recorded in the
-    root's OWN session: on a Saturday that is Bitcoin's Saturday file.
-    Looking in Monday's (the classic weekend rule) found nothing and
-    re-paged the whole session from its open."""
-    sat = D + dt.timedelta(days=2)
+def test_a_24_7_root_starts_the_day_on_its_own_session(tmp_path, monkeypatch):
+    """Startup seeds each root's today with ITS trading day: on a Saturday,
+    Saturday for Bitcoin and Monday for NQ."""
+    hubs: list = []
+    orig_start_today = Hub.start_today
+
+    def start_today(self, root, d, ticks, info=None):
+        hubs.append(self)
+        return orig_start_today(self, root, d, ticks, info)
+
+    monkeypatch.setattr(Hub, "start_today", start_today)
+    app = create_app(roots=["NQ", "BTC"], base=tmp_path / "ticks", feed_factory=QueueFeed(queue.Queue(), []),
+                     now_ms=lambda: et_ms(2026, 9, 26, 10, 0), state=tmp_path / "state")
+    with TestClient(app):
+        pass
+    assert hubs[0].today_date == {"NQ": dt.date(2026, 9, 28), "BTC": dt.date(2026, 9, 26)}
+
+
+def test_a_24_7_reconnect_across_the_roll_refills_the_old_sessions_tail(tmp_path, monkeypatch):
+    """No dead hour at a 24/7 root's 18:00 roll, and no nightly archive
+    behind it: a socket that dropped at 17:40 and is back at 18:05 refills
+    from 17:40 (the floor is the previous session's open, not the new
+    one's), and what it could not fetch is marked as a gap in each session
+    it belongs to."""
+    calls: list = []
+
+    async def fake_refill(ws, contract, frm, to, *, max_pages, sleep=None, on_request=None):
+        calls.append(frm)
+        return [], et_ms(2026, 9, 25, 18, 2)                    # nothing fetched before 18:02
+
+    monkeypatch.setattr("homebase.charts.server.refill", fake_refill)
+    base = tmp_path / "ticks"
+    app = create_app(roots=["BTC"], base=base,
+                     feed_factory=SubscribeFeed("BTC", "BTCV6", et_ms(2026, 9, 25, 17, 40)),
+                     now_ms=lambda: et_ms(2026, 9, 25, 18, 5), state=tmp_path / "state")
+    gaps = base / "BTC" / "2026"
+    with TestClient(app):
+        deadline = time.time() + 5
+        while not (gaps / "2026-09-26_BTCV6.live.gaps").exists() and time.time() < deadline:
+            time.sleep(0.02)
+    assert calls == [et_ms(2026, 9, 25, 17, 40)]
+    assert json.loads((gaps / "2026-09-25_BTCV6.live.gaps").read_text()) == [
+        [et_ms(2026, 9, 25, 17, 40), et_ms(2026, 9, 25, 18, 0)]]
+    assert json.loads((gaps / "2026-09-26_BTCV6.live.gaps").read_text()) == [
+        [et_ms(2026, 9, 25, 18, 0), et_ms(2026, 9, 25, 18, 2)]]
+
+
+@pytest.mark.parametrize("now, day, last", [
+    (et_ms(2026, 9, 26, 10, 0), "2026-09-26", et_ms(2026, 9, 26, 9, 0)),       # its own session's file
+    (et_ms(2026, 9, 25, 18, 5), "2026-09-25", et_ms(2026, 9, 25, 17, 40)),     # just past the roll
+], ids=["mid-session", "just-after-the-roll"])
+def test_a_24_7_restart_refills_from_its_last_recorded_tick(tmp_path, monkeypatch, now, day, last):
+    """A restart's first refill (no `since` yet) starts at the root's last
+    recorded tick: in its own session's file -- on a Saturday, Saturday's,
+    not Monday's (the classic weekend rule) -- or, just past a 24/7 root's
+    18:00 roll with nothing recorded in the new session yet, in the
+    previous session's file (same contract)."""
     contract = symbols.resolve_contract("BTC")
     base = tmp_path / "ticks"
-    write_gz(base / "BTC" / "2026" / f"{sat}_{contract}.live.csv.gz", rows(session_ms(sat, 9, 0), [100_000.0]))
+    write_gz(base / "BTC" / "2026" / f"{day}_{contract}.live.csv.gz", rows(last, [100_000.0]))
     calls: list = []
 
     async def fake_refill(ws, contract, frm, to, *, max_pages, sleep=None, on_request=None):
@@ -772,36 +883,13 @@ def test_a_24_7_restart_refills_from_its_own_last_recorded_tick(tmp_path, monkey
         return [], frm
 
     monkeypatch.setattr("homebase.charts.server.refill", fake_refill)
-
-    class FakeFeed:
-        def __init__(self, roots, on_ticks, on_subscribed=None):
-            self.on_subscribed, self.ws = on_subscribed, None
-
-        def count_request(self):
-            pass
-
-        def budget_used(self):
-            return 0
-
-        async def run(self):
-            asyncio.create_task(self.on_subscribed("BTC", contract, None))    # first subscribe: no since
-            while True:
-                await asyncio.sleep(0.01)
-
-        def stop(self):
-            pass
-
-        def status(self):
-            return {"mode": "live", "connected": True, "error": None, "roots": {},
-                    "budget_hour": 0, "reconnects": 0}
-
-    app = create_app(roots=["BTC"], base=base, feed_factory=FakeFeed,
-                     now_ms=lambda: session_ms(sat, 10, 0), state=tmp_path / "state")
+    app = create_app(roots=["BTC"], base=base, feed_factory=SubscribeFeed("BTC", contract, None),
+                     now_ms=lambda: now, state=tmp_path / "state")
     with TestClient(app):
         deadline = time.time() + 5
         while not calls and time.time() < deadline:
             time.sleep(0.02)
-    assert calls == [session_ms(sat, 9, 0)]
+    assert calls == [last]
 
 
 def replay_app(tmp_path):

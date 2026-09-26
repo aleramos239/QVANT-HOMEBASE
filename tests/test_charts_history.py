@@ -1,6 +1,7 @@
 """History: 1-minute cache on disk, resampled bars == direct build, invalidation."""
 from __future__ import annotations
 
+import datetime as dt
 import os
 import time
 
@@ -54,6 +55,18 @@ def test_a_newer_source_file_invalidates_the_cache(tmp_path):
     store.load = lambda *a: calls.append(a) or orig(*a)
     History(store, cache_dir=tmp_path / "cache").minutes("NQ", D)
     assert len(calls) == 1
+
+
+def test_a_24_7_session_keeps_its_17_00_hour_and_weekend_bars(tmp_path):
+    """Bitcoin's Saturday session (Fri 18:00 -> Sat 18:00) is built with its
+    own trading day: its bars, the 17:00 hour included, are Saturday's --
+    not Monday's (the classic weekend rule)."""
+    sat = D + dt.timedelta(days=2)
+    write_gz(tmp_path / "ticks" / "BTC" / "2026" / f"{sat}_BTCV6.live.csv.gz",
+             rows(session_ms(sat, 16, 59, 30), [100_000.0, 100_005.0], step_ms=31 * 60_000))
+    h = History(TickStore(tmp_path / "ticks"), cache_dir=tmp_path / "cache")
+    assert [(b.session, b.t) for b in h.bars("BTC", BarSpec("time", 60), sat)] == [
+        (sat.isoformat(), session_ms(sat, 16, 59)), (sat.isoformat(), session_ms(sat, 17, 30))]
 
 
 def test_info_labels_the_session(tmp_path):

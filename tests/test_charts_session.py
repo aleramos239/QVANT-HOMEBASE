@@ -5,11 +5,11 @@ from __future__ import annotations
 import datetime as dt
 
 from homebase.charts.bars import BarBuilder, BarSpec, build
-from homebase.charts.session import ET, always_open, session_date, session_range_ms
+from homebase.charts.session import ET, always_open, session_date, session_range_ms, split_by_session
 from homebase.charts.tick import BUY, Tick
 
-THU, FRI, SAT, SUN, MON = (dt.date(2026, 9, 24), dt.date(2026, 9, 25), dt.date(2026, 9, 26),
-                           dt.date(2026, 9, 27), dt.date(2026, 9, 28))
+WED, THU, FRI, SAT, SUN, MON = (dt.date(2026, 9, 23), dt.date(2026, 9, 24), dt.date(2026, 9, 25),
+                                dt.date(2026, 9, 26), dt.date(2026, 9, 27), dt.date(2026, 9, 28))
 
 
 def et(day: dt.date, hh: int, mm: int = 0, ss: int = 0) -> int:
@@ -42,6 +42,17 @@ def test_classic_roots_keep_the_weekday_18_to_17_session():
     assert session_date(et(FRI, 16, 59), "NQ") == FRI
     assert session_range_ms(FRI, "NQ") == (et(THU, 18), et(FRI, 17))
     assert session_range_ms(FRI) == session_range_ms(FRI, "NQ")
+
+
+def test_a_stretch_of_time_splits_into_the_sessions_it_crosses():
+    """(session, start, end) pieces, each clipped to its session; time in no
+    session (a classic root's 17:00 hour and weekend) belongs to no piece."""
+    assert split_by_session("BTC", et(FRI, 17, 40), et(FRI, 18, 5)) == [
+        (FRI, et(FRI, 17, 40), et(FRI, 18, 0)), (SAT, et(FRI, 18, 0), et(FRI, 18, 5))]
+    assert split_by_session("NQ", et(WED, 16, 50), et(WED, 18, 10)) == [
+        (WED, et(WED, 16, 50), et(WED, 17, 0)), (THU, et(WED, 18, 0), et(WED, 18, 10))]
+    assert split_by_session("NQ", et(FRI, 16), et(SUN, 18, 30)) == [
+        (FRI, et(FRI, 16), et(FRI, 17)), (MON, et(SUN, 18), et(SUN, 18, 30))]
 
 
 def test_24_7_time_bars_run_through_17_00_and_into_the_weekend():

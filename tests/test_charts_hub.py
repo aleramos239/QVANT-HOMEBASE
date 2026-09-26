@@ -194,6 +194,22 @@ def test_a_24_7_root_rolls_into_its_saturday_session(tmp_path):
     assert hub.today_date["NQ"] == mon and [t.id for t in hub.today["NQ"]] == [3]
 
 
+def test_a_24_7_stream_runs_through_the_17_00_hour_without_duplicate_bars(tmp_path):
+    """A stream's builder must know its root's trading day: with the classic
+    17:00 close, on_clock would close every Bitcoin bar of the 17:00 hour
+    at once and the next tick would reopen it -- one duplicate bar a tick."""
+    hub, _, _ = setup(tmp_path)
+    fri = D + dt.timedelta(days=1)
+    hub.start_today("BTC", fri, [])
+    s = hub.attach(hub.prepare("BTC", M1, []))
+    hub.subscribe(s, ("conn", "c1"))
+    for r in rows(session_ms(fri, 17, 10), [100_000.0 + 5 * (i % 3) for i in range(150)]):
+        hub.on_ticks("BTC", [r])
+        hub.on_clock(r["ts_ms"] - 1500)
+    assert [b.t for b in s.bars] + [s.builder.cur.t] == [
+        session_ms(fri, 17, 10), session_ms(fri, 17, 11), session_ms(fri, 17, 12)]
+
+
 def test_a_previous_session_straggler_never_rolls_the_tape_back(tmp_path):
     """Only a FORWARD session change is a roll. A print from an older
     session (the one historical trade a weekend subscribe returns; an

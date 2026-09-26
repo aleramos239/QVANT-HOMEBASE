@@ -48,6 +48,22 @@ def session_range_ms(d: dt.date, root: str | None = None) -> tuple[int, int]:
     return int(s.timestamp() * 1000), int(e.timestamp() * 1000)
 
 
+def split_by_session(root: str | None, a_ms: int, b_ms: int) -> list[tuple[dt.date, int, int]]:
+    """[a_ms, b_ms) cut into (session date, start, end) pieces, oldest first,
+    each clipped to its session. Time in no session (a classic root's 17:00
+    hour and weekend) is in no piece."""
+    out = []
+    d = session_date(a_ms, root)
+    while True:
+        s0, s1 = session_range_ms(d, root)
+        if s0 >= b_ms:
+            return out
+        if max(a_ms, s0) < min(b_ms, s1):
+            out.append((d, max(a_ms, s0), min(b_ms, s1)))
+        nxt = dt.datetime.combine(d, dt.time(18, 0), ET)      # the next session opens at 18:00 on d
+        d = session_date(int(nxt.timestamp() * 1000), root)
+
+
 def is_rth(ts_ms: int, session: str) -> bool:
     """True from 09:30 ET on the session's own calendar day."""
     t = dt.datetime.fromtimestamp(ts_ms / 1000, ET)

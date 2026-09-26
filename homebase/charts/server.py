@@ -30,7 +30,7 @@ from .history import History
 from .hub import Hub
 from .recorder import REFILL_MAX_PAGES, LiveRecorder, refill
 from .replay import ReplayFeed
-from .session import ET, et_wall_s, session_date, session_range_ms
+from .session import ET, always_open, et_wall_s, session_date, session_range_ms, split_by_session
 from .store import ARCHIVE, TickStore
 from .studies import make
 from .tick import SideClassifier, from_row
@@ -40,6 +40,8 @@ STATIC = Path(__file__).resolve().parent.parent / "static"
 PUMP_S = 0.25                 # <= 4 updates a second per chart
 STATUS_S = 2.0                # a status to every page this often (the page greys it after 6 s without)
 CLOSE_GRACE_MS = 1500         # a time bar closes this long after its end if no tick closed it
+ROLL_GRACE_MS = 60_000        # a 24/7 root rolls at 18:00 with no dead hour: its old session's last
+                              # prints can reach us after the clock passed 18:00 and are kept this long
 REFILL_BUDGET = 60            # this process's own chart requests per hour
 QUIET = (dt.time(9, 20), dt.time(9, 35))    # never refill across the 9:30 fire
 SEND_QUEUE_MAX = 400
@@ -217,10 +219,18 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         of its own. Either way, no root ever runs two fetches concurrently."""
         d = session_date(clock(), root)
         s0, _ = session_range_ms(d, root)
-        # never page back past this session's open: a `since` from the previous
-        # session (a weekend straggler, a drop before the 17:00 close) would
-        # file that session's ticks as its live file
-        frm = max(since_ms if since_ms is not None else (start_last.get(root) or s0), s0)
+        # The floor. A classic root never pages back past this session's open:
+        # a `since` from the previous session (a weekend straggler, a drop
+        # before the 17:00 close) would file that session's ticks as its live
+        # file, which store.pick prefers to an incomplete archive -- and the
+        # time between (the 17:00 hour, the weekend) trades nothing. A 24/7
+        # root has no dead hour at its 18:00 roll and no nightly archive (its
+        # live file is its only recording): a drop at 17:40 that is back at
+        # 18:05 must still fetch 17:40-18:00, so its floor is the PREVIOUS
+        # session's open (at most one session back). The recorder files each
+        # row, and mark_gap below each missing piece, under its own session.
+        floor = session_range_ms(d - dt.timedelta(days=1), root)[0] if always_open(root) else s0
+        frm = max(since_ms if since_ms is not None else (start_last.get(root) or s0), floor)
         waiting = refill_pending.get(root)
         if waiting is not None:
             waiting["frm"] = min(waiting["frm"], frm)
@@ -255,7 +265,8 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                         log(f"{root}: refill skipped — md budget {feed.budget_used()}/h")
                     added = recorder.append(root, contract, rows)
                     if reached > frm:
-                        recorder.mark_gap(root, d, contract, frm, reached)
+                        for gd, a, b in split_by_session(root, frm, reached):
+                            recorder.mark_gap(root, gd, contract, a, b)
                     log(f"{root}: refilled {len(rows)} ticks"
                         + (f", gap {(reached - frm) / 1000:.0f}s marked" if reached > frm else ""))
                     if added or reached > frm:
@@ -278,7 +289,12 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             # trade a weekend subscribe returns) is neither recorded nor charted:
             # it would file a 1-tick stub for that session, which store.pick
             # prefers to an incomplete archive. Refill rows never come this way.
-            today = session_date(clock(), root)
+            # A 24/7 root has no dead hour at its 18:00 roll: its old session's
+            # last prints stay acceptable for ROLL_GRACE_MS after it.
+            now = clock()
+            if always_open(root):
+                now -= ROLL_GRACE_MS
+            today = session_date(now, root)
             rows = [r for r in rows if session_date(int(r["ts_ms"]), root) >= today]
             hub.on_ticks(root, recorder.append(root, contract, rows))
 
@@ -336,7 +352,12 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                     "source": "replay", "approx": False, "gaps": []})
         else:
             for r in roots:
-                start_last[r] = recorder.last_ts(r, session_date(clock(), r), symbols.resolve_contract(r))
+                d, contract = session_date(clock(), r), symbols.resolve_contract(r)
+                last = recorder.last_ts(r, d, contract)
+                if last is None and always_open(r):
+                    # just past a 24/7 root's 18:00 roll: resume from the old session's tail
+                    last = recorder.last_ts(r, d - dt.timedelta(days=1), contract)
+                start_last[r] = last
                 reseed(r)
         tasks = [asyncio.create_task(pump()), asyncio.create_task(feed.run())]
         log(f"up — {'replay ' + replay.isoformat() if replay else 'live'} · {', '.join(roots)}")
