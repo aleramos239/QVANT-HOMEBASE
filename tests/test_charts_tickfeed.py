@@ -143,3 +143,77 @@ def test_a_refill_error_recorded_mid_subscribe_survives_the_cycle_reset():
                     connect=connect, sleep=sleep)
     run(feed.run())
     assert "refill NQ" in feed.status()["error"] and "boom" in feed.status()["error"]
+
+
+def test_a_refused_root_leaves_the_other_roots_subscribed():
+    socks, subs = [], []
+
+    async def connect():
+        ws = FakeWS(replies=[{"historicalId": 11, "realtimeId": 101}, {"errorText": "Access is denied"},
+                             {"historicalId": 13, "realtimeId": 103}])
+        socks.append(ws)
+        return ws
+
+    async def on_sub(root, contract, since):
+        subs.append(root)
+
+    async def sleep(_s):
+        await asyncio.sleep(0)
+        feed.stop()                      # one cycle is enough
+
+    feed = TickFeed(["NQ", "BTC", "ES"], lambda *a: None, on_subscribed=on_sub, connect=connect, sleep=sleep)
+    run(feed.run())
+    assert len(socks) == 1 and feed.reconnects == 0            # no reconnect loop
+    assert sorted({root for root, _ in feed.subs.values()}) == ["ES", "NQ"]
+    assert subs == ["NQ", "ES"]
+    st = feed.status()
+    assert "refused" in st["roots"]["BTC"]["error"] and st["roots"]["NQ"]["error"] is None
+    assert st["error"] is None
+
+
+def test_a_refused_root_is_asked_again_every_ten_minutes():
+    clock = [1000.0]
+    ws = FakeWS(replies=[{"historicalId": 11, "realtimeId": 101}, {"errorText": "no entitlement"},
+                         {"historicalId": 12, "realtimeId": 102}])
+    waits = [0]
+
+    async def connect():
+        return ws
+
+    async def sleep(_s):
+        await asyncio.sleep(0)
+        waits[0] += 1
+        clock[0] += 300                  # each 1 s wait jumps five minutes
+        if waits[0] >= 3:
+            feed.stop()
+
+    feed = TickFeed(["NQ", "BTC"], lambda *a: None, connect=connect, sleep=sleep, now=lambda: clock[0])
+    run(feed.run())
+    assert [b["symbol"] for _, b in ws.sent] == [symbols.resolve_contract("NQ"), symbols.resolve_contract("BTC"),
+                                                 symbols.resolve_contract("BTC")]
+    assert feed.status()["roots"]["BTC"]["error"] is None
+    assert feed.contracts["BTC"] == symbols.resolve_contract("BTC")
+
+
+def test_a_socket_failure_while_subscribing_still_reconnects_everything():
+    socks = []
+
+    class DyingWS(FakeWS):
+        async def request(self, ep, body=""):
+            self.sent.append((ep, body))
+            if len(self.sent) == 2:
+                raise ConnectionError("socket reset")
+            return {"historicalId": 11, "realtimeId": 101}
+
+    async def connect():
+        socks.append(DyingWS())
+        return socks[-1]
+
+    async def sleep(_s):
+        await asyncio.sleep(0)
+        if len(socks) >= 2:
+            feed.stop()
+
+    feed = TickFeed(["NQ", "ES"], lambda *a: None, connect=connect, sleep=sleep)
+    run(feed.run())
+    assert len(socks) >= 2 and feed.reconnects >= 1

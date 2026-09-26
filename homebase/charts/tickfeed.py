@@ -20,6 +20,12 @@ from . import MD_ENV
 
 BACKOFF_S = (5, 10, 20, 40, 80, 160, 300)
 HEALTHY_S = 600          # a connection that lived this long resets the backoff
+RETRY_REFUSED_S = 600    # a root the feed refused is asked again this often (and on every reconnect)
+
+
+class Refused(RuntimeError):
+    """The md feed will not chart this root: getChart answered without a
+    realtimeId, or the root has no resolvable contract."""
 
 
 async def connect_default():
@@ -39,6 +45,7 @@ class TickFeed:
         self.contracts: dict[str, str] = {}
         self.last_tick: dict[str, float] = {}      # root -> wall time of the last delivery
         self.last_ms: dict[str, int] = {}          # root -> newest tick timestamp delivered
+        self.refused: dict[str, str] = {}          # root -> why the feed refused it
         self._requests: list[float] = []
         self.reconnects = 0
         self.error: Optional[str] = None
@@ -63,7 +70,8 @@ class TickFeed:
                 "reconnects": self.reconnects, "budget_hour": self.budget_used(),
                 "roots": {r: {"contract": self.contracts.get(r),
                               "last_tick_age_s": (round(now - self.last_tick[r], 1)
-                                                  if r in self.last_tick else None)}
+                                                  if r in self.last_tick else None),
+                              "error": self.refused.get(r)}
                           for r in self.roots}}
 
     def _on_event(self, msg: dict) -> None:
@@ -81,7 +89,10 @@ class TickFeed:
                 self.on_ticks(root, sub[1], rows)
 
     async def subscribe(self, root: str) -> str:
-        contract = symbols.resolve_contract(root)
+        try:
+            contract = symbols.resolve_contract(root)
+        except ValueError as e:
+            raise Refused(f"{root}: no front contract ({e})") from None
         body = {"symbol": contract,
                 "chartDescription": {"underlyingType": "Tick", "elementSize": 1,
                                      "elementSizeUnit": "UnderlyingUnits", "withHistogram": False},
@@ -97,7 +108,7 @@ class TickFeed:
                 continue
             break
         if not isinstance(d, dict) or d.get("realtimeId") is None:
-            raise RuntimeError(f"{contract}: getChart refused: {d!r}")
+            raise Refused(f"{contract}: getChart refused: {d!r}")
         for k in ("historicalId", "realtimeId"):
             if d.get(k) is not None:
                 self.subs[int(d[k])] = (root, contract)
@@ -112,6 +123,23 @@ class TickFeed:
         if e is not None:
             self.error = f"refill {root}: {type(e).__name__}: {e}"
 
+    async def _start(self, root: str) -> None:
+        """Subscribe one root and start its gap refill. A root the feed
+        refuses is recorded for status() and retried later: it must never
+        take the other roots' subscriptions down with it (a raise here used
+        to tear the whole socket down and loop reconnecting every root)."""
+        since = self.last_ms.get(root)
+        try:
+            contract = await self.subscribe(root)
+        except Refused as e:
+            self.refused[root] = str(e)
+            return
+        self.refused.pop(root, None)
+        if self.on_subscribed is not None:
+            t = asyncio.create_task(self.on_subscribed(root, contract, since))
+            self._tasks.add(t)
+            t.add_done_callback(lambda t, root=root: self._on_subscribed_done(root, t))
+
     async def run(self) -> None:
         attempt = 0
         while not self._stop:
@@ -121,15 +149,16 @@ class TickFeed:
                 self.error = None            # a fresh cycle; a refill error below now sticks
                 self.ws.event_handlers.append(self._on_event)
                 self.subs = {}
+                self.refused = {}
                 for r in self.roots:
-                    since = self.last_ms.get(r)
-                    c = await self.subscribe(r)
-                    if self.on_subscribed is not None:
-                        t = asyncio.create_task(self.on_subscribed(r, c, since))
-                        self._tasks.add(t)
-                        t.add_done_callback(lambda t, root=r: self._on_subscribed_done(root, t))
+                    await self._start(r)
+                next_retry = self._now() + RETRY_REFUSED_S
                 while not self._stop and self.connected:
                     await self._sleep(1)
+                    if self.refused and self._now() >= next_retry:
+                        next_retry = self._now() + RETRY_REFUSED_S
+                        for r in list(self.refused):
+                            await self._start(r)
                 if not self._stop:
                     self.error = "md socket closed"
             except Exception as e:  # noqa: BLE001 — any failure = reconnect with backoff
