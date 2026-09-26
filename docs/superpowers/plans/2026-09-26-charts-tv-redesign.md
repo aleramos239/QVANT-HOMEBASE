@@ -3284,8 +3284,13 @@ Replace `build(view)` with this version — the same body as Task 4's, plus: it 
     this.buildSeries();
     for (const l of this.lines) l.s.setData(this.bars.map((b) => this.point(l, b)));
     this.drawMarkers(); this.drawLevels(); this.drawGaps(); this.syncFootprint(); this.syncProfile();
-    const panes = this.chart.panes();
-    for (let i = 1; i < panes.length; i++) panes[i].setHeight(PANE_H);
+    // Pane heights as px-sized stretch factors. Not setHeight(): it spreads each change using the laid-out
+    // heights, and panes added this pass are still 0 px, so with 2+ sub-panes only the last one got PANE_H.
+    const panes = this.chart.panes(), subs = panes.length - 1;
+    if (subs) {
+      panes[0].setStretchFactor(Math.max(PANE_H, panes[0].getHeight() - subs * PANE_H));   // pane 0 still holds the whole plot
+      for (let i = 1; i <= subs; i++) panes[i].setStretchFactor(PANE_H);
+    }
     if (view) this.setView(view); else this.chart.timeScale().scrollToRealTime();
     this.lg.badge.hidden = !this.sessions.some((s) => s.approx);
     this.legendRows();
