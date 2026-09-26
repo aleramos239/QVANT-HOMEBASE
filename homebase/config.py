@@ -11,6 +11,7 @@ appear under many strategies.
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import asdict, dataclass, field
 
 from .netguard import clean_entry
@@ -80,17 +81,20 @@ def chart_trading_from(d) -> ChartTradingCfg:
     return c
 
 
-def allowed_hosts_from(v) -> list[str]:
-    """config.json's allowed_hosts: a list of hostnames/IPs. Only entries
-    netguard can match exactly are kept (normalized); anything else -> []."""
+log = logging.getLogger(__name__)
+
+
+def warn_bad_allowed_hosts(v) -> None:
+    """Log each allowed_hosts entry netguard cannot match (it is ignored by
+    the allowlist). The raw value itself stays in the config, untouched, so
+    save() never erases what the user wrote."""
     if not isinstance(v, list):
-        return []
-    out: list[str] = []
+        log.warning("config allowed_hosts is not a list, ignored: %r", v)
+        return
     for e in v:
-        n = clean_entry(e)
-        if n and n not in out:
-            out.append(n)
-    return out
+        if clean_entry(e) is None:
+            log.warning("config allowed_hosts entry ignored (a bare hostname or IP, "
+                        "no port, no brackets, no wildcard): %r", e)
 
 
 @dataclass
@@ -104,7 +108,8 @@ class AppCfg:
     strategies: dict[str, StrategyCfg] = field(default_factory=dict)
     chart_trading: ChartTradingCfg = field(default_factory=ChartTradingCfg)
     # hostnames / IPs, besides loopback, that may WRITE to the desk (e.g. a
-    # Tailscale MagicDNS name or 100.x IP); exact match, no port, no wildcard
+    # Tailscale MagicDNS name or 100.x IP); exact match, no port, no wildcard.
+    # Kept RAW as written in config.json; netguard.allowlist() cleans it.
     allowed_hosts: list[str] = field(default_factory=list)
 
 
@@ -178,7 +183,9 @@ def load() -> AppCfg:
         cfg.strategies[name] = StrategyCfg(**{**base, **s})
     cfg.book = {k: list(v) for k, v in (data.get("book") or {}).items()}
     cfg.chart_trading = chart_trading_from(data.get("chart_trading"))
-    cfg.allowed_hosts = allowed_hosts_from(data.get("allowed_hosts"))
+    if "allowed_hosts" in data:
+        cfg.allowed_hosts = data["allowed_hosts"]
+        warn_bad_allowed_hosts(cfg.allowed_hosts)
 
     # ---- migration: single-account era ("account": {...}) ----
     legacy = data.get("account")

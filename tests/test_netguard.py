@@ -237,11 +237,34 @@ def test_duplicate_guarded_headers_are_refused(desk):
     assert raw([h, j]) == 200 and desk.cfg.armed is True
 
 
-def test_reads_are_not_guarded(desk):
-    """GET/HEAD/OPTIONS pass: the page and curl read the desk as before
-    (the /api/trade/* reads keep their own key + local-Host gate)."""
-    assert desk.get("/api/status", headers={"origin": "https://evil.example"}).status_code == 200
-    assert desk.head("/", headers={"host": "evil.example"}).status_code in (200, 405)
+REBOUND = ("evil.example:8850", "localhost.evil.com:8850", "127.0.0.1.nip.io")
+
+
+@pytest.mark.parametrize("url", ["/api/tv-setup", "/api/status", "/api/logins", "/",
+                                 "/static/index.html", "/api/calendar", "/docs", "/openapi.json"])
+def test_a_rebinding_host_cannot_read_the_desk(desk, url):
+    """Fix round 1 (CRITICAL): a rebound page must not GET /api/tv-setup —
+    the webhook secret + the public tunnel URL would let it forge a /hook
+    alert. The Host is checked on EVERY method, the /static mount included."""
+    for host in REBOUND:
+        r = desk.get(url, headers={"host": host})
+        assert (r.status_code, r.json()) == (403, {"error": "host not allowed"}), (url, host)
+        assert "tv-secret" not in r.text
+        assert desk.head(url, headers={"host": host}).status_code == 403
+        assert desk.options(url, headers={"host": host}).status_code == 403
+
+
+def test_reads_from_an_allowed_host_still_work(desk):
+    """GET/HEAD/OPTIONS skip only the Origin and Content-Type checks."""
+    for host in ("127.0.0.1:8850", "localhost:8850", "[::1]:8850", f"{TS}:8850"):
+        r = desk.get("/api/tv-setup", headers={"host": host})
+        assert r.status_code == 200 and r.json()["secret"] == "tv-secret", host
+    assert desk.get("/", headers={"origin": "https://evil.example"}).status_code == 200
+    assert desk.get("/api/status", headers={"origin": "https://evil.example",
+                                            "content-type": "text/plain"}).status_code == 200
+    assert desk.get("/api/logins").status_code == 200
+    assert desk.get("/static/index.html").status_code == 200
+    assert desk.head("/").status_code in (200, 405)
     assert desk.get("/api/trade/state", headers={"host": "evil.example"}).status_code == 403
 
 
@@ -328,14 +351,76 @@ def test_allowed_hosts_round_trips_through_config(tmp_path, monkeypatch):
     assert config_mod.load().allowed_hosts == [TS, "100.101.102.103"]
 
 
-@pytest.mark.parametrize("raw,want", [
-    (None, []), ("desk.ts.net", []), (7, []), ([], []),
-    ([" Desk.TS.net ", "", 5, "h:1", "ok-host"], ["desk.ts.net", "ok-host"]),
+@pytest.mark.parametrize("raw,usable,dropped", [
+    ([], set(), []),
+    ([" Desk.TS.net ", "", 5, "h:1", "ok-host"], {"desk.ts.net", "ok-host"}, ["''", "5", "'h:1'"]),
+    ("desk.ts.net", set(), ["'desk.ts.net'"]),
+    (None, set(), ["None"]),
+    (7, set(), ["7"]),
 ])
-def test_allowed_hosts_malformed_config_keeps_only_valid_names(tmp_path, monkeypatch, raw, want):
+def test_bad_allowed_hosts_warn_at_load_and_survive_a_save(tmp_path, monkeypatch, caplog,
+                                                          raw, usable, dropped):
+    """Fix round 1: a bad entry never vanishes silently and is never erased
+    from disk — the raw value round-trips through save(); only the
+    in-memory allowlist uses the cleaned entries; each drop is a warning."""
     monkeypatch.setattr(config_mod, "config_path", lambda: tmp_path / "config.json")
     (tmp_path / "config.json").write_text(json.dumps({"allowed_hosts": raw}))
-    assert config_mod.load().allowed_hosts == want
+    with caplog.at_level("WARNING", logger="homebase.config"):
+        cfg = config_mod.load()
+    assert cfg.allowed_hosts == raw
+    assert netguard.allowlist(cfg.allowed_hosts) == netguard.LOOPBACK | usable
+    warned = [r.getMessage() for r in caplog.records if r.name == "homebase.config"]
+    assert len(warned) == len(dropped)
+    for w, d in zip(warned, dropped):
+        assert "allowed_hosts" in w and d in w
+    config_mod.save(cfg)
+    assert json.loads((tmp_path / "config.json").read_text())["allowed_hosts"] == raw
+
+
+def test_a_clean_allowed_hosts_list_warns_nothing(tmp_path, monkeypatch, caplog):
+    monkeypatch.setattr(config_mod, "config_path", lambda: tmp_path / "config.json")
+    (tmp_path / "config.json").write_text(json.dumps({"allowed_hosts": [TS, "100.64.0.1"]}))
+    with caplog.at_level("WARNING", logger="homebase.config"):
+        config_mod.load()
+    assert not [r for r in caplog.records if r.name == "homebase.config"]
+
+
+def test_the_write_guard_ignores_bad_entries_but_keeps_good_ones(desk):
+    desk.cfg.allowed_hosts = ["*", "evil.example:8850", TS]
+    assert desk.post("/api/arm", json={"armed": False},
+                     headers={"host": "evil.example:8850"}).status_code == 403
+    assert desk.post("/api/arm", json={"armed": False},
+                     headers={"host": f"{TS}:8850"}).status_code == 200
+
+
+# --- the reusable check (Task 8's proxy) ---------------------------------------------------------
+def _h(**kw) -> list:
+    return [(k.replace("_", "-").encode(), v.encode()) for k, v in kw.items()]
+
+
+def test_refusal_is_the_shared_combined_check():
+    ok = _h(host="127.0.0.1:8852", content_type="application/json")
+    assert netguard.refusal("POST", ok, LOOP) is None
+    assert netguard.refusal("POST", _h(host="evil.example"), LOOP) == (403, "host not allowed")
+    assert netguard.refusal("GET", _h(host="evil.example"), LOOP) == (403, "host not allowed")
+    assert netguard.refusal("GET", _h(host="localhost", origin="https://evil.example"), LOOP) is None
+    assert netguard.refusal("POST", _h(host="localhost", origin="https://evil.example",
+                                       content_type="application/json"), LOOP) == \
+        (403, "origin not allowed")
+    assert netguard.refusal("POST", _h(host="localhost"), LOOP)[0] == 415
+
+
+def test_refusal_can_skip_the_json_rule_for_a_bodyless_delete():
+    """The chart page sends DELETE /api/layouts/... with no Content-Type:
+    require_json=False keeps the Host and Origin checks and drops only the
+    Content-Type one."""
+    bare = _h(host="localhost:8852", origin="http://localhost:8852")
+    assert netguard.refusal("DELETE", bare, LOOP)[0] == 415
+    assert netguard.refusal("DELETE", bare, LOOP, require_json=False) is None
+    assert netguard.refusal("DELETE", _h(host="evil.example"), LOOP, require_json=False) == \
+        (403, "host not allowed")
+    assert netguard.refusal("DELETE", _h(host="localhost", origin="https://evil.example"), LOOP,
+                            require_json=False) == (403, "origin not allowed")
 
 
 # --- the desk page -------------------------------------------------------------------------------

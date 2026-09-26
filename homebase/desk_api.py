@@ -14,10 +14,11 @@ Host, JSON only, and an Origin (when present) on the same allowlist
 (netguard: loopback + cfg.allowed_hosts).
 
 WriteGuard (Task 5b) is the desk-wide version of that check, on the main
-app only (never the tunneled hook app): every request that is not
-GET/HEAD/OPTIONS needs an allowed Host (403), an allowed Origin when one is
-sent (403) and Content-Type: application/json (415) — a web page cannot arm,
-kill or place a self-test order with a CORS "simple request". It skips
+app only (never the tunneled hook app): EVERY request needs an allowed Host
+(403) — a rebound page cannot even read /api/tv-setup — and every request
+that is not GET/HEAD/OPTIONS also needs an allowed Origin when one is sent
+(403) and Content-Type: application/json (415): a web page cannot arm, kill
+or place a self-test order with a CORS "simple request". It skips
 /api/trade/*, whose own gate above is stricter (loopback Host only, ANY
 Origin refused, the desk key).
 
@@ -56,7 +57,6 @@ HEARTBEAT_S = 15.0
 PAUSE_POLL_S = 0.25               # how often a stream holding events re-checks the pause
 HELD_MAX = 200                    # events a stream may hold in the pause before it ends
 TRADE_HOSTS = frozenset({"localhost", "127.0.0.1"})   # /api/trade/*: the chart service only
-SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 PAUSED = "paused around the 9:30 fire"
 END_HELD = ": end: more than %d events held in the 9:30 pause; reconnect for a fresh state\n\n"
 VIEW_EVENTS = ("state", "account", "bot")   # a fresh snapshot supersedes all three
@@ -285,44 +285,28 @@ def settings_router(desk) -> APIRouter:
 
 
 class WriteGuard:
-    """Pure-ASGI write protection for the desk's MAIN app (Task 5b). Every
-    request that is not GET/HEAD/OPTIONS, except /api/trade/* (stricter
-    gate of its own), needs, in this order:
-      * a Host on the allowlist            -> else 403 {"error": "host not allowed"}
-      * an Origin on it, when one is sent  -> else 403 {"error": "origin not allowed"}
-      * Content-Type: application/json     -> else 415
-    A header sent twice is ambiguous and refused. `hosts()` returns the
+    """Pure-ASGI guard for the desk's MAIN app (Task 5b + fix round 1):
+    netguard.refusal() on every HTTP request — the Host on EVERY method
+    (GETs and the /static mount included: a rebound page must not read the
+    webhook secret from /api/tv-setup), the Origin and a JSON Content-Type on
+    writes. Refusals are {"error": ...} with 403 / 415. It skips
+    /api/trade/*, whose own gate is stricter (loopback Host only on every
+    method, ANY Origin refused, the desk key). `hosts()` returns the
     configured allowed_hosts, read per request. Pure ASGI (not
-    BaseHTTPMiddleware): reads, the SSE stream and its disconnect watch pass
-    straight through, untouched."""
+    BaseHTTPMiddleware): what passes goes straight through, the SSE stream
+    and its disconnect watch untouched."""
 
     def __init__(self, app, hosts):
         self.app, self.hosts = app, hosts
 
     async def __call__(self, scope, receive, send) -> None:
-        if (scope["type"] != "http" or scope["method"] in SAFE_METHODS
-                or scope["path"].startswith("/api/trade/")):
+        if scope["type"] != "http" or scope["path"].startswith("/api/trade/"):
             await self.app(scope, receive, send)
             return
-        refusal = self.refusal(scope["headers"], netguard.allowlist(self.hosts()))
-        if refusal is None:
+        refused = netguard.refusal(scope["method"], scope["headers"],
+                                   netguard.allowlist(self.hosts()))
+        if refused is None:
             await self.app(scope, receive, send)
             return
-        status, error = refusal
+        status, error = refused
         await JSONResponse({"error": error}, status)(scope, receive, send)
-
-    @staticmethod
-    def refusal(headers, allowed: frozenset) -> Optional[tuple[int, str]]:
-        seen: dict[bytes, list[str]] = {b"host": [], b"origin": [], b"content-type": []}
-        for k, v in headers:
-            k = k.lower()
-            if k in seen:
-                seen[k].append(v.decode("latin-1"))
-        host, origin, ctype = seen[b"host"], seen[b"origin"], seen[b"content-type"]
-        if len(host) != 1 or not netguard.host_allowed(host[0], allowed):
-            return 403, "host not allowed"
-        if origin and (len(origin) != 1 or not netguard.origin_allowed(origin[0], allowed)):
-            return 403, "origin not allowed"
-        if len(ctype) != 1 or not netguard.is_json(ctype[0]):
-            return 415, "send JSON (Content-Type: application/json)"
-        return None
