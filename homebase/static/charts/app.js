@@ -274,7 +274,15 @@ class Cell {
   }
 
   drawGaps() {}                // Task 13
-  syncFootprint() {}           // Task 12
+  syncFootprint() {
+    if (!this.fp) return;
+    this.fp.set(this.bars, !!this.cfg.st.footprint, +this.cfg.st.imbalance || 0, this.tick);
+    const on = this.fp.readable(), P = this.P;
+    if (on !== this.fpShown) {
+      this.fpShown = on;       // footprint visible: hide candle bodies, keep the wicks
+      this.candles.applyOptions(on ? { upColor: 'rgba(0,0,0,0)', downColor: 'rgba(0,0,0,0)' } : { upColor: P.up, downColor: P.down });
+    }
+  }
 
   legend(i) {
     const el = $('.legend', this.el);
