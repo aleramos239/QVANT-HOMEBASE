@@ -14,6 +14,8 @@ import datetime as dt
 import gzip
 import io
 import json
+import os
+import zlib
 from pathlib import Path
 
 from .. import ticks as T
@@ -29,6 +31,7 @@ class LiveRecorder:
         self._buf: dict[Path, list[dict]] = {}
         self._seen: dict[Path, set[int]] = {}
         self._last: dict[Path, int] = {}
+        self._needs_repair: set[Path] = set()
         self.error: str | None = None
         self.written = 0
 
@@ -39,20 +42,49 @@ class LiveRecorder:
     def buffered(self) -> int:
         return sum(len(v) for v in self._buf.values())
 
+    def _repair(self, p: Path) -> None:
+        """A crash (or a write whose OSError we caught) can tear the LAST
+        gzip member instead of the first: read_table stops recovering at
+        the first tear, so that would silently hide every good member
+        appended after it too -- far past the one unflushed second we
+        promise to lose. Called on the first touch of a path in this
+        process, and again before a flush that previously failed on it.
+        A file that already decompresses end-to-end is left untouched; a
+        torn tail is repaired by rewriting the file as one clean member
+        holding every record read_table can still recover; a file with no
+        readable header at all (the first member itself torn) is set
+        aside as before."""
+        if not p.exists():
+            return
+        try:
+            gzip.decompress(p.read_bytes())
+            return                            # decompresses cleanly end-to-end: nothing to do
+        except (EOFError, zlib.error, gzip.BadGzipFile, OSError):
+            pass
+        header, recs = read_table(p)
+        if not header:                        # first member torn by a crash: set it aside
+            p.rename(p.with_name(p.name + ".corrupt"))
+            return
+        out = io.StringIO()
+        w = csv.writer(out)
+        w.writerow(header)
+        w.writerows(recs)
+        tmp = p.with_name(p.name + ".tmp")
+        tmp.write_bytes(gzip.compress(out.getvalue().encode()))
+        os.replace(tmp, p)                    # atomic: a crash here still leaves p intact
+
     def _open(self, p: Path) -> set[int]:
         seen = self._seen.get(p)
         if seen is not None:
             return seen
+        self._repair(p)
+        header, recs = read_table(p)
         seen = set()
-        if p.exists():
-            header, recs = read_table(p)
-            if not header:                    # first member torn by a crash: set it aside
-                p.rename(p.with_name(p.name + ".corrupt"))
-            else:
-                ii, it = header.index("id"), header.index("ts_ms")
-                seen = {int(r[ii]) for r in recs if r[ii]}
-                if recs:
-                    self._last[p] = max(int(r[it]) for r in recs)
+        if header:
+            ii, it = header.index("id"), header.index("ts_ms")
+            seen = {int(r[ii]) for r in recs if r[ii]}
+            if recs:
+                self._last[p] = max(int(r[it]) for r in recs)
         self._seen[p] = seen
         return seen
 
@@ -85,6 +117,8 @@ class LiveRecorder:
             if not rows:
                 continue
             try:
+                if p in self._needs_repair:    # a previous flush here left a torn tail
+                    self._repair(p)
                 p.parent.mkdir(parents=True, exist_ok=True)
                 out = io.StringIO()
                 w = csv.DictWriter(out, fieldnames=T.FIELDS, extrasaction="ignore")
@@ -95,7 +129,9 @@ class LiveRecorder:
                     fh.write(gzip.compress(out.getvalue().encode()))
             except OSError as e:
                 failed = f"{p.name}: {e}"      # rows stay buffered; the feed keeps running
+                self._needs_repair.add(p)
                 continue
+            self._needs_repair.discard(p)
             n += len(rows)
             rows.clear()
         self.error = failed

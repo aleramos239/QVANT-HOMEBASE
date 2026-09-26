@@ -6,6 +6,7 @@ import datetime as dt
 import gzip
 
 from homebase import ticks as T
+from homebase.charts import recorder as recorder_module
 from homebase.charts.recorder import LiveRecorder, refill
 from homebase.charts.store import TickStore, read_table
 from tests.charts_util import D, rows, session_ms
@@ -61,6 +62,60 @@ def test_a_torn_first_member_is_set_aside(tmp_path):
     assert p.with_name(p.name + ".corrupt").exists()
     header, recs = read_table(p)
     assert header and len(recs) == 1
+
+
+def test_a_restart_repairs_a_torn_later_member(tmp_path):
+    rec = LiveRecorder(tmp_path)
+    rec.append("NQ", "NQZ6", rows(M, [100.0, 100.25]))
+    rec.flush()                                              # member 1: ids 1, 2 (good)
+    rec.append("NQ", "NQZ6", rows(M + 2_000, [100.5, 100.75], first_id=3))
+    rec.flush()                                              # member 2: ids 3, 4 (good)
+    p = rec.path("NQ", D, "NQZ6")
+    torn = gzip.compress(f"{M + 5_000},101.0,1,,,,,5\n".encode())
+    with open(p, "ab") as fh:
+        fh.write(torn[: len(torn) // 2])                     # crash mid third flush (id 5 lost)
+
+    again = LiveRecorder(tmp_path)
+    again.append("NQ", "NQZ6", rows(M + 8_000, [102.0], first_id=6))
+    again.flush()
+
+    s = TickStore(tmp_path).load("NQ", D)
+    assert [t.id for t in s.ticks] == [1, 2, 3, 4, 6]
+
+
+def test_a_failed_write_mid_member_is_repaired_next_flush(tmp_path, monkeypatch):
+    rec = LiveRecorder(tmp_path)
+    rec.append("NQ", "NQZ6", rows(M, [100.0, 100.25]))
+    rec.flush()                                              # member 1: ids 1, 2 (good)
+    rec.append("NQ", "NQZ6", rows(M + 2_000, [100.5], first_id=3))
+
+    real_open = open
+
+    class HalfWrite:
+        """Writes half its bytes to the real file, then blows up -- like a
+        disk-full write that a moment later has room again."""
+
+        def __init__(self, path, mode):
+            self._fh = real_open(path, mode)
+
+        def write(self, data):
+            self._fh.write(data[: len(data) // 2])
+            raise OSError("simulated disk full")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            self._fh.close()
+            return False
+
+    with monkeypatch.context() as m:
+        m.setattr(recorder_module, "open", lambda p, mode: HalfWrite(p, mode), raising=False)
+        assert rec.flush() == 0 and rec.error and rec.buffered == 1
+
+    assert rec.flush() == 1 and rec.error is None
+    s = TickStore(tmp_path).load("NQ", D)
+    assert [t.id for t in s.ticks] == [1, 2, 3]
 
 
 def test_a_failed_flush_keeps_the_rows(tmp_path):
