@@ -41,6 +41,24 @@ function layout(events, xOf, width) {
   return out;
 }
 
+/* Events within [from, to] (t_ms) out of `events` -- SORTED ascending by t_ms (shown()'s filter keeps the
+   calendar's own order, and the calendar is always time-sorted): a binary search for the range's ends,
+   O(log n), never a scan of every stored event. The calendar accumulates weeks without bound, so a chart
+   asking for its own (small) visible time range must not pay for the whole history on every redraw. from or
+   to null: no bound (every event, as before). */
+function visibleSlice(events, from, to) {
+  if (!events || !events.length || from == null || to == null) return events || [];
+  const bound = (t, strict) => {   // first index with t_ms > t (strict) or >= t (not strict)
+    let lo = 0, hi = events.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (strict ? events[mid].t_ms <= t : events[mid].t_ms < t) lo = mid + 1; else hi = mid;
+    }
+    return lo;
+  };
+  return events.slice(bound(from, false), bound(to, true));
+}
+
 /* The flag under a pane point (the flags' centres sit at y): within FLAG / 2 + 2 px. */
 function flagAt(flags, pt, y) {
   for (const g of flags) if (Math.hypot(pt.x - g.x, pt.y - y) <= FLAG / 2 + 2) return g;
@@ -76,7 +94,7 @@ function nextText(events, nowMs) {
     color: COLORS[next.impact] || COLORS.Holiday };
 }
 
-const api = { COLORS, FLAG, shown, layout, flagAt, tipLine, tipLines, fmtIn, nextText };
+const api = { COLORS, FLAG, shown, layout, visibleSlice, flagAt, tipLine, tipLines, fmtIn, nextText };
 if (typeof window !== 'undefined') window.HBEvents = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

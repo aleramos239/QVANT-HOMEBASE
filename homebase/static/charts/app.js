@@ -54,6 +54,27 @@ const cur = () => cells[selected];
 /* ---- layout + selection ---- */
 function starter(i) { const [root, spec] = START[i % START.length]; return { root, spec, indicators: C.defaults() }; }
 function saveLast() { try { localStorage.setItem('hb_charts_last', JSON.stringify(layout)); } catch (_) { /* storage off */ } }
+/* Anything that changes a chart outside the Settings dialog's own commit (Ok already marks dirty itself) reads
+   the layout as Unsaved the same way: a template apply, removing a chart's indicators, or moving one between
+   the price pane and its own — like editing anything else in the layout. */
+function markDirty() { layout.dirty = true; saveLast(); renderToolbar(); }
+
+/* The legend's collapse chevron (user request): a per-viewer preference, never part of the saved layout, so
+   it lives in its own localStorage key, keyed by the chart's current grid position -- not cell.js, which
+   knows nothing of the grid or localStorage. Every access is its own try/catch: a private window, cleared
+   site data or a blocked store must not break the legend. */
+const LEGEND_FOLD_KEY = 'hb_charts_legend_folded';
+function readLegendFold() {
+  try { return window.HBChartMenu.readFolded(localStorage.getItem(LEGEND_FOLD_KEY)); } catch (_) { return {}; }
+}
+function legendFolded(cell) {
+  try { return window.HBChartMenu.isFolded(readLegendFold(), cells.indexOf(cell)); } catch (_) { return false; }
+}
+function toggleLegendFolded(cell) {
+  const i = cells.indexOf(cell), map = window.HBChartMenu.toggleFolded(readLegendFold(), i);
+  try { localStorage.setItem(LEGEND_FOLD_KEY, JSON.stringify(map)); } catch (_) { /* storage off: this session only */ }
+  return window.HBChartMenu.isFolded(map, i);
+}
 function loadLast() {
   try {
     const v = JSON.parse(localStorage.getItem('hb_charts_last') || 'null');
@@ -91,6 +112,8 @@ function hostFor(id) {
     drawings,
     magnet: () => magnet,
     events: () => calendar,
+    legendFolded,
+    toggleLegendFolded,
   };
 }
 
@@ -106,7 +129,9 @@ function buildGrid() {
   for (let i = 0; i < n; i++) {
     const slot = mk('div');
     grid.appendChild(slot);
-    cells.push(new Cell(slot, layout.cells[i], hostFor('c' + (nextId++))));
+    const cell = new Cell(slot, layout.cells[i], hostFor('c' + (nextId++)));
+    cells.push(cell);
+    cell.applyFold(legendFolded(cell));   // needs this cell's grid index, only known once it is in `cells`
   }
   select(Math.min(selected, n - 1));
 }
@@ -659,7 +684,7 @@ function chartSettings() {
     closeMenu,
     placeMenu,
     commit(changed) {   // Ok: the layout keeps the changes and reads Unsaved until saved
-      if (changed) { layout.dirty = true; saveLast(); renderToolbar(); }
+      if (changed) markDirty();
       closeDialog();
     },
     cancel: closeDialog,
@@ -675,7 +700,12 @@ const MENU_ACTS = {
     try { navigator.clipboard.writeText(it.copy).catch(() => {}); } catch (_) { /* no clipboard */ }
   },
   removeDrawings: (ctx) => drawings.clear(ctx.root),
-  removeIndicators: (ctx) => ctx.cell.update({ indicators: [] }),
+  removeIndicators: (ctx) => { ctx.cell.update({ indicators: [] }); markDirty(); },
+  toggleIndicators: (ctx) => {
+    const show = ctx.allIndicatorsHidden;   // all hidden already: this shows them again, else it hides them
+    ctx.cell.update({ indicators: ctx.cell.cfg.indicators.map((x) => ({ ...x, visible: show })) });
+    markDirty();
+  },
   settings: () => chartSettings(),
 };
 
@@ -690,7 +720,8 @@ function chartMenu(cell, at) {
   select(i);
   const root = cell.shown ? cell.shown.root : cell.cfg.root;
   const ctx = { cell, root, price: at.price, tick: cell.tick, nDrawings: drawings.list(root).length,
-    nIndicators: cell.cfg.indicators.length };
+    nIndicators: cell.cfg.indicators.length,
+    allIndicatorsHidden: cell.cfg.indicators.length > 0 && cell.cfg.indicators.every((x) => x.visible === false) };
   const m = openMenu(null, 'menu-chart', { at });
   let armed = 0;
   for (const it of window.HBChartMenu.items(ctx)) {
@@ -732,7 +763,7 @@ function indicatorMenu(cell, uid, { anchor = null, at = null } = {}) {
   for (const it of window.HBChartMenu.paneItems(inst)) {
     m.appendChild(menuItem(it.text, '', () => {
       closeMenu();
-      if (it.act === 'move') cell.setPlacement(uid, it.pane); else cell.removeIndicator(uid);
+      if (it.act === 'move') { cell.setPlacement(uid, it.pane); markDirty(); } else cell.removeIndicator(uid);
     }));
   }
   placeMenu();
@@ -749,9 +780,7 @@ function applyChartTemplate(cell, raw) {
   if (t.indicators) patch.indicators = t.indicators;
   if (t.spec) patch.spec = t.spec;
   if (Object.keys(patch).length) cell.update(patch);
-  layout.dirty = true;
-  saveLast();
-  renderToolbar();
+  markDirty();
 }
 
 /* Chart menu -> Chart template ›: save this chart (its settings and, unless unticked, its indicators — fresh
@@ -767,9 +796,15 @@ function chartTemplateMenu(cell, at) {
   m.append(back, mk('div', 'menu-sep'), saveRow, mk('div', 'menu-sep'), list, err);
   const fail = (text) => { err.textContent = text; err.hidden = false; placeMenu(); };
   let names = new Set();
+  // the "Replace?" check below only means anything once `names` holds the real list -- a Save clicked (or
+  // Enter pressed) while it is still loading used to see an empty set and save straight over an existing
+  // template with the same name. The inline Save button stays disabled until the list settles.
+  let loaded = false, goBtn = null;
   saveRow.onclick = () => {
     const rowEl = mk('div', 'menu-custom'), input = mk('input', 'menu-input'), go = mk('button', 'btn btn-primary', 'Save');
     go.type = 'button';
+    go.disabled = !loaded;
+    goBtn = go;
     input.type = 'text'; input.placeholder = 'Template name'; input.maxLength = 40; input.spellcheck = false;
     input.setAttribute('aria-label', 'Template name');
     const doSave = async () => {
@@ -781,6 +816,7 @@ function chartTemplateMenu(cell, at) {
       closeMenu();
     };
     const save = () => {
+      if (!loaded) return;   // guards Enter too: the button being disabled is not the only way in
       const name = input.value.trim(), why = S.templateNameError(name);
       if (why) { fail(why); input.focus(); return; }
       if (names.has(name)) {
@@ -804,6 +840,8 @@ function chartTemplateMenu(cell, at) {
   list.append(mk('div', 'menu-empty', 'Loading…'));
   templates.list().then((all) => {
     if (!m.isConnected) return;   // closed meanwhile
+    loaded = true;
+    if (goBtn) goBtn.disabled = false;
     if (!all) { list.replaceChildren(); fail('could not load the templates'); return; }
     names = new Set(Object.keys(all));
     const ns = [...names].sort((a, b) => a.localeCompare(b));

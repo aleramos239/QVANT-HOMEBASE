@@ -207,7 +207,10 @@ class EventFlags extends Layer {
   updateAllViews() {
     const r = this.chart ? this.read() : null;
     this.lines = !!(r && r.lines);
-    this.flags = r ? window.HBEvents.layout(r.events, r.xOf, this.chart.timeScale().width()) : [];
+    // binary-search down to the visible time range first (events.js: visibleSlice) -- a chart never runs
+    // xOf() over every stored calendar event, only the handful actually near what is on screen
+    const events = r ? window.HBEvents.visibleSlice(r.events, r.from, r.to) : [];
+    this.flags = r ? window.HBEvents.layout(events, r.xOf, this.chart.timeScale().width()) : [];
   }
   drawLines(target) {
     if (!this.lines || !this.flags.some((g) => g.line)) return;

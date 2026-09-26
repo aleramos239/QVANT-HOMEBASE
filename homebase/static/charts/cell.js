@@ -5,8 +5,10 @@
    and selection, and gives each cell a `host`:
      {id, send(msg) -> bool, onPick(cell), onLoaded(cell), onRefused(cell, tried, text), onSettings(cell, uid),
       onPosition(cell, d), onChartMenu(cell, {x, y, price}), onIndicatorMenu(cell, uid, {anchor} | {at}),
-      changed(), tool(), toolDone(), drawings, magnet(), events()}   (the drawings/tool/magnet four: the drawing
-      tools, HBDrawings.Controller; events(): every stored calendar event; the chart/indicator menus: app.js)
+      changed(), tool(), toolDone(), drawings, magnet(), events(), legendFolded(cell), toggleLegendFolded(cell)}
+     (the drawings/tool/magnet four: the drawing tools, HBDrawings.Controller; events(): every stored calendar
+      event; the chart/indicator menus: app.js; legendFolded/toggleLegendFolded: the legend's collapse-chevron
+      preference, a per-viewer localStorage map app.js owns — cell.js knows only its own folded bool)
    Bar times arrive as ET wall-clock seconds, so the axis reads ET; tick,
    volume and range bars sit on an evenly spaced synthetic axis (many can
    share a second) and are labelled with their real times.
@@ -101,20 +103,28 @@ class Cell {
     this.fpHide = false;   // the footprint is readable: candle bodies and borders step aside
     this.wm = null;        // the watermark (its colour and visibility follow the settings)
     slot.className = 'panel';
+    this.folded = false;   // the legend's collapse chevron: app.js syncs this to the persisted preference
+                            // right after construction (it needs this cell's grid index, unknown in here)
     slot.innerHTML = `
       <div class="chart"></div>
       <div class="legend">
         <div class="lg-title"><span class="lg-name"></span><span class="badge" hidden>approx. flow</span><span class="lg-msg" role="status"></span></div>
         <div class="lg-ohlc"></div>
+        <div class="lg-fold-wrap"></div>
         <div class="lg-inds"></div>
       </div>
       <div class="ev-tip" role="tooltip" hidden></div>`;
     this.box = slot.querySelector('.chart');
     this.evTip = slot.querySelector('.ev-tip');
     this.lg = { name: slot.querySelector('.lg-name'), badge: slot.querySelector('.badge'), msg: slot.querySelector('.lg-msg'),
-      ohlc: slot.querySelector('.lg-ohlc'), inds: slot.querySelector('.lg-inds') };
+      ohlc: slot.querySelector('.lg-ohlc'), inds: slot.querySelector('.lg-inds'),
+      fold: iconButton('chevron', 'Hide indicators', 'fold') };
+    slot.querySelector('.lg-fold-wrap').append(this.lg.fold);
+    this.lg.fold.setAttribute('aria-expanded', 'true');
+    this.lg.fold.hidden = true;   // legendRows() shows it once there is something to fold
     this.lg.badge.title = 'Part of this history has no bid/ask: buys and sells there are split by the tick rule';
     slot.addEventListener('pointerdown', () => host.onPick(this), true);
+    this.lg.fold.addEventListener('click', () => this.toggleFold());
     this.lg.inds.addEventListener('click', (e) => this.onLegendClick(e));
     this.box.addEventListener('contextmenu', (e) => this.onMenu(e));
     this.box.addEventListener('pointermove', (e) => this.onEventHover(e));
@@ -240,7 +250,13 @@ class Cell {
     const ts = this.chart.timeScale(), time = this.isTime(), first = this.bars[0].ms, last = this.bars[n - 1].ms;
     const ctx = { bars: this.bars, isTime: time, barMs: this.barMs(), coord: (i) => ts.logicalToCoordinate(i) };
     const xOf = (t) => (!time && (t < first || t > last) ? null : window.HBDrawings.timeToX(t, ctx));
-    return { events: window.HBEvents.shown(this.host.events(), this.R), xOf, lines: this.R.evLines };
+    // the visible logical range in ms, one bar of slack each side (a flag right at the edge still needs a
+    // coordinate) -- EventFlags binary-searches the (sorted) calendar down to this window instead of running
+    // every stored event (the calendar accumulates weeks without bound) through xOf() on every redraw
+    const vr = ts.getVisibleLogicalRange();
+    const from = vr ? (this.bars[Math.max(0, Math.floor(vr.from) - 1)] || this.bars[0]).ms : first;
+    const to = vr ? (this.bars[Math.min(n - 1, Math.ceil(vr.to) + 1)] || this.bars[n - 1]).ms : last;
+    return { events: window.HBEvents.shown(this.host.events(), this.R), xOf, lines: this.R.evLines, from, to };
   }
 
   redrawEvents() { if (this.evl) this.evl.redraw(); }
@@ -259,8 +275,14 @@ class Cell {
     tip.style.top = `${Math.max(4, L.flagY - 12 - h)}px`;
   }
 
-  /* Once a second, from the page: now as ET wall-clock ms (a replay's own clock in a replay). */
-  tickSecond(nowEt) { this.clockEt = nowEt; if (this.cd) this.cd.redraw(); }
+  /* Once a second, from the page: now as ET wall-clock ms (a replay's own clock in a replay). The countdown
+     layer is redrawn only when it can actually show something (the setting is on and the chart uses time
+     bars) -- every page tick would otherwise touch every chart's canvas once a second even when the
+     countdown is off or the chart is a tick/volume/range one, where it never draws at all. */
+  tickSecond(nowEt) {
+    this.clockEt = nowEt;
+    if (this.cd && this.R.countdown && this.isTime()) this.cd.redraw();
+  }
 
   /* TradingView's scroll-back: the view's left edge near the first loaded bar asks the server for the next
      chunk of older sessions (one request at a time; none while a subscription is in flight; none once the
@@ -535,8 +557,22 @@ class Cell {
     }
   }
 
+  /* The legend's collapse chevron: folded hides the indicator rows (the OHLC row stays), TradingView-style.
+     Nothing to fold when the chart has no indicators. Per chart, per viewer (app.js persists it). */
+  applyFold(on) {
+    this.folded = !!on;
+    this.lg.inds.hidden = this.folded;
+    this.lg.fold.setAttribute('aria-expanded', String(!this.folded));
+    const label = this.folded ? 'Show indicators' : 'Hide indicators';
+    this.lg.fold.title = label;
+    this.lg.fold.setAttribute('aria-label', label);
+    this.lg.fold.innerHTML = window.HBIcons[this.folded ? 'chevron' : 'chevronUp'] || '';
+  }
+  toggleFold() { this.applyFold(this.host.toggleLegendFolded(this)); }
+
   legendRows() {
     const F = S.legendFlags(this.R);
+    this.lg.fold.hidden = !this.cfg.indicators.length;
     this.rows = this.cfg.indicators.map((inst) => {
       const off = inst.visible === false, row = mk('div', 'lg-row' + (off ? ' off' : '')), vals = mk('span', 'lg-vals');
       const btns = mk('span', 'lg-btns'), hasParams = C.def(inst.id).params.length > 0;

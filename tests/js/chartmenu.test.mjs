@@ -18,15 +18,16 @@ test('no drawings and no indicators: Reset, Copy price, Settings, each in its ow
 test('Remove N drawings / Remove N indicators only when N > 0, drawings first, singular for one', () => {
   const reg = fresh();
   assert.deepEqual(texts(reg.items({ ...CTX, nDrawings: 3, nIndicators: 1 })),
-    ['Reset chart view', '—', 'Copy price 30,878.00', '—', 'Remove 3 drawings', 'Remove 1 indicator', '—', 'Settings…']);
+    ['Reset chart view', '—', 'Copy price 30,878.00', '—', 'Remove 3 drawings', 'Remove 1 indicator',
+      'Hide all indicators', '—', 'Settings…']);
   assert.deepEqual(texts(reg.items({ ...CTX, nDrawings: 1 })).slice(4, 5), ['Remove 1 drawing']);
   assert.deepEqual(texts(reg.items({ ...CTX, nIndicators: 4 })).slice(4, 5), ['Remove 4 indicators']);
 });
 
 test('each built-in names its action; Reset shows ⌥R; Copy carries the plain price', () => {
   const list = fresh().items({ ...CTX, nDrawings: 2, nIndicators: 2 }).filter((x) => !x.sep);
-  assert.deepEqual(list.map((x) => x.act), ['reset', 'copy', 'removeDrawings', 'removeIndicators', 'settings']);
-  assert.deepEqual(list.map((x) => x.section), ['view', 'copy', 'remove', 'remove', 'settings']);
+  assert.deepEqual(list.map((x) => x.act), ['reset', 'copy', 'removeDrawings', 'removeIndicators', 'toggleIndicators', 'settings']);
+  assert.deepEqual(list.map((x) => x.section), ['view', 'copy', 'remove', 'remove', 'remove', 'settings']);
   assert.equal(list[0].sub, '⌥R');
   assert.equal(list[1].copy, '30878.00');
 });
@@ -101,6 +102,40 @@ test('the indicator menu: move to the other placement, then Remove; Remove only 
 test('the armed Remove-drawings text is the rail\'s', () => {
   assert.equal(M.armText(3, 'NQ'), 'Click again to remove 3 drawings on NQ');
   assert.equal(M.armText(1, 'ES'), 'Click again to remove 1 drawing on ES');
+});
+
+test('Hide/Show all indicators: only when there are indicators, text flips with allIndicatorsHidden', () => {
+  const reg = fresh();
+  assert.deepEqual(texts(reg.items({ ...CTX, nIndicators: 3 })),
+    ['Reset chart view', '—', 'Copy price 30,878.00', '—', 'Remove 3 indicators', 'Hide all indicators', '—', 'Settings…']);
+  assert.deepEqual(texts(reg.items({ ...CTX, nIndicators: 3, allIndicatorsHidden: true })),
+    ['Reset chart view', '—', 'Copy price 30,878.00', '—', 'Remove 3 indicators', 'Show all indicators', '—', 'Settings…']);
+  assert.deepEqual(texts(reg.items({ ...CTX, nIndicators: 0, allIndicatorsHidden: true })), texts(reg.items(CTX)));
+  const it = reg.items({ ...CTX, nIndicators: 1 }).find((x) => x.act === 'toggleIndicators');
+  assert.equal(it.section, 'remove');
+});
+
+test('the legend fold map: readFolded sanitizes, toggleFolded flips one cell without touching the others', () => {
+  assert.deepEqual(M.readFolded(null), {});
+  assert.deepEqual(M.readFolded('not json'), {});
+  assert.deepEqual(M.readFolded('[1,2,3]'), {});          // an array is not a map
+  assert.deepEqual(M.readFolded('"just a string"'), {});
+  assert.deepEqual(M.readFolded(JSON.stringify({ 0: true, 1: false, 2: 'yes', x: true })), { 0: true, x: true });
+  assert.equal(M.isFolded({ 0: true }, 0), true);
+  assert.equal(M.isFolded({ 0: true }, 1), false);
+  assert.equal(M.isFolded(null, 0), false);
+  assert.equal(M.isFolded({}, 0), false);
+
+  let map = M.toggleFolded({}, 1);
+  assert.deepEqual(map, { 1: true });
+  assert.equal(M.isFolded(map, 1), true);
+  assert.equal(M.isFolded(map, 0), false);
+  map = M.toggleFolded(map, 0);
+  assert.deepEqual(map, { 0: true, 1: true });   // toggling one cell leaves another already-folded one alone
+  map = M.toggleFolded(map, 1);
+  assert.deepEqual(map, { 0: true });            // toggled back off: the key is removed, not set to false
+  const before = { 3: true };
+  assert.notEqual(M.toggleFolded(before, 3), before);   // a new map, never mutated in place
 });
 
 test('arrow keys walk the items and wrap; Home/End jump; nothing to walk = -1', () => {

@@ -41,6 +41,19 @@ test('flags: one per event time, merged when closer than a flag, coloured by the
   assert.equal(E.FLAG, 10);
 });
 
+test('visibleSlice: a binary search down to [from, to], not a scan of every stored event', () => {
+  const sorted = [HOL, OPEC, IFO, CPI, CORE, OIL].sort((a, b) => a.t_ms - b.t_ms);   // the calendar's own order
+  assert.deepEqual(E.visibleSlice(sorted, HOL.t_ms, OIL.t_ms).map((e) => e.title),
+    sorted.map((e) => e.title));                                       // the whole range: everything
+  assert.deepEqual(E.visibleSlice(sorted, IFO.t_ms, CPI.t_ms).map((e) => e.title),
+    ['German ifo Business Climate', 'CPI m/m', 'Core CPI m/m']);       // both ends inclusive
+  assert.deepEqual(E.visibleSlice(sorted, at(9, 0), at(10, 0)), []);    // nothing in that window
+  assert.deepEqual(E.visibleSlice(sorted, null, OIL.t_ms), sorted);    // no bound: unfiltered, as before
+  assert.deepEqual(E.visibleSlice(sorted, IFO.t_ms, null), sorted);
+  assert.deepEqual(E.visibleSlice([], 0, 1), []);
+  assert.deepEqual(E.visibleSlice(null, 0, 1), []);
+});
+
 test('a flag is hit within its radius + 2 px', () => {
   const flags = [{ x: 100, events: [CPI] }, { x: 140, events: [OIL] }];
   assert.equal(E.flagAt(flags, { x: 104, y: 293 }, 290), flags[0]);

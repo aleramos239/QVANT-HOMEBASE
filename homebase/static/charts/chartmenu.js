@@ -1,7 +1,9 @@
 /* Homebase Charts — the chart's context menu (TradingView's right-click menu), pure: which items a chart's menu
    shows, in which order, with dividers; the extension point other builds add items through; the items of an
-   indicator's own menu; arrow-key stepping. The page (app.js) renders the items and runs them. No browser
-   globals at load time: the Node tests load this file directly.
+   indicator's own menu; arrow-key stepping; the legend's collapse-chevron fold state (a per-viewer
+   localStorage preference, not part of the layout). The page (app.js) renders the items and runs them, and
+   owns the actual localStorage read/write. No browser globals at load time: the Node tests load this file
+   directly.
 
    An item is {text, sub?, act, …} (a built-in: the page runs MENU_ACTS[act]) or {text, sub?, run(ctx)} (an
    extension's: the page calls run). ctx is the page's {cell, root, price, tick, nDrawings, nIndicators}; price
@@ -68,7 +70,8 @@ function builtins(reg) {
     : [{ act: 'copy', text: copyLabel(ctx.price, ctx.tick), copy: copyText(ctx.price, ctx.tick) }]));
   reg.register('remove', (ctx) => [
     ...(ctx.nDrawings > 0 ? [{ act: 'removeDrawings', text: `Remove ${count(ctx.nDrawings, 'drawing')}` }] : []),
-    ...(ctx.nIndicators > 0 ? [{ act: 'removeIndicators', text: `Remove ${count(ctx.nIndicators, 'indicator')}` }] : [])]);
+    ...(ctx.nIndicators > 0 ? [{ act: 'removeIndicators', text: `Remove ${count(ctx.nIndicators, 'indicator')}` }] : []),
+    ...(ctx.nIndicators > 0 ? [{ act: 'toggleIndicators', text: ctx.allIndicatorsHidden ? 'Show all indicators' : 'Hide all indicators' }] : [])]);
   reg.register('settings', () => [{ act: 'settings', text: 'Settings…' }]);
   return reg;
 }
@@ -83,6 +86,27 @@ function paneItems(inst) {
   return out;
 }
 
+/* The legend's collapse chevron (final fix wave, user request): a per-viewer preference, kept in
+   localStorage, not in the layout -- {[cellIndex]: true} for a chart whose indicator rows are folded away
+   (its OHLC row still shows). A corrupt or foreign value under the storage key reads as "nothing folded"
+   rather than throwing; the page wraps every localStorage access itself in try/catch. */
+function readFolded(raw) {
+  let v;
+  try { v = JSON.parse(raw); } catch (_) { return {}; }
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return {};
+  const out = {};
+  for (const k of Object.keys(v)) if (v[k] === true) out[k] = true;
+  return out;
+}
+/* A cell's fold flipped, as a NEW map (the caller persists it) -- absent means unfolded, so the first
+   toggle adds the key and the next one removes it again (never storing an explicit `false`). */
+function toggleFolded(map, index) {
+  const key = String(index), out = { ...(map || {}) };
+  if (out[key]) delete out[key]; else out[key] = true;
+  return out;
+}
+function isFolded(map, index) { return !!(map && map[String(index)]); }
+
 /* The item the arrow keys go to from item i of n (-1: none focused yet); ↓/↑ wrap, Home/End jump. */
 function step(i, n, key) {
   if (n <= 0) return -1;
@@ -95,7 +119,7 @@ function step(i, n, key) {
 
 const main = builtins(createRegistry());   // the page's menu
 const api = { SECTIONS, createRegistry, builtins, register: main.register, items: main.items, paneItems, copyText,
-  copyLabel, armText, step };
+  copyLabel, armText, step, readFolded, toggleFolded, isFolded };
 if (typeof window !== 'undefined') window.HBChartMenu = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

@@ -1,5 +1,5 @@
 /* Homebase Charts — the page's icons, inlined SVG strings.
-   Lucide (https://lucide.dev), lucide-static@1.48.0: house, chevron-down, search,
+   Lucide (https://lucide.dev), lucide-static@1.48.0: house, chevron-down, chevron-up, search,
    square-function, mouse-pointer-2, git-commit-horizontal, rectangle-horizontal, ruler,
    trash-2, eye, eye-off, settings, x, check, sun, moon, magnet, trending-up, trending-down,
    chart-candlestick, paintbrush, list, calendar, ellipsis.
@@ -31,6 +31,7 @@ const svg = (body) => '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="c
 window.HBIcons = {
   desk: svg('<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'),
   chevron: svg('<path d="m6 9 6 6 6-6"/>'),
+  chevronUp: svg('<path d="m18 15-6-6-6 6"/>'),
   search: svg('<path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/>'),
   indicators: svg('<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><path d="M9 17c2 0 2.8-1 2.8-2.8V10c0-2 1-3.3 3.2-3"/><path d="M9 11.2h5.7"/>'),
   cursor: svg('<path d="M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z"/>'),

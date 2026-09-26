@@ -106,6 +106,7 @@ a { color: inherit; }
 .lg-msg.err { color: var(--down); white-space: normal; }
 .lg-ohlc { display: flex; flex-wrap: wrap; gap: 0 8px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .kv .k { margin-right: 3px; color: var(--text); }
+.lg-fold-wrap { pointer-events: auto; margin-left: -4px; }
 .lg-inds { display: flex; flex-direction: column; align-items: flex-start; }
 .lg-row { display: inline-flex; align-items: center; gap: 8px; height: 22px; margin-left: -4px; padding: 0 4px;
   border-radius: 4px; white-space: nowrap; pointer-events: auto; }
