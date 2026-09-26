@@ -32,6 +32,7 @@ class History:
         self.memo: OrderedDict = OrderedDict()
         self.memo_max = memo_max
         self._lock = threading.Lock()
+        self._gen = 0           # bumped by clear(): a build that overlapped a clear() is not memoized
 
     def _from_ticks(self, root: str, spec: BarSpec, d: dt.date) -> list[Bar]:
         s = self.store.load(root, d)
@@ -49,8 +50,10 @@ class History:
             return []
         cp = self.cache_dir / (f"v{CACHE_VERSION}_{root}_{d.isoformat()}_{f.contract}_"
                                f"{'live' if f.live else 'arch'}.m1.pkl")
+        src_ns = None
         try:
-            if cp.stat().st_mtime >= f.path.stat().st_mtime:
+            src_ns = f.path.stat().st_mtime_ns          # the source BEFORE its ticks are read
+            if cp.stat().st_mtime_ns >= src_ns:
                 with open(cp, "rb") as fh:
                     return pickle.load(fh)
         except (OSError, pickle.UnpicklingError, EOFError):
@@ -60,6 +63,10 @@ class History:
         tmp = cp.with_name(cp.name + f".{threading.get_ident()}.tmp")
         with open(tmp, "wb") as fh:
             pickle.dump(bars, fh, protocol=pickle.HIGHEST_PROTOCOL)
+        if src_ns is not None:
+            # stamped with the source as read: a write that lands mid-build (a
+            # refill into an old session) leaves the cache older than its source
+            os.utime(tmp, ns=(src_ns, src_ns))
         os.replace(tmp, cp)
         return bars
 
@@ -70,11 +77,13 @@ class History:
             if hit is not None:
                 self.memo.move_to_end(key)
                 return hit
+            gen = self._gen
         out = resample(self.minutes(root, d), spec) if spec.from_minutes else self._from_ticks(root, spec, d)
         with self._lock:
-            self.memo[key] = out
-            while len(self.memo) > self.memo_max:
-                self.memo.popitem(last=False)
+            if gen == self._gen:        # else a clear() landed mid-build: its file may have changed
+                self.memo[key] = out
+                while len(self.memo) > self.memo_max:
+                    self.memo.popitem(last=False)
         return out
 
     def info(self, root: str, d: dt.date) -> dict:
@@ -89,3 +98,4 @@ class History:
     def clear(self) -> None:
         with self._lock:
             self.memo.clear()
+            self._gen += 1

@@ -271,6 +271,11 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                         + (f", gap {(reached - frm) / 1000:.0f}s marked" if reached > frm else ""))
                     if added or reached > frm:
                         reseed(root)            # else nothing changed: no reload for every open chart
+                        oldest = min((int(r["ts_ms"]) for r in added), default=None)
+                        if oldest is not None and session_date(oldest, root) < session_date(clock(), root):
+                            # rows landed in an older session (a 24/7 root's tail before its
+                            # 18:00 roll), now on disk (reseed flushed): drop its memoized bars
+                            history.clear()
         finally:
             refill_running.discard(root)
             refill_pending.pop(root, None)   # never leave a follow-up orphaned if we exit abnormally

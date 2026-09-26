@@ -6,6 +6,7 @@ import datetime as dt
 import json
 import plistlib
 import queue
+import threading
 import time
 from pathlib import Path
 from urllib.parse import quote
@@ -741,16 +742,19 @@ def et_ms(*a) -> int:
 
 class SubscribeFeed:
     """A live feed that reports one (re)subscribe -- on_subscribed(root,
-    contract, since) -- and then idles: for the refill tests."""
+    contract, since) -- and then idles: for the refill tests. With a
+    `gate` (threading.Event), the subscribe waits until the test sets it."""
 
-    def __init__(self, root, contract, since):
-        self.sub = (root, contract, since)
+    def __init__(self, root, contract, since, gate=None):
+        self.sub, self.gate = (root, contract, since), gate
 
     def __call__(self, roots, on_ticks, on_subscribed=None):
         self.on_subscribed, self.ws = on_subscribed, None
         return self
 
     async def run(self):
+        while self.gate is not None and not self.gate.is_set():
+            await asyncio.sleep(0.01)
         self.task = asyncio.create_task(self.on_subscribed(*self.sub))
         while True:
             await asyncio.sleep(0.01)
@@ -890,6 +894,39 @@ def test_a_24_7_restart_refills_from_its_last_recorded_tick(tmp_path, monkeypatc
         while not calls and time.time() < deadline:
             time.sleep(0.02)
     assert calls == [last]
+
+
+def test_a_24_7_refill_of_the_old_sessions_tail_reaches_open_charts(tmp_path, monkeypatch):
+    """A 24/7 refill can land an OLDER session's tail (Friday 17:40-18:00,
+    fetched after the roll). A chart that built -- and so memoized -- Friday
+    before the refill must get the tail once it resubscribes after the
+    reset: History's memo may not keep serving Friday's pre-refill bars."""
+    contract = symbols.resolve_contract("BTC")
+    base = tmp_path / "ticks"
+    write_gz(base / "BTC" / "2026" / f"2026-09-25_{contract}.live.csv.gz",
+             rows(et_ms(2026, 9, 25, 17, 38), [100_000.0, 100_005.0, 100_010.0], step_ms=60_000))
+
+    async def fake_refill(ws, contract, frm, to, *, max_pages, sleep=None, on_request=None):
+        tail = rows(et_ms(2026, 9, 25, 17, 50), [100_050.0, 100_055.0], step_ms=5 * 60_000, first_id=100)
+        return tail, frm                                        # 17:50 and 17:55, the stretch covered
+
+    monkeypatch.setattr("homebase.charts.server.refill", fake_refill)
+    gate = threading.Event()
+    app = create_app(roots=["BTC"], base=base, feed_factory=SubscribeFeed("BTC", contract, None, gate),
+                     now_ms=lambda: et_ms(2026, 9, 25, 18, 5), state=tmp_path / "state")
+
+    def friday(hist):
+        return [b["ms"] for b in hist["bars"] if b["s"] == "2026-09-25"]
+
+    with TestClient(app) as client, client.websocket_connect("/ws") as ws:
+        ws.send_json({"op": "sub", "id": "a", "root": "BTC", "spec": "time:60"})
+        before = friday(next_of(ws, "history"))
+        gate.set()                                              # now the refill runs
+        next_of(ws, "reset")
+        ws.send_json({"op": "sub", "id": "a", "root": "BTC", "spec": "time:60"})
+        after = friday(next_of(ws, "history"))
+    assert before == [et_ms(2026, 9, 25, 17, m) for m in (38, 39, 40)]
+    assert after == [et_ms(2026, 9, 25, 17, m) for m in (38, 39, 40, 50, 55)]
 
 
 def replay_app(tmp_path):

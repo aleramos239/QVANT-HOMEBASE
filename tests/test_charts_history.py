@@ -7,6 +7,7 @@ import time
 
 from homebase.charts.bars import BarSpec, build
 from homebase.charts.history import History
+from homebase.charts.recorder import LiveRecorder
 from homebase.charts.store import TickStore
 from tests.charts_util import D, rows, session_ms, write_archive, write_gz
 
@@ -67,6 +68,42 @@ def test_a_24_7_session_keeps_its_17_00_hour_and_weekend_bars(tmp_path):
     h = History(TickStore(tmp_path / "ticks"), cache_dir=tmp_path / "cache")
     assert [(b.session, b.t) for b in h.bars("BTC", BarSpec("time", 60), sat)] == [
         (sat.isoformat(), session_ms(sat, 16, 59)), (sat.isoformat(), session_ms(sat, 17, 30))]
+
+
+def test_a_build_racing_a_write_to_its_session_is_not_served_again(tmp_path):
+    """A refill can append to an OLD session's file while a chart builds that
+    session in a worker thread, and the server then clears the memo. That
+    build read the file before the append: what it produced must not be
+    served afterwards -- neither from the memo nor from the minute cache."""
+    fri = D + dt.timedelta(days=1)
+    base = tmp_path / "ticks"
+    src = write_gz(base / "BTC" / "2026" / f"{fri}_BTCV6.live.csv.gz",
+                   rows(session_ms(fri, 17, 38), [1.0, 2.0, 3.0], step_ms=60_000))
+    past = time.time() - 60
+    os.utime(src, (past, past))                                  # recorded a minute ago
+
+    class Racing(History):
+        hook = None
+
+        def _from_ticks(self, root, spec, d):
+            out = super()._from_ticks(root, spec, d)             # reads the file...
+            hook, Racing.hook = Racing.hook, None
+            if hook:
+                hook()                                           # ...then the refill lands
+            return out
+
+    h = Racing(TickStore(base), cache_dir=tmp_path / "cache")
+    rec = LiveRecorder(base)
+
+    def refill_lands():
+        rec.append("BTC", "BTCV6", rows(session_ms(fri, 17, 50), [4.0], first_id=100))
+        rec.flush()
+        h.clear()
+
+    Racing.hook = refill_lands
+    h.bars("BTC", BarSpec("time", 60), fri)                     # the racing build
+    assert [b.t for b in h.bars("BTC", BarSpec("time", 60), fri)] == [
+        session_ms(fri, 17, m) for m in (38, 39, 40, 50)]
 
 
 def test_info_labels_the_session(tmp_path):
