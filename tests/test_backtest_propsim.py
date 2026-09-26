@@ -108,3 +108,31 @@ def test_the_runner_writes_propsim_json_and_validates_the_rule_set(tmp_path, mon
     assert p["rules"]["label"] == "Apex 50K · unconfirmed rules" and p["n_paths"] == 300
     assert p["grid"] == {"first": "2024-03-05", "last": "2024-03-05", "weekdays": 1, "trade_days": 1}
     assert 0.0 <= p["headline"]["eval_pass_p"] <= 1.0 and p["caveat"] == CAVEAT
+
+
+def test_a_malformed_rule_file_never_loses_the_run_bundle(tmp_path, monkeypatch):
+    """A rule file missing a key the engine requires (e.g. trailing_mll) must not throw
+    away trades/equity/plots/run.json -- it degrades to an error recorded in propsim.json,
+    the run still finishes `done`."""
+    monkeypatch.setattr(propsim, "N_PATHS", 300)
+    bad_dir = tmp_path / "rules"
+    bad_dir.mkdir()
+    broken = load_rules(DEFAULT_RULES)
+    del broken["trailing_mll"]                              # a key the engine requires
+    (bad_dir / "broken-rules@t1.json").write_text(json.dumps(broken))
+    monkeypatch.setattr(propsim, "RULES_DIR", bad_dir)
+
+    store = TapeStore(nq_archive(tmp_path / "ticks"), tmp_path / "cache")
+    rid = prepare({"strategy": "nq930", "inputs": {"adx_gate": False}, "prop_rules": "broken-rules@t1",
+                   "range": {"kind": "custom", "start": "2024-03-01", "end": "2024-03-31"}}, tmp_path / "t")
+    run_dir = tmp_path / "t" / "runs" / rid
+    meta = execute(run_dir, store)
+
+    assert meta["propsim_error"] is True
+    for name in ("trades.json", "equity.json", "plots.json", "propsim.json", "run.json"):
+        assert (run_dir / name).is_file(), name
+    st = read_json(run_dir / "status.json")
+    assert st["status"] == "done"
+    p = read_json(run_dir / "propsim.json")
+    assert p["error"].startswith("KeyError") and "trailing_mll" in p["error"]
+    assert p["rules"] == {"name": "LucidFlex 50K", "confirmed": True, "label": "LucidFlex 50K"}

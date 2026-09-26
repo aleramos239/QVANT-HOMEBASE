@@ -93,18 +93,15 @@ def validate(body) -> dict:
     inputs = strategies.resolve_inputs(cls.inputs(), body.get("inputs") or {})
     rng = discipline.parse_range(body.get("range"))
     reason = discipline.check(rng, body.get("holdout"))
+    prop_rules_id = body.get("prop_rules", propsim.DEFAULT_RULES)
+    prop_rules_data = propsim.load_rules(prop_rules_id)     # ValueError "prop_rules: one of ..." when unknown
     return {"strategy": cls.id, "inputs": inputs, "range": rng.to_dict(),
             "qty": _num(body, "qty", 1, 1, 100, integer=True),
             "commission": _num(body, "commission", 4.00, 0.0, 100.0),
             "slippage_ticks": _num(body, "slippage_ticks", 1.0, 0.0, 20.0),
             "capital": _num(body, "capital", 50_000.0, 1.0, 1e9),
             "holdout": {"reason": reason} if reason else None,
-            "prop_rules": _prop_rules(body.get("prop_rules", propsim.DEFAULT_RULES))}
-
-
-def _prop_rules(rule_id) -> str:
-    propsim.load_rules(rule_id)             # ValueError "prop_rules: one of ..." when unknown
-    return rule_id
+            "prop_rules": prop_rules_id, "prop_rules_data": prop_rules_data}
 
 
 def prepare(body, base: Path) -> str:
@@ -121,6 +118,27 @@ def prepare(body, base: Path) -> str:
         discipline.record_spend(base / "spends.jsonl", strategy=req["strategy"], inputs=req["inputs"],
                                 rng=discipline.parse_range(req["range"]), reason=req["holdout"]["reason"])
     return rid
+
+
+def _run_propsim(trades: list[dict], req: dict) -> tuple[dict, bool]:
+    """The prop-eval Monte Carlo never costs the run its bundle: a malformed rule file
+    (e.g. one missing a key the engine requires) is caught here, not left to blow up
+    `execute()` before trades/equity/plots/run.json are written. Passes the rules dict
+    `validate()` already loaded (`req["prop_rules_data"]`) so evaluate() need not re-read
+    the file, and reuses it to label the error when evaluate() still fails past that point.
+    """
+    try:
+        prop = propsim.evaluate(trades, req["prop_rules"], n_paths=propsim.N_PATHS,
+                                rules=req.get("prop_rules_data"))
+        return prop, False
+    except Exception as e:  # noqa: BLE001 — a bad rule file must not sink the whole run
+        prop: dict = {"error": f"{type(e).__name__}: {e}"}
+        r = req.get("prop_rules_data")
+        if r:
+            confirmed = r.get("confirmed") is not False
+            prop["rules"] = {"name": r.get("name"), "confirmed": confirmed,
+                             "label": r.get("name") if confirmed else f"{r.get('name')} · unconfirmed rules"}
+        return prop, True
 
 
 def execute(run_dir: Path, store: TapeStore) -> dict:
@@ -184,14 +202,14 @@ def execute(run_dir: Path, store: TapeStore) -> dict:
     rep = report.build(trades, req["capital"], skipped=all_skipped)
     status.update(phase="prop sim", done=len(days), updated=_now())
     write_json(run_dir / "status.json", status)
-    prop = propsim.evaluate(trades, req["prop_rules"], n_paths=propsim.N_PATHS)
+    prop, prop_error = _run_propsim(trades, req)
     meta = {"id": req["id"], "created": req["created"], "finished": _now(),
             "engine": ENGINE_VERSION, "fill_law": "tick replay",
             "strategy": {"id": cls.id, "name": cls.name, "root": cls.root},
             "inputs": req["inputs"], "range": req["range"], "qty": req["qty"],
             "commission": req["commission"], "slippage_ticks": req["slippage_ticks"],
             "capital": req["capital"], "holdout": reason is not None, "holdout_reason": reason,
-            "prop_rules": req["prop_rules"],
+            "prop_rules": req["prop_rules"], "propsim_error": prop_error,
             "coverage": {"sessions": len(days), "used": len(days) - len(skipped),
                          "skipped": skipped, "skipped_by_reason": by_reason, "no_trade": no_trade,
                          "skipped_by_error": rep["skipped_by_error"],

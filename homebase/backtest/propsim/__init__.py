@@ -64,9 +64,10 @@ def weekday_grid(trades: list[dict]) -> tuple[list[float], list[bool], list[str]
 
 
 def evaluate(trades: list[dict], rule_id: str = DEFAULT_RULES, *, n_paths: int = N_PATHS,
-             horizon: int = HORIZON, seed: int = SEED) -> dict:
-    """The run's propsim.json."""
-    r = load_rules(rule_id)
+             horizon: int = HORIZON, seed: int = SEED, rules: dict | None = None) -> dict:
+    """The run's propsim.json. Pass `rules` when the caller already loaded the rule file
+    (the runner does, from `validate()`) so it is not read from disk a second time."""
+    r = rules if rules is not None else load_rules(rule_id)
     confirmed = r.get("confirmed") is not False
     out = {"rules": {"id": rule_id, "name": r.get("name"), "version": r.get("version"),
                      "confirmed": confirmed,
