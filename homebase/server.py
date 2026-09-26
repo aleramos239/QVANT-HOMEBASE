@@ -25,6 +25,7 @@ import datetime as dt
 import hmac
 import json
 import os
+from dataclasses import asdict
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -42,6 +43,8 @@ from .rules import RULES
 from .metrics import live_metrics, strategy_live_detail
 from .paths import state_dir
 from .timer import SelfTimer
+from . import desk_api
+from .trading import ChartDesk
 
 STATIC = Path(__file__).resolve().parent / "static"
 CLOCK_INTERVAL_S = 1       # also paces the sibling-cancel backstop (cache reads)
@@ -303,6 +306,8 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         return TradovateMD(key, env, token_provider=provider)
 
     timer = SelfTimer(cfg, engine, md_factory=_md_factory)
+    # trading from the chart (spec 2026-09-26): views, guards, journaling
+    desk = ChartDesk(cfg, engine, adapters, acct_status, timer_status=timer.status)
     feed_box: dict = {"feed": None, "retry_at": 0.0, "error": None}
 
     def _bars_strategies() -> dict[str, config_mod.StrategyCfg]:
@@ -411,6 +416,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         else:
             await ad.connect()
         await ad.observe_fills(engine.on_fill)
+        desk.attach(aid, ad)
         acct_status[aid] = {"connected": True, "error": None}
         engine.journal("broker_connected", account=aid,
                        broker_account=a.account_name, mode=mode)
@@ -490,6 +496,9 @@ def create_app(cfg: config_mod.AppCfg | None = None,
 
     @contextlib.asynccontextmanager
     async def lifespan(_app):
+        _app.state.desk_key, key_err = desk_api.ensure_key(state_dir() / desk_api.KEY_FILE)
+        if key_err:
+            engine.journal("desk_key_error", error=key_err)
         tasks = []
         if background:
             import uvicorn  # noqa: PLC0415
@@ -501,6 +510,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                      asyncio.create_task(_equity_loop()),
                      asyncio.create_task(timer.loop()),
                      asyncio.create_task(_feed_loop()),
+                     asyncio.create_task(desk.run()),
                      asyncio.create_task(hook_server.serve())]
         try:
             yield
@@ -523,6 +533,9 @@ def create_app(cfg: config_mod.AppCfg | None = None,
     app.state.broker_loop = _broker_loop
     app.state.login_cooldown = _login_cooldown
     app.state.feed_box = feed_box
+    app.state.desk = desk
+    app.include_router(desk_api.trade_router(desk), prefix="/api/trade")
+    app.include_router(desk_api.settings_router(desk))
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
     # ------------------------------------------------------------ webhook
@@ -570,6 +583,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                        jp.read_text().splitlines()[-JOURNAL_TAIL:]][::-1]
         return {
             "armed": cfg.armed,
+            "chart_trading": asdict(cfg.chart_trading),
             "et_now": engine.now_et().isoformat(timespec="seconds"),
             "readiness": compute_readiness(engine.now_et(), cfg, engine,
                                            acct_status, feed_status(),
@@ -610,6 +624,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
     @app.post("/api/kill")
     async def kill():
         cfg.armed = False
+        desk.disable(cause="kill")          # chart trading off too; never raises
         config_mod.save(cfg)
         # every strategy's own orders first, with the proven per-order calls;
         # then the account-wide calls sweep up anything else
