@@ -48,7 +48,7 @@ def test_replay_serves_history_then_live_updates(tmp_path):
         assert client.get("/api/status").json()["mode"] == "replay"
         assert client.get("/api/symbols").json()["roots"] == ["NQ"]
         assert client.get("/").status_code == 200
-        with client.websocket_connect("/ws") as ws:
+        with client.websocket_connect("/ws", headers={"host": "localhost:8852"}) as ws:
             ws.send_json({"op": "sub", "id": "a", "root": "nq", "spec": "time:60", "studies": ["vwap", "profile"]})
             hist = next_of(ws, "history")
             assert hist["id"] == "a" and hist["bars"][0]["s"] == P.isoformat()
@@ -62,7 +62,7 @@ def test_replay_serves_history_then_live_updates(tmp_path):
 def test_bad_requests_get_an_error_not_a_crash(tmp_path):
     app = create_app(roots=["NQ"], base=archive(tmp_path), replay=D, speed=1,
                      start_et=dt.time(9, 30), state=tmp_path / "state")
-    with TestClient(app) as client, client.websocket_connect("/ws") as ws:
+    with TestClient(app) as client, client.websocket_connect("/ws", headers={"host": "localhost:8852"}) as ws:
         ws.send_json({"op": "sub", "id": "a", "root": "ZZ", "spec": "time:60"})
         assert "not recorded" in next_of(ws, "error")["error"]
         ws.send_json({"op": "sub", "id": "b", "root": "NQ", "spec": "time:0"})
@@ -472,7 +472,7 @@ def test_ws_handler_ends_cleanly_after_close_mid_prepare(tmp_path, monkeypatch):
     monkeypatch.setattr(WebSocket, "receive_text", wrap(WebSocket.receive_text))
 
     with TestClient(app) as client:
-        with client.websocket_connect("/ws") as ws:
+        with client.websocket_connect("/ws", headers={"host": "localhost:8852"}) as ws:
             ws.send_json({"op": "sub", "id": "a", "root": "NQ", "spec": "time:60"})
             time.sleep(2.0)
 
@@ -634,7 +634,7 @@ def test_a_failed_subscribe_leaves_no_orphaned_stream_or_pending_update(tmp_path
 
     app = create_app(roots=["NQ"], base=archive(tmp_path), replay=D, speed=50,
                      start_et=dt.time(9, 30), state=tmp_path / "state")
-    with TestClient(app) as client, client.websocket_connect("/ws") as ws:
+    with TestClient(app) as client, client.websocket_connect("/ws", headers={"host": "localhost:8852"}) as ws:
         ws.send_json({"op": "sub", "id": "a", "root": "NQ", "spec": "time:60"})
         assert next_of(ws, "error")["id"] == "a"
         ws.send_json({"op": "sub", "id": "b", "root": "NQ", "spec": "time:60"})
@@ -700,7 +700,7 @@ def test_a_previous_session_print_is_neither_recorded_nor_charted(tmp_path):
         while not delivered and time.time() < deadline:
             time.sleep(0.02)
         assert delivered
-        with client.websocket_connect("/ws") as ws:
+        with client.websocket_connect("/ws", headers={"host": "localhost:8852"}) as ws:
             ws.send_json({"op": "sub", "id": "a", "root": "NQ", "spec": "time:60"})
             hist = next_of(ws, "history")
     fri_bars = [b for b in hist["bars"] if b["s"] == fri.isoformat()]
@@ -935,7 +935,7 @@ def test_a_24_7_refill_of_the_old_sessions_tail_reaches_open_charts(tmp_path, mo
     def friday(hist):
         return [b["ms"] for b in hist["bars"] if b["s"] == "2026-09-25"]
 
-    with TestClient(app) as client, client.websocket_connect("/ws") as ws:
+    with TestClient(app) as client, client.websocket_connect("/ws", headers={"host": "localhost:8852"}) as ws:
         ws.send_json({"op": "sub", "id": "a", "root": "BTC", "spec": "time:60"})
         before = friday(next_of(ws, "history"))
         gate.set()                                              # now the refill runs
@@ -955,17 +955,44 @@ def test_ws_refuses_a_page_from_another_site(tmp_path):
     """Browsers apply no CORS to websocket handshakes: any page open in the
     desk machine's browser could open /ws and queue chart work. A handshake
     whose Origin is neither this service's host nor localhost is refused; no
-    Origin at all (not a browser: scripts, tests) is allowed."""
+    Origin at all (not a browser: scripts, tests) is allowed. The Host itself
+    is fixed to this service's own port (localhost:8852) here — TestClient's
+    websocket_connect sends a hardcoded Host unless one is passed explicitly
+    — Host allowlisting is covered separately below."""
+    HOST = {"host": "localhost:8852"}
     with TestClient(replay_app(tmp_path)) as client:
         for origin in ("https://evil.example", "http://testserver.evil.example", "null"):
             with pytest.raises(WebSocketDisconnect):
-                with client.websocket_connect("/ws", headers={"origin": origin}) as ws:
+                with client.websocket_connect(
+                        "/ws", headers={**HOST, "origin": origin}) as ws:
                     ws.receive_json()
-        for origin in ("http://testserver", "http://localhost:3000", "http://127.0.0.1:8852"):
-            with client.websocket_connect("/ws", headers={"origin": origin}) as ws:
+        for origin in ("http://localhost:8852", "http://localhost:3000", "http://127.0.0.1:8852"):
+            with client.websocket_connect(
+                    "/ws", headers={**HOST, "origin": origin}) as ws:
                 assert ws.receive_json()["type"] == "status"
-        with client.websocket_connect("/ws") as ws:
+        with client.websocket_connect("/ws", headers=HOST) as ws:
             assert ws.receive_json()["type"] == "status"
+
+
+def test_ws_refuses_a_dns_rebound_host_even_with_a_matching_origin(tmp_path):
+    """A DNS-rebinding page is served AS the attacker's own hostname (e.g.
+    evil.example, resolved by the attacker to the desk's own IP): both its
+    Origin and its Host header read evil.example, so origin_ok's own
+    Origin==Host shortcut alone would wave it through — and the chart
+    service now carries balances, positions and orders for every account.
+    The /ws handshake also requires the Host header itself to be on
+    netguard's allowlist (loopback only, with no configured allowed_hosts
+    here): refused regardless of what Origin claims. localhost:8852 and
+    127.0.0.1:8852 are still accepted."""
+    with TestClient(replay_app(tmp_path)) as client:
+        with pytest.raises(WebSocketDisconnect):
+            with client.websocket_connect(
+                    "/ws", headers={"origin": "http://evil.example:8852",
+                                    "host": "evil.example:8852"}) as ws:
+                ws.receive_json()
+        for host in ("localhost:8852", "127.0.0.1:8852"):
+            with client.websocket_connect("/ws", headers={"host": host}) as ws:
+                assert ws.receive_json()["type"] == "status"
 
 
 def first_answer(ws, cid, limit=200):
@@ -982,7 +1009,7 @@ def test_subscriptions_are_bounded(tmp_path):
     session, and study counts were unbounded. Bars finer than time:5 /
     tick:100 / volume:100 / range:2, or more than 16 studies, answer an
     error (the page shows it in the chart)."""
-    with TestClient(replay_app(tmp_path)) as client, client.websocket_connect("/ws") as ws:
+    with TestClient(replay_app(tmp_path)) as client, client.websocket_connect("/ws", headers={"host": "localhost:8852"}) as ws:
         for spec in ("time:4", "tick:99", "volume:99", "range:1", "tick:1"):
             ws.send_json({"op": "sub", "id": spec, "root": "NQ", "spec": spec})
             m = first_answer(ws, spec)
@@ -1038,7 +1065,7 @@ def test_status_keeps_flowing_and_says_so_while_chart_work_fails(tmp_path, monke
         return orig_send(self, msg)
 
     monkeypatch.setattr(Conn, "send", send)
-    with TestClient(replay_app(tmp_path)) as client, client.websocket_connect("/ws") as ws:
+    with TestClient(replay_app(tmp_path)) as client, client.websocket_connect("/ws", headers={"host": "localhost:8852"}) as ws:
         assert ws.receive_json()["type"] == "status"        # the one sent on connect
         time.sleep(0.8)
     statuses = [m for m in sent if m.get("type") == "status"]

@@ -17,6 +17,9 @@ from tests.test_charts_server import archive, next_of
 
 KEY = "cd" * 32
 BASE_URL = "http://127.0.0.1:8852"      # the Host guard refuses TestClient's default "testserver"
+WS_HOST = {"host": "127.0.0.1:8852"}    # base_url is a no-op for websocket_connect (starlette
+                                         # hardcodes ws://testserver): the Host header for /ws must
+                                         # be passed explicitly instead
 
 
 class QuietFeed:
@@ -61,7 +64,7 @@ def key_file(tmp_path):
 
 def test_without_a_desk_link_the_page_is_told_and_the_proxy_answers_503(tmp_path):
     with TestClient(live_app(tmp_path), base_url=BASE_URL) as c:
-        with c.websocket_connect("/ws") as ws:
+        with c.websocket_connect("/ws", headers=WS_HOST) as ws:
             assert ws.receive_json()["type"] == "status"
             assert ws.receive_json() == {"type": "desk", "down": NO_LINK}
         assert c.post("/api/desk/order", json={}).status_code == 503
@@ -87,7 +90,7 @@ def test_desk_state_fans_out_to_the_page(tmp_path):
     kp = key_file(tmp_path)
     app = live_app(tmp_path, desk_factory=lambda fan: DeskLink(
         fan, key_path=kp, transport=httpx.MockTransport(handler)))
-    with TestClient(app, base_url=BASE_URL) as c, c.websocket_connect("/ws") as ws:
+    with TestClient(app, base_url=BASE_URL) as c, c.websocket_connect("/ws", headers=WS_HOST) as ws:
         for _ in range(400):
             m = ws.receive_json()
             if m.get("type") == "desk" and m.get("event") == "state":
@@ -98,7 +101,7 @@ def test_desk_state_fans_out_to_the_page(tmp_path):
 
 
 def test_quotes_reach_the_page_as_of_the_last_trade(tmp_path):
-    with TestClient(live_app(tmp_path), base_url=BASE_URL) as c, c.websocket_connect("/ws") as ws:
+    with TestClient(live_app(tmp_path), base_url=BASE_URL) as c, c.websocket_connect("/ws", headers=WS_HOST) as ws:
         QuietFeed.last.q.put(("NQ", "NQZ6", rows(session_ms(D, 9, 40), [100.0, 100.25])))
         m = next_of(ws, "quote", limit=400)
     assert m == {"type": "quote", "root": "NQ", "bid": 100.0, "ask": 100.25, "last": 100.25,

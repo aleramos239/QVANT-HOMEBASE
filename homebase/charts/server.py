@@ -22,7 +22,7 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconn
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from .. import symbols
+from .. import netguard, symbols
 from ..paths import state_dir
 from . import DEFAULT_ROOTS, QUIET      # QUIET: never refill across the 9:30 fire
 from .bars import BarSpec
@@ -505,6 +505,17 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
     async def ws_endpoint(sock: WebSocket):
         if not origin_ok(sock.headers.get("origin"), sock.headers.get("host")):
             await sock.close(code=1008)     # before accept(): the handshake is refused (403)
+            return
+        if not netguard.host_allowed(sock.headers.get("host"), netguard.allowlist()):
+            # origin_ok() alone waves through a DNS-rebinding page: it is
+            # served AS the attacker's own hostname, so its Origin and Host
+            # both read e.g. evil.example and satisfy origin_ok's Origin==Host
+            # rule. This service now carries balances, positions and orders
+            # for every account, so the Host header itself must also be on
+            # netguard's shared allowlist (loopback only here -- this
+            # process has no cfg.allowed_hosts of its own) before the
+            # handshake is accepted.
+            await sock.close(code=1008)
             return
         await sock.accept()
         conn = Conn(sock)
