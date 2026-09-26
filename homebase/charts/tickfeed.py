@@ -114,9 +114,13 @@ class TickFeed:
             except (RuntimeError, TimeoutError) as e:
                 # TradovateWS.request raises on a non-200 status and after 15 s
                 # without an answer. With the socket still up that is THIS
-                # symbol's refusal; with it gone ("websocket not connected", a
-                # timeout because the reader died) the whole feed reconnects.
-                if not self.connected:
+                # symbol's refusal; with it gone (a timeout because the reader
+                # died, or "websocket not connected" once the socket is
+                # CLOSING) the whole feed reconnects. .connected itself only
+                # flips in the reader's finally, so it can still read True on
+                # a socket that already raises that message -- check the
+                # message too, not just the flag.
+                if not self.connected or str(e) == "websocket not connected":
                     raise
                 why = str(e) or f"md/getChart {type(e).__name__}"      # a timeout has no message
                 raise Refused(f"{contract}: {why}") from None
@@ -163,6 +167,18 @@ class TickFeed:
         """Inside the 09:20-09:35 ET window around the 9:30 fire."""
         return QUIET[0] <= dt.datetime.fromtimestamp(self._now(), ET).time() < QUIET[1]
 
+    def _extend_past_quiet(self, wait: float) -> float:
+        """If reconnecting `wait` seconds from now would land inside the
+        quiet window, push the wait out to end exactly at QUIET[1] (09:35 ET)
+        instead: a refused-all reconnect costs one getChart per root, and
+        that must never fire inside the 9:30 desk's window."""
+        now = self._now()
+        when = dt.datetime.fromtimestamp(now + wait, ET)
+        if QUIET[0] <= when.time() < QUIET[1]:
+            end = when.replace(hour=QUIET[1].hour, minute=QUIET[1].minute, second=0, microsecond=0)
+            return end.timestamp() - now
+        return wait
+
     async def run(self) -> None:
         attempt = 0
         while not self._stop:
@@ -186,6 +202,8 @@ class TickFeed:
                     if self.refused and self._now() >= next_retry and not self._quiet():
                         next_retry = self._now() + RETRY_REFUSED_S
                         for r in list(self.refused):
+                            if self._quiet():   # a round can straddle 09:20; re-check every root, not once
+                                break
                             await self._start(r)
                 if not self._stop:
                     self.error = "md socket closed"
@@ -206,6 +224,7 @@ class TickFeed:
             wait = BACKOFF_S[min(attempt, len(BACKOFF_S) - 1)]
             if refused_all:
                 wait = max(wait, RETRY_REFUSED_S)   # each such round costs one getChart per root
+                wait = self._extend_past_quiet(wait)
             await self._sleep(wait)
             attempt += 1
 

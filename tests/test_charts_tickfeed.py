@@ -4,10 +4,12 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 
+import pytest
+
 from homebase import symbols
 from homebase.charts import DEFAULT_ROOTS
 from homebase.charts.session import ET
-from homebase.charts.tickfeed import RETRY_REFUSED_S, TickFeed
+from homebase.charts.tickfeed import RETRY_REFUSED_S, Refused, TickFeed
 
 
 def run(coro):
@@ -307,6 +309,50 @@ def test_a_raise_after_the_socket_died_is_not_a_refusal_it_reconnects():
     assert "websocket not connected" in feed.status()["error"]
 
 
+def test_subscribe_reraises_websocket_not_connected_even_if_connected_still_reads_true():
+    """TradovateWS.connected only flips False in the reader's finally, but
+    request() already raises "websocket not connected" once the socket is
+    CLOSING (tradovate_ws.py's _ws_is_closed). A fresh socket that closes
+    right before this fires must not have that filed as THIS symbol's
+    refusal just because .connected hasn't caught up yet."""
+    class StuckWS(FakeWS):
+        async def request(self, ep, body=""):
+            raise RuntimeError("websocket not connected")
+
+    ws = StuckWS()
+    assert ws.connected is True                     # the race: still True when it raises
+    feed = TickFeed(["NQ"], lambda *a: None, sleep=nosleep)
+    feed.ws = ws
+    with pytest.raises(RuntimeError) as exc_info:
+        run(feed.subscribe("NQ"))
+    assert not isinstance(exc_info.value, Refused)
+    assert str(exc_info.value) == "websocket not connected"
+
+
+def test_a_websocket_not_connected_raise_backs_off_normally_not_as_refused():
+    """Filed as a socket failure (not a refusal), the run loop must reconnect
+    at the plain backoff (5 s) -- not wait RETRY_REFUSED_S (600 s), which is
+    only for a root the feed deliberately refuses."""
+    slept = []
+
+    class StuckWS(FakeWS):
+        async def request(self, ep, body=""):
+            raise RuntimeError("websocket not connected")
+
+    async def connect():
+        return StuckWS()
+
+    async def sleep(s):
+        slept.append(s)
+        await asyncio.sleep(0)
+        feed.stop()
+
+    feed = TickFeed(["NQ"], lambda *a: None, connect=connect, sleep=sleep)
+    run(feed.run())
+    assert slept == [5]
+    assert feed.status()["roots"]["NQ"]["error"] is None
+
+
 def test_every_root_refused_on_a_fresh_socket_reconnects_within_the_md_budget():
     """Nothing subscribed = the socket or the login is sick, not a symbol:
     the whole feed reconnects. A login that refuses everything must not
@@ -337,6 +383,31 @@ def test_every_root_refused_on_a_fresh_socket_reconnects_within_the_md_budget():
     assert "every symbol refused" in st["error"] and "status=500" in st["roots"]["NQ"]["error"]
 
 
+def test_refused_all_wait_is_extended_to_clear_the_quiet_window():
+    """A reconnect due while every root is refused must not land inside
+    09:20-09:35 ET: from 09:12 the plain max(backoff, RETRY_REFUSED_S) wait
+    (600 s) would land at 09:22 -- it must be extended to end at 09:35
+    instead, so the reconnect's getChart round never fires inside the
+    window."""
+    t0 = dt.datetime(2026, 9, 24, 9, 12, tzinfo=ET).timestamp()     # a Thursday
+    clock = [t0]
+    slept = []
+
+    async def connect():
+        return RaisingWS({symbols.resolve_contract(r): RuntimeError("md/getChart failed: status=500 data=None")
+                          for r in ("NQ", "BTC")})
+
+    async def sleep(s):
+        slept.append(s)
+        await asyncio.sleep(0)
+        clock[0] += s
+        feed.stop()                      # one cycle is enough to see the computed wait
+
+    feed = TickFeed(["NQ", "BTC"], lambda *a: None, connect=connect, sleep=sleep, now=lambda: clock[0])
+    run(feed.run())
+    assert slept == [23 * 60]            # 09:12 -> 09:35, not the plain 600 s (which lands at 09:22)
+
+
 def test_a_refused_root_is_not_retried_inside_the_0920_0935_quiet_window():
     t0 = dt.datetime(2026, 9, 24, 9, 12, tzinfo=ET).timestamp()     # a Thursday
     clock = [t0]
@@ -365,3 +436,39 @@ def test_a_refused_root_is_not_retried_inside_the_0920_0935_quiet_window():
     feed = TickFeed(["NQ", "BTC"], lambda *a: None, connect=connect, sleep=sleep, now=lambda: clock[0])
     run(feed.run())
     assert asked == [dt.time(9, 12), dt.time(9, 35), dt.time(9, 45), dt.time(9, 55)]   # 09:22 is skipped
+
+
+def test_a_refused_retry_round_stops_mid_round_when_the_quiet_window_opens():
+    """A retry round can straddle 09:20: with 3 refused roots and each
+    request taking real time (15 s here, like a real getChart round-trip),
+    the round must stop the instant a root's turn lands inside 09:20-09:35,
+    leaving the rest for the next scheduled round -- the OLD code checked
+    _quiet() once for the whole round and would have sent all 3."""
+    t0 = dt.datetime(2026, 9, 24, 9, 9, 14, tzinfo=ET).timestamp()   # a Thursday
+    clock = [t0]
+    fail = {symbols.resolve_contract(r) for r in ("BTC", "GC", "SI")}
+
+    class SlowRefusingWS(FakeWS):
+        async def request(self, ep, body=""):
+            self.sent.append((ep, body))
+            if body["symbol"] in fail:
+                clock[0] += 15            # a refusal round-trip costs real time too
+                return {"errorText": "no entitlement"}
+            n = len(self.sent)
+            return {"historicalId": 10 + n, "realtimeId": 100 + n}
+
+    ws = SlowRefusingWS()
+
+    async def connect():
+        return ws
+
+    async def sleep(s):
+        await asyncio.sleep(0)
+        clock[0] += s
+        if clock[0] >= t0 + 700:         # past the partial round, short of the next one at 09:35
+            feed.stop()
+
+    feed = TickFeed(["NQ", "BTC", "GC", "SI"], lambda *a: None, connect=connect, sleep=sleep, now=lambda: clock[0])
+    run(feed.run())
+    retried = [b["symbol"] for _, b in ws.sent[4:]]     # calls after the 4 initial subscribes
+    assert retried == [symbols.resolve_contract("BTC")]        # GC and SI wait for the window to close
