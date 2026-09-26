@@ -15,6 +15,7 @@ import gzip
 import io
 import json
 import os
+import time
 import zlib
 from pathlib import Path
 
@@ -23,6 +24,25 @@ from .session import session_date
 from .store import ARCHIVE, LIVE_SUFFIX, gaps_path, read_table
 
 REFILL_MAX_PAGES = 20
+REPAIR_RETRY_S = 30.0       # a file whose write or repair failed is retried at most this often
+
+
+def monotonic() -> float:           # one seam for the tests to move the clock
+    return time.monotonic()
+
+
+def _inflates_cleanly(p: Path) -> bool:
+    """True if every gzip member of p decompresses. Streamed a MB at a
+    time: gzip.decompress() is pathological on the recorder's one-member-
+    per-second day files (10.5 s for one NQ day of 57k members, 0.46 s
+    streamed), and this runs on the event loop."""
+    try:
+        with gzip.open(p, "rb") as fh:
+            while fh.read(1 << 20):
+                pass
+    except (EOFError, zlib.error, gzip.BadGzipFile, OSError):
+        return False
+    return True
 
 
 class LiveRecorder:
@@ -31,7 +51,10 @@ class LiveRecorder:
         self._buf: dict[Path, list[dict]] = {}
         self._seen: dict[Path, set[int]] = {}
         self._last: dict[Path, int] = {}
-        self._needs_repair: set[Path] = set()
+        # path -> (monotonic time of its last failed write or repair, the error).
+        # Such a file is retried (repair, then its buffered rows) at most every
+        # REPAIR_RETRY_S: each attempt re-reads the whole day's file on the loop.
+        self._needs_repair: dict[Path, tuple[float, str]] = {}
         self.error: str | None = None
         self.written = 0
 
@@ -48,7 +71,8 @@ class LiveRecorder:
         the first tear, so that would silently hide every good member
         appended after it too -- far past the one unflushed second we
         promise to lose. Called on the first touch of a path in this
-        process, and again before a flush that previously failed on it.
+        process, and again before a flush that previously failed on it
+        (at most every REPAIR_RETRY_S, see flush).
         A file that already decompresses end-to-end is left untouched; a
         torn tail is repaired by rewriting the file as one clean member
         holding every record read_table can still recover; a file with no
@@ -56,11 +80,8 @@ class LiveRecorder:
         aside as before."""
         if not p.exists():
             return
-        try:
-            gzip.decompress(p.read_bytes())
+        if _inflates_cleanly(p):
             return                            # decompresses cleanly end-to-end: nothing to do
-        except (EOFError, zlib.error, gzip.BadGzipFile, OSError):
-            pass
         header, recs = read_table(p)
         if not header:                        # first member torn by a crash: set it aside
             p.rename(p.with_name(p.name + ".corrupt"))
@@ -83,9 +104,9 @@ class LiveRecorder:
             # the disk is still full (or whatever else ails it): behave like
             # a failed flush rather than crash ingestion -- read whatever
             # read_table can still recover from the untouched original file,
-            # and let the next flush() (already guarded) retry the repair.
+            # and let a later flush() (already guarded) retry the repair.
             self.error = f"{p.name}: {e}"
-            self._needs_repair.add(p)
+            self._needs_repair[p] = (monotonic(), self.error)
         header, recs = read_table(p)
         seen = set()
         if header:
@@ -119,22 +140,34 @@ class LiveRecorder:
         self._open(p)
         return self._last.get(p)
 
+    def _waiting(self, p: Path, now: float) -> str | None:
+        """The last error of a failed file whose retry is not due yet."""
+        failed_at, why = self._needs_repair.get(p, (None, None))
+        return why if failed_at is not None and now - failed_at < REPAIR_RETRY_S else None
+
     def flush(self) -> int:
-        n, failed = 0, None
+        n, failed, now = 0, None, monotonic()
         for p in list(self._needs_repair):
             if self._buf.get(p):
                 continue                       # has rows to write: repaired alongside them, below
+            if why := self._waiting(p, now):
+                failed = why                   # retried once REPAIR_RETRY_S has passed
+                continue
             try:
                 self._repair(p)
             except OSError as e:
-                failed = f"{p.name}: {e}"      # still torn; retried again next flush
+                failed = f"{p.name}: {e}"      # still torn; retried in REPAIR_RETRY_S
+                self._needs_repair[p] = (now, failed)
                 continue
-            self._needs_repair.discard(p)
+            del self._needs_repair[p]
         for p, rows in self._buf.items():
             if not rows:
                 continue
+            if why := self._waiting(p, now):
+                failed = why                   # rows stay buffered until the retry is due
+                continue
             try:
-                if p in self._needs_repair:    # a previous flush here left a torn tail
+                if p in self._needs_repair:    # a previous attempt here failed: maybe a torn tail
                     self._repair(p)
                 p.parent.mkdir(parents=True, exist_ok=True)
                 out = io.StringIO()
@@ -146,14 +179,14 @@ class LiveRecorder:
                     fh.write(gzip.compress(out.getvalue().encode()))
             except OSError as e:
                 failed = f"{p.name}: {e}"      # rows stay buffered; the feed keeps running
-                self._needs_repair.add(p)
+                self._needs_repair[p] = (now, failed)
                 continue
-            self._needs_repair.discard(p)
+            self._needs_repair.pop(p, None)
             n += len(rows)
             rows.clear()
         if failed is None and self._needs_repair:
-            # defensive: every path above should already have been retried
-            # this call, but never report "healthy" while one is still torn
+            # defensive: every failed path above was retried or reported as
+            # waiting this call, but never report "healthy" while one is torn
             failed = f"{next(iter(self._needs_repair)).name}: still needs repair"
         self.error = failed
         self.written += n

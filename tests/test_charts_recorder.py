@@ -6,6 +6,7 @@ import datetime as dt
 import gzip
 import json
 import os
+import time
 
 from homebase import ticks as T
 from homebase.charts import recorder as recorder_module
@@ -22,6 +23,11 @@ def run(coro):
 
 async def nosleep(_s):
     return None
+
+
+def later(monkeypatch, s=recorder_module.REPAIR_RETRY_S):
+    """Run the recorder's clock s seconds ahead of real time."""
+    monkeypatch.setattr(recorder_module, "monotonic", lambda: time.monotonic() + s)
 
 
 def test_append_dedupes_and_flush_writes_a_readable_file(tmp_path):
@@ -113,6 +119,7 @@ def test_a_failing_repair_on_open_degrades_like_a_failing_flush(tmp_path, monkey
 
         assert again.flush() == 0 and again.buffered == 1 and again.error is not None
 
+    later(monkeypatch)                                       # the retry is due (REPAIR_RETRY_S)
     assert again.flush() == 1 and again.error is None        # the disk recovers
     s = TickStore(tmp_path).load("NQ", D)
     assert [t.id for t in s.ticks] == [1, 2, 3, 4, 6]
@@ -145,6 +152,7 @@ def test_flush_retries_a_pending_repair_with_no_buffered_rows(tmp_path, monkeypa
         assert rec.flush() == 1                               # the ES row is written
         assert rec.error is not None                          # the NQ path is still torn -- must not clear
 
+    later(monkeypatch)                                        # the retry is due (REPAIR_RETRY_S)
     assert rec.flush() == 0                                   # nothing buffered; only a pending repair to retry
     assert rec.error is None
     assert not rec._needs_repair
@@ -153,7 +161,7 @@ def test_flush_retries_a_pending_repair_with_no_buffered_rows(tmp_path, monkeypa
     assert [t.id for t in s.ticks] == [1, 2, 3, 4]
 
 
-def test_a_failed_write_mid_member_is_repaired_next_flush(tmp_path, monkeypatch):
+def test_a_failed_write_mid_member_is_repaired_on_the_retry(tmp_path, monkeypatch):
     rec = LiveRecorder(tmp_path)
     rec.append("NQ", "NQZ6", rows(M, [100.0, 100.25]))
     rec.flush()                                              # member 1: ids 1, 2 (good)
@@ -183,18 +191,20 @@ def test_a_failed_write_mid_member_is_repaired_next_flush(tmp_path, monkeypatch)
         m.setattr(recorder_module, "open", lambda p, mode: HalfWrite(p, mode), raising=False)
         assert rec.flush() == 0 and rec.error and rec.buffered == 1
 
+    later(monkeypatch)                                       # the retry is due (REPAIR_RETRY_S)
     assert rec.flush() == 1 and rec.error is None
     s = TickStore(tmp_path).load("NQ", D)
     assert [t.id for t in s.ticks] == [1, 2, 3]
 
 
-def test_a_failed_flush_keeps_the_rows(tmp_path):
+def test_a_failed_flush_keeps_the_rows(tmp_path, monkeypatch):
     blocker = tmp_path / "NQ"
     blocker.write_text("not a directory")
     rec = LiveRecorder(tmp_path)
     rec.append("NQ", "NQZ6", rows(M, [100.0]))
     assert rec.flush() == 0 and rec.error and rec.buffered == 1
     blocker.unlink()
+    later(monkeypatch)                                       # the retry is due (REPAIR_RETRY_S)
     assert rec.flush() == 1 and rec.error is None
 
 
@@ -256,3 +266,70 @@ def test_refill_honors_a_penalty_ticket():
     fn, calls = pager(rs, penalty_first=True)
     got, _ = run(refill(None, "NQZ6", M - 1, M + 3000, page_fn=fn, sleep=nosleep))
     assert calls[1][1] == "tk" and len(got) == 3
+
+
+def torn_day_file(tmp_path):
+    """A live file whose last member a crash tore (ids 1-4 intact)."""
+    setup = LiveRecorder(tmp_path)
+    setup.append("NQ", "NQZ6", rows(M, [100.0, 100.25, 100.5, 100.75]))
+    setup.flush()
+    p = setup.path("NQ", D, "NQZ6")
+    torn = gzip.compress(f"{M + 5_000},101.0,1,,,,,5\n".encode())
+    with open(p, "ab") as fh:
+        fh.write(torn[: len(torn) // 2])
+    return p
+
+
+def test_the_clean_check_streams_instead_of_inflating_the_whole_file(tmp_path, monkeypatch):
+    """gzip.decompress() on the recorder's one-member-per-second day file is
+    pathological (10.5 s for one NQ day of 57k members; 0.46 s streamed) and
+    ran on the event loop at startup and on every flush while a write failed."""
+    def whole_file(*a, **k):
+        raise AssertionError("the clean check inflated the whole file in one call")
+
+    rec = LiveRecorder(tmp_path)
+    for i in range(50):                                      # 50 flushes = 50 gzip members
+        rec.append("NQ", "NQZ6", rows(M + i * 1000, [100.0], first_id=i + 1))
+        rec.flush()
+    p = rec.path("NQ", D, "NQZ6")
+    before = p.read_bytes()
+    monkeypatch.setattr(gzip, "decompress", whole_file)
+    LiveRecorder(tmp_path).last_ts("NQ", D, "NQZ6")          # first touch: the clean check
+    assert p.read_bytes() == before                          # clean: left untouched
+    torn = torn_day_file(tmp_path / "torn")
+    LiveRecorder(tmp_path / "torn").last_ts("NQ", D, "NQZ6")
+    assert [t.id for t in TickStore(tmp_path / "torn").load("NQ", D).ticks] == [1, 2, 3, 4]
+    assert gzip.open(torn).read()                            # repaired: one clean member
+
+
+def test_a_failing_repair_is_retried_at_most_every_30_s(tmp_path, monkeypatch):
+    """Disk full: every attempt re-reads the whole day's file on the event
+    loop. A file whose repair (or write) failed waits REPAIR_RETRY_S before
+    the next attempt -- rows stay buffered and the error stays visible."""
+    torn_day_file(tmp_path)
+    attempts = []
+    real_repair = LiveRecorder._repair
+
+    def counting_repair(self, p):
+        attempts.append(p.name)
+        return real_repair(self, p)
+
+    def full(*a, **k):
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(LiveRecorder, "_repair", counting_repair)
+    with monkeypatch.context() as m:
+        m.setattr(os, "replace", full)
+        rec = LiveRecorder(tmp_path)
+        assert rec.append("NQ", "NQZ6", rows(M + 8_000, [102.0], first_id=6)) != []
+        assert len(attempts) == 1                            # first touch: tried, failed
+        for _ in range(29):                                  # a flush a second, for 29 s
+            assert rec.flush() == 0 and rec.buffered == 1
+            assert "No space left" in rec.error
+        assert len(attempts) == 1
+        later(m)
+        assert rec.flush() == 0 and len(attempts) == 2       # 30 s on: tried again, still full
+        assert rec.flush() == 0 and len(attempts) == 2
+    later(monkeypatch, 2 * recorder_module.REPAIR_RETRY_S)   # the disk has room again
+    assert rec.flush() == 1 and rec.error is None and len(attempts) == 3
+    assert [t.id for t in TickStore(tmp_path).load("NQ", D).ticks] == [1, 2, 3, 4, 6]
