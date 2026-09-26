@@ -554,6 +554,26 @@ def test_restart_recovers_state(tmp_path):
     assert eng2._state("nq930", "main").upper_id == st.upper_id
 
 
+def test_restart_recovers_todays_skips(tmp_path):
+    """A desk restart after the 09:28:30 prestage must keep today's skips —
+    so an alert or retry never places onto a skipped account (Task 6 review
+    minor 1)."""
+    clock = Clock()
+    eng, _, _ = mkengine(tmp_path, clock=clock)
+    eng.skip_today("nq930", "main")
+    eng.journal("timer_skipped", strategy="nq930", reason="manual_position",
+                account="main", net=2, orders=[])
+    cfg2 = mkcfg()
+    eng2 = Engine(cfg2, {"main": FakeAdapter("main")}, now_fn=clock,
+                  root=tmp_path)
+    assert eng2.skipped_today("nq930") == {"main"}
+    # a gate_chop skip (no account) never fabricates one
+    eng2.journal("timer_skipped", strategy="nq930", reason="gate_chop", adx=14.0)
+    eng3 = Engine(cfg2, {"main": FakeAdapter("main")}, now_fn=clock,
+                  root=tmp_path)
+    assert eng3.skipped_today("nq930") == {"main"}
+
+
 # --- SL/TP measured from the ACTUAL fill, like the research -------------------
 def _fill(eng, st, side, qty, price, oid=None):
     run(eng.on_fill(FillEvent(account_id="main", symbol="NQZ6", side=side,

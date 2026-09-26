@@ -190,14 +190,25 @@ def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
     for name, tst in ((timer_status or {}).get("strategies") or {}).items():
         sym = getattr(cfg.strategies.get(name), "symbol", "?")
         orders = tst.get("skipped_orders") or {}
+        unreadable = tst.get("skipped_unreadable") or {}
+        checked_at = tst.get("prestage_checked_at") or "09:28:30"   # the real check time
         for aid, net in (tst.get("skipped_accounts") or {}).items():
             a = cfg.accounts.get(aid)
+            if net:
+                detail = (f"{name} skipped today — holds {int(net):+d} {sym} "
+                          f"(manual position at {checked_at})")
+            elif aid in unreadable:
+                # the broker read failed and no cached position confirms one
+                # either way — say so, rather than implying a known flat book
+                detail = (f"{name} skipped today — position unknown, "
+                          f"{len(orders.get(aid) or ())} working {sym} order(s) "
+                          f"(manual, at {checked_at})")
+            else:
+                detail = (f"{name} skipped today — {len(orders.get(aid) or ())} "
+                          f"working {sym} order(s) (manual, at {checked_at})")
             checks.append({"level": "bad",
                            "label": (a.label or a.account_name or aid) if a else aid,
-                           "detail": (f"{name} skipped today — holds {int(net):+d} {sym} "
-                                      "(manual position at 09:28:30)") if net else
-                                     (f"{name} skipped today — {len(orders.get(aid) or ())} "
-                                      f"working {sym} order(s) (manual, at 09:28:30)")})
+                           "detail": detail})
     bars = [n for n, s in enabled.items() if getattr(s, "kind", "straddle") == "bars"]
     if bars and weekday and feed_window(now_et):
         up = bool((feed_status or {}).get("connected"))

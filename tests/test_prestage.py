@@ -35,15 +35,21 @@ class CountingAdapter(FakeAdapter):
 class OrderAdapter(FakeAdapter):
     """A fake with Task 2's cached order view (trade_view)."""
     view_orders: dict = {}          # account -> working orders, set per test
+    view_positions: dict = {}       # account -> cached positions, set per test
 
     def trade_view(self):
         return {"orders": list(self.view_orders.get(self.account_id, [])),
-                "seeded": True, "positions": []}
+                "seeded": True,
+                "positions": list(self.view_positions.get(self.account_id, []))}
 
 
 def _order(oid, symbol):
     return {"order_id": oid, "symbol": symbol, "side": "Buy", "type": "Limit", "qty": 1,
             "price": 24400.0, "stop_price": None, "status": "Working"}
+
+
+def _position(cid, symbol, net):
+    return {"contract_id": cid, "symbol": symbol, "net": net, "avg_price": 24400.0}
 
 
 def mk2(tmp_path, nets, adapter_cls=FakeAdapter):
@@ -135,7 +141,7 @@ def test_a_skip_turns_readiness_red_for_that_account(tmp_path):
                           timer_status=timer.status())
     assert r["ready"] is False
     assert {"level": "bad", "label": "A2",
-            "detail": "nq930 skipped today — holds +2 NQ (manual position at 09:28:30)"} in r["checks"]
+            "detail": "nq930 skipped today — holds +2 NQ (manual position at 09:29:00)"} in r["checks"]
 
 
 def test_skips_are_for_today_only(tmp_path):
@@ -231,6 +237,78 @@ def test_a_broken_order_view_still_skips_on_the_position(tmp_path, monkeypatch):
     assert [e["account"] for e in ev if e["event"] == "dry_run"] == ["a2"]
 
 
+def test_a_naked_micro_position_skips_by_the_engines_substring_rule(tmp_path, monkeypatch):
+    """Task 6 review minor 2: a cached position in a related symbol (MNQ for
+    an NQ bot) skips the account even though the pinned contract's own
+    broker-read net is flat."""
+    monkeypatch.setattr(OrderAdapter, "view_positions",
+                        {"a1": [_position("1", "MNQZ6", 2)]})
+    timer, engine, clock = mk2(tmp_path, {"a1": 0, "a2": 0}, adapter_cls=OrderAdapter)
+    _drive_to_fire(timer, clock)
+    ev = events(tmp_path)
+    skips = [e for e in ev if e["event"] == "timer_skipped"]
+    assert [(e["account"], e["reason"], e["net"]) for e in skips] == \
+        [("a1", "manual_position", 2)]
+    assert engine.skipped_today("nq930") == {"a1"}
+    assert [e["account"] for e in ev if e["event"] == "dry_run"] == ["a2"]
+
+
+def test_a_different_expiry_position_skips_too(tmp_path, monkeypatch):
+    """A position in a different expiry of the SAME root (NQH6 vs the
+    pinned NQZ6) is caught the same way."""
+    monkeypatch.setattr(OrderAdapter, "view_positions",
+                        {"a2": [_position("2", "NQH6", -1)]})
+    timer, engine, clock = mk2(tmp_path, {"a1": 0, "a2": 0}, adapter_cls=OrderAdapter)
+    _drive_to_fire(timer, clock)
+    ev = events(tmp_path)
+    assert [(e["account"], e["reason"], e["net"])
+            for e in ev if e["event"] == "timer_skipped"] == [("a2", "manual_position", -1)]
+    assert engine.skipped_today("nq930") == {"a2"}
+
+
+def test_a_flat_cached_position_does_not_skip(tmp_path, monkeypatch):
+    monkeypatch.setattr(OrderAdapter, "view_positions", {"a1": [_position("1", "MNQZ6", 0)]})
+    timer, engine, clock = mk2(tmp_path, {"a1": 0, "a2": 0}, adapter_cls=OrderAdapter)
+    _drive_to_fire(timer, clock)
+    ev = events(tmp_path)
+    assert not any(e["event"] == "timer_skipped" for e in ev)
+    assert sorted(e["account"] for e in ev if e["event"] == "dry_run") == ["a1", "a2"]
+
+
+def test_a_position_in_another_symbol_does_not_skip(tmp_path, monkeypatch):
+    monkeypatch.setattr(OrderAdapter, "view_positions", {"a1": [_position("1", "ESZ6", 3)]})
+    timer, engine, clock = mk2(tmp_path, {"a1": 0, "a2": 0}, adapter_cls=OrderAdapter)
+    _drive_to_fire(timer, clock)
+    ev = events(tmp_path)
+    assert not any(e["event"] == "timer_skipped" for e in ev)
+    assert sorted(e["account"] for e in ev if e["event"] == "dry_run") == ["a1", "a2"]
+
+
+def test_an_unresolved_cached_position_fires_and_journals_the_failed_check(tmp_path, monkeypatch):
+    monkeypatch.setattr(OrderAdapter, "view_positions", {"a1": [_position("1", None, 2)]})
+    timer, engine, clock = mk2(tmp_path, {"a1": 0, "a2": 0}, adapter_cls=OrderAdapter)
+    _drive_to_fire(timer, clock)
+    ev = events(tmp_path)
+    failed = [e for e in ev if e["event"] == "prestage_check_failed"]
+    assert [e["account"] for e in failed] == ["a1"] and "unresolved" in failed[0]["error"]
+    assert not any(e["event"] == "timer_skipped" for e in ev)
+    assert sorted(e["account"] for e in ev if e["event"] == "dry_run") == ["a1", "a2"]
+
+
+def test_a_broken_view_journals_once_not_twice_per_account(tmp_path, monkeypatch):
+    """trade_view() is now shared between the order and position checks: a
+    broken cache must journal exactly ONE prestage_check_failed per account,
+    not one per check."""
+    class Broken(FakeAdapter):
+        def trade_view(self):
+            raise RuntimeError("cache torn")
+    timer, engine, clock = mk2(tmp_path, {"a1": 2, "a2": 0}, adapter_cls=Broken)
+    _drive_to_fire(timer, clock)
+    ev = events(tmp_path)
+    failed = [e for e in ev if e["event"] == "prestage_check_failed"]
+    assert [e["account"] for e in failed] == ["a1", "a2"]      # exactly one each
+
+
 def test_no_order_view_fires_as_before(tmp_path):
     """The base adapter's trade_view() is None (every test fake): positions only."""
     timer, engine, clock = mk2(tmp_path, {"a1": 0, "a2": 0})
@@ -253,7 +331,7 @@ def test_an_order_only_skip_turns_readiness_red(tmp_path, monkeypatch):
                           timer_status=timer.status())
     assert r["ready"] is False
     assert {"level": "bad", "label": "A2",
-            "detail": "nq930 skipped today — 2 working NQ order(s) (manual, at 09:28:30)"} \
+            "detail": "nq930 skipped today — 2 working NQ order(s) (manual, at 09:29:00)"} \
         in r["checks"]
 
 
@@ -322,6 +400,25 @@ def test_a_failing_journal_never_changes_the_decision(tmp_path, monkeypatch, cap
     assert "timer_skipped" in err and "prestage_check_failed" in err and "disk full" in err
 
 
+def test_a_broken_stderr_print_never_raises_into_the_stage(tmp_path, monkeypatch):
+    """Task 6 review minor 3: jnl's own stderr fallback is wrapped too — if
+    even THAT raises (e.g. a closed/broken stream), the stage still
+    completes and the skip decision still stands."""
+    timer, engine, clock = mk2(tmp_path, {"a1": 0, "a2": 2})
+    real = Engine.journal
+
+    def flaky_journal(self, event, **data):
+        if event in ("timer_skipped", "prestage_check_failed"):
+            raise OSError("disk full")
+        return real(self, event, **data)
+    monkeypatch.setattr(Engine, "journal", flaky_journal)
+    monkeypatch.setattr("builtins.print", lambda *a, **kw: (_ for _ in ()).throw(OSError("broken pipe")))
+    _drive_to_fire(timer, clock)          # must not raise
+    st = timer.status()["strategies"]["nq930"]
+    assert st["stage"] == "fired" and st["skipped_accounts"] == {"a2": 2}
+    assert engine.skipped_today("nq930") == {"a2"}
+
+
 def test_an_unreadable_position_with_a_cached_manual_order_skips(tmp_path, monkeypatch):
     """Ruling 2: the position read fails but the cache shows a resting NQ
     order -> skipped, manual_order, position_unreadable."""
@@ -335,7 +432,26 @@ def test_an_unreadable_position_with_a_cached_manual_order_skips(tmp_path, monke
             for e in skips] == [{"reason": "manual_order", "account": "a1", "net": 0,
                                  "orders": ["5"], "position_unreadable": True}]
     assert [e["account"] for e in ev if e["event"] == "dry_run"] == ["a2"]
-    assert timer.status()["strategies"]["nq930"]["skipped_orders"] == {"a1": ["5"]}
+    st = timer.status()["strategies"]["nq930"]
+    assert st["skipped_orders"] == {"a1": ["5"]}
+    assert st["skipped_unreadable"] == {"a1": True}
+
+
+def test_an_unreadable_position_readiness_says_position_unknown(tmp_path, monkeypatch):
+    """Task 6 review minor 5: a position_unreadable skip reads 'position
+    unknown' on the readiness strip, not a claimed flat book."""
+    monkeypatch.setattr(OrderAdapter, "view_orders", {"a1": [_order("5", "MNQZ6")]})
+    timer, engine, clock = mk2(tmp_path, {"a1": "error", "a2": 0}, adapter_cls=OrderAdapter)
+    clock.set_et(9, 21)
+    run(timer.tick())
+    clock.set_et(9, 29)
+    run(timer.tick())
+    r = compute_readiness(engine.now_et(), engine.cfg, engine,
+                          {"a1": {"connected": True}, "a2": {"connected": True}},
+                          timer_status=timer.status())
+    assert {"level": "bad", "label": "A1",
+            "detail": "nq930 skipped today — position unknown, 1 working NQ order(s) "
+                      "(manual, at 09:29:00)"} in r["checks"]
 
 
 def test_an_unreadable_position_without_a_manual_order_fires_as_before(tmp_path, monkeypatch):

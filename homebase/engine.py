@@ -128,6 +128,35 @@ class Engine:
             data = json.loads(p.read_text())
             self.states = {k: DayState(**v) for k, v in data.items()
                            if "account" in v}   # drop pre-book records
+        self._load_skips_from_journal()
+
+    def _load_skips_from_journal(self) -> None:
+        """Restart safety: a desk restart after the 09:28:30 prestage must
+        not forget today's skips, or a retry/alert could place onto an
+        account that already holds the bot's symbol. `_skips` is otherwise
+        only in memory, so rebuild it from today's `timer_skipped` journal
+        lines (the only durable record); a missing/unreadable journal just
+        means no skips are known yet."""
+        p = self._root / "journal.jsonl"
+        if not p.exists():
+            return
+        today = self._today()
+        try:
+            lines = p.read_text().splitlines()
+        except OSError:
+            return
+        for line in lines:
+            try:
+                rec = json.loads(line)
+            except (json.JSONDecodeError, ValueError):
+                continue
+            if rec.get("event") != "timer_skipped":
+                continue
+            if not str(rec.get("et", "")).startswith(today):
+                continue
+            strategy, account = rec.get("strategy"), rec.get("account")
+            if strategy and account:            # gate_chop skips carry no account
+                self._skips.setdefault((today, strategy), set()).add(account)
 
     def _save(self) -> None:
         p = self._day_path(self._today())

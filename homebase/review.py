@@ -61,7 +61,8 @@ def review(date: str) -> str:
         if ev == "timer_gate":
             add(f"  {t}  gate {e.get('gate')} (ADX {e.get('adx')}, {e.get('bars')} bars)")
         elif ev == "timer_skipped":
-            add(f"  {t}  SKIPPED — {e.get('reason')}")
+            who = f" {e['account']}" if e.get("account") else ""
+            add(f"  {t}  SKIPPED{who} — {e.get('reason')}")
         elif ev == "timer_missed":
             if not seen_missed:      # one line, however many restarts
                 add(f"  {t}  MISSED the window (service restarted after "
