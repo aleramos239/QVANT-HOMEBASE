@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import gzip
+import os
 
 from homebase import ticks as T
 from homebase.charts import recorder as recorder_module
@@ -79,6 +80,39 @@ def test_a_restart_repairs_a_torn_later_member(tmp_path):
     again.append("NQ", "NQZ6", rows(M + 8_000, [102.0], first_id=6))
     again.flush()
 
+    s = TickStore(tmp_path).load("NQ", D)
+    assert [t.id for t in s.ticks] == [1, 2, 3, 4, 6]
+
+
+def test_a_failing_repair_on_open_degrades_like_a_failing_flush(tmp_path, monkeypatch):
+    rec = LiveRecorder(tmp_path)
+    rec.append("NQ", "NQZ6", rows(M, [100.0, 100.25]))
+    rec.flush()                                              # member 1: ids 1, 2 (good)
+    rec.append("NQ", "NQZ6", rows(M + 2_000, [100.5, 100.75], first_id=3))
+    rec.flush()                                              # member 2: ids 3, 4 (good)
+    p = rec.path("NQ", D, "NQZ6")
+    torn = gzip.compress(f"{M + 5_000},101.0,1,,,,,5\n".encode())
+    with open(p, "ab") as fh:
+        fh.write(torn[: len(torn) // 2])                     # a torn third member (crash)
+
+    def fail_replace(*a, **kw):
+        raise OSError(28, "No space left on device")
+
+    with monkeypatch.context() as m:
+        m.setattr(os, "replace", fail_replace)               # the disk is still full on restart
+
+        by_last_ts = LiveRecorder(tmp_path)
+        assert by_last_ts.last_ts("NQ", D, "NQZ6") == M + 3_000  # doesn't raise
+        assert by_last_ts.error is not None
+
+        again = LiveRecorder(tmp_path)
+        assert again.append("NQ", "NQZ6", rows(M + 8_000, [102.0], first_id=6)) != []
+        assert again.error is not None
+        assert again.buffered == 1
+
+        assert again.flush() == 0 and again.buffered == 1 and again.error is not None
+
+    assert again.flush() == 1 and again.error is None        # the disk recovers
     s = TickStore(tmp_path).load("NQ", D)
     assert [t.id for t in s.ticks] == [1, 2, 3, 4, 6]
 

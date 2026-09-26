@@ -77,7 +77,15 @@ class LiveRecorder:
         seen = self._seen.get(p)
         if seen is not None:
             return seen
-        self._repair(p)
+        try:
+            self._repair(p)
+        except OSError as e:
+            # the disk is still full (or whatever else ails it): behave like
+            # a failed flush rather than crash ingestion -- read whatever
+            # read_table can still recover from the untouched original file,
+            # and let the next flush() (already guarded) retry the repair.
+            self.error = f"{p.name}: {e}"
+            self._needs_repair.add(p)
         header, recs = read_table(p)
         seen = set()
         if header:
