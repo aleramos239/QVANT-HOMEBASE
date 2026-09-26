@@ -85,6 +85,23 @@ def test_bad_requests_get_an_error_not_a_crash(tmp_path):
         assert next_of(ws, "history")["id"] == "g"
 
 
+def test_the_page_and_its_static_files_are_always_revalidated(tmp_path):
+    """The page and its scripts keep their URLs across builds: without
+    Cache-Control a browser may pair a new charts.html with a heuristically
+    cached old app.js. no-cache = always revalidate; the ETag / 304 path of
+    the static files keeps a reload cheap."""
+    app = create_app(roots=["NQ"], base=archive(tmp_path), replay=D, speed=1,
+                     start_et=dt.time(9, 30), state=tmp_path / "state")
+    with TestClient(app) as client:
+        page = client.get("/")
+        assert page.status_code == 200 and page.headers["cache-control"] == "no-cache"
+        js = client.get("/static/charts/app.js")
+        assert js.status_code == 200 and js.headers["cache-control"] == "no-cache" and js.headers["etag"]
+        again = client.get("/static/charts/app.js", headers={"if-none-match": js.headers["etag"]})
+        assert again.status_code == 304 and again.headers["cache-control"] == "no-cache"
+        assert client.get("/static/charts/charts.css").headers["cache-control"] == "no-cache"
+
+
 def test_layouts_roundtrip(tmp_path):
     app = create_app(roots=["NQ"], base=archive(tmp_path), replay=D, speed=1,
                      start_et=dt.time(9, 30), state=tmp_path / "state")

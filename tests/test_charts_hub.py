@@ -210,6 +210,25 @@ def test_a_24_7_stream_runs_through_the_17_00_hour_without_duplicate_bars(tmp_pa
         session_ms(fri, 17, 10), session_ms(fri, 17, 11), session_ms(fri, 17, 12)]
 
 
+def test_a_late_print_at_a_24_7_roll_adds_no_bar_to_the_old_session(tmp_path):
+    """The chart side of the roll edge: the clock closed Friday's 17:59 bar,
+    then a 17:59:59.9 print arrives before Saturday's first. No extra 18:00
+    candle for Friday, and Friday's cumulative delta does not take it."""
+    hub, _, _ = setup(tmp_path)
+    fri = D + dt.timedelta(days=1)
+    sat = fri + dt.timedelta(days=1)
+    hub.start_today("BTC", fri, [])
+    s = hub.attach(hub.prepare("BTC", M1, ["vwap", "cumdelta"]))
+    hub.subscribe(s, ("conn", "c1"))
+    hub.on_ticks("BTC", rows(session_ms(fri, 17, 59, 30), [100_000.0], first_id=1))
+    hub.on_clock(session_ms(sat, 18, 0))                      # the pump: clock - 1.5 s grace
+    hub.on_ticks("BTC", rows(session_ms(fri, 17, 59, 59) + 900, [100_010.0], size=3, first_id=2))
+    hub.on_ticks("BTC", rows(session_ms(sat, 18, 0) + 500, [100_020.0], first_id=3))
+    assert [(b.session, b.t) for b in s.bars] == [(fri.isoformat(), session_ms(fri, 17, 59))]
+    assert (s.builder.cur.session, s.builder.cur.t) == (sat.isoformat(), session_ms(sat, 18, 0))
+    assert s.values["cumdelta"] == [1]
+
+
 def test_a_previous_session_straggler_never_rolls_the_tape_back(tmp_path):
     """Only a FORWARD session change is a roll. A print from an older
     session (the one historical trade a weekend subscribe returns; an

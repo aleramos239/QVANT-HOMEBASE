@@ -158,6 +158,12 @@ class BarBuilder:
             closed.append(self._close())
         if self.cur is None:
             t = self._bucket(tk.ts_ms) if self.spec.kind == "time" else tk.ts_ms
+            if self.spec.kind == "time" and t >= self._s1:
+                # a late print for a session whose last bar the clock already
+                # closed: its next bucket starts at the session end -- a stray bar
+                # under the old session's label. Not charted live; it is on disk,
+                # and a rebuild from the recorded ticks files it in its own bar.
+                return closed
             self.cur = Bar.open_at(t, self._sess, tk.price)
         self.cur.add(tk, self.tick_size)
         if self._full(self.cur):
@@ -184,8 +190,9 @@ class BarBuilder:
         """Close a TIME bar whose end has passed, so a quiet market doesn't
         hold the last bar open. A tick that arrives later for the closed
         bucket (feed latency beyond the caller's grace) opens the NEXT bucket
-        instead of duplicating the closed one — a reload rebuilds from the
-        recorded ticks and is the truth."""
+        instead of duplicating the closed one (no bucket at or past the
+        session end: add() skips it) — a reload rebuilds from the recorded
+        ticks and is the truth."""
         cur = self.cur
         if cur is None or self.spec.kind != "time":
             return []

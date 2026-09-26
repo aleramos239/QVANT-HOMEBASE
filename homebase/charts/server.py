@@ -121,6 +121,18 @@ def check_drawings(body) -> list:
     return out
 
 
+class RevalidatedFiles(StaticFiles):
+    """The page's files keep their URLs across builds, so a browser must never
+    pair a new charts.html with a heuristically cached old app.js: every
+    response says no-cache (always revalidate). The ETag / Last-Modified
+    304 answer still keeps a reload cheap."""
+
+    def file_response(self, *args, **kwargs):
+        resp = super().file_response(*args, **kwargs)
+        resp.headers["cache-control"] = "no-cache"
+        return resp
+
+
 class Conn:
     """One browser socket. Sends go through a bounded queue drained by a
     writer task, so one slow page can never stall the pump; a page that
@@ -375,11 +387,11 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                 recorder.flush()
 
     app = FastAPI(title="Homebase Charts", lifespan=lifespan)
-    app.mount("/static", StaticFiles(directory=STATIC), name="static")
+    app.mount("/static", RevalidatedFiles(directory=STATIC), name="static")
 
     @app.get("/")
     async def index():
-        return FileResponse(STATIC / "charts.html")
+        return FileResponse(STATIC / "charts.html", headers={"cache-control": "no-cache"})
 
     @app.get("/api/status")
     async def api_status():
