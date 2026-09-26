@@ -27,7 +27,8 @@ function palette() {
   const dark = document.documentElement.getAttribute('data-theme') === 'dark';
   const P = { up: '#089981', down: '#F23645', upA: 'rgba(8,153,129,.5)', downA: 'rgba(242,54,69,.5)', accent: '#2962FF',
     lines: C.LINE_COLORS, vwap: '#9C27B0', band: 'rgba(156,39,176,.45)', cum: '#FF6D00', poc: '#F7A600',
-    gap: 'rgba(120,123,134,.14)', cross: '#9598A1', crossLabel: '#131722' };
+    gap: 'rgba(120,123,134,.14)', cross: '#9598A1', crossLabel: '#131722',
+    handleFill: '#FFFFFF', onAccent: '#FFFFFF' };   // drawing handles: white dots in both themes; text on accent / down fills
   return Object.assign(P, dark
     ? { bg: '#0F0F0F', text: '#DBDBDB', text2: '#8C8C8C', grid: '#1C1C1C', border: '#2E2E2E', accentSoft: 'rgba(41,98,255,.20)',
         downSoft: 'rgba(242,54,69,.18)', watermark: 'rgba(219,219,219,.06)', level: '#8C8C8C', fpText: '#DBDBDB',

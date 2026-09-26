@@ -253,7 +253,7 @@ class Primitive {
       if (c.place) drawShape(ctx, c.place, geo, P);
       const sel = c.selectedDrawing(), hs = sel && handlePoints(sel, geo);
       if (hs) {
-        ctx.fillStyle = P.bg;
+        ctx.fillStyle = P.handleFill;
         ctx.strokeStyle = sel.color || P.accent;
         ctx.lineWidth = 1.5;
         for (const [x, y] of hs) { ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
@@ -299,7 +299,7 @@ function drawMeasure(ctx, m, geo, P, mctx, size) {
   const by = Math.max(2, Math.min(up ? top - bh - 6 : top + h + 6, size.height - bh - 2));
   ctx.fillStyle = col;
   ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 4); ctx.fill();
-  ctx.fillStyle = '#FFFFFF';
+  ctx.fillStyle = P.onAccent;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(lines[0], bx + bw / 2, by + 11);
@@ -323,12 +323,14 @@ class Controller {
     this.prim = new Primitive(this);
     cell.candles.attachPrimitive(this.prim);
     this.on = { down: (e) => this.onDown(e), move: (e) => this.onMove(e), up: (e) => this.onUp(e),
-      hover: (e) => this.onHover(e), leave: () => this.setCursor(null) };
+      hover: (e) => this.onHover(e), leave: () => this.setCursor(null), lost: () => this.abort() };
     this.box.addEventListener('pointerdown', this.on.down, true);
     this.box.addEventListener('pointermove', this.on.hover);
     this.box.addEventListener('pointerleave', this.on.leave);
     window.addEventListener('pointermove', this.on.move, true);
     window.addEventListener('pointerup', this.on.up, true);
+    window.addEventListener('pointercancel', this.on.lost, true);
+    window.addEventListener('blur', this.on.lost);   // the window's own blur: not capture, so element blurs never reach it
     this.off = host.drawings.subscribe(this.root, () => this.refresh());
     host.drawings.ensure(this.root);
     this.refresh();
@@ -341,6 +343,8 @@ class Controller {
     this.box.removeEventListener('pointerleave', this.on.leave);
     window.removeEventListener('pointermove', this.on.move, true);
     window.removeEventListener('pointerup', this.on.up, true);
+    window.removeEventListener('pointercancel', this.on.lost, true);
+    window.removeEventListener('blur', this.on.lost);
     this.off();
     this.release();
     delete this.cell.el.dataset.cursor;
@@ -414,7 +418,8 @@ class Controller {
   }
 
   onDown(e) {
-    if (e.button !== 0 || !this.cell.chart) return;
+    // left button only, and not Ctrl+press: on macOS that is a right-click, and its context menu takes the mouse-up
+    if (e.button !== 0 || e.ctrlKey || !this.cell.chart) return;
     const pt = this.local(e), tool = this.host.tool();
     if (this.measure && this.measure.done) { this.measure = null; this.prim.redraw(); }
     if (!this.inPane(pt)) return;
@@ -452,6 +457,7 @@ class Controller {
 
   onMove(e) {
     if (!this.cell.chart) return;
+    if (this.held() && !(e.buttons & 1)) { this.abort(); return; }   // the button is up, but its release never reached us
     if (this.place || (this.measure && !this.measure.done)) {
       const at = this.at(this.local(e));
       if (!at) return;
@@ -523,15 +529,26 @@ class Controller {
     this.setCursor(null);
   }
 
+  /* A gesture that needs the button held: moving / reshaping a drawing, or a placement or measure being
+     dragged out (one waiting for its 2nd click is not). */
+  held() { return !!this.drag || this.mode === 'drag'; }
+
+  /* Undo a held gesture: a moved drawing goes back (and stays selected), a placement or measure being dragged
+     out is dropped (the tool stays); panning and zoom come back on. Esc, and a release that never reaches us:
+     a move with the button up, pointercancel, or the window losing focus (a context menu, another app). */
+  abort() {
+    if (!this.held()) return false;
+    if (this.drag) this.drag = null;
+    else { this.place = null; this.measure = null; this.mode = null; this.downAt = null; }
+    this.release();
+    this.setCursor(null);
+    this.refresh();
+    return true;
+  }
+
   escape() {
-    if (this.drag) {   // a move / reshape in progress: the drawing goes back, and stays selected
-      this.drag = null;
-      this.release();
-      this.setCursor(null);
-      this.refresh();
-      return true;
-    }
-    if (this.place || this.measure) {
+    if (this.abort()) return true;
+    if (this.place || this.measure) {   // a placement waiting for its 2nd click, or a finished measure
       this.place = null; this.measure = null; this.mode = null; this.downAt = null;
       this.release();
       this.prim.redraw();
