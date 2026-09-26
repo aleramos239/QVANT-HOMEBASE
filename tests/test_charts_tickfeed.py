@@ -95,3 +95,20 @@ def test_reconnect_backs_off_resubscribes_and_reports_the_last_tick():
     assert [s for s in slept if s != 1] == [5, 10]
     assert subs == [("NQ", None), ("NQ", 1005), ("NQ", 1005)]
     assert feed.reconnects == 2 and not feed.connected
+
+
+def test_a_failed_gap_refill_is_recorded_in_status():
+    async def connect():
+        return FakeWS()
+
+    async def bad_refill(root, contract, since):
+        raise RuntimeError("boom")
+
+    async def sleep(s):
+        await asyncio.sleep(0)          # let the on_subscribed task run and raise
+        await asyncio.sleep(0)          # let its done-callback run (call_soon-deferred)
+        feed.stop()
+
+    feed = TickFeed(["NQ"], lambda *a: None, on_subscribed=bad_refill, connect=connect, sleep=sleep)
+    run(feed.run())
+    assert "refill NQ" in feed.status()["error"] and "boom" in feed.status()["error"]

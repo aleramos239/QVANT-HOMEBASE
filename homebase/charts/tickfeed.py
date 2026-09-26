@@ -104,6 +104,14 @@ class TickFeed:
         self.contracts[root] = contract
         return contract
 
+    def _on_subscribed_done(self, root: str, t: "asyncio.Task") -> None:
+        self._tasks.discard(t)
+        if t.cancelled():
+            return
+        e = t.exception()
+        if e is not None:
+            self.error = f"refill {root}: {type(e).__name__}: {e}"
+
     async def run(self) -> None:
         attempt = 0
         while not self._stop:
@@ -118,7 +126,7 @@ class TickFeed:
                     if self.on_subscribed is not None:
                         t = asyncio.create_task(self.on_subscribed(r, c, since))
                         self._tasks.add(t)
-                        t.add_done_callback(self._tasks.discard)
+                        t.add_done_callback(lambda t, root=r: self._on_subscribed_done(root, t))
                 self.error = None
                 while not self._stop and self.connected:
                     await self._sleep(1)
