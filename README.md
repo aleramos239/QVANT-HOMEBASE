@@ -56,7 +56,8 @@ session levels, footprint, delta, cumulative delta, big prints, volume profile. 
 cannot place orders and cannot slow the trading app. It records every live tick to
 `~/futures_ticks/<ROOT>/<YYYY>/<date>_<contract>.live.csv.gz`; past sessions come from the archive.
 
-- Replay any archived session (records nothing): `python -m homebase.charts --replay 2026-09-24 --speed 20 --port 8853`
+- Records live ticks for the same 10 symbols as the nightly archive (NQ ES YM RTY GC SI CL ZN NG HG); `--roots` narrows it.
+- Replay any archived session (records nothing): `python -m homebase.charts --replay 2026-09-22 --roots NQ,ES,YM --speed 20 --port 8853`
 - md login: the Apex eval by default; `HOMEBASE_CHARTS_MD=live` switches to the live login.
 - Budget: one chart request per root per connection; gap refills ≤ 60/hour, never 09:20–09:35 ET.
 - Over Tailscale, serve port 8852 alongside 8850.

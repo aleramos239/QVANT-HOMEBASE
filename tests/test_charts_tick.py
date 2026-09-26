@@ -55,6 +55,11 @@ def test_from_row_parses_blank_quotes_and_strings():
     assert t == Tick(5, 10.0, 3, BUY, 7)
 
 
+def test_live_recorder_covers_the_nightly_archive_roots():
+    from homebase.charts import DEFAULT_ROOTS
+    assert set(DEFAULT_ROOTS) == set(T.ROOTS)
+
+
 def test_md_token_prefers_the_requested_login(tmp_path, monkeypatch):
     cfg = SimpleNamespace(accounts={"demo1": SimpleNamespace(live=False),
                                     "live1": SimpleNamespace(live=True)})

@@ -118,7 +118,8 @@ roll stitches contracts by session with no back-adjustment in Build 1.
 - **Bar types**: time (5s, 15s, 30s, 1m, 2m, 3m, 5m, 10m, 15m, 30m, 1h, 4h,
   1D), tick (N trades), volume (N contracts), range (N ticks).
 - **Symbols**: any root the archive/recorder covers (NQ ES YM RTY GC SI CL …);
-  Build 1 records NQ ES YM live by default, list configurable.
+  Build 1 records the same 10 roots as the nightly archive live (NQ ES YM RTY
+  GC SI CL ZN NG HG) by default; `--roots` narrows it.
 - **Indicators (studies)**: session VWAP (+ optional bands), EMA, SMA, VWMA,
   ADX/DI, session levels (prior day H/L/C, overnight H/L, RTH open), volume.
   Parameters editable per chart.
