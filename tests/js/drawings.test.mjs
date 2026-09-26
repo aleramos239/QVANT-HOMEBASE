@@ -279,8 +279,9 @@ function pointerRig(saved, { tool = 'cursor', magnet = { on: false, mode: 'weak'
   globalThis.window = { addEventListener() {}, removeEventListener() {} };
   const chart = { applyOptions() {}, priceScale: () => ({ width: () => 60 }), panes: () => [{ getHeight: () => 1000 }],
     timeScale: () => ({ logicalToCoordinate: (i) => 100 + i * 10, coordinateToLogical: (x) => (x - 100) / 10 }) };
+  const menuCalls = [];
   const cell = { shown: { root: 'NQ' }, el: { dataset: {} }, P: { accent: '#2962FF' }, chart, bars: rigBars, tick: 0.25,
-    isTime: () => true, barMs: () => MIN,
+    isTime: () => true, barMs: () => MIN, onMenu(e, dbl) { menuCalls.push(!!dbl); },
     box: { clientWidth: 460, getBoundingClientRect: () => ({ left: 0, top: 0 }), addEventListener() {}, removeEventListener() {} },
     candles: { attachPrimitive() {}, priceToCoordinate: (p) => 1000 - p, coordinateToPrice: (y) => 1000 - y } };
   const f = fakeFetch((url, method) => (method === 'GET' ? { status: 200, body: saved } : null));
@@ -297,7 +298,7 @@ function pointerRig(saved, { tool = 'cursor', magnet = { on: false, mode: 'weak'
     await new Promise((r) => setTimeout(r, 5));   // the store's (0 ms) save debounce
     await flush();
   };
-  return { ctl, store, gesture, tool: () => now, puts: () => f.calls.filter((c) => c.method === 'PUT'),
+  return { ctl, store, gesture, tool: () => now, puts: () => f.calls.filter((c) => c.method === 'PUT'), menuCalls,
     done() { ctl.destroy(); } };
 }
 
@@ -440,7 +441,7 @@ test('the short tool mirrors it', async (t) => {
   R.done();
 });
 
-test('a double-click on a box opens its settings; on empty chart it does nothing', async (t) => {
+test('a double-click on a box opens its settings; on empty chart it opens the chart menu (spec §7)', async (t) => {
   withWindow(t);
   const opened = [];
   const R = pointerRig([posBox], { onPosition: (cell, d) => opened.push(d.id) });
@@ -450,5 +451,6 @@ test('a double-click on a box opens its settings; on empty chart it does nothing
   dbl(300, 95);
   assert.deepEqual(opened, ['p']);
   assert.equal(R.ctl.sel, 'p');
+  assert.deepEqual(R.menuCalls, [true]);   // only the empty-space double-click opened the chart menu (dbl = true)
   R.done();
 });

@@ -4,13 +4,15 @@
    history/update handling. The page (app.js) owns the websocket, the toolbar
    and selection, and gives each cell a `host`:
      {id, send(msg) -> bool, onPick(cell), onLoaded(cell), onRefused(cell, tried, text), onSettings(cell, uid),
-      onPosition(cell, d), changed(), tool(), toolDone(), drawings, magnet(), events()}   (the drawings/tool/magnet
-      four: the drawing tools, HBDrawings.Controller; events(): every stored calendar event)
+      onPosition(cell, d), onChartMenu(cell, {x, y, price}), onIndicatorMenu(cell, uid, {anchor} | {at}),
+      changed(), tool(), toolDone(), drawings, magnet(), events()}   (the drawings/tool/magnet four: the drawing
+      tools, HBDrawings.Controller; events(): every stored calendar event; the chart/indicator menus: app.js)
    Bar times arrive as ET wall-clock seconds, so the axis reads ET; tick,
    volume and range bars sit on an evenly spaced synthetic axis (many can
    share a second) and are labelled with their real times.
    Its settings (HBSettings: candle colours, precision, time zone, scales, canvas…) live in `cfg.settings` as
-   overrides of the defaults and are applied in place. */
+   overrides of the defaults and are applied in place. Indicators that can live in their own pane
+   (HBCatalog.placement) are drawn there or on the price pane on an overlay scale of their own. */
 (() => {
 'use strict';
 const LW = window.LightweightCharts;
@@ -23,6 +25,8 @@ const FAKE0 = 946684800;    // synthetic-axis origin for tick/volume/range bars
 const FONT = '-apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif';
 const LEVELS = [['pdh', 'PDH'], ['pdl', 'PDL'], ['pdc', 'PDC'], ['onh', 'ONH'], ['onl', 'ONL'], ['rth_open', 'Open']];
 const PANE_H = 90;          // px: the delta / cumulative delta / ADX panes
+const VOL_TOP = 0.8;    // Volume on the price pane: its bars in the bottom 20%
+const MAIN_TOP = 0.75;  // another pane-type indicator on the price pane: the bottom quarter, on its own scale
 const WHOLE = { type: 'price', precision: 0, minMove: 1 };   // contract counts: -25, not -25.00
 const NOTE_MS = 8000;       // a refused change's reason stays this long in the legend
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -91,6 +95,7 @@ class Cell {
     this.back = new window.HBScrollBack.ScrollBack();   // scroll-back: older history on demand
     this.start = null;   // the "Start of data" / "History limit reached" layer
     this.capped = false;   // this.bars hit the 200,000-bar client cap: scroll-back has stopped asking
+    this.paneUid = [null];   // pane index -> the uid of the indicator in its own pane (0: the price pane)
     this.magnetXhair = false;   // the rail's magnet is on with a tool picked (MagnetOHLC crosshair)
     this.R = S.resolve(cfg.settings || {}, palette());   // the chart's settings, concrete for the theme
     this.fpHide = false;   // the footprint is readable: candle bodies and borders step aside
@@ -111,6 +116,7 @@ class Cell {
     this.lg.badge.title = 'Part of this history has no bid/ask: buys and sells there are split by the tick rule';
     slot.addEventListener('pointerdown', () => host.onPick(this), true);
     this.lg.inds.addEventListener('click', (e) => this.onLegendClick(e));
+    this.box.addEventListener('contextmenu', (e) => this.onMenu(e));
     this.box.addEventListener('pointermove', (e) => this.onEventHover(e));
     this.box.addEventListener('pointerleave', () => { this.evTip.hidden = true; });
     this.title();
@@ -459,10 +465,13 @@ class Cell {
     this.eth = this.cd = this.evl = this.start = null;
   }
 
-  /* One series per drawn part of each indicator instance, in instance order. */
+  /* One series per drawn part of each indicator instance, in instance order. A pane-type indicator goes where
+     its placement says: 'own' = the next pane below; 'main' = the price pane, on an overlay scale of its own
+     pinned to the bottom (as Volume), so it never moves the price autoscale. */
   buildSeries() {
     const P = this.P;
     let ci = 0, pane = 0;
+    this.paneUid = [null];
     const add = (inst, src, part, type, opts, where) => {
       const overlay = where === 0 && !opts.priceScaleId;   // on the price pane's own scale (not the volume overlay)
       const auto = overlay && this.R.scalePriceOnly ? { autoscaleInfoProvider: NO_SCALE } : {};
@@ -472,13 +481,22 @@ class Cell {
     };
     const line = (inst, src, part, color, width, where = 0, extra = {}) => add(inst, src, part, LW.LineSeries,
       { color, lineWidth: width, lastValueVisible: true, crosshairMarkerVisible: false, title: '', ...extra }, where);
+    // {where, scale}: the pane index, and the series options that put it on its overlay scale when on 'main'
+    const spot = (inst) => {
+      if (C.placement(inst) === 'own') { this.paneUid.push(inst.uid); return { where: ++pane, scale: {} }; }
+      return { where: 0, scale: { priceScaleId: 'ind:' + inst.uid, lastValueVisible: false } };
+    };
+    const pin = (s, where, top) => { if (where === 0) s.priceScale().applyOptions({ scaleMargins: { top, bottom: 0 } }); };
     for (const inst of this.cfg.indicators) {
       const k = C.serverKey(inst);
       switch (inst.id) {
-        case 'volume':
-          add(inst, '__vol', null, LW.HistogramSeries, { priceFormat: { type: 'volume' }, priceScaleId: 'vol', lastValueVisible: false }, 0)
-            .priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
+        case 'volume': {
+          const { where } = spot(inst);
+          const s = add(inst, '__vol', null, LW.HistogramSeries, { priceFormat: { type: 'volume' },
+            ...(where === 0 ? { priceScaleId: 'vol', lastValueVisible: false } : { lastValueVisible: true }) }, where);
+          pin(s, where, VOL_TOP);
           break;
+        }
         case 'vwap':
           this.colorOf[inst.uid] = P.vwap;
           line(inst, k, null, P.vwap, 2);
@@ -493,17 +511,24 @@ class Cell {
           break;
         }
         case 'adx': {
-          const where = ++pane;
-          line(inst, k, null, P.text, 2, where); line(inst, k, 'p', P.up, 1, where); line(inst, k, 'm', P.down, 1, where);
+          const { where, scale } = spot(inst);
+          const a = line(inst, k, null, P.text, 2, where, scale);
+          line(inst, k, 'p', P.up, 1, where, scale); line(inst, k, 'm', P.down, 1, where, scale);
+          pin(a, where, MAIN_TOP);   // the three lines share the one scale
           break;
         }
-        case 'delta':
-          add(inst, '__delta', null, LW.HistogramSeries, { lastValueVisible: true, priceFormat: { ...WHOLE } }, ++pane);
+        case 'delta': {
+          const { where, scale } = spot(inst);
+          pin(add(inst, '__delta', null, LW.HistogramSeries, { lastValueVisible: true, priceFormat: { ...WHOLE }, ...scale }, where),
+            where, MAIN_TOP);
           break;
-        case 'cumdelta':
+        }
+        case 'cumdelta': {
           this.colorOf[inst.uid] = P.cum;
-          line(inst, k, null, P.cum, 2, ++pane, { priceFormat: { ...WHOLE } });
+          const { where, scale } = spot(inst);
+          pin(line(inst, k, null, P.cum, 2, where, { priceFormat: { ...WHOLE }, ...scale }), where, MAIN_TOP);
           break;
+        }
         default:   // levels, footprint, profile, big prints: price lines, layers and markers
           break;
       }
@@ -518,6 +543,12 @@ class Cell {
       btns.append(iconButton(off ? 'eyeOff' : 'eye', off ? 'Show' : 'Hide', 'eye'));
       if (hasParams) btns.append(iconButton('gear', 'Settings', 'gear'));
       btns.append(iconButton('x', 'Remove', 'x'));
+      if (C.movable(inst.id)) {   // TradingView's "More": move to the price pane / to a pane below
+        const more = iconButton('ellipsis', 'More', 'more');
+        more.setAttribute('aria-haspopup', 'menu');
+        more.setAttribute('aria-expanded', 'false');
+        btns.append(more);
+      }
       row.dataset.uid = inst.uid;
       row.append(mk('span', 'lg-label', S.legendLabel(C.label(inst), hasParams, F)), vals, btns);
       return { inst, row, vals };
@@ -532,7 +563,8 @@ class Cell {
     if (!inst) return;
     if (b.dataset.act === 'eye') this.setVisible(uid, inst.visible === false);
     else if (b.dataset.act === 'gear') this.host.onSettings(this, uid);
-    else this.update({ indicators: this.cfg.indicators.filter((x) => x.uid !== uid) });
+    else if (b.dataset.act === 'more') this.host.onIndicatorMenu(this, uid, { anchor: b });
+    else this.removeIndicator(uid);
   }
 
   /* Client-only: the stream keeps computing a hidden study, so the toggle is instant. */
@@ -551,6 +583,54 @@ class Cell {
     this.drawLevels(); this.drawMarkers(); this.syncFootprint(); this.syncProfile();
     this.legendRows();
     this.legend(this.hover);
+  }
+
+  removeIndicator(uid) { this.update({ indicators: this.cfg.indicators.filter((x) => x.uid !== uid) }); }
+
+  /* Move a pane-type indicator to 'main' (the price pane) or 'own' (a pane below). The chart is rebuilt
+     through update() (view kept, no resubscribe: the studies are the same), as the legend's × does. */
+  setPlacement(uid, pane) {
+    const inst = this.cfg.indicators.find((x) => x.uid === uid);
+    if (!inst || !C.movable(inst.id) || !C.PANES.includes(pane) || C.placement(inst) === pane) return;
+    this.update({ indicators: this.cfg.indicators.map((x) => (x.uid === uid ? { ...x, pane } : x)) });
+  }
+
+  /* The pane under a viewport y: its index, or -1 (a separator, outside the chart). */
+  paneAt(clientY) {
+    const panes = this.chart ? this.chart.panes() : [];
+    for (let i = 0; i < panes.length; i++) {
+      const el = panes[i].getHTMLElement();
+      if (!el) continue;
+      const r = el.getBoundingClientRect();
+      if (clientY >= r.top && clientY < r.bottom) return i;
+    }
+    return -1;
+  }
+
+  /* Right-click (and, from the drawing controller, a double-click on empty price-pane space: dbl): the chart
+     menu on the price pane with the tick-rounded price under the pointer; an indicator's own menu in its pane
+     (right-click only); nothing on the axes. The browser's own menu never shows over a chart. */
+  onMenu(e, dbl = false) {
+    e.preventDefault();
+    if (!this.chart || !this.bars.length) return;
+    const r = this.box.getBoundingClientRect(), x = e.clientX - r.left;
+    if (x < 0 || x >= this.box.clientWidth - this.chart.priceScale('right').width()) return;   // the price axis
+    const i = this.paneAt(e.clientY), at = { x: e.clientX, y: e.clientY };
+    if (i === 0) {
+      const top = this.chart.panes()[0].getHTMLElement().getBoundingClientRect().top;
+      const raw = this.candles.coordinateToPrice(e.clientY - top);
+      this.host.onChartMenu(this, { ...at, price: raw == null ? null : window.HBDrawings.roundToTick(raw, this.tick) });
+    } else if (i > 0 && !dbl && this.paneUid[i]) {
+      this.host.onIndicatorMenu(this, this.paneUid[i], { at });
+    }
+  }
+
+  /* Reset chart view (the menu, ⌥R): the default bar spacing with the latest bar at the right margin, and every
+     pane's price scale back to auto (T10-R1). */
+  resetView() {
+    if (!this.chart) return;
+    this.chart.timeScale().resetTimeScale();
+    this.chart.panes().forEach((_, i) => this.chart.priceScale('right', i).applyOptions({ autoScale: true }));
   }
 
   /* The OHLC row and every indicator row for bar i (null: the last bar). */

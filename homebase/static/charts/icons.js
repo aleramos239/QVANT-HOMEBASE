@@ -2,7 +2,7 @@
    Lucide (https://lucide.dev), lucide-static@1.48.0: house, chevron-down, search,
    square-function, mouse-pointer-2, git-commit-horizontal, rectangle-horizontal, ruler,
    trash-2, eye, eye-off, settings, x, check, sun, moon, magnet, trending-up, trending-down,
-   chart-candlestick, paintbrush, list, calendar.
+   chart-candlestick, paintbrush, list, calendar, ellipsis.
 
    ISC License
 
@@ -53,5 +53,6 @@ window.HBIcons = {
   paintbrush: svg('<path d="m14.622 17.897-10.68-2.913"/><path d="M18.376 2.622a1 1 0 1 1 3.002 3.002L17.36 9.643a.5.5 0 0 0 0 .707l.944.944a2.41 2.41 0 0 1 0 3.408l-.944.944a.5.5 0 0 1-.707 0L8.354 7.348a.5.5 0 0 1 0-.707l.944-.944a2.41 2.41 0 0 1 3.408 0l.944.944a.5.5 0 0 0 .707 0z"/><path d="M9 8c-1.804 2.71-3.97 3.46-6.583 3.948a.507.507 0 0 0-.302.819l7.32 8.883a1 1 0 0 0 1.185.204C12.735 20.405 16 16.792 16 15"/>'),
   list: svg('<path d="M3 5h.01"/><path d="M3 12h.01"/><path d="M3 19h.01"/><path d="M8 5h13"/><path d="M8 12h13"/><path d="M8 19h13"/>'),
   calendar: svg('<path d="M8 2v3"/><path d="M16 2v3"/><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/>'),
+  ellipsis: svg('<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>'),
 };
 })();

@@ -96,7 +96,8 @@ function button(cls, text) { const b = mk('button', cls, text); b.type = 'button
 
 function mount(box, host) {
   const cell = host.cell;
-  const atOpen = new Map(host.cells().map((c) => [c, c.settings()]));   // Cancel puts every chart back
+  // Cancel puts every chart back: its settings and its indicators (a template's Apply previews live, spec §8)
+  const atOpen = new Map(host.cells().map((c) => [c, { settings: c.settings(), indicators: JSON.parse(JSON.stringify(c.cfg.indicators)) }]));
   let work = S.normalize(cell.settings()), tab = 0, done = false, raf = 0;
   const swatches = new Map();   // colour key -> the <i> inside its swatch button
 
@@ -248,8 +249,20 @@ function mount(box, host) {
     });
   }
 
-  /* A template or "Apply defaults": the dialog's settings become it, previewed live. */
-  function applyTemplate(o) { work = S.normalize(o); renderPane(); preview(); }
+  /* A template or "Apply defaults": the dialog's settings become it, previewed live; a template that also
+     stored indicators or an interval (spec §8) applies those to the chart too, each with fresh uids. An old
+     (Task 6/7) settings-only template, or "Apply defaults" (`{}`), touches only the settings. */
+  function applyTemplate(raw) {
+    const t = S.applyTemplate(raw);
+    work = S.normalize(t.settings);
+    renderPane();
+    flush();
+    cell.setSettings(S.overrides(work));   // applied now (not next frame): indicators below must see it
+    const patch = {};
+    if (t.indicators) patch.indicators = t.indicators;
+    if (t.spec) patch.spec = t.spec;
+    if (Object.keys(patch).length) cell.update(patch);
+  }
   function menuBtn(text) {
     const b = button('menu-i');
     b.setAttribute('role', 'menuitem');
@@ -268,20 +281,31 @@ function mount(box, host) {
       const fail = (text) => { err.textContent = text; err.hidden = false; host.placeMenu(); };
       defaults.onclick = () => { host.closeMenu(); applyTemplate({}); };
       saveAs.onclick = () => {
-        const rowEl = mk('div', 'menu-custom'), input = mk('input', 'menu-input'), go = button('btn btn-primary', 'Save');
+        const wrap = mk('div'), rowEl = mk('div', 'menu-custom'), input = mk('input', 'menu-input'), go = button('btn btn-primary', 'Save');
+        const opts = mk('div', 'menu-tpl-opts');
+        const indLab = mk('label', 'set-chip'), indCb = mk('input');
+        indCb.type = 'checkbox'; indCb.checked = true;
+        indLab.append(indCb, mk('span', '', 'Include indicators'));
+        const ivLab = mk('label', 'set-chip'), ivCb = mk('input');
+        ivCb.type = 'checkbox'; ivCb.checked = false;
+        ivLab.append(ivCb, mk('span', '', 'Include interval'));
+        opts.append(indLab, ivLab);
         input.type = 'text'; input.placeholder = 'Template name'; input.maxLength = 40; input.spellcheck = false;
         input.setAttribute('aria-label', 'Template name');
         const save = async () => {
           const name = input.value.trim(), why = S.templateNameError(name);
           if (why) { fail(why); input.focus(); return; }
-          const res = await host.templates.save(name, S.overrides(work));
+          const body = S.buildTemplate({ settings: work, indicators: cell.cfg.indicators, spec: cell.cfg.spec },
+            { indicators: indCb.checked, interval: ivCb.checked });
+          const res = await host.templates.save(name, body);
           if (res) { fail(res); return; }
           host.closeMenu();
         };
         go.onclick = save;
         input.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } };
         rowEl.append(input, go);
-        saveAs.replaceWith(rowEl);
+        wrap.append(rowEl, opts);
+        saveAs.replaceWith(wrap);
         input.focus();
       };
       list.append(mk('div', 'menu-empty', 'Loading…'));
@@ -324,7 +348,11 @@ function mount(box, host) {
     flush();
     cell.setSettings(S.overrides(work));
     done = true;
-    host.commit(host.cells().some((c) => JSON.stringify(c.settings()) !== JSON.stringify(atOpen.get(c) || {})));
+    host.commit(host.cells().some((c) => {
+      const at = atOpen.get(c);
+      return !at || JSON.stringify(c.settings()) !== JSON.stringify(at.settings)
+        || JSON.stringify(c.cfg.indicators) !== JSON.stringify(at.indicators);
+    }));
   };
   const tpl = button('btn btn-ghost tpl-btn'), chev = mk('span', 'icw sm'), applyAll = button('btn btn-ghost', 'Apply to all');
   chev.innerHTML = I.chevron;
@@ -344,13 +372,18 @@ function mount(box, host) {
   tabs.querySelector('.active').focus();
 
   return {
-    /* Cancel, ×, Esc, a backdrop click: every chart back to its settings at open. After Ok: nothing. */
+    /* Cancel, ×, Esc, a backdrop click: every chart back to its settings — and its indicators, since a template
+       Apply can have changed those too (spec §8) — at open. After Ok: nothing. */
     revert() {
       if (done) return;
       done = true;
       flush();
       const now = host.cells();
-      for (const [c, s] of atOpen) if (now.includes(c)) c.setSettings(s);
+      for (const [c, at] of atOpen) {
+        if (!now.includes(c)) continue;
+        c.setSettings(at.settings);
+        if (JSON.stringify(c.cfg.indicators) !== JSON.stringify(at.indicators)) c.update({ indicators: at.indicators });
+      }
     },
   };
 }

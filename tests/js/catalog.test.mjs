@@ -347,3 +347,72 @@ test('staleAfter: RTH, ETH and 24/7 thresholds', () => {
   assert.equal(C.staleAfter('BTC', ...SAT_NOON), Infinity);    // 24/7, weekend
   assert.equal(C.staleAfter('BTC', ...WED_1730), Infinity);    // 24/7, classic daily break
 });
+
+// ---- pane placement (spec §7) ----
+test('pane-type indicators carry a placement with today as the default; price-pane-only ones carry none', () => {
+  assert.deepEqual(C.PANES, ['main', 'own']);
+  assert.equal(C.instance('volume').pane, 'main');
+  for (const id of ['delta', 'cumdelta', 'adx']) {
+    assert.equal(C.instance(id).pane, 'own', id);
+    assert.equal(C.movable(id), true, id);
+  }
+  assert.equal(C.movable('volume'), true);
+  for (const id of ['vwap', 'ema', 'sma', 'vwma', 'levels', 'footprint', 'profile', 'bigprints']) {
+    assert.equal('pane' in C.instance(id), false, id);
+    assert.equal(C.movable(id), false, id);
+  }
+  assert.equal(C.movable('nope'), false);
+});
+
+test('placement: a valid saved pane, else the default; null for what cannot move', () => {
+  assert.equal(C.placement({ id: 'delta' }), 'own');
+  assert.equal(C.placement({ id: 'delta', pane: 'main' }), 'main');
+  assert.equal(C.placement({ id: 'volume', pane: 'own' }), 'own');
+  assert.equal(C.placement({ id: 'cumdelta', pane: 'sideways' }), 'own');
+  assert.equal(C.placement({ id: 'ema', pane: 'own' }), null);
+  assert.equal(C.placement({ id: 'nope', pane: 'main' }), null);
+  assert.equal(C.placement(null), null);
+});
+
+test('migrate keeps a saved placement and gives a missing or bad one today\'s', () => {
+  const m = C.migrate({ root: 'NQ', spec: 'time:60', indicators: [
+    { uid: 'a', id: 'delta', params: {}, visible: true, pane: 'main' },
+    { uid: 'b', id: 'cumdelta', params: {} },
+    { uid: 'c', id: 'volume', params: {}, pane: 'sideways' },
+    { uid: 'd', id: 'adx', params: { length: 14 }, pane: 'own' },
+    { uid: 'e', id: 'ema', params: { length: 9 }, pane: 'own' }] });
+  assert.deepEqual(m.indicators.map((x) => [x.uid, x.pane]),
+    [['a', 'main'], ['b', 'own'], ['c', 'main'], ['d', 'own'], ['e', undefined]]);
+  assert.equal('pane' in m.indicators[4], false);
+});
+
+test('Build-1 charts migrate with today\'s placement', () => {
+  const m = C.migrate({ root: 'NQ', spec: 'time:60', st: { volume: true, delta: true, cumdelta: true, adx: 14 } });
+  const by = Object.fromEntries(m.indicators.map((x) => [x.id, x.pane]));
+  assert.equal(by.volume, 'main');
+  assert.equal(by.delta, 'own');
+  assert.equal(by.cumdelta, 'own');
+  assert.equal(by.adx, 'own');
+  assert.equal(by.vwap, undefined);
+});
+
+test('a saved layout round-trips each placement', () => {
+  const lay = { grid: 1, cells: [{ root: 'NQ', spec: 'time:60', indicators: [
+    { uid: 'a', id: 'delta', params: {}, visible: true, pane: 'main' },
+    { uid: 'b', id: 'volume', params: {}, visible: true, pane: 'own' }] }] };
+  const back = C.migrateLayout(JSON.parse(JSON.stringify(C.migrateLayout(lay))));
+  assert.deepEqual(back.cells[0].indicators.map((x) => x.pane), ['main', 'own']);
+});
+
+// ---- instance(id, params, extra) — materialising a stored indicator (chart templates, spec §8) ----
+test('instance\'s optional third argument carries visible/pane from a stored indicator, with a fresh uid', () => {
+  const a = C.instance('delta', {}, { visible: false, pane: 'main' });
+  const b = C.instance('delta', {}, { visible: false, pane: 'main' });
+  assert.notEqual(a.uid, b.uid);
+  assert.equal(a.visible, false);
+  assert.equal(a.pane, 'main');
+  assert.equal(C.instance('delta', {}, { pane: 'sideways' }).pane, 'own');   // a bad pane: today's default
+  assert.equal(C.instance('ema', {}, { visible: false, pane: 'own' }).visible, false);
+  assert.equal('pane' in C.instance('ema', {}, { pane: 'own' }), false);     // never movable: no pane, whatever extra says
+  assert.equal(C.instance('volume').visible, true);                          // no extra: today's default (visible)
+});

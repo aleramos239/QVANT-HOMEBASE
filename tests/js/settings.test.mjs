@@ -202,6 +202,57 @@ test('the swatch palette: 10 hues x 6 shades, all distinct, with the chart\'s up
   assert.ok(S.PALETTE.flat().includes('#089981') && S.PALETTE.flat().includes('#F23645'));
 });
 
+// ---- chart templates (spec §8): {settings, indicators?, spec?} ----
+const CHART = { settings: { prevClose: true }, indicators: [
+  { uid: 'a', id: 'delta', params: {}, visible: true, pane: 'main' },
+  { uid: 'b', id: 'ema', params: { length: 9 }, visible: false }], spec: 'time:300' };
+
+test('buildTemplate: settings always, indicators (no uid, movable ones keep pane) unless told off, spec only when asked', () => {
+  const full = S.buildTemplate(CHART, { interval: true });
+  assert.deepEqual(full.settings, { prevClose: true });
+  assert.deepEqual(full.indicators, [{ id: 'delta', params: {}, visible: true, pane: 'main' },
+    { id: 'ema', params: { length: 9 }, visible: false }]);
+  assert.equal('uid' in full.indicators[0], false);
+  assert.equal('pane' in full.indicators[1], false);   // EMA never moves: no pane, whatever the source carried
+  assert.equal(full.spec, 'time:300');
+
+  const settingsOnly = S.buildTemplate(CHART, { indicators: false });
+  assert.equal('indicators' in settingsOnly, false);
+  assert.equal('spec' in settingsOnly, false);   // interval defaults off
+
+  const noInterval = S.buildTemplate(CHART);
+  assert.ok(Array.isArray(noInterval.indicators));   // indicators default on
+  assert.equal('spec' in noInterval, false);
+});
+
+test('applyTemplate: fresh uids each time, spec only when the template stored one, an unknown id or bad spec dropped', () => {
+  const stored = S.buildTemplate(CHART, { interval: true });
+  const a = S.applyTemplate(stored), b = S.applyTemplate(stored);
+  assert.deepEqual(a.settings, { prevClose: true });
+  assert.equal(a.indicators.length, 2);
+  assert.notEqual(a.indicators[0].uid, b.indicators[0].uid);   // fresh every apply
+  assert.notEqual(a.indicators[0].uid, a.indicators[1].uid);
+  assert.equal(a.indicators[0].pane, 'main');
+  assert.equal('pane' in a.indicators[1], false);
+  assert.equal(a.spec, 'time:300');
+
+  const noInterval = S.applyTemplate(S.buildTemplate(CHART));
+  assert.equal('spec' in noInterval, false);   // never stored: never applied
+
+  const junk = S.applyTemplate({ settings: { prevClose: true }, indicators: [{ id: 'nope' }], spec: 'nonsense' });
+  assert.deepEqual(junk.indicators, []);
+  assert.equal('spec' in junk, false);
+});
+
+test('applyTemplate: an old (Task 6/7) settings-only template stays valid — indicators and spec left untouched', () => {
+  const old = { prevClose: true, marginTop: 20 };   // no settings/indicators/spec keys: the old flat shape
+  const t = S.applyTemplate(old);
+  assert.deepEqual(t.settings, { prevClose: true, marginTop: 20 });
+  assert.equal('indicators' in t, false);
+  assert.equal('spec' in t, false);
+  assert.deepEqual(S.applyTemplate({}).settings, {});   // "Apply defaults": settings only, back to the defaults
+});
+
 test('the Events fields: High and Medium on, USD, lines on; currencies cleaned and sorted', () => {
   const d = S.DEFAULTS;
   assert.deepEqual([d.evHigh, d.evMedium, d.evLow, d.evHoliday, d.evLines], [true, true, false, false, true]);

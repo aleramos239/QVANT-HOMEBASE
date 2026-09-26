@@ -114,7 +114,7 @@ a { color: inherit; }
 .lg-vals { display: inline-flex; gap: 8px; font-variant-numeric: tabular-nums; }
 .lg-row.off .lg-label, .lg-row.off .lg-vals { opacity: .5; }
 .lg-btns { display: none; gap: 2px; }
-.lg-row:hover .lg-btns, .lg-row:focus-within .lg-btns { display: inline-flex; }
+.lg-row:hover .lg-btns, .lg-row:focus-within .lg-btns, .lg-btns:has(.ib.open) { display: inline-flex; }
 .ib { width: 18px; height: 18px; display: grid; place-items: center; border-radius: 3px; color: var(--text); }
 .ib .ic { width: 14px; height: 14px; }
 .ib:hover { background: var(--border); }
@@ -276,3 +276,13 @@ a { color: inherit; }
 .set-chips { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px 12px; }
 .set-chip { display: inline-flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
 .set-chip input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
+
+/* ---- the chart's context menu and an indicator's menu (chartmenu.js) ---- */
+.menu:focus { outline: none; }   /* a context menu takes focus itself; its items show the focus ring */
+.menu-chart { min-width: 240px; }
+.menu-chart .menu-sub { font-variant-numeric: tabular-nums; }
+.menu-i.arm .menu-t { color: var(--down); }
+.ib.open { background: var(--border); }
+
+/* Chart template ›'s "Include indicators" / "Include interval" checkboxes (spec §8), under the Save-as name field */
+.menu-tpl-opts { display: flex; gap: 14px; padding: 0 12px 8px; }

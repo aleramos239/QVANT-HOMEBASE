@@ -602,8 +602,9 @@ class Controller {
     return P.create(type, at.t, shiftTime(at.t, P.WIDTH_BARS, this.ctx()), at.p, P.risk(span, c.tick), c.tick);
   }
 
-  /* Double-click on a long/short box (cursor mode): select it and open its settings (host.onPosition).
-     Captured before Lightweight Charts sees it: its own double-click would reset the price scale. */
+  /* Double-click (cursor mode): on a long/short box, select it and open its settings (host.onPosition); on
+     empty price-pane space, the chart menu (Cell.onMenu). Captured before Lightweight Charts sees it: its own
+     double-click would reset the price scale. */
   onDbl(e) {
     if (this.host.tool() !== 'cursor' || !this.cell.chart) return;
     const pt = this.local(e), geo = this.geo();
@@ -618,6 +619,11 @@ class Controller {
       this.host.onPosition(this.cell, all[i]);
       return;
     }
+    // on any other drawing: its own behaviour (none yet), no menu
+    if (all.some((d) => hitTest(d, pt, geo))) return;
+    // empty chart space: the chart menu (spec §7), and not Lightweight Charts' own double-click
+    e.stopPropagation();
+    this.cell.onMenu(e, true);
   }
 
   toolChanged() {

@@ -243,6 +243,40 @@ function templateNameError(name) {
   return '';
 }
 
+/* ---- chart templates (spec §8): a template stores {settings, indicators?, spec?} ---- */
+/* What Save saves from a chart's current pieces (`chart` = {settings, indicators, spec}): its settings
+   overrides always; its indicator list (id, params, visible and, for a movable one, its pane placement — no
+   uid: apply gives every indicator a fresh one) unless `opts.indicators` is false; its bar spec only when
+   `opts.interval` is true. The symbol is never stored. */
+function buildTemplate(chart, opts = {}) {
+  const c = chart && typeof chart === 'object' ? chart : {}, out = { settings: overrides(c.settings || {}) };
+  if (opts.indicators !== false) {
+    out.indicators = (Array.isArray(c.indicators) ? c.indicators : []).map((x) => {
+      const o = { id: x.id, params: Cat.clampParams(x.id, x.params), visible: x.visible !== false };
+      if (Cat.movable(x.id)) o.pane = Cat.placement(x);
+      return o;
+    });
+  }
+  if (opts.interval && typeof c.spec === 'string') out.spec = c.spec;
+  return out;
+}
+
+/* A stored template applied: {settings, indicators?, spec?} ready for HBCell.Cell#setSettings / #update.
+   Understands both vintages: today's {settings, indicators?, spec?} and a Task 6/7 template, a flat settings
+   object with none of those three keys — for it, indicators and spec are left out (untouched: "old
+   settings-only templates stay valid"). Indicators get fresh uids and today's clamped params; an id the
+   catalog no longer has is dropped; a spec that does not parse is dropped as well. */
+function applyTemplate(tpl) {
+  const t = tpl && typeof tpl === 'object' ? tpl : {};
+  const isNew = 'settings' in t || 'indicators' in t || 'spec' in t;
+  const out = { settings: overrides(isNew ? (t.settings && typeof t.settings === 'object' ? t.settings : {}) : t) };
+  if (isNew && Array.isArray(t.indicators)) {
+    out.indicators = t.indicators.filter((x) => x && Cat.def(x.id)).map((x) => Cat.instance(x.id, x.params, x));
+  }
+  if (isNew && typeof t.spec === 'string') { const s = Cat.toSpec(t.spec); if (s) out.spec = s; }
+  return out;
+}
+
 /* The swatch popover's palette: 10 hue columns (grey, red, orange, yellow, green, teal, cyan, blue, purple,
    pink) x 6 rows, light to dark, TradingView-like. */
 const PALETTE = [
@@ -257,7 +291,7 @@ const PALETTE = [
 const api = { FIELDS, DEFAULTS, THEMED, LINE_STYLE, TIMEZONES, PALETTE, CLEAR, parseColor, fmtColor, hexOf, alphaOf,
   withAlpha, normalize, overrides, resolve, chartOptions, candleOptions, scaleMargins, legendFlags, barColor,
   barColorsByPrevClose, splitLabel, legendLabel, titleText, zoneOffsetMs, wallSeconds, outsideRth, barCloseEt,
-  fmtCountdown, templateNameError };
+  fmtCountdown, templateNameError, buildTemplate, applyTemplate };
 if (typeof window !== 'undefined') window.HBSettings = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

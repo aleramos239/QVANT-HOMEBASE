@@ -30,20 +30,20 @@ function marketOpen(root, weekday, minutes) {
 const GROUPS = ['All', 'VWAP', 'Moving averages', 'Trend', 'Levels', 'Volume', 'Order flow'];
 const LENGTH = (def) => ({ key: 'length', label: 'Length', type: 'int', min: 1, max: 1000, def });
 const CATALOG = [
-  { id: 'volume', group: 'Volume', name: 'Volume', params: [] },
+  { id: 'volume', group: 'Volume', name: 'Volume', params: [], pane: 'main' },
   { id: 'vwap', group: 'VWAP', name: 'VWAP', params: [
     { key: 'anchor', label: 'Anchor', type: 'choice', choices: [['eth', 'ETH'], ['rth', 'RTH']], def: 'eth' },
     { key: 'bands', label: 'Bands (1σ and 2σ)', type: 'bool', def: false }] },
   { id: 'ema', group: 'Moving averages', name: 'EMA', params: [LENGTH(20)] },
   { id: 'sma', group: 'Moving averages', name: 'SMA', params: [LENGTH(50)] },
   { id: 'vwma', group: 'Moving averages', name: 'VWMA', params: [LENGTH(20)] },
-  { id: 'adx', group: 'Trend', name: 'ADX / DMI', params: [LENGTH(14)] },
+  { id: 'adx', group: 'Trend', name: 'ADX / DMI', params: [LENGTH(14)], pane: 'own' },
   { id: 'levels', group: 'Levels', name: 'Session levels', params: [] },
   { id: 'footprint', group: 'Order flow', name: 'Footprint', params: [
     { key: 'imbalance', label: 'Imbalance ratio', type: 'num', min: 0, max: 20, step: 0.5, def: 3 }] },
   { id: 'profile', group: 'Order flow', name: 'Volume profile', params: [] },
-  { id: 'delta', group: 'Order flow', name: 'Delta', params: [] },
-  { id: 'cumdelta', group: 'Order flow', name: 'Cumulative delta', params: [] },
+  { id: 'delta', group: 'Order flow', name: 'Delta', params: [], pane: 'own' },
+  { id: 'cumdelta', group: 'Order flow', name: 'Cumulative delta', params: [], pane: 'own' },
   { id: 'bigprints', group: 'Order flow', name: 'Big prints', params: [
     { key: 'min', label: 'Minimum size', type: 'int', min: 1, max: 100000, def: 25 }] },
 ];
@@ -77,6 +77,18 @@ function uid() { return 'i' + Date.now().toString(36) + (seq++).toString(36) + M
 
 function def(id) { return BY_ID[id] || null; }
 
+/* Where an indicator that can live in its own pane is drawn (spec §7): 'own' = a pane of its own below the price
+   pane, 'main' = on the price pane (an overlay at the bottom, out of the price autoscale). A catalog def's `pane`
+   is its default, i.e. where it was drawn before placements existed; the price-pane-only ones (VWAP, MAs,
+   levels, footprint, profile, big prints) have none and never move. */
+const PANES = ['main', 'own'];
+function movable(id) { const d = def(id); return !!(d && d.pane); }
+function placement(inst) {
+  const d = inst && def(inst.id);
+  if (!d || !d.pane) return null;
+  return PANES.includes(inst.pane) ? inst.pane : d.pane;
+}
+
 function clampParams(id, params) {
   const d = def(id), src = params && typeof params === 'object' ? params : {}, out = {};
   if (!d) return out;
@@ -94,8 +106,15 @@ function clampParams(id, params) {
   return out;
 }
 
-function instance(id, params) {
-  return def(id) ? { uid: uid(), id, params: clampParams(id, params), visible: true } : null;
+/* A fresh instance of `id`: a new uid, clamped params, and — for a pane-type indicator — its placement. `extra`
+   (a stored indicator, e.g. from a chart template, spec §8) carries `visible` and `pane` over; anything it
+   leaves out, or a pane that cannot move, takes today's default. */
+function instance(id, params, extra) {
+  const d = def(id);
+  if (!d) return null;
+  const inst = { uid: uid(), id, params: clampParams(id, params), visible: !(extra && extra.visible === false) };
+  if (d.pane) inst.pane = extra && PANES.includes(extra.pane) ? extra.pane : d.pane;
+  return inst;
 }
 
 function defaults() { return [instance('volume'), instance('vwap'), instance('levels'), instance('footprint')]; }
@@ -119,9 +138,12 @@ function migrate(cfg) {
   const root = typeof c.root === 'string' && c.root ? c.root.toUpperCase() : 'NQ';
   const spec = toSpec(c.spec) || 'time:60';
   if (Array.isArray(c.indicators)) {
-    const indicators = c.indicators.filter((x) => x && def(x.id)).map((x) => ({
-      uid: typeof x.uid === 'string' && x.uid ? x.uid : uid(), id: x.id,
-      params: clampParams(x.id, x.params), visible: x.visible !== false }));
+    const indicators = c.indicators.filter((x) => x && def(x.id)).map((x) => {
+      const o = { uid: typeof x.uid === 'string' && x.uid ? x.uid : uid(), id: x.id,
+        params: clampParams(x.id, x.params), visible: x.visible !== false };
+      if (movable(x.id)) o.pane = placement(x);
+      return o;
+    });
     return { root, spec, indicators };
   }
   if (!c.st || typeof c.st !== 'object') return { root, spec, indicators: defaults() };
@@ -304,7 +326,7 @@ function filter(query, group = 'All') {
 const api = { CATALOG, GROUPS, ROOT_NAMES, FAVOURITES, INTERVAL_GROUPS, LINE_COLORS, uid, def, clampParams, instance,
   defaults, serverKey, serverKeys, migrate, migrateLayout, label, legendValues, decimals, fmtPrice, fmtCompact,
   fmtSigned, change, parseSpec, specLabel, longLabel, toSpec, rootName, filter, ALWAYS_OPEN, marketOpen, fmtAge,
-  feedSummary, REC_BUSY, staleAfter, sinceOpen };
+  feedSummary, REC_BUSY, staleAfter, sinceOpen, PANES, movable, placement };
 if (typeof window !== 'undefined') window.HBCatalog = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

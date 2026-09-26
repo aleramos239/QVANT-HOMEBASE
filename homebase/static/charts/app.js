@@ -35,6 +35,7 @@ let noteTimer = 0, armTimer = 0, armRoot = null;   // armRoot: the symbol the ar
 const drawings = new window.HBDrawings.Store({ onError: (root, msg) => sbNote(`${root} drawings: ${msg}`) });
 let magnet = loadMagnet();   // the rail's magnet {on, mode}, per viewer (localStorage hb_charts_magnet)
 let menuRight = false;       // the open menu is a rail flyout: it opens to the right of its button
+let menuAt = null;   // the open menu is a context menu at this viewport point {x, y}
 let replayClock = null;   // {etMs, at, speed, done}: a replay's clock from its last status (live: null)
 let calendar = [];   // every stored calendar event (GET /api/calendar), by time
 let calendarAt;   // the service's calendar.fetched_at they came with (undefined: never loaded)
@@ -82,6 +83,8 @@ function hostFor(id) {
     onRefused,
     onSettings(cell, uid) { settingsDialog(cell, uid); },
     onPosition(cell, d) { positionDialog(cell, d); },
+    onChartMenu(cell, at) { chartMenu(cell, at); },
+    onIndicatorMenu(cell, uid, o) { indicatorMenu(cell, uid, o); },
     changed() { saveLast(); renderToolbar(); },
     tool: () => tool,
     toolDone() { setTool('cursor'); },
@@ -147,20 +150,25 @@ function renderToolbar() {
   $('#tbLayoutName').textContent = !layout.name ? 'Unsaved' : layout.dirty ? `${layout.name} · Unsaved` : layout.name;
 }
 
-/* One popup menu at a time, under its toolbar button (right: to the right of a rail button). */
-function openMenu(anchor, cls, { right = false, root = null } = {}) {
+/* One popup menu at a time: under its toolbar button, right of a rail button (right), or at the pointer (at: a
+   context menu, anchor null). root: the element it is appended to (a dialog's box for in-dialog menus). */
+function openMenu(anchor, cls, { right = false, root = null, at = null } = {}) {
   closeMenu();
   const m = mk('div', 'menu' + (cls ? ' ' + cls : ''));
   m.setAttribute('role', 'menu');
   (root || $('#menuRoot')).appendChild(m);
-  menuEl = m; menuAnchor = anchor; menuRight = right;
-  anchor.classList.add('open');
-  anchor.setAttribute('aria-expanded', 'true');
+  menuEl = m; menuAnchor = anchor; menuRight = right; menuAt = at;
+  if (anchor) { anchor.classList.add('open'); anchor.setAttribute('aria-expanded', 'true'); }
   return m;
 }
 function placeMenu() {
   if (!menuEl) return;
   const w = menuEl.offsetWidth, h = menuEl.offsetHeight;
+  if (menuAt) {   // a context menu: at the pointer, kept inside the window
+    menuEl.style.left = Math.max(4, Math.min(menuAt.x, window.innerWidth - w - 4)) + 'px';
+    menuEl.style.top = Math.max(4, Math.min(menuAt.y, window.innerHeight - h - 4)) + 'px';
+    return;
+  }
   if (menuRight) {
     const r = (menuAnchor.closest('.rail-split') || menuAnchor).getBoundingClientRect();
     menuEl.style.left = (r.right + 8) + 'px';
@@ -174,11 +182,10 @@ function placeMenu() {
 }
 function closeMenu() {
   if (!menuEl) return;
-  const back = menuEl.contains(document.activeElement) ? menuAnchor : null;   // keyboard focus goes back to the button
+  const back = menuAnchor && menuEl.contains(document.activeElement) ? menuAnchor : null;   // keyboard focus goes back to the button
   menuEl.remove();
-  menuAnchor.classList.remove('open');
-  menuAnchor.setAttribute('aria-expanded', 'false');
-  menuEl = menuAnchor = null;
+  if (menuAnchor) { menuAnchor.classList.remove('open'); menuAnchor.setAttribute('aria-expanded', 'false'); }
+  menuEl = menuAnchor = menuAt = null;
   customWait = null;
   if (back) back.focus();
 }
@@ -660,6 +667,157 @@ function chartSettings() {
   dlg.onClose = ctl.revert;   // Cancel, ×, Esc, a backdrop click: every chart back (a no-op after Ok)
 }
 
+/* ---- the chart's context menu (spec §7) ---- */
+/* The built-in items' actions (HBChartMenu items carry `act`; an extension's carry their own run). */
+const MENU_ACTS = {
+  reset: (ctx) => ctx.cell.resetView(),
+  copy: (ctx, it) => {   // silent when the clipboard is unavailable or refused
+    try { navigator.clipboard.writeText(it.copy).catch(() => {}); } catch (_) { /* no clipboard */ }
+  },
+  removeDrawings: (ctx) => drawings.clear(ctx.root),
+  removeIndicators: (ctx) => ctx.cell.update({ indicators: [] }),
+  settings: () => chartSettings(),
+};
+
+/* Right-click on a chart's price pane, or a double-click on its empty space: the chart menu at the pointer, for
+   that chart (it becomes the selected one). Remove N drawings asks twice, like the rail's Remove all: the first
+   click arms it for 3 s (the menu stays open), the second removes. Chart template (spec §8) is not one of
+   HBChartMenu's built-ins (it needs a network fetch and its own submenu): it is spliced in here, right before
+   Settings…. */
+function chartMenu(cell, at) {
+  const i = cells.indexOf(cell);
+  if (i < 0) return;
+  select(i);
+  const root = cell.shown ? cell.shown.root : cell.cfg.root;
+  const ctx = { cell, root, price: at.price, tick: cell.tick, nDrawings: drawings.list(root).length,
+    nIndicators: cell.cfg.indicators.length };
+  const m = openMenu(null, 'menu-chart', { at });
+  let armed = 0;
+  for (const it of window.HBChartMenu.items(ctx)) {
+    if (it.sep) { m.appendChild(mk('div', 'menu-sep')); continue; }
+    if (it.act === 'settings') {
+      const tpl = menuItem('Chart template', '›', () => chartTemplateMenu(cell, at));
+      tpl.setAttribute('aria-haspopup', 'menu');
+      m.appendChild(tpl);
+    }
+    const b = menuItem(it.text, it.sub || '', () => {
+      if (it.act === 'removeDrawings' && !armed) {
+        b.classList.add('arm');
+        b.querySelector('.menu-t').textContent = window.HBChartMenu.armText(ctx.nDrawings, root);
+        armed = setTimeout(() => { armed = 0; b.classList.remove('arm'); b.querySelector('.menu-t').textContent = it.text; }, 3000);
+        return;
+      }
+      clearTimeout(armed);
+      closeMenu();
+      if (it.run) {
+        try { it.run(ctx); } catch (e) { sbNote(`menu: ${e && e.message ? e.message : e}`); }
+        return;
+      }
+      if (MENU_ACTS[it.act]) MENU_ACTS[it.act](ctx, it);
+    });
+    m.appendChild(b);
+  }
+  placeMenu();
+  m.tabIndex = -1;   // the arrow keys start from the menu
+  m.focus({ preventScroll: true });
+}
+
+/* An indicator's own menu: from its legend ⋯ (anchor; a second click closes it) or a right-click in its pane (at). */
+function indicatorMenu(cell, uid, { anchor = null, at = null } = {}) {
+  if (anchor && menuAnchor === anchor) { closeMenu(); return; }
+  const inst = cell.cfg.indicators.find((x) => x.uid === uid), i = cells.indexOf(cell);
+  if (!inst || i < 0) return;
+  select(i);
+  const m = openMenu(anchor, 'menu-ind', { at });
+  for (const it of window.HBChartMenu.paneItems(inst)) {
+    m.appendChild(menuItem(it.text, '', () => {
+      closeMenu();
+      if (it.act === 'move') cell.setPlacement(uid, it.pane); else cell.removeIndicator(uid);
+    }));
+  }
+  placeMenu();
+  if (at) { m.tabIndex = -1; m.focus({ preventScroll: true }); }
+}
+
+/* Applying a saved chart template (spec §8) to one chart from the chart menu: settings, then indicators/interval
+   if the template stored them (fresh uids), and the layout reads Unsaved — the Settings dialog's own Template ▾
+   marks it dirty through the usual Ok/commit path; this one applies straight to the chart, so it says so itself. */
+function applyChartTemplate(cell, raw) {
+  const t = S.applyTemplate(raw);
+  cell.setSettings(t.settings);
+  const patch = {};
+  if (t.indicators) patch.indicators = t.indicators;
+  if (t.spec) patch.spec = t.spec;
+  if (Object.keys(patch).length) cell.update(patch);
+  layout.dirty = true;
+  saveLast();
+  renderToolbar();
+}
+
+/* Chart menu -> Chart template ›: save this chart (its settings and, unless unticked, its indicators — fresh
+   uids on apply) as a named template, or apply a saved one back to this chart only. Reuses the page's own
+   templates client (`templates`, shared with the Settings dialog: GET/PUT/DELETE /api/templates). */
+function chartTemplateMenu(cell, at) {
+  const m = openMenu(null, 'menu-chart menu-tpl', { at });
+  const back = menuItem('‹ Chart template', '', () => chartMenu(cell, at));
+  const saveRow = menuItem('Save this chart as template…', '', () => {});
+  const list = mk('div'), err = mk('div', 'menu-err');
+  err.hidden = true;
+  err.setAttribute('role', 'alert');
+  m.append(back, mk('div', 'menu-sep'), saveRow, mk('div', 'menu-sep'), list, err);
+  const fail = (text) => { err.textContent = text; err.hidden = false; placeMenu(); };
+  let names = new Set();
+  saveRow.onclick = () => {
+    const rowEl = mk('div', 'menu-custom'), input = mk('input', 'menu-input'), go = mk('button', 'btn btn-primary', 'Save');
+    go.type = 'button';
+    input.type = 'text'; input.placeholder = 'Template name'; input.maxLength = 40; input.spellcheck = false;
+    input.setAttribute('aria-label', 'Template name');
+    const doSave = async () => {
+      const name = input.value.trim();
+      const body = S.buildTemplate({ settings: cell.settings(), indicators: cell.cfg.indicators, spec: cell.cfg.spec });
+      const res = await templates.save(name, body);
+      if (res) { fail(res); return; }
+      names.add(name);
+      closeMenu();
+    };
+    const save = () => {
+      const name = input.value.trim(), why = S.templateNameError(name);
+      if (why) { fail(why); input.focus(); return; }
+      if (names.has(name)) {
+        const ask = mk('div', 'menu-confirm'), yes = mk('button', 'btn btn-danger', 'Replace'), no = mk('button', 'btn btn-ghost', 'Cancel');
+        yes.type = 'button'; no.type = 'button';
+        ask.append(mk('span', '', `Replace “${name}”?`), yes, no);
+        rowEl.replaceWith(ask);
+        no.focus();
+        no.onclick = () => { ask.replaceWith(rowEl); input.focus(); };
+        yes.onclick = doSave;
+        return;
+      }
+      doSave();
+    };
+    go.onclick = save;
+    input.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } };
+    rowEl.append(input, go);
+    saveRow.replaceWith(rowEl);
+    input.focus();
+  };
+  list.append(mk('div', 'menu-empty', 'Loading…'));
+  templates.list().then((all) => {
+    if (!m.isConnected) return;   // closed meanwhile
+    if (!all) { list.replaceChildren(); fail('could not load the templates'); return; }
+    names = new Set(Object.keys(all));
+    const ns = [...names].sort((a, b) => a.localeCompare(b));
+    list.replaceChildren(...(ns.length ? ns.map((n) => menuItem(n, '', () => {
+      closeMenu();
+      applyChartTemplate(cell, all[n]);
+    })) : [mk('div', 'menu-empty', 'No saved templates')]));
+    placeMenu();
+  });
+  placeMenu();
+  m.tabIndex = -1;
+  m.focus({ preventScroll: true });
+}
+
 /* ---- drawing rail ---- */
 function setTool(t) {
   tool = t;
@@ -846,6 +1004,17 @@ function onKey(e) {
   if (e.key === 'Escape' && menuEl) { e.preventDefault(); closeMenu(); return; }
   if (e.target.closest && e.target.closest('input, textarea, select, [contenteditable="true"]')) return;
   const c = cur();
+  if (menuEl && ['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) {   // walk the open menu's items
+    const items = [...menuEl.querySelectorAll('.menu-i')].filter((b) => !b.disabled && b.offsetParent !== null);
+    const k = window.HBChartMenu.step(items.indexOf(document.activeElement), items.length, e.key);
+    if (k >= 0) { e.preventDefault(); items[k].focus(); }
+    return;
+  }
+  if (e.altKey && !e.metaKey && !e.ctrlKey && e.code === 'KeyR') {   // ⌥R: Reset chart view (e.key is ® on macOS)
+    e.preventDefault();
+    if (c) c.resetView();
+    return;
+  }
   if (e.key === 'Escape') {
     if (c && c.dc) c.dc.escape();
     if (tool !== 'cursor') setTool('cursor');
@@ -875,7 +1044,7 @@ async function init() {
   $('#railMagnetMore').onclick = () => toggleMenu($('#railMagnetMore'), magnetMenu);
   renderMagnet();
   document.addEventListener('pointerdown', (e) => {
-    if (menuEl && !menuEl.contains(e.target) && !menuAnchor.contains(e.target)) closeMenu();
+    if (menuEl && !menuEl.contains(e.target) && !(menuAnchor && menuAnchor.contains(e.target))) closeMenu();
   }, true);
   window.addEventListener('resize', closeMenu);
   document.addEventListener('keydown', onKey);
