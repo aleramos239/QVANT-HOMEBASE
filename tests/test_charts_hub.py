@@ -114,3 +114,66 @@ def test_the_last_unsubscribe_drops_the_stream(tmp_path):
     assert len(hub.streams) == 1
     hub.drop_conn("b")
     assert hub.streams == {}
+
+
+def test_no_reset_loop_for_a_root_with_no_today_tape(tmp_path):
+    """A root nobody has ticked yet (no file on a replay date; a recorded
+    root that hasn't started ticking) must not be reset every drain forever:
+    prepare() and attach() must see the SAME "no tape yet" state (None both
+    times), not two distinct fresh empty-list objects."""
+    hub, _, _ = setup(tmp_path)
+    s = hub.attach(hub.prepare("ES", M1, ["vwap"]))
+    hub.subscribe(s, ("conn", "c1"))
+    for _ in range(3):
+        assert hub.drain() == []
+        assert hub.streams == {("ES", M1.key): s}
+
+
+def test_attach_resets_when_the_roll_lands_inside_prepare(tmp_path):
+    """prepare() reads self.today_date (the history cutoff) BEFORE the slow
+    history load, and today's tape/info AFTER it. If the 18:00 roll lands in
+    that gap, prepare() returns a stream built from a torn mix: the OLD
+    cutoff (so the session that just closed is excluded from history) but
+    the NEW tape/info (so that session's ticks aren't there either). The
+    tape object itself never changes again before attach() runs, so the
+    plain tape-identity check alone can't catch this -- attach() must also
+    compare today_date."""
+    hub, today, _ = setup(tmp_path)
+    hub.start_today("NQ", D, ticks_of(today))
+
+    class HookHistory(History):
+        hook = None
+
+        def bars(self, root, spec, d):
+            hook, HookHistory.hook = HookHistory.hook, None
+            if hook:
+                hook()                                   # the loop runs on_ticks meanwhile
+            return super().bars(root, spec, d)
+
+    hub.history = HookHistory(hub.store, cache_dir=hub.history.cache_dir)
+    nxt = D + dt.timedelta(days=1)
+    HookHistory.hook = lambda: hub.on_ticks(
+        "NQ", rows(session_ms(nxt, 18, 1), [300.0], first_id=99_999))
+    p = hub.prepare("NQ", M1, ["vwap"])
+    s = hub.attach(p)
+    hub.subscribe(s, ("conn", "c1"))
+    assert hub.drain() == [(("conn", "c1"), {"type": "reset"})]
+
+
+def test_the_roll_resets_the_side_classifier_to_match_a_reload(tmp_path):
+    """A reload classifies each session's ticks with a FRESH SideClassifier
+    (store.ticks_from_table starts one per file). The live tape must match
+    that at the 18:00 roll, not carry the previous session's last
+    price/side across the boundary."""
+    hub, today, _ = setup(tmp_path)
+    hub.start_today("NQ", D, ticks_of(today))          # D's last trade: 201.0
+    s = hub.attach(hub.prepare("NQ", M1, ["cumdelta"]))
+    hub.subscribe(s, ("conn", "c1"))
+    nxt = D + dt.timedelta(days=1)
+    t0 = session_ms(nxt, 18, 0, 1)
+    opening = [{"ts_ms": t0 + i * 1000, "price": 200.0, "size": 5,
+                "bid": 200.25, "ask": 200.0, "bid_size": 5, "ask_size": 5,
+                "id": 99_000 + i} for i in range(3)]     # crossed quote -> tick rule
+    hub.on_ticks("NQ", opening)
+    assert [t.side for t in hub.today["NQ"]] == [t.side for t in ticks_of(opening)]
+    assert [x["date"] for x in s.sessions][-1] == nxt.isoformat()

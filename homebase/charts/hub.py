@@ -102,8 +102,9 @@ class Prepared:
     root: str
     spec: BarSpec
     stream: Stream
-    tape: list        # the today-list object the snapshot was taken from
-    upto: int         # how many of its ticks the snapshot covered
+    tape: list | None      # the today-list object the snapshot was taken from (None: no tape yet)
+    upto: int               # how many of its ticks the snapshot covered
+    today_date: dt.date | None   # self.today_date[root] read at the TOP of prepare() (torn-read guard)
 
 
 class Hub:
@@ -136,19 +137,19 @@ class Hub:
             return
         if root not in self.clf:
             self.start_today(root, session_date(int(rows[0]["ts_ms"])), [])
-        clf = self.clf[root]
         streams = [s for s in self.streams.values() if s.root == root]
         for r in rows:
-            tk = from_row(r, clf)
-            d = session_date(tk.ts_ms)
+            d = session_date(int(r["ts_ms"]))
             if d != self.today_date[root]:              # 18:00 roll: the old session is on disk
                 info = dict(self.today_info[root], date=d.isoformat(), gaps=[])
                 self.today[root] = []
                 self.today_date[root] = d
                 self.today_info[root] = info
+                self.clf[root] = SideClassifier()        # a reload starts each session fresh too
                 self.history.clear()
                 for s in streams:
                     s.sessions.append(info)
+            tk = from_row(r, self.clf[root])
             self.today[root].append(tk)
             for s in streams:
                 for b in s.builder.add(tk):
@@ -165,21 +166,23 @@ class Hub:
     def prepare(self, root: str, spec: BarSpec, study_keys: list[str]) -> Prepared:
         """Worker thread: past sessions + today's bars from a snapshot of the tape."""
         ts = tick_size(root)
-        today = self.today_date.get(root) or session_date(self.now_ms())
+        today_date = self.today_date.get(root)
+        today = today_date or session_date(self.now_ms())
         s = Stream(root, spec, ts, BarBuilder(spec, ts))
         for d in [d for d in self.store.sessions(root) if d < today][-sessions_back(spec):]:
             s.bars.extend(self.history.bars(root, spec, d))
             s.sessions.append(self.history.info(root, d))
-        tape = self.today.get(root, [])
-        upto = len(tape)
-        for tk in tape[:upto]:
-            s.bars.extend(s.builder.add(tk))
+        tape = self.today.get(root)              # None: root has no tape yet (not [] — see attach)
+        upto = len(tape) if tape else 0
+        if tape is not None:
+            for tk in tape[:upto]:
+                s.bars.extend(s.builder.add(tk))
         info = self.today_info.get(root)
         if info:
             s.sessions.append(info)
         for k in study_keys:
             s.add_study(k)
-        return Prepared(root, spec, s, tape, upto)
+        return Prepared(root, spec, s, tape, upto, today_date)
 
     def attach(self, p: Prepared) -> Stream:
         """Event loop: register (or reuse) the stream, catching up the ticks
@@ -188,10 +191,10 @@ class Hub:
         if existing is not None:
             return existing
         s = p.stream
-        tape = self.today.get(p.root, [])
-        if tape is not p.tape:
-            s.reset = True                 # today was reseeded meanwhile: the page resubscribes
-        else:
+        tape = self.today.get(p.root)
+        if tape is not p.tape or self.today_date.get(p.root) != p.today_date:
+            s.reset = True                 # reseeded, rolled, or torn mid-prepare: resubscribe
+        elif tape is not None:
             for tk in tape[p.upto:]:
                 for b in s.builder.add(tk):
                     s.commit(b)
