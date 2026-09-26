@@ -419,3 +419,22 @@ def test_readiness_feed_freshness():
                                "watching": {"NQ/1m": {"last_close": close}}})
         by = {c["label"]: c for c in r["checks"]}
         assert by["Price feed"]["level"] == want, (close, want)
+
+
+def test_a_missing_pin_shows_its_reason_on_the_account(client):
+    """The reason reaches acct_status, /api/status and the readiness strip.
+    (Pins the existing surfacing; the raise itself is tested in
+    tests/test_account_pin.py.)"""
+    reason = "account APEX-044 not on this login (has: APEX-047)"
+
+    async def refuse():
+        raise RuntimeError(reason)
+
+    client.adapter.connect = refuse
+    client.adapter._connected = False
+    r = client.post("/api/accounts/reconnect", json={"account": "main"}).json()
+    assert r["results"]["main"] == {"ok": False, "error": reason}
+    st = client.get("/api/status").json()
+    assert st["accounts"]["main"]["connected"] is False
+    assert st["accounts"]["main"]["error"] == reason
+    assert {"level": "bad", "label": "MAIN", "detail": reason} in st["readiness"]["checks"]

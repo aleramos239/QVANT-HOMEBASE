@@ -56,6 +56,9 @@ class BrokerAdapter(abc.ABC):
         self.account_id = account_id
         self.live = live              # False => demo/sim; live needs explicit opt-in
         self._connected = False
+        # True only when the broker account was chosen by the config's pin
+        # (chart trading refuses any account that is not on its own pin)
+        self.pinned_ok = False
         # canonical symbol -> [broker order id, ...] for protective stops/targets
         # WE placed on this account, so we can cancel them when the leg is closed.
         self._protective: dict[str, list[str]] = {}

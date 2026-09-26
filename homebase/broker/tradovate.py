@@ -190,6 +190,17 @@ class TradovateAdapter(BrokerAdapter):
             chosen = next((a for a in accounts
                            if str(a.get("name", "")).lower() == w
                            or str(a.get("nickname", "")).lower() == w), None)
+        if chosen is None and (want_id or want_name):
+            # A pin that is not on this login is an ERROR, never a fallback:
+            # on 2026-09-26 pins ...044/...045 silently connected to ...047.
+            # Drop the connected flag too, so a reconnect can never keep
+            # reporting the OLD account as up on the new socket.
+            self._connected = False
+            self._acct_num, self._acct_name, self.pinned_ok = None, "", False
+            have = ", ".join(str(a.get("name") or a.get("nickname") or a.get("id"))
+                             for a in accounts)
+            raise RuntimeError(f"account {want_name or want_id} not on this login (has: {have})")
+        pinned = chosen is not None
         if chosen is None:
             active = [a for a in accounts if a.get("active", True)]
             chosen = (active or accounts)[0]
@@ -199,6 +210,7 @@ class TradovateAdapter(BrokerAdapter):
                      f"Pin one with extra.account_name in config.")
         self._acct_num = chosen.get("id")
         self._acct_name = chosen.get("name") or chosen.get("nickname") or str(self._acct_num)
+        self.pinned_ok = pinned
 
     # ------------------------------------------------------------ fill stream
     def _mark_seen(self, fid: int) -> bool:
