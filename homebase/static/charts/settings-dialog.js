@@ -96,8 +96,11 @@ function button(cls, text) { const b = mk('button', cls, text); b.type = 'button
 
 function mount(box, host) {
   const cell = host.cell;
-  // Cancel puts every chart back: its settings and its indicators (a template's Apply previews live, spec §8)
-  const atOpen = new Map(host.cells().map((c) => [c, { settings: c.settings(), indicators: JSON.parse(JSON.stringify(c.cfg.indicators)) }]));
+  // Cancel puts every chart back: its settings, its indicators and its interval (a template's Apply can
+  // change any of the three previews live, spec §8)
+  const atOpen = new Map(host.cells().map((c) => [c, {
+    settings: c.settings(), indicators: JSON.parse(JSON.stringify(c.cfg.indicators)), spec: c.cfg.spec,
+  }]));
   let work = S.normalize(cell.settings()), tab = 0, done = false, raf = 0;
   const swatches = new Map();   // colour key -> the <i> inside its swatch button
 
@@ -351,7 +354,8 @@ function mount(box, host) {
     host.commit(host.cells().some((c) => {
       const at = atOpen.get(c);
       return !at || JSON.stringify(c.settings()) !== JSON.stringify(at.settings)
-        || JSON.stringify(c.cfg.indicators) !== JSON.stringify(at.indicators);
+        || JSON.stringify(c.cfg.indicators) !== JSON.stringify(at.indicators)
+        || c.cfg.spec !== at.spec;
     }));
   };
   const tpl = button('btn btn-ghost tpl-btn'), chev = mk('span', 'icw sm'), applyAll = button('btn btn-ghost', 'Apply to all');
@@ -372,8 +376,8 @@ function mount(box, host) {
   tabs.querySelector('.active').focus();
 
   return {
-    /* Cancel, ×, Esc, a backdrop click: every chart back to its settings — and its indicators, since a template
-       Apply can have changed those too (spec §8) — at open. After Ok: nothing. */
+    /* Cancel, ×, Esc, a backdrop click: every chart back to its settings — and its indicators and interval,
+       since a template Apply can have changed any of those too (spec §8) — at open. After Ok: nothing. */
     revert() {
       if (done) return;
       done = true;
@@ -382,7 +386,10 @@ function mount(box, host) {
       for (const [c, at] of atOpen) {
         if (!now.includes(c)) continue;
         c.setSettings(at.settings);
-        if (JSON.stringify(c.cfg.indicators) !== JSON.stringify(at.indicators)) c.update({ indicators: at.indicators });
+        const patch = {};
+        if (JSON.stringify(c.cfg.indicators) !== JSON.stringify(at.indicators)) patch.indicators = at.indicators;
+        if (c.cfg.spec !== at.spec) patch.spec = at.spec;
+        if (Object.keys(patch).length) c.update(patch);
       }
     },
   };
