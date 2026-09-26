@@ -7,16 +7,24 @@ every request is counted (status shows the hour's total), a rate-limit
 reply is honored with its p-ticket, and reconnects back off 5 s doubling
 to 5 min, so a flapping socket can neither burn the hour nor trip the auth
 captcha. Each (re)connect reads the freshest md token the desk has on disk.
+
+A symbol the feed refuses is isolated: the other roots stay subscribed, it
+is asked again every 10 min (never 09:20-09:35 ET) and on every reconnect.
+A fresh socket that refuses EVERY root is replaced, but no faster than that
+10-min retry: a login that refuses everything must not spend 11 getCharts
+per 5 s-5 min backoff step (~187 in the first hour, over the 180 budget).
 """
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
 import time
 from typing import Awaitable, Callable, Optional
 
 from .. import symbols
 from .. import ticks as T
-from . import MD_ENV
+from . import MD_ENV, QUIET
+from .session import ET
 
 BACKOFF_S = (5, 10, 20, 40, 80, 160, 300)
 HEALTHY_S = 600          # a connection that lived this long resets the backoff
@@ -25,7 +33,8 @@ RETRY_REFUSED_S = 600    # a root the feed refused is asked again this often (an
 
 class Refused(RuntimeError):
     """The md feed will not chart this root: getChart answered without a
-    realtimeId, or the root has no resolvable contract."""
+    realtimeId or failed (a non-200 status, no answer in 15 s) while the
+    socket stayed up, or the root has no resolvable contract."""
 
 
 async def connect_default():
@@ -100,7 +109,17 @@ class TickFeed:
         d = None
         for _ in range(3):
             self.count_request()
-            d = await self.ws.request("md/getChart", body)
+            try:
+                d = await self.ws.request("md/getChart", body)
+            except (RuntimeError, TimeoutError) as e:
+                # TradovateWS.request raises on a non-200 status and after 15 s
+                # without an answer. With the socket still up that is THIS
+                # symbol's refusal; with it gone ("websocket not connected", a
+                # timeout because the reader died) the whole feed reconnects.
+                if not self.connected:
+                    raise
+                why = str(e) or f"md/getChart {type(e).__name__}"      # a timeout has no message
+                raise Refused(f"{contract}: {why}") from None
             if isinstance(d, dict) and d.get("p-ticket"):
                 pen = T.Penalty(d)
                 await self._sleep(pen.wait_s + 1)
@@ -140,10 +159,15 @@ class TickFeed:
             self._tasks.add(t)
             t.add_done_callback(lambda t, root=root: self._on_subscribed_done(root, t))
 
+    def _quiet(self) -> bool:
+        """Inside the 09:20-09:35 ET window around the 9:30 fire."""
+        return QUIET[0] <= dt.datetime.fromtimestamp(self._now(), ET).time() < QUIET[1]
+
     async def run(self) -> None:
         attempt = 0
         while not self._stop:
             started = self._now()
+            refused_all = False
             try:
                 self.ws = await self._connect()
                 self.error = None            # a fresh cycle; a refill error below now sticks
@@ -152,10 +176,14 @@ class TickFeed:
                 self.refused = {}
                 for r in self.roots:
                     await self._start(r)
+                if self.roots and all(r in self.refused for r in self.roots):
+                    # nothing subscribed: the socket or the login is sick, not a symbol
+                    refused_all = True
+                    raise Refused("every symbol refused")
                 next_retry = self._now() + RETRY_REFUSED_S
                 while not self._stop and self.connected:
                     await self._sleep(1)
-                    if self.refused and self._now() >= next_retry:
+                    if self.refused and self._now() >= next_retry and not self._quiet():
                         next_retry = self._now() + RETRY_REFUSED_S
                         for r in list(self.refused):
                             await self._start(r)
@@ -175,7 +203,10 @@ class TickFeed:
             if self._now() - started >= HEALTHY_S:
                 attempt = 0
             self.reconnects += 1
-            await self._sleep(BACKOFF_S[min(attempt, len(BACKOFF_S) - 1)])
+            wait = BACKOFF_S[min(attempt, len(BACKOFF_S) - 1)]
+            if refused_all:
+                wait = max(wait, RETRY_REFUSED_S)   # each such round costs one getChart per root
+            await self._sleep(wait)
             attempt += 1
 
     def stop(self) -> None:

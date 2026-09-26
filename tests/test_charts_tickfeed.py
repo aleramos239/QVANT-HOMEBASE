@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
 
 from homebase import symbols
-from homebase.charts.tickfeed import TickFeed
+from homebase.charts import DEFAULT_ROOTS
+from homebase.charts.session import ET
+from homebase.charts.tickfeed import RETRY_REFUSED_S, TickFeed
 
 
 def run(coro):
@@ -217,3 +220,148 @@ def test_a_socket_failure_while_subscribing_still_reconnects_everything():
     feed = TickFeed(["NQ", "ES"], lambda *a: None, connect=connect, sleep=sleep)
     run(feed.run())
     assert len(socks) >= 2 and feed.reconnects >= 1
+
+
+class RaisingWS(FakeWS):
+    """Like the real TradovateWS.request: a non-200 answer RAISES RuntimeError
+    and a request nobody answers raises TimeoutError after 15 s -- neither
+    comes back as a reply dict. `fail` maps a contract to what its getChart
+    raises; every other contract subscribes."""
+
+    def __init__(self, fail):
+        super().__init__()
+        self.fail = dict(fail)
+
+    async def request(self, ep, body=""):
+        self.sent.append((ep, body))
+        e = self.fail.get(body["symbol"])
+        if e is not None:
+            raise e
+        n = len(self.sent)
+        return {"historicalId": 10 + n, "realtimeId": 100 + n}
+
+
+def _one_cycle_with(fail_btc):
+    socks, subs = [], []
+
+    async def connect():
+        socks.append(RaisingWS({symbols.resolve_contract("BTC"): fail_btc}))
+        return socks[-1]
+
+    async def on_sub(root, contract, since):
+        subs.append(root)
+
+    async def sleep(_s):
+        await asyncio.sleep(0)
+        feed.stop()                      # one steady-state second is enough
+
+    feed = TickFeed(["NQ", "BTC", "ES"], lambda *a: None, on_subscribed=on_sub, connect=connect, sleep=sleep)
+    run(feed.run())
+    return feed, socks, subs
+
+
+def test_a_raised_non_200_refusal_leaves_the_other_roots_subscribed():
+    feed, socks, subs = _one_cycle_with(RuntimeError("md/getChart failed: status=404 data='Unknown symbol'"))
+    assert len(socks) == 1 and feed.reconnects == 0            # no reconnect loop
+    assert sorted({root for root, _ in feed.subs.values()}) == ["ES", "NQ"] and subs == ["NQ", "ES"]
+    st = feed.status()
+    assert "status=404" in st["roots"]["BTC"]["error"] and "Unknown symbol" in st["roots"]["BTC"]["error"]
+    assert st["roots"]["NQ"]["error"] is None and st["error"] is None
+
+
+def test_a_getchart_timeout_on_one_root_leaves_the_other_roots_subscribed():
+    feed, socks, subs = _one_cycle_with(TimeoutError())
+    assert len(socks) == 1 and feed.reconnects == 0
+    assert sorted({root for root, _ in feed.subs.values()}) == ["ES", "NQ"] and subs == ["NQ", "ES"]
+    st = feed.status()
+    assert "TimeoutError" in st["roots"]["BTC"]["error"] and st["error"] is None
+
+
+def test_a_raise_after_the_socket_died_is_not_a_refusal_it_reconnects():
+    """A dead socket's request raises RuntimeError too ("websocket not
+    connected"): with the socket gone it must reconnect everything at the
+    normal backoff, not be filed as that root's refusal."""
+    socks, slept = [], []
+
+    class DyingWS(FakeWS):
+        async def request(self, ep, body=""):
+            self.sent.append((ep, body))
+            if len(self.sent) == 2:
+                self.connected = False              # the reader saw the socket close
+                raise RuntimeError("websocket not connected")
+            return {"historicalId": 11, "realtimeId": 101}
+
+    async def connect():
+        socks.append(DyingWS())
+        return socks[-1]
+
+    async def sleep(s):
+        slept.append(s)
+        await asyncio.sleep(0)
+        if len(socks) >= 2:
+            feed.stop()
+
+    feed = TickFeed(["NQ", "ES"], lambda *a: None, connect=connect, sleep=sleep)
+    run(feed.run())
+    assert len(socks) >= 2 and feed.reconnects >= 1 and slept[0] == 5
+    assert "websocket not connected" in feed.status()["error"]
+
+
+def test_every_root_refused_on_a_fresh_socket_reconnects_within_the_md_budget():
+    """Nothing subscribed = the socket or the login is sick, not a symbol:
+    the whole feed reconnects. A login that refuses everything must not
+    burn the shared 180/hour budget doing it: at the plain 5 s -> 5 min
+    backoff that is ~17 rounds of 11 getCharts in the first hour (~187)."""
+    clock = [1_000_000.0]
+    socks, slept = [], []
+
+    async def connect():
+        socks.append(RaisingWS({symbols.resolve_contract(r): RuntimeError("md/getChart failed: status=500 data=None")
+                                for r in DEFAULT_ROOTS}))
+        return socks[-1]
+
+    async def sleep(s):
+        slept.append(s)
+        await asyncio.sleep(0)
+        clock[0] += s
+        if clock[0] - 1_000_000.0 >= 3600:
+            feed.stop()
+
+    feed = TickFeed(DEFAULT_ROOTS, lambda *a: None, connect=connect, sleep=sleep, now=lambda: clock[0])
+    run(feed.run())
+    assert len(socks) >= 2 and feed.reconnects >= 1                  # a sick socket is still replaced
+    assert all(s >= RETRY_REFUSED_S for s in slept)                  # never faster than the refused-root retry
+    asked = sum(len(ws.sent) for ws in socks)
+    assert asked <= 6 * len(DEFAULT_ROOTS) < 180                     # <= one round per 10 min
+    st = feed.status()
+    assert "every symbol refused" in st["error"] and "status=500" in st["roots"]["NQ"]["error"]
+
+
+def test_a_refused_root_is_not_retried_inside_the_0920_0935_quiet_window():
+    t0 = dt.datetime(2026, 9, 24, 9, 12, tzinfo=ET).timestamp()     # a Thursday
+    clock = [t0]
+    btc = symbols.resolve_contract("BTC")
+    asked = []
+
+    class WS(FakeWS):
+        async def request(self, ep, body=""):
+            if body["symbol"] == btc:
+                asked.append(dt.datetime.fromtimestamp(clock[0], ET).time())
+                self.sent.append((ep, body))
+                return {"errorText": "no entitlement"}
+            return await super().request(ep, body)
+
+    ws = WS()
+
+    async def connect():
+        return ws
+
+    async def sleep(_s):
+        await asyncio.sleep(0)
+        clock[0] += 60                   # each 1 s wait jumps a minute
+        if clock[0] >= t0 + 45 * 60:     # to 09:57
+            feed.stop()
+
+    feed = TickFeed(["NQ", "BTC"], lambda *a: None, connect=connect, sleep=sleep, now=lambda: clock[0])
+    run(feed.run())
+    assert asked == [dt.time(9, 12), dt.time(9, 35), dt.time(9, 45), dt.time(9, 55)]   # 09:22 is skipped

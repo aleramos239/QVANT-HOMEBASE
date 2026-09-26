@@ -24,7 +24,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .. import symbols
 from ..paths import state_dir
-from . import DEFAULT_ROOTS
+from . import DEFAULT_ROOTS, QUIET      # QUIET: never refill across the 9:30 fire
 from .bars import BarSpec
 from .history import History
 from .hub import Hub
@@ -43,7 +43,6 @@ CLOSE_GRACE_MS = 1500         # a time bar closes this long after its end if no 
 ROLL_GRACE_MS = 60_000        # a 24/7 root rolls at 18:00 with no dead hour: its old session's last
                               # prints can reach us after the clock passed 18:00 and are kept this long
 REFILL_BUDGET = 60            # this process's own chart requests per hour
-QUIET = (dt.time(9, 20), dt.time(9, 35))    # never refill across the 9:30 fire
 SEND_QUEUE_MAX = 400
 TIMEFRAMES = [["5s", "time:5"], ["15s", "time:15"], ["30s", "time:30"], ["1m", "time:60"],
               ["2m", "time:120"], ["3m", "time:180"], ["5m", "time:300"], ["10m", "time:600"],
