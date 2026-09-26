@@ -393,3 +393,21 @@ panes below the price chart.
   the extension-point ordering; browser — right-click and empty-space double-click open the menu, Reset / Copy /
   Remove / Settings work, Delta moves to the main chart and back, the price autoscale ignores it on main, a saved
   layout restores the placement.
+
+## 8 · Chart templates per chart (added 2026-09-26, user: "i want each chart to have its own settings, and be able to save layouts so i can just set a saved layout per chart")
+
+Settings are already per chart (§3). This extends the named templates into TradingView-style **chart templates**:
+- A template stores `{settings, indicators, spec?}` — the chart's settings overrides, its indicator list
+  (ids + params + visibility + pane placement, fresh uids on apply) and, only when "Include interval" was ticked at
+  save time, its bar spec. Never the symbol. Existing settings-only templates stay valid (missing keys = unchanged).
+- **Save**: chart menu (§7) `Chart template ›` → `Save this chart as template…` (inline name field, same name
+  rules and 16 KB limit as §3's templates API; an existing name asks inline "Replace?"), and the Settings dialog's
+  `Template ▾ → Save as…` now also stores indicators (checkbox "Include indicators", on by default; "Include
+  interval", off).
+- **Apply**: chart menu `Chart template ›` lists saved templates; clicking one applies it to **that chart only**
+  (settings + indicators replaced, interval changed only if stored), marks the layout Unsaved. The Settings
+  dialog's `Template ▾` list applies to the dialog's chart as today (live preview; Cancel reverts indicators too).
+- **Server**: unchanged routes (`/api/templates`); validation accepts the three keys (indicators validated with
+  the catalog's migrate on the page; server just enforces JSON object + size).
+- **Tests**: Node — template build/apply (fresh uids, spec only when stored, old settings-only templates);
+  browser — save from one chart, apply to another, cancel-revert in the dialog, reload keeps it.
