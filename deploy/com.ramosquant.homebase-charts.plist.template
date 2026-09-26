@@ -12,6 +12,9 @@
   <key>WorkingDirectory</key><string>__REPO__</string>
   <!-- the chart half of the terminal: its OWN process so chart work can never
        delay an order or take the trading app down. Records live ticks. -->
+  <!-- market data from the live login (real-time CME quotes; Level 2 once bought) -->
+  <key>EnvironmentVariables</key>
+  <dict><key>HOMEBASE_CHARTS_MD</key><string>live</string></dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
   <key>ThrottleInterval</key><integer>10</integer>
