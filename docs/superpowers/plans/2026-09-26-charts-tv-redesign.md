@@ -2534,7 +2534,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Modify: `homebase/static/charts/app.js`
 
 **Interfaces:**
-- Consumes: Task 4's page (`layout`, `cells`, `selected`, `menuEl`, `menuAnchor`, `GRIDS`, `mk`, `icon`, `$`, `cur`, `openMenu`, `placeMenu`, `closeMenu`, `toggleMenu`, `menuItem`, `renderToolbar`, `buildGrid`, `saveLast`, `hostFor`, `onKey`, `init`) and Cell (`cfg`, `update(patch)`, `lastGood`, `pending`, `lines`, `rows`, `hover`, `legendRows()`, `legend(i)`, `drawLevels()`, `drawMarkers()`, `syncFootprint()`, `syncProfile()`, `host`); `HBCatalog` (`GROUPS`, `filter`, `instance`, `def`, `clampParams`, `migrateLayout`, `label`); `GET /api/layouts`, `PUT/DELETE /api/layouts/{name}` (same-origin page: passes Task 1's Origin check).
+- Consumes: Task 4's page (`layout`, `cells`, `selected`, `menuEl`, `menuAnchor`, `GRIDS`, `mk`, `icon`, `$`, `cur`, `openMenu`, `placeMenu`, `closeMenu`, `toggleMenu`, `menuItem`, `renderToolbar`, `buildGrid`, `saveLast`, `hostFor`, `onKey`, `init`) and Cell (`cfg`, `update(patch)`, `lastGood`, `inflight` (FIFO of `{cfg, view}` for subscriptions in flight), `lines`, `rows`, `hover`, `legendRows()`, `legend(i)`, `drawLevels()`, `drawMarkers()`, `syncFootprint()`, `syncProfile()`, `host`); `HBCatalog` (`GROUPS`, `filter`, `instance`, `def`, `clampParams`, `migrateLayout`, `label`); `GET /api/layouts`, `PUT/DELETE /api/layouts/{name}` (same-origin page: passes Task 1's Origin check).
 - Produces: `host.onSettings(cell, uid)`; `Cell.setVisible(uid, on)`, `Cell.onLegendClick(e)`; legend rows with `.lg-btns` holding `button.ib[data-act=eye|gear|x]` (gear only for indicators with params); page functions `gridMenu()`, `layoutMenu(saveAsFirst)`, `save()`, `loadLayout(name, saved)`, `putLayout(name)`, `indicatorsDialog()`, `settingsDialog(cell, uid)`, `openDialog(title, cls)`, `closeDialog()`, `trapTab(e)`, variable `dlg` (Task 6's `onKey` builds on this one).
 
 - [ ] **Step 1: `cell.js` — legend row buttons and hide/show.** Add this helper next to `kv()`:
@@ -2591,6 +2591,10 @@ Replace `legendRows()` with:
     inst.visible = on;
     const good = this.lastGood && this.lastGood.indicators.find((x) => x.uid === uid);
     if (good) good.visible = on;   // a later revert must not undo a hide/show
+    for (const e of this.inflight) {   // nor may an answer to a subscription already in flight
+      const q = e.cfg.indicators.find((x) => x.uid === uid);
+      if (q) q.visible = on;
+    }
     this.host.changed();
     for (const l of this.lines) if (l.uid === uid) l.s.applyOptions({ visible: on });
     this.drawLevels(); this.drawMarkers(); this.syncFootprint(); this.syncProfile();
@@ -3274,30 +3278,17 @@ Add `Primitive, Controller` to the `api` object. Update the file's header commen
     if (this.dc) { this.dc.destroy(); this.dc = null; }
 ```
 
-Replace `build(view)` with this version — the same body as Task 4's, plus: it keeps the selected drawing across rebuilds (theme toggle, indicator change) and creates the chart's controller last:
+In `build(view)` keep every existing line exactly as it is in the file (Task 4 and its fix round tuned the pane sizing there) and add two things — it keeps the selected drawing across rebuilds (theme toggle, indicator change) and creates the chart's controller last. As the FIRST line of `build(view)`:
 
 ```js
-  build(view) {
     const sel = this.dc && this.shown && this.dc.root === this.shown.root ? this.dc.sel : null;
-    this.makeChart();
-    this.candles.setData(this.bars.map((b) => this.candle(b)));
-    this.buildSeries();
-    for (const l of this.lines) l.s.setData(this.bars.map((b) => this.point(l, b)));
-    this.drawMarkers(); this.drawLevels(); this.drawGaps(); this.syncFootprint(); this.syncProfile();
-    // Pane heights as px-sized stretch factors. Not setHeight(): it spreads each change using the laid-out
-    // heights, and panes added this pass are still 0 px, so with 2+ sub-panes only the last one got PANE_H.
-    const panes = this.chart.panes(), subs = panes.length - 1;
-    if (subs) {
-      panes[0].setStretchFactor(Math.max(PANE_H, panes[0].getHeight() - subs * PANE_H));   // pane 0 still holds the whole plot
-      for (let i = 1; i <= subs; i++) panes[i].setStretchFactor(PANE_H);
-    }
-    if (view) this.setView(view); else this.chart.timeScale().scrollToRealTime();
-    this.lg.badge.hidden = !this.sessions.some((s) => s.approx);
-    this.legendRows();
-    this.legend(null);
+```
+
+and as the LAST lines of `build(view)` (after `this.legend(null);`):
+
+```js
     this.dc = new window.HBDrawings.Controller(this, this.host);
     if (sel) { this.dc.sel = sel; this.dc.refresh(); }
-  }
 ```
 
 - [ ] **Step 3: `app.js` — tools, the store, remove-all, keys.** Add to the state:
