@@ -321,6 +321,19 @@ class RunManager:
         write_json(d / "status.json", st)
         return st
 
+    def shutdown(self) -> None:
+        """Chart-service shutdown: a run this manager launched must never be
+        left orphaned. Terminates whatever is currently in flight via the
+        same terminate/kill path as cancel(); a no-op if nothing is running."""
+        with self._lock:
+            proc = self._proc
+        if proc is not None:
+            rid, _ = proc
+            try:
+                self.cancel(rid)
+            except ValueError:
+                pass
+
     def runs_list(self, limit: int = 50) -> list[dict]:
         out = []
         for d in sorted((p for p in self.runs.iterdir() if RUN_ID.match(p.name)),
