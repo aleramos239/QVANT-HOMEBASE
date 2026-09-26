@@ -17,7 +17,8 @@ from fastapi.testclient import TestClient
 
 from homebase import symbols
 from homebase.charts.hub import Hub, Stream
-from homebase.charts.server import MAX_DRAWINGS, QUIET, Conn, check_drawings, create_app
+from homebase.charts.server import (MAX_DRAWINGS, MAX_TEMPLATE_BYTES, QUIET, Conn, check_drawings,
+                                    check_template_name, create_app)
 from homebase.charts.session import session_range_ms
 from homebase.charts.store import read_table
 from tests.charts_util import D, ET, rows, session_ms, write_archive, write_gz
@@ -54,6 +55,7 @@ def test_replay_serves_history_then_live_updates(tmp_path):
             assert hist["id"] == "a" and hist["bars"][0]["s"] == P.isoformat()
             assert hist["bars"][-1]["s"] == D.isoformat() and "vwap" in hist["studies"]
             assert hist["profile"]["poc"] > 0
+            assert hist["point_value"] == 20.0 and hist["tick_size"] == 0.25
             up = next_of(ws, "update")
             assert up["id"] == "a" and (up["closed"] or up["live"])
     assert not list((tmp_path / "ticks").rglob("*.live.csv.gz"))      # replay never records
@@ -1222,3 +1224,131 @@ def test_a_failed_drawings_write_leaves_the_saved_drawings_intact(tmp_path, monk
             with pytest.raises(OSError):
                 client.put("/api/drawings/NQ", json=[TREND])
         assert client.get("/api/drawings/NQ").json() == [H1]
+
+
+# ---- long / short positions ----
+T0_MS, T1_MS = 1790000000000, 1790001200000
+
+
+def pos(kind, entry, target, stop, t_target=T1_MS, t_stop=T1_MS, **extra):
+    return {"id": f"p-{kind}", "type": kind, **extra,
+            "points": [{"t": T0_MS, "p": entry}, {"t": t_target, "p": target}, {"t": t_stop, "p": stop}]}
+
+
+LONG = pos("long", 30900.0, 30950.0, 30875.0, qty=2, color="#2962FF")
+SHORT = pos("short", 30900.0, 30850.0, 30925.0)
+
+
+def test_positions_are_saved_with_their_qty(tmp_path):
+    with TestClient(replay_app(tmp_path)) as client:
+        r = client.put("/api/drawings/NQ", json=[LONG, SHORT, TREND])
+        assert r.status_code == 200 and r.json() == {"ok": True, "count": 3}
+        assert client.get("/api/drawings/NQ").json() == [LONG, SHORT, TREND]
+
+
+def test_qty_is_kept_for_positions_only():
+    assert check_drawings([{**TREND, "qty": 3}]) == [TREND]
+    assert check_drawings([pos("long", 1.0, 2.0, 0.5, qty=1)])[0]["qty"] == 1
+    assert check_drawings([pos("short", 1.0, 0.5, 2.0, qty=10_000)])[0]["qty"] == 10_000
+    assert "qty" not in check_drawings([pos("long", 1.0, 2.0, 0.5)])[0]
+
+
+BAD_POSITIONS = [
+    ("long with two points", [{**LONG, "points": LONG["points"][:2]}]),
+    ("short with four points", [{**SHORT, "points": SHORT["points"] + SHORT["points"][:1]}]),
+    ("target and stop on different right edges", [pos("long", 100, 110, 95, t_stop=T1_MS + 60_000)]),
+    ("long stop above the entry", [pos("long", 100, 110, 101)]),
+    ("long target below the entry", [pos("long", 100, 99, 95)]),
+    ("long entry on the stop", [pos("long", 100, 110, 100)]),
+    ("short target above the entry", [pos("short", 100, 101, 105)]),
+    ("short stop below the entry", [pos("short", 100, 90, 99)]),
+    ("short entry on the target", [pos("short", 100, 100, 105)]),
+    ("position t missing", [{**LONG, "points": [{"p": 30900.0}, *LONG["points"][1:]]}]),
+    ("position t a float", [{**LONG, "points": [{"t": 1.5, "p": 30900.0}, *LONG["points"][1:]]}]),
+    ("position p not finite", [pos("long", float("nan"), 110, 95)]),
+    ("qty zero", [{**LONG, "qty": 0}]),
+    ("qty too big", [{**LONG, "qty": 10_001}]),
+    ("qty a float", [{**LONG, "qty": 1.5}]),
+    ("qty a bool", [{**LONG, "qty": True}]),
+    ("qty a string", [{**LONG, "qty": "2"}]),
+]
+
+
+@pytest.mark.parametrize("why,body", BAD_POSITIONS, ids=[b[0] for b in BAD_POSITIONS])
+def test_check_drawings_refuses_malformed_positions(why, body):
+    with pytest.raises(ValueError):
+        check_drawings(body)
+
+
+def test_a_bad_position_is_a_400_that_names_the_rule(tmp_path):
+    with TestClient(replay_app(tmp_path)) as client:
+        r = client.put("/api/drawings/NQ", json=[pos("long", 100, 110, 101)])
+        assert r.status_code == 400 and "stop < entry < target" in r.json()["detail"]
+        r = client.put("/api/drawings/NQ", json=[pos("short", 100, 101, 105)])
+        assert r.status_code == 400 and "target < entry < stop" in r.json()["detail"]
+        assert client.get("/api/drawings/NQ").json() == []
+
+
+# ---- chart-settings templates ----
+TPL = {"prevClose": True, "bodyUp": "#26A69A", "marginTop": 20}
+
+
+def test_templates_roundtrip(tmp_path):
+    other = "My · layout v2"
+    with TestClient(replay_app(tmp_path)) as client:
+        assert client.get("/api/templates").json() == {}
+        assert client.put("/api/templates/Dark candles", json=TPL).json() == {"ok": True}
+        assert client.put("/api/templates/" + quote(other, safe=""), json={}).status_code == 200
+        assert client.get("/api/templates").json() == {"Dark candles": TPL, other: {}}
+        stored = json.loads((tmp_path / "state" / "templates.json").read_text())
+        assert stored == {"Dark candles": TPL, other: {}}
+        assert client.put("/api/templates/Dark candles", json={"wick": False}).status_code == 200
+        assert client.delete("/api/templates/" + quote(other, safe="")).json() == {"ok": True}
+        assert client.get("/api/templates").json() == {"Dark candles": {"wick": False}}
+        assert client.delete("/api/templates/gone").status_code == 200       # deleting nothing is fine
+
+
+def test_a_template_is_a_json_object_of_at_most_16_kb(tmp_path):
+    def body(size):                     # a JSON object exactly `size` bytes long
+        return json.dumps({"x": "a" * (size - len('{"x": ""}'))})
+
+    with TestClient(replay_app(tmp_path)) as client:
+        def put(text):
+            return client.put("/api/templates/t", content=text, headers={"content-type": "application/json"})
+
+        assert len(body(MAX_TEMPLATE_BYTES)) == MAX_TEMPLATE_BYTES == 16 * 1024
+        assert put(body(MAX_TEMPLATE_BYTES)).status_code == 200
+        r = put(body(MAX_TEMPLATE_BYTES + 1))
+        assert r.status_code == 400 and "16 KB" in r.json()["detail"]
+        for bad in ("[1, 2]", '"dark"', "null", "not json", '{"marginTop": NaN}', '{"a": Infinity}'):
+            assert put(bad).status_code == 400, bad
+        assert client.get("/api/templates").json() == {"t": json.loads(body(MAX_TEMPLATE_BYTES))}
+
+
+@pytest.mark.parametrize("name", ["", "x" * 41, "a/b", "a\\b", "..", "a..b", "tab\there", "nul\x00", "del\x7f"])
+def test_check_template_name_refuses(name):
+    with pytest.raises(ValueError):
+        check_template_name(name)
+
+
+def test_template_names_on_the_wire(tmp_path):
+    assert check_template_name("x" * 40) == "x" * 40
+    assert check_template_name("Dark · v1.2") == "Dark · v1.2"
+    with TestClient(replay_app(tmp_path)) as client:
+        assert client.put("/api/templates/" + "x" * 40, json={}).status_code == 200
+        for bad in ("x" * 41, "a/b", "a\\b", "tab\tname", "a..b"):
+            r = client.put("/api/templates/" + quote(bad, safe=""), json={})
+            assert r.status_code == 400, bad
+        assert list(client.get("/api/templates").json()) == ["x" * 40]
+
+
+def test_template_writes_from_another_site_are_refused(tmp_path):
+    evil = {"origin": "https://evil.example"}
+    with TestClient(replay_app(tmp_path)) as client:
+        assert client.put("/api/templates/t", json=TPL, headers=evil).status_code == 403
+        assert client.get("/api/templates").json() == {}
+        assert client.put("/api/templates/t", json=TPL, headers={"origin": "http://localhost:8852"}).status_code == 200
+        assert client.delete("/api/templates/t", headers=evil).status_code == 403
+        assert client.get("/api/templates").json() == {"t": TPL}
+        assert client.delete("/api/templates/t", headers={"origin": "http://127.0.0.1:8852"}).status_code == 200
+        assert client.get("/api/templates").json() == {}

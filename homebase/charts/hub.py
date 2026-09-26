@@ -15,7 +15,7 @@ from __future__ import annotations
 import datetime as dt
 from dataclasses import dataclass, field
 
-from ..contracts import tick_size
+from ..contracts import point_value, tick_size
 from .bars import Bar, BarBuilder, BarSpec
 from .history import History
 from .session import session_date
@@ -86,8 +86,8 @@ class Stream:
             bars.append(live.wire(ts, fp))
         studies = {k: self.values[k][first:] + ([st.preview(live)] if live is not None else [])
                    for k, st in self.studies.items()}
-        return {"root": self.root, "spec": self.spec.key, "tick_size": ts, "bars": bars,
-                "live": live is not None, "studies": studies,
+        return {"root": self.root, "spec": self.spec.key, "tick_size": ts, "point_value": point_value(self.root),
+                "bars": bars, "live": live is not None, "studies": studies,
                 "profile": self.profile.value(live) if self.profile is not None else None,
                 "sessions": self.sessions}
 

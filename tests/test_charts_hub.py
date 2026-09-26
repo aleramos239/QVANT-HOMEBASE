@@ -270,3 +270,12 @@ def test_the_history_message_carries_the_most_recent_20000_bars(tmp_path):
     s.builder.cur, s.dirty = None, True
     [(_, up)] = hub.drain()
     assert len(up["closed"]) == 1 and up["closed"][0]["ms"] == t0 + 20_050 * 60_000
+
+
+def test_the_history_message_carries_the_point_value(tmp_path):
+    """The page turns a position's price move into dollars with it (null: the page shows points only)."""
+    hub, today, _ = setup(tmp_path)
+    hub.start_today("NQ", D, ticks_of(today[:60]))
+    assert open_stream(hub).payload()["point_value"] == 20.0
+    unknown = Stream("ZZ", M1, 0.25, BarBuilder(M1, 0.25, "ZZ"))
+    assert unknown.payload()["point_value"] is None

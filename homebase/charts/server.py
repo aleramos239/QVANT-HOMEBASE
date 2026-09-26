@@ -1,4 +1,4 @@
-"""The chart service: FastAPI on :8852 — the page, the websocket, layouts, drawings,
+"""The chart service: FastAPI on :8852 — the page, the websocket, layouts, drawings, templates,
 status. Its own process; the trading app on :8850 only links to it.
 
     python -m homebase.charts                      # live, from the md feed
@@ -53,7 +53,10 @@ MIN_BAR = {"time": 5, "tick": 100, "volume": 100, "range": 2}   # finer bars cos
 MAX_STUDIES = 16              # per subscription
 LOCAL_HOSTS = ("localhost", "127.0.0.1")
 MAX_DRAWINGS = 500            # per symbol
-DRAWING_POINTS = {"trend": 2, "rect": 2, "hline": 1}
+DRAWING_POINTS = {"trend": 2, "rect": 2, "hline": 1, "long": 3, "short": 3}
+POSITION_QTY_MAX = 10_000     # a long/short box's quantity
+MAX_TEMPLATE_BYTES = 16 * 1024   # one chart-settings template, as JSON
+MAX_TEMPLATE_NAME = 40
 _HEX_COLOR = re.compile(r"#[0-9A-Fa-f]{6}")
 
 
@@ -83,10 +86,24 @@ def _finite(v) -> bool:
     return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
 
 
+def _check_position(kind: str, pts: list) -> None:
+    """A long/short box: [entry, target, stop], target and stop on the box's right edge (one t)."""
+    entry, target, stop = (p["p"] for p in pts)
+    if pts[1]["t"] != pts[2]["t"]:
+        raise ValueError(f"a {kind}'s target and stop share the box's right edge (the same t)")
+    if kind == "long" and not stop < entry < target:
+        raise ValueError("a long has stop < entry < target")
+    if kind == "short" and not target < entry < stop:
+        raise ValueError("a short has target < entry < stop")
+
+
 def check_drawings(body) -> list:
     """The page's drawings for one symbol, validated and stripped to what
-    the page draws: [{id, type, points: [{t?, p}], color?}]. ValueError
-    (with a message for the page) on anything else."""
+    the page draws: [{id, type, points: [{t?, p}], color?, qty?}]. A long /
+    short position is [entry, target, stop] with target and stop on the
+    box's right edge (same t), stop < entry < target (long) or target <
+    entry < stop (short), and an optional qty 1-10000 (kept for positions
+    only). ValueError (with a message for the page) on anything else."""
     if not isinstance(body, list) or len(body) > MAX_DRAWINGS:
         raise ValueError(f"drawings are a list of at most {MAX_DRAWINGS}")
     out = []
@@ -98,7 +115,7 @@ def check_drawings(body) -> list:
             raise ValueError("id: a string of 1-40 characters")
         n = DRAWING_POINTS.get(kind)
         if n is None:
-            raise ValueError("type: trend, hline or rect")
+            raise ValueError("type: trend, hline, rect, long or short")
         if not isinstance(pts, list) or len(pts) != n or not all(isinstance(p, dict) for p in pts):
             raise ValueError(f"a {kind} has exactly {n} point(s)")
         clean = []
@@ -113,12 +130,34 @@ def check_drawings(body) -> list:
                 raise ValueError("a point's t is an integer (epoch ms)")
             clean.append({"t": t, "p": p["p"]})
         item = {"id": did, "type": kind, "points": clean}
+        if kind in ("long", "short"):
+            _check_position(kind, clean)
+            if "qty" in d:
+                q = d["qty"]
+                if not isinstance(q, int) or isinstance(q, bool) or not 1 <= q <= POSITION_QTY_MAX:
+                    raise ValueError(f"qty: a whole number from 1 to {POSITION_QTY_MAX}")
+                item["qty"] = q
         if "color" in d:
             if not isinstance(d["color"], str) or not _HEX_COLOR.fullmatch(d["color"]):
                 raise ValueError("color: #RRGGBB")
             item["color"] = d["color"]
         out.append(item)
     return out
+
+
+def check_template_name(name) -> str:
+    """A chart-settings template's name: 1-40 characters, no / \\ .. and no
+    control characters (it rides in the URL path). ValueError otherwise."""
+    if not isinstance(name, str) or not 1 <= len(name) <= MAX_TEMPLATE_NAME:
+        raise ValueError(f"a template name has 1-{MAX_TEMPLATE_NAME} characters")
+    if "/" in name or "\\" in name or ".." in name or any(ord(ch) < 32 or ord(ch) == 127 for ch in name):
+        raise ValueError("a template name has no / \\ .. or control characters")
+    return name
+
+
+def _no_constant(c: str):
+    """json.loads hook: NaN / Infinity are not JSON (the page's r.json() could not read them back)."""
+    raise ValueError(f"{c} is not JSON")
 
 
 class RevalidatedFiles(StaticFiles):
@@ -176,6 +215,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
     sd.mkdir(parents=True, exist_ok=True)
     layouts_path = sd / "layouts.json"
     drawings_path = sd / "drawings.json"
+    templates_path = sd / "templates.json"
     store = TickStore(base)
     history = History(store, cache_dir=sd / "cache")
     recorder = None if replay else LiveRecorder(base)
@@ -473,6 +513,39 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         all_[r] = clean
         write_json(drawings_path, all_)
         return {"ok": True, "count": len(clean)}
+
+    @app.get("/api/templates")
+    async def get_templates():
+        return read_json(templates_path)
+
+    @app.put("/api/templates/{name:path}")
+    async def put_template(name: str, request: Request):
+        browser_write_ok(request)
+        try:
+            check_template_name(name)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+        raw = await request.body()
+        if len(raw) > MAX_TEMPLATE_BYTES:
+            raise HTTPException(400, f"a template is at most {MAX_TEMPLATE_BYTES // 1024} KB of JSON")
+        try:
+            body = json.loads(raw, parse_constant=_no_constant)
+        except ValueError:
+            raise HTTPException(400, "the body is not JSON") from None
+        if not isinstance(body, dict):
+            raise HTTPException(400, "a template is a JSON object of chart settings")
+        all_ = read_json(templates_path)
+        all_[name] = body
+        write_json(templates_path, all_)
+        return {"ok": True}
+
+    @app.delete("/api/templates/{name:path}")
+    async def delete_template(name: str, request: Request):
+        browser_write_ok(request)
+        all_ = read_json(templates_path)
+        all_.pop(name, None)
+        write_json(templates_path, all_)
+        return {"ok": True}
 
     @app.websocket("/ws")
     async def ws_endpoint(sock: WebSocket):
