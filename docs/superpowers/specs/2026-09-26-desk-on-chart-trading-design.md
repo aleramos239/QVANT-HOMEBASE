@@ -112,7 +112,9 @@ page ◄──────────── desk events fanned out ◄── ch
   symbol, the bot **skips that account for the day**: journal `timer_skipped` with `reason: manual_position`
   (account, net) and the readiness strip red for that account. Other booked accounts fire as usual. Without
   the skip the bot would net against the manual contracts at its 12:55/15:55 flatten and could misattribute
-  fills.
+  fills. A manual **working order** resting in the bot's symbol counts too (controller ruling P1, the safe
+  side of this rule: it could fill inside the bot's window): `reason: manual_order`. The check never delays
+  the 09:30:00 fire: it gives up 0.5 s before it; an unreadable account fires as before (journaled).
 
 ## Chart service side (`homebase/charts/`)
 

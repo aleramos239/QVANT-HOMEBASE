@@ -22,7 +22,7 @@ import datetime as dt
 from typing import Callable
 from zoneinfo import ZoneInfo
 
-from .config import AppCfg
+from .config import AppCfg, assignments
 from .engine import Engine, _hhmm
 from .gate import trend_gate
 
@@ -39,6 +39,8 @@ GATE_BARS = 250            # ask for plenty; Tradovate serves ~120 dailies
 MIN_GATE_BARS = 110        # RMA needs history to converge: at 119 bars the
                            # ADX sits within 0.05 of the research value, at
                            # 100 it drifts 0.35 — below 110, refuse to gate
+PRESTAGE_READ_S = 2.0      # every booked account's position, read concurrently, at most this long
+PRESTAGE_MARGIN_S = 0.5    # ...and never closer than this to 09:30:00 (ruling P6)
 
 
 class SelfTimer:
@@ -153,6 +155,7 @@ class SelfTimer:
             md = await self._ensure_md()
             if s.symbol not in self._subs:
                 self._subs[s.symbol] = await md.subscribe_quote(s.symbol)
+            await self._prestage_skip(name, s, st)
             st["stage"] = "staged"
 
         if st["stage"] == "staged" and t >= FIRE_T:
@@ -182,6 +185,83 @@ class SelfTimer:
                 return
             st.update(anchor=px, stage="fired")
             return self._fire(name, s, px)      # tick() fires all due at once
+
+    async def _prestage_skip(self, name, s, st) -> None:
+        """User-approved (spec 2026-09-26): a booked account that already holds
+        a position in this strategy's symbol at the prestage is skipped for
+        the day — and so is one with a working order resting in it (ruling
+        P1: it could fill inside the bot's window). Otherwise the bot would
+        net against those contracts at its 12:55/15:55 flatten and could
+        misattribute their fills. Positions are the broker's
+        (get_net_position), read concurrently; orders are the adapter's
+        cached view (trade_view, no broker call), matched by the engine's
+        substring rule (NQ also claims MNQZ6). The read takes at most
+        PRESTAGE_READ_S and always ends PRESTAGE_MARGIN_S before 09:30:00
+        (ruling P6). Unreadable, timed out, no time left, or an order whose
+        contract is unresolved -> the account fires as before (journaled).
+        Never raises: the stage must not fail on this check."""
+        now = self.now_et()
+        left = (dt.datetime.combine(now.date(), FIRE_T, tzinfo=ET)
+                - now).total_seconds() - PRESTAGE_MARGIN_S
+        budget = min(PRESTAGE_READ_S, left)
+        if budget <= 0:
+            self.engine.journal("prestage_check_failed", strategy=name,
+                                error="too close to the fire")
+            return
+        sym = s.symbol.upper()
+
+        async def read(aid):
+            ad = self.engine.adapters.get(aid)
+            if ad is None or not ad.connected:
+                return aid, None, [], None, "not connected"
+            try:
+                net = await ad.get_net_position(s.symbol)
+            except Exception as e:  # noqa: BLE001
+                return aid, None, [], None, str(e)[:120] or type(e).__name__
+            mine, problem = [], None
+            try:
+                view = ad.trade_view()          # cache only; None = no order view
+                unresolved = []
+                for o in ((view or {}).get("orders") or []):
+                    if o.get("symbol") is None:
+                        unresolved.append(str(o.get("order_id")))
+                    elif sym in str(o["symbol"]).upper():
+                        mine.append(str(o.get("order_id")))
+                if unresolved:
+                    problem = (f"working order(s) {', '.join(unresolved)}: "
+                               "contract unresolved")
+            except Exception as e:  # noqa: BLE001
+                mine, problem = [], "order view: " + (str(e)[:120] or type(e).__name__)
+            return aid, net, mine, problem, None
+
+        try:
+            got = await asyncio.wait_for(
+                asyncio.gather(*(read(a["account"]) for a in assignments(self.cfg, name))),
+                budget)
+        except Exception as e:  # noqa: BLE001 — incl. the timeout: fire as before
+            self.engine.journal("prestage_check_failed", strategy=name,
+                                error=str(e)[:200] or type(e).__name__)
+            return
+        skipped, skipped_orders = {}, {}
+        for aid, net, orders, problem, err in got:
+            if err is not None:
+                self.engine.journal("prestage_check_failed", strategy=name, account=aid, error=err)
+                continue
+            if problem is not None:
+                self.engine.journal("prestage_check_failed", strategy=name, account=aid,
+                                    error=problem)
+            if net or orders:
+                skipped[aid] = int(net or 0)
+                if orders:
+                    skipped_orders[aid] = orders
+                self.engine.skip_today(name, aid)
+                self.engine.journal("timer_skipped", strategy=name,
+                                    reason="manual_position" if net else "manual_order",
+                                    account=aid, net=int(net or 0), orders=orders)
+        if skipped:
+            st["skipped_accounts"] = skipped
+        if skipped_orders:
+            st["skipped_orders"] = skipped_orders
 
     async def _fire(self, name, s, px) -> None:
         out = await self.engine.handle_alert(

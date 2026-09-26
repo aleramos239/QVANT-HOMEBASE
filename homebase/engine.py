@@ -106,6 +106,10 @@ class Engine:
         self.states: dict[str, DayState] = {}   # "strategy@account" -> state
         self._early: list[FillEvent] = []   # fills that beat the placement acks
         self._retry_at: dict[str, float] = {}   # last sibling-cancel attempt
+        # (date, strategy) -> accounts the 9:30 bot skips today: they held a
+        # manual position or working order in its symbol at the prestage
+        # (timer.STAGE_T)
+        self._skips: dict[tuple[str, str], set[str]] = {}
         self._load_today()
 
     # --- time & persistence -------------------------------------------------
@@ -159,6 +163,12 @@ class Engine:
                 return s
         return "idle"
 
+    def skip_today(self, strategy: str, account: str) -> None:
+        self._skips.setdefault((self._today(), strategy), set()).add(account)
+
+    def skipped_today(self, strategy: str) -> set[str]:
+        return set(self._skips.get((self._today(), strategy), ()))
+
     # --- the signal ----------------------------------------------------------
     async def handle_alert(self, payload: dict, *, force_window: bool = False,
                            source: str = "tv") -> dict:
@@ -203,6 +213,15 @@ class Engine:
                     "reason": f"spread {upper - lower:g} != 2*offset {2 * cfg.offset_pts:g}"}
 
         asg = assignments(self.cfg, name)
+        skipped = self.skipped_today(name)
+        if skipped:                              # the prestage skip (timer._prestage_skip)
+            asg = [a for a in asg if a["account"] not in skipped]
+            if not asg:
+                self.journal("alert_refused", strategy=name, reason="all_accounts_skipped",
+                             skipped=sorted(skipped), source=source)
+                return {"ok": False,
+                        "reason": "every booked account holds a manual position or order"
+                                  " — skipped today"}
         if not asg:
             self.journal("alert_refused", strategy=name, reason="no_assignments",
                          source=source)

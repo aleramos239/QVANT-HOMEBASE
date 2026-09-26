@@ -52,10 +52,10 @@
    - A repeated `client_id` returns the first result (10 min).
    - Hard caps for the editable limits are 50 per order and 100 per position.
 6. **Prestage details.**
-   - Positions are read with `get_net_position`, the authoritative broker read, not the new cache. All accounts are read concurrently with a 2 s total timeout.
+   - Positions are read with `get_net_position`, the authoritative broker read, not the new cache. All accounts are read concurrently with a total timeout of `min(2 s, time left before 09:30:00 − 0.5 s)` (controller ruling P6); no time left → no read, journaled, fire as before.
+   - A manual *working order* resting in the bot's symbol (the adapter's cached `trade_view()["orders"]`, the engine's substring rule, so NQ also claims MNQ) skips the account too (controller ruling P1): `timer_skipped` reason `manual_order`. No order view (a test fake) → positions only. An order whose contract is unresolved → fire as before, journaled `prestage_check_failed`.
    - An unreadable or timed-out read fires as before, journaled `prestage_check_failed`.
    - If every booked account is skipped, the alert is refused with `all_accounts_skipped`.
-   - **Known gap:** a manual *working order* resting across 09:20 is not cancelled or skipped. The approved rule is position-only; flag this to the user.
 7. **Open P&L** is computed by the page. The desk sends the average price and the point value, and the page has the price.
 8. **Desk key file.** If it is corrupt or unwritable, the desk still starts (the 9:30 bot must run) and `/api/trade/*` answers 503. The error is journaled as `desk_key_error`.
 9. **Shutdown with a stream open.** An open SSE stream would block uvicorn's graceful shutdown forever. The desk's plist template gains `--timeout-graceful-shutdown 5`. It takes effect only at the user-approved deploy.
@@ -2776,9 +2776,9 @@ git commit -m "feat(desk): /api/trade (desk key, no Origin, SSE state/account/bo
 - Produces:
   - `Engine.skip_today(strategy, account)` and `Engine.skipped_today(strategy) -> set[str]` (in memory, per ET date);
   - the `handle_alert` filter, with the refusal reason `all_accounts_skipped`;
-  - `SelfTimer._prestage_skip(name, s, st)` and `timer.PRESTAGE_READ_S = 2.0`;
-  - the timer day state gains `skipped_accounts: {account: net}`;
-  - journal events `timer_skipped` (reason `manual_position`, `account`, `net`) and `prestage_check_failed`;
+  - `SelfTimer._prestage_skip(name, s, st)`, `timer.PRESTAGE_READ_S = 2.0` and `timer.PRESTAGE_MARGIN_S = 0.5` (ruling P6);
+  - the timer day state gains `skipped_accounts: {account: net}` (every skipped account, net 0 for an order-only skip) and `skipped_orders: {account: [order ids]}` (ruling P1);
+  - journal events `timer_skipped` (reason `manual_position` or `manual_order`, `account`, `net`, `orders`) and `prestage_check_failed`;
   - a readiness check at level `bad` for each skipped account.
 
 - [ ] **Step 1: Write the failing tests** — `tests/test_prestage.py`:
@@ -3898,7 +3898,7 @@ git diff main -- homebase/timer.py homebase/engine.py | grep "^[+-]" | grep -v "
 Expected:
 - The diff touches only the files in this plan's File Structure, plus the plan doc.
 - `grep "strategy="` in `trading.py` prints nothing: no `manual_*` event carries a strategy.
-- The only timer/engine changes are the `_prestage_skip` call and method, `PRESTAGE_READ_S`, the `assignments` import, `_skips`/`skip_today`/`skipped_today`, and the `handle_alert` filter.
+- The only timer/engine changes are the `_prestage_skip` call and method, `PRESTAGE_READ_S`, `PRESTAGE_MARGIN_S`, the `assignments` import, `_skips`/`skip_today`/`skipped_today`, and the `handle_alert` filter.
 
 - [ ] **Step 7: Commit**
 

@@ -187,6 +187,17 @@ def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
                 checks.append({"level": "bad", "label": name,
                                "detail": "timer error: " +
                                          str((tstat.get(name) or {}).get("error"))[:80]})
+    for name, tst in ((timer_status or {}).get("strategies") or {}).items():
+        sym = getattr(cfg.strategies.get(name), "symbol", "?")
+        orders = tst.get("skipped_orders") or {}
+        for aid, net in (tst.get("skipped_accounts") or {}).items():
+            a = cfg.accounts.get(aid)
+            checks.append({"level": "bad",
+                           "label": (a.label or a.account_name or aid) if a else aid,
+                           "detail": (f"{name} skipped today — holds {int(net):+d} {sym} "
+                                      "(manual position at 09:28:30)") if net else
+                                     (f"{name} skipped today — {len(orders.get(aid) or ())} "
+                                      f"working {sym} order(s) (manual, at 09:28:30)")})
     bars = [n for n, s in enabled.items() if getattr(s, "kind", "straddle") == "bars"]
     if bars and weekday and feed_window(now_et):
         up = bool((feed_status or {}).get("connected"))
