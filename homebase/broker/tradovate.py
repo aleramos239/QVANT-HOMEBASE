@@ -18,11 +18,13 @@ from typing import Callable, Optional
 from .. import symbols
 from ..paths import state_dir as _default_state_dir
 from ..secrets_store import get_credentials
-from .base import BrokerAdapter, FillCallback, FillEvent, OrderRequest, OrderResult
+from .base import (AccountNotOnLogin, BrokerAdapter, FillCallback, FillEvent,
+                   OrderRequest, OrderResult)
 from .tradovate_auth import TradovateAuth
 from .tradovate_ws import TradovateWS, _ws_is_closed
 
 _SEEN_FILL_CAP = 20000
+_SEED_BACKOFF_CAP = 60.0    # seconds between cache-seed retries, at most
 
 
 def _log(msg: str) -> None:
@@ -78,6 +80,15 @@ class TradovateAdapter(BrokerAdapter):
         self._fill_q: asyncio.Queue = asyncio.Queue(maxsize=1000)
         self._consumer: Optional[asyncio.Task] = None
         self._keepalive: Optional[asyncio.Task] = None
+        self._positions: dict[int, dict] = {}     # contractId -> position, THIS account only
+        self._cash: dict = {}                     # cashBalance, THIS account only
+        self._contract_lookups: set = set()       # contract ids being resolved in the background
+        self._lookup_tasks: set = set()           # their tasks, cancelled by close()
+        self._pos_pushed: set = set()             # contract ids pushed while a seed read is in flight
+        self._cash_pushed = False                 # a cashBalance push landed while the seed read it
+        self._seed_task: Optional[asyncio.Task] = None
+        self._seed_sleep = asyncio.sleep          # the seed's retry backoff (tests replace it)
+        self.caches_seeded = False                # position/cash read after the last (re)connect
 
     @property
     def connected(self) -> bool:
@@ -93,6 +104,7 @@ class TradovateAdapter(BrokerAdapter):
 
     # ------------------------------------------------------------ lifecycle
     async def connect(self) -> None:
+        self._stop_seed()
         creds = get_credentials(self.keyring_key)
         if not creds or not creds.get("username") or not creds.get("password"):
             raise RuntimeError(
@@ -107,6 +119,7 @@ class TradovateAdapter(BrokerAdapter):
         sync = await self._ws.user_sync()
         self._ingest_sync(sync)
         self._connected = True
+        self._schedule_seed()
         # a repeat connect() used to stack a new keepalive on top of the old one
         # every time — a night of drops leaked dozens of them
         if self._keepalive is not None and not self._keepalive.done():
@@ -122,6 +135,7 @@ class TradovateAdapter(BrokerAdapter):
         """Rebuild the websocket and re-authorize in place, preserving the fill
         callback, dedup cache, and fill queue so mirroring resumes transparently.
         Recovery is driven by the engine's connection supervisor."""
+        self._stop_seed()
         try:
             if self._ws:
                 await self._ws.close()
@@ -135,6 +149,7 @@ class TradovateAdapter(BrokerAdapter):
         sync = await self._ws.user_sync()
         self._ingest_sync(sync)
         self._connected = True
+        self._schedule_seed()
         if self._consumer is None or self._consumer.done():
             self._consumer = asyncio.create_task(self._consume_fills())
         if self._keepalive is None or self._keepalive.done():
@@ -143,9 +158,12 @@ class TradovateAdapter(BrokerAdapter):
 
     async def close(self) -> None:
         self._connected = False
-        for t in (self._keepalive, self._consumer):
+        self.caches_seeded = False
+        for t in (self._keepalive, self._consumer, self._seed_task, *self._lookup_tasks):
             if t:
                 t.cancel()
+        self._lookup_tasks.clear()
+        self._contract_lookups.clear()      # a reconnect may look them up again
         if self._ws:
             try:
                 await self._ws.close()
@@ -190,6 +208,18 @@ class TradovateAdapter(BrokerAdapter):
             chosen = next((a for a in accounts
                            if str(a.get("name", "")).lower() == w
                            or str(a.get("nickname", "")).lower() == w), None)
+        if chosen is None and (want_id or want_name):
+            # A pin that is not on this login is an ERROR, never a fallback:
+            # on 2026-09-26 pins ...044/...045 silently connected to ...047.
+            # Drop the connected flag too, so a reconnect can never keep
+            # reporting the OLD account as up on the new socket.
+            self._connected = False
+            self._acct_num, self._acct_name, self.pinned_ok = None, "", False
+            have = ", ".join(str(a.get("name") or a.get("nickname") or a.get("id"))
+                             for a in accounts)
+            raise AccountNotOnLogin(
+                f"account {want_name or want_id} not on this login (has: {have})")
+        pinned = chosen is not None
         if chosen is None:
             active = [a for a in accounts if a.get("active", True)]
             chosen = (active or accounts)[0]
@@ -199,6 +229,7 @@ class TradovateAdapter(BrokerAdapter):
                      f"Pin one with extra.account_name in config.")
         self._acct_num = chosen.get("id")
         self._acct_name = chosen.get("name") or chosen.get("nickname") or str(self._acct_num)
+        self.pinned_ok = pinned
 
     # ------------------------------------------------------------ fill stream
     def _mark_seen(self, fid: int) -> bool:
@@ -212,7 +243,9 @@ class TradovateAdapter(BrokerAdapter):
         return True
 
     def _on_ws_event(self, msg: dict) -> None:
-        """Sync handler invoked from the WS reader for every unsolicited frame."""
+        """Sync handler invoked from the WS reader for every unsolicited frame.
+        The adapter's own caches take each push first; listeners (chart
+        trading) hear about it after, and only for THIS account."""
         if msg.get("e") != "props":
             return
         d = msg.get("d") or {}
@@ -226,17 +259,181 @@ class TradovateAdapter(BrokerAdapter):
         elif et == "order":
             if "id" in ent:
                 self._orders[ent["id"]] = {**self._orders.get(ent["id"], {}), **ent}
+                self._name_order_contract(et, ent["id"], self._orders[ent["id"]])
+                self._notify_mine(et, self._orders[ent["id"]])
         elif et == "orderVersion":
             oid = ent.get("orderId")
             if oid is not None:
                 self._order_versions[oid] = {**self._order_versions.get(oid, {}), **ent}
+                self._name_order_contract(et, oid, self._order_versions[oid])
+                self._notify_mine(et, self._order_versions[oid])
         elif et == "fill":
             fid = ent.get("id")
             if fid is None or not self._mark_seen(fid):
                 return
-            if self._on_fill is None:
-                return  # this account is not being observed as master
-            self._enqueue_fill(ent)
+            if self._on_fill is not None:     # this account is being observed as master
+                self._enqueue_fill(ent)
+            self._notify_mine(et, ent)
+        elif et == "position":
+            if self._ingest_position(ent):
+                self._notify_mine(et, self._positions[ent["contractId"]])
+        elif et == "cashBalance":
+            if self._ingest_cash(ent):
+                self._notify_mine(et, self._cash)
+
+    def _owner(self, et: str, ent: dict):
+        """The account an entity belongs to. orderVersion and fill pushes
+        carry no accountId: their order's, or ours when WE placed it."""
+        acct = ent.get("accountId")
+        if acct is None and et in ("orderVersion", "fill"):
+            oid = ent.get("orderId")
+            acct = (self._orders.get(oid) or {}).get("accountId")
+            if acct is None and oid in self._order_symbols:
+                acct = self._acct_num
+        return acct
+
+    def _notify_mine(self, et: str, ent: dict) -> None:
+        try:
+            if self._listeners and self._acct_num is not None \
+                    and self._owner(et, ent) == self._acct_num:
+                self._notify(et, dict(ent))
+        except Exception as e:  # noqa: BLE001 — never break the socket reader
+            _log(f"{self.account_id}: listener dispatch error: {e}")
+
+    def _name_order_contract(self, et: str, oid, ent: dict) -> None:
+        """Name the contract of one of THIS account's orders the way the fill
+        path does: an order WE placed names its own contract, else one
+        contract/item lookup in the background. Left unresolved on failure:
+        trade_view then shows it by what we placed, or with no symbol."""
+        cid = ent.get("contractId")
+        if cid is None or cid in self._contracts or self._acct_num is None:
+            return
+        if self._owner(et, ent) != self._acct_num:
+            return
+        sym = self._order_symbols.get(oid)
+        if sym:
+            self._contracts[cid] = sym
+        else:
+            self._want_contract(cid)
+
+    def _ingest_position(self, ent: dict) -> bool:
+        cid = ent.get("contractId")
+        if self._acct_num is None or ent.get("accountId") != self._acct_num or cid is None:
+            return False
+        self._positions[cid] = {**self._positions.get(cid, {}), **ent}
+        self._pos_pushed.add(cid)
+        if cid not in self._contracts:
+            self._want_contract(cid)
+        return True
+
+    def _ingest_cash(self, ent: dict) -> bool:
+        if self._acct_num is None or ent.get("accountId") != self._acct_num:
+            return False
+        self._cash = {**self._cash, **ent}
+        self._cash_pushed = True
+        return True
+
+    def _want_contract(self, cid) -> None:
+        """Resolve an unseen contract name in the background (a position or
+        order push may name only its contractId). No running loop -> leave it
+        unresolved."""
+        if cid in self._contract_lookups or self._ws is None:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        self._contract_lookups.add(cid)
+        t = loop.create_task(self._lookup_contract(cid))
+        self._lookup_tasks.add(t)
+        t.add_done_callback(self._lookup_tasks.discard)
+
+    async def _lookup_contract(self, cid, *, announce: bool = True) -> None:
+        try:
+            c = await self._ws.contract_item(cid)
+            name = (c or {}).get("name")
+            if name:
+                self._contracts[cid] = name
+                if not announce:
+                    return
+                if cid in self._positions:
+                    self._notify_mine("position", self._positions[cid])
+                for oid, o in list(self._orders.items()):
+                    o_cid = o.get("contractId") or self._order_versions.get(oid, {}).get("contractId")
+                    if o_cid == cid and o.get("ordStatus") in self._WORKING_STATUSES:
+                        self._notify_mine("order", o)
+        except Exception as e:  # noqa: BLE001 — shown unresolved; chart trading refuses meanwhile
+            _log(f"{self.account_id}: contract/item {cid} failed: {e}")
+        finally:
+            self._contract_lookups.discard(cid)
+
+    def _stop_seed(self) -> None:
+        """Forget the caches' seeded state and stop any seed still reading the
+        OLD socket, so a stale snapshot can never mark the new one seeded."""
+        self.caches_seeded = False
+        if self._seed_task is not None and not self._seed_task.done():
+            self._seed_task.cancel()
+
+    def _schedule_seed(self) -> None:
+        """Positions + cash read in the BACKGROUND after a (re)connect: it
+        never delays the connect the 9:30 bot is waiting on."""
+        try:
+            if self._seed_task is not None and not self._seed_task.done():
+                self._seed_task.cancel()
+            self._seed_task = asyncio.create_task(self._seed_caches())
+        except Exception as e:  # noqa: BLE001 — chart trading stays unseeded, the connect stands
+            _log(f"{self.account_id}: cache seed not scheduled: {e}")
+
+    async def _seed_caches(self) -> None:
+        """Positions and cash balance for THIS account, once per (re)connect;
+        pushes keep them current after. A failed read is audited and retried
+        (1 s, 2 s, 4 s ... at most 60 s apart; only the part that failed)
+        until both landed or the adapter disconnects. caches_seeded stays
+        False meanwhile, and chart trading refuses this account."""
+        ws = self._ws
+        pos_done = cash_done = False
+        delay, attempt = 1.0, 0
+        while True:
+            attempt += 1
+            try:
+                if not pos_done:
+                    self._pos_pushed.clear()
+                    positions = await ws.position_list()
+                    me = self._acct_num
+                    snap = {p["contractId"]: p for p in positions or []
+                            if isinstance(p, dict) and p.get("accountId") == me
+                            and p.get("contractId") is not None}
+                    # a push that landed while the read was in flight is NEWER
+                    # than the snapshot: keep it (a fill must never read flat)
+                    snap.update({c: self._positions[c] for c in self._pos_pushed
+                                 if c in self._positions})
+                    self._positions = snap
+                    pos_done = True
+                if not cash_done:
+                    self._cash_pushed = False
+                    cash = await ws.cash_balance_list()
+                    me = self._acct_num
+                    if not self._cash_pushed:
+                        self._cash = next((b for b in cash or []
+                                           if isinstance(b, dict) and b.get("accountId") == me), {})
+                    cash_done = True
+                break
+            except Exception as e:  # noqa: BLE001
+                _log(f"{self.account_id}: cache seed failed (attempt {attempt}, "
+                     f"retry in {delay:g}s): {e}")
+                self.audit({"event": "cache_seed_error", "account": self.account_id,
+                            "attempt": attempt, "retry_in_s": delay,
+                            "error": str(e)[:200]})
+            await self._seed_sleep(delay)
+            delay = min(delay * 2, _SEED_BACKOFF_CAP)
+            if not self.connected or self._ws is not ws:
+                return
+        for cid in [c for c in self._positions if c not in self._contracts]:
+            await self._lookup_contract(cid, announce=False)   # "sync" covers it
+        if self._ws is not ws:
+            return                         # the socket was replaced: its own seed runs
+        self.caches_seeded = True
+        self._notify("sync", {})
 
     def _enqueue_fill(self, ent: dict) -> None:
         """Queue a fill for the consumer; a full queue is surfaced as an audit
@@ -449,6 +646,122 @@ class TradovateAdapter(BrokerAdapter):
                 out.append({"order_id": str(oid), "kind": "target", "side": side,
                             "price": ov.get("price") or o.get("price"), "qty": qty})
         return out
+
+    # ------------------------------------------------------------ chart trading
+    def contract_name(self, contract_id) -> Optional[str]:
+        return self._contracts.get(contract_id)
+
+    async def contract_id(self, symbol: str) -> int:
+        """The contract id for a root or contract, from the cache or one
+        contract/find (cached after)."""
+        name = symbols.resolve_contract(symbol)
+        for cid, n in list(self._contracts.items()):
+            if n == name:
+                return cid
+        c = await self._ws.contract_find(name)
+        cid = (c or {}).get("id")
+        if cid is None:
+            raise RuntimeError(f"no contract found for {name}")
+        self._contracts[cid] = name
+        return cid
+
+    def trade_view(self) -> dict:
+        """Positions, working orders and cash for THIS account, from the pushed
+        caches only (no broker call). `seeded` is False until the (re)connect's
+        position/cash read landed. An order whose contract is still unnamed
+        shows the contract WE placed it on, else symbol None."""
+        me = self._acct_num
+        positions = [{"contract_id": cid, "symbol": self._contracts.get(cid),
+                      "net": int(p.get("netPos") or 0), "avg_price": p.get("netPrice")}
+                     for cid, p in self._positions.items() if int(p.get("netPos") or 0)]
+        orders = []
+        for oid, o in self._orders.items():
+            if me is None or o.get("accountId") != me \
+                    or o.get("ordStatus") not in self._WORKING_STATUSES:
+                continue
+            ov = self._order_versions.get(oid, {})
+            cid = o.get("contractId") or ov.get("contractId")
+            orders.append({
+                "order_id": str(oid),
+                "symbol": ((self._contracts.get(cid) if cid is not None else None)
+                           or self._order_symbols.get(oid)),
+                "side": o.get("action") or ov.get("action"),
+                "type": ov.get("orderType") or o.get("orderType"),
+                "qty": ov.get("orderQty") or o.get("orderQty"),
+                "price": ov.get("price") if ov.get("price") is not None else o.get("price"),
+                "stop_price": (ov.get("stopPrice") if ov.get("stopPrice") is not None
+                               else o.get("stopPrice")),
+                "status": o.get("ordStatus")})
+        return {"broker_account": self._acct_name or None, "pinned": self.pinned_ok,
+                "seeded": self.caches_seeded, "balance": self._cash.get("amount"),
+                "realized_pnl": self._cash.get("realizedPnL"),
+                "positions": sorted(positions, key=lambda p: str(p["symbol"])),
+                "orders": sorted(orders, key=lambda o: o["order_id"])}
+
+    async def cancel_symbol(self, symbol: str, *, exclude=()) -> OrderResult:
+        """Cancel THIS account's working orders in ONE contract (from the
+        pushed order cache), except the ids in `exclude`. An order with no
+        contract id is matched by the contract WE placed it on; one still
+        unknown is left alone, counted in raw["unknown_contract"], and makes
+        the result not ok (it may be this contract's)."""
+        if self._ws is None or self._acct_num is None:
+            return OrderResult(ok=False, error="adapter not connected")
+        try:
+            cid = await self.contract_id(symbol)
+        except Exception as e:  # noqa: BLE001
+            return OrderResult(ok=False, error=f"no contract for {symbol}: {e}")
+        name = self._contracts.get(cid)
+        skip = {str(x) for x in exclude}
+        ids, unknown = [], 0
+        for oid, o in list(self._orders.items()):
+            if o.get("accountId") != self._acct_num \
+                    or o.get("ordStatus") not in self._WORKING_STATUSES \
+                    or str(oid) in skip:
+                continue
+            o_cid = o.get("contractId") or self._order_versions.get(oid, {}).get("contractId")
+            if o_cid is None:
+                placed_on = self._order_symbols.get(oid)
+                if placed_on is None:
+                    unknown += 1
+                elif placed_on == name:
+                    ids.append(oid)
+            elif o_cid == cid:
+                ids.append(oid)
+        res = await asyncio.gather(*(self.cancel_order_by_id(str(i)) for i in ids),
+                                   return_exceptions=True)
+        errors = [f"{i}: {r if isinstance(r, Exception) else r.error}"
+                  for i, r in zip(ids, res) if isinstance(r, Exception) or not r.ok]
+        failed = len(errors)
+        if unknown:
+            errors.append(f"{unknown} working order(s) with an unknown contract left working")
+        return OrderResult(ok=not errors, error="; ".join(errors) or None,
+                           raw={"cancelled": len(ids) - failed,
+                                "ids": [str(i) for i in ids], "unknown_contract": unknown})
+
+    async def flatten_symbol(self, symbol: str) -> OrderResult:
+        """Close THIS account's position in ONE contract, then cancel only that
+        contract's working orders. Position read from the broker (unreadable is
+        not flat -> nothing done); the market order must be accepted before
+        anything is cancelled, so a refused order leaves the stop working."""
+        if self._ws is None or self._acct_num is None:
+            return OrderResult(ok=False, error="adapter not connected")
+        try:
+            net = await self.get_net_position(symbol)
+        except Exception as e:  # noqa: BLE001
+            return OrderResult(ok=False, error=f"position unreadable ({e}) — nothing done")
+        raw: dict = {"net_before": net}
+        if net:
+            r = await self.place_order(OrderRequest(
+                symbol=symbol, side="Sell" if net > 0 else "Buy", qty=abs(net),
+                order_type="Market", text="homebase:chart-flat"))
+            raw["market"] = {"ok": r.ok, "order_id": r.order_id, "error": r.error}
+            if not r.ok:
+                return OrderResult(ok=False, raw=raw,
+                                   error=f"flatten order refused: {r.error} — orders left working")
+        own = [r.order_id] if net and r.order_id else []
+        c = await self.cancel_symbol(symbol, exclude=own)   # never its own market order
+        raw["cancel"] = {"ok": c.ok, "error": c.error, **(c.raw or {})}
+        return OrderResult(ok=c.ok, error=c.error, raw=raw)
 
     async def cancel_order_by_id(self, order_id: str) -> OrderResult:
         if self._ws is None:

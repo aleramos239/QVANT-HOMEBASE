@@ -554,6 +554,47 @@ def test_restart_recovers_state(tmp_path):
     assert eng2._state("nq930", "main").upper_id == st.upper_id
 
 
+def test_restart_recovers_todays_skips(tmp_path):
+    """A desk restart after the 09:28:30 prestage must keep today's skips —
+    so an alert or retry never places onto a skipped account (Task 6 review
+    minor 1)."""
+    clock = Clock()
+    eng, _, _ = mkengine(tmp_path, clock=clock)
+    eng.skip_today("nq930", "main")
+    eng.journal("timer_skipped", strategy="nq930", reason="manual_position",
+                account="main", net=2, orders=[])
+    cfg2 = mkcfg()
+    eng2 = Engine(cfg2, {"main": FakeAdapter("main")}, now_fn=clock,
+                  root=tmp_path)
+    assert eng2.skipped_today("nq930") == {"main"}
+    # a gate_chop skip (no account) never fabricates one
+    eng2.journal("timer_skipped", strategy="nq930", reason="gate_chop", adx=14.0)
+    eng3 = Engine(cfg2, {"main": FakeAdapter("main")}, now_fn=clock,
+                  root=tmp_path)
+    assert eng3.skipped_today("nq930") == {"main"}
+
+
+def test_malformed_journal_lines_never_crash_construction(tmp_path):
+    """Fix round 1 item 1: a malformed journal must never crash engine
+    construction (the desk must still start). A JSON line that isn't an
+    object (a bare int, null, a list) must not raise AttributeError on
+    .get(); a non-UTF-8 byte must not raise UnicodeDecodeError past the
+    OSError-only guard; a truncated last line just fails to parse. The good
+    line among the garbage still counts."""
+    good = json.dumps({"ts": 1, "et": "2026-09-14T09:28:30",
+                       "event": "timer_skipped", "strategy": "nq930",
+                       "reason": "manual_position", "account": "a1", "net": 2})
+    p = tmp_path / "journal.jsonl"
+    body = b"5\n" + b"null\n" + b"[1, 2]\n" + good.encode() + b"\n" \
+        + b"\xff\xfe not valid utf-8\n" \
+        + b'{"truncated": "no closing brace'          # no trailing newline
+    p.write_bytes(body)
+    clock = Clock()
+    cfg = mkcfg()
+    eng = Engine(cfg, {"main": FakeAdapter("main")}, now_fn=clock, root=tmp_path)
+    assert eng.skipped_today("nq930") == {"a1"}
+
+
 # --- SL/TP measured from the ACTUAL fill, like the research -------------------
 def _fill(eng, st, side, qty, price, oid=None):
     run(eng.on_fill(FillEvent(account_id="main", symbol="NQZ6", side=side,

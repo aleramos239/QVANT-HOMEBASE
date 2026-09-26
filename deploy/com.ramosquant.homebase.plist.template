@@ -12,6 +12,7 @@
     <string>--host</string><string>127.0.0.1</string>
     <string>--port</string><string>8850</string>
     <string>--log-level</string><string>warning</string>
+    <string>--timeout-graceful-shutdown</string><string>5</string>
   </array>
   <key>WorkingDirectory</key><string>__REPO__</string>
   <key>RunAtLoad</key><true/>

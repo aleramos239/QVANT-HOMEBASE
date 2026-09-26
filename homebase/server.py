@@ -25,6 +25,7 @@ import datetime as dt
 import hmac
 import json
 import os
+from dataclasses import asdict
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -33,7 +34,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import config as config_mod
 from . import secrets_store
-from .broker.base import BrokerAdapter, OrderRequest
+from .broker.base import AccountNotOnLogin, BrokerAdapter, OrderRequest
 from .broker.tradovate import TradovateAdapter
 from .engine import Engine
 from .feed import MarketFeed
@@ -42,6 +43,8 @@ from .rules import RULES
 from .metrics import live_metrics, strategy_live_detail
 from .paths import state_dir
 from .timer import SelfTimer
+from . import desk_api
+from .trading import ChartDesk
 
 STATIC = Path(__file__).resolve().parent / "static"
 CLOCK_INTERVAL_S = 1       # also paces the sibling-cancel backstop (cache reads)
@@ -184,6 +187,28 @@ def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
                 checks.append({"level": "bad", "label": name,
                                "detail": "timer error: " +
                                          str((tstat.get(name) or {}).get("error"))[:80]})
+    for name, tst in ((timer_status or {}).get("strategies") or {}).items():
+        sym = getattr(cfg.strategies.get(name), "symbol", "?")
+        orders = tst.get("skipped_orders") or {}
+        unreadable = tst.get("skipped_unreadable") or {}
+        checked_at = tst.get("prestage_checked_at") or "09:28:30"   # the real check time
+        for aid, net in (tst.get("skipped_accounts") or {}).items():
+            a = cfg.accounts.get(aid)
+            if net:
+                detail = (f"{name} skipped today — holds {int(net):+d} {sym} "
+                          f"(manual position at {checked_at})")
+            elif aid in unreadable:
+                # the broker read failed and no cached position confirms one
+                # either way — say so, rather than implying a known flat book
+                detail = (f"{name} skipped today — position unknown, "
+                          f"{len(orders.get(aid) or ())} working {sym} order(s) "
+                          f"(manual, at {checked_at})")
+            else:
+                detail = (f"{name} skipped today — {len(orders.get(aid) or ())} "
+                          f"working {sym} order(s) (manual, at {checked_at})")
+            checks.append({"level": "bad",
+                           "label": (a.label or a.account_name or aid) if a else aid,
+                           "detail": detail})
     bars = [n for n, s in enabled.items() if getattr(s, "kind", "straddle") == "bars"]
     if bars and weekday and feed_window(now_et):
         up = bool((feed_status or {}).get("connected"))
@@ -303,6 +328,8 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         return TradovateMD(key, env, token_provider=provider)
 
     timer = SelfTimer(cfg, engine, md_factory=_md_factory)
+    # trading from the chart (spec 2026-09-26): views, guards, journaling
+    desk = ChartDesk(cfg, engine, adapters, acct_status, timer_status=timer.status)
     feed_box: dict = {"feed": None, "retry_at": 0.0, "error": None}
 
     def _bars_strategies() -> dict[str, config_mod.StrategyCfg]:
@@ -398,6 +425,12 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             try:
                 await ad.reconnect()
                 mode = "reconnect"
+            except AccountNotOnLogin:
+                # Permanent: the pin is wrong for THIS login, not a dropped
+                # socket. A full login would just burn the shared keyring
+                # login (other pins on it need it) chasing a pin that will
+                # never be there — never retry it as a transient drop.
+                raise
             except Exception as e:  # noqa: BLE001 — fall back to a real login
                 engine.journal("reconnect_fell_back_to_login", account=aid,
                                error=str(e)[:200])
@@ -405,6 +438,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         else:
             await ad.connect()
         await ad.observe_fills(engine.on_fill)
+        desk.attach(aid, ad)
         acct_status[aid] = {"connected": True, "error": None}
         engine.journal("broker_connected", account=aid,
                        broker_account=a.account_name, mode=mode)
@@ -431,9 +465,12 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                 except Exception as e:  # noqa: BLE001 — report, back off
                     msg = str(e)
                     acct_status[aid] = {"connected": False, "error": msg}
-                    # NEVER hammer the login endpoint: auth rejections and
-                    # rate-limit tickets wait 30 min; anything else 5 min.
-                    slow = ("Login failed" in msg or "p-ticket" in msg
+                    # NEVER hammer the login endpoint: auth rejections,
+                    # rate-limit tickets, and a pin missing from the login
+                    # (permanent until the config or the login changes) wait
+                    # 30 min; anything else 5 min.
+                    slow = (isinstance(e, AccountNotOnLogin)
+                            or "Login failed" in msg or "p-ticket" in msg
                             or "p-captcha" in msg)
                     _login_cooldown[aid] = _t.time() + (1800 if slow else 300)
             await asyncio.sleep(RECONNECT_INTERVAL_S)
@@ -481,6 +518,9 @@ def create_app(cfg: config_mod.AppCfg | None = None,
 
     @contextlib.asynccontextmanager
     async def lifespan(_app):
+        _app.state.desk_key, key_err = desk_api.ensure_key(state_dir() / desk_api.KEY_FILE)
+        if key_err:
+            engine.journal("desk_key_error", error=key_err)
         tasks = []
         if background:
             import uvicorn  # noqa: PLC0415
@@ -492,6 +532,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                      asyncio.create_task(_equity_loop()),
                      asyncio.create_task(timer.loop()),
                      asyncio.create_task(_feed_loop()),
+                     asyncio.create_task(desk.run()),
                      asyncio.create_task(hook_server.serve())]
         try:
             yield
@@ -508,7 +549,17 @@ def create_app(cfg: config_mod.AppCfg | None = None,
     app.state.cfg = cfg
     app.state.adapters = adapters
     app.state.feed_step = feed_step
+    # test-only hooks onto the broker reconnect loop (never called by the
+    # app itself outside `background=True`'s lifespan task)
+    app.state.connect_account = _connect_account
+    app.state.broker_loop = _broker_loop
+    app.state.login_cooldown = _login_cooldown
     app.state.feed_box = feed_box
+    app.state.desk = desk
+    app.include_router(desk_api.trade_router(desk), prefix="/api/trade")
+    app.include_router(desk_api.settings_router(desk))
+    # Task 5b: every write needs an allowed Host/Origin and a JSON body (main app only)
+    app.add_middleware(desk_api.WriteGuard, hosts=lambda: cfg.allowed_hosts)
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
     # ------------------------------------------------------------ webhook
@@ -556,6 +607,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                        jp.read_text().splitlines()[-JOURNAL_TAIL:]][::-1]
         return {
             "armed": cfg.armed,
+            "chart_trading": asdict(cfg.chart_trading),
             "et_now": engine.now_et().isoformat(timespec="seconds"),
             "readiness": compute_readiness(engine.now_et(), cfg, engine,
                                            acct_status, feed_status(),
@@ -596,6 +648,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
     @app.post("/api/kill")
     async def kill():
         cfg.armed = False
+        desk.disable(cause="kill")          # chart trading off too; never raises
         config_mod.save(cfg)
         # every strategy's own orders first, with the proven per-order calls;
         # then the account-wide calls sweep up anything else

@@ -48,6 +48,10 @@ Server + dashboard: coming next (`homebase/server.py`, uvicorn).
 Planned: `git clone` → venv → launchd keepalive → Tailscale for the UI →
 Cloudflare Tunnel for the TradingView webhook. Documented here once built.
 
+The desk plist must include `--timeout-graceful-shutdown 5` (regenerate from
+the template), otherwise the chart service's SSE link makes desk restarts
+hang until SIGKILL.
+
 ## Charts
 
 `python -m homebase.charts` (launchd `com.ramosquant.homebase-charts`, port 8852) is the chart half

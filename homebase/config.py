@@ -11,8 +11,10 @@ appear under many strategies.
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import asdict, dataclass, field
 
+from .netguard import clean_entry
 from .paths import config_path
 
 
@@ -50,6 +52,51 @@ class AccountCfg:
     label: str = ""              # display name (defaults to account_name)
 
 
+HARD_MAX_ORDER_QTY = 50        # the desk page cannot set chart-trading limits above these
+HARD_MAX_POSITION_QTY = 100
+
+
+@dataclass
+class ChartTradingCfg:
+    enabled: bool = False        # orders from the chart page; off until switched on
+    max_order_qty: int = 10      # per order, per account
+    max_position_qty: int = 20   # worst-case |net| per contract, per account
+
+
+def chart_trading_from(d) -> ChartTradingCfg:
+    """config.json's chart_trading block; anything malformed -> the safe
+    defaults (off). `enabled` must be the JSON literal true."""
+    base = ChartTradingCfg()
+    if not isinstance(d, dict):
+        return base
+    try:
+        c = ChartTradingCfg(enabled=d.get("enabled") is True,
+                            max_order_qty=int(d.get("max_order_qty", base.max_order_qty)),
+                            max_position_qty=int(d.get("max_position_qty", base.max_position_qty)))
+    except (TypeError, ValueError):
+        return base
+    if not (1 <= c.max_order_qty <= HARD_MAX_ORDER_QTY
+            and 1 <= c.max_position_qty <= HARD_MAX_POSITION_QTY):
+        return base
+    return c
+
+
+log = logging.getLogger(__name__)
+
+
+def warn_bad_allowed_hosts(v) -> None:
+    """Log each allowed_hosts entry netguard cannot match (it is ignored by
+    the allowlist). The raw value itself stays in the config, untouched, so
+    save() never erases what the user wrote."""
+    if not isinstance(v, list):
+        log.warning("config allowed_hosts is not a list, ignored: %r", v)
+        return
+    for e in v:
+        if clean_entry(e) is None:
+            log.warning("config allowed_hosts entry ignored (a bare hostname or IP, "
+                        "no port, no brackets, no wildcard): %r", e)
+
+
 @dataclass
 class AppCfg:
     armed: bool = False          # master switch: disarmed = journal-only dry run
@@ -59,6 +106,11 @@ class AppCfg:
     accounts: dict[str, AccountCfg] = field(default_factory=dict)
     book: dict[str, list] = field(default_factory=dict)   # strategy -> [{account, qty}]
     strategies: dict[str, StrategyCfg] = field(default_factory=dict)
+    chart_trading: ChartTradingCfg = field(default_factory=ChartTradingCfg)
+    # hostnames / IPs, besides loopback, that may WRITE to the desk (e.g. a
+    # Tailscale MagicDNS name or 100.x IP); exact match, no port, no wildcard.
+    # Kept RAW as written in config.json; netguard.allowlist() cleans it.
+    allowed_hosts: list[str] = field(default_factory=list)
 
 
 def _defaults() -> AppCfg:
@@ -130,6 +182,10 @@ def load() -> AppCfg:
         base = asdict(cfg.strategies[name]) if name in cfg.strategies else {}
         cfg.strategies[name] = StrategyCfg(**{**base, **s})
     cfg.book = {k: list(v) for k, v in (data.get("book") or {}).items()}
+    cfg.chart_trading = chart_trading_from(data.get("chart_trading"))
+    if "allowed_hosts" in data:
+        cfg.allowed_hosts = data["allowed_hosts"]
+        warn_bad_allowed_hosts(cfg.allowed_hosts)
 
     # ---- migration: single-account era ("account": {...}) ----
     legacy = data.get("account")

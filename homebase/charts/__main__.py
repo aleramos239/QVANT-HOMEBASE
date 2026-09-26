@@ -6,8 +6,10 @@ import datetime as dt
 
 import uvicorn
 
+from ..paths import state_dir
 from . import DEFAULT_ROOTS, PORT
 from .calendar import http_get
+from .desk import DeskLink
 from .server import create_app
 
 
@@ -25,7 +27,9 @@ def main(argv=None) -> int:
                      replay=dt.date.fromisoformat(a.replay) if a.replay else None,
                      speed=a.speed, start_et=dt.time.fromisoformat(a.start),
                      # a replay never fetches ForexFactory: the cached weeks on disk are served as is
-                     calendar_fetch=None if a.replay else http_get)
+                     calendar_fetch=None if a.replay else http_get,
+                     desk_factory=None if a.replay else (
+                         lambda fan: DeskLink(fan, key_path=state_dir() / "desk.key")))
     uvicorn.run(app, host=a.host, port=a.port, log_level="warning")
     return 0
 

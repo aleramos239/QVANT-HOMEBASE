@@ -7,8 +7,15 @@ The CopyEngine wires one master adapter's fills out to N follower adapters.
 from __future__ import annotations
 
 import abc
+import sys
 from dataclasses import dataclass, field
 from typing import Awaitable, Callable, Optional
+
+
+class AccountNotOnLogin(RuntimeError):
+    """A pinned account (by id or name) is not exposed by this login's
+    account list. Permanent until the config pin or the login itself
+    changes — never a signal to retry with a fresh username/password login."""
 
 
 @dataclass
@@ -45,6 +52,7 @@ class OrderResult:
 
 
 FillCallback = Callable[[FillEvent], Awaitable[None]]
+EntityListener = Callable[[str, dict], None]
 
 
 class BrokerAdapter(abc.ABC):
@@ -56,6 +64,10 @@ class BrokerAdapter(abc.ABC):
         self.account_id = account_id
         self.live = live              # False => demo/sim; live needs explicit opt-in
         self._connected = False
+        # True only when the broker account was chosen by the config's pin
+        # (chart trading refuses any account that is not on its own pin)
+        self.pinned_ok = False
+        self._listeners: list[EntityListener] = []
         # canonical symbol -> [broker order id, ...] for protective stops/targets
         # WE placed on this account, so we can cancel them when the leg is closed.
         self._protective: dict[str, list[str]] = {}
@@ -220,6 +232,37 @@ class BrokerAdapter(abc.ABC):
                 errors.append(str(e))
         return OrderResult(ok=not errors, error="; ".join(errors) or None,
                            raw={"cancelled": n})
+
+    # --- chart trading (spec 2026-09-26) -------------------------------------
+    def add_listener(self, cb: EntityListener) -> None:
+        """Call cb(entity_type, entity) for THIS account's entity pushes, after
+        the adapter's own caches took them. Types: order, orderVersion,
+        position, fill, cashBalance, and "sync" (the caches were reseeded:
+        re-read everything). Adding the same callable twice is a no-op."""
+        if cb not in self._listeners:
+            self._listeners.append(cb)
+
+    def _notify(self, entity_type: str, entity: dict) -> None:
+        for cb in list(self._listeners):
+            try:
+                cb(entity_type, entity)
+            except Exception as e:  # noqa: BLE001 — a listener must never break the socket reader
+                print(f"[broker] {self.account_id}: listener error: {type(e).__name__}: {e}",
+                      file=sys.stderr, flush=True)
+
+    def trade_view(self) -> Optional[dict]:
+        """Cached positions / working orders / cash for chart trading, with no
+        broker call. None = this adapter cannot provide one."""
+        return None
+
+    def contract_name(self, contract_id) -> Optional[str]:
+        return None
+
+    async def flatten_symbol(self, symbol: str) -> OrderResult:
+        return OrderResult(ok=False, error="flatten_symbol not supported")
+
+    async def cancel_symbol(self, symbol: str) -> OrderResult:
+        return OrderResult(ok=False, error="cancel_symbol not supported")
 
     # --- reads -------------------------------------------------------------
     @abc.abstractmethod

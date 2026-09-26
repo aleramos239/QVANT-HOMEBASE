@@ -35,7 +35,8 @@ def client(tmp_path, monkeypatch):
         return ad
 
     app = create_app(cfg, adapters, background=False, adapter_factory=factory)
-    with TestClient(app) as c:
+    # the desk as its page reaches it (Task 5b: writes need an allowed Host)
+    with TestClient(app, base_url="http://127.0.0.1:8850") as c:
         c.app = app
         c.adapters = adapters
         c.adapter = adapters["main"]
@@ -334,7 +335,7 @@ def test_market_data_takes_host_and_token_from_one_login():
 
 def test_kill_disarms_and_clears_every_account(client):
     client.post("/api/arm", json={"armed": True})
-    r = client.post("/api/kill").json()
+    r = client.post("/api/kill", json={}).json()           # as the page sends it
     assert r["armed"] is False
     ad = client.adapter
     assert ad.cancel_all_calls == 1 and ad.flatten_calls == 1
@@ -419,3 +420,22 @@ def test_readiness_feed_freshness():
                                "watching": {"NQ/1m": {"last_close": close}}})
         by = {c["label"]: c for c in r["checks"]}
         assert by["Price feed"]["level"] == want, (close, want)
+
+
+def test_a_missing_pin_shows_its_reason_on_the_account(client):
+    """The reason reaches acct_status, /api/status and the readiness strip.
+    (Pins the existing surfacing; the raise itself is tested in
+    tests/test_account_pin.py.)"""
+    reason = "account APEX-044 not on this login (has: APEX-047)"
+
+    async def refuse():
+        raise RuntimeError(reason)
+
+    client.adapter.connect = refuse
+    client.adapter._connected = False
+    r = client.post("/api/accounts/reconnect", json={"account": "main"}).json()
+    assert r["results"]["main"] == {"ok": False, "error": reason}
+    st = client.get("/api/status").json()
+    assert st["accounts"]["main"]["connected"] is False
+    assert st["accounts"]["main"]["error"] == reason
+    assert {"level": "bad", "label": "MAIN", "detail": reason} in st["readiness"]["checks"]

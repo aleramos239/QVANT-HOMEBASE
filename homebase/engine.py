@@ -30,6 +30,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import json
+import sys
 import time
 from dataclasses import asdict, dataclass
 from typing import Callable, Optional
@@ -106,6 +107,10 @@ class Engine:
         self.states: dict[str, DayState] = {}   # "strategy@account" -> state
         self._early: list[FillEvent] = []   # fills that beat the placement acks
         self._retry_at: dict[str, float] = {}   # last sibling-cancel attempt
+        # (date, strategy) -> accounts the 9:30 bot skips today: they held a
+        # manual position or working order in its symbol at the prestage
+        # (timer.STAGE_T)
+        self._skips: dict[tuple[str, str], set[str]] = {}
         self._load_today()
 
     # --- time & persistence -------------------------------------------------
@@ -124,6 +129,48 @@ class Engine:
             data = json.loads(p.read_text())
             self.states = {k: DayState(**v) for k, v in data.items()
                            if "account" in v}   # drop pre-book records
+        self._load_skips_from_journal()
+
+    def _load_skips_from_journal(self) -> None:
+        """Restart safety: a desk restart after the 09:28:30 prestage must
+        not forget today's skips, or a retry/alert could place onto an
+        account that already holds the bot's symbol. `_skips` is otherwise
+        only in memory, so rebuild it from today's `timer_skipped` journal
+        lines (the only durable record); a missing/unreadable journal just
+        means no skips are known yet.
+
+        A malformed journal must never crash construction — the desk must
+        still start. A per-line JSON error (including a line that parses to
+        something other than an object: a bare number, null, a list) is
+        skipped; a non-UTF-8 byte is replaced, never raised; and anything
+        else unexpected here is logged and yields no skips for today,
+        rather than raising into __init__."""
+        try:
+            p = self._root / "journal.jsonl"
+            if not p.exists():
+                return
+            today = self._today()
+            try:
+                lines = p.read_text(errors="replace").splitlines()
+            except (OSError, ValueError, UnicodeError):
+                return
+            for line in lines:
+                try:
+                    rec = json.loads(line)
+                except (json.JSONDecodeError, ValueError):
+                    continue
+                if not isinstance(rec, dict):
+                    continue
+                if rec.get("event") != "timer_skipped":
+                    continue
+                if not str(rec.get("et", "")).startswith(today):
+                    continue
+                strategy, account = rec.get("strategy"), rec.get("account")
+                if strategy and account:        # gate_chop skips carry no account
+                    self._skips.setdefault((today, strategy), set()).add(account)
+        except Exception as e:  # noqa: BLE001 — the desk must still start
+            print(f"homebase engine: _load_skips_from_journal failed: {e!r}",
+                  file=sys.stderr)
 
     def _save(self) -> None:
         p = self._day_path(self._today())
@@ -158,6 +205,12 @@ class Engine:
             if s in stats:
                 return s
         return "idle"
+
+    def skip_today(self, strategy: str, account: str) -> None:
+        self._skips.setdefault((self._today(), strategy), set()).add(account)
+
+    def skipped_today(self, strategy: str) -> set[str]:
+        return set(self._skips.get((self._today(), strategy), ()))
 
     # --- the signal ----------------------------------------------------------
     async def handle_alert(self, payload: dict, *, force_window: bool = False,
@@ -203,6 +256,15 @@ class Engine:
                     "reason": f"spread {upper - lower:g} != 2*offset {2 * cfg.offset_pts:g}"}
 
         asg = assignments(self.cfg, name)
+        skipped = self.skipped_today(name)
+        if skipped:                              # the prestage skip (timer._prestage_skip)
+            asg = [a for a in asg if a["account"] not in skipped]
+            if not asg:
+                self.journal("alert_refused", strategy=name, reason="all_accounts_skipped",
+                             skipped=sorted(skipped), source=source)
+                return {"ok": False,
+                        "reason": "every booked account holds a manual position or order"
+                                  " — skipped today"}
         if not asg:
             self.journal("alert_refused", strategy=name, reason="no_assignments",
                          source=source)

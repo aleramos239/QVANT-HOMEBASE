@@ -19,10 +19,11 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import sys
 from typing import Callable
 from zoneinfo import ZoneInfo
 
-from .config import AppCfg
+from .config import AppCfg, assignments
 from .engine import Engine, _hhmm
 from .gate import trend_gate
 
@@ -39,6 +40,8 @@ GATE_BARS = 250            # ask for plenty; Tradovate serves ~120 dailies
 MIN_GATE_BARS = 110        # RMA needs history to converge: at 119 bars the
                            # ADX sits within 0.05 of the research value, at
                            # 100 it drifts 0.35 — below 110, refuse to gate
+PRESTAGE_READ_S = 2.0      # every booked account's position, read concurrently, at most this long
+PRESTAGE_MARGIN_S = 0.5    # ...and never closer than this to 09:30:00 (ruling P6)
 
 
 class SelfTimer:
@@ -153,6 +156,7 @@ class SelfTimer:
             md = await self._ensure_md()
             if s.symbol not in self._subs:
                 self._subs[s.symbol] = await md.subscribe_quote(s.symbol)
+            await self._prestage_skip(name, s, st)
             st["stage"] = "staged"
 
         if st["stage"] == "staged" and t >= FIRE_T:
@@ -182,6 +186,183 @@ class SelfTimer:
                 return
             st.update(anchor=px, stage="fired")
             return self._fire(name, s, px)      # tick() fires all due at once
+
+    async def _prestage_skip(self, name, s, st) -> None:
+        """User-approved (spec 2026-09-26): a booked account that already holds
+        a position in this strategy's symbol at the prestage is skipped for
+        the day — and so is one with a working order resting in it (ruling
+        P1: it could fill inside the bot's window). Otherwise the bot would
+        net against those contracts at its 12:55/15:55 flatten and could
+        misattribute their fills.
+
+        Orders are the adapter's cached view (trade_view, no broker call),
+        matched by the engine's substring rule (NQ also claims MNQZ6); they
+        are read first and always. So is the adapter's cached position view
+        (trade_view()["positions"]), same substring rule — a naked MNQ
+        position, or a different-expiry NQ position, triggers the skip even
+        when the pinned contract's own net (below) reads flat. Positions are
+        ALSO read from the broker (get_net_position), read concurrently, at
+        most PRESTAGE_READ_S and always ending PRESTAGE_MARGIN_S before
+        09:30:00 (ruling P6). A position that cannot be read (error, timeout,
+        no time left) fires as before — unless a manual order or cached
+        position is present: then the account is skipped
+        (`position_unreadable`). An order whose contract is unresolved never
+        skips by itself. Every decision is journaled, but a failing journal
+        write never changes one (logged to stderr instead). Never raises on
+        a read: the stage must not fail on this check.
+
+        Ruling (2026-09-26): if the strategy's day is no longer idle —
+        already placed, live, done, or errored, e.g. a desk restart between
+        09:30 and 09:45 replays gate -> stage on a fresh SelfTimer with no
+        in-memory `st` — the bot's OWN fill now shows as a position at this
+        same check and must never be mistaken for a manual one. No-op
+        entirely: no skip, no journal, no readiness change."""
+        if self.engine.day_status(name) != "idle":
+            return
+
+        def jnl(event, **kw):
+            try:
+                self.engine.journal(event, strategy=name, **kw)
+            except Exception as e:  # noqa: BLE001 — the decision stands
+                try:
+                    print(f"homebase timer: journal {event} for {name} failed: {e!r} {kw}",
+                          file=sys.stderr)
+                except Exception:  # noqa: BLE001 — nothing in this path may raise into the stage
+                    pass
+
+        sym = s.symbol.upper()
+        accounts = [a["account"] for a in assignments(self.cfg, name)]
+
+        def cached_view(aid):
+            """One trade_view() call per account, shared by the order and
+            position checks below (never call it twice — a broken cache
+            must journal ONE failure, not one per check)."""
+            ad = self.engine.adapters.get(aid)
+            try:
+                return (ad.trade_view() if ad is not None else None), None  # None = no view
+            except Exception as e:  # noqa: BLE001
+                return None, "cached view: " + (str(e)[:120] or type(e).__name__)
+
+        def orders_in(view):
+            mine, unresolved, bad = [], [], 0
+            for o in ((view or {}).get("orders") or []):
+                try:
+                    if o.get("symbol") is None:
+                        unresolved.append(str(o.get("order_id")))
+                    elif sym in str(o["symbol"]).upper():
+                        mine.append(str(o.get("order_id")))
+                except Exception:  # noqa: BLE001 — one bad cached order must not hide the rest
+                    bad += 1
+            problems = []
+            if unresolved:
+                problems.append(f"working order(s) {', '.join(unresolved)}: contract unresolved")
+            if bad:
+                problems.append(f"{bad} malformed cached order(s) ignored")
+            return mine, ("; ".join(problems) if problems else None)
+
+        def positions_in(view):
+            """The same substring rule as orders_in, on the adapter's cached
+            positions (trade_view()["positions"]): a naked MNQ position, or a
+            different-expiry NQ position, is caught even when the pinned
+            contract's own broker-read net (below) is flat. NEVER summed
+            across contracts — a hedged MNQZ6 +1 / MNQH6 -1 book still holds
+            a position in the bot's symbol, so any single matching contract
+            with a non-zero net is enough; the reported net is that
+            contract's own value (the first non-zero match)."""
+            net, unresolved, bad = 0, [], 0
+            for p in ((view or {}).get("positions") or []):
+                try:
+                    net_p = int(p.get("net") or 0)
+                    if not net_p:
+                        continue
+                    if p.get("symbol") is None:
+                        unresolved.append(str(p.get("contract_id")))
+                    elif sym in str(p["symbol"]).upper() and not net:
+                        net = net_p
+                except Exception:  # noqa: BLE001 — one bad cached position must not hide the rest
+                    bad += 1
+            problems = []
+            if unresolved:
+                problems.append(f"position(s) {', '.join(unresolved)}: contract unresolved")
+            if bad:
+                problems.append(f"{bad} malformed cached position(s) ignored")
+            return net, ("; ".join(problems) if problems else None)
+
+        views = {aid: cached_view(aid) for aid in accounts}
+        orders, cached_nets, view_errors = {}, {}, {}
+        for aid, (view, verr) in views.items():
+            view_errors[aid] = verr
+            if verr is not None:
+                orders[aid] = ([], None)
+                cached_nets[aid] = (0, None)
+                continue
+            try:
+                orders[aid] = orders_in(view)
+            except Exception as e:  # noqa: BLE001 — a malformed cache must not crash the stage
+                orders[aid] = ([], "order view: " + (str(e)[:120] or type(e).__name__))
+            try:
+                cached_nets[aid] = positions_in(view)
+            except Exception as e:  # noqa: BLE001
+                cached_nets[aid] = (0, "position view: " + (str(e)[:120] or type(e).__name__))
+
+        async def read(aid):
+            ad = self.engine.adapters.get(aid)
+            if ad is None or not ad.connected:
+                return aid, None, "not connected"
+            try:
+                return aid, await ad.get_net_position(s.symbol), None
+            except Exception as e:  # noqa: BLE001
+                return aid, None, str(e)[:120] or type(e).__name__
+
+        now = self.now_et()
+        st["prestage_checked_at"] = now.strftime("%H:%M:%S")   # the REAL check
+                                                                # time, for readiness text
+        left = (dt.datetime.combine(now.date(), FIRE_T, tzinfo=ET)
+                - now).total_seconds() - PRESTAGE_MARGIN_S
+        budget = min(PRESTAGE_READ_S, left)
+        nets: dict = {}                   # account -> (net, error); absent = not read
+        if budget <= 0:
+            jnl("prestage_check_failed", error="too close to the fire")
+        else:
+            try:
+                got = await asyncio.wait_for(asyncio.gather(*(read(a) for a in accounts)),
+                                             budget)
+                nets = {aid: (net, err) for aid, net, err in got}
+            except Exception as e:  # noqa: BLE001 — incl. the timeout
+                jnl("prestage_check_failed", error=str(e)[:200] or type(e).__name__)
+
+        skipped, skipped_orders, skipped_unreadable = {}, {}, {}
+        for aid in accounts:
+            net, err = nets.get(aid, (None, None))
+            mine, problem = orders[aid]
+            cached_net, pos_problem = cached_nets[aid]
+            if err is not None:
+                jnl("prestage_check_failed", account=aid, error=err)
+            if view_errors[aid] is not None:
+                jnl("prestage_check_failed", account=aid, error=view_errors[aid])
+            if problem is not None:
+                jnl("prestage_check_failed", account=aid, error=problem)
+            if pos_problem is not None:
+                jnl("prestage_check_failed", account=aid, error=pos_problem)
+            unreadable = aid not in nets or err is not None
+            net_hit = net or cached_net              # OR: either source is enough
+            if not (net_hit or mine):
+                continue                      # flat / unreadable, no manual order: fire
+            skipped[aid] = int(net_hit or 0)
+            if mine:
+                skipped_orders[aid] = mine
+            if unreadable:
+                skipped_unreadable[aid] = True   # the position itself is unknown, not just flat
+            self.engine.skip_today(name, aid)
+            jnl("timer_skipped", reason="manual_position" if net_hit else "manual_order",
+                account=aid, net=int(net_hit or 0), orders=mine,
+                **({"position_unreadable": True} if unreadable else {}))
+        if skipped:
+            st["skipped_accounts"] = skipped
+        if skipped_orders:
+            st["skipped_orders"] = skipped_orders
+        if skipped_unreadable:
+            st["skipped_unreadable"] = skipped_unreadable
 
     async def _fire(self, name, s, px) -> None:
         out = await self.engine.handle_alert(

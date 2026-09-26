@@ -2,7 +2,8 @@
 
 Runs as its OWN process (python -m homebase.charts, port 8852) so chart work
 can never delay an order or crash the trading engine. Nothing in this
-package places, modifies or cancels orders.
+package talks to the broker's order API: trading from the chart goes to the
+desk (:8850) through desk.py, which holds the only key.
 Spec: docs/superpowers/specs/2026-09-25-live-charts-design.md
 """
 from __future__ import annotations
