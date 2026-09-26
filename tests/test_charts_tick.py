@@ -5,7 +5,7 @@ import datetime as dt
 import json
 from types import SimpleNamespace
 
-from homebase import ticks as T
+from homebase import contracts, ticks as T
 from homebase.charts.session import et_wall_s, is_rth, session_date, session_range_ms
 from homebase.charts.tick import BUY, SELL, SideClassifier, Tick, from_row
 from tests.charts_util import ET, session_ms
@@ -55,9 +55,17 @@ def test_from_row_parses_blank_quotes_and_strings():
     assert t == Tick(5, 10.0, 3, BUY, 7)
 
 
-def test_live_recorder_covers_the_nightly_archive_roots():
+def test_live_recorder_covers_the_nightly_archive_roots_plus_bitcoin():
+    # Bitcoin trades 24/7: the nightly job's weekday 18:00 -> 17:00 fetch
+    # cannot capture it, so the chart service is its only recorder
     from homebase.charts import DEFAULT_ROOTS
-    assert set(DEFAULT_ROOTS) == set(T.ROOTS)
+    assert set(DEFAULT_ROOTS) == set(T.ROOTS) | {"BTC"}
+
+
+def test_bitcoin_contract_spec():
+    assert contracts.tick_size("BTC") == 5.0
+    assert contracts.point_value("BTC") == 5.0
+    assert contracts.tick_size("BTCV6") == 5.0
 
 
 def test_md_token_prefers_the_requested_login(tmp_path, monkeypatch):

@@ -10,10 +10,12 @@ from __future__ import annotations
 import os
 
 PORT = 8852
-# the live recorder captures the same symbols as the nightly tick archive
+# the live recorder captures the nightly tick archive's symbols
 # (homebase.ticks.ROOTS), so the two can be compared and the nightly job can
-# later shrink to a gap-filler
-DEFAULT_ROOTS = ("NQ", "ES", "YM", "RTY", "GC", "SI", "CL", "ZN", "NG", "HG")
+# later shrink to a gap-filler — plus Bitcoin, which trades 24/7: the nightly
+# job's weekday 18:00 -> 17:00 fetch cannot capture it, so this service is
+# its only recorder
+DEFAULT_ROOTS = ("NQ", "ES", "YM", "RTY", "GC", "SI", "CL", "ZN", "NG", "HG", "BTC")
 # whose md socket feeds the charts: "demo" = the Apex eval login (default;
 # confirmed by the Task 14 spike), "live" = the live account's login
 MD_ENV = os.environ.get("HOMEBASE_CHARTS_MD", "demo")

@@ -108,14 +108,35 @@ def _third_friday(year: int, month: int):
     return d + timedelta(days=(4 - d.weekday()) % 7)
 
 
+# CME crypto: monthly contracts expiring on the contract month's LAST Friday;
+# the volume moves to the next month 1-3 days before (59 BTC rolls 2021-26,
+# median 1). Front while today < that Friday minus this many days.
+LAST_FRIDAY_ROLL = {"BTC": 2, "MBT": 2, "ETH": 2, "MET": 2}
+
+
+def _last_friday(year: int, month: int):
+    from datetime import date, timedelta
+    d = date(year + (month == 12), month % 12 + 1, 1) - timedelta(days=1)   # the month's last day
+    return d - timedelta(days=(d.weekday() - 4) % 7)
+
+
 def front_month(root: str, today=None) -> str:
     """Front contract for a root, e.g. front_month("NQ") -> "NQZ6".
     Index roots: quarterlies, rolled one week before the 3rd-Friday expiry
     (the volume roll). CYCLE_ROLL roots (metals, treasuries, energy): their
     own months, rolled on a fixed day of the month before the contract
-    month. Never a dying contract."""
+    month. Crypto (LAST_FRIDAY_ROLL): monthly, rolled `lead` days before the
+    last-Friday expiry. Never a dying contract."""
     from datetime import date, timedelta
     today = today or date.today()
+    lead = LAST_FRIDAY_ROLL.get(root.upper())
+    if lead is not None:
+        y, m = today.year, today.month
+        for _ in range(3):
+            if today < _last_friday(y, m) - timedelta(days=lead):
+                return f"{root}{MONTH_TO_CODE[m]}{y % 10}"
+            y, m = (y, m + 1) if m < 12 else (y + 1, 1)
+        raise ValueError(f"no front month found for {root!r}")
     year = today.year
     cycle, roll_day = CYCLE_ROLL.get(root.upper(), (QUARTERLY, None))
     for _ in range(3):                 # scan up to ~15 months ahead

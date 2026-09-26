@@ -197,6 +197,24 @@ test('root names', () => {
   assert.equal(C.rootName('ZZ'), '');
 });
 
+test('Bitcoin has a name', () => {
+  assert.equal(C.rootName('BTC'), 'Bitcoin');
+});
+
+test('market hours: Globex Sunday 18:00 to Friday 17:00 with a daily break; crypto never closes', () => {
+  const at = (h, m = 0) => h * 60 + m;
+  assert.equal(C.marketOpen('NQ', 6, at(12)), false);        // Saturday
+  assert.equal(C.marketOpen('NQ', 0, at(17, 59)), false);    // Sunday before the open
+  assert.equal(C.marketOpen('NQ', 0, at(18)), true);
+  assert.equal(C.marketOpen('NQ', 3, at(17, 30)), false);    // the daily break
+  assert.equal(C.marketOpen('NQ', 3, at(9, 30)), true);
+  assert.equal(C.marketOpen('NQ', 5, at(16, 59)), true);
+  assert.equal(C.marketOpen('NQ', 5, at(17)), false);        // Friday close
+  for (const [wd, t] of [[6, at(12)], [0, at(10)], [3, at(17, 30)], [5, at(20)]]) {
+    assert.equal(C.marketOpen('BTC', wd, t), true);
+  }
+});
+
 test('dialog filtering by name and group', () => {
   assert.deepEqual(C.filter('', 'Moving averages').map((d) => d.id), ['ema', 'sma', 'vwma']);
   assert.deepEqual(C.filter('delta').map((d) => d.id), ['delta', 'cumdelta']);

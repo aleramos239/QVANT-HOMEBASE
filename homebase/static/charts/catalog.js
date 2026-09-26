@@ -7,7 +7,20 @@
 
 const LINE_COLORS = ['#2962FF', '#FF6D00', '#9C27B0', '#00897B', '#E91E63'];
 const ROOT_NAMES = { NQ: 'E-mini Nasdaq-100', ES: 'E-mini S&P 500', YM: 'E-mini Dow', RTY: 'E-mini Russell 2000',
-  GC: 'Gold', SI: 'Silver', CL: 'Crude Oil', ZN: '10-Year T-Note', NG: 'Natural Gas', HG: 'Copper' };
+  GC: 'Gold', SI: 'Silver', CL: 'Crude Oil', ZN: '10-Year T-Note', NG: 'Natural Gas', HG: 'Copper', BTC: 'Bitcoin' };
+const ALWAYS_OPEN = new Set(['BTC', 'MBT', 'ETH', 'MET']);   // CME crypto: 24/7 since 2026-05-30
+
+/* Is root's market open at this ET weekday (0 = Sunday) and minute of the
+   day? CME Globex: Sunday 18:00 to Friday 17:00 with a daily 17:00-18:00
+   break; crypto never closes. Exchange holidays are not modelled. */
+function marketOpen(root, weekday, minutes) {
+  if (ALWAYS_OPEN.has(root)) return true;
+  if (weekday === 6) return false;
+  if (weekday === 0) return minutes >= 18 * 60;
+  if (minutes >= 17 * 60 && minutes < 18 * 60) return false;
+  if (weekday === 5) return minutes < 17 * 60;
+  return true;
+}
 const GROUPS = ['All', 'VWAP', 'Moving averages', 'Trend', 'Levels', 'Volume', 'Order flow'];
 const LENGTH = (def) => ({ key: 'length', label: 'Length', type: 'int', min: 1, max: 1000, def });
 const CATALOG = [
@@ -221,7 +234,7 @@ function filter(query, group = 'All') {
 
 const api = { CATALOG, GROUPS, ROOT_NAMES, FAVOURITES, INTERVAL_GROUPS, LINE_COLORS, uid, def, clampParams, instance,
   defaults, serverKey, serverKeys, migrate, migrateLayout, label, legendValues, decimals, fmtPrice, fmtCompact,
-  fmtSigned, change, parseSpec, specLabel, longLabel, toSpec, rootName, filter };
+  fmtSigned, change, parseSpec, specLabel, longLabel, toSpec, rootName, filter, ALWAYS_OPEN, marketOpen };
 if (typeof window !== 'undefined') window.HBCatalog = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

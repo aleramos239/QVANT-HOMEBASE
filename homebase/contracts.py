@@ -58,6 +58,7 @@ _SPECS: dict[str, tuple[float, float]] = {
     # --- agriculture (CBOT, quoted in cents/bushel) ---
     "ZC": (50.0, 0.25), "ZW": (50.0, 0.25), "ZS": (50.0, 0.25),  # corn/wheat/soy
     # --- crypto (CME) ---
+    "BTC": (5.0, 5.0),     # bitcoin (5 BTC; $25 a tick)
     "MBT": (0.1, 5.0),   # micro bitcoin ($0.10 per $1 of BTC)
     "MET": (0.1, 0.5),   # micro ether
 }

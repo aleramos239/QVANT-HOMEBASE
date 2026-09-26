@@ -57,6 +57,17 @@ def test_metal_front_months_by_cycle():
     assert front_month("HG", dt.date(2026, 11, 24)) == "HGH7"
 
 
+def test_crypto_rolls_two_days_before_the_last_friday_expiry():
+    # BTC/MBT are monthly and expire on the contract month's last Friday; the
+    # volume moves 1-3 days before (59 BTC rolls 2021-26, median 1)
+    assert front_month("BTC", dt.date(2026, 9, 26)) == "BTCV6"     # Sep expired Fri 25th
+    assert front_month("BTC", dt.date(2026, 10, 27)) == "BTCV6"
+    assert front_month("BTC", dt.date(2026, 10, 28)) == "BTCX6"    # Oct's last Friday is the 30th
+    assert front_month("BTC", dt.date(2026, 12, 22)) == "BTCZ6"
+    assert front_month("BTC", dt.date(2026, 12, 23)) == "BTCF7"    # year wrap
+    assert front_month("MBT", dt.date(2026, 9, 26)) == "MBTV6"
+
+
 def test_unpack_prices_from_offsets():
     rows = T._unpack({"bp": 123056, "bt": 1_000_000, "ts": 0.25,
                       "tks": [{"t": 5, "p": 2, "s": 3, "b": 1, "a": 2, "bs": 10, "as": 4, "id": 9}]})
