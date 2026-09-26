@@ -1,10 +1,13 @@
-/* Homebase Charts — drawing tools. This half is pure: geometry that maps a
+/* Homebase Charts — drawing tools. The pure half: geometry that maps a
    drawing's (time, price) points through the chart's bars to pixels (so a
    drawing stays on its times across timeframes, like TradingView), hit
    tests, tick rounding, the measure text, and the per-symbol store that
-   keeps drawings on the server. No browser globals at load time: the Node
-   tests load this file directly. The canvas primitive and the pointer
-   controller come after it (Task 6). */
+   keeps drawings on the server.
+
+   The browser half, below the store: the canvas primitive that draws one
+   chart's drawings, and the pointer controller that places, selects,
+   moves and deletes them. No browser globals at load time (only inside
+   functions that run in the page): the Node tests load this file directly. */
 (function () {
 'use strict';
 const Cat = (typeof window !== 'undefined' && window.HBCatalog) || (typeof require === 'function' ? require('./catalog.js') : null);
@@ -223,8 +226,339 @@ class Store {
   }
 }
 
+/* ---------------- browser half: canvas primitive + pointer controller ---------------- */
+const MOVE_PX = 4;   // a press that moves less than this is a click, not a drag
+
+/* Draws one chart's trend lines and rectangles, the drawing being placed,
+   the selected drawing's handles and the measure box, as a series
+   primitive on the candles (so only in the price pane). Horizontal lines
+   are native price lines kept by the controller, so their price tag sits
+   on the axis; this layer only draws a selected one's handle. */
+class Primitive {
+  constructor(ctl) {
+    this.ctl = ctl;
+    this.views = [{ zOrder: () => 'top', renderer: () => ({ draw: (target) => this.draw(target) }) }];
+  }
+  attached({ requestUpdate }) { this.requestUpdate = requestUpdate; }
+  detached() { this.requestUpdate = null; }
+  updateAllViews() {}
+  paneViews() { return this.views; }
+  redraw() { if (this.requestUpdate) this.requestUpdate(); }
+  draw(target) {
+    const c = this.ctl, geo = c.geo();
+    if (!geo) return;
+    const P = c.cell.P;
+    target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
+      for (const d of c.items()) if (d.type !== 'hline') drawShape(ctx, d, geo, P);
+      if (c.place) drawShape(ctx, c.place, geo, P);
+      const sel = c.selectedDrawing(), hs = sel && handlePoints(sel, geo);
+      if (hs) {
+        ctx.fillStyle = P.bg;
+        ctx.strokeStyle = sel.color || P.accent;
+        ctx.lineWidth = 1.5;
+        for (const [x, y] of hs) { ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
+      }
+      if (c.measure) drawMeasure(ctx, c.measure, geo, P, c.ctx(), mediaSize);
+    });
+  }
+}
+
+function drawShape(ctx, d, geo, P) {
+  const hs = handlePoints(d, geo);
+  if (!hs) return;
+  const [[x0, y0], [x1, y1]] = hs;
+  ctx.strokeStyle = d.color || P.accent;
+  if (d.type === 'trend') {
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+    return;
+  }
+  const x = Math.min(x0, x1), y = Math.min(y0, y1), w = Math.abs(x1 - x0), h = Math.abs(y1 - y0);
+  ctx.fillStyle = P.accentSoft;
+  ctx.fillRect(x, y, w, h);
+  ctx.lineWidth = 1;
+  ctx.strokeRect(Math.round(x) + 0.5, Math.round(y) + 0.5, Math.round(w), Math.round(h));
+}
+
+function drawMeasure(ctx, m, geo, P, mctx, size) {
+  const x0 = geo.x(m.a.t), x1 = geo.x(m.b.t), y0 = geo.y(m.a.p), y1 = geo.y(m.b.p);
+  if (x0 == null || x1 == null || y0 == null || y1 == null) return;
+  const up = m.b.p >= m.a.p, col = up ? P.accent : P.down;
+  const left = Math.min(x0, x1), top = Math.min(y0, y1), w = Math.abs(x1 - x0), h = Math.abs(y1 - y0);
+  ctx.fillStyle = up ? P.accentSoft : P.downSoft;
+  ctx.fillRect(left, top, w, h);
+  ctx.strokeStyle = col;
+  ctx.lineWidth = 1;
+  const mx = Math.round(left + w / 2) + 0.5, my = Math.round(top + h / 2) + 0.5;
+  ctx.beginPath(); ctx.moveTo(mx, y0); ctx.lineTo(mx, y1); ctx.moveTo(x0, my); ctx.lineTo(x1, my); ctx.stroke();
+  const lines = measureLabel(m.a, m.b, mctx);
+  ctx.font = `12px ${window.HBCell.FONT}`;
+  const bw = Math.max(...lines.map((t) => ctx.measureText(t).width)) + 16, bh = 38;
+  const bx = Math.max(2, Math.min(left + w / 2 - bw / 2, size.width - bw - 2));
+  const by = Math.max(2, Math.min(up ? top - bh - 6 : top + h + 6, size.height - bh - 2));
+  ctx.fillStyle = col;
+  ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 4); ctx.fill();
+  ctx.fillStyle = '#FFFFFF';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(lines[0], bx + bw / 2, by + 11);
+  ctx.fillText(lines[1], bx + bw / 2, by + 27);
+}
+
+/* One chart's drawing interaction. The tool comes from the page's rail
+   (host.tool()); drawings live in the page's per-symbol store
+   (host.drawings), so every chart of the symbol shows the same ones. */
+class Controller {
+  constructor(cell, host) {
+    this.cell = cell; this.host = host; this.root = cell.shown.root; this.box = cell.box;
+    this.sel = null;       // id of the selected drawing
+    this.place = null;     // a trend line / rectangle being placed: {type, points}
+    this.measure = null;   // {a, b, done}
+    this.mode = null;      // placing: 'drag' (button held since the first point) | 'click' (waiting for the 2nd click)
+    this.downAt = null;    // pane point of the press that started placing
+    this.drag = null;      // moving / reshaping: {orig, part, index, from, cur}
+    this.owned = false;    // this gesture switched the chart's panning off
+    this.hlines = new Map();   // drawing id -> its price line
+    this.prim = new Primitive(this);
+    cell.candles.attachPrimitive(this.prim);
+    this.on = { down: (e) => this.onDown(e), move: (e) => this.onMove(e), up: (e) => this.onUp(e),
+      hover: (e) => this.onHover(e), leave: () => this.setCursor(null) };
+    this.box.addEventListener('pointerdown', this.on.down, true);
+    this.box.addEventListener('pointermove', this.on.hover);
+    this.box.addEventListener('pointerleave', this.on.leave);
+    window.addEventListener('pointermove', this.on.move, true);
+    window.addEventListener('pointerup', this.on.up, true);
+    this.off = host.drawings.subscribe(this.root, () => this.refresh());
+    host.drawings.ensure(this.root);
+    this.refresh();
+    this.toolChanged();
+  }
+
+  destroy() {   // before the chart is removed (it takes its price lines and primitives with it)
+    this.box.removeEventListener('pointerdown', this.on.down, true);
+    this.box.removeEventListener('pointermove', this.on.hover);
+    this.box.removeEventListener('pointerleave', this.on.leave);
+    window.removeEventListener('pointermove', this.on.move, true);
+    window.removeEventListener('pointerup', this.on.up, true);
+    this.off();
+    this.release();
+    delete this.cell.el.dataset.cursor;
+    this.hlines.clear();
+  }
+
+  /* The symbol's drawings, with one being dragged shown where it is now. */
+  items() {
+    const list = this.host.drawings.list(this.root), cur = this.drag && this.drag.cur;
+    return cur ? list.map((d) => (d.id === cur.id ? cur : d)) : list;
+  }
+  selectedDrawing() { return this.sel ? this.items().find((d) => d.id === this.sel) || null : null; }
+  ctx() {
+    const c = this.cell, ts = c.chart.timeScale();
+    return { bars: c.bars, isTime: c.isTime(), barMs: c.barMs(), tick: c.tick, coord: (i) => ts.logicalToCoordinate(i) };
+  }
+  geo() {
+    const c = this.cell;
+    if (!c.chart || !c.bars.length) return null;
+    const ctx = this.ctx();
+    return { x: (t) => timeToX(t, ctx), y: (p) => c.candles.priceToCoordinate(p), w: this.paneW() };
+  }
+  paneW() { return this.box.clientWidth - this.cell.chart.priceScale('right').width(); }
+  paneH() { return this.cell.chart.panes()[0].getHeight(); }
+  local(e) { const r = this.box.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+  inPane(pt) { return pt.x >= 0 && pt.x < this.paneW() && pt.y >= 0 && pt.y < this.paneH(); }
+
+  /* The bar-snapped time and tick-rounded price under a pane point. */
+  at(pt) {
+    const c = this.cell, L = c.chart.timeScale().coordinateToLogical(pt.x), p = c.candles.coordinateToPrice(pt.y);
+    if (L == null || p == null || !c.bars.length) return null;
+    return { t: snapTime(L, c.bars, c.isTime(), c.barMs()), p: roundToTick(p, c.tick), L };
+  }
+
+  setCursor(kind) {
+    const k = kind || (this.host.tool() === 'cursor' ? null : 'crosshair');
+    if (k) this.cell.el.dataset.cursor = k; else delete this.cell.el.dataset.cursor;
+  }
+
+  /* Price lines for the horizontal lines; a canvas redraw for the rest. */
+  refresh() {
+    if (!this.cell.candles) return;
+    const P = this.cell.P, seen = new Set();
+    for (const d of this.items()) {
+      if (d.type !== 'hline') continue;
+      seen.add(d.id);
+      const opts = { price: d.points[0].p, color: d.color || P.accent, lineWidth: d.id === this.sel ? 2 : 1,
+        lineStyle: window.LightweightCharts.LineStyle.Solid, axisLabelVisible: true, title: '' };
+      const line = this.hlines.get(d.id);
+      if (line) line.applyOptions(opts); else this.hlines.set(d.id, this.cell.candles.createPriceLine(opts));
+    }
+    for (const [id, line] of this.hlines) {
+      if (!seen.has(id)) { this.cell.candles.removePriceLine(line); this.hlines.delete(id); }
+    }
+    if (this.sel && !this.selectedDrawing()) this.sel = null;
+    this.prim.redraw();
+  }
+
+  /* This gesture is ours. Lightweight Charts 5.2.1 listens to mouse events
+     only: preventDefault() on pointerdown suppresses the mousedown/move/up it
+     would pan with; panning and zooming also stay off until release(). */
+  own(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!this.owned) { this.owned = true; this.cell.chart.applyOptions({ handleScroll: false, handleScale: false }); }
+  }
+  release() {
+    if (!this.owned) return;
+    this.owned = false;
+    if (this.cell.chart) this.cell.chart.applyOptions({ handleScroll: true, handleScale: true });
+  }
+
+  onDown(e) {
+    if (e.button !== 0 || !this.cell.chart) return;
+    const pt = this.local(e), tool = this.host.tool();
+    if (this.measure && this.measure.done) { this.measure = null; this.prim.redraw(); }
+    if (!this.inPane(pt)) return;
+    if (tool !== 'cursor') {
+      const at = this.at(pt);
+      if (!at) return;
+      this.own(e);
+      if (this.mode === 'click') { this.finish(at); return; }
+      if (tool === 'hline') { this.commit({ type: 'hline', points: [{ p: at.p }] }); return; }
+      const start = { t: at.t, p: at.p };
+      if (tool === 'measure') this.measure = { a: start, b: start, done: false };
+      else this.place = { type: tool, points: [start, start] };
+      this.mode = 'drag';
+      this.downAt = pt;
+      this.prim.redraw();
+      return;
+    }
+    const geo = this.geo();
+    if (!geo) return;
+    const sel = this.selectedDrawing();
+    let d = null, hit = sel ? hitTest(sel, pt, geo) : null;
+    if (hit && hit.part === 'handle') d = sel;
+    else {
+      hit = null;
+      const all = this.items();
+      for (let i = all.length - 1; i >= 0 && !d; i--) { const h = hitTest(all[i], pt, geo); if (h) { d = all[i]; hit = h; } }
+    }
+    if (!d) { if (this.sel) { this.sel = null; this.refresh(); } return; }   // empty chart: deselect, let it pan
+    this.own(e);
+    this.sel = d.id;
+    this.drag = { orig: d, part: hit.part, index: hit.index, from: this.at(pt), cur: null };
+    this.setCursor('grabbing');
+    this.refresh();
+  }
+
+  onMove(e) {
+    if (!this.cell.chart) return;
+    if (this.place || (this.measure && !this.measure.done)) {
+      const at = this.at(this.local(e));
+      if (!at) return;
+      const end = { t: at.t, p: at.p };
+      if (this.place) this.place = { ...this.place, points: [this.place.points[0], end] };
+      else this.measure = { ...this.measure, b: end };
+      this.prim.redraw();
+      return;
+    }
+    if (!this.drag || !this.drag.from) return;
+    const at = this.at(this.local(e));
+    if (!at) return;
+    const { orig, part, index, from } = this.drag;
+    this.drag.cur = part === 'handle' ? setPoint(orig, index, at.t, at.p)
+      : moveDrawing(orig, Math.round(at.L) - Math.round(from.L), at.p - from.p, this.cell.tick, this.ctx());
+    this.refresh();
+  }
+
+  onUp(e) {
+    if (!this.cell.chart) return;
+    if (this.place || (this.measure && !this.measure.done)) {
+      if (this.mode !== 'drag') return;
+      const pt = this.local(e);
+      if (Math.hypot(pt.x - this.downAt.x, pt.y - this.downAt.y) < MOVE_PX) { this.mode = 'click'; this.release(); return; }
+      const at = this.at(pt);
+      if (at) this.finish(at);
+      return;
+    }
+    if (!this.drag) return;
+    const moved = this.drag.cur;
+    this.drag = null;
+    this.release();
+    this.setCursor(null);
+    if (moved) this.host.drawings.replace(this.root, moved); else this.refresh();
+  }
+
+  finish(at) {
+    const end = { t: at.t, p: at.p };
+    this.mode = null;
+    this.downAt = null;
+    this.release();
+    if (this.measure && !this.measure.done) {
+      this.measure = { ...this.measure, b: end, done: true };
+      this.prim.redraw();
+      this.host.toolDone();
+      return;
+    }
+    const d = { ...this.place, points: [this.place.points[0], end] };
+    this.place = null;
+    const [a, b] = d.points;
+    if (a.t === b.t && a.p === b.p) { this.prim.redraw(); this.host.toolDone(); return; }   // nothing to draw
+    this.commit(d);
+  }
+
+  commit(d) {
+    const full = { id: newId(), ...d, color: '#2962FF' };
+    this.sel = full.id;
+    this.release();
+    this.host.drawings.add(this.root, full);   // every chart of this symbol refreshes
+    this.host.toolDone();
+  }
+
+  toolChanged() {
+    if (this.place || (this.measure && !this.measure.done)) {
+      this.place = null; this.measure = null; this.mode = null; this.downAt = null;
+      this.release();
+      this.prim.redraw();
+    }
+    this.setCursor(null);
+  }
+
+  escape() {
+    if (this.drag) {   // a move / reshape in progress: the drawing goes back, and stays selected
+      this.drag = null;
+      this.release();
+      this.setCursor(null);
+      this.refresh();
+      return true;
+    }
+    if (this.place || this.measure) {
+      this.place = null; this.measure = null; this.mode = null; this.downAt = null;
+      this.release();
+      this.prim.redraw();
+      return true;
+    }
+    if (this.sel) { this.sel = null; this.refresh(); return true; }
+    return false;
+  }
+
+  deleteSelected() {
+    if (!this.sel) return false;
+    const id = this.sel;
+    this.sel = null;
+    this.host.drawings.remove(this.root, id);
+    return true;
+  }
+
+  onHover(e) {
+    if (this.drag || this.place || e.buttons || this.host.tool() !== 'cursor' || !this.cell.chart) return;
+    const pt = this.local(e), geo = this.geo();
+    const over = !!geo && this.inPane(pt) && this.items().some((d) => hitTest(d, pt, geo));
+    this.setCursor(over ? 'move' : null);
+  }
+}
+
 const api = { barIndexAt, logicalOf, xOfLogical, timeToX, snapTime, roundToTick, distToSegment, handlePoints, hitTest,
-  setPoint, shiftTime, moveDrawing, fmtDuration, measureLabel, newId, Store, HANDLE_TOL, LINE_TOL };
+  setPoint, shiftTime, moveDrawing, fmtDuration, measureLabel, newId, Store, Primitive, Controller, HANDLE_TOL, LINE_TOL };
 if (typeof window !== 'undefined') window.HBDrawings = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

@@ -1,6 +1,7 @@
 /* Homebase Charts — the page: layout and selection, the top toolbar (it
-   acts on the selected chart), menus, the websocket to the chart service
-   (:8852) and the bottom bar. Each grid slot is an HBCell.Cell; the server
+   acts on the selected chart), menus, the drawing rail (the tool and the
+   per-symbol drawings store), the websocket to the chart service (:8852)
+   and the bottom bar. Each grid slot is an HBCell.Cell; the server
    computes everything, the page only draws. */
 (() => {
 'use strict';
@@ -22,6 +23,9 @@ let statusAt = 0, statusLine = '';
 let menuEl = null, menuAnchor = null;
 let customWait = null;   // {cell, spec, err}: a custom interval sent from the open interval menu, awaiting the server
 let dlg = null;   // the open dialog: {back, box, focus}
+let tool = 'cursor';
+let noteTimer = 0, armTimer = 0, armRoot = null;   // armRoot: the symbol the armed remove-all names
+const drawings = new window.HBDrawings.Store({ onError: (root, msg) => sbNote(`${root} drawings: ${msg}`) });
 
 const $ = (s, root = document) => root.querySelector(s);
 const iso = (t) => new Date(t * 1000).toISOString();
@@ -53,6 +57,9 @@ function hostFor(id) {
     onRefused,
     onSettings(cell, uid) { settingsDialog(cell, uid); },
     changed() { saveLast(); renderToolbar(); },
+    tool: () => tool,
+    toolDone() { setTool('cursor'); },
+    drawings,
   };
 }
 
@@ -518,6 +525,49 @@ function settingsDialog(cell, uid) {
   if (first) first.focus();
 }
 
+/* ---- drawing rail ---- */
+function setTool(t) {
+  tool = t;
+  for (const b of document.querySelectorAll('#rail [data-tool]')) b.setAttribute('aria-pressed', String(b.dataset.tool === t));
+  for (const c of cells) if (c.dc) c.dc.toolChanged();
+}
+
+function sbNote(text) {
+  const el = $('#sbNote');
+  el.textContent = text;
+  clearTimeout(noteTimer);
+  noteTimer = setTimeout(() => { el.textContent = ''; }, 8000);
+}
+
+function showTip(anchor, text) {
+  const tip = $('#railTip'), r = anchor.getBoundingClientRect();
+  tip.textContent = text;
+  tip.hidden = false;
+  tip.style.left = `${r.right + 8}px`;
+  tip.style.top = `${r.top + r.height / 2 - tip.offsetHeight / 2}px`;
+}
+
+function disarm() {
+  clearTimeout(armTimer);
+  $('#railClear').classList.remove('arm');
+  $('#railTip').hidden = true;
+}
+
+/* Remove every drawing on the selected chart's symbol: the first click arms, the second (within 3 s) removes.
+   The second click must be on the symbol the tip named: another one (the selection moved) arms again for it. */
+function clearDrawings() {
+  const c = cur(), btn = $('#railClear');
+  if (!c) return;
+  const root = c.shown ? c.shown.root : c.cfg.root, n = drawings.list(root).length;
+  if (btn.classList.contains('arm') && root === armRoot) { disarm(); drawings.clear(root); return; }
+  disarm();
+  if (!n) { showTip(btn, `No drawings on ${root}`); armTimer = setTimeout(disarm, 1500); return; }
+  btn.classList.add('arm');
+  armRoot = root;
+  showTip(btn, `Click again to remove ${n} drawing${n === 1 ? '' : 's'} on ${root}`);
+  armTimer = setTimeout(disarm, 3000);
+}
+
 /* ---- bottom bar ---- */
 function fmtAge(a) { return a == null ? '—' : a < 60 ? `${a.toFixed(1)}s` : `${Math.round(a / 60)}m`; }
 
@@ -584,7 +634,15 @@ function onKey(e) {
     else if (e.key === 'Tab') trapTab(e);
     return;
   }
-  if (e.key === 'Escape' && menuEl) { e.preventDefault(); closeMenu(); }
+  if (e.key === 'Escape' && menuEl) { e.preventDefault(); closeMenu(); return; }
+  if (e.target.closest && e.target.closest('input, textarea, select, [contenteditable="true"]')) return;
+  const c = cur();
+  if (e.key === 'Escape') {
+    if (c && c.dc) c.dc.escape();
+    if (tool !== 'cursor') setTool('cursor');
+  } else if ((e.key === 'Delete' || e.key === 'Backspace') && c && c.dc && c.dc.deleteSelected()) {
+    e.preventDefault();
+  }
 }
 
 async function init() {
@@ -599,6 +657,10 @@ async function init() {
   $('#tbLayout').onclick = () => toggleMenu($('#tbLayout'), () => layoutMenu(false));
   $('#tbSave').onclick = save;
   $('#tbTheme').onclick = toggleTheme;
+  for (const b of document.querySelectorAll('#rail [data-tool]')) {
+    b.onclick = () => setTool(b.dataset.tool === tool && tool !== 'cursor' ? 'cursor' : b.dataset.tool);
+  }
+  $('#railClear').onclick = clearDrawings;
   document.addEventListener('pointerdown', (e) => {
     if (menuEl && !menuEl.contains(e.target) && !menuAnchor.contains(e.target)) closeMenu();
   }, true);

@@ -3,7 +3,8 @@
    instances (HBCatalog), the DOM legend, the watermark, and the
    history/update handling. The page (app.js) owns the websocket, the toolbar
    and selection, and gives each cell a `host`:
-     {id, send(msg) -> bool, onPick(cell), onLoaded(cell), onRefused(cell, tried, text), onSettings(cell, uid), changed()}
+     {id, send(msg) -> bool, onPick(cell), onLoaded(cell), onRefused(cell, tried, text), onSettings(cell, uid), changed(),
+      tool(), toolDone(), drawings}   (the last three: the drawing tools, HBDrawings.Controller)
    Bar times arrive as ET wall-clock seconds, so the axis reads ET; tick,
    volume and range bars sit on an evenly spaced synthetic axis (many can
    share a second) and are labelled with their real times. */
@@ -74,6 +75,7 @@ class Cell {
     this.inflight = [];     // subs sent, not answered yet, oldest first: {cfg, view}; the server answers each once, in order
     this.hover = null;      // bar index under the crosshair (null: the last bar)
     this.noteTimer = 0; this.noteOn = false;   // noteOn: the legend message is still a note()
+    this.dc = null;   // the drawing controller of the current chart
     slot.className = 'panel';
     slot.innerHTML = `
       <div class="chart"></div>
@@ -190,6 +192,7 @@ class Cell {
   }
 
   build(view) {
+    const sel = this.dc && this.shown && this.dc.root === this.shown.root ? this.dc.sel : null;
     this.makeChart();
     this.candles.setData(this.bars.map((b) => this.candle(b)));
     this.buildSeries();
@@ -207,6 +210,8 @@ class Cell {
     this.lg.badge.hidden = !this.sessions.some((s) => s.approx);
     this.legendRows();
     this.legend(null);
+    this.dc = new window.HBDrawings.Controller(this, this.host);
+    if (sel) { this.dc.sel = sel; this.dc.refresh(); }
   }
 
   restyle() { if (this.chart) this.build(this.viewNow()); }
@@ -260,6 +265,7 @@ class Cell {
   }
 
   teardown() {
+    if (this.dc) { this.dc.destroy(); this.dc = null; }
     if (!this.chart) return;
     this.chart.remove();
     this.chart = this.candles = this.markers = this.fp = this.prof = this.gaps = null;   // stale async callbacks can tell
