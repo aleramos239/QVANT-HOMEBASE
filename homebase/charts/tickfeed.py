@@ -118,6 +118,7 @@ class TickFeed:
             started = self._now()
             try:
                 self.ws = await self._connect()
+                self.error = None            # a fresh cycle; a refill error below now sticks
                 self.ws.event_handlers.append(self._on_event)
                 self.subs = {}
                 for r in self.roots:
@@ -127,7 +128,6 @@ class TickFeed:
                         t = asyncio.create_task(self.on_subscribed(r, c, since))
                         self._tasks.add(t)
                         t.add_done_callback(lambda t, root=r: self._on_subscribed_done(root, t))
-                self.error = None
                 while not self._stop and self.connected:
                     await self._sleep(1)
                 if not self._stop:

@@ -112,3 +112,34 @@ def test_a_failed_gap_refill_is_recorded_in_status():
     feed = TickFeed(["NQ"], lambda *a: None, on_subscribed=bad_refill, connect=connect, sleep=sleep)
     run(feed.run())
     assert "refill NQ" in feed.status()["error"] and "boom" in feed.status()["error"]
+
+
+class YieldingWS(FakeWS):
+    """Like FakeWS, but request() genuinely yields once, so a fast-failing
+    on_subscribed task for an earlier root can finish (and run its
+    done-callback) while a later root in the same subscribe loop is still
+    mid-flight — the window the cycle-reset race needs to be observed."""
+
+    async def request(self, ep, body=""):
+        await asyncio.sleep(0)
+        return await super().request(ep, body)
+
+
+def test_a_refill_error_recorded_mid_subscribe_survives_the_cycle_reset():
+    ws = YieldingWS()
+
+    async def connect():
+        return ws
+
+    async def maybe_bad(root, contract, since):
+        if root == "NQ":
+            raise RuntimeError("boom")
+
+    async def sleep(s):
+        await asyncio.sleep(0)          # one steady-state tick, then stop
+        feed.stop()
+
+    feed = TickFeed(["NQ", "ES", "YM"], lambda *a: None, on_subscribed=maybe_bad,
+                    connect=connect, sleep=sleep)
+    run(feed.run())
+    assert "refill NQ" in feed.status()["error"] and "boom" in feed.status()["error"]
