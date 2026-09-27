@@ -12,8 +12,9 @@ from pathlib import Path
 import pytest
 
 from homebase import symbols
-from homebase.charts.depth import (BOOK_LEVELS, DEPTH_ARCHIVE, LINGER_S, RETRY_S, Book, Depth,
-                                   DepthRecorder, parse_roots, read_depth)
+from homebase.charts import depth as depth_mod
+from homebase.charts.depth import (BOOK_LEVELS, DEPTH_ARCHIVE, Book, Depth, DepthRecorder, parse_roots,
+                                   read_depth)
 from homebase.charts.store import ARCHIVE
 from homebase.charts.tickfeed import TickFeed
 from tests.charts_util import D, ET, session_ms
@@ -147,6 +148,13 @@ def test_book_skips_malformed_levels():
     assert b.bids == [[9.5, 4]] and b.offers == []
 
 
+def test_the_spec_values():
+    m = depth_mod
+    assert (m.BOOK_LEVELS, m.WIRE_LEVELS, m.REC_LEVELS) == (30, 20, 10)
+    assert (m.WIRE_MIN_S, m.REC_MIN_S) == (0.1, 0.25)               # <= 10 msgs/s, <= 4 lines/s per root
+    assert (m.LINGER_S, m.RETRY_S, m.FLUSH_S) == (60, 600, 30)
+
+
 def test_parse_roots_from_the_env_value():
     assert parse_roots(None) == ("NQ", "ES")
     assert parse_roots("nq, gc ,,") == ("NQ", "GC")
@@ -223,12 +231,12 @@ def test_demand_subscribes_and_the_last_viewer_leaving_unsubscribes_after_60s():
         gc = symbols.resolve_contract("GC")
         assert subs(feed.ws) == [NQ, gc]
         d.unview((p, "a"))
-        clock.t += LINGER_S - 1
+        clock.t += 59
         await connect(d)
         assert subs(feed.ws, "md/unsubscribeDOM") == []            # still lingering
         d.view((p, "b"), "GC", p.send, p.room)                     # back within the linger
         d.unview((p, "b"))
-        clock.t += LINGER_S - 1
+        clock.t += 59
         await connect(d)
         assert subs(feed.ws, "md/unsubscribeDOM") == []            # the linger restarted
         clock.t += 1
@@ -238,7 +246,7 @@ def test_demand_subscribes_and_the_last_viewer_leaving_unsubscribes_after_60s():
         # a recorded root stays subscribed with nobody watching it
         d.view((p, "c"), "NQ", p.send, p.room)
         d.drop_conn(p)
-        clock.t += 10 * LINGER_S
+        clock.t += 600
         await connect(d)
         assert subs(feed.ws, "md/unsubscribeDOM") == [gc]
         st = d.status()
@@ -276,7 +284,7 @@ def test_a_refused_subscription_is_an_error_retried_every_10_minutes():
         st = d.status()
         assert "Access is denied" in st["ES"]["error"] and not st["ES"]["subscribed"]
         assert "no depth entitlement" in st["NQ"]["error"]
-        clock.t += RETRY_S - 1
+        clock.t += 599
         await connect(d)
         assert subs(feed.ws) == [NQ, ES]                 # not asked again yet
         feed.ws.refuse.clear()
@@ -285,6 +293,20 @@ def test_a_refused_subscription_is_an_error_retried_every_10_minutes():
         assert subs(feed.ws) == [NQ, ES, NQ, ES]
         st = d.status()
         assert st["ES"]["subscribed"] and st["ES"]["error"] is None
+    run(go())
+
+
+def test_a_refused_root_is_asked_again_at_once_on_a_reconnect():
+    async def go():
+        feed, d, clock = make(record=("ES",))
+        feed.ws.refuse[ES] = RuntimeError("md/subscribeDOM failed: status=403")
+        await connect(d)
+        assert d.status()["ES"]["error"]
+        feed.ws = FakeWS()                                  # the feed reconnected 1 s later
+        clock.t += 1
+        await connect(d)
+        assert subs(feed.ws) == [ES]
+        assert d.status()["ES"]["subscribed"] and d.status()["ES"]["error"] is None
     run(go())
 
 
