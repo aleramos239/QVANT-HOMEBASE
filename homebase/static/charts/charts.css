@@ -162,6 +162,17 @@ a { color: inherit; }
 .menu-confirm { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 2px 12px 2px 16px; }
 .menu-confirm span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .menu-err { padding: 2px 16px 8px; color: var(--down); font-size: 12px; white-space: normal; }
+
+/* ---- timeframe + symbol-search hotkey boxes (bare-key shortcuts near the selected chart, TradingView-style) ---- */
+.hotkey-box { position: fixed; z-index: 70; width: 200px; padding: 6px; border-radius: 8px; background: var(--panel);
+  box-shadow: var(--shadow-menu); font-size: 14px; }
+.hotkey-input { display: block; width: 100%; height: 32px; padding: 0 10px; border: 1px solid var(--border);
+  border-radius: 6px; background: var(--panel); color: var(--text); font-size: 14px; }
+.hotkey-input:focus { border-color: var(--accent); outline: none; }
+.hotkey-err { padding: 4px 2px 0; color: var(--down); font-size: 12px; }
+.hotkey-sym { width: 260px; padding: 6px 0; }
+.hotkey-sym .hotkey-input { width: calc(100% - 24px); margin: 0 12px; }
+.hotkey-list { max-height: 260px; margin-top: 6px; overflow: auto; }
 .grid-picks { display: flex; gap: 6px; padding: 6px 10px; }
 .grid-pick { width: 52px; height: 44px; display: grid; place-items: center; border-radius: 6px; color: var(--text-2); }
 .grid-pick .thumb { width: 32px; height: 24px; }

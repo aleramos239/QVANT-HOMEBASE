@@ -39,6 +39,7 @@ let menuAt = null;   // the open menu is a context menu at this viewport point {
 let replayClock = null;   // {etMs, at, speed, done}: a replay's clock from its last status (live: null)
 let calendar = [];   // every stored calendar event (GET /api/calendar), by time
 let calendarAt;   // the service's calendar.fetched_at they came with (undefined: never loaded)
+let hotkeyBox = null;   // {el, input, kind: 'tf' | 'sym'}: the floating timeframe or symbol-search box a bare keypress opened
 let page = null;   // the page interface handed to the trading/tester modules (menus, dialogs, overlays); set in init()
 let lastRaw = [];  // the cells exactly as hb_charts_last stored them (the one-time ticked-list migration reads them)
 
@@ -177,6 +178,7 @@ function hostFor(id) {
 }
 
 function buildGrid() {
+  closeHotkeyBox();   // it is anchored to a cell element the rebuild is about to destroy
   for (const c of cells) c.destroy();
   cells = [];
   const grid = $('#grid'), [cols, rows] = GRIDS[layout.grid] || GRIDS[4], n = cols * rows;
@@ -241,6 +243,7 @@ function renderToolbar() {
    context menu, anchor null). root: the element it is appended to (a dialog's box for in-dialog menus). */
 function openMenu(anchor, cls, { right = false, root = null, at = null } = {}) {
   closeMenu();
+  closeHotkeyBox();
   const m = mk('div', 'menu' + (cls ? ' ' + cls : ''));
   m.setAttribute('role', 'menu');
   (root || $('#menuRoot')).appendChild(m);
@@ -297,6 +300,16 @@ function menuErr(el, text) {
   el.scrollIntoView({ block: 'nearest' });
 }
 
+/* A chart's symbol change: the one path both the #tbSymbol menu and the letter-hotkey search box use. A new
+   symbol keeps the chart's trade config; its algo is cleared only when the desk confirms it trades another
+   symbol (Task 2). The algo on the last accepted symbol is kept aside until the change settles, so a refused
+   change (the chart rolls back to it) gets its algo back (fix round 1). */
+function applySymbol(cell, r) {
+  if (cell.cfg.root === r) return;
+  if (!algoBefore.has(cell)) algoBefore.set(cell, { root: cell.cfg.root, algo: cell.cfg.algo ?? null });
+  cell.update({ root: r, algo: T.algoForRoot(cell.cfg.algo, r, deskStrategies()) });
+}
+
 function symbolMenu() {
   const m = openMenu($('#tbSymbol'), 'menu-sym'), input = mk('input', 'menu-input'), list = mk('div');
   input.type = 'text'; input.placeholder = 'Search'; input.spellcheck = false;
@@ -305,16 +318,7 @@ function symbolMenu() {
     const q = input.value.trim().toUpperCase(), c = cur();
     const hits = meta.roots.filter((r) => !q || r.includes(q) || C.rootName(r).toUpperCase().includes(q));
     list.replaceChildren(...hits.map((r) => {
-      const b = menuItem(r, C.rootName(r), () => {
-        closeMenu();
-        // a new symbol keeps the chart's trade config; its algo is cleared only when the desk confirms it trades
-        // another symbol (Task 2). The algo on the last accepted symbol is kept aside until the change settles, so
-        // a refused change (the chart rolls back to it) gets its algo back (fix round 1).
-        if (c.cfg.root !== r) {
-          if (!algoBefore.has(c)) algoBefore.set(c, { root: c.cfg.root, algo: c.cfg.algo ?? null });
-          c.update({ root: r, algo: T.algoForRoot(c.cfg.algo, r, deskStrategies()) });
-        }
-      }, r === c.cfg.root);
+      const b = menuItem(r, C.rootName(r), () => { closeMenu(); applySymbol(c, r); }, r === c.cfg.root);
       b.prepend(badgeEl(r, 16));
       return b;
     }));
@@ -355,6 +359,104 @@ function intervalMenu() {
   input.onkeydown = (e) => { if (e.key === 'Enter') go(); };
   row.append(input, apply);
   m.append(row, err);
+}
+
+/* ---- keyboard hotkeys: timeframe box + symbol-search box (TradingView-style, spec Task 1 + addition) ----
+   Both are small floating boxes near the SELECTED chart's top-left corner, opened by a bare digit (timeframe)
+   or a bare letter (symbol search) — never while an input/select/textarea/contenteditable has focus, or a
+   dialog or app menu is open (see onKey). Only one is ever open; closeHotkeyBox tears it down on Enter, Esc,
+   blur, or whenever a real menu/dialog opens (openMenu/openDialog) or the grid rebuilds. */
+function hotkeyAnchor(cell) {
+  const r = cell.el.getBoundingClientRect();
+  return { left: r.left + 8, top: r.top + 8 };
+}
+function closeHotkeyBox() {
+  if (!hotkeyBox) return;
+  hotkeyBox.el.remove();
+  hotkeyBox = null;
+}
+/* A blur means "cancel" for both boxes, but Enter/Escape already call closeHotkeyBox() themselves before the
+   blur fires (removing the focused input triggers one) — guarded by identity so that later blur is a no-op. */
+function hotkeyBlur(input) {
+  return () => setTimeout(() => { if (hotkeyBox && hotkeyBox.input === input) closeHotkeyBox(); }, 0);
+}
+
+function openTimeframeBox(cell, seed) {
+  closeHotkeyBox();
+  const { left, top } = hotkeyAnchor(cell);
+  const box = mk('div', 'hotkey-box hotkey-tf'), input = mk('input', 'hotkey-input'), err = mk('div', 'hotkey-err', 'Not available');
+  box.style.left = left + 'px'; box.style.top = top + 'px';
+  input.type = 'text'; input.spellcheck = false; input.autocomplete = 'off';
+  input.setAttribute('aria-label', 'Timeframe');
+  input.placeholder = '5, 30s, 4h, d…';
+  err.hidden = true;
+  err.setAttribute('role', 'alert');
+  const apply = () => {
+    const s = C.parseInterval(input.value);
+    if (!s) { err.hidden = false; return; }
+    closeHotkeyBox();
+    if (cell.cfg.spec !== s) cell.update({ spec: s });
+  };
+  input.oninput = () => { err.hidden = true; };
+  input.onkeydown = (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); apply(); }
+    else if (e.key === 'Escape') { e.preventDefault(); closeHotkeyBox(); }
+  };
+  input.onblur = hotkeyBlur(input);
+  box.append(input, err);
+  $('#menuRoot').appendChild(box);
+  hotkeyBox = { el: box, input, kind: 'tf' };
+  input.value = seed;
+  input.focus();
+  input.setSelectionRange(seed.length, seed.length);
+}
+
+function openSymbolBox(cell, seed) {
+  closeHotkeyBox();
+  const { left, top } = hotkeyAnchor(cell);
+  const box = mk('div', 'hotkey-box hotkey-sym'), input = mk('input', 'hotkey-input'), list = mk('div', 'hotkey-list');
+  box.style.left = left + 'px'; box.style.top = top + 'px';
+  input.type = 'text'; input.spellcheck = false; input.autocomplete = 'off';
+  input.setAttribute('aria-label', 'Search symbols');
+  input.placeholder = 'Symbol';
+  let active = 0;
+  const hits = () => C.matchSymbols(input.value, meta.roots);
+  const render = () => {
+    const h = hits();
+    if (active >= h.length) active = 0;
+    list.replaceChildren(...h.map((r, i) => {
+      const b = mk('button', 'menu-i hotkey-i' + (i === active ? ' active' : ''));
+      b.type = 'button';
+      b.append(badgeEl(r, 16), mk('span', 'menu-t', r), mk('span', 'menu-sub', C.rootName(r)));
+      b.onclick = () => pick(r);
+      return b;
+    }));
+    if (!h.length) list.appendChild(mk('div', 'menu-empty', 'No matching symbol'));
+  };
+  const pick = (r) => { closeHotkeyBox(); applySymbol(cell, r); };
+  input.oninput = () => { active = 0; render(); };
+  input.onkeydown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const h = hits();
+      if (h.length) pick(h[Math.min(active, h.length - 1)]);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      closeHotkeyBox();
+    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      active = window.HBChartMenu.step(active, hits().length, e.key);
+      render();
+    }
+  };
+  input.onblur = hotkeyBlur(input);
+  box.append(input, list);
+  $('#menuRoot').appendChild(box);
+  hotkeyBox = { el: box, input, kind: 'sym' };
+  input.value = seed;
+  render();
+  input.focus();
+  input.setSelectionRange(seed.length, seed.length);
 }
 
 /* A custom interval the open menu sent is on screen: close the menu. */
@@ -566,6 +668,7 @@ async function writeTemplate(method, name, body) {
 /* ---- dialogs ---- */
 function openDialog(title, cls) {
   closeMenu();
+  closeHotkeyBox();
   closeDialog();
   const back = mk('div', 'backdrop'), box = mk('div', 'dialog' + (cls ? ' ' + cls : '')), head = mk('div', 'dlg-head');
   const x = mk('button', 'dlg-x');
@@ -1148,6 +1251,13 @@ function onKey(e) {
     if (k >= 0) { e.preventDefault(); items[k].focus(); }
     return;
   }
+  // TradingView-style bare-key hotkeys: a digit opens the timeframe box, a letter opens symbol search -- never
+  // while a menu is open (menuEl; dlg already returned above) or a modifier is held (so Alt+R, Ctrl/Cmd
+  // shortcuts and Bar Replay's own Space/-> stay untouched -- those aren't single digits/letters anyway).
+  if (c && !menuEl && !hotkeyBox && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    if (/^[0-9]$/.test(e.key)) { e.preventDefault(); openTimeframeBox(c, e.key); return; }
+    if (/^[a-zA-Z]$/.test(e.key)) { e.preventDefault(); openSymbolBox(c, e.key); return; }
+  }
   if (e.altKey && !e.metaKey && !e.ctrlKey && e.code === 'KeyR') {   // ⌥R: Reset chart view (e.key is ® on macOS)
     e.preventDefault();
     if (c) c.resetView();
@@ -1183,8 +1293,10 @@ async function init() {
   renderMagnet();
   document.addEventListener('pointerdown', (e) => {
     if (menuEl && !menuEl.contains(e.target) && !(menuAnchor && menuAnchor.contains(e.target))) closeMenu();
+    if (hotkeyBox && !hotkeyBox.el.contains(e.target)) closeHotkeyBox();
   }, true);
   window.addEventListener('resize', closeMenu);
+  window.addEventListener('resize', closeHotkeyBox);
   document.addEventListener('keydown', onKey);
   page = {
     mk, icon, $, cells: () => cells, cur, select: (c) => select(cells.indexOf(c)),

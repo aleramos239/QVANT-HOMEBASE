@@ -438,3 +438,43 @@ test('a micro root (M prefix) uses its parent\'s badge', () => {
   assert.deepEqual(C.rootBadge('MES'), C.rootBadge('ES'));
   assert.deepEqual(C.rootBadge('MGC'), C.rootBadge('GC'));
 });
+
+// ---- parseInterval(text) — the timeframe-hotkey box (Task 1) ----
+test('parseInterval: every accepted form', () => {
+  for (const [t, s] of [
+    ['5', 'time:300'], ['1', 'time:60'], ['90', 'time:5400'],       // bare N = N minutes
+    ['5s', 'time:5'], ['45S', 'time:45'],                           // Ns = seconds
+    ['5m', 'time:300'], ['15M', 'time:900'],                        // Nm = minutes
+    ['1h', 'time:3600'], ['4H', 'time:14400'],                      // Nh = hours
+    ['d', 'time:86400'], ['D', 'time:86400'], ['1d', 'time:86400'], ['1D', 'time:86400'],   // daily
+  ]) assert.equal(C.parseInterval(t), s, t);
+});
+
+test('parseInterval: weekly ("w") only if the catalog has it — today it does not', () => {
+  assert.equal(C.parseInterval('w'), null);
+  assert.equal(C.parseInterval('W'), null);
+});
+
+test('parseInterval: invalid or unsupported input returns null', () => {
+  for (const t of ['', ' ', 'abc', '0', '0s', '0m', '0h', '2d', '1.5m', '5x', '2w', 'time:60', null, undefined]) {
+    assert.equal(C.parseInterval(t), null, String(t));
+  }
+});
+
+// ---- matchSymbols(query, roots) — the symbol-search hotkey box (Task 1 addition) ----
+test('matchSymbols: prefix on root first, then on name', () => {
+  const roots = ['NQ', 'ES', 'YM', 'GC'];   // names: E-mini Nasdaq-100, E-mini S&P 500, E-mini Dow, Gold
+  assert.deepEqual(C.matchSymbols('N', roots), ['NQ']);
+  assert.deepEqual(C.matchSymbols('E', roots), ['ES', 'NQ', 'YM']);   // ES by root, then the two other E-minis by name
+  assert.deepEqual(C.matchSymbols('G', roots), ['GC']);               // root match "GC" wins over name match "Gold" once
+  assert.deepEqual(C.matchSymbols('n', roots), ['NQ']);                // case-insensitive
+});
+
+test('matchSymbols: empty query returns every root, unfiltered', () => {
+  assert.deepEqual(C.matchSymbols('', ['NQ', 'ES']), ['NQ', 'ES']);
+  assert.deepEqual(C.matchSymbols(null, ['NQ', 'ES']), ['NQ', 'ES']);
+});
+
+test('matchSymbols: no match returns an empty list', () => {
+  assert.deepEqual(C.matchSymbols('Q', ['NQ', 'ES', 'YM', 'GC']), []);
+});

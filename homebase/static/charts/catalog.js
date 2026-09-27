@@ -273,6 +273,43 @@ function toSpec(text) {
   return mult ? `time:${n * mult}` : `${{ t: 'tick', v: 'volume', r: 'range' }[u]}:${n}`;
 }
 
+/* What the user typed in the timeframe-hotkey box (Task 1) as a bar spec, or null: a bare number is minutes
+   ("5" = 5m); Ns/Nm/Nh are seconds/minutes/hours; d/D/1d is daily; w is weekly, but only while the catalog
+   actually offers a weekly bar (it does not today, so "w" is unsupported and returns null). Distinct from
+   toSpec (the interval menu's custom-spec box, which needs an explicit unit and also parses tick/volume/range
+   shorthand): this is the narrower TradingView-style hotkey grammar. */
+function parseInterval(text) {
+  const t = String(text == null ? '' : text).trim();
+  if (!t) return null;
+  let m = /^(\d+)$/.exec(t);
+  if (m) return +m[1] > 0 ? `time:${+m[1] * 60}` : null;
+  m = /^(\d+)s$/i.exec(t);
+  if (m) return +m[1] > 0 ? `time:${+m[1]}` : null;
+  m = /^(\d+)m$/i.exec(t);
+  if (m) return +m[1] > 0 ? `time:${+m[1] * 60}` : null;
+  m = /^(\d+)h$/i.exec(t);
+  if (m) return +m[1] > 0 ? `time:${+m[1] * 3600}` : null;
+  if (/^1?d$/i.test(t)) return 'time:86400';
+  if (/^w$/i.test(t)) {
+    const week = 'time:604800';
+    return INTERVAL_GROUPS.some(([, specs]) => specs.includes(week)) ? week : null;
+  }
+  return null;
+}
+
+/* The command-palette symbol search (Task 1 addition): every root of `roots` whose ROOT itself starts with
+   `query` (case-insensitive), then every remaining root whose NAME starts with it. An empty query returns
+   every root, unfiltered — the box's opening state before the seed letter narrows it. Pure and DOM-free so
+   app.js's #tbSymbol menu and the hotkey box can share it. */
+function matchSymbols(query, roots) {
+  const q = String(query == null ? '' : query).trim().toUpperCase();
+  const list = Array.isArray(roots) ? roots : [];
+  if (!q) return list.slice();
+  const byRoot = list.filter((r) => String(r).toUpperCase().startsWith(q));
+  const byName = list.filter((r) => !byRoot.includes(r) && rootName(r).toUpperCase().startsWith(q));
+  return [...byRoot, ...byName];
+}
+
 function rootName(root) { return ROOT_NAMES[root] || ''; }
 
 /* The badge for `root`: {text?, icon?, bg, fg}. A micro root (an M prefix, e.g. MNQ, MES, MGC) uses its
@@ -346,8 +383,8 @@ function filter(query, group = 'All') {
 
 const api = { CATALOG, GROUPS, ROOT_NAMES, FAVOURITES, INTERVAL_GROUPS, LINE_COLORS, uid, def, clampParams, instance,
   defaults, serverKey, serverKeys, migrate, migrateLayout, label, legendValues, decimals, fmtPrice, fmtCompact,
-  fmtSigned, change, parseSpec, specLabel, longLabel, toSpec, rootName, rootBadge, filter, ALWAYS_OPEN, marketOpen, fmtAge,
-  feedSummary, REC_BUSY, staleAfter, sinceOpen, PANES, movable, placement };
+  fmtSigned, change, parseSpec, specLabel, longLabel, toSpec, parseInterval, matchSymbols, rootName, rootBadge, filter,
+  ALWAYS_OPEN, marketOpen, fmtAge, feedSummary, REC_BUSY, staleAfter, sinceOpen, PANES, movable, placement };
 if (typeof window !== 'undefined') window.HBCatalog = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();
