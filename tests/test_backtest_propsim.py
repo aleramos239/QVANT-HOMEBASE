@@ -65,14 +65,17 @@ def test_the_weekday_grid_fills_no_trade_weekdays_with_zero():
 
 
 def test_rule_files_and_the_unconfirmed_label():
-    """The picker offers exactly two evals -- LucidFlex (the default, confirmed) and
-    LucidPro (unconfirmed) -- newest version per family; older snapshots stay loadable."""
+    """The picker offers exactly three evals -- LucidFlex (the default, confirmed), LucidPro
+    with its $1,200 daily limit and LucidPro without it (both partly unconfirmed) -- newest
+    version per family; older snapshots stay loadable."""
     ids = {r["id"]: r for r in list_rules()}
-    assert set(ids) == {"lucid-flex-50k@2026-09-27", "lucid-pro-50k@2026-09-27"}
+    assert set(ids) == {"lucid-flex-50k@2026-09-27", "lucid-pro-50k@2026-09-27b", "lucid-pro-50k-no-dll@2026-09-27b"}
     assert ids["lucid-flex-50k@2026-09-27"] == {"id": "lucid-flex-50k@2026-09-27", "name": "LucidFlex 50K",
                                                 "version": "2026-09-27", "confirmed": True}
-    assert ids["lucid-pro-50k@2026-09-27"] == {"id": "lucid-pro-50k@2026-09-27", "name": "LucidPro 50K",
-                                               "version": "2026-09-27", "confirmed": False}
+    assert ids["lucid-pro-50k@2026-09-27b"] == {"id": "lucid-pro-50k@2026-09-27b", "name": "LucidPro 50K",
+                                                "version": "2026-09-27b", "confirmed": False}
+    assert ids["lucid-pro-50k-no-dll@2026-09-27b"]["name"] == "LucidPro 50K · no daily loss limit"
+    assert load_rules("lucid-pro-50k@2026-09-27")["daily_loss_limit"] is None   # the older Pro still reproduces
     assert DEFAULT_RULES == "lucid-flex-50k@2026-09-27"
     # the superseded snapshot is off the picker but still on disk and still loadable
     assert (RULES_DIR / "lucid-flex-50k@2026-08.json").is_file()
@@ -198,3 +201,47 @@ def test_a_malformed_rule_file_never_loses_the_run_bundle(tmp_path, monkeypatch)
     p = read_json(run_dir / "propsim.json")
     assert p["error"].startswith("KeyError") and "trailing_mll" in p["error"]
     assert p["rules"] == {"name": "LucidFlex 50K", "confirmed": True, "label": "LucidFlex 50K"}
+
+
+def test_lucidpro_account_holder_numbers_and_the_removable_daily_limit():
+    """Account holder, 2026-09-27: LucidPro 50K = $50,000, target $3,000, max loss $2,000,
+    daily loss limit $1,200 (removable), max size 4 minis / 40 micros. The two new files
+    differ ONLY in the daily limit (and name/notes)."""
+    dll = load_rules("lucid-pro-50k@2026-09-27b")
+    no = load_rules("lucid-pro-50k-no-dll@2026-09-27b")
+    for r in (dll, no):
+        assert (r["account_size"], r["eval_target"], r["trailing_mll"], r["cap_micros"]) == (50000, 3000, 2000, 40)
+        assert r["consistency"] is None and r["eval_min_days"] == 1 and r["confirmed"] is False
+    assert dll["daily_loss_limit"] == 1200 and no["daily_loss_limit"] is None
+    differ = {"name", "notes", "daily_loss_limit"}
+    assert {k: v for k, v in dll.items() if k not in differ} == {k: v for k, v in no.items() if k not in differ}
+
+
+def test_a_soft_daily_limit_caps_the_day_and_the_account_survives():
+    """Hitting the limit stops you for the day (soft): the day's loss is capped at
+    -$1,200 and the account carries on -- it is not a bust by itself."""
+    dll = load_rules("lucid-pro-50k@2026-09-27b")
+    no = load_rules("lucid-pro-50k-no-dll@2026-09-27b")
+    # -1,900 then +3,200: without the limit that is -1,900 + 3,200 = 1,300 (no pass yet);
+    # with it the first day costs only 1,200, so the account stands at +2,000 -> +3,000 needs one more
+    assert engine.run_eval([-1900.0, 3200.0], no) == dict(outcome="timeout", day=2, trade_days=2, max_dd=1900.0)
+    assert engine.run_eval([-1900.0, 3200.0], dll) == dict(outcome="timeout", day=2, trade_days=2, max_dd=1200.0)
+    assert engine.run_eval([-1900.0, 3200.0, 1000.0], dll)["outcome"] == "pass"
+    # a -2,500 day busts the $2,000 max loss without the limit; with it the day stops at -1,200
+    assert engine.run_eval([-2500.0], no)["outcome"] == "bust"
+    assert engine.run_eval([-2500.0], dll)["outcome"] == "timeout"
+    # two limit days in a row still bust (-2,400 through the -2,000 floor)
+    assert engine.run_eval([-2500.0, -2500.0], dll) == dict(outcome="bust", day=2, trade_days=2, max_dd=2400.0)
+    # losses inside the limit and all wins are untouched
+    assert engine.run_eval([-800.0, 4000.0], dll) == engine.run_eval([-800.0, 4000.0], no)
+    # the funded account gets the same cap
+    assert engine.run_funded([-2500.0], no)["bust_at"] == 1
+    assert engine.run_funded([-2500.0], dll)["bust_at"] is None
+
+
+def test_flex_is_unchanged_by_the_daily_limit_code():
+    """Flex carries `daily_loss_limit: null`, so its outcomes are exactly what they were."""
+    flex = load_rules(DEFAULT_RULES)
+    assert flex["daily_loss_limit"] is None
+    for path in ([-2500.0], [-1900.0, 3200.0], [2900.0, 200.0], [1600.0, 1600.0]):
+        assert engine._cap_day(path[0], flex) == path[0]

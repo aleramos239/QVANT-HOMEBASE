@@ -34,11 +34,16 @@ in ``rules/lucid-flex-50k@2026-09-27.json``, echoed on every result):
             keep trading) ON TOP OF a min 2 trading days; no daily-loss limit;
             no time limit (the sim horizon stands in for "eventually").
 
-LUCIDPRO 50K (``rules/lucid-pro-50k@2026-09-27.json``) is Flex minus those two
+LUCIDPRO 50K (``rules/lucid-pro-50k@2026-09-27b.json``) is Flex minus those two
 gates — ``consistency: null`` (no check at all) and ``eval_min_days: 1``, so a
-single +$3,000 day passes. Every other number is INHERITED from Flex and not
-independently confirmed; the file says ``"confirmed": false`` and every result
-from it is labelled "unconfirmed rules".
+single +$3,000 day passes — plus a SOFT $1,200 daily loss limit (hit it and you
+are stopped for the day; the account survives). The account holder confirmed
+size, target, max loss, the daily limit and max size (4 minis / 40 micros) on
+2026-09-27 and that the daily limit can be removed:
+``lucid-pro-50k-no-dll@2026-09-27b.json`` is the same account without it. The
+lock, EOD trailing and payout terms are still INHERITED from Flex, so both files
+say ``"confirmed": false``. (``lucid-pro-50k@2026-09-27`` -- no daily limit --
+stays on disk so older runs reproduce.)
     FUNDED  same $2,000 EOD-trailing max loss locking at +$100. A PAYOUT needs
             5 separate days >= $150 AND net > 0. The cheque is 50% of the
             profit standing when it first qualifies, capped at $2,000 — so the
@@ -107,6 +112,17 @@ def _floor(peak: float, r: dict) -> float:
     return r["lock_floor"] if peak >= r["lock_at"] else peak - r["trailing_mll"]
 
 
+def _cap_day(pnl: float, r: dict) -> float:
+    """A SOFT daily loss limit (LucidPro, account holder 2026-09-27): hitting it
+    closes you out and stops you for the day -- the account survives. On daily
+    P&L that is the day's loss capped at the limit. It cannot see a day that dipped
+    past the limit intraday and then recovered (in reality you'd have been stopped
+    at the limit), so with a limit set the sim is slightly OPTIMISTIC on such days.
+    ``daily_loss_limit: null`` = no limit."""
+    dll = r.get("daily_loss_limit")
+    return max(pnl, -dll) if dll else pnl
+
+
 def _days(path: Iterable) -> Iterable[Tuple[float, bool]]:
     """Normalize a path to (pnl, is_trade_day) pairs. Bare floats count a day
     as traded when its P&L is nonzero — the notebook's own fallback."""
@@ -134,6 +150,7 @@ def run_eval(path: Iterable, r: dict) -> dict:
     profit, peak, floor = 0.0, 0.0, -r["trailing_mll"]
     largest_win_day, trade_days, max_dd, day = 0.0, 0, 0.0, 0
     for pnl, traded in _days(path):
+        pnl = _cap_day(pnl, r)
         day += 1
         profit += pnl
         if traded:
@@ -173,6 +190,7 @@ def run_funded(path: Iterable, r: dict) -> dict:
     payout_at = max_at = bust_at = None
     cheque = None
     for pnl, _ in _days(path):
+        pnl = _cap_day(pnl, r)
         day += 1
         profit += pnl
         if pnl >= r["win_day"]:

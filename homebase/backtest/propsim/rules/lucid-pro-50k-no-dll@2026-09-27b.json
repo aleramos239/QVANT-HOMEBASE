@@ -1,0 +1,48 @@
+{
+  "name": "LucidPro 50K · no daily loss limit",
+  "version": "2026-09-27b",
+  "as_of": "2026-09-27",
+  "source": "Account holder, 2026-09-27, pasted LucidPro 50K's rule table: account size $50,000; profit target $3,000; max loss limit $2,000; daily loss limit $1,200; max size 4 minis or 40 micros -- and said the daily loss limit can be removed as an option. Asked what hitting the daily limit does: it STOPS YOU FOR THE DAY (soft), the account survives. Earlier the same day: no consistency rule and no minimum days. Still INHERITED FROM FLEX and NOT confirmed for LucidPro: the lock (+$2,100 -> +$100 floor), the max loss being EOD-trailing, payout terms, scaling and session rules.",
+  "confirmed": false,
+  "account_size": 50000,
+  "eval_target": 3000,
+  "eval_min_days": 1,
+  "consistency": null,
+  "trailing_mll": 2000,
+  "lock_at": 2100,
+  "lock_floor": 100,
+  "win_day": 150,
+  "payout_win_days": 5,
+  "payout_share": 0.5,
+  "payout_cap": 2000,
+  "max_payout_profit": 4000,
+  "daily_loss_limit": null,
+  "max_days": null,
+  "scaling_micros": {
+    "start": 20,
+    "at_1000": 30,
+    "at_2000": 40
+  },
+  "cap_micros": 40,
+  "mini_point_values": {
+    "NQ": 20,
+    "ES": 50,
+    "GC": 100,
+    "CL": 1000
+  },
+  "flat_by_et": "16:10",
+  "no_overnight": true,
+  "payout_ladder": "first cheques capped $2,000, later $2,500; up to 5 payouts then live review; 90/10 split beyond",
+  "notes": [
+    "Contract scaling (funded): start 20 micros, 30 at +$1,000, 40 at +$2,000; 4 minis = 40 micros is the hard cap (eval too). NOT enforced by the simulator — surfaced as a warning when a ledger exceeds it.",
+    "Flat by 16:10 ET, no overnight holds. NOT enforced by the simulator — surfaced as a warning.",
+    "Only the FIRST payout is simulated; the ladder above is informational.",
+    "Trailing max loss is measured END OF DAY, not intraday: the floor moves up with EOD peak profit and never moves down.",
+    "The floor LOCKS at +$100 once EOD profit reaches +$2,100 — from then on the account cannot be trailed below +$100.",
+    "NO consistency rule and NO minimum trading days (account holder, 2026-09-27): `consistency: null` disables the check, `eval_min_days: 1` means a single day that reaches +$3,000 passes.",
+    "Payout requires 5 separate days >= $150 AND net > 0. Payout amount is 50% of profit capped at $2,000, so the max payout additionally needs >= $4,000 profit.",
+    "The daily loss limit REMOVED (an option on LucidPro, account holder 2026-09-27). No calendar time limit on the eval; the sim horizon stands in for 'eventually'.",
+    "INHERITED, UNCONFIRMED: the lock (lock_at/lock_floor), EOD (not intraday) trailing, payout terms (win_day, payout_win_days, share, cap), scaling and the 16:10 flat rule are Flex's. Confirmed by the account holder: account_size, eval_target, trailing_mll amount, daily_loss_limit, cap_micros (4 minis / 40 micros), consistency null, eval_min_days 1."
+  ],
+  "disclaimer": "Partly confirmed: size, target, max loss, daily limit, max size, no consistency, no minimum days. Verify the lock, trailing type and payout terms against LucidPro's rulebook."
+}

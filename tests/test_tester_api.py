@@ -52,10 +52,10 @@ def test_prop_rule_sets_are_listed_with_the_unconfirmed_flag(tmp_path):
     with client(tmp_path) as c:
         listed = c.get("/api/tester/prop-rules").json()
         rules = {r["id"]: r for r in listed}
-        # exactly the two evals the account holder runs, newest version per family
-        assert [r["name"] for r in listed] == ["LucidFlex 50K", "LucidPro 50K"]
+        # exactly the evals the account holder runs, newest version per family
+        assert [r["name"] for r in listed] == ["LucidFlex 50K", "LucidPro 50K", "LucidPro 50K · no daily loss limit"]
         assert rules["lucid-flex-50k@2026-09-27"]["confirmed"] is True
-        assert rules["lucid-pro-50k@2026-09-27"]["confirmed"] is False
+        assert rules["lucid-pro-50k@2026-09-27b"]["confirmed"] is False
         r = c.post("/api/tester/run", json={**RUN, "prop_rules": "nope@1"})
         assert r.status_code == 400 and "prop_rules" in r.json()["detail"]
 
