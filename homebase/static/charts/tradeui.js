@@ -22,29 +22,48 @@ let page = null;
 let armLive = null;      // the account id mid-arm (first click), or null
 let armTimer = 0;
 const liveConfirmed = new Set();   // LIVE accounts armed THIS session (never persisted: ruling S5 + the review note)
-let inFlight = false;    // one send at a time (review item 2)
+let inFlight = false;    // one send at a time (review item 2; the 2026-09-27 review of Task 5 makes this a toast, not a silent drop)
+const busySubs = new Set();   // notified synchronously on every inFlight flip, so the panel and the chart's lines grey out immediately
 
 /* ---- mode, gated by this session's LIVE arms on top of HBTrade.tradeMode ---- */
 function effectiveMode() {
   const m = D().mode();
   if (m.mode !== 'on') return m;
-  const st = D().state;
-  const accounts = m.accounts.filter((id) => {
-    const a = (st.accounts || []).find((x) => x.id === id);
-    return !a || a.env !== 'live' || liveConfirmed.has(id);
-  });
+  const accounts = T.armedTicked(D().state, m.accounts, liveConfirmed);
   if (accounts.length === m.accounts.length) return m;
   return accounts.length ? { mode: 'on', reason: '', accounts }
     : { mode: 'none', reason: 'Tick an account in the Trade menu', accounts: [] };
 }
+/* The ticked accounts, armed (raw prefs.ticked minus an unarmed LIVE account) -- for the chart's lines and
+   execution markers (review item 5: "not raw prefs.ticked"), independent of whether those accounts are
+   tradable right now (a line stays visible, just read-only, the way tradeMode's own ticked-but-untradable
+   accounts already do). */
+function armedIds() { return T.armedTicked(D().state, D().prefs.ticked, liveConfirmed); }
+/* A single account id, refused when it is an unarmed LIVE account (review item 5's per-account paths). */
+function isArmedAccount(id) {
+  const st = D().state, a = st && (st.accounts || []).find((x) => x.id === id);
+  return !a || a.env !== 'live' || liveConfirmed.has(id);
+}
+/* The first unarmed LIVE account among ids, or null -- for a single refusal toast naming it. */
+function findUnarmed(ids) {
+  const st = D().state, list = (st && st.accounts) || [];
+  for (const id of ids) if (!isArmedAccount(id)) return list.find((x) => x.id === id) || { id };
+  return null;
+}
 function busy() { return inFlight; }
+function onBusyChange(fn) { busySubs.add(fn); return () => busySubs.delete(fn); }
+function setInFlight(v) {
+  inFlight = v;
+  for (const fn of [...busySubs]) { try { fn(v); } catch (e) { console.error(e); } }
+}
 
 /* One send (or one sequential batch of them, for a per-leg modify/cancel) at a time, mode re-checked right
    before it goes out. buildBody(m) returns a body object, an array of bodies (sent in order), or null/undefined
-   to abort silently (the mode reason toast already covers the "why"). */
+   to abort silently (a specific toast — mode reason, accounts-changed, price-moved — already covers the "why").
+   A second attempt while one is in flight now toasts instead of dropping silently (review item 3). */
 function guardedSend(action, buildBody) {
-  if (inFlight) return;
-  inFlight = true;
+  if (inFlight) { D().toast('err', 'Another action is in flight'); return; }
+  setInFlight(true);
   Promise.resolve().then(() => {
     const m = effectiveMode();
     if (m.mode !== 'on') { D().toast('err', m.reason); return null; }
@@ -52,7 +71,7 @@ function guardedSend(action, buildBody) {
     if (body == null) return null;
     if (Array.isArray(body)) return body.reduce((p, one) => p.then(() => D().send(action, one)), Promise.resolve());
     return D().send(action, body);
-  }).catch((e) => console.error(e)).finally(() => { inFlight = false; });
+  }).catch((e) => console.error(e)).finally(() => setInFlight(false));
 }
 
 /* ---- small helpers ---- */
@@ -65,6 +84,7 @@ function acctRows(ids) {
   const st = D().state, list = (st && st.accounts) || [];
   return ids.map((id) => { const a = list.find((x) => x.id === id); return a ? { label: a.label, env: a.env } : { label: id, env: 'demo' }; });
 }
+function hasLive(rows) { return rows.some((a) => a.env === 'live'); }
 function findOrder(account, order_id) {
   const st = D().state, a = st && (st.accounts || []).find((x) => x.id === account);
   const o = a && (a.orders || []).find((x) => String(x.order_id) === String(order_id));
@@ -101,7 +121,10 @@ function confirm({ title, rows = [], note = '', each = '', live = false, action,
       page.closeDialog();
       finish(true);
     };
-    box.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target !== no && e.target.type !== 'checkbox') { e.preventDefault(); yes.click(); } });
+    // review item 1 (CRITICAL): Enter confirms ONLY when focus is on the primary button, or on a non-button
+    // element (the checkbox, an unfocusable row) -- never × (the dialog's own close button, inside `box`),
+    // Cancel, or any other button. T.enterConfirms is the pure, Node-tested predicate.
+    box.addEventListener('keydown', (e) => { if (e.key === 'Enter' && T.enterConfirms(e.target, yes)) { e.preventDefault(); yes.click(); } });
     foot.append(no, yes);
     box.append(body, one, foot);
     if (live) box.classList.add('live');
@@ -114,15 +137,26 @@ function placeOrder({ cell, root, side, type, price = null, qty }) {
   const gate = effectiveMode();
   if (gate.mode !== 'on') { D().toast('err', gate.reason); return; }
   const tick = cell ? cell.tick : tickFor(root), pv = cell ? cell.pv : null;
+  const shown = gate.accounts;   // exactly what the dialog (or the one-click send) is about to show/act on (review item 2)
   const build = (m) => {
+    const resolved = T.resolveConfirmedAccounts(shown, m.accounts);
+    if (!resolved.ok) { D().toast('err', 'Accounts changed — review and try again'); return null; }
+    if (!resolved.accounts.length) return null;
     const prefs = D().prefs, q = D().quotes[root];
     const px = type === 'Market' ? null : T.roundTick(price, tick);
     const ref = type === 'Market' ? (q ? q.last : null) : px;
+    if (type !== 'Market') {   // review item 6: the market moved through the level between click and send
+      const fresh = T.inferType(side, px, q);
+      if (fresh && fresh !== type) { D().toast('err', 'Price moved through your level — re-check the order'); return null; }
+    }
     const { sl, tp } = T.bracket(side, ref, prefs, tick);
-    return T.orderBody({ clientId: T.clientId(), accounts: m.accounts, root, side, qty, type, price: px, sl, tp });
+    return T.orderBody({ clientId: T.clientId(), accounts: resolved.accounts, root, side, qty, type, price: px, sl, tp });
   };
   if (D().prefs.oneClick) { guardedSend('order', build); return; }
   const preview = build(gate);
+  // shown === gate.accounts here, so only the inferType re-check can abort a preview -- the market moved
+  // between the chart-menu's right-click (where `type` was inferred) and picking the item just now.
+  if (preview == null) return;
   const c = T.confirmOrder(preview, D().state, D().quotes[root], pv, tick);
   confirm({ title: c.title, rows: c.accounts.map((a) => ({ label: a.label, env: a.env })), note: c.bracket,
     each: c.each, live: c.live, action: side, tone: side === 'Sell' ? 'down' : 'accent' })
@@ -132,21 +166,32 @@ function placeOrder({ cell, root, side, type, price = null, qty }) {
 function symbolAction(kind, root) {
   const gate = effectiveMode();
   if (gate.mode !== 'on') { D().toast('err', gate.reason); return; }
-  const build = (m) => ({ client_id: T.clientId(), accounts: m.accounts, root });
+  const shown = gate.accounts;
+  const build = (m) => {
+    const resolved = T.resolveConfirmedAccounts(shown, m.accounts);
+    if (!resolved.ok) { D().toast('err', 'Accounts changed — review and try again'); return null; }
+    if (!resolved.accounts.length) return null;
+    return { client_id: T.clientId(), accounts: resolved.accounts, root };
+  };
   if (D().prefs.oneClick && kind !== 'reverse') { guardedSend(kind, build); return; }   // Reverse always confirms (S4)
   const tick = tickFor(root);
   const title = T.actionTitle(kind, { root }, tick);
   const verb = kind === 'flatten' ? 'Flatten' : kind === 'reverse' ? 'Reverse' : 'Cancel orders';
-  confirm({ title, rows: acctRows(gate.accounts), action: verb }).then((ok) => { if (ok) guardedSend(kind, build); });
+  const rows = acctRows(shown);
+  confirm({ title, rows, action: verb, live: hasLive(rows) }).then((ok) => { if (ok) guardedSend(kind, build); });
 }
 
 function moveLine(line, price, root, tick, { onCancel } = {}) {
   const gate = effectiveMode();
   if (gate.mode !== 'on') { D().toast('err', gate.reason); if (onCancel) onCancel(); return; }
+  const accountIds = line.legs.map((l) => l.account);
+  const unarmed = findUnarmed(accountIds);   // review item 5: refuse a LIVE leg that isn't armed this session
+  if (unarmed) { D().toast('err', T.unarmedLiveMessage(unarmed)); if (onCancel) onCancel(); return; }
   const build = () => line.legs.map((leg) => ({ client_id: T.clientId(), account: leg.account, order_id: leg.order_id, price: T.roundTick(price, tick) }));
   if (D().prefs.oneClick) { guardedSend('modify', build); return; }
   const title = T.actionTitle('modify', { root, line, from: line.price, to: price }, tick);
-  confirm({ title, rows: acctRows(line.legs.map((l) => l.account)), action: 'Move' })
+  const rows = acctRows(accountIds);
+  confirm({ title, rows, action: 'Move', live: hasLive(rows) })
     .then((ok) => { if (ok) guardedSend('modify', build); else if (onCancel) onCancel(); });
 }
 
@@ -156,27 +201,39 @@ function closeLine(line, root, tick) {
   if (gate.mode !== 'on') { D().toast('err', gate.reason); return; }
   const isPosition = line.kind === 'position';
   const accounts = [...new Set(line.legs.map((l) => l.account))];
+  const unarmed = findUnarmed(accounts);   // review item 5
+  if (unarmed) { D().toast('err', T.unarmedLiveMessage(unarmed)); return; }
   const action = isPosition ? 'flatten' : 'cancel';
   const build = () => (isPosition ? { client_id: T.clientId(), accounts, root }
     : line.legs.map((leg) => ({ client_id: T.clientId(), account: leg.account, order_id: leg.order_id })));
   if (D().prefs.oneClick) { guardedSend(action, build); return; }
   const title = T.actionTitle(action, { root, line }, tick);
   const verb = isPosition ? 'Flatten' : (line.legs.length > 1 ? 'Cancel orders' : 'Cancel order');
-  confirm({ title, rows: acctRows(accounts), action: verb }).then((ok) => { if (ok) guardedSend(action, build); });
+  const rows = acctRows(accounts);
+  confirm({ title, rows, action: verb, live: hasLive(rows) }).then((ok) => { if (ok) guardedSend(action, build); });
 }
 
 function flattenAccount(account, root) {
   const gate = effectiveMode();
   if (gate.mode !== 'on') { D().toast('err', gate.reason); return; }
+  if (!isArmedAccount(account)) {
+    const st = D().state, a = st && (st.accounts || []).find((x) => x.id === account);
+    D().toast('err', T.unarmedLiveMessage(a || { id: account })); return;
+  }
   const build = () => ({ client_id: T.clientId(), accounts: [account], root });
   if (D().prefs.oneClick) { guardedSend('flatten', build); return; }
   const title = T.actionTitle('flatten', { root }, tickFor(root));
-  confirm({ title, rows: acctRows([account]), action: 'Flatten' }).then((ok) => { if (ok) guardedSend('flatten', build); });
+  const rows = acctRows([account]);
+  confirm({ title, rows, action: 'Flatten', live: hasLive(rows) }).then((ok) => { if (ok) guardedSend('flatten', build); });
 }
 
 function cancelOrder(account, order_id) {
   const gate = effectiveMode();
   if (gate.mode !== 'on') { D().toast('err', gate.reason); return; }
+  if (!isArmedAccount(account)) {
+    const st = D().state, a = st && (st.accounts || []).find((x) => x.id === account);
+    D().toast('err', T.unarmedLiveMessage(a || { id: account })); return;
+  }
   const build = () => ({ client_id: T.clientId(), account, order_id });
   if (D().prefs.oneClick) { guardedSend('cancel', build); return; }
   const { acct, order } = findOrder(account, order_id);
@@ -184,7 +241,8 @@ function cancelOrder(account, order_id) {
   const line = order ? { kind: 'order', side: order.side, type: order.type, qty: Number(order.qty) || 0,
     price: T.orderPrice(order), legs: [{ who: acct ? T.short(acct) : account }] } : null;
   const title = line ? T.actionTitle('cancel', { line }, tick) : 'Cancel order';
-  confirm({ title, rows: acctRows([account]), action: 'Cancel order' }).then((ok) => { if (ok) guardedSend('cancel', build); });
+  const rows = acctRows([account]);
+  confirm({ title, rows, action: 'Cancel order', live: hasLive(rows) }).then((ok) => { if (ok) guardedSend('cancel', build); });
 }
 
 /* ---- the chart's right-click menu: Buy/Sell limit/stop, Cancel all / Flatten / Reverse ---- */
@@ -295,10 +353,40 @@ function restoreFocus(m, key) {
   if (el) el.focus();
 }
 
+/* review item 4: a quote (up to 4/s) used to rebuild this whole menu, losing typed values and clicks. Nothing
+   in the menu depends on a quote at all, so quote-only (and bot/fill) events now do nothing here; a genuine
+   'account' event patches only that row's connection dot, balance and tradable state in place (keyed on
+   data-tm="acct:<id>"), leaving the qty/SL/TP inputs, the one-click switch and any LIVE arm in progress alone.
+   A row that has gone missing (the account list itself changed) falls back to a full fillMenu(). */
+function patchAccountRows(m) {
+  const st = D().state, prefs = D().prefs;
+  if (!st) return false;
+  const accounts = st.accounts || [];
+  if (m.querySelectorAll('.tm-row').length !== accounts.length) return false;
+  for (const a of accounts) {
+    const cb = m.querySelector(`[data-tm="acct:${a.id}"]`);
+    const row = cb && cb.closest('.tm-row');
+    if (!row) return false;
+    cb.disabled = !a.tradable;
+    cb.checked = prefs.ticked.includes(a.id) && (a.env !== 'live' || liveConfirmed.has(a.id));
+    const bal = row.querySelector('.tm-bal');
+    if (bal) bal.textContent = T.money(a.balance);
+    const dot = row.querySelector('.dot');
+    if (dot) dot.className = 'dot' + (a.connected ? ' ok' : ' bad');
+    if (armLive !== a.id) {
+      const lab = row.querySelector('.tm-label'), err = lab && lab.querySelector('.tm-err');
+      if (!a.tradable && !err && lab) lab.appendChild(page.mk('span', 'tm-err', a.error || 'not tradable'));
+      else if (a.tradable && err) err.remove();
+      else if (err) err.textContent = a.error || 'not tradable';
+    }
+  }
+  return true;
+}
+
 function fillMenu(m) {
   const key = focusKey(m);
   m.replaceChildren();
-  const st = D().state, prefs = D().prefs, mode = D().mode();
+  const st = D().state, prefs = D().prefs, mode = effectiveMode();   // review item 6: the status line uses the armed/effective mode
   m.appendChild(page.mk('div', 'menu-h', 'CHART TRADING'));
   if (mode.mode === 'down') {
     m.appendChild(page.mk('div', 'tm-status', `Desk unreachable — ${mode.reason}`));
@@ -342,9 +430,19 @@ function mount(pg) {
   const btn = document.getElementById('tbTrade');
   if (btn) btn.onclick = () => page.toggleMenu(btn, () => fillMenu(page.openMenu(btn, 'menu-trade')));
   updateTradeButton();
-  if (window.HBDeskClient) window.HBDeskClient.on(() => { updateTradeButton(); refillIfOpen(); });
+  if (window.HBDeskClient) {
+    window.HBDeskClient.on((why) => {
+      updateTradeButton();
+      const m = document.querySelector('.menu-trade');
+      if (!m) return;
+      if (why.has('state') || why.has('prefs')) { fillMenu(m); return; }
+      if (why.has('account') && !patchAccountRows(m)) fillMenu(m);
+      // 'quote' / 'bot' / 'fill' alone: nothing in this menu depends on them (review item 4)
+    });
+  }
   registerChartMenuTrading();
 }
 
-window.HBTradeUI = { mount, placeOrder, symbolAction, flattenAccount, cancelOrder, closeLine, moveLine, confirm, busy };
+window.HBTradeUI = { mount, placeOrder, symbolAction, flattenAccount, cancelOrder, closeLine, moveLine, confirm, busy,
+  onBusyChange, armedIds };
 })();

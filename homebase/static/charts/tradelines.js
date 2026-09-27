@@ -65,7 +65,15 @@ class Overlay {
     cell.candles.attachPrimitive(this.hook);
 
     this.unsub = window.HBDeskClient.on(() => this.render());
+    this.unsubBusy = window.HBTradeUI.onBusyChange(() => this.render());
     this.render();
+  }
+
+  /* HBDeskClient.prefs with `ticked` narrowed to the armed accounts (review item 5: an unarmed LIVE account
+     never draws a line or a fill marker, only the raw ticked checkbox in the Trade menu). */
+  armedPrefs() {
+    const Dc = window.HBDeskClient;
+    return { ...Dc.prefs, ticked: window.HBTradeUI.armedIds() };
   }
 
   /* ---- the Buy/Sell block ---- */
@@ -94,8 +102,9 @@ class Overlay {
   /* ---- lines: positions, working orders and SL/TP legs, merged per HBTrade.linesFor (ruling S8) ---- */
   paintLines(mode) {
     const Dc = window.HBDeskClient, root = this.root;
-    const groups = T.linesFor(Dc.state, root, Dc.prefs);
+    const groups = T.linesFor(Dc.state, root, this.armedPrefs());
     const readonly = mode.mode !== 'on';
+    const busy = window.HBTradeUI.busy();
     const seen = new Set();
     for (const g of groups) {
       seen.add(g.key);
@@ -112,7 +121,7 @@ class Overlay {
         it.g = g;
         it.line.applyOptions({ price: g.price, color: T.lineColor(g, this.cell.P) });
       }
-      this.wireChip(it, readonly);
+      this.wireChip(it, readonly, busy);
       this.paint(it);
     }
     for (const [key, it] of [...this.items]) {
@@ -138,13 +147,14 @@ class Overlay {
     return chip;
   }
 
-  wireChip(it, readonly) {
+  wireChip(it, readonly, busy) {
     const { chip, g } = it;
-    const draggable = !readonly && g.kind !== 'position';
+    const draggable = !readonly && !busy && g.kind !== 'position';
     chip.classList.toggle('drag', draggable);
     chip.text.onpointerdown = draggable ? (e) => this.startDrag(e, g.key) : null;
     chip.btn.hidden = readonly;
-    chip.btn.onclick = readonly ? null : () => window.HBTradeUI.closeLine(it.g, this.root, this.cell.tick);
+    chip.btn.disabled = busy;   // review item 3: never clickable while a send is already in flight
+    chip.btn.onclick = readonly || busy ? null : () => window.HBTradeUI.closeLine(it.g, this.root, this.cell.tick);
   }
 
   paint(it) {
@@ -156,7 +166,7 @@ class Overlay {
   /* ---- execution markers (ruling S22); re-set only when the fill ids change ---- */
   paintMarkers() {
     const Dc = window.HBDeskClient;
-    const list = T.fillMarkers(Dc.state, this.root, Dc.prefs, this.cell.P);
+    const list = T.fillMarkers(Dc.state, this.root, this.armedPrefs(), this.cell.P);
     const ids = JSON.stringify(list.map((m) => m.id));
     if (ids === this.fillIds) return;
     this.fillIds = ids;
@@ -229,6 +239,7 @@ class Overlay {
   destroy() {
     if (this.dragging && this.endDrag) this.endDrag();
     this.unsub();
+    this.unsubBusy();
     for (const it of this.items.values()) this.cell.candles.removePriceLine(it.line);
     this.items.clear();
     this.block.remove();

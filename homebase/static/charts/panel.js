@@ -45,12 +45,17 @@ function accountTd(tr, who, env) {
   tr.appendChild(c);
 }
 function dotTd(tr, ok) { const c = el('td'), s = el('span', 'dot' + (ok ? ' ok' : ' bad')); c.appendChild(s); tr.appendChild(c); }
+/* review item 3: a Close/Cancel button must not stay clickable while a send is already in flight (it used to
+   let a second action queue up and get dropped silently). New buttons start disabled when a send is already
+   out; setActionsDisabled (below) flips every rendered one the instant HBTradeUI's busy state changes. */
 function actionTd(tr, label, onClick) {
   const c = el('td'), b = el('button', 'bp-act');
   b.type = 'button'; b.textContent = label; b.onclick = onClick;
+  b.disabled = !!(window.HBTradeUI && window.HBTradeUI.busy());
   c.appendChild(b);
   tr.appendChild(c);
 }
+function setActionsDisabled(busy) { for (const b of elBody.querySelectorAll('.bp-act')) b.disabled = busy; }
 /* Keyed sync: reuses the container's own <table class="bp-table"> (and its rows, by r.key on <tr data-key>)
    across calls, so a row whose key survives keeps its exact DOM node -- its buttons, its focus -- while
    buildRow/updateRow decide what happens to the row itself. The diffing (which keys were added or removed) is
@@ -337,6 +342,7 @@ function mount(pg) {
   elToggle.onclick = () => setOpen(!isOpen);
   wireResize();
   if (window.HBDeskClient) window.HBDeskClient.on(onDeskEvent);
+  if (window.HBTradeUI) window.HBTradeUI.onBusyChange(setActionsDisabled);
 }
 
 /* The built-in tabs (every account: ruling S6). Registered immediately -- addTab only needs the
