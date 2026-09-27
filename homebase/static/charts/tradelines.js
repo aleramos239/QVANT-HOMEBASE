@@ -4,9 +4,10 @@
      - position / order / SL / TP lines (native price lines) with DOM chips that carry their text and a ×
        (ruling S8), draggable by the chip's text (order/SL/TP only — positions are not draggable: ruling S11);
      - the execution markers, through cell.setExtraMarkers('fills', …) (ruling S22).
-   Trading is per chart (2026-09-27 plan, Task 2): the block, the chart's account chips, and draggable / × lines
-   exist only while THIS chart's Trading can trade, and only for this chart's accounts; every other line (every
-   account's, on a chart with Trading off) is view only: no drag, no ×.
+   Trading is per chart, and the chart's ACCOUNTS are the switch (2026-09-27 accounts-per-chart plan, Task 1):
+   the block, the chart's account chips, and draggable / × lines exist only while THIS chart can trade, and
+   only for this chart's accounts; every other line (every account's, on a chart with no accounts) is view
+   only: no drag, no ×.
    The chart's algo (2026-09-27 plan, Task 3), only while the chart's config carries one: a legend badge (bot icon,
    name, state pill, today's P&L, a red Kill -- offered whatever the Trading switch says), the bot's working orders
    as read-only "BOT …" lines (no drag, no ×), its fills today and its real past runs (HBDeskClient.botHistory) as
@@ -70,6 +71,16 @@ class Overlay {
     this.accts.hidden = true;
     this.acctsKey = null;
     cell.el.querySelector('.lg-tradeslot').appendChild(this.accts);
+    // fix round 1, Important 2: a replay that ended on its own latches this chart (HBTrade.replayHaltGuard); the
+    // real Buy/Sell block stays hidden until the viewer says so here, deliberately, on THIS chart
+    this.resume = document.createElement('button');
+    this.resume.type = 'button';
+    this.resume.className = 'tr-resume';
+    this.resume.hidden = true;
+    this.resume.append(mk('span', 'tr-resume-why', 'Replay ended'), mk('span', 'tr-resume-go', 'Resume live trading'));
+    this.resume.title = 'The replay ended without you choosing it. The next order will still ask to confirm.';
+    this.resume.onclick = (e) => { e.stopPropagation(); this.resume.blur(); window.HBTradeUI.resumeLive(this.cell); };
+    cell.el.querySelector('.lg-tradeslot').appendChild(this.resume);
 
     this.layer = mk('div', 'tl-layer');
     cell.el.appendChild(this.layer);
@@ -153,11 +164,11 @@ class Overlay {
     this.buyBtn.disabled = this.sellBtn.disabled = busy;
   }
 
-  /* The chart's accounts next to the block while its Trading is on; one not in the chart's effective set right
-     now (unarmed LIVE, not tradable, unknown) is dimmed. Rebuilt only when the chips change. */
+  /* The chart's accounts next to the block whenever it has any; one not in the chart's effective set right
+     now (unarmed LIVE, not tradable, unknown, replay) is dimmed. Rebuilt only when the chips change. */
   paintAccts(mode) {
     const t = window.HBTradeUI.tradeOf(this.cell);
-    this.accts.hidden = !t.on || !t.accounts.length;
+    this.accts.hidden = !t.accounts.length;
     if (this.accts.hidden) return;
     const chips = T.accountChips(window.HBDeskClient.state, t.accounts, mode.mode === 'on' ? mode.accounts : []);
     const key = JSON.stringify(chips);
@@ -165,7 +176,7 @@ class Overlay {
     this.acctsKey = key;
     this.accts.replaceChildren(...chips.map((c) => {
       const el = mk('span', 'tr-acct' + (c.active ? '' : ' off'), c.who);
-      if (c.env) el.append(mk('span', 'env' + (c.live ? ' live' : ''), c.env));
+      if (c.env) el.append(mk('span', 'env' + (c.live ? ' live' : c.paper ? ' paper' : ''), c.env));
       el.title = c.active ? `Orders from this chart go to ${c.id}` : `${c.id} — not trading from this chart right now`;
       return el;
     }));
@@ -443,6 +454,7 @@ class Overlay {
     if (this.dead || !this.cell.chart) return;
     const mode = window.HBTradeUI.effectiveMode(this.cell);   // review M3: LIVE-arm-aware; Task 2: THIS chart's
     this.paintBlock(mode);
+    this.resume.hidden = !(this.cell.cfg && this.cell.cfg.replayHalt) || !!this.cell.replay;
     this.paintAccts(mode);
     this.paintLines(mode);
     this.paintAlgo();

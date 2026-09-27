@@ -1,11 +1,13 @@
-/* Homebase Charts — HBTradeUI: the Trade toolbar menu (accounts, one-click, qty, SL/TP ticks), the confirm
-   dialog ($ + RR 1:X preview), the trading actions (each sends through HBDeskClient, which owns toasts), and
-   the Buy/Sell limit/stop + Cancel all / Flatten / Reverse items in the chart's right-click menu
-   (HBChartMenu.register('trading', …)).
+/* Homebase Charts — HBTradeUI: the confirm dialog ($ + RR 1:X preview), the trading actions (each sends
+   through HBDeskClient, which owns toasts), the Buy/Sell limit/stop + Cancel all / Flatten / Reverse items in
+   the chart's right-click menu (HBChartMenu.register('trading', …)), the desk's own state in the bottom
+   status bar, and the model behind the chart gear's Trading tab (accounts, the LIVE arm, the algo binding).
 
-   Trading is PER CHART (2026-09-27 plan, Task 2): each chart's cell config carries `trade: {on, accounts}`, and
-   every order-sending path takes its accounts from the chart it was started from (the Buy/Sell block, a chart-menu
-   item, a line's drag or ×, the order panel). The Trade menu edits the SELECTED chart. The bottom panel's
+   Trading is PER CHART, and the chart's ACCOUNTS are the switch (2026-09-27 accounts-per-chart plan, Task 1):
+   each chart's cell config carries `trade: {accounts}` -- `trade.on` is retired -- and every order-sending
+   path takes its accounts from the chart it was started from (the Buy/Sell block, a chart-menu item, a line's
+   drag or ×, the order panel). Accounts are edited in that chart's ⚙ → Trading (settings-dialog.js, through
+   accountRows / toggleAccount / pickAlgo below); the old #tbTrade toolbar menu is gone. The bottom panel's
    per-account Close/Cancel act on the named account only (accountGate).
 
    A chart's algo (2026-09-27 plan, Task 3): `cell.cfg.algo` is set through setCellAlgo; its Kill (botKill) goes
@@ -19,9 +21,9 @@
        opened — the desk, the chart's accounts, its switch or a LIVE arm can all change while a dialog is open;
      - one action's send is in flight at a time (`withLock`): a second attempt while one is out is dropped, and
        the chart menu's Buy/Sell/Cancel/Flatten/Reverse items disappear from a fresh right-click while busy;
-     - a LIVE account needs a second click within 3 s to tick (S5) — including a LIVE tick already sitting in
-       localStorage from a previous session: `liveConfirmed` starts empty every load, so a restored LIVE tick
-       is *shown* but does not count until it is re-armed this session.
+     - a LIVE account needs a second click within 3 s to tick (S5). A layout load drops LIVE accounts
+       outright now (HBTrade.loadedTrade), and `liveConfirmed` still starts empty every load, so a LIVE
+       account left on a chart by any other route is *shown* but does not count until re-armed this session.
    Browser only; the logic (prefs, inference, bodies, lines, confirm texts, toasts) lives in HBTrade. */
 (() => {
 'use strict';
@@ -35,19 +37,21 @@ const liveConfirmed = new Set();   // LIVE accounts armed THIS session (never pe
 let inFlight = false;    // one send at a time (review item 2; the 2026-09-27 review of Task 5 makes this a toast, not a silent drop)
 const busySubs = new Set();   // notified synchronously on every inFlight flip, so the panel and the chart's lines grey out immediately
 const tradeSubs = new Set();  // notified when a chart's trade config or a LIVE arm changes (the charts' overlays re-render)
-let menuCell = null;          // the chart the open Trade menu was filled for
 
 /* ---- one chart's trade config and mode ---- */
-/* The chart's {on, accounts}, sanitised; a missing chart is off with no accounts. */
+/* The chart's {accounts}, sanitised; a missing chart has none (so it is view-only). */
 function tradeOf(cell) { return T.cellTrade(cell && cell.cfg ? cell.cfg.trade : null); }
 /* The root a chart is showing (the loaded one; its config's while nothing has loaded yet). */
 function rootOfCell(cell) { return !cell ? null : cell.shown ? cell.shown.root : (cell.cfg && cell.cfg.root) || null; }
-/* HBTrade.tradeMode on THIS chart's config, with this session's LIVE arms on top (HBTrade.armedMode), and
-   T.replayGuard as the last word: a chart in Bar Replay (cell.replay, set by replayui.js) can never trade
+/* HBTrade.tradeMode on THIS chart's config, with this session's LIVE arms on top (HBTrade.armedMode), any id a
+   load kept before the desk answered taken out (HBTrade.unverifiedMode), a chart latched by a replay that ended
+   on its own refused (HBTrade.replayHaltGuard), and T.replayGuard as the last word: a chart in Bar Replay (cell.replay, set by replayui.js) can never trade
    (2026-09-27 plan, Global Constraints) -- this is the one place every order-sending path's gate (cellGate,
    the chart menu, a line's drag/×, the Buy/Sell block) reads, so nothing needs its own replay check. */
 function effectiveMode(cell) {
-  return T.replayGuard(T.armedMode(D().mode(tradeOf(cell)), D().state, liveConfirmed), !!(cell && cell.replay));
+  const cfg = (cell && cell.cfg) || {};
+  const m = T.unverifiedMode(T.armedMode(D().mode(tradeOf(cell)), D().state, liveConfirmed), cfg.unverified);   // Minor 4
+  return T.replayGuard(T.replayHaltGuard(m, !!cfg.replayHalt), !!(cell && cell.replay));                     // Important 2
 }
 /* A chart-started send path's gate: the chart's mode, the chart still on the page, and still showing the root
    the action was started for. Re-run at send time by guardedSend. */
@@ -76,16 +80,18 @@ function fillIds(cell) { return T.armedTicked(D().state, tradeOf(cell).accounts,
 function onTradeChange(fn) { tradeSubs.add(fn); return () => tradeSubs.delete(fn); }
 function notifyTrade() {
   for (const fn of [...tradeSubs]) { try { fn(); } catch (e) { console.error(e); } }
-  updateTradeButton();
-  refillIfOpen();
+  paintDeskStatus();   // the selected chart's own reason is on that line (Minor 6)
 }
 /* Set a chart's trade config (sanitised). The page saves it: an account-list change is a layout change (the
-   layout reads Unsaved), the switch alone is not (a load always brings it back off). `quiet`: the caller saves
-   (a template preview in the Settings dialog, the one-time migration). */
-function setCellTrade(cell, next, { quiet = false } = {}) {
+   layout reads Unsaved). `quiet`: the caller saves (the Settings dialog's live preview, which Cancel puts
+   back and Ok commits; a template preview; the one-time migration). `mark` / `unmark`: see above. */
+function setCellTrade(cell, next, { quiet = false, mark = [], unmark = [] } = {}) {
   if (!cell || !cell.cfg) return;
   const was = tradeOf(cell), now = T.cellTrade(next);
   cell.cfg.trade = now;
+  // the UNVERIFIED marks (fix round 1, Critical 1): kept a subset of the accounts; a load or a restore `mark`s
+  // what it put back without the desk's word, a user's own tick or untick `unmark`s that one id
+  cell.cfg.unverified = T.nextUnverified(cell.cfg.unverified, now.accounts, { add: mark, remove: unmark });
   if (!quiet && page && page.tradeChanged) page.tradeChanged(cell, JSON.stringify(was.accounts) !== JSON.stringify(now.accounts));
   notifyTrade();
 }
@@ -98,8 +104,6 @@ function setCellAlgo(cell, algo, { quiet = false } = {}) {
   if (!quiet && was !== now && page && page.tradeChanged) page.tradeChanged(cell, true);
   notifyTrade();
 }
-/* The page's selected chart changed: the toolbar dot and an open Trade menu follow it. */
-function selectionChanged() { updateTradeButton(); refillIfOpen(); }
 /* A single account id, refused when it is an unarmed LIVE account (review item 5's per-account paths). Fails
    CLOSED when the id isn't found in desk state at all (M6): unrecognized is never treated as armed. */
 function isArmedAccount(id) {
@@ -155,7 +159,8 @@ function tickFor(root) {
 }
 function acctRows(ids) {
   const st = D().state, list = (st && st.accounts) || [];
-  return ids.map((id) => { const a = list.find((x) => x.id === id); return a ? { label: a.label, env: a.env } : { label: id, env: 'demo' }; });
+  // an id the desk does not list gets env '?' -- never shown as DEMO (M1: fail closed, in the dialog too)
+  return ids.map((id) => { const a = list.find((x) => x.id === id); return a ? { label: a.label, env: a.env } : { label: id, env: '?' }; });
 }
 function hasLive(rows) { return rows.some((a) => a.env === 'live'); }
 function findOrder(account, order_id) {
@@ -176,8 +181,9 @@ function confirm({ title, rows = [], note = '', warn = '', each = '', live = fal
     for (const r of rows) {
       const row = page.mk('div', 'cf-acct');
       // '?': an account the desk does not list (the Kill's rows, fix round 1 M1) -- never shown as DEMO
-      const env = r.env === 'live' ? 'LIVE' : r.env === '?' ? '?' : 'DEMO';
-      row.append(page.mk('span', '', r.label), page.mk('span', `env${r.env === 'live' ? ' live' : ''}`, env));
+      const env = T.envChip(r.env);
+      const cls = r.env === 'live' ? ' live' : r.env === 'paper' ? ' paper' : '';
+      row.append(page.mk('span', '', r.label), page.mk('span', `env${cls}`, env));
       body.append(row);
     }
     if (note) body.append(page.mk('div', 'cf-note', note));
@@ -220,7 +226,7 @@ function confirm({ title, rows = [], note = '', warn = '', each = '', live = fal
 /* `cell` is required: the order goes only to that chart's accounts (the order panel passes the chart selected at
    the moment of its click).
    The order panel (2026-09-27 order-panel plan, Task 3) also passes:
-     - `exits: {sl, tp}`: explicit SL/TP prices (null = that side off), used INSTEAD of the Trade menu's tick
+     - `exits: {sl, tp}`: explicit SL/TP prices (null = that side off), used INSTEAD of the all-charts tick
        defaults; frozen here with everything else, exactly like the M1 bracket;
      - `trigger`: a Stop Limit's trigger (`price` is then its limit);
      - `tif`: 'Day' | 'GTC' for a resting order (a Market order is Day only: none sent).
@@ -284,7 +290,7 @@ function placeOrder({ cell, root, side, type, price = null, qty, exits = undefin
     return T.orderBody({ clientId: T.clientId(), accounts: resolved.accounts, root, side, qty, type, price: px, sl, tp,
       trigger: trig, tif: tf });
   };
-  if (D().prefs.oneClick) { guardedSend('order', g, build); return; }
+  if (T.sendsWithoutConfirm(D().prefs, cell.cfg)) { guardedSend('order', g, build); return; }   // not right after a replay
   const preview = build(gate);
   // shown === gate.accounts here, so only the inferType re-check can abort a preview -- the market moved
   // between the chart-menu's right-click (where `type` was inferred) and picking the item just now.
@@ -292,7 +298,7 @@ function placeOrder({ cell, root, side, type, price = null, qty, exits = undefin
   const c = T.confirmOrder(preview, D().state, D().quotes[root], pv, tick);
   confirm({ title: c.title, rows: c.accounts.map((a) => ({ label: a.label, env: a.env })), note: c.bracket,
     warn: c.warn, each: c.each, live: c.live, action: side, tone: side === 'Sell' ? 'down' : 'accent' })
-    .then((ok) => { if (ok) guardedSend('order', g, build); });
+    .then((ok) => { if (ok) { confirmedAfterReplay(cell); guardedSend('order', g, build); } });
 }
 
 function symbolAction(cell, kind, root) {
@@ -305,12 +311,12 @@ function symbolAction(cell, kind, root) {
     if (!resolved.accounts.length) { D().toast('err', 'No confirmed accounts left — nothing sent'); return null; }   // M9
     return { client_id: T.clientId(), accounts: resolved.accounts, root };
   };
-  if (D().prefs.oneClick && kind !== 'reverse') { guardedSend(kind, g, build); return; }   // Reverse always confirms (S4)
+  if (T.sendsWithoutConfirm(D().prefs, cell.cfg) && kind !== 'reverse') { guardedSend(kind, g, build); return; }   // Reverse always confirms (S4)
   const tick = cell.tick;
   const title = T.actionTitle(kind, { root }, tick);
   const verb = kind === 'flatten' ? 'Flatten' : kind === 'reverse' ? 'Reverse' : 'Cancel orders';
   const rows = acctRows(shown);
-  confirm({ title, rows, action: verb, live: hasLive(rows) }).then((ok) => { if (ok) guardedSend(kind, g, build); });
+  confirm({ title, rows, action: verb, live: hasLive(rows) }).then((ok) => { if (ok) { confirmedAfterReplay(cell); guardedSend(kind, g, build); } });
 }
 
 /* A line may be moved / closed only from a chart whose effective accounts hold every one of its legs. */
@@ -336,11 +342,11 @@ function moveLine(cell, line, price, root, tick, { onCancel } = {}) {
     if (!T.legsWithin(line, m.accounts)) { D().toast('err', 'Accounts changed — review and try again'); return null; }
     return line.legs.map((leg) => ({ client_id: T.clientId(), account: leg.account, order_id: leg.order_id, price: rounded }));
   };
-  if (D().prefs.oneClick) { guardedSend('modify', g, build); return; }
+  if (T.sendsWithoutConfirm(D().prefs, cell.cfg)) { guardedSend('modify', g, build); return; }
   const title = T.actionTitle('modify', { root, line, from: line.price, to: price }, tick);
   const rows = acctRows(accountIds);
   confirm({ title, rows, action: 'Move', live: hasLive(rows) })
-    .then((ok) => { if (ok) guardedSend('modify', g, build); else if (onCancel) onCancel(); });
+    .then((ok) => { if (ok) { confirmedAfterReplay(cell); guardedSend('modify', g, build); } else if (onCancel) onCancel(); });
 }
 
 /* × on a line: flatten for a position, cancel for the rest (SL/TP/plain orders). */
@@ -358,11 +364,11 @@ function closeLine(cell, line, root, tick) {
     return isPosition ? { client_id: T.clientId(), accounts, root }
       : line.legs.map((leg) => ({ client_id: T.clientId(), account: leg.account, order_id: leg.order_id }));
   };
-  if (D().prefs.oneClick) { guardedSend(action, g, build); return; }
+  if (T.sendsWithoutConfirm(D().prefs, cell.cfg)) { guardedSend(action, g, build); return; }
   const title = T.actionTitle(action, { root, line }, tick);
   const verb = isPosition ? 'Flatten' : (line.legs.length > 1 ? 'Cancel orders' : 'Cancel order');
   const rows = acctRows(accounts);
-  confirm({ title, rows, action: verb, live: hasLive(rows) }).then((ok) => { if (ok) guardedSend(action, g, build); });
+  confirm({ title, rows, action: verb, live: hasLive(rows) }).then((ok) => { if (ok) { confirmedAfterReplay(cell); guardedSend(action, g, build); } });
 }
 
 /* The bottom panel's Close / Cancel: the NAMED account only, never a chart's list; the LIVE-arm check stays. */
@@ -461,233 +467,147 @@ function registerChartMenuTrading() {
   });
 }
 
-/* ---- the Trade toolbar menu ---- */
-function dotClass(mode) { return mode === 'on' ? 'ok' : mode === 'down' ? 'bad' : 'warn'; }
-function updateTradeButton() {
-  const btn = document.getElementById('tbTrade'), dot = document.getElementById('tbTradeDot');
-  if (!btn || !dot) return;
-  const m = effectiveMode(page && page.cur());   // the selected chart's
-  dot.className = 'dot ' + dotClass(m.mode);
-  btn.title = m.reason || 'Trade';
+/* ---- a replay's end (fix round 1, Important 2) ----
+   replayui.js reports every end here. An end the user did not choose (a reconnect, the server's own stop, an
+   error, the chart destroyed) latches the chart (`replayHalt`) until "Resume live trading" on its legend; ANY
+   end sets `replayConfirm`, so the first real order from that chart afterwards shows the confirm even with
+   one-click on. Both live on the chart's config (a grid rebuild keeps them; a layout load or a reload starts
+   the chart fresh, and a layout save never writes them). */
+function replayEnded(cell, involuntary) {
+  if (!cell || !cell.cfg) return;
+  const p = T.replayEndPatch(involuntary);
+  cell.cfg.replayHalt = !!cell.cfg.replayHalt || p.replayHalt;   // a later voluntary exit never lifts a latch
+  cell.cfg.replayConfirm = p.replayConfirm;
+  notifyTrade();
 }
+/* A chart destroyed mid-replay (fix round 2): its latch must survive the grid rebuild that destroyed it, and a
+   layout load (or a layout-tab switch) rebuilds from a NEW layout object, so a flag on the old cell config is
+   thrown away. The latch is therefore held HERE, by grid position, and gridRebuilt() re-applies it to whatever
+   chart now sits there -- from any caller of buildGrid, none of which needs to remember.
+   Layout-tab switches (feat/layout-tabs) rely on this set: keep it when merging. */
+const haltedPositions = new Set();
+function replayDestroyed(cell) {
+  const i = page && page.cells ? page.cells().indexOf(cell) : -1;
+  if (i >= 0) haltedPositions.add(i);
+  replayEnded(cell, true);   // the old config too (a grid-size change keeps the same config objects)
+}
+/* app.js buildGrid, once the new cells exist: each recorded position latches the chart now there (halt AND
+   confirm); a position the grid no longer has is dropped -- that chart is gone, nothing can send from it. */
+function gridRebuilt(cells) {
+  const list = Array.isArray(cells) ? cells : [];
+  for (const i of haltedPositions) if (list[i]) replayEnded(list[i], true);
+  haltedPositions.clear();
+}
+/* The legend's "Resume live trading": lifts the latch only -- the next order still confirms. */
+function resumeLive(cell) {
+  if (!cell || !cell.cfg || cell.replay) return;
+  cell.cfg.replayHalt = false;
+  notifyTrade();
+}
+/* A chart-started action the user just confirmed in the dialog: that was the post-replay confirm. */
+function confirmedAfterReplay(cell) { if (cell && cell.cfg && cell.cfg.replayConfirm) cell.cfg.replayConfirm = false; }
 
-function envSpan(env) { return page.mk('span', 'env' + (env === 'live' ? ' live' : ''), String(env || '').toUpperCase()); }
-function dotSpan(ok) { return page.mk('span', 'dot' + (ok ? ' ok' : ' bad')); }
-
-/* Ticking a LIVE account needs a second click within 3 s (S5) -- including one already on a chart's list from a
-   saved layout, since liveConfirmed starts empty every load (the review's "re-confirm on first use after
-   reload"). The arm is per account for the session (unchanged); the tick is the chart's. */
-function setAccountTicked(cell, id, on) {
-  const t = tradeOf(cell), ids = new Set(t.accounts);
+/* ---- the chart gear's Trading tab: ACCOUNTS + ALGO (2026-09-27 accounts-per-chart plan, Task 1) ----
+   The dialog owns the DOM; this owns the rules -- the two-step LIVE arm, "unlisted fails closed", and the
+   algo <-> accounts binding -- so nothing in the dialog can tick an account the desk would refuse. */
+function setAccountTicked(cell, id, on, quiet) {
+  const ids = new Set(tradeOf(cell).accounts);
   if (on) ids.add(id); else ids.delete(id);
-  setCellTrade(cell, { on: t.on, accounts: [...ids] });
+  setCellTrade(cell, { accounts: [...ids] }, { quiet, unmark: [id] });   // the user's own tick: never unverified
 }
-function onTickChange(cell, a, cb) {
-  if (!cell || cell !== page.cur()) { refillIfOpen(); return; }   // the menu edits the selected chart only
-  // fix round 1: a LIVE account on this chart's list but not armed this session (it came back with a layout) is
-  // shown ticked-but-not-armed; a click REMOVES it from the chart -- it never starts the arm flow (arming is a
-  // separate action: tick it again afterwards). Decided from the chart's list, not the checkbox's toggled value.
-  if (T.acctTick(a, tradeOf(cell).accounts, liveConfirmed) === 'unarmed') {
-    if (armLive === a.id) { armLive = null; clearTimeout(armTimer); }
-    setAccountTicked(cell, a.id, false);
-    return;
+function clearArm() { if (armTimer) clearTimeout(armTimer); armTimer = 0; armLive = null; }
+function startArm(id) {
+  clearArm();
+  armLive = id;
+  armTimer = setTimeout(() => { if (armLive === id) { armLive = null; notifyTrade(); } }, 3000);
+  notifyTrade();
+}
+/* The account mid-arm (its first LIVE click), or null: the row shows "Tick LIVE — real orders. Click again". */
+function armPending() { return armLive; }
+/* One chart's ACCOUNTS rows (HBTrade.accountPickRows): the desk's accounts, plus any on this chart's list the
+   desk does not list (chip '?', never tradable). */
+function accountRows(cell) {
+  return T.accountPickRows(D().state, tradeOf(cell).accounts, liveConfirmed, rootOfCell(cell));
+}
+/* Ticking an account that belongs to an algo on this chart's instrument sets the chart's algo to it. */
+function bindAlgoToAccount(cell, id, quiet) {
+  const key = T.algoForAccount(D().state, rootOfCell(cell), id);
+  if (key && T.cellAlgo(cell.cfg && cell.cfg.algo) !== key) setCellAlgo(cell, key, { quiet });
+}
+/* A click on one ACCOUNTS checkbox. The chart's own list decides what it means, never the checkbox's toggled
+   value: an account already on the list (ticked, or a LIVE one not armed this session) is always REMOVED; one
+   that is not is added -- a LIVE account only on its second click within 3 s (ruling S5), an account the desk
+   does not list or cannot trade never (fail closed, M6). Returns what happened, for the dialog to paint:
+   'removed' | 'ticked' | 'armed' | 'arming' | 'refused'. */
+function toggleAccount(cell, id, { quiet = true } = {}) {
+  if (!cell || !cell.cfg) return 'refused';
+  const st = D().state, a = (st && (st.accounts || []).find((x) => x.id === id)) || null;
+  if (tradeOf(cell).accounts.includes(id)) {
+    if (armLive === id) clearArm();
+    if (a && a.env === 'live') liveConfirmed.delete(id);   // re-ticking this session arms again
+    setAccountTicked(cell, id, false, quiet);
+    return 'removed';
   }
-  const wantTick = cb.checked;
-  if (wantTick && a.env === 'live' && !liveConfirmed.has(a.id)) {
-    if (armLive === a.id) {   // the second click, within the window: arm it for real
-      liveConfirmed.add(a.id);
-      clearTimeout(armTimer); armLive = null;
-      setAccountTicked(cell, a.id, true);
-    } else {                  // the first click: arm, but do not tick yet
-      cb.checked = false;
-      armLive = a.id;
-      clearTimeout(armTimer);
-      armTimer = setTimeout(() => { if (armLive === a.id) { armLive = null; refillIfOpen(); } }, 3000);
-    }
-    refillIfOpen();
-    return;
+  if (!a || !a.tradable) { notifyTrade(); return 'refused'; }
+  if (a.env === 'live' && !liveConfirmed.has(id)) {
+    if (armLive !== id) { startArm(id); return 'arming'; }   // the first click: arm, but do not tick yet
+    clearArm();
+    liveConfirmed.add(id);                                   // the second click, within the window: armed for real
+    setAccountTicked(cell, id, true, quiet);
+    bindAlgoToAccount(cell, id, quiet);
+    return 'armed';
   }
-  if (armLive === a.id) { armLive = null; clearTimeout(armTimer); }
-  if (!wantTick && a.env === 'live') liveConfirmed.delete(a.id);   // re-ticking this session arms again
-  setAccountTicked(cell, a.id, wantTick);
+  if (armLive === id) clearArm();
+  setAccountTicked(cell, id, true, quiet);
+  bindAlgoToAccount(cell, id, quiet);
+  return 'ticked';
+}
+/* The ALGO select: picking an algo also ticks the accounts it books on this chart's instrument -- never a LIVE
+   one that is not already armed this session, and never one the desk does not list (HBTrade.algoTickAccounts).
+   Clearing it to None leaves the accounts exactly as they are (watching an algo without trading it is
+   unticking its accounts, not clearing the select). */
+function pickAlgo(cell, key, { quiet = true } = {}) {
+  if (!cell || !cell.cfg) return;
+  const k = T.cellAlgo(key);
+  setCellAlgo(cell, k, { quiet });
+  if (!k) return;
+  const add = T.algoTickAccounts(D().state, rootOfCell(cell), k, liveConfirmed);
+  if (!add.length) return;
+  const have = tradeOf(cell).accounts, next = [...new Set([...have, ...add])];
+  if (next.length !== have.length) setCellTrade(cell, { accounts: next }, { quiet, unmark: add });
 }
 
-/* The checkbox for one row state: 'ticked', 'off', or 'unarmed' (indeterminate: on the chart's list, not armed).
-   An account already on the list can always be removed, even while it is not tradable. */
-function paintTick(cb, a, state) {
-  cb.dataset.state = state;
-  cb.disabled = !a.tradable && state === 'off';
-  cb.checked = state === 'ticked';
-  cb.indeterminate = state === 'unarmed';
-  cb.title = state === 'unarmed' ? "On this chart's list but not armed this session — click to remove it" : '';
-}
-function acctRow(cell, a, t) {
-  const id = `tm-acct-${a.id}`, row = page.mk('div', 'tm-row');
-  const cb = page.mk('input'), state = T.acctTick(a, t.accounts, liveConfirmed);
-  cb.type = 'checkbox'; cb.id = id; cb.dataset.tm = `acct:${a.id}`;
-  paintTick(cb, a, state);
-  cb.onchange = () => onTickChange(cell, a, cb);
-  const lab = page.mk('label', 'tm-label');
-  lab.htmlFor = id;
-  if (armLive === a.id) {
-    lab.appendChild(page.mk('span', 'tm-arm', 'Tick LIVE — real orders. Click again'));
-  } else {
-    lab.appendChild(page.mk('span', 'tm-name', a.label));
-    if (state === 'unarmed') lab.appendChild(page.mk('span', 'tm-unarmed', 'LIVE · not armed'));
-    if (!a.tradable) lab.appendChild(page.mk('span', 'tm-err', a.error || 'not tradable'));
-  }
-  row.append(cb, lab, envSpan(a.env), page.mk('span', 'tm-bal', T.money(a.balance)), dotSpan(a.connected));
-  return row;
-}
-
-function numPref(label, key, value, min, max, note) {
-  const row = page.mk('div', 'tm-pref'), id = `tm-${key}`, lab = page.mk('label', '', label);
-  lab.htmlFor = id;
-  const inp = page.mk('input');
-  inp.type = 'number'; inp.id = id; inp.min = String(min); inp.max = String(max); inp.value = String(value);
-  inp.dataset.tm = key;
-  inp.onchange = () => {
-    const n = Math.round(Number(inp.value)), patch = {};
-    patch[key] = Number.isFinite(n) ? n : value;
-    D().setPrefs(patch);
-  };
-  const right = page.mk('span', '');
-  right.append(inp);
-  if (note) right.append(page.mk('span', 'tm-note', ' ' + note));
-  row.append(lab, right);
-  return row;
-}
-
-/* Which control had focus, so a re-fill (a desk event, or arming a LIVE tick) does not steal it. */
-function focusKey(m) {
-  const el = document.activeElement;
-  return (m.contains(el) && el.dataset && el.dataset.tm) || null;
-}
-function restoreFocus(m, key) {
-  if (!key) return;
-  const el = [...m.querySelectorAll('[data-tm]')].find((x) => x.dataset.tm === key);
-  if (el) el.focus();
-}
-
-/* review item 4: a quote (up to 4/s) used to rebuild this whole menu, losing typed values and clicks. Nothing
-   in the menu depends on a quote at all, so quote-only (and bot/fill) events now do nothing here; a genuine
-   'account' event patches only that row's connection dot, balance and tradable state in place (keyed on
-   data-tm="acct:<id>"), leaving the qty/SL/TP inputs, the one-click switch and any LIVE arm in progress alone.
-   A row that has gone missing (the account list itself changed) falls back to a full fillMenu(). */
-function patchAccountRows(m) {
-  const st = D().state, t = tradeOf(menuCell);
-  if (!st || menuCell !== page.cur()) return false;
-  const accounts = st.accounts || [];
-  if (m.querySelectorAll('.tm-row').length !== accounts.length) return false;
-  for (const a of accounts) {
-    const cb = m.querySelector(`[data-tm="acct:${a.id}"]`);
-    const row = cb && cb.closest('.tm-row');
-    if (!row) return false;
-    const state = T.acctTick(a, t.accounts, liveConfirmed);
-    if (cb.dataset.state !== state) return false;   // the row's label changes with its state: a full fill
-    paintTick(cb, a, state);
-    const bal = row.querySelector('.tm-bal');
-    if (bal) bal.textContent = T.money(a.balance);
-    const dot = row.querySelector('.dot');
-    if (dot) dot.className = 'dot' + (a.connected ? ' ok' : ' bad');
-    if (armLive !== a.id) {
-      const lab = row.querySelector('.tm-label'), err = lab && lab.querySelector('.tm-err');
-      if (!a.tradable && !err && lab) lab.appendChild(page.mk('span', 'tm-err', a.error || 'not tradable'));
-      else if (a.tradable && err) err.remove();
-      else if (err) err.textContent = a.error || 'not tradable';
-    }
-  }
-  return true;
-}
-
-/* The header: "Trading on this chart — NQ · chart 2" and the chart's own Trading switch. */
-function cellHeader(cell, t) {
-  const head = page.mk('div', 'tm-head'), n = page.cells().indexOf(cell) + 1;
-  const title = cell ? `Trading on this chart — ${rootOfCell(cell) || '—'} · chart ${n}` : 'Trading on this chart';
-  head.appendChild(page.mk('span', 'tm-title', title));
-  if (!cell) return head;
-  const sw = page.mk('button', 'switch' + (t.on ? ' on' : ''));
-  sw.type = 'button';
-  sw.setAttribute('role', 'switch');
-  sw.setAttribute('aria-checked', String(t.on));
-  sw.setAttribute('aria-label', `Trading on chart ${n}`);
-  sw.dataset.tm = 'cellon';
-  // a chart in Bar Replay can never trade (Global Constraints): the switch cannot re-arm it while replaying
-  sw.disabled = !!cell.replay;
-  if (cell.replay) sw.title = 'This chart is in replay';
-  sw.onclick = () => {
-    if (cell !== page.cur() || cell.replay) { refillIfOpen(); return; }   // the menu edits the selected chart only
-    const now = tradeOf(cell);
-    setCellTrade(cell, { on: !now.on, accounts: now.accounts });
-  };
-  head.appendChild(sw);
-  return head;
-}
-
-function fillMenu(m) {
-  const key = focusKey(m);
-  m.replaceChildren();
-  const cell = page.cur() || null, t = tradeOf(cell);
-  menuCell = cell;
-  const st = D().state, prefs = D().prefs, gate = D().gate(), mode = effectiveMode(cell);   // review item 6: the armed/effective mode
-  m.appendChild(cellHeader(cell, t));
-  if (gate && gate.mode === 'down') {
-    m.appendChild(page.mk('div', 'tm-status', `Desk unreachable — ${gate.reason}`));
-  } else if (gate && gate.mode === 'off') {
-    const row = page.mk('div', 'tm-status');
-    row.append(document.createTextNode('Chart trading is off on the desk'));
-    const a = document.createElement('a');
-    a.href = page.deskUrl(); a.target = '_blank'; a.rel = 'noopener';
-    a.append(page.icon('extLink'), document.createTextNode('Open the desk'));
-    row.append(a);
-    m.appendChild(row);
-  } else {
-    const lim = (st && st.limits) || {};
-    m.appendChild(page.mk('div', 'tm-status', `Max ${lim.max_order_qty ?? '—'} per order · ${lim.max_position_qty ?? '—'} per position`));
-    if (t.on && mode.mode !== 'on') m.appendChild(page.mk('div', 'tm-status tm-why', mode.reason));
-  }
-  for (const a of (st && st.accounts) || []) m.appendChild(acctRow(cell, a, t));
-  m.appendChild(page.mk('div', 'menu-sep'));
-  const oc = page.mk('div', 'tm-pref'), lab = page.mk('label', '', 'One-click trading');
-  const sw = page.mk('button', 'switch' + (prefs.oneClick ? ' on' : ''));
-  sw.type = 'button';
-  sw.setAttribute('role', 'switch');
-  sw.setAttribute('aria-checked', String(prefs.oneClick));
-  sw.dataset.tm = 'oneclick';
-  sw.onclick = () => { D().setPrefs({ oneClick: !D().prefs.oneClick }); refillIfOpen(); };
-  oc.append(lab, sw);
-  m.appendChild(oc);
-  const maxQty = (st && st.limits && st.limits.max_order_qty) || 10000;
-  m.append(numPref('Default quantity', 'qty', prefs.qty, 1, maxQty),
-    numPref('Stop loss (ticks)', 'slTicks', prefs.slTicks, 0, 10000, '0 = off'),
-    numPref('Take profit (ticks)', 'tpTicks', prefs.tpTicks, 0, 10000, '0 = off'));
-  restoreFocus(m, key);
-}
-
-function refillIfOpen() {
-  const m = document.querySelector('.menu-trade');
-  if (m) fillMenu(m);
+/* ---- the desk's own state, in the bottom status bar (it moved there with the deleted Trade button) ---- */
+function paintDeskStatus() {
+  const dot = document.getElementById('sbDeskDot'), text = document.getElementById('sbDeskText');
+  const link = document.getElementById('sbDeskLink');
+  if (!dot || !text || !link || !D()) return;
+  const cell = page && page.cur ? page.cur() : null;
+  const why = cell ? T.chartWhy({ replay: !!cell.replay, halted: !!(cell.cfg && cell.cfg.replayHalt),
+    accounts: tradeOf(cell).accounts, unverified: cell.cfg && cell.cfg.unverified, state: D().state, liveConfirmed,
+    mode: effectiveMode(cell) }) : '';
+  const s = T.deskStatusText({ state: D().state, down: D().down }, why);
+  dot.className = 'sb-dot ' + s.dot;
+  text.textContent = s.text;
+  link.hidden = !s.link;
+  if (s.link && page) link.href = page.deskUrl();
 }
 
 function mount(pg) {
   page = pg;
-  const btn = document.getElementById('tbTrade');
-  if (btn) btn.onclick = () => page.toggleMenu(btn, () => fillMenu(page.openMenu(btn, 'menu-trade')));
-  updateTradeButton();
+  paintDeskStatus();
   if (window.HBDeskClient) {
     window.HBDeskClient.on((why) => {
-      updateTradeButton();
-      const m = document.querySelector('.menu-trade');
-      if (!m) return;
-      if (why.has('state') || why.has('prefs')) { fillMenu(m); return; }
-      if (why.has('account') && !patchAccountRows(m)) fillMenu(m);
-      // 'quote' / 'bot' / 'fill' alone: nothing in this menu depends on them (review item 4)
+      // 'quote' / 'bot' / 'fill' alone never change the desk's own line; 'account' can (a balance is not in it,
+      // but a list change is how a desk that just came up first shows), so the two that matter repaint it.
+      if (why.has('state') || why.has('account')) paintDeskStatus();
     });
   }
   registerChartMenuTrading();
 }
 
 window.HBTradeUI = { mount, placeOrder, symbolAction, flattenAccount, cancelOrder, closeLine, moveLine, confirm, busy,
-  onBusyChange, onTradeChange, effectiveMode, editableIds, fillIds, tradeOf, setCellTrade, setCellAlgo, selectionChanged, botKill,
-  killBusy };
+  onBusyChange, onTradeChange, effectiveMode, editableIds, fillIds, tradeOf, setCellTrade, setCellAlgo, botKill,
+  killBusy, accountRows, toggleAccount, pickAlgo, armPending, paintDeskStatus, replayEnded, resumeLive,
+  replayDestroyed, gridRebuilt };
 })();

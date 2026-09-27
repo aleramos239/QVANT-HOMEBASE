@@ -36,6 +36,9 @@ const STATE = {
     ym930: { symbol: 'YM', kind: 'straddle', enabled: false, shadow: false, book: {}, timer: null, day_status: 'idle', accounts: {} } } },
 };
 const TICKED = { ticked: ['sim041', 'sim047'], oneClick: false, qty: 2, slTicks: 0, tpTicks: 0 };
+/* The same desk, plus the virtual PAPER account (Task 2 adds the backend; Task 1 only has to render it). */
+const PAPER_STATE = { ...STATE, accounts: [...STATE.accounts, acct('paper', 'PAPER', 'paper', { balance: 50000 })] };
+
 
 test('prefs: defaults, clamps, de-duplicated ticks, garbage in -> defaults', () => {
   const dflt = { ticked: [], oneClick: false, qty: 1, slTicks: 0, tpTicks: 0 };
@@ -81,14 +84,14 @@ test('brackets from ticks (0 = off) and the order body', () => {
   assert.ok(a.length >= 1 && a.length <= 64);
 });
 
-test('trade mode (per chart): the chart\'s switch, its accounts, then the desk\'s rules', () => {
-  const ON = { on: true, accounts: ['sim041', 'sim047'] };
-  assert.deepEqual(T.tradeMode({ state: STATE }, { on: false, accounts: ['sim041'] }),
-    { mode: 'off', reason: 'Trading is off on this chart', accounts: [] });
-  assert.deepEqual(T.tradeMode({ state: STATE }, undefined), { mode: 'off', reason: 'Trading is off on this chart', accounts: [] });
-  assert.deepEqual(T.tradeMode({ state: STATE }, { on: 'yes', accounts: ['sim041'] }).mode, 'off');   // only a real true turns it on
-  assert.deepEqual(T.tradeMode({ state: STATE }, { on: true, accounts: [] }),
-    { mode: 'none', reason: 'Pick accounts for this chart in the Trade menu', accounts: [] });
+test('trade mode (per chart): the ACCOUNTS are the switch (trade.on is retired), then the desk\'s rules', () => {
+  const ON = { accounts: ['sim041', 'sim047'] };
+  // no accounts at all: view only, and the reason points at the chart's own gear
+  assert.deepEqual(T.tradeMode({ state: STATE }, { accounts: [] }), { mode: 'off', reason: T.NO_ACCOUNTS, accounts: [] });
+  assert.deepEqual(T.tradeMode({ state: STATE }, undefined), { mode: 'off', reason: T.NO_ACCOUNTS, accounts: [] });
+  assert.equal(T.NO_ACCOUNTS, "No accounts on this chart — pick one in the chart's ⚙ → Trading");
+  // a stored `on: false` from an old layout is IGNORED: the accounts decide
+  assert.deepEqual(T.tradeMode({ state: STATE }, { on: false, accounts: ['sim041'] }), { mode: 'on', reason: '', accounts: ['sim041'] });
   assert.deepEqual(T.tradeMode({ state: null, down: 'desk unreachable' }, ON), { mode: 'down', reason: 'desk unreachable', accounts: [] });
   assert.equal(T.tradeMode({ state: { ...STATE, enabled: false } }, ON).mode, 'off');
   assert.equal(T.tradeMode({ state: { ...STATE, enabled: false } }, ON).reason, 'Chart trading is off on the desk');
@@ -96,8 +99,8 @@ test('trade mode (per chart): the chart\'s switch, its accounts, then the desk\'
   assert.deepEqual(T.tradeMode({ state: odd }, ON), { mode: 'none', reason: 'No ticked account can trade right now', accounts: [] });
   assert.deepEqual(T.tradeMode({ state: STATE }, ON), { mode: 'on', reason: '', accounts: ['sim041', 'sim047'] });
   // only THIS chart's accounts: another account the desk knows is never added
-  assert.deepEqual(T.tradeMode({ state: STATE }, { on: true, accounts: ['sim047'] }), { mode: 'on', reason: '', accounts: ['sim047'] });
-  assert.deepEqual(T.tradeMode({ state: STATE }, { on: true, accounts: ['ghost'] }).mode, 'none');
+  assert.deepEqual(T.tradeMode({ state: STATE }, { accounts: ['sim047'] }), { mode: 'on', reason: '', accounts: ['sim047'] });
+  assert.deepEqual(T.tradeMode({ state: STATE }, { accounts: ['ghost'] }).mode, 'none');   // unlisted: fails closed
   // the desk-level gate on its own (the Trade menu's status line)
   assert.equal(T.deskGate({ state: STATE }), null);
   assert.deepEqual(T.deskGate({ state: null, down: 'x' }), { mode: 'down', reason: 'x', accounts: [] });
@@ -109,8 +112,8 @@ test('armedMode: an unarmed LIVE account drops out of a chart\'s mode; none left
   assert.deepEqual(T.armedMode(m, STATE, new Set()), { mode: 'on', reason: '', accounts: ['sim041'] });
   assert.deepEqual(T.armedMode(m, STATE, new Set(['live099'])), m);
   assert.deepEqual(T.armedMode({ mode: 'on', reason: '', accounts: ['live099'] }, STATE, new Set()),
-    { mode: 'none', reason: 'Arm the LIVE account for this chart in the Trade menu', accounts: [] });
-  const off = { mode: 'off', reason: 'Trading is off on this chart', accounts: [] };
+    { mode: 'none', reason: "Arm the LIVE account for this chart in the chart's ⚙ → Trading", accounts: [] });
+  const off = { mode: 'off', reason: T.NO_ACCOUNTS, accounts: [] };
   assert.equal(T.armedMode(off, STATE, new Set()), off);
 });
 
@@ -118,36 +121,52 @@ test('replayGuard: a chart in replay can never trade (2026-09-27 bar-replay plan
   const on = { mode: 'on', reason: '', accounts: ['sim041'] };
   assert.deepEqual(T.replayGuard(on, true), { mode: 'none', reason: 'Replay — trading is off', accounts: [] });
   assert.equal(T.replayGuard(on, false), on);   // not in replay: unchanged (same object)
-  const off = { mode: 'off', reason: 'Trading is off on this chart', accounts: [] };
+  const off = { mode: 'off', reason: T.NO_ACCOUNTS, accounts: [] };
   assert.equal(T.replayGuard(off, true), off);  // already off for its own reason: replay need not relabel it
   assert.equal(T.replayGuard(off, false), off);
 });
 
-test('cellTrade: sanitised {on, accounts}; at most 20 ids of 1-64 characters, de-duplicated', () => {
-  assert.deepEqual(T.cellTrade(undefined), { on: false, accounts: [] });
-  assert.deepEqual(T.cellTrade(null), { on: false, accounts: [] });
-  assert.deepEqual(T.cellTrade('on'), { on: false, accounts: [] });
-  assert.deepEqual(T.cellTrade([1]), { on: false, accounts: [] });
+test('cellTrade: sanitised {accounts} -- `on` is retired and never carried through', () => {
+  assert.deepEqual(T.cellTrade(undefined), { accounts: [] });
+  assert.deepEqual(T.cellTrade(null), { accounts: [] });
+  assert.deepEqual(T.cellTrade('on'), { accounts: [] });
+  assert.deepEqual(T.cellTrade([1]), { accounts: [] });
   assert.deepEqual(T.cellTrade({ on: true, accounts: ['a', 'a', 5, '', null, 'x'.repeat(65), 'x'.repeat(64), 'b'] }),
-    { on: true, accounts: ['a', 'x'.repeat(64), 'b'] });
-  assert.deepEqual(T.cellTrade({ on: 1, accounts: 'sim041' }), { on: false, accounts: [] });
+    { accounts: ['a', 'x'.repeat(64), 'b'] });
+  assert.equal('on' in T.cellTrade({ on: true, accounts: ['a'] }), false);
+  assert.deepEqual(T.cellTrade({ on: 1, accounts: 'sim041' }), { accounts: [] });
   const many = Array.from({ length: 25 }, (_, i) => `a${i}`);
-  assert.deepEqual(T.cellTrade({ on: true, accounts: many }).accounts, many.slice(0, 20));
-  const src = { on: true, accounts: ['a'] }, out = T.cellTrade(src);
+  assert.deepEqual(T.cellTrade({ accounts: many }).accounts, many.slice(0, 20));
+  const src = { accounts: ['a'] }, out = T.cellTrade(src);
   out.accounts.push('b');
   assert.deepEqual(src.accounts, ['a']);   // a copy, never the caller's own array
 });
 
-test('loadedTrade: a layout / template load keeps the accounts and ALWAYS forces Trading off', () => {
-  assert.deepEqual(T.loadedTrade({ on: true, accounts: ['sim041', 'sim047'] }), { on: false, accounts: ['sim041', 'sim047'] });
-  assert.deepEqual(T.loadedTrade({ accounts: ['sim041'] }), { on: false, accounts: ['sim041'] });
-  assert.deepEqual(T.loadedTrade(undefined), { on: false, accounts: [] });
-  assert.deepEqual(T.loadedTrade({ on: true, accounts: [7, ''] }), { on: false, accounts: [] });
+test('loadedTrade: a layout / template load keeps DEMO and PAPER accounts and DROPS every LIVE one', () => {
+  // no desk state yet: nothing can be judged LIVE, and nothing can trade either (deskGate is 'down')
+  // ... so every id it keeps is UNVERIFIED until the desk answers (fix round 1, Critical 1)
+  assert.deepEqual(T.loadedTrade({ accounts: ['sim041', 'live099'] }),
+    { accounts: ['sim041', 'live099'], droppedLive: [], unverified: ['sim041', 'live099'] });
+  assert.deepEqual(T.loadedTrade(undefined), { accounts: [], droppedLive: [], unverified: [] });
+  assert.deepEqual(T.loadedTrade({ accounts: [7, ''] }), { accounts: [], droppedLive: [], unverified: [] });
+  // with the desk's list: every LIVE id is dropped and reported; DEMO, PAPER and unlisted ids stay
+  assert.deepEqual(T.loadedTrade({ on: true, accounts: ['sim041', 'live099', 'paper', 'ghost'] }, PAPER_STATE),
+    { accounts: ['sim041', 'paper', 'ghost'], droppedLive: ['live099'], unverified: ['ghost'] });   // unlisted stays unverified
+  assert.deepEqual(T.loadedTrade({ accounts: ['sim041'] }, PAPER_STATE), { accounts: ['sim041'], droppedLive: [], unverified: [] });
+  assert.equal('on' in T.loadedTrade({ on: true, accounts: [] }), false);
+});
+
+test('liveDroppedMessage: the one plain line a load shows when it dropped LIVE accounts', () => {
+  assert.equal(T.liveDroppedMessage([], PAPER_STATE), '');
+  assert.equal(T.liveDroppedMessage(['live099'], PAPER_STATE),
+    'LIVE account FAKELIVE099 was not restored — tick and arm it again');
+  assert.equal(T.liveDroppedMessage(['live099', 'other'], PAPER_STATE),
+    'LIVE accounts FAKELIVE099, other were not restored — tick and arm them again');
 });
 
 test('migrateTicked: the old global ticked list goes to the selected chart only, Trading off', () => {
-  assert.deepEqual(T.migrateTicked(undefined, ['sim041', 'sim047']), { on: false, accounts: ['sim041', 'sim047'] });
-  assert.deepEqual(T.migrateTicked({ root: 'NQ', spec: 'time:60' }, ['sim041']), { on: false, accounts: ['sim041'] });
+  assert.deepEqual(T.migrateTicked(undefined, ['sim041', 'sim047']), { accounts: ['sim041', 'sim047'] });
+  assert.deepEqual(T.migrateTicked({ root: 'NQ', spec: 'time:60' }, ['sim041']), { accounts: ['sim041'] });
   assert.equal(T.migrateTicked({ root: 'NQ', trade: { accounts: [] } }, ['sim041']), null);   // already has a config
   assert.equal(T.migrateTicked({ root: 'NQ', trade: null }, ['sim041']), null);                // the key is there: not an old cell
   assert.equal(T.migrateTicked(undefined, []), null);
@@ -179,20 +198,23 @@ test('layout bits: saves write trade.accounts and algo (never `on`); algo saniti
   assert.equal(T.algoForRoot('', 'NQ', null), null);             // not a valid algo at all
 });
 
-test('templateTrade: a stored template\'s trade / algo, loaded Trading-off; absent keys stay absent', () => {
+test('templateTrade: a stored template\'s trade / algo, LIVE accounts dropped; absent keys stay absent', () => {
   assert.deepEqual(T.templateTrade({ settings: {}, trade: { on: true, accounts: ['sim041'] }, algo: 'nq930' }),
-    { trade: { on: false, accounts: ['sim041'] }, algo: 'nq930' });
-  assert.deepEqual(T.templateTrade({ settings: {} }), {});
-  assert.deepEqual(T.templateTrade({ algo: null }), { algo: null });
-  assert.deepEqual(T.templateTrade(null), {});
+    { trade: { accounts: ['sim041'] }, algo: 'nq930', droppedLive: [], unverified: ['sim041'] });
+  assert.deepEqual(T.templateTrade({ trade: { accounts: ['sim041', 'live099'] } }, PAPER_STATE),
+    { trade: { accounts: ['sim041'] }, droppedLive: ['live099'], unverified: [] });
+  assert.deepEqual(T.templateTrade({ settings: {} }), { droppedLive: [], unverified: [] });
+  assert.deepEqual(T.templateTrade({ algo: null }), { algo: null, droppedLive: [], unverified: [] });
+  assert.deepEqual(T.templateTrade(null), { droppedLive: [], unverified: [] });
 });
 
 test('accountChips: the chart\'s accounts as "…047 DEMO" chips, dimmed when not in the live set', () => {
-  assert.deepEqual(T.accountChips(STATE, ['sim047', 'live099', 'ghost'], ['sim047']), [
-    { id: 'sim047', who: '…047', env: 'DEMO', live: false, active: true },
-    { id: 'live099', who: '…099', env: 'LIVE', live: true, active: false },
-    { id: 'ghost', who: '…ost', env: '', live: false, active: false }]);
-  assert.deepEqual(T.accountChips(null, ['sim041'], []), [{ id: 'sim041', who: '…041', env: '', live: false, active: false }]);
+  assert.deepEqual(T.accountChips(PAPER_STATE, ['sim047', 'live099', 'paper', 'ghost'], ['sim047']), [
+    { id: 'sim047', who: '…047', env: 'DEMO', live: false, paper: false, active: true },
+    { id: 'live099', who: '…099', env: 'LIVE', live: true, paper: false, active: false },
+    { id: 'paper', who: 'PAPER', env: 'PAPER', live: false, paper: true, active: false },   // never "…PER"
+    { id: 'ghost', who: '…ost', env: '', live: false, paper: false, active: false }]);
+  assert.deepEqual(T.accountChips(null, ['sim041'], []), [{ id: 'sim041', who: '…041', env: '', live: false, paper: false, active: false }]);
 });
 
 test('acctTick (fix round 1): a chart\'s LIVE account not armed this session shows ticked-but-not-armed', () => {
@@ -205,15 +227,20 @@ test('acctTick (fix round 1): a chart\'s LIVE account not armed this session sho
   assert.equal(T.acctTick(live, ['live099'], ['live099']), 'ticked');   // an array of armed ids works too
 });
 
-test('hiddenCellsOff (fix round 1): charts beyond the visible grid get Trading switched off, accounts kept', () => {
-  const cells = [{ trade: { on: true, accounts: ['a'] } }, { trade: { on: true, accounts: ['b'] } }, { root: 'NQ' },
-    { trade: { on: true, accounts: ['c'] }, algo: 'nq930' }];
-  T.hiddenCellsOff(cells, 1);
-  assert.deepEqual(cells[0].trade, { on: true, accounts: ['a'] });   // visible: untouched
-  assert.deepEqual(cells[1].trade, { on: false, accounts: ['b'] });
-  assert.deepEqual(cells[2].trade, { on: false, accounts: [] });
-  assert.deepEqual(cells[3], { trade: { on: false, accounts: ['c'] }, algo: 'nq930' });
-  assert.doesNotThrow(() => T.hiddenCellsOff(null, 0));
+test('hiddenCellsLoaded: a chart beyond the visible grid is re-read like a load -- LIVE dropped, the rest kept', () => {
+  const cells = [{ trade: { accounts: ['live099'] } }, { trade: { accounts: ['sim041', 'live099'] } }, { root: 'NQ' },
+    { trade: { accounts: ['paper'] }, algo: 'nq930' }];
+  assert.deepEqual(T.hiddenCellsLoaded(cells, 1, PAPER_STATE), ['live099']);
+  assert.deepEqual(cells[0].trade, { accounts: ['live099'] });   // visible: untouched
+  assert.deepEqual(cells[1].trade, { accounts: ['sim041'] });
+  assert.deepEqual(cells[2].trade, { accounts: [] });
+  assert.deepEqual(cells[3], { trade: { accounts: ['paper'] }, algo: 'nq930', unverified: [] });
+  // with no desk answer yet, a hidden chart's kept ids are marked unverified, like any load
+  const blind = [{ trade: { accounts: ['sim041', 'live099'] } }];
+  assert.deepEqual(T.hiddenCellsLoaded(blind, 0, null), []);
+  assert.deepEqual(blind[0], { trade: { accounts: ['sim041', 'live099'] }, unverified: ['sim041', 'live099'] });
+  assert.deepEqual(T.hiddenCellsLoaded([{ trade: { accounts: ['sim041'] } }], 0, PAPER_STATE), []);
+  assert.doesNotThrow(() => T.hiddenCellsLoaded(null, 0, PAPER_STATE));
 });
 
 test('legsWithin: a line may be moved / closed only when every leg\'s account is one of the chart\'s', () => {
@@ -669,7 +696,7 @@ test('Kill: the confirm text, and one toast per account -- "check it" is a warni
   assert.deepEqual(unk.rows, [{ id: 'acct123456', label: 'acct123456', env: '?' }]);
   // ... and blocks the Kill (fail closed), like an unarmed LIVE account
   assert.equal(T.killBlock(STATE, ['sim041'], new Set()), null);
-  assert.equal(T.killBlock(STATE, ['sim041', 'live099'], new Set()), 'Arm LIVE account FAKELIVE099 in the Trade menu first');
+  assert.equal(T.killBlock(STATE, ['sim041', 'live099'], new Set()), "Arm LIVE account FAKELIVE099 in the chart's ⚙ → Trading first");
   assert.equal(T.killBlock(STATE, ['sim041', 'live099'], new Set(['live099'])), null);
   assert.equal(T.killBlock(STATE, ['acct123456'], new Set(['acct123456'])), "Account acct123456 is not on the desk's list — nothing sent");
   assert.equal(T.killBlock(STATE, [], new Set()), 'This algo has no accounts on the desk — nothing sent');
@@ -771,7 +798,7 @@ test('armedTicked: an unarmed LIVE account is dropped; demo and armed-LIVE accou
   assert.deepEqual(T.armedTicked(null, ['sim041'], new Set()), ['sim041']);   // no state at all: nothing to check against
   // review M6: state EXISTS but doesn't recognize the id -- fails closed (dropped), not assumed armed
   assert.deepEqual(T.armedTicked(STATE, ['sim041', 'ghost-account'], new Set()), ['sim041']);
-  assert.equal(T.unarmedLiveMessage({ id: 'live099', label: 'FAKELIVE099' }), 'Arm LIVE account FAKELIVE099 in the Trade menu first');
+  assert.equal(T.unarmedLiveMessage({ id: 'live099', label: 'FAKELIVE099' }), "Arm LIVE account FAKELIVE099 in the chart's ⚙ → Trading first");
 });
 
 test('freshQuote: a quote older than 10 s (default) counts as no quote', () => {
@@ -1111,15 +1138,179 @@ test('wireSend (I1): {blur: true} drops focus after a pointer click, so no later
   assert.equal(plain.blurs, 0);            // the order panel keeps its focus (its own keyboard send is deliberate)
 });
 
-test('symbolChangeTrade (I2b): a new symbol switches Trading OFF and keeps the accounts; same symbol: nothing', () => {
-  const cfg = { root: 'NQ', trade: { on: true, accounts: ['sim041', 'sim047'] } };
+test('symbolChangeTrade (I2b): a new symbol CLEARS the chart\'s accounts; same symbol: nothing', () => {
+  const cfg = { root: 'NQ', trade: { accounts: ['sim041', 'sim047'] } };
   assert.deepEqual(T.symbolChangeTrade(cfg, { root: 'GC' }),
-    { trade: { on: false, accounts: ['sim041', 'sim047'] }, wasOn: true });
+    { trade: { accounts: [] }, cleared: ['sim041', 'sim047'] });
   assert.equal(T.symbolChangeTrade(cfg, { root: 'NQ' }), null);           // not a change
-  assert.equal(T.symbolChangeTrade(cfg, { spec: 'time:60' }), null);      // an interval change keeps Trading
-  assert.deepEqual(T.symbolChangeTrade({ root: 'NQ', trade: { on: false, accounts: ['sim041'] } }, { root: 'ES' }),
-    { trade: { on: false, accounts: ['sim041'] }, wasOn: false });        // already off: no toast needed
-  assert.deepEqual(T.symbolChangeTrade({ root: 'NQ' }, { root: 'ES' }), { trade: { on: false, accounts: [] }, wasOn: false });
+  assert.equal(T.symbolChangeTrade(cfg, { spec: 'time:60' }), null);      // an interval change keeps the accounts
+  assert.deepEqual(T.symbolChangeTrade({ root: 'NQ', trade: { accounts: [] } }, { root: 'ES' }),
+    { trade: { accounts: [] }, cleared: [] });                            // nothing to clear: no toast needed
+  assert.deepEqual(T.symbolChangeTrade({ root: 'NQ' }, { root: 'ES' }), { trade: { accounts: [] }, cleared: [] });
   assert.equal(T.symbolChangeTrade(null, { root: 'ES' }), null);
-  assert.match(T.SYMBOL_CHANGE_TRADE_OFF, /^Trading switched off — new instrument; turn it back on in the Trade menu$/);
+  assert.match(T.SYMBOL_CHANGE_ACCOUNTS_CLEARED, /^Accounts cleared — new instrument; pick them again in ⚙ → Trading$/);
+});
+
+
+/* ---- 2026-09-27 accounts-per-chart plan, Task 1: the Trading tab's ACCOUNTS + ALGO sections ---- */
+
+test('envChip: LIVE / DEMO / PAPER, and "?" for an account the desk does not list', () => {
+  assert.equal(T.envChip('live'), 'LIVE');
+  assert.equal(T.envChip('demo'), 'DEMO');
+  assert.equal(T.envChip('paper'), 'PAPER');
+  assert.equal(T.envChip(''), '?');
+  assert.equal(T.envChip(undefined), '?');
+  assert.equal(T.envChip('something-else'), '?');
+});
+
+test('algoBookings: which desk strategies on THIS root book which accounts', () => {
+  assert.deepEqual(T.algoBookings(STATE, 'NQ'), [
+    { key: 'nq930', name: 'NQ 9:30 Straddle', accounts: ['sim041'] },
+    { key: 'nq10am', name: 'NQ 10:00 Continuation', accounts: [] }]);
+  assert.deepEqual(T.algoBookings(STATE, 'YM'), [{ key: 'ym930', name: 'YM 9:30 Straddle', accounts: [] }]);
+  assert.deepEqual(T.algoBookings(STATE, 'GC'), []);
+  assert.deepEqual(T.algoBookings(null, 'NQ'), []);
+});
+
+test('algoForAccount / accountsForAlgo: the two-way binding between the ACCOUNTS list and the ALGO select', () => {
+  assert.equal(T.algoForAccount(STATE, 'NQ', 'sim041'), 'nq930');   // ticking it picks its algo
+  assert.equal(T.algoForAccount(STATE, 'NQ', 'sim047'), null);      // booked by nothing on this root
+  assert.equal(T.algoForAccount(STATE, 'YM', 'sim041'), null);      // its algo trades NQ, this chart is YM
+  assert.equal(T.algoForAccount(null, 'NQ', 'sim041'), null);
+  assert.deepEqual(T.accountsForAlgo(STATE, 'NQ', 'nq930'), ['sim041']);   // picking it ticks its accounts
+  assert.deepEqual(T.accountsForAlgo(STATE, 'NQ', 'nq10am'), []);
+  assert.deepEqual(T.accountsForAlgo(STATE, 'YM', 'nq930'), []);           // not on this chart's root
+  assert.deepEqual(T.accountsForAlgo(STATE, 'NQ', 'paper:gc_nfpcpi'), []); // a paper algo books no desk account
+  assert.deepEqual(T.accountsForAlgo(STATE, 'NQ', null), []);
+});
+
+test('algoTickAccounts: picking an algo never ticks a LIVE account behind the two-step arm', () => {
+  const st = { ...STATE, bot: { ...STATE.bot, strategies: { ...STATE.bot.strategies,
+    nq930: { ...STATE.bot.strategies.nq930, book: { sim041: 1, live099: 1, ghost: 1 } } } } };
+  assert.deepEqual(T.algoTickAccounts(st, 'NQ', 'nq930', new Set()), ['sim041']);                    // LIVE + unlisted left out
+  assert.deepEqual(T.algoTickAccounts(st, 'NQ', 'nq930', new Set(['live099'])), ['sim041', 'live099']);   // armed this session: fine
+  assert.deepEqual(T.algoTickAccounts(st, 'NQ', null, new Set()), []);
+  // fix round 1, Minor 5: a not-tradable account is never ticked by a pick, the same as toggleAccount
+  const odd = { ...st, accounts: st.accounts.map((a) => (a.id === 'sim041' ? { ...a, tradable: false } : a)) };
+  assert.deepEqual(T.algoTickAccounts(odd, 'NQ', 'nq930', new Set(['live099'])), ['live099']);
+});
+
+test('accountPickRows: one row per account -- chip, balance, algo note, and an unlisted one failing closed', () => {
+  const rows = T.accountPickRows(PAPER_STATE, ['sim041', 'live099', 'ghost'], new Set(), 'NQ');
+  assert.deepEqual(rows.map((r) => r.id), ['sim041', 'sim047', 'live099', 'paper', 'ghost']);
+  assert.deepEqual(rows[0], { id: 'sim041', label: 'SIM0000041', env: 'demo', chip: 'DEMO', live: false, paper: false,
+    balance: '$50,000', connected: true, listed: true, tick: 'ticked', disabled: false, error: '',
+    algo: 'nq930', note: 'in NQ 9:30 Straddle' });
+  assert.deepEqual(rows[1].tick, 'off');
+  assert.equal(rows[1].note, '');                       // booked by no algo on this root
+  assert.deepEqual(rows[2].chip, 'LIVE');
+  assert.equal(rows[2].live, true);
+  assert.equal(rows[2].tick, 'unarmed');                // on the chart's list, not armed this session
+  assert.equal(rows[3].chip, 'PAPER');                  // an env: 'paper' account renders an amber PAPER chip
+  assert.equal(rows[3].paper, true);
+  // an account the desk does not list: '?', never tickable (fail closed), but removable from the chart
+  assert.deepEqual(rows[4], { id: 'ghost', label: 'ghost', env: '', chip: '?', live: false, paper: false,
+    balance: '—', connected: false, listed: false, tick: 'ticked', disabled: false,
+    error: "not on the desk's list — cannot trade", algo: null, note: '' });
+  // a not-tradable account that is NOT on the chart's list cannot be ticked at all
+  const odd = { ...PAPER_STATE, accounts: PAPER_STATE.accounts.map((a) => ({ ...a, tradable: false, error: 'no md' })) };
+  const rows2 = T.accountPickRows(odd, [], new Set(), 'NQ');
+  assert.equal(rows2[0].disabled, true);
+  assert.equal(rows2[0].error, 'no md');
+  // ... but one already on the list can always be removed
+  assert.equal(T.accountPickRows(odd, ['sim041'], new Set(), 'NQ')[0].disabled, false);
+  assert.deepEqual(T.accountPickRows(null, ['sim041'], new Set(), 'NQ').map((r) => r.chip), ['?']);
+});
+
+test('deskStatusText: the desk\'s own state, for the bottom status bar', () => {
+  assert.deepEqual(T.deskStatusText({ state: STATE }),
+    { dot: 'ok', text: 'Desk: connected · chart trading on · max 10/order, 20/position', link: false });
+  assert.deepEqual(T.deskStatusText({ state: null, down: 'connecting to the desk' }),
+    { dot: 'bad', text: 'Desk unreachable — connecting to the desk', link: false });
+  assert.deepEqual(T.deskStatusText({ state: { ...STATE, enabled: false } }),
+    { dot: 'warn', text: 'Chart trading is off on the desk', link: true });
+  // fix round 1, Minor 6: the SELECTED chart's own reason is appended while the desk itself is fine
+  assert.equal(T.deskStatusText({ state: STATE }, 'arm LIVE …099').text,
+    'Desk: connected · chart trading on · max 10/order, 20/position · this chart: arm LIVE …099');
+  assert.equal(T.deskStatusText({ state: null, down: 'x' }, 'replay').text, 'Desk unreachable — x');   // the desk's reason wins
+  assert.equal(T.deskStatusText({ state: { ...STATE, limits: {} } }).text,
+    'Desk: connected · chart trading on · max —/order, —/position');
+});
+
+
+/* ---- fix round 1 (task-1-review.md) ---- */
+
+test('Critical 1: verifyLoaded drops only UNVERIFIED LIVE ids -- an id armed and ticked this session is never touched', () => {
+  // a load before the desk answered: every kept id unverified
+  const l = T.loadedTrade({ accounts: ['sim041', 'live099', 'ghost'] }, null);
+  assert.deepEqual(l.unverified, ['sim041', 'live099', 'ghost']);
+  // the desk answers: the LIVE one drops, DEMO is verified, an unlisted one stays unverified (fail closed)
+  assert.deepEqual(T.verifyLoaded(l.accounts, l.unverified, STATE),
+    { accounts: ['sim041', 'ghost'], droppedLive: ['live099'], unverified: ['ghost'] });
+  // a user-armed tick carries no mark: nothing drops, however often it runs
+  assert.deepEqual(T.verifyLoaded(['live099'], [], STATE), { accounts: ['live099'], droppedLive: [], unverified: [] });
+  // no desk yet: unchanged; a mark on an id no longer on the chart is pruned
+  assert.deepEqual(T.verifyLoaded(['live099'], ['live099', 'gone'], null), { accounts: ['live099'], droppedLive: [], unverified: ['live099'] });
+});
+
+test('Critical 1: verifyCells -- an armed LIVE tick survives a stream of account events; a restored one drops ONCE', () => {
+  const armed = { trade: { accounts: ['live099'] } };                                     // ticked + armed in the Trading tab
+  const restored = { trade: { accounts: ['sim047', 'live099'] }, unverified: ['sim047', 'live099'] };   // a load, desk down
+  const cfgs = [armed, restored];
+  const first = T.verifyCells(cfgs, STATE);
+  assert.deepEqual(first, { dropped: ['live099'], changed: [1] });
+  assert.deepEqual(armed.trade.accounts, ['live099']);
+  assert.deepEqual(restored, { trade: { accounts: ['sim047'] }, unverified: [] });
+  for (let i = 0; i < 50; i++) assert.deepEqual(T.verifyCells(cfgs, STATE), { dropped: [], changed: [] });   // the toast fires once
+  assert.deepEqual(armed.trade.accounts, ['live099']);
+  assert.deepEqual(T.verifyCells(cfgs, null), { dropped: [], changed: [] });                // no desk: nothing decided
+  assert.doesNotThrow(() => T.verifyCells(null, STATE));
+});
+
+test('Critical 1: nextUnverified keeps the marks a subset of the chart\'s accounts; a user tick clears its own mark', () => {
+  assert.deepEqual(T.nextUnverified(['a', 'b'], ['a', 'b', 'c']), ['a', 'b']);
+  assert.deepEqual(T.nextUnverified(['a', 'b'], ['a']), ['a']);                             // b left the chart
+  assert.deepEqual(T.nextUnverified(['a'], ['a', 'c'], { add: ['c'] }), ['a', 'c']);         // a restore re-added c
+  assert.deepEqual(T.nextUnverified(['a', 'c'], ['a', 'c'], { remove: ['c'] }), ['a']);     // the user ticked c
+  assert.deepEqual(T.nextUnverified(undefined, ['a']), []);
+});
+
+test('Minor 4: unverifiedMode -- the chart\'s mode itself refuses an unverified id (no one-frame window)', () => {
+  const on = { mode: 'on', reason: '', accounts: ['sim041', 'live099'] };
+  assert.deepEqual(T.unverifiedMode(on, ['live099']), { mode: 'on', reason: '', accounts: ['sim041'] });
+  assert.equal(T.unverifiedMode(on, []), on);
+  assert.deepEqual(T.unverifiedMode({ mode: 'on', reason: '', accounts: ['live099'] }, ['live099']),
+    { mode: 'none', reason: T.CHECKING_ACCOUNTS, accounts: [] });
+  const off = { mode: 'off', reason: T.NO_ACCOUNTS, accounts: [] };
+  assert.equal(T.unverifiedMode(off, ['x']), off);
+});
+
+test('Important 2: replayHaltGuard -- after a replay ended involuntarily the chart refuses until acknowledged', () => {
+  const on = { mode: 'on', reason: '', accounts: ['sim041'] };
+  assert.equal(T.REPLAY_ENDED, 'Replay ended — confirm to trade live again');
+  assert.deepEqual(T.replayHaltGuard(on, true), { mode: 'none', reason: T.REPLAY_ENDED, accounts: [] });
+  assert.equal(T.replayHaltGuard(on, false), on);
+  const off = { mode: 'off', reason: T.NO_ACCOUNTS, accounts: [] };
+  assert.equal(T.replayHaltGuard(off, true), off);
+});
+
+test('Important 2: replayEndPatch / sendsWithoutConfirm -- ANY replay end forces the next real order through the confirm', () => {
+  assert.deepEqual(T.replayEndPatch(true), { replayHalt: true, replayConfirm: true });     // reconnect / stopped / error / destroyed
+  assert.deepEqual(T.replayEndPatch(false), { replayHalt: false, replayConfirm: true });   // the user's own exit
+  assert.equal(T.sendsWithoutConfirm({ oneClick: true }, {}), true);
+  assert.equal(T.sendsWithoutConfirm({ oneClick: true }, { replayConfirm: true }), false);
+  assert.equal(T.sendsWithoutConfirm({ oneClick: false }, {}), false);
+  assert.equal(T.sendsWithoutConfirm({ oneClick: true }, null), true);
+});
+
+test('Minor 6: chartWhy -- the selected chart\'s short reason for the status bar', () => {
+  const base = { state: STATE, accounts: ['sim041'], unverified: [], liveConfirmed: new Set(), mode: { mode: 'on' } };
+  assert.equal(T.chartWhy(base), '');
+  assert.equal(T.chartWhy({ ...base, replay: true }), 'replay');
+  assert.equal(T.chartWhy({ ...base, halted: true }), 'replay ended — resume to trade');
+  assert.equal(T.chartWhy({ ...base, accounts: [] }), 'no accounts');
+  assert.equal(T.chartWhy({ ...base, accounts: ['live099'], mode: { mode: 'none' } }), 'arm LIVE …099');
+  assert.equal(T.chartWhy({ ...base, unverified: ['sim041'], mode: { mode: 'none' } }), 'checking accounts');
+  assert.equal(T.chartWhy({ ...base, mode: { mode: 'none', reason: 'No ticked account can trade right now' } }),
+    'no ticked account can trade right now');
 });

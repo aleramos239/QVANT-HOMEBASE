@@ -187,3 +187,156 @@ test('Ok with no changes at all (settings, indicators or spec) reports changed=f
   ok.onclick();
   assert.deepEqual(commits, [false]);
 });
+
+
+/* ---- 2026-09-27 accounts-per-chart plan, Task 1: the Trading tab ----
+   The dialog paints the ACCOUNTS list and reports clicks; every rule lives in HBTradeUI (a double here).
+   These drive it exactly as a click would, so the wiring -- rows, the LIVE two-step arm, "unlisted cannot be
+   ticked", and the algo <-> accounts binding -- is covered end to end, not just in the pure helpers. */
+const T = require('../../homebase/static/charts/trade.js');
+
+const TR_ACCT = (id, label, env, extra = {}) => ({ id, label, env, connected: true, tradable: true, error: null,
+  balance: 50000, realized_pnl: 0, positions: [], orders: [], fills: [], strategies: [], ...extra });
+const TR_STATE = {
+  enabled: true, limits: { max_order_qty: 10, max_position_qty: 20 },
+  accounts: [TR_ACCT('sim041', 'SIM0000041', 'demo'), TR_ACCT('live099', 'FAKELIVE099', 'live'),
+    TR_ACCT('paper', 'PAPER', 'paper')],
+  bot: { date: '2026-09-27', strategies: {
+    nq930: { symbol: 'NQ', kind: 'straddle', enabled: true, shadow: false, book: { sim041: 1 },
+      timer: null, day_status: 'idle', accounts: {} } } },
+};
+
+/* A stand-in for HBTradeUI: the same rules (HBTrade.accountPickRows / acctTick / algoForAccount), the same
+   two-step LIVE arm, over a plain cell config. */
+function makeTradeHost(cell, state = TR_STATE) {
+  const armed = new Set();
+  let arming = null;
+  const subs = new Set();
+  const notify = () => { for (const fn of [...subs]) fn(); };
+  const accountsOf = () => T.cellTrade(cell.cfg.trade).accounts;
+  return {
+    accountRows: () => T.accountPickRows(state, accountsOf(), armed, cell.cfg.root),
+    armPending: () => arming,
+    onTradeChange: (fn) => { subs.add(fn); return () => subs.delete(fn); },
+    tradeWhy: () => { const m = T.tradeMode({ state }, cell.cfg.trade); return m.mode === 'on' ? '' : m.reason; },
+    prefs: () => ({ oneClick: false, qty: 1, slTicks: 0, tpTicks: 0 }),
+    setPrefs: () => {},
+    algoChoices: () => T.algoChoices(state, cell.cfg.root, cell.cfg.algo),
+    setAlgo: (c, v) => {
+      c.cfg.algo = T.cellAlgo(v);
+      if (!c.cfg.algo) return notify();
+      const add = T.algoTickAccounts(state, c.cfg.root, c.cfg.algo, armed);
+      c.cfg.trade = { accounts: [...new Set([...accountsOf(), ...add])] };
+      notify();
+    },
+    toggleAccount: (c, id) => {
+      const a = state.accounts.find((x) => x.id === id) || null, have = accountsOf();
+      if (have.includes(id)) {
+        if (arming === id) arming = null;
+        if (a && a.env === 'live') armed.delete(id);
+        c.cfg.trade = { accounts: have.filter((x) => x !== id) };
+        return notify();
+      }
+      if (!a || !a.tradable) return notify();
+      if (a.env === 'live' && !armed.has(id)) {
+        if (arming !== id) { arming = id; return notify(); }
+        armed.add(id); arming = null;
+      }
+      c.cfg.trade = { accounts: [...have, id] };
+      const key = T.algoForAccount(state, c.cfg.root, id);
+      if (key) c.cfg.algo = key;
+      notify();
+    },
+  };
+}
+
+/* Opens the dialog straight onto the Trading tab and hands back its ACCOUNTS rows. */
+function openTrading(cell, extra = {}) {
+  const { host } = makeHost(cell, []);
+  const box = new FakeEl('div');
+  Object.assign(host, { tab: 'trading' }, makeTradeHost(cell), extra);
+  const dlg = SD.mount(box, host);
+  const rows = () => {
+    const list = box.querySelector('.set-acct-list');
+    return list ? list.children : [];
+  };
+  const click = (i) => { rows()[i].children[0].onchange(); };
+  return { box, host, dlg, rows, click };
+}
+
+test('Trading tab: one row per account, the env chips, the algo note, and the all-charts defaults caption', () => {
+  const cell = makeCell('time:60');
+  cell.cfg.root = 'NQ';
+  cell.cfg.trade = { accounts: [] };
+  cell.cfg.algo = null;
+  const { box, rows } = openTrading(cell);
+  assert.equal(rows().length, 3);
+  assert.equal(findText(rows()[0], 'SIM0000041') != null, true);
+  assert.equal(findText(rows()[0], 'in NQ 9:30 Straddle') != null, true);   // booked by an algo on this instrument
+  assert.equal(findText(rows()[1], 'LIVE') != null, true);
+  const paperChip = rows()[2].children[2];   // checkbox, label, env chip, balance, dot
+  assert.equal(paperChip.textContent, 'PAPER');
+  assert.equal(paperChip.className, 'env paper', 'the PAPER chip carries its own (amber) class');
+  assert.equal(findText(box, 'These apply to every chart.') != null, true);
+  assert.equal(findText(box, "No accounts on this chart — pick one in the chart's ⚙ → Trading") != null, true);
+});
+
+test('Trading tab: ticking a DEMO account picks up its algo, and the chart becomes trade-ready', () => {
+  const cell = makeCell('time:60');
+  cell.cfg.root = 'NQ';
+  cell.cfg.trade = { accounts: [] };
+  cell.cfg.algo = null;
+  const { box, click, rows } = openTrading(cell);
+  click(0);
+  assert.deepEqual(cell.cfg.trade.accounts, ['sim041']);
+  assert.equal(cell.cfg.algo, 'nq930', 'ticking an account that belongs to an algo sets the select to it');
+  assert.equal(box.querySelector('.set-algo').value, 'nq930');
+  assert.equal(rows()[0].children[0].checked, true);
+  click(0);                                       // and un-ticking it leaves the algo selected
+  assert.deepEqual(cell.cfg.trade.accounts, []);
+  assert.equal(cell.cfg.algo, 'nq930');
+});
+
+test('Trading tab: picking an algo ticks its booked accounts; clearing it to None leaves them alone', () => {
+  const cell = makeCell('time:60');
+  cell.cfg.root = 'NQ';
+  cell.cfg.trade = { accounts: [] };
+  cell.cfg.algo = null;
+  const { box } = openTrading(cell);
+  const sel = box.querySelector('.set-algo');
+  sel.value = 'nq930';
+  sel.onchange();
+  assert.deepEqual(cell.cfg.trade.accounts, ['sim041']);
+  sel.value = '';
+  sel.onchange();
+  assert.equal(cell.cfg.algo, null);
+  assert.deepEqual(cell.cfg.trade.accounts, ['sim041'], 'clearing the algo never unticks an account');
+});
+
+test('Trading tab: a LIVE account needs the second click, and an unlisted one can never be ticked', () => {
+  const cell = makeCell('time:60');
+  cell.cfg.root = 'NQ';
+  cell.cfg.trade = { accounts: [] };
+  cell.cfg.algo = null;
+  const { box, click, rows } = openTrading(cell);
+  click(1);                                       // first click on LIVE: arms, does NOT tick
+  assert.deepEqual(cell.cfg.trade.accounts, []);
+  assert.equal(findText(box, 'Tick LIVE — real orders. Click again') != null, true);
+  click(1);                                       // second click: armed, ticked
+  assert.deepEqual(cell.cfg.trade.accounts, ['live099']);
+  assert.equal(rows()[1].children[0].checked, true);
+
+  // an account the desk does not list: '?', disabled when it is not on the chart, and never tickable
+  const ghostState = { ...TR_STATE, accounts: [] };
+  const c2 = makeCell('time:60');
+  c2.cfg.root = 'NQ';
+  c2.cfg.trade = { accounts: [] };
+  c2.cfg.algo = null;
+  const t2 = makeTradeHost(c2, ghostState);
+  const two = openTrading(c2, { accountRows: () => T.accountPickRows(ghostState, ['ghost'], new Set(), 'NQ'),
+    toggleAccount: t2.toggleAccount });
+  assert.equal(two.rows().length, 1);
+  assert.equal(findText(two.rows()[0], '?') != null, true);
+  two.click(0);                                   // the desk does not know it: nothing is added
+  assert.deepEqual(c2.cfg.trade.accounts, []);
+});

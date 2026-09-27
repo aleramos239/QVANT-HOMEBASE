@@ -15,16 +15,16 @@
    `cell.replay` (cell.js) is the one flag every REAL trading path reads: HBTradeUI.effectiveMode runs it
    through T.replayGuard, which hides the real Buy/Sell block, drops the chart-menu's real trading items and
    makes every real line view-only (no drag, no ×) for that cell. doStart() sets `cell.replay` and
-   force-refreshes the chart's overlays BEFORE the server even answers, so there is no gap; onState() forces
-   the cell's own trade.on off the first time a replay actually starts, and it is never turned back on by this
-   module. The PRACTICE path (Task 2: PracticeSim, its block, lines and menu items below) is a wholly separate
+   force-refreshes the chart's overlays BEFORE the server even answers, so there is no gap. It does NOT touch
+   the chart's accounts (2026-09-27 accounts-per-chart plan: the accounts ARE the switch, and a replay must
+   not throw them away) -- replayGuard alone is what refuses a real order here. The PRACTICE path (Task 2: PracticeSim, its block, lines and menu items below) is a wholly separate
    simulation that never touches the desk at all -- see replay.js's own isolation note and
    tests/js/replay.test.mjs's isolation test, which reads this file's source text for exactly that. */
 (() => {
 'use strict';
 const R = window.HBReplay;
 
-const sessions = new WeakMap();   // Cell -> {pending, forcedTrade, ov, date, cursorMs, speed, playing, done}
+const sessions = new WeakMap();   // Cell -> {pending, ov, date, cursorMs, speed, playing, done}
 let page = null;
 let armed = null;      // {cell, cleanup()}: "pick a start" mode is on, or null
 let selArmed = null;   // {cell, cleanup()}: Select bar (Task 2) is armed on an already-replaying chart, or null
@@ -76,11 +76,10 @@ function doStart(cell, date, time) {
   // this cell's Overlay with it -- before any replay_state ever arrives, and its first render reads these.
   // sim/feed/lastPrice: Task 2, filled in once by onState() (cell.tick/cell.pv are not known until the
   // history for THIS date has loaded); qty: the practice block's own quantity field, 1 by default.
-  sessions.set(cell, { pending: true, forcedTrade: false, ov: null, sim: null, feed: null, lastPrice: null,
+  sessions.set(cell, { pending: true, ov: null, sim: null, feed: null, lastPrice: null,
     qty: 1, ...cell.replay });
-  // M3 (final review): Trading off NOW, not at the first replay_state -- an exit, a reconnect or a `stopped`
-  // before that state would otherwise leave it on over the replay's historical bars (onState still re-checks)
-  if (cell.cfg.trade && cell.cfg.trade.on) window.HBTradeUI.setCellTrade(cell, { on: false, accounts: cell.cfg.trade.accounts });
+  // M3 (final review): cell.replay is set ABOVE, before the send, so T.replayGuard refuses every real order
+  // from this instant -- an exit, a reconnect or a `stopped` before the first replay_state cannot open a gap.
   refreshOverlays(cell);
   cell.host.send(R.startOp(cell.id, date, time));
 }
@@ -100,11 +99,22 @@ function savePracticeSession(cell, s) {
   } catch (_) { /* storage off: the session just is not logged */ }
 }
 
-function clearSession(cell) {
+/* Every end of a session comes through here, saying whether the USER chose it (fix round 1, Important 2): an end
+   they did not choose latches the chart until "Resume live trading", and any end makes the next real order
+   confirm (HBTradeUI.replayEnded) -- the practice block sat exactly where the real Buy/Sell block reappears. */
+/* The user's own Exit (the replay bar's ×): the `stopped` that answers it is theirs, so it ends the session with
+   no latch -- only the confirm on the next real order. */
+function exitReplay(cell) {
+  const s = sessions.get(cell);
+  if (s) s.userExit = true;
+  cell.host.send(R.stopOp(cell.id));
+}
+function clearSession(cell, involuntary) {
   if (selArmed && selArmed.cell === cell) disarmSelectBar();
   savePracticeSession(cell, sessions.get(cell));
   sessions.delete(cell);
   cell.replay = null;
+  window.HBTradeUI.replayEnded(cell, involuntary);
   refreshOverlays(cell);
 }
 
@@ -112,24 +122,22 @@ function clearSession(cell) {
    replay sessions existed on the OLD connection are gone with it (the server has no record of this one at
    all). Drop our own bookkeeping for them too -- purely local, nothing to send -- so a chart that was mid
    "pending" (replay_start sent, no answer before the drop) does not stay locked out of trading forever. */
-function onReconnect(cells) { for (const c of cells) if (sessions.has(c)) clearSession(c); }
+function onReconnect(cells) { for (const c of cells) if (sessions.has(c)) clearSession(c, true); }
 
 /* replay_state (parsed by replay.js): `stopped` ends the session locally too (the server's own `reset` that
-   follows makes app.js resubscribe live). Otherwise: update the session, force trade.on off the first time
-   (never back on), and let the live Overlay (if the chart still has one built) redraw. */
+   follows makes app.js resubscribe live). Otherwise: update the session and let the live Overlay (if the
+   chart still has one built) redraw. The chart's accounts are left alone: cell.replay is the refusal. */
 function onState(cell, msg) {
   const parsed = R.parseState(msg);
   if (!parsed || !cell) return;
-  if (parsed.stopped) { clearSession(cell); return; }
+  // `stopped` is the user's own Exit only when this page sent it (the × marks the session); otherwise the
+  // server ended it (end of data, a crashed stream, its own reset): involuntary
+  if (parsed.stopped) { const was = sessions.get(cell); clearSession(cell, !(was && was.userExit)); return; }
   let s = sessions.get(cell);
-  if (!s) { s = { pending: false, forcedTrade: false, ov: null, sim: null, feed: null, lastPrice: null, qty: 1 }; sessions.set(cell, s); }
+  if (!s) { s = { pending: false, ov: null, sim: null, feed: null, lastPrice: null, qty: 1 }; sessions.set(cell, s); }
   s.pending = false;
   s.date = parsed.date; s.cursorMs = parsed.cursorMs; s.speed = parsed.speed; s.playing = parsed.playing; s.done = parsed.done;
   cell.replay = { date: s.date, cursorMs: s.cursorMs, speed: s.speed, playing: s.playing, done: s.done };
-  if (!s.forcedTrade) {
-    s.forcedTrade = true;
-    if (cell.cfg.trade && cell.cfg.trade.on) window.HBTradeUI.setCellTrade(cell, { on: false, accounts: cell.cfg.trade.accounts });
-  }
   // Task 2: the practice simulator, created once THIS date's history has loaded (cell.tick/cell.pv are only
   // known from here on) -- cell.pv is the single source of truth (homebase/contracts.py, via the server's
   // history payload); R.pointValue() only covers the gap on the off chance it is not set yet.
@@ -152,7 +160,11 @@ function onState(cell, msg) {
    its own replay_state{stopped:true}. */
 function onError(cell, msg) {
   if (!cell || !msg) return;
-  if (msg.op === 'replay_start') { sessions.delete(cell); cell.replay = null; refreshOverlays(cell); }
+  if (msg.op === 'replay_start') {
+    sessions.delete(cell); cell.replay = null;
+    window.HBTradeUI.replayEnded(cell, true);   // an error end is never the user's choice
+    refreshOverlays(cell);
+  }
   if (typeof msg.error === 'string') cell.note(msg.error);
 }
 
@@ -228,6 +240,9 @@ function cellDestroyed(cell) {
   try { cell.host.send(R.stopOp(cell.id)); } catch (_) { /* the connection is already gone */ }
   sessions.delete(cell);
   cell.replay = null;
+  // held by grid position (HBTradeUI.replayDestroyed): a layout load rebuilds from new configs, so a flag on this
+  // cell's config alone would be lost; buildGrid re-applies it to the chart that takes this position
+  window.HBTradeUI.replayDestroyed(cell);
 }
 
 /* A symbol or interval change on a replaying chart (cell.js's update() guard): the server auto-stops a
@@ -243,7 +258,7 @@ function cellDestroyed(cell) {
 function guardSymbolChange(cell, patch) {
   if (!page) return;
   if (page.dialogOpen && page.dialogOpen()) {
-    clearSession(cell);
+    clearSession(cell, false);   // the user changed the symbol/interval themselves (and that clears the accounts)
     cell.update(patch);
     if (page.sbNote) page.sbNote('Replay ended — symbol/interval changed');
     return;
@@ -256,7 +271,7 @@ function guardSymbolChange(cell, patch) {
   yes.onclick = () => {
     page.setDialogClose(null);
     page.closeDialog();
-    clearSession(cell);
+    clearSession(cell, false);
     cell.update(patch);
   };
   // M1 (final review): the Enter that picked the new symbol / interval opened this dialog; its auto-repeat must
@@ -532,7 +547,7 @@ class Overlay {
 
     const time = mk('span', 'rb-time');
     const exitBtn = iconBtn('x', 'Exit replay');
-    exitBtn.onclick = () => this.cell.host.send(R.stopOp(this.cell.id));
+    exitBtn.onclick = () => exitReplay(this.cell);
 
     bar.append(jumpBtn, jumpRow, selectBtn, playBtn, stepBtn, speedBtn, time, exitBtn);
     this.cell.el.appendChild(bar);
@@ -806,5 +821,5 @@ function mount(pg) {
 }
 
 window.HBReplayUI = { mount, overlay: (cell, pg) => new Overlay(cell, pg), onState, onError, onBarUpdate,
-  cellDestroyed, onReconnect, togglePlay, step, disarmPick, guardSymbolChange };
+  cellDestroyed, onReconnect, togglePlay, step, disarmPick, guardSymbolChange, exitReplay };
 })();
