@@ -5,7 +5,8 @@ Spec: docs/superpowers/specs/2026-09-26-desk-on-chart-trading-design.md
 The chart page asks through the chart service; only the desk talks to the
 broker. ChartDesk keeps a live view per account (from the adapters' pushed
 caches: no broker call), a view of the bots, and publishes changes to the
-SSE stream (desk_api). Every order, modify, cancel, flatten and reverse
+SSE stream (desk_api). Every order, modify, cancel, exits (an SL/TP added to
+an open position, as one broker OCO: ChartDesk._exits_one), flatten and reverse
 starts from a user's click, passes the guards below (authoritative — the
 page's checks are a convenience) and is journaled with its result as a
 manual_* event. Those events never carry a "strategy" key, so the bots'
@@ -84,7 +85,7 @@ from typing import Callable, Optional
 from . import bothistory
 from . import config as config_mod
 from . import symbols
-from .broker.base import OrderRequest, OrderResult
+from .broker.base import BrokerAdapter, OrderRequest, OrderResult
 from .config import (HARD_MAX_ORDER_QTY, HARD_MAX_POSITION_QTY, AppCfg,
                      ChartTradingCfg, assignments)
 from .contracts import point_value, root_of, round_to_tick, spec_for, tick_size
@@ -259,6 +260,69 @@ def parse_cancel(body) -> tuple:
 def parse_symbol_action(body) -> tuple:
     body = _obj(body)
     return _client_id(body), _accounts(body), _root(body)
+
+
+@dataclass(frozen=True)
+class ExitsIntent:
+    client_id: str
+    accounts: tuple
+    root: str
+    sl_price: Optional[float]
+    tp_price: Optional[float]
+
+
+def parse_exits(body) -> ExitsIntent:
+    """{client_id, accounts: [...] | account, root, sl_price?, tp_price?}: at
+    least one price. `accounts` or `account`, never both."""
+    body = _obj(body)
+    if "accounts" in body and "account" in body:
+        raise ValueError("send `accounts` or `account`, not both")
+    accounts = _accounts(body) if "account" not in body else (_account(body),)
+    sl = _price(body.get("sl_price"), "sl_price")
+    tp = _price(body.get("tp_price"), "tp_price")
+    if sl is None and tp is None:
+        raise ValueError("an sl_price or a tp_price is required")
+    return ExitsIntent(_client_id(body), accounts, _root(body), sl, tp)
+
+
+EXIT_TIF = "GTC"            # the OSO brackets' legs are GTC (tradovate_ws.place_oso): exits match them
+EXIT_TEXT = "homebase:chart-exit"
+EXITS_MISMATCH = "exits don't match the position — manage them in the order panel"
+
+
+def exit_levels(net: int, exits: list, sl_new, tp_new, last: Optional[float]) -> tuple:
+    """The pure half of `exits`. `exits`: the working orders in the contract
+    on the position's exit side. Returns (existing_sl, existing_tp, sl, tp):
+    the existing exit rows (or None) and the final pair's prices (the kept
+    existing exit's price where no new one was asked). Refuses (fail closed):
+    a StopLimit or any type but Stop/Limit on the exit side, more than one
+    SL or TP, an exit not sized exactly to |net|, a new SL/TP where one
+    already works (move that line instead), and a level at or through the
+    last trade (an SL beyond it on the losing side, a TP on the winning side)."""
+    qty, sign = abs(net), (1 if net > 0 else -1)
+    sls = [o for o in exits if o.get("type") == "Stop"]
+    tps = [o for o in exits if o.get("type") == "Limit"]
+    if len(sls) + len(tps) != len(exits) or len(sls) > 1 or len(tps) > 1 \
+            or any(int(o.get("qty") or 0) != qty for o in exits):
+        raise Refused(EXITS_MISMATCH)
+    ex_sl, ex_tp = (sls[0] if sls else None), (tps[0] if tps else None)
+    if sl_new is not None and ex_sl is not None:
+        raise Refused("this position already has a stop loss — drag its line to move it")
+    if tp_new is not None and ex_tp is not None:
+        raise Refused("this position already has a target — drag its line to move it")
+    sl = sl_new if sl_new is not None else (ex_sl.get("stop_price") if ex_sl else None)
+    tp = tp_new if tp_new is not None else (ex_tp.get("price") if ex_tp else None)
+    if (ex_sl is not None and not _finite(sl)) or (ex_tp is not None and not _finite(tp)):
+        raise Refused(EXITS_MISMATCH)
+    if last is None:
+        raise Refused(f"no trade in the last {QUOTE_MAX_AGE_S:.0f} s — an exit needs a fresh price")
+    if sl is not None and not sign * (last - sl) > 0:
+        raise Refused(f"the stop loss must be {'below' if sign > 0 else 'above'} "
+                      f"the last price ({last:,})")
+    if tp is not None and not sign * (tp - last) > 0:
+        raise Refused(f"the target must be {'above' if sign > 0 else 'below'} "
+                      f"the last price ({last:,})")
+    return ex_sl, ex_tp, sl, tp
 
 
 # --- pure guards ---------------------------------------------------------------------
@@ -975,6 +1039,158 @@ class ChartDesk:
         jerr = self._jsafe("manual_cancel", source="chart", scope="order", client_id=cid,
                            account=aid, order_id=oid, contract=contract, ok=r.ok, error=r.error)
         return self._result(r.ok, oid, r.error, jerr)
+
+    # --- exits: add an SL and/or TP to an open position (the chart's drag handles) ---------------
+    async def exits(self, body) -> dict:
+        it = parse_exits(body)
+
+        async def work():
+            quote = fresh_quote(body, it.root, self._now_s())
+            outs = await asyncio.gather(
+                *(self._one("exits", it.client_id, aid,
+                            lambda aid=aid: self._exits_one(it, aid, quote))
+                  for aid in it.accounts), return_exceptions=True)
+            return self._finish("exits", it.client_id, self._gathered(it.accounts, outs))
+
+        return await self._once("exits", it.client_id, work)
+
+    async def _exits_one(self, it: ExitsIntent, aid: str, quote: Optional[dict]) -> dict:
+        """One account: guards 1, 2, 4 and 5 as an order's, then the position
+        and its exits read from the cache and cross-checked with the broker.
+        The result is always ONE SL (Stop) and/or ONE TP (Limit) for the whole
+        position; when both exist they are ONE broker OCO pair.
+
+        The naked window (accepted tradeoff, 2026-09-27): a broker cannot link
+        an order that is already working into a new OCO, so adding the missing
+        half to an existing SL (or TP) CANCELS the existing exit and then
+        places the pair with its price kept. Between the cancel's ack and the
+        pair's ack the position has no working protection (one broker round
+        trip). It is kept as short as possible: every check runs BEFORE the
+        cancel; the position is re-read after it (the old exit may have filled
+        instead), and a DEFINITE refusal of the pair re-places the original
+        exit alone at once. A pair whose outcome is unknown (a timeout: it may
+        be working) is not doubled up; that result says so, loudly."""
+        ad, view, label = self._gate(aid)
+        contract = self._contract(it.root)
+        self._lock(aid, contract, label)
+        self._unresolved(view)
+        if any(r["contract"] == contract for r in self._reservations(aid, view)):
+            raise Refused(f"an order sent from the chart in {contract} on {label} is not "
+                          "confirmed yet — try again in a moment")
+        net = sum(int(p.get("net") or 0) for p in view.get("positions", [])
+                  if p.get("symbol") == contract)
+        if not net:
+            raise Refused(f"no {contract} position on {label} to protect")
+        try:
+            broker_net = await ad.get_net_position(contract)
+        except Exception as e:  # noqa: BLE001 — unreadable is not "as cached"
+            raise Refused(f"the {contract} position on {label} is unreadable ({e}) — nothing done") from None
+        if broker_net != net:
+            raise Refused(f"the {contract} position on {label} is changing — try again in a moment")
+        exit_side = "Sell" if net > 0 else "Buy"
+        mine = [o for o in view.get("orders", []) if o.get("symbol") == contract]
+        if any(o.get("side") not in SIDES for o in mine):
+            raise Refused(EXITS_MISMATCH)
+        exits = [o for o in mine if o.get("side") == exit_side]
+        bots = self._bot_orders(aid)
+        owner = next((bots[str(o.get("order_id"))] for o in exits
+                      if str(o.get("order_id")) in bots), None)
+        if owner:
+            raise Refused(f"the {owner} bot's exits protect this position — they can't be "
+                          "changed from the chart")
+        last = quote["last"] if quote else None
+        rnd = (lambda p: None if p is None else round_to_tick(contract, p))
+        ex_sl, ex_tp, sl, tp = exit_levels(net, exits, rnd(it.sl_price), rnd(it.tp_price), last)
+        qty = abs(net)
+        pair = sl is not None and tp is not None
+        if pair and type(ad).place_oco is BrokerAdapter.place_oco:
+            raise Refused(f"{label}'s broker has no OCO — an SL and a TP together can't be linked")
+        kept = ex_sl or ex_tp                  # the one existing exit a pair replaces (or None)
+        steps: dict = {}
+        if kept is not None:
+            kid = str(kept.get("order_id"))
+            if kid in bots:                    # re-checked right before the cancel
+                raise Refused("that exit belongs to a bot — it can't be changed from the chart")
+            c = await _call(ad.cancel_order_by_id(kid))
+            steps["cancel"] = {"order_id": kid, "ok": c.ok, "error": c.error}
+            if not c.ok:
+                return self._exits_done(it, aid, contract, exit_side, qty, sl, tp, steps, False, None,
+                                        f"the existing exit could not be cancelled ({c.error}) "
+                                        "— nothing changed")
+            try:
+                after = await ad.get_net_position(contract)
+            except Exception as e:  # noqa: BLE001
+                after = None
+                steps["recheck_error"] = str(e)
+            if after != net:
+                # the old exit may have filled (flat now: a new pair could OPEN a position),
+                # or the position is unreadable: put nothing new on, say so loudly
+                return self._exits_done(it, aid, contract, exit_side, qty, sl, tp, steps, False, None,
+                                        f"the {contract} position changed while its exit was being "
+                                        f"replaced (now {after if after is not None else 'unreadable'}) "
+                                        "— NO exit was placed; check the position and its protection")
+            try:                               # the Kill or the 09:20 lock may have landed meanwhile
+                self._still_allowed(aid, contract, label, "nothing new placed")
+            except Refused as e:
+                return await self._exits_restore(it, aid, contract, exit_side, qty, sl, tp, steps, kept, ad,
+                                                 str(e))
+        if pair:
+            r = await _call(ad.place_oco(contract, exit_side, qty, sl, tp, text=EXIT_TEXT,
+                                         time_in_force=EXIT_TIF))
+        else:
+            typ, px = ("Stop", sl) if sl is not None else ("Limit", tp)
+            r = await _call(ad.place_order(OrderRequest(
+                symbol=contract, side=exit_side, qty=qty, order_type=typ,
+                price=px if typ == "Limit" else None, stop_price=px if typ == "Stop" else None,
+                text=EXIT_TEXT, time_in_force=EXIT_TIF)))
+            if r.ok:
+                r = OrderResult(ok=True, order_id=r.order_id, error=None, raw={
+                    **(r.raw or {}), "sl_order_id": r.order_id if typ == "Stop" else None,
+                    "tp_order_id": r.order_id if typ == "Limit" else None})
+        steps["place"] = {"ok": r.ok, "order_id": r.order_id, "error": r.error,
+                          "sl_order_id": (r.raw or {}).get("sl_order_id"),
+                          "tp_order_id": (r.raw or {}).get("tp_order_id")}
+        if r.order_id:
+            self._placed(aid, contract, exit_side, qty, r)
+        if r.ok or kept is None:
+            return self._exits_done(it, aid, contract, exit_side, qty, sl, tp, steps, r.ok, r.order_id,
+                                    r.error)
+        if (r.raw or {}).get("outcome_unknown") or r.order_id:
+            return self._exits_done(it, aid, contract, exit_side, qty, sl, tp, steps, False, r.order_id,
+                                    f"the SL/TP pair's outcome is unknown ({r.error}) and the old exit "
+                                    "was cancelled — CHECK THIS POSITION'S PROTECTION NOW")
+        return await self._exits_restore(it, aid, contract, exit_side, qty, sl, tp, steps, kept, ad,
+                                         f"the SL/TP pair was refused ({r.error})")
+
+    async def _exits_restore(self, it, aid, contract, exit_side, qty, sl, tp, steps, kept, ad,
+                             why: str) -> dict:
+        """The pair did not go on after the old exit was cancelled: re-place
+        that exit alone, at its own price, at once. Never gated (it only puts
+        back protection that was working a moment ago)."""
+        typ = kept.get("type")
+        px = kept.get("stop_price") if typ == "Stop" else kept.get("price")
+        rr = await _call(ad.place_order(OrderRequest(
+            symbol=contract, side=exit_side, qty=qty, order_type=typ,
+            price=px if typ == "Limit" else None, stop_price=px if typ == "Stop" else None,
+            text=EXIT_TEXT, time_in_force=kept.get("tif") or EXIT_TIF)))
+        steps["restore"] = {"ok": rr.ok, "order_id": rr.order_id, "error": rr.error}
+        if rr.ok:
+            self._placed(aid, contract, exit_side, qty, OrderResult(
+                ok=True, order_id=rr.order_id, raw={"sl_order_id": rr.order_id if typ == "Stop" else None,
+                                                    "tp_order_id": rr.order_id if typ == "Limit" else None}))
+            msg = f"{why} — the original {'stop' if typ == 'Stop' else 'target'} was put back"
+        else:
+            msg = (f"{why} AND putting the original {'stop' if typ == 'Stop' else 'target'} back "
+                   f"failed ({rr.error}) — THIS POSITION IS UNPROTECTED")
+        return self._exits_done(it, aid, contract, exit_side, qty, sl, tp, steps, False, None, msg)
+
+    def _exits_done(self, it, aid, contract, exit_side, qty, sl, tp, steps, ok, order_id, error) -> dict:
+        if not ok:
+            _log(f"{aid}: exits in {contract}: {error}")
+        jerr = self._jsafe("manual_exits", source="chart", client_id=it.client_id, account=aid,
+                           root=it.root, contract=contract, side=exit_side, qty=qty, sl=sl, tp=tp,
+                           tif=EXIT_TIF, ok=ok, order_id=order_id, error=error, steps=steps)
+        return self._result(ok, order_id, error, jerr)
 
     # --- the bots: history and the per-strategy Kill -------------------------------------------
     def _strategy(self, name) -> str:

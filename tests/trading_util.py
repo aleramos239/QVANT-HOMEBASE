@@ -42,6 +42,8 @@ class TradeAdapter(FakeAdapter):
         self.flattened: list[str] = []
         self.sym_cancelled: list[str] = []
         self.fail_flatten = False
+        self.ocos: list[tuple] = []
+        self.oco_mode = "ok"            # ok | reject | unknown (a timeout: the pair may exist)
 
     def trade_view(self):
         return {**self.view, "positions": [dict(p) for p in self.view["positions"]],
@@ -55,6 +57,15 @@ class TradeAdapter(FakeAdapter):
         if self.fail_flatten:
             return OrderResult(ok=False, error="flatten rejected by test")
         return OrderResult(ok=True, raw={"net_before": self.net})
+
+    async def place_oco(self, symbol, exit_side, qty, stop_price, limit_price, *, text="",
+                        time_in_force="GTC"):
+        self.ocos.append((symbol, exit_side, qty, stop_price, limit_price, time_in_force))
+        if self.oco_mode == "reject":
+            return OrderResult(ok=False, error="OCO rejected by test")
+        if self.oco_mode == "unknown":
+            return OrderResult(ok=False, error="OCO failed: timeout", raw={"outcome_unknown": True})
+        return OrderResult(ok=True, order_id="901", raw={"sl_order_id": "901", "tp_order_id": "902"})
 
     async def cancel_symbol(self, symbol):
         self.sym_cancelled.append(symbol)

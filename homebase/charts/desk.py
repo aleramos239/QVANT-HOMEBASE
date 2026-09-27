@@ -10,7 +10,7 @@ Only the desk (:8850) talks to the broker's order API. This module:
   * Fanout: those messages to every page without ever waiting on one. Each
     page has a bounded outbox; a page that falls behind loses its oldest
     messages and is resynced with a fresh full state (DeskLink.hello()).
-  * register(): POST /api/desk/{order|modify|cancel|cancel-symbol|flatten|
+  * register(): POST /api/desk/{order|modify|cancel|exits|cancel-symbol|flatten|
     reverse|bot-kill} -> the desk's /api/trade/*, after the Host check (netguard's
     shared allowlist — DNS rebinding, ruling P4), the page-origin check and
     the JSON-only rule, with the body capped at 4 KB, the key added, and
@@ -46,7 +46,7 @@ from fastapi.responses import JSONResponse
 from .. import netguard
 
 DESK_URL = "http://127.0.0.1:8850"
-ACTIONS = ("order", "modify", "cancel", "cancel-symbol", "flatten", "reverse", "bot-kill")
+ACTIONS = ("order", "modify", "cancel", "exits", "cancel-symbol", "flatten", "reverse", "bot-kill")
 HISTORY_PARAMS = ("strategy", "days")    # the only query params relayed to /api/trade/bot-history
 BODY_MAX = 4096
 LINE_MAX = 256 * 1024          # an SSE line, or one event's joined data, over this: drop + reconnect

@@ -264,6 +264,7 @@ def trade_router(desk) -> APIRouter:
     post("/order", desk.order)
     post("/modify", desk.modify)
     post("/cancel", desk.cancel)
+    post("/exits", desk.exits)
     post("/cancel-symbol", desk.cancel_symbol)
     post("/flatten", desk.flatten)
     post("/reverse", desk.reverse)
