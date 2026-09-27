@@ -11,11 +11,12 @@ Only the desk (:8850) talks to the broker's order API. This module:
     page has a bounded outbox; a page that falls behind loses its oldest
     messages and is resynced with a fresh full state (DeskLink.hello()).
   * register(): POST /api/desk/{order|modify|cancel|cancel-symbol|flatten|
-    reverse} -> the desk's /api/trade/*, after the Host check (netguard's
+    reverse|bot-kill} -> the desk's /api/trade/*, after the Host check (netguard's
     shared allowlist — DNS rebinding, ruling P4), the page-origin check and
     the JSON-only rule, with the body capped at 4 KB, the key added, and
     `quotes` (this service's latest quote per root) attached for the desk's
-    stop-side check.
+    stop-side check. GET /api/desk/bot-history -> the desk's
+    /api/trade/bot-history (Host check; only strategy/days relayed).
   * Quotes: bid/ask for the Buy/Sell buttons, "as of last trade": every tick
     the md feed delivers carries the quote at that trade. Decided
     2026-09-26: no md quote subscription — nothing in the repo shows one is
@@ -45,7 +46,8 @@ from fastapi.responses import JSONResponse
 from .. import netguard
 
 DESK_URL = "http://127.0.0.1:8850"
-ACTIONS = ("order", "modify", "cancel", "cancel-symbol", "flatten", "reverse")
+ACTIONS = ("order", "modify", "cancel", "cancel-symbol", "flatten", "reverse", "bot-kill")
+HISTORY_PARAMS = ("strategy", "days")    # the only query params relayed to /api/trade/bot-history
 BODY_MAX = 4096
 LINE_MAX = 256 * 1024          # an SSE line, or one event's joined data, over this: drop + reconnect
 BACKOFF_S = (1, 2, 4, 8, 16, 30)
@@ -346,6 +348,26 @@ class DeskLink:
     def stop(self) -> None:
         self._stop = True
 
+    async def get(self, path: str, params: dict) -> tuple[int, dict]:
+        """A read from the desk's /api/trade/{path}, the key added."""
+        try:
+            key = self.key()
+        except DeskDown as e:
+            return 503, {"detail": f"{UNAVAILABLE}: {e}"}
+        try:
+            async with self._client(POST_TIMEOUT_S) as c:
+                r = await c.get(f"{self.url}/api/trade/{path}", params=params,
+                                headers={"X-Homebase-Key": key})
+        except httpx.TimeoutException:
+            return 504, {"detail": f"no answer from the desk in {POST_TIMEOUT_S:.0f} s"}
+        except Exception as e:  # noqa: BLE001
+            return 502, {"detail": f"desk unreachable: {type(e).__name__}"}
+        try:
+            data = r.json()
+        except ValueError:
+            data = {"detail": r.text[:200]}
+        return r.status_code, data if isinstance(data, dict) else {"detail": data}
+
     async def post(self, action: str, body: dict) -> tuple[int, dict]:
         try:
             key = self.key()
@@ -373,6 +395,17 @@ def register(app, *, link: Optional[DeskLink], quotes: Quotes, browser_write_ok,
     Refused in this order: a Host off the shared allowlist (403, a DNS-rebound
     page), an Origin off it (403), not application/json (415), then the
     chart service's own origin rule (browser_write_ok, 403)."""
+
+    @app.get("/api/desk/bot-history")
+    async def desk_bot_history(request: Request):
+        bad = netguard.refusal(request.method, request.scope["headers"], allowed)
+        if bad is not None:
+            raise HTTPException(*bad)
+        if link is None:
+            raise HTTPException(503, NO_LINK)
+        params = {k: request.query_params[k] for k in HISTORY_PARAMS if k in request.query_params}
+        status, data = await link.get("bot-history", params)
+        return JSONResponse(data, status_code=status)
 
     @app.post("/api/desk/{action}")
     async def desk_proxy(action: str, request: Request):

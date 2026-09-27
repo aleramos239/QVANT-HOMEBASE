@@ -126,6 +126,9 @@ class SelfTimer:
                 await self._md.unsubscribe_quote(sub)
             return
 
+        if st["stage"] in ("idle", "gated", "staged") and self.engine.killed_today(name):
+            st.update(stage="skipped", killed=True)       # the per-strategy Kill: never fire today
+            self.engine.journal("timer_skipped", strategy=name, reason="killed")
         stage = st["stage"]
         if stage in ("fired", "skipped", "done", "error", "missed"):
             if stage == "error" and t < STAGE_T:

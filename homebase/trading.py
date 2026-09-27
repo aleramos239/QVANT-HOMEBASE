@@ -81,6 +81,7 @@ from collections import deque
 from dataclasses import asdict, dataclass
 from typing import Callable, Optional
 
+from . import bothistory
 from . import config as config_mod
 from . import symbols
 from .broker.base import OrderRequest, OrderResult
@@ -388,6 +389,7 @@ class ChartDesk:
         self._last_acct: dict[str, dict] = {}
         self._last_bot: dict | None = None
         self._flush_soon = False
+        self._journal_cache = bothistory.JournalCache()
 
     # --- pub/sub ------------------------------------------------------------
     def subscribe(self) -> asyncio.Queue:
@@ -471,6 +473,7 @@ class ChartDesk:
                 # a copy: the timer mutates its own dict, and flush() compares views
                 "timer": copy.deepcopy((ts.get("strategies") or {}).get(name)),
                 "day_status": self.engine.day_status(name),
+                "killed": self.engine.killed_today(name),
                 "accounts": {st.account: state_view(st, s) for st in self.engine.day_states(name)},
             }
         return {"date": ts.get("date"), "strategies": out}
@@ -959,6 +962,51 @@ class ChartDesk:
         jerr = self._jsafe("manual_cancel", source="chart", scope="order", client_id=cid,
                            account=aid, order_id=oid, contract=contract, ok=r.ok, error=r.error)
         return self._result(r.ok, oid, r.error, jerr)
+
+    # --- the bots: history and the per-strategy Kill -------------------------------------------
+    def _strategy(self, name) -> str:
+        if not isinstance(name, str) or name not in self.cfg.strategies:
+            raise ValueError(f"unknown strategy {name!r}")
+        return name
+
+    async def bot_history(self, strategy, days=None) -> dict:
+        """GET /api/trade/bot-history: the strategy's past runs from the
+        journal (homebase.bothistory). The read AND the rebuild run in a
+        thread, so the desk's loop (the 9:30 fire) never waits on them."""
+        name, n = self._strategy(strategy), bothistory.parse_days(days)
+        symbol = self.cfg.strategies[name].symbol
+        today = self.engine.now_et().date().isoformat()
+        path = self.engine.journal_path
+
+        def build():
+            recs = self._journal_cache.records(path)
+            return bothistory.runs(recs, name, symbol=symbol, today=today, days=n)
+
+        return {"strategy": name, "symbol": symbol, "runs": await asyncio.to_thread(build)}
+
+    async def bot_kill(self, body) -> dict:
+        """POST /api/trade/bot-kill {client_id, strategy}: kill ONE strategy
+        for today (engine.kill_strategy: its own orders and its own contract
+        on its own accounts). Not the desk's Kill: the desk stays armed,
+        chart trading stays on, other strategies keep running. Never gated
+        by chart trading or paused (an emergency stop); idempotent per
+        client_id. -> {ok, results: {account: {...}}}"""
+        body = _obj(body)
+        cid = _client_id(body)
+        name = self._strategy(body.get("strategy"))
+
+        async def work():
+            try:
+                results = await self.engine.kill_strategy(name, source="chart", client_id=cid)
+                out = {"ok": all(r.get("ok") for r in results.values()), "results": results}
+            except Exception as e:  # noqa: BLE001 — the kill mark is already set in memory
+                _log(f"bot-kill {name}: {type(e).__name__}: {e}")
+                out = {"ok": False, "results": {}, "error": f"internal error: {type(e).__name__}: {e}"}
+            self._done[("bot-kill", cid)] = (self._mono(), out)
+            self.publish("result", {"client_id": cid, "action": "bot-kill", **out})
+            return out
+
+        return await self._once("bot-kill", cid, work)
 
     # --- per-symbol actions (many accounts) -------------------------------------------------
     async def _per_symbol(self, action: str, body, fn) -> dict:

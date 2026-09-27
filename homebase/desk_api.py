@@ -30,6 +30,10 @@ SUB_QUEUE_MAX events behind, when the pause holds more than HELD_MAX events
 for it, or when the server cancels the request (uvicorn
 --timeout-graceful-shutdown): a client that never reads blocks nothing.
 GET /api/trade/state answers 503 in the pause (no snapshot is built then).
+So does GET /api/trade/bot-history (the journal rebuild runs in a thread,
+but nothing extra is started around the fire). POST /api/trade/bot-kill
+(ChartDesk.bot_kill) is never paused and never gated by chart trading: it
+is one strategy's emergency stop.
 """
 from __future__ import annotations
 
@@ -246,12 +250,24 @@ def trade_router(desk) -> APIRouter:
                 raise HTTPException(400, str(e)) from None
         r.add_api_route(path, handler, methods=["POST"], name=f"trade_{path.strip('/')}")
 
+    @r.get("/bot-history")
+    async def bot_history(request: Request):
+        check(request)
+        if desk.views_paused():             # P2: nothing extra on the loop around the fire
+            return JSONResponse({"error": PAUSED}, 503)
+        q = request.query_params
+        try:
+            return await desk.bot_history(q.get("strategy"), q.get("days"))
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+
     post("/order", desk.order)
     post("/modify", desk.modify)
     post("/cancel", desk.cancel)
     post("/cancel-symbol", desk.cancel_symbol)
     post("/flatten", desk.flatten)
     post("/reverse", desk.reverse)
+    post("/bot-kill", desk.bot_kill)
     return r
 
 

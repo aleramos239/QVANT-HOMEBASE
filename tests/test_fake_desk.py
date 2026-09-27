@@ -236,3 +236,51 @@ def test_session_end_drops_day_orders_and_keeps_gtc():
     assert c.post("/fake/session-end").json() == {"dropped": 1}
     kept = sorted((o["type"], o["tif"], o["price"] or o["stop_price"]) for o in acct(c)["orders"])
     assert kept == [("Limit", "GTC", 30870.0), ("Stop", "GTC", 30890.0)]
+
+
+# --- the bots: history + the per-strategy kill ------------------------------------------------
+def test_bot_history_is_seeded_and_keyed():
+    c = client()
+    assert c.get("/api/trade/bot-history?strategy=nq930").status_code == 401
+    body = c.get("/api/trade/bot-history?strategy=nq930", headers=H).json()
+    assert (body["strategy"], body["symbol"]) == ("nq930", "NQ")
+    runs = body["runs"]
+    assert {r["status"] for r in runs} >= {"traded", "skipped", "no_fill", "refused"}
+    traded = [r for r in runs if r["status"] == "traded"]
+    assert {r["exit"]["kind"] for r in traded} >= {"tp", "sl"}
+    assert all("pnl_usd" in r and r["entry"]["price"] and r["legs"] for r in traded)
+    assert any(r["account"] is None for r in runs)                     # a whole-day skip
+    assert all(r["date"] < fake_desk.dt.date.today().isoformat() for r in runs)
+    few = c.get("/api/trade/bot-history?strategy=nq930&days=3", headers=H).json()["runs"]
+    assert len(few) < len(runs)
+    assert c.get("/api/trade/bot-history?strategy=nope", headers=H).status_code == 400
+    assert c.get("/api/trade/bot-history?strategy=nq930&days=0", headers=H).status_code == 400
+
+
+def test_bot_kill_cancels_the_bots_orders_and_flattens_only_its_position():
+    c = client()
+    manual = order(c, cid="m1", type="Limit", price=30880.0).json()["results"]["sim041"]["order_id"]
+    order(c, cid="m2", accounts=["sim047"], qty=2)                      # another account's position
+    c.post("/fake/bot", json={"scenario": "live", "anchor": 30900.0})
+    assert acct(c)["positions"][0]["net"] == 1
+    r = c.post("/api/trade/bot-kill", json={"client_id": "k1", "strategy": "nq930", "quotes": Q},
+               headers=H).json()
+    assert r["ok"] is True and r["results"]["sim041"]["ok"] is True
+    a = acct(c)
+    assert a["positions"] == []                                         # the bot's contract, flat
+    assert [o["order_id"] for o in a["orders"]] == [manual]             # the manual order stays
+    assert acct(c, "sim047")["positions"][0]["net"] == 2               # outside the book: untouched
+    s = c.get("/api/trade/state", headers=H).json()["bot"]["strategies"]["nq930"]
+    assert s["killed"] is True and s["accounts"]["sim041"]["exit_reason"] == "killed"
+    again = c.post("/api/trade/bot-kill", json={"client_id": "k1", "strategy": "nq930"}, headers=H).json()
+    assert again == r
+    assert c.post("/api/trade/bot-kill", json={"client_id": "k2", "strategy": "x"}, headers=H).status_code == 400
+    assert c.post("/api/trade/bot-kill", json={"client_id": "k3", "strategy": "nq930"}).status_code == 401
+
+
+def test_bot_kill_before_the_fire_just_marks_it_killed():
+    c = client()
+    r = c.post("/api/trade/bot-kill", json={"client_id": "k", "strategy": "nq930"}, headers=H).json()
+    assert r["ok"] is True and "actions" not in r["results"]["sim041"]
+    assert c.get("/api/trade/state", headers=H).json()["bot"]["strategies"]["nq930"]["killed"] is True
+    assert acct(c)["orders"] == [] and acct(c)["positions"] == []

@@ -422,3 +422,74 @@ def test_proxy_leaves_the_layout_delete_alone(tmp_path):
     """The page's body-less DELETE /api/layouts/... is not the proxy's."""
     c, _ = proxy_app(tmp_path)
     assert c.delete("/api/desk/order").status_code == 405
+
+
+# --- the bots: history (GET) and the per-strategy kill (POST) ---------------------------------
+def bot_app(tmp_path, *, link="default"):
+    seen = []
+
+    def handler(req):
+        seen.append(req)
+        if req.method == "GET":
+            return httpx.Response(200, json={"strategy": "nq930", "symbol": "NQ", "runs": []})
+        return httpx.Response(200, json={"ok": True, "results": {}})
+
+    if link == "default":
+        link = DeskLink(lambda m: None, key_path=key_file(tmp_path),
+                        transport=httpx.MockTransport(handler))
+
+    def browser_write_ok(request: Request) -> None:
+        if not origin_ok(request.headers.get("origin"), request.headers.get("host")):
+            raise HTTPException(403, "writes from another site are refused")
+
+    app = FastAPI()
+    register(app, link=link, quotes=Quotes(), browser_write_ok=browser_write_ok)
+    return TestClient(app, base_url="http://127.0.0.1:8852"), seen
+
+
+def test_bot_kill_is_proxied_like_every_desk_action(tmp_path):
+    c, seen = bot_app(tmp_path)
+    assert c.post("/api/desk/bot-kill", json={"client_id": "k", "strategy": "nq930"},
+                  headers={"origin": "https://evil.example"}).status_code == 403
+    r = c.post("/api/desk/bot-kill", json={"client_id": "k", "strategy": "nq930"},
+               headers={"origin": "http://localhost:8852"})
+    assert r.status_code == 200 and r.json() == {"ok": True, "results": {}}
+    req = seen[-1]
+    assert (req.method, req.url.path, req.headers["x-homebase-key"]) == ("POST", "/api/trade/bot-kill", KEY)
+    assert json.loads(req.content)["strategy"] == "nq930"
+
+
+def test_bot_history_is_proxied_with_the_key_and_only_its_own_params(tmp_path):
+    c, seen = bot_app(tmp_path)
+    r = c.get("/api/desk/bot-history?strategy=nq930&days=30&evil=1")
+    assert r.status_code == 200 and r.json()["runs"] == []
+    assert KEY not in r.text
+    req = seen[-1]
+    assert (req.method, req.url.path, req.headers["x-homebase-key"]) == ("GET", "/api/trade/bot-history", KEY)
+    assert dict(req.url.params) == {"strategy": "nq930", "days": "30"}
+    assert "origin" not in req.headers
+    c.get("/api/desk/bot-history?strategy=nq930")
+    assert dict(seen[-1].url.params) == {"strategy": "nq930"}
+
+
+def test_bot_history_refuses_a_rebinding_host_and_needs_the_link(tmp_path):
+    c, seen = bot_app(tmp_path)
+    assert c.get("/api/desk/bot-history?strategy=nq930", headers={"host": "evil.example"}).status_code == 403
+    assert seen == []
+    c2, _ = bot_app(tmp_path, link=None)
+    assert c2.get("/api/desk/bot-history?strategy=nq930").status_code == 503
+
+
+def test_link_get_maps_failures(tmp_path):
+    def handler(req):
+        if req.url.params.get("strategy") == "slow":
+            raise httpx.ReadTimeout("slow")
+        raise httpx.ConnectError("refused")
+
+    link = DeskLink(lambda m: None, key_path=key_file(tmp_path), transport=httpx.MockTransport(handler))
+    status, body = run(link.get("bot-history", {"strategy": "slow"}))
+    assert status == 504
+    assert run(link.get("bot-history", {"strategy": "x"})) == (502, {"detail": "desk unreachable: ConnectError"})
+    nokey = DeskLink(lambda m: None, key_path=tmp_path / "missing.key")
+    status, body = run(nokey.get("bot-history", {}))
+    assert status == 503 and body["detail"].startswith("desk link unavailable")
