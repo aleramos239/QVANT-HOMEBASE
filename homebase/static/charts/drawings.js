@@ -34,6 +34,22 @@ function barIndexAt(bars, t) {
   return ans;
 }
 
+/* Series markers for events at epoch ms ({ms, ...marker fields}): each lands on the bar that holds its time (the
+   last bar starting at or before it), keeping its own price for atPrice* positions. Events before the first bar,
+   or at/after the last bar's end (barMs; 0 = not a time bar, the last bar holds everything after it), are left
+   out. Sorted by time, as Lightweight Charts wants. */
+function placeMarkers(bars, list, barMs = 0) {
+  const n = bars.length, out = [];
+  if (!n) return out;
+  const end = barMs > 0 ? bars[n - 1].ms + barMs : Infinity;
+  for (const m of list || []) {
+    if (!(m.ms >= bars[0].ms) || m.ms >= end) continue;
+    const { ms, ...rest } = m;
+    out.push({ ...rest, time: bars[barIndexAt(bars, ms)].tt });
+  }
+  return out.sort((a, b) => a.time - b.time);
+}
+
 /* Time t as a fractional bar index. Between two bars it is interpolated by
    time; before the first / after the last bar, time bars extrapolate by
    their length and other bar types (tick, volume, range) clamp. */
@@ -680,7 +696,7 @@ class Controller {
   }
 }
 
-const api = { barIndexAt, logicalOf, xOfLogical, timeToX, snapTime, roundToTick, distToSegment, handlePoints, hitTest,
+const api = { barIndexAt, placeMarkers, logicalOf, xOfLogical, timeToX, snapTime, roundToTick, distToSegment, handlePoints, hitTest,
   setPoint, shiftTime, moveDrawing, samePoints, fmtDuration, measureLabel, newId, MAGNET_PX, MAGNET_OFF, parseMagnet,
   magnetMode, snapPrice, Store, Primitive, Controller, HANDLE_TOL, LINE_TOL };
 if (typeof window !== 'undefined') window.HBDrawings = api;

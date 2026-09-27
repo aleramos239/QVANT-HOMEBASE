@@ -24,6 +24,15 @@ test('barIndexAt finds the last bar at or before t', () => {
   assert.equal(D.barIndexAt([], T0), -1);
 });
 
+test('placeMarkers: on the bar holding the time, inside the loaded bars, sorted', () => {
+  const tbars = [0, 1, 2].map((i) => ({ ms: T0 + i * MIN, tt: 1000 + i }));
+  const out = D.placeMarkers(tbars, [{ id: 'b', ms: T0 + MIN + 5, x: 1 }, { id: 'a', ms: T0 }, { id: 'early', ms: T0 - MIN },
+    { id: 'late', ms: T0 + 3 * MIN }], MIN);
+  assert.deepEqual(out, [{ id: 'a', time: 1000 }, { id: 'b', x: 1, time: 1001 }]);
+  assert.equal(D.placeMarkers(tbars, [{ id: 'late', ms: T0 + 99 * MIN }], 0).length, 1);   // non-time bars: the last bar holds the rest
+  assert.deepEqual(D.placeMarkers([], [{ ms: 1 }]), []);
+});
+
 test('logicalOf interpolates between bars, extrapolates time bars, clamps the others', () => {
   assert.equal(D.logicalOf(bars, T0 + 90000, true, MIN), 1.5);
   assert.equal(D.logicalOf(bars, T0 - 2 * MIN, true, MIN), -2);
