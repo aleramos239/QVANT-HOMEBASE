@@ -511,3 +511,69 @@ def test_a_put_for_the_current_login_during_a_switch_is_409_not_a_file_write(tmp
         assert results["first"].status_code == 200
         assert SettingsStore(tmp_path / "state" / "settings.json").get() == {"md": "live"}
         assert c.get("/api/status").json()["md"] == "live"
+
+
+# ---- desk-settings plan (2026-09-27): GET/PUT /api/settings and GET /api/status answer the
+# desk page's origin too, over the EXACT same-two-origins CORS paperbook.py's account routes
+# already use. Everything else on this service stays same-origin. ------------------------------
+def test_settings_and_status_answer_the_desk_origin_with_exact_cors(tmp_path):
+    app = app_with(tmp_path, {"demo": FakeMdWS("demo"), "live": FakeMdWS("live")})
+    with TestClient(app, base_url=BASE_URL) as c:
+        for o in ("http://localhost:8850", "http://127.0.0.1:8850"):
+            desk = {"origin": o}
+            r = c.get("/api/settings", headers=desk)
+            assert r.status_code == 200 and r.headers["access-control-allow-origin"] == o
+            r = c.get("/api/status", headers=desk)
+            assert r.status_code == 200 and r.headers["access-control-allow-origin"] == o
+            pre = c.options("/api/settings", headers={**desk, "access-control-request-method": "PUT"})
+            assert pre.status_code == 204 and pre.headers["access-control-allow-origin"] == o
+            r = c.put("/api/settings", json={"md": "demo"}, headers=desk)
+            assert r.status_code == 200 and r.headers["access-control-allow-origin"] == o
+        # the chart page's own origin: works, but never carries a CORS header (never needs one)
+        own = {"origin": "http://127.0.0.1:8852"}
+        r = c.get("/api/settings", headers=own)
+        assert r.status_code == 200 and "access-control-allow-origin" not in r.headers
+        r = c.get("/api/status", headers=own)
+        assert r.status_code == 200 and "access-control-allow-origin" not in r.headers
+        r = c.put("/api/settings", json={"md": "live"}, headers=own)
+        assert r.status_code == 200 and "access-control-allow-origin" not in r.headers
+        # no Origin at all (not a browser request): unaffected, as every other test in this file relies on
+        assert c.get("/api/settings").status_code == 200
+        assert c.get("/api/status").status_code == 200
+
+
+def test_every_other_origin_is_refused_on_settings_and_status(tmp_path):
+    """Another localhost port included -- netguard's own Host check alone ignores ports, which
+    is only safe without CORS; desk_origin_refusal is the exact check that makes this route
+    answerable cross-origin at all."""
+    app = app_with(tmp_path, {"demo": FakeMdWS(), "live": FakeMdWS()})
+    with TestClient(app, base_url=BASE_URL) as c:
+        for o in ("http://localhost:3000", "http://evil.example", "http://127.0.0.1:8851", "null"):
+            bad = {"origin": o}
+            assert c.get("/api/settings", headers=bad).status_code == 403, o
+            assert c.get("/api/status", headers=bad).status_code == 403, o
+            assert c.put("/api/settings", json={"md": "live"}, headers=bad).status_code == 403, o
+            pre = c.options("/api/settings", headers={**bad, "access-control-request-method": "PUT"})
+            assert pre.status_code == 403 and "access-control-allow-origin" not in pre.headers, o
+
+
+def test_a_refusal_after_the_origin_check_is_still_readable_by_the_desk_page(tmp_path):
+    """A PUT refused for an ordinary reason (here, the 09:20-09:35 ET window) must still carry
+    the desk origin's CORS header and the real detail -- never just an opaque network failure."""
+    desk = {"origin": "http://localhost:8850"}
+    app = app_with(tmp_path, {"demo": FakeMdWS(), "live": FakeMdWS()},
+                   now_ms=lambda: session_ms(D, 9, 25))
+    with TestClient(app, base_url=BASE_URL) as c:
+        r = c.put("/api/settings", json={"md": "live"}, headers=desk)
+        assert r.status_code == 423 and r.headers["access-control-allow-origin"] == "http://localhost:8850"
+        assert "09:35" in r.json()["detail"]
+
+
+def test_no_other_route_gained_cors(tmp_path):
+    app = app_with(tmp_path, {"demo": FakeMdWS(), "live": FakeMdWS()})
+    with TestClient(app, base_url=BASE_URL) as c:
+        desk = {"origin": "http://localhost:8850"}
+        r = c.get("/api/symbols", headers=desk)
+        assert r.status_code == 200 and "access-control-allow-origin" not in r.headers
+        r = c.get("/api/layouts", headers=desk)
+        assert r.status_code == 200 and "access-control-allow-origin" not in r.headers

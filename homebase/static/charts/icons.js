@@ -6,9 +6,7 @@
    bot, octagon-x, file-text, history, play, pause, skip-forward, skip-back (Bar Replay, 2026-09-27 plan),
    square (Strategy Tester), list-ordered, crosshair (DOM ladder, 2026-09-27 charts-depth plan),
    between-horizontal-start (Bar Replay Select bar, 2026-09-27 ui-controls-and-select-bar plan),
-   chevron-left, chevron-right, clock (the control system, same plan), sliders-horizontal (the
-   app-wide Settings toolbar entry -- deliberately not `settings`/`gear`, which is the per-chart
-   Settings button, 2026-09-27 accounts-paper-layouts-appsettings plan Task 4).
+   chevron-left, chevron-right, clock (the control system, same plan).
 
    ISC License
 
@@ -81,6 +79,5 @@ window.HBIcons = {
   crosshair: svg('<circle cx="12" cy="12" r="10"/><line x1="22" x2="18" y1="12" y2="12"/><line x1="6" x2="2" y1="12" y2="12"/><line x1="12" x2="12" y1="6" y2="2"/><line x1="12" x2="12" y1="22" y2="18"/>'),
   selectBar: svg('<rect width="13" height="7" x="8" y="3" rx="1"/><path d="m2 9 3 3-3 3"/><rect width="13" height="7" x="8" y="14" rx="1"/>'),
   plus: svg('<path d="M5 12h14"/><path d="M12 5v14"/>'),   // lucide-static@1.48.0 "plus" -- the tab strip's Add tab button
-  slidersHorizontal: svg('<path d="M10 5H3"/><path d="M12 19H3"/><path d="M14 3v4"/><path d="M16 17v4"/><path d="M21 12h-9"/><path d="M21 19h-5"/><path d="M21 5h-7"/><path d="M8 10v4"/><path d="M8 12H3"/>'),
 };
 })();

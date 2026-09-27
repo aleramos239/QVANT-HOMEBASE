@@ -41,7 +41,7 @@ from .history import History
 from .hub import Hub, Stream
 from .news import News
 from .paper import ROOT as PAPER_ROOT, STRATEGY_ID as PAPER_ID, BacktestJob, PaperRunner, describe as paper_describe
-from .paperbook import PaperBooks, register as register_paperbook
+from .paperbook import DESK_ORIGINS, PaperBooks, _cors, desk_origin_refusal, register as register_paperbook
 from .recorder import REFILL_MAX_PAGES, LiveRecorder, refill
 from .replay import ReplayFeed
 from .session import ET, always_open, et_wall_s, session_date, session_range_ms, split_by_session
@@ -749,7 +749,14 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         return FileResponse(STATIC / "charts.html", headers={"cache-control": "no-cache"})
 
     @app.get("/api/status")
-    async def api_status():
+    async def api_status(request: Request, response: Response):
+        """Desk-settings plan: also answers the desk page's origin (the last switch error and
+        any md login mismatch feed the Settings dialog there) -- same exact-origin CORS as
+        /api/settings and the paper-account routes; everything else stays same-origin."""
+        bad = desk_origin_refusal(request.headers)
+        if bad is not None:
+            raise HTTPException(*bad)
+        _cors(response, request)
         return status()
 
     @app.get("/api/bursts/now")
@@ -841,12 +848,19 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
     app.include_router(tester)
 
     @app.get("/api/settings")
-    async def get_settings():
+    async def get_settings(request: Request, response: Response):
         """{"md": ..., "accounts": {"live": "···885"|None, "demo": "···021"|None}}. `accounts`
         (review M2) is read from the desk's own config + token files at request time, masked to
         the last 3 characters -- never the settings file, never hard-coded (the Apex login has
         already changed once). None means that login currently has no valid md token, i.e. a
-        switch to it would fail (this also surfaces a C2 mismatch before it's ever attempted)."""
+        switch to it would fail (this also surfaces a C2 mismatch before it's ever attempted).
+
+        Desk-settings plan (2026-09-27): answers the desk page's origin too (paperbook's exact-
+        origin CORS, extended to this route -- everything else on this service stays same-origin)."""
+        bad = desk_origin_refusal(request.headers)
+        if bad is not None:
+            raise HTTPException(*bad)
+        _cors(response, request)
         d = settings_store.get()
         if getattr(feed, "switch_in_progress", False):
             d["md"] = feed.md_env   # the file already names the target; the feed is not there yet
@@ -857,6 +871,17 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         d["accounts"] = {env: (f"···{label[-3:]}" if label and len(label) > 3 else label)
                          for env, label in accts.items()}
         return d
+
+    @app.options("/api/settings")
+    async def settings_preflight(request: Request):
+        """The desk page's CORS preflight for PUT /api/settings -- allowed for DESK_ORIGINS only
+        (anything else: no allow-origin header, so the browser never sends the write)."""
+        o = request.headers.get("origin")
+        if o not in DESK_ORIGINS:
+            return JSONResponse({"detail": "origin not allowed"}, status_code=403)
+        return Response(status_code=204, headers={
+            "access-control-allow-origin": o, "vary": "Origin", "access-control-allow-methods": "PUT",
+            "access-control-allow-headers": "content-type", "access-control-max-age": "600"})
 
     @app.put("/api/settings")
     async def put_settings(request: Request):
@@ -873,7 +898,21 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         (423). Any OTHER failure -- a bad connect, an environment mismatch, every root refused,
         the window opening mid-switch -- is TickFeed's own RuntimeError (502); nothing else is
         allowed to reach this route as an unhandled 500. A feed that has not answered in
-        MD_SWITCH_TIMEOUT_S is 504; the switch still finishes and keeps the file right."""
+        MD_SWITCH_TIMEOUT_S is 504; the switch still finishes and keeps the file right.
+
+        Desk-settings plan: the exact-origin check (desk_origin_refusal) plus CORS (_cors) wrap
+        the whole thing, like paperbook's account-write routes -- a refusal AFTER that check is
+        still readable by the desk page, never just "unreachable"."""
+        bad = desk_origin_refusal(request.headers)
+        if bad is not None:
+            raise HTTPException(*bad)
+        try:
+            result = await do_put_settings(request)
+        except HTTPException as e:
+            return _cors(JSONResponse({"detail": e.detail}, status_code=e.status_code), request)
+        return _cors(JSONResponse(result), request)
+
+    async def do_put_settings(request: Request) -> dict:
         bad = netguard.refusal(request.method, request.scope["headers"], netguard.allowlist())
         if bad is not None:
             raise HTTPException(*bad)
