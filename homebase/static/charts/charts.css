@@ -155,6 +155,16 @@ a { color: inherit; }
 .lg-label { color: var(--text); }
 .lg-vals { display: inline-flex; gap: 8px; font-variant-numeric: tabular-nums; }
 .lg-row.off .lg-label, .lg-row.off .lg-vals { opacity: .5; }
+/* .l2-imb: the imbalance gauge's own badge (l2layer.js), appended to the "Imbalance" legend row -- outside
+   .lg-vals so cell.js's own per-bar legend repaint (which only ever replaces .lg-vals' children) never wipes it. */
+.l2-imb { display: inline-flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
+.l2-imb-barwrap { width: 36px; height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; }
+.l2-imb-bar { height: 100%; width: 0; border-radius: 3px; }
+.l2-imb-bar.bid { background: var(--accent); }
+.l2-imb-bar.ask { background: var(--down); }
+.l2-imb-pct { font-size: 12px; color: var(--text-2); }
+.l2-imb-pct.bid { color: var(--accent); }
+.l2-imb-pct.ask { color: var(--down); }
 .lg-btns { display: none; gap: 2px; }
 .lg-row:hover .lg-btns, .lg-row:focus-within .lg-btns, .lg-btns:has(.ib.open) { display: inline-flex; }
 .ib { width: 18px; height: 18px; display: grid; place-items: center; border-radius: 3px; color: var(--text); }

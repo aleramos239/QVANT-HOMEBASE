@@ -137,3 +137,107 @@ test('buildRows: volume column blank end to end when unavailable, filled when it
   assert.equal(at(30900).vol, 5);
   assert.equal(at(30900.25).vol, null);   // a price with real volume data available, just none printed here
 });
+
+/* ---- Task 2: big-order lines + the imbalance gauge ---- */
+
+test('bigLevels: the median window only pools books within the last 60s', () => {
+  const history = [
+    { ts: -1000, bids: [[100, 100000]], offers: [] },   // well before the window: excluded
+    { ts: -900, bids: [[100, 100000]], offers: [] },
+    { ts: 500, bids: [[100, 10]], offers: [] },         // inside the window
+    { ts: 30000, bids: [[100, 10]], offers: [] },
+  ];
+  const book = { ts: 60000, bids: [[100, 60]], offers: [] };
+  const r = Dom.bigLevels(book, history, { now: 60000, windowMs: 60000 });
+  assert.equal(r.median, 10);           // the two out-of-window snapshots never enter the pool
+  assert.deepEqual(r.bids.map((l) => l.price), [100]);   // 60 >= 5 x 10
+});
+
+test('bigLevels: no history at all -- no median, nothing qualifies whatever the book carries', () => {
+  const book = { ts: 0, bids: [[100, 1000000]], offers: [] };
+  const r = Dom.bigLevels(book, [], { now: 0 });
+  assert.equal(r.median, 0);
+  assert.deepEqual(r.bids, []);
+});
+
+test('bigLevels: the threshold is exactly multiple x the median -- >= qualifies, just under does not', () => {
+  const history = [{ ts: 0, bids: [[100, 10], [101, 10]], offers: [[102, 10], [103, 10]] }];
+  const book = { ts: 0, bids: [[100, 50], [101, 49.999]], offers: [[102, 30]] };
+  const r = Dom.bigLevels(book, history, { now: 0, multiple: 5 });
+  assert.deepEqual(r.bids.map((l) => l.price), [100]);   // 50 >= 5 x 10
+  assert.equal(r.offers.length, 0);                      // 30 < 50
+});
+
+test('bigLevels: a custom multiple narrows or widens what qualifies', () => {
+  const history = [{ ts: 0, bids: [[100, 10]], offers: [] }];
+  const book = { ts: 0, bids: [[100, 35]], offers: [] };
+  assert.deepEqual(Dom.bigLevels(book, history, { now: 0, multiple: 3 }).bids.map((l) => l.price), [100]);   // 35 >= 3x10
+  assert.deepEqual(Dom.bigLevels(book, history, { now: 0, multiple: 5 }).bids, []);                          // 35 < 5x10
+});
+
+test('bigLevels: caps at 8 lines per side, the largest kept', () => {
+  const history = [{ ts: 0, bids: Array.from({ length: 10 }, (_, i) => [100 + i, 10]), offers: [] }];
+  const bids = Array.from({ length: 10 }, (_, i) => [100 + i, 50 + i]);   // 50..59, all >= threshold 50
+  const book = { ts: 0, bids, offers: [] };
+  const r = Dom.bigLevels(book, history, { now: 0 });
+  assert.equal(r.bids.length, 8);
+  assert.deepEqual(r.bids.map((l) => l.size), [59, 58, 57, 56, 55, 54, 53, 52]);
+});
+
+test('bigLevels: a level that falls below the threshold fades out over 5s, then disappears (injected clock)', () => {
+  const history = [{ ts: 0, bids: [[100, 10]], offers: [] }];
+  let r = Dom.bigLevels({ ts: 0, bids: [[100, 60]], offers: [] }, history, { now: 0 });
+  assert.equal(r.bids.length, 1);
+  assert.equal(r.bids[0].opacity, 1);
+  r = Dom.bigLevels({ ts: 2000, bids: [[100, 5]], offers: [] }, history, { now: 2000, prev: r });
+  assert.equal(r.bids.length, 1);
+  assert.ok(r.bids[0].opacity > 0 && r.bids[0].opacity < 1, 'mid-fade');
+  r = Dom.bigLevels({ ts: 5000, bids: [[100, 5]], offers: [] }, history, { now: 5000, prev: r });
+  assert.equal(r.bids.length, 0);   // 5s after it stopped qualifying: gone
+});
+
+test('bigLevels: a level that vanishes from the book fades the same as one that drops below threshold', () => {
+  const history = [{ ts: 0, bids: [[100, 10]], offers: [] }];
+  let r = Dom.bigLevels({ ts: 0, bids: [[100, 60]], offers: [] }, history, { now: 0 });
+  r = Dom.bigLevels({ ts: 4999, bids: [], offers: [] }, history, { now: 4999, prev: r });
+  assert.ok(r.bids.length === 1 && r.bids[0].opacity > 0);
+  r = Dom.bigLevels({ ts: 5000, bids: [], offers: [] }, history, { now: 5000, prev: r });
+  assert.equal(r.bids.length, 0);
+});
+
+test('bigLevels: no book at all -- nothing to draw, no crash', () => {
+  const r = Dom.bigLevels(null, [{ ts: 0, bids: [[100, 10]], offers: [] }], { now: 0 });
+  assert.deepEqual(r.bids, []);
+  assert.deepEqual(r.offers, []);
+});
+
+test('imbalance: sigma bid - sigma ask over the top 10 levels, signed as a pct of the total', () => {
+  const book = { bids: [[100, 30], [99, 20]], offers: [[101, 10], [102, 10]] };
+  const im = Dom.imbalance(book);
+  assert.equal(im.bid, 50);
+  assert.equal(im.ask, 20);
+  assert.equal(im.pct, (50 - 20) / 70 * 100);
+  assert.equal(im.side, 'bid');
+});
+
+test('imbalance: only the top 10 levels count', () => {
+  const bids = Array.from({ length: 12 }, () => [100, 1]);
+  const im = Dom.imbalance({ bids, offers: [] });
+  assert.equal(im.bid, 10);
+});
+
+test('imbalance: empty sides -- no book, both sides empty, one side empty', () => {
+  assert.deepEqual(Dom.imbalance(null), { bid: 0, ask: 0, pct: 0, side: null });
+  assert.deepEqual(Dom.imbalance({ bids: [], offers: [] }), { bid: 0, ask: 0, pct: 0, side: null });
+  const askOnly = Dom.imbalance({ bids: [], offers: [[100, 5]] });
+  assert.equal(askOnly.bid, 0);
+  assert.equal(askOnly.pct, -100);
+  assert.equal(askOnly.side, 'ask');
+});
+
+test('imbalance: a malformed row is dropped, not crashed on', () => {
+  const im = Dom.imbalance({ bids: [[100, 10], ['x', 5], null], offers: [[101, NaN]] });
+  assert.equal(im.bid, 10);
+  assert.equal(im.ask, 0);
+  assert.equal(im.side, 'bid');
+});

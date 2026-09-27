@@ -1321,7 +1321,7 @@ function connect() {
     if (m.type === 'status') { statusAt = Date.now(); showStatus(m); return; }
     if (m.type === 'desk' || m.type === 'quote') { window.HBDeskClient.onMessage(m); return; }
     if (m.type === 'paper') { window.HBPaperClient.onMessage(m); return; }
-    if (m.type === 'depth') { window.HBDomUI.onDepth(m); return; }
+    if (m.type === 'depth') { window.HBDomUI.onDepth(m); window.HBL2Layer.onDepth(m); return; }
     const c = cells.find((x) => x.id === m.id);
     if (!c) return;
     if (m.type === 'history') c.onHistory(m);
@@ -1419,6 +1419,7 @@ async function init() {
   page.overlays.push(window.HBTradeLines.overlay);   // Task 6: the per-chart Buy/Sell block, lines and markers
   page.overlays.push(window.HBReplayUI.overlay);     // Bar Replay: the floating control bar, dimming and REPLAY pill
   page.overlays.push(window.HBTesterLayer.overlay);  // Task 10: the tester's trades, plots and jump on the root's chart
+  page.overlays.push(window.HBL2Layer.overlay);      // charts-l2-news-ui Task 2: big-order lines + the imbalance gauge
   // M8 (tester review): HBTesterUI.mount registers the 'tester' tab via HBPanel.addTab, so it runs BEFORE
   // HBPanel.mount reads a saved {tab: 'tester'} -- otherwise a saved tester tab is not restored on reload.
   window.HBTesterUI.mount(page);               // Task 9

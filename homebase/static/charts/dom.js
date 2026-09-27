@@ -98,7 +98,99 @@ function volumeAtPrice(bars, tick) {
   return seen ? m : null;
 }
 
-const api = { LEVELS, tickIndex, priceOf, buildRows, nextCenter, centerOn, volumeAtPrice };
+/* ---- Task 2: big-order lines + the imbalance gauge (2026-09-27 charts-l2-news-ui plan) ----
+   bigLevels pools the displayed sizes across a window of recent books for the same root (the median window),
+   then lines up the CURRENT book's levels against multiple x that median. The fade of a level that fell below
+   the threshold or vanished from the book is threaded through opts.prev -- this function's own last return --
+   so it stays pure: every input (book, history, now, prev) is explicit, nothing is read off a real clock or a
+   module-level store. imbalance is a one-shot read of the current book alone, no state. */
+const BIG_WINDOW_MS = 60000;   // "the last 60 s of books"
+const BIG_FADE_MS = 5000;      // "fade out over 5 s"
+const BIG_CAP = 8;             // "at most 8 lines per side"
+const BIG_MULTIPLE = 5;        // the catalog's own default
+
+function median(values) {
+  if (!values.length) return 0;
+  const s = values.slice().sort((a, b) => a - b), mid = s.length >> 1;
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+}
+
+/* Every displayed size across `history` ({ts, bids, offers}[], any order) within [now - windowMs, now]. An
+   entry with no finite ts, or older than the window, contributes nothing -- "the median window". */
+function pooledSizes(history, now, windowMs) {
+  const out = [];
+  for (const snap of Array.isArray(history) ? history : []) {
+    if (!snap || !Number.isFinite(snap.ts)) continue;
+    if (Number.isFinite(now) && now - snap.ts > windowMs) continue;
+    for (const rows of [snap.bids, snap.offers]) {
+      for (const r of Array.isArray(rows) ? rows : []) if (Array.isArray(r) && Number.isFinite(r[1])) out.push(r[1]);
+    }
+  }
+  return out;
+}
+
+/* One side (bids or offers): today's qualifying levels (size >= threshold) merged with `prevSide` (this
+   function's own last return for that side), so a level that just fell below the threshold or vanished from
+   the book keeps fading instead of vanishing at once. `since` is the last moment the level qualified, and its
+   `size` freezes at that moment too (a fading line shows the size that earned it the line, not whatever the
+   book prints while it decays). A line whose fade has run its full course (age >= fadeMs, never requalified in
+   between) is dropped for good. Capped to BIG_CAP, live (opacity 1) lines ahead of fading ones, largest first. */
+function bigSide(rows, prevSide, threshold, now, fadeMs) {
+  const qualifying = new Map();
+  for (const r of Array.isArray(rows) ? rows : []) {
+    if (Array.isArray(r) && Number.isFinite(r[0]) && Number.isFinite(r[1]) && r[1] >= threshold) qualifying.set(r[0], r[1]);
+  }
+  const merged = new Map();
+  for (const line of Array.isArray(prevSide) ? prevSide : []) {
+    if (line && Number.isFinite(line.price) && Number.isFinite(line.since)) {
+      merged.set(line.price, { price: line.price, size: line.size, since: line.since });
+    }
+  }
+  for (const [price, size] of qualifying) merged.set(price, { price, size, since: now });
+  const out = [];
+  for (const line of merged.values()) {
+    const live = qualifying.has(line.price);
+    const age = live ? 0 : (Number.isFinite(now) ? now - line.since : Infinity);
+    if (!live && age >= fadeMs) continue;
+    out.push({ price: line.price, size: line.size, since: line.since, opacity: live ? 1 : Math.max(0, 1 - age / fadeMs) });
+  }
+  out.sort((a, b) => b.opacity - a.opacity || b.size - a.size);
+  return out.slice(0, BIG_CAP);
+}
+
+/* The big-order lines for `book` ({bids, offers}: [[price, size], ...] each, best first) given `history`
+   (recent books for the same root; order doesn't matter, this function windows it itself). opts: multiple
+   (default BIG_MULTIPLE), now (ms; defaults to book.ts), windowMs (default BIG_WINDOW_MS), fadeMs (default
+   BIG_FADE_MS), prev (this function's own last return -- {bids, offers} -- omit on the first call for a root).
+   No book, or a history too thin to have a median at all, both mean nothing qualifies. */
+function bigLevels(book, history, opts = {}) {
+  const multiple = opts.multiple > 0 ? opts.multiple : BIG_MULTIPLE;
+  const windowMs = opts.windowMs > 0 ? opts.windowMs : BIG_WINDOW_MS;
+  const fadeMs = opts.fadeMs > 0 ? opts.fadeMs : BIG_FADE_MS;
+  const now = Number.isFinite(opts.now) ? opts.now : (book && Number.isFinite(book.ts) ? book.ts : 0);
+  const prev = opts.prev && typeof opts.prev === 'object' ? opts.prev : {};
+  const med = median(pooledSizes(history, now, windowMs));
+  const threshold = med > 0 ? med * multiple : Infinity;   // no usable median: nothing can qualify
+  return {
+    bids: bigSide(book && book.bids, prev.bids, threshold, now, fadeMs),
+    offers: bigSide(book && book.offers, prev.offers, threshold, now, fadeMs),
+    median: med,
+  };
+}
+
+/* Sigma bid sizes - Sigma ask sizes over the top `n` (default 10) levels each side, signed as a percentage of
+   their total. {bid, ask, pct, side}: side is 'bid' (bid-heavy), 'ask' (ask-heavy) or null (flat, including no
+   book or no size on either side at all -- "imbalance maths including empty sides"). */
+function imbalance(book, n = 10) {
+  const sum = (rows) => (Array.isArray(rows) ? rows.slice(0, n) : [])
+    .reduce((s, r) => s + (Array.isArray(r) && Number.isFinite(r[0]) && Number.isFinite(r[1]) ? r[1] : 0), 0);
+  const bid = sum(book && book.bids), ask = sum(book && book.offers), total = bid + ask;
+  const pct = total > 0 ? (bid - ask) / total * 100 : 0;
+  return { bid, ask, pct, side: pct > 0 ? 'bid' : pct < 0 ? 'ask' : null };
+}
+
+const api = { LEVELS, tickIndex, priceOf, buildRows, nextCenter, centerOn, volumeAtPrice,
+  BIG_WINDOW_MS, BIG_FADE_MS, BIG_CAP, BIG_MULTIPLE, bigLevels, imbalance };
 if (typeof window !== 'undefined') window.HBDom = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

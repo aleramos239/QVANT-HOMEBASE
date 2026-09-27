@@ -38,6 +38,10 @@ test('params are clamped to their range and type', () => {
   assert.deepEqual(C.clampParams('footprint', { imbalance: 2.5 }), { imbalance: 2.5 });
   assert.deepEqual(C.clampParams('footprint', { imbalance: -1 }), { imbalance: 0 });
   assert.deepEqual(C.clampParams('bigprints', { min: 0 }), { min: 1 });
+  assert.deepEqual(C.clampParams('bigorders', {}), { multiple: 5 });
+  assert.deepEqual(C.clampParams('bigorders', { multiple: 0 }), { multiple: 1 });
+  assert.deepEqual(C.clampParams('bigorders', { multiple: 999 }), { multiple: 50 });
+  assert.deepEqual(C.clampParams('imbalance', { junk: 1 }), {});
   assert.deepEqual(C.clampParams('vwap', { anchor: 'xyz', bands: 'yes' }), { anchor: 'eth', bands: false });
   assert.deepEqual(C.clampParams('vwap', { anchor: 'rth', bands: true, junk: 1 }), { anchor: 'rth', bands: true });
   assert.deepEqual(C.clampParams('volume', { any: 1 }), {});
@@ -109,6 +113,8 @@ test('legend labels', () => {
   assert.equal(C.label(C.instance('footprint')), 'Footprint 3×');
   assert.equal(C.label(C.instance('footprint', { imbalance: 0 })), 'Footprint');
   assert.equal(C.label(C.instance('bigprints')), 'Big prints ≥25');
+  assert.equal(C.label(C.instance('bigorders')), 'Big orders 5×');
+  assert.equal(C.label(C.instance('imbalance')), 'Imbalance');
   assert.equal(C.label(C.instance('cumdelta')), 'Cumulative delta');
   assert.equal(C.label(C.instance('levels')), 'Session levels');
 });
@@ -122,7 +128,7 @@ test('legend values per indicator', () => {
     [{ text: '25.12', color: '#0F0F0F' }, { text: '30.00', color: '#089981' }, { text: '—', color: '#F23645' }]);
   assert.deepEqual(C.legendValues(C.instance('cumdelta'), bar, colors, 0.25), [{ text: '-1.50K', color: '#FF6D00' }]);
   assert.deepEqual(C.legendValues(C.instance('sma'), bar, colors, 0.25), [{ text: '—', color: '#2962FF' }]);
-  for (const id of ['volume', 'delta', 'levels', 'footprint', 'profile', 'bigprints']) {
+  for (const id of ['volume', 'delta', 'levels', 'footprint', 'profile', 'bigprints', 'bigorders', 'imbalance']) {
     assert.deepEqual(C.legendValues(C.instance(id), bar, colors, 0.25), [], id);
   }
 });
@@ -218,7 +224,7 @@ test('market hours: Globex Sunday 18:00 to Friday 17:00 with a daily break; cryp
 test('dialog filtering by name and group', () => {
   assert.deepEqual(C.filter('', 'Moving averages').map((d) => d.id), ['ema', 'sma', 'vwma']);
   assert.deepEqual(C.filter('delta').map((d) => d.id), ['delta', 'cumdelta']);
-  assert.deepEqual(C.filter('ORDER').map((d) => d.id), ['footprint', 'profile', 'delta', 'cumdelta', 'bigprints']);
+  assert.deepEqual(C.filter('ORDER').map((d) => d.id), ['footprint', 'profile', 'delta', 'cumdelta', 'bigprints', 'bigorders', 'imbalance']);
   assert.deepEqual(C.filter('zzz'), []);
   assert.equal(C.filter('').length, C.CATALOG.length);
   assert.deepEqual(C.GROUPS, ['All', 'VWAP', 'Moving averages', 'Trend', 'Levels', 'Volume', 'Order flow']);

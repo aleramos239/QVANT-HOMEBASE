@@ -57,6 +57,9 @@ const CATALOG = [
   { id: 'cumdelta', group: 'Order flow', name: 'Cumulative delta', params: [], pane: 'own' },
   { id: 'bigprints', group: 'Order flow', name: 'Big prints', params: [
     { key: 'min', label: 'Minimum size', type: 'int', min: 1, max: 100000, def: 25 }] },
+  { id: 'bigorders', group: 'Order flow', name: 'Big orders', params: [
+    { key: 'multiple', label: 'Multiple', type: 'num', min: 1, max: 50, step: 0.5, def: 5 }] },
+  { id: 'imbalance', group: 'Order flow', name: 'Imbalance', params: [] },
 ];
 const BY_ID = Object.fromEntries(CATALOG.map((d) => [d.id, d]));
 const FAVOURITES = [['1m', 'time:60'], ['5m', 'time:300'], ['15m', 'time:900'], ['1h', 'time:3600'], ['4h', 'time:14400'], ['D', 'time:86400']];
@@ -189,6 +192,7 @@ function label(inst) {
     case 'adx': return `ADX ${p.length}`;
     case 'footprint': return p.imbalance > 0 ? `Footprint ${p.imbalance}×` : 'Footprint';
     case 'bigprints': return `Big prints ≥${p.min}`;
+    case 'bigorders': return `Big orders ${p.multiple}×`;
     default: return d.name;
   }
 }
