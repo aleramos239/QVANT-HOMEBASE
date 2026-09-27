@@ -53,7 +53,7 @@ def test_prop_rule_sets_are_listed_with_the_unconfirmed_flag(tmp_path):
         listed = c.get("/api/tester/prop-rules").json()
         rules = {r["id"]: r for r in listed}
         # exactly the evals the account holder runs, newest version per family
-        assert [r["name"] for r in listed] == ["LucidFlex 50K", "LucidPro 50K", "LucidPro 50K · no daily loss limit"]
+        assert [r["name"] for r in listed] == ["LucidFlex 50K", "LucidPro 50K · $1,200 daily limit", "LucidPro 50K · no daily loss limit"]
         assert rules["lucid-flex-50k@2026-09-27"]["confirmed"] is True
         assert rules["lucid-pro-50k@2026-09-27b"]["confirmed"] is False
         r = c.post("/api/tester/run", json={**RUN, "prop_rules": "nope@1"})
@@ -430,7 +430,7 @@ def test_rescoring_a_run_under_another_eval_equals_a_fresh_run_and_is_cached(tmp
                    headers={"origin": "http://localhost:8852"})
         assert r.status_code == 200
         assert r.json() == fresh_prop
-        assert r.json()["rules"]["label"] == "LucidPro 50K · unconfirmed rules"
+        assert r.json()["rules"]["label"] == "LucidPro 50K (before the daily limit) · unconfirmed rules"
         again = c.post(f"/api/tester/runs/{rid}/propsim", json={"prop_rules": PRO}).json()
         assert again == fresh_prop and len(calls) == 1                     # cache hit
         # the run's own eval comes back as its saved file, untouched

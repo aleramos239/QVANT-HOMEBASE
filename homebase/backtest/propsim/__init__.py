@@ -10,9 +10,15 @@ reproduces:
                                          minimum (account holder, reaffirmed 2026-09-27);
                                          the numbers are 2026-08's, unchanged.
   rules/lucid-flex-50k@2026-08.json      superseded, kept for reproducing older runs.
-  rules/lucid-pro-50k@2026-09-27.json    Flex minus the consistency rule and the minimum
-                                         days (account holder, 2026-09-27); every other
-                                         number INHERITED from Flex, "confirmed": false.
+  rules/lucid-pro-50k@2026-09-27b.json   LucidPro: no consistency rule, no minimum days,
+                                         a SOFT $1,200 daily loss limit; size/target/max
+                                         loss/limit/max size from the account holder
+                                         (2026-09-27); lock, EOD trailing and payout terms
+                                         INHERITED from Flex, "confirmed": false.
+  rules/lucid-pro-50k-no-dll@2026-09-27b.json  the same account with the daily limit
+                                         removed (an option Lucid offers).
+  rules/lucid-pro-50k@2026-09-27.json    superseded (no daily limit, all but two numbers
+                                         inherited), kept for reproducing older runs.
 There is deliberately NO Apex file: the account holder maps other accounts onto Flex or
 Pro, and a file of invented numbers is worse than no file (the placeholder was deleted
 2026-09-27).
@@ -83,6 +89,31 @@ def weekday_grid(trades: list[dict]) -> tuple[list[float], list[bool], list[str]
     return [by.get(d, 0.0) for d in dates], [d in by for d in dates], dates
 
 
+def limit_trades(trades: list[dict], r: dict) -> list[dict]:
+    """The ledger as a SOFT daily loss limit leaves it (LucidPro: hit the limit and you are
+    closed out and stopped for the day; the account survives). Walking each day's trades in
+    ledger order, the trade that takes the day's running P&L to -limit is cut to exactly the
+    limit and the day's later trades are dropped. Null limit: the ledger unchanged. What it
+    still cannot see is a trade that dipped past the limit INTRADE and then won -- evaluate()
+    warns about those."""
+    dll = engine._dll(r)
+    if not dll:
+        return trades
+    out, cum, stopped = [], {}, set()
+    for t in trades:
+        d = t["date"]
+        if d in stopped:
+            continue
+        c, x = cum.get(d, 0.0), float(t["net"])
+        if c + x <= -dll:
+            out.append({**t, "net": -dll - c})
+            stopped.add(d)
+            continue
+        cum[d] = c + x
+        out.append(t)
+    return out
+
+
 def evaluate(trades: list[dict], rule_id: str = DEFAULT_RULES, *, n_paths: int = N_PATHS,
              horizon: int = HORIZON, seed: int = SEED, rules: dict | None = None) -> dict:
     """The run's propsim.json. Pass `rules` when the caller already loaded the rule file
@@ -94,7 +125,15 @@ def evaluate(trades: list[dict], rule_id: str = DEFAULT_RULES, *, n_paths: int =
                      "label": r.get("name") if confirmed else f"{r.get('name')} · unconfirmed rules"},
            "caveat": CAVEAT, "engine": "iid-weekday-bootstrap (IP notebook port)",
            "n_paths": n_paths, "horizon": horizon, "seed": seed}
-    pnls, flags, dates = weekday_grid(trades)
+    dll = engine._dll(r)
+    if dll:
+        over = sum(1 for t in trades if float(t.get("net", 0.0)) < -dll)
+        out["dll_trades_over"] = over
+        if over:
+            out["caveat"] = (f"{CAVEAT} {over} trade(s) lost more than the ${dll:,.0f} daily limit on their own: "
+                             "they are cut to the limit here, but a trade that dipped past it before winning is still "
+                             "counted as a win, so this pass rate is OVERSTATED.")
+    pnls, flags, dates = weekday_grid(limit_trades(trades, r))
     if not pnls:
         return {**out, "skipped": "no trades: nothing to simulate"}
     res = engine.run(pnls, trade_flags=flags, rules=r, n_paths=n_paths, horizon=horizon,

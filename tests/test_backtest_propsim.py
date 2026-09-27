@@ -72,7 +72,7 @@ def test_rule_files_and_the_unconfirmed_label():
     assert set(ids) == {"lucid-flex-50k@2026-09-27", "lucid-pro-50k@2026-09-27b", "lucid-pro-50k-no-dll@2026-09-27b"}
     assert ids["lucid-flex-50k@2026-09-27"] == {"id": "lucid-flex-50k@2026-09-27", "name": "LucidFlex 50K",
                                                 "version": "2026-09-27", "confirmed": True}
-    assert ids["lucid-pro-50k@2026-09-27b"] == {"id": "lucid-pro-50k@2026-09-27b", "name": "LucidPro 50K",
+    assert ids["lucid-pro-50k@2026-09-27b"] == {"id": "lucid-pro-50k@2026-09-27b", "name": "LucidPro 50K · $1,200 daily limit",
                                                 "version": "2026-09-27b", "confirmed": False}
     assert ids["lucid-pro-50k-no-dll@2026-09-27b"]["name"] == "LucidPro 50K · no daily loss limit"
     assert load_rules("lucid-pro-50k@2026-09-27")["daily_loss_limit"] is None   # the older Pro still reproduces
@@ -85,7 +85,7 @@ def test_rule_files_and_the_unconfirmed_label():
     pro = evaluate(day_trades([500.0] * 5), "lucid-pro-50k@2026-09-27", n_paths=200)
     assert lucid["rules"]["id"] == DEFAULT_RULES and lucid["rules"]["label"] == "LucidFlex 50K"
     assert pro["rules"]["confirmed"] is False
-    assert pro["rules"]["label"] == "LucidPro 50K · unconfirmed rules"
+    assert pro["rules"]["label"] == "LucidPro 50K (before the daily limit) · unconfirmed rules"
     assert lucid["caveat"] == pro["caveat"] == CAVEAT
     for bad in ("nope@x", "../lucid-flex-50k@2026-08", "", None):
         with pytest.raises(ValueError, match="prop_rules"):
@@ -170,7 +170,7 @@ def test_the_runner_writes_propsim_json_and_validates_the_rule_set(tmp_path, mon
     meta = execute(tmp_path / "t" / "runs" / rid, store)
     p = read_json(tmp_path / "t" / "runs" / rid / "propsim.json")
     assert meta["prop_rules"] == "lucid-pro-50k@2026-09-27"
-    assert p["rules"]["label"] == "LucidPro 50K · unconfirmed rules" and p["n_paths"] == 300
+    assert p["rules"]["label"] == "LucidPro 50K (before the daily limit) · unconfirmed rules" and p["n_paths"] == 300
     assert p["grid"] == {"first": "2024-03-05", "last": "2024-03-05", "weekdays": 1, "trade_days": 1}
     assert 0.0 <= p["headline"]["eval_pass_p"] <= 1.0 and p["caveat"] == CAVEAT
 
@@ -240,8 +240,50 @@ def test_a_soft_daily_limit_caps_the_day_and_the_account_survives():
 
 
 def test_flex_is_unchanged_by_the_daily_limit_code():
-    """Flex carries `daily_loss_limit: null`, so its outcomes are exactly what they were."""
-    flex = load_rules(DEFAULT_RULES)
+    """Flex carries `daily_loss_limit: null`: limit_trades hands back the very same ledger, and
+    the eval/funded races give exactly what a limit-free Pro file gives on the same days."""
+    flex, no = load_rules(DEFAULT_RULES), load_rules("lucid-pro-50k-no-dll@2026-09-27b")
     assert flex["daily_loss_limit"] is None
-    for path in ([-2500.0], [-1900.0, 3200.0], [2900.0, 200.0], [1600.0, 1600.0]):
-        assert engine._cap_day(path[0], flex) == path[0]
+    ledger = day_trades([-2500.0, 400.0, -1900.0, 3200.0])
+    assert propsim.limit_trades(ledger, flex) is ledger
+    for path in ([-2500.0], [-1900.0, 3200.0, 1000.0], [2900.0, 200.0, 50.0], [1600.0, 1600.0]):
+        assert engine.run_eval(path, flex) == engine.run_eval(path, dict(flex, daily_loss_limit=None))
+        assert engine.run_funded(path, flex) == engine.run_funded(path, dict(flex, daily_loss_limit=None))
+    assert evaluate(ledger, DEFAULT_RULES, n_paths=300)["caveat"] == CAVEAT
+
+
+def test_a_bad_daily_limit_is_refused_not_guessed():
+    flex = load_rules(DEFAULT_RULES)
+    for bad in (-1200, "1200", True):
+        with pytest.raises(ValueError, match="daily_loss_limit"):
+            engine.run_eval([-500.0] * 3, dict(flex, daily_loss_limit=bad))
+    assert engine.run_eval([-2500.0], dict(flex, daily_loss_limit=0))["outcome"] == "bust"   # 0 = no limit
+
+
+def test_limit_trades_stops_the_day_at_the_limit():
+    """Trade level: the crossing trade is cut to exactly the limit and the day's later trades never
+    happen -- so -1,300 then +500 is a -1,200 day, not -800."""
+    pro = load_rules("lucid-pro-50k@2026-09-27b")
+    ledger = [{"date": "2024-03-04", "net": -1300.0}, {"date": "2024-03-04", "net": 500.0},
+              {"date": "2024-03-05", "net": -700.0}, {"date": "2024-03-05", "net": -700.0},
+              {"date": "2024-03-05", "net": 900.0}, {"date": "2024-03-06", "net": -300.0}]
+    got = [(t["date"], t["net"]) for t in propsim.limit_trades(ledger, pro)]
+    assert got == [("2024-03-04", -1200.0), ("2024-03-05", -700.0), ("2024-03-05", -500.0), ("2024-03-06", -300.0)]
+
+
+def test_the_result_warns_when_a_single_trade_breaks_the_limit():
+    ledger = day_trades([-1500.0, 800.0, 900.0])
+    pro = evaluate(ledger, "lucid-pro-50k@2026-09-27b", n_paths=200)
+    assert pro["dll_trades_over"] == 1 and "OVERSTATED" in pro["caveat"]
+    no = evaluate(ledger, "lucid-pro-50k-no-dll@2026-09-27b", n_paths=200)
+    assert "dll_trades_over" not in no and no["caveat"] == CAVEAT
+
+
+def test_monte_carlo_ruin_agrees_with_the_daily_limit():
+    """p_ruin and the drawdowns walk the same capped days as p_prop_pass: one -2,500 day among
+    wins is ruin against the $2,000 floor without the limit, never with it (-1,200)."""
+    from homebase.backtest.stats import montecarlo
+    ledger = day_trades([-2500.0, 900.0, 900.0, 900.0])
+    dll = montecarlo.run(ledger, rules=load_rules("lucid-pro-50k@2026-09-27b"), paths=200, seed=1)
+    no = montecarlo.run(ledger, rules=load_rules("lucid-pro-50k-no-dll@2026-09-27b"), paths=200, seed=1)
+    assert no["p_ruin"] == 1.0 and dll["p_ruin"] == 0.0

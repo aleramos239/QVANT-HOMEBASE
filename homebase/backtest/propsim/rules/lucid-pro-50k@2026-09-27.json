@@ -1,5 +1,5 @@
 {
-  "name": "LucidPro 50K",
+  "name": "LucidPro 50K (before the daily limit)",
   "version": "2026-09-27",
   "as_of": "2026-09-27",
   "source": "Account holder, 2026-09-27, asked for a LucidPro eval and described it as: \"pretty much the same as lucid flex except theres no consistency rule and theres no minimum day, so you could pass it in a single day\". Only those two fields are sourced: consistency = null and eval_min_days = 1. EVERY OTHER NUMBER IN THIS FILE IS INHERITED FROM FLEX (lucid-flex-50k@2026-09-27) AND IS NOT INDEPENDENTLY CONFIRMED for LucidPro -- account size, target, trailing max loss, lock, payout terms, scaling and session rules all come from Flex. \"confirmed\": false until the account holder verifies them; the tester labels every result from this file \"unconfirmed rules\".",

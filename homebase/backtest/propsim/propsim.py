@@ -112,14 +112,29 @@ def _floor(peak: float, r: dict) -> float:
     return r["lock_floor"] if peak >= r["lock_at"] else peak - r["trailing_mll"]
 
 
+def _dll(r: dict) -> Optional[float]:
+    """The ruleset's daily loss limit in $, or None. Only null/0 (no limit) or a
+    positive number is accepted -- a negative one would turn every losing day into a
+    win, so it is refused rather than guessed at."""
+    v = r.get("daily_loss_limit")
+    if v is None or v == 0:
+        return None
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or v < 0:
+        raise ValueError(f"daily_loss_limit: null or a positive $ amount, not {v!r}")
+    return float(v)
+
+
 def _cap_day(pnl: float, r: dict) -> float:
     """A SOFT daily loss limit (LucidPro, account holder 2026-09-27): hitting it
-    closes you out and stops you for the day -- the account survives. On daily
-    P&L that is the day's loss capped at the limit. It cannot see a day that dipped
-    past the limit intraday and then recovered (in reality you'd have been stopped
-    at the limit), so with a limit set the sim is slightly OPTIMISTIC on such days.
-    ``daily_loss_limit: null`` = no limit."""
-    dll = r.get("daily_loss_limit")
+    closes you out and stops you for the day -- the account survives. The tester
+    applies it at TRADE level first (propsim.limit_trades: the crossing trade is cut
+    to the limit, the day's later trades dropped); this daily cap is the safety net
+    for callers that pass bare daily P&L. Either way it cannot see a trade that sat
+    below -limit and then won -- booked as the full win where Lucid would have
+    stopped you out -- so the bigger a strategy's per-trade stop relative to the
+    limit, the more the with-limit pass rate is OVERSTATED; evaluate() warns when
+    any trade's loss exceeds the limit. ``daily_loss_limit: null`` = no limit."""
+    dll = _dll(r)
     return max(pnl, -dll) if dll else pnl
 
 

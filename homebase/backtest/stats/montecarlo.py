@@ -28,7 +28,7 @@ from itertools import accumulate, chain, islice
 from operator import sub
 from typing import List, Optional, Sequence
 
-from ..propsim import HORIZON, engine, weekday_grid
+from ..propsim import HORIZON, engine, limit_trades, weekday_grid
 
 __all__ = ["run", "MAX_WORK", "MAX_PATHS", "DEFAULT_FLOOR"]
 
@@ -126,6 +126,10 @@ def run(
         raise ValueError("floor: a drawdown in $ above 0")
     floor = float(floor)
 
+    # A soft daily loss limit in the rules (LucidPro) ends the day at the limit (limit_trades): applied
+    # before anything else so p_ruin, the drawdowns and p_prop_pass all walk the same capped days.
+    if rules is not None:
+        trades = limit_trades(list(trades), rules)
     pnls, flags, dates = weekday_grid(list(trades))
     at = {d: i for i, d in enumerate(dates)}
     day_nets: List[list] = [[] for _ in dates]
