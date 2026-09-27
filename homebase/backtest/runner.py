@@ -30,6 +30,7 @@ import json
 import os
 import re
 import secrets
+import shutil
 import subprocess
 import sys
 import threading
@@ -127,12 +128,27 @@ def prepare(body, base: Path) -> str:
     rid = f"{now:%Y%m%d-%H%M%S}-{req['strategy']}-{secrets.token_hex(2)}"
     d = base / "runs" / rid
     d.mkdir(parents=True)
-    write_json(d / "request.json", {**req, "id": rid, "created": _now()})
-    write_json(d / "status.json", {"id": rid, "status": "queued", "phase": "queued",
-                                   "done": 0, "total": 0, "updated": _now()})
-    discipline.record(base / "spends.jsonl", strategy=req["strategy"], inputs=req["inputs"],
-                      rng=discipline.parse_range(req["range"]), run_id=rid)   # None inside 2021-2024
+    try:
+        write_json(d / "request.json", {**req, "id": rid, "created": _now()})
+        write_json(d / "status.json", {"id": rid, "status": "queued", "phase": "queued",
+                                       "done": 0, "total": 0, "updated": _now()})
+    except BaseException:
+        shutil.rmtree(d, ignore_errors=True)    # never leave a run folder the page would list as "queued" forever
+        raise
+    _record(base / "spends.jsonl", req, rid)    # None inside 2021-2024; a failed write never fails the run
     return rid
+
+
+def _record(path: Path, req: dict, rid: str) -> None:
+    """The spend log is a RECORD, never a gate -- not even by accident: a write that fails (a full
+    disk, a permissions slip, a directory where the file should be) is logged once to stderr (the
+    child's log.txt) and the run carries on."""
+    try:
+        discipline.record(path, strategy=req["strategy"], inputs=req["inputs"],
+                          rng=discipline.parse_range(req["range"]), run_id=rid)
+    except OSError as e:
+        print(f"tester: could not append to the spend log {path}: {e} (the run continues)",
+              file=sys.stderr, flush=True)
 
 
 # no-trade reasons that are holes in the record, not the strategy choosing to sit out: a crash, and
@@ -183,8 +199,7 @@ def execute(run_dir: Path, store: TapeStore) -> dict:
         # for the normal path. This still only WRITES: the run proceeds either way.
         spends_path = run_dir.parent.parent / "spends.jsonl"
         if not any(s.get("run_id") == req["id"] for s in discipline.spends(spends_path)):
-            discipline.record(spends_path, strategy=req["strategy"], inputs=req["inputs"],
-                              rng=rng, run_id=req["id"])
+            _record(spends_path, req, req["id"])
     strat = cls(req["inputs"])             # one instance: on_session resets its day state
     days = [d for d in store.sessions(cls.root, rng.start, rng.end)
             if rng.includes(d) and strat.trades_on(d)]

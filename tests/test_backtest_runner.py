@@ -60,6 +60,38 @@ def test_no_range_is_refused_and_a_2025_run_is_recorded(tmp_path):
     assert "holdout" not in req and req["range"]["holdout"] is True
 
 
+def test_a_spend_log_that_cannot_be_written_never_fails_the_run(tmp_path, capsys):
+    """Review important 1: the spend log is a record, never a gate -- not even by accident. With
+    spends.jsonl unwritable (here: a directory in its place), a 2025+ run is still accepted, runs
+    to done, and the failure is logged once per write rather than raised."""
+    (tmp_path / "t").mkdir()
+    (tmp_path / "t" / "spends.jsonl").mkdir()                   # open(..., "a") -> IsADirectoryError
+    store = TapeStore(nq_archive(tmp_path / "ticks"), tmp_path / "cache")
+    late = {"kind": "custom", "start": "2024-03-01", "end": "2025-02-01"}
+    rid = prepare(body(range=late), tmp_path / "t")
+    assert "spend log" in capsys.readouterr().err
+    meta = execute(tmp_path / "t" / "runs" / rid, store)        # execute() retries the record: also survives
+    assert meta["holdout"] is True and meta["report"]["summary"]["all"]["trades"] == 1
+    assert read_json(tmp_path / "t" / "runs" / rid / "status.json")["status"] == "done"
+    assert capsys.readouterr().err.count("spend log") == 1
+
+
+def test_a_failed_prepare_leaves_no_orphan_run_folder(tmp_path, monkeypatch):
+    """A prepare() that fails after creating runs/<id>/ must remove it, or the page lists a run
+    stuck at "queued" forever."""
+    real = runner.write_json
+
+    def boom(path, data):
+        if path.name == "status.json":
+            raise OSError("disk full")
+        real(path, data)
+
+    monkeypatch.setattr(runner, "write_json", boom)
+    with pytest.raises(OSError):
+        prepare(body(), tmp_path)
+    assert list((tmp_path / "runs").iterdir()) == []
+
+
 def test_a_range_inside_2021_2024_records_nothing(tmp_path):
     prepare(body(), tmp_path)                                    # 2024-03: inside the research data
     prepare(body(range={"kind": "research"}), tmp_path)
