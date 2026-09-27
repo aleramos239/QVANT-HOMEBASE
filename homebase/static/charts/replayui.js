@@ -117,9 +117,22 @@ function cellDestroyed(cell) {
 
 /* A symbol or interval change on a replaying chart (cell.js's update() guard): the server auto-stops a
    replaying chart's stream the moment a plain `sub` arrives for it, so there is nothing to send here --
-   only the local bookkeeping needs clearing before the patch that was on hold goes through for real. */
+   only the local bookkeeping needs clearing before the patch that was on hold goes through for real.
+
+   task-1-review.md (Important): page.openDialog() always closes whatever dialog is already open first (its
+   own onClose fires before ours ever shows) -- stacking our confirm on top of an open Settings dialog would
+   silently fire that dialog's own Cancel/revert before "Leave replay?" is even answered, discarding whatever
+   else was unsaved in it. Rather than teach every other dialog to suspend its own onClose while ours is up,
+   a change arriving while a dialog is ALREADY open is never asked about a second time: replay just ends
+   (the same way it would if the user had answered "Leave replay" here) and a status-bar note says so. */
 function guardSymbolChange(cell, patch) {
   if (!page) return;
+  if (page.dialogOpen && page.dialogOpen()) {
+    clearSession(cell);
+    cell.update(patch);
+    if (page.sbNote) page.sbNote('Replay ended — symbol/interval changed');
+    return;
+  }
   const box = page.openDialog('Leave replay?', 'small');
   box.appendChild(mk('div', 'dlg-text', "Changing the symbol or interval ends this chart's replay."));
   const foot = mk('div', 'dlg-foot'), no = mk('button', 'btn btn-ghost', 'Cancel'), yes = mk('button', 'btn btn-primary', 'Leave replay');
@@ -169,6 +182,10 @@ function armPick(cell) {
   const box = cell.box;
   box.classList.add('replay-arm');
   const onClick = (e) => {
+    // task-1-review.md (Minor): swallow the click outright, on or off a bar -- while armed, nothing else on
+    // this chart (a drawing tool, a future click-based control under the pointer) should ever see it.
+    e.preventDefault();
+    e.stopPropagation();
     const picked = pickBar(cell, e.clientX);
     if (!picked) return;
     if (page) page.closeMenu();   // also disarms (see disarmPick's call site in app.js's closeMenu)
@@ -247,16 +264,20 @@ class Overlay {
     const jumpRow = mk('span', 'rb-jump');
     const jumpInput = mk('input');
     jumpInput.type = 'text'; jumpInput.placeholder = 'HH:MM'; jumpInput.setAttribute('aria-label', 'Jump to time (ET)');
-    jumpRow.appendChild(jumpInput);
+    const jumpErr = mk('span', 'rb-err', 'HH:MM (ET)');   // task-1-review.md (Minor): shown on a bad jump time
+    jumpErr.hidden = true;
+    jumpErr.setAttribute('role', 'alert');
+    jumpRow.append(jumpInput, jumpErr);
     jumpBtn.onclick = () => {
       jumpRow.classList.toggle('open');
-      if (jumpRow.classList.contains('open')) { jumpInput.value = ''; jumpInput.focus(); }
+      if (jumpRow.classList.contains('open')) { jumpInput.value = ''; jumpErr.hidden = true; jumpInput.focus(); }
     };
     jumpInput.onkeydown = (e) => {
       if (e.key === 'Escape') { e.stopPropagation(); jumpRow.classList.remove('open'); return; }
       if (e.key !== 'Enter') return;
       const to = jumpInput.value.trim();
-      if (!JUMP_RE.test(to)) return;
+      if (!JUMP_RE.test(to)) { jumpErr.hidden = false; return; }
+      jumpErr.hidden = true;
       jumpRow.classList.remove('open');
       this.cell.host.send(R.ctlOp(this.cell.id, 'jump', { to_et: to }));
     };

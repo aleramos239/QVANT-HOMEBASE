@@ -441,6 +441,7 @@ a { color: inherit; }
 .replay-bar .rb-jump input { width: 60px; height: 22px; padding: 0 6px; margin-left: 2px; border: 1px solid var(--border);
   border-radius: 4px; background: var(--panel); font-size: 12px; }
 .replay-bar .rb-jump input:focus { border-color: var(--accent); }
+.replay-bar .rb-err { padding-left: 6px; color: var(--down); font-size: 11px; white-space: nowrap; }
 .replay-bar .rb-speed { height: 24px; padding: 0 8px; border-radius: 4px; color: var(--text); }
 .replay-bar .rb-speed:hover { background: var(--hover); }
 .replay-bar .rb-time { padding: 0 6px; color: var(--text); white-space: nowrap; }

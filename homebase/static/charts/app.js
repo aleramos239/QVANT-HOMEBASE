@@ -1161,7 +1161,7 @@ async function init() {
   document.addEventListener('keydown', onKey);
   page = {
     mk, icon, $, cells: () => cells, cur, select: (c) => select(cells.indexOf(c)),
-    openDialog, closeDialog, setDialogClose(fn) { if (dlg) dlg.onClose = fn; },
+    openDialog, closeDialog, setDialogClose(fn) { if (dlg) dlg.onClose = fn; }, dialogOpen: () => !!dlg,
     openMenu, closeMenu, placeMenu, toggleMenu, menuItem, sbNote, clockMs,
     deskUrl: () => `${location.protocol}//${location.hostname}:8850/`,
     overlays: [],
