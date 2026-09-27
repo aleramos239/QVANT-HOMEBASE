@@ -375,3 +375,16 @@ def test_order_state_counts_the_fills_seen_and_never_reads_none_as_zero(tmp_path
     ad._ingest_sync({"fills": [{"id": 4, "orderId": 11, "qty": 5}, {"id": 1, "orderId": 9, "qty": 1}],
                      "accounts": [{"id": 66121477, "name": "APEX"}]})
     assert ad._order_filled == {9: 3, 11: 5}
+
+
+def test_a_fill_that_cannot_be_counted_is_still_dispatched_exactly_as_before(tmp_path):
+    """Fix round 3 Minor 1: an odd qty (inf) never stops the fill reaching the engine."""
+    ad, _ = mkadapter(tmp_path)
+    got, notified = [], []
+    ad._on_fill = object()                                 # observed: fills are queued
+    ad._enqueue_fill = got.append
+    ad._notify_mine = lambda et, ent: notified.append(et)
+    ent = {"id": 77, "orderId": 9, "qty": float("inf"), "action": "Buy", "price": 1.0}
+    ad._on_ws_event({"e": "props", "d": {"entityType": "fill", "entity": ent}})
+    assert got == [ent] and notified == ["fill"]
+    assert 9 not in ad._order_filled

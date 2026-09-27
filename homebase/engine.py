@@ -49,6 +49,7 @@ SPREAD_TOL_PTS = 0.05
 WORKING = {"Working", "PendingNew", "Pending", "Suspended", "PendingReplace"}
 TERMINAL = {"Filled", "Canceled", "Rejected", "Expired"}    # an order that can never fill (more)
 KILL_POLL_S, KILL_POLL_N = 0.25, 12     # the kill waits up to 3 s for its entry cancels to settle
+MARKET_OUT_FAILED = "check it — market-out reported failure; verify the position"
 SIBLING_RETRY_S = 2.0
 
 
@@ -122,6 +123,7 @@ class Engine:
         self._kill_locks: dict[str, tuple] = {}    # strategy -> (loop, asyncio.Lock)
         self._kill_sleep = asyncio.sleep           # the kill's poll wait (tests replace it)
         self._needs_check_said: set = set()        # (date, strategy, account, at) journaled
+        self._check_it_cancelled: set = set()      # (date, strategy, account): 12:55 entry cancels sent
         self._load_today()
 
     # --- time & persistence -------------------------------------------------
@@ -863,6 +865,12 @@ class Engine:
             acts.append(f"cancel entry {i}: " + ("ok" if ok else
                         str(r if isinstance(r, Exception) else r.error)))
         states = await self._entry_states(ad, [i for i, _ in entries])
+        # the poll yielded (250 ms sleeps): the run may have moved on by itself
+        if st.status == "error" and st.exit_reason == "both_filled":
+            return await self._kill_both_filled(st, cfg, ad, acts)
+        if not self._killable(st):
+            return self._kill_check(st, acts, f"the run ended on its own ({st.exit_reason}) "
+                                              "during the kill")
         held, unsure = {1: 0, -1: 0}, []
         for i, sign in entries:
             status, filled = states[i]
@@ -888,6 +896,12 @@ class Engine:
         if bot and net and (net > 0) != (bot > 0):
             return self._kill_check(st, acts, f"the account's {net:+d} {cfg.symbol} is not on the "
                                               f"bot's side ({bot:+d})")
+        # the position read yielded too: the run is re-checked right before any sale
+        if st.status == "error" and st.exit_reason == "both_filled":
+            return await self._kill_both_filled(st, cfg, ad, acts)
+        if not self._killable(st):
+            return self._kill_check(st, acts, f"the run ended on its own ({st.exit_reason}) "
+                                              "during the kill")
         sold = False
         if bot and net:
             qty, side = min(abs(net), abs(bot)), ("Sell" if net > 0 else "Buy")
@@ -895,8 +909,12 @@ class Engine:
                                                   order_type="Market", text="homebase:kill"))
             acts.append(f"market {side} {qty}: {'ok' if r.ok else r.error}")
             if not r.ok:
-                acts.append("not flat — stop/target left working")
-                return {"ok": False, "sold": False, "actions": acts}
+                # it may have gone out anyway: never send it again -- the run is
+                # killed, its stop/target stay working, a human verifies
+                st.status, st.exit_reason = "done", "killed"
+                st.note = MARKET_OUT_FAILED
+                self._save()
+                return self._kill_check(st, acts, "market-out reported failure; verify the position")
             sold = True
         elif bot:
             acts.append("the account is already flat")
@@ -1085,8 +1103,12 @@ class Engine:
 
     # --- the clock ------------------------------------------------------------
     def needs_check(self, st: DayState) -> bool:
-        """A run of a strategy killed today that is still placed or live."""
-        return st.status in ("placed", "live") and self.killed_today(st.strategy)
+        """A run of a strategy killed today that is still placed or live, or
+        whose kill market-out reported failure."""
+        if not self.killed_today(st.strategy):
+            return False
+        return st.status in ("placed", "live") or \
+            (st.status == "done" and st.note == MARKET_OUT_FAILED)
 
     def _journal_needs_check(self, st: DayState, cfg: StrategyCfg, now: dt.time) -> None:
         """killed_run_needs_check, once at cancel_et (12:55) and once at
@@ -1133,6 +1155,19 @@ class Engine:
                     self.journal("cancel_raced_fill", strategy=st.strategy,
                                  account=st.account, net=net)
                 self._save()
+            elif st.status == "placed" and now >= _hhmm(cfg.cancel_et):
+                # a killed "check it" run: its entries are still cancelled at
+                # 12:55 (once), but it is never promoted to live on the net
+                key = (st.date, st.strategy, st.account)
+                if key not in self._check_it_cancelled:
+                    self._check_it_cancelled.add(key)
+                    acts = []
+                    for oid in (st.upper_id, st.lower_id):
+                        if oid:
+                            r = await ad.cancel_order_by_id(oid)
+                            acts.append(f"cancel {oid}: " + ("ok" if r.ok else str(r.error)))
+                    self.journal("killed_run_entries_cancelled", strategy=st.strategy,
+                                 account=st.account, actions=acts)
             elif st.status == "live" and now >= _hhmm(cfg.flat_et) and not check_it:
                 key = f"flat:{st.strategy}@{st.account}"
                 if time.time() - self._retry_at.get(key, 0.0) < 5.0:

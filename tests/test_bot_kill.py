@@ -675,7 +675,10 @@ def test_a_killed_check_it_run_is_never_promoted_at_1255_nor_flattened_at_1555(t
     run(eng.clock_tick())
     run(eng.clock_tick())
     assert st.status == "placed"                          # not promoted to live on the manual +1
-    assert ads["a1"].cancelled == [] and ads["a1"].orders == []
+    assert ads["a1"].cancelled == ["u1", "l1"]            # its entries ARE cancelled, once
+    assert ads["a1"].orders == []
+    assert [e["event"] for e in journal(tmp_path)].count("killed_run_entries_cancelled") == 1
+    ads["a1"].cancelled.clear()
     clock.set_et(15, 55)
     st.status = "live"                                    # even a live one (e.g. adopted earlier)
     run(eng.clock_tick())
@@ -697,3 +700,63 @@ def test_a_run_that_is_not_killed_still_runs_the_clock_as_before(tmp_path):
     assert set(ads["a1"].cancelled) >= {"eu", "el"} and st.status == "done"   # cancelled_unfilled
     assert "check_it" not in desk.bot_view()["strategies"]["es930"]["accounts"]["a1"]
     assert not any(e["event"] == "killed_run_needs_check" for e in journal(tmp_path))
+
+
+
+# --- fix round 3 ---------------------------------------------------------------------------------
+def test_the_runs_own_exit_during_the_poll_is_never_sold_again(tmp_path):
+    """The review's scenario: the entry cancel is accepted, the poll reads Working and sleeps;
+    meanwhile the entry fills and its stop hits (on_fill: done/sl); the next poll reads Filled,
+    and the position still reads a stale +2. The kill must sell nothing."""
+    from homebase.broker.base import FillEvent
+    desk, eng, ads, clock, cfg = mk(tmp_path, et=(9, 30))
+    st = with_legs(eng._state("nq930", "a1"), NQ_IDS, "placed")
+    ad = ads["a1"]
+    ad.net = 2                                            # stale: the exit is not in it yet
+    script_states(ad, {"u1": [("Working", None), ("Filled", 2)], "l1": [("Canceled", None)]})
+
+    async def exit_during_the_sleep(sec):
+        eng.slept.append(sec)
+        await eng.on_fill(FillEvent(account_id="a1", symbol="NQZ6", side="Buy", qty=2, price=110.25,
+                                    raw={"orderId": "u1"}))
+        await eng.on_fill(FillEvent(account_id="a1", symbol="NQZ6", side="Sell", qty=2, price=105.25,
+                                    raw={"orderId": "us"}))
+
+    eng._kill_sleep = exit_during_the_sleep
+    out = kill(desk)
+    r = out["results"]["a1"]
+    assert ad.orders == []                                # zero market orders
+    assert r["ok"] is False and "the run ended on its own (sl) during the kill" in r["actions"][-1]
+    assert (st.status, st.exit_reason) == ("done", "sl")
+    assert not {"us", "ut", "ds", "dt"} & set(ad.cancelled)
+
+
+def test_a_run_that_becomes_both_filled_during_the_poll_takes_the_both_filled_path(tmp_path):
+    desk, eng, ads, clock, cfg = mk(tmp_path)
+    st = with_legs(eng._state("nq930", "a1"), NQ_IDS, "placed")
+    ads["a1"].net = 2
+    script_states(ads["a1"], {"u1": [("Working", None), ("Filled", 2)], "l1": [("Canceled", None)]})
+
+    async def both_filled(sec):
+        eng.slept.append(sec)
+        st.status, st.exit_reason = "error", "both_filled"
+
+    eng._kill_sleep = both_filled
+    out = kill(desk)
+    assert ads["a1"].orders == [] and "both entries filled" in out["results"]["a1"]["actions"][-1]
+
+
+def test_a_failed_market_out_marks_the_run_killed_and_a_second_kill_never_sells(tmp_path):
+    desk, eng, ads, *_ = mk(tmp_path)
+    st = with_legs(eng._state("nq930", "a1"), NQ_IDS, "live")
+    ads["a1"].net, ads["a1"].fail_market = 2, True
+    ads["a1"].order_status = {"u1": "Filled", "l1": "Canceled"}
+    out = kill(desk, cid="k1")
+    assert out["results"]["a1"]["ok"] is False
+    assert "market-out reported failure; verify the position" in out["results"]["a1"]["actions"][-1]
+    assert (st.status, st.exit_reason) == ("done", "killed")
+    assert not {"us", "ut", "ds", "dt"} & set(ads["a1"].cancelled)      # stops left working
+    ads["a1"].fail_market = False
+    kill(desk, cid="k2")
+    assert len(ads["a1"].orders) == 1                     # the one attempt only
+    assert desk.bot_view()["strategies"]["nq930"]["accounts"]["a1"]["check_it"] is True

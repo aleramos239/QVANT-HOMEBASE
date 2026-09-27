@@ -244,12 +244,12 @@ class TradovateAdapter(BrokerAdapter):
         """Contracts filled per order id, from the fills this socket saw (a
         LOWER bound: a push can omit its orderId or qty). Only ever read by
         get_order_state for the per-strategy kill."""
-        oid, qty = ent.get("orderId"), ent.get("qty")
-        if oid is None or not isinstance(qty, (int, float)) or isinstance(qty, bool) or qty <= 0:
-            return
         try:
+            oid, qty = ent.get("orderId"), ent.get("qty")
+            if oid is None or not isinstance(qty, (int, float)) or isinstance(qty, bool) or qty <= 0:
+                return
             self._order_filled[int(oid)] = self._order_filled.get(int(oid), 0) + int(qty)
-        except (TypeError, ValueError):
+        except Exception:  # noqa: BLE001 — a count, never a reason to lose a fill
             return
 
     def _mark_seen(self, fid: int) -> bool:
@@ -291,10 +291,10 @@ class TradovateAdapter(BrokerAdapter):
             fid = ent.get("id")
             if fid is None or not self._mark_seen(fid):
                 return
-            self._count_fill(ent)
             if self._on_fill is not None:     # this account is being observed as master
                 self._enqueue_fill(ent)
             self._notify_mine(et, ent)
+            self._count_fill(ent)             # after the dispatch, and it never raises
         elif et == "position":
             if self._ingest_position(ent):
                 self._notify_mine(et, self._positions[ent["contractId"]])
