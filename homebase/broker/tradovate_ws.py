@@ -284,6 +284,43 @@ class TradovateWS:
         # The camelCase spelling answers "Access is denied".
         return await self.request("order/placeoso", body)
 
+    async def place_oco(
+        self, *,
+        account_id: int,
+        symbol: str,
+        exit_side: str,                     # "Buy" | "Sell": the side of BOTH legs
+        qty: int,
+        stop_price: float,                  # the Stop leg (the SL)
+        limit_price: float,                 # the Limit leg (the TP): Tradovate's `other`
+        time_in_force: str = "GTC",
+        text: str = "Onyx",
+        account_spec: Optional[str] = None,
+    ) -> dict:
+        """Place a One-Cancels-Other PAIR of exits for an existing position: a
+        Stop (the main order) and a Limit (`other`), same side and qty. The
+        broker cancels the survivor when either fills. Returns {orderId (the
+        Stop), ocoId (the Limit)}. Both legs carry the same time in force (the
+        OSO brackets' GTC by default) so the Limit never silently goes Day."""
+        action = "Buy" if exit_side.lower() == "buy" else "Sell"
+        body = {
+            **({"accountSpec": account_spec} if account_spec else {}),
+            "accountId": account_id,
+            "action": action,
+            "symbol": symbol,
+            "orderQty": qty,
+            "orderType": "Stop",
+            "stopPrice": stop_price,
+            "timeInForce": time_in_force,
+            "isAutomated": True,
+            "text": text,
+            "other": {"action": action, "orderType": "Limit", "price": limit_price,
+                      "timeInForce": time_in_force},
+        }
+        # lowercase, like "order/placeoso": the web client's spelling (the
+        # camelCase OSO route answered "Access is denied" live). Unverified live
+        # for OCO -- the first real use is on a DEMO account.
+        return await self.request("order/placeoco", body)
+
     async def cancel_order(self, order_id: int) -> dict:
         return await self.request("order/cancelorder", {"orderId": order_id})
 

@@ -644,6 +644,50 @@ class TradovateAdapter(BrokerAdapter):
             _log(f"{self.account_id}: OSO failed: {e}")
             return OrderResult(ok=False, error=f"OSO failed: {e}")
 
+    async def place_oco(self, symbol: str, exit_side: str, qty: int, stop_price: float,
+                        limit_price: float, *, text: str = "homebase:chart-exit",
+                        time_in_force: str = "GTC") -> OrderResult:
+        """An SL (Stop) + TP (Limit) pair for an existing position as ONE
+        Tradovate OCO (order/placeoco): the broker cancels the survivor. A 200
+        with no orderId is a logical reject; a reply with the Stop's id but no
+        ocoId is reported NOT ok (the Limit's fate is unknown), with the Stop's
+        id kept in raw so the caller can see what may be working. Whenever the
+        pair MAY exist at the broker (an exception or timeout, or that half
+        answer) raw["outcome_unknown"] is True: the caller must not assume
+        nothing is working."""
+        if self._ws is None or self._acct_num is None:
+            return OrderResult(ok=False, error="adapter not connected")
+        sym = symbols.resolve_contract(symbol)
+        if self.live:
+            _log(f"{self.account_id}: LIVE OCO {exit_side} {qty} {sym} "
+                 f"stop={stop_price} limit={limit_price}")
+        try:
+            d = await self._ws.place_oco(
+                account_id=self._acct_num, symbol=sym, exit_side=exit_side, qty=qty,
+                stop_price=stop_price, limit_price=limit_price,
+                time_in_force=time_in_force, text=text,
+                account_spec=self._acct_name or None)
+        except Exception as e:
+            # incl. a timeout, where the pair may exist at the broker — loud
+            _log(f"{self.account_id}: OCO failed: {e}")
+            return OrderResult(ok=False, error=f"OCO failed: {e}", raw={"outcome_unknown": True})
+        raw = d if isinstance(d, dict) else {}
+        oid, other = raw.get("orderId"), raw.get("ocoId")
+        if oid is None:
+            reason = _reject_reason(raw) or "OCO rejected (no orderId returned)"
+            _log(f"{self.account_id}: OCO rejected: {reason}")
+            return OrderResult(ok=False, error=reason, raw=raw)
+        self._order_symbols[int(oid)] = sym
+        if other is None:
+            _log(f"{self.account_id}: OCO answered without its Limit's id: {raw}")
+            return OrderResult(ok=False, order_id=str(oid),
+                               error="OCO answered without the target's id — check the orders",
+                               raw={**raw, "sl_order_id": str(oid), "tp_order_id": None,
+                                    "outcome_unknown": True})
+        self._order_symbols[int(other)] = sym
+        return OrderResult(ok=True, order_id=str(oid),
+                           raw={**raw, "sl_order_id": str(oid), "tp_order_id": str(other)})
+
     async def get_protective_orders(self, symbol: str) -> list[dict]:
         """Resting Stop/Limit orders on this account for `symbol`, read from the
         WS entity cache (order + latest orderVersion). Lets the engine mirror a

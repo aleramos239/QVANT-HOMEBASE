@@ -304,3 +304,48 @@ def test_a_failed_position_read_is_not_flat(tmp_path):
     ad = mkadapter(tmp_path, broken)
     with pytest.raises(Exception):
         run(ad.get_net_position("NQ"))
+
+
+# --- the chart's exits: one OCO pair (order/placeoco) -------------------------------------
+def test_place_oco_sends_one_stop_with_its_limit_as_other_and_reads_both_ids(tmp_path):
+    def wire(endpoint, query, body):
+        if endpoint == "order/placeoco":
+            return {"orderId": 663695020301, "ocoId": 663695020302}
+        return None
+    ad = mkadapter(tmp_path, wire)
+    r = run(ad.place_oco("NQ", "Sell", 3, 30210.25, 30260.5))
+    assert r.ok and r.order_id == "663695020301"
+    assert (r.raw["sl_order_id"], r.raw["tp_order_id"]) == ("663695020301", "663695020302")
+    [frame] = ad._ws.ws.sent
+    endpoint, _, query, body = frame.split("\n", 3)
+    assert (endpoint, query) == ("order/placeoco", "")
+    sym = json.loads(body)["symbol"]
+    assert json.loads(body) == {
+        "accountSpec": "APEX", "accountId": 66121477, "action": "Sell", "symbol": sym,
+        "orderQty": 3, "orderType": "Stop", "stopPrice": 30210.25, "timeInForce": "GTC",
+        "isAutomated": True, "text": "homebase:chart-exit",
+        "other": {"action": "Sell", "orderType": "Limit", "price": 30260.5, "timeInForce": "GTC"}}
+    assert sym.startswith("NQ") and len(sym) == 4           # the front contract, never the bare root
+
+
+def test_place_oco_reject_timeout_and_half_answers_are_not_ok(tmp_path):
+    def rejects(endpoint, query, body):
+        return {"failureReason": "UnknownReason", "failureText": "Rejected"}
+    r = run(mkadapter(tmp_path, rejects).place_oco("NQ", "Buy", 1, 30300.0, 30200.0))
+    assert not r.ok and r.error == "Rejected" and not r.raw.get("outcome_unknown")
+
+    def errors(endpoint, query, body):
+        return None                                  # 404: the request raised
+    r = run(mkadapter(tmp_path, errors).place_oco("NQ", "Buy", 1, 30300.0, 30200.0))
+    assert not r.ok and r.error.startswith("OCO failed") and r.raw["outcome_unknown"] is True
+
+    def half(endpoint, query, body):
+        return {"orderId": 5}
+    r = run(mkadapter(tmp_path, half).place_oco("NQ", "Buy", 1, 30300.0, 30200.0))
+    assert not r.ok and r.order_id == "5" and r.raw["outcome_unknown"] is True
+
+
+def test_the_base_adapter_has_no_oco():
+    from homebase.broker.base import BrokerAdapter
+    r = run(BrokerAdapter.place_oco(None, "NQ", "Sell", 1, 1.0, 2.0))
+    assert not r.ok and r.error == "this broker has no OCO"

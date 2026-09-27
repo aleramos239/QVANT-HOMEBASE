@@ -201,6 +201,18 @@ class BrokerAdapter(abc.ABC):
         return OrderResult(ok=not errors, error="; ".join(errors) or None,
                            raw={"protective_ids": placed})
 
+    async def place_oco(self, symbol: str, exit_side: str, qty: int, stop_price: float,
+                        limit_price: float, *, text: str = "homebase:chart-exit",
+                        time_in_force: str = "GTC") -> OrderResult:
+        """Rest a protective PAIR for an existing position as ONE broker-linked
+        OCO: a Stop at `stop_price` and a Limit at `limit_price`, both on
+        `exit_side` for `qty`; one filling cancels the other at the broker.
+        ``order_id`` is the Stop's id; ``raw["sl_order_id"]`` /
+        ``raw["tp_order_id"]`` carry both legs' ids. Default: refused — two
+        separate resting orders are NOT an OCO (both could fill and open a
+        position the other way), so an adapter without a native OCO says no."""
+        return OrderResult(ok=False, error="this broker has no OCO")
+
     async def get_protective_orders(self, symbol: str) -> list[dict]:
         """Resting protective orders on this account for `symbol`, as
         ``[{"order_id", "kind", "side", "price", "qty"}]`` where kind is
