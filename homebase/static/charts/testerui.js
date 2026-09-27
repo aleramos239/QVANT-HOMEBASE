@@ -318,8 +318,13 @@ function rangeGroup(busy) {
     const start = page.mk('input'), end = page.mk('input');
     start.type = 'date'; start.value = form.range.start || ''; start.setAttribute('aria-label', 'Range start'); start.disabled = busy;
     end.type = 'date'; end.value = form.range.end || ''; end.setAttribute('aria-label', 'Range end'); end.disabled = busy;
-    start.onchange = () => { form.range = { ...form.range, start: start.value }; persist(); refreshHeader(); };
-    end.onchange = () => { form.range = { ...form.range, end: end.value }; persist(); refreshHeader(); };
+    // NEVER refreshHeader() from here: <input type="date"> fires `change` as soon as the value parses,
+    // which is the FIRST digit of the year -- rebuilding the header there destroys the field under the
+    // caret and leaves a half-typed year (the reported "07/01/0001"). syncRunState() keeps the error
+    // text, the holdout banner and the Run label current without touching the inputs, as the cost
+    // fields and the holdout reason already do.
+    start.onchange = () => { form.range = { ...form.range, start: start.value }; persist(); syncRunState(); };
+    end.onchange = () => { form.range = { ...form.range, end: end.value }; persist(); syncRunState(); };
     wrap.append(start, end);
   }
   return wrap;
@@ -404,7 +409,20 @@ function recentRunsBtn(busy) {
    any of them mid-run used to let a stale report land under a form (or even a strategy) that no longer
    matches it, with the button still reading "Run" as if they matched. The holdout switch/reason are left
    live (they can't change what's already in flight, since the range is frozen). */
+/* A rebuild must never land under the caret. Any header field being typed in (a run finishing, a desk
+   event, a poll) defers the rebuild to that field's blur; selects and buttons rebuild at once, so
+   switching the range kind still swaps the date inputs in immediately. */
+let headerBlurPending = false;
 function refreshHeader() {
+  const act = document.activeElement;
+  if (act && act.tagName === 'INPUT' && headerEl && headerEl.contains(act)) {
+    if (!headerBlurPending) {
+      headerBlurPending = true;
+      act.addEventListener('blur', () => { headerBlurPending = false; refreshHeader(); }, { once: true });
+    }
+    syncRunState();
+    return;
+  }
   const schema = schemaFor(strategyId);
   const busy = !!runStatus;
   headerEl.replaceChildren();
