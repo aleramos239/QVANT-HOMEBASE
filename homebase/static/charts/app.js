@@ -107,30 +107,28 @@ function readLayout(v) {
     if (Object.keys(o).length) c.settings = o;
     const t = T.loadedTrade(r.trade, st);
     c.trade = { accounts: t.accounts };
+    c.unverified = t.unverified;   // what the desk has not vouched for yet: dropped if it turns out LIVE
     pendingDroppedLive.push(...t.droppedLive);
     c.algo = T.cellAlgo(r.algo);
   });
   return lay;
 }
 const deskState = () => (window.HBDeskClient && window.HBDeskClient.state) || null;
-/* Global Constraints: no load ever leaves a LIVE account on a chart. Re-run over every chart (visible and the
-   ones kept beyond the grid) whenever the desk's list changes, so a layout restored before the desk answered
-   is cleaned the instant it can be. Says so once, naming the accounts. */
+/* Global Constraints: no load ever leaves a LIVE account on a chart. A load marks what it kept without the
+   desk's word as UNVERIFIED on that chart (fix round 1, Critical 1); this checks ONLY those marks, over every
+   chart config in the layout (visible ones are the same objects as their cells' cfg), whenever the desk's list
+   changes. An account the user ticked and armed in the Trading tab is never marked, so no balance tick can
+   take it away. Says so once, naming the accounts. */
 function dropLiveAccounts() {
   const st = deskState();
   if (!st) return;
   const dropped = [...pendingDroppedLive];
   pendingDroppedLive = [];
-  for (const c of cells) {
-    const t = T.loadedTrade(c.cfg.trade, st);
-    if (!t.droppedLive.length) continue;
-    dropped.push(...t.droppedLive);
-    window.HBTradeUI.setCellTrade(c, { accounts: t.accounts }, { quiet: true });
-  }
-  dropped.push(...T.hiddenCellsLoaded(layout.cells, cells.length, st));
-  if (!dropped.length) return;
-  saveLast();
-  window.HBDeskClient.toast('err', T.liveDroppedMessage([...new Set(dropped)], st));
+  const v = T.verifyCells(layout.cells, st);
+  dropped.push(...v.dropped);
+  for (const i of v.changed) if (cells[i]) window.HBTradeUI.setCellTrade(cells[i], cells[i].cfg.trade, { quiet: true });
+  if (v.changed.length) saveLast();
+  if (dropped.length) window.HBDeskClient.toast('err', T.liveDroppedMessage([...new Set(dropped)], st));
 }
 
 /* The desk's strategies (for an algo's symbol), merged with the paper strategies (2026-09-27 paper-forward-test
@@ -150,15 +148,18 @@ function deskStrategies() {
 function applyTemplateTrade(cell, raw, { quiet = false } = {}) {
   const st = deskState(), bits = T.templateTrade(raw, st);
   if ('algo' in bits) window.HBTradeUI.setCellAlgo(cell, T.algoForRoot(bits.algo, cell.cfg.root, deskStrategies()), { quiet });
-  if (bits.trade) window.HBTradeUI.setCellTrade(cell, bits.trade, { quiet });
+  if (bits.trade) window.HBTradeUI.setCellTrade(cell, bits.trade, { quiet, mark: bits.unverified });
   if (bits.droppedLive.length) window.HBDeskClient.toast('err', T.liveDroppedMessage(bits.droppedLive, st));
 }
-/* The Settings dialog's Cancel: a chart's accounts and algo exactly as they were at open (HBTrade.tradeBits).
-   Not a load, so its accounts come back as they were -- a LIVE one there at open can only have been armed in
-   this session, and if it was un-armed meanwhile it comes back shown-but-unarmed, which cannot trade. */
+/* The Settings dialog's Cancel: a chart's accounts and algo as they were at open (HBTrade.tradeBits). Every id
+   the restore puts BACK (one no longer on the chart) goes through the same unverified-id drop as a load (fix
+   round 1, Minor 3): a cancelled dialog can never bring back a LIVE account, armed or not. Ids still on the
+   chart keep whatever mark they already had. */
 function restoreTemplateTrade(cell, bits) {
   window.HBTradeUI.setCellAlgo(cell, T.cellAlgo(bits && bits.algo), { quiet: true });
-  window.HBTradeUI.setCellTrade(cell, T.cellTrade(bits && bits.trade), { quiet: true });
+  const have = window.HBTradeUI.tradeOf(cell).accounts, next = T.cellTrade(bits && bits.trade);
+  window.HBTradeUI.setCellTrade(cell, next, { quiet: true, mark: next.accounts.filter((id) => !have.includes(id)) });
+  dropLiveAccounts();
 }
 
 /* The one-time migration of the retired global ticked list onto the SELECTED chart, when that chart has no
@@ -168,7 +169,12 @@ function migrateTickedOnce() {
   const Dc = window.HBDeskClient, ticked = Dc.prefs.ticked;
   if (!ticked || !ticked.length) return;
   const c = cur(), moved = c ? T.migrateTicked(lastRaw[selected], ticked) : null;
-  if (moved) { window.HBTradeUI.setCellTrade(c, moved, { quiet: true }); saveLast(); }
+  if (moved) {   // a load like any other: LIVE dropped, the rest marked until the desk vouches for it
+    const t = T.loadedTrade(moved, deskState());
+    pendingDroppedLive.push(...t.droppedLive);
+    window.HBTradeUI.setCellTrade(c, { accounts: t.accounts }, { quiet: true, mark: t.unverified });
+    saveLast();
+  }
   Dc.setPrefs({ ticked: [] });
 }
 
@@ -247,6 +253,7 @@ function select(i) {
   selected = i;
   cells.forEach((c, k) => c.setSelected(k === i));
   if (page) window.HBOrderPanel.setRoot(panelRoot());   // so does the order panel (it re-reads the chart itself)
+  if (page) window.HBTradeUI.paintDeskStatus();         // and the status bar's "this chart: …" (Minor 6)
   renderToolbar();
   syncCrosshair();
 }

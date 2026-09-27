@@ -71,6 +71,16 @@ class Overlay {
     this.accts.hidden = true;
     this.acctsKey = null;
     cell.el.querySelector('.lg-tradeslot').appendChild(this.accts);
+    // fix round 1, Important 2: a replay that ended on its own latches this chart (HBTrade.replayHaltGuard); the
+    // real Buy/Sell block stays hidden until the viewer says so here, deliberately, on THIS chart
+    this.resume = document.createElement('button');
+    this.resume.type = 'button';
+    this.resume.className = 'tr-resume';
+    this.resume.hidden = true;
+    this.resume.append(mk('span', 'tr-resume-why', 'Replay ended'), mk('span', 'tr-resume-go', 'Resume live trading'));
+    this.resume.title = 'The replay ended without you choosing it. The next order will still ask to confirm.';
+    this.resume.onclick = (e) => { e.stopPropagation(); this.resume.blur(); window.HBTradeUI.resumeLive(this.cell); };
+    cell.el.querySelector('.lg-tradeslot').appendChild(this.resume);
 
     this.layer = mk('div', 'tl-layer');
     cell.el.appendChild(this.layer);
@@ -444,6 +454,7 @@ class Overlay {
     if (this.dead || !this.cell.chart) return;
     const mode = window.HBTradeUI.effectiveMode(this.cell);   // review M3: LIVE-arm-aware; Task 2: THIS chart's
     this.paintBlock(mode);
+    this.resume.hidden = !(this.cell.cfg && this.cell.cfg.replayHalt) || !!this.cell.replay;
     this.paintAccts(mode);
     this.paintLines(mode);
     this.paintAlgo();

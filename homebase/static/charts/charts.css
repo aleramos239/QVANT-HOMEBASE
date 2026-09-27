@@ -780,3 +780,11 @@ a { color: inherit; }
 .tst-hcell.error { color: var(--down); }
 .tst-hcell-net { font-weight: 600; }
 .tst-hcell-sh { font-size: 11px; color: var(--text-2); }
+
+/* ---- the "Resume live trading" chip after a replay that ended on its own (Task 1 fix round 1) ---- */
+.tr-resume { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; border: 1px solid var(--warn);
+  border-radius: 4px; background: var(--warn-soft); color: var(--text); font-size: 12px; cursor: pointer; }
+.tr-resume[hidden] { display: none; }
+.tr-resume-why { color: var(--warn); font-weight: 600; }
+.tr-resume-go { text-decoration: underline; }
+.tr-resume:hover .tr-resume-go { color: var(--accent); }

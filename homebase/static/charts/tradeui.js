@@ -43,12 +43,15 @@ const tradeSubs = new Set();  // notified when a chart's trade config or a LIVE 
 function tradeOf(cell) { return T.cellTrade(cell && cell.cfg ? cell.cfg.trade : null); }
 /* The root a chart is showing (the loaded one; its config's while nothing has loaded yet). */
 function rootOfCell(cell) { return !cell ? null : cell.shown ? cell.shown.root : (cell.cfg && cell.cfg.root) || null; }
-/* HBTrade.tradeMode on THIS chart's config, with this session's LIVE arms on top (HBTrade.armedMode), and
-   T.replayGuard as the last word: a chart in Bar Replay (cell.replay, set by replayui.js) can never trade
+/* HBTrade.tradeMode on THIS chart's config, with this session's LIVE arms on top (HBTrade.armedMode), any id a
+   load kept before the desk answered taken out (HBTrade.unverifiedMode), a chart latched by a replay that ended
+   on its own refused (HBTrade.replayHaltGuard), and T.replayGuard as the last word: a chart in Bar Replay (cell.replay, set by replayui.js) can never trade
    (2026-09-27 plan, Global Constraints) -- this is the one place every order-sending path's gate (cellGate,
    the chart menu, a line's drag/×, the Buy/Sell block) reads, so nothing needs its own replay check. */
 function effectiveMode(cell) {
-  return T.replayGuard(T.armedMode(D().mode(tradeOf(cell)), D().state, liveConfirmed), !!(cell && cell.replay));
+  const cfg = (cell && cell.cfg) || {};
+  const m = T.unverifiedMode(T.armedMode(D().mode(tradeOf(cell)), D().state, liveConfirmed), cfg.unverified);   // Minor 4
+  return T.replayGuard(T.replayHaltGuard(m, !!cfg.replayHalt), !!(cell && cell.replay));                     // Important 2
 }
 /* A chart-started send path's gate: the chart's mode, the chart still on the page, and still showing the root
    the action was started for. Re-run at send time by guardedSend. */
@@ -77,14 +80,18 @@ function fillIds(cell) { return T.armedTicked(D().state, tradeOf(cell).accounts,
 function onTradeChange(fn) { tradeSubs.add(fn); return () => tradeSubs.delete(fn); }
 function notifyTrade() {
   for (const fn of [...tradeSubs]) { try { fn(); } catch (e) { console.error(e); } }
+  paintDeskStatus();   // the selected chart's own reason is on that line (Minor 6)
 }
 /* Set a chart's trade config (sanitised). The page saves it: an account-list change is a layout change (the
    layout reads Unsaved). `quiet`: the caller saves (the Settings dialog's live preview, which Cancel puts
-   back and Ok commits; a template preview; the one-time migration). */
-function setCellTrade(cell, next, { quiet = false } = {}) {
+   back and Ok commits; a template preview; the one-time migration). `mark` / `unmark`: see above. */
+function setCellTrade(cell, next, { quiet = false, mark = [], unmark = [] } = {}) {
   if (!cell || !cell.cfg) return;
   const was = tradeOf(cell), now = T.cellTrade(next);
   cell.cfg.trade = now;
+  // the UNVERIFIED marks (fix round 1, Critical 1): kept a subset of the accounts; a load or a restore `mark`s
+  // what it put back without the desk's word, a user's own tick or untick `unmark`s that one id
+  cell.cfg.unverified = T.nextUnverified(cell.cfg.unverified, now.accounts, { add: mark, remove: unmark });
   if (!quiet && page && page.tradeChanged) page.tradeChanged(cell, JSON.stringify(was.accounts) !== JSON.stringify(now.accounts));
   notifyTrade();
 }
@@ -283,7 +290,7 @@ function placeOrder({ cell, root, side, type, price = null, qty, exits = undefin
     return T.orderBody({ clientId: T.clientId(), accounts: resolved.accounts, root, side, qty, type, price: px, sl, tp,
       trigger: trig, tif: tf });
   };
-  if (D().prefs.oneClick) { guardedSend('order', g, build); return; }
+  if (T.sendsWithoutConfirm(D().prefs, cell.cfg)) { guardedSend('order', g, build); return; }   // not right after a replay
   const preview = build(gate);
   // shown === gate.accounts here, so only the inferType re-check can abort a preview -- the market moved
   // between the chart-menu's right-click (where `type` was inferred) and picking the item just now.
@@ -291,7 +298,7 @@ function placeOrder({ cell, root, side, type, price = null, qty, exits = undefin
   const c = T.confirmOrder(preview, D().state, D().quotes[root], pv, tick);
   confirm({ title: c.title, rows: c.accounts.map((a) => ({ label: a.label, env: a.env })), note: c.bracket,
     warn: c.warn, each: c.each, live: c.live, action: side, tone: side === 'Sell' ? 'down' : 'accent' })
-    .then((ok) => { if (ok) guardedSend('order', g, build); });
+    .then((ok) => { if (ok) { confirmedAfterReplay(cell); guardedSend('order', g, build); } });
 }
 
 function symbolAction(cell, kind, root) {
@@ -304,12 +311,12 @@ function symbolAction(cell, kind, root) {
     if (!resolved.accounts.length) { D().toast('err', 'No confirmed accounts left — nothing sent'); return null; }   // M9
     return { client_id: T.clientId(), accounts: resolved.accounts, root };
   };
-  if (D().prefs.oneClick && kind !== 'reverse') { guardedSend(kind, g, build); return; }   // Reverse always confirms (S4)
+  if (T.sendsWithoutConfirm(D().prefs, cell.cfg) && kind !== 'reverse') { guardedSend(kind, g, build); return; }   // Reverse always confirms (S4)
   const tick = cell.tick;
   const title = T.actionTitle(kind, { root }, tick);
   const verb = kind === 'flatten' ? 'Flatten' : kind === 'reverse' ? 'Reverse' : 'Cancel orders';
   const rows = acctRows(shown);
-  confirm({ title, rows, action: verb, live: hasLive(rows) }).then((ok) => { if (ok) guardedSend(kind, g, build); });
+  confirm({ title, rows, action: verb, live: hasLive(rows) }).then((ok) => { if (ok) { confirmedAfterReplay(cell); guardedSend(kind, g, build); } });
 }
 
 /* A line may be moved / closed only from a chart whose effective accounts hold every one of its legs. */
@@ -335,11 +342,11 @@ function moveLine(cell, line, price, root, tick, { onCancel } = {}) {
     if (!T.legsWithin(line, m.accounts)) { D().toast('err', 'Accounts changed — review and try again'); return null; }
     return line.legs.map((leg) => ({ client_id: T.clientId(), account: leg.account, order_id: leg.order_id, price: rounded }));
   };
-  if (D().prefs.oneClick) { guardedSend('modify', g, build); return; }
+  if (T.sendsWithoutConfirm(D().prefs, cell.cfg)) { guardedSend('modify', g, build); return; }
   const title = T.actionTitle('modify', { root, line, from: line.price, to: price }, tick);
   const rows = acctRows(accountIds);
   confirm({ title, rows, action: 'Move', live: hasLive(rows) })
-    .then((ok) => { if (ok) guardedSend('modify', g, build); else if (onCancel) onCancel(); });
+    .then((ok) => { if (ok) { confirmedAfterReplay(cell); guardedSend('modify', g, build); } else if (onCancel) onCancel(); });
 }
 
 /* × on a line: flatten for a position, cancel for the rest (SL/TP/plain orders). */
@@ -357,11 +364,11 @@ function closeLine(cell, line, root, tick) {
     return isPosition ? { client_id: T.clientId(), accounts, root }
       : line.legs.map((leg) => ({ client_id: T.clientId(), account: leg.account, order_id: leg.order_id }));
   };
-  if (D().prefs.oneClick) { guardedSend(action, g, build); return; }
+  if (T.sendsWithoutConfirm(D().prefs, cell.cfg)) { guardedSend(action, g, build); return; }
   const title = T.actionTitle(action, { root, line }, tick);
   const verb = isPosition ? 'Flatten' : (line.legs.length > 1 ? 'Cancel orders' : 'Cancel order');
   const rows = acctRows(accounts);
-  confirm({ title, rows, action: verb, live: hasLive(rows) }).then((ok) => { if (ok) guardedSend(action, g, build); });
+  confirm({ title, rows, action: verb, live: hasLive(rows) }).then((ok) => { if (ok) { confirmedAfterReplay(cell); guardedSend(action, g, build); } });
 }
 
 /* The bottom panel's Close / Cancel: the NAMED account only, never a chart's list; the LIVE-arm check stays. */
@@ -460,13 +467,35 @@ function registerChartMenuTrading() {
   });
 }
 
+/* ---- a replay's end (fix round 1, Important 2) ----
+   replayui.js reports every end here. An end the user did not choose (a reconnect, the server's own stop, an
+   error, the chart destroyed) latches the chart (`replayHalt`) until "Resume live trading" on its legend; ANY
+   end sets `replayConfirm`, so the first real order from that chart afterwards shows the confirm even with
+   one-click on. Both live on the chart's config (a grid rebuild keeps them; a layout load or a reload starts
+   the chart fresh, and a layout save never writes them). */
+function replayEnded(cell, involuntary) {
+  if (!cell || !cell.cfg) return;
+  const p = T.replayEndPatch(involuntary);
+  cell.cfg.replayHalt = !!cell.cfg.replayHalt || p.replayHalt;   // a later voluntary exit never lifts a latch
+  cell.cfg.replayConfirm = p.replayConfirm;
+  notifyTrade();
+}
+/* The legend's "Resume live trading": lifts the latch only -- the next order still confirms. */
+function resumeLive(cell) {
+  if (!cell || !cell.cfg || cell.replay) return;
+  cell.cfg.replayHalt = false;
+  notifyTrade();
+}
+/* A chart-started action the user just confirmed in the dialog: that was the post-replay confirm. */
+function confirmedAfterReplay(cell) { if (cell && cell.cfg && cell.cfg.replayConfirm) cell.cfg.replayConfirm = false; }
+
 /* ---- the chart gear's Trading tab: ACCOUNTS + ALGO (2026-09-27 accounts-per-chart plan, Task 1) ----
    The dialog owns the DOM; this owns the rules -- the two-step LIVE arm, "unlisted fails closed", and the
    algo <-> accounts binding -- so nothing in the dialog can tick an account the desk would refuse. */
 function setAccountTicked(cell, id, on, quiet) {
   const ids = new Set(tradeOf(cell).accounts);
   if (on) ids.add(id); else ids.delete(id);
-  setCellTrade(cell, { accounts: [...ids] }, { quiet });
+  setCellTrade(cell, { accounts: [...ids] }, { quiet, unmark: [id] });   // the user's own tick: never unverified
 }
 function clearArm() { if (armTimer) clearTimeout(armTimer); armTimer = 0; armLive = null; }
 function startArm(id) {
@@ -527,15 +556,19 @@ function pickAlgo(cell, key, { quiet = true } = {}) {
   const add = T.algoTickAccounts(D().state, rootOfCell(cell), k, liveConfirmed);
   if (!add.length) return;
   const have = tradeOf(cell).accounts, next = [...new Set([...have, ...add])];
-  if (next.length !== have.length) setCellTrade(cell, { accounts: next }, { quiet });
+  if (next.length !== have.length) setCellTrade(cell, { accounts: next }, { quiet, unmark: add });
 }
 
 /* ---- the desk's own state, in the bottom status bar (it moved there with the deleted Trade button) ---- */
 function paintDeskStatus() {
   const dot = document.getElementById('sbDeskDot'), text = document.getElementById('sbDeskText');
   const link = document.getElementById('sbDeskLink');
-  if (!dot || !text || !link) return;
-  const s = T.deskStatusText({ state: D().state, down: D().down });
+  if (!dot || !text || !link || !D()) return;
+  const cell = page && page.cur ? page.cur() : null;
+  const why = cell ? T.chartWhy({ replay: !!cell.replay, halted: !!(cell.cfg && cell.cfg.replayHalt),
+    accounts: tradeOf(cell).accounts, unverified: cell.cfg && cell.cfg.unverified, state: D().state, liveConfirmed,
+    mode: effectiveMode(cell) }) : '';
+  const s = T.deskStatusText({ state: D().state, down: D().down }, why);
   dot.className = 'sb-dot ' + s.dot;
   text.textContent = s.text;
   link.hidden = !s.link;
@@ -557,5 +590,5 @@ function mount(pg) {
 
 window.HBTradeUI = { mount, placeOrder, symbolAction, flattenAccount, cancelOrder, closeLine, moveLine, confirm, busy,
   onBusyChange, onTradeChange, effectiveMode, editableIds, fillIds, tradeOf, setCellTrade, setCellAlgo, botKill,
-  killBusy, accountRows, toggleAccount, pickAlgo, armPending, paintDeskStatus };
+  killBusy, accountRows, toggleAccount, pickAlgo, armPending, paintDeskStatus, replayEnded, resumeLive };
 })();

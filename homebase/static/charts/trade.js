@@ -125,12 +125,61 @@ function liveIds(accounts, state) {
   const list = accountsOf(state);
   return idList(accounts).filter((id) => { const a = list.find((x) => x.id === id); return !!a && a.env === 'live'; });
 }
+/* The UNVERIFIED marks (fix round 1, Critical 1). A load can only drop LIVE ids the desk has already named; while
+   it has said nothing, the ids a load keeps are marked unverified on that chart (cfg.unverified), and only
+   those are ever dropped later, when the desk answers. An id the user ticked (and armed) in the Trading tab
+   never carries a mark, so no desk event can take it away. An id the desk still does not list stays marked:
+   it cannot trade anyway, and if it turns up LIVE later it still drops.
+   verifyLoaded: the marked ids checked against `state` -- LIVE ones dropped, listed non-LIVE ones cleared,
+   unlisted ones kept marked. No state: nothing is decided (marks pruned to the chart's accounts only). */
+function verifyLoaded(accounts, unverified, state) {
+  const acc = idList(accounts), un = idList(unverified).filter((id) => acc.includes(id));
+  if (!state) return { accounts: acc, droppedLive: [], unverified: un };
+  const list = accountsOf(state), live = new Set(liveIds(un, state));
+  return { accounts: acc.filter((id) => !live.has(id)), droppedLive: [...live],
+    unverified: un.filter((id) => !list.some((x) => x.id === id)) };
+}
 /* A layout (or template, or last-session) load: DEMO and PAPER accounts come back, every LIVE one is DROPPED
-   (Global Constraints: a live account must be re-ticked and re-armed in the session). `droppedLive` is what it
-   removed, so the caller can say so once. */
+   (Global Constraints: a live account must be re-ticked and re-armed in the session). Every kept id starts
+   unverified, so `droppedLive` is what the desk could already name, and `unverified` what is left to check. */
 function loadedTrade(raw, state = null) {
-  const accounts = cellTrade(raw).accounts, live = new Set(liveIds(accounts, state));
-  return { accounts: accounts.filter((id) => !live.has(id)), droppedLive: [...live] };
+  const accounts = cellTrade(raw).accounts;
+  return verifyLoaded(accounts, accounts, state);
+}
+/* Every chart config in the layout (visible and beyond the grid) through verifyLoaded, in place: the desk just
+   answered. Returns the LIVE ids it dropped (the caller toasts once, only when there are any) and the indexes it
+   changed (the caller repaints those charts). A chart whose marks are all cleared costs nothing next time, so a
+   stream of account events drops nothing twice. */
+function verifyCells(cfgs, state) {
+  const out = { dropped: [], changed: [] };
+  if (!Array.isArray(cfgs) || !state) return out;
+  cfgs.forEach((c, i) => {
+    if (!isObj(c) || !idList(c.unverified).length) return;
+    const before = idList(c.unverified), v = verifyLoaded(cellTrade(c.trade).accounts, c.unverified, state);
+    c.trade = { accounts: v.accounts };
+    c.unverified = v.unverified;
+    out.dropped.push(...v.droppedLive);
+    // a chart whose marks changed at all can trade differently now (a verified DEMO id becomes usable)
+    if (v.droppedLive.length || JSON.stringify(before) !== JSON.stringify(v.unverified)) out.changed.push(i);
+  });
+  out.dropped = [...new Set(out.dropped)];
+  return out;
+}
+/* A chart's marks after its accounts change: a subset of `accounts`, plus `add` (a restore re-adding an id),
+   minus `remove` (an id the user just ticked or unticked themselves). */
+function nextUnverified(prev, accounts, { add = [], remove = [] } = {}) {
+  const acc = idList(accounts), rm = new Set(remove);
+  return idList([...idList(prev), ...idList(add)]).filter((id) => acc.includes(id) && !rm.has(id));
+}
+const CHECKING_ACCOUNTS = "Checking this chart's accounts with the desk…";
+/* Minor 4: a chart's mode never includes an unverified id, so the frame between the desk's answer and
+   verifyCells running can send nothing to one. A mode that is not 'on' passes through unchanged. */
+function unverifiedMode(m, unverified) {
+  const un = new Set(idList(unverified));
+  if (!m || m.mode !== 'on' || !un.size) return m;
+  const accounts = m.accounts.filter((id) => !un.has(id));
+  if (accounts.length === m.accounts.length) return m;
+  return accounts.length ? { mode: 'on', reason: '', accounts } : { mode: 'none', reason: CHECKING_ACCOUNTS, accounts: [] };
 }
 /* The one plain line a load shows when it dropped LIVE accounts; '' when it dropped none. */
 function liveDroppedMessage(ids, state) {
@@ -151,8 +200,11 @@ function tradeBits(cfg) {
 /* A stored template's trade / algo, as a load: only the keys the template has; LIVE accounts dropped (and
    reported in `droppedLive`, always present) exactly like a layout load. */
 function templateTrade(tpl, state = null) {
-  const t = isObj(tpl) ? tpl : {}, out = { droppedLive: [] };
-  if ('trade' in t) { const l = loadedTrade(t.trade, state); out.trade = { accounts: l.accounts }; out.droppedLive = l.droppedLive; }
+  const t = isObj(tpl) ? tpl : {}, out = { droppedLive: [], unverified: [] };
+  if ('trade' in t) {
+    const l = loadedTrade(t.trade, state);
+    out.trade = { accounts: l.accounts }; out.droppedLive = l.droppedLive; out.unverified = l.unverified;
+  }
   if ('algo' in t) out.algo = cellAlgo(t.algo);
   return out;
 }
@@ -176,6 +228,7 @@ function hiddenCellsLoaded(cells, n, state = null) {
     if (!isObj(cells[i])) continue;
     const l = loadedTrade(cells[i].trade, state);
     cells[i].trade = { accounts: l.accounts };
+    cells[i].unverified = l.unverified;
     dropped.push(...l.droppedLive);
   }
   return [...new Set(dropped)];
@@ -318,6 +371,18 @@ function armedMode(m, state, liveConfirmed) {
    -- HBTradeUI.effectiveMode runs every chart's mode through it, so nothing downstream (the block, the chart
    menu, a line's drag or ×) ever sees 'on' for a replaying chart. A mode that is not 'on' passes through
    unchanged: it is already refused for its own reason, and replay need not relabel it. */
+/* Important 2 (fix round 1): a replay that ended WITHOUT the user choosing it (a reconnect, the server's own
+   stop, an error, the chart destroyed) latches the chart until the user clicks "Resume live trading" on it --
+   the practice block sat exactly where the real Buy/Sell block appears, so the next click must not be real. */
+const REPLAY_ENDED = 'Replay ended — confirm to trade live again';
+function replayHaltGuard(mode, halted) {
+  return halted && mode && mode.mode === 'on' ? { mode: 'none', reason: REPLAY_ENDED, accounts: [] } : mode;
+}
+/* What a replay's end sets on the chart's config: `replayHalt` only for an end the user did not choose, and
+   `replayConfirm` for ANY end -- the first real order afterwards always shows the confirm, one-click or not. */
+function replayEndPatch(involuntary) { return { replayHalt: !!involuntary, replayConfirm: true }; }
+/* Whether a chart-started send may skip the confirm dialog: one-click on, and no replay end pending its confirm. */
+function sendsWithoutConfirm(prefs, cfg) { return !!(prefs && prefs.oneClick) && !(isObj(cfg) && cfg.replayConfirm); }
 function replayGuard(mode, inReplay) {
   return inReplay && mode && mode.mode === 'on' ? { mode: 'none', reason: 'Replay — trading is off', accounts: [] } : mode;
 }
@@ -731,7 +796,8 @@ function accountsForAlgo(state, root, key) {
    session (a LIVE account is only ever ticked through its own two-step arm) and never one the desk does not
    list (armedTicked fails closed on both). */
 function algoTickAccounts(state, root, key, liveConfirmed) {
-  return armedTicked(state, accountsForAlgo(state, root, key), liveConfirmed);
+  const tradable = new Set(accountsOf(state).filter((a) => a.tradable).map((a) => a.id));   // Minor 5: as toggleAccount
+  return armedTicked(state, accountsForAlgo(state, root, key), liveConfirmed).filter((id) => tradable.has(id));
 }
 /* The ACCOUNTS section's rows for one chart: every account the desk lists, then any on THIS chart's list the
    desk does not (chip '?', never tradable -- fail closed -- but always removable from the chart).
@@ -756,13 +822,29 @@ function accountPickRows(state, accounts, liveConfirmed, root) {
 }
 /* The desk's own state for the bottom status bar (it left the deleted Trade button with it): a dot, the line,
    and whether to show the "Open the desk" link. */
-function deskStatusText(desk) {
+function deskStatusText(desk, chartWhyText = '') {
   const gate = deskGate(desk);
   if (gate && gate.mode === 'down') return { dot: 'bad', text: `Desk unreachable — ${gate.reason}`, link: false };
   if (gate) return { dot: 'warn', text: 'Chart trading is off on the desk', link: true };
   const lim = (desk.state && desk.state.limits) || {};
   return { dot: 'ok', link: false,
-    text: `Desk: connected · chart trading on · max ${lim.max_order_qty ?? '—'}/order, ${lim.max_position_qty ?? '—'}/position` };
+    text: `Desk: connected · chart trading on · max ${lim.max_order_qty ?? '—'}/order, ${lim.max_position_qty ?? '—'}/position`
+      + (chartWhyText ? ` · this chart: ${chartWhyText}` : '') };
+}
+/* Minor 6: the SELECTED chart's own short reason for the status bar ('' when it can trade). `mode` is its
+   effective mode; the rest say why, most specific first. */
+function chartWhy({ replay = false, halted = false, accounts = [], unverified = [], state = null, liveConfirmed = null, mode = null } = {}) {
+  if (replay) return 'replay';
+  if (halted) return 'replay ended — resume to trade';
+  const acc = idList(accounts);
+  if (!acc.length) return 'no accounts';
+  if (!mode || mode.mode === 'on') return '';
+  const armed = liveConfirmed instanceof Set ? liveConfirmed : new Set(liveConfirmed || []);
+  const unarmed = accountsOf(state).filter((a) => acc.includes(a.id) && a.env === 'live' && !armed.has(a.id));
+  if (unarmed.length) return `arm LIVE ${unarmed.map(short).join(', ')}`;
+  if (idList(unverified).some((id) => acc.includes(id))) return 'checking accounts';
+  const r = String(mode.reason || '');
+  return r ? r[0].toLowerCase() + r.slice(1) : '';
 }
 
 const fmt1 = (v) => (v == null || !Number.isFinite(v) ? '—' : v.toFixed(1));
@@ -1263,6 +1345,8 @@ const api = { PREFS_KEY, QUOTE_STALE_MS, BOT_NAMES, parsePrefs, prefsText, short
   migrateTicked, deskGate, armedMode, replayGuard, legsWithin, accountChips, acctTick, hiddenCellsLoaded,
   NO_ACCOUNTS, SYMBOL_CHANGE_ACCOUNTS_CLEARED, liveIds, liveDroppedMessage, envChip, algoBookings, algoForAccount,
   accountsForAlgo, algoTickAccounts, accountPickRows, deskStatusText,
+  verifyLoaded, verifyCells, nextUnverified, unverifiedMode, CHECKING_ACCOUNTS, REPLAY_ENDED, replayHaltGuard,
+  replayEndPatch, sendsWithoutConfirm, chartWhy,
   PANEL_QTY_MAX, GTC_WARN, exitTriple, qtyFromRisk, exitSideError, panelOrder, sendLabel,
   parseQty, parseUsd, parseDecimal, roundTickDir, riskTicks,
   paperKey, isPaperAlgo, paperStrategyId, paperStrategiesMap, paperPill, paperToday, paperLabel, paperLines,

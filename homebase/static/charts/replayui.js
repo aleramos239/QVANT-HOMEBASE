@@ -97,10 +97,21 @@ function savePracticeSession(cell, s) {
   } catch (_) { /* storage off: the session just is not logged */ }
 }
 
-function clearSession(cell) {
+/* Every end of a session comes through here, saying whether the USER chose it (fix round 1, Important 2): an end
+   they did not choose latches the chart until "Resume live trading", and any end makes the next real order
+   confirm (HBTradeUI.replayEnded) -- the practice block sat exactly where the real Buy/Sell block reappears. */
+/* The user's own Exit (the replay bar's ×): the `stopped` that answers it is theirs, so it ends the session with
+   no latch -- only the confirm on the next real order. */
+function exitReplay(cell) {
+  const s = sessions.get(cell);
+  if (s) s.userExit = true;
+  cell.host.send(R.stopOp(cell.id));
+}
+function clearSession(cell, involuntary) {
   savePracticeSession(cell, sessions.get(cell));
   sessions.delete(cell);
   cell.replay = null;
+  window.HBTradeUI.replayEnded(cell, involuntary);
   refreshOverlays(cell);
 }
 
@@ -108,7 +119,7 @@ function clearSession(cell) {
    replay sessions existed on the OLD connection are gone with it (the server has no record of this one at
    all). Drop our own bookkeeping for them too -- purely local, nothing to send -- so a chart that was mid
    "pending" (replay_start sent, no answer before the drop) does not stay locked out of trading forever. */
-function onReconnect(cells) { for (const c of cells) if (sessions.has(c)) clearSession(c); }
+function onReconnect(cells) { for (const c of cells) if (sessions.has(c)) clearSession(c, true); }
 
 /* replay_state (parsed by replay.js): `stopped` ends the session locally too (the server's own `reset` that
    follows makes app.js resubscribe live). Otherwise: update the session and let the live Overlay (if the
@@ -116,7 +127,9 @@ function onReconnect(cells) { for (const c of cells) if (sessions.has(c)) clearS
 function onState(cell, msg) {
   const parsed = R.parseState(msg);
   if (!parsed || !cell) return;
-  if (parsed.stopped) { clearSession(cell); return; }
+  // `stopped` is the user's own Exit only when this page sent it (the × marks the session); otherwise the
+  // server ended it (end of data, a crashed stream, its own reset): involuntary
+  if (parsed.stopped) { const was = sessions.get(cell); clearSession(cell, !(was && was.userExit)); return; }
   let s = sessions.get(cell);
   if (!s) { s = { pending: false, ov: null, sim: null, feed: null, lastPrice: null, qty: 1 }; sessions.set(cell, s); }
   s.pending = false;
@@ -144,7 +157,11 @@ function onState(cell, msg) {
    its own replay_state{stopped:true}. */
 function onError(cell, msg) {
   if (!cell || !msg) return;
-  if (msg.op === 'replay_start') { sessions.delete(cell); cell.replay = null; refreshOverlays(cell); }
+  if (msg.op === 'replay_start') {
+    sessions.delete(cell); cell.replay = null;
+    window.HBTradeUI.replayEnded(cell, true);   // an error end is never the user's choice
+    refreshOverlays(cell);
+  }
   if (typeof msg.error === 'string') cell.note(msg.error);
 }
 
@@ -219,6 +236,7 @@ function cellDestroyed(cell) {
   try { cell.host.send(R.stopOp(cell.id)); } catch (_) { /* the connection is already gone */ }
   sessions.delete(cell);
   cell.replay = null;
+  window.HBTradeUI.replayEnded(cell, true);   // the latch lives on cell.cfg, so the rebuilt chart inherits it
 }
 
 /* A symbol or interval change on a replaying chart (cell.js's update() guard): the server auto-stops a
@@ -234,7 +252,7 @@ function cellDestroyed(cell) {
 function guardSymbolChange(cell, patch) {
   if (!page) return;
   if (page.dialogOpen && page.dialogOpen()) {
-    clearSession(cell);
+    clearSession(cell, false);   // the user changed the symbol/interval themselves (and that clears the accounts)
     cell.update(patch);
     if (page.sbNote) page.sbNote('Replay ended — symbol/interval changed');
     return;
@@ -247,7 +265,7 @@ function guardSymbolChange(cell, patch) {
   yes.onclick = () => {
     page.setDialogClose(null);
     page.closeDialog();
-    clearSession(cell);
+    clearSession(cell, false);
     cell.update(patch);
   };
   // M1 (final review): the Enter that picked the new symbol / interval opened this dialog; its auto-repeat must
@@ -402,7 +420,7 @@ class Overlay {
 
     const time = mk('span', 'rb-time');
     const exitBtn = iconBtn('x', 'Exit replay');
-    exitBtn.onclick = () => this.cell.host.send(R.stopOp(this.cell.id));
+    exitBtn.onclick = () => exitReplay(this.cell);
 
     bar.append(jumpBtn, jumpRow, playBtn, stepBtn, speedBtn, time, exitBtn);
     this.cell.el.appendChild(bar);
@@ -675,5 +693,5 @@ function mount(pg) {
 }
 
 window.HBReplayUI = { mount, overlay: (cell, pg) => new Overlay(cell, pg), onState, onError, onBarUpdate,
-  cellDestroyed, onReconnect, togglePlay, step, disarmPick, guardSymbolChange };
+  cellDestroyed, onReconnect, togglePlay, step, disarmPick, guardSymbolChange, exitReplay };
 })();
