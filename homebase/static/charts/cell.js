@@ -887,6 +887,8 @@ class Cell {
     // teardown() is not enough (a rebuild keeps the chart): a pending reach() must not keep polling a cell
     // that is gone for good.
     if (this.reaching) this.reaching.resolve(false);
+    // ... nor may a whenLoaded() (a jump() awaiting this cell's load) wait on a cell that will never load.
+    const w = this.loadWaiters; this.loadWaiters = []; w.forEach((f) => f(false));
     this.teardown();
   }
 }
