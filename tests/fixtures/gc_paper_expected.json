@@ -1,0 +1,64 @@
+{
+ "2024-09-06": {
+  "why": "NFP, stop-loss exit that gapped (net -434)",
+  "contract": "GCZ4",
+  "source": "2024-09-06_GCZ4.csv.gz",
+  "ticks": 34252,
+  "anchor": 2545.8,
+  "trades": [
+   {
+    "date": "2024-09-06",
+    "side": "short",
+    "qty": 1,
+    "entry_ns": 1725625801038019215,
+    "entry_price": 2542.5,
+    "exit_ns": 1725625801038111487,
+    "exit_price": 2546.8,
+    "exit_reason": "sl",
+    "order_price": 2543.8,
+    "sl": 2545.5,
+    "tp": 2536.5,
+    "gross": -430.0,
+    "commission": 4.0,
+    "net": -434.0,
+    "mae_pts": 4.2,
+    "mfe_pts": 4.4,
+    "mae_usd": 420.0,
+    "mfe_usd": 440.0,
+    "bars": 1,
+    "seconds": 0.0
+   }
+  ]
+ },
+ "2024-11-13": {
+  "why": "CPI, take-profit exit (net +596)",
+  "contract": "GCZ4",
+  "source": "2024-11-13_GCZ4.csv.gz",
+  "ticks": 21206,
+  "anchor": 2614.9,
+  "trades": [
+   {
+    "date": "2024-11-13",
+    "side": "long",
+    "qty": 1,
+    "entry_ns": 1731504601049664855,
+    "entry_price": 2617.0,
+    "exit_ns": 1731504625294130875,
+    "exit_price": 2623.0,
+    "exit_reason": "tp",
+    "order_price": 2616.9,
+    "sl": 2614.0,
+    "tp": 2623.0,
+    "gross": 600.0,
+    "commission": 4.0,
+    "net": 596.0,
+    "mae_pts": 2.0,
+    "mfe_pts": 6.1,
+    "mae_usd": 200.0,
+    "mfe_usd": 610.0,
+    "bars": 1,
+    "seconds": 24.244
+   }
+  ]
+ }
+}
