@@ -117,6 +117,14 @@ def test_the_stream_sends_state_first_then_events_then_heartbeats():
 
 
 @pytest.mark.parametrize("port", ["8850", "8852", "8854"])
-def test_the_cli_refuses_the_real_services_ports(port):
+def test_the_cli_refuses_the_real_services_ports(port, monkeypatch, capsys):
+    """As in the chart service's own CLI guard test: stub uvicorn.run so a bind failure (8850 is the
+    live desk's own port -- already taken on this machine) can never masquerade as the ap.error()
+    guard. This fails if the port check is removed, and capsys checks the actual message."""
+    def unreachable(*a, **k):
+        pytest.fail("uvicorn.run must not be reached: the port guard should have refused first")
+    monkeypatch.setattr(fake_desk.uvicorn, "run", unreachable)
     with pytest.raises(SystemExit):
         fake_desk.main(["--port", port])
+    err = capsys.readouterr().err
+    assert f"port {port} belongs to the real desk or the chart service" in err

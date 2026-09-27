@@ -411,7 +411,7 @@ def create_fake_desk(key: str, desk: FakeDesk | None = None) -> FastAPI:
 def write_key(path: Path) -> str:
     key = secrets.token_hex(32)
     path.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
     with os.fdopen(fd, "w") as f:
         f.write(key + "\n")
     os.chmod(path, 0o600)

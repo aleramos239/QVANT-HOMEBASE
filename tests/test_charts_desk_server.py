@@ -159,9 +159,19 @@ def test_the_fake_desk_link_is_refused_outside_replay(tmp_path):
 
 @pytest.mark.parametrize("argv", [["--fake-desk", "8859"],                              # no --replay
                                   ["--replay", "2026-09-22", "--fake-desk", "8850"]])   # the real desk's port
-def test_the_cli_refuses_a_fake_desk_without_replay_or_on_the_real_port(argv):
+def test_the_cli_refuses_a_fake_desk_without_replay_or_on_the_real_port(argv, monkeypatch, capsys):
+    """argparse's own SystemExit must be what refuses this -- never a uvicorn bind failure standing
+    in for it (a port already taken by another process would raise SystemExit too, and the test
+    would pass even with the ap.error() guard deleted). Stubbing uvicorn.run to fail the test if
+    reached proves the guard, not the bind, is what stops this; capsys checks the actual message."""
+    def unreachable(*a, **k):
+        pytest.fail("uvicorn.run must not be reached: the --fake-desk guard should have refused first")
+    monkeypatch.setattr(charts_main.uvicorn, "run", unreachable)
     with pytest.raises(SystemExit):
         charts_main.main(argv)
+    err = capsys.readouterr().err
+    expected = "needs --replay" if "--replay" not in argv else "must not be the real desk's port 8850"
+    assert expected in err
 
 
 def test_replay_links_to_the_fake_desk_and_sends_it_quotes(tmp_path):
