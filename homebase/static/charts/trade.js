@@ -122,11 +122,21 @@ function templateTrade(tpl) {
   if ('algo' in t) out.algo = cellAlgo(t.algo);
   return out;
 }
-/* A chart moved to `root`: its algo stays only while the desk confirms that algo trades `root`; an algo the desk
-   does not list (or no desk state yet) cannot be confirmed, so it is cleared. */
+/* A chart moved to `root` (or a template's algo applied to it): the algo is cleared only when the desk CONFIRMS it
+   trades another symbol. One the desk can't speak to (no state yet, not listed, no symbol) is kept -- fix round 1:
+   a desk that hasn't answered must not silently drop a chart's algo from the next layout save. */
 function algoForRoot(algo, root, strategies) {
-  const a = cellAlgo(algo), s = a && isObj(strategies) ? strategies[a] : null;
-  return s && rootOf(s.symbol) === root ? a : null;
+  const a = cellAlgo(algo);
+  if (!a) return null;
+  const s = isObj(strategies) ? strategies[a] : null;
+  if (!isObj(s) || typeof s.symbol !== 'string' || !s.symbol) return a;
+  return rootOf(s.symbol) === root ? a : null;
+}
+/* Charts kept in the layout beyond the visible grid (a smaller grid): Trading switched off, accounts kept, so a chart
+   that reappears when the grid grows again never comes back already trading (fix round 1). Mutates `cells`. */
+function hiddenCellsOff(cells, n) {
+  if (!Array.isArray(cells)) return;
+  for (let i = Math.max(0, n); i < cells.length; i++) if (isObj(cells[i])) cells[i].trade = loadedTrade(cells[i].trade);
 }
 /* The one-time move of the old global ticked list: onto the SELECTED chart only, and only when that chart has no
    trade config of its own yet (an old layout's cell, or a fresh one). Trading stays off. null: nothing to move. */
@@ -244,6 +254,14 @@ function accountChips(state, accounts, activeIds) {
     const a = list.find((x) => x.id === id), live = !!a && a.env === 'live';
     return { id, who: short(a || { id }), env: a ? (live ? 'LIVE' : 'DEMO') : '', live, active: act.has(id) };
   });
+}
+
+/* A Trade-menu row's state for one chart: 'ticked', 'off', or 'unarmed' -- a LIVE account on the chart's list that
+   is not armed this session (it came back with a layout): shown ticked-but-not-armed, and a click removes it. */
+function acctTick(account, accounts, liveConfirmed) {
+  const armed = liveConfirmed instanceof Set ? liveConfirmed : new Set(liveConfirmed || []);
+  if (!account || !(accounts || []).includes(account.id)) return 'off';
+  return account.env === 'live' && !armed.has(account.id) ? 'unarmed' : 'ticked';
 }
 
 /* The refusal toast for an unarmed LIVE account (per-account paths: flatten, cancel, drag, ×). */
@@ -521,7 +539,7 @@ const api = { PREFS_KEY, QUOTE_STALE_MS, BOT_NAMES, parsePrefs, prefsText, short
   botsFor, positionRows, orderRows, fillRows, accountRows, etTime, diffRows,
   enterConfirms, resolveConfirmedAccounts, armedTicked, unarmedLiveMessage, freshQuote,
   needsQuoteForBracket, refuseIfMarketable, cellTrade, loadedTrade, cellAlgo, tradeBits, templateTrade, algoForRoot,
-  migrateTicked, deskGate, armedMode, legsWithin, accountChips };
+  migrateTicked, deskGate, armedMode, legsWithin, accountChips, acctTick, hiddenCellsOff };
 if (typeof window !== 'undefined') window.HBTrade = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

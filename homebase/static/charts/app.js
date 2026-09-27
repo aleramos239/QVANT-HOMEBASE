@@ -165,6 +165,7 @@ function buildGrid() {
   for (const c of cells) c.destroy();
   cells = [];
   const grid = $('#grid'), [cols, rows] = GRIDS[layout.grid] || GRIDS[4], n = cols * rows;
+  T.hiddenCellsOff(layout.cells, n);   // a chart kept beyond the visible grid never comes back already trading
   grid.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
   grid.style.gridTemplateRows = `repeat(${rows}, minmax(0, 1fr))`;
   grid.dataset.count = String(n);
@@ -290,8 +291,13 @@ function symbolMenu() {
     list.replaceChildren(...hits.map((r) => {
       const b = menuItem(r, C.rootName(r), () => {
         closeMenu();
-        // a new symbol keeps the chart's trade config; its algo stays only if it trades the new symbol (Task 2)
-        if (c.cfg.root !== r) c.update({ root: r, algo: T.algoForRoot(c.cfg.algo, r, deskStrategies()) });
+        // a new symbol keeps the chart's trade config; its algo is cleared only when the desk confirms it trades
+        // another symbol (Task 2). The algo on the last accepted symbol is kept aside until the change settles, so
+        // a refused change (the chart rolls back to it) gets its algo back (fix round 1).
+        if (c.cfg.root !== r) {
+          if (!algoBefore.has(c)) algoBefore.set(c, { root: c.cfg.root, algo: c.cfg.algo ?? null });
+          c.update({ root: r, algo: T.algoForRoot(c.cfg.algo, r, deskStrategies()) });
+        }
       }, r === c.cfg.root);
       b.prepend(badgeEl(r, 16));
       return b;
@@ -336,7 +342,11 @@ function intervalMenu() {
 }
 
 /* A custom interval the open menu sent is on screen: close the menu. */
+/* cell -> {root, algo}: a chart's algo on its last accepted symbol while a symbol change is still unanswered. */
+const algoBefore = new WeakMap();
+
 function onLoaded(cell) {
+  algoBefore.delete(cell);   // a history arrived: whatever symbol it is on now, the algo decision stands
   if (customWait && customWait.cell === cell && cell.shown.spec === customWait.spec) closeMenu();
 }
 
@@ -344,6 +354,12 @@ function onLoaded(cell) {
    config): say why inline in the interval menu if that is where it came
    from, else in the chart's legend. */
 function onRefused(cell, tried, text) {
+  const was = algoBefore.get(cell);
+  if (was && cell.cfg.root === was.root) {   // rolled back to the symbol the algo was on: the algo comes back too
+    algoBefore.delete(cell);
+    cell.cfg.algo = was.algo;
+    saveLast();
+  }
   if (customWait && customWait.cell === cell && menuEl) {
     menuErr(customWait.err, text);
     customWait = null;

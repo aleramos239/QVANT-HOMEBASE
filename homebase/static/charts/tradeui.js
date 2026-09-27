@@ -367,6 +367,14 @@ function setAccountTicked(cell, id, on) {
 }
 function onTickChange(cell, a, cb) {
   if (!cell || cell !== page.cur()) { refillIfOpen(); return; }   // the menu edits the selected chart only
+  // fix round 1: a LIVE account on this chart's list but not armed this session (it came back with a layout) is
+  // shown ticked-but-not-armed; a click REMOVES it from the chart -- it never starts the arm flow (arming is a
+  // separate action: tick it again afterwards). Decided from the chart's list, not the checkbox's toggled value.
+  if (T.acctTick(a, tradeOf(cell).accounts, liveConfirmed) === 'unarmed') {
+    if (armLive === a.id) { armLive = null; clearTimeout(armTimer); }
+    setAccountTicked(cell, a.id, false);
+    return;
+  }
   const wantTick = cb.checked;
   if (wantTick && a.env === 'live' && !liveConfirmed.has(a.id)) {
     if (armLive === a.id) {   // the second click, within the window: arm it for real
@@ -387,12 +395,20 @@ function onTickChange(cell, a, cb) {
   setAccountTicked(cell, a.id, wantTick);
 }
 
+/* The checkbox for one row state: 'ticked', 'off', or 'unarmed' (indeterminate: on the chart's list, not armed).
+   An account already on the list can always be removed, even while it is not tradable. */
+function paintTick(cb, a, state) {
+  cb.dataset.state = state;
+  cb.disabled = !a.tradable && state === 'off';
+  cb.checked = state === 'ticked';
+  cb.indeterminate = state === 'unarmed';
+  cb.title = state === 'unarmed' ? "On this chart's list but not armed this session — click to remove it" : '';
+}
 function acctRow(cell, a, t) {
   const id = `tm-acct-${a.id}`, row = page.mk('div', 'tm-row');
-  const cb = page.mk('input');
+  const cb = page.mk('input'), state = T.acctTick(a, t.accounts, liveConfirmed);
   cb.type = 'checkbox'; cb.id = id; cb.dataset.tm = `acct:${a.id}`;
-  cb.disabled = !a.tradable;
-  cb.checked = t.accounts.includes(a.id) && (a.env !== 'live' || liveConfirmed.has(a.id));
+  paintTick(cb, a, state);
   cb.onchange = () => onTickChange(cell, a, cb);
   const lab = page.mk('label', 'tm-label');
   lab.htmlFor = id;
@@ -400,6 +416,7 @@ function acctRow(cell, a, t) {
     lab.appendChild(page.mk('span', 'tm-arm', 'Tick LIVE — real orders. Click again'));
   } else {
     lab.appendChild(page.mk('span', 'tm-name', a.label));
+    if (state === 'unarmed') lab.appendChild(page.mk('span', 'tm-unarmed', 'LIVE · not armed'));
     if (!a.tradable) lab.appendChild(page.mk('span', 'tm-err', a.error || 'not tradable'));
   }
   row.append(cb, lab, envSpan(a.env), page.mk('span', 'tm-bal', T.money(a.balance)), dotSpan(a.connected));
@@ -449,8 +466,9 @@ function patchAccountRows(m) {
     const cb = m.querySelector(`[data-tm="acct:${a.id}"]`);
     const row = cb && cb.closest('.tm-row');
     if (!row) return false;
-    cb.disabled = !a.tradable;
-    cb.checked = t.accounts.includes(a.id) && (a.env !== 'live' || liveConfirmed.has(a.id));
+    const state = T.acctTick(a, t.accounts, liveConfirmed);
+    if (cb.dataset.state !== state) return false;   // the row's label changes with its state: a full fill
+    paintTick(cb, a, state);
     const bal = row.querySelector('.tm-bal');
     if (bal) bal.textContent = T.money(a.balance);
     const dot = row.querySelector('.dot');

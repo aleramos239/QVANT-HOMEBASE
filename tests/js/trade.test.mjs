@@ -159,9 +159,15 @@ test('layout bits: saves write trade.accounts and algo (never `on`); algo saniti
   assert.equal(T.algoForRoot('nq930', 'NQ', strats), 'nq930');   // still NQ: kept
   assert.equal(T.algoForRoot('nq930', 'ES', strats), null);      // no longer matches: cleared
   assert.equal(T.algoForRoot('ym930', 'YM', strats), 'ym930');
-  assert.equal(T.algoForRoot('gone', 'NQ', strats), null);       // unknown to the desk: cleared (can't confirm a match)
-  assert.equal(T.algoForRoot('nq930', 'NQ', null), null);
+  // fix round 1: only a CONFIRMED mismatch clears; an algo the desk can't speak to (not answered yet, not listed,
+  // no symbol) is kept
+  assert.equal(T.algoForRoot('gone', 'NQ', strats), 'gone');     // not listed: kept
+  assert.equal(T.algoForRoot('nq930', 'NQ', null), 'nq930');     // no desk state yet: kept
+  assert.equal(T.algoForRoot('nq930', 'ES', null), 'nq930');     // no desk state yet: kept, even for another symbol
+  assert.equal(T.algoForRoot('odd', 'NQ', { odd: { kind: 'bars' } }), 'odd');   // listed with no symbol: kept
+  assert.equal(T.algoForRoot('nq930', 'YM', strats), null);      // the desk confirms NQ, the chart is YM: cleared
   assert.equal(T.algoForRoot(null, 'NQ', strats), null);
+  assert.equal(T.algoForRoot('', 'NQ', null), null);             // not a valid algo at all
 });
 
 test('templateTrade: a stored template\'s trade / algo, loaded Trading-off; absent keys stay absent', () => {
@@ -178,6 +184,27 @@ test('accountChips: the chart\'s accounts as "…047 DEMO" chips, dimmed when no
     { id: 'live099', who: '…099', env: 'LIVE', live: true, active: false },
     { id: 'ghost', who: '…ost', env: '', live: false, active: false }]);
   assert.deepEqual(T.accountChips(null, ['sim041'], []), [{ id: 'sim041', who: '…041', env: '', live: false, active: false }]);
+});
+
+test('acctTick (fix round 1): a chart\'s LIVE account not armed this session shows ticked-but-not-armed', () => {
+  const live = STATE.accounts[2], demo = STATE.accounts[0];
+  assert.equal(T.acctTick(live, ['live099'], new Set()), 'unarmed');
+  assert.equal(T.acctTick(live, ['live099'], new Set(['live099'])), 'ticked');
+  assert.equal(T.acctTick(live, [], new Set(['live099'])), 'off');
+  assert.equal(T.acctTick(demo, ['sim041'], new Set()), 'ticked');
+  assert.equal(T.acctTick(demo, [], new Set()), 'off');
+  assert.equal(T.acctTick(live, ['live099'], ['live099']), 'ticked');   // an array of armed ids works too
+});
+
+test('hiddenCellsOff (fix round 1): charts beyond the visible grid get Trading switched off, accounts kept', () => {
+  const cells = [{ trade: { on: true, accounts: ['a'] } }, { trade: { on: true, accounts: ['b'] } }, { root: 'NQ' },
+    { trade: { on: true, accounts: ['c'] }, algo: 'nq930' }];
+  T.hiddenCellsOff(cells, 1);
+  assert.deepEqual(cells[0].trade, { on: true, accounts: ['a'] });   // visible: untouched
+  assert.deepEqual(cells[1].trade, { on: false, accounts: ['b'] });
+  assert.deepEqual(cells[2].trade, { on: false, accounts: [] });
+  assert.deepEqual(cells[3], { trade: { on: false, accounts: ['c'] }, algo: 'nq930' });
+  assert.doesNotThrow(() => T.hiddenCellsOff(null, 0));
 });
 
 test('legsWithin: a line may be moved / closed only when every leg\'s account is one of the chart\'s', () => {
