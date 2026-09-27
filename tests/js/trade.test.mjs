@@ -452,3 +452,165 @@ test('Stop Limit lines: limit and trigger in the label, never draggable', () => 
   assert.equal(T.canDrag(T.linesFor(STATE, 'NQ', ['sim041', 'sim047'])[0]), false);   // positions never drag
   assert.equal(T.canDrag(T.linesFor(STATE, 'NQ', ['sim041', 'sim047'])[1]), true);    // an SL does
 });
+
+/* ---- the order panel's pure helpers (2026-09-27 order-panel plan, Task 3) ---- */
+const NOW = Date.UTC(2026, 8, 28, 14, 0, 0);
+const Q = { bid: 30900, ask: 30900.25, last: 30900, ts_ms: NOW - 1000 };
+const NQ = { tick: 0.25, pv: 20 };
+
+test('exitTriple: ticks / $ / price, SL below a buy and above a sell, TP the other way; $ for the whole qty', () => {
+  const t = (o) => T.exitTriple({ entry: 30900, ...NQ, qty: 1, ...o });
+  assert.deepEqual(t({ unit: 'ticks', value: 20, side: 'Buy', kind: 'sl' }), { usd: 100, ticks: 20, price: 30895 });
+  assert.deepEqual(t({ unit: 'ticks', value: 40, side: 'Buy', kind: 'tp' }), { usd: 200, ticks: 40, price: 30910 });
+  assert.deepEqual(t({ unit: 'ticks', value: 20, side: 'Sell', kind: 'sl' }), { usd: 100, ticks: 20, price: 30905 });
+  assert.deepEqual(t({ unit: 'ticks', value: 20, side: 'Sell', kind: 'tp' }), { usd: 100, ticks: 20, price: 30895 });
+  // $ is the whole order's: 2 contracts x 20 ticks x $5 = $200
+  assert.deepEqual(t({ unit: 'ticks', value: 20, side: 'Buy', kind: 'sl', qty: 2 }), { usd: 200, ticks: 20, price: 30895 });
+  // from $: whole ticks, at least 1
+  assert.deepEqual(t({ unit: 'usd', value: 100, side: 'Buy', kind: 'sl' }), { usd: 100, ticks: 20, price: 30895 });
+  assert.deepEqual(t({ unit: 'usd', value: 100, side: 'Buy', kind: 'sl', qty: 2 }), { usd: 100, ticks: 10, price: 30897.5 });
+  assert.deepEqual(t({ unit: 'usd', value: 7, side: 'Sell', kind: 'tp' }), { usd: 5, ticks: 1, price: 30899.75 });
+  assert.deepEqual(t({ unit: 'usd', value: 1, side: 'Buy', kind: 'tp' }), { usd: 5, ticks: 1, price: 30900.25 });
+  // from a price: tick-rounded; on the wrong side (or AT the entry) there is no exit
+  assert.deepEqual(t({ unit: 'price', value: 30895.1, side: 'Buy', kind: 'sl' }), { usd: 100, ticks: 20, price: 30895 });
+  assert.deepEqual(t({ unit: 'price', value: 30910, side: 'Sell', kind: 'sl' }), { usd: 200, ticks: 40, price: 30910 });
+  assert.equal(t({ unit: 'price', value: 30905, side: 'Buy', kind: 'sl' }), null);
+  assert.equal(t({ unit: 'price', value: 30900, side: 'Buy', kind: 'tp' }), null);
+  assert.equal(t({ unit: 'price', value: 30899, side: 'Sell', kind: 'sl' }), null);
+  // whole ticks >= 1; nothing typed / garbage / no entry -> no exit
+  assert.deepEqual(t({ unit: 'ticks', value: 2.6, side: 'Buy', kind: 'tp' }), { usd: 15, ticks: 3, price: 30900.75 });
+  for (const value of [0, -3, NaN, null, '', 0.4]) assert.equal(t({ unit: 'ticks', value, side: 'Buy', kind: 'sl' }), null, String(value));
+  assert.equal(t({ unit: 'usd', value: 0, side: 'Buy', kind: 'sl' }), null);
+  assert.equal(t({ unit: 'ticks', value: 20, side: 'Buy', kind: 'sl', entry: null }), null);
+  assert.equal(t({ unit: 'bogus', value: 20, side: 'Buy', kind: 'sl' }), null);
+  // no point value: the ticks and price stand, the $ is unknown; a $ input can't be converted at all
+  assert.deepEqual(t({ unit: 'ticks', value: 20, side: 'Buy', kind: 'sl', pv: null }), { usd: null, ticks: 20, price: 30895 });
+  assert.equal(t({ unit: 'usd', value: 100, side: 'Buy', kind: 'sl', pv: null }), null);
+});
+
+test('qtyFromRisk: whole contracts, floored; 0 when the risk is under one contract', () => {
+  assert.equal(T.qtyFromRisk(500, 20, 0.25, 20), 5);
+  assert.equal(T.qtyFromRisk(499, 20, 0.25, 20), 4);
+  assert.equal(T.qtyFromRisk(300, 20, 0.25, 20), 3);
+  assert.equal(T.qtyFromRisk(0.3, 1, 0.1, 1), 3);            // float noise never floors 3 down to 2
+  assert.equal(T.qtyFromRisk(99, 20, 0.25, 20), 0);          // $99 < $100 for one contract
+  for (const bad of [[0, 20, 0.25, 20], [500, 0, 0.25, 20], [500, 20, 0, 20], [500, 20, 0.25, null], [NaN, 20, 0.25, 20]]) {
+    assert.equal(T.qtyFromRisk(...bad), 0, JSON.stringify(bad));
+  }
+});
+
+test('panelOrder: every type on each side versus the quote, prices tick-rounded, tif only on resting types', () => {
+  const po = (o) => T.panelOrder({ side: 'Buy', type: 'Market', qty: 1, price: null, trigger: null, sl: null, tp: null,
+    tif: 'Day', risk: null, quote: Q, nowMs: NOW, ...NQ, ...o });
+  assert.deepEqual(po({}), { ok: true, side: 'Buy', type: 'Market', qty: 1, price: null, trigger: null, sl: null, tp: null, tif: null });
+  assert.equal(po({ side: 'Sell', tif: 'GTC' }).tif, null);   // a Market order is Day only: none sent
+  // Limit: a buy strictly below the ask, a sell strictly above the bid
+  assert.deepEqual(po({ type: 'Limit', price: 30899.1 }),
+    { ok: true, side: 'Buy', type: 'Limit', qty: 1, price: 30899, trigger: null, sl: null, tp: null, tif: 'Day' });
+  assert.equal(po({ type: 'Limit', price: 30900.25 }).ok, false);
+  assert.match(po({ type: 'Limit', price: 30900.25 }).error, /buy limit.*below/i);
+  assert.equal(po({ type: 'Limit', side: 'Sell', price: 30901 }).ok, true);
+  assert.match(po({ type: 'Limit', side: 'Sell', price: 30900 }).error, /sell limit.*above/i);
+  // Stop: a buy above the market, a sell below it
+  assert.equal(po({ type: 'Stop', price: 30901 }).ok, true);
+  assert.match(po({ type: 'Stop', price: 30899 }).error, /buy stop.*above/i);
+  assert.equal(po({ type: 'Stop', side: 'Sell', price: 30899 }).ok, true);
+  assert.match(po({ type: 'Stop', side: 'Sell', price: 30901 }).error, /sell stop.*below/i);
+  // a buy stop at the ask while the last trade is also there: the desk refuses a stop at the last trade
+  assert.equal(po({ type: 'Stop', price: 30900, quote: { ...Q, ask: 30900 } }).ok, false);
+  // Stop Limit: the trigger like a stop; a buy's limit at or above it, a sell's at or below, within 100 ticks
+  assert.deepEqual(po({ type: 'StopLimit', trigger: 30901, price: 30902, tif: 'GTC' }),
+    { ok: true, side: 'Buy', type: 'StopLimit', qty: 1, price: 30902, trigger: 30901, sl: null, tp: null, tif: 'GTC' });
+  assert.equal(po({ type: 'StopLimit', trigger: 30901, price: 30901 }).ok, true);
+  assert.match(po({ type: 'StopLimit', trigger: 30901, price: 30900.75 }).error, /limit.*at or above.*trigger/i);
+  assert.match(po({ type: 'StopLimit', trigger: 30899, price: 30900 }).error, /trigger.*above/i);
+  assert.match(po({ type: 'StopLimit', trigger: 30901, price: 30901 + 101 * 0.25 }).error, /within 100 ticks/);
+  assert.equal(po({ type: 'StopLimit', side: 'Sell', trigger: 30899, price: 30898 }).ok, true);
+  assert.match(po({ type: 'StopLimit', side: 'Sell', trigger: 30899, price: 30899.25 }).error, /limit.*at or below.*trigger/i);
+  assert.match(po({ type: 'StopLimit', side: 'Sell', trigger: 30901, price: 30900 }).error, /trigger.*below/i);
+  // a missing price
+  assert.match(po({ type: 'Limit', price: null }).error, /price/i);
+  assert.match(po({ type: 'StopLimit', trigger: null, price: 30902 }).error, /trigger/i);
+  assert.match(po({ type: 'StopLimit', trigger: 30901, price: NaN }).error, /limit/i);
+  // tif
+  assert.equal(po({ type: 'Limit', price: 30899, tif: 'GTC' }).tif, 'GTC');
+  assert.equal(po({ type: 'Limit', price: 30899, tif: 'IOC' }).ok, false);
+  // bad side / type
+  assert.equal(po({ side: 'Short' }).ok, false);
+  assert.equal(po({ type: 'TrailingStop' }).ok, false);
+});
+
+test('panelOrder: the SL / TP side, a Stop Limit\'s SL beyond the TRIGGER and TP beyond the LIMIT', () => {
+  const po = (o) => T.panelOrder({ side: 'Buy', type: 'Limit', qty: 1, price: 30899, trigger: null, sl: null, tp: null,
+    tif: 'Day', risk: null, quote: Q, nowMs: NOW, ...NQ, ...o });
+  const ok = po({ sl: 30895.1, tp: 30910 });
+  assert.equal(ok.ok, true);
+  assert.equal(ok.sl, 30895);
+  assert.equal(ok.tp, 30910);
+  assert.match(po({ sl: 30899 }).error, /stop loss.*below/i);
+  assert.match(po({ tp: 30898 }).error, /take profit.*above/i);
+  assert.equal(po({ side: 'Sell', price: 30901, sl: 30905, tp: 30890 }).ok, true);
+  assert.match(po({ side: 'Sell', price: 30901, sl: 30900 }).error, /stop loss.*above/i);
+  assert.match(po({ side: 'Sell', price: 30901, tp: 30902 }).error, /take profit.*below/i);
+  // Market: measured from the (fresh) last trade
+  assert.equal(po({ type: 'Market', price: null, sl: 30895, tp: 30910 }).ok, true);
+  assert.match(po({ type: 'Market', price: null, sl: 30900 }).error, /stop loss/i);
+  // Stop Limit buy, trigger 30901 / limit 30903: an SL between the two is refused, as is a TP under the limit
+  const sl = (o) => po({ type: 'StopLimit', trigger: 30901, price: 30903, ...o });
+  assert.match(sl({ sl: 30902 }).error, /stop loss.*trigger/i);
+  assert.equal(sl({ sl: 30900 }).ok, true);
+  assert.match(sl({ tp: 30902.5 }).error, /take profit.*limit/i);
+  assert.equal(sl({ tp: 30904 }).ok, true);
+  // ... and the mirror for a sell: trigger 30899 / limit 30897
+  const ss = (o) => po({ side: 'Sell', type: 'StopLimit', trigger: 30899, price: 30897, ...o });
+  assert.match(ss({ sl: 30898 }).error, /stop loss.*trigger/i);
+  assert.equal(ss({ sl: 30900 }).ok, true);
+  assert.match(ss({ tp: 30897.5 }).error, /take profit.*limit/i);
+  assert.equal(ss({ tp: 30896 }).ok, true);
+});
+
+test('panelOrder: no quote refuses; a stale quote refuses only a Market with an exit; qty 1-10', () => {
+  const po = (o) => T.panelOrder({ side: 'Buy', type: 'Market', qty: 1, price: null, trigger: null, sl: null, tp: null,
+    tif: 'Day', risk: null, quote: Q, nowMs: NOW, ...NQ, ...o });
+  for (const type of ['Market', 'Limit', 'Stop', 'StopLimit']) {
+    const r = po({ type, quote: null, price: 30899, trigger: 30901 });
+    assert.equal(r.ok, false, type);
+    assert.match(r.error, /no price/i, type);
+  }
+  const stale = { ...Q, ts_ms: NOW - 20000 };
+  assert.match(po({ quote: stale, sl: 30895 }).error, /no recent price/i);
+  assert.match(po({ quote: stale, tp: 30910 }).error, /no recent price/i);
+  assert.equal(po({ quote: stale }).ok, true);                                   // no exit: nothing to compute
+  assert.equal(po({ quote: stale, type: 'Limit', price: 30899, sl: 30895 }).ok, true);   // measured from its own price
+  // quantity: whole, 1-10
+  assert.equal(po({ qty: 10 }).ok, true);
+  for (const qty of [0, 11, 1.5, -1, NaN, null]) assert.match(po({ qty }).error, /quantity/i, String(qty));
+  assert.equal(po({ qty: 4, qtyMax: 3 }).ok, false);
+});
+
+test('panelOrder: USD risk sizes from the stop; under one contract, no stop, or over the cap refuses', () => {
+  const po = (o) => T.panelOrder({ side: 'Buy', type: 'Limit', qty: null, price: 30900, trigger: null, sl: 30895, tp: null,
+    tif: 'Day', risk: 500, quote: Q, nowMs: NOW, ...NQ, ...o });   // SL 20 ticks = $100 a contract
+  assert.equal(po({}).qty, 5);
+  assert.equal(po({ risk: 499 }).qty, 4);
+  assert.match(po({ risk: 50 }).error, /under one contract/i);
+  assert.match(po({ sl: null }).error, /stop loss/i);
+  assert.match(po({ risk: 5000 }).error, /quantity/i);   // 50 contracts
+  assert.match(po({ pv: null }).error, /point value/i);
+  // Market: the stop measured from the last trade (30900 here, 20 ticks)
+  assert.equal(po({ type: 'Market', price: null }).qty, 5);
+  // Stop Limit: from the TRIGGER (it may fill there): trigger 30901, SL 30896 = 20 ticks
+  assert.equal(po({ type: 'StopLimit', trigger: 30901, price: 30902, sl: 30896 }).qty, 5);
+});
+
+test('sendLabel + contractOf: "Buy 1 NQZ6 MARKET"; the contract from the desk, then the history, then the root', () => {
+  assert.equal(T.sendLabel('Buy', 1, 'NQZ6', 'Market'), 'Buy 1 NQZ6 MARKET');
+  assert.equal(T.sendLabel('Sell', 2, 'NQZ6', 'Limit'), 'Sell 2 NQZ6 LIMIT');
+  assert.equal(T.sendLabel('Buy', 3, 'ES', 'StopLimit'), 'Buy 3 ES STOP LIMIT');
+  assert.equal(T.sendLabel('Sell', 0, 'GC', 'Stop'), 'Sell GC STOP');   // no valid size: no number
+  assert.equal(T.contractOf(STATE, 'NQ', []), 'NQZ6');
+  assert.equal(T.contractOf(STATE, 'ES', []), 'ESZ6');
+  assert.equal(T.contractOf(STATE, 'GC', [{ date: '2026-09-21', contract: 'GCV6' }, { date: '2026-09-22', contract: 'GCZ6' },
+    { date: '2026-09-23', contract: null }]), 'GCZ6');
+  assert.equal(T.contractOf(null, 'CL', null), 'CL');
+});
