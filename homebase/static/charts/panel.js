@@ -297,7 +297,8 @@ function renderActive(clear = true) {
    lean on syncTable (above) to update in place instead of rebuilding. */
 const TAB_EVENTS = { positions: new Set(['state', 'account', 'quote']), orders: new Set(['state', 'account']),
   fills: new Set(['state', 'account']), accounts: new Set(['state', 'account', 'quote']),
-  fillq: new Set(['state', 'account', 'history']) };   // never 'quote': bot-history is not live-priced
+  fillq: new Set(['state', 'account', 'history']),   // never 'quote': bot-history is not live-priced
+  news: new Set() };   // never a desk event -- HBNewsUI patches it from its own news/burst store instead
 function relevant(id, why) {
   const set = TAB_EVENTS[id];
   if (!set) return true;   // a tab with no declared set (e.g. a future one) always redraws

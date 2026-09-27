@@ -380,6 +380,36 @@ a { color: inherit; }
 .env.live { background: var(--down-soft); color: var(--down); font-weight: 600; }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--text-2); }
 .dot.ok { background: var(--up); } .dot.bad { background: var(--down); } .dot.warn { background: var(--warn); }
+
+/* ---- "News" tab (news-ui plan, Task 4): a live headline stream, newest first ---- */
+.hb-news { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.hb-news-bar { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 10px;
+  border-bottom: 1px solid var(--border); }
+.hb-news-sep { flex: none; width: 1px; align-self: stretch; margin: 0 2px; background: var(--border); }
+.hb-news-chip { height: 22px; padding: 0 9px; border-radius: 11px; border: 1px solid var(--border);
+  background: var(--pill); color: var(--text-2); font-size: 12px; }
+.hb-news-chip:hover { color: var(--text); }
+.hb-news-chip[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.hb-news-chip.tag { font-size: 11px; }
+.hb-news-list { flex: 1; min-height: 0; overflow: auto; }
+.hb-news-row { display: flex; align-items: baseline; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--border); }
+.hb-news-row:hover { background: var(--hover); }
+.hb-news-row.trump { background: var(--paper-soft); }
+.hb-news-row.breaking { background: var(--warn-soft); transition: background 1s ease-out; }
+.hb-news-time { flex: none; width: 40px; color: var(--text-2); font-size: 12px; font-variant-numeric: tabular-nums; }
+.hb-news-src { flex: none; padding: 0 5px; border-radius: 4px; font-size: 11px; line-height: 16px;
+  background: var(--hover); color: var(--text-2); }
+.hb-news-src.truth { background: var(--paper-soft); color: var(--paper); }
+.hb-news-title { flex: 1; min-width: 0; padding: 0; border: 0; background: none; text-align: left; font-size: 13px;
+  color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.hb-news-title:hover { text-decoration: underline; }
+.hb-news-tags { flex: none; display: flex; gap: 4px; }
+.hb-news-tag { padding: 0 5px; border-radius: 8px; background: var(--pill); color: var(--text-2); font-size: 10px;
+  line-height: 15px; }
+/* the per-chart overlay: headline ticks + burst markers (setExtraMarkers) and their shared hover tooltip */
+.hb-news-layer { position: absolute; inset: 0; z-index: 4; pointer-events: none; overflow: hidden; }
+.hb-news-tip { white-space: pre-line; max-width: 320px; z-index: 8; }
+
 /* ---- Trade menu (tradeui.js) ---- */
 .menu-trade { width: 340px; }
 /* the selected chart's header: "Trading on this chart — NQ · chart 2" + its own Trading switch (Task 2) */
