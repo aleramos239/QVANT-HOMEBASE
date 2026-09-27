@@ -50,7 +50,7 @@ from typing import Callable, Optional
 from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from .. import netguard
 from ..backtest.engine import Costs, tick_cmp, to_tick
@@ -58,9 +58,17 @@ from ..contracts import point_value, tick_size
 from ..symbols import resolve_contract
 from . import _jsonl
 
-PAPER_ID = "paper"
+PAPER_ID = "paper"                # the first (built-in) paper account; every other one is "paper-<n>"
 LABEL = "PAPER"
-START_BALANCE = 50_000.0          # the virtual account's opening cash
+START_BALANCE = 50_000.0          # a paper account's default opening cash
+MIN_BALANCE, MAX_BALANCE = 1_000.0, 10_000_000.0
+MAX_ACCOUNTS = 20                 # paper accounts at once (the page's account lists are not built for hundreds)
+NAME_MAX = 32
+# "paper" or "paper-<n>" -- never a colon, so no id can collide with a forward-test algo key "paper:<strategy>"
+PAPER_ID_RE = re.compile(r"paper(?:-[1-9][0-9]{0,5})?")
+_NAME_OK = re.compile(r"[^\x00-\x1f\x7f]+")
+# the desk page (:8850) may create / remove / list paper accounts -- EXACTLY these origins, only on those routes
+DESK_ORIGINS = frozenset({"http://localhost:8850", "http://127.0.0.1:8850"})
 MAX_ORDER_QTY = 10                # the desk's per-order cap (trading.py guard 3)
 MAX_POSITION_QTY = 20             # the desk's per-position cap (trading.py guard 3)
 STOPLIMIT_MAX_TICKS = 100         # the desk's (trading.py check_prices)
@@ -126,17 +134,22 @@ def _client_id(body: dict) -> str:
     return cid
 
 
-def _only_paper(body: dict) -> None:
-    """The paper book takes the PAPER account and nothing else -- the page splits a mixed send; an id here that
-    is not PAPER means that split failed, and it is refused whole rather than guessed at (fail closed)."""
+def is_paper_id(x) -> bool:
+    return isinstance(x, str) and PAPER_ID_RE.fullmatch(x) is not None
+
+
+def _only_paper(body: dict, aid: str = PAPER_ID) -> None:
+    """A book takes ITS OWN account and nothing else -- the page splits a mixed send, and PaperBooks splits a
+    send across paper accounts; an id here that is not this book's means a split failed, and it is refused whole
+    rather than guessed at (fail closed). Every account key a body carries must name it (fix round 1, M7)."""
     if "accounts" not in body and "account" not in body:
-        raise ValueError(f"account: the paper book takes only {PAPER_ID!r}")
-    if "accounts" in body:                           # EVERY key present must name PAPER (fix round 1, M7)
+        raise ValueError(f"account: this paper book takes only {aid!r}")
+    if "accounts" in body:
         a = body.get("accounts")
-        if not isinstance(a, list) or not a or any(x != PAPER_ID for x in a):
-            raise ValueError(f"accounts: the paper book takes only [{PAPER_ID!r}]")
-    if "account" in body and body.get("account") != PAPER_ID:
-        raise ValueError(f"account: the paper book takes only {PAPER_ID!r}")
+        if not isinstance(a, list) or not a or any(x != aid for x in a):
+            raise ValueError(f"accounts: this paper book takes only [{aid!r}]")
+    if "account" in body and body.get("account") != aid:
+        raise ValueError(f"account: this paper book takes only {aid!r}")
 
 
 def _worst_net(net: int, legs: list, side: int, qty: int) -> int:
@@ -177,7 +190,11 @@ _ORDER_FIELDS = {f.name for f in fields(POrder)} - {"min_seq"}
 class PaperBook:
     def __init__(self, path: Optional[Path], *, roots=(), clock_ms: Callable[[], int] = lambda: int(time.time() * 1000),
                  costs: Optional[Costs] = None, mono: Callable[[], float] = time.monotonic,
-                 log: Callable[[str], None] = lambda m: None):
+                 log: Callable[[str], None] = lambda m: None, account_id: str = PAPER_ID, label: str = LABEL,
+                 start_balance: float = START_BALANCE):
+        if not is_paper_id(account_id):
+            raise ValueError(f"not a paper account id: {account_id!r}")
+        self.id, self.label, self.start_balance = account_id, label, float(start_balance)
         self.path = Path(path) if path is not None else None
         self.roots = {r.upper() for r in roots}
         self.clock_ms, self.mono, self.log = clock_ms, mono, log
@@ -405,7 +422,7 @@ class PaperBook:
             res = work()
         except Refused as e:
             res = {"ok": False, "order_id": None, "error": str(e), "refused": True}
-        out = {"results": {PAPER_ID: res}}
+        out = {"results": {self.id: res}}
         self._done[(action, cid)] = (now, out)
         return out
 
@@ -417,7 +434,7 @@ class PaperBook:
         if not isinstance(body, dict):
             raise ValueError("the body is a JSON object")
         cid = _client_id(body)
-        _only_paper(body)
+        _only_paper(body, self.id)
         if action == "order":
             return self._order(cid, body)
         if action in ("modify", "cancel"):
@@ -464,7 +481,7 @@ class PaperBook:
         net = (self.pos.get(root) or {}).get("net", 0)
         worst = _worst_net(net, [(o.side, o.qty) for o in self._working(root)], side, qty)
         if worst > MAX_POSITION_QTY:
-            raise Refused(f"that could take {root} on {LABEL} to {worst} contracts (limit {MAX_POSITION_QTY})")
+            raise Refused(f"that could take {root} on {self.label} to {worst} contracts (limit {MAX_POSITION_QTY})")
         tick = tick_size(root)
         rnd = (lambda p: None if p is None else to_tick(p, tick))
         price, trigger, sl, tp = rnd(price), rnd(trigger), rnd(sl), rnd(tp)
@@ -520,7 +537,7 @@ class PaperBook:
     def _find(self, oid: str) -> POrder:
         o = self.orders.get(oid)
         if o is None or o.status != "working":
-            raise Refused(f"order {oid} is not working on {LABEL}")
+            raise Refused(f"order {oid} is not working on {self.label}")
         return o
 
     def _modify(self, oid: str, price: float) -> dict:
@@ -569,7 +586,7 @@ class PaperBook:
     def _reverse(self, root: str) -> dict:
         net = (self.pos.get(root) or {}).get("net", 0)
         if not net:
-            raise Refused(f"no {root} position on {LABEL} to reverse")
+            raise Refused(f"no {root} position on {self.label} to reverse")
         if abs(net) > MAX_ORDER_QTY or abs(net) > MAX_POSITION_QTY:
             raise Refused(f"reversing {abs(net)} is over the per-order limit ({MAX_ORDER_QTY})")
         self._cancel_all(root)
@@ -582,20 +599,189 @@ class PaperBook:
     def view(self) -> dict:
         positions = [{"symbol": p["symbol"], "net": p["net"], "avg_price": round(p["avg"], 6), "root": r,
                       "point_value": point_value(r)} for r, p in sorted(self.pos.items()) if p["net"]]
-        return {"id": PAPER_ID, "label": LABEL, "pinned": None, "broker_account": None, "env": "paper",
+        return {"id": self.id, "label": self.label, "pinned": None, "broker_account": None, "env": "paper",
                 "connected": True, "error": None, "tradable": True,
-                "balance": round(START_BALANCE + self.realized, 2), "realized_pnl": round(self.realized, 2),
+                "start_balance": self.start_balance, "balance": round(self.start_balance + self.realized, 2), "realized_pnl": round(self.realized, 2),
                 "positions": positions,
                 "orders": [_order_view(o) for o in self.orders.values() if o.status == "working"],
                 "fills": list(self.fills), "strategies": []}
 
+    def busy(self) -> bool:
+        """An open position or any order (working, or a bracket leg waiting on its entry)."""
+        return bool(self.orders) or any(p["net"] for p in self.pos.values())
+
+
+LIMITS = {"max_order_qty": MAX_ORDER_QTY, "max_position_qty": MAX_POSITION_QTY}
+
+
+class PaperBooks:
+    """Every paper account the user made (2026-09-27 Task 2b), each with its OWN book (PaperBook) and its OWN log:
+    the first, built-in "paper" keeps paper/book.jsonl exactly where it always was (its book carries over untouched);
+    "paper-<n>" logs to paper/books/paper-<n>.jsonl. The list is paper/accounts.json ({next, accounts: [{id, label,
+    start_balance, created_ms}]}, written atomically). Ids are never reused: `next` only grows. Removing an account
+    is refused while it holds a position or any order; a removed account's log moves to paper/archive/ and its
+    record is appended to paper/archive/accounts.jsonl -- archived, never deleted. `dir` None: in memory only."""
+
+    def __init__(self, dir: Optional[Path], *, roots=(), clock_ms: Callable[[], int] = lambda: int(time.time() * 1000),
+                 costs: Optional[Costs] = None, mono: Callable[[], float] = time.monotonic,
+                 log: Callable[[str], None] = lambda m: None):
+        self.dir = Path(dir) if dir is not None else None
+        self.kw = {"roots": roots, "clock_ms": clock_ms, "costs": costs, "mono": mono, "log": log}
+        self.clock_ms, self.log = clock_ms, log
+        self.books: dict[str, PaperBook] = {}
+        self.meta: dict[str, dict] = {}
+        self.next = 2
+        self._dirty = True
+        reg = _jsonl.read_json(self.dir / "accounts.json") if self.dir is not None else {}
+        rows = reg.get("accounts") if isinstance(reg.get("accounts"), list) else []
+        rows = [r for r in rows if isinstance(r, dict) and is_paper_id(r.get("id"))]
+        if not any(r["id"] == PAPER_ID for r in rows):   # the built-in first account, always there
+            rows.insert(0, {"id": PAPER_ID, "label": LABEL, "start_balance": START_BALANCE, "created_ms": 0})
+        self.next = max([int(reg.get("next") or 2)] + [int(r["id"].split("-")[1]) + 1 for r in rows if r["id"] != PAPER_ID])
+        for r in rows:
+            self._open(r)
+        if self.dir is not None and not (self.dir / "accounts.json").exists():
+            self._save()
+
+    def path_for(self, aid: str) -> Optional[Path]:
+        if self.dir is None:
+            return None
+        return self.dir / "book.jsonl" if aid == PAPER_ID else self.dir / "books" / f"{aid}.jsonl"
+
+    def _open(self, r: dict) -> None:
+        aid = r["id"]
+        label = str(r.get("label") or aid)[:NAME_MAX]
+        bal = float(r.get("start_balance") or START_BALANCE)
+        self.meta[aid] = {"id": aid, "label": label, "start_balance": bal, "created_ms": int(r.get("created_ms") or 0)}
+        self.books[aid] = PaperBook(self.path_for(aid), account_id=aid, label=label, start_balance=bal, **self.kw)
+
+    def _save(self) -> None:
+        if self.dir is None:
+            return
+        self.dir.mkdir(parents=True, exist_ok=True)
+        _jsonl.write_json(self.dir / "accounts.json", {"next": self.next, "accounts": list(self.meta.values())})
+
+    # ---- the tick path and the page ----
+    def on_ticks(self, root: str, rows: list) -> None:
+        for b in self.books.values():
+            b.on_ticks(root, rows)
+
+    @property
+    def dirty(self) -> bool:
+        return self._dirty or any(b.dirty for b in self.books.values())
+
+    def views(self) -> list[dict]:
+        return [b.view() for b in self.books.values()]
+
     def message(self, clear: bool = True) -> dict:
-        """The /ws push: {"type": "paperbook", "account": <view>, "limits": {...}}; clears `dirty` unless a single
+        """The /ws push: {"type": "paperbook", "accounts": [<view>, ...], "limits"}; clears `dirty` unless a single
         page is being greeted (`clear=False`)."""
+        out = {"type": "paperbook", "accounts": self.views(), "limits": dict(LIMITS)}
         if clear:
-            self.dirty = False
-        return {"type": "paperbook", "account": self.view(),
-                "limits": {"max_order_qty": MAX_ORDER_QTY, "max_position_qty": MAX_POSITION_QTY}}
+            self._dirty = False
+            for b in self.books.values():
+                b.dirty = False
+        return out
+
+    def listing(self) -> list[dict]:
+        """GET /api/paper/accounts: what the desk page lists -- no orders or fills, just who and how much."""
+        out = []
+        for aid, b in self.books.items():
+            v = b.view()
+            out.append({"id": aid, "label": b.label, "env": "paper", "start_balance": b.start_balance,
+                        "balance": v["balance"], "realized_pnl": v["realized_pnl"],
+                        "positions": len(v["positions"]), "orders": len(b.orders), "removable": aid != PAPER_ID})
+        return out
+
+    # ---- orders: split per paper account, each book answers for itself ----
+    def act(self, action: str, body) -> dict:
+        if action not in ACTIONS:
+            raise ValueError(f"unknown paper action {action!r}")
+        if not isinstance(body, dict):
+            raise ValueError("the body is a JSON object")
+        _client_id(body)
+        if "accounts" in body:
+            ids = body.get("accounts")
+            if not isinstance(ids, list) or not ids or not all(is_paper_id(x) for x in ids) or len(ids) > 20:
+                raise ValueError("accounts: a list of paper account ids")
+            if "account" in body:
+                raise ValueError("send `accounts` or `account`, not both")
+            ids = list(dict.fromkeys(ids))
+        else:
+            if not is_paper_id(body.get("account")):
+                raise ValueError("account: a paper account id")
+            ids = [body["account"]]
+        results = {}
+        for aid in ids:
+            b = self.books.get(aid)
+            if b is None:
+                results[aid] = {"ok": False, "order_id": None, "error": f"paper account {aid} does not exist",
+                                "refused": True}
+                continue
+            one = {**body, "accounts": [aid]} if "accounts" in body else body
+            results.update(b.act(action, one)["results"])
+        return {"results": results}
+
+    # ---- create / remove ----
+    def create(self, body) -> dict:
+        if not isinstance(body, dict):
+            raise ValueError("the body is a JSON object")
+        name = body.get("name")
+        if not isinstance(name, str) or not _NAME_OK.fullmatch(name.strip() or "\x00") or len(name.strip()) > NAME_MAX:
+            raise ValueError(f"name: 1-{NAME_MAX} printable characters")
+        name = name.strip()
+        bal = body.get("start_balance", START_BALANCE)
+        if not _finite(bal) or not MIN_BALANCE <= bal <= MAX_BALANCE:
+            raise ValueError(f"start_balance: ${MIN_BALANCE:,.0f} to ${MAX_BALANCE:,.0f}")
+        if any(m["label"].lower() == name.lower() for m in self.meta.values()):
+            raise ValueError(f"a paper account is already called {name!r}")
+        if len(self.books) >= MAX_ACCOUNTS:
+            raise ValueError(f"at most {MAX_ACCOUNTS} paper accounts")
+        aid = f"paper-{self.next}"
+        self.next += 1
+        r = {"id": aid, "label": name, "start_balance": float(bal), "created_ms": int(self.clock_ms())}
+        self._open(r)
+        try:
+            self._save()
+        except Exception:
+            del self.books[aid], self.meta[aid]
+            raise
+        self._dirty = True
+        return {"ok": True, "account": self.books[aid].view()}
+
+    def remove(self, body) -> dict:
+        """{"account": id} -> {ok, archived} or {ok: false, error} (still holding something / the built-in one)."""
+        if not isinstance(body, dict) or not is_paper_id(body.get("account")):
+            raise ValueError("account: a paper account id")
+        aid = body["account"]
+        b = self.books.get(aid)
+        if b is None:
+            return {"ok": False, "error": f"paper account {aid} does not exist"}
+        if aid == PAPER_ID:
+            return {"ok": False, "error": "the built-in PAPER account can't be removed"}
+        if b.busy():
+            return {"ok": False, "error": f"{b.label} has an open position or working orders — flatten it first"}
+        now = int(self.clock_ms())
+        archived = None
+        if self.dir is not None:
+            arch = self.dir / "archive"
+            arch.mkdir(parents=True, exist_ok=True)
+            v = b.view()
+            _jsonl.append(arch / "accounts.jsonl", {**self.meta[aid], "removed_ms": now, "balance": v["balance"],
+                                                    "realized_pnl": v["realized_pnl"]})
+        meta = self.meta.pop(aid)
+        del self.books[aid]
+        try:
+            self._save()
+        except Exception:
+            self.meta[aid], self.books[aid] = meta, b
+            raise
+        src = self.path_for(aid)
+        if src is not None and src.exists():
+            archived = self.dir / "archive" / f"{aid}-{now}.jsonl"
+            src.replace(archived)
+        self._dirty = True
+        return {"ok": True, "archived": archived.name if archived else None}
 
 
 def _od(o: POrder) -> dict:
@@ -628,20 +814,97 @@ def _reject(token: str):
     raise _NonFinite(token)
 
 
-def register(app, *, book: Optional[PaperBook], browser_write_ok, allowed: frozenset = netguard.allowlist()) -> None:
-    """GET /api/paper/book and POST /api/paper/{order|modify|cancel|cancel-symbol|flatten|reverse} -- the desk
-    proxy's request rules (desk.py register): the Host allowlist, the Origin, JSON only, this service's own
-    origin rule, 4 KB, no NaN. Nothing here forwards anything anywhere: the book answers itself. The existing
-    forward-test routes (GET /api/paper/strategies, /api/paper/history) are GETs and are left alone."""
+def desk_origin_refusal(headers) -> Optional[tuple[int, str]]:
+    """The create / remove / list routes: an Origin, when sent, must be this service's own page (scheme://Host) or
+    EXACTLY the desk page's (DESK_ORIGINS) -- netguard's rule ignores ports, which is only safe without CORS, and
+    these routes answer the desk page cross-origin. None: allowed."""
+    origin = headers.get("origin")
+    if origin is None:
+        return None
+    if origin in DESK_ORIGINS or origin == f"http://{headers.get('host', '')}":
+        return None
+    return 403, "origin not allowed"
 
-    @app.get("/api/paper/book")
-    async def paper_book(request: Request):
+
+def _cors(resp, request: Request):
+    o = request.headers.get("origin")
+    if o in DESK_ORIGINS:
+        resp.headers["access-control-allow-origin"] = o
+        resp.headers["vary"] = "Origin"
+    return resp
+
+
+async def _read_json(request: Request):
+    cl = request.headers.get("content-length")
+    if cl is not None and (not cl.isdigit() or int(cl) > BODY_MAX):
+        raise HTTPException(413, "request too large (4 KB max)")
+    raw = b""
+    async for chunk in request.stream():
+        raw += chunk
+        if len(raw) > BODY_MAX:
+            raise HTTPException(413, "request too large (4 KB max)")
+    try:
+        return json.loads(raw, parse_constant=_reject)
+    except _NonFinite:
+        raise HTTPException(400, "invalid number") from None
+    except ValueError:
+        raise HTTPException(400, "the body is not JSON") from None
+
+
+def register(app, *, books: Optional[PaperBooks], browser_write_ok, allowed: frozenset = netguard.allowlist()) -> None:
+    """GET /api/paper/book, POST /api/paper/{order|modify|cancel|cancel-symbol|flatten|reverse} -- the desk proxy's
+    request rules (desk.py register): the Host allowlist, the Origin, JSON only, this service's own origin rule,
+    4 KB, no NaN. GET /api/paper/accounts, POST /api/paper/accounts/{create|remove} (Task 2b) add the same rules
+    plus an EXACT origin check (desk_origin_refusal), and answer CORS for the desk page's two origins only. Nothing
+    here forwards anything anywhere. The forward-test routes (GET /api/paper/strategies, /history) are left alone."""
+
+    def guard(request: Request, write: bool) -> None:
         bad = netguard.refusal(request.method, request.scope["headers"], allowed)
         if bad is not None:
             raise HTTPException(*bad)
-        if book is None:
+        if write:
+            browser_write_ok(request)
+        if books is None:
             raise HTTPException(503, LIVE_ONLY)
-        return {"account": book.view(), "limits": {"max_order_qty": MAX_ORDER_QTY, "max_position_qty": MAX_POSITION_QTY}}
+
+    @app.get("/api/paper/book")
+    async def paper_book(request: Request):
+        guard(request, False)
+        return {"accounts": books.views(), "limits": dict(LIMITS)}
+
+    @app.get("/api/paper/accounts")
+    async def paper_accounts(request: Request):
+        bad = desk_origin_refusal(request.headers)
+        if bad is not None:
+            raise HTTPException(*bad)
+        guard(request, False)
+        return _cors(JSONResponse({"accounts": books.listing()}), request)
+
+    @app.options("/api/paper/accounts/{what}")
+    async def paper_accounts_preflight(what: str, request: Request):
+        """The desk page's CORS preflight: allowed for DESK_ORIGINS only (anything else: no allow-origin header,
+        so the browser never sends the write)."""
+        o = request.headers.get("origin")
+        if what not in ("create", "remove") or o not in DESK_ORIGINS:
+            return JSONResponse({"detail": "origin not allowed"}, status_code=403)
+        return Response(status_code=204, headers={
+            "access-control-allow-origin": o, "vary": "Origin", "access-control-allow-methods": "POST",
+            "access-control-allow-headers": "content-type", "access-control-max-age": "600"})
+
+    @app.post("/api/paper/accounts/{what}")
+    async def paper_accounts_write(what: str, request: Request):
+        bad = desk_origin_refusal(request.headers)
+        if bad is not None:
+            raise HTTPException(*bad)
+        guard(request, True)
+        if what not in ("create", "remove"):
+            raise HTTPException(404, f"unknown paper accounts action {what!r}")
+        body = await _read_json(request)
+        try:
+            out = books.create(body) if what == "create" else books.remove(body)
+        except ValueError as e:
+            return _cors(JSONResponse({"ok": False, "detail": str(e)}, status_code=400), request)
+        return _cors(JSONResponse(out), request)
 
     @app.post("/api/paper/{action}")
     async def paper_action(action: str, request: Request):
@@ -651,24 +914,11 @@ def register(app, *, book: Optional[PaperBook], browser_write_ok, allowed: froze
         browser_write_ok(request)
         if action not in ACTIONS:
             raise HTTPException(404, f"unknown paper action {action!r}")
-        if book is None:
+        if books is None:
             raise HTTPException(503, LIVE_ONLY)
-        cl = request.headers.get("content-length")
-        if cl is not None and (not cl.isdigit() or int(cl) > BODY_MAX):
-            raise HTTPException(413, "request too large (4 KB max)")
-        raw = b""
-        async for chunk in request.stream():
-            raw += chunk
-            if len(raw) > BODY_MAX:
-                raise HTTPException(413, "request too large (4 KB max)")
+        body = await _read_json(request)
         try:
-            body = json.loads(raw, parse_constant=_reject)
-        except _NonFinite:
-            raise HTTPException(400, "invalid number") from None
-        except ValueError:
-            raise HTTPException(400, "the body is not JSON") from None
-        try:
-            out = book.act(action, body)
+            out = books.act(action, body)
         except ValueError as e:
             raise HTTPException(400, str(e)) from None
         return JSONResponse(out)

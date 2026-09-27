@@ -457,7 +457,7 @@ def test_a_paper_order_through_the_service_never_makes_a_desk_call_and_fills_on_
     app = live_app(tmp_path, desk_factory=factory)
     with TestClient(app, base_url=BASE_URL) as c, c.websocket_connect("/ws", headers=WS_HOST) as ws:
         first = next_of(ws, "paperbook", limit=400)
-        assert first["account"]["id"] == PAPER_ID and first["account"]["env"] == "paper"
+        assert first["accounts"][0]["id"] == PAPER_ID and first["accounts"][0]["env"] == "paper"
         assert first["limits"] == {"max_order_qty": 10, "max_position_qty": 20}
         body = {"client_id": "p1", "accounts": [PAPER_ID], "root": "NQ", "side": "Buy", "qty": 1, "type": "Market"}
         r = c.post("/api/paper/order", json=body)
@@ -465,10 +465,10 @@ def test_a_paper_order_through_the_service_never_makes_a_desk_call_and_fills_on_
         QuietFeed.last.q.put(("NQ", "NQZ6", rows(session_ms(CD, 9, 41), [101.0])))   # the next print fills it
         for _ in range(10):
             m = next_of(ws, "paperbook", limit=50)
-            if m["account"]["positions"]:
+            if m["accounts"][0]["positions"]:
                 break
-        assert m["account"]["positions"][0]["net"] == 1 and m["account"]["fills"][0]["price"] == 101.25
-        assert c.get("/api/paper/book").json()["account"]["positions"][0]["avg_price"] == 101.25
+        assert m["accounts"][0]["positions"][0]["net"] == 1 and m["accounts"][0]["fills"][0]["price"] == 101.25
+        assert c.get("/api/paper/book").json()["accounts"][0]["positions"][0]["avg_price"] == 101.25
     assert [p for m_, p in seen if not p.endswith("/stream")] == []          # not one desk call
     assert (tmp_path / "state" / "paper" / "book.jsonl").exists()
 
@@ -512,3 +512,165 @@ def test_the_session_roll_is_found_without_clock_maths_on_every_print():
         assert until > ms and pb.session_of(until - 1, root) == want != pb.session_of(until, root)
     fri = et_ns(dt.date(2024, 3, 8), "17:00:00") // 1_000_000       # a Friday close files into Monday
     assert pb.session_of(fri, "NQ") == "2024-03-11"
+
+
+# ---- several paper accounts (2026-09-27 Task 2b) ---------------------------------------------------------------
+def books(tmp_path, clock_ns=T0):
+    return pb.PaperBooks(tmp_path / "paper", roots=["NQ"], clock_ms=lambda: clock_ns // 1_000_000)
+
+
+def feed_all(bs, prints, root="NQ"):
+    for t, p in prints:
+        hms, _, ms = t.partition(".")
+        bs.on_ticks(root, [{"ts_ns": et_ns(D, hms) + int(ms or 0) * 1_000_000, "ts_ms": 0, "price": p}])
+
+
+def bs_order(bs, accounts, side="Buy", typ="Market", qty=1, **kw):
+    body = {"client_id": f"c{next(_cid)}", "accounts": accounts, "root": "NQ", "side": side, "qty": qty, "type": typ, **kw}
+    return bs.act("order", body)["results"]
+
+
+def test_the_first_paper_accounts_book_carries_over_untouched(tmp_path):
+    old = book(tmp_path)                                   # the single-account book as it was before Task 2b
+    feed(old, [("09:29:59", 100.0)])
+    order(old, "Buy", "Market", qty=2)
+    feed(old, [("09:30:01", 100.0)])
+    order(old, "Sell", "Limit", price=110.0)
+    before = old.view()
+    raw = (tmp_path / "paper" / "book.jsonl").read_bytes()
+    bs = books(tmp_path)
+    assert list(bs.books) == [PAPER_ID]
+    assert bs.books[PAPER_ID].view() == {**before, "start_balance": pb.START_BALANCE}
+    assert (tmp_path / "paper" / "book.jsonl").read_bytes() == raw          # not rewritten, not moved
+    assert json.loads((tmp_path / "paper" / "accounts.json").read_text())["accounts"][0]["id"] == PAPER_ID
+
+
+def test_several_books_are_kept_apart_and_each_survives_a_restart(tmp_path):
+    bs = books(tmp_path)
+    a = bs.create({"name": "Scalps", "start_balance": 25_000})["account"]
+    b2 = bs.create({"name": "Swing"})["account"]
+    assert (a["id"], a["label"], a["balance"], a["env"]) == ("paper-2", "Scalps", 25_000.0, "paper")
+    assert (b2["id"], b2["balance"]) == ("paper-3", pb.START_BALANCE)
+    feed_all(bs, [("09:29:59", 100.0)])
+    r = bs_order(bs, ["paper", "paper-2"], qty=2)          # one send, two paper accounts: each its own result
+    assert r["paper"]["ok"] and r["paper-2"]["ok"]
+    bs_order(bs, ["paper-3"], side="Sell", qty=1)
+    feed_all(bs, [("09:30:01", 101.0)])
+    nets = {k: (b.pos.get("NQ") or {}).get("net", 0) for k, b in bs.books.items()}
+    assert nets == {"paper": 2, "paper-2": 2, "paper-3": -1}
+    assert (tmp_path / "paper" / "books" / "paper-2.jsonl").exists()
+    views = bs.views()
+    bs2 = books(tmp_path)
+    assert bs2.views() == views
+    assert [m["accounts"] for m in [bs2.message()]][0][1]["label"] == "Scalps"
+
+
+def test_an_order_for_one_paper_account_never_touches_another(tmp_path):
+    bs = books(tmp_path)
+    bs.create({"name": "Two"})
+    feed_all(bs, [("09:29:59", 100.0)])
+    oid = bs_order(bs, ["paper-2"], typ="Limit", price=95.0)["paper-2"]["order_id"]
+    assert bs.books[PAPER_ID].orders == {}
+    body = {"client_id": "x", "account": PAPER_ID, "order_id": oid}
+    assert bs.act("cancel", body)["results"][PAPER_ID]["ok"] is False      # that id is not working on PAPER
+    assert len(bs.books["paper-2"].orders) == 1
+    with pytest.raises(ValueError):                                          # a per-book body naming another id
+        bs.books["paper-2"].act("cancel", body)
+    with pytest.raises(ValueError):
+        bs.act("order", {"client_id": "y", "accounts": ["paper", "sim047"], "root": "NQ", "side": "Buy", "qty": 1,
+                         "type": "Market"})
+    assert bs.act("flatten", {"client_id": "z", "accounts": ["paper-9"], "root": "NQ"})["results"]["paper-9"]["ok"] is False
+
+
+def test_ids_never_collide_with_algo_keys_and_are_never_reused(tmp_path):
+    bs = books(tmp_path)
+    ids = [bs.create({"name": f"A{i}"})["account"]["id"] for i in range(3)]
+    assert ids == ["paper-2", "paper-3", "paper-4"]
+    assert all(":" not in i and pb.is_paper_id(i) for i in ids)
+    assert not pb.is_paper_id("paper:gc_nfpcpi") and not pb.is_paper_id("paper-0") and not pb.is_paper_id("PAPER")
+    assert bs.remove({"account": "paper-4"})["ok"]
+    assert bs.create({"name": "A9"})["account"]["id"] == "paper-5"
+    assert books(tmp_path).create({"name": "B"})["account"]["id"] == "paper-6"     # across a restart too
+    with pytest.raises(ValueError):
+        bs.create({"name": "a0"})                          # names are unique, case-insensitively
+    with pytest.raises(ValueError):
+        bs.create({"name": "paper"})                       # "PAPER" is the built-in's
+    for bad in ({"name": ""}, {"name": "x" * 33}, {"name": "a\nb"}, {"name": "ok", "start_balance": 10},
+                {"name": "ok", "start_balance": True}, {"name": 5}):
+        with pytest.raises(ValueError):
+            bs.create(bad)
+
+
+def test_removal_is_refused_while_holding_anything_and_archives_the_history(tmp_path):
+    bs = books(tmp_path)
+    bs.create({"name": "Temp"})
+    feed_all(bs, [("09:29:59", 100.0)])
+    bs_order(bs, ["paper-2"], typ="Limit", price=95.0)
+    r = bs.remove({"account": "paper-2"})
+    assert r["ok"] is False and "flatten it first" in r["error"]
+    bs.act("cancel-symbol", {"client_id": "c", "accounts": ["paper-2"], "root": "NQ"})
+    bs_order(bs, ["paper-2"])
+    feed_all(bs, [("09:30:01", 100.0)])
+    assert "flatten it first" in bs.remove({"account": "paper-2"})["error"]      # an open position
+    bs.act("flatten", {"client_id": "f", "accounts": ["paper-2"], "root": "NQ"})
+    feed_all(bs, [("09:30:02", 100.0)])
+    r = bs.remove({"account": "paper-2"})
+    assert r["ok"] and r["archived"].startswith("paper-2-")
+    assert "paper-2" not in bs.books and not (tmp_path / "paper" / "books" / "paper-2.jsonl").exists()
+    arch = tmp_path / "paper" / "archive"
+    assert (arch / r["archived"]).read_text().count("\n") >= 5                  # the whole log, kept
+    rec = json.loads((arch / "accounts.jsonl").read_text().splitlines()[-1])
+    assert rec["id"] == "paper-2" and rec["label"] == "Temp" and "removed_ms" in rec
+    assert "paper-2" not in books(tmp_path).books
+    assert bs.remove({"account": PAPER_ID})["ok"] is False                        # the built-in stays
+
+
+def test_account_routes_create_list_remove_and_the_desk_origin(tmp_path):
+    with TestClient(live_app(tmp_path), base_url=BASE_URL) as c:
+        desk = {"origin": "http://localhost:8850"}
+        r = c.post("/api/paper/accounts/create", json={"name": "Desk made", "start_balance": 30000}, headers=desk)
+        assert r.status_code == 200 and r.json()["account"]["id"] == "paper-2"
+        assert r.headers["access-control-allow-origin"] == "http://localhost:8850"
+        r = c.get("/api/paper/accounts", headers={"origin": "http://127.0.0.1:8850"})
+        assert [a["id"] for a in r.json()["accounts"]] == ["paper", "paper-2"]
+        assert r.headers["access-control-allow-origin"] == "http://127.0.0.1:8850"
+        pre = c.options("/api/paper/accounts/create", headers={**desk, "access-control-request-method": "POST"})
+        assert pre.status_code == 204 and pre.headers["access-control-allow-origin"] == "http://localhost:8850"
+        # the chart page's own origin works, without CORS headers
+        own = c.post("/api/paper/accounts/create", json={"name": "Chart made"}, headers={"origin": "http://127.0.0.1:8852"})
+        assert own.status_code == 200 and "access-control-allow-origin" not in own.headers
+        # every other origin is refused -- another localhost port included (netguard alone ignores ports)
+        for o in ("http://localhost:3000", "http://evil.example", "http://127.0.0.1:8851", "null"):
+            assert c.post("/api/paper/accounts/create", json={"name": "x"}, headers={"origin": o}).status_code == 403, o
+            assert c.post("/api/paper/accounts/remove", json={"account": "paper-2"}, headers={"origin": o}).status_code == 403
+            assert c.get("/api/paper/accounts", headers={"origin": o}).status_code == 403
+            p = c.options("/api/paper/accounts/create", headers={"origin": o, "access-control-request-method": "POST"})
+            assert p.status_code == 403 and "access-control-allow-origin" not in p.headers
+        # CORS for the desk origin on the account routes ONLY: an order's answer is never readable cross-origin
+        order_body = {"client_id": "o", "accounts": ["paper-9"], "root": "NQ", "side": "Buy", "qty": 1, "type": "Market"}
+        assert "access-control-allow-origin" not in c.post("/api/paper/order", json=order_body, headers=desk).headers
+        assert c.post("/api/paper/accounts/create", content='{"name": "x"}', headers={**desk, "content-type": "text/plain"}).status_code == 415
+        assert c.post("/api/paper/accounts/create", json={"name": "Desk made"}, headers=desk).status_code == 400
+        r = c.post("/api/paper/accounts/remove", json={"account": "paper-2"}, headers=desk)
+        assert r.status_code == 200 and r.json()["ok"] is True
+        assert c.post("/api/paper/accounts/remove", json={"account": "paper"}).json()["ok"] is False
+    assert (tmp_path / "state" / "paper" / "archive" / "accounts.jsonl").exists()
+
+
+def test_the_page_gets_every_paper_account_on_connect(tmp_path):
+    with TestClient(live_app(tmp_path), base_url=BASE_URL) as c, c.websocket_connect("/ws", headers=WS_HOST) as ws:
+        c.post("/api/paper/accounts/create", json={"name": "Second"})
+        for _ in range(10):
+            m = next_of(ws, "paperbook", limit=50)
+            if len(m["accounts"]) == 2:
+                break
+        assert [(a["id"], a["label"]) for a in m["accounts"]] == [("paper", "PAPER"), ("paper-2", "Second")]
+
+
+def test_the_desk_proxy_refuses_every_paper_id(tmp_path):
+    seen, factory = _desk_spy(tmp_path)
+    with TestClient(live_app(tmp_path, desk_factory=factory), base_url=BASE_URL) as c:
+        body = {"client_id": "d1", "accounts": ["sim047", "paper-3"], "root": "NQ", "side": "Buy", "qty": 1, "type": "Market"}
+        assert c.post("/api/desk/order", json=body).status_code == 400
+        assert c.post("/api/desk/modify", json={"client_id": "d", "account": "paper-12", "order_id": "1", "price": 1}).status_code == 400
+    assert [p for _, p in seen if not p.endswith("/stream")] == []

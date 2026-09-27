@@ -40,7 +40,7 @@ from .history import History
 from .hub import Hub, Stream
 from .news import News
 from .paper import ROOT as PAPER_ROOT, STRATEGY_ID as PAPER_ID, BacktestJob, PaperRunner, describe as paper_describe
-from .paperbook import PaperBook, register as register_paperbook
+from .paperbook import PaperBooks, register as register_paperbook
 from .recorder import REFILL_MAX_PAGES, LiveRecorder, refill
 from .replay import ReplayFeed
 from .session import ET, always_open, et_wall_s, session_date, session_range_ms, split_by_session
@@ -294,7 +294,8 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
     # the PAPER account (paperbook.py, Task 2): the page trades it like a desk account; the backtester's fill law
     # on the live prints below, persisted to paper/book.jsonl. Live only -- a replay has none (its routes answer
     # 503), so a replayed price never fills it and never touches the saved book. It never reaches the desk.
-    book = None if replay else PaperBook(sd / "paper" / "book.jsonl", roots=roots, clock_ms=lambda: clock(), log=log)
+    # Task 2b: several paper accounts, each its own book (the first, "paper", keeps paper/book.jsonl untouched)
+    book = None if replay else PaperBooks(sd / "paper", roots=roots, clock_ms=lambda: clock(), log=log)
     recorder = None if replay else LiveRecorder(base)
     conns: set[Conn] = set()
     quotes = Quotes()                     # bid/ask per root for the Buy/Sell buttons (desk.py)
@@ -774,7 +775,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         return r
 
     register_desk(app, link=link, quotes=quotes, browser_write_ok=browser_write_ok)
-    register_paperbook(app, book=book, browser_write_ok=browser_write_ok)
+    register_paperbook(app, books=book, browser_write_ok=browser_write_ok)
     tester = tester_router(browser_write_ok, base, Path(state) / "tester" if state else None)
     app.include_router(tester)
 

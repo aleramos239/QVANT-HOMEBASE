@@ -57,7 +57,8 @@ DESK_QUEUE_MAX = 64            # desk messages held per page before its oldest a
 NOTICES = ("fill", "result")   # events a fresh state does not carry: kept across a resync
 NO_LINK = "chart trading is not available here (replay, or started without the desk link)"
 UNAVAILABLE = "desk link unavailable"
-PAPER_ACCOUNT = "paper"        # paperbook.PAPER_ID (not imported: the paper book never depends on this module or v.v.)
+# paperbook.PAPER_ID_RE (not imported: the paper book never depends on this module or v.v.) -- every paper account
+PAPER_ACCOUNT = re.compile(r"paper(?:-[0-9]+)?")
 PAUSED = "desk paused around 9:30 — reconnecting"
 # the desk_api.py END_HELD comment's prefix (": end: more than %d events held in the 9:30
 # pause; reconnect for a fresh state"): the ONLY case where a clean stream end is not "down"
@@ -434,8 +435,10 @@ def register(app, *, link: Optional[DeskLink], quotes: Quotes, browser_write_ok,
             raise HTTPException(400, "the body is not JSON") from None
         if not isinstance(body, dict):
             raise HTTPException(400, "the body is a JSON object")
-        named = body.get("accounts") if isinstance(body.get("accounts"), list) else []
-        if PAPER_ACCOUNT in named or body.get("account") == PAPER_ACCOUNT:
+        named = list(body.get("accounts")) if isinstance(body.get("accounts"), list) else []
+        if "account" in body:
+            named.append(body.get("account"))
+        if any(isinstance(x, str) and PAPER_ACCOUNT.fullmatch(x) for x in named):
             # 2026-09-27 Task 2: the PAPER account is this service's own book (POST /api/paper/*); the page splits
             # a mixed send, so a body naming it here means that split failed -- refused whole, never relayed
             raise HTTPException(400, "PAPER is the chart service's paper book — it never goes to the desk")
