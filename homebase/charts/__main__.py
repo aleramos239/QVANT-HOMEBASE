@@ -16,6 +16,9 @@ from .news import http_get as news_http_get
 from .paper import spawn_backtest
 from .server import create_app
 
+# the real desk, the chart service, the replays: kept equal to tools/fake_desk.py's FORBIDDEN_PORTS (a test checks)
+FAKE_DESK_REFUSED_PORTS = frozenset({8850, 8852, 8853, 8854})
+
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="python -m homebase.charts")
@@ -38,8 +41,9 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
     if a.fake_desk is not None and not a.replay:
         ap.error("--fake-desk needs --replay (a fake desk never runs beside the live feed)")
-    if a.fake_desk == 8850:
-        ap.error("--fake-desk must not be the real desk's port 8850")
+    if a.fake_desk in FAKE_DESK_REFUSED_PORTS:
+        ap.error(f"--fake-desk must not be {a.fake_desk}: a real service's port "
+                 "(8850 the desk, 8852 the chart service, 8853/8854 the replays)")
     if a.paper_day and not a.replay:
         ap.error("--paper-day works only with --replay")
     if a.paper_allow_holdout and not a.paper_day:

@@ -144,7 +144,7 @@ def app(tmp_path, **kw):
 
 
 def test_the_route_and_the_status_field(tmp_path):
-    with TestClient(app(tmp_path, calendar_fetch=feed())) as client:
+    with TestClient(app(tmp_path, calendar_fetch=feed()), base_url="http://127.0.0.1:8852") as client:
         for _ in range(300):                                            # the startup fetch runs off the event loop
             st = client.get("/api/status").json()["calendar"]
             if st["ok"]:
@@ -161,7 +161,7 @@ def test_the_route_and_the_status_field(tmp_path):
 
 
 def test_without_a_fetch_function_the_service_never_fetches(tmp_path):
-    with TestClient(app(tmp_path)) as client:
+    with TestClient(app(tmp_path), base_url="http://127.0.0.1:8852") as client:
         assert client.get("/api/status").json()["calendar"] == {"ok": False, "fetched_at": None, "error": None}
         assert client.get("/api/calendar").json() == []
 

@@ -158,7 +158,10 @@ def test_the_fake_desk_link_is_refused_outside_replay(tmp_path):
 
 
 @pytest.mark.parametrize("argv", [["--fake-desk", "8859"],                              # no --replay
-                                  ["--replay", "2026-09-22", "--fake-desk", "8850"]])   # the real desk's port
+                                  ["--replay", "2026-09-22", "--fake-desk", "8850"],    # the real desk's port
+                                  ["--replay", "2026-09-22", "--fake-desk", "8852"],    # the chart service
+                                  ["--replay", "2026-09-22", "--fake-desk", "8853"],    # the replays
+                                  ["--replay", "2026-09-22", "--fake-desk", "8854"]])
 def test_the_cli_refuses_a_fake_desk_without_replay_or_on_the_real_port(argv, monkeypatch, capsys):
     """argparse's own SystemExit must be what refuses this -- never a uvicorn bind failure standing
     in for it (a port already taken by another process would raise SystemExit too, and the test
@@ -170,8 +173,14 @@ def test_the_cli_refuses_a_fake_desk_without_replay_or_on_the_real_port(argv, mo
     with pytest.raises(SystemExit):
         charts_main.main(argv)
     err = capsys.readouterr().err
-    expected = "needs --replay" if "--replay" not in argv else "must not be the real desk's port 8850"
+    expected = "needs --replay" if "--replay" not in argv else f"must not be {argv[-1]}"
     assert expected in err
+
+
+def test_the_cli_refuses_exactly_the_ports_the_fake_desk_tool_refuses():
+    """Final review M5: one list -- the real desk, the chart service and the replays."""
+    from tools.fake_desk import FORBIDDEN_PORTS
+    assert charts_main.FAKE_DESK_REFUSED_PORTS == FORBIDDEN_PORTS == frozenset({8850, 8852, 8853, 8854})
 
 
 def test_replay_links_to_the_fake_desk_and_sends_it_quotes(tmp_path):

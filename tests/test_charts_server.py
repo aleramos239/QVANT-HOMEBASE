@@ -45,7 +45,7 @@ def archive(tmp_path):
 def test_replay_serves_history_then_live_updates(tmp_path):
     app = create_app(roots=["NQ"], base=archive(tmp_path), replay=D, speed=50,
                      start_et=dt.time(9, 30), state=tmp_path / "state")
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://127.0.0.1:8852") as client:
         assert client.get("/api/status").json()["mode"] == "replay"
         assert client.get("/api/symbols").json()["roots"] == ["NQ"]
         assert client.get("/").status_code == 200
@@ -64,7 +64,7 @@ def test_replay_serves_history_then_live_updates(tmp_path):
 def test_bad_requests_get_an_error_not_a_crash(tmp_path):
     app = create_app(roots=["NQ"], base=archive(tmp_path), replay=D, speed=1,
                      start_et=dt.time(9, 30), state=tmp_path / "state")
-    with TestClient(app) as client, client.websocket_connect("/ws", headers={"host": "localhost:8852"}) as ws:
+    with TestClient(app, base_url="http://127.0.0.1:8852") as client, client.websocket_connect("/ws", headers={"host": "localhost:8852"}) as ws:
         ws.send_json({"op": "sub", "id": "a", "root": "ZZ", "spec": "time:60"})
         assert "not recorded" in next_of(ws, "error")["error"]
         ws.send_json({"op": "sub", "id": "b", "root": "NQ", "spec": "time:0"})
@@ -94,7 +94,7 @@ def test_the_page_and_its_static_files_are_always_revalidated(tmp_path):
     the static files keeps a reload cheap."""
     app = create_app(roots=["NQ"], base=archive(tmp_path), replay=D, speed=1,
                      start_et=dt.time(9, 30), state=tmp_path / "state")
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://127.0.0.1:8852") as client:
         page = client.get("/")
         assert page.status_code == 200 and page.headers["cache-control"] == "no-cache"
         js = client.get("/static/charts/app.js")
@@ -107,7 +107,7 @@ def test_the_page_and_its_static_files_are_always_revalidated(tmp_path):
 def test_layouts_roundtrip(tmp_path):
     app = create_app(roots=["NQ"], base=archive(tmp_path), replay=D, speed=1,
                      start_et=dt.time(9, 30), state=tmp_path / "state")
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://127.0.0.1:8852") as client:
         lay = {"grid": 2, "cells": [{"root": "NQ", "spec": "time:60", "st": {}}]}
         assert client.put("/api/layouts/main", json=lay).status_code == 200
         assert client.get("/api/layouts").json() == {"main": lay}
@@ -157,7 +157,7 @@ def test_live_mode_records_what_the_feed_delivers(tmp_path):
     app = create_app(roots=["NQ"], base=base, feed_factory=FakeFeed,
                      now_ms=lambda: session_ms(D, 9, 45), state=tmp_path / "state")
     live = base / "NQ" / "2026" / f"{D}_NQZ6.live.csv.gz"
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://127.0.0.1:8852") as client:
         q.put(("NQ", "NQZ6", rows(session_ms(D, 9, 40), [100.0, 100.25])))
         q.put(("NQ", "NQZ6", rows(session_ms(D, 9, 40), [100.0, 100.25])))   # duplicate delivery
         deadline = time.time() + 5
@@ -473,7 +473,7 @@ def test_ws_handler_ends_cleanly_after_close_mid_prepare(tmp_path, monkeypatch):
     monkeypatch.setattr(WebSocket, "receive_json", wrap(WebSocket.receive_json))
     monkeypatch.setattr(WebSocket, "receive_text", wrap(WebSocket.receive_text))
 
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://127.0.0.1:8852") as client:
         with client.websocket_connect("/ws", headers={"host": "localhost:8852"}) as ws:
             ws.send_json({"op": "sub", "id": "a", "root": "NQ", "spec": "time:60"})
             time.sleep(2.0)
@@ -636,7 +636,7 @@ def test_a_failed_subscribe_leaves_no_orphaned_stream_or_pending_update(tmp_path
 
     app = create_app(roots=["NQ"], base=archive(tmp_path), replay=D, speed=50,
                      start_et=dt.time(9, 30), state=tmp_path / "state")
-    with TestClient(app) as client, client.websocket_connect("/ws", headers={"host": "localhost:8852"}) as ws:
+    with TestClient(app, base_url="http://127.0.0.1:8852") as client, client.websocket_connect("/ws", headers={"host": "localhost:8852"}) as ws:
         ws.send_json({"op": "sub", "id": "a", "root": "NQ", "spec": "time:60"})
         assert next_of(ws, "error")["id"] == "a"
         ws.send_json({"op": "sub", "id": "b", "root": "NQ", "spec": "time:60"})
@@ -696,7 +696,7 @@ def test_a_previous_session_print_is_neither_recorded_nor_charted(tmp_path):
     delivered: list = []
     app = create_app(roots=["NQ"], base=base, feed_factory=QueueFeed(q, delivered),
                      now_ms=lambda: sat_10, state=tmp_path / "state")
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://127.0.0.1:8852") as client:
         q.put(("NQ", "NQZ6", [dict(fri_rows[-1], id=987_654_321)]))    # a Tradovate id
         deadline = time.time() + 5
         while not delivered and time.time() < deadline:
@@ -937,7 +937,7 @@ def test_a_24_7_refill_of_the_old_sessions_tail_reaches_open_charts(tmp_path, mo
     def friday(hist):
         return [b["ms"] for b in hist["bars"] if b["s"] == "2026-09-25"]
 
-    with TestClient(app) as client, client.websocket_connect("/ws", headers={"host": "localhost:8852"}) as ws:
+    with TestClient(app, base_url="http://127.0.0.1:8852") as client, client.websocket_connect("/ws", headers={"host": "localhost:8852"}) as ws:
         ws.send_json({"op": "sub", "id": "a", "root": "BTC", "spec": "time:60"})
         before = friday(next_of(ws, "history"))
         gate.set()                                              # now the refill runs
@@ -962,7 +962,7 @@ def test_ws_refuses_a_page_from_another_site(tmp_path):
     websocket_connect sends a hardcoded Host unless one is passed explicitly
     — Host allowlisting is covered separately below."""
     HOST = {"host": "localhost:8852"}
-    with TestClient(replay_app(tmp_path)) as client:
+    with TestClient(replay_app(tmp_path), base_url="http://127.0.0.1:8852") as client:
         for origin in ("https://evil.example", "http://testserver.evil.example", "null"):
             with pytest.raises(WebSocketDisconnect):
                 with client.websocket_connect(
@@ -986,7 +986,7 @@ def test_ws_refuses_a_dns_rebound_host_even_with_a_matching_origin(tmp_path):
     netguard's allowlist (loopback only, with no configured allowed_hosts
     here): refused regardless of what Origin claims. localhost:8852 and
     127.0.0.1:8852 are still accepted."""
-    with TestClient(replay_app(tmp_path)) as client:
+    with TestClient(replay_app(tmp_path), base_url="http://127.0.0.1:8852") as client:
         with pytest.raises(WebSocketDisconnect):
             with client.websocket_connect(
                     "/ws", headers={"origin": "http://evil.example:8852",
@@ -1011,7 +1011,7 @@ def test_subscriptions_are_bounded(tmp_path):
     session, and study counts were unbounded. Bars finer than time:5 /
     tick:100 / volume:100 / range:2, or more than 16 studies, answer an
     error (the page shows it in the chart)."""
-    with TestClient(replay_app(tmp_path)) as client, client.websocket_connect("/ws", headers={"host": "localhost:8852"}) as ws:
+    with TestClient(replay_app(tmp_path), base_url="http://127.0.0.1:8852") as client, client.websocket_connect("/ws", headers={"host": "localhost:8852"}) as ws:
         for spec in ("time:4", "tick:99", "volume:99", "range:1", "tick:1"):
             ws.send_json({"op": "sub", "id": spec, "root": "NQ", "spec": spec})
             m = first_answer(ws, spec)
@@ -1039,7 +1039,7 @@ def test_a_failed_layout_write_leaves_the_saved_layouts_intact(tmp_path, monkeyp
         real_write_text(self, data[: len(data) // 2], *a, **k)
         raise OSError(28, "No space left on device")
 
-    with TestClient(replay_app(tmp_path)) as client:
+    with TestClient(replay_app(tmp_path), base_url="http://127.0.0.1:8852") as client:
         assert client.put("/api/layouts/main", json=lay).status_code == 200
         with monkeypatch.context() as m:
             m.setattr(Path, "write_text", torn)
@@ -1067,7 +1067,7 @@ def test_status_keeps_flowing_and_says_so_while_chart_work_fails(tmp_path, monke
         return orig_send(self, msg)
 
     monkeypatch.setattr(Conn, "send", send)
-    with TestClient(replay_app(tmp_path)) as client, client.websocket_connect("/ws", headers={"host": "localhost:8852"}) as ws:
+    with TestClient(replay_app(tmp_path), base_url="http://127.0.0.1:8852") as client, client.websocket_connect("/ws", headers={"host": "localhost:8852"}) as ws:
         assert ws.receive_json()["type"] == "status"        # the one sent on connect
         time.sleep(0.8)
     statuses = [m for m in sent if m.get("type") == "status"]
@@ -1149,7 +1149,7 @@ def test_drawings_roundtrip_per_root(tmp_path):
     state = tmp_path / "state"
     state.mkdir()
     (state / "drawings.json").write_text(json.dumps({"ES": [HLINE]}))   # another root's drawings
-    with TestClient(replay_app(tmp_path)) as client:
+    with TestClient(replay_app(tmp_path), base_url="http://127.0.0.1:8852") as client:
         assert client.get("/api/drawings/NQ").json() == []
         r = client.put("/api/drawings/NQ", json=[TREND, HLINE, RECT])
         assert r.status_code == 200 and r.json() == {"ok": True, "count": 3}
@@ -1208,7 +1208,7 @@ def test_check_drawings_caps_the_list():
 
 
 def test_a_bad_drawings_body_is_a_400_and_saves_nothing(tmp_path):
-    with TestClient(replay_app(tmp_path)) as client:
+    with TestClient(replay_app(tmp_path), base_url="http://127.0.0.1:8852") as client:
         assert client.put("/api/drawings/NQ", json=[H1]).status_code == 200
         r = client.put("/api/drawings/NQ", json=[{**H1, "type": "fib"}])
         assert r.status_code == 400 and "type" in r.json()["detail"]
@@ -1225,15 +1225,18 @@ def test_browser_writes_from_another_site_are_refused(tmp_path):
     or delete saved layouts and drawings (same rule as the /ws handshake)."""
     lay = {"grid": 2, "cells": [{"root": "NQ", "spec": "time:60", "indicators": []}]}
     evil = {"origin": "https://evil.example"}
-    with TestClient(replay_app(tmp_path)) as client:
+    with TestClient(replay_app(tmp_path), base_url="http://127.0.0.1:8852") as client:
         assert client.put("/api/layouts/main", json=lay, headers=evil).status_code == 403
         assert client.put("/api/drawings/NQ", json=[H1], headers=evil).status_code == 403
         assert client.put("/api/layouts/main", json=lay).status_code == 200            # no Origin: not a browser
         assert client.delete("/api/layouts/main", headers=evil).status_code == 403
         assert client.get("/api/layouts").json() == {"main": lay}
         assert client.get("/api/drawings/NQ").json() == []
-        for ok in ("http://localhost:8852", "http://127.0.0.1:8852", "http://testserver"):
+        for ok in ("http://localhost:8852", "http://127.0.0.1:8852"):
             assert client.put("/api/drawings/NQ", json=[H1], headers={"origin": ok}).status_code == 200
+        # Origin == Host (the page's own origin) on another allowed Host (M4: "testserver" is no longer one)
+        same = {"host": "[::1]:8852", "origin": "http://[::1]:8852"}
+        assert client.put("/api/drawings/NQ", json=[H1], headers=same).status_code == 200
         assert client.delete("/api/layouts/main", headers={"origin": "http://localhost:8852"}).status_code == 200
 
 
@@ -1244,7 +1247,7 @@ def test_a_failed_drawings_write_leaves_the_saved_drawings_intact(tmp_path, monk
         real_write_text(self, data[: len(data) // 2], *a, **k)
         raise OSError(28, "No space left on device")
 
-    with TestClient(replay_app(tmp_path)) as client:
+    with TestClient(replay_app(tmp_path), base_url="http://127.0.0.1:8852") as client:
         assert client.put("/api/drawings/NQ", json=[H1]).status_code == 200
         with monkeypatch.context() as m:
             m.setattr(Path, "write_text", torn)
@@ -1267,7 +1270,7 @@ SHORT = pos("short", 30900.0, 30850.0, 30925.0)
 
 
 def test_positions_are_saved_with_their_qty(tmp_path):
-    with TestClient(replay_app(tmp_path)) as client:
+    with TestClient(replay_app(tmp_path), base_url="http://127.0.0.1:8852") as client:
         r = client.put("/api/drawings/NQ", json=[LONG, SHORT, TREND])
         assert r.status_code == 200 and r.json() == {"ok": True, "count": 3}
         assert client.get("/api/drawings/NQ").json() == [LONG, SHORT, TREND]
@@ -1308,7 +1311,7 @@ def test_check_drawings_refuses_malformed_positions(why, body):
 
 
 def test_a_bad_position_is_a_400_that_names_the_rule(tmp_path):
-    with TestClient(replay_app(tmp_path)) as client:
+    with TestClient(replay_app(tmp_path), base_url="http://127.0.0.1:8852") as client:
         r = client.put("/api/drawings/NQ", json=[pos("long", 100, 110, 101)])
         assert r.status_code == 400 and "stop < entry < target" in r.json()["detail"]
         r = client.put("/api/drawings/NQ", json=[pos("short", 100, 101, 105)])
@@ -1322,7 +1325,7 @@ TPL = {"prevClose": True, "bodyUp": "#26A69A", "marginTop": 20}
 
 def test_templates_roundtrip(tmp_path):
     other = "My · layout v2"
-    with TestClient(replay_app(tmp_path)) as client:
+    with TestClient(replay_app(tmp_path), base_url="http://127.0.0.1:8852") as client:
         assert client.get("/api/templates").json() == {}
         assert client.put("/api/templates/Dark candles", json=TPL).json() == {"ok": True}
         assert client.put("/api/templates/" + quote(other, safe=""), json={}).status_code == 200
@@ -1339,7 +1342,7 @@ def test_a_template_is_a_json_object_of_at_most_16_kb(tmp_path):
     def body(size):                     # a JSON object exactly `size` bytes long
         return json.dumps({"x": "a" * (size - len('{"x": ""}'))})
 
-    with TestClient(replay_app(tmp_path)) as client:
+    with TestClient(replay_app(tmp_path), base_url="http://127.0.0.1:8852") as client:
         def put(text):
             return client.put("/api/templates/t", content=text, headers={"content-type": "application/json"})
 
@@ -1361,7 +1364,7 @@ def test_check_template_name_refuses(name):
 def test_template_names_on_the_wire(tmp_path):
     assert check_template_name("x" * 40) == "x" * 40
     assert check_template_name("Dark · v1.2") == "Dark · v1.2"
-    with TestClient(replay_app(tmp_path)) as client:
+    with TestClient(replay_app(tmp_path), base_url="http://127.0.0.1:8852") as client:
         assert client.put("/api/templates/" + "x" * 40, json={}).status_code == 200
         for bad in ("x" * 41, "a/b", "a\\b", "tab\tname", "a..b"):
             r = client.put("/api/templates/" + quote(bad, safe=""), json={})
@@ -1371,7 +1374,7 @@ def test_template_names_on_the_wire(tmp_path):
 
 def test_template_writes_from_another_site_are_refused(tmp_path):
     evil = {"origin": "https://evil.example"}
-    with TestClient(replay_app(tmp_path)) as client:
+    with TestClient(replay_app(tmp_path), base_url="http://127.0.0.1:8852") as client:
         assert client.put("/api/templates/t", json=TPL, headers=evil).status_code == 403
         assert client.get("/api/templates").json() == {}
         assert client.put("/api/templates/t", json=TPL, headers={"origin": "http://localhost:8852"}).status_code == 200
@@ -1388,7 +1391,7 @@ def test_a_chart_scrolls_back_over_the_socket(tmp_path):
                                                   step_ms=20_000, first_id=1000 * (k + 1)))
     write_archive(base, "NQ", D, "NQZ6", rows(session_ms(D, 9, 29), [200.0] * 120, first_id=90_000))
     app = create_app(roots=["NQ"], base=base, replay=D, speed=1, start_et=dt.time(9, 30), state=tmp_path / "state")
-    with TestClient(app) as client, client.websocket_connect("/ws", headers={"host": "localhost:8852"}) as ws:
+    with TestClient(app, base_url="http://127.0.0.1:8852") as client, client.websocket_connect("/ws", headers={"host": "localhost:8852"}) as ws:
         ws.send_json({"op": "sub", "id": "c1", "root": "NQ", "spec": "time:60", "studies": ["ema:3"]})
         first = next_of(ws, "history")["bars"][0]
         assert first["s"] == days[2].isoformat()                      # the newest 5 of the 7 sessions
@@ -1425,7 +1428,7 @@ def test_a_second_older_request_while_one_builds_gets_busy_not_silence(tmp_path,
                                                   step_ms=20_000, first_id=1000 * (k + 1)))
     write_archive(base, "NQ", D, "NQZ6", rows(session_ms(D, 9, 29), [200.0] * 120, first_id=90_000))
     app = create_app(roots=["NQ"], base=base, replay=D, speed=1, start_et=dt.time(9, 30), state=tmp_path / "state")
-    with TestClient(app) as client, client.websocket_connect("/ws", headers={"host": "localhost:8852"}) as ws:
+    with TestClient(app, base_url="http://127.0.0.1:8852") as client, client.websocket_connect("/ws", headers={"host": "localhost:8852"}) as ws:
         ws.send_json({"op": "sub", "id": "c1", "root": "NQ", "spec": "time:60"})
         first60 = next_of(ws, "history")["bars"][0]
         ws.send_json({"op": "older", "id": "c1", "before": first60["ms"]})
@@ -1447,3 +1450,51 @@ def test_a_second_older_request_while_one_builds_gets_busy_not_silence(tmp_path,
         gate.set()
         answers = [next_of(ws, "older"), next_of(ws, "older")]
         assert all(a.get("done") is True for a in answers), answers
+
+
+# ---- final review M4: ONE Host guard on every /api/* route (GET included) and /ws ----
+BAD_HOSTS = ("evil.example", "evil.example:8852", "localhost.evil.com", "127.0.0.1.nip.io")
+GUARDED = [("GET", "/api/layouts", None), ("PUT", "/api/layouts/x", {"grid": "1", "cells": []}),
+           ("DELETE", "/api/layouts/x", None), ("GET", "/api/templates", None),
+           ("PUT", "/api/templates/x", {"a": 1}), ("DELETE", "/api/templates/x", None),
+           ("GET", "/api/paper/strategies", None), ("GET", "/api/paper/history", None),
+           ("GET", "/api/bursts/now", None), ("GET", "/api/status", None), ("GET", "/api/symbols", None),
+           ("GET", "/api/drawings/NQ", None), ("GET", "/api/calendar", None),
+           ("GET", "/api/desk/bot-history", None), ("POST", "/api/desk/order", {"client_id": "x"})]
+
+
+@pytest.mark.parametrize("host", BAD_HOSTS)
+def test_a_rebound_host_is_refused_on_every_api_route_and_the_socket(tmp_path, host):
+    """A DNS-rebinding page is served AS its own hostname: its Origin and Host both read e.g.
+    evil.example, which satisfies origin_ok's Origin==Host rule. The Host itself must be on the
+    shared allowlist -- on reads too (layouts now carry trade accounts and an algo)."""
+    app = create_app(roots=["NQ"], base=archive(tmp_path), replay=D, speed=50,
+                     start_et=dt.time(9, 30), state=tmp_path / "state")
+    with TestClient(app, base_url="http://127.0.0.1:8852") as client:
+        for method, path, body in GUARDED:
+            r = client.request(method, path, json=body,
+                               headers={"host": host, "origin": f"http://{host}"})
+            assert r.status_code == 403, (method, path, r.status_code)
+            assert r.json() == {"detail": "host not allowed"}
+        with pytest.raises(WebSocketDisconnect):
+            with client.websocket_connect("/ws", headers={"host": host}) as ws:
+                ws.receive_json()
+        # nothing was written by the refused requests
+        assert not (tmp_path / "state" / "layouts.json").exists() or \
+            json.loads((tmp_path / "state" / "layouts.json").read_text()) == {}
+
+
+def test_the_host_guard_passes_loopback_and_leaves_the_page_itself_alone(tmp_path):
+    app = create_app(roots=["NQ"], base=archive(tmp_path), replay=D, speed=50,
+                     start_et=dt.time(9, 30), state=tmp_path / "state")
+    with TestClient(app, base_url="http://127.0.0.1:8852") as client:
+        for host in ("127.0.0.1:8852", "localhost:8852", "[::1]:8852"):
+            assert client.get("/api/layouts", headers={"host": host}).status_code == 200
+            assert client.get("/api/paper/strategies", headers={"host": host}).status_code == 200
+        # a write keeps its Origin (and, on the desk proxy, JSON) checks behind the Host guard
+        r = client.put("/api/layouts/x", json={"grid": "1", "cells": []},
+                       headers={"host": "127.0.0.1:8852", "origin": "https://evil.example"})
+        assert r.status_code == 403 and r.json() != {"detail": "host not allowed"}
+        # two Host headers are ambiguous: refused
+        r = client.get("/api/layouts", headers=[("host", "127.0.0.1:8852"), ("host", "evil.example")])
+        assert r.status_code == 403
