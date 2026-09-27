@@ -153,16 +153,32 @@ def test_orders_triggered_by_one_print_fill_oldest_first():
     assert [f["order_id"] for f in b.fills] == [a, c]
 
 
-def test_a_stop_limit_triggers_on_touch_then_rests_as_a_limit_from_the_next_print():
+def test_a_triggered_stop_limit_fills_at_the_market_capped_by_its_limit_not_at_the_limit():
+    """Fix round 1, I1 -- the reviewer's NQ numbers: trigger 20000.25, limit 20025.00 (100 ticks away)."""
     b = book()
-    feed(b, [("09:29:59", 100.0)])
-    order(b, "Buy", "StopLimit", price=101.5, trigger=101.0)
-    feed(b, [("09:30:01", 101.0)])                       # triggered, never filled on its trigger print
+    feed(b, [("09:29:59", 20000.0)])
+    order(b, "Buy", "StopLimit", price=20025.0, trigger=20000.25)
+    feed(b, [("09:30:01", 20000.25)])                    # triggered, never filled on its trigger print
     assert fills(b) == []
-    feed(b, [("09:30:02", 101.5)])                       # at the limit: no penetration
+    feed(b, [("09:30:02", 20000.5)])
+    assert fills(b) == [("Buy", 1, 20000.75)]            # the print + 1 tick, not 20025.00
+    s2 = book()
+    feed(s2, [("09:29:59", 20000.0)])
+    order(s2, "Sell", "StopLimit", price=19999.0, trigger=19999.75)
+    feed(s2, [("09:30:01", 19999.75), ("09:30:02", 19999.25)])
+    assert fills(s2) == [("Sell", 1, 19999.0)]           # print - 1 tick would be worse than the cap: the cap
+
+
+def test_a_stop_limit_gapped_past_its_limit_rests_then_needs_penetration():
+    b = book()
+    feed(b, [("09:29:59", 20000.0)])
+    order(b, "Buy", "StopLimit", price=20001.0, trigger=20000.25)
+    feed(b, [("09:30:01", 20000.25), ("09:30:02", 20002.0)])     # triggered, then beyond the limit: rests
+    assert fills(b) == [] and b.orders[next(iter(b.orders))].kind == "limit"
+    feed(b, [("09:30:03", 20001.0)])                               # touch only
     assert fills(b) == []
-    feed(b, [("09:30:03", 101.25)])
-    assert fills(b) == [("Buy", 1, 101.5)]
+    feed(b, [("09:30:04", 20000.75)])
+    assert fills(b) == [("Buy", 1, 20001.0)]                       # at the limit, 1-tick penetration
 
 
 # ---- parity with the backtester on the same prints ----------------------------------------------------------
@@ -253,6 +269,11 @@ def test_a_malformed_body_or_a_foreign_account_is_a_400_never_a_guess():
                         "type": "Market", "price": 100.0})
     with pytest.raises(ValueError):
         b.act("bot-kill", {"client_id": "x", "strategy": "nq930"})
+    with pytest.raises(ValueError):                               # fix round 1, M7: every key must name PAPER
+        b.act("order", {"client_id": "x", "accounts": [PAPER_ID], "account": "sim047", "root": "NQ", "side": "Buy",
+                        "qty": 1, "type": "Market"})
+    with pytest.raises(ValueError):
+        b.act("flatten", {"client_id": "x", "root": "NQ"})
 
 
 def test_a_repeated_client_id_is_answered_once():
@@ -302,6 +323,17 @@ def test_reverse_closes_then_opens_the_other_way():
     assert net(b) == -2 and b.pos["NQ"]["avg"] == 99.75
 
 
+def test_a_flattens_closing_order_never_expires():
+    """Fix round 1, M4: a flatten sent with no print left in the session still closes at the next session's first."""
+    b = book()
+    feed(b, [("09:29:59", 100.0)])
+    order(b, "Buy", "Market", qty=2, sl=90.0)
+    feed(b, [("09:30:01", 100.0)])
+    act(b, "flatten", accounts=[PAPER_ID], root="NQ")
+    feed(b, [("19:00:00", 98.0)])                                  # the next session: it fills, it does not expire
+    assert net(b) == 0 and fills(b)[-1] == ("Sell", 2, 97.75)
+
+
 def test_a_day_entry_expires_with_its_session_but_a_positions_legs_do_not():
     b = book()
     feed(b, [("09:29:59", 100.0)])
@@ -332,6 +364,41 @@ def test_the_book_survives_a_restart(tmp_path):
     feed(b2, [("09:30:03", 103.25)])                               # the TP still works after the restart
     assert fills(b2)[-1] == ("Sell", 2, 103.0) and net(b2) == 1
     assert order(b2, "Buy", "Market")["order_id"] not in {o["order_id"] for o in before["orders"]}
+
+
+def test_a_torn_last_line_never_swallows_the_next_event_across_two_restarts(tmp_path):
+    """Fix round 1, I2 -- the reviewer's scenario: a torn fill line, a restart, a re-fill appended, a 2nd restart."""
+    b = book(tmp_path)
+    feed(b, [("09:29:59", 100.0)])
+    oid = order(b, "Buy", "Market")["order_id"]
+    feed(b, [("09:30:01", 100.0)])
+    p = tmp_path / "paper" / "book.jsonl"
+    raw = p.read_bytes()
+    p.write_bytes(raw[:-15])                                   # the crash tore the fill line: no newline
+    b2 = book(tmp_path)
+    assert net(b2) == 0 and oid in b2.orders                   # the fill never landed: the order is still working
+    assert p.read_bytes().endswith(b"\n")                      # and the torn tail is gone before any append
+    feed(b2, [("09:30:02", 101.0)])                            # it fills (once) on the next print
+    assert net(b2) == 1
+    b3 = book(tmp_path)
+    assert net(b3) == 1 and oid not in b3.orders and b3.view() == b2.view()
+    feed(b3, [("09:30:03", 102.0)])
+    assert net(b3) == 1                                        # never a third fill
+
+
+def test_a_failed_append_changes_nothing(tmp_path, monkeypatch):
+    """Fix round 1, M5: persisted first -- a disk error leaves the book as it was, and a retry is not a duplicate."""
+    b = book(tmp_path)
+    feed(b, [("09:29:59", 100.0)])
+    def boom(*a, **k):
+        raise OSError("disk full")
+    monkeypatch.setattr(pb._jsonl, "append", boom)
+    body = {"client_id": "x1", "accounts": [PAPER_ID], "root": "NQ", "side": "Buy", "qty": 1, "type": "Limit", "price": 99.0}
+    with pytest.raises(OSError):
+        b.act("order", body)
+    assert b.orders == {}
+    monkeypatch.undo()
+    assert b.act("order", body)["results"][PAPER_ID]["ok"] and len(b.orders) == 1
 
 
 def test_a_torn_line_does_not_lose_the_rest_of_the_book(tmp_path):

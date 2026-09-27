@@ -20,9 +20,10 @@ Fill law -- homebase/backtest/engine.py, line for line (cited where each rule is
   * orders that trigger on the same print fill oldest first; a bracket's SL/TP go live from the print AFTER
     the entry's (engine.py L13-14, L19, L313-326, L351-357).
 "Goes live": an order accepted between two prints may fill from the next print this book sees (the real-time
-analogue of the engine's min_i with placement_ms = 0). A Stop Limit (the engine has none) triggers like a stop
-and then rests as a limit at its limit price from the NEXT print -- never filled on its trigger print
-(pessimistic, like the engine's bracket rule). Prints the service missed (a feed gap) are never invented: a stop
+analogue of the engine's min_i with placement_ms = 0). A Stop Limit (the engine has none) triggers like a stop,
+never fills on its trigger print (pessimistic, like the engine's bracket rule), and on the NEXT print fills like a
+market order capped at its limit (print +/- slip, never worse than the limit) when that print is at or better
+than the limit; a print beyond the limit leaves it resting as an ordinary 1-tick-penetration limit. Prints the service missed (a feed gap) are never invented: a stop
 whose level was crossed inside the gap fills on the first print after it, paying the gap.
 
 Caps, as the desk's (trading.py guards 3 and 6): 1-10 contracts per order; the worst-case |net| in the contract
@@ -128,13 +129,14 @@ def _client_id(body: dict) -> str:
 def _only_paper(body: dict) -> None:
     """The paper book takes the PAPER account and nothing else -- the page splits a mixed send; an id here that
     is not PAPER means that split failed, and it is refused whole rather than guessed at (fail closed)."""
-    if "accounts" in body:
+    if "accounts" not in body and "account" not in body:
+        raise ValueError(f"account: the paper book takes only {PAPER_ID!r}")
+    if "accounts" in body:                           # EVERY key present must name PAPER (fix round 1, M7)
         a = body.get("accounts")
         if not isinstance(a, list) or not a or any(x != PAPER_ID for x in a):
             raise ValueError(f"accounts: the paper book takes only [{PAPER_ID!r}]")
-    else:
-        if body.get("account") != PAPER_ID:
-            raise ValueError(f"account: the paper book takes only {PAPER_ID!r}")
+    if "account" in body and body.get("account") != PAPER_ID:
+        raise ValueError(f"account: the paper book takes only {PAPER_ID!r}")
 
 
 def _worst_net(net: int, legs: list, side: int, qty: int) -> int:
@@ -152,7 +154,8 @@ class POrder:
     symbol: str
     side: int                        # +1 buy, -1 sell
     type: str                        # what the page shows: Market | Limit | Stop | StopLimit
-    kind: str                        # the fill law's: market | limit | stop | stoplimit (untriggered)
+    kind: str                        # the fill law's: market | limit | stop | stoplimit (untriggered) |
+                                     # triggered (a Stop Limit's first live print: market capped at its limit)
     price: Optional[float]           # a Limit's / Stop Limit's limit, a Stop's trigger; None for a Market
     trigger: Optional[float]         # a Stop Limit's trigger
     qty: int
@@ -198,6 +201,7 @@ class PaperBook:
 
     # ---- the event log --------------------------------------------------------------------------------------
     def _load(self) -> None:
+        self._heal()
         for ev in _jsonl.read_all(self.path):
             try:
                 self._apply(ev, seq=0)
@@ -206,10 +210,26 @@ class PaperBook:
         for o in self.orders.values():
             o.min_seq = 0                            # a restart: every working order may fill on the next print
 
+    def _heal(self) -> None:
+        """Fix round 1, I2: a crash mid-append leaves a torn last line with no newline; the next append would glue
+        onto it and BOTH events would be lost on the following load. Cut the file back to its last complete line
+        before anything can append."""
+        try:
+            with open(self.path, "rb+") as f:
+                data = f.read()
+                if data and not data.endswith(b"\n"):
+                    keep = data.rfind(b"\n") + 1
+                    f.truncate(keep)
+                    self.log(f"paperbook: cut a torn last line ({len(data) - keep} bytes) from {self.path.name}")
+        except FileNotFoundError:
+            pass
+
     def _do(self, ev: dict, seq: int = 0) -> None:
-        self._apply(ev, seq=seq)
+        # fix round 1, M5: persisted FIRST -- an append that fails (disk full) raises before the book changes, so
+        # memory never holds what a restart would not, and a retried client_id is not answered from a ghost
         if self.path is not None:
             _jsonl.append(self.path, ev)
+        self._apply(ev, seq=seq)
         self.dirty = True
 
     def _apply(self, ev: dict, seq: int) -> None:
@@ -225,9 +245,11 @@ class PaperBook:
                 self._drop(oid)
         elif kind == "modify":
             self.orders[ev["id"]].price = float(ev["price"])
-        elif kind == "trigger":                      # a Stop Limit touched its trigger: a resting limit from the NEXT print
+        elif kind == "trigger":                      # a Stop Limit touched its trigger: live as a limit from the NEXT print
             o = self.orders[ev["id"]]
-            o.kind, o.min_seq = "limit", seq + 1
+            o.kind, o.min_seq = "triggered", seq + 1
+        elif kind == "rest":                         # a triggered Stop Limit whose first print was beyond its limit
+            self.orders[ev["id"]].kind = "limit"
         elif kind == "fill":
             self._fill(self.orders[ev["id"]], float(ev["price"]), int(ev["ts_ns"]), int(ev["fid"]), seq)
         else:
@@ -306,13 +328,16 @@ class PaperBook:
             if hit.kind == "stoplimit":
                 self._do({"ev": "trigger", "id": hit.id}, seq=s)
                 continue
+            if hit.kind == "triggered" and not self._marketable(hit, px, tick):
+                self._do({"ev": "rest", "id": hit.id}, seq=s)   # from now on an ordinary resting limit
+                continue
             self._fid += 1
             self._do({"ev": "fill", "id": hit.id, "price": self._fill_price(hit, px, tick), "ts_ns": ts_ns,
                       "fid": self._fid}, seq=s)
 
     def _triggers(self, o: POrder, px: float, tick: float) -> bool:
-        if o.kind == "market":                                           # engine.py L292-293
-            return True
+        if o.kind in ("market", "triggered"):                            # engine.py L292-293 (a triggered Stop
+            return True                                                  # Limit's first live print: see _fill_price)
         if o.kind in ("stop", "stoplimit"):                              # engine.py L294-296: touch
             lvl = o.trigger if o.kind == "stoplimit" else o.price
             return tick_cmp(px, lvl, tick) >= 0 if o.side > 0 else tick_cmp(px, lvl, tick) <= 0
@@ -320,8 +345,19 @@ class PaperBook:
             return tick_cmp(px, to_tick(o.price - tick, tick), tick) <= 0
         return tick_cmp(px, to_tick(o.price + tick, tick), tick) >= 0
 
+    @staticmethod
+    def _marketable(o: POrder, p: float, tick: float) -> bool:
+        """A triggered Stop Limit's limit is a CAP: the print is at or better than it."""
+        return tick_cmp(p, o.price, tick) <= 0 if o.side > 0 else tick_cmp(p, o.price, tick) >= 0
+
     def _fill_price(self, o: POrder, p: float, tick: float) -> float:
         slip = self.costs.slippage_ticks * tick                          # engine.py L267
+        if o.kind == "triggered":
+            # fix round 1, I1: on its first live print a triggered Stop Limit is a MARKET order capped at its limit
+            # (a real exchange fills a marketable limit at the market, never at the far cap): the print +/- slip,
+            # never worse than the limit -- the engine's market fill (L307-308) with the limit as a bound
+            raw = min(o.price, p + slip) if o.side > 0 else max(o.price, p - slip)
+            return to_tick(raw, tick)
         if o.kind == "limit":                                            # engine.py L303-304: at the limit
             return o.price
         if o.kind == "stop":                                             # engine.py L305-306: the gap + slip
@@ -331,10 +367,11 @@ class PaperBook:
         return to_tick(raw, tick)
 
     def _expire(self, root: str, sess: str) -> None:
-        """A new session on `root`: Day ENTRIES placed for an earlier one are cancelled (bracket legs of a filled
-        position are not -- the book never leaves a paper position naked by itself)."""
+        """A new session on `root`: Day ENTRIES placed for an earlier one are cancelled. Protective legs (SL/TP) and
+        closing orders (a flatten's / reverse's close) never expire (fix round 1, M4): the book never leaves a
+        paper position open or naked by itself."""
         ids = [o.id for o in self.orders.values() if o.root == root and o.tif == "Day"
-               and o.role in ("entry", "flat") and o.session and o.session < sess]
+               and o.role == "entry" and o.session and o.session < sess]
         if ids:
             self._do({"ev": "cancel", "ids": ids, "why": "expired"})
 
