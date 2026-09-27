@@ -434,7 +434,7 @@ class Cell {
     if (leavesReplay && this.host.onReplayGuard) { this.host.onReplayGuard(this, patch); return; }
     const was = this.shown;
     // final review I2(b), SAFETY: a new symbol switches this chart's Trading off (its accounts kept) before the
-    // change applies -- every path (radar, palette, toolbar menu, a dialog) comes through here
+    // change applies -- every path (palette, toolbar menu, a dialog) comes through here
     const offTrade = window.HBTrade.symbolChangeTrade(this.cfg, patch);   // trade.js loads after this file: read at call time
     if (offTrade && this.host.onSymbolChange) this.host.onSymbolChange(this, offTrade);
     Object.assign(this.cfg, patch);
