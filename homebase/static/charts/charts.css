@@ -659,6 +659,14 @@ a { color: inherit; }
 .replay-bar .rb-speed { height: 24px; padding: 0 8px; border-radius: 4px; color: var(--text); }
 .replay-bar .rb-speed:hover { background: var(--hover); }
 .replay-bar .rb-time { padding: 0 6px; color: var(--text); white-space: nowrap; }
+/* Select bar (2026-09-27 ui-controls-and-select-bar plan, Task 2): armed state of its own toolbar button,
+   the crosshair over the chart while armed, and its vertical marker/bar highlight/ET label. */
+.replay-bar .ib.active { background: var(--accent-soft); color: var(--accent); }
+.chart.replay-pick-on, .chart.replay-pick-on * { cursor: crosshair !important; }
+.replay-pick-line { position: absolute; top: 0; bottom: 0; z-index: 5; width: 1px; background: var(--accent); pointer-events: none; }
+.replay-pick-band { position: absolute; top: 0; bottom: 0; z-index: 4; background: var(--accent-soft); pointer-events: none; }
+.replay-pick-label { position: absolute; z-index: 7; padding: 2px 6px; border-radius: 4px; background: var(--tip); color: #FFFFFF;
+  font-size: 11px; line-height: 16px; white-space: nowrap; pointer-events: none; font-variant-numeric: tabular-nums; }
 
 /* ---- Bar Replay Task 2: practice trading (same look as real trading's .lg-trade/.tr-*/.tl-*, tradelines.js) ---- */
 .pr-tag { align-self: center; margin-right: 2px; padding: 2px 6px; border-radius: 4px; background: var(--warn);

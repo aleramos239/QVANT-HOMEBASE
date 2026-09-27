@@ -68,6 +68,74 @@ test('stopOp', () => {
   assert.deepEqual(R.stopOp('c1'), { op: 'replay_stop', id: 'c1' });
 });
 
+/* ================================================================================================
+   Select bar (2026-09-27 plan, Task 2): bar-at-x resolution, the cursor label's ET formatting, and
+   the jump op built for a backwards and a forwards target.
+   ================================================================================================ */
+
+test('clampLogical: rounds to the nearest bar and clamps into [0, len)', () => {
+  assert.equal(R.clampLogical(2.4, 5), 2);
+  assert.equal(R.clampLogical(2.6, 5), 3);
+  assert.equal(R.clampLogical(-3, 5), 0);       // off the left edge
+  assert.equal(R.clampLogical(10, 5), 4);        // off the right edge
+  assert.equal(R.clampLogical(NaN, 5), null);
+  assert.equal(R.clampLogical(2, 0), null);      // no bars at all
+  assert.equal(R.clampLogical(2, 1.5), null);    // len must be an integer
+});
+
+test('barAt: a bar\'s ET wall-clock second -> {date, time}; null off-range or malformed', () => {
+  const bars = [
+    { t: 9 * 3600 + 30 * 60, s: '2024-03-08' },        // 09:30
+    { t: 9 * 3600 + 31 * 60 + 5, s: '2024-03-08' },     // 09:31:05 -- seconds truncate
+    { t: -1, s: '2024-03-08' },                          // negative wraps into the prior day's clock (defensive)
+  ];
+  assert.deepEqual(R.barAt(bars, 0), { date: '2024-03-08', time: '09:30' });
+  assert.deepEqual(R.barAt(bars, 1), { date: '2024-03-08', time: '09:31' });
+  assert.deepEqual(R.barAt(bars, 2), { date: '2024-03-08', time: '23:59' });
+  assert.equal(R.barAt(bars, -1), null);
+  assert.equal(R.barAt(bars, 3), null);
+  assert.equal(R.barAt([{ t: NaN, s: '2024-03-08' }], 0), null);
+  assert.equal(R.barAt([{ t: 100, s: 5 }], 0), null);
+  assert.equal(R.barAt(null, 0), null);
+});
+
+test('fmtPickLabel: the Select-bar cursor label\'s ET formatting', () => {
+  assert.equal(R.fmtPickLabel('2024-03-08', '09:31'), '2024-03-08 09:31 ET');
+});
+
+test('etHM: cursor_ms -> its own ET "HH:MM" (2024-03-08 is EST, UTC-5)', () => {
+  assert.equal(R.etHM(Date.UTC(2024, 2, 8, 14, 31, 5)), '09:31');
+  assert.equal(R.etHM(Date.UTC(2024, 6, 8, 13, 31, 5)), '09:31');   // 2024-07-08, EDT
+  assert.equal(R.etHM(null), '');
+  assert.equal(R.etHM(NaN), '');
+});
+
+test('selectBarPlan: refused outright for a different calendar day than the one replaying (jump only moves within it)', () => {
+  const cursorMs = Date.UTC(2024, 2, 8, 14, 31, 0);   // 09:31 ET
+  assert.equal(R.selectBarPlan('c1', '2024-03-08', cursorMs, { date: '2024-03-07', time: '09:30' }), null);
+  assert.equal(R.selectBarPlan('c1', '2024-03-08', cursorMs, null), null);
+});
+
+test('selectBarPlan: a FORWARD target (later than the cursor, same day)', () => {
+  const cursorMs = Date.UTC(2024, 2, 8, 14, 31, 0);   // 09:31 ET
+  const plan = R.selectBarPlan('c1', '2024-03-08', cursorMs, { date: '2024-03-08', time: '09:45' });
+  assert.equal(plan.backward, false);
+  assert.deepEqual(plan.op, { op: 'replay_ctl', id: 'c1', action: 'jump', to_et: '09:45' });
+});
+
+test('selectBarPlan: a BACKWARD target (earlier than the cursor, same day) -- the practice-reset signal', () => {
+  const cursorMs = Date.UTC(2024, 2, 8, 14, 31, 0);   // 09:31 ET
+  const plan = R.selectBarPlan('c1', '2024-03-08', cursorMs, { date: '2024-03-08', time: '09:30' });
+  assert.equal(plan.backward, true);
+  assert.deepEqual(plan.op, { op: 'replay_ctl', id: 'c1', action: 'jump', to_et: '09:30' });
+});
+
+test('selectBarPlan: picking the cursor\'s own bar again is not "backward"', () => {
+  const cursorMs = Date.UTC(2024, 2, 8, 14, 31, 0);   // 09:31 ET
+  const plan = R.selectBarPlan('c1', '2024-03-08', cursorMs, { date: '2024-03-08', time: '09:31' });
+  assert.equal(plan.backward, false);
+});
+
 test('SPEEDS / FIRST_DATE are exported for the UI\'s speed menu and date field', () => {
   assert.deepEqual(R.SPEEDS, [1, 2, 5, 10, 30, 60, 'bar']);
   assert.equal(R.FIRST_DATE, '2021-09-22');

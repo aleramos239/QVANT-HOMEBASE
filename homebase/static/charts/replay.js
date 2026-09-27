@@ -79,6 +79,62 @@ function stopOp(id) {
   return { op: 'replay_stop', id: String(id) };
 }
 
+/* ---- Select bar (2026-09-27 plan, Task 2): resolving a chart x-coordinate to a bar, and the jump it plans.
+   Pure half only -- replayui.js's pickBar() does the DOM part (clientX -> a chart-local x -> coordinateToLogical),
+   then calls clampLogical()/barAt() below with the result, exactly like the pre-existing "pick a start" flow
+   already did inline; factored out here so Select-bar's own richer picking (replayui.js) shares the same
+   resolution instead of re-implementing it. ---- */
+
+/* A raw logical (possibly fractional, off either end) -> a valid index into a `len`-long bars array, or null
+   for an empty/invalid array. Rounds to the nearest bar and clamps into range, same as TradingView's own
+   snap-to-bar picking. */
+function clampLogical(logical, len) {
+  if (!Number.isFinite(logical) || !Number.isInteger(len) || len <= 0) return null;
+  return Math.max(0, Math.min(len - 1, Math.round(logical)));
+}
+
+/* The bar at index `i` of `bars` (cell.js's own shape: `t` an ET wall-clock SECOND, `s` that bar's own session
+   date "YYYY-MM-DD") -> {date, time: "HH:MM"} -- exactly what the server's `_at()` wants for a `jump`'s
+   `to_et`, and what `_parse_start`'s `start_et` wants too (armPick's original use). null for an out-of-range
+   index or a malformed bar (replay bars are always well-formed; this is the same defensiveness pickBar always
+   had). */
+function barAt(bars, i) {
+  if (!Array.isArray(bars) || !Number.isInteger(i) || i < 0 || i >= bars.length) return null;
+  const b = bars[i];
+  if (!b || typeof b.s !== 'string' || !Number.isFinite(b.t)) return null;
+  const secs = ((Math.floor(b.t) % 86400) + 86400) % 86400;
+  const hh = String(Math.floor(secs / 3600)).padStart(2, '0');
+  const mm = String(Math.floor(secs / 60) % 60).padStart(2, '0');
+  return { date: b.s, time: `${hh}:${mm}` };
+}
+
+/* The floating label beside the cursor while Select-bar is armed: "YYYY-MM-DD HH:MM ET". */
+function fmtPickLabel(date, time) { return `${date} ${time} ET`; }
+
+/* cursor_ms (epoch ms) -> its own ET "HH:MM" -- CURSOR_FMT already computes hour/minute (fmtCursor's own
+   formatter), just not exposed on its own; Select-bar's backward/forward test compares against this, not the
+   full "YYYY-MM-DD HH:MM:SS ET" string. '' for anything that is not a finite instant. */
+function etHM(ms) {
+  if (!Number.isFinite(ms)) return '';
+  const p = {};
+  for (const x of CURSOR_FMT.formatToParts(new Date(ms))) p[x.type] = x.value;
+  return `${p.hour}:${p.minute}`;
+}
+
+/* Select-bar's click-to-commit decision: `picked` ({date, time}, from barAt) against the replaying session's
+   own `sessionDate` and current `cursorMs`. null: the pick is refused outright -- a different calendar day
+   than the one actually replaying (scroll-back can show sessions before it) is not reachable by `jump`, which
+   only ever moves within `r.date` (homebase/charts/barreplay.py's `_at` takes a time-of-day, never a date).
+   Otherwise {backward, op}: `op` is the replay_ctl message to send; `backward` (picked earlier than the
+   current cursor, same day) is what replayui.js's commit path uses to decide whether an open practice
+   position must be reset -- a position cannot survive a rewind past its own entry. */
+function selectBarPlan(id, sessionDate, cursorMs, picked) {
+  if (!picked || picked.date !== sessionDate) return null;
+  const cursorEt = etHM(cursorMs);
+  const backward = cursorEt !== '' && picked.time < cursorEt;
+  return { backward, op: ctlOp(id, 'jump', { to_et: picked.time }) };
+}
+
 /* ================================================================================================
    Task 2: practice trading -- the fill law (homebase/backtest/engine.py) and the practice simulator.
    ================================================================================================ */
@@ -365,6 +421,7 @@ function pushPracticeSession(existing, session) {
 }
 
 const api = { FIRST_DATE, SPEEDS, parseState, fmtCursor, validStart, speedLabel, startOp, ctlOp, stopOp,
+  clampLogical, barAt, fmtPickLabel, etHM, selectBarPlan,
   DEFAULT_COSTS, toTick, tickCmp, firstAtOrAbove, firstAtOrBelow, triggerIndex, fillPrice, PracticeSim,
   barPrints, BarFeed, POINT_VALUE, pointValue, PRACTICE_KEY, PRACTICE_MAX, practiceSession, pushPracticeSession };
 if (typeof window !== 'undefined') window.HBReplay = api;
