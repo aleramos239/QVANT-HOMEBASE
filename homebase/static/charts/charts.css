@@ -11,6 +11,7 @@
   --paper: #7E57C2; --paper-soft: rgba(126, 87, 194, .10);
   --heat-lo: rgba(41, 98, 255, .06); --heat-mid: rgba(247, 166, 0, .45); --heat-hi: rgba(242, 54, 69, .85);   /* the liquidity heatmap (cell.js palette) */
   --tip: #131722;
+  --ctl-border: #D1D4DC; --ctl-border-hover: #B2B5BE; --ctl-bg-disabled: #F8F9FD; --ctl-placeholder: #9598A1;
   --shadow-menu: 0 2px 8px rgba(0, 0, 0, .16);
   --shadow-dialog: 0 8px 32px rgba(0, 0, 0, .24);
   --backdrop: rgba(0, 0, 0, .25);
@@ -20,6 +21,7 @@
   --frame: #0A0A0A; --panel: #0F0F0F; --text: #DBDBDB; --text-2: #8C8C8C; --border: #2E2E2E;
   --grid: #1C1C1C; --hover: #2A2A2A; --pill: #2A2A2A; --accent-soft: rgba(41, 98, 255, .20);
   --down-soft: rgba(242, 54, 69, .18); --tip: #2A2E39; --warn-soft: #2B2412;
+  --ctl-border: #3D3D3D; --ctl-border-hover: #5C5C5C; --ctl-bg-disabled: #161616; --ctl-placeholder: #6A6A6A;
   --paper: #B39DDB; --paper-soft: rgba(179, 157, 219, .18);
   --heat-lo: rgba(41, 98, 255, .10); --heat-mid: rgba(247, 166, 0, .55); --heat-hi: rgba(242, 54, 69, .90);
   --shadow-menu: 0 0 0 1px #2E2E2E, 0 4px 12px rgba(0, 0, 0, .5);
@@ -845,3 +847,84 @@ a { color: inherit; }
 .tr-resume-why { color: var(--warn); font-weight: 600; }
 .tr-resume-go { text-decoration: underline; }
 .tr-resume:hover .tr-resume-go { color: var(--accent); }
+
+/* ==== The control system (2026-09-27 ui-controls plan, Task 1) ====
+   One look for every text box, number box and select in the app, TradingView-style: a visible 1px
+   border (not the faint panel separator), a darker border on hover, and on focus the accent border plus a
+   soft 3px ring -- never the page-wide 2px outline on top of it. Heights stay each control's own, so
+   nothing reflows. Declared last so it wins over the per-control rules above at equal specificity. */
+:where(.menu-input, .hotkey-input, .field input[type="number"], .field input[type="text"], .set-select, .set-num,
+  .sw-hex, .op-in, .op-sel, .tst-num, .tst-date-in, .tst-heat-vals, .replay-bar .rb-jump input, .ctl-in) {
+  border: 1px solid var(--ctl-border); background-color: var(--panel); color: var(--text);
+  font-variant-numeric: tabular-nums; caret-color: var(--accent);
+  transition: border-color 120ms ease, box-shadow 120ms ease; }
+:where(.menu-input, .hotkey-input, .field input[type="number"], .field input[type="text"], .set-select, .set-num,
+  .sw-hex, .op-in, .op-sel, .tst-num, .tst-date-in, .tst-heat-vals, .replay-bar .rb-jump input, .ctl-in):hover:not(:disabled):not(:focus) {
+  border-color: var(--ctl-border-hover); }
+:where(.menu-input, .hotkey-input, .field input[type="number"], .field input[type="text"], .set-select, .set-num,
+  .sw-hex, .op-in, .op-sel, .tst-num, .tst-date-in, .tst-heat-vals, .replay-bar .rb-jump input, .ctl-in):focus {
+  outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+:where(.menu-input, .hotkey-input, .field input, .set-num, .sw-hex, .op-in, .tst-num, .tst-date-in, .tst-heat-vals,
+  .replay-bar .rb-jump input, .ctl-in)::placeholder { color: var(--ctl-placeholder); opacity: 1; }
+:where(.menu-input, .hotkey-input, .field input[type="number"], .field input[type="text"], .set-select, .set-num,
+  .sw-hex, .op-in, .op-sel, .tst-num, .tst-date-in, .tst-heat-vals, .replay-bar .rb-jump input, .ctl-in):disabled {
+  background-color: var(--ctl-bg-disabled); color: var(--text-2); cursor: default; }
+:where(.menu-input, .hotkey-input, .field input, .set-num, .sw-hex, .op-in, .tst-num, .tst-date-in, .tst-heat-vals,
+  .replay-bar .rb-jump input, .ctl-in, .set-select, .op-sel)[aria-invalid="true"] {
+  border-color: var(--down); }
+:where(.menu-input, .hotkey-input, .field input, .set-num, .sw-hex, .op-in, .tst-num, .tst-date-in, .tst-heat-vals,
+  .replay-bar .rb-jump input, .ctl-in, .set-select, .op-sel)[aria-invalid="true"]:focus {
+  box-shadow: 0 0 0 3px var(--down-soft); }
+/* the search boxes that wrap a bare input: the box carries the same border and ring */
+.dlg-search { border-color: var(--ctl-border); transition: border-color 120ms ease, box-shadow 120ms ease; }
+.dlg-search:hover:not(:focus-within) { border-color: var(--ctl-border-hover); }
+.dlg-search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.dlg-search input::placeholder { color: var(--ctl-placeholder); opacity: 1; }
+/* number boxes: no browser spinners (arrow keys still step); the value reads right-aligned like a price */
+input[type="number"] { appearance: textfield; -moz-appearance: textfield; }
+input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+/* selects: the chevron in the theme's own grey */
+:root[data-theme="dark"] .set-select, :root[data-theme="dark"] .op-sel {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238C8C8C' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); }
+.op-sel { appearance: none; padding-right: 28px;
+  background: var(--panel) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23787B86' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 8px center / 14px; }
+.set-select, .op-sel { cursor: pointer; }
+.set-select:disabled, .op-sel:disabled { cursor: default; }
+
+/* buttons: a press you can feel, a keyboard ring that sits outside the button, a clear disabled state */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-weight: 500;
+  transition: background-color 120ms ease, box-shadow 120ms ease, transform 120ms ease-out; }
+.btn:active:not(:disabled) { transform: scale(.97); }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn:disabled { opacity: .45; cursor: default; transform: none; }
+.btn-primary:disabled:hover { background: var(--accent); }
+.btn-ghost { box-shadow: inset 0 0 0 1px var(--ctl-border); }
+.btn-ghost:hover:not(:disabled) { box-shadow: inset 0 0 0 1px var(--ctl-border-hover); }
+.btn-danger:hover:not(:disabled) { background: color-mix(in srgb, var(--down) 88%, #000); }
+@media (prefers-reduced-motion: reduce) { .btn { transition: none; } .btn:active:not(:disabled) { transform: none; } }
+
+/* ---- Bar Replay start popover: a date field + time field, a month calendar, and quick times ---- */
+.menu.replay-menu { width: 300px; padding-bottom: 8px; }
+.rp-fields { display: grid; grid-template-columns: 1fr 104px; gap: 8px; padding: 4px 12px 8px; }
+.rp-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.rp-lab { color: var(--text-2); font-size: 12px; }
+.ctl-wrap { position: relative; display: block; }
+.ctl-wrap .icw { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); color: var(--text-2); pointer-events: none; }
+.ctl-wrap .icw .ic { width: 16px; height: 16px; }
+.ctl-in { display: block; width: 100%; height: 34px; padding: 0 10px 0 32px; border-radius: 6px; font-size: 14px; }
+.replay-menu .tst-cal { padding: 0 12px 4px; }
+.tst-cal-d:disabled { color: var(--text-2); opacity: .35; cursor: default; background: none; }
+.tst-cal-d.today { box-shadow: inset 0 0 0 1px var(--ctl-border); }
+.tst-cal-d.sel { box-shadow: none; }
+.tst-cal-nav { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 6px; color: var(--text-2); }
+.tst-cal-nav:hover { background: var(--hover); color: var(--text); }
+.tst-cal-t { font-weight: 600; }
+.rp-quick { display: flex; align-items: center; gap: 6px; padding: 6px 12px 2px; }
+.rp-quick-l { color: var(--text-2); font-size: 12px; margin-right: 2px; }
+.rp-chip { height: 26px; padding: 0 9px; border-radius: 13px; box-shadow: inset 0 0 0 1px var(--ctl-border); font-size: 12px;
+  font-variant-numeric: tabular-nums; transition: background-color 120ms ease, box-shadow 120ms ease; }
+.rp-chip:hover { background: var(--hover); }
+.rp-chip.on { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); color: var(--accent); }
+.rp-foot { display: flex; align-items: center; gap: 8px; padding: 8px 12px 0; }
+.rp-foot .menu-hint { flex: 1; padding: 0; color: var(--text-2); font-size: 12px; line-height: 1.3; }
+.replay-menu .menu-err { padding: 4px 12px 0; }

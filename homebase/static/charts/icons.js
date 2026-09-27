@@ -5,7 +5,8 @@
    chart-candlestick, paintbrush, list, calendar, ellipsis, external-link, droplet, flame, panel-right,
    bot, octagon-x, file-text, history, play, pause, skip-forward, skip-back (Bar Replay, 2026-09-27 plan),
    square (Strategy Tester), list-ordered, crosshair (DOM ladder, 2026-09-27 charts-depth plan),
-   between-horizontal-start (Bar Replay Select bar, 2026-09-27 ui-controls-and-select-bar plan).
+   between-horizontal-start (Bar Replay Select bar, 2026-09-27 ui-controls-and-select-bar plan),
+   chevron-left, chevron-right, clock (the control system, same plan).
 
    ISC License
 
@@ -35,6 +36,9 @@ window.HBIcons = {
   desk: svg('<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'),
   chevron: svg('<path d="m6 9 6 6 6-6"/>'),
   chevronUp: svg('<path d="m18 15-6-6-6 6"/>'),
+  chevronLeft: svg('<path d="m15 18-6-6 6-6"/>'),
+  chevronRight: svg('<path d="m9 18 6-6-6-6"/>'),
+  clock: svg('<path d="M12 6v6l4 2"/><circle cx="12" cy="12" r="10"/>'),
   search: svg('<path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/>'),
   indicators: svg('<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><path d="M9 17c2 0 2.8-1 2.8-2.8V10c0-2 1-3.3 3.2-3"/><path d="M9 11.2h5.7"/>'),
   cursor: svg('<path d="M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z"/>'),

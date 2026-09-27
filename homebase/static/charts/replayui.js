@@ -443,25 +443,101 @@ function armSelectBar(cell, btn) {
   } };
 }
 
-/* ---- the toolbar button's popover: type a date + time, or just click the chart ---- */
+/* ---- the toolbar button's popover: a date and a time (typed, or picked from the calendar and the quick
+   times), or just click the chart. Plain text fields, never <input type="date"> (it fires change on the first
+   year digit); the typing help and the messages are replay.js' pure typeDate/tidyDate/startError. ---- */
+const QUICK_TIMES = ['08:30', '09:30', '10:00', '15:00'];
+function field(label, iconName, placeholder, value) {
+  const wrap = mk('label', 'rp-field'), box = mk('span', 'ctl-wrap'), inp = mk('input', 'ctl-in');
+  inp.type = 'text'; inp.placeholder = placeholder; inp.value = value;
+  inp.autocomplete = 'off'; inp.spellcheck = false; inp.inputMode = 'numeric';
+  inp.setAttribute('aria-label', label);
+  box.append(icon(iconName), inp);
+  wrap.append(mk('span', 'rp-lab', label), box);
+  return { wrap, inp };
+}
 function fillMenu(m, cell) {
   m.classList.add('replay-menu');
   m.appendChild(mk('div', 'menu-h', 'Bar Replay'));
-  const row = mk('div', 'menu-custom');
-  const dateInput = mk('input', 'menu-input'), timeInput = mk('input', 'menu-input'), go = mk('button', 'btn btn-primary', 'Start');
-  dateInput.type = 'text'; dateInput.placeholder = 'YYYY-MM-DD'; dateInput.value = lastPick.date;
-  dateInput.setAttribute('aria-label', 'Start date (ET)');
-  timeInput.type = 'text'; timeInput.placeholder = 'HH:MM'; timeInput.value = lastPick.time;
-  timeInput.setAttribute('aria-label', 'Start time (ET)');
-  go.type = 'button';
+  const today = todayEt(), X = window.HBTester;
+  const d = field('Date', 'calendar', 'YYYY-MM-DD', lastPick.date), t = field('Time (ET)', 'clock', 'HH:MM', lastPick.time);
+  const fields = mk('div', 'rp-fields');
+  fields.append(d.wrap, t.wrap);
   const err = mk('div', 'menu-err');
   err.hidden = true;
   err.setAttribute('role', 'alert');
+  const go = mk('button', 'btn btn-primary', 'Start');
+  go.type = 'button';
+  let month = (R.tidyDate(lastPick.date) || '').slice(0, 7);
+  if (!/^\d{4}-\d{2}$/.test(month)) month = today.slice(0, 7);
+  const cal = mk('div', 'tst-cal'), quick = mk('div', 'rp-quick');
+
+  const showErr = (e) => {
+    d.inp.removeAttribute('aria-invalid'); t.inp.removeAttribute('aria-invalid');
+    err.hidden = !e;
+    err.textContent = e ? e.msg : '';
+    if (e) (e.field === 'date' ? d.inp : t.inp).setAttribute('aria-invalid', 'true');
+  };
+  // typing help only when the caret is at the end and a character was added, so editing mid-text and
+  // deleting behave exactly as typed
+  const assist = (inp, fn) => (e) => {
+    if (!e.inputType || !e.inputType.startsWith('insert') || inp.selectionStart !== inp.value.length) return;
+    const v = fn(inp.value);
+    if (v !== inp.value) inp.value = v;
+  };
+  d.inp.addEventListener('input', (e) => { assist(d.inp, R.typeDate)(e); if (!err.hidden) showErr(null); syncCal(); });
+  t.inp.addEventListener('input', (e) => { assist(t.inp, R.typeTime)(e); if (!err.hidden) showErr(null); drawQuick(); });
+  d.inp.addEventListener('blur', () => { d.inp.value = R.tidyDate(d.inp.value); syncCal(); });
+  t.inp.addEventListener('blur', () => { t.inp.value = R.tidyTime(t.inp.value); drawQuick(); });
+
+  function syncCal() {
+    const v = R.tidyDate(d.inp.value);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(v) && v.slice(0, 7) !== month) month = v.slice(0, 7);
+    drawCal();
+  }
+  function drawCal() {
+    if (!X) return;
+    const g = X.monthGrid(month), picked = R.tidyDate(d.inp.value);
+    const head = mk('div', 'tst-cal-head'), prev = mk('button', 'tst-cal-nav'), next = mk('button', 'tst-cal-nav');
+    prev.type = next.type = 'button';
+    prev.append(icon('chevronLeft')); next.append(icon('chevronRight'));
+    prev.setAttribute('aria-label', 'Previous month'); next.setAttribute('aria-label', 'Next month');
+    prev.onclick = () => { month = X.shiftMonth(month, -1); drawCal(); };
+    next.onclick = () => { month = X.shiftMonth(month, 1); drawCal(); };
+    prev.disabled = month <= R.FIRST_DATE.slice(0, 7);
+    next.disabled = month >= today.slice(0, 7);
+    head.append(prev, mk('span', 'tst-cal-t', g.label), next);
+    const grid = mk('div', 'tst-cal-grid');
+    for (const w of g.dow) grid.appendChild(mk('span', 'tst-cal-dow', w));
+    for (const wk of g.weeks) {
+      for (const c of wk) {
+        const b = mk('button', 'tst-cal-d' + (c.outside ? ' out' : '') + (c.iso === picked ? ' sel' : '')
+          + (c.iso === today ? ' today' : ''), String(c.day));
+        b.type = 'button';
+        b.disabled = !R.dayOpen(c.iso, today);
+        b.setAttribute('aria-label', X.prettyDate(c.iso));
+        b.onclick = () => { d.inp.value = c.iso; showErr(null); syncCal(); t.inp.focus(); t.inp.select(); };
+        grid.appendChild(b);
+      }
+    }
+    cal.replaceChildren(head, grid);
+  }
+  function drawQuick() {
+    const cur = R.tidyTime(t.inp.value);
+    quick.replaceChildren(mk('span', 'rp-quick-l', 'Quick'));
+    for (const q of QUICK_TIMES) {
+      const b = mk('button', 'rp-chip' + (q === cur ? ' on' : ''), q);
+      b.type = 'button';
+      b.onclick = () => { t.inp.value = q; showErr(null); drawQuick(); };
+      quick.appendChild(b);
+    }
+  }
   const submit = () => {
-    const date = dateInput.value.trim(), time = timeInput.value.trim();
-    if (!R.validStart(date, time, todayEt())) {
-      err.textContent = `date: ${R.FIRST_DATE} to yesterday, time HH:MM (ET)`;
-      err.hidden = false;
+    d.inp.value = R.tidyDate(d.inp.value); t.inp.value = R.tidyTime(t.inp.value);
+    const date = d.inp.value, time = t.inp.value, e = R.startError(date, time, today);
+    if (e || !R.validStart(date, time, today)) {
+      showErr(e || { field: 'date', msg: `Date: ${R.FIRST_DATE} to yesterday` });
+      (e && e.field === 'time' ? t.inp : d.inp).focus();
       return;
     }
     page.closeMenu();
@@ -469,12 +545,15 @@ function fillMenu(m, cell) {
   };
   go.onclick = submit;
   const onEnter = (e) => { if (e.key === 'Enter') submit(); };
-  dateInput.onkeydown = onEnter;
-  timeInput.onkeydown = onEnter;
-  row.append(dateInput, timeInput, go);
-  m.append(row, err, mk('div', 'menu-hint', 'or click a point on the selected chart'));
+  d.inp.onkeydown = onEnter;
+  t.inp.onkeydown = onEnter;
+  const foot = mk('div', 'rp-foot');
+  foot.append(mk('div', 'menu-hint', 'or click a point on the selected chart'), go);
+  m.append(fields, cal, quick, err, foot);
+  drawCal(); drawQuick();
   armPick(cell);
-  dateInput.focus();
+  d.inp.focus();
+  d.inp.select();
 }
 
 /* ---- the floating control bar + dimming overlay + REPLAY pill: one page.overlays entry, per chart ---- */

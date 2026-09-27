@@ -63,6 +63,40 @@ function validStart(date, time, today) {
   return date >= FIRST_DATE && date < today;
 }
 
+/* The start popover's typing help, TradingView-style: a separator is added for you as soon as the part
+   before it is complete ("2025" -> "2025-", "09" -> "09:"), only while typing at the end (the caller checks
+   that), so deleting never fights you. Blur tidies loose forms: "2025/3/5", "20250305" -> "2025-03-05";
+   "930", "9:30", "0930" -> "09:30". Anything it cannot read is returned untouched for the error to name. */
+function typeDate(text) { return /^\d{4}$/.test(text) || /^\d{4}-\d{2}$/.test(text) ? text + '-' : text; }
+function typeTime(text) {
+  if (/^\d:$/.test(text)) return '0' + text;
+  return /^([01]\d|2[0-3])$/.test(text) ? text + ':' : text;
+}
+function tidyDate(text) {
+  const t = String(text == null ? '' : text).trim();
+  let m = t.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/) || t.match(/^(\d{4})(\d{2})(\d{2})$/);
+  return m ? `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}` : t;
+}
+function tidyTime(text) {
+  const t = String(text == null ? '' : text).trim();
+  const m = t.match(/^(\d{1,2}):?(\d{2})$/);
+  return m ? `${m[1].padStart(2, '0')}:${m[2]}` : t;
+}
+/* Which field is wrong, and why, in words -- null when validStart() would pass. */
+function startError(date, time, today) {
+  if (!DATE_RE.test(date || '')) return { field: 'date', msg: 'Date: YYYY-MM-DD' };
+  if (date < FIRST_DATE) return { field: 'date', msg: `Date: the archive starts ${FIRST_DATE}` };
+  if (date >= today) return { field: 'date', msg: 'Date: pick a finished session (yesterday or earlier)' };
+  if (!TIME_RE.test(time || '')) return { field: 'time', msg: 'Time: HH:MM, 24-hour ET' };
+  return null;
+}
+/* A calendar day you can start from: inside the archive, before today, and a weekday. */
+function dayOpen(iso, today) {
+  if (!DATE_RE.test(iso) || iso < FIRST_DATE || iso >= today) return false;
+  const dow = new Date(iso + 'T12:00:00Z').getUTCDay();
+  return dow !== 0 && dow !== 6;
+}
+
 /* The speed menu's label: "1×" .. "60×", "Bar". */
 function speedLabel(s) { return s === 'bar' ? 'Bar' : `${s}×`; }
 
@@ -420,7 +454,7 @@ function pushPracticeSession(existing, session) {
   return list.length > PRACTICE_MAX ? list.slice(list.length - PRACTICE_MAX) : list;
 }
 
-const api = { FIRST_DATE, SPEEDS, parseState, fmtCursor, validStart, speedLabel, startOp, ctlOp, stopOp,
+const api = { FIRST_DATE, SPEEDS, parseState, fmtCursor, validStart, typeDate, typeTime, tidyDate, tidyTime, startError, dayOpen, speedLabel, startOp, ctlOp, stopOp,
   clampLogical, barAt, fmtPickLabel, etHM, selectBarPlan,
   DEFAULT_COSTS, toTick, tickCmp, firstAtOrAbove, firstAtOrBelow, triggerIndex, fillPrice, PracticeSim,
   barPrints, BarFeed, POINT_VALUE, pointValue, PRACTICE_KEY, PRACTICE_MAX, practiceSession, pushPracticeSession };

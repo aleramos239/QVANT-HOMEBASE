@@ -413,3 +413,47 @@ test('isolation (2026-09-27 plan, Task 2): the practice path never references th
     for (const bad of forbidden) assert.equal(text.includes(bad), false, `${name} references ${JSON.stringify(bad)}`);
   }
 });
+
+test('typeDate/typeTime: a separator appears once the part before it is complete', () => {
+  assert.equal(R.typeDate('2025'), '2025-');
+  assert.equal(R.typeDate('2025-03'), '2025-03-');
+  assert.equal(R.typeDate('2025-0'), '2025-0');
+  assert.equal(R.typeDate('2025-03-1'), '2025-03-1');
+  assert.equal(R.typeTime('09'), '09:');
+  assert.equal(R.typeTime('23'), '23:');
+  assert.equal(R.typeTime('93'), '93');        // not an hour: left for blur to read as 09:3x
+  assert.equal(R.typeTime('9:'), '09:');
+  assert.equal(R.typeTime('09:3'), '09:3');
+});
+
+test('tidyDate/tidyTime: loose forms become canonical on blur; unreadable text is left alone', () => {
+  assert.equal(R.tidyDate('2025/3/5'), '2025-03-05');
+  assert.equal(R.tidyDate('20250305'), '2025-03-05');
+  assert.equal(R.tidyDate(' 2025-03-05 '), '2025-03-05');
+  assert.equal(R.tidyDate('March 5'), 'March 5');
+  assert.equal(R.tidyTime('930'), '09:30');
+  assert.equal(R.tidyTime('9:30'), '09:30');
+  assert.equal(R.tidyTime('0930'), '09:30');
+  assert.equal(R.tidyTime('nine'), 'nine');
+});
+
+test('startError names the wrong field in words; null exactly when validStart passes', () => {
+  const today = '2026-09-27';
+  assert.equal(R.startError('2025-3-5', '09:30', today).field, 'date');
+  assert.match(R.startError('2020-01-02', '09:30', today).msg, /archive starts/);
+  assert.match(R.startError('2026-09-27', '09:30', today).msg, /finished session/);
+  assert.equal(R.startError('2025-03-05', '25:00', today).field, 'time');
+  assert.equal(R.startError('2025-03-05', '09:30', today), null);
+  for (const [d, t] of [['2025-03-05', '09:30'], ['2020-01-01', '09:30'], ['2025-03-05', '9:30'], ['x', 'y']]) {
+    assert.equal(R.startError(d, t, today) === null, R.validStart(d, t, today));
+  }
+});
+
+test('dayOpen: weekdays inside the archive and before today only', () => {
+  const today = '2026-09-27';
+  assert.equal(R.dayOpen('2025-03-05', today), true);    // Wednesday
+  assert.equal(R.dayOpen('2025-03-08', today), false);   // Saturday
+  assert.equal(R.dayOpen('2025-03-09', today), false);   // Sunday
+  assert.equal(R.dayOpen('2021-09-21', today), false);   // before the archive
+  assert.equal(R.dayOpen('2026-09-27', today), false);   // today
+});

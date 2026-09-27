@@ -376,9 +376,9 @@ function openDatesDialog() {
     const g = X.monthGrid(draft.month);
     cal.replaceChildren();
     const head = page.mk('div', 'tst-cal-head');
-    const prev = iconBtn('chevronUp', 'Previous month', () => { draft.month = X.shiftMonth(draft.month, -1); drawCal(); });
-    const next = iconBtn('chevron', 'Next month', () => { draft.month = X.shiftMonth(draft.month, 1); drawCal(); });
-    prev.classList.add('tst-cal-prev');
+    const prev = iconBtn('chevronLeft', 'Previous month', () => { draft.month = X.shiftMonth(draft.month, -1); drawCal(); });
+    const next = iconBtn('chevronRight', 'Next month', () => { draft.month = X.shiftMonth(draft.month, 1); drawCal(); });
+    prev.classList.add('tst-cal-prev', 'tst-cal-nav'); next.classList.add('tst-cal-nav');
     head.append(prev, page.mk('span', 'tst-cal-t', g.label), next);
     const grid = page.mk('div', 'tst-cal-grid');
     for (const d of g.dow) grid.appendChild(page.mk('span', 'tst-cal-dow', d));
