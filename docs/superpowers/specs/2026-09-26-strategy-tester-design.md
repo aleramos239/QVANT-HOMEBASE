@@ -174,9 +174,14 @@ Defaults equal the desk's live geometry; a pytest pins that.
   the weekday grid of the run's **daily net P&L** (0-trade weekdays included), Wilson CIs, eval pass / bust /
   timeout, days-to-pass percentiles, funded payout + expected cheque. The "days drawn independently"
   caveat is shown on every result (it is the friendly end of the band).
-- **Rule sets**: `lucid-flex-50k@2026-08.json` (confirmed by the account holder 2026-08-01, shipped as is) and
-  an **Apex 50K** set whose numbers the user confirms before it is marked confirmed — until then the page labels
-  it `unconfirmed rules`. Rule files are JSON, selectable per run.
+- **Evals** (updated 2026-09-27): two, and other accounts map onto them — `lucid-flex-50k@2026-09-27.json`
+  (the DEFAULT; 50% consistency ON TOP OF a 2-trading-day minimum, reaffirmed by the account holder 2026-09-27,
+  numbers unchanged from the 2026-08 snapshot, which stays on disk so older runs reproduce) and
+  `lucid-pro-50k@2026-09-27.json` (Flex with `consistency: null` and `eval_min_days: 1` — passable in a single
+  day; every other number inherited from Flex, `"confirmed": false`, so the page labels it `unconfirmed rules`).
+  The Apex placeholder was deleted: invented numbers are worse than no file. Rule files are JSON, one family per
+  eval; the picker offers the newest version per family, older snapshots stay loadable. Selectable per run from
+  an **Eval** picker shown beside the prop-eval tiles (and in the inputs dialog).
 - **Report**: a `Prop eval` block in the Overview tab — tiles `Eval pass %` (with 95% CI), `Bust %`, `Median days
   to pass`, `Funded: expected cheque $` — plus the rule set name; computed in the runner after the backtest
   (≤ 3 s at the notebook's default path count), stored in the bundle (`propsim.json`).

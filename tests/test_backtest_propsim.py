@@ -65,28 +65,90 @@ def test_the_weekday_grid_fills_no_trade_weekdays_with_zero():
 
 
 def test_rule_files_and_the_unconfirmed_label():
+    """The picker offers exactly two evals -- LucidFlex (the default, confirmed) and
+    LucidPro (unconfirmed) -- newest version per family; older snapshots stay loadable."""
     ids = {r["id"]: r for r in list_rules()}
-    assert ids["lucid-flex-50k@2026-08"]["confirmed"] is True
-    assert ids["apex-50k@unconfirmed"] == {"id": "apex-50k@unconfirmed", "name": "Apex 50K",
-                                          "version": "unconfirmed", "confirmed": False}
+    assert set(ids) == {"lucid-flex-50k@2026-09-27", "lucid-pro-50k@2026-09-27"}
+    assert ids["lucid-flex-50k@2026-09-27"] == {"id": "lucid-flex-50k@2026-09-27", "name": "LucidFlex 50K",
+                                                "version": "2026-09-27", "confirmed": True}
+    assert ids["lucid-pro-50k@2026-09-27"] == {"id": "lucid-pro-50k@2026-09-27", "name": "LucidPro 50K",
+                                               "version": "2026-09-27", "confirmed": False}
+    assert DEFAULT_RULES == "lucid-flex-50k@2026-09-27"
+    # the superseded snapshot is off the picker but still on disk and still loadable
+    assert (RULES_DIR / "lucid-flex-50k@2026-08.json").is_file()
+    assert load_rules("lucid-flex-50k@2026-08")["version"] == "2026-08"
+
     lucid = evaluate(day_trades([500.0] * 5), n_paths=200)
-    apex = evaluate(day_trades([500.0] * 5), "apex-50k@unconfirmed", n_paths=200)
+    pro = evaluate(day_trades([500.0] * 5), "lucid-pro-50k@2026-09-27", n_paths=200)
     assert lucid["rules"]["id"] == DEFAULT_RULES and lucid["rules"]["label"] == "LucidFlex 50K"
-    assert apex["rules"]["confirmed"] is False
-    assert apex["rules"]["label"] == "Apex 50K · unconfirmed rules"
-    assert lucid["caveat"] == apex["caveat"] == CAVEAT
+    assert pro["rules"]["confirmed"] is False
+    assert pro["rules"]["label"] == "LucidPro 50K · unconfirmed rules"
+    assert lucid["caveat"] == pro["caveat"] == CAVEAT
     for bad in ("nope@x", "../lucid-flex-50k@2026-08", "", None):
         with pytest.raises(ValueError, match="prop_rules"):
             load_rules(bad)
 
 
-def test_apex_placeholders_are_the_lucidflex_numbers_until_confirmed():
-    apex = json.loads((RULES_DIR / "apex-50k@unconfirmed.json").read_text())
-    lucid = load_rules(DEFAULT_RULES)
-    assert apex["confirmed"] is False and "PLACEHOLDER" in apex["source"]
-    assert set(apex) >= set(lucid) - {"source", "as_of", "notes", "disclaimer", "payout_ladder"}
-    for k in apex["placeholder_fields"]:
-        assert apex[k] == lucid[k], k
+def test_the_apex_placeholder_is_gone():
+    """Invented numbers are worse than no file: other accounts map onto Flex or Pro."""
+    assert not (RULES_DIR / "apex-50k@unconfirmed.json").exists()
+    assert not list(RULES_DIR.glob("apex*"))
+
+
+def test_flex_2026_09_27_reaffirms_the_2026_08_numbers_so_nothing_moves():
+    """Account holder, 2026-09-27: Flex DOES have the 50% consistency rule on top of the
+    2-day minimum. The new snapshot is a reaffirmation, not a change -- every rule number
+    matches 2026-08, so Flex pass rates must be byte-identical across the two files."""
+    old = load_rules("lucid-flex-50k@2026-08")
+    new = load_rules("lucid-flex-50k@2026-09-27")
+    assert new["consistency"] == old["consistency"] == 0.5
+    assert new["eval_min_days"] == old["eval_min_days"] == 2
+    provenance = {"version", "as_of", "source", "notes", "confirmed", "disclaimer"}
+    assert set(new) - provenance == set(old) - provenance
+    for k in set(new) - provenance:
+        assert new[k] == old[k], k
+    assert "2026-09-27" in new["source"] and "consistency" in new["source"]
+
+    pnls = [900.0, -400.0, 0.0, 1800.0, -250.0, 120.0, 2600.0, -700.0]
+    before = evaluate(day_trades(pnls), "lucid-flex-50k@2026-08", n_paths=2000)
+    after = evaluate(day_trades(pnls), "lucid-flex-50k@2026-09-27", n_paths=2000)
+    assert before["headline"] == after["headline"]
+    assert before["result"] == after["result"]
+
+
+def test_pro_is_flex_minus_the_consistency_rule_and_the_minimum_days():
+    """Account holder, 2026-09-27: "same as Flex except no consistency rule and no
+    minimum days". Everything else is INHERITED and unconfirmed."""
+    flex = load_rules(DEFAULT_RULES)
+    pro = load_rules("lucid-pro-50k@2026-09-27")
+    assert pro["consistency"] is None and pro["eval_min_days"] == 1
+    assert pro["confirmed"] is False
+    for word in ("2026-09-27", "INHERITED FROM FLEX", "NOT INDEPENDENTLY CONFIRMED"):
+        assert word in pro["source"], word
+    differ = {"name", "version", "source", "confirmed", "notes", "disclaimer",
+              "consistency", "eval_min_days"}
+    assert set(pro) - differ == set(flex) - differ
+    for k in set(pro) - differ:
+        assert pro[k] == flex[k], k
+
+
+def test_a_null_consistency_disables_the_check_and_0_5_still_blocks():
+    """propsim.run_eval must treat `consistency: null` as "no consistency check" --
+    and must still enforce it when the ruleset carries 0.5."""
+    flex, pro = load_rules(DEFAULT_RULES), load_rules("lucid-pro-50k@2026-09-27")
+
+    # one dominant day (2,900 of 3,100 = 93.5% > 50%): Flex refuses to pass, Pro passes
+    dominant = [2900.0, 200.0]
+    assert engine.run_eval(dominant, flex)["outcome"] == "timeout"
+    pro_out = engine.run_eval(dominant, pro)
+    assert pro_out["outcome"] == "pass" and pro_out["day"] == 2
+
+    # Pro has no minimum days either: +$3,100 on day 1 is a pass; Flex needs a 2nd day
+    assert engine.run_eval([3100.0], pro) == dict(outcome="pass", day=1, trade_days=1, max_dd=0.0)
+    assert engine.run_eval([3100.0], flex)["outcome"] == "timeout"
+
+    # a balanced pair clears Flex's 50% (1,600 of 3,200 = exactly 50%)
+    assert engine.run_eval([1600.0, 1600.0], flex)["outcome"] == "pass"
 
 
 def test_no_trades_is_a_skip_not_a_crash():
@@ -100,12 +162,12 @@ def test_the_runner_writes_propsim_json_and_validates_the_rule_set(tmp_path, mon
     with pytest.raises(ValueError, match="prop_rules"):
         validate({"strategy": "nq930", "prop_rules": "zz@1"})
     store = TapeStore(nq_archive(tmp_path / "ticks"), tmp_path / "cache")
-    rid = prepare({"strategy": "nq930", "inputs": {"adx_gate": False}, "prop_rules": "apex-50k@unconfirmed",
+    rid = prepare({"strategy": "nq930", "inputs": {"adx_gate": False}, "prop_rules": "lucid-pro-50k@2026-09-27",
                    "range": {"kind": "custom", "start": "2024-03-01", "end": "2024-03-31"}}, tmp_path / "t")
     meta = execute(tmp_path / "t" / "runs" / rid, store)
     p = read_json(tmp_path / "t" / "runs" / rid / "propsim.json")
-    assert meta["prop_rules"] == "apex-50k@unconfirmed"
-    assert p["rules"]["label"] == "Apex 50K · unconfirmed rules" and p["n_paths"] == 300
+    assert meta["prop_rules"] == "lucid-pro-50k@2026-09-27"
+    assert p["rules"]["label"] == "LucidPro 50K · unconfirmed rules" and p["n_paths"] == 300
     assert p["grid"] == {"first": "2024-03-05", "last": "2024-03-05", "weekdays": 1, "trade_days": 1}
     assert 0.0 <= p["headline"]["eval_pass_p"] <= 1.0 and p["caveat"] == CAVEAT
 

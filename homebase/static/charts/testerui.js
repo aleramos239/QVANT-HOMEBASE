@@ -467,11 +467,21 @@ function inputsDialogRow(inp, draft) {
   row.append(lab, ctl);
   return row;
 }
+/* The Eval picker — which funded-account evaluation the prop numbers are scored against.
+   One builder, used both in the inputs dialog and beside the prop-eval tiles themselves, so
+   "pick the eval it's running" is answerable from where the numbers are. */
+function evalSelect(selected, onPick) {
+  const sel = page.mk('select', 'set-select');
+  for (const o of X.evalOptions(propRulesList, selected)) sel.appendChild(optionEl(o.id, o.label));
+  sel.value = selected;
+  sel.onchange = () => onPick(sel.value);
+  return sel;
+}
 function propRulesRow(draft) {
-  const row = page.mk('div', 'field'), lab = page.mk('label', '', 'Rule set'), sel = page.mk('select', 'set-select');
-  for (const r of (propRulesList || [])) sel.appendChild(optionEl(r.id, r.name + (r.confirmed ? '' : ' · unconfirmed rules')));
-  sel.value = draft.prop_rules;
-  sel.onchange = () => { draft.prop_rules = sel.value; };
+  const row = page.mk('div', 'field'), lab = page.mk('label', '', 'Eval'), id = 'ti-eval';
+  const sel = evalSelect(draft.prop_rules, (v) => { draft.prop_rules = v; });
+  sel.id = id;
+  lab.htmlFor = id;
   row.append(lab, sel);
   return row;
 }
@@ -830,13 +840,24 @@ function tileEl(t) {
   if (t.sub) el.appendChild(page.mk('div', 'tst-tile-s', t.sub));
   return el;
 }
-function propBlock(propsim) {
+function propBlock(propsim, ranUnder) {
   const view = X.propView(propsim);
   const wrap = page.mk('div', 'tst-prop');
   const head = page.mk('div', 'tst-prop-head');
   head.appendChild(page.mk('span', 'tst-prop-title', 'Prop eval' + (view.rules ? ` · ${view.rules.name}` : '')));
   if (view.unconfirmed) head.appendChild(page.mk('span', 'tst-badge warn', 'unconfirmed rules'));
+  // Pick the eval right here: it sets the eval the NEXT run is scored against (these tiles were
+  // computed server-side under `ranUnder`), so say so rather than silently restating the numbers.
+  const picker = page.mk('span', 'tst-eval-pick'), lab = page.mk('label', 'tst-cost-l', 'Eval');
+  const sel = evalSelect(form.prop_rules, (v) => { form = { ...form, prop_rules: v }; persist(); refreshHeader(); refreshContent(); });
+  sel.id = 'tst-eval-sel';
+  lab.htmlFor = sel.id;
+  picker.append(lab, sel);
+  head.appendChild(picker);
   wrap.appendChild(head);
+  if (ranUnder && form.prop_rules !== ranUnder) {
+    wrap.appendChild(page.mk('div', 'tst-caveat', `These numbers were scored under ${ranUnder} — re-run to score this strategy under the eval selected above.`));
+  }
   if (view.tiles) {
     const g = page.mk('div', 'tst-tiles tst-tiles-small');
     for (const t of view.tiles) g.appendChild(tileEl(t));
@@ -926,7 +947,7 @@ function renderOverview(container) {
   const chartWrap = page.mk('div', 'tst-chart');
   container.appendChild(chartWrap);
   miniChartHandle = miniChart(chartWrap, equity, palette());
-  container.appendChild(propBlock(propsim));
+  container.appendChild(propBlock(propsim, run.prop_rules));
   container.appendChild(mcBlock(run.id));
 }
 

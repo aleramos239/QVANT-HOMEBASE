@@ -17,7 +17,7 @@ const COL = { net_profit: 12345.5, net_profit_pct: 24.691, gross_profit: 30000, 
   sharpe_traded_days: 3.3, t_stat: 2.346, expectancy: 514.4, days: 24 };
 const RUN = { strategy: { id: 'nq930', name: 'NQ 9:30 straddle', root: 'NQ' }, inputs: { offset_pts: 12, adx_gate: true, mode: 'b', n: 2 },
   range: { kind: 'custom', start: '2023-01-01', end: '2025-02-01', label: '2023-01-01 → 2025-02-01', holdout: true },
-  qty: 2, commission: 4, slippage_ticks: 1, capital: 50000, holdout: true, holdout_reason: 'final check', prop_rules: 'lucid-flex-50k@2026-08',
+  qty: 2, commission: 4, slippage_ticks: 1, capital: 50000, holdout: true, holdout_reason: 'final check', prop_rules: 'lucid-flex-50k@2026-09-27',
   engine: 'x', fill_law: 'tick replay',
   coverage: { sessions: 520, used: 517, skipped: [{ date: '2023-03-01', reason: 'missing 13:00–15:00 ET' }], skipped_by_reason: {},
     no_trade: [], skipped_by_error: 2, skipped_by_data: 1 },
@@ -27,7 +27,7 @@ test('form defaults from the schema; restore keeps only valid values', () => {
   const f = X.defaults(STRAT);
   assert.deepEqual(f, { strategy: 'nq930', inputs: { offset_pts: 10, adx_gate: false, mode: 'a', n: 3 },
     range: { kind: 'research', start: '', end: '' }, qty: 1, commission: 4, slippage_ticks: 1,
-    prop_rules: 'lucid-flex-50k@2026-08', holdout: { on: false, reason: '' } });
+    prop_rules: 'lucid-flex-50k@2026-09-27', holdout: { on: false, reason: '' } });
   const r = X.restore({ ...f, inputs: { offset_pts: 11, adx_gate: 'yes', ghost: 1, n: 2.5 }, qty: 3 }, STRAT);
   assert.deepEqual(r.inputs, { offset_pts: 11, adx_gate: false, mode: 'a', n: 3 });
   assert.equal(r.qty, 3);
@@ -63,7 +63,7 @@ test('holdout: which ranges reach 2025, and the refusals the page shows before s
 test('the request body: holdout only when the range reaches it; key and run label', () => {
   const f = X.defaults(STRAT);
   assert.deepEqual(X.body({ ...f, holdout: { on: true, reason: 'x' } }), { strategy: 'nq930', inputs: f.inputs, range: { kind: 'research' },
-    qty: 1, commission: 4, slippage_ticks: 1, prop_rules: 'lucid-flex-50k@2026-08' });
+    qty: 1, commission: 4, slippage_ticks: 1, prop_rules: 'lucid-flex-50k@2026-09-27' });
   const h = { ...f, range: { kind: 'custom', start: '2024-06-01', end: '2025-06-01' }, holdout: { on: true, reason: ' final check ' } };
   assert.deepEqual(X.body(h).holdout, { reason: 'final check' });
   assert.deepEqual(X.body(h).range, { kind: 'custom', start: '2024-06-01', end: '2025-06-01' });
@@ -98,7 +98,7 @@ test('Overview tiles, badges and the prop block', () => {
     ['t-stat', '2.35', '']]);
   assert.deepEqual(X.badges(RUN).map((b) => [b.text, b.tone]), [['Tick replay', 'info'], ['517 of 520 sessions', 'warn'],
     ['2 strategy errors', 'err'], ['Includes holdout', 'err']]);
-  const prop = { rules: { name: 'Apex 50K', confirmed: false, label: 'Apex 50K · unconfirmed rules' }, caveat: 'c',
+  const prop = { rules: { id: 'lucid-pro-50k@2026-09-27', name: 'LucidPro 50K', confirmed: false, label: 'LucidPro 50K · unconfirmed rules' }, caveat: 'c',
     headline: { eval_pass_p: 0.4312, eval_pass_ci: [0.424, 0.438], bust_p: 0.31, median_days_to_pass: 17.5, funded_expected_cheque: 1648.2 } };
   assert.deepEqual(X.propView(prop).tiles.map((t) => [t.label, t.value, t.sub]), [['Eval pass', '43.1%', '95% CI 42.4–43.8%'],
     ['Bust', '31.0%', ''], ['Median days to pass', '18', ''], ['Funded: expected cheque', '$1,648.20', '']]);
@@ -108,7 +108,7 @@ test('Overview tiles, badges and the prop block', () => {
 });
 
 const MC = { unit: 'day', paths: 2000, paths_requested: 5000, capped: true, mode: 'shuffle', seed: 1, n_trades: 24, n_days: 1000, floor: 2000,
-  prop_rules: { id: 'apex-50k@unconfirmed', name: 'Apex 50K', confirmed: false, label: 'Apex 50K · unconfirmed rules' },
+  prop_rules: { id: 'lucid-pro-50k@2026-09-27', name: 'LucidPro 50K', confirmed: false, label: 'LucidPro 50K · unconfirmed rules' },
   drawdown: { p5: -6000, p25: -5000, p50: -4210, p75: -3000, p95: -1000 },
   final_net: { p5: 8000, p25: 10500, p50: 12345.5, p75: 14000, p95: 16000 },
   losing_streak: { p5: 1, p25: 2, p50: 3, p75: 4, p95: 6 },
@@ -124,7 +124,7 @@ test('Monte Carlo: the headline, percentile tiles and DD histogram bars', () => 
     ['Final net (p50)', '+$12,345.50', 'p5 +$8,000 · p95 +$16,000', 'up'],
     ['Losing streak (p50)', '3', 'p5 1 · p95 6', ''],
     ['P(DD ≥ $2,000)', '2.1%', 'ruin floor', ''],
-    ['P(prop pass)', '73.4%', 'Apex 50K · unconfirmed rules', ''],
+    ['P(prop pass)', '73.4%', 'LucidPro 50K · unconfirmed rules', ''],
     ['Paths', '2,000', 'capped from 5,000 · resampled by day', '']]);
   assert.equal(X.mcTiles({ ...MC, p_prop_pass: null, prop_rules: undefined })[4].value, '—');
   assert.equal(X.mcTiles({ ...MC, capped: false, paths: 5000 })[5].sub, 'resampled by day');
@@ -171,10 +171,10 @@ test('review M1: a profit factor at the no-loss cap never reads as a +996 delta'
 });
 
 const RUN_A = { strategy: { id: 'nq930', name: 'NQ 9:30 straddle' }, inputs: { offset_pts: 10, adx_gate: false, mode: 'a' },
-  qty: 1, commission: 4, slippage_ticks: 1, capital: 50000, prop_rules: 'lucid-flex-50k@2026-08',
+  qty: 1, commission: 4, slippage_ticks: 1, capital: 50000, prop_rules: 'lucid-flex-50k@2026-09-27',
   range: { label: 'Research window 2021–2024' } };
 const RUN_B = { strategy: { id: 'nq930', name: 'NQ 9:30 straddle' }, inputs: { offset_pts: 12, adx_gate: false, mode: 'b' },
-  qty: 2, commission: 4, slippage_ticks: 1, capital: 50000, prop_rules: 'lucid-flex-50k@2026-08',
+  qty: 2, commission: 4, slippage_ticks: 1, capital: 50000, prop_rules: 'lucid-flex-50k@2026-09-27',
   range: { label: 'Research window 2021–2024' } };
 
 test('paramsDiff: only the inputs/costs/range that differ, unchanged ones dropped', () => {
@@ -251,6 +251,20 @@ test('inputError is exported (testerui.js\'s inputs-dialog validation reuses it 
   const inp = STRAT.inputs[0];   // offset_pts: float, 0..400
   assert.equal(X.inputError(inp, 401), 'Entry offset (pts): 0 to 400');
   assert.equal(X.inputError(inp, 12), null);
+});
+
+test('the Eval picker: one option per listed ruleset, unconfirmed ones marked', () => {
+  const list = [{ id: 'lucid-flex-50k@2026-09-27', name: 'LucidFlex 50K', version: '2026-09-27', confirmed: true },
+    { id: 'lucid-pro-50k@2026-09-27', name: 'LucidPro 50K', version: '2026-09-27', confirmed: false }];
+  assert.deepEqual(X.evalOptions(list, 'lucid-flex-50k@2026-09-27'), [
+    { id: 'lucid-flex-50k@2026-09-27', label: 'LucidFlex 50K', unconfirmed: false, selected: true },
+    { id: 'lucid-pro-50k@2026-09-27', label: 'LucidPro 50K · unconfirmed', unconfirmed: true, selected: false }]);
+  // a run made under a superseded (unlisted) ruleset still shows its own id, selected
+  assert.deepEqual(X.evalOptions(list, 'lucid-flex-50k@2026-08').map((o) => [o.id, o.selected]),
+    [['lucid-flex-50k@2026-09-27', false], ['lucid-pro-50k@2026-09-27', false], ['lucid-flex-50k@2026-08', true]]);
+  assert.deepEqual(X.evalOptions(null, 'lucid-flex-50k@2026-09-27'),
+    [{ id: 'lucid-flex-50k@2026-09-27', label: 'lucid-flex-50k@2026-09-27', unconfirmed: false, selected: true }]);
+  assert.equal(X.DEFAULT_RULES, 'lucid-flex-50k@2026-09-27');
 });
 
 test('equity series: strictly increasing seconds', () => {

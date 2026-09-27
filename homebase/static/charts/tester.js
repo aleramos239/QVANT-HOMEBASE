@@ -13,7 +13,7 @@ const Tr = need('HBTrade', './trade.js');
 
 const MINUS = '−';
 const HOLDOUT_START = '2025-01-01';
-const DEFAULT_RULES = 'lucid-flex-50k@2026-08';
+const DEFAULT_RULES = 'lucid-flex-50k@2026-09-27';
 const REASON_MAX = 200;
 const RANGES = [{ kind: 'research', label: 'Research window 2021–2024' },
   { kind: 'is_months', label: 'IS months only (Jan/Apr/Jul/Oct)' }, { kind: 'custom', label: 'Custom…' }];
@@ -168,6 +168,16 @@ function propView(p) {
     { label: 'Bust', value: rate(h.bust_p * 100), sub: '' },
     { label: 'Median days to pass', value: h.median_days_to_pass == null ? '—' : String(Math.round(h.median_days_to_pass)), sub: '' },
     { label: 'Funded: expected cheque', value: Tr.money(h.funded_expected_cheque), sub: '' }] };
+}
+
+/* The Eval picker's options: one per ruleset the server offers, `selected` marking the one in
+   force. A run made under a SUPERSEDED snapshot (still loadable, no longer offered) keeps its own
+   id as a trailing option, so switching away from it is deliberate rather than silent. */
+function evalOptions(list, selected) {
+  const out = (list || []).map((r) => ({ id: r.id, label: r.name + (r.confirmed === false ? ' · unconfirmed' : ''),
+    unconfirmed: r.confirmed === false, selected: r.id === selected }));
+  if (selected && !out.some((o) => o.selected)) out.push({ id: selected, label: selected, unconfirmed: false, selected: true });
+  return out;
 }
 
 /* ---- Monte Carlo (Overview sub-tab): resamples the run's own DAYS (their trades intact), never the fills ---- */
@@ -543,7 +553,7 @@ const api = { MAX_CELLS, parseValues, valueLabel, gridAxes, gridCount, gridProbl
   WF_METRICS, WF_STEP_HEADERS, wfBody, wfProblems, wfLooksText, etaText, wfProgress, wfTiles, wfStepRows, wfStability, wfPhases,
   wfScheme,
   heatLevel, cellView, gridProgress, RANGES, HOLDOUT_START, DEFAULT_RULES, REASON_MAX, defaults, restore, fromRun, reachesHoldout, problems, inputError, body,
-  key, runLabel, progress, pct, rate, num, dur, fmtEt, tiles, badges, propView, mcHeadline, mcTiles, mcHistogram, compareRows, paramsDiff,
+  key, runLabel, progress, pct, rate, num, dur, fmtEt, tiles, badges, propView, evalOptions, mcHeadline, mcTiles, mcHistogram, compareRows, paramsDiff,
   summaryRows, periodRows, sortTrades, tradeCells, tradeMarks, equitySeries, reachSpec, toneOf };
 if (typeof window !== 'undefined') window.HBTester = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;

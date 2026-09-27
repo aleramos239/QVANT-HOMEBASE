@@ -1,5 +1,10 @@
 # VENDORED from ONYX TRADING onyx/report/propsim.py — untracked in ONYX's git when vendored
-# (2026-09-26), sha256 0d480ccd3d67ad034e89674cf7211f129fce27af0a9ac9ba7f82f72f0452cdf0. Do not edit here: re-vendor instead. Stdlib only.
+# (2026-09-26), sha256 0d480ccd3d67ad034e89674cf7211f129fce27af0a9ac9ba7f82f72f0452cdf0. Stdlib only.
+# DIVERGED 2026-09-27, deliberately: `consistency: null` now disables the consistency check
+# (LucidPro has no such rule), and the default ruleset is lucid-flex-50k@2026-09-27. ONYX's
+# copy carries the same null-handling but also a lucid-flex-50k@2026-09 snapshot claiming Flex
+# has NO consistency rule — the account holder WITHDREW that on 2026-09-27, so do NOT re-vendor
+# ONYX's rules over homebase's. Re-vendor engine changes only, keeping this divergence.
 """Monte Carlo over the LucidFlex 50K eval + funded lifecycle.
 
 Port of the Institutional Protocol course's prop-firm notebook engine
@@ -20,14 +25,20 @@ THE CLOCK: the sampling pool is the full weekday grid (Mon–Fri, including
 0-trade weekdays), so every "days" figure is CALENDAR WEEKDAYS — the desk's fee
 clock — not traded sessions.
 
-LUCIDFLEX 50K RULES (confirmed by the account holder 2026-08-01; snapshot in
-``onyx/report/rules/lucid-flex-50k@2026-08.json``, echoed on every result):
+LUCIDFLEX 50K RULES (account holder 2026-08-01, reaffirmed 2026-09-27; snapshot
+in ``rules/lucid-flex-50k@2026-09-27.json``, echoed on every result):
 
     EVAL    +$3,000 target; $2,000 EOD-trailing max loss which LOCKS at a +$100
             floor once EOD profit reaches +$2,100; 50% consistency (largest
             winning day <= 50% of total profit at the moment of passing, else
-            keep trading); min 2 trading days; no daily-loss limit; no time
-            limit (the sim horizon stands in for "eventually").
+            keep trading) ON TOP OF a min 2 trading days; no daily-loss limit;
+            no time limit (the sim horizon stands in for "eventually").
+
+LUCIDPRO 50K (``rules/lucid-pro-50k@2026-09-27.json``) is Flex minus those two
+gates — ``consistency: null`` (no check at all) and ``eval_min_days: 1``, so a
+single +$3,000 day passes. Every other number is INHERITED from Flex and not
+independently confirmed; the file says ``"confirmed": false`` and every result
+from it is labelled "unconfirmed rules".
     FUNDED  same $2,000 EOD-trailing max loss locking at +$100. A PAYOUT needs
             5 separate days >= $150 AND net > 0. The cheque is 50% of the
             profit standing when it first qualifies, capped at $2,000 — so the
@@ -51,7 +62,7 @@ __all__ = ["RULES", "run", "run_eval", "run_funded", "load_rules", "wilson_ci"]
 # daily_loss_limit) and its CLI loads whatever file sorts first. This ruleset
 # uses a different, LucidFlex-shaped contract and must not collide with it.
 _RULES_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                           "rules", "lucid-flex-50k@2026-08.json")
+                           "rules", "lucid-flex-50k@2026-09-27.json")
 
 
 def load_rules(path: Optional[str] = None) -> dict:
@@ -135,8 +146,12 @@ def run_eval(path: Iterable, r: dict) -> dict:
         if profit > peak:
             peak = profit
             floor = _floor(peak, r)
+        # `consistency: null` = the account has no consistency rule (LucidPro);
+        # a number is the cap on the largest winning day's share of the profit.
+        consistency = r.get("consistency")
         if (profit >= r["eval_target"] and trade_days >= r["eval_min_days"]
-                and largest_win_day <= r["consistency"] * profit):
+                and (consistency is None
+                     or largest_win_day <= consistency * profit)):
             return dict(outcome="pass", day=day, trade_days=trade_days,
                         max_dd=max_dd)
     return dict(outcome="timeout", day=day, trade_days=trade_days,
