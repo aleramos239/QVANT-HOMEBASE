@@ -1314,3 +1314,65 @@ test('Minor 6: chartWhy -- the selected chart\'s short reason for the status bar
   assert.equal(T.chartWhy({ ...base, mode: { mode: 'none', reason: 'No ticked account can trade right now' } }),
     'no ticked account can trade right now');
 });
+
+/* ---- the PAPER account (2026-09-27 accounts/paper plan, Task 2) ---- */
+const PAPER_ACCT = acct('paper', 'PAPER', 'paper', {
+  positions: [{ symbol: 'NQZ6', net: 1, avg_price: 30900, root: 'NQ', point_value: 20 }],
+  orders: [{ order_id: '3', symbol: 'NQZ6', side: 'Sell', type: 'Stop', qty: 1, price: null, stop_price: 30885, owner: null, role: 'sl' }],
+  fills: [{ id: 1, order_id: '1', symbol: 'NQZ6', side: 'Buy', qty: 1, price: 30900, time: '2026-09-22T13:31:12.000Z', owner: null }] });
+
+test('PAPER: withPaper appends the paper account to the desk state, never twice, and never without a desk state', () => {
+  const m = T.withPaper(STATE, PAPER_ACCT);
+  assert.deepEqual(m.accounts.map((a) => a.id), ['sim041', 'sim047', 'live099', 'paper']);
+  assert.equal(m.bot, STATE.bot);
+  assert.equal(STATE.accounts.length, 3, 'the desk state itself is untouched');
+  assert.deepEqual(T.withPaper(m, PAPER_ACCT).accounts.map((a) => a.id), ['sim041', 'sim047', 'live099', 'paper']);
+  assert.equal(T.withPaper(null, PAPER_ACCT), null, 'desk down: nothing trades, PAPER included (fail closed)');
+  assert.equal(T.withPaper(STATE, null), STATE);
+  assert.equal(T.withPaper(STATE, { ...PAPER_ACCT, id: 'sim047' }), STATE, 'only the paper id ever joins');
+});
+
+test('PAPER: splitSend sends the paper part to the paper book only, and a Kill to the desk only', () => {
+  const body = { client_id: 'c1', accounts: ['sim041', 'paper'], root: 'NQ', side: 'Buy', qty: 1, type: 'Market' };
+  assert.deepEqual(T.splitSend('order', body), { desk: { ...body, accounts: ['sim041'] }, paper: { ...body, accounts: ['paper'] } });
+  assert.deepEqual(T.splitSend('flatten', { client_id: 'c', accounts: ['paper'], root: 'NQ' }),
+    { desk: null, paper: { client_id: 'c', accounts: ['paper'], root: 'NQ' } });
+  assert.deepEqual(T.splitSend('cancel', { client_id: 'c', account: 'paper', order_id: '3' }).desk, null);
+  assert.deepEqual(T.splitSend('modify', { client_id: 'c', account: 'sim041', order_id: '11', price: 1 }).paper, null);
+  assert.deepEqual(T.splitSend('bot-kill', { client_id: 'k', strategy: 'nq930' }), { desk: { client_id: 'k', strategy: 'nq930' }, paper: null });
+});
+
+test('PAPER: routeSend never calls the desk for a paper-only action (and never the paper book for a desk-only one)', async () => {
+  const calls = [];
+  const send = { desk: (a, b) => calls.push(['desk', a, b.accounts || b.account]), paper: (a, b) => calls.push(['paper', a, b.accounts || b.account]) };
+  await T.routeSend('order', { client_id: 'c', accounts: ['paper'], root: 'NQ', side: 'Buy', qty: 1, type: 'Market' }, send);
+  await T.routeSend('cancel', { client_id: 'c', account: 'paper', order_id: '3' }, send);
+  assert.deepEqual(calls, [['paper', 'order', ['paper']], ['paper', 'cancel', 'paper']]);
+  calls.length = 0;
+  await T.routeSend('flatten', { client_id: 'c', accounts: ['sim041'], root: 'NQ' }, send);
+  assert.deepEqual(calls, [['desk', 'flatten', ['sim041']]]);
+});
+
+test('PAPER: a chart with PAPER trades it like any account -- and Bar Replay stops it like any account', () => {
+  const desk = { state: T.withPaper(STATE, PAPER_ACCT), down: null };
+  const m = T.tradeMode(desk, { accounts: ['paper'] });
+  assert.deepEqual(m, { mode: 'on', reason: '', accounts: ['paper'] });
+  assert.equal(T.armedMode(m, desk.state, new Set()), m, 'never LIVE: no arm needed');
+  assert.equal(T.replayGuard(m, true).mode, 'none');
+  assert.deepEqual(T.tradeMode({ state: null, down: 'x' }, { accounts: ['paper'] }).mode, 'down');
+});
+
+test('PAPER: its lines never merge with a desk account\'s, and carry its tag and the paper colour', () => {
+  const st = T.withPaper(STATE, PAPER_ACCT), Pp = { ...P, paper: '#7E57C2' };
+  const pos = T.linesFor(st, 'NQ', ['paper', 'sim047']).filter((g) => g.kind === 'position');
+  const paper = pos.find((g) => g.paper), desk = pos.find((g) => !g.paper && g.editable);
+  assert.ok(paper && desk && paper.key !== desk.key, 'same side and price, still two lines');
+  assert.deepEqual(paper.legs.map((l) => l.account), ['paper']);
+  assert.match(T.lineText(paper, 30910), /^LONG 1 · \+\$200 · PAPER$/);
+  assert.equal(T.lineColor(paper, Pp), '#7E57C2');
+  assert.equal(T.lineColor(desk, Pp), P.up);
+  const sl = T.linesFor(st, 'NQ', ['paper']).find((g) => g.paper && g.kind === 'sl');
+  assert.equal(T.lineColor(sl, Pp), '#7E57C2');
+  const mk = T.fillMarkers(st, 'NQ', ['paper'], Pp);
+  assert.deepEqual(mk.map((x) => [x.color, x.text]), [['#7E57C2', 'PAPER']]);
+});

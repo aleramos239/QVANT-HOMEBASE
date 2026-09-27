@@ -146,9 +146,21 @@ function guardedSend(action, gate, buildBody) {
     if (m.mode !== 'on') { D().toast('err', m.reason); return null; }
     const body = buildBody(m);
     if (body == null) return null;
-    if (Array.isArray(body)) return body.reduce((p, one) => p.then(() => D().send(action, one)), Promise.resolve());
-    return D().send(action, body);
+    if (Array.isArray(body)) return body.reduce((p, one) => p.then(() => sendRouted(action, one)), Promise.resolve());
+    return sendRouted(action, body);
   }).catch((e) => console.error(e)).finally(() => setInFlight(false));
+}
+/* The one place a gated action leaves the page (2026-09-27 accounts/paper plan, Task 2): HBTrade.routeSend splits
+   it -- the desk's accounts to HBDeskClient.send, the PAPER account to HBPaperClient.send (POST /api/paper/*,
+   never the desk). Both parts ride the same gate, confirm and in-flight lock above. */
+function sendRouted(action, body) { return T.routeSend(action, body, { desk: (a, b) => D().send(a, b), paper: paperSend }); }
+function paperSend(action, body) {
+  const Pc = window.HBPaperClient;
+  if (!Pc || !Pc.send) { D().toast('err', 'PAPER is not available on this page — nothing sent'); return null; }
+  return Pc.send(action, body).then(({ status, data }) => {
+    for (const t of T.resultToasts(action, status, data, D().state)) D().toast(t.tone, t.text);
+    return data;
+  });
 }
 
 /* ---- small helpers ---- */
@@ -604,6 +616,10 @@ function mount(pg) {
     });
   }
   registerChartMenuTrading();
+  if (window.HBPaperClient && window.HBPaperClient.onFill) {
+    // a fill of a PAPER order this page placed, like the desk's own fill toast (deskclient.js)
+    window.HBPaperClient.onFill((f) => D().toast('ok', T.fillText({ account: T.PAPER_ID, fill: f }, D().state, tickFor(T.rootOf(f.symbol)))));
+  }
 }
 
 window.HBTradeUI = { mount, placeOrder, symbolAction, flattenAccount, cancelOrder, closeLine, moveLine, confirm, busy,

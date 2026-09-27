@@ -403,8 +403,8 @@ function accountChips(state, accounts, activeIds) {
   });
 }
 
-/* An account's env as its chip: LIVE (red), DEMO (grey), PAPER (amber -- Task 2's virtual account), or '?' for
-   an env the desk did not give (an account it does not list). */
+/* An account's env as its chip: LIVE (red), DEMO (grey), PAPER (the paper colour -- Task 2's virtual account), or
+   '?' for an env the desk did not give (an account it does not list). */
 const ENV_CHIPS = { live: 'LIVE', demo: 'DEMO', paper: 'PAPER' };
 function envChip(env) { return ENV_CHIPS[String(env || '')] || '?'; }
 
@@ -602,11 +602,12 @@ function linesFor(state, root, editable) {
     g.legs.push(leg);
   };
   for (const a of accountsOf(state)) {
-    const ed = mine.has(a.id), pre = ed ? 'e' : 'v';
+    // the PAPER account's lines are never merged with a desk account's (Task 2): they carry its tag and colour
+    const paper = a.env === 'paper', ed = mine.has(a.id), pre = (ed ? 'e' : 'v') + (paper ? 'p' : ''), pp = paper ? { paper: true } : {};
     const who = short(a), pos = (a.positions || []).filter((p) => p.root === root && p.net);
     for (const p of pos) {
       const s = p.net > 0 ? 1 : -1;
-      add(`${pre}|position|${s}|${p.avg_price}`, { kind: 'position', side: s > 0 ? 'Buy' : 'Sell', price: p.avg_price, editable: ed },
+      add(`${pre}|position|${s}|${p.avg_price}`, { kind: 'position', side: s > 0 ? 'Buy' : 'Sell', price: p.avg_price, editable: ed, ...pp },
         { account: a.id, who, qty: Math.abs(p.net), avg: p.avg_price, s, pv: p.point_value ?? null, symbol: p.symbol });
     }
     for (const o of a.orders || []) {
@@ -617,7 +618,7 @@ function linesFor(state, root, editable) {
       const kind = !exit ? 'order' : /stop/i.test(o.type) ? 'sl' : /limit/i.test(o.type) ? 'tp' : 'order';
       const limit = o.type === 'StopLimit' ? o.price ?? null : undefined;   // drawn at the trigger, labelled with both
       add(`${pre}|${kind}|${o.side}|${o.type}|${at}${limit !== undefined ? `|${limit}` : ''}`,
-        { kind, side: o.side, type: o.type, price: at, editable: ed, ...(limit !== undefined ? { limit } : {}) },
+        { kind, side: o.side, type: o.type, price: at, editable: ed, ...pp, ...(limit !== undefined ? { limit } : {}) },
         { account: a.id, who, qty: Number(o.qty) || 0, order_id: String(o.order_id),
           avg: p ? p.avg_price : null, s: p ? (p.net > 0 ? 1 : -1) : 0, pv: p ? p.point_value ?? null : null });
     }
@@ -650,7 +651,9 @@ function lineText(g, last) {
   if (g.kind === 'order') return [lineLabel(g), whoText(g), view].filter(Boolean).join(' · ');
   return [lineLabel(g), usd(linePnl(g, last)), whoText(g), view].filter(Boolean).join(' · ');
 }
+const PAPER_COLOR = '#7E57C2';   // charts.css --paper (light); cell.js's palette carries the theme's own as P.paper
 function lineColor(g, P) {
+  if (g.paper) return P.paper || PAPER_COLOR;   // a PAPER line: the paper colour whatever its kind (its text says which)
   if (g.kind === 'position') return g.side === 'Buy' ? P.up : P.down;
   if (g.kind === 'sl') return P.down;
   if (g.kind === 'tp') return P.up;
@@ -721,9 +724,9 @@ function fillMarkers(state, root, ids, P) {
     for (const f of a.fills || []) {
       const ms = Date.parse(f.time);
       if (f.owner || rootOf(f.symbol) !== root || !Number.isFinite(ms)) continue;
-      const buy = f.side === 'Buy';
+      const buy = f.side === 'Buy', paper = a.env === 'paper';   // a PAPER fill: tagged, in the paper colour (Task 2)
       out.push({ id: `f${a.id}:${f.id}`, ms, price: f.price, position: buy ? 'atPriceBottom' : 'atPriceTop',
-        shape: buy ? 'arrowUp' : 'arrowDown', color: buy ? P.accent : P.down, text: '' });
+        shape: buy ? 'arrowUp' : 'arrowDown', color: paper ? P.paper || PAPER_COLOR : buy ? P.accent : P.down, text: paper ? 'PAPER' : '' });
     }
   }
   return out;
@@ -1335,6 +1338,42 @@ function accountRows(state, quotes) {
   });
 }
 
+/* ---- the PAPER account (2026-09-27 accounts/paper plan, Task 2) ----
+   The chart service's own paper book (paperbook.py) is one more account the page trades exactly like a desk one.
+   It joins the desk's state as the page sees it (withPaper), so every existing path -- modes, the LIVE-arm rules
+   (it is never LIVE), lines, markers, the confirm dialog, the bottom panel -- treats it as an account; only the
+   SEND is split (splitSend / routeSend): its part goes to POST /api/paper/{action} through HBPaperClient, never to
+   the desk. It has no separate switch of its own: like any account it needs the desk's state (a desk that is down or
+   has chart trading off stops PAPER too -- fail closed, one rule for every account). */
+const PAPER_ID = 'paper';
+/* The desk's state with the PAPER account appended; the state itself (null while the desk is down), untouched, when
+   there is no paper account yet. Never mutates either argument. */
+function withPaper(state, paperAcct) {
+  if (!state || !isObj(paperAcct) || paperAcct.id !== PAPER_ID) return state;
+  const list = accountsOf(state).filter((a) => a && a.id !== PAPER_ID);   // the desk never lists it; never twice
+  return { ...state, accounts: [...list, paperAcct] };
+}
+/* One page action split by where each account lives: {desk, paper}, each a body or null. The same client_id goes to
+   both (each side de-duplicates on its own). A Kill is the desk's alone; an unknown shape goes to the desk unchanged
+   (it refuses what it does not know). */
+function splitSend(action, body) {
+  if (!isObj(body) || action === 'bot-kill') return { desk: isObj(body) ? body : null, paper: null };
+  if (Array.isArray(body.accounts)) {
+    const p = body.accounts.filter((id) => id === PAPER_ID), d = body.accounts.filter((id) => id !== PAPER_ID);
+    return { desk: d.length ? { ...body, accounts: d } : null, paper: p.length ? { ...body, accounts: p } : null };
+  }
+  if (body.account === PAPER_ID) return { desk: null, paper: body };
+  return { desk: body, paper: null };
+}
+/* Send one action through `send.desk(action, body)` and `send.paper(action, body)` by splitSend: a PAPER-only action
+   never calls send.desk, a desk-only one never calls send.paper. Resolves when both parts have answered. */
+function routeSend(action, body, send) {
+  const parts = splitSend(action, body), out = [];
+  if (parts.desk) out.push(Promise.resolve().then(() => send.desk(action, parts.desk)));
+  if (parts.paper) out.push(Promise.resolve().then(() => send.paper(action, parts.paper)));
+  return Promise.all(out);
+}
+
 const api = { PREFS_KEY, QUOTE_STALE_MS, BOT_NAMES, parsePrefs, prefsText, short, rootOf, orderPrice, abbr, inferType, menuText,
   roundTick, bracket, orderBody, clientId, tradeMode, quoteView, usd, money, pnl, rrText, linesFor, linePnl, lineLabel,
   lineText, lineColor, canDrag, withPrice, orderTitle, confirmOrder, actionTitle, resultToasts, fillText, fillMarkers, botName, positionRows, orderRows, fillRows, accountRows, etTime, diffRows,
@@ -1350,7 +1389,7 @@ const api = { PREFS_KEY, QUOTE_STALE_MS, BOT_NAMES, parsePrefs, prefsText, short
   PANEL_QTY_MAX, GTC_WARN, exitTriple, qtyFromRisk, exitSideError, panelOrder, sendLabel,
   parseQty, parseUsd, parseDecimal, roundTickDir, riskTicks,
   paperKey, isPaperAlgo, paperStrategyId, paperStrategiesMap, paperPill, paperToday, paperLabel, paperLines,
-  paperMarkers, paperOverlay, paperRunMarkers, paperStatsText };
+  paperMarkers, paperOverlay, paperRunMarkers, paperStatsText, PAPER_ID, withPaper, splitSend, routeSend };
 if (typeof window !== 'undefined') window.HBTrade = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

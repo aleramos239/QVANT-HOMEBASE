@@ -407,7 +407,7 @@ a { color: inherit; }
 .bp-fq-compare { padding: 8px 10px; color: var(--text-2); font-size: 12px; }
 .env { padding: 0 5px; border-radius: 4px; font-size: 11px; line-height: 16px; background: var(--hover); color: var(--text-2); }
 .env.live { background: var(--down-soft); color: var(--down); font-weight: 600; }
-.env.paper { background: var(--warn-soft); color: var(--warn); font-weight: 600; }
+.env.paper { background: var(--paper-soft); color: var(--paper); font-weight: 600; }   /* the PAPER account (Task 2) */
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--text-2); }
 .dot.ok { background: var(--up); } .dot.bad { background: var(--down); } .dot.warn { background: var(--warn); }
 

@@ -126,10 +126,16 @@ function toast(tone, text) {
   if (ms > 0) setTimeout(() => el.remove(), ms);
 }
 
+/* The desk's state as the page sees it: the PAPER account (the chart service's own paper book, HBPaperClient)
+   appended to the desk's accounts (2026-09-27 accounts/paper plan, Task 2) -- null while the desk is down. `send`
+   below stays the desk's alone: HBTradeUI splits a PAPER part off to HBPaperClient before anything reaches it. */
+function merged() { return T.withPaper(desk.state, window.HBPaperClient ? window.HBPaperClient.account() : null); }
+
 window.HBDeskClient = {
-  get state() { return desk.state; }, get down() { return desk.down; }, quotes: desk.quotes,
+  get state() { return merged(); }, get down() { return desk.down; }, quotes: desk.quotes,
   get prefs() { return desk.prefs; }, setPrefs, on, onMessage, send, toast, botHistory,
-  mode: (cellTrade) => T.tradeMode(desk, cellTrade),   // ONE chart's mode, from that chart's own {accounts}
+  mode: (cellTrade) => T.tradeMode({ state: merged(), down: desk.down }, cellTrade),   // ONE chart's mode, from its own {accounts}
   gate: () => T.deskGate(desk),                        // the desk-level half alone (null: up and on)
+  bookChanged: () => emit('account'),                  // the PAPER account changed (app.js, on a /ws paperbook push)
 };
 })();

@@ -1495,6 +1495,7 @@ function connect() {
     if (m.type === 'status') { statusAt = Date.now(); showStatus(m); return; }
     if (m.type === 'desk' || m.type === 'quote') { window.HBDeskClient.onMessage(m); return; }
     if (m.type === 'paper') { window.HBPaperClient.onMessage(m); return; }
+    if (m.type === 'paperbook') { window.HBPaperClient.onBook(m); window.HBDeskClient.bookChanged(); return; }   // the PAPER account
     if (m.type === 'depth') { window.HBDomUI.onDepth(m); window.HBL2Layer.onDepth(m); window.HBLiquidity.onDepth(m); return; }
     if (m.type === 'news' || m.type === 'burst' || m.type === 'burst_update') { window.HBNewsUI.onMessage(m); return; }
     const c = cells.find((x) => x.id === m.id);

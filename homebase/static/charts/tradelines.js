@@ -245,6 +245,7 @@ class Overlay {
     const Dc = window.HBDeskClient, q = Dc.quotes[this.root];
     it.chip.text.textContent = T.lineText(it.g, q ? q.last : null);
     it.chip.style.setProperty('--c', T.lineColor(it.g, this.cell.P));
+    it.chip.classList.toggle('paper', !!it.g.paper);   // a PAPER account's line (Task 2): its colour comes via --c
   }
 
   /* ---- execution markers (ruling S22); re-set only when the fill ids change ---- */

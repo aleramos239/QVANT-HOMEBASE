@@ -336,3 +336,50 @@ test('release/4: every layout-tab path rebuilds only through loadLayout -> build
   assert.doesNotMatch(outside, /new Cell\(/);
   assert.doesNotMatch(outside, /^\s*cells = /m);
 });
+
+/* ---- the PAPER account through the REAL send path (2026-09-27 accounts/paper plan, Task 2) ---- */
+test('PAPER: the real send path routes the paper part to the paper client only; a Bar Replay chart sends to neither', async () => {
+  reset();
+  const paperSent = [];
+  const paperAcct = acct('paper', 'PAPER', 'paper', {
+    positions: [{ symbol: 'NQZ6', net: 2, avg_price: 30000, root: 'NQ', point_value: 20 }],
+    orders: [{ order_id: '5', symbol: 'NQZ6', side: 'Sell', type: 'Limit', qty: 2, price: 30010, stop_price: null, owner: null }] });
+  const was = desk.state;
+  desk.state = T.withPaper(STATE, paperAcct);
+  global.window.HBPaperClient = {
+    send(action, body) { paperSent.push({ action, body }); return Promise.resolve({ status: 200, data: { results: { paper: { ok: true, order_id: '9' } } } }); },
+  };
+  try {
+    const mixed = chart(['sim041', 'paper']);
+    UI.placeOrder({ cell: mixed, root: 'NQ', side: 'Buy', type: 'Market', qty: 1 });   // one-click on
+    await flush(); await flush();
+    assert.deepEqual(desk.sent.map((s) => s.body.accounts), [['sim041']], 'the desk never sees PAPER');
+    assert.deepEqual(paperSent.map((s) => [s.action, s.body.accounts]), [['order', ['paper']]]);
+    assert.equal(desk.sent[0].body.client_id, paperSent[0].body.client_id);
+    assert.ok(desk.toasts.includes('PAPER · order accepted'));
+
+    reset(); paperSent.length = 0;
+    const paperOnly = chart(['paper']);
+    UI.symbolAction(paperOnly, 'flatten', 'NQ');
+    await flush(); await flush();                            // one action in flight at a time (the page-wide lock)
+    const line = T.linesFor(desk.state, 'NQ', ['paper']).find((g) => g.kind === 'tp');
+    UI.closeLine(paperOnly, line, 'NQ', 0.25);
+    await flush(); await flush();
+    UI.flattenAccount('paper', 'NQ');                        // the bottom panel's per-account Close
+    await flush(); await flush();
+    assert.equal(desk.sent.length, 0, 'a PAPER-only chart makes no desk call at all');
+    assert.deepEqual(paperSent.map((s) => s.action), ['flatten', 'cancel', 'flatten']);
+    assert.deepEqual(paperSent[1].body, { client_id: paperSent[1].body.client_id, account: 'paper', order_id: '5' });
+
+    reset(); paperSent.length = 0;
+    RUI.onState(paperOnly, { id: 'c1', date: '2026-09-24', cursor_ms: 0, speed: 1, playing: true });   // Bar Replay
+    UI.placeOrder({ cell: paperOnly, root: 'NQ', side: 'Buy', type: 'Market', qty: 1 });
+    UI.symbolAction(paperOnly, 'flatten', 'NQ');
+    await flush();
+    assert.equal(paperSent.length + desk.sent.length, 0, 'a replaying chart never reaches the paper book either');
+    assert.deepEqual(desk.toasts, ['Replay — trading is off', 'Replay — trading is off']);
+  } finally {
+    desk.state = was;
+    delete global.window.HBPaperClient;
+  }
+});
