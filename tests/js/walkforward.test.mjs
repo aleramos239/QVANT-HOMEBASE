@@ -11,14 +11,22 @@ const GATE = { key: 'adx_gate', label: 'ADX(14) trend gate', type: 'bool', defau
 const STRAT = { id: 'nq930', name: 'NQ 9:30 straddle', root: 'NQ', inputs: [OFF, SL, GATE] };
 const ROWS = [{ key: 'offset_pts', text: '10, 12' }, { key: 'sl_pts', text: '5' }, { key: '', text: '' }];
 
-test('wfBody: the grid body plus metric and min_trades, never a range or a holdout', () => {
-  const f = { ...X.defaults(STRAT), holdout: { on: true, reason: 'x' }, range: { kind: 'custom', start: '2025-01-01', end: '2025-06-30' } };
+test('wfBody: the grid body plus metric, min_trades and the ratio the picker chose', () => {
+  const f = { ...X.defaults(STRAT), range: { id: 'custom', start: '2025-01-01', end: '2025-06-30', wf: 2 } };
   const b = X.wfBody(f, X.gridAxes(ROWS, STRAT).axes, 'sharpe', 3);
   assert.deepEqual(b.axes, [{ key: 'offset_pts', values: [10, 12] }, { key: 'sl_pts', values: [5] }]);
   assert.equal(b.metric, 'sharpe');
   assert.equal(b.min_trades, 3);
   assert.deepEqual(b.inputs, { adx_gate: false });
-  assert.ok(!('range' in b) && !('holdout' in b));
+  assert.ok(!('holdout' in b));
+  // the window rides along: the walk-forward runs over whatever the picker shows
+  assert.deepEqual(b.range, { kind: 'custom', start: '2025-01-01', end: '2025-06-30' });
+  // the ratio is part of the REQUEST, so it is part of the job's identity -- switching it can
+  // never leave the other ratio's result on screen
+  assert.equal(b.test_months, 2);
+  assert.equal(X.wfBody({ ...f, range: { ...f.range, wf: 1 } }, X.gridAxes(ROWS, STRAT).axes, 'sharpe', 3).test_months, 1);
+  assert.equal(X.wfBody(X.defaults(STRAT), X.gridAxes(ROWS, STRAT).axes, 'net_profit', 5).test_months, 3);
+  assert.deepEqual(X.WF_RATIOS, [1, 2, 3]);
 });
 
 test('wfProblems: the grid rules plus a whole min-trades of 1 to 1000', () => {
@@ -27,7 +35,11 @@ test('wfProblems: the grid rules plus a whole min-trades of 1 to 1000', () => {
   assert.equal(X.wfProblems(f, STRAT, ROWS, 0), 'Min trades: a whole number 1 to 1000');
   assert.equal(X.wfProblems(f, STRAT, ROWS, 2.5), 'Min trades: a whole number 1 to 1000');
   assert.equal(X.wfProblems(f, STRAT, ROWS, NaN), 'Min trades: a whole number 1 to 1000');
-  assert.equal(X.wfProblems(f, STRAT, [{ key: '', text: '' }, ROWS[1], ROWS[2]], 5), 'Pick a parameter for Rows and Columns');
+  // with no axis grid at all the walk-forward says where to set one, not "Rows and Columns"
+  assert.equal(X.wfProblems(f, STRAT, [{ key: '', text: '' }, ROWS[1], ROWS[2]], 5),
+    'Pick the parameters to search on the Heat-map tab first.');
+  assert.equal(X.WF_NEEDS_GRID, 'Pick the parameters to search on the Heat-map tab first.');
+  assert.equal(X.wfProblems(f, STRAT, [ROWS[0], { key: 'offset_pts', text: '1' }, ROWS[2]], 5), 'Entry offset (pts) is picked twice');
   assert.deepEqual(X.WF_METRICS.map((m) => m[0]), ['net_profit', 'sharpe', 'profit_factor', 't_stat']);
 });
 
@@ -78,8 +90,11 @@ const RESULT = {
     { k: 1, select: '2022-02', test: ['2022-03', '2022-05'], cell: 1, params: { offset_pts: 12, sl_pts: 5 }, is: STATS(250, 5),
       oos: STATS(-60, 3), stitched: false, changed: true },
     { k: 2, select: '2022-03', test: ['2022-04', '2022-06'], cell: null, params: null, is: null, oos: null, stitched: false, changed: null }],
+  window: { start: '2022-01', end: '2022-06' },
   stitched: { stats: STATS(-480, 7, { max_drawdown: -500 }), equity: { t_ms: [], equity: [], drawdown: [] },
-    months: ['2022-02', '2022-03', '2022-04'], legs: [0] },
+    trades: [], months: ['2022-02', '2022-03', '2022-04'], legs: [0] },
+  stitched_is: { stats: STATS(500, 5), months: ['2022-01'] },
+  drop: { net_profit: -980, sharpe: -0.4 },
   phases: [{ phase: 0, steps: 1, net_profit: -480, trades: 7, sharpe: -1 }, { phase: 1, steps: 1, net_profit: -60, trades: 3, sharpe: -2 },
     { phase: 2, steps: 1, net_profit: 0, trades: 0, sharpe: 0 }],
   stability: { changes: 1, pairs: 1, distinct: 2, no_pick: 1, top: { cell: 0, count: 1 } },
@@ -87,9 +102,18 @@ const RESULT = {
 };
 const AXES = [{ key: 'offset_pts', label: 'Entry offset (pts)', values: [10, 12] }, { key: 'sl_pts', label: 'Stop loss (pts)', values: [5] }];
 
-test('wfTiles: the stitched OOS stats in dollars plus Sharpe', () => {
+test('wfTiles: both sides of the same chain -- out-of-sample, and the selection months it picked on', () => {
   const t = X.wfTiles(RESULT);
-  assert.deepEqual(t.map((x) => x.label), ['Stitched OOS net', 'Max drawdown', 'Win rate', 'Profit factor', 'Sharpe', 'Trades']);
+  assert.deepEqual(t.map((x) => x.label), ['Out-of-sample net', 'Max drawdown', 'Win rate', 'Profit factor', 'Sharpe', 'Trades']);
+  const is = X.wfTiles(RESULT, 'is');
+  assert.equal(is[0].label, 'In-sample net');
+  assert.equal(is[0].value, '+$500');
+  assert.equal(is[0].sub, '2022-01 → 2022-01');
+  assert.equal(is[5].value, '5');
+  assert.deepEqual(X.WF_SIDE_LABELS, { is: 'In-sample (selection)', oos: 'Out-of-sample' });
+  assert.equal(X.wfDrop(RESULT), `In-sample → out-of-sample: net ${M}$980 · Sharpe ${M}0.40`);
+  assert.equal(X.wfDrop({ drop: { net_profit: 120.5, sharpe: 0.25 } }), 'In-sample → out-of-sample: net +$120.50 · Sharpe +0.25');
+  assert.equal(X.wfDrop({ drop: { net_profit: -10, sharpe: null } }), `In-sample → out-of-sample: net ${M}$10 · Sharpe —`);
   assert.equal(t[0].value, `${M}$480`);
   assert.equal(t[0].tone, 'down');
   assert.equal(t[0].sub, '2022-02 → 2022-04');
@@ -110,8 +134,11 @@ test('wfStepRows: one row per monthly step, dollars and Sharpe both sides, the c
   assert.equal(rows[1].stitched, false);
   assert.deepEqual(rows[2].cells.slice(0, 3), ['2022-03', '2022-04 → 2022-06', 'no pick (no cell with ≥ 5 trades)']);
   assert.deepEqual(rows[2].cells.slice(3), ['—', '—', '—', '—', '—', '—', '—', '—', '—']);
-  assert.deepEqual(X.WF_STEP_HEADERS, ['Select', 'Test', 'Chosen params', 'IS net', 'IS trades', 'IS Sharpe',
-    'OOS net', 'OOS trades', 'OOS win %', 'OOS PF', 'OOS Sharpe', 'OOS max DD']);
+  assert.deepEqual(X.WF_STEP_HEADERS, ['Select', 'Test', 'Chosen params', 'Net', 'Trades', 'Sharpe',
+    'Net', 'Trades', 'Win %', 'PF', 'Sharpe', 'Max DD']);
+  // the two sides are named once, over the columns they span
+  assert.deepEqual(X.WF_STEP_GROUPS, [['', 3], ['In-sample (selection)', 3], ['Out-of-sample', 6]]);
+  assert.equal(X.WF_STEP_GROUPS.reduce((n, g) => n + g[1], 0), X.WF_STEP_HEADERS.length);
 });
 
 test('wfStability and wfPhases say how often the pick moved and how much the chain phase matters', () => {
@@ -119,5 +146,7 @@ test('wfStability and wfPhases say how often the pick moved and how much the cha
   assert.equal(X.wfStability({ ...RESULT, stability: { changes: 0, pairs: 0, distinct: 0, no_pick: 3, top: null } }),
     'Params changed 0 of 0 consecutive picks · 0 distinct cells · 3 months with no pick');
   assert.equal(X.wfPhases(RESULT), `Chain phase check (same picks, chain started 1 or 2 months later): phase 1 ${M}$60 · phase 2 $0`);
-  assert.equal(X.wfScheme(RESULT), 'Select on 1 month by Net $ (≥ 5 trades), test the next 3, stepping monthly · 3 steps · stitched: steps 0, 3, 6, …');
+  assert.equal(X.wfScheme(RESULT), '2022-01 → 2022-06 · Walk-forward 1:3 — select on 1 month by Net $ '
+    + '(≥ 5 trades), test the next 3, stepping monthly · 3 steps · stitched: steps 0, 3, 6, …');
+  assert.match(X.wfScheme({ ...RESULT, scheme: { ...RESULT.scheme, test_months: 1 } }), /Walk-forward 1:1 —/);
 });
