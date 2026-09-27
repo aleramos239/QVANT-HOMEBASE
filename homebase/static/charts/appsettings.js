@@ -66,6 +66,13 @@ function mount(box, host) {
   const mdErr = mk('div', 'set-why');
   mdErr.hidden = true;
   mdErr.setAttribute('role', 'alert');
+  // what /api/status says about the feed itself (fix round 2, re-review M-f): a login that
+  // connected as the other one, or the last switch that failed -- also one made in another tab
+  // or before this dialog opened
+  const mdState = mk('div', 'set-why');
+  mdState.hidden = true;
+  let feedStatus = host.status ? host.status() : null;
+  const labelOf = (v) => (MD_CHOICES.find((c) => c.value === v) || { label: v }).label;
   const applyRow = mk('div', 'set-row'), apply = mk('button', 'btn btn-primary', 'Apply');
   apply.type = 'button';
   apply.onclick = doApply;
@@ -83,6 +90,13 @@ function mount(box, host) {
     mdErr.hidden = !err;
     apply.disabled = busy || !current || staged === activeMd;
     apply.textContent = busy ? 'Applying…' : 'Apply';
+    const s = feedStatus, notes = [];
+    if (s && s.md_mismatch) notes.push(s.md_mismatch);
+    if (s && s.switch_error && !err && !busy) {   // this dialog's own failure already shows above
+      notes.push(`The last switch to ${labelOf(s.switch_error.to)} failed: ${s.switch_error.error}`);
+    }
+    mdState.textContent = notes.join(' ');
+    mdState.hidden = !notes.length;
   }
 
   async function doApply() {
@@ -122,7 +136,7 @@ function mount(box, host) {
     apSwitch.setAttribute('aria-checked', String(dark));
   }
 
-  body.append(mdCap, mdIntro, mdRows, mdNote, mdErr, mdWarn, applyRow, apCap, apRow);
+  body.append(mdCap, mdIntro, mdRows, mdNote, mdErr, mdState, mdWarn, applyRow, apCap, apRow);
   const close = mk('button', 'btn btn-ghost', 'Close');
   close.type = 'button';
   close.onclick = () => host.close();
@@ -141,7 +155,8 @@ function mount(box, host) {
   // only while idle: a switch THIS dialog just started must not have its own staged pick undone
   // by the very status tick that is about to confirm it (doApply reconciles `current` itself)
   const offStatus = host.onStatus((s) => {
-    if (busy || !current || !s || s.md == null || s.md === current.md) return;
+    if (s) feedStatus = s;
+    if (busy || !current || !s || s.md == null || s.md === current.md) { paintMd(); return; }
     current = { ...current, md: s.md };
     staged = s.md;
     paintMd();

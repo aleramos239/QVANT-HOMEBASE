@@ -310,3 +310,43 @@ test('a PUT that resolves after the dialog already closed is ignored (no repaint
   // radios stay exactly as they were left (disabled, mid-flight) -- no crash, no late repaint
   assert.ok(radios(box).every((r) => r.disabled));
 });
+
+/* Fix round 2, re-review M-f: what /api/status says about the feed shows in the dialog too. */
+function stateRow(box) {
+  return findAll(box, (c) => hasClass(c, 'set-why')).filter((c) => !/blank/.test(c.textContent))[1];
+}
+
+test('a failed switch recorded in status (another tab, before this dialog opened) shows on open', async () => {
+  const { host } = makeHost();
+  host.status = () => ({ md: 'demo', switch_error: { to: 'live', error: 'no valid live md token on disk', at: 1 } });
+  const box = new FakeEl('div');
+  AS.mount(box, host);
+  await Promise.resolve(); await Promise.resolve();
+  const row = stateRow(box);
+  assert.equal(row.hidden, false);
+  assert.match(row.textContent, /last switch to Live failed: no valid live md token/);
+});
+
+test('a status tick carrying md_mismatch shows it, and a clean tick clears it', async () => {
+  const { host, fireStatus } = makeHost();
+  const box = new FakeEl('div');
+  AS.mount(box, host);
+  await Promise.resolve(); await Promise.resolve();
+  fireStatus({ md: 'demo', md_mismatch: 'set to the demo login, but it has no valid md token: charts come from live' });
+  assert.match(stateRow(box).textContent, /charts come from live/);
+  fireStatus({ md: 'demo', md_mismatch: null, switch_error: null });
+  assert.equal(stateRow(box).hidden, true);
+});
+
+test("this dialog's own failed Apply is not repeated by the status line", async () => {
+  const { host, setNextPut, fireStatus } = makeHost();
+  const box = new FakeEl('div');
+  AS.mount(box, host);
+  await Promise.resolve(); await Promise.resolve();
+  setNextPut(Promise.resolve({ ok: false, error: 'no live token' }));
+  radios(box).find((r) => r.value === 'live').onchange();
+  await apply(box).onclick();
+  fireStatus({ md: 'demo', switch_error: { to: 'live', error: 'no live token', at: 1 } });
+  assert.match(errRow(box).textContent, /no live token/);
+  assert.equal(stateRow(box).hidden, true);
+});

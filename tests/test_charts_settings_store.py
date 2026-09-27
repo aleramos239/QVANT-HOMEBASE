@@ -79,3 +79,15 @@ def test_m6_a_write_that_cannot_be_read_back_raises_rather_than_silently_losing_
     store.set_md("live")
     assert calls, "set_md must fsync the temp file before the atomic rename"
     assert SettingsStore(path).get() == {"md": "live"}
+
+
+def test_the_env_default_is_normalised_and_an_unknown_value_is_demo():
+    """Re-review M-a: "LIVE" means live; anything unrecognised is demo, what it always got."""
+    import os
+    import subprocess
+    import sys
+    for raw, want in (("LIVE", "live"), (" live ", "live"), ("demo", "demo"), ("paper", "demo")):
+        out = subprocess.run([sys.executable, "-c", "from homebase.charts import MD_ENV; print(MD_ENV)"],
+                             capture_output=True, text=True, check=True,
+                             env={**os.environ, "HOMEBASE_CHARTS_MD": raw}).stdout.strip()
+        assert out == want, raw

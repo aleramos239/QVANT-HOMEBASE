@@ -79,8 +79,9 @@ BOT_BUSY_STATUSES = ("placing", "placed", "live", "error")   # C3: trading.BOT_B
 MD_SWITCH_MARGIN_START = dt.time(9, 15)   # I4: a margin before QUIET[0] itself -- a switch's own
                                           # duration is unbounded (connect + up to 11 getChart
                                           # timeouts + p-ticket retries), so QUIET[0] is too late
-MD_SWITCH_COOLDOWN_S = 300         # I3: at most one switch ATTEMPT every 5 min
-MD_SWITCH_BUDGET_HEADROOM = 120    # I3: refuse a switch once the active login is this close to 180/h
+MD_SWITCH_COOLDOWN_S = 600         # I3: at most one switch ATTEMPT every 10 min
+MD_SWITCH_BUDGET_HEADROOM = 120    # I3/N4: refuse a switch once the TARGET login is this close to 180/h
+MD_SWITCH_TIMEOUT_S = 600          # N3: the PUT never waits longer than this for the feed
 
 
 def log(msg: str) -> None:
@@ -830,6 +831,8 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         already changed once). None means that login currently has no valid md token, i.e. a
         switch to it would fail (this also surfaces a C2 mismatch before it's ever attempted)."""
         d = settings_store.get()
+        if getattr(feed, "switch_in_progress", False):
+            d["md"] = feed.md_env   # the file already names the target; the feed is not there yet
         try:
             accts = T.accounts_by_env()
         except Exception:  # noqa: BLE001 — a broken config must never break the dialog, only omit the note
@@ -841,18 +844,19 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
     @app.put("/api/settings")
     async def put_settings(request: Request):
         """{"md": "live"|"demo"}: switches the chart feed's md login in place (TickFeed.switch_md)
-        and, only once that succeeds, persists the choice. JSON-only (like the desk proxy) on top
+        and persists the choice (written first, put back if the switch fails). JSON-only (like the desk proxy) on top
         of the Host check every /api/* route already gets from HostGuard.
 
         Refused, in order: a bad body (400); replay, which has no switchable feed (503); a switch
         already in flight (409, TickFeed's own SwitchInProgress); a cooldown since the last
         ATTEMPT, successful or not (429, review I3 -- a switch costs roughly 2 requests per root,
         subscribe plus its gap refill, so unthrottled clicking can spend the whole hourly budget
-        in under ten); the active login too close to its own hourly budget to afford one more
+        in under ten); the TARGET login too close to its own hourly budget to afford one
         switch's worth of requests (429); the 09:20-09:35 ET weekday window or a bot working
         (423). Any OTHER failure -- a bad connect, an environment mismatch, every root refused,
         the window opening mid-switch -- is TickFeed's own RuntimeError (502); nothing else is
-        allowed to reach this route as an unhandled 500."""
+        allowed to reach this route as an unhandled 500. A feed that has not answered in
+        MD_SWITCH_TIMEOUT_S is 504; the switch still finishes and keeps the file right."""
         bad = netguard.refusal(request.method, request.scope["headers"], netguard.allowlist())
         if bad is not None:
             raise HTTPException(*bad)
@@ -866,44 +870,61 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         md = body["md"]
         if not hasattr(feed, "switch_md"):
             raise HTTPException(503, "the market-data login can't be switched here (replay)")
+        if getattr(feed, "switch_in_progress", False):
+            # before the no-op path: its write would overwrite the file the switch in flight
+            # already wrote, and a landing switch would then disagree with it
+            raise HTTPException(409, "a market-data login switch is already in progress")
         if md == getattr(feed, "md_env", None):
             settings_store.set_md(md)   # already on it -- still make the file agree
             return settings_store.get()
-        if getattr(feed, "switch_in_progress", False):
-            raise HTTPException(409, "a market-data login switch is already in progress")
         now_s = clock() / 1000
         since_last = now_s - last_md_switch_attempt[0]
         if since_last < MD_SWITCH_COOLDOWN_S:
             wait = int(MD_SWITCH_COOLDOWN_S - since_last)
             raise HTTPException(429, f"switching logins is limited to once every "
                                      f"{MD_SWITCH_COOLDOWN_S // 60:.0f} minutes — try again in {wait}s")
-        if feed.budget_used() + 2 * len(roots) > MD_SWITCH_BUDGET_HEADROOM:
-            raise HTTPException(429, "the active login is close to its hourly market-data budget "
+        if feed.budget_used(md) + 2 * len(roots) > MD_SWITCH_BUDGET_HEADROOM:
+            # N4: the switch's getCharts and gap refills are spent on the login switched TO
+            raise HTTPException(429, f"the {md} login is close to its hourly market-data budget "
                                      "— try again after it resets")
         reason = md_switch_refused()
         if reason:
             raise HTTPException(423, reason)
         last_md_switch_attempt[0] = now_s   # counts the ATTEMPT, whatever it ends up doing
         previous_md = feed.md_env
+
+        async def switch_and_save() -> None:
+            """The file is written FIRST (a write failure then switches nothing) and put back
+            if the switch fails -- so the file, status() and the dialog never disagree, and no
+            second switch is ever needed to undo one (re-review M-d). Runs as its own task: a
+            PUT that times out or is dropped does not cut the bookkeeping short."""
+            try:
+                settings_store.set_md(md)
+            except Exception as e:  # noqa: BLE001
+                raise RuntimeError(f"could not save the setting ({type(e).__name__}: {e}) — "
+                                   "nothing was switched") from None
+            try:
+                await feed.switch_md(md)
+            except BaseException:
+                try:
+                    settings_store.set_md(previous_md)
+                except Exception as e:  # noqa: BLE001
+                    log(f"md switch failed AND the setting could not be put back: {e}")
+                raise
+
+        job = asyncio.ensure_future(switch_and_save())
+        job.add_done_callback(lambda t: t.cancelled() or t.exception())   # never "never retrieved"
         try:
-            await feed.switch_md(md)
+            await asyncio.wait_for(asyncio.shield(job), MD_SWITCH_TIMEOUT_S)
+        except asyncio.TimeoutError:
+            raise HTTPException(504, "the market-data switch is taking too long — its outcome "
+                                     "will show in Settings") from None
         except SwitchInProgress as e:
             raise HTTPException(409, str(e)) from None
         except RuntimeError as e:
             raise HTTPException(502, str(e)) from None
         except Exception as e:  # noqa: BLE001 — belt & suspenders: this route must never 500
             raise HTTPException(502, f"{type(e).__name__}: {e}") from None
-        try:
-            settings_store.set_md(md)
-        except Exception as e:  # noqa: BLE001 — review M6: the feed already switched; a failed
-                                # write must not leave it agreeing with a stale file on the next
-                                # restart, so roll the FEED back to what the file still says
-            try:
-                await feed.switch_md(previous_md)
-            except Exception:  # noqa: BLE001 — best-effort: the write failure is the one reported
-                pass
-            raise HTTPException(502, f"the switch worked but saving it failed "
-                                     f"({type(e).__name__}: {e}) — kept the previous login") from None
         return settings_store.get()
 
     @app.get("/api/layouts")

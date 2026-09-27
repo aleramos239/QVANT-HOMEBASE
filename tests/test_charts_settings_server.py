@@ -370,19 +370,14 @@ def test_m2_get_settings_carries_an_accounts_block(tmp_path):
         assert d["accounts"] == {"live": None, "demo": None}
 
 
-# ---- M6: a settings.json write failure after a successful switch rolls the FEED back too ----
+# ---- M6 / M-d: the file is written first and put back on failure; never a second switch ----
 
-def test_m6_a_write_failure_after_a_successful_switch_rolls_the_feed_back(tmp_path):
+def test_m6_a_write_failure_switches_nothing(tmp_path):
     from homebase.charts import settings_store as settings_store_mod
-
-    # a fresh socket per connect (real TradovateWS would be a new connection too) -- the
-    # rollback reconnects "demo" a second time, after the first demo_ws was already closed
-    async def md_connect(env):
-        return FakeMdWS(env)
-
-    app = create_app(roots=["NQ", "ES"], base=archive(tmp_path), state=tmp_path / "state",
-                     now_ms=lambda: session_ms(D, 9, 45), md_connect=md_connect)
+    connects = {"demo": FakeMdWS("demo"), "live": FakeMdWS("live")}
+    app = app_with(tmp_path, connects)
     with TestClient(app, base_url=BASE_URL) as c:
+        wait_for(lambda: connects["demo"].sent)
         monkey = settings_store_mod.SettingsStore.set_md
 
         def boom(self, md):
@@ -392,9 +387,127 @@ def test_m6_a_write_failure_after_a_successful_switch_rolls_the_feed_back(tmp_pa
             r = c.put("/api/settings", json={"md": "live"})
         finally:
             settings_store_mod.SettingsStore.set_md = monkey
-        assert r.status_code == 502
-        assert "kept the previous login" in r.json()["detail"]
-        # the FEED itself rolled back to demo (not left switched with a stale file underneath)
+        assert r.status_code == 502 and "nothing was switched" in r.json()["detail"]
+        assert connects["calls"] == ["demo"]                 # the live login was never touched
         st = c.get("/api/status").json()
-        assert st["md"] == "demo" and st["connected"]
+        assert st["md"] == "demo" and st["connected"] and st["switch_error"] is None
         assert c.get("/api/settings").json()["md"] == "demo"
+
+
+def test_md_a_failed_switch_puts_the_file_back_and_all_three_agree(tmp_path):
+    from homebase.charts.settings_store import SettingsStore
+    demo_ws = FakeMdWS("demo")
+    app = app_with(tmp_path, {"demo": demo_ws, "live": RuntimeError("no live token")})
+    with TestClient(app, base_url=BASE_URL) as c:
+        wait_for(lambda: demo_ws.sent)
+        r = c.put("/api/settings", json={"md": "live"})
+        assert r.status_code == 502 and "no live token" in r.json()["detail"]
+        assert SettingsStore(tmp_path / "state" / "settings.json").get() == {"md": "demo"}
+        assert c.get("/api/settings").json()["md"] == "demo"
+        st = c.get("/api/status").json()
+        assert st["md"] == "demo" and st["switch_error"]["to"] == "live"
+
+
+# ---- N2 end to end: a failed switch leaves the served socket, its depth and its budget alone ----
+
+def test_n2_a_failed_switch_neither_reconnects_nor_moves_depth(tmp_path):
+    demo_ws = FakeMdWS("demo")
+
+    class Refusing(FakeMdWS):
+        async def request(self, ep, body=""):
+            self.sent.append((ep, body))
+            return {"errorText": "no entitlement"}
+
+    cand = Refusing("live")
+    connects = {"demo": demo_ws, "live": cand}
+    app = app_with(tmp_path, connects, depth_roots=("NQ",))
+    with TestClient(app, base_url=BASE_URL) as c:
+        wait_for(lambda: any(ep == "md/subscribeDOM" for ep, _ in demo_ws.sent))
+        n_demo = len(demo_ws.sent)
+        r = c.put("/api/settings", json={"md": "live"})
+        assert r.status_code == 502 and "refused every symbol" in r.json()["detail"]
+        time.sleep(0.3)                                      # run() and Depth take their next steps
+        assert connects["calls"] == ["demo", "live"]         # no reconnect of either login
+        assert len(demo_ws.sent) == n_demo and demo_ws.connected   # no resubscribe, no DOM again
+        assert not any(ep == "md/subscribeDOM" for ep, _ in cand.sent)   # depth never followed it
+        assert not cand.connected
+        st = c.get("/api/status").json()
+        assert st["connected"] and st["md"] == "demo" and st["reconnects"] == 0
+
+
+# ---- N4: the budget headroom is checked against the login being switched TO ----
+
+def test_n4_the_budget_headroom_is_the_target_logins(tmp_path):
+    demo_ws, live_ws = FakeMdWS("demo"), FakeMdWS("live")
+    app = app_with(tmp_path, {"demo": demo_ws, "live": live_ws})
+    with TestClient(app, base_url=BASE_URL) as c:
+        from homebase.charts import server as server_mod
+        wait_for(lambda: demo_ws.sent)
+        real = server_mod.TickFeed.budget_used
+
+        def only_live_is_busy(self, env=None):
+            return server_mod.MD_SWITCH_BUDGET_HEADROOM if env == "live" else real(self, env)
+        server_mod.TickFeed.budget_used = only_live_is_busy
+        try:
+            r = c.put("/api/settings", json={"md": "live"})
+        finally:
+            server_mod.TickFeed.budget_used = real
+        assert r.status_code == 429 and "live login" in r.json()["detail"]
+        assert c.get("/api/settings").json()["md"] == "demo"
+
+
+def test_n3_a_switch_that_outlasts_the_timeout_is_504_and_still_lands_consistently(tmp_path):
+    from homebase.charts import server as server_mod
+    from homebase.charts.settings_store import SettingsStore
+    entered, release = threading.Event(), threading.Event()
+
+    async def md_connect(env):
+        if env == "live":
+            entered.set()
+            await asyncio.get_event_loop().run_in_executor(None, release.wait)
+        return FakeMdWS(env)
+
+    app = create_app(roots=["NQ", "ES"], base=archive(tmp_path), state=tmp_path / "state",
+                     now_ms=lambda: session_ms(D, 9, 45), md_connect=md_connect)
+    old = server_mod.MD_SWITCH_TIMEOUT_S
+    server_mod.MD_SWITCH_TIMEOUT_S = 0.2
+    try:
+        with TestClient(app, base_url=BASE_URL) as c:
+            r = c.put("/api/settings", json={"md": "live"})
+            assert r.status_code == 504
+            assert c.get("/api/settings").json()["md"] == "demo"   # not there yet: says so
+            release.set()
+            wait_for(lambda: c.get("/api/status").json()["md"] == "live")
+            assert c.get("/api/settings").json()["md"] == "live"
+            assert SettingsStore(tmp_path / "state" / "settings.json").get() == {"md": "live"}
+    finally:
+        server_mod.MD_SWITCH_TIMEOUT_S = old
+        release.set()
+
+
+def test_a_put_for_the_current_login_during_a_switch_is_409_not_a_file_write(tmp_path):
+    from homebase.charts.settings_store import SettingsStore
+    entered, release = threading.Event(), threading.Event()
+
+    async def md_connect(env):
+        if env == "live":
+            entered.set()
+            await asyncio.get_event_loop().run_in_executor(None, release.wait)
+        return FakeMdWS(env)
+
+    app = create_app(roots=["NQ", "ES"], base=archive(tmp_path), state=tmp_path / "state",
+                     now_ms=lambda: session_ms(D, 9, 45), md_connect=md_connect)
+    with TestClient(app, base_url=BASE_URL) as c:
+        results = {}
+        t = threading.Thread(target=lambda: results.setdefault(
+            "first", c.put("/api/settings", json={"md": "live"})))
+        t.start()
+        try:
+            assert entered.wait(5.0)
+            assert c.put("/api/settings", json={"md": "demo"}).status_code == 409
+        finally:
+            release.set()
+            t.join(5.0)
+        assert results["first"].status_code == 200
+        assert SettingsStore(tmp_path / "state" / "settings.json").get() == {"md": "live"}
+        assert c.get("/api/status").json()["md"] == "live"

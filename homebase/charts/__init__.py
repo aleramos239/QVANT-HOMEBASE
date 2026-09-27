@@ -23,7 +23,11 @@ QUIET = (dt.time(9, 20), dt.time(9, 35))
 DEFAULT_ROOTS = ("NQ", "ES", "YM", "RTY", "GC", "SI", "CL", "ZN", "NG", "HG", "BTC")
 # whose md socket feeds the charts: "demo" = the Apex eval login (default;
 # confirmed by the Task 14 spike), "live" = the live account's login
-MD_ENV = os.environ.get("HOMEBASE_CHARTS_MD", "demo")
+# ("LIVE" or " live" means live; anything unrecognised is "demo", which is what
+# it always silently got)
+MD_ENV = os.environ.get("HOMEBASE_CHARTS_MD", "demo").strip().lower()
+if MD_ENV not in ("live", "demo"):
+    MD_ENV = "demo"
 
 
 def parse_depth_roots(value: str | None) -> tuple[str, ...]:
