@@ -267,6 +267,24 @@ test('the Eval picker: one option per listed ruleset, unconfirmed ones marked', 
   assert.equal(X.DEFAULT_RULES, 'lucid-flex-50k@2026-09-27');
 });
 
+test('propShown: the saved block, a re-score in flight, a finished re-score, a stale one', () => {
+  const saved = { rules: { name: 'LucidFlex 50K' } }, pro = { rules: { name: 'LucidPro 50K' } };
+  const F = 'lucid-flex-50k@2026-09-27', P = 'lucid-pro-50k@2026-09-27';
+  const idle = { runId: null, rulesId: null, loading: false, error: '', result: null };
+  assert.deepEqual(X.propShown(saved, F, idle, 'r1'), { propsim: saved, rulesId: F, loading: false, error: '', rescored: false });
+  // picking back the run's own eval shows the saved block, not a re-score
+  assert.deepEqual(X.propShown(saved, F, { ...idle, runId: 'r1', rulesId: F }, 'r1').rescored, false);
+  // in flight: the saved numbers stay up (their header still names their eval), the picker shows the pick
+  assert.deepEqual(X.propShown(saved, F, { ...idle, runId: 'r1', rulesId: P, loading: true }, 'r1'),
+    { propsim: saved, rulesId: P, loading: true, error: '', rescored: false });
+  assert.deepEqual(X.propShown(saved, F, { ...idle, runId: 'r1', rulesId: P, result: pro }, 'r1'),
+    { propsim: pro, rulesId: P, loading: false, error: '', rescored: true });
+  assert.deepEqual(X.propShown(saved, F, { ...idle, runId: 'r1', rulesId: P, error: 'boom' }, 'r1'),
+    { propsim: saved, rulesId: F, loading: false, error: 'boom', rescored: false });
+  // a re-score for ANOTHER run never leaks onto this one
+  assert.deepEqual(X.propShown(saved, F, { ...idle, runId: 'r0', rulesId: P, result: pro }, 'r1').propsim, saved);
+});
+
 test('equity series: strictly increasing seconds', () => {
   assert.deepEqual(X.equitySeries({ t_ms: [1000, 1500, 5000], equity: [1, 2, 3], drawdown: [0, 0, -1] }), {
     equity: [{ time: 1, value: 1 }, { time: 2, value: 2 }, { time: 5, value: 3 }],

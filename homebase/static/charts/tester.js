@@ -180,6 +180,19 @@ function evalOptions(list, selected) {
   return out;
 }
 
+/* Which prop-eval block the Overview shows. `saved` is the run's own propsim.json (scored under
+   `ranUnder`); `rs` is the last re-score request {runId, rulesId, loading, error, result}. A re-score
+   applies only to the run it was asked for, and only when it names a different eval than the saved
+   one. While it is in flight the saved numbers stay up — their header still names their own eval. */
+function propShown(saved, ranUnder, rs, runId) {
+  const base = { propsim: saved, rulesId: ranUnder, loading: false, error: '', rescored: false };
+  if (!rs || rs.runId !== runId || !rs.rulesId || rs.rulesId === ranUnder) return base;
+  if (rs.error) return { ...base, error: rs.error };
+  if (rs.loading) return { ...base, rulesId: rs.rulesId, loading: true };
+  if (rs.result) return { propsim: rs.result, rulesId: rs.rulesId, loading: false, error: '', rescored: true };
+  return base;
+}
+
 /* ---- Monte Carlo (Overview sub-tab): resamples the run's own DAYS (their trades intact), never the fills ---- */
 /* "the backtest's actual path: DD −$X, worse than P% of day reshuffles" -- P = the share of resampled
    paths whose drawdown was strictly less bad (review M2: a high P = an unlucky recorded path). */
@@ -553,7 +566,7 @@ const api = { MAX_CELLS, parseValues, valueLabel, gridAxes, gridCount, gridProbl
   WF_METRICS, WF_STEP_HEADERS, wfBody, wfProblems, wfLooksText, etaText, wfProgress, wfTiles, wfStepRows, wfStability, wfPhases,
   wfScheme,
   heatLevel, cellView, gridProgress, RANGES, HOLDOUT_START, DEFAULT_RULES, REASON_MAX, defaults, restore, fromRun, reachesHoldout, problems, inputError, body,
-  key, runLabel, progress, pct, rate, num, dur, fmtEt, tiles, badges, propView, evalOptions, mcHeadline, mcTiles, mcHistogram, compareRows, paramsDiff,
+  key, runLabel, progress, pct, rate, num, dur, fmtEt, tiles, badges, propView, evalOptions, propShown, mcHeadline, mcTiles, mcHistogram, compareRows, paramsDiff,
   summaryRows, periodRows, sortTrades, tradeCells, tradeMarks, equitySeries, reachSpec, toneOf };
 if (typeof window !== 'undefined') window.HBTester = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;

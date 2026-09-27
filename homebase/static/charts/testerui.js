@@ -840,24 +840,52 @@ function tileEl(t) {
   if (t.sub) el.appendChild(page.mk('div', 'tst-tile-s', t.sub));
   return el;
 }
-function propBlock(propsim, ranUnder) {
-  const view = X.propView(propsim);
+/* ---- prop-eval re-score: the eval reads only the finished ledger, so picking another eval on a loaded
+   run re-scores it server-side (POST /api/tester/propsim, cached there) -- a VIEW, the run's saved
+   propsim.json is never overwritten. A heat-map cell re-scores via the {grid_id, cell} source its
+   Monte Carlo already tracks. ---- */
+let rescore = { runId: null, rulesId: null, loading: false, error: '', result: null };
+let rescoreToken = 0;
+function startRescore(run, rulesId) {
+  const runId = run.id, token = ++rescoreToken;
+  const src = mc.runId === runId && mc.src ? mc.src : { run_id: runId };
+  const done = (patch) => { if (token !== rescoreToken) return; rescore = { runId, rulesId, loading: false, error: '', result: null, ...patch }; if (innerTab === 'overview') refreshContent(); };
+  rescore = { runId, rulesId, loading: rulesId !== run.prop_rules, error: '', result: null };
+  if (innerTab === 'overview') refreshContent();
+  if (!rescore.loading) return;
+  fetch('/api/tester/propsim', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...src, prop_rules: rulesId }) })
+    .then(async (r) => {
+      if (r.ok) return r.json();
+      let d = '';
+      try { d = (await r.json()).detail || ''; } catch (_) { /* no body */ }
+      throw new Error(d || `request failed (${r.status})`);
+    })
+    .then((result) => done({ result }))
+    .catch((e) => done({ error: `Re-scoring failed: ${e.message || 'unknown error'}` }));
+}
+function propBlock(saved, run) {
+  const shown = X.propShown(saved, run.prop_rules, rescore, run.id);
+  const view = X.propView(shown.propsim);
   const wrap = page.mk('div', 'tst-prop');
   const head = page.mk('div', 'tst-prop-head');
   head.appendChild(page.mk('span', 'tst-prop-title', 'Prop eval' + (view.rules ? ` · ${view.rules.name}` : '')));
   if (view.unconfirmed) head.appendChild(page.mk('span', 'tst-badge warn', 'unconfirmed rules'));
-  // Pick the eval right here: it sets the eval the NEXT run is scored against (these tiles were
-  // computed server-side under `ranUnder`), so say so rather than silently restating the numbers.
+  if (shown.loading) {
+    const sp = page.mk('span', 'tst-eval-spin');
+    sp.setAttribute('role', 'status');
+    sp.setAttribute('aria-label', 'Re-scoring');
+    head.appendChild(sp);
+  }
+  // The picker re-scores THIS run under the chosen eval, and makes it the eval for the next run.
   const picker = page.mk('span', 'tst-eval-pick'), lab = page.mk('label', 'tst-cost-l', 'Eval');
-  const sel = evalSelect(form.prop_rules, (v) => { form = { ...form, prop_rules: v }; persist(); refreshHeader(); refreshContent(); });
+  const sel = evalSelect(shown.rulesId, (v) => { form = { ...form, prop_rules: v }; persist(); refreshHeader(); startRescore(run, v); });
   sel.id = 'tst-eval-sel';
   lab.htmlFor = sel.id;
   picker.append(lab, sel);
   head.appendChild(picker);
   wrap.appendChild(head);
-  if (ranUnder && form.prop_rules !== ranUnder) {
-    wrap.appendChild(page.mk('div', 'tst-caveat', `These numbers were scored under ${ranUnder} — re-run to score this strategy under the eval selected above.`));
-  }
+  if (shown.error) wrap.appendChild(page.mk('div', 'tst-err', shown.error));
+  if (shown.rescored) wrap.appendChild(page.mk('div', 'tst-caveat', `Re-scored from this run's trades; the run was saved under ${run.prop_rules}.`));
   if (view.tiles) {
     const g = page.mk('div', 'tst-tiles tst-tiles-small');
     for (const t of view.tiles) g.appendChild(tileEl(t));
@@ -947,7 +975,7 @@ function renderOverview(container) {
   const chartWrap = page.mk('div', 'tst-chart');
   container.appendChild(chartWrap);
   miniChartHandle = miniChart(chartWrap, equity, palette());
-  container.appendChild(propBlock(propsim, run.prop_rules));
+  container.appendChild(propBlock(propsim, run));
   container.appendChild(mcBlock(run.id));
 }
 

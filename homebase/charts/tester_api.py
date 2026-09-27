@@ -8,6 +8,12 @@
     GET  /api/tester/run/{id}            status + progress
     POST /api/tester/run/{id}/cancel
     GET  /api/tester/run/{id}/bundle     run (meta + report + coverage), trades, equity, plots, propsim
+    POST /api/tester/runs/{id}/propsim   {prop_rules} -> the run's prop-eval block re-scored under another
+                                          eval (same shape as the bundle's propsim). The eval reads only
+                                          the finished ledger, so a re-score IS a re-run; it is a VIEW --
+                                          the run's saved propsim.json is never overwritten. Cached per
+                                          (source, rules id, rules version).
+    POST /api/tester/propsim             the same, {run_id | grid_id + cell, prop_rules}
     GET  /api/tester/runs                recent runs, newest first
     POST /api/tester/grid                {strategy, inputs, axes: [{key, values}] x2-3, qty, commission,
                                           slippage_ticks, capital?, prop_rules?} -> {id}
@@ -57,13 +63,14 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from .. import strategies
 from ..backtest import propsim
 from ..backtest.grid import GridManager, LooksCorrupt
-from ..backtest.runner import RunManager, default_base
+from ..backtest.runner import RunManager, _run_propsim, default_base
 from ..backtest.stats import montecarlo
 from ..backtest import walkforward
 from ..backtest.walkforward import WalkForwardManager
 from ..backtest.tape import CACHE
 
 MC_CACHE = 64            # Monte Carlo results kept per service (review I3)
+PROP_CACHE = 64          # prop-eval re-scores kept per service
 _HOST_RE = re.compile(r"^(127\.0\.0\.1|localhost)(:\d+)?$", re.IGNORECASE)
 
 
@@ -297,6 +304,63 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
             while len(mc_cache) > MC_CACHE:
                 mc_cache.popitem(last=False)
         return out
+
+    prop_cache: OrderedDict = OrderedDict()
+    prop_lock = threading.Lock()
+
+    def _rescore(source: tuple, load: Callable[[], dict], rule_id) -> dict:
+        """A finished run's (or heat-map cell's) prop eval under `rule_id`, from its stored ledger.
+        The run's OWN eval returns its saved propsim.json as is; any other runs the same
+        _run_propsim a fresh run would (same seed, same paths), so the numbers equal a re-run.
+        Never writes to the run dir. A plain-`def` caller: FastAPI's threadpool, not the loop."""
+        if not isinstance(rule_id, str) or not rule_id:
+            raise HTTPException(400, "prop_rules: required")
+        try:
+            rules = propsim.load_rules(rule_id)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+        key = (source, rule_id, rules.get("version"))
+        with prop_lock:
+            if key in prop_cache:
+                prop_cache.move_to_end(key)
+                return prop_cache[key]
+        try:
+            b = load()
+        except KeyError:
+            raise HTTPException(404, "no such heat-map cell") from None
+        except ValueError as e:
+            raise HTTPException(409, str(e)) from None
+        run_meta = b["run"] or {}
+        if run_meta.get("prop_rules") == rule_id and b.get("propsim") is not None:
+            out = b["propsim"]
+        else:
+            out, _ = _run_propsim(b["trades"] or [], {"prop_rules": rule_id, "prop_rules_data": rules})
+        with prop_lock:
+            prop_cache[key] = out
+            while len(prop_cache) > PROP_CACHE:
+                prop_cache.popitem(last=False)
+        return out
+
+    @r.post("/runs/{rid}/propsim")
+    def rescore_run(rid: str, request: Request, body: dict):
+        write_ok(request)
+        known(rid)
+        return _rescore(("run", rid), lambda: manager.bundle(rid), body.get("prop_rules"))
+
+    @r.post("/propsim")
+    def rescore(request: Request, body: dict):
+        write_ok(request)
+        if "grid_id" in body or "cell" in body:
+            if "run_id" in body or "grid_id" not in body or "cell" not in body:
+                raise HTTPException(400, "either run_id, or grid_id + cell")
+            gid, cell = str(body["grid_id"]), body["cell"]
+            if isinstance(cell, bool) or not isinstance(cell, int):
+                raise HTTPException(400, "cell: a whole number")
+            known_grid(gid)
+            return _rescore(("cell", gid, cell), lambda: grids.cell_bundle(gid, cell), body.get("prop_rules"))
+        rid = str(body.get("run_id", ""))
+        known(rid)
+        return _rescore(("run", rid), lambda: manager.bundle(rid), body.get("prop_rules"))
 
     r.manager = manager   # so the chart service can stop an in-flight child on shutdown
     r.grids = grids       # likewise every grid cell's child
