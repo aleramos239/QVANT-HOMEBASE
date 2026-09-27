@@ -12,13 +12,15 @@ TickFeed.count_request, and nothing here ever asks md/getChart.
 Who is subscribed: the roots recorded (DEPTH_RECORD_ROOTS) plus the roots
 any page has a chart on; a root nobody watches any more is unsubscribed
 LINGER_S after its last viewer left, unless it is recorded. A refused
-subscription is that root's status error and is asked again every RETRY_S
-(and on every reconnect).
+subscription (an error, an errorText, a p-ticket penalty, or a reply with no
+subscriptionId) is that root's status error and is asked again every
+RETRY_S, never before a penalty's p-time, and on every reconnect.
 
 Tradovate sends a FULL snapshot per DOM event, so each event replaces the
 book. The event carries only a contractId: the subscribeDOM reply's
 subscriptionId is that contractId (the same as for subscribeQuote,
 verified live in marketdata.py), so the subscription maps it to the root.
+Only that id binds a root: a push for any other contractId is dropped.
 
 To the pages: {"type": "depth", "root", "ts", "bids", "offers"}, the top
 WIRE_LEVELS levels each side, at most one message per WIRE_MIN_S per root
@@ -272,8 +274,7 @@ class Depth:
         self._ws = None                             # the socket our subscriptions live on
         self.subscribed: dict[str, str] = {}        # root -> contract, on self._ws
         self._contract: dict[str, str] = {}         # root -> the contract its book is recorded under
-        self._cid: dict[int, str] = {}              # contractId -> root
-        self._unbound: list[str] = []               # subscribed, but the reply named no contractId
+        self._cid: dict[int, str] = {}              # contractId (the reply's subscriptionId) -> root
         self._inflight: set[str] = set()
         self.errors: dict[str, str] = {}            # root -> why its subscription was refused
         self._retry_at: dict[str, float] = {}
@@ -343,15 +344,9 @@ class Depth:
         if isinstance(cid, bool):
             return None
         try:
-            cid = int(cid)
+            return self._cid.get(int(cid))
         except (TypeError, ValueError):
             return None
-        root = self._cid.get(cid)
-        if root is None and len(self._unbound) == 1:
-            # a reply without a subscriptionId: the one unbound root is the only candidate
-            root = self._unbound.pop()
-            self._cid[cid] = root
-        return root
 
     def on_event(self, msg: dict) -> None:
         """An md socket event (on the socket reader's loop)."""
@@ -406,7 +401,6 @@ class Depth:
         self._ws = ws
         self.subscribed.clear()
         self._cid.clear()
-        self._unbound.clear()
         self._inflight.clear()
         self._retry_at.clear()                  # refused roots are asked again on every reconnect
         self.books.clear()
@@ -415,11 +409,11 @@ class Depth:
         if ws is not None and self.on_event not in ws.event_handlers:
             ws.event_handlers.append(self.on_event)
 
-    def _refuse(self, root: str, why: str) -> None:
+    def _refuse(self, root: str, why: str, wait: float = RETRY_S) -> None:
         if self.errors.get(root) != why:
             self._log(f"depth {root}: {why}")
         self.errors[root] = why
-        self._retry_at[root] = self._now() + RETRY_S
+        self._retry_at[root] = self._now() + max(RETRY_S, wait)
 
     async def _subscribe(self, ws, root: str) -> None:
         try:
@@ -439,18 +433,24 @@ class Depth:
                 return
             if ws is not self._ws:
                 return                           # answered on a socket we already left
+            if isinstance(d, dict) and d.get("p-ticket"):
+                # a penalty: refused like any other, and never asked again before its p-time
+                pt = _num(d.get("p-time")) or 0.0
+                self._refuse(root, f"{contract}: penalty (p-ticket, p-time {pt:g} s)", wait=pt)
+                return
             if isinstance(d, dict) and d.get("errorText"):
                 self._refuse(root, f"{contract}: {d['errorText']}")
                 return
-            cid = d.get("subscriptionId", d.get("contractId")) if isinstance(d, dict) else None
+            cid = d.get("subscriptionId") if isinstance(d, dict) else None
+            if isinstance(cid, bool) or not isinstance(cid, (int, str)) or not str(cid).isdigit():
+                # the id is the only way to tell whose book a push is: without it, nothing binds
+                self._refuse(root, f"{contract}: no subscriptionId in the subscribeDOM reply {d!r}"[:200])
+                return
             self.subscribed[root] = contract
             self._contract[root] = contract
+            self._cid[int(cid)] = root
             self.errors.pop(root, None)
             self._retry_at.pop(root, None)
-            try:
-                self._cid[int(cid)] = root
-            except (TypeError, ValueError):
-                self._unbound.append(root)
         finally:
             if ws is self._ws:
                 self._inflight.discard(root)
@@ -485,8 +485,6 @@ class Depth:
             contract = self.subscribed.pop(root)
             self._left_at.pop(root, None)
             self._cid = {c: r for c, r in self._cid.items() if r != root}
-            if root in self._unbound:
-                self._unbound.remove(root)
             self.books.pop(root, None)
             self._wire_due.discard(root)
             self._spawn(self._unsubscribe(ws, contract))

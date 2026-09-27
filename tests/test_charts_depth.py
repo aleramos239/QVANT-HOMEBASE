@@ -178,19 +178,45 @@ def test_dom_events_route_to_a_root_by_the_subscription_contract_id():
     assert set(d.books) == {"NQ", "ES"}
 
 
-def test_a_reply_without_a_subscription_id_binds_the_first_unknown_contract_id():
-    class NoIdWS(FakeWS):
-        async def request(self, ep, body=""):
-            self.sent.append((ep, body))
-            return {"mode": "RealTime"}
-
+def test_a_reply_without_a_subscription_id_is_a_refusal_retried_in_10_minutes():
     async def go():
-        feed, d, _ = make(record=("NQ",), ws=NoIdWS())
+        feed, d, clock = make(record=("NQ",))
+        feed.ws.refuse[NQ] = {"mode": "RealTime"}              # no subscriptionId: nothing to bind
         await connect(d)
+        st = d.status()["NQ"]
+        assert not st["subscribed"] and "subscriptionId" in st["error"]
         feed.ws.push(4242, ladder(100.0, 2), ladder(100.25, 2, down=False))
-        return d
-    d = run(go())
-    assert d.books["NQ"].bids[0] == [100.0, 5]
+        assert "NQ" not in d.books                              # never bound by guesswork
+        feed.ws.refuse.clear()
+        clock.t += 599
+        await connect(d)
+        assert subs(feed.ws) == [NQ]
+        clock.t += 1
+        await connect(d)
+        assert subs(feed.ws) == [NQ, NQ] and d.status()["NQ"]["subscribed"]
+    run(go())
+
+
+def test_a_penalty_reply_is_a_refusal_that_waits_at_least_its_p_time():
+    async def go():
+        feed, d, clock = make(record=("NQ", "ES"))
+        feed.ws.refuse[NQ] = {"p-ticket": "tk", "p-time": 900}     # longer than the 10-min retry
+        feed.ws.refuse[ES] = {"p-ticket": "tk2", "p-time": 5}      # shorter: the 10-min retry rules
+        await connect(d)
+        st = d.status()
+        assert not st["NQ"]["subscribed"] and "p-ticket" in st["NQ"]["error"]
+        assert not st["ES"]["subscribed"] and "p-ticket" in st["ES"]["error"]
+        feed.ws.refuse.clear()
+        clock.t += 600
+        await connect(d)
+        assert subs(feed.ws) == [NQ, ES, ES]
+        clock.t += 299
+        await connect(d)
+        assert subs(feed.ws) == [NQ, ES, ES]
+        clock.t += 1
+        await connect(d)
+        assert subs(feed.ws) == [NQ, ES, ES, NQ] and d.status()["NQ"]["subscribed"]
+    run(go())
 
 
 # ------------------------------------------------------------------ subscriptions
