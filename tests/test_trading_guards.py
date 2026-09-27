@@ -33,7 +33,7 @@ async def _ok(oid):
 # --- parsing ---------------------------------------------------------------------
 @pytest.mark.parametrize("patch,msg", [
     ({"side": "buy"}, "side: Buy or Sell"),
-    ({"type": "StopLimit"}, "type: Market, Limit or Stop"),
+    ({"type": "Trailing"}, "type: Market, Limit, Stop or StopLimit"),
     ({"qty": 1.5}, "qty: a whole number"),
     ({"qty": True}, "qty: a whole number"),
     ({"type": "Limit"}, "price is required"),

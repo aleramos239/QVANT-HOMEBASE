@@ -41,6 +41,11 @@ class OrderRequest:
     stop_price: Optional[float] = None
     tp_price: Optional[float] = None
     text: str = "Onyx"
+    # Appended last so positional callers are unchanged. A StopLimit entry's
+    # limit rides in `price` and its trigger HERE -- never in `stop_price`,
+    # which is the protective SL of a bracket.
+    trigger_price: Optional[float] = None
+    time_in_force: str = "Day"
 
 
 @dataclass
@@ -88,7 +93,8 @@ class BrokerAdapter(abc.ABC):
         """The bare entry order from a bracket request — protective stop/target
         prices stripped so the entry doesn't get sent with a stop attached."""
         return OrderRequest(symbol=req.symbol, side=req.side, qty=req.qty,
-                            order_type=req.order_type, price=req.price, text=req.text)
+                            order_type=req.order_type, price=req.price, text=req.text,
+                            trigger_price=req.trigger_price, time_in_force=req.time_in_force)
 
     @property
     def connected(self) -> bool:
@@ -163,6 +169,10 @@ class BrokerAdapter(abc.ABC):
         protective order ids and any protective errors ride in ``raw``."""
         if req.stop_price is None and req.tp_price is None:
             return await self.place_order(req)
+        if req.order_type in ("Stop", "StopLimit"):
+            # legging rests the SL the moment the entry is PLACED, not when it
+            # fills: for a stop entry that is the wrong side of the market
+            return OrderResult(ok=False, error="bracketed stop entries need a broker OSO")
         entry = await self.place_order(self._entry_only(req))
         if not entry.ok:
             return entry
@@ -213,6 +223,12 @@ class BrokerAdapter(abc.ABC):
         """Broker status of one order ("Working", "Filled", ...); None if
         unknown. Default: unknown."""
         return None
+
+    async def get_order_state(self, order_id: str) -> dict:
+        """{"status": get_order_status, "filled_qty": contracts this order is
+        KNOWN to have filled, or None when the adapter cannot tell (None is
+        never "0": no fill seen is not no fill)}. Default: filled unknown."""
+        return {"status": await self.get_order_status(order_id), "filled_qty": None}
 
     async def cancel_protective_orders(self, symbol: str) -> OrderResult:
         """Cancel the protective orders WE placed for `symbol` (best-effort).
