@@ -27,7 +27,7 @@ def test_status_carries_news_and_burst_shapes(tmp_path):
         assert st["news"] == {"ok": False, "last_fetch": {
             "financialjuice": {"at": None, "items": 0, "error": None},
             "truth": {"at": None, "items": 0, "error": None}}, "delay_p50_s": None}
-        assert st["bursts"] == {"roots": ["NQ"], "last": {"NQ": None}}
+        assert st["bursts"] == {"roots": ["NQ"], "last": {"NQ": None}, "now": {"NQ": None}}
 
 
 def test_the_route_serves_news_and_is_host_guarded(tmp_path):
@@ -92,3 +92,5 @@ def test_a_burst_on_the_live_tick_path_is_fanned_and_recorded_in_status(tmp_path
         assert m["root"] == "NQ" and m["dir"] == "up" and m["move_ticks"] == 40.0 and m["ratio"] == 20.0
         st = c.get("/api/status").json()
         assert st["bursts"]["last"]["NQ"]["move_ticks"] == 40.0
+        assert st["bursts"]["now"]["NQ"] == 20.0                # Task 2: the radar's current ratio
+        assert c.get("/api/bursts/now").json() == st["bursts"]["now"]

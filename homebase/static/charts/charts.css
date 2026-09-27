@@ -66,6 +66,31 @@ a { color: inherit; }
 .thumb i { border: 1.5px solid currentColor; border-radius: 2px; }
 @media (max-width: 760px) { .tb-label { display: none; } }
 
+/* ---- burst radar strip (Task 2): a thin bar under the toolbar, one chip per streamed root,
+   sorted grey/amber/red -- click one to load it on the selected chart. Collapsible; folded state
+   is a per-viewer localStorage preference (radar.js decides colour/order, app.js wires the DOM). */
+.radar { flex: none; height: 30px; display: flex; align-items: center; gap: 6px; padding: 0 8px;
+  background: var(--panel); border-top: 1px solid var(--border); overflow: hidden; }
+.radar.folded { height: 22px; }
+.radar.folded .radar-chips { display: none; }
+.radar-fold { flex: none; width: 18px; height: 18px; display: grid; place-items: center; border-radius: 4px; color: var(--text-2); }
+.radar-fold:hover { background: var(--hover); color: var(--text); }
+.radar-fold .ic { transition: transform .12s; }
+.radar.folded .radar-fold .ic { transform: rotate(180deg); }
+.radar-chips { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; overflow-x: auto; scrollbar-width: none; white-space: nowrap; }
+.radar-chips::-webkit-scrollbar { display: none; }
+.radar-chip { flex: none; display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 8px;
+  border-radius: 10px; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums;
+  background: var(--hover); color: var(--text-2); }
+.radar-chip:hover { filter: brightness(0.96); }
+:root[data-theme="dark"] .radar-chip:hover { filter: brightness(1.2); }
+.radar-chip .radar-root { color: var(--text); font-weight: 700; }
+.radar-chip.amber { background: var(--warn-soft); color: var(--warn); }
+.radar-chip.amber .radar-root { color: var(--warn); }
+.radar-chip.red { background: var(--down-soft); color: var(--down); }
+.radar-chip.red .radar-root { color: var(--down); }
+.radar-empty { color: var(--text-2); font-size: 12px; }
+
 /* ---- drawing rail + the grid of chart panels on the frame ---- */
 .main { flex: 1; min-height: 0; display: flex; gap: 4px; padding: 4px 4px 4px 0; }
 .rail { flex: none; width: 52px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 0;

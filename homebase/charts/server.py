@@ -677,6 +677,13 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
     async def api_status():
         return status()
 
+    @app.get("/api/bursts/now")
+    async def api_bursts_now():
+        # Task 2, the burst radar strip: every streamed root's current ratio, for the page's
+        # first paint before its /ws status (which carries the same thing every STATUS_S) lands.
+        # Reads BurstBook's own cached per-root ratio -- no new md request, no event-loop work.
+        return burst_book.now()
+
     @app.get("/api/symbols")
     async def api_symbols():
         return {"roots": roots, "timeframes": TIMEFRAMES}

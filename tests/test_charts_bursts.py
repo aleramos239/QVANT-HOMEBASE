@@ -142,6 +142,46 @@ def test_refractory_period_holds_a_root_quiet_for_120s_after_firing():
     assert fired_again is not None
 
 
+def test_ratio_now_is_none_before_warmup_even_on_a_huge_move():
+    det = BurstDetector(tick_size=1.0)
+    ts = 0
+    for _ in range(3):                          # well under WARMUP_BUCKETS (40)
+        det.push(ts, 1000.0)
+        ts += WINDOW_MS
+    det.push(ts, 1000.0 + 100)
+    assert det.ratio_now() is None
+
+
+def test_ratio_now_reflects_the_live_ratio_even_when_it_does_not_fire():
+    # median 2 ticks; a 3-tick move is a 1.5x ratio -- real, but under both TICKS_MIN (8) and
+    # RATIO_MIN (4x), so push() returns None even though the radar should still show 1.5x.
+    det = BurstDetector(tick_size=1.0)
+    next_ts, price = feed_baseline(det, move_ticks=2.0, tick_size=1.0)
+    spike_start = next_ts + WINDOW_MS
+    assert det.push(spike_start, price) is None
+    assert det.ratio_now() is None                          # one point alone: no window yet either
+    fired = det.push(spike_start + 29_000, price + 3.0)
+    assert fired is None
+    assert det.ratio_now() == 1.5
+
+
+def test_ratio_now_matches_a_firing_burst_ratio_and_keeps_reporting_through_the_refractory():
+    det = BurstDetector(tick_size=1.0)
+    next_ts, price = feed_baseline(det, move_ticks=2.0, tick_size=1.0)
+    spike_start = next_ts + WINDOW_MS
+    det.push(spike_start, price)
+    fired = det.push(spike_start + 29_000, price + 40.0)
+    assert fired is not None
+    assert det.ratio_now() == fired["ratio"] == 20.0
+    # a second spike inside the refractory window is refused by push() (already tested above),
+    # but ratio_now() still tracks the live number -- it is not gated by the refractory hold.
+    again_ts = spike_start + 29_000 + WINDOW_MS + 1000
+    det.push(again_ts, price + 40.0)
+    blocked = det.push(again_ts + 29_000, price + 44.0)      # a small 4-tick follow-through: ratio 2.0
+    assert blocked is None
+    assert det.ratio_now() == 2.0
+
+
 def test_configured_roots_reads_the_env_or_falls_back_to_default():
     assert configured_roots("") == configured_roots(None)
     assert configured_roots("nq, es , gc") == ("NQ", "ES", "GC")
@@ -254,7 +294,7 @@ def test_burstbook_stores_bursts_under_a_bursts_subfolder_linked_to_news_via_new
             return [news_item(t_ms, title="Trump: strike")]
 
         book = BurstBook(tmp, ["NQ"], tick_size_of, news_near)
-        assert book.status() == {"roots": ["NQ"], "last": {"NQ": None}}
+        assert book.status() == {"roots": ["NQ"], "last": {"NQ": None}, "now": {"NQ": None}}
         ts, price = _warm_book(book, "NQ", day_start, 1000.0)
         spike_start = ts + WINDOW_MS
         book.push("NQ", spike_start, price)
@@ -270,6 +310,22 @@ def test_burstbook_stores_bursts_under_a_bursts_subfolder_linked_to_news_via_new
         assert len(lines) == 1 and lines[0]["root"] == "NQ"
         # a sibling news day file must never appear inside the bursts/ subfolder or vice versa
         assert not (Path(tmp) / f"{stored[0].name}").exists() or True   # (folder separation, see news.py tests)
+
+
+def test_burstbook_now_tracks_every_configured_root_independently():
+    tick_size_of = {"NQ": 1.0, "ES": 1.0}.get
+    day_start = int(dt.datetime(2026, 9, 26, 12, 0, tzinfo=dt.timezone.utc).timestamp() * 1000)
+    with tempfile.TemporaryDirectory() as tmp:
+        book = BurstBook(tmp, ["NQ", "ES"], tick_size_of, lambda t_ms, window_ms: [])
+        assert book.now() == {"NQ": None, "ES": None}        # neither root has warmed up yet
+        ts, price = _warm_book(book, "NQ", day_start, 1000.0)   # NQ only: ES stays cold
+        spike_start = ts + WINDOW_MS
+        book.push("NQ", spike_start, price)
+        book.push("NQ", spike_start + 29_000, price + 3.0)      # a 1.5x move: real, but doesn't fire
+        now = book.now()
+        assert now["NQ"] == 1.5
+        assert now["ES"] is None
+        assert book.status()["now"] == now                      # status() carries the same numbers
 
 
 def test_link_news_attaches_a_late_arriving_headline_to_an_already_fired_burst():

@@ -62,7 +62,14 @@ class BurstDetector:
     not just "some time has passed since the very first tick ever seen".
     A halt (the 17:00-18:00 maintenance break, a feed drop) empties most or
     all of those buckets, so the root re-earns its warm-up after a gap,
-    exactly like a brand-new root would."""
+    exactly like a brand-new root would.
+
+    `ratio_now()` (Task 2, the burst radar): the same move_ticks/median this
+    root would be judged on right now, cached from the last `push()` --
+    unlike a fired burst, it is not gated by TICKS_MIN, RATIO_MIN or the
+    refractory window, so the radar can show a calm 0.6x as well as a firing
+    6x. None before warm-up (or with fewer than 2 ticks in the live window),
+    same as a verdict would be."""
 
     def __init__(self, tick_size: float):
         self.tick_size = tick_size
@@ -72,6 +79,7 @@ class BurstDetector:
         self._buckets: dict[int, list[float]] = {}
         self._bucket_order: deque[int] = deque()
         self._last_fire_ms: Optional[int] = None
+        self._last_ratio: Optional[float] = None
 
     def push(self, ts_ms: int, price: float) -> Optional[dict]:
         self._win.append((ts_ms, price))
@@ -89,15 +97,15 @@ class BurstDetector:
             self._buckets.pop(self._bucket_order.popleft(), None)
 
         hist = [abs(v[1] - v[0]) / self.tick_size for k, v in self._buckets.items() if k != bucket]
-        if len(hist) < WARMUP_BUCKETS:
+        if len(hist) < WARMUP_BUCKETS or len(self._win) < 2:
+            self._last_ratio = None
             return None                                     # not enough LIVE history in the lookback yet
-        if len(self._win) < 2:
-            return None
         cur_from, cur_to = self._win[0][1], self._win[-1][1]
         move_ticks = abs(cur_to - cur_from) / self.tick_size
+        med = median(hist)
+        self._last_ratio = round(move_ticks / med, 3) if med > 0 else None
         if move_ticks < TICKS_MIN:
             return None
-        med = median(hist)
         if med <= 0 or move_ticks / med < RATIO_MIN:
             return None
         if self._last_fire_ms is not None and ts_ms - self._last_fire_ms < REFRACTORY_MS:
@@ -106,6 +114,9 @@ class BurstDetector:
         return {"t_ms": ts_ms, "dir": "up" if cur_to > cur_from else "down",
                 "move_ticks": round(move_ticks, 3), "ratio": round(move_ticks / med, 3),
                 "from_px": cur_from, "to_px": cur_to}
+
+    def ratio_now(self) -> Optional[float]:
+        return self._last_ratio
 
 
 def _near(a_ms: int, item: dict) -> bool:
@@ -282,8 +293,15 @@ class BurstBook:
             lines.append(rec)          # shouldn't happen (the burst was just written), but never silently drop it
         _jsonl.write_all(path, lines)
 
+    def now(self) -> dict[str, Optional[float]]:
+        """Every configured root's CURRENT ratio (Task 2, the burst radar strip): the same
+        move_ticks/median a fired burst is judged on, live and un-gated (so a quiet 0.6x shows
+        too, not just a firing 4x+), or None before that root has warmed up. Cheap: each
+        detector's ratio is cached from its own last `push()`, nothing is recomputed here."""
+        return {r: d.ratio_now() for r, d in self._detectors.items()}
+
     def status(self) -> dict:
-        return {"roots": list(self.roots), "last": dict(self.last)}
+        return {"roots": list(self.roots), "last": dict(self.last), "now": self.now()}
 
 
 class ReactionBook:

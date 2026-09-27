@@ -1177,8 +1177,51 @@ function renderNextEvent() {
   if (n) { el.textContent = n.text; el.style.color = n.color; }
 }
 
+/* ---- burst radar strip (Task 2): a thin strip under the toolbar, one chip per streamed root,
+   coloured/sorted by radar.js (pure); this is only the DOM + the click-to-applySymbol wiring.
+   Chips repaint from the /ws status's `bursts.now` (showStatus, below, every STATUS_S) and once
+   up front from GET /api/bursts/now so the strip is not empty for the first couple of seconds. */
+const RADAR_FOLD_KEY = 'hb_radar_fold';
+function loadRadarFold() { try { return localStorage.getItem(RADAR_FOLD_KEY) === '1'; } catch (_) { return false; } }
+function saveRadarFold(v) { try { localStorage.setItem(RADAR_FOLD_KEY, v ? '1' : '0'); } catch (_) { /* storage off: this session only */ } }
+function renderRadar(now) {
+  const el = $('#radarChips');
+  if (!el) return;
+  const chips = window.HBRadar.radarChips(now);
+  if (!chips.length) { el.replaceChildren(mk('span', 'radar-empty', 'No burst data yet')); return; }
+  el.replaceChildren(...chips.map((c) => {
+    const b = mk('button', `radar-chip ${c.cls}`);
+    b.type = 'button';
+    b.title = `${c.root} · ${c.text} its 60-minute normal — click to load it on the selected chart`;
+    b.appendChild(mk('span', 'radar-root', c.root));
+    b.appendChild(document.createTextNode(c.text));
+    b.onclick = () => { const cell = cur(); if (cell) applySymbol(cell, c.root); };
+    return b;
+  }));
+}
+async function loadRadarNow() {
+  try {
+    const r = await fetch('/api/bursts/now');
+    if (r.ok) renderRadar(await r.json());
+  } catch (_) { /* the next /ws status carries the same numbers */ }
+}
+function mountRadar() {
+  const folded = loadRadarFold();
+  const el = $('#radar'), fold = $('#radarFold');
+  el.classList.toggle('folded', folded);
+  fold.setAttribute('aria-expanded', String(!folded));
+  fold.onclick = () => {
+    const v = !el.classList.contains('folded');
+    el.classList.toggle('folded', v);
+    fold.setAttribute('aria-expanded', String(!v));
+    saveRadarFold(v);
+  };
+  loadRadarNow();
+}
+
 /* ---- bottom bar ---- */
 function showStatus(s) {
+  if (s.bursts) renderRadar(s.bursts.now);
   if (s.mode === 'replay') replayClock = { etMs: (s.clock_s || 0) * 1000, at: Date.now(), speed: s.speed || 1, done: !!s.done };
   else if (s.mode === 'live') replayClock = null;
   if (s.calendar && s.calendar.fetched_at !== calendarAt) { calendarAt = s.calendar.fetched_at; loadCalendar(); }
@@ -1310,6 +1353,7 @@ async function init() {
   $('#tbSave').onclick = save;
   $('#tbSettings').onclick = () => chartSettings();
   $('#tbTheme').onclick = toggleTheme;
+  mountRadar();
   for (const b of document.querySelectorAll('#rail [data-tool]')) {
     b.onclick = () => setTool(b.dataset.tool === tool && tool !== 'cursor' ? 'cursor' : b.dataset.tool);
   }
