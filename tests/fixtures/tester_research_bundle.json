@@ -1,0 +1,592 @@
+{
+ "equity": {
+  "drawdown": [
+   0.0,
+   -134.0,
+   0.0,
+   -134.0,
+   -268.0,
+   0.0,
+   0.0,
+   -134.0
+  ],
+  "equity": [
+   296.0,
+   162.0,
+   458.0,
+   324.0,
+   190.0,
+   486.0,
+   782.0,
+   648.0
+  ],
+  "t_ms": [
+   1614695403000,
+   1626269403000,
+   1655299803000,
+   1668004203000,
+   1675866603000,
+   1695216603000,
+   1709649003000,
+   1724247003000
+  ]
+ },
+ "plots": {
+  "hlines": [
+   {
+    "date": "2021-03-02",
+    "name": "anchor",
+    "price": 100.0
+   },
+   {
+    "date": "2021-07-14",
+    "name": "anchor",
+    "price": 100.0
+   },
+   {
+    "date": "2022-01-05",
+    "name": "anchor",
+    "price": 100.0
+   },
+   {
+    "date": "2022-06-15",
+    "name": "anchor",
+    "price": 100.0
+   },
+   {
+    "date": "2022-11-09",
+    "name": "anchor",
+    "price": 100.0
+   },
+   {
+    "date": "2023-02-08",
+    "name": "anchor",
+    "price": 100.0
+   },
+   {
+    "date": "2023-06-07",
+    "name": "anchor",
+    "price": 100.0
+   },
+   {
+    "date": "2023-09-20",
+    "name": "anchor",
+    "price": 100.0
+   },
+   {
+    "date": "2024-03-05",
+    "name": "anchor",
+    "price": 100.0
+   },
+   {
+    "date": "2024-08-21",
+    "name": "anchor",
+    "price": 100.0
+   }
+  ],
+  "plots": {}
+ },
+ "run": {
+  "capital": 50000.0,
+  "commission": 4.0,
+  "coverage": {
+   "no_trade": [],
+   "sessions": 12,
+   "skipped": [
+    {
+     "date": "2021-05-12",
+     "reason": "missing 13:00\u201316:00 ET"
+    },
+    {
+     "date": "2024-03-06",
+     "reason": "missing 13:00\u201316:00 ET"
+    }
+   ],
+   "skipped_by_data": 2,
+   "skipped_by_error": 0,
+   "skipped_by_reason": {
+    "missing 13:00\u201316:00 ET": 2
+   },
+   "used": 10
+  },
+  "engine": "tick-2",
+  "fill_law": "tick replay",
+  "holdout": false,
+  "holdout_reason": null,
+  "inputs": {
+   "adx_gate": false,
+   "adx_min": 20.0,
+   "offset_pts": 10.0,
+   "sl_pts": 5.0,
+   "tp_pts": 15.0
+  },
+  "prop_rules": "lucid-flex-50k@2026-08",
+  "propsim_error": false,
+  "qty": 1,
+  "range": {
+   "end": "2024-12-31",
+   "holdout": false,
+   "kind": "research",
+   "label": "Research window 2021\u20132024",
+   "start": "2021-01-01"
+  },
+  "report": {
+   "by_month": [
+    {
+     "avg_trade": 296.0,
+     "max_drawdown": 0.0,
+     "net": 296.0,
+     "period": "2021-03",
+     "profit_factor": 999.0,
+     "sharpe": 0.0,
+     "trades": 1,
+     "win_rate": 100.0
+    },
+    {
+     "avg_trade": -134.0,
+     "max_drawdown": -134.0,
+     "net": -134.0,
+     "period": "2021-07",
+     "profit_factor": 0.0,
+     "sharpe": 0.0,
+     "trades": 1,
+     "win_rate": 0.0
+    },
+    {
+     "avg_trade": 296.0,
+     "max_drawdown": 0.0,
+     "net": 296.0,
+     "period": "2022-06",
+     "profit_factor": 999.0,
+     "sharpe": 0.0,
+     "trades": 1,
+     "win_rate": 100.0
+    },
+    {
+     "avg_trade": -134.0,
+     "max_drawdown": -134.0,
+     "net": -134.0,
+     "period": "2022-11",
+     "profit_factor": 0.0,
+     "sharpe": 0.0,
+     "trades": 1,
+     "win_rate": 0.0
+    },
+    {
+     "avg_trade": -134.0,
+     "max_drawdown": -134.0,
+     "net": -134.0,
+     "period": "2023-02",
+     "profit_factor": 0.0,
+     "sharpe": 0.0,
+     "trades": 1,
+     "win_rate": 0.0
+    },
+    {
+     "avg_trade": 296.0,
+     "max_drawdown": 0.0,
+     "net": 296.0,
+     "period": "2023-09",
+     "profit_factor": 999.0,
+     "sharpe": 0.0,
+     "trades": 1,
+     "win_rate": 100.0
+    },
+    {
+     "avg_trade": 296.0,
+     "max_drawdown": 0.0,
+     "net": 296.0,
+     "period": "2024-03",
+     "profit_factor": 999.0,
+     "sharpe": 0.0,
+     "trades": 1,
+     "win_rate": 100.0
+    },
+    {
+     "avg_trade": -134.0,
+     "max_drawdown": -134.0,
+     "net": -134.0,
+     "period": "2024-08",
+     "profit_factor": 0.0,
+     "sharpe": 0.0,
+     "trades": 1,
+     "win_rate": 0.0
+    }
+   ],
+   "by_year": [
+    {
+     "avg_trade": 81.0,
+     "max_drawdown": -134.0,
+     "net": 162.0,
+     "period": "2021",
+     "profit_factor": 2.208955223880597,
+     "sharpe": 0.8046268199643114,
+     "trades": 2,
+     "win_rate": 50.0
+    },
+    {
+     "avg_trade": 81.0,
+     "max_drawdown": -134.0,
+     "net": 162.0,
+     "period": "2022",
+     "profit_factor": 2.208955223880597,
+     "sharpe": 0.766018998913098,
+     "trades": 2,
+     "win_rate": 50.0
+    },
+    {
+     "avg_trade": 81.0,
+     "max_drawdown": -134.0,
+     "net": 162.0,
+     "period": "2023",
+     "profit_factor": 2.208955223880597,
+     "sharpe": 0.6223154259320224,
+     "trades": 2,
+     "win_rate": 50.0
+    },
+    {
+     "avg_trade": 81.0,
+     "max_drawdown": -134.0,
+     "net": 162.0,
+     "period": "2024",
+     "profit_factor": 2.208955223880597,
+     "sharpe": 0.7172866377373137,
+     "trades": 2,
+     "win_rate": 50.0
+    }
+   ],
+   "capital": 50000.0,
+   "sharpe_basis": "weekday grid (daily net incl. 0-trade weekdays, \u00d7\u221a252)",
+   "skipped": [
+    {
+     "date": "2021-05-12",
+     "reason": "missing 13:00\u201316:00 ET"
+    },
+    {
+     "date": "2024-03-06",
+     "reason": "missing 13:00\u201316:00 ET"
+    }
+   ],
+   "skipped_by_data": 2,
+   "skipped_by_error": 0,
+   "summary": {
+    "all": {
+     "avg_bars_in_trade": 1.0,
+     "avg_loss": -134.0,
+     "avg_seconds_in_trade": 2.0,
+     "avg_trade": 81.0,
+     "avg_win": 296.0,
+     "commission_paid": 32.0,
+     "days": 8,
+     "expectancy": 81.0,
+     "gross_loss": -536.0,
+     "gross_profit": 1184.0,
+     "largest_loss": -134.0,
+     "largest_win": 296.0,
+     "losses": 4,
+     "max_consec_losses": 2,
+     "max_drawdown": -268.0,
+     "max_drawdown_pct": -0.53113480518451,
+     "max_runup": 782.0,
+     "net_profit": 648.0,
+     "net_profit_pct": 1.2959999999999998,
+     "profit_factor": 2.208955223880597,
+     "rr": 2.208955223880597,
+     "rr_label": "1:2.21",
+     "sharpe": 0.5261932351204192,
+     "sharpe_traded_days": 5.594365743247988,
+     "sortino": 1.2758986932259384,
+     "t_stat": 0.9967714241685203,
+     "trades": 8,
+     "win_rate": 50.0,
+     "wins": 4
+    },
+    "long": {
+     "avg_bars_in_trade": 1.0,
+     "avg_loss": -134.0,
+     "avg_seconds_in_trade": 2.0,
+     "avg_trade": 81.0,
+     "avg_win": 296.0,
+     "commission_paid": 32.0,
+     "days": 8,
+     "expectancy": 81.0,
+     "gross_loss": -536.0,
+     "gross_profit": 1184.0,
+     "largest_loss": -134.0,
+     "largest_win": 296.0,
+     "losses": 4,
+     "max_consec_losses": 2,
+     "max_drawdown": -268.0,
+     "max_drawdown_pct": -0.53113480518451,
+     "max_runup": 782.0,
+     "net_profit": 648.0,
+     "net_profit_pct": 1.2959999999999998,
+     "profit_factor": 2.208955223880597,
+     "rr": 2.208955223880597,
+     "rr_label": "1:2.21",
+     "sharpe": 0.5261932351204192,
+     "sharpe_traded_days": 5.594365743247988,
+     "sortino": 1.2758986932259384,
+     "t_stat": 0.9967714241685203,
+     "trades": 8,
+     "win_rate": 50.0,
+     "wins": 4
+    },
+    "short": {
+     "avg_bars_in_trade": null,
+     "avg_loss": null,
+     "avg_seconds_in_trade": null,
+     "avg_trade": null,
+     "avg_win": null,
+     "commission_paid": 0,
+     "days": 0,
+     "expectancy": null,
+     "gross_loss": 0,
+     "gross_profit": 0,
+     "largest_loss": null,
+     "largest_win": null,
+     "losses": 0,
+     "max_consec_losses": 0,
+     "max_drawdown": 0.0,
+     "max_drawdown_pct": 0.0,
+     "max_runup": 0.0,
+     "net_profit": 0,
+     "net_profit_pct": 0.0,
+     "profit_factor": null,
+     "rr": null,
+     "rr_label": "\u2014",
+     "sharpe": 0.0,
+     "sharpe_traded_days": 0.0,
+     "sortino": null,
+     "t_stat": null,
+     "trades": 0,
+     "win_rate": null,
+     "wins": 0
+    }
+   }
+  },
+  "slippage_ticks": 1.0,
+  "strategy": {
+   "id": "nq930",
+   "name": "NQ 9:30 Straddle",
+   "root": "NQ"
+  },
+  "strategy_config": {
+   "cancel_et": "12:55",
+   "desk_cfg": {
+    "accept_from_et": "09:29",
+    "accept_until_et": "09:45",
+    "bar_minutes": 1,
+    "cancel_et": "12:55",
+    "enabled": true,
+    "flat_et": "15:55",
+    "gated": true,
+    "kind": "straddle",
+    "metrics": {
+     "caveat": "does not cover live fill quality \u2014 the edge is 2\u20134 ticks deep",
+     "equity_file": "nq930_equity.json",
+     "rows": {
+      "PF": "2.34",
+      "WR": "47.3%",
+      "avg/trade/mini": "$79.0",
+      "green months": "10/10",
+      "maxDD/mini": "\u2212$1,135",
+      "t": "5.04",
+      "trades": "167"
+     },
+     "source": "one-shot sealed-year OOS exam \u00b7 2025-07-08\u21922026-07-07 \u00b7 TV 15s"
+    },
+    "offset_pts": 10.0,
+    "pine_file": "nq930.pine",
+    "qty": 3,
+    "rule": "",
+    "self_fire": true,
+    "shadow": false,
+    "sl_pts": 5.0,
+    "symbol": "NQ",
+    "tp_pts": 15.0,
+    "warmup_bars": 60
+   },
+   "fire": "09:30:00",
+   "flat_et": "15:55"
+  }
+ },
+ "trades": [
+  {
+   "bars": 1,
+   "commission": 4.0,
+   "date": "2021-03-02",
+   "entry_ms": 1614695401000,
+   "entry_price": 110.25,
+   "exit_ms": 1614695403000,
+   "exit_price": 125.25,
+   "exit_reason": "tp",
+   "gross": 300.0,
+   "mae_pts": 0.25,
+   "mae_usd": 5.0,
+   "mfe_pts": 15.75,
+   "mfe_usd": 315.0,
+   "net": 296.0,
+   "order_price": 110.0,
+   "qty": 1,
+   "seconds": 2.0,
+   "side": "long",
+   "sl": 105.25,
+   "tp": 125.25
+  },
+  {
+   "bars": 1,
+   "commission": 4.0,
+   "date": "2021-07-14",
+   "entry_ms": 1626269401000,
+   "entry_price": 110.25,
+   "exit_ms": 1626269403000,
+   "exit_price": 103.75,
+   "exit_reason": "sl",
+   "gross": -130.0,
+   "mae_pts": 6.25,
+   "mae_usd": 125.0,
+   "mfe_pts": 0.0,
+   "mfe_usd": 0.0,
+   "net": -134.0,
+   "order_price": 110.0,
+   "qty": 1,
+   "seconds": 2.0,
+   "side": "long",
+   "sl": 105.25,
+   "tp": 125.25
+  },
+  {
+   "bars": 1,
+   "commission": 4.0,
+   "date": "2022-06-15",
+   "entry_ms": 1655299801000,
+   "entry_price": 110.25,
+   "exit_ms": 1655299803000,
+   "exit_price": 125.25,
+   "exit_reason": "tp",
+   "gross": 300.0,
+   "mae_pts": 0.25,
+   "mae_usd": 5.0,
+   "mfe_pts": 15.75,
+   "mfe_usd": 315.0,
+   "net": 296.0,
+   "order_price": 110.0,
+   "qty": 1,
+   "seconds": 2.0,
+   "side": "long",
+   "sl": 105.25,
+   "tp": 125.25
+  },
+  {
+   "bars": 1,
+   "commission": 4.0,
+   "date": "2022-11-09",
+   "entry_ms": 1668004201000,
+   "entry_price": 110.25,
+   "exit_ms": 1668004203000,
+   "exit_price": 103.75,
+   "exit_reason": "sl",
+   "gross": -130.0,
+   "mae_pts": 6.25,
+   "mae_usd": 125.0,
+   "mfe_pts": 0.0,
+   "mfe_usd": 0.0,
+   "net": -134.0,
+   "order_price": 110.0,
+   "qty": 1,
+   "seconds": 2.0,
+   "side": "long",
+   "sl": 105.25,
+   "tp": 125.25
+  },
+  {
+   "bars": 1,
+   "commission": 4.0,
+   "date": "2023-02-08",
+   "entry_ms": 1675866601000,
+   "entry_price": 110.25,
+   "exit_ms": 1675866603000,
+   "exit_price": 103.75,
+   "exit_reason": "sl",
+   "gross": -130.0,
+   "mae_pts": 6.25,
+   "mae_usd": 125.0,
+   "mfe_pts": 0.0,
+   "mfe_usd": 0.0,
+   "net": -134.0,
+   "order_price": 110.0,
+   "qty": 1,
+   "seconds": 2.0,
+   "side": "long",
+   "sl": 105.25,
+   "tp": 125.25
+  },
+  {
+   "bars": 1,
+   "commission": 4.0,
+   "date": "2023-09-20",
+   "entry_ms": 1695216601000,
+   "entry_price": 110.25,
+   "exit_ms": 1695216603000,
+   "exit_price": 125.25,
+   "exit_reason": "tp",
+   "gross": 300.0,
+   "mae_pts": 0.25,
+   "mae_usd": 5.0,
+   "mfe_pts": 15.75,
+   "mfe_usd": 315.0,
+   "net": 296.0,
+   "order_price": 110.0,
+   "qty": 1,
+   "seconds": 2.0,
+   "side": "long",
+   "sl": 105.25,
+   "tp": 125.25
+  },
+  {
+   "bars": 1,
+   "commission": 4.0,
+   "date": "2024-03-05",
+   "entry_ms": 1709649001000,
+   "entry_price": 110.25,
+   "exit_ms": 1709649003000,
+   "exit_price": 125.25,
+   "exit_reason": "tp",
+   "gross": 300.0,
+   "mae_pts": 0.25,
+   "mae_usd": 5.0,
+   "mfe_pts": 15.75,
+   "mfe_usd": 315.0,
+   "net": 296.0,
+   "order_price": 110.0,
+   "qty": 1,
+   "seconds": 2.0,
+   "side": "long",
+   "sl": 105.25,
+   "tp": 125.25
+  },
+  {
+   "bars": 1,
+   "commission": 4.0,
+   "date": "2024-08-21",
+   "entry_ms": 1724247001000,
+   "entry_price": 110.25,
+   "exit_ms": 1724247003000,
+   "exit_price": 103.75,
+   "exit_reason": "sl",
+   "gross": -130.0,
+   "mae_pts": 6.25,
+   "mae_usd": 125.0,
+   "mfe_pts": 0.0,
+   "mfe_usd": 0.0,
+   "net": -134.0,
+   "order_price": 110.0,
+   "qty": 1,
+   "seconds": 2.0,
+   "side": "long",
+   "sl": 105.25,
+   "tp": 125.25
+  }
+ ]
+}
