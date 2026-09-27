@@ -4,6 +4,8 @@ from __future__ import annotations
 import datetime as dt
 from array import array
 
+import pytest
+
 from homebase.backtest.engine import Costs, build_bars, run_session, to_tick
 from homebase.backtest.tape import Tape, et_ns
 from homebase.strategies.base import Strategy
@@ -339,3 +341,117 @@ def test_mae_mfe_short_side():
     assert (t.mae_pts, t.mfe_pts) == (2.25, 15.25)
     assert (t.mae_usd, t.mfe_usd) == (45.0, 305.0)
     assert t.bars == 4 and t.seconds == 179.0
+
+
+# ---- Stop-Limit entries (plan Task 5): trigger like a stop, fill like a limit capped at `limit`
+
+def sl_straddle(n, off=10.0, sl=5.0, tp=15.0, sell_first=False, n_sell=None):
+    """The straddle with stop-limit legs: limit = trigger +/- n ticks through it."""
+    n_sell = n if n_sell is None else n_sell
+
+    def fire(ctx, s):
+        a = ctx.last_price
+        up, dn = a + off, a - off
+        mk = [("buy", lambda: ctx.stop_limit_entry("long", up, up + n * TICK, sl=up - sl, tp=up + tp)),
+              ("sell", lambda: ctx.stop_limit_entry("short", dn, dn - n_sell * TICK, sl=dn + sl,
+                                                    tp=dn - tp))]
+        for k, f in (mk[::-1] if sell_first else mk):
+            s.o[k] = f()
+        ctx.oco(s.o["buy"], s.o["sell"])
+    return fire
+
+
+def run_sl(rows, n, slip=1.0, root="NQ", **kw):
+    """-> (SessionResult, the script, whose .o holds the two entry Orders)."""
+    s = Script({"09:30:00": sl_straddle(n, **kw), "12:55": cancel, "15:55": flat})
+    return run_session(s, tape(rows, root=root), Costs(4.0, slip), qty=1), s
+
+
+@pytest.mark.parametrize("print_px,n,fill", [
+    (110.0, 2, 110.25),     # touch: print + slip is inside the limit -> same as stop-market
+    (110.25, 2, 110.5),     # 1-tick gap: print + slip == limit
+    (110.5, 2, 110.5),      # print AT the limit: stop-market would pay 110.75, capped at 110.5
+    (110.0, 1, 110.25),
+])
+def test_stoplimit_triggers_then_fills_marketable_at_min_of_print_plus_slip_and_limit(print_px, n, fill):
+    res, s = run_sl([("09:29:59", 100.0), ("09:30:01", print_px), ("09:31", 140.0)], n)
+    t, = res.trades
+    assert t.side == "long" and t.order_price == 110.0 and t.entry_price == fill
+    assert t.entry_ns == et_ns(D, "09:30:01")
+    assert (t.sl, t.tp) == (fill - 5.0, fill + 15.0)             # brackets moved to the fill
+    assert s.o["buy"].triggered and s.o["buy"].status == "filled"
+    assert s.o["sell"].status == "cancelled" and not s.o["sell"].triggered
+
+
+def test_stoplimit_slip_zero_fills_at_the_print():
+    res, _ = run_sl([("09:29:59", 100.0), ("09:30:01", 110.25), ("09:31", 140.0)], 2, slip=0.0)
+    assert res.trades[0].entry_price == 110.25
+
+
+def test_stoplimit_gapped_past_the_limit_rests_and_needs_one_tick_penetration():
+    res, s = run_sl([("09:29:59", 100.0),
+                     ("09:30:01", 112.0),      # triggers, but 112 > limit 110.25: rests
+                     ("09:30:02", 110.25),     # AT the limit: no penetration, no fill
+                     ("09:30:03", 110.0),      # 1 tick through: fills AT the limit, no slip
+                     ("09:31", 140.0)], 1)
+    t, = res.trades
+    assert t.side == "long" and t.order_price == 110.0 and t.entry_price == 110.25
+    assert t.entry_ns == et_ns(D, "09:30:03")
+    assert (t.sl, t.tp) == (105.25, 125.25)
+    assert t.exit_reason == "tp" and t.exit_price == 125.25
+
+
+def test_stoplimit_that_never_fills_is_cancelled_at_cancel_et_and_reads_as_missed():
+    res, s = run_sl([("09:29:59", 100.0), ("09:30:01", 112.0), ("10:00", 115.0),
+                     ("12:56", 109.0),         # would penetrate -- but the order died at 12:55
+                     ("14:00", 111.0)], 1)
+    assert res.trades == []
+    assert s.o["buy"].triggered and s.o["buy"].status == "cancelled"
+    assert not s.o["sell"].triggered and s.o["sell"].status == "cancelled"
+
+
+def test_stoplimit_sell_side_mirrors():
+    res, s = run_sl([("09:29:59", 100.0), ("09:30:01", 89.75), ("09:31", 60.0)], 2)
+    t, = res.trades                                         # trigger 90, limit 89.5
+    assert t.side == "short" and t.order_price == 90.0 and t.entry_price == 89.5
+    assert (t.sl, t.tp) == (94.5, 74.5)
+
+    res, s = run_sl([("09:29:59", 100.0), ("09:30:01", 88.0), ("09:30:02", 89.75),
+                     ("09:30:03", 90.0), ("09:31", 60.0)], 1)
+    t, = res.trades                                         # limit 89.75: rests, fills on 90.0
+    assert t.side == "short" and t.entry_price == 89.75 and t.entry_ns == et_ns(D, "09:30:03")
+
+
+def test_a_resting_stoplimit_does_not_cancel_its_oco_partner_until_one_fills():
+    # sell leg created first (older), limit 4 ticks: on the 89.5 print both the resting
+    # buy limit (110.25) and the sell stop-limit could fill -- oldest first, the sell.
+    res, s = run_sl([("09:29:59", 100.0), ("09:30:01", 112.0), ("09:30:02", 89.5),
+                     ("09:31", 60.0)], 1, sell_first=True, n_sell=4)
+    t, = res.trades
+    assert t.side == "short" and t.entry_price == 89.25       # max(89.5 - 1 tick, 89.0)
+    assert s.o["buy"].triggered and s.o["buy"].status == "cancelled"
+
+
+def test_stoplimit_trigger_and_limit_survive_tick_grid_float_noise():
+    """CL tick 0.01: `64.01 + 0.01` is 64.02000000000001 in raw float64; a print at
+    exactly 64.02 is INSIDE that limit, and a print at 64.01 penetrates it by a tick."""
+    def go(rows, side, trig, lim):
+        s = Script({"09:30:00": lambda ctx, s: s.o.__setitem__(
+            "x", ctx.stop_limit_entry(side, trig, lim, sl=None, tp=None)), "15:55": flat},
+            move=False)
+        return run_session(s, tape(rows, root="CL"), Costs(4.0, 1.0), qty=1).trades
+
+    t, = go([("09:29:59", 63.90), ("09:30:01", 64.02), ("09:31", 64.30)], "long", 64.01, 64.01 + 0.01)
+    assert t.entry_price == 64.02                                    # min(64.03, 64.02)
+    t, = go([("09:29:59", 63.90), ("09:30:01", 64.05), ("09:30:02", 64.01), ("09:31", 64.30)],
+            "long", 64.01, 64.01 + 0.01)
+    assert t.entry_price == 64.02 and t.entry_ns == et_ns(D, "09:30:02")
+    t, = go([("09:29:59", 64.30), ("09:30:01", 63.95), ("09:30:02", 64.03), ("09:31", 63.50)],
+            "short", 64.03, 64.03 - 0.01)
+    assert t.entry_price == 64.02 and t.entry_ns == et_ns(D, "09:30:02")
+
+
+def test_stoplimit_limit_on_the_wrong_side_of_the_trigger_is_refused():
+    res = run([("09:29:59", 100.0), ("09:30:01", 111.0)],
+              plan={"09:30:00": lambda ctx, s: ctx.stop_limit_entry("long", 110.0, 109.75)})
+    assert res.trades == [] and res.skip.startswith("strategy error") and "limit" in res.skip

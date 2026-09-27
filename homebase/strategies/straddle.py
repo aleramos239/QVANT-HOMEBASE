@@ -6,6 +6,10 @@ engine._legs (buy stop at anchor + offset with SL trigger - sl / TP trigger + tp
 sell stop mirrored); after the fill both brackets move to the fill, like
 engine._move_brackets; unfilled entries are cancelled at cancel_et; an open
 position is flattened at flat_et.
+
+`entry_limit_ticks` (research; desk straddles only): 0 = stop-market entries,
+the desk's order and the default; n > 0 = stop-limit entries whose limit sits n
+ticks through the trigger (buy: trigger + n ticks, sell: trigger - n ticks).
 """
 from __future__ import annotations
 
@@ -70,8 +74,12 @@ class OpenStraddle(Strategy):
                 return
             ctx.hline("anchor", anchor)
             ctx.move_brackets_to_fill = True
-            self.entries = tuple(ctx.stop_entry(g.side, g.trigger, sl=g.sl, tp=g.tp)
-                                 for g in self.legs(anchor))
+            n = self.p.get("entry_limit_ticks", 0)
+            self.entries = tuple(
+                ctx.stop_limit_entry(g.side, g.trigger, g.trigger + (n if g.side == "long" else -n)
+                                     * ctx.tick, sl=g.sl, tp=g.tp) if n
+                else ctx.stop_entry(g.side, g.trigger, sl=g.sl, tp=g.tp)
+                for g in self.legs(anchor))
             ctx.oco(*self.entries)
         elif et_time == self.cancel_et:
             for o in self.entries:
@@ -113,4 +121,6 @@ class DeskStraddle(OpenStraddle):
             Input("tp_pts", "Take profit (pts)", "float", c.tp_pts, 0.25, m, 0.25),
             Input("adx_gate", "ADX(14) trend gate", "bool", bool(c.gated)),
             Input("adx_min", "ADX threshold", "float", THRESHOLD, 0.0, 100.0, 0.5),
+            Input("entry_limit_ticks", "Entry stop-limit (ticks through; 0 = stop-market)", "int",
+                  0, 0, 100, 1),
         ]

@@ -38,7 +38,7 @@ def test_registry_has_the_four_v1_strategies_with_schemas():
     cat = {c["id"]: c for c in catalog()}
     assert cat["nq930"]["root"] == "NQ" and cat["gc_nfpcpi"]["root"] == "GC"
     assert {i["key"] for i in cat["nq930"]["inputs"]} == {"offset_pts", "sl_pts", "tp_pts",
-                                                         "adx_gate", "adx_min"}
+                                                         "adx_gate", "adx_min", "entry_limit_ticks"}
     assert cat["nq10am"]["inputs"] == []
     with pytest.raises(ValueError, match="unknown strategy"):
         get("nope")
@@ -175,3 +175,36 @@ def test_no_print_before_fire_skips_cleanly_not_a_strategy_error():
     assert res.trades == []
     assert res.skip == "no print before 09:30:00"
     assert not res.skip.startswith("strategy error")
+
+
+# ---- Task 5: entry_limit_ticks (0 = stop-market, the desk's order; n = stop-limit n ticks through)
+
+_GAP = [("09:29:59", 100.0), ("09:30:01", 111.0), ("09:30:02", 110.0), ("09:31", 140.0)]
+
+
+@pytest.mark.parametrize("cls", [NQ930, YM930])
+def test_entry_limit_ticks_defaults_to_stop_market(cls):
+    assert cls().p["entry_limit_ticks"] == 0
+    s = cls({"adx_gate": False})                    # the frozen nq930 default is gated
+    run_session(s, _tape(cls.root, dt.date(2024, 3, 5), _GAP), Costs())
+    assert [o.kind for o in s.entries] == ["stop", "stop"]
+
+
+def test_default_is_identical_to_explicit_zero_and_a_limit_changes_the_fill():
+    d = dt.date(2024, 3, 5)
+    geo = {"offset_pts": 10.0, "sl_pts": 5.0, "tp_pts": 15.0, "adx_gate": False}
+    base = run_session(NQ930(geo), _tape("NQ", d, _GAP), Costs())
+    zero = run_session(NQ930({**geo, "entry_limit_ticks": 0}), _tape("NQ", d, _GAP), Costs())
+    assert [t.to_dict() for t in base.trades] == [t.to_dict() for t in zero.trades]
+    assert base.trades[0].entry_price == 111.25                 # gap 1 tick + 1 tick slip
+
+    s = NQ930({**geo, "entry_limit_ticks": 2})
+    lim = run_session(s, _tape("NQ", d, _GAP), Costs())
+    assert [(o.kind, o.price, o.limit) for o in s.entries] == [("stoplimit", 110.0, 110.5),
+                                                               ("stoplimit", 90.0, 89.5)]
+    assert lim.trades[0].entry_price == 110.5                   # min(111 + 1 tick, 110.5)
+    assert (lim.trades[0].sl, lim.trades[0].tp) == (105.5, 125.5)
+
+
+def test_gc_straddle_has_no_entry_limit_input_and_stays_stop_market():
+    assert "entry_limit_ticks" not in {i.key for i in GCNfpCpi.inputs()}

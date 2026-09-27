@@ -9,6 +9,14 @@ House fill law (research/nq_930_straddle_ticks.py L22-31, generalised):
     PENETRATION: a buy limit fills only on a print <= price - tick, a sell limit
     only on a print >= price + tick, AT the limit price, no slip.
   * MARKET orders fill at the first print at/after they go live, +/- slip.
+  * STOP-LIMIT entries (`stoplimit`: trigger `price`, cap `limit`) trigger like a
+    stop, on the first print at or through the trigger. If that print is inside
+    the limit (buy: print <= limit) it fills on it at min(print + slip, limit)
+    (sell: max(print - slip, limit)). If it gapped past the limit, the order
+    rests as a LIMIT at `limit` from the next print and needs the 1-tick
+    penetration above. `triggered` records the touch, so a triggered order that
+    is cancelled unfilled reads as a missed trade. OCO cancels on a FILL only: a
+    triggered-but-resting leg leaves its partner working.
   * Commission is flat per round turn per contract.
   * Prints sharing one ts_ns resolve in ROW ORDER (the tape is stable-sorted);
     orders that trigger on the same print fill oldest first.
@@ -102,8 +110,8 @@ class Costs:
 class Order:
     id: int
     side: int                       # +1 buy, -1 sell
-    kind: str                       # "stop" | "limit" | "market"
-    price: float | None             # trigger (stop) / limit price; None for market
+    kind: str                       # "stop" | "limit" | "market" | "stoplimit"
+    price: float | None             # trigger (stop, stoplimit) / limit price; None for market
     qty: int
     min_i: int                      # first print index this order may fill on
     role: str = "entry"             # "entry" | "sl" | "tp"
@@ -113,6 +121,8 @@ class Order:
     ref: float | None = None        # entries: the price the brackets were sized from
     oco: int | None = None
     status: str = "working"         # working | filled | cancelled
+    limit: float | None = None      # stoplimit: the worst price it may fill at
+    triggered: bool = False         # stoplimit: its trigger has printed (then it rests at `limit`)
     pos: "Position | None" = None   # exits: the position they close
 
 
@@ -201,15 +211,21 @@ class Ctx:
     def flat(self) -> bool:
         return not self._s.positions
 
-    def _entry(self, kind, side, price, qty, sl, tp, tp_rr, ref) -> Order:
+    def _entry(self, kind, side, price, qty, sl, tp, tp_rr, ref, limit=None) -> Order:
         if side not in SIDE:
             raise ValueError(f"side must be 'long' or 'short', not {side!r}")
         tick = self._s.tick
         price = None if price is None else to_tick(price, tick)
         sl = None if sl is None else to_tick(sl, tick)
         tp = None if tp is None else to_tick(tp, tick)
+        kw = {}
+        if kind == "stoplimit":
+            kw["limit"] = to_tick(limit, tick)
+            if tick_cmp(kw["limit"], price, tick) * SIDE[side] < 0:
+                raise ValueError(f"a {side} stop-limit's limit {kw['limit']} must be at or "
+                                 f"through its trigger {price}")
         return self._s.new_order(SIDE[side], kind, price, int(qty or self.qty),
-                                 sl=sl, tp=tp, tp_rr=tp_rr, ref=ref)
+                                 sl=sl, tp=tp, tp_rr=tp_rr, ref=ref, **kw)
 
     def stop_entry(self, side: str, price: float, qty: int | None = None, sl=None, tp=None,
                    tp_rr=None) -> Order:
@@ -218,6 +234,11 @@ class Ctx:
     def limit_entry(self, side: str, price: float, qty: int | None = None, sl=None, tp=None,
                     tp_rr=None) -> Order:
         return self._entry("limit", side, price, qty, sl, tp, tp_rr, price)
+
+    def stop_limit_entry(self, side: str, price: float, limit: float, qty: int | None = None,
+                         sl=None, tp=None, tp_rr=None) -> Order:
+        """Trigger at `price`, fill no worse than `limit` (see the house law)."""
+        return self._entry("stoplimit", side, price, qty, sl, tp, tp_rr, price, limit)
 
     def market(self, side: str, qty: int | None = None, sl=None, tp=None, tp_rr=None,
                ref: float | None = None) -> Order:
@@ -277,17 +298,23 @@ class _Sim:
     def _trigger(self, o: Order, a: int, b: int) -> int:
         if o.kind == "market":
             return a
-        if o.kind == "stop":
+        if o.kind == "stop" or (o.kind == "stoplimit" and not o.triggered):
             return (first_at_or_above(self.px, o.price, a, b, self.tick) if o.side > 0
                     else first_at_or_below(self.px, o.price, a, b, self.tick))
-        lvl = (to_tick(o.price - self.tick, self.tick) if o.side > 0
-               else to_tick(o.price + self.tick, self.tick))
+        px = o.limit if o.kind == "stoplimit" else o.price      # a triggered stoplimit rests
+        lvl = (to_tick(px - self.tick, self.tick) if o.side > 0
+               else to_tick(px + self.tick, self.tick))
         return (first_at_or_below(self.px, lvl, a, b, self.tick) if o.side > 0
                 else first_at_or_above(self.px, lvl, a, b, self.tick))
 
     def _fill_price(self, o: Order, p: float) -> float:
         if o.kind == "limit":
             return o.price
+        if o.kind == "stoplimit":
+            if o.triggered:
+                return o.limit
+            raw = min(p + self.slip, o.limit) if o.side > 0 else max(p - self.slip, o.limit)
+            return to_tick(raw, self.tick)
         if o.kind == "stop":
             raw = max(o.price, p) + self.slip if o.side > 0 else min(o.price, p) - self.slip
         else:
@@ -307,7 +334,14 @@ class _Sim:
                     best_k, best = k, o
             if best is None:
                 break
-            self._fill(best, best_k)
+            if best.kind == "stoplimit" and not best.triggered:
+                if tick_cmp(self.px[best_k], best.limit, self.tick) * best.side > 0:
+                    best.min_i = best_k + 1     # gapped past the limit: rest as a limit
+                else:
+                    self._fill(best, best_k)    # marketable on its own trigger print
+                best.triggered = True           # after _fill: its price reads this flag
+            else:
+                self._fill(best, best_k)
             self.i = best_k           # other orders may still trigger on this same print
         self.i = max(self.i, j)
 
