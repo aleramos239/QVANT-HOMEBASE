@@ -11,29 +11,30 @@ Per path:
     through the reordered days, so intraday drawdown inside a day still counts;
   * ruin = the path's max drawdown reaching ``floor`` $ (review I1). The default floor is the prop
     rules' trailing max loss, else $2,000;
-  * prop pass = ``propsim.engine.run_eval`` on the reordered (day P&L, traded?) sequence, i.e. the
-    LucidFlex race itself -- EOD trailing floor, consistency on the largest DAY, min days on traded
-    days. It is not a copy.
+  * prop pass = ``propsim.engine.run_eval`` on the FIRST ``propsim.HORIZON`` (250) days of the
+    reordered (day P&L, traded?) sequence, i.e. the LucidFlex race itself -- EOD trailing floor,
+    consistency on the largest DAY, min days on traded days -- over the same horizon the run's own
+    prop sim uses, so a bootstrap MC reads what the prop tile reads. It is not a copy.
 
-Work is capped at ``MAX_WORK`` day-steps (days x paths, review I3), and the result reports the
-paths actually used. Money is USD, and drawdowns are <= 0 and include the 0 starting peak (the same
+Work is capped at ``MAX_WORK`` steps (max(days, trades) x paths, review I3 + rereview), and the
+result reports the paths actually used. Money is USD, and drawdowns are <= 0 and include the 0 starting peak (the same
 convention as ``stats._max_dd``).
 """
 from __future__ import annotations
 
 import hashlib
 import random
-from itertools import accumulate, chain
+from itertools import accumulate, chain, islice
 from operator import sub
 from typing import List, Optional, Sequence
 
-from ..propsim import engine, weekday_grid
+from ..propsim import HORIZON, engine, weekday_grid
 
 __all__ = ["run", "MAX_WORK", "MAX_PATHS", "DEFAULT_FLOOR"]
 
 PCTS = (5, 25, 50, 75, 95)
 MAX_PATHS = 10_000
-MAX_WORK = 2_000_000          # days x paths per call (review I3)
+MAX_WORK = 2_000_000          # max(days, trades) x paths per call (review I3; trades too, rereview)
 DEFAULT_FLOOR = 2000.0        # $ drawdown = ruin when no prop rules give a trailing max loss
 
 
@@ -132,7 +133,7 @@ def run(
         day_nets[at[t["date"]]].append(float(t["net"]))
     sig = ["".join("L" if x < 0 else "W" for x in nets) for nets in day_nets]
     n = len(dates)
-    used = max(1, min(paths, MAX_WORK // n))
+    used = max(1, min(paths, MAX_WORK // max(n, len(trades))))
     rng = random.Random(seed)
 
     dds: List[float] = []
@@ -153,8 +154,8 @@ def run(
         streaks.append(float(max(map(len, "".join(map(sig.__getitem__, order)).split("W")))))
         if -dd >= floor:
             n_ruin += 1
-        if rules is not None and engine.run_eval(zip(map(pnls.__getitem__, order), map(flags.__getitem__, order)),
-                                                 rules)["outcome"] == "pass":
+        days = zip(map(pnls.__getitem__, order), map(flags.__getitem__, order))
+        if rules is not None and engine.run_eval(islice(days, HORIZON), rules)["outcome"] == "pass":
             n_pass += 1
 
     actual = _walk([float(t["net"]) for t in trades])[0]

@@ -137,13 +137,18 @@ def prepare(body, base: Path) -> str:
     return rid
 
 
+# no-trade reasons that are holes in the record, not the strategy choosing to sit out: a crash, and
+# "no print before <fire>" -- the tape had no price at the fire time (a data hole, rereview)
+HOLE_REASONS = ("strategy error", "no print before")
+
+
 def report_holes(skipped: list[dict], no_trade: list[dict]) -> list[dict]:
     """The sessions the report drops from its Sharpe weekday grid: real holes only -- a coverage/data
-    gap (`skipped`) or a strategy crash ("strategy error: ..."). A strategy's OWN no-trade reason
-    (a trend gate, "no print before ...") is a real flat day the account sat through: it stays on the
+    gap (`skipped`), a strategy crash ("strategy error: ...") or no print at the fire time ("no print
+    before ..."). A strategy's OWN no-trade reason (a trend gate) is a real flat day the account sat through: it stays on the
     grid as 0.0 (review C1 -- dropping it inflated a gated strategy's Sharpe ~1.5x). The coverage block
     still lists every no-trade day for display."""
-    return list(skipped) + [n for n in no_trade if n["reason"].startswith("strategy error")]
+    return list(skipped) + [n for n in no_trade if n["reason"].startswith(HOLE_REASONS)]
 
 
 def _run_propsim(trades: list[dict], req: dict) -> tuple[dict, bool]:

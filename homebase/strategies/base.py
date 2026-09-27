@@ -95,7 +95,8 @@ class Strategy:
     # True = every session is independent: day state resets in on_session and anything older comes from
     # ctx.daily (the store), never from an earlier session of the SAME run. The walk-forward relies on it
     # (a month sliced out of a full-window run == a run over that month) and refuses a strategy without it.
-    session_independent: bool = True
+    # Opt-in: each strategy says so in its OWN class once someone has checked it (rereview M3).
+    session_independent: bool = False
 
     def __init__(self, params: dict | None = None):
         self.p = resolve_inputs(self.inputs(), params)
