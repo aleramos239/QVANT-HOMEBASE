@@ -62,11 +62,25 @@ a { color: inherit; }
   border-radius: 14px; background: var(--pill); font-size: 14px; font-weight: 600; }
 .tb-pill .ic { width: 16px; height: 16px; color: var(--text-2); }
 .tb-pill:hover, .tb-pill.open { background: var(--border); }
-.tb-msg { flex: none; padding: 0 6px; color: var(--text-2); font-size: 12px; }
-.tb-msg.err { color: var(--down); }
 .thumb { display: inline-grid; gap: 2px; width: 20px; height: 15px; }
 .thumb i { border: 1.5px solid currentColor; border-radius: 2px; }
 @media (max-width: 760px) { .tb-label { display: none; } }
+
+/* ---- layout tabs: a TradingView-style strip under the toolbar, one tab per saved layout
+   (2026-09-27 layout-tabs plan, Task 3) ---- */
+.tabstrip { flex: none; height: 32px; display: flex; align-items: center; padding: 0 4px; background: var(--panel);
+  border-top: 1px solid var(--border); overflow-x: auto; overflow-y: hidden; white-space: nowrap; scrollbar-width: none; }
+.tabstrip::-webkit-scrollbar { display: none; }
+.tab-btn { flex: none; height: 32px; max-width: 180px; display: inline-flex; align-items: center; gap: 6px;
+  padding: 0 12px; margin-right: 2px; color: var(--text-2); font-size: 13px; border-bottom: 2px solid transparent; }
+.tab-btn:hover { color: var(--text); background: var(--hover); }
+.tab-btn.active { color: var(--text); border-bottom-color: var(--accent); }
+.tab-btn.drag-over { box-shadow: inset 2px 0 0 var(--accent); }
+.tab-name { overflow: hidden; text-overflow: ellipsis; }
+.tab-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--warn); }
+.tab-add { flex: none; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 6px; color: var(--text-2); }
+.tab-add:hover { background: var(--hover); color: var(--text); }
+.tab-add .ic { width: 16px; height: 16px; }
 
 /* ---- drawing rail + the grid of chart panels on the frame ---- */
 .main { flex: 1; min-height: 0; display: flex; gap: 4px; padding: 4px 4px 4px 0; }

@@ -126,6 +126,30 @@ def test_layouts_roundtrip(tmp_path):
         assert client.get("/api/layouts").json() == {}
 
 
+def test_layout_order_roundtrip_and_restart_persistence(tmp_path):
+    """The tab strip's left-to-right order (2026-09-27 layout-tabs plan, Task 3): empty until a
+    viewer drags a tab, then whatever was last written -- surviving a fresh app() the way layouts and
+    templates already do (a restart re-reads the same state dir)."""
+    state = tmp_path / "state"
+    app = create_app(roots=["NQ"], base=archive(tmp_path), replay=D, speed=1,
+                     start_et=dt.time(9, 30), state=state)
+    with TestClient(app, base_url="http://127.0.0.1:8852") as client:
+        assert client.get("/api/layout-order").json() == []
+        r = client.put("/api/layout-order", json=["b", "a", "c"])
+        assert r.status_code == 200
+        assert client.get("/api/layout-order").json() == ["b", "a", "c"]
+        # a bad body (not a list of strings) is refused and leaves the stored order untouched
+        assert client.put("/api/layout-order", json={"not": "a list"}).status_code == 400
+        assert client.put("/api/layout-order", json=["ok", 3]).status_code == 400
+        assert client.get("/api/layout-order").json() == ["b", "a", "c"]
+
+    # a fresh app() over the same state dir (a restart) reads the same order back
+    app2 = create_app(roots=["NQ"], base=archive(tmp_path), replay=D, speed=1,
+                      start_et=dt.time(9, 30), state=state)
+    with TestClient(app2, base_url="http://127.0.0.1:8852") as client2:
+        assert client2.get("/api/layout-order").json() == ["b", "a", "c"]
+
+
 def test_live_mode_records_what_the_feed_delivers(tmp_path):
     q: queue.Queue = queue.Queue()
 
@@ -1228,6 +1252,7 @@ def test_browser_writes_from_another_site_are_refused(tmp_path):
     with TestClient(replay_app(tmp_path), base_url="http://127.0.0.1:8852") as client:
         assert client.put("/api/layouts/main", json=lay, headers=evil).status_code == 403
         assert client.put("/api/drawings/NQ", json=[H1], headers=evil).status_code == 403
+        assert client.put("/api/layout-order", json=["main"], headers=evil).status_code == 403
         assert client.put("/api/layouts/main", json=lay).status_code == 200            # no Origin: not a browser
         assert client.delete("/api/layouts/main", headers=evil).status_code == 403
         assert client.get("/api/layouts").json() == {"main": lay}
@@ -1455,7 +1480,8 @@ def test_a_second_older_request_while_one_builds_gets_busy_not_silence(tmp_path,
 # ---- final review M4: ONE Host guard on every /api/* route (GET included) and /ws ----
 BAD_HOSTS = ("evil.example", "evil.example:8852", "localhost.evil.com", "127.0.0.1.nip.io")
 GUARDED = [("GET", "/api/layouts", None), ("PUT", "/api/layouts/x", {"grid": "1", "cells": []}),
-           ("DELETE", "/api/layouts/x", None), ("GET", "/api/templates", None),
+           ("DELETE", "/api/layouts/x", None), ("GET", "/api/layout-order", None),
+           ("PUT", "/api/layout-order", ["x"]), ("GET", "/api/templates", None),
            ("PUT", "/api/templates/x", {"a": 1}), ("DELETE", "/api/templates/x", None),
            ("GET", "/api/paper/strategies", None), ("GET", "/api/paper/history", None),
            ("GET", "/api/bursts/now", None), ("GET", "/api/status", None), ("GET", "/api/symbols", None),

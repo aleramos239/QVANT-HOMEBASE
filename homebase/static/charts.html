@@ -28,14 +28,12 @@
   <span class="tb-spacer"></span>
   <button class="tb-btn" id="tbTrade" type="button" title="Trade" aria-haspopup="menu" aria-expanded="false"><span class="dot" id="tbTradeDot"></span><span class="tb-label">Trade</span><span class="icw sm" data-icon="chevron"></span></button>
   <button class="tb-btn" id="tbOrder" type="button" title="Order panel" aria-pressed="false" aria-controls="opanel"><span class="icw" data-icon="panelRight"></span><span class="tb-label">Order</span></button>
-  <button class="tb-btn" id="tbDom" type="button" title="DOM (Level 2 ladder)" aria-pressed="false" aria-controls="opanel"><span class="icw" data-icon="listOrdered"></span><span class="tb-label">DOM</span></button><span class="tb-sep"></span>
-  <button class="tb-btn" id="tbLayout" type="button" title="Saved layouts" aria-haspopup="menu" aria-expanded="false"><span id="tbLayoutName">Unsaved</span><span class="icw sm" data-icon="chevron"></span></button>
-  <button class="tb-btn" id="tbSave" type="button" title="Save layout">Save</button>
-  <span class="tb-msg" id="tbSaveMsg" role="status"></span>
+  <button class="tb-btn" id="tbDom" type="button" title="DOM (Level 2 ladder)" aria-pressed="false" aria-controls="opanel"><span class="icw" data-icon="listOrdered"></span><span class="tb-label">DOM</span></button>
   <span class="tb-sep"></span>
   <button class="tb-btn tb-icon" id="tbSettings" type="button" title="Chart settings" aria-label="Chart settings" aria-haspopup="dialog"><span class="icw" data-icon="gear"></span></button>
   <button class="tb-btn tb-icon" id="tbTheme" type="button" title="Dark theme"><span class="icw" data-icon="moon"></span></button>
 </header>
+<div class="tabstrip" id="tabStrip" role="tablist" aria-label="Layout tabs"></div>
 <div class="main">
   <nav class="rail" id="rail" aria-label="Drawing tools">
     <button class="rail-btn" type="button" data-tool="cursor" title="Cursor" aria-pressed="true"><span class="icw" data-icon="cursor"></span></button>
@@ -104,6 +102,7 @@
 <script src="/static/charts/replay.js?v=9"></script>
 <script src="/static/charts/replayui.js?v=9"></script>
 <script src="/static/charts/orderpanel.js?v=9"></script>
+<script src="/static/charts/layouts.js?v=9"></script>
 <script src="/static/charts/app.js?v=9"></script>
 </body>
 </html>

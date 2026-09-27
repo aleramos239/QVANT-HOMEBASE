@@ -250,7 +250,7 @@ function renderToolbar() {
   th.title = dark ? 'Light theme' : 'Dark theme';
   thumb(layout.grid, $('#tbGridThumb'));
   $('#tbGrid').title = `Chart layout: ${GRID_NAMES[layout.grid]}`;
-  $('#tbLayoutName').textContent = !layout.name ? 'Unsaved' : layout.dirty ? `${layout.name} · Unsaved` : layout.name;
+  renderTabs();   // the active tab and its unsaved dot follow layout.name / layout.dirty like everything else here
 }
 
 /* One popup menu at a time: under its toolbar button, right of a rail button (right), or at the pointer (at: a
@@ -536,20 +536,31 @@ function gridMenu() {
   m.appendChild(picks);
 }
 
-/* ---- saved layouts ---- */
-/* The saved layouts by name; null when they could not be read. */
-async function fetchLayouts() {
-  try { const r = await fetch('/api/layouts'); return r.ok ? await r.json() : null; } catch (_) { return null; }
-}
+/* ---- layout tabs (2026-09-27 layout-tabs plan, Task 3) ----
+   Each tab IS a saved layout: server truth lives at /api/layouts/{name} (the body) and /api/layout-order
+   (the strip's left-to-right order, viewer-agnostic -- everyone who opens this desk sees the same tabs in
+   the same place). Pure decisions (ordering, the dot, rename collisions, closing the active tab, default
+   names, drag reorder) live in layouts.js (window.HBLayouts) and are unit-tested there; this section only
+   owns the fetches, the DOM and localStorage. The LAST open tab is already covered by the existing
+   hb_charts_last save/load (saveLast/loadLast above) -- it stores `layout.name` alongside the cells, so
+   nothing new is needed for that per the spec. */
+let tabOrder = [];          // display order: names that exist, per HBLayouts.orderNames
+let layoutsCache = {};      // name -> last-known server body (GET /api/layouts), kept fresh as we write
+let tabSnapshot = null;     // the body last written/loaded for layout.name; null = never saved / not loaded yet
+let dragTab = null;         // the tab name currently being dragged, or null
 
-/* PUT the current layout under `name`: '' when saved, else the reason. */
-async function putLayout(name) {
-  // each chart's trade ACCOUNTS and algo are saved (HBTrade.tradeBits), never its Trading switch (Task 2)
-  const body = { grid: layout.grid, cells: layout.cells.map((c) => {
+/* The current charts as a layout body -- exactly what a PUT (or a rename/duplicate copy) sends. Each
+   chart's trade ACCOUNTS and algo are saved (HBTrade.tradeBits), never its Trading switch (Task 2). */
+function layoutBody() {
+  return { grid: layout.grid, cells: layout.cells.map((c) => {
     const { root, spec, indicators, settings } = c;
     const base = settings && Object.keys(settings).length ? { root, spec, indicators, settings } : { root, spec, indicators };
     return { ...base, ...T.tradeBits(c) };
   }) };
+}
+
+/* PUT `body` (default: the current charts) under `name`: '' when saved, else the reason. */
+async function putLayout(name, body = layoutBody()) {
   let r;
   try {
     r = await fetch('/api/layouts/' + encodeURIComponent(name), { method: 'PUT',
@@ -561,103 +572,211 @@ async function putLayout(name) {
   return `save failed (${r.status})` + (detail ? ': ' + detail : '');
 }
 
-let saveMsgTimer = 0;
-function saveMsg(text, err = false) {
-  const m = $('#tbSaveMsg');
-  m.textContent = text;
-  m.classList.toggle('err', err);
-  clearTimeout(saveMsgTimer);
-  if (text && !err) saveMsgTimer = setTimeout(() => { m.textContent = ''; }, 2000);
-}
-
-/* Save to the loaded layout's name; with none yet, ask for one in the layouts menu. */
-async function save() {
-  if (!layout.name) { if (menuAnchor !== $('#tbLayout')) toggleMenu($('#tbLayout'), () => layoutMenu(true)); return; }
-  const why = await putLayout(layout.name);
-  if (!why && layout.dirty) { layout.dirty = false; saveLast(); renderToolbar(); }
-  saveMsg(why || 'Saved', !!why);
+/* Best-effort: the strip's order is cosmetic (never trade config), so a failed write only means the
+   NEXT reload sees the old order -- worth logging, never worth blocking a click over. */
+function persistOrder() {
+  fetch('/api/layout-order', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(tabOrder) })
+    .catch(() => { /* next load falls back to A-Z for anything unordered (HBLayouts.orderNames) */ });
 }
 
 function loadLayout(name, saved) {
   layout = { ...readLayout(saved), name, dirty: false };
+  tabSnapshot = layoutBody();
   saveLast();
   selected = 0;
   buildGrid();
+  renderTabs();
 }
 
-async function layoutMenu(saveAsFirst = false) {
-  const m = openMenu($('#tbLayout'), 'menu-layouts'), list = mk('div'), err = mk('div', 'menu-err');
+/* Clicking a tab: save the current one first if it is named (spec) -- but only write when it actually
+   drifted from the server (HBLayouts.isDirty), so a click-through of unrelated tabs never spams PUTs. A
+   failed save keeps the user ON the current tab rather than silently discarding their edits. */
+async function switchTab(name) {
+  if (name === layout.name) return;
+  if (layout.name && window.HBLayouts.isDirty(tabSnapshot, layoutBody())) {
+    const why = await putLayout(layout.name);
+    if (why) { sbNote(why); return; }
+    layoutsCache[layout.name] = layoutBody();
+    layout.dirty = false;
+  }
+  const saved = layoutsCache[name];
+  if (!saved) { sbNote(`could not open “${name}”`); return; }
+  loadLayout(name, saved);
+}
+
+/* + : a new tab, auto-named, seeded from whatever is on screen right now. */
+async function addTab() {
+  const name = window.HBLayouts.uniqueName('Layout', tabOrder);
+  const body = layoutBody();
+  const why = await putLayout(name, body);
+  if (why) { sbNote(why); return; }
+  layoutsCache[name] = body;
+  tabOrder.push(name);
+  persistOrder();
+  layout.name = name;
+  layout.dirty = false;
+  tabSnapshot = body;
+  saveLast();
+  renderTabs();
+  renderToolbar();
+}
+
+/* Right-click menu -> Duplicate: a copy under "<name> copy" (counted up on a collision), switched to
+   immediately -- landing on the new tab is what TradingView does, and it is also the only sane result
+   when `name` IS the active tab (the copy is byte-identical to what is already on screen). */
+async function duplicateTab(name) {
+  const body = name === layout.name ? layoutBody() : layoutsCache[name];
+  if (!body) { sbNote(`could not read “${name}”`); return; }
+  const next = window.HBLayouts.uniqueName(`${name} copy`, tabOrder);
+  const why = await putLayout(next, body);
+  if (why) { sbNote(why); return; }
+  layoutsCache[next] = body;
+  const at = tabOrder.indexOf(name);
+  tabOrder.splice(at < 0 ? tabOrder.length : at + 1, 0, next);
+  persistOrder();
+  if (name === layout.name) {
+    layout.name = next;
+    layout.dirty = false;
+    tabSnapshot = body;
+    saveLast();
+    renderToolbar();
+  } else {
+    loadLayout(next, body);
+  }
+  renderTabs();
+}
+
+/* Right-click menu -> Rename: an inline popover anchored on the tab itself (the codebase's usual
+   "Save layout as..." pattern) -- a rename is a PUT under the new name plus a DELETE of the old one,
+   since the server only knows layouts by name. */
+function renameTab(oldName) {
+  const anchor = [...$('#tabStrip').children].find((b) => b.dataset.tab === oldName);
+  const m = openMenu(anchor || $('#tabStrip'), 'menu-rename'), row = mk('div', 'menu-custom');
+  const input = mk('input', 'menu-input'), ok = mk('button', 'btn btn-primary', 'Rename'), err = mk('div', 'menu-err');
+  input.type = 'text'; input.maxLength = 80; input.value = oldName; input.spellcheck = false;
+  input.setAttribute('aria-label', 'Layout name');
   err.hidden = true;
   err.setAttribute('role', 'alert');
-  const saveAs = menuItem('Save layout as…', '', () => askName());
-  m.append(mk('div', 'menu-h', 'Saved layouts'), list, mk('div', 'menu-sep'), saveAs, err);
-  // inline in this menu; next to Save if the menu closed while the request was out
-  const fail = (text) => { if (menuEl !== m) { saveMsg(text, true); return; } menuErr(err, text); placeMenu(); };
-
-  function askName() {
-    const row = mk('div', 'menu-custom'), input = mk('input', 'menu-input'), ok = mk('button', 'btn btn-primary', 'Save');
-    input.type = 'text'; input.placeholder = 'Layout name'; input.maxLength = 80; input.value = layout.name;
-    input.setAttribute('aria-label', 'Layout name');
-    ok.type = 'button';
-    const go = async () => {
-      const name = input.value.trim(), saving = layout;
-      if (!name) { input.focus(); return; }
-      // the browser resolves /api/layouts/. and /.. as path steps: the PUT would miss the layout
-      if (name === '.' || name === '..') { fail('“.” and “..” cannot be layout names'); input.focus(); return; }
-      const why = await putLayout(name);
-      if (why) { fail(why); return; }
-      if (layout === saving) { layout.name = name; layout.dirty = false; saveLast(); renderToolbar(); }   // not a layout loaded meanwhile
-      if (menuEl === m) closeMenu();
-      saveMsg('Saved');
-    };
-    ok.onclick = go;
-    input.onkeydown = (e) => { if (e.key === 'Enter') go(); };
-    row.append(input, ok);
-    saveAs.replaceWith(row);
-    input.focus();
-    input.select();
-  }
-
-  function confirmDelete(row, name) {
-    const box = mk('div', 'menu-confirm'), yes = mk('button', 'btn btn-danger', 'Delete'), no = mk('button', 'btn btn-ghost', 'Cancel');
-    const del = row.querySelector('.menu-del'), had = row.contains(document.activeElement);
-    const back = () => { const f = box.contains(document.activeElement); box.replaceWith(row); if (f) del.focus(); };
-    yes.type = 'button';
-    no.type = 'button';
-    box.append(mk('span', '', `Delete “${name}”?`), yes, no);
-    row.replaceWith(box);
-    if (had) no.focus();   // keyboard focus moves into the confirm (and back to × on Cancel)
-    no.onclick = back;
-    yes.onclick = async () => {
-      let r = null;
-      try { r = await fetch('/api/layouts/' + encodeURIComponent(name), { method: 'DELETE' }); } catch (_) { /* r stays null */ }
-      if (!r || !r.ok) { back(); fail(`delete failed${r ? ` (${r.status})` : ': network error'}`); return; }
-      const f = box.contains(document.activeElement), near = box.nextElementSibling || box.previousElementSibling;
-      box.remove();
-      if (layout.name === name) { layout.name = ''; saveLast(); renderToolbar(); }
-      // a row waiting in its own delete confirm is still a saved layout
-      if (!list.querySelector('.menu-row, .menu-confirm')) list.replaceChildren(mk('div', 'menu-empty', 'No saved layouts yet'));
-      if (f) { const to = (near && near.querySelector('.menu-i')) || m.querySelector('.menu-i, .menu-input'); if (to) to.focus(); }
-    };
-  }
-
-  if (saveAsFirst) askName();
-  const all = await fetchLayouts();
-  if (menuEl !== m) return;   // closed while loading
-  if (!all) { fail('could not load the saved layouts'); return; }
-  const names = Object.keys(all).sort((a, b) => a.localeCompare(b));
-  if (!names.length) list.appendChild(mk('div', 'menu-empty', 'No saved layouts yet'));
-  for (const name of names) {
-    const row = mk('div', 'menu-row'), del = mk('button', 'menu-del');
-    del.type = 'button';
-    del.title = `Delete ${name}`;
-    del.setAttribute('aria-label', `Delete ${name}`);
-    del.appendChild(icon('x'));
-    del.onclick = () => confirmDelete(row, name);
-    row.append(menuItem(name, '', () => { closeMenu(); loadLayout(name, all[name]); }, name === layout.name), del);
-    list.appendChild(row);
-  }
+  ok.type = 'button';
+  const go = async () => {
+    const next = input.value.trim(), why = window.HBLayouts.renameError(next, oldName, tabOrder);
+    if (why) { menuErr(err, why); input.focus(); return; }
+    if (next === oldName) { closeMenu(); return; }
+    const body = oldName === layout.name ? layoutBody() : layoutsCache[oldName];
+    if (!body) { menuErr(err, `could not read “${oldName}”`); return; }
+    const putWhy = await putLayout(next, body);
+    if (putWhy) { menuErr(err, putWhy); return; }
+    try { await fetch('/api/layouts/' + encodeURIComponent(oldName), { method: 'DELETE' }); } catch (_) { /* best-effort */ }
+    delete layoutsCache[oldName];
+    layoutsCache[next] = body;
+    tabOrder = tabOrder.map((n) => (n === oldName ? next : n));
+    persistOrder();
+    if (layout.name === oldName) { layout.name = next; tabSnapshot = body; saveLast(); renderToolbar(); }
+    closeMenu();
+    renderTabs();
+  };
+  ok.onclick = go;
+  input.onkeydown = (e) => { if (e.key === 'Enter') go(); };
+  row.append(input, ok);
+  m.append(row, err);
   placeMenu();
+  input.focus();
+  input.select();
+}
+
+/* Right-click menu -> Close, and middle-click: permanently deletes the saved layout (there is no other
+   "all saved layouts" list any more, so closing its only tab IS deleting it). Closing the active tab
+   switches to the neighbour HBLayouts.closeTab picks; closing the last one leaves the current charts on
+   screen, just unnamed (nothing left to switch to). */
+async function closeTabByName(name) {
+  const idx = tabOrder.indexOf(name);
+  if (idx < 0) return;
+  let r = null;
+  try { r = await fetch('/api/layouts/' + encodeURIComponent(name), { method: 'DELETE' }); } catch (_) { /* r stays null */ }
+  if (!r || !r.ok) { sbNote(`close failed${r ? ` (${r.status})` : ': network error'}`); return; }
+  delete layoutsCache[name];
+  const { order, active } = window.HBLayouts.closeTab(tabOrder, idx);
+  tabOrder = order;
+  persistOrder();
+  if (name === layout.name) {
+    if (active >= 0 && layoutsCache[tabOrder[active]]) loadLayout(tabOrder[active], layoutsCache[tabOrder[active]]);
+    else { layout.name = ''; layout.dirty = false; tabSnapshot = null; saveLast(); renderToolbar(); }
+  }
+  renderTabs();
+}
+
+function tabContextMenu(name, at) {
+  const m = openMenu(null, 'menu-tabctx', { at });
+  m.append(
+    menuItem('Rename', '', () => { closeMenu(); renameTab(name); }),
+    menuItem('Duplicate', '', () => { closeMenu(); duplicateTab(name); }),
+    menuItem('Close', '', () => { closeMenu(); closeTabByName(name); }),
+  );
+  placeMenu();
+  m.tabIndex = -1;
+  m.focus({ preventScroll: true });
+}
+
+function renderTabs() {
+  const strip = $('#tabStrip');
+  strip.replaceChildren(...tabOrder.map((name, i) => {
+    const active = name === layout.name, b = mk('button', 'tab-btn' + (active ? ' active' : ''));
+    b.type = 'button';
+    b.dataset.tab = name;
+    b.draggable = true;
+    b.title = name;
+    b.setAttribute('role', 'tab');
+    b.setAttribute('aria-selected', String(active));
+    b.appendChild(mk('span', 'tab-name', name));
+    if (active && layout.dirty) { const dot = mk('span', 'tab-dot'); dot.setAttribute('aria-label', 'Unsaved changes'); b.appendChild(dot); }
+    b.onclick = () => switchTab(name);
+    b.oncontextmenu = (e) => { e.preventDefault(); tabContextMenu(name, { x: e.clientX, y: e.clientY }); };
+    // middle-click closes (a real click event only for the primary button; auxclick covers the middle one
+    // cross-browser without also firing on a plain left-click)
+    b.onauxclick = (e) => { if (e.button === 1) { e.preventDefault(); closeTabByName(name); } };
+    b.ondragstart = (e) => { dragTab = name; e.dataTransfer.effectAllowed = 'move'; };
+    b.ondragend = () => { dragTab = null; strip.querySelectorAll('.drag-over').forEach((x) => x.classList.remove('drag-over')); };
+    b.ondragover = (e) => { if (dragTab && dragTab !== name) { e.preventDefault(); b.classList.add('drag-over'); } };
+    b.ondragleave = () => b.classList.remove('drag-over');
+    b.ondrop = (e) => {
+      e.preventDefault();
+      b.classList.remove('drag-over');
+      if (!dragTab || dragTab === name) return;
+      tabOrder = window.HBLayouts.moveTab(tabOrder, dragTab, i);
+      dragTab = null;
+      persistOrder();
+      renderTabs();
+    };
+    return b;
+  }));
+  const add = mk('button', 'tab-add');
+  add.type = 'button';
+  add.title = 'Add layout tab';
+  add.setAttribute('aria-label', 'Add layout tab');
+  add.appendChild(icon('plus'));
+  add.onclick = addTab;
+  strip.appendChild(add);
+}
+
+/* Everything the tab strip knows about which layouts exist, at startup: `layout.name` (from
+   hb_charts_last, read already by loadLast()) just needs SOMETHING to switch to on a later click, so this
+   caches every saved body up front rather than re-fetching per tab (the old menu's lazy-fetch-on-open no
+   longer applies -- the strip is on screen from the first paint). */
+async function loadTabs() {
+  let all = null, order = null;
+  try {
+    const [ra, ro] = await Promise.all([fetch('/api/layouts'), fetch('/api/layout-order')]);
+    all = ra.ok ? await ra.json() : null;
+    order = ro.ok ? await ro.json() : null;
+  } catch (_) { /* keep whatever we had */ }
+  if (!all) { sbNote('could not load saved layouts'); return; }
+  layoutsCache = all;
+  tabOrder = window.HBLayouts.orderNames(Object.keys(all), Array.isArray(order) ? order : []);
+  // the active tab (from hb_charts_last, restored before this resolved) may carry edits made before a
+  // refresh -- seed the snapshot from the SERVER's body, never the current one, so isDirty still catches
+  // real drift instead of treating "whatever is on screen right now" as automatically saved
+  if (layout.name && all[layout.name]) tabSnapshot = all[layout.name];
+  renderTabs();
 }
 
 /* ---- chart-settings templates (shared by every chart, saved on the server) ---- */
@@ -1321,8 +1440,6 @@ async function init() {
   $('#tbIntervals').onclick = () => toggleMenu($('#tbIntervals'), intervalMenu);
   $('#tbIndicators').onclick = indicatorsDialog;
   $('#tbGrid').onclick = () => toggleMenu($('#tbGrid'), gridMenu);
-  $('#tbLayout').onclick = () => toggleMenu($('#tbLayout'), () => layoutMenu(false));
-  $('#tbSave').onclick = save;
   $('#tbSettings').onclick = () => chartSettings();
   $('#tbTheme').onclick = toggleTheme;
   $('#tbDom').onclick = () => window.HBOrderPanel.openTab('dom');
@@ -1366,6 +1483,7 @@ async function init() {
   window.HBReplayUI.mount(page);
   buildGrid();   // after the mounts: page.overlays must be filled before any cell's build() reads host.overlays()
   migrateTickedOnce();
+  loadTabs();    // async: renderTabs() already painted the "+" from buildGrid's renderToolbar; this fills the rest
   connect();
   tick();
   setInterval(tick, 1000);

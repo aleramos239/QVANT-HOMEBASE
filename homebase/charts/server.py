@@ -262,6 +262,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
     sd = Path(state) if state else state_dir() / "charts"
     sd.mkdir(parents=True, exist_ok=True)
     layouts_path = sd / "layouts.json"
+    layout_order_path = sd / "layout_order.json"   # 2026-09-27 layout-tabs: the tab strip's left-to-right order
     drawings_path = sd / "drawings.json"
     templates_path = sd / "templates.json"
     # ForexFactory's calendar; calendar_fetch None never fetches (tests); python -m homebase.charts passes http_get
@@ -731,13 +732,20 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             return {}
         return v if isinstance(v, dict) else {}
 
-    def write_json(path: Path, data: dict) -> None:
+    def write_json(path: Path, data: dict | list) -> None:
         """Via a temp file + atomic rename: a crash or a full disk mid-write
         must never tear the file (torn, it reads back as {} and the next
         save would wipe everything in it)."""
         tmp = path.with_name(path.name + ".tmp")
         tmp.write_text(json.dumps(data, indent=2))
         os.replace(tmp, path)
+
+    def read_json_list(path: Path) -> list:
+        try:
+            v = json.loads(path.read_text())
+        except (OSError, ValueError):
+            return []
+        return v if isinstance(v, list) else []
 
     def browser_write_ok(request: Request) -> None:
         """Browsers send a cross-site PUT/DELETE after a preflight that this
@@ -778,6 +786,21 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         all_ = read_json(layouts_path)
         all_.pop(name, None)
         write_json(layouts_path, all_)
+        return {"ok": True}
+
+    @app.get("/api/layout-order")
+    async def get_layout_order():
+        # a distinct path from /api/layouts/{name:path} on purpose -- sharing the prefix would make
+        # "order" just another layout name under that route, whichever one FastAPI matched first
+        return read_json_list(layout_order_path)
+
+    @app.put("/api/layout-order")
+    async def put_layout_order(request: Request):
+        browser_write_ok(request)
+        body = await request.json()
+        if not isinstance(body, list) or not all(isinstance(x, str) for x in body):
+            raise HTTPException(400, "a layout order is a list of names")
+        write_json(layout_order_path, body)
         return {"ok": True}
 
     @app.get("/api/drawings/{root}")
