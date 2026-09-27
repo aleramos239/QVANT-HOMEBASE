@@ -7,7 +7,12 @@
       templates: {list(), save(name, settings), remove(name)}, countries(),
       algoChoices(cell), setAlgo(cell, key|null)}   (countries(): every currency code seen in the loaded calendar,
       for the Events tab's chips; algoChoices / setAlgo: the Trading tab's Algo select -- HBTrade.algoChoices, and a
-      live preview that Cancel puts back through host.restoreTrade) */
+      live preview that Cancel puts back through host.restoreTrade)
+   The Trading tab (2026-09-27 accounts-per-chart plan, Task 1) also uses:
+     {accountRows(cell), toggleAccount(cell, id), armPending(), tradeWhy(cell), prefs(), setPrefs(patch),
+      onTradeChange(fn) -> unsubscribe}
+   -- the rules behind all of them (the two-step LIVE arm, unlisted accounts failing closed, the algo <->
+   accounts binding) live in HBTradeUI / HBTrade, never here: this file only paints and reports clicks. */
 (() => {
 'use strict';
 const S = window.HBSettings, I = window.HBIcons;
@@ -20,7 +25,10 @@ const asPrecision = (v) => (v === '' ? null : Number(v));
 /* The tabs, in TradingView's order. A row: {label, check?: key (a checkbox before the label), colors?: [[key,
    what]] (a swatch each), select?: {key, choices: [[value, text]], parse?}, number?: {key, min, max, unit?},
    dot?: colour (a colour dot before the label, no swatch), chips?: key (a multi-select of host.countries()),
-   algo?: true (the chart's desk algo: host.algoChoices / host.setAlgo, not a setting)}. */
+   algo?: true (the chart's desk algo: host.algoChoices / host.setAlgo, not a setting),
+   accounts?: true (the Trading tab's ACCOUNTS list: the chart's own accounts, not a setting),
+   pref?: {key, kind?: 'switch', min, max, note} (a viewer-wide trade preference: host.prefs / host.setPrefs),
+   caption?: text (a plain note line, no control)}. */
 const TABS = [
   { id: 'symbol', label: 'Symbol', icon: 'candles', sections: [
     ['CANDLES', [
@@ -88,8 +96,19 @@ const TABS = [
     ]],
   ] },
   { id: 'trading', label: 'Trading', icon: 'bot', sections: [
+    // the chart's ACCOUNTS are what makes it trade-ready at all, so they come first
+    ['ACCOUNTS', [
+      { accounts: true },
+    ]],
     ['ALGO', [
       { label: 'Algo', algo: true },
+    ]],
+    ['DEFAULTS (all charts)', [
+      { label: 'One-click trading', pref: { key: 'oneClick', kind: 'switch' } },
+      { label: 'Default quantity', pref: { key: 'qty', min: 1, max: 10000 } },
+      { label: 'Stop loss (ticks)', pref: { key: 'slTicks', min: 0, max: 10000, note: '0 = off' } },
+      { label: 'Take profit (ticks)', pref: { key: 'tpTicks', min: 0, max: 10000, note: '0 = off' } },
+      { caption: 'These apply to every chart.' },
     ]],
   ] },
 ];
@@ -111,8 +130,13 @@ function mount(box, host) {
   const atOpen = new Map(host.cells().map((c) => [c, {
     settings: c.settings(), indicators: JSON.parse(JSON.stringify(c.cfg.indicators)), spec: c.cfg.spec, trade: tradeBits(c),
   }]));
-  let work = S.normalize(cell.settings()), tab = 0, done = false, raf = 0;
+  // host.tab: which tab to open on (the order panel's "Change" opens Trading); anything else starts on Symbol
+  let work = S.normalize(cell.settings()), tab = Math.max(0, TABS.findIndex((t) => t.id === host.tab)), done = false, raf = 0;
   const swatches = new Map();   // colour key -> the <i> inside its swatch button
+  let acctBox = null, acctWhy = null, algoSel = null;   // the Trading tab's live parts (null while it is not open)
+  let algoKey = '';                       // what the Algo select was last built from, so it rebuilds only on a real change
+  let acctKey = '';                       // and what the ACCOUNTS rows were last built from, for the same reason
+  const acctCells = new Map();            // account id -> {cb, bal, dot}: focus restore, and in-place updates
 
   const body = mk('div', 'set-body'), tabs = mk('div', 'set-tabs'), pane = mk('div', 'set-pane'), foot = mk('div', 'set-foot');
   tabs.setAttribute('role', 'tablist');
@@ -150,12 +174,99 @@ function mount(box, host) {
   function renderPane() {
     host.closeMenu();
     swatches.clear();
+    acctBox = acctWhy = algoSel = null;
+    algoKey = acctKey = '';
+    acctCells.clear();
     pane.replaceChildren(...TABS[tab].sections.flatMap(([cap, rows]) => [mk('div', 'set-cap', cap), ...rows.map(row)]));
     pane.scrollTop = 0;
     paint();
   }
 
+  /* ---- the Trading tab's ACCOUNTS list (2026-09-27 accounts-per-chart plan, Task 1) ----
+     One row per account: a checkbox, the label, its env chip (LIVE red / DEMO grey / PAPER amber), the
+     balance, and a quiet "in NQ 9:30 Straddle" when an algo on this chart's instrument books it. Ticking a
+     LIVE row starts the two-step arm and only ticks on the second click; an account the desk does not list
+     shows '?' and can never be ticked. Every rule is HBTradeUI.toggleAccount's -- a click only reports. */
+  function paintAccounts() {
+    if (!acctBox || !host.accountRows) return;
+    const arming = host.armPending ? host.armPending() : null;
+    const rows = host.accountRows(cell);
+    // the rows are rebuilt only when something STRUCTURAL changed (a row, a tick, an arm). A balance or a
+    // connection dot arrives up to once a frame while the desk is up: those update in place, so a rebuild can
+    // never land between a viewer's pointerdown and the click it was about to make on a checkbox.
+    const shape = JSON.stringify([arming, rows.map((r) => [r.id, r.label, r.chip, r.live, r.paper, r.tick, r.disabled, r.error, r.note])]);
+    if (shape !== acctKey) {
+      acctKey = shape;
+      const active = document.activeElement;
+      let focused = null;
+      for (const [id, c] of acctCells) if (c.cb === active) focused = id;
+      acctCells.clear();
+      acctBox.replaceChildren(...(rows.length ? rows.map((r) => acctRow(r, arming))
+        : [mk('div', 'set-unit', 'The desk has not listed any account yet')]));
+      if (focused && acctCells.has(focused)) acctCells.get(focused).cb.focus();
+    }
+    for (const r of rows) {
+      const c = acctCells.get(r.id);
+      if (!c) continue;
+      c.bal.textContent = r.balance;
+      c.dot.className = 'sb-dot' + (r.connected ? ' ok' : ' bad');
+    }
+    if (acctWhy) {
+      const why = host.tradeWhy ? host.tradeWhy(cell) : '';
+      acctWhy.textContent = why;
+      acctWhy.hidden = !why;
+    }
+  }
+  function acctRow(r, arming) {
+    const el = mk('div', 'set-acct'), cb = mk('input');
+    cb.type = 'checkbox';
+    cb.checked = r.tick === 'ticked';
+    cb.indeterminate = r.tick === 'unarmed';
+    cb.disabled = r.disabled;
+    cb.setAttribute('aria-label', r.label);
+    cb.title = r.tick === 'unarmed' ? "On this chart's list but not armed this session — click to remove it" : '';
+    cb.onchange = () => { if (host.toggleAccount) host.toggleAccount(cell, r.id); paintAccounts(); syncAlgo(); };
+    const lab = mk('div', 'set-acct-lab');
+    if (arming === r.id) {
+      lab.append(mk('span', 'set-acct-arm', 'Tick LIVE — real orders. Click again'));
+    } else {
+      lab.append(mk('span', 'set-acct-name', r.label));
+      if (r.tick === 'unarmed') lab.append(mk('span', 'set-acct-arm', 'LIVE · not armed'));
+      if (r.note) lab.append(mk('span', 'set-acct-note', r.note));
+      if (r.error) lab.append(mk('span', 'set-acct-err', r.error));
+    }
+    const chip = mk('span', 'env' + (r.live ? ' live' : r.paper ? ' paper' : ''), r.chip);
+    const dot = mk('span', 'sb-dot' + (r.connected ? ' ok' : ' bad'));
+    const bal = mk('span', 'set-acct-bal', r.balance);
+    acctCells.set(r.id, { cb, bal, dot });
+    el.append(cb, lab, chip, bal, dot);
+    return el;
+  }
+
+  /* The Algo select's options and value, rebuilt only when either really changed (so a rebuild never happens
+     under an open dropdown): ticking an account that belongs to an algo moves this select. */
+  function syncAlgo() {
+    if (!algoSel) return;
+    const cur = (cell.cfg && cell.cfg.algo) || '';
+    const choices = host.algoChoices ? host.algoChoices(cell) : [{ value: '', text: 'None' }];
+    const key = JSON.stringify([choices, cur]);
+    if (algoKey === key) return;
+    algoKey = key;
+    algoSel.replaceChildren(...choices.map((c) => { const o = mk('option', '', c.text); o.value = c.value; return o; }));
+    algoSel.value = cur;
+  }
+
   function row(r) {
+    if (r.accounts) {   // the ACCOUNTS list: a block of its own, not a label + control row
+      const el = mk('div', 'set-accts');
+      acctBox = mk('div', 'set-acct-list');
+      acctWhy = mk('div', 'set-why');
+      acctWhy.hidden = true;
+      el.append(acctBox, acctWhy);
+      paintAccounts();
+      return el;
+    }
+    if (r.caption) return mk('div', 'set-note', r.caption);
     const el = mk('div', 'set-row'), name = mk('label', 'set-name'), ctl = mk('div', 'set-ctl');
     if (r.check) {
       const cb = mk('input');
@@ -194,15 +305,43 @@ function mount(box, host) {
       ctl.append(n);
       if (unit) ctl.append(mk('span', 'set-unit', unit));
     }
-    if (r.algo) {   // the chart's desk algo: None, or one of the desk's strategies on this chart's root
-      const s = mk('select', 'set-select set-algo'), cur = (cell.cfg && cell.cfg.algo) || '';
-      s.setAttribute('aria-label', r.label);
-      for (const c of host.algoChoices ? host.algoChoices(cell) : [{ value: '', text: 'None' }]) {
-        const o = mk('option', '', c.text); o.value = c.value; s.append(o);
+    if (r.pref) {   // a viewer-wide trade preference (one-click, qty, SL/TP ticks): every chart's, not this one's
+      const { key, kind, min, max, note } = r.pref, cur = host.prefs ? host.prefs() : {};
+      if (kind === 'switch') {
+        const sw = button('switch' + (cur[key] ? ' on' : ''));
+        sw.setAttribute('role', 'switch');
+        sw.setAttribute('aria-checked', String(!!cur[key]));
+        sw.setAttribute('aria-label', r.label);
+        sw.onclick = () => {
+          if (host.setPrefs) host.setPrefs({ [key]: !(host.prefs() || {})[key] });
+          const on = !!(host.prefs ? host.prefs() : {})[key];
+          sw.classList.toggle('on', on);
+          sw.setAttribute('aria-checked', String(on));
+        };
+        ctl.append(sw);
+      } else {
+        const n = mk('input', 'set-num');
+        n.type = 'number'; n.min = String(min); n.max = String(max); n.step = '1';
+        n.value = String(cur[key] ?? min);
+        n.setAttribute('aria-label', r.label);
+        n.onchange = () => {
+          const v = Math.round(Number(n.value));
+          if (host.setPrefs) host.setPrefs({ [key]: Number.isFinite(v) ? v : cur[key] });
+          n.value = String((host.prefs ? host.prefs() : cur)[key]);   // shows the clamped value
+        };
+        ctl.append(n);
+        if (note) ctl.append(mk('span', 'set-unit', note));
       }
-      s.value = cur;
-      s.title = 'Draws this algo on the chart: its orders, fills, past runs and its Kill';
-      s.onchange = () => { if (host.setAlgo) host.setAlgo(cell, s.value || null); };
+    }
+    if (r.algo) {   // the chart's desk algo: None, or one of the desk's strategies on this chart's root
+      const s = mk('select', 'set-select set-algo');
+      s.setAttribute('aria-label', r.label);
+      s.title = 'Draws this algo on the chart, and ticks the accounts it books on this instrument';
+      // picking one also ticks its booked accounts (HBTradeUI.pickAlgo, through host.setAlgo); clearing it to
+      // None leaves them alone -- unticking the accounts is how you watch an algo without trading it
+      s.onchange = () => { if (host.setAlgo) host.setAlgo(cell, s.value || null); paintAccounts(); };
+      algoSel = s;
+      syncAlgo();
       ctl.append(s);
     }
     if (r.chips) {   // a multi-select: one checkbox per currency in the feed (plus any already picked)
@@ -374,6 +513,7 @@ function mount(box, host) {
   cancel.onclick = () => host.cancel();
   ok.onclick = () => {
     flush();
+    stopWatching();
     cell.setSettings(S.overrides(work));
     done = true;
     host.commit(host.cells().some((c) => {
@@ -397,6 +537,13 @@ function mount(box, host) {
   };
   foot.append(tpl, grow, applyAll, cancel, ok);
 
+  /* The chart's accounts, its algo, the desk's list and a LIVE arm's 3 s window can all change while the
+     dialog is open. Re-read only the Trading tab's live parts, so a half-typed number or an open swatch
+     popover elsewhere in the pane survives. */
+  function syncTrading() { paintAccounts(); syncAlgo(); }
+  let unsub = host.onTradeChange ? host.onTradeChange(syncTrading) : null;
+  const stopWatching = () => { if (unsub) { unsub(); unsub = null; } };
+
   renderTabs();
   renderPane();
   tabs.querySelector('.active').focus();
@@ -405,6 +552,7 @@ function mount(box, host) {
     /* Cancel, ×, Esc, a backdrop click: every chart back to its settings — and its indicators and interval,
        since a template Apply can have changed any of those too (spec §8) — at open. After Ok: nothing. */
     revert() {
+      stopWatching();
       if (done) return;
       done = true;
       flush();

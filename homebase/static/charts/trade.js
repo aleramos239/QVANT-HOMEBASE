@@ -46,8 +46,13 @@ function parsePrefs(text) {
 const prefsText = (p) => JSON.stringify(parsePrefs(JSON.stringify(p)));
 
 /* ---- names ---- */
-/* "…047": the last 3 characters of an account's label (or id). */
-function short(a) { const s = String((a && (a.label || a.id)) || ''); return s.length > 3 ? '…' + s.slice(-3) : s; }
+/* "…047": the last 3 characters of an account's label (or id) -- except the PAPER account, whose short name is
+   its label verbatim ("PAPER", never "…PER"): it is one virtual account, not one of a broker's numbered ones. */
+function short(a) {
+  const s = String((a && (a.label || a.id)) || '');
+  if (a && a.env === 'paper') return s;
+  return s.length > 3 ? '…' + s.slice(-3) : s;
+}
 /* NQZ6 -> NQ · MNQH27 -> MNQ · NQ -> NQ: a month code + 1-2 digit year stripped. */
 function rootOf(symbol) {
   const s = String(symbol || '').toUpperCase(), m = /^([A-Z0-9]+?)[FGHJKMNQUVXZ]\d{1,2}$/.exec(s);
@@ -102,16 +107,40 @@ let seq = 0;
 /* One per user action (the desk de-duplicates on it: a retry of the same action reuses it). */
 function clientId(now = Date.now()) { seq = (seq + 1) % 1e6; return `c${now.toString(36)}-${seq.toString(36)}-${Math.random().toString(36).slice(2, 8)}`; }
 
-/* ---- per-chart trading (2026-09-27 plan, Task 2) ----
-   Each chart's cell config carries `trade: {on, accounts}` (default off, no accounts) and `algo` (a desk strategy
-   key, or null). Every order-sending path takes its accounts from the chart it was started from. */
-/* The cell config's trade, sanitised: `on` only for a real true; accounts per idList. Always a fresh object. */
+/* ---- per-chart trading (2026-09-27 accounts-per-chart plan, Task 1) ----
+   Each chart's cell config carries `trade: {accounts}` and `algo` (a desk strategy key, or null). The ACCOUNTS
+   are the switch: a non-empty list means the chart is trade-ready, an empty one means view-only. The old
+   `trade.on` flag is RETIRED -- it is not read, not written, and an old layout's stored `on` is ignored.
+   Every order-sending path takes its accounts from the chart it was started from. */
+/* The cell config's trade, sanitised: accounts per idList. Always a fresh object, never an `on` key. */
 function cellTrade(raw) {
   const o = isObj(raw) ? raw : {};
-  return { on: o.on === true, accounts: idList(o.accounts) };
+  return { accounts: idList(o.accounts) };
 }
-/* A layout (or template, or last-session) load: the accounts come back, Trading NEVER does. */
-function loadedTrade(raw) { return { on: false, accounts: cellTrade(raw).accounts }; }
+/* Which of `accounts` the desk says are LIVE; [] while the desk has said nothing (nothing can trade then
+   anyway: deskGate is 'down'). An id the desk does not list is NOT live by this measure -- it is kept, shown
+   '?' and fails closed everywhere else. */
+function liveIds(accounts, state) {
+  if (!state) return [];
+  const list = accountsOf(state);
+  return idList(accounts).filter((id) => { const a = list.find((x) => x.id === id); return !!a && a.env === 'live'; });
+}
+/* A layout (or template, or last-session) load: DEMO and PAPER accounts come back, every LIVE one is DROPPED
+   (Global Constraints: a live account must be re-ticked and re-armed in the session). `droppedLive` is what it
+   removed, so the caller can say so once. */
+function loadedTrade(raw, state = null) {
+  const accounts = cellTrade(raw).accounts, live = new Set(liveIds(accounts, state));
+  return { accounts: accounts.filter((id) => !live.has(id)), droppedLive: [...live] };
+}
+/* The one plain line a load shows when it dropped LIVE accounts; '' when it dropped none. */
+function liveDroppedMessage(ids, state) {
+  const list = idList(ids);
+  if (!list.length) return '';
+  const who = list.map((id) => { const a = accountsOf(state).find((x) => x.id === id); return (a && a.label) || id; });
+  return list.length === 1
+    ? `LIVE account ${who[0]} was not restored — tick and arm it again`
+    : `LIVE accounts ${who.join(', ')} were not restored — tick and arm them again`;
+}
 /* The cell's algo: a desk strategy key (1-64 characters), or null. */
 function cellAlgo(raw) { return typeof raw === 'string' && raw.length >= 1 && raw.length <= 64 ? raw : null; }
 /* What a layout / template save writes for a chart: its account list and its algo -- never `on`. */
@@ -119,10 +148,11 @@ function tradeBits(cfg) {
   const c = isObj(cfg) ? cfg : {};
   return { trade: { accounts: cellTrade(c.trade).accounts }, algo: cellAlgo(c.algo) };
 }
-/* A stored template's trade / algo, as a load: only the keys the template has; trade forced off. */
-function templateTrade(tpl) {
-  const t = isObj(tpl) ? tpl : {}, out = {};
-  if ('trade' in t) out.trade = loadedTrade(t.trade);
+/* A stored template's trade / algo, as a load: only the keys the template has; LIVE accounts dropped (and
+   reported in `droppedLive`, always present) exactly like a layout load. */
+function templateTrade(tpl, state = null) {
+  const t = isObj(tpl) ? tpl : {}, out = { droppedLive: [] };
+  if ('trade' in t) { const l = loadedTrade(t.trade, state); out.trade = { accounts: l.accounts }; out.droppedLive = l.droppedLive; }
   if ('algo' in t) out.algo = cellAlgo(t.algo);
   return out;
 }
@@ -136,33 +166,41 @@ function algoForRoot(algo, root, strategies) {
   if (!isObj(s) || typeof s.symbol !== 'string' || !s.symbol) return a;
   return rootOf(s.symbol) === root ? a : null;
 }
-/* Charts kept in the layout beyond the visible grid (a smaller grid): Trading switched off, accounts kept, so a chart
-   that reappears when the grid grows again never comes back already trading (fix round 1). Mutates `cells`. */
-function hiddenCellsOff(cells, n) {
-  if (!Array.isArray(cells)) return;
-  for (let i = Math.max(0, n); i < cells.length; i++) if (isObj(cells[i])) cells[i].trade = loadedTrade(cells[i].trade);
+/* Charts kept in the layout beyond the visible grid (a smaller grid) are re-read exactly like a load: DEMO and
+   PAPER accounts kept, every LIVE one dropped, so a chart that reappears when the grid grows again can never
+   come back trading LIVE unarmed. Mutates `cells`; returns every LIVE id it dropped. */
+function hiddenCellsLoaded(cells, n, state = null) {
+  const dropped = [];
+  if (!Array.isArray(cells)) return dropped;
+  for (let i = Math.max(0, n); i < cells.length; i++) {
+    if (!isObj(cells[i])) continue;
+    const l = loadedTrade(cells[i].trade, state);
+    cells[i].trade = { accounts: l.accounts };
+    dropped.push(...l.droppedLive);
+  }
+  return [...new Set(dropped)];
 }
 /* The one-time move of the old global ticked list: onto the SELECTED chart only, and only when that chart has no
-   trade config of its own yet (an old layout's cell, or a fresh one). Trading stays off. null: nothing to move. */
+   trade config of its own yet (an old layout's cell, or a fresh one). null: nothing to move. */
 function migrateTicked(rawCell, ticked) {
   if (isObj(rawCell) && 'trade' in rawCell) return null;
   const accounts = idList(ticked);
-  return accounts.length ? { on: false, accounts } : null;
+  return accounts.length ? { accounts } : null;
 }
 
 /* ---- what the page may do (ruling S7), per chart ---- */
+const NO_ACCOUNTS = "No accounts on this chart — pick one in the chart's ⚙ → Trading";
 /* The desk-level half: down, or chart trading switched off on the desk; null when the desk is up and on. */
 function deskGate(desk) {
   if (!desk || !desk.state) return { mode: 'down', reason: (desk && desk.down) || 'connecting to the desk', accounts: [] };
   if (!desk.state.enabled) return { mode: 'off', reason: 'Chart trading is off on the desk', accounts: [] };
   return null;
 }
-/* One chart's mode from its trade config: its switch, then its accounts, then the desk's rules. `accounts` is
+/* One chart's mode from its trade config: its ACCOUNTS are the switch, then the desk's rules. `accounts` is
    only ever a subset of THIS chart's accounts (the tradable ones). */
 function tradeMode(desk, ct) {
   const t = cellTrade(ct);
-  if (!t.on) return { mode: 'off', reason: 'Trading is off on this chart', accounts: [] };
-  if (!t.accounts.length) return { mode: 'none', reason: 'Pick accounts for this chart in the Trade menu', accounts: [] };
+  if (!t.accounts.length) return { mode: 'off', reason: NO_ACCOUNTS, accounts: [] };
   const gate = deskGate(desk);
   if (gate) return gate;
   const ticked = new Set(t.accounts);
@@ -172,16 +210,15 @@ function tradeMode(desk, ct) {
 }
 
 /* ---- final whole-branch review (2026-09-27) ---- */
-/* I2(b), SAFETY ruling: ANY symbol change on a chart switches that chart's Trading OFF and keeps its accounts
-   (qty and SL/TP ticks are global, so a Trading-on NQ chart moved to GC would otherwise trade GC at the NQ size
-   on the next one-click). This deliberately replaces the earlier plan text "a symbol change keeps the trade
-   config". `patch` is the change about to apply to `cfg`; null when it does not change the symbol. `wasOn`: the
-   caller toasts SYMBOL_CHANGE_TRADE_OFF only when Trading really was on. */
-const SYMBOL_CHANGE_TRADE_OFF = 'Trading switched off — new instrument; turn it back on in the Trade menu';
+/* I2(b), SAFETY ruling: ANY symbol change on a chart CLEARS that chart's accounts (qty and SL/TP ticks are
+   global, so an NQ chart moved to GC would otherwise trade GC at the NQ size on the next one-click). With the
+   accounts as the switch (2026-09-27 accounts-per-chart plan) clearing them is what "switch it off" now means.
+   `patch` is the change about to apply to `cfg`; null when it does not change the symbol. `cleared`: what was
+   taken away -- the caller toasts SYMBOL_CHANGE_ACCOUNTS_CLEARED only when there really was something. */
+const SYMBOL_CHANGE_ACCOUNTS_CLEARED = 'Accounts cleared — new instrument; pick them again in ⚙ → Trading';
 function symbolChangeTrade(cfg, patch) {
   if (!isObj(cfg) || !isObj(patch) || !('root' in patch) || patch.root === cfg.root) return null;
-  const was = cellTrade(cfg.trade);
-  return { trade: { on: false, accounts: was.accounts }, wasOn: was.on };
+  return { trade: { accounts: [] }, cleared: cellTrade(cfg.trade).accounts };
 }
 
 /* I1: a send button (the order panel's Send, the chart's Buy/Sell block) acts on a POINTER click, or on Enter /
@@ -251,7 +288,7 @@ function resolveConfirmedAccounts(shown, fresh) {
 }
 
 /* Ticked accounts minus any LIVE account not armed this session (ruling S5's second click) -- shared by the
-   Trade menu's effective mode and the chart's lines/markers, so a LIVE account never trades or draws until
+   chart's effective mode and its lines/markers, so a LIVE account never trades or draws until
    armed. `liveConfirmed` is a Set (or array) of account ids armed this session. No state at all (the desk
    hasn't loaded yet) passes `ticked` through unchanged, since there is nothing to check against; but once
    `state` exists, an id it does not recognize fails CLOSED (M6) -- dropped, never assumed armed. */
@@ -272,11 +309,12 @@ function armedMode(m, state, liveConfirmed) {
   const accounts = armedTicked(state, m.accounts, liveConfirmed);
   if (accounts.length === m.accounts.length) return m;
   return accounts.length ? { mode: 'on', reason: '', accounts }
-    : { mode: 'none', reason: 'Arm the LIVE account for this chart in the Trade menu', accounts: [] };
+    : { mode: 'none', reason: "Arm the LIVE account for this chart in the chart's ⚙ → Trading", accounts: [] };
 }
 /* A chart in replay can never trade (2026-09-27 bar-replay plan, Global Constraints): its Buy/Sell block,
-   chart-menu trading items and draggable order lines are hidden for the duration, and its real trade.on is
-   forced off for it (replayui.js) and stays off on exit. This is the last word on an otherwise-tradable mode
+   chart-menu trading items and draggable order lines are hidden for the duration. The chart KEEPS its
+   accounts across a replay (they are the switch now, and replay must not throw them away): this guard alone
+   is the refusal, from the instant replayui.js sets cell.replay. This is the last word on an otherwise-tradable mode
    -- HBTradeUI.effectiveMode runs every chart's mode through it, so nothing downstream (the block, the chart
    menu, a line's drag or ×) ever sees 'on' for a replaying chart. A mode that is not 'on' passes through
    unchanged: it is already refused for its own reason, and replay need not relabel it. */
@@ -295,10 +333,15 @@ function legsWithin(line, accounts) {
 function accountChips(state, accounts, activeIds) {
   const act = new Set(activeIds || []), list = accountsOf(state);
   return idList(accounts).map((id) => {
-    const a = list.find((x) => x.id === id), live = !!a && a.env === 'live';
-    return { id, who: short(a || { id }), env: a ? (live ? 'LIVE' : 'DEMO') : '', live, active: act.has(id) };
+    const a = list.find((x) => x.id === id), live = !!a && a.env === 'live', paper = !!a && a.env === 'paper';
+    return { id, who: short(a || { id }), env: a ? envChip(a.env) : '', live, paper, active: act.has(id) };
   });
 }
+
+/* An account's env as its chip: LIVE (red), DEMO (grey), PAPER (amber -- Task 2's virtual account), or '?' for
+   an env the desk did not give (an account it does not list). */
+const ENV_CHIPS = { live: 'LIVE', demo: 'DEMO', paper: 'PAPER' };
+function envChip(env) { return ENV_CHIPS[String(env || '')] || '?'; }
 
 /* A Trade-menu row's state for one chart: 'ticked', 'off', or 'unarmed' -- a LIVE account on the chart's list that
    is not armed this session (it came back with a layout): shown ticked-but-not-armed, and a click removes it. */
@@ -311,7 +354,7 @@ function acctTick(account, accounts, liveConfirmed) {
 /* The refusal toast for an unarmed LIVE account (per-account paths: flatten, cancel, drag, ×). */
 function unarmedLiveMessage(account) {
   const label = (account && (account.label || account.id)) || 'account';
-  return `Arm LIVE account ${label} in the Trade menu first`;
+  return `Arm LIVE account ${label} in the chart's ⚙ → Trading first`;
 }
 
 /* The Buy/Sell block's texts: bid / ask (the last trade when one side is missing), the spread in ticks, stale when
@@ -663,6 +706,63 @@ function algoChoices(state, root, current = null, paperList = null) {
   const confirmedElsewhere = cur && (isObj(strats[cur]) || papers.some((p) => paperKey(p.id) === cur));
   if (cur && !confirmedElsewhere && !out.some((c) => c.value === cur)) out.push({ value: cur, text: algoName(cur) });
   return out;
+}
+
+/* ---- the chart's gear -> Trading tab (2026-09-27 accounts-per-chart plan, Task 1) ---- */
+/* Which desk strategies on `root` book which accounts: [{key, name, accounts}], in the desk's own order. A
+   strategy's BOOK is what "belongs to an algo" means -- not the accounts it happened to act on today. */
+function algoBookings(state, root) {
+  const strats = (state && state.bot && isObj(state.bot.strategies) && state.bot.strategies) || {};
+  return Object.entries(strats)
+    .filter(([, s]) => isObj(s) && rootOf(s.symbol) === root)
+    .map(([key, s]) => ({ key, name: algoName(key), accounts: Object.keys(isObj(s.book) ? s.book : {}) }));
+}
+/* The algo on `root` that books `id`, or null: ticking that account sets the ALGO select to it. */
+function algoForAccount(state, root, id) {
+  const b = algoBookings(state, root).find((x) => x.accounts.includes(id));
+  return b ? b.key : null;
+}
+/* The accounts `key` books on `root`; [] when it is not a desk strategy on this root (a paper algo books none). */
+function accountsForAlgo(state, root, key) {
+  const k = cellAlgo(key), b = k ? algoBookings(state, root).find((x) => x.key === k) : null;
+  return b ? [...b.accounts] : [];
+}
+/* Which of an algo's booked accounts a PICK of it may tick: never a LIVE one that is not already armed this
+   session (a LIVE account is only ever ticked through its own two-step arm) and never one the desk does not
+   list (armedTicked fails closed on both). */
+function algoTickAccounts(state, root, key, liveConfirmed) {
+  return armedTicked(state, accountsForAlgo(state, root, key), liveConfirmed);
+}
+/* The ACCOUNTS section's rows for one chart: every account the desk lists, then any on THIS chart's list the
+   desk does not (chip '?', never tradable -- fail closed -- but always removable from the chart).
+     tick: 'ticked' | 'off' | 'unarmed' (acctTick); disabled: the checkbox cannot be turned ON;
+     note: "in NQ 9:30 Straddle" when an algo on this chart's instrument books it. */
+function accountPickRows(state, accounts, liveConfirmed, root) {
+  const on = idList(accounts), onSet = new Set(on), listed = accountsOf(state);
+  const rows = listed.map((a) => {
+    const tick = acctTick(a, on, liveConfirmed), algo = algoForAccount(state, root, a.id);
+    return { id: a.id, label: a.label || a.id, env: a.env || '', chip: envChip(a.env), live: a.env === 'live',
+      paper: a.env === 'paper', balance: money(a.balance), connected: !!a.connected, listed: true,
+      tick, disabled: !a.tradable && tick === 'off', error: a.tradable ? '' : (a.error || 'not tradable'),
+      algo, note: algo ? `in ${algoName(algo)}` : '' };
+  });
+  const seen = new Set(listed.map((a) => a.id));
+  for (const id of on) {
+    if (seen.has(id)) continue;
+    rows.push({ id, label: id, env: '', chip: '?', live: false, paper: false, balance: '—', connected: false,
+      listed: false, tick: 'ticked', disabled: false, error: "not on the desk's list — cannot trade", algo: null, note: '' });
+  }
+  return rows.filter((r) => r.listed || onSet.has(r.id));
+}
+/* The desk's own state for the bottom status bar (it left the deleted Trade button with it): a dot, the line,
+   and whether to show the "Open the desk" link. */
+function deskStatusText(desk) {
+  const gate = deskGate(desk);
+  if (gate && gate.mode === 'down') return { dot: 'bad', text: `Desk unreachable — ${gate.reason}`, link: false };
+  if (gate) return { dot: 'warn', text: 'Chart trading is off on the desk', link: true };
+  const lim = (desk.state && desk.state.limits) || {};
+  return { dot: 'ok', link: false,
+    text: `Desk: connected · chart trading on · max ${lim.max_order_qty ?? '—'}/order, ${lim.max_position_qty ?? '—'}/position` };
 }
 
 const fmt1 = (v) => (v == null || !Number.isFinite(v) ? '—' : v.toFixed(1));
@@ -1158,9 +1258,11 @@ const api = { PREFS_KEY, QUOTE_STALE_MS, BOT_NAMES, parsePrefs, prefsText, short
   lineText, lineColor, canDrag, withPrice, orderTitle, confirmOrder, actionTitle, resultToasts, fillText, fillMarkers, botName, positionRows, orderRows, fillRows, accountRows, etTime, diffRows,
   algoName, algoLabel, algoChoices, algoAccounts, botPill, botToday, algoOverlay, etMs, pastRunMarkers, nearestTip, historySig,
   killConfirm, killToasts, killBlock, killSold,
-  enterConfirms, wireSend, SYMBOL_CHANGE_TRADE_OFF, symbolChangeTrade, resolveConfirmedAccounts, armedTicked, unarmedLiveMessage, freshQuote,
+  enterConfirms, wireSend, symbolChangeTrade, resolveConfirmedAccounts, armedTicked, unarmedLiveMessage, freshQuote,
   needsQuoteForBracket, refuseIfMarketable, cellTrade, loadedTrade, cellAlgo, tradeBits, templateTrade, algoForRoot,
-  migrateTicked, deskGate, armedMode, replayGuard, legsWithin, accountChips, acctTick, hiddenCellsOff,
+  migrateTicked, deskGate, armedMode, replayGuard, legsWithin, accountChips, acctTick, hiddenCellsLoaded,
+  NO_ACCOUNTS, SYMBOL_CHANGE_ACCOUNTS_CLEARED, liveIds, liveDroppedMessage, envChip, algoBookings, algoForAccount,
+  accountsForAlgo, algoTickAccounts, accountPickRows, deskStatusText,
   PANEL_QTY_MAX, GTC_WARN, exitTriple, qtyFromRisk, exitSideError, panelOrder, sendLabel,
   parseQty, parseUsd, parseDecimal, roundTickDir, riskTicks,
   paperKey, isPaperAlgo, paperStrategyId, paperStrategiesMap, paperPill, paperToday, paperLabel, paperLines,

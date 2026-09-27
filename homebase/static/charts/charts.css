@@ -257,6 +257,11 @@ a { color: inherit; }
 .sb-feed.bad, .sb-note { color: var(--down); }
 .sb-feed.warn { color: var(--warn); }
 .sb-spacer { flex: 1; }
+/* the desk's own state (tradeui.js paintDeskStatus): the dot, the line, and the "Open the desk" link */
+.sb-desk { min-width: 0; display: flex; align-items: center; gap: 6px; overflow: hidden; white-space: nowrap; }
+.sb-desk > span:not(.sb-dot) { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.sb-desk-link { color: var(--accent); text-decoration: none; }
+.sb-desk-link:hover { text-decoration: underline; }
 #sbRec.warn { color: var(--warn); }
 .sb-credit { color: var(--text-2); text-decoration: none; }
 .sb-credit:hover { color: var(--text); text-decoration: underline; }
@@ -318,6 +323,21 @@ a { color: inherit; }
 .set-chips { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px 12px; }
 .set-chip { display: inline-flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
 .set-chip input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
+/* ---- the Trading tab: ACCOUNTS + the all-charts defaults (accounts-per-chart plan, Task 1) ---- */
+.set-accts { padding: 2px 0 4px; }
+.set-acct-list { display: flex; flex-direction: column; }
+.set-acct { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto auto 10px; align-items: center; gap: 10px;
+  min-height: 36px; }
+.set-acct input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
+.set-acct input[type="checkbox"]:disabled { opacity: .5; cursor: default; }
+.set-acct-lab { min-width: 0; display: flex; flex-direction: column; justify-content: center; line-height: 1.2; }
+.set-acct-name, .set-acct-note, .set-acct-err, .set-acct-arm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.set-acct-note { color: var(--text-2); font-size: 11px; }
+.set-acct-err { color: var(--text-2); font-size: 11px; }
+.set-acct-arm { color: var(--down); font-size: 12px; font-weight: 600; }
+.set-acct-bal { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.set-why { padding: 6px 0 2px; color: var(--warn); font-size: 12px; }
+.set-note { padding: 6px 0 2px; color: var(--text-2); font-size: 12px; }
 
 /* ---- the chart's context menu and an indicator's menu (chartmenu.js) ---- */
 .menu:focus { outline: none; }   /* a context menu takes focus itself; its items show the focus ring */
@@ -365,6 +385,7 @@ a { color: inherit; }
 .bp-fq-compare { padding: 8px 10px; color: var(--text-2); font-size: 12px; }
 .env { padding: 0 5px; border-radius: 4px; font-size: 11px; line-height: 16px; background: var(--hover); color: var(--text-2); }
 .env.live { background: var(--down-soft); color: var(--down); font-weight: 600; }
+.env.paper { background: var(--warn-soft); color: var(--warn); font-weight: 600; }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--text-2); }
 .dot.ok { background: var(--up); } .dot.bad { background: var(--down); } .dot.warn { background: var(--warn); }
 
@@ -397,31 +418,6 @@ a { color: inherit; }
 .hb-news-layer { position: absolute; inset: 0; z-index: 4; pointer-events: none; overflow: hidden; }
 .hb-news-tip { white-space: pre-line; max-width: 320px; z-index: 8; }
 
-/* ---- Trade menu (tradeui.js) ---- */
-.menu-trade { width: 340px; }
-/* the selected chart's header: "Trading on this chart — NQ · chart 2" + its own Trading switch (Task 2) */
-.tm-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px 6px; }
-.tm-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; }
-.tm-why { color: var(--warn); padding-top: 0; }
-.tm-status { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; padding: 0 16px 10px; color: var(--text-2); font-size: 12px; }
-.tm-status a { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); text-decoration: none; }
-.tm-status a:hover { text-decoration: underline; }
-.tm-status a .ic { width: 13px; height: 13px; }
-.tm-row { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto auto 10px; align-items: center; gap: 8px;
-  height: 32px; padding: 0 16px; }
-.tm-row input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
-.tm-row input[type="checkbox"]:disabled { opacity: .5; }
-.tm-label { min-width: 0; display: flex; flex-direction: column; justify-content: center; line-height: 1.15; }
-.tm-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tm-err { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); font-size: 11px; }
-.tm-unarmed { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--down); font-size: 11px; font-weight: 600; }
-.tm-arm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--down); font-size: 12px; font-weight: 600; }
-.tm-bal { white-space: nowrap; font-variant-numeric: tabular-nums; }
-.tm-pref { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 36px; padding: 4px 16px; }
-.tm-pref input[type="number"] { width: 76px; height: 28px; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px;
-  background: var(--panel); font-variant-numeric: tabular-nums; }
-.tm-pref input[type="number"]:focus { border-color: var(--accent); }
-.tm-note { color: var(--text-2); font-size: 11px; }
 .switch { flex: none; position: relative; width: 28px; height: 16px; border-radius: 8px; background: var(--pill); }
 .switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%;
   background: #FFFFFF; transition: transform .12s; }

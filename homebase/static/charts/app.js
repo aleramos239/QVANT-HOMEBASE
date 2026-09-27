@@ -57,7 +57,7 @@ const cur = () => cells[selected];
 /* ---- layout + selection ---- */
 function starter(i) {
   const [root, spec] = START[i % START.length];
-  return { root, spec, indicators: C.defaults(), trade: T.loadedTrade(null), algo: null };
+  return { root, spec, indicators: C.defaults(), trade: { accounts: [] }, algo: null };   // a fresh chart is view-only
 }
 function saveLast() { try { localStorage.setItem('hb_charts_last', JSON.stringify(layout)); } catch (_) { /* storage off */ } }
 /* Anything that changes a chart outside the Settings dialog's own commit (Ok already marks dirty itself) reads
@@ -93,18 +93,44 @@ function loadLast() {
 
 /* A saved layout (localStorage or the server) as the page runs it: HBCatalog.migrateLayout gives each chart's
    {root, spec, indicators}; each chart's settings (HBSettings overrides, cleaned) are kept beside them, and its
-   trade accounts and algo (Task 2). EVERY load goes through HBTrade.loadedTrade: Trading always comes back off,
-   whatever the stored layout (or the last session) says. */
+   trade accounts and algo. EVERY load goes through HBTrade.loadedTrade: DEMO and PAPER accounts come back, a
+   LIVE one NEVER does (2026-09-27 accounts-per-chart plan, Global Constraints). A load usually runs before the
+   desk has said which accounts are live, so dropLiveAccounts() below re-runs the drop the moment its list
+   arrives -- and `pendingDroppedLive` carries what this load already dropped into the one notice. */
+let pendingDroppedLive = [];
 function readLayout(v) {
   const lay = C.migrateLayout(v), raw = v && Array.isArray(v.cells) ? v.cells : [];
+  const st = deskState();
   lay.cells.forEach((c, i) => {
     const r = raw[i] && typeof raw[i] === 'object' ? raw[i] : {};
     const s = r.settings, o = S.overrides(s && typeof s === 'object' ? s : {});
     if (Object.keys(o).length) c.settings = o;
-    c.trade = T.loadedTrade(r.trade);
+    const t = T.loadedTrade(r.trade, st);
+    c.trade = { accounts: t.accounts };
+    pendingDroppedLive.push(...t.droppedLive);
     c.algo = T.cellAlgo(r.algo);
   });
   return lay;
+}
+const deskState = () => (window.HBDeskClient && window.HBDeskClient.state) || null;
+/* Global Constraints: no load ever leaves a LIVE account on a chart. Re-run over every chart (visible and the
+   ones kept beyond the grid) whenever the desk's list changes, so a layout restored before the desk answered
+   is cleaned the instant it can be. Says so once, naming the accounts. */
+function dropLiveAccounts() {
+  const st = deskState();
+  if (!st) return;
+  const dropped = [...pendingDroppedLive];
+  pendingDroppedLive = [];
+  for (const c of cells) {
+    const t = T.loadedTrade(c.cfg.trade, st);
+    if (!t.droppedLive.length) continue;
+    dropped.push(...t.droppedLive);
+    window.HBTradeUI.setCellTrade(c, { accounts: t.accounts }, { quiet: true });
+  }
+  dropped.push(...T.hiddenCellsLoaded(layout.cells, cells.length, st));
+  if (!dropped.length) return;
+  saveLast();
+  window.HBDeskClient.toast('err', T.liveDroppedMessage([...new Set(dropped)], st));
 }
 
 /* The desk's strategies (for an algo's symbol), merged with the paper strategies (2026-09-27 paper-forward-test
@@ -118,23 +144,25 @@ function deskStrategies() {
   const paper = window.HBPaperClient ? T.paperStrategiesMap(window.HBPaperClient.strategies()) : {};
   return { ...bot, ...paper };
 }
-/* A template's trade / algo onto one chart (Task 2): only the keys the template stored; Trading always comes back
-   OFF (HBTrade.templateTrade -> loadedTrade); its algo is kept only while the desk confirms it trades this chart's
-   symbol (templates never store a symbol). `quiet`: the caller saves (the Settings dialog: on Ok). */
+/* A template's trade / algo onto one chart: only the keys the template stored; a LIVE account in it is dropped
+   like any load (HBTrade.templateTrade -> loadedTrade); its algo is kept only while the desk confirms it trades
+   this chart's symbol (templates never store a symbol). `quiet`: the caller saves (the Settings dialog: on Ok). */
 function applyTemplateTrade(cell, raw, { quiet = false } = {}) {
-  const bits = T.templateTrade(raw);
+  const st = deskState(), bits = T.templateTrade(raw, st);
   if ('algo' in bits) window.HBTradeUI.setCellAlgo(cell, T.algoForRoot(bits.algo, cell.cfg.root, deskStrategies()), { quiet });
   if (bits.trade) window.HBTradeUI.setCellTrade(cell, bits.trade, { quiet });
+  if (bits.droppedLive.length) window.HBDeskClient.toast('err', T.liveDroppedMessage(bits.droppedLive, st));
 }
-/* The Settings dialog's Cancel: a chart's accounts and algo as they were at open (HBTrade.tradeBits) -- restored
-   with Trading OFF, never back on (a template Apply may have switched it off; Cancel does not re-arm it). */
+/* The Settings dialog's Cancel: a chart's accounts and algo exactly as they were at open (HBTrade.tradeBits).
+   Not a load, so its accounts come back as they were -- a LIVE one there at open can only have been armed in
+   this session, and if it was un-armed meanwhile it comes back shown-but-unarmed, which cannot trade. */
 function restoreTemplateTrade(cell, bits) {
   window.HBTradeUI.setCellAlgo(cell, T.cellAlgo(bits && bits.algo), { quiet: true });
-  window.HBTradeUI.setCellTrade(cell, T.loadedTrade(bits && bits.trade), { quiet: true });
+  window.HBTradeUI.setCellTrade(cell, T.cellTrade(bits && bits.trade), { quiet: true });
 }
 
-/* Task 2's one-time migration: the retired global ticked list moves onto the SELECTED chart, Trading off, when
-   that chart has no trade config of its own yet (a pre-Task-2 layout, or a fresh one). Other charts get nothing.
+/* The one-time migration of the retired global ticked list onto the SELECTED chart, when that chart has no
+   trade config of its own yet (a pre-Task-2 layout, or a fresh one). Other charts get nothing.
    The old list is then cleared, so this never runs again. */
 function migrateTickedOnce() {
   const Dc = window.HBDeskClient, ticked = Dc.prefs.ticked;
@@ -172,12 +200,12 @@ function hostFor(id) {
     onChartMenu(cell, at) { chartMenu(cell, at); },
     onIndicatorMenu(cell, uid, o) { indicatorMenu(cell, uid, o); },
     onReplayGuard(cell, patch) { window.HBReplayUI.guardSymbolChange(cell, patch); },
-    // final review I2(b), SAFETY ruling: any symbol change switches that chart's Trading off, accounts kept
-    // (HBTrade.symbolChangeTrade, from cell.update); the toast only when it really was on
+    // final review I2(b), SAFETY ruling: any symbol change CLEARS that chart's accounts, so the new instrument
+    // is view-only until they are picked again (HBTrade.symbolChangeTrade, from cell.update)
     onSymbolChange(cell, off) {
-      if (!off.wasOn) return;   // already off: nothing to switch, nothing to say
+      if (!off.cleared.length) return;   // nothing on the chart: nothing to clear, nothing to say
       window.HBTradeUI.setCellTrade(cell, off.trade);
-      window.HBDeskClient.toast('err', T.SYMBOL_CHANGE_TRADE_OFF);
+      window.HBDeskClient.toast('err', T.SYMBOL_CHANGE_ACCOUNTS_CLEARED);
     },
     changed() { saveLast(); renderToolbar(); },
     tool: () => tool,
@@ -196,7 +224,8 @@ function buildGrid() {
   for (const c of cells) { window.HBReplayUI.cellDestroyed(c); c.destroy(); }
   cells = [];
   const grid = $('#grid'), [cols, rows] = GRIDS[layout.grid] || GRIDS[4], n = cols * rows;
-  T.hiddenCellsOff(layout.cells, n);   // a chart kept beyond the visible grid never comes back already trading
+  // a chart kept beyond the visible grid is re-read like a load: its LIVE accounts drop, the rest stay
+  const hidden = T.hiddenCellsLoaded(layout.cells, n, deskState());
   grid.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
   grid.style.gridTemplateRows = `repeat(${rows}, minmax(0, 1fr))`;
   grid.dataset.count = String(n);
@@ -210,13 +239,13 @@ function buildGrid() {
     cell.applyFold(legendFolded(cell));   // needs this cell's grid index, only known once it is in `cells`
   }
   select(Math.min(selected, n - 1));
+  if (hidden.length) window.HBDeskClient.toast('err', T.liveDroppedMessage(hidden, deskState()));
 }
 
 function select(i) {
   if (i < 0 || i >= cells.length) return;
   selected = i;
   cells.forEach((c, k) => c.setSelected(k === i));
-  if (page) window.HBTradeUI.selectionChanged();   // the Trade menu and its toolbar dot follow the selected chart
   if (page) window.HBOrderPanel.setRoot(panelRoot());   // so does the order panel (it re-reads the chart itself)
   renderToolbar();
   syncCrosshair();
@@ -544,7 +573,7 @@ async function fetchLayouts() {
 
 /* PUT the current layout under `name`: '' when saved, else the reason. */
 async function putLayout(name) {
-  // each chart's trade ACCOUNTS and algo are saved (HBTrade.tradeBits), never its Trading switch (Task 2)
+  // each chart's trade ACCOUNTS and algo are saved (HBTrade.tradeBits); a LIVE one is dropped again on load
   const body = { grid: layout.grid, cells: layout.cells.map((c) => {
     const { root, spec, indicators, settings } = c;
     const base = settings && Object.keys(settings).length ? { root, spec, indicators, settings } : { root, spec, indicators };
@@ -583,6 +612,7 @@ function loadLayout(name, saved) {
   saveLast();
   selected = 0;
   buildGrid();
+  dropLiveAccounts();   // the load's own LIVE drop is reported once, here (readLayout only collects it)
 }
 
 async function layoutMenu(saveAsFirst = false) {
@@ -877,21 +907,37 @@ function positionDialog(cell, d) {
 
 /* The chart Settings dialog (settings-dialog.js): the toolbar gear opens it for the selected chart, a per-chart
    gear or the chart menu's Settings… for that chart. */
-function chartSettings(c = cur()) {
+function chartSettings(c = cur(), tab = null) {
   if (!c) return;
   select(cells.indexOf(c));
   const box = openDialog('Settings', 'settings');
   const ctl = window.HBSettingsDialog.mount(box, {
     cell: c,
+    tab,                  // which tab to open on: the order panel's "Change" asks for 'trading'
     cells: () => cells,
     templates,
     tradeBits: (x) => T.tradeBits(x.cfg),                               // Task 2: what a template save adds
     applyTrade: (x, raw) => applyTemplateTrade(x, raw, { quiet: true }),  // a template Apply (saved on Ok)
     restoreTrade: restoreTemplateTrade,                                   // Cancel
-    // Task 3: the Algo select -- the desk's strategies on this chart's root, plus (Task 2) any paper strategy on
-    // it ("paper:<id>"); a pick previews live, saved on Ok
+    // Task 3: the Algo select -- the desk's strategies on this chart's root, plus (paper Task 2) any paper
+    // strategy on it ("paper:<id>"); a pick previews live, saved on Ok, and ticks the accounts it books
     algoChoices: (x) => T.algoChoices(window.HBDeskClient.state, x.cfg.root, x.cfg.algo, window.HBPaperClient ? window.HBPaperClient.strategies() : []),
-    setAlgo: (x, v) => window.HBTradeUI.setCellAlgo(x, v || null, { quiet: true }),
+    setAlgo: (x, v) => window.HBTradeUI.pickAlgo(x, v || null, { quiet: true }),
+    // 2026-09-27 accounts-per-chart plan, Task 1: the Trading tab's ACCOUNTS list and the all-charts defaults.
+    // Every rule (the two-step LIVE arm, an unlisted account failing closed, the algo binding) is HBTradeUI's.
+    accountRows: (x) => window.HBTradeUI.accountRows(x),
+    toggleAccount: (x, id) => window.HBTradeUI.toggleAccount(x, id, { quiet: true }),
+    armPending: () => window.HBTradeUI.armPending(),
+    tradeWhy: (x) => { const m = window.HBTradeUI.effectiveMode(x); return m.mode === 'on' ? '' : m.reason; },
+    prefs: () => window.HBDeskClient.prefs,
+    setPrefs: (patch) => window.HBDeskClient.setPrefs(patch),
+    // the Trading tab re-reads on a tick / LIVE arm AND on a desk change (a new account list, one going
+    // not-tradable): both, since the dialog must never show a row the desk no longer backs
+    onTradeChange: (fn) => {
+      const offTrade = window.HBTradeUI.onTradeChange(fn);
+      const offDesk = window.HBDeskClient.on((why) => { if (why.has('state') || why.has('account')) fn(); });
+      return () => { offTrade(); offDesk(); };
+    },
     countries: () => [...new Set(calendar.map((e) => e.country))].sort(),
     toggleMenu(anchor, cls, fill) {   // menus and popovers open inside the dialog (above its backdrop)
       if (menuAnchor === anchor) { closeMenu(); return; }
@@ -1343,7 +1389,7 @@ async function init() {
   page = {
     mk, icon, $, cells: () => cells, cur, select: (c) => select(cells.indexOf(c)),
     openDialog, closeDialog, setDialogClose(fn) { if (dlg) dlg.onClose = fn; }, dialogOpen: () => !!dlg,
-    openMenu, closeMenu, placeMenu, toggleMenu, menuItem, sbNote, clockMs,
+    openMenu, closeMenu, placeMenu, toggleMenu, menuItem, sbNote, clockMs, chartSettings,
     deskUrl: () => `${location.protocol}//${location.hostname}:8850/`,
     overlays: [],
     // a chart's trade config changed (HBTradeUI.setCellTrade): an account-list change is a layout change (Unsaved);
@@ -1361,11 +1407,15 @@ async function init() {
   window.HBTesterUI.mount(page);               // Task 9
   window.HBNewsUI.mount(page);                 // 2026-09-27 news-ui plan, Task 4: registers the News tab
   window.HBPanel.mount(page);                 // Task 4
-  window.HBTradeUI.mount(page);                // Task 5
+  window.HBTradeUI.mount(page);                // Task 5 (it also owns the desk's line in the status bar)
   window.HBOrderPanel.mount(page);             // order-panel plan Task 3: the right dock (follows the selected chart)
   window.HBReplayUI.mount(page);
   buildGrid();   // after the mounts: page.overlays must be filled before any cell's build() reads host.overlays()
   migrateTickedOnce();
+  // Global Constraints: no LIVE account survives a load. The layout was restored before the desk answered, so
+  // the drop is (re-)run every time its account list changes -- and once now, in case it already has.
+  if (window.HBDeskClient) window.HBDeskClient.on((why) => { if (why.has('state') || why.has('account')) dropLiveAccounts(); });
+  dropLiveAccounts();
   connect();
   tick();
   setInterval(tick, 1000);

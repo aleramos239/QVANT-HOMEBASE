@@ -14,16 +14,16 @@
    `cell.replay` (cell.js) is the one flag every REAL trading path reads: HBTradeUI.effectiveMode runs it
    through T.replayGuard, which hides the real Buy/Sell block, drops the chart-menu's real trading items and
    makes every real line view-only (no drag, no ×) for that cell. doStart() sets `cell.replay` and
-   force-refreshes the chart's overlays BEFORE the server even answers, so there is no gap; onState() forces
-   the cell's own trade.on off the first time a replay actually starts, and it is never turned back on by this
-   module. The PRACTICE path (Task 2: PracticeSim, its block, lines and menu items below) is a wholly separate
+   force-refreshes the chart's overlays BEFORE the server even answers, so there is no gap. It does NOT touch
+   the chart's accounts (2026-09-27 accounts-per-chart plan: the accounts ARE the switch, and a replay must
+   not throw them away) -- replayGuard alone is what refuses a real order here. The PRACTICE path (Task 2: PracticeSim, its block, lines and menu items below) is a wholly separate
    simulation that never touches the desk at all -- see replay.js's own isolation note and
    tests/js/replay.test.mjs's isolation test, which reads this file's source text for exactly that. */
 (() => {
 'use strict';
 const R = window.HBReplay;
 
-const sessions = new WeakMap();   // Cell -> {pending, forcedTrade, ov, date, cursorMs, speed, playing, done}
+const sessions = new WeakMap();   // Cell -> {pending, ov, date, cursorMs, speed, playing, done}
 let page = null;
 let armed = null;                 // {cell, cleanup()}: "pick a start" mode is on, or null
 let lastPick = { date: '', time: '09:30' };   // remembered for this viewer's next open only, never persisted
@@ -74,11 +74,10 @@ function doStart(cell, date, time) {
   // this cell's Overlay with it -- before any replay_state ever arrives, and its first render reads these.
   // sim/feed/lastPrice: Task 2, filled in once by onState() (cell.tick/cell.pv are not known until the
   // history for THIS date has loaded); qty: the practice block's own quantity field, 1 by default.
-  sessions.set(cell, { pending: true, forcedTrade: false, ov: null, sim: null, feed: null, lastPrice: null,
+  sessions.set(cell, { pending: true, ov: null, sim: null, feed: null, lastPrice: null,
     qty: 1, ...cell.replay });
-  // M3 (final review): Trading off NOW, not at the first replay_state -- an exit, a reconnect or a `stopped`
-  // before that state would otherwise leave it on over the replay's historical bars (onState still re-checks)
-  if (cell.cfg.trade && cell.cfg.trade.on) window.HBTradeUI.setCellTrade(cell, { on: false, accounts: cell.cfg.trade.accounts });
+  // M3 (final review): cell.replay is set ABOVE, before the send, so T.replayGuard refuses every real order
+  // from this instant -- an exit, a reconnect or a `stopped` before the first replay_state cannot open a gap.
   refreshOverlays(cell);
   cell.host.send(R.startOp(cell.id, date, time));
 }
@@ -112,21 +111,17 @@ function clearSession(cell) {
 function onReconnect(cells) { for (const c of cells) if (sessions.has(c)) clearSession(c); }
 
 /* replay_state (parsed by replay.js): `stopped` ends the session locally too (the server's own `reset` that
-   follows makes app.js resubscribe live). Otherwise: update the session, force trade.on off the first time
-   (never back on), and let the live Overlay (if the chart still has one built) redraw. */
+   follows makes app.js resubscribe live). Otherwise: update the session and let the live Overlay (if the
+   chart still has one built) redraw. The chart's accounts are left alone: cell.replay is the refusal. */
 function onState(cell, msg) {
   const parsed = R.parseState(msg);
   if (!parsed || !cell) return;
   if (parsed.stopped) { clearSession(cell); return; }
   let s = sessions.get(cell);
-  if (!s) { s = { pending: false, forcedTrade: false, ov: null, sim: null, feed: null, lastPrice: null, qty: 1 }; sessions.set(cell, s); }
+  if (!s) { s = { pending: false, ov: null, sim: null, feed: null, lastPrice: null, qty: 1 }; sessions.set(cell, s); }
   s.pending = false;
   s.date = parsed.date; s.cursorMs = parsed.cursorMs; s.speed = parsed.speed; s.playing = parsed.playing; s.done = parsed.done;
   cell.replay = { date: s.date, cursorMs: s.cursorMs, speed: s.speed, playing: s.playing, done: s.done };
-  if (!s.forcedTrade) {
-    s.forcedTrade = true;
-    if (cell.cfg.trade && cell.cfg.trade.on) window.HBTradeUI.setCellTrade(cell, { on: false, accounts: cell.cfg.trade.accounts });
-  }
   // Task 2: the practice simulator, created once THIS date's history has loaded (cell.tick/cell.pv are only
   // known from here on) -- cell.pv is the single source of truth (homebase/contracts.py, via the server's
   // history payload); R.pointValue() only covers the gap on the off chance it is not set yet.

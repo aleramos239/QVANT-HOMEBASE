@@ -252,8 +252,9 @@ function build() {
   const ahead = mk('div', 'op-ahead');
   ui.change = mk('button', 'op-link', 'Change');
   ui.change.type = 'button';
-  ui.change.title = "This chart's trading and accounts (the Trade menu)";
-  ui.change.onclick = () => { const b = document.getElementById('tbTrade'); if (b) b.click(); };
+  ui.change.title = "This chart's accounts (its ⚙ → Trading)";
+  // the Trade menu is gone: the accounts live in the chart's own Settings dialog, on its Trading tab
+  ui.change.onclick = () => { const c = selectedCell(); if (c && page.chartSettings) page.chartSettings(c, 'trading'); };
   ahead.append(mk('span', 'op-lab', 'Accounts'), ui.change);
   ui.chips = mk('div', 'op-chips');
   ui.why = mk('div', 'op-why');
@@ -335,7 +336,7 @@ function setRisk(on) {
   if (on && !st.sl.on) st.sl.on = true;
   paint();
 }
-/* The exits back to the Trade menu's tick defaults (0 = off): at mount and on a symbol change. */
+/* The exits back to the all-charts tick defaults (0 = off, ⚙ → Trading): at mount and on a symbol change. */
 function resetExits() {
   const p = D().prefs;
   for (const [k, n] of [['tp', p.tpTicks], ['sl', p.slTicks]]) {
@@ -400,9 +401,9 @@ function paint() {
   ui.sym.textContent = root;   // the root the order body carries; the desk picks the contract (fix round 1)
   ui.name.textContent = Cat.rootName(root) || '';
 
-  // Trading per chart: this chart's switch, accounts and mode (LIVE-arm aware)
+  // Trading per chart: this chart's accounts ARE its switch, plus its mode (LIVE-arm aware)
   const t = UI().tradeOf(cell), m = UI().effectiveMode(cell);
-  el.classList.toggle('off', !t.on);
+  el.classList.toggle('off', !t.accounts.length);
   paintAccounts(t, m);
   if (flashPending) { flashPending = false; flashChips(); }   // another chart: its accounts are the ones an order goes to now (fix round 1)
 
@@ -505,7 +506,7 @@ function paintAccounts(t, m) {
     acctKey = key;
     ui.chips.replaceChildren(...(chips.length ? chips.map((c) => {
       const e = mk('span', 'tr-acct' + (c.active ? '' : ' off'), c.who);
-      if (c.env) e.append(mk('span', 'env' + (c.live ? ' live' : ''), c.env));
+      if (c.env) e.append(mk('span', 'env' + (c.live ? ' live' : c.paper ? ' paper' : ''), c.env));
       e.title = c.active ? `Orders from this panel go to ${c.id}` : `${c.id} — not trading from this chart right now`;
       return e;
     }) : [mk('span', 'op-none', 'No accounts on this chart')]));
