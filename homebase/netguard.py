@@ -91,9 +91,14 @@ def origin_allowed(origin: Optional[str], allowed: frozenset) -> bool:
     if not origin:
         return False
     # The port is ignored: any page served from an allowed host (e.g. the
-    # chart service on :8852) may write. That is safe ONLY while the desk has
-    # no CORS middleware — no page elsewhere can read a response. Adding CORS
-    # (or reflecting Origin) would need an exact origin match instead.
+    # chart service on :8852) may write. That is safe ONLY while the response
+    # carries no CORS header -- no page elsewhere can then read it, even if
+    # its write goes through. A route that DOES need to answer another
+    # origin (desk-settings plan: charts/paperbook.py's DESK_ORIGINS, shared
+    # by /api/settings, /api/status and /api/paper/accounts*) must add its
+    # OWN exact-origin check (paperbook.desk_origin_refusal) in front of this
+    # one and only emit the CORS header for that exact match -- never widen
+    # this allowlist-by-host check itself to stand in for it.
     m = _ORIGIN.fullmatch(origin.lower())
     return m is not None and host_allowed(m.group("host"), allowed)
 

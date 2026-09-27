@@ -48,7 +48,7 @@ gateT  = input.bool(false, "Trade TREND days only (removed from spec 2026-09-16)
 adxTh  = input.float(20.0, "ADX trend threshold (daily)",           minval = 5, step = 1)
 bandLo = input.float(0.85, "Regime LOW band (ratio below)",         minval = 0.1, step = 0.05)
 bandHi = input.float(1.15, "Regime HIGH band (ratio above)",        minval = 1.0, step = 0.05)
-hookSec = input.string("", "Webhook secret (Homebase)", tooltip = "Paste from the app's TradingView setup card. Empty = no alert payload.")
+hookSec = input.string("", "Webhook secret (Homebase)", tooltip = "Paste config.json's webhook_secret. Empty = no alert payload.")
 
 // ---- regime detection (yesterday's completed daily values, non-repainting) ----
 f_adx() =>

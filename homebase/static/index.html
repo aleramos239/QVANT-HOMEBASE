@@ -509,7 +509,10 @@
       <span class="spacer" style="flex:1"></span>
       <button class="cal-nav" onclick="closeSettings()" title="Close">&times;</button>
     </div>
-    <div id="settingsBody"></div>
+    <div id="settingsBody">
+      <div id="settingsTrading"></div>
+      <div id="settingsMarketData"></div>
+    </div>
   </div>
 </div>
 
@@ -609,6 +612,7 @@
   (function(){ var a = document.getElementById('chartsLink'); if (a) a.href = location.protocol + '//' + location.hostname + ':8852/?v=15'; })();
 const $ = (s) => document.querySelector(s);
 let ST = null;
+let DESK_STALE = false;   // true while refresh() is failing: ST is the last-known state, not current
 const DEMO = new URLSearchParams(location.search).has("demo");
 
 /* ---- algo manager: which algo cards show on the home page ----
@@ -830,9 +834,13 @@ function render() {
 
 async function refresh() {
   if (FREEZE) return;             // don't wipe an open menu or qty edit
-  if (DEMO) { ST = demoStatus(); render(); return; }
-  try { ST = await (await fetch("/api/status")).json(); render(); }
-  catch { $("#clock").textContent = "server unreachable"; }
+  if (DEMO) { ST = demoStatus(); DESK_STALE = false; render(); return; }
+  try { ST = await (await fetch("/api/status")).json(); DESK_STALE = false; render(); }
+  catch {
+    DESK_STALE = true;   // ST is now the last-known state, not current -- Settings shows it as stale
+    $("#clock").textContent = "server unreachable";
+    if ($("#settingsOverlay").classList.contains("open")) renderSettings();
+  }
 }
 
 /* ---- PREVIEW MODE (?demo=1): sample data, clearly labeled, never real ---- */
@@ -865,7 +873,6 @@ function demoStatus() {
       {level: "ok", label: "Lucid Eval #1", detail: "connected"},
       {level: "ok", label: "Lucid Eval #2", detail: "connected"},
       {level: "ok", label: "Apex Eval", detail: "connected"},
-      {level: "ok", label: "Webhook secret", detail: "set"},
       {level: "ok", label: "nq930", detail: "done"},
       {level: "ok", label: "ym930", detail: "live"},
       {level: "info", label: "Mode", detail: "ARMED — signals place real orders"}]},
@@ -1298,19 +1305,26 @@ async function removePaper(id) {
   loadPaper();
 }
 
-/* ---- Settings (2026-09-27 desk-settings plan) ----
+/* ---- Settings (2026-09-27 desk-settings plan; fix round 1) ----
    Moved here from the charts page, per the user's call. GET/PUT /api/settings and GET /api/status
    live in the CHART service (:8852) -- this page only asks it, over the same exact-origin CORS
    the paper-account routes above already use (charts/paperbook.py's DESK_ORIGINS, now shared by
    charts/server.py's /api/settings and /api/status too). No native dialogs: this page's own
-   overlay/modal pattern. Sections are an array of builders so more app-wide settings can join
-   MARKET DATA later -- today there are two, TRADING first.
+   overlay/modal pattern. Two sections, TRADING first, each with its OWN container
+   (#settingsTrading / #settingsMarketData) so a rebuild of one never touches the other's nodes
+   (GOTCHAS: never rebuild a container that might have focus -- patch in place). TRADING is built
+   ONCE and only ever patched in place (status text, pill class, the toggle's label/class) --
+   #tradeKillBtn is never replaced, so a click or keyboard focus on it survives every repaint from
+   render()'s 2.5s ST refresh and loadChartStatus's own poll.
 
    TRADING (arm/kill follow-up): Arm/Disarm/Kill, moved from the top bar into this dialog's
    first section. These three handlers are UNCHANGED from the top-bar buttons they replace --
    same confirmDlg, same POSTs to the desk's own /api/arm and /api/kill, same-origin as today.
    They talk only to the desk itself (ST, already refreshed every 2.5s) -- never the CHART
-   service, so TRADING keeps working even when MARKET DATA reads "Charts service not running". */
+   service, so TRADING keeps working even when MARKET DATA reads "Charts service not reachable".
+   When ST is null (desk not yet heard from) TRADING shows "Desk status unknown" with no
+   Arm/Disarm toggle -- fail closed, never assert a safe state it doesn't know -- but Kill stays
+   enabled. When refresh() is failing, the last-known state is marked stale (DESK_STALE). */
 async function doArm() {
   if (!await confirmDlg("Arm the desk?",
       "Signals will place REAL bracketed orders on every account assigned in the book.",
@@ -1330,6 +1344,52 @@ async function doKill() {
   toast("Kill: " + JSON.stringify(r.results)); refresh();
 }
 
+let tradingEls = null;   // built once into #settingsTrading; never rebuilt after that
+function buildTrading() {
+  if (tradingEls) return tradingEls;
+  const root = $("#settingsTrading");
+  if (!root) return null;
+  root.innerHTML = `
+    <div class="slabel">TRADING</div>
+    <p class="wnote" style="margin-top:0" id="tradingLine">
+      <span class="pill idle" id="tradingPill">—</span> <span id="tradingText"></span></p>
+    <div class="row-btns" style="justify-content:flex-start;margin:8px 0 16px" id="tradingToggleRow">
+      <button class="btn btn-sm btn-default" id="tradeArmBtn" type="button"></button>
+    </div>
+    <p class="wnote" style="margin-top:0">Cancels every working order and flattens every
+      position on every connected account, then disarms.</p>
+    <div class="row-btns" style="justify-content:flex-start;margin:8px 0">
+      <button class="btn btn-destructive btn-sm" id="tradeKillBtn" type="button">Kill everything</button>
+    </div>`;
+  tradingEls = {
+    pill: $("#tradingPill"), text: $("#tradingText"),
+    toggleRow: $("#tradingToggleRow"), toggle: $("#tradeArmBtn"), kill: $("#tradeKillBtn"),
+  };
+  tradingEls.kill.onclick = doKill;   // wired once -- this node is never replaced
+  return tradingEls;
+}
+function updateTrading() {
+  const els = buildTrading();
+  if (!els) return;
+  if (ST == null) {
+    els.pill.className = "pill idle";
+    els.pill.textContent = "—";
+    els.text.textContent = "Desk status unknown — connecting…";
+    els.toggleRow.style.display = "none";   // fail closed: no Arm/Disarm while the state is unknown
+    els.toggle.onclick = null;
+    return;
+  }
+  const armed = !!ST.armed;
+  const stale = DESK_STALE ? " (stale — desk unreachable)" : "";
+  els.toggleRow.style.display = "";
+  els.pill.className = armed ? "pill live" : "pill idle";
+  els.pill.textContent = armed ? "ARMED" : "SHADOW";
+  els.text.textContent = (armed ? "ARMED — signals place real orders" : "Disarmed — signals are journaled only") + stale;
+  els.toggle.className = "btn btn-sm " + (armed ? "btn-outline" : "btn-default");
+  els.toggle.textContent = armed ? "Disarm" : "Arm";
+  els.toggle.onclick = armed ? doDisarm : doArm;
+}
+
 const MD_CHOICES = [
   {value: "live", label: "Live"},
   {value: "demo", label: "Apex (demo)"},
@@ -1339,7 +1399,7 @@ let MD_STAGED = null;     // the picked-but-not-yet-applied login
 let MD_BUSY = false;      // an Apply PUT in flight
 let MD_ERR = "";          // this dialog's own last Apply failure
 let MD_FEED = null;       // GET /api/status from the CHART service (md_mismatch, switch_error)
-let MD_REACHABLE = true;  // false: "Charts service not running", Apply disabled
+let MD_REACHABLE = true;  // false: "Charts service not reachable from this page", Apply disabled
 let MD_POLL = null;
 
 async function chartGet(path) {
@@ -1351,46 +1411,35 @@ async function chartGet(path) {
 }
 function labelOfMd(v) { return (MD_CHOICES.find(c => c.value === v) || {label: v}).label; }
 
+const PREVIEW_TOAST = "Preview mode — sample data, controls disabled.";   // same text as post()'s
+
 async function loadSettings() {
+  if (DEMO) { toast(PREVIEW_TOAST); MD_REACHABLE = false; renderMarketData(); return; }
   const r = await chartGet("/api/settings");
   MD_REACHABLE = r.ok;
   if (r.ok) {
     MD = r.data;
     if (!MD_BUSY) MD_STAGED = MD.md;
   }
-  renderSettings();
+  renderMarketData();
 }
 async function loadChartStatus() {
+  if (DEMO) { toast(PREVIEW_TOAST); return; }
   const r = await chartGet("/api/status");
   if (r.ok) MD_FEED = r.data;
-  MD_REACHABLE = MD_REACHABLE || r.ok;   // a status success also proves the service is up
-  if (!MD_BUSY) renderSettings();
-}
-
-function tradingSection() {
-  const armed = !!(ST && ST.armed);
-  return `
-    <div class="slabel">TRADING</div>
-    <p class="wnote" style="margin-top:0">
-      <span class="${armed ? "pill live" : "pill idle"}">${armed ? "ARMED" : "SHADOW"}</span>
-      &nbsp;${armed ? "ARMED — signals place real orders" : "Disarmed — signals are journaled only"}</p>
-    <div class="row-btns" style="justify-content:flex-start;margin:8px 0 16px">
-      <button class="btn btn-sm ${armed ? "btn-outline" : "btn-default"}" id="tradeArmBtn" type="button">
-        ${armed ? "Disarm" : "Arm"}</button>
-    </div>
-    <p class="wnote" style="margin-top:0">Cancels every working order and flattens every
-      position on every connected account, then disarms.</p>
-    <div class="row-btns" style="justify-content:flex-start;margin:8px 0">
-      <button class="btn btn-destructive btn-sm" id="tradeKillBtn" type="button">Kill everything</button>
-    </div>`;
+  MD_REACHABLE = r.ok;   // M1: reflects the LATEST read, so a dead-then-revived service recovers
+  if (r.ok && !MD_BUSY && !MD) { await loadSettings(); return; }   // M1: retry once it's back
+  if (!MD_BUSY) renderMarketData();
 }
 
 /* MARKET DATA -- "Fill charts from": Apply stages the pick, then switches it; a busy state
-   while it runs; the pick snaps back to whichever login is ACTUALLY in use on failure. */
+   while it runs; the pick snaps back to whichever login is ACTUALLY in use on failure. Rebuilt
+   only when its own inputs actually changed (mdSig), so a poll tick that changes nothing never
+   touches its radios/Apply button either. */
 function marketDataSection() {
   if (!MD_REACHABLE) {
     return `<div class="slabel">MARKET DATA</div>
-      <p class="mcap warn">Charts service not running.</p>`;
+      <p class="mcap warn">Charts service not reachable from this page.</p>`;
   }
   if (!MD) return `<div class="slabel">MARKET DATA</div><p class="mcap">loading…</p>`;
   const rows = MD_CHOICES.map((c) => {
@@ -1418,38 +1467,44 @@ function marketDataSection() {
     </div>`;
 }
 
-const SETTINGS_SECTIONS = [tradingSection, marketDataSection];   // more app-wide settings append here later
-
-function renderSettings() {
-  const body = $("#settingsBody");
-  if (!body) return;
-  body.innerHTML = SETTINGS_SECTIONS.map((fn) => fn()).join("");
-  const armBtn = $("#tradeArmBtn");
-  if (armBtn) armBtn.onclick = () => (ST && ST.armed ? doDisarm() : doArm());
-  const killBtn = $("#tradeKillBtn");
-  if (killBtn) killBtn.onclick = doKill;
-  for (const b of body.querySelectorAll("button[data-md]")) {
-    b.addEventListener("click", () => { MD_STAGED = b.dataset.md; MD_ERR = ""; renderSettings(); });
+let mdSig = null;
+function renderMarketData() {
+  const root = $("#settingsMarketData");
+  if (!root) return;
+  const sig = JSON.stringify([MD_REACHABLE, MD, MD_STAGED, MD_BUSY, MD_ERR, MD_FEED]);
+  if (sig === mdSig) return;   // nothing changed: leave the existing nodes (and any focus) alone
+  mdSig = sig;
+  root.innerHTML = marketDataSection();
+  for (const b of root.querySelectorAll("button[data-md]")) {
+    b.addEventListener("click", () => { MD_STAGED = b.dataset.md; MD_ERR = ""; renderMarketData(); });
   }
   const apply = $("#mdApply");
   if (apply) apply.onclick = applyMd;
 }
 
+function renderSettings() {
+  updateTrading();     // patches in place -- never rebuilds, so Kill/focus survive
+  renderMarketData();  // rebuilds only its own container, and only when its inputs changed
+}
+
 async function applyMd() {
+  if (DEMO) { toast(PREVIEW_TOAST); return; }
   if (MD_BUSY || !MD || MD_STAGED === MD.md) return;   // e.repeat / a stray second click: ignored
   const md = MD_STAGED;
-  MD_BUSY = true; MD_ERR = ""; renderSettings();
+  MD_BUSY = true; MD_ERR = ""; renderMarketData();
   let res;
   try {
     const r = await fetch(CHART + "/api/settings", {method: "PUT",
       headers: {"content-type": "application/json"}, body: JSON.stringify({md})});
     const data = await r.json().catch(() => ({}));
-    res = r.ok ? {ok: true, settings: data} : {ok: false, error: data.detail || ("failed (" + r.status + ")")};
+    let detail = data && data.detail;
+    if (detail !== undefined && typeof detail !== "string") detail = JSON.stringify(detail);   // M3: a 422 array etc.
+    res = r.ok ? {ok: true, settings: data} : {ok: false, error: detail || ("failed (" + r.status + ")")};
   } catch (_) { res = {ok: false, error: "the chart service (:8852) is not reachable"}; }
   MD_BUSY = false;
   if (res.ok) { MD = res.settings; MD_STAGED = MD.md; MD_ERR = ""; }
   else { MD_ERR = res.error; MD_STAGED = MD.md; }   // snap back to whichever login is ACTUALLY in use
-  renderSettings();
+  renderMarketData();
 }
 
 function openSettings() {
@@ -1458,7 +1513,7 @@ function openSettings() {
   loadSettings();
   loadChartStatus();
   clearInterval(MD_POLL);
-  MD_POLL = setInterval(loadChartStatus, 2500);
+  if (!DEMO) MD_POLL = setInterval(loadChartStatus, 2500);   // preview mode never polls :8852
 }
 function closeSettings() {
   $("#settingsOverlay").classList.remove("open");

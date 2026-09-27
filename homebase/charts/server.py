@@ -796,7 +796,14 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         """Browsers send a cross-site PUT/DELETE after a preflight that this
         app never answers, but a simple no-CORS request could still reach
         us; refuse any write from a page that is not this service's own
-        (same rule as the /ws handshake)."""
+        (same rule as the /ws handshake).
+
+        Desk-settings plan: /api/settings' PUT and /api/paper/accounts*'s
+        writes now ALSO answer the desk page's exact origin with a CORS
+        header, so "no CORS request could still reach us" is no longer true
+        for those two routes specifically -- they add their own exact-origin
+        check (desk_origin_refusal) and only emit the header for that exact
+        match, in front of this same-origin check, rather than loosening it."""
         if not origin_ok(request.headers.get("origin"), request.headers.get("host")):
             raise HTTPException(403, "writes from another site are refused")
 
