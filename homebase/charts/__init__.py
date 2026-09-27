@@ -24,3 +24,16 @@ DEFAULT_ROOTS = ("NQ", "ES", "YM", "RTY", "GC", "SI", "CL", "ZN", "NG", "HG", "B
 # whose md socket feeds the charts: "demo" = the Apex eval login (default;
 # confirmed by the Task 14 spike), "live" = the live account's login
 MD_ENV = os.environ.get("HOMEBASE_CHARTS_MD", "demo")
+
+
+def parse_depth_roots(value: str | None) -> tuple[str, ...]:
+    """HOMEBASE_DEPTH_ROOTS: comma-separated roots; unset = NQ, ES; "" = none."""
+    if value is None:
+        value = "NQ,ES"
+    return tuple(r.strip().upper() for r in value.split(",") if r.strip())
+
+
+# Level 2: the roots whose depth is recorded to ~/futures_depth (and so always
+# subscribed). Other roots get depth only while a page shows them.
+# Spec: docs/superpowers/specs/2026-09-27-charts-depth-design.md
+DEPTH_RECORD_ROOTS = parse_depth_roots(os.environ.get("HOMEBASE_DEPTH_ROOTS"))

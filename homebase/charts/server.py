@@ -24,10 +24,11 @@ from fastapi.staticfiles import StaticFiles
 
 from .. import netguard, symbols
 from ..paths import state_dir
-from . import DEFAULT_ROOTS, QUIET      # QUIET: never refill across the 9:30 fire
+from . import DEFAULT_ROOTS, DEPTH_RECORD_ROOTS, QUIET      # QUIET: never refill across the 9:30 fire
 from .bars import BarSpec
 from .barreplay import BarReplay
 from .calendar import Calendar
+from .depth import DEPTH_ARCHIVE, Depth, DepthRecorder
 from .desk import Fanout, Quotes, register as register_desk
 from .history import History
 from .hub import Hub, Stream
@@ -214,7 +215,7 @@ class Conn:
 def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | None = None,
                speed: float = 10.0, start_et: dt.time = dt.time(9, 25), feed_factory=None,
                now_ms=None, state: Path | None = None, calendar_fetch=None,
-               desk_factory=None) -> FastAPI:
+               desk_factory=None, depth_roots=None, depth_base: Path | None = None) -> FastAPI:
     roots = [r.upper() for r in roots]
     sd = Path(state) if state else state_dir() / "charts"
     sd.mkdir(parents=True, exist_ok=True)
@@ -374,6 +375,14 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             hub.on_ticks(root, recorder.append(root, contract, rows))
 
         feed = (feed_factory or TickFeed)(roots, on_live, on_subscribed=_refill)
+    # Level 2 rides the live feed's own md socket; replay builds none of it (no
+    # subscriptions, no depth messages). Recorded: the depth roots this service charts.
+    depth = None
+    if not replay:
+        rec_roots = [r for r in (DEPTH_RECORD_ROOTS if depth_roots is None else depth_roots)
+                     if r.upper() in roots]
+        depth = Depth(feed, rec_roots, log=log,
+                      recorder=DepthRecorder(depth_base or DEPTH_ARCHIVE) if rec_roots else None)
     hub = Hub(history, clock)
     # per-chart Bar Replay: its own hubs over its own History memo; never the live hub, recorder, desk or quotes
     replays = BarReplay(store, sd / "cache", roots, lambda: clock(), min_bar=MIN_BAR,
@@ -386,6 +395,10 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             st["error"] = f"charts: {chart_error[0]}"   # the charts are frozen: say so
         st["recorder"] = None if recorder is None else {
             "written": recorder.written, "buffered": recorder.buffered, "error": recorder.error}
+        st["depth"] = {} if depth is None else depth.status()
+        st["depth_recorder"] = None if depth is None or depth.recorder is None else depth.recorder.status()
+        if depth is not None and depth.error and not st.get("error"):
+            st["error"] = f"depth: {depth.error}"
         st["streams"] = len(hub.streams)
         st["clients"] = len(conns)
         st["calendar"] = cal.status()
@@ -492,11 +505,15 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             tasks.append(asyncio.create_task(calendar_loop()))
         if link is not None:
             tasks.append(asyncio.create_task(link.run()))
+        if depth is not None:
+            tasks.append(asyncio.create_task(depth.run()))
         log(f"up — {'replay ' + replay.isoformat() if replay else 'live'} · {', '.join(roots)}")
         try:
             yield
         finally:
             feed.stop()
+            if depth is not None:
+                depth.stop()
             if link is not None:
                 link.stop()             # stop() alone can't interrupt a blocked read; the
                                          # cancel below (link.run() is in `tasks`) does that
@@ -504,6 +521,8 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                 t.cancel()
             if recorder is not None:
                 recorder.flush()
+            if depth is not None:
+                await depth.aclose()    # cancels its requests in flight; the recording's last member
             tester.manager.shutdown()   # never leave a runner child orphaned
 
     app = FastAPI(title="Homebase Charts", lifespan=lifespan)
@@ -661,7 +680,10 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         conn = Conn(sock)
         conns.add(conn)
         conn.send({"type": "status", **status()})
-        desk_fan.attach(conn, conn.send, lambda: not conn.dead and conn.q.qsize() < SEND_QUEUE_MAX // 2)
+        def room() -> bool:
+            return not conn.dead and conn.q.qsize() < SEND_QUEUE_MAX // 2
+
+        desk_fan.attach(conn, conn.send, room)
         try:
             while True:
                 # Only a framing/decoding problem is swallowed here. Receiving
@@ -687,6 +709,8 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                 if op == "unsub":
                     replays.stop(conn, cid, notify=False)
                     hub.unsubscribe((conn, cid))
+                    if depth is not None:
+                        depth.unview((conn, cid))
                     continue
                 if op == "older":
                     if not replays.ask_older(conn, cid, msg.get("before")):
@@ -734,6 +758,8 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                         s.add_study(k)
                     hub.subscribe(s, (conn, cid))
                     conn.send({"type": "history", "id": cid, **s.payload(bool(msg.get("fp", True)))})
+                    if depth is not None:
+                        depth.view((conn, cid), root, conn.send, room)   # after `history`: depth follows it
                 except Exception as e:  # noqa: BLE001 — an unexpected failure building the
                                         # stream must not drop every chart on the page either
                     log(f"sub {cid} ({root} {spec.key}): {type(e).__name__}: {e}\n{traceback.format_exc()}")
@@ -743,6 +769,8 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                     # an id that never got `history`), and never leave a
                     # freshly attached, now-subscriberless stream in hub.streams
                     hub.unsubscribe((conn, cid))
+                    if depth is not None:
+                        depth.unview((conn, cid))
                     if s is not None and not s.subs and hub.streams.get(s.key) is s:
                         del hub.streams[s.key]
                     continue
@@ -754,6 +782,8 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         finally:
             conns.discard(conn)
             desk_fan.detach(conn)
+            if depth is not None:
+                depth.drop_conn(conn)
             hub.drop_conn(conn)
             replays.drop_conn(conn)
             conn.task.cancel()
