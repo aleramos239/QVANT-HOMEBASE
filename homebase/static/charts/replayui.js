@@ -1,20 +1,24 @@
-/* Homebase Charts — HBReplayUI: Bar Replay's browser half (2026-09-27 plan, Task 1). The pure protocol lives in
-   replay.js; this file is the toolbar button, the "pick a start" cursor, the floating control bar, the
-   dimming overlay and the REPLAY pill -- one more `page.overlays` entry, built and torn down with the chart
+/* Homebase Charts — HBReplayUI: Bar Replay's browser half. The pure protocol AND the practice fill-law
+   simulator live in replay.js; this file is the DOM/wiring half -- the toolbar button, the "pick a start"
+   cursor, the floating control bar, the dimming overlay, the REPLAY pill, and (Task 2) the PRACTICE Buy/Sell
+   block, its lines and its P&L strip -- one more `page.overlays` entry, built and torn down with the chart
    exactly like HBTradeLines' (tradelines.js), plus the ws message routing app.js hands it.
 
    State: a WeakMap `sessions`, keyed by the Cell instance (stable for its lifetime; a grid rebuild drops the
    whole Cell, so nothing to clean up there beyond telling the server -- see cellDestroyed). A session survives
    the chart being torn down and rebuilt (an indicator change, a time-zone change, a replay `jump`'s fresh
    history): only its `ov` (the live Overlay instance's DOM) is recreated; `date`/`cursorMs`/`speed`/`playing`/
-   `done` persist and seed the new one.
+   `done`/`sim`/`feed`/`qty`/`lastPrice` persist and seed the new one.
 
    Safety (2026-09-27 plan, Global Constraints -- binding): a chart in replay can never send a real order.
-   `cell.replay` (cell.js) is the one flag every trading path reads: HBTradeUI.effectiveMode runs it through
-   T.replayGuard, which hides the Buy/Sell block, drops the chart-menu's trading items and makes every line
-   view-only (no drag, no ×) for that cell. doStart() sets `cell.replay` and force-refreshes the chart's
-   overlays BEFORE the server even answers, so there is no gap; onState() forces the cell's own trade.on off
-   the first time a replay actually starts, and it is never turned back on by this module. */
+   `cell.replay` (cell.js) is the one flag every REAL trading path reads: HBTradeUI.effectiveMode runs it
+   through T.replayGuard, which hides the real Buy/Sell block, drops the chart-menu's real trading items and
+   makes every real line view-only (no drag, no ×) for that cell. doStart() sets `cell.replay` and
+   force-refreshes the chart's overlays BEFORE the server even answers, so there is no gap; onState() forces
+   the cell's own trade.on off the first time a replay actually starts, and it is never turned back on by this
+   module. The PRACTICE path (Task 2: PracticeSim, its block, lines and menu items below) is a wholly separate
+   simulation that never touches the desk at all -- see replay.js's own isolation note and
+   tests/js/replay.test.mjs's isolation test, which reads this file's source text for exactly that. */
 (() => {
 'use strict';
 const R = window.HBReplay;
@@ -40,6 +44,14 @@ function iconBtn(name, title) {
   return b;
 }
 
+/* A practice line's chip suffix: " @ 20,010.25" for anything with a real price, "MKT" for a still-pending
+   market entry (its order carries price: null -- it fills at the next print, so there is nothing to show yet),
+   nothing for a position (its own text already says "Long 1" etc). */
+function practiceChipSuffix(g, tick) {
+  if (g.kind === 'position') return '';
+  return g.price == null ? ' MKT' : ` @ ${window.HBCatalog.fmtPrice(g.price, tick)}`;
+}
+
 /* Today as an ET "YYYY-MM-DD": the start field's upper bound (today itself is refused server-side as "not a
    completed session"; en-CA gives year-month-day order directly). */
 const TODAY_FMT = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' });
@@ -60,12 +72,31 @@ function doStart(cell, date, time) {
   cell.replay = { date, cursorMs: 0, speed: 'bar', playing: false, done: false };
   // the session carries the same fields (not just `pending`): the `history` answer rebuilds the chart -- and
   // this cell's Overlay with it -- before any replay_state ever arrives, and its first render reads these.
-  sessions.set(cell, { pending: true, forcedTrade: false, ov: null, ...cell.replay });
+  // sim/feed/lastPrice: Task 2, filled in once by onState() (cell.tick/cell.pv are not known until the
+  // history for THIS date has loaded); qty: the practice block's own quantity field, 1 by default.
+  sessions.set(cell, { pending: true, forcedTrade: false, ov: null, sim: null, feed: null, lastPrice: null,
+    qty: 1, ...cell.replay });
   refreshOverlays(cell);
   cell.host.send(R.startOp(cell.id, date, time));
 }
 
+/* localStorage.getItem/setItem, each its own try/catch (Global Constraints): the finished practice session
+   (if it ever placed a trade) under hb.practice, capped at the last 200. Called from every path that ends a
+   session -- clearSession() (exit, symbol/interval change, a dropped connection) and cellDestroyed() (a grid
+   rebuild) -- so nothing depends on the user reaching the × specifically. */
+function savePracticeSession(cell, s) {
+  if (!s || !s.sim || !s.sim.trades.length) return;
+  try {
+    const root = (cell.shown && cell.shown.root) || cell.cfg.root;
+    const session = R.practiceSession(s.date, root, s.sim);
+    let existing = null;
+    try { existing = JSON.parse(localStorage.getItem(R.PRACTICE_KEY) || 'null'); } catch (_) { existing = null; }
+    localStorage.setItem(R.PRACTICE_KEY, JSON.stringify(R.pushPracticeSession(existing, session)));
+  } catch (_) { /* storage off: the session just is not logged */ }
+}
+
 function clearSession(cell) {
+  savePracticeSession(cell, sessions.get(cell));
   sessions.delete(cell);
   cell.replay = null;
   refreshOverlays(cell);
@@ -85,13 +116,26 @@ function onState(cell, msg) {
   if (!parsed || !cell) return;
   if (parsed.stopped) { clearSession(cell); return; }
   let s = sessions.get(cell);
-  if (!s) { s = { pending: false, forcedTrade: false, ov: null }; sessions.set(cell, s); }
+  if (!s) { s = { pending: false, forcedTrade: false, ov: null, sim: null, feed: null, lastPrice: null, qty: 1 }; sessions.set(cell, s); }
   s.pending = false;
   s.date = parsed.date; s.cursorMs = parsed.cursorMs; s.speed = parsed.speed; s.playing = parsed.playing; s.done = parsed.done;
   cell.replay = { date: s.date, cursorMs: s.cursorMs, speed: s.speed, playing: s.playing, done: s.done };
   if (!s.forcedTrade) {
     s.forcedTrade = true;
     if (cell.cfg.trade && cell.cfg.trade.on) window.HBTradeUI.setCellTrade(cell, { on: false, accounts: cell.cfg.trade.accounts });
+  }
+  // Task 2: the practice simulator, created once THIS date's history has loaded (cell.tick/cell.pv are only
+  // known from here on) -- cell.pv is the single source of truth (homebase/contracts.py, via the server's
+  // history payload); R.pointValue() only covers the gap on the off chance it is not set yet.
+  if (!s.sim) {
+    const root = (cell.shown && cell.shown.root) || cell.cfg.root;
+    const pv = cell.pv != null ? cell.pv : R.pointValue(root);
+    if (cell.tick > 0 && pv != null) {
+      s.sim = new R.PracticeSim(cell.tick, pv);
+      s.feed = new R.BarFeed(s.sim);
+      const last = cell.bars.length ? cell.bars[cell.bars.length - 1] : null;
+      if (last) s.lastPrice = last.c;
+    }
   }
   if (s.ov) s.ov.refresh(s);
 }
@@ -106,10 +150,71 @@ function onError(cell, msg) {
   if (typeof msg.error === 'string') cell.note(msg.error);
 }
 
+/* ---- Task 2: practice trading -- feeding the simulator, placing orders, no desk anywhere in this path ---- */
+/* Every `update` message for a replaying cell (app.js's ws.onmessage), tagged `replay: true` by the server but
+   otherwise the SAME shape cell.onUpdate() already reads: `closed` (bars finished since the last message) and
+   `live` (the currently forming one). Historical bars from the initial `history` are never fed -- a user could
+   not have traded against ticks that already happened before the practice block existed for this session. */
+function onBarUpdate(cell, m) {
+  const s = sessions.get(cell);
+  if (!s || !s.feed) return;
+  for (const b of m.closed || []) s.feed.closedBar(b, b.ms);
+  if (m.live) { s.feed.liveBar(m.live, m.live.ms); s.lastPrice = m.live.c; }
+  else if (m.closed && m.closed.length) s.lastPrice = m.closed[m.closed.length - 1].c;
+  if (s.ov) s.ov.refreshPractice(s);
+}
+
+/* The SAME global SL/TP-tick prefs real trading uses (hb_trade_prefs) -- HBTrade.parsePrefs/PREFS_KEY are pure
+   (no desk reference: isolation), the desk client just wraps this exact read/write for its own purposes. */
+function readPrefs() {
+  const T = window.HBTrade;
+  try { return T.parsePrefs(localStorage.getItem(T.PREFS_KEY)); } catch (_) { return T.parsePrefs(null); }
+}
+
+/* A practice Market (price: null) / Limit / Stop entry, from the block or the chart menu. `side`: 'Buy'/'Sell'. */
+function placePractice(cell, side, kind, price) {
+  const s = sessions.get(cell);
+  if (!s || !s.sim) return;
+  const ref = kind === 'Market' ? s.lastPrice : price;
+  if (ref == null) return;   // no price yet to size a bracket from (or to fill a limit/stop against)
+  const { sl, tp } = window.HBTrade.bracket(side, ref, readPrefs(), cell.tick);
+  const o = s.sim.enter(side === 'Buy' ? 1 : -1, kind.toLowerCase(), kind === 'Market' ? null : price, s.qty || 1, sl, tp);
+  if (o && s.ov) s.ov.refreshPractice(s);
+}
+function flattenPractice(cell) {
+  const s = sessions.get(cell);
+  if (!s || !s.sim || !s.sim.position) return;
+  s.sim.flatten();
+  if (s.ov) s.ov.refreshPractice(s);
+}
+
+/* The chart's right-click menu: Practice Buy/Sell Limit/Stop at the clicked price, only on a replaying cell
+   with its own practice simulator up (this covers Task 2's "available from... the chart menu"; the block
+   covers Market). Registered once (mount()), like tradeui.js's own 'trading' section -- the two never collide:
+   HBTradeUI's items already return [] for a replaying cell (effectiveMode -> T.replayGuard), and these return
+   [] for anything else. */
+function registerPracticeMenu() {
+  window.HBChartMenu.register('trading', (ctx) => {
+    const cell = ctx.cell, s = sessions.get(cell);
+    if (!cell.replay || !s || !s.sim || ctx.price == null) return [];
+    const T = window.HBTrade, q = { last: s.lastPrice, bid: s.lastPrice, ask: s.lastPrice }, qty = s.qty || 1;
+    const price = T.roundTick(ctx.price, ctx.tick), out = [];
+    for (const side of ['Buy', 'Sell']) {
+      const type = T.inferType(side, price, q);
+      if (type) out.push({ text: `Practice: ${T.menuText(side, qty, price, type, ctx.tick)}`,
+        run: () => placePractice(cell, side, type, price) });
+    }
+    if (s.sim.position) out.push({ text: 'Practice: Flatten', run: () => flattenPractice(cell) });
+    return out;
+  });
+}
+
 /* A cell is about to be destroyed (a grid/layout rebuild): tell the server so its slot frees immediately
    rather than waiting for the whole connection to drop. Best effort -- the socket may already be closed. */
 function cellDestroyed(cell) {
-  if (!sessions.has(cell)) return;
+  const s = sessions.get(cell);
+  if (!s) return;
+  savePracticeSession(cell, s);
   try { cell.host.send(R.stopOp(cell.id)); } catch (_) { /* the connection is already gone */ }
   sessions.delete(cell);
   cell.replay = null;
@@ -300,7 +405,200 @@ class Overlay {
     this.bar = bar;
     this.els = { playBtn, speedBtn, time };
     s.ov = this;
+    this.buildPractice(s);
     this.refresh(s);
+  }
+
+  /* ---- Task 2: the PRACTICE Buy/Sell block, its lines, and the P&L strip -- built only once s.sim exists
+     (onState() creates it once cell.tick/cell.pv are known for this session's date). No desk reference. ---- */
+  buildPractice(s) {
+    if (!s.sim) return;
+    const cell = this.cell;
+    const block = mk('div', 'lg-trade');
+    const tag = mk('span', 'pr-tag', 'PRACTICE');
+    const sellBtn = mk('button', 'tr-sell'), sellPx = mk('span', 'tr-px', '—');
+    sellBtn.type = 'button';
+    sellBtn.append(sellPx, mk('span', 'tr-lbl', 'SELL'));
+    sellBtn.onclick = () => placePractice(cell, 'Sell', 'Market', null);
+    const mid = mk('div', 'tr-mid'), qty = mk('input');
+    qty.type = 'number'; qty.min = '1'; qty.step = '1'; qty.className = 'tr-qty'; qty.value = String(s.qty || 1);
+    qty.setAttribute('aria-label', 'Practice quantity');
+    qty.onchange = () => {
+      const n = Math.max(1, Math.round(Number(qty.value)) || 1);
+      qty.value = String(n);
+      const sess = sessions.get(cell); if (sess) sess.qty = n;
+    };
+    mid.appendChild(qty);
+    const buyBtn = mk('button', 'tr-buy'), buyPx = mk('span', 'tr-px', '—');
+    buyBtn.type = 'button';
+    buyBtn.append(buyPx, mk('span', 'tr-lbl', 'BUY'));
+    buyBtn.onclick = () => placePractice(cell, 'Buy', 'Market', null);
+    block.append(tag, sellBtn, mid, buyBtn);
+    cell.el.querySelector('.lg-tradeslot').appendChild(block);
+    this.prBlock = block; this.prQty = qty; this.prSellPx = sellPx; this.prBuyPx = buyPx;
+
+    this.prPnl = mk('div', 'replay-pnl');
+    cell.el.appendChild(this.prPnl);
+
+    this.prLayer = mk('div', 'tl-layer');
+    cell.el.appendChild(this.prLayer);
+    this.prItems = new Map();
+    this.prDragging = null;
+    this.refreshPractice(s);
+  }
+
+  /* Called on every replay_state and every bar update (onBarUpdate -> s.ov.refreshPractice) -- the block's
+     price, the P&L strip and the lines all follow the last trade as it streams in. */
+  refreshPractice(s) {
+    if (this.dead || !this.prBlock || !s.sim) return;
+    const T = window.HBTrade, Cat = window.HBCatalog, tick = this.cell.tick, last = s.lastPrice;
+    const text = last == null ? '—' : Cat.fmtPrice(last, tick);
+    this.prSellPx.textContent = text;
+    this.prBuyPx.textContent = text;
+    // enter() itself refuses a second entry/position (PracticeSim.enter); disabling the buttons here just
+    // makes that visible instead of a silent no-op click.
+    const busy = !!s.sim.position || s.sim.orders.some((o) => o.role === 'entry');
+    this.prBlock.querySelectorAll('.tr-buy, .tr-sell').forEach((b) => { b.disabled = busy; });
+    const n = s.sim.tradeCount();
+    this.prPnl.textContent = `Practice — Open ${T.usd(s.sim.openPnl(last)) ?? '$0'} · Realized `
+      + `${T.usd(s.sim.realizedPnl()) ?? '$0'} · ${n} trade${n === 1 ? '' : 's'}`;
+    this.refreshPracticeLines(s);
+  }
+
+  practiceColor(g) {
+    if (g.kind === 'position') return g.side > 0 ? '#089981' : '#F23645';
+    if (g.kind === 'sl') return '#F23645';
+    if (g.kind === 'tp') return '#089981';
+    return '#F7A600';   // a plain working entry: amber, matching the PRACTICE tag
+  }
+
+  buildPracticeChip() {
+    const chip = mk('div', 'tl-chip');
+    chip.text = mk('span', 'tl-text');
+    chip.btn = mk('button', 'tl-x');
+    chip.btn.type = 'button';
+    chip.btn.setAttribute('aria-label', 'Cancel');
+    chip.btn.textContent = '×';
+    chip.append(chip.text, chip.btn);
+    return chip;
+  }
+
+  /* The practice position (if any, view only -- ruling S11's real-trading convention applies here too: a
+     position is never draggable) and every working order (draggable by its chip text, × to cancel) --
+     Task 2's "Lines: the practice position, orders and SL/TP lines can be dragged; the practice order lines
+     have ×." Mirrors tradelines.js's paintLines/buildChip/sync, driven by s.sim instead of the desk. */
+  refreshPracticeLines(s) {
+    const cell = this.cell, sim = s.sim, seen = new Set(), groups = [];
+    if (sim.position) {
+      const p = sim.position;
+      groups.push({ key: 'pos', kind: 'position', side: p.side, price: p.entryPrice, id: null,
+        text: `${p.side > 0 ? 'Long' : 'Short'} ${p.qty}`, editable: false });
+    }
+    for (const o of sim.orders) {
+      if (o.price == null) continue;   // a market order (entry or flatten) rests at no price -- nothing to draw
+      const label = o.role === 'sl' ? 'SL' : o.role === 'tp' ? 'TP' : (o.side > 0 ? 'Buy' : 'Sell');
+      groups.push({ key: `o${o.id}`, kind: o.role, side: o.side, price: o.price, id: o.id,
+        text: `${label} ${o.qty}`, editable: o.role !== 'flat' });
+    }
+    for (const g of groups) {
+      seen.add(g.key);
+      if (this.prDragging === g.key) continue;
+      let it = this.prItems.get(g.key);
+      if (!it) {
+        const line = cell.candles.createPriceLine({ price: g.price, color: this.practiceColor(g), lineWidth: 1,
+          lineStyle: g.kind === 'position' ? 0 : 2, axisLabelVisible: true, title: '' });
+        const chip = this.buildPracticeChip();
+        it = { g, line, chip };
+        this.prItems.set(g.key, it);
+        this.prLayer.appendChild(chip);
+      } else {
+        it.g = g;
+        it.line.applyOptions({ price: g.price, color: this.practiceColor(g) });
+      }
+      const draggable = g.editable && g.kind !== 'position' && g.price != null;   // a market entry has no price to drag
+      it.chip.classList.toggle('drag', draggable);
+      it.chip.classList.toggle('view', !draggable);
+      it.chip.text.onpointerdown = draggable ? (e) => this.startPracticeDrag(e, g.key) : null;
+      it.chip.btn.hidden = !draggable;
+      it.chip.btn.onclick = draggable ? () => { sim.cancel(g.id); this.refreshPractice(s); } : null;
+      it.chip.text.textContent = g.text + practiceChipSuffix(g, cell.tick);
+      it.chip.style.setProperty('--c', this.practiceColor(g));
+    }
+    for (const [key, it] of [...this.prItems]) {
+      if (seen.has(key) || this.prDragging === key) continue;
+      cell.candles.removePriceLine(it.line);
+      it.chip.remove();
+      this.prItems.delete(key);
+    }
+    this.syncPracticeChips();
+  }
+
+  syncPracticeChips() {
+    const c = this.cell;
+    if (!c.chart || !this.prItems) return;
+    const paneH = c.chart.panes()[0].getHeight(), right = c.chart.priceScale('right').width() + 6;
+    for (const it of this.prItems.values()) {
+      const y = c.candles.priceToCoordinate(it.g.price);
+      const off = y == null || y < 0 || y > paneH;
+      it.chip.hidden = off;
+      if (!off) { it.chip.style.right = `${right}px`; it.chip.style.transform = `translateY(${Math.round(y) - 11}px)`; }
+    }
+  }
+
+  /* Dragging a working order's chip re-prices it directly (practice: no confirm dialog, no desk send) --
+     mirrors tradelines.js's startDrag exactly for the pointer-capture / cancel-on-lost-capture mechanics. */
+  startPracticeDrag(e, key) {
+    if (e.button !== 0) return;
+    if (this.prDragging && this.prEndDrag) this.prEndDrag();
+    e.preventDefault(); e.stopPropagation();
+    const cell = this.cell, it = this.prItems.get(key), grip = e.currentTarget, from = it.g.price;
+    const top = cell.box.getBoundingClientRect().top;
+    let price = from, outside = false;
+    grip.setPointerCapture(e.pointerId);
+    this.prDragging = key;
+    const move = (ev) => {
+      if (ev.buttons === 0) { lost(); return; }
+      const paneH = cell.chart ? cell.chart.panes()[0].getHeight() : 0, y = ev.clientY - top;
+      outside = y < 0 || y > paneH;
+      if (outside) { this.syncPracticeChips(); return; }
+      const raw = cell.candles.coordinateToPrice(y);
+      if (raw == null) return;
+      price = window.HBDrawings.roundToTick(raw, cell.tick);
+      it.g = { ...it.g, price };
+      it.line.applyOptions({ price });
+      it.chip.text.textContent = it.g.text + ` @ ${window.HBCatalog.fmtPrice(price, cell.tick)}`;   // always a real price mid-drag
+      this.syncPracticeChips();
+    };
+    const end = (commit) => {
+      grip.removeEventListener('pointermove', move);
+      grip.removeEventListener('pointerup', up);
+      grip.removeEventListener('pointercancel', lost);
+      grip.removeEventListener('lostpointercapture', lost);
+      window.removeEventListener('blur', lost);
+      this.prDragging = null; this.prEndDrag = null;
+      const s = sessions.get(this.cell);
+      const changed = window.HBDrawings.roundToTick(price, cell.tick) !== window.HBDrawings.roundToTick(from, cell.tick);
+      if (commit && !outside && changed && s && s.sim) {
+        const o = s.sim.orders.find((x) => x.id === it.g.id);
+        if (o) o.price = window.HBReplay.toTick(price, cell.tick);
+      }
+      if (s) this.refreshPractice(s);
+    };
+    const up = () => end(true), lost = () => end(false);
+    grip.addEventListener('pointermove', move);
+    grip.addEventListener('pointerup', up);
+    grip.addEventListener('pointercancel', lost);
+    grip.addEventListener('lostpointercapture', lost);
+    window.addEventListener('blur', lost);
+    this.prEndDrag = () => end(false);
+  }
+
+  destroyPractice() {
+    if (this.prDragging && this.prEndDrag) this.prEndDrag();
+    if (this.prBlock) this.prBlock.remove();
+    if (this.prPnl) this.prPnl.remove();
+    if (this.prLayer) this.prLayer.remove();
+    if (this.prItems) { for (const it of this.prItems.values()) { try { this.cell.candles.removePriceLine(it.line); } catch (_) { /* chart already gone */ } } }
   }
 
   fillSpeed(m) {
@@ -323,6 +621,10 @@ class Overlay {
     this.els.speedBtn.textContent = R.speedLabel(s.speed);
     this.els.time.textContent = R.fmtCursor(s.cursorMs) + (s.done ? ' · done' : '');
     this.reposition(s);
+    // the practice sim (Task 2) is created by onState() once cell.tick/cell.pv are known, which can be AFTER
+    // this Overlay's own build() already ran without it (build() -> onState() -> refresh(), same first pass).
+    if (s.sim && !this.prBlock) this.buildPractice(s);
+    else if (this.prBlock) this.refreshPractice(s);
   }
 
   /* The dimming overlay: everything right of the cursor (the last/forming bar IS the cursor -- replay feeds
@@ -342,7 +644,7 @@ class Overlay {
     this.dim.style.width = `${paneW - x}px`;
   }
 
-  onBars() { this.reposition(); }
+  onBars() { this.reposition(); this.syncPracticeChips(); }
 
   destroy() {
     this.dead = true;
@@ -350,6 +652,7 @@ class Overlay {
     if (this.pill) this.pill.remove();
     if (this.dim) this.dim.remove();
     if (this.bar) this.bar.remove();
+    this.destroyPractice();
     const s = sessions.get(this.cell);
     if (s && s.ov === this) s.ov = null;
   }
@@ -358,6 +661,7 @@ class Overlay {
 /* ---- mount (app.js's init(), like HBTradeUI's) ---- */
 function mount(pg) {
   page = pg;
+  registerPracticeMenu();
   const btn = document.getElementById('tbReplay');
   if (!btn) return;
   btn.onclick = () => {
@@ -366,6 +670,6 @@ function mount(pg) {
   };
 }
 
-window.HBReplayUI = { mount, overlay: (cell, pg) => new Overlay(cell, pg), onState, onError, cellDestroyed,
-  onReconnect, togglePlay, step, disarmPick, guardSymbolChange };
+window.HBReplayUI = { mount, overlay: (cell, pg) => new Overlay(cell, pg), onState, onError, onBarUpdate,
+  cellDestroyed, onReconnect, togglePlay, step, disarmPick, guardSymbolChange };
 })();

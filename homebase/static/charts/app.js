@@ -1092,7 +1092,7 @@ function connect() {
     if (!c) return;
     if (m.type === 'history') c.onHistory(m);
     else if (m.type === 'older') c.onOlder(m);
-    else if (m.type === 'update') c.onUpdate(m);
+    else if (m.type === 'update') { c.onUpdate(m); if (c.replay) window.HBReplayUI.onBarUpdate(c, m); }
     else if (m.type === 'reset') c.subscribe(true);
     else if (m.type === 'error') c.onError(m.error);
     else if (m.type === 'replay_state') window.HBReplayUI.onState(c, m);
