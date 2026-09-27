@@ -5,13 +5,21 @@ on; a day it never reached an account (a gate-chop skip, a refused alert, a
 kill before the fire) is one run with account None, meaning every booked
 account. Statuses: traded | skipped | refused | no_fill | killed | error.
 
-  legs    the entry orders it placed ({side, price, ts})
-  entry   {side, price, ts}: the (average) entry fill
-  exit    {price, ts, kind}: kind tp | sl from the engine's grade, "flat" when
-          a flatten closed it (15:55 clock, a kill, a manual flatten), else
-          "other"
-  pnl_usd (exit - entry) x side x point value x qty, less $4 per contract per
-          round trip; left out when the fills cannot be matched
+  legs        the entry orders it placed ({side, price, ts})
+  entry       {side, price, ts, slip_ticks}: the (average) entry fill; slip_ticks
+              is the fill vs its stop trigger (the matching leg), signed so
+              positive = worse for us; null when it can't be computed
+  exit        {price, ts, kind}: kind tp | sl from the engine's grade, "flat" when
+              a flatten closed it (15:55 clock, a kill, a manual flatten), else
+              "other". An "sl" exit also carries slip_ticks (vs the SL price
+              from the engine's brackets_moved re-price, same sign convention)
+              and gap_through (true when that slip is >= 2 ticks)
+  pnl_usd     (exit - entry) x side x point value x qty, less $4 per contract per
+              round trip; left out when the fills cannot be matched
+  fire_ms     09:30:00.000 ET on the run's date (the self-timer's fixed fire
+              time); placed_ms is the journal ts of "placed"; latency_ms is
+              their difference. Present whenever a "placed" landed, else left
+              out entirely
 
 ts values are epoch milliseconds. Today's run is left out until it has a
 result (an entry, a cancel, a skip, ...). A kill (the chart's per-bot
@@ -27,14 +35,21 @@ import json
 import threading
 from pathlib import Path
 from typing import Iterable, Optional
+from zoneinfo import ZoneInfo
 
-from .contracts import point_value
+from .contracts import point_value, tick_size
 
 COMMISSION_RT = 4.0              # $ per contract per round trip
 DAYS_DEFAULT, DAYS_MAX = 120, 400
 KILLED_FROM_CHART = "killed from the chart"
 _IGNORED_REFUSALS = {"already_traded"}      # a late second signal on a day it acted: noise
 _FLAT_EVENTS = {"clock_flat", "manual_flatten"}
+
+ET = ZoneInfo("America/New_York")
+FIRE_ET = dt.time(9, 30, 0)      # the self-timer's fixed fire time; no per-strategy
+                                  # fire time exists in the journal or config today
+GAP_THROUGH_TICKS = 2.0          # an SL fill this far beyond its stop counts as a gap
+_TICK_EPS = 1e-9
 
 
 def parse_days(v) -> int:
@@ -117,9 +132,48 @@ def _num(v) -> Optional[float]:
     return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
 
 
+def _fire_ms(date: str) -> Optional[int]:
+    """09:30:00.000 ET on this run's date, as epoch ms (DST-correct)."""
+    try:
+        d = dt.date.fromisoformat(date)
+    except ValueError:
+        return None
+    return int(dt.datetime.combine(d, FIRE_ET, tzinfo=ET).timestamp() * 1000)
+
+
+def _trigger_price(legs: list[dict], side) -> Optional[float]:
+    for leg in legs:
+        if leg.get("side") == side:
+            return leg.get("price")
+    return None
+
+
+def _entry_slip_ticks(entry: dict, legs: list[dict], tick: float) -> Optional[float]:
+    """Entry fill vs its stop trigger, in ticks, signed so positive = worse for us."""
+    side = entry.get("side")
+    if side not in ("Buy", "Sell") or not tick:
+        return None
+    trigger, fill = _trigger_price(legs, side), entry.get("price")
+    if trigger is None or fill is None:
+        return None
+    sign = 1 if side == "Buy" else -1
+    return round(sign * (fill - trigger) / tick, 4) + 0.0     # no signed zero
+
+
+def _exit_slip_ticks(entry: Optional[dict], exit_price: Optional[float],
+                     sl_ref: Optional[float], tick: float) -> Optional[float]:
+    """An SL exit fill vs its stop price, in ticks, signed so positive = worse for us."""
+    side = entry.get("side") if entry else None
+    if side not in ("Buy", "Sell") or not tick or sl_ref is None or exit_price is None:
+        return None
+    sign = 1 if side == "Buy" else -1
+    return round(sign * (sl_ref - exit_price) / tick, 4) + 0.0   # no signed zero
+
+
 def runs(records: Iterable[dict], strategy: str, *, symbol: str, today: str,
          days: int = DAYS_DEFAULT) -> list[dict]:
     first = (dt.date.fromisoformat(today) - dt.timedelta(days=days - 1)).isoformat()
+    tick = tick_size(symbol)
     acct: dict[tuple, dict] = {}          # (date, account) -> working run
     day: dict[str, dict] = {}             # date -> strategy-level facts (no account)
 
@@ -127,7 +181,7 @@ def runs(records: Iterable[dict], strategy: str, *, symbol: str, today: str,
         return acct.setdefault((date, account), {"legs": [], "qty": None, "entry": None,
                                                  "exit": None, "flat": False, "status": None,
                                                  "reason": None, "killed": False,
-                                                 "resolved": False})
+                                                 "resolved": False, "sl_ref": None})
 
     def killed(date, account) -> None:
         """A kill ends only a run still going: one that already exited keeps its real exit."""
@@ -176,6 +230,13 @@ def runs(records: Iterable[dict], strategy: str, *, symbol: str, today: str,
             kind = rec.get("reason") if rec.get("reason") in ("tp", "sl") else "other"
             r["exit"] = {"price": _num(rec.get("fill")), "ts": ts, "kind": kind}
             r["resolved"] = True
+        elif ev == "brackets_moved" and account:
+            # the stop that's actually working, re-priced to the real fill
+            # (engine._move_brackets); a fill at the trigger leaves it here too
+            r = run_of(date, account)
+            sl = _num(rec.get("sl"))
+            if sl is not None:
+                r["sl_ref"] = sl
         elif ev in _FLAT_EVENTS:
             targets = [account] if account else \
                 [a for a in (rec.get("results") or {})] if isinstance(rec.get("results"), dict) else []
@@ -233,10 +294,22 @@ def runs(records: Iterable[dict], strategy: str, *, symbol: str, today: str,
         if status in ("error", "skipped") and r["reason"] is not None:
             row["reason"] = r["reason"]
         row["legs"] = r["legs"]
+        if r["legs"]:            # a "placed" landed: the fire-to-ack latency applies
+            fire_ms, placed_ms = _fire_ms(date), r["legs"][0]["ts"]
+            row["fire_ms"] = fire_ms
+            row["placed_ms"] = placed_ms
+            row["latency_ms"] = (placed_ms - fire_ms if fire_ms is not None
+                                 and placed_ms is not None else None)
         if entry is not None:
-            row["entry"] = entry
+            row["entry"] = {**entry, "slip_ticks": _entry_slip_ticks(entry, r["legs"], tick)}
         if ex is not None:
-            row["exit"] = {**ex, "kind": "flat"} if r["flat"] else ex
+            exit_row = {**ex, "kind": "flat"} if r["flat"] else dict(ex)
+            if exit_row.get("kind") == "sl":
+                slip = _exit_slip_ticks(entry, exit_row.get("price"), r["sl_ref"], tick)
+                exit_row["slip_ticks"] = slip
+                exit_row["gap_through"] = (None if slip is None else
+                                           slip >= GAP_THROUGH_TICKS - _TICK_EPS)
+            row["exit"] = exit_row
         pnl = _pnl(entry, ex, r["qty"], symbol)
         if pnl is not None:
             row["pnl_usd"] = pnl
