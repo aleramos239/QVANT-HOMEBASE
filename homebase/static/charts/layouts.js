@@ -71,7 +71,15 @@ function moveTab(order, name, toIndex) {
   return rest;
 }
 
-const api = { orderNames, isDirty, renameError, uniqueName, closeTab, moveTab };
+/* The + menu's "reopen" list: every saved layout in `names` that isn't currently an open tab (`open`),
+   A->Z. Closing a tab (see app.js's closeTab) never deletes the layout, so it always stays findable
+   here until someone explicitly deletes it. */
+function closedNames(names, open) {
+  const isOpen = new Set(open);
+  return names.filter((n) => !isOpen.has(n)).sort((a, b) => a.localeCompare(b));
+}
+
+const api = { orderNames, isDirty, renameError, uniqueName, closeTab, moveTab, closedNames };
 if (typeof window !== 'undefined') window.HBLayouts = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

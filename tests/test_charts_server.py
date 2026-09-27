@@ -126,6 +126,67 @@ def test_layouts_roundtrip(tmp_path):
         assert client.get("/api/layouts").json() == {}
 
 
+def test_rename_layout_moves_it_atomically_in_one_request(tmp_path):
+    """2026-09-27 layout-tabs plan, coordinator ruling: rename is a single server-side move, never a
+    client PUT-new-then-DELETE-old (a failed DELETE there would leave two copies with no way to tell
+    which is live). The old key is gone and the new one carries the exact same body, in one request."""
+    lay = {"grid": 2, "cells": [{"root": "NQ", "spec": "time:60", "st": {}}]}
+    with TestClient(replay_app(tmp_path), base_url="http://127.0.0.1:8852") as client:
+        assert client.put("/api/layouts/main", json=lay).status_code == 200
+        r = client.post("/api/layouts/main/rename", json={"to": "Main 2"})
+        assert r.status_code == 200 and r.json() == {"ok": True}
+        assert client.get("/api/layouts").json() == {"Main 2": lay}
+
+        # a name with "/" and a space on both sides of the move (encodeURIComponent on the old name;
+        # the new name travels in the JSON body, so it needs no URL-encoding at all)
+        r = client.post("/api/layouts/" + quote("Main 2", safe="") + "/rename", json={"to": "NQ/ES 2x2"})
+        assert r.status_code == 200
+        assert client.get("/api/layouts").json() == {"NQ/ES 2x2": lay}
+
+
+def test_rename_layout_refuses_a_collision_and_bad_names_leaving_both_sides_untouched(tmp_path):
+    lay = {"grid": 2, "cells": [{"root": "NQ", "spec": "time:60", "st": {}}]}
+    other = {"grid": 4, "cells": []}
+    with TestClient(replay_app(tmp_path), base_url="http://127.0.0.1:8852") as client:
+        assert client.put("/api/layouts/main", json=lay).status_code == 200
+        assert client.put("/api/layouts/other", json=other).status_code == 200
+
+        r = client.post("/api/layouts/main/rename", json={"to": "other"})
+        assert r.status_code == 409 and "other" in r.json()["detail"]
+        assert client.get("/api/layouts").json() == {"main": lay, "other": other}   # neither side moved
+
+        for bad in (".", "..", "", None):
+            r = client.post("/api/layouts/main/rename", json={"to": bad})
+            assert r.status_code == 400, bad
+        assert client.post("/api/layouts/main/rename", json={}).status_code == 400
+        assert client.get("/api/layouts").json() == {"main": lay, "other": other}
+
+        assert client.post("/api/layouts/nope/rename", json={"to": "somewhere"}).status_code == 404
+        # renaming to its own current name is a harmless no-op, not a collision with itself
+        assert client.post("/api/layouts/main/rename", json={"to": "main"}).status_code == 200
+        assert client.get("/api/layouts").json() == {"main": lay, "other": other}
+
+
+def test_a_failed_rename_leaves_the_saved_layouts_untouched(tmp_path, monkeypatch):
+    """The rename is one write_json call (temp file + atomic replace) after the in-memory dict move --
+    a crash or a full disk mid-write lands exactly like any other write_json failure: the file on disk
+    is untouched, never half-renamed (no orphan, because there is nothing partial to surface)."""
+    lay = {"grid": 2, "cells": [{"root": "NQ", "spec": "time:60", "st": {}}]}
+    real_write_text = Path.write_text
+
+    def torn(self, data, *a, **k):
+        real_write_text(self, data[: len(data) // 2], *a, **k)
+        raise OSError(28, "No space left on device")
+
+    with TestClient(replay_app(tmp_path), base_url="http://127.0.0.1:8852") as client:
+        assert client.put("/api/layouts/main", json=lay).status_code == 200
+        with monkeypatch.context() as m:
+            m.setattr(Path, "write_text", torn)
+            with pytest.raises(OSError):
+                client.post("/api/layouts/main/rename", json={"to": "renamed"})
+        assert client.get("/api/layouts").json() == {"main": lay}
+
+
 def test_layout_order_roundtrip_and_restart_persistence(tmp_path):
     """The tab strip's left-to-right order (2026-09-27 layout-tabs plan, Task 3): empty until a
     viewer drags a tab, then whatever was last written -- surviving a fresh app() the way layouts and
@@ -1254,6 +1315,8 @@ def test_browser_writes_from_another_site_are_refused(tmp_path):
         assert client.put("/api/drawings/NQ", json=[H1], headers=evil).status_code == 403
         assert client.put("/api/layout-order", json=["main"], headers=evil).status_code == 403
         assert client.put("/api/layouts/main", json=lay).status_code == 200            # no Origin: not a browser
+        assert client.post("/api/layouts/main/rename", json={"to": "renamed"}, headers=evil).status_code == 403
+        assert client.get("/api/layouts").json() == {"main": lay}                      # refused: nothing moved
         assert client.delete("/api/layouts/main", headers=evil).status_code == 403
         assert client.get("/api/layouts").json() == {"main": lay}
         assert client.get("/api/drawings/NQ").json() == []
@@ -1480,7 +1543,8 @@ def test_a_second_older_request_while_one_builds_gets_busy_not_silence(tmp_path,
 # ---- final review M4: ONE Host guard on every /api/* route (GET included) and /ws ----
 BAD_HOSTS = ("evil.example", "evil.example:8852", "localhost.evil.com", "127.0.0.1.nip.io")
 GUARDED = [("GET", "/api/layouts", None), ("PUT", "/api/layouts/x", {"grid": "1", "cells": []}),
-           ("DELETE", "/api/layouts/x", None), ("GET", "/api/layout-order", None),
+           ("DELETE", "/api/layouts/x", None), ("POST", "/api/layouts/x/rename", {"to": "y"}),
+           ("GET", "/api/layout-order", None),
            ("PUT", "/api/layout-order", ["x"]), ("GET", "/api/templates", None),
            ("PUT", "/api/templates/x", {"a": 1}), ("DELETE", "/api/templates/x", None),
            ("GET", "/api/paper/strategies", None), ("GET", "/api/paper/history", None),

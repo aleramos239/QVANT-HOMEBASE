@@ -646,9 +646,10 @@ async function duplicateTab(name) {
   renderTabs();
 }
 
-/* Right-click menu -> Rename: an inline popover anchored on the tab itself (the codebase's usual
-   "Save layout as..." pattern) -- a rename is a PUT under the new name plus a DELETE of the old one,
-   since the server only knows layouts by name. */
+/* Rename: a single atomic server-side move (POST /api/layouts/{name}/rename), never a client-side
+   PUT-new-then-DELETE-old -- a failed DELETE there would leave two copies with no way to tell which is
+   live. Renaming the ACTIVE tab saves its current edits first (under the OLD name) so the rename carries
+   them, rather than moving a stale server body and losing what's on screen. */
 function renameTab(oldName) {
   const anchor = [...$('#tabStrip').children].find((b) => b.dataset.tab === oldName);
   const m = openMenu(anchor || $('#tabStrip'), 'menu-rename'), row = mk('div', 'menu-custom');
@@ -662,16 +663,28 @@ function renameTab(oldName) {
     const next = input.value.trim(), why = window.HBLayouts.renameError(next, oldName, tabOrder);
     if (why) { menuErr(err, why); input.focus(); return; }
     if (next === oldName) { closeMenu(); return; }
-    const body = oldName === layout.name ? layoutBody() : layoutsCache[oldName];
-    if (!body) { menuErr(err, `could not read “${oldName}”`); return; }
-    const putWhy = await putLayout(next, body);
-    if (putWhy) { menuErr(err, putWhy); return; }
-    try { await fetch('/api/layouts/' + encodeURIComponent(oldName), { method: 'DELETE' }); } catch (_) { /* best-effort */ }
+    if (oldName === layout.name && window.HBLayouts.isDirty(tabSnapshot, layoutBody())) {
+      const saveWhy = await putLayout(oldName);
+      if (saveWhy) { menuErr(err, saveWhy); return; }
+      layoutsCache[oldName] = layoutBody();
+      layout.dirty = false;
+    }
+    let r;
+    try {
+      r = await fetch(`/api/layouts/${encodeURIComponent(oldName)}/rename`, { method: 'POST',
+        headers: { 'content-type': 'application/json' }, body: JSON.stringify({ to: next }) });
+    } catch (e) { menuErr(err, 'rename failed: ' + (e && e.message ? e.message : 'network error')); return; }
+    if (!r.ok) {
+      let detail = '';
+      try { detail = (await r.json()).detail || ''; } catch (_) { /* no JSON body */ }
+      menuErr(err, `rename failed (${r.status})` + (detail ? ': ' + detail : ''));
+      return;
+    }
+    layoutsCache[next] = layoutsCache[oldName];
     delete layoutsCache[oldName];
-    layoutsCache[next] = body;
     tabOrder = tabOrder.map((n) => (n === oldName ? next : n));
     persistOrder();
-    if (layout.name === oldName) { layout.name = next; tabSnapshot = body; saveLast(); renderToolbar(); }
+    if (layout.name === oldName) { layout.name = next; tabSnapshot = layoutsCache[next]; saveLast(); renderToolbar(); }
     closeMenu();
     renderTabs();
   };
@@ -684,17 +697,13 @@ function renameTab(oldName) {
   input.select();
 }
 
-/* Right-click menu -> Close, and middle-click: permanently deletes the saved layout (there is no other
-   "all saved layouts" list any more, so closing its only tab IS deleting it). Closing the active tab
-   switches to the neighbour HBLayouts.closeTab picks; closing the last one leaves the current charts on
-   screen, just unnamed (nothing left to switch to). */
-async function closeTabByName(name) {
+/* Right-click menu -> Close, and middle-click: removes the tab from the STRIP only -- the saved layout
+   stays on the server, reachable again from the + menu's "not currently open" list. Closing the active
+   tab switches to the neighbour HBLayouts.closeTab picks; closing the last one leaves the current charts
+   on screen, just unnamed (nothing left to switch to). Purely local: no network call, so it cannot fail. */
+function closeTab(name) {
   const idx = tabOrder.indexOf(name);
   if (idx < 0) return;
-  let r = null;
-  try { r = await fetch('/api/layouts/' + encodeURIComponent(name), { method: 'DELETE' }); } catch (_) { /* r stays null */ }
-  if (!r || !r.ok) { sbNote(`close failed${r ? ` (${r.status})` : ': network error'}`); return; }
-  delete layoutsCache[name];
   const { order, active } = window.HBLayouts.closeTab(tabOrder, idx);
   tabOrder = order;
   persistOrder();
@@ -705,16 +714,74 @@ async function closeTabByName(name) {
   renderTabs();
 }
 
+/* Right-click menu -> Delete layout... (danger-styled, confirmed through openDialog, never a native
+   confirm()): the only path left that removes a saved layout from the server. Closing a tab never does
+   this any more -- see closeTab above. */
+function deleteLayoutTab(name) {
+  const box = openDialog('Delete layout', 'small'), body = mk('div', 'dlg-fields');
+  body.appendChild(mk('div', 'dlg-msg', `Delete “${name}”? This removes it from the server for everyone -- it cannot be undone.`));
+  const foot = mk('div', 'dlg-foot'), cancel = mk('button', 'btn btn-ghost', 'Cancel'), del = mk('button', 'btn btn-danger', 'Delete');
+  cancel.type = 'button';
+  del.type = 'button';
+  cancel.onclick = closeDialog;
+  del.onclick = async () => {
+    del.disabled = true;
+    let r = null;
+    try { r = await fetch('/api/layouts/' + encodeURIComponent(name), { method: 'DELETE' }); } catch (_) { /* r stays null */ }
+    if (!r || !r.ok) { del.disabled = false; sbNote(`delete failed${r ? ` (${r.status})` : ': network error'}`); return; }
+    closeDialog();
+    delete layoutsCache[name];
+    const idx = tabOrder.indexOf(name);
+    if (idx >= 0) {
+      const { order, active } = window.HBLayouts.closeTab(tabOrder, idx);
+      tabOrder = order;
+      persistOrder();
+      if (name === layout.name) {
+        if (active >= 0 && layoutsCache[tabOrder[active]]) loadLayout(tabOrder[active], layoutsCache[tabOrder[active]]);
+        else { layout.name = ''; layout.dirty = false; tabSnapshot = null; saveLast(); renderToolbar(); }
+      }
+      renderTabs();
+    }
+  };
+  foot.append(cancel, del);
+  body.appendChild(foot);
+  box.appendChild(body);
+  del.focus();
+}
+
 function tabContextMenu(name, at) {
   const m = openMenu(null, 'menu-tabctx', { at });
+  const del = menuItem('Delete layout…', '', () => { closeMenu(); deleteLayoutTab(name); });
+  del.classList.add('menu-i-danger');
   m.append(
     menuItem('Rename', '', () => { closeMenu(); renameTab(name); }),
     menuItem('Duplicate', '', () => { closeMenu(); duplicateTab(name); }),
-    menuItem('Close', '', () => { closeMenu(); closeTabByName(name); }),
+    menuItem('Close', '', () => { closeMenu(); closeTab(name); }),
+    mk('div', 'menu-sep'),
+    del,
   );
   placeMenu();
   m.tabIndex = -1;
   m.focus({ preventScroll: true });
+}
+
+/* + menu: "New layout" (the old bare + behaviour) plus, when any saved layout is currently closed, a
+   list of those names so one can be reopened. Reopening loads straight from the local cache -- no refetch
+   -- consistent with the rest of the strip trusting layoutsCache between explicit server round trips. */
+function reopenTab(name) {
+  if (!tabOrder.includes(name)) { tabOrder.push(name); persistOrder(); }
+  switchTab(name);
+}
+
+function addTabMenu(anchor) {
+  const names = window.HBLayouts.closedNames(Object.keys(layoutsCache), tabOrder);
+  if (!names.length) { addTab(); return; }
+  const m = openMenu(anchor, 'menu-tabadd');
+  m.appendChild(menuItem('New layout', '', () => { closeMenu(); addTab(); }));
+  m.appendChild(mk('div', 'menu-sep'));
+  m.appendChild(mk('div', 'menu-h', 'Reopen'));
+  for (const name of names) m.appendChild(menuItem(name, '', () => { closeMenu(); reopenTab(name); }));
+  placeMenu();
 }
 
 function renderTabs() {
@@ -731,9 +798,9 @@ function renderTabs() {
     if (active && layout.dirty) { const dot = mk('span', 'tab-dot'); dot.setAttribute('aria-label', 'Unsaved changes'); b.appendChild(dot); }
     b.onclick = () => switchTab(name);
     b.oncontextmenu = (e) => { e.preventDefault(); tabContextMenu(name, { x: e.clientX, y: e.clientY }); };
-    // middle-click closes (a real click event only for the primary button; auxclick covers the middle one
-    // cross-browser without also firing on a plain left-click)
-    b.onauxclick = (e) => { if (e.button === 1) { e.preventDefault(); closeTabByName(name); } };
+    // middle-click closes the tab (never deletes -- same as the context menu's Close, not its Delete);
+    // auxclick covers the middle button cross-browser without also firing on a plain left-click
+    b.onauxclick = (e) => { if (e.button === 1) { e.preventDefault(); closeTab(name); } };
     b.ondragstart = (e) => { dragTab = name; e.dataTransfer.effectAllowed = 'move'; };
     b.ondragend = () => { dragTab = null; strip.querySelectorAll('.drag-over').forEach((x) => x.classList.remove('drag-over')); };
     b.ondragover = (e) => { if (dragTab && dragTab !== name) { e.preventDefault(); b.classList.add('drag-over'); } };
@@ -754,7 +821,7 @@ function renderTabs() {
   add.title = 'Add layout tab';
   add.setAttribute('aria-label', 'Add layout tab');
   add.appendChild(icon('plus'));
-  add.onclick = addTab;
+  add.onclick = () => addTabMenu(add);
   strip.appendChild(add);
 }
 

@@ -116,3 +116,17 @@ test('moveTab clamps an out-of-range target index', () => {
   assert.deepEqual(L.moveTab(['a', 'b', 'c'], 'a', 99), ['b', 'c', 'a']);
   assert.deepEqual(L.moveTab(['a', 'b', 'c'], 'c', -5), ['c', 'a', 'b']);
 });
+
+// ---- closedNames: the + menu's "reopen a closed tab" list ----
+test('closedNames lists saved layouts that are not open, A-Z', () => {
+  assert.deepEqual(L.closedNames(['c', 'a', 'b'], ['b']), ['a', 'c']);
+});
+
+test('closedNames is empty once every saved layout is open', () => {
+  assert.deepEqual(L.closedNames(['a', 'b'], ['a', 'b']), []);
+  assert.deepEqual(L.closedNames(['a', 'b'], ['a', 'b', 'c']), []);   // an "open" name unknown to `names` is fine
+});
+
+test('closedNames with nothing saved is empty regardless of what is open', () => {
+  assert.deepEqual(L.closedNames([], ['a']), []);
+});

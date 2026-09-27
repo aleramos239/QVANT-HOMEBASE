@@ -788,6 +788,32 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         write_json(layouts_path, all_)
         return {"ok": True}
 
+    @app.post("/api/layouts/{name:path}/rename")
+    async def rename_layout(name: str, request: Request):
+        """One atomic dict-key move plus the same temp-file+rename write as every other layouts.json
+        write (write_json) -- never a client-side PUT-new-then-DELETE-old, which would leave two copies
+        on disk (and no way to tell which is live) if the DELETE leg failed after a successful PUT.
+        A crash or a full disk here lands exactly like any other write_json failure: the file on disk is
+        untouched (see test_a_failed_rename_leaves_the_saved_layouts_untouched), never half-renamed."""
+        browser_write_ok(request)
+        body = await request.json()
+        new = body.get("to") if isinstance(body, dict) else None
+        if not isinstance(new, str) or not new:
+            raise HTTPException(400, "a rename is {to: <new name>}")
+        # the browser resolves /api/layouts/. and /.. as path steps: the PUT/DELETE route would miss it
+        if new in (".", ".."):
+            raise HTTPException(400, "“.” and “..” cannot be layout names")
+        all_ = read_json(layouts_path)
+        if name not in all_:
+            raise HTTPException(404, f"{name!r} is not a saved layout")
+        if new == name:
+            return {"ok": True}
+        if new in all_:
+            raise HTTPException(409, f"a layout named {new!r} already exists")
+        all_[new] = all_.pop(name)
+        write_json(layouts_path, all_)
+        return {"ok": True}
+
     @app.get("/api/layout-order")
     async def get_layout_order():
         # a distinct path from /api/layouts/{name:path} on purpose -- sharing the prefix would make
