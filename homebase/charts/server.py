@@ -35,6 +35,7 @@ from .desk import Fanout, Quotes, register as register_desk
 from .history import History
 from .hub import Hub, Stream
 from .news import News
+from .paper import ROOT as PAPER_ROOT, STRATEGY_ID as PAPER_ID, PaperRunner, describe as paper_describe
 from .recorder import REFILL_MAX_PAGES, LiveRecorder, refill
 from .replay import ReplayFeed
 from .session import ET, always_open, et_wall_s, session_date, session_range_ms, split_by_session
@@ -52,6 +53,7 @@ ROLL_GRACE_MS = 60_000        # a 24/7 root rolls at 18:00 with no dead hour: it
                               # prints can reach us after the clock passed 18:00 and are kept this long
 REFILL_BUDGET = 60            # this process's own chart requests per hour
 SEND_QUEUE_MAX = 400
+PAPER_POLL_S = 0.25            # the paper runner is asked this often; it runs at most once a second
 TIMEFRAMES = [["5s", "time:5"], ["15s", "time:15"], ["30s", "time:30"], ["1m", "time:60"],
               ["2m", "time:120"], ["3m", "time:180"], ["5m", "time:300"], ["10m", "time:600"],
               ["15m", "time:900"], ["30m", "time:1800"], ["1h", "time:3600"], ["4h", "time:14400"],
@@ -219,7 +221,10 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                speed: float = 10.0, start_et: dt.time = dt.time(9, 25), feed_factory=None,
                now_ms=None, state: Path | None = None, calendar_fetch=None,
                desk_factory=None, news_fetch=None, depth_roots=None,
-               depth_base: Path | None = None) -> FastAPI:
+               depth_base: Path | None = None, paper_day: bool = False,
+               paper_backtest=None) -> FastAPI:
+    if paper_day and not replay:
+        raise ValueError("paper_day forces a REPLAYED date to be an event day: it needs replay")
     roots = [r.upper() for r in roots]
     sd = Path(state) if state else state_dir() / "charts"
     sd.mkdir(parents=True, exist_ok=True)
@@ -240,6 +245,12 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
     reaction_book = ReactionBook(news_dir, contract_tick_size)
     store = TickStore(base)
     history = History(store, cache_dir=sd / "cache")
+    # forward PAPER test of the GC NFP+CPI straddle (paper.py): never an order; live only,
+    # or a replay forced by --paper-day (which stores nothing); paper_backtest (python -m
+    # homebase.charts passes paper.spawn_backtest) computes the cached 2021-2024 comparison once
+    paper = PaperRunner(sd / "paper", cal, enabled=PAPER_ROOT in roots and (not replay or paper_day),
+                        force_day=replay if paper_day else None, persist=not replay, log=log)
+    paper_jobs: list = []
     recorder = None if replay else LiveRecorder(base)
     conns: set[Conn] = set()
     quotes = Quotes()                     # bid/ask per root for the Buy/Sell buttons (desk.py)
@@ -271,6 +282,11 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             "date": d.isoformat(), "contract": sess.contract if sess else symbols.resolve_contract(root),
             "source": "live", "approx": bool(sess and ticks and not sess.bid_ask),
             "gaps": [[et_wall_s(a), et_wall_s(b)] for a, b in (sess.gaps if sess else [])]})
+        if root == PAPER_ROOT:
+            try:        # a restart mid-window (or a gap refill) rebuilds the paper tape from the recording
+                paper.seed(clock(), ((t.ts_ms * 1_000_000, t.price, t.size) for t in ticks))
+            except Exception as e:  # noqa: BLE001 — paper work must never break the charts
+                log(f"paper seed: {type(e).__name__}: {e}")
 
     async def _quiet_wait() -> None:
         while QUIET[0] <= dt.datetime.fromtimestamp(clock() / 1000, ET).time() < QUIET[1]:
@@ -364,11 +380,21 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             refill_running.discard(root)
             refill_pending.pop(root, None)   # never leave a follow-up orphaned if we exit abnormally
 
+    def paper_ticks(root: str, rows: list[dict]) -> None:
+        if root == PAPER_ROOT and rows:
+            try:
+                paper.on_ticks(rows)
+            except Exception as e:  # noqa: BLE001 — paper work must never break the live tick path
+                log(f"paper ticks: {type(e).__name__}: {e}")
+
     # the feed is built AFTER reseed/_refill exist (it takes _refill as its
     # callback); every function above only touches feed/hub/clock when called
     if replay:
-        feed = ReplayFeed(store, roots, replay, lambda r, c, rows: hub.on_ticks(r, rows),
-                          speed=speed, start_et=start_et)
+        def on_replay(root: str, _contract: str, rows: list[dict]) -> None:
+            hub.on_ticks(root, rows)
+            paper_ticks(root, rows)
+
+        feed = ReplayFeed(store, roots, replay, on_replay, speed=speed, start_et=start_et)
         clock = feed.now_ms
     else:
         clock = now_ms or (lambda: int(time.time() * 1000))
@@ -388,6 +414,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             quotes.note(root, rows)
             kept = recorder.append(root, contract, rows)
             hub.on_ticks(root, kept)
+            paper_ticks(root, kept)
             if kept:
                 try:
                     if root in burst_book.roots:
@@ -433,6 +460,20 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         st["news"] = news.status()
         st["bursts"] = burst_book.status()
         return st
+
+    async def paper_loop() -> None:
+        """The paper runner: run_session in a worker thread, at most once a second, only inside
+        its window on an event day (PaperRunner.due decides); every change goes to every page."""
+        while True:
+            await asyncio.sleep(PAPER_POLL_S)       # not the `sleep` seam: tests patch it to 0
+            try:
+                now = clock()
+                if paper.due(now):
+                    msg = await asyncio.to_thread(paper.step, now)
+                    if msg is not None:
+                        fan(msg)
+            except Exception as e:  # noqa: BLE001 — the paper runner must never take the service down
+                log(f"paper: {type(e).__name__}: {e}")
 
     older_busy: set = set()     # (conn, chart id, stream identity) with a scroll-back chunk being built --
                                 # keyed by the STREAM (not just conn/cid) so a fresh subscription after an
@@ -532,6 +573,12 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
     async def lifespan(_app):
         if replay:
             for r, rs in feed.load().items():
+                if r == PAPER_ROOT:
+                    try:        # --paper-day: the session so far, like a live restart's reseed
+                        paper.seed(clock(), ((int(x["ts_ns"]) if x.get("ts_ns") else int(x["ts_ms"]) * 1_000_000,
+                                              float(x["price"]), int(x.get("size") or 0)) for x in rs))
+                    except Exception as e:  # noqa: BLE001 — paper work must never break the charts
+                        log(f"paper seed: {type(e).__name__}: {e}")
                 clf = SideClassifier()
                 hub.start_today(r, replay, [from_row(x, clf) for x in rs], {
                     "date": replay.isoformat(), "contract": feed.contracts.get(r),
@@ -554,6 +601,13 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             tasks.append(asyncio.create_task(link.run()))
         if depth is not None:
             tasks.append(asyncio.create_task(depth.run()))
+        if paper.enabled:
+            tasks.append(asyncio.create_task(paper_loop()))
+        if paper_backtest is not None and not (sd / "paper" / "backtest.json").exists():
+            try:
+                paper_jobs.append(paper_backtest(sd / "paper"))
+            except Exception as e:  # noqa: BLE001 — the comparison is optional
+                log(f"paper backtest: {type(e).__name__}: {e}")
         log(f"up — {'replay ' + replay.isoformat() if replay else 'live'} · {', '.join(roots)}")
         try:
             yield
@@ -571,6 +625,9 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             if depth is not None:
                 await depth.aclose()    # cancels its requests in flight; the recording's last member
             tester.manager.shutdown()   # never leave a runner child orphaned
+            for job in paper_jobs:      # nor the paper comparison's
+                if job is not None and job.poll() is None:
+                    job.terminate()
 
     app = FastAPI(title="Homebase Charts", lifespan=lifespan)
     app.mount("/static", RevalidatedFiles(directory=STATIC), name="static")
@@ -697,6 +754,16 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         write_json(templates_path, all_)
         return {"ok": True}
 
+    @app.get("/api/paper/strategies")
+    async def paper_strategies():
+        return [paper_describe()]
+
+    @app.get("/api/paper/history")
+    async def paper_history(strategy: str = PAPER_ID):
+        if strategy != PAPER_ID:
+            raise HTTPException(404, f"no paper strategy {strategy!r}")
+        return paper.history()
+
     @app.get("/api/calendar")
     async def api_calendar(request: Request):
         q = request.query_params
@@ -741,6 +808,8 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         conn = Conn(sock)
         conns.add(conn)
         conn.send({"type": "status", **status()})
+        if paper.current is not None:
+            conn.send(paper.current)            # the paper run's state, like every later change
         def room() -> bool:
             return not conn.dead and conn.q.qsize() < SEND_QUEUE_MAX // 2
 
