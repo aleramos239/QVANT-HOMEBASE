@@ -51,119 +51,188 @@ function actionTd(tr, label, onClick) {
   c.appendChild(b);
   tr.appendChild(c);
 }
-function table(headers, rows, buildRow) {
-  const t = el('table', 'bp-table'), thead = el('thead'), htr = el('tr'), tbody = el('tbody');
-  for (const h of headers) { const th = el('th', h.cls); th.textContent = h.text; htr.appendChild(th); }
-  thead.appendChild(htr);
-  for (const r of rows) { const tr = el('tr'); buildRow(tr, r); tbody.appendChild(tr); }
-  t.append(thead, tbody);
-  return t;
+/* Keyed sync: reuses the container's own <table class="bp-table"> (and its rows, by r.key on <tr data-key>)
+   across calls, so a row whose key survives keeps its exact DOM node -- its buttons, its focus -- while
+   buildRow/updateRow decide what happens to the row itself. The diffing (which keys were added or removed) is
+   HBTrade.diffRows, pure and Node-tested; only the DOM add/remove/reorder happens here.
+   2026-09-27 (review of Tasks 3-4): the panel used to rebuild its active table from scratch on every desk
+   event, including quotes at up to 4/s, replacing a Close/Cancel button mid-click and losing keyboard focus. */
+function syncTable(container, headers, rows, keyOf, buildRow, updateRow) {
+  let t = container.querySelector('table.bp-table'), tbody;
+  if (!t) {
+    container.replaceChildren();
+    t = el('table', 'bp-table');
+    const thead = el('thead'), htr = el('tr');
+    for (const h of headers) { const th = el('th', h.cls); th.textContent = h.text; htr.appendChild(th); }
+    thead.appendChild(htr);
+    tbody = el('tbody');
+    t.append(thead, tbody);
+    container.appendChild(t);
+  } else {
+    tbody = t.querySelector('tbody');
+  }
+  const existing = new Map();
+  for (const tr of tbody.children) existing.set(tr.dataset.key, tr);
+  const plan = T.diffRows([...existing.keys()], rows, keyOf);
+  for (const k of plan.remove) { const tr = existing.get(k); if (tr) tr.remove(); }
+  let prev = null;
+  for (const r of rows) {
+    const k = keyOf(r);
+    let tr = existing.get(k);
+    if (!tr) { tr = el('tr'); tr.dataset.key = k; buildRow(tr, r); } else updateRow(tr, r);
+    tbody.insertBefore(tr, prev ? prev.nextSibling : tbody.firstChild);
+    prev = tr;
+  }
 }
 
 /* ---- the four trading tabs ---- */
 const D = () => window.HBDeskClient;
 
+const POSITION_HEAD = [{ text: 'Account' }, { text: 'Symbol' }, { text: 'Side' }, { text: 'Qty', cls: 'num' }, { text: 'Avg price', cls: 'num' },
+  { text: 'Last', cls: 'num' }, { text: 'Open P&L', cls: 'num' }, { text: '' }];
+function buildPositionRow(tr, r) {
+  accountTd(tr, r.who, r.env);
+  td(tr, r.symbol);
+  td(tr, r.side, r.side === 'Long' ? 'up' : 'down');
+  td(tr, r.qty, 'num');
+  td(tr, r.avg, 'num');
+  td(tr, r.last, 'num');
+  td(tr, r.pnl, 'num ' + (r.tone || ''));
+  actionTd(tr, 'Close', () => { window.HBTradeUI && window.HBTradeUI.flattenAccount(r.account, r.root); });
+}
+/* Never touches cell 7 (the Close button): a quote or an unrelated account's update must not replace it. */
+function updatePositionRow(tr, r) {
+  const c = tr.children;
+  c[2].textContent = r.side; c[2].className = r.side === 'Long' ? 'up' : 'down';
+  c[3].textContent = r.qty;
+  c[4].textContent = r.avg;
+  c[5].textContent = r.last;
+  c[6].textContent = r.pnl; c[6].className = 'num ' + (r.tone || '');
+}
 function renderPositions(target) {
   const d = D();
-  if (!d.state) { target.appendChild(downDiv(d.down)); return; }
+  if (!d.state) { target.replaceChildren(downDiv(d.down)); return; }
   const rows = T.positionRows(d.state, d.quotes);
-  if (!rows.length) { target.appendChild(emptyDiv('No open positions')); return; }
-  target.appendChild(table(
-    [{ text: 'Account' }, { text: 'Symbol' }, { text: 'Side' }, { text: 'Qty', cls: 'num' }, { text: 'Avg price', cls: 'num' },
-      { text: 'Last', cls: 'num' }, { text: 'Open P&L', cls: 'num' }, { text: '' }],
-    rows,
-    (tr, r) => {
-      accountTd(tr, r.who, r.env);
-      td(tr, r.symbol);
-      td(tr, r.side, r.side === 'Long' ? 'up' : 'down');
-      td(tr, r.qty, 'num');
-      td(tr, r.avg, 'num');
-      td(tr, r.last, 'num');
-      td(tr, r.pnl, 'num ' + (r.tone || ''));
-      actionTd(tr, 'Close', () => { window.HBTradeUI && window.HBTradeUI.flattenAccount(r.account, r.root); });
-    },
-  ));
+  if (!rows.length) { target.replaceChildren(emptyDiv('No open positions')); return; }
+  syncTable(target, POSITION_HEAD, rows, (r) => r.key, buildPositionRow, updatePositionRow);
 }
 
+const ORDER_HEAD = [{ text: 'Account' }, { text: 'Symbol' }, { text: 'Side' }, { text: 'Type' }, { text: 'Qty', cls: 'num' },
+  { text: 'Price', cls: 'num' }, { text: 'Status' }, { text: 'Owner' }, { text: '' }];
+function buildOrderRow(tr, r) {
+  td(tr, r.who);
+  td(tr, r.symbol);
+  td(tr, r.side);
+  td(tr, r.type);
+  td(tr, r.qty, 'num');
+  td(tr, r.price, 'num');
+  td(tr, r.status);
+  td(tr, r.owner);
+  if (r.cancellable) actionTd(tr, 'Cancel', () => { window.HBTradeUI && window.HBTradeUI.cancelOrder(r.account, r.order_id); });
+  else td(tr, '');
+}
+/* Never touches cell 8 (the Cancel button, when present): only what can change on a still-working order. */
+function updateOrderRow(tr, r) {
+  const c = tr.children;
+  c[4].textContent = r.qty;
+  c[5].textContent = r.price;
+  c[6].textContent = r.status;
+  c[7].textContent = r.owner;
+}
 function renderOrders(target) {
   const d = D();
-  if (!d.state) { target.appendChild(downDiv(d.down)); return; }
+  if (!d.state) { target.replaceChildren(downDiv(d.down)); return; }
   const rows = T.orderRows(d.state);
-  if (!rows.length) { target.appendChild(emptyDiv('No working orders')); return; }
-  target.appendChild(table(
-    [{ text: 'Account' }, { text: 'Symbol' }, { text: 'Side' }, { text: 'Type' }, { text: 'Qty', cls: 'num' },
-      { text: 'Price', cls: 'num' }, { text: 'Status' }, { text: 'Owner' }, { text: '' }],
-    rows,
-    (tr, r) => {
-      td(tr, r.who);
-      td(tr, r.symbol);
-      td(tr, r.side);
-      td(tr, r.type);
-      td(tr, r.qty, 'num');
-      td(tr, r.price, 'num');
-      td(tr, r.status);
-      td(tr, r.owner);
-      if (r.cancellable) actionTd(tr, 'Cancel', () => { window.HBTradeUI && window.HBTradeUI.cancelOrder(r.account, r.order_id); });
-      else td(tr, '');
-    },
-  ));
+  if (!rows.length) { target.replaceChildren(emptyDiv('No working orders')); return; }
+  syncTable(target, ORDER_HEAD, rows, (r) => r.key, buildOrderRow, updateOrderRow);
 }
 
+const FILL_HEAD = [{ text: 'Time (ET)' }, { text: 'Account' }, { text: 'Symbol' }, { text: 'Side' }, { text: 'Qty', cls: 'num' },
+  { text: 'Price', cls: 'num' }, { text: 'Owner' }];
+function buildFillRow(tr, r) {
+  td(tr, r.time);
+  td(tr, r.who);
+  td(tr, r.symbol);
+  td(tr, r.side);
+  td(tr, r.qty, 'num');
+  td(tr, r.price, 'num');
+  td(tr, r.owner);
+}
 function renderFills(target) {
   const d = D();
-  if (!d.state) { target.appendChild(downDiv(d.down)); return; }
+  if (!d.state) { target.replaceChildren(downDiv(d.down)); return; }
   const rows = T.fillRows(d.state);
-  if (!rows.length) { target.appendChild(emptyDiv('No fills today')); return; }
-  target.appendChild(table(
-    [{ text: 'Time (ET)' }, { text: 'Account' }, { text: 'Symbol' }, { text: 'Side' }, { text: 'Qty', cls: 'num' },
-      { text: 'Price', cls: 'num' }, { text: 'Owner' }],
-    rows,
-    (tr, r) => {
-      td(tr, r.time);
-      td(tr, r.who);
-      td(tr, r.symbol);
-      td(tr, r.side);
-      td(tr, r.qty, 'num');
-      td(tr, r.price, 'num');
-      td(tr, r.owner);
-    },
-  ));
+  if (!rows.length) { target.replaceChildren(emptyDiv('No fills today')); return; }
+  syncTable(target, FILL_HEAD, rows, (r) => r.key, buildFillRow, buildFillRow);   // a fill never changes once it exists
 }
 
+const ACCOUNT_HEAD = [{ text: 'Account' }, { text: 'Env' }, { text: 'Connected' }, { text: 'Broker account' }, { text: 'Balance', cls: 'num' },
+  { text: 'Realized P&L', cls: 'num' }, { text: 'Open P&L', cls: 'num' }, { text: 'Strategies' }, { text: 'Status' }];
+function buildAccountRow(tr, r) {
+  td(tr, r.who);
+  const c = el('td');
+  c.appendChild(envSpan(r.env));
+  tr.appendChild(c);
+  dotTd(tr, r.connected);
+  td(tr, r.broker);
+  td(tr, r.balance, 'num');
+  td(tr, r.realized, 'num');
+  td(tr, r.open, 'num ' + (r.openTone || ''));
+  td(tr, r.strategies);
+  td(tr, r.status, r.status === 'Ready' ? '' : 'down');
+}
+function updateAccountRow(tr, r) {
+  const c = tr.children;
+  c[2].replaceChildren(el('span', 'dot' + (r.connected ? ' ok' : ' bad')));
+  c[3].textContent = r.broker;
+  c[4].textContent = r.balance;
+  c[5].textContent = r.realized;
+  c[6].textContent = r.open; c[6].className = 'num ' + (r.openTone || '');
+  c[7].textContent = r.strategies;
+  c[8].textContent = r.status; c[8].className = r.status === 'Ready' ? '' : 'down';
+}
 function renderAccounts(target) {
   const d = D();
-  if (!d.state) { target.appendChild(downDiv(d.down)); return; }
+  if (!d.state) { target.replaceChildren(downDiv(d.down)); return; }
   const rows = T.accountRows(d.state, d.quotes);
-  if (!rows.length) { target.appendChild(emptyDiv('No accounts on the desk')); return; }
-  target.appendChild(table(
-    [{ text: 'Account' }, { text: 'Env' }, { text: 'Connected' }, { text: 'Broker account' }, { text: 'Balance', cls: 'num' },
-      { text: 'Realized P&L', cls: 'num' }, { text: 'Open P&L', cls: 'num' }, { text: 'Strategies' }, { text: 'Status' }],
-    rows,
-    (tr, r) => {
-      td(tr, r.who);
-      const c = el('td');
-      c.appendChild(envSpan(r.env));
-      tr.appendChild(c);
-      dotTd(tr, r.connected);
-      td(tr, r.broker);
-      td(tr, r.balance, 'num');
-      td(tr, r.realized, 'num');
-      td(tr, r.open, 'num ' + (r.openTone || ''));
-      td(tr, r.strategies);
-      td(tr, r.status, r.status === 'Ready' ? '' : 'down');
-    },
-  ));
+  if (!rows.length) { target.replaceChildren(emptyDiv('No accounts on the desk')); return; }
+  syncTable(target, ACCOUNT_HEAD, rows, (r) => r.id, buildAccountRow, updateAccountRow);
 }
 
 /* ---- the panel shell ---- */
 function renderTabsBar() { for (const t of tabs) t.btn.setAttribute('aria-selected', String(t.id === activeId)); }
 
-function renderActive() {
+/* clear = true: a tab switch or the panel opening -- the container is wiped first, so every render function's
+   own syncTable call starts a brand-new table. clear = false: a desk event with the same tab still showing --
+   the container (and any table.bp-table already in it) is left alone, so syncTable reconciles onto it instead
+   of tearing it down (ruling: a Close/Cancel button or the focus on it survives a quote tick). */
+function renderActive(clear = true) {
   const t = tabs.find((x) => x.id === activeId);
-  elBody.replaceChildren();
-  if (!t) return;
+  if (!t) { if (clear) elBody.replaceChildren(); return; }
+  if (clear) elBody.replaceChildren();
   try { t.render(elBody); } catch (e) { console.error(e); }
-  if (t.onShow) { try { t.onShow(); } catch (e) { console.error(e); } }
+  if (clear && t.onShow) { try { t.onShow(); } catch (e) { console.error(e); } }
+}
+
+/* Which desk-event reasons (HBDeskClient's emit keys) each built-in tab's content actually depends on. Orders
+   and Fills never change from a quote, so a quote tick (up to 4/s) does not even call their render -- the
+   previous bug rebuilt whichever tab was open on every desk event, including quotes, tearing down a Cancel
+   button mid-click. Positions and Accounts do need quotes (open P&L), so they stay in the relevant set and
+   lean on syncTable (above) to update in place instead of rebuilding. */
+const TAB_EVENTS = { positions: new Set(['state', 'account', 'quote']), orders: new Set(['state', 'account']),
+  fills: new Set(['state', 'account']), accounts: new Set(['state', 'account', 'quote']) };
+function relevant(id, why) {
+  const set = TAB_EVENTS[id];
+  if (!set) return true;   // a tab with no declared set (e.g. a future one) always redraws
+  for (const w of why) if (set.has(w)) return true;
+  return false;
+}
+/* The desk client's own subscription (mount, below): redraws the active tab in place, and only when its
+   declared events actually fired. */
+function onDeskEvent(why) {
+  if (!isOpen) return;
+  if (!relevant(activeId, why)) return;
+  renderActive(false);
 }
 
 function applyHeight(h) {
@@ -267,7 +336,7 @@ function mount(pg) {
   if (isOpen) renderActive();
   elToggle.onclick = () => setOpen(!isOpen);
   wireResize();
-  if (window.HBDeskClient) window.HBDeskClient.on(() => refresh());
+  if (window.HBDeskClient) window.HBDeskClient.on(onDeskEvent);
 }
 
 /* The built-in tabs (every account: ruling S6). Registered immediately -- addTab only needs the

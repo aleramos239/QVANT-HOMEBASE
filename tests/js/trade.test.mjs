@@ -171,15 +171,27 @@ test('bots: badge, entry lines merged across accounts, markers from the bot\'s f
 
 test('table rows', () => {
   const q = { NQ: { last: 30910 } };
-  assert.deepEqual(T.positionRows(STATE, q)[0], { account: 'sim041', who: 'SIM0000041', env: 'demo', symbol: 'NQZ6', root: 'NQ',
+  assert.deepEqual(T.positionRows(STATE, q)[0], { key: 'sim041:NQZ6', account: 'sim041', who: 'SIM0000041', env: 'demo', symbol: 'NQZ6', root: 'NQ',
     side: 'Long', qty: 2, avg: '30,900.00', last: '30,910.00', pnl: '+$400', tone: 'up' });
   assert.equal(T.positionRows(STATE, {})[2].pnl, '—');
   const o = T.orderRows(STATE);
-  assert.deepEqual(o.find((r) => r.order_id === '14'), { account: 'sim041', who: 'SIM0000041', symbol: 'NQZ6', side: 'Sell', type: 'Stop', qty: 1,
+  assert.deepEqual(o.find((r) => r.order_id === '14'), { key: 'sim041:14', account: 'sim041', who: 'SIM0000041', symbol: 'NQZ6', side: 'Sell', type: 'Stop', qty: 1,
     price: '30,890.00', status: '', owner: '9:30 bot', order_id: '14', cancellable: false });
   assert.deepEqual(T.fillRows(STATE).map((r) => r.time), ['09:31:12', '09:30:01']);
+  assert.deepEqual(T.fillRows(STATE).map((r) => r.key), ['sim041:1', 'sim041:2']);
   const a = T.accountRows(STATE, q)[0];
   assert.deepEqual([a.who, a.env, a.balance, a.realized, a.open, a.strategies, a.status], ['SIM0000041', 'demo', '$50,000', '$0', '+$400', '9:30 bot', 'Ready']);
+});
+
+test('diffRows: a key present before and after is neither added nor removed (a DOM row keyed on it is never torn down)', () => {
+  const rows = [{ k: 'a' }, { k: 'b' }, { k: 'c' }];
+  assert.deepEqual(T.diffRows(['a', 'b'], rows, (r) => r.k), { keys: ['a', 'b', 'c'], add: ['c'], remove: [] });
+  assert.deepEqual(T.diffRows(['a', 'b', 'z'], [{ k: 'b' }], (r) => r.k), { keys: ['b'], add: [], remove: ['a', 'z'] });
+  assert.deepEqual(T.diffRows([], [], () => 'x'), { keys: [], add: [], remove: [] });
+  // every key common to both lists is absent from both add and remove
+  const prev = ['a', 'b', 'c'], next = [{ k: 'b' }, { k: 'c' }, { k: 'd' }];
+  const d = T.diffRows(prev, next, (r) => r.k);
+  for (const k of ['b', 'c']) { assert.ok(!d.add.includes(k)); assert.ok(!d.remove.includes(k)); }
 });
 
 test('placeMarkers: on the bar holding the time, inside the loaded bars, sorted', () => {

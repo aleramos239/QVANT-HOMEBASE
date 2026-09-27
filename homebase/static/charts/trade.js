@@ -308,8 +308,9 @@ function positionRows(state, quotes) {
     for (const p of a.positions || []) {
       if (!p.net) continue;
       const v = openPnl(p, quotes), q = quotes[p.root];
-      out.push({ account: a.id, who: a.label, env: a.env, symbol: p.symbol, root: p.root, side: p.net > 0 ? 'Long' : 'Short',
-        qty: Math.abs(p.net), avg: px(p.avg_price), last: px(q ? q.last : null), pnl: usd(v) ?? '—', tone: tone(v) });
+      out.push({ key: `${a.id}:${p.symbol}`, account: a.id, who: a.label, env: a.env, symbol: p.symbol, root: p.root,
+        side: p.net > 0 ? 'Long' : 'Short', qty: Math.abs(p.net), avg: px(p.avg_price), last: px(q ? q.last : null),
+        pnl: usd(v) ?? '—', tone: tone(v) });
     }
   }
   return out;
@@ -318,9 +319,9 @@ function orderRows(state) {
   const out = [];
   for (const a of accountsOf(state)) {
     for (const o of a.orders || []) {
-      out.push({ account: a.id, who: a.label, symbol: o.symbol, side: o.side, type: o.type, qty: Number(o.qty) || 0,
-        price: px(orderPrice(o)), status: o.status || '', owner: o.owner ? botName(o.owner) : '', order_id: String(o.order_id),
-        cancellable: !o.owner });
+      out.push({ key: `${a.id}:${o.order_id}`, account: a.id, who: a.label, symbol: o.symbol, side: o.side, type: o.type,
+        qty: Number(o.qty) || 0, price: px(orderPrice(o)), status: o.status || '', owner: o.owner ? botName(o.owner) : '',
+        order_id: String(o.order_id), cancellable: !o.owner });
     }
   }
   return out;
@@ -330,11 +331,20 @@ function fillRows(state) {
   for (const a of accountsOf(state)) {
     for (const f of a.fills || []) {
       const ms = Date.parse(f.time);
-      out.push({ ms, time: etTime(ms), who: a.label, symbol: f.symbol, side: f.side, qty: f.qty, price: px(f.price),
-        owner: f.owner ? botName(f.owner) : '' });
+      out.push({ key: `${a.id}:${f.id}`, ms, time: etTime(ms), who: a.label, symbol: f.symbol, side: f.side, qty: f.qty,
+        price: px(f.price), owner: f.owner ? botName(f.owner) : '' });
     }
   }
   return out.sort((x, y) => (y.ms || 0) - (x.ms || 0));
+}
+
+/* ---- keyed-row diffing (panel.js): across a rebuild, which of the previously-rendered row keys should be added
+   or removed, so a row whose key is unchanged keeps its own DOM node (its button, its focus) even while its
+   other cells update in place. Pure: prevKeys is the caller's own list of what it rendered last (any order);
+   rows is the fresh list, in the order they should render; keyOf reads a row's key. */
+function diffRows(prevKeys, rows, keyOf) {
+  const keys = rows.map(keyOf), prevSet = new Set(prevKeys), nextSet = new Set(keys);
+  return { keys, add: keys.filter((k) => !prevSet.has(k)), remove: prevKeys.filter((k) => !nextSet.has(k)) };
 }
 function accountRows(state, quotes) {
   return accountsOf(state).map((a) => {
@@ -350,7 +360,7 @@ function accountRows(state, quotes) {
 const api = { PREFS_KEY, QUOTE_STALE_MS, BOT_NAMES, parsePrefs, prefsText, short, rootOf, orderPrice, abbr, inferType, menuText,
   roundTick, bracket, orderBody, clientId, tradeMode, quoteView, usd, money, pnl, rrText, linesFor, linePnl, lineLabel,
   lineText, lineColor, withPrice, orderTitle, confirmOrder, actionTitle, resultToasts, fillText, fillMarkers, botName,
-  botsFor, positionRows, orderRows, fillRows, accountRows, etTime };
+  botsFor, positionRows, orderRows, fillRows, accountRows, etTime, diffRows };
 if (typeof window !== 'undefined') window.HBTrade = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();
