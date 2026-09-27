@@ -41,8 +41,8 @@ are stopped for the day; the account survives). The account holder confirmed
 size, target, max loss, the daily limit and max size (4 minis / 40 micros) on
 2026-09-27 and that the daily limit can be removed:
 ``lucid-pro-50k-no-dll@2026-09-27b.json`` is the same account without it. The
-lock, EOD trailing and payout terms are still INHERITED from Flex, so both files
-say ``"confirmed": false``. (``lucid-pro-50k@2026-09-27`` -- no daily limit --
+lock, EOD trailing and payout terms match Flex; the account holder confirmed the
+whole ruleset later the same day, so both files say ``"confirmed": true``. (``lucid-pro-50k@2026-09-27`` -- no daily limit --
 stays on disk so older runs reproduce.)
     FUNDED  same $2,000 EOD-trailing max loss locking at +$100. A PAYOUT needs
             5 separate days >= $150 AND net > 0. The cheque is 50% of the

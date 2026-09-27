@@ -73,7 +73,7 @@ def test_rule_files_and_the_unconfirmed_label():
     assert ids["lucid-flex-50k@2026-09-27"] == {"id": "lucid-flex-50k@2026-09-27", "name": "LucidFlex 50K",
                                                 "version": "2026-09-27", "confirmed": True}
     assert ids["lucid-pro-50k@2026-09-27b"] == {"id": "lucid-pro-50k@2026-09-27b", "name": "LucidPro 50K · $1,200 daily limit",
-                                                "version": "2026-09-27b", "confirmed": False}
+                                                "version": "2026-09-27b", "confirmed": True}
     assert ids["lucid-pro-50k-no-dll@2026-09-27b"]["name"] == "LucidPro 50K · no daily loss limit"
     assert load_rules("lucid-pro-50k@2026-09-27")["daily_loss_limit"] is None   # the older Pro still reproduces
     assert DEFAULT_RULES == "lucid-flex-50k@2026-09-27"
@@ -211,7 +211,7 @@ def test_lucidpro_account_holder_numbers_and_the_removable_daily_limit():
     no = load_rules("lucid-pro-50k-no-dll@2026-09-27b")
     for r in (dll, no):
         assert (r["account_size"], r["eval_target"], r["trailing_mll"], r["cap_micros"]) == (50000, 3000, 2000, 40)
-        assert r["consistency"] is None and r["eval_min_days"] == 1 and r["confirmed"] is False
+        assert r["consistency"] is None and r["eval_min_days"] == 1 and r["confirmed"] is True
     assert dll["daily_loss_limit"] == 1200 and no["daily_loss_limit"] is None
     differ = {"name", "notes", "daily_loss_limit"}
     assert {k: v for k, v in dll.items() if k not in differ} == {k: v for k, v in no.items() if k not in differ}

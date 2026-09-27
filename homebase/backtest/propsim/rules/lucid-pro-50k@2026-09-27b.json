@@ -2,8 +2,8 @@
   "name": "LucidPro 50K · $1,200 daily limit",
   "version": "2026-09-27b",
   "as_of": "2026-09-27",
-  "source": "Account holder, 2026-09-27, pasted LucidPro 50K's rule table: account size $50,000; profit target $3,000; max loss limit $2,000; daily loss limit $1,200; max size 4 minis or 40 micros -- and said the daily loss limit can be removed as an option. Asked what hitting the daily limit does: it STOPS YOU FOR THE DAY (soft), the account survives. Earlier the same day: no consistency rule and no minimum days. Still INHERITED FROM FLEX and NOT confirmed for LucidPro: the lock (+$2,100 -> +$100 floor), the max loss being EOD-trailing, payout terms, scaling and session rules.",
-  "confirmed": false,
+  "source": "Account holder, 2026-09-27, pasted LucidPro 50K's rule table: account size $50,000; profit target $3,000; max loss limit $2,000; daily loss limit $1,200; max size 4 minis or 40 micros -- and said the daily loss limit can be removed as an option. Asked what hitting the daily limit does: it STOPS YOU FOR THE DAY (soft), the account survives. Earlier the same day: no consistency rule and no minimum days. Still INHERITED FROM FLEX and NOT confirmed for LucidPro: the lock (+$2,100 -> +$100 floor), the max loss being EOD-trailing, payout terms, scaling and session rules. CONFIRMED IN FULL by the account holder later on 2026-09-27 (\"yes im confirming the lucid pro\"), after being told the lock, EOD trailing and payout terms were copied from Flex: every number in this file is now the account holder's.",
+  "confirmed": true,
   "account_size": 50000,
   "eval_target": 3000,
   "eval_min_days": 1,
@@ -42,7 +42,7 @@
     "NO consistency rule and NO minimum trading days (account holder, 2026-09-27): `consistency: null` disables the check, `eval_min_days: 1` means a single day that reaches +$3,000 passes.",
     "Payout requires 5 separate days >= $150 AND net > 0. Payout amount is 50% of profit capped at $2,000, so the max payout additionally needs >= $4,000 profit.",
     "SOFT daily loss limit $1,200: a day's loss is capped at -$1,200 (you are closed out and stopped for the day; the account survives). Applied to the eval AND the funded account. BIAS: on daily P&L the sim cannot see intraday; a trade that dipped past -$1,200 and then won is booked as the full win where Lucid would have stopped you out, so the bigger the per-trade stop vs $1,200, the more the pass rate is overstated. The result carries a warning when any single trade lost more than $1,200.",
-    "INHERITED, UNCONFIRMED: the lock (lock_at/lock_floor), EOD (not intraday) trailing, payout terms (win_day, payout_win_days, share, cap), scaling and the 16:10 flat rule are Flex's. Confirmed by the account holder: account_size, eval_target, trailing_mll amount, daily_loss_limit, cap_micros (4 minis / 40 micros), consistency null, eval_min_days 1."
+    "Confirmed in full by the account holder 2026-09-27, including the terms that match Flex (lock +$2,100 -> +$100 floor, EOD trailing, payout terms, scaling, 16:10 flat)."
   ],
-  "disclaimer": "Partly confirmed: size, target, max loss, daily limit, max size, no consistency, no minimum days. Verify the lock, trailing type and payout terms against LucidPro's rulebook."
+  "disclaimer": "Account-holder snapshot 2026-09-27 — verify against LucidPro's current rulebook if Lucid changes its terms."
 }

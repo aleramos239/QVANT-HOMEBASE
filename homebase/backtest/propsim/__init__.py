@@ -11,10 +11,10 @@ reproduces:
                                          the numbers are 2026-08's, unchanged.
   rules/lucid-flex-50k@2026-08.json      superseded, kept for reproducing older runs.
   rules/lucid-pro-50k@2026-09-27b.json   LucidPro: no consistency rule, no minimum days,
-                                         a SOFT $1,200 daily loss limit; size/target/max
-                                         loss/limit/max size from the account holder
-                                         (2026-09-27); lock, EOD trailing and payout terms
-                                         INHERITED from Flex, "confirmed": false.
+                                         a SOFT $1,200 daily loss limit; every number
+                                         confirmed by the account holder (2026-09-27),
+                                         including the lock, EOD trailing and payout
+                                         terms it shares with Flex.
   rules/lucid-pro-50k-no-dll@2026-09-27b.json  the same account with the daily limit
                                          removed (an option Lucid offers).
   rules/lucid-pro-50k@2026-09-27.json    superseded (no daily limit, all but two numbers
