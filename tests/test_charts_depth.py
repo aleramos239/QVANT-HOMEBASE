@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import gzip
+import threading
 from pathlib import Path
 
 import pytest
@@ -153,6 +154,7 @@ def test_the_spec_values():
     assert (m.BOOK_LEVELS, m.WIRE_LEVELS, m.REC_LEVELS) == (30, 20, 10)
     assert (m.WIRE_MIN_S, m.REC_MIN_S) == (0.1, 0.25)               # <= 10 msgs/s, <= 4 lines/s per root
     assert (m.LINGER_S, m.RETRY_S, m.FLUSH_S) == (60, 600, 30)
+    assert m.GZIP_LEVEL == 6
 
 
 def test_parse_roots_from_the_env_value():
@@ -336,6 +338,24 @@ def test_a_refused_root_is_asked_again_at_once_on_a_reconnect():
     run(go())
 
 
+def test_shutdown_cancels_the_subscribe_requests_in_flight(tmp_path):
+    async def go():
+        rec = DepthRecorder(tmp_path / "depth")
+        feed, d, _ = make(record=("NQ",), recorder=rec)
+        hung = asyncio.Event()
+
+        async def never(ep, body=""):
+            hung.set()
+            await asyncio.Event().wait()                     # a request with no answer
+        feed.ws.request = never
+        d.step()
+        await hung.wait()
+        await asyncio.wait_for(d.aclose(), 2)
+        return d
+    d = run(go())
+    assert not d._tasks
+
+
 def test_a_dead_socket_during_subscribe_is_not_a_refusal():
     async def go():
         feed, d, _ = make(record=("NQ",))
@@ -468,7 +488,7 @@ def test_recording_is_capped_at_4_lines_a_second_top10_only(tmp_path):
             d.step()
         clock.t = start + 0.99
         d.step()
-        d.flush()
+        await d.aflush()
         return rec
     rec = run(go())
     p = rec.path("NQ", D, NQ)
@@ -490,7 +510,7 @@ def test_only_a_changed_top10_is_recorded(tmp_path):
         clock.t += 1
         feed.ws.push(111, ladder(100.0, 10, size=9), ladder(100.25, 10, down=False))
         d.step()
-        d.flush()
+        await d.aflush()
         return rec
     rec = run(go())
     lines = read_depth(rec.path("NQ", D, NQ))
@@ -535,13 +555,15 @@ def test_the_recorder_flushes_every_30s_and_on_shutdown(tmp_path):
         p = rec.path("NQ", D, NQ)
         clock.t += 29
         d.step()
+        await d.settle()
         assert not p.exists()
         clock.t += 1
         d.step()
+        await d.settle()
         assert len(read_depth(p)) == 1
         clock.t += 1
         feed.ws.push(111, ladder(101.0, 3), ladder(101.25, 3, down=False))
-        d.flush()                                          # what shutdown calls
+        await d.aclose()                                   # what shutdown calls
         assert len(read_depth(p)) == 2
     run(go())
 
@@ -553,6 +575,61 @@ def test_disk_errors_are_reported_and_never_raise(tmp_path):
     rec.add("NQ", "NQZ6", T0, [[1.0, 1]], [[1.25, 1]])
     assert rec.flush() == 0
     assert rec.error and rec.buffered == 1                # kept for the next flush
+
+
+def test_a_failed_file_is_rechecked_at_most_every_repair_retry(tmp_path, monkeypatch):
+    clock = Clock(0.0)
+    rec = DepthRecorder(tmp_path / "depth", now=clock)
+    calls = []
+
+    def repair(p):
+        calls.append(clock.t)
+        raise OSError("No space left on device")
+    monkeypatch.setattr(rec, "_repair", repair)
+    rec.add("NQ", "NQZ6", T0, [[1.0, 1]], [[1.25, 1]])
+    assert rec.flush() == 0 and "No space" in rec.error
+    for _ in range(9):                                      # every 30 s flush for 4.5 min: not re-read
+        clock.t += 30
+        assert rec.flush() == 0 and "No space" in rec.error and rec.buffered == 1
+    assert calls == [0.0]
+    clock.t = depth_mod.REPAIR_RETRY_S
+    rec.flush()
+    assert calls == [0.0, depth_mod.REPAIR_RETRY_S]
+    monkeypatch.undo()
+    clock.t += depth_mod.REPAIR_RETRY_S
+    assert rec.flush() == 1 and rec.error is None
+    assert len(read_depth(rec.path("NQ", D, "NQZ6"))) == 1
+
+
+def test_the_file_scan_runs_off_the_event_loop(tmp_path, monkeypatch):
+    threads = []
+    real = depth_mod._scan
+
+    def scan(raw):
+        threads.append(threading.current_thread())
+        return real(raw)
+    monkeypatch.setattr(depth_mod, "_scan", scan)
+    rec = DepthRecorder(tmp_path / "depth")
+    rec.add("NQ", "NQZ6", T0, [[1.0, 1]], [[1.25, 1]])
+    rec.flush()                                             # the file does not exist yet: no scan
+    assert threads == []
+    rec2 = DepthRecorder(tmp_path / "depth")                # a new process: its first touch scans it
+
+    async def go():
+        feed, d, _ = make(record=("NQ",), recorder=rec2)
+        rec2.add("NQ", "NQZ6", T0 + 1, [[2.0, 1]], [[2.25, 1]])
+        await d.aflush()
+    run(go())
+    assert len(threads) == 1 and threads[0] is not threading.main_thread()
+    assert len(read_depth(rec.path("NQ", D, "NQZ6"))) == 2
+
+
+def test_members_are_compressed_at_level_6(tmp_path):
+    rec = DepthRecorder(tmp_path / "depth")
+    rec.add("NQ", "NQZ6", T0, [[1.0, 1]], [[1.25, 1]])
+    rec.flush()
+    raw = rec.path("NQ", D, "NQZ6").read_bytes()
+    assert raw[8] == 0          # gzip XFL: 2 = level 9, 4 = level 1, 0 = anything between
 
 
 def test_the_recorder_never_writes_under_futures_ticks(tmp_path):

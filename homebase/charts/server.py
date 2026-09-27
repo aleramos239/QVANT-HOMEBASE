@@ -517,7 +517,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             if recorder is not None:
                 recorder.flush()
             if depth is not None:
-                depth.flush()           # the depth recording's last member
+                await depth.aclose()    # cancels its requests in flight; the recording's last member
             tester.manager.shutdown()   # never leave a runner child orphaned
 
     app = FastAPI(title="Homebase Charts", lifespan=lifespan)

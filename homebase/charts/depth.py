@@ -32,8 +32,10 @@ current one (the Fanout's hello).
 Recording: ~/futures_depth/<ROOT>/<YYYY>/<session date>_<contract>.depth.jsonl.gz,
 one gzip member per flush (every FLUSH_S and on shutdown), at most one line
 per REC_MIN_S per root and only when the top REC_LEVELS changed:
-{"t": ms, "b": [[p, s], ...], "a": [[p, s], ...]}. Disk errors go to status
-and never raise. The recorder refuses any base under ~/futures_ticks.
+{"t": ms, "b": [[p, s], ...], "a": [[p, s], ...]}. The file work (gzip,
+a torn-tail check of the day file) runs in a worker thread, never on the
+event loop. Disk errors go to status and never raise; a failed file is
+retried at most every REPAIR_RETRY_S. The recorder refuses any base under ~/futures_ticks.
 Replay builds none of this: a replay page gets no depth messages.
 """
 from __future__ import annotations
@@ -69,6 +71,8 @@ FLUSH_S = 30.0            # the recording is flushed this often (and on shutdown
 STEP_S = 0.05             # the depth loop's cadence: coalesced books go out within this of their window
 PAGE_QUEUE_MAX = 4        # depth messages held per page per root before it is resynced to the latest
 BUFFER_MAX = 50_000       # lines held per file while the disk refuses them (~3.5 h at 4/s); oldest dropped
+REPAIR_RETRY_S = 300.0    # a file whose write failed is re-read / re-tried at most this often (not every flush)
+GZIP_LEVEL = 6
 _EPS = 1e-9               # float slack on the rate windows
 _READ_CHUNK = 1 << 16
 
@@ -185,12 +189,19 @@ def _under(p: Path, root: Path) -> bool:
 
 
 class DepthRecorder:
-    def __init__(self, base: Path = DEPTH_ARCHIVE):
+    """Buffers lines on the event loop; writes them in a worker thread
+    (aflush): the gzip work and a file's first-touch scan (a whole day file,
+    ~100 ms / ~100 MB of inflate for 19 MB) never run on the loop. flush()
+    is the same, synchronously, for callers without a loop."""
+
+    def __init__(self, base: Path = DEPTH_ARCHIVE, now: Callable[[], float] = time.monotonic):
         self.base = Path(base)
         if _under(self.base, TICK_ARCHIVE):
             raise ValueError(f"depth is never recorded under the tick archive ({TICK_ARCHIVE})")
+        self._now = now
         self._buf: dict[Path, deque] = {}
-        self._checked: set[Path] = set()       # files repaired (if torn) on first touch in this process
+        self._checked: set[Path] = set()        # files repaired (if torn) on first touch in this process
+        self._failed: dict[Path, tuple[float, str]] = {}   # path -> (when its write failed, why)
         self.error: Optional[str] = None
         self.written = 0
         self.dropped = 0                        # lines lost to BUFFER_MAX while the disk refused them
@@ -224,34 +235,67 @@ class DepthRecorder:
             p.rename(p.with_name(p.name + ".corrupt"))
             return
         tmp = p.with_name(p.name + ".tmp")
-        tmp.write_bytes(gzip.compress(b"".join(members)))
+        tmp.write_bytes(gzip.compress(b"".join(members), compresslevel=GZIP_LEVEL))
         os.replace(tmp, p)
 
-    def flush(self) -> int:
-        """One gzip member per file; returns the lines written. Never raises
-        on a disk error: it is kept in .error and the lines stay buffered."""
-        n, failed = 0, None
-        for p, q in list(self._buf.items()):
-            if not q:
-                del self._buf[p]
+    def _take(self) -> dict[Path, list[str]]:
+        """(loop) The buffered lines, handed to one write; add() starts new buffers."""
+        batch = {p: list(q) for p, q in self._buf.items() if q}
+        self._buf = {}
+        return batch
+
+    def _write(self, batch: dict[Path, list[str]], now: float) -> tuple[dict[Path, int], dict[Path, str]]:
+        """(thread) One gzip member per file. A file that failed less than
+        REPAIR_RETRY_S ago is not touched (no re-read, no write) until then."""
+        done, failed = {}, {}
+        for p, lines in batch.items():
+            f = self._failed.get(p)
+            if f is not None and now - f[0] < REPAIR_RETRY_S - _EPS:
+                failed[p] = f[1]
                 continue
             try:
                 if p not in self._checked:
                     self._repair(p)
                     self._checked.add(p)
                 p.parent.mkdir(parents=True, exist_ok=True)
-                data = gzip.compress("".join(q).encode())
+                data = gzip.compress("".join(lines).encode(), compresslevel=GZIP_LEVEL)
                 with open(p, "ab") as fh:
                     fh.write(data)
             except OSError as e:
-                failed = f"{p.name}: {e}"
-                self._checked.discard(p)        # a half-written member: repaired before the retry
+                failed[p] = f"{p.name}: {e}"
+                self._failed[p] = (now, failed[p])
+                self._checked.discard(p)        # maybe a half-written member: repaired before the retry
                 continue
-            n += len(q)
-            del self._buf[p]
-        self.error = failed
+            self._failed.pop(p, None)
+            done[p] = len(lines)
+        return done, failed
+
+    def _finish(self, batch, done, failed) -> int:
+        """(loop) Lines not written go back ahead of anything added meanwhile."""
+        for p, lines in batch.items():
+            if p in done:
+                continue
+            q = deque(lines)
+            q.extend(self._buf.get(p, ()))
+            while len(q) > BUFFER_MAX:
+                q.popleft()
+                self.dropped += 1
+            self._buf[p] = q
+        self.error = next(iter(failed.values()), None)
+        n = sum(done.values())
         self.written += n
         return n
+
+    def flush(self) -> int:
+        """Write now, on the calling thread; returns the lines written. Never
+        raises on a disk error: it is kept in .error and the lines stay buffered."""
+        batch = self._take()
+        return self._finish(batch, *self._write(batch, self._now()))
+
+    async def aflush(self) -> int:
+        """flush(), with the file work in a worker thread."""
+        batch = self._take()
+        return self._finish(batch, *(await asyncio.to_thread(self._write, batch, self._now())))
 
     def status(self) -> dict:
         return {"written": self.written, "buffered": self.buffered, "dropped": self.dropped,
@@ -288,7 +332,9 @@ class Depth:
         self._last_rec: dict[str, float] = {}
         self._last_top: dict[str, tuple] = {}
         self._last_flush = now()
-        self._tasks: set = set()
+        self._tasks: set = set()                    # subscribe / unsubscribe requests in flight
+        self._flush_task: Optional[asyncio.Task] = None
+        self._flush_lock: Optional[asyncio.Lock] = None
         self._stop = False
         self.error: Optional[str] = None
 
@@ -491,13 +537,17 @@ class Depth:
 
     # ---- the loop
 
-    def flush(self) -> None:
+    async def aflush(self) -> None:
+        """Write the recording (its file work in a worker thread); one flush at a time."""
         if self.recorder is None:
             return
-        try:
-            self.recorder.flush()
-        except Exception as e:  # noqa: BLE001 — recording never takes the service down
-            self.recorder.error = f"{type(e).__name__}: {e}"
+        if self._flush_lock is None:
+            self._flush_lock = asyncio.Lock()
+        async with self._flush_lock:
+            try:
+                await self.recorder.aflush()
+            except Exception as e:  # noqa: BLE001 — recording never takes the service down
+                self.recorder.error = f"{type(e).__name__}: {e}"
 
     def step(self) -> None:
         now = self._now()
@@ -507,14 +557,27 @@ class Depth:
         for fan in self._fans.values():
             fan.flush()                          # pages whose socket had no room before
         self._reconcile(now)
-        if self.recorder is not None and now - self._last_flush >= FLUSH_S - _EPS:
+        if self.recorder is not None and now - self._last_flush >= FLUSH_S - _EPS \
+                and (self._flush_task is None or self._flush_task.done()):
             self._last_flush = now
-            self.flush()
+            self._flush_task = asyncio.create_task(self.aflush())
 
     async def settle(self) -> None:
-        """Wait for the subscription requests in flight (tests)."""
-        while self._tasks:
+        """Wait for the requests and the flush in flight (tests)."""
+        while self._tasks or (self._flush_task is not None and not self._flush_task.done()):
+            pending = list(self._tasks) + ([self._flush_task] if self._flush_task else [])
+            await asyncio.gather(*pending, return_exceptions=True)
+
+    async def aclose(self) -> None:
+        """Shutdown: stop the loop, cancel the requests in flight, write the recording's last member."""
+        self._stop = True
+        for t in list(self._tasks):
+            t.cancel()
+        if self._tasks:
             await asyncio.gather(*list(self._tasks), return_exceptions=True)
+        if self._flush_task is not None:
+            await asyncio.gather(self._flush_task, return_exceptions=True)
+        await self.aflush()
 
     async def run(self) -> None:
         while not self._stop:
