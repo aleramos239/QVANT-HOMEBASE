@@ -99,6 +99,43 @@ function tradeMode(desk, prefs) {
   return { mode: 'on', reason: '', accounts };
 }
 
+/* ---- safety review (2026-09-27 review of Task 5) ---- */
+/* Enter in the confirm dialog: confirms only when focus is on the primary button, or on a non-button element
+   (the checkbox, an unfocusable row) -- never on ×, Cancel, or any other button. `target`/`primary` need only
+   `tagName` (any real DOM element qualifies). */
+function enterConfirms(target, primary) {
+  if (!target) return false;
+  if (target === primary) return true;
+  return target.tagName !== 'BUTTON';
+}
+
+/* A send must go only to the accounts the confirm dialog actually showed, intersected with the fresh
+   effective set at send time -- never to an account the dialog never listed. `ok: false` (the fresh set would
+   ADD an account beyond what was shown) means abort entirely; a fresh set that only shrank sends to the
+   surviving intersection. */
+function resolveConfirmedAccounts(shown, fresh) {
+  const shownSet = new Set(shown), freshSet = new Set(fresh);
+  if (fresh.some((id) => !shownSet.has(id))) return { ok: false, accounts: [] };
+  return { ok: true, accounts: shown.filter((id) => freshSet.has(id)) };
+}
+
+/* Ticked accounts minus any LIVE account not armed this session (ruling S5's second click) -- shared by the
+   Trade menu's effective mode and the chart's lines/markers, so a LIVE account never trades or draws until
+   armed. `liveConfirmed` is a Set (or array) of account ids armed this session. */
+function armedTicked(state, ticked, liveConfirmed) {
+  const confirmed = liveConfirmed instanceof Set ? liveConfirmed : new Set(liveConfirmed || []);
+  const accounts = accountsOf(state);
+  return ticked.filter((id) => {
+    const a = accounts.find((x) => x.id === id);
+    return !a || a.env !== 'live' || confirmed.has(id);
+  });
+}
+/* The refusal toast for an unarmed LIVE account (per-account paths: flatten, cancel, drag, ×). */
+function unarmedLiveMessage(account) {
+  const label = (account && (account.label || account.id)) || 'account';
+  return `Arm LIVE account ${label} in the Trade menu first`;
+}
+
 /* The Buy/Sell block's texts: bid / ask (the last trade when one side is missing), the spread in ticks, stale when
    the quote's trade is over 30 s old against nowMs (the replay clock in a replay). */
 function quoteView(q, tick, nowMs) {
@@ -360,7 +397,8 @@ function accountRows(state, quotes) {
 const api = { PREFS_KEY, QUOTE_STALE_MS, BOT_NAMES, parsePrefs, prefsText, short, rootOf, orderPrice, abbr, inferType, menuText,
   roundTick, bracket, orderBody, clientId, tradeMode, quoteView, usd, money, pnl, rrText, linesFor, linePnl, lineLabel,
   lineText, lineColor, withPrice, orderTitle, confirmOrder, actionTitle, resultToasts, fillText, fillMarkers, botName,
-  botsFor, positionRows, orderRows, fillRows, accountRows, etTime, diffRows };
+  botsFor, positionRows, orderRows, fillRows, accountRows, etTime, diffRows,
+  enterConfirms, resolveConfirmedAccounts, armedTicked, unarmedLiveMessage };
 if (typeof window !== 'undefined') window.HBTrade = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

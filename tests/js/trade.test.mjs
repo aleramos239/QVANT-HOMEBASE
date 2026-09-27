@@ -194,6 +194,30 @@ test('diffRows: a key present before and after is neither added nor removed (a D
   for (const k of ['b', 'c']) { assert.ok(!d.add.includes(k)); assert.ok(!d.remove.includes(k)); }
 });
 
+test('enterConfirms: only the primary button or a non-button element', () => {
+  const yes = { tagName: 'BUTTON' }, no = { tagName: 'BUTTON' }, x = { tagName: 'BUTTON' }, ck = { tagName: 'INPUT' };
+  assert.equal(T.enterConfirms(yes, yes), true);     // the primary button itself
+  assert.equal(T.enterConfirms(no, yes), false);     // Cancel
+  assert.equal(T.enterConfirms(x, yes), false);      // × (any other button)
+  assert.equal(T.enterConfirms(ck, yes), true);      // a non-button element (the checkbox, a row)
+  assert.equal(T.enterConfirms(null, yes), false);
+});
+
+test('resolveConfirmedAccounts: send only the shown ∩ fresh accounts; an ADDED account aborts entirely', () => {
+  assert.deepEqual(T.resolveConfirmedAccounts(['sim041', 'sim047'], ['sim041', 'sim047']), { ok: true, accounts: ['sim041', 'sim047'] });
+  assert.deepEqual(T.resolveConfirmedAccounts(['sim041', 'sim047'], ['sim041']), { ok: true, accounts: ['sim041'] });   // shrank: fine
+  assert.deepEqual(T.resolveConfirmedAccounts(['sim041'], ['sim041', 'sim047']), { ok: false, accounts: [] });          // grew: abort
+  assert.deepEqual(T.resolveConfirmedAccounts([], []), { ok: true, accounts: [] });
+});
+
+test('armedTicked: an unarmed LIVE account is dropped; demo and armed-LIVE accounts pass through', () => {
+  assert.deepEqual(T.armedTicked(STATE, ['sim041', 'sim047', 'live099'], new Set()), ['sim041', 'sim047']);
+  assert.deepEqual(T.armedTicked(STATE, ['sim041', 'live099'], new Set(['live099'])), ['sim041', 'live099']);
+  assert.deepEqual(T.armedTicked(STATE, ['sim041', 'live099'], []), ['sim041']);
+  assert.deepEqual(T.armedTicked(null, ['sim041'], new Set()), ['sim041']);   // no state: nothing to check against
+  assert.equal(T.unarmedLiveMessage({ id: 'live099', label: 'FAKELIVE099' }), 'Arm LIVE account FAKELIVE099 in the Trade menu first');
+});
+
 test('placeMarkers: on the bar holding the time, inside the loaded bars, sorted', () => {
   const bars = [0, 1, 2].map((i) => ({ ms: 60000 * (10 + i), tt: 100 + i }));
   const out = D.placeMarkers(bars, [{ id: 'b', ms: 60000 * 11 + 5, x: 1 }, { id: 'a', ms: 60000 * 10 }, { id: 'early', ms: 1 },
