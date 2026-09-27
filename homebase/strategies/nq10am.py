@@ -22,6 +22,7 @@ ET = ZoneInfo("America/New_York")
 
 class NQ10am(Strategy):
     id = "nq10am"
+    session_independent = True   # checked 2026-09-27: on_session resets its bars; config is fixed per run
     name = "NQ 10:00 Continuation"
     root = "NQ"
     desk_key = "nq10am"

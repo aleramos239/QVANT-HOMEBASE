@@ -219,7 +219,8 @@ def test_report_holes_keeps_data_gaps_and_strategy_errors_but_not_the_strategys_
     no_trade = [{"date": "2024-03-07", "reason": "trend gate: ADX 20 <= 25"},
                 {"date": "2024-03-08", "reason": "strategy error: ZeroDivisionError: x"},
                 {"date": "2024-03-11", "reason": "no print before 09:30:00"}]
-    assert runner.report_holes(skipped, no_trade) == [skipped[0], no_trade[1]]
+    # rereview: "no print before" = the tape had no price at the fire time -- a data hole, not a flat day
+    assert runner.report_holes(skipped, no_trade) == [skipped[0], no_trade[1], no_trade[2]]
 
 
 def _winning_day(base, d):
@@ -255,3 +256,15 @@ def test_a_gate_skip_day_stays_in_the_sharpe_grid_as_a_flat_day(tmp_path, monkey
     assert meta["report"]["skipped_by_data"] == 0 and meta["coverage"]["skipped_by_data"] == 0
     assert meta["report"]["skipped"] == []
     assert meta["coverage"]["no_trade"] == [{"date": "2024-03-06", "reason": gate}]   # still shown
+
+
+def test_every_strategy_declares_session_independence_explicitly():
+    """rereview M3: the flag is opt-in (the base says False), so a new stateful strategy is refused by
+    the walk-forward until someone checks it and says so in its own class."""
+    from homebase import strategies
+    from homebase.strategies.base import Strategy
+    assert Strategy.session_independent is False
+    assert set(strategies.REGISTRY) == {"nq930", "ym930", "nq10am", "gc_nfpcpi"}
+    for cls in strategies.REGISTRY.values():
+        assert "session_independent" in vars(cls), cls.id
+        assert cls.session_independent is True, cls.id

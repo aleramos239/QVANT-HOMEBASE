@@ -29,6 +29,7 @@ def calendar() -> dict[dt.date, frozenset]:
 
 class GCNfpCpi(OpenStraddle):
     id = "gc_nfpcpi"
+    session_independent = True   # checked 2026-09-27: day state resets in on_session; event days come from a fixed calendar file
     name = "GC 8:30 NFP + CPI Straddle"
     root = "GC"
     session_window = ("08:20", "09:56")

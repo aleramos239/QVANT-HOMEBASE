@@ -205,3 +205,23 @@ def test_a_typical_run_finishes_under_a_second():
     t0 = time.perf_counter()
     r = mc.run(tr, paths=5000, seed=1, rules=LUCID)
     assert time.perf_counter() - t0 < 1.0 and r["n_days"] * r["paths"] <= mc.MAX_WORK
+
+
+# ---------------------------------------------------------------- rereview: horizon + trade-aware work cap
+
+def test_the_prop_race_is_the_first_horizon_days_so_bootstrap_matches_the_runs_own_prop_sim():
+    """propsim.evaluate races HORIZON (250) i.i.d. weekday draws; a bootstrap MC path over a longer grid
+    must race only its first 250 days, or the MC tile reads friendlier than the prop tile above it."""
+    rng = random.Random(4)                  # a slow edge: without the horizon ~99% pass, with it ~67%
+    tr = [{"date": d, "net": rng.choice([-200.0, 150.0, 220.0])} for d in weekdays(700) if rng.random() < 0.25]
+    want = propsim.evaluate(tr, rules=LUCID)["headline"]["eval_pass_p"]
+    got = mc.run(tr, paths=2800, seed=3, mode="bootstrap", rules=LUCID)
+    assert got["n_days"] > 2 * propsim.HORIZON and got["paths"] == 2800      # a grid well past the horizon
+    assert 0.1 < want < 0.9                                   # a race with room to move either way
+    assert got["p_prop_pass"] == pytest.approx(want, abs=0.035)   # ~4 SE at 2,800 vs 20,000 paths
+
+
+def test_the_work_cap_counts_trades_as_well_as_days():
+    tr = by_day([[10.0, -5.0, 3.0, -2.0, 1.0]] * 1000)          # 1,000 days x 5 trades
+    r = mc.run(tr, paths=10_000, seed=1)
+    assert r["n_trades"] == 5000 and r["paths"] == mc.MAX_WORK // 5000 and r["capped"] is True

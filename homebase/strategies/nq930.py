@@ -6,6 +6,7 @@ from .straddle import DeskStraddle
 
 class NQ930(DeskStraddle):
     id = "nq930"
+    session_independent = True   # checked 2026-09-27: day state resets in on_session; the ADX gate reads ctx.daily (the store)
     name = "NQ 9:30 Straddle"
     root = "NQ"
     desk_key = "nq930"
