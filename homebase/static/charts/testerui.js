@@ -745,7 +745,6 @@ function loadRecentRun(id) {
    then belong to a different strategy or an edited form) and drops the bundle outright if the live
    strategyId has since moved on from what was actually submitted. */
 function startRun() {
-  const schema = schemaFor(strategyId);
   const prob = computeErrorText();
   if (prob) { serverError = ''; refreshHeader(); return; }
   if (X.isWalkforward(form)) { startWf(); return; }   // the pill carries a 1:N scheme: a walk-forward, not a run
