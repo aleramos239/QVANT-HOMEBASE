@@ -194,13 +194,15 @@ test('diffRows: a key present before and after is neither added nor removed (a D
   for (const k of ['b', 'c']) { assert.ok(!d.add.includes(k)); assert.ok(!d.remove.includes(k)); }
 });
 
-test('enterConfirms: only the primary button or a non-button element', () => {
+test('enterConfirms: only the primary button or a non-button element, and never a held key', () => {
   const yes = { tagName: 'BUTTON' }, no = { tagName: 'BUTTON' }, x = { tagName: 'BUTTON' }, ck = { tagName: 'INPUT' };
   assert.equal(T.enterConfirms(yes, yes), true);     // the primary button itself
   assert.equal(T.enterConfirms(no, yes), false);     // Cancel
   assert.equal(T.enterConfirms(x, yes), false);      // × (any other button)
-  assert.equal(T.enterConfirms(ck, yes), true);      // a non-button element (the checkbox, a row)
+  assert.equal(T.enterConfirms(ck, yes), true);      // a non-button element (the checkbox, a row: M7 keeps this)
   assert.equal(T.enterConfirms(null, yes), false);
+  assert.equal(T.enterConfirms(yes, yes, true), false);   // I3: a held (auto-repeat) Enter never confirms
+  assert.equal(T.enterConfirms(ck, yes, true), false);    // repeat wins even over a non-button target
 });
 
 test('resolveConfirmedAccounts: send only the shown ∩ fresh accounts; an ADDED account aborts entirely', () => {
@@ -210,12 +212,24 @@ test('resolveConfirmedAccounts: send only the shown ∩ fresh accounts; an ADDED
   assert.deepEqual(T.resolveConfirmedAccounts([], []), { ok: true, accounts: [] });
 });
 
-test('armedTicked: an unarmed LIVE account is dropped; demo and armed-LIVE accounts pass through', () => {
+test('armedTicked: an unarmed LIVE account is dropped; demo and armed-LIVE accounts pass through; a missing id fails CLOSED', () => {
   assert.deepEqual(T.armedTicked(STATE, ['sim041', 'sim047', 'live099'], new Set()), ['sim041', 'sim047']);
   assert.deepEqual(T.armedTicked(STATE, ['sim041', 'live099'], new Set(['live099'])), ['sim041', 'live099']);
   assert.deepEqual(T.armedTicked(STATE, ['sim041', 'live099'], []), ['sim041']);
-  assert.deepEqual(T.armedTicked(null, ['sim041'], new Set()), ['sim041']);   // no state: nothing to check against
+  assert.deepEqual(T.armedTicked(null, ['sim041'], new Set()), ['sim041']);   // no state at all: nothing to check against
+  // review M6: state EXISTS but doesn't recognize the id -- fails closed (dropped), not assumed armed
+  assert.deepEqual(T.armedTicked(STATE, ['sim041', 'ghost-account'], new Set()), ['sim041']);
   assert.equal(T.unarmedLiveMessage({ id: 'live099', label: 'FAKELIVE099' }), 'Arm LIVE account FAKELIVE099 in the Trade menu first');
+});
+
+test('freshQuote: a quote older than 10 s (default) counts as no quote', () => {
+  const q = { bid: 30900, ask: 30900.25, last: 30900.25, ts_ms: 1000 };
+  assert.deepEqual(T.freshQuote(q, 1000), q);          // age 0
+  assert.deepEqual(T.freshQuote(q, 11000), q);         // age 10,000 ms: still fresh (<=)
+  assert.equal(T.freshQuote(q, 11001), null);          // age 10,001 ms: stale
+  assert.equal(T.freshQuote(q, 5000, 2000), null);     // a tighter maxAgeMs
+  assert.equal(T.freshQuote(null, 1000), null);
+  assert.equal(T.freshQuote({ last: 1 }, 1000), null); // no ts_ms at all
 });
 
 test('placeMarkers: on the bar holding the time, inside the loaded bars, sorted', () => {

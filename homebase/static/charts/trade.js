@@ -99,14 +99,25 @@ function tradeMode(desk, prefs) {
   return { mode: 'on', reason: '', accounts };
 }
 
-/* ---- safety review (2026-09-27 review of Task 5) ---- */
+/* ---- safety review (2026-09-27 review of Task 5, and its follow-up review of Tasks 5+6) ---- */
 /* Enter in the confirm dialog: confirms only when focus is on the primary button, or on a non-button element
-   (the checkbox, an unfocusable row) -- never on ×, Cancel, or any other button. `target`/`primary` need only
-   `tagName` (any real DOM element qualifies). */
-function enterConfirms(target, primary) {
+   (the checkbox, an unfocusable row) -- never on ×, Cancel, or any other button, and never a held key
+   (`repeat`: I3 -- a key auto-repeating from picking a menu item by keyboard must not also confirm the dialog
+   it just opened). `target`/`primary` need only `tagName` (any real DOM element qualifies). */
+function enterConfirms(target, primary, repeat) {
+  if (repeat) return false;
   if (!target) return false;
   if (target === primary) return true;
   return target.tagName !== 'BUTTON';
+}
+
+/* A quote older than maxAgeMs (default 10 s) counts as no quote at all for a trading decision (M4): the 30 s
+   `QUOTE_STALE_MS` only greys the Buy/Sell block, which is looser than what's safe to infer a Limit/Stop type
+   or a Market bracket from. Callers pass the result straight to inferType/bracket, which already treat a null
+   quote as "can't tell" -- no new refusal branch needed where this replaces a raw quote lookup. */
+function freshQuote(q, nowMs, maxAgeMs = 10000) {
+  if (!q || !Number.isFinite(q.ts_ms) || !Number.isFinite(nowMs)) return null;
+  return nowMs - q.ts_ms <= maxAgeMs ? q : null;
 }
 
 /* A send must go only to the accounts the confirm dialog actually showed, intersected with the fresh
@@ -121,13 +132,17 @@ function resolveConfirmedAccounts(shown, fresh) {
 
 /* Ticked accounts minus any LIVE account not armed this session (ruling S5's second click) -- shared by the
    Trade menu's effective mode and the chart's lines/markers, so a LIVE account never trades or draws until
-   armed. `liveConfirmed` is a Set (or array) of account ids armed this session. */
+   armed. `liveConfirmed` is a Set (or array) of account ids armed this session. No state at all (the desk
+   hasn't loaded yet) passes `ticked` through unchanged, since there is nothing to check against; but once
+   `state` exists, an id it does not recognize fails CLOSED (M6) -- dropped, never assumed armed. */
 function armedTicked(state, ticked, liveConfirmed) {
+  if (!state) return ticked;
   const confirmed = liveConfirmed instanceof Set ? liveConfirmed : new Set(liveConfirmed || []);
   const accounts = accountsOf(state);
   return ticked.filter((id) => {
     const a = accounts.find((x) => x.id === id);
-    return !a || a.env !== 'live' || confirmed.has(id);
+    if (!a) return false;
+    return a.env !== 'live' || confirmed.has(id);
   });
 }
 /* The refusal toast for an unarmed LIVE account (per-account paths: flatten, cancel, drag, ×). */
@@ -398,7 +413,7 @@ const api = { PREFS_KEY, QUOTE_STALE_MS, BOT_NAMES, parsePrefs, prefsText, short
   roundTick, bracket, orderBody, clientId, tradeMode, quoteView, usd, money, pnl, rrText, linesFor, linePnl, lineLabel,
   lineText, lineColor, withPrice, orderTitle, confirmOrder, actionTitle, resultToasts, fillText, fillMarkers, botName,
   botsFor, positionRows, orderRows, fillRows, accountRows, etTime, diffRows,
-  enterConfirms, resolveConfirmedAccounts, armedTicked, unarmedLiveMessage };
+  enterConfirms, resolveConfirmedAccounts, armedTicked, unarmedLiveMessage, freshQuote };
 if (typeof window !== 'undefined') window.HBTrade = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();
