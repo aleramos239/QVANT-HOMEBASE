@@ -59,13 +59,16 @@ function orderPrice(o) {
 const ABBR = { Limit: 'LMT', Stop: 'STP', StopLimit: 'STP LMT', Market: 'MKT', TrailingStop: 'TRAIL' };
 const abbr = (t) => ABBR[t] || String(t || '').toUpperCase();
 
-/* TradingView's rule for a clicked price: a buy above the ask is a Stop, at or below it a Limit; a sell below the
-   bid is a Stop, at or above it a Limit. No ask/bid: the last trade; no quote at all: null (no order items). */
+/* The clicked (or dragged-to) price's marketability: a buy AT OR ABOVE the ask is a Stop (marketable), strictly
+   below it a Limit (passive); a sell AT OR BELOW the bid is a Stop, strictly above it a Limit. No ask/bid: the
+   last trade; no quote at all: null (no order items). The touch itself counts as marketable (>= / <=,
+   re-review Minor 1): a TP dragged exactly onto the price is refused the same as one dragged through it, since
+   a limit order resting right at the touch fills essentially immediately. */
 function inferType(side, price, q) {
   if (!q || price == null) return null;
-  if (side === 'Buy') { const a = q.ask ?? q.last; return a == null ? null : price > a ? 'Stop' : 'Limit'; }
+  if (side === 'Buy') { const a = q.ask ?? q.last; return a == null ? null : price >= a ? 'Stop' : 'Limit'; }
   const b = q.bid ?? q.last;
-  return b == null ? null : price < b ? 'Stop' : 'Limit';
+  return b == null ? null : price <= b ? 'Stop' : 'Limit';
 }
 function menuText(side, qty, price, type, tick) { return `${side} ${qty} @ ${Cat.fmtPrice(price, tick)} ${type}`; }
 function roundTick(p, tick) { return tick > 0 ? Number((Math.round(p / tick) * tick).toFixed(Cat.decimals(tick))) : p; }
@@ -111,13 +114,31 @@ function enterConfirms(target, primary, repeat) {
   return target.tagName !== 'BUTTON';
 }
 
-/* A quote older than maxAgeMs (default 10 s) counts as no quote at all for a trading decision (M4): the 30 s
-   `QUOTE_STALE_MS` only greys the Buy/Sell block, which is looser than what's safe to infer a Limit/Stop type
-   or a Market bracket from. Callers pass the result straight to inferType/bracket, which already treat a null
-   quote as "can't tell" -- no new refusal branch needed where this replaces a raw quote lookup. */
+/* A quote older than maxAgeMs (default 10 s) counts as no quote for DISPLAY and for which chart-menu Buy/Sell
+   items exist (M4). Ruling (2026-09-27 re-review): `ts_ms` is the last TRADE time, so a quiet market goes
+   "stale" by this measure often -- fine for greying the block or hiding a menu item, but too eager to also
+   gate a REFUSAL check. A refusal (can this Limit/Stop/bracket actually be trusted not to fill at once) always
+   uses the last known quote at ANY age instead (see refuseIfMarketable); only "no quote ever" refuses there. */
 function freshQuote(q, nowMs, maxAgeMs = 10000) {
   if (!q || !Number.isFinite(q.ts_ms) || !Number.isFinite(nowMs)) return null;
   return nowMs - q.ts_ms <= maxAgeMs ? q : null;
+}
+
+/* N1: a Market order whose prefs would attach a bracket (a nonzero SL or TP tick default) needs a quote to
+   compute it from -- without one, sending anyway would place a naked market order the user never asked for. */
+function needsQuoteForBracket(type, slTicks, tpTicks) {
+  return type === 'Market' && (slTicks > 0 || tpTicks > 0);
+}
+
+/* N2/I1: whether a re-priced or new Limit/Stop order should be refused for having drifted (or landed) on the
+   wrong side of the market, using the LAST KNOWN quote at any age -- freshness only gates display and menu
+   items (see freshQuote), never this check. No quote at all is refused outright, since "no quote" means "can't
+   verify," not "assume it's fine." Returns the toast text to show, or null when the send may proceed. */
+function refuseIfMarketable(side, price, quote, expectedKind) {
+  if (!quote) return "No price yet — can't check the move";
+  const fresh = inferType(side, price, quote);
+  if (fresh && fresh !== expectedKind) return 'Price moved through your level — re-check the order';
+  return null;
 }
 
 /* A send must go only to the accounts the confirm dialog actually showed, intersected with the fresh
@@ -413,7 +434,8 @@ const api = { PREFS_KEY, QUOTE_STALE_MS, BOT_NAMES, parsePrefs, prefsText, short
   roundTick, bracket, orderBody, clientId, tradeMode, quoteView, usd, money, pnl, rrText, linesFor, linePnl, lineLabel,
   lineText, lineColor, withPrice, orderTitle, confirmOrder, actionTitle, resultToasts, fillText, fillMarkers, botName,
   botsFor, positionRows, orderRows, fillRows, accountRows, etTime, diffRows,
-  enterConfirms, resolveConfirmedAccounts, armedTicked, unarmedLiveMessage, freshQuote };
+  enterConfirms, resolveConfirmedAccounts, armedTicked, unarmedLiveMessage, freshQuote,
+  needsQuoteForBracket, refuseIfMarketable };
 if (typeof window !== 'undefined') window.HBTrade = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

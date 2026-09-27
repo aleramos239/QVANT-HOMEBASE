@@ -53,14 +53,17 @@ test('names: short account, contract root', () => {
   assert.deepEqual(['NQZ6', 'MNQH27', 'NQ', '6EZ6', 'ZN', 'ZNZ6', null].map(T.rootOf), ['NQ', 'MNQ', 'NQ', '6E', 'ZN', 'ZN', '']);
 });
 
-test('Limit or Stop from the clicked price (TradingView), and the menu text', () => {
+test('Limit or Stop from the clicked price (TradingView); AT the touch is marketable (re-review Minor 1)', () => {
   const q = { bid: 30900, ask: 30900.25, last: 30900.25 };
   assert.equal(T.inferType('Buy', 30901, q), 'Stop');
-  assert.equal(T.inferType('Buy', 30900.25, q), 'Limit');
+  assert.equal(T.inferType('Buy', 30900.25, q), 'Stop');    // AT the ask: marketable, not passive (>= )
+  assert.equal(T.inferType('Buy', 30900, q), 'Limit');      // strictly below the ask: still passive
   assert.equal(T.inferType('Sell', 30899.75, q), 'Stop');
-  assert.equal(T.inferType('Sell', 30900, q), 'Limit');
+  assert.equal(T.inferType('Sell', 30900, q), 'Stop');      // AT the bid: marketable, not passive (<=)
+  assert.equal(T.inferType('Sell', 30900.25, q), 'Limit');  // strictly above the bid: still passive
   assert.equal(T.inferType('Buy', 30901, null), null);
-  assert.equal(T.inferType('Buy', 30901, { last: 30902 }), 'Limit');   // no ask: the last trade
+  assert.equal(T.inferType('Buy', 30902, { last: 30902 }), 'Stop');    // no ask: the last trade, AT it is marketable
+  assert.equal(T.inferType('Buy', 30901, { last: 30902 }), 'Limit');   // no ask: the last trade, below it is passive
   assert.equal(T.menuText('Buy', 2, 30900, 'Limit', 0.25), 'Buy 2 @ 30,900.00 Limit');
 });
 
@@ -230,6 +233,25 @@ test('freshQuote: a quote older than 10 s (default) counts as no quote', () => {
   assert.equal(T.freshQuote(q, 5000, 2000), null);     // a tighter maxAgeMs
   assert.equal(T.freshQuote(null, 1000), null);
   assert.equal(T.freshQuote({ last: 1 }, 1000), null); // no ts_ms at all
+});
+
+test('needsQuoteForBracket (N1): only a Market order with a nonzero SL or TP tick pref needs one', () => {
+  assert.equal(T.needsQuoteForBracket('Market', 20, 0), true);
+  assert.equal(T.needsQuoteForBracket('Market', 0, 40), true);
+  assert.equal(T.needsQuoteForBracket('Market', 0, 0), false);   // no bracket wanted: no quote needed
+  assert.equal(T.needsQuoteForBracket('Limit', 20, 40), false);  // not a Market order
+  assert.equal(T.needsQuoteForBracket('Stop', 20, 0), false);
+});
+
+test('refuseIfMarketable (N2/I1): the LAST KNOWN quote at any age, refuse outright with none at all', () => {
+  const q = { bid: 30900, ask: 30900.25, last: 30900.25, ts_ms: 1 };   // ancient, but present
+  // no quote at all: refused regardless of side/price/kind
+  assert.equal(T.refuseIfMarketable('Sell', 30880, null, 'Limit'), "No price yet — can't check the move");
+  // a stale-but-present quote is still used (freshness is a display/menu-only gate, not a refusal one)
+  assert.equal(T.refuseIfMarketable('Sell', 30905, q, 'Limit'), null);           // 30905 above the bid: still passive, fine
+  assert.equal(T.refuseIfMarketable('Sell', 30900, q, 'Limit'), 'Price moved through your level — re-check the order');   // AT the bid: marketable now
+  assert.equal(T.refuseIfMarketable('Buy', 30900.25, q, 'Limit'), 'Price moved through your level — re-check the order'); // AT the ask
+  assert.equal(T.refuseIfMarketable('Buy', 30905, q, 'Stop'), null);             // above the ask: still a genuine Stop, fine
 });
 
 test('placeMarkers: on the bar holding the time, inside the loaded bars, sorted', () => {
