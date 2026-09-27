@@ -20,7 +20,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.websockets import WebSocketClose
 
@@ -33,6 +33,7 @@ from .barreplay import BarReplay
 from .bursts import REACTION_ROOTS, BurstBook, ReactionBook, configured_roots
 from .calendar import Calendar
 from .depth import DEPTH_ARCHIVE, Depth, DepthRecorder
+from .depthgrid import MAX_COLS as DEPTH_MAX_COLS, MAX_SPAN_MS as DEPTH_MAX_SPAN_MS, DepthHistory, Paused
 from .desk import Fanout, Quotes, register as register_desk
 from .history import History
 from .hub import Hub, Stream
@@ -45,7 +46,7 @@ from .store import ARCHIVE, TickStore
 from .studies import make
 from .tick import SideClassifier, from_row
 from .tester_api import tester_router
-from .tickfeed import TickFeed
+from .tickfeed import TickFeed, in_quiet
 
 STATIC = Path(__file__).resolve().parent.parent / "static"
 PUMP_S = 0.25                 # <= 4 updates a second per chart
@@ -864,6 +865,35 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         tags = [t.strip() for t in q.get("tags", "").split(",") if t.strip()]
         sources = [s.strip() for s in q.get("sources", "").split(",") if s.strip()]
         return news.items(frm, to, tags or None, sources or None)
+
+    # the liquidity heatmap's history (depthgrid.py): the recorded depth files as a down-sampled grid,
+    # decoded in a worker thread (one at a time, cached per file), <= 2 MB, never past now (a replay's
+    # own clock in a replay: no look-ahead), and never read at all 09:20-09:35 ET by the wall clock
+    def depth_quiet() -> bool:
+        return in_quiet(time.time() if replay else clock() / 1000)
+
+    depth_history = DepthHistory(depth_base or DEPTH_ARCHIVE, contract_tick_size, quiet=depth_quiet)
+
+    @app.get("/api/depth/history")
+    async def api_depth_history(request: Request):
+        q = request.query_params
+        root = known_root(q.get("root", ""))
+        try:
+            frm, to = int(q["from_ms"]), int(q["to_ms"])
+            cols = int(q.get("cols", DEPTH_MAX_COLS // 2))
+        except (KeyError, ValueError):
+            raise HTTPException(400, "from_ms / to_ms: epoch ms; cols: a whole number") from None
+        if to <= frm or to - frm > DEPTH_MAX_SPAN_MS:
+            raise HTTPException(400, f"to_ms after from_ms, at most {DEPTH_MAX_SPAN_MS // 3_600_000} h apart")
+        if depth_quiet():
+            raise HTTPException(503, "paused for the 9:30 window")
+        try:
+            body = await asyncio.to_thread(depth_history.grid, root, frm, to, cols, clock())
+        except Paused:
+            raise HTTPException(503, "paused for the 9:30 window") from None
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+        return Response(body, media_type="application/json")
 
     @app.websocket("/ws")
     async def ws_endpoint(sock: WebSocket):
