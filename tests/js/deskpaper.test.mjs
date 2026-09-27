@@ -43,7 +43,18 @@ test('the accounts popup lists every paper account with its PAPER chip and balan
   assert.match(html, /\$25000/);
   assert.doesNotMatch(html, /<img/);
   assert.match(html, /&lt;img src=x onerror=alert\(1\)&gt;/);
-  assert.equal((html.match(/removePaper\(/g) || []).length, 1, 'only a user-made account has a Remove');
+  assert.equal((html.match(/data-paper-id="paper-2"/g) || []).length, 1, 'only a user-made account has a Remove');
+  assert.doesNotMatch(html, /onclick=/, 'no inline handler carries an id');
+});
+
+test('a row whose id is not a paper id is never rendered (a hostile answer cannot reach a button)', async () => {
+  const evil = { ok: true, accounts: [{ id: "x');alert(1)//", label: 'e', balance: 1, realized_pnl: 0, removable: true },
+    { id: 'paper-4', label: 'ok', balance: 1, realized_pnl: 0, removable: true }], broken: 'registry unreadable' };
+  const { api, els } = load({ answers: { 'http://localhost:8852/api/paper/accounts': evil } });
+  await api.loadPaper();
+  assert.deepEqual(api.PAPER.map((a) => a.id), ['paper-4']);
+  assert.doesNotMatch(els.paperList.innerHTML, /alert/);
+  assert.match(els.paperList.innerHTML, /registry unreadable/);
 });
 
 test('Remove asks through the in-page confirm, then posts to the chart service', async () => {

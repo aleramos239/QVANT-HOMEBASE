@@ -41,8 +41,10 @@ from __future__ import annotations
 import datetime as dt
 import json
 import math
+import os
 import re
 import time
+import unicodedata
 from collections import deque
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
@@ -66,7 +68,12 @@ MAX_ACCOUNTS = 20                 # paper accounts at once (the page's account l
 NAME_MAX = 32
 # "paper" or "paper-<n>" -- never a colon, so no id can collide with a forward-test algo key "paper:<strategy>"
 PAPER_ID_RE = re.compile(r"paper(?:-[1-9][0-9]{0,5})?")
-_NAME_OK = re.compile(r"[^\x00-\x1f\x7f]+")
+# fix round 1 (I2): what a paper account's name may be -- see clean_name()
+_LOOKALIKE = str.maketrans({                      # letters that pass for p/a/e/r in "PAPER" (Cyrillic, Greek)
+    "\u0440": "p", "\u0420": "p", "\u03c1": "p", "\u03a1": "p",
+    "\u0430": "a", "\u0410": "a", "\u03b1": "a", "\u0391": "a",
+    "\u0435": "e", "\u0415": "e", "\u03b5": "e", "\u0395": "e",
+    "\u0433": "r", "\u0413": "r"})
 # the desk page (:8850) may create / remove / list paper accounts -- EXACTLY these origins, only on those routes
 DESK_ORIGINS = frozenset({"http://localhost:8850", "http://127.0.0.1:8850"})
 MAX_ORDER_QTY = 10                # the desk's per-order cap (trading.py guard 3)
@@ -114,7 +121,55 @@ def _session_until(ts_ms: int, root: str) -> int:
 
 
 def _finite(v) -> bool:
-    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+    if not isinstance(v, (int, float)) or isinstance(v, bool):
+        return False
+    try:
+        return math.isfinite(v)
+    except OverflowError:                       # fix round 1 (M1): a 400-digit int is not a number we take
+        return False
+
+
+def clean_name(raw) -> str:
+    """A paper account's name, or ValueError (fix round 1, I2): NFKC-normalised, trimmed, 1-NAME_MAX characters,
+    at least one visible one, and none in Unicode category C* (control, format -- zero-width, bidi overrides and
+    isolates, BOM --, surrogate, private use, unassigned) or Zl / Zp (line / paragraph separators)."""
+    if not isinstance(raw, str):
+        raise ValueError("name: text")
+    name = unicodedata.normalize("NFKC", raw).strip()
+    bad = [c for c in name if unicodedata.category(c)[0] == "C" or unicodedata.category(c) in ("Zl", "Zp")]
+    if bad:
+        raise ValueError("name: no control, invisible or text-direction characters")
+    if not name or not 1 <= len(name) <= NAME_MAX:
+        raise ValueError(f"name: 1-{NAME_MAX} characters")
+    return name
+
+
+def name_key(name: str) -> str:
+    """What two names are compared by: NFKC + casefold (so "Scalps" / "SCALPS" / "Ｓｃａｌｐｓ" collide)."""
+    return unicodedata.normalize("NFKC", name).casefold()
+
+
+def looks_like_paper(name: str) -> bool:
+    """"PAPER" is the built-in's: reserved in any look-alike spelling -- case, width, spacing or punctuation
+    ("P.A.P.E.R", "p a p e r") and the Cyrillic / Greek letters that pass for its own."""
+    letters = "".join(c for c in name_key(name).translate(_LOOKALIKE) if c.isalnum())
+    return letters == "paper"
+
+
+def _atomic_json(path: Path, data) -> None:
+    """Fix round 1 (I3): write, fsync the file, rename over, fsync the directory -- a power loss leaves the old
+    file or the new one, never an empty one."""
+    tmp = path.with_name(path.name + f".{os.getpid()}.tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(json.dumps(data))
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
+    fd = os.open(path.parent, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
 
 
 def _price(v, name: str, required: bool = False) -> Optional[float]:
@@ -632,16 +687,75 @@ class PaperBooks:
         self.meta: dict[str, dict] = {}
         self.next = 2
         self._dirty = True
-        reg = _jsonl.read_json(self.dir / "accounts.json") if self.dir is not None else {}
-        rows = reg.get("accounts") if isinstance(reg.get("accounts"), list) else []
-        rows = [r for r in rows if isinstance(r, dict) and is_paper_id(r.get("id"))]
+        self.broken: Optional[str] = None            # why the registry cannot be trusted (fail closed), or None
+        rows = self._read_registry()
         if not any(r["id"] == PAPER_ID for r in rows):   # the built-in first account, always there
             rows.insert(0, {"id": PAPER_ID, "label": LABEL, "start_balance": START_BALANCE, "created_ms": 0})
-        self.next = max([int(reg.get("next") or 2)] + [int(r["id"].split("-")[1]) + 1 for r in rows if r["id"] != PAPER_ID])
+        self.next = max(self.next, self._max_seen(rows) + 1)
         for r in rows:
             self._open(r)
-        if self.dir is not None and not (self.dir / "accounts.json").exists():
+        if self.dir is not None and self.broken is None and not (self.dir / "accounts.json").exists():
             self._save()
+
+    def _read_registry(self) -> list[dict]:
+        """The registry's rows. Missing: a first start (the built-in only). Present but unreadable, not an object, or
+        without an `accounts` list: BROKEN -- logged loudly, reported in status, creates and removes refused, and the
+        file is never rewritten until someone repairs it (fix round 1, I3: never silently drop accounts). A single
+        bad field is coerced or its row skipped, loudly (M4) -- never a crash at startup."""
+        if self.dir is None:
+            return []
+        p = self.dir / "accounts.json"
+        if not p.exists():
+            return []
+        try:
+            reg = json.loads(p.read_text())
+            if not isinstance(reg, dict) or not isinstance(reg.get("accounts"), list):
+                raise ValueError("not {next, accounts: [...]}")
+        except (OSError, ValueError) as e:
+            self.broken = f"paper/accounts.json is unreadable ({type(e).__name__}: {e}) — user paper accounts are " \
+                          "not loaded and none can be created or removed until it is repaired"
+            self.log(f"paperbook: REGISTRY BROKEN: {self.broken}")
+            return []
+        try:
+            self.next = max(2, int(reg.get("next") or 2))
+        except (TypeError, ValueError):
+            self.log(f"paperbook: accounts.json `next` {reg.get('next')!r} is not a number — derived from disk")
+        rows = []
+        for r in reg["accounts"]:
+            if not isinstance(r, dict) or not is_paper_id(r.get("id")) or any(x["id"] == r["id"] for x in rows):
+                self.log(f"paperbook: accounts.json row skipped: {str(r)[:120]}")
+                continue
+            try:
+                bal = float(r.get("start_balance") or START_BALANCE)
+                if not math.isfinite(bal) or bal <= 0:
+                    raise ValueError(bal)
+            except (TypeError, ValueError, OverflowError):
+                self.log(f"paperbook: {r['id']}: start_balance {r.get('start_balance')!r} unreadable — $50,000 used")
+                bal = START_BALANCE
+            try:
+                created = int(r.get("created_ms") or 0)
+            except (TypeError, ValueError):
+                created = 0
+            rows.append({"id": r["id"], "label": str(r.get("label") or r["id"])[:NAME_MAX], "start_balance": bal,
+                         "created_ms": created})
+        return rows
+
+    def _max_seen(self, rows: list[dict]) -> int:
+        """The highest paper-<n> ever used: the registry, every log in books/, every archived log and every
+        archived record (fix round 1, I3) -- so an id is never handed out twice, even after a lost registry."""
+        n = [1] + [int(r["id"].split("-")[1]) for r in rows if r["id"] != PAPER_ID]
+        if self.dir is not None:
+            for f in list((self.dir / "books").glob("paper-*.jsonl")) + list((self.dir / "archive").glob("paper-*.jsonl")):
+                m = re.match(r"paper-([1-9][0-9]{0,5})(?:-|\.jsonl$)", f.name)
+                if m:
+                    n.append(int(m.group(1)))
+            for r in _jsonl.read_all(self.dir / "archive" / "accounts.jsonl"):
+                if is_paper_id(r.get("id")) and r["id"] != PAPER_ID:
+                    n.append(int(r["id"].split("-")[1]))
+        return max(n)
+
+    def status(self) -> dict:
+        return {"accounts": len(self.books), "broken": self.broken}
 
     def path_for(self, aid: str) -> Optional[Path]:
         if self.dir is None:
@@ -651,7 +765,7 @@ class PaperBooks:
     def _open(self, r: dict) -> None:
         aid = r["id"]
         label = str(r.get("label") or aid)[:NAME_MAX]
-        bal = float(r.get("start_balance") or START_BALANCE)
+        bal = float(r["start_balance"])
         self.meta[aid] = {"id": aid, "label": label, "start_balance": bal, "created_ms": int(r.get("created_ms") or 0)}
         self.books[aid] = PaperBook(self.path_for(aid), account_id=aid, label=label, start_balance=bal, **self.kw)
 
@@ -659,7 +773,9 @@ class PaperBooks:
         if self.dir is None:
             return
         self.dir.mkdir(parents=True, exist_ok=True)
-        _jsonl.write_json(self.dir / "accounts.json", {"next": self.next, "accounts": list(self.meta.values())})
+        if self.broken is not None:                  # never overwrite a registry someone has to repair
+            raise Refused(self.broken)
+        _atomic_json(self.dir / "accounts.json", {"next": self.next, "accounts": list(self.meta.values())})
 
     # ---- the tick path and the page ----
     def on_ticks(self, root: str, rows: list) -> None:
@@ -726,18 +842,22 @@ class PaperBooks:
     def create(self, body) -> dict:
         if not isinstance(body, dict):
             raise ValueError("the body is a JSON object")
-        name = body.get("name")
-        if not isinstance(name, str) or not _NAME_OK.fullmatch(name.strip() or "\x00") or len(name.strip()) > NAME_MAX:
-            raise ValueError(f"name: 1-{NAME_MAX} printable characters")
-        name = name.strip()
+        if self.broken is not None:
+            raise ValueError(self.broken)
+        name = clean_name(body.get("name"))
         bal = body.get("start_balance", START_BALANCE)
         if not _finite(bal) or not MIN_BALANCE <= bal <= MAX_BALANCE:
             raise ValueError(f"start_balance: ${MIN_BALANCE:,.0f} to ${MAX_BALANCE:,.0f}")
-        if any(m["label"].lower() == name.lower() for m in self.meta.values()):
+        if looks_like_paper(name):
+            raise ValueError(f"{LABEL!r} is the built-in account's name")
+        if any(name_key(m["label"]) == name_key(name) for m in self.meta.values()):
             raise ValueError(f"a paper account is already called {name!r}")
         if len(self.books) >= MAX_ACCOUNTS:
             raise ValueError(f"at most {MAX_ACCOUNTS} paper accounts")
+        self.next = max(self.next, self._max_seen(list(self.meta.values())) + 1)
         aid = f"paper-{self.next}"
+        if self.path_for(aid) is not None and self.path_for(aid).exists():   # fail closed: never adopt a log
+            raise ValueError(f"{aid}'s log already exists on disk — refusing to reuse it")
         self.next += 1
         r = {"id": aid, "label": name, "start_balance": float(bal), "created_ms": int(self.clock_ms())}
         self._open(r)
@@ -761,25 +881,28 @@ class PaperBooks:
             return {"ok": False, "error": "the built-in PAPER account can't be removed"}
         if b.busy():
             return {"ok": False, "error": f"{b.label} has an open position or working orders — flatten it first"}
+        if self.broken is not None:
+            return {"ok": False, "error": self.broken}
         now = int(self.clock_ms())
         archived = None
-        if self.dir is not None:
-            arch = self.dir / "archive"
-            arch.mkdir(parents=True, exist_ok=True)
-            v = b.view()
-            _jsonl.append(arch / "accounts.jsonl", {**self.meta[aid], "removed_ms": now, "balance": v["balance"],
-                                                    "realized_pnl": v["realized_pnl"]})
+        v = b.view()
         meta = self.meta.pop(aid)
         del self.books[aid]
         try:
-            self._save()
-        except Exception:
+            self._save()                             # fix round 1 (M5): the registry first -- a failed save changes
+        except Exception:                            # nothing, not even the archive
             self.meta[aid], self.books[aid] = meta, b
             raise
-        src = self.path_for(aid)
-        if src is not None and src.exists():
-            archived = self.dir / "archive" / f"{aid}-{now}.jsonl"
-            src.replace(archived)
+        if self.dir is not None:
+            arch = self.dir / "archive"
+            arch.mkdir(parents=True, exist_ok=True)
+            src = self.path_for(aid)
+            if src.exists():
+                archived = arch / f"{aid}-{now}.jsonl"
+                src.replace(archived)
+            _jsonl.append(arch / "accounts.jsonl", {**meta, "removed_ms": now, "balance": v["balance"],
+                                                    "realized_pnl": v["realized_pnl"],
+                                                    "log": archived.name if archived else None})
         self._dirty = True
         return {"ok": True, "archived": archived.name if archived else None}
 
@@ -872,13 +995,21 @@ def register(app, *, books: Optional[PaperBooks], browser_write_ok, allowed: fro
         guard(request, False)
         return {"accounts": books.views(), "limits": dict(LIMITS)}
 
+    def answered(request: Request, e: HTTPException):
+        """Fix round 1 (M2): a refusal AFTER the exact origin check passed is readable by the desk page (so it can
+        say why, not "unreachable"); a request whose origin failed that check never gets here."""
+        return _cors(JSONResponse({"ok": False, "detail": e.detail}, status_code=e.status_code), request)
+
     @app.get("/api/paper/accounts")
     async def paper_accounts(request: Request):
         bad = desk_origin_refusal(request.headers)
         if bad is not None:
             raise HTTPException(*bad)
-        guard(request, False)
-        return _cors(JSONResponse({"accounts": books.listing()}), request)
+        try:
+            guard(request, False)
+        except HTTPException as e:
+            return answered(request, e)
+        return _cors(JSONResponse({"accounts": books.listing(), "broken": books.broken}), request)
 
     @app.options("/api/paper/accounts/{what}")
     async def paper_accounts_preflight(what: str, request: Request):
@@ -896,10 +1027,13 @@ def register(app, *, books: Optional[PaperBooks], browser_write_ok, allowed: fro
         bad = desk_origin_refusal(request.headers)
         if bad is not None:
             raise HTTPException(*bad)
-        guard(request, True)
-        if what not in ("create", "remove"):
-            raise HTTPException(404, f"unknown paper accounts action {what!r}")
-        body = await _read_json(request)
+        try:
+            guard(request, True)
+            if what not in ("create", "remove"):
+                raise HTTPException(404, f"unknown paper accounts action {what!r}")
+            body = await _read_json(request)
+        except HTTPException as e:
+            return answered(request, e)
         try:
             out = books.create(body) if what == "create" else books.remove(body)
         except ValueError as e:

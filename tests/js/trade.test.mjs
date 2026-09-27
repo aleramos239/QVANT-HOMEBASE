@@ -1401,3 +1401,9 @@ test('Task 2b: the gear -> Trading ACCOUNTS rows show each paper account with it
     { accounts: ['paper-2', 'paper-7'], droppedLive: ['live099'], unverified: ['paper-7'] });
   assert.deepEqual(T.tradeMode({ state: st }, { accounts: ['paper-2', 'paper-7'] }), { mode: 'on', reason: '', accounts: ['paper-2'] });
 });
+
+test('Task 2b fix round 1 (M6): a long paper name is trimmed in chips and lines; a short one is verbatim', () => {
+  assert.equal(T.short({ id: 'paper-2', label: 'Scalps', env: 'paper' }), 'Scalps');
+  assert.equal(T.short({ id: 'paper-2', label: 'A very long paper account name', env: 'paper' }), 'A very long p…');
+  assert.equal(T.short({ id: 'paper', label: 'PAPER', env: 'paper' }), 'PAPER');
+});

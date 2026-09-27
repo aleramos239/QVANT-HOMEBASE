@@ -529,6 +529,9 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         st["calendar"] = cal.status()
         st["news"] = news.status()
         st["bursts"] = burst_book.status()
+        st["paper"] = None if book is None else book.status()
+        if book is not None and book.broken and not st.get("error"):
+            st["error"] = f"paper: {book.broken}"   # loud: the page's status strip shows it
         return st
 
     async def paper_loop() -> None:

@@ -48,9 +48,10 @@ const prefsText = (p) => JSON.stringify(parsePrefs(JSON.stringify(p)));
 /* ---- names ---- */
 /* "…047": the last 3 characters of an account's label (or id) -- except the PAPER account, whose short name is
    its label verbatim ("PAPER", never "…PER"): it is one virtual account, not one of a broker's numbered ones. */
+const PAPER_SHORT_MAX = 14;   // Task 2b fix round 1 (M6): a user-given paper name is trimmed in chips / lines / toasts
 function short(a) {
   const s = String((a && (a.label || a.id)) || '');
-  if (a && a.env === 'paper') return s;
+  if (a && a.env === 'paper') return s.length > PAPER_SHORT_MAX ? s.slice(0, PAPER_SHORT_MAX - 1) + '…' : s;
   return s.length > 3 ? '…' + s.slice(-3) : s;
 }
 /* NQZ6 -> NQ · MNQH27 -> MNQ · NQ -> NQ: a month code + 1-2 digit year stripped. */

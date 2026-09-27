@@ -674,3 +674,130 @@ def test_the_desk_proxy_refuses_every_paper_id(tmp_path):
         assert c.post("/api/desk/order", json=body).status_code == 400
         assert c.post("/api/desk/modify", json={"client_id": "d", "account": "paper-12", "order_id": "1", "price": 1}).status_code == 400
     assert [p for _, p in seen if not p.endswith("/stream")] == []
+
+
+# ---- Task 2b fix round 1 -------------------------------------------------------------------------------------
+@pytest.mark.parametrize("bad", ["​", "​PAPER", "‮evil", "a⁦b", "﻿x", "a\x85b", "a b",
+                                 "a b", "a\x00b", "a‍b", "ab", "   ", "", "x" * 33, 7, None])
+def test_names_refuse_invisible_control_and_bidi_characters(tmp_path, bad):
+    with pytest.raises(ValueError):
+        books(tmp_path).create({"name": bad})
+
+
+def test_names_are_nfkc_normalised_trimmed_and_unique_by_their_normal_form(tmp_path):
+    bs = books(tmp_path)
+    a = bs.create({"name": "  Ｓｃａｌｐｓ  "})["account"]        # fullwidth -> NFKC "Scalps"
+    assert a["label"] == "Scalps"
+    for dup in ("scalps", "SCALPS", "Ｓｃａｌｐｓ", " scalps "):
+        with pytest.raises(ValueError, match="already called"):
+            bs.create({"name": dup})
+    assert bs.create({"name": "Café 2"})["account"]["label"] == "Café 2"      # accents are fine
+
+
+@pytest.mark.parametrize("fake", ["paper", "PAPER", "Paper", "ＰＡＰＥＲ", "P.A.P.E.R", "p a p e r", "P-A-P-E-R",
+                                  "РАРЕR", "pаper", "PAPΕR"])
+def test_the_built_in_name_is_reserved_in_any_look_alike(tmp_path, fake):
+    with pytest.raises(ValueError, match="built-in"):
+        books(tmp_path).create({"name": fake})
+
+
+def test_a_lost_registry_never_reuses_an_id_or_adopts_an_old_log(tmp_path):
+    bs = books(tmp_path)
+    bs.create({"name": "one"})
+    bs.create({"name": "two"})
+    bs.remove({"account": "paper-3"})                       # paper-3 now only in the archive
+    (tmp_path / "paper" / "accounts.json").unlink()          # the registry is gone (a lost write)
+    bs2 = books(tmp_path)
+    assert list(bs2.books) == [PAPER_ID]
+    assert bs2.create({"name": "fresh"})["account"]["id"] == "paper-4"   # past books/paper-2 and the archived paper-3
+
+
+def test_create_refuses_to_adopt_a_log_already_on_disk(tmp_path):
+    bs = books(tmp_path)
+    bs.next = 2
+    (tmp_path / "paper" / "books").mkdir(parents=True, exist_ok=True)
+    stray = tmp_path / "paper" / "books" / "paper-7.jsonl"
+    stray.write_text("")
+    bs._max_seen = lambda rows: 1                            # a disk scan that missed it: create itself still refuses
+    bs.next = 7
+    with pytest.raises(ValueError, match="already exists"):
+        bs.create({"name": "x"})
+
+
+@pytest.mark.parametrize("content", ["", "{", "[]", '{"next": 3}', '{"accounts": "x"}'])
+def test_an_unreadable_registry_fails_closed_and_loud(tmp_path, content):
+    bs = books(tmp_path)
+    bs.create({"name": "kept"})
+    reg = tmp_path / "paper" / "accounts.json"
+    reg.write_text(content)
+    logs = []
+    bs2 = pb.PaperBooks(tmp_path / "paper", roots=["NQ"], clock_ms=lambda: T0 // 1_000_000, log=logs.append)
+    assert bs2.broken and any("REGISTRY BROKEN" in m for m in logs)
+    assert bs2.status()["broken"] == bs2.broken
+    assert list(bs2.books) == [PAPER_ID]                      # the built-in still trades
+    with pytest.raises(ValueError, match="unreadable"):
+        bs2.create({"name": "new"})
+    assert bs2.remove({"account": "paper-2"})["ok"] is False
+    assert reg.read_text() == content                        # never rewritten over
+
+
+def test_a_bad_registry_field_never_stops_the_service(tmp_path):
+    bs = books(tmp_path)
+    bs.create({"name": "one"})
+    reg = tmp_path / "paper" / "accounts.json"
+    d = json.loads(reg.read_text())
+    d["next"] = "x"
+    d["accounts"][1]["start_balance"] = "abc"
+    d["accounts"].append({"id": "../../etc", "label": "bad"})
+    reg.write_text(json.dumps(d))
+    bs2 = books(tmp_path)
+    assert bs2.broken is None and list(bs2.books) == [PAPER_ID, "paper-2"]
+    assert bs2.books["paper-2"].start_balance == pb.START_BALANCE
+    assert bs2.create({"name": "two"})["account"]["id"] == "paper-3"
+
+
+def test_the_registry_is_written_with_fsync(tmp_path, monkeypatch):
+    synced = []
+    real = pb.os.fsync
+    monkeypatch.setattr(pb.os, "fsync", lambda fd: (synced.append(fd), real(fd)))
+    books(tmp_path).create({"name": "x"})
+    assert len(synced) >= 2                                  # the file and its directory
+
+
+def test_a_failed_registry_save_on_remove_writes_no_archive_record(tmp_path, monkeypatch):
+    bs = books(tmp_path)
+    bs.create({"name": "one"})
+    def boom(*a, **k):
+        raise OSError("disk full")
+    monkeypatch.setattr(pb, "_atomic_json", boom)
+    with pytest.raises(OSError):
+        bs.remove({"account": "paper-2"})
+    assert "paper-2" in bs.books
+    assert not (tmp_path / "paper" / "archive" / "accounts.jsonl").exists()
+
+
+def test_a_huge_integer_is_a_400_not_a_500(tmp_path):
+    with TestClient(live_app(tmp_path), base_url=BASE_URL) as c:
+        big = "1" + "0" * 400
+        r = c.post("/api/paper/accounts/create", content='{"name": "x", "start_balance": ' + big + "}",
+                   headers={"content-type": "application/json"})
+        assert r.status_code == 400
+        r = c.post("/api/paper/order", content='{"client_id": "c", "accounts": ["paper"], "root": "NQ", "side": "Buy", '
+                   '"qty": 1, "type": "Limit", "price": ' + big + "}", headers={"content-type": "application/json"})
+        assert r.status_code == 400
+
+
+def test_a_refusal_after_the_origin_check_is_readable_by_the_desk_page(tmp_path):
+    desk = {"origin": "http://localhost:8850"}
+    with TestClient(live_app(tmp_path), base_url=BASE_URL) as c:
+        r = c.post("/api/paper/accounts/create", content="{bad", headers={**desk, "content-type": "application/json"})
+        assert r.status_code == 400 and r.headers["access-control-allow-origin"] == "http://localhost:8850"
+        r = c.post("/api/paper/accounts/create", content='{"name": "x"}', headers={**desk, "content-type": "text/plain"})
+        assert r.status_code == 415 and r.headers["access-control-allow-origin"] == "http://localhost:8850"
+        r = c.post("/api/paper/accounts/create", json={"name": "x"}, headers={"origin": "http://localhost:3000"})
+        assert r.status_code == 403 and "access-control-allow-origin" not in r.headers
+    app = create_app(roots=["NQ"], base=archive(tmp_path), replay=CD, speed=50, state=tmp_path / "rstate")
+    with TestClient(app, base_url=BASE_URL) as c:
+        r = c.get("/api/paper/accounts", headers=desk)
+        assert r.status_code == 503 and r.headers["access-control-allow-origin"] == "http://localhost:8850"
+        assert "live only" in r.json()["detail"]

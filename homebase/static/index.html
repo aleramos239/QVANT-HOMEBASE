@@ -1253,7 +1253,8 @@ $("#connectOverlay").addEventListener("click", (e) => {
    one set of chart-service routes that answers this page's origin (exact-origin CORS). Nothing here touches the
    desk's own API. Names are user text: always escaped before they reach innerHTML. */
 const CHART = location.protocol + "//" + location.hostname + ":8852";
-let PAPER = [];
+let PAPER = [], PAPER_BROKEN = "";
+const PAPER_ID_RE = /^paper(?:-[1-9][0-9]{0,5})?$/;   // the chart service's id rule: nothing else is ever rendered
 const esc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g,
   (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
 async function chartPost(path, body) {
@@ -1288,8 +1289,11 @@ async function loadPaper() {
   if (DEMO) { PAPER = []; return renderPaper(); }
   try {
     const r = await fetch(CHART + "/api/paper/accounts");
-    PAPER = r.ok ? ((await r.json()).accounts || []) : [];
-    renderPaper(r.ok ? "" : "chart service answered HTTP " + r.status);
+    const d = await r.json().catch(() => ({}));
+    // only rows with a valid paper id are kept: the id reaches a button's data attribute (fix round 1, M3)
+    PAPER = r.ok ? (d.accounts || []).filter(a => a && PAPER_ID_RE.test(String(a.id))) : [];
+    PAPER_BROKEN = r.ok ? String(d.broken || "") : "";
+    renderPaper(r.ok ? "" : (d.detail || "chart service answered HTTP " + r.status));
   } catch (_) { PAPER = []; renderPaper("the chart service (:8852) is not reachable"); }
 }
 function paperRow(a) {
@@ -1301,19 +1305,24 @@ function paperRow(a) {
     <span class="spacer"></span>
     <span class="kvi">${usd(a.balance)}</span>
     <span class="kvi ${pnl > 0 ? "pos" : pnl < 0 ? "neg" : ""}">${pnl > 0 ? "+" : ""}${usd(pnl)}</span>
-    ${a.removable ? `<button class="x" style="border:none;background:none;color:var(--muted-foreground);cursor:pointer;font-size:14px"
-      onclick="removePaper('${esc(a.id)}')" title="Remove this paper account">&times;</button>` : ""}
+    ${a.removable ? `<button class="x paper-rm" style="border:none;background:none;color:var(--muted-foreground);cursor:pointer;font-size:14px"
+      data-paper-id="${esc(a.id)}" title="Remove this paper account">&times;</button>` : ""}
   </div>`;
 }
 function renderPaper(why) {
   const el = $("#paperList");
   if (!el) return;
-  el.innerHTML = `<div class="slabel" style="margin-top:14px">PAPER ACCOUNTS</div>` + (PAPER.length
-    ? PAPER.map(paperRow).join("")
-    : `<div class="mcap" style="padding:10px 0">${esc(why || "none")}</div>`);
+  el.innerHTML = `<div class="slabel" style="margin-top:14px">PAPER ACCOUNTS</div>` +
+    (PAPER_BROKEN ? `<div class="mcap" style="padding:6px 0;color:var(--destructive)">${esc(PAPER_BROKEN)}</div>` : "") +
+    (PAPER.length ? PAPER.map(paperRow).join("")
+      : `<div class="mcap" style="padding:10px 0">${esc(why || "none")}</div>`);
+  // Remove is wired here, never through an inline handler: an id never becomes JavaScript source (fix round 1, M3)
+  for (const b of el.querySelectorAll ? el.querySelectorAll("button.paper-rm") : []) {
+    b.addEventListener("click", () => removePaper(b.dataset.paperId));
+  }
 }
 async function removePaper(id) {
-  const a = PAPER.find(x => x.id === id);
+  const a = PAPER.find(x => x.id === id && PAPER_ID_RE.test(String(id)));
   if (!a) return;
   closeAccts();
   if (!await confirmDlg("Remove paper account " + a.label + "?",
