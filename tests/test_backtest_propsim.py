@@ -307,3 +307,16 @@ def test_monte_carlo_ruin_agrees_with_the_daily_limit():
     dll = montecarlo.run(ledger, rules=load_rules("lucid-pro-50k@2026-09-27b"), paths=200, seed=1)
     no = montecarlo.run(ledger, rules=load_rules("lucid-pro-50k-no-dll@2026-09-27b"), paths=200, seed=1)
     assert no["p_ruin"] == 1.0 and dll["p_ruin"] == 0.0
+
+
+def test_overlapping_positions_and_a_broken_mae_are_flagged():
+    ledger = [{"date": "2024-03-04", "net": 500.0, "mae_usd": 700.0, "commission": 4.0, "entry_ms": 2, "exit_ms": 5},
+              {"date": "2024-03-04", "net": 300.0, "mae_usd": 700.0, "commission": 4.0, "entry_ms": 1, "exit_ms": 9},
+              {"date": "2024-03-05", "net": 900.0, "mae_usd": 100.0, "commission": 4.0, "entry_ms": 1, "exit_ms": 2},
+              {"date": "2024-03-05", "net": 900.0, "mae_usd": 100.0, "commission": 4.0, "entry_ms": 3, "exit_ms": 4}]
+    assert propsim.overlap_days(ledger) == 1
+    res = evaluate(ledger, "lucid-pro-50k@2026-09-27b", n_paths=100)
+    assert res["dll_overlap_days"] == 1 and "OVERSTATED" in res["caveat"]
+    nan = [{"date": "2024-03-04", "net": 3000.0, "mae_usd": float("nan"), "commission": 4.0}]
+    assert propsim.limit_trades(nan, load_rules("lucid-pro-50k@2026-09-27b"))[0]["net"] == 3000.0
+    assert "OVERSTATED" in evaluate(nan, "lucid-pro-50k@2026-09-27b", n_paths=50)["caveat"]

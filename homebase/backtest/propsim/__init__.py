@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import math
 import re
 from pathlib import Path
 
@@ -89,14 +90,44 @@ def weekday_grid(trades: list[dict]) -> tuple[list[float], list[bool], list[str]
     return [by.get(d, 0.0) for d in dates], [d in by for d in dates], dates
 
 
+def _has_mae(t: dict) -> bool:
+    v = t.get("mae_usd")
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+
+
+def _span(t: dict) -> tuple | None:
+    """(entry, exit) in ns from either ledger form (engine ns, bundle ms), else None."""
+    if "entry_ns" in t and "exit_ns" in t:
+        return t["entry_ns"], t["exit_ns"]
+    if "entry_ms" in t and "exit_ms" in t:
+        return t["entry_ms"] * 1_000_000, t["exit_ms"] * 1_000_000
+    return None
+
+
+def overlap_days(trades: list[dict]) -> int:
+    """Days on which a position opened before an earlier-listed one had closed. limit_trades
+    walks trades one after another, so on those days two open drawdowns are never summed and
+    the daily limit can be missed -- evaluate() says so."""
+    last_exit, days = {}, set()
+    for t in trades:
+        sp = _span(t)
+        if sp is None:
+            continue
+        d = t["date"]
+        if d in last_exit and sp[0] < last_exit[d]:
+            days.add(d)
+        last_exit[d] = max(last_exit.get(d, sp[1]), sp[1])
+    return len(days)
+
+
 def _worst(t: dict) -> float:
     """A trade's worst moment in $, net of its commission: -mae_usd - commission (the engine's
     tick-level adverse excursion). A ledger without mae_usd (old runs, bare {date, net}) falls
     back to the closing net -- blind to a dip-then-win, which evaluate() then warns about."""
     net = float(t["net"])
-    mae = t.get("mae_usd")
-    if mae is None:
+    if not _has_mae(t):
         return net
+    mae = t["mae_usd"]
     return min(net, -abs(float(mae)) - float(t.get("commission") or 0.0))
 
 
@@ -104,7 +135,7 @@ def limit_trades(trades: list[dict], r: dict) -> list[dict]:
     """The ledger as a SOFT daily loss limit leaves it (LucidPro: the moment the day's P&L --
     closed trades plus the open one -- reaches -limit you are closed out and stopped for the
     day; the account survives). Walking each day's trades in ledger order (the engine's is
-    chronological), a trade whose WORST moment (``_worst``: its tick-level MAE, so a trade that
+    by EXIT time), a trade whose WORST moment (``_worst``: its tick-level MAE, so a trade that
     dipped past the limit and then won is caught) takes the day to -limit is closed at exactly
     the limit, marked ``dll_stop``, and the day's later trades are dropped.
 
@@ -145,9 +176,17 @@ def evaluate(trades: list[dict], rule_id: str = DEFAULT_RULES, *, n_paths: int =
         limited = limit_trades(trades, r)
         out["dll_stopped_days"] = sum(1 for t in limited if t.get("dll_stop"))
         # only a ledger WITHOUT the engine's mae_usd is blind to a dip-then-win
-        if any(t.get("mae_usd") is None for t in trades):
-            out["caveat"] = (f"{CAVEAT} This ledger has no per-trade adverse excursion, so a trade that dipped past "
-                             f"the ${dll:,.0f} daily limit and then recovered is counted in full: the pass rate is OVERSTATED.")
+        notes = []
+        if any(not _has_mae(t) for t in trades):
+            notes.append(f"This ledger has no per-trade adverse excursion, so a trade that dipped past the "
+                         f"${dll:,.0f} daily limit and then recovered is counted in full.")
+        ov = overlap_days(trades)
+        if ov:
+            out["dll_overlap_days"] = ov
+            notes.append(f"On {ov} day(s) positions overlapped; their open losses are not added together, so the "
+                         f"${dll:,.0f} daily limit can be missed there.")
+        if notes:
+            out["caveat"] = f"{CAVEAT} {' '.join(notes)} The pass rate is OVERSTATED."
     else:
         limited = trades
     pnls, flags, dates = weekday_grid(limited)
