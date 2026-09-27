@@ -25,6 +25,7 @@ Only the desk (:8850) talks to the broker's order API. This module:
 The desk key is read from its file for each request and kept nowhere else:
 it never goes to a page, into a log line, or into /api/status. In replay
 there is no DeskLink at all and the proxy answers 503 (ruling 10).
+In replay the link may point at the fake desk (tools/fake_desk.py) only.
 """
 from __future__ import annotations
 

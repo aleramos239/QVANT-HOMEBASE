@@ -3,10 +3,12 @@ from the ticks, the proxy. The real desk is never reached (MockTransport)."""
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
 import json
 import queue
 
 import httpx
+import pytest
 from fastapi.testclient import TestClient
 from starlette.middleware.cors import CORSMiddleware
 
@@ -145,3 +147,41 @@ def test_no_cors_middleware_on_the_chart_service(tmp_path):
     middleware: no page on another origin can ever read the response back."""
     app = live_app(tmp_path)
     assert not any(m.cls is CORSMiddleware for m in app.user_middleware)
+
+
+from homebase.charts import __main__ as charts_main
+
+
+def test_the_fake_desk_link_is_refused_outside_replay(tmp_path):
+    with pytest.raises(ValueError):
+        live_app(tmp_path, fake_desk_factory=lambda fan: None)
+
+
+@pytest.mark.parametrize("argv", [["--fake-desk", "8859"],                              # no --replay
+                                  ["--replay", "2026-09-22", "--fake-desk", "8850"]])   # the real desk's port
+def test_the_cli_refuses_a_fake_desk_without_replay_or_on_the_real_port(argv):
+    with pytest.raises(SystemExit):
+        charts_main.main(argv)
+
+
+def test_replay_links_to_the_fake_desk_and_sends_it_quotes(tmp_path):
+    posted = []
+
+    async def sse_body():
+        yield b'event: state\ndata: {"enabled": true, "accounts": [], "bot": {}}\n\n'
+        await asyncio.Event().wait()
+
+    def handler(req):
+        if req.method == "GET":
+            return httpx.Response(200, content=sse_body(), headers={"content-type": "text/event-stream"})
+        posted.append(json.loads(req.content))
+        return httpx.Response(200, json={"results": {}})
+
+    kp = key_file(tmp_path)
+    app = create_app(roots=["NQ"], base=archive(tmp_path), replay=D, speed=50, start_et=dt.time(9, 30),
+                     state=tmp_path / "state", fake_desk_factory=lambda fan: DeskLink(
+                         fan, key_path=kp, url="http://127.0.0.1:8859", transport=httpx.MockTransport(handler)))
+    with TestClient(app, base_url=BASE_URL) as c, c.websocket_connect("/ws", headers=WS_HOST) as ws:
+        assert next_of(ws, "quote", limit=2000)["root"] == "NQ"
+        assert c.post("/api/desk/order", json={"client_id": "c"}).status_code == 200
+    assert "NQ" in posted[-1]["quotes"]

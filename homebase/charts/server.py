@@ -213,7 +213,7 @@ class Conn:
 def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | None = None,
                speed: float = 10.0, start_et: dt.time = dt.time(9, 25), feed_factory=None,
                now_ms=None, state: Path | None = None, calendar_fetch=None,
-               desk_factory=None) -> FastAPI:
+               desk_factory=None, fake_desk_factory=None) -> FastAPI:
     roots = [r.upper() for r in roots]
     sd = Path(state) if state else state_dir() / "charts"
     sd.mkdir(parents=True, exist_ok=True)
@@ -233,8 +233,14 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         for c in list(conns):
             c.send(msg)
 
-    # the desk link: never in replay (a replayed price must never reach an order)
-    link = desk_factory(desk_fan.publish) if (desk_factory is not None and not replay) else None
+    if fake_desk_factory is not None and not replay:
+        raise ValueError("fake_desk_factory is for replay only: a fake desk never runs beside the live feed")
+    # the desk link: never in replay (a replayed price must never reach an order); a replay may link to the
+    # FAKE desk only (browser checks, python -m homebase.charts --replay … --fake-desk PORT)
+    if replay:
+        link = fake_desk_factory(desk_fan.publish) if fake_desk_factory is not None else None
+    else:
+        link = desk_factory(desk_fan.publish) if desk_factory is not None else None
     if link is not None:
         desk_fan.hello = link.hello
     start_last: dict[str, int | None] = {}
@@ -351,8 +357,12 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
     # the feed is built AFTER reseed/_refill exist (it takes _refill as its
     # callback); every function above only touches feed/hub/clock when called
     if replay:
-        feed = ReplayFeed(store, roots, replay, lambda r, c, rows: hub.on_ticks(r, rows),
-                          speed=speed, start_et=start_et)
+        def on_replay(root: str, contract: str, rows: list[dict]) -> None:
+            if link is not None:
+                quotes.note(root, rows)
+            hub.on_ticks(root, rows)
+
+        feed = ReplayFeed(store, roots, replay, on_replay, speed=speed, start_et=start_et)
         clock = feed.now_ms
     else:
         clock = now_ms or (lambda: int(time.time() * 1000))

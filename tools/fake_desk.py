@@ -1,0 +1,433 @@
+"""A FAKE desk for browser checks of chart trading: never the real desk, never a broker.
+
+    .venv/bin/python -m tools.fake_desk [--port 8859]
+
+It speaks the desk's /api/trade/* (homebase/desk_api.py + trading.py):
+  * the X-Homebase-Key header, with ITS OWN key, written fresh to homebase/.state/fake-desk.key
+    (mode 0600) at start; the real desk.key is never read or written;
+  * no Origin;
+  * GET /state, and the SSE /stream: state first, then account / bot / fill / result, and a
+    heartbeat every 15 s;
+  * POST order / modify / cancel / cancel-symbol / flatten / reverse, answering
+    {"results": {account: {ok, order_id, error[, refused]}}}.
+Bodies go through the desk's own parsers (homebase.trading.parse_*), so a malformed body gets
+the same 400. Everything lives in memory: nothing is journaled, and no broker code is imported.
+
+Fills:
+  * A Market order fills at once at the chart service's quote (body["quotes"][root]): the ask for
+    a buy, the bid for a sell, else the last trade.
+  * A Limit or Stop order rests until POST /fake/fill.
+  * An entry's sl_price / tp_price become working Stop / Limit exits when it fills. The first
+    exit to fill cancels the other (OCO).
+
+Controls (no key; the process binds 127.0.0.1 only):
+    POST /fake/enabled {"on": bool}                       chart trading on/off (a state event)
+    POST /fake/refuse {"reason": "..." | null}            every action is refused with this sentence
+    POST /fake/fill {"account", "order_id", "price"?}     fill a working order
+    POST /fake/bot {"scenario": "idle|placed|live|done", "anchor": 30900.0}   the NQ 9:30 bot on sim041
+    POST /fake/drop                                       end every SSE stream (the chart service reconnects)
+"""
+from __future__ import annotations
+
+import argparse
+import asyncio
+import datetime as dt
+import itertools
+import json
+import os
+import secrets
+from pathlib import Path
+
+import uvicorn
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import StreamingResponse
+
+from homebase.contracts import point_value, round_to_tick
+from homebase.paths import state_dir
+from homebase.trading import parse_cancel, parse_modify, parse_order, parse_symbol_action
+
+PORT = 8859
+FORBIDDEN_PORTS = frozenset({8850, 8852, 8853, 8854})   # the real desk, the chart service, the replays
+KEY_FILE = "fake-desk.key"
+MAX_ORDER, MAX_POSITION = 10, 20
+HEARTBEAT_S = 15.0
+MONTH = "Z6"
+ACCOUNTS = (("sim041", "SIM0000041", "demo"), ("sim047", "SIM0000047", "demo"),
+            ("live099", "FAKELIVE099", "live"))
+SCENARIOS = ("idle", "placed", "live", "done")
+OFF = "chart trading is off — switch it on on the desk page"
+
+
+def now_iso() -> str:
+    return dt.datetime.now(dt.timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def sse(event: str, data) -> str:
+    return f"event: {event}\ndata: {json.dumps(data, default=str)}\n\n"
+
+
+class FakeDesk:
+    def __init__(self):
+        self.enabled = True
+        self.refuse: str | None = None
+        self.ids = itertools.count(1001)
+        self.subs: set[asyncio.Queue] = set()
+        self.acct = {aid: {"id": aid, "label": label, "env": env, "realized": 0.0, "pos": {},
+                           "orders": {}, "legs": {}, "fills": []}
+                     for aid, label, env in ACCOUNTS}
+        self.bot: dict = {"date": None, "strategies": {}}
+        self.set_bot("idle", 30900.0)
+
+    # ---- views: the desk's own shapes (trading.ChartDesk.account_view / snapshot) ----
+    def account_view(self, aid: str) -> dict:
+        a = self.acct[aid]
+        return {"id": aid, "label": a["label"], "pinned": a["label"], "broker_account": a["label"],
+                "env": a["env"], "connected": True, "error": None, "tradable": True,
+                "balance": 50_000.0 + a["realized"], "realized_pnl": a["realized"],
+                "positions": [{"contract_id": 1, "symbol": sym, "net": p["net"], "avg_price": p["avg"],
+                               "root": sym[:-len(MONTH)], "point_value": point_value(sym)}
+                              for sym, p in sorted(a["pos"].items()) if p["net"]],
+                "orders": [dict(o) for _, o in sorted(a["orders"].items())],
+                "fills": list(a["fills"][-50:]),
+                "strategies": ["nq930"] if aid == "sim041" else []}
+
+    def snapshot(self) -> dict:
+        return {"enabled": self.enabled,
+                "limits": {"max_order_qty": MAX_ORDER, "max_position_qty": MAX_POSITION},
+                "accounts": [self.account_view(aid) for aid in self.acct], "bot": self.bot}
+
+    def publish(self, event: str, data) -> None:
+        for q in list(self.subs):
+            q.put_nowait((event, data))
+
+    def changed(self, aid: str) -> None:
+        self.publish("account", self.account_view(aid))
+
+    # ---- book-keeping ----
+    def fill(self, aid: str, symbol: str, side: str, qty: int, price: float, order_id: str,
+             owner: str | None = None) -> None:
+        a = self.acct[aid]
+        p = a["pos"].setdefault(symbol, {"net": 0, "avg": None})
+        s = 1 if side == "Buy" else -1
+        net0, avg0 = p["net"], p["avg"]
+        closing = min(qty, abs(net0)) if net0 and (net0 > 0) != (s > 0) else 0
+        if closing:
+            a["realized"] += (price - avg0) * (1 if net0 > 0 else -1) * closing * (point_value(symbol) or 0.0)
+        net1 = net0 + s * qty
+        if net1 == 0:
+            avg1 = None
+        elif closing == 0:
+            avg1 = round(((avg0 or 0.0) * abs(net0) + price * qty) / abs(net1), 6)
+        elif closing < abs(net0):
+            avg1 = avg0
+        else:
+            avg1 = price                              # flipped: the rest opens at the fill price
+        p.update(net=net1, avg=avg1)
+        f = {"id": next(self.ids), "order_id": order_id, "symbol": symbol, "side": side, "qty": qty,
+             "price": price, "time": now_iso(), "owner": owner}
+        a["fills"].append(f)
+        self.publish("fill", {"account": aid, "fill": f})
+
+    def rest(self, aid, symbol, side, qty, typ, price, sl=None, tp=None, owner=None) -> str:
+        oid = str(next(self.ids))
+        price = round_to_tick(symbol, price)
+        self.acct[aid]["orders"][oid] = {
+            "order_id": oid, "symbol": symbol, "side": side, "type": typ, "qty": qty,
+            "price": price if typ == "Limit" else None, "stop_price": price if typ == "Stop" else None,
+            "status": "Working", "owner": owner}
+        self.acct[aid]["legs"][oid] = {"sl": sl, "tp": tp}
+        return oid
+
+    def brackets(self, aid, symbol, side, qty, leg) -> None:
+        out = "Sell" if side == "Buy" else "Buy"
+        sl = self.rest(aid, symbol, out, qty, "Stop", leg["sl"]) if leg.get("sl") else None
+        tp = self.rest(aid, symbol, out, qty, "Limit", leg["tp"]) if leg.get("tp") else None
+        if sl and tp:
+            legs = self.acct[aid]["legs"]
+            legs[sl]["oco"], legs[tp]["oco"] = tp, sl
+
+    def drop_order(self, aid: str, oid: str) -> dict:
+        self.acct[aid]["legs"].pop(oid, None)
+        return self.acct[aid]["orders"].pop(oid)
+
+    def fill_order(self, aid: str, oid: str, price=None) -> None:
+        a = self.acct[aid]
+        leg = dict(a["legs"].get(oid) or {})
+        o = self.drop_order(aid, oid)
+        px = float(price) if price is not None else (o["price"] if o["type"] == "Limit" else o["stop_price"])
+        self.fill(aid, o["symbol"], o["side"], o["qty"], px, oid)
+        if leg.get("oco") in a["orders"]:
+            self.drop_order(aid, leg["oco"])
+        self.brackets(aid, o["symbol"], o["side"], o["qty"], leg)
+        self.changed(aid)
+
+    # ---- actions ----
+    def gate(self, aid: str) -> str | None:
+        if not self.enabled:
+            return OFF
+        if aid not in self.acct:
+            return f"unknown account {aid!r}"
+        return self.refuse
+
+    @staticmethod
+    def refused(reason: str) -> dict:
+        return {"ok": False, "order_id": None, "error": reason, "refused": True}
+
+    @staticmethod
+    def ok(oid=None) -> dict:
+        return {"ok": True, "order_id": oid, "error": None}
+
+    def finish(self, action: str, cid: str, results: dict) -> dict:
+        out = {"results": results}
+        self.publish("result", {"client_id": cid, "action": action, **out})
+        return out
+
+    def order(self, body) -> dict:
+        it = parse_order(body)
+        symbol = it.root + MONTH
+        q = (body.get("quotes") or {}).get(it.root) or {}
+        last = q.get("last")
+        res = {}
+        for aid in it.accounts:
+            why, px = self.gate(aid), None
+            if why is None and not 1 <= it.qty <= MAX_ORDER:
+                why = f"quantity must be 1-{MAX_ORDER}"
+            if why is None and it.type == "Stop" and last is not None:
+                if it.side == "Buy" and it.price <= last:
+                    why = f"a buy stop must be above the last price ({last:,})"
+                if it.side == "Sell" and it.price >= last:
+                    why = f"a sell stop must be below the last price ({last:,})"
+            if why is None and it.type == "Market":
+                px = q.get("ask" if it.side == "Buy" else "bid") or last
+                if px is None:
+                    why = f"fake desk: no quote for {it.root} to fill a market order at"
+            if why:
+                res[aid] = self.refused(why)
+                continue
+            leg = {"sl": it.sl_price, "tp": it.tp_price}
+            if it.type == "Market":
+                oid = str(next(self.ids))
+                self.fill(aid, symbol, it.side, it.qty, float(px), oid)
+                self.brackets(aid, symbol, it.side, it.qty, leg)
+            else:
+                oid = self.rest(aid, symbol, it.side, it.qty, it.type, it.price, it.sl_price, it.tp_price)
+            self.changed(aid)
+            res[aid] = self.ok(oid)
+        return self.finish("order", it.client_id, res)
+
+    def modify(self, body) -> dict:
+        cid, aid, oid, price = parse_modify(body)
+        why = self.gate(aid)
+        o = self.acct[aid]["orders"].get(oid) if why is None else None
+        if why is None and o is None:
+            why = f"order {oid} is not working on {self.acct[aid]['label']}"
+        if why:
+            return self.finish("modify", cid, {aid: self.refused(why)})
+        o["price" if o["type"] == "Limit" else "stop_price"] = round_to_tick(o["symbol"], price)
+        self.changed(aid)
+        return self.finish("modify", cid, {aid: self.ok(oid)})
+
+    def cancel(self, body) -> dict:
+        cid, aid, oid = parse_cancel(body)
+        why = self.gate(aid)
+        if why is None and oid not in self.acct[aid]["orders"]:
+            why = f"order {oid} is not working on {self.acct[aid]['label']}"
+        if why:
+            return self.finish("cancel", cid, {aid: self.refused(why)})
+        self.drop_order(aid, oid)
+        self.changed(aid)
+        return self.finish("cancel", cid, {aid: self.ok(oid)})
+
+    def _per_symbol(self, action: str, body, fn) -> dict:
+        cid, accounts, root = parse_symbol_action(body)
+        q = (body.get("quotes") or {}).get(root) or {}
+        res = {}
+        for aid in accounts:
+            why = self.gate(aid)
+            if why:
+                res[aid] = self.refused(why)
+                continue
+            fn(aid, root + MONTH, q.get("last"))
+            self.changed(aid)
+            res[aid] = self.ok()
+        return self.finish(action, cid, res)
+
+    def _cancel_symbol(self, aid, symbol, last) -> None:
+        for oid in [k for k, o in self.acct[aid]["orders"].items() if o["symbol"] == symbol and not o["owner"]]:
+            self.drop_order(aid, oid)
+
+    def _flatten(self, aid, symbol, last) -> int:
+        self._cancel_symbol(aid, symbol, last)
+        p = self.acct[aid]["pos"].get(symbol)
+        net = p["net"] if p else 0
+        if net:
+            self.fill(aid, symbol, "Sell" if net > 0 else "Buy", abs(net), float(last or p["avg"]),
+                      str(next(self.ids)))
+        return net
+
+    def _reverse(self, aid, symbol, last) -> None:
+        net = self._flatten(aid, symbol, last)
+        if net:
+            px = float(last or self.acct[aid]["fills"][-1]["price"])
+            self.fill(aid, symbol, "Buy" if net < 0 else "Sell", abs(net), px, str(next(self.ids)))
+
+    def cancel_symbol(self, body) -> dict:
+        return self._per_symbol("cancel-symbol", body, self._cancel_symbol)
+
+    def flatten(self, body) -> dict:
+        return self._per_symbol("flatten", body, self._flatten)
+
+    def reverse(self, body) -> dict:
+        return self._per_symbol("reverse", body, self._reverse)
+
+    # ---- the NQ 9:30 bot on sim041 (bot view = trading.ChartDesk.bot_view) ----
+    def set_bot(self, scenario: str, anchor: float) -> None:
+        a = self.acct["sim041"]
+        for oid in [k for k, o in a["orders"].items() if o["owner"] == "nq930"]:
+            self.drop_order("sim041", oid)
+        x = round_to_tick("NQZ6", anchor)
+        up, dn = x + 10.0, x - 10.0
+        st = {"status": "idle", "qty": 1, "upper": None, "lower": None, "entry_side": None,
+              "entry_fill": None, "entry_qty": None, "sl": None, "tp": None, "exit_fill": None,
+              "exit_reason": None, "pnl": None, "note": None}
+        timer, day = {"stage": "idle", "gate": None, "adx": None, "anchor": None}, "idle"
+        if scenario != "idle":
+            timer = {"stage": "done", "gate": True, "adx": 23.4, "anchor": x}
+            st.update(status="placed", upper=up, lower=dn)
+            day = "placed"
+        if scenario == "placed":
+            self.rest("sim041", "NQZ6", "Buy", 1, "Stop", up, owner="nq930")
+            self.rest("sim041", "NQZ6", "Sell", 1, "Stop", dn, owner="nq930")
+        if scenario in ("live", "done"):
+            st.update(status="live", entry_side="Buy", entry_fill=up, entry_qty=1, sl=up - 5, tp=up + 15)
+            day = "live"
+            self.fill("sim041", "NQZ6", "Buy", 1, up, str(next(self.ids)), owner="nq930")
+        if scenario == "done":
+            st.update(status="done", exit_fill=up + 15, exit_reason="tp", pnl=15 * 20 - 4.0)
+            day = "done"
+            self.fill("sim041", "NQZ6", "Sell", 1, up + 15, str(next(self.ids)), owner="nq930")
+        self.bot = {"date": dt.date.today().isoformat(), "strategies": {"nq930": {
+            "symbol": "NQ", "kind": "straddle", "enabled": True, "shadow": False,
+            "offset_pts": 10.0, "sl_pts": 5.0, "tp_pts": 15.0, "book": {"sim041": 1},
+            "timer": timer, "day_status": day, "accounts": {"sim041": st}}}}
+
+
+async def stream(desk: FakeDesk, heartbeat_s: float = HEARTBEAT_S):
+    q: asyncio.Queue = asyncio.Queue()
+    desk.subs.add(q)
+    try:
+        yield sse("state", desk.snapshot())
+        while True:
+            try:
+                event, data = await asyncio.wait_for(q.get(), heartbeat_s)
+            except asyncio.TimeoutError:
+                yield sse("heartbeat", {"ts": dt.datetime.now().timestamp()})
+                continue
+            if event is None:
+                return
+            yield sse(event, data)
+    finally:
+        desk.subs.discard(q)
+
+
+def create_fake_desk(key: str, desk: FakeDesk | None = None) -> FastAPI:
+    desk = desk or FakeDesk()
+    app = FastAPI(title="fake desk (browser checks only)")
+    app.state.desk = desk
+
+    def check(request: Request) -> None:
+        if request.headers.get("origin") is not None:
+            raise HTTPException(403, "browser requests are refused — trade through the chart service")
+        if request.headers.get("x-homebase-key", "") != key:
+            raise HTTPException(401, "bad or missing X-Homebase-Key")
+
+    @app.get("/api/trade/state")
+    async def trade_state(request: Request):
+        check(request)
+        return desk.snapshot()
+
+    @app.get("/api/trade/stream")
+    async def trade_stream(request: Request):
+        check(request)
+        return StreamingResponse(stream(desk), media_type="text/event-stream",
+                                 headers={"Cache-Control": "no-cache"})
+
+    def route(fn):
+        async def handler(request: Request):
+            check(request)
+            try:
+                body = await request.json()
+            except ValueError:
+                raise HTTPException(400, "the body is not JSON") from None
+            try:
+                return fn(body)
+            except ValueError as e:
+                raise HTTPException(400, str(e)) from None
+        return handler
+
+    for name, fn in (("order", desk.order), ("modify", desk.modify), ("cancel", desk.cancel),
+                     ("cancel-symbol", desk.cancel_symbol), ("flatten", desk.flatten),
+                     ("reverse", desk.reverse)):
+        app.add_api_route(f"/api/trade/{name}", route(fn), methods=["POST"], name=f"trade_{name}")
+
+    @app.post("/fake/enabled")
+    async def fake_enabled(body: dict):
+        desk.enabled = bool(body.get("on"))
+        desk.publish("state", desk.snapshot())
+        return {"enabled": desk.enabled}
+
+    @app.post("/fake/refuse")
+    async def fake_refuse(body: dict):
+        desk.refuse = str(body["reason"]) if body.get("reason") else None
+        return {"refuse": desk.refuse}
+
+    @app.post("/fake/fill")
+    async def fake_fill(body: dict):
+        aid, oid = str(body.get("account")), str(body.get("order_id"))
+        if oid not in desk.acct.get(aid, {}).get("orders", {}):
+            raise HTTPException(404, "no such working order")
+        desk.fill_order(aid, oid, body.get("price"))
+        return {"ok": True}
+
+    @app.post("/fake/bot")
+    async def fake_bot(body: dict):
+        if body.get("scenario") not in SCENARIOS:
+            raise HTTPException(400, f"scenario: one of {', '.join(SCENARIOS)}")
+        desk.set_bot(body["scenario"], float(body.get("anchor") or 30900.0))
+        desk.publish("bot", desk.bot)
+        desk.changed("sim041")
+        return desk.bot
+
+    @app.post("/fake/drop")
+    async def fake_drop():
+        n = len(desk.subs)
+        for q in list(desk.subs):
+            q.put_nowait((None, None))
+        return {"dropped": n}
+
+    return app
+
+
+def write_key(path: Path) -> str:
+    key = secrets.token_hex(32)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write(key + "\n")
+    os.chmod(path, 0o600)
+    return key
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(prog="python -m tools.fake_desk")
+    ap.add_argument("--port", type=int, default=PORT)
+    a = ap.parse_args(argv)
+    if a.port in FORBIDDEN_PORTS:
+        ap.error(f"port {a.port} belongs to the real desk or the chart service")
+    key = write_key(state_dir() / KEY_FILE)
+    uvicorn.run(create_fake_desk(key), host="127.0.0.1", port=a.port, log_level="warning")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
