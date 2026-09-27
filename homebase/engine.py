@@ -121,6 +121,7 @@ class Engine:
         self._killed: dict[str, set[str]] = {}
         self._kill_locks: dict[str, tuple] = {}    # strategy -> (loop, asyncio.Lock)
         self._kill_sleep = asyncio.sleep           # the kill's poll wait (tests replace it)
+        self._needs_check_said: set = set()        # (date, strategy, account, at) journaled
         self._load_today()
 
     # --- time & persistence -------------------------------------------------
@@ -1083,6 +1084,20 @@ class Engine:
                 if s.account == account and s.date == today]
 
     # --- the clock ------------------------------------------------------------
+    def needs_check(self, st: DayState) -> bool:
+        """A run of a strategy killed today that is still placed or live."""
+        return st.status in ("placed", "live") and self.killed_today(st.strategy)
+
+    def _journal_needs_check(self, st: DayState, cfg: StrategyCfg, now: dt.time) -> None:
+        """killed_run_needs_check, once at cancel_et (12:55) and once at
+        flat_et (15:55), for each such run."""
+        for at in (cfg.cancel_et, cfg.flat_et):
+            key = (st.date, st.strategy, st.account, at)
+            if now >= _hhmm(at) and key not in self._needs_check_said:
+                self._needs_check_said.add(key)
+                self.journal("killed_run_needs_check", strategy=st.strategy, account=st.account,
+                             status=st.status, at=at)
+
     async def clock_tick(self) -> None:
         now = self.now_et().time()
         for st in list(self.states.values()):
@@ -1090,13 +1105,20 @@ class Engine:
             ad = self.adapters.get(st.account)
             if cfg is None or ad is None or st.date != self._today():
                 continue
+            # A run of a strategy KILLED today that is still placed/live is a
+            # "check it" run (the kill could not attribute its position): a
+            # human's job. Its stop/target stay working; it is never promoted
+            # at 12:55 nor flattened at 15:55 on the account-wide net.
+            check_it = self.needs_check(st)
+            if check_it:
+                self._journal_needs_check(st, cfg, now)
             if st.status == "placed" and now < _hhmm(cfg.cancel_et):
                 if ad.connected:   # a dead socket's cache is stale; reconnect reconciles
                     await self._guard_placed(
                         st, cfg, ad, check_position=False,
                         event="entry_found_by_check",
                         note="fill push missed — entry found by the order-status check")
-            elif st.status == "placed" and now >= _hhmm(cfg.cancel_et):
+            elif st.status == "placed" and now >= _hhmm(cfg.cancel_et) and not check_it:
                 for oid in (st.upper_id, st.lower_id):
                     if oid:
                         await ad.cancel_order_by_id(oid)
@@ -1111,7 +1133,7 @@ class Engine:
                     self.journal("cancel_raced_fill", strategy=st.strategy,
                                  account=st.account, net=net)
                 self._save()
-            elif st.status == "live" and now >= _hhmm(cfg.flat_et):
+            elif st.status == "live" and now >= _hhmm(cfg.flat_et) and not check_it:
                 key = f"flat:{st.strategy}@{st.account}"
                 if time.time() - self._retry_at.get(key, 0.0) < 5.0:
                     continue                          # a failed flat retries every 5 s

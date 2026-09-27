@@ -656,3 +656,44 @@ def test_a_kill_during_an_early_fill_replay_acts_once(tmp_path):
     assert "market Sell 2: ok" in k["results"]["a1"]["actions"]
     after = [e for e in journal(tmp_path) if e["event"] == "strategy_killed_after_ack"]
     assert after and after[-1]["actions"] == ["already killed — nothing to do"]
+
+
+# --- a killed "check it" run is a human's job: never promoted at 12:55, never flattened at 15:55 ---
+def _check_it_run(tmp_path):
+    desk, eng, ads, clock, cfg = mk(tmp_path)
+    st = with_legs(eng._state("nq930", "a1"), NQ_IDS, "placed")
+    ads["a1"].net = 1                                     # a manual position the kill cannot attribute
+    ads["a1"].order_status = {"u1": "Canceled", "l1": "Canceled"}
+    assert kill(desk)["results"]["a1"]["ok"] is False    # "check it": left placed, stops working
+    ads["a1"].cancelled.clear()
+    return desk, eng, ads, clock, st
+
+
+def test_a_killed_check_it_run_is_never_promoted_at_1255_nor_flattened_at_1555(tmp_path):
+    desk, eng, ads, clock, st = _check_it_run(tmp_path)
+    clock.set_et(12, 55)
+    run(eng.clock_tick())
+    run(eng.clock_tick())
+    assert st.status == "placed"                          # not promoted to live on the manual +1
+    assert ads["a1"].cancelled == [] and ads["a1"].orders == []
+    clock.set_et(15, 55)
+    st.status = "live"                                    # even a live one (e.g. adopted earlier)
+    run(eng.clock_tick())
+    run(eng.clock_tick())
+    assert ads["a1"].orders == [] and ads["a1"].cancelled == [] and st.status == "live"
+    said = [(e["account"], e["status"], e["at"]) for e in journal(tmp_path)
+            if e["event"] == "killed_run_needs_check"]
+    assert said == [("a1", "placed", "12:55"), ("a1", "live", "15:55")]    # once per checkpoint
+    view = desk.bot_view()["strategies"]["nq930"]["accounts"]["a1"]
+    assert view["check_it"] is True
+
+
+def test_a_run_that_is_not_killed_still_runs_the_clock_as_before(tmp_path):
+    desk, eng, ads, clock, cfg = mk(tmp_path)
+    st = with_legs(eng._state("es930", "a1"), ES_IDS, "placed")
+    kill(desk, strategy="nq930")                          # another strategy killed: no effect here
+    clock.set_et(12, 55)
+    run(eng.clock_tick())
+    assert set(ads["a1"].cancelled) >= {"eu", "el"} and st.status == "done"   # cancelled_unfilled
+    assert "check_it" not in desk.bot_view()["strategies"]["es930"]["accounts"]["a1"]
+    assert not any(e["event"] == "killed_run_needs_check" for e in journal(tmp_path))

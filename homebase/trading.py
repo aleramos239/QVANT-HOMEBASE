@@ -477,7 +477,9 @@ class ChartDesk:
                 "timer": copy.deepcopy((ts.get("strategies") or {}).get(name)),
                 "day_status": self.engine.day_status(name),
                 "killed": self.engine.killed_today(name),
-                "accounts": {st.account: state_view(st, s) for st in self.engine.day_states(name)},
+                "accounts": {st.account: ({**state_view(st, s), "check_it": True}
+                                          if self.engine.needs_check(st) else state_view(st, s))
+                             for st in self.engine.day_states(name)},
             }
         return {"date": ts.get("date"), "strategies": out}
 
