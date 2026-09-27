@@ -24,7 +24,8 @@
   <span class="tb-sep"></span>
   <button class="tb-btn" id="tbGrid" type="button" title="Chart layout" aria-haspopup="menu" aria-expanded="false"><span class="thumb" id="tbGridThumb"></span><span class="icw sm" data-icon="chevron"></span></button>
   <span class="tb-spacer"></span>
-  <button class="tb-btn" id="tbTrade" type="button" title="Trade" aria-haspopup="menu" aria-expanded="false"><span class="dot" id="tbTradeDot"></span><span class="tb-label">Trade</span><span class="icw sm" data-icon="chevron"></span></button><span class="tb-sep"></span>
+  <button class="tb-btn" id="tbTrade" type="button" title="Trade" aria-haspopup="menu" aria-expanded="false"><span class="dot" id="tbTradeDot"></span><span class="tb-label">Trade</span><span class="icw sm" data-icon="chevron"></span></button>
+  <button class="tb-btn" id="tbOrder" type="button" title="Order panel" aria-pressed="false" aria-controls="opanel"><span class="icw" data-icon="panelRight"></span><span class="tb-label">Order</span></button><span class="tb-sep"></span>
   <button class="tb-btn" id="tbLayout" type="button" title="Saved layouts" aria-haspopup="menu" aria-expanded="false"><span id="tbLayoutName">Unsaved</span><span class="icw sm" data-icon="chevron"></span></button>
   <button class="tb-btn" id="tbSave" type="button" title="Save layout">Save</button>
   <span class="tb-msg" id="tbSaveMsg" role="status"></span>
@@ -49,6 +50,7 @@
     <button class="rail-btn" type="button" id="railClear" title="Remove drawings"><span class="icw" data-icon="trash"></span></button>
   </nav>
   <div class="grid" id="grid"></div>
+  <aside class="opanel" id="opanel" aria-label="Order panel" hidden></aside>
 </div>
 <section class="bpanel" id="bpanel" aria-label="Trading and Strategy Tester">
   <div class="bp-resize" id="bpResize" role="separator" aria-orientation="horizontal" aria-label="Resize the panel" tabindex="0"></div>
@@ -85,6 +87,7 @@
 <script src="/static/charts/panel.js?v=4"></script>
 <script src="/static/charts/tradeui.js?v=4"></script>
 <script src="/static/charts/tradelines.js?v=4"></script>
+<script src="/static/charts/orderpanel.js?v=4"></script>
 <script src="/static/charts/app.js?v=4"></script>
 </body>
 </html>

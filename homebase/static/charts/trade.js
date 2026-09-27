@@ -345,8 +345,6 @@ function panelOrder({ side, type, qty, price = null, trigger = null, sl = null, 
   const buy = side === 'Buy', word = buy ? 'buy' : 'sell', rt = (v) => roundTick(v, tick);
   const px = type === 'Market' ? null : num(price), trig = type === 'StopLimit' ? num(trigger) : null;
   const slPx = sl == null ? null : num(sl), tpPx = tp == null ? null : num(tp);
-  if (slPx != null && !Number.isFinite(slPx)) return bad('Enter the stop loss');
-  if (tpPx != null && !Number.isFinite(tpPx)) return bad('Enter the take profit');
   let P = null, TR = null;
   if (type === 'Limit' || type === 'Stop') {
     if (!Number.isFinite(px)) return bad('Enter a price');
@@ -368,6 +366,8 @@ function panelOrder({ side, type, qty, price = null, trigger = null, sl = null, 
     if (buy ? P < TR : P > TR) return bad(`A ${word} stop limit's limit must be at or ${buy ? 'above' : 'below'} its trigger`);
     if (Math.round(Math.abs(P - TR) / tick) > STOPLIMIT_MAX_TICKS) return bad(`The limit must be within ${STOPLIMIT_MAX_TICKS} ticks of the trigger`);
   }
+  if (slPx != null && !Number.isFinite(slPx)) return bad('Enter the stop loss');
+  if (tpPx != null && !Number.isFinite(tpPx)) return bad('Enter the take profit');
   const S = slPx == null ? null : rt(slPx), TP = tpPx == null ? null : rt(tpPx);
   let slRef = P, tpRef = P;
   if (type === 'Market') {
@@ -379,6 +379,7 @@ function panelOrder({ side, type, qty, price = null, trigger = null, sl = null, 
   if (side2) return bad(side2);
   let n = qty;
   if (risk != null) {
+    if (!(num(risk) > 0)) return bad('Enter the USD risk');
     if (S == null) return bad('USD risk needs a stop loss');
     if (!(pv > 0)) return bad('No point value for this chart yet');
     n = qtyFromRisk(num(risk), Math.round(Math.abs(slRef - S) / tick), tick, pv);
@@ -680,7 +681,7 @@ const api = { PREFS_KEY, QUOTE_STALE_MS, BOT_NAMES, parsePrefs, prefsText, short
   enterConfirms, resolveConfirmedAccounts, armedTicked, unarmedLiveMessage, freshQuote,
   needsQuoteForBracket, refuseIfMarketable, cellTrade, loadedTrade, cellAlgo, tradeBits, templateTrade, algoForRoot,
   migrateTicked, deskGate, armedMode, legsWithin, accountChips, acctTick, hiddenCellsOff,
-  PANEL_QTY_MAX, exitTriple, qtyFromRisk, exitSideError, panelOrder, sendLabel, contractOf };
+  PANEL_QTY_MAX, GTC_WARN, exitTriple, qtyFromRisk, exitSideError, panelOrder, sendLabel, contractOf };
 if (typeof window !== 'undefined') window.HBTrade = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

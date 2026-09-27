@@ -141,7 +141,22 @@ function hostFor(id) {
   return {
     id,
     send(msg) { if (!ws || ws.readyState !== 1) return false; ws.send(JSON.stringify(msg)); return true; },
-    onPick(cell) { select(cells.indexOf(cell)); },
+    onPick(cell, e) {
+      // the order panel's price field has focus and the SELECTED chart is pressed: the press fills that field (the
+      // price under the pointer, tick-rounded) and does nothing else -- no pan, no drawing, no order
+      const OP = window.HBOrderPanel;
+      if (e && e.button === 0 && cells.indexOf(cell) === selected && OP && OP.wantsPick()) {
+        const price = cell.priceAtEvent(e);
+        if (price != null) {
+          e.preventDefault();
+          e.stopPropagation();
+          cell.swallowClicks();
+          OP.pickPrice(price);
+          return;
+        }
+      }
+      select(cells.indexOf(cell));
+    },
     onLoaded,
     onRefused,
     onSettings(cell, uid) { settingsDialog(cell, uid); },
@@ -186,6 +201,7 @@ function select(i) {
   selected = i;
   cells.forEach((c, k) => c.setSelected(k === i));
   if (page) window.HBTradeUI.selectionChanged();   // the Trade menu and its toolbar dot follow the selected chart
+  if (page) window.HBOrderPanel.setRoot(panelRoot());   // so does the order panel (it re-reads the chart itself)
   renderToolbar();
   syncCrosshair();
 }
@@ -345,8 +361,12 @@ function intervalMenu() {
 /* cell -> {root, algo}: a chart's algo on its last accepted symbol while a symbol change is still unanswered. */
 const algoBefore = new WeakMap();
 
+/* The selected chart's loaded root (null while it has none). */
+function panelRoot() { const c = cur(); return c && c.shown ? c.shown.root : null; }
+
 function onLoaded(cell) {
   algoBefore.delete(cell);   // a history arrived: whatever symbol it is on now, the algo decision stands
+  if (page && cell === cur()) window.HBOrderPanel.setRoot(panelRoot());   // its symbol / tick / point value may be new
   if (customWait && customWait.cell === cell && cell.shown.spec === customWait.spec) closeMenu();
 }
 
@@ -1176,6 +1196,7 @@ async function init() {
   page.overlays.push(window.HBTradeLines.overlay);   // Task 6: the per-chart Buy/Sell block, lines and markers
   window.HBPanel.mount(page);                 // Task 4
   window.HBTradeUI.mount(page);                // Task 5
+  window.HBOrderPanel.mount(page);             // order-panel plan Task 3: the right dock (follows the selected chart)
   buildGrid();   // after the mounts: page.overlays must be filled before any cell's build() reads host.overlays()
   migrateTickedOnce();
   connect();

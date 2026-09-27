@@ -3,7 +3,7 @@
    instances (HBCatalog), the DOM legend, the watermark, and the
    history/update handling. The page (app.js) owns the websocket, the toolbar
    and selection, and gives each cell a `host`:
-     {id, send(msg) -> bool, onPick(cell), onLoaded(cell), onRefused(cell, tried, text), onSettings(cell, uid),
+     {id, send(msg) -> bool, onPick(cell, pointerdownEvent), onLoaded(cell), onRefused(cell, tried, text), onSettings(cell, uid),
       onChartSettings(cell), onPosition(cell, d), onChartMenu(cell, {x, y, price}), onIndicatorMenu(cell, uid, {anchor} | {at}),
       changed(), tool(), toolDone(), drawings, magnet(), events(), legendFolded(cell), toggleLegendFolded(cell)}
      (the drawings/tool/magnet four: the drawing tools, HBDrawings.Controller; events(): every stored calendar
@@ -143,7 +143,12 @@ class Cell {
     this.lg.fold.setAttribute('aria-expanded', 'true');
     this.lg.fold.hidden = true;   // legendRows() shows it once there is something to fold
     this.lg.badge.title = 'Part of this history has no bid/ask: buys and sells there are split by the tick rule';
-    slot.addEventListener('pointerdown', () => host.onPick(this), true);
+    slot.addEventListener('pointerdown', (e) => host.onPick(this, e), true);
+    // a press the order panel took as a price pick (swallowClicks): its click / double-click never reach the chart
+    this.swallowUntil = 0;
+    const swallow = (e) => { if (performance.now() < this.swallowUntil) { e.stopPropagation(); e.preventDefault(); } };
+    slot.addEventListener('click', swallow, true);
+    slot.addEventListener('dblclick', swallow, true);
     this.lg.fold.addEventListener('click', () => this.toggleFold());
     this.lg.inds.addEventListener('click', (e) => this.onLegendClick(e));
     this.box.addEventListener('contextmenu', (e) => this.onMenu(e));
@@ -668,6 +673,20 @@ class Cell {
     if (!inst || !C.movable(inst.id) || !C.PANES.includes(pane) || C.placement(inst) === pane) return;
     this.update({ indicators: this.cfg.indicators.map((x) => (x.uid === uid ? { ...x, pane } : x)) });
   }
+
+  /* The tick-rounded price under a pointer event on the price pane's plot area (not the axes, the legend, a line's
+     chip or another pane), or null -- the order panel's pick-a-price-from-the-chart. */
+  priceAtEvent(e) {
+    if (!this.chart || !this.candles || !this.bars.length || !e || !this.box.contains(e.target)) return null;
+    const r = this.box.getBoundingClientRect(), x = e.clientX - r.left;
+    if (x < 0 || x >= this.box.clientWidth - this.chart.priceScale('right').width()) return null;
+    if (this.paneAt(e.clientY) !== 0) return null;
+    const top = this.chart.panes()[0].getHTMLElement().getBoundingClientRect().top;
+    const raw = this.candles.coordinateToPrice(e.clientY - top);
+    return raw == null || !Number.isFinite(raw) ? null : window.HBDrawings.roundToTick(raw, this.tick);
+  }
+  /* The rest of a press taken as a price pick: its click and a double-click right after it are swallowed. */
+  swallowClicks(ms = 500) { this.swallowUntil = performance.now() + ms; }
 
   /* The pane under a viewport y: its index, or -1 (a separator, outside the chart). */
   paneAt(clientY) {

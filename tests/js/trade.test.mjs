@@ -595,6 +595,7 @@ test('panelOrder: USD risk sizes from the stop; under one contract, no stop, or 
   assert.equal(po({ risk: 499 }).qty, 4);
   assert.match(po({ risk: 50 }).error, /under one contract/i);
   assert.match(po({ sl: null }).error, /stop loss/i);
+  for (const risk of [0, -5, NaN, '']) assert.match(po({ risk }).error, /enter the usd risk/i, String(risk));
   assert.match(po({ risk: 5000 }).error, /quantity/i);   // 50 contracts
   assert.match(po({ pv: null }).error, /point value/i);
   // Market: the stop measured from the last trade (30900 here, 20 ticks)

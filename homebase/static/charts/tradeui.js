@@ -187,37 +187,72 @@ function confirm({ title, rows = [], note = '', warn = '', each = '', live = fal
 }
 
 /* ---- actions (the table in the brief) ---- */
-/* `cell` is required: the order goes only to that chart's accounts (the order panel passes the selected chart). */
-function placeOrder({ cell, root, side, type, price = null, qty }) {
+/* `cell` is required: the order goes only to that chart's accounts (the order panel passes the chart selected at
+   the moment of its click).
+   The order panel (2026-09-27 order-panel plan, Task 3) also passes:
+     - `exits: {sl, tp}`: explicit SL/TP prices (null = that side off), used INSTEAD of the Trade menu's tick
+       defaults; frozen here with everything else, exactly like the M1 bracket;
+     - `trigger`: a Stop Limit's trigger (`price` is then its limit);
+     - `tif`: 'Day' | 'GTC' for a resting order (a Market order is Day only: none sent).
+   Without them (the Buy/Sell block, the chart menu) the body is exactly what it always was. */
+function placeOrder({ cell, root, side, type, price = null, qty, exits = undefined, trigger = null, tif = null }) {
   const g = () => cellGate(cell, root), gate = g();
   if (gate.mode !== 'on') { D().toast('err', gate.reason); return; }
   const tick = cell.tick, pv = cell.pv ?? null;
   const shown = gate.accounts;   // exactly what the dialog (or the one-click send) is about to show/act on (review item 2)
   const prefs = D().prefs;
+  const explicit = exits != null;
   const px = type === 'Market' ? null : T.roundTick(price, tick);
+  const trig = type === 'StopLimit' && trigger != null ? T.roundTick(trigger, tick) : null;
+  const tf = type === 'Market' ? null : tif;   // a Market order is Day only
+  if (type === 'StopLimit' && (!explicit || !Number.isFinite(trig) || !Number.isFinite(px))) {
+    D().toast('err', 'A Stop Limit needs its trigger, limit and exits from the order panel'); return;
+  }
   // M1: the reference price and the SL/TP it implies are frozen HERE (decision time: the preview, or the
   // one-click send itself) and reused verbatim at the actual send -- never recomputed from a quote that may
   // have moved since, so the confirm dialog and the send always carry the same bracket. A quote older than
   // 10 s (M4) counts as no quote, so no bracket, same as never having had one.
   const q0 = T.freshQuote(D().quotes[root], page.clockMs());
   const ref = type === 'Market' ? (q0 ? q0.last : null) : px;
-  // N1: a Market order that would attach a bracket (a nonzero SL/TP tick pref) needs a fresh quote to compute
-  // it from -- refuse rather than send it naked, with one-click on or off. Not `guardedSend`'s buildBody: this
-  // must stop the send before any confirm dialog even opens, not just before the network call.
-  if (T.needsQuoteForBracket(type, prefs.slTicks, prefs.tpTicks) && !q0) {
-    D().toast('err', "No recent price — can't attach your stop/target; try again");
-    return;
+  let sl, tp;
+  if (explicit) {
+    sl = exits.sl == null ? null : T.roundTick(exits.sl, tick);
+    tp = exits.tp == null ? null : T.roundTick(exits.tp, tick);
+    // N1 for explicit exits: a Market with an exit needs a fresh quote to measure it against
+    if (type === 'Market' && (sl != null || tp != null) && !(q0 && q0.last != null)) {
+      D().toast('err', "No recent price — can't attach your stop/target; try again");
+      return;
+    }
+    // the exits' side, frozen with them: a Stop Limit's SL beyond its trigger, TP beyond its limit
+    const bad = T.exitSideError(side, type === 'StopLimit' ? trig : ref, ref, sl, tp, type === 'StopLimit');
+    if (bad) { D().toast('err', bad); return; }
+  } else {
+    // N1: a Market order that would attach a bracket (a nonzero SL/TP tick pref) needs a fresh quote to compute
+    // it from -- refuse rather than send it naked, with one-click on or off. Not `guardedSend`'s buildBody: this
+    // must stop the send before any confirm dialog even opens, not just before the network call.
+    if (T.needsQuoteForBracket(type, prefs.slTicks, prefs.tpTicks) && !q0) {
+      D().toast('err', "No recent price — can't attach your stop/target; try again");
+      return;
+    }
+    ({ sl, tp } = T.bracket(side, ref, prefs, tick));
   }
-  const { sl, tp } = T.bracket(side, ref, prefs, tick);
   const build = (m) => {
     const resolved = T.resolveConfirmedAccounts(shown, m.accounts);
     if (!resolved.ok) { D().toast('err', 'Accounts changed — review and try again'); return null; }
     if (!resolved.accounts.length) { D().toast('err', 'No confirmed accounts left — nothing sent'); return null; }   // M9
     if (type !== 'Market') {   // review item 6/N2: re-check against the LAST KNOWN quote at any age, refusing outright with none
-      const msg = T.refuseIfMarketable(side, px, D().quotes[root], type);
+      // a Stop Limit's trigger is what must still be a stop (its limit rests beyond it)
+      const msg = type === 'StopLimit' ? T.refuseIfMarketable(side, trig, D().quotes[root], 'Stop')
+        : T.refuseIfMarketable(side, px, D().quotes[root], type);
       if (msg) { D().toast('err', msg); return null; }
+    } else if (explicit && (sl != null || tp != null)) {
+      // a Market's explicit exits were measured from the last trade at preview: the market must not have moved
+      // through them since (the desk would refuse, or the stop would sit on the wrong side right after the fill)
+      const q = D().quotes[root], last = q ? q.last : null;
+      if (last == null || T.exitSideError(side, last, last, sl, tp)) { D().toast('err', 'Price moved through your stop/target — re-check the order'); return null; }
     }
-    return T.orderBody({ clientId: T.clientId(), accounts: resolved.accounts, root, side, qty, type, price: px, sl, tp });
+    return T.orderBody({ clientId: T.clientId(), accounts: resolved.accounts, root, side, qty, type, price: px, sl, tp,
+      trigger: trig, tif: tf });
   };
   if (D().prefs.oneClick) { guardedSend('order', g, build); return; }
   const preview = build(gate);
