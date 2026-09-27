@@ -133,6 +133,52 @@ test('Monte Carlo: the headline, percentile tiles and DD histogram bars', () => 
     [{ pct: 100, title: '$0 to $0: 7 paths' }]);
 });
 
+/* ---- Compare two runs ---- */
+const REPORT_A = { summary: { all: { net_profit: 12345.5, profit_factor: 1.8765, win_rate: 54.17, sharpe: 1.234,
+  max_drawdown: -4210, avg_trade: 514.4, trades: 24 } },
+  by_year: [{ period: '2022', net: 5000 }, { period: '2023', net: -1000 }, { period: '2024', net: 8345.5 }] };
+const REPORT_B = { summary: { all: { net_profit: 9000, profit_factor: 1.5, win_rate: 50.0, sharpe: 1.0,
+  max_drawdown: -6000, avg_trade: 400, trades: 30 } },
+  by_year: [{ period: '2022', net: -500 }, { period: '2023', net: 4500 }, { period: '2024', net: 5000 }] };
+const PROP_A = { headline: { eval_pass_p: 0.68 } };
+
+test('compareRows: net/PF/WR/Sharpe/maxDD/avg/trades/green years/prop pass, A vs B vs delta, the better side flagged', () => {
+  const rows = X.compareRows(REPORT_A, REPORT_B, PROP_A, null);
+  const byKey = Object.fromEntries(rows.map((r) => [r.key, r]));
+  assert.deepEqual(byKey.net, { key: 'net', label: 'Net profit', a: '+$12,345.50', b: '+$9,000', delta: `${M}$3,345.50`, better: 'a' });
+  assert.deepEqual(byKey.pf, { key: 'pf', label: 'Profit factor', a: '1.88', b: '1.50', delta: `${M}0.38`, better: 'a' });
+  assert.deepEqual(byKey.wr, { key: 'wr', label: 'Win rate', a: '54.2%', b: '50.0%', delta: `${M}4.2%`, better: 'a' });
+  assert.deepEqual(byKey.sharpe, { key: 'sharpe', label: 'Sharpe', a: '1.23', b: '1.00', delta: `${M}0.23`, better: 'a' });
+  // maxDD is <= 0: A (−$4,210) is LESS bad than B (−$6,000), so A is still "better" here
+  assert.deepEqual(byKey.maxdd, { key: 'maxdd', label: 'Max drawdown', a: `${M}$4,210`, b: `${M}$6,000`, delta: `${M}$1,790`, better: 'a' });
+  assert.deepEqual(byKey.avg, { key: 'avg', label: 'Avg trade', a: '+$514.40', b: '+$400', delta: `${M}$114.40`, better: 'a' });
+  // trades never highlights a "better" side -- more trades isn't inherently better
+  assert.deepEqual(byKey.trades, { key: 'trades', label: 'Trades', a: '24', b: '30', delta: '+6', better: null });
+  // both runs went green 2 of 3 years: a tie, no highlight
+  assert.deepEqual(byKey.green_years, { key: 'green_years', label: 'Green years', a: '2/3', b: '2/3', delta: '0', better: null });
+  // B never ran a prop eval: "—", never a false 0%, and no highlight either way
+  assert.deepEqual(byKey.prop_pass, { key: 'prop_pass', label: 'Prop pass', a: '68.0%', b: '—', delta: '—', better: null });
+});
+
+const RUN_A = { strategy: { id: 'nq930', name: 'NQ 9:30 straddle' }, inputs: { offset_pts: 10, adx_gate: false, mode: 'a' },
+  qty: 1, commission: 4, slippage_ticks: 1, capital: 50000, prop_rules: 'lucid-flex-50k@2026-08',
+  range: { label: 'Research window 2021–2024' } };
+const RUN_B = { strategy: { id: 'nq930', name: 'NQ 9:30 straddle' }, inputs: { offset_pts: 12, adx_gate: false, mode: 'b' },
+  qty: 2, commission: 4, slippage_ticks: 1, capital: 50000, prop_rules: 'lucid-flex-50k@2026-08',
+  range: { label: 'Research window 2021–2024' } };
+
+test('paramsDiff: only the inputs/costs/range that differ, unchanged ones dropped', () => {
+  assert.deepEqual(X.paramsDiff(RUN_A, RUN_B), [
+    { label: 'mode', a: 'a', b: 'b' }, { label: 'offset_pts', a: '10', b: '12' }, { label: 'Qty', a: '1', b: '2' }]);
+  assert.deepEqual(X.paramsDiff(RUN_A, RUN_A), []);
+});
+
+test('paramsDiff: a strategy switch is its own row, ahead of the input diffs', () => {
+  const runC = { ...RUN_B, strategy: { id: 'ym930', name: 'YM 9:30 straddle' } };
+  const diff = X.paramsDiff(RUN_A, runC);
+  assert.deepEqual(diff[0], { label: 'Strategy', a: 'NQ 9:30 straddle', b: 'YM 9:30 straddle' });
+});
+
 test('performance summary rows (All / Long / Short, dollars, RR 1:X, Sharpe)', () => {
   const rows = X.summaryRows(RUN.report.summary);
   assert.deepEqual(rows[0], { label: 'Net profit', all: '+$12,345.50 (+24.69%)', long: '+$12,345.50 (+24.69%)', short: '+$12,345.50 (+24.69%)' });

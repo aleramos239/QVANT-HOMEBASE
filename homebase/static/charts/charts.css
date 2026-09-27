@@ -459,6 +459,17 @@ a { color: inherit; }
 .tst-mc { padding-top: 4px; margin-top: 8px; border-top: 1px solid var(--border); }
 .tst-mc-hist { display: flex; align-items: flex-end; gap: 2px; height: 44px; margin-top: 4px; }
 .tst-mc-bar { flex: 1 1 0; min-height: 2px; background: var(--down); opacity: .7; border-radius: 1px 1px 0 0; }
+.tst-cmp-cb { width: 14px; height: 14px; margin: 0 0 0 12px; flex: none; accent-color: var(--accent); }
+.tst-cmp-footer .tst-cmp-footer-t { flex: 1; color: var(--text-2); font-size: 12px; }
+.tst-cmp-go { height: 26px; padding: 0 12px; }
+.tst-cmp-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.tst-cmp-legend { display: flex; gap: 16px; margin-bottom: 8px; }
+.tst-cmp-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); }
+.tst-cmp-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.tst-cmp-a .tst-cmp-dot { background: var(--accent); }
+.tst-cmp-b .tst-cmp-dot { background: var(--warn); }
+.tst-cmp-chart { height: 260px; margin-bottom: 12px; }
+.tst-cmp-better { background: var(--accent-soft); border-radius: 4px; font-weight: 600; }
 .tst-list { margin: 4px 0; padding-left: 20px; font-size: 12px; }
 .tst-kv-line { padding: 8px 0; font-size: 12px; color: var(--text-2); }
 .sort-th { display: inline-flex; align-items: center; gap: 2px; color: var(--text-2); font-size: inherit; white-space: nowrap; }

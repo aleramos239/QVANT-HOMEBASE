@@ -195,6 +195,70 @@ function mcHistogram(r) {
     title: `${Tr.money(edges[i])} to ${Tr.money(edges[i + 1])}: ${c} path${c === 1 ? '' : 's'}`,
   }));
 }
+
+/* ---- Compare two runs (Compare sub-tab): diff table + params diff, both pure ---- */
+const SIGNCH = (v) => (v > 0 ? '+' : v < 0 ? MINUS : '');
+/* signed() and money() already carry their own sign; a delta needs one too even where the metric's
+   own formatter (num/rate/int) doesn't, so a +0.3 Sharpe or a +2 trade delta still reads as a gain. */
+function numDelta(v, d = 2) { return v == null || !Number.isFinite(v) ? '—' : SIGNCH(v) + Math.abs(v).toFixed(d); }
+function rateDelta(v) { return v == null || !Number.isFinite(v) ? '—' : SIGNCH(v) + Math.abs(v).toFixed(1) + '%'; }
+function intDelta(v) { return v == null || !Number.isFinite(v) ? '—' : SIGNCH(v) + int(Math.round(Math.abs(v))); }
+/* [key, label, getter(summary.all), format, deltaFormat, higherIsBetter|null]. maxDD is <= 0, so
+   "higher" (closer to zero) already reads as the less-bad side -- no special-casing needed. `null`
+   (trades) never highlights either side: more trades is not inherently better. */
+const CMP_ROWS = [
+  ['net', 'Net profit', (c) => c.net_profit, signed, (v) => signed(v), true],
+  ['pf', 'Profit factor', (c) => c.profit_factor, (v) => num(v, 2, true), (v) => numDelta(v, 2), true],
+  ['wr', 'Win rate', (c) => c.win_rate, rate, rateDelta, true],
+  ['sharpe', 'Sharpe', (c) => c.sharpe, (v) => num(v), (v) => numDelta(v), true],
+  ['maxdd', 'Max drawdown', (c) => c.max_drawdown, (v) => Tr.money(v), (v) => signed(v), true],
+  ['avg', 'Avg trade', (c) => c.avg_trade, signed, (v) => signed(v), true],
+  ['trades', 'Trades', (c) => c.trades, int, intDelta, null],
+];
+function greenYears(byYear) { return { n: (byYear || []).filter((y) => y.net > 0).length, total: (byYear || []).length }; }
+function propPassOf(propsim) { return propsim && propsim.headline ? propsim.headline.eval_pass_p : null; }
+/* 'a' | 'b' | null (a tie, a missing value, or a metric with no better side). */
+function betterSide(av, bv, higherBetter) {
+  if (higherBetter == null || av == null || bv == null || !Number.isFinite(av) || !Number.isFinite(bv) || av === bv) return null;
+  return (higherBetter ? av > bv : av < bv) ? 'a' : 'b';
+}
+/* net, PF, WR, Sharpe, maxDD, avg trade, trades, green years and prop pass -- one row per metric,
+   each {label, a, b, delta, better}. `a`/`b` are `run.report`; `propA`/`propB` are `run.propsim` (or
+   null -- a run that never ran a prop eval reads "—", never a false 0%). */
+function compareRows(a, b, propA, propB) {
+  const ca = a.summary.all, cb = b.summary.all;
+  const rows = CMP_ROWS.map(([key, label, get, fmt, fmtDelta, higherBetter]) => {
+    const av = get(ca), bv = get(cb);
+    const ok = av != null && bv != null && Number.isFinite(av) && Number.isFinite(bv);
+    return { key, label, a: fmt(av), b: fmt(bv), delta: ok ? fmtDelta(bv - av) : '—', better: betterSide(av, bv, higherBetter) };
+  });
+  const ga = greenYears(a.by_year), gb = greenYears(b.by_year);
+  rows.push({ key: 'green_years', label: 'Green years', a: `${ga.n}/${ga.total}`, b: `${gb.n}/${gb.total}`,
+    delta: intDelta(gb.n - ga.n), better: betterSide(ga.n, gb.n, true) });
+  const pa = propPassOf(propA), pb = propPassOf(propB);
+  const propOk = pa != null && pb != null;
+  rows.push({ key: 'prop_pass', label: 'Prop pass', a: pa == null ? '—' : rate(pa * 100), b: pb == null ? '—' : rate(pb * 100),
+    delta: propOk ? rateDelta((pb - pa) * 100) : '—', better: betterSide(pa, pb, true) });
+  return rows;
+}
+/* Every strategy input, qty/commission/slippage/capital/prop_rules/range that differs between the
+   two runs -- [{label, a, b}], nothing when the two runs are identical on that field. A strategy
+   switch itself is the first row rather than a wall of "unknown parameter" noise from comparing
+   two unrelated input schemas key-for-key. */
+function paramsDiff(a, b) {
+  const out = [];
+  if (a.strategy.id !== b.strategy.id) out.push({ label: 'Strategy', a: a.strategy.name, b: b.strategy.name });
+  const keys = new Set([...Object.keys(a.inputs || {}), ...Object.keys(b.inputs || {})]);
+  for (const k of [...keys].sort()) {
+    const av = (a.inputs || {})[k], bv = (b.inputs || {})[k];
+    if (JSON.stringify(av) !== JSON.stringify(bv)) out.push({ label: k, a: valueLabel(av), b: valueLabel(bv) });
+  }
+  const FIELDS = [['qty', 'Qty'], ['commission', 'Commission'], ['slippage_ticks', 'Slippage (ticks)'],
+    ['capital', 'Capital'], ['prop_rules', 'Prop rules']];
+  for (const [k, label] of FIELDS) if (a[k] !== b[k]) out.push({ label, a: String(a[k]), b: String(b[k]) });
+  if (a.range.label !== b.range.label) out.push({ label: 'Range', a: a.range.label, b: b.range.label });
+  return out;
+}
 const SUMMARY = [
   ['Net profit', (c) => `${signed(c.net_profit)} (${pct(c.net_profit_pct)})`],
   ['Gross profit', (c) => Tr.money(c.gross_profit)], ['Gross loss', (c) => Tr.money(c.gross_loss)],
@@ -392,8 +456,8 @@ function gridProgress(st) {
 
 const api = { MAX_CELLS, parseValues, valueLabel, gridAxes, gridCount, gridProblems, gridBody, looksText, looksLine, heatPanels, heatMaxAbs,
   heatLevel, cellView, gridProgress, RANGES, HOLDOUT_START, DEFAULT_RULES, REASON_MAX, defaults, restore, fromRun, reachesHoldout, problems, inputError, body,
-  key, runLabel, progress, pct, rate, num, dur, fmtEt, tiles, badges, propView, mcHeadline, mcTiles, mcHistogram, summaryRows, periodRows, sortTrades, tradeCells,
-  tradeMarks, equitySeries, reachSpec, toneOf };
+  key, runLabel, progress, pct, rate, num, dur, fmtEt, tiles, badges, propView, mcHeadline, mcTiles, mcHistogram, compareRows, paramsDiff,
+  summaryRows, periodRows, sortTrades, tradeCells, tradeMarks, equitySeries, reachSpec, toneOf };
 if (typeof window !== 'undefined') window.HBTester = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

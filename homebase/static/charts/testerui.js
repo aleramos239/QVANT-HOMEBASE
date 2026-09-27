@@ -104,6 +104,13 @@ let visibleTradeRows = TRADE_CHUNK;
 let miniChartHandle = null;
 let mc = { runId: null, loading: false, error: '', result: null };   // Monte Carlo, keyed to bundle.run.id
 let mcToken = 0;
+/* Compare two runs: picked from Recent runs (<= 2 ids), then the Compare tab's own loaded bundles. */
+let compareIds = [];
+let compare = null;         // { aId, bId, a: bundle, b: bundle } once both load
+let compareLoading = false;
+let compareErr = '';
+let compareToken = 0;
+let compareChartHandle = null;
 const listeners = new Set();
 /* the heat-map */
 let heatRows = null;       // [{key, text}] x 3 for strategyId (key '' = unused): the axis editor
@@ -153,8 +160,8 @@ function palette() {
   const c = page.cur && page.cur();
   if (c && c.P) return c.P;
   const dark = document.documentElement.getAttribute('data-theme') === 'dark';
-  return dark ? { text2: '#8C8C8C', grid: '#1C1C1C', up: '#089981', down: '#F23645' }
-              : { text2: '#787B86', grid: '#F0F3FA', up: '#089981', down: '#F23645' };
+  return dark ? { text2: '#8C8C8C', grid: '#1C1C1C', up: '#089981', down: '#F23645', accent: '#2962FF', warn: '#F7A600' }
+              : { text2: '#787B86', grid: '#F0F3FA', up: '#089981', down: '#F23645', accent: '#2962FF', warn: '#F7A600' };
 }
 
 /* ---- the Overview mini chart (equity + drawdown), verbatim per the task brief ---- */
@@ -188,6 +195,41 @@ function dropMiniChart() {
   if (!miniChartHandle) return;
   try { miniChartHandle.remove(); } catch (_) { /* already gone */ }
   miniChartHandle = null;
+}
+function dropCompareChart() {
+  if (!compareChartHandle) return;
+  try { compareChartHandle.remove(); } catch (_) { /* already gone */ }
+  compareChartHandle = null;
+}
+/* The Compare tab's overlaid equity + drawdown chart, verbatim in spirit with miniChart() above:
+   run A in accent blue, run B in warn orange (Global Constraints: "look like TradingView" -- reusing
+   the app's own tokens rather than inventing a new colour pair). */
+function compareChart(el, eqA, eqB, P) {
+  const LW = window.LightweightCharts, sa = X.equitySeries(eqA), sb = X.equitySeries(eqB);
+  const priceFmt = { type: 'price', precision: 0, minMove: 1 };
+  const chart = LW.createChart(el, { autoSize: true, height: 260,
+    layout: { background: { color: 'transparent' }, textColor: P.text2, fontSize: 11, attributionLogo: false,
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif' },
+    grid: { vertLines: { visible: false }, horzLines: { color: P.grid } },
+    localization: { timeFormatter: (t) => X.fmtEt(t * 1000) },
+    rightPriceScale: { borderVisible: false },
+    timeScale: { borderVisible: false, tickMarkFormatter: (t) => ET_TICK.format(new Date(t * 1000)) },
+    handleScroll: false, handleScale: false });
+  const eqLineA = chart.addSeries(LW.LineSeries, { color: P.accent, lineWidth: 2, priceFormat: priceFmt,
+    lastValueVisible: false, priceLineVisible: false });
+  eqLineA.setData(sa.equity);
+  const eqLineB = chart.addSeries(LW.LineSeries, { color: P.warn, lineWidth: 2, priceFormat: priceFmt,
+    lastValueVisible: false, priceLineVisible: false });
+  eqLineB.setData(sb.equity);
+  const ddA = chart.addSeries(LW.AreaSeries, { lineColor: P.accent, topColor: 'rgba(41,98,255,0)', bottomColor: 'rgba(41,98,255,.25)',
+    lineWidth: 1, priceFormat: priceFmt, lastValueVisible: false, priceLineVisible: false, invertFilledArea: true }, 1);
+  ddA.setData(sa.drawdown);
+  const ddB = chart.addSeries(LW.AreaSeries, { lineColor: P.warn, topColor: 'rgba(247,166,0,0)', bottomColor: 'rgba(247,166,0,.25)',
+    lineWidth: 1, priceFormat: priceFmt, lastValueVisible: false, priceLineVisible: false, invertFilledArea: true }, 1);
+  ddB.setData(sb.drawdown);
+  chart.panes()[1].setStretchFactor(0.35);
+  chart.timeScale().fitContent();
+  return chart;
 }
 
 /* ================================================================== header ================================================================== */
@@ -446,7 +488,44 @@ function recentRunRow(r) {
   b.appendChild(line);
   if (r.holdout) b.appendChild(page.mk('span', 'env live', 'HOLDOUT'));
   if (done) b.onclick = () => { page.closeMenu(); loadRecentRun(r.id); };
-  return b;
+  if (!done) return b;      // only a finished run has a report to compare
+  const row = page.mk('div', 'menu-row');
+  const cb = page.mk('input', 'tst-cmp-cb');
+  cb.type = 'checkbox';
+  cb.checked = compareIds.includes(r.id);
+  cb.setAttribute('aria-label', `Pick ${stratName} · ${rangeLabel} to compare`);
+  cb.dataset.runId = r.id;
+  cb.onchange = () => {
+    if (cb.checked) {
+      if (compareIds.length >= 2) { cb.checked = false; return; }
+      compareIds = [...compareIds, r.id];
+    } else {
+      compareIds = compareIds.filter((id) => id !== r.id);
+    }
+    syncCompareFooter(row.parentElement);
+  };
+  row.append(cb, b);
+  return row;
+}
+function compareFooter() {
+  const wrap = page.mk('div', 'menu-confirm tst-cmp-footer');
+  wrap.appendChild(page.mk('span', 'tst-cmp-footer-t', ''));
+  const btn = page.mk('button', 'btn btn-primary tst-cmp-go', 'Compare');
+  btn.type = 'button';
+  wrap.appendChild(btn);
+  return wrap;
+}
+/* Focus-preserving: the footer text/button state and every checkbox's disabled state (a 3rd pick is
+   refused, not silently swapped for one already ticked). */
+function syncCompareFooter(m) {
+  if (!m || !document.body.contains(m)) return;
+  const label = m.querySelector('.tst-cmp-footer-t'), btn = m.querySelector('.tst-cmp-go');
+  if (label) label.textContent = compareIds.length >= 2 ? '2 runs picked'
+    : `Pick ${2 - compareIds.length} more run${compareIds.length === 1 ? '' : 's'} to compare`;
+  if (btn) btn.disabled = compareIds.length !== 2;
+  m.querySelectorAll('.tst-cmp-cb').forEach((cb) => {
+    cb.disabled = compareIds.length >= 2 && !compareIds.includes(cb.dataset.runId);
+  });
 }
 function fillRecentRunsMenu(m) {
   m.appendChild(page.mk('div', 'menu-empty', 'Loading…'));
@@ -455,9 +534,97 @@ function fillRecentRunsMenu(m) {
       if (!document.body.contains(m)) return;   // closed while loading
       m.replaceChildren();
       if (!list.length) { m.appendChild(page.mk('div', 'menu-empty', 'No runs yet')); page.placeMenu(); return; }
+      compareIds = compareIds.filter((id) => list.some((r) => r.id === id && r.status === 'done'));
       for (const r of list) m.appendChild(recentRunRow(r));
+      const footer = compareFooter();
+      footer.querySelector('.tst-cmp-go').onclick = () => { const ids = compareIds; page.closeMenu(); startCompare(ids); };
+      m.appendChild(footer);
+      syncCompareFooter(m);
       page.placeMenu();
     });
+}
+
+/* ================================================================== compare two runs ================================================================== */
+
+function startCompare(ids) {
+  if (ids.length !== 2) return;
+  const [aId, bId] = ids;
+  compare = { aId, bId, a: null, b: null };
+  compareLoading = true;
+  compareErr = '';
+  compareIds = [];
+  innerTab = 'compare';
+  const token = ++compareToken;
+  refreshTabsBar();
+  refreshContent();
+  const fetchOne = (id) => fetch(`/api/tester/run/${id}/bundle`).then((r) => (r.ok ? r.json() : Promise.reject(r.status)));
+  Promise.all([fetchOne(aId), fetchOne(bId)])
+    .then(([a, b]) => {
+      if (token !== compareToken) return;
+      compare = { aId, bId, a, b };
+      compareLoading = false;
+      if (innerTab === 'compare') refreshContent();
+    })
+    .catch(() => {
+      if (token !== compareToken) return;
+      compareLoading = false;
+      compareErr = 'could not load one of the runs to compare';
+      if (innerTab === 'compare') refreshContent();
+    });
+}
+function closeCompare() {
+  compare = null;
+  compareErr = '';
+  compareLoading = false;
+  if (innerTab === 'compare') innerTab = 'overview';
+  refreshTabsBar();
+  refreshContent();
+}
+function runChip(run, colorClass, letter) {
+  const chip = page.mk('span', `tst-cmp-chip ${colorClass}`);
+  chip.appendChild(page.mk('span', 'tst-cmp-dot'));
+  const stratName = ((strategiesList || []).find((s) => s.id === run.strategy.id) || {}).name || run.strategy.name;
+  chip.appendChild(document.createTextNode(`${letter}: ${stratName} · ${run.range.label}`));
+  if (run.holdout) chip.appendChild(page.mk('span', 'tst-badge err', 'holdout'));
+  return chip;
+}
+function compareTable(rows) {
+  const t = page.mk('table', 'bp-table'), thead = page.mk('thead'), htr = page.mk('tr');
+  ['', 'A', 'B', 'Δ'].forEach((h, i) => htr.appendChild(page.mk('th', i ? 'num' : '', h)));
+  thead.appendChild(htr);
+  t.appendChild(thead);
+  const tbody = page.mk('tbody');
+  for (const r of rows) {
+    const tr = page.mk('tr');
+    tr.appendChild(page.mk('td', '', r.label));
+    tr.appendChild(page.mk('td', `num${r.better === 'a' ? ' tst-cmp-better' : ''}`, r.a));
+    tr.appendChild(page.mk('td', `num${r.better === 'b' ? ' tst-cmp-better' : ''}`, r.b));
+    tr.appendChild(page.mk('td', 'num', r.delta));
+    tbody.appendChild(tr);
+  }
+  t.appendChild(tbody);
+  return t;
+}
+function renderCompare(container) {
+  const wrap = page.mk('div', 'tst-cmp');
+  const head = page.mk('div', 'tst-cmp-head');
+  head.appendChild(page.mk('span', 'tst-prop-title', 'Compare'));
+  head.appendChild(iconBtn('x', 'Close comparison', closeCompare));
+  wrap.appendChild(head);
+  container.appendChild(wrap);
+  if (compareErr) { wrap.appendChild(page.mk('div', 'tst-err', compareErr)); return; }
+  if (compareLoading || !compare || !compare.a || !compare.b) { wrap.appendChild(page.mk('div', 'bp-empty', 'Loading the two runs…')); return; }
+  const { a, b } = compare;
+  const legend = page.mk('div', 'tst-cmp-legend');
+  legend.append(runChip(a.run, 'tst-cmp-a', 'A'), runChip(b.run, 'tst-cmp-b', 'B'));
+  wrap.appendChild(legend);
+  const chartWrap = page.mk('div', 'tst-cmp-chart');
+  wrap.appendChild(chartWrap);
+  compareChartHandle = compareChart(chartWrap, a.equity, b.equity, palette());
+  wrap.appendChild(compareTable(X.compareRows(a.run.report, b.run.report, a.propsim, b.propsim)));
+  const diff = X.paramsDiff(a.run, b.run);
+  wrap.appendChild(page.mk('div', 'set-cap', 'PARAMS THAT DIFFER'));
+  wrap.appendChild(diff.length ? kvTable(diff.map((d) => [d.label, `${d.a}  →  ${d.b}`])) : page.mk('div', 'bp-empty', 'Same parameters'));
 }
 function loadRecentRun(id) {
   fetch(`/api/tester/run/${id}/bundle`).then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
@@ -591,7 +758,8 @@ function cancelRun() {
 
 function refreshTabsBar() {
   tabsEl.replaceChildren();
-  for (const [id, label] of INNER_TABS) {
+  const tabs = compare ? [...INNER_TABS, ['compare', 'Compare']] : INNER_TABS;
+  for (const [id, label] of tabs) {
     const b = page.mk('button', 'tst-tab' + (innerTab === id ? ' active' : ''), label);
     b.type = 'button';
     b.setAttribute('role', 'tab');
@@ -827,9 +995,11 @@ const EMPTY_MSG = { overview: 'Run the strategy to see a report', summary: 'Run 
    NEXT successful load (loadBundle / loadRecentRun / switchStrategy clear it). */
 function refreshContent() {
   dropMiniChart();
+  dropCompareChart();
   contentEl.replaceChildren();
   if (lastRunFailed) contentEl.appendChild(page.mk('div', 'tst-fail-banner', `The last run failed: ${lastRunFailed}`));
   if (innerTab === 'heatmap') { renderHeatmap(contentEl); return; }
+  if (innerTab === 'compare') { renderCompare(contentEl); return; }
   heatGridEl = null;
   if (!bundle) { contentEl.appendChild(page.mk('div', 'bp-empty', EMPTY_MSG[innerTab])); return; }
   if (innerTab === 'overview') renderOverview(contentEl);
