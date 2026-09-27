@@ -1321,6 +1321,7 @@ function connect() {
     if (m.type === 'status') { statusAt = Date.now(); showStatus(m); return; }
     if (m.type === 'desk' || m.type === 'quote') { window.HBDeskClient.onMessage(m); return; }
     if (m.type === 'paper') { window.HBPaperClient.onMessage(m); return; }
+    if (m.type === 'depth') { window.HBDomUI.onDepth(m); return; }
     const c = cells.find((x) => x.id === m.id);
     if (!c) return;
     if (m.type === 'history') c.onHistory(m);
@@ -1389,6 +1390,7 @@ async function init() {
   $('#tbSave').onclick = save;
   $('#tbSettings').onclick = () => chartSettings();
   $('#tbTheme').onclick = toggleTheme;
+  $('#tbDom').onclick = () => window.HBOrderPanel.openTab('dom');
   mountRadar();
   for (const b of document.querySelectorAll('#rail [data-tool]')) {
     b.onclick = () => setTool(b.dataset.tool === tool && tool !== 'cursor' ? 'cursor' : b.dataset.tool);

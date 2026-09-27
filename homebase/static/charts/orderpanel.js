@@ -269,9 +269,10 @@ function build() {
 
   ui.order.append(ui.form, accts, foot);
 
-  // ---- the DOM tab (the Level 2 ladder comes next) ----
-  ui.dom = mk('div', 'op-dom', 'Level 2 ladder — coming next');
+  // ---- the DOM tab: the Level 2 ladder (HBDomUI), read-only, follows the selected chart's root ----
+  ui.dom = mk('div', 'op-dom');
   ui.dom.setAttribute('role', 'tabpanel');
+  window.HBDomUI.mount(ui.dom, page);
 
   ui.grip = mk('div', 'op-resize');
   ui.grip.setAttribute('role', 'separator');
@@ -357,6 +358,7 @@ function paint() {
   const tb = document.getElementById('tbOrder');
   if (tb) { tb.setAttribute('aria-pressed', String(open)); tb.classList.toggle('active', open); }
   const cell = selectedCell(), root = cell && cell.shown ? cell.shown.root : null;
+  window.HBDomUI.sync(cell);   // the ladder follows the selected chart even while the Order tab is showing
   if (cell !== seen.cell || root !== seen.root) {
     if (seen.cell && cell !== seen.cell) flashPending = true;   // shown once this chart's accounts paint (it may still be loading)
     seen = { cell, root };
@@ -365,10 +367,11 @@ function paint() {
     if (formRoot !== null) symbolChanged();
     formRoot = root;
   }
-  if (!open) { flashPending = false; return; }
+  if (!open) { flashPending = false; window.HBDomUI.setVisible(false); return; }
   for (const [id, b] of Object.entries(ui.tabs)) { b.setAttribute('aria-selected', String(tab === id)); b.classList.toggle('on', tab === id); }
   ui.order.hidden = tab !== 'order';
   ui.dom.hidden = tab !== 'dom';
+  window.HBDomUI.setVisible(tab === 'dom');
 
   // header: the badge (rebuilt only on a symbol change), the root and its name
   if (root !== logoRoot) { logoRoot = root; ui.logo.replaceChildren(...(root ? [window.HBCell.badgeEl(root, 20)] : [])); }
@@ -532,6 +535,12 @@ function setOpen(v) {
   paint();
 }
 function toggle() { setOpen(!open); }
+/* The toolbar's DOM button: opens the panel (if closed) straight onto the DOM tab. */
+function openTab(id) {
+  tab = id;
+  if (!open) { open = true; save(); }
+  paint();
+}
 function setRoot() { paint(); }   // the selected chart (or its symbol) changed: the panel re-reads it
 function wireResize(g) {
   let drag = false;
@@ -577,5 +586,5 @@ function mount(pg) {
   paint();
 }
 
-window.HBOrderPanel = { mount, toggle, setRoot, pickPrice, wantsPick };
+window.HBOrderPanel = { mount, toggle, setRoot, pickPrice, wantsPick, openTab };
 })();

@@ -4,7 +4,7 @@
    trash-2, eye, eye-off, settings, x, check, sun, moon, magnet, trending-up, trending-down,
    chart-candlestick, paintbrush, list, calendar, ellipsis, external-link, droplet, flame, panel-right,
    bot, octagon-x, file-text, history, play, pause, skip-forward, skip-back (Bar Replay, 2026-09-27 plan),
-   square (Strategy Tester).
+   square (Strategy Tester), list-ordered, crosshair (DOM ladder, 2026-09-27 charts-depth plan).
 
    ISC License
 
@@ -70,5 +70,7 @@ window.HBIcons = {
   skipForward: svg('<path d="M21 4v16"/><path d="M6.029 4.285A2 2 0 0 0 3 6v12a2 2 0 0 0 3.029 1.715l9.997-5.998a2 2 0 0 0 .003-3.432z"/>'),
   skipBack: svg('<path d="M17.971 4.285A2 2 0 0 1 21 6v12a2 2 0 0 1-3.029 1.715l-9.997-5.998a2 2 0 0 1-.003-3.432z"/><path d="M3 20V4"/>'),
   square: svg('<rect width="18" height="18" x="3" y="3" rx="2"/>'),
+  listOrdered: svg('<path d="M11 5h10"/><path d="M11 12h10"/><path d="M11 19h10"/><path d="M4 4h1v5"/><path d="M4 9h2"/><path d="M6.5 20H3.4c0-1 2.6-1.925 2.6-3.5a1.5 1.5 0 0 0-2.6-1.02"/>'),
+  crosshair: svg('<circle cx="12" cy="12" r="10"/><line x1="22" x2="18" y1="12" y2="12"/><line x1="6" x2="2" y1="12" y2="12"/><line x1="12" x2="12" y1="6" y2="2"/><line x1="12" x2="12" y1="22" y2="18"/>'),
 };
 })();

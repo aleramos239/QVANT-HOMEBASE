@@ -517,7 +517,34 @@ a { color: inherit; }
 .op-order { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .op-form { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; padding: 12px 14px 4px; display: flex; flex-direction: column; gap: 12px; }
 .opanel.off .op-form { opacity: .45; pointer-events: none; }   /* Trading off on this chart: greyed, nothing to press */
-.op-dom { flex: 1; display: grid; place-items: center; padding: 24px; color: var(--text-2); font-size: 13px; text-align: center; }
+.op-dom { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+/* ---- the DOM tab: the Level 2 ladder (2026-09-27 charts-depth plan, Task 1). Read-only: no row is a button. */
+.dom-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.dom-head { flex: none; display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--border); }
+.dom-spacer { flex: 1; }
+.dom-recentre { display: flex; align-items: center; gap: 4px; height: 26px; padding: 0 8px; border-radius: 6px; color: var(--text-2); font-size: 12px; font-weight: 600; }
+.dom-recentre:hover { background: var(--hover); color: var(--text); }
+.dom-recentre .ic { width: 14px; height: 14px; }
+.dom-cols, .dom-row { display: grid; grid-template-columns: 1fr minmax(70px, 1fr) 1fr 1fr; align-items: center; }
+.dom-cols { flex: none; padding: 4px 10px; color: var(--text-2); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; border-bottom: 1px solid var(--border); }
+.dom-c { text-align: center; padding: 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dom-rows { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; font-variant-numeric: tabular-nums; }
+.dom-row { padding: 2px 10px; font-size: 12px; }
+.dom-row.best-bid { background: var(--accent-soft); }
+.dom-row.best-ask { background: var(--down-soft); }
+.dom-row.best-bid .dom-bid, .dom-row.best-ask .dom-ask { font-weight: 700; }
+.dom-bid { color: var(--accent); }
+.dom-ask { color: var(--down); }
+.dom-vol { color: var(--text-2); }
+.dom-price { display: flex; align-items: center; justify-content: center; gap: 4px; font-weight: 600; }
+.dom-mk { display: inline-flex; gap: 2px; }
+.dom-chip { display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px; padding: 0 4px;
+  border-radius: 3px; font-size: 10px; font-weight: 700; color: #FFFFFF; }
+.dom-chip-pos.dom-chip-buy, .dom-chip-tp { background: var(--up); }
+.dom-chip-pos.dom-chip-sell, .dom-chip-sl, .dom-chip-order.dom-chip-sell { background: var(--down); }
+.dom-chip-order.dom-chip-buy { background: var(--accent); }
+.dom-idle { flex: 1; display: grid; place-items: center; padding: 24px; color: var(--text-2); font-size: 13px; text-align: center; }
 
 /* Sell / Buy tiles with the spread between them */
 .op-tiles { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
