@@ -1091,7 +1091,6 @@ async function init() {
   }, true);
   window.addEventListener('resize', closeMenu);
   document.addEventListener('keydown', onKey);
-  buildGrid();
   page = {
     mk, icon, $, cells: () => cells, cur, select: (c) => select(cells.indexOf(c)),
     openDialog, closeDialog, setDialogClose(fn) { if (dlg) dlg.onClose = fn; },
@@ -1099,8 +1098,10 @@ async function init() {
     deskUrl: () => `${location.protocol}//${location.hostname}:8850/`,
     overlays: [],
   };
+  page.overlays.push(window.HBTradeLines.overlay);   // Task 6: the per-chart Buy/Sell block, lines and markers
   window.HBPanel.mount(page);                 // Task 4
   window.HBTradeUI.mount(page);                // Task 5
+  buildGrid();   // after the mounts: page.overlays must be filled before any cell's build() reads host.overlays()
   connect();
   tick();
   setInterval(tick, 1000);

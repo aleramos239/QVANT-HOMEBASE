@@ -39,7 +39,7 @@ const clone = (x) => JSON.parse(JSON.stringify(x));
 function palette() {
   const dark = document.documentElement.getAttribute('data-theme') === 'dark';
   const P = { up: '#089981', down: '#F23645', upA: 'rgba(8,153,129,.5)', downA: 'rgba(242,54,69,.5)', accent: '#2962FF',
-    lines: C.LINE_COLORS, vwap: '#9C27B0', band: 'rgba(156,39,176,.45)', cum: '#FF6D00', poc: '#F7A600',
+    lines: C.LINE_COLORS, vwap: '#9C27B0', band: 'rgba(156,39,176,.45)', cum: '#FF6D00', poc: '#F7A600', warn: '#F7A600',
     gap: 'rgba(120,123,134,.14)', cross: '#9598A1', crossLabel: '#131722',
     handleFill: '#FFFFFF', onAccent: '#FFFFFF',   // drawing handles: white dots in both themes; text on accent / down fills
     profitZone: 'rgba(8,153,129,.20)', lossZone: 'rgba(242,54,69,.20)' };
@@ -102,6 +102,8 @@ class Cell {
     this.R = S.resolve(cfg.settings || {}, palette());   // the chart's settings, concrete for the theme
     this.fpHide = false;   // the footprint is readable: candle bodies and borders step aside
     this.wm = null;        // the watermark (its colour and visibility follow the settings)
+    this.extMarkers = {};  // key -> [{ms, ...marker}] from overlays (trading, bots, the tester): HBDrawings.placeMarkers
+    this.ov = [];          // this chart's overlays (page.overlays), rebuilt with the chart
     slot.className = 'panel';
     this.folded = false;   // the legend's collapse chevron: app.js syncs this to the persisted preference
                             // right after construction (it needs this cell's grid index, unknown in here)
@@ -335,6 +337,7 @@ class Cell {
       if (this.dc) this.dc.refresh();
     }
     this.start.set(this.back.done || this.capped, this.capped ? 'History limit reached' : 'Start of data');
+    for (const o of this.ov) if (o.onBars) o.onBars();
   }
 
   /* Send the chart's config; keepView: restore the view on screen when the
@@ -437,6 +440,7 @@ class Cell {
     this.dc = new window.HBDrawings.Controller(this, this.host);
     if (sel) { this.dc.sel = sel; this.dc.refresh(); }
     requestAnimationFrame(() => this.placeGear());
+    this.ov = this.host.overlays ? this.host.overlays(this) : [];
   }
 
   restyle() { if (this.chart) this.build(this.viewNow()); }
@@ -496,6 +500,8 @@ class Cell {
   }
 
   teardown() {
+    for (const o of this.ov) { try { o.destroy(); } catch (e) { console.error(e); } }
+    this.ov = [];
     if (this.dc) { this.dc.destroy(); this.dc = null; }
     if (!this.chart) return;
     this.chart.remove();
@@ -722,6 +728,7 @@ class Cell {
     if (touched.some((b) => b.big && b.big.length)) this.drawMarkers();
     this.drawLevels(); this.syncFootprint();
     this.legend(this.hover);
+    for (const o of this.ov) if (o.onBars) o.onBars();
   }
 
   append(b) {
@@ -775,18 +782,26 @@ class Cell {
 
   visible(id) { return this.cfg.indicators.filter((x) => x.id === id && x.visible !== false); }
 
+  /* Trading, bot and tester markers share this one series-markers plugin, keyed by source (ruling S22): each
+     overlay hands its own list to setExtraMarkers, and every redraw merges them with the big-prints markers. */
+  setExtraMarkers(key, list) { this.extMarkers[key] = list || []; this.drawMarkers(); }
+
   drawMarkers() {
     if (!this.markers) return;
-    const mins = this.visible('bigprints').map((x) => x.params.min), P = this.P;
-    if (!mins.length) { this.markers.setMarkers([]); return; }
-    const min = Math.min(...mins), out = [];
-    for (const b of this.bars) {
-      for (const [, , size, side] of (b.big || [])) {
-        if (size >= min) out.push({ time: b.tt, position: side > 0 ? 'belowBar' : 'aboveBar',
-          color: side > 0 ? P.up : P.down, shape: 'circle', size: 0.6, text: String(size) });
+    const mins = this.visible('bigprints').map((x) => x.params.min), P = this.P, big = [];
+    if (mins.length) {
+      const min = Math.min(...mins);
+      for (const b of this.bars) {
+        for (const [, , size, side] of (b.big || [])) {
+          if (size >= min) big.push({ time: b.tt, position: side > 0 ? 'belowBar' : 'aboveBar',
+            color: side > 0 ? P.up : P.down, shape: 'circle', size: 0.6, text: String(size) });
+        }
       }
     }
-    this.markers.setMarkers(out.slice(-600));
+    const extra = [];
+    for (const k in this.extMarkers) extra.push(...this.extMarkers[k]);
+    const placed = window.HBDrawings.placeMarkers(this.bars, extra, this.barMs());
+    this.markers.setMarkers([...big.slice(-600), ...placed].sort((a, b) => a.time - b.time));
   }
 
   drawLevels() {
