@@ -171,6 +171,77 @@ function renderFills(target) {
   syncTable(target, FILL_HEAD, rows, (r) => r.key, buildFillRow, buildFillRow);   // a fill never changes once it exists
 }
 
+/* ---- "Fill quality" tab (Task 3, page half; the desk half is homebase/bothistory.py) ---- */
+/* Live fill quality vs the desk journal (GET /api/desk/bot-history, HBDeskClient.botHistory): per
+   run, the fire-to-ack latency and the entry/SL slip in ticks and $ (homebase/fillquality.js does
+   the pure math -- nulls where a run cannot answer, never a wrong 0). One strategy at a time; the
+   selector covers the desk's bots (HBTrade.BOT_NAMES -- gc_nfpcpi and the paper strategies are not
+   desk-journalled bot-history subjects). Rebuilt whole on each render: unlike Positions/Orders it
+   never fires on a quote (TAB_EVENTS below), so there is no per-row state (a Close/Cancel button,
+   focus) a rebuild could lose. */
+const FQ = window.HBFillQuality;
+const BOT_KEYS = Object.keys(T.BOT_NAMES);
+let fqStrategy = BOT_KEYS[0] || null;
+
+const FQ_HEAD = [{ text: 'Date' }, { text: 'Account' }, { text: 'Latency (ms)', cls: 'num' },
+  { text: 'Entry slip (ticks)', cls: 'num' }, { text: 'Entry slip ($)', cls: 'num' },
+  { text: 'SL slip (ticks)', cls: 'num' }, { text: 'SL slip ($)', cls: 'num' }, { text: 'Gap-through' }];
+const fqTicks = (v) => (v == null ? '—' : v.toFixed(2));
+const fqMs = (v) => (v == null ? '—' : String(Math.round(v)));
+const fqUsd = (v) => (v == null ? '—' : T.usd(v));
+function buildFqRow(tr, r) {
+  td(tr, r.date);
+  td(tr, r.account || 'all accounts');
+  td(tr, fqMs(r.latencyMs), 'num');
+  td(tr, fqTicks(r.entryTicks), 'num');
+  td(tr, fqUsd(r.entryUsd), 'num');
+  td(tr, fqTicks(r.slTicks), 'num');
+  td(tr, fqUsd(r.slUsd), 'num');
+  td(tr, r.gapThrough ? '✓' : (r.gapThrough == null ? '—' : ''));
+}
+/* The summary <tfoot> row: n + the averages/median FQ.fillQualitySummary computed, under the same
+   columns as the rows above them. */
+function buildFqSummaryRow(tr, s) {
+  td(tr, `Average (n ${s.n})`);
+  td(tr, '');
+  td(tr, fqMs(s.medianLatencyMs), 'num');
+  td(tr, fqTicks(s.avgEntryTicks), 'num');
+  td(tr, fqUsd(s.avgEntryUsd), 'num');
+  td(tr, fqTicks(s.avgSlTicks), 'num');
+  td(tr, fqUsd(s.avgSlUsd), 'num');
+  td(tr, '');
+}
+function renderFillQuality(target) {
+  const d = D();
+  target.replaceChildren();
+  const bar = el('div', 'bp-fq-bar'), label = el('span'), sel = el('select', 'bp-fq-select');
+  label.textContent = 'Strategy';
+  for (const k of BOT_KEYS) { const o = el('option'); o.value = k; o.textContent = T.algoName(k); sel.appendChild(o); }
+  sel.value = fqStrategy || '';
+  sel.onchange = () => { fqStrategy = sel.value; renderFillQuality(target); };
+  bar.append(label, sel);
+  target.appendChild(bar);
+  if (!fqStrategy) { target.appendChild(emptyDiv('No bots configured')); return; }
+  if (!d.state) { target.appendChild(downDiv(d.down)); return; }
+  const hist = d.botHistory(fqStrategy);        // {strategy, symbol, runs}, or null while the first fetch is out
+  if (!hist) { target.appendChild(emptyDiv('Loading…')); return; }
+  const rows = FQ.fillQualityRows(hist.runs, T.rootOf(hist.symbol));
+  if (!rows.length) { target.appendChild(emptyDiv('No live runs yet')); return; }
+  const table = el('table', 'bp-table'), thead = el('thead'), htr = el('tr');
+  for (const h of FQ_HEAD) { const th = el('th', h.cls); th.textContent = h.text; htr.appendChild(th); }
+  thead.appendChild(htr);
+  const tbody = el('tbody');
+  for (const r of rows) { const tr = el('tr'); buildFqRow(tr, r); tbody.appendChild(tr); }
+  const tfoot = el('tfoot'), ftr = el('tr');
+  buildFqSummaryRow(ftr, FQ.fillQualitySummary(rows));
+  tfoot.appendChild(ftr);
+  table.append(thead, tbody, tfoot);
+  target.appendChild(table);
+  const compare = el('div', 'bp-fq-compare');
+  compare.textContent = 'backtest assumes 1.0 tick per side';
+  target.appendChild(compare);
+}
+
 const ACCOUNT_HEAD = [{ text: 'Account' }, { text: 'Env' }, { text: 'Connected' }, { text: 'Broker account' }, { text: 'Balance', cls: 'num' },
   { text: 'Realized P&L', cls: 'num' }, { text: 'Open P&L', cls: 'num' }, { text: 'Strategies' }, { text: 'Status' }];
 function buildAccountRow(tr, r) {
@@ -225,7 +296,8 @@ function renderActive(clear = true) {
    button mid-click. Positions and Accounts do need quotes (open P&L), so they stay in the relevant set and
    lean on syncTable (above) to update in place instead of rebuilding. */
 const TAB_EVENTS = { positions: new Set(['state', 'account', 'quote']), orders: new Set(['state', 'account']),
-  fills: new Set(['state', 'account']), accounts: new Set(['state', 'account', 'quote']) };
+  fills: new Set(['state', 'account']), accounts: new Set(['state', 'account', 'quote']),
+  fillq: new Set(['state', 'account', 'history']) };   // never 'quote': bot-history is not live-priced
 function relevant(id, why) {
   const set = TAB_EVENTS[id];
   if (!set) return true;   // a tab with no declared set (e.g. a future one) always redraws
@@ -352,6 +424,7 @@ addTab({ id: 'positions', label: 'Positions', render: renderPositions });
 addTab({ id: 'orders', label: 'Orders', render: renderOrders });
 addTab({ id: 'fills', label: 'Fills', render: renderFills });
 addTab({ id: 'accounts', label: 'Accounts', render: renderAccounts });
+addTab({ id: 'fillq', label: 'Fill quality', render: renderFillQuality });
 
 window.HBPanel = { mount, addTab, show, refresh, isShowing };
 })();

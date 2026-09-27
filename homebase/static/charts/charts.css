@@ -370,6 +370,12 @@ a { color: inherit; }
 .bp-act { height: 22px; padding: 0 8px; border-radius: 4px; border: 1px solid var(--border); font-size: 12px; }
 .bp-act:hover { background: var(--hover); }
 .up { color: var(--up); } .down { color: var(--down); }
+
+/* ---- "Fill quality" tab (Task 3, page half) ---- */
+.bp-fq-bar { flex: none; display: flex; align-items: center; gap: 8px; padding: 8px 10px; }
+.bp-fq-select { height: 26px; padding: 0 8px; border-radius: 4px; border: 1px solid var(--border); background: var(--panel); color: var(--text); font-size: 12px; }
+.bp-table tfoot td { font-weight: 600; background: var(--grid); border-top: 1px solid var(--border); border-bottom: none; }
+.bp-fq-compare { padding: 8px 10px; color: var(--text-2); font-size: 12px; }
 .env { padding: 0 5px; border-radius: 4px; font-size: 11px; line-height: 16px; background: var(--hover); color: var(--text-2); }
 .env.live { background: var(--down-soft); color: var(--down); font-weight: 600; }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--text-2); }
