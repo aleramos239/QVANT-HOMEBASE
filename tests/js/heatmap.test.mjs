@@ -133,3 +133,12 @@ test('gridProgress and valueLabel', () => {
   assert.equal(X.valueLabel(12.5), '12.5');
   assert.equal(X.valueLabel('b'), 'b');
 });
+
+test('the 9:30 QUIET window: a queued run or grid reads "paused for the 9:30 window"', () => {
+  assert.equal(X.progress({ status: 'queued', paused: 'paused for the 9:30 window' }).text, 'Queued · paused for the 9:30 window');
+  assert.equal(X.progress({ status: 'queued' }).text, 'Queued…');
+  assert.equal(X.gridProgress({ status: 'queued', done: 0, total: 4, paused: 'paused for the 9:30 window' }).text,
+    'Queued · 0 / 4 cells · paused for the 9:30 window');
+  assert.equal(X.gridProgress({ status: 'running', done: 2, total: 4, paused: 'paused for the 9:30 window' }).text,
+    'Running · 2 / 4 cells · paused for the 9:30 window');
+});

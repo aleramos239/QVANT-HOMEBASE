@@ -13,7 +13,10 @@
 status: queued -> running -> done | error | cancelled. The chart service owns a
 RunManager (submit / status / cancel / runs / bundle) that launches
 `python -m homebase.backtest.runner exec <run_dir>` with its own interpreter,
-FIFO, one child at a time — never in the service's event loop. A script run
+FIFO, one child at a time — never in the service's event loop — and only once it
+holds one of the machine-wide backtest slots (slots.py: 2 at once with the heat-map's
+cells, none starting 09:20-09:35 ET on weekdays; a request in that window is refused,
+a run already queued waits and its status reads `paused`). A script run
 (`python -m homebase.backtest.runner run --strategy nq930 ...`) executes in the
 script's process and writes into the same runs dir, so the page lists it; the
 flock keeps it from overlapping a page run.
@@ -39,6 +42,7 @@ from .. import strategies
 from ..paths import repo_root, state_dir
 from . import discipline, propsim, report
 from .engine import ENGINE_VERSION, Costs, run_session
+from .slots import QUIET_MSG, QUIET_REFUSAL, Slots
 from .tape import ARCHIVE, CACHE, TapeStore, coverage_reason, effective_session_window, missing_hours
 
 RUN_ID = re.compile(r"^\d{8}-\d{6}-[a-z0-9_]+-[0-9a-f]{4}$")
@@ -293,9 +297,10 @@ class RunManager:
     """The chart service's handle on tester runs (thread-safe; no asyncio)."""
 
     def __init__(self, base: Path, *, archive: Path = ARCHIVE, cache: Path = CACHE,
-                 python: str = sys.executable):
+                 python: str = sys.executable, slots: Slots | None = None):
         self.base, self.runs = Path(base), Path(base) / "runs"
         self.archive, self.cache, self.python = Path(archive), Path(cache), python
+        self.slots = slots or Slots(self.base / "slots")
         self.runs.mkdir(parents=True, exist_ok=True)
         self._q: deque[str] = deque()
         self._proc: tuple[str, subprocess.Popen] | None = None
@@ -320,6 +325,8 @@ class RunManager:
         return self.runs / rid
 
     def submit(self, body) -> str:
+        if self.slots.quiet():
+            raise ValueError(QUIET_REFUSAL)
         rid = prepare(body, self.base)
         with self._lock:
             self._q.append(rid)
@@ -334,6 +341,8 @@ class RunManager:
         with self._lock:
             if rid in self._q:
                 st["queue_position"] = list(self._q).index(rid) + 1
+        if st.get("status") == "queued" and self.slots.quiet():
+            st["paused"] = QUIET_MSG
         return st
 
     def cancel(self, rid: str) -> dict:
@@ -393,6 +402,10 @@ class RunManager:
     def bundle(self, rid: str) -> dict:
         return read_bundle(self.dir(rid))
 
+    def _head(self) -> str | None:
+        with self._lock:
+            return self._q[0] if self._q else None
+
     def _loop(self) -> None:
         while True:
             self._wake.wait()
@@ -400,15 +413,35 @@ class RunManager:
                 if not self._q:
                     self._wake.clear()
                     continue
-                rid = self._q.popleft()
+                rid = self._q[0]
+            # a slot first (the global cap, the QUIET window); give up if the run is cancelled meanwhile
+            slot = self.slots.acquire(cancelled=lambda: self._head() != rid)
+            if slot is None:
+                continue
+            with self._lock:
+                if not self._q or self._q[0] != rid:
+                    slot.close()
+                    continue
+                self._q.popleft()
                 d = self.runs / rid
                 log = open(d / "log.txt", "ab")
-                proc = subprocess.Popen(
-                    [self.python, "-m", "homebase.backtest.runner", "exec", str(d),
-                     "--archive", str(self.archive), "--cache", str(self.cache)],
-                    cwd=repo_root(), stdout=log, stderr=subprocess.STDOUT)
+                try:
+                    proc = subprocess.Popen(
+                        [self.python, "-m", "homebase.backtest.runner", "exec", str(d),
+                         "--archive", str(self.archive), "--cache", str(self.cache)],
+                        cwd=repo_root(), stdout=log, stderr=subprocess.STDOUT)
+                except OSError as e:
+                    slot.close()
+                    log.close()
+                    st = read_json(d / "status.json", {}) or {}
+                    st.update(status="error", error=f"could not start the runner: {e}", updated=_now())
+                    write_json(d / "status.json", st)
+                    continue
                 self._proc = (rid, proc)
-            code = proc.wait()
+            try:
+                code = proc.wait()
+            finally:
+                slot.close()
             log.close()
             with self._lock:
                 self._proc = None
@@ -474,9 +507,17 @@ def main(argv: list[str] | None = None) -> int:
     if a.holdout_reason:
         body["holdout"] = {"reason": a.holdout_reason}
     base = a.base or default_base()
+    slots = Slots(base / "slots")
+    if slots.quiet():
+        print(QUIET_REFUSAL, file=sys.stderr)
+        return 2
     rid = prepare(body, base)
     t0 = time.monotonic()
-    exec_run(base / "runs" / rid, store)
+    slot = slots.acquire()
+    try:
+        exec_run(base / "runs" / rid, store)
+    finally:
+        slot.close()
     meta = read_json(base / "runs" / rid / "run.json")
     s = meta["report"]["summary"]["all"]
     print(f"{rid}: {s['trades']} trades, net ${s['net_profit']:,.2f}, WR {s['win_rate'] or 0:.1f}%, "

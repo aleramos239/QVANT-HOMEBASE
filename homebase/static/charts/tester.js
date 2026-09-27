@@ -120,7 +120,7 @@ function runLabel(f, loadedKey) { return loadedKey && key(f) !== loadedKey ? 'Up
 
 function progress(st) {
   const s = st && st.status;
-  if (s === 'queued') return { text: 'Queued…', frac: null, final: false };
+  if (s === 'queued') return { text: st.paused ? `Queued · ${st.paused}` : 'Queued…', frac: null, final: false };
   if (s === 'running') {
     const n = `${int(st.done)} / ${int(st.total)} sessions`, frac = st.total ? st.done / st.total : null;
     if (st.phase === 'building cache') return { text: `Building the tick cache · ${n}`, frac, final: false };
@@ -353,9 +353,9 @@ function cellView(c) {
 }
 function gridProgress(st) {
   const s = st && st.status, n = `${int(st && st.done)} / ${int(st && st.total)} cells`;
-  const frac = st && st.total ? st.done / st.total : null;
-  if (s === 'queued') return { text: `Queued · ${n}`, frac: null, final: false };
-  if (s === 'running') return { text: `Running · ${n}`, frac, final: false };
+  const frac = st && st.total ? st.done / st.total : null, pause = st && st.paused ? ` · ${st.paused}` : '';
+  if (s === 'queued') return { text: `Queued · ${n}${pause}`, frac: null, final: false };
+  if (s === 'running') return { text: `Running · ${n}${pause}`, frac, final: false };
   if (s === 'done') return { text: `Done · ${n}`, frac: 1, final: true };
   if (s === 'cancelled') return { text: `Cancelled · ${n}${st.error ? ' · ' + st.error : ''}`, frac, final: true };
   return { text: '', frac: null, final: false };

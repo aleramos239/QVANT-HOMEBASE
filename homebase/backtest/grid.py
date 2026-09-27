@@ -13,7 +13,9 @@ with the same params, executed by the same `runner exec` child (`--no-lock`: the
 Looks: a cell counts once, when it finishes with numbers (status done) -- a cancelled or
 never-started cell was never seen. At a 5% level ~looks/20 cells read "significant" by luck.
 The chart service owns a GridManager: cells go FIFO through a pool of WORKERS threads, each
-waiting on its own child process, so the service's event loop never runs a backtest.
+waiting on its own child process, so the service's event loop never runs a backtest. A cell
+starts only once it holds a machine-wide backtest slot (slots.py: 2 at once shared with single
+runs, none starting 09:20-09:35 ET on weekdays -- the grid then reads `paused`).
 """
 from __future__ import annotations
 
@@ -32,6 +34,7 @@ from ..paths import repo_root
 from . import runner
 from .discipline import DisciplineError, parse_range
 from .runner import RUN_ID, _now, read_json, write_json
+from .slots import QUIET_MSG, Slots
 from .tape import ARCHIVE, CACHE
 
 MAX_CELLS = 60
@@ -147,11 +150,12 @@ class GridManager:
     """The chart service's handle on heat-map grids (thread-safe; no asyncio)."""
 
     def __init__(self, base: Path, *, archive: Path = ARCHIVE, cache: Path = CACHE,
-                 python: str = sys.executable, workers: int = WORKERS):
+                 python: str = sys.executable, workers: int = WORKERS, slots: Slots | None = None):
         self.base, self.grids = Path(base), Path(base) / "grids"
         self.looks_path = self.base / "looks.json"
         self.archive, self.cache, self.python, self.workers = Path(archive), Path(cache), python, workers
         self.grids.mkdir(parents=True, exist_ok=True)
+        self.slots = slots or Slots(self.base / "slots")
         self._q: deque[tuple[str, int]] = deque()
         self._procs: dict[tuple[str, int], subprocess.Popen] = {}
         self._live: dict[str, dict] = {}          # grids this process started (the rest are read from disk)
@@ -219,6 +223,9 @@ class GridManager:
         st = self._live.get(gid)
         st = copy.deepcopy(st) if st is not None else (read_json(self.grids / gid / "grid.json", {}) or {})
         st["looks"] = read_looks(self.looks_path).get(st.get("strategy"), 0)
+        if (st.get("status") not in FINAL and any(c.get("status") == "queued" for c in st.get("cells", []))
+                and self.slots.quiet()):
+            st["paused"] = QUIET_MSG
         return st
 
     def status(self, gid: str) -> dict:
@@ -278,6 +285,14 @@ class GridManager:
                     self._cv.wait()
                 if self._stopping:
                     return
+            # a slot first (the global cap, the QUIET window); let go if the queue empties meanwhile
+            slot = self.slots.acquire(cancelled=self._idle)
+            if slot is None:
+                continue
+            with self._cv:
+                if self._stopping or not self._q:
+                    slot.close()
+                    continue
                 gid, i = self._q.popleft()
                 st = self._live[gid]
                 cell = st["cells"][i]
@@ -292,13 +307,17 @@ class GridManager:
                          "--archive", str(self.archive), "--cache", str(self.cache)],
                         cwd=repo_root(), stdout=log, stderr=subprocess.STDOUT)
                 except OSError as e:
+                    slot.close()
                     log.close()
                     cell.update(status="error", error=f"could not start the runner: {e}")
                     self._finish_grid(st)
                     self._save(gid)
                     continue
                 self._procs[(gid, i)] = proc
-            code = proc.wait()
+            try:
+                code = proc.wait()
+            finally:
+                slot.close()
             log.close()
             rs = read_json(cdir / "status.json", {}) or {}
             run = read_json(cdir / "run.json") if rs.get("status") == "done" else None
@@ -312,6 +331,10 @@ class GridManager:
                     cell.update(status="error", error=rs.get("error") or f"runner exited {code}: {tail}")
                 self._finish_grid(st)
                 self._save(gid)
+
+    def _idle(self) -> bool:
+        with self._lock:
+            return self._stopping or not self._q
 
     @staticmethod
     def _finish_grid(st: dict) -> None:           # under the lock

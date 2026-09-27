@@ -217,3 +217,15 @@ def test_grid_requests_the_rules_refuse(tmp_path):
         for path in ("/api/tester/grids", "/api/tester/looks"):
             assert c.get(path, headers=REBIND_HOST).status_code == 403
         assert c.get("/api/tester/grids").json() == []
+
+
+def test_a_single_run_request_in_the_quiet_window_is_refused_with_the_pause_text(tmp_path, monkeypatch):
+    from homebase.backtest import slots
+    monkeypatch.setattr(slots, "et_now", lambda: dt.datetime(2026, 9, 28, 9, 25, tzinfo=slots.ET))
+    with client(tmp_path) as c:
+        r = c.post("/api/tester/run", json=RUN)
+        assert r.status_code == 400 and "paused for the 9:30 window" in r.json()["detail"]
+        gid = c.post("/api/tester/grid", json=GRID).json()["id"]      # a grid may queue; its cells wait
+        st = c.get(f"/api/tester/grid/{gid}").json()
+        assert st["paused"] == "paused for the 9:30 window" and st["status"] == "queued"
+        c.post(f"/api/tester/grid/{gid}/cancel")
