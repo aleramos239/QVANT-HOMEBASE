@@ -23,13 +23,16 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .. import netguard, symbols
+from ..contracts import tick_size as contract_tick_size
 from ..paths import state_dir
 from . import DEFAULT_ROOTS, QUIET      # QUIET: never refill across the 9:30 fire
 from .bars import BarSpec
+from .bursts import REACTION_ROOTS, BurstBook, ReactionBook, configured_roots
 from .calendar import Calendar
 from .desk import Fanout, Quotes, register as register_desk
 from .history import History
 from .hub import Hub, Stream
+from .news import News
 from .recorder import REFILL_MAX_PAGES, LiveRecorder, refill
 from .replay import ReplayFeed
 from .session import ET, always_open, et_wall_s, session_date, session_range_ms, split_by_session
@@ -213,7 +216,7 @@ class Conn:
 def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | None = None,
                speed: float = 10.0, start_et: dt.time = dt.time(9, 25), feed_factory=None,
                now_ms=None, state: Path | None = None, calendar_fetch=None,
-               desk_factory=None) -> FastAPI:
+               desk_factory=None, news_fetch=None) -> FastAPI:
     roots = [r.upper() for r in roots]
     sd = Path(state) if state else state_dir() / "charts"
     sd.mkdir(parents=True, exist_ok=True)
@@ -222,6 +225,13 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
     templates_path = sd / "templates.json"
     # ForexFactory's calendar; calendar_fetch None never fetches (tests); python -m homebase.charts passes http_get
     cal = Calendar(sd / "calendar", fetch=calendar_fetch)
+    # news.py: no fetching in replay mode, whatever the caller passes (a replayed price must never
+    # look like it triggered a burst/reaction against a headline that broke long after that session)
+    news_fetch = None if replay else news_fetch
+    news_dir = sd / "news"
+    news = News(news_dir, fetch=news_fetch)
+    burst_book = BurstBook(news_dir, [r for r in configured_roots() if r in roots], contract_tick_size)
+    reaction_book = ReactionBook(news_dir, contract_tick_size)
     store = TickStore(base)
     history = History(store, cache_dir=sd / "cache")
     recorder = None if replay else LiveRecorder(base)
@@ -370,7 +380,19 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             today = session_date(now, root)
             rows = [r for r in rows if session_date(int(r["ts_ms"]), root) >= today]
             quotes.note(root, rows)
-            hub.on_ticks(root, recorder.append(root, contract, rows))
+            kept = recorder.append(root, contract, rows)
+            hub.on_ticks(root, kept)
+            if kept and root in burst_book.roots:
+                near = news.items(0, 2 ** 62)      # near_news() itself narrows this to +/- 3 min
+                for r in kept:
+                    fired = burst_book.push(root, int(r["ts_ms"]), float(r["price"]), near)
+                    if fired is not None:
+                        fan({"type": "burst", **fired})
+            if kept and root in REACTION_ROOTS:
+                for r in kept:
+                    reaction_book.push_tick(root, int(r["ts_ms"]), float(r["price"]))
+            if kept:
+                reaction_book.flush_due(int(kept[-1]["ts_ms"]))
 
         feed = (feed_factory or TickFeed)(roots, on_live, on_subscribed=_refill)
     hub = Hub(history, clock)
@@ -385,6 +407,8 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         st["streams"] = len(hub.streams)
         st["clients"] = len(conns)
         st["calendar"] = cal.status()
+        st["news"] = news.status()
+        st["bursts"] = burst_book.status()
         return st
 
     older_busy: set = set()     # (conn, chart id, stream identity) with a scroll-back chunk being built --
@@ -456,6 +480,19 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                 except Exception as e:  # noqa: BLE001
                     log(f"pump status: {type(e).__name__}: {e}")
 
+    async def news_loop() -> None:
+        """The two news feeds, each on its own 60 s floor (News.poll() enforces
+        it per source); never faster, and never at all without news_fetch
+        (replay, or a test that passes none)."""
+        while True:
+            try:
+                for item in await asyncio.to_thread(news.poll):
+                    fan({"type": "news", **item})
+                    reaction_book.add_item(item)
+            except Exception as e:  # noqa: BLE001 — the news feed must never take the service down
+                log(f"news: {type(e).__name__}: {e}")
+            await asyncio.sleep(5.0)
+
     async def calendar_loop() -> None:
         """The calendar at startup, then hourly (30 min after a failure); never faster: FF blocks polling."""
         while True:
@@ -485,6 +522,8 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         tasks = [asyncio.create_task(pump()), asyncio.create_task(feed.run())]
         if calendar_fetch is not None:
             tasks.append(asyncio.create_task(calendar_loop()))
+        if news_fetch is not None:
+            tasks.append(asyncio.create_task(news_loop()))
         if link is not None:
             tasks.append(asyncio.create_task(link.run()))
         log(f"up — {'replay ' + replay.isoformat() if replay else 'live'} · {', '.join(roots)}")
@@ -635,6 +674,20 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             raise HTTPException(400, "from / to: epoch ms") from None
         countries = [c.strip() for c in q.get("countries", "").split(",") if c.strip()]
         return cal.events(frm, to, countries or None)
+
+    @app.get("/api/news")
+    async def api_news(request: Request):
+        bad = netguard.refusal(request.method, request.scope["headers"], netguard.allowlist())
+        if bad is not None:
+            raise HTTPException(*bad)
+        q = request.query_params
+        try:
+            frm, to = int(q.get("from", 0)), int(q.get("to", 2 ** 62))
+        except ValueError:
+            raise HTTPException(400, "from / to: epoch ms") from None
+        tags = [t.strip() for t in q.get("tags", "").split(",") if t.strip()]
+        sources = [s.strip() for s in q.get("sources", "").split(",") if s.strip()]
+        return news.items(frm, to, tags or None, sources or None)
 
     @app.websocket("/ws")
     async def ws_endpoint(sock: WebSocket):
