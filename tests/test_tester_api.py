@@ -5,6 +5,7 @@ import datetime as dt
 import subprocess
 import threading
 import time
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
@@ -196,7 +197,8 @@ def test_a_grid_goes_from_post_to_cell_bundles_and_counts_its_looks(tmp_path):
         assert c.get("/api/tester/looks").json() == {"nq930": 4}
         assert c.get("/api/tester/grids").json()[0]["id"] == gid
         assert c.get("/api/tester/runs").json() == []            # cells never flood Recent runs
-        assert (tmp_path / "state" / "tester" / "looks.json").exists()
+        import os
+        assert (Path(os.environ["HOMEBASE_TESTER_SHARED"]) / "looks.json").exists()
 
 
 def test_grid_requests_the_rules_refuse(tmp_path):
@@ -229,3 +231,13 @@ def test_a_single_run_request_in_the_quiet_window_is_refused_with_the_pause_text
         st = c.get(f"/api/tester/grid/{gid}").json()
         assert st["paused"] == "paused for the 9:30 window" and st["status"] == "queued"
         c.post(f"/api/tester/grid/{gid}/cancel")
+
+
+def test_a_corrupt_looks_counter_is_a_409_on_looks_and_a_400_on_a_new_grid(tmp_path, tester_shared):
+    (tester_shared / "looks.json").write_text("{torn")
+    with client(tmp_path) as c:
+        r = c.get("/api/tester/looks")
+        assert r.status_code == 409 and "looks.json.bak" in r.json()["detail"]
+        r = c.post("/api/tester/grid", json=GRID)
+        assert r.status_code == 400 and "never reset silently" in r.json()["detail"]
+    assert (tester_shared / "looks.json").read_text() == "{torn"

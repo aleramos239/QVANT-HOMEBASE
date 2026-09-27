@@ -39,7 +39,7 @@ test('gridAxes / gridProblems: 2 or 3 distinct parameters, the 60-cell cap, the 
   assert.equal(X.gridCount(X.gridAxes(two, STRAT).axes), 6);
   assert.equal(X.gridProblems(f, STRAT, two), null);
   assert.equal(X.gridProblems(f, STRAT, [{ key: 'offset_pts', text: '5' }, { key: '', text: '' }, { key: '', text: '' }]),
-    'Pick 2 or 3 parameters');
+    'Pick a parameter for Rows and Columns');
   assert.equal(X.gridProblems(f, STRAT, [{ key: 'offset_pts', text: '5' }, { key: 'offset_pts', text: '6' }, { key: '', text: '' }]),
     'Entry offset (pts) is picked twice');
   assert.equal(X.gridProblems(f, STRAT, [{ key: 'offset_pts', text: '1:10:1' }, { key: 'sl_pts', text: '1:7:1' }, { key: '', text: '' }]),
@@ -141,4 +141,21 @@ test('the 9:30 QUIET window: a queued run or grid reads "paused for the 9:30 win
     'Queued · 0 / 4 cells · paused for the 9:30 window');
   assert.equal(X.gridProgress({ status: 'running', done: 2, total: 4, paused: 'paused for the 9:30 window' }).text,
     'Running · 2 / 4 cells · paused for the 9:30 window');
+});
+
+test('review #7: Rows and Columns are both required; Panels is optional and never shifts into their place', () => {
+  const f = X.defaults(STRAT);
+  const none = { key: '', text: '' };
+  assert.equal(X.gridProblems(f, STRAT, [none, { key: 'offset_pts', text: '5' }, { key: 'sl_pts', text: '4' }]),
+    'Pick a parameter for Rows and Columns');
+  assert.equal(X.gridProblems(f, STRAT, [{ key: 'offset_pts', text: '5' }, none, { key: 'sl_pts', text: '4' }]),
+    'Pick a parameter for Rows and Columns');
+  assert.equal(X.gridProblems(f, STRAT, [{ key: 'offset_pts', text: '5' }, none, none]), 'Pick a parameter for Rows and Columns');
+  assert.deepEqual(X.gridAxes([{ key: 'offset_pts', text: '5' }, { key: 'sl_pts', text: '4' }, none], STRAT).axes.map((a) => a.key),
+    ['offset_pts', 'sl_pts']);
+});
+
+test('looksLine: a counter the server could not read is said so, never shown as 0', () => {
+  assert.equal(X.looksLine(184, ''), 'looks this strategy: 184 — expect ~9 lucky cells at 5%');
+  assert.equal(X.looksLine(null, 'the looks counter x is unreadable'), 'looks counter unreadable: the looks counter x is unreadable');
 });

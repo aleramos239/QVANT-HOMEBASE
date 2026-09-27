@@ -289,8 +289,9 @@ function parseValues(text, inp) {
 function valueLabel(v) { return typeof v === 'boolean' ? (v ? 'on' : 'off') : String(v); }
 /* The axis rows [{key, text}] (key '' = unused) -> {axes: [{key, values}]} or {error}. */
 function gridAxes(rows, s) {
-  const used = rows.filter((r) => r.key);
-  if (used.length < 2 || used.length > 3) return { error: 'Pick 2 or 3 parameters' };
+  // Rows and Columns are required; Panels is optional -- a role never shifts into an empty one's place
+  if (!rows[0] || !rows[0].key || !rows[1] || !rows[1].key) return { error: 'Pick a parameter for Rows and Columns' };
+  const used = rows.slice(0, 3).filter((r) => r.key);
   const axes = [];
   for (const r of used) {
     const inp = s.inputs.find((i) => i.key === r.key);
@@ -327,6 +328,8 @@ function looksText(n) {
   n = Number.isFinite(n) ? n : 0;
   return `looks this strategy: ${n} — expect ~${Math.round(n / 20)} lucky cells at 5%`;
 }
+/* The looks line: a counter the server refused to read (a corrupt looks.json) is said so, never shown as 0. */
+function looksLine(n, err) { return err ? `looks counter unreadable: ${err}` : looksText(n); }
 /* Rows = the 1st parameter, columns = the 2nd, one panel per value of a 3rd; cells[r][c] = the cell index. */
 function heatPanels(g) {
   const [ra, ca, pa] = g.axes, at = new Map(g.cells.map((c) => [c.coords.join(','), c.i]));
@@ -361,7 +364,7 @@ function gridProgress(st) {
   return { text: '', frac: null, final: false };
 }
 
-const api = { MAX_CELLS, parseValues, valueLabel, gridAxes, gridCount, gridProblems, gridBody, looksText, heatPanels, heatMaxAbs,
+const api = { MAX_CELLS, parseValues, valueLabel, gridAxes, gridCount, gridProblems, gridBody, looksText, looksLine, heatPanels, heatMaxAbs,
   heatLevel, cellView, gridProgress, RANGES, HOLDOUT_START, DEFAULT_RULES, REASON_MAX, defaults, restore, fromRun, reachesHoldout, problems, inputError, body,
   key, runLabel, progress, pct, rate, num, dur, fmtEt, tiles, badges, propView, summaryRows, periodRows, sortTrades, tradeCells,
   tradeMarks, equitySeries, reachSpec, toneOf };

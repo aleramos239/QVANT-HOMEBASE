@@ -41,7 +41,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from .. import strategies
 from ..backtest import propsim
-from ..backtest.grid import GridManager
+from ..backtest.grid import GridManager, LooksCorrupt
 from ..backtest.runner import RunManager, default_base
 from ..backtest.tape import CACHE
 
@@ -151,7 +151,10 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
 
     @r.get("/looks")
     def looks():
-        return grids.all_looks()
+        try:
+            return grids.all_looks()
+        except LooksCorrupt as e:           # refused, never shown as a reset counter
+            raise HTTPException(409, str(e)) from None
 
     r.manager = manager   # so the chart service can stop an in-flight child on shutdown
     r.grids = grids       # likewise every grid cell's child

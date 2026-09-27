@@ -5,13 +5,19 @@ Every cell is an ordinary tester run -- the request `runner.validate()` builds f
 with the same params, executed by the same `runner exec` child (`--no-lock`: the grid's own
 2-worker pool bounds it, not the one-run flock) -- so a cell's report IS the single run's.
 
-    <base> = homebase/.state/tester
+    <shared> = slots.shared_dir() = ~/.homebase/tester   (per machine: every checkout counts here)
       looks.json                 {strategy: finished grid cells ever run}   (the looks counter)
+    <base> = homebase/.state/tester                     (per checkout)
       grids/<id>/grid.json       the grid: axes, base inputs, costs, per-cell status + summary
       grids/<id>/cells/NN/       a run dir exactly as runs/<id>/ (request, status, run, trades, ...)
 
 Looks: a cell counts once, when it finishes with numbers (status done) -- a cancelled or
 never-started cell was never seen. At a 5% level ~looks/20 cells read "significant" by luck.
+The counter is never reset silently: a looks.json that does not parse (or holds anything but
+{name: count >= 0}) is copied to looks.json.bak and REFUSED -- no grid starts until a person
+fixes or removes it. Writes are fsync'd tmp + rename under a cross-process flock (looks.lock).
+A checkout-local <base>/looks.json from before the counter moved is summed in once and renamed
+looks.json.migrated.
 The chart service owns a GridManager: cells go FIFO through a pool of WORKERS threads, each
 waiting on its own child process, so the service's event loop never runs a backtest. A cell
 starts only once it holds a machine-wide backtest slot (slots.py: 2 at once shared with single
@@ -21,7 +27,11 @@ from __future__ import annotations
 
 import copy
 import datetime as dt
+import fcntl
 import itertools
+import json
+import os
+import shutil
 import secrets
 import subprocess
 import sys
@@ -34,7 +44,7 @@ from ..paths import repo_root
 from . import runner
 from .discipline import DisciplineError, parse_range
 from .runner import RUN_ID, _now, read_json, write_json
-from .slots import QUIET_MSG, Slots
+from .slots import QUIET_MSG, Slots, shared_dir
 from .tape import ARCHIVE, CACHE
 
 MAX_CELLS = 60
@@ -119,21 +129,88 @@ def validate_grid(body) -> dict:
 
 # ---------------------------------------------------------------- the looks counter
 
+class LooksCorrupt(ValueError):
+    """looks.json exists but is not {name: count >= 0}. Shown to the user; never auto-repaired."""
+
+
+def _valid_looks(d) -> bool:
+    return isinstance(d, dict) and all(isinstance(k, str) and type(v) is int and v >= 0 for k, v in d.items())
+
+
 def read_looks(path: Path) -> dict[str, int]:
-    d = read_json(Path(path), {})
-    if not isinstance(d, dict):
+    """{} when the file does not exist; LooksCorrupt (after keeping a .bak copy) when it does not parse."""
+    path = Path(path)
+    try:
+        raw = path.read_bytes()
+    except FileNotFoundError:
         return {}
-    return {k: v for k, v in d.items() if isinstance(v, int) and not isinstance(v, bool) and v >= 0}
+    try:
+        d = json.loads(raw)
+    except ValueError:
+        d = None
+    if not _valid_looks(d):
+        bak = path.with_name(path.name + ".bak")
+        shutil.copyfile(path, bak)
+        raise LooksCorrupt(f"the looks counter {path} is unreadable (kept a copy as {bak.name}): fix or "
+                           "remove it -- it is never reset silently, and no grid runs until then")
+    return d
+
+
+def _write_durable(path: Path, data) -> None:
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(json.dumps(data, separators=(",", ":"), sort_keys=True))
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
+    dfd = os.open(path.parent, os.O_RDONLY)
+    try:
+        os.fsync(dfd)
+    finally:
+        os.close(dfd)
+
+
+class _looks_lock:
+    """The cross-process lock for a looks.json read-modify-write (every checkout shares the file)."""
+
+    def __init__(self, path: Path):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self.fh = open(path.with_name("looks.lock"), "a")
+
+    def __enter__(self):
+        fcntl.flock(self.fh, fcntl.LOCK_EX)
+        return self
+
+    def __exit__(self, *exc):
+        self.fh.close()
 
 
 def add_look(path: Path, strategy: str, n: int = 1) -> int:
-    """+n looks for `strategy`; the new total. Callers serialize (GridManager holds its lock)."""
+    """+n looks for `strategy`; the new total. LooksCorrupt (file untouched) when it is unreadable."""
     path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    looks = read_looks(path)
-    looks[strategy] = looks.get(strategy, 0) + n
-    write_json(path, looks)
-    return looks[strategy]
+    with _looks_lock(path):
+        looks = read_looks(path)
+        looks[strategy] = looks.get(strategy, 0) + n
+        _write_durable(path, looks)
+        return looks[strategy]
+
+
+def migrate_looks(local: Path, shared: Path) -> bool:
+    """Sum a checkout-local looks.json into the shared one, once (the local file is renamed
+    .migrated). False (both files untouched) when either is unreadable."""
+    local, shared = Path(local), Path(shared)
+    if not local.exists():
+        return False
+    with _looks_lock(shared):
+        try:
+            mine, theirs = read_looks(local), read_looks(shared)
+        except LooksCorrupt:
+            return False
+        for k, v in mine.items():
+            theirs[k] = theirs.get(k, 0) + v
+        _write_durable(shared, theirs)
+        os.replace(local, local.with_name(local.name + ".migrated"))
+    return True
 
 
 # ---------------------------------------------------------------- the manager
@@ -150,12 +227,15 @@ class GridManager:
     """The chart service's handle on heat-map grids (thread-safe; no asyncio)."""
 
     def __init__(self, base: Path, *, archive: Path = ARCHIVE, cache: Path = CACHE,
-                 python: str = sys.executable, workers: int = WORKERS, slots: Slots | None = None):
+                 python: str = sys.executable, workers: int = WORKERS, slots: Slots | None = None,
+                 shared: Path | None = None):
         self.base, self.grids = Path(base), Path(base) / "grids"
-        self.looks_path = self.base / "looks.json"
+        self.shared = Path(shared) if shared is not None else shared_dir()
+        self.looks_path = self.shared / "looks.json"
         self.archive, self.cache, self.python, self.workers = Path(archive), Path(cache), python, workers
         self.grids.mkdir(parents=True, exist_ok=True)
-        self.slots = slots or Slots(self.base / "slots")
+        self.slots = slots or Slots(self.shared / "slots")
+        migrate_looks(self.base / "looks.json", self.looks_path)
         self._q: deque[tuple[str, int]] = deque()
         self._procs: dict[tuple[str, int], subprocess.Popen] = {}
         self._live: dict[str, dict] = {}          # grids this process started (the rest are read from disk)
@@ -189,6 +269,7 @@ class GridManager:
 
     def submit(self, body) -> str:
         g = validate_grid(body)
+        read_looks(self.looks_path)            # LooksCorrupt (a ValueError -> 400): no grid runs uncounted
         gid = f"{dt.datetime.now():%Y%m%d-%H%M%S}-{g['strategy']}-{secrets.token_hex(2)}"
         d = self.grids / gid
         cells = []
@@ -222,7 +303,10 @@ class GridManager:
     def _view(self, gid: str) -> dict:        # under the lock
         st = self._live.get(gid)
         st = copy.deepcopy(st) if st is not None else (read_json(self.grids / gid / "grid.json", {}) or {})
-        st["looks"] = read_looks(self.looks_path).get(st.get("strategy"), 0)
+        try:
+            st["looks"] = read_looks(self.looks_path).get(st.get("strategy"), 0)
+        except LooksCorrupt as e:
+            st["looks"], st["looks_error"] = None, str(e)
         if (st.get("status") not in FINAL and any(c.get("status") == "queued" for c in st.get("cells", []))
                 and self.slots.quiet()):
             st["paused"] = QUIET_MSG
@@ -302,10 +386,11 @@ class GridManager:
                 self._save(gid)
                 log = open(cdir / "log.txt", "ab")
                 try:
-                    proc = subprocess.Popen(
+                    proc = subprocess.Popen(      # the child holds the slot too: it lives as long as the backtest
                         [self.python, "-m", "homebase.backtest.runner", "exec", str(cdir), "--no-lock",
-                         "--archive", str(self.archive), "--cache", str(self.cache)],
-                        cwd=repo_root(), stdout=log, stderr=subprocess.STDOUT)
+                         "--archive", str(self.archive), "--cache", str(self.cache),
+                         "--slot-fd", str(slot.fileno())],
+                        cwd=repo_root(), stdout=log, stderr=subprocess.STDOUT, pass_fds=(slot.fileno(),))
                 except OSError as e:
                     slot.close()
                     log.close()
@@ -325,7 +410,10 @@ class GridManager:
                 self._procs.pop((gid, i), None)
                 if run is not None:                 # it finished with numbers (even if a cancel raced it)
                     cell.update(status="done", summary=_summary(run))
-                    add_look(self.looks_path, st["strategy"])
+                    try:
+                        add_look(self.looks_path, st["strategy"])
+                    except LooksCorrupt as e:       # refused at submit; broken mid-grid: say so, never reset
+                        st["looks_error"] = str(e)
                 elif cell["status"] != "cancelled":
                     tail = (cdir / "log.txt").read_text(errors="replace")[-600:]
                     cell.update(status="error", error=rs.get("error") or f"runner exited {code}: {tail}")

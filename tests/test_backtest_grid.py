@@ -118,10 +118,47 @@ def test_looks_persist_per_strategy(tmp_path):
     assert grid.add_look(p, "ym930") == 1
     assert json.loads(p.read_text()) == {"nq930": 2, "ym930": 1}
     assert grid.read_looks(p) == {"nq930": 2, "ym930": 1}          # a fresh read, e.g. after a restart
-    p.write_text("{torn")
-    assert grid.read_looks(p) == {}                                # never crashes the page on a bad file
-    p.write_text(json.dumps({"nq930": 5, "bad": "x", "neg": -1}))
-    assert grid.read_looks(p) == {"nq930": 5}
+    assert not list(p.parent.glob("*.tmp"))
+
+
+@pytest.mark.parametrize("raw", ["{torn", "", "[1, 2]", json.dumps({"nq930": 5, "bad": "x"}),
+                                 json.dumps({"nq930": -1}), json.dumps({"nq930": True})])
+def test_a_corrupt_looks_file_is_refused_kept_as_bak_and_never_reset(tmp_path, raw):
+    p = tmp_path / "looks.json"
+    p.write_text(raw)
+    with pytest.raises(grid.LooksCorrupt, match="looks.json.bak"):
+        grid.read_looks(p)
+    with pytest.raises(grid.LooksCorrupt):
+        grid.add_look(p, "nq930")
+    assert p.read_text() == raw                                    # untouched: never silently reset
+    assert (tmp_path / "looks.json.bak").read_text() == raw
+
+
+def test_a_grid_is_refused_while_the_looks_file_is_corrupt(tmp_path, tester_shared):
+    (tester_shared / "looks.json").write_text("{torn")
+    m = GridManager(tmp_path)
+    with pytest.raises(ValueError, match="looks.json"):
+        m.submit(gbody())
+    assert not list((tmp_path / "grids").glob("2*"))
+    assert (tester_shared / "looks.json").read_text() == "{torn"
+
+
+def test_looks_live_in_the_machine_wide_dir_and_a_checkout_local_file_is_summed_in_once(tmp_path, tester_shared):
+    (tester_shared / "looks.json").write_text(json.dumps({"nq930": 2, "ym930": 1}))
+    (tmp_path / "looks.json").write_text(json.dumps({"nq930": 3, "gc_nfpcpi": 4}))
+    m = GridManager(tmp_path)
+    assert m.looks_path == tester_shared / "looks.json" and m.slots.dir == tester_shared / "slots"
+    assert grid.read_looks(tester_shared / "looks.json") == {"nq930": 5, "ym930": 1, "gc_nfpcpi": 4}
+    assert not (tmp_path / "looks.json").exists() and (tmp_path / "looks.json.migrated").exists()
+    GridManager(tmp_path)                                          # a restart: never summed twice
+    assert grid.read_looks(tester_shared / "looks.json") == {"nq930": 5, "ym930": 1, "gc_nfpcpi": 4}
+
+
+def test_a_corrupt_checkout_local_looks_file_is_not_migrated_and_kept(tmp_path, tester_shared):
+    (tmp_path / "looks.json").write_text("{torn")
+    GridManager(tmp_path)
+    assert (tmp_path / "looks.json").read_text() == "{torn"
+    assert grid.read_looks(tester_shared / "looks.json") == {}
 
 
 # ---------------------------------------------------------------- the manager, with a fake child
@@ -179,6 +216,7 @@ def fake(monkeypatch):
 
     def popen(argv, **kw):
         ch = FakeChild(argv, release, net=100.0 * (len(spawned) + 1))
+        ch.kw = kw
         spawned.append(ch)
         return ch
 
@@ -186,7 +224,7 @@ def fake(monkeypatch):
     return release, spawned
 
 
-def test_the_pool_runs_at_most_two_cells_at_once_and_counts_one_look_per_finished_cell(tmp_path, fake):
+def test_the_pool_runs_at_most_two_cells_at_once_and_counts_one_look_per_finished_cell(tmp_path, fake, tester_shared):
     release, spawned = fake
     m = GridManager(tmp_path, archive=tmp_path / "a", cache=tmp_path / "c")
     gid = m.submit(gbody(axes=[{"key": "offset_pts", "values": [10, 11, 12]}, {"key": "sl_pts", "values": [5, 6]}]))
@@ -201,19 +239,21 @@ def test_the_pool_runs_at_most_two_cells_at_once_and_counts_one_look_per_finishe
     assert st["looks"] == 0
     for ch in spawned:
         assert "--no-lock" in ch.argv and ch.argv[ch.argv.index("--archive") + 1] == str(tmp_path / "a")
+        fd = int(ch.argv[ch.argv.index("--slot-fd") + 1])
+        assert ch.kw["pass_fds"] == (fd,)                        # the child holds its own slot
     release.set()
     st = wait_grid(m, gid)
     assert st["status"] == "done" and st["done"] == 6 and FakeChild.peak == 2
     assert all(c["status"] == "done" and c["summary"]["sharpe"] == 1.5 for c in st["cells"])
     assert sorted(c["summary"]["net_profit"] for c in st["cells"]) == [100.0 * k for k in range(1, 7)]
-    assert st["looks"] == 6 and grid.read_looks(tmp_path / "looks.json") == {"nq930": 6}
+    assert st["looks"] == 6 and grid.read_looks(tester_shared / "looks.json") == {"nq930": 6}
     # the state is on disk: a new manager (a restarted service) reads the finished grid back
     m2 = GridManager(tmp_path)
     assert m2.status(gid)["status"] == "done" and m2.status(gid)["looks"] == 6
     assert m2.list()[0]["id"] == gid
 
 
-def test_cancel_drops_queued_cells_stops_running_ones_and_counts_no_look_for_them(tmp_path, fake):
+def test_cancel_drops_queued_cells_stops_running_ones_and_counts_no_look_for_them(tmp_path, fake, tester_shared):
     release, spawned = fake
     m = GridManager(tmp_path)
     gid = m.submit(gbody())
@@ -225,7 +265,7 @@ def test_cancel_drops_queued_cells_stops_running_ones_and_counts_no_look_for_the
     assert [c["status"] for c in st["cells"]] == ["cancelled"] * 4
     time.sleep(0.2)
     assert len(spawned) == 2                                   # nothing queued was started after the cancel
-    assert m.status(gid)["looks"] == 0 and grid.read_looks(tmp_path / "looks.json") == {}
+    assert m.status(gid)["looks"] == 0 and grid.read_looks(tester_shared / "looks.json") == {}
     assert m.cancel(gid)["status"] == "cancelled"              # idempotent
 
 
@@ -283,3 +323,52 @@ def test_every_cell_equals_a_single_run_with_the_same_params(tmp_path):
         for k, v in cell["summary"].items():
             if k in allc:
                 assert v == allc[k], k
+
+
+# ---------------------------------------------------------------- two cells building one cache session at once
+
+def _exec_after_barrier(run_dir: str, archive: str, cache: str, barrier) -> None:
+    from pathlib import Path
+
+    from homebase.backtest.runner import execute
+    from homebase.backtest.tape import TapeStore
+    barrier.wait(30)                    # both processes start building the (empty) cache together
+    execute(Path(run_dir), TapeStore(Path(archive), Path(cache)))
+
+
+def test_two_cells_building_the_same_cached_sessions_concurrently_equal_a_single_run(tmp_path):
+    """Review #9: two backtest PROCESSES (as two grid cells are) build the same tape-cache
+    sessions at the same moment into one empty cache; each result must equal a single run built
+    alone on its own fresh cache, and the shared cache must load back identically."""
+    import multiprocessing as mp
+
+    from homebase.backtest import runner as R
+    from homebase.backtest.tape import TapeStore
+    archive, shared_cache = nq_archive(tmp_path / "ticks"), tmp_path / "cache-shared"
+    params = [{"offset_pts": 10.0}, {"offset_pts": 12.0}]
+    dirs = [tmp_path / "cells" / "runs" / R.prepare({"strategy": "nq930", "inputs": {"adx_gate": False, **p},
+                                                      "range": {"kind": "research"}}, tmp_path / "cells")
+            for p in params]
+    ctx = mp.get_context("spawn")
+    barrier = ctx.Barrier(2)
+    procs = [ctx.Process(target=_exec_after_barrier, args=(str(d), str(archive), str(shared_cache), barrier))
+             for d in dirs]
+    for p in procs:
+        p.start()
+    for p in procs:
+        p.join(60)
+        assert p.exitcode == 0
+    for p, d in zip(params, dirs):
+        base = tmp_path / f"alone-{p['offset_pts']}"
+        rid = R.prepare({"strategy": "nq930", "inputs": {"adx_gate": False, **p}, "range": {"kind": "research"}}, base)
+        R.execute(base / "runs" / rid, TapeStore(archive, base / "cache"))
+        alone, both = R.read_bundle(base / "runs" / rid), R.read_bundle(d)
+        assert both["run"]["report"] == alone["run"]["report"]
+        for k in ("trades", "equity", "plots", "propsim"):
+            assert both[k] == alone[k], k
+    # the concurrently built cache is byte-for-byte what a lone build writes
+    alone_cache = tmp_path / f"alone-{params[0]['offset_pts']}" / "cache"
+    built = sorted(p.relative_to(shared_cache) for p in shared_cache.rglob("*") if p.is_file())
+    assert built and not [p for p in built if p.name.endswith(".tmp")]
+    for rel in built:
+        assert (shared_cache / rel).read_bytes() == (alone_cache / rel).read_bytes(), rel

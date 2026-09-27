@@ -111,7 +111,8 @@ let gridStarting = false;  // POST in flight
 let gridErr = '';          // a 400 detail / lost contact -- cleared on the next axis edit
 let looksMap = {};         // {strategy: looks}
 let heatCell = null;       // {gid, i}: the cell whose report is loaded in the other tabs
-let heatResumed = false;   // the newest grid of this strategy was looked up once (page reload)
+let heatResumed = false;   // the newest grid of this strategy was looked up once (page reload / strategy switch)
+let looksErr = '';         // GET /looks refused (a corrupt looks.json): shown, never read as 0
 let heatCfgEl = null, heatErrEl = null, heatCountEl = null, heatLooksEl = null, heatRunEl = null, heatNoteEl = null;
 let heatGridEl = null, heatProgBar = null, heatProgText = null;
 let heatCellEls = new Map();
@@ -460,6 +461,7 @@ function loadRecentRun(id) {
   fetch(`/api/tester/run/${id}/bundle`).then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
     .then((b) => {
       const schema = schemaFor(b.run.strategy.id);
+      if (b.run.strategy.id !== strategyId) resetGrid();
       strategyId = b.run.strategy.id;
       form = X.fromRun(b.run, schema);
       bundle = b;
@@ -859,7 +861,7 @@ function syncHeat() {
   const text = gridErr || prob || '';
   heatErrEl.textContent = text;
   heatErrEl.hidden = !text;
-  heatLooksEl.textContent = X.looksText(looksMap[strategyId] || 0);
+  heatLooksEl.textContent = X.looksLine(looksMap[strategyId] || 0, (grid && grid.looks_error) || looksErr);
   const runBtnEl = heatRunEl && heatRunEl.querySelector('.tst-run');
   if (runBtnEl) runBtnEl.disabled = !!prob;
 }
@@ -990,8 +992,12 @@ function renderHeatmap(container) {
 
 /* A page reload mid-grid: pick the newest grid of this strategy back up (and the looks counter). */
 function resumeGrid() {
-  fetch('/api/tester/looks').then((r) => (r.ok ? r.json() : {})).catch(() => ({}))
-    .then((m) => { looksMap = { ...m, ...looksMap }; syncHeat(); });
+  fetch('/api/tester/looks').then(async (r) => {
+    if (r.status === 409) { let d = ''; try { d = (await r.json()).detail || ''; } catch (_) { /* no body */ } looksErr = d || 'unreadable'; return {}; }
+    looksErr = '';
+    return r.ok ? r.json() : {};
+  }).catch(() => ({}))
+    .then((m) => { looksMap = { ...looksMap, ...m }; syncHeat(); });
   const idle = () => !gridStarting && (!grid || grid.lost);
   if (!idle()) return;
   const token = gridToken, want = grid && grid.lost ? grid.id : null;
@@ -1040,7 +1046,7 @@ function pollGrid(gid, token, attempt = 0) {
       const fresh = !grid || grid.id !== st.id, wasBusy = gridInFlight();
       grid = st;
       gridStarting = false;
-      looksMap[st.strategy] = st.looks;
+      if (st.looks != null) looksMap[st.strategy] = st.looks;
       const final = X.gridProgress(st).final;
       if (fresh) { refreshHeatConfig(); buildGrid(); } else { patchGrid(); if (wasBusy && final) refreshHeatConfig(); }
       if (!final) setTimeout(() => pollGrid(gid, token, 0), 1000);
@@ -1089,7 +1095,20 @@ function loadCell(i) {
 
 /* ================================================================== strategy switching / mount ================================================================== */
 
+/* Review #8: the heat-map belongs to ONE strategy. A switch drops the old grid from the page (its poll
+   stops via the token); on the server it keeps running, and the next heat-map render re-attaches the
+   newest grid of whichever strategy is current -- so switching back picks the old one up again. */
+function resetGrid() {
+  gridToken++;
+  grid = null;
+  gridStarting = false;
+  gridErr = '';
+  heatCell = null;
+  heatResumed = false;
+}
+
 function switchStrategy(id) {
+  if (id !== strategyId) resetGrid();
   strategyId = id;
   form = X.restore(store.forms[id], schemaFor(id));
   bundle = null;

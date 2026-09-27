@@ -42,7 +42,7 @@ from .. import strategies
 from ..paths import repo_root, state_dir
 from . import discipline, propsim, report
 from .engine import ENGINE_VERSION, Costs, run_session
-from .slots import QUIET_MSG, QUIET_REFUSAL, Slots
+from .slots import QUIET_MSG, QUIET_REFUSAL, Slots, held
 from .tape import ARCHIVE, CACHE, TapeStore, coverage_reason, effective_session_window, missing_hours
 
 RUN_ID = re.compile(r"^\d{8}-\d{6}-[a-z0-9_]+-[0-9a-f]{4}$")
@@ -300,7 +300,7 @@ class RunManager:
                  python: str = sys.executable, slots: Slots | None = None):
         self.base, self.runs = Path(base), Path(base) / "runs"
         self.archive, self.cache, self.python = Path(archive), Path(cache), python
-        self.slots = slots or Slots(self.base / "slots")
+        self.slots = slots or Slots()          # the per-machine slots (slots.shared_dir())
         self.runs.mkdir(parents=True, exist_ok=True)
         self._q: deque[str] = deque()
         self._proc: tuple[str, subprocess.Popen] | None = None
@@ -426,10 +426,11 @@ class RunManager:
                 d = self.runs / rid
                 log = open(d / "log.txt", "ab")
                 try:
-                    proc = subprocess.Popen(
+                    proc = subprocess.Popen(      # the child holds the slot too: it lives as long as the backtest
                         [self.python, "-m", "homebase.backtest.runner", "exec", str(d),
-                         "--archive", str(self.archive), "--cache", str(self.cache)],
-                        cwd=repo_root(), stdout=log, stderr=subprocess.STDOUT)
+                         "--archive", str(self.archive), "--cache", str(self.cache),
+                         "--slot-fd", str(slot.fileno())],
+                        cwd=repo_root(), stdout=log, stderr=subprocess.STDOUT, pass_fds=(slot.fileno(),))
                 except OSError as e:
                     slot.close()
                     log.close()
@@ -478,6 +479,9 @@ def main(argv: list[str] | None = None) -> int:
     ex = sub.add_parser("exec", help="run a prepared run dir (the chart service uses this)")
     ex.add_argument("run_dir", type=Path)
     ex.add_argument("--no-lock", action="store_true", help="a heat-map cell: the grid pool bounds it")
+    ex.add_argument("--slot-fd", type=int, default=None,
+                    help="an inherited backtest slot (the chart service passes it); without one, exec "
+                         "takes its own slot and refuses the 09:20-09:35 ET window")
     run = sub.add_parser("run", help="validate + run in this process (scripts, the assistant)")
     run.add_argument("--strategy", required=True)
     run.add_argument("--input", action="append", default=[], help="key=value (JSON value)")
@@ -494,8 +498,19 @@ def main(argv: list[str] | None = None) -> int:
     a = ap.parse_args(argv)
     store = TapeStore(a.archive, a.cache)
     if a.cmd == "exec":
-        os.nice(5)          # on top of the chart job's own nice 5: a backtest never competes with the desk
-        return exec_run(a.run_dir, store, lock=not a.no_lock)
+        slot = None
+        if a.slot_fd is None or not held(a.slot_fd):
+            slots = Slots()
+            if slots.quiet():
+                print(QUIET_REFUSAL, file=sys.stderr)
+                return 2
+            slot = slots.acquire()
+        try:
+            os.nice(5)      # on top of the chart job's own nice 5: a backtest never competes with the desk
+            return exec_run(a.run_dir, store, lock=not a.no_lock)
+        finally:
+            if slot is not None:
+                slot.close()
     if a.range in ("research", "is_months"):
         rng = {"kind": a.range}
     else:
@@ -507,7 +522,7 @@ def main(argv: list[str] | None = None) -> int:
     if a.holdout_reason:
         body["holdout"] = {"reason": a.holdout_reason}
     base = a.base or default_base()
-    slots = Slots(base / "slots")
+    slots = Slots()
     if slots.quiet():
         print(QUIET_REFUSAL, file=sys.stderr)
         return 2
