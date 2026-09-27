@@ -13,6 +13,7 @@
 </script>
 <link rel="stylesheet" href="/static/shadcn.css">
 <script src="/static/vendor/lightweight-charts.js"></script>
+<script src="/static/algo-visibility.js?v=1"></script>
 <style>
   /* Page chrome — same language as the TradeCopier app: B&W chrome, the only
      hues are --pos/--neg for P&L-grade data, shadcn tokens for everything. */
@@ -343,6 +344,7 @@
       <div class="ready notready" id="readyStrip" style="display:none"></div>
 
       <div class="sec-head" style="margin-top:8px">
+        <span class="hint" id="algoHiddenHint" style="display:none"></span>
         <span class="spacer"></span>
         <button class="btn btn-outline btn-sm btn-icon" onclick="openAccts()"
           title="Connected accounts">
@@ -350,6 +352,7 @@
             stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h4"/></svg>
         </button>
+        <button class="btn btn-outline btn-sm" onclick="openAlgoMgr()">Manage algos</button>
         <button class="btn btn-outline btn-sm" onclick="openConnect()">+ Add account</button>
       </div>
       <div id="strats"></div>
@@ -519,6 +522,20 @@
   </div>
 </div>
 
+<div class="overlay" id="algoOverlay">
+  <div class="modal" style="width:640px;max-width:94vw">
+    <div class="cal-head">
+      <span style="font-weight:600">Manage algos</span>
+      <span style="font-size:12px;color:var(--muted-foreground)" id="algoCount"></span>
+      <span class="spacer" style="flex:1"></span>
+      <button class="cal-nav" onclick="closeAlgoMgr()" title="Close">&times;</button>
+    </div>
+    <p class="mcap" style="margin:0 0 8px">Hiding is display only — it never changes whether an
+      algo trades. An algo that's live (on AND booked to an account) always shows here.</p>
+    <div id="algoList"></div>
+  </div>
+</div>
+
 <div class="overlay" id="liveOverlay">
   <div class="modal" style="width:640px;max-width:94vw">
     <div class="cal-head">
@@ -588,6 +605,14 @@
 const $ = (s) => document.querySelector(s);
 let ST = null;
 const DEMO = new URLSearchParams(location.search).has("demo");
+
+/* ---- algo manager: which algo cards show on the home page ----
+   Display-only preference, per viewer, in localStorage. Missing/unreadable
+   storage, or an algo that's tradable, has activity today, or needs a
+   human check, all fail toward SHOWING the card — the safe failure is
+   seeing more, never less. The pure decision lives in algo-visibility.js
+   so it can be unit tested with `node --test`. */
+let HIDDEN_ALGOS = (window.AlgoVisibility ? window.AlgoVisibility.loadHidden() : []);
 
 function toast(msg, ms = 4200) {
   const t = $("#toast");
@@ -770,8 +795,23 @@ function render() {
          title="Dismiss — reappears if the problems change"
          onclick="dismissReady()">&times;</button>`;
   } else strip.style.display = "none";
+
+  const algoVis = window.AlgoVisibility
+    ? window.AlgoVisibility.computeVisibility(s.strategies, s.book, HIDDEN_ALGOS)
+    : Object.keys(s.strategies).map(n => ({name: n, visible: true}));
+  const visibleNames = new Set(algoVis.filter(a => a.visible).map(a => a.name));
   $("#strats").innerHTML = Object.entries(s.strategies)
+    .filter(([n]) => visibleNames.has(n))
     .map(([n, v]) => stratCard(n, v)).join("");
+  const hiddenCount = algoVis.filter(a => !a.visible).length;
+  const hint = $("#algoHiddenHint");
+  if (hiddenCount) {
+    hint.style.display = "";
+    hint.innerHTML = `${hiddenCount} algo${hiddenCount > 1 ? "s" : ""} hidden — ` +
+      `<a href="#" onclick="openAlgoMgr();return false"
+         style="color:inherit;text-decoration:underline">manage</a>`;
+  } else hint.style.display = "none";
+  if ($("#algoOverlay").classList.contains("open")) renderAlgoMgr();
 
   const feed = $("#feed");
   const rows = (s.journal || []).map(r => {
@@ -1398,6 +1438,57 @@ async function removeAcct(id) {
 }
 $("#acctOverlay").addEventListener("click", (e) => {
   if (e.target === e.currentTarget) closeAccts();
+});
+
+/* ---- algo manager popup: choose which algos show on the home page ---- */
+function renderAlgoMgr() {
+  if (!ST || !window.AlgoVisibility) return;
+  const rows = window.AlgoVisibility.computeVisibility(ST.strategies, ST.book, HIDDEN_ALGOS);
+  $("#algoCount").textContent = rows.length + " algo" + (rows.length === 1 ? "" : "s");
+  $("#algoList").innerHTML = rows.length
+    ? rows.map(a => {
+        const statusPill = `<span class="${STATUS_PILL[a.day_status] || "pill idle"}">${a.day_status}</span>`;
+        const onPill = a.enabled
+          ? `<span class="pill live">ON</span>` : `<span class="pill idle">OFF</span>`;
+        const note = a.locked
+          ? `<span class="mcap" style="margin:2px 0 0">${a.lockReason}</span>` : "";
+        return `<div class="acct" style="padding:9px 0;align-items:flex-start">
+          <div style="display:flex;flex-direction:column;gap:2px;min-width:0">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="nm" style="font-size:13px">${a.name.toUpperCase()}</span>
+              <span class="hint" style="font-size:11.5px">${a.symbol}</span>
+              ${onPill}${statusPill}
+            </div>
+            ${note}
+          </div>
+          <span class="spacer"></span>
+          <label class="hint" style="display:flex;align-items:center;gap:6px;cursor:${a.locked ? "default" : "pointer"};font-size:12px"
+            title="${a.locked ? a.lockReason : "Show on home page"}">
+            Show on home page
+            <button class="switch" aria-checked="${a.visible}" ${a.locked ? "disabled" : ""}
+              onclick="toggleAlgoHidden('${a.name}', ${a.visible})"></button>
+          </label>
+        </div>`;
+      }).join("")
+    : `<div class="mcap" style="padding:14px 0">no algos configured yet</div>`;
+}
+function openAlgoMgr() { renderAlgoMgr(); $("#algoOverlay").classList.add("open"); }
+function closeAlgoMgr() { $("#algoOverlay").classList.remove("open"); }
+function toggleAlgoHidden(name, currentlyVisible) {
+  if (!window.AlgoVisibility) return;
+  // currentlyVisible -> user wants to hide it; already-hidden -> unhide.
+  // withHidden() itself also refuses to hide a locked algo, so a stale
+  // click on a supposedly-disabled control can't sneak one past the rule.
+  const rows = window.AlgoVisibility.computeVisibility(ST.strategies, ST.book, HIDDEN_ALGOS);
+  const row = rows.find(r => r.name === name);
+  const locked = !!(row && row.locked);
+  HIDDEN_ALGOS = window.AlgoVisibility.withHidden(HIDDEN_ALGOS, name, currentlyVisible, locked);
+  window.AlgoVisibility.saveHidden(HIDDEN_ALGOS);
+  renderAlgoMgr();
+  render();
+}
+$("#algoOverlay").addEventListener("click", (e) => {
+  if (e.target === e.currentTarget) closeAlgoMgr();
 });
 
 /* ---- strategy LIVE popup: calendar + metrics + trade log ---- */
