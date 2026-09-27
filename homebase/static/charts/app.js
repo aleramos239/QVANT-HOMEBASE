@@ -1322,6 +1322,7 @@ function connect() {
     if (m.type === 'desk' || m.type === 'quote') { window.HBDeskClient.onMessage(m); return; }
     if (m.type === 'paper') { window.HBPaperClient.onMessage(m); return; }
     if (m.type === 'depth') { window.HBDomUI.onDepth(m); window.HBL2Layer.onDepth(m); window.HBLiquidity.onDepth(m); return; }
+    if (m.type === 'news' || m.type === 'burst' || m.type === 'burst_update') { window.HBNewsUI.onMessage(m); return; }
     const c = cells.find((x) => x.id === m.id);
     if (!c) return;
     if (m.type === 'history') c.onHistory(m);
@@ -1426,9 +1427,11 @@ async function init() {
   page.overlays.push(window.HBTesterLayer.overlay);  // Task 10: the tester's trades, plots and jump on the root's chart
   page.overlays.push(window.HBL2Layer.overlay);      // charts-l2-news-ui Task 2: big-order lines + the imbalance gauge
   page.overlays.push(window.HBLiquidity.overlay);    // charts-l2-news-ui Task 3: the liquidity heatmap behind the candles
+  page.overlays.push(window.HBNewsUI.overlay);       // 2026-09-27 news-ui plan, Task 4: headline ticks + burst markers
   // M8 (tester review): HBTesterUI.mount registers the 'tester' tab via HBPanel.addTab, so it runs BEFORE
   // HBPanel.mount reads a saved {tab: 'tester'} -- otherwise a saved tester tab is not restored on reload.
   window.HBTesterUI.mount(page);               // Task 9
+  window.HBNewsUI.mount(page);                 // 2026-09-27 news-ui plan, Task 4: registers the News tab
   window.HBPanel.mount(page);                 // Task 4
   window.HBTradeUI.mount(page);                // Task 5
   window.HBOrderPanel.mount(page);             // order-panel plan Task 3: the right dock (follows the selected chart)
