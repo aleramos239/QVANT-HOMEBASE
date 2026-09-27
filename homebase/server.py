@@ -631,7 +631,9 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                     "research": s.metrics,
                     "live": live.get(name),
                     "day_status": engine.day_status(name),
-                    "accounts": [vars(st) for st in engine.day_states(name)],
+                    "killed": engine.killed_today(name),
+                    "accounts": [{**vars(st), "check_it": engine.needs_check(st)}
+                                 for st in engine.day_states(name)],
                 } for name, s in cfg.strategies.items()
             },
             "journal": journal,

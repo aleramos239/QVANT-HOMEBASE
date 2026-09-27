@@ -608,9 +608,10 @@ const DEMO = new URLSearchParams(location.search).has("demo");
 
 /* ---- algo manager: which algo cards show on the home page ----
    Display-only preference, per viewer, in localStorage. Missing/unreadable
-   storage or a live algo (enabled + booked) both fail toward SHOWING the
-   card — the safe failure is seeing more, never less. The pure decision
-   lives in algo-visibility.js so it can be unit tested with `node --test`. */
+   storage, or an algo that's tradable, has activity today, or needs a
+   human check, all fail toward SHOWING the card — the safe failure is
+   seeing more, never less. The pure decision lives in algo-visibility.js
+   so it can be unit tested with `node --test`. */
 let HIDDEN_ALGOS = (window.AlgoVisibility ? window.AlgoVisibility.loadHidden() : []);
 
 function toast(msg, ms = 4200) {
@@ -1450,7 +1451,7 @@ function renderAlgoMgr() {
         const onPill = a.enabled
           ? `<span class="pill live">ON</span>` : `<span class="pill idle">OFF</span>`;
         const note = a.locked
-          ? `<span class="mcap" style="margin:2px 0 0">Live — disable it before hiding</span>` : "";
+          ? `<span class="mcap" style="margin:2px 0 0">${a.lockReason}</span>` : "";
         return `<div class="acct" style="padding:9px 0;align-items:flex-start">
           <div style="display:flex;flex-direction:column;gap:2px;min-width:0">
             <div style="display:flex;align-items:center;gap:8px">
@@ -1462,7 +1463,7 @@ function renderAlgoMgr() {
           </div>
           <span class="spacer"></span>
           <label class="hint" style="display:flex;align-items:center;gap:6px;cursor:${a.locked ? "default" : "pointer"};font-size:12px"
-            title="${a.locked ? "Live — disable it before hiding" : "Show on home page"}">
+            title="${a.locked ? a.lockReason : "Show on home page"}">
             Show on home page
             <button class="switch" aria-checked="${a.visible}" ${a.locked ? "disabled" : ""}
               onclick="toggleAlgoHidden('${a.name}', ${a.visible})"></button>
@@ -1476,12 +1477,12 @@ function closeAlgoMgr() { $("#algoOverlay").classList.remove("open"); }
 function toggleAlgoHidden(name, currentlyVisible) {
   if (!window.AlgoVisibility) return;
   // currentlyVisible -> user wants to hide it; already-hidden -> unhide.
-  // withHidden() itself also refuses to hide a live algo, so a stale click
-  // on a supposedly-disabled control can't sneak one past the rule.
+  // withHidden() itself also refuses to hide a locked algo, so a stale
+  // click on a supposedly-disabled control can't sneak one past the rule.
   const rows = window.AlgoVisibility.computeVisibility(ST.strategies, ST.book, HIDDEN_ALGOS);
   const row = rows.find(r => r.name === name);
-  const live = !!(row && row.live);
-  HIDDEN_ALGOS = window.AlgoVisibility.withHidden(HIDDEN_ALGOS, name, currentlyVisible, live);
+  const locked = !!(row && row.locked);
+  HIDDEN_ALGOS = window.AlgoVisibility.withHidden(HIDDEN_ALGOS, name, currentlyVisible, locked);
   window.AlgoVisibility.saveHidden(HIDDEN_ALGOS);
   renderAlgoMgr();
   render();
