@@ -76,6 +76,9 @@ function doStart(cell, date, time) {
   // history for THIS date has loaded); qty: the practice block's own quantity field, 1 by default.
   sessions.set(cell, { pending: true, forcedTrade: false, ov: null, sim: null, feed: null, lastPrice: null,
     qty: 1, ...cell.replay });
+  // M3 (final review): Trading off NOW, not at the first replay_state -- an exit, a reconnect or a `stopped`
+  // before that state would otherwise leave it on over the replay's historical bars (onState still re-checks)
+  if (cell.cfg.trade && cell.cfg.trade.on) window.HBTradeUI.setCellTrade(cell, { on: false, accounts: cell.cfg.trade.accounts });
   refreshOverlays(cell);
   cell.host.send(R.startOp(cell.id, date, time));
 }
@@ -252,9 +255,12 @@ function guardSymbolChange(cell, patch) {
     clearSession(cell);
     cell.update(patch);
   };
+  // M1 (final review): the Enter that picked the new symbol / interval opened this dialog; its auto-repeat must
+  // not natively click a button here (a held key never answers it), and the default focus is Cancel
+  box.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.repeat) e.preventDefault(); });
   foot.append(no, yes);
   box.appendChild(foot);
-  yes.focus();
+  no.focus();
 }
 
 /* ---- keyboard (app.js's onKey; Space/→ only while the cell is selected and no input is focused) ---- */

@@ -262,7 +262,7 @@ function build() {
   const foot = mk('div', 'op-foot');
   ui.send = mk('button', 'op-send buy', 'Buy');
   ui.send.type = 'button';
-  wireSend(ui.send);
+  T.wireSend(ui.send, send);
   ui.reason = mk('div', 'op-reason');
   ui.reason.setAttribute('role', 'status');
   foot.append(ui.send, ui.reason);
@@ -293,20 +293,8 @@ function coll(title, key) {
   return { box, head: h, body, key };
 }
 
-/* ---- the send: a pointer click, or Enter / Space on the focused button -- never a held key ---- */
-function wireSend(b) {
-  let spaceDown = false;
-  b.addEventListener('click', (e) => { if (e.detail > 0) send(); });   // keyboard activation is handled below
-  b.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); if (!e.repeat) send(); }
-    else if (e.key === ' ') { e.preventDefault(); if (!e.repeat) spaceDown = true; }
-  });
-  // Space sends on release (as a native button does): the confirm dialog opens only after the key is up, so the
-  // release can never land on its confirm button
-  b.addEventListener('keyup', (e) => { if (e.key === ' ') { e.preventDefault(); if (spaceDown) { spaceDown = false; send(); } } });
-  b.addEventListener('blur', () => { spaceDown = false; });
-}
-
+/* ---- the send: a pointer click, or Enter / Space on the focused button -- never a held key (HBTrade.wireSend,
+   shared with the chart's Buy/Sell block) ---- */
 function send() {
   if (UI().busy() || ui.send.disabled) return;
   const cell = selectedCell();   // resolved NOW, at the click -- never a chart kept from a paint

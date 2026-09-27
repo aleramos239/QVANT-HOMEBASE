@@ -9,7 +9,8 @@
    per-account Close/Cancel act on the named account only (accountGate).
 
    A chart's algo (2026-09-27 plan, Task 3): `cell.cfg.algo` is set through setCellAlgo; its Kill (botKill) goes
-   through the same confirm + guardedSend path, needs the LIVE arm for a LIVE account of the bot, and is offered
+   through the same confirm and a guardedSend-shaped send on its OWN per-strategy lock (final review I3: a hung
+   order never holds a Kill back), needs the LIVE arm for a LIVE account of the bot, and is offered
    whatever the chart's Trading switch says (it is the emergency stop, not trading).
 
    Safety (ruling S4/S5, and the 2026-09-27 review of Tasks 3-4):
@@ -111,6 +112,16 @@ function findUnarmed(ids) {
   const st = D().state, list = (st && st.accounts) || [];
   for (const id of ids) if (!isArmedAccount(id)) return list.find((x) => x.id === id) || { id };
   return null;
+}
+/* final review I3: the emergency Kill has its OWN lock, per strategy -- never the page-wide one above, so an order,
+   modify or flatten hung on the desk (up to its 20 s timeout) can never hold a Kill back. It still needs its
+   confirm, the LIVE arm (killGate) and the replay gate; a second Kill of the SAME strategy while one is in flight
+   is refused (the desk is idempotent per client_id and serialises kills itself). */
+const killing = new Set();   // strategy keys whose Kill is in flight
+function killBusy(key) { return killing.has(key); }
+function setKilling(key, v) {
+  if (v) killing.add(key); else killing.delete(key);
+  for (const fn of [...busySubs]) { try { fn(inFlight); } catch (e) { console.error(e); } }   // the badges repaint
 }
 function busy() { return inFlight; }
 function onBusyChange(fn) { busySubs.add(fn); return () => busySubs.delete(fn); }
@@ -404,7 +415,7 @@ function killGate(cell, key) {
 function botKill(cell) {
   const key = T.cellAlgo(cell && cell.cfg && cell.cfg.algo);
   if (!key) return;
-  if (busy()) { D().toast('err', 'Another action is in flight'); return; }
+  if (killBusy(key)) { D().toast('err', `A Kill of ${T.algoName(key)} is already in flight`); return; }   // I3: never the page-wide lock
   const g = () => killGate(cell, key), gate = g();
   if (gate.mode !== 'on') { D().toast('err', gate.reason); return; }
   const shown = gate.accounts, c = T.killConfirm(key, D().state.bot.strategies[key], D().state);
@@ -415,7 +426,18 @@ function botKill(cell) {
   };
   confirm({ title: c.title, rows: c.rows.map((r) => ({ label: r.label, env: r.env })), note: c.note, live: c.live,
     action: 'Kill', tone: 'down', oneClickBox: false })
-    .then((ok) => { if (ok) guardedSend('bot-kill', g, build); });
+    .then((ok) => { if (ok) killSend(key, g, build); });
+}
+/* guardedSend's shape for the Kill, on the Kill's own per-strategy lock (I3): the gate re-run at send time. */
+function killSend(key, gate, buildBody) {
+  if (killBusy(key)) { D().toast('err', `A Kill of ${T.algoName(key)} is already in flight`); return; }
+  setKilling(key, true);
+  Promise.resolve().then(() => {
+    const m = gate();
+    if (m.mode !== 'on') { D().toast('err', m.reason); return null; }
+    const body = buildBody(m);
+    return body == null ? null : D().send('bot-kill', body);
+  }).catch((e) => console.error(e)).finally(() => setKilling(key, false));
 }
 
 /* ---- the chart's right-click menu: Buy/Sell limit/stop, Cancel all / Flatten / Reverse -- only on a chart whose
@@ -666,5 +688,6 @@ function mount(pg) {
 }
 
 window.HBTradeUI = { mount, placeOrder, symbolAction, flattenAccount, cancelOrder, closeLine, moveLine, confirm, busy,
-  onBusyChange, onTradeChange, effectiveMode, editableIds, fillIds, tradeOf, setCellTrade, setCellAlgo, selectionChanged, botKill };
+  onBusyChange, onTradeChange, effectiveMode, editableIds, fillIds, tradeOf, setCellTrade, setCellAlgo, selectionChanged, botKill,
+  killBusy };
 })();

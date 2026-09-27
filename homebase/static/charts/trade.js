@@ -171,6 +171,36 @@ function tradeMode(desk, ct) {
   return { mode: 'on', reason: '', accounts };
 }
 
+/* ---- final whole-branch review (2026-09-27) ---- */
+/* I2(b), SAFETY ruling: ANY symbol change on a chart switches that chart's Trading OFF and keeps its accounts
+   (qty and SL/TP ticks are global, so a Trading-on NQ chart moved to GC would otherwise trade GC at the NQ size
+   on the next one-click). This deliberately replaces the earlier plan text "a symbol change keeps the trade
+   config". `patch` is the change about to apply to `cfg`; null when it does not change the symbol. `wasOn`: the
+   caller toasts SYMBOL_CHANGE_TRADE_OFF only when Trading really was on. */
+const SYMBOL_CHANGE_TRADE_OFF = 'Trading switched off — new instrument; turn it back on in the Trade menu';
+function symbolChangeTrade(cfg, patch) {
+  if (!isObj(cfg) || !isObj(patch) || !('root' in patch) || patch.root === cfg.root) return null;
+  const was = cellTrade(cfg.trade);
+  return { trade: { on: false, accounts: was.accounts }, wasOn: was.on };
+}
+
+/* I1: a send button (the order panel's Send, the chart's Buy/Sell block) acts on a POINTER click, or on Enter /
+   Space pressed on it -- never on a held key's auto-repeat, and never on the click event a keyboard makes
+   (detail 0: keyboard activation is handled here instead, so it is counted once). Space sends on release (as a
+   native button does), so a confirm dialog opens only after the key is up. `blur`: drop focus after a pointer
+   click (the chart block), so a later Enter/Space -- or a menu closing and handing focus back -- cannot land
+   on the button. `b` needs only addEventListener (and blur() when `blur`). */
+function wireSend(b, send, { blur = false } = {}) {
+  let spaceDown = false;
+  b.addEventListener('click', (e) => { if (e.detail > 0) { if (blur) b.blur(); send(); } });
+  b.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); if (!e.repeat) send(); }
+    else if (e.key === ' ') { e.preventDefault(); if (!e.repeat) spaceDown = true; }
+  });
+  b.addEventListener('keyup', (e) => { if (e.key === ' ') { e.preventDefault(); if (spaceDown) { spaceDown = false; send(); } } });
+  b.addEventListener('blur', () => { spaceDown = false; });
+}
+
 /* ---- safety review (2026-09-27 review of Task 5, and its follow-up review of Tasks 5+6) ---- */
 /* Enter in the confirm dialog: confirms only when focus is on the primary button, or on a non-button element
    (the checkbox, an unfocusable row) -- never on ×, Cancel, or any other button, and never a held key
@@ -1128,7 +1158,7 @@ const api = { PREFS_KEY, QUOTE_STALE_MS, BOT_NAMES, parsePrefs, prefsText, short
   lineText, lineColor, canDrag, withPrice, orderTitle, confirmOrder, actionTitle, resultToasts, fillText, fillMarkers, botName, positionRows, orderRows, fillRows, accountRows, etTime, diffRows,
   algoName, algoLabel, algoChoices, algoAccounts, botPill, botToday, algoOverlay, etMs, pastRunMarkers, nearestTip, historySig,
   killConfirm, killToasts, killBlock, killSold,
-  enterConfirms, resolveConfirmedAccounts, armedTicked, unarmedLiveMessage, freshQuote,
+  enterConfirms, wireSend, SYMBOL_CHANGE_TRADE_OFF, symbolChangeTrade, resolveConfirmedAccounts, armedTicked, unarmedLiveMessage, freshQuote,
   needsQuoteForBracket, refuseIfMarketable, cellTrade, loadedTrade, cellAlgo, tradeBits, templateTrade, algoForRoot,
   migrateTicked, deskGate, armedMode, replayGuard, legsWithin, accountChips, acctTick, hiddenCellsOff,
   PANEL_QTY_MAX, GTC_WARN, exitTriple, qtyFromRisk, exitSideError, panelOrder, sendLabel,

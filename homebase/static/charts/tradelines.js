@@ -57,8 +57,10 @@ class Overlay {
     this.buyPx = document.createElement('span'); this.buyPx.className = 'tr-px';
     this.buyBtn.append(this.buyPx, mk('span', 'tr-lbl', 'BUY'));
     this.block.append(this.sellBtn, this.mid, this.buyBtn);
-    this.sellBtn.onclick = () => this.trade('Sell');
-    this.buyBtn.onclick = () => this.trade('Buy');
+    // I1 (final review): a real pointer click, or Enter / Space with no auto-repeat -- never the click a held key
+    // (or a menu handing focus back to a focused BUY) makes; a pointer click drops focus (HBTrade.wireSend)
+    T.wireSend(this.sellBtn, () => this.trade('Sell'), { blur: true });
+    T.wireSend(this.buyBtn, () => this.trade('Buy'), { blur: true });
     this.qty.onchange = () => {
       const n = Math.round(Number(this.qty.value));
       window.HBDeskClient.setPrefs({ qty: Number.isFinite(n) ? n : window.HBDeskClient.prefs.qty });
@@ -274,7 +276,9 @@ class Overlay {
   paintBadge(o) {
     this.badges.hidden = !o;
     if (!o) { this.badgeKey = null; return; }
-    const busy = window.HBTradeUI.busy(), pnl = o.pnl == null ? '' : T.usd(o.pnl);
+    // I3 (final review): the Kill greys out only while a Kill of THIS algo is in flight -- never behind the page-wide
+    // send lock (a hung order must not block the emergency stop)
+    const busy = window.HBTradeUI.killBusy(T.cellAlgo(this.cell.cfg && this.cell.cfg.algo)), pnl = o.pnl == null ? '' : T.usd(o.pnl);
     const rp = !!this.cell.replay;   // a replaying chart cannot Kill (HBTradeUI.killGate refuses it too)
     const key = JSON.stringify([o.label, o.pill, o.gate, pnl, busy, rp]);
     if (key === this.badgeKey) return;
