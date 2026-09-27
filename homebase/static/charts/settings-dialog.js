@@ -98,8 +98,10 @@ function mount(box, host) {
   const cell = host.cell;
   // Cancel puts every chart back: its settings, its indicators and its interval (a template's Apply can
   // change any of the three previews live, spec §8)
+  // (and, Task 2, its trade accounts + algo: host.tradeBits, when the page provides it)
+  const tradeBits = (c) => (host.tradeBits ? host.tradeBits(c) : null);
   const atOpen = new Map(host.cells().map((c) => [c, {
-    settings: c.settings(), indicators: JSON.parse(JSON.stringify(c.cfg.indicators)), spec: c.cfg.spec,
+    settings: c.settings(), indicators: JSON.parse(JSON.stringify(c.cfg.indicators)), spec: c.cfg.spec, trade: tradeBits(c),
   }]));
   let work = S.normalize(cell.settings()), tab = 0, done = false, raf = 0;
   const swatches = new Map();   // colour key -> the <i> inside its swatch button
@@ -265,6 +267,7 @@ function mount(box, host) {
     if (t.indicators) patch.indicators = t.indicators;
     if (t.spec) patch.spec = t.spec;
     if (Object.keys(patch).length) cell.update(patch);
+    if (host.applyTrade) host.applyTrade(cell, raw);   // Task 2: its accounts (Trading always off) and algo, if stored
   }
   function menuBtn(text) {
     const b = button('menu-i');
@@ -298,8 +301,8 @@ function mount(box, host) {
         const save = async () => {
           const name = input.value.trim(), why = S.templateNameError(name);
           if (why) { fail(why); input.focus(); return; }
-          const body = S.buildTemplate({ settings: work, indicators: cell.cfg.indicators, spec: cell.cfg.spec },
-            { indicators: indCb.checked, interval: ivCb.checked });
+          const body = { ...S.buildTemplate({ settings: work, indicators: cell.cfg.indicators, spec: cell.cfg.spec },
+            { indicators: indCb.checked, interval: ivCb.checked }), ...(tradeBits(cell) || {}) };   // Task 2: accounts + algo
           const res = await host.templates.save(name, body);
           if (res) { fail(res); return; }
           host.closeMenu();
@@ -355,7 +358,8 @@ function mount(box, host) {
       const at = atOpen.get(c);
       return !at || JSON.stringify(c.settings()) !== JSON.stringify(at.settings)
         || JSON.stringify(c.cfg.indicators) !== JSON.stringify(at.indicators)
-        || c.cfg.spec !== at.spec;
+        || c.cfg.spec !== at.spec
+        || JSON.stringify(tradeBits(c)) !== JSON.stringify(at.trade);
     }));
   };
   const tpl = button('btn btn-ghost tpl-btn'), chev = mk('span', 'icw sm'), applyAll = button('btn btn-ghost', 'Apply to all');
@@ -390,6 +394,8 @@ function mount(box, host) {
         if (JSON.stringify(c.cfg.indicators) !== JSON.stringify(at.indicators)) patch.indicators = at.indicators;
         if (c.cfg.spec !== at.spec) patch.spec = at.spec;
         if (Object.keys(patch).length) c.update(patch);
+        // Task 2: accounts + algo back as at open -- with Trading OFF (host.restoreTrade), never switched back on
+        if (host.restoreTrade && JSON.stringify(tradeBits(c)) !== JSON.stringify(at.trade)) host.restoreTrade(c, at.trade);
       }
     },
   };

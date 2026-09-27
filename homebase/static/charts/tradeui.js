@@ -3,10 +3,15 @@
    the Buy/Sell limit/stop + Cancel all / Flatten / Reverse items in the chart's right-click menu
    (HBChartMenu.register('trading', …)).
 
+   Trading is PER CHART (2026-09-27 plan, Task 2): each chart's cell config carries `trade: {on, accounts}`, and
+   every order-sending path takes its accounts from the chart it was started from (the Buy/Sell block, a chart-menu
+   item, a line's drag or ×, the order panel). The Trade menu edits the SELECTED chart. The bottom panel's
+   per-account Close/Cancel act on the named account only (accountGate).
+
    Safety (ruling S4/S5, and the 2026-09-27 review of Tasks 3-4):
-     - every action re-reads HBDesk.mode() and the ticked accounts at the moment it actually sends, not at the
-       moment the user clicked or the confirm dialog opened — the desk, the ticked set or a LIVE arm can all
-       change while a dialog is open;
+     - every action re-reads its gate (the chart's mode from HBDesk.mode(that chart's trade), or the named
+       account's gate) at the moment it actually sends, not at the moment the user clicked or the confirm dialog
+       opened — the desk, the chart's accounts, its switch or a LIVE arm can all change while a dialog is open;
      - one action's send is in flight at a time (`withLock`): a second attempt while one is out is dropped, and
        the chart menu's Buy/Sell/Cancel/Flatten/Reverse items disappear from a fresh right-click while busy;
      - a LIVE account needs a second click within 3 s to tick (S5) — including a LIVE tick already sitting in
@@ -24,21 +29,60 @@ let armTimer = 0;
 const liveConfirmed = new Set();   // LIVE accounts armed THIS session (never persisted: ruling S5 + the review note)
 let inFlight = false;    // one send at a time (review item 2; the 2026-09-27 review of Task 5 makes this a toast, not a silent drop)
 const busySubs = new Set();   // notified synchronously on every inFlight flip, so the panel and the chart's lines grey out immediately
+const tradeSubs = new Set();  // notified when a chart's trade config or a LIVE arm changes (the charts' overlays re-render)
+let menuCell = null;          // the chart the open Trade menu was filled for
 
-/* ---- mode, gated by this session's LIVE arms on top of HBTrade.tradeMode ---- */
-function effectiveMode() {
-  const m = D().mode();
-  if (m.mode !== 'on') return m;
-  const accounts = T.armedTicked(D().state, m.accounts, liveConfirmed);
-  if (accounts.length === m.accounts.length) return m;
-  return accounts.length ? { mode: 'on', reason: '', accounts }
-    : { mode: 'none', reason: 'Tick an account in the Trade menu', accounts: [] };
+/* ---- one chart's trade config and mode ---- */
+/* The chart's {on, accounts}, sanitised; a missing chart is off with no accounts. */
+function tradeOf(cell) { return T.cellTrade(cell && cell.cfg ? cell.cfg.trade : null); }
+/* The root a chart is showing (the loaded one; its config's while nothing has loaded yet). */
+function rootOfCell(cell) { return !cell ? null : cell.shown ? cell.shown.root : (cell.cfg && cell.cfg.root) || null; }
+/* HBTrade.tradeMode on THIS chart's config, with this session's LIVE arms on top (HBTrade.armedMode). */
+function effectiveMode(cell) {
+  return T.armedMode(D().mode(tradeOf(cell)), D().state, liveConfirmed);
 }
-/* The ticked accounts, armed (raw prefs.ticked minus an unarmed LIVE account) -- for the chart's lines and
-   execution markers (review item 5: "not raw prefs.ticked"), independent of whether those accounts are
-   tradable right now (a line stays visible, just read-only, the way tradeMode's own ticked-but-untradable
-   accounts already do). */
-function armedIds() { return T.armedTicked(D().state, D().prefs.ticked, liveConfirmed); }
+/* A chart-started send path's gate: the chart's mode, the chart still on the page, and still showing the root
+   the action was started for. Re-run at send time by guardedSend. */
+function cellGate(cell, root) {
+  const m = effectiveMode(cell);
+  if (m.mode !== 'on') return m;
+  if (!page || !page.cells().includes(cell)) return { mode: 'none', reason: 'That chart is gone — nothing sent', accounts: [] };
+  if (rootOfCell(cell) !== root) return { mode: 'none', reason: 'This chart changed symbol — nothing sent', accounts: [] };
+  return m;
+}
+/* The bottom panel's per-account gate: the desk up and on, and the named account armed if it is LIVE. */
+function accountGate(account) {
+  const g = D().gate();
+  if (g) return g;
+  if (!isArmedAccount(account)) {
+    const st = D().state, a = st && (st.accounts || []).find((x) => x.id === account);
+    return { mode: 'none', reason: T.unarmedLiveMessage(a || { id: account }), accounts: [] };
+  }
+  return { mode: 'on', reason: '', accounts: [account] };
+}
+/* The accounts whose lines this chart may drag / close: its effective accounts, none while it cannot trade. */
+function editableIds(cell) { const m = effectiveMode(cell); return m.mode === 'on' ? m.accounts : []; }
+/* The accounts whose execution markers this chart draws: its own accounts, minus an unarmed LIVE one
+   (review item 5), whether or not its Trading is on. */
+function fillIds(cell) { return T.armedTicked(D().state, tradeOf(cell).accounts, liveConfirmed); }
+function onTradeChange(fn) { tradeSubs.add(fn); return () => tradeSubs.delete(fn); }
+function notifyTrade() {
+  for (const fn of [...tradeSubs]) { try { fn(); } catch (e) { console.error(e); } }
+  updateTradeButton();
+  refillIfOpen();
+}
+/* Set a chart's trade config (sanitised). The page saves it: an account-list change is a layout change (the
+   layout reads Unsaved), the switch alone is not (a load always brings it back off). `quiet`: the caller saves
+   (a template preview in the Settings dialog, the one-time migration). */
+function setCellTrade(cell, next, { quiet = false } = {}) {
+  if (!cell || !cell.cfg) return;
+  const was = tradeOf(cell), now = T.cellTrade(next);
+  cell.cfg.trade = now;
+  if (!quiet && page && page.tradeChanged) page.tradeChanged(cell, JSON.stringify(was.accounts) !== JSON.stringify(now.accounts));
+  notifyTrade();
+}
+/* The page's selected chart changed: the toolbar dot and an open Trade menu follow it. */
+function selectionChanged() { updateTradeButton(); refillIfOpen(); }
 /* A single account id, refused when it is an unarmed LIVE account (review item 5's per-account paths). Fails
    CLOSED when the id isn't found in desk state at all (M6): unrecognized is never treated as armed. */
 function isArmedAccount(id) {
@@ -59,15 +103,15 @@ function setInFlight(v) {
   for (const fn of [...busySubs]) { try { fn(v); } catch (e) { console.error(e); } }
 }
 
-/* One send (or one sequential batch of them, for a per-leg modify/cancel) at a time, mode re-checked right
-   before it goes out. buildBody(m) returns a body object, an array of bodies (sent in order), or null/undefined
+/* One send (or one sequential batch of them, for a per-leg modify/cancel) at a time, its gate (a function: the
+   chart's cellGate, or the panel's accountGate) re-checked right before it goes out. buildBody(m) returns a body object, an array of bodies (sent in order), or null/undefined
    to abort silently (a specific toast — mode reason, accounts-changed, price-moved — already covers the "why").
    A second attempt while one is in flight now toasts instead of dropping silently (review item 3). */
-function guardedSend(action, buildBody) {
+function guardedSend(action, gate, buildBody) {
   if (inFlight) { D().toast('err', 'Another action is in flight'); return; }
   setInFlight(true);
   Promise.resolve().then(() => {
-    const m = effectiveMode();
+    const m = gate();
     if (m.mode !== 'on') { D().toast('err', m.reason); return null; }
     const body = buildBody(m);
     if (body == null) return null;
@@ -142,10 +186,11 @@ function confirm({ title, rows = [], note = '', each = '', live = false, action,
 }
 
 /* ---- actions (the table in the brief) ---- */
+/* `cell` is required: the order goes only to that chart's accounts (the order panel passes the selected chart). */
 function placeOrder({ cell, root, side, type, price = null, qty }) {
-  const gate = effectiveMode();
+  const g = () => cellGate(cell, root), gate = g();
   if (gate.mode !== 'on') { D().toast('err', gate.reason); return; }
-  const tick = cell ? cell.tick : tickFor(root), pv = cell ? cell.pv : null;
+  const tick = cell.tick, pv = cell.pv ?? null;
   const shown = gate.accounts;   // exactly what the dialog (or the one-click send) is about to show/act on (review item 2)
   const prefs = D().prefs;
   const px = type === 'Market' ? null : T.roundTick(price, tick);
@@ -173,7 +218,7 @@ function placeOrder({ cell, root, side, type, price = null, qty }) {
     }
     return T.orderBody({ clientId: T.clientId(), accounts: resolved.accounts, root, side, qty, type, price: px, sl, tp });
   };
-  if (D().prefs.oneClick) { guardedSend('order', build); return; }
+  if (D().prefs.oneClick) { guardedSend('order', g, build); return; }
   const preview = build(gate);
   // shown === gate.accounts here, so only the inferType re-check can abort a preview -- the market moved
   // between the chart-menu's right-click (where `type` was inferred) and picking the item just now.
@@ -181,11 +226,11 @@ function placeOrder({ cell, root, side, type, price = null, qty }) {
   const c = T.confirmOrder(preview, D().state, D().quotes[root], pv, tick);
   confirm({ title: c.title, rows: c.accounts.map((a) => ({ label: a.label, env: a.env })), note: c.bracket,
     each: c.each, live: c.live, action: side, tone: side === 'Sell' ? 'down' : 'accent' })
-    .then((ok) => { if (ok) guardedSend('order', build); });
+    .then((ok) => { if (ok) guardedSend('order', g, build); });
 }
 
-function symbolAction(kind, root) {
-  const gate = effectiveMode();
+function symbolAction(cell, kind, root) {
+  const g = () => cellGate(cell, root), gate = g();
   if (gate.mode !== 'on') { D().toast('err', gate.reason); return; }
   const shown = gate.accounts;
   const build = (m) => {
@@ -194,20 +239,24 @@ function symbolAction(kind, root) {
     if (!resolved.accounts.length) { D().toast('err', 'No confirmed accounts left — nothing sent'); return null; }   // M9
     return { client_id: T.clientId(), accounts: resolved.accounts, root };
   };
-  if (D().prefs.oneClick && kind !== 'reverse') { guardedSend(kind, build); return; }   // Reverse always confirms (S4)
-  const tick = tickFor(root);
+  if (D().prefs.oneClick && kind !== 'reverse') { guardedSend(kind, g, build); return; }   // Reverse always confirms (S4)
+  const tick = cell.tick;
   const title = T.actionTitle(kind, { root }, tick);
   const verb = kind === 'flatten' ? 'Flatten' : kind === 'reverse' ? 'Reverse' : 'Cancel orders';
   const rows = acctRows(shown);
-  confirm({ title, rows, action: verb, live: hasLive(rows) }).then((ok) => { if (ok) guardedSend(kind, build); });
+  confirm({ title, rows, action: verb, live: hasLive(rows) }).then((ok) => { if (ok) guardedSend(kind, g, build); });
 }
 
-function moveLine(line, price, root, tick, { onCancel } = {}) {
-  const gate = effectiveMode();
+/* A line may be moved / closed only from a chart whose effective accounts hold every one of its legs. */
+const NOT_THIS_CHART = "That line isn't on this chart's trading accounts — view only";
+
+function moveLine(cell, line, price, root, tick, { onCancel } = {}) {
+  const g = () => cellGate(cell, root), gate = g();
   if (gate.mode !== 'on') { D().toast('err', gate.reason); if (onCancel) onCancel(); return; }
   const accountIds = line.legs.map((l) => l.account);
   const unarmed = findUnarmed(accountIds);   // review item 5: refuse a LIVE leg that isn't armed this session
   if (unarmed) { D().toast('err', T.unarmedLiveMessage(unarmed)); if (onCancel) onCancel(); return; }
+  if (line.editable === false || !T.legsWithin(line, gate.accounts)) { D().toast('err', NOT_THIS_CHART); if (onCancel) onCancel(); return; }
   const rounded = T.roundTick(price, tick);
   if (rounded === T.roundTick(line.price, tick)) { if (onCancel) onCancel(); return; }   // M8: a zero-tick move sends nothing
   if (line.type) {   // I1/N2: re-run against the LAST KNOWN quote at any age -- a Limit dragged through (or
@@ -216,68 +265,69 @@ function moveLine(line, price, root, tick, { onCancel } = {}) {
     const msg = T.refuseIfMarketable(line.side, rounded, D().quotes[root], kind);
     if (msg) { D().toast('err', msg); if (onCancel) onCancel(); return; }
   }
-  const build = () => line.legs.map((leg) => ({ client_id: T.clientId(), account: leg.account, order_id: leg.order_id, price: rounded }));
-  if (D().prefs.oneClick) { guardedSend('modify', build); return; }
+  const build = (m) => {
+    if (!T.legsWithin(line, m.accounts)) { D().toast('err', 'Accounts changed — review and try again'); return null; }
+    return line.legs.map((leg) => ({ client_id: T.clientId(), account: leg.account, order_id: leg.order_id, price: rounded }));
+  };
+  if (D().prefs.oneClick) { guardedSend('modify', g, build); return; }
   const title = T.actionTitle('modify', { root, line, from: line.price, to: price }, tick);
   const rows = acctRows(accountIds);
   confirm({ title, rows, action: 'Move', live: hasLive(rows) })
-    .then((ok) => { if (ok) guardedSend('modify', build); else if (onCancel) onCancel(); });
+    .then((ok) => { if (ok) guardedSend('modify', g, build); else if (onCancel) onCancel(); });
 }
 
 /* × on a line: flatten for a position, cancel for the rest (SL/TP/plain orders). */
-function closeLine(line, root, tick) {
-  const gate = effectiveMode();
+function closeLine(cell, line, root, tick) {
+  const g = () => cellGate(cell, root), gate = g();
   if (gate.mode !== 'on') { D().toast('err', gate.reason); return; }
   const isPosition = line.kind === 'position';
   const accounts = [...new Set(line.legs.map((l) => l.account))];
   const unarmed = findUnarmed(accounts);   // review item 5
   if (unarmed) { D().toast('err', T.unarmedLiveMessage(unarmed)); return; }
+  if (line.editable === false || !T.legsWithin(line, gate.accounts)) { D().toast('err', NOT_THIS_CHART); return; }
   const action = isPosition ? 'flatten' : 'cancel';
-  const build = () => (isPosition ? { client_id: T.clientId(), accounts, root }
-    : line.legs.map((leg) => ({ client_id: T.clientId(), account: leg.account, order_id: leg.order_id })));
-  if (D().prefs.oneClick) { guardedSend(action, build); return; }
+  const build = (m) => {
+    if (!T.legsWithin(line, m.accounts)) { D().toast('err', 'Accounts changed — review and try again'); return null; }
+    return isPosition ? { client_id: T.clientId(), accounts, root }
+      : line.legs.map((leg) => ({ client_id: T.clientId(), account: leg.account, order_id: leg.order_id }));
+  };
+  if (D().prefs.oneClick) { guardedSend(action, g, build); return; }
   const title = T.actionTitle(action, { root, line }, tick);
   const verb = isPosition ? 'Flatten' : (line.legs.length > 1 ? 'Cancel orders' : 'Cancel order');
   const rows = acctRows(accounts);
-  confirm({ title, rows, action: verb, live: hasLive(rows) }).then((ok) => { if (ok) guardedSend(action, build); });
+  confirm({ title, rows, action: verb, live: hasLive(rows) }).then((ok) => { if (ok) guardedSend(action, g, build); });
 }
 
+/* The bottom panel's Close / Cancel: the NAMED account only, never a chart's list; the LIVE-arm check stays. */
 function flattenAccount(account, root) {
-  const gate = effectiveMode();
+  const g = () => accountGate(account), gate = g();
   if (gate.mode !== 'on') { D().toast('err', gate.reason); return; }
-  if (!isArmedAccount(account)) {
-    const st = D().state, a = st && (st.accounts || []).find((x) => x.id === account);
-    D().toast('err', T.unarmedLiveMessage(a || { id: account })); return;
-  }
   const build = () => ({ client_id: T.clientId(), accounts: [account], root });
-  if (D().prefs.oneClick) { guardedSend('flatten', build); return; }
+  if (D().prefs.oneClick) { guardedSend('flatten', g, build); return; }
   const title = T.actionTitle('flatten', { root }, tickFor(root));
   const rows = acctRows([account]);
-  confirm({ title, rows, action: 'Flatten', live: hasLive(rows) }).then((ok) => { if (ok) guardedSend('flatten', build); });
+  confirm({ title, rows, action: 'Flatten', live: hasLive(rows) }).then((ok) => { if (ok) guardedSend('flatten', g, build); });
 }
 
 function cancelOrder(account, order_id) {
-  const gate = effectiveMode();
+  const g = () => accountGate(account), gate = g();
   if (gate.mode !== 'on') { D().toast('err', gate.reason); return; }
-  if (!isArmedAccount(account)) {
-    const st = D().state, a = st && (st.accounts || []).find((x) => x.id === account);
-    D().toast('err', T.unarmedLiveMessage(a || { id: account })); return;
-  }
   const build = () => ({ client_id: T.clientId(), account, order_id });
-  if (D().prefs.oneClick) { guardedSend('cancel', build); return; }
+  if (D().prefs.oneClick) { guardedSend('cancel', g, build); return; }
   const { acct, order } = findOrder(account, order_id);
   const tick = order ? tickFor(T.rootOf(order.symbol)) : 0;
   const line = order ? { kind: 'order', side: order.side, type: order.type, qty: Number(order.qty) || 0,
     price: T.orderPrice(order), legs: [{ who: acct ? T.short(acct) : account }] } : null;
   const title = line ? T.actionTitle('cancel', { line }, tick) : 'Cancel order';
   const rows = acctRows([account]);
-  confirm({ title, rows, action: 'Cancel order', live: hasLive(rows) }).then((ok) => { if (ok) guardedSend('cancel', build); });
+  confirm({ title, rows, action: 'Cancel order', live: hasLive(rows) }).then((ok) => { if (ok) guardedSend('cancel', g, build); });
 }
 
-/* ---- the chart's right-click menu: Buy/Sell limit/stop, Cancel all / Flatten / Reverse ---- */
+/* ---- the chart's right-click menu: Buy/Sell limit/stop, Cancel all / Flatten / Reverse -- only on a chart whose
+   own Trading can trade right now, and every item acts for THAT chart ---- */
 function registerChartMenuTrading() {
   window.HBChartMenu.register('trading', (ctx) => {
-    if (effectiveMode().mode !== 'on' || busy()) return [];
+    if (effectiveMode(ctx.cell).mode !== 'on' || busy()) return [];
     const Dk = D(), q = T.freshQuote(Dk.quotes[ctx.root], page.clockMs()), qty = Dk.prefs.qty, out = [];   // M4
     if (ctx.price != null) {
       const price = T.roundTick(ctx.price, ctx.tick);   // always tick-rounded before inferType (review item 2)
@@ -287,9 +337,9 @@ function registerChartMenuTrading() {
           run: () => placeOrder({ cell: ctx.cell, root: ctx.root, side, type, price, qty }) });
       }
     }
-    out.push({ text: `Cancel all orders (${ctx.root})`, run: () => symbolAction('cancel-symbol', ctx.root) },
-      { text: `Flatten ${ctx.root}`, run: () => symbolAction('flatten', ctx.root) },
-      { text: `Reverse ${ctx.root}`, run: () => symbolAction('reverse', ctx.root) });
+    out.push({ text: `Cancel all orders (${ctx.root})`, run: () => symbolAction(ctx.cell, 'cancel-symbol', ctx.root) },
+      { text: `Flatten ${ctx.root}`, run: () => symbolAction(ctx.cell, 'flatten', ctx.root) },
+      { text: `Reverse ${ctx.root}`, run: () => symbolAction(ctx.cell, 'reverse', ctx.root) });
     return out;
   });
 }
@@ -299,7 +349,7 @@ function dotClass(mode) { return mode === 'on' ? 'ok' : mode === 'down' ? 'bad' 
 function updateTradeButton() {
   const btn = document.getElementById('tbTrade'), dot = document.getElementById('tbTradeDot');
   if (!btn || !dot) return;
-  const m = effectiveMode();
+  const m = effectiveMode(page && page.cur());   // the selected chart's
   dot.className = 'dot ' + dotClass(m.mode);
   btn.title = m.reason || 'Trade';
 }
@@ -307,17 +357,22 @@ function updateTradeButton() {
 function envSpan(env) { return page.mk('span', 'env' + (env === 'live' ? ' live' : ''), String(env || '').toUpperCase()); }
 function dotSpan(ok) { return page.mk('span', 'dot' + (ok ? ' ok' : ' bad')); }
 
-/* Ticking a LIVE account needs a second click within 3 s (S5) -- including one already ticked in localStorage
-   from a previous session, since liveConfirmed starts empty every load (the review's "re-confirm on first use
-   after reload"). */
-function onTickChange(a, cb) {
-  const prefs = D().prefs, wantTick = cb.checked;
+/* Ticking a LIVE account needs a second click within 3 s (S5) -- including one already on a chart's list from a
+   saved layout, since liveConfirmed starts empty every load (the review's "re-confirm on first use after
+   reload"). The arm is per account for the session (unchanged); the tick is the chart's. */
+function setAccountTicked(cell, id, on) {
+  const t = tradeOf(cell), ids = new Set(t.accounts);
+  if (on) ids.add(id); else ids.delete(id);
+  setCellTrade(cell, { on: t.on, accounts: [...ids] });
+}
+function onTickChange(cell, a, cb) {
+  if (!cell || cell !== page.cur()) { refillIfOpen(); return; }   // the menu edits the selected chart only
+  const wantTick = cb.checked;
   if (wantTick && a.env === 'live' && !liveConfirmed.has(a.id)) {
     if (armLive === a.id) {   // the second click, within the window: arm it for real
       liveConfirmed.add(a.id);
       clearTimeout(armTimer); armLive = null;
-      const ticked = new Set(prefs.ticked); ticked.add(a.id);
-      D().setPrefs({ ticked: [...ticked] });
+      setAccountTicked(cell, a.id, true);
     } else {                  // the first click: arm, but do not tick yet
       cb.checked = false;
       armLive = a.id;
@@ -329,18 +384,16 @@ function onTickChange(a, cb) {
   }
   if (armLive === a.id) { armLive = null; clearTimeout(armTimer); }
   if (!wantTick && a.env === 'live') liveConfirmed.delete(a.id);   // re-ticking this session arms again
-  const ticked = new Set(prefs.ticked);
-  if (wantTick) ticked.add(a.id); else ticked.delete(a.id);
-  D().setPrefs({ ticked: [...ticked] });
+  setAccountTicked(cell, a.id, wantTick);
 }
 
-function acctRow(a, prefs) {
+function acctRow(cell, a, t) {
   const id = `tm-acct-${a.id}`, row = page.mk('div', 'tm-row');
   const cb = page.mk('input');
   cb.type = 'checkbox'; cb.id = id; cb.dataset.tm = `acct:${a.id}`;
   cb.disabled = !a.tradable;
-  cb.checked = prefs.ticked.includes(a.id) && (a.env !== 'live' || liveConfirmed.has(a.id));
-  cb.onchange = () => onTickChange(a, cb);
+  cb.checked = t.accounts.includes(a.id) && (a.env !== 'live' || liveConfirmed.has(a.id));
+  cb.onchange = () => onTickChange(cell, a, cb);
   const lab = page.mk('label', 'tm-label');
   lab.htmlFor = id;
   if (armLive === a.id) {
@@ -388,8 +441,8 @@ function restoreFocus(m, key) {
    data-tm="acct:<id>"), leaving the qty/SL/TP inputs, the one-click switch and any LIVE arm in progress alone.
    A row that has gone missing (the account list itself changed) falls back to a full fillMenu(). */
 function patchAccountRows(m) {
-  const st = D().state, prefs = D().prefs;
-  if (!st) return false;
+  const st = D().state, t = tradeOf(menuCell);
+  if (!st || menuCell !== page.cur()) return false;
   const accounts = st.accounts || [];
   if (m.querySelectorAll('.tm-row').length !== accounts.length) return false;
   for (const a of accounts) {
@@ -397,7 +450,7 @@ function patchAccountRows(m) {
     const row = cb && cb.closest('.tm-row');
     if (!row) return false;
     cb.disabled = !a.tradable;
-    cb.checked = prefs.ticked.includes(a.id) && (a.env !== 'live' || liveConfirmed.has(a.id));
+    cb.checked = t.accounts.includes(a.id) && (a.env !== 'live' || liveConfirmed.has(a.id));
     const bal = row.querySelector('.tm-bal');
     if (bal) bal.textContent = T.money(a.balance);
     const dot = row.querySelector('.dot');
@@ -412,14 +465,37 @@ function patchAccountRows(m) {
   return true;
 }
 
+/* The header: "Trading on this chart — NQ · chart 2" and the chart's own Trading switch. */
+function cellHeader(cell, t) {
+  const head = page.mk('div', 'tm-head'), n = page.cells().indexOf(cell) + 1;
+  const title = cell ? `Trading on this chart — ${rootOfCell(cell) || '—'} · chart ${n}` : 'Trading on this chart';
+  head.appendChild(page.mk('span', 'tm-title', title));
+  if (!cell) return head;
+  const sw = page.mk('button', 'switch' + (t.on ? ' on' : ''));
+  sw.type = 'button';
+  sw.setAttribute('role', 'switch');
+  sw.setAttribute('aria-checked', String(t.on));
+  sw.setAttribute('aria-label', `Trading on chart ${n}`);
+  sw.dataset.tm = 'cellon';
+  sw.onclick = () => {
+    if (cell !== page.cur()) { refillIfOpen(); return; }   // the menu edits the selected chart only
+    const now = tradeOf(cell);
+    setCellTrade(cell, { on: !now.on, accounts: now.accounts });
+  };
+  head.appendChild(sw);
+  return head;
+}
+
 function fillMenu(m) {
   const key = focusKey(m);
   m.replaceChildren();
-  const st = D().state, prefs = D().prefs, mode = effectiveMode();   // review item 6: the status line uses the armed/effective mode
-  m.appendChild(page.mk('div', 'menu-h', 'CHART TRADING'));
-  if (mode.mode === 'down') {
-    m.appendChild(page.mk('div', 'tm-status', `Desk unreachable — ${mode.reason}`));
-  } else if (mode.mode === 'off') {
+  const cell = page.cur() || null, t = tradeOf(cell);
+  menuCell = cell;
+  const st = D().state, prefs = D().prefs, gate = D().gate(), mode = effectiveMode(cell);   // review item 6: the armed/effective mode
+  m.appendChild(cellHeader(cell, t));
+  if (gate && gate.mode === 'down') {
+    m.appendChild(page.mk('div', 'tm-status', `Desk unreachable — ${gate.reason}`));
+  } else if (gate && gate.mode === 'off') {
     const row = page.mk('div', 'tm-status');
     row.append(document.createTextNode('Chart trading is off on the desk'));
     const a = document.createElement('a');
@@ -430,8 +506,9 @@ function fillMenu(m) {
   } else {
     const lim = (st && st.limits) || {};
     m.appendChild(page.mk('div', 'tm-status', `Max ${lim.max_order_qty ?? '—'} per order · ${lim.max_position_qty ?? '—'} per position`));
+    if (t.on && mode.mode !== 'on') m.appendChild(page.mk('div', 'tm-status tm-why', mode.reason));
   }
-  for (const a of (st && st.accounts) || []) m.appendChild(acctRow(a, prefs));
+  for (const a of (st && st.accounts) || []) m.appendChild(acctRow(cell, a, t));
   m.appendChild(page.mk('div', 'menu-sep'));
   const oc = page.mk('div', 'tm-pref'), lab = page.mk('label', '', 'One-click trading');
   const sw = page.mk('button', 'switch' + (prefs.oneClick ? ' on' : ''));
@@ -473,5 +550,5 @@ function mount(pg) {
 }
 
 window.HBTradeUI = { mount, placeOrder, symbolAction, flattenAccount, cancelOrder, closeLine, moveLine, confirm, busy,
-  onBusyChange, armedIds, effectiveMode };
+  onBusyChange, onTradeChange, effectiveMode, editableIds, fillIds, tradeOf, setCellTrade, selectionChanged };
 })();

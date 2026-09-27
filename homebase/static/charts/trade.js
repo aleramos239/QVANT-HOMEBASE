@@ -26,13 +26,20 @@ const ET = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour
 const int = (v, lo, hi, dflt) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : dflt; };
 const accountsOf = (state) => (state && state.accounts) || [];
 
-/* ---- preferences (per viewer: localStorage hb_trade_prefs) ---- */
+/* A list of account ids: strings of 1-64 characters, de-duplicated, at most 20 (a fresh array). */
+function idList(v) {
+  return Array.isArray(v) ? [...new Set(v.filter((x) => typeof x === 'string' && x.length >= 1 && x.length <= 64))].slice(0, 20) : [];
+}
+const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
+
+/* ---- preferences (per viewer: localStorage hb_trade_prefs) ----
+   `ticked` is the RETIRED global account list: nothing routes orders from it any more (2026-09-27 plan, Task 2).
+   It is still parsed only so the page can migrate an old list onto one chart once (migrateTicked), then clear it. */
 function parsePrefs(text) {
   let o = null;
   try { o = JSON.parse(text); } catch (_) { o = null; }
-  if (!o || typeof o !== 'object' || Array.isArray(o)) o = {};
-  const ticked = Array.isArray(o.ticked)
-    ? [...new Set(o.ticked.filter((x) => typeof x === 'string' && x.length >= 1 && x.length <= 64))].slice(0, 20) : [];
+  if (!isObj(o)) o = {};
+  const ticked = idList(o.ticked);
   return { ticked, oneClick: o.oneClick === true, qty: int(o.qty, 1, QTY_MAX, 1),
     slTicks: int(o.slTicks, 0, QTY_MAX, 0), tpTicks: int(o.tpTicks, 0, QTY_MAX, 0) };
 }
@@ -91,14 +98,62 @@ let seq = 0;
 /* One per user action (the desk de-duplicates on it: a retry of the same action reuses it). */
 function clientId(now = Date.now()) { seq = (seq + 1) % 1e6; return `c${now.toString(36)}-${seq.toString(36)}-${Math.random().toString(36).slice(2, 8)}`; }
 
-/* ---- what the page may do (ruling S7) ---- */
-function tradeMode(desk, prefs) {
+/* ---- per-chart trading (2026-09-27 plan, Task 2) ----
+   Each chart's cell config carries `trade: {on, accounts}` (default off, no accounts) and `algo` (a desk strategy
+   key, or null). Every order-sending path takes its accounts from the chart it was started from. */
+/* The cell config's trade, sanitised: `on` only for a real true; accounts per idList. Always a fresh object. */
+function cellTrade(raw) {
+  const o = isObj(raw) ? raw : {};
+  return { on: o.on === true, accounts: idList(o.accounts) };
+}
+/* A layout (or template, or last-session) load: the accounts come back, Trading NEVER does. */
+function loadedTrade(raw) { return { on: false, accounts: cellTrade(raw).accounts }; }
+/* The cell's algo: a desk strategy key (1-64 characters), or null. */
+function cellAlgo(raw) { return typeof raw === 'string' && raw.length >= 1 && raw.length <= 64 ? raw : null; }
+/* What a layout / template save writes for a chart: its account list and its algo -- never `on`. */
+function tradeBits(cfg) {
+  const c = isObj(cfg) ? cfg : {};
+  return { trade: { accounts: cellTrade(c.trade).accounts }, algo: cellAlgo(c.algo) };
+}
+/* A stored template's trade / algo, as a load: only the keys the template has; trade forced off. */
+function templateTrade(tpl) {
+  const t = isObj(tpl) ? tpl : {}, out = {};
+  if ('trade' in t) out.trade = loadedTrade(t.trade);
+  if ('algo' in t) out.algo = cellAlgo(t.algo);
+  return out;
+}
+/* A chart moved to `root`: its algo stays only while the desk confirms that algo trades `root`; an algo the desk
+   does not list (or no desk state yet) cannot be confirmed, so it is cleared. */
+function algoForRoot(algo, root, strategies) {
+  const a = cellAlgo(algo), s = a && isObj(strategies) ? strategies[a] : null;
+  return s && rootOf(s.symbol) === root ? a : null;
+}
+/* The one-time move of the old global ticked list: onto the SELECTED chart only, and only when that chart has no
+   trade config of its own yet (an old layout's cell, or a fresh one). Trading stays off. null: nothing to move. */
+function migrateTicked(rawCell, ticked) {
+  if (isObj(rawCell) && 'trade' in rawCell) return null;
+  const accounts = idList(ticked);
+  return accounts.length ? { on: false, accounts } : null;
+}
+
+/* ---- what the page may do (ruling S7), per chart ---- */
+/* The desk-level half: down, or chart trading switched off on the desk; null when the desk is up and on. */
+function deskGate(desk) {
   if (!desk || !desk.state) return { mode: 'down', reason: (desk && desk.down) || 'connecting to the desk', accounts: [] };
-  const st = desk.state;
-  if (!st.enabled) return { mode: 'off', reason: 'Chart trading is off on the desk', accounts: [] };
-  const ticked = new Set(prefs.ticked);
-  const accounts = accountsOf(st).filter((a) => ticked.has(a.id) && a.tradable).map((a) => a.id);
-  if (!accounts.length) return { mode: 'none', reason: ticked.size ? 'No ticked account can trade right now' : 'Tick an account in the Trade menu', accounts };
+  if (!desk.state.enabled) return { mode: 'off', reason: 'Chart trading is off on the desk', accounts: [] };
+  return null;
+}
+/* One chart's mode from its trade config: its switch, then its accounts, then the desk's rules. `accounts` is
+   only ever a subset of THIS chart's accounts (the tradable ones). */
+function tradeMode(desk, ct) {
+  const t = cellTrade(ct);
+  if (!t.on) return { mode: 'off', reason: 'Trading is off on this chart', accounts: [] };
+  if (!t.accounts.length) return { mode: 'none', reason: 'Pick accounts for this chart in the Trade menu', accounts: [] };
+  const gate = deskGate(desk);
+  if (gate) return gate;
+  const ticked = new Set(t.accounts);
+  const accounts = accountsOf(desk.state).filter((a) => ticked.has(a.id) && a.tradable).map((a) => a.id);
+  if (!accounts.length) return { mode: 'none', reason: 'No ticked account can trade right now', accounts };
   return { mode: 'on', reason: '', accounts };
 }
 
@@ -166,6 +221,31 @@ function armedTicked(state, ticked, liveConfirmed) {
     return a.env !== 'live' || confirmed.has(id);
   });
 }
+/* A chart's mode with this session's LIVE arms applied (armedTicked): an unarmed LIVE account drops out; with none
+   left the chart cannot trade. A mode that is not 'on' passes through unchanged (the same object). */
+function armedMode(m, state, liveConfirmed) {
+  if (!m || m.mode !== 'on') return m;
+  const accounts = armedTicked(state, m.accounts, liveConfirmed);
+  if (accounts.length === m.accounts.length) return m;
+  return accounts.length ? { mode: 'on', reason: '', accounts }
+    : { mode: 'none', reason: 'Arm the LIVE account for this chart in the Trade menu', accounts: [] };
+}
+/* Whether every leg of a line belongs to `accounts` (a chart's effective accounts): the only lines a chart may
+   move or close. An empty or missing line never qualifies. */
+function legsWithin(line, accounts) {
+  const ok = new Set(accounts || []);
+  return !!line && Array.isArray(line.legs) && line.legs.length > 0 && line.legs.every((l) => ok.has(l.account));
+}
+/* The chart's accounts as legend chips, "…047 DEMO": `active` when the account is in `activeIds` (the ones an order
+   from this chart would go to right now); an account the desk does not list has no env. */
+function accountChips(state, accounts, activeIds) {
+  const act = new Set(activeIds || []), list = accountsOf(state);
+  return idList(accounts).map((id) => {
+    const a = list.find((x) => x.id === id), live = !!a && a.env === 'live';
+    return { id, who: short(a || { id }), env: a ? (live ? 'LIVE' : 'DEMO') : '', live, active: act.has(id) };
+  });
+}
+
 /* The refusal toast for an unarmed LIVE account (per-account paths: flatten, cancel, drag, ×). */
 function unarmedLiveMessage(account) {
   const label = (account && (account.label || account.id)) || 'account';
@@ -195,10 +275,13 @@ function rrText(risk, reward) { return risk > 0 && reward > 0 ? `1:${Number((rew
 /* ---- lines (ruling S8) ---- */
 /* Positions (merged by side + average price), SL/TP legs (an order opposite to the account's position in that
    contract: a stop type is SL, a limit is TP) and plain working orders, merged by kind + side + type + price, for
-   the ticked accounts in `root`. A bot's own orders (owner set) are drawn by the bot overlay instead. */
-function linesFor(state, root, prefs) {
+   EVERY account in `root` (Task 2: a chart never loses sight of a position). `editable` (an array or Set: the
+   chart's effective accounts, empty when its Trading is off) marks which lines may be dragged / closed; an editable
+   line and a view-only one are never merged together, so an action on a line can only reach editable accounts.
+   A bot's own orders (owner set) are drawn by the bot overlay instead. */
+function linesFor(state, root, editable) {
   if (!state) return [];
-  const ticked = new Set(prefs.ticked), groups = new Map();
+  const mine = new Set(editable || []), groups = new Map();
   const add = (key, base, leg) => {
     let g = groups.get(key);
     if (!g) { g = { key, ...base, qty: 0, legs: [] }; groups.set(key, g); }
@@ -206,11 +289,11 @@ function linesFor(state, root, prefs) {
     g.legs.push(leg);
   };
   for (const a of accountsOf(state)) {
-    if (!ticked.has(a.id)) continue;
+    const ed = mine.has(a.id), pre = ed ? 'e' : 'v';
     const who = short(a), pos = (a.positions || []).filter((p) => p.root === root && p.net);
     for (const p of pos) {
       const s = p.net > 0 ? 1 : -1;
-      add(`position|${s}|${p.avg_price}`, { kind: 'position', side: s > 0 ? 'Buy' : 'Sell', price: p.avg_price },
+      add(`${pre}|position|${s}|${p.avg_price}`, { kind: 'position', side: s > 0 ? 'Buy' : 'Sell', price: p.avg_price, editable: ed },
         { account: a.id, who, qty: Math.abs(p.net), avg: p.avg_price, s, pv: p.point_value ?? null, symbol: p.symbol });
     }
     for (const o of a.orders || []) {
@@ -219,7 +302,7 @@ function linesFor(state, root, prefs) {
       const p = pos.find((x) => x.symbol === o.symbol);
       const exit = !!p && ((p.net > 0 && o.side === 'Sell') || (p.net < 0 && o.side === 'Buy'));
       const kind = !exit ? 'order' : /stop/i.test(o.type) ? 'sl' : /limit/i.test(o.type) ? 'tp' : 'order';
-      add(`${kind}|${o.side}|${o.type}|${at}`, { kind, side: o.side, type: o.type, price: at },
+      add(`${pre}|${kind}|${o.side}|${o.type}|${at}`, { kind, side: o.side, type: o.type, price: at, editable: ed },
         { account: a.id, who, qty: Number(o.qty) || 0, order_id: String(o.order_id),
           avg: p ? p.avg_price : null, s: p ? (p.net > 0 ? 1 : -1) : 0, pv: p ? p.point_value ?? null : null });
     }
@@ -245,8 +328,9 @@ function lineLabel(g) {
   return `${g.side.toUpperCase()} ${abbr(g.type)} ${g.qty}`;
 }
 function lineText(g, last) {
-  if (g.kind === 'order') return `${lineLabel(g)} · ${whoText(g)}`;
-  return [lineLabel(g), usd(linePnl(g, last)), whoText(g)].filter(Boolean).join(' · ');
+  const view = g.editable === false ? 'view only' : null;
+  if (g.kind === 'order') return [lineLabel(g), whoText(g), view].filter(Boolean).join(' · ');
+  return [lineLabel(g), usd(linePnl(g, last)), whoText(g), view].filter(Boolean).join(' · ');
 }
 function lineColor(g, P) {
   if (g.kind === 'position') return g.side === 'Buy' ? P.up : P.down;
@@ -303,8 +387,9 @@ function fillText(ev, state, tick) {
 }
 
 /* ---- markers ({ms, …} for HBDrawings.placeMarkers) ---- */
-function fillMarkers(state, root, prefs, P) {
-  const ticked = new Set(prefs.ticked), out = [];
+/* `ids`: the chart's accounts (LIVE ones only once armed). */
+function fillMarkers(state, root, ids, P) {
+  const ticked = new Set(ids || []), out = [];
   for (const a of accountsOf(state)) {
     if (!ticked.has(a.id)) continue;
     for (const f of a.fills || []) {
@@ -435,7 +520,8 @@ const api = { PREFS_KEY, QUOTE_STALE_MS, BOT_NAMES, parsePrefs, prefsText, short
   lineText, lineColor, withPrice, orderTitle, confirmOrder, actionTitle, resultToasts, fillText, fillMarkers, botName,
   botsFor, positionRows, orderRows, fillRows, accountRows, etTime, diffRows,
   enterConfirms, resolveConfirmedAccounts, armedTicked, unarmedLiveMessage, freshQuote,
-  needsQuoteForBracket, refuseIfMarketable };
+  needsQuoteForBracket, refuseIfMarketable, cellTrade, loadedTrade, cellAlgo, tradeBits, templateTrade, algoForRoot,
+  migrateTicked, deskGate, armedMode, legsWithin, accountChips };
 if (typeof window !== 'undefined') window.HBTrade = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

@@ -5,7 +5,7 @@
    the server computes everything, the page only draws. */
 (() => {
 'use strict';
-const C = window.HBCatalog, I = window.HBIcons, S = window.HBSettings, { Cell, badgeEl } = window.HBCell;
+const C = window.HBCatalog, I = window.HBIcons, S = window.HBSettings, T = window.HBTrade, { Cell, badgeEl } = window.HBCell;
 const GRIDS = { 1: [1, 1], 2: [2, 1], 4: [2, 2], 6: [3, 2] };
 const GRID_NAMES = { 1: '1 chart', 2: '2 charts side by side', 4: '2 × 2 charts', 6: '3 × 2 charts' };
 const STATUS_STALE_S = 6;   // the server sends a status every 2 s: this long without one = it is stuck
@@ -40,6 +40,7 @@ let replayClock = null;   // {etMs, at, speed, done}: a replay's clock from its 
 let calendar = [];   // every stored calendar event (GET /api/calendar), by time
 let calendarAt;   // the service's calendar.fetched_at they came with (undefined: never loaded)
 let page = null;   // the page interface handed to the trading/tester modules (menus, dialogs, overlays); set in init()
+let lastRaw = [];  // the cells exactly as hb_charts_last stored them (the one-time ticked-list migration reads them)
 
 const $ = (s, root = document) => root.querySelector(s);
 const iso = (t) => new Date(t * 1000).toISOString();
@@ -53,7 +54,10 @@ function icon(name) { const s = mk('span', 'icw'); s.innerHTML = I[name] || ''; 
 const cur = () => cells[selected];
 
 /* ---- layout + selection ---- */
-function starter(i) { const [root, spec] = START[i % START.length]; return { root, spec, indicators: C.defaults() }; }
+function starter(i) {
+  const [root, spec] = START[i % START.length];
+  return { root, spec, indicators: C.defaults(), trade: T.loadedTrade(null), algo: null };
+}
 function saveLast() { try { localStorage.setItem('hb_charts_last', JSON.stringify(layout)); } catch (_) { /* storage off */ } }
 /* Anything that changes a chart outside the Settings dialog's own commit (Ok already marks dirty itself) reads
    the layout as Unsaved the same way: a template apply, removing a chart's indicators, or moving one between
@@ -81,19 +85,56 @@ function loadLast() {
     const v = JSON.parse(localStorage.getItem('hb_charts_last') || 'null');
     if (v && Array.isArray(v.cells)) {
       layout = { ...readLayout(v), name: typeof v.name === 'string' ? v.name : '', dirty: v.dirty === true };
+      lastRaw = v.cells;
     }
   } catch (_) { /* unreadable: start fresh */ }
 }
 
 /* A saved layout (localStorage or the server) as the page runs it: HBCatalog.migrateLayout gives each chart's
-   {root, spec, indicators}; each chart's settings (HBSettings overrides, cleaned) are kept beside them. */
+   {root, spec, indicators}; each chart's settings (HBSettings overrides, cleaned) are kept beside them, and its
+   trade accounts and algo (Task 2). EVERY load goes through HBTrade.loadedTrade: Trading always comes back off,
+   whatever the stored layout (or the last session) says. */
 function readLayout(v) {
   const lay = C.migrateLayout(v), raw = v && Array.isArray(v.cells) ? v.cells : [];
   lay.cells.forEach((c, i) => {
-    const s = raw[i] && raw[i].settings, o = S.overrides(s && typeof s === 'object' ? s : {});
+    const r = raw[i] && typeof raw[i] === 'object' ? raw[i] : {};
+    const s = r.settings, o = S.overrides(s && typeof s === 'object' ? s : {});
     if (Object.keys(o).length) c.settings = o;
+    c.trade = T.loadedTrade(r.trade);
+    c.algo = T.cellAlgo(r.algo);
   });
   return lay;
+}
+
+/* The desk's strategies (for an algo's symbol), or null before the desk has answered. */
+function deskStrategies() {
+  const st = window.HBDeskClient && window.HBDeskClient.state;
+  return (st && st.bot && st.bot.strategies) || null;
+}
+/* A template's trade / algo onto one chart (Task 2): only the keys the template stored; Trading always comes back
+   OFF (HBTrade.templateTrade -> loadedTrade); its algo is kept only while the desk confirms it trades this chart's
+   symbol (templates never store a symbol). `quiet`: the caller saves (the Settings dialog: on Ok). */
+function applyTemplateTrade(cell, raw, { quiet = false } = {}) {
+  const bits = T.templateTrade(raw);
+  if (bits.trade) window.HBTradeUI.setCellTrade(cell, bits.trade, { quiet });
+  if ('algo' in bits) cell.cfg.algo = T.algoForRoot(bits.algo, cell.cfg.root, deskStrategies());
+}
+/* The Settings dialog's Cancel: a chart's accounts and algo as they were at open (HBTrade.tradeBits) -- restored
+   with Trading OFF, never back on (a template Apply may have switched it off; Cancel does not re-arm it). */
+function restoreTemplateTrade(cell, bits) {
+  window.HBTradeUI.setCellTrade(cell, T.loadedTrade(bits && bits.trade), { quiet: true });
+  cell.cfg.algo = T.cellAlgo(bits && bits.algo);
+}
+
+/* Task 2's one-time migration: the retired global ticked list moves onto the SELECTED chart, Trading off, when
+   that chart has no trade config of its own yet (a pre-Task-2 layout, or a fresh one). Other charts get nothing.
+   The old list is then cleared, so this never runs again. */
+function migrateTickedOnce() {
+  const Dc = window.HBDeskClient, ticked = Dc.prefs.ticked;
+  if (!ticked || !ticked.length) return;
+  const c = cur(), moved = c ? T.migrateTicked(lastRaw[selected], ticked) : null;
+  if (moved) { window.HBTradeUI.setCellTrade(c, moved, { quiet: true }); saveLast(); }
+  Dc.setPrefs({ ticked: [] });
 }
 
 function hostFor(id) {
@@ -143,6 +184,7 @@ function select(i) {
   if (i < 0 || i >= cells.length) return;
   selected = i;
   cells.forEach((c, k) => c.setSelected(k === i));
+  if (page) window.HBTradeUI.selectionChanged();   // the Trade menu and its toolbar dot follow the selected chart
   renderToolbar();
   syncCrosshair();
 }
@@ -248,7 +290,8 @@ function symbolMenu() {
     list.replaceChildren(...hits.map((r) => {
       const b = menuItem(r, C.rootName(r), () => {
         closeMenu();
-        if (c.cfg.root !== r) c.update({ root: r });
+        // a new symbol keeps the chart's trade config; its algo stays only if it trades the new symbol (Task 2)
+        if (c.cfg.root !== r) c.update({ root: r, algo: T.algoForRoot(c.cfg.algo, r, deskStrategies()) });
       }, r === c.cfg.root);
       b.prepend(badgeEl(r, 16));
       return b;
@@ -347,8 +390,12 @@ async function fetchLayouts() {
 
 /* PUT the current layout under `name`: '' when saved, else the reason. */
 async function putLayout(name) {
-  const body = { grid: layout.grid, cells: layout.cells.map(({ root, spec, indicators, settings }) =>
-    (settings && Object.keys(settings).length ? { root, spec, indicators, settings } : { root, spec, indicators })) };
+  // each chart's trade ACCOUNTS and algo are saved (HBTrade.tradeBits), never its Trading switch (Task 2)
+  const body = { grid: layout.grid, cells: layout.cells.map((c) => {
+    const { root, spec, indicators, settings } = c;
+    const base = settings && Object.keys(settings).length ? { root, spec, indicators, settings } : { root, spec, indicators };
+    return { ...base, ...T.tradeBits(c) };
+  }) };
   let r;
   try {
     r = await fetch('/api/layouts/' + encodeURIComponent(name), { method: 'PUT',
@@ -683,6 +730,9 @@ function chartSettings(c = cur()) {
     cell: c,
     cells: () => cells,
     templates,
+    tradeBits: (x) => T.tradeBits(x.cfg),                               // Task 2: what a template save adds
+    applyTrade: (x, raw) => applyTemplateTrade(x, raw, { quiet: true }),  // a template Apply (saved on Ok)
+    restoreTrade: restoreTemplateTrade,                                   // Cancel
     countries: () => [...new Set(calendar.map((e) => e.country))].sort(),
     toggleMenu(anchor, cls, fill) {   // menus and popovers open inside the dialog (above its backdrop)
       if (menuAnchor === anchor) { closeMenu(); return; }
@@ -788,6 +838,7 @@ function applyChartTemplate(cell, raw) {
   if (t.indicators) patch.indicators = t.indicators;
   if (t.spec) patch.spec = t.spec;
   if (Object.keys(patch).length) cell.update(patch);
+  applyTemplateTrade(cell, raw);   // its accounts (Trading off) and algo, when the template stored them
   markDirty();
 }
 
@@ -817,7 +868,8 @@ function chartTemplateMenu(cell, at) {
     input.setAttribute('aria-label', 'Template name');
     const doSave = async () => {
       const name = input.value.trim();
-      const body = S.buildTemplate({ settings: cell.settings(), indicators: cell.cfg.indicators, spec: cell.cfg.spec });
+      const body = { ...S.buildTemplate({ settings: cell.settings(), indicators: cell.cfg.indicators, spec: cell.cfg.spec }),
+        ...T.tradeBits(cell.cfg) };   // Task 2: the chart's accounts and algo too (never its Trading switch)
       const res = await templates.save(name, body);
       if (res) { fail(res); return; }
       names.add(name);
@@ -1101,11 +1153,15 @@ async function init() {
     openMenu, closeMenu, placeMenu, toggleMenu, menuItem, sbNote, clockMs,
     deskUrl: () => `${location.protocol}//${location.hostname}:8850/`,
     overlays: [],
+    // a chart's trade config changed (HBTradeUI.setCellTrade): an account-list change is a layout change (Unsaved);
+    // the switch alone is not saved as "on" anywhere a load could bring back (loadedTrade)
+    tradeChanged(cell, accountsChanged) { if (accountsChanged) markDirty(); else saveLast(); },
   };
   page.overlays.push(window.HBTradeLines.overlay);   // Task 6: the per-chart Buy/Sell block, lines and markers
   window.HBPanel.mount(page);                 // Task 4
   window.HBTradeUI.mount(page);                // Task 5
   buildGrid();   // after the mounts: page.overlays must be filled before any cell's build() reads host.overlays()
+  migrateTickedOnce();
   connect();
   tick();
   setInterval(tick, 1000);

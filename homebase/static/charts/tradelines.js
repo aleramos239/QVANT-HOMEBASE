@@ -4,6 +4,9 @@
      - position / order / SL / TP lines (native price lines) with DOM chips that carry their text and a ×
        (ruling S8), draggable by the chip's text (order/SL/TP only — positions are not draggable: ruling S11);
      - the execution markers, through cell.setExtraMarkers('fills', …) (ruling S22).
+   Trading is per chart (2026-09-27 plan, Task 2): the block, the chart's account chips, and draggable / × lines
+   exist only while THIS chart's Trading can trade, and only for this chart's accounts; every other line (every
+   account's, on a chart with Trading off) is view only: no drag, no ×.
    Every action that changes an order goes through HBTradeUI's confirm policy and send path — this file never
    calls HBDeskClient.send directly. Browser only; the logic (modes, lines, dollars, markers) lives in HBTrade. */
 (() => {
@@ -57,6 +60,10 @@ class Overlay {
       window.HBDeskClient.setPrefs({ qty: Number.isFinite(n) ? n : window.HBDeskClient.prefs.qty });
     };
     cell.el.querySelector('.lg-tradeslot').appendChild(this.block);
+    this.accts = mk('span', 'tr-accts');   // the chart's accounts, "…047 DEMO" (shown while its Trading is on)
+    this.accts.hidden = true;
+    this.acctsKey = null;
+    cell.el.querySelector('.lg-tradeslot').appendChild(this.accts);
 
     this.layer = mk('div', 'tl-layer');
     cell.el.appendChild(this.layer);
@@ -69,14 +76,8 @@ class Overlay {
 
     this.unsub = window.HBDeskClient.on(() => this.render());
     this.unsubBusy = window.HBTradeUI.onBusyChange(() => this.render());
+    this.unsubTrade = window.HBTradeUI.onTradeChange(() => this.render());   // this (or any) chart's trade config / a LIVE arm
     this.render();
-  }
-
-  /* HBDeskClient.prefs with `ticked` narrowed to the armed accounts (review item 5: an unarmed LIVE account
-     never draws a line or a fill marker, only the raw ticked checkbox in the Trade menu). */
-  armedPrefs() {
-    const Dc = window.HBDeskClient;
-    return { ...Dc.prefs, ticked: window.HBTradeUI.armedIds() };
   }
 
   /* ---- the Buy/Sell block ---- */
@@ -102,11 +103,29 @@ class Overlay {
     this.buyBtn.disabled = this.sellBtn.disabled = busy;
   }
 
+  /* The chart's accounts next to the block while its Trading is on; one not in the chart's effective set right
+     now (unarmed LIVE, not tradable, unknown) is dimmed. Rebuilt only when the chips change. */
+  paintAccts(mode) {
+    const t = window.HBTradeUI.tradeOf(this.cell);
+    this.accts.hidden = !t.on || !t.accounts.length;
+    if (this.accts.hidden) return;
+    const chips = T.accountChips(window.HBDeskClient.state, t.accounts, mode.mode === 'on' ? mode.accounts : []);
+    const key = JSON.stringify(chips);
+    if (key === this.acctsKey) return;
+    this.acctsKey = key;
+    this.accts.replaceChildren(...chips.map((c) => {
+      const el = mk('span', 'tr-acct' + (c.active ? '' : ' off'), c.who);
+      if (c.env) el.append(mk('span', 'env' + (c.live ? ' live' : ''), c.env));
+      el.title = c.active ? `Orders from this chart go to ${c.id}` : `${c.id} — not trading from this chart right now`;
+      return el;
+    }));
+  }
+
   /* ---- lines: positions, working orders and SL/TP legs, merged per HBTrade.linesFor (ruling S8) ---- */
   paintLines(mode) {
     const Dc = window.HBDeskClient, root = this.root;
-    const groups = T.linesFor(Dc.state, root, this.armedPrefs());
-    const readonly = mode.mode !== 'on';
+    // every account's lines; only this chart's effective accounts' are editable (none while it cannot trade)
+    const groups = T.linesFor(Dc.state, root, mode.mode === 'on' ? mode.accounts : []);
     const busy = window.HBTradeUI.busy();
     const seen = new Set();
     for (const g of groups) {
@@ -124,7 +143,7 @@ class Overlay {
         it.g = g;
         it.line.applyOptions({ price: g.price, color: T.lineColor(g, this.cell.P) });
       }
-      this.wireChip(it, readonly, busy);
+      this.wireChip(it, !g.editable, busy);
       this.paint(it);
     }
     for (const [key, it] of [...this.items]) {
@@ -154,10 +173,11 @@ class Overlay {
     const { chip, g } = it;
     const draggable = !readonly && !busy && g.kind !== 'position';
     chip.classList.toggle('drag', draggable);
+    chip.classList.toggle('view', readonly);
     chip.text.onpointerdown = draggable ? (e) => this.startDrag(e, g.key) : null;
     chip.btn.hidden = readonly;
     chip.btn.disabled = busy;   // review item 3: never clickable while a send is already in flight
-    chip.btn.onclick = readonly || busy ? null : () => window.HBTradeUI.closeLine(it.g, this.root, this.cell.tick);
+    chip.btn.onclick = readonly || busy ? null : () => window.HBTradeUI.closeLine(this.cell, it.g, this.root, this.cell.tick);
   }
 
   paint(it) {
@@ -169,7 +189,7 @@ class Overlay {
   /* ---- execution markers (ruling S22); re-set only when the fill ids change ---- */
   paintMarkers() {
     const Dc = window.HBDeskClient;
-    const list = T.fillMarkers(Dc.state, this.root, this.armedPrefs(), this.cell.P);
+    const list = T.fillMarkers(Dc.state, this.root, window.HBTradeUI.fillIds(this.cell), this.cell.P);
     const ids = JSON.stringify(list.map((m) => m.id));
     if (ids === this.fillIds) return;
     this.fillIds = ids;
@@ -178,8 +198,9 @@ class Overlay {
 
   render() {
     if (this.dead || !this.cell.chart) return;
-    const mode = window.HBTradeUI.effectiveMode();   // review M3: LIVE-arm-aware, not the raw desk mode
+    const mode = window.HBTradeUI.effectiveMode(this.cell);   // review M3: LIVE-arm-aware; Task 2: THIS chart's
     this.paintBlock(mode);
+    this.paintAccts(mode);
     this.paintLines(mode);
     this.paintMarkers();
   }
@@ -237,7 +258,7 @@ class Overlay {
       // M8: compare tick-rounded to tick-rounded (a zero-tick drag can otherwise differ only in float noise)
       const changed = window.HBDrawings.roundToTick(price, c.tick) !== window.HBDrawings.roundToTick(from, c.tick);
       if (commit && !outside && changed) {
-        window.HBTradeUI.moveLine({ ...it.g, price: from }, price, c.shown.root, c.tick, { onCancel: () => this.render() });
+        window.HBTradeUI.moveLine(c, { ...it.g, price: from }, price, c.shown.root, c.tick, { onCancel: () => this.render() });
       } else this.render();      // back to the desk's price (also covers a release outside the pane: I1)
     };
     const up = () => end(true), lost = () => end(false);
@@ -256,9 +277,11 @@ class Overlay {
     if (this.dragging && this.endDrag) this.endDrag();
     this.unsub();
     this.unsubBusy();
+    this.unsubTrade();
     for (const it of this.items.values()) this.cell.candles.removePriceLine(it.line);
     this.items.clear();
     this.block.remove();
+    this.accts.remove();
     this.layer.remove();
     this.badges.remove();
     if (this.cell.chart) this.cell.candles.detachPrimitive(this.hook);

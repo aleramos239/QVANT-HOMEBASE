@@ -87,6 +87,7 @@ function toast(tone, text) {
 window.HBDeskClient = {
   get state() { return desk.state; }, get down() { return desk.down; }, quotes: desk.quotes,
   get prefs() { return desk.prefs; }, setPrefs, on, onMessage, send, toast,
-  mode: () => T.tradeMode(desk, desk.prefs),
+  mode: (cellTrade) => T.tradeMode(desk, cellTrade),   // ONE chart's mode, from that chart's own {on, accounts}
+  gate: () => T.deskGate(desk),                        // the desk-level half alone (null: up and on)
 };
 })();

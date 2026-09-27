@@ -336,6 +336,10 @@ a { color: inherit; }
 .dot.ok { background: var(--up); } .dot.bad { background: var(--down); } .dot.warn { background: var(--warn); }
 /* ---- Trade menu (tradeui.js) ---- */
 .menu-trade { width: 340px; }
+/* the selected chart's header: "Trading on this chart — NQ · chart 2" + its own Trading switch (Task 2) */
+.tm-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px 6px; }
+.tm-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; }
+.tm-why { color: var(--warn); padding-top: 0; }
 .tm-status { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; padding: 0 16px 10px; color: var(--text-2); font-size: 12px; }
 .tm-status a { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); text-decoration: none; }
 .tm-status a:hover { text-decoration: underline; }
@@ -398,11 +402,18 @@ a { color: inherit; }
 .tr-mid { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
 .tr-qty { width: 48px; height: 22px; text-align: center; border: 1px solid var(--border); border-radius: 4px; background: var(--panel); font-size: 12px; }
 .tr-spread { font-size: 11px; color: var(--text-2); }
+/* the chart's trading accounts beside the block, "…047 DEMO" (Task 2); dimmed when not trading right now */
+.lg-tradeslot { display: flex; align-items: center; flex-wrap: wrap; gap: 0 6px; }
+.tr-accts { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px; margin-top: 4px; pointer-events: auto; }
+.tr-acct { display: inline-flex; align-items: center; gap: 4px; height: 18px; padding: 0 2px 0 6px; border-radius: 4px;
+  background: var(--panel); box-shadow: 0 0 0 1px var(--border); font-size: 11px; color: var(--text); font-variant-numeric: tabular-nums; }
+.tr-acct.off { opacity: .5; }
 .tl-layer { position: absolute; inset: 0; z-index: 4; pointer-events: none; overflow: hidden; }
 .tl-chip { position: absolute; top: 0; display: inline-flex; height: 22px; border-radius: 4px; overflow: hidden; pointer-events: auto;
   font-size: 12px; font-variant-numeric: tabular-nums; box-shadow: 0 0 0 1px var(--c); background: var(--panel); }
 .tl-text { padding: 0 8px; line-height: 22px; background: var(--c); color: #fff; white-space: nowrap; }
 .tl-chip.drag .tl-text { cursor: ns-resize; }
+.tl-chip.view .tl-text { background: var(--panel); color: var(--c); }   /* view only: no drag, no × (Task 2) */
 .tl-x { width: 22px; color: var(--c); display: grid; place-items: center; }
 .tl-x:hover { background: var(--hover); }
 .tl-chip.bot .tl-text { background: var(--panel); color: var(--c); }

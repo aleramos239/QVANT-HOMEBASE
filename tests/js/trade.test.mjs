@@ -81,13 +81,111 @@ test('brackets from ticks (0 = off) and the order body', () => {
   assert.ok(a.length >= 1 && a.length <= 64);
 });
 
-test('trade mode: down, off, none, on', () => {
-  assert.deepEqual(T.tradeMode({ state: null, down: 'desk unreachable' }, TICKED), { mode: 'down', reason: 'desk unreachable', accounts: [] });
-  assert.equal(T.tradeMode({ state: { ...STATE, enabled: false } }, TICKED).mode, 'off');
-  assert.equal(T.tradeMode({ state: STATE }, { ...TICKED, ticked: [] }).reason, 'Tick an account in the Trade menu');
+test('trade mode (per chart): the chart\'s switch, its accounts, then the desk\'s rules', () => {
+  const ON = { on: true, accounts: ['sim041', 'sim047'] };
+  assert.deepEqual(T.tradeMode({ state: STATE }, { on: false, accounts: ['sim041'] }),
+    { mode: 'off', reason: 'Trading is off on this chart', accounts: [] });
+  assert.deepEqual(T.tradeMode({ state: STATE }, undefined), { mode: 'off', reason: 'Trading is off on this chart', accounts: [] });
+  assert.deepEqual(T.tradeMode({ state: STATE }, { on: 'yes', accounts: ['sim041'] }).mode, 'off');   // only a real true turns it on
+  assert.deepEqual(T.tradeMode({ state: STATE }, { on: true, accounts: [] }),
+    { mode: 'none', reason: 'Pick accounts for this chart in the Trade menu', accounts: [] });
+  assert.deepEqual(T.tradeMode({ state: null, down: 'desk unreachable' }, ON), { mode: 'down', reason: 'desk unreachable', accounts: [] });
+  assert.equal(T.tradeMode({ state: { ...STATE, enabled: false } }, ON).mode, 'off');
+  assert.equal(T.tradeMode({ state: { ...STATE, enabled: false } }, ON).reason, 'Chart trading is off on the desk');
   const odd = { ...STATE, accounts: STATE.accounts.map((a) => ({ ...a, tradable: false })) };
-  assert.equal(T.tradeMode({ state: odd }, TICKED).mode, 'none');
-  assert.deepEqual(T.tradeMode({ state: STATE }, TICKED), { mode: 'on', reason: '', accounts: ['sim041', 'sim047'] });
+  assert.deepEqual(T.tradeMode({ state: odd }, ON), { mode: 'none', reason: 'No ticked account can trade right now', accounts: [] });
+  assert.deepEqual(T.tradeMode({ state: STATE }, ON), { mode: 'on', reason: '', accounts: ['sim041', 'sim047'] });
+  // only THIS chart's accounts: another account the desk knows is never added
+  assert.deepEqual(T.tradeMode({ state: STATE }, { on: true, accounts: ['sim047'] }), { mode: 'on', reason: '', accounts: ['sim047'] });
+  assert.deepEqual(T.tradeMode({ state: STATE }, { on: true, accounts: ['ghost'] }).mode, 'none');
+  // the desk-level gate on its own (the Trade menu's status line)
+  assert.equal(T.deskGate({ state: STATE }), null);
+  assert.deepEqual(T.deskGate({ state: null, down: 'x' }), { mode: 'down', reason: 'x', accounts: [] });
+  assert.equal(T.deskGate({ state: { ...STATE, enabled: false } }).mode, 'off');
+});
+
+test('armedMode: an unarmed LIVE account drops out of a chart\'s mode; none left -> not on', () => {
+  const m = { mode: 'on', reason: '', accounts: ['sim041', 'live099'] };
+  assert.deepEqual(T.armedMode(m, STATE, new Set()), { mode: 'on', reason: '', accounts: ['sim041'] });
+  assert.deepEqual(T.armedMode(m, STATE, new Set(['live099'])), m);
+  assert.deepEqual(T.armedMode({ mode: 'on', reason: '', accounts: ['live099'] }, STATE, new Set()),
+    { mode: 'none', reason: 'Arm the LIVE account for this chart in the Trade menu', accounts: [] });
+  const off = { mode: 'off', reason: 'Trading is off on this chart', accounts: [] };
+  assert.equal(T.armedMode(off, STATE, new Set()), off);
+});
+
+test('cellTrade: sanitised {on, accounts}; at most 20 ids of 1-64 characters, de-duplicated', () => {
+  assert.deepEqual(T.cellTrade(undefined), { on: false, accounts: [] });
+  assert.deepEqual(T.cellTrade(null), { on: false, accounts: [] });
+  assert.deepEqual(T.cellTrade('on'), { on: false, accounts: [] });
+  assert.deepEqual(T.cellTrade([1]), { on: false, accounts: [] });
+  assert.deepEqual(T.cellTrade({ on: true, accounts: ['a', 'a', 5, '', null, 'x'.repeat(65), 'x'.repeat(64), 'b'] }),
+    { on: true, accounts: ['a', 'x'.repeat(64), 'b'] });
+  assert.deepEqual(T.cellTrade({ on: 1, accounts: 'sim041' }), { on: false, accounts: [] });
+  const many = Array.from({ length: 25 }, (_, i) => `a${i}`);
+  assert.deepEqual(T.cellTrade({ on: true, accounts: many }).accounts, many.slice(0, 20));
+  const src = { on: true, accounts: ['a'] }, out = T.cellTrade(src);
+  out.accounts.push('b');
+  assert.deepEqual(src.accounts, ['a']);   // a copy, never the caller's own array
+});
+
+test('loadedTrade: a layout / template load keeps the accounts and ALWAYS forces Trading off', () => {
+  assert.deepEqual(T.loadedTrade({ on: true, accounts: ['sim041', 'sim047'] }), { on: false, accounts: ['sim041', 'sim047'] });
+  assert.deepEqual(T.loadedTrade({ accounts: ['sim041'] }), { on: false, accounts: ['sim041'] });
+  assert.deepEqual(T.loadedTrade(undefined), { on: false, accounts: [] });
+  assert.deepEqual(T.loadedTrade({ on: true, accounts: [7, ''] }), { on: false, accounts: [] });
+});
+
+test('migrateTicked: the old global ticked list goes to the selected chart only, Trading off', () => {
+  assert.deepEqual(T.migrateTicked(undefined, ['sim041', 'sim047']), { on: false, accounts: ['sim041', 'sim047'] });
+  assert.deepEqual(T.migrateTicked({ root: 'NQ', spec: 'time:60' }, ['sim041']), { on: false, accounts: ['sim041'] });
+  assert.equal(T.migrateTicked({ root: 'NQ', trade: { accounts: [] } }, ['sim041']), null);   // already has a config
+  assert.equal(T.migrateTicked({ root: 'NQ', trade: null }, ['sim041']), null);                // the key is there: not an old cell
+  assert.equal(T.migrateTicked(undefined, []), null);
+  assert.equal(T.migrateTicked(undefined, undefined), null);
+  assert.equal(T.migrateTicked(undefined, [5, '']), null);   // nothing valid to move
+});
+
+test('layout bits: saves write trade.accounts and algo (never `on`); algo sanitised; symbol change', () => {
+  assert.deepEqual(T.tradeBits({ root: 'NQ', trade: { on: true, accounts: ['sim041'] }, algo: 'nq930' }),
+    { trade: { accounts: ['sim041'] }, algo: 'nq930' });
+  assert.deepEqual(T.tradeBits({ root: 'NQ' }), { trade: { accounts: [] }, algo: null });
+  assert.equal(T.cellAlgo('nq930'), 'nq930');
+  assert.equal(T.cellAlgo(''), null);
+  assert.equal(T.cellAlgo('x'.repeat(65)), null);
+  assert.equal(T.cellAlgo(7), null);
+  assert.equal(T.cellAlgo(undefined), null);
+  const strats = STATE.bot.strategies;
+  assert.equal(T.algoForRoot('nq930', 'NQ', strats), 'nq930');   // still NQ: kept
+  assert.equal(T.algoForRoot('nq930', 'ES', strats), null);      // no longer matches: cleared
+  assert.equal(T.algoForRoot('ym930', 'YM', strats), 'ym930');
+  assert.equal(T.algoForRoot('gone', 'NQ', strats), null);       // unknown to the desk: cleared (can't confirm a match)
+  assert.equal(T.algoForRoot('nq930', 'NQ', null), null);
+  assert.equal(T.algoForRoot(null, 'NQ', strats), null);
+});
+
+test('templateTrade: a stored template\'s trade / algo, loaded Trading-off; absent keys stay absent', () => {
+  assert.deepEqual(T.templateTrade({ settings: {}, trade: { on: true, accounts: ['sim041'] }, algo: 'nq930' }),
+    { trade: { on: false, accounts: ['sim041'] }, algo: 'nq930' });
+  assert.deepEqual(T.templateTrade({ settings: {} }), {});
+  assert.deepEqual(T.templateTrade({ algo: null }), { algo: null });
+  assert.deepEqual(T.templateTrade(null), {});
+});
+
+test('accountChips: the chart\'s accounts as "…047 DEMO" chips, dimmed when not in the live set', () => {
+  assert.deepEqual(T.accountChips(STATE, ['sim047', 'live099', 'ghost'], ['sim047']), [
+    { id: 'sim047', who: '…047', env: 'DEMO', live: false, active: true },
+    { id: 'live099', who: '…099', env: 'LIVE', live: true, active: false },
+    { id: 'ghost', who: '…ost', env: '', live: false, active: false }]);
+  assert.deepEqual(T.accountChips(null, ['sim041'], []), [{ id: 'sim041', who: '…041', env: '', live: false, active: false }]);
+});
+
+test('legsWithin: a line may be moved / closed only when every leg\'s account is one of the chart\'s', () => {
+  const g = { legs: [{ account: 'sim041' }, { account: 'sim047' }] };
+  assert.equal(T.legsWithin(g, ['sim041', 'sim047']), true);
+  assert.equal(T.legsWithin(g, ['sim041']), false);
+  assert.equal(T.legsWithin({ legs: [] }, ['sim041']), false);
+  assert.equal(T.legsWithin(null, ['sim041']), false);
 });
 
 test('quote view: prices, spread in ticks, stale after 30 s', () => {
@@ -108,18 +206,43 @@ test('money: signed dollars with a true minus, RR 1:X', () => {
   assert.equal(T.rrText(0, 30), null);
 });
 
-test('lines: merged positions, SL/TP legs with dollars, plain orders, bots\' orders left out, ticked accounts only', () => {
-  const lines = T.linesFor(STATE, 'NQ', TICKED);
+test('lines: merged positions, SL/TP legs with dollars, plain orders, bots\' orders left out; editable = the chart\'s accounts', () => {
+  const EDIT = ['sim041', 'sim047'];
+  const lines = T.linesFor(STATE, 'NQ', EDIT);
   assert.deepEqual(lines.map((g) => g.kind), ['position', 'sl', 'tp', 'order']);
+  assert.deepEqual(lines.map((g) => g.editable), [true, true, true, true]);
   assert.deepEqual(lines.map((g) => T.lineText(g, 30910)),
     ['LONG 3 · +$600 · 2 accts', `SL 3 · ${M}$900 · 2 accts`, 'TP 2 · +$1,200 · …041', 'BUY LMT 1 · …041']);
   assert.equal(T.lineText(lines[0], null), 'LONG 3 · 2 accts');
   assert.deepEqual(lines[1].legs.map((l) => [l.account, l.order_id]), [['sim041', '11'], ['sim047', '21']]);
   assert.deepEqual(lines.map((g) => T.lineColor(g, P)), [P.up, P.down, P.up, P.accent]);
   assert.equal(T.lineText(T.withPrice(lines[1], 30880), 30910), `SL 3 · ${M}$1,200 · 2 accts`);
-  assert.deepEqual(T.linesFor(STATE, 'NQ', { ...TICKED, ticked: [] }), []);
-  assert.deepEqual(T.linesFor(null, 'NQ', TICKED), []);
+  assert.deepEqual(T.linesFor(null, 'NQ', EDIT), []);
   assert.deepEqual(T.lineLabel(lines[3]), 'BUY LMT 1');
+  assert.equal(T.withPrice(lines[1], 1).editable, true);
+});
+
+test('lines on a chart with Trading off: every account\'s lines, all view only', () => {
+  const lines = T.linesFor(STATE, 'NQ', []);
+  assert.deepEqual(lines.map((g) => g.editable), [false, false, false, false]);
+  assert.deepEqual(lines.map((g) => T.lineText(g, 30910)),
+    ['LONG 3 · +$600 · 2 accts · view only', `SL 3 · ${M}$900 · 2 accts · view only`, 'TP 2 · +$1,200 · …041 · view only',
+      'BUY LMT 1 · …041 · view only']);
+  assert.deepEqual(T.linesFor(STATE, 'NQ', undefined).map((g) => g.editable), [false, false, false, false]);
+  assert.deepEqual(T.linesFor(STATE, 'ES', []).map((g) => T.lineText(g, 6490)), ['SHORT 1 · +$500 · …099 · view only']);
+});
+
+test('lines on a chart trading some accounts: others\' lines stay view only, never merged into an editable one', () => {
+  const lines = T.linesFor(STATE, 'NQ', ['sim047']);
+  const byKey = (k, e) => lines.find((g) => g.kind === k && g.editable === e);
+  assert.deepEqual(byKey('sl', true).legs.map((l) => l.account), ['sim047']);
+  assert.deepEqual(byKey('sl', false).legs.map((l) => l.account), ['sim041']);
+  assert.notEqual(byKey('sl', true).key, byKey('sl', false).key);
+  assert.equal(T.lineText(byKey('sl', true), 30910), `SL 1 · ${M}$300 · …047`);
+  assert.equal(T.lineText(byKey('sl', false), 30910), `SL 2 · ${M}$600 · …041 · view only`);
+  for (const g of lines) if (g.editable) assert.ok(g.legs.every((l) => l.account === 'sim047'));
+  // a Set works the same as an array
+  assert.deepEqual(T.linesFor(STATE, 'NQ', new Set(['sim047'])).map((g) => g.key), lines.map((g) => g.key));
 });
 
 test('confirm: title, bracket dollars and RR, accounts, LIVE flag', () => {
@@ -133,12 +256,12 @@ test('confirm: title, bracket dollars and RR, accounts, LIVE flag', () => {
   assert.equal(c.title, 'Sell 1 NQ at market');
   assert.equal(c.live, true);
   assert.equal(c.bracket, '');
-  const sl = T.linesFor(STATE, 'NQ', TICKED)[1];
+  const sl = T.linesFor(STATE, 'NQ', ['sim041', 'sim047'])[1];
   assert.equal(T.actionTitle('modify', { root: 'NQ', line: sl, from: 30885, to: 30880 }, 0.25), 'Move SL 3 30,885.00 → 30,880.00');
   assert.equal(T.actionTitle('cancel', { root: 'NQ', line: sl }, 0.25), 'Cancel SL 3 @ 30,885.00 · 2 accts');
   assert.equal(T.actionTitle('reverse', { root: 'NQ' }, 0.25), 'Reverse NQ');
   assert.equal(T.actionTitle('cancel-symbol', { root: 'NQ' }, 0.25), 'Cancel all NQ orders');
-  assert.equal(T.actionTitle('flatten', { root: 'NQ', line: T.linesFor(STATE, 'NQ', TICKED)[0] }, 0.25), 'Flatten NQ · 2 accts');
+  assert.equal(T.actionTitle('flatten', { root: 'NQ', line: T.linesFor(STATE, 'NQ', ['sim041', 'sim047'])[0] }, 0.25), 'Flatten NQ · 2 accts');
 });
 
 test('toasts: one per account from the desk, the proxy detail otherwise; fills', () => {
@@ -153,8 +276,9 @@ test('toasts: one per account from the desk, the proxy detail otherwise; fills',
   assert.equal(T.fillText({ account: 'sim041', fill: { side: 'Buy', qty: 2, price: 30910.25 } }, STATE, 0.25), 'Filled 2 @ 30,910.25 · …041');
 });
 
-test('execution markers: ticked accounts, manual fills only, at the fill price', () => {
-  assert.deepEqual(T.fillMarkers(STATE, 'NQ', TICKED, P), [{ id: 'fsim041:1', ms: Date.parse('2026-09-22T13:31:12.000Z'), price: 30900,
+test('execution markers: the chart\'s accounts, manual fills only, at the fill price', () => {
+  assert.deepEqual(T.fillMarkers(STATE, 'NQ', [], P), []);
+  assert.deepEqual(T.fillMarkers(STATE, 'NQ', ['sim041'], P), [{ id: 'fsim041:1', ms: Date.parse('2026-09-22T13:31:12.000Z'), price: 30900,
     position: 'atPriceBottom', shape: 'arrowUp', color: P.accent, text: '' }]);
 });
 
