@@ -2,7 +2,7 @@
    Lucide (https://lucide.dev), lucide-static@1.48.0: house, chevron-down, chevron-up, search,
    square-function, mouse-pointer-2, git-commit-horizontal, rectangle-horizontal, ruler,
    trash-2, eye, eye-off, settings, x, check, sun, moon, magnet, trending-up, trending-down,
-   chart-candlestick, paintbrush, list, calendar, ellipsis, external-link.
+   chart-candlestick, paintbrush, list, calendar, ellipsis, external-link, play, square, history.
 
    ISC License
 
@@ -56,5 +56,8 @@ window.HBIcons = {
   calendar: svg('<path d="M8 2v3"/><path d="M16 2v3"/><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/>'),
   ellipsis: svg('<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>'),
   extLink: svg('<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>'),
+  play: svg('<polygon points="6 3 20 12 6 21 6 3"/>'),
+  square: svg('<rect width="18" height="18" x="3" y="3" rx="2"/>'),
+  history: svg('<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>'),
 };
 })();

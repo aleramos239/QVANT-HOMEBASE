@@ -1101,6 +1101,7 @@ async function init() {
   page.overlays.push(window.HBTradeLines.overlay);   // Task 6: the per-chart Buy/Sell block, lines and markers
   window.HBPanel.mount(page);                 // Task 4
   window.HBTradeUI.mount(page);                // Task 5
+  window.HBTesterUI.mount(page);               // Task 9
   buildGrid();   // after the mounts: page.overlays must be filled before any cell's build() reads host.overlays()
   connect();
   tick();
