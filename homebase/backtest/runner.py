@@ -29,8 +29,10 @@ import fcntl
 import json
 import os
 import re
+import resource
 import secrets
 import shutil
+import signal
 import subprocess
 import sys
 import threading
@@ -40,12 +42,12 @@ from collections import deque
 from pathlib import Path
 
 from .. import draftstore, strategies
-from . import drafthost
+from . import drafthost, sandbox
 from ..paths import repo_root, state_dir
 from . import discipline, propsim, report
 from .engine import ENGINE_VERSION, Costs, run_session
 from .slots import QUIET_MSG, QUIET_REFUSAL, Slots, held
-from .tape import ARCHIVE, CACHE, TapeStore, coverage_reason, effective_session_window, missing_hours
+from .tape import ARCHIVE, CACHE, OverlayTapeStore, TapeStore, coverage_reason, effective_session_window, missing_hours
 
 RUN_ID = re.compile(r"^\d{8}-\d{6}-[a-z0-9_]+-[0-9a-f]{4}$")
 FIELDS = {"strategy", "inputs", "range", "qty", "commission", "slippage_ticks", "capital",
@@ -87,7 +89,7 @@ def _num(body: dict, key: str, default: float, lo: float, hi: float, integer: bo
     return int(v) if integer else float(v)
 
 
-def validate(body) -> dict:
+def validate(body, *, draft: tuple | None = None) -> dict:
     """The request as the engine will run it. ValueError (DisciplineError is one)
     with a message for the page on anything the schema refuses. No range is refused for
     the dates it reads (2026-09-27): only a malformed one fails."""
@@ -103,10 +105,15 @@ def validate(body) -> dict:
     # would otherwise bubble up as a 500.
     if "inputs" in body and body["inputs"] is not None and not isinstance(body["inputs"], dict):
         raise ValueError("inputs: a JSON object")
-    if drafthost.needs_child(body.get("strategy")):
-        # a DRAFT: never imported here -- validated (and snapshotted) in a child process
-        return drafthost.in_child("validate_run", {"body": body})
-    cls = strategies.get(str(body.get("strategy", "")))
+    sid = str(body.get("strategy", ""))
+    src = None
+    if draftstore.is_draft_id(sid):
+        # a DRAFT: validated against a STUB built from its text (drafthost) -- its code never runs here --
+        # and refused outright when the sandbox its backtest must run in is not working (fail closed)
+        sandbox.require()
+        cls, src = draft if draft is not None else drafthost.snapshot(sid)
+    else:
+        cls = strategies.get(sid)
     inputs = strategies.resolve_inputs(cls.inputs(), body.get("inputs") or {})
     rng = discipline.parse_range(body.get("range"))
     prop_rules_id = body.get("prop_rules", propsim.DEFAULT_RULES)
@@ -115,13 +122,14 @@ def validate(body) -> dict:
     # nq10am rule config, anything else read from config.json at call time -- so
     # the bundle stays reproducible even after config.json later changes.
     strategy_config = cls(inputs).provenance()
-    return {"strategy": cls.id, "inputs": inputs, "range": rng.to_dict(),
+    req = {"strategy": cls.id, "inputs": inputs, "range": rng.to_dict(),
             "strategy_config": strategy_config,
             "qty": _num(body, "qty", 1, 1, 100, integer=True),
             "commission": _num(body, "commission", 4.00, 0.0, 100.0),
             "slippage_ticks": _num(body, "slippage_ticks", 1.0, 0.0, 20.0),
             "capital": _num(body, "capital", 50_000.0, 1.0, 1e9),
             "prop_rules": prop_rules_id, "prop_rules_data": prop_rules_data}
+    return drafthost.stamp(req, src) if src is not None else req
 
 
 def prepare(body, base: Path) -> str:
@@ -393,11 +401,7 @@ class RunManager:
             else:
                 raise ValueError("this run was not started by the chart service (stop it where it runs)")
         if proc is not None:
-            proc.terminate()
-            try:
-                proc.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                proc.kill()
+            stop_proc(proc)
         st = read_json(d / "status.json", {}) or {}
         if st.get("status") == "done":
             return st                           # it finished before the signal landed
@@ -457,35 +461,116 @@ class RunManager:
                     continue
                 self._q.popleft()
                 d = self.runs / rid
-                log = open(d / "log.txt", "ab")
                 try:
-                    proc = subprocess.Popen(      # the child holds the slot too: it lives as long as the backtest
-                        [self.python, "-m", "homebase.backtest.runner", "exec", str(d),
-                         "--archive", str(self.archive), "--cache", str(self.cache),
-                         "--slot-fd", str(slot.fileno())],
-                        cwd=repo_root(), stdout=log, stderr=subprocess.STDOUT, pass_fds=(slot.fileno(),))
-                except OSError as e:
+                    proc = launch(d, self.python, self.archive, self.cache, slot)
+                except (OSError, ValueError) as e:
                     slot.close()
-                    log.close()
                     st = read_json(d / "status.json", {}) or {}
                     st.update(status="error", error=f"could not start the runner: {e}", updated=_now())
                     write_json(d / "status.json", st)
                     continue
                 self._proc = (rid, proc)
             try:
-                code = proc.wait()
+                code, timed_out = wait_proc(proc)
             finally:
-                slot.close()
-            log.close()
+                slot.close()                    # always: a killed draft's whole group is gone by now
+                finish_proc(proc)
             with self._lock:
                 self._proc = None
                 if rid in self._cancelled:
                     continue                    # cancel() writes the final status
             st = read_json(d / "status.json", {}) or {}
-            if st.get("status") not in FINAL:
+            if timed_out:
+                st.update(status="error", error=timed_out, updated=_now())
+                write_json(d / "status.json", st)
+            elif st.get("status") not in FINAL:
                 tail = (d / "log.txt").read_text(errors="replace")[-600:]
                 st.update(status="error", error=f"runner exited {code}: {tail}", updated=_now())
                 write_json(d / "status.json", st)
+
+
+# ---------------------------------------------------------------- launching a backtest child
+
+def launch(run_dir: Path, python: str, archive: Path, cache: Path, slot, extra: tuple = ()) -> subprocess.Popen:
+    """Start `runner exec <run_dir>` holding `slot`. A built-in strategy's child starts exactly as it always
+    has. A DRAFT's (its request.json carries draft_source) starts inside the macOS sandbox (sandbox.py +
+    draft.sb: no network, writes only to its run dir and a private tmp dir that also holds its own tape
+    cache), with a minimal env, in its OWN process group (stop_proc kills the whole group), and is refused
+    when the sandbox is not working (fail closed)."""
+    req = read_json(Path(run_dir) / "request.json", {}) or {}
+    argv = [python, "-m", "homebase.backtest.runner", "exec", str(run_dir), *extra,
+            "--archive", str(archive), "--cache", str(cache), "--slot-fd", str(slot.fileno())]
+    draft = drafthost.is_draft_req(req)
+    tmp = None
+    if draft:
+        sandbox.require()
+        tmp = sandbox.private_tmp()
+        argv += ["--private-cache", str(tmp / "tape")]
+    log = open(Path(run_dir) / "log.txt", "ab")
+    try:
+        if draft:
+            proc = subprocess.Popen(
+                sandbox.command(argv, sandbox.params(run_dir=run_dir, archive=archive, cache=cache, tmp=tmp,
+                                                     python=python)),
+                cwd=tmp, env=sandbox.env(tmp), stdout=log, stderr=subprocess.STDOUT,
+                pass_fds=(slot.fileno(),), start_new_session=True)
+        else:
+            proc = subprocess.Popen(      # the child holds the slot too: it lives as long as the backtest
+                argv, cwd=repo_root(), stdout=log, stderr=subprocess.STDOUT, pass_fds=(slot.fileno(),))
+    except BaseException:
+        log.close()
+        if tmp is not None:
+            sandbox.drop_tmp(tmp)
+        raise
+    proc.hb_draft, proc.hb_tmp, proc.hb_log = draft, tmp, log
+    return proc
+
+
+def wait_proc(proc: subprocess.Popen) -> tuple[int, str | None]:
+    """(exit code, None) -- or, for a DRAFT past its wall clock (sandbox.DRAFT_TIMEOUT_S), its whole process
+    group killed and (code, the reason)."""
+    if not getattr(proc, "hb_draft", False):
+        return proc.wait(), None
+    try:
+        return proc.wait(timeout=sandbox.DRAFT_TIMEOUT_S), None
+    except subprocess.TimeoutExpired:
+        stop_proc(proc)
+        return proc.returncode, (f"timed out: a draft backtest may run at most "
+                                 f"{sandbox.DRAFT_TIMEOUT_S / 60:g} minutes (the run was stopped)")
+
+
+def stop_proc(proc: subprocess.Popen) -> None:
+    """Terminate a backtest child (cancel / timeout / shutdown). A draft's is killed as a process GROUP, so
+    nothing it started survives holding the inherited slot fd."""
+    if getattr(proc, "hb_draft", False):
+        for sig, wait_s in ((signal.SIGTERM, 10), (signal.SIGKILL, 10)):
+            try:
+                os.killpg(proc.pid, sig)
+            except (ProcessLookupError, PermissionError):
+                pass
+            try:
+                proc.wait(timeout=wait_s)
+                break
+            except subprocess.TimeoutExpired:
+                continue
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)      # the group's stragglers, even after the leader exited
+        except (ProcessLookupError, PermissionError):
+            pass
+        return
+    proc.terminate()
+    try:
+        proc.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+
+
+def finish_proc(proc: subprocess.Popen) -> None:
+    log = getattr(proc, "hb_log", None)
+    if log is not None:
+        log.close()
+    if getattr(proc, "hb_tmp", None) is not None:
+        sandbox.drop_tmp(proc.hb_tmp)
 
 
 def _register_draft(run_dir: Path) -> None:
@@ -521,6 +606,8 @@ def main(argv: list[str] | None = None) -> int:
     ex = sub.add_parser("exec", help="run a prepared run dir (the chart service uses this)")
     ex.add_argument("run_dir", type=Path)
     ex.add_argument("--no-lock", action="store_true", help="a heat-map cell: the grid pool bounds it")
+    ex.add_argument("--private-cache", type=Path, default=None,
+                    help="a DRAFT run (sandboxed): read the shared --cache, build any missing tape here")
     ex.add_argument("--slot-fd", type=int, default=None,
                     help="an inherited backtest slot (the chart service passes it); without one, exec "
                          "takes its own slot and refuses the 09:20-09:35 ET window")
@@ -539,7 +626,6 @@ def main(argv: list[str] | None = None) -> int:
     a = ap.parse_args(argv)
     store = TapeStore(a.archive, a.cache)
     if a.cmd == "exec":
-        _register_draft(a.run_dir)
         slot = None
         if a.slot_fd is None or not held(a.slot_fd):
             slots = Slots()
@@ -549,6 +635,17 @@ def main(argv: list[str] | None = None) -> int:
             slot = slots.acquire()
         try:
             os.nice(5)      # on top of the chart job's own nice 5: a backtest never competes with the desk
+            req = read_json(Path(a.run_dir) / "request.json", {}) or {}
+            if drafthost.is_draft_req(req):
+                # a DRAFT's code runs only here, and only inside the sandbox the chart service put us in
+                if os.environ.get("HOMEBASE_SANDBOXED") != "1":
+                    print("refused: a draft strategy runs only inside the backtest sandbox", file=sys.stderr)
+                    return 2
+                cpu = int(sandbox.DRAFT_TIMEOUT_S)
+                resource.setrlimit(resource.RLIMIT_CPU, (cpu, cpu))
+                if a.private_cache is not None:
+                    store = OverlayTapeStore(a.archive, a.cache, a.private_cache)
+                _register_draft(a.run_dir)
             return exec_run(a.run_dir, store, lock=not a.no_lock)
         finally:
             if slot is not None:

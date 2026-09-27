@@ -19,8 +19,9 @@ PROTOCOLS = ("2025-06-18", "2025-03-26", "2024-11-05")
 INSTRUCTIONS = (
     "Homebase Strategy Tester: backtest strategies on real tick data (tick replay, pessimistic fills), "
     "run parameter heat-maps and walk-forwards, Monte Carlo and prop-eval re-scores, write DRAFT strategies, "
-    "and show any finished run on the user's chart page (show_on_chart). Research only -- there are no "
-    "trading tools. The research window is 2021-2024 (the default range); name 2025+ ranges only when the "
+    "and show any finished run on the user's chart page (show_on_chart; never 09:20-09:35 ET). Research only -- "
+    "there are no trading tools. Long jobs return their id after wait_s: call the same tool with that id to "
+    "keep waiting, or cancel it. The research window is 2021-2024 (the default range); name 2025+ ranges only when the "
     "user asks. At most 2 backtests run at once on this machine and none start 09:20-09:35 ET on weekdays: "
     "a refusal says so -- report it, do not retry in a loop.")
 

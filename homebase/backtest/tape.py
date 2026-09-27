@@ -315,6 +315,22 @@ class TapeStore:
         return {"date": d.isoformat(), **head["daily"]}
 
 
+class OverlayTapeStore(TapeStore):
+    """A sandboxed DRAFT run's store: it READS the shared tape cache when a session is already there and
+    fresh, and builds a missing one into its own private cache -- it never writes the shared one."""
+
+    def __init__(self, archive: Path, shared: Path, private: Path, min_ticks: int = MIN_TICKS):
+        super().__init__(archive, private, min_ticks)
+        self.shared = Path(shared)
+
+    def cache_path(self, root: str, d: dt.date) -> Path:
+        shared = self.shared / root / f"{d.isoformat()}.tape"
+        got = self.pick(root, d)
+        if got is not None and self._fresh(self._header(shared), got[0]):
+            return shared
+        return super().cache_path(root, d)
+
+
 def _warm_one(args) -> str:
     archive, cache, root, d = args
     s = TapeStore(Path(archive), Path(cache))

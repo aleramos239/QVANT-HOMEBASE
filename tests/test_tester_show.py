@@ -92,3 +92,21 @@ def test_show_is_json_only_and_behind_the_host_and_origin_guards(tmp_path):
         assert c.post("/api/tester/show", json={"run_id": rid}, headers={"host": "evil.example"}).status_code == 403
         assert c.post("/api/tester/show", json={"run_id": rid},
                       headers={"host": "evil.example", "origin": "http://evil.example"}).status_code == 403
+
+
+def test_show_is_refused_in_the_930_window(tmp_path, monkeypatch):
+    from homebase.backtest import slots
+    with client(tmp_path) as c:
+        rid = done_run(c)
+        monkeypatch.setattr(slots, "et_now", lambda: dt.datetime(2026, 9, 28, 9, 29, tzinfo=slots.ET))
+        r = c.post("/api/tester/show", json={"run_id": rid}, headers=LOCAL)
+        assert r.status_code == 409 and "09:20" in r.json()["detail"]
+        monkeypatch.setattr(slots, "et_now", lambda: dt.datetime(2026, 9, 27, 9, 29, tzinfo=slots.ET))  # a Sunday
+        assert c.post("/api/tester/show", json={"run_id": rid}, headers=LOCAL).status_code == 200
+
+
+def test_focus_date_is_strictly_yyyy_mm_dd(tmp_path):
+    with client(tmp_path) as c:
+        rid = done_run(c)
+        for bad in ("20240304", "2024-W10-1", "2024-3-4", "2024-02-30", 20240304):
+            assert c.post("/api/tester/show", json={"run_id": rid, "focus": {"date": bad}}).status_code == 400, bad

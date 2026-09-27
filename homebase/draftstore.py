@@ -9,16 +9,21 @@ and a name may not equal a built-in module or strategy name, so a draft can neve
 
 Who reads what:
   * the Claude MCP server (homebase.claude_mcp) writes/deletes the files through write()/delete();
-  * the chart service lists and validates drafts ONLY through homebase.backtest.drafthost, which
-    runs them in a child process with a timeout -- a draft is never imported into the service;
-  * a backtest child (`runner exec`) runs the source snapshot saved in its own request.json.
+  * the chart service LISTS and VALIDATES drafts from static_meta() alone -- an AST read of the text: no
+    draft code runs to list the catalog, read a strategy or validate a request;
+  * the only place a draft's code ever runs is its backtest child (`runner exec`), launched inside the
+    macOS sandbox (homebase/backtest/sandbox.py + draft.sb) with the source snapshot saved in its
+    request.json.
+A name may not shadow a stdlib or homebase module (and the drafts dir is never put on any sys.path).
 The desk (homebase.server / engine / trading) reads its strategies from config.json + homebase.rules
-and never looks here (tests/test_claude_tools.py pins that).
+and never looks here (tests/test_claude_drafts.py pins that).
 """
 from __future__ import annotations
 
+import ast
 import os
 import re
+import sys
 from pathlib import Path
 
 ENV = "HOMEBASE_DRAFTS_DIR"
@@ -27,7 +32,19 @@ MAX_BYTES = 200_000
 NAME_RE = re.compile(r"^[a-z][a-z0-9_]{1,39}$")
 _BUILTIN_DIR = Path(__file__).resolve().parent / "strategies"
 # words that would read as something else on the page or in a module path
-RESERVED = frozenset({"draft", "drafts", "base", "strategy", "strategies", "test", "tests", "init", "main"})
+RESERVED = frozenset({"draft", "drafts", "base", "strategy", "strategies", "test", "tests", "init", "main",
+                      "homebase", "sitecustomize", "usercustomize", "conftest", "setup"})
+_HOMEBASE_DIR = Path(__file__).resolve().parent
+# Python 3.10+ lists its stdlib; the MCP server may run on an older python3, which gets this floor instead
+_STDLIB = frozenset(getattr(sys, "stdlib_module_names", ())) | frozenset(sys.builtin_module_names) | frozenset({
+    "abc", "ast", "asyncio", "base64", "bisect", "builtins", "calendar", "cmath", "code", "collections", "copy",
+    "csv", "ctypes", "dataclasses", "datetime", "decimal", "email", "enum", "fcntl", "fractions", "functools",
+    "gc", "glob", "gzip", "hashlib", "heapq", "hmac", "html", "http", "importlib", "inspect", "io", "itertools",
+    "json", "logging", "math", "operator", "os", "pathlib", "pickle", "platform", "queue", "random", "re",
+    "resource", "secrets", "select", "shutil", "signal", "site", "socket", "sqlite3", "ssl", "stat",
+    "statistics", "string", "struct", "subprocess", "sys", "tempfile", "threading", "time", "token", "tokenize",
+    "traceback", "types", "typing", "unittest", "urllib", "uuid", "warnings", "weakref", "xml", "zipfile",
+    "zoneinfo", "array", "numbers", "contextlib", "textwrap", "argparse", "codecs", "locale", "posix", "errno"})
 
 
 def drafts_dir() -> Path:
@@ -41,6 +58,17 @@ def builtin_names() -> frozenset:
         return frozenset(p.stem for p in _BUILTIN_DIR.glob("*.py"))
     except OSError:
         return frozenset()
+
+
+def shadow_names() -> frozenset:
+    """Module names a draft file must never be called: the stdlib's and every homebase module/package, so a
+    stray PYTHONPATH (or a cwd of the drafts dir) could never make an import pick up a draft."""
+    try:
+        mine = {p.stem for p in _HOMEBASE_DIR.rglob("*.py")} | {p.name for p in _HOMEBASE_DIR.rglob("*")
+                                                                if p.is_dir()}
+    except OSError:
+        mine = set()
+    return _STDLIB | frozenset(mine)
 
 
 def is_draft_id(sid) -> bool:
@@ -68,6 +96,8 @@ def validate_name(name, builtin_ids=()) -> str:
         raise ValueError(f"name: {name!r} is reserved")
     if name in builtin_names() or name in set(builtin_ids) or draft_id(name) in set(builtin_ids):
         raise ValueError(f"name: {name!r} is a built-in strategy -- pick another name")
+    if name in shadow_names():
+        raise ValueError(f"name: {name!r} is a Python or homebase module name -- pick another name")
     return name
 
 
@@ -111,6 +141,9 @@ def check_source(code) -> None:
         compile(code, "<draft>", "exec", dont_inherit=True)
     except SyntaxError as e:
         raise ValueError(f"SyntaxError: {e.msg} (line {e.lineno})") from None
+    except (MemoryError, RecursionError, ValueError) as e:     # a pathological source (parser stack overflow)
+        raise ValueError(f"the source could not be parsed: {type(e).__name__}") from None
+    static_meta(code)                                           # ValueError when the catalog could not read it
 
 
 def write(name: str, code: str, base: Path | None = None, builtin_ids=()) -> Path:
@@ -136,10 +169,97 @@ def delete(name: str, base: Path | None = None) -> bool:
     return True
 
 
+# ---------------------------------------------------------------- static metadata (never runs the code)
+
+_CLASS_ATTRS = {"name": str, "root": str, "session_window": (tuple, list), "bar_minutes": int,
+                "bar_window": (tuple, list, type(None)), "placement_ms": int, "session_independent": bool}
+INPUT_FIELDS = ("key", "label", "type", "default", "min", "max", "step", "choices")
+
+
+class StaticError(ValueError):
+    """The draft's catalog metadata cannot be read from its text alone."""
+
+
+def _lit(node, what: str):
+    try:
+        return ast.literal_eval(node)
+    except (ValueError, TypeError, SyntaxError, MemoryError, RecursionError):
+        raise StaticError(f"{what} must be a literal (a number, string, bool, None, tuple or list), "
+                          f"not an expression: the catalog reads drafts without running them") from None
+
+
+def _is_strategy_base(b) -> bool:
+    return (isinstance(b, ast.Name) and b.id == "Strategy") or (isinstance(b, ast.Attribute) and b.attr == "Strategy")
+
+
+def _input(call, i: int) -> dict:
+    if not (isinstance(call, ast.Call) and ((isinstance(call.func, ast.Name) and call.func.id == "Input")
+                                            or (isinstance(call.func, ast.Attribute) and call.func.attr == "Input"))):
+        raise StaticError(f"inputs(): item {i} must be an Input(...) call")
+    if any(isinstance(a, ast.Starred) for a in call.args) or any(k.arg is None for k in call.keywords):
+        raise StaticError(f"inputs(): item {i}: no *args / **kwargs")
+    if len(call.args) > len(INPUT_FIELDS):
+        raise StaticError(f"inputs(): item {i}: too many arguments")
+    d = {INPUT_FIELDS[j]: _lit(a, f"inputs() item {i} argument {j + 1}") for j, a in enumerate(call.args)}
+    for k in call.keywords:
+        if k.arg not in INPUT_FIELDS or k.arg in d:
+            raise StaticError(f"inputs(): item {i}: unknown or repeated argument {k.arg!r}")
+        d[k.arg] = _lit(k.value, f"inputs() item {i} {k.arg}")
+    for need in ("key", "label", "type", "default"):
+        if need not in d:
+            raise StaticError(f"inputs(): item {i} needs {need}")
+    d["choices"] = list(d.get("choices") or ())
+    return d
+
+
+def static_meta(source: str) -> dict:
+    """The draft's catalog metadata from its SOURCE TEXT (ast only -- nothing is imported or run):
+    {class, doc, name, root, session_window, bar_minutes, ..., inputs: [{key, label, type, default, min, max,
+    step, choices}]}. The draft must define exactly one class deriving directly from Strategy, whose class
+    attributes above are literals and whose inputs() (when it has one) is `return [Input(...), ...]` with
+    literal arguments -- the shape DRAFT_TEMPLATE shows. StaticError (a ValueError) otherwise."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError as e:
+        raise StaticError(f"SyntaxError: {e.msg} (line {e.lineno})") from None
+    except (MemoryError, RecursionError, ValueError) as e:
+        raise StaticError(f"the source could not be parsed: {type(e).__name__}") from None
+    classes = [n for n in tree.body if isinstance(n, ast.ClassDef) and any(_is_strategy_base(b) for b in n.bases)]
+    if len(classes) != 1:
+        raise StaticError(f"a draft defines exactly one class deriving from Strategy at the top level "
+                          f"(found {len(classes)})")
+    cls = classes[0]
+    meta = {"class": cls.name, "doc": ast.get_docstring(tree) or ast.get_docstring(cls) or "", "inputs": []}
+    for st in cls.body:
+        targets = st.targets if isinstance(st, ast.Assign) else [st.target] if isinstance(st, ast.AnnAssign) else []
+        for t in targets:
+            if isinstance(t, ast.Name) and t.id in _CLASS_ATTRS and st.value is not None:
+                v = _lit(st.value, t.id)
+                if not isinstance(v, _CLASS_ATTRS[t.id]) or (t.id == "bar_minutes" and isinstance(v, bool)):
+                    raise StaticError(f"{t.id}: wrong type ({type(v).__name__})")
+                meta[t.id] = list(v) if isinstance(v, (tuple, list)) else v
+        if isinstance(st, (ast.FunctionDef, ast.AsyncFunctionDef)) and st.name == "inputs":
+            body = [b for b in st.body if not (isinstance(b, ast.Expr) and isinstance(b.value, ast.Constant))]
+            if len(body) != 1 or not isinstance(body[0], ast.Return) or \
+                    not isinstance(body[0].value, (ast.List, ast.Tuple)):
+                raise StaticError("inputs() must be a single `return [Input(...), ...]` with literal arguments")
+            meta["inputs"] = [_input(c, i) for i, c in enumerate(body[0].value.elts)]
+    if not meta.get("root"):
+        raise StaticError('the strategy needs a literal `root = "NQ"` (or another archive root)')
+    if "session_window" in meta and len(meta["session_window"]) != 2:
+        raise StaticError("session_window: (start, end)")
+    return meta
+
+
 DRAFT_TEMPLATE = '''"""<One line: what this strategy does.>
 
 A DRAFT strategy for the Homebase Strategy Tester. Rules for a valid draft:
-  * exactly ONE subclass of homebase.strategies.base.Strategy in the file;
+  * exactly ONE class deriving directly from Strategy in the file;
+  * the catalog reads the class WITHOUT running it: `name`, `root`, `session_window`, `bar_minutes`,
+    `session_independent` are literals, and inputs() is exactly `return [Input(...), ...]` with literal
+    arguments (Input(key, label, type, default, min, max, step, choices));
+  * the code runs only in the backtest, inside a sandbox: no network, no files but its own run dir,
+    at most 20 minutes of wall clock;
   * absolute imports only (from homebase.strategies.base import Input, Strategy);
     stdlib only -- no numpy/pandas;
   * the file name is the draft's name; its tester id is "draft_<name>" (the class's own `id` is

@@ -296,6 +296,18 @@ def test_show_on_chart_request_shape(fake):
     assert "No chart page is open" in b.call("show_on_chart", {"run_id": RID})
 
 
+def test_cancel_uses_the_tester_cancel_routes_only(fake):
+    b = box(fake)
+    for kind, arg in (("run", "run_id"), ("grid", "grid_id"), ("walkforward", "walkforward_id")):
+        fake.routes[("POST", f"/api/tester/{kind}/X1/cancel")] = {"status": "cancelled"}
+        assert "cancelled" in b.call("cancel", {arg: "X1"})
+        assert fake.last("POST")["path"] == f"/api/tester/{kind}/X1/cancel"
+    with pytest.raises(ToolError):
+        b.call("cancel", {})
+    with pytest.raises(ToolError):
+        b.call("cancel", {"run_id": "a", "grid_id": "b"})
+
+
 def test_read_strategy_includes_source_and_the_template(fake):
     text = box(fake).call("read_strategy", {"strategy": "nq930"})
     assert "class NQ930" in text and "DRAFT TEMPLATE" in text and "ctx.stop_entry" in text
@@ -310,11 +322,15 @@ def test_write_strategy_and_delete_draft(fake, drafts_dir):
          "inputs": [{"key": "offset_pts", "default": 10.0}]}]
     text = b.call("write_strategy", {"name": "nq_orb", "code": draftstore.DRAFT_TEMPLATE})
     assert (drafts_dir / "nq_orb.py").read_text() == draftstore.DRAFT_TEMPLATE
-    assert "Loaded OK as draft_nq_orb" in text
+    assert "Listed as draft_nq_orb" in text
     fake.routes[("GET", "/api/tester/strategies")] = CATALOG + [
         {"id": "draft_bad", "name": "bad", "draft": True, "error": "ModuleNotFoundError: No module named 'x'"}]
-    with pytest.raises(ToolError, match="does not load: ModuleNotFoundError"):
-        b.call("write_strategy", {"name": "bad", "code": "import x\n"})
+    with pytest.raises(ToolError, match="cannot read it: ModuleNotFoundError"):
+        b.call("write_strategy", {"name": "bad", "code": draftstore.DRAFT_TEMPLATE})
+    with pytest.raises(ToolError, match="literal"):          # refused before anything is written
+        b.call("write_strategy", {"name": "dyn", "code": draftstore.DRAFT_TEMPLATE.replace('root = "NQ"', 'root = "N" + "Q"')})
+    with pytest.raises(ToolError, match="module name"):
+        b.call("write_strategy", {"name": "json", "code": draftstore.DRAFT_TEMPLATE})
     with pytest.raises(ToolError, match="built-in"):
         b.call("write_strategy", {"name": "nq930", "code": "x = 1\n"})
     with pytest.raises(ToolError, match="SyntaxError"):
@@ -333,7 +349,7 @@ def test_the_client_refuses_anything_but_loopback_and_tester_routes(monkeypatch)
 
 # ---------------------------------------------------------------- no trading, ever
 
-FORBIDDEN_TOOL_WORDS = ("order", "trade_", "place", "arm", "kill", "flatten", "cancel", "account", "desk", "paper",
+FORBIDDEN_TOOL_WORDS = ("order", "trade_", "place", "arm", "kill", "flatten", "account", "desk", "paper",
                         "position", "broker", "live", "setting", "market_data", "algo", "bot")
 
 
@@ -341,7 +357,7 @@ def test_no_tool_can_trade():
     names = tools.Toolbox().names()
     assert names == ["list_strategies", "read_strategy", "backtest", "heatmap", "walkforward", "montecarlo",
                      "prop_eval", "list_prop_rules", "list_runs", "get_run", "trades", "show_on_chart",
-                     "write_strategy", "delete_draft"]
+                     "cancel", "write_strategy", "delete_draft"]
     for n in names:
         assert not any(w in n for w in FORBIDDEN_TOOL_WORDS), n
 

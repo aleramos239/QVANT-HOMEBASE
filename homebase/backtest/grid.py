@@ -40,8 +40,7 @@ import threading
 from collections import deque
 from pathlib import Path
 
-from .. import strategies
-from ..paths import repo_root
+from .. import draftstore, strategies
 from . import drafthost, runner
 from .discipline import parse_range
 from .runner import RUN_ID, _now, read_json, write_json
@@ -81,9 +80,8 @@ def validate_grid(body) -> dict:
     extra = sorted(set(body) - FIELDS)
     if extra:
         raise ValueError(f"unknown field(s): {', '.join(extra)}")
-    if drafthost.needs_child(body.get("strategy")):
-        return drafthost.in_child("validate_grid", {"body": body})    # a DRAFT: never imported here
-    cls = strategies.get(str(body.get("strategy", "")))
+    draft = drafthost.snapshot(body.get("strategy")) if draftstore.is_draft_id(body.get("strategy")) else None
+    cls = draft[0] if draft else strategies.get(str(body.get("strategy", "")))   # a draft: its STUB, never its code
     base = body.get("inputs")
     if base is not None and not isinstance(base, dict):
         raise ValueError("inputs: a JSON object")
@@ -119,7 +117,7 @@ def validate_grid(body) -> dict:
     cells = []
     for c in expand(axes):
         req = runner.validate({"strategy": cls.id, "inputs": {**base, **c["params"]}, "range": body.get("range"),
-                               **common})
+                               **common}, draft=draft)
         cells.append({**c, "req": req})
     first = cells[0]["req"]
     return {"strategy": cls.id, "strategy_name": cls.name, "axes": axes,
@@ -397,16 +395,10 @@ class GridManager:
                 st["status"] = "running"
                 st.setdefault("started", _now())
                 self._save(gid)
-                log = open(cdir / "log.txt", "ab")
-                try:
-                    proc = subprocess.Popen(      # the child holds the slot too: it lives as long as the backtest
-                        [self.python, "-m", "homebase.backtest.runner", "exec", str(cdir), "--no-lock",
-                         "--archive", str(self.archive), "--cache", str(self.cache),
-                         "--slot-fd", str(slot.fileno())],
-                        cwd=repo_root(), stdout=log, stderr=subprocess.STDOUT, pass_fds=(slot.fileno(),))
-                except OSError as e:
+                try:              # the child holds the slot too; a DRAFT's runs sandboxed (runner.launch)
+                    proc = runner.launch(cdir, self.python, self.archive, self.cache, slot, ("--no-lock",))
+                except (OSError, ValueError) as e:
                     slot.close()
-                    log.close()
                     cell.update(status="error", error=f"could not start the runner: {e}")
                     self._finish_grid(st)
                     self._save(gid)
@@ -416,11 +408,13 @@ class GridManager:
                     continue
                 self._procs[(gid, i)] = proc
             try:
-                code = proc.wait()
+                code, timed_out = runner.wait_proc(proc)
             finally:
-                slot.close()
-            log.close()
+                slot.close()                    # always: a killed draft's whole group is gone by now
+                runner.finish_proc(proc)
             rs = read_json(cdir / "status.json", {}) or {}
+            if timed_out:
+                rs = {**rs, "status": "error", "error": timed_out}
             run = read_json(cdir / "run.json") if rs.get("status") == "done" else None
             hook_error = None
             if run is not None:
@@ -471,8 +465,4 @@ class GridManager:
 
 
 def _stop(proc) -> None:
-    proc.terminate()
-    try:
-        proc.wait(timeout=10)
-    except subprocess.TimeoutExpired:
-        proc.kill()
+    runner.stop_proc(proc)          # a draft's whole process group; a built-in's child as before

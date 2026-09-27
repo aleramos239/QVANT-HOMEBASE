@@ -1,0 +1,42 @@
+;; The macOS sandbox a DRAFT strategy's backtest runs in (homebase/backtest/sandbox.py builds the command:
+;;   /usr/bin/sandbox-exec -f draft.sb -D REPO=... -D VENV=... -D PYHOME=... -D ARCHIVE=... -D CACHE=...
+;;                         -D RUNDIR=... -D TMP=... -D HOME=... python -m homebase.backtest.runner exec ...).
+;; Deny by default. A draft is code the user (or Claude) just wrote: it may read the code it needs, the tick
+;; archive and the shared tape cache, and write ONLY its own run dir and a private tmp dir. No network at all
+;; (not even localhost: never the desk on :8850 or the chart service on :8852), no fork, no exec of anything
+;; but the interpreter (the Python framework's own launcher included). All paths are realpaths (the sandbox matches resolved paths).
+;; tests/test_claude_sandbox.py proves a draft cannot read desk.key, open a socket or write into the venv.
+(version 1)
+(deny default)
+
+;; the interpreter itself, and nothing else
+(allow process-exec (literal (param "PYEXE")) (literal (param "PYREAL")) (subpath (param "PYHOME")))
+
+;; its own process info only (os.nice(5), resource limits)
+(allow process-info* (target self))
+(allow system-sched (target self))
+
+;; what any process needs from the OS (metadata lookups, sysctl, the system libraries, tz data, /dev/null)
+(allow file-read-metadata)
+(allow sysctl-read)
+(allow file-read* (literal "/") (subpath "/usr/lib") (subpath "/usr/share") (subpath "/System")
+                  (subpath "/private/var/db/timezone") (subpath "/private/etc")
+                  (literal "/dev/null") (literal "/dev/urandom") (literal "/dev/random") (literal "/dev/dtracehelper"))
+(allow file-write-data (literal "/dev/null") (literal "/dev/dtracehelper"))
+(allow file-ioctl (literal "/dev/null") (literal "/dev/dtracehelper"))
+
+;; read: the Python install, the venv, the repo's code, the tick archive and the shared tape cache
+(allow file-read* (subpath (param "PYHOME")) (subpath (param "VENV")) (subpath (param "REPO"))
+                  (subpath (param "ARCHIVE")) (subpath (param "CACHE")))
+
+;; ... but never the desk's state (desk.key, broker tokens, credentials), ~/.homebase, ssh keys, the shell rc
+(deny file-read* (subpath (string-append (param "REPO") "/homebase/.state"))
+                 (subpath (string-append (param "HOME") "/.homebase"))
+                 (subpath (string-append (param "HOME") "/.ssh"))
+                 (literal (string-append (param "HOME") "/.zshrc"))
+                 (subpath (string-append (param "HOME") "/Library/Keychains")))
+
+;; read + write: its own run dir and its private tmp dir -- nothing else, never the venv or the repo
+(allow file-read* file-write* (subpath (param "RUNDIR")) (subpath (param "TMP")))
+;; ... and the runs dir's one-run lock file (runner._locked: flock on runs/.lock, opened for append)
+(allow file-read* file-write* (literal (param "LOCK")))

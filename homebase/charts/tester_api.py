@@ -2,14 +2,15 @@
 
     GET  /api/tester/strategies          strategies with input schemas + defaults; DRAFT strategies
                                           (~/.homebase/strategies, homebase.draftstore) follow the built-ins
-                                          with `draft: true` (and `error` when one does not load) -- described
-                                          in a child process (backtest.drafthost), never imported here
+                                          with `draft: true` (and `error` when its metadata cannot be read) --
+                                          read from the file's TEXT (backtest.drafthost, ast): no draft runs
     GET  /api/tester/strategies/{id}/source   the strategy's source text: a built-in's module (+ the
                                           homebase/strategies modules its classes inherit from), or a draft's file
     POST /api/tester/show                {run_id | grid_id + cell, focus?: {trade_index | date | time_ms}}
                                           -> tells every open chart page (/ws `tester_show`) to load that run or
                                           heat-map cell into the Strategy Tester and show it on a chart
-                                          (JSON only; the page picks the chart -- testerlayer.showPlan)
+                                          (JSON only; refused 09:20-09:35 ET on weekdays; the page picks the
+                                          chart -- testerlayer.showPlan)
     GET  /api/tester/prop-rules          prop-eval rule sets [{id, name, version, confirmed}]
     POST /api/tester/run                 {strategy, inputs, range, qty, commission,
                                           slippage_ticks, capital?, prop_rules?} -> {id}
@@ -82,6 +83,7 @@ from ..backtest.runner import RunManager, _run_propsim, default_base, read_json
 from ..backtest.stats import montecarlo
 from ..backtest import walkforward
 from ..backtest.walkforward import WalkForwardManager
+from ..backtest.slots import Slots
 from ..backtest.tape import CACHE
 
 MC_CACHE = 64            # Monte Carlo results kept per service (review I3)
@@ -101,6 +103,7 @@ def host_ok(request: Request) -> None:
 
 _STRATEGIES_DIR = Path(strategies.__file__).resolve().parent
 FOCUS_KEYS = ("trade_index", "date", "time_ms")
+_DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 
 def builtin_source(sid: str) -> list[dict]:
@@ -126,11 +129,14 @@ def check_focus(focus) -> dict | None:
         raise HTTPException(400, "focus: one of {trade_index}, {date}, {time_ms}")
     k, v = next(iter(focus.items()))
     if k == "date":
+        # strictly YYYY-MM-DD, returned in its canonical form: the page compares it to trade dates as a string
+        # (3.11+'s fromisoformat alone would also take "20240304" or "2024-W10-1")
+        if not isinstance(v, str) or not _DATE_RE.fullmatch(v):
+            raise HTTPException(400, "focus.date: YYYY-MM-DD")
         try:
-            dt.date.fromisoformat(str(v))
+            return {"date": dt.date.fromisoformat(v).isoformat()}
         except ValueError:
             raise HTTPException(400, "focus.date: YYYY-MM-DD") from None
-        return {"date": str(v)}
     if isinstance(v, bool) or not isinstance(v, int) or v < 0:
         raise HTTPException(400, f"focus.{k}: a whole number >= 0")
     return {k: v}
@@ -176,6 +182,8 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         write_ok(request)
         if not netguard.is_json(request.headers.get("content-type")):
             raise HTTPException(415, "send JSON (Content-Type: application/json)")
+        if Slots().quiet():       # the desk's 9:30 window: never move a chart or decode history then
+            raise HTTPException(409, "not 09:20–09:35 ET on weekdays (the 9:30 window): show it after 09:35")
         try:
             body = await request.json()
         except ValueError:

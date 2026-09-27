@@ -469,6 +469,7 @@ function recentRunsBtn(busy) {
    switching the range kind still swaps the date inputs in immediately. */
 let headerBlurPending = false;
 function refreshHeader() {
+  if (!headerEl) return;   // the tab has never been drawn (Claude's show with the panel left alone)
   const act = document.activeElement;
   if (act && act.tagName === 'INPUT' && headerEl && headerEl.contains(act)) {
     if (!headerBlurPending) {
@@ -733,32 +734,45 @@ function loadRecentRun(id) {
     .then((b) => applyRun(b))
     .catch(() => { serverError = 'could not load that run'; refreshHeader(); });
 }
-/* A finished run's bundle into every tab, exactly as Recent runs loads one. */
-function applyRun(b, tab = 'overview') {
+/* A finished run's bundle into every tab, exactly as Recent runs loads one. `src` = {grid_id, cell} for a
+   heat-map cell. When the tab was never drawn (Claude's show with the panel left alone) the state is set and
+   saved, and the tab draws it the first time it is shown. */
+function applyRun(b, tab = 'overview', src = null) {
   const schema = schemaFor(b.run.strategy.id);
-  if (b.run.strategy.id !== strategyId) resetGrid();
+  const moved = b.run.strategy.id !== strategyId;
+  if (moved) resetGrid();
+  if (moved && src) resetWf();
   strategyId = b.run.strategy.id;
   form = X.fromRun(b.run, schema);
   bundle = b;
-  startMonteCarlo(b.run.id);
+  startMonteCarlo(b.run.id, src || { run_id: b.run.id });
   loadedKey = X.key(form);
   lastRunFailed = '';
   innerTab = tab;
   visibleTradeRows = TRADE_CHUNK;
   selectedTrade = null;
+  if (src) {                                   // a heat-map cell: the heat-map shows its grid, cell marked
+    heatCell = { gid: src.grid_id, i: src.cell };
+    if (!grid || grid.id !== src.grid_id) pollGrid(src.grid_id, ++gridToken);
+  }
   persist();
-  refreshHeader();
-  refreshTabsBar();
-  refreshContent();
+  if (headerEl) {
+    refreshHeader();
+    refreshTabsBar();
+    refreshContent();
+  }
   notify();
 }
 
 /* ---- "Show on chart", asked by Claude (POST /api/tester/show -> /ws {type: 'tester_show'}) ----
-   Opens this tab, loads the run (or heat-map cell) the way a click on Recent runs (or on the cell) would, then
-   puts it on a chart chosen by HBTesterLayer.showPlan -- never a replaying chart, and never a new instrument on
-   a chart with accounts or an algo (then nothing moves and the status note says why) -- and scrolls to the
-   focus trade when one was asked for. Refused while this page has a run / grid / walk-forward starting or in
-   flight: the header is frozen then (I1), and Claude's request must not clobber the user's own. */
+   Loads the run (or heat-map cell) into the Strategy Tester the way Recent runs (or a heat-map click) would,
+   then puts it on a chart planned by HBTesterLayer.showPlan: never a replaying chart, never a chart with
+   accounts or an algo (not even one already on the run's instrument), never the selected chart (the order
+   panel and DOM follow it), and the selection itself is left alone. With no eligible chart nothing moves and the
+   status note says why. The bottom panel switches to the Strategy Tester only while NO chart has accounts or an
+   algo -- otherwise the user's Positions/Orders stay on screen and the note says where the run is. Refused while
+   this page has a run / grid / walk-forward starting or in flight (I1: the header is frozen then). The server
+   already refuses the whole request 09:20-09:35 ET on weekdays. */
 let showToken = 0;
 async function showFromClaude(m) {
   if (!page || !m || (m.run_id == null && m.grid_id == null)) return;
@@ -774,46 +788,29 @@ async function showFromClaude(m) {
   if (token !== showToken) return;              // a newer request won
   if (!b || !b.run) { page.sbNote(`Claude asked to show ${what}: it could not be loaded`); return; }
   if (busyNow()) { page.sbNote(`Claude asked to show ${what}: a run started here meanwhile -- left it alone`); return; }
-  window.HBPanel.show('tester');
-  if (!root || !root.isConnected || !headerEl) { page.sbNote(`Claude asked to show ${what}: the Strategy Tester did not open`); return; }
   const L = window.HBTesterLayer, focus = m.focus || null;
-  const tab = focus ? 'trades' : 'overview';
-  if (m.grid_id != null) {
-    const moved = b.run.strategy.id !== strategyId;
-    if (moved) { resetGrid(); resetWf(); }
-    strategyId = b.run.strategy.id;
-    form = X.fromRun(b.run, schemaFor(strategyId));
-    bundle = b;
-    startMonteCarlo(b.run.id, { grid_id: m.grid_id, cell: m.cell });
-    loadedKey = X.key(form);
-    lastRunFailed = '';
-    innerTab = tab;
-    visibleTradeRows = TRADE_CHUNK;
-    selectedTrade = null;
-    heatCell = { gid: m.grid_id, i: m.cell };
-    if (!grid || grid.id !== m.grid_id) pollGrid(m.grid_id, ++gridToken);   // the heat-map shows that grid
-    persist();
-    refreshHeader();
-    refreshTabsBar();
-    refreshContent();
-    notify();
-  } else {
-    applyRun(b, tab);
-  }
-  // the chart: re-read NOW (the grid may have been rebuilt, a chart may have started replaying)
-  const cells = page.cells(), sel = cells.indexOf(page.cur()), want = b.run.strategy.root;
-  const plan = L.showPlan(cells.map(L.chartFacts), sel, want);
-  if (plan.index < 0) { page.sbNote(plan.reason); return; }
+  const edited = !!(form && loadedKey && X.key(form) !== loadedKey);   // unsaved header edits it replaces
+  const anyTrading = page.cells().some((c) => L.chartFacts(c).tradeReady);
+  const panelOk = !anyTrading || window.HBPanel.isShowing('tester');
+  if (panelOk) window.HBPanel.show('tester');
+  applyRun(b, focus ? 'trades' : 'overview', m.grid_id != null ? { grid_id: m.grid_id, cell: m.cell } : null);
+  const notes = [];
+  if (edited) notes.push('your unsaved Strategy Tester edits were replaced');
+  if (!panelOk) notes.push('open the Strategy Tester tab to see it (the panel stays put while a chart has accounts)');
+  // the chart: planned NOW (the grid may have been rebuilt, a chart may have started replaying)
+  const cells = page.cells(), want = b.run.strategy.root;
+  const plan = L.showPlan(cells.map(L.chartFacts), cells.indexOf(page.cur()), want, { avoidSelected: true });
+  if (plan.index < 0) { page.sbNote([`Loaded ${what} into the Strategy Tester`, plan.reason, ...notes].join(' · ')); return; }
   const cell = cells[plan.index];
   const i = L.focusTrade(b.trades, focus);
-  if (i != null) { await L.jump(i, cell); return; }
-  if (cell.replay) return;
-  page.select(cell);
-  if (plan.switchRoot) {
-    if (L.chartFacts(cell).tradeReady) { page.sbNote('That chart has accounts or an algo on it now: its instrument is left alone'); return; }
-    cell.update({ root: want });
+  if (i != null) {
+    await L.jump(i, cell, { select: false });
+    if (notes.length) page.sbNote(notes.join(' · '));
+    return;
   }
-  page.sbNote(focus ? `Showing ${what} -- no trade matches that focus` : `Showing ${what} on ${want}`);
+  if (cell.replay || L.chartFacts(cell).tradeReady) { page.sbNote('That chart changed meanwhile: left it alone'); return; }
+  if (plan.switchRoot) cell.update({ root: want });
+  page.sbNote([focus ? `Showing ${what} -- no trade matches that focus` : `Showing ${what} on ${want}`, ...notes].join(' · '));
 }
 
 /* ================================================================== run / poll / cancel ================================================================== */
@@ -924,6 +921,7 @@ function cancelRun() {
 /* ================================================================== inner tabs + content ================================================================== */
 
 function refreshTabsBar() {
+  if (!tabsEl) return;   // the tab has never been drawn (Claude's show with the panel left alone)
   tabsEl.replaceChildren();
   const tabs = compare ? [...INNER_TABS, ['compare', 'Compare']] : INNER_TABS;
   for (const [id, label] of tabs) {
@@ -1242,6 +1240,7 @@ const EMPTY_MSG = { overview: 'Run the strategy to see a report', summary: 'Run 
    it isn't from the latest attempt. `lastRunFailed` survives edits and sits above the content until the
    NEXT successful load (loadBundle / loadRecentRun / switchStrategy clear it). */
 function refreshContent() {
+  if (!contentEl) return;   // the tab has never been drawn (Claude's show with the panel left alone)
   dropMiniChart();
   dropCompareChart();
   dropWfChart();

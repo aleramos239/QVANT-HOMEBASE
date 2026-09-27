@@ -4,8 +4,9 @@ Every handler goes through Client (loopback :8852, /api/tester/* only) -- except
 delete_draft, which write/remove one file in the drafts dir through homebase.draftstore (text only;
 the chart service loads drafts in a child process, never in-process).
 
-Long jobs (backtest, heatmap, walkforward) poll until done, up to `wait_s` (default 600 s); past that
+Long jobs (backtest, heatmap, walkforward) poll until done, up to `wait_s` (default 120 s); past that
 they return the job id and its progress, and the same tool called with that id picks the wait back up.
+`cancel` stops a run, heat-map or walk-forward (the tester's own cancel routes).
 """
 from __future__ import annotations
 
@@ -21,7 +22,7 @@ from .client import Client, ToolError, base_url
 
 ET = ZoneInfo("America/New_York")
 FINAL = ("done", "error", "cancelled")
-DEFAULT_WAIT_S = 600
+DEFAULT_WAIT_S = 120           # short: the stdio loop is single-threaded, so a long wait blocks every call
 MAX_WAIT_S = 3600
 PRESETS = {"2021-2024": ("2021-01-01", "2024-12-31"), "2022-2024": ("2022-01-01", "2024-12-31"),
            "2025-2026": ("2025-01-01", None), "all": ("2021-01-01", None)}
@@ -139,10 +140,15 @@ SPECS = [
                                  "properties": {"trade_index": {"type": "integer", "minimum": 0},
                                                 "date": {"type": "string"}, "time_ms": {"type": "integer"}},
                                  "additionalProperties": False}}),
+    _spec("cancel", "Cancel a queued or running job: a single run (run_id), a heat-map (grid_id) or a "
+          "walk-forward (walkforward_id). Uses the Strategy Tester's own cancel; a finished job is left as it is.",
+          {"run_id": {"type": "string"}, "grid_id": {"type": "string"}, "walkforward_id": {"type": "string"}}),
     _spec("write_strategy", "Create or replace a DRAFT strategy: writes ~/.homebase/strategies/<name>.py (only "
-          "that file) and loads it in a sandboxed child process to report its inputs or its error. Its tester id "
-          "is draft_<name>; backtest it like any strategy. Drafts can only be backtested -- they never trade. "
-          "Follow the template read_strategy returns.",
+          "that file) after checking its syntax, and reports the inputs the tester read from its text (nothing "
+          "runs). Its tester id is draft_<name>; backtest it like any strategy -- the backtest is the only place "
+          "its code runs, inside a sandbox (no network, no files outside its run dir, 20 min max). Drafts never "
+          "trade. Follow the template read_strategy returns: literal class attributes and a literal "
+          "`return [Input(...), ...]`.",
           {"name": {"type": "string", "description": "a-z, 0-9, '_' (2-40 chars, starting with a letter); not a "
                                                      "built-in strategy's name."},
            "code": {"type": "string", "description": "The complete Python source."}}, ["name", "code"]),
@@ -605,6 +611,15 @@ class Toolbox:
                 + (f" and scrolls to {focus}" if focus else "")
                 + ". If no chart could take the run's instrument safely, the page's status bar says why.")
 
+    def t_cancel(self, run_id=None, grid_id=None, walkforward_id=None) -> str:
+        given = [(k, v) for k, v in (("run", run_id), ("grid", grid_id), ("walkforward", walkforward_id))
+                 if v is not None]
+        if len(given) != 1:
+            raise ToolError("give exactly one of run_id, grid_id, walkforward_id")
+        kind, jid = given[0]
+        st = self.c.post(f"/api/tester/{kind}/{_q(jid)}/cancel", {})
+        return f"{kind} {jid}: {st.get('status', '?')}" + (f" -- {st['error']}" if st.get("error") else "")
+
     def t_write_strategy(self, name: str, code: str) -> str:
         built = [s.get("id") for s in self._catalog() if not s.get("draft")]
         try:
@@ -616,9 +631,10 @@ class Toolbox:
         if entry is None:
             return f"Wrote {path}, but the tester does not list {sid} yet (is the chart service running this version?)"
         if entry.get("error"):
-            raise ToolError(f"Wrote {path}, but it does not load: {entry['error']}\nFix it and call write_strategy again.")
+            raise ToolError(f"Wrote {path}, but the tester cannot read it: {entry['error']}\n"
+                            "Fix it and call write_strategy again.")
         ins = "; ".join(f"{i.get('key')}={i.get('default')}" for i in entry.get("inputs") or []) or "none"
-        return (f"Wrote {path}. Loaded OK as {sid} ({entry.get('name')}, root {entry.get('root')}, "
+        return (f"Wrote {path}. Listed as {sid} ({entry.get('name')}, root {entry.get('root')}, "
                 f"session_independent={entry.get('session_independent')}). Inputs: {ins}.\n"
                 f"Next: backtest(strategy={sid!r}, ...)")
 

@@ -62,7 +62,6 @@ import math
 from collections import Counter
 from pathlib import Path
 
-from .. import strategies
 from . import drafthost, report
 from .discipline import RESEARCH_END, RESEARCH_START
 from .grid import FINAL, GridManager, LooksCorrupt, add_look, validate_grid
@@ -307,8 +306,6 @@ def validate_wf(body) -> dict:
     own fields. ValueError / DisciplineError with a message for the page."""
     if not isinstance(body, dict):
         raise ValueError("the body is a JSON object")
-    if drafthost.needs_child(body.get("strategy")):
-        return drafthost.in_child("validate_wf", {"body": body})      # a DRAFT: never imported here
     b = dict(body)
     test_months = ratio(b.pop("test_months", TEST_MONTHS))
     if isinstance(b.get("range"), dict) and b["range"].get("kind") == "is_months":
@@ -319,7 +316,7 @@ def validate_wf(body) -> dict:
         raise ValueError(f"metric: one of {', '.join(METRICS)}")
     min_trades = _min_trades(b.pop("min_trades", DEFAULT_MIN_TRADES))
     g = validate_grid(b)
-    if not getattr(strategies.get(g["strategy"]), "session_independent", False):
+    if not getattr(drafthost.resolve(g["strategy"]), "session_independent", False):   # a draft: its stub
         raise ValueError(f"{g['strategy']}: not flagged session-independent, so a month cannot be sliced "
                          "out of one full-window run -- the walk-forward refuses it")
     for c in g["cells"]:

@@ -11,33 +11,42 @@ const src = (f) => readFileSync(new URL(`../../homebase/static/charts/${f}`, imp
 
 const chart = (root, o = {}) => ({ root, replay: false, tradeReady: false, ...o });
 
-test('showPlan: the selected chart already on the run\'s root is used as is', () => {
-  assert.deepEqual(L.showPlan([chart('ES'), chart('NQ'), chart('NQ')], 2, 'NQ'), { index: 2, switchRoot: false });
+const CLICK = { avoidSelected: false };
+
+test('showPlan (Claude): never the selected chart -- the order panel follows it', () => {
+  assert.deepEqual(L.showPlan([chart('NQ'), chart('NQ')], 0, 'NQ'), { index: 1, switchRoot: false });
+  assert.deepEqual(L.showPlan([chart('NQ'), chart('ES')], 0, 'NQ'), { index: 1, switchRoot: true });
+  assert.equal(L.showPlan([chart('NQ')], 0, 'NQ').index, -1);
 });
 
-test('showPlan: another chart on the root beats switching the selected one', () => {
-  assert.deepEqual(L.showPlan([chart('ES'), chart('NQ')], 0, 'NQ'), { index: 1, switchRoot: false });
+test('showPlan: a free chart already on the root beats switching one', () => {
+  assert.deepEqual(L.showPlan([chart('ES'), chart('YM'), chart('NQ')], 0, 'NQ'), { index: 2, switchRoot: false });
+  assert.deepEqual(L.showPlan([chart('ES'), chart('NQ')], 0, 'NQ', CLICK), { index: 1, switchRoot: false });
 });
 
-test('showPlan: a replaying chart is never touched, even on the right root', () => {
-  const plan = L.showPlan([chart('NQ', { replay: true }), chart('ES')], 0, 'NQ');
-  assert.deepEqual(plan, { index: 1, switchRoot: true });
+test('showPlan: a trade-ready chart is NEVER taken over, even on the run\'s own root', () => {
+  // the only NQ chart has accounts: a free ES chart switches instead; that NQ chart is never re-intervalled
+  assert.deepEqual(L.showPlan([chart('ES'), chart('NQ', { tradeReady: true }), chart('YM')], 0, 'NQ'),
+    { index: 2, switchRoot: true });
+  assert.deepEqual(L.showPlan([chart('NQ', { tradeReady: true }), chart('YM')], 0, 'NQ', CLICK),
+    { index: 1, switchRoot: true });
+  assert.equal(L.showPlan([chart('NQ', { tradeReady: true })], 0, 'NQ', CLICK).index, -1);
 });
 
-test('showPlan: a trade-ready chart keeps its instrument; a free one switches (the selected one first)', () => {
-  const charts = [chart('ES', { tradeReady: true }), chart('YM'), chart('GC')];
-  assert.deepEqual(L.showPlan(charts, 0, 'NQ'), { index: 1, switchRoot: true });
-  assert.deepEqual(L.showPlan(charts, 2, 'NQ'), { index: 2, switchRoot: true });
+test('showPlan: a replaying chart is never touched', () => {
+  assert.deepEqual(L.showPlan([chart('ES'), chart('NQ', { replay: true }), chart('GC')], 0, 'NQ'),
+    { index: 2, switchRoot: true });
 });
 
-test('showPlan: a trade-ready chart ALREADY on the root is fine to show on (nothing about it changes)', () => {
-  assert.deepEqual(L.showPlan([chart('NQ', { tradeReady: true })], 0, 'NQ'), { index: 0, switchRoot: false });
+test('showPlan (a click in List of trades): the selected chart may be used when it is free', () => {
+  assert.deepEqual(L.showPlan([chart('NQ'), chart('NQ')], 0, 'NQ', CLICK), { index: 0, switchRoot: false });
+  assert.deepEqual(L.showPlan([chart('ES'), chart('YM')], 1, 'NQ', CLICK), { index: 1, switchRoot: true });
 });
 
-test('showPlan: every chart replaying or trade-ready -> nothing is touched, and the page says why', () => {
+test('showPlan: nothing eligible -> nothing is touched, and the page says why', () => {
   const plan = L.showPlan([chart('ES', { tradeReady: true }), chart('NQ', { replay: true })], 0, 'NQ');
   assert.equal(plan.index, -1);
-  assert.match(plan.reason, /never changes instrument/);
+  assert.match(plan.reason, /never taken over/);
   assert.equal(L.showPlan([], 0, 'NQ').index, -1);
 });
 
@@ -79,10 +88,20 @@ test('the page routes /ws tester_show to HBTesterUI.show, and the handler plans 
   const ui = src('testerui.js');
   assert.match(ui, /show: showFromClaude/);
   const body = ui.slice(ui.indexOf('async function showFromClaude'), ui.indexOf('/* ================', ui.indexOf('async function showFromClaude')));
-  assert.match(body, /L\.showPlan\(cells\.map\(L\.chartFacts\)/);
-  assert.match(body, /busyNow\(\)/);                       // refused while this page has its own job in flight
-  assert.match(body, /await L\.jump\(i, cell\)/);          // focus goes through jump on the PLANNED chart
-  assert.doesNotMatch(body, /\/api\/(?!tester\/)/);        // it only ever reads tester routes
+  assert.match(body, /L\.showPlan\(cells\.map\(L\.chartFacts\), cells\.indexOf\(page\.cur\(\)\), want, \{ avoidSelected: true \}\)/);
+  assert.match(body, /busyNow\(\)/);                               // refused while this page has its own job
+  assert.match(body, /await L\.jump\(i, cell, \{ select: false \}\)/);   // the planned chart, selection untouched
+  assert.doesNotMatch(body, /page\.select\(/);                     // never moves the selection (order panel target)
+  assert.match(body, /if \(panelOk\) window\.HBPanel\.show\('tester'\)/); // no panel swap while a chart has accounts
+  assert.doesNotMatch(body, /\/api\/(?!tester\/)/);
+});
+
+test('a click in List of trades plans through showPlan too, and never touches a trade-ready chart', () => {
+  const tl = src('testerlayer.js');
+  const jump = tl.slice(tl.indexOf('async function jump('), tl.indexOf('const api = {'));
+  assert.match(jump, /showPlan\(cells\.map\(chartFacts\), cells\.indexOf\(PAGE\.cur\(\)\), root, \{ avoidSelected: false \}\)/);
+  assert.match(jump, /if \(chartFacts\(cell\)\.tradeReady\) \{ PAGE\.sbNote/);
+  assert.ok(jump.indexOf('tradeReady') < jump.indexOf('cell.update('));   // checked before anything changes
 });
 
 test('the algo picker is built from the desk state and the paper list only -- never the tester catalog', () => {

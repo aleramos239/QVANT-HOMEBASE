@@ -13,7 +13,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from homebase import draftstore, strategies
-from homebase.backtest import drafthost, grid, runner, slots, walkforward
+from homebase.backtest import grid, runner, slots, walkforward
 from homebase.charts.server import create_app
 from tests.backtest_util import D1, nq_archive
 
@@ -96,91 +96,115 @@ def test_write_touches_only_its_own_file_and_checks_syntax(drafts_dir):
     assert draftstore.delete("nq_orb") and not p.exists() and not draftstore.delete("nq_orb")
 
 
-# ---------------------------------------------------------------- isolation
+# ---------------------------------------------------------------- listing / validating never runs a draft
 
-def test_the_catalog_describes_drafts_in_a_child_never_in_this_process(tmp_path, sentinel):
+@pytest.mark.parametrize("bad", ["json", "homebase", "sitecustomize", "usercustomize", "socket", "charts", "engine"])
+def test_names_never_shadow_a_stdlib_or_homebase_module(bad):
+    with pytest.raises(ValueError, match="module name|reserved|built-in"):
+        draftstore.validate_name(bad)
+
+
+def test_a_pathological_source_is_a_value_error():
+    with pytest.raises(ValueError):
+        draftstore.check_source("x = " + "-" * 199_000 + "1\n")
+
+
+def test_static_meta_reads_the_template_without_running_it():
+    m = draftstore.static_meta(draftstore.DRAFT_TEMPLATE)
+    assert m["class"] == "MyDraft" and m["root"] == "NQ" and m["session_independent"] is True
+    assert [i["key"] for i in m["inputs"]] == ["offset_pts", "sl_pts", "tp_pts"]
+    assert m["inputs"][0] == {"key": "offset_pts", "label": "Offset (pts)", "type": "float", "default": 10.0,
+                              "min": 0.25, "max": 100, "step": 0.25, "choices": []}
+
+
+@pytest.mark.parametrize("src,msg", [
+    ("from homebase.strategies.base import Strategy\n", "exactly one class"),
+    ("from homebase.strategies.base import Strategy\nclass A(Strategy):\n    root = 'NQ'\n"
+     "class B(Strategy):\n    root = 'NQ'\n", "exactly one class"),
+    ("from homebase.strategies.base import Strategy\nclass A(Strategy):\n    name = 'x'\n", "root"),
+    ("from homebase.strategies.base import Strategy\nR = 'NQ'\nclass A(Strategy):\n    root = R\n", "literal"),
+    ("from homebase.strategies.base import Input, Strategy\nclass A(Strategy):\n    root = 'NQ'\n"
+     "    @classmethod\n    def inputs(cls):\n        xs = []\n        return xs\n", "single `return"),
+    ("from homebase.strategies.base import Input, Strategy\nclass A(Strategy):\n    root = 'NQ'\n"
+     "    @classmethod\n    def inputs(cls):\n        return [Input('a', 'A', 'float', 1.0 + 2)]\n", "literal"),
+])
+def test_static_meta_refuses_what_it_cannot_read(src, msg):
+    with pytest.raises(ValueError, match=msg):
+        draftstore.static_meta(src)
+
+
+def test_the_catalog_never_runs_a_draft(tmp_path, sentinel):
     write_template()
-    draftstore.write("broken_one", "import no_such_module_xyz\n")
-    draftstore.write("two_classes", "from homebase.strategies.base import Strategy\n"
-                     "class A(Strategy):\n    root='NQ'\nclass B(Strategy):\n    root='NQ'\n")
+    (draftstore.drafts_dir() / "not_static.py").write_text(
+        "from homebase.strategies.base import Strategy\nclass A(Strategy):\n    root = 'N' + 'Q'\n")
     with client(tmp_path) as c:
         got = {s["id"]: s for s in c.get("/api/tester/strategies").json()}
+        c.get("/api/tester/strategies/draft_my_orb/source")
     assert {"nq930", "ym930", "nq10am", "gc_nfpcpi"} <= set(got)
     d = got["draft_my_orb"]
-    assert d["draft"] is True and d["root"] == "NQ" and not d.get("error")
+    assert d["draft"] is True and d["root"] == "NQ" and not d.get("error") and d["session_independent"] is True
     assert [i["key"] for i in d["inputs"]] == ["offset_pts", "sl_pts", "tp_pts"]
-    assert "ModuleNotFoundError" in got["draft_broken_one"]["error"]
-    assert "exactly one Strategy subclass" in got["draft_two_classes"]["error"]
-    # the draft's module-level code ran -- in a child, never here
-    pids = {p.name for p in sentinel.iterdir()}
-    assert pids and str(os.getpid()) not in pids
+    assert "literal" in got["draft_not_static"]["error"]
+    assert not list(sentinel.iterdir())                # no draft code ran -- in this process or any child
     assert not any(m.startswith("homebase_draft_") for m in sys.modules)
     assert not any(draftstore.is_draft_id(k) for k in strategies.REGISTRY)
 
 
-def test_validate_run_grid_and_walkforward_for_a_draft_go_through_the_child(sentinel, monkeypatch):
+def test_validation_uses_the_static_stub_and_snapshots_the_source(sentinel):
     write_template()
-    calls = []
-    real = drafthost.in_child
-    monkeypatch.setattr(drafthost, "in_child", lambda op, payload, **kw: calls.append(op) or real(op, payload, **kw))
     req = runner.validate({"strategy": "draft_my_orb", "range": MARCH})
     assert req["strategy"] == "draft_my_orb" and req["inputs"]["offset_pts"] == 10.0
-    assert req["draft_source"] == (draftstore.drafts_dir() / "my_orb.py").read_text()
+    assert req["draft_source"] == (draftstore.drafts_dir() / "my_orb.py").read_text() and req["draft_sha256"]
     g = grid.validate_grid({"strategy": "draft_my_orb", "range": MARCH,
                             "axes": [{"key": "sl_pts", "values": [4, 5]}, {"key": "tp_pts", "values": [10, 15]}]})
-    assert len(g["cells"]) == 4 and all(c["req"]["draft_source"] for c in g["cells"])
+    assert len(g["cells"]) == 4 and all(c["req"]["draft_source"] == req["draft_source"] for c in g["cells"])
     wf = walkforward.validate_wf({"strategy": "draft_my_orb", "range": {"kind": "custom", "start": "2024-01-01",
                                   "end": "2024-06-30"}, "axes": [{"key": "sl_pts", "values": [4, 5]},
                                                                  {"key": "tp_pts", "values": [10, 15]}]})
     assert wf["walkforward"]["test_months"] == 3 and all(c["req"]["propsim"] is False for c in wf["cells"])
-    assert calls == ["validate_run", "validate_grid", "validate_wf"]
-    assert str(os.getpid()) not in {p.name for p in sentinel.iterdir()}
+    with pytest.raises(ValueError, match="sl_pts"):
+        runner.validate({"strategy": "draft_my_orb", "inputs": {"sl_pts": 1e9}, "range": MARCH})
+    assert not list(sentinel.iterdir())
     assert not any(draftstore.is_draft_id(k) for k in strategies.REGISTRY)
 
 
-def test_a_bad_draft_is_a_clear_400(tmp_path):
-    draftstore.write("boom", "from homebase.strategies.base import Strategy\nraise RuntimeError('kaboom')\n")
+def test_a_bad_draft_request_is_a_clear_400(tmp_path):
     with client(tmp_path) as c:
-        r = c.post("/api/tester/run", json={"strategy": "draft_boom", "range": MARCH})
-        assert r.status_code == 400 and "RuntimeError" in r.json()["detail"] and "kaboom" in r.json()["detail"]
         r = c.post("/api/tester/run", json={"strategy": "draft_nope", "range": MARCH})
         assert r.status_code == 400 and "no draft 'nope'" in r.json()["detail"]
         r = c.post("/api/tester/run", json={"strategy": "draft_../x", "range": MARCH})
         assert r.status_code == 400
 
 
-def test_a_draft_that_hangs_at_import_times_out(monkeypatch):
-    draftstore.write("slow", "import time\ntime.sleep(30)\n")
-    with pytest.raises(drafthost.DraftError, match="did not load within"):
-        drafthost.in_child("validate_run", {"body": {"strategy": "draft_slow"}}, timeout=1.0)
-
-
-def test_no_draft_child_starts_in_the_quiet_window(monkeypatch):
+def test_no_draft_run_starts_in_the_quiet_window(tmp_path, monkeypatch):
     write_template()
-    monkeypatch.setattr(slots, "et_now", lambda: dt.datetime(2026, 9, 28, 9, 25, tzinfo=slots.ET))
-    with pytest.raises(drafthost.DraftError, match="09:20"):
-        runner.validate({"strategy": "draft_my_orb", "range": MARCH})
+    with client(tmp_path) as c:
+        monkeypatch.setattr(slots, "et_now", lambda: dt.datetime(2026, 9, 28, 9, 25, tzinfo=slots.ET))
+        r = c.post("/api/tester/run", json={"strategy": "draft_my_orb", "range": MARCH})
+        assert r.status_code == 400 and "09:20" in r.json()["detail"]
 
 
-def test_a_draft_backtests_end_to_end_and_runs_the_validated_snapshot(tmp_path, sentinel):
+def test_a_draft_backtests_end_to_end_in_the_sandbox_and_runs_the_validated_snapshot(tmp_path):
     write_template()
     with client(tmp_path) as c:
         r = c.post("/api/tester/run", json={"strategy": "draft_my_orb", "range": MARCH})
         assert r.status_code == 200, r.text
         rid = r.json()["id"]
         # the file changes after validation: the run still executes the snapshot it was validated with
-        draftstore.write("my_orb", "raise SystemExit('edited after submit')\n")
+        draftstore.write("my_orb", draftstore.DRAFT_TEMPLATE.replace('"09:30:00"', '"09:45:00"'))
         st = poll(c, f"/api/tester/run/{rid}")
-        assert st["status"] == "done", st
+        assert st["status"] == "done", st.get("error")
         b = c.get(f"/api/tester/run/{rid}/bundle").json()
         assert b["run"]["strategy"]["id"] == "draft_my_orb"
         assert len(b["trades"]) == 1 and b["trades"][0]["side"] == "long" and b["trades"][0]["exit_reason"] == "tp"
         req = runner.read_json(tmp_path / "state" / "tester" / "runs" / rid / "request.json")
-        assert "edited after submit" not in req["draft_source"] and req["draft_sha256"]
-    assert str(os.getpid()) not in {p.name for p in sentinel.iterdir()}
+        assert '"09:45:00"' not in req["draft_source"]
+    assert not any(m.startswith("homebase_draft_") for m in sys.modules)
+    assert not list((tmp_path / "state" / "tester" / "tape").glob("**/*.tape")), \
+        "a sandboxed draft run never writes the shared tape cache"
 
 
-def test_source_route_serves_builtins_and_draft_text_without_importing(tmp_path, sentinel):
+def test_source_route_serves_builtins_and_draft_text_without_running_it(tmp_path, sentinel):
     write_template()
     with client(tmp_path) as c:
         s = c.get("/api/tester/strategies/nq930/source").json()
@@ -190,7 +214,7 @@ def test_source_route_serves_builtins_and_draft_text_without_importing(tmp_path,
         assert d["draft"] is True and "class MyDraft" in d["files"][0]["text"]
         assert c.get("/api/tester/strategies/draft_nope/source").status_code == 404
         assert c.get("/api/tester/strategies/nope/source").status_code == 404
-    assert not list(sentinel.iterdir())        # reading source never loads the draft
+    assert not list(sentinel.iterdir())
 
 
 # ---------------------------------------------------------------- the desk can never load one
@@ -213,7 +237,7 @@ def test_importing_the_desk_never_loads_a_draft(sentinel):
     write_template()
     code = ("import sys, homebase.server, homebase.engine, homebase.trading, homebase.rules\n"
             "bad = [m for m in sys.modules if m.startswith('homebase_draft_') or m in "
-            "('homebase.draftstore', 'homebase.backtest.drafthost')]\n"
+            "('homebase.draftstore', 'homebase.backtest.drafthost', 'homebase.backtest.sandbox')]\n"
             "from homebase.rules import RULES\n"
             "assert not bad, bad\nassert not any(k.startswith('draft_') for k in RULES), RULES\nprint('ok')\n")
     p = subprocess.run([sys.executable, "-c", code], cwd=REPO, capture_output=True, text=True, timeout=120)

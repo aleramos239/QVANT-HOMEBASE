@@ -95,23 +95,25 @@ function stackLabels(rows, rowH, top, bottom) {
 
 function labelsFit(x0, x1) { return x0 != null && x1 != null && x1 - x0 >= LABEL_MIN_PX; }
 
-/* ---- "Show on chart" from Claude (POST /api/tester/show -> /ws tester_show): WHICH chart shows the run.
-   `charts` is [{root, replay, tradeReady}] in grid order (root = what the chart shows now; tradeReady = any
-   account ticked or an algo set). The rules, safest first:
-     - a replaying chart is NEVER touched (not selected, not switched, not scrolled);
-     - a chart already showing the run's root is used as is -- the selected one first;
-     - otherwise a chart with NO accounts and NO algo may switch to the run's root -- the selected one first;
-     - a trade-ready chart NEVER changes instrument. When every chart is replaying or trade-ready, nothing is
-       touched and the page says why in its status note (the user frees a chart and asks again).
-   Returns {index, switchRoot} or {index: -1, reason}. Pure. */
-function showPlan(charts, selected, root) {
+/* ---- WHICH chart shows a tester run: Claude's "show on chart" (POST /api/tester/show -> /ws tester_show) and a
+   click in List of trades both plan through here. `charts` is [{root, replay, tradeReady}] in grid order (root =
+   what the chart shows now; tradeReady = any account ticked or an algo set). The rules:
+     - a replaying chart is NEVER touched;
+     - a trade-ready chart is NEVER taken over -- not switched, not re-intervalled, not scrolled -- even when it
+       already shows the run's root;
+     - avoidSelected (Claude's show): never the selected chart either -- the order panel and DOM follow it;
+     - of what is left, a chart already on the root first (the selected one first, when allowed), else one that
+       switches to the root. None left: {index: -1, reason} and nothing moves (the page says why).
+   Pure. */
+function showPlan(charts, selected, root, { avoidSelected = true } = {}) {
   const list = charts || [];
   const order = [selected, ...list.map((_, i) => i).filter((i) => i !== selected)]
     .filter((i) => i >= 0 && i < list.length);
-  for (const i of order) if (!list[i].replay && list[i].root === root) return { index: i, switchRoot: false };
-  for (const i of order) if (!list[i].replay && !list[i].tradeReady) return { index: i, switchRoot: true };
-  return { index: -1, reason: `No chart can show ${root}: every chart is replaying or has accounts/an algo on it `
-    + '(a trade-ready chart never changes instrument). Clear one chart, then ask again.' };
+  const ok = (i) => !list[i].replay && !list[i].tradeReady && !(avoidSelected && i === selected);
+  for (const i of order) if (ok(i) && list[i].root === root) return { index: i, switchRoot: false };
+  for (const i of order) if (ok(i)) return { index: i, switchRoot: true };
+  return { index: -1, reason: `No free chart for ${root}: charts with accounts or an algo, a replaying chart`
+    + `${avoidSelected ? ' and the selected chart' : ''} are never taken over. Clear a chart's accounts (or add one), then try again.` };
 }
 
 /* The trade a show request focuses: {trade_index} as given (when it exists); {date} the first trade on or
@@ -393,21 +395,24 @@ function overlay(cell, page) {
 /* Jump to trade i (ruling S20): select it, pick the chart showing the run's root (falling back to the
    selected one), switch it to whatever interval lets scroll-back reach the trade's entry under the client's
    200,000-bar cap, load history back to it, then zoom. Every early return leaves the status-bar note as
-   whatever last explained why. `target` (Claude's show, planned by showPlan) names the chart to use instead;
-   it is re-checked here, at the moment it is touched: a chart that started replaying is left alone. */
-async function jump(i, target = null) {
+   whatever last explained why. The chart comes from showPlan (a trade-ready or replaying chart is never used);
+   `target` (Claude's show, already planned) names it instead, and select: false leaves the selection alone. */
+async function jump(i, target = null, { select = true } = {}) {
   if (!PAGE) return;
   const U = window.HBTesterUI, b = U.bundle, t = b && b.trades[i];
   if (!t) return;
-  if (target && (target.replay || !PAGE.cells().includes(target))) { PAGE.sbNote('That chart is replaying (or gone): left it alone'); return; }
-  if (target && chartFacts(target).root !== b.run.strategy.root && chartFacts(target).tradeReady) {
-    PAGE.sbNote('That chart has accounts or an algo on it now: its instrument is left alone');
-    return;
-  }
   U.select(i);
   const root = b.run.strategy.root, cells = PAGE.cells(), rootOf = (c) => (c.shown || c.cfg).root;
-  const cell = target || (rootOf(PAGE.cur()) === root ? PAGE.cur() : cells.find((c) => rootOf(c) === root) || PAGE.cur());
-  PAGE.select(cell);
+  let cell = target;
+  if (!cell) {        // a click in List of trades: the same rule as Claude's show, the selected chart allowed
+    const plan = showPlan(cells.map(chartFacts), cells.indexOf(PAGE.cur()), root, { avoidSelected: false });
+    if (plan.index < 0) { PAGE.sbNote(plan.reason); return; }
+    cell = cells[plan.index];
+  }
+  // re-checked at the moment it is touched: never a replaying chart, never one with accounts or an algo
+  if (cell.replay || !cells.includes(cell)) { PAGE.sbNote('That chart is replaying (or gone): left it alone'); return; }
+  if (chartFacts(cell).tradeReady) { PAGE.sbNote('That chart has accounts or an algo on it: left it alone'); return; }
+  if (select) PAGE.select(cell);
   const spec = window.HBTester.reachSpec(cell.cfg.spec, t.entry_ms, PAGE.clockMs());
   if (rootOf(cell) !== root || spec !== cell.cfg.spec) {
     const specChanged = spec !== cell.cfg.spec;
