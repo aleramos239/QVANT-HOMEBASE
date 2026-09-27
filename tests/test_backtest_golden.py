@@ -76,7 +76,10 @@ def test_engine_reproduces_research_trade_by_trade(store, case):
 # is expected to grow. Uses the real derived tape cache (~/futures_derived/homebase_tape, written by
 # every ordinary run) rather than a tmp one: a cold parse of ~1,000 sessions takes minutes.
 
-RESEARCH_DIGEST = "faf8f6f37482cd4edcd68438da263ff3f25da2384b4ae1517c6c20f5396b3693"
+# Re-pinned at release/4: feat/propsim-evals renamed the ruleset id lucid-flex-50k@2026-08 ->
+# lucid-flex-50k@2026-09-27 inside propsim.json. trades/equity/report/coverage hash identical and
+# propsim.json minus its "rules" label hashes identical (81feeaffd10f24e9) on both sides.
+RESEARCH_DIGEST = "bedc19f61142f4ecb9a30d32dde33fb26378fd97e58aa887b272f98163e6773a"
 RESEARCH_HEADLINE = {"trades": 518, "net_profit": 263.0, "win_rate": 27.220077220077222,
                      "profit_factor": 1.0063414751766209, "sharpe": 0.037311904610996545,
                      "skipped": 2}
