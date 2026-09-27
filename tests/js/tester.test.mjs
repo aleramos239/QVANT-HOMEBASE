@@ -107,6 +107,32 @@ test('Overview tiles, badges and the prop block', () => {
   assert.deepEqual(X.propView(null), { message: 'No prop-eval result in this run', rules: null, unconfirmed: false });
 });
 
+const MC = { paths: 5000, mode: 'shuffle', seed: 1, n_trades: 24,
+  drawdown: { p5: -6000, p25: -5000, p50: -4210, p75: -3000, p95: -1000 },
+  final_net: { p5: 8000, p25: 10500, p50: 12345.5, p75: 14000, p95: 16000 },
+  losing_streak: { p5: 1, p25: 2, p50: 3, p75: 4, p95: 6 },
+  p_ruin: 0.021, p_prop_pass: 0.734,
+  histogram: { edges: [-6000, -4000, -2000, 0], counts: [10, 40, 0] },
+  actual: { max_dd: -4210, percentile: 61.7 } };
+
+test('Monte Carlo: the headline, percentile tiles and DD histogram bars', () => {
+  assert.equal(X.mcHeadline(MC), `the backtest's actual path: DD ${M}$4,210 (percentile 62)`);
+  assert.deepEqual(X.mcTiles(MC).map((t) => [t.label, t.value, t.sub, t.tone]), [
+    ['Max drawdown (p50)', `${M}$4,210`, `p5 ${M}$6,000 · p95 ${M}$1,000`, ''],
+    ['Final net (p50)', '+$12,345.50', 'p5 +$8,000 · p95 +$16,000', 'up'],
+    ['Losing streak (p50)', '3', 'p5 1 · p95 6', ''],
+    ['P(ruin)', '2.1%', '', ''],
+    ['P(prop pass)', '73.4%', '', '']]);
+  assert.equal(X.mcTiles({ ...MC, p_prop_pass: null })[4].value, '—');
+  assert.deepEqual(X.mcHistogram(MC), [
+    { pct: 25, title: `${M}$6,000 to ${M}$4,000: 10 paths` },
+    { pct: 100, title: `${M}$4,000 to ${M}$2,000: 40 paths` },
+    { pct: 2, title: `${M}$2,000 to $0: 0 paths` }]);
+  // a degenerate (single-valued) histogram never divides by zero
+  assert.deepEqual(X.mcHistogram({ ...MC, histogram: { edges: [0, 0], counts: [7] } }),
+    [{ pct: 100, title: '$0 to $0: 7 paths' }]);
+});
+
 test('performance summary rows (All / Long / Short, dollars, RR 1:X, Sharpe)', () => {
   const rows = X.summaryRows(RUN.report.summary);
   assert.deepEqual(rows[0], { label: 'Net profit', all: '+$12,345.50 (+24.69%)', long: '+$12,345.50 (+24.69%)', short: '+$12,345.50 (+24.69%)' });

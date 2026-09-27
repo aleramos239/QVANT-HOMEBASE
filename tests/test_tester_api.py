@@ -69,6 +69,43 @@ def test_a_run_goes_from_post_to_bundle(tmp_path):
         assert (tmp_path / "state" / "tester" / "runs" / rid / "run.json").exists()
 
 
+def test_montecarlo_runs_over_a_finished_bundle_and_reuses_its_prop_rules(tmp_path):
+    with client(tmp_path) as c:
+        rid = c.post("/api/tester/run", json=RUN).json()["id"]
+        poll(c, rid)
+        r = c.post("/api/tester/montecarlo", json={"run_id": rid, "paths": 500, "seed": 1},
+                   headers={"origin": "http://localhost:8852"})
+        assert r.status_code == 200
+        mc = r.json()
+        assert mc["paths"] == 500 and mc["mode"] == "shuffle" and mc["n_trades"] == 1
+        for k in ("drawdown", "final_net", "losing_streak"):
+            assert set(mc[k]) == {"p5", "p25", "p50", "p75", "p95"}
+        assert 0.0 <= mc["p_ruin"] <= 1.0
+        assert mc["p_prop_pass"] is not None            # RUN's default prop_rules ran clean
+        assert "histogram" in mc and "actual" in mc
+        # same seed -> identical result; a different seed need not match
+        again = c.post("/api/tester/montecarlo", json={"run_id": rid, "paths": 500, "seed": 1}).json()
+        assert again == mc
+
+
+def test_montecarlo_refuses_bad_requests_and_cross_site_writes(tmp_path):
+    with client(tmp_path) as c:
+        rid = c.post("/api/tester/run", json=RUN).json()["id"]
+        assert c.post("/api/tester/montecarlo", json={"run_id": rid}, headers=EVIL).status_code == 403
+        assert c.post("/api/tester/montecarlo", json={"run_id": rid},
+                      headers={"origin": "http://evil.example", **REBIND_HOST}).status_code == 403
+        assert c.post("/api/tester/montecarlo", json={"run_id": "20260926-120000-nq930-abcd"}).status_code == 404
+        r = c.post("/api/tester/montecarlo", json={"run_id": rid, "paths": 10_001})
+        assert r.status_code == 400 and "paths" in r.json()["detail"]
+        r = c.post("/api/tester/montecarlo", json={"run_id": rid, "mode": "bogus"})
+        assert r.status_code == 400 and "mode" in r.json()["detail"]
+        # the run is still queued/running: no trades to resample yet
+        r = c.post("/api/tester/montecarlo", json={"run_id": rid})
+        assert r.status_code in (400, 409)
+        poll(c, rid)
+        assert c.post("/api/tester/montecarlo", json={"run_id": rid}).status_code == 200
+
+
 def test_writes_from_another_site_are_refused(tmp_path):
     with client(tmp_path) as c:
         assert c.post("/api/tester/run", json=RUN, headers=EVIL).status_code == 403

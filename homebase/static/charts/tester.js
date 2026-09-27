@@ -169,6 +169,32 @@ function propView(p) {
     { label: 'Median days to pass', value: h.median_days_to_pass == null ? '—' : String(Math.round(h.median_days_to_pass)), sub: '' },
     { label: 'Funded: expected cheque', value: Tr.money(h.funded_expected_cheque), sub: '' }] };
 }
+
+/* ---- Monte Carlo (Overview sub-tab): resamples the run's own trade P&L, never the fills ---- */
+/* "the backtest's actual path: DD −$X (percentile P)" -- where the ONE path the backtest actually
+   drew ranks inside the resampled distribution of max drawdowns. */
+function mcHeadline(r) {
+  return `the backtest's actual path: DD ${Tr.money(r.actual.max_dd)} (percentile ${Math.round(r.actual.percentile)})`;
+}
+function mcTiles(r) {
+  const dd = r.drawdown, fn = r.final_net, ls = r.losing_streak;
+  const spread = (m, fmt) => `p5 ${fmt(m.p5)} · p95 ${fmt(m.p95)}`;
+  return [
+    { label: 'Max drawdown (p50)', value: Tr.money(dd.p50), sub: spread(dd, Tr.money), tone: '' },
+    { label: 'Final net (p50)', value: signed(fn.p50), sub: spread(fn, signed), tone: toneOf(fn.p50) },
+    { label: 'Losing streak (p50)', value: int(Math.round(ls.p50)), sub: spread(ls, (v) => int(Math.round(v))), tone: '' },
+    { label: 'P(ruin)', value: rate(r.p_ruin * 100), sub: '', tone: '' },
+    { label: 'P(prop pass)', value: r.p_prop_pass == null ? '—' : rate(r.p_prop_pass * 100), sub: '', tone: '' }];
+}
+/* Bar heights as a % of the tallest bin (>= 2% so a lone path never disappears); `title` carries
+   the bin's own $ range + path count for a hover tooltip -- the chart itself stays a plain <div> row. */
+function mcHistogram(r) {
+  const { edges, counts } = r.histogram, max = Math.max(1, ...counts);
+  return counts.map((c, i) => ({
+    pct: Math.max(2, Math.round((c / max) * 100)),
+    title: `${Tr.money(edges[i])} to ${Tr.money(edges[i + 1])}: ${c} path${c === 1 ? '' : 's'}`,
+  }));
+}
 const SUMMARY = [
   ['Net profit', (c) => `${signed(c.net_profit)} (${pct(c.net_profit_pct)})`],
   ['Gross profit', (c) => Tr.money(c.gross_profit)], ['Gross loss', (c) => Tr.money(c.gross_loss)],
@@ -366,7 +392,7 @@ function gridProgress(st) {
 
 const api = { MAX_CELLS, parseValues, valueLabel, gridAxes, gridCount, gridProblems, gridBody, looksText, looksLine, heatPanels, heatMaxAbs,
   heatLevel, cellView, gridProgress, RANGES, HOLDOUT_START, DEFAULT_RULES, REASON_MAX, defaults, restore, fromRun, reachesHoldout, problems, inputError, body,
-  key, runLabel, progress, pct, rate, num, dur, fmtEt, tiles, badges, propView, summaryRows, periodRows, sortTrades, tradeCells,
+  key, runLabel, progress, pct, rate, num, dur, fmtEt, tiles, badges, propView, mcHeadline, mcTiles, mcHistogram, summaryRows, periodRows, sortTrades, tradeCells,
   tradeMarks, equitySeries, reachSpec, toneOf };
 if (typeof window !== 'undefined') window.HBTester = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;

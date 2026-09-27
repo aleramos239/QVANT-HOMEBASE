@@ -102,6 +102,8 @@ let selectedTrade = null;
 let sortCol = 'n', sortDir = 1;
 let visibleTradeRows = TRADE_CHUNK;
 let miniChartHandle = null;
+let mc = { runId: null, loading: false, error: '', result: null };   // Monte Carlo, keyed to bundle.run.id
+let mcToken = 0;
 const listeners = new Set();
 /* the heat-map */
 let heatRows = null;       // [{key, text}] x 3 for strategyId (key '' = unused): the axis editor
@@ -465,6 +467,7 @@ function loadRecentRun(id) {
       strategyId = b.run.strategy.id;
       form = X.fromRun(b.run, schema);
       bundle = b;
+      startMonteCarlo(b.run.id);
       loadedKey = X.key(form);
       lastRunFailed = '';
       innerTab = 'overview';
@@ -559,6 +562,7 @@ function loadBundle(rid, token) {
         return;
       }
       bundle = b;
+      startMonteCarlo(b.run.id);
       loadedKey = submittedKey;
       lastRunFailed = '';   // M1: a successful load is the only thing that clears the stale-failure banner
       innerTab = 'overview';
@@ -637,6 +641,40 @@ function propBlock(propsim) {
   }
   return wrap;
 }
+/* ---- Monte Carlo (Overview sub-tab): fetched once per run id, cached in `mc` ---- */
+function startMonteCarlo(runId) {
+  mc = { runId, loading: true, error: '', result: null };
+  const token = ++mcToken;
+  fetch('/api/tester/montecarlo', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ run_id: runId }) })
+    .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+    .then((result) => { if (token !== mcToken) return; mc = { runId, loading: false, error: '', result }; if (innerTab === 'overview') refreshContent(); })
+    .catch(() => { if (token !== mcToken) return; mc = { runId, loading: false, error: 'Monte Carlo failed to run', result: null }; if (innerTab === 'overview') refreshContent(); });
+}
+function mcBarsEl(r) {
+  const wrap = page.mk('div', 'tst-mc-hist');
+  for (const b of X.mcHistogram(r)) {
+    const bar = page.mk('div', 'tst-mc-bar');
+    bar.style.height = `${b.pct}%`;
+    bar.title = b.title;
+    wrap.appendChild(bar);
+  }
+  return wrap;
+}
+function mcBlock(runId) {
+  const wrap = page.mk('div', 'tst-mc');
+  const head = page.mk('div', 'tst-prop-head');
+  head.appendChild(page.mk('span', 'tst-prop-title', 'Monte Carlo'));
+  wrap.appendChild(head);
+  if (mc.runId !== runId || mc.loading) { wrap.appendChild(page.mk('div', 'bp-empty', 'Running Monte Carlo…')); return wrap; }
+  if (mc.error) { wrap.appendChild(page.mk('div', 'tst-err', mc.error)); return wrap; }
+  if (!mc.result) return wrap;
+  wrap.appendChild(page.mk('div', 'tst-caveat', X.mcHeadline(mc.result)));
+  const g = page.mk('div', 'tst-tiles tst-tiles-small');
+  for (const t of X.mcTiles(mc.result)) g.appendChild(tileEl(t));
+  wrap.appendChild(g);
+  wrap.appendChild(mcBarsEl(mc.result));
+  return wrap;
+}
 function renderOverview(container) {
   const { run, equity, propsim } = bundle;
   const badges = page.mk('div', 'tst-badges');
@@ -653,6 +691,7 @@ function renderOverview(container) {
   container.appendChild(chartWrap);
   miniChartHandle = miniChart(chartWrap, equity, palette());
   container.appendChild(propBlock(propsim));
+  container.appendChild(mcBlock(run.id));
 }
 
 function kvTable(rows) {
@@ -1079,6 +1118,7 @@ function loadCell(i) {
       strategyId = b.run.strategy.id;
       form = X.fromRun(b.run, schemaFor(strategyId));
       bundle = b;
+      startMonteCarlo(b.run.id);
       loadedKey = X.key(form);
       lastRunFailed = '';
       visibleTradeRows = TRADE_CHUNK;

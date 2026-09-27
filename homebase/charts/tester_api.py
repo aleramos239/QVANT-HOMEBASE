@@ -18,6 +18,10 @@
     GET  /api/tester/grid/{id}/cell/{i}/bundle   a cell's full run bundle (the same shape as a run's)
     GET  /api/tester/grids               recent grids, newest first
     GET  /api/tester/looks               {strategy: heat-map cells ever run}
+    POST /api/tester/montecarlo          {run_id, paths?, mode?, seed?} -> homebase.backtest.stats.montecarlo.run()
+                                          over a DONE run's trade P&L (<= 10,000 paths; a plain `def`
+                                          route, so it runs in FastAPI's threadpool, off the event loop --
+                                          the same reason every route here is sync, not async)
 
 Grid cells run as the same `runner exec` child a single run uses, 2 at a time, from the
 GridManager's worker threads (homebase.backtest.grid) -- never in this process's event loop.
@@ -43,6 +47,7 @@ from .. import strategies
 from ..backtest import propsim
 from ..backtest.grid import GridManager, LooksCorrupt
 from ..backtest.runner import RunManager, default_base
+from ..backtest.stats import montecarlo
 from ..backtest.tape import CACHE
 
 _HOST_RE = re.compile(r"^(127\.0\.0\.1|localhost)(:\d+)?$", re.IGNORECASE)
@@ -155,6 +160,56 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
             return grids.all_looks()
         except LooksCorrupt as e:           # refused, never shown as a reset counter
             raise HTTPException(409, str(e)) from None
+
+    def _mc_int(body: dict, key: str, default: int, lo: int, hi: int) -> int:
+        v = body.get(key, default)
+        if v is None:
+            v = default
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or v != v:
+            raise HTTPException(400, f"{key}: expected a number")
+        if float(v) != int(v):
+            raise HTTPException(400, f"{key}: expected a whole number")
+        v = int(v)
+        if not lo <= v <= hi:
+            raise HTTPException(400, f"{key}: must be within [{lo}, {hi}]")
+        return v
+
+    @r.post("/montecarlo")
+    def run_montecarlo(request: Request, body: dict):
+        """A finished run's trade P&L, resampled `paths` times (<= 10,000 -- Global
+        Constraints). Reuses the run's own prop rules (when it ran one, and prop-eval
+        itself did not error) so P(prop pass) is the same LucidFlex race the run's own
+        propsim.json used, not a re-guess. A plain `def`: FastAPI's threadpool runs it,
+        never this service's event loop."""
+        write_ok(request)
+        rid = str(body.get("run_id", ""))
+        known(rid)
+        mode = body.get("mode", "shuffle")
+        if mode not in ("shuffle", "bootstrap"):
+            raise HTTPException(400, "mode: shuffle or bootstrap")
+        seed = body.get("seed")
+        if seed is not None:
+            if isinstance(seed, bool) or not isinstance(seed, (int, float)):
+                raise HTTPException(400, "seed: a number")
+            seed = int(seed)
+        paths = _mc_int(body, "paths", 5000, 1, 10_000)
+        try:
+            b = manager.bundle(rid)
+        except ValueError as e:
+            raise HTTPException(409, str(e)) from None
+        run_meta = b["run"] or {}
+        rules = None
+        if run_meta.get("prop_rules") and not run_meta.get("propsim_error"):
+            try:
+                rules = propsim.load_rules(run_meta["prop_rules"])
+            except ValueError:
+                rules = None    # an unknown/removed rule id: MC still runs, just without P(prop pass)
+        pnls = [t["net"] for t in (b["trades"] or [])]
+        try:
+            return montecarlo.run(pnls, paths=paths, mode=mode, seed=seed,
+                                  starting_balance=run_meta.get("capital", 0.0), rules=rules)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
 
     r.manager = manager   # so the chart service can stop an in-flight child on shutdown
     r.grids = grids       # likewise every grid cell's child
