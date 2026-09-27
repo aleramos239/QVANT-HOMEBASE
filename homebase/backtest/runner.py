@@ -13,7 +13,10 @@
 status: queued -> running -> done | error | cancelled. The chart service owns a
 RunManager (submit / status / cancel / runs / bundle) that launches
 `python -m homebase.backtest.runner exec <run_dir>` with its own interpreter,
-FIFO, one child at a time — never in the service's event loop. A script run
+FIFO, one child at a time — never in the service's event loop — and only once it
+holds one of the machine-wide backtest slots (slots.py: 2 at once with the heat-map's
+cells, none starting 09:20-09:35 ET on weekdays; a request in that window is refused,
+a run already queued waits and its status reads `paused`). A script run
 (`python -m homebase.backtest.runner run --strategy nq930 ...`) executes in the
 script's process and writes into the same runs dir, so the page lists it; the
 flock keeps it from overlapping a page run.
@@ -39,6 +42,7 @@ from .. import strategies
 from ..paths import repo_root, state_dir
 from . import discipline, propsim, report
 from .engine import ENGINE_VERSION, Costs, run_session
+from .slots import QUIET_MSG, QUIET_REFUSAL, Slots, held
 from .tape import ARCHIVE, CACHE, TapeStore, coverage_reason, effective_session_window, missing_hours
 
 RUN_ID = re.compile(r"^\d{8}-\d{6}-[a-z0-9_]+-[0-9a-f]{4}$")
@@ -133,6 +137,15 @@ def prepare(body, base: Path) -> str:
     return rid
 
 
+def report_holes(skipped: list[dict], no_trade: list[dict]) -> list[dict]:
+    """The sessions the report drops from its Sharpe weekday grid: real holes only -- a coverage/data
+    gap (`skipped`) or a strategy crash ("strategy error: ..."). A strategy's OWN no-trade reason
+    (a trend gate, "no print before ...") is a real flat day the account sat through: it stays on the
+    grid as 0.0 (review C1 -- dropping it inflated a gated strategy's Sharpe ~1.5x). The coverage block
+    still lists every no-trade day for display."""
+    return list(skipped) + [n for n in no_trade if n["reason"].startswith("strategy error")]
+
+
 def _run_propsim(trades: list[dict], req: dict) -> tuple[dict, bool]:
     """The prop-eval Monte Carlo never costs the run its bundle: a malformed rule file
     (e.g. one missing a key the engine requires) is caught here, not left to blow up
@@ -223,15 +236,16 @@ def execute(run_dir: Path, store: TapeStore) -> dict:
     by_reason: dict[str, int] = {}
     for s in skipped:
         by_reason[s["reason"]] = by_reason.get(s["reason"], 0) + 1
-    # Every session the engine could not turn into a trade row -- coverage gaps
-    # AND the strategy's own no-trade/crash reasons (SessionResult.skip) -- goes
-    # to the report so a broken strategy or a data hole never reads as a quiet
-    # zero (carried from Task 5/6 review).
-    all_skipped = skipped + no_trade
-    rep = report.build(trades, req["capital"], skipped=all_skipped)
+    # Only real holes (a coverage gap or a strategy crash) leave the report's Sharpe grid, and a
+    # crash still reads loudly as skipped_by_error (carried from Task 5/6 review); a strategy's own
+    # no-trade day is a flat 0.0 there (review C1). coverage.no_trade keeps every reason for display.
+    rep = report.build(trades, req["capital"], skipped=report_holes(skipped, no_trade))
     status.update(phase="prop sim", done=len(days), updated=_now())
     write_json(run_dir / "status.json", status)
-    prop, prop_error = _run_propsim(trades, req)
+    if req.get("propsim", True):
+        prop, prop_error = _run_propsim(trades, req)
+    else:                                   # a walk-forward cell: its full-window prop sim is never shown
+        prop, prop_error = {"skipped": "not run (a walk-forward cell)"}, False
     meta = {"id": req["id"], "created": req["created"], "finished": _now(),
             "engine": ENGINE_VERSION, "fill_law": "tick replay",
             "strategy": {"id": cls.id, "name": cls.name, "root": cls.root},
@@ -263,8 +277,9 @@ def _locked(runs: Path):
     return fh
 
 
-def exec_run(run_dir: Path, store: TapeStore) -> int:
-    fh = _locked(run_dir.parent)
+def exec_run(run_dir: Path, store: TapeStore, lock: bool = True) -> int:
+    """lock=False: a heat-map cell (grid.py) -- its own 2-worker pool bounds it, not the one-run flock."""
+    fh = _locked(run_dir.parent) if lock else None
     try:
         execute(run_dir, store)
         return 0
@@ -274,16 +289,28 @@ def exec_run(run_dir: Path, store: TapeStore) -> int:
         write_json(run_dir / "status.json", st)
         raise
     finally:
-        fh.close()
+        if fh is not None:
+            fh.close()
+
+
+def read_bundle(d: Path) -> dict:
+    """A finished run dir (runs/<id>/ or a grid cell) as the page loads it."""
+    st = read_json(d / "status.json", {}) or {}
+    if st.get("status") != "done":
+        raise ValueError(f"run {d.name} is {st.get('status')}, not done")
+    return {"run": read_json(d / "run.json"), "trades": read_json(d / "trades.json"),
+            "equity": read_json(d / "equity.json"), "plots": read_json(d / "plots.json"),
+            "propsim": read_json(d / "propsim.json")}
 
 
 class RunManager:
     """The chart service's handle on tester runs (thread-safe; no asyncio)."""
 
     def __init__(self, base: Path, *, archive: Path = ARCHIVE, cache: Path = CACHE,
-                 python: str = sys.executable):
+                 python: str = sys.executable, slots: Slots | None = None):
         self.base, self.runs = Path(base), Path(base) / "runs"
         self.archive, self.cache, self.python = Path(archive), Path(cache), python
+        self.slots = slots or Slots()          # the per-machine slots (slots.shared_dir())
         self.runs.mkdir(parents=True, exist_ok=True)
         self._q: deque[str] = deque()
         self._proc: tuple[str, subprocess.Popen] | None = None
@@ -308,6 +335,8 @@ class RunManager:
         return self.runs / rid
 
     def submit(self, body) -> str:
+        if self.slots.quiet():
+            raise ValueError(QUIET_REFUSAL)
         rid = prepare(body, self.base)
         with self._lock:
             self._q.append(rid)
@@ -322,6 +351,8 @@ class RunManager:
         with self._lock:
             if rid in self._q:
                 st["queue_position"] = list(self._q).index(rid) + 1
+        if st.get("status") == "queued" and self.slots.quiet():
+            st["paused"] = QUIET_MSG
         return st
 
     def cancel(self, rid: str) -> dict:
@@ -379,13 +410,11 @@ class RunManager:
         return out
 
     def bundle(self, rid: str) -> dict:
-        d = self.dir(rid)
-        st = read_json(d / "status.json", {}) or {}
-        if st.get("status") != "done":
-            raise ValueError(f"run {rid} is {st.get('status')}, not done")
-        return {"run": read_json(d / "run.json"), "trades": read_json(d / "trades.json"),
-                "equity": read_json(d / "equity.json"), "plots": read_json(d / "plots.json"),
-                "propsim": read_json(d / "propsim.json")}
+        return read_bundle(self.dir(rid))
+
+    def _head(self) -> str | None:
+        with self._lock:
+            return self._q[0] if self._q else None
 
     def _loop(self) -> None:
         while True:
@@ -394,15 +423,36 @@ class RunManager:
                 if not self._q:
                     self._wake.clear()
                     continue
-                rid = self._q.popleft()
+                rid = self._q[0]
+            # a slot first (the global cap, the QUIET window); give up if the run is cancelled meanwhile
+            slot = self.slots.acquire(cancelled=lambda: self._head() != rid)
+            if slot is None:
+                continue
+            with self._lock:
+                if not self._q or self._q[0] != rid:
+                    slot.close()
+                    continue
+                self._q.popleft()
                 d = self.runs / rid
                 log = open(d / "log.txt", "ab")
-                proc = subprocess.Popen(
-                    [self.python, "-m", "homebase.backtest.runner", "exec", str(d),
-                     "--archive", str(self.archive), "--cache", str(self.cache)],
-                    cwd=repo_root(), stdout=log, stderr=subprocess.STDOUT)
+                try:
+                    proc = subprocess.Popen(      # the child holds the slot too: it lives as long as the backtest
+                        [self.python, "-m", "homebase.backtest.runner", "exec", str(d),
+                         "--archive", str(self.archive), "--cache", str(self.cache),
+                         "--slot-fd", str(slot.fileno())],
+                        cwd=repo_root(), stdout=log, stderr=subprocess.STDOUT, pass_fds=(slot.fileno(),))
+                except OSError as e:
+                    slot.close()
+                    log.close()
+                    st = read_json(d / "status.json", {}) or {}
+                    st.update(status="error", error=f"could not start the runner: {e}", updated=_now())
+                    write_json(d / "status.json", st)
+                    continue
                 self._proc = (rid, proc)
-            code = proc.wait()
+            try:
+                code = proc.wait()
+            finally:
+                slot.close()
             log.close()
             with self._lock:
                 self._proc = None
@@ -438,6 +488,10 @@ def main(argv: list[str] | None = None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     ex = sub.add_parser("exec", help="run a prepared run dir (the chart service uses this)")
     ex.add_argument("run_dir", type=Path)
+    ex.add_argument("--no-lock", action="store_true", help="a heat-map cell: the grid pool bounds it")
+    ex.add_argument("--slot-fd", type=int, default=None,
+                    help="an inherited backtest slot (the chart service passes it); without one, exec "
+                         "takes its own slot and refuses the 09:20-09:35 ET window")
     run = sub.add_parser("run", help="validate + run in this process (scripts, the assistant)")
     run.add_argument("--strategy", required=True)
     run.add_argument("--input", action="append", default=[], help="key=value (JSON value)")
@@ -454,8 +508,19 @@ def main(argv: list[str] | None = None) -> int:
     a = ap.parse_args(argv)
     store = TapeStore(a.archive, a.cache)
     if a.cmd == "exec":
-        os.nice(5)          # on top of the chart job's own nice 5: a backtest never competes with the desk
-        return exec_run(a.run_dir, store)
+        slot = None
+        if a.slot_fd is None or not held(a.slot_fd):
+            slots = Slots()
+            if slots.quiet():
+                print(QUIET_REFUSAL, file=sys.stderr)
+                return 2
+            slot = slots.acquire()
+        try:
+            os.nice(5)      # on top of the chart job's own nice 5: a backtest never competes with the desk
+            return exec_run(a.run_dir, store, lock=not a.no_lock)
+        finally:
+            if slot is not None:
+                slot.close()
     if a.range in ("research", "is_months"):
         rng = {"kind": a.range}
     else:
@@ -467,9 +532,17 @@ def main(argv: list[str] | None = None) -> int:
     if a.holdout_reason:
         body["holdout"] = {"reason": a.holdout_reason}
     base = a.base or default_base()
+    slots = Slots()
+    if slots.quiet():
+        print(QUIET_REFUSAL, file=sys.stderr)
+        return 2
     rid = prepare(body, base)
     t0 = time.monotonic()
-    exec_run(base / "runs" / rid, store)
+    slot = slots.acquire()
+    try:
+        exec_run(base / "runs" / rid, store)
+    finally:
+        slot.close()
     meta = read_json(base / "runs" / rid / "run.json")
     s = meta["report"]["summary"]["all"]
     print(f"{rid}: {s['trades']} trades, net ${s['net_profit']:,.2f}, WR {s['win_rate'] or 0:.1f}%, "

@@ -43,7 +43,7 @@ from dataclasses import asdict, dataclass, field
 from ..contracts import point_value, tick_size
 from .tape import et_ns
 
-ENGINE_VERSION = "tick-1"
+ENGINE_VERSION = "tick-2"      # tick-2: a strategy's own no-trade day is a flat 0.0 on the Sharpe grid (review C1)
 SIDE = {"long": 1, "short": -1}
 NAME = {1: "long", -1: "short"}
 CHUNK = 4096                    # prefilter block for the trigger scan

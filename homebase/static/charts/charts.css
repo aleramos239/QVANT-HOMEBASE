@@ -620,3 +620,123 @@ a { color: inherit; }
 .replay-pnl { position: absolute; left: 50%; bottom: 44px; z-index: 6; transform: translateX(-50%);
   padding: 3px 10px; border-radius: 8px; background: var(--panel); box-shadow: var(--shadow-menu);
   font-size: 12px; color: var(--text); white-space: nowrap; pointer-events: none; font-variant-numeric: tabular-nums; }
+/* ---- Strategy Tester tab (testerui.js) ---- */
+.tst { display: flex; flex-direction: column; min-height: 100%; }
+/* The header, the holdout banner (conditionally shown/hidden between them) and the inner tab bar sit in
+   ONE sticky wrapper -- each was its own `position: sticky` box at first, which needed a fixed `top`
+   offset for every box below the first; the holdout banner's height only exists when it's shown, so a
+   fixed offset for the tab bar was wrong in one case or the other. One wrapper avoids the arithmetic. */
+.tst-sticky { flex: none; position: sticky; top: 0; z-index: 2; background: var(--panel); }
+.tst-head { height: 40px; display: flex; align-items: center; gap: 10px;
+  padding: 0 10px; overflow-x: auto; overflow-y: hidden; white-space: nowrap; border-bottom: 1px solid var(--border); }
+.tst-head .set-select { height: 28px; font-size: 13px; }
+.tst-head :disabled { opacity: .5; cursor: default; }
+.tst-icon-btn { flex: none; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 6px; color: var(--text-2); }
+.tst-icon-btn:hover { background: var(--hover); color: var(--text); }
+.tst-icon-btn:disabled:hover { background: none; }
+.tst-icon-btn .ic { width: 17px; height: 17px; }
+.tst-holdout-banner { padding: 6px 10px; font-size: 12px; color: var(--warn); background: var(--hover); border-bottom: 1px solid var(--border); }
+.tst-fail-banner { margin-bottom: 12px; padding: 8px 10px; border-radius: 6px; background: var(--down-soft); color: var(--down); font-size: 12px; }
+.tst-group { flex: none; display: inline-flex; align-items: center; gap: 6px; }
+.tst-cost { flex: none; display: inline-flex; align-items: center; gap: 4px; }
+.tst-cost-l { color: var(--text-2); font-size: 12px; }
+.tst-num { width: 56px; height: 28px; padding: 0 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel);
+  font-variant-numeric: tabular-nums; }
+.tst-num:focus { border-color: var(--accent); }
+.tst-reason { width: 220px; height: 28px; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); font-size: 12px; }
+.tst-reason:focus { border-color: var(--accent); }
+.tst-run-area { flex: none; display: inline-flex; align-items: center; gap: 8px; }
+.tst-run { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; }
+.tst-run .ic { width: 15px; height: 15px; }
+.tst-progress { flex: none; width: 120px; height: 6px; accent-color: var(--accent); }
+.tst-progress-text { color: var(--text-2); font-size: 12px; }
+.tst-btn { flex: none; display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 10px; border-radius: 6px; color: var(--text); }
+.tst-btn:hover { background: var(--hover); }
+.tst-btn .ic { width: 15px; height: 15px; color: var(--text-2); }
+.tst-err { flex: none; color: var(--down); font-size: 12px; padding: 0 4px; }
+.tst-tabs { height: 32px; display: flex; align-items: center; padding: 0 10px; border-bottom: 1px solid var(--border); }
+.tst-tab { height: 100%; padding: 0 10px; font-size: 12px; color: var(--text-2); border-bottom: 2px solid transparent; }
+.tst-tab:hover { color: var(--text); }
+.tst-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+.tst-hide { display: flex; align-items: center; gap: 6px; color: var(--text-2); font-size: 12px; }
+.tst-hide input { width: 14px; height: 14px; margin: 0; accent-color: var(--accent); }
+.tst-content { padding: 12px; }
+.tst-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.tst-badge { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 4px; font-size: 12px; background: var(--hover); color: var(--text-2); }
+.tst-badge.warn { color: var(--warn); }
+.tst-badge.err { background: var(--down-soft); color: var(--down); }
+.tst-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.tst-tiles-small { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 8px; }
+.tst-tile { padding: 8px 0; }
+.tst-tile-v { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.tst-tile-l { color: var(--text-2); font-size: 12px; margin-top: 2px; }
+.tst-tile-s { color: var(--text-2); font-size: 12px; }
+.tst-chart { height: 180px; margin-bottom: 16px; }
+.tst-prop { padding-top: 4px; border-top: 1px solid var(--border); }
+.tst-prop-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.tst-prop-title { font-size: 13px; font-weight: 600; }
+.tst-caveat { color: var(--text-2); font-size: 12px; margin-top: 4px; }
+.tst-mc { padding-top: 4px; margin-top: 8px; border-top: 1px solid var(--border); }
+.tst-mc-floor { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; font-size: 12px; }
+.tst-mc-floor-in { width: 90px; }
+.tst-mc-hist { display: flex; align-items: flex-end; gap: 2px; height: 44px; margin-top: 4px; }
+.tst-mc-bar { flex: 1 1 0; min-height: 2px; background: var(--down); opacity: .7; border-radius: 1px 1px 0 0; }
+.tst-cmp-cb { width: 14px; height: 14px; margin: 0 0 0 12px; flex: none; accent-color: var(--accent); }
+.tst-cmp-footer .tst-cmp-footer-t { flex: 1; color: var(--text-2); font-size: 12px; }
+.tst-cmp-go { height: 26px; padding: 0 12px; }
+.tst-cmp-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.tst-cmp-legend { display: flex; gap: 16px; margin-bottom: 8px; }
+.tst-cmp-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); }
+.tst-cmp-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.tst-cmp-a .tst-cmp-dot { background: var(--accent); }
+.tst-cmp-b .tst-cmp-dot { background: var(--warn); }
+.tst-cmp-chart { height: 260px; margin-bottom: 12px; }
+.tst-cmp-better { background: var(--accent-soft); border-radius: 4px; font-weight: 600; }
+.tst-list { margin: 4px 0; padding-left: 20px; font-size: 12px; }
+.tst-kv-line { padding: 8px 0; font-size: 12px; color: var(--text-2); }
+.sort-th { display: inline-flex; align-items: center; gap: 2px; color: var(--text-2); font-size: inherit; white-space: nowrap; }
+.sort-th:hover { color: var(--text); }
+.bp-table td.tst-more-cell { height: 40px; text-align: center; }
+.tst-more { display: inline-block; }
+.bp-table tr.sel td { background: var(--accent-soft); }
+.dialog.settings-small { width: min(460px, 92vw); max-height: 80vh; }
+.dialog.settings-small .dlg-fields { max-height: 60vh; overflow: auto; scrollbar-width: thin; }
+.menu-tester-runs { width: 360px; }
+.tst-run-row { display: flex; align-items: center; gap: 8px; white-space: normal; }
+.tst-run-row .menu-t { white-space: normal; }
+.tst-run-row:disabled { opacity: .6; cursor: default; }
+/* the Heat-map sub-tab: axis editor, run row, and the grid (colour = net $, Sharpe under it) */
+.tst-heat-cfg { padding-bottom: 12px; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+.tst-heat-axes { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-bottom: 10px; }
+.tst-heat-axis { display: inline-flex; align-items: center; gap: 6px; }
+.tst-heat-axis .set-select { height: 28px; font-size: 13px; }
+.tst-heat-role { width: 52px; }
+.tst-heat-vals { width: 190px; height: 28px; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel);
+  font-size: 12px; font-variant-numeric: tabular-nums; }
+.tst-heat-vals:focus { border-color: var(--accent); }
+.tst-heat-cfg :disabled { opacity: .5; cursor: default; }
+.tst-heat-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; font-size: 12px; color: var(--text-2); }
+.tst-heat-looks { color: var(--warn); }
+.tst-heat-err { display: block; padding: 6px 0 0; }
+.tst-heat-loaded { padding-top: 0; }
+.tst-heat-loaded[hidden] { display: none; }
+.tst-heat-grid { overflow-x: auto; }
+.tst-wf-min { width: 72px; }
+.tst-wf-body { overflow-x: auto; }
+.tst-wf-steps tr.tst-wf-chain td { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.tst-wf-steps td.tst-wf-changed { color: var(--warn); }
+.tst-heat-table { border-collapse: separate; border-spacing: 2px; font-size: 12px; font-variant-numeric: tabular-nums; margin-bottom: 12px; }
+.tst-heat-table th { color: var(--text-2); font-weight: 400; padding: 0 8px; white-space: nowrap; }
+.tst-heat-table th.num { text-align: right; }
+.tst-heat-table thead th.num { text-align: center; }
+.tst-heat-corner { text-align: left; }
+.tst-heat-table td { padding: 0; }
+.tst-hcell { width: 96px; height: 44px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  border-radius: 4px; background: var(--hover); color: var(--text); }
+.tst-hcell:disabled { cursor: default; color: var(--text-2); }
+.tst-hcell.done:hover { box-shadow: inset 0 0 0 1px var(--text-2); }
+.tst-hcell.warn { box-shadow: inset 0 0 0 1px var(--warn); }
+.tst-hcell.sel { box-shadow: inset 0 0 0 2px var(--accent); }
+.tst-hcell.error { color: var(--down); }
+.tst-hcell-net { font-weight: 600; }
+.tst-hcell-sh { font-size: 11px; color: var(--text-2); }

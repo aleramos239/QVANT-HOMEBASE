@@ -84,7 +84,7 @@ def test_execute_writes_the_bundle_and_lists_skipped_sessions(tmp_path):
     rid = prepare(body(qty=2), tmp_path / "t")
     d = tmp_path / "t" / "runs" / rid
     meta = execute(d, store)
-    assert meta["engine"] == "tick-1" and meta["fill_law"] == "tick replay" and meta["holdout"] is False
+    assert meta["engine"] == "tick-2" and meta["fill_law"] == "tick replay" and meta["holdout"] is False
     cov = meta["coverage"]
     assert (cov["sessions"], cov["used"]) == (2, 1)
     assert cov["skipped"] == [{"date": D2.isoformat(), "reason": "missing 13:00–16:00 ET"}]
@@ -210,3 +210,48 @@ def test_cli_run_prints_a_summary(tmp_path, capsys):
                         "--range", "2024-03-01:2024-03-31", "--base", str(tmp_path / "t"),
                         "--archive", str(arch), "--cache", str(tmp_path / "cache")]) == 0
     assert "1 trades" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------- review C1: a strategy's own skips are flat days
+
+def test_report_holes_keeps_data_gaps_and_strategy_errors_but_not_the_strategys_own_skips():
+    skipped = [{"date": "2024-03-06", "reason": "missing 13:00–16:00 ET"}]
+    no_trade = [{"date": "2024-03-07", "reason": "trend gate: ADX 20 <= 25"},
+                {"date": "2024-03-08", "reason": "strategy error: ZeroDivisionError: x"},
+                {"date": "2024-03-11", "reason": "no print before 09:30:00"}]
+    assert runner.report_holes(skipped, no_trade) == [skipped[0], no_trade[1]]
+
+
+def _winning_day(base, d):
+    day = rows(ms(d, "09:25:00"), [100.0] * 290, step_ms=1000)
+    day += rows(ms(d, "09:30:01"), [110.0, 112.0, 126.0], step_ms=1000)
+    day += rows(ms(d, "09:31:00"), [120.0] * 1500, step_ms=15_000)
+    write_archive(base, "NQ", d, "NQH4", day)
+
+
+def test_a_gate_skip_day_stays_in_the_sharpe_grid_as_a_flat_day(tmp_path, monkeypatch):
+    from homebase.backtest import report
+    from homebase.backtest.engine import SessionResult
+    days = [dt.date(2024, 3, 5), dt.date(2024, 3, 6), dt.date(2024, 3, 7)]
+    for d in days:
+        _winning_day(tmp_path / "ticks", d)
+    real = runner.run_session
+    gate = "trend gate: ADX 20.0 <= 25"
+
+    def gated(strat, tape, costs, **kw):
+        res = real(strat, tape, costs, **kw)
+        return SessionResult(res.date, skip=gate) if res.date == "2024-03-06" else res
+
+    monkeypatch.setattr(runner, "run_session", gated)
+    rid = prepare(body(), tmp_path / "t")
+    meta = execute(tmp_path / "t" / "runs" / rid, TapeStore(tmp_path / "ticks", tmp_path / "cache"))
+    tr = [{**t, "entry_ns": t["entry_ms"] * 1_000_000, "exit_ns": t["exit_ms"] * 1_000_000}
+          for t in read_json(tmp_path / "t" / "runs" / rid / "trades.json")]
+    assert [t["date"] for t in tr] == ["2024-03-05", "2024-03-07"]
+    allc = meta["report"]["summary"]["all"]
+    flat = report.column(tr, 50_000.0, [])                      # 03-06 in the grid as 0.0
+    holed = report.column(tr, 50_000.0, [{"date": "2024-03-06", "reason": gate}])
+    assert allc["sharpe"] == flat["sharpe"] and flat["sharpe"] != holed["sharpe"]
+    assert meta["report"]["skipped_by_data"] == 0 and meta["coverage"]["skipped_by_data"] == 0
+    assert meta["report"]["skipped"] == []
+    assert meta["coverage"]["no_trade"] == [{"date": "2024-03-06", "reason": gate}]   # still shown

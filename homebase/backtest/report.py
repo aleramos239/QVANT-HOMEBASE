@@ -28,8 +28,10 @@ Conventions (stated once):
 Skips: a session the engine could not trade (a strategy exception, caught and
 recorded as `skip = "strategy error: <msg>"`; or a coverage/data gap) never
 becomes a trade row, so it is invisible to `column()`/`periods()`. Callers pass
-the run's skipped sessions as `skipped=[{"date", "reason"}, ...]` and `build`
-surfaces them loudly rather than let a broken strategy look like a quiet zero:
+ONLY those holes as `skipped=[{"date", "reason"}, ...]` (runner.report_holes) --
+a strategy's own no-trade day (a trend gate) is a real flat 0.0 weekday, never a
+hole (review C1) -- and `build` surfaces them loudly rather than let a broken
+strategy look like a quiet zero:
 `skipped_by_error` counts reasons starting with "strategy error", the rest
 (coverage gaps, etc.) are `skipped_by_data`.
 """

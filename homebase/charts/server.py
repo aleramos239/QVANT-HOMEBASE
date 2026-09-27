@@ -663,6 +663,8 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             if depth is not None:
                 await depth.aclose()    # cancels its requests in flight; the recording's last member
             tester.manager.shutdown()   # never leave a runner child orphaned
+            tester.grids.shutdown()     # ... nor a heat-map cell's
+            tester.wfs.shutdown()       # ... nor a walk-forward cell's
             for job in paper_job:       # nor the paper comparison's (terminated and reaped)
                 job.stop()
 

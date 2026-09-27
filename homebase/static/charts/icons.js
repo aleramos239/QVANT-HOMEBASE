@@ -3,7 +3,8 @@
    square-function, mouse-pointer-2, git-commit-horizontal, rectangle-horizontal, ruler,
    trash-2, eye, eye-off, settings, x, check, sun, moon, magnet, trending-up, trending-down,
    chart-candlestick, paintbrush, list, calendar, ellipsis, external-link, droplet, flame, panel-right,
-   bot, octagon-x, file-text, history, play, pause, skip-forward, skip-back (Bar Replay, 2026-09-27 plan).
+   bot, octagon-x, file-text, history, play, pause, skip-forward, skip-back (Bar Replay, 2026-09-27 plan),
+   square (Strategy Tester).
 
    ISC License
 
@@ -68,5 +69,6 @@ window.HBIcons = {
   pause: svg('<rect x="14" y="3" width="5" height="18" rx="1"/><rect x="5" y="3" width="5" height="18" rx="1"/>'),
   skipForward: svg('<path d="M21 4v16"/><path d="M6.029 4.285A2 2 0 0 0 3 6v12a2 2 0 0 0 3.029 1.715l9.997-5.998a2 2 0 0 0 .003-3.432z"/>'),
   skipBack: svg('<path d="M17.971 4.285A2 2 0 0 1 21 6v12a2 2 0 0 1-3.029 1.715l-9.997-5.998a2 2 0 0 1-.003-3.432z"/><path d="M3 20V4"/>'),
+  square: svg('<rect width="18" height="18" x="3" y="3" rx="2"/>'),
 };
 })();

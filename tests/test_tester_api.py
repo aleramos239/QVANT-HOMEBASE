@@ -5,6 +5,7 @@ import datetime as dt
 import subprocess
 import threading
 import time
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
@@ -66,6 +67,70 @@ def test_a_run_goes_from_post_to_bundle(tmp_path):
         assert b["propsim"]["rules"]["label"] == "LucidFlex 50K" and "headline" in b["propsim"]
         assert c.get("/api/tester/runs").json()[0]["id"] == rid
         assert (tmp_path / "state" / "tester" / "runs" / rid / "run.json").exists()
+
+
+def test_montecarlo_runs_over_a_finished_bundle_and_reuses_its_prop_rules(tmp_path, monkeypatch):
+    from homebase.backtest.stats import montecarlo as MC
+    calls = []
+    real = MC.run
+    monkeypatch.setattr(MC, "run", lambda *a, **kw: calls.append((a, kw)) or real(*a, **kw))
+    with client(tmp_path) as c:
+        rid = c.post("/api/tester/run", json=RUN).json()["id"]
+        poll(c, rid)
+        r = c.post("/api/tester/montecarlo", json={"run_id": rid, "paths": 500},
+                   headers={"origin": "http://localhost:8852"})
+        assert r.status_code == 200
+        mc = r.json()
+        assert mc["paths"] == 500 and mc["mode"] == "shuffle" and mc["n_trades"] == 1 and mc["unit"] == "day"
+        for k in ("drawdown", "final_net", "losing_streak"):
+            assert set(mc[k]) == {"p5", "p25", "p50", "p75", "p95"}
+        assert mc["floor"] == 2000.0 and 0.0 <= mc["p_ruin"] <= 1.0     # LucidFlex's trailing max loss
+        assert mc["p_prop_pass"] is not None and mc["prop_rules"]["confirmed"] is True
+        assert mc["seed"] == MC.seed_for(rid)                         # I2: repeatable without a seed
+        assert "histogram" in mc and "actual" in mc
+        (args, kw), = calls
+        assert isinstance(args[0][0], dict) and "date" in args[0][0]   # C2: trades, not bare nets
+        again = c.post("/api/tester/montecarlo", json={"run_id": rid, "paths": 500}).json()
+        assert again == mc and len(calls) == 1                         # I3: served from the cache
+        other = c.post("/api/tester/montecarlo", json={"run_id": rid, "paths": 500, "floor": 500}).json()
+        assert other["floor"] == 500.0 and len(calls) == 2
+        assert c.post("/api/tester/montecarlo", json={"run_id": rid, "paths": 500, "seed": 7}).json()["seed"] == 7
+
+
+def test_montecarlo_over_a_heatmap_cell(tmp_path):
+    with client(tmp_path) as c:
+        gid = c.post("/api/tester/grid", json=GRID).json()["id"]
+        poll_grid(c, gid)
+        r = c.post("/api/tester/montecarlo", json={"grid_id": gid, "cell": 1, "paths": 200})
+        assert r.status_code == 200 and r.json()["n_trades"] >= 0
+        cell_run = c.get(f"/api/tester/grid/{gid}/cell/1/bundle").json()["run"]["id"]
+        from homebase.backtest.stats import montecarlo as MC
+        assert r.json()["seed"] == MC.seed_for(cell_run)
+        assert c.post("/api/tester/montecarlo", json={"grid_id": gid, "cell": 9}).status_code == 404
+        assert c.post("/api/tester/montecarlo", json={"grid_id": "20260927-120000-nq930-abcd", "cell": 0}).status_code == 404
+        assert c.post("/api/tester/montecarlo", json={"grid_id": gid}).status_code == 400
+        assert c.post("/api/tester/montecarlo", json={"grid_id": gid, "cell": 0, "run_id": "x"}).status_code == 400
+
+
+def test_montecarlo_refuses_bad_requests_and_cross_site_writes(tmp_path):
+    with client(tmp_path) as c:
+        rid = c.post("/api/tester/run", json=RUN).json()["id"]
+        assert c.post("/api/tester/montecarlo", json={"run_id": rid}, headers=EVIL).status_code == 403
+        assert c.post("/api/tester/montecarlo", json={"run_id": rid},
+                      headers={"origin": "http://evil.example", **REBIND_HOST}).status_code == 403
+        assert c.post("/api/tester/montecarlo", json={"run_id": "20260926-120000-nq930-abcd"}).status_code == 404
+        r = c.post("/api/tester/montecarlo", json={"run_id": rid, "paths": 10_001})
+        assert r.status_code == 400 and "paths" in r.json()["detail"]
+        r = c.post("/api/tester/montecarlo", json={"run_id": rid, "mode": "bogus"})
+        assert r.status_code == 400 and "mode" in r.json()["detail"]
+        for bad in (0, -5, "x", True):
+            r = c.post("/api/tester/montecarlo", json={"run_id": rid, "floor": bad})
+            assert r.status_code == 400 and "floor" in r.json()["detail"], bad
+        # the run is still queued/running: no trades to resample yet
+        r = c.post("/api/tester/montecarlo", json={"run_id": rid})
+        assert r.status_code in (400, 409)
+        poll(c, rid)
+        assert c.post("/api/tester/montecarlo", json={"run_id": rid}).status_code == 200
 
 
 def test_writes_from_another_site_are_refused(tmp_path):
@@ -162,3 +227,158 @@ def test_shutdown_terminates_an_in_flight_runner_child(tmp_path, monkeypatch):
         assert c.get(f"/api/tester/run/{rid}").json()["status"] in ("queued", "running")
     # the `with` block's exit ran the app's shutdown lifecycle
     assert events and events[0] in ("terminate", "kill")
+
+
+# ---------------------------------------------------------------- the parameter heat-map
+
+GRID = {"strategy": "nq930", "inputs": {"adx_gate": False},
+        "axes": [{"key": "offset_pts", "values": [10, 12]}, {"key": "sl_pts", "values": [5, 6]}]}
+
+
+def poll_grid(c, gid, s=120.0):
+    t = time.monotonic() + s
+    while time.monotonic() < t:
+        st = c.get(f"/api/tester/grid/{gid}").json()
+        if st["status"] in ("done", "cancelled"):
+            return st
+        time.sleep(0.05)
+    raise AssertionError("grid never finished")
+
+
+def test_a_grid_goes_from_post_to_cell_bundles_and_counts_its_looks(tmp_path):
+    with client(tmp_path) as c:
+        assert c.get("/api/tester/looks").json() == {}
+        gid = c.post("/api/tester/grid", json=GRID, headers={"origin": "http://localhost:8852"}).json()["id"]
+        st = poll_grid(c, gid)
+        assert st["status"] == "done" and st["total"] == 4 and st["looks"] == 4
+        assert st["range"]["start"] == "2021-01-01" and st["range"]["end"] == "2024-12-31"
+        assert [a["key"] for a in st["axes"]] == ["offset_pts", "sl_pts"]
+        cell = st["cells"][3]
+        assert cell["params"] == {"offset_pts": 12.0, "sl_pts": 6.0} and "net_profit" in cell["summary"]
+        b = c.get(f"/api/tester/grid/{gid}/cell/3/bundle").json()
+        assert b["run"]["inputs"]["offset_pts"] == 12.0 and b["run"]["range"]["kind"] == "research"
+        assert b["run"]["report"]["summary"]["all"]["net_profit"] == cell["summary"]["net_profit"]
+        assert c.get("/api/tester/looks").json() == {"nq930": 4}
+        assert c.get("/api/tester/grids").json()[0]["id"] == gid
+        assert c.get("/api/tester/runs").json() == []            # cells never flood Recent runs
+        import os
+        assert (Path(os.environ["HOMEBASE_TESTER_SHARED"]) / "looks.json").exists()
+
+
+def test_grid_requests_the_rules_refuse(tmp_path):
+    with client(tmp_path) as c:
+        for bad, word in (({**GRID, "range": {"kind": "custom", "start": "2024-01-01", "end": "2025-03-01"}}, "research window"),
+                          ({**GRID, "holdout": {"reason": "x"}}, "research window"),
+                          ({**GRID, "axes": [{"key": "offset_pts", "values": list(range(61))},
+                                             {"key": "sl_pts", "values": [5]}]}, "at most 60"),
+                          ({**GRID, "axes": GRID["axes"][:1]}, "2 or 3")):
+            r = c.post("/api/tester/grid", json=bad)
+            assert r.status_code == 400 and word in r.json()["detail"], r.json()
+        assert c.post("/api/tester/grid", json=GRID, headers=EVIL).status_code == 403
+        assert c.post("/api/tester/grid", json=GRID, headers={"origin": "http://evil.example", **REBIND_HOST}).status_code == 403
+        for path in ("/api/tester/grid/20260927-120000-nq930-abcd", "/api/tester/grid/..%2F..%2Fetc",
+                     "/api/tester/grid/20260927-120000-nq930-abcd/cell/0/bundle"):
+            assert c.get(path).status_code == 404, path
+        assert c.post("/api/tester/grid/20260927-120000-nq930-abcd/cancel").status_code == 404
+        for path in ("/api/tester/grids", "/api/tester/looks"):
+            assert c.get(path, headers=REBIND_HOST).status_code == 403
+        assert c.get("/api/tester/grids").json() == []
+
+
+def test_a_single_run_request_in_the_quiet_window_is_refused_with_the_pause_text(tmp_path, monkeypatch):
+    from homebase.backtest import slots
+    monkeypatch.setattr(slots, "et_now", lambda: dt.datetime(2026, 9, 28, 9, 25, tzinfo=slots.ET))
+    with client(tmp_path) as c:
+        r = c.post("/api/tester/run", json=RUN)
+        assert r.status_code == 400 and "paused for the 9:30 window" in r.json()["detail"]
+        gid = c.post("/api/tester/grid", json=GRID).json()["id"]      # a grid may queue; its cells wait
+        st = c.get(f"/api/tester/grid/{gid}").json()
+        assert st["paused"] == "paused for the 9:30 window" and st["status"] == "queued"
+        c.post(f"/api/tester/grid/{gid}/cancel")
+
+
+def test_a_corrupt_looks_counter_is_a_409_on_looks_and_a_400_on_a_new_grid(tmp_path, tester_shared):
+    (tester_shared / "looks.json").write_text("{torn")
+    with client(tmp_path) as c:
+        r = c.get("/api/tester/looks")
+        assert r.status_code == 409 and "looks.json.bak" in r.json()["detail"]
+        r = c.post("/api/tester/grid", json=GRID)
+        assert r.status_code == 400 and "never reset silently" in r.json()["detail"]
+    assert (tester_shared / "looks.json").read_text() == "{torn"
+
+
+# ---------------------------------------------------------------- walk-forward
+
+WF = {"strategy": "nq930", "inputs": {"adx_gate": False}, "min_trades": 1,
+      "axes": [{"key": "offset_pts", "values": [10, 12]}, {"key": "sl_pts", "values": [5]}]}
+
+
+def poll_wf(c, wid, s=120.0):
+    t = time.monotonic() + s
+    while time.monotonic() < t:
+        st = c.get(f"/api/tester/walkforward/{wid}").json()
+        if st["status"] in ("done", "cancelled", "error"):
+            return st
+        time.sleep(0.05)
+    raise AssertionError("walk-forward never finished")
+
+
+def test_a_walkforward_goes_from_post_to_a_stitched_result_and_counts_cells_x_steps(tmp_path):
+    with client(tmp_path) as c:
+        wid = c.post("/api/tester/walkforward", json=WF, headers={"origin": "http://localhost:8852"}).json()["id"]
+        st = poll_wf(c, wid)
+        assert st["status"] == "done", st.get("error")
+        assert st["total"] == 2 and st["walkforward"]["n_steps"] == 45 and st["looks_added"] == 90
+        assert st["range"]["start"] == "2021-01-01" and st["range"]["end"] == "2024-12-31"
+        assert all("net_profit" not in (cell.get("summary") or {}) for cell in st["cells"])
+        assert c.get("/api/tester/looks").json() == {"nq930": 90}
+        r = c.get(f"/api/tester/walkforward/{wid}/result").json()
+        assert r["n_steps"] == 45 and r["n_cells"] == 2 and r["looks"] == 90
+        by = {s["select"]: s for s in r["steps"]}
+        assert by["2024-03"]["cell"] is not None and by["2024-03"]["is"]["trades"] >= 1   # the synthetic March day
+        assert by["2024-03"]["oos"]["trades"] == 0                                         # April-June: no tape
+        assert set(r["stitched"]["stats"]) >= {"net_profit", "profit_factor", "win_rate", "sharpe", "max_drawdown"}
+        assert c.get("/api/tester/walkforwards").json()[0]["id"] == wid
+        assert c.get("/api/tester/grids").json() == []                 # never mixed into the heat-map's list
+        assert c.get(f"/api/tester/grid/{wid}").status_code == 404
+        assert c.get(f"/api/tester/grid/{wid}/cell/0/bundle").status_code == 404
+        assert c.get("/api/tester/runs").json() == []
+
+
+def test_walkforward_requests_the_rules_refuse(tmp_path):
+    with client(tmp_path) as c:
+        for bad, word in (({**WF, "range": {"kind": "custom", "start": "2022-01-01", "end": "2022-06-30"}}, "research window"),
+                          ({**WF, "holdout": {"reason": "x"}}, "research window"),
+                          ({**WF, "metric": "win_rate"}, "metric"), ({**WF, "min_trades": 0}, "min_trades"),
+                          ({**WF, "axes": [{"key": "offset_pts", "values": list(range(61))},
+                                           {"key": "sl_pts", "values": [5]}]}, "at most 60")):
+            r = c.post("/api/tester/walkforward", json=bad)
+            assert r.status_code == 400 and word in r.json()["detail"], r.json()
+        assert c.post("/api/tester/walkforward", json=WF, headers=EVIL).status_code == 403
+        for path in ("/api/tester/walkforward/20260927-120000-nq930-abcd",
+                     "/api/tester/walkforward/20260927-120000-nq930-abcd/result"):
+            assert c.get(path).status_code == 404, path
+        assert c.post("/api/tester/walkforward/20260927-120000-nq930-abcd/cancel").status_code == 404
+        assert c.get("/api/tester/walkforwards", headers=REBIND_HOST).status_code == 403
+
+
+def test_a_queued_walkforward_can_be_cancelled_and_has_no_result(tmp_path, monkeypatch):
+    from homebase.backtest import slots
+    monkeypatch.setattr(slots, "et_now", lambda: dt.datetime(2026, 9, 28, 9, 25, tzinfo=slots.ET))
+    with client(tmp_path) as c:
+        wid = c.post("/api/tester/walkforward", json=WF).json()["id"]
+        st = c.get(f"/api/tester/walkforward/{wid}").json()
+        assert st["status"] == "queued" and st["paused"] == "paused for the 9:30 window" and st["eta_s"] is None
+        assert c.post(f"/api/tester/walkforward/{wid}/cancel", headers=EVIL).status_code == 403
+        assert c.post(f"/api/tester/walkforward/{wid}/cancel").json()["status"] == "cancelled"
+        assert c.get(f"/api/tester/walkforward/{wid}/result").status_code == 409
+        assert c.get("/api/tester/looks").json() == {}
+
+
+def test_the_walkforward_scheme_comes_from_the_server(tmp_path):
+    with client(tmp_path) as c:
+        s = c.get("/api/tester/walkforward-scheme").json()
+        assert s["n_steps"] == 45 and (s["first_select"], s["last_select"]) == ("2021-01", "2024-09")
+        assert (s["select_months"], s["test_months"], s["step_months"]) == (1, 3, 1)
+        assert s["metrics"][0] == ["net_profit", "Net $"] and s["default_min_trades"] == 5
+        assert c.get("/api/tester/walkforward-scheme", headers=REBIND_HOST).status_code == 403

@@ -1380,7 +1380,13 @@ async function init() {
   };
   page.overlays.push(window.HBTradeLines.overlay);   // Task 6: the per-chart Buy/Sell block, lines and markers
   page.overlays.push(window.HBReplayUI.overlay);     // Bar Replay: the floating control bar, dimming and REPLAY pill
+  page.overlays.push(window.HBTesterLayer.overlay);  // Task 10: the tester's trades, plots and jump on the root's chart
   window.HBPanel.mount(page);                 // Task 4
+  // NOTE (release/tester merge, 2026-09-27): HBPanel.mount is required to run before HBTesterUI.mount here.
+  // HBTesterUI.mount registers the 'tester' tab via HBPanel.addTab -- since HBPanel.mount already read any
+  // saved {tab: 'tester'} state by this point, a bottom-panel tab of "tester" saved from a previous session
+  // will not be restored on this reload (falls back to the default tab); the tab still works once clicked.
+  window.HBTesterUI.mount(page);               // Task 9
   window.HBTradeUI.mount(page);                // Task 5
   window.HBOrderPanel.mount(page);             // order-panel plan Task 3: the right dock (follows the selected chart)
   window.HBReplayUI.mount(page);
