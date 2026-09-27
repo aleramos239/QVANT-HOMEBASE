@@ -454,7 +454,88 @@ function gridProgress(st) {
   return { text: '', frac: null, final: false };
 }
 
+/* ---- the walk-forward: 1 month to select, the next 3 to test, stepping monthly, research window 2021-2024 only
+   (homebase/backtest/walkforward.py owns the scheme; these only shape its request and its result) ---- */
+const WF_METRICS = [['net_profit', 'Net $'], ['sharpe', 'Sharpe'], ['profit_factor', 'Profit factor'], ['t_stat', 't-stat']];
+const WF_STEPS = 45;          // 48 months of 2021-2024, a 1-month select + 3-month test: select 2021-01 .. 2024-09
+const WF_MIN_TRADES_MAX = 1000;
+function wfBody(f, axes, metric, minTrades) { return { ...gridBody(f, axes), metric, min_trades: minTrades }; }
+function wfProblems(f, s, rows, minTrades) {
+  const g = gridProblems(f, s, rows);
+  if (g) return g;
+  if (!Number.isInteger(minTrades) || minTrades < 1 || minTrades > WF_MIN_TRADES_MAX) return `Min trades: a whole number 1 to ${WF_MIN_TRADES_MAX}`;
+  return null;
+}
+function wfLooksText(cells) {
+  return `${int(cells)} cell${cells === 1 ? '' : 's'} × ${WF_STEPS} selection months = ${int(cells * WF_STEPS)} looks`;
+}
+function etaText(s) {
+  if (s == null || !Number.isFinite(s)) return '';
+  if (s < 60) return '<1 min left';
+  const m = Math.round(s / 60);
+  if (m < 60) return `~${m} min left`;
+  const h = Math.floor(m / 60), r = m % 60;
+  return r ? `~${h} h ${r} min left` : `~${h} h left`;
+}
+function wfProgress(st) {
+  const s = st && st.status, n = `${int(st && st.done)} / ${int(st && st.total)} cells`, pause = st && st.paused ? ` · ${st.paused}` : '';
+  if (st && st.lost) return { text: 'Lost contact · it keeps running on the server', frac: null, final: true };
+  if (s === 'queued') return { text: `Queued · ${n}${pause}`, frac: null, final: false };
+  if (s === 'running') {
+    const p = Number.isFinite(st.progress) ? st.progress : null, eta = pause ? '' : etaText(st.eta_s);
+    return { text: `Running · ${n}${p == null ? '' : ` · ${Math.round(p * 100)}%`}${eta ? ` · ${eta}` : ''}${pause}`, frac: p, final: false };
+  }
+  if (s === 'selecting') return { text: 'Selecting and stitching…', frac: null, final: false };
+  if (s === 'done') return { text: `Done · ${int(st.total)} cells · ${int(st.looks_added)} looks counted`, frac: 1, final: true };
+  if (s === 'cancelled') return { text: `Cancelled · ${n} · no looks counted${st.error ? ' · ' + st.error : ''}`, frac: null, final: true };
+  if (s === 'error') return { text: `Failed · ${st.error || 'unknown error'}`, frac: null, final: true };
+  return { text: '', frac: null, final: false };
+}
+const span = (a, b) => `${a} → ${b}`;
+function wfTiles(r) {
+  const s = r.stitched.stats, m = r.stitched.months;
+  return [
+    { label: 'Stitched OOS net', value: signed(s.net_profit), sub: m.length ? span(m[0], m[m.length - 1]) : '', tone: toneOf(s.net_profit) },
+    { label: 'Max drawdown', value: Tr.money(s.max_drawdown), sub: '', tone: toneOf(s.max_drawdown) },
+    { label: 'Win rate', value: rate(s.win_rate), sub: '', tone: '' },
+    { label: 'Profit factor', value: num(s.profit_factor, 2, true), sub: '', tone: '' },
+    { label: 'Sharpe', value: num(s.sharpe), sub: 'weekday grid', tone: '' },
+    { label: 'Trades', value: int(s.trades), sub: '', tone: '' }];
+}
+const WF_STEP_HEADERS = ['Select', 'Test', 'Chosen params', 'IS net', 'IS trades', 'IS Sharpe',
+  'OOS net', 'OOS trades', 'OOS win %', 'OOS PF', 'OOS Sharpe', 'OOS max DD'];
+function paramsLabel(axes, params) { return axes.map((a) => `${a.label} ${valueLabel(params[a.key])}`).join(' · '); }
+function wfStepRows(r, axes) {
+  return r.steps.map((s) => {
+    const head = [s.select, span(s.test[0], s.test[1])];
+    if (s.cell == null) {
+      return { cells: [...head, `no pick (no cell with ≥ ${r.scheme.min_trades} trades)`, ...Array(9).fill('—')],
+        stitched: !!s.stitched, changed: s.changed, isTone: '', oosTone: '' };
+    }
+    const i = s.is, o = s.oos;
+    return { cells: [...head, paramsLabel(axes, s.params), signed(i.net_profit), int(i.trades), num(i.sharpe),
+      signed(o.net_profit), int(o.trades), rate(o.win_rate), num(o.profit_factor, 2, true), num(o.sharpe), Tr.money(o.max_drawdown)],
+    stitched: !!s.stitched, changed: s.changed, isTone: toneOf(i.net_profit), oosTone: toneOf(o.net_profit) };
+  });
+}
+function wfStability(r) {
+  const s = r.stability, np = s.no_pick;
+  return `Params changed ${int(s.changes)} of ${int(s.pairs)} consecutive picks · ${int(s.distinct)} distinct cell${s.distinct === 1 ? '' : 's'}`
+    + ` · ${int(np)} month${np === 1 ? '' : 's'} with no pick`;
+}
+function wfPhases(r) {
+  const rest = r.phases.filter((p) => p.phase > 0).map((p) => `phase ${p.phase} ${signed(p.net_profit)}`).join(' · ');
+  return `Chain phase check (same picks, chain started 1 or 2 months later): ${rest}`;
+}
+function wfScheme(r) {
+  const c = r.scheme;
+  return `Select on ${c.select_months} month by ${c.metric_label} (≥ ${c.min_trades} trades), test the next ${c.test_months}, `
+    + `stepping monthly · ${int(r.n_steps)} steps · stitched: ${c.stitch}`;
+}
+
 const api = { MAX_CELLS, parseValues, valueLabel, gridAxes, gridCount, gridProblems, gridBody, looksText, looksLine, heatPanels, heatMaxAbs,
+  WF_METRICS, WF_STEPS, WF_STEP_HEADERS, wfBody, wfProblems, wfLooksText, etaText, wfProgress, wfTiles, wfStepRows, wfStability, wfPhases,
+  wfScheme,
   heatLevel, cellView, gridProgress, RANGES, HOLDOUT_START, DEFAULT_RULES, REASON_MAX, defaults, restore, fromRun, reachesHoldout, problems, inputError, body,
   key, runLabel, progress, pct, rate, num, dur, fmtEt, tiles, badges, propView, mcHeadline, mcTiles, mcHistogram, compareRows, paramsDiff,
   summaryRows, periodRows, sortTrades, tradeCells, tradeMarks, equitySeries, reachSpec, toneOf };

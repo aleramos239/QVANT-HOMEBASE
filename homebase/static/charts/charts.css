@@ -499,6 +499,10 @@ a { color: inherit; }
 .tst-heat-loaded { padding-top: 0; }
 .tst-heat-loaded[hidden] { display: none; }
 .tst-heat-grid { overflow-x: auto; }
+.tst-wf-min { width: 72px; }
+.tst-wf-body { overflow-x: auto; }
+.tst-wf-steps tr.tst-wf-chain td { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.tst-wf-steps td.tst-wf-changed { color: var(--warn); }
 .tst-heat-table { border-collapse: separate; border-spacing: 2px; font-size: 12px; font-variant-numeric: tabular-nums; margin-bottom: 12px; }
 .tst-heat-table th { color: var(--text-2); font-weight: 400; padding: 0 8px; white-space: nowrap; }
 .tst-heat-table th.num { text-align: right; }
