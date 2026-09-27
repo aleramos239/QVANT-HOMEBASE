@@ -27,12 +27,14 @@ test('parseValues: lists, inclusive ranges, bools, choices, and every refusal', 
   assert.equal(X.parseValues('5, 5.0', OFF).error, 'Entry offset (pts): 5 twice');
   assert.equal(X.parseValues('20:5:5', OFF).error, 'Entry offset (pts): a range is start:end:step with start ≤ end and step > 0');
   assert.equal(X.parseValues('5:20:0', OFF).error, 'Entry offset (pts): a range is start:end:step with start ≤ end and step > 0');
-  assert.equal(X.parseValues('0:400:0.25', OFF).error, 'Entry offset (pts): more than 60 values');
+  assert.equal(X.parseValues('0:400:0.25', OFF, 60).error, 'Entry offset (pts): more than 60 values');
+  assert.equal(X.parseValues('0:400:0.25', OFF, 400).error, 'Entry offset (pts): more than 400 values');
+  assert.equal(X.parseValues('0:99:1', OFF, 400).values.length, 100);        // a raised cap lets it through
   assert.equal(X.parseValues('maybe', GATE).error, 'ADX(14) trend gate: on or off');
   assert.equal(X.parseValues('c', MODE).error, 'Mode: one of a, b');
 });
 
-test('gridAxes / gridProblems: 2 or 3 distinct parameters, the 60-cell cap, the base inputs and costs', () => {
+test('gridAxes / gridProblems: 2 or 3 distinct parameters, the cell cap, the base inputs and costs', () => {
   const f = X.defaults(STRAT);
   const two = [{ key: 'offset_pts', text: '5:15:5' }, { key: 'sl_pts', text: '4, 6' }, { key: '', text: '' }];
   assert.deepEqual(X.gridAxes(two, STRAT), { axes: [{ key: 'offset_pts', values: [5, 10, 15] }, { key: 'sl_pts', values: [4, 6] }] });
@@ -43,7 +45,13 @@ test('gridAxes / gridProblems: 2 or 3 distinct parameters, the 60-cell cap, the 
   assert.equal(X.gridProblems(f, STRAT, [{ key: 'offset_pts', text: '5' }, { key: 'offset_pts', text: '6' }, { key: '', text: '' }]),
     'Entry offset (pts) is picked twice');
   assert.equal(X.gridProblems(f, STRAT, [{ key: 'offset_pts', text: '1:10:1' }, { key: 'sl_pts', text: '1:7:1' }, { key: '', text: '' }]),
-    '70 cells: a grid is at most 60');
+    '70 cells: this grid is capped at 60 (raise Max cells, up to 400)');
+  // ... and raising Max cells is exactly what lets it run
+  assert.equal(X.gridProblems({ ...f, max_cells: 100 }, STRAT,
+    [{ key: 'offset_pts', text: '1:10:1' }, { key: 'sl_pts', text: '1:7:1' }, { key: '', text: '' }]), null);
+  assert.equal(X.gridProblems({ ...f, max_cells: 401 }, STRAT, two), 'Max cells: a whole number 1 to 400');
+  assert.equal(X.gridProblems({ ...f, max_cells: 0 }, STRAT, two), 'Max cells: a whole number 1 to 400');
+  assert.equal(X.gridProblems({ ...f, max_cells: 12.5 }, STRAT, two), 'Max cells: a whole number 1 to 400');
   assert.equal(X.gridProblems(f, STRAT, [{ key: 'offset_pts', text: '1:10:1' }, { key: 'sl_pts', text: '1:6:1' }, { key: 'n', text: '1' }]), null);
   assert.equal(X.gridProblems(f, STRAT, [{ key: 'offset_pts', text: 'x' }, { key: 'sl_pts', text: '1' }, { key: '', text: '' }]),
     'Entry offset (pts): "x" is not a number');
@@ -53,15 +61,46 @@ test('gridAxes / gridProblems: 2 or 3 distinct parameters, the 60-cell cap, the 
   assert.equal(X.gridProblems({ ...f, qty: 0 }, STRAT, two), 'Qty: 1 to 100');
 });
 
-test('gridBody: research window only, never a range or holdout, varied inputs left to the axes', () => {
-  const f = { ...X.defaults(STRAT), range: { kind: 'custom', start: '2024-01-01', end: '2025-06-01' },
-    holdout: { on: true, reason: 'peek' }, qty: 2 };
+test('an axis in from/to/steps mode: evenly spaced, rounded to the parameter\'s own step', () => {
+  assert.deepEqual(X.stepValues(5, 20, 4, OFF), { values: [5, 10, 15, 20] });
+  assert.deepEqual(X.stepValues(5, 20, 1, OFF), { values: [5] });              // steps = 1 is just `from`
+  assert.deepEqual(X.stepValues(5, 20, 2, OFF), { values: [5, 20] });
+  assert.deepEqual(X.stepValues(0, 1, 5, OFF), { values: [0, 0.25, 0.5, 0.75, 1] });
+  // rounded to the parameter's step (0.25): the raw thirds land on the grid
+  assert.deepEqual(X.stepValues(0, 1, 4, OFF), { values: [0, 0.25, 0.75, 1] });
+  // an int parameter rounds to whole numbers, and a collision is dropped, not refused
+  assert.deepEqual(X.stepValues(1, 3, 5, N), { values: [1, 2, 3] });
+  assert.equal(X.stepValues('', 20, 4, OFF).error, 'Entry offset (pts): from and to are numbers');
+  assert.equal(X.stepValues(5, 'x', 4, OFF).error, 'Entry offset (pts): from and to are numbers');
+  assert.equal(X.stepValues(5, 20, 0, OFF).error, 'Entry offset (pts): steps is a whole number 1 to 400');
+  assert.equal(X.stepValues(5, 20, 2.5, OFF).error, 'Entry offset (pts): steps is a whole number 1 to 400');
+  assert.equal(X.stepValues(20, 5, 4, OFF).error, 'Entry offset (pts): to must be above from');
+  assert.equal(X.stepValues(5, 500, 4, OFF).error, 'Entry offset (pts): 0 to 400');
+  // the same row read through gridAxes
+  const rows = [{ key: 'offset_pts', mode: 'range', from: 5, to: 20, steps: 4 }, { key: 'sl_pts', text: '4, 6' }, { key: '', text: '' }];
+  assert.deepEqual(X.gridAxes(rows, STRAT, 60),
+    { axes: [{ key: 'offset_pts', values: [5, 10, 15, 20] }, { key: 'sl_pts', values: [4, 6] }] });
+});
+
+test('the Max cells warning only speaks above 60, and uses a measured per-cell time when there is one', () => {
+  assert.equal(X.cellsWarning(60, 12), '');
+  assert.equal(X.cellsWarning(61, null),
+    '61 cells — above 60 a grid can run for hours; only 2 cells run at a time');
+  assert.equal(X.cellsWarning(120, 30), '120 cells ≈ 30m 0s at 30s a cell, 2 at a time');
+  assert.equal(X.cellsWarning(400, 0), '400 cells — above 60 a grid can run for hours; only 2 cells run at a time');
+});
+
+test('gridBody: the range picker\'s window and the cell cap, varied inputs left to the axes', () => {
+  const f = { ...X.defaults(STRAT), range: { id: 'custom', start: '2024-01-01', end: '2025-06-01', wf: null }, qty: 2 };
   const b = X.gridBody(f, [{ key: 'offset_pts', values: [5, 10] }, { key: 'sl_pts', values: [4] }]);
   assert.deepEqual(b, { strategy: 'nq930', inputs: { adx_gate: false, mode: 'a', n: 3 },
     axes: [{ key: 'offset_pts', values: [5, 10] }, { key: 'sl_pts', values: [4] }],
-    qty: 2, commission: 4, slippage_ticks: 1, prop_rules: 'lucid-flex-50k@2026-08' });
-  assert.equal('range' in b, false);
+    range: { kind: 'custom', start: '2024-01-01', end: '2025-06-01' },
+    qty: 2, commission: 4, slippage_ticks: 1, max_cells: 60, prop_rules: 'lucid-flex-50k@2026-08' });
   assert.equal('holdout' in b, false);
+  // the default preset still sends {kind:'research'} verbatim
+  assert.deepEqual(X.gridBody(X.defaults(STRAT), [{ key: 'offset_pts', values: [5] }, { key: 'sl_pts', values: [4] }]).range,
+    { kind: 'research' });
 });
 
 test('looksText: the looks counter line, verbatim', () => {

@@ -17,7 +17,7 @@ const COL = { net_profit: 12345.5, net_profit_pct: 24.691, gross_profit: 30000, 
   sharpe_traded_days: 3.3, t_stat: 2.346, expectancy: 514.4, days: 24 };
 const RUN = { strategy: { id: 'nq930', name: 'NQ 9:30 straddle', root: 'NQ' }, inputs: { offset_pts: 12, adx_gate: true, mode: 'b', n: 2 },
   range: { kind: 'custom', start: '2023-01-01', end: '2025-02-01', label: '2023-01-01 → 2025-02-01', holdout: true },
-  qty: 2, commission: 4, slippage_ticks: 1, capital: 50000, holdout: true, holdout_reason: 'final check', prop_rules: 'lucid-flex-50k@2026-08',
+  qty: 2, commission: 4, slippage_ticks: 1, capital: 50000, holdout: true, holdout_reason: null, prop_rules: 'lucid-flex-50k@2026-08',
   engine: 'x', fill_law: 'tick replay',
   coverage: { sessions: 520, used: 517, skipped: [{ date: '2023-03-01', reason: 'missing 13:00–15:00 ET' }], skipped_by_reason: {},
     no_trade: [], skipped_by_error: 2, skipped_by_data: 1 },
@@ -26,59 +26,119 @@ const RUN = { strategy: { id: 'nq930', name: 'NQ 9:30 straddle', root: 'NQ' }, i
 test('form defaults from the schema; restore keeps only valid values', () => {
   const f = X.defaults(STRAT);
   assert.deepEqual(f, { strategy: 'nq930', inputs: { offset_pts: 10, adx_gate: false, mode: 'a', n: 3 },
-    range: { kind: 'research', start: '', end: '' }, qty: 1, commission: 4, slippage_ticks: 1,
-    prop_rules: 'lucid-flex-50k@2026-08', holdout: { on: false, reason: '' } });
+    range: { id: 'research', start: '', end: '', wf: null }, qty: 1, commission: 4, slippage_ticks: 1,
+    max_cells: 60, prop_rules: 'lucid-flex-50k@2026-08' });
   const r = X.restore({ ...f, inputs: { offset_pts: 11, adx_gate: 'yes', ghost: 1, n: 2.5 }, qty: 3 }, STRAT);
   assert.deepEqual(r.inputs, { offset_pts: 11, adx_gate: false, mode: 'a', n: 3 });
   assert.equal(r.qty, 3);
   assert.equal(X.restore({ strategy: 'other' }, STRAT).strategy, 'nq930');
+  assert.equal(X.restore({ ...f, max_cells: 401 }, STRAT).max_cells, 60);      // out of range: the default
+  assert.equal(X.restore({ ...f, max_cells: 240 }, STRAT).max_cells, 240);
 });
 
-test('C1: the Holdout switch is never persisted or restored -- `on` is always false coming out of restore, the reason text alone survives', () => {
-  const saved = { ...X.defaults(STRAT), holdout: { on: true, reason: 'last time' } };
-  const r = X.restore(saved, STRAT);
-  assert.equal(r.holdout.on, false);
-  assert.equal(r.holdout.reason, 'last time');   // the reason is a convenience prefill, not a standing approval
-});
-
-test('holdout: which ranges reach 2025, and the refusals the page shows before sending', () => {
+test('restore drops a range preset it no longer knows (the old is_months / custom kinds)', () => {
   const f = X.defaults(STRAT);
-  assert.equal(X.reachesHoldout({ kind: 'research' }), false);
-  assert.equal(X.reachesHoldout({ kind: 'custom', start: '2023-01-01', end: '2024-12-31' }), false);
-  assert.equal(X.reachesHoldout({ kind: 'custom', start: '2023-01-01', end: '2025-01-01' }), true);
-  assert.equal(X.reachesHoldout({ kind: 'is_months', start: '', end: '2025-03-01' }), true);
+  assert.deepEqual(X.restore({ ...f, range: { kind: 'is_months', start: '', end: '' } }, STRAT).range, f.range);
+  assert.deepEqual(X.restore({ ...f, range: { id: 'custom', start: '2023-01-01', end: '2023-06-30', wf: 9 } }, STRAT).range,
+    { id: 'custom', start: '2023-01-01', end: '2023-06-30', wf: null });        // 9 is not a ratio
+  assert.equal(X.restore({ ...f, range: { id: '2025-2026', start: '', end: '', wf: 2 } }, STRAT).range.wf, 2);
+});
+
+test('the presets map to (start, end); 2025-2026 and All end today (ET)', () => {
+  assert.deepEqual(X.RANGES.map((r) => r.label),
+    ['2021-2024', '2022-2024', '2025-2026', 'All (2021-now)', 'Custom date range…']);
+  const now = X.today();
+  assert.match(now, /^\d{4}-\d{2}-\d{2}$/);
+  assert.deepEqual(X.rangeSpec('research'), { start: '2021-01-01', end: '2024-12-31' });
+  assert.deepEqual(X.rangeSpec('2022-2024'), { start: '2022-01-01', end: '2024-12-31' });
+  assert.deepEqual(X.rangeSpec('2025-2026'), { start: '2025-01-01', end: now });
+  assert.deepEqual(X.rangeSpec('all'), { start: '2021-01-01', end: now });
+  assert.deepEqual(X.rangeSpec('custom'), { start: null, end: null });
+  assert.deepEqual(X.rangeDates({ id: 'custom', start: '2026-01-02', end: '2026-02-03' }), { start: '2026-01-02', end: '2026-02-03' });
+});
+
+test('no range is refused for the dates it reads any more; only a malformed one is', () => {
+  const f = X.defaults(STRAT);
   assert.equal(X.problems(f, STRAT), null);
-  assert.equal(X.problems({ ...f, range: { kind: 'custom', start: '2023-01-01', end: '' } }, STRAT), 'A custom range needs a start and an end date');
-  assert.equal(X.problems({ ...f, range: { kind: 'custom', start: '2024-01-01', end: '2023-01-01' } }, STRAT), 'The start date is after the end date');
-  const hold = { ...f, range: { kind: 'custom', start: '2024-06-01', end: '2025-06-01' } };
-  assert.equal(X.problems(hold, STRAT), 'This range reaches 2025 or later (holdout data): turn on Holdout and give a one-line reason');
-  assert.equal(X.problems({ ...hold, holdout: { on: true, reason: '  ' } }, STRAT), 'This range reaches 2025 or later (holdout data): turn on Holdout and give a one-line reason');
-  assert.equal(X.problems({ ...hold, holdout: { on: true, reason: 'a\nb' } }, STRAT), 'The holdout reason is one line of at most 200 characters');
-  assert.equal(X.problems({ ...hold, holdout: { on: true, reason: 'final check' } }, STRAT), null);
+  for (const id of ['2022-2024', '2025-2026', 'all']) assert.equal(X.problems({ ...f, range: { id, start: '', end: '', wf: null } }, STRAT), null);
+  assert.equal(X.problems({ ...f, range: { id: 'custom', start: '2025-01-01', end: '2026-09-27' } }, STRAT), null);
+  assert.equal(X.problems({ ...f, range: { id: 'custom', start: '2023-01-01', end: '' } }, STRAT), 'End date: a date, YYYY-MM-DD');
+  assert.equal(X.problems({ ...f, range: { id: 'custom', start: '2023-02-30', end: '2023-06-01' } }, STRAT),
+    'Start date: "2023-02-30" is not a date (YYYY-MM-DD)');
+  assert.equal(X.problems({ ...f, range: { id: 'custom', start: '2024-01-01', end: '2023-01-01' } }, STRAT), 'The start date is after the end date');
   assert.equal(X.problems({ ...f, inputs: { ...f.inputs, offset_pts: 401 } }, STRAT), 'Entry offset (pts): 0 to 400');
   assert.equal(X.problems({ ...f, inputs: { ...f.inputs, n: 2.5 } }, STRAT), 'Bars: a whole number');
   assert.equal(X.problems({ ...f, qty: 0 }, STRAT), 'Qty: 1 to 100');
 });
 
-test('the request body: holdout only when the range reaches it; key and run label', () => {
+test('typed dates: what parses, what does not, and how one reads back', () => {
+  assert.equal(X.parseDate('2026-09-27'), '2026-09-27');
+  assert.equal(X.parseDate('  2024-02-29  '), '2024-02-29');            // a leap day
+  for (const bad of ['2023-02-29', '2026-13-01', '2026-09-31', '26-09-27', '2026/09/27', 'today', '', null]) {
+    assert.equal(X.parseDate(bad), null, String(bad));
+  }
+  assert.equal(X.dateError('', 'Start date'), 'Start date: a date, YYYY-MM-DD');
+  assert.equal(X.dateError('2026-13-01', 'End date'), 'End date: "2026-13-01" is not a date (YYYY-MM-DD)');
+  assert.equal(X.dateError('2026-01-31', 'End date'), null);
+  assert.equal(X.prettyDate('2026-09-21'), 'Sep 21, 2026');
+  assert.equal(X.prettyDate('nope'), '—');
+});
+
+test('the pill reads the preset, the custom dates, and the walk-forward scheme on top', () => {
+  assert.equal(X.pillLabel({ id: 'research', wf: null }), '2021-2024');
+  assert.equal(X.pillLabel({ id: '2025-2026', wf: null }), '2025-2026');
+  assert.equal(X.pillLabel({ id: 'all', wf: 1 }), 'All (2021-now) · WF 1:1');
+  assert.equal(X.pillLabel({ id: 'research', wf: 2 }), '2021-2024 · WF 1:2');
+  assert.equal(X.pillLabel({ id: 'custom', start: '2026-09-21', end: '2026-09-25' }), 'Sep 21, 2026 — Sep 25, 2026');
+  assert.equal(X.pillLabel({ id: 'custom', start: '2026-09-21', end: '', wf: 3 }), 'Custom date range · WF 1:3');
+  assert.equal(X.isWalkforward({ range: { id: 'research', wf: 3 } }), true);
+  assert.equal(X.isWalkforward({ range: { id: 'research', wf: null } }), false);
+});
+
+test("the Custom dialog's calendar: 6 rows of 7, Sunday first, neighbouring days marked", () => {
+  const g = X.monthGrid('2026-09');
+  assert.equal(g.label, 'September 2026');
+  assert.deepEqual(g.dow, ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']);
+  assert.equal(g.weeks.length, 6);
+  assert.ok(g.weeks.every((w) => w.length === 7));
+  assert.equal(g.weeks[0][0].iso, '2026-08-30');            // 2026-09-01 is a Tuesday
+  assert.equal(g.weeks[0][0].outside, true);
+  assert.deepEqual(g.weeks[0][2], { iso: '2026-09-01', day: 1, outside: false });
+  assert.equal(g.weeks[4][5].iso, '2026-10-02');
+  assert.equal(X.monthGrid('2024-02').weeks.flat().filter((d) => !d.outside).length, 29);   // a leap February
+  assert.equal(X.shiftMonth('2026-01', -1), '2025-12');
+  assert.equal(X.shiftMonth('2026-12', 1), '2027-01');
+  assert.equal(X.shiftMonth('2026-09', 4), '2027-01');
+});
+
+test('the request body: the range picker\'s own window, and the default preset unchanged', () => {
   const f = X.defaults(STRAT);
-  assert.deepEqual(X.body({ ...f, holdout: { on: true, reason: 'x' } }), { strategy: 'nq930', inputs: f.inputs, range: { kind: 'research' },
+  // THE parity line: the default preset still sends {kind:'research'} verbatim, so a 2021-2024
+  // request is byte for byte the one this tester always sent.
+  assert.deepEqual(X.body(f), { strategy: 'nq930', inputs: f.inputs, range: { kind: 'research' },
     qty: 1, commission: 4, slippage_ticks: 1, prop_rules: 'lucid-flex-50k@2026-08' });
-  const h = { ...f, range: { kind: 'custom', start: '2024-06-01', end: '2025-06-01' }, holdout: { on: true, reason: ' final check ' } };
-  assert.deepEqual(X.body(h).holdout, { reason: 'final check' });
-  assert.deepEqual(X.body(h).range, { kind: 'custom', start: '2024-06-01', end: '2025-06-01' });
-  assert.deepEqual(X.body({ ...f, range: { kind: 'is_months', start: '', end: '2023-12-31' } }).range, { kind: 'is_months', end: '2023-12-31' });
+  assert.equal('holdout' in X.body(f), false);
+  assert.deepEqual(X.body({ ...f, range: { id: '2022-2024', start: '', end: '', wf: null } }).range,
+    { kind: 'custom', start: '2022-01-01', end: '2024-12-31' });
+  assert.deepEqual(X.body({ ...f, range: { id: '2025-2026', start: '', end: '', wf: null } }).range,
+    { kind: 'custom', start: '2025-01-01', end: X.today() });
+  assert.deepEqual(X.body({ ...f, range: { id: 'custom', start: '2024-06-01', end: '2025-06-01' } }).range,
+    { kind: 'custom', start: '2024-06-01', end: '2025-06-01' });
+  // the walk-forward rides on the same window: the single-run body is unchanged by it
+  assert.deepEqual(X.body({ ...f, range: { id: 'research', start: '', end: '', wf: 2 } }).range, { kind: 'research' });
   assert.equal(X.runLabel(f, null), 'Run');
   assert.equal(X.runLabel(f, X.key(f)), 'Run');
   assert.equal(X.runLabel({ ...f, qty: 2 }, X.key(f)), 'Update report');
 });
 
-test('a loaded run fills the form back; C1: a holdout run comes back with the switch OFF (the reason is still prefilled)', () => {
+test('a loaded run fills the form back, its range matched to a preset when one fits', () => {
   const f = X.fromRun(RUN, STRAT);
   assert.deepEqual(f.inputs, { offset_pts: 12, adx_gate: true, mode: 'b', n: 2 });
-  assert.deepEqual(f.range, { kind: 'custom', start: '2023-01-01', end: '2025-02-01' });
-  assert.deepEqual(f.holdout, { on: false, reason: 'final check' });
+  assert.deepEqual(f.range, { id: 'custom', start: '2023-01-01', end: '2025-02-01', wf: null });
   assert.equal(f.qty, 2);
+  assert.deepEqual(X.rangeFromRun({ kind: 'research', start: '2021-01-01', end: '2024-12-31' }), { id: 'research', start: '', end: '' });
+  assert.deepEqual(X.rangeFromRun({ kind: 'custom', start: '2022-01-01', end: '2024-12-31' }), { id: '2022-2024', start: '', end: '' });
+  assert.deepEqual(X.rangeFromRun({ kind: 'custom', start: '2025-01-01', end: X.today() }), { id: '2025-2026', start: '', end: '' });
 });
 
 test('progress text and fraction', () => {
@@ -97,7 +157,7 @@ test('Overview tiles, badges and the prop block', () => {
     ['Profit factor', '1.88', ''], ['Sharpe', '1.23', 'weekday grid'], ['Avg trade', '+$514.40', ''], ['Avg win : loss', 'RR 1:1.44', ''],
     ['t-stat', '2.35', '']]);
   assert.deepEqual(X.badges(RUN).map((b) => [b.text, b.tone]), [['Tick replay', 'info'], ['517 of 520 sessions', 'warn'],
-    ['2 strategy errors', 'err'], ['Includes holdout', 'err']]);
+    ['2 strategy errors', 'err'], ['Includes holdout', 'err']]);   // the badge is now a fact, not a permission
   const prop = { rules: { name: 'Apex 50K', confirmed: false, label: 'Apex 50K · unconfirmed rules' }, caveat: 'c',
     headline: { eval_pass_p: 0.4312, eval_pass_ci: [0.424, 0.438], bust_p: 0.31, median_days_to_pass: 17.5, funded_expected_cheque: 1648.2 } };
   assert.deepEqual(X.propView(prop).tiles.map((t) => [t.label, t.value, t.sub]), [['Eval pass', '43.1%', '95% CI 42.4–43.8%'],

@@ -1,6 +1,7 @@
-"""Walk-forward: 1 month to SELECT, the next 3 months to TEST, stepping monthly, on the research window
-2021-2024 only. Window stepping, the selection tie-break, non-overlapping stitching, the per-month cache
-equalling a single run over that month, and the manager end to end (a fake runner child)."""
+"""Walk-forward: 1 month to SELECT, the next N months to TEST (the 1:1 / 1:2 / 1:3 ratio), stepping
+monthly, over whatever window the request names. Window stepping, the selection tie-break,
+non-overlapping stitching at every ratio, the per-month cache equalling a single run over that month,
+and the manager end to end (a fake runner child)."""
 from __future__ import annotations
 
 import datetime as dt
@@ -74,6 +75,37 @@ def test_steps_select_one_month_and_test_the_next_three_and_drop_the_last_partia
     assert research[-1] == {"k": 44, "select": "2024-09", "test": ["2024-10", "2024-11", "2024-12"]}
     for st in research:                                                       # test is strictly after select
         assert all(m > st["select"] for m in st["test"])
+
+
+def test_stepping_at_every_ratio_and_a_window_too_short_for_one_cycle():
+    """1:1, 1:2 and 1:3 all select on ONE month and test on the next N; a window without
+    a complete N-month test window after a selection month yields no step at all."""
+    months = ["2022-01", "2022-02", "2022-03", "2022-04", "2022-05"]
+    assert wf.steps(months, 1) == [{"k": k, "select": months[k], "test": [months[k + 1]]} for k in range(4)]
+    assert wf.steps(months, 2) == [{"k": 0, "select": "2022-01", "test": ["2022-02", "2022-03"]},
+                                   {"k": 1, "select": "2022-02", "test": ["2022-03", "2022-04"]},
+                                   {"k": 2, "select": "2022-03", "test": ["2022-04", "2022-05"]}]
+    assert len(wf.steps(months, 3)) == 2
+    for n in (1, 2, 3):
+        assert wf.steps(months[:n], n) == []                                  # never a partial test window
+        assert wf.steps(months[:n + 1], n) == [{"k": 0, "select": months[0], "test": months[1:n + 1]}]
+    research = wf.month_list(dt.date(2021, 1, 1), dt.date(2024, 12, 31))
+    assert [len(wf.steps(research, n)) for n in (1, 2, 3)] == [47, 46, 45]
+
+
+def test_the_stitched_chain_never_overlaps_at_any_ratio():
+    """The chain steps by N, so its test windows tile the out-of-sample months once each --
+    the no-overlap rule, whichever ratio is chosen."""
+    months = wf.month_list(dt.date(2021, 1, 1), dt.date(2024, 12, 31))
+    for n in (1, 2, 3):
+        st = wf.steps(months, n)
+        for phase in range(n):
+            ks = wf.chain(len(st), phase, n)
+            assert ks == list(range(phase, len(st), n))
+            covered = [m for k in ks for m in st[k]["test"]]
+            assert len(covered) == len(set(covered))                          # no month twice
+            assert covered == months[phase + 1:phase + 1 + len(covered)]      # contiguous, in order
+    assert [m for k in wf.chain(len(wf.steps(months, 1)), 0, 1) for m in wf.steps(months, 1)[k]["test"]] == months[1:48]
 
 
 # ---------------------------------------------------------------- selection
@@ -169,6 +201,58 @@ def test_compute_selects_tests_and_stitches_a_two_cell_grid_over_five_months():
     assert r["scheme"]["select_months"] == 1 and r["scheme"]["test_months"] == 3 and r["scheme"]["step_months"] == 1
 
 
+def test_compute_at_each_ratio_reports_both_sides_and_the_drop():
+    """The user's "and then OOS for each": the stitched chain carries the selection months'
+    own (in-sample) result beside the out-of-sample one, and the drop between them."""
+    months = ["2022-01", "2022-02", "2022-03", "2022-04", "2022-05"]
+    tr = five_month_cells()
+    cells = [{"i": i, "params": {"offset_pts": 10.0 + i}, "months": wf.month_stats(tr[i], [], 50_000.0, months)}
+             for i in (0, 1)]
+    got = {}
+    for n in (1, 2, 3):
+        r = wf.compute(cells, months, trades_of=lambda i: (tr[i], []), metric="net_profit", min_trades=5,
+                       capital=50_000.0, test_months=n)
+        assert r["scheme"]["test_months"] == n and r["n_steps"] == len(wf.steps(months, n))
+        assert len(r["phases"]) == n
+        # the IS side is the chain's selection months, each read as a single run over that month
+        is_months = [r["steps"][k]["select"] for k in r["stitched"]["legs"]]
+        assert r["stitched_is"]["months"] == is_months
+        want = report.column([wf.to_ns(t) for k in r["stitched"]["legs"] if r["steps"][k]["cell"] is not None
+                              for t in tr[r["steps"][k]["cell"]] if t["date"][:7] == r["steps"][k]["select"]],
+                             50_000.0, [])
+        assert r["stitched_is"]["stats"]["net_profit"] == want["net_profit"]
+        assert r["drop"]["net_profit"] == round(r["stitched"]["stats"]["net_profit"] - r["stitched_is"]["stats"]["net_profit"], 2)
+        # the out-of-sample trades travel with the result: the List of trades tab reads them
+        assert len(r["stitched"]["trades"]) == r["stitched"]["stats"]["trades"]
+        assert all("entry_ms" in t and "entry_ns" not in t for t in r["stitched"]["trades"])
+        got[n] = r["stitched"]["stats"]["net_profit"]
+    # 1:1 holds January's pick for February alone, then re-selects (cell 1 wins February, −20 in
+    # March); 1:3 holds January's pick across Feb-Apr. Different schemes, different chains.
+    assert got == {1: -520, 2: -490, 3: -480}
+
+
+def test_a_step_is_the_single_run_over_its_own_months():
+    """A step's IS and OOS numbers ARE report.column over those months' trades of the picked
+    cell -- the same thing a single run over each month would have produced."""
+    months = ["2022-01", "2022-02", "2022-03", "2022-04", "2022-05"]
+    tr = five_month_cells()
+    cells = [{"i": i, "params": {"offset_pts": 10.0 + i}, "months": wf.month_stats(tr[i], [], 50_000.0, months)}
+             for i in (0, 1)]
+    r = wf.compute(cells, months, trades_of=lambda i: (tr[i], []), metric="net_profit", min_trades=5,
+                   capital=50_000.0, test_months=2)
+    assert any(row["cell"] is not None for row in r["steps"])
+    for row in r["steps"]:
+        i = row["cell"]
+        if i is None:
+            assert row["is"] is None and row["oos"] is None
+            continue
+        sel = report.column([wf.to_ns(t) for t in tr[i] if t["date"][:7] == row["select"]], 50_000.0, [])
+        oos = report.column([wf.to_ns(t) for t in tr[i] if row["test"][0] <= t["date"][:7] <= row["test"][1]], 50_000.0, [])
+        for k in ("net_profit", "trades", "win_rate", "sharpe", "max_drawdown"):
+            assert row["is"][k] == sel[k], (row["select"], k)
+            assert row["oos"][k] == oos[k], (row["test"], k)
+
+
 def test_a_month_with_no_eligible_cell_sits_out_flat():
     months = ["2022-01", "2022-02", "2022-03", "2022-04", "2022-05"]
     tr = five_month_cells()
@@ -209,6 +293,35 @@ def test_the_walkforward_runs_whatever_window_it_is_given():
 def test_a_window_too_short_for_one_full_cycle_is_refused():
     with pytest.raises(ValueError, match="too short"):
         wf.validate_wf(wbody(range={"kind": "custom", "start": "2024-01-01", "end": "2024-03-31"}))
+    # the same window IS long enough at 1:1 and 1:2 -- the refusal is per ratio
+    for n in (1, 2):
+        g = wf.validate_wf(wbody(range={"kind": "custom", "start": "2024-01-01", "end": "2024-03-31"}, test_months=n))
+        assert g["walkforward"]["n_steps"] == 3 - n
+    with pytest.raises(ValueError, match="too short"):
+        wf.validate_wf(wbody(range={"kind": "custom", "start": "2024-01-01", "end": "2024-01-31"}, test_months=1))
+
+
+def test_the_ratio_is_part_of_the_job():
+    for n in (1, 2, 3):
+        g = wf.validate_wf(wbody(test_months=n))
+        assert g["walkforward"]["test_months"] == n
+        assert g["walkforward"]["n_steps"] == len(wf.steps(g["walkforward"]["months"], n))
+        assert f"1:{n}" in g["walkforward"]["stitch"] or f"{n}-month" in g["walkforward"]["stitch"]
+    assert wf.validate_wf(wbody())["walkforward"]["test_months"] == 3        # 1:3 stays the default
+    for bad in (0, 4, 2.5, True, "2"):
+        with pytest.raises(ValueError, match="test_months"):
+            wf.validate_wf(wbody(test_months=bad))
+
+
+def test_the_scheme_route_reports_the_step_count_for_a_ratio_and_a_window():
+    sc = wf.scheme()
+    assert sc["n_steps"] == 45 and sc["test_months"] == 3 and sc["ratios"] == [1, 2, 3]
+    assert (sc["first_select"], sc["last_select"]) == ("2021-01", "2024-09")
+    assert wf.scheme(test_months=1)["n_steps"] == 47 and wf.scheme(test_months=2)["n_steps"] == 46
+    w = wf.scheme(start="2025-01-01", end="2026-06-30", test_months=1)
+    assert w["n_steps"] == 17 and w["first_select"] == "2025-01" and w["last_select"] == "2026-05"
+    short = wf.scheme(start="2024-01-01", end="2024-02-29", test_months=3)
+    assert short["n_steps"] == 0 and short["first_select"] is None
 
 
 def test_a_malformed_window_is_still_refused():

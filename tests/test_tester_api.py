@@ -273,7 +273,7 @@ def test_grid_requests_the_rules_refuse(tmp_path):
         for bad, word in (({**GRID, "range": {"kind": "custom", "start": "2025-03-01", "end": "2024-01-01"}}, "after"),
                           ({**GRID, "holdout": {"reason": "x"}}, "unknown field"),
                           ({**GRID, "axes": [{"key": "offset_pts", "values": list(range(61))},
-                                             {"key": "sl_pts", "values": [5]}]}, "at most 60"),
+                                             {"key": "sl_pts", "values": [5]}]}, "capped at 60"),
                           ({**GRID, "axes": GRID["axes"][:1]}, "2 or 3")):
             r = c.post("/api/tester/grid", json=bad)
             assert r.status_code == 400 and word in r.json()["detail"], r.json()
@@ -354,7 +354,7 @@ def test_walkforward_requests_the_rules_refuse(tmp_path):
                           ({**WF, "holdout": {"reason": "x"}}, "unknown field"),
                           ({**WF, "metric": "win_rate"}, "metric"), ({**WF, "min_trades": 0}, "min_trades"),
                           ({**WF, "axes": [{"key": "offset_pts", "values": list(range(61))},
-                                           {"key": "sl_pts", "values": [5]}]}, "at most 60")):
+                                           {"key": "sl_pts", "values": [5]}]}, "capped at 60")):
             r = c.post("/api/tester/walkforward", json=bad)
             assert r.status_code == 400 and word in r.json()["detail"], r.json()
         assert c.post("/api/tester/walkforward", json=WF, headers=EVIL).status_code == 403
@@ -384,4 +384,15 @@ def test_the_walkforward_scheme_comes_from_the_server(tmp_path):
         assert s["n_steps"] == 45 and (s["first_select"], s["last_select"]) == ("2021-01", "2024-09")
         assert (s["select_months"], s["test_months"], s["step_months"]) == (1, 3, 1)
         assert s["metrics"][0] == ["net_profit", "Net $"] and s["default_min_trades"] == 5
+        assert s["ratios"] == [1, 2, 3] and s["default_test_months"] == 3
+        # the step count follows the ratio AND the window the picker shows
+        one = c.get("/api/tester/walkforward-scheme", params={"test_months": 1}).json()
+        assert one["n_steps"] == 47 and one["test_months"] == 1
+        w = c.get("/api/tester/walkforward-scheme",
+                  params={"test_months": 2, "start": "2025-01-01", "end": "2026-06-30"}).json()
+        assert w["n_steps"] == 16 and w["window"] == {"start": "2025-01-01", "end": "2026-06-30"}
+        short = c.get("/api/tester/walkforward-scheme",
+                      params={"start": "2024-01-01", "end": "2024-02-29"}).json()
+        assert short["n_steps"] == 0 and short["first_select"] is None
+        assert c.get("/api/tester/walkforward-scheme", params={"start": "nope"}).status_code == 400
         assert c.get("/api/tester/walkforward-scheme", headers=REBIND_HOST).status_code == 403

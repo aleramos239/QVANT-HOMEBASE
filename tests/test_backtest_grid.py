@@ -114,6 +114,28 @@ def test_the_grid_runs_whatever_window_it_is_given():
             assert (c["req"]["range"]["kind"], c["req"]["range"]["start"], c["req"]["range"]["end"]) == (rng["kind"], *want)
 
 
+def test_max_cells_is_the_cap_and_400_is_the_hard_ceiling():
+    """The viewer chooses how many cells (the Max cells box); the server enforces the same
+    number, and refuses anything above 400 whatever the body asks for."""
+    from homebase.backtest.grid import DEFAULT_MAX_CELLS, HARD_MAX_CELLS
+    assert (DEFAULT_MAX_CELLS, HARD_MAX_CELLS) == (60, 400)
+    assert validate_grid(gbody())["max_cells"] == 60
+    big = gbody(axes=[{"key": "offset_pts", "values": list(range(10))},
+                      {"key": "sl_pts", "values": [1, 2, 3, 4, 5, 6, 7]}])          # 70 cells
+    with pytest.raises(ValueError, match="70 cells"):
+        validate_grid(big)
+    g = validate_grid({**big, "max_cells": 100})
+    assert len(g["cells"]) == 70 and g["max_cells"] == 100
+    huge = gbody(axes=[{"key": "offset_pts", "values": [x * 0.25 for x in range(1, 41)]},
+                       {"key": "sl_pts", "values": [x * 0.25 for x in range(1, 11)]}])   # 400 cells
+    assert len(validate_grid({**huge, "max_cells": 400})["cells"]) == 400
+    with pytest.raises(ValueError, match="max_cells"):
+        validate_grid({**huge, "max_cells": 401})
+    for bad in (0, -1, 2.5, True, "60", None):
+        with pytest.raises(ValueError, match="max_cells"):
+            validate_grid(gbody(max_cells=bad))
+
+
 def test_a_malformed_window_is_still_refused():
     for rng in ({"kind": "custom", "start": "2024-01-01"}, {"kind": "nope"},
                 {"kind": "custom", "start": "2024-06-01", "end": "2024-01-01"}):

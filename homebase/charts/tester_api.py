@@ -26,7 +26,8 @@
     GET  /api/tester/walkforward/{id}/result   the steps, the stitched OOS equity + stats (409 until done)
     POST /api/tester/walkforward/{id}/cancel
     GET  /api/tester/walkforwards        recent walk-forwards, newest first
-    GET  /api/tester/walkforward-scheme  the step count, metrics and defaults (no job needed)
+    GET  /api/tester/walkforward-scheme  ?test_months=1|2|3&start=&end= — the step count for that ratio
+                                          and window, plus the metrics and defaults (no job needed)
     POST /api/tester/montecarlo          {run_id | grid_id + cell, paths?, mode?, seed?, floor?} ->
                                           homebase.backtest.stats.montecarlo.run() over a DONE run's trades,
                                           resampled by day (<= 10,000 paths, <= 2,000,000 day-steps; seed
@@ -210,8 +211,14 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         return wfs.cancel(wid)
 
     @r.get("/walkforward-scheme")
-    def walkforward_scheme():
-        return walkforward.scheme()
+    def walkforward_scheme(test_months: int = walkforward.TEST_MONTHS,
+                           start: str | None = None, end: str | None = None):
+        """The page reads its step count from here rather than assuming one (review M5) — now for
+        the ratio and the window the range picker currently shows."""
+        try:
+            return walkforward.scheme(start=start, end=end, test_months=test_months)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
 
     @r.get("/walkforwards")
     def recent_walkforwards():
