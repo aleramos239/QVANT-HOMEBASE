@@ -14,7 +14,10 @@ any page has a chart on; a root nobody watches any more is unsubscribed
 LINGER_S after its last viewer left, unless it is recorded. A refused
 subscription (an error, an errorText, a p-ticket penalty, or a reply with no
 subscriptionId) is that root's status error and is asked again every
-RETRY_S, never before a penalty's p-time, and on every reconnect.
+RETRY_S, never before a penalty's p-time, and on every reconnect. Inside the
+09:20-09:35 ET quiet window (tickfeed.in_quiet) no retry and no new-demand
+subscription is sent; they wait for 09:35. A recorded root's first ask and a
+re-subscribe after a reconnect still go.
 
 Tradovate sends a FULL snapshot per DOM event, so each event replaces the
 book. The event carries only a contractId: the subscribeDOM reply's
@@ -27,7 +30,8 @@ WIRE_LEVELS levels each side, at most one message per WIRE_MIN_S per root
 (the latest book wins), and only to connections with a chart on that root.
 Each root has a desk.Fanout: a bounded outbox per page that never waits; a
 page that falls behind drops its queued books and is resynced with the
-current one (the Fanout's hello).
+current one (the Fanout's hello). When the md socket goes, so do the books:
+each watched root's pages get an empty one (ts null) at once.
 
 Recording: ~/futures_depth/<ROOT>/<YYYY>/<session date>_<contract>.depth.jsonl.gz,
 one gzip member per flush (every FLUSH_S and on shutdown), at most one line
@@ -57,6 +61,7 @@ from . import parse_depth_roots as parse_roots  # noqa: F401 — re-exported
 from .desk import Fanout
 from .session import session_date
 from .store import ARCHIVE as TICK_ARCHIVE
+from .tickfeed import in_quiet
 
 DEPTH_ARCHIVE = Path.home() / "futures_depth"
 SUFFIX = ".depth.jsonl.gz"
@@ -320,6 +325,8 @@ class Depth:
         self._contract: dict[str, str] = {}         # root -> the contract its book is recorded under
         self._cid: dict[int, str] = {}              # contractId (the reply's subscriptionId) -> root
         self._inflight: set[str] = set()
+        self._resub: set[str] = set()               # subscribed on a socket since lost: re-asked even
+                                                    # inside the 09:20-09:35 quiet window
         self.errors: dict[str, str] = {}            # root -> why its subscription was refused
         self._retry_at: dict[str, float] = {}
         self._viewers: dict[Hashable, str] = {}     # (conn, chart id) -> root
@@ -444,7 +451,8 @@ class Depth:
         if ws is self._ws:
             return
         # a new socket (the feed reconnected) or none: nothing is subscribed on it
-        self._ws = ws
+        lost, self._ws = self._ws, ws
+        self._resub |= set(self.subscribed)
         self.subscribed.clear()
         self._cid.clear()
         self._inflight.clear()
@@ -452,6 +460,13 @@ class Depth:
         self.books.clear()
         self._wire_due.clear()
         self._rec_due.clear()
+        if lost is not None:
+            # the books went with the socket: no page keeps showing a stale one
+            now = self._now()
+            for root, fan in self._fans.items():
+                if self._count.get(root):
+                    self._last_wire[root] = now
+                    fan.publish(self.message(root))
         if ws is not None and self.on_event not in ws.event_handlers:
             ws.event_handlers.append(self.on_event)
 
@@ -495,6 +510,7 @@ class Depth:
             self.subscribed[root] = contract
             self._contract[root] = contract
             self._cid[int(cid)] = root
+            self._resub.discard(root)
             self.errors.pop(root, None)
             self._retry_at.pop(root, None)
         finally:
@@ -517,8 +533,14 @@ class Depth:
         if ws is None:
             return
         want = list(dict.fromkeys([*self.record, *sorted(self._count)]))
+        self._resub &= set(want)
+        # 09:20-09:35 ET: no retries and no new demand (they wait for 09:35); a recorded
+        # root's first ask and a re-subscribe after a reconnect still go
+        quiet = in_quiet(self._wall_ms() / 1000)
         for root in want:
             if root in self.subscribed or root in self._inflight or now < self._retry_at.get(root, -math.inf):
+                continue
+            if quiet and (root in self.errors or (root not in self.record and root not in self._resub)):
                 continue
             self._inflight.add(root)
             self._spawn(self._subscribe(ws, root))

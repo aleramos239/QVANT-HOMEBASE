@@ -99,10 +99,10 @@ def ladder(best, n, step=0.25, down=True, size=5):
     return [(best - i * step if down else best + i * step, size + i) for i in range(n)]
 
 
-def make(record=("NQ", "ES"), ws=None, recorder=None, clock=None):
+def make(record=("NQ", "ES"), ws=None, recorder=None, clock=None, wall=None):
     feed = FakeFeed(FakeWS() if ws is None else ws)
     clock = clock or Clock()
-    d = Depth(feed, record, recorder=recorder, now=clock, wall_ms=lambda: T0)
+    d = Depth(feed, record, recorder=recorder, now=clock, wall_ms=wall or (lambda: T0))
     return feed, d, clock
 
 
@@ -336,6 +336,56 @@ def test_a_refused_root_is_asked_again_at_once_on_a_reconnect():
         assert subs(feed.ws) == [ES]
         assert d.status()["ES"]["subscribed"] and d.status()["ES"]["error"] is None
     run(go())
+
+
+def et_ms(h, m):
+    return int(dt.datetime.combine(D, dt.time(h, m), ET).timestamp() * 1000)
+
+
+def test_no_retry_or_new_demand_subscription_inside_the_0920_0935_quiet_window():
+    async def go():
+        wall = [et_ms(9, 19)]
+        gc = symbols.resolve_contract("GC")
+        feed, d, clock = make(record=("NQ", "ES"), ws=FakeWS({NQ: 111, ES: 222, gc: 333}),
+                              wall=lambda: wall[0])
+        feed.ws.refuse[ES] = RuntimeError("md/subscribeDOM failed: status=403")
+        await connect(d)                                     # 09:19: both asked, ES refused
+        assert subs(feed.ws) == [NQ, ES]
+        feed.ws.refuse.clear()
+        wall[0] = et_ms(9, 20)
+        p = Page()
+        d.view((p, "a"), "GC", p.send, p.room)               # new demand in the window
+        clock.t += 600                                        # ES's retry falls due in the window
+        await connect(d)
+        assert subs(feed.ws) == [NQ, ES]
+        # a reconnect inside the window re-subscribes what was subscribed, and nothing else
+        feed.ws = FakeWS({NQ: 111, ES: 222, gc: 333})
+        wall[0] = et_ms(9, 30)
+        await connect(d)
+        assert subs(feed.ws) == [NQ]
+        wall[0] = et_ms(9, 34) + 59_000
+        await connect(d)
+        assert subs(feed.ws) == [NQ]
+        wall[0] = et_ms(9, 35)                               # deferred to 09:35
+        await connect(d)
+        assert sorted(subs(feed.ws)) == sorted([NQ, ES, gc])
+    run(go())
+
+
+def test_a_reconnect_sends_viewers_an_empty_book():
+    async def go():
+        feed, d, clock = make(record=("NQ",))
+        p = Page()
+        d.view((p, "a"), "NQ", p.send, p.room)
+        await connect(d)
+        feed.ws.push(111, ladder(100.0, 3), ladder(100.25, 3, down=False))
+        assert p.got[-1]["bids"]
+        feed.ws.connected = False                             # the socket dropped: the book is stale
+        clock.t += 1
+        await connect(d)
+        return p
+    p = run(go())
+    assert p.got[-1] == {"type": "depth", "root": "NQ", "ts": None, "bids": [], "offers": []}
 
 
 def test_shutdown_cancels_the_subscribe_requests_in_flight(tmp_path):
