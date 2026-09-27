@@ -482,7 +482,9 @@ class PaperRunner:
         return hit + self.stalls(tape, now_ns)
 
     def summarize(self, res, now_ns: int, final: bool) -> dict:
-        anchor = next((h["price"] for h in res.hlines if h.get("name") == "anchor"), None)
+        # By ROLE, not by name: a straddle's anchor line now carries its session's tag
+        # (gc_nfpcpi labels it "anchor \u00b7 CPI"), and only one level is ever role "anchor".
+        anchor = next((h["price"] for h in res.hlines if h.get("role") == "anchor"), None)
         legs = [] if anchor is None else [
             {"side": g.side, "price": to_tick(g.trigger, self.tick), "sl": to_tick(g.sl, self.tick),
              "tp": to_tick(g.tp, self.tick)} for g in self.strategy.legs(anchor)]

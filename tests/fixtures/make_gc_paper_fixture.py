@@ -52,7 +52,7 @@ def main() -> None:
             w.writerow([ts[i] // 1_000_000, repr(px[i]), sz[i], ts[i]])
         (HERE / f"gc_paper_{iso}.csv.gz").write_bytes(gzip.compress(buf.getvalue().encode(), 9))
         expected[iso] = {"why": why, "contract": contract, "source": src.name, "ticks": b - a,
-                         "anchor": next(h["price"] for h in res.hlines if h["name"] == "anchor"),
+                         "anchor": next(h["price"] for h in res.hlines if h["role"] == "anchor"),
                          "trades": [t.to_dict() for t in res.trades]}
         print(iso, contract, b - a, [(t.side, t.exit_reason, t.net) for t in res.trades])
     (HERE / "gc_paper_expected.json").write_text(json.dumps(expected, indent=1) + "\n")

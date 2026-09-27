@@ -46,3 +46,8 @@ class GCNfpCpi(OpenStraddle):
 
     def trades_on(self, d: dt.date) -> bool:
         return bool(calendar().get(d, frozenset()) & EVENTS[self.p["events"]])
+
+    def session_tag(self, ctx) -> str:
+        """The day's own ForexFactory tag ("NFP", "CLAIMS+CPI"), so a level on the chart says
+        WHICH event this session was traded for."""
+        return "+".join(sorted(calendar().get(ctx.date, frozenset())))

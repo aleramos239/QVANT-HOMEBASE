@@ -16,6 +16,7 @@ from .base import Input, Strategy
 
 MIN_GATE_BARS = 110       # = homebase.timer.MIN_GATE_BARS (pinned by a test)
 GATE_BARS = 250           # = homebase.timer.GATE_BARS
+MINUS = "\u2212"          # U+2212 MINUS SIGN: "Short entry -2" reads as a level, not a hyphen
 
 
 def desk_cfg(name: str):
@@ -49,8 +50,14 @@ class OpenStraddle(Strategy):
     def needs_daily(self) -> bool:
         return bool(self.p.get("adx_gate"))
 
+    def session_tag(self, ctx) -> str:
+        """A label for the session the anchor line carries (gc_nfpcpi: its event day).
+        Empty = the anchor keeps its bare name."""
+        return ""
+
     def on_session(self, ctx) -> None:
         self.entries = ()
+        self.geometry = ()     # ((entry order, "Long"|"Short", [its hline records]), ...)
 
     def on_time(self, ctx, et_time: str) -> None:
         if et_time == self.fire:
@@ -68,16 +75,44 @@ class OpenStraddle(Strategy):
             if anchor is None:
                 ctx.skip(f"no print before {self.fire}")
                 return
-            ctx.hline("anchor", anchor)
+            tag = self.session_tag(ctx)
+            ctx.hline("anchor" + (f" \u00b7 {tag}" if tag else ""), anchor, role="anchor")
+            # The whole plan, both legs, BEFORE anything fills: the entry offsets first, then each
+            # leg's bracket as computed from its trigger. What the leg actually became -- the moved
+            # bracket, or a " (not filled)" mark -- is written at cancel_et, once the day has ruled.
+            legs = self.legs(anchor)
+            off = self.p["offset_pts"]
+            recs = [[ctx.hline(f"{g.side.capitalize()} entry {'+' if g.side == 'long' else MINUS}{off:g}",
+                               g.trigger, role="entry")] for g in legs]
+            for g, rec in zip(legs, recs):
+                rec.append(ctx.hline(f"{g.side.capitalize()} SL (planned)", g.sl, role="sl"))
+                rec.append(ctx.hline(f"{g.side.capitalize()} TP (planned)", g.tp, role="tp"))
             ctx.move_brackets_to_fill = True
-            self.entries = tuple(ctx.stop_entry(g.side, g.trigger, sl=g.sl, tp=g.tp)
-                                 for g in self.legs(anchor))
+            self.entries = tuple(ctx.stop_entry(g.side, g.trigger, sl=g.sl, tp=g.tp) for g in legs)
             ctx.oco(*self.entries)
+            self.geometry = tuple(zip(self.entries, (g.side.capitalize() for g in legs), recs))
         elif et_time == self.cancel_et:
+            self._resolve(ctx)
             for o in self.entries:
                 ctx.cancel(o)
         elif et_time == self.flat_et:
             ctx.flatten("time")
+
+    def _resolve(self, ctx) -> None:
+        """Recording only: the day has ruled, so say so on the levels. The leg that filled gains its
+        FINAL bracket -- the one the engine re-priced to the fill, exactly as the desk's
+        engine._move_brackets does -- beside the "(planned)" one it was given at the trigger; the leg
+        that never triggered has its three levels renamed " (not filled)"."""
+        for o, side, recs in self.geometry:
+            if o.status == "filled":
+                if o.fill_sl is not None:
+                    ctx.hline(f"{side} SL", o.fill_sl, role="sl")
+                if o.fill_tp is not None:
+                    ctx.hline(f"{side} TP", o.fill_tp, role="tp")
+            else:
+                for rec in recs:
+                    rec["name"] = rec["name"].replace(" (planned)", "") + " (not filled)"
+        self.geometry = ()
 
     def provenance(self) -> dict:
         """Item 4: the times a run actually fired/cancelled/flattened at -- the
