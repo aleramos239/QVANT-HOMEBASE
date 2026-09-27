@@ -97,6 +97,8 @@ class Cell {
     this.back = new window.HBScrollBack.ScrollBack();   // scroll-back: older history on demand
     this.start = null;   // the "Start of data" / "History limit reached" layer
     this.capped = false;   // this.bars hit the 200,000-bar client cap: scroll-back has stopped asking
+    this.reaching = null;   // a reach() in progress: {ms, onStep, timer, resolve}, or null
+    this.loadWaiters = [];  // whenLoaded() promises awaiting the next onHistory()/onError()
     this.paneUid = [null];   // pane index -> the uid of the indicator in its own pane (0: the price pane)
     this.magnetXhair = false;   // the rail's magnet is on with a tool picked (MagnetOHLC crosshair)
     this.R = S.resolve(cfg.settings || {}, palette());   // the chart's settings, concrete for the theme
@@ -338,6 +340,44 @@ class Cell {
     }
     this.start.set(this.back.done || this.capped, this.capped ? 'History limit reached' : 'Start of data');
     for (const o of this.ov) if (o.onBars) o.onBars();
+    if (this.reaching) this.reachStep();
+  }
+
+  /* Whoever is waiting for this chart's next load (a jump that switched its root or interval): resolved
+     true from onHistory() (the answer landed) or false from onError() once nothing else is in flight (the
+     change was refused). */
+  whenLoaded() { return new Promise((res) => this.loadWaiters.push(res)); }
+
+  /* Load older history until the first bar starts at or before ms (a tester trade). It rides the scroll-back
+     guard (one request at a time, the pauses after errors) and asks again every 700 ms until the answer lands.
+     true once ms is on the chart; false when the archive or the 200,000-bar cap ends first, or a newer reach()
+     or destroy() replaced it. */
+  reach(ms, onStep) {
+    if (this.reaching) this.reaching.resolve(false);
+    return new Promise((resolve) => {
+      const r = this.reaching = { ms, onStep, timer: 0,
+        resolve: (ok) => { clearTimeout(r.timer); if (this.reaching === r) this.reaching = null; resolve(ok); } };
+      this.reachStep();
+    });
+  }
+  reachStep() {
+    const r = this.reaching;
+    if (!r) return;
+    if (this.bars.length && this.bars[0].ms <= r.ms) { r.resolve(true); return; }
+    if (this.back.done || this.capped) { r.resolve(false); return; }
+    if (r.onStep && this.bars.length) r.onStep(this.bars[0].ms);
+    this.askOlder({ from: 0, to: 0 });
+    clearTimeout(r.timer);
+    r.timer = setTimeout(() => this.reachStep(), 700);
+  }
+
+  /* Zoom the time axis to [fromMs, toMs] with half its width of padding (at least 10 bars) each side. */
+  focusRange(fromMs, toMs) {
+    const D = window.HBDrawings, i = D.barIndexAt(this.bars, fromMs), j = Math.max(i, D.barIndexAt(this.bars, toMs));
+    if (!this.chart || i < 0) return false;
+    const pad = Math.max(10, Math.round((j - i) / 2));
+    this.chart.timeScale().setVisibleLogicalRange({ from: i - pad, to: j + pad });
+    return true;
   }
 
   /* Send the chart's config; keepView: restore the view on screen when the
@@ -396,6 +436,8 @@ class Cell {
     if (m.partial) this.askOlder({ from: 0, to: this.bars.length });
     if (!this.noteOn) this.message('');
     this.host.onLoaded(this);
+    // A history message landed: whoever waits for this chart's load (a jump that switched its root or interval).
+    const w = this.loadWaiters; this.loadWaiters = []; w.forEach((f) => f(true));
   }
 
   /* The server refused the oldest sub in flight. If a newer one is on its
@@ -406,6 +448,8 @@ class Cell {
   onError(text) {
     const entry = this.inflight.shift(), tried = entry ? entry.cfg : null;
     if (this.inflight.length) { this.note(text); return; }
+    // Nothing else in flight: the change our loadWaiters were promised (a jump's cell.update()) is not coming.
+    const w = this.loadWaiters; this.loadWaiters = []; w.forEach((f) => f(false));
     if (tried && this.lastGood && JSON.stringify(tried) !== JSON.stringify(this.lastGood)) {
       Object.assign(this.cfg, clone(this.lastGood));
       this.title();
@@ -840,6 +884,9 @@ class Cell {
   destroy() {
     this.host.send({ op: 'unsub', id: this.id });
     clearTimeout(this.noteTimer);
+    // teardown() is not enough (a rebuild keeps the chart): a pending reach() must not keep polling a cell
+    // that is gone for good.
+    if (this.reaching) this.reaching.resolve(false);
     this.teardown();
   }
 }

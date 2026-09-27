@@ -1099,6 +1099,7 @@ async function init() {
     overlays: [],
   };
   page.overlays.push(window.HBTradeLines.overlay);   // Task 6: the per-chart Buy/Sell block, lines and markers
+  page.overlays.push(window.HBTesterLayer.overlay);  // Task 10: the tester's trades, plots and jump on the root's chart
   // M8 (2026-09-27 review): HBTesterUI.mount registers the 'tester' tab via HBPanel.addTab -- it must run
   // BEFORE HBPanel.mount reads a saved {tab: 'tester'} and looks for it, or a saved tab selection/open
   // state pointing at the tester tab is silently dropped on reload.
