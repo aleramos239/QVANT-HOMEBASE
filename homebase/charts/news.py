@@ -3,12 +3,15 @@ FinancialJuice RSS + Trump's Truth Social RSS (trumpstruth.org), polled on a
 floor, tagged by keyword, kept per ET calendar day, served by time range.
 
 Same shape as calendar.py: the fetch function is injected (tests never touch
-the network), a floor keeps polling polite even across a restart, a bad or
-oversized response is a failure that keeps what we already had, and storage
-is a plain file written atomically (temp + rename) so a crash mid-write can
-never tear it. `poll()`'s network call runs in a worker thread (server.py's
-`asyncio.to_thread`); every read/write of this object's state goes through
-`self._lock` so a page's GET can never race that thread.
+the network), a floor keeps polling polite even across a restart, and a bad
+or oversized response is a failure that keeps what we already had. A day
+file is appended to in O(1) (`_jsonl.append`: open in append mode, write one
+line, flush -- never a whole-file rewrite); `state.json` (the per-source
+poll floor) is small and rewritten atomically instead (temp + rename).
+`poll()`'s network + disk I/O run in a worker thread (server.py's
+`asyncio.to_thread`); `self._lock` is held only for the brief in-memory
+bookkeeping around that I/O, so a page's GET (`items()`/`near()`/`status()`,
+also on `self._lock`) can never be stalled by a slow disk or network call.
 """
 from __future__ import annotations
 
@@ -194,12 +197,21 @@ class News:
                 except (TypeError, ValueError):
                     pass
 
-    def _save_state(self) -> None:
-        _jsonl.write_json(self._state_path(), {"last_try": dict(self._last_try)})
+    def _save_state(self, last_try: dict) -> None:
+        """Write state.json from a caller-supplied snapshot. Pure disk I/O,
+        touches no shared state -- callers run this OUTSIDE self._lock."""
+        _jsonl.write_json(self._state_path(), {"last_try": last_try})
 
     def _load(self) -> None:
+        """Runs once, single-threaded, in __init__ (before any other thread
+        can hold a reference to self) -- safe to mix disk I/O with the
+        in-memory build here, unlike poll()'s ongoing prune below."""
         self._load_state()
-        self._prune(write=False)
+        cutoff = dt.datetime.fromtimestamp(self.now(), ET).date() - dt.timedelta(days=self.retention_days)
+        for p in list(self.folder.glob("*.jsonl")):
+            m = DAY_FILE.match(p.name)
+            if m and dt.date.fromisoformat(m.group(1)) < cutoff:
+                p.unlink(missing_ok=True)
         for p in sorted(self.folder.glob("*.jsonl")):
             m = DAY_FILE.match(p.name)
             if not m:
@@ -213,20 +225,26 @@ class News:
                 bisect.insort(self._by_t, it, key=lambda r: r["t_ms"])
                 bisect.insort(self._by_seen, it, key=lambda r: r["seen_ms"])
 
-    def _prune(self, write: bool = True) -> None:
-        """Delete day files (and drop them from memory) older than
-        retention_days, judged against `now()`. Caller holds `self._lock`."""
+    def _prune_memory(self) -> list[str]:
+        """Drop day keys older than retention_days from the in-memory
+        structures only, and return them -- the caller deletes their files
+        AFTER releasing self._lock (see poll()). Caller holds self._lock."""
         cutoff = dt.datetime.fromtimestamp(self.now(), ET).date() - dt.timedelta(days=self.retention_days)
-        for p in list(self.folder.glob("*.jsonl")):
-            m = DAY_FILE.match(p.name)
-            if m and dt.date.fromisoformat(m.group(1)) < cutoff:
-                p.unlink(missing_ok=True)
-                self._by_day.pop(m.group(1), None)
-        if write and any(dt.date.fromisoformat(k) < cutoff for k in self._by_day):
-            self._by_day = {k: v for k, v in self._by_day.items() if dt.date.fromisoformat(k) >= cutoff}
-            dropped = {it["id"] for items in self._by_day.values() for it in items}
-            self._by_t = [r for r in self._by_t if r["id"] in dropped]
-            self._by_seen = [r for r in self._by_seen if r["id"] in dropped]
+        dropped = [k for k in self._by_day if dt.date.fromisoformat(k) < cutoff]
+        if not dropped:
+            return []
+        for k in dropped:
+            del self._by_day[k]
+        keep_ids = {it["id"] for items in self._by_day.values() for it in items}
+        self._by_t = [r for r in self._by_t if r["id"] in keep_ids]
+        self._by_seen = [r for r in self._by_seen if r["id"] in keep_ids]
+        return dropped
+
+    def _delete_days(self, days: list[str]) -> None:
+        """Pure disk I/O (file deletion), no shared state -- run OUTSIDE
+        self._lock."""
+        for day in days:
+            (self.folder / f"{day}.jsonl").unlink(missing_ok=True)
 
     # -- polling -----------------------------------------------------------
 
@@ -239,9 +257,16 @@ class News:
         """One pass: every source past its 60 s floor is fetched once. Returns
         the newly stored items (already deduped, tagged, and on disk), oldest
         first. Without a fetch function nothing is ever fetched (replay).
-        Meant to run in a worker thread (it blocks on network I/O); the
-        actual state mutation below is short and lock-protected so a
-        concurrent `items()`/`near()`/`status()` on the event loop is safe."""
+        Meant to run in a worker thread (it blocks on network + disk I/O).
+
+        Lock discipline (review fix round 2): `self._lock` is held ONLY for
+        the fast in-memory bookkeeping -- reading/updating `_last_try`,
+        `last_fetch`, `_seen`, `_by_day`, `_by_t`, `_by_seen`. Every disk
+        write (state.json, a day file's append, an old day file's delete)
+        happens AFTER the lock is released, using a snapshot/list captured
+        while it was held. `items()`/`near()`/`status()` only ever need the
+        same short lock, so a slow disk (or a monkeypatched slow one in
+        tests) can never stall them."""
         if self.fetch is None:
             return []
         new = []
@@ -251,7 +276,8 @@ class News:
                 if now - self._last_try[src.name] < POLL_S:
                     continue
                 self._last_try[src.name] = now
-                self._save_state()
+                last_try_snapshot = dict(self._last_try)
+            self._save_state(last_try_snapshot)                  # disk I/O: outside the lock
             try:
                 items = parse_rss(self.fetch(src.url))          # network I/O: outside the lock
             except Exception as e:  # noqa: BLE001 — one source's failure never stops the others
@@ -259,6 +285,7 @@ class News:
                     self.last_fetch[src.name] = {**self.last_fetch[src.name],
                                                  "error": f"{type(e).__name__}: {e}"[:200]}
                 continue
+            to_write: list[tuple[str, dict]] = []
             with self._lock:
                 self.last_fetch[src.name] = {"at": int(now * 1000), "items": len(items), "error": None}
                 for raw_item in items:
@@ -277,11 +304,14 @@ class News:
                     self._by_day.setdefault(day, []).append(rec)
                     bisect.insort(self._by_t, rec, key=lambda r: r["t_ms"])
                     bisect.insort(self._by_seen, rec, key=lambda r: r["seen_ms"])
-                    _jsonl.append(self.folder / f"{day}.jsonl", rec)
                     new.append(rec)
+                    to_write.append((day, rec))
+            for day, rec in to_write:                             # disk I/O: outside the lock
+                _jsonl.append(self.folder / f"{day}.jsonl", rec)
         if new:
             with self._lock:
-                self._prune()
+                dropped_days = self._prune_memory()
+            self._delete_days(dropped_days)                        # disk I/O: outside the lock
         return new
 
     # -- reads ---------------------------------------------------------

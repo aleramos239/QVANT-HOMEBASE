@@ -1,7 +1,13 @@
-"""Tiny atomic JSONL helpers shared by news.py and bursts.py: append one
-line, read every line back, or rewrite the whole file -- always via a temp
-file + `os.replace`, so a crash or a full disk mid-write can never leave a
-torn line for the next reader."""
+"""Tiny JSONL helpers shared by news.py and bursts.py: append one line, read
+every line back, or rewrite the whole file.
+
+`append()` is a true O(1) append (open in append mode, write one line,
+flush) -- it must never rewrite the whole file: these run under a caller's
+lock or on a hot tick path, and an O(n) rewrite per line would turn either
+into an O(n^2) growth or (worse) block a reader for as long as the file
+takes to rewrite. `write_all()`/`write_json()` genuinely replace the whole
+file (a burst's `near_news` update, state.json), so those stay atomic via a
+temp file + `os.replace`, which a single small append does not need."""
 from __future__ import annotations
 
 import json
@@ -34,13 +40,11 @@ def write_all(path: Path, objs: list[dict]) -> None:
 
 
 def append(path: Path, obj: dict) -> None:
-    """One more line, atomically (temp file with the file's prior content
-    plus the new line, then rename)."""
-    line = json.dumps(obj)
-    tmp = path.with_name(path.name + f".{os.getpid()}.tmp")
-    prior = path.read_text() if path.exists() else ""
-    tmp.write_text(prior + line + "\n")
-    os.replace(tmp, path)
+    """One more line, in O(1): open in append mode, write it, flush. Never
+    reads or rewrites the file's existing content."""
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(obj) + "\n")
+        f.flush()
 
 
 def write_json(path: Path, data: dict) -> None:

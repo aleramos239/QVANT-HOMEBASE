@@ -375,3 +375,61 @@ def test_concurrent_poll_and_query_cannot_raise(tmp_path):
     for t in threads:
         t.join(timeout=5)
     assert errors == []
+
+
+def test_reads_never_block_on_a_slow_disk_write(tmp_path):
+    """review round 2: _lock must be released BEFORE any disk I/O (state.json,
+    a day file's append) -- a slow write must never stall items()/near()/
+    status(), which only ever need the same short lock for their in-memory
+    read. Proven by making the append itself sleep and timing reads while
+    it's in flight, synchronized on a threading.Event so this isn't a race
+    against scheduling."""
+    n = News(tmp_path / "news", fetch=feed(RSS_ITEM), now=lambda: T0)
+    real_append = news_module._jsonl.append
+    append_started = threading.Event()
+
+    def slow_append(path, obj):
+        append_started.set()
+        time_module.sleep(0.5)
+        return real_append(path, obj)
+
+    news_module._jsonl.append = slow_append
+    try:
+        t = threading.Thread(target=n.poll)
+        t.start()
+        assert append_started.wait(2.0), "poll() never reached a disk write"
+        for read in (lambda: n.items(0, 2 ** 62), lambda: n.near(int(T0 * 1000), 180_000), lambda: n.status()):
+            started = time_module.perf_counter()
+            read()
+            elapsed = time_module.perf_counter() - started
+            assert elapsed < 0.05, f"a read took {elapsed * 1000:.0f}ms while a disk write was in flight"
+        t.join(timeout=5)
+        assert not t.is_alive()
+    finally:
+        news_module._jsonl.append = real_append
+
+
+def test_state_json_write_also_happens_outside_the_lock(tmp_path):
+    """The same guarantee for _save_state (state.json), not just day-file
+    appends -- a slow write_json must not stall reads either."""
+    n = News(tmp_path / "news", fetch=feed(RSS_ITEM), now=lambda: T0)
+    real_write_json = news_module._jsonl.write_json
+    write_started = threading.Event()
+
+    def slow_write_json(path, data):
+        write_started.set()
+        time_module.sleep(0.5)
+        return real_write_json(path, data)
+
+    news_module._jsonl.write_json = slow_write_json
+    try:
+        t = threading.Thread(target=n.poll)
+        t.start()
+        assert write_started.wait(2.0), "poll() never reached state.json's write"
+        started = time_module.perf_counter()
+        n.status()
+        elapsed = time_module.perf_counter() - started
+        assert elapsed < 0.05
+        t.join(timeout=5)
+    finally:
+        news_module._jsonl.write_json = real_write_json
