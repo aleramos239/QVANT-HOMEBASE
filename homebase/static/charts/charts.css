@@ -357,6 +357,14 @@ a { color: inherit; }
 .set-acct-note { color: var(--text-2); font-size: 11px; }
 .set-acct-err { color: var(--text-2); font-size: 11px; }
 .set-acct-arm { color: var(--down); font-size: 12px; font-weight: 600; }
+/* Task 2b: "+ Add paper account" under the ACCOUNTS list */
+.set-paper-add { padding: 6px 0 2px; }
+.set-link { border: 0; background: none; padding: 0; color: var(--accent); font: inherit; font-size: 12px; cursor: pointer; }
+.set-link:hover { text-decoration: underline; }
+.set-paper-form { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.set-paper-form .set-num.set-in { width: 150px; }
+.set-paper-form .set-num.set-in-num { width: 96px; }
+.set-paper-form .set-acct-err { flex-basis: 100%; }
 .set-acct-bal { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .set-why { padding: 6px 0 2px; color: var(--warn); font-size: 12px; }
 .set-note { padding: 6px 0 2px; color: var(--text-2); font-size: 12px; }

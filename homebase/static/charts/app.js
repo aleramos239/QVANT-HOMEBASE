@@ -1125,6 +1125,8 @@ function chartSettings(c = cur(), tab = null) {
     // 2026-09-27 accounts-per-chart plan, Task 1: the Trading tab's ACCOUNTS list and the all-charts defaults.
     // Every rule (the two-step LIVE arm, an unlisted account failing closed, the algo binding) is HBTradeUI's.
     accountRows: (x) => window.HBTradeUI.accountRows(x),
+    // Task 2b: the ACCOUNTS list's "+ Add paper account" (the chart service's own route; its push adds the row)
+    createPaperAccount: (name, bal) => window.HBPaperClient.createAccount(name, bal),
     toggleAccount: (x, id) => window.HBTradeUI.toggleAccount(x, id, { quiet: true }),
     armPending: () => window.HBTradeUI.armPending(),
     tradeWhy: (x) => { const m = window.HBTradeUI.effectiveMode(x); return m.mode === 'on' ? '' : m.reason; },

@@ -6,8 +6,10 @@
      - the live /ws {"type":"paper", ...} push, kept as the latest message per strategy id;
      - a strategy's past runs + stats, GET /api/paper/history?strategy=<id> -- cached like the desk client's
        bot history (60 s, or sooner on a new ET day or a changed `current` message).
-   The PAPER account (2026-09-27 accounts/paper plan, Task 2), the service's own paper book (paperbook.py):
-     - the /ws {"type":"paperbook", account, limits} push, kept as the latest account view (account());
+   The paper ACCOUNTS (2026-09-27 accounts/paper plan, Task 2; several since Task 2b), the service's own paper
+   books (paperbook.py):
+     - the /ws {"type":"paperbook", accounts, limits} push, kept as the latest account views (accounts());
+     - createAccount(name, startBalance): POST /api/paper/accounts/create -> {status, data};
      - send(action, body): POST /api/paper/{action} for order | modify | cancel | cancel-symbol | flatten | reverse
        only -> {status, data}; the caller (HBTradeUI) routes a send here by HBTrade.routeSend and owns the toasts;
      - onFill(fn): a new fill of an order this page placed (like the desk's fill toast rule).
@@ -84,23 +86,32 @@ async function fetchHistory(id, e, day, sig) {
 
 /* ---- the PAPER account ---- */
 const BOOK_ACTIONS = ['order', 'modify', 'cancel', 'cancel-symbol', 'flatten', 'reverse'];
-const book = { account: null, limits: null };
+const PAPER_ID_RE = /^paper(?:-[1-9][0-9]{0,5})?$/;   // HBTrade.isPaperId's rule (this file loads on its own)
+const book = { accounts: [], limits: null };
 const fillSubs = new Set();
-const ours = new Set();   // paper order ids this page placed: their fills are announced (onFill)
-let seenFills = null;     // fill ids of the last view (null: none yet -- the first view announces nothing)
-/* The PAPER account in the desk's account shape, or null before the service has sent one. */
-function account() { return book.account; }
+const ours = new Set();   // "<account>:<order id>" this page placed: their fills are announced (onFill)
+let seenFills = null;     // "<account>:<fill id>" of the last push (null: none yet -- the first announces nothing)
+/* The paper accounts in the desk's account shape ([] before the service has sent any). */
+function accounts() { return book.accounts; }
 function limits() { return book.limits; }
 function onFill(fn) { fillSubs.add(fn); return () => fillSubs.delete(fn); }
-/* A /ws {"type":"paperbook", account, limits} push: the latest view; announces fills of our own orders it adds. */
+/* A /ws {"type":"paperbook", accounts, limits} push: the latest views; announces fills of our own orders it adds
+   ({...fill, account}). Anything that is not a paper account is dropped. */
 function onBook(m) {
-  const a = m && m.account;
-  if (!a || typeof a !== 'object' || a.id !== 'paper') return;
-  const list = Array.isArray(a.fills) ? a.fills : [], fresh = [];
-  if (seenFills) for (const f of list) if (f && !seenFills.has(String(f.id)) && ours.has(String(f.order_id))) fresh.push(f);
-  seenFills = new Set(list.map((f) => String(f && f.id)));
-  book.account = a;
-  book.limits = m.limits || null;
+  const list = (m && Array.isArray(m.accounts) ? m.accounts : [])
+    .filter((a) => a && typeof a === 'object' && typeof a.id === 'string' && PAPER_ID_RE.test(a.id));
+  const fresh = [], seen = new Set();
+  for (const a of list) {
+    for (const f of Array.isArray(a.fills) ? a.fills : []) {
+      if (!f) continue;
+      const k = `${a.id}:${f.id}`;
+      seen.add(k);
+      if (seenFills && !seenFills.has(k) && ours.has(`${a.id}:${f.order_id}`)) fresh.push({ ...f, account: a.id });
+    }
+  }
+  seenFills = seen;
+  book.accounts = list;
+  book.limits = (m && m.limits) || null;
   for (const f of fresh) for (const fn of [...fillSubs]) { try { fn(f); } catch (e) { console.error(e); } }
 }
 /* POST /api/paper/{action} -> {status, data}; anything but the six book actions (a Kill) is refused here, unsent. */
@@ -112,9 +123,20 @@ async function send(action, body) {
     status = r.status;
     try { data = await r.json(); } catch (_) { data = null; }
   } catch (_) { data = { detail: 'chart service unreachable' }; }
-  if (data && data.results) for (const r of Object.values(data.results)) if (r && r.ok && r.order_id) ours.add(String(r.order_id));
+  if (data && data.results) for (const [id, r] of Object.entries(data.results)) if (r && r.ok && r.order_id) ours.add(`${id}:${r.order_id}`);
+  return { status, data };
+}
+/* Task 2b: a new paper account -> {status, data} (data.account on success, data.detail on a refusal). */
+async function createAccount(name, startBalance) {
+  let status = 0, data = null;
+  try {
+    const r = await fetch('/api/paper/accounts/create', { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name, start_balance: startBalance }) });
+    status = r.status;
+    try { data = await r.json(); } catch (_) { data = null; }
+  } catch (_) { data = { detail: 'chart service unreachable' }; }
   return { status, data };
 }
 
-window.HBPaperClient = { strategies, state, on, onMessage, history, account, limits, onBook, onFill, send };
+window.HBPaperClient = { strategies, state, on, onMessage, history, accounts, limits, onBook, onFill, send, createAccount };
 })();

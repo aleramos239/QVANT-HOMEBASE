@@ -126,10 +126,10 @@ function toast(tone, text) {
   if (ms > 0) setTimeout(() => el.remove(), ms);
 }
 
-/* The desk's state as the page sees it: the PAPER account (the chart service's own paper book, HBPaperClient)
+/* The desk's state as the page sees it: the paper accounts (the chart service's own paper books, HBPaperClient)
    appended to the desk's accounts (2026-09-27 accounts/paper plan, Task 2) -- null while the desk is down. `send`
    below stays the desk's alone: HBTradeUI splits a PAPER part off to HBPaperClient before anything reaches it. */
-function merged() { return T.withPaper(desk.state, window.HBPaperClient ? window.HBPaperClient.account() : null); }
+function merged() { return T.withPaper(desk.state, window.HBPaperClient ? window.HBPaperClient.accounts() : []); }
 
 window.HBDeskClient = {
   get state() { return merged(); }, get down() { return desk.down; }, quotes: desk.quotes,

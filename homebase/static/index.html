@@ -176,6 +176,7 @@
   .opt{ display:flex; align-items:center; gap:12px; border:1px solid var(--border);
     border-radius:var(--radius-lg); padding:13px 14px; cursor:pointer; margin-bottom:10px; }
   .opt:hover{ background:var(--secondary); }
+  .pill.paper{ background:rgba(126,87,194,.12); color:#7E57C2; }
   .opt.sel{ background:var(--primary); color:var(--primary-foreground); border-color:var(--primary); }
   .opt.sel .sub{ color:inherit; opacity:.75; }
   .opt.disabled{ opacity:.45; cursor:not-allowed; }
@@ -430,6 +431,9 @@
       <div class="opt disabled" title="Not wired into Homebase yet"><span class="glyph">Nt</span>
         <span><span class="t">NinjaTrader</span><br><span class="sub">Not wired into Homebase yet</span></span>
         <span class="spacer"></span><span class="radio"></span></div>
+      <div class="opt" id="optPaper" onclick="wizPaper()"><span class="glyph">Pa</span>
+        <span><span class="t">Add paper account</span><br><span class="sub">Simulated fills on live prices — never sent to a broker</span></span>
+        <span class="spacer"></span><span class="radio"></span></div>
       <div class="seg">
         <button class="sel" type="button" id="envDemo" onclick="setEnv('demo')">Demo — practice money</button>
         <button type="button" id="envLive" onclick="setEnv('live')">Live — real money</button>
@@ -467,6 +471,21 @@
       <div class="row-btns">
         <button class="btn btn-outline" onclick="wizGoto(1)">&larr; Back</button>
         <button class="btn btn-default" id="cGo" onclick="doConnect()">Find my accounts</button>
+      </div>
+    </div>
+
+    <div id="wstepP" style="display:none">
+      <h2>Add a paper account</h2>
+      <p class="sub">Trade it from the charts like any account. Orders fill on the live prices
+        by the backtester's rules — nothing is ever sent to a broker.</p>
+      <div class="field"><label>Name</label>
+        <input id="pName" autocomplete="off" spellcheck="false" maxlength="32" placeholder="e.g. Scalps"></div>
+      <div class="field"><label>Starting balance (USD)</label>
+        <input id="pBal" autocomplete="off" inputmode="decimal" value="50000"></div>
+      <p class="wnote" id="pErr" style="display:none;color:var(--destructive)"></p>
+      <div class="row-btns">
+        <button class="btn btn-outline" onclick="wizGoto(1)">&larr; Back</button>
+        <button class="btn btn-default" id="pGo" onclick="addPaper()">Add paper account</button>
       </div>
     </div>
 
@@ -519,6 +538,7 @@
       <button class="cal-nav" onclick="closeAccts()" title="Close">&times;</button>
     </div>
     <div id="acctList2"></div>
+    <div id="paperList"></div>
   </div>
 </div>
 
@@ -1135,6 +1155,7 @@ function closeConnect() {
   const p = $("#cPass"); if (p) p.value = "";
 }
 function wizGoto(n) {
+  $("#wstepP").style.display = "none";
   for (const i of [1, 2, 3]) {
     $("#wstep" + i).style.display = i === n ? "" : "none";
     const st = $("#ws" + i);
@@ -1225,6 +1246,83 @@ async function useAccount() {
 $("#connectOverlay").addEventListener("click", (e) => {
   if (e.target === e.currentTarget) closeConnect();
 });
+
+/* ---- paper accounts (2026-09-27 Task 2b) ----
+   Paper accounts live in the CHART service (:8852), not in this desk: its books fill on the live prices and never
+   reach a broker. This page only asks it -- GET /api/paper/accounts, POST /api/paper/accounts/{create|remove}, the
+   one set of chart-service routes that answers this page's origin (exact-origin CORS). Nothing here touches the
+   desk's own API. Names are user text: always escaped before they reach innerHTML. */
+const CHART = location.protocol + "//" + location.hostname + ":8852";
+let PAPER = [];
+const esc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g,
+  (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+async function chartPost(path, body) {
+  if (DEMO) { toast("Preview mode — sample data, controls disabled."); return {ok: false}; }
+  try {
+    const r = await fetch(CHART + path, {method: "POST", headers: {"Content-Type": "application/json"},
+                                         body: JSON.stringify(body || {})});
+    try { return await r.json(); } catch (_) { return {ok: false, detail: "HTTP " + r.status}; }
+  } catch (_) { return {ok: false, detail: "the chart service (:8852) is not reachable"}; }
+}
+function wizPaper() {
+  for (const i of [1, 2, 3]) $("#wstep" + i).style.display = "none";
+  $("#wstepP").style.display = "";
+  $("#pErr").style.display = "none";
+  $("#pName").value = ""; $("#pBal").value = "50000";
+  $("#pName").focus();
+}
+async function addPaper() {
+  const name = $("#pName").value.trim();
+  const bal = Number(String($("#pBal").value).replace(/[$,\s]/g, ""));
+  const err = (t) => { const e = $("#pErr"); e.textContent = t; e.style.display = ""; };
+  if (!name) return err("Give it a name.");
+  if (!(bal >= 1000 && bal <= 10000000)) return err("Starting balance: $1,000 to $10,000,000.");
+  const btn = $("#pGo"); btn.disabled = true; btn.textContent = "Adding…";
+  try {
+    const r = await chartPost("/api/paper/accounts/create", {name, start_balance: bal});
+    if (r.ok) { toast("Paper account " + r.account.label + " added — pick it in a chart's ⚙ → Trading.", 6000); closeConnect(); loadPaper(); }
+    else err(r.detail || r.error || "refused");
+  } finally { btn.disabled = false; btn.textContent = "Add paper account"; }
+}
+async function loadPaper() {
+  if (DEMO) { PAPER = []; return renderPaper(); }
+  try {
+    const r = await fetch(CHART + "/api/paper/accounts");
+    PAPER = r.ok ? ((await r.json()).accounts || []) : [];
+    renderPaper(r.ok ? "" : "chart service answered HTTP " + r.status);
+  } catch (_) { PAPER = []; renderPaper("the chart service (:8852) is not reachable"); }
+}
+function paperRow(a) {
+  const pnl = a.realized_pnl;
+  return `<div class="acct paper-row" style="padding:7px 0">
+    <span class="dot on" style="width:7px;height:7px"></span>
+    <span class="nm" style="font-size:13px">${esc(a.label)}</span>
+    <span class="pill paper" style="font-size:10px">PAPER</span>
+    <span class="spacer"></span>
+    <span class="kvi">${usd(a.balance)}</span>
+    <span class="kvi ${pnl > 0 ? "pos" : pnl < 0 ? "neg" : ""}">${pnl > 0 ? "+" : ""}${usd(pnl)}</span>
+    ${a.removable ? `<button class="x" style="border:none;background:none;color:var(--muted-foreground);cursor:pointer;font-size:14px"
+      onclick="removePaper('${esc(a.id)}')" title="Remove this paper account">&times;</button>` : ""}
+  </div>`;
+}
+function renderPaper(why) {
+  const el = $("#paperList");
+  if (!el) return;
+  el.innerHTML = `<div class="slabel" style="margin-top:14px">PAPER ACCOUNTS</div>` + (PAPER.length
+    ? PAPER.map(paperRow).join("")
+    : `<div class="mcap" style="padding:10px 0">${esc(why || "none")}</div>`);
+}
+async function removePaper(id) {
+  const a = PAPER.find(x => x.id === id);
+  if (!a) return;
+  closeAccts();
+  if (!await confirmDlg("Remove paper account " + a.label + "?",
+      "Its history is archived, not deleted. Refused while it has an open position or working orders — flatten it first.",
+      "Remove", true)) return;
+  const r = await chartPost("/api/paper/accounts/remove", {account: id});
+  toast(r.ok ? a.label + " removed — its history is archived." : "Refused — " + (r.detail || r.error || "unknown"), 6000);
+  loadPaper();
+}
 
 /* ---- research details popup ---- */
 function equitySvg(points, w = 560, h = 190) {
@@ -1424,6 +1522,8 @@ function openAccts() {
             onclick="removeAcct('${id}')" title="Remove this account">&times;</button></div>`);
       }).join("")
     : `<div class="mcap" style="padding:14px 0">no accounts yet — add one to start</div>`;
+  renderPaper();
+  loadPaper();
   $("#acctOverlay").classList.add("open");
 }
 function closeAccts() { $("#acctOverlay").classList.remove("open"); }

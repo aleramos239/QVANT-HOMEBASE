@@ -340,3 +340,32 @@ test('Trading tab: a LIVE account needs the second click, and an unlisted one ca
   two.click(0);                                   // the desk does not know it: nothing is added
   assert.deepEqual(c2.cfg.trade.accounts, []);
 });
+
+test('Task 2b: "+ Add paper account" under the ACCOUNTS list creates one through the host, inline, no native prompt', async () => {
+  const cell = makeCell('time:60');
+  cell.cfg.root = 'NQ';
+  cell.cfg.trade = { accounts: [] };
+  cell.cfg.algo = null;
+  const calls = [];
+  let answer = { status: 400, data: { ok: false, detail: "a paper account is already called 'Scalps'" } };
+  const { box } = openTrading(cell, { createPaperAccount: async (n, b) => { calls.push([n, b]); return answer; } });
+  const link = findText(box, '+ Add paper account'), form = box.querySelector('.set-paper-form');
+  assert.ok(link && form && form.hidden === true);
+  link.onclick();
+  assert.equal(form.hidden, false);
+  const [name, bal, add] = form.children;
+  await add.onclick();
+  assert.deepEqual(calls, [], 'no name: nothing sent');
+  assert.equal(form.children[4].textContent, 'Give it a name');
+  name.value = '  Scalps '; bal.value = '$25,000';
+  await add.onclick();
+  assert.deepEqual(calls, [['Scalps', 25000]]);
+  assert.equal(form.hidden, false, 'a refusal keeps the form open');
+  assert.match(form.children[4].textContent, /already called/);
+  answer = { status: 200, data: { ok: true, account: { id: 'paper-2' } } };
+  await add.onclick();
+  assert.equal(form.hidden, true);
+  assert.equal(link.hidden, false);
+  const noHost = openTrading(makeCell('time:60'), { createPaperAccount: undefined });
+  assert.equal(findText(noHost.box, '+ Add paper account'), null);
+});

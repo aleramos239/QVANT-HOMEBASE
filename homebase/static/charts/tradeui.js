@@ -618,7 +618,7 @@ function mount(pg) {
   registerChartMenuTrading();
   if (window.HBPaperClient && window.HBPaperClient.onFill) {
     // a fill of a PAPER order this page placed, like the desk's own fill toast (deskclient.js)
-    window.HBPaperClient.onFill((f) => D().toast('ok', T.fillText({ account: T.PAPER_ID, fill: f }, D().state, tickFor(T.rootOf(f.symbol)))));
+    window.HBPaperClient.onFill((f) => D().toast('ok', T.fillText({ account: f.account || T.PAPER_ID, fill: f }, D().state, tickFor(T.rootOf(f.symbol)))));
   }
 }
 

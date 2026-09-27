@@ -46,17 +46,26 @@ test('send posts JSON to /api/paper/{action} only, and refuses anything that is 
     '/api/paper/cancel-symbol', '/api/paper/flatten', '/api/paper/reverse']);
 });
 
-test('the book push is kept as the PAPER account, and only a new fill of our own order is announced', async () => {
+test('the book push keeps every paper account, and only a new fill of our own order is announced', async () => {
   const { P } = load();
   const seen = [];
-  P.onFill((f) => seen.push(f.id));
-  const view = (fills) => ({ type: 'paperbook', account: { id: 'paper', env: 'paper', fills }, limits: { max_order_qty: 10 } });
-  P.onBook(view([{ id: 1, order_id: '3' }]));                 // the first view: history, never announced
-  assert.equal(P.account().id, 'paper');
+  P.onFill((f) => seen.push([f.account, f.id]));
+  const acc = (id, fills) => ({ id, env: 'paper', fills });
+  const push = (list) => P.onBook({ type: 'paperbook', accounts: list, limits: { max_order_qty: 10 } });
+  push([acc('paper', [{ id: 1, order_id: '3' }]), acc('paper-2', [{ id: 1, order_id: '7' }])]);   // history: never announced
+  assert.deepEqual(P.accounts().map((a) => a.id), ['paper', 'paper-2']);
   assert.deepEqual(P.limits(), { max_order_qty: 10 });
-  await P.send('order', {});                                  // the page places order 7
-  P.onBook(view([{ id: 1, order_id: '3' }, { id: 2, order_id: '9' }, { id: 3, order_id: '7' }]));
-  assert.deepEqual(seen, [3]);
-  P.onBook({ type: 'paperbook', account: { id: 'sim047' } });   // not the paper account: ignored
-  assert.equal(P.account().id, 'paper');
+  await P.send('order', {});                                  // the page places order 7 (on "paper", per the fake answer)
+  push([acc('paper', [{ id: 1, order_id: '3' }, { id: 2, order_id: '7' }]),
+    acc('paper-2', [{ id: 1, order_id: '7' }, { id: 2, order_id: '7' }])]);   // paper-2's order 7 is not ours
+  assert.deepEqual(seen, [['paper', 2]]);
+  push([acc('paper', []), { id: 'sim047', env: 'demo' }, { id: 'paper:gc_nfpcpi' }]);   // only paper ACCOUNT ids are kept
+  assert.deepEqual(P.accounts().map((a) => a.id), ['paper']);
+});
+
+test('createAccount posts a name and a starting balance to the chart service\'s own route', async () => {
+  const { P, fetched } = load();
+  await P.createAccount('Scalps', 25000);
+  assert.equal(fetched[0].url, '/api/paper/accounts/create');
+  assert.deepEqual(JSON.parse(fetched[0].opts.body), { name: 'Scalps', start_balance: 25000 });
 });

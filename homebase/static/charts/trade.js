@@ -1346,12 +1346,18 @@ function accountRows(state, quotes) {
    the desk. It has no separate switch of its own: like any account it needs the desk's state (a desk that is down or
    has chart trading off stops PAPER too -- fail closed, one rule for every account). */
 const PAPER_ID = 'paper';
-/* The desk's state with the PAPER account appended; the state itself (null while the desk is down), untouched, when
-   there is no paper account yet. Never mutates either argument. */
-function withPaper(state, paperAcct) {
-  if (!state || !isObj(paperAcct) || paperAcct.id !== PAPER_ID) return state;
-  const list = accountsOf(state).filter((a) => a && a.id !== PAPER_ID);   // the desk never lists it; never twice
-  return { ...state, accounts: [...list, paperAcct] };
+/* Task 2b: the user makes more paper accounts -- "paper" (the built-in first one) or "paper-<n>". Never a colon, so a
+   paper ACCOUNT id can never be read as a paper ALGO key ("paper:<strategy>", isPaperAlgo). */
+const PAPER_ID_RE = /^paper(?:-[1-9][0-9]{0,5})?$/;
+function isPaperId(id) { return typeof id === 'string' && PAPER_ID_RE.test(id); }
+/* The desk's state with the paper accounts appended (an array, or one account); the state itself (null while the
+   desk is down), untouched, when there is none. Only paper ids join, each once; never mutates an argument. */
+function withPaper(state, paperAccts) {
+  const list = (Array.isArray(paperAccts) ? paperAccts : [paperAccts])
+    .filter((a, i, all) => isObj(a) && isPaperId(a.id) && all.findIndex((b) => isObj(b) && b.id === a.id) === i);
+  if (!state || !list.length) return state;
+  const desk = accountsOf(state).filter((a) => a && !isPaperId(a.id));   // the desk never lists one; never twice
+  return { ...state, accounts: [...desk, ...list] };
 }
 /* One page action split by where each account lives: {desk, paper}, each a body or null. The same client_id goes to
    both (each side de-duplicates on its own). A Kill is the desk's alone; an unknown shape goes to the desk unchanged
@@ -1359,10 +1365,10 @@ function withPaper(state, paperAcct) {
 function splitSend(action, body) {
   if (!isObj(body) || action === 'bot-kill') return { desk: isObj(body) ? body : null, paper: null };
   if (Array.isArray(body.accounts)) {
-    const p = body.accounts.filter((id) => id === PAPER_ID), d = body.accounts.filter((id) => id !== PAPER_ID);
+    const p = body.accounts.filter(isPaperId), d = body.accounts.filter((id) => !isPaperId(id));
     return { desk: d.length ? { ...body, accounts: d } : null, paper: p.length ? { ...body, accounts: p } : null };
   }
-  if (body.account === PAPER_ID) return { desk: null, paper: body };
+  if (isPaperId(body.account)) return { desk: null, paper: body };
   return { desk: body, paper: null };
 }
 /* Send one action through `send.desk(action, body)` and `send.paper(action, body)` by splitSend: a PAPER-only action
@@ -1389,7 +1395,7 @@ const api = { PREFS_KEY, QUOTE_STALE_MS, BOT_NAMES, parsePrefs, prefsText, short
   PANEL_QTY_MAX, GTC_WARN, exitTriple, qtyFromRisk, exitSideError, panelOrder, sendLabel,
   parseQty, parseUsd, parseDecimal, roundTickDir, riskTicks,
   paperKey, isPaperAlgo, paperStrategyId, paperStrategiesMap, paperPill, paperToday, paperLabel, paperLines,
-  paperMarkers, paperOverlay, paperRunMarkers, paperStatsText, PAPER_ID, withPaper, splitSend, routeSend };
+  paperMarkers, paperOverlay, paperRunMarkers, paperStatsText, PAPER_ID, isPaperId, withPaper, splitSend, routeSend };
 if (typeof window !== 'undefined') window.HBTrade = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

@@ -1376,3 +1376,28 @@ test('PAPER: its lines never merge with a desk account\'s, and carry its tag and
   const mk = T.fillMarkers(st, 'NQ', ['paper'], Pp);
   assert.deepEqual(mk.map((x) => [x.color, x.text]), [['#7E57C2', 'PAPER']]);
 });
+
+/* ---- several paper accounts (2026-09-27 Task 2b) ---- */
+test('Task 2b: every paper account joins the state; ids never read as algo keys; a send splits across them', () => {
+  const p2 = acct('paper-2', 'Scalps', 'paper', { balance: 25000 });
+  const m = T.withPaper(STATE, [PAPER_ACCT, p2, { ...p2 }, acct('paper:gc_nfpcpi', 'x', 'paper'), acct('sim047', 'x', 'paper')]);
+  assert.deepEqual(m.accounts.map((a) => a.id), ['sim041', 'sim047', 'live099', 'paper', 'paper-2']);
+  for (const id of ['paper', 'paper-2', 'paper-123']) assert.equal(T.isPaperId(id), true, id);
+  for (const id of ['paper:gc_nfpcpi', 'paper-0', 'PAPER', 'paper-', 'sim047', null]) assert.equal(T.isPaperId(id), false, String(id));
+  assert.equal(T.isPaperAlgo('paper-2'), false);
+  const body = { client_id: 'c', accounts: ['sim041', 'paper', 'paper-2'], root: 'NQ', side: 'Buy', qty: 1, type: 'Market' };
+  const sp = T.splitSend('order', body);
+  assert.deepEqual([sp.desk.accounts, sp.paper.accounts], [['sim041'], ['paper', 'paper-2']]);
+  assert.equal(T.splitSend('cancel', { client_id: 'c', account: 'paper-2', order_id: '1' }).desk, null);
+});
+
+test('Task 2b: the gear -> Trading ACCOUNTS rows show each paper account with its name, the PAPER chip and its balance', () => {
+  const st = T.withPaper(STATE, [PAPER_ACCT, acct('paper-2', 'Scalps', 'paper', { balance: 25123.5 })]);
+  const rows = T.accountPickRows(st, ['paper-2'], new Set(), 'NQ').filter((r) => r.paper);
+  assert.deepEqual(rows.map((r) => [r.id, r.label, r.chip, r.balance, r.tick, r.disabled]),
+    [['paper', 'PAPER', 'PAPER', '$50,000', 'off', false], ['paper-2', 'Scalps', 'PAPER', T.money(25123.5), 'ticked', false]]);
+  // a layout keeps paper ids (and drops LIVE ones); a removed paper account stays unverified: it can never trade
+  assert.deepEqual(T.loadedTrade({ accounts: ['paper-2', 'live099', 'paper-7'] }, st),
+    { accounts: ['paper-2', 'paper-7'], droppedLive: ['live099'], unverified: ['paper-7'] });
+  assert.deepEqual(T.tradeMode({ state: st }, { accounts: ['paper-2', 'paper-7'] }), { mode: 'on', reason: '', accounts: ['paper-2'] });
+});

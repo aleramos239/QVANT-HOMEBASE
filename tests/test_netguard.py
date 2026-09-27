@@ -425,13 +425,14 @@ def test_refusal_can_skip_the_json_rule_for_a_bodyless_delete():
 
 # --- the desk page -------------------------------------------------------------------------------
 def test_the_desk_page_sends_every_post_as_json():
-    """Every POST on the desk page goes through post(), which always sends
-    Content-Type: application/json and a JSON body ({} when none, e.g. Kill)."""
+    """Every POST on the desk page goes through post() -- or, for the chart service's paper-account routes
+    (Task 2b), chartPost() -- and both always send Content-Type: application/json and a JSON body."""
     html = (Path(__file__).resolve().parent.parent / "homebase" / "static" / "index.html").read_text()
-    assert len(re.findall(r"method:\s*\"POST\"", html, re.I)) == 1
-    helper = re.search(r"async function post\(url, body\) \{(.*?)\n\}", html, re.S).group(1)
-    assert '"Content-Type": "application/json"' in helper
-    assert "JSON.stringify(body || {})" in helper
+    assert len(re.findall(r"method:\s*\"POST\"", html, re.I)) == 2
+    for name in ("post(url, body)", "chartPost(path, body)"):
+        helper = re.search(r"async function " + re.escape(name) + r" \{(.*?)\n\}", html, re.S).group(1)
+        assert '"Content-Type": "application/json"' in helper
+        assert "JSON.stringify(body || {})" in helper
 
 
 # --- WebSockets on the main app (Task 5b re-review, carried to Task 6) -----------------------

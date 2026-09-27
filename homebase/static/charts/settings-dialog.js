@@ -243,6 +243,41 @@ function mount(box, host) {
     return el;
   }
 
+  /* Task 2b: "+ Add paper account" under the ACCOUNTS list -- a small inline form (name, starting balance), never a
+     native prompt, and OUTSIDE the rows' box so a row rebuild can never destroy it mid-typing. The new account's
+     row appears when the service's push lands; a refusal shows its reason in the form. */
+  function paperAdder() {
+    const wrap = mk('div', 'set-paper-add');
+    const link = mk('button', 'set-link', '+ Add paper account');
+    link.type = 'button';
+    const form = mk('div', 'set-paper-form');
+    form.hidden = true;
+    const name = mk('input', 'set-num set-in'), bal = mk('input', 'set-num set-in-num');
+    name.placeholder = 'Name'; name.maxLength = 32; name.setAttribute('aria-label', 'Paper account name');
+    bal.value = '50000'; bal.inputMode = 'decimal'; bal.setAttribute('aria-label', 'Starting balance (USD)');
+    const add = mk('button', 'btn btn-primary', 'Add'), cancel = mk('button', 'btn', 'Cancel'), err = mk('div', 'set-acct-err');
+    add.type = cancel.type = 'button';
+    err.hidden = true;
+    const close = () => { form.hidden = true; link.hidden = false; err.hidden = true; name.value = ''; bal.value = '50000'; };
+    link.onclick = () => { link.hidden = true; form.hidden = false; name.focus(); };
+    cancel.onclick = close;
+    add.onclick = async () => {
+      if (add.disabled) return;
+      const n = String(name.value || '').trim(), b = Number(String(bal.value || '').replace(/[$,\s]/g, ''));
+      const bad = !n ? 'Give it a name' : !(b >= 1000 && b <= 10000000) ? 'Starting balance: $1,000 to $10,000,000' : '';
+      if (bad) { err.textContent = bad; err.hidden = false; return; }
+      add.disabled = true;
+      try {
+        const { status, data } = await host.createPaperAccount(n, b);
+        if (status === 200 && data && data.ok) close();
+        else { err.textContent = (data && (data.detail || data.error)) || `Refused (HTTP ${status})`; err.hidden = false; }
+      } finally { add.disabled = false; }
+    };
+    form.append(name, bal, add, cancel, err);
+    wrap.append(link, form);
+    return wrap;
+  }
+
   /* The Algo select's options and value, rebuilt only when either really changed (so a rebuild never happens
      under an open dropdown): ticking an account that belongs to an algo moves this select. */
   function syncAlgo() {
@@ -263,6 +298,7 @@ function mount(box, host) {
       acctWhy = mk('div', 'set-why');
       acctWhy.hidden = true;
       el.append(acctBox, acctWhy);
+      if (host.createPaperAccount) el.append(paperAdder());
       paintAccounts();
       return el;
     }
