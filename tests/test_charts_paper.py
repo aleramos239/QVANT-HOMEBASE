@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import ast
 from array import array
+from bisect import bisect_left
 import datetime as dt
 import json
 import subprocess
@@ -150,8 +151,9 @@ def test_the_anchor_is_carried_from_before_the_buffer_window(tmp_path):
     """No print in the last 10 s before 08:30: the anchor still equals the full tape's."""
     d = CPI_DAY
     rows = [r for r in fixture_rows(d) if not ms(d, "08:29:48") <= r["ts_ms"] < ms(d, "08:30:00")]
-    rows = [{**x, "ts_ms": ms(d, "08:25:00"), "ts_ns": ms(d, "08:25:00") * 1_000_000}
-            if x["ts_ms"] < ms(d, "08:29:48") else x for x in rows]      # earlier prints -> 08:25
+    # earlier prints -> 08:29:20 (carried, before 08:29:50; within the 60 s GC-stall limit of 08:30's prints)
+    rows = [{**x, "ts_ms": ms(d, "08:29:20"), "ts_ns": ms(d, "08:29:20") * 1_000_000}
+            if x["ts_ms"] < ms(d, "08:29:48") else x for x in rows]
     tape = Tape("GC", d, "", *stable_sorted(array("q", [_ns(x) for x in rows]), array("d", [x["price"] for x in rows]),
                                              array("i", [x["size"] for x in rows])), {})
     direct = run_session(GCNfpCpi(), tape, Costs())
@@ -822,3 +824,44 @@ def test_m8_window_ms_bounds_the_seed(tmp_path):
     r = runner(tmp_path)
     assert r.window_ms(ms(CPI_DAY, "07:00:00")) == (ms(CPI_DAY, "08:20:00"), ms(CPI_DAY, "09:56:00"))
     assert runner(tmp_path / "x").window_ms(ms(dt.date(2024, 9, 9), "07:00:00")) is None
+
+
+# ================================================================ fix round 2
+
+def test_r2_a_gc_only_stall_after_the_fill_is_no_data_never_a_trade(tmp_path):
+    """GC's subscription dies at 08:30:05 while NQ/ES keep printing: no 09:55 flat ever
+    prints, so the engine's end-of-tape close would be saved as a trade."""
+    d = NFP_DAY
+    rows = [x for x in fixture_rows(d) if x["ts_ms"] < ms(d, "08:30:05")]
+    r = runner(tmp_path)
+    drive(r, rows, d, "08:29:40", "09:56:03", alive=True)
+    assert r.final
+    _no_trade(r.current)
+    assert "GC stall" in r.current["error"]
+
+
+def test_r2_a_gap_ending_just_before_08_29_50_with_a_stale_carried_anchor_is_no_data(tmp_path):
+    """No GC print in [08:29:50, 08:30); the anchor is the carried 08:24:59 print and the
+    recording marks 08:25:00-08:29:49 missing: the legs would come from a stale anchor."""
+    d = CPI_DAY
+    real = fixture_rows(d)
+    rows = [{**real[0], "ts_ms": ms(d, "08:24:59"), "ts_ns": ms(d, "08:24:59") * 1_000_000}]
+    rows += [x for x in real if x["ts_ms"] >= ms(d, "08:30:00")]
+    r = runner(tmp_path)
+    now = ms(d, "08:29:40")
+    _seed(r, now, [x for x in rows if x["ts_ms"] < now], gaps=[[ms(d, "08:25:00"), ms(d, "08:29:49")]])
+    drive(r, rows, d, "08:29:40", "09:56:03", alive=True)
+    assert r.final
+    _no_trade(r.current)
+    assert "08:25:00" in r.current["error"]
+
+
+def test_r2_genuine_lulls_do_not_trip_the_stall_check():
+    """The worst real GC lull between 08:31 and 09:55 in the research window is 12.5 s;
+    both fixtures' longest GC silence after the anchor is far under 60 s."""
+    for d in (NFP_DAY, CPI_DAY):
+        ts, _, _ = fixture(d)
+        i = bisect_left(ts, et_ns(d, "08:30:00")) - 1
+        j = bisect_left(ts, et_ns(d, "09:55:00"))
+        pts = list(ts[i:j]) + [et_ns(d, "09:55:00")]
+        assert max(b - a for a, b in zip(pts, pts[1:])) < paper_mod.STALL_NS

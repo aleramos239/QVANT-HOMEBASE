@@ -72,6 +72,8 @@ EVENT_RECHECK_S = 60.0                      # a non-event day re-reads the calen
 SILENCE_TO = "08:31:00"                     # >= SILENCE_S with no print on any root in [08:29:50, this) = a gap
 SILENCE_S = 5
 SILENCE_NS = SILENCE_S * 1_000_000_000
+STALL_S = 60                                # >= this with no GC print, anchor -> min(now, 09:55): a GC stall
+STALL_NS = STALL_S * 1_000_000_000          # (the worst real GC lull 08:31-09:55, 2021-2024: 12.5 s)
 HOLD_UNTIL = "10:30"                        # the final run waits for a GC refill up to this ET time
 BACKTEST_BLOCK = (dt.time(8, 0), dt.time(10, 0))   # the comparison child never starts in here (ET) ...
 BACKTEST_AT = dt.time(10, 5)                # ... a start that lands inside waits until this
@@ -212,6 +214,7 @@ class PaperRunner:
         self.t_fire = et_ns(d, s.fire)
         self.t_silence_end = et_ns(d, SILENCE_TO)
         self.t_cancel = et_ns(d, s.cancel_et)
+        self.t_flat = et_ns(d, s.flat_et)
         self.t_end = et_ns(d, _add_min(s.flat_et, 1))
         self.t_hold = et_ns(d, HOLD_UNTIL)
         stored = self._stored(d)
@@ -365,6 +368,23 @@ class PaperRunner:
                 out.append((x, y, "silence"))
         return out
 
+    def _anchor_ns(self, tape: Tape) -> int | None:
+        """The anchor print's time: the last tape print before 08:30:00 (maybe the carry)."""
+        i = bisect_left(tape.ts, self.t_fire)
+        return tape.ts[i - 1] if i > 0 else None
+
+    def stalls(self, tape: Tape, now_ns: int) -> list[tuple[int, int, str]]:
+        """Fix round 2: every stretch of >= 60 s with no GC print between the anchor and
+        min(now, 09:55), the tail after the last print included. Catches a GC-only stall
+        (a dead or refused GC subscription while the other roots keep printing)."""
+        a = self._anchor_ns(tape)
+        end = min(now_ns, self.t_flat)
+        if a is None or end - a < STALL_NS:
+            return []
+        i, j = bisect_left(tape.ts, a), bisect_left(tape.ts, end)
+        pts = [*tape.ts[i:j], end]
+        return [(x, y, "GC stall") for x, y in zip(pts, pts[1:]) if y - x >= STALL_NS]
+
     def gaps(self, tape: Tape, now_ns: int, final: bool) -> list[tuple[int, int, str]]:
         out = list(self._rec_gaps) + list(self._pending)
         out += self._silences(tape, getattr(self, "_snap_alive", array("q")), now_ns)
@@ -446,15 +466,20 @@ class PaperRunner:
         return {**base, **s}
 
     def _gap_hit(self, s: dict, tape: Tape, now_ns: int, final: bool) -> list:
-        """The gaps overlapping [08:29:50, exit] (a trade), [08:29:50, now] (an open one) or
-        [08:29:50, 08:45] (no fill)."""
+        """The gaps overlapping [start, exit] (a trade), [start, now] (an open one) or
+        [start, 08:45] (no fill), start = min(08:29:50, the anchor print) -- so a hole just
+        before a stale carried anchor counts (fix round 2) -- plus any GC stall, which
+        voids the day whatever it overlaps: a dead GC feed is never a trade."""
         if s.get("exit"):
             end = s["exit"]["ts"] * 1_000_000
         elif s.get("entry"):
             end = now_ns
         else:
             end = self.t_cancel if final else min(self.t_cancel, now_ns)
-        return [g for g in self.gaps(tape, now_ns, final) if g[0] <= end and g[1] > self.t_buf0]
+        a = self._anchor_ns(tape)
+        start = self.t_buf0 if a is None else min(self.t_buf0, a)
+        hit = [g for g in self.gaps(tape, now_ns, final) if g[0] <= end and g[1] > start]
+        return hit + self.stalls(tape, now_ns)
 
     def summarize(self, res, now_ns: int, final: bool) -> dict:
         anchor = next((h["price"] for h in res.hlines if h.get("name") == "anchor"), None)
