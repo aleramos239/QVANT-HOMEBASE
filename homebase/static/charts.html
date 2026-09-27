@@ -49,6 +49,13 @@
   </nav>
   <div class="grid" id="grid"></div>
 </div>
+<section class="bpanel" id="bpanel" aria-label="Trading and Strategy Tester">
+  <div class="bp-resize" id="bpResize" role="separator" aria-orientation="horizontal" aria-label="Resize the panel" tabindex="0"></div>
+  <div class="bp-bar"><div class="bp-tabs" id="bpTabs" role="tablist"></div><span class="bp-spacer"></span>
+    <button class="bp-toggle" id="bpToggle" type="button" aria-label="Open the panel" title="Open the panel"><span class="icw" data-icon="chevronUp"></span></button></div>
+  <div class="bp-body" id="bpBody"></div>
+</section>
+<div class="toasts" id="toastRoot" aria-live="polite"></div>
 <footer class="statusbar">
   <span class="sb-dot" id="sbDot"></span><span class="sb-mode" id="sbMode">Connecting…</span><span class="sb-feed" id="sbFeed"></span>
   <span class="sb-spacer"></span>
@@ -73,6 +80,8 @@
 <script src="/static/charts/settings-dialog.js?v=4"></script>
 <script src="/static/charts/chartmenu.js?v=4"></script>
 <script src="/static/charts/trade.js?v=4"></script>
+<script src="/static/charts/deskclient.js?v=4"></script>
+<script src="/static/charts/panel.js?v=4"></script>
 <script src="/static/charts/app.js?v=4"></script>
 </body>
 </html>

@@ -39,6 +39,7 @@ let menuAt = null;   // the open menu is a context menu at this viewport point {
 let replayClock = null;   // {etMs, at, speed, done}: a replay's clock from its last status (live: null)
 let calendar = [];   // every stored calendar event (GET /api/calendar), by time
 let calendarAt;   // the service's calendar.fetched_at they came with (undefined: never loaded)
+let page = null;   // the page interface handed to the trading/tester modules (menus, dialogs, overlays); set in init()
 
 const $ = (s, root = document) => root.querySelector(s);
 const iso = (t) => new Date(t * 1000).toISOString();
@@ -115,6 +116,7 @@ function hostFor(id) {
     events: () => calendar,
     legendFolded,
     toggleLegendFolded,
+    overlays(cell) { return page.overlays.map((f) => f(cell, page)); },
   };
 }
 
@@ -1023,6 +1025,7 @@ function connect() {
     let m;
     try { m = JSON.parse(e.data); } catch (_) { return; }
     if (m.type === 'status') { statusAt = Date.now(); showStatus(m); return; }
+    if (m.type === 'desk' || m.type === 'quote') { window.HBDeskClient.onMessage(m); return; }
     const c = cells.find((x) => x.id === m.id);
     if (!c) return;
     if (m.type === 'history') c.onHistory(m);
@@ -1089,6 +1092,14 @@ async function init() {
   window.addEventListener('resize', closeMenu);
   document.addEventListener('keydown', onKey);
   buildGrid();
+  page = {
+    mk, icon, $, cells: () => cells, cur, select: (c) => select(cells.indexOf(c)),
+    openDialog, closeDialog, setDialogClose(fn) { if (dlg) dlg.onClose = fn; },
+    openMenu, closeMenu, placeMenu, toggleMenu, menuItem, sbNote, clockMs,
+    deskUrl: () => `${location.protocol}//${location.hostname}:8850/`,
+    overlays: [],
+  };
+  window.HBPanel.mount(page);                 // Task 4
   connect();
   tick();
   setInterval(tick, 1000);

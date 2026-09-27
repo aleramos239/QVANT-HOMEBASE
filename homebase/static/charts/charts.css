@@ -294,3 +294,44 @@ a { color: inherit; }
 
 /* Chart template ›'s "Include indicators" / "Include interval" checkboxes (spec §8), under the Save-as name field */
 .menu-tpl-opts { display: flex; gap: 14px; padding: 0 12px 8px; }
+
+/* ---- bottom panel (collapsible, shared by trading and the Strategy Tester) ---- */
+.bpanel { flex: none; position: relative; display: flex; flex-direction: column; margin: 0 4px 4px 56px;
+  background: var(--panel); border-radius: 6px; height: 34px; }                    /* 56px = rail 52 + gap 4 */
+.bpanel.open { height: var(--bp-h, 260px); }
+.bp-resize { position: absolute; left: 0; right: 0; top: -4px; height: 8px; cursor: ns-resize; z-index: 2; }
+.bpanel:not(.open) .bp-resize { display: none; }
+.bp-bar { flex: none; height: 34px; display: flex; align-items: center; padding: 0 4px; border-bottom: 1px solid transparent; }
+.bpanel.open .bp-bar { border-bottom-color: var(--border); }
+.bp-tabs { display: flex; height: 100%; }
+.bp-tab { height: 100%; padding: 0 12px; font-size: 13px; color: var(--text-2); border-bottom: 2px solid transparent; }
+.bp-tab:hover { color: var(--text); }
+.bp-tab[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
+.bp-spacer { flex: 1; }
+.bp-toggle { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 4px; color: var(--text-2); }
+.bp-toggle:hover { background: var(--hover); color: var(--text); }
+.bpanel.open .bp-toggle .ic { transform: rotate(180deg); }
+.bp-body { flex: 1; min-height: 0; overflow: auto; }
+.bpanel:not(.open) .bp-body { display: none; }
+.bp-empty { padding: 16px; color: var(--text-2); font-size: 13px; }
+.bp-table { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+.bp-table th { position: sticky; top: 0; background: var(--panel); color: var(--text-2); font-weight: 400; text-align: left;
+  height: 28px; padding: 0 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.bp-table td { height: 28px; padding: 0 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.bp-table td.num, .bp-table th.num { text-align: right; }
+.bp-table tr:hover td { background: var(--hover); }
+.bp-act { height: 22px; padding: 0 8px; border-radius: 4px; border: 1px solid var(--border); font-size: 12px; }
+.bp-act:hover { background: var(--hover); }
+.up { color: var(--up); } .down { color: var(--down); }
+.env { padding: 0 5px; border-radius: 4px; font-size: 11px; line-height: 16px; background: var(--hover); color: var(--text-2); }
+.env.live { background: var(--down-soft); color: var(--down); font-weight: 600; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--text-2); }
+.dot.ok { background: var(--up); } .dot.bad { background: var(--down); } .dot.warn { background: var(--warn); }
+/* ---- toasts (top-right under the toolbar: ruling S24) ---- */
+.toasts { position: fixed; top: 46px; right: 12px; z-index: 90; display: flex; flex-direction: column; gap: 6px; width: min(380px, 90vw); }
+.toast { display: flex; align-items: flex-start; gap: 8px; padding: 8px 8px 8px 12px; border-radius: 8px; background: var(--panel);
+  box-shadow: var(--shadow-menu); border-left: 3px solid var(--up); font-size: 13px; }
+.toast.err { border-left-color: var(--down); }
+.toast span { flex: 1; overflow-wrap: anywhere; }
+.toast-x { width: 20px; height: 20px; display: grid; place-items: center; border-radius: 4px; color: var(--text-2); }
+.toast-x:hover { background: var(--hover); }
