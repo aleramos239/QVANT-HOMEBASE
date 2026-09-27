@@ -9,7 +9,7 @@
     document.documentElement.setAttribute('data-theme', (_t === 'light' || _t === 'dark') ? _t : 'light');
   } catch (_) { document.documentElement.setAttribute('data-theme', 'light'); }
 </script>
-<link rel="stylesheet" href="/static/charts/charts.css?v=6">
+<link rel="stylesheet" href="/static/charts/charts.css?v=7">
 </head>
 <body>
 <header class="toolbar" role="toolbar" aria-label="Chart toolbar">
@@ -35,10 +35,6 @@
   <button class="tb-btn tb-icon" id="tbSettings" type="button" title="Chart settings" aria-label="Chart settings" aria-haspopup="dialog"><span class="icw" data-icon="gear"></span></button>
   <button class="tb-btn tb-icon" id="tbTheme" type="button" title="Dark theme"><span class="icw" data-icon="moon"></span></button>
 </header>
-<div class="radar" id="radar" role="group" aria-label="Cross-market burst radar">
-  <button class="radar-fold" id="radarFold" type="button" title="Collapse the radar" aria-expanded="true"><span class="icw sm" data-icon="chevronUp"></span></button>
-  <div class="radar-chips" id="radarChips"></div>
-</div>
 <div class="main">
   <nav class="rail" id="rail" aria-label="Drawing tools">
     <button class="rail-btn" type="button" data-tool="cursor" title="Cursor" aria-pressed="true"><span class="icw" data-icon="cursor"></span></button>
@@ -77,31 +73,30 @@
 <div id="dialogRoot"></div>
 <div class="rail-tip" id="railTip" role="status" hidden></div>
 <script src="/static/vendor/lightweight-charts-5.2.1.js"></script>
-<script src="/static/charts/icons.js?v=6"></script>
-<script src="/static/charts/catalog.js?v=6"></script>
-<script src="/static/charts/radar.js?v=6"></script>
-<script src="/static/charts/primitives.js?v=6"></script>
-<script src="/static/charts/drawings.js?v=6"></script>
-<script src="/static/charts/position.js?v=6"></script>
-<script src="/static/charts/settings.js?v=6"></script>
-<script src="/static/charts/events.js?v=6"></script>
-<script src="/static/charts/scrollback.js?v=6"></script>
-<script src="/static/charts/cell.js?v=6"></script>
-<script src="/static/charts/settings-dialog.js?v=6"></script>
-<script src="/static/charts/chartmenu.js?v=6"></script>
-<script src="/static/charts/trade.js?v=6"></script>
-<script src="/static/charts/fillquality.js?v=6"></script>
-<script src="/static/charts/deskclient.js?v=6"></script>
-<script src="/static/charts/paperclient.js?v=6"></script>
-<script src="/static/charts/panel.js?v=6"></script>
-<script src="/static/charts/tradeui.js?v=6"></script>
-<script src="/static/charts/tradelines.js?v=6"></script>
-<script src="/static/charts/tester.js?v=6"></script>
-<script src="/static/charts/testerui.js?v=6"></script>
-<script src="/static/charts/testerlayer.js?v=6"></script>
-<script src="/static/charts/replay.js?v=6"></script>
-<script src="/static/charts/replayui.js?v=6"></script>
-<script src="/static/charts/orderpanel.js?v=6"></script>
-<script src="/static/charts/app.js?v=6"></script>
+<script src="/static/charts/icons.js?v=7"></script>
+<script src="/static/charts/catalog.js?v=7"></script>
+<script src="/static/charts/primitives.js?v=7"></script>
+<script src="/static/charts/drawings.js?v=7"></script>
+<script src="/static/charts/position.js?v=7"></script>
+<script src="/static/charts/settings.js?v=7"></script>
+<script src="/static/charts/events.js?v=7"></script>
+<script src="/static/charts/scrollback.js?v=7"></script>
+<script src="/static/charts/cell.js?v=7"></script>
+<script src="/static/charts/settings-dialog.js?v=7"></script>
+<script src="/static/charts/chartmenu.js?v=7"></script>
+<script src="/static/charts/trade.js?v=7"></script>
+<script src="/static/charts/fillquality.js?v=7"></script>
+<script src="/static/charts/deskclient.js?v=7"></script>
+<script src="/static/charts/paperclient.js?v=7"></script>
+<script src="/static/charts/panel.js?v=7"></script>
+<script src="/static/charts/tradeui.js?v=7"></script>
+<script src="/static/charts/tradelines.js?v=7"></script>
+<script src="/static/charts/tester.js?v=7"></script>
+<script src="/static/charts/testerui.js?v=7"></script>
+<script src="/static/charts/testerlayer.js?v=7"></script>
+<script src="/static/charts/replay.js?v=7"></script>
+<script src="/static/charts/replayui.js?v=7"></script>
+<script src="/static/charts/orderpanel.js?v=7"></script>
+<script src="/static/charts/app.js?v=7"></script>
 </body>
 </html>
