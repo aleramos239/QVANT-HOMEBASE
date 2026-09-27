@@ -64,14 +64,14 @@ def expand(axes: list[dict]) -> list[dict]:
             for i, coords in enumerate(itertools.product(*ranges))]
 
 
-def _research_only(body: dict) -> None:
+def _research_only(body: dict, msg: str = RESEARCH_ONLY) -> None:
     if "holdout" in body:
-        raise DisciplineError(f"{RESEARCH_ONLY} (no holdout)")
+        raise DisciplineError(f"{msg} (no holdout)")
     rng = body.get("range")
     if rng is None:
         return
     if not (isinstance(rng, dict) and rng.get("kind") == "research" and set(rng) <= {"kind"}):
-        raise DisciplineError(RESEARCH_ONLY)
+        raise DisciplineError(msg)
 
 
 def validate_grid(body) -> dict:
@@ -224,12 +224,19 @@ def _summary(run: dict | None) -> dict:
 
 
 class GridManager:
-    """The chart service's handle on heat-map grids (thread-safe; no asyncio)."""
+    """The chart service's handle on heat-map grids (thread-safe; no asyncio).
+
+    Subclass hooks (walkforward.WalkForwardManager): SUBDIR (where its jobs live), COUNT_CELL_LOOKS
+    (a heat-map cell is a look the moment it finishes; a walk-forward counts its own), _validate,
+    _cell_finished / _cell_summary (per finished cell), _finish_grid and _after_cell (the job's end)."""
+
+    SUBDIR = "grids"
+    COUNT_CELL_LOOKS = True
 
     def __init__(self, base: Path, *, archive: Path = ARCHIVE, cache: Path = CACHE,
                  python: str = sys.executable, workers: int = WORKERS, slots: Slots | None = None,
                  shared: Path | None = None):
-        self.base, self.grids = Path(base), Path(base) / "grids"
+        self.base, self.grids = Path(base), Path(base) / self.SUBDIR
         self.shared = Path(shared) if shared is not None else shared_dir()
         self.looks_path = self.shared / "looks.json"
         self.archive, self.cache, self.python, self.workers = Path(archive), Path(cache), python, workers
@@ -249,7 +256,7 @@ class GridManager:
         """Grids a previous service process left unfinished are dead now."""
         for p in self.grids.glob("*/grid.json"):
             g = read_json(p, {}) or {}
-            if g.get("status") in ("queued", "running"):
+            if g.get("status") not in FINAL:
                 for c in g.get("cells", []):
                     if c.get("status") == "queued":
                         c["status"] = "cancelled"
@@ -267,8 +274,11 @@ class GridManager:
         with self._lock:
             return read_looks(self.looks_path)
 
+    def _validate(self, body) -> dict:
+        return validate_grid(body)
+
     def submit(self, body) -> str:
-        g = validate_grid(body)
+        g = self._validate(body)
         read_looks(self.looks_path)            # LooksCorrupt (a ValueError -> 400): no grid runs uncounted
         gid = f"{dt.datetime.now():%Y%m%d-%H%M%S}-{g['strategy']}-{secrets.token_hex(2)}"
         d = self.grids / gid
@@ -383,6 +393,7 @@ class GridManager:
                 cdir = self.grids / gid / "cells" / f"{i:02d}"
                 cell["status"] = "running"
                 st["status"] = "running"
+                st.setdefault("started", _now())
                 self._save(gid)
                 log = open(cdir / "log.txt", "ab")
                 try:
@@ -397,6 +408,9 @@ class GridManager:
                     cell.update(status="error", error=f"could not start the runner: {e}")
                     self._finish_grid(st)
                     self._save(gid)
+                    after = self._after_cell(gid, st)
+                    if after is not None:
+                        threading.Thread(target=after, daemon=True).start()
                     continue
                 self._procs[(gid, i)] = proc
             try:
@@ -406,19 +420,31 @@ class GridManager:
             log.close()
             rs = read_json(cdir / "status.json", {}) or {}
             run = read_json(cdir / "run.json") if rs.get("status") == "done" else None
+            hook_error = None
+            if run is not None:
+                try:
+                    self._cell_finished(cdir, run)
+                except Exception as e:  # noqa: BLE001 -- the cell reads as an error, never a silent gap
+                    hook_error = f"{type(e).__name__}: {e}"
             with self._cv:
                 self._procs.pop((gid, i), None)
-                if run is not None:                 # it finished with numbers (even if a cancel raced it)
-                    cell.update(status="done", summary=_summary(run))
-                    try:
-                        add_look(self.looks_path, st["strategy"])
-                    except LooksCorrupt as e:       # refused at submit; broken mid-grid: say so, never reset
-                        st["looks_error"] = str(e)
+                if run is not None and hook_error is None:   # it finished with numbers (even if a cancel raced it)
+                    cell.update(status="done", summary=self._cell_summary(run))
+                    if self.COUNT_CELL_LOOKS:
+                        try:
+                            add_look(self.looks_path, st["strategy"])
+                        except LooksCorrupt as e:   # refused at submit; broken mid-grid: say so, never reset
+                            st["looks_error"] = str(e)
+                elif hook_error is not None:
+                    cell.update(status="error", error=hook_error)
                 elif cell["status"] != "cancelled":
                     tail = (cdir / "log.txt").read_text(errors="replace")[-600:]
                     cell.update(status="error", error=rs.get("error") or f"runner exited {code}: {tail}")
                 self._finish_grid(st)
                 self._save(gid)
+                after = self._after_cell(gid, st)
+            if after is not None:
+                after()
 
     def _idle(self) -> bool:
         with self._lock:
@@ -428,6 +454,18 @@ class GridManager:
     def _finish_grid(st: dict) -> None:           # under the lock
         if st["status"] != "cancelled" and all(c["status"] in FINAL for c in st["cells"]):
             st["status"] = "done"
+
+    # ---- subclass hooks (the heat-map's own behaviour below)
+
+    def _cell_finished(self, cdir: Path, run: dict) -> None:
+        """A cell finished with numbers (a worker thread, outside the lock)."""
+
+    def _cell_summary(self, run: dict) -> dict:
+        return _summary(run)
+
+    def _after_cell(self, gid: str, st: dict):   # under the lock
+        """A callable to run once the lock is released (None: nothing)."""
+        return None
 
 
 def _stop(proc) -> None:

@@ -511,6 +511,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                 recorder.flush()
             tester.manager.shutdown()   # never leave a runner child orphaned
             tester.grids.shutdown()     # ... nor a heat-map cell's
+            tester.wfs.shutdown()       # ... nor a walk-forward cell's
 
     app = FastAPI(title="Homebase Charts", lifespan=lifespan)
     app.mount("/static", RevalidatedFiles(directory=STATIC), name="static")

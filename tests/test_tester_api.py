@@ -278,3 +278,71 @@ def test_a_corrupt_looks_counter_is_a_409_on_looks_and_a_400_on_a_new_grid(tmp_p
         r = c.post("/api/tester/grid", json=GRID)
         assert r.status_code == 400 and "never reset silently" in r.json()["detail"]
     assert (tester_shared / "looks.json").read_text() == "{torn"
+
+
+# ---------------------------------------------------------------- walk-forward
+
+WF = {"strategy": "nq930", "inputs": {"adx_gate": False}, "min_trades": 1,
+      "axes": [{"key": "offset_pts", "values": [10, 12]}, {"key": "sl_pts", "values": [5]}]}
+
+
+def poll_wf(c, wid, s=120.0):
+    t = time.monotonic() + s
+    while time.monotonic() < t:
+        st = c.get(f"/api/tester/walkforward/{wid}").json()
+        if st["status"] in ("done", "cancelled", "error"):
+            return st
+        time.sleep(0.05)
+    raise AssertionError("walk-forward never finished")
+
+
+def test_a_walkforward_goes_from_post_to_a_stitched_result_and_counts_cells_x_steps(tmp_path):
+    with client(tmp_path) as c:
+        wid = c.post("/api/tester/walkforward", json=WF, headers={"origin": "http://localhost:8852"}).json()["id"]
+        st = poll_wf(c, wid)
+        assert st["status"] == "done", st.get("error")
+        assert st["total"] == 2 and st["walkforward"]["n_steps"] == 45 and st["looks_added"] == 90
+        assert st["range"]["start"] == "2021-01-01" and st["range"]["end"] == "2024-12-31"
+        assert all("net_profit" not in (cell.get("summary") or {}) for cell in st["cells"])
+        assert c.get("/api/tester/looks").json() == {"nq930": 90}
+        r = c.get(f"/api/tester/walkforward/{wid}/result").json()
+        assert r["n_steps"] == 45 and r["n_cells"] == 2 and r["looks"] == 90
+        by = {s["select"]: s for s in r["steps"]}
+        assert by["2024-03"]["cell"] is not None and by["2024-03"]["is"]["trades"] >= 1   # the synthetic March day
+        assert by["2024-03"]["oos"]["trades"] == 0                                         # April-June: no tape
+        assert set(r["stitched"]["stats"]) >= {"net_profit", "profit_factor", "win_rate", "sharpe", "max_drawdown"}
+        assert c.get("/api/tester/walkforwards").json()[0]["id"] == wid
+        assert c.get("/api/tester/grids").json() == []                 # never mixed into the heat-map's list
+        assert c.get(f"/api/tester/grid/{wid}").status_code == 404
+        assert c.get(f"/api/tester/grid/{wid}/cell/0/bundle").status_code == 404
+        assert c.get("/api/tester/runs").json() == []
+
+
+def test_walkforward_requests_the_rules_refuse(tmp_path):
+    with client(tmp_path) as c:
+        for bad, word in (({**WF, "range": {"kind": "custom", "start": "2022-01-01", "end": "2022-06-30"}}, "research window"),
+                          ({**WF, "holdout": {"reason": "x"}}, "research window"),
+                          ({**WF, "metric": "win_rate"}, "metric"), ({**WF, "min_trades": 0}, "min_trades"),
+                          ({**WF, "axes": [{"key": "offset_pts", "values": list(range(61))},
+                                           {"key": "sl_pts", "values": [5]}]}, "at most 60")):
+            r = c.post("/api/tester/walkforward", json=bad)
+            assert r.status_code == 400 and word in r.json()["detail"], r.json()
+        assert c.post("/api/tester/walkforward", json=WF, headers=EVIL).status_code == 403
+        for path in ("/api/tester/walkforward/20260927-120000-nq930-abcd",
+                     "/api/tester/walkforward/20260927-120000-nq930-abcd/result"):
+            assert c.get(path).status_code == 404, path
+        assert c.post("/api/tester/walkforward/20260927-120000-nq930-abcd/cancel").status_code == 404
+        assert c.get("/api/tester/walkforwards", headers=REBIND_HOST).status_code == 403
+
+
+def test_a_queued_walkforward_can_be_cancelled_and_has_no_result(tmp_path, monkeypatch):
+    from homebase.backtest import slots
+    monkeypatch.setattr(slots, "et_now", lambda: dt.datetime(2026, 9, 28, 9, 25, tzinfo=slots.ET))
+    with client(tmp_path) as c:
+        wid = c.post("/api/tester/walkforward", json=WF).json()["id"]
+        st = c.get(f"/api/tester/walkforward/{wid}").json()
+        assert st["status"] == "queued" and st["paused"] == "paused for the 9:30 window" and st["eta_s"] is None
+        assert c.post(f"/api/tester/walkforward/{wid}/cancel", headers=EVIL).status_code == 403
+        assert c.post(f"/api/tester/walkforward/{wid}/cancel").json()["status"] == "cancelled"
+        assert c.get(f"/api/tester/walkforward/{wid}/result").status_code == 409
+        assert c.get("/api/tester/looks").json() == {}

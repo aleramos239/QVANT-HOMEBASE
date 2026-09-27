@@ -18,6 +18,13 @@
     GET  /api/tester/grid/{id}/cell/{i}/bundle   a cell's full run bundle (the same shape as a run's)
     GET  /api/tester/grids               recent grids, newest first
     GET  /api/tester/looks               {strategy: heat-map cells ever run}
+    POST /api/tester/walkforward         the grid body + {metric?, min_trades?} -> {id}: 1 month to select, the
+                                          next 3 to test, stepping monthly, research window 2021-2024 ONLY
+                                          (homebase.backtest.walkforward -- a range or holdout is refused)
+    GET  /api/tester/walkforward/{id}    status, per-cell status (never full-window P&L), progress, eta_s
+    GET  /api/tester/walkforward/{id}/result   the steps, the stitched OOS equity + stats (409 until done)
+    POST /api/tester/walkforward/{id}/cancel
+    GET  /api/tester/walkforwards        recent walk-forwards, newest first
     POST /api/tester/montecarlo          {run_id, paths?, mode?, seed?} -> homebase.backtest.stats.montecarlo.run()
                                           over a DONE run's trade P&L (<= 10,000 paths; a plain `def`
                                           route, so it runs in FastAPI's threadpool, off the event loop --
@@ -48,6 +55,7 @@ from ..backtest import propsim
 from ..backtest.grid import GridManager, LooksCorrupt
 from ..backtest.runner import RunManager, default_base
 from ..backtest.stats import montecarlo
+from ..backtest.walkforward import WalkForwardManager
 from ..backtest.tape import CACHE
 
 _HOST_RE = re.compile(r"^(127\.0\.0\.1|localhost)(:\d+)?$", re.IGNORECASE)
@@ -64,7 +72,7 @@ def host_ok(request: Request) -> None:
 
 
 def make_router(write_ok: Callable[[Request], None], manager: RunManager,
-                grids: GridManager) -> APIRouter:
+                grids: GridManager, wfs: WalkForwardManager) -> APIRouter:
     r = APIRouter(prefix="/api/tester", dependencies=[Depends(host_ok)])
 
     def known(rid: str):
@@ -161,6 +169,43 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         except LooksCorrupt as e:           # refused, never shown as a reset counter
             raise HTTPException(409, str(e)) from None
 
+    def known_wf(wid: str):
+        try:
+            return wfs.dir(wid)
+        except KeyError:
+            raise HTTPException(404, f"no walk-forward {wid!r}") from None
+
+    @r.post("/walkforward")
+    def start_walkforward(request: Request, body: dict):
+        write_ok(request)
+        try:
+            return {"id": wfs.submit(body)}
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+
+    @r.get("/walkforward/{wid}")
+    def walkforward_status(wid: str):
+        known_wf(wid)
+        return wfs.status(wid)
+
+    @r.get("/walkforward/{wid}/result")
+    def walkforward_result(wid: str):
+        known_wf(wid)
+        try:
+            return wfs.result(wid)
+        except ValueError as e:
+            raise HTTPException(409, str(e)) from None
+
+    @r.post("/walkforward/{wid}/cancel")
+    def cancel_walkforward(wid: str, request: Request):
+        write_ok(request)
+        known_wf(wid)
+        return wfs.cancel(wid)
+
+    @r.get("/walkforwards")
+    def recent_walkforwards():
+        return wfs.list()
+
     def _mc_int(body: dict, key: str, default: int, lo: int, hi: int) -> int:
         v = body.get(key, default)
         if v is None:
@@ -213,6 +258,7 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
 
     r.manager = manager   # so the chart service can stop an in-flight child on shutdown
     r.grids = grids       # likewise every grid cell's child
+    r.wfs = wfs           # ... and every walk-forward cell's
     return r
 
 
@@ -223,4 +269,5 @@ def tester_router(write_ok: Callable[[Request], None], archive: Path,
     base = Path(state) if state else default_base()
     cache = base / "tape" if state else CACHE
     return make_router(write_ok, RunManager(base, archive=archive, cache=cache),
-                       GridManager(base, archive=archive, cache=cache))
+                       GridManager(base, archive=archive, cache=cache),
+                       WalkForwardManager(base, archive=archive, cache=cache))
