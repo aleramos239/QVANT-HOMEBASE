@@ -114,6 +114,15 @@ test('armedMode: an unarmed LIVE account drops out of a chart\'s mode; none left
   assert.equal(T.armedMode(off, STATE, new Set()), off);
 });
 
+test('replayGuard: a chart in replay can never trade (2026-09-27 bar-replay plan, Global Constraints) -- always overrides an otherwise-tradable mode', () => {
+  const on = { mode: 'on', reason: '', accounts: ['sim041'] };
+  assert.deepEqual(T.replayGuard(on, true), { mode: 'none', reason: 'Replay — trading is off', accounts: [] });
+  assert.equal(T.replayGuard(on, false), on);   // not in replay: unchanged (same object)
+  const off = { mode: 'off', reason: 'Trading is off on this chart', accounts: [] };
+  assert.equal(T.replayGuard(off, true), off);  // already off for its own reason: replay need not relabel it
+  assert.equal(T.replayGuard(off, false), off);
+});
+
 test('cellTrade: sanitised {on, accounts}; at most 20 ids of 1-64 characters, de-duplicated', () => {
   assert.deepEqual(T.cellTrade(undefined), { on: false, accounts: [] });
   assert.deepEqual(T.cellTrade(null), { on: false, accounts: [] });

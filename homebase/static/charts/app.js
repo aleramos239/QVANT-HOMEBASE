@@ -149,6 +149,7 @@ function hostFor(id) {
     onPosition(cell, d) { positionDialog(cell, d); },
     onChartMenu(cell, at) { chartMenu(cell, at); },
     onIndicatorMenu(cell, uid, o) { indicatorMenu(cell, uid, o); },
+    onReplayGuard(cell, patch) { window.HBReplayUI.guardSymbolChange(cell, patch); },
     changed() { saveLast(); renderToolbar(); },
     tool: () => tool,
     toolDone() { setTool('cursor'); },
@@ -162,7 +163,7 @@ function hostFor(id) {
 }
 
 function buildGrid() {
-  for (const c of cells) c.destroy();
+  for (const c of cells) { window.HBReplayUI.cellDestroyed(c); c.destroy(); }
   cells = [];
   const grid = $('#grid'), [cols, rows] = GRIDS[layout.grid] || GRIDS[4], n = cols * rows;
   grid.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
@@ -257,6 +258,7 @@ function closeMenu() {
   if (menuAnchor) { menuAnchor.classList.remove('open'); menuAnchor.setAttribute('aria-expanded', 'false'); }
   menuEl = menuAnchor = menuAt = null;
   customWait = null;
+  if (window.HBReplayUI) window.HBReplayUI.disarmPick();   // the Replay popover's "pick a start" arm, if any
   if (back) back.focus();
 }
 function toggleMenu(anchor, fill) {
@@ -1076,7 +1078,11 @@ function tick() {
 /* ---- the chart service ---- */
 function connect() {
   ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
-  ws.onopen = () => { statusAt = Date.now(); for (const c of cells) { c.clearInflight(); c.subscribe(true); } };
+  ws.onopen = () => {
+    statusAt = Date.now();
+    window.HBReplayUI.onReconnect(cells);   // a fresh connection carries no replay sessions from the old one
+    for (const c of cells) { c.clearInflight(); c.subscribe(true); }
+  };
   ws.onmessage = (e) => {
     let m;
     try { m = JSON.parse(e.data); } catch (_) { return; }
@@ -1089,6 +1095,8 @@ function connect() {
     else if (m.type === 'update') c.onUpdate(m);
     else if (m.type === 'reset') c.subscribe(true);
     else if (m.type === 'error') c.onError(m.error);
+    else if (m.type === 'replay_state') window.HBReplayUI.onState(c, m);
+    else if (m.type === 'replay_error') window.HBReplayUI.onError(c, m);
   };
   ws.onclose = () => { showStatus({ connected: false, error: 'chart service unreachable — retrying' }); setTimeout(connect, 2000); };
 }
@@ -1113,6 +1121,10 @@ function onKey(e) {
     e.preventDefault();
     if (c) c.resetView();
     return;
+  }
+  if (c && c.replay && !menuEl) {   // Space plays/pauses, → steps -- only the selected cell, no input focused
+    if (e.code === 'Space') { e.preventDefault(); window.HBReplayUI.togglePlay(c); return; }
+    if (e.key === 'ArrowRight') { e.preventDefault(); window.HBReplayUI.step(c); return; }
   }
   if (e.key === 'Escape') {
     if (c && c.dc) c.dc.escape();
@@ -1158,8 +1170,10 @@ async function init() {
     tradeChanged(cell, accountsChanged) { if (accountsChanged) markDirty(); else saveLast(); },
   };
   page.overlays.push(window.HBTradeLines.overlay);   // Task 6: the per-chart Buy/Sell block, lines and markers
+  page.overlays.push(window.HBReplayUI.overlay);     // Bar Replay: the floating control bar, dimming and REPLAY pill
   window.HBPanel.mount(page);                 // Task 4
   window.HBTradeUI.mount(page);                // Task 5
+  window.HBReplayUI.mount(page);
   buildGrid();   // after the mounts: page.overlays must be filled before any cell's build() reads host.overlays()
   migrateTickedOnce();
   connect();

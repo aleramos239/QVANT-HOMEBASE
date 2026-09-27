@@ -37,9 +37,12 @@ let menuCell = null;          // the chart the open Trade menu was filled for
 function tradeOf(cell) { return T.cellTrade(cell && cell.cfg ? cell.cfg.trade : null); }
 /* The root a chart is showing (the loaded one; its config's while nothing has loaded yet). */
 function rootOfCell(cell) { return !cell ? null : cell.shown ? cell.shown.root : (cell.cfg && cell.cfg.root) || null; }
-/* HBTrade.tradeMode on THIS chart's config, with this session's LIVE arms on top (HBTrade.armedMode). */
+/* HBTrade.tradeMode on THIS chart's config, with this session's LIVE arms on top (HBTrade.armedMode), and
+   T.replayGuard as the last word: a chart in Bar Replay (cell.replay, set by replayui.js) can never trade
+   (2026-09-27 plan, Global Constraints) -- this is the one place every order-sending path's gate (cellGate,
+   the chart menu, a line's drag/×, the Buy/Sell block) reads, so nothing needs its own replay check. */
 function effectiveMode(cell) {
-  return T.armedMode(D().mode(tradeOf(cell)), D().state, liveConfirmed);
+  return T.replayGuard(T.armedMode(D().mode(tradeOf(cell)), D().state, liveConfirmed), !!(cell && cell.replay));
 }
 /* A chart-started send path's gate: the chart's mode, the chart still on the page, and still showing the root
    the action was started for. Re-run at send time by guardedSend. */
@@ -477,8 +480,11 @@ function cellHeader(cell, t) {
   sw.setAttribute('aria-checked', String(t.on));
   sw.setAttribute('aria-label', `Trading on chart ${n}`);
   sw.dataset.tm = 'cellon';
+  // a chart in Bar Replay can never trade (Global Constraints): the switch cannot re-arm it while replaying
+  sw.disabled = !!cell.replay;
+  if (cell.replay) sw.title = 'This chart is in replay';
   sw.onclick = () => {
-    if (cell !== page.cur()) { refillIfOpen(); return; }   // the menu edits the selected chart only
+    if (cell !== page.cur() || cell.replay) { refillIfOpen(); return; }   // the menu edits the selected chart only
     const now = tradeOf(cell);
     setCellTrade(cell, { on: !now.on, accounts: now.accounts });
   };
