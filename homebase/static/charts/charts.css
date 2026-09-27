@@ -691,7 +691,6 @@ a { color: inherit; }
 .tst-icon-btn:hover { background: var(--hover); color: var(--text); }
 .tst-icon-btn:disabled:hover { background: none; }
 .tst-icon-btn .ic { width: 17px; height: 17px; }
-.tst-holdout-banner { padding: 6px 10px; font-size: 12px; color: var(--warn); background: var(--hover); border-bottom: 1px solid var(--border); }
 .tst-fail-banner { margin-bottom: 12px; padding: 8px 10px; border-radius: 6px; background: var(--down-soft); color: var(--down); font-size: 12px; }
 .tst-group { flex: none; display: inline-flex; align-items: center; gap: 6px; }
 .tst-cost { flex: none; display: inline-flex; align-items: center; gap: 4px; }
@@ -699,8 +698,25 @@ a { color: inherit; }
 .tst-num { width: 56px; height: 28px; padding: 0 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel);
   font-variant-numeric: tabular-nums; }
 .tst-num:focus { border-color: var(--accent); }
-.tst-reason { width: 220px; height: 28px; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); font-size: 12px; }
-.tst-reason:focus { border-color: var(--accent); }
+/* the range pill: one button reading the current window (and its walk-forward scheme, if any) */
+.tst-range { border: 1px solid var(--border); font-size: 13px; }
+.tst-range-t { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.menu-tst-range { min-width: 250px; }
+.menu-tst-range .set-cap { margin: 8px 16px 2px; }
+/* Backtesting dates: two plain text fields + a month calendar (never a native date control) */
+.tst-date-in { width: 140px; height: 28px; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--panel); font-size: 13px; font-variant-numeric: tabular-nums; }
+.tst-date-in:focus { border-color: var(--accent); }
+.tst-cal { padding: 4px 20px 8px; }
+.tst-cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.tst-cal-t { font-size: 13px; }
+.tst-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.tst-cal-dow { text-align: center; color: var(--text-2); font-size: 11px; padding-bottom: 2px; }
+.tst-cal-d { height: 28px; border-radius: 6px; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--text); }
+.tst-cal-d:hover { background: var(--hover); }
+.tst-cal-d.out { color: var(--text-2); opacity: .55; }
+.tst-cal-d.in { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.tst-cal-d.sel { background: var(--accent); color: #fff; }
 .tst-run-area { flex: none; display: inline-flex; align-items: center; gap: 8px; }
 .tst-run { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; }
 .tst-run .ic { width: 15px; height: 15px; }
@@ -782,7 +798,12 @@ a { color: inherit; }
 .tst-heat-loaded[hidden] { display: none; }
 .tst-heat-grid { overflow-x: auto; }
 .tst-wf-min { width: 72px; }
-.tst-wf-body { overflow-x: auto; }
+.tst-heat-mode { max-width: 150px; }
+.tst-heat-step { width: 72px; }
+.tst-heat-vals-wrap { display: inline-flex; align-items: center; gap: 4px; }
+.tst-heat-warn { padding: 4px 0; color: var(--warn); font-size: 12px; }
+.tst-heat-warn[hidden] { display: none; }
+.tst-wf-steps th.tst-wf-group { text-align: center; color: var(--text-2); border-bottom: 1px solid var(--border); }
 .tst-wf-steps tr.tst-wf-chain td { background: color-mix(in srgb, var(--accent) 8%, transparent); }
 .tst-wf-steps td.tst-wf-changed { color: var(--warn); }
 .tst-heat-table { border-collapse: separate; border-spacing: 2px; font-size: 12px; font-variant-numeric: tabular-nums; margin-bottom: 12px; }

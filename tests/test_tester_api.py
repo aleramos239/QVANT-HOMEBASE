@@ -144,9 +144,12 @@ def test_writes_from_another_site_are_refused(tmp_path):
 
 def test_bad_requests_and_unknown_runs(tmp_path):
     with client(tmp_path) as c:
-        r = c.post("/api/tester/run", json={**RUN, "range": {"kind": "custom", "start": "2025-01-02",
-                                                               "end": "2025-02-01"}})
-        assert r.status_code == 400 and "Holdout" in r.json()["detail"]
+        # 2026-09-27: a 2025+ range is no longer refused -- only a malformed one is.
+        r = c.post("/api/tester/run", json={**RUN, "range": {"kind": "custom", "start": "2025-02-02",
+                                                             "end": "2025-01-01"}})
+        assert r.status_code == 400 and "after" in r.json()["detail"]
+        r = c.post("/api/tester/run", json={**RUN, "holdout": {"reason": "x"}})
+        assert r.status_code == 400 and "unknown field" in r.json()["detail"]
         assert c.post("/api/tester/run", json={**RUN, "strategy": "zz"}).status_code == 400
         # Item 7: a non-dict `inputs` is a 400 (a bad request), never a 500.
         for bad_inputs in (["sl_pts"], 5, "sl_pts", True):
@@ -270,10 +273,10 @@ def test_a_grid_goes_from_post_to_cell_bundles_and_counts_its_looks(tmp_path):
 
 def test_grid_requests_the_rules_refuse(tmp_path):
     with client(tmp_path) as c:
-        for bad, word in (({**GRID, "range": {"kind": "custom", "start": "2024-01-01", "end": "2025-03-01"}}, "research window"),
-                          ({**GRID, "holdout": {"reason": "x"}}, "research window"),
+        for bad, word in (({**GRID, "range": {"kind": "custom", "start": "2025-03-01", "end": "2024-01-01"}}, "after"),
+                          ({**GRID, "holdout": {"reason": "x"}}, "unknown field"),
                           ({**GRID, "axes": [{"key": "offset_pts", "values": list(range(61))},
-                                             {"key": "sl_pts", "values": [5]}]}, "at most 60"),
+                                             {"key": "sl_pts", "values": [5]}]}, "capped at 60"),
                           ({**GRID, "axes": GRID["axes"][:1]}, "2 or 3")):
             r = c.post("/api/tester/grid", json=bad)
             assert r.status_code == 400 and word in r.json()["detail"], r.json()
@@ -350,11 +353,11 @@ def test_a_walkforward_goes_from_post_to_a_stitched_result_and_counts_cells_x_st
 
 def test_walkforward_requests_the_rules_refuse(tmp_path):
     with client(tmp_path) as c:
-        for bad, word in (({**WF, "range": {"kind": "custom", "start": "2022-01-01", "end": "2022-06-30"}}, "research window"),
-                          ({**WF, "holdout": {"reason": "x"}}, "research window"),
+        for bad, word in (({**WF, "range": {"kind": "custom", "start": "2022-01-01", "end": "2022-03-31"}}, "too short"),
+                          ({**WF, "holdout": {"reason": "x"}}, "unknown field"),
                           ({**WF, "metric": "win_rate"}, "metric"), ({**WF, "min_trades": 0}, "min_trades"),
                           ({**WF, "axes": [{"key": "offset_pts", "values": list(range(61))},
-                                           {"key": "sl_pts", "values": [5]}]}, "at most 60")):
+                                           {"key": "sl_pts", "values": [5]}]}, "capped at 60")):
             r = c.post("/api/tester/walkforward", json=bad)
             assert r.status_code == 400 and word in r.json()["detail"], r.json()
         assert c.post("/api/tester/walkforward", json=WF, headers=EVIL).status_code == 403
@@ -384,6 +387,22 @@ def test_the_walkforward_scheme_comes_from_the_server(tmp_path):
         assert s["n_steps"] == 45 and (s["first_select"], s["last_select"]) == ("2021-01", "2024-09")
         assert (s["select_months"], s["test_months"], s["step_months"]) == (1, 3, 1)
         assert s["metrics"][0] == ["net_profit", "Net $"] and s["default_min_trades"] == 5
+        assert s["ratios"] == [1, 2, 3] and s["default_test_months"] == 3
+        # the step count follows the ratio AND the window the picker shows
+        one = c.get("/api/tester/walkforward-scheme", params={"test_months": 1}).json()
+        assert one["n_steps"] == 47 and one["test_months"] == 1
+        w = c.get("/api/tester/walkforward-scheme",
+                  params={"test_months": 2, "start": "2025-01-01", "end": "2026-06-30"}).json()
+        assert w["n_steps"] == 16 and w["window"] == {"start": "2025-01-01", "end": "2026-06-30"}
+        short = c.get("/api/tester/walkforward-scheme",
+                      params={"start": "2024-01-01", "end": "2024-02-29"}).json()
+        assert short["n_steps"] == 0 and short["first_select"] is None
+        assert c.get("/api/tester/walkforward-scheme", params={"start": "nope"}).status_code == 400
+        r = c.get("/api/tester/walkforward-scheme", params={"test_months": 5})
+        assert r.status_code == 400 and "test_months" in r.json()["detail"]        # never coerced to 1:3
+        assert c.get("/api/tester/walkforward-scheme", params={"test_months": "2.0"}).status_code in (400, 422)
+        r = c.post("/api/tester/walkforward", json={**WF, "test_months": 2.0})
+        assert r.status_code == 400 and "test_months" in r.json()["detail"]        # a 400, never a 500
         assert c.get("/api/tester/walkforward-scheme", headers=REBIND_HOST).status_code == 403
 
 

@@ -1,6 +1,7 @@
 /* Homebase Charts — the Strategy Tester panel, the pure half:
-     - the run form: defaults from a strategy's input schema, the range presets, the holdout rule
-       the server enforces, the request body, Run vs Update report;
+     - the run form: defaults from a strategy's input schema, the range picker (fixed-window presets,
+       the walk-forward ratios that compose with them, and a typed custom range), the request body,
+       Run vs Update report;
      - the progress text;
      - the report's tiles, tables, trade rows, badges and chart marks;
      - the interval a jump to an old trade can use.
@@ -12,13 +13,84 @@ const Cat = need('HBCatalog', './catalog.js');
 const Tr = need('HBTrade', './trade.js');
 
 const MINUS = '−';
-const HOLDOUT_START = '2025-01-01';
 const DEFAULT_RULES = 'lucid-flex-50k@2026-09-27';
-const REASON_MAX = 200;
-const RANGES = [{ kind: 'research', label: 'Research window 2021–2024' },
-  { kind: 'is_months', label: 'IS months only (Jan/Apr/Jul/Oct)' }, { kind: 'custom', label: 'Custom…' }];
-const HOLDOUT_MSG = 'This range reaches 2025 or later (holdout data): turn on Holdout and give a one-line reason';
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
+
+/* ---- the range picker (one pill -> a menu of presets -> a Custom dialog) ----
+   A form's range is {id, start, end, wf}. `id` names one of the fixed windows below (or 'custom',
+   where start/end are the typed dates). `wf` is null, or a walk-forward ratio 1 | 2 | 3 -- months
+   OUT-of-sample per 1 selection month -- which COMPOSES with whichever window is chosen, so
+   "2025-2026 · WF 1:1" is a walk-forward run over 2025-2026. `end: null` in the table means today
+   (ET: the session clock, not the viewer's). 2026-09-27: nothing here refuses a date any more. */
+const RANGES = [
+  { id: 'research', label: '2021-2024', start: '2021-01-01', end: '2024-12-31' },
+  { id: '2022-2024', label: '2022-2024', start: '2022-01-01', end: '2024-12-31' },
+  { id: '2025-2026', label: '2025-2026', start: '2025-01-01', end: null },
+  { id: 'all', label: 'All (2021-now)', start: '2021-01-01', end: null },
+  { id: 'custom', label: 'Custom date range…', start: null, end: null },
+];
+const WF_RATIOS = [1, 2, 3];
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September',
+  'October', 'November', 'December'];
+const DOW = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+const ET_DAY = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' });
+function today() { return ET_DAY.format(new Date()); }
+const preset = (id) => RANGES.find((r) => r.id === id) || RANGES[0];
+/* A preset's own (start, end) — `end: null` resolves to today. 'custom' has neither. */
+function rangeSpec(id) {
+  const p = preset(id);
+  return { start: p.start, end: p.start && p.end == null ? today() : p.end };
+}
+/* The dates a form's range actually runs over: its preset's, or the typed ones for Custom. */
+function rangeDates(r) { return r && r.id === 'custom' ? { start: r.start || '', end: r.end || '' } : rangeSpec(r ? r.id : 'research'); }
+const daysInMonth = (y, m) => new Date(Date.UTC(y, m, 0)).getUTCDate();
+/* 'YYYY-MM-DD' back, but only for a real calendar date: 2026-02-30 and 2026-13-01 are not dates. */
+function parseDate(text) {
+  const t = String(text == null ? '' : text).trim();
+  if (!ISO.test(t)) return null;
+  const [y, m, d] = t.split('-').map(Number);
+  return m >= 1 && m <= 12 && d >= 1 && d <= daysInMonth(y, m) ? t : null;
+}
+function dateError(text, what) {
+  const t = String(text == null ? '' : text).trim();
+  if (!t) return `${what}: a date, YYYY-MM-DD`;
+  return parseDate(t) ? null : `${what}: "${t}" is not a date (YYYY-MM-DD)`;
+}
+function prettyDate(iso) {
+  const d = parseDate(iso);
+  if (!d) return '—';
+  const [y, m, day] = d.split('-').map(Number);
+  return `${MONTHS_SHORT[m - 1]} ${day}, ${y}`;
+}
+/* The pill's text: the preset's own name (or the custom dates), plus the walk-forward scheme when
+   one is on -- "2021-2024 · WF 1:2". */
+function pillLabel(r) {
+  const base = !r || r.id !== 'custom' ? preset(r ? r.id : 'research').label
+    : (parseDate(r.start) && parseDate(r.end) ? `${prettyDate(r.start)} — ${prettyDate(r.end)}` : 'Custom date range');
+  return r && r.wf ? `${base} · WF 1:${r.wf}` : base;
+}
+const ymOf = (y, m) => `${y}-${String(m).padStart(2, '0')}`;
+function shiftMonth(ym, delta) {
+  const [y, m] = String(ym).split('-').map(Number);
+  const k = (y * 12 + (m - 1)) + delta;
+  return ymOf(Math.floor(k / 12), (k % 12) + 1);
+}
+/* One month of the Custom dialog's calendar: Sunday first, always 6 rows so the grid never jumps
+   height between months. `outside` marks the leading/trailing days of the neighbouring months. */
+function monthGrid(ym) {
+  const [y, m] = String(ym).split('-').map(Number);
+  const lead = new Date(Date.UTC(y, m - 1, 1)).getUTCDay(), weeks = [];
+  for (let w = 0; w < 6; w++) {
+    const row = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(Date.UTC(y, m - 1, 1 + w * 7 + i - lead)), iso = d.toISOString().slice(0, 10);
+      row.push({ iso, day: d.getUTCDate(), outside: iso.slice(0, 7) !== ymOf(y, m) });
+    }
+    weeks.push(row);
+  }
+  return { ym: ymOf(y, m), label: `${MONTHS_LONG[m - 1]} ${y}`, dow: DOW, weeks };
+}
 const ET = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', hourCycle: 'h23', year: 'numeric', month: '2-digit',
   day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
 const COSTS = [['qty', 'Qty', 1, 100, true], ['commission', 'Commission', 0, 100, false], ['slippage_ticks', 'Slippage (ticks)', 0, 20, false]];
@@ -59,8 +131,8 @@ function inputError(inp, v) {
 }
 function defaults(s) {
   return { strategy: s.id, inputs: Object.fromEntries(s.inputs.map((i) => [i.key, i.default])),
-    range: { kind: 'research', start: '', end: '' }, qty: 1, commission: 4, slippage_ticks: 1,
-    prop_rules: DEFAULT_RULES, holdout: { on: false, reason: '' } };
+    range: { id: 'research', start: '', end: '', wf: null }, qty: 1, commission: 4, slippage_ticks: 1,
+    max_cells: DEFAULT_MAX_CELLS, prop_rules: DEFAULT_RULES };
 }
 /* A saved form for strategy s: its valid values over the defaults (anything unknown or invalid is dropped). */
 function restore(saved, s) {
@@ -68,23 +140,29 @@ function restore(saved, s) {
   if (!saved || saved.strategy !== s.id) return f;
   for (const i of s.inputs) { const v = saved.inputs && saved.inputs[i.key]; if (v !== undefined && !inputError(i, v)) f.inputs[i.key] = v; }
   const r = saved.range || {};
-  if (RANGES.some((x) => x.kind === r.kind)) f.range = { kind: r.kind, start: ISO.test(r.start) ? r.start : '', end: ISO.test(r.end) ? r.end : '' };
+  if (RANGES.some((x) => x.id === r.id)) {
+    f.range = { id: r.id, start: ISO.test(r.start) ? r.start : '', end: ISO.test(r.end) ? r.end : '',
+      wf: WF_RATIOS.includes(r.wf) ? r.wf : null };
+  }
   for (const [k, , lo, hi, whole] of COSTS) { const v = saved[k]; if (typeof v === 'number' && v >= lo && v <= hi && (!whole || Number.isInteger(v))) f[k] = v; }
+  if (!maxCellsError(saved.max_cells)) f.max_cells = saved.max_cells;
   if (typeof saved.prop_rules === 'string') f.prop_rules = saved.prop_rules;
-  // C1 (critical, 2026-09-27 review): the Holdout switch is never persisted or restored -- `on` is
-  // always false coming out of restore(), whatever a saved form (or a loaded run, via fromRun below)
-  // says. Approval to spend holdout data is per use, not a standing preference. The reason text alone
-  // is still carried over, so a re-armed switch doesn't force retyping it.
-  if (saved.holdout && typeof saved.holdout.reason === 'string') f.holdout = { on: false, reason: saved.holdout.reason.slice(0, REASON_MAX) };
   return f;
 }
-function fromRun(run, s) {
-  return restore({ strategy: run.strategy.id, inputs: run.inputs,
-    range: { kind: run.range.kind, start: run.range.kind === 'research' ? '' : run.range.start, end: run.range.kind === 'research' ? '' : run.range.end },
-    qty: run.qty, commission: run.commission, slippage_ticks: run.slippage_ticks, prop_rules: run.prop_rules,
-    holdout: { on: !!run.holdout, reason: run.holdout_reason || '' } }, s);
+/* A finished run's own range back onto a picker preset: the fixed window whose dates it matches,
+   else Custom with those dates. A loaded run is always a single run, so never a walk-forward. */
+function rangeFromRun(rng) {
+  if (!rng) return { id: 'research', start: '', end: '' };
+  if (rng.kind === 'research') return { id: 'research', start: '', end: '' };
+  const hit = RANGES.find((x) => x.id !== 'custom' && x.start === rng.start && rangeSpec(x.id).end === rng.end);
+  return hit ? { id: hit.id, start: '', end: '' } : { id: 'custom', start: rng.start || '', end: rng.end || '' };
 }
-function reachesHoldout(r) { return !!r && r.kind !== 'research' && (r.end || '2024-12-31') >= HOLDOUT_START; }
+function fromRun(run, s) {
+  return restore({ strategy: run.strategy.id, inputs: run.inputs, range: rangeFromRun(run.range),
+    qty: run.qty, commission: run.commission, slippage_ticks: run.slippage_ticks,
+    max_cells: run.max_cells, prop_rules: run.prop_rules }, s);
+}
+const isWalkforward = (f) => !!(f && f.range && f.range.wf);
 function problems(f, s) {
   for (const i of s.inputs) { const e = inputError(i, f.inputs[i.key]); if (e) return e; }
   for (const [k, label, lo, hi, whole] of COSTS) {
@@ -92,28 +170,25 @@ function problems(f, s) {
     if (typeof v !== 'number' || !Number.isFinite(v) || v < lo || v > hi || (whole && !Number.isInteger(v))) return `${label}: ${lo} to ${hi}`;
   }
   const r = f.range;
-  if (r.kind === 'custom' && !(ISO.test(r.start) && ISO.test(r.end))) return 'A custom range needs a start and an end date';
-  if (r.kind !== 'research' && r.start && r.end && r.start > r.end) return 'The start date is after the end date';
-  if (reachesHoldout(r)) {
-    const why = (f.holdout.reason || '').trim();
-    if (!f.holdout.on || !why) return HOLDOUT_MSG;
-    if (why.includes('\n') || why.length > REASON_MAX) return `The holdout reason is one line of at most ${REASON_MAX} characters`;
+  if (r.id === 'custom') {
+    const e = dateError(r.start, 'Start date') || dateError(r.end, 'End date');
+    if (e) return e;
   }
+  const { start, end } = rangeDates(r);
+  if (start && end && start > end) return 'The start date is after the end date';
   return null;
 }
+/* The server's own range shape. The default preset stays `{kind: 'research'}` verbatim, so a
+   2021-2024 request is byte for byte the one this tester always sent. */
 function rangeBody(r) {
-  if (r.kind === 'research') return { kind: 'research' };
-  const b = { kind: r.kind };
-  if (r.start) b.start = r.start;
-  if (r.end) b.end = r.end;
-  return b;
+  if (!r || r.id === 'research') return { kind: 'research' };
+  const { start, end } = rangeDates(r);
+  return { kind: 'custom', start, end };
 }
-/* The POST /api/tester/run body. holdout only when the range reaches 2025 (ruling S16: no spend otherwise). */
+/* The POST /api/tester/run body. */
 function body(f) {
-  const b = { strategy: f.strategy, inputs: { ...f.inputs }, range: rangeBody(f.range), qty: f.qty, commission: f.commission,
+  return { strategy: f.strategy, inputs: { ...f.inputs }, range: rangeBody(f.range), qty: f.qty, commission: f.commission,
     slippage_ticks: f.slippage_ticks, prop_rules: f.prop_rules };
-  if (reachesHoldout(f.range)) b.holdout = { reason: f.holdout.reason.trim() };
-  return b;
 }
 const key = (f) => JSON.stringify(body(f));
 function runLabel(f, loadedKey) { return loadedKey && key(f) !== loadedKey ? 'Update report' : 'Run'; }
@@ -363,13 +438,52 @@ function reachSpec(spec, ms, nowMs, cap = 200000) {
   return 'time:86400';
 }
 
-/* ---- the parameter heat-map (research window 2021–2024 only; the server forces it) ---- */
-const MAX_CELLS = 60;
+/* ---- the parameter heat-map (over the range picker's own window) ---- */
+const DEFAULT_MAX_CELLS = 60;      // the Max cells box's default; the viewer may raise it
+const HARD_MAX_CELLS = 400;        // ... but never past here, and the server refuses 401 too
+const GRID_WORKERS = 2;            // grid.py's pool: how many cells actually run at once
 const RANGE_MSG = 'a range is start:end:step with start ≤ end and step > 0';
+function maxCellsError(n) {
+  return Number.isInteger(n) && n >= 1 && n <= HARD_MAX_CELLS ? null
+    : `Max cells: a whole number 1 to ${HARD_MAX_CELLS}`;
+}
+/* Above the default the viewer is told what they are asking for, in the measured per-cell time
+   when a finished grid has given us one (grid.py runs GRID_WORKERS cells at a time). */
+function cellsWarning(n, secPerCell) {
+  if (!(n > DEFAULT_MAX_CELLS)) return '';
+  const each = Number.isFinite(secPerCell) && secPerCell > 0 ? secPerCell : null;
+  return each ? `${n} cells ≈ ${dur((n * each) / GRID_WORKERS)} at ${dur(each)} a cell, ${GRID_WORKERS} at a time`
+    : `${n} cells — above ${DEFAULT_MAX_CELLS} a grid can run for hours; only ${GRID_WORKERS} cells run at a time`;
+}
+/* from / to / steps -> `steps` evenly spaced values, each rounded to the parameter's own step
+   (5, 20, 4 -> 5, 10, 15, 20; steps = 1 -> just `from`). Rounding can land two on the same value:
+   the duplicate is dropped rather than refused, so a coarse step just yields fewer cells. */
+function stepValues(from, to, steps, inp) {
+  const lo = Number(from), hi = Number(to), k = Number(steps);
+  if (String(from).trim() === '' || String(to).trim() === '' || ![lo, hi].every(Number.isFinite)) {
+    return { error: `${inp.label}: from and to are numbers` };
+  }
+  if (!Number.isInteger(k) || k < 1 || k > HARD_MAX_CELLS) return { error: `${inp.label}: steps is a whole number 1 to ${HARD_MAX_CELLS}` };
+  if (k > 1 && !(hi > lo)) return { error: `${inp.label}: to must be above from` };
+  const q = Number.isFinite(inp.step) && inp.step > 0 ? inp.step : null, out = [];
+  for (let i = 0; i < k; i++) {
+    const raw = k === 1 ? lo : lo + (i * (hi - lo)) / (k - 1);
+    const v = Number((q ? Math.round(raw / q) * q : raw).toFixed(6));
+    if (!out.includes(v)) out.push(v);
+  }
+  for (const v of out) { const e = inputError(inp, v); if (e) return { error: e }; }
+  return { values: out };
+}
+/* One axis row -> its values: the free-text list, or from/to/steps when the row is in that mode. */
+function axisValues(row, inp, maxCells) {
+  return row && row.mode === 'range' ? stepValues(row.from, row.to, row.steps, inp)
+    : parseValues(row ? row.text : '', inp, maxCells);
+}
 const decimals = (x) => { const m = /\.(\d+)$/.exec(String(x)); return m ? m[1].length : 0; };
 /* One axis's values from the text box: "5, 10, 15", "5:20:5" (inclusive), mixes of both; bools as on/off
    (true/false); a choice by name. {values} or {error}; every value passes inputError, none twice. */
-function parseValues(text, inp) {
+function parseValues(text, inp, maxCells) {
+  const cap = maxCellsError(maxCells) ? HARD_MAX_CELLS : maxCells;
   const toks = String(text || '').split(/[\s,]+/).filter(Boolean);
   if (!toks.length) return { error: `${inp.label}: enter values` };
   const out = [];
@@ -383,7 +497,7 @@ function parseValues(text, inp) {
     } else if (t.includes(':')) {
       const parts = t.split(':'), [a, b, st] = parts.map(Number);
       if (parts.length !== 3 || ![a, b, st].every(Number.isFinite) || !(st > 0) || a > b) return { error: `${inp.label}: ${RANGE_MSG}` };
-      if ((b - a) / st + 1 > MAX_CELLS + 1e-9) return { error: `${inp.label}: more than ${MAX_CELLS} values` };
+      if ((b - a) / st + 1 > cap + 1e-9) return { error: `${inp.label}: more than ${cap} values` };
       const d = Math.max(decimals(parts[0]), decimals(parts[2]));
       for (let k = 0; ; k++) {
         const v = Number((a + k * st).toFixed(d));
@@ -396,7 +510,7 @@ function parseValues(text, inp) {
       out.push(v);
     }
   }
-  if (out.length > MAX_CELLS) return { error: `${inp.label}: more than ${MAX_CELLS} values` };
+  if (out.length > cap) return { error: `${inp.label}: more than ${cap} values` };
   for (let j = 0; j < out.length; j++) {
     const e = inputError(inp, out[j]);
     if (e) return { error: e };
@@ -405,8 +519,8 @@ function parseValues(text, inp) {
   return { values: out };
 }
 function valueLabel(v) { return typeof v === 'boolean' ? (v ? 'on' : 'off') : String(v); }
-/* The axis rows [{key, text}] (key '' = unused) -> {axes: [{key, values}]} or {error}. */
-function gridAxes(rows, s) {
+/* The axis rows [{key, mode, text | from/to/steps}] (key '' = unused) -> {axes: [{key, values}]} or {error}. */
+function gridAxes(rows, s, maxCells) {
   // Rows and Columns are required; Panels is optional -- a role never shifts into an empty one's place
   if (!rows[0] || !rows[0].key || !rows[1] || !rows[1].key) return { error: 'Pick a parameter for Rows and Columns' };
   const used = rows.slice(0, 3).filter((r) => r.key);
@@ -415,7 +529,7 @@ function gridAxes(rows, s) {
     const inp = s.inputs.find((i) => i.key === r.key);
     if (!inp) return { error: `Unknown parameter ${r.key}` };
     if (axes.some((a) => a.key === r.key)) return { error: `${inp.label} is picked twice` };
-    const p = parseValues(r.text, inp);
+    const p = axisValues(r, inp, maxCells);
     if (p.error) return { error: p.error };
     axes.push({ key: r.key, values: p.values });
   }
@@ -423,10 +537,13 @@ function gridAxes(rows, s) {
 }
 const gridCount = (axes) => axes.reduce((n, a) => n * a.values.length, 1);
 function gridProblems(f, s, rows) {
-  const g = gridAxes(rows, s);
+  const cap = f.max_cells;
+  const capErr = maxCellsError(cap);
+  if (capErr) return capErr;
+  const g = gridAxes(rows, s, cap);
   if (g.error) return g.error;
   const n = gridCount(g.axes);
-  if (n > MAX_CELLS) return `${n} cells: a grid is at most ${MAX_CELLS}`;
+  if (n > cap) return `${n} cells: this grid is capped at ${cap} (raise Max cells, up to ${HARD_MAX_CELLS})`;
   const varied = new Set(g.axes.map((a) => a.key));
   for (const i of s.inputs) { if (!varied.has(i.key)) { const e = inputError(i, f.inputs[i.key]); if (e) return e; } }
   for (const [k, label, lo, hi, whole] of COSTS) {
@@ -435,12 +552,13 @@ function gridProblems(f, s, rows) {
   }
   return null;
 }
-/* The POST /api/tester/grid body: never a range or a holdout -- the heat-map is the research window only. */
+/* The POST /api/tester/grid body: the range picker's own window, and the viewer's cell cap. */
 function gridBody(f, axes) {
   const varied = new Set(axes.map((a) => a.key));
   return { strategy: f.strategy, inputs: Object.fromEntries(Object.entries(f.inputs).filter(([k]) => !varied.has(k))),
-    axes: axes.map((a) => ({ key: a.key, values: [...a.values] })), qty: f.qty, commission: f.commission,
-    slippage_ticks: f.slippage_ticks, prop_rules: f.prop_rules };
+    axes: axes.map((a) => ({ key: a.key, values: [...a.values] })), range: rangeBody(f.range),
+    qty: f.qty, commission: f.commission, slippage_ticks: f.slippage_ticks,
+    max_cells: f.max_cells, prop_rules: f.prop_rules };
 }
 function looksText(n) {
   n = Number.isFinite(n) ? n : 0;
@@ -482,12 +600,21 @@ function gridProgress(st) {
   return { text: '', frac: null, final: false };
 }
 
-/* ---- the walk-forward: 1 month to select, the next 3 to test, stepping monthly, research window 2021-2024 only
-   (homebase/backtest/walkforward.py owns the scheme; these only shape its request and its result) ---- */
+/* ---- the walk-forward: 1 month to select, the next N to test, stepping monthly, over the window the
+   range picker names. It has no tab of its own: picking "Walk-forward 1:N" in the picker turns the
+   Run button into a walk-forward over the chosen window, and the result lands in Overview /
+   Performance summary / List of trades. (homebase/backtest/walkforward.py owns the scheme; these
+   only shape its request and read its result.) ---- */
 const WF_METRICS = [['net_profit', 'Net $'], ['sharpe', 'Sharpe'], ['profit_factor', 'Profit factor'], ['t_stat', 't-stat']];
 const WF_MIN_TRADES_MAX = 1000;
-function wfBody(f, axes, metric, minTrades) { return { ...gridBody(f, axes), metric, min_trades: minTrades }; }
+const WF_NEEDS_GRID = 'Pick the parameters to search on the Heat-map tab first.';
+/* test_months = the ratio's OOS side: "1:2" sends 2. It is part of the request, so it is part of
+   the job's identity -- switching the ratio can never show the other one's result. */
+function wfBody(f, axes, metric, minTrades) {
+  return { ...gridBody(f, axes), metric, min_trades: minTrades, test_months: f.range.wf || 3 };
+}
 function wfProblems(f, s, rows, minTrades) {
+  if (!rows || !rows[0] || !rows[0].key || !rows[1] || !rows[1].key) return WF_NEEDS_GRID;
   const g = gridProblems(f, s, rows);
   if (g) return g;
   if (!Number.isInteger(minTrades) || minTrades < 1 || minTrades > WF_MIN_TRADES_MAX) return `Min trades: a whole number 1 to ${WF_MIN_TRADES_MAX}`;
@@ -521,18 +648,43 @@ function wfProgress(st) {
   return { text: '', frac: null, final: false };
 }
 const span = (a, b) => `${a} → ${b}`;
-function wfTiles(r) {
-  const s = r.stitched.stats, m = r.stitched.months;
+/* One row of tiles for either side of the stitched chain. `which` is 'oos' (the stitched out-of-sample)
+   or 'is' (the selection months those picks were chosen on) -- the user's "and then OOS for each". The
+   two sides span DIFFERENT month counts (1 per leg vs N per leg), so the headline is per MONTH, each side
+   says how many months it covers, and the raw total is labelled as a total over that span. */
+const months_ = (n) => `${int(n)} month${n === 1 ? '' : 's'}`;
+function wfTiles(r, which = 'oos') {
+  const side = which === 'is' ? r.stitched_is : r.stitched;
+  const s = side.stats, m = side.months || [], n = side.n_months ?? m.length, pm = side.per_month || {};
   return [
-    { label: 'Stitched OOS net', value: signed(s.net_profit), sub: m.length ? span(m[0], m[m.length - 1]) : '', tone: toneOf(s.net_profit) },
+    { label: 'Net / month', value: signed(pm.net_profit), sub: `${months_(n)}${m.length ? ' · ' + span(m[0], m[m.length - 1]) : ''}`,
+      tone: toneOf(pm.net_profit) },
+    { label: 'Trades / month', value: num(pm.trades, 1), sub: '', tone: '' },
+    { label: 'Total net', value: signed(s.net_profit), sub: `over ${months_(n)}`, tone: toneOf(s.net_profit) },
     { label: 'Max drawdown', value: Tr.money(s.max_drawdown), sub: '', tone: toneOf(s.max_drawdown) },
     { label: 'Win rate', value: rate(s.win_rate), sub: '', tone: '' },
     { label: 'Profit factor', value: num(s.profit_factor, 2, true), sub: '', tone: '' },
-    { label: 'Sharpe', value: num(s.sharpe), sub: 'weekday grid', tone: '' },
-    { label: 'Trades', value: int(s.trades), sub: '', tone: '' }];
+    { label: 'Sharpe', value: num(s.sharpe), sub: 'weekday grid', tone: '' }];
 }
-const WF_STEP_HEADERS = ['Select', 'Test', 'Chosen params', 'IS net', 'IS trades', 'IS Sharpe',
-  'OOS net', 'OOS trades', 'OOS win %', 'OOS PF', 'OOS Sharpe', 'OOS max DD'];
+const WF_SIDE_LABELS = { is: 'In-sample (selection)', oos: 'Out-of-sample' };
+/* How far the edge fell between the two sides -- per MONTH in $ and %, and in Sharpe (already a rate).
+   Never a difference of raw totals: at 1:3 those span 1 month against 3. */
+function wfDrop(r) {
+  const d = r.drop || {};
+  const pp = (v, f) => (v == null || !Number.isFinite(v) ? '—' : (v > 0 ? '+' : v < 0 ? MINUS : '') + f(Math.abs(v)));
+  const pct = d.pct == null || !Number.isFinite(d.pct) ? '' : ` (${pp(d.pct, (x) => `${Math.round(x)}%`)})`;
+  return `In-sample → out-of-sample, per month: net ${pp(d.net_profit_per_month, (x) => Tr.money(x))}${pct}`
+    + ` · Sharpe ${pp(d.sharpe, (x) => x.toFixed(2))}`;
+}
+/* The months the stitched chain never tests out-of-sample (its last leg did not fit the window). */
+function wfUncovered(r) {
+  const u = (r.stitched && r.stitched.uncovered) || [];
+  return u.length ? `Not tested out-of-sample: ${u.join(', ')}` : '';
+}
+/* The step table's two header rows: the group spans, then the columns themselves. */
+const WF_STEP_GROUPS = [['', 3], [WF_SIDE_LABELS.is, 3], [WF_SIDE_LABELS.oos, 6]];
+const WF_STEP_HEADERS = ['Select', 'Test', 'Chosen params', 'Net', 'Trades', 'Sharpe',
+  'Net', 'Trades', 'Win %', 'PF', 'Sharpe', 'Max DD'];
 function paramsLabel(axes, params) { return axes.map((a) => `${a.label} ${valueLabel(params[a.key])}`).join(' · '); }
 function wfStepRows(r, axes) {
   return r.steps.map((s) => {
@@ -557,15 +709,20 @@ function wfPhases(r) {
   return `Chain phase check (same picks, chain started 1 or 2 months later): ${rest}`;
 }
 function wfScheme(r) {
-  const c = r.scheme;
-  return `Select on ${c.select_months} month by ${c.metric_label} (≥ ${c.min_trades} trades), test the next ${c.test_months}, `
-    + `stepping monthly · ${int(r.n_steps)} steps · stitched: ${c.stitch}`;
+  const c = r.scheme, w = r.window || {};
+  const win = w.start && w.end ? `${w.start} → ${w.end} · ` : '';
+  return `${win}Walk-forward 1:${c.test_months} — select on ${c.select_months} month by ${c.metric_label} `
+    + `(≥ ${c.min_trades} trades), test the next ${c.test_months}, stepping monthly · ${int(r.n_steps)} steps `
+    + `· stitched: ${c.stitch}`;
 }
 
-const api = { MAX_CELLS, parseValues, valueLabel, gridAxes, gridCount, gridProblems, gridBody, looksText, looksLine, heatPanels, heatMaxAbs,
-  WF_METRICS, WF_STEP_HEADERS, wfBody, wfProblems, wfLooksText, etaText, wfProgress, wfTiles, wfStepRows, wfStability, wfPhases,
-  wfScheme,
-  heatLevel, cellView, gridProgress, RANGES, HOLDOUT_START, DEFAULT_RULES, REASON_MAX, defaults, restore, fromRun, reachesHoldout, problems, inputError, body,
+const api = { DEFAULT_MAX_CELLS, HARD_MAX_CELLS, GRID_WORKERS, maxCellsError, cellsWarning, stepValues, axisValues,
+  parseValues, valueLabel, gridAxes, gridCount, gridProblems, gridBody, looksText, looksLine, heatPanels, heatMaxAbs,
+  WF_METRICS, WF_RATIOS, WF_STEP_HEADERS, WF_STEP_GROUPS, WF_SIDE_LABELS, WF_NEEDS_GRID, wfBody, wfProblems, wfLooksText,
+  etaText, wfProgress, wfTiles, wfDrop, wfUncovered, wfStepRows, wfStability, wfPhases, wfScheme,
+  heatLevel, cellView, gridProgress, RANGES, DEFAULT_RULES, defaults, restore, fromRun, rangeFromRun, isWalkforward,
+  today, rangeSpec, rangeDates, rangeBody, parseDate, dateError, prettyDate, pillLabel, monthGrid, shiftMonth,
+  problems, inputError, body,
   key, runLabel, progress, pct, rate, num, dur, fmtEt, tiles, badges, propView, evalOptions, propShown, mcHeadline, mcTiles, mcHistogram, compareRows, paramsDiff,
   summaryRows, periodRows, sortTrades, tradeCells, tradeMarks, equitySeries, reachSpec, toneOf };
 if (typeof window !== 'undefined') window.HBTester = api;

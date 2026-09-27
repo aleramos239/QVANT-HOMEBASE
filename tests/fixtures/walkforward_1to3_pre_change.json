@@ -1,0 +1,660 @@
+{
+ "looks": 33,
+ "n_cells": 3,
+ "n_steps": 11,
+ "phases": [
+  {
+   "net_profit": 1685.0,
+   "phase": 0,
+   "sharpe": 1.9837623105453526,
+   "steps": 4,
+   "trades": 56
+  },
+  {
+   "net_profit": 1629.0,
+   "phase": 1,
+   "sharpe": 1.783351657669367,
+   "steps": 4,
+   "trades": 60
+  },
+  {
+   "net_profit": 843.0,
+   "phase": 2,
+   "sharpe": 1.3067533651998635,
+   "steps": 3,
+   "trades": 46
+  }
+ ],
+ "scheme": {
+  "metric": "net_profit",
+  "metric_label": "Net $",
+  "min_trades": 5,
+  "select_months": 1,
+  "step_months": 1,
+  "stitch": "steps 0, 3, 6, \u2026 (phase 0), each holding its pick for its full 3-month test window: the test windows tile the OOS months once each, never overlapping",
+  "test_months": 3,
+  "tie_break": "best metric (equal to 6 decimals = a tie) \u2192 more trades that month \u2192 lowest cell index"
+ },
+ "skipped_by_error": 1,
+ "stability": {
+  "changes": 5,
+  "distinct": 3,
+  "no_pick": 0,
+  "pairs": 10,
+  "top": {
+   "cell": 0,
+   "count": 6
+  }
+ },
+ "steps": [
+  {
+   "cell": 2,
+   "changed": null,
+   "is": {
+    "avg_trade": 36.0,
+    "max_drawdown": -141.0,
+    "net_profit": 180.0,
+    "profit_factor": 2.276595744680851,
+    "sharpe": 5.090663823418601,
+    "skipped_by_error": 0,
+    "t_stat": 0.7170660316257946,
+    "trades": 5,
+    "win_rate": 60.0
+   },
+   "k": 0,
+   "oos": {
+    "avg_trade": 38.125,
+    "max_drawdown": -267.0,
+    "net_profit": 610.0,
+    "profit_factor": 2.268191268191268,
+    "sharpe": 3.0839652971791227,
+    "skipped_by_error": 0,
+    "t_stat": 1.3392186348502744,
+    "trades": 16,
+    "win_rate": 62.5
+   },
+   "params": {
+    "offset_pts": 12.0
+   },
+   "select": "2022-01",
+   "stitched": true,
+   "test": [
+    "2022-02",
+    "2022-04"
+   ]
+  },
+  {
+   "cell": 1,
+   "changed": true,
+   "is": {
+    "avg_trade": 52.0,
+    "max_drawdown": -109.0,
+    "net_profit": 260.0,
+    "profit_factor": 3.385321100917431,
+    "sharpe": 7.353181078271311,
+    "skipped_by_error": 0,
+    "t_stat": 1.0357620456817034,
+    "trades": 5,
+    "win_rate": 60.0
+   },
+   "k": 1,
+   "oos": {
+    "avg_trade": 29.125,
+    "max_drawdown": -300.0,
+    "net_profit": 466.0,
+    "profit_factor": 1.8146853146853146,
+    "sharpe": 2.3099985233410285,
+    "skipped_by_error": 1,
+    "t_stat": 0.9975042627118977,
+    "trades": 16,
+    "win_rate": 62.5
+   },
+   "params": {
+    "offset_pts": 11.0
+   },
+   "select": "2022-02",
+   "stitched": false,
+   "test": [
+    "2022-03",
+    "2022-05"
+   ]
+  },
+  {
+   "cell": 0,
+   "changed": true,
+   "is": {
+    "avg_trade": 68.0,
+    "max_drawdown": -77.0,
+    "net_profit": 340.0,
+    "profit_factor": 5.415584415584416,
+    "sharpe": 9.615698333124024,
+    "skipped_by_error": 0,
+    "t_stat": 1.3544580597376121,
+    "trades": 5,
+    "win_rate": 60.0
+   },
+   "k": 2,
+   "oos": {
+    "avg_trade": 20.125,
+    "max_drawdown": -252.0,
+    "net_profit": 322.0,
+    "profit_factor": 1.4961479198767333,
+    "sharpe": 1.6139073543390956,
+    "skipped_by_error": 0,
+    "t_stat": 0.6818056552984834,
+    "trades": 16,
+    "win_rate": 56.25
+   },
+   "params": {
+    "offset_pts": 10.0
+   },
+   "select": "2022-03",
+   "stitched": false,
+   "test": [
+    "2022-04",
+    "2022-06"
+   ]
+  },
+  {
+   "cell": 0,
+   "changed": false,
+   "is": {
+    "avg_trade": 23.166666666666668,
+    "max_drawdown": -203.0,
+    "net_profit": 139.0,
+    "profit_factor": 1.6205357142857142,
+    "sharpe": 3.015823369188361,
+    "skipped_by_error": 0,
+    "t_stat": 0.46535164875972673,
+    "trades": 6,
+    "win_rate": 50.0
+   },
+   "k": 3,
+   "oos": {
+    "avg_trade": 25.785714285714285,
+    "max_drawdown": -252.0,
+    "net_profit": 361.0,
+    "profit_factor": 1.6077441077441077,
+    "sharpe": 1.7659312239992004,
+    "skipped_by_error": 0,
+    "t_stat": 0.7623296968710821,
+    "trades": 14,
+    "win_rate": 57.14285714285714
+   },
+   "params": {
+    "offset_pts": 10.0
+   },
+   "select": "2022-04",
+   "stitched": true,
+   "test": [
+    "2022-05",
+    "2022-07"
+   ]
+  },
+  {
+   "cell": 0,
+   "changed": false,
+   "is": {
+    "avg_trade": 16.428571428571427,
+    "max_drawdown": -252.0,
+    "net_profit": 115.0,
+    "profit_factor": 1.4563492063492063,
+    "sharpe": 2.3383427420543854,
+    "skipped_by_error": 0,
+    "t_stat": 0.38972379034239757,
+    "trades": 7,
+    "win_rate": 57.14285714285714
+   },
+   "k": 4,
+   "oos": {
+    "avg_trade": 25.916666666666668,
+    "max_drawdown": -205.0,
+    "net_profit": 311.0,
+    "profit_factor": 1.5685557586837295,
+    "sharpe": 1.558677019239115,
+    "skipped_by_error": 0,
+    "t_stat": 0.6681355045382089,
+    "trades": 12,
+    "win_rate": 58.333333333333336
+   },
+   "params": {
+    "offset_pts": 10.0
+   },
+   "select": "2022-05",
+   "stitched": false,
+   "test": [
+    "2022-06",
+    "2022-08"
+   ]
+  },
+  {
+   "cell": 2,
+   "changed": true,
+   "is": {
+    "avg_trade": -19.0,
+    "max_drawdown": -297.0,
+    "net_profit": -95.0,
+    "profit_factor": 0.6801346801346801,
+    "sharpe": -2.36953351763372,
+    "skipped_by_error": 0,
+    "t_stat": -0.3337702223583278,
+    "trades": 5,
+    "win_rate": 40.0
+   },
+   "k": 5,
+   "oos": {
+    "avg_trade": 3.125,
+    "max_drawdown": -382.0,
+    "net_profit": 50.0,
+    "profit_factor": 1.0672043010752688,
+    "sharpe": 0.253712572310083,
+    "skipped_by_error": 0,
+    "t_stat": 0.10726452910097879,
+    "trades": 16,
+    "win_rate": 50.0
+   },
+   "params": {
+    "offset_pts": 12.0
+   },
+   "select": "2022-06",
+   "stitched": false,
+   "test": [
+    "2022-07",
+    "2022-09"
+   ]
+  },
+  {
+   "cell": 2,
+   "changed": false,
+   "is": {
+    "avg_trade": 56.166666666666664,
+    "max_drawdown": -163.0,
+    "net_profit": 337.0,
+    "profit_factor": 3.067484662576687,
+    "sharpe": 7.0687326502219205,
+    "skipped_by_error": 0,
+    "t_stat": 1.0907291279156583,
+    "trades": 6,
+    "win_rate": 66.66666666666666
+   },
+   "k": 6,
+   "oos": {
+    "avg_trade": 1.6428571428571428,
+    "max_drawdown": -382.0,
+    "net_profit": 23.0,
+    "profit_factor": 1.0377049180327869,
+    "sharpe": 0.1312948265015657,
+    "skipped_by_error": 0,
+    "t_stat": 0.0563726401940453,
+    "trades": 14,
+    "win_rate": 50.0
+   },
+   "params": {
+    "offset_pts": 12.0
+   },
+   "select": "2022-07",
+   "stitched": true,
+   "test": [
+    "2022-08",
+    "2022-10"
+   ]
+  },
+  {
+   "cell": 0,
+   "changed": true,
+   "is": {
+    "avg_trade": 13.0,
+    "max_drawdown": -205.0,
+    "net_profit": 65.0,
+    "profit_factor": 1.3170731707317074,
+    "sharpe": 1.6212597752230717,
+    "skipped_by_error": 0,
+    "t_stat": 0.22836909950832956,
+    "trades": 5,
+    "win_rate": 60.0
+   },
+   "k": 7,
+   "oos": {
+    "avg_trade": 10.125,
+    "max_drawdown": -275.0,
+    "net_profit": 162.0,
+    "profit_factor": 1.243609022556391,
+    "sharpe": 0.8656897165211647,
+    "skipped_by_error": 0,
+    "t_stat": 0.36311188932217414,
+    "trades": 16,
+    "win_rate": 50.0
+   },
+   "params": {
+    "offset_pts": 10.0
+   },
+   "select": "2022-08",
+   "stitched": false,
+   "test": [
+    "2022-09",
+    "2022-11"
+   ]
+  },
+  {
+   "cell": 0,
+   "changed": false,
+   "is": {
+    "avg_trade": 21.5,
+    "max_drawdown": -255.0,
+    "net_profit": 129.0,
+    "profit_factor": 1.5058823529411764,
+    "sharpe": 2.569486613325764,
+    "skipped_by_error": 0,
+    "t_stat": 0.39648039211891567,
+    "trades": 6,
+    "win_rate": 50.0
+   },
+   "k": 8,
+   "oos": {
+    "avg_trade": 33.642857142857146,
+    "max_drawdown": -275.0,
+    "net_profit": 471.0,
+    "profit_factor": 2.148780487804878,
+    "sharpe": 2.650588562282827,
+    "skipped_by_error": 0,
+    "t_stat": 1.1544136317997973,
+    "trades": 14,
+    "win_rate": 64.28571428571429
+   },
+   "params": {
+    "offset_pts": 10.0
+   },
+   "select": "2022-09",
+   "stitched": false,
+   "test": [
+    "2022-10",
+    "2022-12"
+   ]
+  },
+  {
+   "cell": 0,
+   "changed": false,
+   "is": {
+    "avg_trade": -4.285714285714286,
+    "max_drawdown": -225.0,
+    "net_profit": -30.0,
+    "profit_factor": 0.9166666666666666,
+    "sharpe": -0.5691929032993384,
+    "skipped_by_error": 0,
+    "t_stat": -0.09486548388322308,
+    "trades": 7,
+    "win_rate": 42.857142857142854
+   },
+   "k": 9,
+   "oos": {
+    "avg_trade": 57.583333333333336,
+    "max_drawdown": -191.0,
+    "net_profit": 691.0,
+    "profit_factor": 3.867219917012448,
+    "sharpe": 3.951507925563291,
+    "skipped_by_error": 0,
+    "t_stat": 1.8786843088033383,
+    "trades": 12,
+    "win_rate": 75.0
+   },
+   "params": {
+    "offset_pts": 10.0
+   },
+   "select": "2022-10",
+   "stitched": true,
+   "test": [
+    "2022-11",
+    "2023-01"
+   ]
+  },
+  {
+   "cell": 2,
+   "changed": true,
+   "is": {
+    "avg_trade": 6.0,
+    "max_drawdown": -255.0,
+    "net_profit": 30.0,
+    "profit_factor": 1.1176470588235294,
+    "sharpe": 0.7098802784419863,
+    "skipped_by_error": 0,
+    "t_stat": 0.09999305627885147,
+    "trades": 5,
+    "win_rate": 60.0
+   },
+   "k": 10,
+   "oos": {
+    "avg_trade": 43.125,
+    "max_drawdown": -221.0,
+    "net_profit": 690.0,
+    "profit_factor": 2.2432432432432434,
+    "sharpe": 3.1648701077035746,
+    "skipped_by_error": 0,
+    "t_stat": 1.393657875327225,
+    "trades": 16,
+    "win_rate": 62.5
+   },
+   "params": {
+    "offset_pts": 12.0
+   },
+   "select": "2022-11",
+   "stitched": false,
+   "test": [
+    "2022-12",
+    "2023-02"
+   ]
+  }
+ ],
+ "stitched": {
+  "equity": {
+   "drawdown": [
+    -53.0,
+    -35.0,
+    0.0,
+    0.0,
+    -169.0,
+    -267.0,
+    -267.0,
+    -196.0,
+    -54.0,
+    0.0,
+    -116.0,
+    -161.0,
+    -135.0,
+    -82.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    -155.0,
+    -239.0,
+    -252.0,
+    -194.0,
+    -109.0,
+    0.0,
+    -173.0,
+    -35.0,
+    0.0,
+    -120.0,
+    -169.0,
+    -304.0,
+    -368.0,
+    -361.0,
+    -283.0,
+    -134.0,
+    -314.0,
+    -423.0,
+    -505.0,
+    -516.0,
+    -456.0,
+    -485.0,
+    -443.0,
+    -330.0,
+    -146.0,
+    -196.0,
+    -175.0,
+    -83.0,
+    -80.0,
+    -6.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    -131.0,
+    -191.0
+   ],
+   "equity": [
+    -53.0,
+    -35.0,
+    54.0,
+    214.0,
+    45.0,
+    -53.0,
+    -53.0,
+    18.0,
+    160.0,
+    373.0,
+    257.0,
+    212.0,
+    238.0,
+    291.0,
+    415.0,
+    610.0,
+    642.0,
+    745.0,
+    919.0,
+    764.0,
+    680.0,
+    667.0,
+    725.0,
+    810.0,
+    966.0,
+    793.0,
+    931.0,
+    1140.0,
+    1020.0,
+    971.0,
+    836.0,
+    772.0,
+    779.0,
+    857.0,
+    1006.0,
+    826.0,
+    717.0,
+    635.0,
+    624.0,
+    684.0,
+    655.0,
+    697.0,
+    810.0,
+    994.0,
+    944.0,
+    965.0,
+    1057.0,
+    1060.0,
+    1134.0,
+    1279.0,
+    1495.0,
+    1551.0,
+    1678.0,
+    1876.0,
+    1745.0,
+    1685.0
+   ],
+   "t_ms": [
+    1643725860000,
+    1643812260000,
+    1643898660000,
+    1643985060000,
+    1644244260000,
+    1644330660000,
+    1646145060000,
+    1646231460000,
+    1646317860000,
+    1646404260000,
+    1646663460000,
+    1646749860000,
+    1646836260000,
+    1648823460000,
+    1649082660000,
+    1649169060000,
+    1651501860000,
+    1651588260000,
+    1651674660000,
+    1651761060000,
+    1651847460000,
+    1652106660000,
+    1652193060000,
+    1654093860000,
+    1654180260000,
+    1654266660000,
+    1656685860000,
+    1656945060000,
+    1657031460000,
+    1657117860000,
+    1659364260000,
+    1659450660000,
+    1659537060000,
+    1659623460000,
+    1659709860000,
+    1659969060000,
+    1660055460000,
+    1662042660000,
+    1662129060000,
+    1662388260000,
+    1664807460000,
+    1664893860000,
+    1664980260000,
+    1665066660000,
+    1667313060000,
+    1667399460000,
+    1667485860000,
+    1669905060000,
+    1669991460000,
+    1670250660000,
+    1670337060000,
+    1672669860000,
+    1672756260000,
+    1672842660000,
+    1672929060000,
+    1673015460000
+   ]
+  },
+  "legs": [
+   0,
+   3,
+   6,
+   9
+  ],
+  "months": [
+   "2022-02",
+   "2022-03",
+   "2022-04",
+   "2022-05",
+   "2022-06",
+   "2022-07",
+   "2022-08",
+   "2022-09",
+   "2022-10",
+   "2022-11",
+   "2022-12",
+   "2023-01"
+  ],
+  "stats": {
+   "avg_trade": 30.089285714285715,
+   "max_drawdown": -516.0,
+   "net_profit": 1685.0,
+   "profit_factor": 1.8748701973001038,
+   "sharpe": 1.9837623105453526,
+   "skipped_by_error": 0,
+   "t_stat": 1.991619244551051,
+   "trades": 56,
+   "win_rate": 60.71428571428571
+  }
+ },
+ "window": {
+  "end": "2023-02",
+  "start": "2022-01"
+ }
+}

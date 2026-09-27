@@ -1,5 +1,6 @@
-"""Parameter heat-map grids: one strategy, 2 or 3 inputs with value lists, at most 60 cells,
-on the research window 2021-01-01 -> 2024-12-31 ONLY (forced here, server-side).
+"""Parameter heat-map grids: one strategy, 2 or 3 inputs with value lists, at most `max_cells`
+(the page's own Max cells box; 60 by default, 400 the hard ceiling),
+over whatever window the request names (the range picker's preset; 2021-2024 by default).
 
 Every cell is an ordinary tester run -- the request `runner.validate()` builds for a single run
 with the same params, executed by the same `runner exec` child (`--no-lock`: the grid's own
@@ -42,19 +43,26 @@ from pathlib import Path
 from .. import strategies
 from ..paths import repo_root
 from . import runner
-from .discipline import DisciplineError, parse_range
+from .discipline import parse_range
 from .runner import RUN_ID, _now, read_json, write_json
 from .slots import QUIET_MSG, Slots, shared_dir
 from .tape import ARCHIVE, CACHE
 
-MAX_CELLS = 60
+DEFAULT_MAX_CELLS = 60      # what the page's Max cells box starts at
+HARD_MAX_CELLS = 400        # ... and the most it, or any other client, may ask for
 WORKERS = 2
-FIELDS = {"strategy", "inputs", "axes", "range", "qty", "commission", "slippage_ticks", "capital", "prop_rules"}
-RESEARCH_ONLY = "the heat-map runs on the research window 2021–2024 only"
+FIELDS = {"strategy", "inputs", "axes", "range", "qty", "commission", "slippage_ticks", "capital",
+          "max_cells", "prop_rules"}
 SUMMARY_KEYS = ("net_profit", "sharpe", "trades", "win_rate", "profit_factor", "max_drawdown", "t_stat",
                 "avg_trade")
 FINAL = {"done", "error", "cancelled"}
 INTERRUPTED = "interrupted (the chart service restarted)"
+
+
+def _max_cells(v) -> int:
+    if isinstance(v, bool) or not isinstance(v, int) or not 1 <= v <= HARD_MAX_CELLS:
+        raise ValueError(f"max_cells: a whole number 1 to {HARD_MAX_CELLS}")
+    return v
 
 
 def expand(axes: list[dict]) -> list[dict]:
@@ -64,22 +72,12 @@ def expand(axes: list[dict]) -> list[dict]:
             for i, coords in enumerate(itertools.product(*ranges))]
 
 
-def _research_only(body: dict, msg: str = RESEARCH_ONLY) -> None:
-    if "holdout" in body:
-        raise DisciplineError(f"{msg} (no holdout)")
-    rng = body.get("range")
-    if rng is None:
-        return
-    if not (isinstance(rng, dict) and rng.get("kind") == "research" and set(rng) <= {"kind"}):
-        raise DisciplineError(msg)
-
-
 def validate_grid(body) -> dict:
-    """The grid as it will run: resolved axes + one single-run request per cell. ValueError
-    (DisciplineError for the window) with a message for the page on anything refused."""
+    """The grid as it will run: resolved axes + one single-run request per cell, all over the
+    body's own range (2021-2024 when it names none). ValueError (DisciplineError for a malformed
+    window) with a message for the page on anything refused."""
     if not isinstance(body, dict):
         raise ValueError("the body is a JSON object")
-    _research_only(body)
     extra = sorted(set(body) - FIELDS)
     if extra:
         raise ValueError(f"unknown field(s): {', '.join(extra)}")
@@ -108,21 +106,23 @@ def validate_grid(body) -> dict:
             if v in resolved[:j]:
                 raise ValueError(f"{k}: {v!r} twice")
         axes.append({"key": k, "label": schema[k].label, "type": schema[k].type, "values": resolved})
+    cap = _max_cells(body.get("max_cells", DEFAULT_MAX_CELLS))
     n = 1
     for a in axes:
         n *= len(a["values"])
-    if n > MAX_CELLS:
-        raise ValueError(f"{n} cells: a grid is at most {MAX_CELLS}")
+    if n > cap:
+        raise ValueError(f"{n} cells: this grid is capped at {cap} (raise Max cells, up to {HARD_MAX_CELLS})")
     common = {k: body[k] for k in ("qty", "commission", "slippage_ticks", "capital", "prop_rules") if k in body}
+    rng = parse_range(body.get("range"))         # DisciplineError on a malformed window; nothing else refuses
     cells = []
     for c in expand(axes):
-        req = runner.validate({"strategy": cls.id, "inputs": {**base, **c["params"]}, "range": {"kind": "research"},
+        req = runner.validate({"strategy": cls.id, "inputs": {**base, **c["params"]}, "range": body.get("range"),
                                **common})
         cells.append({**c, "req": req})
     first = cells[0]["req"]
     return {"strategy": cls.id, "strategy_name": cls.name, "axes": axes,
             "base": {k: v for k, v in first["inputs"].items() if k not in keys},
-            "range": parse_range({"kind": "research"}).to_dict(),
+            "range": rng.to_dict(), "max_cells": cap,
             **{k: first[k] for k in ("qty", "commission", "slippage_ticks", "capital", "prop_rules")},
             "cells": cells}
 
