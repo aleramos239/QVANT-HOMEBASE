@@ -47,6 +47,7 @@ from .paths import state_dir
 ET = ZoneInfo("America/New_York")
 SPREAD_TOL_PTS = 0.05
 WORKING = {"Working", "PendingNew", "Pending", "Suspended", "PendingReplace"}
+CLOSED = {"Canceled", "Rejected", "Expired", "Completed"}    # an order that can never fill now
 SIBLING_RETRY_S = 2.0
 
 
@@ -117,6 +118,7 @@ class Engine:
         # date -> strategies killed that day (the per-strategy Kill); rebuilt
         # from today's `strategy_killed` journal lines on a restart
         self._killed: dict[str, set[str]] = {}
+        self._kill_locks: dict[str, tuple] = {}    # strategy -> (loop, asyncio.Lock)
         self._load_today()
 
     # --- time & persistence -------------------------------------------------
@@ -167,7 +169,7 @@ class Engine:
                     continue
                 if not isinstance(rec, dict):
                     continue
-                if rec.get("event") == "strategy_killed" \
+                if rec.get("event") in ("strategy_killed", "strategy_kill_requested") \
                         and str(rec.get("et", "")).startswith(today) and rec.get("strategy"):
                     self._killed.setdefault(today, set()).add(str(rec["strategy"]))
                     continue
@@ -696,46 +698,64 @@ class Engine:
         self._save()
         return out
 
+    def _kill_lock(self, name: str) -> asyncio.Lock:
+        """One kill per strategy at a time: a second kill (another chart, a
+        re-click) waits, then finds the run killed and does nothing."""
+        loop = asyncio.get_running_loop()
+        held = self._kill_locks.get(name)
+        if held is None or held[0] is not loop:
+            held = self._kill_locks[name] = (loop, asyncio.Lock())
+        return held[1]
+
     async def kill_strategy(self, name: str, **journal_extra) -> dict:
         """The per-strategy Kill. Marks `name` killed for today FIRST (no
-        alert, signal or timer fire places it again today), then, per account
-        -- its booked accounts plus any account it acted on today -- and
-        nothing else:
-          idle     nothing to do (never flatten a position the bot did not open)
-          placing  the acks are outstanding: _place finishes the kill once
-                   they land (see _kill_after_ack)
-          placed / live / both-filled error   _flatten_state: market out of
-                   THIS strategy's symbol, then cancel its own known orders
+        alert, signal or timer fire places it again today) and journals
+        `strategy_kill_requested` (a restart honours it), then, under the
+        strategy's own lock, per account -- its booked accounts plus any
+        account it acted on today -- and nothing else:
+          idle        nothing to do (never flatten a position the bot did not open)
+          placing     the acks are outstanding: _place finishes the kill once
+                      they land (_kill_after_ack)
+          placed / live / both-filled error   _kill_state: never more than
+                      the bot's own filled quantity, only on its side
+          done (killed already)   nothing
           done, or a failed placement   cancel its own orders still
-                   working; no market order
+                      working; no market order
         Never the account-wide cancel_all / flatten_all, never another
         strategy's orders, never the desk's arm or chart trading. Journals
         `strategy_killed` with every account's result. {account: result};
-        a result carrying "actions" means the bot had acted there."""
+        "acted": True marks an account where the kill ended a running run."""
         cfg = self.cfg.strategies[name]
         self.kill_today(name)
-        states = {st.account: st for st in self.day_states(name)}
-        accounts = list(dict.fromkeys([a["account"] for a in assignments(self.cfg, name)]
-                                      + list(states)))
-        outs = await asyncio.gather(*(self._kill_one(cfg, a, states.get(a)) for a in accounts),
-                                    return_exceptions=True)
-        results = {a: (o if isinstance(o, dict) else
-                       {"ok": False, "error": f"internal error: {type(o).__name__}: {o}",
-                        "actions": []})
-                   for a, o in zip(accounts, outs)}
-        self._save()
-        self.journal("strategy_killed", strategy=name, results=results, **journal_extra)
+        try:
+            self.journal("strategy_kill_requested", strategy=name, **journal_extra)
+        except Exception as e:  # noqa: BLE001 — the kill goes on; it is marked in memory
+            print(f"homebase engine: journal strategy_kill_requested failed: {e!r}", file=sys.stderr)
+        async with self._kill_lock(name):
+            states = {st.account: st for st in self.day_states(name)}    # read INSIDE the lock
+            accounts = list(dict.fromkeys([a["account"] for a in assignments(self.cfg, name)]
+                                          + list(states)))
+            outs = await asyncio.gather(*(self._kill_one(cfg, a, states.get(a)) for a in accounts),
+                                        return_exceptions=True)
+            results = {a: (o if isinstance(o, dict) else
+                           {"ok": False, "error": f"internal error: {type(o).__name__}: {o}",
+                            "actions": []})
+                       for a, o in zip(accounts, outs)}
+            self._save()
+            self.journal("strategy_killed", strategy=name, results=results, **journal_extra)
         return results
 
     async def _kill_one(self, cfg: StrategyCfg, account: str,
                         st: Optional[DayState]) -> dict:
         if st is None or st.status == "idle":
             return {"ok": True, "note": "the bot has not acted on this account today — nothing to do"}
+        if st.status == "done" and st.exit_reason == "killed":
+            return {"ok": True, "note": "already killed — nothing to do"}
         ad = self.adapters.get(account)
         if ad is None:
             return {"ok": False, "error": "account not connected", "actions": []}
         if st.status == "placing":
-            return {"ok": True, "pending": True,
+            return {"ok": True, "acted": True, "pending": True,
                     "note": "its orders are not acknowledged yet — they are cancelled and its "
                             "position flattened as soon as they are"}
         if st.status == "done" or (st.status == "error" and st.exit_reason != "both_filled"):
@@ -759,18 +779,99 @@ class Engine:
                     ok = False
                     acts.append(f"order {i}: status unknown — check it")
             return {"ok": ok, "actions": acts}
-        flat, acts = await self._flatten_state(st, cfg, ad)
-        if flat and st.status in ("placed", "live"):
+        ok, acts = await self._kill_state(st, cfg, ad)
+        if ok and st.status in ("placed", "live"):
             st.status, st.exit_reason = "done", "killed"
-        return {"ok": flat, "actions": acts}
+        return {"ok": ok, "acted": True, "actions": acts}
+
+    async def _kill_state(self, st: DayState, cfg: StrategyCfg,
+                          ad: BrokerAdapter) -> tuple[bool, list[str]]:
+        """The per-strategy kill's own flatten (the global Kill keeps
+        _flatten_state, unchanged). In this order:
+          1. cancel both entries (an entry cannot fill after its cancel);
+          2. read each entry's status: Filled -> that side is the bot's (the
+             run's own entry: its filled qty); an entry whose cancel failed
+             and that is neither Filled nor closed -> unknown: stop here,
+             nothing sold, stop/target left working;
+          3. read the account's net in the bot's symbol;
+          4. market out min(|net|, the bot's filled qty), and ONLY when the
+             net is on the bot's side -- a manual position or another
+             strategy's contracts are never sold beyond that; a net on the
+             other side -> nothing sold, stop/target left working;
+          5. cancel the bot's own stop/target orders.
+        Returns (ok, actions)."""
+        acts: list[str] = []
+        entries = [(i, sign) for i, sign in ((st.upper_id, 1), (st.lower_id, -1)) if i]
+        res = await asyncio.gather(*(ad.cancel_order_by_id(i) for i, _ in entries),
+                                   return_exceptions=True)
+        failed = set()
+        for (i, _), r in zip(entries, res):
+            ok = not isinstance(r, Exception) and r.ok
+            if not ok:
+                failed.add(i)
+            acts.append(f"cancel entry {i}: " + ("ok" if ok else
+                        str(r if isinstance(r, Exception) else r.error)))
+        entry_id = self._entry_id(st) if st.entry_side else None
+        bot_net, unsure = 0, []
+        for i, sign in entries:
+            try:
+                status = await ad.get_order_status(i)
+            except Exception:  # noqa: BLE001
+                status = None
+            if i == entry_id or status == "Filled":
+                q = (st.entry_qty or st.qty) if i == entry_id else st.qty
+                bot_net += sign * int(q or 0)
+            elif i in failed and status not in CLOSED:
+                unsure.append(i)
+        if unsure:
+            acts.append(f"entry {', '.join(unsure)} neither cancelled nor filled — nothing sold, "
+                        "stop/target left working; check it")
+            return False, acts
+        try:
+            net = int(await ad.get_net_position(cfg.symbol) or 0)
+        except Exception as e:  # noqa: BLE001 — unreadable is NOT flat
+            acts.append(f"position unreadable ({e}) — stop/target left working")
+            return False, acts
+        if bot_net and net and (net > 0) == (bot_net > 0):
+            qty, side = min(abs(net), abs(bot_net)), ("Sell" if net > 0 else "Buy")
+            r = await ad.place_order(OrderRequest(symbol=cfg.symbol, side=side, qty=qty,
+                                                  order_type="Market", text="homebase:kill"))
+            acts.append(f"market {side} {qty}: {'ok' if r.ok else r.error}")
+            if not r.ok:
+                acts.append("not flat — stop/target left working")
+                return False, acts
+        elif bot_net and net:
+            acts.append(f"the account's {cfg.symbol} position ({net:+d}) is not on the bot's side "
+                        f"({bot_net:+d}) — nothing sold, stop/target left working; check it")
+            return False, acts
+        elif net:
+            acts.append(f"the bot holds nothing here — the account's {net:+d} is left alone")
+        ids = [i for i in (st.up_sl_id, st.up_tp_id, st.dn_sl_id, st.dn_tp_id) if i]
+        res = await asyncio.gather(*(ad.cancel_order_by_id(i) for i in ids), return_exceptions=True)
+        for i, r in zip(ids, res):
+            ok = not isinstance(r, Exception) and r.ok
+            acts.append(f"cancel {i}: " + ("ok" if ok else
+                        str(r if isinstance(r, Exception) else r.error)))
+        return True, acts
 
     async def _kill_after_ack(self, st: DayState, cfg: StrategyCfg, ad: BrokerAdapter) -> None:
-        flat, acts = await self._flatten_state(st, cfg, ad)
-        if flat and st.status in ("placed", "live"):
-            st.status, st.exit_reason = "done", "killed"
-        self._save()
-        self.journal("strategy_killed_after_ack", strategy=st.strategy, account=st.account,
-                     ok=flat, actions=acts)
+        """A kill that landed while this run was placing, finished now. Never
+        raises into _place: the placement stands as placed either way."""
+        try:
+            async with self._kill_lock(st.strategy):
+                ok, acts = await self._kill_state(st, cfg, ad)
+                if ok and st.status in ("placed", "live"):
+                    st.status, st.exit_reason = "done", "killed"
+                self._save()
+                self.journal("strategy_killed_after_ack", strategy=st.strategy, account=st.account,
+                             ok=ok, actions=acts)
+        except Exception as e:  # noqa: BLE001
+            try:
+                self.journal("strategy_kill_failed", strategy=st.strategy, account=st.account,
+                             error=f"{type(e).__name__}: {e}"[:300])
+            except Exception as e2:  # noqa: BLE001
+                print(f"homebase engine: kill after ack failed ({e!r}); journal failed ({e2!r})",
+                      file=sys.stderr)
 
     async def _flatten_state(self, st: DayState, cfg: StrategyCfg,
                              ad: BrokerAdapter) -> tuple[bool, list[str]]:

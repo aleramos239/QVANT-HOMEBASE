@@ -14,9 +14,12 @@ account. Statuses: traded | skipped | refused | no_fill | killed | error.
           round trip; left out when the fills cannot be matched
 
 ts values are epoch milliseconds. Today's run is left out until it has a
-result (an entry, a cancel, a skip, ...). Malformed journal lines are
-skipped. JournalCache reads the file again only when its size or mtime
-changes (the desk reads it in a thread: asyncio.to_thread)."""
+result (an entry, a cancel, a skip, ...). A kill (the chart's per-bot
+Kill, or the desk's Kill) marks a run killed only if it has no exit yet: a
+finished trade keeps its real exit. Malformed journal lines (and a
+non-string account) are skipped. JournalCache parses only the bytes appended
+since the last read (a full re-read only when the file shrank or was
+replaced); the desk calls it in a thread (asyncio.to_thread)."""
 from __future__ import annotations
 
 import datetime as dt
@@ -59,16 +62,23 @@ def parse_lines(lines: Iterable[str]) -> list[dict]:
 
 
 class JournalCache:
-    """The journal's records, re-read only when (size, mtime) changes."""
+    """The journal's records, parsed incrementally: each call reads only the
+    complete lines appended since the last one (the journal is append-only).
+    The file shrinking, being replaced (another inode) or changing without
+    growing -> one full re-read. Unchanged (size, mtime) -> no read at all."""
 
     def __init__(self):
-        self._key: Optional[tuple] = None
+        self._ident: Optional[tuple] = None   # (path, inode)
+        self._off = 0                         # bytes parsed so far (always a line end)
+        self._stamp: Optional[tuple] = None   # (size, mtime_ns) at the last call
         self._recs: list[dict] = []
         self._lock = threading.Lock()        # called from worker threads (asyncio.to_thread)
 
     @staticmethod
-    def _read(path: Path) -> list[dict]:
-        return parse_lines(path.read_text(errors="replace").splitlines())
+    def _read_from(path: Path, offset: int, size: int) -> bytes:
+        with open(path, "rb") as f:
+            f.seek(offset)
+            return f.read(size - offset)
 
     def records(self, path: Path) -> list[dict]:
         with self._lock:
@@ -76,13 +86,23 @@ class JournalCache:
                 st = path.stat()
             except OSError:
                 return []
-            key = (str(path), st.st_size, st.st_mtime_ns)
-            if key != self._key:
+            stamp = (st.st_size, st.st_mtime_ns)
+            if stamp == self._stamp and self._ident == (str(path), st.st_ino):
+                return self._recs
+            if self._ident != (str(path), st.st_ino) or st.st_size < self._off \
+                    or (self._stamp is not None and st.st_size == self._stamp[0]):
+                self._ident, self._off, self._recs = (str(path), st.st_ino), 0, []
+            if st.st_size > self._off:
                 try:
-                    recs = self._read(path)
-                except (OSError, ValueError):
+                    chunk = self._read_from(path, self._off, st.st_size)
+                except OSError:
                     return []
-                self._recs, self._key = recs, key
+                end = chunk.rfind(b"\n")
+                if end >= 0:                  # only whole lines; a partial tail waits
+                    new = parse_lines(chunk[:end].decode("utf-8", errors="replace").splitlines())
+                    self._recs = self._recs + new     # a new list: a reader's copy never changes
+                    self._off += end + 1
+            self._stamp = stamp
             return self._recs
 
 
@@ -109,6 +129,12 @@ def runs(records: Iterable[dict], strategy: str, *, symbol: str, today: str,
                                                  "reason": None, "killed": False,
                                                  "resolved": False})
 
+    def killed(date, account) -> None:
+        """A kill ends only a run still going: one that already exited keeps its real exit."""
+        r = run_of(date, account)
+        if r["exit"] is None:
+            r["killed"] = r["flat"] = r["resolved"] = True
+
     for rec in records:
         et, ev = rec.get("et"), rec.get("event")
         if not isinstance(et, str) or len(et) < 10 or not isinstance(ev, str):
@@ -120,12 +146,13 @@ def runs(records: Iterable[dict], strategy: str, *, symbol: str, today: str,
             for key in (rec.get("strategies") or {}) if isinstance(rec.get("strategies"), dict) else ():
                 name, _, account = str(key).partition("@")
                 if name == strategy and account:
-                    r = run_of(date, account)
-                    r["killed"] = r["flat"] = r["resolved"] = True
+                    killed(date, account)
             continue
         if rec.get("strategy") != strategy:
             continue
         account = rec.get("account")
+        if account is not None and not isinstance(account, str):
+            continue                                   # malformed: never a dict key
         ts = _ms(rec)
         if ev == "placed" and account:
             r = run_of(date, account)
@@ -174,15 +201,15 @@ def runs(records: Iterable[dict], strategy: str, *, symbol: str, today: str,
             if rec.get("reason") not in _IGNORED_REFUSALS:
                 day.setdefault(date, {}).setdefault("refused", rec.get("reason"))
         elif ev == "strategy_killed_after_ack" and account:     # killed while placing
-            r = run_of(date, account)
-            r["killed"] = r["flat"] = r["resolved"] = True
+            killed(date, account)
+        elif ev == "strategy_kill_requested":
+            day.setdefault(date, {})["killed"] = True
         elif ev == "strategy_killed":
             day.setdefault(date, {})["killed"] = True
             results = rec.get("results") if isinstance(rec.get("results"), dict) else {}
             for a, res in results.items():
-                if isinstance(res, dict) and "actions" in res:     # the bot had acted there
-                    r = run_of(date, a)
-                    r["killed"] = r["flat"] = r["resolved"] = True
+                if isinstance(res, dict) and res.get("acted"):    # it ended a running run there
+                    killed(date, a)
 
     out = []
     for (date, account), r in acct.items():

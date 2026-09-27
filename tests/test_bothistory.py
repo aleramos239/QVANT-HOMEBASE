@@ -157,7 +157,7 @@ def test_errors_kills_and_flat_exits():
 def test_a_chart_kill_marks_only_the_accounts_it_acted_on():
     recs = [placed("2026-09-14", "a1"), placed("2026-09-14", "a2"),
             rec("strategy_killed", "2026-09-14", "09:35:00", strategy="nq930",
-                results={"a1": {"ok": True, "actions": ["cancel 1: ok"]},
+                results={"a1": {"ok": True, "acted": True, "actions": ["cancel 1: ok"]},
                          "a2": {"ok": True, "note": "nothing to do"}}),
             rec("cancelled_unfilled", "2026-09-14", "12:55:00", strategy="nq930", account="a2")]
     a1, a2 = history(recs)
@@ -173,24 +173,66 @@ def test_window_other_strategies_and_todays_unresolved_run():
     assert [r["date"] for r in history(recs, days=200)] == ["2026-05-01"]
 
 
-def test_the_journal_is_read_once_per_change(tmp_path):
+def test_the_journal_is_parsed_incrementally(tmp_path):
+    """Fix round 1 (review Minor 8): only the bytes appended since the last read are parsed;
+    a partial last line waits; a shrunk (or replaced) file is read again from the start."""
     p = tmp_path / "journal.jsonl"
-    p.write_text(json.dumps(placed("2026-09-14", "a1")) + "\nbroken\n")
+    first = json.dumps(placed("2026-09-14", "a1")) + "\nbroken\n"
+    p.write_text(first)
     cache = JournalCache()
     reads = []
-    orig = cache._read
+    orig = cache._read_from
 
-    def counting(path):
-        reads.append(path)
-        return orig(path)
+    def counting(path, offset, size):
+        reads.append((offset, size))
+        return orig(path, offset, size)
 
-    cache._read = counting
+    cache._read_from = counting
     assert len(cache.records(p)) == 1 and len(cache.records(p)) == 1
-    assert len(reads) == 1
+    assert reads == [(0, len(first))]                       # unchanged: no second read
+    second = json.dumps(placed("2026-09-15", "a1"))
     with open(p, "a") as f:
-        f.write(json.dumps(placed("2026-09-15", "a1")) + "\n")
-    assert len(cache.records(p)) == 2 and len(reads) == 2
+        f.write(second[:20])                                 # a line still being written
+    assert len(cache.records(p)) == 1
+    with open(p, "a") as f:
+        f.write(second[20:] + "\n")
+    assert len(cache.records(p)) == 2
+    assert reads[1][0] == len(first) and reads[2][0] == len(first)     # never from 0 again
+    p.write_text(json.dumps(placed("2026-09-16", "a1")) + "\n")       # shrank: read from 0
+    recs = cache.records(p)
+    assert len(recs) == 1 and recs[0]["et"].startswith("2026-09-16") and reads[-1][0] == 0
     assert cache.records(tmp_path / "missing.jsonl") == []
+
+
+def test_a_kill_after_the_exit_leaves_the_trade_as_it_was():
+    """Fix round 1 (review Important 4): a TP day killed at 11:00 is still a TP day."""
+    base = [placed("2026-09-14", "a1"),
+            rec("entry_fill", "2026-09-14", "09:30:02", strategy="nq930", account="a1", side="Buy",
+                fill=30910.0, qty_filled=2),
+            rec("exit_fill", "2026-09-14", "09:41:00", strategy="nq930", account="a1", reason="tp",
+                fill=30925.0)]
+    for kill in (rec("strategy_killed", "2026-09-14", "11:00:00", strategy="nq930",
+                     results={"a1": {"ok": True, "actions": []}}),
+                 rec("strategy_killed", "2026-09-14", "11:00:00", strategy="nq930",
+                     results={"a1": {"ok": True, "acted": True, "actions": []}}),
+                 rec("kill_switch", "2026-09-14", "11:00:00", results={},
+                     strategies={"nq930@a1": []})):
+        (r,) = history(base + [kill])
+        assert (r["status"], r["exit"]["kind"], r["pnl_usd"]) == ("traded", "tp", 592.0), kill["event"]
+
+
+def test_a_non_string_account_is_skipped():
+    recs = [placed("2026-09-14", "a1"),
+            {**placed("2026-09-14", "a1"), "account": ["x"]},
+            {**placed("2026-09-15", "a1"), "account": {"x": 1}},
+            rec("cancelled_unfilled", "2026-09-14", "12:55:00", strategy="nq930", account="a1")]
+    assert [(r["date"], r["account"]) for r in history(recs)] == [("2026-09-14", "a1")]
+
+
+def test_a_kill_request_alone_marks_the_day_killed():
+    recs = [rec("strategy_kill_requested", "2026-09-14", "09:10:00", strategy="nq930")]
+    assert history(recs) == [{"date": "2026-09-14", "account": None, "status": "killed",
+                              "reason": "killed from the chart", "legs": []}]
 
 
 def test_days_are_1_to_400_default_120():

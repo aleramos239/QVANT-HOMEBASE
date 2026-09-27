@@ -433,7 +433,7 @@ class FakeDesk:
                 acts.append(f"cancel {oid}: ok")
             if st["status"] in ("placed", "live"):
                 st.update(status="done", exit_reason="killed")
-            results[aid] = {"ok": True, "actions": acts}
+            results[aid] = {"ok": True, "acted": True, "actions": acts}
             self.changed(aid)
         if s["day_status"] in ("placed", "live"):
             s["day_status"] = "done"

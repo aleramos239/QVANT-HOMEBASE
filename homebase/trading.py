@@ -111,6 +111,9 @@ _ORDER_ID = re.compile(r"[0-9]{1,20}")
 # asyncio loop. View refresh (periodic + push-triggered) is paused in this
 # narrow window, on weekdays, regardless of what else is going on.
 VIEW_PAUSE_FROM, VIEW_PAUSE_UNTIL = dt.time(9, 29, 50), dt.time(9, 30, 30)
+# bot-history (a journal parse in a thread) keeps clear of the fire for longer:
+# a request started just before 09:29:50 must not still be parsing at 09:30
+HISTORY_PAUSE_FROM = dt.time(9, 29)
 SETTINGS_PAUSED = ("settings can't change 09:29:50–09:30:30 or while the bot is placing "
                    "— try again in a moment")
 
@@ -489,6 +492,14 @@ class ChartDesk:
     # --- controller ruling P2: protect the 9:30 fire from view work ------------
     def views_paused(self) -> bool:
         """Public: desk_api's stream holds its serialization on this (P2)."""
+        return self._views_paused()
+
+    def history_paused(self) -> bool:
+        """bot-history answers 503 from 09:29:00 to 09:30:30 ET on weekdays,
+        and whenever the views are paused (a bot placing)."""
+        now = self.engine.now_et()
+        if now.weekday() < 5 and HISTORY_PAUSE_FROM <= now.time() < VIEW_PAUSE_UNTIL:
+            return True
         return self._views_paused()
 
     def _views_paused(self) -> bool:
