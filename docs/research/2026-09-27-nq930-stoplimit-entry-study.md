@@ -1,8 +1,7 @@
 # NQ 9:30 straddle: would Stop-Limit entries improve the fills? (study, 2026-09-27)
 
-Status: **PREREGISTERED — written and committed before any run.** Results are appended
-below the prereg in a later commit; nothing above the "Results" heading changes after
-the prereg commit.
+Status: **PREREGISTERED** (commit ef7a8d1, before any run) — **RESULTS appended below.**
+Nothing above the "Results" heading changed after the prereg commit except this status line.
 
 ## 1. Question
 
@@ -105,4 +104,113 @@ answer needs live fills; the fill tracker does not exist yet.
 
 ## Results
 
-_(appended after the run)_
+Run 2026-09-27 on the prereg commit's rules (engine commit 867fbce), script
+`docs/research/nq930_stoplimit_study.py`, raw numbers in
+`docs/research/2026-09-27-nq930-stoplimit-entry-study.json`.
+
+- Sample: 825 NQ sessions 2021-09-22 → 2024-12-31, 2 skipped for coverage holes, 823
+  trades in every cell. 2025+ not loaded (the script asserts it).
+- Live desk config confirmed through `desk_cfg`: off 5 / SL 5 / TP 15, ungated, cancel
+  12:55, flat 15:55.
+- **Default is byte-identical:** the baseline trade ledger from this branch (default
+  inputs, and `entry_limit_ticks = 0`) hashes the same as the ledger from `main`'s engine
+  (sha256 `456ba86e…`). Golden parity 22/22 (21 sessions + the fixture check).
+
+Per contract, $4 round turn. RR is the realised avg win : avg loss (1:2.70 in every
+stop-limit cell). "Capped" = fills on the baseline's own entry print at a better price.
+"Switched" = a different entry print than the baseline (every one the same side,
+filled later on the resting limit).
+
+| cell | filled | missed | switched | capped | WR | net $ | avg $/trade | PF | Sharpe | t | maxDD $ | green yrs | yrs ≥ base | helps (rule) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| baseline (stop-market, 1 t) | 823 | 0 | – | – | 26.9% | −652 | −0.79 | 0.99 | −0.07 | −0.13 | −5,779 | 2/4 | – | – |
+| SL+1 | 823 | 0 | 19 | 61 | 26.7% | −1,027 | −1.25 | 0.98 | −0.11 | −0.20 | −6,159 | 2/4 | 3 | no |
+| SL+2 | 823 | 0 | 14 | 5 | 26.9% | −627 | −0.76 | 0.99 | −0.07 | −0.12 | −5,774 | 2/4 | 4 | yes |
+| SL+3 | 823 | 0 | 9 | 5 | 26.9% | −652 | −0.79 | 0.99 | −0.07 | −0.13 | −5,784 | 2/4 | 3 | yes (tie) |
+| SL+4 | 823 | 0 | 8 | 1 | 26.9% | −637 | −0.77 | 0.99 | −0.07 | −0.12 | −5,774 | 2/4 | 4 | yes |
+| SL+6 | 823 | 0 | 3 | 3 | 27.0% | −247 | −0.30 | 1.00 | −0.03 | −0.05 | −5,784 | 2/4 | 3 | yes |
+| SL+8 | 823 | 0 | 2 | 1 | 26.9% | −647 | −0.79 | 0.99 | −0.07 | −0.13 | −5,784 | 2/4 | 3 | yes |
+| *baseline, 0 t slip* | 823 | 0 | – | – | 27.8% | +5,668 | +6.89 | 1.09 | 0.60 | 1.10 | −3,368 | 2/4 | – | – |
+| *baseline, 2 t slip* | 823 | 0 | – | – | 25.5% | −8,177 | −9.94 | 0.88 | −0.86 | −1.59 | −9,904 | 1/4 | – | – |
+
+Net by year ($, per contract):
+
+| cell | 2021 (Sep-Dec) | 2022 | 2023 | 2024 |
+|---|---|---|---|---|
+| baseline | −894 | −2,290 | +610 | +1,922 |
+| SL+1 | −889 | −2,680 | +615 | +1,927 |
+| SL+2 | −894 | −2,285 | +610 | +1,942 |
+| SL+3 | −894 | −2,295 | +610 | +1,927 |
+| SL+4 | −894 | −2,285 | +610 | +1,932 |
+| SL+6 | −894 | −2,295 | +610 | +2,332 |
+| SL+8 | −894 | −2,295 | +610 | +1,932 |
+| baseline 0 t | −624 | −155 | +2,760 | +3,687 |
+| baseline 2 t | −1,164 | −4,905 | −2,350 | +242 |
+
+At the book's 10 contracts every dollar figure is ×10 (e.g. baseline −$6,520, maxDD
+−$57,790); WR, PF, Sharpe and t are unchanged.
+
+Descriptive (not a cell): how far past the trigger the triggering print sat, on the 823
+baseline entries: **0 ticks 743 (90.3%)**, 1 tick 61 (7.4%), 2 ticks 5, 3 ticks 5,
+4-10 ticks 9 (2.3% at 2+ ticks; max 10).
+
+Where each cell's difference from the baseline comes from:
+
+| cell | capped fills: net change | switched fills: net change | trades whose outcome flipped |
+|---|---|---|---|
+| SL+1 | +$10 on 61 fills (1 tick better = $305 of entry price) | −$385 on 19 | 3 |
+| SL+2 | +$5 on 5 | +$20 on 14 | 2 |
+| SL+3 | $0 on 5 | $0 on 9 | 2 (one each way) |
+| SL+4 | $0 on 1 | +$15 on 8 | 2 |
+| SL+6 | −$5 on 3 | +$410 on 3 | 1 |
+| SL+8 | $0 on 1 | +$5 on 2 | 0 |
+
+### Verdict against the preregistered rule
+
+By the letter of the rule, **SL+2 is the smallest cell that "helps"** (SL+3, 4, 6 and 8
+also pass; SL+1 fails on net). But the rule has no minimum effect size and passes ties:
+SL+2's "gain" is +$25 over 823 trades ($0.03 a trade), and every cell's difference comes
+from 0-3 trades whose outcome flipped (SL+6's +$405 is one trade). **Plain reading: a
+Stop-Limit entry makes no measurable difference to the NQ 9:30 straddle under this fill
+model.** Not supported as an improvement; not refuted as harmful either (except SL+1,
+slightly negative).
+
+### Why it makes no difference (plain English)
+
+1. **The open rarely gaps the trigger.** Nine entries in ten trigger on a print exactly
+   at the stop price, so a stop-limit fills at the same price as the stop-market.
+2. **The desk moves the bracket to the fill.** SL and TP sit a fixed distance from the
+   actual fill, so every trade wins +15 pts or loses −5 pts (minus exit slip and
+   commission; the rare 15:55 time exit aside) whatever the entry price was. A better entry only shifts the bracket; it
+   does not add dollars. SL+1 got 61 entries one tick better ($305 of price) and that
+   was worth $10 of P&L.
+3. **When the trigger does gap past the limit, price comes straight back.** No cell
+   missed a single trade: every gapped order filled on the whip-back, median ~40-60 ms
+   later (max ~142 s). The whip-back fills are slightly worse on average at SL+1
+   (−$385 on 19): when price snaps back through the limit the breakout was weaker.
+4. **What does move the result is slippage itself**, and most of that is on the
+   protective stop, which a stop-limit entry does not touch: 0 / 1 / 2 ticks per side
+   gives +$5,668 / −$652 / −$8,177 per contract, roughly $7k per tick over 823 trades.
+
+### Caveats
+
+- **The model fixes touch slippage at 1 tick.** On a touch print the stop-market pays
+  trigger + 1 tick and a stop-limit N ≥ 1 pays the same. If live stop entries routinely
+  slip 2+ ticks (a queue behind the stop run), a +1/+2 tick limit could cap that — and
+  could then miss trades the engine cannot see. This study cannot answer that; only live
+  fills can.
+- **Capped fills assume the limit fills whenever the print is inside it.** A real
+  marketable limit behind the stop queue may not. Here that affected 1-61 fills per cell
+  and was worth ≤ $10, so it does not change the verdict.
+- **Resting fills use the house 1-tick penetration rule**, a proxy for queue position,
+  not a queue model.
+- **Live fill quality is unmeasured** until the fill-quality tracker (plan Task 3)
+  exists. That is the next evidence, not another backtest.
+- The baseline's own result on this window (PF 0.99, t −0.13) is context, not a new
+  verdict on the strategy: the 2021-24 window is ~300+ cells deep for this family, and
+  this study was about the entry order, not the signal.
+- The study adds 7 cells + 2 slippage lines of exposure on 2021-24 for the NQ
+  930-straddle family (same signal, execution variants only).
+
+**Recommendation:** keep the desk on stop-market entries. Revisit only if the fill tracker
+shows routine entry slippage of 2+ ticks.
