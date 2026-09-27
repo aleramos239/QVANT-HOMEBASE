@@ -155,9 +155,8 @@ def test_order_route_validates_then_answers_per_account(desk_client):
     assert c.post("/api/trade/order", headers=c.H, content=b"not json").status_code == 400
 
 
-def test_the_tunneled_hook_app_has_no_trade_routes(desk_client):
-    paths = {r.path for r in desk_client.app.state.hook_app.routes if hasattr(r, "path")}
-    assert not any(p.startswith("/api/trade") or p == "/api/chart-trading" for p in paths)
+def test_there_is_no_tunneled_hook_app_any_more(desk_client):
+    assert not hasattr(desk_client.app.state, "hook_app")      # webhook removed 2026-09-27
 
 
 # --- the desk page's switch ----------------------------------------------------------------

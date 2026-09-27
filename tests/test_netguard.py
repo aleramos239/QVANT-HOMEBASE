@@ -257,8 +257,8 @@ def test_a_rebinding_host_cannot_read_the_desk(desk, url):
 def test_reads_from_an_allowed_host_still_work(desk):
     """GET/HEAD/OPTIONS skip only the Origin and Content-Type checks."""
     for host in ("127.0.0.1:8850", "localhost:8850", "[::1]:8850", f"{TS}:8850"):
-        r = desk.get("/api/tv-setup", headers={"host": host})
-        assert r.status_code == 200 and r.json()["secret"] == "tv-secret", host
+        r = desk.get("/api/status", headers={"host": host})
+        assert r.status_code == 200 and "tv-secret" not in r.text, host
     assert desk.get("/", headers={"origin": "https://evil.example"}).status_code == 200
     assert desk.get("/api/status", headers={"origin": "https://evil.example",
                                             "content-type": "text/plain"}).status_code == 200
@@ -273,7 +273,8 @@ def test_every_post_route_on_the_main_app_is_guarded(desk):
     loopback Host only, any Origin refused, desk key) refuses text/plain."""
     posts = sorted({r.path for r in desk.app.routes if "POST" in getattr(r, "methods", set())}
                    | {"/api/chart-trading"})           # included via its router
-    assert {"/api/arm", "/api/kill", "/api/selftest-order", "/hook"} <= set(posts)
+    assert {"/api/arm", "/api/kill", "/api/selftest-order"} <= set(posts)
+    assert "/hook" not in posts           # the TradingView webhook was removed 2026-09-27
     for p in posts:
         assert desk.post(p, content="{}", headers={"content-type": "text/plain"}).status_code \
             == 415, p
@@ -324,22 +325,17 @@ def test_same_origin_json_alone_uses_the_allowlist(tmp_path):
 
 
 # --- the public hook app on :8851 is untouched ---------------------------------------------
-def test_the_hook_app_is_unaffected_by_the_guard(desk):
-    """TradingView reaches /hook through the tunnel with its own Host, maybe
-    text/plain: the hook app answers exactly as before (the secret gates it)."""
-    hc = TestClient(desk.app.state.hook_app, base_url="https://abc-def.trycloudflare.com")
-    body = json.dumps({"secret": "tv-secret", "strategy": "nq930",
-                       "upper": 24510.0, "lower": 24490.0})
-    r = hc.post("/hook", content=body, headers={"content-type": "text/plain; charset=utf-8",
-                                               "origin": "https://evil.example"})
-    assert r.status_code == 200 and r.json()["ok"] in (True, False)
-    assert hc.post("/hook", content=body.replace("tv-secret", "nope"),
-                   headers={"content-type": "text/plain"}).status_code == 401
-    mw = [m.cls.__name__ for m in desk.app.state.hook_app.user_middleware]
-    assert mw == []
+def test_the_webhook_is_gone(desk):
+    """Removed 2026-09-27 at the user's request: no /hook route, no hook-only app/listener, no
+    tv-setup / hook-url routes, and the secret is never served."""
+    assert not hasattr(desk.app.state, "hook_app")
+    paths = {r.path for r in desk.app.routes if hasattr(r, "path")}
+    assert not {"/hook", "/api/tv-setup", "/api/hook-url"} & paths
+    body = '{"secret": "tv-secret", "strategy": "nq930", "upper": 1, "lower": 0}'
+    r = desk.post("/hook", content=body, headers={"content-type": "application/json",
+                                                  "host": "127.0.0.1:8850"})
+    assert r.status_code in (404, 405)
 
-
-# --- config ------------------------------------------------------------------------------------
 def test_allowed_hosts_round_trips_through_config(tmp_path, monkeypatch):
     monkeypatch.setattr(config_mod, "config_path", lambda: tmp_path / "config.json")
     assert config_mod.load().allowed_hosts == []

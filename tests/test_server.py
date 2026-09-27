@@ -44,20 +44,6 @@ def client(tmp_path, monkeypatch):
         yield c
 
 
-def test_hook_rejects_bad_secret(client):
-    r = client.post("/hook", json={"secret": "wrong", "strategy": "nq930",
-                                   "upper": 24510.0, "lower": 24490.0})
-    assert r.status_code == 401
-
-
-def test_hook_good_secret_dry_run(client):
-    r = client.post("/hook", json={"secret": "tv-secret", "strategy": "nq930",
-                                   "upper": 24510.0, "lower": 24490.0})
-    assert r.status_code == 200
-    assert r.json()["ok"] in (True, False)      # window-dependent, never 500
-    assert client.adapter.brackets == []        # disarmed: nothing placed
-
-
 def test_status_shape(client):
     d = client.get("/api/status").json()
     assert d["armed"] is False
@@ -67,24 +53,6 @@ def test_status_shape(client):
     assert "research" in s and "live" in s
     assert d["book"] == {"nq930": [{"account": "main", "qty": 3}]}
     assert d["accounts"]["main"]["label"] == "MAIN"
-
-
-def test_hook_app_exposes_only_the_hook(client):
-    hook_app = client.app.state.hook_app
-    paths = {r.path for r in hook_app.routes if hasattr(r, "path")}
-    assert "/hook" in paths
-    assert not any(p.startswith("/api") or p == "/" for p in paths)
-    hc = TestClient(hook_app)
-    assert hc.post("/hook", json={"secret": "tv-secret", "strategy": "nq930",
-                                  "upper": 24510.0,
-                                  "lower": 24490.0}).status_code == 200
-    assert hc.get("/api/status").status_code == 404
-
-
-def test_hook_url_persists_into_tv_setup(client):
-    client.post("/api/hook-url", json={"url": "https://x.trycloudflare.com/"})
-    d = client.get("/api/tv-setup").json()
-    assert d["public_hook_url"] == "https://x.trycloudflare.com/hook"
 
 
 def test_arm_toggle_persists(client):
@@ -439,3 +407,21 @@ def test_a_missing_pin_shows_its_reason_on_the_account(client):
     assert st["accounts"]["main"]["connected"] is False
     assert st["accounts"]["main"]["error"] == reason
     assert {"level": "bad", "label": "MAIN", "detail": reason} in st["readiness"]["checks"]
+
+
+def test_the_webhook_and_its_secret_are_gone(client, tmp_path, monkeypatch):
+    """Removed 2026-09-27: /hook, /api/tv-setup and /api/hook-url answer 404/405; the health list
+    has no webhook line; a saved config never carries the old secret."""
+    assert client.post("/hook", json={"secret": "tv-secret", "strategy": "nq930",
+                                      "upper": 1, "lower": 0}).status_code in (404, 405)
+    assert client.get("/api/tv-setup").status_code == 404
+    assert client.post("/api/hook-url", json={"url": "https://x"}).status_code in (404, 405)
+    assert "Webhook" not in client.get("/api/status").text
+    from homebase import config as config_mod
+    from homebase.config import AppCfg
+    p = tmp_path / "cfg.json"
+    monkeypatch.setattr(config_mod, "config_path", lambda: p)
+    config_mod.save(AppCfg(webhook_secret="old-secret", public_hook_url="https://x"))
+    import json as _json
+    d = _json.loads(p.read_text())
+    assert d["webhook_secret"] == "" and d["public_hook_url"] == ""

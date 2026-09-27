@@ -172,9 +172,8 @@ def load() -> AppCfg:
         return cfg
     data = json.loads(p.read_text())
     cfg.armed = bool(data.get("armed", cfg.armed))
-    cfg.webhook_secret = str(data.get("webhook_secret", cfg.webhook_secret))
-    cfg.hook_port = int(data.get("hook_port", cfg.hook_port))
-    cfg.public_hook_url = str(data.get("public_hook_url", cfg.public_hook_url))
+    # the TradingView webhook was removed 2026-09-27: a stored secret / tunnel URL is ignored,
+    # and save() writes them blank, so the old secret leaves the config file on the next save
     for aid, a in (data.get("accounts") or {}).items():
         base = asdict(AccountCfg())
         cfg.accounts[aid] = AccountCfg(**{**base, **a})
@@ -202,8 +201,10 @@ def load() -> AppCfg:
 
 
 def save(cfg: AppCfg) -> None:
-    config_path().write_text(json.dumps(asdict(cfg), indent=2,
-                                        ensure_ascii=False) + "\n")
+    d = asdict(cfg)
+    d["webhook_secret"] = ""      # the webhook is gone (2026-09-27): never persist a secret
+    d["public_hook_url"] = ""
+    config_path().write_text(json.dumps(d, indent=2, ensure_ascii=False) + "\n")
 
 
 def assignments(cfg: AppCfg, strategy: str) -> list[dict]:

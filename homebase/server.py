@@ -1,6 +1,5 @@
 """The homebase server: signals in, the book out.
 
-    POST /hook               TradingView webhook (shared secret in payload)
     GET  /                   dashboard
     GET  /api/status         everything the dashboard renders
     POST /api/arm            {"armed": true|false} — the master switch
@@ -9,11 +8,11 @@
     POST /api/connect        validate a login (demo or live), return its accounts
     POST /api/accounts/add   add one broker account to the pool
     POST /api/book           set a strategy's account assignments
-    GET  /api/tv-setup       webhook URL/secret + per-strategy alert steps
-    POST /api/hook-url       record the tunnel's public origin
     GET  /api/logins (+delete), GET /api/calendar
 
-Binds to localhost; the ONLY tunneled surface is the hook-only port.
+Binds to localhost only. The TradingView webhook (/hook, its hook-only port 8851 and the
+Cloudflare tunnel in front of it) was REMOVED 2026-09-27 at the user's request -- signals come
+from the desk's own 9:30 timer.
 Runs fine with zero accounts: everything reports its own state loudly and
 the engine still validates + journals (dry run).
 """
@@ -22,7 +21,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import datetime as dt
-import hmac
 import json
 import os
 from dataclasses import asdict
@@ -143,9 +141,6 @@ def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
                        "label": a.label or a.account_name or aid,
                        "detail": "connected" if s.get("connected")
                        else (s.get("error") or "not connected")})
-    checks.append({"level": "ok" if cfg.webhook_secret else "bad",
-                   "label": "Webhook secret",
-                   "detail": "set" if cfg.webhook_secret else "missing"})
     if power is not None:
         if power.get("discharging") and (power.get("pct") or 100) < 25:
             checks.append({"level": "bad", "label": "Power",
@@ -523,17 +518,12 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             engine.journal("desk_key_error", error=key_err)
         tasks = []
         if background:
-            import uvicorn  # noqa: PLC0415
-            hook_server = uvicorn.Server(uvicorn.Config(
-                hook_app, host="127.0.0.1", port=cfg.hook_port,
-                log_level="warning"))
             tasks = [asyncio.create_task(_clock_loop()),
                      asyncio.create_task(_broker_loop()),
                      asyncio.create_task(_equity_loop()),
                      asyncio.create_task(timer.loop()),
                      asyncio.create_task(_feed_loop()),
-                     asyncio.create_task(desk.run()),
-                     asyncio.create_task(hook_server.serve())]
+                     asyncio.create_task(desk.run())]
         try:
             yield
         finally:
@@ -562,23 +552,6 @@ def create_app(cfg: config_mod.AppCfg | None = None,
     app.add_middleware(desk_api.WriteGuard, hosts=lambda: cfg.allowed_hosts)
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
-    # ------------------------------------------------------------ webhook
-    async def _handle_hook(request: Request):
-        try:
-            payload = json.loads(await request.body())
-        except Exception:
-            raise HTTPException(400, "body must be JSON")
-        secret = str(payload.pop("secret", ""))
-        if not cfg.webhook_secret or \
-                not hmac.compare_digest(secret, cfg.webhook_secret):
-            engine.journal("hook_rejected", reason="bad_secret")
-            raise HTTPException(401, "bad secret")
-        return await engine.handle_alert(payload)
-
-    app.post("/hook")(_handle_hook)
-    hook_app = FastAPI(title="Homebase hook")
-    hook_app.post("/hook")(_handle_hook)
-    app.state.hook_app = hook_app
 
     # ------------------------------------------------------------ dashboard
     @app.get("/")
@@ -996,38 +969,6 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         config_mod.save(cfg)
         engine.journal("book_updated", strategy=name, assignments=rows)
         return {"ok": True, "book": cfg.book}
-
-    @app.post("/api/hook-url")
-    async def set_hook_url(request: Request):
-        body = await request.json()
-        cfg.public_hook_url = str(body.get("url") or "").rstrip("/")
-        config_mod.save(cfg)
-        return {"ok": True, "public_hook_url": cfg.public_hook_url}
-
-    @app.get("/api/tv-setup")
-    async def tv_setup():
-        return {
-            "hook_path": "/hook",
-            "public_hook_url": (cfg.public_hook_url + "/hook")
-            if cfg.public_hook_url else None,
-            "secret": cfg.webhook_secret,
-            "strategies": {
-                name: {
-                    "symbol": s.symbol,
-                    "alert_body_example": json.dumps({
-                        "secret": cfg.webhook_secret, "strategy": name,
-                        "upper": 24500 + s.offset_pts,
-                        "lower": 24500 - s.offset_pts}),
-                    "steps": [
-                        f"Open the {s.symbol} 15s chart with the strategy script",
-                        "Paste the webhook secret into the script's input",
-                        "Create alert: condition = the script, 'Any alert() "
-                        "function call', open-ended, webhook URL = this "
-                        "server's /hook",
-                    ],
-                } for name, s in cfg.strategies.items()
-            },
-        }
 
     @app.get("/api/research-equity")
     async def research_equity(strategy: str):
