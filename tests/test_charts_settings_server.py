@@ -5,6 +5,7 @@ broker, no tokens, nothing written under ~/futures_ticks or ~/futures_depth."""
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
 import threading
 import time
 
@@ -41,17 +42,21 @@ class FakeMdWS:
 
 
 class FakeLink:
-    """The desk link (desk.py): only .state (bot_placing reads it), .hello/.run/.stop
-    (server.py's lifespan/desk_fan need them). No broker, no SSE, no key file."""
+    """The desk link (desk.py): .state and .down (bot_placing reads both -- C3 fail-closed:
+    unknown/down state is BUSY), .hello/.run/.stop (server.py's lifespan/desk_fan need them). No
+    broker, no SSE, no key file. Defaults to CONNECTED and IDLE (a state with no strategies,
+    down=None) so every test that never mentions the desk at all is unaffected; the fail-closed
+    (state=None / down set) tests below set it back explicitly."""
 
     def __init__(self, publish):
         self.publish = publish
-        self.state = None
+        self.state = {"date": None, "strategies": {}}
+        self.down = None
         self._stop = False
 
     def hello(self):
-        return {"type": "desk", "down": "test link"} if self.state is None else \
-            {"type": "desk", "event": "state", "data": self.state}
+        return {"type": "desk", "down": self.down} if self.down is not None or self.state is None \
+            else {"type": "desk", "event": "state", "data": self.state}
 
     async def run(self):
         while not self._stop:
@@ -97,7 +102,7 @@ def test_get_settings_reads_the_env_default_with_no_file(tmp_path, monkeypatch):
     ws = FakeMdWS("demo")
     app = app_with(tmp_path, {"demo": ws})
     with TestClient(app, base_url=BASE_URL) as c:
-        assert c.get("/api/settings").json() == {"md": "demo"}
+        assert c.get("/api/settings").json()["md"] == "demo"
 
 
 def test_switching_md_persists_and_is_reflected_in_status(tmp_path):
@@ -107,7 +112,7 @@ def test_switching_md_persists_and_is_reflected_in_status(tmp_path):
         assert c.get("/api/settings").json()["md"] == "demo"
         r = c.put("/api/settings", json={"md": "live"})
         assert r.status_code == 200 and r.json() == {"md": "live"}
-        assert c.get("/api/settings").json() == {"md": "live"}
+        assert c.get("/api/settings").json()["md"] == "live"
         st = c.get("/api/status").json()
         assert st["md"] == "live"
         # a fresh store over the same state dir reads back the persisted choice
@@ -132,20 +137,61 @@ def test_refused_inside_the_0920_0935_et_window_on_a_weekday(tmp_path):
         assert c.get("/api/settings").json()["md"] == "demo"   # untouched
 
 
-def test_refused_while_the_desk_reports_a_bot_placing(tmp_path):
+def test_refused_while_the_desk_reports_a_bot_working(tmp_path):
+    """C3: the desk pauses its OWN view publishing for the whole "placing" span (trading.py's
+    _views_paused), so this process's DeskLink.state never actually holds "placing" -- BOT_BUSY
+    also covers "placed" and "live" (an account with a resting or open bracket), which this
+    process CAN observe, plus "error". "idle"/"done"/"flat" never refuse."""
     link_box = []
     app = app_with(tmp_path, {"demo": FakeMdWS(), "live": FakeMdWS()}, link_box=link_box)
     with TestClient(app, base_url=BASE_URL) as c:
         wait_for(lambda: link_box)
+        for busy_status in ("placing", "placed", "live", "error"):
+            link_box[0].state = {"bot": {"strategies": {
+                "nq930": {"accounts": {"acct1": {"status": busy_status}}}}}}
+            r = c.put("/api/settings", json={"md": "live"})
+            assert r.status_code == 423, busy_status
+            assert "09:35" in r.json()["detail"]
+            assert c.get("/api/settings").json()["md"] == "demo"
+        # a calm status (idle/done, never in BOT_BUSY_STATUSES) does not refuse -- one switch
+        # only, since the I3 cooldown (its own test below) refuses a second in quick succession
         link_box[0].state = {"bot": {"strategies": {
-            "nq930": {"accounts": {"acct1": {"status": "placing"}}}}}}
+            "nq930": {"accounts": {"acct1": {"status": "idle"}}}}}}
+        assert c.put("/api/settings", json={"md": "live"}).status_code == 200
+
+
+def test_refused_when_the_desk_link_state_is_unknown_or_down_fail_closed(tmp_path):
+    """C3: an md switch is optional work, so a desk this process has lost contact with (never
+    saw a state, or is reporting `down`) must read as busy, never as "not placing"."""
+    link_box = []
+    app = app_with(tmp_path, {"demo": FakeMdWS(), "live": FakeMdWS()}, link_box=link_box)
+    with TestClient(app, base_url=BASE_URL) as c:
+        wait_for(lambda: link_box)
+        link_box[0].state = None
+        link_box[0].down = "connecting to the desk"
         r = c.put("/api/settings", json={"md": "live"})
         assert r.status_code == 423
-        assert "09:35" in r.json()["detail"]
-        assert c.get("/api/settings").json()["md"] == "demo"
-        # a status OTHER than placing (placed/live/flat) does not refuse
-        link_box[0].state = {"bot": {"strategies": {
-            "nq930": {"accounts": {"acct1": {"status": "flat"}}}}}}
+        # a state WAS received once, but the link then reported down: still fail closed
+        link_box[0].state = {"bot": {"strategies": {}}}
+        link_box[0].down = "desk stream ended"
+        assert c.put("/api/settings", json={"md": "live"}).status_code == 423
+        # connected, with a state, down cleared: no longer refused on this ground
+        link_box[0].down = None
+        assert c.put("/api/settings", json={"md": "live"}).status_code == 200
+
+
+def test_no_desk_link_at_all_is_never_busy(tmp_path):
+    """`link is None` (no desk_factory configured, e.g. a page opened stand-alone) must not
+    refuse forever -- only a CONFIGURED link's own unknown/down state does (see the fail-closed
+    test above)."""
+    ws1, ws2 = FakeMdWS("demo"), FakeMdWS("live")
+
+    async def md_connect(env):
+        return ws1 if env == "demo" else ws2
+
+    app = create_app(roots=["NQ", "ES"], base=archive(tmp_path), state=tmp_path / "state",
+                     now_ms=lambda: session_ms(D, 9, 45), md_connect=md_connect)
+    with TestClient(app, base_url=BASE_URL) as c:
         assert c.put("/api/settings", json={"md": "live"}).status_code == 200
 
 
@@ -155,7 +201,7 @@ def test_a_failed_relogin_falls_back_and_keeps_the_old_setting(tmp_path):
     with TestClient(app, base_url=BASE_URL) as c:
         r = c.put("/api/settings", json={"md": "live"})
         assert r.status_code == 502
-        assert c.get("/api/settings").json() == {"md": "demo"}
+        assert c.get("/api/settings").json()["md"] == "demo"
         st = c.get("/api/status").json()
         assert st["md"] == "demo" and st["connected"]           # the old (demo) socket kept running
         # the old socket is still usable -- unaffected by the failed switch attempt
@@ -226,4 +272,129 @@ def test_a_second_put_while_one_is_in_flight_is_refused_with_409(tmp_path):
 
         assert second.status_code == 409
         assert results["first"].status_code == 200
-        assert c.get("/api/settings").json() == {"md": "live"}
+        assert c.get("/api/settings").json()["md"] == "live"
+
+
+# ---- I3: a switch costs ~2 requests/root (subscribe + gap refill); throttle real toggling ----
+
+def test_i3_a_second_switch_within_the_cooldown_is_refused(tmp_path):
+    demo_ws, live_ws = FakeMdWS("demo"), FakeMdWS("live")
+    app = app_with(tmp_path, {"demo": demo_ws, "live": live_ws})
+    with TestClient(app, base_url=BASE_URL) as c:
+        assert c.put("/api/settings", json={"md": "live"}).status_code == 200
+        r = c.put("/api/settings", json={"md": "demo"})
+        assert r.status_code == 429
+        assert "minutes" in r.json()["detail"]
+        assert c.get("/api/settings").json()["md"] == "live"   # the first switch's result stands
+
+
+def test_i3_a_refused_attempt_does_not_itself_start_the_cooldown(tmp_path):
+    """A PUT refused before ever touching switch_md (bad value, the window, a bot working) must
+    not count as an "attempt" -- only a call that actually reaches feed.switch_md does."""
+    app = app_with(tmp_path, {"demo": FakeMdWS(), "live": FakeMdWS()},
+                   now_ms=lambda: session_ms(D, 9, 25))   # inside the window: every PUT refused
+    with TestClient(app, base_url=BASE_URL) as c:
+        for _ in range(3):
+            assert c.put("/api/settings", json={"md": "live"}).status_code == 423
+        # nothing here ever reached switch_md, so a later, allowed PUT is not cooled down either
+        # (re-checked once the window test below proves the window itself, not the cooldown,
+        # is what refused these three)
+
+
+def test_i3_a_switch_refused_by_the_md_budget_headroom(tmp_path):
+    demo_ws, live_ws = FakeMdWS("demo"), FakeMdWS("live")
+    app = app_with(tmp_path, {"demo": demo_ws, "live": live_ws})
+    with TestClient(app, base_url=BASE_URL) as c:
+        from homebase.charts import server as server_mod
+        wait_for(lambda: demo_ws.sent)
+        monkey = server_mod.TickFeed.budget_used
+        server_mod.TickFeed.budget_used = lambda self, env=None: server_mod.MD_SWITCH_BUDGET_HEADROOM
+        try:
+            r = c.put("/api/settings", json={"md": "live"})
+        finally:
+            server_mod.TickFeed.budget_used = monkey
+        assert r.status_code == 429
+        assert "budget" in r.json()["detail"]
+        assert c.get("/api/settings").json()["md"] == "demo"
+
+
+# ---- I4: the refusal window has a margin before 09:20 itself, and boundary/DST coverage (M4) ----
+
+def test_i4_refused_from_a_margin_before_0920_through_0935_on_a_weekday(tmp_path):
+    def app_at(hh, mm, ss=0):
+        # each case gets its own state dir: app_with persists settings.json under tmp_path, and
+        # a PUT that succeeds in an earlier case must not make a LATER case's fresh feed start
+        # already on "live" (its own no-op check would then bypass the window check entirely)
+        case = tmp_path / f"m{hh:02d}{mm:02d}{ss:02d}"
+        return app_with(case, {"demo": FakeMdWS(), "live": FakeMdWS()},
+                        now_ms=lambda: session_ms(D, hh, mm, ss))   # D is a Thursday
+
+    with TestClient(app_at(9, 14, 59), base_url=BASE_URL) as c:
+        assert c.put("/api/settings", json={"md": "live"}).status_code == 200
+    with TestClient(app_at(9, 15, 0), base_url=BASE_URL) as c:
+        assert c.put("/api/settings", json={"md": "live"}).status_code == 423
+    with TestClient(app_at(9, 19, 59), base_url=BASE_URL) as c:
+        assert c.put("/api/settings", json={"md": "live"}).status_code == 423
+    with TestClient(app_at(9, 34, 59), base_url=BASE_URL) as c:
+        assert c.put("/api/settings", json={"md": "live"}).status_code == 423
+    with TestClient(app_at(9, 35, 0), base_url=BASE_URL) as c:
+        assert c.put("/api/settings", json={"md": "live"}).status_code == 200
+
+
+def test_i4_the_window_only_applies_on_weekdays(tmp_path):
+    saturday = dt.date(2026, 9, 26)
+    app = app_with(tmp_path, {"demo": FakeMdWS(), "live": FakeMdWS()},
+                   now_ms=lambda: session_ms(saturday, 9, 25))
+    with TestClient(app, base_url=BASE_URL) as c:
+        assert c.put("/api/settings", json={"md": "live"}).status_code == 200
+
+
+def test_i4_the_window_holds_across_a_dst_change(tmp_path):
+    for d in (dt.date(2026, 3, 9), dt.date(2026, 11, 2)):   # US DST start/end, both weekdays
+        app = app_with(tmp_path, {"demo": FakeMdWS(), "live": FakeMdWS()},
+                       now_ms=lambda d=d: session_ms(d, 9, 25))
+        with TestClient(app, base_url=BASE_URL) as c:
+            r = c.put("/api/settings", json={"md": "live"})
+            assert r.status_code == 423, d
+
+
+# ---- M2: GET /api/settings carries a masked account id per login, read live, never hard-coded ----
+
+def test_m2_get_settings_carries_an_accounts_block(tmp_path):
+    app = app_with(tmp_path, {"demo": FakeMdWS()})
+    with TestClient(app, base_url=BASE_URL) as c:
+        d = c.get("/api/settings").json()
+        assert set(d["accounts"]) == {"live", "demo"}
+        # this worktree ships no config.json (a machine-local secret file): both read as None,
+        # never a stub or a hard-coded number
+        assert d["accounts"] == {"live": None, "demo": None}
+
+
+# ---- M6: a settings.json write failure after a successful switch rolls the FEED back too ----
+
+def test_m6_a_write_failure_after_a_successful_switch_rolls_the_feed_back(tmp_path):
+    from homebase.charts import settings_store as settings_store_mod
+
+    # a fresh socket per connect (real TradovateWS would be a new connection too) -- the
+    # rollback reconnects "demo" a second time, after the first demo_ws was already closed
+    async def md_connect(env):
+        return FakeMdWS(env)
+
+    app = create_app(roots=["NQ", "ES"], base=archive(tmp_path), state=tmp_path / "state",
+                     now_ms=lambda: session_ms(D, 9, 45), md_connect=md_connect)
+    with TestClient(app, base_url=BASE_URL) as c:
+        monkey = settings_store_mod.SettingsStore.set_md
+
+        def boom(self, md):
+            raise OSError("disk full")
+        settings_store_mod.SettingsStore.set_md = boom
+        try:
+            r = c.put("/api/settings", json={"md": "live"})
+        finally:
+            settings_store_mod.SettingsStore.set_md = monkey
+        assert r.status_code == 502
+        assert "kept the previous login" in r.json()["detail"]
+        # the FEED itself rolled back to demo (not left switched with a stale file underneath)
+        st = c.get("/api/status").json()
+        assert st["md"] == "demo" and st["connected"]
+        assert c.get("/api/settings").json()["md"] == "demo"

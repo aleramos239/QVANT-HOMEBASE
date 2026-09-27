@@ -4,11 +4,12 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 
-/* appsettings.js (Task 4, 2026-09-27 accounts-paper-layouts-appsettings plan) is a DOM-mounting
-   module like settings-dialog.js: it reads/writes `window` at load time and has no
-   `module.exports` fallback. Same small hand-written DOM/window shim as settings-dialog.test.mjs
-   (just the element APIs this dialog actually calls), so it loads and runs for real under
-   `node --test` instead of only ever running inside a browser check. */
+/* appsettings.js (Task 4, 2026-09-27 accounts-paper-layouts-appsettings plan; MARKET DATA
+   reworked in Fix round 1) is a DOM-mounting module like settings-dialog.js: it reads/writes
+   `window` at load time and has no `module.exports` fallback. Same small hand-written DOM/window
+   shim as settings-dialog.test.mjs (just the element APIs this dialog actually calls), so it
+   loads and runs for real under `node --test` instead of only ever running inside a browser
+   check. */
 
 class FakeEl {
   constructor(tag) {
@@ -66,6 +67,7 @@ function findAll(el, pred) {
 function findByOwnText(el, tag, text) {
   return descend({ children: [el] }, (c) => c.tagName === tag.toUpperCase() && c.textContent === text);
 }
+function hasClass(c, cls) { return c.className && c.className.split(' ').includes(cls); }
 
 function loadDialog() {
   global.window = global.window || {};   // a dedicated object, not an alias for `global` itself
@@ -78,8 +80,8 @@ const AS = loadDialog();
 
 /* A host double: getSettings/putSettings are driven explicitly per test (resolve/reject at will)
    rather than auto-resolving, so tests can assert the busy/disabled state WHILE a PUT is in
-   flight -- the whole point of the "a second PUT while one is in flight is refused" contract. */
-function makeHost({ initial = { md: 'demo' } } = {}) {
+   flight. */
+function makeHost({ initial = { md: 'demo', accounts: { live: null, demo: null } } } = {}) {
   let dark = false;
   const statusFns = new Set();
   const putCalls = [];
@@ -105,8 +107,19 @@ function makeHost({ initial = { md: 'demo' } } = {}) {
 function radios(box) {
   return findAll(box, (c) => c.tagName === 'INPUT' && c.type === 'radio');
 }
+function apply(box) {
+  return findAll(box, (c) => c.tagName === 'BUTTON' && hasClass(c, 'btn-primary'))[0];
+}
+function warnRow(box) {
+  return findAll(box, (c) => hasClass(c, 'set-why'))
+    .find((c) => /blank/.test(c.textContent));
+}
+function errRow(box) {
+  return findAll(box, (c) => hasClass(c, 'set-why'))
+    .find((c) => !/blank/.test(c.textContent));
+}
 
-test('mounts two MD radios and the theme switch; radios stay disabled until getSettings answers', () => {
+test('mounts two MD radios, the warning line and Apply; radios and Apply stay disabled until getSettings answers', () => {
   const { host } = makeHost();
   host.getSettings = () => new Promise(() => {});   // never resolves in this test
   const box = new FakeEl('div');
@@ -115,63 +128,110 @@ test('mounts two MD radios and the theme switch; radios stay disabled until getS
   assert.equal(rs.length, 2);
   assert.deepEqual(rs.map((r) => r.value).sort(), ['demo', 'live']);
   assert.ok(rs.every((r) => r.disabled), 'no current setting yet: nothing is pickable');
+  assert.ok(apply(box).disabled);
+  assert.match(warnRow(box).textContent, /blank/);
 });
 
-test('the current login is checked once getSettings resolves', async () => {
-  const { host } = makeHost({ initial: { md: 'demo' } });
+test('the current login is checked and Apply is disabled once getSettings resolves (nothing staged yet)', async () => {
+  const { host } = makeHost({ initial: { md: 'demo', accounts: { live: null, demo: null } } });
   const box = new FakeEl('div');
   AS.mount(box, host);
   await Promise.resolve(); await Promise.resolve();
   const rs = radios(box);
-  const demo = rs.find((r) => r.value === 'demo'), live = rs.find((r) => r.value === 'live');
-  assert.equal(demo.checked, true);
-  assert.equal(live.checked, false);
+  assert.equal(rs.find((r) => r.value === 'demo').checked, true);
+  assert.equal(rs.find((r) => r.value === 'live').checked, false);
   assert.ok(rs.every((r) => !r.disabled));
+  assert.ok(apply(box).disabled, 'staged === current: nothing to apply yet');
 });
 
-test('picking a login PUTs it, disables the radios while in flight, and reflects the result on success', async () => {
-  const { host, putCalls, setNextPut } = makeHost({ initial: { md: 'demo' } });
+test('picking a radio only STAGES it -- no PUT, Apply becomes enabled', async () => {
+  const { host, putCalls } = makeHost({ initial: { md: 'demo', accounts: { live: null, demo: null } } });
+  const box = new FakeEl('div');
+  AS.mount(box, host);
+  await Promise.resolve(); await Promise.resolve();
+
+  const live = radios(box).find((r) => r.value === 'live');
+  live.onchange();
+  assert.deepEqual(putCalls, [], 'a radio pick alone must never PUT');
+  assert.equal(live.checked, true);
+  assert.equal(radios(box).find((r) => r.value === 'demo').checked, false);
+  assert.ok(!apply(box).disabled, 'a staged change makes Apply available');
+});
+
+test('re-picking the login already active disables Apply again', async () => {
+  const { host } = makeHost({ initial: { md: 'demo', accounts: { live: null, demo: null } } });
+  const box = new FakeEl('div');
+  AS.mount(box, host);
+  await Promise.resolve(); await Promise.resolve();
+
+  radios(box).find((r) => r.value === 'live').onchange();
+  assert.ok(!apply(box).disabled);
+  radios(box).find((r) => r.value === 'demo').onchange();
+  assert.ok(apply(box).disabled, 'staged is back to the active login: nothing to apply');
+});
+
+test('Apply PUTs the staged login, disables Apply/radios and shows a busy label while in flight', async () => {
+  const { host, putCalls, setNextPut } = makeHost({ initial: { md: 'demo', accounts: { live: null, demo: null } } });
   const box = new FakeEl('div');
   AS.mount(box, host);
   await Promise.resolve(); await Promise.resolve();
 
   let resolvePut;
   setNextPut(new Promise((res) => { resolvePut = res; }));
-  const live = radios(box).find((r) => r.value === 'live');
-  live.onchange();
+  radios(box).find((r) => r.value === 'live').onchange();
+  apply(box).onclick();
   assert.deepEqual(putCalls, [{ md: 'live' }]);
-  assert.ok(radios(box).every((r) => r.disabled), 'busy: a second pick must not fire a second PUT');
+  assert.ok(apply(box).disabled, 'busy: a second click must not fire a second PUT');
+  assert.equal(apply(box).textContent, 'Applying…');
+  assert.ok(radios(box).every((r) => r.disabled), 'radios are also disabled while a switch is in flight');
 
-  resolvePut({ ok: true, settings: { md: 'live' } });
+  resolvePut({ ok: true, settings: { md: 'live', accounts: { live: null, demo: null } } });
   await Promise.resolve(); await Promise.resolve();
   const rs = radios(box);
   assert.equal(rs.find((r) => r.value === 'live').checked, true);
   assert.equal(rs.find((r) => r.value === 'demo').checked, false);
   assert.ok(rs.every((r) => !r.disabled));
+  assert.equal(apply(box).textContent, 'Apply');
+  assert.ok(apply(box).disabled, 'now on "live": staged === current again');
 });
 
-test('a refused switch (09:20-09:35 / bot placing / failed re-login) shows inline and leaves the old login checked', async () => {
-  const { host, setNextPut } = makeHost({ initial: { md: 'demo' } });
+test('a held Enter/Space (repeated clicks while busy) never fires a second PUT', async () => {
+  const { host, putCalls, setNextPut } = makeHost({ initial: { md: 'demo', accounts: { live: null, demo: null } } });
+  const box = new FakeEl('div');
+  AS.mount(box, host);
+  await Promise.resolve(); await Promise.resolve();
+
+  setNextPut(new Promise(() => {}));   // never resolves in this test
+  radios(box).find((r) => r.value === 'live').onchange();
+  apply(box).onclick();
+  apply(box).onclick();   // a second "click" (e.g. keyboard auto-repeat) while busy
+  apply(box).onclick();
+  assert.equal(putCalls.length, 1);
+});
+
+test('a refused switch (09:20-09:35 / bot working / failed re-login) shows inline and snaps the radio back', async () => {
+  const { host, setNextPut } = makeHost({ initial: { md: 'demo', accounts: { live: null, demo: null } } });
   const box = new FakeEl('div');
   AS.mount(box, host);
   await Promise.resolve(); await Promise.resolve();
 
   setNextPut(Promise.resolve({ ok: false, error: 'Not while the 9:30 bot is working — try after 09:35.' }));
-  const live = radios(box).find((r) => r.value === 'live');
-  live.onchange();
+  radios(box).find((r) => r.value === 'live').onchange();
+  apply(box).onclick();
   await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
 
   const rs = radios(box);
-  assert.equal(rs.find((r) => r.value === 'demo').checked, true, 'the old (still active) login stays checked');
+  assert.equal(rs.find((r) => r.value === 'demo').checked, true, 'the old (still active) login snaps back');
   assert.equal(rs.find((r) => r.value === 'live').checked, false);
   assert.ok(rs.every((r) => !r.disabled), 'a resolved PUT (even a refusal) must re-enable the radios');
-  const err = descend(box, (c) => c.className.split(' ').includes('set-why'));
+  assert.ok(apply(box).disabled, 'staged snapped back to current: nothing left to apply');
+  const err = errRow(box);
   assert.equal(err.hidden, false);
   assert.match(err.textContent, /09:35/);
 });
 
-test('a status update for a login switched elsewhere repaints the radios without a new GET', async () => {
-  const { host, fireStatus } = makeHost({ initial: { md: 'demo' } });
+test('a status update for a login switched elsewhere repaints the radios without a new GET, but only while idle', async () => {
+  const { host, fireStatus } = makeHost({ initial: { md: 'demo', accounts: { live: null, demo: null } } });
   const box = new FakeEl('div');
   AS.mount(box, host);
   await Promise.resolve(); await Promise.resolve();
@@ -180,13 +240,42 @@ test('a status update for a login switched elsewhere repaints the radios without
   const rs = radios(box);
   assert.equal(rs.find((r) => r.value === 'live').checked, true);
   assert.equal(rs.find((r) => r.value === 'demo').checked, false);
+  assert.ok(apply(box).disabled);
+});
+
+test('a status tick that arrives WHILE this dialog is applying its own switch does not clobber it', async () => {
+  const { host, setNextPut, fireStatus } = makeHost({ initial: { md: 'demo', accounts: { live: null, demo: null } } });
+  const box = new FakeEl('div');
+  AS.mount(box, host);
+  await Promise.resolve(); await Promise.resolve();
+
+  let resolvePut;
+  setNextPut(new Promise((res) => { resolvePut = res; }));
+  radios(box).find((r) => r.value === 'live').onchange();
+  apply(box).onclick();
+  fireStatus({ md: 'demo' });   // a stale status tick from before the switch landed
+  assert.ok(radios(box).every((r) => r.disabled), 'still busy: the stale tick must not re-enable anything');
+
+  resolvePut({ ok: true, settings: { md: 'live', accounts: { live: null, demo: null } } });
+  await Promise.resolve(); await Promise.resolve();
+  assert.equal(radios(box).find((r) => r.value === 'live').checked, true);
+});
+
+test('the account label from GET /api/settings shows next to each login', async () => {
+  const { host } = makeHost({ initial: { md: 'demo', accounts: { live: '···885', demo: null } } });
+  const box = new FakeEl('div');
+  AS.mount(box, host);
+  await Promise.resolve(); await Promise.resolve();
+  const liveRow = findAll(box, (c) => hasClass(c, 'set-name'))
+    .find((c) => c.children.some((k) => k.textContent === 'Live'));
+  assert.ok(liveRow.children.some((k) => k.textContent === '(···885)'));
 });
 
 test('the appearance switch calls host.toggleTheme and reflects host.isDark()', () => {
   const { host } = makeHost();
   const box = new FakeEl('div');
   AS.mount(box, host);
-  const sw = descend(box, (c) => c.tagName === 'BUTTON' && c.className.split(' ').includes('switch'));
+  const sw = descend(box, (c) => c.tagName === 'BUTTON' && hasClass(c, 'switch'));
   assert.equal(sw.classList.contains('on'), false);
   sw.onclick();
   assert.equal(host.isDark(), true);
@@ -206,7 +295,7 @@ test('Close calls host.close(); stop() unsubscribes the status listener', async 
 });
 
 test('a PUT that resolves after the dialog already closed is ignored (no repaint on a dead dialog)', async () => {
-  const { host, setNextPut } = makeHost({ initial: { md: 'demo' } });
+  const { host, setNextPut } = makeHost({ initial: { md: 'demo', accounts: { live: null, demo: null } } });
   const box = new FakeEl('div');
   const ctl = AS.mount(box, host);
   await Promise.resolve(); await Promise.resolve();
@@ -214,8 +303,9 @@ test('a PUT that resolves after the dialog already closed is ignored (no repaint
   let resolvePut;
   setNextPut(new Promise((res) => { resolvePut = res; }));
   radios(box).find((r) => r.value === 'live').onchange();
+  apply(box).onclick();
   ctl.stop();                          // the dialog closes while the PUT is still in flight
-  resolvePut({ ok: true, settings: { md: 'live' } });
+  resolvePut({ ok: true, settings: { md: 'live', accounts: { live: null, demo: null } } });
   await Promise.resolve(); await Promise.resolve();
   // radios stay exactly as they were left (disabled, mid-flight) -- no crash, no late repaint
   assert.ok(radios(box).every((r) => r.disabled));

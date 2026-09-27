@@ -37,9 +37,16 @@ class SettingsStore:
         return v if isinstance(v, dict) else {}
 
     def _write(self, data: dict) -> None:
+        """Temp file + fsync + atomic rename (review M6): a crash or a full disk mid-write must
+        never tear the file, and the rename must never land ahead of the data actually reaching
+        disk -- a full disk here raises (OSError), and the caller (server.py's PUT /api/settings)
+        rolls the feed itself back rather than leaving it switched with a stale file underneath."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.path.with_name(self.path.name + ".tmp")
-        tmp.write_text(json.dumps(data, indent=2))
+        with open(tmp, "w") as f:
+            f.write(json.dumps(data, indent=2))
+            f.flush()
+            os.fsync(f.fileno())
         os.replace(tmp, self.path)
 
     def get(self) -> dict:

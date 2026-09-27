@@ -16,12 +16,20 @@ def run(coro):
     return asyncio.run(coro)
 
 
+_UNSET = object()
+
+
 class FakeWS:
-    def __init__(self, replies=None):
+    def __init__(self, replies=None, environment=_UNSET):
         self.connected = True
         self.event_handlers = []
         self.sent = []
         self.replies = list(replies or [])
+        # only set when a test asks for it: TickFeed.run()'s C2 mismatch check reads
+        # `getattr(ws, "environment", env)`, which must default to a MATCH for every test that
+        # never mentions environment at all (only the C2-specific tests below do).
+        if environment is not _UNSET:
+            self.environment = environment
 
     async def request(self, ep, body=""):
         self.sent.append((ep, body))
@@ -476,38 +484,59 @@ def test_a_refused_retry_round_stops_mid_round_when_the_quiet_window_opens():
 
 # ------------------------------------------------------------------ switch_md
 # Task 4, 2026-09-27 accounts-paper-layouts-appsettings plan: the runtime market-data login
-# switch. server.py's PUT /api/settings owns the refusal windows (09:20-09:35 ET / a bot
-# placing); these tests are TickFeed's own contract: swap in place, no bulk refetch, a failed
-# connect falls back and keeps the old login, and a switch already in flight is refused.
+# switch, hardened in Fix round 1 after review of bdaccbd (C1/C2/I1/I2/I3/I4/M3). switch_md only
+# ever leaves a REQUEST for run() to service -- there is no second connector -- so every test
+# here drives run() as a live background task alongside switch_md, never hand-setting feed.ws
+# the way the pre-review version did (that shape can no longer express what changed: switch_md
+# now genuinely depends on run() to resolve it).
+#
+# `feed.ws` and `.connected` only mean anything WHILE run() is still active: _drive's teardown
+# (feed.stop(), the same as a real shutdown) closes and nulls `feed.ws` like any other cycle end.
+# So every check of "which socket is live" happens INSIDE body(), before _drive tears down --
+# `feed.md_env`, `.subs`, `.refused`, `.switch_error` and a FakeWS's own `.connected`/`.sent` all
+# outlive the drive and are asserted after it, exactly like the pre-existing tests above.
 
-def test_switch_md_connects_fresh_resubscribes_and_closes_the_old_socket():
-    old_ws = FakeWS()
+async def _drive(feed, body):
+    """Runs feed.run() as a background task for the duration of `body()`, then stops it and
+    waits for it to actually exit -- every test below's shape, so a bug that hangs run() fails
+    the test (5 s) instead of hanging the whole suite."""
+    task = asyncio.ensure_future(feed.run())
+    try:
+        return await asyncio.wait_for(body(), timeout=5)
+    finally:
+        feed.stop()
+        await asyncio.wait_for(task, timeout=5)
+
+
+def test_switch_md_subscribes_before_installing_and_closes_and_detaches_the_old_socket():
+    old_ws, new_ws = FakeWS(), FakeWS()
 
     async def connect():
         return old_ws
 
-    news_ws = FakeWS()
-
     async def connect_env(env):
         assert env == "live"
-        return news_ws
+        return new_ws
 
     feed = TickFeed(["NQ", "ES"], lambda *a: None, connect=connect, connect_env=connect_env,
                     sleep=nosleep, md_env="demo")
-    feed.ws = old_ws            # as if run() had already connected under "demo"
-    old_ws.event_handlers.append(feed._on_event)
-    run(feed.subscribe("NQ"))
-    run(feed.subscribe("ES"))
 
-    got = run(feed.switch_md("live"))
+    async def body():
+        while not feed.connected:      # let run() finish its initial "demo" connect first
+            await asyncio.sleep(0)
+        assert feed.ws is old_ws
+        got = await feed.switch_md("live")
+        return got, feed.ws is new_ws, feed._on_event in new_ws.event_handlers
 
+    got, ws_is_new, handler_on_new = run(_drive(feed, body))
     assert got == "live" and feed.md_env == "live"
-    assert feed.ws is news_ws
-    assert not old_ws.connected                              # closed once the new socket was up
-    assert feed._on_event in news_ws.event_handlers
+    assert ws_is_new and handler_on_new
+    assert not old_ws.connected                              # closed once the new socket was proven
+    assert feed._on_event not in old_ws.event_handlers        # M3: detached, not just outgrown
     # re-subscribed on the NEW socket, one getChart per root -- no bulk history refetch
-    assert [b["symbol"] for _, b in news_ws.sent] == [symbols.resolve_contract("NQ"), symbols.resolve_contract("ES")]
+    assert [b["symbol"] for _, b in new_ws.sent] == [symbols.resolve_contract("NQ"), symbols.resolve_contract("ES")]
     assert sorted({root for root, _ in feed.subs.values()}) == ["ES", "NQ"]
+    assert feed.switch_error is None
 
 
 def test_switch_md_is_a_noop_when_already_on_that_login_and_connected():
@@ -518,46 +547,431 @@ def test_switch_md_is_a_noop_when_already_on_that_login_and_connected():
     assert got == "live" and ws.sent == []                    # no getChart, nothing touched
 
 
-def test_a_failed_switch_keeps_the_old_login_and_socket():
+def test_an_unknown_login_is_refused_without_touching_anything():
+    feed = TickFeed(["NQ"], lambda *a: None, sleep=nosleep, md_env="demo")
+    with pytest.raises(ValueError):
+        run(feed.switch_md("paper"))
+    assert feed.md_env == "demo" and feed._pending_env is None
+
+
+def test_a_failed_connect_falls_back_and_keeps_the_old_login_and_socket():
     old_ws = FakeWS()
+
+    async def connect():
+        return old_ws
 
     async def connect_env(env):
         raise RuntimeError("md refused the new login")
 
-    feed = TickFeed(["NQ"], lambda *a: None, connect_env=connect_env, sleep=nosleep, md_env="demo")
-    feed.ws = old_ws
-    old_ws.event_handlers.append(feed._on_event)
-    run(feed.subscribe("NQ"))
-    sent_before = list(old_ws.sent)
+    feed = TickFeed(["NQ"], lambda *a: None, connect=connect, connect_env=connect_env,
+                    sleep=nosleep, md_env="demo")
 
-    with pytest.raises(RuntimeError, match="could not connect the live login"):
-        run(feed.switch_md("live"))
+    async def body():
+        while not feed.connected:
+            await asyncio.sleep(0)
+        sent_before = list(old_ws.sent)
+        with pytest.raises(RuntimeError, match="md refused the new login"):
+            await feed.switch_md("live")
+        return sent_before, feed.ws is old_ws, old_ws.connected
 
+    sent_before, ws_is_old, old_connected = run(_drive(feed, body))
+    assert ws_is_old and old_connected                        # the old socket was never touched
     assert feed.md_env == "demo"                              # unchanged: the caller must not persist it
-    assert feed.ws is old_ws and old_ws.connected              # the old socket was never closed
     assert old_ws.sent == sent_before                          # no re-subscribe attempted on a failed switch
-    assert not feed._switching                                 # the in-flight flag is always cleared
+    assert feed._pending_env is None and feed._pending_fut is None
+    assert feed.switch_error == {"to": "live", "error": "RuntimeError: md refused the new login",
+                                 "at": feed.switch_error["at"]}
 
 
-def test_a_second_switch_while_one_is_in_flight_is_refused():
+def test_a_second_switch_while_one_is_in_flight_is_refused_with_switchinprogress():
     entered = asyncio.Event()
     release = asyncio.Event()
+
+    async def connect():
+        return FakeWS()
 
     async def slow_connect_env(env):
         entered.set()
         await release.wait()
         return FakeWS()
 
-    feed = TickFeed(["NQ"], lambda *a: None, connect_env=slow_connect_env, sleep=nosleep, md_env="demo")
-    feed.ws = FakeWS()
+    feed = TickFeed(["NQ"], lambda *a: None, connect=connect, connect_env=slow_connect_env,
+                    sleep=nosleep, md_env="demo")
 
-    async def scenario():
+    async def body():
+        while not feed.connected:
+            await asyncio.sleep(0)
         first = asyncio.ensure_future(feed.switch_md("live"))
         await entered.wait()
         with pytest.raises(SwitchInProgress):
             await feed.switch_md("demo")
         release.set()
-        await first
+        return await first
 
-    run(scenario())
-    assert feed.md_env == "live" and not feed._switching
+    got = run(_drive(feed, body))
+    assert got == "live" and feed.md_env == "live"
+
+
+# ---- C2: the socket connect_env hands back must actually be the login that was asked for ----
+
+def test_c2_environment_mismatch_is_a_failed_switch_and_closes_the_mismatched_socket():
+    old_ws = FakeWS()
+
+    async def connect():
+        return old_ws
+
+    mismatched = FakeWS(environment="demo")   # asked for "live", got a demo socket back
+
+    async def connect_env(env):
+        assert env == "live"
+        return mismatched
+
+    feed = TickFeed(["NQ"], lambda *a: None, connect=connect, connect_env=connect_env,
+                    sleep=nosleep, md_env="demo")
+
+    async def body():
+        while not feed.connected:
+            await asyncio.sleep(0)
+        with pytest.raises(RuntimeError, match="asked for the live md login, got 'demo'"):
+            await feed.switch_md("live")
+        return feed.ws is old_ws, old_ws.connected
+
+    ws_is_old, old_connected = run(_drive(feed, body))
+    assert ws_is_old and old_connected
+    assert feed.md_env == "demo"
+    assert not mismatched.connected                           # the mismatched candidate was closed
+    assert feed.switch_error["to"] == "live"
+
+
+def test_c2_a_mismatch_at_startup_never_connects_and_shows_in_status():
+    ws = FakeWS(environment="demo")
+
+    async def connect_env(env):
+        return ws
+
+    slept = []
+
+    async def sleep(s):
+        slept.append(s)
+        if len(slept) >= 2:
+            feed.stop()
+        await asyncio.sleep(0)
+
+    feed = TickFeed(["NQ"], lambda *a: None, connect_env=connect_env, sleep=sleep, md_env="live")
+    run(feed.run())
+    assert not feed.connected
+    assert "asked for the live md login" in feed.status()["error"]
+    assert not ws.connected
+
+
+# ---- C1: the three races the review reproduced against the OLD (two-connector) design ----
+
+def test_race_switch_during_backoff_preempts_it_instead_of_waiting_it_out():
+    attempts = {"demo": 0}
+
+    async def connect():
+        attempts["demo"] += 1
+        raise RuntimeError("demo down")
+
+    live_ws = FakeWS()
+
+    async def connect_env(env):
+        assert env == "live"
+        return live_ws
+
+    slept = []
+
+    async def sleep(s):
+        slept.append(s)
+        await asyncio.Event().wait()   # blocks forever: only feed._wake can end this wait
+
+    feed = TickFeed(["NQ"], lambda *a: None, connect=connect, connect_env=connect_env,
+                    sleep=sleep, md_env="demo")
+
+    async def body():
+        while not slept:               # let run() fail once and settle into its backoff _wait
+            await asyncio.sleep(0)
+        assert attempts["demo"] == 1
+        got = await feed.switch_md("live")
+        return got, feed.ws is live_ws
+
+    got, ws_is_live = run(_drive(feed, body))
+    assert got == "live" and feed.md_env == "live" and ws_is_live
+    assert attempts["demo"] == 1       # the backoff never actually elapsed -- the switch preempted it
+
+
+def test_race_switch_while_a_normal_reconnects_own_connect_is_in_flight():
+    """The switch arrives before run()'s OWN (non-switch) connect() call for the CURRENT login
+    has even returned. review C1 bullet 2: the old design let the switch's socket get installed
+    and then silently overwritten by this in-flight connect finishing after it. Here there is
+    only one connector: the switch is simply picked up on run()'s NEXT iteration."""
+    entered_connect = asyncio.Event()
+    release_connect = asyncio.Event()
+
+    async def connect():                     # the ordinary reconnect's own connect (md_env == "demo")
+        entered_connect.set()
+        await release_connect.wait()
+        return FakeWS()
+
+    live_ws = FakeWS()
+
+    async def connect_env(env):
+        assert env == "live"
+        return live_ws
+
+    feed = TickFeed(["NQ"], lambda *a: None, connect=connect, connect_env=connect_env,
+                    sleep=nosleep, md_env="demo")
+
+    async def body():
+        await entered_connect.wait()          # run() is awaiting connect() for "demo" right now
+        switch = asyncio.ensure_future(feed.switch_md("live"))
+        await asyncio.sleep(0)                # let switch_md register its request (self.ws is still None)
+        release_connect.set()                 # now let the in-flight "demo" connect finish
+        got = await switch
+        return got, feed.ws is live_ws, live_ws.connected
+
+    got, ws_is_live, live_connected = run(_drive(feed, body))
+    assert got == "live" and ws_is_live and live_connected
+    assert feed.md_env == "live"
+
+
+def test_race_switch_while_subscribing_a_normal_reconnect_aborts_that_attempt_cleanly():
+    """The switch arrives while run() is mid-subscribe on its OWN (non-switch) candidate socket.
+    review C1 bullet 3: the old design let the switch's socket take over while run()'s remaining
+    _start calls kept landing on it too, double-subscribing every root. Here, closing the
+    in-flight candidate makes its own subscribe fail (a real closed socket would too), which
+    aborts that attempt; the switch is serviced cleanly on the next iteration."""
+    entered_es = asyncio.Event()
+    release_es = asyncio.Event()
+
+    class SlowWS(FakeWS):
+        def __init__(self):
+            super().__init__()
+            self._waited = False
+
+        async def request(self, ep, body=""):
+            if not self.connected:
+                raise RuntimeError("websocket not connected")
+            if not self._waited and ep == "md/getChart" and body.get("symbol") == symbols.resolve_contract("ES"):
+                self._waited = True
+                entered_es.set()
+                await release_es.wait()
+                if not self.connected:
+                    raise RuntimeError("websocket not connected")
+            return await super().request(ep, body)
+
+    demo_ws = SlowWS()
+
+    async def connect():
+        return demo_ws
+
+    live_ws = FakeWS()
+
+    async def connect_env(env):
+        assert env == "live"
+        return live_ws
+
+    feed = TickFeed(["NQ", "ES"], lambda *a: None, connect=connect, connect_env=connect_env,
+                    sleep=nosleep, md_env="demo")
+
+    async def body():
+        await entered_es.wait()         # NQ subscribed; ES's getChart is in flight on demo_ws
+        switch = asyncio.ensure_future(feed.switch_md("live"))
+        await asyncio.sleep(0)
+        release_es.set()                # the stuck ES request now sees its socket closed
+        got = await switch
+        return got, feed.ws is live_ws
+
+    got, ws_is_live = run(_drive(feed, body))
+    assert got == "live" and ws_is_live
+    assert feed.md_env == "live"
+    # both roots end up subscribed on the WINNING (live) socket only -- never doubled
+    assert sorted({root for root, _ in feed.subs.values()}) == ["ES", "NQ"]
+    assert [b["symbol"] for _, b in live_ws.sent] == [symbols.resolve_contract("NQ"), symbols.resolve_contract("ES")]
+
+
+# ---- I1: a switch must not land somewhere worse than where it started ----
+
+def test_i1_a_switch_that_refuses_every_root_falls_back():
+    old_ws = FakeWS()
+
+    async def connect():
+        return old_ws
+
+    bad_ws = FakeWS(replies=[{"errorText": "no entitlement"}])
+
+    async def connect_env(env):
+        return bad_ws
+
+    feed = TickFeed(["NQ"], lambda *a: None, connect=connect, connect_env=connect_env,
+                    sleep=nosleep, md_env="demo")
+
+    async def body():
+        while not feed.connected:
+            await asyncio.sleep(0)
+        with pytest.raises(Refused, match="every symbol refused"):
+            await feed.switch_md("live")
+        return feed.ws is old_ws, old_ws.connected
+
+    ws_is_old, old_connected = run(_drive(feed, body))
+    assert ws_is_old and old_connected
+    assert feed.md_env == "demo"
+    assert not bad_ws.connected
+    assert "NQ" not in feed.refused                            # the OLD (working) picture is restored
+
+
+def test_i1_a_switch_that_refuses_more_roots_than_the_old_login_falls_back():
+    old_ws = FakeWS()   # both roots subscribe fine on the old login
+
+    async def connect():
+        return old_ws
+
+    # the new login refuses ES (the old login had 0 refusals) -- strictly worse, must fall back
+    bad_ws = FakeWS(replies=[{"historicalId": 1, "realtimeId": 2}, {"errorText": "no entitlement"}])
+
+    async def connect_env(env):
+        return bad_ws
+
+    feed = TickFeed(["NQ", "ES"], lambda *a: None, connect=connect, connect_env=connect_env,
+                    sleep=nosleep, md_env="demo")
+
+    async def body():
+        while not feed.connected:
+            await asyncio.sleep(0)
+        with pytest.raises(RuntimeError, match="refused 1 root"):
+            await feed.switch_md("live")
+        return feed.ws is old_ws
+
+    ws_is_old = run(_drive(feed, body))
+    assert ws_is_old
+    assert feed.md_env == "demo"
+    assert feed.refused == {}                                  # the old login's own (clean) picture, restored
+
+
+def test_i1_a_p_ticket_during_a_switch_counts_as_a_refusal_not_a_stalled_wait():
+    old_ws = FakeWS()
+
+    async def connect():
+        return old_ws
+
+    slept = []
+
+    async def sleep(s):
+        slept.append(s)
+        await asyncio.sleep(0)
+
+    penalized_ws = FakeWS(replies=[{"p-ticket": "tk", "p-time": 999}])
+
+    async def connect_env(env):
+        return penalized_ws
+
+    feed = TickFeed(["NQ"], lambda *a: None, connect=connect, connect_env=connect_env,
+                    sleep=sleep, md_env="demo")
+
+    async def body():
+        while not feed.connected:
+            await asyncio.sleep(0)
+        slept.clear()
+        with pytest.raises(Refused):
+            await feed.switch_md("live")
+        return feed.ws is old_ws
+
+    ws_is_old = run(_drive(feed, body))
+    assert 1000 not in slept                                    # never slept out the p-ticket's wait_s (999 + 1)
+    assert ws_is_old and feed.md_env == "demo"
+
+
+# ---- I2: a failed switch is reported in status(), cleared by the next success ----
+
+def test_i2_switch_error_appears_in_status_and_clears_on_the_next_successful_switch():
+    old_ws, live_ws = FakeWS(), FakeWS()
+
+    async def connect():
+        return old_ws
+
+    calls = {"n": 0}
+
+    async def connect_env(env):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("first attempt fails")
+        return live_ws
+
+    feed = TickFeed(["NQ"], lambda *a: None, connect=connect, connect_env=connect_env,
+                    sleep=nosleep, md_env="demo")
+
+    async def body():
+        while not feed.connected:
+            await asyncio.sleep(0)
+        with pytest.raises(RuntimeError):
+            await feed.switch_md("live")
+        assert feed.status()["switch_error"]["to"] == "live"
+        await feed.switch_md("live")
+        return feed.status()
+
+    st = run(_drive(feed, body))
+    assert st["switch_error"] is None
+    assert st["md"] == "live"
+
+
+# ---- I3: the md budget is tracked per login, not pooled ----
+
+def test_i3_budget_is_tracked_per_login_not_pooled():
+    old_ws, new_ws = FakeWS(), FakeWS()
+
+    async def connect():
+        return old_ws
+
+    async def connect_env(env):
+        return new_ws
+
+    feed = TickFeed(["NQ", "ES"], lambda *a: None, connect=connect, connect_env=connect_env,
+                    sleep=nosleep, md_env="demo")
+
+    async def body():
+        while not feed.connected:
+            await asyncio.sleep(0)
+        assert feed.budget_used("demo") == 2   # NQ + ES subscribed on the old login
+        assert feed.budget_used("live") == 0   # never touched yet
+        await feed.switch_md("live")
+
+    run(_drive(feed, body))
+    assert feed.budget_used("live") == 2       # NQ + ES subscribed fresh on the new login
+    assert feed.budget_used("demo") == 2       # the old login's own hour is untouched by the switch
+    assert feed.budget_used() == feed.budget_used("live")   # default = the ACTIVE login
+
+
+# ---- I4: the 9:30 window opening mid-switch aborts to the old login ----
+
+def test_i4_the_quiet_window_opening_mid_switch_aborts_and_falls_back():
+    old_ws = FakeWS()
+
+    async def connect():
+        return old_ws
+
+    t0 = dt.datetime(2026, 9, 24, 9, 19, 58, tzinfo=ET).timestamp()   # a Thursday, just before 09:20
+    clock = [t0]
+
+    class ClockedWS(FakeWS):
+        async def request(self, ep, body=""):
+            clock[0] += 5          # each getChart costs real time; the second root lands at 09:20:03
+            return await super().request(ep, body)
+
+    new_ws = ClockedWS()
+
+    async def connect_env(env):
+        return new_ws
+
+    feed = TickFeed(["NQ", "ES"], lambda *a: None, connect=connect, connect_env=connect_env,
+                    sleep=nosleep, now=lambda: clock[0], md_env="demo")
+
+    async def body():
+        while not feed.connected:
+            await asyncio.sleep(0)
+        with pytest.raises(RuntimeError, match="9:30 window opened"):
+            await feed.switch_md("live")
+        return feed.ws is old_ws
+
+    ws_is_old = run(_drive(feed, body))
+    assert ws_is_old and feed.md_env == "demo"
+    assert new_ws.sent and not new_ws.connected                # NQ got as far as being asked, then aborted

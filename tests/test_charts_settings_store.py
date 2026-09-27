@@ -59,3 +59,23 @@ def test_other_keys_in_the_file_survive_a_set_md(tmp_path):
     SettingsStore(path).set_md("live")
     import json
     assert json.loads(path.read_text()) == {"unrelated": 42, "md": "live"}
+
+
+def test_m6_a_write_that_cannot_be_read_back_raises_rather_than_silently_losing_it(tmp_path, monkeypatch):
+    """The temp-file write is fsync'd before the atomic rename (review M6). This does not (and
+    cannot, from a unit test) prove fsync reaches the disk platter -- it proves the write path
+    calls it, so a real OSError during fsync (a full disk) surfaces to the caller instead of a
+    silently torn or missing file."""
+    import os as os_mod
+    path = tmp_path / "settings.json"
+    store = SettingsStore(path)
+    calls = []
+    real_fsync = os_mod.fsync
+
+    def spy_fsync(fd):
+        calls.append(fd)
+        real_fsync(fd)
+    monkeypatch.setattr(os_mod, "fsync", spy_fsync)
+    store.set_md("live")
+    assert calls, "set_md must fsync the temp file before the atomic rename"
+    assert SettingsStore(path).get() == {"md": "live"}

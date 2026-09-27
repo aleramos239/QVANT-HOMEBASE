@@ -305,6 +305,33 @@ def md_token(prefer_live: bool = True) -> tuple[str, str]:
     raise RuntimeError("no valid md token on disk — is the desk running and connected?")
 
 
+def accounts_by_env() -> dict[str, "str | None"]:
+    """{"live": <label>, "demo": <label>} -- the account whose md token is valid on disk RIGHT
+    NOW for each env, or None (Task 4 fix round 1, review M2: the app-settings dialog shows this
+    next to "Live"/"Apex (demo)" instead of a hard-coded account number, and it also makes a C2
+    environment mismatch visible before a switch is even attempted -- a None here means that
+    login has no valid token, so a switch to it would fail). The first account per env with a
+    live token wins, same rule as md_token's own scan."""
+    cfg = config_mod.load()
+    now = dt.datetime.now(dt.timezone.utc)
+    out: dict[str, "str | None"] = {"live": None, "demo": None}
+    for aid, a in cfg.accounts.items():
+        env = "live" if a.live else "demo"
+        if out[env] is not None:
+            continue
+        p = state_dir() / f"{aid}.tokens.json"
+        if not p.exists():
+            continue
+        try:
+            d = json.loads(p.read_text())
+            exp = dt.datetime.fromisoformat(str(d.get("expiration_time", "")).replace("Z", "+00:00"))
+        except (ValueError, TypeError):
+            continue
+        if d.get("md_access_token") and exp > now + dt.timedelta(minutes=2):
+            out[env] = a.label or a.account_name or aid
+    return out
+
+
 async def connect_md(prefer_live: bool = True) -> TradovateWS:
     tok, env = md_token(prefer_live)
     ws = TradovateWS(tok, env)
