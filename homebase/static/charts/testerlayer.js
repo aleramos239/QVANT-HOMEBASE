@@ -95,6 +95,40 @@ function stackLabels(rows, rowH, top, bottom) {
 
 function labelsFit(x0, x1) { return x0 != null && x1 != null && x1 - x0 >= LABEL_MIN_PX; }
 
+/* ---- "Show on chart" from Claude (POST /api/tester/show -> /ws tester_show): WHICH chart shows the run.
+   `charts` is [{root, replay, tradeReady}] in grid order (root = what the chart shows now; tradeReady = any
+   account ticked or an algo set). The rules, safest first:
+     - a replaying chart is NEVER touched (not selected, not switched, not scrolled);
+     - a chart already showing the run's root is used as is -- the selected one first;
+     - otherwise a chart with NO accounts and NO algo may switch to the run's root -- the selected one first;
+     - a trade-ready chart NEVER changes instrument. When every chart is replaying or trade-ready, nothing is
+       touched and the page says why in its status note (the user frees a chart and asks again).
+   Returns {index, switchRoot} or {index: -1, reason}. Pure. */
+function showPlan(charts, selected, root) {
+  const list = charts || [];
+  const order = [selected, ...list.map((_, i) => i).filter((i) => i !== selected)]
+    .filter((i) => i >= 0 && i < list.length);
+  for (const i of order) if (!list[i].replay && list[i].root === root) return { index: i, switchRoot: false };
+  for (const i of order) if (!list[i].replay && !list[i].tradeReady) return { index: i, switchRoot: true };
+  return { index: -1, reason: `No chart can show ${root}: every chart is replaying or has accounts/an algo on it `
+    + '(a trade-ready chart never changes instrument). Clear one chart, then ask again.' };
+}
+
+/* The trade a show request focuses: {trade_index} as given (when it exists); {date} the first trade on or
+   after that session date, else the last one before it; {time_ms} the first trade still open at or after
+   that instant (exit_ms >= t), else the last one. null when there are no trades or no focus. Pure. */
+function focusTrade(trades, focus) {
+  const ts = trades || [];
+  if (!focus || !ts.length) return null;
+  if (focus.trade_index != null) return Number.isInteger(focus.trade_index) && focus.trade_index >= 0
+    && focus.trade_index < ts.length ? focus.trade_index : null;
+  let i = -1;
+  if (focus.date != null) i = ts.findIndex((t) => t.date >= focus.date);
+  else if (focus.time_ms != null) i = ts.findIndex((t) => t.exit_ms >= focus.time_ms);
+  else return null;
+  return i < 0 ? ts.length - 1 : i;
+}
+
 /* ================================================================== browser half ================================================================== */
 
 const PLOT_PANE_H = 90;   // px, = cell.js PANE_H: the gate/indicator sub-pane
@@ -342,6 +376,14 @@ class Overlay {
   }
 }
 
+/* What showPlan needs to know about one live chart. Fails closed: no HBTradeUI to ask = trade-ready. */
+function chartFacts(c) {
+  const TU = typeof window !== 'undefined' ? window.HBTradeUI : null;
+  const tr = TU && TU.tradeOf ? TU.tradeOf(c) : null;
+  return { root: (c.shown || c.cfg).root, replay: !!c.replay,
+    tradeReady: !tr || !!(c.cfg && c.cfg.algo) || !!(tr.accounts && tr.accounts.length) };
+}
+
 let PAGE = null;   // the page interface (same singleton every overlay() call hands us): jump()'s own home
 function overlay(cell, page) {
   PAGE = page;
@@ -351,14 +393,20 @@ function overlay(cell, page) {
 /* Jump to trade i (ruling S20): select it, pick the chart showing the run's root (falling back to the
    selected one), switch it to whatever interval lets scroll-back reach the trade's entry under the client's
    200,000-bar cap, load history back to it, then zoom. Every early return leaves the status-bar note as
-   whatever last explained why. */
-async function jump(i) {
+   whatever last explained why. `target` (Claude's show, planned by showPlan) names the chart to use instead;
+   it is re-checked here, at the moment it is touched: a chart that started replaying is left alone. */
+async function jump(i, target = null) {
   if (!PAGE) return;
   const U = window.HBTesterUI, b = U.bundle, t = b && b.trades[i];
   if (!t) return;
+  if (target && (target.replay || !PAGE.cells().includes(target))) { PAGE.sbNote('That chart is replaying (or gone): left it alone'); return; }
+  if (target && chartFacts(target).root !== b.run.strategy.root && chartFacts(target).tradeReady) {
+    PAGE.sbNote('That chart has accounts or an algo on it now: its instrument is left alone');
+    return;
+  }
   U.select(i);
   const root = b.run.strategy.root, cells = PAGE.cells(), rootOf = (c) => (c.shown || c.cfg).root;
-  const cell = rootOf(PAGE.cur()) === root ? PAGE.cur() : cells.find((c) => rootOf(c) === root) || PAGE.cur();
+  const cell = target || (rootOf(PAGE.cur()) === root ? PAGE.cur() : cells.find((c) => rootOf(c) === root) || PAGE.cur());
   PAGE.select(cell);
   const spec = window.HBTester.reachSpec(cell.cfg.spec, t.entry_ms, PAGE.clockMs());
   if (rootOf(cell) !== root || spec !== cell.cfg.spec) {
@@ -376,7 +424,7 @@ async function jump(i) {
   cell.focusRange(t.entry_ms, t.exit_ms);
 }
 
-const api = { overlay, jump, tradesInRange, sessionSpan, plotPoints,
+const api = { overlay, jump, tradesInRange, sessionSpan, plotPoints, showPlan, focusTrade, chartFacts,
   hlineStyle, hlineLabel, hlineTip, stackLabels, labelsFit, LABEL_MIN_PX };
 if (typeof window !== 'undefined') window.HBTesterLayer = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;

@@ -25,3 +25,12 @@ def tester_shared(tmp_path_factory, monkeypatch):
 @pytest.fixture(autouse=True)
 def _outside_the_quiet_window(monkeypatch):
     monkeypatch.setattr(slots, "et_now", lambda: dt.datetime(2026, 9, 28, 12, 0, tzinfo=slots.ET))
+
+
+@pytest.fixture(autouse=True)
+def drafts_dir(tmp_path_factory, monkeypatch):
+    """DRAFT strategies (homebase.draftstore): a fresh, empty tmp dir per test -- never ~/.homebase/strategies.
+    Child processes (the draft host, runner exec) inherit it through the environment."""
+    d = tmp_path_factory.mktemp("drafts")
+    monkeypatch.setenv("HOMEBASE_DRAFTS_DIR", str(d))
+    return d

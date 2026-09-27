@@ -851,7 +851,11 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
 
     register_desk(app, link=link, quotes=quotes, browser_write_ok=browser_write_ok)
     register_paperbook(app, books=book, browser_write_ok=browser_write_ok)
-    tester = tester_router(browser_write_ok, base, Path(state) / "tester" if state else None)
+    def fan_count(msg: dict) -> int:      # POST /api/tester/show: tell every page, say how many there were
+        fan(msg)
+        return len(conns)
+
+    tester = tester_router(browser_write_ok, base, Path(state) / "tester" if state else None, notify=fan_count)
     app.include_router(tester)
 
     @app.get("/api/settings")

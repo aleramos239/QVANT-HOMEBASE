@@ -42,7 +42,7 @@ from pathlib import Path
 
 from .. import strategies
 from ..paths import repo_root
-from . import runner
+from . import drafthost, runner
 from .discipline import parse_range
 from .runner import RUN_ID, _now, read_json, write_json
 from .slots import QUIET_MSG, Slots, shared_dir
@@ -81,6 +81,8 @@ def validate_grid(body) -> dict:
     extra = sorted(set(body) - FIELDS)
     if extra:
         raise ValueError(f"unknown field(s): {', '.join(extra)}")
+    if drafthost.needs_child(body.get("strategy")):
+        return drafthost.in_child("validate_grid", {"body": body})    # a DRAFT: never imported here
     cls = strategies.get(str(body.get("strategy", "")))
     base = body.get("inputs")
     if base is not None and not isinstance(base, dict):

@@ -39,7 +39,8 @@ from bisect import bisect_left
 from collections import deque
 from pathlib import Path
 
-from .. import strategies
+from .. import draftstore, strategies
+from . import drafthost
 from ..paths import repo_root, state_dir
 from . import discipline, propsim, report
 from .engine import ENGINE_VERSION, Costs, run_session
@@ -102,6 +103,9 @@ def validate(body) -> dict:
     # would otherwise bubble up as a 500.
     if "inputs" in body and body["inputs"] is not None and not isinstance(body["inputs"], dict):
         raise ValueError("inputs: a JSON object")
+    if drafthost.needs_child(body.get("strategy")):
+        # a DRAFT: never imported here -- validated (and snapshotted) in a child process
+        return drafthost.in_child("validate_run", {"body": body})
     cls = strategies.get(str(body.get("strategy", "")))
     inputs = strategies.resolve_inputs(cls.inputs(), body.get("inputs") or {})
     rng = discipline.parse_range(body.get("range"))
@@ -484,6 +488,15 @@ class RunManager:
                 write_json(d / "status.json", st)
 
 
+def _register_draft(run_dir: Path) -> None:
+    """A `runner exec` child whose request carries a DRAFT's source snapshot registers it into this
+    child's own strategies.REGISTRY -- the exact code that was validated, not the file as it is now."""
+    req = read_json(Path(run_dir) / "request.json", {}) or {}
+    src = req.get("draft_source")
+    if isinstance(src, str) and draftstore.is_draft_id(req.get("strategy")):
+        drafthost.register_source(draftstore.name_of(req["strategy"]), src)
+
+
 def _alive(pid) -> bool:
     if not isinstance(pid, int) or pid <= 0:
         return False
@@ -526,6 +539,7 @@ def main(argv: list[str] | None = None) -> int:
     a = ap.parse_args(argv)
     store = TapeStore(a.archive, a.cache)
     if a.cmd == "exec":
+        _register_draft(a.run_dir)
         slot = None
         if a.slot_fd is None or not held(a.slot_fd):
             slots = Slots()

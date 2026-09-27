@@ -1,6 +1,15 @@
 """The Strategy Tester's HTTP API on the chart service (:8852).
 
-    GET  /api/tester/strategies          strategies with input schemas + defaults
+    GET  /api/tester/strategies          strategies with input schemas + defaults; DRAFT strategies
+                                          (~/.homebase/strategies, homebase.draftstore) follow the built-ins
+                                          with `draft: true` (and `error` when one does not load) -- described
+                                          in a child process (backtest.drafthost), never imported here
+    GET  /api/tester/strategies/{id}/source   the strategy's source text: a built-in's module (+ the
+                                          homebase/strategies modules its classes inherit from), or a draft's file
+    POST /api/tester/show                {run_id | grid_id + cell, focus?: {trade_index | date | time_ms}}
+                                          -> tells every open chart page (/ws `tester_show`) to load that run or
+                                          heat-map cell into the Strategy Tester and show it on a chart
+                                          (JSON only; the page picks the chart -- testerlayer.showPlan)
     GET  /api/tester/prop-rules          prop-eval rule sets [{id, name, version, confirmed}]
     POST /api/tester/run                 {strategy, inputs, range, qty, commission,
                                           slippage_ticks, capital?, prop_rules?} -> {id}
@@ -54,6 +63,9 @@ uniformly rather than routed around it. POSTs additionally pass browser_write_ok
 """
 from __future__ import annotations
 
+import asyncio
+import datetime as dt
+import inspect
 import re
 import threading
 from collections import OrderedDict
@@ -62,10 +74,11 @@ from typing import Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from .. import strategies
+from .. import draftstore, netguard, strategies
+from ..backtest import drafthost
 from ..backtest import propsim
 from ..backtest.grid import GridManager, LooksCorrupt
-from ..backtest.runner import RunManager, _run_propsim, default_base
+from ..backtest.runner import RunManager, _run_propsim, default_base, read_json
 from ..backtest.stats import montecarlo
 from ..backtest import walkforward
 from ..backtest.walkforward import WalkForwardManager
@@ -86,8 +99,46 @@ def host_ok(request: Request) -> None:
         raise HTTPException(403, "unexpected Host header")
 
 
+_STRATEGIES_DIR = Path(strategies.__file__).resolve().parent
+FOCUS_KEYS = ("trade_index", "date", "time_ms")
+
+
+def builtin_source(sid: str) -> list[dict]:
+    """A built-in strategy's source: its own module, then every homebase/strategies module one of its
+    classes inherits from (the straddles live in straddle.py, the contract in base.py)."""
+    cls = strategies.get(sid)
+    files: list[Path] = []
+    for k in cls.__mro__:
+        try:
+            f = Path(inspect.getsourcefile(k) or "").resolve()
+        except TypeError:
+            continue
+        if f.parent == _STRATEGIES_DIR and f.suffix == ".py" and f not in files:
+            files.append(f)
+    return [{"path": f"homebase/strategies/{f.name}", "text": f.read_text(encoding="utf-8")} for f in files]
+
+
+def check_focus(focus) -> dict | None:
+    """None, or exactly one of {trade_index: int >= 0, date: 'YYYY-MM-DD', time_ms: int epoch ms}."""
+    if focus is None:
+        return None
+    if not isinstance(focus, dict) or len(focus) != 1 or next(iter(focus)) not in FOCUS_KEYS:
+        raise HTTPException(400, "focus: one of {trade_index}, {date}, {time_ms}")
+    k, v = next(iter(focus.items()))
+    if k == "date":
+        try:
+            dt.date.fromisoformat(str(v))
+        except ValueError:
+            raise HTTPException(400, "focus.date: YYYY-MM-DD") from None
+        return {"date": str(v)}
+    if isinstance(v, bool) or not isinstance(v, int) or v < 0:
+        raise HTTPException(400, f"focus.{k}: a whole number >= 0")
+    return {k: v}
+
+
 def make_router(write_ok: Callable[[Request], None], manager: RunManager,
-                grids: GridManager, wfs: WalkForwardManager) -> APIRouter:
+                grids: GridManager, wfs: WalkForwardManager,
+                notify: Callable[[dict], int] | None = None) -> APIRouter:
     r = APIRouter(prefix="/api/tester", dependencies=[Depends(host_ok)])
 
     def known(rid: str):
@@ -98,7 +149,59 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
 
     @r.get("/strategies")
     def list_strategies():
-        return strategies.catalog()
+        built = strategies.catalog()
+        return built + drafthost.catalog(builtin_ids={s["id"] for s in built})
+
+    @r.get("/strategies/{sid}/source")
+    def strategy_source(sid: str):
+        if draftstore.is_draft_id(sid):
+            try:
+                name = draftstore.name_of(sid)
+                text = draftstore.read(name)
+            except (ValueError, FileNotFoundError):
+                raise HTTPException(404, f"no draft {sid!r}") from None
+            return {"id": sid, "draft": True,
+                    "files": [{"path": str(draftstore.path_for(name)), "text": text}]}
+        try:
+            return {"id": sid, "draft": False, "files": builtin_source(sid)}
+        except ValueError:
+            raise HTTPException(404, f"no strategy {sid!r}") from None
+
+    @r.post("/show")
+    async def show(request: Request):
+        """Ask every open chart page to load a finished run (or heat-map cell) into the Strategy Tester
+        and show it on a chart. JSON only, behind the same Host + Origin guards as every write here;
+        async (the page fan-out lives on the event loop) with the one small disk read in a thread.
+        Answers how many pages were told -- 0 means no chart page is open."""
+        write_ok(request)
+        if not netguard.is_json(request.headers.get("content-type")):
+            raise HTTPException(415, "send JSON (Content-Type: application/json)")
+        try:
+            body = await request.json()
+        except ValueError:
+            raise HTTPException(400, "the body is JSON") from None
+        if not isinstance(body, dict) or set(body) - {"run_id", "grid_id", "cell", "focus"}:
+            raise HTTPException(400, "{run_id | grid_id + cell, focus?}")
+        focus = check_focus(body.get("focus"))
+        if "grid_id" in body or "cell" in body:
+            if "run_id" in body or "grid_id" not in body or "cell" not in body:
+                raise HTTPException(400, "either run_id, or grid_id + cell")
+            gid, cell = str(body["grid_id"]), body["cell"]
+            if isinstance(cell, bool) or not isinstance(cell, int) or cell < 0:
+                raise HTTPException(400, "cell: a whole number")
+            d = known_grid(gid) / "cells" / f"{cell:02d}"
+            msg = {"type": "tester_show", "grid_id": gid, "cell": cell}
+        else:
+            rid = str(body.get("run_id", ""))
+            d = known(rid)
+            msg = {"type": "tester_show", "run_id": rid}
+        st = await asyncio.to_thread(lambda: read_json(d / "status.json", {}) or {})
+        if st.get("status") != "done":
+            raise HTTPException(409, f"that run is {st.get('status') or 'missing'}, not done")
+        if focus is not None:
+            msg["focus"] = focus
+        pages = notify(msg) if notify is not None else 0
+        return {"ok": True, "pages": pages, **{k: v for k, v in msg.items() if k != "type"}}
 
     @r.get("/prop-rules")
     def prop_rules():
@@ -379,11 +482,11 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
 
 
 def tester_router(write_ok: Callable[[Request], None], archive: Path,
-                  state: Path | None = None) -> APIRouter:
+                  state: Path | None = None, notify: Callable[[dict], int] | None = None) -> APIRouter:
     """Production (state None): homebase/.state/tester + the ~/futures_derived tape
     cache. A test passes its tmp dir and gets the runs AND the cache under it."""
     base = Path(state) if state else default_base()
     cache = base / "tape" if state else CACHE
     return make_router(write_ok, RunManager(base, archive=archive, cache=cache),
                        GridManager(base, archive=archive, cache=cache),
-                       WalkForwardManager(base, archive=archive, cache=cache))
+                       WalkForwardManager(base, archive=archive, cache=cache), notify=notify)

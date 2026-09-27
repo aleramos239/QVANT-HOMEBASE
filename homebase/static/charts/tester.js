@@ -716,7 +716,13 @@ function wfScheme(r) {
     + `· stitched: ${c.stitch}`;
 }
 
-const api = { DEFAULT_MAX_CELLS, HARD_MAX_CELLS, GRID_WORKERS, maxCellsError, cellsWarning, stepValues, axisValues,
+/* A strategy's name in the picker: a DRAFT (~/.homebase/strategies, written by Claude or by hand) says so,
+   and one that does not load says that too (the option is disabled; its error is the tooltip). */
+function strategyLabel(s) {
+  if (!s) return '';
+  return s.draft ? `DRAFT · ${s.name || s.id}${s.error ? ' (does not load)' : ''}` : (s.name || s.id);
+}
+const api = { strategyLabel, DEFAULT_MAX_CELLS, HARD_MAX_CELLS, GRID_WORKERS, maxCellsError, cellsWarning, stepValues, axisValues,
   parseValues, valueLabel, gridAxes, gridCount, gridProblems, gridBody, looksText, looksLine, heatPanels, heatMaxAbs,
   WF_METRICS, WF_RATIOS, WF_STEP_HEADERS, WF_STEP_GROUPS, WF_SIDE_LABELS, WF_NEEDS_GRID, wfBody, wfProblems, wfLooksText,
   etaText, wfProgress, wfTiles, wfDrop, wfUncovered, wfStepRows, wfStability, wfPhases, wfScheme,

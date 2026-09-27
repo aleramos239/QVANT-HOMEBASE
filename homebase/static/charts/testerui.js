@@ -281,7 +281,10 @@ function strategySelect(busy) {
   const sel = page.mk('select', 'set-select tst-strat');
   sel.setAttribute('aria-label', 'Strategy');
   sel.disabled = busy;
-  for (const s of strategiesList) sel.appendChild(optionEl(s.id, s.name));
+  for (const s of strategiesList) {
+    const o = sel.appendChild(optionEl(s.id, X.strategyLabel(s)));
+    if (s.error) { o.disabled = true; o.title = s.error; }   // a draft that does not load: listed, not runnable
+  }
   sel.value = strategyId;
   sel.onchange = () => switchStrategy(sel.value);
   return sel;
@@ -727,25 +730,90 @@ function renderCompare(container) {
 }
 function loadRecentRun(id) {
   fetch(`/api/tester/run/${id}/bundle`).then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
-    .then((b) => {
-      const schema = schemaFor(b.run.strategy.id);
-      if (b.run.strategy.id !== strategyId) resetGrid();
-      strategyId = b.run.strategy.id;
-      form = X.fromRun(b.run, schema);
-      bundle = b;
-      startMonteCarlo(b.run.id);
-      loadedKey = X.key(form);
-      lastRunFailed = '';
-      innerTab = 'overview';
-      visibleTradeRows = TRADE_CHUNK;
-      selectedTrade = null;
-      persist();
-      refreshHeader();
-      refreshTabsBar();
-      refreshContent();
-      notify();
-    })
+    .then((b) => applyRun(b))
     .catch(() => { serverError = 'could not load that run'; refreshHeader(); });
+}
+/* A finished run's bundle into every tab, exactly as Recent runs loads one. */
+function applyRun(b, tab = 'overview') {
+  const schema = schemaFor(b.run.strategy.id);
+  if (b.run.strategy.id !== strategyId) resetGrid();
+  strategyId = b.run.strategy.id;
+  form = X.fromRun(b.run, schema);
+  bundle = b;
+  startMonteCarlo(b.run.id);
+  loadedKey = X.key(form);
+  lastRunFailed = '';
+  innerTab = tab;
+  visibleTradeRows = TRADE_CHUNK;
+  selectedTrade = null;
+  persist();
+  refreshHeader();
+  refreshTabsBar();
+  refreshContent();
+  notify();
+}
+
+/* ---- "Show on chart", asked by Claude (POST /api/tester/show -> /ws {type: 'tester_show'}) ----
+   Opens this tab, loads the run (or heat-map cell) the way a click on Recent runs (or on the cell) would, then
+   puts it on a chart chosen by HBTesterLayer.showPlan -- never a replaying chart, and never a new instrument on
+   a chart with accounts or an algo (then nothing moves and the status note says why) -- and scrolls to the
+   focus trade when one was asked for. Refused while this page has a run / grid / walk-forward starting or in
+   flight: the header is frozen then (I1), and Claude's request must not clobber the user's own. */
+let showToken = 0;
+async function showFromClaude(m) {
+  if (!page || !m || (m.run_id == null && m.grid_id == null)) return;
+  const what = m.run_id != null ? `run ${m.run_id}` : `heat-map cell ${m.cell} of ${m.grid_id}`;
+  const busyNow = () => !!runStatus || gridInFlight() || wfInFlight();
+  if (busyNow()) { page.sbNote(`Claude asked to show ${what}: a run is in flight here -- load it once it finishes`); return; }
+  const token = ++showToken;
+  await Promise.all([loadStrategies(), loadPropRules()]);
+  const url = m.run_id != null ? `/api/tester/run/${encodeURIComponent(m.run_id)}/bundle`
+    : `/api/tester/grid/${encodeURIComponent(m.grid_id)}/cell/${Number(m.cell)}/bundle`;
+  let b = null;
+  try { const r = await fetch(url); if (r.ok) b = await r.json(); } catch (_) { /* reported below */ }
+  if (token !== showToken) return;              // a newer request won
+  if (!b || !b.run) { page.sbNote(`Claude asked to show ${what}: it could not be loaded`); return; }
+  if (busyNow()) { page.sbNote(`Claude asked to show ${what}: a run started here meanwhile -- left it alone`); return; }
+  window.HBPanel.show('tester');
+  if (!root || !root.isConnected || !headerEl) { page.sbNote(`Claude asked to show ${what}: the Strategy Tester did not open`); return; }
+  const L = window.HBTesterLayer, focus = m.focus || null;
+  const tab = focus ? 'trades' : 'overview';
+  if (m.grid_id != null) {
+    const moved = b.run.strategy.id !== strategyId;
+    if (moved) { resetGrid(); resetWf(); }
+    strategyId = b.run.strategy.id;
+    form = X.fromRun(b.run, schemaFor(strategyId));
+    bundle = b;
+    startMonteCarlo(b.run.id, { grid_id: m.grid_id, cell: m.cell });
+    loadedKey = X.key(form);
+    lastRunFailed = '';
+    innerTab = tab;
+    visibleTradeRows = TRADE_CHUNK;
+    selectedTrade = null;
+    heatCell = { gid: m.grid_id, i: m.cell };
+    if (!grid || grid.id !== m.grid_id) pollGrid(m.grid_id, ++gridToken);   // the heat-map shows that grid
+    persist();
+    refreshHeader();
+    refreshTabsBar();
+    refreshContent();
+    notify();
+  } else {
+    applyRun(b, tab);
+  }
+  // the chart: re-read NOW (the grid may have been rebuilt, a chart may have started replaying)
+  const cells = page.cells(), sel = cells.indexOf(page.cur()), want = b.run.strategy.root;
+  const plan = L.showPlan(cells.map(L.chartFacts), sel, want);
+  if (plan.index < 0) { page.sbNote(plan.reason); return; }
+  const cell = cells[plan.index];
+  const i = L.focusTrade(b.trades, focus);
+  if (i != null) { await L.jump(i, cell); return; }
+  if (cell.replay) return;
+  page.select(cell);
+  if (plan.switchRoot) {
+    if (L.chartFacts(cell).tradeReady) { page.sbNote('That chart has accounts or an algo on it now: its instrument is left alone'); return; }
+    cell.update({ root: want });
+  }
+  page.sbNote(focus ? `Showing ${what} -- no trade matches that focus` : `Showing ${what} on ${want}`);
 }
 
 /* ================================================================== run / poll / cancel ================================================================== */
@@ -1889,7 +1957,7 @@ function buildFull() {
   root.replaceChildren();
   store = loadStore();
   rules = store.rules !== false;
-  strategyId = (strategiesList.some((s) => s.id === store.strategy) ? store.strategy : strategiesList[0].id);
+  strategyId = (strategiesList.some((s) => s.id === store.strategy && !s.error) ? store.strategy : strategiesList[0].id);
   form = X.restore(store.forms[strategyId], schemaFor(strategyId));
   headerEl = page.mk('div', 'tst-head');
   tabsEl = page.mk('div', 'tst-tabs');
@@ -1931,5 +1999,6 @@ window.HBTesterUI = {
   get rules() { return rules; },
   on(fn) { listeners.add(fn); return () => listeners.delete(fn); },
   select(i) { selectedTrade = i; if (innerTab === 'trades') refreshContent(); notify(); },
+  show: showFromClaude,
 };
 })();

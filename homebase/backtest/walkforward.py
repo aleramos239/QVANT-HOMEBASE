@@ -63,7 +63,7 @@ from collections import Counter
 from pathlib import Path
 
 from .. import strategies
-from . import report
+from . import drafthost, report
 from .discipline import RESEARCH_END, RESEARCH_START
 from .grid import FINAL, GridManager, LooksCorrupt, add_look, validate_grid
 from .runner import read_json, report_holes, write_json
@@ -307,6 +307,8 @@ def validate_wf(body) -> dict:
     own fields. ValueError / DisciplineError with a message for the page."""
     if not isinstance(body, dict):
         raise ValueError("the body is a JSON object")
+    if drafthost.needs_child(body.get("strategy")):
+        return drafthost.in_child("validate_wf", {"body": body})      # a DRAFT: never imported here
     b = dict(body)
     test_months = ratio(b.pop("test_months", TEST_MONTHS))
     if isinstance(b.get("range"), dict) and b["range"].get("kind") == "is_months":

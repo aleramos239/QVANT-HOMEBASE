@@ -1500,6 +1500,7 @@ function connect() {
     if (m.type === 'paperbook') { window.HBPaperClient.onBook(m); window.HBDeskClient.bookChanged(); return; }   // the PAPER account
     if (m.type === 'depth') { window.HBDomUI.onDepth(m); window.HBL2Layer.onDepth(m); window.HBLiquidity.onDepth(m); return; }
     if (m.type === 'news' || m.type === 'burst' || m.type === 'burst_update') { window.HBNewsUI.onMessage(m); return; }
+    if (m.type === 'tester_show') { window.HBTesterUI.show(m); return; }   // Claude's "show on chart" (POST /api/tester/show)
     const c = cells.find((x) => x.id === m.id);
     if (!c) return;
     if (m.type === 'history') c.onHistory(m);
