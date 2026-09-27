@@ -130,3 +130,18 @@ test('closedNames is empty once every saved layout is open', () => {
 test('closedNames with nothing saved is empty regardless of what is open', () => {
   assert.deepEqual(L.closedNames([], ['a']), []);
 });
+
+// ---- startTab: what the page opens on start ----
+test('startTab: no remembered tab opens the first saved layout', () => {
+  const saved = { A: {}, B: {} };
+  assert.equal(L.startTab('', false, ['B', 'A'], saved), 'B');
+  assert.equal(L.startTab('gone', false, ['A', 'B'], saved), 'A');   // remembered tab was deleted
+});
+test('startTab: keeps the screen when the remembered tab exists, there is unsaved work, or nothing is saved', () => {
+  const saved = { A: {}, B: {} };
+  assert.equal(L.startTab('B', false, ['A', 'B'], saved), null);
+  assert.equal(L.startTab('', true, ['A', 'B'], saved), null);        // unsaved, unnamed work is the user's
+  assert.equal(L.startTab('gone', true, ['A'], saved), null);
+  assert.equal(L.startTab('', false, [], {}), null);
+  assert.equal(L.startTab('', false, ['X'], saved), null);            // order names nothing saved
+});

@@ -884,6 +884,8 @@ async function loadTabs() {
   // refresh -- seed the snapshot from the SERVER's body, never the current one, so isDirty still catches
   // real drift instead of treating "whatever is on screen right now" as automatically saved
   if (layout.name && all[layout.name]) tabSnapshot = all[layout.name];
+  const first = window.HBLayouts.startTab(layout.name, layout.dirty, tabOrder, all);
+  if (first) { loadLayout(first, all[first]); return; }   // loadLayout renders the tabs itself
   renderTabs();
 }
 

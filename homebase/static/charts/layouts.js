@@ -79,7 +79,16 @@ function closedNames(names, open) {
   return names.filter((n) => !isOpen.has(n)).sort((a, b) => a.localeCompare(b));
 }
 
-const api = { orderNames, isDirty, renameError, uniqueName, closeTab, moveTab, closedNames };
+/* Which saved layout to open when the page starts, or null to keep what is on screen. A start with no
+   remembered tab (a fresh window, cleared storage) or whose remembered tab no longer exists opens the FIRST
+   tab rather than a blank chart -- but never over unsaved work (`dirty`), which is the user's. */
+function startTab(name, dirty, order, saved) {
+  if (dirty || !Array.isArray(order) || !order.length || !saved) return null;
+  if (name && Object.prototype.hasOwnProperty.call(saved, name)) return null;
+  return order.find((n) => Object.prototype.hasOwnProperty.call(saved, n)) || null;
+}
+
+const api = { startTab, orderNames, isDirty, renameError, uniqueName, closeTab, moveTab, closedNames };
 if (typeof window !== 'undefined') window.HBLayouts = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();
