@@ -271,12 +271,32 @@ def test_limit_trades_stops_the_day_at_the_limit():
     assert got == [("2024-03-04", -1200.0), ("2024-03-05", -700.0), ("2024-03-05", -500.0), ("2024-03-06", -300.0)]
 
 
-def test_the_result_warns_when_a_single_trade_breaks_the_limit():
-    ledger = day_trades([-1500.0, 800.0, 900.0])
+def test_a_dip_past_the_limit_is_a_stop_even_when_the_trade_then_wins():
+    """Lucid stops you the MOMENT the day reaches -$1,200, closed trades plus the open one. The
+    engine's tick-level mae_usd shows the dip: a trade that sat at -1,300 then hit +3,000 is a
+    -1,200 day; with -200 already banked, a -1,100 dip (-1,108 with its commission) is enough."""
+    pro = load_rules("lucid-pro-50k@2026-09-27b")
+    ledger = [{"date": "2024-03-04", "net": 3000.0, "mae_usd": 1300.0, "commission": 8.0},
+              {"date": "2024-03-05", "net": -200.0, "mae_usd": 250.0, "commission": 8.0},
+              {"date": "2024-03-05", "net": 2500.0, "mae_usd": 1100.0, "commission": 8.0},
+              {"date": "2024-03-05", "net": 400.0, "mae_usd": 0.0, "commission": 8.0},
+              {"date": "2024-03-06", "net": 900.0, "mae_usd": 1100.0, "commission": 8.0}]
+    got = propsim.limit_trades(ledger, pro)
+    assert [(t["date"], t["net"], t.get("dll_stop", False)) for t in got] == [
+        ("2024-03-04", -1200.0, True), ("2024-03-05", -200.0, False), ("2024-03-05", -1000.0, True),
+        ("2024-03-06", 900.0, False)]
+    res = evaluate(ledger, "lucid-pro-50k@2026-09-27b", n_paths=200)
+    assert res["dll_stopped_days"] == 2 and res["caveat"] == CAVEAT   # MAE present: nothing hidden
+    # the same ledger without the limit is untouched
+    assert propsim.limit_trades(ledger, load_rules("lucid-pro-50k-no-dll@2026-09-27b")) is ledger
+
+
+def test_a_ledger_without_mae_is_flagged_as_overstated():
+    ledger = day_trades([-1500.0, 800.0, 900.0])            # bare {date, net}: blind to intraday
     pro = evaluate(ledger, "lucid-pro-50k@2026-09-27b", n_paths=200)
-    assert pro["dll_trades_over"] == 1 and "OVERSTATED" in pro["caveat"]
+    assert "OVERSTATED" in pro["caveat"]
     no = evaluate(ledger, "lucid-pro-50k-no-dll@2026-09-27b", n_paths=200)
-    assert "dll_trades_over" not in no and no["caveat"] == CAVEAT
+    assert "dll_stopped_days" not in no and no["caveat"] == CAVEAT
 
 
 def test_monte_carlo_ruin_agrees_with_the_daily_limit():

@@ -89,13 +89,28 @@ def weekday_grid(trades: list[dict]) -> tuple[list[float], list[bool], list[str]
     return [by.get(d, 0.0) for d in dates], [d in by for d in dates], dates
 
 
+def _worst(t: dict) -> float:
+    """A trade's worst moment in $, net of its commission: -mae_usd - commission (the engine's
+    tick-level adverse excursion). A ledger without mae_usd (old runs, bare {date, net}) falls
+    back to the closing net -- blind to a dip-then-win, which evaluate() then warns about."""
+    net = float(t["net"])
+    mae = t.get("mae_usd")
+    if mae is None:
+        return net
+    return min(net, -abs(float(mae)) - float(t.get("commission") or 0.0))
+
+
 def limit_trades(trades: list[dict], r: dict) -> list[dict]:
-    """The ledger as a SOFT daily loss limit leaves it (LucidPro: hit the limit and you are
-    closed out and stopped for the day; the account survives). Walking each day's trades in
-    ledger order, the trade that takes the day's running P&L to -limit is cut to exactly the
-    limit and the day's later trades are dropped. Null limit: the ledger unchanged. What it
-    still cannot see is a trade that dipped past the limit INTRADE and then won -- evaluate()
-    warns about those."""
+    """The ledger as a SOFT daily loss limit leaves it (LucidPro: the moment the day's P&L --
+    closed trades plus the open one -- reaches -limit you are closed out and stopped for the
+    day; the account survives). Walking each day's trades in ledger order (the engine's is
+    chronological), a trade whose WORST moment (``_worst``: its tick-level MAE, so a trade that
+    dipped past the limit and then won is caught) takes the day to -limit is closed at exactly
+    the limit, marked ``dll_stop``, and the day's later trades are dropped.
+
+    Approximations, both small: the stop fills at exactly -limit (Lucid liquidates at market,
+    so a fast market can cost a little more), and two positions open AT THE SAME TIME are
+    walked one after the other rather than summed. Null limit: the ledger unchanged."""
     dll = engine._dll(r)
     if not dll:
         return trades
@@ -104,12 +119,12 @@ def limit_trades(trades: list[dict], r: dict) -> list[dict]:
         d = t["date"]
         if d in stopped:
             continue
-        c, x = cum.get(d, 0.0), float(t["net"])
-        if c + x <= -dll:
-            out.append({**t, "net": -dll - c})
+        c = cum.get(d, 0.0)
+        if c + _worst(t) <= -dll:
+            out.append({**t, "net": -dll - c, "dll_stop": True})
             stopped.add(d)
             continue
-        cum[d] = c + x
+        cum[d] = c + float(t["net"])
         out.append(t)
     return out
 
@@ -127,13 +142,15 @@ def evaluate(trades: list[dict], rule_id: str = DEFAULT_RULES, *, n_paths: int =
            "n_paths": n_paths, "horizon": horizon, "seed": seed}
     dll = engine._dll(r)
     if dll:
-        over = sum(1 for t in trades if float(t.get("net", 0.0)) < -dll)
-        out["dll_trades_over"] = over
-        if over:
-            out["caveat"] = (f"{CAVEAT} {over} trade(s) lost more than the ${dll:,.0f} daily limit on their own: "
-                             "they are cut to the limit here, but a trade that dipped past it before winning is still "
-                             "counted as a win, so this pass rate is OVERSTATED.")
-    pnls, flags, dates = weekday_grid(limit_trades(trades, r))
+        limited = limit_trades(trades, r)
+        out["dll_stopped_days"] = sum(1 for t in limited if t.get("dll_stop"))
+        # only a ledger WITHOUT the engine's mae_usd is blind to a dip-then-win
+        if any(t.get("mae_usd") is None for t in trades):
+            out["caveat"] = (f"{CAVEAT} This ledger has no per-trade adverse excursion, so a trade that dipped past "
+                             f"the ${dll:,.0f} daily limit and then recovered is counted in full: the pass rate is OVERSTATED.")
+    else:
+        limited = trades
+    pnls, flags, dates = weekday_grid(limited)
     if not pnls:
         return {**out, "skipped": "no trades: nothing to simulate"}
     res = engine.run(pnls, trade_flags=flags, rules=r, n_paths=n_paths, horizon=horizon,
