@@ -224,6 +224,12 @@ class BrokerAdapter(abc.ABC):
         unknown. Default: unknown."""
         return None
 
+    async def get_order_state(self, order_id: str) -> dict:
+        """{"status": get_order_status, "filled_qty": contracts this order is
+        KNOWN to have filled, or None when the adapter cannot tell (None is
+        never "0": no fill seen is not no fill)}. Default: filled unknown."""
+        return {"status": await self.get_order_status(order_id), "filled_qty": None}
+
     async def cancel_protective_orders(self, symbol: str) -> OrderResult:
         """Cancel the protective orders WE placed for `symbol` (best-effort).
         Called by the engine when the copied leg goes flat, so a surviving Stop

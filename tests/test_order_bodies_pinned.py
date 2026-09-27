@@ -354,3 +354,24 @@ def test_legged_fallback_still_legs_market_and_limit_entries():
     ad = _legged()
     r = run(ad.place_bracket(OrderRequest("NQZ6", "Buy", 1, "Stop", 101.0)))   # no SL/TP: a plain stop
     assert r.ok and [x.order_type for x in ad.sent] == ["Stop"]
+
+
+def test_order_state_counts_the_fills_seen_and_never_reads_none_as_zero(tmp_path):
+    """The per-strategy kill's partial-fill check (fix round 2): contracts filled per order,
+    from the fill pushes (and the sync), each fill id once; nothing seen -> None."""
+    ad, _ = mkadapter(tmp_path)
+    ad._orders[9] = {"id": 9, "accountId": 66121477, "ordStatus": "Canceled"}
+
+    def push(fid, qty, oid=9):
+        ad._on_ws_event({"e": "props", "d": {"entityType": "fill", "entity": {
+            "id": fid, "orderId": oid, "qty": qty, "action": "Buy", "price": 1.0}}})
+
+    assert run(ad.get_order_state("9")) == {"status": "Canceled", "filled_qty": None}
+    push(1, 1)
+    push(2, 2)
+    push(2, 2)                                             # the same fill again: counted once
+    push(3, None)                                          # no qty: not counted
+    assert run(ad.get_order_state("9")) == {"status": "Canceled", "filled_qty": 3}
+    ad._ingest_sync({"fills": [{"id": 4, "orderId": 11, "qty": 5}, {"id": 1, "orderId": 9, "qty": 1}],
+                     "accounts": [{"id": 66121477, "name": "APEX"}]})
+    assert ad._order_filled == {9: 3, 11: 5}

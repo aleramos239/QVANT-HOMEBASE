@@ -38,8 +38,31 @@ def mk(tmp_path, et=(10, 0), armed=True):
         chart_trading=ChartTradingCfg(enabled=True))
     ads = {a: TradeAdapter(a) for a in cfg.accounts}
     eng = Engine(cfg, ads, now_fn=clock, root=tmp_path)
+    eng.slept = []
+
+    async def fast_sleep(s):                          # the kill's 250 ms polls, without the wait
+        eng.slept.append(s)
+        await asyncio.sleep(0)
+
+    eng._kill_sleep = fast_sleep
     desk = ChartDesk(cfg, eng, ads, {}, save=lambda c: None, mono=Mono())
     return desk, eng, ads, clock, cfg
+
+
+def script_states(ad, script):
+    """get_order_state answers from `script` {order id: [(status, filled_qty), ...]}: one item per
+    read, the last one repeated; an id not in it reads the adapter's order_status."""
+    seq = {k: list(v) for k, v in script.items()}
+    base = ad.get_order_state
+
+    async def get_order_state(i):
+        items = seq.get(str(i))
+        if not items:
+            return await base(i)
+        status, filled = items.pop(0) if len(items) > 1 else items[0]
+        return {"status": status, "filled_qty": filled}
+
+    ad.get_order_state = get_order_state
 
 
 def with_legs(st, ids, status, side="Buy"):
@@ -135,16 +158,31 @@ def test_a_net_on_the_other_side_sells_nothing_and_leaves_the_stops(tmp_path):
     assert not {"us", "ut", "ds", "dt"} & set(ads["a1"].cancelled)       # stop/target left working
 
 
-def test_placed_not_filled_cancels_the_entries_first_and_sells_nothing(tmp_path):
+def test_placed_not_filled_and_flat_cancels_the_entries_first_then_the_dead_brackets(tmp_path):
     desk, eng, ads, *_ = mk(tmp_path)
     st = with_legs(eng._state("nq930", "a1"), NQ_IDS, "placed")
-    ads["a1"].net = 1                                     # a manual position, not the bot's
     ads["a1"].order_status = {"u1": "Canceled", "l1": "Canceled"}
     calls = logged(ads["a1"])
     out = kill(desk)
     assert out["results"]["a1"]["ok"] is True and ads["a1"].orders == []
-    assert calls[:2] == [("cancel", "u1"), ("cancel", "l1")]
+    assert calls == [("cancel", "u1"), ("cancel", "l1"), ("cancel", "us"), ("cancel", "ut"),
+                     ("cancel", "ds"), ("cancel", "dt")]
     assert (st.status, st.exit_reason) == ("done", "killed")
+
+
+def test_placed_not_filled_but_the_account_holds_a_position_says_check_it(tmp_path):
+    """Round 2 ruling: a position the bot cannot account for (a fill it has not seen, or a
+    manual one) -> nothing sold, stop/target left working, "check it"."""
+    desk, eng, ads, *_ = mk(tmp_path)
+    st = with_legs(eng._state("nq930", "a1"), NQ_IDS, "placed")
+    ads["a1"].net = 1
+    ads["a1"].order_status = {"u1": "Canceled", "l1": "Canceled"}
+    out = kill(desk)
+    r = out["results"]["a1"]
+    assert r["ok"] is False and "check it" in r["actions"][-1] and "not fully attributed" in r["actions"][-1]
+    assert ads["a1"].orders == [] and ads["a1"].cancelled == ["u1", "l1"]      # stops left working
+    assert st.status == "placed"
+    assert [e["event"] for e in journal(tmp_path)].count("strategy_kill_check") == 1
 
 
 def test_an_entry_that_fills_at_the_kill_is_sold_capped_before_its_brackets_go(tmp_path):
@@ -238,6 +276,7 @@ def test_the_client_id_is_deduplicated(tmp_path):
     desk, eng, ads, *_ = mk(tmp_path)
     with_legs(eng._state("nq930", "a1"), NQ_IDS, "live")
     ads["a1"].net = 2
+    ads["a1"].order_status = {"u1": "Filled", "l1": "Canceled"}
     first = kill(desk)
     ads["a1"].net = 2                                      # a second kill WOULD sell again
     assert kill(desk) == first
@@ -322,6 +361,7 @@ def test_a_kill_after_the_acks_that_raises_never_fails_the_placement(tmp_path):
         raise RuntimeError("socket gone")
 
     ad.place_bracket, ad.get_net_position = slow, broken
+    ad.order_status = {"a1-101": "Canceled", "a1-102": "Canceled"}   # the ids the acks bring
 
     async def go():
         fire = asyncio.ensure_future(eng.handle_alert({"strategy": "nq930", "upper": 110.0,
@@ -359,6 +399,7 @@ def test_a_kill_that_lands_while_the_bot_is_placing_finishes_after_the_acks(tmp_
         return await orig(req)
 
     ad.place_bracket = slow
+    ad.order_status = {"a1-101": "Canceled", "a1-102": "Canceled"}   # the ids the acks bring
 
     async def go():
         fire = asyncio.ensure_future(eng.handle_alert({"strategy": "nq930", "upper": 110.0,
@@ -435,25 +476,183 @@ def test_a_failed_placement_is_never_flattened(tmp_path):
     assert ads["a1"].orders == [] and ads["a1"].cancelled == []
 
 
-def test_a_both_filled_error_nets_to_zero_so_only_its_brackets_go(tmp_path):
-    """Both entries filled: the bot is +2 and -2 -> its own net is 0; the account's -1 is
-    not the bot's by its own fills and is left alone (never more than the bot's quantity)."""
+def test_a_both_filled_error_never_sells_and_keeps_the_stops_while_a_position_is_open(tmp_path):
+    """Round 2 ruling: the both-filled path relies on the engine's emergency; a net left
+    after it -> no bracket cancels, "check it"."""
     desk, eng, ads, *_ = mk(tmp_path)
     st = with_legs(eng._state("nq930", "a1"), NQ_IDS, "live")
     st.status, st.exit_reason = "error", "both_filled"
     ads["a1"].net = -1
-    ads["a1"].order_status = {"u1": "Filled", "l1": "Filled"}
     out = kill(desk)
-    assert out["results"]["a1"]["ok"] is True
-    assert ads["a1"].orders == []
-    assert {"us", "ut", "ds", "dt"} <= set(ads["a1"].cancelled)
+    assert out["results"]["a1"]["ok"] is False and "check it" in out["results"]["a1"]["actions"][-1]
+    assert ads["a1"].orders == [] and ads["a1"].cancelled == []
 
 
-def test_a_both_filled_error_with_the_bots_net_left_sells_that(tmp_path):
+def test_a_both_filled_error_that_is_flat_cancels_its_brackets(tmp_path):
     desk, eng, ads, *_ = mk(tmp_path)
     st = with_legs(eng._state("nq930", "a1"), NQ_IDS, "live")
     st.status, st.exit_reason = "error", "both_filled"
-    ads["a1"].net = 4                                     # bot +2 (sell side cancelled) + manual 2
+    out = kill(desk)
+    assert out["results"]["a1"]["ok"] is True and ads["a1"].orders == []
+    assert sorted(ads["a1"].cancelled) == ["ds", "dt", "us", "ut"]
+
+
+def test_live_with_both_entries_reading_filled_takes_the_both_filled_path(tmp_path):
+    desk, eng, ads, *_ = mk(tmp_path)
+    with_legs(eng._state("nq930", "a1"), NQ_IDS, "live")
+    ads["a1"].order_status = {"u1": "Filled", "l1": "Filled"}
+    ads["a1"].net = 4                                     # bot +2 -2, manual +4
+    out = kill(desk)
+    assert out["results"]["a1"]["ok"] is False and ads["a1"].orders == []
+    assert not {"us", "ut", "ds", "dt"} & set(ads["a1"].cancelled)
+
+
+# --- round 2: the entry cancel settles before anything is sold -------------------------------
+def test_a_fill_landing_as_the_cancel_is_accepted_is_waited_for_then_sold(tmp_path):
+    """(a) the cancel is accepted, but the stop entry fills: its status reads Working twice,
+    then Filled -> the kill waits (250 ms polls), then sells the bot's 2 and cancels its stops."""
+    desk, eng, ads, *_ = mk(tmp_path)
+    st = with_legs(eng._state("nq930", "a1"), NQ_IDS, "placed")
+    ad = ads["a1"]
+    ad.net = 2
+    script_states(ad, {"u1": [("Working", None), ("Working", None), ("Filled", 2)],
+                       "l1": [("Canceled", None)]})
+    calls = logged(ad)
+    out = kill(desk)
+    assert out["results"]["a1"]["ok"] is True
+    assert eng.slept == [0.25, 0.25]
+    assert calls == [("cancel", "u1"), ("cancel", "l1"), ("market", "Sell", 2),
+                     ("cancel", "us"), ("cancel", "ut"), ("cancel", "ds"), ("cancel", "dt")]
+    assert (st.status, st.exit_reason) == ("done", "killed")
+
+
+def test_a_partial_fill_then_cancel_is_unsure_and_keeps_the_stops(tmp_path):
+    """(b) the entry filled 1 of 2 and was then cancelled: it reads Canceled with a fill."""
+    desk, eng, ads, *_ = mk(tmp_path)
+    st = with_legs(eng._state("nq930", "a1"), NQ_IDS, "placed")
+    ad = ads["a1"]
+    ad.net = 1
+    script_states(ad, {"u1": [("Canceled", 1)], "l1": [("Canceled", None)]})
+    out = kill(desk)
+    r = out["results"]["a1"]
+    assert r["ok"] is False and "canceled after 1 filled" in r["actions"][-1]
+    assert ad.orders == [] and ad.cancelled == ["u1", "l1"] and st.status == "placed"
+
+
+def test_a_stale_partial_record_never_undersells(tmp_path):
+    """(c) the run recorded 4 of 10, but the entry reads Filled: the bot holds 10, never
+    entry_qty -> it sells 10 and only then cancels the stops."""
+    desk, eng, ads, *_ = mk(tmp_path)
+    st = with_legs(eng._state("nq930", "a1"), NQ_IDS, "live")
+    st.qty, st.entry_qty = 10, 4
+    ads["a1"].net = 10
     ads["a1"].order_status = {"u1": "Filled", "l1": "Canceled"}
-    kill(desk)
-    assert [(o.side, o.qty) for o in ads["a1"].orders] == [("Sell", 2)]
+    calls = logged(ads["a1"])
+    out = kill(desk)
+    assert out["results"]["a1"]["ok"] is True
+    assert calls[2] == ("market", "Sell", 10) and len(calls) == 7
+
+
+def test_an_entry_that_never_settles_is_unsure_after_3_s(tmp_path):
+    desk, eng, ads, *_ = mk(tmp_path)
+    st = with_legs(eng._state("nq930", "a1"), NQ_IDS, "placed")
+    ads["a1"].net = 2
+    ads["a1"].order_status = {"u1": "Working", "l1": "Canceled"}
+    out = kill(desk)
+    assert out["results"]["a1"]["ok"] is False and "not cancelled or filled" in out["results"]["a1"]["actions"][-1]
+    assert eng.slept == [0.25] * 12                       # 3 s of 250 ms polls
+    assert ads["a1"].orders == [] and st.status == "placed"
+
+
+# --- round 2 Critical B: the after-ack kill acts only on a run still running -----------------
+def test_a_second_kill_racing_the_acks_sells_once(tmp_path):
+    """Kill #1 lands while placing (pending). The acks land; before _place reaches its own
+    kill check, kill #2 finishes the run. The after-ack kill must then do nothing."""
+    desk, eng, ads, clock, cfg = mk(tmp_path, et=(9, 30))
+    ad = ads["a1"]
+    acks, replay = asyncio.Event(), asyncio.Event()
+    orig = ad.place_bracket
+
+    async def slow(req):
+        await acks.wait()
+        return await orig(req)
+
+    real_replay = eng._replay_early
+
+    async def held_replay(account):
+        await replay.wait()                               # the run is "placed" here
+        return await real_replay(account)
+
+    ad.place_bracket, eng._replay_early = slow, held_replay
+    ad.order_status = {"a1-101": "Filled", "a1-102": "Canceled"}
+    ad.net = 2
+
+    async def go():
+        fire = asyncio.ensure_future(eng.handle_alert({"strategy": "nq930", "upper": 110.0,
+                                                        "lower": 90.0}))
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        k1 = await desk.bot_kill({"client_id": "k1", "strategy": "nq930"})
+        acks.set()
+        for _ in range(5):
+            await asyncio.sleep(0)
+        assert eng._state("nq930", "a1").status == "placed"
+        k2 = await desk.bot_kill({"client_id": "k2", "strategy": "nq930"})
+        replay.set()
+        await fire
+        return k1, k2
+
+    k1, k2 = run(go())
+    assert k1["results"]["a1"]["pending"] is True
+    assert "market Sell 2: ok" in k2["results"]["a1"]["actions"]
+    assert [(o.side, o.qty) for o in ad.orders] == [("Sell", 2)]          # exactly one
+    after = [e for e in journal(tmp_path) if e["event"] == "strategy_killed_after_ack"]
+    assert after[-1]["actions"] == ["already killed — nothing to do"]
+
+
+def test_a_kill_during_an_early_fill_replay_acts_once(tmp_path):
+    """The entry fill beat the acks (held in _early); while its replay awaits the sibling
+    cancel, a kill finishes the run -> _place's own after-ack kill does nothing more."""
+    from homebase.broker.base import FillEvent
+    desk, eng, ads, clock, cfg = mk(tmp_path, et=(9, 30))
+    ad = ads["a1"]
+    acks, sibling = asyncio.Event(), asyncio.Event()
+    orig_place, orig_cancel = ad.place_bracket, ad.cancel_order_by_id
+
+    async def slow_place(req):
+        await acks.wait()
+        return await orig_place(req)
+
+    async def slow_first_cancel(i):
+        if str(i) == "a1-102" and not sibling.is_set():   # the replay's sibling cancel waits
+            await sibling.wait()
+        return await orig_cancel(i)
+
+    ad.place_bracket, ad.cancel_order_by_id = slow_place, slow_first_cancel
+    ad.order_status = {"a1-101": "Filled", "a1-102": "Canceled"}
+    ad.net = 2
+
+    async def go():
+        fire = asyncio.ensure_future(eng.handle_alert({"strategy": "nq930", "upper": 110.0,
+                                                        "lower": 90.0}))
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        await eng.on_fill(FillEvent(account_id="a1", symbol="NQZ6", side="Buy", qty=2, price=110.25,
+                                    raw={"orderId": "a1-101"}))      # beats the acks: held
+        acks.set()
+        for _ in range(5):
+            await asyncio.sleep(0)
+        assert eng._state("nq930", "a1").status == "live"            # the replay is mid-cancel
+        k = asyncio.ensure_future(desk.bot_kill({"client_id": "k", "strategy": "nq930"}))
+        for _ in range(20):
+            await asyncio.sleep(0)
+        sibling.set()
+        await k
+        await fire
+        return k.result()
+
+    k = run(go())
+    assert [(o.side, o.qty) for o in ad.orders] == [("Sell", 2)]
+    assert "market Sell 2: ok" in k["results"]["a1"]["actions"]
+    after = [e for e in journal(tmp_path) if e["event"] == "strategy_killed_after_ack"]
+    assert after and after[-1]["actions"] == ["already killed — nothing to do"]

@@ -81,6 +81,7 @@ class TradovateAdapter(BrokerAdapter):
         self._orders: dict[int, dict] = {}        # orderId -> order entity
         self._order_versions: dict[int, dict] = {}  # orderId -> latest orderVersion
         self._order_symbols: dict[int, str] = {}  # orderId -> contract, orders WE placed
+        self._order_filled: dict[int, int] = {}   # orderId -> contracts filled (fills seen)
         self._seen_fills: set[int] = set()
         self._seen_order: deque = deque(maxlen=_SEEN_FILL_CAP)
         self._on_fill: Optional[FillCallback] = None
@@ -190,8 +191,8 @@ class TradovateAdapter(BrokerAdapter):
             if oid is not None:
                 self._order_versions[oid] = ov
         for f in sync.get("fills", []) or []:
-            if "id" in f:
-                self._mark_seen(f["id"])   # historical fills must not be copied
+            if "id" in f and self._mark_seen(f["id"]):   # historical fills must not be copied
+                self._count_fill(f)
         self._resolve_account(sync.get("accounts", []) or [])
 
     def list_accounts(self) -> list[dict]:
@@ -239,6 +240,18 @@ class TradovateAdapter(BrokerAdapter):
         self.pinned_ok = pinned
 
     # ------------------------------------------------------------ fill stream
+    def _count_fill(self, ent: dict) -> None:
+        """Contracts filled per order id, from the fills this socket saw (a
+        LOWER bound: a push can omit its orderId or qty). Only ever read by
+        get_order_state for the per-strategy kill."""
+        oid, qty = ent.get("orderId"), ent.get("qty")
+        if oid is None or not isinstance(qty, (int, float)) or isinstance(qty, bool) or qty <= 0:
+            return
+        try:
+            self._order_filled[int(oid)] = self._order_filled.get(int(oid), 0) + int(qty)
+        except (TypeError, ValueError):
+            return
+
     def _mark_seen(self, fid: int) -> bool:
         """Record a fill id; return True if it was not seen before."""
         if fid in self._seen_fills:
@@ -278,6 +291,7 @@ class TradovateAdapter(BrokerAdapter):
             fid = ent.get("id")
             if fid is None or not self._mark_seen(fid):
                 return
+            self._count_fill(ent)
             if self._on_fill is not None:     # this account is being observed as master
                 self._enqueue_fill(ent)
             self._notify_mine(et, ent)
@@ -888,6 +902,17 @@ class TradovateAdapter(BrokerAdapter):
             if isinstance(full, dict) and "id" in full:
                 o = self._orders[oid] = {**full, **o}
         return o.get("ordStatus")
+
+    async def get_order_state(self, order_id: str) -> dict:
+        """Status + contracts KNOWN filled: the fills seen for this order, or
+        None when none were seen (no fill seen is not "no fill": a push can
+        be missed). Only the per-strategy kill reads it."""
+        status = await self.get_order_status(order_id)
+        try:
+            n = self._order_filled.get(int(order_id), 0)
+        except (TypeError, ValueError):
+            n = 0
+        return {"status": status, "filled_qty": n or None}
 
     async def get_balance(self) -> dict:
         if self._ws is None or self._acct_num is None:
