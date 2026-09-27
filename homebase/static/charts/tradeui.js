@@ -8,6 +8,10 @@
    item, a line's drag or ×, the order panel). The Trade menu edits the SELECTED chart. The bottom panel's
    per-account Close/Cancel act on the named account only (accountGate).
 
+   A chart's algo (2026-09-27 plan, Task 3): `cell.cfg.algo` is set through setCellAlgo; its Kill (botKill) goes
+   through the same confirm + guardedSend path, needs the LIVE arm for a LIVE account of the bot, and is offered
+   whatever the chart's Trading switch says (it is the emergency stop, not trading).
+
    Safety (ruling S4/S5, and the 2026-09-27 review of Tasks 3-4):
      - every action re-reads its gate (the chart's mode from HBDesk.mode(that chart's trade), or the named
        account's gate) at the moment it actually sends, not at the moment the user clicked or the confirm dialog
@@ -81,6 +85,15 @@ function setCellTrade(cell, next, { quiet = false } = {}) {
   if (!quiet && page && page.tradeChanged) page.tradeChanged(cell, JSON.stringify(was.accounts) !== JSON.stringify(now.accounts));
   notifyTrade();
 }
+/* Set a chart's algo (a desk strategy key, or null). An algo is part of the layout (Unsaved) unless `quiet` (the
+   Settings dialog's live preview: saved on its Ok; a Cancel / rollback that restores it). */
+function setCellAlgo(cell, algo, { quiet = false } = {}) {
+  if (!cell || !cell.cfg) return;
+  const was = T.cellAlgo(cell.cfg.algo), now = T.cellAlgo(algo);
+  cell.cfg.algo = now;
+  if (!quiet && was !== now && page && page.tradeChanged) page.tradeChanged(cell, true);
+  notifyTrade();
+}
 /* The page's selected chart changed: the toolbar dot and an open Trade menu follow it. */
 function selectionChanged() { updateTradeButton(); refillIfOpen(); }
 /* A single account id, refused when it is an unarmed LIVE account (review item 5's per-account paths). Fails
@@ -138,7 +151,7 @@ function findOrder(account, order_id) {
 }
 
 /* ---- the confirm dialog (the pattern app.js already uses) ---- */
-function confirm({ title, rows = [], note = '', warn = '', each = '', live = false, action, tone = 'accent' }) {
+function confirm({ title, rows = [], note = '', warn = '', each = '', live = false, action, tone = 'accent', oneClickBox = true }) {
   const Dc = D();
   return new Promise((resolve) => {
     let done = false;
@@ -157,6 +170,7 @@ function confirm({ title, rows = [], note = '', warn = '', each = '', live = fal
     const one = page.mk('label', 'cf-one'), ck = page.mk('input');
     ck.type = 'checkbox';
     one.append(ck, page.mk('span', '', "Don't ask again (one-click trading)"));
+    one.hidden = !oneClickBox;   // the Kill always asks: no one-click box there
     const foot = page.mk('div', 'dlg-foot'), no = page.mk('button', 'btn', 'Cancel'), yes = page.mk('button', `btn primary ${tone}`, action);
     no.type = yes.type = 'button';
     no.onclick = () => page.closeDialog();                 // onClose -> finish(false)
@@ -358,6 +372,42 @@ function cancelOrder(account, order_id) {
   const title = line ? T.actionTitle('cancel', { line }, tick) : 'Cancel order';
   const rows = acctRows([account]);
   confirm({ title, rows, action: 'Cancel order', live: hasLive(rows) }).then((ok) => { if (ok) guardedSend('cancel', g, build); });
+}
+
+/* ---- a chart's algo: the per-strategy Kill (POST bot-kill {client_id, strategy}) ---- */
+/* The Kill's gate, re-run at send time: the desk reachable (NOT its chart-trading switch, NOT this chart's Trading:
+   an emergency stop), the strategy still on the desk, the chart still on the page and still carrying that algo, and
+   every LIVE account of the bot armed this session. `accounts`: the accounts the desk's kill acts on. */
+function killGate(cell, key) {
+  const g = D().gate();
+  if (g && g.mode === 'down') return g;
+  const st = D().state, s = st && st.bot && st.bot.strategies ? st.bot.strategies[key] : null;
+  if (!s) return { mode: 'none', reason: `${T.algoName(key)} is not on the desk — nothing sent`, accounts: [] };
+  if (!page || !page.cells().includes(cell) || T.cellAlgo(cell.cfg && cell.cfg.algo) !== key) {
+    return { mode: 'none', reason: 'That chart no longer carries this algo — nothing sent', accounts: [] };
+  }
+  const ids = T.algoAccounts(s), list = st.accounts || [];
+  const unarmed = ids.map((id) => list.find((a) => a.id === id)).find((a) => a && a.env === 'live' && !liveConfirmed.has(a.id));
+  if (unarmed) return { mode: 'none', reason: T.unarmedLiveMessage(unarmed), accounts: [] };
+  return { mode: 'on', reason: '', accounts: ids };
+}
+/* Kill the chart's algo: always confirmed (never one-click), then one guarded send; one toast per account (a
+   "check it" answer is a sticky warning, HBTrade.killToasts). */
+function botKill(cell) {
+  const key = T.cellAlgo(cell && cell.cfg && cell.cfg.algo);
+  if (!key) return;
+  if (busy()) { D().toast('err', 'Another action is in flight'); return; }
+  const g = () => killGate(cell, key), gate = g();
+  if (gate.mode !== 'on') { D().toast('err', gate.reason); return; }
+  const shown = gate.accounts, c = T.killConfirm(key, D().state.bot.strategies[key], D().state);
+  const build = (m) => {
+    // the desk's kill acts on the strategy's own accounts: an account the dialog never listed aborts it
+    if (!T.resolveConfirmedAccounts(shown, m.accounts).ok) { D().toast('err', 'Accounts changed — review and try again'); return null; }
+    return { client_id: T.clientId(), strategy: key };
+  };
+  confirm({ title: c.title, rows: c.rows.map((r) => ({ label: r.label, env: r.env })), note: c.note, live: c.live,
+    action: 'Kill', tone: 'down', oneClickBox: false })
+    .then((ok) => { if (ok) guardedSend('bot-kill', g, build); });
 }
 
 /* ---- the chart's right-click menu: Buy/Sell limit/stop, Cancel all / Flatten / Reverse -- only on a chart whose
@@ -605,5 +655,5 @@ function mount(pg) {
 }
 
 window.HBTradeUI = { mount, placeOrder, symbolAction, flattenAccount, cancelOrder, closeLine, moveLine, confirm, busy,
-  onBusyChange, onTradeChange, effectiveMode, editableIds, fillIds, tradeOf, setCellTrade, selectionChanged };
+  onBusyChange, onTradeChange, effectiveMode, editableIds, fillIds, tradeOf, setCellTrade, setCellAlgo, selectionChanged, botKill };
 })();

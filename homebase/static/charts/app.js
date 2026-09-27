@@ -116,14 +116,14 @@ function deskStrategies() {
    symbol (templates never store a symbol). `quiet`: the caller saves (the Settings dialog: on Ok). */
 function applyTemplateTrade(cell, raw, { quiet = false } = {}) {
   const bits = T.templateTrade(raw);
+  if ('algo' in bits) window.HBTradeUI.setCellAlgo(cell, T.algoForRoot(bits.algo, cell.cfg.root, deskStrategies()), { quiet });
   if (bits.trade) window.HBTradeUI.setCellTrade(cell, bits.trade, { quiet });
-  if ('algo' in bits) cell.cfg.algo = T.algoForRoot(bits.algo, cell.cfg.root, deskStrategies());
 }
 /* The Settings dialog's Cancel: a chart's accounts and algo as they were at open (HBTrade.tradeBits) -- restored
    with Trading OFF, never back on (a template Apply may have switched it off; Cancel does not re-arm it). */
 function restoreTemplateTrade(cell, bits) {
+  window.HBTradeUI.setCellAlgo(cell, T.cellAlgo(bits && bits.algo), { quiet: true });
   window.HBTradeUI.setCellTrade(cell, T.loadedTrade(bits && bits.trade), { quiet: true });
-  cell.cfg.algo = T.cellAlgo(bits && bits.algo);
 }
 
 /* Task 2's one-time migration: the retired global ticked list moves onto the SELECTED chart, Trading off, when
@@ -377,7 +377,7 @@ function onRefused(cell, tried, text) {
   const was = algoBefore.get(cell);
   if (was && cell.cfg.root === was.root) {   // rolled back to the symbol the algo was on: the algo comes back too
     algoBefore.delete(cell);
-    cell.cfg.algo = was.algo;
+    window.HBTradeUI.setCellAlgo(cell, was.algo, { quiet: true });
     saveLast();
   }
   if (customWait && customWait.cell === cell && menuEl) {
@@ -769,6 +769,9 @@ function chartSettings(c = cur()) {
     tradeBits: (x) => T.tradeBits(x.cfg),                               // Task 2: what a template save adds
     applyTrade: (x, raw) => applyTemplateTrade(x, raw, { quiet: true }),  // a template Apply (saved on Ok)
     restoreTrade: restoreTemplateTrade,                                   // Cancel
+    // Task 3: the Algo select -- the desk's strategies on this chart's root; a pick previews live, saved on Ok
+    algoChoices: (x) => T.algoChoices(window.HBDeskClient.state, x.cfg.root, x.cfg.algo),
+    setAlgo: (x, v) => window.HBTradeUI.setCellAlgo(x, v || null, { quiet: true }),
     countries: () => [...new Set(calendar.map((e) => e.country))].sort(),
     toggleMenu(anchor, cls, fill) {   // menus and popovers open inside the dialog (above its backdrop)
       if (menuAnchor === anchor) { closeMenu(); return; }

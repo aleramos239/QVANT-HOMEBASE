@@ -2,7 +2,8 @@
    Lucide (https://lucide.dev), lucide-static@1.48.0: house, chevron-down, chevron-up, search,
    square-function, mouse-pointer-2, git-commit-horizontal, rectangle-horizontal, ruler,
    trash-2, eye, eye-off, settings, x, check, sun, moon, magnet, trending-up, trending-down,
-   chart-candlestick, paintbrush, list, calendar, ellipsis, external-link, droplet, flame, panel-right.
+   chart-candlestick, paintbrush, list, calendar, ellipsis, external-link, droplet, flame, panel-right,
+   bot, octagon-x.
 
    ISC License
 
@@ -58,6 +59,8 @@ window.HBIcons = {
   extLink: svg('<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>'),
   droplet: svg('<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/>'),
   panelRight: svg('<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/>'),
+  bot: svg('<path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/>'),
+  octagonX: svg('<path d="m15 9-6 6"/><path d="M2.586 16.726A2 2 0 0 1 2 15.312V8.688a2 2 0 0 1 .586-1.414l4.688-4.688A2 2 0 0 1 8.688 2h6.624a2 2 0 0 1 1.414.586l4.688 4.688A2 2 0 0 1 22 8.688v6.624a2 2 0 0 1-.586 1.414l-4.688 4.688a2 2 0 0 1-1.414.586H8.688a2 2 0 0 1-1.414-.586z"/><path d="m9 9 6 6"/>'),
   flame: svg('<path d="M12 3q1 4 4 6.5t3 5.5a1 1 0 0 1-14 0 5 5 0 0 1 1-3 1 1 0 0 0 5 0c0-2-1.5-3-1.5-5q0-2 2.5-4"/>'),
 };
 })();

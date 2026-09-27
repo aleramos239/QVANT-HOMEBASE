@@ -6,7 +6,7 @@
      - the position / order / bracket lines with their labels and dollars;
      - the confirm dialog's texts and the toasts;
      - the execution markers;
-     - the live strategies' badge / lines / markers;
+     - a chart's algo: its badge, BOT lines, markers, past runs and Kill;
      - the bottom panel's table rows.
    It reads the desk's state exactly as the desk's snapshot shapes it (homebase/trading.py
    ChartDesk.snapshot). No browser globals at load time: the Node tests load this file directly. */
@@ -549,6 +549,7 @@ function actionTitle(kind, { root, line, from, to }, tick) {
 const VERB = { order: 'order accepted', modify: 'order moved', cancel: 'order cancelled', 'cancel-symbol': 'orders cancelled',
   flatten: 'flattened', reverse: 'reversed' };
 function resultToasts(action, status, data, state) {
+  if (action === 'bot-kill') return killToasts(status, data, state);
   const label = (id) => { const a = accountsOf(state).find((x) => x.id === id); return a ? short(a) : id; };
   if (!data || typeof data !== 'object' || !data.results) {
     const d = data && (data.detail ?? data.error);
@@ -580,58 +581,276 @@ function fillMarkers(state, root, ids, P) {
   return out;
 }
 
-/* ---- live strategies (ruling S12) ---- */
+/* ---- the algo on a chart (2026-09-27 plan, Task 3) ----
+   A chart's `algo` (a desk strategy key) draws that bot's run: a legend badge (name, state pill, today's P&L, Kill),
+   its working orders as read-only BOT lines, its fills as markers, and its real past runs (GET bot-history) as
+   markers with a tooltip. A chart without an algo draws none of it, even on the bot's root. */
+const ALGO_NAMES = { nq930: 'NQ 9:30 Straddle', ym930: 'YM 9:30 Straddle', nq10am: 'NQ 10:00 Continuation',
+  gc_nfpcpi: 'GC 8:30 NFP + CPI Straddle' };
+const GREY = '#9598A1';   // a past day it did not trade: TradingView's neutral grey
+const CHECK_IT_TIP = 'Killed, but the desk could not account for its whole position: the stops were left working — '
+  + 'verify the position at the broker';
+const STATUS_WORDS = { skipped: 'Skipped', refused: 'Refused', no_fill: 'No fill', killed: 'Killed', error: 'Error', traded: 'Traded' };
+const EXIT_WORDS = { tp: 'TP', sl: 'SL', flat: 'Flat', other: 'Exit' };
+const ET_PARTS = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hourCycle: 'h23', year: 'numeric',
+  month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+
+function algoName(key) { return ALGO_NAMES[key] || String(key || ''); }
+const whoOf = (state, id) => short(accountsOf(state).find((x) => x.id === id) || { id });
+/* The strategy's accounts: its book's, then any it acted on today (the bot view's), de-duplicated. */
+function algoAccounts(s) {
+  return isObj(s) ? [...new Set([...Object.keys(isObj(s.book) ? s.book : {}), ...Object.keys(isObj(s.accounts) ? s.accounts : {})])] : [];
+}
+/* "NQ 9:30 Straddle · …047": the name and the last 3 of each booked account. */
+function algoLabel(key, s, state) {
+  const who = Object.keys((s && isObj(s.book) && s.book) || {}).map((id) => whoOf(state, id));
+  return who.length ? `${algoName(key)} · ${who.join(', ')}` : algoName(key);
+}
+/* The Settings dialog's Algo select for a chart on `root`: None, then the desk's strategies on that root. The
+   chart's current algo stays listed (by name) while the desk has not listed it, so the select can show it. */
+function algoChoices(state, root, current = null) {
+  const strats = (state && state.bot && isObj(state.bot.strategies) && state.bot.strategies) || {};
+  const out = [{ value: '', text: 'None' }, ...Object.entries(strats).filter(([, s]) => isObj(s) && rootOf(s.symbol) === root)
+    .map(([k, s]) => ({ value: k, text: algoLabel(k, s, state) }))];
+  const cur = cellAlgo(current);
+  if (cur && !out.some((c) => c.value === cur)) out.push({ value: cur, text: algoName(cur) });
+  return out;
+}
+
 const fmt1 = (v) => (v == null || !Number.isFinite(v) ? '—' : v.toFixed(1));
-function botStatus(s) {
-  const t = s.timer || {}, accts = Object.values(s.accounts || {});
-  let st;
-  if (!s.enabled) st = 'off';
-  else if (s.day_status === 'done') {
-    const known = accts.filter((a) => a.pnl != null);
-    st = known.length ? `done ${usd(known.reduce((x, a) => x + a.pnl, 0))}` : 'done';
-  } else if (s.day_status && s.day_status !== 'idle') st = s.day_status;
-  else st = t.stage || 'idle';
-  return s.shadow ? `${st} · shadow` : st;
+function gateText(t) { return t.gate === true ? `TREND ADX ${fmt1(t.adx)}` : t.gate === false ? `CHOP ADX ${fmt1(t.adx)}` : ''; }
+/* The badge's state pill from the bot view: {state, text, tone, tip}. state is one of idle / armed / placing /
+   in trade / done / skipped / killed / shadow, plus 'check it' (a killed run the desk could not fully account
+   for: amber), 'off' (disabled on the desk) and 'error'. tone: idle | live | warn | err. */
+function botPill(s) {
+  const t = (s && isObj(s.timer) && s.timer) || {}, accts = Object.values((s && isObj(s.accounts) && s.accounts) || {});
+  const pill = (state, tone, tip = '') => ({ state, text: state === 'check it' ? 'CHECK IT' : state, tone, tip });
+  const gate = gateText(t);
+  if (accts.some((a) => a && a.check_it)) return pill('check it', 'warn', CHECK_IT_TIP);
+  if (s.killed || t.killed) return pill('killed', 'err', 'Killed from the chart: it does not fire again today');
+  if (!s.enabled) return pill('off', 'idle', 'Disabled on the desk');
+  if (s.shadow) return pill('shadow', 'idle', 'Shadow: its signals are journaled, never placed');
+  const d = s.day_status;
+  if (d === 'error' || t.stage === 'error') {
+    const note = accts.map((a) => a && a.note).find(Boolean);
+    return pill('error', 'err', t.error || note || 'The desk reported an error — see the desk');
+  }
+  if (d === 'live') return pill('in trade', 'live', 'In a position, its stop and target working');
+  if (d === 'placing') return pill('placing', 'live', 'Sending its entry orders');
+  if (d === 'placed') return pill('armed', 'live', 'Its entry orders are working, waiting for a fill');
+  if (d === 'done') return pill('done', 'idle', 'Done for today');
+  if (t.stage === 'skipped') return pill('skipped', 'idle', `Skipped today${gate ? ` — ${gate}` : ''}`);
+  if (t.stage === 'missed') return pill('skipped', 'idle', 'Missed its window today');
+  if (t.stage === 'staged') return pill('armed', 'live', `Staged: fires at the open${gate ? ` — ${gate}` : ''}`);
+  return pill('idle', 'idle', gate);
 }
-function botBadge(key, s) {
-  const t = s.timer || {};
-  const gate = t.gate === true ? `TREND ADX ${fmt1(t.adx)}` : t.gate === false ? `CHOP ADX ${fmt1(t.adx)}` : null;
-  const tone = s.day_status === 'error' || t.stage === 'error' ? 'err'
-    : ['placing', 'placed', 'live'].includes(s.day_status) ? 'live' : 'idle';
-  return { text: [botName(key), s.enabled ? gate : null, botStatus(s)].filter(Boolean).join(' · '), tone };
+/* Today's P&L across its accounts: realized, plus an open trade at `last`; null while nothing is known. */
+function botToday(s, last, pv) {
+  let sum = 0, any = false;
+  for (const a of Object.values((s && isObj(s.accounts) && s.accounts) || {})) {
+    if (!a) continue;
+    if (a.pnl != null && Number.isFinite(a.pnl)) { sum += a.pnl; any = true; continue; }
+    if (a.status === 'live' && a.entry_fill != null) {
+      const v = pnl(a.entry_fill, last, a.entry_side === 'Buy' ? 1 : -1, Number(a.entry_qty ?? a.qty) || 0, pv);
+      if (v == null) return null;
+      sum += v; any = true;
+    }
+  }
+  return any ? sum : null;
 }
-function botLines(key, s, tick) {
-  const pre = s.kind === 'straddle' ? '9:30' : botName(key), m = new Map();
-  const put = (kind, price, label, qty) => {
-    if (price == null) return;
-    const id = `${kind}|${price}`, g = m.get(id) || { key: `bot|${key}|${id}`, kind, price, label, qty: 0 };
+
+/* Its working orders as read-only lines: the orders the desk tags with its key (owner), plus any level the bot view
+   says it is working that no listed order shows yet (the order list lags an ack). A leg on the entry side (or at
+   the view's entry trigger before a fill) is an entry, "BOT BUY STP 10 @ …"; once in a position, the opposite
+   side's Stop is its SL and its Limit its TP. Merged across accounts by kind + side + price, highest price first. */
+function botLines(state, key, s, root, tick, P) {
+  const m = new Map(), views = isObj(s.accounts) ? s.accounts : {};
+  const put = (kind, side, type, price, qty) => {
+    if (price == null || !Number.isFinite(price)) return;
+    const id = `${kind}|${side}|${price}`;
+    const g = m.get(id) || { key: `bot|${key}|${id}`, kind, side, type, price, qty: 0, editable: false, bot: true };
     g.qty += Number(qty) || 0;
     m.set(id, g);
   };
-  for (const a of Object.values(s.accounts || {})) {
-    if (a.status === 'placing' || a.status === 'placed') { put('entry', a.upper, 'BUY STOP', a.qty); put('entry', a.lower, 'SELL STOP', a.qty); }
-    if (a.status === 'live') { put('sl', a.sl, 'SL', a.entry_qty ?? a.qty); put('tp', a.tp, 'TP', a.entry_qty ?? a.qty); }
-  }
-  return [...m.values()].map((g) => ({ ...g, text: `${pre} ${g.label} ${g.qty} @ ${Cat.fmtPrice(g.price, tick)}` }));
-}
-function botMarkers(key, s, state, P) {
-  const out = [];
-  for (const a of accountsOf(state)) {
-    const st = (s.accounts || {})[a.id];
-    for (const f of a.fills || []) {
-      const ms = Date.parse(f.time);
-      if (f.owner !== key || !Number.isFinite(ms)) continue;
-      const entry = !st || !st.entry_side || f.side === st.entry_side, buy = f.side === 'Buy';
-      out.push({ id: `b${a.id}:${f.id}`, ms, price: f.price, position: buy ? 'atPriceBottom' : 'atPriceTop',
-        shape: buy ? 'arrowUp' : 'arrowDown', color: P.warn, text: entry ? '' : (st && st.pnl != null ? usd(st.pnl) : '') });
+  const kindOf = (st, side, type, price) => {
+    const inTrade = !!(st && st.entry_side) && ['live', 'done', 'error'].includes(st.status);
+    if (inTrade && side !== st.entry_side) return /limit/i.test(type) && !/stop/i.test(type) ? 'tp' : 'sl';
+    if (st && ((side === 'Buy' && price === st.upper) || (side === 'Sell' && price === st.lower))) return 'entry';
+    if (inTrade) return 'entry';
+    return /limit/i.test(type) && !/stop/i.test(type) ? 'tp' : /stop/i.test(type) && (st && (st.upper != null || st.lower != null)) ? 'sl' : 'entry';
+  };
+  const ids = new Set(algoAccounts(s));
+  for (const a of accountsOf(state)) ids.add(a.id);
+  for (const id of ids) {
+    const a = accountsOf(state).find((x) => x.id === id), st = views[id];
+    const own = ((a && a.orders) || []).filter((o) => o.owner === key && rootOf(o.symbol) === root && orderPrice(o) != null);
+    const seen = new Set();
+    for (const o of own) {
+      const at = orderPrice(o), kind = kindOf(st, o.side, o.type, at);
+      seen.add(`${kind}|${o.side}|${at}`);
+      put(kind, o.side, o.type, at, o.qty);
+    }
+    if (!st) continue;
+    const add = (kind, side, type, price, qty) => { if (!seen.has(`${kind}|${side}|${price}`)) put(kind, side, type, price, qty); };
+    if (st.status === 'placing' || st.status === 'placed') {
+      add('entry', 'Buy', 'Stop', st.upper, st.qty); add('entry', 'Sell', 'Stop', st.lower, st.qty);
+    }
+    if (st.status === 'live' && st.entry_side) {
+      const out = st.entry_side === 'Buy' ? 'Sell' : 'Buy', q = st.entry_qty ?? st.qty;
+      add('sl', out, 'Stop', st.sl, q); add('tp', out, 'Limit', st.tp, q);
     }
   }
-  return out;
+  return [...m.values()].sort((x, y) => y.price - x.price).map((g) => {
+    const at = Cat.fmtPrice(g.price, tick);
+    const text = g.kind === 'entry' ? `BOT ${g.side.toUpperCase()} ${abbr(g.type)} ${g.qty} @ ${at}` : `BOT ${g.kind.toUpperCase()} ${g.qty} @ ${at}`;
+    const color = g.kind === 'sl' ? P.down : g.kind === 'tp' ? P.up : g.side === 'Buy' ? P.accent : P.down;
+    return { ...g, text, color };
+  });
 }
-function botsFor(state, root, tick, P) {
-  const strats = (state && state.bot && state.bot.strategies) || {};
-  return Object.entries(strats).filter(([, s]) => rootOf(s.symbol) === root)
-    .map(([key, s]) => ({ key, badge: botBadge(key, s), lines: s.enabled ? botLines(key, s, tick) : [], markers: botMarkers(key, s, state, P) }));
+/* Today's fills of the bot (owner = its key): the entry an arrow in the bot colour, the exit a circle with the P&L. */
+function botMarkers(state, key, s, root, tick, P) {
+  const out = [], views = isObj(s.accounts) ? s.accounts : {};
+  for (const a of accountsOf(state)) {
+    const st = views[a.id];
+    for (const f of a.fills || []) {
+      const ms = Date.parse(f.time);
+      if (f.owner !== key || rootOf(f.symbol) !== root || !Number.isFinite(ms)) continue;
+      const entry = !st || !st.entry_side || f.side === st.entry_side, buy = f.side === 'Buy';
+      const v = !entry && st && st.pnl != null && Number.isFinite(st.pnl) ? st.pnl : null;
+      const tip = `Today · ${short(a)} · ${f.side} ${f.qty} @ ${Cat.fmtPrice(f.price, tick)}${entry ? '' : ` (exit)${v != null ? ` · ${usd(v)}` : ''}`}`;
+      out.push(entry
+        ? { id: `b${a.id}:${f.id}`, ms, price: f.price, position: buy ? 'atPriceBottom' : 'atPriceTop', shape: buy ? 'arrowUp' : 'arrowDown', color: P.warn, text: '', tip }
+        : { id: `b${a.id}:${f.id}`, ms, price: f.price, position: 'atPriceMiddle', shape: 'circle',
+          color: v == null ? P.warn : v >= 0 ? P.up : P.down, text: v == null ? '' : usd(v), tip });
+    }
+  }
+  return out.sort((x, y) => x.ms - y.ms);
+}
+/* Everything a chart draws for its algo, or null: no algo, no desk state, not on the desk, or another root. */
+function algoOverlay(state, algo, root, tick, P, last = null, pv = null) {
+  const key = cellAlgo(algo), strats = state && state.bot && isObj(state.bot.strategies) ? state.bot.strategies : null;
+  const s = key && strats ? strats[key] : null;
+  if (!isObj(s) || rootOf(s.symbol) !== root) return null;
+  return { key, name: algoName(key), label: algoLabel(key, s, state), gate: gateText(isObj(s.timer) ? s.timer : {}), pill: botPill(s),
+    pnl: botToday(s, last, pv), accounts: algoAccounts(s), lines: botLines(state, key, s, root, tick, P), markers: botMarkers(state, key, s, root, tick, P) };
+}
+
+/* ---- past runs (GET /api/desk/bot-history) ---- */
+/* An ET wall-clock time on an ISO date as epoch ms (DST-aware); NaN for garbage. */
+function etMs(date, hhmm) {
+  const d = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(date || '')), t = /^(\d{1,2}):(\d{2})$/.exec(String(hhmm || ''));
+  if (!d || !t) return NaN;
+  const want = Date.UTC(+d[1], +d[2] - 1, +d[3], +t[1], +t[2]);
+  let ms = want + 5 * 3600e3;
+  for (let i = 0; i < 2; i++) {
+    const p = Object.fromEntries(ET_PARTS.formatToParts(new Date(ms)).map((x) => [x.type, x.value]));
+    ms += want - Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute);
+  }
+  return ms;
+}
+/* The contracts a past run traded: from its P&L when that solves to a whole number, else the account's book qty. */
+function runQty(run, pv, bookQty) {
+  const e = run.entry, x = run.exit, v = run.pnl_usd;
+  if (e && x && e.price != null && x.price != null && v != null && pv > 0) {
+    const per = (e.side === 'Buy' ? 1 : -1) * (x.price - e.price) * pv - 4;   // bothistory: net of $4 per contract round trip
+    if (Math.abs(per) > 1e-9) {
+      const q = v / per;
+      if (q >= 0.5 && Math.abs(q - Math.round(q)) < 0.01) return Math.round(q);
+    }
+  }
+  return Number.isFinite(bookQty) && bookQty > 0 ? bookQty : null;
+}
+const reasonText = (r) => String(r).replace(/_/g, ' ');
+/* "2026-09-24 · …047 · Buy 10 @ 30,120.25 → TP 30,135.25 · +$2,960"; a day it did not trade: "… · Skipped — gate chop". */
+function runTip(run, who, tick, qty) {
+  const head = `${run.date} · ${who}`, status = run.status, word = STATUS_WORDS[status] || String(status || '');
+  const why = run.reason != null && run.reason !== '' ? ` — ${reasonText(run.reason)}` : '';
+  const e = run.entry;
+  if (!e) return `${head} · ${word}${why}`;
+  let s = `${head} · ${e.side} ${qty != null ? `${qty} ` : ''}@ ${Cat.fmtPrice(e.price, tick)}`;
+  const x = run.exit;
+  if (x) s += ` → ${EXIT_WORDS[x.kind] || 'Exit'} ${Cat.fmtPrice(x.price, tick)} · ${run.pnl_usd != null ? usd(run.pnl_usd) : 'P&L unknown'}`;
+  else s += ' · no exit';
+  if (status && status !== 'traded') s += ` · ${String(word).toLowerCase()}${why}`;
+  return s;
+}
+/* The past runs as markers ({ms, ..., tip} for HBDrawings.placeMarkers once `tip` is taken off): per traded run an
+   entry arrow and an exit circle (green / red by its P&L, the bot colour when unknown); a day it did not trade a
+   small grey square above the bar where it placed, else at the 09:30 ET open. Only markers in [from, to) are
+   kept, and `today`'s run is left to the live overlay. A run with no account covers every booked account. */
+function pastRunMarkers(runs, { key, s, state, tick, pv, P, from, to, today }) {
+  const out = [], book = (s && isObj(s.book) && s.book) || {};
+  const everyone = Object.keys(book).map((id) => whoOf(state, id)).join(', ') || 'every account';
+  const inRange = (ms) => Number.isFinite(ms) && ms >= from && ms < to;
+  for (const run of Array.isArray(runs) ? runs : []) {
+    if (!isObj(run) || typeof run.date !== 'string' || run.date === today) continue;
+    const acct = typeof run.account === 'string' ? run.account : null;
+    const who = acct ? whoOf(state, acct) : everyone, id = `h${key}:${run.date}:${acct || '*'}`;
+    const e = isObj(run.entry) ? run.entry : null, x = isObj(run.exit) ? run.exit : null;
+    if (e && e.price != null && Number.isFinite(e.ts)) {
+      const tip = runTip(run, who, tick, runQty(run, pv, acct ? Number(book[acct]) : NaN)), buy = e.side === 'Buy';
+      if (inRange(e.ts)) {
+        out.push({ id: `${id}:e`, ms: e.ts, price: e.price, position: buy ? 'atPriceBottom' : 'atPriceTop',
+          shape: buy ? 'arrowUp' : 'arrowDown', color: P.warn, text: '', tip });
+      }
+      if (x && x.price != null && inRange(x.ts)) {
+        const v = run.pnl_usd;
+        out.push({ id: `${id}:x`, ms: x.ts, price: x.price, position: 'atPriceMiddle', shape: 'circle',
+          color: v == null ? P.warn : v >= 0 ? P.up : P.down, text: '', tip });
+      }
+      continue;
+    }
+    const leg = (Array.isArray(run.legs) ? run.legs : []).find((l) => l && Number.isFinite(l.ts));
+    const ms = leg ? leg.ts : etMs(run.date, '09:30');
+    if (inRange(ms)) out.push({ id: `${id}:f`, ms, position: 'aboveBar', shape: 'square', size: 0.5, color: GREY, text: '', tip: runTip(run, who, tick, null) });
+  }
+  return out.sort((a, b) => a.ms - b.ms);
+}
+/* The tip of the marker nearest (x, y) within r px, or null. points: [{x, y, tip}]. */
+function nearestTip(points, x, y, r) {
+  let best = null, bd = r * r;
+  for (const p of points || []) {
+    const d = (p.x - x) ** 2 + (p.y - y) ** 2;
+    if (d <= bd) { bd = d; best = p; }
+  }
+  return best ? best.tip : null;
+}
+/* What a change on the bot view means for its history: a new exit fill, a skip, a kill -> fetch again. */
+function historySig(s) {
+  if (!isObj(s)) return '';
+  const t = isObj(s.timer) ? s.timer : {};
+  const accts = Object.entries(isObj(s.accounts) ? s.accounts : {}).map(([id, a]) => [id, a && a.status, a && a.exit_fill != null ? a.exit_fill : null]);
+  return JSON.stringify([t.stage || null, !!s.killed, accts.sort((a, b) => (a[0] < b[0] ? -1 : 1))]);
+}
+
+/* ---- the Kill ---- */
+/* The confirm: "Kill NQ 9:30 Straddle" over "Cancel its orders and flatten its NQ position on …047. The desk stays
+   armed for other strategies." with its accounts (DEMO/LIVE). `accounts`: every account the desk's kill acts on. */
+function killConfirm(key, s, state) {
+  const ids = algoAccounts(s), list = accountsOf(state);
+  const rows = ids.map((id) => { const a = list.find((x) => x.id === id); return { id, label: a ? a.label : id, env: a ? a.env : '' }; });
+  const title = `Kill ${algoName(key)}`, who = ids.map((id) => whoOf(state, id)).join(', ');
+  const rest = `cancel its orders and flatten its ${rootOf(s && s.symbol)} position on ${who}. The desk stays armed for other strategies.`;
+  return { title, note: rest[0].toUpperCase() + rest.slice(1), text: `${title} — ${rest}`, rows, accounts: ids,
+    live: rows.some((r) => r.env === 'live') };
+}
+/* One toast per account from POST bot-kill: a "check it" (the desk left the stops working) is a warning, never a
+   success; a kill still waiting on the broker's acks is a warning too. */
+function killToasts(status, data, state) {
+  const label = (id) => { const a = accountsOf(state).find((x) => x.id === id); return a ? short(a) : id; };
+  if (!isObj(data) || !isObj(data.results) || (!Object.keys(data.results).length && data.error)) {
+    const d = data && (data.detail ?? data.error);
+    return [{ tone: 'err', text: typeof d === 'string' && d ? d : `desk error (HTTP ${status})` }];
+  }
+  return Object.entries(data.results).map(([id, r]) => {
+    const o = isObj(r) ? r : {}, acts = Array.isArray(o.actions) ? o.actions.map(String) : [];
+    const check = acts.find((x) => /check it/i.test(x));
+    if (check) return { tone: 'warn', text: `${label(id)} · CHECK IT — ${check.replace(/^check it\s*—\s*/i, '')}` };
+    if (!o.ok) return { tone: 'err', text: `${label(id)} · kill failed — ${o.error || acts.join('; ') || 'refused'}` };
+    if (o.pending) return { tone: 'warn', text: `${label(id)} · kill pending — ${o.note || 'waiting on the broker'}` };
+    if (o.acted) return { tone: 'ok', text: `${label(id)} · killed — ${o.sold ? 'position flattened' : 'its orders cancelled'}` };
+    return { tone: 'ok', text: `${label(id)} · ${o.note || 'killed'}` };
+  });
 }
 
 /* ---- the bottom panel's rows (every account: ruling S6) ---- */
@@ -694,8 +913,9 @@ function accountRows(state, quotes) {
 
 const api = { PREFS_KEY, QUOTE_STALE_MS, BOT_NAMES, parsePrefs, prefsText, short, rootOf, orderPrice, abbr, inferType, menuText,
   roundTick, bracket, orderBody, clientId, tradeMode, quoteView, usd, money, pnl, rrText, linesFor, linePnl, lineLabel,
-  lineText, lineColor, canDrag, withPrice, orderTitle, confirmOrder, actionTitle, resultToasts, fillText, fillMarkers, botName,
-  botsFor, positionRows, orderRows, fillRows, accountRows, etTime, diffRows,
+  lineText, lineColor, canDrag, withPrice, orderTitle, confirmOrder, actionTitle, resultToasts, fillText, fillMarkers, botName, positionRows, orderRows, fillRows, accountRows, etTime, diffRows,
+  algoName, algoLabel, algoChoices, algoAccounts, botPill, botToday, algoOverlay, etMs, pastRunMarkers, nearestTip, historySig,
+  killConfirm, killToasts,
   enterConfirms, resolveConfirmedAccounts, armedTicked, unarmedLiveMessage, freshQuote,
   needsQuoteForBracket, refuseIfMarketable, cellTrade, loadedTrade, cellAlgo, tradeBits, templateTrade, algoForRoot,
   migrateTicked, deskGate, armedMode, legsWithin, accountChips, acctTick, hiddenCellsOff,

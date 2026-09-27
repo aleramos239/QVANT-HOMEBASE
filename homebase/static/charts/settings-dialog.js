@@ -4,8 +4,10 @@
    Ok keeps the changes. Browser only: the model is HBSettings (settings.js); the page (app.js) owns the
    dialog frame and the menus and hands them over as `host`:
      {cell, cells(), toggleMenu(anchor, cls, fill(menuEl)), closeMenu(), placeMenu(), commit(changed), cancel(),
-      templates: {list(), save(name, settings), remove(name)}, countries()}   (countries(): every currency code
-      seen in the loaded calendar, for the Events tab's chips) */
+      templates: {list(), save(name, settings), remove(name)}, countries(),
+      algoChoices(cell), setAlgo(cell, key|null)}   (countries(): every currency code seen in the loaded calendar,
+      for the Events tab's chips; algoChoices / setAlgo: the Trading tab's Algo select -- HBTrade.algoChoices, and a
+      live preview that Cancel puts back through host.restoreTrade) */
 (() => {
 'use strict';
 const S = window.HBSettings, I = window.HBIcons;
@@ -17,7 +19,8 @@ const asPrecision = (v) => (v === '' ? null : Number(v));
 
 /* The tabs, in TradingView's order. A row: {label, check?: key (a checkbox before the label), colors?: [[key,
    what]] (a swatch each), select?: {key, choices: [[value, text]], parse?}, number?: {key, min, max, unit?},
-   dot?: colour (a colour dot before the label, no swatch), chips?: key (a multi-select of host.countries())}. */
+   dot?: colour (a colour dot before the label, no swatch), chips?: key (a multi-select of host.countries()),
+   algo?: true (the chart's desk algo: host.algoChoices / host.setAlgo, not a setting)}. */
 const TABS = [
   { id: 'symbol', label: 'Symbol', icon: 'candles', sections: [
     ['CANDLES', [
@@ -82,6 +85,11 @@ const TABS = [
       { label: 'Holiday', check: 'evHoliday', dot: '#9598A1' },
       { label: 'Currencies', chips: 'evCountries' },
       { label: 'Vertical lines for high impact', check: 'evLines' },
+    ]],
+  ] },
+  { id: 'trading', label: 'Trading', icon: 'bot', sections: [
+    ['ALGO', [
+      { label: 'Algo', algo: true },
     ]],
   ] },
 ];
@@ -185,6 +193,17 @@ function mount(box, host) {
       n.onchange = () => { n.value = String(work[key]); };   // shows the clamped value
       ctl.append(n);
       if (unit) ctl.append(mk('span', 'set-unit', unit));
+    }
+    if (r.algo) {   // the chart's desk algo: None, or one of the desk's strategies on this chart's root
+      const s = mk('select', 'set-select set-algo'), cur = (cell.cfg && cell.cfg.algo) || '';
+      s.setAttribute('aria-label', r.label);
+      for (const c of host.algoChoices ? host.algoChoices(cell) : [{ value: '', text: 'None' }]) {
+        const o = mk('option', '', c.text); o.value = c.value; s.append(o);
+      }
+      s.value = cur;
+      s.title = 'Draws this algo on the chart: its orders, fills, past runs and its Kill';
+      s.onchange = () => { if (host.setAlgo) host.setAlgo(cell, s.value || null); };
+      ctl.append(s);
     }
     if (r.chips) {   // a multi-select: one checkbox per currency in the feed (plus any already picked)
       const key = r.chips, picked = new Set(work[key]), wrap = mk('div', 'set-chips');

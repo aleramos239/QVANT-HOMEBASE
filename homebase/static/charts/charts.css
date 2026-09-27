@@ -7,7 +7,7 @@
   --frame: #EBEBEB; --panel: #FFFFFF; --text: #0F0F0F; --text-2: #787B86; --border: #E0E3EB;
   --grid: #F0F3FA; --hover: #F0F3FA; --pill: #EBEBEB;
   --accent: #2962FF; --accent-hover: #1E53E5; --accent-soft: rgba(41, 98, 255, .10);
-  --up: #089981; --down: #F23645; --down-soft: rgba(242, 54, 69, .10); --warn: #F7A600;
+  --up: #089981; --down: #F23645; --down-soft: rgba(242, 54, 69, .10); --warn: #F7A600; --warn-soft: #FFF6E0;
   --tip: #131722;
   --shadow-menu: 0 2px 8px rgba(0, 0, 0, .16);
   --shadow-dialog: 0 8px 32px rgba(0, 0, 0, .24);
@@ -17,7 +17,7 @@
 :root[data-theme="dark"] {
   --frame: #0A0A0A; --panel: #0F0F0F; --text: #DBDBDB; --text-2: #8C8C8C; --border: #2E2E2E;
   --grid: #1C1C1C; --hover: #2A2A2A; --pill: #2A2A2A; --accent-soft: rgba(41, 98, 255, .20);
-  --down-soft: rgba(242, 54, 69, .18); --tip: #2A2E39;
+  --down-soft: rgba(242, 54, 69, .18); --tip: #2A2E39; --warn-soft: #2B2412;
   --shadow-menu: 0 0 0 1px #2E2E2E, 0 4px 12px rgba(0, 0, 0, .5);
   --shadow-dialog: 0 0 0 1px #2E2E2E, 0 8px 32px rgba(0, 0, 0, .6);
   --backdrop: rgba(0, 0, 0, .5);
@@ -389,6 +389,7 @@ a { color: inherit; }
 .toast { display: flex; align-items: flex-start; gap: 8px; padding: 8px 8px 8px 12px; border-radius: 8px; background: var(--panel);
   box-shadow: var(--shadow-menu); border-left: 3px solid var(--up); font-size: 13px; }
 .toast.err { border-left-color: var(--down); }
+.toast.warn { border-left-color: var(--warn); background: var(--warn-soft); font-weight: 600; }   /* a kill's "check it": stays until dismissed */
 .toast span { flex: 1; overflow-wrap: anywhere; }
 .toast-x { width: 20px; height: 20px; display: grid; place-items: center; border-radius: 4px; color: var(--text-2); }
 .toast-x:hover { background: var(--hover); }
@@ -418,7 +419,25 @@ a { color: inherit; }
 .tl-chip.view .tl-text { background: var(--panel); color: var(--c); }   /* view only: no drag, no × (Task 2) */
 .tl-x { width: 22px; color: var(--c); display: grid; place-items: center; }
 .tl-x:hover { background: var(--hover); }
-.tl-chip.bot .tl-text { background: var(--panel); color: var(--c); }
+.tl-chip.bot .tl-text { background: var(--panel); color: var(--c); cursor: default; }
+
+/* ---- the chart's algo (Task 3): the legend badge -- bot icon, name, state pill, today's P&L, Kill ---- */
+.lg-bots { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 2px 0 6px; border-radius: 4px;
+  background: var(--panel); box-shadow: 0 0 0 1px var(--border); font-size: 12px; line-height: 18px; pointer-events: auto;
+  font-variant-numeric: tabular-nums; flex: none; }
+.bb-ic .ic { width: 14px; height: 14px; color: var(--text-2); }
+.bb-name { color: var(--text); font-weight: 600; max-width: 180px; overflow: hidden; text-overflow: ellipsis; cursor: default; }
+.bb-pill { padding: 0 6px; border-radius: 9px; font-size: 11px; line-height: 16px; background: var(--hover); color: var(--text-2); cursor: help; }
+.bb-pill.live { background: var(--accent-soft); color: var(--accent); }
+.bb-pill.err { background: var(--down-soft); color: var(--down); }
+.bb-pill.warn { background: var(--warn); color: #131722; font-weight: 700; letter-spacing: .02em; }
+.bb-pnl { cursor: default; } .bb-pnl.up { color: var(--up); } .bb-pnl.down { color: var(--down); }
+.bb-kill { display: inline-flex; align-items: center; gap: 3px; height: 18px; padding: 0 6px 0 4px; border-radius: 3px;
+  background: var(--down); color: #FFFFFF; font-size: 11px; font-weight: 600; }
+.bb-kill .ic { width: 13px; height: 13px; }
+.bb-kill:hover { filter: brightness(1.08); }
+.bb-kill:disabled { opacity: .5; cursor: default; filter: none; }
+.bot-tip { z-index: 8; }
 
 /* ---- the order panel (orderpanel.js): TradingView's right dock, following the selected chart ---- */
 .tb-btn#tbOrder.active { color: var(--accent); }
