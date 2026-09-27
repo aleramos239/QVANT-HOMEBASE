@@ -59,9 +59,10 @@ class Wall:
 
 
 def drive(runner: PaperRunner, rows: list[dict], d: dt.date, frm: str, to: str, step_ms: int = 250,
-          wall: Wall | None = None, states: list | None = None) -> int:
+          wall: Wall | None = None, states: list | None = None, alive: bool = False) -> int:
     """Play rows through the runner on a simulated clock [frm, to], the service's way:
-    ticks as they 'arrive', then due()/step() every step_ms (wall advances with it)."""
+    ticks as they 'arrive', then due()/step() every step_ms (wall advances with it).
+    alive: other roots keep printing (the md socket is alive) at every step."""
     now, end, i = ms(d, frm), ms(d, to), 0
     wall = wall or runner.wall
     while now <= end:
@@ -71,6 +72,9 @@ def drive(runner: PaperRunner, rows: list[dict], d: dt.date, frm: str, to: str, 
         if j > i:
             runner.on_ticks(rows[i:j])
             i = j
+        if alive:
+            runner.window_ms(now)                              # (rolls the day, as the service's poll does)
+            runner.note_alive(now)
         if runner.due(now):
             msg = runner.step(now)
             if msg is not None and states is not None and (not states or states[-1] != msg["state"]):
@@ -152,7 +156,7 @@ def test_the_anchor_is_carried_from_before_the_buffer_window(tmp_path):
                                              array("i", [x["size"] for x in rows])), {})
     direct = run_session(GCNfpCpi(), tape, Costs())
     r = runner(tmp_path)
-    drive(r, rows, d, "08:24:00", "09:56:03", step_ms=500)
+    drive(r, rows, d, "08:24:00", "09:56:03", step_ms=500, alive=True)   # only GC was quiet
     assert r.current["anchor"] == direct.hlines[0]["price"]
     assert [t.to_dict() for t in r.last_result.trades] == [t.to_dict() for t in direct.trades]
 
@@ -207,7 +211,8 @@ def test_the_static_csv_only_decides_dates_it_contains_when_the_calendar_has_no_
 
 def test_a_non_event_day_does_no_work(tmp_path):
     d = dt.date(2024, 9, 9)
-    r = runner(tmp_path)
+    cal = _cal(tmp_path, _ff("Unemployment Claims", "2024-09-12"))          # the week is known: no event
+    r = PaperRunner(tmp_path / "paper", cal, wall=Wall(), log=lambda m: None)
     rows = [{**x, "ts_ms": x["ts_ms"] + 3 * 86_400_000, "ts_ns": x["ts_ns"] + 3 * 86_400 * 10 ** 9}
             for x in fixture_rows(NFP_DAY)]
     drive(r, rows, d, "08:29:00", "09:57:00", step_ms=1000)
@@ -328,7 +333,7 @@ def test_a_restart_after_the_window_finalises_from_the_recorded_ticks(tmp_path):
 
 def test_a_re_finalised_day_keeps_one_line(tmp_path):
     r = runner(tmp_path)
-    r._reset(CPI_DAY)
+    r._reset(CPI_DAY, 0)
     base = {"date": CPI_DAY.isoformat(), "event": "CPI", "rule": "csv", "state": "done", "legs": []}
     r._finish({**base, "status": "no_fill"})
     r._finish({**base, "status": "traded", "pnl_usd": 596.0})
@@ -410,9 +415,21 @@ def test_the_service_never_launches_the_backtest_unless_asked_and_only_once(tmp_
         def poll(self):
             return 0
 
-    with TestClient(_gc_live_app(tmp_path, ms(CPI_DAY, "07:00:00"),
-                                 paper_backtest=lambda folder: launched.append(folder) or Job())):
-        pass
+        def wait(self, timeout=None):
+            return 0
+
+    def spawn(folder):
+        launched.append(folder)
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / "backtest.json").write_text("{}")
+        return Job()
+
+    import time
+    with TestClient(_gc_live_app(tmp_path, ms(CPI_DAY, "07:00:00"), paper_backtest=spawn)):
+        for _ in range(50):
+            if launched:
+                break
+            time.sleep(0.02)
     assert launched == [tmp_path / "state" / "paper"]
     (tmp_path / "state" / "paper").mkdir(parents=True, exist_ok=True)
     (tmp_path / "state" / "paper" / "backtest.json").write_text("{}")
@@ -465,3 +482,343 @@ def test_a_replay_without_the_flag_runs_no_paper(tmp_path):
         import time
         time.sleep(1.5)
         assert c.get("/api/paper/history").json()["current"] is None
+
+
+# ================================================================ fix round 1
+
+def _seed(r: PaperRunner, now: int, rows: list[dict], gaps=()):
+    r.seed(now, ((_ns(x), x["price"], x["size"]) for x in rows), gaps=gaps)
+
+
+def _holey(d: dt.date, a: str, b: str) -> list[dict]:
+    """The fixture day with every print in [a, b) ET missing."""
+    return [x for x in fixture_rows(d) if not ms(d, a) <= x["ts_ms"] < ms(d, b)]
+
+
+def _no_trade(cur: dict) -> None:
+    assert cur["status"] == "no_data" and "feed gap" in cur["error"]
+    assert cur["entry"] is None and cur["exit"] is None and cur["pnl_usd"] is None and cur["legs"] == []
+
+
+# ---- C1: a gap never becomes a trade
+
+def test_c1_a_restart_with_a_recorded_gap_finalises_no_data_never_a_fake_trade(tmp_path):
+    """Scenario A: the service was down 08:29:55-08:40 and the refill was skipped (md
+    budget): the recorder marked the hole. Without the mark the holey tape DOES trade."""
+    d = NFP_DAY
+    rows = _holey(d, "08:29:55", "08:40:00")
+    ts = array("q", [_ns(x) for x in rows])
+    holey = run_session(GCNfpCpi(), Tape("GC", d, "", ts, array("d", [x["price"] for x in rows]),
+                                         array("i", [x["size"] for x in rows]), {}), Costs())
+    assert holey.trades                                        # the fake trade the gap would have made
+    r = runner(tmp_path)
+    now = ms(d, "11:00:00")                                    # a restart after the window
+    _seed(r, now, rows, gaps=[[ms(d, "08:29:55"), ms(d, "08:40:00")]])
+    assert r.due(now)
+    r.step(now)
+    _no_trade(r.current)
+    assert r.current["state"] == "done" and "08:29:55" in r.current["error"]
+    rec = json.loads((tmp_path / "paper" / "runs.jsonl").read_text())
+    assert rec["status"] == "no_data" and "pnl_usd" not in rec and "entry" not in rec
+
+
+def test_c1_a_socket_drop_is_flagged_on_reconnect_until_the_refill_resolves_it(tmp_path):
+    """Scenario A, live: the socket drops 08:29:55 and reconnects 08:40 while other roots'
+    prints kept the feed looking alive; the reconnect flag makes the hole a gap."""
+    d = CPI_DAY
+    rows, wall = fixture_rows(d), Wall()
+    r = runner(tmp_path, wall=wall)
+    early = [x for x in rows if x["ts_ms"] < ms(d, "08:29:55")]
+    drive(r, early, d, "08:29:40", "08:29:55")
+    for s in range(ms(d, "08:29:55"), ms(d, "08:40:00"), 1000):
+        r.note_alive(s)
+    r.note_gap(ms(d, "08:29:55"), ms(d, "08:40:00"), "reconnect")
+    wall.t += 5
+    assert r.due(ms(d, "08:40:00")) and r.step(ms(d, "08:40:00")) is not None
+    _no_trade(r.current)
+    assert r.current["state"] == "waiting"                     # not final: a refill may still fill it
+    # the refill fetched everything: the recording is complete, the flag is resolved
+    _seed(r, ms(d, "08:40:05"), [x for x in rows if x["ts_ms"] <= ms(d, "08:40:05")], gaps=[])
+    r.clear_pending()
+    wall.t += 5
+    r.step(ms(d, "08:40:05"))
+    assert r.current["status"] == "traded" and r.current["pnl_usd"] == 596.0
+
+
+def test_c1_five_seconds_of_silence_is_a_gap_unless_the_rest_of_the_feed_was_alive(tmp_path):
+    d = CPI_DAY
+    rows = _holey(d, "08:30:00.500", "08:30:30")
+    r = runner(tmp_path / "dead")
+    drive(r, rows, d, "08:29:40", "09:56:03")
+    _no_trade(r.current)
+    assert "silence" in r.current["error"]
+    alive = runner(tmp_path / "alive")                         # NQ/ES kept printing: GC was just quiet
+    drive(alive, rows, d, "08:29:40", "09:56:03", alive=True)
+    assert alive.current["status"] != "no_data"
+
+
+def test_c1_the_final_run_waits_for_a_gc_refill_until_10_30(tmp_path):
+    """Scenario B: the refill is still paging at 09:56:02; the day is not finalised on the
+    holey tape, and a reseed that lands later is used."""
+    d, busy = CPI_DAY, [True]
+    rows = fixture_rows(d)
+    r = runner(tmp_path, busy=lambda: busy[0])
+    drive(r, [x for x in rows if x["ts_ms"] < ms(d, "08:29:59")], d, "08:29:40", "09:56:03")
+    assert not r.final
+    r.wall.t += 5
+    assert r.due(ms(d, "10:00:00")) is False                   # held while GC's refill runs
+    _seed(r, ms(d, "10:10:00"), rows, gaps=[])                 # the refill landed
+    busy[0] = False
+    r.wall.t += 5
+    assert r.due(ms(d, "10:10:00"))
+    r.step(ms(d, "10:10:00"))
+    assert r.final and r.current["status"] == "traded" and r.current["pnl_usd"] == 596.0
+    # a refill still running at 10:30: finalised, as no_data
+    r2 = runner(tmp_path / "late", busy=lambda: True)
+    drive(r2, [x for x in rows if x["ts_ms"] < ms(d, "08:29:59")], d, "08:29:40", "09:56:03")
+    r2.wall.t += 5
+    assert r2.due(ms(d, "10:29:59")) is False and r2.due(ms(d, "10:30:00"))
+    r2.step(ms(d, "10:30:00"))
+    assert r2.final and r2.current["status"] == "no_data" and "refill" in r2.current["error"]
+
+
+def test_c1_the_service_seeds_the_recorded_gaps_at_startup(tmp_path):
+    """End to end: a live recording with a marked hole; the restarted service finalises
+    no_data from the recording (sliced to the window, ticks from 18:00 the evening before)."""
+    from tests.charts_util import write_gz
+    d = NFP_DAY
+    rows = [{"ts_ms": ms(d, "08:10:00") - 3600_000 * 13, "price": 2500.0, "size": 1, "id": 1}]
+    rows += [{**x, "id": i + 2} for i, x in enumerate(_holey(d, "08:29:55", "08:40:00"))]
+    live = tmp_path / "ticks" / "GC" / "2024" / f"{d.isoformat()}_GCZ4.live.csv.gz"
+    write_gz(live, rows)
+    live.with_name(f"{d.isoformat()}_GCZ4.live.gaps").write_text(
+        json.dumps([[ms(d, "08:29:55"), ms(d, "08:40:00")]]))
+    with TestClient(_gc_live_app(tmp_path, ms(d, "11:00:00")), base_url="http://127.0.0.1:8852") as c:
+        import time
+        for _ in range(40):
+            h = c.get("/api/paper/history").json()
+            if h["runs"]:
+                break
+            time.sleep(0.1)
+    assert [x["status"] for x in h["runs"]] == ["no_data"] and "feed gap" in h["runs"][0]["error"]
+
+
+# ---- I2: the backtest child
+
+class FakeProc:
+    def __init__(self, code=None, polls_until_exit=None):
+        self.code, self.left = code, polls_until_exit
+        self.killed = self.terminated = False
+        self.waited = 0
+
+    def poll(self):
+        if self.killed or self.terminated:
+            return -9
+        if self.left is not None:
+            self.left -= 1
+            if self.left <= 0:
+                return self.code
+        return None
+
+    def kill(self):
+        self.killed = True
+
+    def terminate(self):
+        self.terminated = True
+
+    def wait(self, timeout=None):
+        self.waited += 1
+        return -9 if (self.killed or self.terminated) else self.code
+
+
+def _job(tmp_path, now_ms, proc, wall0=1_800_000_000.0, on_spawn=None):
+    import asyncio
+    t = {"wall": wall0, "slept": []}
+
+    async def sleep(s):
+        t["slept"].append(s)
+        t["wall"] += s
+
+    def spawn(folder):
+        t.setdefault("spawned", []).append(folder)
+        if on_spawn:
+            on_spawn(folder)
+        return proc
+
+    job = paper_mod.BacktestJob(tmp_path / "paper", spawn, lambda: now_ms, lambda m: None,
+                                sleep=sleep, wall=lambda: t["wall"])
+    asyncio.run(job.run())
+    return job, t
+
+
+def test_i2_the_backtest_never_starts_between_08_00_and_10_00_et(tmp_path):
+    d = CPI_DAY
+    assert paper_mod.backtest_delay_s(ms(d, "07:59:59")) == 0
+    assert paper_mod.backtest_delay_s(ms(d, "08:00:00")) == 2 * 3600 + 5 * 60
+    assert paper_mod.backtest_delay_s(ms(d, "09:25:00")) == 40 * 60      # the QUIET window too
+    assert paper_mod.backtest_delay_s(ms(d, "10:00:00")) == 0
+    ok = lambda f: (f.mkdir(parents=True), (f / "backtest.json").write_text("{}"))   # noqa: E731
+    _, t = _job(tmp_path, ms(d, "08:30:00"), FakeProc(0, 1), on_spawn=ok)
+    assert t["slept"][0] == 95 * 60 and t["spawned"]              # waited to 10:05, then launched
+
+
+def test_i2_a_hung_backtest_is_killed_after_15_minutes_and_blocks_respawn_for_24h(tmp_path):
+    proc = FakeProc()                                              # never exits
+    _, t = _job(tmp_path, ms(CPI_DAY, "12:00:00"), proc)
+    assert proc.killed and proc.waited >= 1                        # killed and reaped
+    assert 15 * 60 <= sum(t["slept"]) <= 15 * 60 + 10
+    failed = json.loads((tmp_path / "paper" / "backtest.failed").read_text())
+    assert "timeout" in failed["reason"]
+    _, t2 = _job(tmp_path, ms(CPI_DAY, "12:00:00"), FakeProc(0, 1), wall0=t["wall"] + 3600)
+    assert "spawned" not in t2                                     # blocked for 24 h
+    _, t3 = _job(tmp_path, ms(CPI_DAY, "12:00:00"), FakeProc(0, 1), wall0=t["wall"] + 86_401)
+    assert t3["spawned"]
+
+
+def test_i2_the_child_is_reaped_and_a_failed_exit_leaves_the_marker(tmp_path):
+    ok = FakeProc(0, 2)
+    _job(tmp_path / "a", ms(CPI_DAY, "12:00:00"), ok, on_spawn=lambda f: (f.mkdir(parents=True), (f / "backtest.json").write_text("{}")))
+    assert ok.waited == 1 and not (tmp_path / "a" / "paper" / "backtest.failed").exists()
+    bad = FakeProc(1, 2)
+    _job(tmp_path / "b", ms(CPI_DAY, "12:00:00"), bad)
+    assert bad.waited == 1
+    assert "exit 1" in json.loads((tmp_path / "b" / "paper" / "backtest.failed").read_text())["reason"]
+
+
+def test_i2_stop_terminates_and_reaps_a_running_child(tmp_path):
+    job = paper_mod.BacktestJob(tmp_path / "paper", lambda f: None, lambda: 0, lambda m: None)
+    job.proc = FakeProc()
+    job.stop()
+    assert job.proc.terminated and job.proc.waited == 1
+
+
+# ---- I3: replay isolation
+
+def test_i3_a_replay_never_reads_or_writes_the_forward_record(tmp_path):
+    d = CPI_DAY
+    folder = tmp_path / "state" / "paper"
+    folder.mkdir(parents=True)
+    forward = [{"date": "2024-10-10", "strategy": "gc_nfpcpi", "event": "CPI", "rule": "ff", "status": "traded",
+                "legs": [], "pnl_usd": 596.0},
+               {"date": d.isoformat(), "strategy": "gc_nfpcpi", "event": "CPI", "rule": "ff",
+                "status": "no_fill", "legs": []}]
+    (folder / "runs.jsonl").write_text("".join(json.dumps(x) + "\n" for x in forward))
+    before = (folder / "runs.jsonl").read_bytes()
+    app = create_app(roots=["GC"], base=_replay_archive(tmp_path, d), replay=d, speed=40,
+                     start_et=dt.time(8, 29, 55), state=tmp_path / "state", paper_day=True)
+    with TestClient(app, base_url="http://127.0.0.1:8852") as c, \
+            c.websocket_connect("/ws", headers=WS_HOST) as ws:
+        m = next_of(ws, "paper", limit=400)
+        assert m["replay"] is True and m["status"] != "no_fill"    # not the stored forward run
+        h = c.get("/api/paper/history").json()
+        assert all(x.get("replay") for x in h["runs"])            # the forward runs are not listed
+        assert h["stats"]["paper"]["n"] == 0
+    assert (folder / "runs.jsonl").read_bytes() == before
+
+
+def test_i3_replay_runs_are_tagged_and_kept_out_of_the_forward_stats(tmp_path):
+    r = PaperRunner(None, None, replay=True, force_day=CPI_DAY, persist=False, wall=Wall(), log=lambda m: None)
+    drive(r, fixture_rows(CPI_DAY), CPI_DAY, "08:29:40", "09:56:03")
+    assert r.final and r.current["replay"] is True and r.runs[0]["replay"] is True
+    assert r.runs[0]["status"] == "traded"
+    assert r.history()["stats"]["paper"]["n"] == 0
+
+
+# ---- M4: --paper-day refuses holdout dates
+
+def test_m4_paper_day_refuses_holdout_dates_unless_allowed(monkeypatch, capsys):
+    captured: dict = {}
+    _patch_run(monkeypatch, captured)
+    with pytest.raises(SystemExit):
+        main_mod.main(["--replay", "2025-01-02", "--paper-day"])
+    assert "holdout" in capsys.readouterr().err and captured == {}
+    assert main_mod.main(["--replay", "2024-12-31", "--paper-day"]) == 0
+    assert main_mod.main(["--replay", "2025-10-03", "--paper-day", "--paper-allow-holdout"]) == 0
+    assert captured["replay"] == dt.date(2025, 10, 3) and captured["paper_day"] is True
+    with pytest.raises(SystemExit):
+        main_mod.main(["--replay", "2025-10-03", "--paper-allow-holdout"])
+
+
+# ---- M5: the tags are re-read at 08:29:50; a missing calendar is recorded
+
+def test_m5_an_event_removed_before_08_29_50_is_not_traded(tmp_path):
+    d = dt.date(2026, 10, 2)
+    cal = _cal(tmp_path, _ff("Non-Farm Employment Change", "2026-10-02"))
+    r = PaperRunner(tmp_path / "paper", cal, wall=Wall(), log=lambda m: None)
+    r.due(ms(d, "07:00:00"))
+    assert r.tags == frozenset({"NFP"})
+    wk = week_start(ms(d, "08:30")).isoformat()
+    cal.weeks[wk] = [e for e in cal.weeks[wk] if e["title"] != "Non-Farm Employment Change"]   # postponed
+    assert r.due(ms(d, "08:29:50")) is False
+    assert r.tags == frozenset() and r.rule == "ff" and r.runs_done == 0
+
+
+def test_m5_a_missing_calendar_week_is_recorded_not_silently_skipped(tmp_path):
+    d = dt.date(2026, 10, 2)                                        # past the CSV, FF week never fetched
+    r = PaperRunner(tmp_path / "paper", _cal(tmp_path), wall=Wall(), log=lambda m: None)
+    assert r.due(ms(d, "08:00:00")) is False
+    assert r.due(ms(d, "08:29:50"))
+    r.step(ms(d, "08:29:50"))
+    assert r.final and r.current["status"] == "calendar_missing"
+    rec = json.loads((tmp_path / "paper" / "runs.jsonl").read_text())
+    assert rec["status"] == "calendar_missing" and rec["date"] == d.isoformat()
+    assert r.history()["stats"]["paper"]["n"] == 0
+    sat = PaperRunner(tmp_path / "sat", _cal(tmp_path), wall=Wall(), log=lambda m: None)
+    assert sat.due(ms(dt.date(2026, 10, 3), "08:29:50")) is False  # a weekend is not missing
+
+
+# ---- M6/M7: nothing is marked done until it succeeded
+
+def test_m6_a_failed_snapshot_is_retried(tmp_path):
+    r = runner(tmp_path)
+    d = CPI_DAY
+    drive(r, fixture_rows(d), d, "08:29:40", "08:29:55")
+    real, calls = r.snapshot, []
+
+    def flaky():
+        calls.append(1)
+        if len(calls) == 1:
+            raise OSError("boom")
+        return real()
+
+    r.snapshot = flaky
+    now = ms(d, "08:30:05")
+    r.wall.t += 5
+    assert r.due(now) and r.step(now) is None
+    assert r.phase == 1                                            # not advanced
+    r.wall.t += 1
+    assert r.due(now)
+    assert r.step(now) is not None and r.phase == 2
+
+
+def test_m7_a_failed_write_keeps_the_day_open_and_retries(tmp_path, monkeypatch):
+    r = runner(tmp_path)
+    d = CPI_DAY
+    drive(r, fixture_rows(d), d, "08:29:40", "09:55:00")
+    real, calls = paper_mod._jsonl.append, []
+
+    def flaky(path, obj):
+        calls.append(1)
+        if len(calls) == 1:
+            raise OSError("disk full")
+        return real(path, obj)
+
+    monkeypatch.setattr(paper_mod._jsonl, "append", flaky)
+    end = ms(d, "09:56:03")
+    r.wall.t += 5
+    assert r.due(end)
+    r.step(end)
+    assert not r.final and r.runs == []
+    r.wall.t += 1
+    assert r.due(end)
+    r.step(end)
+    assert r.final and len(r.runs) == 1
+    assert len((tmp_path / "paper" / "runs.jsonl").read_text().splitlines()) == 1
+
+
+# ---- M8: seeding only walks the window
+
+def test_m8_window_ms_bounds_the_seed(tmp_path):
+    r = runner(tmp_path)
+    assert r.window_ms(ms(CPI_DAY, "07:00:00")) == (ms(CPI_DAY, "08:20:00"), ms(CPI_DAY, "09:56:00"))
+    assert runner(tmp_path / "x").window_ms(ms(dt.date(2024, 9, 9), "07:00:00")) is None

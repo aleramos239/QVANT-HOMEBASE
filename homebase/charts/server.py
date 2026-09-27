@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+from bisect import bisect_left
 import json
 import math
 import os
@@ -35,7 +36,7 @@ from .desk import Fanout, Quotes, register as register_desk
 from .history import History
 from .hub import Hub, Stream
 from .news import News
-from .paper import ROOT as PAPER_ROOT, STRATEGY_ID as PAPER_ID, PaperRunner, describe as paper_describe
+from .paper import ROOT as PAPER_ROOT, STRATEGY_ID as PAPER_ID, BacktestJob, PaperRunner, describe as paper_describe
 from .recorder import REFILL_MAX_PAGES, LiveRecorder, refill
 from .replay import ReplayFeed
 from .session import ET, always_open, et_wall_s, session_date, session_range_ms, split_by_session
@@ -246,11 +247,16 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
     store = TickStore(base)
     history = History(store, cache_dir=sd / "cache")
     # forward PAPER test of the GC NFP+CPI straddle (paper.py): never an order; live only,
-    # or a replay forced by --paper-day (which stores nothing); paper_backtest (python -m
-    # homebase.charts passes paper.spawn_backtest) computes the cached 2021-2024 comparison once
-    paper = PaperRunner(sd / "paper", cal, enabled=PAPER_ROOT in roots and (not replay or paper_day),
-                        force_day=replay if paper_day else None, persist=not replay, log=log)
-    paper_jobs: list = []
+    # or a replay forced by --paper-day, which never reads or writes the forward runs.jsonl;
+    # paper_backtest (python -m homebase.charts passes paper.spawn_backtest) computes the
+    # cached 2021-2024 comparison once, via BacktestJob (never 08:00-10:00 ET, 15 min cap).
+    # busy: the final run waits while GC's gap refill runs (up to 10:30 ET)
+    paper = PaperRunner(None if replay else sd / "paper", cal,
+                        enabled=PAPER_ROOT in roots and (not replay or paper_day),
+                        force_day=replay if paper_day else None, persist=not replay, replay=bool(replay),
+                        backtest_file=sd / "paper" / "backtest.json",
+                        busy=lambda: PAPER_ROOT in refill_running or PAPER_ROOT in refill_pending, log=log)
+    paper_job: list = []
     recorder = None if replay else LiveRecorder(base)
     conns: set[Conn] = set()
     quotes = Quotes()                     # bid/ask per root for the Buy/Sell buttons (desk.py)
@@ -284,7 +290,12 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             "gaps": [[et_wall_s(a), et_wall_s(b)] for a, b in (sess.gaps if sess else [])]})
         if root == PAPER_ROOT:
             try:        # a restart mid-window (or a gap refill) rebuilds the paper tape from the recording
-                paper.seed(clock(), ((t.ts_ms * 1_000_000, t.price, t.size) for t in ticks))
+                w = paper.window_ms(clock())    # [08:20, 09:56) on an event day, else None: O(log n) slice
+                if w is not None:
+                    i = bisect_left(ticks, w[0], key=lambda t: t.ts_ms)
+                    j = bisect_left(ticks, w[1], lo=i, key=lambda t: t.ts_ms)
+                    paper.seed(clock(), ((t.ts_ms * 1_000_000, t.price, t.size) for t in ticks[i:j]),
+                               gaps=sess.gaps if sess else [])
             except Exception as e:  # noqa: BLE001 — paper work must never break the charts
                 log(f"paper seed: {type(e).__name__}: {e}")
 
@@ -331,6 +342,8 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         # row, and mark_gap below each missing piece, under its own session.
         floor = session_range_ms(d - dt.timedelta(days=1), root)[0] if always_open(root) else s0
         frm = max(since_ms if since_ms is not None else (start_last.get(root) or s0), floor)
+        if root == PAPER_ROOT:
+            paper.note_gap(frm, clock(), "reconnect")   # a hole until this refill resolves it
         waiting = refill_pending.get(root)
         if waiting is not None:
             waiting["frm"] = min(waiting["frm"], frm)
@@ -379,13 +392,18 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         finally:
             refill_running.discard(root)
             refill_pending.pop(root, None)   # never leave a follow-up orphaned if we exit abnormally
+            if root == PAPER_ROOT:
+                paper.clear_pending()       # the reseeds above carried what could not be filled
 
     def paper_ticks(root: str, rows: list[dict]) -> None:
-        if root == PAPER_ROOT and rows:
-            try:
+        if not rows:
+            return
+        try:
+            paper.note_alive(int(rows[-1]["ts_ms"]))    # any root: the md socket is alive
+            if root == PAPER_ROOT:
                 paper.on_ticks(rows)
-            except Exception as e:  # noqa: BLE001 — paper work must never break the live tick path
-                log(f"paper ticks: {type(e).__name__}: {e}")
+        except Exception as e:  # noqa: BLE001 — paper work must never break the live tick path
+            log(f"paper ticks: {type(e).__name__}: {e}")
 
     # the feed is built AFTER reseed/_refill exist (it takes _refill as its
     # callback); every function above only touches feed/hub/clock when called
@@ -575,8 +593,12 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             for r, rs in feed.load().items():
                 if r == PAPER_ROOT:
                     try:        # --paper-day: the session so far, like a live restart's reseed
-                        paper.seed(clock(), ((int(x["ts_ns"]) if x.get("ts_ns") else int(x["ts_ms"]) * 1_000_000,
-                                              float(x["price"]), int(x.get("size") or 0)) for x in rs))
+                        w = paper.window_ms(clock())
+                        if w is not None:
+                            i = bisect_left(rs, w[0], key=lambda x: int(x["ts_ms"]))
+                            j = bisect_left(rs, w[1], lo=i, key=lambda x: int(x["ts_ms"]))
+                            paper.seed(clock(), ((int(x["ts_ns"]) if x.get("ts_ns") else int(x["ts_ms"]) * 1_000_000,
+                                                  float(x["price"]), int(x.get("size") or 0)) for x in rs[i:j]))
                     except Exception as e:  # noqa: BLE001 — paper work must never break the charts
                         log(f"paper seed: {type(e).__name__}: {e}")
                 clf = SideClassifier()
@@ -603,11 +625,19 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             tasks.append(asyncio.create_task(depth.run()))
         if paper.enabled:
             tasks.append(asyncio.create_task(paper_loop()))
-        if paper_backtest is not None and not (sd / "paper" / "backtest.json").exists():
-            try:
-                paper_jobs.append(paper_backtest(sd / "paper"))
-            except Exception as e:  # noqa: BLE001 — the comparison is optional
-                log(f"paper backtest: {type(e).__name__}: {e}")
+        if paper_backtest is not None:
+            job = BacktestJob(sd / "paper", paper_backtest, clock, log)
+            paper_job.append(job)
+
+            async def backtest_job() -> None:
+                try:
+                    await job.run()
+                except asyncio.CancelledError:
+                    raise
+                except Exception as e:  # noqa: BLE001 — the comparison is optional
+                    log(f"paper backtest: {type(e).__name__}: {e}")
+
+            tasks.append(asyncio.create_task(backtest_job()))
         log(f"up — {'replay ' + replay.isoformat() if replay else 'live'} · {', '.join(roots)}")
         try:
             yield
@@ -625,9 +655,8 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             if depth is not None:
                 await depth.aclose()    # cancels its requests in flight; the recording's last member
             tester.manager.shutdown()   # never leave a runner child orphaned
-            for job in paper_jobs:      # nor the paper comparison's
-                if job is not None and job.poll() is None:
-                    job.terminate()
+            for job in paper_job:       # nor the paper comparison's (terminated and reaped)
+                job.stop()
 
     app = FastAPI(title="Homebase Charts", lifespan=lifespan)
     app.mount("/static", RevalidatedFiles(directory=STATIC), name="static")

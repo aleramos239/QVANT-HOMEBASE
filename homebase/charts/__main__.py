@@ -6,6 +6,7 @@ import datetime as dt
 
 import uvicorn
 
+from ..backtest.discipline import RESEARCH_END
 from ..paths import state_dir
 from . import DEFAULT_ROOTS, PORT
 from .calendar import http_get
@@ -27,9 +28,17 @@ def main(argv=None) -> int:
     ap.add_argument("--paper-day", action="store_true",
                     help="replay only: the replayed date counts as a GC NFP/CPI event day for the "
                          "paper runner (browser checks; stores nothing) -- use with --start 08:25")
+    ap.add_argument("--paper-allow-holdout", action="store_true",
+                    help="with --paper-day: allow a replayed date after 2024-12-31 (holdout data; "
+                         "each use needs the user's approval)")
     a = ap.parse_args(argv)
     if a.paper_day and not a.replay:
         ap.error("--paper-day works only with --replay")
+    if a.paper_allow_holdout and not a.paper_day:
+        ap.error("--paper-allow-holdout works only with --paper-day")
+    if a.paper_day and dt.date.fromisoformat(a.replay) > RESEARCH_END and not a.paper_allow_holdout:
+        ap.error(f"--paper-day on {a.replay}: dates after {RESEARCH_END} are holdout data "
+                 "(add --paper-allow-holdout only with the user's approval)")
     app = create_app(roots=[r for r in a.roots.split(",") if r],
                      replay=dt.date.fromisoformat(a.replay) if a.replay else None,
                      speed=a.speed, start_et=dt.time.fromisoformat(a.start),
