@@ -1,0 +1,39 @@
+{
+  "name": "Apex EOD 50K",
+  "version": "2026-09-27b",
+  "as_of": "2026-09-27",
+  "source": "Account holder 2026-09-27: \"the EOD trail apex with the max 6 con\", $3,000 target, $2,000 EOD-trailing max loss, $1,000 daily loss limit, no consistency rule, passable in 1 day, floor locks at +$100. The daily limit is modelled SOFT (closed out and stopped for the day, the account survives), the same as Lucid's -- confirm if Apex's differs. Floor: $2,000 below the EOD peak, locking at $50,100 (+$100) once the EOD peak reaches +$2,100.",
+  "confirmed": false,
+  "account_size": 50000,
+  "eval_target": 3000,
+  "eval_min_days": 1,
+  "consistency": null,
+  "trailing_mll": 2000,
+  "lock_at": 2100,
+  "lock_floor": 100,
+  "win_day": 150,
+  "payout_win_days": 5,
+  "payout_share": 0.5,
+  "payout_cap": 2000,
+  "max_payout_profit": 4000,
+  "daily_loss_limit": 1000,
+  "max_days": null,
+  "scaling_micros": null,
+  "cap_micros": 60,
+  "mini_point_values": {
+    "NQ": 20,
+    "ES": 50,
+    "GC": 100,
+    "CL": 1000
+  },
+  "flat_by_et": "16:10",
+  "no_overnight": true,
+  "notes": [
+    "Max size 6 minis = 60 micros. NOT enforced by the simulator.",
+    "Trailing max loss is END OF DAY: the floor moves up with the EOD peak and never down, and locks at +$100 ($50,100) once EOD profit reaches +$2,100.",
+    "No consistency rule and no minimum days: a single +$3,000 day passes.",
+    "SOFT daily loss limit $1,000, applied per trade from each trade's tick-level worst moment (MAE); stopped for the day, account survives.",
+    "FUNDED/PAYOUT block (win_day, payout_win_days, payout_share, payout_cap, max_payout_profit) is COPIED FROM LUCIDFLEX as a placeholder -- Apex's own payout rules were not given, so the 'Funded: expected cheque' figure is NOT Apex's. That is the only unconfirmed part of this file."
+  ],
+  "disclaimer": "Eval rules from the account holder 2026-09-27; payout terms are placeholders copied from LucidFlex."
+}

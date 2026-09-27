@@ -69,7 +69,9 @@ def test_rule_files_and_the_unconfirmed_label():
     with its $1,200 daily limit and LucidPro without it (both partly unconfirmed) -- newest
     version per family; older snapshots stay loadable."""
     ids = {r["id"]: r for r in list_rules()}
-    assert set(ids) == {"lucid-flex-50k@2026-09-27", "lucid-pro-50k@2026-09-27b", "lucid-pro-50k-no-dll@2026-09-27b"}
+    assert set(ids) == {"lucid-flex-50k@2026-09-27", "lucid-flex-50k-dll@2026-09-27b", "lucid-pro-50k@2026-09-27b",
+                        "lucid-pro-50k-no-dll@2026-09-27b", "topstep-50k@2026-09-27b", "apex-legacy-50k@2026-09-27b",
+                        "apex-eod-50k@2026-09-27b"}
     assert ids["lucid-flex-50k@2026-09-27"] == {"id": "lucid-flex-50k@2026-09-27", "name": "LucidFlex 50K",
                                                 "version": "2026-09-27", "confirmed": True}
     assert ids["lucid-pro-50k@2026-09-27b"] == {"id": "lucid-pro-50k@2026-09-27b", "name": "LucidPro 50K · $1,200 daily limit",
@@ -93,9 +95,11 @@ def test_rule_files_and_the_unconfirmed_label():
 
 
 def test_the_apex_placeholder_is_gone():
-    """Invented numbers are worse than no file: other accounts map onto Flex or Pro."""
+    """Invented numbers are worse than no file: the old all-Flex-copy placeholder stays deleted;
+    the Apex files that exist now carry the account holder's own numbers (2026-09-27)."""
     assert not (RULES_DIR / "apex-50k@unconfirmed.json").exists()
-    assert not list(RULES_DIR.glob("apex*"))
+    assert sorted(p.name for p in RULES_DIR.glob("apex*")) == ["apex-eod-50k@2026-09-27b.json",
+                                                              "apex-legacy-50k@2026-09-27b.json"]
 
 
 def test_flex_2026_09_27_reaffirms_the_2026_08_numbers_so_nothing_moves():
@@ -320,3 +324,28 @@ def test_overlapping_positions_and_a_broken_mae_are_flagged():
     nan = [{"date": "2024-03-04", "net": 3000.0, "mae_usd": float("nan"), "commission": 4.0}]
     assert propsim.limit_trades(nan, load_rules("lucid-pro-50k@2026-09-27b"))[0]["net"] == 3000.0
     assert "OVERSTATED" in evaluate(nan, "lucid-pro-50k@2026-09-27b", n_paths=50)["caveat"]
+
+
+def test_the_account_holders_other_evals():
+    """2026-09-27: Flex + a $1,200 daily limit; Topstep = Flex with no daily limit and a 5-mini cap;
+    Apex Legacy = $3,000 / $2,000 EOD trail locking at $50,100, 10 minis, no consistency, 1 day;
+    Apex EOD = the same with a $1,000 daily limit and 6 minis. Apex payout terms are placeholders,
+    so both Apex files stay unconfirmed."""
+    flex = load_rules(DEFAULT_RULES)
+    fd = load_rules("lucid-flex-50k-dll@2026-09-27b")
+    assert fd["daily_loss_limit"] == 1200 and fd["consistency"] == 0.5 and fd["eval_min_days"] == 2
+    top = load_rules("topstep-50k@2026-09-27b")
+    assert top["cap_micros"] == 50 and top["daily_loss_limit"] is None
+    same = ("eval_target", "trailing_mll", "lock_at", "lock_floor", "consistency", "eval_min_days", "win_day",
+            "payout_win_days", "payout_share", "payout_cap", "max_payout_profit")
+    assert all(top[k] == flex[k] == fd[k] for k in same)
+    for rid, cap, dll in (("apex-legacy-50k@2026-09-27b", 100, None), ("apex-eod-50k@2026-09-27b", 60, 1000)):
+        a = load_rules(rid)
+        assert (a["eval_target"], a["trailing_mll"], a["lock_at"], a["lock_floor"]) == (3000, 2000, 2100, 100)
+        assert a["consistency"] is None and a["eval_min_days"] == 1
+        assert a["cap_micros"] == cap and a["daily_loss_limit"] == dll and a["confirmed"] is False
+        assert engine.run_eval([3100.0], a)["outcome"] == "pass"          # one day, no consistency
+    eod = load_rules("apex-eod-50k@2026-09-27b")
+    legacy = load_rules("apex-legacy-50k@2026-09-27b")
+    assert engine.run_eval([-2500.0], eod)["outcome"] == "timeout"        # stopped at -1,000 for the day
+    assert engine.run_eval([-2500.0], legacy)["outcome"] == "bust"        # no daily limit: through the $2,000 trail

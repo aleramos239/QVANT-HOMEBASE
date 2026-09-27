@@ -1,0 +1,47 @@
+{
+  "name": "LucidFlex 50K · $1,200 daily limit",
+  "version": "2026-09-27b",
+  "as_of": "2026-09-27",
+  "source": "Account holder 2026-09-27: LucidFlex 50K with a $1,200 daily loss limit, as an option alongside plain Flex (\"make the lucid flex ... lucid flex $1200 daily DD\"). Every other number is LucidFlex 50K@2026-09-27's (50% consistency on top of a 2-day minimum, $3,000 target, $2,000 EOD-trailing max loss). The limit is modelled like LucidPro's: SOFT -- hit it and you are closed out and stopped for the day; the account survives.",
+  "confirmed": true,
+  "account_size": 50000,
+  "eval_target": 3000,
+  "eval_min_days": 2,
+  "consistency": 0.5,
+  "trailing_mll": 2000,
+  "lock_at": 2100,
+  "lock_floor": 100,
+  "win_day": 150,
+  "payout_win_days": 5,
+  "payout_share": 0.5,
+  "payout_cap": 2000,
+  "max_payout_profit": 4000,
+  "daily_loss_limit": 1200,
+  "max_days": null,
+  "scaling_micros": {
+    "start": 20,
+    "at_1000": 30,
+    "at_2000": 40
+  },
+  "cap_micros": 40,
+  "mini_point_values": {
+    "NQ": 20,
+    "ES": 50,
+    "GC": 100,
+    "CL": 1000
+  },
+  "flat_by_et": "16:10",
+  "no_overnight": true,
+  "payout_ladder": "first cheques capped $2,000, later $2,500; up to 5 payouts then live review; 90/10 split beyond",
+  "notes": [
+    "Contract scaling (funded): start 20 micros, 30 at +$1,000, 40 at +$2,000; 4 minis = 40 micros is the hard cap (eval too). NOT enforced by the simulator — surfaced as a warning when a ledger exceeds it.",
+    "Flat by 16:10 ET, no overnight holds. NOT enforced by the simulator — surfaced as a warning.",
+    "Only the FIRST payout is simulated; the ladder above is informational.",
+    "Trailing max loss is measured END OF DAY, not intraday: the floor moves up with EOD peak profit and never moves down.",
+    "The floor LOCKS at +$100 once EOD profit reaches +$2,100 — from then on the account cannot be trailed below +$100.",
+    "Consistency is checked at the moment of passing: largest winning day must be <= 50% of total profit, else keep trading. Reaffirmed by the account holder 2026-09-27 -- it applies ON TOP OF the 2-trading-day minimum, not instead of it.",
+    "Payout requires 5 separate days >= $150 AND net > 0. Payout amount is 50% of profit capped at $2,000, so the max payout additionally needs >= $4,000 profit.",
+    "SOFT daily loss limit $1,200, applied per trade from each trade's tick-level worst moment (MAE): the moment the day's closed trades plus the open one reach -$1,200 you are closed out at -$1,200 and stopped for the day. Applied to the eval, the funded account and the Monte Carlo ruin walk."
+  ],
+  "disclaimer": "Illustrative, versioned snapshot — verify against LucidFlex's current rulebook before relying on these numbers."
+}

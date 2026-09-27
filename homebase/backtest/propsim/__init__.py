@@ -17,10 +17,17 @@ reproduces:
                                          terms it shares with Flex.
   rules/lucid-pro-50k-no-dll@2026-09-27b.json  the same account with the daily limit
                                          removed (an option Lucid offers).
+  rules/lucid-flex-50k-dll@2026-09-27b.json  Flex plus a SOFT $1,200 daily limit.
+  rules/topstep-50k@2026-09-27b.json     Flex rules, no daily limit, 5-mini cap.
+  rules/apex-legacy-50k@2026-09-27b.json $3,000 / $2,000 EOD trail locking at +$100, no
+                                         consistency, 1 day, 10 minis.
+  rules/apex-eod-50k@2026-09-27b.json    the same plus a SOFT $1,000 daily limit, 6 minis.
+                                         Both Apex files: payout terms are placeholders
+                                         copied from Flex, "confirmed": false.
   rules/lucid-pro-50k@2026-09-27.json    superseded (no daily limit, all but two numbers
                                          inherited), kept for reproducing older runs.
-There is deliberately NO Apex file: the account holder maps other accounts onto Flex or
-Pro, and a file of invented numbers is worse than no file (the placeholder was deleted
+Apex and Topstep files carry ONLY numbers the account holder gave (2026-09-27); an
+invented number is worse than no file (an earlier Apex placeholder was deleted
 2026-09-27).
 
 The model: i.i.d. day bootstrap over the WEEKDAY GRID of the run's daily net P&L —
