@@ -27,6 +27,7 @@ from ..contracts import tick_size as contract_tick_size
 from ..paths import state_dir
 from . import DEFAULT_ROOTS, DEPTH_RECORD_ROOTS, QUIET      # QUIET: never refill across the 9:30 fire
 from .bars import BarSpec
+from .barreplay import BarReplay
 from .bursts import REACTION_ROOTS, BurstBook, ReactionBook, configured_roots
 from .calendar import Calendar
 from .depth import DEPTH_ARCHIVE, Depth, DepthRecorder
@@ -411,6 +412,9 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         depth = Depth(feed, rec_roots, log=log,
                       recorder=DepthRecorder(depth_base or DEPTH_ARCHIVE) if rec_roots else None)
     hub = Hub(history, clock)
+    # per-chart Bar Replay: its own hubs over its own History memo; never the live hub, recorder, desk or quotes
+    replays = BarReplay(store, sd / "cache", roots, lambda: clock(), min_bar=MIN_BAR,
+                        max_studies=MAX_STUDIES, log=log)
     chart_error: list[str | None] = [None]     # the pump's chart work, failing right now
 
     def status() -> dict:
@@ -484,6 +488,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                 for m in quotes.drain():
                     fan(m)
                 desk_fan.flush()
+                replays.pump()
                 chart_error[0] = None
             except Exception as e:  # noqa: BLE001 — the pump must never die
                 chart_error[0] = f"{type(e).__name__}: {e}"
@@ -763,12 +768,24 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                     continue
                 op, cid = msg.get("op"), str(msg.get("id", ""))
                 if op == "unsub":
+                    replays.stop(conn, cid, notify=False)
                     hub.unsubscribe((conn, cid))
                     if depth is not None:
                         depth.unview((conn, cid))
                     continue
                 if op == "older":
-                    ask_older(conn, cid, msg.get("before"))
+                    if not replays.ask_older(conn, cid, msg.get("before")):
+                        ask_older(conn, cid, msg.get("before"))
+                    continue
+                if op == "replay_start":
+                    if await replays.start(conn, cid, msg, live=hub.stream_of((conn, cid))):
+                        hub.unsubscribe((conn, cid))    # the chart leaves the live stream
+                    continue
+                if op == "replay_ctl":
+                    await replays.control(conn, cid, msg)
+                    continue
+                if op == "replay_stop":
+                    replays.stop(conn, cid)
                     continue
                 if op != "sub":
                     continue
@@ -792,6 +809,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                     conn.send({"type": "error", "id": cid, "error": str(e)})
                     continue
                 s = None
+                replays.stop(conn, cid, notify=False)   # a sub on a replaying chart returns it to live
                 try:
                     hub.unsubscribe((conn, cid))
                     s = hub.streams.get((root, spec.key))
@@ -828,6 +846,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             if depth is not None:
                 depth.drop_conn(conn)
             hub.drop_conn(conn)
+            replays.drop_conn(conn)
             conn.task.cancel()
 
     return app
