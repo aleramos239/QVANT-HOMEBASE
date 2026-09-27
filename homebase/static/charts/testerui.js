@@ -19,7 +19,7 @@ const X = window.HBTester;
 const Tr = window.HBTrade;
 const REASON_MAX = X.REASON_MAX;
 
-const COST_FIELDS = [['qty', 'Qty', 1, 100, 1], ['commission', 'Commission $', 0, 100, 0.01],
+const COST_FIELDS = [['qty', 'Qty', 1, 100, 1], ['commission', 'Commission $/RT (per contract)', 0, 100, 0.01],
   ['slippage_ticks', 'Slippage (ticks)', 0, 20, 0.25]];
 const INNER_TABS = [['overview', 'Overview'], ['summary', 'Performance summary'], ['trades', 'List of trades'],
   ['properties', 'Properties']];
@@ -27,23 +27,39 @@ const TRADE_COLS = [['n', '#', true], ['side', 'Side', false], ['entry', 'Entry 
   ['exit', 'Exit time', false], [null, 'Exit price', true], ['reason', 'Reason', false], ['qty', 'Qty', true],
   ['net', 'Net', true], ['mae', 'MAE', true], ['mfe', 'MFE', true], ['dur', 'Duration', true]];
 const TRADE_CHUNK = 500;
+// M4: LightweightCharts renders `time` (unix seconds) as UTC by default; every other chart in this app
+// reads ET (cell.js's own comment: "Bar times arrive as ET wall-clock seconds, so the axis reads ET").
+// The mini chart's `time` values are real epoch seconds (X.equitySeries, unshifted -- its own Node tests
+// pin that), so ET-ness has to come from formatting here, not from the data.
+const ET_TICK = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric' });
 
 let page = null;
 
 /* ---- strategies / prop rules: fetched once, cached ---- */
 let strategiesList = null, propRulesList = null;
 let strategiesPromise = null, propRulesPromise = null;
+/* M7: a failed (or empty) load must not wedge the tab on "Could not load…" forever -- clearing the cached
+   promise lets the next render() (the next time the tab is shown) try again, instead of replaying the
+   same rejection/empty list from cache indefinitely. */
 function loadStrategies() {
   if (!strategiesPromise) {
     strategiesPromise = fetch('/api/tester/strategies').then((r) => (r.ok ? r.json() : [])).catch(() => [])
-      .then((list) => { strategiesList = Array.isArray(list) ? list : []; return strategiesList; });
+      .then((list) => {
+        strategiesList = Array.isArray(list) ? list : [];
+        if (!strategiesList.length) strategiesPromise = null;
+        return strategiesList;
+      });
   }
   return strategiesPromise;
 }
 function loadPropRules() {
   if (!propRulesPromise) {
     propRulesPromise = fetch('/api/tester/prop-rules').then((r) => (r.ok ? r.json() : [])).catch(() => [])
-      .then((list) => { propRulesList = Array.isArray(list) ? list : []; return propRulesList; });
+      .then((list) => {
+        propRulesList = Array.isArray(list) ? list : [];
+        if (!propRulesList.length) propRulesPromise = null;
+        return propRulesList;
+      });
   }
   return propRulesPromise;
 }
@@ -67,7 +83,9 @@ let strategyId = null;
 let form = null;
 let loadedKey = null;      // HBTester.key of the form that produced `bundle`, or null
 let bundle = null;         // {run, trades, equity, plots, propsim} or null
-let serverError = '';      // a 400 detail, or a run failure -- takes precedence over a client-side `problems()` line
+let serverError = '';      // a 400 detail, or a submit-time refusal -- cleared on the next form edit (persist())
+let lastRunFailed = '';    // M1: sticks above the content -- unlike serverError -- until the NEXT successful load
+let submittedKey = null, submittedStrategy = null;   // I1: a snapshot of what was actually sent, for the in-flight run
 let runId = null;
 let runStatus = null;      // the last polled status, or null (no run in flight / just finished)
 let pollToken = 0;
@@ -80,7 +98,7 @@ let miniChartHandle = null;
 const listeners = new Set();
 
 /* ---- DOM roots, rebuilt by render(); refreshed in place by everything else ---- */
-let root = null, headerEl = null, tabsEl = null, contentEl = null;
+let root = null, headerEl = null, holdoutBannerEl = null, tabsEl = null, contentEl = null;
 let errEl = null, runBtn = null, progressBarEl = null, progressTextEl = null;
 
 function notify() { for (const fn of [...listeners]) { try { fn(); } catch (e) { console.error(e); } } }
@@ -91,17 +109,16 @@ function persist() {
   saveStore();
 }
 
-/* ---- validation shown in the header's error line and the inputs dialog: a local copy of tester.js's
-   private inputError (not exported -- Task 8's file is not one this task modifies). Kept tiny and mirrors
-   the rules HBTester.problems() already applies (and tester.test.mjs already covers) for a schema input. */
-function checkInput(inp, v) {
-  if (inp.type === 'bool') return typeof v === 'boolean' ? null : `${inp.label}: on or off`;
-  if (inp.type === 'choice') return inp.choices.includes(v) ? null : `${inp.label}: one of ${inp.choices.join(', ')}`;
-  if (typeof v !== 'number' || !Number.isFinite(v)) return `${inp.label}: a number`;
-  if (inp.type === 'int' && !Number.isInteger(v)) return `${inp.label}: a whole number`;
-  if ((inp.min != null && v < inp.min) || (inp.max != null && v > inp.max)) return `${inp.label}: ${inp.min} to ${inp.max}`;
-  return null;
+/* C1 (critical): a valid, armed holdout run -- the switch is on, the range actually reaches 2025+, and the
+   reason is a valid one-liner -- i.e. exactly the condition under which the NEXT Run click spends holdout
+   data and gets logged. Mirrors the same check `HBTester.problems()` makes for the holdout block, so the
+   amber warning and the "spends holdout" button label track it exactly. */
+function holdoutArmed(f) {
+  if (!f.holdout.on || !X.reachesHoldout(f.range)) return false;
+  const why = (f.holdout.reason || '').trim();
+  return !!why && !why.includes('\n') && why.length <= REASON_MAX;
 }
+function runLabelFor() { return holdoutArmed(form) ? 'Run · spends holdout' : X.runLabel(form, loadedKey); }
 
 function tickForRoot(root_) {
   const cells = (page.cells && page.cells()) || [];
@@ -125,12 +142,21 @@ function miniChart(el, equity, P) {
     layout: { background: { color: 'transparent' }, textColor: P.text2, fontSize: 11, attributionLogo: false,
       fontFamily: '-apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif' },
     grid: { vertLines: { visible: false }, horzLines: { color: P.grid } },
-    rightPriceScale: { borderVisible: false }, timeScale: { borderVisible: false }, handleScroll: false, handleScale: false });
+    // M4: ET, not the browser's UTC default -- tick labels via tickMarkFormatter, the crosshair via
+    // localization.timeFormatter (X.fmtEt, the same ET formatter every trade time in this tab already uses).
+    localization: { timeFormatter: (t) => X.fmtEt(t * 1000) },
+    rightPriceScale: { borderVisible: false },
+    timeScale: { borderVisible: false, tickMarkFormatter: (t) => ET_TICK.format(new Date(t * 1000)) },
+    handleScroll: false, handleScale: false });
   const eq = chart.addSeries(LW.AreaSeries, { lineColor: P.up, topColor: 'rgba(8,153,129,.28)', bottomColor: 'rgba(8,153,129,0)',
     lineWidth: 2, priceFormat: { type: 'price', precision: 0, minMove: 1 }, lastValueVisible: false, priceLineVisible: false });
   eq.setData(s.equity);
+  // M4: drawdown is <= 0 -- without invertFilledArea the fill runs from the line down to the pane's own
+  // bottom, so a DEEPER drawdown (a line already near the bottom) paints LESS red. Inverting fills from
+  // the line up to zero instead, so a deeper drawdown reads as more red, not less.
   const dd = chart.addSeries(LW.AreaSeries, { lineColor: P.down, topColor: 'rgba(242,54,69,0)', bottomColor: 'rgba(242,54,69,.35)',
-    lineWidth: 1, priceFormat: { type: 'price', precision: 0, minMove: 1 }, lastValueVisible: false, priceLineVisible: false }, 1);
+    lineWidth: 1, priceFormat: { type: 'price', precision: 0, minMove: 1 }, lastValueVisible: false, priceLineVisible: false,
+    invertFilledArea: true }, 1);
   dd.setData(s.drawdown);
   chart.panes()[1].setStretchFactor(0.35);
   chart.timeScale().fitContent();
@@ -145,12 +171,19 @@ function dropMiniChart() {
 /* ================================================================== header ================================================================== */
 
 function computeErrorText() { return serverError || X.problems(form, schemaFor(strategyId)) || ''; }
+function updateHoldoutBanner() {
+  if (!holdoutBannerEl) return;
+  const armed = holdoutArmed(form);
+  holdoutBannerEl.hidden = !armed;
+  if (armed) holdoutBannerEl.textContent = 'This run spends holdout data (2025+) — logged';
+}
 /* A cheap, focus-preserving update for the fields a viewer types into (qty/commission/slippage, the holdout
-   reason): recompute the error line and the Run label without rebuilding the header. */
+   reason): recompute the error line, the holdout banner and the Run label without rebuilding the header. */
 function syncRunState() {
   const text = computeErrorText();
   if (errEl) { errEl.textContent = text; errEl.hidden = !text; }
-  if (runBtn) { const label = X.runLabel(form, loadedKey); runBtn.lastChild.textContent = ' ' + label; runBtn.setAttribute('aria-label', label); }
+  updateHoldoutBanner();
+  if (runBtn) { const label = runLabelFor(); runBtn.lastChild.textContent = ' ' + label; runBtn.setAttribute('aria-label', label); }
 }
 function updateProgressUI() {
   const p = X.progress(runStatus);
@@ -160,45 +193,56 @@ function updateProgressUI() {
 
 function optionEl(value, text) { const o = document.createElement('option'); o.value = value; o.textContent = text; return o; }
 
-function strategySelect() {
+function strategySelect(busy) {
   const sel = page.mk('select', 'set-select tst-strat');
   sel.setAttribute('aria-label', 'Strategy');
+  sel.disabled = busy;
   for (const s of strategiesList) sel.appendChild(optionEl(s.id, s.name));
   sel.value = strategyId;
   sel.onchange = () => switchStrategy(sel.value);
   return sel;
 }
-function iconBtn(name, title, onClick) {
+function iconBtn(name, title, onClick, busy) {
   const b = page.mk('button', 'tst-icon-btn');
   b.type = 'button';
   b.title = title;
   b.setAttribute('aria-label', title);
+  b.disabled = !!busy;
   b.appendChild(page.icon(name));
   b.onclick = onClick;
   return b;
 }
-function rangeGroup() {
+/* I3: the date inputs show only for Custom, and leaving Custom clears start/end -- otherwise a range
+   switched away from Custom (e.g. to IS months) silently kept sending the old, narrower window, and a
+   hidden holdout end date could force the switch on for a range the viewer could no longer see. */
+function rangeGroup(busy) {
   const wrap = page.mk('span', 'tst-group');
   const sel = page.mk('select', 'set-select');
   sel.setAttribute('aria-label', 'Range');
+  sel.disabled = busy;
   for (const r of X.RANGES) sel.appendChild(optionEl(r.kind, r.label));
   sel.value = form.range.kind;
-  sel.onchange = () => { form.range = { kind: sel.value, start: form.range.start, end: form.range.end }; persist(); refreshHeader(); };
+  sel.onchange = () => {
+    const kind = sel.value;
+    form.range = { kind, start: kind === 'custom' ? form.range.start : '', end: kind === 'custom' ? form.range.end : '' };
+    persist();
+    refreshHeader();
+  };
   wrap.appendChild(sel);
   if (form.range.kind === 'custom') {
     const start = page.mk('input'), end = page.mk('input');
-    start.type = 'date'; start.value = form.range.start || ''; start.setAttribute('aria-label', 'Range start');
-    end.type = 'date'; end.value = form.range.end || ''; end.setAttribute('aria-label', 'Range end');
+    start.type = 'date'; start.value = form.range.start || ''; start.setAttribute('aria-label', 'Range start'); start.disabled = busy;
+    end.type = 'date'; end.value = form.range.end || ''; end.setAttribute('aria-label', 'Range end'); end.disabled = busy;
     start.onchange = () => { form.range = { ...form.range, start: start.value }; persist(); refreshHeader(); };
     end.onchange = () => { form.range = { ...form.range, end: end.value }; persist(); refreshHeader(); };
     wrap.append(start, end);
   }
   return wrap;
 }
-function costInput(key, label, lo, hi, step) {
+function costInput(key, label, lo, hi, step, busy) {
   const wrap = page.mk('span', 'tst-cost'), lab = page.mk('label', 'tst-cost-l', label), inp = page.mk('input', 'tst-num');
   inp.type = 'number'; inp.min = String(lo); inp.max = String(hi); inp.step = String(step); inp.value = String(form[key]);
-  inp.id = `tst-cost-${key}`; lab.htmlFor = inp.id;
+  inp.id = `tst-cost-${key}`; lab.htmlFor = inp.id; inp.disabled = busy;
   inp.oninput = () => {
     const v = inp.value === '' ? NaN : Number(inp.value);
     form = { ...form, [key]: v };
@@ -244,32 +288,38 @@ function runArea() {
     progressBarEl = null; progressTextEl = null;
     runBtn = page.mk('button', 'btn btn-primary tst-run');
     runBtn.type = 'button';
-    runBtn.append(page.icon('play'), document.createTextNode(' ' + X.runLabel(form, loadedKey)));
+    runBtn.append(page.icon('play'), document.createTextNode(' ' + runLabelFor()));
     runBtn.onclick = startRun;
     wrap.appendChild(runBtn);
   }
   return wrap;
 }
-function recentRunsBtn() {
+function recentRunsBtn(busy) {
   const b = page.mk('button', 'tst-btn');
   b.type = 'button';
   b.setAttribute('aria-haspopup', 'menu');
   b.setAttribute('aria-expanded', 'false');
+  b.disabled = busy;
   b.append(page.icon('history'), document.createTextNode(' Recent runs'), page.icon('chevron'));
   b.onclick = () => page.toggleMenu(b, () => fillRecentRunsMenu(page.openMenu(b, 'menu-tester-runs')));
   return b;
 }
 
+/* I1: while a run is in flight, the strategy select, gear, range/dates and costs are disabled -- editing
+   any of them mid-run used to let a stale report land under a form (or even a strategy) that no longer
+   matches it, with the button still reading "Run" as if they matched. The holdout switch/reason are left
+   live (they can't change what's already in flight, since the range is frozen). */
 function refreshHeader() {
   const schema = schemaFor(strategyId);
+  const busy = !!runStatus;
   headerEl.replaceChildren();
-  headerEl.appendChild(strategySelect());
-  headerEl.appendChild(iconBtn('gear', `${schema.name} · Inputs`, openInputsDialog));
-  headerEl.appendChild(rangeGroup());
-  for (const [key, label, lo, hi, step] of COST_FIELDS) headerEl.appendChild(costInput(key, label, lo, hi, step));
+  headerEl.appendChild(strategySelect(busy));
+  headerEl.appendChild(iconBtn('gear', `${schema.name} · Inputs`, openInputsDialog, busy));
+  headerEl.appendChild(rangeGroup(busy));
+  for (const [key, label, lo, hi, step] of COST_FIELDS) headerEl.appendChild(costInput(key, label, lo, hi, step, busy));
   headerEl.appendChild(holdoutGroup());
   headerEl.appendChild(runArea());
-  headerEl.appendChild(recentRunsBtn());
+  headerEl.appendChild(recentRunsBtn(busy));
   errEl = page.mk('span', 'tst-err', '');
   headerEl.appendChild(errEl);
   syncRunState();
@@ -328,7 +378,7 @@ function openInputsDialog() {
   cancel.onclick = page.closeDialog;
   ok.onclick = () => {
     for (const inp of schema.inputs) {
-      const e = checkInput(inp, draft.inputs[inp.key]);
+      const e = X.inputError(inp, draft.inputs[inp.key]);
       if (e) { err.textContent = e; err.hidden = false; return; }
     }
     form = { ...form, inputs: draft.inputs, prop_rules: draft.prop_rules };
@@ -351,9 +401,15 @@ function recentRunRow(r) {
   b.disabled = !done;
   const stratName = ((strategiesList || []).find((s) => s.id === r.strategy) || {}).name || r.strategy;
   const rangeLabel = (r.range && r.range.label) || '';
-  const line = page.mk('span', 'menu-t', done
-    ? `${stratName} · ${rangeLabel} · ${Tr.money(r.net_profit)} · ${r.trades ?? 0} trades`
-    : `${stratName} · ${rangeLabel} · ${r.status}`);
+  const line = page.mk('span', 'menu-t');
+  if (done) {
+    // M3: a signed $ with a tone (Tr.usd), not the unsigned Tr.money that read a win the same as a loss.
+    const net = Tr.usd(r.net_profit) ?? '—', tone = X.toneOf(r.net_profit);
+    line.append(document.createTextNode(`${stratName} · ${rangeLabel} · `), page.mk('span', tone, net),
+      document.createTextNode(` · ${r.trades ?? 0} trades`));
+  } else {
+    line.textContent = `${stratName} · ${rangeLabel} · ${r.status}`;
+  }
   b.appendChild(line);
   if (r.holdout) b.appendChild(page.mk('span', 'env live', 'HOLDOUT'));
   if (done) b.onclick = () => { page.closeMenu(); loadRecentRun(r.id); };
@@ -378,6 +434,7 @@ function loadRecentRun(id) {
       form = X.fromRun(b.run, schema);
       bundle = b;
       loadedKey = X.key(form);
+      lastRunFailed = '';
       innerTab = 'overview';
       visibleTradeRows = TRADE_CHUNK;
       selectedTrade = null;
@@ -392,11 +449,18 @@ function loadRecentRun(id) {
 
 /* ================================================================== run / poll / cancel ================================================================== */
 
+/* I1: the strategy/gear/range/dates/costs are disabled while a run is in flight (refreshHeader), but
+   submittedKey/submittedStrategy are still snapshotted here, belt-and-suspenders -- loadBundle uses the
+   SNAPSHOT for loadedKey (not whatever `form` says once the run lands, which review I1 found could by
+   then belong to a different strategy or an edited form) and drops the bundle outright if the live
+   strategyId has since moved on from what was actually submitted. */
 function startRun() {
   const schema = schemaFor(strategyId);
   const prob = X.problems(form, schema);
   if (prob) { serverError = ''; refreshHeader(); return; }
   const bodyObj = X.body(form);
+  submittedKey = X.key(form);
+  submittedStrategy = strategyId;
   serverError = '';
   runStatus = { status: 'queued' };
   const token = ++pollToken;
@@ -423,35 +487,48 @@ function startRun() {
       refreshHeader();
     });
 }
-function poll(rid, token) {
+/* M2: one dropped status fetch used to end polling for good while the run carried on server-side. Retries
+   3x with backoff (500ms, 1s, 2s) before finally giving up; any successful fetch resets the counter. */
+function poll(rid, token, attempt = 0) {
   fetch(`/api/tester/run/${rid}`).then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
     .then((st) => {
       if (token !== pollToken) return;
       runStatus = st;
       updateProgressUI();
       const p = X.progress(st);
-      if (!p.final) { setTimeout(() => poll(rid, token), 500); return; }
+      if (!p.final) { setTimeout(() => poll(rid, token, 0), 500); return; }
       if (st.status === 'done') { loadBundle(rid, token); return; }
       runStatus = null;
       serverError = p.text;
+      lastRunFailed = p.text;
       refreshHeader();
+      refreshContent();
     })
     .catch(() => {
       if (token !== pollToken) return;
+      if (attempt < 3) { setTimeout(() => poll(rid, token, attempt + 1), 500 * (2 ** attempt)); return; }
       runStatus = null;
       serverError = 'lost contact with the run';
+      lastRunFailed = 'lost contact with the run';
       refreshHeader();
+      refreshContent();
     });
 }
-/* loadedKey is HBTester.key of the CURRENT form, not a snapshot of what was submitted (ruling: the run
-   label reacts to further edits the same way whether they happened before or during the run). */
 function loadBundle(rid, token) {
   fetch(`/api/tester/run/${rid}/bundle`).then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
     .then((b) => {
       if (token !== pollToken) return;
-      bundle = b;
-      loadedKey = X.key(form);
       runStatus = null;
+      // I1: dropped -- either the snapshot taken at submit time or the bundle's own recorded strategy no
+      // longer matches what the header shows now (the controls are disabled mid-run, but this is the
+      // belt-and-suspenders half of the fix: the header has moved on to another strategy some other way).
+      if (submittedStrategy !== strategyId || b.run.strategy.id !== strategyId) {
+        refreshHeader();
+        return;
+      }
+      bundle = b;
+      loadedKey = submittedKey;
+      lastRunFailed = '';   // M1: a successful load is the only thing that clears the stale-failure banner
       innerTab = 'overview';
       visibleTradeRows = TRADE_CHUNK;
       selectedTrade = null;
@@ -464,7 +541,9 @@ function loadBundle(rid, token) {
       if (token !== pollToken) return;
       runStatus = null;
       serverError = 'the run finished but its bundle could not be read';
+      lastRunFailed = serverError;
       refreshHeader();
+      refreshContent();
     });
 }
 function cancelRun() {
@@ -640,7 +719,9 @@ function renderTrades(container) {
     const tr = page.mk('tr', selectedTrade === idx ? 'sel' : '');
     X.tradeCells(t, idx, tick).forEach((cell, i) => {
       const td = page.mk('td', TRADE_COLS[i][2] ? 'num' : '', cell);
-      if (i === 8) td.classList.add(t.net > 0 ? 'up' : t.net < 0 ? 'down' : '');
+      // I4: classList.add('') throws (a $0-net trade, e.g. a 1-tick winner the commission exactly
+      // cancels) -- X.toneOf(0) is '', and an empty tone is simply never added.
+      if (i === 8) { const tone = X.toneOf(t.net); if (tone) td.classList.add(tone); }
       tr.appendChild(td);
     });
     tr.onclick = () => { selectTrade(idx); if (window.HBTesterLayer) window.HBTesterLayer.jump(idx); };
@@ -662,9 +743,14 @@ function renderTrades(container) {
 
 const EMPTY_MSG = { overview: 'Run the strategy to see a report', summary: 'Run the strategy to see a performance summary',
   trades: 'Run the strategy to see its trades', properties: 'Run the strategy to see its properties' };
+/* M1: `serverError` clears on the next keystroke (persist()), so a failed run's reason would otherwise
+   vanish the moment the viewer touches anything -- leaving the (stale) last-good report with no note that
+   it isn't from the latest attempt. `lastRunFailed` survives edits and sits above the content until the
+   NEXT successful load (loadBundle / loadRecentRun / switchStrategy clear it). */
 function refreshContent() {
   dropMiniChart();
   contentEl.replaceChildren();
+  if (lastRunFailed) contentEl.appendChild(page.mk('div', 'tst-fail-banner', `The last run failed: ${lastRunFailed}`));
   if (!bundle) { contentEl.appendChild(page.mk('div', 'bp-empty', EMPTY_MSG[innerTab])); return; }
   if (innerTab === 'overview') renderOverview(contentEl);
   else if (innerTab === 'summary') renderSummary(contentEl);
@@ -679,6 +765,7 @@ function switchStrategy(id) {
   form = X.restore(store.forms[id], schemaFor(id));
   bundle = null;
   loadedKey = null;
+  lastRunFailed = '';
   innerTab = 'overview';
   visibleTradeRows = TRADE_CHUNK;
   selectedTrade = null;
@@ -695,9 +782,13 @@ function buildFull() {
   strategyId = (strategiesList.some((s) => s.id === store.strategy) ? store.strategy : strategiesList[0].id);
   form = X.restore(store.forms[strategyId], schemaFor(strategyId));
   headerEl = page.mk('div', 'tst-head');
+  holdoutBannerEl = page.mk('div', 'tst-holdout-banner', '');
+  holdoutBannerEl.hidden = true;
   tabsEl = page.mk('div', 'tst-tabs');
   contentEl = page.mk('div', 'tst-content');
-  root.append(headerEl, tabsEl, contentEl);
+  const sticky = page.mk('div', 'tst-sticky');
+  sticky.append(headerEl, holdoutBannerEl, tabsEl);
+  root.append(sticky, contentEl);
   refreshHeader();
   refreshTabsBar();
   refreshContent();

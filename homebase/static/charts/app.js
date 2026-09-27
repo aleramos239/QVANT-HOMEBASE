@@ -1099,9 +1099,12 @@ async function init() {
     overlays: [],
   };
   page.overlays.push(window.HBTradeLines.overlay);   // Task 6: the per-chart Buy/Sell block, lines and markers
+  // M8 (2026-09-27 review): HBTesterUI.mount registers the 'tester' tab via HBPanel.addTab -- it must run
+  // BEFORE HBPanel.mount reads a saved {tab: 'tester'} and looks for it, or a saved tab selection/open
+  // state pointing at the tester tab is silently dropped on reload.
+  window.HBTesterUI.mount(page);               // Task 9
   window.HBPanel.mount(page);                 // Task 4
   window.HBTradeUI.mount(page);                // Task 5
-  window.HBTesterUI.mount(page);               // Task 9
   buildGrid();   // after the mounts: page.overlays must be filled before any cell's build() reads host.overlays()
   connect();
   tick();

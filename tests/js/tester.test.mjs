@@ -34,6 +34,13 @@ test('form defaults from the schema; restore keeps only valid values', () => {
   assert.equal(X.restore({ strategy: 'other' }, STRAT).strategy, 'nq930');
 });
 
+test('C1: the Holdout switch is never persisted or restored -- `on` is always false coming out of restore, the reason text alone survives', () => {
+  const saved = { ...X.defaults(STRAT), holdout: { on: true, reason: 'last time' } };
+  const r = X.restore(saved, STRAT);
+  assert.equal(r.holdout.on, false);
+  assert.equal(r.holdout.reason, 'last time');   // the reason is a convenience prefill, not a standing approval
+});
+
 test('holdout: which ranges reach 2025, and the refusals the page shows before sending', () => {
   const f = X.defaults(STRAT);
   assert.equal(X.reachesHoldout({ kind: 'research' }), false);
@@ -66,11 +73,11 @@ test('the request body: holdout only when the range reaches it; key and run labe
   assert.equal(X.runLabel({ ...f, qty: 2 }, X.key(f)), 'Update report');
 });
 
-test('a loaded run fills the form back', () => {
+test('a loaded run fills the form back; C1: a holdout run comes back with the switch OFF (the reason is still prefilled)', () => {
   const f = X.fromRun(RUN, STRAT);
   assert.deepEqual(f.inputs, { offset_pts: 12, adx_gate: true, mode: 'b', n: 2 });
   assert.deepEqual(f.range, { kind: 'custom', start: '2023-01-01', end: '2025-02-01' });
-  assert.deepEqual(f.holdout, { on: true, reason: 'final check' });
+  assert.deepEqual(f.holdout, { on: false, reason: 'final check' });
   assert.equal(f.qty, 2);
 });
 
@@ -111,11 +118,13 @@ test('performance summary rows (All / Long / Short, dollars, RR 1:X, Sharpe)', (
   assert.equal(by['Commission paid'], '$96');
 });
 
+// mae_usd/mfe_usd are magnitudes from the engine, always >= 0 (engine.py: `max(0.0, ...)`; its own test
+// asserts 45.0, never -45.0) -- the review's I2 fix corrected a fixture that had them negative.
 const TRADES = [
   { date: '2024-01-02', side: 'long', qty: 1, entry_ms: Date.parse('2024-01-02T14:30:01Z'), entry_price: 16900.25, exit_ms: Date.parse('2024-01-02T14:31:00Z'),
-    exit_price: 16915.25, exit_reason: 'tp', sl: 16895.25, tp: 16915.25, net: 296, mae_usd: -40, mfe_usd: 300, seconds: 59 },
+    exit_price: 16915.25, exit_reason: 'tp', sl: 16895.25, tp: 16915.25, net: 296, mae_usd: 40, mfe_usd: 300, seconds: 59 },
   { date: '2024-01-03', side: 'short', qty: 1, entry_ms: Date.parse('2024-01-03T14:30:02Z'), entry_price: 16800, exit_ms: Date.parse('2024-01-03T14:35:00Z'),
-    exit_price: 16805, exit_reason: 'sl', sl: 16805, tp: 16785, net: -104, mae_usd: -100, mfe_usd: 20, seconds: 298 }];
+    exit_price: 16805, exit_reason: 'sl', sl: 16805, tp: 16785, net: -104, mae_usd: 100, mfe_usd: 20, seconds: 298 }];
 
 test('trades: sort, cells, chart marks', () => {
   assert.deepEqual(X.sortTrades(TRADES, 'net', -1), [0, 1]);
@@ -127,6 +136,39 @@ test('trades: sort, cells, chart marks', () => {
   assert.deepEqual(X.tradeMarks(TRADES, P)[3], { id: 'tx1', ms: TRADES[1].exit_ms, price: 16805, position: 'atPriceMiddle', shape: 'circle',
     color: 'D', text: `${M}$104`, size: 0.6 });
   assert.equal(X.tradeMarks(TRADES, P)[2].shape, 'arrowDown');
+});
+
+test('I2: MAE always reads as a loss (the engine only ever hands it a >= 0 magnitude); MFE keeps its "+"', () => {
+  assert.equal(X.tradeCells(TRADES[0], 0, 0.25)[9], `${M}$40`);    // mae_usd: 40 -> a loss, not a gain
+  assert.equal(X.tradeCells(TRADES[0], 0, 0.25)[10], '+$300');     // mfe_usd is favorable: the "+" is correct
+  assert.equal(X.tradeCells({ ...TRADES[0], mae_usd: 0 }, 0, 0.25)[9], '$0');   // no adverse excursion at all
+});
+
+test('I4: toneOf(0) is neutral, never "down" -- a $0-net trade must not hand the page an empty class to add', () => {
+  assert.equal(X.toneOf(0), '');
+  assert.equal(X.toneOf(50), 'up');
+  assert.equal(X.toneOf(-50), 'down');
+});
+
+test('M5: the ∞ cap applies only where num() is asked for it (Profit factor / RR), not every magnitude', () => {
+  assert.equal(X.num(5000), '5000.00');           // uncapped by default: t-stat, Sharpe, avg bars in trade, ...
+  assert.equal(X.num(5000, 2, true), '∞');        // Profit factor / RR opt in explicitly
+  assert.equal(X.num(998.4, 1, true), '998.4');
+  const big = { ...COL, profit_factor: 5000, avg_bars_in_trade: 1000, sharpe: 1200, t_stat: 1500 };
+  const tiles = Object.fromEntries(X.tiles({ ...RUN, report: { ...RUN.report, summary: { all: big, long: big, short: big } } })
+    .map((t) => [t.label, t.value]));
+  assert.equal(tiles['Profit factor'], '∞');
+  assert.equal(tiles['Sharpe'], '1200.00');       // NOT ∞: a plain magnitude, not a ratio that can blow up
+  const rows = Object.fromEntries(X.summaryRows({ all: big, long: big, short: big }).map((r) => [r.label, r.all]));
+  assert.equal(rows['Profit factor'], '∞');
+  assert.equal(rows['Avg bars in trade'], '1000.0');   // a >16.6h trade in 1-min bars: no longer misread as ∞
+  assert.equal(rows['Sharpe ratio'], '1200.00');
+});
+
+test('inputError is exported (testerui.js\'s inputs-dialog validation reuses it instead of a local copy)', () => {
+  const inp = STRAT.inputs[0];   // offset_pts: float, 0..400
+  assert.equal(X.inputError(inp, 401), 'Entry offset (pts): 0 to 400');
+  assert.equal(X.inputError(inp, 12), null);
 });
 
 test('equity series: strictly increasing seconds', () => {

@@ -25,7 +25,11 @@ const COSTS = [['qty', 'Qty', 1, 100, true], ['commission', 'Commission', 0, 100
 
 /* ---- formatting ---- */
 const neg = (s, v) => (v < 0 ? MINUS + s : s);
-function num(v, d = 2) { return v == null || !Number.isFinite(v) ? '—' : v >= 999 ? '∞' : neg(Math.abs(v).toFixed(d), v); }
+/* `inf`: cap at 999 and show '∞' -- only Profit factor and RR are unbounded ratios that can blow up
+   (a near-zero denominator); every other num() caller (Sharpe, t-stat, avg bars in trade, Sortino, …) is
+   a plain magnitude that can legitimately sit at or past 999 (review M5: a >16.6h trade's "avg bars"
+   used to read ∞ because this cap applied to every num() call). */
+function num(v, d = 2, inf = false) { return v == null || !Number.isFinite(v) ? '—' : (inf && v >= 999) ? '∞' : neg(Math.abs(v).toFixed(d), v); }
 function pct(v) { return v == null || !Number.isFinite(v) ? '—' : (v > 0 ? '+' : v < 0 ? MINUS : '') + Math.abs(v).toFixed(2) + '%'; }
 function rate(v) { return v == null || !Number.isFinite(v) ? '—' : v.toFixed(1) + '%'; }
 function dur(s) {
@@ -67,7 +71,11 @@ function restore(saved, s) {
   if (RANGES.some((x) => x.kind === r.kind)) f.range = { kind: r.kind, start: ISO.test(r.start) ? r.start : '', end: ISO.test(r.end) ? r.end : '' };
   for (const [k, , lo, hi, whole] of COSTS) { const v = saved[k]; if (typeof v === 'number' && v >= lo && v <= hi && (!whole || Number.isInteger(v))) f[k] = v; }
   if (typeof saved.prop_rules === 'string') f.prop_rules = saved.prop_rules;
-  if (saved.holdout && typeof saved.holdout.reason === 'string') f.holdout = { on: !!saved.holdout.on, reason: saved.holdout.reason.slice(0, REASON_MAX) };
+  // C1 (critical, 2026-09-27 review): the Holdout switch is never persisted or restored -- `on` is
+  // always false coming out of restore(), whatever a saved form (or a loaded run, via fromRun below)
+  // says. Approval to spend holdout data is per use, not a standing preference. The reason text alone
+  // is still carried over, so a re-armed switch doesn't force retyping it.
+  if (saved.holdout && typeof saved.holdout.reason === 'string') f.holdout = { on: false, reason: saved.holdout.reason.slice(0, REASON_MAX) };
   return f;
 }
 function fromRun(run, s) {
@@ -134,7 +142,7 @@ function tiles(run) {
     { label: 'Net P&L', value: signed(a.net_profit), sub: pct(a.net_profit_pct), tone: toneOf(a.net_profit) },
     { label: 'Max drawdown', value: Tr.money(a.max_drawdown), sub: pct(a.max_drawdown_pct), tone: toneOf(a.max_drawdown) },
     { label: 'Win rate', value: rate(a.win_rate), sub: `${a.wins ?? 0}/${a.trades ?? 0}`, tone: '' },
-    { label: 'Profit factor', value: num(a.profit_factor), sub: '', tone: '' },
+    { label: 'Profit factor', value: num(a.profit_factor, 2, true), sub: '', tone: '' },
     { label: 'Sharpe', value: num(a.sharpe), sub: 'weekday grid', tone: '', title: run.report.sharpe_basis },
     { label: 'Avg trade', value: signed(a.avg_trade), sub: '', tone: toneOf(a.avg_trade) },
     { label: 'Avg win : loss', value: a.rr_label && a.rr_label !== '—' ? `RR ${a.rr_label}` : '—', sub: '', tone: '' },
@@ -166,7 +174,7 @@ const SUMMARY = [
   ['Gross profit', (c) => Tr.money(c.gross_profit)], ['Gross loss', (c) => Tr.money(c.gross_loss)],
   ['Commission paid', (c) => Tr.money(c.commission_paid)],
   ['Max drawdown', (c) => `${Tr.money(c.max_drawdown)} (${pct(c.max_drawdown_pct)})`], ['Max run-up', (c) => Tr.money(c.max_runup)],
-  ['Profit factor', (c) => num(c.profit_factor)], ['Total trades', (c) => int(c.trades)], ['Winning trades', (c) => int(c.wins)],
+  ['Profit factor', (c) => num(c.profit_factor, 2, true)], ['Total trades', (c) => int(c.trades)], ['Winning trades', (c) => int(c.wins)],
   ['Losing trades', (c) => int(c.losses)], ['Percent profitable', (c) => rate(c.win_rate)], ['Avg trade', (c) => signed(c.avg_trade)],
   ['Avg winning trade', (c) => signed(c.avg_win)], ['Avg losing trade', (c) => signed(c.avg_loss)],
   ['Ratio avg win / avg loss', (c) => (c.rr_label && c.rr_label !== '—' ? `RR ${c.rr_label}` : '—')],
@@ -192,10 +200,14 @@ function sortTrades(trades, k, dir) {
     return (x < y ? -1 : x > y ? 1 : 0) * dir || a - b;
   });
 }
+/* mae_usd (and mfe_usd) are magnitudes from the engine, always >= 0 (engine.py: `max(0.0, ...)`; its own
+   test asserts 45.0, never -45.0). MFE is favorable, so signed()'s "+" reads right; MAE is how far the
+   trade went AGAINST you, so it must read as a loss (review I2 -- signed() showed an adverse excursion
+   as "+$45"). */
 function tradeCells(t, i, tick) {
   return [String(i + 1), t.side === 'long' ? 'Long' : 'Short', fmtEt(t.entry_ms), Cat.fmtPrice(t.entry_price, tick), fmtEt(t.exit_ms),
-    Cat.fmtPrice(t.exit_price, tick), String(t.exit_reason || '').toUpperCase(), String(t.qty), signed(t.net), signed(t.mae_usd),
-    signed(t.mfe_usd), dur(t.seconds)];
+    Cat.fmtPrice(t.exit_price, tick), String(t.exit_reason || '').toUpperCase(), String(t.qty), signed(t.net),
+    t.mae_usd ? MINUS + Tr.money(Math.abs(t.mae_usd)) : '$0', signed(t.mfe_usd), dur(t.seconds)];
 }
 /* Entry ▲/▼ at the entry price, exit ● at the exit price with the net $ (ruling S21); {ms,…} for placeMarkers. */
 function tradeMarks(trades, P) {
@@ -233,9 +245,9 @@ function reachSpec(spec, ms, nowMs, cap = 200000) {
   return 'time:86400';
 }
 
-const api = { RANGES, HOLDOUT_START, DEFAULT_RULES, REASON_MAX, defaults, restore, fromRun, reachesHoldout, problems, body, key, runLabel,
-  progress, pct, rate, num, dur, fmtEt, tiles, badges, propView, summaryRows, periodRows, sortTrades, tradeCells, tradeMarks,
-  equitySeries, reachSpec };
+const api = { RANGES, HOLDOUT_START, DEFAULT_RULES, REASON_MAX, defaults, restore, fromRun, reachesHoldout, problems, inputError, body,
+  key, runLabel, progress, pct, rate, num, dur, fmtEt, tiles, badges, propView, summaryRows, periodRows, sortTrades, tradeCells,
+  tradeMarks, equitySeries, reachSpec, toneOf };
 if (typeof window !== 'undefined') window.HBTester = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

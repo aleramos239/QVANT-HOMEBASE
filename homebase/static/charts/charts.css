@@ -402,12 +402,21 @@ a { color: inherit; }
 
 /* ---- Strategy Tester tab (testerui.js) ---- */
 .tst { display: flex; flex-direction: column; min-height: 100%; }
-.tst-head { flex: none; position: sticky; top: 0; z-index: 2; height: 40px; display: flex; align-items: center; gap: 10px;
-  padding: 0 10px; overflow-x: auto; overflow-y: hidden; white-space: nowrap; background: var(--panel); border-bottom: 1px solid var(--border); }
+/* The header, the holdout banner (conditionally shown/hidden between them) and the inner tab bar sit in
+   ONE sticky wrapper -- each was its own `position: sticky` box at first, which needed a fixed `top`
+   offset for every box below the first; the holdout banner's height only exists when it's shown, so a
+   fixed offset for the tab bar was wrong in one case or the other. One wrapper avoids the arithmetic. */
+.tst-sticky { flex: none; position: sticky; top: 0; z-index: 2; background: var(--panel); }
+.tst-head { height: 40px; display: flex; align-items: center; gap: 10px;
+  padding: 0 10px; overflow-x: auto; overflow-y: hidden; white-space: nowrap; border-bottom: 1px solid var(--border); }
 .tst-head .set-select { height: 28px; font-size: 13px; }
+.tst-head :disabled { opacity: .5; cursor: default; }
 .tst-icon-btn { flex: none; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 6px; color: var(--text-2); }
 .tst-icon-btn:hover { background: var(--hover); color: var(--text); }
+.tst-icon-btn:disabled:hover { background: none; }
 .tst-icon-btn .ic { width: 17px; height: 17px; }
+.tst-holdout-banner { padding: 6px 10px; font-size: 12px; color: var(--warn); background: var(--hover); border-bottom: 1px solid var(--border); }
+.tst-fail-banner { margin-bottom: 12px; padding: 8px 10px; border-radius: 6px; background: var(--down-soft); color: var(--down); font-size: 12px; }
 .tst-group { flex: none; display: inline-flex; align-items: center; gap: 6px; }
 .tst-cost { flex: none; display: inline-flex; align-items: center; gap: 4px; }
 .tst-cost-l { color: var(--text-2); font-size: 12px; }
@@ -425,8 +434,7 @@ a { color: inherit; }
 .tst-btn:hover { background: var(--hover); }
 .tst-btn .ic { width: 15px; height: 15px; color: var(--text-2); }
 .tst-err { flex: none; color: var(--down); font-size: 12px; padding: 0 4px; }
-.tst-tabs { flex: none; position: sticky; top: 40px; z-index: 2; height: 32px; display: flex; align-items: center;
-  padding: 0 10px; background: var(--panel); border-bottom: 1px solid var(--border); }
+.tst-tabs { height: 32px; display: flex; align-items: center; padding: 0 10px; border-bottom: 1px solid var(--border); }
 .tst-tab { height: 100%; padding: 0 10px; font-size: 12px; color: var(--text-2); border-bottom: 2px solid transparent; }
 .tst-tab:hover { color: var(--text); }
 .tst-tab.active { color: var(--text); border-bottom-color: var(--accent); }
