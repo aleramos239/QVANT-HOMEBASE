@@ -63,7 +63,7 @@ def test_status_carries_the_depth_block_and_pages_get_depth(tmp_path):
     app = create_app(roots=["NQ", "ES"], base=base, feed_factory=feed,
                      now_ms=lambda: session_ms(D, 9, 45), state=tmp_path / "state",
                      depth_roots=("NQ",), depth_base=tmp_path / "depth")
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://127.0.0.1:8852") as client:
         wait_for(lambda: subs(ws) == [NQ])
         st = client.get("/api/status").json()
         assert st["depth"]["NQ"] == {"subscribed": True, "levels": [0, 0], "age_s": None, "error": None}
@@ -98,7 +98,7 @@ def test_replay_makes_no_depth_subscriptions(tmp_path, monkeypatch):
     write_archive(base, "NQ", D, "NQZ6", rows(session_ms(D, 9, 29), [200.0 + 0.25 * (i % 4) for i in range(60)]))
     app = server.create_app(roots=["NQ"], base=base, replay=D, speed=1, start_et=dt.time(9, 30),
                             state=tmp_path / "state", depth_base=tmp_path / "depth")
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://127.0.0.1:8852") as client:
         st = client.get("/api/status").json()
         assert st["depth"] == {} and st["depth_recorder"] is None
     assert not (tmp_path / "depth").exists()

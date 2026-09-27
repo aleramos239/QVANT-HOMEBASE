@@ -26,17 +26,33 @@ test('ratioText: one decimal with a multiplication sign, em dash for no ratio ye
   assert.equal(R.ratioText(NaN), '—');
 });
 
-test('radarChips: sorted by ratio descending, coloured and labelled', () => {
-  const chips = R.radarChips({ NQ: 1.2, CL: 4.5, GC: 3.0, YM: 0 });
-  assert.deepEqual(chips.map((c) => c.root), ['CL', 'GC', 'NQ', 'YM']);
-  assert.deepEqual(chips.map((c) => c.cls), ['red', 'amber', 'grey', 'grey']);
-  assert.deepEqual(chips.map((c) => c.text), ['4.5×', '3.0×', '1.2×', '0.0×']);
+const ORDER = ['NQ', 'ES', 'YM', 'RTY', 'GC', 'SI', 'CL', 'ZN', 'NG', 'HG', 'BTC'];   // the service's /api/symbols order
+
+test('radarChips (I2a): a FIXED order -- the catalog order -- never sorted by ratio; the colour shows the ratio', () => {
+  const chips = R.radarChips({ NQ: 1.2, CL: 4.5, GC: 3.0, YM: 0 }, ORDER);
+  assert.deepEqual(chips.map((c) => c.root), ['NQ', 'YM', 'GC', 'CL']);
+  assert.deepEqual(chips.map((c) => c.cls), ['grey', 'grey', 'amber', 'red']);
+  assert.deepEqual(chips.map((c) => c.text), ['1.2×', '0.0×', '3.0×', '4.5×']);
 });
 
-test('radarChips: a root with no median yet (null) sorts after every real ratio, alphabetically among themselves', () => {
-  const chips = R.radarChips({ NQ: 1.0, CL: null, BTC: null, GC: 5.0 });
-  assert.deepEqual(chips.map((c) => c.root), ['GC', 'NQ', 'BTC', 'CL']);
-  assert.deepEqual(chips.slice(2).map((c) => c.text), ['—', '—']);
+test('radarChips (I2a): the order does not move when the ratios change (a press lands on the root aimed at)', () => {
+  const a = R.radarChips({ NQ: 9, ES: 1, GC: null }, ORDER).map((c) => c.root);
+  const b = R.radarChips({ NQ: 0.5, ES: 7, GC: 3 }, ORDER).map((c) => c.root);
+  assert.deepEqual(a, ['NQ', 'ES', 'GC']);
+  assert.deepEqual(b, a);
+});
+
+test('radarChips (I2a): a root with no ratio yet keeps its place and reads as a grey em dash', () => {
+  const chips = R.radarChips({ NQ: 1.0, CL: null, BTC: null, GC: 5.0 }, ORDER);
+  assert.deepEqual(chips.map((c) => c.root), ['NQ', 'GC', 'CL', 'BTC']);
+  assert.deepEqual(chips.map((c) => c.text), ['1.0×', '5.0×', '—', '—']);
+  assert.deepEqual(chips.map((c) => c.cls), ['grey', 'red', 'grey', 'grey']);
+});
+
+test('radarChips (I2a): a root the order does not list goes after it, alphabetically; no order at all -> alphabetical', () => {
+  assert.deepEqual(R.radarChips({ ZZ: 1, NQ: 1, AA: 2 }, ORDER).map((c) => c.root), ['NQ', 'AA', 'ZZ']);
+  assert.deepEqual(R.radarChips({ NQ: 1, CL: 2, BTC: null }).map((c) => c.root), ['BTC', 'CL', 'NQ']);
+  assert.deepEqual(R.radarChips({ NQ: 1 }, null).map((c) => c.root), ['NQ']);
 });
 
 test('radarChips: empty or garbage input never throws, yields no chips', () => {

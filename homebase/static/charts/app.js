@@ -172,6 +172,13 @@ function hostFor(id) {
     onChartMenu(cell, at) { chartMenu(cell, at); },
     onIndicatorMenu(cell, uid, o) { indicatorMenu(cell, uid, o); },
     onReplayGuard(cell, patch) { window.HBReplayUI.guardSymbolChange(cell, patch); },
+    // final review I2(b), SAFETY ruling: any symbol change switches that chart's Trading off, accounts kept
+    // (HBTrade.symbolChangeTrade, from cell.update); the toast only when it really was on
+    onSymbolChange(cell, off) {
+      if (!off.wasOn) return;   // already off: nothing to switch, nothing to say
+      window.HBTradeUI.setCellTrade(cell, off.trade);
+      window.HBDeskClient.toast('err', T.SYMBOL_CHANGE_TRADE_OFF);
+    },
     changed() { saveLast(); renderToolbar(); },
     tool: () => tool,
     toolDone() { setTool('cursor'); },
@@ -308,8 +315,9 @@ function menuErr(el, text) {
   el.scrollIntoView({ block: 'nearest' });
 }
 
-/* A chart's symbol change: the one path both the #tbSymbol menu and the letter-hotkey search box use. A new
-   symbol keeps the chart's trade config; its algo is cleared only when the desk confirms it trades another
+/* A chart's symbol change: the one path the #tbSymbol menu, the letter-hotkey search box and the radar use. A new
+   symbol switches the chart's Trading OFF and keeps its accounts (final review I2(b), SAFETY ruling -- enforced in
+   cell.update for every path, HBTrade.symbolChangeTrade); its algo is cleared only when the desk confirms it trades another
    symbol (Task 2). The algo on the last accepted symbol is kept aside until the change settles, so a refused
    change (the chart rolls back to it) gets its algo back (fix round 1). */
 function applySymbol(cell, r) {
@@ -1178,26 +1186,49 @@ function renderNextEvent() {
 }
 
 /* ---- burst radar strip (Task 2): a thin strip under the toolbar, one chip per streamed root,
-   coloured/sorted by radar.js (pure); this is only the DOM + the click-to-applySymbol wiring.
+   coloured by radar.js (pure); this is only the DOM + the click-to-applySymbol wiring.
    Chips repaint from the /ws status's `bursts.now` (showStatus, below, every STATUS_S) and once
-   up front from GET /api/bursts/now so the strip is not empty for the first couple of seconds. */
+   up front from GET /api/bursts/now so the strip is not empty for the first couple of seconds.
+   Final review I2a: the strip is never rebuilt -- each chip is patched in place, keyed by its root, in the
+   service's FIXED root order (meta.roots), so a chip never moves or is replaced under a press; and no repaint
+   happens at all while the pointer is over the strip (the latest numbers land when it leaves). */
 const RADAR_FOLD_KEY = 'hb_radar_fold';
+const radarChipEls = new Map();   // root -> its chip button (kept across repaints)
+let radarHover = false, radarPending;   // pointer over the strip; the numbers held back meanwhile (undefined: none)
 function loadRadarFold() { try { return localStorage.getItem(RADAR_FOLD_KEY) === '1'; } catch (_) { return false; } }
 function saveRadarFold(v) { try { localStorage.setItem(RADAR_FOLD_KEY, v ? '1' : '0'); } catch (_) { /* storage off: this session only */ } }
+function radarChipEl(root) {
+  const b = mk('button', 'radar-chip grey');
+  b.type = 'button';
+  b.dataset.root = root;
+  b.appendChild(mk('span', 'radar-root', root));
+  b.appendChild(document.createTextNode(''));
+  b.onclick = () => { const cell = cur(); if (cell) applySymbol(cell, root); };   // the root this chip was made for
+  return b;
+}
 function renderRadar(now) {
   const el = $('#radarChips');
   if (!el) return;
-  const chips = window.HBRadar.radarChips(now);
-  if (!chips.length) { el.replaceChildren(mk('span', 'radar-empty', 'No burst data yet')); return; }
-  el.replaceChildren(...chips.map((c) => {
-    const b = mk('button', `radar-chip ${c.cls}`);
-    b.type = 'button';
-    b.title = `${c.root} · ${c.text} its 60-minute normal — click to load it on the selected chart`;
-    b.appendChild(mk('span', 'radar-root', c.root));
-    b.appendChild(document.createTextNode(c.text));
-    b.onclick = () => { const cell = cur(); if (cell) applySymbol(cell, c.root); };
-    return b;
-  }));
+  if (radarHover) { radarPending = now; return; }
+  radarPending = undefined;
+  const chips = window.HBRadar.radarChips(now, meta.roots);
+  let empty = el.querySelector('.radar-empty');
+  if (!chips.length && !empty) { empty = mk('span', 'radar-empty', 'No burst data yet'); el.appendChild(empty); }
+  if (empty) empty.hidden = chips.length > 0;
+  const keep = new Set(chips.map((c) => c.root));
+  for (const [root, b] of radarChipEls) if (!keep.has(root)) { b.remove(); radarChipEls.delete(root); }
+  let at = el.firstChild;   // walk the fixed order: a chip already in its place is never moved or replaced
+  for (const c of chips) {
+    let b = radarChipEls.get(c.root);
+    if (!b) { b = radarChipEl(c.root); radarChipEls.set(c.root, b); }
+    const cls = `radar-chip ${c.cls}`;
+    if (b.className !== cls) b.className = cls;
+    if (b.lastChild.nodeValue !== c.text) b.lastChild.nodeValue = c.text;
+    const title = `${c.root} · ${c.text} its 60-minute normal — click to load it on the selected chart`;
+    if (b.title !== title) b.title = title;
+    while (at && at.classList && at.classList.contains('radar-empty')) at = at.nextSibling;
+    if (at !== b) el.insertBefore(b, at); else at = at.nextSibling;
+  }
 }
 async function loadRadarNow() {
   try {
@@ -1207,8 +1238,13 @@ async function loadRadarNow() {
 }
 function mountRadar() {
   const folded = loadRadarFold();
-  const el = $('#radar'), fold = $('#radarFold');
+  const el = $('#radar'), fold = $('#radarFold'), chips = $('#radarChips');
   el.classList.toggle('folded', folded);
+  chips.addEventListener('pointerenter', () => { radarHover = true; });
+  chips.addEventListener('pointerleave', () => {
+    radarHover = false;
+    if (radarPending !== undefined) renderRadar(radarPending);
+  });
   fold.setAttribute('aria-expanded', String(!folded));
   fold.onclick = () => {
     const v = !el.classList.contains('folded');

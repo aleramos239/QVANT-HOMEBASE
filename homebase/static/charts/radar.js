@@ -1,7 +1,7 @@
 /* Homebase Charts — pure helpers for the cross-market burst radar strip (Task 2): given the chart
    service's per-root current ratio (ticks-in-30s move vs its 60-min median, from BurstBook.now()
    via the /ws status message's `bursts.now`, or GET /api/bursts/now for the first paint), decide
-   each chip's colour class and label, and the strip's left-to-right order. No DOM, no browser
+   each chip's colour class and label, and the strip's fixed left-to-right order. No DOM, no browser
    globals: the Node tests load this file directly. app.js builds the chip elements, wires the
    click-to-applySymbol behaviour and the collapse/localStorage state. */
 (function () {
@@ -24,20 +24,20 @@ function ratioText(ratio) {
   return (typeof ratio === 'number' && Number.isFinite(ratio)) ? `${ratio.toFixed(1)}×` : '—';
 }
 
-/* `now` = {root: ratio|null} (BurstBook.now(), the /ws status's `bursts.now` or GET /api/bursts/now)
-   -> chips sorted by ratio descending; a root with no ratio yet sorts last, alphabetically among
-   themselves so the strip does not reshuffle those every 2 s while several roots sit at "--". */
-function radarChips(now) {
-  const roots = Object.keys(now && typeof now === 'object' ? now : {});
+/* `now` = {root: ratio|null} (BurstBook.now(), the /ws status's `bursts.now` or GET /api/bursts/now), `order`
+   = the service's roots in catalog order (GET /api/symbols) -> one chip per root of `now`, in a FIXED order
+   (final review I2a): `order` first, then any root it does not list, alphabetically. Never sorted by ratio --
+   a strip that reshuffles every 2 s turns a press into a click on another root; the colour shows the ratio. */
+function radarChips(now, order) {
+  const src = now && typeof now === 'object' ? now : {};
+  const roots = Object.keys(src), known = Array.isArray(order) ? order : [];
+  const rank = (r) => { const i = known.indexOf(r); return i < 0 ? known.length : i; };
   return roots
-    .map((root) => ({ root, ratio: typeof now[root] === 'number' && Number.isFinite(now[root]) ? now[root] : null }))
-    .sort((a, b) => {
-      if (a.ratio == null && b.ratio == null) return a.root < b.root ? -1 : a.root > b.root ? 1 : 0;
-      if (a.ratio == null) return 1;
-      if (b.ratio == null) return -1;
-      return b.ratio - a.ratio;
-    })
-    .map((c) => ({ ...c, cls: ratioClass(c.ratio), text: ratioText(c.ratio) }));
+    .sort((a, b) => rank(a) - rank(b) || (a < b ? -1 : a > b ? 1 : 0))
+    .map((root) => {
+      const ratio = typeof src[root] === 'number' && Number.isFinite(src[root]) ? src[root] : null;
+      return { root, ratio, cls: ratioClass(ratio), text: ratioText(ratio) };
+    });
 }
 
 const api = { AMBER_AT, RED_AT, ratioClass, ratioText, radarChips };

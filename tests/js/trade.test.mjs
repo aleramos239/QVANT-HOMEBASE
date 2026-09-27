@@ -1044,3 +1044,82 @@ test('parseQty / parseUsd / parseDecimal: plain digits only -- no commas, hex, e
   assert.equal(T.parseDecimal('-12.5', true), -12.5);   // a price may be negative only when asked
   for (const s of ['30,900', '0x10', '1e5', '-12.5', 'Infinity', 'NaN']) assert.ok(Number.isNaN(T.parseDecimal(s)), JSON.stringify(s));
 });
+
+/* ---- final-review fixes (2026-09-27) ---- */
+/* A stand-in button: records its listeners, fires synthetic events, counts blur() calls. */
+function fakeButton() {
+  const on = {};
+  return {
+    blurs: 0,
+    addEventListener(type, fn) { (on[type] ||= []).push(fn); },
+    blur() { this.blurs++; },
+    fire(type, init = {}) {
+      const e = { type, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; }, ...init };
+      for (const fn of on[type] || []) fn(e);
+      return e;
+    },
+  };
+}
+
+test('wireSend (I1): a pointer click sends; a keyboard-made click (detail 0) never does', () => {
+  const b = fakeButton(); let n = 0;
+  T.wireSend(b, () => n++);
+  b.fire('click', { detail: 1 });
+  assert.equal(n, 1);
+  b.fire('click', { detail: 0 });          // Enter/Space on a focused button fires click with detail 0
+  assert.equal(n, 1);
+});
+
+test('wireSend (I1): Enter sends once and a held Enter (repeat) never sends again', () => {
+  const b = fakeButton(); let n = 0;
+  T.wireSend(b, () => n++);
+  const e = b.fire('keydown', { key: 'Enter', repeat: false });
+  assert.equal(n, 1);
+  assert.equal(e.defaultPrevented, true);  // the native click it would make is swallowed
+  for (let i = 0; i < 5; i++) assert.equal(b.fire('keydown', { key: 'Enter', repeat: true }).defaultPrevented, true);
+  assert.equal(n, 1);
+});
+
+test('wireSend (I1): Space sends on release only, never for a held Space, and a blur mid-press cancels it', () => {
+  const b = fakeButton(); let n = 0;
+  T.wireSend(b, () => n++);
+  b.fire('keydown', { key: ' ', repeat: false });
+  assert.equal(n, 0);
+  b.fire('keydown', { key: ' ', repeat: true });
+  b.fire('keyup', { key: ' ' });
+  assert.equal(n, 1);
+  b.fire('keyup', { key: ' ' });           // a stray release without a fresh press sends nothing
+  assert.equal(n, 1);
+  b.fire('keydown', { key: ' ', repeat: true });   // a repeat arriving with no fresh press arms nothing
+  b.fire('keyup', { key: ' ' });
+  assert.equal(n, 1);
+  b.fire('keydown', { key: ' ', repeat: false });
+  b.fire('blur');
+  b.fire('keyup', { key: ' ' });
+  assert.equal(n, 1);
+});
+
+test('wireSend (I1): {blur: true} drops focus after a pointer click, so no later key can land on the button', () => {
+  const b = fakeButton(); let n = 0;
+  T.wireSend(b, () => n++, { blur: true });
+  b.fire('click', { detail: 1 });
+  assert.equal(n, 1);
+  assert.equal(b.blurs, 1);
+  const plain = fakeButton();
+  T.wireSend(plain, () => {});
+  plain.fire('click', { detail: 1 });
+  assert.equal(plain.blurs, 0);            // the order panel keeps its focus (its own keyboard send is deliberate)
+});
+
+test('symbolChangeTrade (I2b): a new symbol switches Trading OFF and keeps the accounts; same symbol: nothing', () => {
+  const cfg = { root: 'NQ', trade: { on: true, accounts: ['sim041', 'sim047'] } };
+  assert.deepEqual(T.symbolChangeTrade(cfg, { root: 'GC' }),
+    { trade: { on: false, accounts: ['sim041', 'sim047'] }, wasOn: true });
+  assert.equal(T.symbolChangeTrade(cfg, { root: 'NQ' }), null);           // not a change
+  assert.equal(T.symbolChangeTrade(cfg, { spec: 'time:60' }), null);      // an interval change keeps Trading
+  assert.deepEqual(T.symbolChangeTrade({ root: 'NQ', trade: { on: false, accounts: ['sim041'] } }, { root: 'ES' }),
+    { trade: { on: false, accounts: ['sim041'] }, wasOn: false });        // already off: no toast needed
+  assert.deepEqual(T.symbolChangeTrade({ root: 'NQ' }, { root: 'ES' }), { trade: { on: false, accounts: [] }, wasOn: false });
+  assert.equal(T.symbolChangeTrade(null, { root: 'ES' }), null);
+  assert.match(T.SYMBOL_CHANGE_TRADE_OFF, /^Trading switched off — new instrument; turn it back on in the Trade menu$/);
+});

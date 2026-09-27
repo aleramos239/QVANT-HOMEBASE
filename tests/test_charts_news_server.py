@@ -22,7 +22,7 @@ RSS = ("<rss><channel><item><title>Fed signals a rate cut</title><link>u1</link>
 
 
 def test_status_carries_news_and_burst_shapes(tmp_path):
-    with TestClient(live_app(tmp_path)) as c:
+    with TestClient(live_app(tmp_path), base_url="http://127.0.0.1:8852") as c:
         st = c.get("/api/status").json()
         assert st["news"] == {"ok": False, "last_fetch": {
             "financialjuice": {"at": None, "items": 0, "error": None},

@@ -20,8 +20,9 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.websockets import WebSocketClose
 
 from .. import netguard, symbols
 from ..contracts import tick_size as contract_tick_size
@@ -91,6 +92,35 @@ def origin_ok(origin: str | None, host: str | None) -> bool:
     except ValueError:                  # e.g. a malformed IPv6 literal
         return False
     return o is not None and (o in LOCAL_HOSTS or o == h)
+
+
+class HostGuard:
+    """Final review M4: ONE Host check, netguard's shared allowlist (loopback
+    only here -- this process has no allowed_hosts of its own), on EVERY
+    /api/* request (GET included: layouts and templates carry a chart's trade
+    accounts and algo) and on every websocket handshake (/ws), as the desk's
+    own desk_api.WriteGuard does. A DNS-rebound page arrives with Host:
+    evil.example and satisfies origin_ok's Origin==Host rule, so the Host
+    itself must be checked. Writes keep their own Origin (browser_write_ok) and
+    -- on the desk proxy -- JSON checks behind this. Pure ASGI: what passes goes
+    straight through (the page and /static are left alone)."""
+
+    def __init__(self, app, allowed: frozenset | None = None):
+        self.app, self.allowed = app, allowed if allowed is not None else netguard.allowlist()
+
+    def _refused(self, scope) -> bool:
+        # method "GET": netguard.refusal() then checks the Host only (exactly one, on the allowlist)
+        return netguard.refusal("GET", scope["headers"], self.allowed) is not None
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] == "websocket" and self._refused(scope):
+            await WebSocketClose(code=1008, reason="host not allowed")(scope, receive, send)
+            return
+        path = scope.get("path", "")
+        if scope["type"] == "http" and (path == "/api" or path.startswith("/api/")) and self._refused(scope):
+            await JSONResponse({"detail": "host not allowed"}, 403)(scope, receive, send)
+            return
+        await self.app(scope, receive, send)
 
 
 def _finite(v) -> bool:
@@ -669,6 +699,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                 job.stop()
 
     app = FastAPI(title="Homebase Charts", lifespan=lifespan)
+    app.add_middleware(HostGuard)   # M4: the Host allowlist on every /api/* route and /ws
     app.mount("/static", RevalidatedFiles(directory=STATIC), name="static")
 
     @app.get("/")
