@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import threading
+import time as time_module
 
 import pytest
 from fastapi.testclient import TestClient
@@ -210,6 +212,10 @@ def test_items_filters_by_range_tags_and_sources_newest_first(tmp_path):
               "title": title, "url": "", "tags": tag(src, title)}
         n._by_day.setdefault(news_module._day_key(rec["seen_ms"]), []).append(rec)
         n._seen.add(rec["id"])
+        n._by_t.append(rec)
+        n._by_seen.append(rec)
+    n._by_t.sort(key=lambda r: r["t_ms"])
+    n._by_seen.sort(key=lambda r: r["seen_ms"])
     got = n.items(base, base + 3000)
     assert [g["id"] for g in got] == ["id2", "id1", "id0"]      # newest first
     assert [g["id"] for g in n.items(base, base + 3000, sources=["truth"])] == ["id1"]
@@ -239,3 +245,133 @@ def test_the_route_serves_stored_items_and_is_host_guarded(tmp_path):
         bad = c.get("/api/news", headers={"host": "evil.example"})
         assert bad.status_code == 403
         assert c.get("/api/news?from=soon").status_code == 400
+
+
+# ---- fix round 1 -----------------------------------------------------------
+
+def test_a_restart_with_sibling_burst_and_reaction_files_never_reads_them_as_news(tmp_path):
+    """CRITICAL (review): bursts.py stores into <folder>/bursts/ and
+    <folder>/reactions/ subfolders, one level below news's own day files --
+    Path.glob("*.jsonl") is non-recursive, and DAY_FILE is now fully
+    anchored, so neither a stray same-level "bursts-<date>.jsonl" (an old
+    layout) nor the real subfolder files can ever be read back as a
+    headline, corrupt /api/news, or blow up status()'s "seen_ms" access."""
+    folder = tmp_path / "news"
+    folder.mkdir()
+    (folder / "bursts").mkdir()
+    (folder / "reactions").mkdir()
+    day = dt.datetime.fromtimestamp(T0, news_module.ET).date().isoformat()
+    # the real (fixed) layout: these must never be visible to News at all
+    (folder / "bursts" / f"{day}.jsonl").write_text(json.dumps({"root": "NQ", "t_ms": 1}) + "\n")
+    (folder / "reactions" / f"{day}.jsonl").write_text(json.dumps({"id": "r1", "t_ms": 1}) + "\n")
+    # belt-and-suspenders: a stray old-layout file at the news folder's own level, which the
+    # anchored regex must reject even though it ends in "<date>.jsonl"
+    (folder / f"bursts-{day}.jsonl").write_text(json.dumps({"root": "NQ", "t_ms": 2}) + "\n")
+
+    n = News(folder, fetch=feed(RSS_ITEM), now=lambda: T0)
+    n.poll()
+    n2 = News(folder, fetch=None, now=lambda: T0)      # "restart": a fresh instance reads the folder back
+    got = n2.items(0, 2 ** 62)
+    assert len(got) == 4 and {g["source"] for g in got} == {"financialjuice", "truth"}   # not the bursts/reactions
+    assert all("root" not in g and "move_ticks" not in g for g in got)   # never a burst/reaction record
+    st = n2.status()                                     # must not KeyError on a burst/reaction's missing "seen_ms"
+    assert st["delay_p50_s"] is not None
+    fed_only = [g for g in got if "fed" in g["tags"]]
+    assert len(fed_only) == 2                           # tag filtering still works against the real items only
+    assert {g["id"] for g in n2.items(0, 2 ** 62, tags=["fed"])} == {g["id"] for g in fed_only}
+
+
+def test_the_60s_floor_survives_a_restart(tmp_path):
+    """review #2: last_try is persisted (atomically) so a process restart
+    can't reset a source's floor and re-hit it early."""
+    folder = tmp_path / "news"
+    calls = []
+
+    def fetch(url):
+        calls.append(url)
+        return RSS_ITEM.encode()
+
+    n = News(folder, fetch=fetch, now=lambda: T0)
+    n.poll()
+    assert len(calls) == 2                              # one GET per source
+    assert (folder / "state.json").exists()
+    restarted = News(folder, fetch=fetch, now=lambda: T0 + 30)   # 30s later: still inside the 60s floor
+    assert restarted.poll() == []
+    assert len(calls) == 2                               # no new GETs: the floor survived the restart
+    later = News(folder, fetch=fetch, now=lambda: T0 + 61)
+    later.poll()
+    assert len(calls) == 4
+
+
+def test_t_ms_is_clamped_to_at_most_seen_ms(tmp_path):
+    """review #6c: a bad feed's future-dated pubDate must never outrun when
+    we actually saw it (it would break the reaction tracker's +5m scheduling)."""
+    future = "Fri, 26 Sep 2099 12:00:00 GMT"
+    raw = RSS_ITEM.replace("Fri, 26 Sep 2026 12:30:00 GMT", future)
+    n = News(tmp_path / "news", fetch=feed(raw), now=lambda: T0)
+    got = n.poll()
+    assert got[0]["t_ms"] == got[0]["seen_ms"] == int(T0 * 1000)
+
+
+def test_near_uses_a_bisect_index_not_a_full_scan(tmp_path):
+    n = News(tmp_path / "news", fetch=None, now=lambda: T0)
+    base = int(T0 * 1000)
+    for i in range(5):
+        rec = {"id": f"n{i}", "source": "financialjuice", "t_ms": base + i * 60_000,
+              "seen_ms": base + i * 60_000, "title": "x", "url": "", "tags": []}
+        n._by_day.setdefault(news_module._day_key(rec["seen_ms"]), []).append(rec)
+        n._by_t.append(rec)
+        n._by_seen.append(rec)
+    n._by_t.sort(key=lambda r: r["t_ms"])
+    n._by_seen.sort(key=lambda r: r["seen_ms"])
+    got = [r["id"] for r in n.near(base + 2 * 60_000, 90_000)]     # +/- 90s around n2: n1, n2, n3
+    assert got == ["n1", "n2", "n3"]
+    # a distant seen_ms match (well outside the t_ms window) is still found
+    far = {"id": "far", "source": "financialjuice", "t_ms": base - 10_000_000,
+          "seen_ms": base + 2 * 60_000, "title": "x", "url": "", "tags": []}
+    n._by_t.append(far)
+    n._by_t.sort(key=lambda r: r["t_ms"])
+    n._by_seen.append(far)
+    n._by_seen.sort(key=lambda r: r["seen_ms"])
+    got2 = {r["id"] for r in n.near(base + 2 * 60_000, 90_000)}
+    assert "far" in got2
+
+
+def test_concurrent_poll_and_query_cannot_raise(tmp_path):
+    """review #5: poll() mutates shared state from a worker thread while the
+    event loop reads it (items/near/status) -- both paths must go through
+    the same lock. Hammer both from real threads and require no exception."""
+    n = News(tmp_path / "news", fetch=feed(RSS_ITEM), now=time_module.time)
+    errors: list[BaseException] = []
+    stop = threading.Event()
+
+    def poller():
+        i = 0
+        while not stop.is_set():
+            try:
+                n._last_try = {s: 0.0 for s in n._last_try}     # force past the floor every time
+                n.fetch = feed(RSS_ITEM.replace("fj-1", f"fj-1-{i}").replace("fj-2", f"fj-2-{i}"))
+                n.poll()
+                i += 1
+            except BaseException as e:  # noqa: BLE001 — capture, don't crash the thread silently
+                errors.append(e)
+                return
+
+    def reader():
+        while not stop.is_set():
+            try:
+                n.items(0, 2 ** 62)
+                n.near(int(time_module.time() * 1000), 180_000)
+                n.status()
+            except BaseException as e:  # noqa: BLE001
+                errors.append(e)
+                return
+
+    threads = [threading.Thread(target=poller), threading.Thread(target=reader), threading.Thread(target=reader)]
+    for t in threads:
+        t.start()
+    time_module.sleep(0.4)
+    stop.set()
+    for t in threads:
+        t.join(timeout=5)
+    assert errors == []

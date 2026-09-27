@@ -6,17 +6,19 @@ Same shape as calendar.py: the fetch function is injected (tests never touch
 the network), a floor keeps polling polite even across a restart, a bad or
 oversized response is a failure that keeps what we already had, and storage
 is a plain file written atomically (temp + rename) so a crash mid-write can
-never tear it.
+never tear it. `poll()`'s network call runs in a worker thread (server.py's
+`asyncio.to_thread`); every read/write of this object's state goes through
+`self._lock` so a page's GET can never race that thread.
 """
 from __future__ import annotations
 
+import bisect
 import datetime as dt
 import hashlib
-import json
-import os
 import re
 import ssl
 import statistics
+import threading
 import time
 import urllib.request
 import xml.etree.ElementTree as ET_tree
@@ -26,6 +28,8 @@ from pathlib import Path
 from typing import Callable, Optional
 from zoneinfo import ZoneInfo
 
+from . import _jsonl
+
 ET = ZoneInfo("America/New_York")
 POLL_S = 60             # never faster: be a polite client
 TIMEOUT_S = 10
@@ -34,7 +38,7 @@ USER_AGENT = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.3
               "Chrome/128.0 Safari/537.36")
 RETENTION_DAYS = 90
 QUERY_MAX = 500
-DAY_FILE = re.compile(r"(\d{4}-\d{2}-\d{2})\.jsonl$")
+DAY_FILE = re.compile(r"^(\d{4}-\d{2}-\d{2})\.jsonl$")     # anchored: a sibling bursts-/reactions- file never matches
 
 
 @dataclass(frozen=True)
@@ -146,39 +150,18 @@ def _day_key(seen_ms: int) -> str:
     return dt.datetime.fromtimestamp(seen_ms / 1000, ET).date().isoformat()
 
 
-def _append_jsonl(path: Path, obj: dict) -> None:
-    """Append one JSON line, atomically (temp file with the whole day's
-    content + the new line, then rename): a torn write can never leave a
-    line half-written for the next reader."""
-    line = json.dumps(obj)
-    tmp = path.with_name(path.name + f".{os.getpid()}.tmp")
-    prior = path.read_text() if path.exists() else ""
-    tmp.write_text(prior + line + "\n")
-    os.replace(tmp, path)
-
-
-def _read_jsonl(path: Path) -> list[dict]:
-    out = []
-    try:
-        text = path.read_text()
-    except OSError:
-        return out
-    for line in text.splitlines():
-        try:
-            v = json.loads(line)
-        except ValueError:
-            continue
-        if isinstance(v, dict):
-            out.append(v)
-    return out
-
-
 class News:
     """Polls SOURCES on their floor, tags + dedups + stores each new item,
     and serves them back by time range. `fetch` is injected (None: never
     fetches, matching Calendar and "no fetch in replay"). Items for the
     trailing `retention_days` are kept in memory (they're small); older day
-    files are deleted."""
+    files are deleted.
+
+    Bursts and reactions are NOT stored in this folder (they live in their
+    own `bursts/`/`reactions/` subfolders, owned by bursts.py) -- `_load()`'s
+    glob is non-recursive and DAY_FILE is fully anchored, so even a stray
+    misnamed file directly in this folder can't be read back as a headline.
+    """
 
     def __init__(self, folder, fetch: Optional[Callable[[str], bytes]] = None, now=time.time,
                  sources=SOURCES, retention_days: int = RETENTION_DAYS):
@@ -188,71 +171,120 @@ class News:
         self.sources = sources
         self.retention_days = retention_days
         self.folder.mkdir(parents=True, exist_ok=True)
+        self._lock = threading.Lock()          # poll() runs off-thread (asyncio.to_thread); routes read live
         self._last_try: dict[str, float] = {s.name: 0.0 for s in sources}
         self.last_fetch: dict[str, dict] = {s.name: {"at": None, "items": 0, "error": None} for s in sources}
         self._by_day: dict[str, list[dict]] = {}
         self._seen: set[str] = set()
+        self._by_t: list[dict] = []            # sorted by t_ms, for near()'s bisect
+        self._by_seen: list[dict] = []         # sorted by seen_ms, for near()'s bisect
         self._load()
 
+    # -- persistence -----------------------------------------------------
+
+    def _state_path(self) -> Path:
+        return self.folder / "state.json"
+
+    def _load_state(self) -> None:
+        st = _jsonl.read_json(self._state_path())
+        for name, ts in (st.get("last_try") or {}).items():
+            if name in self._last_try:
+                try:
+                    self._last_try[name] = float(ts)
+                except (TypeError, ValueError):
+                    pass
+
+    def _save_state(self) -> None:
+        _jsonl.write_json(self._state_path(), {"last_try": dict(self._last_try)})
+
     def _load(self) -> None:
+        self._load_state()
         self._prune(write=False)
         for p in sorted(self.folder.glob("*.jsonl")):
-            m = DAY_FILE.search(p.name)
+            m = DAY_FILE.match(p.name)
             if not m:
                 continue
-            items = _read_jsonl(p)
+            items = _jsonl.read_all(p)
             self._by_day[m.group(1)] = items
-            self._seen.update(it["id"] for it in items if "id" in it)
+            for it in items:
+                if "id" not in it:
+                    continue
+                self._seen.add(it["id"])
+                bisect.insort(self._by_t, it, key=lambda r: r["t_ms"])
+                bisect.insort(self._by_seen, it, key=lambda r: r["seen_ms"])
 
     def _prune(self, write: bool = True) -> None:
         """Delete day files (and drop them from memory) older than
-        retention_days, judged against `now()`."""
+        retention_days, judged against `now()`. Caller holds `self._lock`."""
         cutoff = dt.datetime.fromtimestamp(self.now(), ET).date() - dt.timedelta(days=self.retention_days)
         for p in list(self.folder.glob("*.jsonl")):
-            m = DAY_FILE.search(p.name)
+            m = DAY_FILE.match(p.name)
             if m and dt.date.fromisoformat(m.group(1)) < cutoff:
                 p.unlink(missing_ok=True)
                 self._by_day.pop(m.group(1), None)
-        if write:
+        if write and any(dt.date.fromisoformat(k) < cutoff for k in self._by_day):
             self._by_day = {k: v for k, v in self._by_day.items() if dt.date.fromisoformat(k) >= cutoff}
+            dropped = {it["id"] for items in self._by_day.values() for it in items}
+            self._by_t = [r for r in self._by_t if r["id"] in dropped]
+            self._by_seen = [r for r in self._by_seen if r["id"] in dropped]
+
+    # -- polling -----------------------------------------------------------
 
     def wait_s(self, source: str) -> float:
         """Seconds until `source` may be polled again."""
-        return max(0.0, self._last_try.get(source, 0.0) + POLL_S - self.now())
+        with self._lock:
+            return max(0.0, self._last_try.get(source, 0.0) + POLL_S - self.now())
 
     def poll(self) -> list[dict]:
         """One pass: every source past its 60 s floor is fetched once. Returns
         the newly stored items (already deduped, tagged, and on disk), oldest
-        first. Without a fetch function nothing is ever fetched (replay)."""
+        first. Without a fetch function nothing is ever fetched (replay).
+        Meant to run in a worker thread (it blocks on network I/O); the
+        actual state mutation below is short and lock-protected so a
+        concurrent `items()`/`near()`/`status()` on the event loop is safe."""
         if self.fetch is None:
             return []
         new = []
         now = self.now()
         for src in self.sources:
-            if now - self._last_try[src.name] < POLL_S:
-                continue
-            self._last_try[src.name] = now
-            try:
-                items = parse_rss(self.fetch(src.url))
-            except Exception as e:  # noqa: BLE001 — one source's failure never stops the others
-                self.last_fetch[src.name] = {**self.last_fetch[src.name],
-                                             "error": f"{type(e).__name__}: {e}"[:200]}
-                continue
-            self.last_fetch[src.name] = {"at": int(now * 1000), "items": len(items), "error": None}
-            for raw_item in items:
-                rec_id = _id(src.name, raw_item["guid"], raw_item["title"])
-                if rec_id in self._seen:
+            with self._lock:
+                if now - self._last_try[src.name] < POLL_S:
                     continue
-                rec = {"id": rec_id, "source": src.name, "t_ms": raw_item["t_ms"], "seen_ms": int(now * 1000),
-                       "title": raw_item["title"], "url": raw_item["url"], "tags": tag(src.name, raw_item["title"])}
-                self._seen.add(rec_id)
-                day = _day_key(rec["seen_ms"])
-                self._by_day.setdefault(day, []).append(rec)
-                _append_jsonl(self.folder / f"{day}.jsonl", rec)
-                new.append(rec)
+                self._last_try[src.name] = now
+                self._save_state()
+            try:
+                items = parse_rss(self.fetch(src.url))          # network I/O: outside the lock
+            except Exception as e:  # noqa: BLE001 — one source's failure never stops the others
+                with self._lock:
+                    self.last_fetch[src.name] = {**self.last_fetch[src.name],
+                                                 "error": f"{type(e).__name__}: {e}"[:200]}
+                continue
+            with self._lock:
+                self.last_fetch[src.name] = {"at": int(now * 1000), "items": len(items), "error": None}
+                for raw_item in items:
+                    rec_id = _id(src.name, raw_item["guid"], raw_item["title"])
+                    if rec_id in self._seen:
+                        continue
+                    seen_ms = int(now * 1000)
+                    # a bad feed's future-dated pubDate must never outrun when we actually saw it
+                    # (it would break the reaction tracker's "+5m after t_ms" scheduling)
+                    t_ms = min(raw_item["t_ms"], seen_ms)
+                    rec = {"id": rec_id, "source": src.name, "t_ms": t_ms, "seen_ms": seen_ms,
+                           "title": raw_item["title"], "url": raw_item["url"],
+                           "tags": tag(src.name, raw_item["title"])}
+                    self._seen.add(rec_id)
+                    day = _day_key(seen_ms)
+                    self._by_day.setdefault(day, []).append(rec)
+                    bisect.insort(self._by_t, rec, key=lambda r: r["t_ms"])
+                    bisect.insort(self._by_seen, rec, key=lambda r: r["seen_ms"])
+                    _jsonl.append(self.folder / f"{day}.jsonl", rec)
+                    new.append(rec)
         if new:
-            self._prune()
+            with self._lock:
+                self._prune()
         return new
+
+    # -- reads ---------------------------------------------------------
 
     def items(self, frm: int, to: int, tags: Optional[list[str]] = None,
               sources: Optional[list[str]] = None) -> list[dict]:
@@ -260,24 +292,47 @@ class News:
         QUERY_MAX. `tags`/`sources` (any case) keep only a matching item."""
         want_tags = {t.lower() for t in tags} if tags else None
         want_src = {s.lower() for s in sources} if sources else None
+        with self._lock:
+            lo = bisect.bisect_left(self._by_t, frm, key=lambda r: r["t_ms"])
+            hi = bisect.bisect_left(self._by_t, to, key=lambda r: r["t_ms"])
+            candidates = list(self._by_t[lo:hi])
         out = []
-        for day_items in self._by_day.values():
-            for it in day_items:
-                if not frm <= it["t_ms"] < to:
-                    continue
-                if want_src is not None and it["source"].lower() not in want_src:
-                    continue
-                if want_tags is not None and not (want_tags & {t.lower() for t in it["tags"]}):
-                    continue
-                out.append(it)
+        for it in candidates:
+            if want_src is not None and it["source"].lower() not in want_src:
+                continue
+            if want_tags is not None and not (want_tags & {t.lower() for t in it["tags"]}):
+                continue
+            out.append(it)
         out.sort(key=lambda it: it["t_ms"], reverse=True)
         return out[:QUERY_MAX]
 
+    def near(self, t_ms: int, window_ms: int) -> list[dict]:
+        """Items within +/- window_ms of t_ms, by t_ms OR seen_ms, via two
+        sorted indices + bisect (never a scan of everything kept). Used by
+        the burst detector's near_news() -- which itself re-checks both
+        fields, so a slightly generous union here is fine."""
+        with self._lock:
+            lo1 = bisect.bisect_left(self._by_t, t_ms - window_ms, key=lambda r: r["t_ms"])
+            hi1 = bisect.bisect_right(self._by_t, t_ms + window_ms, key=lambda r: r["t_ms"])
+            lo2 = bisect.bisect_left(self._by_seen, t_ms - window_ms, key=lambda r: r["seen_ms"])
+            hi2 = bisect.bisect_right(self._by_seen, t_ms + window_ms, key=lambda r: r["seen_ms"])
+            a, b = self._by_t[lo1:hi1], self._by_seen[lo2:hi2]
+        seen_ids: set[str] = set()
+        out = []
+        for r in a + b:
+            if r["id"] not in seen_ids:
+                seen_ids.add(r["id"])
+                out.append(r)
+        return out
+
     def delay_p50_s(self) -> Optional[float]:
         """Median seen_ms - t_ms across everything kept, in seconds."""
-        delays = [(it["seen_ms"] - it["t_ms"]) / 1000 for items in self._by_day.values() for it in items]
+        with self._lock:
+            delays = [(it["seen_ms"] - it["t_ms"]) / 1000 for it in self._by_t]
         return statistics.median(delays) if delays else None
 
     def status(self) -> dict:
-        return {"ok": any(v["error"] is None and v["at"] is not None for v in self.last_fetch.values()),
-                "last_fetch": dict(self.last_fetch), "delay_p50_s": self.delay_p50_s()}
+        with self._lock:
+            last_fetch = {k: dict(v) for k, v in self.last_fetch.items()}
+        return {"ok": any(v["error"] is None and v["at"] is not None for v in last_fetch.values()),
+                "last_fetch": last_fetch, "delay_p50_s": self.delay_p50_s()}

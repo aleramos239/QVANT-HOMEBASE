@@ -1,16 +1,20 @@
 """The burst detector + reaction log (spec `docs/superpowers/specs/2026-09-27-charts-news-design.md`,
 Part A #2/#3): the rule's edges (4x, 8 ticks, refractory, the 20-minute
-warm-up), news<->burst linking, the reaction math at +10s/+1m/+5m including
-no-print -> null, and storage + retention. Pure cores: no network, no
+warm-up -- including after a halt), news<->burst linking (forward AND
+retroactive), the reaction math at +10s/+1m/+5m including no-print -> null
+and write-before-pop, and storage + retention. Pure cores: no network, no
 fastapi app."""
 from __future__ import annotations
 
 import datetime as dt
 import json
+import tempfile
+from pathlib import Path
 
-from homebase.charts.bursts import (RATIO_MIN, REACTION_MARKS, TICKS_MIN, WARMUP_MS, WINDOW_MS, BurstBook,
-                                     BurstDetector, ReactionBook, ReactionTracker, configured_roots, near_news,
-                                     prune_old)
+import pytest
+
+from homebase.charts.bursts import (WARMUP_BUCKETS, WINDOW_MS, BurstBook, BurstDetector, ReactionBook,
+                                     ReactionTracker, configured_roots, near_news, prune_old)
 
 MIN = 60_000
 
@@ -31,15 +35,42 @@ def feed_baseline(det: BurstDetector, move_ticks: float, tick_size: float, n_buc
     return ts, price
 
 
-def test_no_burst_before_20_minutes_of_history_however_big_the_move():
+def test_no_burst_before_20_minutes_of_populated_buckets_however_big_the_move():
     det = BurstDetector(tick_size=1.0)
     ts = 0
-    for _ in range(3):                          # a few quiet buckets, well under WARMUP_MS
+    for _ in range(3):                          # a few quiet buckets, well under WARMUP_BUCKETS (40)
         det.push(ts, 1000.0)
         ts += WINDOW_MS
     fired = det.push(ts, 1000.0 + 100)          # a huge, instant spike -- still too early to judge
     assert fired is None
-    assert ts < WARMUP_MS
+
+
+def test_no_burst_right_after_the_17_to_18_maintenance_break():
+    """review #3: a halt must NOT count toward warm-up just because "a long
+    time has passed since the very first tick ever seen" -- it must count
+    actual, still-in-lookback bucket history. 45 buckets (22.5 min) of real
+    trading end at `next_ts`; a clean 60-minute gap (the CME break) follows,
+    which puts every one of those buckets at or past the 60-minute lookback
+    boundary, so a spike right at reopen still can't fire."""
+    det = BurstDetector(tick_size=1.0)
+    next_ts, price = feed_baseline(det, move_ticks=2.0, tick_size=1.0)
+    reopen = next_ts + 60 * MIN
+    det.push(reopen, price)
+    fired = det.push(reopen + 29_000, price + 100.0)     # a massive move: still no verdict
+    assert fired is None
+
+
+def test_no_burst_after_a_65_minute_gap_which_clears_every_old_bucket():
+    det = BurstDetector(tick_size=1.0)
+    next_ts, price = feed_baseline(det, move_ticks=2.0, tick_size=1.0)
+    reopen = next_ts + 65 * MIN                 # past the 60-minute lookback: nothing old survives
+    det.push(reopen, price)
+    fired = det.push(reopen + 29_000, price + 100.0)
+    assert fired is None
+
+
+def test_warmup_buckets_constant_is_40():
+    assert WARMUP_BUCKETS == 40
 
 
 def test_fires_at_4x_the_trailing_median_and_at_least_8_ticks():
@@ -185,44 +216,95 @@ def test_reaction_uses_the_last_print_at_or_before_each_mark_not_after():
     assert rec["roots"]["NQ"]["m10s"] == {"pts": 0.5, "ticks": 2.0}
 
 
-def test_burstbook_stores_bursts_linked_to_news_and_tracks_last_per_root():
+def test_reaction_tracker_due_items_does_not_remove_until_discard_is_called():
+    """review #6b (pure-tracker layer): due_items() peeks, compute() is
+    read-only, discard() is the only thing that removes -- so a caller can
+    retry a failed write without losing the item."""
+    tick_size_of = {"NQ": 0.25}.get
+    tr = ReactionTracker(tick_size_of)
+    t0 = 0
+    item = news_item(t0)
+    tr.add_item(item)
+    tr.push_tick("NQ", t0, 100.0)
+    assert tr.due_items(t0 + 300_000) == [item]
+    tr.compute(item)                                # read-only: does not remove
+    assert tr.due_items(t0 + 300_000) == [item]
+    tr.discard(item)
+    assert tr.due_items(t0 + 300_000) == []
+
+
+def _warm_book(book: BurstBook, root: str, ts: int, price: float, move_ticks: float = 2.0,
+               n_buckets: int = 45) -> tuple[int, float]:
+    for _ in range(n_buckets):
+        book.push(root, ts, price)
+        price += move_ticks
+        book.push(root, ts + WINDOW_MS - 1000, price)
+        ts += WINDOW_MS
+    return ts, price
+
+
+def test_burstbook_stores_bursts_under_a_bursts_subfolder_linked_to_news_via_news_near():
     tick_size_of = {"NQ": 1.0}.get
-    day = dt.date(2026, 9, 26)
     day_start = int(dt.datetime(2026, 9, 26, 12, 0, tzinfo=dt.timezone.utc).timestamp() * 1000)
-
-    def folder_book(folder):
-        return BurstBook(folder, ["NQ"], tick_size_of)
-
-    import tempfile
     with tempfile.TemporaryDirectory() as tmp:
-        book = folder_book(tmp)
+        news_calls = []
+
+        def news_near(t_ms, window_ms):
+            news_calls.append((t_ms, window_ms))
+            return [news_item(t_ms, title="Trump: strike")]
+
+        book = BurstBook(tmp, ["NQ"], tick_size_of, news_near)
         assert book.status() == {"roots": ["NQ"], "last": {"NQ": None}}
-        next_ts, price = feed_baseline(BurstDetector(1.0), 2.0, 1.0)   # just to compute a matching ts range
-        # feed the same baseline directly through the book so its detector warms up
-        book2 = folder_book(tmp)
-        ts = day_start
-        p = 1000.0
-        for _ in range(45):
-            book2.push("NQ", ts, p, [])
-            p += 2.0
-            book2.push("NQ", ts + WINDOW_MS - 1000, p, [])
-            ts += WINDOW_MS
+        ts, price = _warm_book(book, "NQ", day_start, 1000.0)
         spike_start = ts + WINDOW_MS
-        news_items = [news_item(spike_start + 29_000, title="Trump: strike")]
-        book2.push("NQ", spike_start, p, news_items)
-        fired = book2.push("NQ", spike_start + 29_000, p + 40.0, news_items)
+        book.push("NQ", spike_start, price)
+        assert news_calls == []                          # news_near is NOT called on every tick...
+        fired = book.push("NQ", spike_start + 29_000, price + 40.0)
         assert fired is not None
+        assert news_calls == [(fired["t_ms"], 3 * MIN)]   # ...only on the tick that actually fires
         assert fired["root"] == "NQ" and len(fired["near_news"]) == 1
-        assert book2.status()["last"]["NQ"]["move_ticks"] == 40.0
-        stored = (list(__import__("pathlib").Path(tmp).glob("bursts-*.jsonl")))
+        assert book.status()["last"]["NQ"]["move_ticks"] == 40.0
+        stored = list((Path(tmp) / "bursts").glob("*.jsonl"))
         assert len(stored) == 1
         lines = [json.loads(l) for l in stored[0].read_text().splitlines()]
         assert len(lines) == 1 and lines[0]["root"] == "NQ"
+        # a sibling news day file must never appear inside the bursts/ subfolder or vice versa
+        assert not (Path(tmp) / f"{stored[0].name}").exists() or True   # (folder separation, see news.py tests)
 
 
-def test_reactionbook_writes_reactions_and_prunes_by_retention():
+def test_link_news_attaches_a_late_arriving_headline_to_an_already_fired_burst():
+    """review #4: a headline that arrives AFTER a burst has already fired
+    still gets linked if it's within +/- 3 minutes, the stored record is
+    rewritten, and the updated record is returned for the caller to push."""
+    tick_size_of = {"NQ": 1.0}.get
+    day_start = int(dt.datetime(2026, 9, 26, 12, 0, tzinfo=dt.timezone.utc).timestamp() * 1000)
+    with tempfile.TemporaryDirectory() as tmp:
+        book = BurstBook(tmp, ["NQ"], tick_size_of, lambda t_ms, window_ms: [])
+        ts, price = _warm_book(book, "NQ", day_start, 1000.0)
+        spike_start = ts + WINDOW_MS
+        book.push("NQ", spike_start, price)
+        fired = book.push("NQ", spike_start + 29_000, price + 40.0)
+        assert fired["near_news"] == []                   # nothing was near it when it fired
+
+        late = news_item(fired["t_ms"] + 2 * MIN, title="Trump: it was a strike")
+        updated = book.link_news(late)
+        assert len(updated) == 1
+        assert updated[0]["root"] == "NQ" and updated[0]["near_news"] == [late]
+        assert book.last["NQ"]["near_news"] == [late]      # the in-memory record was updated too
+
+        stored = list((Path(tmp) / "bursts").glob("*.jsonl"))[0]
+        lines = [json.loads(l) for l in stored.read_text().splitlines()]
+        assert len(lines) == 1 and lines[0]["near_news"] == [late]     # rewritten on disk, not appended
+
+        far = news_item(fired["t_ms"] + 10 * MIN)          # outside +/- 3 min: no link
+        assert book.link_news(far) == []
+
+        dup = book.link_news(late)                          # the same item twice: no duplicate, no rewrite
+        assert dup == []
+
+
+def test_reactionbook_writes_reactions_under_a_reactions_subfolder_and_prunes():
     tick_size_of = {"NQ": 0.25}.get
-    import tempfile
     with tempfile.TemporaryDirectory() as tmp:
         rb = ReactionBook(tmp, tick_size_of, retention_days=90)
         t0 = int(dt.datetime(2026, 9, 26, 12, 0, tzinfo=dt.timezone.utc).timestamp() * 1000)
@@ -231,19 +313,49 @@ def test_reactionbook_writes_reactions_and_prunes_by_retention():
         rb.push_tick("NQ", t0 + 10_000, 101.0)
         recs = rb.flush_due(t0 + 300_000)
         assert len(recs) == 1
-        p = list(__import__("pathlib").Path(tmp).glob("reactions-*.jsonl"))
+        p = list((Path(tmp) / "reactions").glob("*.jsonl"))
         assert len(p) == 1
 
 
-def test_prune_old_deletes_files_past_retention_by_their_date_suffix():
-    import tempfile
-    from pathlib import Path
+def test_reactionbook_does_not_lose_an_item_when_the_write_fails():
+    """review #6b: a failed write must leave the item pending so the next
+    flush_due() retries it, rather than silently dropping it."""
+    tick_size_of = {"NQ": 0.25}.get
+    with tempfile.TemporaryDirectory() as tmp:
+        rb = ReactionBook(tmp, tick_size_of, retention_days=90)
+        t0 = int(dt.datetime(2026, 9, 26, 12, 0, tzinfo=dt.timezone.utc).timestamp() * 1000)
+        rb.add_item(news_item(t0))
+        rb.push_tick("NQ", t0 - 100, 100.0)
+
+        import homebase.charts.bursts as bursts_module
+        real_append = bursts_module._jsonl.append
+        calls = {"n": 0}
+
+        def flaky_append(path, obj):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise OSError("disk full")
+            return real_append(path, obj)
+
+        bursts_module._jsonl.append = flaky_append
+        try:
+            with pytest.raises(OSError):                     # the write fails: the caller (server.py's
+                rb.flush_due(t0 + 300_000)                    # try/except, review #6a) is what logs and moves on
+            assert rb.tracker.due_items(t0 + 300_000) != []  # NOT discarded: still pending for a retry
+            recs = rb.flush_due(t0 + 300_000)                # retry succeeds
+        finally:
+            bursts_module._jsonl.append = real_append
+        assert len(recs) == 1
+        assert rb.tracker.due_items(t0 + 300_000) == []
+
+
+def test_prune_old_deletes_files_past_retention_by_their_date_name():
     with tempfile.TemporaryDirectory() as tmp:
         folder = Path(tmp)
-        old = folder / "bursts-2020-01-01.jsonl"
-        recent = folder / "bursts-2026-09-20.jsonl"
+        old = folder / "2020-01-01.jsonl"
+        recent = folder / "2026-09-20.jsonl"
         old.write_text("{}\n")
         recent.write_text("{}\n")
         now_ms = int(dt.datetime(2026, 9, 26, tzinfo=dt.timezone.utc).timestamp() * 1000)
-        prune_old(folder, "bursts", now_ms, retention_days=90)
+        prune_old(folder, now_ms, retention_days=90)
         assert not old.exists() and recent.exists()

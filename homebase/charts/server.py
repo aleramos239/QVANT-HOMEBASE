@@ -232,7 +232,10 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
     news_fetch = None if replay else news_fetch
     news_dir = sd / "news"
     news = News(news_dir, fetch=news_fetch)
-    burst_book = BurstBook(news_dir, [r for r in configured_roots() if r in roots], contract_tick_size)
+    # bursts/reactions live in their own subfolders below news_dir (never loose files beside
+    # news's own <date>.jsonl day files -- see news.py's docstring); news.near() is a bisect
+    # lookup, called only on the rare tick that actually fires a burst, never on every tick
+    burst_book = BurstBook(news_dir, [r for r in configured_roots() if r in roots], contract_tick_size, news.near)
     reaction_book = ReactionBook(news_dir, contract_tick_size)
     store = TickStore(base)
     history = History(store, cache_dir=sd / "cache")
@@ -384,17 +387,19 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             quotes.note(root, rows)
             kept = recorder.append(root, contract, rows)
             hub.on_ticks(root, kept)
-            if kept and root in burst_book.roots:
-                near = news.items(0, 2 ** 62)      # near_news() itself narrows this to +/- 3 min
-                for r in kept:
-                    fired = burst_book.push(root, int(r["ts_ms"]), float(r["price"]), near)
-                    if fired is not None:
-                        fan({"type": "burst", **fired})
-            if kept and root in REACTION_ROOTS:
-                for r in kept:
-                    reaction_book.push_tick(root, int(r["ts_ms"]), float(r["price"]))
             if kept:
-                reaction_book.flush_due(int(kept[-1]["ts_ms"]))
+                try:
+                    if root in burst_book.roots:
+                        for r in kept:
+                            fired = burst_book.push(root, int(r["ts_ms"]), float(r["price"]))
+                            if fired is not None:
+                                fan({"type": "burst", **fired})
+                    if root in REACTION_ROOTS:
+                        for r in kept:
+                            reaction_book.push_tick(root, int(r["ts_ms"]), float(r["price"]))
+                    reaction_book.flush_due(int(kept[-1]["ts_ms"]))
+                except Exception as e:  # noqa: BLE001 — burst/reaction work must never break the live tick path
+                    log(f"news/bursts ({root}): {type(e).__name__}: {e}")
 
         feed = (feed_factory or TickFeed)(roots, on_live, on_subscribed=_refill)
     # Level 2 rides the live feed's own md socket; replay builds none of it (no
@@ -503,6 +508,8 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                 for item in await asyncio.to_thread(news.poll):
                     fan({"type": "news", **item})
                     reaction_book.add_item(item)
+                    for updated in burst_book.link_news(item):    # a headline that arrived after its burst
+                        fan({"type": "burst_update", **updated})
             except Exception as e:  # noqa: BLE001 — the news feed must never take the service down
                 log(f"news: {type(e).__name__}: {e}")
             await asyncio.sleep(5.0)
