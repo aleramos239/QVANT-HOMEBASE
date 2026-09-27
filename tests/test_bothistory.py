@@ -48,7 +48,10 @@ def test_a_tp_day_and_an_sl_day_with_net_dollars():
         "date": "2026-09-14", "account": "a1", "status": "traded",
         "legs": [{"side": "Buy", "price": 30910.0, "ts": ms("2026-09-14", "09:30:00")},
                  {"side": "Sell", "price": 30890.0, "ts": ms("2026-09-14", "09:30:00")}],
-        "entry": {"side": "Buy", "price": 30910.25, "ts": ms("2026-09-14", "09:30:02")},
+        "fire_ms": ms("2026-09-14", "09:30:00"), "placed_ms": ms("2026-09-14", "09:30:00"),
+        "latency_ms": 0,
+        "entry": {"side": "Buy", "price": 30910.25, "ts": ms("2026-09-14", "09:30:02"),
+                 "slip_ticks": 1.0},              # (30910.25 - 30910.0) / 0.25
         "exit": {"price": 30925.25, "ts": ms("2026-09-14", "09:41:10"), "kind": "tp"},
         "pnl_usd": 592.0}                        # 15 pts x $20 x 2, less $4 x 2 round trips
     assert (sl["status"], sl["entry"]["side"], sl["exit"]["kind"], sl["pnl_usd"]) == \
@@ -121,7 +124,8 @@ def test_an_unmatched_exit_has_no_dollars_and_a_split_entry_uses_the_average():
                 fill=30925.5)]
     a, b = history(recs)
     assert a["exit"]["kind"] == "other" and "pnl_usd" not in a and "entry" not in a
-    assert b["entry"] == {"side": "Buy", "price": 30910.5, "ts": ms("2026-09-15", "09:30:02")}
+    assert b["entry"] == {"side": "Buy", "price": 30910.5, "ts": ms("2026-09-15", "09:30:02"),
+                          "slip_ticks": 2.0}      # (30910.5 - 30910.0) / 0.25
     assert b["pnl_usd"] == 592.0
 
 
@@ -251,3 +255,100 @@ def test_a_kill_that_landed_while_placing_marks_that_account_killed():
                 ok=True, actions=["cancel 1: ok"])]
     (r,) = history(recs)
     assert (r["account"], r["status"]) == ("a1", "killed")
+
+
+# --- fire latency and fill-quality (Task 3) ---------------------------------------------------
+
+def test_fire_latency_and_a_gapped_sl_slip():
+    recs = [placed("2026-09-08", "a1"),
+            rec("entry_fill", "2026-09-08", "09:30:02", strategy="nq930", account="a1", side="Buy",
+                fill=30910.5, qty_filled=2),
+            rec("brackets_moved", "2026-09-08", "09:30:02", strategy="nq930", account="a1",
+                fill=30910.5, sl=30905.5, tp=30920.5, moved=True),
+            rec("exit_fill", "2026-09-08", "09:35:00", strategy="nq930", account="a1", reason="sl",
+                fill=30903.0)]
+    (r,) = history(recs)
+    assert r["fire_ms"] == ms("2026-09-08", "09:30:00") == r["placed_ms"]
+    assert r["latency_ms"] == 0
+    assert r["entry"]["slip_ticks"] == 2.0            # (30910.5 - 30910.0) / 0.25, worse for a long
+    assert r["exit"]["slip_ticks"] == 10.0            # (30905.5 - 30903.0) / 0.25, well past the stop
+    assert r["exit"]["gap_through"] is True
+
+
+def test_a_small_sl_slip_is_not_a_gap():
+    recs = [placed("2026-09-09", "a1"),
+            rec("entry_fill", "2026-09-09", "09:30:02", strategy="nq930", account="a1", side="Buy",
+                fill=30910.0, qty_filled=2),
+            rec("brackets_moved", "2026-09-09", "09:30:02", strategy="nq930", account="a1", sl=30905.0),
+            rec("exit_fill", "2026-09-09", "09:35:00", strategy="nq930", account="a1", reason="sl",
+                fill=30904.75)]
+    (r,) = history(recs)
+    assert r["exit"]["slip_ticks"] == 1.0
+    assert r["exit"]["gap_through"] is False
+
+
+def test_a_short_entry_and_sl_exit_have_the_same_worse_is_positive_sign():
+    recs = [placed("2026-09-10", "a1"),                # upper 30910 / lower 30890
+            rec("entry_fill", "2026-09-10", "09:30:02", strategy="nq930", account="a1", side="Sell",
+                fill=30889.5, qty_filled=2),            # filled BELOW the 30890 trigger: worse, short
+            rec("brackets_moved", "2026-09-10", "09:30:02", strategy="nq930", account="a1", sl=30894.5),
+            rec("exit_fill", "2026-09-10", "09:35:00", strategy="nq930", account="a1", reason="sl",
+                fill=30896.0)]                          # bought back ABOVE the stop: worse, short
+    (r,) = history(recs)
+    assert r["entry"]["slip_ticks"] == 2.0
+    assert r["exit"]["slip_ticks"] == 6.0
+    assert r["exit"]["gap_through"] is True
+
+
+def test_a_missing_brackets_moved_event_gives_a_null_sl_slip_not_a_crash():
+    recs = [placed("2026-09-11", "a1"),
+            rec("entry_fill", "2026-09-11", "09:30:02", strategy="nq930", account="a1", side="Buy",
+                fill=30910.0, qty_filled=2),
+            rec("exit_fill", "2026-09-11", "09:35:00", strategy="nq930", account="a1", reason="sl",
+                fill=30905.0)]
+    (r,) = history(recs)
+    assert r["exit"]["slip_ticks"] is None
+    assert r["exit"]["gap_through"] is None
+
+
+def test_a_tp_exit_carries_no_slip_fields():
+    recs = [placed("2026-09-12", "a1"),
+            rec("entry_fill", "2026-09-12", "09:30:02", strategy="nq930", account="a1", side="Buy",
+                fill=30910.0, qty_filled=2),
+            rec("brackets_moved", "2026-09-12", "09:30:02", strategy="nq930", account="a1", sl=30905.0),
+            rec("exit_fill", "2026-09-12", "09:40:00", strategy="nq930", account="a1", reason="tp",
+                fill=30925.0)]
+    (r,) = history(recs)
+    assert "slip_ticks" not in r["exit"] and "gap_through" not in r["exit"]
+
+
+def test_nonzero_latency_and_a_missing_ts_gives_a_null_placed_ms_not_a_crash():
+    late = {**placed("2026-09-13", "a1"),
+            "ts": dt.datetime.fromisoformat("2026-09-13T09:30:00.750-04:00").timestamp()}
+    (r,) = history([late, rec("cancelled_unfilled", "2026-09-13", "12:55:00", strategy="nq930",
+                              account="a1")])
+    assert r["fire_ms"] == ms("2026-09-13", "09:30:00")
+    assert r["placed_ms"] == ms("2026-09-13", "09:30:00") + 750
+    assert r["latency_ms"] == 750
+
+    malformed = {**placed("2026-09-14", "a1")}
+    del malformed["ts"]
+    (r2,) = history([malformed, rec("cancelled_unfilled", "2026-09-14", "12:55:00",
+                                    strategy="nq930", account="a1")])
+    assert r2["fire_ms"] == ms("2026-09-14", "09:30:00")
+    assert r2["placed_ms"] is None and r2["latency_ms"] is None
+
+
+def test_a_day_level_row_never_needed_a_placed_carries_no_fire_or_latency_fields():
+    recs = [rec("timer_skipped", "2026-09-15", "09:30:00", strategy="nq930", reason="gate_chop")]
+    (r,) = history(recs)
+    assert "fire_ms" not in r and "placed_ms" not in r and "latency_ms" not in r
+
+
+def test_dst_spring_forward_fire_time_is_still_09_30_et():
+    """2026-03-08 is a Sunday; use the Monday after the US spring-forward (EDT, UTC-4)
+    to make sure the ET conversion tracks the offset change, not a fixed UTC hour."""
+    recs = [placed("2026-03-09", "a1"),
+            rec("cancelled_unfilled", "2026-03-09", "12:55:00", strategy="nq930", account="a1")]
+    (r,) = history(recs, days=250)
+    assert r["fire_ms"] == ms("2026-03-09", "09:30:00")
