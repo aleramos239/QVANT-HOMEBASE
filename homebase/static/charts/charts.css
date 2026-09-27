@@ -68,8 +68,11 @@ a { color: inherit; }
 
 /* ---- layout tabs: a TradingView-style strip under the toolbar, one tab per saved layout
    (2026-09-27 layout-tabs plan, Task 3) ---- */
-.tabstrip { flex: none; height: 32px; display: flex; align-items: center; padding: 0 4px; background: var(--panel);
-  border-top: 1px solid var(--border); overflow-x: auto; overflow-y: hidden; white-space: nowrap; scrollbar-width: none; }
+.tabrow { flex: none; height: 34px; display: flex; align-items: center; padding: 0 4px; background: var(--panel);
+  border-bottom: 1px solid var(--border); }
+.tabrow > .tb-sep { flex: none; }
+.tabstrip { flex: 1; min-width: 0; height: 100%; display: flex; align-items: center; padding: 0 4px;
+  overflow-x: auto; overflow-y: hidden; white-space: nowrap; scrollbar-width: none; }
 .tabstrip::-webkit-scrollbar { display: none; }
 .tab-btn { flex: none; height: 32px; max-width: 180px; display: inline-flex; align-items: center; gap: 6px;
   padding: 0 12px; margin-right: 2px; color: var(--text-2); font-size: 13px; border-bottom: 2px solid transparent; }

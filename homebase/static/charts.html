@@ -9,12 +9,15 @@
     document.documentElement.setAttribute('data-theme', (_t === 'light' || _t === 'dark') ? _t : 'light');
   } catch (_) { document.documentElement.setAttribute('data-theme', 'light'); }
 </script>
-<link rel="stylesheet" href="/static/charts/charts.css?v=11">
+<link rel="stylesheet" href="/static/charts/charts.css?v=12">
 </head>
 <body>
-<header class="toolbar" role="toolbar" aria-label="Chart toolbar">
+<div class="tabrow">
   <a class="tb-btn" id="tbDesk" href="#" title="Back to the desk"><span class="icw" data-icon="desk"></span><span class="tb-label">Desk</span></a>
   <span class="tb-sep"></span>
+  <div class="tabstrip" id="tabStrip" role="tablist" aria-label="Layout tabs"></div>
+</div>
+<header class="toolbar" role="toolbar" aria-label="Chart toolbar">
   <button class="tb-pill" id="tbSymbol" type="button" aria-haspopup="menu" aria-expanded="false"><span class="icw" data-icon="search"></span><span id="tbSymbolText">NQ</span></button>
   <span class="tb-sep"></span>
   <div class="tb-group" id="tbFavs" role="group" aria-label="Interval"></div>
@@ -32,7 +35,6 @@
   <button class="tb-btn tb-icon" id="tbSettings" type="button" title="Chart settings" aria-label="Chart settings" aria-haspopup="dialog"><span class="icw" data-icon="gear"></span></button>
   <button class="tb-btn tb-icon" id="tbTheme" type="button" title="Dark theme"><span class="icw" data-icon="moon"></span></button>
 </header>
-<div class="tabstrip" id="tabStrip" role="tablist" aria-label="Layout tabs"></div>
 <div class="main">
   <nav class="rail" id="rail" aria-label="Drawing tools">
     <button class="rail-btn" type="button" data-tool="cursor" title="Cursor" aria-pressed="true"><span class="icw" data-icon="cursor"></span></button>
@@ -71,38 +73,38 @@
 <div id="menuRoot"></div>
 <div id="dialogRoot"></div>
 <div class="rail-tip" id="railTip" role="status" hidden></div>
-<script src="/static/vendor/lightweight-charts-5.2.1.js?v=11"></script>
-<script src="/static/charts/icons.js?v=11"></script>
-<script src="/static/charts/catalog.js?v=11"></script>
-<script src="/static/charts/primitives.js?v=11"></script>
-<script src="/static/charts/drawings.js?v=11"></script>
-<script src="/static/charts/position.js?v=11"></script>
-<script src="/static/charts/settings.js?v=11"></script>
-<script src="/static/charts/events.js?v=11"></script>
-<script src="/static/charts/news.js?v=11"></script>
-<script src="/static/charts/scrollback.js?v=11"></script>
-<script src="/static/charts/cell.js?v=11"></script>
-<script src="/static/charts/settings-dialog.js?v=11"></script>
-<script src="/static/charts/chartmenu.js?v=11"></script>
-<script src="/static/charts/trade.js?v=11"></script>
-<script src="/static/charts/fillquality.js?v=11"></script>
-<script src="/static/charts/deskclient.js?v=11"></script>
-<script src="/static/charts/paperclient.js?v=11"></script>
-<script src="/static/charts/dom.js?v=11"></script>
-<script src="/static/charts/domui.js?v=11"></script>
-<script src="/static/charts/panel.js?v=11"></script>
-<script src="/static/charts/tradeui.js?v=11"></script>
-<script src="/static/charts/tradelines.js?v=11"></script>
-<script src="/static/charts/newsui.js?v=11"></script>
-<script src="/static/charts/tester.js?v=11"></script>
-<script src="/static/charts/testerui.js?v=11"></script>
-<script src="/static/charts/testerlayer.js?v=11"></script>
-<script src="/static/charts/l2layer.js?v=11"></script>
-<script src="/static/charts/liquidity.js?v=11"></script>
-<script src="/static/charts/replay.js?v=11"></script>
-<script src="/static/charts/replayui.js?v=11"></script>
-<script src="/static/charts/orderpanel.js?v=11"></script>
-<script src="/static/charts/layouts.js?v=11"></script>
-<script src="/static/charts/app.js?v=11"></script>
+<script src="/static/vendor/lightweight-charts-5.2.1.js?v=12"></script>
+<script src="/static/charts/icons.js?v=12"></script>
+<script src="/static/charts/catalog.js?v=12"></script>
+<script src="/static/charts/primitives.js?v=12"></script>
+<script src="/static/charts/drawings.js?v=12"></script>
+<script src="/static/charts/position.js?v=12"></script>
+<script src="/static/charts/settings.js?v=12"></script>
+<script src="/static/charts/events.js?v=12"></script>
+<script src="/static/charts/news.js?v=12"></script>
+<script src="/static/charts/scrollback.js?v=12"></script>
+<script src="/static/charts/cell.js?v=12"></script>
+<script src="/static/charts/settings-dialog.js?v=12"></script>
+<script src="/static/charts/chartmenu.js?v=12"></script>
+<script src="/static/charts/trade.js?v=12"></script>
+<script src="/static/charts/fillquality.js?v=12"></script>
+<script src="/static/charts/deskclient.js?v=12"></script>
+<script src="/static/charts/paperclient.js?v=12"></script>
+<script src="/static/charts/dom.js?v=12"></script>
+<script src="/static/charts/domui.js?v=12"></script>
+<script src="/static/charts/panel.js?v=12"></script>
+<script src="/static/charts/tradeui.js?v=12"></script>
+<script src="/static/charts/tradelines.js?v=12"></script>
+<script src="/static/charts/newsui.js?v=12"></script>
+<script src="/static/charts/tester.js?v=12"></script>
+<script src="/static/charts/testerui.js?v=12"></script>
+<script src="/static/charts/testerlayer.js?v=12"></script>
+<script src="/static/charts/l2layer.js?v=12"></script>
+<script src="/static/charts/liquidity.js?v=12"></script>
+<script src="/static/charts/replay.js?v=12"></script>
+<script src="/static/charts/replayui.js?v=12"></script>
+<script src="/static/charts/orderpanel.js?v=12"></script>
+<script src="/static/charts/layouts.js?v=12"></script>
+<script src="/static/charts/app.js?v=12"></script>
 </body>
 </html>
