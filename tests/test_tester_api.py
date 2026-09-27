@@ -50,9 +50,12 @@ def test_strategies_lists_the_schemas(tmp_path):
 
 def test_prop_rule_sets_are_listed_with_the_unconfirmed_flag(tmp_path):
     with client(tmp_path) as c:
-        rules = {r["id"]: r for r in c.get("/api/tester/prop-rules").json()}
-        assert rules["lucid-flex-50k@2026-08"]["confirmed"] is True
-        assert rules["apex-50k@unconfirmed"]["confirmed"] is False
+        listed = c.get("/api/tester/prop-rules").json()
+        rules = {r["id"]: r for r in listed}
+        # exactly the two evals the account holder runs, newest version per family
+        assert [r["name"] for r in listed] == ["LucidFlex 50K", "LucidPro 50K"]
+        assert rules["lucid-flex-50k@2026-09-27"]["confirmed"] is True
+        assert rules["lucid-pro-50k@2026-09-27"]["confirmed"] is False
         r = c.post("/api/tester/run", json={**RUN, "prop_rules": "nope@1"})
         assert r.status_code == 400 and "prop_rules" in r.json()["detail"]
 
@@ -382,3 +385,62 @@ def test_the_walkforward_scheme_comes_from_the_server(tmp_path):
         assert (s["select_months"], s["test_months"], s["step_months"]) == (1, 3, 1)
         assert s["metrics"][0] == ["net_profit", "Net $"] and s["default_min_trades"] == 5
         assert c.get("/api/tester/walkforward-scheme", headers=REBIND_HOST).status_code == 403
+
+
+PRO = "lucid-pro-50k@2026-09-27"
+
+
+def test_rescoring_a_run_under_another_eval_equals_a_fresh_run_and_is_cached(tmp_path, monkeypatch):
+    """The prop eval reads only the finished ledger, so re-scoring IS re-running: the re-score
+    under Pro equals a fresh run under Pro; a repeat is served from the cache; the run's saved
+    propsim.json stays the eval it was run with (a re-score is a view, not an overwrite)."""
+    from homebase.backtest import propsim as P
+    with client(tmp_path) as c:
+        rid = c.post("/api/tester/run", json=RUN).json()["id"]
+        assert poll(c, rid)["status"] == "done"
+        saved_path = tmp_path / "state" / "tester" / "runs" / rid / "propsim.json"
+        saved_bytes = saved_path.read_bytes()
+        fresh = c.post("/api/tester/run", json={**RUN, "prop_rules": PRO}).json()["id"]
+        assert poll(c, fresh)["status"] == "done"
+        fresh_prop = c.get(f"/api/tester/run/{fresh}/bundle").json()["propsim"]
+
+        calls = []
+        real = P.evaluate
+        monkeypatch.setattr(P, "evaluate", lambda *a, **kw: calls.append(a) or real(*a, **kw))
+        r = c.post(f"/api/tester/runs/{rid}/propsim", json={"prop_rules": PRO},
+                   headers={"origin": "http://localhost:8852"})
+        assert r.status_code == 200
+        assert r.json() == fresh_prop
+        assert r.json()["rules"]["label"] == "LucidPro 50K · unconfirmed rules"
+        again = c.post(f"/api/tester/runs/{rid}/propsim", json={"prop_rules": PRO}).json()
+        assert again == fresh_prop and len(calls) == 1                     # cache hit
+        # the run's own eval comes back as its saved file, untouched
+        own = c.post(f"/api/tester/runs/{rid}/propsim", json={"prop_rules": P.DEFAULT_RULES}).json()
+        assert own == c.get(f"/api/tester/run/{rid}/bundle").json()["propsim"]
+        assert saved_path.read_bytes() == saved_bytes
+        # the general route takes {run_id} too
+        assert c.post("/api/tester/propsim", json={"run_id": rid, "prop_rules": PRO}).json() == fresh_prop
+
+
+def test_rescoring_refuses_bad_requests_and_cross_site_writes(tmp_path):
+    with client(tmp_path) as c:
+        rid = c.post("/api/tester/run", json=RUN).json()["id"]
+        poll(c, rid)
+        r = c.post(f"/api/tester/runs/{rid}/propsim", json={"prop_rules": "nope@1"})
+        assert r.status_code == 400 and "prop_rules" in r.json()["detail"]
+        assert c.post(f"/api/tester/runs/{rid}/propsim", json={}).status_code == 400
+        assert c.post("/api/tester/runs/20260927-120000-nq930-abcd/propsim", json={"prop_rules": PRO}).status_code == 404
+        assert c.post(f"/api/tester/runs/{rid}/propsim", json={"prop_rules": PRO}, headers=EVIL).status_code == 403
+
+
+def test_rescoring_a_heatmap_cell(tmp_path):
+    from homebase.backtest import propsim as P
+    with client(tmp_path) as c:
+        gid = c.post("/api/tester/grid", json=GRID).json()["id"]
+        poll_grid(c, gid)
+        b = c.get(f"/api/tester/grid/{gid}/cell/1/bundle").json()
+        r = c.post("/api/tester/propsim", json={"grid_id": gid, "cell": 1, "prop_rules": PRO})
+        assert r.status_code == 200
+        assert r.json() == P.evaluate(b["trades"], PRO, n_paths=P.N_PATHS, rules=P.load_rules(PRO))
+        assert c.post("/api/tester/propsim", json={"grid_id": gid, "cell": 9, "prop_rules": PRO}).status_code == 404
+        assert c.post("/api/tester/propsim", json={"grid_id": gid, "prop_rules": PRO}).status_code == 400

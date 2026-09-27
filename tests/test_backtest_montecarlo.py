@@ -14,7 +14,7 @@ from homebase.backtest import propsim
 from homebase.backtest.propsim import engine
 from homebase.backtest.stats import montecarlo as mc
 
-LUCID = propsim.load_rules("lucid-flex-50k@2026-08")
+LUCID = propsim.load_rules(propsim.DEFAULT_RULES)
 # A trivial eval any single winning day clears immediately.
 RULES_PASS = dict(eval_target=100, eval_min_days=1, consistency=1.0, trailing_mll=1000, lock_at=999_999, lock_floor=0)
 # A trailing max loss no path survives.

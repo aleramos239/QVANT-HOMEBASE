@@ -1,11 +1,21 @@
 """Prop-eval pass rate for a tester run: the vendored ONYX Monte Carlo over the run's daily net P&L.
 
-Vendored (do not edit — re-vendor):
-  propsim.py                          <- ONYX TRADING onyx/report/propsim.py (header: source + sha256)
-  rules/lucid-flex-50k@2026-08.json   <- onyx/report/rules/ @ 0a75af5, shipped as is (confirmed by
-                                         the account holder 2026-08-01)
-Homebase's own:
-  rules/apex-50k@unconfirmed.json     PLACEHOLDER numbers copied from LucidFlex, "confirmed": false.
+Vendored (see its header before editing):
+  propsim.py                             <- ONYX TRADING onyx/report/propsim.py, with a deliberate
+                                            local divergence (null consistency, default ruleset)
+Rulesets — one FAMILY per eval the account holder runs, newest version per family is
+what the picker offers; older snapshots stay on disk and stay loadable so a past run
+reproduces:
+  rules/lucid-flex-50k@2026-09-27.json   the DEFAULT. 50% consistency ON TOP OF a 2-day
+                                         minimum (account holder, reaffirmed 2026-09-27);
+                                         the numbers are 2026-08's, unchanged.
+  rules/lucid-flex-50k@2026-08.json      superseded, kept for reproducing older runs.
+  rules/lucid-pro-50k@2026-09-27.json    Flex minus the consistency rule and the minimum
+                                         days (account holder, 2026-09-27); every other
+                                         number INHERITED from Flex, "confirmed": false.
+There is deliberately NO Apex file: the account holder maps other accounts onto Flex or
+Pro, and a file of invented numbers is worse than no file (the placeholder was deleted
+2026-09-27).
 
 The model: i.i.d. day bootstrap over the WEEKDAY GRID of the run's daily net P&L —
 every Mon–Fri from the first to the last trading session, 0.0 on weekdays without a
@@ -24,7 +34,7 @@ from pathlib import Path
 from . import propsim as engine
 
 RULES_DIR = Path(__file__).resolve().parent / "rules"
-DEFAULT_RULES = "lucid-flex-50k@2026-08"
+DEFAULT_RULES = "lucid-flex-50k@2026-09-27"
 N_PATHS, HORIZON, SEED = 20_000, 250, 20260801        # the notebook's defaults
 CAVEAT = ("Days are drawn independently: streaks and regime clustering are not modeled, "
           "so read these rates as the friendly end of the band.")
@@ -32,8 +42,18 @@ _ID = re.compile(r"^[a-z0-9-]+@[a-z0-9-]+$")
 
 
 def list_rules() -> list[dict]:
-    out = []
+    """The evals offered in the picker: the NEWEST version of each family (the part of
+    the id before the ``@``), ordered by family. A superseded snapshot stays on disk and
+    `load_rules` still reads it — an old run reproduces — it is just not offered."""
+    newest: dict[str, Path] = {}
     for p in sorted(RULES_DIR.glob("*.json")):
+        family, _, version = p.stem.partition("@")
+        cur = newest.get(family)
+        if cur is None or version > cur.stem.partition("@")[2]:
+            newest[family] = p
+    out = []
+    for family in sorted(newest):
+        p = newest[family]
         r = json.loads(p.read_text())
         out.append({"id": p.stem, "name": r.get("name", p.stem), "version": r.get("version"),
                     "confirmed": r.get("confirmed") is not False})

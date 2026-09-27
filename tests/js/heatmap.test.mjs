@@ -59,7 +59,7 @@ test('gridBody: research window only, never a range or holdout, varied inputs le
   const b = X.gridBody(f, [{ key: 'offset_pts', values: [5, 10] }, { key: 'sl_pts', values: [4] }]);
   assert.deepEqual(b, { strategy: 'nq930', inputs: { adx_gate: false, mode: 'a', n: 3 },
     axes: [{ key: 'offset_pts', values: [5, 10] }, { key: 'sl_pts', values: [4] }],
-    qty: 2, commission: 4, slippage_ticks: 1, prop_rules: 'lucid-flex-50k@2026-08' });
+    qty: 2, commission: 4, slippage_ticks: 1, prop_rules: 'lucid-flex-50k@2026-09-27' });
   assert.equal('range' in b, false);
   assert.equal('holdout' in b, false);
 });
