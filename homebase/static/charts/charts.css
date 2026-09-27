@@ -428,7 +428,8 @@ a { color: inherit; }
 .op-resize:hover, .op-resize:focus-visible { background: var(--accent-soft); }
 .op-head { flex: none; display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 8px 0 14px; }
 .op-logo { display: inline-flex; flex: none; }
-.op-sym { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.op-sym { flex: none; font-size: 15px; font-weight: 600; white-space: nowrap; }
+.op-name { min-width: 0; color: var(--text-2); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .op-spacer { flex: 1; }
 .op-x { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 4px; color: var(--text-2); }
 .op-x:hover { background: var(--hover); color: var(--text); }
@@ -491,7 +492,8 @@ a { color: inherit; }
 .op-ahead { display: flex; align-items: center; justify-content: space-between; }
 .op-link { color: var(--accent); font-size: 13px; }
 .op-link:hover { text-decoration: underline; }
-.op-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.op-chips { display: flex; flex-wrap: wrap; gap: 4px; border-radius: 6px; transition: box-shadow .6s, background-color .6s; }
+.op-chips.flash { background: var(--accent-soft); box-shadow: 0 0 0 4px var(--accent-soft); transition: none; }   /* another chart selected */
 .op-none { color: var(--text-2); font-size: 12px; }
 .op-why { color: var(--warn); font-size: 12px; }
 .op-why:empty { display: none; }

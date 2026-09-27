@@ -289,26 +289,51 @@ const PANEL_TYPES = ['Market', 'Limit', 'Stop', 'StopLimit'];
 const PANEL_QTY_MAX = 10;           // the panel's own cap per order (the desk's limits still decide)
 const STOPLIMIT_MAX_TICKS = 100;    // the desk's: a Stop Limit's limit at most this far from its trigger
 const num = (v) => (v == null || v === '' ? NaN : Number(v));
+/* Typed numbers, strictly (fix round 1, review Minor 5): surrounding spaces are fine; commas, hex, exponents, signs
+   and anything else are NaN -- never "0,5" read as 5. parseQty: whole contracts (digits only). parseUsd: digits
+   with at most one decimal point. parseDecimal: the same for a price (a leading minus only when `neg`). */
+function parseQty(s) { const t = String(s == null ? '' : s).trim(); return /^\d+$/.test(t) ? Number(t) : NaN; }
+function parseUsd(s) { const t = String(s == null ? '' : s).trim(); return /^(\d+\.?\d*|\.\d+)$/.test(t) ? Number(t) : NaN; }
+function parseDecimal(s, neg = false) {
+  const t = String(s == null ? '' : s).trim();
+  return (neg ? /^-?(\d+\.?\d*|\.\d+)$/ : /^(\d+\.?\d*|\.\d+)$/).test(t) ? Number(t) : NaN;
+}
+/* A price onto the tick grid, rounded toward `dir` (+1: up, -1: down); exact grid prices stay put. */
+function roundTickDir(p, tick, dir) {
+  if (!(tick > 0)) return p;
+  const n = p / tick, k = dir > 0 ? Math.ceil(n - 1e-9) : Math.floor(n + 1e-9);
+  return Number((k * tick).toFixed(Cat.decimals(tick)));
+}
 /* One exit (kind 'sl' | 'tp') of a side's order from `entry`, typed in `unit` ('usd' | 'ticks' | 'price'):
    {usd, ticks, price}. An SL sits below a Buy's entry (above a Sell's), a TP the other way. `ticks` is whole and
    >= 1, `price` tick-rounded, `usd` for the whole order's qty (null without a point value). Anything that can't make
    an exit (nothing typed, garbage, a price on the wrong side or AT the entry, no entry, a $ without a point value)
-   -> null. `entry` is the order's price; a Market's last trade; a Stop Limit's trigger for its SL, limit for its TP. */
+   -> null. `entry` is the order's price; a Market's last trade; a Stop Limit's trigger for its SL, limit for its TP.
+   Fix round 1: an SL never ends up riskier than typed -- a $ SL floors to whole ticks (under one tick: null), an
+   off-tick SL price rounds AWAY from the entry; a TP rounds to the nearest tick (a $ TP to at least 1 tick). */
 function exitTriple({ unit, value, side, entry, tick, pv = null, kind, qty = 1 }) {
   const v = num(value), e = num(entry);
   if (!Number.isFinite(v) || !Number.isFinite(e) || !(tick > 0) || !['Buy', 'Sell'].includes(side)) return null;
   const dir = (side === 'Buy') === (kind === 'tp') ? 1 : -1;   // + : above the entry
   const perTick = pv != null && Number.isFinite(pv) && pv > 0 && qty > 0 ? tick * pv * qty : null;
-  let ticks;
+  const sl = kind === 'sl';
+  let ticks, onTick = null;
   if (unit === 'ticks') ticks = Math.round(v);
   else if (unit === 'usd') {
     if (perTick == null || !(v > 0)) return null;
-    ticks = Math.max(1, Math.round(v / perTick));
-  } else if (unit === 'price') ticks = Math.round((dir * (roundTick(v, tick) - e)) / tick);
-  else return null;
+    ticks = sl ? Math.floor(v / perTick + 1e-9) : Math.max(1, Math.round(v / perTick));
+  } else if (unit === 'price') {
+    onTick = sl ? roundTickDir(v, tick, dir) : roundTick(v, tick);   // an SL: away from the entry
+    ticks = Math.round((dir * (onTick - e)) / tick);
+  } else return null;
   if (!(ticks >= 1)) return null;
-  const price = unit === 'price' ? roundTick(v, tick) : roundTick(e + dir * ticks * tick, tick);
+  const price = onTick != null ? onTick : roundTick(e + dir * ticks * tick, tick);
   return { usd: perTick == null ? null : Number((ticks * perTick).toFixed(2)), ticks, price };
+}
+/* The SL's distance for USD-risk sizing, in ticks, from the order's worst fill: a Stop Limit's LIMIT (it may fill
+   anywhere up to it), otherwise its entry (a Market's last trade). `ref` is that price. */
+function riskTicks(ref, sl, tick) {
+  return ref == null || sl == null || !(tick > 0) ? 0 : Math.round(Math.abs(ref - sl) / tick);
 }
 /* Contracts for a USD risk at an SL `slTicks` away: floored (never over the risk); 0 when under one contract. */
 function qtyFromRisk(usd, slTicks, tick, pv) {
@@ -368,7 +393,8 @@ function panelOrder({ side, type, qty, price = null, trigger = null, sl = null, 
   }
   if (slPx != null && !Number.isFinite(slPx)) return bad('Enter the stop loss');
   if (tpPx != null && !Number.isFinite(tpPx)) return bad('Enter the take profit');
-  const S = slPx == null ? null : rt(slPx), TP = tpPx == null ? null : rt(tpPx);
+  // an off-tick SL rounds AWAY from the entry (fix round 1): below for a buy, above for a sell
+  const S = slPx == null ? null : roundTickDir(slPx, tick, buy ? -1 : 1), TP = tpPx == null ? null : rt(tpPx);
   let slRef = P, tpRef = P;
   if (type === 'Market') {
     if ((S != null || TP != null || risk != null) && !freshQuote(q, nowMs)) return bad("No recent price — can't attach your stop/target");
@@ -382,7 +408,9 @@ function panelOrder({ side, type, qty, price = null, trigger = null, sl = null, 
     if (!(num(risk) > 0)) return bad('Enter the USD risk');
     if (S == null) return bad('USD risk needs a stop loss');
     if (!(pv > 0)) return bad('No point value for this chart yet');
-    n = qtyFromRisk(num(risk), Math.round(Math.abs(slRef - S) / tick), tick, pv);
+    // sized from the WORST fill (fix round 1, review Important 1): a Stop Limit may fill anywhere up to its limit,
+    // so its risk runs from the LIMIT to the SL -- the confirm's "risk (worst fill)"; Market / Limit / Stop: the entry
+    n = qtyFromRisk(num(risk), riskTicks(tpRef, S, tick), tick, pv);
     if (n < 1) return bad(`$${num(risk) || 0} risk is under one contract at this stop`);
   }
   if (!Number.isInteger(n) || n < 1 || n > qtyMax) return bad(`Quantity must be 1–${qtyMax}${risk != null ? ` (this risk is ${n} contracts)` : ''}`);
@@ -394,23 +422,13 @@ function panelOrder({ side, type, qty, price = null, trigger = null, sl = null, 
   return { ok: true, side, type, qty: n, price: P, trigger: TR, sl: S, tp: TP, tif: T2 };
 }
 const TYPE_WORDS = { Market: 'MARKET', Limit: 'LIMIT', Stop: 'STOP', StopLimit: 'STOP LIMIT' };
-/* The send button: "Buy 1 NQZ6 MARKET" (no number without a valid size). */
-function sendLabel(side, qty, contract, type) {
-  return [side, qty >= 1 ? String(qty) : null, contract, TYPE_WORDS[type] || String(type || '').toUpperCase()].filter(Boolean).join(' ');
+/* The send button: "Buy 2 NQ LIMIT" -- the ROOT, which is all the order body carries (the desk picks the contract);
+   no number without a valid size. */
+function sendLabel(side, qty, root, type) {
+  return [side, qty >= 1 ? String(qty) : null, root, TYPE_WORDS[type] || String(type || '').toUpperCase()].filter(Boolean).join(' ');
 }
-/* The front-month contract for a root, for display: one the desk holds or works in it, else the chart history's
-   latest session's, else the root itself. */
-function contractOf(state, root, sessions) {
-  for (const a of accountsOf(state)) {
-    for (const x of [...(a.positions || []), ...(a.orders || [])]) if (x.symbol && rootOf(x.symbol) === root) return x.symbol;
-  }
-  const withC = (Array.isArray(sessions) ? sessions : []).filter((s) => s && s.contract && rootOf(s.contract) === root);
-  if (withC.length) return withC.reduce((a, b) => (String(b.date) > String(a.date) ? b : a)).contract;
-  return root;
-}
-
 /* ---- money ---- */
-const sign =(v) => (v > 0 ? '+' : v < 0 ? MINUS : '');
+const sign = (v) => (v > 0 ? '+' : v < 0 ? MINUS : '');
 /* "+$450" · "−$1,212.50" · "$0"; null when unknown. */
 function usd(v) { return v == null || !Number.isFinite(v) ? null : sign(Math.round(v * 100)) + Pos.fmtUsd(v); }
 /* Unsigned unless negative: "$50,000" · "−$3"; "—" when unknown. */
@@ -681,7 +699,8 @@ const api = { PREFS_KEY, QUOTE_STALE_MS, BOT_NAMES, parsePrefs, prefsText, short
   enterConfirms, resolveConfirmedAccounts, armedTicked, unarmedLiveMessage, freshQuote,
   needsQuoteForBracket, refuseIfMarketable, cellTrade, loadedTrade, cellAlgo, tradeBits, templateTrade, algoForRoot,
   migrateTicked, deskGate, armedMode, legsWithin, accountChips, acctTick, hiddenCellsOff,
-  PANEL_QTY_MAX, GTC_WARN, exitTriple, qtyFromRisk, exitSideError, panelOrder, sendLabel, contractOf };
+  PANEL_QTY_MAX, GTC_WARN, exitTriple, qtyFromRisk, exitSideError, panelOrder, sendLabel,
+  parseQty, parseUsd, parseDecimal, roundTickDir, riskTicks };
 if (typeof window !== 'undefined') window.HBTrade = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

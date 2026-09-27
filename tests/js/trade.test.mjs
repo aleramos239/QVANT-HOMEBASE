@@ -470,10 +470,23 @@ test('exitTriple: ticks / $ / price, SL below a buy and above a sell, TP the oth
   assert.deepEqual(t({ unit: 'usd', value: 100, side: 'Buy', kind: 'sl' }), { usd: 100, ticks: 20, price: 30895 });
   assert.deepEqual(t({ unit: 'usd', value: 100, side: 'Buy', kind: 'sl', qty: 2 }), { usd: 100, ticks: 10, price: 30897.5 });
   assert.deepEqual(t({ unit: 'usd', value: 7, side: 'Sell', kind: 'tp' }), { usd: 5, ticks: 1, price: 30899.75 });
+  assert.deepEqual(t({ unit: 'usd', value: 8, side: 'Sell', kind: 'tp' }), { usd: 10, ticks: 2, price: 30899.5 });   // a TP: nearest
+  // fix round 1 (review Minor 3): an SL in $ floors to whole ticks -- never more than the typed dollars
+  assert.deepEqual(t({ unit: 'usd', value: 8, side: 'Buy', kind: 'sl' }), { usd: 5, ticks: 1, price: 30899.75 });
+  assert.deepEqual(t({ unit: 'usd', value: 32, side: 'Buy', kind: 'sl', entry: 6500, tick: 0.25, pv: 50 }), { usd: 25, ticks: 2, price: 6499.5 });
+  assert.deepEqual(t({ unit: 'usd', value: 99.99, side: 'Sell', kind: 'sl' }), { usd: 95, ticks: 19, price: 30904.75 });
+  assert.equal(t({ unit: 'usd', value: 4.99, side: 'Buy', kind: 'sl' }), null);   // under one tick: no SL (never rounded up)
   assert.deepEqual(t({ unit: 'usd', value: 1, side: 'Buy', kind: 'tp' }), { usd: 5, ticks: 1, price: 30900.25 });
   // from a price: tick-rounded; on the wrong side (or AT the entry) there is no exit
   assert.deepEqual(t({ unit: 'price', value: 30895.1, side: 'Buy', kind: 'sl' }), { usd: 100, ticks: 20, price: 30895 });
   assert.deepEqual(t({ unit: 'price', value: 30910, side: 'Sell', kind: 'sl' }), { usd: 200, ticks: 40, price: 30910 });
+  // fix round 1 (review Minor 4): an off-tick SL price rounds AWAY from the entry; a TP to the nearest tick
+  assert.deepEqual(t({ unit: 'price', value: 30895.2, side: 'Buy', kind: 'sl' }), { usd: 100, ticks: 20, price: 30895 });
+  assert.deepEqual(t({ unit: 'price', value: 30899.9, side: 'Buy', kind: 'sl' }), { usd: 5, ticks: 1, price: 30899.75 });
+  assert.deepEqual(t({ unit: 'price', value: 30905.05, side: 'Sell', kind: 'sl' }), { usd: 105, ticks: 21, price: 30905.25 });
+  assert.deepEqual(t({ unit: 'price', value: 30900.1, side: 'Sell', kind: 'sl' }), { usd: 5, ticks: 1, price: 30900.25 });
+  assert.deepEqual(t({ unit: 'price', value: 30910.1, side: 'Buy', kind: 'tp' }), { usd: 200, ticks: 40, price: 30910 });
+  assert.deepEqual(t({ unit: 'price', value: 30889.9, side: 'Sell', kind: 'tp' }), { usd: 200, ticks: 40, price: 30890 });
   assert.equal(t({ unit: 'price', value: 30905, side: 'Buy', kind: 'sl' }), null);
   assert.equal(t({ unit: 'price', value: 30900, side: 'Buy', kind: 'tp' }), null);
   assert.equal(t({ unit: 'price', value: 30899, side: 'Sell', kind: 'sl' }), null);
@@ -543,9 +556,10 @@ test('panelOrder: every type on each side versus the quote, prices tick-rounded,
 test('panelOrder: the SL / TP side, a Stop Limit\'s SL beyond the TRIGGER and TP beyond the LIMIT', () => {
   const po = (o) => T.panelOrder({ side: 'Buy', type: 'Limit', qty: 1, price: 30899, trigger: null, sl: null, tp: null,
     tif: 'Day', risk: null, quote: Q, nowMs: NOW, ...NQ, ...o });
-  const ok = po({ sl: 30895.1, tp: 30910 });
+  const ok = po({ sl: 30895.2, tp: 30910 });
   assert.equal(ok.ok, true);
-  assert.equal(ok.sl, 30895);
+  assert.equal(ok.sl, 30895);   // away from the entry, never toward it (fix round 1)
+  assert.equal(po({ side: 'Sell', price: 30901, sl: 30905.05 }).sl, 30905.25);
   assert.equal(ok.tp, 30910);
   assert.match(po({ sl: 30899 }).error, /stop loss.*below/i);
   assert.match(po({ tp: 30898 }).error, /take profit.*above/i);
@@ -600,18 +614,35 @@ test('panelOrder: USD risk sizes from the stop; under one contract, no stop, or 
   assert.match(po({ pv: null }).error, /point value/i);
   // Market: the stop measured from the last trade (30900 here, 20 ticks)
   assert.equal(po({ type: 'Market', price: null }).qty, 5);
-  // Stop Limit: from the TRIGGER (it may fill there): trigger 30901, SL 30896 = 20 ticks
-  assert.equal(po({ type: 'StopLimit', trigger: 30901, price: 30902, sl: 30896 }).qty, 5);
+  // Stop Limit: from the LIMIT (the worst fill), as the confirm's "risk (worst fill)": limit 30902 to SL 30896 =
+  // 24 ticks = $120 a contract -> 4 (from the trigger it would have been 5)
+  assert.equal(po({ type: 'StopLimit', trigger: 30901, price: 30902, sl: 30896 }).qty, 4);
+  // fix round 1 (review Important 1): trigger 30901, limit 30926, SL 30896 = 120 ticks = $600 a contract: $500 -> 0
+  const wide = po({ type: 'StopLimit', trigger: 30901, price: 30926, sl: 30896 });
+  assert.equal(wide.ok, false);
+  assert.match(wide.error, /under one contract/i);
 });
 
-test('sendLabel + contractOf: "Buy 1 NQZ6 MARKET"; the contract from the desk, then the history, then the root', () => {
-  assert.equal(T.sendLabel('Buy', 1, 'NQZ6', 'Market'), 'Buy 1 NQZ6 MARKET');
-  assert.equal(T.sendLabel('Sell', 2, 'NQZ6', 'Limit'), 'Sell 2 NQZ6 LIMIT');
+test('sendLabel: "Buy 2 NQ LIMIT" -- the ROOT the body carries, never a guessed contract (fix round 1)', () => {
+  assert.equal(T.sendLabel('Buy', 1, 'NQ', 'Market'), 'Buy 1 NQ MARKET');
+  assert.equal(T.sendLabel('Buy', 2, 'NQ', 'Limit'), 'Buy 2 NQ LIMIT');
   assert.equal(T.sendLabel('Buy', 3, 'ES', 'StopLimit'), 'Buy 3 ES STOP LIMIT');
   assert.equal(T.sendLabel('Sell', 0, 'GC', 'Stop'), 'Sell GC STOP');   // no valid size: no number
-  assert.equal(T.contractOf(STATE, 'NQ', []), 'NQZ6');
-  assert.equal(T.contractOf(STATE, 'ES', []), 'ESZ6');
-  assert.equal(T.contractOf(STATE, 'GC', [{ date: '2026-09-21', contract: 'GCV6' }, { date: '2026-09-22', contract: 'GCZ6' },
-    { date: '2026-09-23', contract: null }]), 'GCZ6');
-  assert.equal(T.contractOf(null, 'CL', null), 'CL');
+  assert.equal(T.contractOf, undefined);
+});
+
+test('parseQty / parseUsd / parseDecimal: plain digits only -- no commas, hex, exponents or signs (fix round 1)', () => {
+  assert.equal(T.parseQty('5'), 5);
+  assert.equal(T.parseQty(' 12 '), 12);
+  for (const s of ['0,5', '1,000', '0x5', '1e1', '+3', '-3', '2.', '2.0', '1.5', '', ' ', 'abc', '５', null, undefined]) {
+    assert.ok(Number.isNaN(T.parseQty(s)), JSON.stringify(s));
+  }
+  assert.equal(T.parseUsd('500'), 500);
+  assert.equal(T.parseUsd('31.25'), 31.25);
+  assert.equal(T.parseUsd('.5'), 0.5);
+  assert.equal(T.parseUsd('500.'), 500);
+  for (const s of ['1,000', '1.2.3', '0x10', '1e3', '-5', '+5', '$5', '', '.', null]) assert.ok(Number.isNaN(T.parseUsd(s)), JSON.stringify(s));
+  assert.equal(T.parseDecimal('30900.25'), 30900.25);
+  assert.equal(T.parseDecimal('-12.5', true), -12.5);   // a price may be negative only when asked
+  for (const s of ['30,900', '0x10', '1e5', '-12.5', 'Infinity', 'NaN']) assert.ok(Number.isNaN(T.parseDecimal(s)), JSON.stringify(s));
 });
