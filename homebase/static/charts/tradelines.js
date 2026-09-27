@@ -92,12 +92,32 @@ class Overlay {
     this.botItems = new Map();   // key -> {g, line, chip}: the algo's read-only BOT lines
     this.botIds = null;          // last JSON of the bot marker ids sent to setExtraMarkers('bots')
     this.tips = [];              // [{ms, price, position, tip}] of the drawn bot markers, for the hover tooltip
+
+    // the paper (forward-test) algo badge (2026-09-27 paper-forward-test plan, Task 2): its own row, same slot as
+    // the bot's -- the two never show together (a chart's algo is either a desk one or a paper one) -- with an
+    // event chip and NO Kill (nothing live to stop), plus a stats line under it (paper vs. the backtest).
+    this.pbadge = mk('div', 'lg-bots lg-paper');
+    this.pbadge.hidden = true;
+    cell.el.querySelector('.lg-tradeslot').before(this.pbadge);
+    this.pstats = mk('div', 'lg-paper-stats');
+    this.pstats.hidden = true;
+    cell.el.querySelector('.lg-tradeslot').before(this.pstats);
+    this.pb = { ic: mk('span', 'icw bb-ic'), name: mk('span', 'bb-name'), event: mk('span', 'bb-event'), pill: mk('span', 'bb-pill'), pnl: mk('span', 'bb-pnl') };
+    this.pb.ic.innerHTML = window.HBIcons.fileText;   // our own static SVG strings
+    this.pbadge.append(this.pb.ic, this.pb.name, this.pb.event, this.pb.pill, this.pb.pnl);
+    this.paperBadgeKey = null;
+    this.paperStatsKey = null;
+    this.paperItems = new Map();   // key -> {g, line, chip}: the paper algo's dashed, read-only lines
+    this.paperIds = null;          // last JSON of the paper marker ids sent to setExtraMarkers('paper')
+    this.ptips = [];               // [{ms, price, position, tip}] of the drawn paper markers, for the hover tooltip
+
     this.tip = mk('div', 'ev-tip bot-tip');
     this.tip.setAttribute('role', 'tooltip');
     this.tip.hidden = true;
     this.layer.appendChild(this.tip);
     this.onMove = (p) => this.hoverTip(p);
     cell.chart.subscribeCrosshairMove(this.onMove);
+    this.unsubPaper = window.HBPaperClient ? window.HBPaperClient.on(() => this.render()) : null;
 
     this.hook = new Hook(() => this.sync());
     cell.candles.attachPrimitive(this.hook);
@@ -304,12 +324,98 @@ class Overlay {
     }
   }
 
-  /* The tooltip of the bot marker under the mouse (HBTrade.nearestTip within 10 px). */
+  /* ---- the chart's paper (forward-test) algo (2026-09-27 paper-forward-test plan, Task 2): badge, dashed lines,
+     today's + past markers -- the same shape as paintAlgo/paintBadge/paintBotLines, but from HBPaperClient's own
+     state (never the desk's), with no Kill and no accounts. */
+  paintPaper() {
+    const Pc = window.HBPaperClient, c = this.cell;
+    const o = Pc ? T.paperOverlay(Pc.state(), c.cfg.algo, this.root, c.tick, c.P) : null;
+    this.paintPaperBadge(o);
+    this.paintPaperLines(o ? o.lines : []);
+    let list = [];
+    if (o && c.bars.length) {   // only what falls inside the loaded bars, so a tip never belongs to an undrawn marker
+      const hist = Pc.history(o.id), bars = c.bars, barMs = c.barMs();
+      const from = bars[0].ms, to = barMs > 0 ? bars[bars.length - 1].ms + barMs : Infinity;
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+      list = o.markers.filter((m) => m.ms >= from && m.ms < to);
+      if (hist && Array.isArray(hist.runs)) list = [...T.paperRunMarkers(hist.runs, { tick: c.tick, P: c.P, from, to, today }), ...list];
+      this.paintPaperStats(o, hist ? hist.stats : null);
+    } else {
+      this.paintPaperStats(o, null);
+    }
+    this.ptips = list.map((m) => ({ ms: m.ms, price: m.price, position: m.position, tip: m.tip }));
+    const ids = JSON.stringify(list.map((m) => [m.id, m.color, m.text]));
+    if (ids === this.paperIds) return;
+    this.paperIds = ids;
+    this.cell.setExtraMarkers('paper', list.map(({ tip, ...m }) => m));   // the tip stays ours (this.ptips)
+  }
+
+  paintPaperBadge(o) {
+    this.pbadge.hidden = !o;
+    if (!o) { this.paperBadgeKey = null; return; }
+    const key = JSON.stringify([o.label, o.event, o.pill, o.pnl]);
+    if (key === this.paperBadgeKey) return;
+    this.paperBadgeKey = key;
+    this.pb.name.textContent = o.name;
+    this.pb.name.title = o.label;
+    this.pb.event.textContent = o.event || '';
+    this.pb.event.hidden = !o.event;
+    this.pb.pill.textContent = o.pill.text;
+    this.pb.pill.className = `bb-pill ${o.pill.tone}`;
+    this.pb.pill.title = o.pill.tip || '';
+    const pnl = o.pnl == null ? '' : T.usd(o.pnl);
+    this.pb.pnl.textContent = pnl;
+    this.pb.pnl.hidden = !pnl;
+    this.pb.pnl.className = 'bb-pnl' + (o.pnl > 0 ? ' up' : o.pnl < 0 ? ' down' : '');
+    this.pb.pnl.title = "Today's paper P&L";
+  }
+
+  /* The stats line under the badge: "Paper 3 · WR 67% · avg +$203 | Backtest 21–24: 76 · WR 68% · avg +$296". */
+  paintPaperStats(o, stats) {
+    const text = o ? T.paperStatsText(stats) : '';
+    this.pstats.hidden = !text;
+    if (text === this.paperStatsKey) return;
+    this.paperStatsKey = text;
+    this.pstats.textContent = text;
+  }
+
+  /* dashed, read-only: no drag, no × -- nothing here is a real order (never sent, never cancellable) */
+  paintPaperLines(lines) {
+    const seen = new Set();
+    for (const g of lines) {
+      seen.add(g.key);
+      let it = this.paperItems.get(g.key);
+      if (!it) {
+        const line = this.cell.candles.createPriceLine({ price: g.price, color: g.color, lineWidth: 1, lineStyle: 2,
+          axisLabelVisible: true, title: '' });
+        const chip = this.buildChip();
+        chip.classList.add('bot', 'view', 'paper');
+        chip.btn.hidden = true;
+        chip.title = 'A simulated paper order — it was never sent';
+        it = { g, line, chip };
+        this.paperItems.set(g.key, it);
+        this.layer.appendChild(chip);
+      } else {
+        it.g = g;
+        it.line.applyOptions({ price: g.price, color: g.color });
+      }
+      it.chip.text.textContent = g.text;
+      it.chip.style.setProperty('--c', g.color);
+    }
+    for (const [key, it] of [...this.paperItems]) {
+      if (seen.has(key)) continue;
+      this.cell.candles.removePriceLine(it.line);
+      it.chip.remove();
+      this.paperItems.delete(key);
+    }
+  }
+
+  /* The tooltip of the bot or paper marker under the mouse (HBTrade.nearestTip within 10 px). */
   hoverTip(p) {
-    const c = this.cell;
-    if (this.dead || !c.chart || !p || !p.point || !this.tips.length || !c.bars.length) { this.tip.hidden = true; return; }
+    const c = this.cell, all = this.tips.length || this.ptips.length ? [...this.tips, ...this.ptips] : this.tips;
+    if (this.dead || !c.chart || !p || !p.point || !all.length || !c.bars.length) { this.tip.hidden = true; return; }
     const D = window.HBDrawings, ts = c.chart.timeScale(), pts = [];
-    for (const m of this.tips) {
+    for (const m of all) {
       const i = D.barIndexAt(c.bars, m.ms);
       if (i < 0) continue;
       const b = c.bars[i], x = ts.timeToCoordinate(b.tt);
@@ -334,6 +440,7 @@ class Overlay {
     this.paintAccts(mode);
     this.paintLines(mode);
     this.paintAlgo();
+    this.paintPaper();
     this.sync();
     this.paintMarkers();
   }
@@ -345,7 +452,7 @@ class Overlay {
     const c = this.cell;
     if (!c.chart) return;
     const paneH = c.chart.panes()[0].getHeight(), right = c.chart.priceScale('right').width() + 6;
-    for (const it of [...this.items.values(), ...this.botItems.values()]) {
+    for (const it of [...this.items.values(), ...this.botItems.values(), ...this.paperItems.values()]) {
       const y = c.candles.priceToCoordinate(it.g.price);
       const off = y == null || y < 0 || y > paneH;
       it.chip.hidden = off;
@@ -411,17 +518,22 @@ class Overlay {
     this.unsub();
     this.unsubBusy();
     this.unsubTrade();
-    for (const it of [...this.items.values(), ...this.botItems.values()]) this.cell.candles.removePriceLine(it.line);
+    if (this.unsubPaper) this.unsubPaper();
+    for (const it of [...this.items.values(), ...this.botItems.values(), ...this.paperItems.values()]) this.cell.candles.removePriceLine(it.line);
     this.items.clear();
     this.botItems.clear();
+    this.paperItems.clear();
     if (this.cell.chart) this.cell.chart.unsubscribeCrosshairMove(this.onMove);
     this.block.remove();
     this.accts.remove();
     this.layer.remove();
     this.badges.remove();
+    this.pbadge.remove();
+    this.pstats.remove();
     if (this.cell.chart) this.cell.candles.detachPrimitive(this.hook);
     this.cell.setExtraMarkers('fills', []);
     this.cell.setExtraMarkers('bots', []);
+    this.cell.setExtraMarkers('paper', []);
   }
 }
 

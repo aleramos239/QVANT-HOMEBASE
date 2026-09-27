@@ -586,11 +586,12 @@ function fillMarkers(state, root, ids, P) {
    its working orders as read-only BOT lines, its fills as markers, and its real past runs (GET bot-history) as
    markers with a tooltip. A chart without an algo draws none of it, even on the bot's root. */
 const ALGO_NAMES = { nq930: 'NQ 9:30 Straddle', ym930: 'YM 9:30 Straddle', nq10am: 'NQ 10:00 Continuation',
-  gc_nfpcpi: 'GC 8:30 NFP + CPI Straddle' };
+  gc_nfpcpi: 'GC 8:30 NFP + CPI Straddle', 'paper:gc_nfpcpi': 'GC NFP/CPI (paper)' };
 const GREY = '#9598A1';   // a past day it did not trade: TradingView's neutral grey
 const CHECK_IT_TIP = 'Killed, but the desk could not account for its whole position: the stops were left working — '
   + 'verify the position at the broker';
-const STATUS_WORDS = { skipped: 'Skipped', refused: 'Refused', no_fill: 'No fill', killed: 'Killed', error: 'Error', traded: 'Traded' };
+const STATUS_WORDS = { skipped: 'Skipped', refused: 'Refused', no_fill: 'No fill', killed: 'Killed', error: 'Error', traded: 'Traded',
+  no_data: 'No data', calendar_missing: 'No calendar' };
 const EXIT_WORDS = { tp: 'TP', sl: 'SL', flat: 'Flat', other: 'Exit' };
 const ET_PARTS = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hourCycle: 'h23', year: 'numeric',
   month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
@@ -606,15 +607,21 @@ function algoLabel(key, s, state) {
   const who = Object.keys((s && isObj(s.book) && s.book) || {}).map((id) => whoOf(state, id));
   return who.length ? `${algoName(key)} · ${who.join(', ')}` : algoName(key);
 }
-/* The Settings dialog's Algo select for a chart on `root`: None, then the desk's strategies on that root. The
-   chart's current algo stays listed (by name) while the desk has not listed it, so the select can show it. */
-function algoChoices(state, root, current = null) {
+/* The Settings dialog's Algo select for a chart on `root`: None, then the desk's strategies on that root, then any
+   paper strategy (Task 2's GET /api/paper/strategies, `paperList`) on that root, as "paper:<id>" -- its own `name`
+   verbatim (e.g. "GC NFP/CPI (paper)"), never re-derived. The chart's current algo stays listed (by name) while
+   NEITHER list has confirmed it yet, so the select can show it. */
+function algoChoices(state, root, current = null, paperList = null) {
   const strats = (state && state.bot && isObj(state.bot.strategies) && state.bot.strategies) || {};
-  const out = [{ value: '', text: 'None' }, ...Object.entries(strats).filter(([, s]) => isObj(s) && rootOf(s.symbol) === root)
-    .map(([k, s]) => ({ value: k, text: algoLabel(k, s, state) }))];
-  const cur = cellAlgo(current);   // fix round 1, M4: only while the desk has NOT listed it (unconfirmed), never a
+  const papers = (Array.isArray(paperList) ? paperList : []).filter((p) => isObj(p) && typeof p.id === 'string' && p.id);
+  const out = [{ value: '', text: 'None' },
+    ...Object.entries(strats).filter(([, s]) => isObj(s) && rootOf(s.symbol) === root)
+      .map(([k, s]) => ({ value: k, text: algoLabel(k, s, state) })),
+    ...papers.filter((p) => rootOf(p.root) === root).map((p) => ({ value: paperKey(p.id), text: p.name || algoName(paperKey(p.id)) }))];
+  const cur = cellAlgo(current);   // fix round 1, M4: only while NEITHER list has confirmed it (unconfirmed), never a
                                    // confirmed other-root strategy
-  if (cur && !isObj(strats[cur]) && !out.some((c) => c.value === cur)) out.push({ value: cur, text: algoName(cur) });
+  const confirmedElsewhere = cur && (isObj(strats[cur]) || papers.some((p) => paperKey(p.id) === cur));
+  if (cur && !confirmedElsewhere && !out.some((c) => c.value === cur)) out.push({ value: cur, text: algoName(cur) });
   return out;
 }
 
@@ -832,6 +839,173 @@ function historySig(s) {
   return JSON.stringify([t.stage || null, !!s.killed, accts.sort((a, b) => (a[0] < b[0] ? -1 : 1))]);
 }
 
+/* ---- the paper (forward-test) algo on a chart (2026-09-27 paper-forward-test plan, Task 2) ----
+   A chart's `algo` may instead name a PAPER strategy: "paper:<id>" (e.g. "paper:gc_nfpcpi"), never a desk one.
+   It draws the same shape of overlay as a bot's (a legend badge, dashed read-only lines, markers, past runs) from
+   the chart service's OWN state -- GET /api/paper/strategies (the static list), the /ws {"type":"paper", ...}
+   push (`current`, the latest message per strategy id) and GET /api/paper/history (past runs + stats) -- never the
+   desk's. It never sends an order, so it has no Kill and no accounts. */
+const PAPER_PREFIX = 'paper:';
+const PAPER_EVENT_TIME = '08:30';   // the strategy's fixed fire time (paper.py EVENT_TIME): for a day with no entry
+function paperKey(id) { return `${PAPER_PREFIX}${id}`; }
+function isPaperAlgo(key) { return typeof key === 'string' && key.startsWith(PAPER_PREFIX) && key.length > PAPER_PREFIX.length; }
+function paperStrategyId(key) { return isPaperAlgo(key) ? key.slice(PAPER_PREFIX.length) : null; }
+/* {id, root, params} entries (GET /api/paper/strategies) as an algoForRoot-shaped map, keyed "paper:<id>" -> {symbol:
+   root}: merge this into the desk's own strategies map (never null) so HBTrade.algoForRoot confirms a paper algo's
+   root exactly like a desk one, and clears it only once THIS list confirms a mismatch. */
+function paperStrategiesMap(list) {
+  const out = {};
+  for (const p of Array.isArray(list) ? list : []) {
+    if (isObj(p) && typeof p.id === 'string' && p.id && typeof p.root === 'string' && p.root) out[paperKey(p.id)] = { symbol: p.root };
+  }
+  return out;
+}
+
+/* The badge's state pill from the latest /ws paper message: state one of waiting / armed / "in trade" / done (a
+   status of "error" always wins the tone, whatever state it arrived with). No message yet: waiting, no tip. */
+function paperPill(msg) {
+  const raw = msg && msg.state, state = raw === 'in_trade' ? 'in trade' : raw || 'waiting';
+  const err = !!(msg && msg.status === 'error');
+  const tone = err ? 'err' : state === 'armed' || state === 'in trade' ? 'live' : 'idle';
+  return { state, text: state, tone, tip: paperTip(msg) };
+}
+function paperTip(msg) {
+  if (!msg) return 'No paper run yet today';
+  if (msg.status === 'error') return msg.error || 'The paper runner reported an error';
+  if (msg.status === 'no_data') return `Feed gap — this run could not be trusted${msg.error ? ` (${msg.error})` : ''}`;
+  if (msg.status === 'calendar_missing') return 'No calendar data for this date';
+  if (msg.state === 'waiting') return 'Waiting for the event window to open';
+  if (msg.state === 'armed') return 'Simulated stop entries placed, waiting for a fill';
+  if (msg.state === 'in_trade') return 'In a simulated position';
+  if (msg.status === 'no_fill') return 'No fill today';
+  if (msg.status === 'traded') return 'Done for today';
+  return '';
+}
+/* Today's paper P&L: the finished run's, else the open (provisional) mark while in a simulated position; null
+   while neither is known yet. */
+function paperToday(msg) {
+  if (!msg) return null;
+  if (msg.pnl_usd != null && Number.isFinite(msg.pnl_usd)) return msg.pnl_usd;
+  if (msg.open_pnl_usd != null && Number.isFinite(msg.open_pnl_usd)) return msg.open_pnl_usd;
+  return null;
+}
+/* "GC NFP/CPI (paper) · CPI": the strategy's name, plus today's event once the calendar has decided one. */
+function paperLabel(name, msg) { return msg && msg.event ? `${name} · ${msg.event}` : name; }
+
+/* One dashed, read-only paper line: an "entry" (a simulated stop order, still pending) or an "sl"/"tp" (once in a
+   simulated position) -- the same shape as HBTrade.botLines' lines, so HBTradeLines can paint it the same way. */
+function paperLine(kind, side, price, tick, P) {
+  const at = Cat.fmtPrice(price, tick);
+  const text = kind === 'entry' ? `PAPER ${side.toUpperCase()} STP @ ${at}` : `PAPER ${kind.toUpperCase()} @ ${at}`;
+  const color = kind === 'sl' ? P.down : kind === 'tp' ? P.up : side === 'Buy' ? P.accent : P.down;
+  return { key: `paper|${kind}|${side}|${price}`, kind, side, price, editable: false, paper: true, text, color };
+}
+/* The paper strategy's lines from its latest /ws message: both simulated stop entries while armed (no fill yet),
+   or its SL/TP (the opposite side of its fill) once in a simulated position; none once done (its entry/exit are
+   markers instead, like the bot's), and none while still waiting (no legs known yet). */
+function paperLines(msg, tick, P) {
+  if (!msg) return [];
+  if (msg.state === 'armed' && Array.isArray(msg.legs)) {
+    return msg.legs.filter((l) => isObj(l) && Number.isFinite(l.price) && (l.side === 'Buy' || l.side === 'Sell'))
+      .map((l) => paperLine('entry', l.side, l.price, tick, P));
+  }
+  if (msg.state === 'in_trade' && isObj(msg.entry)) {
+    const out = msg.entry.side === 'Buy' ? 'Sell' : 'Buy', lines = [];
+    if (Number.isFinite(msg.entry.tp)) lines.push(paperLine('tp', out, msg.entry.tp, tick, P));
+    if (Number.isFinite(msg.entry.sl)) lines.push(paperLine('sl', out, msg.entry.sl, tick, P));
+    return lines;
+  }
+  return [];
+}
+/* Today's fill markers from the latest /ws message: the entry an arrow, the exit (once it has one) a circle with
+   the P&L -- exactly like the bot's, tagged PAPER in the tooltip instead of an account. */
+function paperMarkers(msg, tick, P) {
+  if (!msg || !isObj(msg.entry) || msg.entry.price == null || !Number.isFinite(msg.entry.ts)) return [];
+  const e = msg.entry, buy = e.side === 'Buy', id = `paper:${msg.date}`, out = [];
+  out.push({ id: `${id}:e`, ms: e.ts, price: e.price, position: buy ? 'atPriceBottom' : 'atPriceTop',
+    shape: buy ? 'arrowUp' : 'arrowDown', color: P.warn, text: '', tip: `PAPER · ${e.side} @ ${Cat.fmtPrice(e.price, tick)}` });
+  const x = msg.exit;
+  if (isObj(x) && x.price != null && Number.isFinite(x.ts)) {
+    const v = msg.pnl_usd;
+    out.push({ id: `${id}:x`, ms: x.ts, price: x.price, position: 'atPriceMiddle', shape: 'circle',
+      color: v == null ? P.warn : v >= 0 ? P.up : P.down, text: v == null ? '' : usd(v),
+      tip: `PAPER · ${EXIT_WORDS[x.kind] || 'Exit'} @ ${Cat.fmtPrice(x.price, tick)}${v != null ? ` · ${usd(v)}` : ''}` });
+  }
+  return out;
+}
+/* Everything a chart draws for its paper algo, or null: not a paper algo, the strategy not (yet) listed, or
+   another root. `paper` is {strategies: GET /api/paper/strategies' list, current: {id -> latest /ws message}}. */
+function paperOverlay(paper, algo, root, tick, P) {
+  const key = cellAlgo(algo);
+  if (!isPaperAlgo(key)) return null;
+  const id = paperStrategyId(key);
+  const list = paper && Array.isArray(paper.strategies) ? paper.strategies : [];
+  const strat = list.find((s) => isObj(s) && s.id === id);
+  if (!strat || rootOf(strat.root) !== root) return null;
+  const msg = paper && isObj(paper.current) ? paper.current[id] : null;
+  const name = strat.name || algoName(key);
+  return { key, id, name, label: paperLabel(name, msg), event: (msg && msg.event) || null, pill: paperPill(msg),
+    pnl: paperToday(msg), lines: paperLines(msg, tick, P), markers: paperMarkers(msg, tick, P) };
+}
+
+/* ---- the paper strategy's past runs (GET /api/paper/history) ---- */
+/* "2026-09-24 · PAPER CPI · Buy @ 30,120.25 → TP 30,135.25 · +$2,960"; a day with no entry: "… · PAPER · No fill". */
+function paperRunTip(run, tick) {
+  const status = run.status, word = STATUS_WORDS[status] || String(status || '');
+  const head = `${run.date} · PAPER${run.event ? ` ${run.event}` : ''}`;
+  const e = run.entry;
+  if (!e) return `${head} · ${word}`;
+  let s = `${head} · ${e.side} @ ${Cat.fmtPrice(e.price, tick)}`;
+  const x = run.exit;
+  if (x) s += ` → ${EXIT_WORDS[x.kind] || 'Exit'} ${Cat.fmtPrice(x.price, tick)} · ${run.pnl_usd != null ? usd(run.pnl_usd) : 'P&L unknown'}`;
+  else s += ' · no exit';
+  if (status && status !== 'traded') s += ` · ${String(word).toLowerCase()}`;
+  return s;
+}
+/* Past paper runs as markers, exactly like HBTrade.pastRunMarkers but account-less: an entry arrow + exit circle
+   per traded run, else a grey flag where it would have fired (08:30 ET, no legs carry a timestamp). Today's run is
+   left to the live overlay (paperMarkers), like the bot's. Only markers in [from, to) are kept. */
+function paperRunMarkers(runs, { tick, P, from, to, today }) {
+  const out = [], inRange = (ms) => Number.isFinite(ms) && ms >= from && ms < to;
+  for (const run of Array.isArray(runs) ? runs : []) {
+    if (!isObj(run) || typeof run.date !== 'string' || run.date === today) continue;
+    const id = `paperh:${run.date}`, tip = paperRunTip(run, tick);
+    const e = isObj(run.entry) ? run.entry : null, x = isObj(run.exit) ? run.exit : null;
+    if (e && e.price != null && Number.isFinite(e.ts)) {
+      const buy = e.side === 'Buy';
+      if (inRange(e.ts)) out.push({ id: `${id}:e`, ms: e.ts, price: e.price, position: buy ? 'atPriceBottom' : 'atPriceTop',
+        shape: buy ? 'arrowUp' : 'arrowDown', color: P.warn, text: '', tip });
+      if (x && x.price != null && inRange(x.ts)) {
+        const v = run.pnl_usd;
+        out.push({ id: `${id}:x`, ms: x.ts, price: x.price, position: 'atPriceMiddle', shape: 'circle',
+          color: v == null ? P.warn : v >= 0 ? P.up : P.down, text: '', tip });
+      }
+      continue;
+    }
+    const ms = etMs(run.date, PAPER_EVENT_TIME);
+    if (inRange(ms)) out.push({ id: `${id}:f`, ms, position: 'aboveBar', shape: 'square', size: 0.5, color: GREY, text: '', tip });
+  }
+  return out.sort((a, b) => a.ms - b.ms);
+}
+
+/* ---- the stats line under the badge: "Paper 3 · WR 67% · avg +$203 | Backtest 21–24: 76 · WR 68% · avg +$296" ---- */
+const wrPct = (wr) => (wr == null || !Number.isFinite(wr) ? '—' : `${Math.round(wr)}%`);
+/* "2021-2024" -> "21–24"; anything else (a window the server hasn't computed yet) verbatim. */
+function shortWindow(w) {
+  const m = /^(\d{4})-(\d{4})$/.exec(String(w || ''));
+  return m ? `${m[1].slice(2)}–${m[2].slice(2)}` : String(w || '');
+}
+function paperSideText(label, s) {
+  return isObj(s) ? `${label} ${s.n ?? 0} · WR ${wrPct(s.wr)} · avg ${usd(s.avg) ?? '—'}` : null;
+}
+/* {paper: {n, wr, avg, net}, backtest: {window, n, wr, avg, net} | null} (GET /api/paper/history's `stats`) -> the
+   one-line text; '' with nothing to show. No backtest yet (still computing): the paper side alone. */
+function paperStatsText(stats) {
+  if (!isObj(stats)) return '';
+  return [paperSideText('Paper', stats.paper), isObj(stats.backtest) ? paperSideText(`Backtest ${shortWindow(stats.backtest.window)}:`, stats.backtest) : null]
+    .filter(Boolean).join(' | ');
+}
+
 /* ---- the Kill ---- */
 /* The confirm: "Kill NQ 9:30 Straddle" over "Cancel its orders and flatten its NQ position on …047. The desk stays
    armed for other strategies." with its accounts (DEMO/LIVE). `accounts`: every account the desk's kill acts on. */
@@ -948,7 +1122,9 @@ const api = { PREFS_KEY, QUOTE_STALE_MS, BOT_NAMES, parsePrefs, prefsText, short
   needsQuoteForBracket, refuseIfMarketable, cellTrade, loadedTrade, cellAlgo, tradeBits, templateTrade, algoForRoot,
   migrateTicked, deskGate, armedMode, legsWithin, accountChips, acctTick, hiddenCellsOff,
   PANEL_QTY_MAX, GTC_WARN, exitTriple, qtyFromRisk, exitSideError, panelOrder, sendLabel,
-  parseQty, parseUsd, parseDecimal, roundTickDir, riskTicks };
+  parseQty, parseUsd, parseDecimal, roundTickDir, riskTicks,
+  paperKey, isPaperAlgo, paperStrategyId, paperStrategiesMap, paperPill, paperToday, paperLabel, paperLines,
+  paperMarkers, paperOverlay, paperRunMarkers, paperStatsText };
 if (typeof window !== 'undefined') window.HBTrade = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

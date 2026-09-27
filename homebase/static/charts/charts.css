@@ -8,6 +8,7 @@
   --grid: #F0F3FA; --hover: #F0F3FA; --pill: #EBEBEB;
   --accent: #2962FF; --accent-hover: #1E53E5; --accent-soft: rgba(41, 98, 255, .10);
   --up: #089981; --down: #F23645; --down-soft: rgba(242, 54, 69, .10); --warn: #F7A600; --warn-soft: #FFF6E0;
+  --paper: #7E57C2; --paper-soft: rgba(126, 87, 194, .10);
   --tip: #131722;
   --shadow-menu: 0 2px 8px rgba(0, 0, 0, .16);
   --shadow-dialog: 0 8px 32px rgba(0, 0, 0, .24);
@@ -18,6 +19,7 @@
   --frame: #0A0A0A; --panel: #0F0F0F; --text: #DBDBDB; --text-2: #8C8C8C; --border: #2E2E2E;
   --grid: #1C1C1C; --hover: #2A2A2A; --pill: #2A2A2A; --accent-soft: rgba(41, 98, 255, .20);
   --down-soft: rgba(242, 54, 69, .18); --tip: #2A2E39; --warn-soft: #2B2412;
+  --paper: #B39DDB; --paper-soft: rgba(179, 157, 219, .18);
   --shadow-menu: 0 0 0 1px #2E2E2E, 0 4px 12px rgba(0, 0, 0, .5);
   --shadow-dialog: 0 0 0 1px #2E2E2E, 0 8px 32px rgba(0, 0, 0, .6);
   --backdrop: rgba(0, 0, 0, .5);
@@ -451,6 +453,16 @@ a { color: inherit; }
 .bb-kill:hover { filter: brightness(1.08); }
 .bb-kill:disabled { opacity: .5; cursor: default; filter: none; }
 .bot-tip { z-index: 8; }
+
+/* ---- the paper (forward-test) algo badge (2026-09-27 paper-forward-test plan, Task 2): its own colour, no Kill --
+   it never sends an order -- plus a stats line under it comparing today's paper runs against the backtest. */
+.lg-bots.lg-paper { box-shadow: 0 0 0 1px var(--paper); }
+.lg-bots.lg-paper .bb-ic .ic { color: var(--paper); }
+.lg-bots.lg-paper .bb-event { padding: 0 6px; border-radius: 9px; font-size: 11px; line-height: 16px;
+  background: var(--paper-soft); color: var(--paper); cursor: default; }
+.lg-paper-stats { display: inline-block; max-width: 100%; margin-top: 2px; padding: 0 2px 0 6px; font-size: 11px;
+  line-height: 16px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  pointer-events: auto; font-variant-numeric: tabular-nums; cursor: default; }
 
 /* ---- the order panel (orderpanel.js): TradingView's right dock, following the selected chart ---- */
 .tb-btn#tbOrder.active { color: var(--accent); }

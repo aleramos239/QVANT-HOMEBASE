@@ -107,10 +107,16 @@ function readLayout(v) {
   return lay;
 }
 
-/* The desk's strategies (for an algo's symbol), or null before the desk has answered. */
+/* The desk's strategies (for an algo's symbol), merged with the paper strategies (2026-09-27 paper-forward-test
+   plan, Task 2: GET /api/paper/strategies, keyed "paper:<id>") -- never null, so HBTrade.algoForRoot confirms a
+   paper algo's root exactly like a desk one, clearing it only once ITS list confirms a mismatch. An absent key
+   (the desk, or the paper list, hasn't answered yet) is "kept" by algoForRoot exactly like a missing desk state
+   used to be. */
 function deskStrategies() {
   const st = window.HBDeskClient && window.HBDeskClient.state;
-  return (st && st.bot && st.bot.strategies) || null;
+  const bot = (st && st.bot && st.bot.strategies) || {};
+  const paper = window.HBPaperClient ? T.paperStrategiesMap(window.HBPaperClient.strategies()) : {};
+  return { ...bot, ...paper };
 }
 /* A template's trade / algo onto one chart (Task 2): only the keys the template stored; Trading always comes back
    OFF (HBTrade.templateTrade -> loadedTrade); its algo is kept only while the desk confirms it trades this chart's
@@ -872,8 +878,9 @@ function chartSettings(c = cur()) {
     tradeBits: (x) => T.tradeBits(x.cfg),                               // Task 2: what a template save adds
     applyTrade: (x, raw) => applyTemplateTrade(x, raw, { quiet: true }),  // a template Apply (saved on Ok)
     restoreTrade: restoreTemplateTrade,                                   // Cancel
-    // Task 3: the Algo select -- the desk's strategies on this chart's root; a pick previews live, saved on Ok
-    algoChoices: (x) => T.algoChoices(window.HBDeskClient.state, x.cfg.root, x.cfg.algo),
+    // Task 3: the Algo select -- the desk's strategies on this chart's root, plus (Task 2) any paper strategy on
+    // it ("paper:<id>"); a pick previews live, saved on Ok
+    algoChoices: (x) => T.algoChoices(window.HBDeskClient.state, x.cfg.root, x.cfg.algo, window.HBPaperClient ? window.HBPaperClient.strategies() : []),
     setAlgo: (x, v) => window.HBTradeUI.setCellAlgo(x, v || null, { quiet: true }),
     countries: () => [...new Set(calendar.map((e) => e.country))].sort(),
     toggleMenu(anchor, cls, fill) {   // menus and popovers open inside the dialog (above its backdrop)
@@ -1224,6 +1231,7 @@ function connect() {
     try { m = JSON.parse(e.data); } catch (_) { return; }
     if (m.type === 'status') { statusAt = Date.now(); showStatus(m); return; }
     if (m.type === 'desk' || m.type === 'quote') { window.HBDeskClient.onMessage(m); return; }
+    if (m.type === 'paper') { window.HBPaperClient.onMessage(m); return; }
     const c = cells.find((x) => x.id === m.id);
     if (!c) return;
     if (m.type === 'history') c.onHistory(m);

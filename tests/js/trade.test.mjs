@@ -480,6 +480,159 @@ test('past runs -> markers: entry arrow + exit circle per traded run, a grey fla
   assert.deepEqual(T.pastRunMarkers(null, { key: 'nq930', s, state: STATE, tick: 0.25, pv: 20, P, from: 0, to: Infinity, today: '' }), []);
 });
 
+const PAPER_STRATS = [{ id: 'gc_nfpcpi', name: 'GC NFP/CPI (paper)', root: 'GC', params: { offset_pts: 2, sl_pts: 3, tp_pts: 6, qty: 1 } }];
+
+test('paper: the algo key round-trips, and its strategies list becomes an algoForRoot map (2026-09-27 paper plan, Task 2)', () => {
+  assert.equal(T.paperKey('gc_nfpcpi'), 'paper:gc_nfpcpi');
+  assert.equal(T.isPaperAlgo('paper:gc_nfpcpi'), true);
+  assert.equal(T.isPaperAlgo('nq930'), false);
+  assert.equal(T.isPaperAlgo('paper:'), false);   // the prefix alone names nothing
+  assert.equal(T.isPaperAlgo(null), false);
+  assert.equal(T.paperStrategyId('paper:gc_nfpcpi'), 'gc_nfpcpi');
+  assert.equal(T.paperStrategyId('nq930'), null);
+  assert.deepEqual(T.paperStrategiesMap(PAPER_STRATS), { 'paper:gc_nfpcpi': { symbol: 'GC' } });
+  assert.deepEqual(T.paperStrategiesMap([{ id: '', root: 'GC' }, { id: 'x' }, null, 'garbage']), {});
+  assert.deepEqual(T.paperStrategiesMap(null), {});
+});
+
+test('paper: algoForRoot confirms a paper algo\'s root from the merged map, clearing only on a confirmed mismatch', () => {
+  const merged = { ...STATE.bot.strategies, ...T.paperStrategiesMap(PAPER_STRATS) };
+  assert.equal(T.algoForRoot('paper:gc_nfpcpi', 'GC', merged), 'paper:gc_nfpcpi');   // confirmed: kept
+  assert.equal(T.algoForRoot('paper:gc_nfpcpi', 'NQ', merged), null);                // confirmed mismatch: cleared
+  assert.equal(T.algoForRoot('paper:gc_nfpcpi', 'GC', {}), 'paper:gc_nfpcpi');        // not listed yet: kept
+  assert.equal(T.algoForRoot('paper:gc_nfpcpi', 'GC', null), 'paper:gc_nfpcpi');      // no state at all: kept
+});
+
+test('paper: the Settings dialog\'s Algo choices include the paper strategies for the chart\'s root', () => {
+  assert.deepEqual(T.algoChoices(STATE, 'GC', null, PAPER_STRATS), [{ value: '', text: 'None' },
+    { value: 'paper:gc_nfpcpi', text: 'GC NFP/CPI (paper)' }]);
+  assert.deepEqual(T.algoChoices(STATE, 'NQ', null, PAPER_STRATS), [{ value: '', text: 'None' },
+    { value: 'nq930', text: 'NQ 9:30 Straddle · …041' }, { value: 'nq10am', text: 'NQ 10:00 Continuation' }]);   // GC paper: not on NQ
+  // the chart's current paper algo stays pickable while the list hasn't loaded yet (null / [])
+  assert.deepEqual(T.algoChoices(STATE, 'GC', 'paper:gc_nfpcpi', null), [{ value: '', text: 'None' },
+    { value: 'paper:gc_nfpcpi', text: 'GC NFP/CPI (paper)' }]);   // ALGO_NAMES fallback text, not listed twice
+  assert.deepEqual(T.algoChoices(STATE, 'GC', 'paper:gc_nfpcpi', PAPER_STRATS).length, 2);   // listed already: not twice
+  // the list CONFIRMS it trades GC: not offered as a fallback on another root
+  assert.deepEqual(T.algoChoices(STATE, 'NQ', 'paper:gc_nfpcpi', PAPER_STRATS), [{ value: '', text: 'None' },
+    { value: 'nq930', text: 'NQ 9:30 Straddle · …041' }, { value: 'nq10am', text: 'NQ 10:00 Continuation' }]);
+});
+
+test('paper: the badge state pill from the latest /ws message', () => {
+  assert.deepEqual([T.paperPill(null).state, T.paperPill(null).tone], ['waiting', 'idle']);
+  assert.deepEqual([T.paperPill({ state: 'waiting' }).state, T.paperPill({ state: 'waiting' }).tone], ['waiting', 'idle']);
+  assert.deepEqual([T.paperPill({ state: 'armed' }).state, T.paperPill({ state: 'armed' }).tone], ['armed', 'live']);
+  assert.deepEqual([T.paperPill({ state: 'in_trade' }).state, T.paperPill({ state: 'in_trade' }).tone], ['in trade', 'live']);
+  assert.deepEqual([T.paperPill({ state: 'done', status: 'traded' }).state, T.paperPill({ state: 'done', status: 'traded' }).tone], ['done', 'idle']);
+  // an error tone wins whatever state it arrived with
+  assert.deepEqual([T.paperPill({ state: 'done', status: 'error', error: 'boom' }).tone, T.paperPill({ state: 'done', status: 'error', error: 'boom' }).tip], ['err', 'boom']);
+  assert.match(T.paperPill({ state: 'done', status: 'no_data' }).tip, /Feed gap/);
+  assert.match(T.paperPill({ state: 'done', status: 'calendar_missing' }).tip, /No calendar/);
+});
+
+test('paper: today\'s P&L -- the finished run\'s, else the open mark; the label with today\'s event', () => {
+  assert.equal(T.paperToday(null), null);
+  assert.equal(T.paperToday({ state: 'armed' }), null);
+  assert.equal(T.paperToday({ state: 'in_trade', open_pnl_usd: 120.5 }), 120.5);
+  assert.equal(T.paperToday({ state: 'done', status: 'traded', pnl_usd: -84 }), -84);
+  assert.equal(T.paperToday({ state: 'done', status: 'traded', pnl_usd: 12, open_pnl_usd: 999 }), 12);   // finished wins
+  assert.equal(T.paperLabel('GC NFP/CPI (paper)', null), 'GC NFP/CPI (paper)');
+  assert.equal(T.paperLabel('GC NFP/CPI (paper)', { event: 'CPI' }), 'GC NFP/CPI (paper) · CPI');
+});
+
+test('paper: dashed lines -- both simulated stop entries while armed, SL/TP once in a simulated position, none waiting/done', () => {
+  assert.deepEqual(T.paperLines(null, 0.1, P), []);
+  assert.deepEqual(T.paperLines({ state: 'waiting', legs: [] }, 0.1, P), []);
+  const armed = { state: 'armed', legs: [{ side: 'Buy', price: 3902 }, { side: 'Sell', price: 3898 }] };
+  assert.deepEqual(T.paperLines(armed, 0.1, P).map((l) => [l.kind, l.side, l.text, l.editable, l.paper]),
+    [['entry', 'Buy', 'PAPER BUY STP @ 3,902.0', false, true], ['entry', 'Sell', 'PAPER SELL STP @ 3,898.0', false, true]]);
+  assert.deepEqual(T.paperLines(armed, 0.1, P).map((l) => l.color), [P.accent, P.down]);
+  const inTrade = { state: 'in_trade', entry: { side: 'Buy', price: 3902, sl: 3899, tp: 3908 } };
+  assert.deepEqual(T.paperLines(inTrade, 0.1, P).map((l) => [l.kind, l.side, l.text]),
+    [['tp', 'Sell', 'PAPER TP @ 3,908.0'], ['sl', 'Sell', 'PAPER SL @ 3,899.0']]);
+  assert.deepEqual(T.paperLines(inTrade, 0.1, P).map((l) => l.color), [P.up, P.down]);
+  assert.deepEqual(T.paperLines({ state: 'done', status: 'traded' }, 0.1, P), []);
+  assert.ok(T.paperLines(armed, 0.1, P).every((l) => T.canDrag(l) === true && l.editable === false));   // dashed, but never draggable from a chip since editable is false
+});
+
+test('paper: today\'s fill markers -- entry arrow, exit circle with the P&L, tagged PAPER', () => {
+  assert.deepEqual(T.paperMarkers(null, 0.1, P), []);
+  assert.deepEqual(T.paperMarkers({ state: 'armed' }, 0.1, P), []);
+  const live = { date: '2026-09-26', state: 'in_trade', entry: { side: 'Buy', price: 3902, ts: at('2026-09-26T12:30:01Z') } };
+  const m1 = T.paperMarkers(live, 0.1, P);
+  assert.deepEqual(m1.map((x) => [x.shape, x.price, x.position, x.tip]), [['arrowUp', 3902, 'atPriceBottom', 'PAPER · Buy @ 3,902.0']]);
+  assert.equal(m1[0].color, P.warn);
+  const done = { ...live, state: 'done', status: 'traded', exit: { price: 3908, ts: at('2026-09-26T12:44:00Z'), kind: 'tp' }, pnl_usd: 600 };
+  const m2 = T.paperMarkers(done, 0.1, P);
+  assert.deepEqual(m2.map((x) => [x.shape, x.price, x.color, x.text, x.tip]),
+    [['arrowUp', 3902, P.warn, '', 'PAPER · Buy @ 3,902.0'], ['circle', 3908, P.up, '+$600', 'PAPER · TP @ 3,908.0 · +$600']]);
+  assert.equal(new Set(m2.map((x) => x.id)).size, 2);
+  const loss = { ...done, pnl_usd: -300 };
+  assert.equal(T.paperMarkers(loss, 0.1, P)[1].color, P.down);
+});
+
+test('paper overlay: only for a listed paper algo confirmed on its own root; combines pill, label, lines and markers', () => {
+  assert.equal(T.paperOverlay({ strategies: PAPER_STRATS, current: {} }, null, 'GC', 0.1, P), null);            // not a paper algo
+  assert.equal(T.paperOverlay({ strategies: PAPER_STRATS, current: {} }, 'nq930', 'GC', 0.1, P), null);         // a desk algo, not paper
+  assert.equal(T.paperOverlay({ strategies: [], current: {} }, 'paper:gc_nfpcpi', 'GC', 0.1, P), null);         // not listed yet
+  assert.equal(T.paperOverlay({ strategies: PAPER_STRATS, current: {} }, 'paper:gc_nfpcpi', 'NQ', 0.1, P), null);   // another root
+  assert.equal(T.paperOverlay(null, 'paper:gc_nfpcpi', 'GC', 0.1, P), null);
+  const msg = { strategy: 'gc_nfpcpi', date: '2026-09-26', event: 'CPI', state: 'armed', status: null,
+    legs: [{ side: 'Buy', price: 3902 }, { side: 'Sell', price: 3898 }] };
+  const o = T.paperOverlay({ strategies: PAPER_STRATS, current: { gc_nfpcpi: msg } }, 'paper:gc_nfpcpi', 'GC', 0.1, P);
+  assert.equal(o.name, 'GC NFP/CPI (paper)');
+  assert.equal(o.label, 'GC NFP/CPI (paper) · CPI');
+  assert.equal(o.event, 'CPI');
+  assert.deepEqual(o.pill, T.paperPill(msg));
+  assert.equal(o.pnl, null);
+  assert.equal(o.lines.length, 2);
+  assert.deepEqual(o.markers, []);
+  // no message yet at all (a fresh load, before the first /ws push): still shown, waiting
+  const o2 = T.paperOverlay({ strategies: PAPER_STRATS, current: {} }, 'paper:gc_nfpcpi', 'GC', 0.1, P);
+  assert.equal(o2.pill.state, 'waiting');
+  assert.deepEqual(o2.lines, []);
+});
+
+const PAPER_RUNS = [
+  { date: '2026-09-12', strategy: 'gc_nfpcpi', event: 'NFP', status: 'traded', legs: [],
+    entry: { side: 'Buy', price: 3900, ts: at('2026-09-12T12:30:01Z') }, exit: { price: 3906, ts: at('2026-09-12T12:35:00Z'), kind: 'tp' }, pnl_usd: 596 },
+  { date: '2026-09-13', strategy: 'gc_nfpcpi', event: 'CPI', status: 'no_fill', legs: [{ side: 'Buy', price: 3910 }, { side: 'Sell', price: 3904 }] },
+  { date: '2026-09-14', strategy: 'gc_nfpcpi', event: 'NFP', status: 'no_data', legs: [], error: 'feed gap' },
+  { date: '2026-09-15', strategy: 'gc_nfpcpi', event: 'CPI', status: 'calendar_missing', legs: [] },
+  { date: '2026-09-26', strategy: 'gc_nfpcpi', event: 'NFP', status: 'traded', legs: [],   // today: left to the live overlay
+    entry: { side: 'Sell', price: 3920, ts: at('2026-09-26T12:30:01Z') }, exit: { price: 3914, ts: at('2026-09-26T12:35:00Z'), kind: 'tp' }, pnl_usd: 596 },
+];
+
+test('paper: past runs -> markers, account-less; a grey flag at 08:30 ET for a day with no entry; today left to the live overlay', () => {
+  const list = T.paperRunMarkers(PAPER_RUNS, { tick: 0.1, P, from: 0, to: Infinity, today: '2026-09-26' });
+  assert.deepEqual(list.map((m) => [m.shape, m.ms, m.price ?? null]), [
+    ['arrowUp', at('2026-09-12T12:30:01Z'), 3900],
+    ['circle', at('2026-09-12T12:35:00Z'), 3906],
+    ['square', T.etMs('2026-09-13', '08:30'), null],
+    ['square', T.etMs('2026-09-14', '08:30'), null],
+    ['square', T.etMs('2026-09-15', '08:30'), null],
+  ]);
+  assert.equal(list[0].tip, '2026-09-12 · PAPER NFP · Buy @ 3,900.0 → TP 3,906.0 · +$596');
+  assert.equal(list[1].tip, list[0].tip);
+  assert.equal(list[2].tip, '2026-09-13 · PAPER CPI · No fill');
+  assert.equal(list[3].tip, '2026-09-14 · PAPER NFP · No data');
+  assert.equal(list[4].tip, '2026-09-15 · PAPER CPI · No calendar');
+  assert.deepEqual(list.slice(2).every((m) => m.color === '#9598A1'), true);
+  assert.equal(new Set(list.map((m) => m.id)).size, list.length);
+  assert.deepEqual(T.paperRunMarkers(null, { tick: 0.1, P, from: 0, to: Infinity, today: '' }), []);
+  // range: only markers inside [from, to)
+  const narrow = T.paperRunMarkers(PAPER_RUNS, { tick: 0.1, P, from: at('2026-09-13T00:00:00Z'), to: at('2026-09-14T00:00:00Z'), today: '2026-09-26' });
+  assert.equal(narrow.length, 1);
+});
+
+test('paper: the stats line under the badge, exactly as specified', () => {
+  const stats = { paper: { n: 3, wr: 66.7, avg: 203, net: 608 }, backtest: { window: '2021-2024', n: 76, wr: 67.6, avg: 296, net: 22496 } };
+  assert.equal(T.paperStatsText(stats), 'Paper 3 · WR 67% · avg +$203 | Backtest 21–24: 76 · WR 68% · avg +$296');
+  assert.equal(T.paperStatsText({ paper: { n: 0, wr: null, avg: null, net: 0 }, backtest: null }), 'Paper 0 · WR — · avg —');
+  assert.equal(T.paperStatsText({ paper: { n: 1, wr: 0, avg: -50, net: -50 } }), 'Paper 1 · WR 0% · avg −$50');
+  assert.equal(T.paperStatsText(null), '');
+  assert.equal(T.paperStatsText({}), '');   // no `paper` key at all: nothing to show either
+});
+
 test('ET wall-clock to epoch ms (DST both sides), and the nearest marker under the mouse', () => {
   assert.equal(T.etMs('2026-09-24', '09:30'), at('2026-09-24T13:30:00Z'));
   assert.equal(T.etMs('2026-12-01', '09:30'), at('2026-12-01T14:30:00Z'));
