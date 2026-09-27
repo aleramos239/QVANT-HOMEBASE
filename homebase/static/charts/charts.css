@@ -327,6 +327,50 @@ a { color: inherit; }
 .env.live { background: var(--down-soft); color: var(--down); font-weight: 600; }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--text-2); }
 .dot.ok { background: var(--up); } .dot.bad { background: var(--down); } .dot.warn { background: var(--warn); }
+/* ---- Trade menu (tradeui.js) ---- */
+.menu-trade { width: 340px; }
+.tm-status { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; padding: 0 16px 10px; color: var(--text-2); font-size: 12px; }
+.tm-status a { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); text-decoration: none; }
+.tm-status a:hover { text-decoration: underline; }
+.tm-status a .ic { width: 13px; height: 13px; }
+.tm-row { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto auto 10px; align-items: center; gap: 8px;
+  height: 32px; padding: 0 16px; }
+.tm-row input[type="checkbox"] { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
+.tm-row input[type="checkbox"]:disabled { opacity: .5; }
+.tm-label { min-width: 0; display: flex; flex-direction: column; justify-content: center; line-height: 1.15; }
+.tm-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tm-err { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); font-size: 11px; }
+.tm-arm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--down); font-size: 12px; font-weight: 600; }
+.tm-bal { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.tm-pref { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 36px; padding: 4px 16px; }
+.tm-pref input[type="number"] { width: 76px; height: 28px; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--panel); font-variant-numeric: tabular-nums; }
+.tm-pref input[type="number"]:focus { border-color: var(--accent); }
+.tm-note { color: var(--text-2); font-size: 11px; }
+.switch { flex: none; position: relative; width: 28px; height: 16px; border-radius: 8px; background: var(--pill); }
+.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%;
+  background: #FFFFFF; transition: transform .12s; }
+.switch.on { background: var(--accent); }
+.switch.on::after { transform: translateX(12px); }
+
+/* ---- confirm dialog (tradeui.js): the $ + RR 1:X preview before an order or an action ---- */
+.dialog.confirm { width: min(420px, 92vw); }
+.dialog.confirm.live { box-shadow: 0 0 0 1px var(--down), var(--shadow-dialog); }
+.cf-body { padding: 4px 20px 8px; }
+.cf-acct { display: flex; align-items: center; justify-content: space-between; height: 28px; }
+.cf-note { padding: 6px 0; font-size: 13px; font-variant-numeric: tabular-nums; }
+.cf-each { padding-bottom: 6px; color: var(--text-2); font-size: 12px; }
+.cf-one { display: flex; align-items: center; gap: 8px; padding: 10px 20px; border-top: 1px solid var(--border); font-size: 13px; }
+.cf-one input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
+.dialog.confirm .btn { box-shadow: inset 0 0 0 1px var(--border); }
+.dialog.confirm .btn:hover { background: var(--hover); }
+.dialog.confirm .btn.primary { box-shadow: none; color: #FFFFFF; }
+.dialog.confirm .btn.primary.accent { background: var(--accent); }
+.dialog.confirm .btn.primary.accent:hover { background: var(--accent-hover); }
+.dialog.confirm .btn.primary.down { background: var(--down); }
+.dialog.confirm .btn.primary.down:hover { opacity: .9; }
+.dialog.confirm .btn:disabled { opacity: .6; cursor: default; }
+
 /* ---- toasts (top-right under the toolbar: ruling S24) ---- */
 .toasts { position: fixed; top: 46px; right: 12px; z-index: 90; display: flex; flex-direction: column; gap: 6px; width: min(380px, 90vw); }
 .toast { display: flex; align-items: flex-start; gap: 8px; padding: 8px 8px 8px 12px; border-radius: 8px; background: var(--panel);

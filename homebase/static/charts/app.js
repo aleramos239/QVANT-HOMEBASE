@@ -1100,6 +1100,7 @@ async function init() {
     overlays: [],
   };
   window.HBPanel.mount(page);                 // Task 4
+  window.HBTradeUI.mount(page);                // Task 5
   connect();
   tick();
   setInterval(tick, 1000);
