@@ -275,7 +275,8 @@ class Overlay {
     this.badges.hidden = !o;
     if (!o) { this.badgeKey = null; return; }
     const busy = window.HBTradeUI.busy(), pnl = o.pnl == null ? '' : T.usd(o.pnl);
-    const key = JSON.stringify([o.label, o.pill, o.gate, pnl, busy]);
+    const rp = !!this.cell.replay;   // a replaying chart cannot Kill (HBTradeUI.killGate refuses it too)
+    const key = JSON.stringify([o.label, o.pill, o.gate, pnl, busy, rp]);
     if (key === this.badgeKey) return;
     this.badgeKey = key;
     this.bb.name.textContent = o.name;
@@ -288,8 +289,9 @@ class Overlay {
     this.bb.pnl.hidden = !pnl;
     this.bb.pnl.className = 'bb-pnl' + (o.pnl > 0 ? ' up' : o.pnl < 0 ? ' down' : '');
     this.bb.pnl.title = "Today's P&L";
-    this.bb.kill.disabled = busy;
-    this.bb.kill.title = `Kill ${o.name}: cancel its orders and flatten its position on its own accounts`;
+    this.bb.kill.disabled = busy || rp;
+    this.bb.kill.title = rp ? 'Replay — leave replay to Kill this algo'
+      : `Kill ${o.name}: cancel its orders and flatten its position on its own accounts`;
     this.bb.kill.setAttribute('aria-label', `Kill ${o.name}`);
   }
 

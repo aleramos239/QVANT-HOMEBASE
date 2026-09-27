@@ -118,6 +118,8 @@ class Cell {
     this.wm = null;        // the watermark (its colour and visibility follow the settings)
     this.extMarkers = {};  // key -> [{ms, ...marker}] from overlays (trading, bots, the tester): HBDrawings.placeMarkers
     this.ov = [];          // this chart's overlays (page.overlays), rebuilt with the chart
+    this.replay = null;    // Bar Replay (2026-09-27 plan): null live, else {date, cursorMs, speed, playing, done}
+                            // -- set by replayui.js, read by HBTradeUI.effectiveMode (a replaying chart never trades)
     slot.className = 'panel';
     this.folded = false;   // the legend's collapse chevron: app.js syncs this to the persisted preference
                             // right after construction (it needs this cell's grid index, unknown in here)
@@ -381,6 +383,13 @@ class Cell {
      does not carry yet, or when a sub is still in flight (its answer would
      otherwise land on top of this change). */
   update(patch) {
+    // a symbol or interval change ends this chart's replay (barreplay.py: a plain `sub` on a replaying chart
+    // auto-stops it server-side) -- the host asks "Leave replay?" once and, on Yes, re-runs this same patch
+    // (this.replay will be cleared by then, so it goes straight through). An indicator-only patch (studies,
+    // visibility, pane) never touches root/spec, so it is never guarded here.
+    const leavesReplay = this.replay && (('root' in patch && patch.root !== this.cfg.root) ||
+      ('spec' in patch && patch.spec !== this.cfg.spec));
+    if (leavesReplay && this.host.onReplayGuard) { this.host.onReplayGuard(this, patch); return; }
     const was = this.shown;
     Object.assign(this.cfg, patch);
     this.title();

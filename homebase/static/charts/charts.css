@@ -145,6 +145,8 @@ a { color: inherit; }
   white-space: nowrap; }
 .menu-i:hover, .menu-i:focus-visible { background: var(--hover); }
 .menu-i.active { color: var(--accent); }
+.menu-i:disabled { opacity: .5; cursor: default; }
+.menu-i:disabled:hover { background: none; }
 .menu-t { flex: 1; overflow: hidden; text-overflow: ellipsis; }
 .menu-sub { color: var(--text-2); }
 .menu-sym .menu-t { flex: 0 0 44px; font-weight: 600; }
@@ -549,3 +551,41 @@ a { color: inherit; }
 .op-send:disabled { opacity: .45; cursor: default; }
 .op-reason { min-height: 16px; padding-top: 6px; color: var(--text-2); font-size: 12px; text-align: center; }
 @media (max-width: 760px) { .opanel { position: fixed; right: 4px; top: 42px; bottom: 34px; z-index: 30; width: min(320px, calc(100vw - 8px)) !important; } }
+
+.switch:disabled { opacity: .5; cursor: default; }
+
+/* ---- Bar Replay (2026-09-27 plan, Task 1) ---- */
+.replay-arm .chart, .replay-arm .chart * { cursor: crosshair !important; }
+.replay-menu { display: flex; flex-direction: column; }
+.replay-menu .menu-hint { padding: 2px 12px 8px; color: var(--text-2); font-size: 12px; }
+.dlg-text { padding: 0 20px 16px; color: var(--text); font-size: 13px; }
+/* the REPLAY pill, in the legend title next to the badge/name */
+.replay-pill { flex: none; padding: 0 5px; border-radius: 4px; background: var(--down); color: #FFFFFF;
+  font-size: 10px; font-weight: 700; letter-spacing: .04em; line-height: 16px; pointer-events: none; }
+/* everything right of the cursor: a translucent overlay, repositioned on scroll/zoom and every bar */
+.replay-dim { position: absolute; top: 0; bottom: 0; z-index: 3; background: var(--backdrop); pointer-events: none; }
+/* the floating control bar, bottom-centre of the cell */
+.replay-bar { position: absolute; left: 50%; bottom: 10px; z-index: 6; display: flex; align-items: center; gap: 2px;
+  transform: translateX(-50%); padding: 4px; border-radius: 8px; background: var(--panel); box-shadow: var(--shadow-menu);
+  font-size: 12px; font-variant-numeric: tabular-nums; pointer-events: auto; }
+.replay-bar .ib:hover { background: var(--hover); }
+.replay-bar .ib:disabled { opacity: .5; cursor: default; }
+.replay-bar .ib:disabled:hover { background: none; }
+.replay-bar .rb-jump { display: none; align-items: center; }
+.replay-bar .rb-jump.open { display: inline-flex; }
+.replay-bar .rb-jump input { width: 60px; height: 22px; padding: 0 6px; margin-left: 2px; border: 1px solid var(--border);
+  border-radius: 4px; background: var(--panel); font-size: 12px; }
+.replay-bar .rb-jump input:focus { border-color: var(--accent); }
+.replay-bar .rb-err { padding-left: 6px; color: var(--down); font-size: 11px; white-space: nowrap; }
+.replay-bar .rb-speed { height: 24px; padding: 0 8px; border-radius: 4px; color: var(--text); }
+.replay-bar .rb-speed:hover { background: var(--hover); }
+.replay-bar .rb-time { padding: 0 6px; color: var(--text); white-space: nowrap; }
+
+/* ---- Bar Replay Task 2: practice trading (same look as real trading's .lg-trade/.tr-*/.tl-*, tradelines.js) ---- */
+.pr-tag { align-self: center; margin-right: 2px; padding: 2px 6px; border-radius: 4px; background: var(--warn);
+  color: #131722; font-size: 10px; font-weight: 700; letter-spacing: .04em; white-space: nowrap; }
+.tr-buy:disabled, .tr-sell:disabled { opacity: .5; cursor: default; filter: none; }
+/* the P&L strip, just above the floating control bar */
+.replay-pnl { position: absolute; left: 50%; bottom: 44px; z-index: 6; transform: translateX(-50%);
+  padding: 3px 10px; border-radius: 8px; background: var(--panel); box-shadow: var(--shadow-menu);
+  font-size: 12px; color: var(--text); white-space: nowrap; pointer-events: none; font-variant-numeric: tabular-nums; }

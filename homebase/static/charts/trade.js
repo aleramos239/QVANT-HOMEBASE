@@ -244,6 +244,16 @@ function armedMode(m, state, liveConfirmed) {
   return accounts.length ? { mode: 'on', reason: '', accounts }
     : { mode: 'none', reason: 'Arm the LIVE account for this chart in the Trade menu', accounts: [] };
 }
+/* A chart in replay can never trade (2026-09-27 bar-replay plan, Global Constraints): its Buy/Sell block,
+   chart-menu trading items and draggable order lines are hidden for the duration, and its real trade.on is
+   forced off for it (replayui.js) and stays off on exit. This is the last word on an otherwise-tradable mode
+   -- HBTradeUI.effectiveMode runs every chart's mode through it, so nothing downstream (the block, the chart
+   menu, a line's drag or ×) ever sees 'on' for a replaying chart. A mode that is not 'on' passes through
+   unchanged: it is already refused for its own reason, and replay need not relabel it. */
+function replayGuard(mode, inReplay) {
+  return inReplay && mode && mode.mode === 'on' ? { mode: 'none', reason: 'Replay — trading is off', accounts: [] } : mode;
+}
+
 /* Whether every leg of a line belongs to `accounts` (a chart's effective accounts): the only lines a chart may
    move or close. An empty or missing line never qualifies. */
 function legsWithin(line, accounts) {
@@ -1120,7 +1130,7 @@ const api = { PREFS_KEY, QUOTE_STALE_MS, BOT_NAMES, parsePrefs, prefsText, short
   killConfirm, killToasts, killBlock, killSold,
   enterConfirms, resolveConfirmedAccounts, armedTicked, unarmedLiveMessage, freshQuote,
   needsQuoteForBracket, refuseIfMarketable, cellTrade, loadedTrade, cellAlgo, tradeBits, templateTrade, algoForRoot,
-  migrateTicked, deskGate, armedMode, legsWithin, accountChips, acctTick, hiddenCellsOff,
+  migrateTicked, deskGate, armedMode, replayGuard, legsWithin, accountChips, acctTick, hiddenCellsOff,
   PANEL_QTY_MAX, GTC_WARN, exitTriple, qtyFromRisk, exitSideError, panelOrder, sendLabel,
   parseQty, parseUsd, parseDecimal, roundTickDir, riskTicks,
   paperKey, isPaperAlgo, paperStrategyId, paperStrategiesMap, paperPill, paperToday, paperLabel, paperLines,

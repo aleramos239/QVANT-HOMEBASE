@@ -171,6 +171,7 @@ function hostFor(id) {
     onPosition(cell, d) { positionDialog(cell, d); },
     onChartMenu(cell, at) { chartMenu(cell, at); },
     onIndicatorMenu(cell, uid, o) { indicatorMenu(cell, uid, o); },
+    onReplayGuard(cell, patch) { window.HBReplayUI.guardSymbolChange(cell, patch); },
     changed() { saveLast(); renderToolbar(); },
     tool: () => tool,
     toolDone() { setTool('cursor'); },
@@ -185,7 +186,7 @@ function hostFor(id) {
 
 function buildGrid() {
   closeHotkeyBox();   // it is anchored to a cell element the rebuild is about to destroy
-  for (const c of cells) c.destroy();
+  for (const c of cells) { window.HBReplayUI.cellDestroyed(c); c.destroy(); }
   cells = [];
   const grid = $('#grid'), [cols, rows] = GRIDS[layout.grid] || GRIDS[4], n = cols * rows;
   T.hiddenCellsOff(layout.cells, n);   // a chart kept beyond the visible grid never comes back already trading
@@ -283,6 +284,7 @@ function closeMenu() {
   if (menuAnchor) { menuAnchor.classList.remove('open'); menuAnchor.setAttribute('aria-expanded', 'false'); }
   menuEl = menuAnchor = menuAt = null;
   customWait = null;
+  if (window.HBReplayUI) window.HBReplayUI.disarmPick();   // the Replay popover's "pick a start" arm, if any
   if (back) back.focus();
 }
 function toggleMenu(anchor, fill) {
@@ -939,6 +941,9 @@ function chartMenu(cell, at) {
       m.appendChild(tpl);
     }
     const b = menuItem(it.text, it.sub || '', () => {
+      if (it.disabled) return;   // task-2-review.md Minor 3: an item greyed out by its own provider (e.g. a
+                                  // practice Buy/Sell while already in a position) never runs, even from the
+                                  // keyboard -- native `disabled` already blocks the mouse (set just below).
       if (it.act === 'removeDrawings' && !armed) {
         b.classList.add('arm');
         b.querySelector('.menu-t').textContent = window.HBChartMenu.armText(ctx.nDrawings, root);
@@ -953,6 +958,7 @@ function chartMenu(cell, at) {
       }
       if (MENU_ACTS[it.act]) MENU_ACTS[it.act](ctx, it);
     });
+    if (it.disabled) { b.disabled = true; b.setAttribute('aria-disabled', 'true'); }
     m.appendChild(b);
   }
   placeMenu();
@@ -1225,7 +1231,11 @@ function tick() {
 /* ---- the chart service ---- */
 function connect() {
   ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
-  ws.onopen = () => { statusAt = Date.now(); for (const c of cells) { c.clearInflight(); c.subscribe(true); } };
+  ws.onopen = () => {
+    statusAt = Date.now();
+    window.HBReplayUI.onReconnect(cells);   // a fresh connection carries no replay sessions from the old one
+    for (const c of cells) { c.clearInflight(); c.subscribe(true); }
+  };
   ws.onmessage = (e) => {
     let m;
     try { m = JSON.parse(e.data); } catch (_) { return; }
@@ -1236,9 +1246,11 @@ function connect() {
     if (!c) return;
     if (m.type === 'history') c.onHistory(m);
     else if (m.type === 'older') c.onOlder(m);
-    else if (m.type === 'update') c.onUpdate(m);
+    else if (m.type === 'update') { c.onUpdate(m); if (c.replay) window.HBReplayUI.onBarUpdate(c, m); }
     else if (m.type === 'reset') c.subscribe(true);
     else if (m.type === 'error') c.onError(m.error);
+    else if (m.type === 'replay_state') window.HBReplayUI.onState(c, m);
+    else if (m.type === 'replay_error') window.HBReplayUI.onError(c, m);
   };
   ws.onclose = () => { showStatus({ connected: false, error: 'chart service unreachable — retrying' }); setTimeout(connect, 2000); };
 }
@@ -1270,6 +1282,12 @@ function onKey(e) {
     e.preventDefault();
     if (c) c.resetView();
     return;
+  }
+  // Space plays/pauses, → steps -- only the selected cell while it replays, no input focused (returned above), no
+  // menu / hotkey box open, and never a key aimed at the order panel (its send button owns Space itself)
+  if (c && c.replay && !menuEl && !hotkeyBox && !(e.target.closest && e.target.closest('#opanel'))) {
+    if (e.code === 'Space') { e.preventDefault(); window.HBReplayUI.togglePlay(c); return; }
+    if (e.key === 'ArrowRight') { e.preventDefault(); window.HBReplayUI.step(c); return; }
   }
   if (e.key === 'Escape') {
     if (c && c.dc) c.dc.escape();
@@ -1308,7 +1326,7 @@ async function init() {
   document.addEventListener('keydown', onKey);
   page = {
     mk, icon, $, cells: () => cells, cur, select: (c) => select(cells.indexOf(c)),
-    openDialog, closeDialog, setDialogClose(fn) { if (dlg) dlg.onClose = fn; },
+    openDialog, closeDialog, setDialogClose(fn) { if (dlg) dlg.onClose = fn; }, dialogOpen: () => !!dlg,
     openMenu, closeMenu, placeMenu, toggleMenu, menuItem, sbNote, clockMs,
     deskUrl: () => `${location.protocol}//${location.hostname}:8850/`,
     overlays: [],
@@ -1317,9 +1335,11 @@ async function init() {
     tradeChanged(cell, accountsChanged) { if (accountsChanged) markDirty(); else saveLast(); },
   };
   page.overlays.push(window.HBTradeLines.overlay);   // Task 6: the per-chart Buy/Sell block, lines and markers
+  page.overlays.push(window.HBReplayUI.overlay);     // Bar Replay: the floating control bar, dimming and REPLAY pill
   window.HBPanel.mount(page);                 // Task 4
   window.HBTradeUI.mount(page);                // Task 5
   window.HBOrderPanel.mount(page);             // order-panel plan Task 3: the right dock (follows the selected chart)
+  window.HBReplayUI.mount(page);
   buildGrid();   // after the mounts: page.overlays must be filled before any cell's build() reads host.overlays()
   migrateTickedOnce();
   connect();
