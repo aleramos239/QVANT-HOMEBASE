@@ -30,11 +30,26 @@ const CHART = 'http://127.0.0.1:8852';
 
 async function tick(n = 12) { for (let i = 0; i < n; i++) await Promise.resolve(); }
 
+// Ids that exist in the static HTML from page load (the overlay's own containers) -- everything
+// else (#tradingPill, #tradeArmBtn, #ctSwitch, #mdApply, ...) is only "in the DOM" once some
+// container's innerHTML has actually been built with it, exactly like the real page: $("#ctSwitch")
+// must return null before Settings has ever been opened, so a stray top-level `.onclick = ...`
+// on it would throw here just like it would in a real browser.
+const STATIC_IDS = new Set(['settingsOverlay', 'settingsBody', 'settingsTrading', 'settingsMarketData']);
+
 function load({ armed = false, confirm = true, demo = false, fetchAnswers = {}, putAnswers = {} } = {}) {
   const els = {}, fetched = [], posts = [], toasts = [], confirms = [], refreshes = [];
-  const listeners = {};
+  const listeners = {}, builtIds = new Set(STATIC_IDS);
+  const doc = { activeElement: null };
   const el = (id) => (els[id] ||= {
-    innerHTML: '',
+    _html: '',
+    get innerHTML() { return this._html; },
+    set innerHTML(v) {
+      this._html = v;
+      const re = /id="([^"]+)"/g;
+      let m;
+      while ((m = re.exec(v))) builtIds.add(m[1]);
+    },
     classList: {
       _s: new Set(),
       add(c) { this._s.add(c); },
@@ -56,6 +71,11 @@ function load({ armed = false, confirm = true, demo = false, fetchAnswers = {}, 
     style: {},
     className: '',
     textContent: '',
+    value: '',
+    title: '',
+    _attrs: {},
+    setAttribute(k, v) { this._attrs[k] = String(v); },
+    getAttribute(k) { return this._attrs[k]; },
     addEventListener() {},   // #settingsOverlay's click-outside-to-close listener: never exercised here
   });
   const ctx = vm.createContext({
@@ -63,7 +83,11 @@ function load({ armed = false, confirm = true, demo = false, fetchAnswers = {}, 
     ST: armed == null ? null : { armed },
     DESK_STALE: false,
     DEMO: demo,
-    $: (sel) => el(sel.replace(/^#/, '')),
+    document: doc,
+    $: (sel) => {
+      const id = sel.replace(/^#/, '');
+      return builtIds.has(id) ? el(id) : null;   // realistic: null before that id is ever built
+    },
     CHART,
     esc,
     toast: (t) => toasts.push(t),
@@ -87,11 +111,12 @@ function load({ armed = false, confirm = true, demo = false, fetchAnswers = {}, 
     globalThis.api = {
       openSettings, closeSettings, renderSettings, updateTrading, renderMarketData,
       doArm, doDisarm, doKill, applyMd, loadSettings, loadChartStatus,
+      renderChartTrading, setChartTrading,
       get ST() { return ST; }, set ST(v) { ST = v; },
       get MD() { return MD; }, get MD_STAGED() { return MD_STAGED; },
       get MD_REACHABLE() { return MD_REACHABLE; },
     };`, ctx);
-  return { api: ctx.api, els, fetched, posts, toasts, confirms, refreshes, listeners };
+  return { api: ctx.api, els, doc, fetched, posts, toasts, confirms, refreshes, listeners };
 }
 
 // ---- I1: TRADING is built once and patched in place -------------------------------------------
@@ -376,4 +401,70 @@ test('a status tick that arrives mid-Apply does not clobber MARKET DATA\'s busy 
   resolvePut({ ok: true, status: 200, json: async () => ({ md: 'live', accounts: { live: null, demo: null } }) });
   await applying;
   assert.doesNotMatch(els.settingsMarketData.innerHTML, /Applying…/);
+});
+
+// ---- Chart trading, moved into TRADING (below Arm/Disarm, above Kill) -------------------------
+test('renderChartTrading is a safe no-op while the dialog has never been opened (Settings closed)', () => {
+  const { api } = load();   // buildTrading() has never run: #ctSwitch etc. do not exist yet
+  assert.doesNotThrow(() => api.renderChartTrading({ enabled: true, max_order_qty: 5, max_position_qty: 10 }));
+  assert.doesNotThrow(() => api.renderChartTrading(null));
+});
+
+test('Chart trading sits below Arm/Disarm and above Kill, under its own sub-heading', () => {
+  const { api, els } = load();
+  api.renderSettings();
+  const html = els.settingsTrading.innerHTML;
+  const armRow = html.indexOf('id="tradeArmBtn"');
+  const heading = html.indexOf('Chart trading');
+  const ctRow = html.indexOf('id="ctSwitch"');
+  const killRow = html.indexOf('id="tradeKillBtn"');
+  assert.ok(armRow < heading && heading < ctRow && ctRow < killRow, 'Arm/Disarm < "Chart trading" < ctSwitch < Kill');
+});
+
+test('once built, renderChartTrading patches the switch/state/limits in place -- never rebuilding', () => {
+  const { api, els } = load();
+  api.renderSettings();   // builds TRADING, including the chart-trading controls
+  const switchNode = els.ctSwitch, saveNode = els.ctSave;
+  api.renderChartTrading({ enabled: true, max_order_qty: 7, max_position_qty: 14 });
+  assert.equal(els.ctSwitch.getAttribute('aria-checked'), 'true');
+  assert.equal(els.ctState.textContent, 'On — the chart page can place orders');
+  assert.equal(els.ctMaxOrder.value, 7);
+  assert.equal(els.ctMaxPos.value, 14);
+  // the SAME nodes, never replaced
+  assert.equal(els.ctSwitch, switchNode);
+  assert.equal(els.ctSave, saveNode);
+});
+
+test('renderChartTrading never overwrites a limit input the user is actively typing in', () => {
+  const { api, els, doc } = load();
+  api.renderSettings();
+  api.renderChartTrading({ enabled: false, max_order_qty: 1, max_position_qty: 2 });   // first paint: populates the fake els
+  doc.activeElement = els.ctMaxOrder;   // the user has focus in "Max per order"
+  els.ctMaxOrder.value = '99';          // mid-edit, not yet saved
+  api.renderChartTrading({ enabled: false, max_order_qty: 10, max_position_qty: 20 });
+  assert.equal(els.ctMaxOrder.value, '99', 'a focused input is never clobbered by a repaint');
+  assert.equal(els.ctMaxPos.value, 20, 'an unfocused input still gets patched');
+});
+
+test('the chart-trading switch calls setChartTrading, which confirms before turning ON', async () => {
+  const { api, els, confirms, posts } = load();
+  api.renderSettings();
+  api.ST = { armed: false, chart_trading: { enabled: false, max_order_qty: 10, max_position_qty: 20 } };
+  assert.ok(els.ctSwitch.onclick, 'the switch is wired once TRADING is built');
+  await els.ctSwitch.onclick();
+  assert.equal(confirms.length, 1);
+  assert.match(confirms[0].title, /Turn chart trading ON/);
+  assert.deepEqual(JSON.parse(JSON.stringify(posts)), [{ url: '/api/chart-trading', body: { enabled: true } }]);
+});
+
+test('Save limits POSTs the two number inputs\' parsed values, same endpoint as before', async () => {
+  const { api, els, posts } = load();
+  api.renderSettings();
+  api.renderChartTrading({ enabled: false, max_order_qty: 1, max_position_qty: 2 });   // populates the fake els
+  els.ctMaxOrder.value = '15';
+  els.ctMaxPos.value = '30';
+  assert.ok(els.ctSave.onclick);
+  await els.ctSave.onclick();
+  assert.deepEqual(JSON.parse(JSON.stringify(posts)),
+    [{ url: '/api/chart-trading', body: { max_order_qty: 15, max_position_qty: 30 } }]);
 });
