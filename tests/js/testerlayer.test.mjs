@@ -60,3 +60,69 @@ test('plotPoints: no bars -> []', () => {
   assert.deepEqual(X.plotPoints([[1, 2]], []), []);
   assert.deepEqual(X.plotPoints([[1, 2]], null), []);
 });
+
+/* ---------------------------------------------------------------- rule geometry (2026-09-27)
+   The strategy records every level it PLACED, so the page must read a session at a glance:
+   style by role (never by parsing the name beyond the side), label each line at its right-hand
+   end, stack labels that collide, and hide them when the session is too narrow to carry text. */
+
+const P = { up: '#089981', down: '#F23645', accent: '#2962FF', text2: '#787B86' };
+const h = (name, role, price = 1) => ({ name, price, role, date: '2024-01-02' });
+
+test('hlineStyle: role picks the colour — entry takes its own side, sl red, tp green, anchor/level neutral', () => {
+  assert.equal(X.hlineStyle(h('Long entry +5', 'entry'), P).color, P.accent);
+  assert.equal(X.hlineStyle(h('Short entry −5', 'entry'), P).color, P.down);
+  assert.equal(X.hlineStyle(h('Long SL', 'sl'), P).color, P.down);
+  assert.equal(X.hlineStyle(h('Long TP', 'tp'), P).color, P.up);
+  assert.equal(X.hlineStyle(h('anchor · NFP', 'anchor'), P).color, P.text2);
+  assert.equal(X.hlineStyle(h('stop', 'level'), P).color, P.text2);
+  assert.equal(X.hlineStyle(h('legacy', undefined), P).color, P.text2);   // a record from before roles
+});
+
+test('hlineStyle: the anchor is solid, a live level dashed, a planned / unfilled one dimmer and finer', () => {
+  assert.deepEqual(X.hlineStyle(h('anchor', 'anchor'), P).dash, []);
+  const live = X.hlineStyle(h('Long SL', 'sl'), P);
+  const planned = X.hlineStyle(h('Long SL (planned)', 'sl'), P);
+  const gone = X.hlineStyle(h('Short SL (not filled)', 'sl'), P);
+  assert.equal(live.alpha, 1);
+  assert.equal(planned.alpha < 1 && gone.alpha === planned.alpha, true);
+  assert.deepEqual(planned.dash, gone.dash);
+  // "more finely dashed": shorter ink, longer gap than the live counterpart
+  assert.equal(planned.dash[0] < live.dash[0] && planned.dash[1] > live.dash[1], true);
+  assert.equal(planned.color, live.color);          // dimmed by alpha, not by a different colour
+});
+
+test('hlineLabel: the name and the price, as the tester shows every price', () => {
+  assert.equal(X.hlineLabel(h('Long entry +5', 'entry', 30925)), 'Long entry +5 · 30,925.00');
+  assert.equal(X.hlineLabel(h('Short SL (not filled)', 'sl', 2050.4)), 'Short SL (not filled) · 2,050.40');
+});
+
+test('stackLabels: labels that do not collide keep their own y', () => {
+  assert.deepEqual(X.stackLabels([{ y: 10, t: 'a' }, { y: 50, t: 'b' }], 12, 0, 100).map((r) => r.y), [10, 50]);
+});
+
+test('stackLabels: colliding labels are pushed apart by one row, in price order', () => {
+  const rows = [{ y: 16, t: 'c' }, { y: 10, t: 'a' }, { y: 14, t: 'b' }];
+  assert.deepEqual(X.stackLabels(rows, 12, 0, 500), [{ y: 10, t: 'a' }, { y: 22, t: 'b' }, { y: 34, t: 'c' }]);
+  assert.deepEqual(rows.map((r) => r.y), [16, 10, 14]);        // pure: the input is untouched
+});
+
+test('stackLabels: a stack that runs past the pane is pushed back up, keeping its spacing', () => {
+  assert.deepEqual(X.stackLabels([{ y: 95 }, { y: 96 }, { y: 97 }], 12, 0, 100).map((r) => r.y), [76, 88, 100]);
+  assert.deepEqual(X.stackLabels([{ y: -5 }], 12, 0, 100).map((r) => r.y), [0]);
+});
+
+test('stackLabels: nothing in, nothing out', () => {
+  assert.deepEqual(X.stackLabels([], 12, 0, 100), []);
+  assert.deepEqual(X.stackLabels(null, 12, 0, 100), []);
+});
+
+test('labelsFit: a session narrower than the minimum draws its lines but no text', () => {
+  assert.equal(X.labelsFit(100, 100 + X.LABEL_MIN_PX), true);
+  assert.equal(X.labelsFit(100, 100 + X.LABEL_MIN_PX - 1), false);
+  assert.equal(X.labelsFit(null, 200), false);
+});
+
+test('hlineTip: hover text names the level, its price and the session it belongs to', () => {
+  assert.equal(X.hlineTip(h('Long TP', 'tp', 30925)), 'Long TP · 30,925.00\n2024-01-02');
+});

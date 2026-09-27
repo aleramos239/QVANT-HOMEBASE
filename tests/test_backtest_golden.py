@@ -65,3 +65,44 @@ def test_engine_reproduces_research_trade_by_trade(store, case):
     assert t.exit_reason == REASON[case["why"]]
     assert t.exit_price == case["exit_price_spec"]
     assert t.net == pytest.approx(case["net_spec"], abs=0.005)
+
+
+# ---------------------------------------------------------------- the research window is pinned
+#
+# "Show a backtest's rules on the chart" (2026-09-27) adds RECORDING only: strategies emit more
+# hlines/plots, the page draws them. No number a run reports may move because of it, so the whole
+# 2021-2024 nq930 research run -- every trade, the equity curve, the report and the prop sim -- is
+# hashed here and pinned. plots.json is deliberately NOT in the digest: the geometry lives there and
+# is expected to grow. Uses the real derived tape cache (~/futures_derived/homebase_tape, written by
+# every ordinary run) rather than a tmp one: a cold parse of ~1,000 sessions takes minutes.
+
+RESEARCH_DIGEST = "faf8f6f37482cd4edcd68438da263ff3f25da2384b4ae1517c6c20f5396b3693"
+RESEARCH_HEADLINE = {"trades": 518, "net_profit": 263.0, "win_rate": 27.220077220077222,
+                     "profit_factor": 1.0063414751766209, "sharpe": 0.037311904610996545,
+                     "skipped": 2}
+
+
+def _research_bundle(tmp_path):
+    from homebase.backtest import runner
+    from homebase.backtest.tape import CACHE
+    store = TapeStore(ARCHIVE, CACHE)
+    rid = runner.prepare({"strategy": "nq930", "range": {"kind": "research"}}, tmp_path)
+    meta = runner.execute(tmp_path / "runs" / rid, store)
+    d = tmp_path / "runs" / rid
+    return meta, {k: runner.read_json(d / f"{k}.json") for k in ("trades", "equity", "propsim")}
+
+
+def research_digest(meta, files) -> str:
+    import hashlib
+    payload = {"report": meta["report"], "coverage": meta["coverage"], **files}
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":"),
+                                     default=str).encode()).hexdigest()
+
+
+def test_the_2021_2024_research_run_is_byte_identical(tmp_path, frozen_desk_defaults):
+    meta, files = _research_bundle(tmp_path)
+    s = meta["report"]["summary"]["all"]
+    assert {"trades": s["trades"], "net_profit": s["net_profit"], "win_rate": s["win_rate"],
+            "profit_factor": s["profit_factor"], "sharpe": s["sharpe"],
+            "skipped": len(meta["coverage"]["skipped"])} == RESEARCH_HEADLINE
+    assert research_digest(meta, files) == RESEARCH_DIGEST

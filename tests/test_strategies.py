@@ -175,3 +175,119 @@ def test_no_print_before_fire_skips_cleanly_not_a_strategy_error():
     assert res.trades == []
     assert res.skip == "no print before 09:30:00"
     assert not res.skip.startswith("strategy error")
+
+
+# ---------------------------------------------------------------- rule geometry (2026-09-27)
+#
+# A run records what the strategy DECIDED, not only what filled: the anchor, both entry offsets,
+# each leg's planned bracket, the bracket as it moved to the actual fill, and a " (not filled)"
+# mark on the leg that never triggered. Recording only -- every number a run reports is pinned
+# byte-identical by tests/test_backtest_golden.py::test_the_2021_2024_research_run_is_byte_identical.
+
+STRADDLE = {"offset_pts": 5.0, "sl_pts": 5.0, "tp_pts": 15.0, "adx_gate": False}
+
+
+def _geo(res):
+    return [(h["name"], h["price"], h["role"]) for h in res.hlines]
+
+
+def test_straddle_records_the_whole_plan_and_marks_the_leg_that_filled():
+    d = dt.date(2024, 12, 31)
+    tp = _tape("NQ", d, [("09:29:59", 100.0), ("09:30:01", 106.0), ("09:31", 125.0)])
+    res = run_session(NQ930(STRADDLE), tp, Costs())
+    t, = res.trades
+    assert (t.side, t.entry_price, t.sl, t.tp) == ("long", 106.25, 101.25, 121.25)
+    assert _geo(res) == [
+        ("anchor", 100.0, "anchor"),
+        ("Long entry +5", 105.0, "entry"),
+        ("Short entry −5 (not filled)", 95.0, "entry"),
+        ("Long SL (planned)", 100.0, "sl"),
+        ("Long TP (planned)", 120.0, "tp"),
+        ("Short SL (not filled)", 100.0, "sl"),
+        ("Short TP (not filled)", 80.0, "tp"),
+        ("Long SL", 101.25, "sl"),            # the bracket AS IT MOVED to the fill (desk _move_brackets)
+        ("Long TP", 121.25, "tp"),
+    ]
+
+
+def test_straddle_records_the_short_leg_when_that_is_the_one_that_fills():
+    d = dt.date(2024, 12, 31)
+    tp = _tape("NQ", d, [("09:29:59", 100.0), ("09:30:01", 94.0), ("09:31", 75.0)])
+    res = run_session(NQ930(STRADDLE), tp, Costs())
+    t, = res.trades
+    assert (t.side, t.entry_price, t.sl, t.tp) == ("short", 93.75, 98.75, 78.75)
+    assert _geo(res) == [
+        ("anchor", 100.0, "anchor"),
+        ("Long entry +5 (not filled)", 105.0, "entry"),
+        ("Short entry −5", 95.0, "entry"),
+        ("Long SL (not filled)", 100.0, "sl"),
+        ("Long TP (not filled)", 120.0, "tp"),
+        ("Short SL (planned)", 100.0, "sl"),
+        ("Short TP (planned)", 80.0, "tp"),
+        ("Short SL", 98.75, "sl"),
+        ("Short TP", 78.75, "tp"),
+    ]
+
+
+def test_straddle_marks_both_legs_not_filled_on_a_day_neither_triggers():
+    d = dt.date(2024, 12, 31)
+    tp = _tape("NQ", d, [("09:29:59", 100.0), ("09:30:01", 101.0), ("09:31", 99.0)])
+    res = run_session(NQ930(STRADDLE), tp, Costs())
+    assert res.trades == []
+    assert [n for n, _, _ in _geo(res)] == [
+        "anchor", "Long entry +5 (not filled)", "Short entry −5 (not filled)",
+        "Long SL (not filled)", "Long TP (not filled)",
+        "Short SL (not filled)", "Short TP (not filled)"]
+
+
+def test_a_skipped_session_records_no_levels_at_all():
+    d = dt.date(2024, 12, 31)
+    tp = _tape("NQ", d, [("09:30:01", 111.0), ("09:31", 140.0)])       # no print before 09:30
+    res = run_session(NQ930(STRADDLE), tp, Costs())
+    assert res.skip == "no print before 09:30:00" and res.hlines == []
+    res = run_session(NQ930({**STRADDLE, "adx_gate": True}),
+                      _tape("NQ", d, [("09:29:59", 100.0), ("09:31", 140.0)]), Costs(),
+                      daily=GATE_FIX["bars"][:100])
+    assert res.skip and res.hlines == []
+
+
+def test_the_offset_in_the_label_is_the_strategys_own():
+    d = dt.date(2024, 12, 31)
+    tp = _tape("NQ", d, [("09:29:59", 100.0), ("09:31", 100.25)])
+    res = run_session(NQ930({**STRADDLE, "offset_pts": 12.25}), tp, Costs())
+    assert [n for n, _, _ in _geo(res)][1:3] == ["Long entry +12.25 (not filled)",
+                                                 "Short entry −12.25 (not filled)"]
+
+
+def test_gc_inherits_the_geometry_and_names_its_event_day_on_the_anchor():
+    d = dt.date(2024, 1, 5)                                            # NFP
+    tp = _tape("GC", d, [("08:29:59", 2050.0), ("08:30:00.100", 2052.3), ("08:31", 2058.5)])
+    res = run_session(GCNfpCpi(), tp, Costs())
+    assert _geo(res)[0] == ("anchor · NFP", 2050.0, "anchor")
+    assert [n for n, _, _ in _geo(res)][1:] == [
+        "Long entry +2", "Short entry −2 (not filled)",
+        "Long SL (planned)", "Long TP (planned)",
+        "Short SL (not filled)", "Short TP (not filled)", "Long SL", "Long TP"]
+
+
+def test_nq10am_records_signal_stop_target_and_plots_its_gate():
+    d = dt.date(2024, 3, 5)
+    rows = [(f"09:{30 + i}:10", 100.0 + i) for i in range(30)]
+    rows += [("10:00:00.090", 130.0), ("10:10", 200.0)]
+    res = run_session(NQ10am(), _tape("NQ", d, rows), Costs())
+    assert _geo(res) == [("signal", 129.0, "entry"), ("stop", 100.0, "sl"), ("target", 150.75, "tp")]
+    assert list(res.plots) == ["Close position", "Top quarter", "Bottom quarter"]
+    [[_, pos]] = res.plots["Close position"]
+    assert pos == 1.0                                                   # the 09:59 close IS the high
+    assert [v for _, v in res.plots["Top quarter"]] == [0.75]
+    assert [v for _, v in res.plots["Bottom quarter"]] == [0.25]
+
+
+def test_nq10am_plots_the_gate_even_on_a_day_the_gate_refuses():
+    d = dt.date(2024, 3, 5)
+    rows = [(f"09:{30 + i}:10", 100.0 + i) for i in range(29)] + [("09:59:10", 100.5)]
+    rows += [("10:00:00.090", 100.0), ("10:10", 100.0)]
+    res = run_session(NQ10am(), _tape("NQ", d, rows), Costs())
+    assert res.trades == [] and res.hlines == []
+    [[_, pos]] = res.plots["Close position"]
+    assert pos == round(0.5 / 28.0, 4)                                  # close near the LOW: no long

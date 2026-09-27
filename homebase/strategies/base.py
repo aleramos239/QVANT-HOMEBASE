@@ -20,7 +20,11 @@ Events (all times ET, all run BEFORE the first print at or after their time):
 Orders (see homebase/backtest/engine.py for the fill law):
   ctx.stop_entry / ctx.limit_entry / ctx.market -> Order;  ctx.oco(a, b);
   ctx.cancel(order);  ctx.flatten();  ctx.move_brackets_to_fill = True;
-  ctx.plot(name, t_ns, value);  ctx.hline(name, price);  ctx.skip(reason)
+  ctx.plot(name, t_ns, value);  ctx.skip(reason);
+  ctx.hline(name, price, role=...) -> the record -- the levels the strategy PLACED, drawn on the
+    chart and never traded: role is one of anchor | entry | sl | tp | level (default "level"), so
+    the page styles a level without parsing its name. A strategy may rename a record it kept a
+    reference to before the session ends (OpenStraddle marks the leg that never filled).
 """
 from __future__ import annotations
 

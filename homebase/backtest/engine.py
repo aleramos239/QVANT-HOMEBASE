@@ -46,6 +46,7 @@ from .tape import et_ns
 ENGINE_VERSION = "tick-2"      # tick-2: a strategy's own no-trade day is a flat 0.0 on the Sharpe grid (review C1)
 SIDE = {"long": 1, "short": -1}
 NAME = {1: "long", -1: "short"}
+ROLES = ("anchor", "entry", "sl", "tp", "level")   # Ctx.hline: what the page styles a level by
 CHUNK = 4096                    # prefilter block for the trigger scan
 
 
@@ -114,6 +115,11 @@ class Order:
     oco: int | None = None
     status: str = "working"         # working | filled | cancelled
     pos: "Position | None" = None   # exits: the position they close
+    # Recording only (never read by the fill law): what an ENTRY actually became, so a strategy
+    # can draw the bracket as it ended up -- re-priced to the fill -- next to the one it planned.
+    fill_px: float | None = None
+    fill_sl: float | None = None
+    fill_tp: float | None = None
 
 
 @dataclass(eq=False)
@@ -170,7 +176,7 @@ class SessionResult:
     date: str
     trades: list = field(default_factory=list)
     plots: dict = field(default_factory=dict)     # name -> [[t_ms, value], ...]
-    hlines: list = field(default_factory=list)    # [{name, price, date}]
+    hlines: list = field(default_factory=list)    # [{name, price, date, role}]
     skip: str | None = None                       # the strategy's reason for no trade
 
 
@@ -237,8 +243,16 @@ class Ctx:
     def plot(self, name: str, t_ns: int, value: float) -> None:
         self._s.res.plots.setdefault(name, []).append([t_ns // 1_000_000, value])
 
-    def hline(self, name: str, price: float) -> None:
-        self._s.res.hlines.append({"name": name, "price": price, "date": self.date.isoformat()})
+    def hline(self, name: str, price: float, role: str = "level") -> dict:
+        """Record a level the strategy placed this session, for the chart only -- it never
+        reaches an order. `role` is one of ROLES, so the page can style it without parsing
+        the name. Returns the record, which a strategy may still rename (the straddle marks
+        the leg that never filled) before the session ends."""
+        if role not in ROLES:
+            raise ValueError(f"role must be one of {', '.join(ROLES)}, not {role!r}")
+        rec = {"name": name, "price": price, "date": self.date.isoformat(), "role": role}
+        self._s.res.hlines.append(rec)
+        return rec
 
     def skip(self, reason: str) -> None:
         self._s.res.skip = reason
@@ -342,6 +356,7 @@ class _Sim:
         if tp is not None:
             pos.tp = Order(self._ids, -o.side, "limit", tp, o.qty, k + 1, role="tp", pos=pos)
             self.orders.append(pos.tp)
+        o.fill_px, o.fill_sl, o.fill_tp = fill, sl, tp      # recording only (Order.fill_px)
         self.positions.append(pos)
 
     def _close(self, pos: Position, fill: float, k: int, reason: str) -> None:
