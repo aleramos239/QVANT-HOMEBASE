@@ -191,8 +191,19 @@ function ramp(v, stops) {
   return `rgba(${Math.round(c(0))},${Math.round(c(1))},${Math.round(c(2))},${Math.round(c(3) * 1000) / 1000})`;
 }
 
+/* Bar Replay (review I3): a column shows the book at its END, so one ending past the replay cursor would show
+   the book from after it -- such a column is dropped whole, never clipped. */
+function beforeCursor(cells, cursorMs) { return cells.filter((c) => c.t1 <= cursorMs); }
+
+/* How long a history chunk waits before it is asked again after a failed request: the server's 503 "busy"
+   (its one worker is on another request) soon, a paused window (09:20-09:35, the 08:30 release) a minute. */
+function retryAfter(status, detail) {
+  if (status === 503) return /^busy/.test(String(detail || '')) ? 2000 : 60_000;
+  return 30_000;
+}
+
 const api = { BIN_MS, HOLD_MS, LIVE_MS, LIVE_MAX, CHUNK_COLS, MAX_VIEW_MS, gridCells, intensity, windowMax,
-  LiveBuffer, liveGrid, level, chunkStarts, ChunkCache, logicalAt, timeAt, parseStops, ramp };
+  LiveBuffer, liveGrid, level, chunkStarts, ChunkCache, logicalAt, timeAt, parseStops, ramp, beforeCursor, retryAfter };
 
 /* ---------------------------------------------------------------- browser */
 
@@ -200,7 +211,7 @@ if (typeof window !== 'undefined' && window.HBLayers) {
   const DEBOUNCE_MS = 250;        // a scroll/zoom settles this long before history is asked
   const PAINT_MS = 500;           // live books repaint the heatmap at most twice a second
   const REFRESH_MS = 5 * 60_000;  // a cached chunk that ends short of what is now needed is asked again, at most this often
-  const RETRY_MS = { 503: 60_000, other: 30_000 };
+  const REPLAY_REFRESH_MS = 3000; // ... on a Bar Replay chart, whose cursor moves on
   const BUCKETS = 24;             // colour steps: one fill per step, not per cell
 
   const live = new Map();         // root -> LiveBuffer
@@ -210,6 +221,12 @@ if (typeof window !== 'undefined' && window.HBLayers) {
   const overlays = new Set();
 
   /* The same entry point as HBDomUI.onDepth / HBL2Layer.onDepth (app.js's ws routing). */
+  /* The page's /ws dropped: every live book is gone from now (the new socket's greeting brings them back). */
+  const onDisconnect = () => {
+    for (const b of live.values()) if (b.length) b.gap(Math.max(Date.now(), b.latest() + 1));
+    for (const ov of overlays) ov.dirty = true;
+  };
+
   const onDepth = (m) => {
     if (!m || typeof m.root !== 'string') return;
     let b = live.get(m.root);
@@ -226,15 +243,17 @@ if (typeof window !== 'undefined' && window.HBLayers) {
 
   async function fetchChunk(root, key, from, to) {
     pending.add(key);
-    let status = 0;
     try {
       const q = new URLSearchParams({ root, from_ms: String(from), to_ms: String(to), cols: String(CHUNK_COLS) });
       const r = await fetch('/api/depth/history?' + q);
-      status = r.status;
       if (r.ok) { cache.set(key, { upTo: to, at: Date.now(), cells: gridCells(await r.json()) }); blocked.delete(key); }
-      else blocked.set(key, Date.now() + (RETRY_MS[status] || RETRY_MS.other));
+      else {
+        let detail = null;
+        try { detail = (await r.json()).detail; } catch (_) { /* no JSON body */ }
+        blocked.set(key, Date.now() + retryAfter(r.status, detail));
+      }
     } catch (_) {
-      blocked.set(key, Date.now() + RETRY_MS.other);
+      blocked.set(key, Date.now() + retryAfter(0, null));
     } finally {
       pending.delete(key);
     }
@@ -256,6 +275,7 @@ if (typeof window !== 'undefined' && window.HBLayers) {
       this.dirty = false;
       this.dead = false;
       this.liveMemo = null;
+      this.inflight = false;          // one history request in flight per chart (review I2)
       const P = cell.P || {};
       this.stops = parseStops([P.heatLo || 'rgba(41,98,255,.06)', P.heatMid || 'rgba(247,166,0,.45)', P.heatHi || 'rgba(242,54,69,.85)']);
       this.fills = Array.from({ length: BUCKETS }, (_, b) => ramp((b + 1) / BUCKETS, this.stops));
@@ -287,32 +307,40 @@ if (typeof window !== 'undefined' && window.HBLayers) {
       const vr = ts.getVisibleLogicalRange();
       if (!vr || !n) return null;
       this.root = cell.shown ? cell.shown.root : cell.cfg.root;
-      const barMs = cell.isTime() ? cell.barMs() : 0, buf = cell.replay ? null : live.get(this.root);
+      // Bar Replay (review I3): never the live book, and nothing at or past the replay cursor
+      const replay = !!cell.replay, cursor = replay && Number.isFinite(cell.replay.cursorMs) ? cell.replay.cursorMs : null;
+      const barMs = cell.isTime() ? cell.barMs() : 0, buf = replay ? null : live.get(this.root);
       const lastMs = bars[n - 1].ms;
-      const end = barMs ? lastMs + barMs : (cell.replay ? lastMs : Math.max(lastMs, (buf && buf.latest()) || lastMs));
+      let end = barMs ? lastMs + barMs : (replay ? lastMs : Math.max(lastMs, (buf && buf.latest()) || lastMs));
+      if (replay) end = Math.min(end, cursor == null ? lastMs : cursor);
       const from = timeAt(bars, vr.from, barMs, end), to = Math.min(timeAt(bars, vr.to, barMs, end), end);
       const lv = level(to - from, ts.width());
       if (!lv || !(to > from)) return null;
       const oldest = buf && buf.length ? buf.oldest() : null;
       const cut = oldest == null ? Infinity : Math.floor(oldest / lv.dt) * lv.dt;
-      return { bars, barMs, end, from, to, lv, buf, cut };
+      return { bars, barMs, end, from, to, lv, buf, cut, replay, cursor: replay ? end : null };
     }
 
     /* History for the part of the view older than the live buffer: every chunk not cached (or cached short of
        what is now needed), not in flight, not backing off. */
     ask() {
-      if (!this.on()) return;
+      if (!this.on() || this.inflight) return;
       const v = this.view();
       if (!v) return;
-      const now = Date.now(), upto = Math.min(v.to, v.cut, now);
+      const now = Date.now(), upto = Math.min(v.to, v.cut, now, v.replay ? v.cursor : Infinity);
+      const refresh = v.replay ? REPLAY_REFRESH_MS : REFRESH_MS;
       for (const s of chunkStarts(v.from, upto, v.lv.chunk)) {
         const key = `${this.root}|${v.lv.dt}|${s}`, need = Math.min(s + v.lv.chunk, upto);
         const have = cache.get(key);
         const until = blocked.get(key);
         if (until > now || pending.has(key)) continue;
         if (until) blocked.delete(key);
-        if (have && (have.upTo >= need || now - have.at < REFRESH_MS)) continue;
-        fetchChunk(this.root, key, s, Math.min(s + v.lv.chunk, now));
+        if (have && (have.upTo >= need || now - have.at < refresh)) continue;
+        this.inflight = true;
+        const root = this.root;
+        fetchChunk(root, key, s, Math.min(s + v.lv.chunk, now, v.replay ? v.cursor : Infinity))
+          .finally(() => { this.inflight = false; if (!this.dead) this.ask(); });
+        break;                        // the next chunk once this one lands
       }
       this.redraw();
     }
@@ -323,7 +351,7 @@ if (typeof window !== 'undefined' && window.HBLayers) {
       for (const s of chunkStarts(v.from, Math.min(v.to, v.cut), v.lv.chunk)) {
         const have = cache.get(`${this.root}|${v.lv.dt}|${s}`);
         if (!have) continue;
-        for (const c of have.cells) {
+        for (const c of v.replay ? beforeCursor(have.cells, v.cursor) : have.cells) {
           if (c.t0 >= v.cut || c.t0 >= v.end) continue;
           const t1 = Math.min(c.t1, v.cut, v.end);
           out.push(t1 === c.t1 ? c : { ...c, t1 });
@@ -395,6 +423,8 @@ if (typeof window !== 'undefined' && window.HBLayers) {
   }
 
   api.onDepth = onDepth;
+  api.onDisconnect = onDisconnect;
+  api.liveBuffer = (root) => live.get(root) || null;
   api.overlay = (cell) => new Overlay(cell);
   window.HBLiquidity = api;
 }

@@ -357,6 +357,8 @@ function paint() {
   el.style.width = `${width}px`;
   const tb = document.getElementById('tbOrder');
   if (tb) { tb.setAttribute('aria-pressed', String(open)); tb.classList.toggle('active', open); }
+  const tbDom = document.getElementById('tbDom'), domOn = window.HBDom.pressed({ open, tab }, 'dom');
+  if (tbDom) { tbDom.setAttribute('aria-pressed', String(domOn)); tbDom.classList.toggle('active', domOn); }
   const cell = selectedCell(), root = cell && cell.shown ? cell.shown.root : null;
   window.HBDomUI.sync(cell);   // the ladder follows the selected chart even while the Order tab is showing
   if (cell !== seen.cell || root !== seen.root) {
@@ -535,10 +537,12 @@ function setOpen(v) {
   paint();
 }
 function toggle() { setOpen(!open); }
-/* The toolbar's DOM button: opens the panel (if closed) straight onto the DOM tab. */
+/* The toolbar's DOM button (review 12): opens the panel onto the DOM tab, or closes it when the DOM tab is
+   already showing; pressed while it is. */
 function openTab(id) {
-  tab = id;
-  if (!open) { open = true; save(); }
+  const next = window.HBDom.toggleTab({ open, tab }, id);
+  tab = next.tab;
+  if (next.open !== open) { open = next.open; save(); }
   paint();
 }
 function setRoot() { paint(); }   // the selected chart (or its symbol) changed: the panel re-reads it

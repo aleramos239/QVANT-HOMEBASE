@@ -71,31 +71,67 @@ function nextCenter(prevIdx, lastPrice, tick, levels = LEVELS) {
   return prevIdx;
 }
 
-/* A forced recentre (the button, or Ctrl+Space while the ladder has focus): straight to the last trade's row,
+/* A forced recentre (the Recentre button, or C while the ladder has focus): straight to the last trade's row,
    regardless of whether it already sits in view. null when there is no last trade to centre on. */
 function centerOn(lastPrice, tick) { return tickIndex(lastPrice, tick); }
 
-/* Session (loaded-range) volume at price from the cell's own bars: each bar's footprint (bar.fp,
-   [[price, sellAtBid, buyAtAsk], ...], sent whenever the server's `fp` flag is on -- the default) summed per
-   tick index across every loaded bar. null (not a Map) when no loaded bar carries footprint data at all -- the
-   whole column is blank, never zeroed; a Map that simply has no entry for a price means that price saw no
-   prints across the loaded bars, which is a real, drawable zero-ish blank (also left null on the row). */
-function volumeAtPrice(bars, tick) {
+/* Volume at price from the cell's own bars[from..to): each bar's footprint (bar.fp, [[price, sellAtBid,
+   buyAtAsk], ...], sent whenever the server's `fp` flag is on -- the default) summed per tick index. null (not a
+   Map) when no bar in the range carries footprint data at all -- the whole column is blank, never zeroed; a Map
+   with no entry for a price means that price saw no prints, also left blank on the row. */
+function addFp(m, bar, tick) {
+  for (const row of bar.fp) {
+    if (!Array.isArray(row) || row.length < 3) continue;
+    const idx = tickIndex(row[0], tick);
+    if (idx == null) continue;
+    const v = (Number.isFinite(row[1]) ? row[1] : 0) + (Number.isFinite(row[2]) ? row[2] : 0);
+    m.set(idx, (m.get(idx) || 0) + v);
+  }
+}
+function volumeAtPrice(bars, tick, from = 0, to = Array.isArray(bars) ? bars.length : 0) {
   if (!Array.isArray(bars) || !bars.length) return null;
   let seen = false;
   const m = new Map();
-  for (const b of bars) {
+  for (let i = Math.max(0, from); i < Math.min(to, bars.length); i++) {
+    const b = bars[i];
     if (!b || !Array.isArray(b.fp)) continue;
     seen = true;
-    for (const row of b.fp) {
-      if (!Array.isArray(row) || row.length < 3) continue;
-      const idx = tickIndex(row[0], tick);
-      if (idx == null) continue;
-      const v = (Number.isFinite(row[1]) ? row[1] : 0) + (Number.isFinite(row[2]) ? row[2] : 0);
-      m.set(idx, (m.get(idx) || 0) + v);
-    }
+    addFp(m, b, tick);
   }
   return seen ? m : null;
+}
+/* `map` (a memo of the closed bars, never mutated) plus the forming bar, as a new Map -- the forming bar is
+   replaced in place on every update, so it is added on each paint rather than memoised (review I5). */
+function withBar(map, bar, tick) {
+  if (!bar || !Array.isArray(bar.fp)) return map;
+  const m = new Map(map || []);
+  addFp(m, bar, tick);
+  return m;
+}
+/* The session of a bar from its ET wall seconds (bar.t): sessions open at 18:00 ET, so shifting by 6 h puts
+   each on one calendar day; Friday's close and Sunday's 18:00 open land on different days (Friday, Monday). */
+function sessionKey(etWallS) { return Math.floor((etWallS + 6 * 3600) / 86400); }
+/* The index of the first loaded bar in the last bar's session (review 11: Vol is the current session only). */
+function sessionStart(bars) {
+  const n = Array.isArray(bars) ? bars.length : 0;
+  if (!n) return 0;
+  const k = sessionKey(bars[n - 1].t);
+  let i = n - 1;
+  while (i > 0 && sessionKey(bars[i - 1].t) === k) i--;
+  return i;
+}
+
+/* The DOM toolbar button (review 12): opens the panel onto its tab, or closes it when that tab already shows. */
+function toggleTab(state, id) {
+  return state.open && state.tab === id ? { open: false, tab: id } : { open: true, tab: id };
+}
+function pressed(state, id) { return !!state.open && state.tab === id; }
+/* The ladder's recentre key while it has focus: a bare C (Ctrl+Space is macOS's input-source switch). */
+function isRecentreKey(e) { return !!e && (e.key === 'c' || e.key === 'C') && !e.ctrlKey && !e.metaKey && !e.altKey; }
+/* A marker chip's title: its line label and the account(s) it belongs to (review 14). */
+function chipTitle(label, legs) {
+  const who = [...new Set((legs || []).map((l) => l && l.who).filter(Boolean))];
+  return who.length ? `${label} · ${who.join(', ')}` : label;
 }
 
 /* ---- Task 2: big-order lines + the imbalance gauge (2026-09-27 charts-l2-news-ui plan) ----
@@ -135,33 +171,46 @@ function pooledSizes(history, now, windowMs) {
    `size` freezes at that moment too (a fading line shows the size that earned it the line, not whatever the
    book prints while it decays). A line whose fade has run its full course (age >= fadeMs, never requalified in
    between) is dropped for good. Capped to BIG_CAP, live (opacity 1) lines ahead of fading ones, largest first. */
-function bigSide(rows, prevSide, threshold, now, fadeMs) {
+function bigSide(rows, prevSide, threshold, now, fadeMs, tick) {
+  const keyOf = (price) => (tick > 0 ? tickIndex(price, tick) : price);   // review 7: the ladder's own key
   const qualifying = new Map();
   for (const r of Array.isArray(rows) ? rows : []) {
-    if (Array.isArray(r) && Number.isFinite(r[0]) && Number.isFinite(r[1]) && r[1] >= threshold) qualifying.set(r[0], r[1]);
+    if (Array.isArray(r) && Number.isFinite(r[0]) && Number.isFinite(r[1]) && r[1] >= threshold) {
+      qualifying.set(keyOf(r[0]), { price: r[0], size: r[1] });
+    }
   }
   const merged = new Map();
   for (const line of Array.isArray(prevSide) ? prevSide : []) {
     if (line && Number.isFinite(line.price) && Number.isFinite(line.since)) {
-      merged.set(line.price, { price: line.price, size: line.size, since: line.since });
+      merged.set(keyOf(line.price), { price: line.price, size: line.size, since: line.since });
     }
   }
-  for (const [price, size] of qualifying) merged.set(price, { price, size, since: now });
+  for (const [k, q] of qualifying) merged.set(k, { price: q.price, size: q.size, since: now });
   const out = [];
-  for (const line of merged.values()) {
-    const live = qualifying.has(line.price);
+  for (const [k, line] of merged) {
+    const live = qualifying.has(k);
     const age = live ? 0 : (Number.isFinite(now) ? now - line.since : Infinity);
     if (!live && age >= fadeMs) continue;
-    out.push({ price: line.price, size: line.size, since: line.since, opacity: live ? 1 : Math.max(0, 1 - age / fadeMs) });
+    out.push({ idx: k, price: line.price, size: line.size, since: line.since,
+      opacity: live ? 1 : Math.max(0, 1 - age / fadeMs) });
   }
   out.sort((a, b) => b.opacity - a.opacity || b.size - a.size);
   return out.slice(0, BIG_CAP);
 }
 
+/* The median displayed size over `history` within [now - windowMs, now] -- the caller computes it once per
+   root per book (review 8) and hands it to bigLevels as opts.median. */
+function medianOf(history, now, windowMs = BIG_WINDOW_MS) { return median(pooledSizes(history, now, windowMs)); }
+/* Any line still fading: the overlay keeps repainting on its own clock until none is (review 6). */
+function fading(result) {
+  return !!result && ['bids', 'offers'].some((s) => Array.isArray(result[s]) && result[s].some((l) => l.opacity < 1));
+}
+
 /* The big-order lines for `book` ({bids, offers}: [[price, size], ...] each, best first) given `history`
    (recent books for the same root; order doesn't matter, this function windows it itself). opts: multiple
    (default BIG_MULTIPLE), now (ms; defaults to book.ts), windowMs (default BIG_WINDOW_MS), fadeMs (default
-   BIG_FADE_MS), prev (this function's own last return -- {bids, offers} -- omit on the first call for a root).
+   BIG_FADE_MS), prev (this function's own last return -- {bids, offers} -- omit on the first call for a root),
+   tick (key levels by tick index, as the ladder does), median (precomputed: `history` is then not pooled).
    No book, or a history too thin to have a median at all, both mean nothing qualifies. */
 function bigLevels(book, history, opts = {}) {
   const multiple = opts.multiple > 0 ? opts.multiple : BIG_MULTIPLE;
@@ -169,11 +218,11 @@ function bigLevels(book, history, opts = {}) {
   const fadeMs = opts.fadeMs > 0 ? opts.fadeMs : BIG_FADE_MS;
   const now = Number.isFinite(opts.now) ? opts.now : (book && Number.isFinite(book.ts) ? book.ts : 0);
   const prev = opts.prev && typeof opts.prev === 'object' ? opts.prev : {};
-  const med = median(pooledSizes(history, now, windowMs));
+  const med = Number.isFinite(opts.median) && opts.median >= 0 ? opts.median : medianOf(history, now, windowMs);
   const threshold = med > 0 ? med * multiple : Infinity;   // no usable median: nothing can qualify
   return {
-    bids: bigSide(book && book.bids, prev.bids, threshold, now, fadeMs),
-    offers: bigSide(book && book.offers, prev.offers, threshold, now, fadeMs),
+    bids: bigSide(book && book.bids, prev.bids, threshold, now, fadeMs, opts.tick),
+    offers: bigSide(book && book.offers, prev.offers, threshold, now, fadeMs, opts.tick),
     median: med,
   };
 }
@@ -189,8 +238,9 @@ function imbalance(book, n = 10) {
   return { bid, ask, pct, side: pct > 0 ? 'bid' : pct < 0 ? 'ask' : null };
 }
 
-const api = { LEVELS, tickIndex, priceOf, buildRows, nextCenter, centerOn, volumeAtPrice,
-  BIG_WINDOW_MS, BIG_FADE_MS, BIG_CAP, BIG_MULTIPLE, bigLevels, imbalance };
+const api = { LEVELS, tickIndex, priceOf, buildRows, nextCenter, centerOn, volumeAtPrice, withBar, sessionKey,
+  sessionStart, toggleTab, pressed, isRecentreKey, chipTitle,
+  BIG_WINDOW_MS, BIG_FADE_MS, BIG_CAP, BIG_MULTIPLE, bigLevels, medianOf, fading, imbalance };
 if (typeof window !== 'undefined') window.HBDom = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

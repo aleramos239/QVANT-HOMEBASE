@@ -1332,7 +1332,12 @@ function connect() {
     else if (m.type === 'replay_state') window.HBReplayUI.onState(c, m);
     else if (m.type === 'replay_error') window.HBReplayUI.onError(c, m);
   };
-  ws.onclose = () => { showStatus({ connected: false, error: 'chart service unreachable — retrying' }); setTimeout(connect, 2000); };
+  ws.onclose = () => {
+    showStatus({ connected: false, error: 'chart service unreachable — retrying' });
+    // the books went with the socket: the ladder says "Book stale", the lines go, the heatmap leaves a gap
+    window.HBDomUI.onDisconnect(); window.HBL2Layer.onDisconnect(); window.HBLiquidity.onDisconnect();
+    setTimeout(connect, 2000);
+  };
 }
 
 /* ---- keyboard ---- */

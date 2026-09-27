@@ -241,3 +241,70 @@ test('imbalance: a malformed row is dropped, not crashed on', () => {
   assert.equal(im.ask, 0);
   assert.equal(im.side, 'bid');
 });
+
+/* ---- review fix round 1 ---- */
+const H = 3600;
+test('sessionKey / sessionStart: the session opens at 18:00 ET; a weekend folds into Monday', () => {
+  const day = 20000 * 86400;                                   // an ET-wall midnight, in ET wall seconds
+  assert.equal(Dom.sessionKey(day + 17 * H), Dom.sessionKey(day - 5 * H));        // 19:00 the evening before
+  assert.notEqual(Dom.sessionKey(day + 18 * H), Dom.sessionKey(day + 17 * H));    // 18:00 starts the next one
+  const bars = [{ t: day + 9 * H }, { t: day + 16 * H }, { t: day + 18 * H }, { t: day + 20 * H }, { t: day + 24 * H + 9 * H }];
+  assert.equal(Dom.sessionStart(bars), 2);                     // 18:00 and 20:00 and the next morning: one session
+  assert.equal(Dom.sessionStart([]), 0);
+  assert.equal(Dom.sessionStart([{ t: day }]), 0);
+});
+
+test('volumeAtPrice: an index range; withBar adds the forming bar onto a copy', () => {
+  const bars = [{ fp: [[100, 1, 1]] }, { fp: [[100, 2, 0]] }, { fp: [[100, 0, 5], [100.25, 1, 0]] }];
+  const closed = Dom.volumeAtPrice(bars, TICK, 1, 2);          // bars[1] only
+  assert.equal(closed.get(Dom.tickIndex(100, TICK)), 2);
+  const all = Dom.withBar(closed, bars[2], TICK);
+  assert.equal(all.get(Dom.tickIndex(100, TICK)), 7);
+  assert.equal(all.get(Dom.tickIndex(100.25, TICK)), 1);
+  assert.equal(closed.get(Dom.tickIndex(100, TICK)), 2);        // the memo is never mutated
+  assert.equal(Dom.withBar(null, { o: 1 }, TICK), null);        // nothing anywhere: still blank
+  assert.equal(Dom.withBar(null, bars[2], TICK).get(Dom.tickIndex(100, TICK)), 5);
+  assert.equal(Dom.volumeAtPrice(bars, TICK, 3, 3), null);
+});
+
+test('bigLevels: levels are keyed by tick index, so a float hair off the tick is the same line', () => {
+  const hist = [{ ts: 0, bids: [[100, 1], [99.75, 1]], offers: [[100.25, 1]] }];
+  const first = Dom.bigLevels({ ts: 0, bids: [[100, 10]], offers: [] }, hist, { now: 0, tick: TICK });
+  const next = Dom.bigLevels({ ts: 1000, bids: [[100.0000000001, 10]], offers: [] }, hist, { now: 1000, tick: TICK, prev: first });
+  assert.equal(next.bids.length, 1);
+  assert.equal(next.bids[0].opacity, 1);
+  assert.equal(next.bids[0].idx, Dom.tickIndex(100, TICK));
+});
+
+test('bigLevels: a precomputed median is used as is (computed once per root per book)', () => {
+  const r = Dom.bigLevels({ ts: 0, bids: [[100, 10], [99.75, 9]], offers: [] }, null, { now: 0, tick: TICK, median: 2 });
+  assert.deepEqual(r.bids.map((l) => l.price), [100]);          // 10 >= 5 x 2, 9 < 10
+  assert.equal(r.median, 2);
+  assert.equal(Dom.medianOf([{ ts: 0, bids: [[1, 1], [2, 3]], offers: [[3, 2]] }], 0), 2);
+  assert.equal(Dom.fading({ bids: [{ opacity: 1 }], offers: [{ opacity: 0.4 }] }), true);
+  assert.equal(Dom.fading({ bids: [{ opacity: 1 }], offers: [] }), false);
+  assert.equal(Dom.fading(null), false);
+});
+
+test('toggleTab: the DOM button opens onto its tab, and closes the panel when that tab is already showing', () => {
+  assert.deepEqual(Dom.toggleTab({ open: false, tab: 'order' }, 'dom'), { open: true, tab: 'dom' });
+  assert.deepEqual(Dom.toggleTab({ open: true, tab: 'order' }, 'dom'), { open: true, tab: 'dom' });
+  assert.deepEqual(Dom.toggleTab({ open: true, tab: 'dom' }, 'dom'), { open: false, tab: 'dom' });
+  assert.equal(Dom.pressed({ open: true, tab: 'dom' }, 'dom'), true);
+  assert.equal(Dom.pressed({ open: false, tab: 'dom' }, 'dom'), false);
+  assert.equal(Dom.pressed({ open: true, tab: 'order' }, 'dom'), false);
+});
+
+test('isRecentreKey: a bare C only (never with a modifier)', () => {
+  assert.equal(Dom.isRecentreKey({ key: 'c' }), true);
+  assert.equal(Dom.isRecentreKey({ key: 'C', shiftKey: true }), true);
+  for (const e of [{ key: 'c', ctrlKey: true }, { key: 'c', metaKey: true }, { key: 'c', altKey: true }, { key: ' ', ctrlKey: true }, { key: 'x' }]) {
+    assert.equal(Dom.isRecentreKey(e), false, JSON.stringify(e));
+  }
+});
+
+test('chipTitle: the line label and the account(s) it belongs to', () => {
+  assert.equal(Dom.chipTitle('LONG 2', [{ who: '…047' }, { who: '…047' }]), 'LONG 2 · …047');
+  assert.equal(Dom.chipTitle('BUY LMT 1', [{ who: '…047' }, { who: '…045' }]), 'BUY LMT 1 · …047, …045');
+  assert.equal(Dom.chipTitle('SL 1', []), 'SL 1');
+});

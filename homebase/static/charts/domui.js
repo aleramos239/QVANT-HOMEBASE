@@ -30,7 +30,7 @@ let gridCenter = null;                         // the centre the current row ele
 const rowEls = new Map();                      // tick index -> {row, bid, priceText, mkWrap, ask, vol}
 const seenRoot = new Set();                    // roots we've received at least one depth message for
 const books = new Map();                       // root -> the latest {type, root, ts, bids, offers}
-let volCache = { bars: null, len: -1, tick: null, map: null };
+let volCache = { bars: null, len: -1, tick: null, start: -1, closed: null };
 let dirty = false;
 
 /* ---- small helpers ---- */
@@ -39,13 +39,17 @@ function currentLast() {
   const q = D().quotes[cur.root];
   return q && Number.isFinite(q.last) ? q.last : null;
 }
-/* Memoised on the cell's own bars array + its length: recomputed only when new bars actually arrived. */
+/* The current session's volume at price (review 11), the forming bar included (review I5): the closed bars of
+   the session are memoised on the bars array + its length + the session start; the forming bar -- replaced in
+   place on every update -- is added onto a copy at each paint. */
 function volumeFor(cell, tick) {
-  const bars = cell.bars;
-  if (volCache.bars === bars && volCache.len === bars.length && volCache.tick === tick) return volCache.map;
-  const map = Dom.volumeAtPrice(bars, tick);
-  volCache = { bars, len: bars.length, tick, map };
-  return map;
+  const bars = cell.bars, n = bars.length;
+  if (!n) return null;
+  const start = Dom.sessionStart(bars);
+  if (!(volCache.bars === bars && volCache.len === n && volCache.tick === tick && volCache.start === start)) {
+    volCache = { bars, len: n, tick, start, closed: Dom.volumeAtPrice(bars, tick, start, n - 1) };
+  }
+  return Dom.withBar(volCache.closed, bars[n - 1], tick);
 }
 
 /* ---- build (once) ---- */
@@ -69,7 +73,7 @@ function build() {
   ui.head = mkEl('div', 'dom-head');
   ui.recentre = mkEl('button', 'dom-recentre');
   ui.recentre.type = 'button';
-  ui.recentre.title = 'Recentre on the last trade (Ctrl+Space while the ladder has focus)';
+  ui.recentre.title = 'Recentre on the last trade (C while the ladder has focus)';
   ui.recentre.append(page.icon('crosshair'), mkEl('span', '', 'Recentre'));
   ui.recentre.onclick = forceRecentre;
   ui.head.append(mkEl('span', 'dom-spacer'), ui.recentre);
@@ -90,11 +94,11 @@ function build() {
   container.replaceChildren(ui.wrap);
 }
 
-/* ---- the recentre shortcut: only while the ladder itself has focus (a keydown on ui.rows or a descendant --
-   never the app-wide document listener), and never while a dialog owns the keyboard. Never Space alone (Bar
-   Replay's) or a bare digit/letter (the timeframe/symbol boxes): Ctrl+Space matches neither. ---- */
+/* ---- the recentre shortcut: C, only while the ladder itself has focus (a keydown on ui.rows or a descendant --
+   never the app-wide document listener, so the symbol box's type-to-search never sees it), and never while a
+   dialog owns the keyboard. Not Ctrl+Space: macOS takes it for the input-source switch (review 12). ---- */
 function onKeydown(e) {
-  if (!e.ctrlKey || e.code !== 'Space') return;
+  if (!Dom.isRecentreKey(e)) return;
   if (page.dialogOpen && page.dialogOpen()) return;
   e.preventDefault();
   e.stopPropagation();
@@ -123,6 +127,11 @@ function sync(cell) {
   cur = { cell, root, tick };
   dirty = true;
 }
+/* The page's /ws dropped (review 13): every book is stale until the new socket's greeting brings it back. */
+function onDisconnect() {
+  for (const [root, m] of books) books.set(root, { ...m, ts: null });
+  dirty = true;
+}
 function setVisible(v) {
   v = !!v;
   if (v === visible) return;
@@ -147,7 +156,7 @@ function markerChip(g) {
   const kind = g.kind === 'position' ? 'pos' : g.kind;   // 'pos' | 'sl' | 'tp' | 'order'
   const side = g.side === 'Buy' ? 'buy' : 'sell';
   const chip = mkEl('span', `dom-chip dom-chip-${kind} dom-chip-${side}`, String(g.qty));
-  chip.title = T.lineLabel(g);
+  chip.title = Dom.chipTitle(T.lineLabel(g), g.legs);   // names the account(s): "LONG 2 · …047" (review 14)
   return chip;
 }
 function paintRows(rows, tick, groups) {
@@ -204,5 +213,5 @@ function mount(el, pg) {
   setInterval(() => { if (dirty) { dirty = false; if (visible) paint(); } }, PAINT_MIN_MS);
 }
 
-window.HBDomUI = { mount, sync, setVisible, onDepth };
+window.HBDomUI = { mount, sync, setVisible, onDepth, onDisconnect };
 })();

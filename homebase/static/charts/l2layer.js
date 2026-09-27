@@ -24,6 +24,8 @@ const HISTORY_MS = Dom.BIG_WINDOW_MS + 5000;   // a small margin over the 60 s w
 
 const books = new Map();       // root -> latest {ts, bids, offers} (ts null / message absent: no depth)
 const history = new Map();     // root -> [{ts, bids, offers}, ...] pruned to ~HISTORY_MS
+const offsets = new Map();     // root -> book.ts - Date.now() at arrival: the fade clock between books
+const medians = new Map();     // root -> {ts, value}: the median once per root per book (review 8)
 const overlays = new Set();    // live Overlay instances, so one depth message can mark every one dirty
 
 /* The shared entry point app.js's ws routing calls, right alongside HBDomUI.onDepth — same message, same
@@ -31,10 +33,11 @@ const overlays = new Set();    // live Overlay instances, so one depth message c
    this root's book and history; a malformed message is dropped, never throws. */
 function onDepth(m) {
   if (!m || typeof m.root !== 'string') return;
-  if (m.ts == null) { books.delete(m.root); history.delete(m.root); }
+  if (m.ts == null) { books.delete(m.root); history.delete(m.root); medians.delete(m.root); }
   else {
     const snap = { ts: m.ts, bids: m.bids, offers: m.offers };
     books.set(m.root, snap);
+    offsets.set(m.root, m.ts - Date.now());
     let h = history.get(m.root);
     if (!h) { h = []; history.set(m.root, h); }
     h.push(snap);
@@ -43,6 +46,20 @@ function onDepth(m) {
   }
   for (const ov of overlays) if (ov.root === m.root) ov.dirty = true;
 }
+/* The page's /ws dropped: every book is gone (the server greets the new socket with the current ones). */
+function onDisconnect() {
+  books.clear(); history.clear(); medians.clear();
+  for (const ov of overlays) ov.dirty = true;
+}
+function medianFor(root, book) {
+  const m = medians.get(root);
+  if (m && m.ts === book.ts) return m.value;
+  const value = Dom.medianOf(history.get(root) || [], book.ts);
+  medians.set(root, { ts: book.ts, value });
+  return value;
+}
+/* Now on the book's clock: the last book's ts plus the wall time since it arrived (a quiet book still fades). */
+function bookNow(root, book) { return offsets.has(root) ? Date.now() + offsets.get(root) : book.ts; }
 
 function hexToRgba(hex, alpha) {
   const h = String(hex).replace('#', '');
@@ -62,11 +79,16 @@ class Overlay {
     this.root = cell.shown ? cell.shown.root : cell.cfg.root;
     this.dirty = true;
     this.lines = { bids: [], offers: [] };     // bigLevels' own last return, threaded back in as opts.prev
-    this.priceLines = new Map();               // "bids:price" | "offers:price" -> the LWC price-line handle
+    this.priceLines = new Map();               // "bids:tickIdx" | "offers:tickIdx" -> the LWC price-line handle
     this.badge = null;                         // {wrap, bar, pct}, once built
     this.badgeUid = null;                      // the 'imbalance' instance uid it was built for
     overlays.add(this);
-    this.timer = setInterval(() => { if (this.dirty && !this.dead) { this.dirty = false; this.paint(); } }, PAINT_MIN_MS);
+    // a depth message marks it dirty; a line still fading repaints on this clock alone (review 6)
+    this.timer = setInterval(() => {
+      if (this.dead || !(this.dirty || Dom.fading(this.lines))) return;
+      this.dirty = false;
+      this.paint();
+    }, PAINT_MIN_MS);
     this.paint();   // an already-streaming root (switching charts, adding the indicator) shows at once
   }
 
@@ -74,7 +96,8 @@ class Overlay {
     if (this.dead || !this.cell.chart) return;
     const cell = this.cell;
     this.root = cell.shown ? cell.shown.root : cell.cfg.root;
-    const book = this.root ? books.get(this.root) : null;
+    // Bar Replay (review I4): a replaying chart shows another date -- the live book is never drawn on it
+    const book = this.root && !cell.replay ? books.get(this.root) : null;
     this.paintBigLines(cell, book);
     this.paintImbalance(cell, book);
   }
@@ -83,8 +106,8 @@ class Overlay {
   paintBigLines(cell, book) {
     const inst = findIndicator(cell, 'bigorders');
     if (!inst || !book) { this.clearLines(); this.lines = { bids: [], offers: [] }; return; }
-    const hist = history.get(this.root) || [];
-    const result = Dom.bigLevels(book, hist, { multiple: inst.params.multiple, now: book.ts, prev: this.lines });
+    const result = Dom.bigLevels(book, null, { multiple: inst.params.multiple, now: bookNow(this.root, book),
+      prev: this.lines, tick: cell.tick, median: medianFor(this.root, book) });
     this.lines = { bids: result.bids, offers: result.offers };
     this.syncLines(cell);
   }
@@ -95,7 +118,7 @@ class Overlay {
     const wanted = new Map();
     for (const side of ['bids', 'offers']) {
       const color = side === 'bids' ? (P.accent || '#2962FF') : (P.down || '#F23645');
-      for (const line of this.lines[side]) wanted.set(`${side}:${line.price}`, { ...line, color });
+      for (const line of this.lines[side]) wanted.set(`${side}:${line.idx}`, { ...line, color });   // tick index (review 7)
     }
     for (const [key, pl] of [...this.priceLines]) {
       if (!wanted.has(key)) { cell.candles.removePriceLine(pl); this.priceLines.delete(key); }
@@ -171,7 +194,7 @@ class Overlay {
 
 function overlay(cell) { return new Overlay(cell); }
 
-const api = { overlay, onDepth };
+const api = { overlay, onDepth, onDisconnect };
 if (typeof window !== 'undefined') window.HBL2Layer = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();
