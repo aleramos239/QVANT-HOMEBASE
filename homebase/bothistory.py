@@ -157,7 +157,7 @@ def _entry_slip_ticks(entry: dict, legs: list[dict], tick: float) -> Optional[fl
     if trigger is None or fill is None:
         return None
     sign = 1 if side == "Buy" else -1
-    return round(sign * (fill - trigger) / tick, 4)
+    return round(sign * (fill - trigger) / tick, 4) + 0.0     # no signed zero
 
 
 def _exit_slip_ticks(entry: Optional[dict], exit_price: Optional[float],
@@ -167,7 +167,7 @@ def _exit_slip_ticks(entry: Optional[dict], exit_price: Optional[float],
     if side not in ("Buy", "Sell") or not tick or sl_ref is None or exit_price is None:
         return None
     sign = 1 if side == "Buy" else -1
-    return round(sign * (sl_ref - exit_price) / tick, 4)
+    return round(sign * (sl_ref - exit_price) / tick, 4) + 0.0   # no signed zero
 
 
 def runs(records: Iterable[dict], strategy: str, *, symbol: str, today: str,

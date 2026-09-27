@@ -300,6 +300,17 @@ def test_a_short_entry_and_sl_exit_have_the_same_worse_is_positive_sign():
     assert r["exit"]["gap_through"] is True
 
 
+def test_a_fill_exactly_at_the_trigger_gives_a_clean_zero_not_a_signed_zero():
+    """A Sell entry at its trigger flips sign*0 to -0.0 unless normalized; str()
+    would print "-0.0" in a UI, so it must come back as a plain 0.0."""
+    recs = [placed("2026-09-11", "a1"),                 # lower 30890
+            rec("entry_fill", "2026-09-11", "09:30:02", strategy="nq930", account="a1", side="Sell",
+                fill=30890.0, qty_filled=2)]
+    (r,) = history(recs)
+    assert r["entry"]["slip_ticks"] == 0.0
+    assert str(r["entry"]["slip_ticks"]) == "0.0"
+
+
 def test_a_missing_brackets_moved_event_gives_a_null_sl_slip_not_a_crash():
     recs = [placed("2026-09-11", "a1"),
             rec("entry_fill", "2026-09-11", "09:30:02", strategy="nq930", account="a1", side="Buy",
