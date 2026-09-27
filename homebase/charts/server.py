@@ -23,13 +23,18 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .. import netguard, symbols
+from ..contracts import tick_size as contract_tick_size
 from ..paths import state_dir
-from . import DEFAULT_ROOTS, QUIET      # QUIET: never refill across the 9:30 fire
+from . import DEFAULT_ROOTS, DEPTH_RECORD_ROOTS, QUIET      # QUIET: never refill across the 9:30 fire
 from .bars import BarSpec
+from .barreplay import BarReplay
+from .bursts import REACTION_ROOTS, BurstBook, ReactionBook, configured_roots
 from .calendar import Calendar
+from .depth import DEPTH_ARCHIVE, Depth, DepthRecorder
 from .desk import Fanout, Quotes, register as register_desk
 from .history import History
 from .hub import Hub, Stream
+from .news import News
 from .recorder import REFILL_MAX_PAGES, LiveRecorder, refill
 from .replay import ReplayFeed
 from .session import ET, always_open, et_wall_s, session_date, session_range_ms, split_by_session
@@ -213,7 +218,8 @@ class Conn:
 def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | None = None,
                speed: float = 10.0, start_et: dt.time = dt.time(9, 25), feed_factory=None,
                now_ms=None, state: Path | None = None, calendar_fetch=None,
-               desk_factory=None, fake_desk_factory=None) -> FastAPI:
+               desk_factory=None, fake_desk_factory=None, news_fetch=None, depth_roots=None,
+               depth_base: Path | None = None) -> FastAPI:
     roots = [r.upper() for r in roots]
     sd = Path(state) if state else state_dir() / "charts"
     sd.mkdir(parents=True, exist_ok=True)
@@ -222,6 +228,16 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
     templates_path = sd / "templates.json"
     # ForexFactory's calendar; calendar_fetch None never fetches (tests); python -m homebase.charts passes http_get
     cal = Calendar(sd / "calendar", fetch=calendar_fetch)
+    # news.py: no fetching in replay mode, whatever the caller passes (a replayed price must never
+    # look like it triggered a burst/reaction against a headline that broke long after that session)
+    news_fetch = None if replay else news_fetch
+    news_dir = sd / "news"
+    news = News(news_dir, fetch=news_fetch)
+    # bursts/reactions live in their own subfolders below news_dir (never loose files beside
+    # news's own <date>.jsonl day files -- see news.py's docstring); news.near() is a bisect
+    # lookup, called only on the rare tick that actually fires a burst, never on every tick
+    burst_book = BurstBook(news_dir, [r for r in configured_roots() if r in roots], contract_tick_size, news.near)
+    reaction_book = ReactionBook(news_dir, contract_tick_size)
     store = TickStore(base)
     history = History(store, cache_dir=sd / "cache")
     recorder = None if replay else LiveRecorder(base)
@@ -380,10 +396,35 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             today = session_date(now, root)
             rows = [r for r in rows if session_date(int(r["ts_ms"]), root) >= today]
             quotes.note(root, rows)
-            hub.on_ticks(root, recorder.append(root, contract, rows))
+            kept = recorder.append(root, contract, rows)
+            hub.on_ticks(root, kept)
+            if kept:
+                try:
+                    if root in burst_book.roots:
+                        for r in kept:
+                            fired = burst_book.push(root, int(r["ts_ms"]), float(r["price"]))
+                            if fired is not None:
+                                fan({"type": "burst", **fired})
+                    if root in REACTION_ROOTS:
+                        for r in kept:
+                            reaction_book.push_tick(root, int(r["ts_ms"]), float(r["price"]))
+                    reaction_book.flush_due(int(kept[-1]["ts_ms"]))
+                except Exception as e:  # noqa: BLE001 — burst/reaction work must never break the live tick path
+                    log(f"news/bursts ({root}): {type(e).__name__}: {e}")
 
         feed = (feed_factory or TickFeed)(roots, on_live, on_subscribed=_refill)
+    # Level 2 rides the live feed's own md socket; replay builds none of it (no
+    # subscriptions, no depth messages). Recorded: the depth roots this service charts.
+    depth = None
+    if not replay:
+        rec_roots = [r for r in (DEPTH_RECORD_ROOTS if depth_roots is None else depth_roots)
+                     if r.upper() in roots]
+        depth = Depth(feed, rec_roots, log=log,
+                      recorder=DepthRecorder(depth_base or DEPTH_ARCHIVE) if rec_roots else None)
     hub = Hub(history, clock)
+    # per-chart Bar Replay: its own hubs over its own History memo; never the live hub, recorder, desk or quotes
+    replays = BarReplay(store, sd / "cache", roots, lambda: clock(), min_bar=MIN_BAR,
+                        max_studies=MAX_STUDIES, log=log)
     chart_error: list[str | None] = [None]     # the pump's chart work, failing right now
 
     def status() -> dict:
@@ -392,9 +433,15 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             st["error"] = f"charts: {chart_error[0]}"   # the charts are frozen: say so
         st["recorder"] = None if recorder is None else {
             "written": recorder.written, "buffered": recorder.buffered, "error": recorder.error}
+        st["depth"] = {} if depth is None else depth.status()
+        st["depth_recorder"] = None if depth is None or depth.recorder is None else depth.recorder.status()
+        if depth is not None and depth.error and not st.get("error"):
+            st["error"] = f"depth: {depth.error}"
         st["streams"] = len(hub.streams)
         st["clients"] = len(conns)
         st["calendar"] = cal.status()
+        st["news"] = news.status()
+        st["bursts"] = burst_book.status()
         return st
 
     older_busy: set = set()     # (conn, chart id, stream identity) with a scroll-back chunk being built --
@@ -451,6 +498,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                 for m in quotes.drain():
                     fan(m)
                 desk_fan.flush()
+                replays.pump()
                 chart_error[0] = None
             except Exception as e:  # noqa: BLE001 — the pump must never die
                 chart_error[0] = f"{type(e).__name__}: {e}"
@@ -465,6 +513,21 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                         c.send(st)
                 except Exception as e:  # noqa: BLE001
                     log(f"pump status: {type(e).__name__}: {e}")
+
+    async def news_loop() -> None:
+        """The two news feeds, each on its own 60 s floor (News.poll() enforces
+        it per source); never faster, and never at all without news_fetch
+        (replay, or a test that passes none)."""
+        while True:
+            try:
+                for item in await asyncio.to_thread(news.poll):
+                    fan({"type": "news", **item})
+                    reaction_book.add_item(item)
+                    for updated in burst_book.link_news(item):    # a headline that arrived after its burst
+                        fan({"type": "burst_update", **updated})
+            except Exception as e:  # noqa: BLE001 — the news feed must never take the service down
+                log(f"news: {type(e).__name__}: {e}")
+            await asyncio.sleep(5.0)
 
     async def calendar_loop() -> None:
         """The calendar at startup, then hourly (30 min after a failure); never faster: FF blocks polling."""
@@ -495,13 +558,19 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         tasks = [asyncio.create_task(pump()), asyncio.create_task(feed.run())]
         if calendar_fetch is not None:
             tasks.append(asyncio.create_task(calendar_loop()))
+        if news_fetch is not None:
+            tasks.append(asyncio.create_task(news_loop()))
         if link is not None:
             tasks.append(asyncio.create_task(link.run()))
+        if depth is not None:
+            tasks.append(asyncio.create_task(depth.run()))
         log(f"up — {'replay ' + replay.isoformat() if replay else 'live'} · {', '.join(roots)}")
         try:
             yield
         finally:
             feed.stop()
+            if depth is not None:
+                depth.stop()
             if link is not None:
                 link.stop()             # stop() alone can't interrupt a blocked read; the
                                          # cancel below (link.run() is in `tasks`) does that
@@ -509,6 +578,8 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                 t.cancel()
             if recorder is not None:
                 recorder.flush()
+            if depth is not None:
+                await depth.aclose()    # cancels its requests in flight; the recording's last member
             tester.manager.shutdown()   # never leave a runner child orphaned
 
     app = FastAPI(title="Homebase Charts", lifespan=lifespan)
@@ -646,6 +717,20 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         countries = [c.strip() for c in q.get("countries", "").split(",") if c.strip()]
         return cal.events(frm, to, countries or None)
 
+    @app.get("/api/news")
+    async def api_news(request: Request):
+        bad = netguard.refusal(request.method, request.scope["headers"], netguard.allowlist())
+        if bad is not None:
+            raise HTTPException(*bad)
+        q = request.query_params
+        try:
+            frm, to = int(q.get("from", 0)), int(q.get("to", 2 ** 62))
+        except ValueError:
+            raise HTTPException(400, "from / to: epoch ms") from None
+        tags = [t.strip() for t in q.get("tags", "").split(",") if t.strip()]
+        sources = [s.strip() for s in q.get("sources", "").split(",") if s.strip()]
+        return news.items(frm, to, tags or None, sources or None)
+
     @app.websocket("/ws")
     async def ws_endpoint(sock: WebSocket):
         if not origin_ok(sock.headers.get("origin"), sock.headers.get("host")):
@@ -666,7 +751,10 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         conn = Conn(sock)
         conns.add(conn)
         conn.send({"type": "status", **status()})
-        desk_fan.attach(conn, conn.send, lambda: not conn.dead and conn.q.qsize() < SEND_QUEUE_MAX // 2)
+        def room() -> bool:
+            return not conn.dead and conn.q.qsize() < SEND_QUEUE_MAX // 2
+
+        desk_fan.attach(conn, conn.send, room)
         try:
             while True:
                 # Only a framing/decoding problem is swallowed here. Receiving
@@ -690,10 +778,24 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                     continue
                 op, cid = msg.get("op"), str(msg.get("id", ""))
                 if op == "unsub":
+                    replays.stop(conn, cid, notify=False)
                     hub.unsubscribe((conn, cid))
+                    if depth is not None:
+                        depth.unview((conn, cid))
                     continue
                 if op == "older":
-                    ask_older(conn, cid, msg.get("before"))
+                    if not replays.ask_older(conn, cid, msg.get("before")):
+                        ask_older(conn, cid, msg.get("before"))
+                    continue
+                if op == "replay_start":
+                    if await replays.start(conn, cid, msg, live=hub.stream_of((conn, cid))):
+                        hub.unsubscribe((conn, cid))    # the chart leaves the live stream
+                    continue
+                if op == "replay_ctl":
+                    await replays.control(conn, cid, msg)
+                    continue
+                if op == "replay_stop":
+                    replays.stop(conn, cid)
                     continue
                 if op != "sub":
                     continue
@@ -717,6 +819,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                     conn.send({"type": "error", "id": cid, "error": str(e)})
                     continue
                 s = None
+                replays.stop(conn, cid, notify=False)   # a sub on a replaying chart returns it to live
                 try:
                     hub.unsubscribe((conn, cid))
                     s = hub.streams.get((root, spec.key))
@@ -726,6 +829,8 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                         s.add_study(k)
                     hub.subscribe(s, (conn, cid))
                     conn.send({"type": "history", "id": cid, **s.payload(bool(msg.get("fp", True)))})
+                    if depth is not None:
+                        depth.view((conn, cid), root, conn.send, room)   # after `history`: depth follows it
                 except Exception as e:  # noqa: BLE001 — an unexpected failure building the
                                         # stream must not drop every chart on the page either
                     log(f"sub {cid} ({root} {spec.key}): {type(e).__name__}: {e}\n{traceback.format_exc()}")
@@ -735,6 +840,8 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                     # an id that never got `history`), and never leave a
                     # freshly attached, now-subscriberless stream in hub.streams
                     hub.unsubscribe((conn, cid))
+                    if depth is not None:
+                        depth.unview((conn, cid))
                     if s is not None and not s.subs and hub.streams.get(s.key) is s:
                         del hub.streams[s.key]
                     continue
@@ -746,7 +853,10 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         finally:
             conns.discard(conn)
             desk_fan.detach(conn)
+            if depth is not None:
+                depth.drop_conn(conn)
             hub.drop_conn(conn)
+            replays.drop_conn(conn)
             conn.task.cancel()
 
     return app

@@ -25,6 +25,7 @@ def test_replay_mode_passes_no_calendar_fetch(monkeypatch):
     assert main_mod.main(["--replay", "2026-09-24"]) == 0
     assert captured["replay"] == dt.date(2026, 9, 24)
     assert captured["calendar_fetch"] is None
+    assert captured["news_fetch"] is None       # a replay never fetches FinancialJuice/trumpstruth either
 
 
 def test_live_mode_passes_the_real_http_get(monkeypatch):
@@ -33,3 +34,4 @@ def test_live_mode_passes_the_real_http_get(monkeypatch):
     assert main_mod.main([]) == 0
     assert captured["replay"] is None
     assert captured["calendar_fetch"] is main_mod.http_get
+    assert captured["news_fetch"] is main_mod.news_http_get

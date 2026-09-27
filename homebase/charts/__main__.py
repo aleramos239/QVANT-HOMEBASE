@@ -11,6 +11,7 @@ from ..paths import state_dir
 from . import DEFAULT_ROOTS, PORT
 from .calendar import http_get
 from .desk import DeskLink
+from .news import http_get as news_http_get
 from .server import create_app
 
 
@@ -34,8 +35,9 @@ def main(argv=None) -> int:
     app = create_app(roots=[r for r in a.roots.split(",") if r],
                      replay=dt.date.fromisoformat(a.replay) if a.replay else None,
                      speed=a.speed, start_et=dt.time.fromisoformat(a.start),
-                     # a replay never fetches ForexFactory: the cached weeks on disk are served as is
+                     # a replay never fetches ForexFactory or the news feeds: cached data is served as is
                      calendar_fetch=None if a.replay else http_get,
+                     news_fetch=None if a.replay else news_http_get,
                      desk_factory=None if a.replay else (
                          lambda fan: DeskLink(fan, key_path=state_dir() / "desk.key")),
                      fake_desk_factory=(lambda fan: DeskLink(
