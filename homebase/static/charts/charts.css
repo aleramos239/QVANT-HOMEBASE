@@ -469,3 +469,34 @@ a { color: inherit; }
 .tst-run-row { display: flex; align-items: center; gap: 8px; white-space: normal; }
 .tst-run-row .menu-t { white-space: normal; }
 .tst-run-row:disabled { opacity: .6; cursor: default; }
+/* the Heat-map sub-tab: axis editor, run row, and the grid (colour = net $, Sharpe under it) */
+.tst-heat-cfg { padding-bottom: 12px; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+.tst-heat-axes { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-bottom: 10px; }
+.tst-heat-axis { display: inline-flex; align-items: center; gap: 6px; }
+.tst-heat-axis .set-select { height: 28px; font-size: 13px; }
+.tst-heat-role { width: 52px; }
+.tst-heat-vals { width: 190px; height: 28px; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel);
+  font-size: 12px; font-variant-numeric: tabular-nums; }
+.tst-heat-vals:focus { border-color: var(--accent); }
+.tst-heat-cfg :disabled { opacity: .5; cursor: default; }
+.tst-heat-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; font-size: 12px; color: var(--text-2); }
+.tst-heat-looks { color: var(--warn); }
+.tst-heat-err { display: block; padding: 6px 0 0; }
+.tst-heat-loaded { padding-top: 0; }
+.tst-heat-loaded[hidden] { display: none; }
+.tst-heat-grid { overflow-x: auto; }
+.tst-heat-table { border-collapse: separate; border-spacing: 2px; font-size: 12px; font-variant-numeric: tabular-nums; margin-bottom: 12px; }
+.tst-heat-table th { color: var(--text-2); font-weight: 400; padding: 0 8px; white-space: nowrap; }
+.tst-heat-table th.num { text-align: right; }
+.tst-heat-table thead th.num { text-align: center; }
+.tst-heat-corner { text-align: left; }
+.tst-heat-table td { padding: 0; }
+.tst-hcell { width: 96px; height: 44px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  border-radius: 4px; background: var(--hover); color: var(--text); }
+.tst-hcell:disabled { cursor: default; color: var(--text-2); }
+.tst-hcell.done:hover { box-shadow: inset 0 0 0 1px var(--text-2); }
+.tst-hcell.warn { box-shadow: inset 0 0 0 1px var(--warn); }
+.tst-hcell.sel { box-shadow: inset 0 0 0 2px var(--accent); }
+.tst-hcell.error { color: var(--down); }
+.tst-hcell-net { font-weight: 600; }
+.tst-hcell-sh { font-size: 11px; color: var(--text-2); }

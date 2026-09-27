@@ -1,8 +1,13 @@
 /* Homebase Charts — HBTesterUI: the Strategy Tester tab (HBPanel.addTab), built on HBTester (the pure
    model: form defaults/validation, the request body, progress text, tiles/tables/marks). This module owns
    the DOM only: the header row (strategy, inputs dialog, range, costs, holdout, run/progress/cancel, recent
-   runs), the inner Overview / Performance summary / List of trades / Properties tabs, and the mini equity +
-   drawdown chart.
+   runs), the inner Overview / Performance summary / List of trades / Properties / Heat-map tabs, and the mini
+   equity + drawdown chart.
+
+   Heat-map: 2 or 3 inputs x value lists (<= 60 cells) run as a grid on the research window 2021-2024 ONLY
+   (the server forces it; the Holdout switch is disabled on that tab). Each cell is a full single run: a
+   click loads its bundle into the other tabs. The grid DOM is built once per grid (or tab show) and every
+   poll PATCHES its cells in place -- never a rebuild (and a desk-event render() is a no-op, see below).
 
    Carried finding (2026-09-27 review of Tasks 3-4, restated for this tab): HBPanel.refresh() -- really
    onDeskEvent -- re-renders whichever tab is active on every desk event, including quotes at up to 4/s,
@@ -22,7 +27,8 @@ const REASON_MAX = X.REASON_MAX;
 const COST_FIELDS = [['qty', 'Qty', 1, 100, 1], ['commission', 'Commission $/RT (per contract)', 0, 100, 0.01],
   ['slippage_ticks', 'Slippage (ticks)', 0, 20, 0.25]];
 const INNER_TABS = [['overview', 'Overview'], ['summary', 'Performance summary'], ['trades', 'List of trades'],
-  ['properties', 'Properties']];
+  ['properties', 'Properties'], ['heatmap', 'Heat-map']];
+const AXIS_ROLES = ['Rows', 'Columns', 'Panels'];
 const TRADE_COLS = [['n', '#', true], ['side', 'Side', false], ['entry', 'Entry time', false], [null, 'Entry price', true],
   ['exit', 'Exit time', false], [null, 'Exit price', true], ['reason', 'Reason', false], ['qty', 'Qty', true],
   ['net', 'Net', true], ['mae', 'MAE', true], ['mfe', 'MFE', true], ['dur', 'Duration', true]];
@@ -67,12 +73,13 @@ function schemaFor(id) { return (strategiesList || []).find((s) => s.id === id) 
 
 /* ---- per-viewer persisted form ({strategy, forms: {id: form}} in localStorage hb_tester) ---- */
 const STORE_KEY = 'hb_tester';
-let store = { strategy: null, forms: {} };
+let store = { strategy: null, forms: {}, heat: {} };
 function loadStore() {
+  const obj = (x) => (x && typeof x === 'object' ? x : {});
   try {
     const v = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
-    return (v && typeof v === 'object') ? { strategy: v.strategy || null, forms: (v.forms && typeof v.forms === 'object') ? v.forms : {} } : { strategy: null, forms: {} };
-  } catch (_) { return { strategy: null, forms: {} }; }
+    return (v && typeof v === 'object') ? { strategy: v.strategy || null, forms: obj(v.forms), heat: obj(v.heat) } : { strategy: null, forms: {}, heat: {} };
+  } catch (_) { return { strategy: null, forms: {}, heat: {} }; }
 }
 function saveStore() {
   try { localStorage.setItem(STORE_KEY, JSON.stringify(store)); } catch (_) { /* storage off: this session only */ }
@@ -96,6 +103,18 @@ let sortCol = 'n', sortDir = 1;
 let visibleTradeRows = TRADE_CHUNK;
 let miniChartHandle = null;
 const listeners = new Set();
+/* the heat-map */
+let heatRows = null;       // [{key, text}] x 3 for strategyId (key '' = unused): the axis editor
+let grid = null;           // the last polled grid status (server shape), or null
+let gridToken = 0;
+let gridStarting = false;  // POST in flight
+let gridErr = '';          // a 400 detail / lost contact -- cleared on the next axis edit
+let looksMap = {};         // {strategy: looks}
+let heatCell = null;       // {gid, i}: the cell whose report is loaded in the other tabs
+let heatResumed = false;   // the newest grid of this strategy was looked up once (page reload)
+let heatCfgEl = null, heatErrEl = null, heatCountEl = null, heatLooksEl = null, heatRunEl = null, heatNoteEl = null;
+let heatGridEl = null, heatProgBar = null, heatProgText = null;
+let heatCellEls = new Map();
 
 /* ---- DOM roots, rebuilt by render(); refreshed in place by everything else ---- */
 let root = null, headerEl = null, holdoutBannerEl = null, tabsEl = null, contentEl = null;
@@ -183,6 +202,7 @@ function syncRunState() {
   const text = computeErrorText();
   if (errEl) { errEl.textContent = text; errEl.hidden = !text; }
   updateHoldoutBanner();
+  syncHeat();
   if (runBtn) { const label = runLabelFor(); runBtn.lastChild.textContent = ' ' + label; runBtn.setAttribute('aria-label', label); }
 }
 function updateProgressUI() {
@@ -255,6 +275,16 @@ function costInput(key, label, lo, hi, step, busy) {
 function holdoutGroup() {
   const wrap = page.mk('span', 'tst-group');
   const lab = page.mk('label', 'tst-cost-l', 'Holdout');
+  if (innerTab === 'heatmap') {        // the heat-map is the research window only: the switch doesn't apply
+    const off = page.mk('button', 'switch');
+    off.type = 'button';
+    off.disabled = true;
+    off.setAttribute('role', 'switch');
+    off.setAttribute('aria-checked', 'false');
+    off.setAttribute('aria-label', 'Holdout (research window only)');
+    wrap.append(lab, off, page.mk('span', 'tst-cost-l', 'research window only'));
+    return wrap;
+  }
   const sw = page.mk('button', 'switch' + (form.holdout.on ? ' on' : ''));
   sw.type = 'button';
   sw.setAttribute('role', 'switch');
@@ -560,7 +590,14 @@ function refreshTabsBar() {
     b.type = 'button';
     b.setAttribute('role', 'tab');
     b.setAttribute('aria-selected', String(innerTab === id));
-    b.onclick = () => { innerTab = id; refreshTabsBar(); refreshContent(); };
+    b.onclick = () => {
+      const was = innerTab;
+      innerTab = id;
+      // the Holdout switch never carries into (or out of) the heat-map armed: it doesn't apply there
+      if ((id === 'heatmap') !== (was === 'heatmap')) { if (form.holdout.on) form = { ...form, holdout: { ...form.holdout, on: false } }; refreshHeader(); }
+      refreshTabsBar();
+      refreshContent();
+    };
     tabsEl.appendChild(b);
   }
   tabsEl.appendChild(page.mk('span', 'bp-spacer'));
@@ -751,11 +788,303 @@ function refreshContent() {
   dropMiniChart();
   contentEl.replaceChildren();
   if (lastRunFailed) contentEl.appendChild(page.mk('div', 'tst-fail-banner', `The last run failed: ${lastRunFailed}`));
+  if (innerTab === 'heatmap') { renderHeatmap(contentEl); return; }
+  heatGridEl = null;
   if (!bundle) { contentEl.appendChild(page.mk('div', 'bp-empty', EMPTY_MSG[innerTab])); return; }
   if (innerTab === 'overview') renderOverview(contentEl);
   else if (innerTab === 'summary') renderSummary(contentEl);
   else if (innerTab === 'trades') renderTrades(contentEl);
   else renderProperties(contentEl);
+}
+
+/* ================================================================== the heat-map ================================================================== */
+
+let heatRowsStrategy = null;
+/* The axis editor rows for the current strategy: the saved rows (unknown keys dropped), else the first two
+   numeric inputs at their defaults. */
+function currentHeatRows() {
+  if (heatRows && heatRowsStrategy === strategyId) return heatRows;
+  const schema = schemaFor(strategyId), keys = new Set(schema.inputs.map((i) => i.key));
+  const saved = Array.isArray(store.heat[strategyId]) ? store.heat[strategyId] : null;
+  if (saved && saved.length === 3) {
+    heatRows = saved.map((r) => (r && keys.has(r.key) ? { key: r.key, text: typeof r.text === 'string' ? r.text : '' } : { key: '', text: '' }));
+  } else {
+    const nums = schema.inputs.filter((i) => i.type === 'int' || i.type === 'float');
+    heatRows = [0, 1, 2].map((k) => (k < 2 && nums[k] ? { key: nums[k].key, text: String(nums[k].default) } : { key: '', text: '' }));
+  }
+  heatRowsStrategy = strategyId;
+  return heatRows;
+}
+function saveHeatRows() { gridErr = ''; store.heat[strategyId] = heatRows; saveStore(); }
+const gridInFlight = () => gridStarting || !!(grid && !X.gridProgress(grid).final);
+const heatLive = () => !!(heatGridEl && heatGridEl.isConnected);
+
+function axisRow(k, busy) {
+  const rows = currentHeatRows(), schema = schemaFor(strategyId), row = page.mk('div', 'tst-heat-axis');
+  const lab = page.mk('label', 'tst-cost-l tst-heat-role', AXIS_ROLES[k]);
+  const sel = page.mk('select', 'set-select');
+  sel.id = `tst-heat-key-${k}`;
+  lab.htmlFor = sel.id;
+  sel.disabled = busy;
+  sel.appendChild(optionEl('', k < 2 ? 'Pick a parameter' : '— none —'));
+  for (const i of schema.inputs) sel.appendChild(optionEl(i.key, i.label));
+  sel.value = rows[k].key;
+  const txt = page.mk('input', 'tst-heat-vals');
+  txt.type = 'text';
+  txt.disabled = busy || !rows[k].key;
+  txt.value = rows[k].text;
+  txt.setAttribute('aria-label', `${AXIS_ROLES[k]} values`);
+  const placeholder = (inp) => (!inp ? '' : inp.type === 'bool' ? 'on, off' : inp.type === 'choice' ? inp.choices.join(', ')
+    : 'e.g. 5, 10, 15  or  5:20:5');
+  txt.placeholder = placeholder(schema.inputs.find((i) => i.key === rows[k].key));
+  sel.onchange = () => {
+    const inp = schema.inputs.find((i) => i.key === sel.value);
+    rows[k] = { key: sel.value, text: inp ? (inp.type === 'bool' ? 'on, off' : String(inp.default)) : '' };
+    txt.value = rows[k].text;
+    txt.disabled = !inp;
+    txt.placeholder = placeholder(inp);
+    saveHeatRows();
+    syncHeat();
+  };
+  txt.oninput = () => { rows[k] = { ...rows[k], text: txt.value }; saveHeatRows(); syncHeat(); };
+  row.append(lab, sel, txt);
+  return row;
+}
+/* Focus-preserving: the cell count, the error line, the looks line and the Run grid button's enabled state. */
+function syncHeat() {
+  if (!heatLive() || !heatErrEl) return;
+  const schema = schemaFor(strategyId), rows = currentHeatRows();
+  const prob = X.gridProblems(form, schema, rows), g = X.gridAxes(rows, schema);
+  heatCountEl.textContent = g.axes ? `${X.gridCount(g.axes)} cells` : '';
+  const text = gridErr || prob || '';
+  heatErrEl.textContent = text;
+  heatErrEl.hidden = !text;
+  heatLooksEl.textContent = X.looksText(looksMap[strategyId] || 0);
+  const runBtnEl = heatRunEl && heatRunEl.querySelector('.tst-run');
+  if (runBtnEl) runBtnEl.disabled = !!prob;
+}
+function heatRunArea() {
+  heatRunEl.replaceChildren();
+  heatProgBar = null; heatProgText = null;
+  if (gridInFlight()) {
+    heatProgBar = document.createElement('progress');
+    heatProgBar.className = 'tst-progress';
+    heatProgBar.max = 1;
+    heatProgText = page.mk('span', 'tst-progress-text', '');
+    heatRunEl.append(heatProgBar, heatProgText, iconBtn('square', 'Cancel the grid', cancelGrid, gridStarting));
+    patchProgress();
+  } else {
+    const b = page.mk('button', 'btn btn-primary tst-run');
+    b.type = 'button';
+    b.append(page.icon('play'), document.createTextNode(' Run grid'));
+    b.onclick = startGrid;
+    heatRunEl.appendChild(b);
+    if (grid) heatRunEl.appendChild(page.mk('span', 'tst-progress-text', X.gridProgress(grid).text));
+  }
+}
+function patchProgress() {
+  if (!heatProgText) return;
+  const p = grid ? X.gridProgress(grid) : { text: 'Starting…', frac: null };
+  heatProgText.textContent = p.text;
+  if (p.frac == null) heatProgBar.removeAttribute('value'); else heatProgBar.value = p.frac;
+}
+/* The editor + run row. Rebuilt only on a real state change (a strategy switch, a grid starting or ending). */
+function refreshHeatConfig() {
+  if (!heatLive()) return;
+  const busy = gridInFlight();
+  heatCfgEl.replaceChildren();
+  const axes = page.mk('div', 'tst-heat-axes');
+  for (let k = 0; k < 3; k++) axes.appendChild(axisRow(k, busy));
+  heatCountEl = page.mk('span', 'tst-heat-count', '');
+  heatRunEl = page.mk('span', 'tst-run-area');
+  const line = page.mk('div', 'tst-heat-line');
+  heatLooksEl = page.mk('span', 'tst-heat-looks', '');
+  heatLooksEl.title = 'Every finished heat-map cell is a look. At a 5% level about 1 in 20 looks reads "significant" by luck alone.';
+  line.append(heatRunEl, heatCountEl, page.mk('span', 'tst-heat-note', 'Research window 2021–2024 only'), heatLooksEl);
+  heatErrEl = page.mk('div', 'tst-err tst-heat-err', '');
+  heatCfgEl.append(axes, line, heatErrEl);
+  heatRunArea();
+  syncHeat();
+}
+
+function cellLabel(g, c) { return g.axes.map((a) => `${a.label} ${X.valueLabel(c.params[a.key])}`).join(' · '); }
+function updateHeatNote() {
+  if (!heatNoteEl) return;
+  const c = heatCell && grid && heatCell.gid === grid.id ? grid.cells[heatCell.i] : null;
+  heatNoteEl.replaceChildren();
+  heatNoteEl.hidden = !c;
+  if (!c) return;
+  const open = page.mk('button', 'bp-act', 'Open Overview');
+  open.type = 'button';
+  open.onclick = () => { innerTab = 'overview'; form = { ...form, holdout: { ...form.holdout, on: false } }; refreshHeader(); refreshTabsBar(); refreshContent(); };
+  heatNoteEl.append(document.createTextNode(`Loaded in Overview, Performance summary and List of trades: ${cellLabel(grid, c)}  `), open);
+}
+/* The grid itself: built once per grid (or tab show); patchGrid() fills it in place on every poll. */
+function buildGrid() {
+  if (!heatLive()) return;
+  heatGridEl.replaceChildren();
+  heatCellEls = new Map();
+  if (!grid || !grid.axes) {
+    heatGridEl.appendChild(page.mk('div', 'bp-empty', gridStarting ? 'Starting the grid…'
+      : 'Pick 2 or 3 parameters and run the grid: each cell is a full tick-replay run on 2021–2024'));
+    return;
+  }
+  const cost = `qty ${grid.qty} · ${Tr.money(grid.commission)}/RT · ${grid.slippage_ticks} tick slippage`;
+  heatGridEl.appendChild(page.mk('div', 'tst-kv-line', `${grid.strategy_name || grid.strategy} · ${grid.range.label} · ${cost} · colour = net $, Sharpe = weekday grid`));
+  for (const p of X.heatPanels(grid)) {
+    if (p.title) heatGridEl.appendChild(page.mk('div', 'set-cap', p.title));
+    const t = page.mk('table', 'tst-heat-table'), thead = page.mk('thead'), htr = page.mk('tr');
+    htr.appendChild(page.mk('th', 'tst-heat-corner', `${p.rowLabel} ↓ · ${p.colLabel} →`));
+    for (const c of p.cols) htr.appendChild(page.mk('th', 'num', c));
+    thead.appendChild(htr);
+    const tbody = page.mk('tbody');
+    p.rows.forEach((r, ri) => {
+      const tr = page.mk('tr');
+      tr.appendChild(page.mk('th', 'num', r));
+      for (const i of p.cells[ri]) {
+        const td = page.mk('td'), b = page.mk('button', 'tst-hcell');
+        b.type = 'button';
+        b.append(page.mk('span', 'tst-hcell-net', ''), page.mk('span', 'tst-hcell-sh', ''));
+        b.onclick = () => loadCell(i);
+        td.appendChild(b);
+        heatCellEls.set(i, b);
+        tr.appendChild(td);
+      }
+      tbody.appendChild(tr);
+    });
+    t.append(thead, tbody);
+    heatGridEl.appendChild(t);
+  }
+  patchGrid();
+}
+function patchGrid() {
+  if (!heatLive() || !grid || !grid.cells) return;
+  const maxAbs = X.heatMaxAbs(grid), sel = heatCell && heatCell.gid === grid.id ? heatCell.i : null;
+  for (const c of grid.cells) {
+    const b = heatCellEls.get(c.i);
+    if (!b) continue;
+    const v = X.cellView(c), lvl = X.heatLevel(c.summary && c.summary.net_profit, maxAbs);
+    b.firstChild.textContent = v.net;
+    b.lastChild.textContent = v.sharpe;
+    b.style.background = lvl.alpha ? `color-mix(in srgb, var(--${lvl.tone}) ${Math.round(lvl.alpha * 100)}%, transparent)` : '';
+    b.className = `tst-hcell ${v.state}${v.warn ? ' warn' : ''}${sel === c.i ? ' sel' : ''}`;
+    b.title = `${cellLabel(grid, c)}\n${v.title}${v.warn ? '\n' + v.warn : ''}`;
+    b.disabled = v.state !== 'done';
+  }
+  patchProgress();
+  syncHeat();
+  updateHeatNote();
+}
+function renderHeatmap(container) {
+  const wrap = page.mk('div', 'tst-heat');
+  heatCfgEl = page.mk('div', 'tst-heat-cfg');
+  heatNoteEl = page.mk('div', 'tst-kv-line tst-heat-loaded');
+  heatGridEl = page.mk('div', 'tst-heat-grid');
+  wrap.append(heatCfgEl, heatNoteEl, heatGridEl);
+  container.appendChild(wrap);
+  refreshHeatConfig();
+  buildGrid();
+  updateHeatNote();
+  if (!heatResumed) { heatResumed = true; resumeGrid(); }
+}
+
+/* A page reload mid-grid: pick the newest grid of this strategy back up (and the looks counter). */
+function resumeGrid() {
+  fetch('/api/tester/looks').then((r) => (r.ok ? r.json() : {})).catch(() => ({}))
+    .then((m) => { looksMap = { ...m, ...looksMap }; syncHeat(); });
+  const idle = () => !gridStarting && (!grid || grid.lost);
+  if (!idle()) return;
+  const token = gridToken, want = grid && grid.lost ? grid.id : null;
+  fetch('/api/tester/grids').then((r) => (r.ok ? r.json() : [])).catch(() => [])
+    .then((list) => {
+      const g = (list || []).find((x) => (want ? x.id === want : x.strategy === strategyId));
+      if (g && token === gridToken && idle()) { if (grid) grid = null; pollGrid(g.id, ++gridToken); }
+    });
+}
+function startGrid() {
+  const schema = schemaFor(strategyId), rows = currentHeatRows();
+  if (X.gridProblems(form, schema, rows)) { syncHeat(); return; }
+  const bodyObj = X.gridBody(form, X.gridAxes(rows, schema).axes);
+  const token = ++gridToken;
+  gridErr = '';
+  gridStarting = true;
+  grid = null;
+  heatCell = null;
+  refreshHeatConfig();
+  buildGrid();
+  updateHeatNote();
+  fetch('/api/tester/grid', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(bodyObj) })
+    .then(async (r) => {
+      if (r.status === 400) {
+        let detail = '';
+        try { detail = (await r.json()).detail || ''; } catch (_) { /* no JSON body */ }
+        throw new Error(detail || 'bad request');
+      }
+      if (!r.ok) throw new Error(`request failed (${r.status})`);
+      return r.json();
+    })
+    .then(({ id }) => { if (token === gridToken) pollGrid(id, token); })
+    .catch((e) => {
+      if (token !== gridToken) return;
+      gridStarting = false;
+      gridErr = e.message || 'request failed';
+      refreshHeatConfig();
+      buildGrid();
+    });
+}
+function pollGrid(gid, token, attempt = 0) {
+  fetch(`/api/tester/grid/${gid}`).then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+    .then((st) => {
+      if (token !== gridToken) return;
+      gridErr = gridErr.startsWith('lost contact') ? '' : gridErr;
+      const fresh = !grid || grid.id !== st.id, wasBusy = gridInFlight();
+      grid = st;
+      gridStarting = false;
+      looksMap[st.strategy] = st.looks;
+      const final = X.gridProgress(st).final;
+      if (fresh) { refreshHeatConfig(); buildGrid(); } else { patchGrid(); if (wasBusy && final) refreshHeatConfig(); }
+      if (!final) setTimeout(() => pollGrid(gid, token, 0), 1000);
+    })
+    .catch(() => {
+      if (token !== gridToken) return;
+      if (attempt < 3) { setTimeout(() => pollGrid(gid, token, attempt + 1), 500 * (2 ** attempt)); return; }
+      gridStarting = false;
+      gridErr = 'lost contact with the grid (it keeps running on the server; reopen the tab to pick it up)';
+      if (grid) grid = { ...grid, status: 'cancelled', error: 'lost contact', lost: true };
+      heatResumed = false;
+      refreshHeatConfig();
+    });
+}
+function cancelGrid() {
+  if (!grid) return;
+  fetch(`/api/tester/grid/${grid.id}/cancel`, { method: 'POST' }).catch(() => { /* the next poll reflects reality */ });
+}
+/* A cell's full report into Overview / Performance summary / List of trades (and the chart), exactly as a
+   recent run loads -- the form takes the cell's inputs. Refused while a single run is in flight (I1: the
+   header is frozen then). */
+function loadCell(i) {
+  if (!grid) return;
+  if (runStatus) { gridErr = 'A run is in flight: load a cell once it finishes'; syncHeat(); return; }
+  const gid = grid.id;
+  fetch(`/api/tester/grid/${gid}/cell/${i}/bundle`).then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+    .then((b) => {
+      if (runStatus || !grid || grid.id !== gid) return;
+      const moved = b.run.strategy.id !== strategyId;
+      strategyId = b.run.strategy.id;
+      form = X.fromRun(b.run, schemaFor(strategyId));
+      bundle = b;
+      loadedKey = X.key(form);
+      lastRunFailed = '';
+      visibleTradeRows = TRADE_CHUNK;
+      selectedTrade = null;
+      heatCell = { gid, i };
+      persist();
+      refreshHeader();
+      if (moved) refreshHeatConfig();
+      patchGrid();
+      notify();
+    })
+    .catch(() => { gridErr = 'could not load that cell'; syncHeat(); });
 }
 
 /* ================================================================== strategy switching / mount ================================================================== */

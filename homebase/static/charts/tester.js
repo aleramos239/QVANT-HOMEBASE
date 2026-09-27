@@ -245,7 +245,124 @@ function reachSpec(spec, ms, nowMs, cap = 200000) {
   return 'time:86400';
 }
 
-const api = { RANGES, HOLDOUT_START, DEFAULT_RULES, REASON_MAX, defaults, restore, fromRun, reachesHoldout, problems, inputError, body,
+/* ---- the parameter heat-map (research window 2021–2024 only; the server forces it) ---- */
+const MAX_CELLS = 60;
+const RANGE_MSG = 'a range is start:end:step with start ≤ end and step > 0';
+const decimals = (x) => { const m = /\.(\d+)$/.exec(String(x)); return m ? m[1].length : 0; };
+/* One axis's values from the text box: "5, 10, 15", "5:20:5" (inclusive), mixes of both; bools as on/off
+   (true/false); a choice by name. {values} or {error}; every value passes inputError, none twice. */
+function parseValues(text, inp) {
+  const toks = String(text || '').split(/[\s,]+/).filter(Boolean);
+  if (!toks.length) return { error: `${inp.label}: enter values` };
+  const out = [];
+  for (const t of toks) {
+    if (inp.type === 'bool') {
+      const v = { on: true, true: true, off: false, false: false }[t.toLowerCase()];
+      if (v === undefined) return { error: `${inp.label}: on or off` };
+      out.push(v);
+    } else if (inp.type === 'choice') {
+      out.push(t);
+    } else if (t.includes(':')) {
+      const parts = t.split(':'), [a, b, st] = parts.map(Number);
+      if (parts.length !== 3 || ![a, b, st].every(Number.isFinite) || !(st > 0) || a > b) return { error: `${inp.label}: ${RANGE_MSG}` };
+      if ((b - a) / st + 1 > MAX_CELLS + 1e-9) return { error: `${inp.label}: more than ${MAX_CELLS} values` };
+      const d = Math.max(decimals(parts[0]), decimals(parts[2]));
+      for (let k = 0; ; k++) {
+        const v = Number((a + k * st).toFixed(d));
+        if (v > b + 1e-9) break;
+        out.push(v);
+      }
+    } else {
+      const v = Number(t);
+      if (!Number.isFinite(v)) return { error: `${inp.label}: "${t}" is not a number` };
+      out.push(v);
+    }
+  }
+  if (out.length > MAX_CELLS) return { error: `${inp.label}: more than ${MAX_CELLS} values` };
+  for (let j = 0; j < out.length; j++) {
+    const e = inputError(inp, out[j]);
+    if (e) return { error: e };
+    if (out.indexOf(out[j]) !== j) return { error: `${inp.label}: ${valueLabel(out[j])} twice` };
+  }
+  return { values: out };
+}
+function valueLabel(v) { return typeof v === 'boolean' ? (v ? 'on' : 'off') : String(v); }
+/* The axis rows [{key, text}] (key '' = unused) -> {axes: [{key, values}]} or {error}. */
+function gridAxes(rows, s) {
+  const used = rows.filter((r) => r.key);
+  if (used.length < 2 || used.length > 3) return { error: 'Pick 2 or 3 parameters' };
+  const axes = [];
+  for (const r of used) {
+    const inp = s.inputs.find((i) => i.key === r.key);
+    if (!inp) return { error: `Unknown parameter ${r.key}` };
+    if (axes.some((a) => a.key === r.key)) return { error: `${inp.label} is picked twice` };
+    const p = parseValues(r.text, inp);
+    if (p.error) return { error: p.error };
+    axes.push({ key: r.key, values: p.values });
+  }
+  return { axes };
+}
+const gridCount = (axes) => axes.reduce((n, a) => n * a.values.length, 1);
+function gridProblems(f, s, rows) {
+  const g = gridAxes(rows, s);
+  if (g.error) return g.error;
+  const n = gridCount(g.axes);
+  if (n > MAX_CELLS) return `${n} cells: a grid is at most ${MAX_CELLS}`;
+  const varied = new Set(g.axes.map((a) => a.key));
+  for (const i of s.inputs) { if (!varied.has(i.key)) { const e = inputError(i, f.inputs[i.key]); if (e) return e; } }
+  for (const [k, label, lo, hi, whole] of COSTS) {
+    const v = f[k];
+    if (typeof v !== 'number' || !Number.isFinite(v) || v < lo || v > hi || (whole && !Number.isInteger(v))) return `${label}: ${lo} to ${hi}`;
+  }
+  return null;
+}
+/* The POST /api/tester/grid body: never a range or a holdout -- the heat-map is the research window only. */
+function gridBody(f, axes) {
+  const varied = new Set(axes.map((a) => a.key));
+  return { strategy: f.strategy, inputs: Object.fromEntries(Object.entries(f.inputs).filter(([k]) => !varied.has(k))),
+    axes: axes.map((a) => ({ key: a.key, values: [...a.values] })), qty: f.qty, commission: f.commission,
+    slippage_ticks: f.slippage_ticks, prop_rules: f.prop_rules };
+}
+function looksText(n) {
+  n = Number.isFinite(n) ? n : 0;
+  return `looks this strategy: ${n} — expect ~${Math.round(n / 20)} lucky cells at 5%`;
+}
+/* Rows = the 1st parameter, columns = the 2nd, one panel per value of a 3rd; cells[r][c] = the cell index. */
+function heatPanels(g) {
+  const [ra, ca, pa] = g.axes, at = new Map(g.cells.map((c) => [c.coords.join(','), c.i]));
+  return (pa ? pa.values : [null]).map((pv, p) => ({
+    title: pa ? `${pa.label} = ${valueLabel(pv)}` : null, rowLabel: ra.label, colLabel: ca.label,
+    rows: ra.values.map(valueLabel), cols: ca.values.map(valueLabel),
+    cells: ra.values.map((_, r) => ca.values.map((__, c) => at.get((pa ? [r, c, p] : [r, c]).join(',')))) }));
+}
+function heatMaxAbs(g) {
+  return g.cells.reduce((m, c) => (c.status === 'done' && c.summary && Number.isFinite(c.summary.net_profit)
+    ? Math.max(m, Math.abs(c.summary.net_profit)) : m), 0);
+}
+function heatLevel(v, maxAbs) {
+  if (v == null || !Number.isFinite(v) || !v || !(maxAbs > 0)) return { tone: '', alpha: 0 };
+  return { tone: toneOf(v), alpha: Math.round((0.1 + 0.6 * Math.min(1, Math.abs(v) / maxAbs)) * 100) / 100 };
+}
+const CELL_STATE = { queued: '·', running: '…', error: 'error', cancelled: '—' };
+function cellView(c) {
+  if (c.status !== 'done' || !c.summary) return { state: c.status, net: CELL_STATE[c.status] || '·', sharpe: '', tone: '', warn: '', title: c.error || c.status };
+  const s = c.summary, errs = s.skipped_by_error || 0;
+  return { state: 'done', net: signed(s.net_profit), sharpe: `Sharpe ${num(s.sharpe)}`, tone: toneOf(s.net_profit),
+    warn: errs ? `${errs} strategy error${errs === 1 ? '' : 's'}` : '',
+    title: `${int(s.trades)} trades · WR ${rate(s.win_rate)} · PF ${num(s.profit_factor, 2, true)} · t ${num(s.t_stat)} · max DD ${Tr.money(s.max_drawdown)}` };
+}
+function gridProgress(st) {
+  const s = st && st.status, n = `${int(st && st.done)} / ${int(st && st.total)} cells`;
+  const frac = st && st.total ? st.done / st.total : null;
+  if (s === 'queued') return { text: `Queued · ${n}`, frac: null, final: false };
+  if (s === 'running') return { text: `Running · ${n}`, frac, final: false };
+  if (s === 'done') return { text: `Done · ${n}`, frac: 1, final: true };
+  if (s === 'cancelled') return { text: `Cancelled · ${n}${st.error ? ' · ' + st.error : ''}`, frac, final: true };
+  return { text: '', frac: null, final: false };
+}
+
+const api = { MAX_CELLS, parseValues, valueLabel, gridAxes, gridCount, gridProblems, gridBody, looksText, heatPanels, heatMaxAbs,
+  heatLevel, cellView, gridProgress, RANGES, HOLDOUT_START, DEFAULT_RULES, REASON_MAX, defaults, restore, fromRun, reachesHoldout, problems, inputError, body,
   key, runLabel, progress, pct, rate, num, dur, fmtEt, tiles, badges, propView, summaryRows, periodRows, sortTrades, tradeCells,
   tradeMarks, equitySeries, reachSpec, toneOf };
 if (typeof window !== 'undefined') window.HBTester = api;
