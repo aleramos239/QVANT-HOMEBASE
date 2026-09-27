@@ -43,18 +43,36 @@ class Refused(RuntimeError):
     socket stayed up, or the root has no resolvable contract."""
 
 
-async def connect_default():
-    return await T.connect_md(prefer_live=(MD_ENV == "live"))
+class SwitchInProgress(RuntimeError):
+    """switch_md() was called while an earlier switch is still connecting:
+    the caller (PUT /api/settings) turns this into a 409, never a queued
+    second attempt."""
+
+
+async def connect_env(env: str) -> "T.TradovateWS":
+    """Connect under `env`'s login ("live"|"demo") -- never a login of its
+    own (see ticks.md_token). The default for both a fresh connect and a
+    runtime switch_md (below); MD_ENV only matters as TickFeed's md_env
+    default, not here."""
+    return await T.connect_md(prefer_live=(env == "live"))
 
 
 class TickFeed:
     def __init__(self, roots, on_ticks: Callable[[str, str, list], None],
                  on_subscribed: Optional[Callable[[str, str, Optional[int]], Awaitable[None]]] = None,
-                 connect=connect_default, sleep=asyncio.sleep, now=time.time):
+                 connect=None, connect_env=connect_env, sleep=asyncio.sleep, now=time.time,
+                 md_env: Optional[str] = None):
         self.roots = [r.upper() for r in roots]
         self.on_ticks = on_ticks
         self.on_subscribed = on_subscribed
-        self._connect, self._sleep, self._now = connect, sleep, now
+        # md_env: which login (Task 4, 2026-09-27 app-settings plan): defaults to MD_ENV (the
+        # env var / today's behaviour) so a caller that never touches this is unaffected.
+        # Reconnects after a drop use whatever this is NOW (self._connect reads it fresh each
+        # time), so a runtime switch (switch_md) survives a later reconnect too.
+        self.md_env = md_env if md_env is not None else MD_ENV
+        self._connect_env = connect_env
+        self._connect = connect or (lambda: self._connect_env(self.md_env))
+        self._sleep, self._now = sleep, now
         self.ws = None
         self.subs: dict[int, tuple[str, str]] = {}
         self.contracts: dict[str, str] = {}
@@ -66,6 +84,7 @@ class TickFeed:
         self.error: Optional[str] = None
         self._stop = False
         self._tasks: set = set()
+        self._switching = False   # switch_md in flight: a second call is refused, not queued
 
     def count_request(self) -> None:
         self._requests.append(self._now())
@@ -81,7 +100,7 @@ class TickFeed:
 
     def status(self) -> dict:
         now = self._now()
-        return {"mode": "live", "md": MD_ENV, "connected": self.connected, "error": self.error,
+        return {"mode": "live", "md": self.md_env, "connected": self.connected, "error": self.error,
                 "reconnects": self.reconnects, "budget_hour": self.budget_used(),
                 "roots": {r: {"contract": self.contracts.get(r),
                               "last_tick_age_s": (round(now - self.last_tick[r], 1)
@@ -236,3 +255,44 @@ class TickFeed:
 
     def stop(self) -> None:
         self._stop = True
+
+    async def switch_md(self, new_env: str) -> str:
+        """Runtime switch (Task 4, 2026-09-27 app-settings plan): reconnect under `new_env`'s
+        login ("live"|"demo") IN PLACE -- one fresh md socket, the same roots re-subscribed on
+        it (one getChart per root, no bulk history refetch), and the old socket closed only once
+        the new one is up. self.ws becomes a new object, which is exactly what Depth._watch_socket
+        already polls for, so depth re-subscribes on its own -- nothing else to wire here.
+
+        Serialized: a switch already in flight raises rather than queuing a second one (the
+        caller -- the /api/settings PUT -- turns that into a 409). A failed connect (or refusal
+        below) leaves self.ws and self.md_env exactly as they were: the caller must not persist
+        the new choice."""
+        if new_env not in ("live", "demo"):
+            raise ValueError(f"unknown md login {new_env!r}")
+        if self._switching:
+            raise SwitchInProgress("a market-data login switch is already in progress")
+        self._switching = True
+        try:
+            if new_env == self.md_env and self.connected:
+                return self.md_env
+            try:
+                new_ws = await self._connect_env(new_env)
+            except Exception as e:  # noqa: BLE001 — reported to the caller, the old login stays up
+                raise RuntimeError(f"could not connect the {new_env} login: {type(e).__name__}: {e}") from None
+            old_ws = self.ws
+            self.ws = new_ws
+            self.ws.event_handlers.append(self._on_event)
+            self.md_env = new_env
+            self.error = None
+            self.subs = {}
+            self.refused = {}
+            for r in self.roots:
+                await self._start(r)
+            if old_ws is not None:
+                try:
+                    await old_ws.close()
+                except Exception:  # noqa: BLE001 — the new socket is already live; a stale close error is moot
+                    pass
+            return self.md_env
+        finally:
+            self._switching = False

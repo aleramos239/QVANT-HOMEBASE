@@ -9,7 +9,7 @@ import pytest
 from homebase import symbols
 from homebase.charts import DEFAULT_ROOTS
 from homebase.charts.session import ET
-from homebase.charts.tickfeed import RETRY_REFUSED_S, Refused, TickFeed
+from homebase.charts.tickfeed import RETRY_REFUSED_S, Refused, SwitchInProgress, TickFeed
 
 
 def run(coro):
@@ -472,3 +472,92 @@ def test_a_refused_retry_round_stops_mid_round_when_the_quiet_window_opens():
     run(feed.run())
     retried = [b["symbol"] for _, b in ws.sent[4:]]     # calls after the 4 initial subscribes
     assert retried == [symbols.resolve_contract("BTC")]        # GC and SI wait for the window to close
+
+
+# ------------------------------------------------------------------ switch_md
+# Task 4, 2026-09-27 accounts-paper-layouts-appsettings plan: the runtime market-data login
+# switch. server.py's PUT /api/settings owns the refusal windows (09:20-09:35 ET / a bot
+# placing); these tests are TickFeed's own contract: swap in place, no bulk refetch, a failed
+# connect falls back and keeps the old login, and a switch already in flight is refused.
+
+def test_switch_md_connects_fresh_resubscribes_and_closes_the_old_socket():
+    old_ws = FakeWS()
+
+    async def connect():
+        return old_ws
+
+    news_ws = FakeWS()
+
+    async def connect_env(env):
+        assert env == "live"
+        return news_ws
+
+    feed = TickFeed(["NQ", "ES"], lambda *a: None, connect=connect, connect_env=connect_env,
+                    sleep=nosleep, md_env="demo")
+    feed.ws = old_ws            # as if run() had already connected under "demo"
+    old_ws.event_handlers.append(feed._on_event)
+    run(feed.subscribe("NQ"))
+    run(feed.subscribe("ES"))
+
+    got = run(feed.switch_md("live"))
+
+    assert got == "live" and feed.md_env == "live"
+    assert feed.ws is news_ws
+    assert not old_ws.connected                              # closed once the new socket was up
+    assert feed._on_event in news_ws.event_handlers
+    # re-subscribed on the NEW socket, one getChart per root -- no bulk history refetch
+    assert [b["symbol"] for _, b in news_ws.sent] == [symbols.resolve_contract("NQ"), symbols.resolve_contract("ES")]
+    assert sorted({root for root, _ in feed.subs.values()}) == ["ES", "NQ"]
+
+
+def test_switch_md_is_a_noop_when_already_on_that_login_and_connected():
+    ws = FakeWS()
+    feed = TickFeed(["NQ"], lambda *a: None, sleep=nosleep, md_env="live")
+    feed.ws = ws
+    got = run(feed.switch_md("live"))
+    assert got == "live" and ws.sent == []                    # no getChart, nothing touched
+
+
+def test_a_failed_switch_keeps_the_old_login_and_socket():
+    old_ws = FakeWS()
+
+    async def connect_env(env):
+        raise RuntimeError("md refused the new login")
+
+    feed = TickFeed(["NQ"], lambda *a: None, connect_env=connect_env, sleep=nosleep, md_env="demo")
+    feed.ws = old_ws
+    old_ws.event_handlers.append(feed._on_event)
+    run(feed.subscribe("NQ"))
+    sent_before = list(old_ws.sent)
+
+    with pytest.raises(RuntimeError, match="could not connect the live login"):
+        run(feed.switch_md("live"))
+
+    assert feed.md_env == "demo"                              # unchanged: the caller must not persist it
+    assert feed.ws is old_ws and old_ws.connected              # the old socket was never closed
+    assert old_ws.sent == sent_before                          # no re-subscribe attempted on a failed switch
+    assert not feed._switching                                 # the in-flight flag is always cleared
+
+
+def test_a_second_switch_while_one_is_in_flight_is_refused():
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def slow_connect_env(env):
+        entered.set()
+        await release.wait()
+        return FakeWS()
+
+    feed = TickFeed(["NQ"], lambda *a: None, connect_env=slow_connect_env, sleep=nosleep, md_env="demo")
+    feed.ws = FakeWS()
+
+    async def scenario():
+        first = asyncio.ensure_future(feed.switch_md("live"))
+        await entered.wait()
+        with pytest.raises(SwitchInProgress):
+            await feed.switch_md("demo")
+        release.set()
+        await first
+
+    run(scenario())
+    assert feed.md_env == "live" and not feed._switching

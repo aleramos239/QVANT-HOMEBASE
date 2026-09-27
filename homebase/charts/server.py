@@ -43,11 +43,12 @@ from .paper import ROOT as PAPER_ROOT, STRATEGY_ID as PAPER_ID, BacktestJob, Pap
 from .recorder import REFILL_MAX_PAGES, LiveRecorder, refill
 from .replay import ReplayFeed
 from .session import ET, always_open, et_wall_s, session_date, session_range_ms, split_by_session
+from .settings_store import MD_CHOICES, SettingsStore
 from .store import ARCHIVE, TickStore
 from .studies import make
 from .tick import SideClassifier, from_row
 from .tester_api import tester_router
-from .tickfeed import TickFeed
+from .tickfeed import SwitchInProgress, TickFeed
 
 STATIC = Path(__file__).resolve().parent.parent / "static"
 PUMP_S = 0.25                 # <= 4 updates a second per chart
@@ -255,7 +256,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                now_ms=None, state: Path | None = None, calendar_fetch=None,
                desk_factory=None, fake_desk_factory=None, news_fetch=None, depth_roots=None,
                depth_base: Path | None = None, paper_day: bool = False,
-               paper_backtest=None, depth_executor=None) -> FastAPI:
+               paper_backtest=None, depth_executor=None, md_connect=None) -> FastAPI:
     if paper_day and not replay:
         raise ValueError("paper_day forces a REPLAYED date to be an event day: it needs replay")
     roots = [r.upper() for r in roots]
@@ -265,6 +266,9 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
     layout_order_path = sd / "layout_order.json"   # 2026-09-27 layout-tabs: the tab strip's left-to-right order
     drawings_path = sd / "drawings.json"
     templates_path = sd / "templates.json"
+    # Task 4, 2026-09-27 app-settings plan: the market-data login choice (more app-wide settings
+    # land in the same file later). MD_ENV is the default until the user picks one.
+    settings_store = SettingsStore(sd / "settings.json")
     # ForexFactory's calendar; calendar_fetch None never fetches (tests); python -m homebase.charts passes http_get
     cal = Calendar(sd / "calendar", fetch=calendar_fetch)
     # news.py: no fetching in replay mode, whatever the caller passes (a replayed price must never
@@ -488,7 +492,15 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                 except Exception as e:  # noqa: BLE001 — burst/reaction work must never break the live tick path
                     log(f"news/bursts ({root}): {type(e).__name__}: {e}")
 
-        feed = (feed_factory or TickFeed)(roots, on_live, on_subscribed=_refill)
+        if feed_factory is None:
+            # the default TickFeed only: a caller's own feed_factory (tests, mostly) keeps its
+            # existing signature -- it never reads app settings and was never asked to
+            feed_kwargs = {"md_env": settings_store.get()["md"]}
+            if md_connect is not None:   # tests: a fake connect_env, never a real login
+                feed_kwargs["connect_env"] = md_connect
+            feed = TickFeed(roots, on_live, on_subscribed=_refill, **feed_kwargs)
+        else:
+            feed = feed_factory(roots, on_live, on_subscribed=_refill)
     # Level 2 rides the live feed's own md socket; replay builds none of it (no
     # subscriptions, no depth messages). Recorded: the depth roots this service charts.
     depth = None
@@ -761,9 +773,69 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             raise HTTPException(404, f"{root!r} is not a charted symbol")
         return r
 
+    def bot_placing() -> bool:
+        """True while ANY bot day-state is "placing" -- trading.py's own guard-4 wording, read
+        from the same DeskLink.state this process already keeps for the page (bot_view's shape:
+        {date, strategies: {name: {..., accounts: {acct: {status, ...}}}}}). No link, no state yet
+        (replay, or the desk not connected): reads as "not placing", never as a standing refusal."""
+        if link is None or link.state is None:
+            return False
+        strategies = (link.state.get("bot") or {}).get("strategies") or {}
+        return any(a.get("status") == "placing"
+                  for s in strategies.values()
+                  for a in (s.get("accounts") or {}).values())
+
+    def md_switch_refused() -> str | None:
+        """None, or the one sentence the Settings dialog shows: refused inside 09:20-09:35 ET on
+        a weekday (the 9:30 fire, whether or not a bot is booked today -- in_quiet has no weekday
+        check of its own, see tickfeed.py) or while the desk reports a bot actually placing."""
+        t = dt.datetime.fromtimestamp(clock() / 1000, ET)
+        if t.weekday() < 5 and QUIET[0] <= t.time() < QUIET[1]:
+            return "Not while the 9:30 bot is working — try after 09:35."
+        if bot_placing():
+            return "Not while the 9:30 bot is working — try after 09:35."
+        return None
+
     register_desk(app, link=link, quotes=quotes, browser_write_ok=browser_write_ok)
     tester = tester_router(browser_write_ok, base, Path(state) / "tester" if state else None)
     app.include_router(tester)
+
+    @app.get("/api/settings")
+    async def get_settings():
+        return settings_store.get()
+
+    @app.put("/api/settings")
+    async def put_settings(request: Request):
+        """{"md": "live"|"demo"}: switches the chart feed's md login in place (TickFeed.switch_md)
+        and, only once that succeeds, persists the choice. JSON-only (like the desk proxy) on top
+        of the Host check every /api/* route already gets from HostGuard."""
+        bad = netguard.refusal(request.method, request.scope["headers"], netguard.allowlist())
+        if bad is not None:
+            raise HTTPException(*bad)
+        browser_write_ok(request)
+        try:
+            body = await request.json()
+        except ValueError:
+            raise HTTPException(400, "the body is not JSON") from None
+        if not isinstance(body, dict) or body.get("md") not in MD_CHOICES:
+            raise HTTPException(400, f"""a settings update is {{"md": {' or '.join(MD_CHOICES)}}}""")
+        md = body["md"]
+        if not hasattr(feed, "switch_md"):
+            raise HTTPException(503, "the market-data login can't be switched here (replay)")
+        if md == getattr(feed, "md_env", None):
+            settings_store.set_md(md)   # already on it -- still make the file agree
+            return settings_store.get()
+        reason = md_switch_refused()
+        if reason:
+            raise HTTPException(423, reason)
+        try:
+            await feed.switch_md(md)
+        except SwitchInProgress as e:
+            raise HTTPException(409, str(e)) from None
+        except RuntimeError as e:
+            raise HTTPException(502, str(e)) from None
+        settings_store.set_md(md)
+        return settings_store.get()
 
     @app.get("/api/layouts")
     async def get_layouts():
