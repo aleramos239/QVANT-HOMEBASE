@@ -240,3 +240,21 @@ test('placeMarkers: on the bar holding the time, inside the loaded bars, sorted'
   assert.equal(D.placeMarkers(bars, [{ id: 'late', ms: 60000 * 99 }], 0).length, 1);   // non-time bars: the last bar holds the rest
   assert.deepEqual(D.placeMarkers([], [{ ms: 1 }]), []);
 });
+
+test('Stop Limit + TIF: the order body and the confirm text', () => {
+  const b = T.orderBody({ clientId: 'c', accounts: ['sim041'], root: 'NQ', side: 'Buy', qty: 1, type: 'StopLimit',
+    price: 30900, trigger: 30895, tif: 'GTC' });
+  assert.deepEqual(b, { client_id: 'c', accounts: ['sim041'], root: 'NQ', side: 'Buy', qty: 1, type: 'StopLimit',
+    price: 30900, trigger_price: 30895, tif: 'GTC' });
+  assert.equal(T.confirmOrder(b, STATE, null, 20, 0.25).title, 'Buy 1 NQ Stop Limit @ 30,900.00 (trigger 30,895.00) · GTC');
+  // a trigger is only sent with a Stop Limit; no tif given -> none sent (the desk defaults to Day)
+  assert.deepEqual(T.orderBody({ clientId: 'c', accounts: ['a'], root: 'NQ', side: 'Sell', qty: 1, type: 'Limit', price: 5, trigger: 4 }),
+    { client_id: 'c', accounts: ['a'], root: 'NQ', side: 'Sell', qty: 1, type: 'Limit', price: 5 });
+  const day = T.orderBody({ clientId: 'c', accounts: ['sim041'], root: 'NQ', side: 'Sell', qty: 2, type: 'Limit', price: 30950, tif: 'Day' });
+  assert.equal(day.tif, 'Day');
+  assert.equal(T.confirmOrder(day, STATE, null, 20, 0.25).title, 'Sell 2 NQ Limit @ 30,950.00 · Day');
+  // the bracket dollars of a Stop Limit are measured from its limit
+  const br = T.orderBody({ clientId: 'c', accounts: ['sim041'], root: 'NQ', side: 'Buy', qty: 1, type: 'StopLimit',
+    price: 30900, trigger: 30895, sl: 30890, tp: 30920 });
+  assert.equal(T.confirmOrder(br, STATE, null, 20, 0.25).bracket, `SL 30,890.00 ${M}$200 · TP 30,920.00 +$400 · RR 1:2`);
+});

@@ -17,13 +17,21 @@ Fills:
   * A Market order fills at once at the chart service's quote (body["quotes"][root]): the ask for
     a buy, the bid for a sell, else the last trade.
   * A Limit or Stop order rests until POST /fake/fill.
+  * A StopLimit rests (price = its limit, stop_price and trigger = its trigger). It triggers once a
+    quote's last trade reaches the trigger, then fills AT THE LIMIT on the first quote where the limit
+    is marketable (buy: last <= limit, sell: last >= limit; both may happen on one quote). Quotes come
+    from POST /fake/quote and from the quotes block of every action body. /fake/fill fills it at the limit.
   * An entry's sl_price / tp_price become working Stop / Limit exits when it fills. The first
     exit to fill cancels the other (OCO).
+  * tif (Day | GTC, default Day) is stored and shown on each order row; exits are GTC, like the real
+    OSO brackets. POST /fake/session-end drops every working Day order (nothing else models a session).
 
 Controls (no key; the process binds 127.0.0.1 only):
     POST /fake/enabled {"on": bool}                       chart trading on/off (a state event)
     POST /fake/refuse {"reason": "..." | null}            every action is refused with this sentence
     POST /fake/fill {"account", "order_id", "price"?}     fill a working order
+    POST /fake/quote {"root": "NQ", "last": 30901.0, "ts_ms"?}   a last trade: triggers/fills StopLimits
+    POST /fake/session-end                                drop every working Day order
     POST /fake/bot {"scenario": "idle|placed|live|done", "anchor": 30900.0}   the NQ 9:30 bot on sim041
     POST /fake/drop                                       end every SSE stream (the chart service reconnects)
 """
@@ -44,7 +52,8 @@ from fastapi.responses import StreamingResponse
 
 from homebase.contracts import point_value, round_to_tick
 from homebase.paths import state_dir
-from homebase.trading import parse_cancel, parse_modify, parse_order, parse_symbol_action
+from homebase.trading import (Refused, check_prices, parse_cancel, parse_modify, parse_order,
+                              parse_symbol_action)
 
 PORT = 8859
 FORBIDDEN_PORTS = frozenset({8850, 8852, 8853, 8854})   # the real desk, the chart service, the replays
@@ -136,20 +145,24 @@ class FakeDesk:
         a["fills"].append(f)
         self.publish("fill", {"account": aid, "fill": f})
 
-    def rest(self, aid, symbol, side, qty, typ, price, sl=None, tp=None, owner=None) -> str:
+    def rest(self, aid, symbol, side, qty, typ, price, sl=None, tp=None, owner=None,
+             trigger=None, tif="Day") -> str:
         oid = str(next(self.ids))
         price = round_to_tick(symbol, price)
-        self.acct[aid]["orders"][oid] = {
-            "order_id": oid, "symbol": symbol, "side": side, "type": typ, "qty": qty,
-            "price": price if typ == "Limit" else None, "stop_price": price if typ == "Stop" else None,
-            "status": "Working", "owner": owner}
+        row = {"order_id": oid, "symbol": symbol, "side": side, "type": typ, "qty": qty,
+               "price": price if typ in ("Limit", "StopLimit") else None,
+               "stop_price": price if typ == "Stop" else None,
+               "status": "Working", "owner": owner, "tif": tif}
+        if typ == "StopLimit":
+            row["stop_price"] = row["trigger"] = round_to_tick(symbol, trigger)
+        self.acct[aid]["orders"][oid] = row
         self.acct[aid]["legs"][oid] = {"sl": sl, "tp": tp}
         return oid
 
     def brackets(self, aid, symbol, side, qty, leg) -> None:
         out = "Sell" if side == "Buy" else "Buy"
-        sl = self.rest(aid, symbol, out, qty, "Stop", leg["sl"]) if leg.get("sl") else None
-        tp = self.rest(aid, symbol, out, qty, "Limit", leg["tp"]) if leg.get("tp") else None
+        sl = self.rest(aid, symbol, out, qty, "Stop", leg["sl"], tif="GTC") if leg.get("sl") else None
+        tp = self.rest(aid, symbol, out, qty, "Limit", leg["tp"], tif="GTC") if leg.get("tp") else None
         if sl and tp:
             legs = self.acct[aid]["legs"]
             legs[sl]["oco"], legs[tp]["oco"] = tp, sl
@@ -162,12 +175,40 @@ class FakeDesk:
         a = self.acct[aid]
         leg = dict(a["legs"].get(oid) or {})
         o = self.drop_order(aid, oid)
-        px = float(price) if price is not None else (o["price"] if o["type"] == "Limit" else o["stop_price"])
+        px = float(price) if price is not None else \
+            (o["price"] if o["type"] in ("Limit", "StopLimit") else o["stop_price"])
         self.fill(aid, o["symbol"], o["side"], o["qty"], px, oid, ts_ms=ts_ms)
         if leg.get("oco") in a["orders"]:
             self.drop_order(aid, leg["oco"])
         self.brackets(aid, o["symbol"], o["side"], o["qty"], leg)
         self.changed(aid)
+
+    def on_quote(self, root: str, last, ts_ms=None) -> None:
+        """A last trade in `root`: trigger StopLimits it reaches, fill (at the limit) those whose limit
+        is marketable once triggered."""
+        if last is None:
+            return
+        symbol = root + MONTH
+        for aid, a in self.acct.items():
+            for oid, o in list(a["orders"].items()):
+                if o["type"] != "StopLimit" or o["symbol"] != symbol or oid not in a["orders"]:
+                    continue
+                buy, leg = o["side"] == "Buy", a["legs"][oid]       # "triggered" lives off the shown row
+                if not leg.get("triggered") and (last >= o["trigger"] if buy else last <= o["trigger"]):
+                    leg["triggered"] = True
+                if leg.get("triggered") and (last <= o["price"] if buy else last >= o["price"]):
+                    self.fill_order(aid, oid, ts_ms=ts_ms)
+
+    def session_end(self) -> int:
+        n = 0
+        for aid, a in self.acct.items():
+            day = [oid for oid, o in a["orders"].items() if o.get("tif", "Day") == "Day"]
+            for oid in day:
+                self.drop_order(aid, oid)
+            n += len(day)
+            if day:
+                self.changed(aid)
+        return n
 
     # ---- actions ----
     def gate(self, aid: str) -> str | None:
@@ -198,6 +239,7 @@ class FakeDesk:
         symbol = it.root + MONTH
         q = (body.get("quotes") or {}).get(it.root) or {}
         last, ts_ms = q.get("last"), q.get("ts_ms")
+        self.on_quote(it.root, last, ts_ms)
         res = {}
         for aid in it.accounts:
             why, px = self.gate(aid), None
@@ -208,6 +250,13 @@ class FakeDesk:
                     why = f"a buy stop must be above the last price ({last:,})"
                 if it.side == "Sell" and it.price >= last:
                     why = f"a sell stop must be below the last price ({last:,})"
+            if why is None and it.type == "StopLimit":
+                try:        # the desk's own rule and sentences
+                    check_prices(it.side, it.type, it.price, it.sl_price, it.tp_price, symbol,
+                                 {"last": float(last)} if last is not None else None,
+                                 trigger=it.trigger_price)
+                except Refused as e:
+                    why = str(e)
             if why is None and it.type == "Market":
                 px = q.get("ask" if it.side == "Buy" else "bid") or last
                 if px is None:
@@ -221,7 +270,8 @@ class FakeDesk:
                 self.fill(aid, symbol, it.side, it.qty, float(px), oid, ts_ms=ts_ms)
                 self.brackets(aid, symbol, it.side, it.qty, leg)
             else:
-                oid = self.rest(aid, symbol, it.side, it.qty, it.type, it.price, it.sl_price, it.tp_price)
+                oid = self.rest(aid, symbol, it.side, it.qty, it.type, it.price, it.sl_price, it.tp_price,
+                                trigger=it.trigger_price, tif=it.tif)
             self.changed(aid)
             res[aid] = self.ok(oid)
         return self.finish("order", it.client_id, res)
@@ -234,6 +284,8 @@ class FakeDesk:
         o = self.acct[aid]["orders"].get(oid) if why is None else None
         if why is None and o is None:
             why = f"order {oid} is not working on {self.acct[aid]['label']}"
+        if why is None and o["type"] == "StopLimit":
+            why = "Stop Limit orders can't be moved — cancel and place again"
         if why:
             return self.finish("modify", cid, {aid: self.refused(why)})
         o["price" if o["type"] == "Limit" else "stop_price"] = round_to_tick(o["symbol"], price)
@@ -258,6 +310,7 @@ class FakeDesk:
         if (action, cid) in self.seen:
             return self.seen[(action, cid)]
         q = (body.get("quotes") or {}).get(root) or {}
+        self.on_quote(root, q.get("last"), q.get("ts_ms"))
         res = {}
         for aid in accounts:
             why = self.gate(aid)
@@ -407,6 +460,18 @@ def create_fake_desk(key: str, desk: FakeDesk | None = None) -> FastAPI:
         # so a manually-triggered fill lands inside the replay's loaded bars (review item 7).
         desk.fill_order(aid, oid, body.get("price"), body.get("ts_ms"))
         return {"ok": True}
+
+    @app.post("/fake/quote")
+    async def fake_quote(body: dict):
+        root, last = str(body.get("root") or "").upper(), body.get("last")
+        if not root or not isinstance(last, (int, float)) or isinstance(last, bool):
+            raise HTTPException(400, "root and a numeric last are required")
+        desk.on_quote(root, float(last), body.get("ts_ms"))
+        return {"ok": True}
+
+    @app.post("/fake/session-end")
+    async def fake_session_end():
+        return {"dropped": desk.session_end()}
 
     @app.post("/fake/bot")
     async def fake_bot(body: dict):

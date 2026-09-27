@@ -230,8 +230,9 @@ class TradovateWS:
         qty: int,
         stop_price: Optional[float] = None,  # absolute SL price (opposite side)
         tp_price: Optional[float] = None,    # absolute TP price (opposite side)
-        entry_type: str = "Market",          # entry: Market, Limit or Stop
-        entry_price: Optional[float] = None,  # Limit price, or Stop trigger
+        entry_type: str = "Market",          # entry: Market, Limit, Stop or StopLimit
+        entry_price: Optional[float] = None,  # Limit price, Stop trigger, or StopLimit's limit
+        entry_trigger_price: Optional[float] = None,  # StopLimit only: its trigger
         time_in_force: str = "Day",
         text: str = "Onyx",
         account_spec: Optional[str] = None,
@@ -242,6 +243,9 @@ class TradovateWS:
         `stop_price` / `tp_price` is required. Returns {orderId} for the parent."""
         if stop_price is None and tp_price is None:
             raise ValueError("place_oso needs at least a stop or a target price")
+        if entry_type == "StopLimit" and (entry_price is None or entry_trigger_price is None):
+            raise ValueError("a StopLimit entry needs entry_price (the limit) "
+                             "and entry_trigger_price")
         opposite = "Sell" if side.lower() == "buy" else "Buy"
         parent_action = "Buy" if side.lower() == "buy" else "Sell"
         body = {
@@ -261,6 +265,10 @@ class TradovateWS:
             # Stop entry (e.g. a straddle leg): the trigger rides in stopPrice,
             # exactly as order/placeorder does it; brackets below are unchanged.
             body["stopPrice"] = entry_price
+        elif entry_type == "StopLimit":
+            # as order/placeorder: price = the limit, stopPrice = the trigger
+            body["price"] = entry_price
+            body["stopPrice"] = entry_trigger_price
         # bracket1 takes the stop when present; otherwise the lone target lands
         # in bracket1 so we never send an empty bracket1 with a filled bracket2.
         if stop_price is not None:

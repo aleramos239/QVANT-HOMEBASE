@@ -77,11 +77,15 @@ function bracket(side, ref, prefs, tick) {
   return { sl: prefs.slTicks > 0 ? roundTick(ref - s * prefs.slTicks * tick, tick) : null,
     tp: prefs.tpTicks > 0 ? roundTick(ref + s * prefs.tpTicks * tick, tick) : null };
 }
-function orderBody({ clientId, accounts, root, side, qty, type, price = null, sl = null, tp = null }) {
+/* A Stop Limit's `price` is its limit and `trigger` its trigger (sent only with a Stop Limit). `tif` (Day | GTC) is
+   sent only when given: the desk defaults to Day. */
+function orderBody({ clientId, accounts, root, side, qty, type, price = null, sl = null, tp = null, trigger = null, tif = null }) {
   const b = { client_id: clientId, accounts: [...accounts], root, side, qty, type };
   if (type !== 'Market') b.price = price;
+  if (type === 'StopLimit') b.trigger_price = trigger;
   if (sl != null) b.sl_price = sl;
   if (tp != null) b.tp_price = tp;
+  if (tif != null) b.tif = tif;
   return b;
 }
 let seq = 0;
@@ -236,8 +240,11 @@ function lineColor(g, P) {
 const withPrice = (g, price) => ({ ...g, price });
 
 /* ---- confirm dialog ---- */
+const TYPE_NAMES = { StopLimit: 'Stop Limit' };
 function orderTitle(b, tick) {
-  return `${b.side} ${b.qty} ${b.root} ${b.type === 'Market' ? 'at market' : `${b.type} @ ${Cat.fmtPrice(b.price, tick)}`}`;
+  const what = b.type === 'Market' ? 'at market' : `${TYPE_NAMES[b.type] || b.type} @ ${Cat.fmtPrice(b.price, tick)}`;
+  const trig = b.type === 'StopLimit' ? ` (trigger ${Cat.fmtPrice(b.trigger_price, tick)})` : '';
+  return `${b.side} ${b.qty} ${b.root} ${what}${trig}${b.tif ? ` · ${b.tif}` : ''}`;
 }
 function confirmOrder(b, state, quote, pv, tick) {
   const accts = accountsOf(state).filter((a) => b.accounts.includes(a.id));

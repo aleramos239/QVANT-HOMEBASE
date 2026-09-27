@@ -41,6 +41,11 @@ class OrderRequest:
     stop_price: Optional[float] = None
     tp_price: Optional[float] = None
     text: str = "Onyx"
+    # Appended last so positional callers are unchanged. A StopLimit entry's
+    # limit rides in `price` and its trigger HERE -- never in `stop_price`,
+    # which is the protective SL of a bracket.
+    trigger_price: Optional[float] = None
+    time_in_force: str = "Day"
 
 
 @dataclass
@@ -88,7 +93,8 @@ class BrokerAdapter(abc.ABC):
         """The bare entry order from a bracket request — protective stop/target
         prices stripped so the entry doesn't get sent with a stop attached."""
         return OrderRequest(symbol=req.symbol, side=req.side, qty=req.qty,
-                            order_type=req.order_type, price=req.price, text=req.text)
+                            order_type=req.order_type, price=req.price, text=req.text,
+                            trigger_price=req.trigger_price, time_in_force=req.time_in_force)
 
     @property
     def connected(self) -> bool:
