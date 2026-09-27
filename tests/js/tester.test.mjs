@@ -107,23 +107,27 @@ test('Overview tiles, badges and the prop block', () => {
   assert.deepEqual(X.propView(null), { message: 'No prop-eval result in this run', rules: null, unconfirmed: false });
 });
 
-const MC = { paths: 5000, mode: 'shuffle', seed: 1, n_trades: 24,
+const MC = { unit: 'day', paths: 2000, paths_requested: 5000, capped: true, mode: 'shuffle', seed: 1, n_trades: 24, n_days: 1000, floor: 2000,
+  prop_rules: { id: 'apex-50k@unconfirmed', name: 'Apex 50K', confirmed: false, label: 'Apex 50K · unconfirmed rules' },
   drawdown: { p5: -6000, p25: -5000, p50: -4210, p75: -3000, p95: -1000 },
   final_net: { p5: 8000, p25: 10500, p50: 12345.5, p75: 14000, p95: 16000 },
   losing_streak: { p5: 1, p25: 2, p50: 3, p75: 4, p95: 6 },
   p_ruin: 0.021, p_prop_pass: 0.734,
   histogram: { edges: [-6000, -4000, -2000, 0], counts: [10, 40, 0] },
-  actual: { max_dd: -4210, percentile: 61.7 } };
+  actual: { max_dd: -4210, worse_than_pct: 61.7 } };
 
 test('Monte Carlo: the headline, percentile tiles and DD histogram bars', () => {
-  assert.equal(X.mcHeadline(MC), `the backtest's actual path: DD ${M}$4,210 (percentile 62)`);
+  assert.equal(X.mcHeadline(MC), `the backtest's actual path: DD ${M}$4,210, worse than 62% of day reshuffles`);
+  assert.equal(X.mcHeadline({ ...MC, mode: 'bootstrap' }), `the backtest's actual path: DD ${M}$4,210, worse than 62% of day resamples`);
   assert.deepEqual(X.mcTiles(MC).map((t) => [t.label, t.value, t.sub, t.tone]), [
     ['Max drawdown (p50)', `${M}$4,210`, `p5 ${M}$6,000 · p95 ${M}$1,000`, ''],
     ['Final net (p50)', '+$12,345.50', 'p5 +$8,000 · p95 +$16,000', 'up'],
     ['Losing streak (p50)', '3', 'p5 1 · p95 6', ''],
-    ['P(ruin)', '2.1%', '', ''],
-    ['P(prop pass)', '73.4%', '', '']]);
-  assert.equal(X.mcTiles({ ...MC, p_prop_pass: null })[4].value, '—');
+    ['P(DD ≥ $2,000)', '2.1%', 'ruin floor', ''],
+    ['P(prop pass)', '73.4%', 'Apex 50K · unconfirmed rules', ''],
+    ['Paths', '2,000', 'capped from 5,000 · resampled by day', '']]);
+  assert.equal(X.mcTiles({ ...MC, p_prop_pass: null, prop_rules: undefined })[4].value, '—');
+  assert.equal(X.mcTiles({ ...MC, capped: false, paths: 5000 })[5].sub, 'resampled by day');
   assert.deepEqual(X.mcHistogram(MC), [
     { pct: 25, title: `${M}$6,000 to ${M}$4,000: 10 paths` },
     { pct: 100, title: `${M}$4,000 to ${M}$2,000: 40 paths` },
@@ -158,6 +162,12 @@ test('compareRows: net/PF/WR/Sharpe/maxDD/avg/trades/green years/prop pass, A vs
   assert.deepEqual(byKey.green_years, { key: 'green_years', label: 'Green years', a: '2/3', b: '2/3', delta: '0', better: null });
   // B never ran a prop eval: "—", never a false 0%, and no highlight either way
   assert.deepEqual(byKey.prop_pass, { key: 'prop_pass', label: 'Prop pass', a: '68.0%', b: '—', delta: '—', better: null });
+});
+
+test('review M1: a profit factor at the no-loss cap never reads as a +996 delta', () => {
+  const capped = { ...REPORT_A, summary: { all: { ...REPORT_A.summary.all, profit_factor: 999 } } };
+  const pf = X.compareRows(REPORT_B, capped, null, null).find((r) => r.key === 'pf');
+  assert.deepEqual(pf, { key: 'pf', label: 'Profit factor', a: '1.50', b: '∞', delta: '—', better: 'b' });
 });
 
 const RUN_A = { strategy: { id: 'nq930', name: 'NQ 9:30 straddle' }, inputs: { offset_pts: 10, adx_gate: false, mode: 'a' },

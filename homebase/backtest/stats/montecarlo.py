@@ -1,32 +1,40 @@
-"""Monte Carlo over a finished run's trade P&L: how lucky was the one path the backtest showed?
+"""Monte Carlo over a finished run's trades: how lucky was the one path the backtest showed?
 
-Resamples the trade-level P&L list thousands of times -- by SHUFFLING it (same trades, a
-different order; the default) or by BOOTSTRAPPING it (drawn with replacement, so a path can
-repeat or drop a trade) -- and reports the spread of outcomes: percentiles of max drawdown,
-final net and the longest losing streak, the odds of ruin, and (reusing the prop-eval engine's
-own day-race, ``homebase.backtest.propsim.propsim.run_eval``) the odds of passing a prop eval
-on that path. It never re-simulates fills: a resample only reorders/redraws the P&L numbers the
-engine already produced (the house fill law is unchanged).
+The resampling unit is the DAY (review C2), the same weekday grid the run's own prop eval uses
+(``propsim.weekday_grid``: every Mon-Fri from the first to the last session, a 0-trade weekday
+included as a flat day). Each day keeps its own trades in their recorded order. A path SHUFFLES the
+days (the same days, a different order -- the default) or BOOTSTRAPS them (drawn with replacement).
+It never re-simulates fills: the resample only reorders or redraws what the engine already produced.
 
-Every path is one straight pass over the resampled list, computing drawdown/streak/prop-pass
-together (`_walk`) so a 10,000-path x 1,000-trade call — the API route's own ceiling — stays
-comfortably under its 2s budget: see ``tests/test_backtest_montecarlo.py``'s own timing test.
+Per path:
+  * max drawdown $, final net $ and the longest losing streak (in trades) -- walked trade by trade
+    through the reordered days, so intraday drawdown inside a day still counts;
+  * ruin = the path's max drawdown reaching ``floor`` $ (review I1). The default floor is the prop
+    rules' trailing max loss, else $2,000;
+  * prop pass = ``propsim.engine.run_eval`` on the reordered (day P&L, traded?) sequence, i.e. the
+    LucidFlex race itself -- EOD trailing floor, consistency on the largest DAY, min days on traded
+    days. It is not a copy.
 
-Convention: money is USD, matching ``stats.py``; drawdowns are <= 0. ``ruin_threshold`` is an
-absolute EQUITY floor (``starting_balance + cumulative P&L``, checked AFTER each trade, never
-against the pre-trade starting point itself), default 0.0 -- with the run's own capital as
-``starting_balance``, that is "lost the whole starting balance"; a bare P&L list
-(``starting_balance`` left at its 0.0 default) makes it "cumulative P&L ever went to zero or
-below" instead, which is the honest reading when there is no account size to lose.
+Work is capped at ``MAX_WORK`` day-steps (days x paths, review I3), and the result reports the
+paths actually used. Money is USD, and drawdowns are <= 0 and include the 0 starting peak (the same
+convention as ``stats._max_dd``).
 """
 from __future__ import annotations
 
+import hashlib
 import random
+from itertools import accumulate, chain
+from operator import sub
 from typing import List, Optional, Sequence
 
-__all__ = ["run"]
+from ..propsim import engine, weekday_grid
+
+__all__ = ["run", "MAX_WORK", "MAX_PATHS", "DEFAULT_FLOOR"]
 
 PCTS = (5, 25, 50, 75, 95)
+MAX_PATHS = 10_000
+MAX_WORK = 2_000_000          # days x paths per call (review I3)
+DEFAULT_FLOOR = 2000.0        # $ drawdown = ruin when no prop rules give a trailing max loss
 
 
 def _quantile(sorted_xs: Sequence[float], q: float):
@@ -63,140 +71,101 @@ def _histogram(dds: List[float], bins: int = 20) -> dict:
     return {"edges": edges, "counts": counts}
 
 
-def _actual_path(pnls: Sequence[float]) -> float:
-    """Max drawdown $ of the trades IN THEIR RECORDED ORDER -- the backtest's one real path,
-    read against the resampled distribution to say how lucky (or not) it was."""
-    peak = worst = run = 0.0
-    for p in pnls:
-        run += p
-        if run > peak:
-            peak = run
-        else:
-            worst = min(worst, run - peak)
-    return worst
+def _walk(seq: Sequence[float]) -> tuple[float, float]:
+    """(max drawdown <= 0, final net) of one path: the worst fall from the running peak (the 0 start
+    counts as a peak), and the running sum's end (sequential adds, as the equity curve itself)."""
+    if not seq:
+        return 0.0, 0.0
+    eq = list(accumulate(seq))
+    peaks = accumulate(eq, max, initial=0.0)
+    next(peaks)
+    return min(0.0, min(map(sub, eq, peaks))), eq[-1]
 
 
-def _percentile_rank(sorted_xs: Sequence[float], x: float) -> float:
-    """% of the sample <= x (0..100) -- bisect_right over an already-sorted list."""
-    import bisect
-    if not sorted_xs:
-        return 0.0
-    return 100.0 * bisect.bisect_right(sorted_xs, x) / len(sorted_xs)
+def seed_for(source_id: str) -> int:
+    """The default seed for a run (review I2): derived from its id, so reopening the same run shows
+    the same numbers."""
+    return int.from_bytes(hashlib.sha256(str(source_id).encode()).digest()[:4], "big")
 
 
 def run(
-    pnls: Sequence[float],
+    trades: Sequence[dict],
     *,
     paths: int = 5000,
     seed: Optional[int] = None,
     mode: str = "shuffle",
-    starting_balance: float = 0.0,
     rules: Optional[dict] = None,
-    ruin_threshold: float = 0.0,
+    floor: Optional[float] = None,
     bins: int = 20,
 ) -> dict:
-    """Resample ``pnls`` (one float per trade, recorded order) ``paths`` times.
+    """Resample ``trades`` ({date, net}, in recorded order) by day, ``paths`` times (capped at
+    MAX_WORK // days).
 
-    ``mode``: "shuffle" (without replacement -- a permutation; every path's final net is
-    IDENTICAL, since it is the same trades reordered) or "bootstrap" (with replacement, via
-    ``random.choices`` -- final net varies path to path). "shuffle" is the default: it asks
-    "how lucky was the ORDER", not "what if the edge itself were different sized".
+    ``mode``: "shuffle" (a permutation of the days, so every path's final net is identical) or
+    "bootstrap" (days drawn with replacement). ``rules``: a loaded prop-rules dict; when given, each
+    path races ``engine.run_eval`` and ``p_prop_pass`` is the pass fraction (None without rules).
+    ``floor``: the ruin drawdown in $ (> 0); by default the rules' ``trailing_mll``, else DEFAULT_FLOOR.
 
-    ``rules``: a loaded prop-rules dict (``propsim.load_rules(...)``'s own shape, the LucidFlex
-    contract: ``eval_target``/``eval_min_days``/``consistency``/``trailing_mll``/``lock_at``/
-    ``lock_floor``). When given, each path also races ``propsim.run_eval`` treating every
-    (resampled) trade as one day; ``p_prop_pass`` is the pass fraction. ``None`` skips it
-    (``p_prop_pass`` comes back ``None``) -- exactly the callers that never ran a prop eval on
-    this ledger in the first place.
-
-    Returns percentiles (p5/p25/p50/p75/p95) of max drawdown $, final net $ and the longest
-    losing streak (trades); ``p_ruin``; ``p_prop_pass``; a max-DD histogram; and ``actual`` --
-    the recorded-order path's own max DD and where it ranks in the resampled distribution
-    (headline text: "the backtest's actual path: DD -$X (percentile P)").
+    Returns:
+      * the p5..p95 of max drawdown $, final net $ and the losing streak (trades);
+      * ``p_ruin`` = P(max DD >= floor), and ``p_prop_pass``;
+      * a max-DD histogram;
+      * ``actual``: the recorded order's own max DD, plus ``worse_than_pct``, the % of resampled
+        paths whose DD is strictly less bad (ties never count, review M2).
     """
-    if not pnls:
+    if not trades:
         raise ValueError("no trades: nothing to resample")
     if mode not in ("shuffle", "bootstrap"):
         raise ValueError('mode: "shuffle" or "bootstrap"')
-    if not 1 <= paths <= 10_000:
-        raise ValueError("paths: 1 to 10,000")
+    if not 1 <= paths <= MAX_PATHS:
+        raise ValueError(f"paths: 1 to {MAX_PATHS:,}")
+    if floor is None:
+        floor = float(rules["trailing_mll"]) if rules and rules.get("trailing_mll") else DEFAULT_FLOOR
+    if isinstance(floor, bool) or not isinstance(floor, (int, float)) or not 0 < floor < 1e12:
+        raise ValueError("floor: a drawdown in $ above 0")
+    floor = float(floor)
 
-    pnls = [float(p) for p in pnls]
-    n = len(pnls)
+    pnls, flags, dates = weekday_grid(list(trades))
+    at = {d: i for i, d in enumerate(dates)}
+    day_nets: List[list] = [[] for _ in dates]
+    for t in trades:
+        day_nets[at[t["date"]]].append(float(t["net"]))
+    sig = ["".join("L" if x < 0 else "W" for x in nets) for nets in day_nets]
+    n = len(dates)
+    used = max(1, min(paths, MAX_WORK // n))
     rng = random.Random(seed)
-
-    r = rules or {}
-    eval_target = r.get("eval_target")
-    eval_min_days = r.get("eval_min_days")
-    consistency = r.get("consistency")
-    trailing_mll = r.get("trailing_mll")
-    lock_at = r.get("lock_at")
-    lock_floor = r.get("lock_floor")
 
     dds: List[float] = []
     finals: List[float] = []
-    streaks: List[int] = []
-    n_ruin = 0
-    n_pass = 0
-    work = list(pnls)
-    for _ in range(paths):
-        work = rng.choices(pnls, k=n) if mode == "bootstrap" else work
+    streaks: List[float] = []
+    n_ruin = n_pass = 0
+    idx = list(range(n))
+    for _ in range(used):
         if mode == "shuffle":
-            rng.shuffle(work)
-
-        peak = run_eq = worst = 0.0
-        min_eq = float("inf")   # post-trade only (see module docstring): the pre-trade
-                                 # baseline of 0.0 is not itself a ruin, whatever the floor is
-        cur_loss, max_loss = 0, 0
-        floor = -trailing_mll if rules else None
-        largest_win_day = 0.0
-        trade_days = 0
-        outcome = None if rules else "skip"
-
-        for p in work:
-            run_eq += p
-            if run_eq > peak:
-                peak = run_eq
-                if outcome is None:
-                    floor = lock_floor if peak >= lock_at else peak - trailing_mll
-            else:
-                d = run_eq - peak
-                if d < worst:
-                    worst = d
-            if run_eq < min_eq:
-                min_eq = run_eq
-            if p < 0:
-                cur_loss += 1
-                max_loss = max(max_loss, cur_loss)
-            else:
-                cur_loss = 0
-            if outcome is None:
-                if p != 0.0:
-                    trade_days += 1
-                if p > largest_win_day:
-                    largest_win_day = p
-                if run_eq <= floor:
-                    outcome = "bust"
-                elif (run_eq >= eval_target and trade_days >= eval_min_days
-                      and largest_win_day <= consistency * run_eq):
-                    outcome = "pass"
-
-        dds.append(worst)
-        finals.append(run_eq)
-        streaks.append(max_loss)
-        if starting_balance + min_eq <= ruin_threshold:
+            rng.shuffle(idx)            # cumulative, like the pre-fix walk: 1 trade/day reproduces it exactly
+            order = idx
+        else:
+            order = rng.choices(range(n), k=n)
+        seq = list(chain.from_iterable(map(day_nets.__getitem__, order)))
+        dd, final = _walk(seq)
+        dds.append(dd)
+        finals.append(final)
+        streaks.append(float(max(map(len, "".join(map(sig.__getitem__, order)).split("W")))))
+        if -dd >= floor:
             n_ruin += 1
-        if outcome == "pass":
+        if rules is not None and engine.run_eval(zip(map(pnls.__getitem__, order), map(flags.__getitem__, order)),
+                                                 rules)["outcome"] == "pass":
             n_pass += 1
 
-    actual_dd = _actual_path(pnls)
+    actual = _walk([float(t["net"]) for t in trades])[0]
     return {
-        "paths": paths, "mode": mode, "seed": seed, "n_trades": n,
+        "unit": "day", "paths": used, "paths_requested": paths, "capped": used < paths,
+        "mode": mode, "seed": seed, "n_trades": len(trades), "n_days": n,
         "drawdown": _percentiles(dds),
         "final_net": _percentiles(finals),
-        "losing_streak": _percentiles([float(s) for s in streaks]),
-        "p_ruin": n_ruin / paths,
-        "p_prop_pass": (n_pass / paths) if rules else None,
+        "losing_streak": _percentiles(streaks),
+        "floor": floor, "p_ruin": n_ruin / used,
+        "p_prop_pass": (n_pass / used) if rules is not None else None,
         "histogram": _histogram(dds, bins),
-        "actual": {"max_dd": actual_dd, "percentile": _percentile_rank(sorted(dds), actual_dd)},
+        "actual": {"max_dd": actual, "worse_than_pct": 100.0 * sum(1 for d in dds if d > actual) / used},
     }

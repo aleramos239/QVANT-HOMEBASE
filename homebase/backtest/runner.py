@@ -137,6 +137,15 @@ def prepare(body, base: Path) -> str:
     return rid
 
 
+def report_holes(skipped: list[dict], no_trade: list[dict]) -> list[dict]:
+    """The sessions the report drops from its Sharpe weekday grid: real holes only -- a coverage/data
+    gap (`skipped`) or a strategy crash ("strategy error: ..."). A strategy's OWN no-trade reason
+    (a trend gate, "no print before ...") is a real flat day the account sat through: it stays on the
+    grid as 0.0 (review C1 -- dropping it inflated a gated strategy's Sharpe ~1.5x). The coverage block
+    still lists every no-trade day for display."""
+    return list(skipped) + [n for n in no_trade if n["reason"].startswith("strategy error")]
+
+
 def _run_propsim(trades: list[dict], req: dict) -> tuple[dict, bool]:
     """The prop-eval Monte Carlo never costs the run its bundle: a malformed rule file
     (e.g. one missing a key the engine requires) is caught here, not left to blow up
@@ -227,15 +236,16 @@ def execute(run_dir: Path, store: TapeStore) -> dict:
     by_reason: dict[str, int] = {}
     for s in skipped:
         by_reason[s["reason"]] = by_reason.get(s["reason"], 0) + 1
-    # Every session the engine could not turn into a trade row -- coverage gaps
-    # AND the strategy's own no-trade/crash reasons (SessionResult.skip) -- goes
-    # to the report so a broken strategy or a data hole never reads as a quiet
-    # zero (carried from Task 5/6 review).
-    all_skipped = skipped + no_trade
-    rep = report.build(trades, req["capital"], skipped=all_skipped)
+    # Only real holes (a coverage gap or a strategy crash) leave the report's Sharpe grid, and a
+    # crash still reads loudly as skipped_by_error (carried from Task 5/6 review); a strategy's own
+    # no-trade day is a flat 0.0 there (review C1). coverage.no_trade keeps every reason for display.
+    rep = report.build(trades, req["capital"], skipped=report_holes(skipped, no_trade))
     status.update(phase="prop sim", done=len(days), updated=_now())
     write_json(run_dir / "status.json", status)
-    prop, prop_error = _run_propsim(trades, req)
+    if req.get("propsim", True):
+        prop, prop_error = _run_propsim(trades, req)
+    else:                                   # a walk-forward cell: its full-window prop sim is never shown
+        prop, prop_error = {"skipped": "not run (a walk-forward cell)"}, False
     meta = {"id": req["id"], "created": req["created"], "finished": _now(),
             "engine": ENGINE_VERSION, "fill_law": "tick replay",
             "strategy": {"id": cls.id, "name": cls.name, "root": cls.root},

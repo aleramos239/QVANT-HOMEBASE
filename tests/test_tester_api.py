@@ -69,23 +69,47 @@ def test_a_run_goes_from_post_to_bundle(tmp_path):
         assert (tmp_path / "state" / "tester" / "runs" / rid / "run.json").exists()
 
 
-def test_montecarlo_runs_over_a_finished_bundle_and_reuses_its_prop_rules(tmp_path):
+def test_montecarlo_runs_over_a_finished_bundle_and_reuses_its_prop_rules(tmp_path, monkeypatch):
+    from homebase.backtest.stats import montecarlo as MC
+    calls = []
+    real = MC.run
+    monkeypatch.setattr(MC, "run", lambda *a, **kw: calls.append((a, kw)) or real(*a, **kw))
     with client(tmp_path) as c:
         rid = c.post("/api/tester/run", json=RUN).json()["id"]
         poll(c, rid)
-        r = c.post("/api/tester/montecarlo", json={"run_id": rid, "paths": 500, "seed": 1},
+        r = c.post("/api/tester/montecarlo", json={"run_id": rid, "paths": 500},
                    headers={"origin": "http://localhost:8852"})
         assert r.status_code == 200
         mc = r.json()
-        assert mc["paths"] == 500 and mc["mode"] == "shuffle" and mc["n_trades"] == 1
+        assert mc["paths"] == 500 and mc["mode"] == "shuffle" and mc["n_trades"] == 1 and mc["unit"] == "day"
         for k in ("drawdown", "final_net", "losing_streak"):
             assert set(mc[k]) == {"p5", "p25", "p50", "p75", "p95"}
-        assert 0.0 <= mc["p_ruin"] <= 1.0
-        assert mc["p_prop_pass"] is not None            # RUN's default prop_rules ran clean
+        assert mc["floor"] == 2000.0 and 0.0 <= mc["p_ruin"] <= 1.0     # LucidFlex's trailing max loss
+        assert mc["p_prop_pass"] is not None and mc["prop_rules"]["confirmed"] is True
+        assert mc["seed"] == MC.seed_for(rid)                         # I2: repeatable without a seed
         assert "histogram" in mc and "actual" in mc
-        # same seed -> identical result; a different seed need not match
-        again = c.post("/api/tester/montecarlo", json={"run_id": rid, "paths": 500, "seed": 1}).json()
-        assert again == mc
+        (args, kw), = calls
+        assert isinstance(args[0][0], dict) and "date" in args[0][0]   # C2: trades, not bare nets
+        again = c.post("/api/tester/montecarlo", json={"run_id": rid, "paths": 500}).json()
+        assert again == mc and len(calls) == 1                         # I3: served from the cache
+        other = c.post("/api/tester/montecarlo", json={"run_id": rid, "paths": 500, "floor": 500}).json()
+        assert other["floor"] == 500.0 and len(calls) == 2
+        assert c.post("/api/tester/montecarlo", json={"run_id": rid, "paths": 500, "seed": 7}).json()["seed"] == 7
+
+
+def test_montecarlo_over_a_heatmap_cell(tmp_path):
+    with client(tmp_path) as c:
+        gid = c.post("/api/tester/grid", json=GRID).json()["id"]
+        poll_grid(c, gid)
+        r = c.post("/api/tester/montecarlo", json={"grid_id": gid, "cell": 1, "paths": 200})
+        assert r.status_code == 200 and r.json()["n_trades"] >= 0
+        cell_run = c.get(f"/api/tester/grid/{gid}/cell/1/bundle").json()["run"]["id"]
+        from homebase.backtest.stats import montecarlo as MC
+        assert r.json()["seed"] == MC.seed_for(cell_run)
+        assert c.post("/api/tester/montecarlo", json={"grid_id": gid, "cell": 9}).status_code == 404
+        assert c.post("/api/tester/montecarlo", json={"grid_id": "20260927-120000-nq930-abcd", "cell": 0}).status_code == 404
+        assert c.post("/api/tester/montecarlo", json={"grid_id": gid}).status_code == 400
+        assert c.post("/api/tester/montecarlo", json={"grid_id": gid, "cell": 0, "run_id": "x"}).status_code == 400
 
 
 def test_montecarlo_refuses_bad_requests_and_cross_site_writes(tmp_path):
@@ -99,6 +123,9 @@ def test_montecarlo_refuses_bad_requests_and_cross_site_writes(tmp_path):
         assert r.status_code == 400 and "paths" in r.json()["detail"]
         r = c.post("/api/tester/montecarlo", json={"run_id": rid, "mode": "bogus"})
         assert r.status_code == 400 and "mode" in r.json()["detail"]
+        for bad in (0, -5, "x", True):
+            r = c.post("/api/tester/montecarlo", json={"run_id": rid, "floor": bad})
+            assert r.status_code == 400 and "floor" in r.json()["detail"], bad
         # the run is still queued/running: no trades to resample yet
         r = c.post("/api/tester/montecarlo", json={"run_id": rid})
         assert r.status_code in (400, 409)
@@ -346,3 +373,12 @@ def test_a_queued_walkforward_can_be_cancelled_and_has_no_result(tmp_path, monke
         assert c.post(f"/api/tester/walkforward/{wid}/cancel").json()["status"] == "cancelled"
         assert c.get(f"/api/tester/walkforward/{wid}/result").status_code == 409
         assert c.get("/api/tester/looks").json() == {}
+
+
+def test_the_walkforward_scheme_comes_from_the_server(tmp_path):
+    with client(tmp_path) as c:
+        s = c.get("/api/tester/walkforward-scheme").json()
+        assert s["n_steps"] == 45 and (s["first_select"], s["last_select"]) == ("2021-01", "2024-09")
+        assert (s["select_months"], s["test_months"], s["step_months"]) == (1, 3, 1)
+        assert s["metrics"][0] == ["net_profit", "Net $"] and s["default_min_trades"] == 5
+        assert c.get("/api/tester/walkforward-scheme", headers=REBIND_HOST).status_code == 403

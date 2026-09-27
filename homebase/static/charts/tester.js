@@ -170,11 +170,12 @@ function propView(p) {
     { label: 'Funded: expected cheque', value: Tr.money(h.funded_expected_cheque), sub: '' }] };
 }
 
-/* ---- Monte Carlo (Overview sub-tab): resamples the run's own trade P&L, never the fills ---- */
-/* "the backtest's actual path: DD −$X (percentile P)" -- where the ONE path the backtest actually
-   drew ranks inside the resampled distribution of max drawdowns. */
+/* ---- Monte Carlo (Overview sub-tab): resamples the run's own DAYS (their trades intact), never the fills ---- */
+/* "the backtest's actual path: DD −$X, worse than P% of day reshuffles" -- P = the share of resampled
+   paths whose drawdown was strictly less bad (review M2: a high P = an unlucky recorded path). */
 function mcHeadline(r) {
-  return `the backtest's actual path: DD ${Tr.money(r.actual.max_dd)} (percentile ${Math.round(r.actual.percentile)})`;
+  const what = r.mode === 'bootstrap' ? 'day resamples' : 'day reshuffles';
+  return `the backtest's actual path: DD ${Tr.money(r.actual.max_dd)}, worse than ${Math.round(r.actual.worse_than_pct)}% of ${what}`;
 }
 function mcTiles(r) {
   const dd = r.drawdown, fn = r.final_net, ls = r.losing_streak;
@@ -183,8 +184,10 @@ function mcTiles(r) {
     { label: 'Max drawdown (p50)', value: Tr.money(dd.p50), sub: spread(dd, Tr.money), tone: '' },
     { label: 'Final net (p50)', value: signed(fn.p50), sub: spread(fn, signed), tone: toneOf(fn.p50) },
     { label: 'Losing streak (p50)', value: int(Math.round(ls.p50)), sub: spread(ls, (v) => int(Math.round(v))), tone: '' },
-    { label: 'P(ruin)', value: rate(r.p_ruin * 100), sub: '', tone: '' },
-    { label: 'P(prop pass)', value: r.p_prop_pass == null ? '—' : rate(r.p_prop_pass * 100), sub: '', tone: '' }];
+    { label: `P(DD ≥ ${Tr.money(r.floor)})`, value: rate(r.p_ruin * 100), sub: 'ruin floor', tone: '' },
+    { label: 'P(prop pass)', value: r.p_prop_pass == null ? '—' : rate(r.p_prop_pass * 100),
+      sub: r.prop_rules ? r.prop_rules.label : '', tone: '' },
+    { label: 'Paths', value: int(r.paths), sub: `${r.capped ? `capped from ${int(r.paths_requested)} · ` : ''}resampled by day`, tone: '' }];
 }
 /* Bar heights as a % of the tallest bin (>= 2% so a lone path never disappears); `title` carries
    the bin's own $ range + path count for a hover tooltip -- the chart itself stays a plain <div> row. */
@@ -229,7 +232,9 @@ function compareRows(a, b, propA, propB) {
   const ca = a.summary.all, cb = b.summary.all;
   const rows = CMP_ROWS.map(([key, label, get, fmt, fmtDelta, higherBetter]) => {
     const av = get(ca), bv = get(cb);
-    const ok = av != null && bv != null && Number.isFinite(av) && Number.isFinite(bv);
+    // review M1: a profit factor at the no-loss cap (999) is "∞", not a number to subtract
+    const capped = key === 'pf' && (av >= 999 || bv >= 999);
+    const ok = !capped && av != null && bv != null && Number.isFinite(av) && Number.isFinite(bv);
     return { key, label, a: fmt(av), b: fmt(bv), delta: ok ? fmtDelta(bv - av) : '—', better: betterSide(av, bv, higherBetter) };
   });
   const ga = greenYears(a.by_year), gb = greenYears(b.by_year);
@@ -457,7 +462,6 @@ function gridProgress(st) {
 /* ---- the walk-forward: 1 month to select, the next 3 to test, stepping monthly, research window 2021-2024 only
    (homebase/backtest/walkforward.py owns the scheme; these only shape its request and its result) ---- */
 const WF_METRICS = [['net_profit', 'Net $'], ['sharpe', 'Sharpe'], ['profit_factor', 'Profit factor'], ['t_stat', 't-stat']];
-const WF_STEPS = 45;          // 48 months of 2021-2024, a 1-month select + 3-month test: select 2021-01 .. 2024-09
 const WF_MIN_TRADES_MAX = 1000;
 function wfBody(f, axes, metric, minTrades) { return { ...gridBody(f, axes), metric, min_trades: minTrades }; }
 function wfProblems(f, s, rows, minTrades) {
@@ -466,8 +470,10 @@ function wfProblems(f, s, rows, minTrades) {
   if (!Number.isInteger(minTrades) || minTrades < 1 || minTrades > WF_MIN_TRADES_MAX) return `Min trades: a whole number 1 to ${WF_MIN_TRADES_MAX}`;
   return null;
 }
-function wfLooksText(cells) {
-  return `${int(cells)} cell${cells === 1 ? '' : 's'} × ${WF_STEPS} selection months = ${int(cells * WF_STEPS)} looks`;
+/* nSteps comes from GET /api/tester/walkforward-scheme (review M5); '' until it has loaded. */
+function wfLooksText(cells, nSteps) {
+  if (!Number.isInteger(nSteps)) return '';
+  return `${int(cells)} cell${cells === 1 ? '' : 's'} × ${nSteps} selection months = ${int(cells * nSteps)} looks`;
 }
 function etaText(s) {
   if (s == null || !Number.isFinite(s)) return '';
@@ -534,7 +540,7 @@ function wfScheme(r) {
 }
 
 const api = { MAX_CELLS, parseValues, valueLabel, gridAxes, gridCount, gridProblems, gridBody, looksText, looksLine, heatPanels, heatMaxAbs,
-  WF_METRICS, WF_STEPS, WF_STEP_HEADERS, wfBody, wfProblems, wfLooksText, etaText, wfProgress, wfTiles, wfStepRows, wfStability, wfPhases,
+  WF_METRICS, WF_STEP_HEADERS, wfBody, wfProblems, wfLooksText, etaText, wfProgress, wfTiles, wfStepRows, wfStability, wfPhases,
   wfScheme,
   heatLevel, cellView, gridProgress, RANGES, HOLDOUT_START, DEFAULT_RULES, REASON_MAX, defaults, restore, fromRun, reachesHoldout, problems, inputError, body,
   key, runLabel, progress, pct, rate, num, dur, fmtEt, tiles, badges, propView, mcHeadline, mcTiles, mcHistogram, compareRows, paramsDiff,

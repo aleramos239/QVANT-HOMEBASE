@@ -111,7 +111,7 @@ let selectedTrade = null;
 let sortCol = 'n', sortDir = 1;
 let visibleTradeRows = TRADE_CHUNK;
 let miniChartHandle = null;
-let mc = { runId: null, loading: false, error: '', result: null };   // Monte Carlo, keyed to bundle.run.id
+let mc = { runId: null, src: null, floor: null, loading: false, error: '', result: null };   // Monte Carlo, keyed to bundle.run.id
 let mcToken = 0;
 /* Compare two runs: picked from Recent runs (<= 2 ids), then the Compare tab's own loaded bundles. */
 let compareIds = [];
@@ -144,6 +144,7 @@ let wfResultErr = '';
 let wfResumed = false;
 let wfCfgEl = null, wfErrEl = null, wfCountEl = null, wfLooksEl = null, wfRunEl = null, wfBodyEl = null;
 let wfProgBar = null, wfProgText = null, wfChartHandle = null;
+let wfScheme = null, wfSchemePromise = null;   // GET /api/tester/walkforward-scheme: the step count (review M5)
 
 /* ---- DOM roots, rebuilt by render(); refreshed in place by everything else ---- */
 let root = null, headerEl = null, holdoutBannerEl = null, tabsEl = null, contentEl = null;
@@ -828,14 +829,43 @@ function propBlock(propsim) {
   }
   return wrap;
 }
-/* ---- Monte Carlo (Overview sub-tab): fetched once per run id, cached in `mc` ---- */
-function startMonteCarlo(runId) {
-  mc = { runId, loading: true, error: '', result: null };
+/* ---- Monte Carlo (Overview sub-tab): fetched once per run id (and floor), cached in `mc` and on the server.
+   `src` is {run_id} for a run, {grid_id, cell} for a heat-map cell (review I4). No seed is sent: the server
+   derives one from the run id, so reopening a run shows the same numbers (review I2). ---- */
+function startMonteCarlo(runId, src = { run_id: runId }, floor = null) {
+  mc = { runId, src, floor, loading: true, error: '', result: null };
   const token = ++mcToken;
-  fetch('/api/tester/montecarlo', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ run_id: runId }) })
-    .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
-    .then((result) => { if (token !== mcToken) return; mc = { runId, loading: false, error: '', result }; if (innerTab === 'overview') refreshContent(); })
-    .catch(() => { if (token !== mcToken) return; mc = { runId, loading: false, error: 'Monte Carlo failed to run', result: null }; if (innerTab === 'overview') refreshContent(); });
+  const payload = floor == null ? src : { ...src, floor };
+  const done = (patch) => { if (token !== mcToken) return; mc = { runId, src, floor, loading: false, error: '', result: null, ...patch }; if (innerTab === 'overview') refreshContent(); };
+  fetch('/api/tester/montecarlo', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) })
+    .then(async (r) => {
+      if (r.ok) return r.json();
+      let d = '';
+      try { d = (await r.json()).detail || ''; } catch (_) { /* no body */ }
+      throw new Error(d || `request failed (${r.status})`);
+    })
+    .then((result) => done({ result }))
+    .catch((e) => done({ error: `Monte Carlo failed to run: ${e.message || 'unknown error'}` }));
+}
+/* The ruin floor (review I1): P(max drawdown ≥ $floor), editable; committed on Enter / blur. */
+function mcFloorInput() {
+  const wrap = page.mk('span', 'tst-mc-floor'), lab = page.mk('label', 'tst-cost-l', 'Ruin = drawdown ≥ $');
+  const inp = page.mk('input', 'tst-heat-vals tst-mc-floor-in');
+  inp.id = 'tst-mc-floor';
+  lab.htmlFor = inp.id;
+  inp.type = 'number';
+  inp.min = '1';
+  inp.step = '100';
+  inp.disabled = mc.loading;
+  inp.value = mc.result ? String(mc.result.floor) : mc.floor != null ? String(mc.floor) : '';
+  inp.onchange = () => {
+    const v = Number(inp.value);
+    if (!(inp.value.trim() && Number.isFinite(v) && v > 0)) { inp.value = mc.result ? String(mc.result.floor) : ''; return; }
+    if (mc.result && v === mc.result.floor) return;
+    startMonteCarlo(mc.runId, mc.src, v);
+  };
+  wrap.append(lab, inp);
+  return wrap;
 }
 function mcBarsEl(r) {
   const wrap = page.mk('div', 'tst-mc-hist');
@@ -851,6 +881,7 @@ function mcBlock(runId) {
   const wrap = page.mk('div', 'tst-mc');
   const head = page.mk('div', 'tst-prop-head');
   head.appendChild(page.mk('span', 'tst-prop-title', 'Monte Carlo'));
+  if (mc.runId === runId) head.appendChild(mcFloorInput());
   wrap.appendChild(head);
   if (mc.runId !== runId || mc.loading) { wrap.appendChild(page.mk('div', 'bp-empty', 'Running Monte Carlo…')); return wrap; }
   if (mc.error) { wrap.appendChild(page.mk('div', 'tst-err', mc.error)); return wrap; }
@@ -1312,7 +1343,7 @@ function loadCell(i) {
       strategyId = b.run.strategy.id;
       form = X.fromRun(b.run, schemaFor(strategyId));
       bundle = b;
-      startMonteCarlo(b.run.id);
+      startMonteCarlo(b.run.id, { grid_id: gid, cell: i });
       loadedKey = X.key(form);
       lastRunFailed = '';
       visibleTradeRows = TRADE_CHUNK;
@@ -1356,7 +1387,8 @@ function syncWf() {
   const n = g.axes ? X.gridCount(g.axes) : 0;
   wfCountEl.textContent = g.axes ? `${n} cells` : '';
   const total = X.looksLine(looksMap[strategyId] || 0, (wf && wf.looks_error) || looksErr);
-  wfLooksEl.textContent = g.axes && n <= X.MAX_CELLS ? `${X.wfLooksText(n)} · ${total}` : total;
+  const preview = g.axes && n <= X.MAX_CELLS ? X.wfLooksText(n, wfScheme && wfScheme.n_steps) : '';
+  wfLooksEl.textContent = preview ? `${preview} · ${total}` : total;
   const text = wfErr || prob || '';
   wfErrEl.textContent = text;
   wfErrEl.hidden = !text;
@@ -1493,7 +1525,15 @@ function loadWfResult(wid, token) {
     .then((result) => { if (token !== wfToken) return; wfResult = { id: wid, result }; wfResultErr = ''; buildWfBody(); })
     .catch(() => { if (token !== wfToken) return; wfResultErr = 'could not load the walk-forward result'; buildWfBody(); });
 }
+function loadWfScheme() {
+  if (wfScheme || wfSchemePromise) return;
+  wfSchemePromise = fetch('/api/tester/walkforward-scheme').then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+    .then((sc) => { wfScheme = sc; syncWf(); })
+    .catch(() => { /* the preview stays blank; the next render retries */ })
+    .finally(() => { wfSchemePromise = null; });
+}
 function renderWalkforward(container) {
+  loadWfScheme();
   const wrap = page.mk('div', 'tst-heat tst-wf');
   wfCfgEl = page.mk('div', 'tst-heat-cfg');
   wfBodyEl = page.mk('div', 'tst-wf-body');

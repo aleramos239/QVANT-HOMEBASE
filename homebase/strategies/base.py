@@ -92,6 +92,10 @@ class Strategy:
     bar_minutes: int = 0                  # > 0: on_bar gets bars of this size
     bar_window: tuple[str, str] | None = None   # ET span bars are built over (default: session_window)
     placement_ms: int = 85                # measured order-placement latency (research)
+    # True = every session is independent: day state resets in on_session and anything older comes from
+    # ctx.daily (the store), never from an earlier session of the SAME run. The walk-forward relies on it
+    # (a month sliced out of a full-window run == a run over that month) and refuses a strategy without it.
+    session_independent: bool = True
 
     def __init__(self, params: dict | None = None):
         self.p = resolve_inputs(self.inputs(), params)

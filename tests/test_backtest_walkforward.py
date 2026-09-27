@@ -213,12 +213,13 @@ def test_bad_walkforward_fields_are_refused(extra, msg):
 
 # ---------------------------------------------------------------- a month slice == a single run over that month
 
-def test_a_cells_month_slice_equals_a_single_run_over_that_month(tmp_path):
+@pytest.mark.parametrize("gated", [False, True])
+def test_a_cells_month_slice_equals_a_single_run_over_that_month(tmp_path, gated):
     from homebase.backtest import runner as R
     from homebase.backtest.tape import TapeStore
     from tests.backtest_util import nq_archive
     archive = nq_archive(tmp_path / "ticks")
-    inputs = {"adx_gate": False, "offset_pts": 10.0}
+    inputs = {"adx_gate": gated, "offset_pts": 10.0}
     full = R.prepare({"strategy": "nq930", "inputs": inputs, "range": {"kind": "research"}}, tmp_path / "a")
     R.execute(tmp_path / "a" / "runs" / full, TapeStore(archive, tmp_path / "cache"))
     one = R.prepare({"strategy": "nq930", "inputs": inputs,
@@ -226,7 +227,7 @@ def test_a_cells_month_slice_equals_a_single_run_over_that_month(tmp_path):
     R.execute(tmp_path / "b" / "runs" / one, TapeStore(archive, tmp_path / "cache"))
     months = wf.cell_months(tmp_path / "a" / "runs" / full, ["2024-02", "2024-03"])
     single = read_json(tmp_path / "b" / "runs" / one / "run.json")["report"]["summary"]["all"]
-    assert single["trades"] >= 1
+    assert single["trades"] >= (0 if gated else 1)
     for k in wf.STAT_KEYS:
         if k != "skipped_by_error":
             assert months["2024-03"][k] == single[k], k
@@ -377,3 +378,35 @@ def test_walkforwards_live_apart_from_heatmap_grids(tmp_path, fake):
         gm.status(wid)
     release.set()
     wait_wf(wfm, wid)
+
+
+# ---------------------------------------------------------------- review M3 / M4
+
+def test_a_strategy_not_flagged_session_independent_is_refused(monkeypatch):
+    from homebase import strategies
+    cls = strategies.get("nq930")
+    assert cls.session_independent is True
+    monkeypatch.setattr(cls, "session_independent", False)
+    with pytest.raises(ValueError, match="session"):
+        wf.validate_wf(wbody())
+
+
+def test_walkforward_cells_skip_the_unused_prop_sim(tmp_path, fake):
+    release, fail, spawned = fake
+    m = WalkForwardManager(tmp_path)
+    wid = m.submit(wbody())
+    for c in ("00", "01"):
+        assert read_json(m.dir(wid) / "cells" / c / "request.json")["propsim"] is False
+    release.set()
+    wait_wf(m, wid)
+
+
+def test_execute_without_prop_sim_writes_a_skipped_marker(tmp_path):
+    from homebase.backtest import runner as R
+    from homebase.backtest.tape import TapeStore
+    from tests.backtest_util import nq_archive
+    rid = R.prepare({"strategy": "nq930", "inputs": {"adx_gate": False}, "range": {"kind": "research"}}, tmp_path)
+    d = tmp_path / "runs" / rid
+    write_json(d / "request.json", {**read_json(d / "request.json"), "propsim": False})
+    meta = R.execute(d, TapeStore(nq_archive(tmp_path / "ticks"), tmp_path / "cache"))
+    assert "skipped" in read_json(d / "propsim.json") and meta["propsim_error"] is False

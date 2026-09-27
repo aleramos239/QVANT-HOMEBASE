@@ -22,9 +22,11 @@ choice of phase is visible, never silently picked. The chain is fixed at phase 0
 
 Execution (the per-month cache). Each cell runs ONCE over the whole research window as an ordinary
 heat-map cell (grid.GridManager: the same `runner exec` child, the machine-wide 2-slot cap, FCFS tickets,
-no starts 09:20-09:35 ET). Sessions are independent (a strategy's day state resets every session, daily
-bars come from the store, not the range), so a cell's trades inside month m ARE a single run over month m
-(tests/test_backtest_walkforward.py pins that on real ticks). When a cell finishes, its per-month stats
+no starts 09:20-09:35 ET). Sessions are independent -- a strategy declares it (Strategy.session_independent;
+the walk-forward refuses one that does not): its day state resets every session and daily bars come from
+the store, not the range -- so a cell's trades inside month m ARE a single run over month m
+(tests/test_backtest_walkforward.py pins that on real ticks, gate off and on). A cell skips the full-window
+prop sim (request "propsim": false): it would never be shown. When a cell finishes, its per-month stats
 are cached in cells/NN/months.json; selection reads only those, and a test leg re-uses the chosen cell's
 already-computed trades. 60 cells cost 60 backtests, not 60 x 45.
 
@@ -49,10 +51,11 @@ import math
 from collections import Counter
 from pathlib import Path
 
+from .. import strategies
 from . import grid, report
 from .discipline import RESEARCH_END, RESEARCH_START
 from .grid import FINAL, GridManager, LooksCorrupt, add_look, validate_grid
-from .runner import read_json, write_json
+from .runner import read_json, report_holes, write_json
 
 SELECT_MONTHS = 1
 TEST_MONTHS = 3
@@ -121,9 +124,10 @@ def month_stats(trades_ms: list[dict], skipped: list[dict], capital: float, mont
 
 
 def _run_skipped(run: dict) -> list[dict]:
-    """The sessions a run's report treats as holes (runner.execute: coverage skips + no-trade reasons)."""
+    """The sessions a run's report treats as holes -- exactly runner.report_holes, so a month slice
+    equals a single run over that month."""
     cov = run.get("coverage") or {}
-    return list(cov.get("skipped") or []) + list(cov.get("no_trade") or [])
+    return report_holes(cov.get("skipped") or [], cov.get("no_trade") or [])
 
 
 def cell_months(cdir: Path, months: list[str]) -> dict:
@@ -223,6 +227,16 @@ def compute(cells: list[dict], months: list[str], *, trades_of, metric: str, min
     }
 
 
+def scheme() -> dict:
+    """What the page needs before a job exists (review M5: the step count comes from here, not a
+    client constant)."""
+    st = steps(month_list(RESEARCH_START, RESEARCH_END))
+    return {"n_steps": len(st), "first_select": st[0]["select"], "last_select": st[-1]["select"],
+            "select_months": SELECT_MONTHS, "test_months": TEST_MONTHS, "step_months": STEP_MONTHS,
+            "metrics": [[k, v] for k, v in METRICS.items()], "default_metric": DEFAULT_METRIC,
+            "default_min_trades": DEFAULT_MIN_TRADES, "max_min_trades": MAX_MIN_TRADES}
+
+
 # ---------------------------------------------------------------- validation
 
 def _min_trades(v) -> int:
@@ -245,6 +259,11 @@ def validate_wf(body) -> dict:
         raise ValueError(f"metric: one of {', '.join(METRICS)}")
     min_trades = _min_trades(b.pop("min_trades", DEFAULT_MIN_TRADES))
     g = validate_grid(b)
+    if not getattr(strategies.get(g["strategy"]), "session_independent", False):
+        raise ValueError(f"{g['strategy']}: not flagged session-independent, so a month cannot be sliced "
+                         "out of one full-window run -- the walk-forward refuses it")
+    for c in g["cells"]:
+        c["req"]["propsim"] = False          # the full-window prop sim is never shown here (review M4)
     months = month_list(RESEARCH_START, RESEARCH_END)
     g["walkforward"] = {"metric": metric, "metric_label": METRICS[metric], "min_trades": min_trades,
                         "select_months": SELECT_MONTHS, "test_months": TEST_MONTHS, "step_months": STEP_MONTHS,

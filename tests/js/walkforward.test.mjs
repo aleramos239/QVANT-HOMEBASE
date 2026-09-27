@@ -31,11 +31,12 @@ test('wfProblems: the grid rules plus a whole min-trades of 1 to 1000', () => {
   assert.deepEqual(X.WF_METRICS.map((m) => m[0]), ['net_profit', 'sharpe', 'profit_factor', 't_stat']);
 });
 
-test('wfLooksText: cells x the 45 selection months of 2021-2024', () => {
-  assert.equal(X.WF_STEPS, 45);
-  assert.equal(X.wfLooksText(2), '2 cells × 45 selection months = 90 looks');
-  assert.equal(X.wfLooksText(60), '60 cells × 45 selection months = 2,700 looks');
-  assert.equal(X.wfLooksText(1), '1 cell × 45 selection months = 45 looks');
+test('wfLooksText: cells x the selection-month count the server gives (review M5: never a client constant)', () => {
+  assert.equal(X.WF_STEPS, undefined);
+  assert.equal(X.wfLooksText(2, 45), '2 cells × 45 selection months = 90 looks');
+  assert.equal(X.wfLooksText(60, 45), '60 cells × 45 selection months = 2,700 looks');
+  assert.equal(X.wfLooksText(1, 44), '1 cell × 44 selection months = 44 looks');
+  assert.equal(X.wfLooksText(4, null), '');
 });
 
 test('etaText rounds to what a person reads', () => {

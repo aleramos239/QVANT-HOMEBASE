@@ -25,10 +25,12 @@
     GET  /api/tester/walkforward/{id}/result   the steps, the stitched OOS equity + stats (409 until done)
     POST /api/tester/walkforward/{id}/cancel
     GET  /api/tester/walkforwards        recent walk-forwards, newest first
-    POST /api/tester/montecarlo          {run_id, paths?, mode?, seed?} -> homebase.backtest.stats.montecarlo.run()
-                                          over a DONE run's trade P&L (<= 10,000 paths; a plain `def`
-                                          route, so it runs in FastAPI's threadpool, off the event loop --
-                                          the same reason every route here is sync, not async)
+    GET  /api/tester/walkforward-scheme  the step count, metrics and defaults (no job needed)
+    POST /api/tester/montecarlo          {run_id | grid_id + cell, paths?, mode?, seed?, floor?} ->
+                                          homebase.backtest.stats.montecarlo.run() over a DONE run's trades,
+                                          resampled by day (<= 10,000 paths, <= 2,000,000 day-steps; seed
+                                          derived from the run id; cached; a plain `def` route, so it runs in
+                                          FastAPI's threadpool, off the event loop)
 
 Grid cells run as the same `runner exec` child a single run uses, 2 at a time, from the
 GridManager's worker threads (homebase.backtest.grid) -- never in this process's event loop.
@@ -45,6 +47,8 @@ uniformly rather than routed around it. POSTs additionally pass browser_write_ok
 from __future__ import annotations
 
 import re
+import threading
+from collections import OrderedDict
 from pathlib import Path
 from typing import Callable
 
@@ -55,9 +59,11 @@ from ..backtest import propsim
 from ..backtest.grid import GridManager, LooksCorrupt
 from ..backtest.runner import RunManager, default_base
 from ..backtest.stats import montecarlo
+from ..backtest import walkforward
 from ..backtest.walkforward import WalkForwardManager
 from ..backtest.tape import CACHE
 
+MC_CACHE = 64            # Monte Carlo results kept per service (review I3)
 _HOST_RE = re.compile(r"^(127\.0\.0\.1|localhost)(:\d+)?$", re.IGNORECASE)
 
 
@@ -202,6 +208,10 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         known_wf(wid)
         return wfs.cancel(wid)
 
+    @r.get("/walkforward-scheme")
+    def walkforward_scheme():
+        return walkforward.scheme()
+
     @r.get("/walkforwards")
     def recent_walkforwards():
         return wfs.list()
@@ -219,42 +229,74 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
             raise HTTPException(400, f"{key}: must be within [{lo}, {hi}]")
         return v
 
+    mc_cache: OrderedDict = OrderedDict()
+    mc_lock = threading.Lock()
+
     @r.post("/montecarlo")
     def run_montecarlo(request: Request, body: dict):
-        """A finished run's trade P&L, resampled `paths` times (<= 10,000 -- Global
-        Constraints). Reuses the run's own prop rules (when it ran one, and prop-eval
-        itself did not error) so P(prop pass) is the same LucidFlex race the run's own
-        propsim.json used, not a re-guess. A plain `def`: FastAPI's threadpool runs it,
-        never this service's event loop."""
+        """A finished run's (or heat-map cell's, {grid_id, cell}) trades resampled by DAY --
+        homebase.backtest.stats.montecarlo.run. The prop race is propsim's own run_eval under the
+        run's own rules (skipped when the run's prop eval errored or its rule id is gone). The seed
+        defaults to one derived from the run id, and the ruin floor to the rules' trailing max loss
+        (else $2,000). Results are cached per (run, mode, seed, paths, floor). A plain `def`: FastAPI's
+        threadpool runs it, never this service's event loop."""
         write_ok(request)
-        rid = str(body.get("run_id", ""))
-        known(rid)
+        if "grid_id" in body or "cell" in body:
+            if "run_id" in body or "grid_id" not in body or "cell" not in body:
+                raise HTTPException(400, "either run_id, or grid_id + cell")
+            gid, cell = str(body["grid_id"]), body["cell"]
+            if isinstance(cell, bool) or not isinstance(cell, int):
+                raise HTTPException(400, "cell: a whole number")
+            known_grid(gid)
+            load = lambda: grids.cell_bundle(gid, cell)          # noqa: E731
+        else:
+            rid = str(body.get("run_id", ""))
+            known(rid)
+            load = lambda: manager.bundle(rid)                   # noqa: E731
         mode = body.get("mode", "shuffle")
         if mode not in ("shuffle", "bootstrap"):
             raise HTTPException(400, "mode: shuffle or bootstrap")
         seed = body.get("seed")
-        if seed is not None:
-            if isinstance(seed, bool) or not isinstance(seed, (int, float)):
-                raise HTTPException(400, "seed: a number")
-            seed = int(seed)
-        paths = _mc_int(body, "paths", 5000, 1, 10_000)
+        if seed is not None and (isinstance(seed, bool) or not isinstance(seed, (int, float))):
+            raise HTTPException(400, "seed: a number")
+        floor = body.get("floor")
+        if floor is not None and (isinstance(floor, bool) or not isinstance(floor, (int, float))
+                                  or not 0 < floor < 1e12):
+            raise HTTPException(400, "floor: a drawdown in $ above 0")
+        paths = _mc_int(body, "paths", 5000, 1, montecarlo.MAX_PATHS)
         try:
-            b = manager.bundle(rid)
+            b = load()
+        except KeyError:
+            raise HTTPException(404, "no such heat-map cell") from None
         except ValueError as e:
             raise HTTPException(409, str(e)) from None
         run_meta = b["run"] or {}
+        source = run_meta.get("id") or ""
+        seed = montecarlo.seed_for(source) if seed is None else int(seed)
+        key = (source, mode, seed, paths, None if floor is None else float(floor))
+        with mc_lock:
+            if key in mc_cache:
+                mc_cache.move_to_end(key)
+                return mc_cache[key]
         rules = None
         if run_meta.get("prop_rules") and not run_meta.get("propsim_error"):
             try:
                 rules = propsim.load_rules(run_meta["prop_rules"])
             except ValueError:
                 rules = None    # an unknown/removed rule id: MC still runs, just without P(prop pass)
-        pnls = [t["net"] for t in (b["trades"] or [])]
         try:
-            return montecarlo.run(pnls, paths=paths, mode=mode, seed=seed,
-                                  starting_balance=run_meta.get("capital", 0.0), rules=rules)
+            out = montecarlo.run(b["trades"] or [], paths=paths, mode=mode, seed=seed, rules=rules, floor=floor)
         except ValueError as e:
             raise HTTPException(400, str(e)) from None
+        if rules is not None:
+            confirmed = rules.get("confirmed") is not False
+            out["prop_rules"] = {"id": run_meta["prop_rules"], "name": rules.get("name"), "confirmed": confirmed,
+                                 "label": rules.get("name") if confirmed else f"{rules.get('name')} · unconfirmed rules"}
+        with mc_lock:
+            mc_cache[key] = out
+            while len(mc_cache) > MC_CACHE:
+                mc_cache.popitem(last=False)
+        return out
 
     r.manager = manager   # so the chart service can stop an in-flight child on shutdown
     r.grids = grids       # likewise every grid cell's child
