@@ -236,7 +236,9 @@ function cellDestroyed(cell) {
   try { cell.host.send(R.stopOp(cell.id)); } catch (_) { /* the connection is already gone */ }
   sessions.delete(cell);
   cell.replay = null;
-  window.HBTradeUI.replayEnded(cell, true);   // the latch lives on cell.cfg, so the rebuilt chart inherits it
+  // held by grid position (HBTradeUI.replayDestroyed): a layout load rebuilds from new configs, so a flag on this
+  // cell's config alone would be lost; buildGrid re-applies it to the chart that takes this position
+  window.HBTradeUI.replayDestroyed(cell);
 }
 
 /* A symbol or interval change on a replaying chart (cell.js's update() guard): the server auto-stops a

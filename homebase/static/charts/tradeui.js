@@ -480,6 +480,24 @@ function replayEnded(cell, involuntary) {
   cell.cfg.replayConfirm = p.replayConfirm;
   notifyTrade();
 }
+/* A chart destroyed mid-replay (fix round 2): its latch must survive the grid rebuild that destroyed it, and a
+   layout load (or a layout-tab switch) rebuilds from a NEW layout object, so a flag on the old cell config is
+   thrown away. The latch is therefore held HERE, by grid position, and gridRebuilt() re-applies it to whatever
+   chart now sits there -- from any caller of buildGrid, none of which needs to remember.
+   Layout-tab switches (feat/layout-tabs) rely on this set: keep it when merging. */
+const haltedPositions = new Set();
+function replayDestroyed(cell) {
+  const i = page && page.cells ? page.cells().indexOf(cell) : -1;
+  if (i >= 0) haltedPositions.add(i);
+  replayEnded(cell, true);   // the old config too (a grid-size change keeps the same config objects)
+}
+/* app.js buildGrid, once the new cells exist: each recorded position latches the chart now there (halt AND
+   confirm); a position the grid no longer has is dropped -- that chart is gone, nothing can send from it. */
+function gridRebuilt(cells) {
+  const list = Array.isArray(cells) ? cells : [];
+  for (const i of haltedPositions) if (list[i]) replayEnded(list[i], true);
+  haltedPositions.clear();
+}
 /* The legend's "Resume live trading": lifts the latch only -- the next order still confirms. */
 function resumeLive(cell) {
   if (!cell || !cell.cfg || cell.replay) return;
@@ -590,5 +608,6 @@ function mount(pg) {
 
 window.HBTradeUI = { mount, placeOrder, symbolAction, flattenAccount, cancelOrder, closeLine, moveLine, confirm, busy,
   onBusyChange, onTradeChange, effectiveMode, editableIds, fillIds, tradeOf, setCellTrade, setCellAlgo, botKill,
-  killBusy, accountRows, toggleAccount, pickAlgo, armPending, paintDeskStatus, replayEnded, resumeLive };
+  killBusy, accountRows, toggleAccount, pickAlgo, armPending, paintDeskStatus, replayEnded, resumeLive,
+  replayDestroyed, gridRebuilt };
 })();

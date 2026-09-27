@@ -166,3 +166,75 @@ test('Important 2: a destroyed chart and a refused replay_start latch too', () =
   RUI.onError(d, { op: 'replay_start', error: 'no data' });
   assert.equal(UI.effectiveMode(d).reason, T.REPLAY_ENDED);
 });
+
+/* ---- fix round 2 (task-1-rereview.md): the replay-end latch survives ANY grid rebuild ----
+   app.js's buildGrid destroys every cell (HBReplayUI.cellDestroyed) and then builds new ones -- from a NEW layout
+   object when it is a layout load (or a layout-tab switch), so a flag on the old cell config would be thrown
+   away. The latch is held by grid POSITION at page level and re-applied by HBTradeUI.gridRebuilt. These drive
+   exactly the order buildGrid runs them in: cellDestroyed over the old cells, then gridRebuilt over the new. */
+function rebuild(newCells) {
+  for (const old of cells) RUI.cellDestroyed(old);   // buildGrid's first loop, while `cells` is still the old grid
+  cells = newCells;
+  UI.gridRebuilt(cells);                             // buildGrid, once the new cells exist
+}
+const practicing = (accounts) => {
+  const c = chart(accounts);
+  RUI.onState(c, { id: 'c1', date: '2026-09-24', cursor_ms: 0, speed: 1, playing: true });
+  return c;
+};
+const fresh = () => ({ cfg: { root: 'NQ', trade: { accounts: ['sim041'] }, algo: null }, shown: { root: 'NQ' }, tick: 0.25,
+  pv: 20, replay: null, ov: [], bars: [], note() {}, host: { send() {} } });
+
+test('fix round 2: practicing, then a layout load -- the rebuilt chart sends nothing and opens no dialog until Resume', async () => {
+  reset();
+  practicing(['sim041']);
+  const next = fresh();                    // loadLayout: a brand-new config object from the saved layout
+  rebuild([next]);
+  assert.deepEqual(UI.effectiveMode(next), { mode: 'none', reason: T.REPLAY_ENDED, accounts: [] });
+  UI.placeOrder({ cell: next, root: 'NQ', side: 'Buy', type: 'Market', qty: 1 });   // one-click is on
+  await flush();
+  assert.equal(desk.sent.length, 0);
+  assert.equal(dialogs.length, 0);
+  UI.resumeLive(next);
+  UI.placeOrder({ cell: next, root: 'NQ', side: 'Buy', type: 'Market', qty: 1 });
+  await flush();
+  assert.equal(desk.sent.length, 0, 'after Resume the first order still confirms');
+  assert.equal(dialogs.length, 1);
+  clickPrimary('Buy');
+  await flush();
+  assert.equal(desk.sent.length, 1);
+});
+
+test('fix round 2: the same through a grid-size change -- the latch lands on whatever chart now sits at that position', () => {
+  reset();
+  const a = fresh(), b = practicing(['sim041']);
+  cells = [a, b];                           // chart 2 (position 1) is the one practicing
+  const na = fresh(), nb = fresh(), nc = fresh(), nd = fresh();
+  rebuild([na, nb, nc, nd]);                // 2 -> 4 charts
+  assert.equal(UI.effectiveMode(na).mode, 'on');
+  assert.equal(UI.effectiveMode(nb).reason, T.REPLAY_ENDED);
+  assert.equal(UI.effectiveMode(nc).mode, 'on');
+  rebuild([fresh(), fresh()]);              // the entry was consumed: the next rebuild latches nothing new
+  assert.equal(UI.effectiveMode(cells[1]).mode, 'on');
+});
+
+test('fix round 2: a grid that SHRINKS past the practicing chart drops the entry cleanly', () => {
+  reset();
+  const a = fresh(), b = practicing(['sim041']);
+  cells = [a, b];
+  const only = fresh();
+  rebuild([only]);                          // 2 -> 1: position 1 no longer exists
+  assert.equal(UI.effectiveMode(only).mode, 'on');
+  const later = [fresh(), fresh()];
+  rebuild(later);                           // growing back later must not resurrect it
+  assert.equal(UI.effectiveMode(later[1]).mode, 'on');
+});
+
+test('fix round 2: app.js buildGrid re-applies the latch after building, for every caller', async () => {
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../../homebase/static/charts/app.js', import.meta.url), 'utf8');
+  const body = src.slice(src.indexOf('function buildGrid()'), src.indexOf('function select('));
+  const destroyed = body.indexOf('HBReplayUI.cellDestroyed'), rebuilt = body.indexOf('HBTradeUI.gridRebuilt(cells)');
+  assert.ok(destroyed >= 0 && rebuilt > destroyed, 'buildGrid: cellDestroyed over the old cells, then gridRebuilt(cells) over the new');
+  assert.ok(body.indexOf('new Cell(') < rebuilt, 'gridRebuilt runs once the new cells exist');
+});

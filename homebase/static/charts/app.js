@@ -244,6 +244,9 @@ function buildGrid() {
     cells.push(cell);
     cell.applyFold(legendFolded(cell));   // needs this cell's grid index, only known once it is in `cells`
   }
+  // fix round 2: a chart destroyed mid-replay latches whatever chart now sits at its grid position -- for EVERY
+  // caller (a layout load, a layout-tab switch, a grid-size change): HBTradeUI holds the positions
+  window.HBTradeUI.gridRebuilt(cells);
   select(Math.min(selected, n - 1));
   if (hidden.length) window.HBDeskClient.toast('err', T.liveDroppedMessage(hidden, deskState()));
 }
