@@ -183,24 +183,39 @@ def test_a_month_with_no_eligible_cell_sits_out_flat():
 
 # ---------------------------------------------------------------- validation: the research window, forced
 
-def test_validate_forces_the_research_window_and_counts_the_steps():
+def test_validate_defaults_to_the_research_window_and_counts_the_steps():
     g = wf.validate_wf(wbody())
     w = g["walkforward"]
     assert w["metric"] == "net_profit" and w["min_trades"] == 5
     assert w["months"][0] == "2021-01" and w["months"][-1] == "2024-12" and w["n_steps"] == 45
     assert g["range"]["start"] == "2021-01-01" and g["range"]["end"] == "2024-12-31"
     for c in g["cells"]:
-        assert c["req"]["range"]["kind"] == "research" and c["req"]["holdout"] is None
+        assert c["req"]["range"]["kind"] == "research" and "holdout" not in c["req"]
     assert wf.validate_wf(wbody(metric="sharpe", min_trades=3))["walkforward"]["metric"] == "sharpe"
 
 
-@pytest.mark.parametrize("extra", [{"range": {"kind": "custom", "start": "2022-01-01", "end": "2022-06-30"}},
-                                   {"range": {"kind": "custom", "start": "2024-01-01", "end": "2025-06-30"}},
-                                   {"range": {"kind": "is_months"}}, {"range": {"kind": "research", "end": "2025-06-30"}},
-                                   {"holdout": {"reason": "peek"}}])
-def test_any_other_window_or_a_holdout_is_refused(extra):
-    with pytest.raises(DisciplineError, match="walk-forward runs on the research window 2021–2024 only"):
-        wf.validate_wf(wbody(**extra))
+def test_the_walkforward_runs_whatever_window_it_is_given():
+    """2026-09-27: the window comes from the range picker, 2025+ included, and the months
+    the scheme steps over are that window's own whole calendar months."""
+    g = wf.validate_wf(wbody(range={"kind": "custom", "start": "2025-01-01", "end": "2026-06-30"}))
+    w = g["walkforward"]
+    assert w["months"][0] == "2025-01" and w["months"][-1] == "2026-06" and len(w["months"]) == 18
+    assert w["n_steps"] == 15
+    assert (g["range"]["start"], g["range"]["end"]) == ("2025-01-01", "2026-06-30")
+    for c in g["cells"]:
+        assert (c["req"]["range"]["start"], c["req"]["range"]["end"]) == ("2025-01-01", "2026-06-30")
+
+
+def test_a_window_too_short_for_one_full_cycle_is_refused():
+    with pytest.raises(ValueError, match="too short"):
+        wf.validate_wf(wbody(range={"kind": "custom", "start": "2024-01-01", "end": "2024-03-31"}))
+
+
+def test_a_malformed_window_is_still_refused():
+    with pytest.raises(DisciplineError):
+        wf.validate_wf(wbody(range={"kind": "nope"}))
+    with pytest.raises(ValueError, match="unknown field"):
+        wf.validate_wf(wbody(holdout={"reason": "peek"}))
 
 
 @pytest.mark.parametrize("extra,msg", [({"metric": "win_rate"}, "metric"), ({"metric": 3}, "metric"),

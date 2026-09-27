@@ -1,13 +1,17 @@
-"""The user's data rules, enforced for every tester run and shown on every report.
+"""The user's data rules: what a tester range MEANS, and the record of what it read.
 
   * Ranges: "research" = the research window 2021-01-01 -> 2024-12-31 (the
     default); "is_months" = only Jan/Apr/Jul/Oct sessions (inside the research
     window unless start/end say otherwise); "custom" = start/end as given.
-  * A range reaching 2025-01-01 or later is HOLDOUT data. It runs only with the
-    Holdout switch on plus a one-line reason, and each such run appends
-    {ts, strategy, inputs, range, reason} to spends.jsonl — when the run is
-    accepted, so a cancelled or failed look is still a spend. The report carries
-    an "Includes holdout" badge. The app never edits the vault: the assistant
+  * NOTHING here refuses a range for reading late data any more (2026-09-27, the
+    user's instruction: "remove all of it"). Every preset and every custom range
+    runs. A range that is malformed -- a bad date, a start after its end, an
+    unknown kind -- still fails, because it is not a range at all.
+  * A range reaching 2025-01-01 or later is still RECORDED: record() appends
+    {ts, strategy, inputs, range[, run_id]} to spends.jsonl when the run is
+    accepted, so past results stay attributable. The log is WRITE-ONLY -- it is
+    never read back to gate a run or to raise a prompt, and record()'s return
+    value is ignored by every caller. The app never edits the vault: the assistant
     folds spends into the burned-data ledger note.
 """
 from __future__ import annotations
@@ -23,11 +27,10 @@ RESEARCH_END = dt.date(2024, 12, 31)
 HOLDOUT_START = dt.date(2025, 1, 1)
 IS_MONTHS = (1, 4, 7, 10)
 KINDS = ("research", "is_months", "custom")
-REASON_MAX = 200
 
 
 class DisciplineError(ValueError):
-    """A run the data rules refuse. The message is shown to the user."""
+    """A range that is not a range (a bad date, an unknown kind). The message is shown to the user."""
 
 
 @dataclass(frozen=True)
@@ -80,29 +83,20 @@ def parse_range(obj) -> Range:
     return Range(kind, start, end)
 
 
-def check(rng: Range, holdout: dict | None) -> str | None:
-    """The holdout reason when the run may read >= 2025-01-01 data, None when it
-    stays inside the research data. DisciplineError when the rules refuse it."""
+def record(path: Path, *, strategy: str, inputs: dict, rng: Range, run_id: str | None = None,
+           ts: str | None = None) -> dict | None:
+    """Append ONE spend line (never rewrites, never refuses) when `rng` reaches
+    2025-01-01 or later; None when it stays inside the research data. `run_id`, when
+    given, lets a later caller (execute()'s dedup) recognize a spend it already logged
+    for this run — it is left out of the record entirely when not given, matching every
+    spend logged before run ids existed.
+
+    The return value is a courtesy: every caller ignores it. This log records, it does
+    not gate — nothing reads it back to decide whether a run may proceed."""
     if not rng.holdout:
         return None
-    reason = (holdout or {}).get("reason") if isinstance(holdout, dict) else None
-    if not isinstance(reason, str) or not reason.strip():
-        raise DisciplineError("this range reaches 2025-01-01 or later (holdout data): "
-                              "turn on Holdout and give a one-line reason")
-    reason = reason.strip()
-    if "\n" in reason or len(reason) > REASON_MAX:
-        raise DisciplineError(f"the holdout reason is one line of at most {REASON_MAX} characters")
-    return reason
-
-
-def record_spend(path: Path, *, strategy: str, inputs: dict, rng: Range, reason: str,
-                 run_id: str | None = None, ts: str | None = None) -> dict:
-    """Append ONE spend line (never rewrites). `run_id`, when given, lets a later
-    caller (execute()'s Item 5 dedup) recognize a spend it already logged for this
-    run — it is left out of the record entirely when not given, matching every
-    spend logged before Item 5 existed."""
     rec = {"ts": ts or dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
-           "strategy": strategy, "inputs": inputs, "range": rng.to_dict(), "reason": reason}
+           "strategy": strategy, "inputs": inputs, "range": rng.to_dict()}
     if run_id is not None:
         rec["run_id"] = run_id
     path.parent.mkdir(parents=True, exist_ok=True)

@@ -1,4 +1,4 @@
-"""Parameter heat-map grids: expansion, the 60-cell cap, the forced research window, the
+"""Parameter heat-map grids: expansion, the cell cap, the range it is given, the
 looks counter, the 2-worker pool, cancel, and a cell == a single run with the same params."""
 from __future__ import annotations
 
@@ -92,19 +92,34 @@ def test_bad_bodies_are_refused():
             validate_grid(bad)
 
 
-def test_the_window_is_forced_to_the_research_window_2021_2024():
+def test_the_default_window_is_the_research_window_and_every_cell_gets_it():
     for g in (validate_grid(gbody()), validate_grid(gbody(range={"kind": "research"}))):
         assert g["range"]["start"] == "2021-01-01" and g["range"]["end"] == "2024-12-31"
         for c in g["cells"]:
             assert c["req"]["range"]["kind"] == "research"
             assert (c["req"]["range"]["start"], c["req"]["range"]["end"]) == ("2021-01-01", "2024-12-31")
-            assert c["req"]["holdout"] is None
-    for rng in ({"kind": "custom", "start": "2024-01-01", "end": "2025-06-30"},
-                {"kind": "custom", "start": "2022-01-01", "end": "2023-12-31"},
-                {"kind": "is_months"}, {"kind": "research", "end": "2025-06-30"}):
-        with pytest.raises(DisciplineError, match="research window 2021–2024 only"):
+            assert "holdout" not in c["req"]
+
+
+def test_the_grid_runs_whatever_window_it_is_given():
+    """2026-09-27: the heat-map is no longer pinned to 2021-2024 -- the range picker's
+    preset reaches it, 2025+ included, and every cell runs that same window."""
+    for rng, want in (({"kind": "custom", "start": "2022-01-01", "end": "2024-12-31"}, ("2022-01-01", "2024-12-31")),
+                      ({"kind": "custom", "start": "2025-01-01", "end": "2026-09-27"}, ("2025-01-01", "2026-09-27")),
+                      ({"kind": "is_months"}, ("2021-01-01", "2024-12-31"))):
+        g = validate_grid(gbody(range=rng))
+        assert (g["range"]["start"], g["range"]["end"]) == want
+        assert g["range"]["kind"] == rng["kind"]
+        for c in g["cells"]:
+            assert (c["req"]["range"]["kind"], c["req"]["range"]["start"], c["req"]["range"]["end"]) == (rng["kind"], *want)
+
+
+def test_a_malformed_window_is_still_refused():
+    for rng in ({"kind": "custom", "start": "2024-01-01"}, {"kind": "nope"},
+                {"kind": "custom", "start": "2024-06-01", "end": "2024-01-01"}):
+        with pytest.raises(DisciplineError):
             validate_grid(gbody(range=rng))
-    with pytest.raises(DisciplineError, match="research window 2021–2024 only"):
+    with pytest.raises(ValueError, match="unknown field"):
         validate_grid(gbody(holdout={"reason": "peek"}))
 
 

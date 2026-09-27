@@ -1,7 +1,7 @@
 """Tester runs: validated, one at a time, each in its OWN process, into a run bundle.
 
     <base> = homebase/.state/tester
-      spends.jsonl              holdout spends (discipline.py)
+      spends.jsonl              the record of runs that read 2025+ data (discipline.py; never a gate)
       runs/.lock                held (flock) by whichever run is executing
       runs/<id>/request.json    the validated request
       runs/<id>/status.json     {status, phase, done, total, error?, pid?, updated}
@@ -46,7 +46,7 @@ from .slots import QUIET_MSG, QUIET_REFUSAL, Slots, held
 from .tape import ARCHIVE, CACHE, TapeStore, coverage_reason, effective_session_window, missing_hours
 
 RUN_ID = re.compile(r"^\d{8}-\d{6}-[a-z0-9_]+-[0-9a-f]{4}$")
-FIELDS = {"strategy", "inputs", "range", "qty", "commission", "slippage_ticks", "capital", "holdout",
+FIELDS = {"strategy", "inputs", "range", "qty", "commission", "slippage_ticks", "capital",
           "prop_rules"}
 FINAL = {"done", "error", "cancelled"}
 PROGRESS_S = 0.5
@@ -87,7 +87,8 @@ def _num(body: dict, key: str, default: float, lo: float, hi: float, integer: bo
 
 def validate(body) -> dict:
     """The request as the engine will run it. ValueError (DisciplineError is one)
-    with a message for the page on anything the schema or the data rules refuse."""
+    with a message for the page on anything the schema refuses. No range is refused for
+    the dates it reads (2026-09-27): only a malformed one fails."""
     if not isinstance(body, dict):
         raise ValueError("the body is a JSON object")
     extra = sorted(set(body) - FIELDS)
@@ -103,7 +104,6 @@ def validate(body) -> dict:
     cls = strategies.get(str(body.get("strategy", "")))
     inputs = strategies.resolve_inputs(cls.inputs(), body.get("inputs") or {})
     rng = discipline.parse_range(body.get("range"))
-    reason = discipline.check(rng, body.get("holdout"))
     prop_rules_id = body.get("prop_rules", propsim.DEFAULT_RULES)
     prop_rules_data = propsim.load_rules(prop_rules_id)     # ValueError "prop_rules: one of ..." when unknown
     # Item 4 (provenance): the resolved runtime config -- cancel/flat times, the
@@ -116,12 +116,12 @@ def validate(body) -> dict:
             "commission": _num(body, "commission", 4.00, 0.0, 100.0),
             "slippage_ticks": _num(body, "slippage_ticks", 1.0, 0.0, 20.0),
             "capital": _num(body, "capital", 50_000.0, 1.0, 1e9),
-            "holdout": {"reason": reason} if reason else None,
             "prop_rules": prop_rules_id, "prop_rules_data": prop_rules_data}
 
 
 def prepare(body, base: Path) -> str:
-    """Validate, create runs/<id>/ (request + queued status), record a holdout spend."""
+    """Validate, create runs/<id>/ (request + queued status), and record the run in the
+    spend log when its range reads 2025+ data (a record, never a gate)."""
     req = validate(body)
     now = dt.datetime.now()
     rid = f"{now:%Y%m%d-%H%M%S}-{req['strategy']}-{secrets.token_hex(2)}"
@@ -130,10 +130,8 @@ def prepare(body, base: Path) -> str:
     write_json(d / "request.json", {**req, "id": rid, "created": _now()})
     write_json(d / "status.json", {"id": rid, "status": "queued", "phase": "queued",
                                    "done": 0, "total": 0, "updated": _now()})
-    if req["holdout"]:                     # accepted (validate/check already passed) -> it's a spend
-        discipline.record_spend(base / "spends.jsonl", strategy=req["strategy"], inputs=req["inputs"],
-                                rng=discipline.parse_range(req["range"]), reason=req["holdout"]["reason"],
-                                run_id=rid)
+    discipline.record(base / "spends.jsonl", strategy=req["strategy"], inputs=req["inputs"],
+                      rng=discipline.parse_range(req["range"]), run_id=rid)   # None inside 2021-2024
     return rid
 
 
@@ -177,17 +175,16 @@ def execute(run_dir: Path, store: TapeStore) -> dict:
     req = read_json(run_dir / "request.json")
     cls = strategies.get(req["strategy"])
     rng = discipline.parse_range(req["range"])
-    reason = discipline.check(rng, req.get("holdout"))            # defence in depth
-    if reason is not None:
-        # Item 5 (discipline edge): prepare() already logged this run's spend for
-        # the ordinary path, but a hand-edited request.json (e.g. a range widened
-        # to holdout data after prepare() ran, then `runner exec` invoked on it
-        # directly) never went through prepare() at all -- re-check here and log
-        # the spend exactly once per run id, never a second time for the normal path.
+    if rng.holdout:
+        # Item 5 (the record's edge): prepare() already logged this run for the ordinary
+        # path, but a hand-edited request.json (e.g. a range widened to 2025+ after
+        # prepare() ran, then `runner exec` invoked on it directly) never went through
+        # prepare() at all -- record it here exactly once per run id, never a second time
+        # for the normal path. This still only WRITES: the run proceeds either way.
         spends_path = run_dir.parent.parent / "spends.jsonl"
         if not any(s.get("run_id") == req["id"] for s in discipline.spends(spends_path)):
-            discipline.record_spend(spends_path, strategy=req["strategy"], inputs=req["inputs"],
-                                    rng=rng, reason=reason, run_id=req["id"])
+            discipline.record(spends_path, strategy=req["strategy"], inputs=req["inputs"],
+                              rng=rng, run_id=req["id"])
     strat = cls(req["inputs"])             # one instance: on_session resets its day state
     days = [d for d in store.sessions(cls.root, rng.start, rng.end)
             if rng.includes(d) and strat.trades_on(d)]
@@ -257,7 +254,9 @@ def execute(run_dir: Path, store: TapeStore) -> dict:
             "inputs": req["inputs"], "strategy_config": req.get("strategy_config", {}),
             "range": req["range"], "qty": req["qty"],
             "commission": req["commission"], "slippage_ticks": req["slippage_ticks"],
-            "capital": req["capital"], "holdout": reason is not None, "holdout_reason": reason,
+            # `holdout`: this run READ 2025+ data — a fact on the report, not a permission.
+            # `holdout_reason` is retired (always null) and kept only so a bundle keeps its shape.
+            "capital": req["capital"], "holdout": rng.holdout, "holdout_reason": None,
             "prop_rules": req["prop_rules"], "propsim_error": prop_error,
             "coverage": {"sessions": len(days), "used": len(days) - len(skipped),
                          "skipped": skipped, "skipped_by_reason": by_reason, "no_trade": no_trade,
@@ -410,7 +409,7 @@ class RunManager:
             allc = ((meta.get("report") or {}).get("summary") or {}).get("all") or {}
             out.append({"id": d.name, "strategy": req.get("strategy"), "created": req.get("created"),
                         "status": st.get("status"), "range": req.get("range"),
-                        "holdout": bool(req.get("holdout")), "trades": allc.get("trades"),
+                        "holdout": bool((req.get("range") or {}).get("holdout")), "trades": allc.get("trades"),
                         "net_profit": allc.get("net_profit")})
         return out
 
@@ -505,7 +504,6 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--commission", type=float, default=4.00)
     run.add_argument("--slippage-ticks", type=float, default=1.0)
     run.add_argument("--capital", type=float, default=50_000.0)
-    run.add_argument("--holdout-reason")
     run.add_argument("--base", type=Path, default=None)
     for p in (ex, run):
         p.add_argument("--archive", type=Path, default=ARCHIVE)
@@ -534,8 +532,6 @@ def main(argv: list[str] | None = None) -> int:
     body = {"strategy": a.strategy, "inputs": dict(_kv(x) for x in a.input), "range": rng,
             "qty": a.qty, "commission": a.commission, "slippage_ticks": a.slippage_ticks,
             "capital": a.capital}
-    if a.holdout_reason:
-        body["holdout"] = {"reason": a.holdout_reason}
     base = a.base or default_base()
     slots = Slots()
     if slots.quiet():

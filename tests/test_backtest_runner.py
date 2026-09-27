@@ -1,4 +1,4 @@
-"""Runner: validation + spends, the bundle, one-at-a-time child processes, cancel, recovery."""
+"""Runner: validation + the spend record, the bundle, one-at-a-time child processes, cancel, recovery."""
 from __future__ import annotations
 
 import datetime as dt
@@ -9,7 +9,6 @@ import time
 import pytest
 
 from homebase.backtest import runner
-from homebase.backtest.discipline import DisciplineError
 from homebase.backtest.runner import RunManager, execute, prepare, read_json, validate
 from homebase.backtest.tape import TapeStore
 from tests.backtest_util import D1, D2, ms, nq_archive
@@ -37,46 +36,44 @@ def test_validate_fills_defaults_and_refuses_bad_requests():
     v = validate({"strategy": "nq930"})
     assert v["range"]["kind"] == "research" and v["range"]["start"] == "2021-01-01"
     assert (v["qty"], v["commission"], v["slippage_ticks"], v["capital"]) == (1, 4.0, 1.0, 50_000.0)
-    assert v["holdout"] is None and v["inputs"]["sl_pts"] == 5.0
+    assert "holdout" not in v and v["inputs"]["sl_pts"] == 5.0
     for bad, msg in (({"strategy": "zz"}, "unknown strategy"), (body(qty=0), "qty"),
                      (body(qty=1.5), "whole"), (body(commission=-1), "commission"),
                      (body(slippage_ticks="1"), "number"), (body(extra=1), "unknown field"),
                      (body(inputs={"sl_pts": -1}), "sl_pts"), ("x", "JSON object"),
                      (body(inputs=["sl_pts"]), "inputs"), (body(inputs=5), "inputs"),
-                     (body(inputs="sl_pts"), "inputs"), (body(inputs=True), "inputs")):
+                     (body(inputs="sl_pts"), "inputs"), (body(inputs=True), "inputs"),
+                     (body(holdout={"reason": "x"}), "unknown field")):
         with pytest.raises(ValueError, match=msg):
             validate(bad)
 
 
-def test_a_holdout_range_needs_the_switch_and_every_accepted_run_is_a_spend(tmp_path):
+def test_no_range_is_refused_and_a_2025_run_is_recorded(tmp_path):
+    """2026-09-27: the holdout switch is gone. A range reaching 2025+ runs with nothing
+    asked for, and the spend log gains exactly one line naming the run."""
     late = {"kind": "custom", "start": "2024-12-01", "end": "2025-02-01"}
-    with pytest.raises(DisciplineError):
-        prepare(body(range=late), tmp_path)
-    assert not (tmp_path / "spends.jsonl").exists()
-    rid = prepare(body(range=late, holdout={"reason": "forward check"}), tmp_path)
+    rid = prepare(body(range=late), tmp_path)
     [spend] = [json.loads(x) for x in (tmp_path / "spends.jsonl").read_text().splitlines()]
-    assert spend["strategy"] == "nq930" and spend["reason"] == "forward check"
+    assert spend["strategy"] == "nq930" and spend["run_id"] == rid and "reason" not in spend
     assert spend["range"]["end"] == "2025-02-01" and spend["inputs"]["adx_gate"] is False
     req = read_json(tmp_path / "runs" / rid / "request.json")
-    assert req["holdout"] == {"reason": "forward check"}
-    prepare(body(), tmp_path)
-    assert len((tmp_path / "spends.jsonl").read_text().splitlines()) == 1     # research: no spend
+    assert "holdout" not in req and req["range"]["holdout"] is True
 
 
-def test_is_months_reaching_2025_also_needs_the_holdout_switch(tmp_path):
-    """Carry (Task 6 review): the holdout rule keys off the range's END date, not
-    its kind — an IS-months range with an explicit 2025 end is holdout data too,
-    and must be refused without the switch, and record exactly one spend when
-    accepted."""
-    late = {"kind": "is_months", "start": "2024-10-01", "end": "2025-04-30"}
-    with pytest.raises(DisciplineError):
-        prepare(body(range=late), tmp_path)
+def test_a_range_inside_2021_2024_records_nothing(tmp_path):
+    prepare(body(), tmp_path)                                    # 2024-03: inside the research data
+    prepare(body(range={"kind": "research"}), tmp_path)
     assert not (tmp_path / "spends.jsonl").exists()
-    rid = prepare(body(range=late, holdout={"reason": "IS-months forward check"}), tmp_path)
+
+
+def test_is_months_reaching_2025_is_recorded_too(tmp_path):
+    """Carry (Task 6 review): the record keys off the range's END date, not its kind --
+    an IS-months range with an explicit 2025 end read holdout data too."""
+    late = {"kind": "is_months", "start": "2024-10-01", "end": "2025-04-30"}
+    rid = prepare(body(range=late), tmp_path)
     [spend] = [json.loads(x) for x in (tmp_path / "spends.jsonl").read_text().splitlines()]
-    assert spend["range"]["kind"] == "is_months" and spend["reason"] == "IS-months forward check"
-    req = read_json(tmp_path / "runs" / rid / "request.json")
-    assert req["range"]["kind"] == "is_months" and req["holdout"] == {"reason": "IS-months forward check"}
+    assert spend["range"]["kind"] == "is_months" and spend["run_id"] == rid
+    assert read_json(tmp_path / "runs" / rid / "request.json")["range"]["kind"] == "is_months"
 
 
 def test_execute_writes_the_bundle_and_lists_skipped_sessions(tmp_path):
@@ -128,36 +125,23 @@ def test_a_half_day_tape_ending_at_the_early_close_is_used_not_skipped(tmp_path)
     assert cov["sessions"] == 1 and cov["used"] == 1 and cov["skipped"] == []
 
 
-def test_execute_refuses_a_tampered_request_reaching_the_holdout(tmp_path):
-    rid = prepare(body(), tmp_path)
-    p = tmp_path / "runs" / rid / "request.json"
-    req = read_json(p)
-    req["range"] = {"kind": "custom", "start": "2024-12-01", "end": "2025-03-01"}
-    p.write_text(json.dumps(req))
-    with pytest.raises(DisciplineError):
-        execute(tmp_path / "runs" / rid, TapeStore(tmp_path / "ticks", tmp_path / "cache"))
-
-
-def test_execute_logs_exactly_one_spend_for_a_hand_edited_holdout_reason(tmp_path):
-    """Item 5 (discipline edge): a request.json hand-edited to reach holdout data
-    AFTER prepare() already ran (so prepare()'s own spend-on-accept never saw it)
-    must still be logged when `execute()` (a script's `runner exec run_dir`, not
-    the normal submit path) re-checks and finds a valid holdout reason -- exactly
-    once, even if execute() runs on the same bundle again."""
+def test_execute_runs_a_request_widened_to_2025_and_records_it_exactly_once(tmp_path):
+    """Item 5 (the record's edge): a request.json hand-edited to reach 2025+ AFTER
+    prepare() ran (so prepare()'s own record never saw it) still RUNS -- nothing refuses
+    it -- and is logged exactly once, even if execute() runs on the same bundle again."""
     store = TapeStore(nq_archive(tmp_path / "ticks"), tmp_path / "cache")
-    rid = prepare(body(), tmp_path)                     # an ordinary, non-holdout range
+    rid = prepare(body(), tmp_path)                     # an ordinary 2024 range
     assert not (tmp_path / "spends.jsonl").exists()
     p = tmp_path / "runs" / rid / "request.json"
     req = read_json(p)
-    req["range"] = {"kind": "custom", "start": "2024-12-01", "end": "2025-03-01"}
-    req["holdout"] = {"reason": "hand-edited forward check"}
+    req["range"] = {"kind": "custom", "start": "2024-03-01", "end": "2025-03-01",
+                    "label": "x", "holdout": True}
     p.write_text(json.dumps(req))
-    execute(tmp_path / "runs" / rid, store)
+    meta = execute(tmp_path / "runs" / rid, store)
+    assert meta["holdout"] is True and meta["holdout_reason"] is None
     lines = (tmp_path / "spends.jsonl").read_text().splitlines()
-    assert len(lines) == 1
-    spend = json.loads(lines[0])
-    assert spend["run_id"] == rid and spend["reason"] == "hand-edited forward check"
-    execute(tmp_path / "runs" / rid, store)              # running it again must not double-log
+    assert len(lines) == 1 and json.loads(lines[0])["run_id"] == rid
+    execute(tmp_path / "runs" / rid, store)             # running it again must not double-log
     assert len((tmp_path / "spends.jsonl").read_text().splitlines()) == 1
 
 

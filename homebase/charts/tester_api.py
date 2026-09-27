@@ -3,24 +3,25 @@
     GET  /api/tester/strategies          strategies with input schemas + defaults
     GET  /api/tester/prop-rules          prop-eval rule sets [{id, name, version, confirmed}]
     POST /api/tester/run                 {strategy, inputs, range, qty, commission,
-                                          slippage_ticks, capital?, prop_rules?,
-                                          holdout?: {reason}} -> {id}
+                                          slippage_ticks, capital?, prop_rules?} -> {id}
+                                          (any window: nothing is refused for the dates it reads;
+                                          a range reaching 2025+ is recorded in spends.jsonl)
     GET  /api/tester/run/{id}            status + progress
     POST /api/tester/run/{id}/cancel
     GET  /api/tester/run/{id}/bundle     run (meta + report + coverage), trades, equity, plots, propsim
     GET  /api/tester/runs                recent runs, newest first
     POST /api/tester/grid                {strategy, inputs, axes: [{key, values}] x2-3, qty, commission,
                                           slippage_ticks, capital?, prop_rules?} -> {id}
-                                          (<= 60 cells, research window 2021-2024 ONLY: a range or
-                                          holdout other than research is refused)
+                                          (<= 60 cells, over the body's own range -- 2021-2024
+                                          when it names none)
     GET  /api/tester/grid/{id}           the grid, per-cell status + summary, and its strategy's looks
     POST /api/tester/grid/{id}/cancel
     GET  /api/tester/grid/{id}/cell/{i}/bundle   a cell's full run bundle (the same shape as a run's)
     GET  /api/tester/grids               recent grids, newest first
     GET  /api/tester/looks               {strategy: heat-map cells ever run}
     POST /api/tester/walkforward         the grid body + {metric?, min_trades?} -> {id}: 1 month to select, the
-                                          next 3 to test, stepping monthly, research window 2021-2024 ONLY
-                                          (homebase.backtest.walkforward -- a range or holdout is refused)
+                                          next 3 to test, stepping monthly, over the body's own range
+                                          (homebase.backtest.walkforward)
     GET  /api/tester/walkforward/{id}    status, per-cell status (never full-window P&L), progress, eta_s
     GET  /api/tester/walkforward/{id}/result   the steps, the stitched OOS equity + stats (409 until done)
     POST /api/tester/walkforward/{id}/cancel

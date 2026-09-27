@@ -1,9 +1,9 @@
-"""Walk-forward, the user's scheme: 1 month to SELECT, the next 3 months to TEST, stepping monthly, on the
-research window 2021-01-01 -> 2024-12-31 ONLY (forced here, server-side; a range or holdout is refused).
+"""Walk-forward, the user's scheme: 1 month to SELECT, the next N months to TEST, stepping monthly, over
+whatever window the request names (the range picker's preset; 2021-01-01 -> 2024-12-31 by default).
 
-Steps. Over the window's whole calendar months m_0..m_47, step k selects on m_k and tests on
-m_{k+1}..m_{k+3}. A step whose test window would run past the window's last month is dropped (no partial
-test windows), so the research window has 45 steps: select 2021-01 .. 2024-09.
+Steps. Over the window's whole calendar months m_0..m_k, step k selects on m_k and tests on
+m_{k+1}..m_{k+N}. A step whose test window would run past the window's last month is dropped (no partial
+test windows), so the research window at N = 3 has 45 steps: select 2021-01 .. 2024-09.
 
 Selection. In each selection month every cell of the user's grid (<= 60 cells, the heat-map's own
 validation) is scored by the chosen metric (default net $); a cell needs >= min_trades (default 5) trades
@@ -20,7 +20,7 @@ still run and shown in the per-step table (its own 3-month OOS, overlapping -- n
 other two chains' (phase 1: steps 1, 4, ...; phase 2: steps 2, 5, ...) net is reported next to it so the
 choice of phase is visible, never silently picked. The chain is fixed at phase 0 before any result exists.
 
-Execution (the per-month cache). Each cell runs ONCE over the whole research window as an ordinary
+Execution (the per-month cache). Each cell runs ONCE over the whole window as an ordinary
 heat-map cell (grid.GridManager: the same `runner exec` child, the machine-wide 2-slot cap, FCFS tickets,
 no starts 09:20-09:35 ET). Sessions are independent -- a strategy declares it (Strategy.session_independent;
 the walk-forward refuses one that does not): its day state resets every session and daily bars come from
@@ -52,7 +52,7 @@ from collections import Counter
 from pathlib import Path
 
 from .. import strategies
-from . import grid, report
+from . import report
 from .discipline import RESEARCH_END, RESEARCH_START
 from .grid import FINAL, GridManager, LooksCorrupt, add_look, validate_grid
 from .runner import read_json, report_holes, write_json
@@ -64,7 +64,6 @@ METRICS = {"net_profit": "Net $", "sharpe": "Sharpe", "profit_factor": "Profit f
 DEFAULT_METRIC = "net_profit"
 DEFAULT_MIN_TRADES = 5
 MAX_MIN_TRADES = 1000
-RESEARCH_ONLY = "the walk-forward runs on the research window 2021–2024 only"
 STAT_KEYS = ("net_profit", "trades", "win_rate", "profit_factor", "sharpe", "max_drawdown", "avg_trade", "t_stat",
              "skipped_by_error")
 TIE_BREAK = "best metric (equal to 6 decimals = a tie) → more trades that month → lowest cell index"
@@ -248,11 +247,10 @@ def _min_trades(v) -> int:
 
 
 def validate_wf(body) -> dict:
-    """The heat-map grid (validate_grid: <= 60 cells, 2-3 axes, research window) + the walk-forward's
+    """The heat-map grid (validate_grid: <= 60 cells, 2-3 axes, its own range) + the walk-forward's
     own fields. ValueError / DisciplineError with a message for the page."""
     if not isinstance(body, dict):
         raise ValueError("the body is a JSON object")
-    grid._research_only(body, RESEARCH_ONLY)
     b = dict(body)
     metric = b.pop("metric", DEFAULT_METRIC)
     if not isinstance(metric, str) or metric not in METRICS:
@@ -264,7 +262,10 @@ def validate_wf(body) -> dict:
                          "out of one full-window run -- the walk-forward refuses it")
     for c in g["cells"]:
         c["req"]["propsim"] = False          # the full-window prop sim is never shown here (review M4)
-    months = month_list(RESEARCH_START, RESEARCH_END)
+    months = month_list(dt.date.fromisoformat(g["range"]["start"]), dt.date.fromisoformat(g["range"]["end"]))
+    if len(steps(months)) == 0:
+        raise ValueError(f"{g['range']['label']}: too short for one full walk-forward cycle "
+                         f"({SELECT_MONTHS} selection month + {TEST_MONTHS} test months of whole calendar months)")
     g["walkforward"] = {"metric": metric, "metric_label": METRICS[metric], "min_trades": min_trades,
                         "select_months": SELECT_MONTHS, "test_months": TEST_MONTHS, "step_months": STEP_MONTHS,
                         "months": months, "n_steps": len(steps(months)), "tie_break": TIE_BREAK,
@@ -287,7 +288,7 @@ def _eta(st: dict, progress: float) -> float | None:
 
 
 class WalkForwardManager(GridManager):
-    """Walk-forward jobs: a heat-map grid over the research window (its own dir, no per-cell looks),
+    """Walk-forward jobs: a heat-map grid over the job's window (its own dir, no per-cell looks),
     then selection + stitching once every cell is done."""
 
     SUBDIR = "walkforward"
@@ -304,8 +305,9 @@ class WalkForwardManager(GridManager):
         # the per-month cache; the months come from the job itself
         g = read_json(Path(cdir).parent.parent / "grid.json", {}) or {}
         months = (g.get("walkforward") or {}).get("months") or month_list(RESEARCH_START, RESEARCH_END)
-        if (run.get("range") or {}).get("kind") != "research":
-            raise ValueError("a walk-forward cell ran outside the research window")
+        want, got = g.get("range") or {}, run.get("range") or {}
+        if want and (got.get("kind"), got.get("start"), got.get("end")) != (want.get("kind"), want.get("start"), want.get("end")):
+            raise ValueError("a walk-forward cell ran outside the job's own window")
         write_json(Path(cdir) / "months.json", cell_months(cdir, months))
 
     def _cell_summary(self, run: dict) -> dict:

@@ -141,9 +141,12 @@ def test_writes_from_another_site_are_refused(tmp_path):
 
 def test_bad_requests_and_unknown_runs(tmp_path):
     with client(tmp_path) as c:
-        r = c.post("/api/tester/run", json={**RUN, "range": {"kind": "custom", "start": "2025-01-02",
-                                                               "end": "2025-02-01"}})
-        assert r.status_code == 400 and "Holdout" in r.json()["detail"]
+        # 2026-09-27: a 2025+ range is no longer refused -- only a malformed one is.
+        r = c.post("/api/tester/run", json={**RUN, "range": {"kind": "custom", "start": "2025-02-02",
+                                                             "end": "2025-01-01"}})
+        assert r.status_code == 400 and "after" in r.json()["detail"]
+        r = c.post("/api/tester/run", json={**RUN, "holdout": {"reason": "x"}})
+        assert r.status_code == 400 and "unknown field" in r.json()["detail"]
         assert c.post("/api/tester/run", json={**RUN, "strategy": "zz"}).status_code == 400
         # Item 7: a non-dict `inputs` is a 400 (a bad request), never a 500.
         for bad_inputs in (["sl_pts"], 5, "sl_pts", True):
@@ -267,8 +270,8 @@ def test_a_grid_goes_from_post_to_cell_bundles_and_counts_its_looks(tmp_path):
 
 def test_grid_requests_the_rules_refuse(tmp_path):
     with client(tmp_path) as c:
-        for bad, word in (({**GRID, "range": {"kind": "custom", "start": "2024-01-01", "end": "2025-03-01"}}, "research window"),
-                          ({**GRID, "holdout": {"reason": "x"}}, "research window"),
+        for bad, word in (({**GRID, "range": {"kind": "custom", "start": "2025-03-01", "end": "2024-01-01"}}, "after"),
+                          ({**GRID, "holdout": {"reason": "x"}}, "unknown field"),
                           ({**GRID, "axes": [{"key": "offset_pts", "values": list(range(61))},
                                              {"key": "sl_pts", "values": [5]}]}, "at most 60"),
                           ({**GRID, "axes": GRID["axes"][:1]}, "2 or 3")):
@@ -347,8 +350,8 @@ def test_a_walkforward_goes_from_post_to_a_stitched_result_and_counts_cells_x_st
 
 def test_walkforward_requests_the_rules_refuse(tmp_path):
     with client(tmp_path) as c:
-        for bad, word in (({**WF, "range": {"kind": "custom", "start": "2022-01-01", "end": "2022-06-30"}}, "research window"),
-                          ({**WF, "holdout": {"reason": "x"}}, "research window"),
+        for bad, word in (({**WF, "range": {"kind": "custom", "start": "2022-01-01", "end": "2022-03-31"}}, "too short"),
+                          ({**WF, "holdout": {"reason": "x"}}, "unknown field"),
                           ({**WF, "metric": "win_rate"}, "metric"), ({**WF, "min_trades": 0}, "min_trades"),
                           ({**WF, "axes": [{"key": "offset_pts", "values": list(range(61))},
                                            {"key": "sl_pts", "values": [5]}]}, "at most 60")):
