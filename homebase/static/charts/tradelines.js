@@ -201,7 +201,11 @@ class Overlay {
 
   /* on .tl-text; the pointer is captured by the chip, so the chart never pans */
   startDrag(e, key) {
-    if (e.button !== 0 || this.dragging) return;
+    if (e.button !== 0) return;
+    // Minor 2 (re-review): a stray drag stuck mid-flight (capture survived with no up/cancel reaching us) must
+    // not silently swallow the next press -- cancel it properly (restoring its line, clearing this.dragging)
+    // instead of just returning, so THIS press can still start a fresh, correct drag.
+    if (this.dragging && this.endDrag) this.endDrag();
     e.preventDefault(); e.stopPropagation();
     const c = this.cell, it = this.items.get(key), grip = e.currentTarget, from = it.g.price;
     const top = c.box.getBoundingClientRect().top;

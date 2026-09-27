@@ -155,14 +155,21 @@ function placeOrder({ cell, root, side, type, price = null, qty }) {
   // 10 s (M4) counts as no quote, so no bracket, same as never having had one.
   const q0 = T.freshQuote(D().quotes[root], page.clockMs());
   const ref = type === 'Market' ? (q0 ? q0.last : null) : px;
+  // N1: a Market order that would attach a bracket (a nonzero SL/TP tick pref) needs a fresh quote to compute
+  // it from -- refuse rather than send it naked, with one-click on or off. Not `guardedSend`'s buildBody: this
+  // must stop the send before any confirm dialog even opens, not just before the network call.
+  if (T.needsQuoteForBracket(type, prefs.slTicks, prefs.tpTicks) && !q0) {
+    D().toast('err', "No recent price — can't attach your stop/target; try again");
+    return;
+  }
   const { sl, tp } = T.bracket(side, ref, prefs, tick);
   const build = (m) => {
     const resolved = T.resolveConfirmedAccounts(shown, m.accounts);
     if (!resolved.ok) { D().toast('err', 'Accounts changed — review and try again'); return null; }
     if (!resolved.accounts.length) { D().toast('err', 'No confirmed accounts left — nothing sent'); return null; }   // M9
-    if (type !== 'Market') {   // review item 6: the market moved through the level between click and send
-      const fresh = T.inferType(side, px, T.freshQuote(D().quotes[root], page.clockMs()));
-      if (fresh && fresh !== type) { D().toast('err', 'Price moved through your level — re-check the order'); return null; }
+    if (type !== 'Market') {   // review item 6/N2: re-check against the LAST KNOWN quote at any age, refusing outright with none
+      const msg = T.refuseIfMarketable(side, px, D().quotes[root], type);
+      if (msg) { D().toast('err', msg); return null; }
     }
     return T.orderBody({ clientId: T.clientId(), accounts: resolved.accounts, root, side, qty, type, price: px, sl, tp });
   };
@@ -203,10 +210,11 @@ function moveLine(line, price, root, tick, { onCancel } = {}) {
   if (unarmed) { D().toast('err', T.unarmedLiveMessage(unarmed)); if (onCancel) onCancel(); return; }
   const rounded = T.roundTick(price, tick);
   if (rounded === T.roundTick(line.price, tick)) { if (onCancel) onCancel(); return; }   // M8: a zero-tick move sends nothing
-  if (line.type) {   // I1: re-run inferType -- a Limit dragged through the market must not silently fill
-    const fresh = T.inferType(line.side, rounded, T.freshQuote(D().quotes[root], page.clockMs()));
+  if (line.type) {   // I1/N2: re-run against the LAST KNOWN quote at any age -- a Limit dragged through (or
+                      // onto) the market must not silently fill; no quote at all refuses outright.
     const kind = /stop/i.test(line.type) ? 'Stop' : 'Limit';
-    if (fresh && fresh !== kind) { D().toast('err', 'Price moved through your level — re-check the order'); if (onCancel) onCancel(); return; }
+    const msg = T.refuseIfMarketable(line.side, rounded, D().quotes[root], kind);
+    if (msg) { D().toast('err', msg); if (onCancel) onCancel(); return; }
   }
   const build = () => line.legs.map((leg) => ({ client_id: T.clientId(), account: leg.account, order_id: leg.order_id, price: rounded }));
   if (D().prefs.oneClick) { guardedSend('modify', build); return; }
