@@ -72,9 +72,11 @@ class Overlay {
     this.layer = mk('div', 'tl-layer');
     cell.el.appendChild(this.layer);
 
-    this.badges = mk('span', 'lg-bots');   // the chart's algo badge (Task 3)
+    // the chart's algo badge (Task 3): its own legend row under the OHLC values, above the Buy/Sell slot, so the
+    // title keeps its width in a small grid cell (fix round 1)
+    this.badges = mk('div', 'lg-bots');
     this.badges.hidden = true;
-    cell.el.querySelector('.lg-title').appendChild(this.badges);
+    cell.el.querySelector('.lg-tradeslot').before(this.badges);
     this.bb = {
       ic: mk('span', 'icw bb-ic'), name: mk('span', 'bb-name'), pill: mk('span', 'bb-pill'), pnl: mk('span', 'bb-pnl'),
       kill: document.createElement('button'),
@@ -233,15 +235,20 @@ class Overlay {
                                  // belongs to a marker that is not drawn
       const hist = Dc.botHistory(o.key), s = Dc.state.bot.strategies[o.key], bars = c.bars, barMs = c.barMs();
       const from = bars[0].ms, to = barMs > 0 ? bars[bars.length - 1].ms + barMs : Infinity;
-      const today = Dc.state.bot.date || new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+      // fix round 1, M3: today by the ET clock (the desk's own date), never the last bot view's `date`, which stays
+      // on yesterday after midnight until the timer publishes again
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
       list = o.markers.filter((m) => m.ms >= from && m.ms < to);
-      if (hist) list = [...T.pastRunMarkers(hist.runs, { key: o.key, s, state: Dc.state, tick: c.tick, pv: c.pv ?? null, P: c.P, from, to, today }), ...list];
+      if (hist) {
+        list = [...T.pastRunMarkers(hist.runs, { key: o.key, s, state: Dc.state, tick: c.tick, pv: c.pv ?? null, P: c.P, from, to, today,
+          liveAccounts: o.liveAccounts }), ...list];
+      }
     }
     this.tips = list.map((m) => ({ ms: m.ms, price: m.price, position: m.position, tip: m.tip }));
     const ids = JSON.stringify(list.map((m) => [m.id, m.color, m.text]));
     if (ids === this.botIds) return;
     this.botIds = ids;
-    this.cell.setExtraMarkers('bots', list.map(({ tip, ...m }) => m));   // the tip stays ours (this.tips)
+    this.cell.setExtraMarkers('bots', list.map(({ tip, account, ...m }) => m));   // the tip stays ours (this.tips)
   }
 
   paintBadge(o) {

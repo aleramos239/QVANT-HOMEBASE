@@ -161,7 +161,9 @@ function confirm({ title, rows = [], note = '', warn = '', each = '', live = fal
     const body = page.mk('div', 'cf-body');
     for (const r of rows) {
       const row = page.mk('div', 'cf-acct');
-      row.append(page.mk('span', '', r.label), page.mk('span', `env${r.env === 'live' ? ' live' : ''}`, r.env === 'live' ? 'LIVE' : 'DEMO'));
+      // '?': an account the desk does not list (the Kill's rows, fix round 1 M1) -- never shown as DEMO
+      const env = r.env === 'live' ? 'LIVE' : r.env === '?' ? '?' : 'DEMO';
+      row.append(page.mk('span', '', r.label), page.mk('span', `env${r.env === 'live' ? ' live' : ''}`, env));
       body.append(row);
     }
     if (note) body.append(page.mk('div', 'cf-note', note));
@@ -386,9 +388,8 @@ function killGate(cell, key) {
   if (!page || !page.cells().includes(cell) || T.cellAlgo(cell.cfg && cell.cfg.algo) !== key) {
     return { mode: 'none', reason: 'That chart no longer carries this algo — nothing sent', accounts: [] };
   }
-  const ids = T.algoAccounts(s), list = st.accounts || [];
-  const unarmed = ids.map((id) => list.find((a) => a.id === id)).find((a) => a && a.env === 'live' && !liveConfirmed.has(a.id));
-  if (unarmed) return { mode: 'none', reason: T.unarmedLiveMessage(unarmed), accounts: [] };
+  const ids = T.algoAccounts(s), why = T.killBlock(st, ids, liveConfirmed);   // an unlisted account fails closed (M1)
+  if (why) return { mode: 'none', reason: why, accounts: [] };
   return { mode: 'on', reason: '', accounts: ids };
 }
 /* Kill the chart's algo: always confirmed (never one-click), then one guarded send; one toast per account (a

@@ -286,7 +286,10 @@ function mount(box, host) {
     if (t.indicators) patch.indicators = t.indicators;
     if (t.spec) patch.spec = t.spec;
     if (Object.keys(patch).length) cell.update(patch);
-    if (host.applyTrade) host.applyTrade(cell, raw);   // Task 2: its accounts (Trading always off) and algo, if stored
+    if (host.applyTrade) {   // Task 2: its accounts (Trading always off) and algo, if stored
+      host.applyTrade(cell, raw);
+      renderPane();          // fix round 1, M5: the Trading tab's Algo select shows the template's algo, not the old one
+    }
   }
   function menuBtn(text) {
     const b = button('menu-i');

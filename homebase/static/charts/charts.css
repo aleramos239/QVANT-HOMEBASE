@@ -422,11 +422,13 @@ a { color: inherit; }
 .tl-chip.bot .tl-text { background: var(--panel); color: var(--c); cursor: default; }
 
 /* ---- the chart's algo (Task 3): the legend badge -- bot icon, name, state pill, today's P&L, Kill ---- */
-.lg-bots { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 2px 0 6px; border-radius: 4px;
+.lg-bots { display: inline-flex; align-items: center; gap: 6px; height: 22px; margin-top: 3px; padding: 0 2px 0 6px; border-radius: 4px;
+  max-width: 100%; white-space: nowrap;
   background: var(--panel); box-shadow: 0 0 0 1px var(--border); font-size: 12px; line-height: 18px; pointer-events: auto;
   font-variant-numeric: tabular-nums; flex: none; }
 .bb-ic .ic { width: 14px; height: 14px; color: var(--text-2); }
-.bb-name { color: var(--text); font-weight: 600; max-width: 180px; overflow: hidden; text-overflow: ellipsis; cursor: default; }
+.bb-name { color: var(--text); font-weight: 600; max-width: 180px; min-width: 0; overflow: hidden; text-overflow: ellipsis; cursor: default; }
+.lg-bots > :not(.bb-name) { flex: none; }
 .bb-pill { padding: 0 6px; border-radius: 9px; font-size: 11px; line-height: 16px; background: var(--hover); color: var(--text-2); cursor: help; }
 .bb-pill.live { background: var(--accent-soft); color: var(--accent); }
 .bb-pill.err { background: var(--down-soft); color: var(--down); }

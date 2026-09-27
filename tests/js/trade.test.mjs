@@ -332,6 +332,9 @@ test('algo names: the desk strategy, its booked accounts, the choices for a char
   // the chart's current algo stays pickable while the desk hasn't listed it (no state yet)
   assert.deepEqual(T.algoChoices(null, 'NQ', 'nq930'), [{ value: '', text: 'None' }, { value: 'nq930', text: 'NQ 9:30 Straddle' }]);
   assert.deepEqual(T.algoChoices(STATE, 'NQ', 'nq930').length, 3);   // listed already: not twice
+  assert.deepEqual(T.algoChoices(STATE, 'ES', 'nq930'), [{ value: '', text: 'None' }]);   // the desk CONFIRMS it trades NQ: not offered on ES
+  assert.deepEqual(T.algoChoices(STATE, 'NQ', 'gone'), [{ value: '', text: 'None' },
+    { value: 'nq930', text: 'NQ 9:30 Straddle · …041' }, { value: 'nq10am', text: 'NQ 10:00 Continuation' }, { value: 'gone', text: 'gone' }]);   // not listed: kept
 });
 
 test('algo badge: the state pill from the bot view', () => {
@@ -392,6 +395,16 @@ test('algo overlay: only for the chart\'s own algo on its own root; BOT lines ar
   live.accounts[0].orders.push({ order_id: '31', symbol: 'NQZ6', side: 'Sell', type: 'Stop', qty: 10, price: null, stop_price: 30905, owner: 'nq930' },
     { order_id: '32', symbol: 'NQZ6', side: 'Sell', type: 'Limit', qty: 10, price: 30925, stop_price: null, owner: 'nq930' });
   assert.deepEqual(T.algoOverlay(live, 'nq930', 'NQ', 0.25, P, 30912, 20).lines.map((l) => l.text), ['BOT TP 10 @ 30,925.00', 'BOT SL 10 @ 30,905.00']);
+  // fix round 1, M6: the view's level and the working order disagree (a bracket move in flight): the ORDER only, no
+  // phantom second SL/TP from the view
+  const moved = structuredClone(live);
+  moved.accounts[0].orders = moved.accounts[0].orders.map((o) => (o.order_id === '31' ? { ...o, stop_price: 30906.25 } : o.order_id === '32' ? { ...o, price: 30926 } : o));
+  assert.deepEqual(T.algoOverlay(moved, 'nq930', 'NQ', 0.25, P, 30912, 20).lines.map((l) => l.text), ['BOT TP 10 @ 30,926.00', 'BOT SL 10 @ 30,906.25']);
+  // an entry order a float hair off the view's trigger is still that entry (tick epsilon), not a second line
+  const hair = botState();
+  hair.accounts[0].orders = [{ order_id: '41', symbol: 'NQZ6', side: 'Buy', type: 'Stop', qty: 10, price: null, stop_price: 30910.0000001, owner: 'nq930' },
+    { order_id: '42', symbol: 'NQZ6', side: 'Sell', type: 'Stop', qty: 10, price: null, stop_price: 30890, owner: 'nq930' }];
+  assert.deepEqual(T.algoOverlay(hair, 'nq930', 'NQ', 0.25, P, 30900, 20).lines.map((l) => [l.kind, l.side, l.qty]), [['entry', 'Buy', 10], ['entry', 'Sell', 10]]);
   // today's fill markers: the bot's own fills only, the entry an arrow, the exit a circle with the P&L
   const done = botState({ day_status: 'done' }, { sim041: { status: 'done', qty: 1, entry_side: 'Buy', entry_fill: 30910, pnl: 296 } });
   done.accounts[0].fills.push({ id: 3, order_id: '7', symbol: 'NQZ6', side: 'Sell', qty: 1, price: 30925, time: '2026-09-22T13:44:10.000Z', owner: 'nq930' });
@@ -399,6 +412,8 @@ test('algo overlay: only for the chart\'s own algo on its own root; BOT lines ar
   assert.deepEqual(mk.map((m) => [m.shape, m.price, m.position, m.text, m.color]),
     [['arrowUp', 30910, 'atPriceBottom', '', P.warn], ['circle', 30925, 'atPriceMiddle', '+$296', P.up]]);
   assert.equal(mk[0].tip, 'Today · …041 · Buy 1 @ 30,910.00');
+  assert.deepEqual(T.algoOverlay(done, 'nq930', 'NQ', 0.25, P, 30912, 20).liveAccounts, ['sim041']);   // today's run: drawn live
+  assert.deepEqual(T.algoOverlay(STATE, 'nq930', 'NQ', 0.25, P, 30900, 20).liveAccounts, ['sim041']);
   // an order of the bot still working after it is done (a kill that left its stop): still drawn, as its SL
   assert.deepEqual(T.algoOverlay(done, 'nq930', 'NQ', 0.25, P, 30912, 20).lines.map((l) => l.text), ['BOT SL 1 @ 30,890.00']);
   done.accounts[0].orders = done.accounts[0].orders.filter((x) => !x.owner);
@@ -418,13 +433,13 @@ const RUNS = [
   { date: '2026-09-24', account: 'sim041', status: 'no_fill', legs: [{ side: 'Buy', price: 30300, ts: at('2026-09-24T13:30:00.088Z') }] },
   { date: '2026-09-25', account: null, status: 'refused', reason: 'bad_spread', legs: [] },
   { date: '2026-09-28', account: 'sim041', status: 'traded', legs: [], entry: { side: 'Buy', price: 30400, ts: at('2026-09-28T13:30:01Z') },
-    exit: { price: 30405, ts: at('2026-09-28T13:40:00Z'), kind: 'flat' }, pnl_usd: 96 },                         // today: drawn live
+    exit: { price: 30405, ts: at('2026-09-28T13:40:00Z'), kind: 'flat' }, pnl_usd: 96 },                         // today: drawn live when sim041 has live fills
 ];
 
 test('past runs -> markers: entry arrow + exit circle per traded run, a grey flag for the rest, loaded range only', () => {
   const s = { ...NQ930, book: { sim041: 1, sim047: 10 } };
   const list = T.pastRunMarkers(RUNS, { key: 'nq930', s, state: STATE, tick: 0.25, pv: 20, P,
-    from: at('2026-09-20T00:00:00Z'), to: at('2026-09-29T00:00:00Z'), today: '2026-09-28' });
+    from: at('2026-09-20T00:00:00Z'), to: at('2026-09-29T00:00:00Z'), today: '2026-09-28', liveAccounts: ['sim041'] });
   assert.deepEqual(list.map((m) => [m.shape, m.ms, m.price ?? null, m.position]), [
     ['arrowUp', at('2026-09-21T13:30:01Z'), 30120.25, 'atPriceBottom'],
     ['circle', at('2026-09-21T13:44:10Z'), 30135.25, 'atPriceMiddle'],
@@ -433,10 +448,10 @@ test('past runs -> markers: entry arrow + exit circle per traded run, a grey fla
     ['square', at('2026-09-23T13:30:00Z'), null, 'aboveBar'],          // no legs: the 09:30 ET session open
     ['square', at('2026-09-24T13:30:00.088Z'), null, 'aboveBar'],      // placed, never filled: where it placed
     ['square', at('2026-09-25T13:30:00Z'), null, 'aboveBar']]);
-  // the qty comes from the P&L when it can (10 here, though the book says 10 too), else the book (…041: 1)
+  // the qty comes from the P&L (exact); without one it is left out (fix round 1, M2: never today's book size)
   assert.equal(list[0].tip, '2026-09-21 · …047 · Buy 10 @ 30,120.25 → TP 30,135.25 · +$2,960');
   assert.equal(list[1].tip, list[0].tip);
-  assert.equal(list[2].tip, '2026-09-22 · …041 · Sell 1 @ 30,200.00 → SL 30,205.00 · P&L unknown');
+  assert.equal(list[2].tip, '2026-09-22 · …041 · Sell @ 30,200.00 → SL 30,205.00 · P&L unknown');
   assert.deepEqual([list[1].color, list[3].color], [P.up, P.warn]);   // a win green; unknown P&L in the bot colour
   assert.equal(list[4].tip, '2026-09-23 · …041, …047 · Skipped — gate chop');   // no account: every booked account
   assert.equal(list[5].tip, '2026-09-24 · …041 · No fill');
@@ -451,7 +466,16 @@ test('past runs -> markers: entry arrow + exit circle per traded run, a grey fla
   { key: 'nq930', s, state: STATE, tick: 0.25, pv: 20, P, from: 0, to: Infinity, today: '2026-09-28' });
   assert.equal(more[0].tip, '2026-09-21 · …041 · Buy 1 @ 30,100.00 → Flat 30,090.00 · −$204 · killed');
   assert.equal(more[1].color, P.down);
-  assert.equal(more[2].tip, '2026-09-22 · …041 · Buy 1 @ 30,100.00 · no exit · error — both filled');
+  assert.equal(more[2].tip, '2026-09-22 · …041 · Buy @ 30,100.00 · no exit · error — both filled');
+  // no point value yet: no qty either
+  assert.equal(T.pastRunMarkers([RUNS[1]], { key: 'nq930', s, state: STATE, tick: 0.25, pv: null, P, from: 0, to: Infinity, today: '' })[0].tip,
+    '2026-09-21 · …047 · Buy @ 30,120.25 → TP 30,135.25 · +$2,960');
+  // today's run: left to the live overlay only for an account that has live bot fills today (report concern 5)
+  const today = (live) => T.pastRunMarkers(RUNS, { key: 'nq930', s, state: STATE, tick: 0.25, pv: 20, P, from: at('2026-09-28T00:00:00Z'), to: Infinity,
+    today: '2026-09-28', liveAccounts: live }).length;
+  assert.equal(today([]), 2);             // no live fills: today's history row is drawn (entry + exit)
+  assert.equal(today(['sim041']), 0);     // the live overlay draws it
+  assert.equal(today(['sim047']), 2);     // another account's fills don't cover sim041's run
   assert.equal(more.length, 3);
   assert.deepEqual(T.pastRunMarkers(null, { key: 'nq930', s, state: STATE, tick: 0.25, pv: 20, P, from: 0, to: Infinity, today: '' }), []);
 });
@@ -478,14 +502,30 @@ test('Kill: the confirm text, and one toast per account -- "check it" is a warni
   const both = T.killConfirm('nq930', { ...NQ930, book: { sim041: 1, live099: 1 } }, STATE);   // plus an account it acted on today
   assert.deepEqual([both.accounts, both.live], [['sim041', 'live099'], true]);
   assert.match(both.text, /on …041, …099\./);
+  // fix round 1, M1: an account the desk does not list is '?', never DEMO
+  const unk = T.killConfirm('nq930', { ...NQ930, book: { acct123456: 1 }, accounts: {} }, STATE);
+  assert.deepEqual(unk.rows, [{ id: 'acct123456', label: 'acct123456', env: '?' }]);
+  // ... and blocks the Kill (fail closed), like an unarmed LIVE account
+  assert.equal(T.killBlock(STATE, ['sim041'], new Set()), null);
+  assert.equal(T.killBlock(STATE, ['sim041', 'live099'], new Set()), 'Arm LIVE account FAKELIVE099 in the Trade menu first');
+  assert.equal(T.killBlock(STATE, ['sim041', 'live099'], new Set(['live099'])), null);
+  assert.equal(T.killBlock(STATE, ['acct123456'], new Set(['acct123456'])), "Account acct123456 is not on the desk's list — nothing sent");
+  assert.equal(T.killBlock(STATE, [], new Set()), 'This algo has no accounts on the desk — nothing sent');
+  // exactly what the desk sends (engine.kill_strategy -> _kill_one; `sold` never reaches the answer): a sale is its
+  // "market Sell 1: ok" action (fix round 1, I1)
   const data = { ok: false, results: {
-    sim041: { ok: true, acted: true, sold: true, actions: ['cancel entry 1: ok', 'market Sell 1: ok'] },
-    sim047: { ok: false, sold: false, actions: ['cancel entry 2: ok', 'check it — position unreadable (boom); position not fully attributed; stops left working'] },
+    sim041: { ok: true, acted: true, actions: ['cancel entry 11: ok', 'cancel entry 12: ok', 'market Sell 1: ok', 'cancel 13: ok', 'cancel 14: ok'] },
+    sim047: { ok: false, acted: true, actions: ['cancel entry 2: ok', 'check it — position unreadable (boom); position not fully attributed; stops left working'] },
     live099: { ok: true, note: 'the bot has not acted on this account today — nothing to do' },
     acct9: { ok: false, error: 'account not connected', actions: [] },
     acct8: { ok: true, acted: true, pending: true, note: 'its orders are not acknowledged yet — they are cancelled and its position flattened as soon as they are' },
-    acct7: { ok: true, acted: true, sold: false, actions: ['cancel entry 1: ok'] },
-    acct6: { ok: false, actions: ['order 5: status unknown — check it'] } } };
+    acct7: { ok: true, acted: true, actions: ['cancel entry 1: ok', 'cancel entry 2: ok', 'the account is already flat', 'cancel 3: ok'] },
+    acct6: { ok: false, actions: ['order 5: status unknown — check it'] },
+    acct5: { ok: true, actions: ['cancel 9: ok'] },
+    acct4: { ok: true, actions: [] },
+    acct3: { ok: true, note: 'already killed — nothing to do' },
+    acct2: { ok: false, acted: true, actions: ['cancel entry 1: ok', 'market Buy 2: broker said no', 'check it — market-out reported failure; verify the position; position not fully attributed; stops left working'] },
+    acct1: { ok: false, error: 'internal error: RuntimeError: x', actions: [] } } };
   assert.deepEqual(T.resultToasts('bot-kill', 200, data, STATE), [
     { tone: 'ok', text: '…041 · killed — position flattened' },
     { tone: 'warn', text: '…047 · CHECK IT — position unreadable (boom); position not fully attributed; stops left working' },
@@ -493,7 +533,16 @@ test('Kill: the confirm text, and one toast per account -- "check it" is a warni
     { tone: 'err', text: 'acct9 · kill failed — account not connected' },
     { tone: 'warn', text: 'acct8 · kill pending — its orders are not acknowledged yet — they are cancelled and its position flattened as soon as they are' },
     { tone: 'ok', text: 'acct7 · killed — its orders cancelled' },
-    { tone: 'warn', text: 'acct6 · CHECK IT — order 5: status unknown — check it' }]);
+    { tone: 'warn', text: 'acct6 · CHECK IT — order 5: status unknown — check it' },
+    { tone: 'ok', text: 'acct5 · killed — its leftover orders cancelled' },
+    { tone: 'ok', text: 'acct4 · killed — nothing was working' },
+    { tone: 'ok', text: 'acct3 · already killed — nothing to do' },
+    { tone: 'warn', text: 'acct2 · CHECK IT — market-out reported failure; verify the position; position not fully attributed; stops left working' },
+    { tone: 'err', text: 'acct1 · kill failed — internal error: RuntimeError: x' }]);
+  assert.equal(T.killSold(['market Sell 1: ok']), true);
+  assert.equal(T.killSold(['market Sell 1: broker said no', 'cancel 3: ok']), false);
+  assert.equal(T.killSold(['smarket Sell 1: ok']), false);
+  assert.equal(T.killSold(null), false);
   assert.deepEqual(T.resultToasts('bot-kill', 200, { ok: false, results: {}, error: 'internal error: KeyError: x' }, STATE),
     [{ tone: 'err', text: 'internal error: KeyError: x' }]);
   assert.deepEqual(T.resultToasts('bot-kill', 503, { detail: 'desk unreachable' }, STATE), [{ tone: 'err', text: 'desk unreachable' }]);
