@@ -416,3 +416,25 @@ test('instance\'s optional third argument carries visible/pane from a stored ind
   assert.equal('pane' in C.instance('ema', {}, { pane: 'own' }), false);     // never movable: no pane, whatever extra says
   assert.equal(C.instance('volume').visible, true);                          // no extra: today's default (visible)
 });
+
+// ---- rootBadge(root) — the instrument badge (Task 1: legend + symbol search) ----
+test('every ROOT_NAMES key has its own badge', () => {
+  for (const root of Object.keys(C.ROOT_NAMES)) {
+    const b = C.rootBadge(root);
+    assert.ok(b && b.bg && b.fg, `${root} has no badge`);
+    assert.ok(b.text || b.icon, `${root} badge has neither text nor icon`);
+  }
+  assert.deepEqual(C.rootBadge('NQ'), { text: '100', bg: '#0b1f4d', fg: '#fff' });
+  assert.deepEqual(C.rootBadge('CL'), { icon: 'droplet', bg: '#1b1b1b', fg: '#fff' });
+  assert.deepEqual(C.rootBadge('NG'), { icon: 'flame', bg: '#1565c0', fg: '#fff' });
+});
+
+test('an unknown root falls back to its own first two letters', () => {
+  assert.deepEqual(C.rootBadge('ZZ'), { text: 'ZZ', bg: '#5d6b7a', fg: '#fff' });
+});
+
+test('a micro root (M prefix) uses its parent\'s badge', () => {
+  assert.deepEqual(C.rootBadge('MNQ'), C.rootBadge('NQ'));
+  assert.deepEqual(C.rootBadge('MES'), C.rootBadge('ES'));
+  assert.deepEqual(C.rootBadge('MGC'), C.rootBadge('GC'));
+});

@@ -56,7 +56,7 @@ class Overlay {
       const n = Math.round(Number(this.qty.value));
       window.HBDeskClient.setPrefs({ qty: Number.isFinite(n) ? n : window.HBDeskClient.prefs.qty });
     };
-    cell.el.querySelector('.legend').appendChild(this.block);
+    cell.el.querySelector('.lg-tradeslot').appendChild(this.block);
 
     this.layer = mk('div', 'tl-layer');
     cell.el.appendChild(this.layer);

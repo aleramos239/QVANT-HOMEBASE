@@ -9,6 +9,17 @@ const LINE_COLORS = ['#2962FF', '#FF6D00', '#9C27B0', '#00897B', '#E91E63'];
 const ROOT_NAMES = { NQ: 'E-mini Nasdaq-100', ES: 'E-mini S&P 500', YM: 'E-mini Dow', RTY: 'E-mini Russell 2000',
   GC: 'Gold', SI: 'Silver', CL: 'Crude Oil', ZN: '10-Year T-Note', NG: 'Natural Gas', HG: 'Copper', BTC: 'Bitcoin' };
 const ALWAYS_OPEN = new Set(['BTC', 'MBT', 'ETH', 'MET']);   // CME crypto: 24/7 since 2026-05-30
+// The instrument badge (Task 1: legend + symbol search). No exchange or brand logos — these are our own
+// text/shape designs; `icon` names a Lucide icon (icons.js) instead of text where one reads better (CL, NG).
+const ROOT_BADGES = {
+  NQ: { text: '100', bg: '#0b1f4d', fg: '#fff' }, ES: { text: '500', bg: '#b3261e', fg: '#fff' },
+  YM: { text: '30', bg: '#1f3a93', fg: '#fff' }, RTY: { text: '2K', bg: '#6a1b9a', fg: '#fff' },
+  GC: { text: 'Au', bg: '#c9a227', fg: '#1b1b1b' }, SI: { text: 'Ag', bg: '#9ea7ad', fg: '#1b1b1b' },
+  HG: { text: 'Cu', bg: '#b87333', fg: '#fff' }, CL: { icon: 'droplet', bg: '#1b1b1b', fg: '#fff' },
+  NG: { icon: 'flame', bg: '#1565c0', fg: '#fff' }, ZN: { text: '10Y', bg: '#2e7d32', fg: '#fff' },
+  BTC: { text: '₿', bg: '#f7931a', fg: '#fff' },
+};
+const BADGE_FALLBACK = { bg: '#5d6b7a', fg: '#fff' };
 
 /* CME Globex classic hours: Sunday 18:00 to Friday 17:00 with a daily
    17:00-18:00 break. Exchange holidays are not modelled. Factored out of
@@ -264,6 +275,16 @@ function toSpec(text) {
 
 function rootName(root) { return ROOT_NAMES[root] || ''; }
 
+/* The badge for `root`: {text?, icon?, bg, fg}. A micro root (an M prefix, e.g. MNQ, MES, MGC) uses its
+   parent's badge; anything else unlisted falls back to its own first two letters. DOM-free — cell.js/app.js
+   draw the circle. */
+function rootBadge(root) {
+  const r = String(root || '').toUpperCase();
+  if (ROOT_BADGES[r]) return ROOT_BADGES[r];
+  if (r.length > 1 && r[0] === 'M' && ROOT_BADGES[r.slice(1)]) return ROOT_BADGES[r.slice(1)];
+  return { text: r.slice(0, 2), ...BADGE_FALLBACK };
+}
+
 /* An age in seconds as the bottom bar shows it: 12.3s · 4m · 2h · 3d. */
 function fmtAge(a) {
   if (a == null) return '—';
@@ -325,7 +346,7 @@ function filter(query, group = 'All') {
 
 const api = { CATALOG, GROUPS, ROOT_NAMES, FAVOURITES, INTERVAL_GROUPS, LINE_COLORS, uid, def, clampParams, instance,
   defaults, serverKey, serverKeys, migrate, migrateLayout, label, legendValues, decimals, fmtPrice, fmtCompact,
-  fmtSigned, change, parseSpec, specLabel, longLabel, toSpec, rootName, filter, ALWAYS_OPEN, marketOpen, fmtAge,
+  fmtSigned, change, parseSpec, specLabel, longLabel, toSpec, rootName, rootBadge, filter, ALWAYS_OPEN, marketOpen, fmtAge,
   feedSummary, REC_BUSY, staleAfter, sinceOpen, PANES, movable, placement };
 if (typeof window !== 'undefined') window.HBCatalog = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;

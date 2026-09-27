@@ -106,6 +106,11 @@ a { color: inherit; }
   align-items: flex-start; gap: 1px; font-size: 13px; line-height: 20px; pointer-events: none; }
 .lg-title { display: flex; align-items: center; gap: 8px; max-width: 100%; font-size: 16px; line-height: 22px; white-space: nowrap; }
 .grid[data-count="4"] .lg-title, .grid[data-count="6"] .lg-title { font-size: 14px; line-height: 20px; }
+.lg-logo { display: inline-flex; flex: none; }
+/* The instrument badge: our own text/shape circle, never a real exchange or brand logo (see HBCatalog.rootBadge). */
+.logo { display: inline-flex; align-items: center; justify-content: center; flex: none; border-radius: 50%;
+  font-size: 9px; font-weight: 700; letter-spacing: -.2px; user-select: none; }
+.logo .ic { width: 62%; height: 62%; stroke-width: 2.5; }
 .lg-name { overflow: hidden; text-overflow: ellipsis; }
 .badge { flex: none; padding: 0 5px; border-radius: 4px; background: var(--hover); color: var(--text-2);
   font-size: 11px; line-height: 16px; cursor: help; pointer-events: auto; }
@@ -113,6 +118,8 @@ a { color: inherit; }
 .lg-msg.err { color: var(--down); white-space: normal; }
 .lg-ohlc { display: flex; flex-wrap: wrap; gap: 0 8px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .kv .k { margin-right: 3px; color: var(--text); }
+/* .lg-tradeslot: the Buy/Sell block (tradelines.js' .lg-trade) lives here, between OHLC and the fold chevron,
+   so it stays visible when the legend is folded (folding hides only .lg-inds). */
 .lg-fold-wrap { pointer-events: auto; margin-left: -4px; }
 .lg-inds { display: flex; flex-direction: column; align-items: flex-start; }
 .lg-row { display: inline-flex; align-items: center; gap: 8px; height: 22px; margin-left: -4px; padding: 0 4px;

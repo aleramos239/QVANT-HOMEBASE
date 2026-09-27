@@ -5,7 +5,7 @@
    the server computes everything, the page only draws. */
 (() => {
 'use strict';
-const C = window.HBCatalog, I = window.HBIcons, S = window.HBSettings, { Cell } = window.HBCell;
+const C = window.HBCatalog, I = window.HBIcons, S = window.HBSettings, { Cell, badgeEl } = window.HBCell;
 const GRIDS = { 1: [1, 1], 2: [2, 1], 4: [2, 2], 6: [3, 2] };
 const GRID_NAMES = { 1: '1 chart', 2: '2 charts side by side', 4: '2 × 2 charts', 6: '3 × 2 charts' };
 const STATUS_STALE_S = 6;   // the server sends a status every 2 s: this long without one = it is stuck
@@ -245,10 +245,14 @@ function symbolMenu() {
   const render = () => {
     const q = input.value.trim().toUpperCase(), c = cur();
     const hits = meta.roots.filter((r) => !q || r.includes(q) || C.rootName(r).toUpperCase().includes(q));
-    list.replaceChildren(...hits.map((r) => menuItem(r, C.rootName(r), () => {
-      closeMenu();
-      if (c.cfg.root !== r) c.update({ root: r });
-    }, r === c.cfg.root)));
+    list.replaceChildren(...hits.map((r) => {
+      const b = menuItem(r, C.rootName(r), () => {
+        closeMenu();
+        if (c.cfg.root !== r) c.update({ root: r });
+      }, r === c.cfg.root);
+      b.prepend(badgeEl(r, 16));
+      return b;
+    }));
     if (!hits.length) list.appendChild(mk('div', 'menu-empty', 'No matching symbol'));
   };
   input.oninput = render;

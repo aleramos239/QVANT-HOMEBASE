@@ -70,6 +70,20 @@ function iconButton(name, title, act) {
   return b;
 }
 
+/* The instrument badge (HBCatalog.rootBadge): a small circle, our own text/shape design — never a real
+   exchange or brand logo. `size` is 20 in the legend, 16 in the symbol search rows (spec Task 1). The name
+   next to it keeps the accessible text, so the badge itself is decorative. */
+function badgeEl(root, size) {
+  const b = C.rootBadge(root), s = mk('span', 'logo');
+  s.style.width = s.style.height = `${size}px`;
+  s.style.background = b.bg;
+  s.style.color = b.fg;
+  s.setAttribute('aria-hidden', 'true');
+  if (b.icon) s.innerHTML = window.HBIcons[b.icon] || '';
+  else s.textContent = b.text || '';
+  return s;
+}
+
 /* Time-axis labels like TradingView's: year, month name, day of month, HH:MM(:SS). */
 function tickLabel(t, type) {
   const d = new Date(t * 1000);
@@ -110,8 +124,9 @@ class Cell {
     slot.innerHTML = `
       <div class="chart"></div>
       <div class="legend">
-        <div class="lg-title"><span class="lg-name"></span><span class="badge" hidden>approx. flow</span><span class="lg-msg" role="status"></span></div>
+        <div class="lg-title"><span class="lg-logo"></span><span class="lg-name"></span><span class="badge" hidden>approx. flow</span><span class="lg-msg" role="status"></span></div>
         <div class="lg-ohlc"></div>
+        <div class="lg-tradeslot"></div>
         <div class="lg-fold-wrap"></div>
         <div class="lg-inds"></div>
       </div>
@@ -121,8 +136,8 @@ class Cell {
     this.evTip = slot.querySelector('.ev-tip');
     this.gear = slot.querySelector('.cell-gear');
     this.gear.innerHTML = window.HBIcons.gear;
-    this.lg = { name: slot.querySelector('.lg-name'), badge: slot.querySelector('.badge'), msg: slot.querySelector('.lg-msg'),
-      ohlc: slot.querySelector('.lg-ohlc'), inds: slot.querySelector('.lg-inds'),
+    this.lg = { logo: slot.querySelector('.lg-logo'), name: slot.querySelector('.lg-name'), badge: slot.querySelector('.badge'),
+      msg: slot.querySelector('.lg-msg'), ohlc: slot.querySelector('.lg-ohlc'), inds: slot.querySelector('.lg-inds'),
       fold: iconButton('chevron', 'Hide indicators', 'fold') };
     slot.querySelector('.lg-fold-wrap').append(this.lg.fold);
     this.lg.fold.setAttribute('aria-expanded', 'true');
@@ -157,6 +172,7 @@ class Cell {
     const { root, spec } = this.cfg, F = S.legendFlags(this.R);
     this.lg.name.hidden = !F.title;
     this.lg.name.textContent = S.titleText(root, C.rootName(root), C.specLabel(spec), F.titleMode);
+    this.lg.logo.replaceChildren(badgeEl(root, 20));
   }
   message(text, err = false) { this.noteOn = false; this.lg.msg.textContent = text || ''; this.lg.msg.classList.toggle('err', !!err); }
   note(text) {   // a refused change: its reason in red for a while (then cleared, if nothing replaced it)
@@ -844,5 +860,5 @@ class Cell {
   }
 }
 
-window.HBCell = { Cell, palette, FONT };
+window.HBCell = { Cell, palette, FONT, badgeEl };
 })();
