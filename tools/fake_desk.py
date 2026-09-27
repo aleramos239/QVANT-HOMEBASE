@@ -8,7 +8,7 @@ It speaks the desk's /api/trade/* (homebase/desk_api.py + trading.py):
   * no Origin;
   * GET /state, and the SSE /stream: state first, then account / bot / fill / result, and a
     heartbeat every 15 s;
-  * POST order / modify / cancel / cancel-symbol / flatten / reverse, answering
+  * POST order / modify / cancel / exits / cancel-symbol / flatten / reverse, answering
     {"results": {account: {ok, order_id, error[, refused]}}}.
   * GET bot-history?strategy=nq930&days=N: past runs built by the desk's own homebase.bothistory from a
     SEEDED journal (a few weekdays before today: TP, SL, skipped, a whole-day gate skip, no fill, refused).
@@ -58,8 +58,8 @@ from fastapi.responses import StreamingResponse
 from homebase import bothistory
 from homebase.contracts import point_value, round_to_tick
 from homebase.paths import state_dir
-from homebase.trading import (Refused, check_prices, parse_cancel, parse_modify, parse_order,
-                              parse_symbol_action)
+from homebase.trading import (Refused, check_prices, exit_levels, parse_cancel, parse_exits, parse_modify,
+                              parse_order, parse_symbol_action)
 
 PORT = 8859
 FORBIDDEN_PORTS = frozenset({8850, 8852, 8853, 8854})   # the real desk, the chart service, the replays
@@ -313,6 +313,49 @@ class FakeDesk:
         self.changed(aid)
         return self.finish("cancel", cid, {aid: self.ok(oid)})
 
+    def exits(self, body) -> dict:
+        """The desk's `exits` (trading.ChartDesk._exits_one): its pure rule (exit_levels) on this fake's own
+        book -- the kept exit dropped, the final SL/TP rested GTC as one OCO pair (the first to fill drops the
+        other)."""
+        it = parse_exits(body)
+        if ("exits", it.client_id) in self.seen:
+            return self.seen[("exits", it.client_id)]
+        symbol = it.root + MONTH
+        q = (body.get("quotes") or {}).get(it.root) or {}
+        res = {}
+        for aid in it.accounts:
+            why = self.gate(aid)
+            a = self.acct.get(aid)
+            p = a["pos"].get(symbol) if why is None else None
+            net = p["net"] if p else 0
+            if why is None and not net:
+                why = f"no {symbol} position on {a['label']} to protect"
+            if why is None:
+                out = "Sell" if net > 0 else "Buy"
+                ex = [o for o in a["orders"].values() if o["symbol"] == symbol and o["side"] == out]
+                if any(o["owner"] for o in ex):
+                    why = "the nq930 bot's exits protect this position — they can't be changed from the chart"
+                else:
+                    try:
+                        rnd = (lambda v: None if v is None else round_to_tick(symbol, v))
+                        ex_sl, ex_tp, sl, tp = exit_levels(net, ex, rnd(it.sl_price), rnd(it.tp_price),
+                                                           q.get("last"))
+                    except Refused as e:
+                        why = str(e)
+            if why:
+                res[aid] = self.refused(why)
+                continue
+            for kept in (ex_sl, ex_tp):
+                if kept is not None:
+                    self.drop_order(aid, kept["order_id"])
+            sid = self.rest(aid, symbol, out, abs(net), "Stop", sl, tif="GTC") if sl is not None else None
+            tid = self.rest(aid, symbol, out, abs(net), "Limit", tp, tif="GTC") if tp is not None else None
+            if sid and tid:
+                a["legs"][sid]["oco"], a["legs"][tid]["oco"] = tid, sid
+            self.changed(aid)
+            res[aid] = self.ok(sid or tid)
+        return self.finish("exits", it.client_id, res)
+
     def _per_symbol(self, action: str, body, fn) -> dict:
         cid, accounts, root = parse_symbol_action(body)
         if (action, cid) in self.seen:
@@ -555,7 +598,7 @@ def create_fake_desk(key: str, desk: FakeDesk | None = None) -> FastAPI:
         return handler
 
     for name, fn in (("order", desk.order), ("modify", desk.modify), ("cancel", desk.cancel),
-                     ("cancel-symbol", desk.cancel_symbol), ("flatten", desk.flatten),
+                     ("exits", desk.exits), ("cancel-symbol", desk.cancel_symbol), ("flatten", desk.flatten),
                      ("reverse", desk.reverse), ("bot-kill", desk.bot_kill)):
         app.add_api_route(f"/api/trade/{name}", route(fn), methods=["POST"], name=f"trade_{name}")
 

@@ -284,3 +284,19 @@ def test_bot_kill_before_the_fire_just_marks_it_killed():
     assert r["ok"] is True and "actions" not in r["results"]["sim041"]
     assert c.get("/api/trade/state", headers=H).json()["bot"]["strategies"]["nq930"]["killed"] is True
     assert acct(c)["orders"] == [] and acct(c)["positions"] == []
+
+
+def test_exits_add_a_tp_to_a_positions_stop_as_one_oco_pair():
+    c = client()
+    assert order(c, qty=2, sl_price=30890.0).json()["results"]["sim041"]["ok"]
+    body = {"client_id": "e1", "accounts": ["sim041"], "root": "NQ", "tp_price": 30920.0, "quotes": Q}
+    assert c.post("/api/trade/exits", json=body, headers=H).json()["results"]["sim041"]["ok"] is True
+    a = acct(c)
+    assert sorted((o["type"], o["qty"], o["price"] or o["stop_price"], o["tif"]) for o in a["orders"]) == \
+        [("Limit", 2, 30920.0, "GTC"), ("Stop", 2, 30890.0, "GTC")]
+    stop = next(o for o in a["orders"] if o["type"] == "Stop")
+    c.post("/fake/fill", json={"account": "sim041", "order_id": stop["order_id"]})
+    assert acct(c)["orders"] == []                              # the target went with it
+    body = {**body, "client_id": "e2", "sl_price": 30950.0, "tp_price": None}
+    r = c.post("/api/trade/exits", json=body, headers=H).json()["results"]["sim041"]
+    assert r["refused"] and "no NQZ6 position" in r["error"]
