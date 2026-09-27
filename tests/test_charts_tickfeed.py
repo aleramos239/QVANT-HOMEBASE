@@ -1006,3 +1006,34 @@ def test_an_ordinary_reconnect_starts_from_fresh_subscriptions():
     subs = rig.drive(body)
     nq = symbols.resolve_contract("NQ")
     assert subs == {21: ("NQ", nq), 201: ("NQ", nq)}          # the dead socket's 11/101 are gone
+
+
+def test_a_switch_while_down_to_a_login_refusing_every_root_backs_off_normally():
+    """Re-review 2, R1: the refused-all verdict is about the OTHER login -- the active one must come
+    back on the ordinary 5 s backoff, never the 10-minute refused wait (which near 09:14 would have
+    run past 09:35 and kept the charts dark through the open)."""
+    good = FakeWS()
+    calls = {"n": 0}
+
+    def ordinary():
+        calls["n"] += 1
+        return _raise(RuntimeError("demo down")) if calls["n"] == 1 else good
+
+    rig = Rig(["NQ"], ordinary=ordinary, env_socks={"live": FakeWS(replies=[{"errorText": "Access is denied"}])},
+              block_backoff=True)
+
+    async def body():
+        while not any(s != 1 for s in rig.slept):
+            await asyncio.sleep(0)
+        with pytest.raises(Exception):
+            await rig.feed.switch_md("live")
+        while not any(s != 1 for s in rig.slept[1:]):
+            await asyncio.sleep(0)
+        rig.gate.set()
+        while rig.feed.ws is not good:
+            await asyncio.sleep(0)
+        await rig.polls(3)
+
+    rig.drive(body)
+    waits = [s for s in rig.slept if s != 1]
+    assert waits[:2] == [5, 10] and 600 not in waits and rig.feed.md_env == "demo"

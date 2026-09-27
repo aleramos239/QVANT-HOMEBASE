@@ -274,11 +274,9 @@ class TickFeed:
                 if self._pending_env is not None:
                     # SWITCH (nothing is up): the switch is this cycle's connect. A failure is
                     # this cycle's failure -- the usual backoff, then the active login again.
-                    try:
-                        await self._switch(self._pending_env)
-                    except Refused:
-                        refused_all = True
-                        raise
+                    # Never the 10-minute refused-all wait: that verdict was about the OTHER login,
+                    # and it must not keep the active one dark (re-review 2, R1).
+                    await self._switch(self._pending_env)
                 else:
                     self.ws = await self._connect()
                     self.error = None            # a fresh cycle; a refill error below now sticks
