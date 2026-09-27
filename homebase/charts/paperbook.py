@@ -81,7 +81,7 @@ MAX_POSITION_QTY = 20             # the desk's per-position cap (trading.py guar
 STOPLIMIT_MAX_TICKS = 100         # the desk's (trading.py check_prices)
 FILLS_KEPT = 50                   # fills in the account view (the desk's FILLS_KEPT)
 DEDUP_TTL_S = 600.0
-ACTIONS = ("order", "modify", "cancel", "cancel-symbol", "flatten", "reverse")
+ACTIONS = ("order", "modify", "cancel", "exits", "cancel-symbol", "flatten", "reverse")
 TYPES = ("Market", "Limit", "Stop", "StopLimit")
 TIFS = ("Day", "GTC")
 SIDES = {"Buy": 1, "Sell": -1}
@@ -492,6 +492,12 @@ class PaperBook:
         _only_paper(body, self.id)
         if action == "order":
             return self._order(cid, body)
+        if action == "exits":
+            sl, tp = _price(body.get("sl_price"), "sl_price"), _price(body.get("tp_price"), "tp_price")
+            if sl is None and tp is None:
+                raise ValueError("an sl_price or a tp_price is required")
+            root = self._root(body)
+            return self._once(action, cid, lambda: self._exits(root, sl, tp))
         if action in ("modify", "cancel"):
             oid = self._order_id(body)
             if action == "modify":
@@ -625,6 +631,57 @@ class PaperBook:
                    side=side, type="Market", kind="market", price=None, trigger=None, qty=qty, role=role,
                    placed_ms=now, session=session_of(now, root))
         self._do({"ev": "place", "orders": [_od(o)]}, seq=self.seq.get(root, 0))
+
+    def _exits(self, root: str, sl: Optional[float], tp: Optional[float]) -> dict:
+        """The desk's `exits` (trading.py ChartDesk._exits_one, exit_levels), on this book: an SL and/or TP for the
+        WHOLE open position, ending as one Stop and/or one Limit -- an OCO pair (one `oco` group: the first fill
+        cancels its twin, _fill) when both. Refused the same way (fail closed): no position, an exit-side order that
+        is not a plain Stop/Limit, more than one of either, one not sized to the position, a new SL/TP where one
+        already works, or a level at/through the last print. Adding the missing half cancels the existing exit and
+        places the pair with its price kept, in one synchronous step (no print can land between them here). The
+        Stop is always placed BEFORE the Limit, so if one print could ever trigger both, the oldest-first rule fills
+        the stop (pessimistic, like the engine's same-bar rule)."""
+        pos = self.pos.get(root) or {}
+        net = pos.get("net", 0)
+        if not net:
+            raise Refused(f"no {root} position on {self.label} to protect")
+        tick = tick_size(root)
+        sign, qty = (1 if net > 0 else -1), abs(net)
+        exits = [o for o in self._working(root) if o.side == -sign]
+        sls = [o for o in exits if o.type == "Stop"]
+        tps = [o for o in exits if o.type == "Limit"]
+        if len(sls) + len(tps) != len(exits) or len(sls) > 1 or len(tps) > 1 or any(o.qty != qty for o in exits):
+            raise Refused("exits don't match the position — manage them in the order panel")
+        ex_sl, ex_tp = (sls[0] if sls else None), (tps[0] if tps else None)
+        if sl is not None and ex_sl is not None:
+            raise Refused("this position already has a stop loss — drag its line to move it")
+        if tp is not None and ex_tp is not None:
+            raise Refused("this position already has a target — drag its line to move it")
+        sl = to_tick(sl, tick) if sl is not None else (ex_sl.price if ex_sl else None)
+        tp = to_tick(tp, tick) if tp is not None else (ex_tp.price if ex_tp else None)
+        last = self.last.get(root)
+        if last is None:
+            raise Refused(f"no {root} print yet — an exit needs a price to check against")
+        if sl is not None and not sign * tick_cmp(last, sl, tick) > 0:
+            raise Refused(f"the stop loss must be {'below' if sign > 0 else 'above'} the last price ({last:,})")
+        if tp is not None and not sign * tick_cmp(tp, last, tick) > 0:
+            raise Refused(f"the target must be {'above' if sign > 0 else 'below'} the last price ({last:,})")
+        kept = ex_sl or ex_tp
+        now = self.clock_ms()
+        base = {"root": root, "symbol": pos.get("symbol") or resolve_contract(root), "side": -sign, "qty": qty,
+                "placed_ms": now, "session": session_of(now, root), "tif": "GTC", "trigger": None}
+        legs = []
+        if sl is not None:
+            legs.append(POrder(id=self._next_id(), type="Stop", kind="stop", price=sl, role="sl", **base))
+        if tp is not None:
+            legs.append(POrder(id=self._next_id(), type="Limit", kind="limit", price=tp, role="tp", **base))
+        if len(legs) == 2:
+            for o in legs:
+                o.oco = f"x{legs[0].id}"
+        if kept is not None:
+            self._do({"ev": "cancel", "ids": [kept.id], "why": "exits"})
+        self._do({"ev": "place", "orders": [_od(o) for o in legs]}, seq=self.seq.get(root, 0))
+        return {"ok": True, "order_id": legs[0].id, "error": None}
 
     def _cancel_symbol(self, root: str) -> dict:
         self._cancel_all(root)
@@ -975,7 +1032,7 @@ async def _read_json(request: Request):
 
 
 def register(app, *, books: Optional[PaperBooks], browser_write_ok, allowed: frozenset = netguard.allowlist()) -> None:
-    """GET /api/paper/book, POST /api/paper/{order|modify|cancel|cancel-symbol|flatten|reverse} -- the desk proxy's
+    """GET /api/paper/book, POST /api/paper/{order|modify|cancel|exits|cancel-symbol|flatten|reverse} -- the desk proxy's
     request rules (desk.py register): the Host allowlist, the Origin, JSON only, this service's own origin rule,
     4 KB, no NaN. GET /api/paper/accounts, POST /api/paper/accounts/{create|remove} (Task 2b) add the same rules
     plus an EXACT origin check (desk_origin_refusal), and answer CORS for the desk page's two origins only. Nothing

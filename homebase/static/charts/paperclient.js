@@ -10,7 +10,7 @@
    books (paperbook.py):
      - the /ws {"type":"paperbook", accounts, limits} push, kept as the latest account views (accounts());
      - createAccount(name, startBalance): POST /api/paper/accounts/create -> {status, data};
-     - send(action, body): POST /api/paper/{action} for order | modify | cancel | cancel-symbol | flatten | reverse
+     - send(action, body): POST /api/paper/{action} for order | modify | cancel | exits | cancel-symbol | flatten | reverse
        only -> {status, data}; the caller (HBTradeUI) routes a send here by HBTrade.routeSend and owns the toasts;
      - onFill(fn): a new fill of an order this page placed (like the desk's fill toast rule).
    Browser only; the logic (the pill, lines, markers, stats text, the split) lives in HBTrade. */
@@ -85,7 +85,7 @@ async function fetchHistory(id, e, day, sig) {
 }
 
 /* ---- the PAPER account ---- */
-const BOOK_ACTIONS = ['order', 'modify', 'cancel', 'cancel-symbol', 'flatten', 'reverse'];
+const BOOK_ACTIONS = ['order', 'modify', 'cancel', 'exits', 'cancel-symbol', 'flatten', 'reverse'];
 const PAPER_ID_RE = /^paper(?:-[1-9][0-9]{0,5})?$/;   // HBTrade.isPaperId's rule (this file loads on its own)
 const book = { accounts: [], limits: null };
 const fillSubs = new Set();

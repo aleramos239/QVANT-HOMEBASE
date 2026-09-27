@@ -801,3 +801,126 @@ def test_a_refusal_after_the_origin_check_is_readable_by_the_desk_page(tmp_path)
         r = c.get("/api/paper/accounts", headers=desk)
         assert r.status_code == 503 and r.headers["access-control-allow-origin"] == "http://localhost:8850"
         assert "live only" in r.json()["detail"]
+
+
+# ---- exits: an SL / TP added to an open position (the chart's drag handles) ---------------------------------
+def long3(b):
+    feed(b, [("09:29:59", 100.0)])
+    assert order(b, "Buy", "Market", qty=3)["ok"]
+    feed(b, [("09:30:01", 100.0)])
+    assert net(b) == 3
+
+
+def exits(b, **kw):
+    return act(b, "exits", accounts=[PAPER_ID], root="NQ", **kw)
+
+
+def test_paper_exits_both_at_once_are_one_oco_pair_for_the_whole_position():
+    b = book()
+    long3(b)
+    r = exits(b, sl_price=98.1, tp_price=103.0)
+    assert r["ok"] is True
+    rows = b.view()["orders"]
+    assert [(o["type"], o["role"], o["side"], o["qty"], o["tif"]) for o in rows] == \
+        [("Stop", "sl", "Sell", 3, "GTC"), ("Limit", "tp", "Sell", 3, "GTC")]
+    assert rows[0]["stop_price"] == 98.0 and rows[1]["price"] == 103.0
+    groups = {o.oco for o in b.orders.values()}
+    assert len(groups) == 1 and None not in groups
+    feed(b, [("09:30:02", 103.25)])                                   # 1-tick through the TP
+    assert fills(b)[-1] == ("Sell", 3, 103.0) and net(b) == 0
+    assert b.view()["orders"] == []                                   # the SL went with it
+
+
+def test_paper_exits_the_stop_side_of_the_pair_fills_and_cancels_the_target():
+    b = book()
+    long3(b)
+    exits(b, sl_price=98.0, tp_price=103.0)
+    feed(b, [("09:30:02", 97.5)])                                     # gapped through the stop
+    assert fills(b)[-1] == ("Sell", 3, 97.25) and net(b) == 0 and b.orders == {}
+
+
+def test_paper_exits_one_print_that_could_trigger_both_fills_the_stop():
+    """Same-print ambiguity is pessimistic: the Stop is placed before the Limit, and the oldest triggered order
+    fills first. (A valid pair can't both trigger on one print; the law is pinned by forcing the levels.)"""
+    b = book()
+    long3(b)
+    exits(b, sl_price=98.0, tp_price=103.0)
+    for o in b.orders.values():                                       # force an overlap: stop 99, target 98.5
+        o.price = 99.0 if o.type == "Stop" else 98.5
+    feed(b, [("09:30:02", 99.0)])
+    assert b.fills[-1]["role"] == "sl" and net(b) == 0 and b.orders == {}
+
+
+def test_paper_exits_adding_the_missing_half_keeps_the_existing_price_as_one_pair():
+    b = book()
+    long3(b)
+    assert exits(b, tp_price=103.0)["ok"]
+    [tp] = b.orders.values()
+    assert tp.oco is None
+    assert exits(b, sl_price=98.0)["ok"]
+    assert tp.id not in b.orders                                       # replaced, not left next to the pair
+    kept = sorted((o.type, o.price) for o in b.orders.values())
+    assert kept == [("Limit", 103.0), ("Stop", 98.0)]
+    assert len({o.oco for o in b.orders.values()}) == 1
+    assert list(b.orders.values())[0].type == "Stop"                  # the stop is the older of the two
+
+
+def test_paper_exits_on_a_short_and_on_an_entrys_bracket_leg():
+    b = book()
+    feed(b, [("09:29:59", 100.0)])
+    order(b, "Sell", "Market", qty=2, sl=102.0)
+    feed(b, [("09:30:01", 100.0)])
+    assert net(b) == -2
+    assert exits(b, tp_price=97.0)["ok"]
+    assert sorted((o.type, o.side, o.qty, o.price) for o in b.orders.values()) == \
+        [("Limit", 1, 2, 97.0), ("Stop", 1, 2, 102.0)]
+
+
+@pytest.mark.parametrize("setup,body,msg", [
+    ("flat", {"sl_price": 98.0}, "no NQ position on PAPER to protect"),
+    ("long", {"sl_price": 100.0}, "the stop loss must be below the last price"),
+    ("long", {"tp_price": 100.0}, "the target must be above the last price"),
+    ("sl", {"sl_price": 97.0}, "already has a stop loss"),
+    ("partial", {"tp_price": 103.0}, "exits don't match the position"),
+    ("two", {"tp_price": 103.0}, "exits don't match the position"),
+])
+def test_paper_exits_refusals(setup, body, msg):
+    b = book()
+    if setup == "flat":
+        feed(b, [("09:29:59", 100.0)])
+    else:
+        long3(b)
+    if setup == "sl":
+        exits(b, sl_price=98.0)
+    if setup == "partial":
+        order(b, "Sell", "Stop", qty=1, price=98.0)
+    if setup == "two":
+        order(b, "Sell", "Stop", qty=3, price=98.0)
+        order(b, "Sell", "Stop", qty=3, price=97.0)
+    before = dict(b.orders)
+    r = exits(b, **body)
+    assert r["ok"] is False and r["refused"] and msg in r["error"]
+    assert b.orders == before
+
+
+def test_paper_exits_need_a_price_and_split_across_paper_accounts(tmp_path):
+    b = book()
+    with pytest.raises(ValueError, match="an sl_price or a tp_price is required"):
+        exits(b)
+    bs = books(tmp_path)
+    bs.create({"name": "Two"})
+    feed_all(bs, [("09:29:59", 100.0)])
+    bs_order(bs, [PAPER_ID, "paper-2"], qty=2)
+    feed_all(bs, [("09:30:01", 100.0)])
+    res = bs.act("exits", {"client_id": "e1", "accounts": [PAPER_ID, "paper-2"], "root": "NQ", "sl_price": 98.0})
+    assert res["results"][PAPER_ID]["ok"] and res["results"]["paper-2"]["ok"]
+    assert all(len(bk.orders) == 1 for bk in bs.books.values())
+
+
+def test_paper_exits_survive_a_restart(tmp_path):
+    b = book(tmp_path)
+    long3(b)
+    exits(b, sl_price=98.0, tp_price=103.0)
+    again = book(tmp_path)
+    assert sorted((o.type, o.price, o.oco is not None) for o in again.orders.values()) == \
+        [("Limit", 103.0, True), ("Stop", 98.0, True)]

@@ -41,9 +41,9 @@ test('send posts JSON to /api/paper/{action} only, and refuses anything that is 
   const k = await P.send('bot-kill', { client_id: 'k', strategy: 'nq930' });
   assert.equal(k.status, 0);
   assert.equal(fetched.length, 1, 'a Kill never leaves through the paper client');
-  for (const a of ['modify', 'cancel', 'cancel-symbol', 'flatten', 'reverse']) await P.send(a, {});
+  for (const a of ['modify', 'cancel', 'exits', 'cancel-symbol', 'flatten', 'reverse']) await P.send(a, {});
   assert.deepEqual(fetched.map((f) => f.url), ['/api/paper/order', '/api/paper/modify', '/api/paper/cancel',
-    '/api/paper/cancel-symbol', '/api/paper/flatten', '/api/paper/reverse']);
+    '/api/paper/exits', '/api/paper/cancel-symbol', '/api/paper/flatten', '/api/paper/reverse']);
 });
 
 test('the book push keeps every paper account, and only a new fill of our own order is announced', async () => {
