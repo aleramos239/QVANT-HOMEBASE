@@ -162,3 +162,58 @@ def test_shutdown_terminates_an_in_flight_runner_child(tmp_path, monkeypatch):
         assert c.get(f"/api/tester/run/{rid}").json()["status"] in ("queued", "running")
     # the `with` block's exit ran the app's shutdown lifecycle
     assert events and events[0] in ("terminate", "kill")
+
+
+# ---------------------------------------------------------------- the parameter heat-map
+
+GRID = {"strategy": "nq930", "inputs": {"adx_gate": False},
+        "axes": [{"key": "offset_pts", "values": [10, 12]}, {"key": "sl_pts", "values": [5, 6]}]}
+
+
+def poll_grid(c, gid, s=120.0):
+    t = time.monotonic() + s
+    while time.monotonic() < t:
+        st = c.get(f"/api/tester/grid/{gid}").json()
+        if st["status"] in ("done", "cancelled"):
+            return st
+        time.sleep(0.05)
+    raise AssertionError("grid never finished")
+
+
+def test_a_grid_goes_from_post_to_cell_bundles_and_counts_its_looks(tmp_path):
+    with client(tmp_path) as c:
+        assert c.get("/api/tester/looks").json() == {}
+        gid = c.post("/api/tester/grid", json=GRID, headers={"origin": "http://localhost:8852"}).json()["id"]
+        st = poll_grid(c, gid)
+        assert st["status"] == "done" and st["total"] == 4 and st["looks"] == 4
+        assert st["range"]["start"] == "2021-01-01" and st["range"]["end"] == "2024-12-31"
+        assert [a["key"] for a in st["axes"]] == ["offset_pts", "sl_pts"]
+        cell = st["cells"][3]
+        assert cell["params"] == {"offset_pts": 12.0, "sl_pts": 6.0} and "net_profit" in cell["summary"]
+        b = c.get(f"/api/tester/grid/{gid}/cell/3/bundle").json()
+        assert b["run"]["inputs"]["offset_pts"] == 12.0 and b["run"]["range"]["kind"] == "research"
+        assert b["run"]["report"]["summary"]["all"]["net_profit"] == cell["summary"]["net_profit"]
+        assert c.get("/api/tester/looks").json() == {"nq930": 4}
+        assert c.get("/api/tester/grids").json()[0]["id"] == gid
+        assert c.get("/api/tester/runs").json() == []            # cells never flood Recent runs
+        assert (tmp_path / "state" / "tester" / "looks.json").exists()
+
+
+def test_grid_requests_the_rules_refuse(tmp_path):
+    with client(tmp_path) as c:
+        for bad, word in (({**GRID, "range": {"kind": "custom", "start": "2024-01-01", "end": "2025-03-01"}}, "research window"),
+                          ({**GRID, "holdout": {"reason": "x"}}, "research window"),
+                          ({**GRID, "axes": [{"key": "offset_pts", "values": list(range(61))},
+                                             {"key": "sl_pts", "values": [5]}]}, "at most 60"),
+                          ({**GRID, "axes": GRID["axes"][:1]}, "2 or 3")):
+            r = c.post("/api/tester/grid", json=bad)
+            assert r.status_code == 400 and word in r.json()["detail"], r.json()
+        assert c.post("/api/tester/grid", json=GRID, headers=EVIL).status_code == 403
+        assert c.post("/api/tester/grid", json=GRID, headers={"origin": "http://evil.example", **REBIND_HOST}).status_code == 403
+        for path in ("/api/tester/grid/20260927-120000-nq930-abcd", "/api/tester/grid/..%2F..%2Fetc",
+                     "/api/tester/grid/20260927-120000-nq930-abcd/cell/0/bundle"):
+            assert c.get(path).status_code == 404, path
+        assert c.post("/api/tester/grid/20260927-120000-nq930-abcd/cancel").status_code == 404
+        for path in ("/api/tester/grids", "/api/tester/looks"):
+            assert c.get(path, headers=REBIND_HOST).status_code == 403
+        assert c.get("/api/tester/grids").json() == []

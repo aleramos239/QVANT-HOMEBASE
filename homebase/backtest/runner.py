@@ -263,8 +263,9 @@ def _locked(runs: Path):
     return fh
 
 
-def exec_run(run_dir: Path, store: TapeStore) -> int:
-    fh = _locked(run_dir.parent)
+def exec_run(run_dir: Path, store: TapeStore, lock: bool = True) -> int:
+    """lock=False: a heat-map cell (grid.py) -- its own 2-worker pool bounds it, not the one-run flock."""
+    fh = _locked(run_dir.parent) if lock else None
     try:
         execute(run_dir, store)
         return 0
@@ -274,7 +275,18 @@ def exec_run(run_dir: Path, store: TapeStore) -> int:
         write_json(run_dir / "status.json", st)
         raise
     finally:
-        fh.close()
+        if fh is not None:
+            fh.close()
+
+
+def read_bundle(d: Path) -> dict:
+    """A finished run dir (runs/<id>/ or a grid cell) as the page loads it."""
+    st = read_json(d / "status.json", {}) or {}
+    if st.get("status") != "done":
+        raise ValueError(f"run {d.name} is {st.get('status')}, not done")
+    return {"run": read_json(d / "run.json"), "trades": read_json(d / "trades.json"),
+            "equity": read_json(d / "equity.json"), "plots": read_json(d / "plots.json"),
+            "propsim": read_json(d / "propsim.json")}
 
 
 class RunManager:
@@ -379,13 +391,7 @@ class RunManager:
         return out
 
     def bundle(self, rid: str) -> dict:
-        d = self.dir(rid)
-        st = read_json(d / "status.json", {}) or {}
-        if st.get("status") != "done":
-            raise ValueError(f"run {rid} is {st.get('status')}, not done")
-        return {"run": read_json(d / "run.json"), "trades": read_json(d / "trades.json"),
-                "equity": read_json(d / "equity.json"), "plots": read_json(d / "plots.json"),
-                "propsim": read_json(d / "propsim.json")}
+        return read_bundle(self.dir(rid))
 
     def _loop(self) -> None:
         while True:
@@ -438,6 +444,7 @@ def main(argv: list[str] | None = None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     ex = sub.add_parser("exec", help="run a prepared run dir (the chart service uses this)")
     ex.add_argument("run_dir", type=Path)
+    ex.add_argument("--no-lock", action="store_true", help="a heat-map cell: the grid pool bounds it")
     run = sub.add_parser("run", help="validate + run in this process (scripts, the assistant)")
     run.add_argument("--strategy", required=True)
     run.add_argument("--input", action="append", default=[], help="key=value (JSON value)")
@@ -455,7 +462,7 @@ def main(argv: list[str] | None = None) -> int:
     store = TapeStore(a.archive, a.cache)
     if a.cmd == "exec":
         os.nice(5)          # on top of the chart job's own nice 5: a backtest never competes with the desk
-        return exec_run(a.run_dir, store)
+        return exec_run(a.run_dir, store, lock=not a.no_lock)
     if a.range in ("research", "is_months"):
         rng = {"kind": a.range}
     else:
