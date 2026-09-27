@@ -92,9 +92,10 @@ const RESULT = {
     { k: 2, select: '2022-03', test: ['2022-04', '2022-06'], cell: null, params: null, is: null, oos: null, stitched: false, changed: null }],
   window: { start: '2022-01', end: '2022-06' },
   stitched: { stats: STATS(-480, 7, { max_drawdown: -500 }), equity: { t_ms: [], equity: [], drawdown: [] },
-    trades: [], months: ['2022-02', '2022-03', '2022-04'], legs: [0] },
-  stitched_is: { stats: STATS(500, 5), months: ['2022-01'] },
-  drop: { net_profit: -980, sharpe: -0.4 },
+    trades: [], months: ['2022-02', '2022-03', '2022-04'], legs: [0], n_months: 3,
+    per_month: { net_profit: -160, trades: 2.3333 }, uncovered: ['2022-05', '2022-06'] },
+  stitched_is: { stats: STATS(500, 5), months: ['2022-01'], n_months: 1, per_month: { net_profit: 500, trades: 5 } },
+  drop: { net_profit_per_month: -660, pct: -132, sharpe: -0.4 },
   phases: [{ phase: 0, steps: 1, net_profit: -480, trades: 7, sharpe: -1 }, { phase: 1, steps: 1, net_profit: -60, trades: 3, sharpe: -2 },
     { phase: 2, steps: 1, net_profit: 0, trades: 0, sharpe: 0 }],
   stability: { changes: 1, pairs: 1, distinct: 2, no_pick: 1, top: { cell: 0, count: 1 } },
@@ -102,24 +103,38 @@ const RESULT = {
 };
 const AXES = [{ key: 'offset_pts', label: 'Entry offset (pts)', values: [10, 12] }, { key: 'sl_pts', label: 'Stop loss (pts)', values: [5] }];
 
-test('wfTiles: both sides of the same chain -- out-of-sample, and the selection months it picked on', () => {
+test('wfTiles: both sides per MONTH (they span different month counts), totals labelled as totals', () => {
   const t = X.wfTiles(RESULT);
-  assert.deepEqual(t.map((x) => x.label), ['Out-of-sample net', 'Max drawdown', 'Win rate', 'Profit factor', 'Sharpe', 'Trades']);
-  const is = X.wfTiles(RESULT, 'is');
-  assert.equal(is[0].label, 'In-sample net');
-  assert.equal(is[0].value, '+$500');
-  assert.equal(is[0].sub, '2022-01 → 2022-01');
-  assert.equal(is[5].value, '5');
-  assert.deepEqual(X.WF_SIDE_LABELS, { is: 'In-sample (selection)', oos: 'Out-of-sample' });
-  assert.equal(X.wfDrop(RESULT), `In-sample → out-of-sample: net ${M}$980 · Sharpe ${M}0.40`);
-  assert.equal(X.wfDrop({ drop: { net_profit: 120.5, sharpe: 0.25 } }), 'In-sample → out-of-sample: net +$120.50 · Sharpe +0.25');
-  assert.equal(X.wfDrop({ drop: { net_profit: -10, sharpe: null } }), `In-sample → out-of-sample: net ${M}$10 · Sharpe —`);
-  assert.equal(t[0].value, `${M}$480`);
+  assert.deepEqual(t.map((x) => x.label), ['Net / month', 'Trades / month', 'Total net', 'Max drawdown', 'Win rate',
+    'Profit factor', 'Sharpe']);
+  assert.equal(t[0].value, `${M}$160`);
+  assert.equal(t[0].sub, '3 months · 2022-02 → 2022-04');
   assert.equal(t[0].tone, 'down');
-  assert.equal(t[0].sub, '2022-02 → 2022-04');
-  assert.equal(t[1].value, `${M}$500`);
-  assert.equal(t[4].value, '1.23');
-  assert.equal(t[5].value, '7');
+  assert.equal(t[1].value, '2.3');
+  assert.equal(t[2].value, `${M}$480`);
+  assert.equal(t[2].sub, 'over 3 months');                 // a total, and says over how long
+  assert.equal(t[3].value, `${M}$500`);
+  assert.equal(t[6].value, '1.23');
+  const is = X.wfTiles(RESULT, 'is');
+  assert.equal(is[0].value, '+$500');
+  assert.equal(is[0].sub, '1 month · 2022-01 → 2022-01');
+  assert.equal(is[2].sub, 'over 1 month');
+  assert.deepEqual(X.WF_SIDE_LABELS, { is: 'In-sample (selection)', oos: 'Out-of-sample' });
+});
+
+test('wfDrop is per month, in $ and %, never a raw-total difference', () => {
+  assert.equal(X.wfDrop(RESULT), `In-sample → out-of-sample, per month: net ${M}$660 (${M}132%) · Sharpe ${M}0.40`);
+  // the review's case: OOS earns exactly a third of IS per month -> -67%, where equal totals would say 0
+  assert.equal(X.wfDrop({ drop: { net_profit_per_month: -200, pct: -66.67, sharpe: null } }),
+    `In-sample → out-of-sample, per month: net ${M}$200 (${M}67%) · Sharpe —`);
+  assert.equal(X.wfDrop({ drop: { net_profit_per_month: 50, pct: null, sharpe: 0.25 } }),
+    'In-sample → out-of-sample, per month: net +$50 · Sharpe +0.25');
+});
+
+test('wfUncovered names the months the chain never tests out-of-sample', () => {
+  assert.equal(X.wfUncovered(RESULT), 'Not tested out-of-sample: 2022-05, 2022-06');
+  assert.equal(X.wfUncovered({ stitched: { uncovered: [] } }), '');
+  assert.equal(X.wfUncovered({ stitched: {} }), '');
 });
 
 test('wfStepRows: one row per monthly step, dollars and Sharpe both sides, the chain and changes marked', () => {

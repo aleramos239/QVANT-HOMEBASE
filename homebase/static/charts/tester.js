@@ -625,27 +625,38 @@ function wfProgress(st) {
   return { text: '', frac: null, final: false };
 }
 const span = (a, b) => `${a} → ${b}`;
-/* One row of six tiles for either side of the stitched chain. `which` is 'oos' (the stitched
-   out-of-sample) or 'is' (the selection months those picks were chosen on) -- the user's
-   "and then OOS for each": both sides, side by side, at the same ratio. */
+/* One row of tiles for either side of the stitched chain. `which` is 'oos' (the stitched out-of-sample)
+   or 'is' (the selection months those picks were chosen on) -- the user's "and then OOS for each". The
+   two sides span DIFFERENT month counts (1 per leg vs N per leg), so the headline is per MONTH, each side
+   says how many months it covers, and the raw total is labelled as a total over that span. */
+const months_ = (n) => `${int(n)} month${n === 1 ? '' : 's'}`;
 function wfTiles(r, which = 'oos') {
   const side = which === 'is' ? r.stitched_is : r.stitched;
-  const s = side.stats, m = side.months;
+  const s = side.stats, m = side.months || [], n = side.n_months ?? m.length, pm = side.per_month || {};
   return [
-    { label: which === 'is' ? 'In-sample net' : 'Out-of-sample net', value: signed(s.net_profit),
-      sub: m.length ? span(m[0], m[m.length - 1]) : '', tone: toneOf(s.net_profit) },
+    { label: 'Net / month', value: signed(pm.net_profit), sub: `${months_(n)}${m.length ? ' · ' + span(m[0], m[m.length - 1]) : ''}`,
+      tone: toneOf(pm.net_profit) },
+    { label: 'Trades / month', value: num(pm.trades, 1), sub: '', tone: '' },
+    { label: 'Total net', value: signed(s.net_profit), sub: `over ${months_(n)}`, tone: toneOf(s.net_profit) },
     { label: 'Max drawdown', value: Tr.money(s.max_drawdown), sub: '', tone: toneOf(s.max_drawdown) },
     { label: 'Win rate', value: rate(s.win_rate), sub: '', tone: '' },
     { label: 'Profit factor', value: num(s.profit_factor, 2, true), sub: '', tone: '' },
-    { label: 'Sharpe', value: num(s.sharpe), sub: 'weekday grid', tone: '' },
-    { label: 'Trades', value: int(s.trades), sub: '', tone: '' }];
+    { label: 'Sharpe', value: num(s.sharpe), sub: 'weekday grid', tone: '' }];
 }
 const WF_SIDE_LABELS = { is: 'In-sample (selection)', oos: 'Out-of-sample' };
-/* The one line that says how far the edge fell between the two sides, in $ and in Sharpe. */
+/* How far the edge fell between the two sides -- per MONTH in $ and %, and in Sharpe (already a rate).
+   Never a difference of raw totals: at 1:3 those span 1 month against 3. */
 function wfDrop(r) {
   const d = r.drop || {};
-  const pp = (v, f) => (v == null || !Number.isFinite(v) ? '—' : (v > 0 ? '+' : MINUS) + f(Math.abs(v)));
-  return `In-sample → out-of-sample: net ${pp(d.net_profit, (x) => Tr.money(x))} · Sharpe ${pp(d.sharpe, (x) => x.toFixed(2))}`;
+  const pp = (v, f) => (v == null || !Number.isFinite(v) ? '—' : (v > 0 ? '+' : v < 0 ? MINUS : '') + f(Math.abs(v)));
+  const pct = d.pct == null || !Number.isFinite(d.pct) ? '' : ` (${pp(d.pct, (x) => `${Math.round(x)}%`)})`;
+  return `In-sample → out-of-sample, per month: net ${pp(d.net_profit_per_month, (x) => Tr.money(x))}${pct}`
+    + ` · Sharpe ${pp(d.sharpe, (x) => x.toFixed(2))}`;
+}
+/* The months the stitched chain never tests out-of-sample (its last leg did not fit the window). */
+function wfUncovered(r) {
+  const u = (r.stitched && r.stitched.uncovered) || [];
+  return u.length ? `Not tested out-of-sample: ${u.join(', ')}` : '';
 }
 /* The step table's two header rows: the group spans, then the columns themselves. */
 const WF_STEP_GROUPS = [['', 3], [WF_SIDE_LABELS.is, 3], [WF_SIDE_LABELS.oos, 6]];
@@ -685,7 +696,7 @@ function wfScheme(r) {
 const api = { DEFAULT_MAX_CELLS, HARD_MAX_CELLS, GRID_WORKERS, maxCellsError, cellsWarning, stepValues, axisValues,
   parseValues, valueLabel, gridAxes, gridCount, gridProblems, gridBody, looksText, looksLine, heatPanels, heatMaxAbs,
   WF_METRICS, WF_RATIOS, WF_STEP_HEADERS, WF_STEP_GROUPS, WF_SIDE_LABELS, WF_NEEDS_GRID, wfBody, wfProblems, wfLooksText,
-  etaText, wfProgress, wfTiles, wfDrop, wfStepRows, wfStability, wfPhases, wfScheme,
+  etaText, wfProgress, wfTiles, wfDrop, wfUncovered, wfStepRows, wfStability, wfPhases, wfScheme,
   heatLevel, cellView, gridProgress, RANGES, DEFAULT_RULES, defaults, restore, fromRun, rangeFromRun, isWalkforward,
   today, rangeSpec, rangeDates, rangeBody, parseDate, dateError, prettyDate, pillLabel, monthGrid, shiftMonth,
   problems, inputError, body,

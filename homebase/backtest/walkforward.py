@@ -24,8 +24,12 @@ other N-1 chains' (phase 1: steps 1, N+1, ...; and so on) net is reported next t
 phase is visible, never silently picked. The chain is fixed at phase 0 before any result exists.
 
 Both sides. The result carries the stitched OUT-of-sample chain and, beside it, the same chain's own
-SELECTION months (`stitched_is`) plus the drop between them in $ and Sharpe -- the user's "and then OOS
-for each". The out-of-sample trades travel with it, so the List of trades tab reads them directly.
+SELECTION months (`stitched_is`) -- the user's "and then OOS for each". The two sides span DIFFERENT
+month counts (1 per leg in-sample, N per leg out-of-sample: 15 vs 45 on 2021-2024 at 1:3), so their raw
+totals are not comparable: each side also reports `n_months` and `per_month` (net $ and trades per month,
+a flat no-pick month counted as a month), and the drop is taken on the per-month net (in $ and as a %
+of the in-sample month) and on Sharpe, which is already a rate. `stitched.uncovered` lists the tail months
+the chain never tests out-of-sample. The OOS trades travel with the result for the List of trades tab.
 
 Execution (the per-month cache). Each cell runs ONCE over the whole window as an ordinary
 heat-map cell (grid.GridManager: the same `runner exec` child, the machine-wide 2-slot cap, FCFS tickets,
@@ -75,6 +79,13 @@ MAX_MIN_TRADES = 1000
 STAT_KEYS = ("net_profit", "trades", "win_rate", "profit_factor", "sharpe", "max_drawdown", "avg_trade", "t_stat",
              "skipped_by_error")
 TIE_BREAK = "best metric (equal to 6 decimals = a tie) → more trades that month → lowest cell index"
+
+
+def ratio(v) -> int:
+    """A walk-forward ratio's OOS side: exactly the int 1, 2 or 3 (2.0 and True are not ratios)."""
+    if type(v) is not int or v not in RATIOS:
+        raise ValueError(f"test_months: one of {', '.join(str(x) for x in RATIOS)} (the 1:N walk-forward ratio)")
+    return v
 
 
 def stitch_rule(test_months: int = TEST_MONTHS) -> str:
@@ -229,6 +240,14 @@ def compute(cells: list[dict], months: list[str], *, trades_of, metric: str, min
     counts = Counter(p for p in picks if p is not None)
     top = min(counts.items(), key=lambda kv: (-kv[1], kv[0])) if counts else None
     oos, ins = _stats(tr0, sk0, capital), _stats(tri, ski, capital)
+
+    def per_month(stats: dict, n: int) -> dict | None:
+        return None if not n else {"net_profit": round((stats["net_profit"] or 0.0) / n, 2),
+                                   "trades": round((stats["trades"] or 0) / n, 4)}
+
+    pm_oos, pm_is = per_month(oos, len(covered0)), per_month(ins, len(coveredi))
+    d_pm = None if pm_oos is None or pm_is is None else round(pm_oos["net_profit"] - pm_is["net_profit"], 2)
+    tested = set(covered0)
     return {
         "scheme": {"select_months": SELECT_MONTHS, "test_months": test_months, "step_months": STEP_MONTHS,
                    "ratio": f"1:{test_months}",
@@ -238,9 +257,14 @@ def compute(cells: list[dict], months: list[str], *, trades_of, metric: str, min
         "n_cells": len(cells), "n_steps": len(st), "looks": len(cells) * len(st),
         "steps": rows,
         "stitched": {"stats": oos, "equity": report.equity(trades_ns), "trades": report.to_ms(trades_ns),
-                     "months": covered0, "legs": chain(len(st), 0, test_months)},
-        "stitched_is": {"stats": ins, "months": coveredi},
-        "drop": {"net_profit": round((oos["net_profit"] or 0.0) - (ins["net_profit"] or 0.0), 2),
+                     "months": covered0, "legs": chain(len(st), 0, test_months),
+                     "n_months": len(covered0), "per_month": pm_oos,
+                     "uncovered": [m for m in months[SELECT_MONTHS:] if m not in tested] if st else []},
+        "stitched_is": {"stats": ins, "months": coveredi, "n_months": len(coveredi), "per_month": pm_is},
+        # the drop is PER MONTH: the two sides' totals span different month counts (review I2)
+        "drop": {"net_profit_per_month": d_pm,
+                 "pct": None if d_pm is None or not pm_is["net_profit"]
+                 else round(d_pm / abs(pm_is["net_profit"]) * 100, 2),
                  "sharpe": None if oos["sharpe"] is None or ins["sharpe"] is None
                  else round(oos["sharpe"] - ins["sharpe"], 4)},
         "phases": phases,
@@ -255,7 +279,7 @@ def scheme(start: str | None = None, end: str | None = None, test_months: int = 
     """What the page needs before a job exists (review M5: the step count comes from here, not a
     client constant) -- for the ratio and window the picker currently shows. A window too short
     for one full cycle reports 0 steps rather than failing: the page says so in its own words."""
-    n = test_months if test_months in RATIOS else TEST_MONTHS
+    n = ratio(test_months)                       # an invalid ratio is a 400, never silently 1:3 (review M4)
     s = dt.date.fromisoformat(start) if start else RESEARCH_START
     e = dt.date.fromisoformat(end) if end else RESEARCH_END
     st = steps(month_list(s, e), n)
@@ -284,9 +308,10 @@ def validate_wf(body) -> dict:
     if not isinstance(body, dict):
         raise ValueError("the body is a JSON object")
     b = dict(body)
-    test_months = b.pop("test_months", TEST_MONTHS)
-    if isinstance(test_months, bool) or test_months not in RATIOS:
-        raise ValueError(f"test_months: one of {', '.join(str(x) for x in RATIOS)} (the 1:N walk-forward ratio)")
+    test_months = ratio(b.pop("test_months", TEST_MONTHS))
+    if isinstance(b.get("range"), dict) and b["range"].get("kind") == "is_months":
+        raise ValueError("a walk-forward steps whole calendar months, so it cannot run on IS months only "
+                         "(Jan/Apr/Jul/Oct): pick a continuous window")
     metric = b.pop("metric", DEFAULT_METRIC)
     if not isinstance(metric, str) or metric not in METRICS:
         raise ValueError(f"metric: one of {', '.join(METRICS)}")

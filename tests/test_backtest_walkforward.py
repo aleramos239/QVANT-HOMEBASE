@@ -221,7 +221,14 @@ def test_compute_at_each_ratio_reports_both_sides_and_the_drop():
                               for t in tr[r["steps"][k]["cell"]] if t["date"][:7] == r["steps"][k]["select"]],
                              50_000.0, [])
         assert r["stitched_is"]["stats"]["net_profit"] == want["net_profit"]
-        assert r["drop"]["net_profit"] == round(r["stitched"]["stats"]["net_profit"] - r["stitched_is"]["stats"]["net_profit"], 2)
+        # the two sides span different month counts (1 per leg vs N per leg): compare per month
+        oos_n, is_n = r["stitched"]["n_months"], r["stitched_is"]["n_months"]
+        assert oos_n == len(r["stitched"]["months"]) and is_n == len(r["stitched_is"]["months"])
+        assert r["stitched"]["per_month"]["net_profit"] == round(r["stitched"]["stats"]["net_profit"] / oos_n, 2)
+        assert r["stitched_is"]["per_month"]["net_profit"] == round(r["stitched_is"]["stats"]["net_profit"] / is_n, 2)
+        assert r["drop"]["net_profit_per_month"] == round(
+            r["stitched"]["per_month"]["net_profit"] - r["stitched_is"]["per_month"]["net_profit"], 2)
+        assert "net_profit" not in r["drop"]          # a raw-total "drop" across unequal spans is never reported
         # the out-of-sample trades travel with the result: the List of trades tab reads them
         assert len(r["stitched"]["trades"]) == r["stitched"]["stats"]["trades"]
         assert all("entry_ms" in t and "entry_ns" not in t for t in r["stitched"]["trades"])
@@ -229,6 +236,34 @@ def test_compute_at_each_ratio_reports_both_sides_and_the_drop():
     # 1:1 holds January's pick for February alone, then re-selects (cell 1 wins February, −20 in
     # March); 1:3 holds January's pick across Feb-Apr. Different schemes, different chains.
     assert got == {1: -520, 2: -490, 3: -480}
+
+
+def test_at_1to3_an_oos_earning_a_third_of_is_per_month_reads_minus_67_percent():
+    """Review important 2: at 1:3 the IS side is 1 month per leg and the OOS side 3. An OOS month
+    earning exactly 1/3 of the IS month has the SAME stitched total -- a raw-total drop of $0 would
+    say nothing was lost. Per month, it is -67%."""
+    months = ["2022-01", "2022-02", "2022-03", "2022-04"]
+    tr = trades("2022-01", [60.0] * 5) + trades("2022-02", [20.0] * 5) + trades("2022-03", [20.0] * 5) \
+        + trades("2022-04", [20.0] * 5)
+    cells = [{"i": 0, "params": {"offset_pts": 10.0}, "months": wf.month_stats(tr, [], 50_000.0, months)}]
+    r = wf.compute(cells, months, trades_of=lambda i: (tr, []), metric="net_profit", min_trades=5,
+                   capital=50_000.0, test_months=3)
+    assert r["stitched"]["stats"]["net_profit"] == r["stitched_is"]["stats"]["net_profit"] == 300.0   # equal totals...
+    assert (r["stitched_is"]["n_months"], r["stitched"]["n_months"]) == (1, 3)
+    assert r["stitched_is"]["per_month"] == {"net_profit": 300.0, "trades": 5.0}
+    assert r["stitched"]["per_month"] == {"net_profit": 100.0, "trades": 5.0}
+    assert r["drop"]["net_profit_per_month"] == -200.0                                             # ...not per month
+    assert round(r["drop"]["pct"]) == -67
+
+
+def test_the_months_never_tested_out_of_sample_are_listed():
+    """Review minor 6: when the chain's last leg can't fit, the tail months are never OOS -- say which."""
+    research = wf.month_list(dt.date(2021, 1, 1), dt.date(2024, 12, 31))
+    tr = trades("2021-01", [10.0] * 5)
+    cells = [{"i": 0, "params": {}, "months": wf.month_stats(tr, [], 50_000.0, research)}]
+    got = {n: wf.compute(cells, research, trades_of=lambda i: (tr, []), metric="net_profit", min_trades=5,
+                         capital=50_000.0, test_months=n)["stitched"]["uncovered"] for n in (1, 2, 3)}
+    assert got == {1: [], 2: ["2024-12"], 3: ["2024-11", "2024-12"]}
 
 
 def test_a_step_is_the_single_run_over_its_own_months():
@@ -308,9 +343,16 @@ def test_the_ratio_is_part_of_the_job():
         assert g["walkforward"]["n_steps"] == len(wf.steps(g["walkforward"]["months"], n))
         assert f"1:{n}" in g["walkforward"]["stitch"] or f"{n}-month" in g["walkforward"]["stitch"]
     assert wf.validate_wf(wbody())["walkforward"]["test_months"] == 3        # 1:3 stays the default
-    for bad in (0, 4, 2.5, True, "2"):
+    for bad in (0, 4, 2.5, 2.0, True, "2", None):      # 2.0 is not a ratio either (review minor 3)
         with pytest.raises(ValueError, match="test_months"):
             wf.validate_wf(wbody(test_months=bad))
+
+
+def test_is_months_is_refused_for_a_walkforward():
+    """Review minor 5: the scheme steps CALENDAR months; an IS-months window would select on empty
+    months and score test legs over partly empty windows."""
+    with pytest.raises(ValueError, match="calendar months"):
+        wf.validate_wf(wbody(range={"kind": "is_months"}))
 
 
 def test_the_scheme_route_reports_the_step_count_for_a_ratio_and_a_window():
@@ -322,6 +364,9 @@ def test_the_scheme_route_reports_the_step_count_for_a_ratio_and_a_window():
     assert w["n_steps"] == 17 and w["first_select"] == "2025-01" and w["last_select"] == "2026-05"
     short = wf.scheme(start="2024-01-01", end="2024-02-29", test_months=3)
     assert short["n_steps"] == 0 and short["first_select"] is None
+    for bad in (0, 4, 5, 2.0, True):                   # review minor 4: never silently 1:3
+        with pytest.raises(ValueError, match="test_months"):
+            wf.scheme(test_months=bad)
 
 
 def test_a_malformed_window_is_still_refused():

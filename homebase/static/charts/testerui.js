@@ -1634,6 +1634,8 @@ function renderWfOverview(container, r) {
     container.appendChild(tiles);
   }
   container.appendChild(page.mk('div', 'tst-kv-line', X.wfDrop(r)));
+  const unc = X.wfUncovered(r);
+  if (unc) container.appendChild(page.mk('div', 'tst-kv-line', unc));
   const chartWrap = page.mk('div', 'tst-chart');
   container.appendChild(chartWrap);
   if ((r.stitched.equity.t_ms || []).length) wfChartHandle = miniChart(chartWrap, r.stitched.equity, palette());

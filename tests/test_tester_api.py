@@ -395,4 +395,9 @@ def test_the_walkforward_scheme_comes_from_the_server(tmp_path):
                       params={"start": "2024-01-01", "end": "2024-02-29"}).json()
         assert short["n_steps"] == 0 and short["first_select"] is None
         assert c.get("/api/tester/walkforward-scheme", params={"start": "nope"}).status_code == 400
+        r = c.get("/api/tester/walkforward-scheme", params={"test_months": 5})
+        assert r.status_code == 400 and "test_months" in r.json()["detail"]        # never coerced to 1:3
+        assert c.get("/api/tester/walkforward-scheme", params={"test_months": "2.0"}).status_code in (400, 422)
+        r = c.post("/api/tester/walkforward", json={**WF, "test_months": 2.0})
+        assert r.status_code == 400 and "test_months" in r.json()["detail"]        # a 400, never a 500
         assert c.get("/api/tester/walkforward-scheme", headers=REBIND_HOST).status_code == 403
