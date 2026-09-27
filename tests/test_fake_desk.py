@@ -65,16 +65,18 @@ def test_limit_rests_moves_and_cancels():
 
 
 def test_refusals_carry_the_desks_sentences():
+    # a distinct client_id per call: a real client never reuses one across separate orders, and the desk
+    # (fake and real alike) now treats a repeated (action, client_id) as a retry of the FIRST one (review item 6)
     c = client()
-    assert order(c, qty=11).json()["results"]["sim041"]["error"] == "quantity must be 1-10"
-    r = order(c, type="Stop", price=30890.0).json()["results"]["sim041"]
+    assert order(c, cid="r1", qty=11).json()["results"]["sim041"]["error"] == "quantity must be 1-10"
+    r = order(c, cid="r2", type="Stop", price=30890.0).json()["results"]["sim041"]
     assert r == {"ok": False, "order_id": None, "error": "a buy stop must be above the last price (30,900.25)",
                  "refused": True}
     c.post("/fake/refuse", json={"reason": "NQZ6 on SIM0000041 is locked 09:20-09:35 ET for the nq930 bot"})
-    assert "locked" in order(c).json()["results"]["sim041"]["error"]
+    assert "locked" in order(c, cid="r3").json()["results"]["sim041"]["error"]
     c.post("/fake/refuse", json={"reason": None})
     c.post("/fake/enabled", json={"on": False})
-    assert order(c).json()["results"]["sim041"]["error"] == \
+    assert order(c, cid="r4").json()["results"]["sim041"]["error"] == \
         "chart trading is off — switch it on on the desk page"
     assert c.post("/api/trade/order", json={"client_id": "c"}, headers=H).status_code == 400   # the desk's parser
 
@@ -88,6 +90,42 @@ def test_flatten_and_reverse():
     c.post("/api/trade/flatten", json={"client_id": "f", "accounts": ["sim041"], "root": "NQ", "quotes": Q},
            headers=H)
     assert acct(c)["positions"] == []
+
+
+def test_fills_are_stamped_from_the_quotes_ts_ms_not_wall_clock_time():
+    """2026-09-27 review of Tasks 5-6: a fill used to be stamped with real wall-clock time even under
+    --replay, landing outside every loaded bar's range on a replay chart. A Market order's quote already
+    carries `ts_ms`; the fill now uses it."""
+    c = client()
+    order(c, qty=1).json()
+    assert acct(c)["fills"][-1]["time"] == "1970-01-01T00:00:00.001Z"   # Q's ts_ms is 1
+    # /fake/fill (no quotes context) takes an optional explicit ts_ms the same way
+    oid = order(c, cid="c2", type="Limit", price=30880.0).json()["results"]["sim041"]["order_id"]
+    c.post("/fake/fill", json={"account": "sim041", "order_id": oid, "ts_ms": 2000})
+    assert acct(c)["fills"][-1]["time"] == "1970-01-01T00:00:02.000Z"
+    # no ts_ms at all: falls back to real wall-clock time (still an ISO string, just not epoch-0-ish)
+    oid = order(c, cid="c3", type="Limit", price=30880.0, quotes={}).json()["results"]["sim041"]["order_id"]
+    c.post("/fake/fill", json={"account": "sim041", "order_id": oid})
+    assert acct(c)["fills"][-1]["time"].startswith("20")   # a real year, not 1970
+
+
+def test_a_retried_client_id_is_idempotent_not_a_second_order():
+    """2026-09-27 review (item 6): the real desk de-duplicates on (action, client_id); the fake one did not,
+    so a retried send (or any client bug that re-sent the same body) quietly placed a second order."""
+    c = client()
+    first = order(c, cid="dup1", qty=2).json()
+    again = order(c, cid="dup1", qty=2).json()
+    assert again == first
+    assert len(acct(c)["fills"]) == 1
+    assert acct(c)["positions"][0]["net"] == 2   # not 4: the retry never re-executed
+    # the same guard applies to modify/cancel/flatten/reverse (all keyed by (action, client_id))
+    oid = order(c, cid="dup2", type="Limit", price=30880.0).json()["results"]["sim041"]["order_id"]
+    m1 = c.post("/api/trade/modify", json={"client_id": "modid", "account": "sim041", "order_id": oid,
+                                            "price": 30870.0}, headers=H).json()
+    m2 = c.post("/api/trade/modify", json={"client_id": "modid", "account": "sim041", "order_id": oid,
+                                            "price": 30860.0}, headers=H).json()
+    assert m1 == m2
+    assert acct(c)["orders"][0]["price"] == 30870.0   # the second modify's price never applied
 
 
 def test_bot_scenarios():

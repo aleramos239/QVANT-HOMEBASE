@@ -58,8 +58,13 @@ SCENARIOS = ("idle", "placed", "live", "done")
 OFF = "chart trading is off — switch it on on the desk page"
 
 
-def now_iso() -> str:
-    return dt.datetime.now(dt.timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+def now_iso(ts_ms: float | int | None = None) -> str:
+    """Wall-clock time, or `ts_ms` (epoch milliseconds) when given -- a fill stamped from a quote's own
+    `ts_ms`, or an explicit `/fake/fill` `ts_ms`, lands on the REPLAY clock instead of real wall-clock time, so
+    it shows up on a replay chart's loaded bars (2026-09-27 review of Task 5-6: fills used to be stamped with
+    real time even in --replay, landing outside every loaded bar's range)."""
+    d = dt.datetime.now(dt.timezone.utc) if ts_ms is None else dt.datetime.fromtimestamp(ts_ms / 1000, dt.timezone.utc)
+    return d.isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
 def sse(event: str, data) -> str:
@@ -77,6 +82,9 @@ class FakeDesk:
                      for aid, label, env in ACCOUNTS}
         self.bot: dict = {"date": None, "strategies": {}}
         self.set_bot("idle", 30900.0)
+        self.seen: dict[tuple[str, str], dict] = {}   # (action, client_id) -> the {"results": ...} already returned
+                                                       # for it (idempotent retries: review item 6, matching
+                                                       # the real desk's (action, client_id) dedup contract)
 
     # ---- views: the desk's own shapes (trading.ChartDesk.account_view / snapshot) ----
     def account_view(self, aid: str) -> dict:
@@ -105,7 +113,7 @@ class FakeDesk:
 
     # ---- book-keeping ----
     def fill(self, aid: str, symbol: str, side: str, qty: int, price: float, order_id: str,
-             owner: str | None = None) -> None:
+             owner: str | None = None, ts_ms: float | int | None = None) -> None:
         a = self.acct[aid]
         p = a["pos"].setdefault(symbol, {"net": 0, "avg": None})
         s = 1 if side == "Buy" else -1
@@ -124,7 +132,7 @@ class FakeDesk:
             avg1 = price                              # flipped: the rest opens at the fill price
         p.update(net=net1, avg=avg1)
         f = {"id": next(self.ids), "order_id": order_id, "symbol": symbol, "side": side, "qty": qty,
-             "price": price, "time": now_iso(), "owner": owner}
+             "price": price, "time": now_iso(ts_ms), "owner": owner}
         a["fills"].append(f)
         self.publish("fill", {"account": aid, "fill": f})
 
@@ -150,12 +158,12 @@ class FakeDesk:
         self.acct[aid]["legs"].pop(oid, None)
         return self.acct[aid]["orders"].pop(oid)
 
-    def fill_order(self, aid: str, oid: str, price=None) -> None:
+    def fill_order(self, aid: str, oid: str, price=None, ts_ms=None) -> None:
         a = self.acct[aid]
         leg = dict(a["legs"].get(oid) or {})
         o = self.drop_order(aid, oid)
         px = float(price) if price is not None else (o["price"] if o["type"] == "Limit" else o["stop_price"])
-        self.fill(aid, o["symbol"], o["side"], o["qty"], px, oid)
+        self.fill(aid, o["symbol"], o["side"], o["qty"], px, oid, ts_ms=ts_ms)
         if leg.get("oco") in a["orders"]:
             self.drop_order(aid, leg["oco"])
         self.brackets(aid, o["symbol"], o["side"], o["qty"], leg)
@@ -179,14 +187,17 @@ class FakeDesk:
 
     def finish(self, action: str, cid: str, results: dict) -> dict:
         out = {"results": results}
+        self.seen[(action, cid)] = out   # review item 6: (action, client_id) retried is idempotent
         self.publish("result", {"client_id": cid, "action": action, **out})
         return out
 
     def order(self, body) -> dict:
         it = parse_order(body)
+        if ("order", it.client_id) in self.seen:
+            return self.seen[("order", it.client_id)]
         symbol = it.root + MONTH
         q = (body.get("quotes") or {}).get(it.root) or {}
-        last = q.get("last")
+        last, ts_ms = q.get("last"), q.get("ts_ms")
         res = {}
         for aid in it.accounts:
             why, px = self.gate(aid), None
@@ -207,7 +218,7 @@ class FakeDesk:
             leg = {"sl": it.sl_price, "tp": it.tp_price}
             if it.type == "Market":
                 oid = str(next(self.ids))
-                self.fill(aid, symbol, it.side, it.qty, float(px), oid)
+                self.fill(aid, symbol, it.side, it.qty, float(px), oid, ts_ms=ts_ms)
                 self.brackets(aid, symbol, it.side, it.qty, leg)
             else:
                 oid = self.rest(aid, symbol, it.side, it.qty, it.type, it.price, it.sl_price, it.tp_price)
@@ -217,6 +228,8 @@ class FakeDesk:
 
     def modify(self, body) -> dict:
         cid, aid, oid, price = parse_modify(body)
+        if ("modify", cid) in self.seen:
+            return self.seen[("modify", cid)]
         why = self.gate(aid)
         o = self.acct[aid]["orders"].get(oid) if why is None else None
         if why is None and o is None:
@@ -229,6 +242,8 @@ class FakeDesk:
 
     def cancel(self, body) -> dict:
         cid, aid, oid = parse_cancel(body)
+        if ("cancel", cid) in self.seen:
+            return self.seen[("cancel", cid)]
         why = self.gate(aid)
         if why is None and oid not in self.acct[aid]["orders"]:
             why = f"order {oid} is not working on {self.acct[aid]['label']}"
@@ -240,6 +255,8 @@ class FakeDesk:
 
     def _per_symbol(self, action: str, body, fn) -> dict:
         cid, accounts, root = parse_symbol_action(body)
+        if (action, cid) in self.seen:
+            return self.seen[(action, cid)]
         q = (body.get("quotes") or {}).get(root) or {}
         res = {}
         for aid in accounts:
@@ -247,29 +264,29 @@ class FakeDesk:
             if why:
                 res[aid] = self.refused(why)
                 continue
-            fn(aid, root + MONTH, q.get("last"))
+            fn(aid, root + MONTH, q.get("last"), q.get("ts_ms"))
             self.changed(aid)
             res[aid] = self.ok()
         return self.finish(action, cid, res)
 
-    def _cancel_symbol(self, aid, symbol, last) -> None:
+    def _cancel_symbol(self, aid, symbol, last, ts_ms=None) -> None:
         for oid in [k for k, o in self.acct[aid]["orders"].items() if o["symbol"] == symbol and not o["owner"]]:
             self.drop_order(aid, oid)
 
-    def _flatten(self, aid, symbol, last) -> int:
+    def _flatten(self, aid, symbol, last, ts_ms=None) -> int:
         self._cancel_symbol(aid, symbol, last)
         p = self.acct[aid]["pos"].get(symbol)
         net = p["net"] if p else 0
         if net:
             self.fill(aid, symbol, "Sell" if net > 0 else "Buy", abs(net), float(last or p["avg"]),
-                      str(next(self.ids)))
+                      str(next(self.ids)), ts_ms=ts_ms)
         return net
 
-    def _reverse(self, aid, symbol, last) -> None:
-        net = self._flatten(aid, symbol, last)
+    def _reverse(self, aid, symbol, last, ts_ms=None) -> None:
+        net = self._flatten(aid, symbol, last, ts_ms)
         if net:
             px = float(last or self.acct[aid]["fills"][-1]["price"])
-            self.fill(aid, symbol, "Buy" if net < 0 else "Sell", abs(net), px, str(next(self.ids)))
+            self.fill(aid, symbol, "Buy" if net < 0 else "Sell", abs(net), px, str(next(self.ids)), ts_ms=ts_ms)
 
     def cancel_symbol(self, body) -> dict:
         return self._per_symbol("cancel-symbol", body, self._cancel_symbol)
@@ -386,7 +403,9 @@ def create_fake_desk(key: str, desk: FakeDesk | None = None) -> FastAPI:
         aid, oid = str(body.get("account")), str(body.get("order_id"))
         if oid not in desk.acct.get(aid, {}).get("orders", {}):
             raise HTTPException(404, "no such working order")
-        desk.fill_order(aid, oid, body.get("price"))
+        # ts_ms (epoch ms, optional): stamp the fill on a replay's own clock instead of real wall-clock time,
+        # so a manually-triggered fill lands inside the replay's loaded bars (review item 7).
+        desk.fill_order(aid, oid, body.get("price"), body.get("ts_ms"))
         return {"ok": True}
 
     @app.post("/fake/bot")
