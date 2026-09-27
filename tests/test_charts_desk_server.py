@@ -195,3 +195,26 @@ def test_replay_links_to_the_fake_desk_and_sends_it_quotes(tmp_path):
         assert next_of(ws, "quote", limit=2000)["root"] == "NQ"
         assert c.post("/api/desk/order", json={"client_id": "c"}).status_code == 200
     assert "NQ" in posted[-1]["quotes"]
+
+
+def test_the_chart_service_relays_bot_history_and_bot_kill(tmp_path):
+    seen = []
+
+    def handler(req):
+        if req.url.path == "/api/trade/stream":
+            return httpx.Response(200, content=b'event: state\ndata: {"accounts": [], "bot": {}}\n\n',
+                                  headers={"content-type": "text/event-stream"})
+        seen.append((req.method, req.url.path, dict(req.url.params), req.headers.get("x-homebase-key")))
+        if req.method == "GET":
+            return httpx.Response(200, json={"strategy": "nq930", "symbol": "NQ", "runs": []})
+        return httpx.Response(200, json={"ok": True, "results": {}})
+
+    kp = key_file(tmp_path)
+    app = live_app(tmp_path, desk_factory=lambda fan: DeskLink(
+        fan, key_path=kp, transport=httpx.MockTransport(handler)))
+    with TestClient(app, base_url=BASE_URL) as c:
+        assert c.get("/api/desk/bot-history?strategy=nq930&days=9").json()["symbol"] == "NQ"
+        assert c.post("/api/desk/bot-kill", json={"client_id": "k", "strategy": "nq930"},
+                      headers={"origin": "http://localhost:8852"}).json()["ok"] is True
+    assert seen == [("GET", "/api/trade/bot-history", {"strategy": "nq930", "days": "9"}, KEY),
+                    ("POST", "/api/trade/bot-kill", {}, KEY)]

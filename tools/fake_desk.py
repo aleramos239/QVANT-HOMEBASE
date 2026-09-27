@@ -10,6 +10,10 @@ It speaks the desk's /api/trade/* (homebase/desk_api.py + trading.py):
     heartbeat every 15 s;
   * POST order / modify / cancel / cancel-symbol / flatten / reverse, answering
     {"results": {account: {ok, order_id, error[, refused]}}}.
+  * GET bot-history?strategy=nq930&days=N: past runs built by the desk's own homebase.bothistory from a
+    SEEDED journal (a few weekdays before today: TP, SL, skipped, a whole-day gate skip, no fill, refused).
+  * POST bot-kill {client_id, strategy}: the NQ 9:30 bot only -- its own orders cancelled, its own position
+    flattened (at the body's quote, else its entry), `killed` shown on the bot view; idempotent per client_id.
 Bodies go through the desk's own parsers (homebase.trading.parse_*), so a malformed body gets
 the same 400. Everything lives in memory: nothing is journaled, and no broker code is imported.
 
@@ -45,11 +49,13 @@ import json
 import os
 import secrets
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
+from homebase import bothistory
 from homebase.contracts import point_value, round_to_tick
 from homebase.paths import state_dir
 from homebase.trading import (Refused, check_prices, parse_cancel, parse_modify, parse_order,
@@ -61,6 +67,7 @@ KEY_FILE = "fake-desk.key"
 MAX_ORDER, MAX_POSITION = 10, 20
 HEARTBEAT_S = 15.0
 MONTH = "Z6"
+ET = ZoneInfo("America/New_York")
 ACCOUNTS = (("sim041", "SIM0000041", "demo"), ("sim047", "SIM0000047", "demo"),
             ("live099", "FAKELIVE099", "live"))
 SCENARIOS = ("idle", "placed", "live", "done")
@@ -91,6 +98,7 @@ class FakeDesk:
                      for aid, label, env in ACCOUNTS}
         self.bot: dict = {"date": None, "strategies": {}}
         self.set_bot("idle", 30900.0)
+        self.journal: list[dict] = seed_journal(dt.date.today())
         self.seen: dict[tuple[str, str], dict] = {}   # (action, client_id) -> the {"results": ...} already returned
                                                        # for it (idempotent retries: review item 6, matching
                                                        # the real desk's (action, client_id) dedup contract)
@@ -379,7 +387,110 @@ class FakeDesk:
         self.bot = {"date": dt.date.today().isoformat(), "strategies": {"nq930": {
             "symbol": "NQ", "kind": "straddle", "enabled": True, "shadow": False,
             "offset_pts": 10.0, "sl_pts": 5.0, "tp_pts": 15.0, "book": {"sim041": 1},
-            "timer": timer, "day_status": day, "accounts": {"sim041": st}}}}
+            "timer": timer, "day_status": day, "killed": False, "accounts": {"sim041": st}}}}
+
+    # ---- the bots: history + the per-strategy kill (trading.ChartDesk.bot_history / bot_kill) ----
+    def _strategy(self, name) -> str:
+        if not isinstance(name, str) or name not in self.bot["strategies"]:
+            raise ValueError(f"unknown strategy {name!r}")
+        return name
+
+    def bot_history(self, strategy, days=None) -> dict:
+        name, n = self._strategy(strategy), bothistory.parse_days(days)
+        sym = self.bot["strategies"][name]["symbol"]
+        return {"strategy": name, "symbol": sym,
+                "runs": bothistory.runs(self.journal, name, symbol=sym,
+                                        today=dt.date.today().isoformat(), days=n)}
+
+    def bot_kill(self, body) -> dict:
+        if not isinstance(body, dict):
+            raise ValueError("the body is a JSON object")
+        cid = body.get("client_id")
+        if not isinstance(cid, str) or not 1 <= len(cid) <= 64:
+            raise ValueError("client_id: a string of 1-64 characters")
+        name = self._strategy(body.get("strategy"))
+        if ("bot-kill", cid) in self.seen:
+            return self.seen[("bot-kill", cid)]
+        s = self.bot["strategies"][name]
+        s["killed"] = True
+        q = (body.get("quotes") or {}).get(s["symbol"]) or {}
+        results = {}
+        for aid, st in s["accounts"].items():
+            if st["status"] == "idle":
+                results[aid] = {"ok": True, "note": "the bot has not acted on this account today — nothing to do"}
+                continue
+            acts = []
+            if st["status"] == "live":
+                px = float(q.get("last") or st["entry_fill"])
+                out = "Sell" if st["entry_side"] == "Buy" else "Buy"
+                self.fill(aid, "NQZ6", out, st["entry_qty"], px, str(next(self.ids)), owner=name,
+                          ts_ms=q.get("ts_ms"))
+                acts.append(f"market {out} {st['entry_qty']}: ok")
+                sign = 1 if st["entry_side"] == "Buy" else -1
+                st.update(exit_fill=px, pnl=round(sign * (px - st["entry_fill"]) * 20 * st["entry_qty"], 2))
+            for oid in [k for k, o in self.acct[aid]["orders"].items() if o["owner"] == name]:
+                self.drop_order(aid, oid)
+                acts.append(f"cancel {oid}: ok")
+            if st["status"] in ("placed", "live"):
+                st.update(status="done", exit_reason="killed")
+            results[aid] = {"ok": True, "acted": True, "actions": acts}
+            self.changed(aid)
+        if s["day_status"] in ("placed", "live"):
+            s["day_status"] = "done"
+        self.journal.append({"ts": dt.datetime.now().timestamp(),
+                             "et": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
+                             "event": "strategy_killed", "strategy": name, "results": results})
+        self.publish("bot", self.bot)
+        out = {"ok": all(r["ok"] for r in results.values()), "results": results}
+        self.seen[("bot-kill", cid)] = out
+        self.publish("result", {"client_id": cid, "action": "bot-kill", **out})
+        return out
+
+
+def seed_journal(today: dt.date) -> list[dict]:
+    """A few past NQ 9:30 runs on sim041, in the desk journal's own event shapes, on the weekdays
+    before `today`: TP, SL, a manual-position skip, a whole-day gate skip, no fill, a refused alert."""
+    days, d = [], today
+    while len(days) < 8:
+        d -= dt.timedelta(days=1)
+        if d.weekday() < 5:
+            days.append(d)
+    days.reverse()
+
+    def rec(day, hms, event, **data):
+        t = dt.datetime.combine(day, dt.time.fromisoformat(hms), tzinfo=ET)
+        return {"ts": t.timestamp(), "et": t.isoformat(timespec="seconds"), "event": event,
+                "strategy": "nq930", **data}
+
+    out = []
+    for i, day in enumerate(days):
+        a = 30700.0 + 25 * i                        # the anchor drifts a little day to day
+        up, dn = a + 10, a - 10
+        kind = ("tp", "sl", "skip", "tp", "chop", "no_fill", "refused", "sl")[i]
+        if kind == "skip":
+            out.append(rec(day, "09:28:31", "timer_skipped", account="sim041", reason="manual_position",
+                           net=1, orders=[]))
+            continue
+        if kind == "chop":
+            out.append(rec(day, "09:30:00", "timer_skipped", reason="gate_chop", adx=14.2))
+            continue
+        if kind == "refused":
+            out.append(rec(day, "09:30:00", "alert_refused", reason="bad_spread", upper=up, lower=dn))
+            continue
+        out.append(rec(day, "09:30:00", "placed", account="sim041", source="timer", upper=up, lower=dn,
+                       qty=1, upper_id=f"u{i}", lower_id=f"l{i}", place_ms=88))
+        if kind == "no_fill":
+            out.append(rec(day, "12:55:00", "cancelled_unfilled", account="sim041"))
+            continue
+        side = "Buy" if i % 2 == 0 else "Sell"
+        fill = (up + 0.25) if side == "Buy" else (dn - 0.25)
+        sign = 1 if side == "Buy" else -1
+        exit_px = fill + sign * 15 if kind == "tp" else fill - sign * 5
+        out.append(rec(day, "09:30:01", "entry_fill", account="sim041", side=side, fill=fill,
+                       anchor=up if side == "Buy" else dn, qty_filled=1))
+        out.append(rec(day, "09:44:10" if kind == "tp" else "09:33:20", "exit_fill", account="sim041",
+                       reason=kind, fill=exit_px, pnl=round(sign * (exit_px - fill) * 20, 2)))
+    return out
 
 
 async def stream(desk: FakeDesk, heartbeat_s: float = HEARTBEAT_S):
@@ -416,6 +527,14 @@ def create_fake_desk(key: str, desk: FakeDesk | None = None) -> FastAPI:
         check(request)
         return desk.snapshot()
 
+    @app.get("/api/trade/bot-history")
+    async def trade_bot_history(request: Request):
+        check(request)
+        try:
+            return desk.bot_history(request.query_params.get("strategy"), request.query_params.get("days"))
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+
     @app.get("/api/trade/stream")
     async def trade_stream(request: Request):
         check(request)
@@ -437,7 +556,7 @@ def create_fake_desk(key: str, desk: FakeDesk | None = None) -> FastAPI:
 
     for name, fn in (("order", desk.order), ("modify", desk.modify), ("cancel", desk.cancel),
                      ("cancel-symbol", desk.cancel_symbol), ("flatten", desk.flatten),
-                     ("reverse", desk.reverse)):
+                     ("reverse", desk.reverse), ("bot-kill", desk.bot_kill)):
         app.add_api_route(f"/api/trade/{name}", route(fn), methods=["POST"], name=f"trade_{name}")
 
     @app.post("/fake/enabled")
