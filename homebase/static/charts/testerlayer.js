@@ -56,8 +56,48 @@ function plotPoints(points, bars) {
   return [...byTt.entries()].sort((a, b) => a[0] - b[0]).map(([time, value]) => ({ time, value }));
 }
 
+/* ---- rule geometry (2026-09-27): a run records every level the strategy PLACED, not only the fills, so
+   a session reads at a glance. Style comes from the record's ROLE (anchor | entry | sl | tp | level), never
+   from parsing its name -- except the side of an entry, which only the name carries ("Long entry +5"). A
+   "(planned)" bracket (the one the trigger sized, before the engine moved it to the fill) and a
+   "(not filled)" leg are the same colour as their live counterpart, dimmed and more finely dashed. */
+
+const LABEL_MIN_PX = 44;         // a session narrower than this draws its lines but no text
+const LABEL_ROW_H = 13;          // px between two stacked labels
+const DIMMED = /\((?:planned|not filled)\)/;
+const LIVE_DASH = [4, 3], DIM_DASH = [1, 5], LEVEL_DASH = [1, 3];
+
+function hlineStyle(item, P) {
+  const name = (item && item.name) || '', role = (item && item.role) || 'level';
+  const color = role === 'entry' ? (/^short/i.test(name) ? P.down : P.accent)
+    : role === 'sl' ? P.down
+      : role === 'tp' ? P.up : P.text2;
+  const dim = DIMMED.test(name);
+  const dash = role === 'anchor' ? [] : dim ? DIM_DASH : role === 'level' ? LEVEL_DASH : LIVE_DASH;
+  return { color, dash, alpha: dim ? 0.45 : 1 };
+}
+
+const hlinePrice = (v) => Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 });
+function hlineLabel(item) { return `${item.name} \u00b7 ${hlinePrice(item.price)}`; }
+function hlineTip(item) { return `${hlineLabel(item)}\n${item.date}`; }
+
+/* Labels for levels that sit close together, pushed apart into rows of `rowH` px inside [top, bottom]:
+   sorted by y, each one moved down to clear the one above, then the whole stack pushed back up if it ran
+   off the bottom. Pure -- a new array, the input rows untouched. */
+function stackLabels(rows, rowH, top, bottom) {
+  const out = [...(rows || [])].sort((a, b) => a.y - b.y).map((r) => ({ ...r }));
+  let floor = top;
+  for (const r of out) { r.y = Math.max(r.y, floor); floor = r.y + rowH; }
+  let ceil = bottom;
+  for (let i = out.length - 1; i >= 0; i--) { out[i].y = Math.min(out[i].y, ceil); ceil = out[i].y - rowH; }
+  return out;
+}
+
+function labelsFit(x0, x1) { return x0 != null && x1 != null && x1 - x0 >= LABEL_MIN_PX; }
+
 /* ================================================================== browser half ================================================================== */
 
+const PLOT_PANE_H = 90;   // px, = cell.js PANE_H: the gate/indicator sub-pane
 const PLOT_FONT = '11px -apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif';
 
 function seg(ctx, x0, x1, y, color, dashed) {
@@ -85,24 +125,45 @@ function drawTrade(ctx, t, P, xOf, yOf) {
   ctx.setLineDash([]);
 }
 
-/* One hlines item ({name, price, date}): a dotted segment across the bars whose b.s === item.date (searched
-   only within [from, to], the visible bar window), its name as an 11px label at the left end. */
-function drawHline(ctx, ts, bars, item, P, yOf, from, to) {
-  const span = sessionSpan(bars, item.date, from, to);
-  if (!span) return;
-  const x0 = ts.logicalToCoordinate(span[0]), x1 = ts.logicalToCoordinate(span[1] + 1), y = yOf(item.price);
-  if (x0 == null || x1 == null || y == null) return;
-  const yy = Math.round(y) + 0.5;
-  ctx.strokeStyle = P.text2;
-  ctx.lineWidth = 1;
-  ctx.setLineDash([1, 3]);
-  ctx.beginPath(); ctx.moveTo(x0, yy); ctx.lineTo(x1, yy); ctx.stroke();
-  ctx.setLineDash([]);
+/* Every hlines item ({name, price, date, role}) whose session is inside the visible bar window [from, to]:
+   one segment per level across its own session, styled by role, then the labels at the right-hand end --
+   stacked per session so close levels never overwrite each other, and dropped entirely on a session too
+   narrow to carry text (a zoomed-out year must not be a wall of names). Returns the segments it drew, for
+   the overlay's hover.  */
+function drawHlines(ctx, hlines, bars, P, ts, yOf, from, to, paneH) {
+  const hits = [], byDate = new Map();
+  for (const item of hlines) {
+    const span = sessionSpan(bars, item.date, from, to);
+    if (!span) continue;
+    const x0 = ts.logicalToCoordinate(span[0]), x1 = ts.logicalToCoordinate(span[1] + 1), y = yOf(item.price);
+    if (x0 == null || x1 == null || y == null) continue;
+    const st = hlineStyle(item, P);
+    ctx.save();
+    ctx.globalAlpha = st.alpha;
+    ctx.strokeStyle = st.color;
+    ctx.lineWidth = 1;
+    ctx.setLineDash(st.dash);
+    const yy = Math.round(y) + 0.5;
+    ctx.beginPath(); ctx.moveTo(x0, yy); ctx.lineTo(x1, yy); ctx.stroke();
+    ctx.restore();
+    hits.push({ x0, x1, y, tip: hlineTip(item) });
+    if (!labelsFit(x0, x1)) continue;
+    if (!byDate.has(item.date)) byDate.set(item.date, []);
+    byDate.get(item.date).push({ y, x1, item, st });
+  }
   ctx.font = PLOT_FONT;
-  ctx.fillStyle = P.text2;
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'alphabetic';
-  ctx.fillText(item.name, x0 + 3, yy - 3);
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  for (const rows of byDate.values()) {
+    for (const r of stackLabels(rows, LABEL_ROW_H, LABEL_ROW_H / 2, Math.max(LABEL_ROW_H / 2, paneH - LABEL_ROW_H / 2))) {
+      ctx.save();
+      ctx.globalAlpha = r.st.alpha;
+      ctx.fillStyle = r.st.color;
+      ctx.fillText(hlineLabel(r.item), r.x1 - 4, r.y);
+      ctx.restore();
+    }
+  }
+  return hits;
 }
 
 /* A series-primitive on cell.candles (the plugin shape Lightweight Charts wants: attached/detached,
@@ -112,6 +173,7 @@ class TesterMarks {
   constructor(cell) {
     this.cell = cell;
     this.chart = null; this.series = null; this.requestUpdate = null;
+    this.hits = [];                // the level segments last drawn, for the overlay's hover
     this._views = [{ zOrder: () => 'top', renderer: () => ({ draw: (t) => this.draw(t) }) }];
   }
   attached({ chart, series, requestUpdate }) { this.chart = chart; this.series = series; this.requestUpdate = requestUpdate; }
@@ -121,47 +183,83 @@ class TesterMarks {
   redraw() { if (this.requestUpdate) this.requestUpdate(); }
 
   draw(target) {
+    this.hits = [];
     if (!this.chart || !this.series) return;
     const U = window.HBTesterUI, b = U.bundle, cell = this.cell;
-    if (!b || !cell.shown || cell.shown.root !== b.run.strategy.root || U.hidden) return;
+    if (!b || !cell.shown || cell.shown.root !== b.run.strategy.root) return;
     const P = cell.P, bars = cell.bars, ts = this.chart.timeScale();
     const bctx = { bars, isTime: cell.isTime(), barMs: cell.barMs(), coord: (i) => ts.logicalToCoordinate(i) };
     const xOf = (ms) => D.timeToX(ms, bctx);
     const yOf = (price) => this.series.priceToCoordinate(price);
-    const sel = U.selected, trade = sel != null ? b.trades[sel] : null;
-    const hlines = (b.plots && b.plots.hlines) || [];
+    const sel = U.selected, trade = U.hidden || sel == null ? null : b.trades[sel];
+    const hlines = U.rules ? ((b.plots && b.plots.hlines) || []) : [];
     let from = 0, to = bars.length - 1;
     if (hlines.length) {
       const vr = ts.getVisibleLogicalRange();
       if (vr) { from = Math.max(0, Math.floor(vr.from)); to = Math.min(bars.length - 1, Math.ceil(vr.to)); }
     }
-    target.useMediaCoordinateSpace(({ context: ctx }) => {
+    target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
       if (trade) drawTrade(ctx, trade, P, xOf, yOf);
-      for (const item of hlines) drawHline(ctx, ts, bars, item, P, yOf, from, to);
+      if (hlines.length) this.hits = drawHlines(ctx, hlines, bars, P, ts, yOf, from, to, mediaSize.height);
     });
   }
 }
 
-/* One overlay per chart. Active when HBTesterUI.bundle exists, this cell shows that bundle's root, and
-   trades are not hidden. */
+/* One overlay per chart. It shows a run when HBTesterUI.bundle exists and this cell shows that bundle's
+   root; within that, the two sub-tab-bar ticks are independent -- "Hide trades" silences the markers and
+   the selected trade's segments, "Rules" silences the recorded geometry (the levels and the series plots).
+   A series plot draws in its OWN sub-pane below the candles, never over them. */
 class Overlay {
   constructor(cell) {
     this.cell = cell;
     this.dead = false;
     this.plotSeries = new Map();   // plot name -> LineSeries
     this.plotsBundle = null;       // the bundle those series were built for (null: none built)
+    this.plotPane = null;          // the sub-pane index those series live in
     this.bar0 = null;              // bars[0].ms as of the last recompute
     this.lastBundle = undefined;
     this.lastHidden = undefined;
+    this.lastRules = undefined;
     this.marks = new TesterMarks(cell);
     cell.candles.attachPrimitive(this.marks);
+    this.layer = document.createElement('div');
+    this.layer.className = 'hb-tester-layer';
+    this.tip = document.createElement('div');
+    this.tip.className = 'ev-tip hb-tester-tip';
+    this.tip.hidden = true;
+    this.layer.appendChild(this.tip);
+    cell.el.appendChild(this.layer);
+    this.onMove = (p) => this.hoverTip(p);
+    if (cell.chart) cell.chart.subscribeCrosshairMove(this.onMove);
     this.unsub = window.HBTesterUI.on(() => this.onNotify());
     this.onNotify();
   }
 
-  active() {
-    const U = window.HBTesterUI, b = U.bundle, cell = this.cell;
-    return !!(b && cell.shown && cell.shown.root === b.run.strategy.root && !U.hidden);
+  /* This cell is showing the loaded run's instrument. */
+  shows() {
+    const b = window.HBTesterUI.bundle, cell = this.cell;
+    return !!(b && cell.shown && cell.shown.root === b.run.strategy.root);
+  }
+
+  active() { return this.shows() && !window.HBTesterUI.hidden; }
+
+  /* The level under the mouse (within 4 px of its segment, inside its own session's span): its name,
+     price and session date. Mirrors newsui.js's marker tooltip. */
+  hoverTip(p) {
+    if (this.dead || !this.cell.chart || !p || !p.point || !this.marks.hits.length) { this.tip.hidden = true; return; }
+    const { x, y } = p.point;
+    let best = null, bestD = 5;
+    for (const hit of this.marks.hits) {
+      if (x < hit.x0 || x > hit.x1) continue;
+      const d = Math.abs(y - hit.y);
+      if (d < bestD) { bestD = d; best = hit; }
+    }
+    if (!best) { this.tip.hidden = true; return; }
+    this.tip.textContent = best.tip;
+    this.tip.hidden = false;
+    const w = this.layer.clientWidth, tw = this.tip.offsetWidth;
+    this.tip.style.left = `${Math.max(4, Math.min(w - tw - 4, x + 12))}px`;
+    this.tip.style.top = `${Math.max(4, y - 34)}px`;
   }
 
   /* HBTesterUI.on() fires for a bundle load, a Recent-runs load, a strategy switch, a trade selection AND a
@@ -170,9 +268,9 @@ class Overlay {
      redrawn, since it reads HBTesterUI.selected live at draw time. */
   onNotify() {
     if (this.dead || !this.cell.chart) return;
-    const U = window.HBTesterUI, b = U.bundle, hidden = U.hidden;
-    if (b !== this.lastBundle || hidden !== this.lastHidden) {
-      this.lastBundle = b; this.lastHidden = hidden;
+    const U = window.HBTesterUI, b = U.bundle, hidden = U.hidden, rules = U.rules;
+    if (b !== this.lastBundle || hidden !== this.lastHidden || rules !== this.lastRules) {
+      this.lastBundle = b; this.lastHidden = hidden; this.lastRules = rules;
       this.recompute(b);
     }
     this.marks.redraw();
@@ -182,7 +280,7 @@ class Overlay {
      Recomputed only when the oldest loaded bar actually moved (older history came in) -- a live update at the
      newest bar changes nothing a loaded-run's trades/plots would newly qualify for. */
   onBars() {
-    if (this.dead || !this.cell.chart || !this.active()) return;
+    if (this.dead || !this.cell.chart || !this.shows()) return;
     const bars = this.cell.bars, bar0 = bars.length ? bars[0].ms : null;
     if (bar0 === this.bar0) return;
     this.recompute(window.HBTesterUI.bundle);
@@ -190,30 +288,45 @@ class Overlay {
   }
 
   recompute(b) {
-    const active = this.active(), bars = this.cell.bars;
+    const bars = this.cell.bars;
     this.bar0 = bars.length ? bars[0].ms : null;
-    this.cell.setExtraMarkers('tester', active
+    this.cell.setExtraMarkers('tester', this.active()
       ? window.HBTester.tradeMarks(tradesInRange(b.trades, bars, this.cell.barMs()), this.cell.P) : []);
-    this.rebuildPlots(active, b);
+    this.rebuildPlots(this.shows() && window.HBTesterUI.rules, b);
   }
 
-  rebuildPlots(active, b) {
+  /* The run's series plots (an ADX gate, the 10:00 candle's close position) in a sub-pane of their own --
+     they are 0-to-1 gate readings, not prices, and would be meaningless stretched over the candles. */
+  rebuildPlots(on, b) {
     const chart = this.cell.chart;
-    if (!active || b !== this.plotsBundle) {
-      for (const s of this.plotSeries.values()) { if (chart) chart.removeSeries(s); }
-      this.plotSeries.clear();
-      this.plotsBundle = active ? b : null;
-      if (active && chart) {
+    if (!on || b !== this.plotsBundle) {
+      this.dropPlots();
+      this.plotsBundle = on ? b : null;
+      const names = on && chart ? Object.keys((b.plots && b.plots.plots) || {}) : [];
+      if (names.length) {
         const LW = window.LightweightCharts, Cat = window.HBCatalog;
-        Object.keys((b.plots && b.plots.plots) || {}).forEach((name, k) => {
+        this.plotPane = chart.panes().length;
+        names.forEach((name, k) => {
           this.plotSeries.set(name, chart.addSeries(LW.LineSeries, { color: Cat.LINE_COLORS[k % 5], lineWidth: 1,
-            lastValueVisible: false, priceLineVisible: false, autoscaleInfoProvider: () => null }));
+            lastValueVisible: false, priceLineVisible: false }, this.plotPane));
         });
+        const pane = chart.panes()[this.plotPane];
+        if (pane) pane.setStretchFactor(PLOT_PANE_H);
       }
     }
-    if (!active) return;
+    if (!on) return;
     const bars = this.cell.bars;
     for (const [name, series] of this.plotSeries) series.setData(plotPoints((b.plots.plots[name] || []), bars));
+  }
+
+  dropPlots() {
+    const chart = this.cell.chart;
+    const had = this.plotSeries.size, pane = this.plotPane;
+    for (const s of this.plotSeries.values()) { if (chart) chart.removeSeries(s); }
+    this.plotSeries.clear();
+    this.plotPane = null;
+    // the sub-pane we opened is now empty: close it, or every toggle leaves a dead band behind
+    if (had && chart && pane != null && chart.removePane) { try { chart.removePane(pane); } catch (_) { /* already gone */ } }
   }
 
   destroy() {
@@ -221,9 +334,10 @@ class Overlay {
     this.unsub();
     if (this.cell.chart) {
       this.cell.candles.detachPrimitive(this.marks);
-      for (const s of this.plotSeries.values()) this.cell.chart.removeSeries(s);
+      this.cell.chart.unsubscribeCrosshairMove(this.onMove);
     }
-    this.plotSeries.clear();
+    this.dropPlots();
+    this.layer.remove();
     this.cell.setExtraMarkers('tester', []);
   }
 }
@@ -262,7 +376,8 @@ async function jump(i) {
   cell.focusRange(t.entry_ms, t.exit_ms);
 }
 
-const api = { overlay, jump, tradesInRange, sessionSpan, plotPoints };
+const api = { overlay, jump, tradesInRange, sessionSpan, plotPoints,
+  hlineStyle, hlineLabel, hlineTip, stackLabels, labelsFit, LABEL_MIN_PX };
 if (typeof window !== 'undefined') window.HBTesterLayer = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

@@ -79,15 +79,16 @@ function loadPropRules() {
 }
 function schemaFor(id) { return (strategiesList || []).find((s) => s.id === id) || (strategiesList || [])[0] || null; }
 
-/* ---- per-viewer persisted form ({strategy, forms: {id: form}} in localStorage hb_tester) ---- */
+/* ---- per-viewer persisted form ({strategy, forms: {id: form}, rules} in localStorage hb_tester) ---- */
 const STORE_KEY = 'hb_tester';
-let store = { strategy: null, forms: {}, heat: {}, wf: {} };
+let store = { strategy: null, forms: {}, heat: {}, wf: {}, rules: true };
 function loadStore() {
   const obj = (x) => (x && typeof x === 'object' ? x : {});
-  const empty = { strategy: null, forms: {}, heat: {}, wf: {} };
+  const empty = { strategy: null, forms: {}, heat: {}, wf: {}, rules: true };
   try {
     const v = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
-    return (v && typeof v === 'object') ? { strategy: v.strategy || null, forms: obj(v.forms), heat: obj(v.heat), wf: obj(v.wf) } : empty;
+    return (v && typeof v === 'object') ? { strategy: v.strategy || null, forms: obj(v.forms), heat: obj(v.heat),
+      wf: obj(v.wf), rules: v.rules !== false } : empty;
   } catch (_) { return empty; }
 }
 function saveStore() {
@@ -107,6 +108,7 @@ let runStatus = null;      // the last polled status, or null (no run in flight 
 let pollToken = 0;
 let innerTab = 'overview';
 let hidden = false;
+let rules = true;          // the "Rules" tick: the strategy's own levels + gate plots on the chart
 let selectedTrade = null;
 let sortCol = 'n', sortDir = 1;
 let visibleTradeRows = TRADE_CHUNK;
@@ -819,6 +821,15 @@ function refreshTabsBar() {
   cb.onchange = () => { hidden = cb.checked; notify(); };
   lab.append(cb, document.createTextNode('Hide trades'));
   tabsEl.appendChild(lab);
+  // "Rules": the levels the strategy PLACED (both straddle offsets, each leg's bracket, the leg that
+  // never filled) and its gate plots -- independent of the trade markers, and remembered per viewer.
+  const rl = page.mk('label', 'tst-hide'), rb = page.mk('input');
+  rb.type = 'checkbox';
+  rb.checked = rules;
+  rb.onchange = () => { rules = rb.checked; store.rules = rules; saveStore(); notify(); };
+  rl.append(rb, document.createTextNode('Rules'));
+  rl.title = 'Show the levels the strategy placed: entries, stops, targets and gates';
+  tabsEl.appendChild(rl);
 }
 
 function tileEl(t) {
@@ -1680,6 +1691,7 @@ function switchStrategy(id) {
 function buildFull() {
   root.replaceChildren();
   store = loadStore();
+  rules = store.rules !== false;
   strategyId = (strategiesList.some((s) => s.id === store.strategy) ? store.strategy : strategiesList[0].id);
   form = X.restore(store.forms[strategyId], schemaFor(strategyId));
   headerEl = page.mk('div', 'tst-head');
@@ -1721,6 +1733,7 @@ window.HBTesterUI = {
   get bundle() { return bundle; },
   get selected() { return selectedTrade; },
   get hidden() { return hidden; },
+  get rules() { return rules; },
   on(fn) { listeners.add(fn); return () => listeners.delete(fn); },
   select(i) { selectedTrade = i; if (innerTab === 'trades') refreshContent(); notify(); },
 };
