@@ -202,7 +202,9 @@ function linesFor(state, root, prefs) {
       const p = pos.find((x) => x.symbol === o.symbol);
       const exit = !!p && ((p.net > 0 && o.side === 'Sell') || (p.net < 0 && o.side === 'Buy'));
       const kind = !exit ? 'order' : /stop/i.test(o.type) ? 'sl' : /limit/i.test(o.type) ? 'tp' : 'order';
-      add(`${kind}|${o.side}|${o.type}|${at}`, { kind, side: o.side, type: o.type, price: at },
+      const limit = o.type === 'StopLimit' ? o.price ?? null : undefined;   // drawn at the trigger, labelled with both
+      add(`${kind}|${o.side}|${o.type}|${at}${limit !== undefined ? `|${limit}` : ''}`,
+        { kind, side: o.side, type: o.type, price: at, ...(limit !== undefined ? { limit } : {}) },
         { account: a.id, who, qty: Number(o.qty) || 0, order_id: String(o.order_id),
           avg: p ? p.avg_price : null, s: p ? (p.net > 0 ? 1 : -1) : 0, pv: p ? p.point_value ?? null : null });
     }
@@ -225,8 +227,11 @@ function whoText(g) { const w = [...new Set(g.legs.map((l) => l.who))]; return w
 function lineLabel(g) {
   if (g.kind === 'position') return `${g.side === 'Buy' ? 'LONG' : 'SHORT'} ${g.qty}`;
   if (g.kind === 'sl' || g.kind === 'tp') return `${g.kind.toUpperCase()} ${g.qty}`;
+  if (g.type === 'StopLimit') return `${g.side.toUpperCase()} STP LMT ${px(g.limit)} (trig ${px(g.price)}) ${g.qty}`;
   return `${g.side.toUpperCase()} ${abbr(g.type)} ${g.qty}`;
 }
+/* Positions never drag (ruling S11); a Stop Limit can't be moved (the desk refuses it): cancel and place again. */
+function canDrag(g) { return g.kind !== 'position' && g.type !== 'StopLimit'; }
 function lineText(g, last) {
   if (g.kind === 'order') return `${lineLabel(g)} · ${whoText(g)}`;
   return [lineLabel(g), usd(linePnl(g, last)), whoText(g)].filter(Boolean).join(' · ');
@@ -241,6 +246,7 @@ const withPrice = (g, price) => ({ ...g, price });
 
 /* ---- confirm dialog ---- */
 const TYPE_NAMES = { StopLimit: 'Stop Limit' };
+const GTC_WARN = "GTC stays working overnight — if it's still working at 09:28 the 9:30 bot skips this account";
 function orderTitle(b, tick) {
   const what = b.type === 'Market' ? 'at market' : `${TYPE_NAMES[b.type] || b.type} @ ${Cat.fmtPrice(b.price, tick)}`;
   const trig = b.type === 'StopLimit' ? ` (trigger ${Cat.fmtPrice(b.trigger_price, tick)})` : '';
@@ -252,12 +258,15 @@ function confirmOrder(b, state, quote, pv, tick) {
   const risk = b.sl_price != null ? pnl(ref, b.sl_price, s, b.qty, pv) : null;
   const reward = b.tp_price != null ? pnl(ref, b.tp_price, s, b.qty, pv) : null;
   const bits = [];
-  if (b.sl_price != null) bits.push(`SL ${Cat.fmtPrice(b.sl_price, tick)}${risk != null ? ` ${usd(risk)}` : ''}`);
+  // a Stop Limit's risk is measured from its limit: the worst fill (it may fill better, at the trigger)
+  const riskLabel = b.type === 'StopLimit' ? 'risk (worst fill) ' : '';
+  if (b.sl_price != null) bits.push(`SL ${Cat.fmtPrice(b.sl_price, tick)}${risk != null ? ` ${riskLabel}${usd(risk)}` : ''}`);
   if (b.tp_price != null) bits.push(`TP ${Cat.fmtPrice(b.tp_price, tick)}${reward != null ? ` ${usd(reward)}` : ''}`);
   const rr = ref != null && b.sl_price != null && b.tp_price != null ? rrText(Math.abs(ref - b.sl_price), Math.abs(b.tp_price - ref)) : null;
   if (rr) bits.push(`RR ${rr}`);
   return { title: orderTitle(b, tick), accounts: accts.map((a) => ({ id: a.id, label: a.label, env: a.env })),
-    bracket: bits.join(' · '), each: accts.length > 1 ? `each of ${accts.length} accounts` : '', live: accts.some((a) => a.env === 'live') };
+    bracket: bits.join(' · '), each: accts.length > 1 ? `each of ${accts.length} accounts` : '', live: accts.some((a) => a.env === 'live'),
+    warn: b.tif === 'GTC' ? GTC_WARN : '' };
 }
 function actionTitle(kind, { root, line, from, to }, tick) {
   switch (kind) {
@@ -418,7 +427,7 @@ function accountRows(state, quotes) {
 
 const api = { PREFS_KEY, QUOTE_STALE_MS, BOT_NAMES, parsePrefs, prefsText, short, rootOf, orderPrice, abbr, inferType, menuText,
   roundTick, bracket, orderBody, clientId, tradeMode, quoteView, usd, money, pnl, rrText, linesFor, linePnl, lineLabel,
-  lineText, lineColor, withPrice, orderTitle, confirmOrder, actionTitle, resultToasts, fillText, fillMarkers, botName,
+  lineText, lineColor, canDrag, withPrice, orderTitle, confirmOrder, actionTitle, resultToasts, fillText, fillMarkers, botName,
   botsFor, positionRows, orderRows, fillRows, accountRows, etTime, diffRows,
   enterConfirms, resolveConfirmedAccounts, armedTicked, unarmedLiveMessage, freshQuote };
 if (typeof window !== 'undefined') window.HBTrade = api;

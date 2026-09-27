@@ -288,6 +288,69 @@ def test_trade_view_stoplimit_rows_carry_the_limit_and_the_trigger(tmp_path):
     rows = {o["order_id"]: o for o in ad.trade_view()["orders"]}
     assert rows["5"]["type"] == "StopLimit"
     assert (rows["5"]["price"], rows["5"]["trigger"]) == (21002.0, 21000.0)
-    assert "trigger" not in rows["6"]                     # other rows keep their old shape
+    assert "trigger" not in rows["6"]                     # only a StopLimit row carries a trigger
     assert rows["6"] == {"order_id": "6", "symbol": "NQZ6", "side": "Sell", "type": "Limit",
-                         "qty": 1, "price": 21050.0, "stop_price": None, "status": "Working"}
+                         "qty": 1, "price": 21050.0, "stop_price": None, "status": "Working",
+                         "tif": None}
+
+
+def test_trade_view_rows_carry_the_tif_from_the_broker(tmp_path):
+    ad, _ = mkadapter(tmp_path)
+    ad._contracts[7] = "NQZ6"
+    ad._orders = {
+        5: {"id": 5, "accountId": 66121477, "contractId": 7, "action": "Buy", "ordStatus": "Working"},
+        6: {"id": 6, "accountId": 66121477, "contractId": 7, "action": "Buy", "ordStatus": "Working",
+            "timeInForce": "Day"},
+        8: {"id": 8, "accountId": 66121477, "contractId": 7, "action": "Buy", "ordStatus": "Working"}}
+    ad._order_versions = {
+        5: {"orderId": 5, "orderType": "Limit", "orderQty": 1, "price": 1.0, "timeInForce": "GTC"},
+        6: {"orderId": 6, "orderType": "Limit", "orderQty": 1, "price": 2.0},
+        8: {"orderId": 8, "orderType": "Limit", "orderQty": 1, "price": 3.0}}
+    rows = {o["order_id"]: o["tif"] for o in ad.trade_view()["orders"]}
+    assert rows == {"5": "GTC", "6": "Day", "8": None}      # the version first, then the order, else None
+
+
+def _legged():
+    """The base class's legged place_bracket (no native OSO), recording place_order."""
+    from homebase.broker.base import BrokerAdapter, OrderResult
+
+    class Legged(BrokerAdapter):
+        platform = "legged"
+
+        def __init__(self):
+            super().__init__("legged")
+            self.sent = []
+
+        async def connect(self): ...
+        async def close(self): ...
+        async def observe_fills(self, on_fill): ...
+        async def flatten_all(self): return OrderResult(ok=True)
+        async def cancel_all(self): return OrderResult(ok=True)
+        async def get_balance(self): return {}
+        async def get_net_position(self, symbol): return 0
+
+        async def place_order(self, req):
+            self.sent.append(req)
+            return OrderResult(ok=True, order_id=str(len(self.sent)))
+
+    return Legged()
+
+
+@pytest.mark.parametrize("typ,kw", [("Stop", {}), ("StopLimit", {"trigger_price": 100.0})])
+def test_legged_fallback_refuses_bracketed_stop_entries(typ, kw):
+    """Fix round 1 (review Minor 6): the legged fallback rests the SL the moment the entry is PLACED,
+    not when it fills -- for a stop entry that is the wrong side of the market."""
+    ad = _legged()
+    r = run(ad.place_bracket(OrderRequest("NQZ6", "Buy", 1, typ, 101.0, 99.0, 110.0, **kw)))
+    assert not r.ok and r.error == "bracketed stop entries need a broker OSO"
+    assert ad.sent == []
+
+
+def test_legged_fallback_still_legs_market_and_limit_entries():
+    ad = _legged()
+    assert run(ad.place_bracket(OrderRequest("NQZ6", "Buy", 1, "Limit", 101.0, 99.0, 110.0))).ok
+    assert [(r.order_type, r.side) for r in ad.sent] == \
+        [("Limit", "Buy"), ("Stop", "Sell"), ("Limit", "Sell")]
+    ad = _legged()
+    r = run(ad.place_bracket(OrderRequest("NQZ6", "Buy", 1, "Stop", 101.0)))   # no SL/TP: a plain stop
+    assert r.ok and [x.order_type for x in ad.sent] == ["Stop"]

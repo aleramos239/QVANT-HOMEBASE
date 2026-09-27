@@ -169,6 +169,10 @@ class BrokerAdapter(abc.ABC):
         protective order ids and any protective errors ride in ``raw``."""
         if req.stop_price is None and req.tp_price is None:
             return await self.place_order(req)
+        if req.order_type in ("Stop", "StopLimit"):
+            # legging rests the SL the moment the entry is PLACED, not when it
+            # fills: for a stop entry that is the wrong side of the market
+            return OrderResult(ok=False, error="bracketed stop entries need a broker OSO")
         entry = await self.place_order(self._entry_only(req))
         if not entry.ok:
             return entry

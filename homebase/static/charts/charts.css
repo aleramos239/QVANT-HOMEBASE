@@ -359,6 +359,7 @@ a { color: inherit; }
 .cf-body { padding: 4px 20px 8px; }
 .cf-acct { display: flex; align-items: center; justify-content: space-between; height: 28px; }
 .cf-note { padding: 6px 0; font-size: 13px; font-variant-numeric: tabular-nums; }
+.cf-warn { color: var(--warn); }
 .cf-each { padding-bottom: 6px; color: var(--text-2); font-size: 12px; }
 .cf-one { display: flex; align-items: center; gap: 8px; padding: 10px 20px; border-top: 1px solid var(--border); font-size: 13px; }
 .cf-one input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }

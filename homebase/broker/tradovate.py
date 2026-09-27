@@ -707,7 +707,8 @@ class TradovateAdapter(BrokerAdapter):
                 "price": ov.get("price") if ov.get("price") is not None else o.get("price"),
                 "stop_price": (ov.get("stopPrice") if ov.get("stopPrice") is not None
                                else o.get("stopPrice")),
-                "status": o.get("ordStatus")}
+                "status": o.get("ordStatus"),
+                "tif": ov.get("timeInForce") or o.get("timeInForce") or None}
             if row["type"] == "StopLimit":
                 row["trigger"] = row["stop_price"]     # price = the limit, trigger = stopPrice
             orders.append(row)

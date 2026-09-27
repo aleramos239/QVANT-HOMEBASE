@@ -47,7 +47,8 @@ Guards, per account (a refusal is one sentence the page shows as-is):
      trade (a fresh quote from the chart service is required); bracket
      stop/target on the losing/winning side of the entry. A Stop Limit's
      trigger is checked like a stop; its limit sits on the fill-allowing side
-     of the trigger, within 100 ticks, and is the bracket's entry.
+     of the trigger, within 100 ticks; its SL sits beyond the trigger and
+     its TP beyond the limit. A Market order is Day only.
 
 Controller ruling (P2, 2026-09-26): the 09:30:00.000 bot fire runs on this
 same asyncio loop. ChartDesk's periodic view refresh (`run`), its
@@ -233,6 +234,8 @@ def parse_order(body) -> OrderIntent:
     tif = body.get("tif", "Day")
     if tif not in TIFS:
         raise ValueError("tif: Day or GTC")
+    if typ == "Market" and tif != "Day":
+        raise ValueError("a Market order is Day only")
     return OrderIntent(_client_id(body), _accounts(body), _root(body), side, qty, typ, price,
                        _price(body.get("sl_price"), "sl_price"),
                        _price(body.get("tp_price"), "tp_price"), trigger, tif)
@@ -291,8 +294,9 @@ def check_prices(side: str, typ: str, price, sl, tp, contract: str,
     trade, and a bracket whose stop/target sit on the wrong side of the
     entry. A Stop Limit's trigger is checked like a stop; its limit (`price`)
     must be on the fill-allowing side of the trigger (buy: at or above,
-    sell: at or below) and within STOPLIMIT_MAX_TICKS of it; its bracket is
-    measured from the limit. Returns (price, sl, tp, trigger) rounded."""
+    sell: at or below) and within STOPLIMIT_MAX_TICKS of it; its bracket's
+    SL must sit beyond the TRIGGER (it may fill there) and its TP beyond the
+    LIMIT. Returns (price, sl, tp, trigger) rounded."""
     def rnd(p):
         return None if p is None else round_to_tick(contract, p)
 
@@ -325,6 +329,10 @@ def check_prices(side: str, typ: str, price, sl, tp, contract: str,
         if ref is None:
             raise Refused(f"{fresh} — a bracket on a market order needs a fresh price")
         sign = 1 if side == "Buy" else -1
+        if typ == "StopLimit" and sl is not None and not sign * (trigger - sl) > 0:
+            # it may fill at the trigger, not the limit: an SL between the two
+            # would sit on the wrong side of the market right after the fill
+            raise Refused("the stop loss must be beyond the trigger price")
         if sl is not None and not sign * (ref - sl) > 0:
             raise Refused("the stop loss must be on the losing side of the entry")
         if tp is not None and not sign * (tp - ref) > 0:

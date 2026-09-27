@@ -36,6 +36,7 @@ def test_types_and_tifs():
     ({"type": "Market", "tif": "IOC"}, "tif: Day or GTC"),
     ({"type": "Market", "tif": "day"}, "tif: Day or GTC"),
     ({"type": "Trailing"}, "type: Market, Limit, Stop or StopLimit"),
+    ({"type": "Market", "tif": "GTC"}, "a Market order is Day only"),
 ])
 def test_parse_refuses(patch, msg):
     with pytest.raises(ValueError, match=re.escape(msg)):
@@ -95,22 +96,45 @@ def test_trigger_and_limit_are_tick_rounded_and_reach_the_adapter_apart(tmp_path
         ("StopLimit", 102.25, 101.0, None, "GTC", NQC)
 
 
-def test_the_bracket_ref_is_the_limit_price(tmp_path):
-    desk, eng, ads, clock, *_ = mkdesk(tmp_path)
+def test_a_buy_stop_limits_sl_is_beyond_the_trigger_and_its_tp_beyond_the_limit(tmp_path):
+    """Fix round 1 (review Important 1): the entry may fill at the TRIGGER, not the limit, so an SL
+    between trigger and limit would sit above the market right after a fill."""
+    desk, eng, ads, clock, mono, _ = mkdesk(tmp_path)
     q = quote(clock, last=100.0)
-    # trigger 101 / limit 103: an SL at 103.5 is above the LIMIT (the entry) -> refused, although
-    # a TP at 102 is above the trigger it is below the limit -> refused too
-    assert order(desk, price=103.0, trigger_price=101.0, sl_price=103.5, quotes=q)["error"] == \
-        "the stop loss must be on the losing side of the entry"
-    assert order(desk, cid="c2", price=103.0, trigger_price=101.0, tp_price=102.0, quotes=q)["error"] == \
-        "the target must be on the winning side of the entry"
-    r = order(desk, cid="c3", price=103.0, trigger_price=101.0, sl_price=102.0, tp_price=110.0,
+    # trigger 101 / limit 103
+    assert order(desk, price=103.0, trigger_price=101.0, sl_price=102.0, quotes=q)["error"] == \
+        "the stop loss must be beyond the trigger price"            # between trigger and limit
+    assert order(desk, cid="c2", price=103.0, trigger_price=101.0, sl_price=101.0, quotes=q)["error"] == \
+        "the stop loss must be beyond the trigger price"            # at the trigger
+    assert order(desk, cid="c3", price=103.0, trigger_price=101.0, tp_price=102.0, quotes=q)["error"] == \
+        "the target must be on the winning side of the entry"       # above the trigger, below the limit
+    mono.t += 1
+    assert order(desk, cid="c4", price=103.0, trigger_price=101.0, tp_price=103.0, quotes=q)["error"] == \
+        "the target must be on the winning side of the entry"       # at the limit
+    r = order(desk, cid="c5", price=103.0, trigger_price=101.0, sl_price=100.75, tp_price=110.0,
               quotes=q)
     assert r["ok"] is True
     b = ads["a1"].brackets[-1]
     assert (b.order_type, b.price, b.trigger_price, b.stop_price, b.tp_price, b.time_in_force) == \
-        ("StopLimit", 103.0, 101.0, 102.0, 110.0, "Day")
+        ("StopLimit", 103.0, 101.0, 100.75, 110.0, "Day")
     assert ads["a1"].orders == []
+
+
+def test_a_sell_stop_limits_sl_is_beyond_the_trigger_and_its_tp_beyond_the_limit(tmp_path):
+    desk, eng, ads, clock, mono, _ = mkdesk(tmp_path)
+    q = quote(clock, last=100.0)
+    # trigger 99 / limit 97
+    kw = dict(side="Sell", price=97.0, trigger_price=99.0, quotes=q)
+    assert order(desk, sl_price=98.0, **kw)["error"] == "the stop loss must be beyond the trigger price"
+    assert order(desk, cid="c2", sl_price=99.0, **kw)["error"] == "the stop loss must be beyond the trigger price"
+    assert order(desk, cid="c3", tp_price=98.0, **kw)["error"] == \
+        "the target must be on the winning side of the entry"
+    mono.t += 1
+    assert order(desk, cid="c4", tp_price=97.0, **kw)["error"] == \
+        "the target must be on the winning side of the entry"
+    assert order(desk, cid="c5", sl_price=99.25, tp_price=90.0, **kw)["ok"] is True
+    b = ads["a1"].brackets[-1]
+    assert (b.side, b.price, b.trigger_price, b.stop_price, b.tp_price) == ("Sell", 97.0, 99.0, 99.25, 90.0)
 
 
 # --- what the other types send, and the journal ----------------------------------------------
@@ -146,3 +170,9 @@ def test_a_stop_limit_order_cannot_be_moved(tmp_path):
                          "quotes": quote(clock, last=100.0)}))["results"]["a1"]
     assert r["error"] == "Stop Limit orders can't be moved — cancel and place again"
     assert ads["a1"].modified == []
+
+
+def test_a_market_order_is_day_only_but_day_is_accepted(tmp_path):
+    desk, eng, ads, *_ = mkdesk(tmp_path)
+    assert order(desk, type="Market", tif="Day")["ok"] is True
+    assert ads["a1"].orders[-1].time_in_force == "Day"
