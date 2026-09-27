@@ -9,6 +9,7 @@
   --accent: #2962FF; --accent-hover: #1E53E5; --accent-soft: rgba(41, 98, 255, .10);
   --up: #089981; --down: #F23645; --down-soft: rgba(242, 54, 69, .10); --warn: #F7A600; --warn-soft: #FFF6E0;
   --paper: #7E57C2; --paper-soft: rgba(126, 87, 194, .10);
+  --heat-lo: rgba(41, 98, 255, .06); --heat-mid: rgba(247, 166, 0, .45); --heat-hi: rgba(242, 54, 69, .85);   /* the liquidity heatmap (cell.js palette) */
   --tip: #131722;
   --shadow-menu: 0 2px 8px rgba(0, 0, 0, .16);
   --shadow-dialog: 0 8px 32px rgba(0, 0, 0, .24);
@@ -20,6 +21,7 @@
   --grid: #1C1C1C; --hover: #2A2A2A; --pill: #2A2A2A; --accent-soft: rgba(41, 98, 255, .20);
   --down-soft: rgba(242, 54, 69, .18); --tip: #2A2E39; --warn-soft: #2B2412;
   --paper: #B39DDB; --paper-soft: rgba(179, 157, 219, .18);
+  --heat-lo: rgba(41, 98, 255, .10); --heat-mid: rgba(247, 166, 0, .55); --heat-hi: rgba(242, 54, 69, .90);
   --shadow-menu: 0 0 0 1px #2E2E2E, 0 4px 12px rgba(0, 0, 0, .5);
   --shadow-dialog: 0 0 0 1px #2E2E2E, 0 8px 32px rgba(0, 0, 0, .6);
   --backdrop: rgba(0, 0, 0, .5);

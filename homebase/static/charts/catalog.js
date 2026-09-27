@@ -60,6 +60,7 @@ const CATALOG = [
   { id: 'bigorders', group: 'Order flow', name: 'Big orders', params: [
     { key: 'multiple', label: 'Multiple', type: 'num', min: 1, max: 50, step: 0.5, def: 5 }] },
   { id: 'imbalance', group: 'Order flow', name: 'Imbalance', params: [] },
+  { id: 'heatmap', group: 'Order flow', name: 'Liquidity heatmap', params: [] },
 ];
 const BY_ID = Object.fromEntries(CATALOG.map((d) => [d.id, d]));
 const FAVOURITES = [['1m', 'time:60'], ['5m', 'time:300'], ['15m', 'time:900'], ['1h', 'time:3600'], ['4h', 'time:14400'], ['D', 'time:86400']];
