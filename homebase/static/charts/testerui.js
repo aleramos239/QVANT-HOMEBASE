@@ -1,20 +1,27 @@
 /* Homebase Charts — HBTesterUI: the Strategy Tester tab (HBPanel.addTab), built on HBTester (the pure
    model: form defaults/validation, the request body, progress text, tiles/tables/marks). This module owns
-   the DOM only: the header row (strategy, inputs dialog, range, costs, holdout, run/progress/cancel, recent
-   runs), the inner Overview / Performance summary / List of trades / Properties / Heat-map tabs, and the mini
-   equity + drawdown chart.
+   the DOM only: the header row (strategy, inputs dialog, the range pill, costs, run/progress/cancel,
+   recent runs), the inner Overview / Performance summary / List of trades / Properties / Heat-map tabs,
+   and the mini equity + drawdown chart.
 
-   Heat-map: 2 or 3 inputs x value lists (<= 60 cells) run as a grid on the research window 2021-2024 ONLY
-   (the server forces it; the Holdout switch is disabled on that tab). Each cell is a full single run: a
-   click loads its bundle into the other tabs. The grid DOM is built once per grid (or tab show) and every
-   poll PATCHES its cells in place -- never a rebuild (and a desk-event render() is a no-op, see below).
+   The range pill (2026-09-27) is the one place a period is chosen: a button reading the current window
+   that opens a menu of fixed presets (2021-2024, 2022-2024, 2025-2026, All), then the three walk-forward
+   schemes -- 1:1, 1:2, 1:3 -- which COMPOSE with whichever window is showing ("2021-2024 · WF 1:2"), then
+   Custom date range…, a dialog with two plain TEXT fields and a month calendar. There is no native date
+   control anywhere here, so the class of bug where <input type="date"> destroys the field under the caret
+   cannot come back; refreshHeader still defers a rebuild to blur for the fields that remain.
 
-   Walk-forward: the same axis rows (shared with the heat-map) + a selection metric and a minimum trade
-   count, run server-side as 1 month to select / the next 3 to test, stepping monthly, on 2021-2024 ONLY
-   (homebase/backtest/walkforward.py). Its config + body are built once per job (or tab show); polls patch
-   the progress bar/text (with ETA) in place; the result is fetched once when the job is done. Its controls
-   are disabled while it runs. Full-window cell results are never shown -- only the picked cells'
-   selection-month stats and their out-of-sample test legs.
+   Heat-map: 2 or 3 inputs x value lists (a free-text list, or from/to/steps) run as a grid over the pill's
+   own window, capped by the Max cells box (60 by default, 400 the server's ceiling). Each cell is a full
+   single run: a click loads its bundle into the other tabs. The grid DOM is built once per grid (or tab
+   show) and every poll PATCHES its cells in place -- never a rebuild (and a desk-event render() is a
+   no-op, see below). The walk-forward's own two settings (Select by, Min trades) live here too, since a
+   walk-forward searches exactly this grid.
+
+   Walk-forward: no tab of its own. Picking a "Walk-forward 1:N" preset turns the header's Run button into
+   a walk-forward over the chosen window; the result lands in the ordinary tabs -- Overview (both stitched
+   sides and the out-of-sample equity), Performance summary (the per-step table) and List of trades (the
+   out-of-sample trades). Full-window cell results are never shown.
 
    Carried finding (2026-09-27 review of Tasks 3-4, restated for this tab): HBPanel.refresh() -- really
    onDeskEvent -- re-renders whichever tab is active on every desk event, including quotes at up to 4/s,
@@ -29,18 +36,17 @@
 'use strict';
 const X = window.HBTester;
 const Tr = window.HBTrade;
-const REASON_MAX = X.REASON_MAX;
 
 const COST_FIELDS = [['qty', 'Qty', 1, 100, 1], ['commission', 'Commission $/RT (per contract)', 0, 100, 0.01],
   ['slippage_ticks', 'Slippage (ticks)', 0, 20, 0.25]];
 const INNER_TABS = [['overview', 'Overview'], ['summary', 'Performance summary'], ['trades', 'List of trades'],
-  ['properties', 'Properties'], ['heatmap', 'Heat-map'], ['walkforward', 'Walk-forward']];
-const RESEARCH_ONLY_TABS = new Set(['heatmap', 'walkforward']);   // the Holdout switch doesn't apply there
+  ['properties', 'Properties'], ['heatmap', 'Heat-map']];
 const AXIS_ROLES = ['Rows', 'Columns', 'Panels'];
 const TRADE_COLS = [['n', '#', true], ['side', 'Side', false], ['entry', 'Entry time', false], [null, 'Entry price', true],
   ['exit', 'Exit time', false], [null, 'Exit price', true], ['reason', 'Reason', false], ['qty', 'Qty', true],
   ['net', 'Net', true], ['mae', 'MAE', true], ['mfe', 'MFE', true], ['dur', 'Duration', true]];
 const TRADE_CHUNK = 500;
+const WORKERS_PER_MACHINE = 2;   // grid.py's pool: how many cells actually run at once
 // M4: LightweightCharts renders `time` (unix seconds) as UTC by default; every other chart in this app
 // reads ET (cell.js's own comment: "Bar times arrive as ET wall-clock seconds, so the axis reads ET").
 // The mini chart's `time` values are real epoch seconds (X.equitySeries, unshifted -- its own Node tests
@@ -81,13 +87,14 @@ function schemaFor(id) { return (strategiesList || []).find((s) => s.id === id) 
 
 /* ---- per-viewer persisted form ({strategy, forms: {id: form}} in localStorage hb_tester) ---- */
 const STORE_KEY = 'hb_tester';
-let store = { strategy: null, forms: {}, heat: {}, wf: {} };
+let store = { strategy: null, forms: {}, heat: {}, wf: {}, cellSecs: {} };
 function loadStore() {
   const obj = (x) => (x && typeof x === 'object' ? x : {});
-  const empty = { strategy: null, forms: {}, heat: {}, wf: {} };
+  const empty = { strategy: null, forms: {}, heat: {}, wf: {}, cellSecs: {} };
   try {
     const v = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
-    return (v && typeof v === 'object') ? { strategy: v.strategy || null, forms: obj(v.forms), heat: obj(v.heat), wf: obj(v.wf) } : empty;
+    return (v && typeof v === 'object') ? { strategy: v.strategy || null, forms: obj(v.forms), heat: obj(v.heat),
+      wf: obj(v.wf), cellSecs: obj(v.cellSecs) } : empty;
   } catch (_) { return empty; }
 }
 function saveStore() {
@@ -131,7 +138,7 @@ let looksMap = {};         // {strategy: looks}
 let heatCell = null;       // {gid, i}: the cell whose report is loaded in the other tabs
 let heatResumed = false;   // the newest grid of this strategy was looked up once (page reload / strategy switch)
 let looksErr = '';         // GET /looks refused (a corrupt looks.json): shown, never read as 0
-let heatCfgEl = null, heatErrEl = null, heatCountEl = null, heatLooksEl = null, heatRunEl = null, heatNoteEl = null;
+let heatCfgEl = null, heatErrEl = null, heatCountEl = null, heatLooksEl = null, heatRunEl = null, heatNoteEl = null, heatWarnEl = null;
 let heatGridEl = null, heatProgBar = null, heatProgText = null;
 let heatCellEls = new Map();
 /* the walk-forward */
@@ -142,12 +149,11 @@ let wfErr = '';            // a 400 detail / lost contact -- cleared on the next
 let wfResult = null;       // { id, result } -- fetched once per finished job
 let wfResultErr = '';
 let wfResumed = false;
-let wfCfgEl = null, wfErrEl = null, wfCountEl = null, wfLooksEl = null, wfRunEl = null, wfBodyEl = null;
-let wfProgBar = null, wfProgText = null, wfChartHandle = null;
-let wfScheme = null, wfSchemePromise = null;   // GET /api/tester/walkforward-scheme: the step count (review M5)
+let wfChartHandle = null;
+let wfScheme = null, wfSchemePromise = null, wfSchemeKey = null;   // GET /api/tester/walkforward-scheme (review M5)
 
 /* ---- DOM roots, rebuilt by render(); refreshed in place by everything else ---- */
-let root = null, headerEl = null, holdoutBannerEl = null, tabsEl = null, contentEl = null;
+let root = null, headerEl = null, tabsEl = null, contentEl = null;
 let errEl = null, runBtn = null, progressBarEl = null, progressTextEl = null;
 
 function notify() { for (const fn of [...listeners]) { try { fn(); } catch (e) { console.error(e); } } }
@@ -158,16 +164,9 @@ function persist() {
   saveStore();
 }
 
-/* C1 (critical): a valid, armed holdout run -- the switch is on, the range actually reaches 2025+, and the
-   reason is a valid one-liner -- i.e. exactly the condition under which the NEXT Run click spends holdout
-   data and gets logged. Mirrors the same check `HBTester.problems()` makes for the holdout block, so the
-   amber warning and the "spends holdout" button label track it exactly. */
-function holdoutArmed(f) {
-  if (!f.holdout.on || !X.reachesHoldout(f.range)) return false;
-  const why = (f.holdout.reason || '').trim();
-  return !!why && !why.includes('\n') && why.length <= REASON_MAX;
-}
-function runLabelFor() { return holdoutArmed(form) ? 'Run · spends holdout' : X.runLabel(form, loadedKey); }
+/* What the header's Run button does next: a walk-forward when the pill carries one of the 1:N schemes,
+   otherwise the ordinary single run (Run / Update report). */
+function runLabelFor() { return X.isWalkforward(form) ? `Run walk-forward 1:${form.range.wf}` : X.runLabel(form, loadedKey); }
 
 function tickForRoot(root_) {
   const cells = (page.cells && page.cells()) || [];
@@ -254,24 +253,23 @@ function compareChart(el, eqA, eqB, P) {
 
 /* ================================================================== header ================================================================== */
 
-function computeErrorText() { return serverError || X.problems(form, schemaFor(strategyId)) || ''; }
-function updateHoldoutBanner() {
-  if (!holdoutBannerEl) return;
-  const armed = holdoutArmed(form);
-  holdoutBannerEl.hidden = !armed;
-  if (armed) holdoutBannerEl.textContent = 'This run spends holdout data (2025+) — logged';
+function computeErrorText() {
+  const base = serverError || X.problems(form, schemaFor(strategyId));
+  if (base) return base;
+  // a walk-forward needs the heat-map's axis grid: say where to set one rather than refusing silently
+  if (X.isWalkforward(form)) return X.wfProblems(form, schemaFor(strategyId), currentHeatRows(), wfPrefs().minTrades) || '';
+  return '';
 }
-/* A cheap, focus-preserving update for the fields a viewer types into (qty/commission/slippage, the holdout
-   reason): recompute the error line, the holdout banner and the Run label without rebuilding the header. */
+/* A cheap, focus-preserving update for the fields a viewer types into (qty/commission/slippage):
+   recompute the error line and the Run label without rebuilding the header. */
 function syncRunState() {
   const text = computeErrorText();
   if (errEl) { errEl.textContent = text; errEl.hidden = !text; }
-  updateHoldoutBanner();
   syncHeat();
   if (runBtn) { const label = runLabelFor(); runBtn.lastChild.textContent = ' ' + label; runBtn.setAttribute('aria-label', label); }
 }
 function updateProgressUI() {
-  const p = X.progress(runStatus);
+  const p = runStatus ? X.progress(runStatus) : (wfInFlight() ? (wf ? X.wfProgress(wf) : { text: 'Starting the walk-forward…', frac: null }) : X.progress(null));
   if (progressTextEl) progressTextEl.textContent = p.text;
   if (progressBarEl) { if (p.frac == null) progressBarEl.removeAttribute('value'); else progressBarEl.value = p.frac; }
 }
@@ -297,37 +295,122 @@ function iconBtn(name, title, onClick, busy) {
   b.onclick = onClick;
   return b;
 }
-/* I3: the date inputs show only for Custom, and leaving Custom clears start/end -- otherwise a range
-   switched away from Custom (e.g. to IS months) silently kept sending the old, narrower window, and a
-   hidden holdout end date could force the switch on for a range the viewer could no longer see. */
-function rangeGroup(busy) {
-  const wrap = page.mk('span', 'tst-group');
-  const sel = page.mk('select', 'set-select');
-  sel.setAttribute('aria-label', 'Range');
-  sel.disabled = busy;
-  for (const r of X.RANGES) sel.appendChild(optionEl(r.kind, r.label));
-  sel.value = form.range.kind;
-  sel.onchange = () => {
-    const kind = sel.value;
-    form.range = { kind, start: kind === 'custom' ? form.range.start : '', end: kind === 'custom' ? form.range.end : '' };
-    persist();
-    refreshHeader();
-  };
-  wrap.appendChild(sel);
-  if (form.range.kind === 'custom') {
-    const start = page.mk('input'), end = page.mk('input');
-    start.type = 'date'; start.value = form.range.start || ''; start.setAttribute('aria-label', 'Range start'); start.disabled = busy;
-    end.type = 'date'; end.value = form.range.end || ''; end.setAttribute('aria-label', 'Range end'); end.disabled = busy;
-    // NEVER refreshHeader() from here: <input type="date"> fires `change` as soon as the value parses,
-    // which is the FIRST digit of the year -- rebuilding the header there destroys the field under the
-    // caret and leaves a half-typed year (the reported "07/01/0001"). syncRunState() keeps the error
-    // text, the holdout banner and the Run label current without touching the inputs, as the cost
-    // fields and the holdout reason already do.
-    start.onchange = () => { form.range = { ...form.range, start: start.value }; persist(); syncRunState(); };
-    end.onchange = () => { form.range = { ...form.range, end: end.value }; persist(); syncRunState(); };
-    wrap.append(start, end);
+/* The range pill and its menu. Leaving a preset clears the typed custom dates (the old I3 fix), so a
+   window switched away from Custom can never keep sending the narrower one it no longer shows. */
+function setRange(patch) {
+  form = { ...form, range: { ...form.range, ...patch } };
+  persist();
+  page.closeMenu();
+  refreshHeader();
+  if (X.isWalkforward(form) !== !!wf) { /* nothing to drop: the job itself is keyed by its own body */ }
+}
+function fillRangeMenu(m) {
+  for (const r of X.RANGES) {
+    if (r.id === 'custom') continue;
+    m.appendChild(page.menuItem(r.label, '', () => setRange({ id: r.id, start: '', end: '' }), form.range.id === r.id));
   }
-  return wrap;
+  m.appendChild(page.mk('div', 'menu-sep'));
+  m.appendChild(page.mk('div', 'set-cap tst-menu-cap', 'Walk-forward'));
+  for (const n of X.WF_RATIOS) {
+    const on = form.range.wf === n;
+    m.appendChild(page.menuItem(`Walk-forward 1:${n}`, `select on 1 month, test on the next ${n}`,
+      () => setRange({ wf: on ? null : n }), on));       // picking the active one again turns it off
+  }
+  m.appendChild(page.mk('div', 'menu-sep'));
+  m.appendChild(page.menuItem('Custom date range…', '', () => { page.closeMenu(); openDatesDialog(); },
+    form.range.id === 'custom'));
+}
+function rangePill(busy) {
+  const b = page.mk('button', 'tst-btn tst-range');
+  b.type = 'button';
+  b.disabled = busy;
+  b.setAttribute('aria-haspopup', 'menu');
+  b.setAttribute('aria-expanded', 'false');
+  b.setAttribute('aria-label', `Backtesting dates · ${X.pillLabel(form.range)}`);
+  b.append(page.icon('calendar'), page.mk('span', 'tst-range-t', X.pillLabel(form.range)), page.icon('chevron'));
+  b.onclick = () => page.toggleMenu(b, () => fillRangeMenu(page.openMenu(b, 'menu-tst-range')));
+  return b;
+}
+/* Custom date range…: two PLAIN TEXT fields (never <input type="date">) plus a month calendar. Typed text
+   is checked on blur and again on Select, which stays disabled until both dates are real. Cancel changes
+   nothing -- the draft is only written back by Select. */
+function openDatesDialog() {
+  const box = page.openDialog('Backtesting dates', 'settings-small');
+  const cur = X.rangeDates(form.range);
+  const draft = { start: form.range.id === 'custom' ? (form.range.start || '') : (cur.start || ''),
+    end: form.range.id === 'custom' ? (form.range.end || '') : (cur.end || ''), next: 'start' };
+  draft.month = (X.parseDate(draft.start) || X.today()).slice(0, 7);
+  const fields = page.mk('div', 'dlg-fields'), err = page.mk('div', 'dlg-err'), cal = page.mk('div', 'tst-cal');
+  err.hidden = true;
+  err.setAttribute('role', 'alert');
+  const ok = page.mk('button', 'btn btn-primary', 'Select');
+  const inputs = {};
+  const problem = () => X.dateError(draft.start, 'Start date') || X.dateError(draft.end, 'End date')
+    || (draft.start > draft.end ? 'The start date is after the end date' : null);
+  const sync = (show) => {
+    const e = problem();
+    ok.disabled = !!e;
+    err.textContent = show && e ? e : '';
+    err.hidden = !err.textContent;
+    for (const k of ['start', 'end']) inputs[k].value = draft[k];
+    drawCal();
+  };
+  for (const [k, label] of [['start', 'Start date'], ['end', 'End date']]) {
+    const row = page.mk('div', 'field'), lab = page.mk('label', '', label), inp = page.mk('input', 'tst-date-in');
+    inp.type = 'text';                       // never 'date': see the module note
+    inp.id = `tst-date-${k}`;
+    inp.placeholder = 'YYYY-MM-DD';
+    inp.autocomplete = 'off';
+    inp.spellcheck = false;
+    inp.value = draft[k];
+    lab.htmlFor = inp.id;
+    inp.oninput = () => { draft[k] = inp.value.trim(); ok.disabled = !!problem(); };
+    inp.onfocus = () => { draft.next = k; };
+    inp.onblur = () => { const d = X.parseDate(draft[k]); if (d) draft.month = d.slice(0, 7); sync(true); };
+    inputs[k] = inp;
+    row.append(lab, inp);
+    fields.appendChild(row);
+  }
+  function drawCal() {
+    const g = X.monthGrid(draft.month);
+    cal.replaceChildren();
+    const head = page.mk('div', 'tst-cal-head');
+    const prev = iconBtn('chevronUp', 'Previous month', () => { draft.month = X.shiftMonth(draft.month, -1); drawCal(); });
+    const next = iconBtn('chevron', 'Next month', () => { draft.month = X.shiftMonth(draft.month, 1); drawCal(); });
+    prev.classList.add('tst-cal-prev');
+    head.append(prev, page.mk('span', 'tst-cal-t', g.label), next);
+    const grid = page.mk('div', 'tst-cal-grid');
+    for (const d of g.dow) grid.appendChild(page.mk('span', 'tst-cal-dow', d));
+    for (const w of g.weeks) {
+      for (const c of w) {
+        const b = page.mk('button', 'tst-cal-d' + (c.outside ? ' out' : '')
+          + (c.iso === draft.start || c.iso === draft.end ? ' sel' : '')
+          + (draft.start && draft.end && c.iso > draft.start && c.iso < draft.end ? ' in' : ''), String(c.day));
+        b.type = 'button';
+        b.setAttribute('aria-label', X.prettyDate(c.iso));
+        b.onclick = () => {
+          draft[draft.next] = c.iso;
+          draft.next = draft.next === 'start' ? 'end' : 'start';
+          sync(false);
+        };
+        grid.appendChild(b);
+      }
+    }
+    cal.append(head, grid);
+  }
+  const foot = page.mk('div', 'dlg-foot'), cancel = page.mk('button', 'btn btn-ghost', 'Cancel');
+  cancel.type = 'button';
+  ok.type = 'button';
+  cancel.onclick = page.closeDialog;
+  ok.onclick = () => {
+    if (problem()) { sync(true); return; }
+    page.closeDialog();
+    setRange({ id: 'custom', start: draft.start, end: draft.end });
+  };
+  foot.append(cancel, ok);
+  box.append(fields, cal, err, foot);
+  sync(false);
+  inputs.start.focus();
 }
 function costInput(key, label, lo, hi, step, busy) {
   const wrap = page.mk('span', 'tst-cost'), lab = page.mk('label', 'tst-cost-l', label), inp = page.mk('input', 'tst-num');
@@ -342,46 +425,15 @@ function costInput(key, label, lo, hi, step, busy) {
   wrap.append(lab, inp);
   return wrap;
 }
-function holdoutGroup() {
-  const wrap = page.mk('span', 'tst-group');
-  const lab = page.mk('label', 'tst-cost-l', 'Holdout');
-  if (RESEARCH_ONLY_TABS.has(innerTab)) {   // the heat-map / walk-forward are the research window only: the switch doesn't apply
-    const off = page.mk('button', 'switch');
-    off.type = 'button';
-    off.disabled = true;
-    off.setAttribute('role', 'switch');
-    off.setAttribute('aria-checked', 'false');
-    off.setAttribute('aria-label', 'Holdout (research window only)');
-    wrap.append(lab, off, page.mk('span', 'tst-cost-l', 'research window only'));
-    return wrap;
-  }
-  const sw = page.mk('button', 'switch' + (form.holdout.on ? ' on' : ''));
-  sw.type = 'button';
-  sw.setAttribute('role', 'switch');
-  sw.setAttribute('aria-checked', String(form.holdout.on));
-  sw.setAttribute('aria-label', 'Holdout');
-  sw.onclick = () => { form = { ...form, holdout: { ...form.holdout, on: !form.holdout.on } }; persist(); refreshHeader(); };
-  wrap.append(lab, sw);
-  if (form.holdout.on) {
-    const reason = page.mk('input', 'tst-reason');
-    reason.type = 'text';
-    reason.maxLength = REASON_MAX;
-    reason.placeholder = 'Why spend holdout data? (logged)';
-    reason.value = form.holdout.reason || '';
-    reason.setAttribute('aria-label', 'Holdout reason');
-    reason.oninput = () => { form = { ...form, holdout: { ...form.holdout, reason: reason.value } }; persist(); syncRunState(); };
-    wrap.appendChild(reason);
-  }
-  return wrap;
-}
 function runArea() {
   const wrap = page.mk('span', 'tst-run-area');
-  if (runStatus) {
+  if (runStatus || wfInFlight()) {
     progressBarEl = document.createElement('progress');
     progressBarEl.className = 'tst-progress';
     progressBarEl.max = 1;
     progressTextEl = page.mk('span', 'tst-progress-text', '');
-    const cancel = iconBtn('square', 'Cancel', cancelRun);
+    const cancel = runStatus ? iconBtn('square', 'Cancel', cancelRun)
+      : iconBtn('square', 'Cancel the walk-forward', cancelWf, wfStarting);
     wrap.append(progressBarEl, progressTextEl, cancel);
     updateProgressUI();
   } else {
@@ -407,8 +459,7 @@ function recentRunsBtn(busy) {
 
 /* I1: while a run is in flight, the strategy select, gear, range/dates and costs are disabled -- editing
    any of them mid-run used to let a stale report land under a form (or even a strategy) that no longer
-   matches it, with the button still reading "Run" as if they matched. The holdout switch/reason are left
-   live (they can't change what's already in flight, since the range is frozen). */
+   matches it, with the button still reading "Run" as if they matched. */
 /* A rebuild must never land under the caret. Any header field being typed in (a run finishing, a desk
    event, a poll) defers the rebuild to that field's blur; selects and buttons rebuild at once, so
    switching the range kind still swaps the date inputs in immediately. */
@@ -424,13 +475,12 @@ function refreshHeader() {
     return;
   }
   const schema = schemaFor(strategyId);
-  const busy = !!runStatus;
+  const busy = !!runStatus || wfInFlight();      // controls are frozen while EITHER kind of job is in flight
   headerEl.replaceChildren();
   headerEl.appendChild(strategySelect(busy));
   headerEl.appendChild(iconBtn('gear', `${schema.name} · Inputs`, openInputsDialog, busy));
-  headerEl.appendChild(rangeGroup(busy));
+  headerEl.appendChild(rangePill(busy));
   for (const [key, label, lo, hi, step] of COST_FIELDS) headerEl.appendChild(costInput(key, label, lo, hi, step, busy));
-  headerEl.appendChild(holdoutGroup());
   headerEl.appendChild(runArea());
   headerEl.appendChild(recentRunsBtn(busy));
   errEl = page.mk('span', 'tst-err', '');
@@ -524,7 +574,7 @@ function recentRunRow(r) {
     line.textContent = `${stratName} · ${rangeLabel} · ${r.status}`;
   }
   b.appendChild(line);
-  if (r.holdout) b.appendChild(page.mk('span', 'env live', 'HOLDOUT'));
+  if (r.holdout) b.appendChild(page.mk('span', 'env live', '2025+'));   // this run read past the research window
   if (done) b.onclick = () => { page.closeMenu(); loadRecentRun(r.id); };
   if (!done) return b;      // only a finished run has a report to compare
   const row = page.mk('div', 'menu-row');
@@ -623,7 +673,7 @@ function runChip(run, colorClass, letter) {
   chip.appendChild(page.mk('span', 'tst-cmp-dot'));
   const stratName = ((strategiesList || []).find((s) => s.id === run.strategy.id) || {}).name || run.strategy.name;
   chip.appendChild(document.createTextNode(`${letter}: ${stratName} · ${run.range.label}`));
-  if (run.holdout) chip.appendChild(page.mk('span', 'tst-badge err', 'holdout'));
+  if (run.holdout) chip.appendChild(page.mk('span', 'tst-badge err', '2025+'));
   return chip;
 }
 function compareTable(rows) {
@@ -696,8 +746,9 @@ function loadRecentRun(id) {
    strategyId has since moved on from what was actually submitted. */
 function startRun() {
   const schema = schemaFor(strategyId);
-  const prob = X.problems(form, schema);
+  const prob = computeErrorText();
   if (prob) { serverError = ''; refreshHeader(); return; }
+  if (X.isWalkforward(form)) { startWf(); return; }   // the pill carries a 1:N scheme: a walk-forward, not a run
   const bodyObj = X.body(form);
   submittedKey = X.key(form);
   submittedStrategy = strategyId;
@@ -803,10 +854,7 @@ function refreshTabsBar() {
     b.setAttribute('role', 'tab');
     b.setAttribute('aria-selected', String(innerTab === id));
     b.onclick = () => {
-      const was = innerTab;
       innerTab = id;
-      // the Holdout switch never carries into (or out of) the heat-map / walk-forward armed: it doesn't apply there
-      if (RESEARCH_ONLY_TABS.has(id) !== RESEARCH_ONLY_TABS.has(was)) { if (form.holdout.on) form = { ...form, holdout: { ...form.holdout, on: false } }; refreshHeader(); }
       refreshTabsBar();
       refreshContent();
     };
@@ -1000,7 +1048,6 @@ function renderProperties(container) {
   if ((c.skipped || []).length) container.appendChild(skippedList('Skipped sessions', c.skipped));
   if ((c.no_trade || []).length) container.appendChild(skippedList('No-trade sessions', c.no_trade));
   container.appendChild(kvTable([['Engine', run.engine], ['Fill law', run.fill_law]]));
-  if (run.holdout) container.appendChild(kvTable([['Holdout reason', run.holdout_reason || '']]));
   container.appendChild(kvTable([['Run id', run.id], ['Created', run.created], ['Finished', run.finished]]));
 }
 
@@ -1009,9 +1056,10 @@ function selectTrade(i) {
   if (innerTab === 'trades') refreshContent();
   notify();
 }
-function renderTrades(container) {
-  const trades = bundle.trades || [];
-  const tick = tickForRoot(bundle.run.strategy.root);
+/* The trades table. `onPick` null = a read-only list (the walk-forward's stitched out-of-sample
+   trades, which belong to no single run and so have nothing on the chart to jump to). */
+function tradeTable(trades, root_, onPick) {
+  const tick = tickForRoot(root_);
   const order = X.sortTrades(trades, sortCol, sortDir);
   const table = page.mk('table', 'bp-table'), thead = page.mk('thead'), htr = page.mk('tr');
   TRADE_COLS.forEach(([key, label, num]) => {
@@ -1030,7 +1078,7 @@ function renderTrades(container) {
   const shown = order.slice(0, visibleTradeRows);
   for (const idx of shown) {
     const t = trades[idx];
-    const tr = page.mk('tr', selectedTrade === idx ? 'sel' : '');
+    const tr = page.mk('tr', onPick && selectedTrade === idx ? 'sel' : '');
     X.tradeCells(t, idx, tick).forEach((cell, i) => {
       const td = page.mk('td', TRADE_COLS[i][2] ? 'num' : '', cell);
       // I4: classList.add('') throws (a $0-net trade, e.g. a 1-tick winner the commission exactly
@@ -1038,7 +1086,7 @@ function renderTrades(container) {
       if (i === 8) { const tone = X.toneOf(t.net); if (tone) td.classList.add(tone); }
       tr.appendChild(td);
     });
-    tr.onclick = () => { selectTrade(idx); if (window.HBTesterLayer) window.HBTesterLayer.jump(idx); };
+    if (onPick) tr.onclick = () => onPick(idx);
     tbody.appendChild(tr);
   }
   if (order.length > shown.length) {
@@ -1052,7 +1100,13 @@ function renderTrades(container) {
     tbody.appendChild(tr);
   }
   table.appendChild(tbody);
-  container.appendChild(table);
+  return table;
+}
+function renderTrades(container) {
+  container.appendChild(tradeTable(bundle.trades || [], bundle.run.strategy.root, (idx) => {
+    selectTrade(idx);
+    if (window.HBTesterLayer) window.HBTesterLayer.jump(idx);
+  }));
 }
 
 const EMPTY_MSG = { overview: 'Run the strategy to see a report', summary: 'Run the strategy to see a performance summary',
@@ -1065,12 +1119,22 @@ function refreshContent() {
   dropMiniChart();
   dropCompareChart();
   dropWfChart();
+  ensureWf();
   contentEl.replaceChildren();
   if (lastRunFailed) contentEl.appendChild(page.mk('div', 'tst-fail-banner', `The last run failed: ${lastRunFailed}`));
   if (innerTab === 'heatmap') { renderHeatmap(contentEl); return; }
-  if (innerTab === 'walkforward') { renderWalkforward(contentEl); return; }
   if (innerTab === 'compare') { renderCompare(contentEl); return; }
   heatGridEl = null;
+  // A walk-forward owns Overview / Performance summary / List of trades while its result is on screen:
+  // there is no separate place to look for it (2026-09-27 — the Walk-forward tab is gone).
+  const r = wfShown();
+  if (r && innerTab !== 'properties') {
+    if (innerTab === 'overview') renderWfOverview(contentEl, r);
+    else if (innerTab === 'summary') renderWfSummary(contentEl, r);
+    else renderWfTrades(contentEl, r);
+    return;
+  }
+  if (wfBusyNote(contentEl)) return;
   if (!bundle) { contentEl.appendChild(page.mk('div', 'bp-empty', EMPTY_MSG[innerTab])); return; }
   if (innerTab === 'overview') renderOverview(contentEl);
   else if (innerTab === 'summary') renderSummary(contentEl);
@@ -1087,11 +1151,16 @@ function currentHeatRows() {
   if (heatRows && heatRowsStrategy === strategyId) return heatRows;
   const schema = schemaFor(strategyId), keys = new Set(schema.inputs.map((i) => i.key));
   const saved = Array.isArray(store.heat[strategyId]) ? store.heat[strategyId] : null;
+  const blank = { key: '', mode: 'list', text: '', from: '', to: '', steps: '' };
+  const clean = (r) => ({ key: r.key, mode: r.mode === 'range' ? 'range' : 'list',
+    text: typeof r.text === 'string' ? r.text : '',
+    from: r.from == null ? '' : String(r.from), to: r.to == null ? '' : String(r.to),
+    steps: r.steps == null ? '' : String(r.steps) });
   if (saved && saved.length === 3) {
-    heatRows = saved.map((r) => (r && keys.has(r.key) ? { key: r.key, text: typeof r.text === 'string' ? r.text : '' } : { key: '', text: '' }));
+    heatRows = saved.map((r) => (r && keys.has(r.key) ? clean(r) : { ...blank }));
   } else {
     const nums = schema.inputs.filter((i) => i.type === 'int' || i.type === 'float');
-    heatRows = [0, 1, 2].map((k) => (k < 2 && nums[k] ? { key: nums[k].key, text: String(nums[k].default) } : { key: '', text: '' }));
+    heatRows = [0, 1, 2].map((k) => (k < 2 && nums[k] ? { ...blank, key: nums[k].key, text: String(nums[k].default) } : { ...blank }));
   }
   heatRowsStrategy = strategyId;
   return heatRows;
@@ -1100,6 +1169,9 @@ function saveHeatRows() { gridErr = ''; store.heat[strategyId] = heatRows; saveS
 const gridInFlight = () => gridStarting || !!(grid && !X.gridProgress(grid).final);
 const heatLive = () => !!(heatGridEl && heatGridEl.isConnected);
 
+/* One axis row: the parameter, then EITHER a free-text list ("5, 10, 15" or "5:20:5") or from/to/steps,
+   which spreads `steps` values evenly and rounds each to the parameter's own step. The mode select
+   swaps only the value fields; the row's other mode keeps whatever was typed in it. */
 function axisRow(k, busy, sync = syncHeat) {
   const rows = currentHeatRows(), schema = schemaFor(strategyId), row = page.mk('div', 'tst-heat-axis');
   const lab = page.mk('label', 'tst-cost-l tst-heat-role', AXIS_ROLES[k]);
@@ -1110,39 +1182,97 @@ function axisRow(k, busy, sync = syncHeat) {
   sel.appendChild(optionEl('', k < 2 ? 'Pick a parameter' : '— none —'));
   for (const i of schema.inputs) sel.appendChild(optionEl(i.key, i.label));
   sel.value = rows[k].key;
-  const txt = page.mk('input', 'tst-heat-vals');
-  txt.type = 'text';
-  txt.disabled = busy || !rows[k].key;
-  txt.value = rows[k].text;
-  txt.setAttribute('aria-label', `${AXIS_ROLES[k]} values`);
+  const inpOf = () => schema.inputs.find((i) => i.key === rows[k].key);
+  const mode = page.mk('select', 'set-select tst-heat-mode');
+  mode.setAttribute('aria-label', `${AXIS_ROLES[k]} value mode`);
+  mode.appendChild(optionEl('list', 'List'));
+  mode.appendChild(optionEl('range', 'From / to / steps'));
+  mode.value = rows[k].mode;
+  const vals = page.mk('span', 'tst-heat-vals-wrap');
   const placeholder = (inp) => (!inp ? '' : inp.type === 'bool' ? 'on, off' : inp.type === 'choice' ? inp.choices.join(', ')
     : 'e.g. 5, 10, 15  or  5:20:5');
-  txt.placeholder = placeholder(schema.inputs.find((i) => i.key === rows[k].key));
+  function drawVals() {
+    const inp = inpOf(), numeric = !!inp && (inp.type === 'int' || inp.type === 'float');
+    mode.disabled = busy || !numeric;
+    if (!numeric && rows[k].mode === 'range') rows[k] = { ...rows[k], mode: 'list' };
+    mode.value = rows[k].mode;
+    vals.replaceChildren();
+    if (rows[k].mode === 'range') {
+      for (const [f, ph, aria] of [['from', 'from', 'from'], ['to', 'to', 'to'], ['steps', 'steps', 'steps']]) {
+        const x = page.mk('input', 'tst-num tst-heat-step');
+        x.type = 'number';
+        x.placeholder = ph;
+        x.value = rows[k][f];
+        x.disabled = busy || !inp;
+        x.setAttribute('aria-label', `${AXIS_ROLES[k]} ${aria}`);
+        x.oninput = () => { rows[k] = { ...rows[k], [f]: x.value }; saveHeatRows(); sync(); };
+        vals.appendChild(x);
+      }
+      return;
+    }
+    const txt = page.mk('input', 'tst-heat-vals');
+    txt.type = 'text';
+    txt.disabled = busy || !inp;
+    txt.value = rows[k].text;
+    txt.setAttribute('aria-label', `${AXIS_ROLES[k]} values`);
+    txt.placeholder = placeholder(inp);
+    txt.oninput = () => { rows[k] = { ...rows[k], text: txt.value }; saveHeatRows(); sync(); };
+    vals.appendChild(txt);
+  }
   sel.onchange = () => {
     const inp = schema.inputs.find((i) => i.key === sel.value);
-    rows[k] = { key: sel.value, text: inp ? (inp.type === 'bool' ? 'on, off' : String(inp.default)) : '' };
-    txt.value = rows[k].text;
-    txt.disabled = !inp;
-    txt.placeholder = placeholder(inp);
+    rows[k] = { ...rows[k], key: sel.value,
+      text: inp ? (inp.type === 'bool' ? 'on, off' : String(inp.default)) : '', from: '', to: '', steps: '' };
+    drawVals();
     saveHeatRows();
     sync();
   };
-  txt.oninput = () => { rows[k] = { ...rows[k], text: txt.value }; saveHeatRows(); sync(); };
-  row.append(lab, sel, txt);
+  mode.onchange = () => { rows[k] = { ...rows[k], mode: mode.value }; drawVals(); saveHeatRows(); sync(); };
+  drawVals();
+  row.append(lab, sel, mode, vals);
   return row;
 }
 /* Focus-preserving: the cell count, the error line, the looks line and the Run grid button's enabled state. */
 function syncHeat() {
+  syncRunStateLabelOnly();
   if (!heatLive() || !heatErrEl) return;
   const schema = schemaFor(strategyId), rows = currentHeatRows();
-  const prob = X.gridProblems(form, schema, rows), g = X.gridAxes(rows, schema);
-  heatCountEl.textContent = g.axes ? `${X.gridCount(g.axes)} cells` : '';
+  const prob = X.gridProblems(form, schema, rows), g = X.gridAxes(rows, schema, form.max_cells);
+  const n = g.axes ? X.gridCount(g.axes) : 0;
+  heatCountEl.textContent = g.axes ? `${n} cells` : '';
   const text = gridErr || prob || '';
   heatErrEl.textContent = text;
   heatErrEl.hidden = !text;
-  heatLooksEl.textContent = X.looksLine(looksMap[strategyId] || 0, (grid && grid.looks_error) || looksErr);
+  if (heatWarnEl) {
+    heatWarnEl.textContent = g.axes ? X.cellsWarning(n, cellSeconds()) : '';
+    heatWarnEl.hidden = !heatWarnEl.textContent;
+  }
+  const total = X.looksLine(looksMap[strategyId] || 0, (grid && grid.looks_error) || (wf && wf.looks_error) || looksErr);
+  const preview = g.axes && X.isWalkforward(form) ? X.wfLooksText(n, wfScheme && wfScheme.n_steps) : '';
+  heatLooksEl.textContent = preview ? `${preview} · ${total}` : total;
   const runBtnEl = heatRunEl && heatRunEl.querySelector('.tst-run');
   if (runBtnEl) runBtnEl.disabled = !!prob;
+}
+/* syncHeat is called from syncRunState, so it must not call back into it: only the header's own
+   error line and Run label need refreshing when an axis edit changes what Run would do. */
+function syncRunStateLabelOnly() {
+  if (!X.isWalkforward(form) || !errEl) return;
+  const text = serverError || X.problems(form, schemaFor(strategyId))
+    || X.wfProblems(form, schemaFor(strategyId), currentHeatRows(), wfPrefs().minTrades) || '';
+  errEl.textContent = text;
+  errEl.hidden = !text;
+}
+/* The measured seconds per cell, from the last grid this viewer finished (per strategy). */
+function cellSeconds() {
+  const v = (store.cellSecs || {})[strategyId];
+  return Number.isFinite(v) && v > 0 ? v : null;
+}
+function recordCellSeconds(st) {
+  if (!st || st.status !== 'done' || !st.started || !st.total) return;
+  const secs = (Date.now() - Date.parse(st.started)) / 1000 * WORKERS_PER_MACHINE / st.total;
+  if (!Number.isFinite(secs) || secs <= 0) return;
+  store.cellSecs = { ...(store.cellSecs || {}), [strategyId]: Math.round(secs * 10) / 10 };
+  saveStore();
 }
 function heatRunArea() {
   heatRunEl.replaceChildren();
@@ -1172,20 +1302,69 @@ function patchProgress() {
 /* The editor + run row. Rebuilt only on a real state change (a strategy switch, a grid starting or ending). */
 function refreshHeatConfig() {
   if (!heatLive()) return;
-  const busy = gridInFlight();
+  const busy = gridInFlight() || wfInFlight();
   heatCfgEl.replaceChildren();
   const axes = page.mk('div', 'tst-heat-axes');
   for (let k = 0; k < 3; k++) axes.appendChild(axisRow(k, busy));
+  const opts = page.mk('div', 'tst-heat-axes');
+  opts.append(maxCellsField(busy), ...wfSettingFields(busy));
   heatCountEl = page.mk('span', 'tst-heat-count', '');
   heatRunEl = page.mk('span', 'tst-run-area');
   const line = page.mk('div', 'tst-heat-line');
   heatLooksEl = page.mk('span', 'tst-heat-looks', '');
   heatLooksEl.title = 'Every finished heat-map cell is a look. At a 5% level about 1 in 20 looks reads "significant" by luck alone.';
-  line.append(heatRunEl, heatCountEl, page.mk('span', 'tst-heat-note', 'Research window 2021–2024 only'), heatLooksEl);
+  line.append(heatRunEl, heatCountEl, page.mk('span', 'tst-heat-note', X.pillLabel(form.range)), heatLooksEl);
+  heatWarnEl = page.mk('div', 'tst-heat-warn', '');
+  heatWarnEl.hidden = true;
   heatErrEl = page.mk('div', 'tst-err tst-heat-err', '');
-  heatCfgEl.append(axes, line, heatErrEl);
+  heatCfgEl.append(axes, opts, line, heatWarnEl, heatErrEl);
   heatRunArea();
   syncHeat();
+}
+/* How many cells this viewer will allow. The server holds the same number, and refuses past 400. */
+function maxCellsField(busy) {
+  const wrap = page.mk('span', 'tst-heat-axis'), lab = page.mk('label', 'tst-cost-l', 'Max cells');
+  const inp = page.mk('input', 'tst-num');
+  inp.type = 'number';
+  inp.min = '1';
+  inp.max = String(X.HARD_MAX_CELLS);
+  inp.step = '1';
+  inp.id = 'tst-heat-max';
+  inp.value = String(form.max_cells);
+  inp.disabled = busy;
+  lab.htmlFor = inp.id;
+  inp.oninput = () => {
+    const v = inp.value === '' ? NaN : Number(inp.value);
+    form = { ...form, max_cells: v };
+    persist();
+    syncHeat();
+  };
+  wrap.append(lab, inp);
+  return wrap;
+}
+/* The walk-forward's own two settings: they search exactly this grid, so they live beside it. */
+function wfSettingFields(busy) {
+  const pr = wfPrefs();
+  const mWrap = page.mk('span', 'tst-heat-axis'), mLab = page.mk('label', 'tst-cost-l', 'Walk-forward: select by');
+  const metric = page.mk('select', 'set-select');
+  metric.id = 'tst-wf-metric';
+  mLab.htmlFor = metric.id;
+  metric.disabled = busy;
+  for (const [k, label] of X.WF_METRICS) metric.appendChild(optionEl(k, label));
+  metric.value = pr.metric;
+  metric.onchange = () => { saveWfPrefs({ metric: metric.value }); syncHeat(); };
+  mWrap.append(mLab, metric);
+  const nWrap = page.mk('span', 'tst-heat-axis'), nLab = page.mk('label', 'tst-cost-l', 'Min trades in the month');
+  const minT = page.mk('input', 'tst-num tst-wf-min');
+  minT.id = 'tst-wf-min';
+  nLab.htmlFor = minT.id;
+  minT.type = 'number';
+  minT.min = '1'; minT.max = '1000'; minT.step = '1';
+  minT.disabled = busy;
+  minT.value = pr.minText;
+  minT.oninput = () => { saveWfPrefs({ minText: minT.value }); syncHeat(); };
+  nWrap.append(nLab, minT);
+  return [mWrap, nWrap];
 }
 
 function cellLabel(g, c) { return g.axes.map((a) => `${a.label} ${X.valueLabel(c.params[a.key])}`).join(' · '); }
@@ -1197,7 +1376,7 @@ function updateHeatNote() {
   if (!c) return;
   const open = page.mk('button', 'bp-act', 'Open Overview');
   open.type = 'button';
-  open.onclick = () => { innerTab = 'overview'; form = { ...form, holdout: { ...form.holdout, on: false } }; refreshHeader(); refreshTabsBar(); refreshContent(); };
+  open.onclick = () => { innerTab = 'overview'; refreshTabsBar(); refreshContent(); };
   heatNoteEl.append(document.createTextNode(`Loaded in Overview, Performance summary and List of trades: ${cellLabel(grid, c)}  `), open);
 }
 /* The grid itself: built once per grid (or tab show); patchGrid() fills it in place on every poll. */
@@ -1207,7 +1386,7 @@ function buildGrid() {
   heatCellEls = new Map();
   if (!grid || !grid.axes) {
     heatGridEl.appendChild(page.mk('div', 'bp-empty', gridStarting ? 'Starting the grid…'
-      : 'Pick 2 or 3 parameters and run the grid: each cell is a full tick-replay run on 2021–2024'));
+      : `Pick 2 or 3 parameters and run the grid: each cell is a full tick-replay run on ${X.pillLabel(form.range)}`));
     return;
   }
   const cost = `qty ${grid.qty} · ${Tr.money(grid.commission)}/RT · ${grid.slippage_ticks} tick slippage`;
@@ -1276,7 +1455,7 @@ function refreshLooks() {
     looksErr = '';
     return r.ok ? r.json() : {};
   }).catch(() => ({}))
-    .then((m) => { looksMap = { ...looksMap, ...m }; syncHeat(); syncWf(); });
+    .then((m) => { looksMap = { ...looksMap, ...m }; syncHeat(); });
 }
 function resumeGrid() {
   refreshLooks();
@@ -1292,7 +1471,7 @@ function resumeGrid() {
 function startGrid() {
   const schema = schemaFor(strategyId), rows = currentHeatRows();
   if (X.gridProblems(form, schema, rows)) { syncHeat(); return; }
-  const bodyObj = X.gridBody(form, X.gridAxes(rows, schema).axes);
+  const bodyObj = X.gridBody(form, X.gridAxes(rows, schema, form.max_cells).axes);
   const token = ++gridToken;
   gridErr = '';
   gridStarting = true;
@@ -1330,6 +1509,7 @@ function pollGrid(gid, token, attempt = 0) {
       gridStarting = false;
       if (st.looks != null) looksMap[st.strategy] = st.looks;
       const final = X.gridProgress(st).final;
+      if (final) recordCellSeconds(st);        // the measured per-cell time the Max cells warning uses
       if (fresh) { refreshHeatConfig(); buildGrid(); } else { patchGrid(); if (wasBusy && final) refreshHeatConfig(); }
       if (!final) setTimeout(() => pollGrid(gid, token, 0), 1000);
     })
@@ -1376,10 +1556,26 @@ function loadCell(i) {
     .catch(() => { gridErr = 'could not load that cell'; syncHeat(); });
 }
 
-/* ================================================================== the walk-forward ================================================================== */
+/* ================================================================== the walk-forward ==================================================================
+   No tab of its own: the range pill's "Walk-forward 1:N" presets start it, and its result fills
+   Overview / Performance summary / List of trades. Its two settings (Select by, Min trades) live on
+   the Heat-map tab, beside the axis grid it searches. */
 
 const wfInFlight = () => wfStarting || !!(wf && !X.wfProgress(wf).final);
-const wfLive = () => !!(wfBodyEl && wfBodyEl.isConnected);
+/* Does the job on screen belong to the pill as it reads NOW? The ratio and the window are part of the
+   job's identity, so switching either one must never leave the other one's result up. */
+function wfMatchesPill() {
+  if (!wf || !X.isWalkforward(form)) return false;
+  const want = X.rangeBody(form.range), got = wf.range || {}, cfg = wf.walkforward || {};
+  const wantStart = want.kind === 'research' ? '2021-01-01' : want.start;
+  const wantEnd = want.kind === 'research' ? '2024-12-31' : want.end;
+  return cfg.test_months === form.range.wf && got.start === wantStart && got.end === wantEnd;
+}
+/* The result currently on screen: a finished job the pill still describes, whose result has arrived. */
+function wfShown() {
+  if (!wfMatchesPill() || wf.status !== 'done' || !wfResult || wfResult.id !== wf.id) return null;
+  return wfResult.result;
+}
 function wfPrefs() {
   const p = store.wf[strategyId] || {};
   const metric = X.WF_METRICS.some(([k]) => k === p.metric) ? p.metric : 'net_profit';
@@ -1397,90 +1593,67 @@ function dropWfChart() {
   try { wfChartHandle.remove(); } catch (_) { /* already gone */ }
   wfChartHandle = null;
 }
-/* Focus-preserving: the cell count, the looks preview, the error line and the Run button's enabled state. */
-function syncWf() {
-  if (!wfLive() || !wfErrEl) return;
-  const schema = schemaFor(strategyId), rows = currentHeatRows(), pr = wfPrefs();
-  const prob = X.wfProblems(form, schema, rows, pr.minTrades), g = X.gridAxes(rows, schema);
-  const n = g.axes ? X.gridCount(g.axes) : 0;
-  wfCountEl.textContent = g.axes ? `${n} cells` : '';
-  const total = X.looksLine(looksMap[strategyId] || 0, (wf && wf.looks_error) || looksErr);
-  const preview = g.axes && n <= X.MAX_CELLS ? X.wfLooksText(n, wfScheme && wfScheme.n_steps) : '';
-  wfLooksEl.textContent = preview ? `${preview} · ${total}` : total;
-  const text = wfErr || prob || '';
-  wfErrEl.textContent = text;
-  wfErrEl.hidden = !text;
-  const b = wfRunEl && wfRunEl.querySelector('.tst-run');
-  if (b) b.disabled = !!prob;
-}
-function patchWfProgress() {
-  if (!wfProgText) return;
-  const p = wf ? X.wfProgress(wf) : { text: 'Starting…', frac: null };
-  wfProgText.textContent = p.text;
-  if (p.frac == null) wfProgBar.removeAttribute('value'); else wfProgBar.value = p.frac;
-}
-function wfRunArea() {
-  wfRunEl.replaceChildren();
-  wfProgBar = null; wfProgText = null;
-  if (wfInFlight()) {
-    wfProgBar = document.createElement('progress');
-    wfProgBar.className = 'tst-progress';
-    wfProgBar.max = 1;
-    wfProgText = page.mk('span', 'tst-progress-text', '');
-    wfRunEl.append(wfProgBar, wfProgText, iconBtn('square', 'Cancel the walk-forward', cancelWf, wfStarting));
-    patchWfProgress();
-  } else {
-    const b = page.mk('button', 'btn btn-primary tst-run');
-    b.type = 'button';
-    b.append(page.icon('play'), document.createTextNode(' Run walk-forward'));
-    b.onclick = startWf;
-    wfRunEl.appendChild(b);
-    if (wf) wfRunEl.appendChild(page.mk('span', 'tst-progress-text', X.wfProgress(wf).text));
+/* While a walk-forward is running (or has failed), the ordinary tabs say so rather than showing the
+   last single run's report under a pill that no longer describes it. Returns true when it wrote. */
+function wfBusyNote(container) {
+  if (!X.isWalkforward(form)) return false;          // a plain run: the ordinary tabs are the ordinary tabs
+  const mine = wfMatchesPill();
+  if (wfStarting || (mine && wfInFlight())) {
+    container.appendChild(page.mk('div', 'bp-empty',
+      'Each cell runs once over the window; the selection and the stitched out-of-sample result appear when every cell is done'));
+    return true;
   }
+  if (!wf || !mine) {
+    const had = wf ? ` — the result on file is for ${(wf.range || {}).label || 'another window'} at 1:${(wf.walkforward || {}).test_months}` : '';
+    container.appendChild(page.mk('div', 'bp-empty', `Run the walk-forward to see ${X.pillLabel(form.range)}${had}`));
+    return true;
+  }
+  if (wf.status === 'error' || wf.status === 'cancelled') {
+    container.appendChild(page.mk('div', 'tst-err', X.wfProgress(wf).text));
+    return true;
+  }
+  if (wf.status === 'done' && !wfShown()) {
+    container.appendChild(page.mk('div', wfResultErr ? 'tst-err' : 'bp-empty', wfResultErr || 'Loading the result…'));
+    if (!wfResultErr) loadWfResult(wf.id, wfToken);
+    return true;
+  }
+  return false;
 }
-/* The editor + run row. Rebuilt only on a real state change (a strategy switch, a job starting or ending). */
-function refreshWfConfig() {
-  if (!wfLive()) return;
-  const busy = wfInFlight(), pr = wfPrefs();
-  wfCfgEl.replaceChildren();
-  const axes = page.mk('div', 'tst-heat-axes');
-  for (let k = 0; k < 3; k++) axes.appendChild(axisRow(k, busy, () => { wfErr = ''; syncWf(); }));
-  const sel = page.mk('div', 'tst-heat-axes');
-  const mWrap = page.mk('span', 'tst-heat-axis'), mLab = page.mk('label', 'tst-cost-l', 'Select by');
-  const metric = page.mk('select', 'set-select');
-  metric.id = 'tst-wf-metric';
-  mLab.htmlFor = metric.id;
-  metric.disabled = busy;
-  for (const [k, label] of X.WF_METRICS) metric.appendChild(optionEl(k, label));
-  metric.value = pr.metric;
-  metric.onchange = () => { saveWfPrefs({ metric: metric.value }); syncWf(); };
-  mWrap.append(mLab, metric);
-  const nWrap = page.mk('span', 'tst-heat-axis'), nLab = page.mk('label', 'tst-cost-l', 'Min trades in the month');
-  const minT = page.mk('input', 'tst-heat-vals tst-wf-min');
-  minT.id = 'tst-wf-min';
-  nLab.htmlFor = minT.id;
-  minT.type = 'number';
-  minT.min = '1'; minT.max = '1000'; minT.step = '1';
-  minT.disabled = busy;
-  minT.value = pr.minText;
-  minT.oninput = () => { saveWfPrefs({ minText: minT.value }); syncWf(); };
-  nWrap.append(nLab, minT);
-  sel.append(mWrap, nWrap);
-  wfCountEl = page.mk('span', 'tst-heat-count', '');
-  wfRunEl = page.mk('span', 'tst-run-area');
-  wfLooksEl = page.mk('span', 'tst-heat-looks', '');
-  wfLooksEl.title = 'Every selection month compares every cell: each is a look. At a 5% level about 1 in 20 looks reads "significant" by luck alone.';
-  const line = page.mk('div', 'tst-heat-line');
-  line.append(wfRunEl, wfCountEl, page.mk('span', 'tst-heat-note', 'Research window 2021–2024 only · select 1 month, test the next 3, monthly'), wfLooksEl);
-  wfErrEl = page.mk('div', 'tst-err tst-heat-err', '');
-  wfCfgEl.append(axes, sel, line, wfErrEl);
-  wfRunArea();
-  syncWf();
+function wfHeadLines(container, r) {
+  container.appendChild(page.mk('div', 'tst-kv-line', X.wfScheme(r)));
+  const ran = (wf.axes || []).map((a) => `${a.label}: ${a.values.map(X.valueLabel).join(', ')}`).join(' · ');
+  if (ran) container.appendChild(page.mk('div', 'tst-kv-line', `Grid: ${ran}`));
+}
+/* Overview: both stitched sides -- the out-of-sample the user cares about, and the selection months
+   those picks were made on -- then the stitched out-of-sample equity. */
+function renderWfOverview(container, r) {
+  wfHeadLines(container, r);
+  for (const side of ['oos', 'is']) {
+    container.appendChild(page.mk('div', 'set-cap', X.WF_SIDE_LABELS[side].toUpperCase()));
+    const tiles = page.mk('div', 'tst-tiles');
+    for (const t of X.wfTiles(r, side)) tiles.appendChild(tileEl(t));
+    container.appendChild(tiles);
+  }
+  container.appendChild(page.mk('div', 'tst-kv-line', X.wfDrop(r)));
+  const chartWrap = page.mk('div', 'tst-chart');
+  container.appendChild(chartWrap);
+  if ((r.stitched.equity.t_ms || []).length) wfChartHandle = miniChart(chartWrap, r.stitched.equity, palette());
+  else chartWrap.appendChild(page.mk('div', 'bp-empty', 'No out-of-sample trades in the stitched chain'));
+  container.appendChild(page.mk('div', 'tst-kv-line', X.wfStability(r)));
+  container.appendChild(page.mk('div', 'tst-kv-line', X.wfPhases(r)));
+  if (r.skipped_by_error) container.appendChild(page.mk('div', 'tst-err', `${r.skipped_by_error} strategy-error sessions inside the test legs`));
 }
 function wfStepTable(r) {
-  const t = page.mk('table', 'bp-table tst-wf-steps'), thead = page.mk('thead'), htr = page.mk('tr');
+  const t = page.mk('table', 'bp-table tst-wf-steps'), thead = page.mk('thead');
+  const gtr = page.mk('tr');
+  X.WF_STEP_GROUPS.forEach(([label, span], i) => {
+    const th = page.mk('th', i ? 'num tst-wf-group' : '', label);
+    th.colSpan = span;
+    gtr.appendChild(th);
+  });
+  const htr = page.mk('tr');
   X.WF_STEP_HEADERS.forEach((h, i) => htr.appendChild(page.mk('th', i >= 3 ? 'num' : '', h)));
-  thead.appendChild(htr);
+  thead.append(gtr, htr);
   const tbody = page.mk('tbody');
   for (const row of X.wfStepRows(r, wf.axes)) {
     const tr = page.mk('tr', row.stitched ? 'tst-wf-chain' : '');
@@ -1491,77 +1664,49 @@ function wfStepTable(r) {
       if (i === 2 && row.changed) td.classList.add('tst-wf-changed');
       tr.appendChild(td);
     });
-    if (row.stitched) tr.title = 'In the stitched chain: this pick is held for its full 3-month test window';
+    if (row.stitched) tr.title = `In the stitched chain: this pick is held for its full ${r.scheme.test_months}-month test window`;
     tbody.appendChild(tr);
   }
   t.append(thead, tbody);
   return t;
 }
-function renderWfResult(r) {
-  wfBodyEl.appendChild(page.mk('div', 'tst-kv-line', X.wfScheme(r)));
-  const tiles = page.mk('div', 'tst-tiles');
-  for (const tl of X.wfTiles(r)) tiles.appendChild(tileEl(tl));
-  wfBodyEl.appendChild(tiles);
-  const chartWrap = page.mk('div', 'tst-chart');
-  wfBodyEl.appendChild(chartWrap);
-  if ((r.stitched.equity.t_ms || []).length) wfChartHandle = miniChart(chartWrap, r.stitched.equity, palette());
-  else chartWrap.appendChild(page.mk('div', 'bp-empty', 'No out-of-sample trades in the stitched chain'));
-  wfBodyEl.appendChild(page.mk('div', 'tst-kv-line', X.wfStability(r)));
-  wfBodyEl.appendChild(page.mk('div', 'tst-kv-line', X.wfPhases(r)));
-  if (r.skipped_by_error) wfBodyEl.appendChild(page.mk('div', 'tst-err', `${r.skipped_by_error} strategy-error sessions inside the test legs`));
-  wfBodyEl.appendChild(page.mk('div', 'set-cap', `STEPS · highlighted rows = the stitched chain · tie-break: ${r.scheme.tie_break}`));
-  wfBodyEl.appendChild(wfStepTable(r));
+function renderWfSummary(container, r) {
+  wfHeadLines(container, r);
+  container.appendChild(page.mk('div', 'set-cap', `STEPS · highlighted rows = the stitched chain · tie-break: ${r.scheme.tie_break}`));
+  container.appendChild(wfStepTable(r));
 }
-/* The body: built once per job state (fresh job, a job ending, the result arriving) -- never on a poll tick. */
-function buildWfBody() {
-  if (!wfLive()) return;
-  dropWfChart();
-  wfBodyEl.replaceChildren();
-  if (!wf) {
-    wfBodyEl.appendChild(page.mk('div', 'bp-empty', wfStarting ? 'Starting the walk-forward…'
-      : 'Pick 2 or 3 parameters: each month, every cell is scored and the best is traded for the next 3 months (2021–2024)'));
-    return;
-  }
-  const cost = `qty ${wf.qty} · ${Tr.money(wf.commission)}/RT · ${wf.slippage_ticks} tick slippage`;
-  const ran = (wf.axes || []).map((a) => `${a.label}: ${a.values.map(X.valueLabel).join(', ')}`).join(' · ');
-  wfBodyEl.appendChild(page.mk('div', 'tst-kv-line', `${wf.strategy_name || wf.strategy} · ${wf.range.label} · ${cost}`));
-  if (ran) wfBodyEl.appendChild(page.mk('div', 'tst-kv-line', `Grid: ${ran}`));
-  if (wf.status === 'done') {
-    if (wfResult && wfResult.id === wf.id) { renderWfResult(wfResult.result); return; }
-    wfBodyEl.appendChild(page.mk('div', wfResultErr ? 'tst-err' : 'bp-empty', wfResultErr || 'Loading the result…'));
-    if (!wfResultErr) loadWfResult(wf.id, wfToken);
-    return;
-  }
-  if (wf.status === 'error' || wf.status === 'cancelled') {
-    wfBodyEl.appendChild(page.mk('div', 'tst-err', X.wfProgress(wf).text));
-    return;
-  }
-  wfBodyEl.appendChild(page.mk('div', 'bp-empty', 'Each cell runs once over 2021–2024; the selection and the stitched out-of-sample equity appear when every cell is done'));
+/* List of trades: the stitched OUT-of-sample trades, in the same table a single run uses. */
+function renderWfTrades(container, r) {
+  const trades = r.stitched.trades || [];
+  if (!trades.length) { container.appendChild(page.mk('div', 'bp-empty', 'No out-of-sample trades in the stitched chain')); return; }
+  container.appendChild(page.mk('div', 'set-cap', 'OUT-OF-SAMPLE TRADES'));
+  container.appendChild(tradeTable(trades, schemaFor(strategyId).root, null));
 }
 function loadWfResult(wid, token) {
   fetch(`/api/tester/walkforward/${wid}/result`).then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
-    .then((result) => { if (token !== wfToken) return; wfResult = { id: wid, result }; wfResultErr = ''; buildWfBody(); })
-    .catch(() => { if (token !== wfToken) return; wfResultErr = 'could not load the walk-forward result'; buildWfBody(); });
+    .then((result) => { if (token !== wfToken) return; wfResult = { id: wid, result }; wfResultErr = ''; refreshContent(); })
+    .catch(() => { if (token !== wfToken) return; wfResultErr = 'could not load the walk-forward result'; refreshContent(); });
 }
+/* The step count comes from the server for the ratio AND the window the pill shows (review M5), never
+   from a client constant. Re-fetched whenever either changes; the previous answer is kept meanwhile. */
 function loadWfScheme() {
-  if (wfScheme || wfSchemePromise) return;
-  wfSchemePromise = fetch('/api/tester/walkforward-scheme').then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
-    .then((sc) => { wfScheme = sc; syncWf(); })
-    .catch(() => { /* the preview stays blank; the next render retries */ })
+  const d = X.rangeDates(form.range), n = form.range.wf || 3;
+  const key = `${n}|${d.start}|${d.end}`;
+  if (wfSchemeKey === key || wfSchemePromise) return;
+  wfSchemeKey = key;
+  const q = new URLSearchParams({ test_months: String(n), start: d.start || '', end: d.end || '' });
+  wfSchemePromise = fetch(`/api/tester/walkforward-scheme?${q}`).then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+    .then((sc) => { wfScheme = sc; syncHeat(); })
+    .catch(() => { wfSchemeKey = null; /* the preview stays as it was; the next render retries */ })
     .finally(() => { wfSchemePromise = null; });
 }
-function renderWalkforward(container) {
+/* A page reload mid-job (or a return to this strategy): pick the newest walk-forward of this strategy back up. */
+/* The step-count preview follows the pill, and a page reload mid-job picks the newest walk-forward of
+   this strategy back up -- once. */
+function ensureWf() {
   loadWfScheme();
-  const wrap = page.mk('div', 'tst-heat tst-wf');
-  wfCfgEl = page.mk('div', 'tst-heat-cfg');
-  wfBodyEl = page.mk('div', 'tst-wf-body');
-  wrap.append(wfCfgEl, wfBodyEl);
-  container.appendChild(wrap);
-  refreshWfConfig();
-  buildWfBody();
   if (!wfResumed) { wfResumed = true; resumeWf(); }
 }
-/* A page reload mid-job (or a return to this strategy): pick the newest walk-forward of this strategy back up. */
 function resumeWf() {
   refreshLooks();
   const idle = () => !wfStarting && (!wf || wf.lost);
@@ -1575,16 +1720,16 @@ function resumeWf() {
 }
 function startWf() {
   const schema = schemaFor(strategyId), rows = currentHeatRows(), pr = wfPrefs();
-  if (X.wfProblems(form, schema, rows, pr.minTrades)) { syncWf(); return; }
-  const bodyObj = X.wfBody(form, X.gridAxes(rows, schema).axes, pr.metric, pr.minTrades);
+  if (X.wfProblems(form, schema, rows, pr.minTrades)) { refreshHeader(); return; }
+  const bodyObj = X.wfBody(form, X.gridAxes(rows, schema, form.max_cells).axes, pr.metric, pr.minTrades);
   const token = ++wfToken;
   wfErr = '';
   wfStarting = true;
   wf = null;
   wfResult = null;
   wfResultErr = '';
-  refreshWfConfig();
-  buildWfBody();
+  refreshHeader();
+  refreshContent();
   fetch('/api/tester/walkforward', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(bodyObj) })
     .then(async (r) => {
       if (r.status === 400) {
@@ -1600,8 +1745,9 @@ function startWf() {
       if (token !== wfToken) return;
       wfStarting = false;
       wfErr = e.message || 'request failed';
-      refreshWfConfig();
-      buildWfBody();
+      serverError = wfErr;
+      refreshHeader();
+      refreshContent();
     });
 }
 function pollWf(wid, token, attempt = 0) {
@@ -1614,11 +1760,11 @@ function pollWf(wid, token, attempt = 0) {
       wfStarting = false;
       if (st.looks != null) looksMap[st.strategy] = st.looks;
       const final = X.wfProgress(st).final;
-      if (fresh) { refreshWfConfig(); buildWfBody(); } else {
-        patchWfProgress();
-        if (wasBusy && final) refreshWfConfig();
-        if (wasStatus !== st.status) buildWfBody();
-        syncWf();
+      if (fresh) { refreshHeader(); refreshContent(); } else {
+        updateProgressUI();
+        if (wasBusy && final) refreshHeader();
+        if (wasStatus !== st.status) refreshContent();
+        syncHeat();
       }
       if (!final) setTimeout(() => pollWf(wid, token, 0), 1000);
     })
@@ -1629,7 +1775,8 @@ function pollWf(wid, token, attempt = 0) {
       wfErr = 'lost contact with the walk-forward (it keeps running on the server; reopen the tab to pick it up)';
       if (wf) wf = { ...wf, status: 'cancelled', error: 'lost contact', lost: true };
       wfResumed = false;
-      refreshWfConfig();
+      refreshHeader();
+      refreshContent();
     });
 }
 function cancelWf() {
@@ -1644,6 +1791,7 @@ function resetWf() {
   wfResult = null;
   wfResultErr = '';
   wfResumed = false;
+  wfSchemeKey = null;
 }
 
 /* ================================================================== strategy switching / mount ================================================================== */
@@ -1683,12 +1831,10 @@ function buildFull() {
   strategyId = (strategiesList.some((s) => s.id === store.strategy) ? store.strategy : strategiesList[0].id);
   form = X.restore(store.forms[strategyId], schemaFor(strategyId));
   headerEl = page.mk('div', 'tst-head');
-  holdoutBannerEl = page.mk('div', 'tst-holdout-banner', '');
-  holdoutBannerEl.hidden = true;
   tabsEl = page.mk('div', 'tst-tabs');
   contentEl = page.mk('div', 'tst-content');
   const sticky = page.mk('div', 'tst-sticky');
-  sticky.append(headerEl, holdoutBannerEl, tabsEl);
+  sticky.append(headerEl, tabsEl);
   root.append(sticky, contentEl);
   refreshHeader();
   refreshTabsBar();
