@@ -199,10 +199,13 @@ function registerPracticeMenu() {
     if (!cell.replay || !s || !s.sim || ctx.price == null) return [];
     const T = window.HBTrade, q = { last: s.lastPrice, bid: s.lastPrice, ask: s.lastPrice }, qty = s.qty || 1;
     const price = T.roundTick(ctx.price, ctx.tick), out = [];
+    // task-2-review.md Minor 3: grey these out the same way the block's own Buy/Sell disable (PracticeSim.enter
+    // would refuse them anyway) instead of leaving a silent no-op click.
+    const busy = !!s.sim.position || s.sim.orders.some((o) => o.role === 'entry');
     for (const side of ['Buy', 'Sell']) {
       const type = T.inferType(side, price, q);
       if (type) out.push({ text: `Practice: ${T.menuText(side, qty, price, type, ctx.tick)}`,
-        run: () => placePractice(cell, side, type, price) });
+        disabled: busy, run: () => placePractice(cell, side, type, price) });
     }
     if (s.sim.position) out.push({ text: 'Practice: Flatten', run: () => flattenPractice(cell) });
     return out;

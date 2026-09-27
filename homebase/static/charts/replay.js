@@ -244,6 +244,28 @@ class PracticeSim {
       gross: round2(gross), commission: round2(commission), net: round2(gross - commission) });
   }
 
+  /* Which extreme an OHLC bar's print path must visit FIRST, to resolve a same-bar ambiguity the way that is
+     WORSE for the trader rather than the way a bar's shape happens to suggest -- see 50-Permanent/Findings/
+     2026-09-22-15s-bar-ambiguity-confirmed-live.md: a real NQ 9:30 straddle had its entry, stop AND target all
+     inside one 15s bar, and a shape-based backtest scored it a WIN (target) when the exchange tape said LOSS
+     (stop, 0.53s after entry, target never printed) -- bar paths are structurally biased toward the optimistic
+     outcome. Two cases:
+       - an open position: the extreme that HURTS it (its SL side) must come first -- long -> 'low' (its SL is
+         below), short -> 'high' (its SL is above) -- whatever the bar's own open/close shape says.
+       - no position, but a stop or limit ENTRY is working: the extreme that FILLS it is fixed by its own side
+         (a buy fires on the high, a sell on the low) -- putting that one first automatically leaves the OTHER
+         extreme, adverse to the position that fill is about to create, still ahead of it in the path, so a
+         same-bar move against the fresh position can still hit its SL within the same bar instead of being
+         silently dropped. A market entry has no trigger side to favour (it fires on the very next print
+         regardless of path order), so it does not produce a hint.
+     null: neither applies (flat with nothing working, or only a market order) -- the caller falls back to the
+     bar's own close-direction shape, since there is nothing yet to be pessimistic FOR. */
+  worstFirst() {
+    if (this.position) return this.position.side > 0 ? 'low' : 'high';
+    const entry = this.orders.find((o) => o.role === 'entry' && o.kind !== 'market');
+    return entry ? (entry.side > 0 ? 'high' : 'low') : null;
+  }
+
   /* Unrealised P&L of the open position at `lastPrice` (0 while flat or with no price yet). */
   openPnl(lastPrice) {
     if (!this.position || lastPrice == null) return 0;
@@ -256,35 +278,43 @@ class PracticeSim {
 
 /* A closed OHLC bar as an ordered path of representative prints -- OUR OWN convention (engine.py has no
    equivalent: it always has the real tape), for feeding PracticeSim.feed() when the replay stream is
-   bar-shaped rather than raw ticks. Common backtesting convention when only OHLC is known: a bar that closed
-   at or above its open is assumed to have dipped to its low before rallying to its high; one that closed below
-   is assumed to have rallied to its high before falling to its low. EXACT, not approximate, on a tick-replay
-   chart (spec `tick:N`): there every bar IS one real print (o===h===l===c), and this collapses to that single
-   value. */
-function barPrints(bar) {
+   bar-shaped rather than raw ticks. EXACT, not approximate, on a tick-replay chart (spec `tick:N`): there every
+   bar IS one real print (o===h===l===c), and this collapses to that single value.
+
+   `worstFirst` ('low' | 'high' | falsy, from PracticeSim.worstFirst()) OVERRIDES the bar's own shape whenever
+   there is a position or a working entry to be pessimistic for -- 2026-09-22-15s-bar-ambiguity-confirmed-live:
+   an OHLC bar's true intrabar order is unknown, and guessing it from the bar's own close direction (a common
+   backtesting convention: closed at/above open -> dipped to the low before rallying to the high; closed below
+   -> the reverse) is a coin flip that is biased toward the OPTIMISTIC outcome whenever a single bar spans both
+   an SL and a TP. Only with no hint at all (truly nothing to be pessimistic for) does the shape-based guess
+   apply, since there is no position or pending fill it could bias against. */
+function barPrints(bar, worstFirst) {
   const { o, h, l, c } = bar;
   if (o === h && h === l && l === c) return [o];
+  if (worstFirst === 'low') return [o, l, h, c];
+  if (worstFirst === 'high') return [o, h, l, c];
   return c >= o ? [o, l, h, c] : [o, h, l, c];
 }
 
 /* BarFeed: turns the replay stream's bar updates (homebase/charts/server.py's `update` message: `closed[]`
    bars, then the current `live` one, both flagged `replay: true`) into the print segments PracticeSim.feed()
    wants.
-     - closedBar(): a finished bar is fed once, in full (barPrints()), then the live tracker resets for the
-       NEXT bar's own open.
+     - closedBar(): a finished bar is fed once, in full (barPrints(), position-aware via sim.worstFirst()),
+       then the live tracker resets for the NEXT bar's own open.
      - liveBar(): the FORMING bar arrives again and again as it grows (its h/l/c are cumulative, from the same
        bar's start). Feeding the WHOLE bar's path again on every update would re-present an extreme that was
        already fed on a PRIOR update as if it were happening NOW -- an order placed in between could then fire
        on a price the market touched before that order even existed. So only the genuinely NEW high/low (if
        any) since the last update are fed, chained from the last update's close (not the bar's own open) --
-       ordered the same dip-then-rally / rally-then-dip way as barPrints(), using this update's own close to
-       decide which. Exact on a tick-replay chart, where every "bar" is one real print and there is never a
-       new high AND a new low in the same update. */
+       ordered the SAME way barPrints() would (sim.worstFirst() first when there is a position or a working
+       entry to be pessimistic for; the update's own close-direction shape otherwise). Exact on a tick-replay
+       chart, where every "bar" is one real print and there is never a new high AND a new low in the same
+       update. */
 class BarFeed {
   constructor(sim) { this.sim = sim; this.liveBase = null; }
 
   closedBar(bar, ms) {
-    this.sim.feed(barPrints(bar), ms);
+    this.sim.feed(barPrints(bar, this.sim.worstFirst()), ms);
     this.liveBase = null;
   }
 
@@ -293,8 +323,11 @@ class BarFeed {
     const base = fresh ? { h: -Infinity, l: Infinity, c: bar.o } : this.liveBase;
     const newHigh = bar.h > base.h ? bar.h : null;
     const newLow = bar.l < base.l ? bar.l : null;
-    const upFirst = bar.c >= base.c;
-    const exts = (upFirst ? [newLow, newHigh] : [newHigh, newLow]).filter((x) => x != null);
+    const worst = this.sim.worstFirst();
+    // 2026-09-22-15s-bar-ambiguity-confirmed-live (see barPrints()/worstFirst()'s own comments): a position or
+    // a working entry's own adverse side overrides the update's close-direction shape.
+    const lowFirst = worst === 'low' ? true : worst === 'high' ? false : bar.c >= base.c;
+    const exts = (lowFirst ? [newLow, newHigh] : [newHigh, newLow]).filter((x) => x != null);
     const path = fresh ? [bar.o, ...exts] : exts;
     if (!path.length || path[path.length - 1] !== bar.c) path.push(bar.c);
     this.sim.feed(path, ms);

@@ -792,6 +792,9 @@ function chartMenu(cell, at) {
       m.appendChild(tpl);
     }
     const b = menuItem(it.text, it.sub || '', () => {
+      if (it.disabled) return;   // task-2-review.md Minor 3: an item greyed out by its own provider (e.g. a
+                                  // practice Buy/Sell while already in a position) never runs, even from the
+                                  // keyboard -- native `disabled` already blocks the mouse (set just below).
       if (it.act === 'removeDrawings' && !armed) {
         b.classList.add('arm');
         b.querySelector('.menu-t').textContent = window.HBChartMenu.armText(ctx.nDrawings, root);
@@ -806,6 +809,7 @@ function chartMenu(cell, at) {
       }
       if (MENU_ACTS[it.act]) MENU_ACTS[it.act](ctx, it);
     });
+    if (it.disabled) { b.disabled = true; b.setAttribute('aria-disabled', 'true'); }
     m.appendChild(b);
   }
   placeMenu();

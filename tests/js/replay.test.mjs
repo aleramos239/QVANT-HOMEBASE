@@ -178,6 +178,23 @@ test('PracticeSim: SL/TP bracket a fill, and closing either cancels the sibling 
   assert.equal(sim2.trades[0].exitPrice, 19990);
 });
 
+test('PracticeSim.worstFirst(): which extreme the bar path must visit first, to be pessimistic for the trader (task-2-review.md Critical)', () => {
+  const sim = new R.PracticeSim(0.25, 20, { commissionRt: 4, slippageTicks: 0 });
+  assert.equal(sim.worstFirst(), null);                              // flat, nothing working: no hint
+  const stop = sim.enter(1, 'stop', 106, 1);
+  assert.equal(sim.worstFirst(), 'high');                            // a BUY stop entry fires on the high
+  sim.cancel(stop.id);
+  sim.enter(-1, 'stop', 94, 1);
+  assert.equal(sim.worstFirst(), 'low');                             // a SELL stop entry fires on the low
+  const sim2 = new R.PracticeSim(0.25, 20, { commissionRt: 4, slippageTicks: 0 });
+  sim2.enter(1, 'market', null, 1);
+  assert.equal(sim2.worstFirst(), null);                             // a market entry has no trigger side to favour
+  sim2.feed([20000], 1000);
+  assert.equal(sim2.worstFirst(), 'low');                            // now long: the low (its SL side) is adverse
+  sim2.flatten();
+  assert.equal(sim2.worstFirst(), 'low');                            // still long (open) until the flatten fills
+});
+
 test('PracticeSim: flatten closes at the market; enter() refuses a second entry while one is pending or filled', () => {
   const costs = { commissionRt: 4, slippageTicks: 0 };
   const sim = new R.PracticeSim(0.25, 20, costs);
@@ -215,10 +232,20 @@ test('PracticeSim: open / realised P&L and trade count feed the P&L strip', () =
   assert.equal(sim.tradeCount(), 1);
 });
 
-test('barPrints: a closed OHLC bar as an ordered path -- a bullish bar dips then rallies, a bearish bar rallies then dips; a tick bar is one print', () => {
+test('barPrints: with no hint, a closed OHLC bar as an ordered path -- a bullish bar dips then rallies, a bearish bar rallies then dips; a tick bar is one print', () => {
   assert.deepEqual(R.barPrints({ o: 100, h: 105, l: 98, c: 103 }), [100, 98, 105, 103]);   // c >= o
   assert.deepEqual(R.barPrints({ o: 103, h: 105, l: 98, c: 100 }), [103, 105, 98, 100]);   // c < o
   assert.deepEqual(R.barPrints({ o: 50, h: 50, l: 50, c: 50 }), [50]);                      // a tick bar: o===h===l===c
+});
+
+test('barPrints: a worstFirst hint overrides the bar\'s own shape (task-2-review.md Critical -- 2026-09-22-15s-bar-ambiguity-confirmed-live: an OHLC path is biased toward the target, so an open position\'s adverse side must always come first, whatever the bar closed)', () => {
+  const bar = { o: 100, h: 112, l: 93, c: 98 };   // closes BELOW open
+  assert.deepEqual(R.barPrints(bar, 'low'), [100, 93, 112, 98]);    // 'low' wins regardless of the down-close shape
+  assert.deepEqual(R.barPrints(bar, 'high'), [100, 112, 93, 98]);   // 'high' likewise
+  const up = { o: 100, h: 112, l: 88, c: 108 };   // closes ABOVE open
+  assert.deepEqual(R.barPrints(up, 'low'), [100, 88, 112, 108]);
+  assert.deepEqual(R.barPrints(up, 'high'), [100, 112, 88, 108]);
+  assert.deepEqual(R.barPrints({ o: 50, h: 50, l: 50, c: 50 }, 'high'), [50]);   // a tick bar ignores the hint too
 });
 
 test('BarFeed: a closed bar feeds its whole path once and resets the live tracker for the next bar', () => {
@@ -239,6 +266,39 @@ test('BarFeed: a live bar chains from the last close; an order placed AFTER an e
   assert.equal(sim.orders.includes(stop), true);              // still working: 105 was not re-fed as if new
   feed.liveBar({ o: 100, h: 107, l: 98, c: 106 }, 3000);      // h genuinely extends past 106 now
   assert.equal(sim.orders.includes(stop), false);             // fires for real this time
+});
+
+test('a bar spanning BOTH the SL and the TP always resolves to the SL, never the TP -- long and short, up-close and down-close bars, via feed() AND liveBar() (task-2-review.md Critical + Important: 2026-09-22-15s-bar-ambiguity-confirmed-live)', () => {
+  const costs = { commissionRt: 4, slippageTicks: 0 };
+  const cases = [
+    // side, entry, sl, tp, bar -- each bar's range spans both the sl and the tp
+    { name: 'long, down-close (the review\'s own repro)', side: 1, entry: 100, sl: 95, tp: 110,
+      bar: { o: 100, h: 112, l: 93, c: 98 } },
+    { name: 'long, up-close', side: 1, entry: 100, sl: 95, tp: 110,
+      bar: { o: 100, h: 112, l: 93, c: 105 } },
+    { name: 'short, up-close (the review\'s mirror repro)', side: -1, entry: 100, sl: 105, tp: 90,
+      bar: { o: 100, h: 112, l: 88, c: 108 } },
+    { name: 'short, down-close', side: -1, entry: 100, sl: 105, tp: 90,
+      bar: { o: 100, h: 112, l: 88, c: 95 } },
+  ];
+  for (const c of cases) {
+    // via feed() + barPrints(), the closed-bar path
+    const sim = new R.PracticeSim(0.25, 20, costs);
+    sim.enter(c.side, 'market', null, 1, c.sl, c.tp);
+    sim.feed([c.entry], 1000);
+    sim.feed(R.barPrints(c.bar, sim.worstFirst()), 2000);
+    assert.equal(sim.trades.length, 1, `${c.name} (feed): expected one closed trade`);
+    assert.equal(sim.trades[0].exitReason, 'sl', `${c.name} (feed): SL must win, got ${sim.trades[0].exitReason}`);
+
+    // via BarFeed.liveBar(), a single forming-bar update spanning the same range
+    const sim2 = new R.PracticeSim(0.25, 20, costs);
+    const feed = new R.BarFeed(sim2);
+    sim2.enter(c.side, 'market', null, 1, c.sl, c.tp);
+    feed.liveBar({ o: c.entry, h: c.entry, l: c.entry, c: c.entry }, 1000);   // opens the position at c.entry
+    feed.liveBar(c.bar, 2000);                                                // one update spans the sl and the tp
+    assert.equal(sim2.trades.length, 1, `${c.name} (liveBar): expected one closed trade`);
+    assert.equal(sim2.trades[0].exitReason, 'sl', `${c.name} (liveBar): SL must win, got ${sim2.trades[0].exitReason}`);
+  }
 });
 
 test('pointValue: USD per 1.00 move, per contract -- homebase/contracts.py, verified for these 8 roots', () => {

@@ -143,6 +143,8 @@ a { color: inherit; }
   white-space: nowrap; }
 .menu-i:hover, .menu-i:focus-visible { background: var(--hover); }
 .menu-i.active { color: var(--accent); }
+.menu-i:disabled { opacity: .5; cursor: default; }
+.menu-i:disabled:hover { background: none; }
 .menu-t { flex: 1; overflow: hidden; text-overflow: ellipsis; }
 .menu-sub { color: var(--text-2); }
 .menu-sym .menu-t { flex: 0 0 44px; font-weight: 600; }
