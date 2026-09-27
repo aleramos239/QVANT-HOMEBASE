@@ -173,7 +173,9 @@ def test_the_first_archived_day_is_allowed(tmp_path):
     r, _ = mk(tmp_path, base=base)
     c = FakeConn()
     assert start(r, c, date=first.isoformat(), start_et="09:31") is True
-    assert c.last("replay_state")["done"] is True                    # the cursor is past its last trade
+    st = c.last("replay_state")
+    assert st["done"] is True and st["cursor_ms"] == session_range_ms(first, "NQ")[1]   # past its last trade
+    assert c.last("history")["live"] is False
 
 
 # ---------------------------------------------------------------- play / pause / speed / jump
@@ -256,8 +258,10 @@ def test_play_to_the_end_is_done_and_stops(tmp_path):
     r.pump()
     st = c.last("replay_state")
     assert st["done"] is True and st["playing"] is False
+    assert st["cursor_ms"] == session_range_ms(D, "NQ")[1]          # done: the cursor is the session end
     closed, live = today_bars(c)
-    assert sum(b["v"] for b in closed) + (live["v"] if live else 0) == 240
+    assert live is None and sum(b["v"] for b in closed) == 240     # ... which closed the last time bar
+    assert closed[-1]["ms"] == session_ms(D, 9, 32)
     ctl(r, c, action="step")                             # nothing left: harmless
     assert c.last("replay_state")["done"] is True
 
@@ -328,18 +332,18 @@ def test_stop_returns_the_chart_to_live(tmp_path):
 def test_limits_per_connection_and_per_server(tmp_path):
     r, _ = mk(tmp_path)
     a, b, x = FakeConn(), FakeConn(), FakeConn()
-    assert MAX_PER_CONN == 4 and MAX_PER_SERVER == 8
-    for i in range(4):
+    assert MAX_PER_CONN == 2 and MAX_PER_SERVER == 4
+    for i in range(2):
         assert start(r, a, cid=f"a{i}") is True
-    assert start(r, a, cid="a4") is False
-    assert "4" in a.last("replay_error", "a4")["error"]
-    assert start(r, a, cid="a0", start_et="09:31") is True    # restarting one of them is no fifth
-    for i in range(4):
+    assert start(r, a, cid="a2") is False
+    assert "at most 2" in a.last("replay_error", "a2")["error"]
+    assert start(r, a, cid="a0", start_et="09:31") is True    # restarting one of them is no third
+    for i in range(2):
         assert start(r, b, cid=f"b{i}") is True
     assert start(r, x, cid="x0") is False
-    assert "8" in x.last("replay_error", "x0")["error"]
+    assert "at most 4" in x.last("replay_error", "x0")["error"]
     r.drop_conn(a)                                           # a disconnect ends its streams
-    assert r.count() == 4 and r.count(a) == 0
+    assert r.count() == 2 and r.count(a) == 0
     assert start(r, x, cid="x0") is True
 
 
@@ -396,7 +400,7 @@ def test_a_24_7_root_replays_its_saturday_session(tmp_path):
     assert r.cursor(c, "a") == int(dt.datetime(2026, 9, 19, 9, 32, tzinfo=ET).timestamp() * 1000)
     s0, s1 = session_range_ms(SAT, "BTC")
     assert start(r, c, cid="b", root="BTC", date=SAT.isoformat(), start_et="17:30") is True   # no dead hour
-    assert r.cursor(c, "b") < s1
+    assert r.cursor(c, "b") == s1 and c.last("replay_state", "b")["done"] is True   # past its last trade
 
 
 def test_scroll_back_on_a_replay_chart_never_reaches_past_the_replay_day(tmp_path):
@@ -570,3 +574,103 @@ def test_the_module_imports_nothing_that_trades_or_records():
     src = open(br_mod.__file__).read()
     for name in ("desk", "recorder", "tickfeed", "Quotes", "Fanout", "LiveRecorder", "tradovate"):
         assert f"import {name}" not in src and f".{name} import" not in src, name
+
+
+# ---------------------------------------------------------------- fix round 1
+def test_the_replay_memo_is_small_and_emptied_when_no_replay_is_left(tmp_path):
+    r, _ = mk(tmp_path)
+    assert r.history.memo_max == br_mod.MEMO_MAX == 16
+    a, b = FakeConn(), FakeConn()
+    start(r, a)
+    start(r, b, spec="time:300")
+    assert r.history.memo
+    r.stop(a, "a")
+    assert r.history.memo                                     # b still replays
+    r.drop_conn(b)
+    assert not r.history.memo
+
+
+def test_a_restart_frees_the_old_day_before_loading_the_new_one(tmp_path, monkeypatch):
+    r, _ = mk(tmp_path)
+    c = FakeConn()
+    start(r, c)
+    held = []
+    orig = BarReplay._load
+
+    def load(self, root, d):
+        held.append(self.owns(c, "a"))
+        return orig(self, root, d)
+    monkeypatch.setattr(BarReplay, "_load", load)
+    assert start(r, c, date=P.isoformat()) is True
+    assert held == [False] and r.count() == 1
+    assert c.last("history")["sessions"][-1]["date"] == P.isoformat()
+    # a restart that then fails leaves the chart replaying nothing: it is sent back to live
+    assert start(r, c, date="2026-09-10") is False
+    assert c.out[-1] == {"type": "reset", "id": "a"} and r.count() == 0 and not r.history.memo
+
+
+@pytest.mark.parametrize("spec", ["time:86400", "tick:1000000", "tick:100"])
+def test_a_big_step_is_sliced_across_pumps(tmp_path, monkeypatch, spec):
+    monkeypatch.setattr(br_mod, "FEED_MAX", 30)
+    r, wall = mk(tmp_path)
+    c = FakeConn()
+    start(r, c, spec=spec, speed="bar", start_et="09:29")      # one trade applied
+    fed = [r.active[(c, "a")].idx]
+    n0 = len(today_bars(c)[0])
+    ctl(r, c, action="step")
+    fed.append(r.active[(c, "a")].idx)
+    assert fed[-1] - fed[-2] == 30 and len(today_bars(c)[0]) == n0   # one slice, no bar yet
+    assert c.last("replay_state")["cursor_ms"] == d_rows()[30]["ts_ms"]
+    pumps = 0
+    while r.active[(c, "a")].stepping:
+        wall[0] += 0.25
+        r.pump()
+        pumps += 1
+        fed.append(r.active[(c, "a")].idx)
+        assert fed[-1] - fed[-2] <= 30
+    closed, _ = today_bars(c)
+    if spec == "tick:100":
+        assert pumps == 3 and len(closed) == n0 + 1 and closed[-1]["n"] == 100
+    else:                              # the only bar is the whole session: all 240 trades, then the end
+        closed, live = today_bars(c)
+        if spec == "time:86400":       # the session end closes the last time bar
+            assert pumps == 7 and len(closed) == n0 + 1 and closed[-1]["v"] == 240 and live is None
+        else:                          # a tick bar closes on its trades only: 240 < 1,000,000 stays open
+            assert pumps == 7 and len(closed) == n0 and live["v"] == 240
+        st = c.last("replay_state")
+        assert st["done"] is True and st["cursor_ms"] == session_range_ms(D, "NQ")[1]
+
+
+def test_a_failing_replay_is_freed(tmp_path, monkeypatch):
+    r, wall = mk(tmp_path)
+    c = FakeConn()
+    start(r, c, speed=10)
+    ctl(r, c, action="play")
+
+    def boom(self, rep):
+        raise RuntimeError("bad tape")
+    monkeypatch.setattr(BarReplay, "_catch_up", boom)
+    wall[0] += 1
+    r.pump()
+    assert "bad tape" in c.last("replay_error")["error"]
+    assert c.out[-1] == {"type": "reset", "id": "a"}
+    assert r.count() == 0 and not r.history.memo
+
+
+@pytest.mark.parametrize("then", ["stop", "jump"])
+def test_a_scroll_back_answer_in_flight_is_dropped_at_stop_or_jump(tmp_path, then):
+    r, _ = mk(tmp_path)
+    c = FakeConn()
+    start(r, c)
+    first = c.last("history")["bars"][0]["ms"]
+
+    async def go():
+        assert r.ask_older(c, "a", first) is True
+        if then == "stop":
+            r.stop(c, "a")
+        else:
+            await r.control(c, "a", {"action": "jump", "to_et": "09:31"})
+        while r.tasks:
+            await asyncio.sleep(0.01)
+    run(go())
+    assert not c.of("older")

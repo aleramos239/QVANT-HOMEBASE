@@ -38,8 +38,11 @@ from .studies import make
 
 FIRST_DATE = dt.date(2021, 9, 22)       # the archive's first session
 SPEEDS = (1, 2, 5, 10, 30, 60, "bar")
-MAX_PER_CONN = 4
-MAX_PER_SERVER = 8
+MAX_PER_CONN = 2
+MAX_PER_SERVER = 4
+MEMO_MAX = 16                           # the replays' own History memo (sessions of bars); cleared when idle
+FEED_MAX = 20_000                       # ticks fed per stream per call (pump / op): a big step on a big bar
+                                        # (time:86400, tick:1000000) goes on over several pumps, never one freeze
 STATE_S = 1.0                           # a replay_state at least this often while a replay exists
 BAR_PLAY_S = 1.0                        # speed "bar" + play: one bar per this many wall seconds
 _DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
@@ -79,8 +82,14 @@ class Replay:
     anchor_cursor: int = 0
     last_state: float = 0.0
     last_bar: float = 0.0
-    failed: bool = False
+    gen: int = 0                        # bumped by every (re)build and by the end: stale scroll-back is dropped
+    step_to: int | None = None          # a time step under way: its target cursor
+    step_n0: int | None = None          # a tick/volume/range step under way: the closed-bar count it started at
     older_busy: set = field(default_factory=set)
+
+    @property
+    def stepping(self) -> bool:
+        return self.step_to is not None or self.step_n0 is not None
 
 
 def _studies_of(live) -> list:
@@ -95,7 +104,8 @@ class BarReplay:
     def __init__(self, store: TickStore, cache_dir, roots, now_ms, *, min_bar: dict, max_studies: int,
                  wall=None, log=None):
         self.store = store
-        self.history = History(store, cache_dir=cache_dir)   # its own memo: never evicts the live charts'
+        # its own memo (never evicts the live charts'), small, and emptied whenever no replay is left
+        self.history = History(store, cache_dir=cache_dir, memo_max=MEMO_MAX)
         self.roots = [r.upper() for r in roots]
         self.now_ms = now_ms                                 # the LIVE clock: which sessions are completed
         self.min_bar, self.max_studies = min_bar, max_studies
@@ -222,12 +232,13 @@ class BarReplay:
         """Event loop: swap the replay onto a freshly built hub and send its history."""
         s = hub.attach(prepared)
         r.hub, r.stream, r.idx, r.cursor = hub, s, idx, cursor
+        r.gen += 1
+        r.step_to = r.step_n0 = None
+        r.done = False
         hub.on_clock(cursor)                 # a time bar that ends exactly at the cursor is closed
+        self._check_done(r)
         hub.subscribe(s, (r.conn, r.cid))
         s.dirty = False
-        r.done = r.idx >= len(r.ticks)
-        if r.done:
-            r.playing = False
         self._anchor(r)
         self._history(r)
 
@@ -247,25 +258,28 @@ class BarReplay:
         except Refused as e:
             self._error(conn, cid, "replay_start", str(e))
             return False
+        replaced = self.active.pop(key, None) is not None   # free the old day BEFORE loading the new one
         self.pending.add(key)
+        ok = False
         try:
             loaded = await asyncio.to_thread(self._load, root, d)
             if loaded is None:
                 raise Refused(f"no archived {root} session on {d.isoformat()}")
             ticks, ts, info = loaded
             hub, prepared, idx = await asyncio.to_thread(self._build, root, spec, keys, d, ticks, ts, info, cursor)
+            ok = True
         except Refused as e:
             self._error(conn, cid, "replay_start", str(e))
-            return False
         except Exception as e:  # noqa: BLE001 — a failed build answers the page, never kills the socket
             self._log(f"replay_start {cid} ({root} {spec.key} {d}): {type(e).__name__}: {e}")
             self._error(conn, cid, "replay_start", str(e) or type(e).__name__)
-            return False
         finally:
             self.pending.discard(key)
-        if getattr(conn, "dead", False):
+        if not ok or getattr(conn, "dead", False):
+            if replaced:                     # it was replaying and now is not: back to live
+                conn.send({"type": "reset", "id": cid})
+            self._idle()
             return False
-        self.active.pop(key, None)           # a replay_start on a replaying chart replaces it
         s0, s1 = session_range_ms(d, root)
         r = Replay(conn, cid, root, spec, keys, fp, d, s0, s1, ticks, ts, info, speed=speed)
         self.active[key] = r
@@ -283,11 +297,13 @@ class BarReplay:
             if act == "play":
                 if not r.done:
                     self._catch_up(r)
+                    r.step_to = r.step_n0 = None     # a step under way gives way to play
                     r.playing = True
                     self._anchor(r)
             elif act == "pause":
                 self._catch_up(r)
                 r.playing = False
+                r.step_to = r.step_n0 = None
             elif act == "step":
                 self._catch_up(r)
                 r.playing = False
@@ -300,6 +316,7 @@ class BarReplay:
                 self._anchor(r)
             elif act == "jump":
                 cursor = self._at(r.root, r.date, msg.get("to_et"))
+                r.gen += 1                   # scroll-back answers from before the jump are dropped
                 hub, prepared, idx = await asyncio.to_thread(
                     self._build, r.root, r.spec, r.keys, r.date, r.ticks, r.ts, r.info, cursor)
                 if self.active.get((conn, cid)) is not r:
@@ -319,14 +336,22 @@ class BarReplay:
         if r is None:
             return False
         r.playing = False
+        r.gen += 1                           # an in-flight scroll-back answer is dropped
         if notify:
             self._state(r, stopped=True)
             conn.send({"type": "reset", "id": cid})
+        self._idle()
         return True
 
     def drop_conn(self, conn) -> None:
         for k in [k for k in self.active if k[0] is conn]:
-            del self.active[k]
+            self.active.pop(k).gen += 1
+        self._idle()
+
+    def _idle(self) -> None:
+        """No replay left (active or loading): drop the replays' memo of built sessions."""
+        if not self.active and not self.pending:
+            self.history.clear()
 
     def ask_older(self, conn, cid: str, before) -> bool:
         """Scroll-back on a replay chart: the live `older` answer, built by the replay's own hub (whose today
@@ -338,7 +363,7 @@ class BarReplay:
             conn.send({"type": "older", "id": cid, "before": before, "replay": True,
                        "error": "before: the first bar's time (epoch ms)"})
             return True
-        busy = id(r.stream)
+        busy = r.gen
         if busy in r.older_busy:
             conn.send({"type": "older", "id": cid, "before": before, "replay": True, "error": "busy"})
             return True
@@ -348,13 +373,16 @@ class BarReplay:
         task.add_done_callback(self.tasks.discard)
         return True
 
-    async def _older(self, r: Replay, busy: int, before: int) -> None:
+    async def _older(self, r: Replay, gen: int, before: int) -> None:
+        hub, stream = r.hub, r.stream
         try:
-            ans = await asyncio.to_thread(r.hub.older, r.stream, before)
+            ans = await asyncio.to_thread(hub.older, stream, before)
         except Exception as e:  # noqa: BLE001 — the page retries a failed chunk
             ans = {"error": str(e) or type(e).__name__}
         finally:
-            r.older_busy.discard(busy)
+            r.older_busy.discard(gen)
+        if r.gen != gen or self.active.get((r.conn, r.cid)) is not r:
+            return                           # stopped or jumped meanwhile: that chart is not there any more
         r.conn.send({"type": "older", "id": r.cid, "before": before, **ans, "replay": True})
 
     # ------------------------------------------------------------ the clock
@@ -363,11 +391,11 @@ class BarReplay:
         replay_state once a second. One failing replay is paused and told; the others go on."""
         now = self._wall()
         for r in list(self.active.values()):
-            if r.failed:
-                continue
             try:
-                was = r.done
-                if r.playing:
+                was = (r.done, r.stepping)
+                if r.stepping:
+                    self._continue_step(r)       # one FEED_MAX slice per pump
+                elif r.playing:
                     if r.speed == "bar":
                         if now - r.last_bar >= BAR_PLAY_S:
                             r.last_bar = now
@@ -375,12 +403,12 @@ class BarReplay:
                     else:
                         self._catch_up(r)
                 self._flush(r)
-                if r.done != was or now - r.last_state >= STATE_S:
+                if (r.done, r.stepping) != was or now - r.last_state >= STATE_S:
                     self._state(r)
             except Exception as e:  # noqa: BLE001 — never the live pump's problem
-                r.failed, r.playing = True, False
                 self._log(f"replay {r.cid} ({r.root} {r.spec.key} {r.date}): {type(e).__name__}: {e}")
                 self._error(r.conn, r.cid, "replay_ctl", f"replay stopped: {type(e).__name__}: {e}")
+                self.stop(r.conn, r.cid)         # frees its buffer and its place in the limits; page -> live
 
     def _anchor(self, r: Replay) -> None:
         r.anchor_wall = r.last_bar = self._wall()
@@ -392,37 +420,50 @@ class BarReplay:
             return
         self._advance(r, r.anchor_cursor + round((self._wall() - r.anchor_wall) * 1000 * r.speed))
 
-    def _feed(self, r: Replay, upto_ms: int, one_bar: bool = False) -> None:
-        """Apply the buffered ticks with ts <= upto_ms (one_bar: stop once a bar closes)."""
+    def _feed(self, r: Replay, upto_ms: int, n0: int | None = None) -> bool:
+        """Apply the buffered ticks with ts <= upto_ms, at most FEED_MAX of them (n0: stop once the stream
+        holds more than n0 closed bars). True: finished (reached upto_ms, or the bar closed); False: the
+        slice ran out first -- the caller goes on at the next pump."""
         s, tape, ticks = r.stream, r.hub.today[r.root], r.ticks
-        n0 = len(s.bars)
+        budget = FEED_MAX
         while r.idx < len(ticks) and ticks[r.idx].ts_ms <= upto_ms:
+            if budget <= 0:
+                return False
+            budget -= 1
             tk = ticks[r.idx]
             r.idx += 1
             tape.append(tk)
             for b in s.builder.add(tk):
                 s.commit(b)
             s.dirty = True
-            if one_bar:
-                r.cursor = max(r.cursor, tk.ts_ms)
-                if len(s.bars) > n0:
-                    break
+            r.cursor = max(r.cursor, tk.ts_ms)
+            if n0 is not None and len(s.bars) > n0:
+                return True
+        return True
 
-    def _advance(self, r: Replay, target_ms: int) -> None:
+    def _advance(self, r: Replay, target_ms: int) -> bool:
+        """Move the cursor to target_ms (capped at the session end). False: only part of the way this call."""
         target = min(target_ms, r.s1)
         if target > r.cursor:
-            self._feed(r, target)
+            if not self._feed(r, target):
+                return False
             r.cursor = target
             r.hub.on_clock(target)
         self._check_done(r)
+        return True
 
     def _check_done(self, r: Replay) -> None:
-        if r.idx >= len(r.ticks):
+        """Every trade applied: the cursor goes to the session end, which closes the last time bar."""
+        if r.idx >= len(r.ticks) and not r.done:
             r.done, r.playing = True, False
+            r.step_to = r.step_n0 = None
+            r.cursor = max(r.cursor, r.s1)
+            r.hub.on_clock(r.s1)
 
     def _step(self, r: Replay) -> None:
-        """Exactly one more closed bar of the chart's own type (fewer only at the end of the session)."""
-        if r.done:
+        """Begin a step: exactly one more closed bar of the chart's own type (fewer only at the session's
+        end). It feeds at most FEED_MAX ticks now; a step still under way goes on at every pump."""
+        if r.done or r.stepping:
             return
         s = r.stream
         if s.spec.kind == "time":
@@ -433,7 +474,16 @@ class BarReplay:
                 t = r.s0 + (nxt - r.s0) // n * n
             else:
                 t = cur.t
-            self._advance(r, min(t + n, r.s1))
+            r.step_to = min(t + n, r.s1)
         else:
-            self._feed(r, r.s1, one_bar=True)
+            r.step_n0 = len(s.bars)
+        self._continue_step(r)
+
+    def _continue_step(self, r: Replay) -> None:
+        if r.step_to is not None:
+            if self._advance(r, r.step_to):
+                r.step_to = None
+        elif r.step_n0 is not None:
+            if self._feed(r, r.s1, n0=r.step_n0):
+                r.step_n0 = None
             self._check_done(r)

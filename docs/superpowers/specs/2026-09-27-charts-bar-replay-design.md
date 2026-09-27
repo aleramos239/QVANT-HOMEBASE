@@ -20,7 +20,7 @@ A chart can switch into replay mode without affecting other charts or the live f
   - It uses its own Hub/BarBuilder instance, never the live hub, and never records.
   - It never touches the desk link: no quotes are noted and no fan-out to trading.
 - **Limits:**
-  - At most 4 replay streams per connection and 8 per server.
+  - At most 2 replay streams per connection and 4 per server.
   - Each stream's tick buffer holds one session.
   - A stream ends on disconnect or `replay_stop`.
 - **Load:** tick loading runs off the event loop (`to_thread`). The first frame answers within the history time budget, using the same newest-first rule as deep history.
