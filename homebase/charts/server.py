@@ -33,7 +33,8 @@ from .barreplay import BarReplay
 from .bursts import REACTION_ROOTS, BurstBook, ReactionBook, configured_roots
 from .calendar import Calendar
 from .depth import DEPTH_ARCHIVE, Depth, DepthRecorder
-from .depthgrid import MAX_COLS as DEPTH_MAX_COLS, MAX_SPAN_MS as DEPTH_MAX_SPAN_MS, DepthHistory, Paused
+from .depthgrid import (MAX_COLS as DEPTH_MAX_COLS, MAX_SPAN_MS as DEPTH_MAX_SPAN_MS, Busy, HistoryPool, Paused,
+                        paused_reason)
 from .desk import Fanout, Quotes, register as register_desk
 from .history import History
 from .hub import Hub, Stream
@@ -46,7 +47,7 @@ from .store import ARCHIVE, TickStore
 from .studies import make
 from .tick import SideClassifier, from_row
 from .tester_api import tester_router
-from .tickfeed import TickFeed, in_quiet
+from .tickfeed import TickFeed
 
 STATIC = Path(__file__).resolve().parent.parent / "static"
 PUMP_S = 0.25                 # <= 4 updates a second per chart
@@ -254,7 +255,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                now_ms=None, state: Path | None = None, calendar_fetch=None,
                desk_factory=None, fake_desk_factory=None, news_fetch=None, depth_roots=None,
                depth_base: Path | None = None, paper_day: bool = False,
-               paper_backtest=None) -> FastAPI:
+               paper_backtest=None, depth_executor=None) -> FastAPI:
     if paper_day and not replay:
         raise ValueError("paper_day forces a REPLAYED date to be an event day: it needs replay")
     roots = [r.upper() for r in roots]
@@ -693,6 +694,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                 recorder.flush()
             if depth is not None:
                 await depth.aclose()    # cancels its requests in flight; the recording's last member
+            depth_pool.shutdown()       # the depth history worker (depthgrid.HistoryPool), if it ever started
             tester.manager.shutdown()   # never leave a runner child orphaned
             tester.grids.shutdown()     # ... nor a heat-map cell's
             tester.wfs.shutdown()       # ... nor a walk-forward cell's
@@ -866,31 +868,38 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         sources = [s.strip() for s in q.get("sources", "").split(",") if s.strip()]
         return news.items(frm, to, tags or None, sources or None)
 
-    # the liquidity heatmap's history (depthgrid.py): the recorded depth files as a down-sampled grid,
-    # decoded in a worker thread (one at a time, cached per file), <= 2 MB, never past now (a replay's
-    # own clock in a replay: no look-ahead), and never read at all 09:20-09:35 ET by the wall clock
-    def depth_quiet() -> bool:
-        return in_quiet(time.time() if replay else clock() / 1000)
+    # the liquidity heatmap's history (depthgrid.py): the recorded depth files as a down-sampled grid, built
+    # in ONE spawned worker process (never this process, never the default thread pool), one request at a
+    # time (busy -> 503, never queued), <= 2 MB, never past now (a replay's own clock in a replay: no
+    # look-ahead), and never decoded 09:20-09:35 ET or 08:29:30-08:31 ET on weekdays, by the wall clock
+    # (the service's clock when live, so tests can place it)
+    def depth_wall_ms() -> float:
+        return time.time() * 1000 if replay else clock()
 
-    depth_history = DepthHistory(depth_base or DEPTH_ARCHIVE, contract_tick_size, quiet=depth_quiet)
+    depth_pool = HistoryPool(depth_base or DEPTH_ARCHIVE,
+                             **({"executor_factory": depth_executor} if depth_executor else {}))
 
     @app.get("/api/depth/history")
     async def api_depth_history(request: Request):
         q = request.query_params
         root = known_root(q.get("root", ""))
+        now = clock()
         try:
             frm, to = int(q["from_ms"]), int(q["to_ms"])
             cols = int(q.get("cols", DEPTH_MAX_COLS // 2))
         except (KeyError, ValueError):
             raise HTTPException(400, "from_ms / to_ms: epoch ms; cols: a whole number") from None
-        if to <= frm or to - frm > DEPTH_MAX_SPAN_MS:
-            raise HTTPException(400, f"to_ms after from_ms, at most {DEPTH_MAX_SPAN_MS // 3_600_000} h apart")
-        if depth_quiet():
-            raise HTTPException(503, "paused for the 9:30 window")
+        if frm < 0 or to > now + 86_400_000 or to <= frm or to - frm > DEPTH_MAX_SPAN_MS:
+            raise HTTPException(400, f"0 <= from_ms < to_ms <= now + 1 day, "
+                                     f"at most {DEPTH_MAX_SPAN_MS // 3_600_000} h apart")
+        wall = depth_wall_ms()
+        why = paused_reason(wall / 1000)
+        if why:
+            raise HTTPException(503, why)
         try:
-            body = await asyncio.to_thread(depth_history.grid, root, frm, to, cols, clock())
-        except Paused:
-            raise HTTPException(503, "paused for the 9:30 window") from None
+            body = await depth_pool.grid(root, frm, to, cols, now, wall - time.time() * 1000)
+        except (Busy, Paused) as e:
+            raise HTTPException(503, str(e)) from None
         except ValueError as e:
             raise HTTPException(400, str(e)) from None
         return Response(body, media_type="application/json")

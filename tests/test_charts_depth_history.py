@@ -3,17 +3,22 @@
 Synthetic files in tmp dirs only: nothing here reads or writes ~/futures_depth."""
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import gzip
 import json
 import os
 import threading
+from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures.process import BrokenProcessPool
 
 import pytest
 from fastapi.testclient import TestClient
 
+from homebase.charts import depth as depth_mod
 from homebase.charts import depthgrid
-from homebase.charts.depthgrid import BIN_MS, HOLD_MS, MAX_COLS, MAX_SPAN_MS, DepthHistory, Paused
+from homebase.charts.depthgrid import (BIN_MS, HOLD_MS, MAX_COLS, MAX_SPAN_MS, Busy, DepthHistory, HistoryPool,
+                                       Paused, paused_reason)
 from tests.charts_util import D, session_ms
 from homebase.charts.server import create_app
 from tests.test_charts_desk_server import QuietFeed
@@ -43,8 +48,10 @@ def hist(base, **kw):
 
 
 def app_at(tmp_path, now_ms):
+    """The service with its depth history pool in-process (a thread worker): the real spawn is tested once below."""
     return create_app(roots=["NQ"], base=tmp_path / "ticks", feed_factory=QuietFeed, now_ms=lambda: now_ms,
-                      state=tmp_path / "state", depth_base=tmp_path / "depth")
+                      state=tmp_path / "state", depth_base=tmp_path / "depth",
+                      depth_executor=lambda: ThreadPoolExecutor(max_workers=1))
 
 
 def grid(h, frm, to, cols, root="NQ", now_ms=None):
@@ -206,6 +213,109 @@ def test_the_quiet_window_pauses_every_decode(tmp_path):
         h.grid("NQ", T0, T0 + 1000, 1)
 
 
+def test_quiet_is_checked_between_members_and_the_decode_resumes_where_it_stopped(tmp_path, monkeypatch):
+    write_depth(tmp_path, [[line(T0 + k * 1000, [[100.0, k + 1]], [[100.25, 1]])] for k in range(6)])
+    parsed = []
+    real = depthgrid._parse_member
+    monkeypatch.setattr(depthgrid, "_parse_member", lambda raw: parsed.append(raw) or real(raw))
+    calls = [0]
+
+    def quiet():                        # opens after the grid's check, the file's first-touch check + 3 members
+        calls[0] += 1
+        return calls[0] > 5
+
+    h = hist(tmp_path, quiet=quiet)
+    with pytest.raises(Paused):
+        h.grid("NQ", T0, T0 + 6000, 6)
+    assert len(parsed) == 3
+    h.quiet = lambda: False
+    g = grid(h, T0, T0 + 6000, 6)
+    assert len(parsed) == 6                                            # only the 3 not yet decoded
+    assert [cells_at(g, c)[100.0] for c in range(6)] == [1, 2, 3, 4, 5, 6]
+
+
+def test_the_paused_windows(monkeypatch):
+    et = lambda d, hh, mm, ss=0: dt.datetime.combine(d, dt.time(hh, mm, ss), depthgrid.ET).timestamp()
+    thu, sat = D, D + dt.timedelta(days=2)
+    assert paused_reason(et(thu, 9, 20)) == paused_reason(et(thu, 9, 34, 59)) == "paused for the 9:30 window"
+    assert paused_reason(et(thu, 9, 35)) is None
+    assert paused_reason(et(thu, 8, 29, 30)) == paused_reason(et(thu, 8, 30, 59)) == "paused for the 8:30 data release"
+    assert paused_reason(et(thu, 8, 29, 29)) is None and paused_reason(et(thu, 8, 31)) is None
+    assert paused_reason(et(sat, 8, 30)) is None                      # no releases on a weekend
+
+
+def test_the_cache_is_int32_arrays_and_the_suffix_is_the_recorders(tmp_path):
+    write_depth(tmp_path, [[line(T0, [[100.0, 1]], [[100.25, 1]])]])
+    h = hist(tmp_path)
+    grid(h, T0, T0 + 1000, 1)
+    f = next(iter(h._cache.values()))
+    assert (f.px.typecode, f.sz.typecode, f.off.typecode) == ("i", "i", "i")
+    assert depthgrid.SUFFIX == depth_mod.SUFFIX
+
+
+# ------------------------------------------------------------------ the worker pool
+
+class FakeExecutor:
+    """Holds each submitted call until the test resolves it."""
+    made = 0
+
+    def __init__(self):
+        FakeExecutor.made += 1
+        self.futures, self.shut = [], False
+
+    def submit(self, fn, *args):
+        f = Future()
+        self.futures.append((f, fn, args))
+        return f
+
+    def shutdown(self, wait=True, cancel_futures=False):
+        self.shut = True
+
+
+def test_the_pool_answers_busy_instead_of_queueing_and_restarts_a_dead_worker(tmp_path):
+    FakeExecutor.made = 0
+    made = []
+    pool = HistoryPool(tmp_path, executor_factory=lambda: made.append(FakeExecutor()) or made[-1])
+
+    async def run():
+        assert made == []                                              # started lazily
+        first = asyncio.ensure_future(pool.grid("NQ", T0, T0 + 1000, 1, now_ms=T0 + 5000))
+        await asyncio.sleep(0)
+        with pytest.raises(Busy):                                      # one at a time: never queued
+            await pool.grid("NQ", T0, T0 + 1000, 1, now_ms=T0 + 5000)
+        f, fn, args = made[0].futures[0]
+        assert fn is depthgrid.child_grid and args[0] == str(tmp_path)
+        f.set_result(b'{"ok":1}')
+        assert await first == b'{"ok":1}'
+        second = asyncio.ensure_future(pool.grid("NQ", T0, T0 + 1000, 1, now_ms=T0 + 5000))
+        await asyncio.sleep(0)
+        made[0].futures[1][0].set_exception(BrokenProcessPool("worker died"))
+        with pytest.raises(Busy):
+            await second
+        assert made[0].shut
+        third = asyncio.ensure_future(pool.grid("NQ", T0, T0 + 1000, 1, now_ms=T0 + 5000))
+        await asyncio.sleep(0)
+        assert len(made) == 2                                          # a fresh worker
+        made[1].futures[0][0].set_exception(Paused("paused for the 9:30 window"))
+        with pytest.raises(Paused):
+            await third
+        pool.shutdown()
+        assert made[1].shut
+
+    asyncio.run(run())
+
+
+def test_a_real_spawned_worker_builds_the_grid(tmp_path):
+    write_depth(tmp_path, [[line(T0, [[100.0, 5]], [[100.25, 7]])]])
+    pool = HistoryPool(tmp_path)
+    try:
+        body = asyncio.run(pool.grid("NQ", T0, T0 + 2000, 2, now_ms=T0 + 60_000))
+    finally:
+        pool.shutdown()
+    g = json.loads(body)
+    assert g["prices"] == [100.0, 100.25] and len(g["cells"]) == 4
+
+
 def test_one_decode_at_a_time(tmp_path):
     write_depth(tmp_path, [[line(T0, [[100.0, 1]], [[100.25, 1]])]])
     h = hist(tmp_path)
@@ -245,9 +355,19 @@ def test_the_route_serves_the_grid_behind_the_host_guard(tmp_path):
                      headers={"host": "evil.example"}).status_code == 403
         assert c.get("/api/depth/history", params={"root": "ZZ", "from_ms": T0, "to_ms": T0 + 1}).status_code == 404
         for bad in ({"root": "NQ"}, {"root": "NQ", "from_ms": "x", "to_ms": T0},
+                    {"root": "NQ", "from_ms": -1, "to_ms": T0},
+                    {"root": "NQ", "from_ms": 10 ** 30, "to_ms": 10 ** 30 + 1},
+                    {"root": "NQ", "from_ms": T0, "to_ms": T0 + 60_000 + 86_400_001},
                     {"root": "NQ", "from_ms": T0, "to_ms": T0},
                     {"root": "NQ", "from_ms": T0 - MAX_SPAN_MS - 1, "to_ms": T0}):
             assert c.get("/api/depth/history", params=bad).status_code == 400, bad
+
+
+def test_the_route_answers_503_in_the_830_release_minute(tmp_path):
+    app = app_at(tmp_path, session_ms(D, 8, 30, 10))
+    with TestClient(app, base_url=BASE_URL) as c:
+        r = c.get("/api/depth/history", params={"root": "NQ", "from_ms": T0 - 7_200_000, "to_ms": T0 - 3_600_000})
+        assert r.status_code == 503 and r.json()["detail"] == "paused for the 8:30 data release"
 
 
 def test_the_route_answers_503_in_the_930_window(tmp_path):
