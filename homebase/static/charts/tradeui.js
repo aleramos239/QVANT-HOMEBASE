@@ -138,7 +138,7 @@ function findOrder(account, order_id) {
 }
 
 /* ---- the confirm dialog (the pattern app.js already uses) ---- */
-function confirm({ title, rows = [], note = '', each = '', live = false, action, tone = 'accent' }) {
+function confirm({ title, rows = [], note = '', warn = '', each = '', live = false, action, tone = 'accent' }) {
   const Dc = D();
   return new Promise((resolve) => {
     let done = false;
@@ -152,6 +152,7 @@ function confirm({ title, rows = [], note = '', each = '', live = false, action,
       body.append(row);
     }
     if (note) body.append(page.mk('div', 'cf-note', note));
+    if (warn) body.append(page.mk('div', 'cf-note cf-warn', warn));
     if (each) body.append(page.mk('div', 'cf-each', each));
     const one = page.mk('label', 'cf-one'), ck = page.mk('input');
     ck.type = 'checkbox';
@@ -225,7 +226,7 @@ function placeOrder({ cell, root, side, type, price = null, qty }) {
   if (preview == null) return;
   const c = T.confirmOrder(preview, D().state, D().quotes[root], pv, tick);
   confirm({ title: c.title, rows: c.accounts.map((a) => ({ label: a.label, env: a.env })), note: c.bracket,
-    each: c.each, live: c.live, action: side, tone: side === 'Sell' ? 'down' : 'accent' })
+    warn: c.warn, each: c.each, live: c.live, action: side, tone: side === 'Sell' ? 'down' : 'accent' })
     .then((ok) => { if (ok) guardedSend('order', g, build); });
 }
 
@@ -251,6 +252,7 @@ function symbolAction(cell, kind, root) {
 const NOT_THIS_CHART = "That line isn't on this chart's trading accounts — view only";
 
 function moveLine(cell, line, price, root, tick, { onCancel } = {}) {
+  if (!T.canDrag(line)) { if (onCancel) onCancel(); return; }   // a Stop Limit can't be moved: cancel and place again
   const g = () => cellGate(cell, root), gate = g();
   if (gate.mode !== 'on') { D().toast('err', gate.reason); if (onCancel) onCancel(); return; }
   const accountIds = line.legs.map((l) => l.account);

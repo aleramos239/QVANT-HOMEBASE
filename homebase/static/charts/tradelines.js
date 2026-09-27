@@ -171,7 +171,7 @@ class Overlay {
 
   wireChip(it, readonly, busy) {
     const { chip, g } = it;
-    const draggable = !readonly && !busy && g.kind !== 'position';
+    const draggable = !readonly && !busy && T.canDrag(g);   // positions and Stop Limits never drag
     chip.classList.toggle('drag', draggable);
     chip.classList.toggle('view', readonly);
     chip.text.onpointerdown = draggable ? (e) => this.startDrag(e, g.key) : null;

@@ -71,7 +71,8 @@ def test_listener_hears_this_accounts_entities_after_the_cache_took_them(tmp_pat
     v = ad.trade_view()
     assert v["positions"] == [{"contract_id": 3267315, "symbol": "NQZ6", "net": 2, "avg_price": 100.0}]
     assert v["orders"] == [{"order_id": "5", "symbol": "NQZ6", "side": "Buy", "type": "Limit",
-                            "qty": 2, "price": 100.0, "stop_price": None, "status": "Working"}]
+                            "qty": 2, "price": 100.0, "stop_price": None, "status": "Working",
+                            "tif": None}]
     assert (v["balance"], v["realized_pnl"]) == (5.0, 1.5)
 
 

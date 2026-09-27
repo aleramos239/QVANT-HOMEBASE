@@ -45,7 +45,10 @@ Guards, per account (a refusal is one sentence the page shows as-is):
   `manual_error`.
   6. prices: tick-rounded; a buy stop above / a sell stop below the last
      trade (a fresh quote from the chart service is required); bracket
-     stop/target on the losing/winning side of the entry.
+     stop/target on the losing/winning side of the entry. A Stop Limit's
+     trigger is checked like a stop; its limit sits on the fill-allowing side
+     of the trigger, within 100 ticks; its SL sits beyond the trigger and
+     its TP beyond the limit. A Market order is Day only.
 
 Controller ruling (P2, 2026-09-26): the 09:30:00.000 bot fire runs on this
 same asyncio loop. ChartDesk's periodic view refresh (`run`), its
@@ -83,7 +86,7 @@ from . import symbols
 from .broker.base import OrderRequest, OrderResult
 from .config import (HARD_MAX_ORDER_QTY, HARD_MAX_POSITION_QTY, AppCfg,
                      ChartTradingCfg, assignments)
-from .contracts import point_value, root_of, round_to_tick, spec_for
+from .contracts import point_value, root_of, round_to_tick, spec_for, tick_size
 
 LOCK_FROM, LOCK_UNTIL = dt.time(9, 20), dt.time(9, 35)
 BOT_BUSY = ("placing", "placed", "live")
@@ -97,7 +100,9 @@ DEDUP_TTL_S = 600.0
 SUB_QUEUE_MAX = 500
 WATCH_S = 0.5
 SIDES = ("Buy", "Sell")
-TYPES = ("Market", "Limit", "Stop")
+TYPES = ("Market", "Limit", "Stop", "StopLimit")
+TIFS = ("Day", "GTC")
+STOPLIMIT_MAX_TICKS = 100       # a Stop Limit's limit sits at most this far from its trigger
 _ROOT = re.compile(r"[A-Z0-9]{1,6}")
 _ORDER_ID = re.compile(r"[0-9]{1,20}")
 
@@ -207,6 +212,8 @@ class OrderIntent:
     price: Optional[float]
     sl_price: Optional[float]
     tp_price: Optional[float]
+    trigger_price: Optional[float] = None     # StopLimit only; `price` is then its limit
+    tif: str = "Day"
 
 
 def parse_order(body) -> OrderIntent:
@@ -215,15 +222,23 @@ def parse_order(body) -> OrderIntent:
     if side not in SIDES:
         raise ValueError("side: Buy or Sell")
     if typ not in TYPES:
-        raise ValueError("type: Market, Limit or Stop")
+        raise ValueError("type: Market, Limit, Stop or StopLimit")
     if isinstance(qty, bool) or not isinstance(qty, int):
         raise ValueError("qty: a whole number")
     price = _price(body.get("price"), "price", required=typ != "Market")
     if typ == "Market" and price is not None:
         raise ValueError("a Market order carries no price")
+    if typ != "StopLimit" and body.get("trigger_price") is not None:
+        raise ValueError("only a Stop Limit order carries a trigger_price")
+    trigger = _price(body.get("trigger_price"), "trigger_price", required=typ == "StopLimit")
+    tif = body.get("tif", "Day")
+    if tif not in TIFS:
+        raise ValueError("tif: Day or GTC")
+    if typ == "Market" and tif != "Day":
+        raise ValueError("a Market order is Day only")
     return OrderIntent(_client_id(body), _accounts(body), _root(body), side, qty, typ, price,
                        _price(body.get("sl_price"), "sl_price"),
-                       _price(body.get("tp_price"), "tp_price"))
+                       _price(body.get("tp_price"), "tp_price"), trigger, tif)
 
 
 def parse_modify(body) -> tuple:
@@ -274,14 +289,18 @@ def fresh_quote(body: dict, root: str, now_s: float) -> Optional[dict]:
 
 
 def check_prices(side: str, typ: str, price, sl, tp, contract: str,
-                 quote: Optional[dict]) -> tuple:
+                 quote: Optional[dict], trigger=None) -> tuple:
     """Tick-round every price; refuse a stop on the wrong side of the last
     trade, and a bracket whose stop/target sit on the wrong side of the
-    entry. Returns (price, sl, tp) rounded."""
+    entry. A Stop Limit's trigger is checked like a stop; its limit (`price`)
+    must be on the fill-allowing side of the trigger (buy: at or above,
+    sell: at or below) and within STOPLIMIT_MAX_TICKS of it; its bracket's
+    SL must sit beyond the TRIGGER (it may fill there) and its TP beyond the
+    LIMIT. Returns (price, sl, tp, trigger) rounded."""
     def rnd(p):
         return None if p is None else round_to_tick(contract, p)
 
-    price, sl, tp = rnd(price), rnd(sl), rnd(tp)
+    price, sl, tp, trigger = rnd(price), rnd(sl), rnd(tp), rnd(trigger)
     last = quote["last"] if quote else None
     fresh = f"no trade in {contract} in the last {QUOTE_MAX_AGE_S:.0f} s"
     if typ == "Stop":
@@ -291,16 +310,34 @@ def check_prices(side: str, typ: str, price, sl, tp, contract: str,
             raise Refused(f"a buy stop must be above the last price ({last:,})")
         if side == "Sell" and price >= last:
             raise Refused(f"a sell stop must be below the last price ({last:,})")
+    if typ == "StopLimit":
+        if last is None:
+            raise Refused(f"{fresh} — a stop limit order needs a fresh price")
+        if side == "Buy" and trigger <= last:
+            raise Refused(f"a buy stop limit's trigger must be above the last price ({last:,})")
+        if side == "Sell" and trigger >= last:
+            raise Refused(f"a sell stop limit's trigger must be below the last price ({last:,})")
+        if side == "Buy" and price < trigger:
+            raise Refused("a buy stop limit's limit must be at or above its trigger")
+        if side == "Sell" and price > trigger:
+            raise Refused("a sell stop limit's limit must be at or below its trigger")
+        if round(abs(price - trigger) / tick_size(contract)) > STOPLIMIT_MAX_TICKS:
+            raise Refused(f"a stop limit's limit must be within {STOPLIMIT_MAX_TICKS} ticks "
+                          "of its trigger")
     if sl is not None or tp is not None:
         ref = price if typ != "Market" else last
         if ref is None:
             raise Refused(f"{fresh} — a bracket on a market order needs a fresh price")
         sign = 1 if side == "Buy" else -1
+        if typ == "StopLimit" and sl is not None and not sign * (trigger - sl) > 0:
+            # it may fill at the trigger, not the limit: an SL between the two
+            # would sit on the wrong side of the market right after the fill
+            raise Refused("the stop loss must be beyond the trigger price")
         if sl is not None and not sign * (ref - sl) > 0:
             raise Refused("the stop loss must be on the losing side of the entry")
         if tp is not None and not sign * (tp - ref) > 0:
             raise Refused("the target must be on the winning side of the entry")
-    return price, sl, tp
+    return price, sl, tp, trigger
 
 
 def worst_net(view: dict, contract: str, side: str, qty: int, reserved=()) -> int:
@@ -836,17 +873,20 @@ class ChartDesk:
         if worst > lim.max_position_qty:
             raise Refused(f"that could take {contract} on {label} to {worst} contracts "
                           f"(limit {lim.max_position_qty})")
-        price, sl, tp = check_prices(it.side, it.type, it.price, it.sl_price, it.tp_price,
-                                     contract, quote)
+        price, sl, tp, trigger = check_prices(it.side, it.type, it.price, it.sl_price,
+                                              it.tp_price, contract, quote,
+                                              trigger=it.trigger_price)
         req = OrderRequest(symbol=contract, side=it.side, qty=it.qty, order_type=it.type,
-                           price=price, stop_price=sl, tp_price=tp, text="homebase:chart")
+                           price=price, stop_price=sl, tp_price=tp, text="homebase:chart",
+                           trigger_price=trigger, time_in_force=it.tif)
         bracket = sl is not None or tp is not None
         r = await _call(ad.place_bracket(req) if bracket else ad.place_order(req))
         if r.ok:
             self._placed(aid, contract, it.side, it.qty, r)
         jerr = self._jsafe("manual_order", source="chart", client_id=it.client_id, account=aid,
                            root=it.root, contract=contract, side=it.side, qty=it.qty,
-                           type=it.type, price=price, sl=sl, tp=tp, ok=r.ok,
+                           type=it.type, price=price, trigger=trigger, tif=it.tif,
+                           sl=sl, tp=tp, ok=r.ok,
                            order_id=r.order_id, error=r.error)
         return self._result(r.ok, r.order_id, r.error, jerr)
 
@@ -876,6 +916,8 @@ class ChartDesk:
             raise Refused("that order's contract is not resolved yet — try again in a moment")
         self._lock(aid, contract, label)      # a busy bot refuses EVERY modify in its contract
         typ = o.get("type")
+        if typ == "StopLimit":
+            raise Refused("Stop Limit orders can't be moved — cancel and place again")
         if typ not in ("Limit", "Stop"):
             raise Refused(f"only Limit and Stop orders can be moved (this one is {typ})")
         px = round_to_tick(contract, price)

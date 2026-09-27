@@ -31,6 +31,13 @@ def _log(msg: str) -> None:
     print(f"[tradovate] {msg}", file=sys.stderr, flush=True)
 
 
+STOPLIMIT_INCOMPLETE = "a Stop Limit order needs both a limit price and a trigger"
+
+
+def _stoplimit_incomplete(req: OrderRequest) -> bool:
+    return req.order_type == "StopLimit" and (req.price is None or req.trigger_price is None)
+
+
 def _reject_reason(d) -> str:
     """Human-readable reason from an order/placeorder response that carried no
     orderId. Tradovate returns transport status 200 even on a logical reject and
@@ -550,14 +557,19 @@ class TradovateAdapter(BrokerAdapter):
     async def place_order(self, req: OrderRequest) -> OrderResult:
         if self._ws is None or self._acct_num is None:
             return OrderResult(ok=False, error="adapter not connected")
+        if _stoplimit_incomplete(req):
+            return OrderResult(ok=False, error=STOPLIMIT_INCOMPLETE)
         sym = symbols.resolve_contract(req.symbol)
         if self.live:
             _log(f"{self.account_id}: LIVE ORDER {req.side} {req.qty} {sym}")
+        # a StopLimit's stopPrice is its TRIGGER, never the bracket's SL
+        stop = req.trigger_price if req.order_type == "StopLimit" else req.stop_price
         try:
             d = await self._ws.place_order(
                 account_id=self._acct_num, symbol=sym, side=req.side,
-                qty=req.qty, order_type=req.order_type, price=req.price,
-                stop_price=req.stop_price, text=req.text,
+                qty=req.qty, order_type=req.order_type,
+                time_in_force=req.time_in_force, price=req.price,
+                stop_price=stop, text=req.text,
                 account_spec=self._acct_name or None,
             )
             oid = d.get("orderId") if isinstance(d, dict) else None
@@ -583,6 +595,8 @@ class TradovateAdapter(BrokerAdapter):
             return OrderResult(ok=False, error="adapter not connected")
         if req.stop_price is None and req.tp_price is None:
             return await self.place_order(req)
+        if _stoplimit_incomplete(req):
+            return OrderResult(ok=False, error=STOPLIMIT_INCOMPLETE)
         sym = symbols.resolve_contract(req.symbol)
         if self.live:
             _log(f"{self.account_id}: LIVE BRACKET {req.side} {req.qty} {sym} "
@@ -591,7 +605,9 @@ class TradovateAdapter(BrokerAdapter):
             d = await self._ws.place_oso(
                 account_id=self._acct_num, symbol=sym, side=req.side,
                 qty=req.qty, stop_price=req.stop_price, tp_price=req.tp_price,
-                entry_type=req.order_type, entry_price=req.price, text=req.text,
+                entry_type=req.order_type, entry_price=req.price,
+                entry_trigger_price=req.trigger_price,
+                time_in_force=req.time_in_force, text=req.text,
                 account_spec=self._acct_name or None)
             oid = d.get("orderId") if isinstance(d, dict) else None
             if oid is None:
@@ -681,7 +697,7 @@ class TradovateAdapter(BrokerAdapter):
                 continue
             ov = self._order_versions.get(oid, {})
             cid = o.get("contractId") or ov.get("contractId")
-            orders.append({
+            row = {
                 "order_id": str(oid),
                 "symbol": ((self._contracts.get(cid) if cid is not None else None)
                            or self._order_symbols.get(oid)),
@@ -691,7 +707,11 @@ class TradovateAdapter(BrokerAdapter):
                 "price": ov.get("price") if ov.get("price") is not None else o.get("price"),
                 "stop_price": (ov.get("stopPrice") if ov.get("stopPrice") is not None
                                else o.get("stopPrice")),
-                "status": o.get("ordStatus")})
+                "status": o.get("ordStatus"),
+                "tif": ov.get("timeInForce") or o.get("timeInForce") or None}
+            if row["type"] == "StopLimit":
+                row["trigger"] = row["stop_price"]     # price = the limit, trigger = stopPrice
+            orders.append(row)
         return {"broker_account": self._acct_name or None, "pinned": self.pinned_ok,
                 "seeded": self.caches_seeded, "balance": self._cash.get("amount"),
                 "realized_pnl": self._cash.get("realizedPnL"),

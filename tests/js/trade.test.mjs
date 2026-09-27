@@ -277,7 +277,7 @@ test('confirm: title, bracket dollars and RR, accounts, LIVE flag', () => {
   assert.deepEqual(T.confirmOrder(b, STATE, null, 20, 0.25), {
     title: 'Buy 2 NQ Limit @ 30,900.00',
     accounts: [{ id: 'sim041', label: 'SIM0000041', env: 'demo' }, { id: 'sim047', label: 'SIM0000047', env: 'demo' }],
-    bracket: `SL 30,885.00 ${M}$600 · TP 30,930.00 +$1,200 · RR 1:2`, each: 'each of 2 accounts', live: false });
+    bracket: `SL 30,885.00 ${M}$600 · TP 30,930.00 +$1,200 · RR 1:2`, each: 'each of 2 accounts', live: false, warn: '' });
   const m = T.orderBody({ clientId: 'c', accounts: ['live099'], root: 'NQ', side: 'Sell', qty: 1, type: 'Market' });
   const c = T.confirmOrder(m, STATE, { last: 30910 }, 20, 0.25);
   assert.equal(c.title, 'Sell 1 NQ at market');
@@ -412,4 +412,43 @@ test('placeMarkers: on the bar holding the time, inside the loaded bars, sorted'
   assert.deepEqual(out, [{ id: 'a', time: 100 }, { id: 'b', x: 1, time: 101 }]);
   assert.equal(D.placeMarkers(bars, [{ id: 'late', ms: 60000 * 99 }], 0).length, 1);   // non-time bars: the last bar holds the rest
   assert.deepEqual(D.placeMarkers([], [{ ms: 1 }]), []);
+});
+
+test('Stop Limit + TIF: the order body and the confirm text', () => {
+  const b = T.orderBody({ clientId: 'c', accounts: ['sim041'], root: 'NQ', side: 'Buy', qty: 1, type: 'StopLimit',
+    price: 30900, trigger: 30895, tif: 'GTC' });
+  assert.deepEqual(b, { client_id: 'c', accounts: ['sim041'], root: 'NQ', side: 'Buy', qty: 1, type: 'StopLimit',
+    price: 30900, trigger_price: 30895, tif: 'GTC' });
+  assert.equal(T.confirmOrder(b, STATE, null, 20, 0.25).title, 'Buy 1 NQ Stop Limit @ 30,900.00 (trigger 30,895.00) · GTC');
+  // a trigger is only sent with a Stop Limit; no tif given -> none sent (the desk defaults to Day)
+  assert.deepEqual(T.orderBody({ clientId: 'c', accounts: ['a'], root: 'NQ', side: 'Sell', qty: 1, type: 'Limit', price: 5, trigger: 4 }),
+    { client_id: 'c', accounts: ['a'], root: 'NQ', side: 'Sell', qty: 1, type: 'Limit', price: 5 });
+  const day = T.orderBody({ clientId: 'c', accounts: ['sim041'], root: 'NQ', side: 'Sell', qty: 2, type: 'Limit', price: 30950, tif: 'Day' });
+  assert.equal(day.tif, 'Day');
+  assert.equal(T.confirmOrder(day, STATE, null, 20, 0.25).title, 'Sell 2 NQ Limit @ 30,950.00 · Day');
+  // a Stop Limit's risk is measured from its limit: the worst fill, labelled as such
+  const br = T.orderBody({ clientId: 'c', accounts: ['sim041'], root: 'NQ', side: 'Buy', qty: 1, type: 'StopLimit',
+    price: 30900, trigger: 30895, sl: 30890, tp: 30920 });
+  assert.equal(T.confirmOrder(br, STATE, null, 20, 0.25).bracket,
+    `SL 30,890.00 risk (worst fill) ${M}$200 · TP 30,920.00 +$400 · RR 1:2`);
+  // GTC: a note, never a refusal; Day and no tif: none
+  assert.equal(T.confirmOrder(b, STATE, null, 20, 0.25).warn,
+    "GTC stays working overnight — if it's still working at 09:28 the 9:30 bot skips this account");
+  assert.equal(T.confirmOrder(day, STATE, null, 20, 0.25).warn, '');
+  assert.equal(T.confirmOrder(br, STATE, null, 20, 0.25).warn, '');
+});
+
+test('Stop Limit lines: limit and trigger in the label, never draggable', () => {
+  const st = { ...STATE, accounts: [acct('sim041', 'SIM0000041', 'demo', { orders: [
+    { order_id: '31', symbol: 'NQZ6', side: 'Buy', type: 'StopLimit', qty: 1, price: 30905, stop_price: 30902, trigger: 30902, owner: null },
+    { order_id: '32', symbol: 'NQZ6', side: 'Buy', type: 'StopLimit', qty: 1, price: 30906, stop_price: 30902, trigger: 30902, owner: null },
+    { order_id: '33', symbol: 'NQZ6', side: 'Buy', type: 'Limit', qty: 1, price: 30880, stop_price: null, owner: null }] })] };
+  const lines = T.linesFor(st, 'NQ', ['sim041']);
+  assert.equal(lines.length, 3);                                   // a different limit is a different line
+  assert.deepEqual(lines.map((g) => g.price), [30902, 30902, 30880]);   // drawn at the trigger
+  assert.equal(T.lineLabel(lines[0]), 'BUY STP LMT 30,905.00 (trig 30,902.00) 1');
+  assert.equal(T.lineText(lines[1], 30900), 'BUY STP LMT 30,906.00 (trig 30,902.00) 1 · …041');
+  assert.deepEqual(lines.map((g) => T.canDrag(g)), [false, false, true]);
+  assert.equal(T.canDrag(T.linesFor(STATE, 'NQ', ['sim041', 'sim047'])[0]), false);   // positions never drag
+  assert.equal(T.canDrag(T.linesFor(STATE, 'NQ', ['sim041', 'sim047'])[1]), true);    // an SL does
 });

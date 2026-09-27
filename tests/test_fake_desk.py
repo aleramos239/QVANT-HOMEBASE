@@ -166,3 +166,73 @@ def test_the_cli_refuses_the_real_services_ports(port, monkeypatch, capsys):
         fake_desk.main(["--port", port])
     err = capsys.readouterr().err
     assert f"port {port} belongs to the real desk or the chart service" in err
+
+
+# --- Stop Limit + time-in-force ---------------------------------------------------------------
+def quote_tick(c, last, root="NQ"):
+    return c.post("/fake/quote", json={"root": root, "last": last})
+
+
+def test_a_stop_limit_rests_with_its_limit_trigger_and_tif():
+    c = client()
+    r = order(c, type="StopLimit", price=30905.13, trigger_price=30902.0, tif="GTC").json()
+    assert r["results"]["sim041"]["ok"] is True
+    (o,) = acct(c)["orders"]
+    assert (o["type"], o["price"], o["stop_price"], o["trigger"], o["tif"]) == \
+        ("StopLimit", 30905.25, 30902.0, 30902.0, "GTC")
+    lim = order(c, cid="c2", type="Limit", price=30880.0).json()["results"]["sim041"]["order_id"]
+    assert next(o for o in acct(c)["orders"] if o["order_id"] == lim)["tif"] == "Day"   # the default
+
+
+def test_a_stop_limit_is_refused_with_the_desks_sentences():
+    c = client()
+    r = order(c, type="StopLimit", price=30900.0, trigger_price=30900.0).json()["results"]["sim041"]
+    assert r["error"] == "a buy stop limit's trigger must be above the last price (30,900.25)"
+    r = order(c, cid="c2", type="StopLimit", price=30901.0, trigger_price=30902.0).json()["results"]["sim041"]
+    assert r["error"] == "a buy stop limit's limit must be at or above its trigger"
+    r = order(c, cid="c3", type="StopLimit", price=30905.0, trigger_price=30902.0, quotes={}).json()
+    assert "a stop limit order needs a fresh price" in r["results"]["sim041"]["error"]
+    assert acct(c)["orders"] == []
+
+
+def test_a_stop_limit_fills_at_its_limit_once_triggered_and_marketable():
+    c = client()
+    order(c, type="StopLimit", price=30905.0, trigger_price=30902.0, sl_price=30895.0, tp_price=30920.0)
+    quote_tick(c, 30901.0)                                     # below the trigger: nothing
+    assert acct(c)["orders"][0]["type"] == "StopLimit" and acct(c)["positions"] == []
+    quote_tick(c, 30907.0)                                     # triggered, but past the limit: rests
+    assert acct(c)["orders"][0]["type"] == "StopLimit" and acct(c)["positions"] == []
+    quote_tick(c, 30904.0)                                     # back inside the limit: fills AT the limit
+    a = acct(c)
+    assert a["positions"][0]["net"] == 1 and a["positions"][0]["avg_price"] == 30905.0
+    assert sorted(o["type"] for o in a["orders"]) == ["Limit", "Stop"]     # its bracket rests
+    assert {o["tif"] for o in a["orders"]} == {"GTC"}
+
+
+def test_a_sell_stop_limit_triggers_and_fills_in_one_quote_and_can_be_filled_by_hand():
+    c = client()
+    order(c, side="Sell", type="StopLimit", price=30895.0, trigger_price=30898.0)
+    quote_tick(c, 30897.0)                                     # through the trigger, above the limit
+    assert acct(c)["positions"][0]["net"] == -1 and acct(c)["fills"][-1]["price"] == 30895.0
+    oid = order(c, cid="c2", side="Sell", type="StopLimit", price=30890.0,
+                trigger_price=30892.0).json()["results"]["sim041"]["order_id"]
+    c.post("/fake/fill", json={"account": "sim041", "order_id": oid})
+    assert acct(c)["fills"][-1]["price"] == 30890.0             # by hand: the limit too
+
+
+def test_a_stop_limit_cannot_be_moved():
+    c = client()
+    oid = order(c, type="StopLimit", price=30905.0, trigger_price=30902.0).json()["results"]["sim041"]["order_id"]
+    r = c.post("/api/trade/modify", json={"client_id": "m", "account": "sim041", "order_id": oid,
+                                           "price": 30906.0}, headers=H).json()["results"]["sim041"]
+    assert r["error"] == "Stop Limit orders can't be moved — cancel and place again"
+
+
+def test_session_end_drops_day_orders_and_keeps_gtc():
+    c = client()
+    order(c, qty=1, sl_price=30890.0)                           # a market fill: its SL rests GTC
+    order(c, cid="c2", type="Limit", price=30880.0)             # Day
+    order(c, cid="c3", type="Limit", price=30870.0, tif="GTC")  # GTC
+    assert c.post("/fake/session-end").json() == {"dropped": 1}
+    kept = sorted((o["type"], o["tif"], o["price"] or o["stop_price"]) for o in acct(c)["orders"])
+    assert kept == [("Limit", "GTC", 30870.0), ("Stop", "GTC", 30890.0)]
