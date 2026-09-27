@@ -31,6 +31,12 @@ HEALTHY_S = 600          # a connection that lived this long resets the backoff
 RETRY_REFUSED_S = 600    # a root the feed refused is asked again this often (and on every reconnect)
 
 
+def in_quiet(ts_s: float) -> bool:
+    """Is epoch time ts_s inside the 09:20-09:35 ET window around the 9:30
+    fire, when this process sends no optional md requests?"""
+    return QUIET[0] <= dt.datetime.fromtimestamp(ts_s, ET).time() < QUIET[1]
+
+
 class Refused(RuntimeError):
     """The md feed will not chart this root: getChart answered without a
     realtimeId or failed (a non-200 status, no answer in 15 s) while the
@@ -165,7 +171,7 @@ class TickFeed:
 
     def _quiet(self) -> bool:
         """Inside the 09:20-09:35 ET window around the 9:30 fire."""
-        return QUIET[0] <= dt.datetime.fromtimestamp(self._now(), ET).time() < QUIET[1]
+        return in_quiet(self._now())
 
     def _extend_past_quiet(self, wait: float) -> float:
         """If reconnecting `wait` seconds from now would land inside the
