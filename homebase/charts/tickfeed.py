@@ -13,6 +13,17 @@ is asked again every 10 min (never 09:20-09:35 ET) and on every reconnect.
 A fresh socket that refuses EVERY root is replaced, but no faster than that
 10-min retry: a login that refuses everything must not spend 11 getCharts
 per 5 s-5 min backoff step (~187 in the first hour, over the 180 budget).
+
+Runtime login switch (Task 4, 2026-09-27 app-settings plan, fix round 2):
+`switch_md()` only leaves a REQUEST that `run()` services at two hooks --
+the steady loop's 1 s poll (a socket is up: it keeps serving, untouched,
+while `_switch` connects, subscribes and verifies the other login on a
+candidate socket; only a verified candidate is installed, and a failed one
+is closed and the steady loop simply carries on watching the old socket)
+and the top of a cycle (nothing is up: the switch is that cycle's connect).
+With no switch requested, `run()` is main's loop, line for line
+(tests/test_charts_tickfeed_parity.py drives a frozen copy of main's
+run() against this one and compares every broker call and delivered tick).
 """
 from __future__ import annotations
 
@@ -26,6 +37,7 @@ from .. import ticks as T
 from . import MD_ENV, QUIET
 from .session import ET
 
+MD_ENVS = ("live", "demo")
 BACKOFF_S = (5, 10, 20, 40, 80, 160, 300)
 HEALTHY_S = 600          # a connection that lived this long resets the backoff
 RETRY_REFUSED_S = 600    # a root the feed refused is asked again this often (and on every reconnect)
@@ -37,51 +49,95 @@ def in_quiet(ts_s: float) -> bool:
     return QUIET[0] <= dt.datetime.fromtimestamp(ts_s, ET).time() < QUIET[1]
 
 
+class SwitchInProgress(RuntimeError):
+    """switch_md() was called while an earlier switch is still pending:
+    the caller (PUT /api/settings) turns this into a 409, never a queue."""
+
+
 class Refused(RuntimeError):
     """The md feed will not chart this root: getChart answered without a
     realtimeId or failed (a non-200 status, no answer in 15 s) while the
     socket stayed up, or the root has no resolvable contract."""
 
 
+async def connect_env(env: str):
+    """A socket under `env`'s login ("live"|"demo"). md_token treats the
+    wish as a preference and falls back to the other login's token when
+    this one has none valid: an ordinary (re)connect accepts that exactly
+    as before (status() reports it as md_mismatch); a switch refuses it."""
+    return await T.connect_md(prefer_live=(env == "live"))
+
+
 async def connect_default():
-    return await T.connect_md(prefer_live=(MD_ENV == "live"))
+    return await connect_env(MD_ENV)
 
 
 class TickFeed:
     def __init__(self, roots, on_ticks: Callable[[str, str, list], None],
                  on_subscribed: Optional[Callable[[str, str, Optional[int]], Awaitable[None]]] = None,
-                 connect=connect_default, sleep=asyncio.sleep, now=time.time):
+                 connect=None, sleep=asyncio.sleep, now=time.time,
+                 connect_env=connect_env, md_env: Optional[str] = None):
         self.roots = [r.upper() for r in roots]
         self.on_ticks = on_ticks
         self.on_subscribed = on_subscribed
-        self._connect, self._sleep, self._now = connect, sleep, now
+        # md_env: the login in use. It moves only when run() installs a verified switch.
+        self.md_env = md_env if md_env is not None else MD_ENV
+        self._connect_env = connect_env
+        # an ordinary (re)connect: `connect` if the caller gave one (the pre-switch seam), else
+        # the active login's -- read at call time, so a reconnect after a switch stays on it
+        self._connect = connect or (lambda: self._connect_env(self.md_env))
+        self._sleep, self._now = sleep, now
         self.ws = None
         self.subs: dict[int, tuple[str, str]] = {}
         self.contracts: dict[str, str] = {}
         self.last_tick: dict[str, float] = {}      # root -> wall time of the last delivery
         self.last_ms: dict[str, int] = {}          # root -> newest tick timestamp delivered
         self.refused: dict[str, str] = {}          # root -> why the feed refused it
-        self._requests: list[float] = []
+        self._requests: dict[str, list[float]] = {}   # per login: each has its own 180/h
         self.reconnects = 0
         self.error: Optional[str] = None
         self._stop = False
         self._tasks: set = set()
+        # the login switch: a request (env + Future) that only run() services
+        self._pending_env: Optional[str] = None
+        self._pending_fut: Optional[asyncio.Future] = None
+        self.switch_error: Optional[dict] = None     # the last failed switch, until one succeeds
+        self._running = False
+        self._wake: Optional[asyncio.Event] = None  # ends a backoff wait early for a switch or stop()
 
-    def count_request(self) -> None:
-        self._requests.append(self._now())
+    def count_request(self, env: Optional[str] = None) -> None:
+        """One chart request, charged to `env`'s login (default: the active one)."""
+        self._requests.setdefault(env or self.md_env, []).append(self._now())
 
-    def budget_used(self) -> int:
+    def budget_used(self, env: Optional[str] = None) -> int:
+        """Chart requests in the last hour on `env`'s login (default: the active one)."""
+        env = env or self.md_env
         cut = self._now() - 3600
-        self._requests = [t for t in self._requests if t > cut]
-        return len(self._requests)
+        kept = [t for t in self._requests.get(env, []) if t > cut]
+        self._requests[env] = kept
+        return len(kept)
 
     @property
     def connected(self) -> bool:
         return bool(self.ws is not None and getattr(self.ws, "connected", False))
 
+    @property
+    def switch_in_progress(self) -> bool:
+        return self._pending_fut is not None
+
+    def md_mismatch(self) -> Optional[str]:
+        """The socket up is not the login md_env names (an ordinary connect took the other
+        login's token because this one had none valid): said, never silently."""
+        got = getattr(self.ws, "environment", None) if self.connected else None
+        if got is None or got == self.md_env:
+            return None
+        return f"set to the {self.md_env} login, but it has no valid md token: charts come from {got}"
+
     def status(self) -> dict:
         now = self._now()
-        return {"mode": "live", "md": MD_ENV, "connected": self.connected, "error": self.error,
+        return {"mode": "live", "md": self.md_env, "connected": self.connected, "error": self.error,
+                "md_mismatch": self.md_mismatch(), "switching_to": self._pending_env,
+                "switch_error": self.switch_error,
                 "reconnects": self.reconnects, "budget_hour": self.budget_used(),
                 "roots": {r: {"contract": self.contracts.get(r),
                               "last_tick_age_s": (round(now - self.last_tick[r], 1)
@@ -103,7 +159,12 @@ class TickFeed:
                 self.last_ms[root] = max(self.last_ms.get(root, 0), max(r["ts_ms"] for r in rows))
                 self.on_ticks(root, sub[1], rows)
 
-    async def subscribe(self, root: str) -> str:
+    async def subscribe(self, root: str, *, cand=None, subs: Optional[dict] = None,
+                        contracts: Optional[dict] = None, env: Optional[str] = None) -> str:
+        """`cand` set: a switch is verifying candidate socket `cand` of login `env`. The
+        request goes to it, ids and contract land in the caller's own maps (the socket in use
+        keeps routing through self.subs untouched), and a p-ticket is a refusal, not a wait:
+        a switch must never stall inside the PUT or spend a penalty on the target login."""
         try:
             contract = symbols.resolve_contract(root)
         except ValueError as e:
@@ -114,9 +175,9 @@ class TickFeed:
                 "timeRange": {"asMuchAsElements": 1}}
         d = None
         for _ in range(3):
-            self.count_request()
+            self.count_request(env)
             try:
-                d = await self.ws.request("md/getChart", body)
+                d = await (self.ws if cand is None else cand).request("md/getChart", body)
             except (RuntimeError, TimeoutError) as e:
                 # TradovateWS.request raises on a non-200 status and after 15 s
                 # without an answer. With the socket still up that is THIS
@@ -126,11 +187,14 @@ class TickFeed:
                 # flips in the reader's finally, so it can still read True on
                 # a socket that already raises that message -- check the
                 # message too, not just the flag.
-                if not self.connected or str(e) == "websocket not connected":
+                up = self.connected if cand is None else bool(getattr(cand, "connected", False))
+                if not up or str(e) == "websocket not connected":
                     raise
                 why = str(e) or f"md/getChart {type(e).__name__}"      # a timeout has no message
                 raise Refused(f"{contract}: {why}") from None
             if isinstance(d, dict) and d.get("p-ticket"):
+                if cand is not None:
+                    raise Refused(f"{contract}: rate-limited (p-ticket) during a login switch")
                 pen = T.Penalty(d)
                 await self._sleep(pen.wait_s + 1)
                 body = {**body, "p-ticket": pen.ticket}
@@ -138,10 +202,11 @@ class TickFeed:
             break
         if not isinstance(d, dict) or d.get("realtimeId") is None:
             raise Refused(f"{contract}: getChart refused: {d!r}")
+        subs = self.subs if subs is None else subs
         for k in ("historicalId", "realtimeId"):
             if d.get(k) is not None:
-                self.subs[int(d[k])] = (root, contract)
-        self.contracts[root] = contract
+                subs[int(d[k])] = (root, contract)
+        (self.contracts if contracts is None else contracts)[root] = contract
         return contract
 
     def _on_subscribed_done(self, root: str, t: "asyncio.Task") -> None:
@@ -164,6 +229,9 @@ class TickFeed:
             self.refused[root] = str(e)
             return
         self.refused.pop(root, None)
+        self._refill_after(root, contract, since)
+
+    def _refill_after(self, root: str, contract: str, since: Optional[int]) -> None:
         if self.on_subscribed is not None:
             t = asyncio.create_task(self.on_subscribed(root, contract, since))
             self._tasks.add(t)
@@ -186,25 +254,57 @@ class TickFeed:
         return wait
 
     async def run(self) -> None:
+        """main's connection loop, unchanged, plus the two switch hooks marked SWITCH.
+        Whatever way this exits (stop, cancel, a crash), a pending switch is answered."""
+        self._running = True
+        self._wake = asyncio.Event()
+        try:
+            await self._run()
+        finally:
+            self._running = False
+            if self._pending_fut is not None:
+                self._resolve_pending(RuntimeError("the market-data feed stopped"))
+
+    async def _run(self) -> None:
         attempt = 0
         while not self._stop:
             started = self._now()
             refused_all = False
             try:
-                self.ws = await self._connect()
-                self.error = None            # a fresh cycle; a refill error below now sticks
-                self.ws.event_handlers.append(self._on_event)
-                self.subs = {}
-                self.refused = {}
-                for r in self.roots:
-                    await self._start(r)
-                if self.roots and all(r in self.refused for r in self.roots):
-                    # nothing subscribed: the socket or the login is sick, not a symbol
-                    refused_all = True
-                    raise Refused("every symbol refused")
+                if self._pending_env is not None:
+                    # SWITCH (nothing is up): the switch is this cycle's connect. A failure is
+                    # this cycle's failure -- the usual backoff, then the active login again.
+                    try:
+                        await self._switch(self._pending_env)
+                    except Refused:
+                        refused_all = True
+                        raise
+                else:
+                    self.ws = await self._connect()
+                    self.error = None            # a fresh cycle; a refill error below now sticks
+                    self.ws.event_handlers.append(self._on_event)
+                    self.subs = {}
+                    self.refused = {}
+                    for r in self.roots:
+                        await self._start(r)
+                    if self.roots and all(r in self.refused for r in self.roots):
+                        # nothing subscribed: the socket or the login is sick, not a symbol
+                        refused_all = True
+                        raise Refused("every symbol refused")
                 next_retry = self._now() + RETRY_REFUSED_S
                 while not self._stop and self.connected:
                     await self._sleep(1)
+                    if self._pending_env is not None:
+                        # SWITCH (a socket is up): it keeps serving while _switch verifies the
+                        # other login. Success installs it; failure leaves this socket exactly
+                        # as it was and this loop goes on watching it -- no teardown, no
+                        # reconnect, no backoff (re-review N2).
+                        try:
+                            await self._switch(self._pending_env)
+                            next_retry = self._now() + RETRY_REFUSED_S
+                        except Exception:  # noqa: BLE001 — answered and recorded by _switch
+                            pass
+                        continue
                     if self.refused and self._now() >= next_retry and not self._quiet():
                         next_retry = self._now() + RETRY_REFUSED_S
                         for r in list(self.refused):
@@ -231,8 +331,122 @@ class TickFeed:
             if refused_all:
                 wait = max(wait, RETRY_REFUSED_S)   # each such round costs one getChart per root
                 wait = self._extend_past_quiet(wait)
-            await self._sleep(wait)
+            await self._backoff(wait)
             attempt += 1
+
+    async def _backoff(self, wait: float) -> None:
+        """self._sleep(wait), cut short by a switch request or stop(). A switch already
+        pending skips it: the feed is down, and the switch is the next connect."""
+        if self._pending_env is not None:
+            return
+        self._wake.clear()
+        sleeper = asyncio.ensure_future(self._sleep(wait))
+        waker = asyncio.ensure_future(self._wake.wait())
+        try:
+            await asyncio.wait({sleeper, waker}, return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            for t in (sleeper, waker):
+                t.cancel()
+            await asyncio.gather(sleeper, waker, return_exceptions=True)
+
+    def _resolve_pending(self, error: Optional[BaseException]) -> None:
+        """Answer the pending switch (success when error is None) and record the outcome."""
+        env, fut = self._pending_env, self._pending_fut
+        self._pending_env, self._pending_fut = None, None
+        if error is None:
+            self.switch_error = None
+        else:
+            self.switch_error = {"to": env, "error": str(error) or type(error).__name__,
+                                 "at": self._now()}
+        if fut is not None and not fut.done():
+            if error is None:
+                fut.set_result(self.md_env)
+            else:
+                fut.set_exception(error)
+
+    async def _switch(self, env: str) -> None:
+        """Connect `env`'s login on a candidate socket, subscribe every root on it, verify, and
+        only then install it. The socket in use (if any) keeps serving throughout and is closed
+        only after the install. Any failure closes the candidate, touches nothing else, answers
+        the pending switch with the error and raises it. The requests are charged to `env`."""
+        old = self.ws if self.connected else None
+        cand = None
+        try:
+            if self._quiet():
+                raise RuntimeError("the 9:30 window is open — keeping the previous login")
+            cand = await self._connect_env(env)
+            got = getattr(cand, "environment", env)
+            if got != env:
+                raise RuntimeError(f"no valid {env} md token on disk (the connect came back as "
+                                   f"{got}) — keeping the previous login")
+            subs: dict = {}
+            contracts: dict = {}
+            refused: dict = {}
+            ok: list = []
+            for r in self.roots:
+                if self._quiet():   # the 9:30 window opened mid-switch
+                    raise RuntimeError("the 9:30 window opened during the switch — "
+                                       "keeping the previous login")
+                try:
+                    ok.append((r, await self.subscribe(r, cand=cand, subs=subs,
+                                                       contracts=contracts, env=env)))
+                except Refused as e:
+                    refused[r] = str(e)
+            if self.roots and not ok:
+                raise Refused(f"the {env} login refused every symbol — keeping the previous login")
+            if old is not None and len(refused) > len(self.refused):
+                raise RuntimeError(f"the {env} login refused {len(refused)} symbol(s), the "
+                                   f"previous one {len(self.refused)} — keeping the previous login")
+        except BaseException as e:
+            if cand is not None:
+                try:
+                    await cand.close()
+                except Exception:  # noqa: BLE001
+                    pass
+            if isinstance(e, Exception):
+                self._resolve_pending(e)
+            raise
+        # install: no await until the new socket routes, so no tick falls between the two
+        if old is not None:
+            try:
+                old.event_handlers.remove(self._on_event)
+            except ValueError:
+                pass
+        self.ws = cand
+        cand.event_handlers.append(self._on_event)
+        self.subs, self.contracts, self.refused = subs, contracts, refused
+        self.md_env = env
+        self.error = None
+        self._resolve_pending(None)
+        # gap refills start only now, on the installed socket and its login: their fetch runs
+        # past this moment, so it covers every tick between each root's last delivery and the
+        # new socket routing
+        for r, c in ok:
+            self._refill_after(r, c, self.last_ms.get(r))
+        if old is not None:
+            try:
+                await old.close()
+            except Exception:  # noqa: BLE001
+                pass
 
     def stop(self) -> None:
         self._stop = True
+        if self._wake is not None:
+            self._wake.set()
+
+    async def switch_md(self, new_env: str) -> str:
+        """Ask run() to move the feed to `new_env`'s login; returns once it has (the login now
+        in use) or raises the reason it did not (RuntimeError; the previous login is kept).
+        One at a time: a second request while one is pending raises SwitchInProgress."""
+        if new_env not in MD_ENVS:
+            raise ValueError(f"unknown md login {new_env!r}")
+        if self._pending_fut is not None:
+            raise SwitchInProgress("a market-data login switch is already in progress")
+        if new_env == self.md_env and self.connected:
+            return self.md_env
+        if self._stop or not self._running:
+            raise RuntimeError("the market-data feed is not running")
+        fut = asyncio.get_running_loop().create_future()
+        self._pending_env, self._pending_fut = new_env, fut
+        self._wake.set()
+        return await fut

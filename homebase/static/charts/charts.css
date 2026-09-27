@@ -289,6 +289,13 @@ a { color: inherit; }
 .sb-credit:hover { color: var(--text); text-decoration: underline; }
 @media (max-width: 760px) { .sb-opt { display: none; } }
 
+/* ---- app-wide Settings dialog (appsettings.js, Task 4, 2026-09-27 accounts-paper-layouts-
+   appsettings plan) -- reuses the chart Settings dialog's own .set-cap/.set-row/.set-name/
+   .set-ctl/.switch/.set-note/.set-why (below), just without its tabs/pane scaffold, so this is
+   the one place that needs .set-pane's own padding restated for a bare .dlg-fields body. */
+.dialog.appsettings { width: min(420px, 92vw); }
+.dialog.appsettings .dlg-fields { padding: 4px 24px 16px; }
+
 /* ---- chart Settings dialog (settings-dialog.js) ---- */
 .dialog.settings { width: min(820px, 94vw); height: min(600px, 88vh); max-height: none; }
 .set-body { flex: 1; min-height: 0; display: flex; border-top: 1px solid var(--border); }

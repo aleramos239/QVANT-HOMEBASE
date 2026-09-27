@@ -27,6 +27,8 @@ let cells = [];
 let selected = 0;
 let nextId = 1;
 let statusAt = 0, statusLine = '';
+let lastStatus = null;             // the last /ws "status" message (md, connected, error, ...)
+const statusListeners = new Set(); // App Settings dialog: repaint the MARKET DATA note/badge live
 let menuEl = null, menuAnchor = null;
 let customWait = null;   // {cell, spec, err}: a custom interval sent from the open interval menu, awaiting the server
 let dlg = null;   // the open dialog: {back, box, focus}
@@ -910,6 +912,42 @@ async function writeTemplate(method, name, body) {
   return `${what} failed (${r.status})` + (detail ? ': ' + detail : '');
 }
 
+/* App Settings (appsettings.js, Task 4, 2026-09-27 accounts-paper-layouts-appsettings plan):
+   GET/PUT /api/settings. A failed PUT (the refusal windows, a failed re-login) leaves the
+   server's own setting untouched -- putSettings just reports what the server said. */
+async function getSettings() {
+  try {
+    const r = await fetch('/api/settings');
+    return r.ok ? await r.json() : null;
+  } catch (_) { return null; }
+}
+async function putSettings(patch) {
+  let r;
+  try {
+    r = await fetch('/api/settings', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(patch) });
+  } catch (_) { return { ok: false, error: 'network error' }; }
+  if (r.ok) return { ok: true, settings: await r.json() };
+  let detail = '';
+  try { detail = (await r.json()).detail || ''; } catch (_) { /* no JSON body */ }
+  return { ok: false, error: detail || `failed (${r.status})` };
+}
+
+/* The app-wide Settings dialog (appsettings.js): a distinct toolbar icon from the chart gear
+   (#tbSettings). Structured so more app-wide settings can join MARKET DATA / APPEARANCE later. */
+function appSettingsDialog() {
+  const box = openDialog('Settings', 'small appsettings');
+  const ctl = window.HBAppSettings.mount(box, {
+    getSettings,
+    putSettings,
+    status: () => lastStatus,
+    onStatus(fn) { statusListeners.add(fn); return () => statusListeners.delete(fn); },
+    isDark: () => document.documentElement.getAttribute('data-theme') === 'dark',
+    toggleTheme,
+    close: closeDialog,
+  });
+  dlg.onClose = ctl.stop;
+}
+
 /* ---- dialogs ---- */
 function openDialog(title, cls) {
   closeMenu();
@@ -1434,6 +1472,8 @@ function renderNextEvent() {
 
 /* ---- bottom bar ---- */
 function showStatus(s) {
+  lastStatus = s;
+  for (const fn of statusListeners) fn(s);
   if (s.mode === 'replay') replayClock = { etMs: (s.clock_s || 0) * 1000, at: Date.now(), speed: s.speed || 1, done: !!s.done };
   else if (s.mode === 'live') replayClock = null;
   if (s.calendar && s.calendar.fetched_at !== calendarAt) { calendarAt = s.calendar.fetched_at; loadCalendar(); }
@@ -1570,6 +1610,7 @@ async function init() {
   $('#tbIndicators').onclick = indicatorsDialog;
   $('#tbGrid').onclick = () => toggleMenu($('#tbGrid'), gridMenu);
   $('#tbSettings').onclick = () => chartSettings();
+  $('#tbAppSettings').onclick = () => appSettingsDialog();
   $('#tbTheme').onclick = toggleTheme;
   $('#tbDom').onclick = () => window.HBOrderPanel.openTab('dom');
   for (const b of document.querySelectorAll('#rail [data-tool]')) {
