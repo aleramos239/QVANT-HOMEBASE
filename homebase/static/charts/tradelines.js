@@ -28,6 +28,9 @@ class Overlay {
     this.dragging = null;     // the key mid-drag, or null
     this.endDrag = null;      // set by startDrag; cancels a drag in progress (destroy mid-drag)
     this.fillIds = null;      // last JSON.stringify of the fill marker ids sent to setExtraMarkers
+    this.dead = false;        // review M2: set in destroy(); render() (and any callback still holding this
+                               // overlay, e.g. a cancelled drag's onCancel) becomes a no-op once true, so a
+                               // destroyed overlay can never create an orphan price line on the cell's NEW chart
 
     this.block = document.createElement('div');
     this.block.className = 'lg-trade';
@@ -174,8 +177,8 @@ class Overlay {
   }
 
   render() {
-    if (!this.cell.chart) return;
-    const mode = window.HBDeskClient.mode();
+    if (this.dead || !this.cell.chart) return;
+    const mode = window.HBTradeUI.effectiveMode();   // review M3: LIVE-arm-aware, not the raw desk mode
     this.paintBlock(mode);
     this.paintLines(mode);
     this.paintMarkers();
@@ -202,11 +205,15 @@ class Overlay {
     e.preventDefault(); e.stopPropagation();
     const c = this.cell, it = this.items.get(key), grip = e.currentTarget, from = it.g.price;
     const top = c.box.getBoundingClientRect().top;
-    let price = from;
+    let price = from, outside = false;   // I1: released outside the price pane must not send
     grip.setPointerCapture(e.pointerId);
     this.dragging = key;
     const move = (ev) => {
-      const raw = c.candles.coordinateToPrice(ev.clientY - top);
+      if (ev.buttons === 0) { lost(); return; }   // I2: the button was released without a pointerup/cancel reaching us
+      const paneH = c.chart ? c.chart.panes()[0].getHeight() : 0, y = ev.clientY - top;
+      outside = y < 0 || y > paneH;
+      if (outside) { this.sync(); return; }   // freeze the line at its last in-pane price; do not extrapolate
+      const raw = c.candles.coordinateToPrice(y);
       if (raw == null) return;
       price = window.HBDrawings.roundToTick(raw, c.tick);
       it.g = window.HBTrade.withPrice(it.g, price);
@@ -218,25 +225,30 @@ class Overlay {
       grip.removeEventListener('pointermove', move);
       grip.removeEventListener('pointerup', up);
       grip.removeEventListener('pointercancel', lost);
+      grip.removeEventListener('lostpointercapture', lost);
       window.removeEventListener('keydown', esc, true);
       window.removeEventListener('blur', lost);
       this.dragging = null;
       this.endDrag = null;
-      if (commit && price !== from) {
+      // M8: compare tick-rounded to tick-rounded (a zero-tick drag can otherwise differ only in float noise)
+      const changed = window.HBDrawings.roundToTick(price, c.tick) !== window.HBDrawings.roundToTick(from, c.tick);
+      if (commit && !outside && changed) {
         window.HBTradeUI.moveLine({ ...it.g, price: from }, price, c.shown.root, c.tick, { onCancel: () => this.render() });
-      } else this.render();      // back to the desk's price
+      } else this.render();      // back to the desk's price (also covers a release outside the pane: I1)
     };
     const up = () => end(true), lost = () => end(false);
     const esc = (ev) => { if (ev.key === 'Escape') { ev.stopPropagation(); ev.preventDefault(); end(false); } };
     grip.addEventListener('pointermove', move);
     grip.addEventListener('pointerup', up);
     grip.addEventListener('pointercancel', lost);
+    grip.addEventListener('lostpointercapture', lost);   // I2: capture lost with no up/cancel (a system gesture, e.g.)
     window.addEventListener('keydown', esc, true);
     window.addEventListener('blur', lost);
     this.endDrag = () => end(false);
   }
 
   destroy() {
+    this.dead = true;   // review M2: any callback still holding this overlay (e.g. a cancelled drag's onCancel) becomes a no-op
     if (this.dragging && this.endDrag) this.endDrag();
     this.unsub();
     this.unsubBusy();

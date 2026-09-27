@@ -39,10 +39,12 @@ function effectiveMode() {
    tradable right now (a line stays visible, just read-only, the way tradeMode's own ticked-but-untradable
    accounts already do). */
 function armedIds() { return T.armedTicked(D().state, D().prefs.ticked, liveConfirmed); }
-/* A single account id, refused when it is an unarmed LIVE account (review item 5's per-account paths). */
+/* A single account id, refused when it is an unarmed LIVE account (review item 5's per-account paths). Fails
+   CLOSED when the id isn't found in desk state at all (M6): unrecognized is never treated as armed. */
 function isArmedAccount(id) {
   const st = D().state, a = st && (st.accounts || []).find((x) => x.id === id);
-  return !a || a.env !== 'live' || liveConfirmed.has(id);
+  if (!a) return false;
+  return a.env !== 'live' || liveConfirmed.has(id);
 }
 /* The first unarmed LIVE account among ids, or null -- for a single refusal toast naming it. */
 function findUnarmed(ids) {
@@ -124,7 +126,14 @@ function confirm({ title, rows = [], note = '', each = '', live = false, action,
     // review item 1 (CRITICAL): Enter confirms ONLY when focus is on the primary button, or on a non-button
     // element (the checkbox, an unfocusable row) -- never × (the dialog's own close button, inside `box`),
     // Cancel, or any other button. T.enterConfirms is the pure, Node-tested predicate.
-    box.addEventListener('keydown', (e) => { if (e.key === 'Enter' && T.enterConfirms(e.target, yes)) { e.preventDefault(); yes.click(); } });
+    // I3: a HELD Enter (e.repeat) never confirms either -- picking a chart-menu item by keyboard opens this
+    // dialog with focus already on `yes`, and the still-held key's auto-repeat must not also confirm it. The
+    // repeat is still swallowed (preventDefault) so it can't leak into some other default action.
+    box.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      if (T.enterConfirms(e.target, yes, e.repeat)) { e.preventDefault(); yes.click(); }
+      else if (e.repeat) e.preventDefault();
+    });
     foot.append(no, yes);
     box.append(body, one, foot);
     if (live) box.classList.add('live');
@@ -138,18 +147,23 @@ function placeOrder({ cell, root, side, type, price = null, qty }) {
   if (gate.mode !== 'on') { D().toast('err', gate.reason); return; }
   const tick = cell ? cell.tick : tickFor(root), pv = cell ? cell.pv : null;
   const shown = gate.accounts;   // exactly what the dialog (or the one-click send) is about to show/act on (review item 2)
+  const prefs = D().prefs;
+  const px = type === 'Market' ? null : T.roundTick(price, tick);
+  // M1: the reference price and the SL/TP it implies are frozen HERE (decision time: the preview, or the
+  // one-click send itself) and reused verbatim at the actual send -- never recomputed from a quote that may
+  // have moved since, so the confirm dialog and the send always carry the same bracket. A quote older than
+  // 10 s (M4) counts as no quote, so no bracket, same as never having had one.
+  const q0 = T.freshQuote(D().quotes[root], page.clockMs());
+  const ref = type === 'Market' ? (q0 ? q0.last : null) : px;
+  const { sl, tp } = T.bracket(side, ref, prefs, tick);
   const build = (m) => {
     const resolved = T.resolveConfirmedAccounts(shown, m.accounts);
     if (!resolved.ok) { D().toast('err', 'Accounts changed — review and try again'); return null; }
-    if (!resolved.accounts.length) return null;
-    const prefs = D().prefs, q = D().quotes[root];
-    const px = type === 'Market' ? null : T.roundTick(price, tick);
-    const ref = type === 'Market' ? (q ? q.last : null) : px;
+    if (!resolved.accounts.length) { D().toast('err', 'No confirmed accounts left — nothing sent'); return null; }   // M9
     if (type !== 'Market') {   // review item 6: the market moved through the level between click and send
-      const fresh = T.inferType(side, px, q);
+      const fresh = T.inferType(side, px, T.freshQuote(D().quotes[root], page.clockMs()));
       if (fresh && fresh !== type) { D().toast('err', 'Price moved through your level — re-check the order'); return null; }
     }
-    const { sl, tp } = T.bracket(side, ref, prefs, tick);
     return T.orderBody({ clientId: T.clientId(), accounts: resolved.accounts, root, side, qty, type, price: px, sl, tp });
   };
   if (D().prefs.oneClick) { guardedSend('order', build); return; }
@@ -170,7 +184,7 @@ function symbolAction(kind, root) {
   const build = (m) => {
     const resolved = T.resolveConfirmedAccounts(shown, m.accounts);
     if (!resolved.ok) { D().toast('err', 'Accounts changed — review and try again'); return null; }
-    if (!resolved.accounts.length) return null;
+    if (!resolved.accounts.length) { D().toast('err', 'No confirmed accounts left — nothing sent'); return null; }   // M9
     return { client_id: T.clientId(), accounts: resolved.accounts, root };
   };
   if (D().prefs.oneClick && kind !== 'reverse') { guardedSend(kind, build); return; }   // Reverse always confirms (S4)
@@ -187,7 +201,14 @@ function moveLine(line, price, root, tick, { onCancel } = {}) {
   const accountIds = line.legs.map((l) => l.account);
   const unarmed = findUnarmed(accountIds);   // review item 5: refuse a LIVE leg that isn't armed this session
   if (unarmed) { D().toast('err', T.unarmedLiveMessage(unarmed)); if (onCancel) onCancel(); return; }
-  const build = () => line.legs.map((leg) => ({ client_id: T.clientId(), account: leg.account, order_id: leg.order_id, price: T.roundTick(price, tick) }));
+  const rounded = T.roundTick(price, tick);
+  if (rounded === T.roundTick(line.price, tick)) { if (onCancel) onCancel(); return; }   // M8: a zero-tick move sends nothing
+  if (line.type) {   // I1: re-run inferType -- a Limit dragged through the market must not silently fill
+    const fresh = T.inferType(line.side, rounded, T.freshQuote(D().quotes[root], page.clockMs()));
+    const kind = /stop/i.test(line.type) ? 'Stop' : 'Limit';
+    if (fresh && fresh !== kind) { D().toast('err', 'Price moved through your level — re-check the order'); if (onCancel) onCancel(); return; }
+  }
+  const build = () => line.legs.map((leg) => ({ client_id: T.clientId(), account: leg.account, order_id: leg.order_id, price: rounded }));
   if (D().prefs.oneClick) { guardedSend('modify', build); return; }
   const title = T.actionTitle('modify', { root, line, from: line.price, to: price }, tick);
   const rows = acctRows(accountIds);
@@ -249,7 +270,7 @@ function cancelOrder(account, order_id) {
 function registerChartMenuTrading() {
   window.HBChartMenu.register('trading', (ctx) => {
     if (effectiveMode().mode !== 'on' || busy()) return [];
-    const Dk = D(), q = Dk.quotes[ctx.root], qty = Dk.prefs.qty, out = [];
+    const Dk = D(), q = T.freshQuote(Dk.quotes[ctx.root], page.clockMs()), qty = Dk.prefs.qty, out = [];   // M4
     if (ctx.price != null) {
       const price = T.roundTick(ctx.price, ctx.tick);   // always tick-rounded before inferType (review item 2)
       for (const side of ['Buy', 'Sell']) {
@@ -444,5 +465,5 @@ function mount(pg) {
 }
 
 window.HBTradeUI = { mount, placeOrder, symbolAction, flattenAccount, cancelOrder, closeLine, moveLine, confirm, busy,
-  onBusyChange, armedIds };
+  onBusyChange, armedIds, effectiveMode };
 })();
