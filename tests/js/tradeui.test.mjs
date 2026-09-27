@@ -238,3 +238,101 @@ test('fix round 2: app.js buildGrid re-applies the latch after building, for eve
   assert.ok(destroyed >= 0 && rebuilt > destroyed, 'buildGrid: cellDestroyed over the old cells, then gridRebuilt(cells) over the new');
   assert.ok(body.indexOf('new Cell(') < rebuilt, 'gridRebuilt runs once the new cells exist');
 });
+
+/* ---- release/4: the latch through a LAYOUT-TAB switch, driven through app.js's OWN code ----
+   feat/layout-tabs' switchTab rebuilds the grid; the release merge routes it (and add / reopen / close / duplicate
+   / delete) through loadLayout -> buildGrid -> HBTradeUI.gridRebuilt. app.js is a browser IIFE, so this lifts
+   the REAL switchTab, loadLayout and buildGrid source out of it and runs them in a vm context against the real
+   tradeui.js / replayui.js / layouts.js; only the DOM, the Cell class and the network are stubbed. */
+test('release/4: practicing in replay, then a layout-TAB switch -- the next one-click sends nothing and opens no dialog', async () => {
+  const { readFileSync } = await import('node:fs');
+  const vm = await import('node:vm');
+  const src = readFileSync(new URL('../../homebase/static/charts/app.js', import.meta.url), 'utf8');
+  const lift = (name) => {
+    const m = new RegExp(`^(async )?function ${name}\\(`, 'm').exec(src);
+    assert.ok(m, `app.js defines ${name}`);
+    return src.slice(m.index, src.indexOf('\n}\n', m.index) + 2);
+  };
+  const L = require('../../homebase/static/charts/layouts.js');
+  reset();
+  const saved = (accounts) => ({ grid: 1, cells: [{ root: 'NQ', spec: '1m', indicators: [], trade: { accounts } }] });
+  class Cell {
+    constructor(slot, cfg, host) {
+      Object.assign(this, { cfg, host: { send() {}, id: host.id }, shown: { root: cfg.root }, tick: 0.25, pv: 20, replay: null,
+        ov: [], bars: [], destroyed: false });
+    }
+    note() {}
+    destroy() { this.destroyed = true; }
+    applyFold() {}
+    setSelected() {}
+  }
+  const el = () => ({ style: {}, dataset: {}, replaceChildren() {}, appendChild() {} });
+  const ctx = vm.createContext({
+    window: global.window, T, Cell, GRIDS: { 1: [1, 1], 2: [2, 1], 4: [2, 2], 6: [3, 2] }, $: () => el(), mk: () => el(),
+    closeHotkeyBox() {}, deskState: () => STATE, starter: () => ({ root: 'NQ', spec: '1m', indicators: [], trade: { accounts: [] } }),
+    hostFor: (id) => ({ id }), legendFolded: () => false, select() {}, saveLast() {}, dropLiveAccounts() {}, renderTabs() {},
+    renderToolbar() {}, sbNote(t) { throw new Error('sbNote: ' + t); },
+    // readLayout's safety half (HBTrade.loadedTrade) is pinned elsewhere; here: a NEW config object per load
+    readLayout: (v) => ({ grid: v.grid, cells: v.cells.map((c) => ({ ...c, trade: { accounts: [...c.trade.accounts] }, algo: null })) }),
+    layoutBody: () => ({ grid: ctx.layout.grid, cells: ctx.layout.cells.map(({ root, spec, indicators, trade }) => ({ root, spec, indicators, trade })) }),
+    putLayout: async () => '',
+  });
+  vm.runInContext(`
+    let layout = { grid: 1, cells: [], name: 'A', dirty: false }, cells = [], selected = 0, nextId = 1, tabSnapshot = null;
+    let layoutsCache = {};
+    ${lift('buildGrid')}
+    ${lift('loadLayout')}
+    ${lift('switchTab')}
+    globalThis.api = { buildGrid, loadLayout, switchTab, get cells() { return cells; }, get layout() { return layout; },
+      setCache(c) { layoutsCache = c; } };
+  `, ctx);
+  ctx.window.HBLayouts = L;
+  const api = ctx.api;
+  Object.defineProperty(ctx, 'layout', { get: () => api.layout });
+  page.cells = () => api.cells;            // the page's own view of the grid, as app.js's page object has it
+  try {
+    api.setCache({ A: saved(['sim041']), B: saved(['sim041']) });
+    api.loadLayout('A', saved(['sim041']));            // tab A on screen: one chart, a DEMO account ticked
+    const before = api.cells[0];
+    RUI.onState(before, { id: before.host.id, date: '2026-09-24', cursor_ms: 0, speed: 1, playing: true });
+    assert.ok(before.replay, 'tab A\'s chart is practicing in Bar Replay');
+    await api.switchTab('B');                          // the layout-tab click
+    const after = api.cells[0];
+    assert.notEqual(after, before, 'the switch rebuilt the grid');
+    assert.equal(before.destroyed, true);
+    assert.equal(after.replay, null, 'the new chart is not in replay: only the latch can stop it');
+    assert.deepEqual(UI.effectiveMode(after), { mode: 'none', reason: T.REPLAY_ENDED, accounts: [] });
+    UI.placeOrder({ cell: after, root: 'NQ', side: 'Buy', type: 'Market', qty: 1 });   // one-click is on
+    await flush();
+    assert.equal(desk.prefs.oneClick, true);
+    assert.equal(desk.sent.length, 0, 'nothing reaches the desk');
+    assert.equal(dialogs.length, 0, 'and no confirm dialog opens');
+  } finally {
+    page.cells = () => cells;
+  }
+});
+
+/* Every layout-tab path that replaces the charts on screen must do it through loadLayout -> buildGrid (the only
+   place gridRebuilt runs): no tab path builds cells, swaps `layout`, or rebuilds the grid by itself. */
+test('release/4: every layout-tab path rebuilds only through loadLayout -> buildGrid', async () => {
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../../homebase/static/charts/app.js', import.meta.url), 'utf8');
+  const body = (name) => {
+    const m = new RegExp(`^(async )?function ${name}\\(`, 'm').exec(src);
+    assert.ok(m, `app.js defines ${name}`);
+    return src.slice(m.index, src.indexOf('\n}\n', m.index) + 2);
+  };
+  const lb = body('loadLayout');
+  assert.ok(lb.indexOf('buildGrid()') > lb.indexOf('layout = '), 'loadLayout swaps the layout, then builds the grid');
+  assert.match(body('switchTab'), /loadLayout\(name, saved\)/);
+  assert.match(body('reopenTab'), /switchTab\(name\)/);
+  for (const name of ['switchTab', 'addTab', 'duplicateTab', 'renameTab', 'closeTab', 'deleteLayoutTab', 'reopenTab',
+    'addTabMenu', 'tabContextMenu', 'renderTabs', 'loadTabs']) {
+    const b = body(name);
+    assert.doesNotMatch(b, /new Cell\(|\bcells = |\blayout = |#grid|replaceChildren\(\.\.\.cells/, `${name} never rebuilds the grid itself`);
+  }
+  // the only places that construct charts or assign the grid are buildGrid itself
+  const outside = src.replace(body('buildGrid'), '');
+  assert.doesNotMatch(outside, /new Cell\(/);
+  assert.doesNotMatch(outside, /^\s*cells = /m);
+});
