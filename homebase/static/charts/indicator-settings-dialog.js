@@ -106,14 +106,39 @@ function mount(box, host) {
       };
       draw();
     } else if (p.type === 'time') {
+      // No destructive re-clamp per keystroke: a value only ever REPLACES vals[p.key] once it normalises (so
+      // "9", "09:", "09:3" while still typing just wait, live-previewing the moment they resolve); left
+      // incomplete/bad on blur or Enter, it shows an inline error (as the Style tab's hex field does) and the
+      // field snaps back to the last valid value -- never the factory default.
       ctl = mk('input', 'sw-hex');
       ctl.type = 'text';
       ctl.placeholder = 'HH:MM';
       ctl.maxLength = 5;
       ctl.value = vals[p.key];
       ctl.setAttribute('aria-label', p.label);
-      ctl.oninput = () => { vals[p.key] = ctl.value; preview(); };
-      ctl.onblur = () => { ctl.value = vals[p.key] = C.clampParams(inst.id, vals)[p.key]; };   // snaps to HH:MM or the default
+      const err = mk('div', 'dlg-err');
+      err.hidden = true;
+      err.setAttribute('role', 'alert');
+      ctl.oninput = () => {
+        const norm = C.normalizeHHMM(ctl.value);
+        if (!norm) return;   // still typing (or unparseable so far): leave vals/err alone, no preview yet
+        vals[p.key] = norm;
+        err.hidden = true;
+        preview();
+      };
+      const settle = () => {
+        const norm = C.normalizeHHMM(ctl.value);
+        if (norm) { vals[p.key] = norm; ctl.value = norm; err.hidden = true; preview(); return; }
+        err.textContent = 'Use HH:MM, e.g. 09:30';
+        err.hidden = false;
+        ctl.value = vals[p.key];   // back to the last valid value, never p.def
+      };
+      ctl.onblur = settle;
+      ctl.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); settle(); } };
+      ctl.id = id;
+      lab.htmlFor = id;
+      row.append(lab, ctl, err);
+      return row;
     } else {
       ctl = mk('input', 'set-num');
       ctl.type = 'number';

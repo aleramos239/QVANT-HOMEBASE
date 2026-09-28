@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from homebase.charts.bars import Bar, BarSpec, build
-from homebase.charts.session import custom_anchor_key
+from homebase.charts.session import ET, custom_anchor_key
 from homebase.charts.studies import (ADX, EMA, SMA, VWAP, VWMA, CumDelta, Levels, Profile,
                                      make, profile_from)
 from homebase.charts.tick import BUY, SELL, Tick
@@ -170,6 +170,46 @@ def test_vwap_custom_anchor_is_dst_safe():
     k2 = custom_anchor_key(session_ms(dt.date(2026, 3, 8), 10, 0), 10, 0)
     assert k1.utcoffset() != k2.utcoffset()            # the UTC offset really did change between the two
     assert k1.time() == k2.time() == dt.time(10, 0)    # both keys still land on 10:00 ET wall-clock
+
+
+def test_custom_anchor_key_pins_fold_through_the_fall_back_repeated_hour():
+    """2026-11-01: US DST ends (02:00 EDT -> 01:00 EST), so 01:00-01:59 ET happens twice -- fold 0 (EDT) then
+    fold 1 (EST). A t0100 anchor's period key for the two passes must be the exact same INSTANT, not merely
+    equal wall-clock fields: two aware datetimes that share one tzinfo object compare `==` by naive fields
+    only (a well-known datetime quirk -- ambiguous-hour values differing only by fold compare equal even
+    though their real instant, and .timestamp(), differ by an hour), so a `==`-based state-key check in
+    VWAP.step can't by itself prove there is only one reset. Pinning fold=0 makes .fold/.utcoffset()/
+    .timestamp() agree too, so nothing downstream that DOES look at the real instant (JSON round-tripping the
+    key, a repair/scroll-back diff, a datetime built through a different ET object) can end up disagreeing."""
+    d = dt.date(2026, 11, 1)
+    first_pass = dt.datetime(d.year, d.month, d.day, 1, 30, tzinfo=ET, fold=0)     # 01:30 EDT (first time through)
+    second_pass = dt.datetime(d.year, d.month, d.day, 1, 30, tzinfo=ET, fold=1)    # 01:30 EST (repeated hour)
+    assert first_pass.utcoffset() != second_pass.utcoffset()          # really is the ambiguous repeated hour
+    k_first = custom_anchor_key(int(first_pass.timestamp() * 1000), 1, 0)
+    k_second = custom_anchor_key(int(second_pass.timestamp() * 1000), 1, 0)
+    assert k_first.fold == 0 and k_second.fold == 0
+    assert k_first.utcoffset() == k_second.utcoffset()
+    assert k_first.timestamp() == k_second.timestamp()   # the same real instant, not just equal naive fields
+
+    before = int(dt.datetime(d.year, d.month, d.day, 0, 30, tzinfo=ET, fold=0).timestamp() * 1000)   # 00:30
+    k_before = custom_anchor_key(before, 1, 0)
+    assert k_before.timestamp() != k_first.timestamp()    # the 00:30 bar is still in the PRIOR day's period
+
+
+def test_vwap_custom_anchor_resets_once_on_the_fall_back_sunday():
+    """Same day as above, end to end through VWAP: one reset at 01:00, not a second one when the repeated
+    hour's second pass (fold 1) arrives."""
+    d = dt.date(2026, 11, 1)
+    first_pass = dt.datetime(d.year, d.month, d.day, 1, 30, tzinfo=ET, fold=0)
+    second_pass = dt.datetime(d.year, d.month, d.day, 1, 30, tzinfo=ET, fold=1)
+    before = int(dt.datetime(d.year, d.month, d.day, 0, 30, tzinfo=ET, fold=0).timestamp() * 1000)
+    v = make("vwap:t0100")
+    a = bar(5.0, t=before, session="2026-11-01"); a.pv, a.p2v, a.v = 5.0, 25.0, 1
+    b = bar(10.0, t=int(first_pass.timestamp() * 1000), session="2026-11-01"); b.pv, b.p2v, b.v = 10.0, 100.0, 1
+    c = bar(20.0, t=int(second_pass.timestamp() * 1000), session="2026-11-01"); c.pv, c.p2v, c.v = 20.0, 400.0, 1
+    got = [v.push(a), v.push(b), v.push(c)]
+    assert got[1]["vwap"] == 10.0    # the 01:00 anchor resets here (a's period ends)
+    assert got[2]["vwap"] == 15.0    # b + c share the SAME period: no second reset in the repeated hour
 
 
 def test_vwap_week_anchor_resets_at_the_weeks_first_session():

@@ -132,7 +132,24 @@ function placement(inst) {
   return PANES.includes(inst.pane) ? inst.pane : d.pane;
 }
 
-const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;   // the canonical stored/wire form
+
+/* Loose keyboard entry for a "Time (ET)" field, normalised to the canonical zero-padded "HH:MM", or null:
+   "9:30" / "09:30" / "930" / "0930" all mean the same thing -- typing without the colon, or without the
+   leading zero, is the normal way to enter a time, not an error. */
+function normalizeHHMM(text) {
+  const t = String(text == null ? '' : text).trim();
+  let hh, mm;
+  const withColon = /^(\d{1,2}):(\d{1,2})$/.exec(t);
+  if (withColon) { hh = +withColon[1]; mm = +withColon[2]; }
+  else {
+    const digits = /^(\d{3,4})$/.exec(t);
+    if (!digits) return null;
+    hh = +digits[1].slice(0, -2);
+    mm = +digits[1].slice(-2);
+  }
+  return hh >= 0 && hh <= 23 && mm >= 0 && mm <= 59 ? `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}` : null;
+}
 
 function clampParams(id, params) {
   const d = def(id), src = params && typeof params === 'object' ? params : {}, out = {};
@@ -141,7 +158,7 @@ function clampParams(id, params) {
     const v = src[p.key];
     if (p.type === 'bool') out[p.key] = typeof v === 'boolean' ? v : p.def;
     else if (p.type === 'choice') out[p.key] = p.choices.some(([c]) => c === v) ? v : p.def;
-    else if (p.type === 'time') out[p.key] = typeof v === 'string' && HHMM.test(v) ? v : p.def;
+    else if (p.type === 'time') out[p.key] = (typeof v === 'string' && normalizeHHMM(v)) || p.def;
     else {
       let n = v === null || v === '' || typeof v === 'boolean' ? NaN : Number(v);
       if (!Number.isFinite(n)) n = p.def;
@@ -274,14 +291,27 @@ function serverKeys(list) { return [...new Set((list || []).map(serverKey).filte
 
 /* A saved chart config of any vintage as {root, spec, indicators}. The spec is
    normalised as the server answers it (a Build-1 "tick:0750" is "tick:750"). */
+/* A stored vwap params object from BEFORE this anchor/bands rework: the indicators-array format (like
+   Build-1's "st" form, migrated a few lines below) could already carry {anchor, bands}. `bands` is not a
+   param key any more, so clampParams alone would silently drop it -- translate it into today's band 1 (x1) +
+   band 2 (x2) on/off FIRST, the same mapping the st-form branch uses. A params object that never had `bands`
+   passes through untouched. */
+function migrateVwapParams(params) {
+  const src = params && typeof params === 'object' ? params : {};
+  if (typeof src.bands !== 'boolean') return src;
+  const { bands, ...rest } = src;
+  return { ...rest, band1On: bands, band1Mult: 1, band2On: bands, band2Mult: 2 };
+}
+
 function migrate(cfg) {
   const c = cfg && typeof cfg === 'object' ? cfg : {};
   const root = typeof c.root === 'string' && c.root ? c.root.toUpperCase() : 'NQ';
   const spec = toSpec(c.spec) || 'time:60';
   if (Array.isArray(c.indicators)) {
     const indicators = c.indicators.filter((x) => x && def(x.id)).map((x) => {
+      const params = x.id === 'vwap' ? migrateVwapParams(x.params) : x.params;
       const o = { uid: typeof x.uid === 'string' && x.uid ? x.uid : uid(), id: x.id,
-        params: clampParams(x.id, x.params), visible: x.visible !== false };
+        params: clampParams(x.id, params), visible: x.visible !== false };
       if (movable(x.id)) o.pane = placement(x);
       const st = clampStyle(x.id, x.style);   // absent/malformed: no `style` -- renders as it always has
       if (st) o.style = st;
@@ -526,7 +556,7 @@ const api = { parseFavs, sortFavs, toggleFav, CATALOG, GROUPS, ROOT_NAMES, FAVOU
   defaults, serverKey, serverKeys, migrate, migrateLayout, label, legendValues, decimals, fmtPrice, fmtCompact,
   fmtSigned, change, parseSpec, specLabel, longLabel, toSpec, parseInterval, matchSymbols, rootName, rootBadge, filter,
   ALWAYS_OPEN, marketOpen, fmtAge, feedSummary, REC_BUSY, staleAfter, sinceOpen, PANES, movable, placement,
-  styleLineKeys, defaultStyle, clampStyle, cycleColor, sanitizePreset };
+  styleLineKeys, defaultStyle, clampStyle, cycleColor, sanitizePreset, normalizeHHMM };
 if (typeof window !== 'undefined') window.HBCatalog = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();
