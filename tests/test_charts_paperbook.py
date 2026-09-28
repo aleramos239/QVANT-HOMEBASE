@@ -1011,63 +1011,129 @@ def test_a_held_bracket_leg_moves_only_on_its_side_of_its_entry():
     assert act(s, "modify", account=PAPER_ID, order_id=legs["tp"], price=97.0)["ok"]
 
 
-# ---- fast-paper (2026-09-27): a Market fills at the quote at once; every change reaches the page at once ----------
+
+# ---- fast-paper (2026-09-27): a Market fills at once -- the live book, else the quote, else the next print ------
 NOW_MS = T0 // 1_000_000                       # the fixture book's clock
 
 
-def quoted(bid=99.75, ask=100.0, age_ms=500, root="NQ", tmp_path=None):
-    """A book whose quote_of answers q[root] -- {bid, ask, ts_ms: age_ms before the book's clock} (None: no quote). The
-    tests change q in place."""
-    q = {root: {"bid": bid, "ask": ask, "ts_ms": NOW_MS - age_ms}}
-    return book(tmp_path, root=root, quote_of=q.get), q
+def q_(bid=99.75, ask=100.0, age_ms=500, **kw):
+    """A trade-row quote as Quotes.quote_of gives it: age_ms before the book's clock, 5 lots shown each side."""
+    return {"bid": bid, "ask": ask, "bid_size": 5, "ask_size": 5, "ts_ms": NOW_MS - age_ms, **kw}
+
+
+def l2(bids=((99.75, 2), (99.5, 1), (99.25, 3)), offers=((100.0, 1), (100.25, 1), (100.5, 5)), age_ms=300):
+    """A Level 2 book as Depth.book_of gives it: best first, age_ms before the book's clock."""
+    return {"bids": [list(x) for x in bids], "offers": [list(x) for x in offers], "ts_ms": NOW_MS - age_ms}
+
+
+def live(quote=None, depth=None, root="NQ", tmp_path=None):
+    """A book whose quote_of / book_of answer src["quote"] / src["book"] for `root` -- the tests change src in place."""
+    src = {"quote": quote, "book": depth}
+    b = book(tmp_path, root=root, quote_of=lambda r: src["quote"] if r == root else None,
+             book_of=lambda r: src["book"] if r == root else None)
+    return b, src
 
 
 def test_a_market_buy_fills_at_once_at_the_ask_and_a_sell_at_the_bid_with_no_slip():
-    b, q = quoted(bid=99.75, ask=100.0)
+    b, _ = live(quote=q_(bid=99.75, ask=100.0))                       # no Level 2 book: the trade-row quote
     r = order(b, "Buy", "Market", qty=2)                             # no print needed: the quote is the price
     assert r["ok"] and fills(b) == [("Buy", 2, 100.0)] and net(b) == 2 and b.view()["orders"] == []
     f = b.fills[-1]
-    assert (f["src"], f["order_id"], f["time"]) == ("quote", r["order_id"], pb._iso(T0))   # filled NOW, book's clock
+    assert (f["src"], f["order_id"], f["time"]) == ("quote", r["order_id"], pb._iso(T0)) and "parts" not in f
     order(b, "Sell", "Market", qty=2)
     assert fills(b)[-1] == ("Sell", 2, 99.75) and net(b) == 0
     assert b.realized == pytest.approx(-0.25 * 20 * 2 - 8.0)         # the spread, once; $4 a round turn per contract
 
 
 @pytest.mark.parametrize("why, quote", [
-    ("older than 2 s", {"bid": 99.75, "ask": 100.0, "ts_ms": NOW_MS - 2001}),
-    ("over 1 s ahead of the book's clock", {"bid": 99.75, "ask": 100.0, "ts_ms": NOW_MS + 1001}),
+    ("older than 2 s", q_(age_ms=2001)),
+    ("over 1 s ahead of the book's clock", q_(age_ms=-1001)),
     ("none", None),
-    ("crossed", {"bid": 100.25, "ask": 100.0, "ts_ms": NOW_MS}),
-    ("locked", {"bid": 100.0, "ask": 100.0, "ts_ms": NOW_MS}),
-    ("off the tick grid", {"bid": 99.8, "ask": 100.0, "ts_ms": NOW_MS}),
-    ("21 ticks wide", {"bid": 94.75, "ask": 100.0, "ts_ms": NOW_MS}),
-    ("no bid", {"bid": None, "ask": 100.0, "ts_ms": NOW_MS}),
-    ("not a number", {"bid": float("nan"), "ask": 100.0, "ts_ms": NOW_MS}),
-    ("no time", {"bid": 99.75, "ask": 100.0}),
+    ("crossed", q_(bid=100.25, ask=100.0)),
+    ("locked", q_(bid=100.0, ask=100.0)),
+    ("off the tick grid", q_(bid=99.8)),
+    ("21 ticks wide", q_(bid=94.75)),
+    ("no bid", q_(bid=None)),
+    ("not a number", q_(bid=float("nan"))),
+    ("no time", {k: v for k, v in q_().items() if k != "ts_ms"}),
+    ("no size at the touch", q_(ask_size=None)),
+    ("less size at the touch than the order", q_(ask_size=1)),
 ])
-def test_an_unusable_quote_leaves_a_market_order_to_the_next_print(why, quote):
-    b = book(quote_of={"NQ": quote}.get)
+def test_with_no_book_an_unusable_quote_leaves_a_market_order_to_the_next_print(why, quote):
+    b, _ = live(quote=quote)
     feed(b, [("09:29:59", 100.0)])
-    assert order(b, "Buy", "Market")["ok"]
+    assert order(b, "Buy", "Market", qty=2)["ok"]
     assert fills(b) == [] and [o["type"] for o in b.view()["orders"]] == ["Market"]
     feed(b, [("09:30:01", 100.5)])
-    assert fills(b) == [("Buy", 1, 100.75)] and b.fills[-1]["src"] == "print"   # the engine's law: print + 1 tick
+    assert fills(b) == [("Buy", 2, 100.75)] and b.fills[-1]["src"] == "print"   # the engine's law: print + 1 tick
 
 
 def test_the_quote_limits_are_inclusive_and_the_grid_check_is_epsilon_tolerant():
-    for quote in ({"bid": 99.75, "ask": 100.0, "ts_ms": NOW_MS - 2000},         # exactly 2 s old
-                  {"bid": 99.75, "ask": 100.0, "ts_ms": NOW_MS + 1000},         # exactly 1 s ahead
-                  {"bid": 95.0, "ask": 100.0, "ts_ms": NOW_MS}):                # exactly 20 ticks wide
-        b = book(quote_of={"NQ": quote}.get)
-        order(b, "Buy", "Market")
-        assert fills(b) == [("Buy", 1, 100.0)] and b.fills[-1]["src"] == "quote", quote
-    c = book(root="CL", quote_of={"CL": {"bid": 64.01, "ask": 64.01 + 0.01, "ts_ms": NOW_MS}}.get)
+    for quote in (q_(age_ms=2000), q_(age_ms=-1000), q_(bid=95.0), q_(ask_size=2)):   # 2 s old, 1 s ahead, 20 ticks
+        b, _ = live(quote=quote)                                                      # wide, the order's size shown
+        order(b, "Buy", "Market", qty=2)
+        assert fills(b) == [("Buy", 2, 100.0)] and b.fills[-1]["src"] == "quote", quote
+    c, _ = live(quote={**q_(), "bid": 64.01, "ask": 64.01 + 0.01}, root="CL")
     order(c, "Buy", "Market", root="CL")                             # 64.02000000000001 is on the grid
     assert fills(c) == [("Buy", 1, 64.02)]
 
 
-def test_only_a_market_order_fills_at_the_quote():
-    b, q = quoted(bid=99.75, ask=100.0)
+def test_a_market_order_walks_the_live_book_for_all_of_its_size_at_the_weighted_average():
+    b, _ = live(quote=q_(), depth=l2())
+    r = order(b, "Buy", "Market", qty=3)                             # offers 100 x1, 100.25 x1, 100.5 x5
+    f = b.fills[-1]
+    assert (f["src"], f["qty"], f["price"], f["parts"]) == ("book", 3, 100.25, [[100.0, 1], [100.25, 1], [100.5, 1]])
+    assert f["order_id"] == r["order_id"] and b.pos["NQ"]["avg"] == 100.25 and b.view()["orders"] == []
+    order(b, "Sell", "Market", qty=4)                                # bids 99.75 x2, 99.5 x1, 99.25 x3
+    f = b.fills[-1]
+    assert (f["src"], f["price"], f["parts"]) == ("book", 99.5625, [[99.75, 2], [99.5, 1], [99.25, 1]])
+    assert net(b) == -1 and b.pos["NQ"]["avg"] == 99.5625            # 3 closed, 1 opened short at the fill
+    assert b.realized == pytest.approx((99.5625 - 100.25) * 20 * 3 - 12.0)   # no slip; $4 a contract a round turn
+
+
+def test_a_book_too_thin_for_all_of_it_leaves_the_quote_only_if_its_touch_shows_all_of_it():
+    thin = l2(offers=((100.0, 1), (100.25, 2)))                      # 3 lots on show
+    b, _ = live(quote=q_(ask_size=5), depth=thin)
+    order(b, "Buy", "Market", qty=4)
+    assert fills(b) == [("Buy", 4, 100.0)] and b.fills[-1]["src"] == "quote"   # never 3 from the book, 1 later
+    c, _ = live(quote=q_(ask_size=3), depth=thin)
+    feed(c, [("09:29:59", 100.0)])
+    order(c, "Buy", "Market", qty=4)
+    assert fills(c) == []                                            # neither shows 4: the next print, all of it
+    feed(c, [("09:30:01", 100.5)])
+    assert fills(c) == [("Buy", 4, 100.75)] and c.fills[-1]["src"] == "print"
+
+
+@pytest.mark.parametrize("why, depth", [
+    ("none", None),
+    ("older than 2 s", l2(age_ms=2001)),
+    ("over 1 s ahead of the book's clock", l2(age_ms=-1001)),
+    ("no time", {"bids": [[99.75, 2]], "offers": [[100.0, 5]]}),
+    ("one-sided", l2(bids=())),
+    ("crossed", l2(bids=((100.25, 1),))),
+    ("locked", l2(bids=((100.0, 1),))),
+    ("21 ticks wide", l2(bids=((94.75, 1),))),
+    ("a level off the grid", l2(offers=((100.0, 1), (100.3, 5)))),
+    ("out of order past what it takes", l2(offers=((100.0, 1), (100.5, 1), (100.25, 5)))),   # fail closed: all of it
+    ("a level twice", l2(offers=((100.0, 1), (100.0, 5)))),
+    ("a fractional size", l2(offers=((100.0, 1.5), (100.25, 5)))),
+    ("a level that is not [price, size]", l2(offers=((100.0, 1), (100.25, 5), (100.5,)))),
+])
+def test_an_unusable_book_leaves_the_quote(why, depth):
+    b, _ = live(quote=q_(), depth=depth)
+    order(b, "Buy", "Market", qty=2)
+    assert fills(b) == [("Buy", 2, 100.0)] and b.fills[-1]["src"] == "quote"
+
+
+def test_the_book_limits_are_inclusive():
+    for depth in (l2(age_ms=2000), l2(age_ms=-1000), l2(bids=((95.0, 1),))):   # 2 s old, 1 s ahead, 20 ticks wide
+        b, _ = live(depth=depth)
+        order(b, "Buy", "Market", qty=2)
+        assert (b.fills[-1]["src"], b.fills[-1]["parts"]) == ("book", [[100.0, 1], [100.25, 1]]), depth
+
+
+def test_only_a_market_order_fills_at_once():
+    b, _ = live(quote=q_(), depth=l2())
     feed(b, [("09:29:59", 100.0)])
     order(b, "Buy", "Limit", price=100.25)                           # through the ask: still waits for a print
     order(b, "Buy", "Stop", price=100.25)
@@ -1075,70 +1141,83 @@ def test_only_a_market_order_fills_at_the_quote():
     assert fills(b) == [] and len(b.view()["orders"]) == 3
 
 
-def test_a_quote_filled_entrys_bracket_goes_live_at_once_and_trades_from_the_next_print():
-    b, q = quoted(bid=99.75, ask=100.0)
-    feed(b, [("09:29:59", 100.0)])
-    assert order(b, "Buy", "Market", sl=99.0, tp=101.0)["ok"]
-    assert fills(b) == [("Buy", 1, 100.0)]
+def test_an_entry_filled_at_once_has_its_bracket_live_and_trading_from_the_next_print():
+    b, _ = live(quote=q_(), depth=l2())
+    feed(b, [("09:29:59", 100.0)])                                   # a Market's bracket is checked against it
+    assert order(b, "Buy", "Market", qty=2, sl=99.0, tp=101.0)["ok"]
+    assert fills(b) == [("Buy", 2, 100.125)] and b.fills[-1]["src"] == "book"
     assert sorted((o["type"], o["role"], o["status"]) for o in b.view()["orders"]) == \
         [("Limit", "tp", "Working"), ("Stop", "sl", "Working")]      # never "Suspended": the entry is in
     feed(b, [("09:30:01", 99.0)])                                    # the very next print touches the stop
-    assert fills(b)[-1] == ("Sell", 1, 98.75) and net(b) == 0 and b.view()["orders"] == []   # its OCO twin went too
+    assert fills(b)[-1] == ("Sell", 2, 98.75) and net(b) == 0 and b.view()["orders"] == []   # its OCO twin went too
 
 
-def test_flatten_and_reverse_fill_at_the_quote_at_once():
-    b, q = quoted(bid=99.75, ask=100.0)
-    feed(b, [("09:29:59", 100.0)])                                   # a Market's bracket is checked against it
-    order(b, "Buy", "Market", qty=3, sl=95.0, tp=110.0)
-    assert net(b) == 3 and len(b.view()["orders"]) == 2
-    q["NQ"] = {"bid": 101.0, "ask": 101.25, "ts_ms": NOW_MS}
+def test_flatten_walks_the_book_and_a_reverse_takes_both_legs_from_one_read():
+    b, src = live(quote=q_(), depth=l2())
+    feed(b, [("09:29:59", 100.0)])
+    order(b, "Buy", "Market", qty=3, sl=95.0, tp=110.0)              # in at 100.25 (the book)
+    src["book"] = l2(bids=((101.0, 2), (100.75, 5)), offers=((101.25, 1), (101.5, 1), (102.0, 9)))
     assert act(b, "flatten", accounts=[PAPER_ID], root="NQ")["ok"]
-    assert net(b) == 0 and b.view()["orders"] == [] and fills(b)[-1] == ("Sell", 3, 101.0)   # brackets gone, out at the bid
-    order(b, "Buy", "Market", qty=2)                                 # long 2 at the ask
+    f = b.fills[-1]
+    assert net(b) == 0 and b.view()["orders"] == [] and (f["side"], f["qty"], f["parts"]) == ("Sell", 3, [[101.0, 2], [100.75, 1]])
+    order(b, "Buy", "Market", qty=2)
+    assert b.fills[-1]["parts"] == [[101.25, 1], [101.5, 1]]
+    # a reverse reads the book ONCE, for 4: the close takes the first 2 of it, the open the next 2
     assert act(b, "reverse", accounts=[PAPER_ID], root="NQ")["ok"]
-    assert fills(b)[-2:] == [("Sell", 2, 101.0), ("Sell", 2, 101.0)] and [f["role"] for f in b.fills][-2:] == ["flat", "entry"]
-    assert net(b) == -2 and b.pos["NQ"]["avg"] == 101.0 and b.view()["orders"] == []
-    q["NQ"]["ts_ms"] = NOW_MS - 5000                                 # stale: BOTH legs wait for the print, in order
+    assert [(f["role"], f["price"], f["parts"]) for f in b.fills][-2:] == \
+        [("flat", 101.0, [[101.0, 2]]), ("entry", 100.75, [[100.75, 2]])]
+    assert net(b) == -2 and b.pos["NQ"]["avg"] == 100.75 and b.view()["orders"] == []
+    # short 2: a buy reverse needs 4 -- the book shows 3 and the quote's touch 3: both legs wait, in order
+    src["book"], src["quote"] = l2(offers=((100.5, 3),)), q_(ask=100.0, ask_size=3)
     assert act(b, "reverse", accounts=[PAPER_ID], root="NQ")["ok"]
     assert [o["type"] for o in b.view()["orders"]] == ["Market", "Market"] and net(b) == -2
-    feed(b, [("09:30:01", 101.0)])
+    feed(b, [("09:30:01", 100.5)])
     assert net(b) == 2 and [f["src"] for f in b.fills][-2:] == ["print", "print"]
+    src["book"], src["quote"] = None, q_(bid_size=4)                 # no book, the quote's bid shows 4: both at it
+    assert act(b, "reverse", accounts=[PAPER_ID], root="NQ")["ok"]
+    assert [(f["role"], f["price"], f["src"]) for f in b.fills][-2:] == [("flat", 99.75, "quote"), ("entry", 99.75, "quote")]
 
 
-def test_a_quote_fill_is_logged_with_its_src_and_survives_a_restart(tmp_path):
-    b, q = quoted(bid=99.75, ask=100.0, tmp_path=tmp_path)
+def test_an_instant_fill_is_logged_with_its_src_and_levels_and_survives_a_restart(tmp_path):
+    b, _ = live(quote=q_(), depth=l2(), tmp_path=tmp_path)
     feed(b, [("09:29:59", 100.0)])
     order(b, "Buy", "Market", qty=2, sl=98.0)
     log = [json.loads(x) for x in (tmp_path / "paper" / "book.jsonl").read_text().splitlines()]
     assert [e["ev"] for e in log] == ["place", "fill"]
-    assert {k: log[1][k] for k in ("price", "ts_ns", "src")} == {"price": 100.0, "ts_ns": NOW_MS * 1_000_000, "src": "quote"}
-    again = book(tmp_path)                                           # a restart replays the log: no quote needed
-    assert net(again) == 2 and again.pos["NQ"]["avg"] == 100.0 and again.fills[-1]["src"] == "quote"
+    assert {k: log[1][k] for k in ("price", "ts_ns", "src", "parts")} == \
+        {"price": 100.125, "ts_ns": NOW_MS * 1_000_000, "src": "book", "parts": [[100.0, 1], [100.25, 1]]}
+    again = book(tmp_path)                                           # a restart replays the log: no book needed
+    f = again.fills[-1]
+    assert (net(again), again.pos["NQ"]["avg"], f["src"], f["parts"]) == (2, 100.125, "book", [[100.0, 1], [100.25, 1]])
     assert [(o["role"], o["status"]) for o in again.view()["orders"]] == [("sl", "Working")]
     old = tmp_path / "old" / "paper" / "book.jsonl"                  # a log from before `src`: its fills were prints
     old.parent.mkdir(parents=True)
-    old.write_text("".join(json.dumps({k: v for k, v in e.items() if k != "src"}) + "\n" for e in log))
-    assert book(tmp_path / "old").fills[-1]["src"] == "print"
+    old.write_text("".join(json.dumps({k: v for k, v in e.items() if k not in ("src", "parts")}) + "\n" for e in log))
+    f = book(tmp_path / "old").fills[-1]
+    assert f["src"] == "print" and "parts" not in f
 
 
-def test_every_paper_account_fills_at_the_quote_and_each_change_is_announced(tmp_path):
-    q, changed = {"NQ": {"bid": 99.75, "ask": 100.0, "ts_ms": NOW_MS}}, []
-    bs = pb.PaperBooks(tmp_path / "paper", roots=["NQ"], clock_ms=lambda: NOW_MS, quote_of=q.get,
-                       on_change=lambda: changed.append(1))
+def test_every_paper_account_fills_at_once_and_each_change_is_announced(tmp_path):
+    src, changed = {"quote": q_(age_ms=0), "book": None}, []
+    bs = pb.PaperBooks(tmp_path / "paper", roots=["NQ"], clock_ms=lambda: NOW_MS, quote_of=lambda r: src["quote"],
+                       book_of=lambda r: src["book"], on_change=lambda: changed.append(1))
     bs.create({"name": "Two"})
     assert len(changed) == 1
     res = bs_order(bs, ["paper", "paper-2"])
     assert all(r["ok"] for r in res.values()) and len(changed) == 2            # one announcement per action
     assert [b.fills[-1]["price"] for b in bs.books.values()] == [100.0, 100.0]
+    src["book"] = l2(age_ms=0)
+    bs_order(bs, ["paper-2"], qty=2)
+    assert bs.books["paper-2"].fills[-1]["parts"] == [[100.0, 1], [100.25, 1]] and len(changed) == 3
     bs.message()                                                    # pushed: nothing is dirty now
     feed_all(bs, [("09:30:01", 100.0)])                              # a print that changes nothing: silent
     assert bs_order(bs, ["paper"], qty=11)["paper"]["refused"]       # a refusal changes nothing: silent
-    assert len(changed) == 2
-    q["NQ"] = None
-    bs_order(bs, ["paper"], side="Sell")                            # no quote: placed, waiting -- a change
+    assert len(changed) == 3
+    src["quote"] = src["book"] = None
+    bs_order(bs, ["paper"], side="Sell")                            # nothing to fill at: placed, waiting -- a change
     bs.message()
     feed_all(bs, [("09:30:02", 100.5)])                              # the print that fills it -- a change
-    assert len(changed) == 4 and bs.books["paper"].fills[-1]["src"] == "print"
+    assert len(changed) == 5 and bs.books["paper"].fills[-1]["src"] == "print"
 
 
 def test_a_paper_change_reaches_the_page_at_once_without_waiting_for_the_pump(tmp_path, monkeypatch):
@@ -1158,3 +1237,23 @@ def test_a_paper_change_reaches_the_page_at_once_without_waiting_for_the_pump(tm
         a = next_within(ws, "paperbook", lambda m: not m["accounts"][0]["positions"])["accounts"][0]
         assert a["orders"] == [] and \
             (a["fills"][-1]["side"], a["fills"][-1]["price"], a["fills"][-1]["src"]) == ("Sell", 100.75, "quote")
+
+
+def test_the_service_walks_its_own_live_level2_book(tmp_path):
+    """End to end: the chart service's Depth (a fake md socket, one DOM push as Tradovate sends it) is the book a
+    PAPER market order walks."""
+    from tests.test_charts_depth import NQ as NQ_CONTRACT, FakeWS, subs
+    from tests.test_charts_depth_server import LiveFeed, wait_for
+    ws = FakeWS()
+    live_feed = LiveFeed(ws)
+    app = create_app(roots=["NQ"], base=tmp_path / "ticks", feed_factory=live_feed,
+                     now_ms=lambda: session_ms(CD, 9, 45), state=tmp_path / "state",
+                     depth_roots=("NQ",), depth_base=tmp_path / "depth")
+    with TestClient(app, base_url=BASE_URL) as c:
+        wait_for(lambda: subs(ws) == [NQ_CONTRACT] and c.get("/api/status").json()["depth"]["NQ"]["subscribed"])
+        live_feed.q.put(lambda: ws.push(111, [(99.75, 2)], [(100.0, 1), (100.25, 4)]))   # stamped at the clock
+        wait_for(lambda: c.get("/api/status").json()["depth"]["NQ"]["levels"] == [1, 2])
+        body = {"client_id": "l2", "accounts": [PAPER_ID], "root": "NQ", "side": "Buy", "qty": 3, "type": "Market"}
+        assert c.post("/api/paper/order", json=body).json()["results"][PAPER_ID]["ok"]
+        f = c.get("/api/paper/book").json()["accounts"][0]["fills"][-1]
+    assert (f["src"], f["qty"], f["price"], f["parts"]) == ("book", 3, 100.166667, [[100.0, 1], [100.25, 2]])

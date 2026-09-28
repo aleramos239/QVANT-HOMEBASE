@@ -141,6 +141,23 @@ def test_book_replaces_on_every_snapshot_best_first_and_capped():
     assert b.bids[0] == [1000, 1] and b.offers[0] == [2000, 1]
 
 
+def test_book_of_is_every_level_best_first_as_copies_or_none():
+    """fast-paper: the paper book's read of the DOM -- all BOOK_LEVELS, never the wire's 20, and nothing it can change."""
+    _, d, _ = make()
+    assert d.book_of("NQ") is None                                   # no book (not subscribed, or the socket went)
+    b = d.books["NQ"] = Book("NQ")
+    assert d.book_of("NQ") is None                                   # a book that never had a snapshot
+    b.apply({"timestamp": "2026-09-24T13:45:00.250Z",
+             "bids": [{"price": 1000 - i * 0.25, "size": 2} for i in range(25)],
+             "offers": [{"price": 1000.25 + i * 0.25, "size": 3} for i in range(25)]}, now=1.0, wall_ms=0)
+    got = d.book_of("NQ")
+    assert got["ts_ms"] == b.ts and len(got["bids"]) == len(got["offers"]) == 25
+    assert got["bids"][0] == [1000.0, 2] and got["offers"][0] == [1000.25, 3]
+    got["bids"][0][1] = 99
+    got["offers"].clear()
+    assert b.bids[0] == [1000.0, 2] and len(b.offers) == 25
+
+
 def test_book_skips_malformed_levels():
     b = Book("NQ")
     b.apply({"bids": [{"price": "x", "size": 1}, {"price": 10.0, "size": 0}, {"price": 9.75},

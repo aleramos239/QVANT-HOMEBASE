@@ -354,6 +354,15 @@ class Depth:
         bids, offers = b.top(WIRE_LEVELS)
         return {"type": "depth", "root": root, "ts": b.ts, "bids": bids, "offers": offers}
 
+    def book_of(self, root: str) -> Optional[dict]:
+        """The paper book's read of the latest DOM (paperbook.py, fast-paper): {bids, offers, ts_ms} -- every level
+        kept, best first, as copies -- or None when there is none (not subscribed, or the md socket went)."""
+        b = self.books.get(root)
+        if b is None or b.ts is None:
+            return None
+        bids, offers = b.top(BOOK_LEVELS)
+        return {"bids": bids, "offers": offers, "ts_ms": b.ts}
+
     def _conn_has(self, conn, root: str) -> bool:
         return any(k[0] is conn and r == root for k, r in self._viewers.items())
 

@@ -435,7 +435,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                         busy=lambda: PAPER_ROOT in refill_running or PAPER_ROOT in refill_pending, log=log)
     paper_job: list = []
     quotes = Quotes()                     # bid/ask per root for the Buy/Sell buttons (desk.py) -- and, while fresh,
-                                          # the price a PAPER market order fills at (paperbook.py, quote_of)
+                                          # a PAPER market order's price when the live book can't take it (quote_of)
 
     def push_paper() -> None:
         """The PAPER accounts to every page, when they changed. Run by paper_push only: at once on a change, at most
@@ -447,13 +447,19 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             log(f"paper push: {type(e).__name__}: {e}")
 
     paper_push = Throttle(push_paper, PAPER_PUSH_GAP_S)
+
+    def depth_book(root: str):
+        """The live Level 2 book of `root` for a PAPER market fill (depth.py), or None. (depth: defined below.)"""
+        return None if depth is None else depth.book_of(root)
+
     # the PAPER account (paperbook.py, Task 2): the page trades it like a desk account; the backtester's fill law
     # on the live prints below, persisted to paper/book.jsonl. Live only -- a replay has none (its routes answer
     # 503), so a replayed price never fills it and never touches the saved book. It never reaches the desk.
     # Task 2b: several paper accounts, each its own book (the first, "paper", keeps paper/book.jsonl untouched)
-    # fast-paper: a Market fills at the quote at once (quote_of); every change is pushed at once (on_change)
+    # fast-paper: a Market fills at once against the live book (book_of), else the quote (quote_of), for all of its
+    # size or not at all; every change is pushed at once (on_change)
     book = None if replay else PaperBooks(sd / "paper", roots=roots, clock_ms=lambda: clock(), log=log,
-                                          quote_of=quotes.quote_of, on_change=paper_push.kick)
+                                          quote_of=quotes.quote_of, book_of=depth_book, on_change=paper_push.kick)
     recorder = None if replay else LiveRecorder(base)
     conns: set[Conn] = set()
     desk_fan = Fanout()                   # desk events fanned out to every page, bounded per page
