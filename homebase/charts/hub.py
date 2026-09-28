@@ -46,10 +46,11 @@ def sessions_back(spec: BarSpec) -> int:
 
 def warm_bars(key: str) -> int:
     """How many bars after a join a study's value still depends on the bars before it: a window's length, or
-    long enough for an EMA's (5n) / a Wilder ADX's (10n) memory to fade below e^-10. 0: the study restarts
-    every session (VWAP, cumulative delta, levels)."""
-    name, _, n = str(key).partition(":")
-    n = int(n) if n.isdecimal() else 0
+    long enough for an EMA's (5n) / a Wilder ADX's (10n) memory to fade below e^-10. 0: the study restarts on
+    its own anchor (VWAP, cumulative delta, levels). Reads only the length token (index 1): an sma/ema key may
+    carry a third `:source` token, which never changes the window length."""
+    name, *rest = str(key).split(":")
+    n = int(rest[0]) if rest and rest[0].isdecimal() else 0
     return {"sma": n, "vwma": n, "ema": 5 * n, "adx": 10 * n}.get(name, 0)
 
 

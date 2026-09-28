@@ -4,14 +4,36 @@ push(bar) commits a CLOSED bar and returns its value; preview(bar) values
 the DEVELOPING bar without committing. State is an immutable tuple, so a
 preview can never corrupt it. Values: float, dict, or None (warming up).
 
-Wire keys: "sma:50", "ema:20", "vwma:15", "vwap", "vwap:rth", "adx:14",
-"cumdelta", "levels". ("profile" is not a Study — see Profile.)
+Wire keys: "sma:50", "sma:50:hl2" (length + optional source, sma/ema only; default source is close), "ema:20",
+"vwma:15", "vwap", "vwap:rth", "vwap:week", "vwap:month", "vwap:t0200" (anchor eth/rth/week/month/tHHMM;
+"vwap" alone is "eth"), "adx:14", "cumdelta", "levels". ("profile" is not a Study — see Profile.)
 """
 from __future__ import annotations
 
 import math
+import re
 
-from .session import is_rth
+from .session import custom_anchor_key, is_rth, month_key, week_key
+
+SOURCES = ("close", "open", "high", "low", "hl2", "hlc3", "ohlc4")
+
+
+def _source_value(bar, source: str) -> float:
+    if source == "close":
+        return bar.c
+    if source == "open":
+        return bar.o
+    if source == "high":
+        return bar.h
+    if source == "low":
+        return bar.l
+    if source == "hl2":
+        return (bar.h + bar.l) / 2
+    if source == "hlc3":
+        return (bar.h + bar.l + bar.c) / 3
+    if source == "ohlc4":
+        return (bar.o + bar.h + bar.l + bar.c) / 4
+    raise ValueError(f"source {source!r} (have {', '.join(SOURCES)})")
 
 
 class Study:
@@ -33,21 +55,30 @@ class Study:
 
 
 class SMA(Study):
-    def __init__(self, n: int = 20):
+    """Simple moving average of `source` (default close -- "sma:50" is unchanged)."""
+
+    def __init__(self, n: int = 20, source: str = "close"):
         self.n = int(n)
+        if source not in SOURCES:
+            raise ValueError(f"source {source!r} (have {', '.join(SOURCES)})")
+        self.source = source
         super().__init__()
 
     def step(self, st, bar):
-        w = (st + (bar.c,))[-self.n:]
+        w = (st + (_source_value(bar, self.source),))[-self.n:]
         return w, (sum(w) / self.n if len(w) == self.n else None)
 
 
 class EMA(Study):
-    """pandas ewm(span=n, adjust=False): alpha 2/(n+1), seeded with the first close."""
+    """pandas ewm(span=n, adjust=False): alpha 2/(n+1), seeded with the first value of `source` (default
+    close -- "ema:20" is unchanged)."""
 
-    def __init__(self, n: int = 20):
+    def __init__(self, n: int = 20, source: str = "close"):
         self.n = int(n)
         self.a = 2.0 / (self.n + 1)
+        if source not in SOURCES:
+            raise ValueError(f"source {source!r} (have {', '.join(SOURCES)})")
+        self.source = source
         super().__init__()
 
     def initial(self):
@@ -55,7 +86,8 @@ class EMA(Study):
 
     def step(self, st, bar):
         prev = st[0]
-        v = bar.c if prev is None else prev + (bar.c - prev) * self.a
+        x = _source_value(bar, self.source)
+        v = x if prev is None else prev + (x - prev) * self.a
         return (v,), v
 
 
@@ -74,27 +106,60 @@ class VWMA(Study):
         return w, (sum(c * v for c, v in w) / vol if vol else None)
 
 
+_CUSTOM_ANCHOR = re.compile(r"^t(\d{2})(\d{2})$")
+
+
 class VWAP(Study):
-    """Session VWAP from every trade (bars carry sum(p*q)) + its volume-
-    weighted standard deviation for bands. anchor "eth" resets at the 18:00
-    open (TradingView's session default); "rth" resets at 09:30 ET and is
-    None before it."""
+    """Session VWAP from every trade (bars carry sum(p*q)) + its volume-weighted standard deviation for bands.
+
+    Anchor (wire key "vwap:<anchor>", "vwap" alone means "eth"):
+      "eth"    resets at the 18:00 ET session open (TradingView's session default) -- wire key "vwap"
+      "rth"    resets at 09:30 ET and is None before it -- wire key "vwap:rth"
+      "week"   resets at the week's first session (Sunday 18:00 ET) -- wire key "vwap:week"
+      "month"  resets at the first session of the calendar month, by CME trade date -- wire key "vwap:month"
+      "tHHMM"  resets every day at HH:MM ET, e.g. "t0200" = 02:00 ET -- wire key "vwap:t0200".
+
+    The period key is decided from each CLOSED bar's own start (bar.t; a Study never sees mid-bar ticks), the
+    same rule the "rth" anchor already used for is_rth. So on bars coarser than the anchor (e.g. 1h bars with a
+    09:30 anchor) a bar that STARTS before the anchor is still the old period even though its span crosses the
+    anchor -- the reset first shows on the next bar, the first one whose start is at or after the anchor
+    instant, i.e. the first bar that fully contains only time at-or-past the anchor.
+    """
 
     def __init__(self, anchor: str = "eth"):
-        if anchor not in ("eth", "rth"):
-            raise ValueError(f"vwap anchor {anchor!r} (eth or rth)")
+        if anchor in ("eth", "rth", "week", "month"):
+            self.kind, self.hh, self.mm = anchor, None, None
+        else:
+            m = _CUSTOM_ANCHOR.match(anchor)
+            if not m:
+                raise ValueError(f"vwap anchor {anchor!r} (eth, rth, week, month, or tHHMM e.g. t0200)")
+            hh, mm = int(m.group(1)), int(m.group(2))
+            if not (0 <= hh <= 23 and 0 <= mm <= 59):
+                raise ValueError(f"vwap anchor {anchor!r}: HH must be 00-23 and MM 00-59")
+            self.kind, self.hh, self.mm = "custom", hh, mm
         self.anchor = anchor
         super().__init__()
 
     def initial(self):
         return (None, 0.0, 0.0, 0)
 
+    def _period(self, bar):
+        """The accumulator resets whenever this key changes bar over bar."""
+        if self.kind in ("eth", "rth"):
+            return bar.session
+        if self.kind == "week":
+            return week_key(bar.session)
+        if self.kind == "month":
+            return month_key(bar.session)
+        return custom_anchor_key(bar.t, self.hh, self.mm)
+
     def step(self, st, bar):
-        if self.anchor == "rth" and not is_rth(bar.t, bar.session):
+        if self.kind == "rth" and not is_rth(bar.t, bar.session):
             return st, None
-        _, pv, p2v, v = st if st[0] == bar.session else (bar.session, 0.0, 0.0, 0)
+        key = self._period(bar)
+        _, pv, p2v, v = st if st[0] == key else (key, 0.0, 0.0, 0)
         pv, p2v, v = pv + bar.pv, p2v + bar.p2v, v + bar.v
-        new = (bar.session, pv, p2v, v)
+        new = (key, pv, p2v, v)
         if not v:
             return new, None
         vw = pv / v
@@ -187,7 +252,12 @@ def make(key: str) -> Study:
     cls = REGISTRY.get(name)
     if cls is None:
         raise ValueError(f"unknown study {key!r} (have {', '.join(sorted(REGISTRY))}, profile)")
-    if cls in (SMA, EMA, VWMA, ADX):
+    if cls in (SMA, EMA):
+        if len(args) > 2 or (args and not (args[0].isdecimal() and int(args[0]) in LENGTHS)):
+            raise ValueError(f"bad study {key!r}: {name} takes a length and optional source "
+                              f"{LENGTHS[0]}..{LENGTHS[-1]}, e.g. {name}:20 or {name}:20:hl2")
+        return cls() if not args else cls(int(args[0]), *args[1:])
+    if cls in (VWMA, ADX):
         if len(args) > 1 or (args and not (args[0].isdecimal() and int(args[0]) in LENGTHS)):
             raise ValueError(f"bad study {key!r}: {name} takes one length "
                              f"{LENGTHS[0]}..{LENGTHS[-1]}, e.g. {name}:20")
