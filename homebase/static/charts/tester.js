@@ -20,7 +20,8 @@ const ISO = /^\d{4}-\d{2}-\d{2}$/;
    A form's range is {id, start, end, wf}. `id` names one of the fixed windows below (or 'custom',
    where start/end are the typed dates). `wf` is null, or a walk-forward ratio 1 | 2 | 3 -- months
    OUT-of-sample per 1 selection month -- which COMPOSES with whichever window is chosen, so
-   "2025-2026 · WF 1:1" is a walk-forward run over 2025-2026. `end: null` in the table means today
+   "2025-2026 · WF 1:1" is a walk-forward run over 2025-2026. `wf: 'compare'` = the three ratios
+   side by side from one grid run ("2021-2024 · WF compare"). `end: null` in the table means today
    (ET: the session clock, not the viewer's). 2026-09-27: nothing here refuses a date any more. */
 const RANGES = [
   { id: 'research', label: '2021-2024', start: '2021-01-01', end: '2024-12-31' },
@@ -30,6 +31,8 @@ const RANGES = [
   { id: 'custom', label: 'Custom date range…', start: null, end: null },
 ];
 const WF_RATIOS = [1, 2, 3];
+const WF_COMPARE = 'compare';
+const WF_MODES = [...WF_RATIOS, WF_COMPARE];
 const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September',
   'October', 'November', 'December'];
@@ -68,6 +71,7 @@ function prettyDate(iso) {
 function pillLabel(r) {
   const base = !r || r.id !== 'custom' ? preset(r ? r.id : 'research').label
     : (parseDate(r.start) && parseDate(r.end) ? `${prettyDate(r.start)} — ${prettyDate(r.end)}` : 'Custom date range');
+  if (r && r.wf === WF_COMPARE) return `${base} · WF compare`;
   return r && r.wf ? `${base} · WF 1:${r.wf}` : base;
 }
 const ymOf = (y, m) => `${y}-${String(m).padStart(2, '0')}`;
@@ -142,7 +146,7 @@ function restore(saved, s) {
   const r = saved.range || {};
   if (RANGES.some((x) => x.id === r.id)) {
     f.range = { id: r.id, start: ISO.test(r.start) ? r.start : '', end: ISO.test(r.end) ? r.end : '',
-      wf: WF_RATIOS.includes(r.wf) ? r.wf : null };
+      wf: WF_MODES.includes(r.wf) ? r.wf : null };
   }
   for (const [k, , lo, hi, whole] of COSTS) { const v = saved[k]; if (typeof v === 'number' && v >= lo && v <= hi && (!whole || Number.isInteger(v))) f[k] = v; }
   if (!maxCellsError(saved.max_cells)) f.max_cells = saved.max_cells;
@@ -163,6 +167,7 @@ function fromRun(run, s) {
     max_cells: run.max_cells, prop_rules: run.prop_rules }, s);
 }
 const isWalkforward = (f) => !!(f && f.range && f.range.wf);
+const isWfCompare = (f) => !!(f && f.range && f.range.wf === WF_COMPARE);
 function problems(f, s) {
   for (const i of s.inputs) { const e = inputError(i, f.inputs[i.key]); if (e) return e; }
   for (const [k, label, lo, hi, whole] of COSTS) {
@@ -611,8 +616,12 @@ const WF_NEEDS_GRID = 'Pick the parameters to search on the Heat-map tab first.'
 /* test_months = the ratio's OOS side: "1:2" sends 2. It is part of the request, so it is part of
    the job's identity -- switching the ratio can never show the other one's result. */
 function wfBody(f, axes, metric, minTrades) {
+  if (f.range.wf === WF_COMPARE) return { ...gridBody(f, axes), metric, min_trades: minTrades, compare: true };
   return { ...gridBody(f, axes), metric, min_trades: minTrades, test_months: f.range.wf || 3 };
 }
+/* A job's mode as the pill spells it: its ratio N, or 'compare' -- what the pill must equal for its result to show. */
+function wfModeOf(cfg) { return cfg && cfg.compare ? WF_COMPARE : (cfg ? cfg.test_months : null); }
+function wfModeLabel(cfg) { return wfModeOf(cfg) === WF_COMPARE ? '1:1 · 1:2 · 1:3 compare' : `1:${cfg && cfg.test_months}`; }
 function wfProblems(f, s, rows, minTrades) {
   if (!rows || !rows[0] || !rows[0].key || !rows[1] || !rows[1].key) return WF_NEEDS_GRID;
   const g = gridProblems(f, s, rows);
@@ -621,9 +630,10 @@ function wfProblems(f, s, rows, minTrades) {
   return null;
 }
 /* nSteps comes from GET /api/tester/walkforward-scheme (review M5); '' until it has loaded. */
-function wfLooksText(cells, nSteps) {
+function wfLooksText(cells, nSteps, compare = false) {
   if (!Number.isInteger(nSteps)) return '';
-  return `${int(cells)} cell${cells === 1 ? '' : 's'} × ${nSteps} selection months = ${int(cells * nSteps)} looks`;
+  return `${int(cells)} cell${cells === 1 ? '' : 's'} × ${nSteps} selection months${compare ? ' (1:1 + 1:2 + 1:3)' : ''}`
+    + ` = ${int(cells * nSteps)} looks`;
 }
 function etaText(s) {
   if (s == null || !Number.isFinite(s)) return '';
@@ -716,6 +726,49 @@ function wfScheme(r) {
     + `· stitched: ${c.stitch}`;
 }
 
+/* ---- the walk-forward comparison: 1:1 · 1:2 · 1:3 from one grid run (GET .../walkforward/{id}/compare).
+   Every number here is the STITCHED OUT-OF-SAMPLE chain of its scheme -- the summary carries nothing
+   in-sample. One colour per scheme, shared by the column header and its equity line. */
+const WF_COMPARE_EXTRA = '#9C27B0';     // a third line colour beside the palette's accent and warn
+function wfCompareColors(P) { return [P.accent, P.warn, WF_COMPARE_EXTRA]; }
+const WF_COMPARE_ROWS = [
+  ['span', 'Out-of-sample span'], ['net', 'Net $'], ['net_month', 'Net / month'], ['trades', 'Trades'],
+  ['win_rate', 'Win rate'], ['pf', 'Profit factor'], ['avg_trade', 'Avg trade $'], ['max_dd', 'Max drawdown $'],
+  ['sharpe', 'Sharpe'], ['legs', 'Steps (stitched legs)'], ['legs_pct', '% of steps profitable'],
+  ['selects', 'Selection months (first → last)'], ['uncovered', 'Not tested out-of-sample']];
+function wfCompareCell(key, c) {
+  const s = c.stats || {}, L = c.legs || {}, pm = c.per_month || {};
+  switch (key) {
+    case 'span': return { text: c.span ? `${span(c.span[0], c.span[1])} · ${months_(c.n_months)}` : '—', tone: '' };
+    case 'net': return { text: signed(s.net_profit), tone: toneOf(s.net_profit) };
+    case 'net_month': return { text: signed(pm.net_profit), tone: toneOf(pm.net_profit) };
+    case 'trades': return { text: int(s.trades), tone: '' };
+    case 'win_rate': return { text: rate(s.win_rate), tone: '' };
+    case 'pf': return { text: num(s.profit_factor, 2, true), tone: '' };
+    case 'avg_trade': return { text: signed(s.avg_trade), tone: toneOf(s.avg_trade) };
+    case 'max_dd': return { text: Tr.money(s.max_drawdown), tone: toneOf(s.max_drawdown) };
+    case 'sharpe': return { text: num(s.sharpe), tone: '' };
+    case 'legs': return { text: L.n == null ? '—' : `${int(L.n)}${L.no_pick ? ` (${int(L.no_pick)} no pick)` : ''}`, tone: '' };
+    case 'legs_pct': return { text: L.pct_profitable == null ? '—' : `${rate(L.pct_profitable)} (${int(L.profitable)} of ${int(L.n)})`, tone: '' };
+    case 'selects': return { text: L.first_select ? span(L.first_select, L.last_select) : '—', tone: '' };
+    case 'uncovered': return { text: (c.uncovered || []).length ? c.uncovered.join(', ') : '—', tone: '' };
+    default: return { text: '—', tone: '' };
+  }
+}
+/* The side-by-side table: one column per scheme (header = its ratio), one row per metric. */
+function wfCompareTable(cmp) {
+  const cols = (cmp && cmp.schemes) || [];
+  return { head: cols.map((c) => ({ ratio: c.ratio, test_months: c.test_months,
+    title: `Walk-forward ${c.ratio}: select on 1 month, hold the pick for ${c.test_months} — click to open its full result` })),
+  rows: WF_COMPARE_ROWS.map(([key, label]) => ({ key, label, cells: cols.map((c) => wfCompareCell(key, c)) })) };
+}
+function wfCompareHead(cmp) {
+  const c = cmp.scheme || {}, w = cmp.window || {};
+  const win = w.start && w.end ? `${w.start} → ${w.end} · ` : '';
+  return `${win}Walk-forward 1:1 · 1:2 · 1:3 — one grid run, select on ${c.select_months} month by ${c.metric_label} `
+    + `(≥ ${c.min_trades} trades), stepping monthly · ${int(cmp.n_cells)} cells · ${int(cmp.looks)} looks counted`;
+}
+
 /* A strategy's name in the picker: a DRAFT (~/.homebase/strategies, written by Claude or by hand) says so,
    and one that does not load says that too (the option is disabled; its error is the tooltip). */
 function strategyLabel(s) {
@@ -724,7 +777,8 @@ function strategyLabel(s) {
 }
 const api = { strategyLabel, DEFAULT_MAX_CELLS, HARD_MAX_CELLS, GRID_WORKERS, maxCellsError, cellsWarning, stepValues, axisValues,
   parseValues, valueLabel, gridAxes, gridCount, gridProblems, gridBody, looksText, looksLine, heatPanels, heatMaxAbs,
-  WF_METRICS, WF_RATIOS, WF_STEP_HEADERS, WF_STEP_GROUPS, WF_SIDE_LABELS, WF_NEEDS_GRID, wfBody, wfProblems, wfLooksText,
+  WF_METRICS, WF_RATIOS, WF_COMPARE, WF_MODES, isWfCompare, wfModeOf, wfModeLabel, WF_COMPARE_ROWS, wfCompareColors,
+  wfCompareCell, wfCompareTable, wfCompareHead, WF_STEP_HEADERS, WF_STEP_GROUPS, WF_SIDE_LABELS, WF_NEEDS_GRID, wfBody, wfProblems, wfLooksText,
   etaText, wfProgress, wfTiles, wfDrop, wfUncovered, wfStepRows, wfStability, wfPhases, wfScheme,
   heatLevel, cellView, gridProgress, RANGES, DEFAULT_RULES, defaults, restore, fromRun, rangeFromRun, isWalkforward,
   today, rangeSpec, rangeDates, rangeBody, parseDate, dateError, prettyDate, pillLabel, monthGrid, shiftMonth,

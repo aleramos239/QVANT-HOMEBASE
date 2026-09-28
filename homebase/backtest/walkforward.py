@@ -300,7 +300,7 @@ def _legs(r: dict) -> dict:
 
 
 COMPARE_NOTE = ("Same window, grid, costs, Select-by and Min-trades for all three. A longer test length "
-                "re-selects less often -- one pick every N months, held for N months -- so it has fewer "
+                "re-selects less often — one pick every N months, held for N months — so it has fewer "
                 "selection points and trades further from the month each pick was made on; and each stitched "
                 "out-of-sample chain covers slightly different months (see each scheme's span). "
                 "Out-of-sample only: no in-sample number is shown here.")

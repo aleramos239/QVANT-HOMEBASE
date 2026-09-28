@@ -695,7 +695,8 @@ def test_a_compare_job_runs_each_cell_once_and_equals_three_separate_walkforward
             m.compare(sep)
         with pytest.raises(ValueError, match=f"1:{n}, not"):
             m.result(sep, 1 + n % 3)
-    assert m.list()[-1]["compare"] is True and m.list()[0]["compare"] is False
+    listed = {g["id"]: g for g in m.list()}                  # ids sort by second + random suffix: look up by id
+    assert listed[wid]["compare"] is True and listed[sep]["compare"] is False and listed[sep]["test_months"] == 3
     m2 = WalkForwardManager(tmp_path)                          # a restart reads it back, counted once
     assert m2.compare(wid) == s and m2.result(wid, 2) == m.result(wid, 2)
     assert grid.read_looks(tester_shared / "looks.json") == {"nq930": 276 + 2 * 138}

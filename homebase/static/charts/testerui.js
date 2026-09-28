@@ -23,6 +23,11 @@
    sides and the out-of-sample equity), Performance summary (the per-step table) and List of trades (the
    out-of-sample trades). Full-window cell results are never shown.
 
+   Walk-forward compare: "Walk-forward compare 1:1 · 1:2 · 1:3" in the same menu runs ONE server job (one grid
+   run, selected and stitched at all three ratios). Overview / Performance summary then show the three
+   STITCHED OUT-OF-SAMPLE results side by side, with their equity lines overlaid; clicking a column loads
+   that scheme's ordinary 1:N result into the tabs (a bar above it leads back to the comparison).
+
    Carried finding (2026-09-27 review of Tasks 3-4, restated for this tab): HBPanel.refresh() -- really
    onDeskEvent -- re-renders whichever tab is active on every desk event, including quotes at up to 4/s,
    because a tab with no entry in panel.js's own TAB_EVENTS map (this one included -- panel.js is not a file
@@ -147,7 +152,8 @@ let wf = null;             // the last polled walk-forward status (server shape)
 let wfToken = 0;
 let wfStarting = false;    // POST in flight
 let wfErr = '';            // a 400 detail / lost contact -- cleared on the next edit
-let wfResult = null;       // { id, result } -- fetched once per finished job
+let wfResult = null;       // { id, result } -- fetched once per finished job (a compare job: its side-by-side summary)
+let wfPick = null;         // a compare job's opened column: { id, n, result|null, err } -- null = the comparison
 let wfResultErr = '';
 let wfResumed = false;
 let wfChartHandle = null;
@@ -167,7 +173,10 @@ function persist() {
 
 /* What the header's Run button does next: a walk-forward when the pill carries one of the 1:N schemes,
    otherwise the ordinary single run (Run / Update report). */
-function runLabelFor() { return X.isWalkforward(form) ? `Run walk-forward 1:${form.range.wf}` : X.runLabel(form, loadedKey); }
+function runLabelFor() {
+  if (X.isWfCompare(form)) return 'Run walk-forward compare';
+  return X.isWalkforward(form) ? `Run walk-forward 1:${form.range.wf}` : X.runLabel(form, loadedKey);
+}
 
 function tickForRoot(root_) {
   const cells = (page.cells && page.cells()) || [];
@@ -320,6 +329,9 @@ function fillRangeMenu(m) {
     m.appendChild(page.menuItem(`Walk-forward 1:${n}`, `select on 1 month, test on the next ${n}`,
       () => setRange({ wf: on ? null : n }), on));       // picking the active one again turns it off
   }
+  const cmpOn = form.range.wf === X.WF_COMPARE;
+  m.appendChild(page.menuItem('Walk-forward compare 1:1 · 1:2 · 1:3', 'one grid run, the three out-of-sample results side by side',
+    () => setRange({ wf: cmpOn ? null : X.WF_COMPARE }), cmpOn));
   m.appendChild(page.mk('div', 'menu-sep'));
   m.appendChild(page.menuItem('Custom date range…', '', () => { page.closeMenu(); openDatesDialog(); },
     form.range.id === 'custom'));
@@ -1252,8 +1264,16 @@ function refreshContent() {
   heatGridEl = null;
   // A walk-forward owns Overview / Performance summary / List of trades while its result is on screen:
   // there is no separate place to look for it (2026-09-27 — the Walk-forward tab is gone).
+  const cmp = wfCompareShown();
+  if (cmp && innerTab !== 'properties') {
+    if (innerTab === 'trades') contentEl.appendChild(page.mk('div', 'bp-empty',
+      'Click a scheme\'s column on Overview to list its out-of-sample trades'));
+    else renderWfCompare(contentEl, cmp);
+    return;
+  }
   const r = wfShown();
   if (r && innerTab !== 'properties') {
+    if (wfPick) wfPickBar(contentEl);
     if (innerTab === 'overview') renderWfOverview(contentEl, r);
     else if (innerTab === 'summary') renderWfSummary(contentEl, r);
     else renderWfTrades(contentEl, r);
@@ -1373,7 +1393,8 @@ function syncHeat() {
     heatWarnEl.hidden = !heatWarnEl.textContent;
   }
   const total = X.looksLine(looksMap[strategyId] || 0, (grid && grid.looks_error) || (wf && wf.looks_error) || looksErr);
-  const preview = g.axes && X.isWalkforward(form) ? X.wfLooksText(n, wfScheme && wfScheme.n_steps) : '';
+  const preview = g.axes && X.isWalkforward(form)
+    ? X.wfLooksText(n, wfScheme && wfScheme.n_steps, !!(wfScheme && wfScheme.compare)) : '';
   heatLooksEl.textContent = preview ? `${preview} · ${total}` : total;
   const runBtnEl = heatRunEl && heatRunEl.querySelector('.tst-run');
   if (runBtnEl) runBtnEl.disabled = !!prob;
@@ -1694,11 +1715,19 @@ function wfMatchesPill() {
   const want = X.rangeBody(form.range), got = wf.range || {}, cfg = wf.walkforward || {};
   const wantStart = want.kind === 'research' ? '2021-01-01' : want.start;
   const wantEnd = want.kind === 'research' ? '2024-12-31' : want.end;
-  return cfg.test_months === form.range.wf && got.start === wantStart && got.end === wantEnd;
+  return X.wfModeOf(cfg) === form.range.wf && got.start === wantStart && got.end === wantEnd;
 }
-/* The result currently on screen: a finished job the pill still describes, whose result has arrived. */
+const wfDone = () => wfMatchesPill() && wf.status === 'done' && !!wfResult && wfResult.id === wf.id;
+/* The ordinary 1:N result currently on screen: a finished job the pill still describes, whose result has
+   arrived -- for a compare job, the column the viewer opened (once it has loaded). */
 function wfShown() {
-  if (!wfMatchesPill() || wf.status !== 'done' || !wfResult || wfResult.id !== wf.id) return null;
+  if (!wfDone()) return null;
+  if (!(wf.walkforward || {}).compare) return wfResult.result;
+  return wfPick && wfPick.id === wf.id && wfPick.result ? wfPick.result : null;
+}
+/* A compare job's side-by-side summary, while no column is open. */
+function wfCompareShown() {
+  if (!wfDone() || !(wf.walkforward || {}).compare || wfPick) return null;
   return wfResult.result;
 }
 function wfPrefs() {
@@ -1729,7 +1758,7 @@ function wfBusyNote(container) {
     return true;
   }
   if (!wf || !mine) {
-    const had = wf ? ` — the result on file is for ${(wf.range || {}).label || 'another window'} at 1:${(wf.walkforward || {}).test_months}` : '';
+    const had = wf ? ` — the result on file is for ${(wf.range || {}).label || 'another window'} at ${X.wfModeLabel(wf.walkforward)}` : '';
     container.appendChild(page.mk('div', 'bp-empty', `Run the walk-forward to see ${X.pillLabel(form.range)}${had}`));
     return true;
   }
@@ -1737,9 +1766,14 @@ function wfBusyNote(container) {
     container.appendChild(page.mk('div', 'tst-err', X.wfProgress(wf).text));
     return true;
   }
-  if (wf.status === 'done' && !wfShown()) {
+  if (wf.status === 'done' && !wfShown() && !wfCompareShown()) {
+    if (wfPick && wfDone()) {                      // a compare column opened, its result not here yet
+      wfPickBar(container);
+      container.appendChild(page.mk('div', wfPick.err ? 'tst-err' : 'bp-empty', wfPick.err || 'Loading the result…'));
+      return true;
+    }
     container.appendChild(page.mk('div', wfResultErr ? 'tst-err' : 'bp-empty', wfResultErr || 'Loading the result…'));
-    if (!wfResultErr) loadWfResult(wf.id, wfToken);
+    if (!wfResultErr) loadWfResult(wf.id, wfToken, !!(wf.walkforward || {}).compare);
     return true;
   }
   return false;
@@ -1809,8 +1843,86 @@ function renderWfTrades(container, r) {
   container.appendChild(page.mk('div', 'set-cap', 'OUT-OF-SAMPLE TRADES'));
   container.appendChild(tradeTable(trades, schemaFor(strategyId).root, null));
 }
-function loadWfResult(wid, token) {
-  fetch(`/api/tester/walkforward/${wid}/result`).then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+/* ---- the comparison (a compare job, no column open) ---- */
+function wfCompareChart(el, schemes, P) {
+  const LW = window.LightweightCharts, colors = X.wfCompareColors(P);
+  const chart = LW.createChart(el, { autoSize: true, height: 180,
+    layout: { background: { color: 'transparent' }, textColor: P.text2, fontSize: 11, attributionLogo: false,
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif' },
+    grid: { vertLines: { visible: false }, horzLines: { color: P.grid } },
+    localization: { timeFormatter: (t) => X.fmtEt(t * 1000) },
+    rightPriceScale: { borderVisible: false },
+    timeScale: { borderVisible: false, tickMarkFormatter: (t) => ET_TICK.format(new Date(t * 1000)) },
+    handleScroll: false, handleScale: false });
+  schemes.forEach((c, i) => {
+    const line = chart.addSeries(LW.LineSeries, { color: colors[i % colors.length], lineWidth: 2,
+      priceFormat: { type: 'price', precision: 0, minMove: 1 }, lastValueVisible: false, priceLineVisible: false });
+    line.setData(X.equitySeries(c.equity || {}).equity);
+  });
+  chart.timeScale().fitContent();
+  return chart;
+}
+function renderWfCompare(container, cmp) {
+  container.appendChild(page.mk('div', 'tst-kv-line', X.wfCompareHead(cmp)));
+  const ran = (wf.axes || []).map((a) => `${a.label}: ${a.values.map(X.valueLabel).join(', ')}`).join(' · ');
+  if (ran) container.appendChild(page.mk('div', 'tst-kv-line', `Grid: ${ran}`));
+  container.appendChild(page.mk('div', 'set-cap', 'STITCHED OUT-OF-SAMPLE, BY TEST LENGTH · click a column to open that scheme'));
+  const colors = X.wfCompareColors(palette()), view = X.wfCompareTable(cmp);
+  const t = page.mk('table', 'bp-table tst-wf-cmp'), thead = page.mk('thead'), htr = page.mk('tr');
+  htr.appendChild(page.mk('th', '', ''));
+  view.head.forEach((h, i) => {
+    const th = page.mk('th', 'num'), b = page.mk('button', 'tst-wf-cmp-col');
+    b.type = 'button';
+    b.title = h.title;
+    const dot = page.mk('span', 'tst-cmp-dot');
+    dot.style.background = colors[i % colors.length];
+    b.append(dot, document.createTextNode(`Walk-forward ${h.ratio}`));
+    b.onclick = () => openWfScheme(h.test_months);
+    th.appendChild(b);
+    htr.appendChild(th);
+  });
+  thead.appendChild(htr);
+  const tbody = page.mk('tbody');
+  for (const row of view.rows) {
+    const tr = page.mk('tr');
+    tr.appendChild(page.mk('td', '', row.label));
+    row.cells.forEach((c, i) => {
+      const td = page.mk('td', `num tst-wf-cmp-cell${c.tone ? ' ' + c.tone : ''}`, c.text);
+      td.onclick = () => openWfScheme(view.head[i].test_months);
+      td.title = view.head[i].title;
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  }
+  t.append(thead, tbody);
+  container.appendChild(t);
+  container.appendChild(page.mk('div', 'tst-kv-line', cmp.note || ''));
+  const chartWrap = page.mk('div', 'tst-chart');
+  container.appendChild(chartWrap);
+  if (cmp.schemes.some((c) => ((c.equity || {}).t_ms || []).length)) wfChartHandle = wfCompareChart(chartWrap, cmp.schemes, palette());
+  else chartWrap.appendChild(page.mk('div', 'bp-empty', 'No out-of-sample trades in any stitched chain'));
+}
+/* A column click: that scheme's ordinary 1:N result into the tabs (fetched once per open). */
+function openWfScheme(n) {
+  if (!wf) return;
+  const wid = wf.id, token = wfToken;
+  wfPick = { id: wid, n, result: null, err: '' };
+  refreshContent();
+  fetch(`/api/tester/walkforward/${wid}/result?test_months=${n}`).then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+    .then((result) => { if (token !== wfToken || !wfPick || wfPick.id !== wid || wfPick.n !== n) return; wfPick = { ...wfPick, result }; refreshContent(); })
+    .catch(() => { if (token !== wfToken || !wfPick || wfPick.id !== wid || wfPick.n !== n) return; wfPick = { ...wfPick, err: `could not load the 1:${n} result` }; refreshContent(); });
+}
+function wfPickBar(container) {
+  const bar = page.mk('div', 'tst-wf-pickbar');
+  bar.appendChild(page.mk('span', '', `Walk-forward 1:${wfPick.n} — one scheme of the 1:1 · 1:2 · 1:3 comparison`));
+  const back = page.mk('button', 'tst-btn', 'Back to the comparison');
+  back.type = 'button';
+  back.onclick = () => { wfPick = null; refreshContent(); };
+  bar.appendChild(back);
+  container.appendChild(bar);
+}
+function loadWfResult(wid, token, compare = false) {
+  fetch(`/api/tester/walkforward/${wid}/${compare ? 'compare' : 'result'}`).then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
     .then((result) => { if (token !== wfToken) return; wfResult = { id: wid, result }; wfResultErr = ''; refreshContent(); })
     .catch(() => { if (token !== wfToken) return; wfResultErr = 'could not load the walk-forward result'; refreshContent(); });
 }
@@ -1855,6 +1967,7 @@ function startWf() {
   wf = null;
   wfResult = null;
   wfResultErr = '';
+  wfPick = null;
   refreshHeader();
   refreshContent();
   fetch('/api/tester/walkforward', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(bodyObj) })
@@ -1883,6 +1996,7 @@ function pollWf(wid, token, attempt = 0) {
       if (token !== wfToken) return;
       wfErr = wfErr.startsWith('lost contact') ? '' : wfErr;
       const fresh = !wf || wf.id !== st.id, wasBusy = wfInFlight(), wasStatus = wf && wf.status;
+      if (fresh) wfPick = null;
       wf = st;
       wfStarting = false;
       if (st.looks != null) looksMap[st.strategy] = st.looks;
@@ -1917,6 +2031,7 @@ function resetWf() {
   wfErr = '';
   wfResult = null;
   wfResultErr = '';
+  wfPick = null;
   wfResumed = false;
   wfSchemeKey = null;
 }
