@@ -554,27 +554,48 @@ a { color: inherit; }
   line-height: 16px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   pointer-events: auto; font-variant-numeric: tabular-nums; cursor: default; }
 
-/* ---- the order panel (orderpanel.js): TradingView's right dock, following the selected chart ---- */
-.tb-btn#tbOrder.active { color: var(--accent); }
-.opanel { flex: none; position: relative; width: 320px; min-width: 280px; max-width: 420px; display: flex; flex-direction: column;
-  min-height: 0; overflow: hidden; border-radius: 6px; background: var(--panel); font-size: 13px; }
-.op-resize { position: absolute; left: 0; top: 0; bottom: 0; width: 6px; cursor: ew-resize; z-index: 2; }
-.op-resize:hover, .op-resize:focus-visible { background: var(--accent-soft); }
+/* ---- the panel shell (panelshell.js): the chrome around the Order and DOM panels -- each is either docked
+   in the right column (#pdock) or floating over the chart (#floatLayer). 2026-09-27 panels plan. ---- */
+.tb-btn#tbOrder.active, .tb-btn#tbDom.active { color: var(--accent); }
+.pdock { flex: none; position: relative; display: flex; flex-direction: column; min-height: 0;
+  width: 320px; min-width: 260px; max-width: 480px; gap: 0; padding-left: 6px; }
+.pdock[hidden] { display: none; }
+.pdock.drop-target { outline: 2px dashed var(--accent); outline-offset: -2px; border-radius: 6px; }
+.pdock-widthgrip { position: absolute; left: 0; top: 0; bottom: 0; width: 6px; cursor: ew-resize; z-index: 3; }
+.pdock-widthgrip:hover, .pdock-widthgrip:focus-visible { background: var(--accent-soft); }
+.pdock-split { flex: none; height: 6px; margin: -3px 0; cursor: row-resize; z-index: 2; position: relative; }
+.pdock-split:hover { background: var(--accent-soft); }
+#floatLayer { position: fixed; inset: 0; pointer-events: none; z-index: 40; }
+#floatLayer .hbpanel { pointer-events: auto; }
+
+.hbpanel { display: flex; flex-direction: column; min-height: 0; background: var(--panel); border-radius: 6px;
+  overflow: hidden; font-size: 13px; }
+.hbpanel.docked { flex: none; min-height: 80px; }
+.hbpanel.floating { position: fixed; box-shadow: 0 8px 28px rgba(0, 0, 0, .35); border: 1px solid var(--border); }
+.hbpanel-head { flex: none; display: flex; align-items: center; gap: 4px; height: 32px; padding: 0 6px 0 10px;
+  cursor: grab; user-select: none; touch-action: none; border-bottom: 1px solid var(--border); background: var(--pill); }
+.hbpanel-head:active { cursor: grabbing; }
+.hbpanel-title { flex: none; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--text-2); }
+.hbpanel-spacer { flex: 1; }
+.hbpanel-btn { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 4px; color: var(--text-2); flex: none; }
+.hbpanel-btn:hover { background: var(--hover); color: var(--text); }
+.hbpanel-btn .ic { width: 14px; height: 14px; }
+.hbpanel-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.hbpanel-rz { position: absolute; z-index: 4; }
+.hbpanel.docked .hbpanel-rz { display: none; }   /* only a floating panel resizes by its edges/corner */
+.hbpanel-rz-n, .hbpanel-rz-s { left: 6px; right: 6px; height: 6px; cursor: ns-resize; }
+.hbpanel-rz-n { top: -3px; } .hbpanel-rz-s { bottom: -3px; }
+.hbpanel-rz-e, .hbpanel-rz-w { top: 6px; bottom: 6px; width: 6px; cursor: ew-resize; }
+.hbpanel-rz-e { right: -3px; } .hbpanel-rz-w { left: -3px; }
+.hbpanel-rz-se { right: -4px; bottom: -4px; width: 14px; height: 14px; cursor: nwse-resize; }
+
 .op-head { flex: none; display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 8px 0 14px; }
 .op-logo { display: inline-flex; flex: none; }
 .op-sym { flex: none; font-size: 15px; font-weight: 600; white-space: nowrap; }
 .op-name { min-width: 0; color: var(--text-2); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.op-spacer { flex: 1; }
-.op-x { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 4px; color: var(--text-2); }
-.op-x:hover { background: var(--hover); color: var(--text); }
-.op-tabs { flex: none; display: flex; gap: 16px; padding: 0 14px; border-bottom: 1px solid var(--border); }
-.op-tab { height: 34px; color: var(--text-2); font-size: 13px; font-weight: 600; box-shadow: inset 0 -2px 0 transparent; }
-.op-tab:hover { color: var(--text); }
-.op-tab.on { color: var(--text); box-shadow: inset 0 -2px 0 var(--text); }
 .op-order { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .op-form { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; padding: 12px 14px 4px; display: flex; flex-direction: column; gap: 12px; }
 .opanel.off .op-form { opacity: .45; pointer-events: none; }   /* Trading off on this chart: greyed, nothing to press */
-.op-dom { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
 /* ---- the DOM tab: the Level 2 ladder (2026-09-27 charts-depth plan, Task 1). Read-only: no row is a button. */
 .dom-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; }
@@ -665,7 +686,6 @@ a { color: inherit; }
 .op-send:hover:not(:disabled) { filter: brightness(1.08); }
 .op-send:disabled { opacity: .45; cursor: default; }
 .op-reason { min-height: 16px; padding-top: 6px; color: var(--text-2); font-size: 12px; text-align: center; }
-@media (max-width: 760px) { .opanel { position: fixed; right: 4px; top: 42px; bottom: 34px; z-index: 30; width: min(320px, calc(100vw - 8px)) !important; } }
 
 .switch:disabled { opacity: .5; cursor: default; }
 
