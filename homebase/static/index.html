@@ -1687,8 +1687,10 @@ function closeAsgMenus(refocus) {
    The dialog names the strategy, the account and the size that will be sent -- frozen from the
    click. The rest of the book is read after the answer, so a change that landed meanwhile (an
    account unbooked in another window) is never written back. Cancel sends nothing. Raising a
-   live booking's size asks the same way; lowering it, or unbooking (removeAsg), never asks --
-   the safer direction (the desk's one confirm policy). */
+   live booking's size asks the same way -- but only from Enter: a blur (a click anywhere else,
+   Kill included) never opens a dialog, it reverts the raise and says so (review M2). Lowering a
+   size, or unbooking (removeAsg), never asks -- the safer direction (the desk's one confirm
+   policy). "Book live" is the neutral primary button, never Kill's red. */
 function isDemoAcct(id) {
   const a = ((ST && ST.accounts) || {})[id];
   return !!a && a.env === "demo";
@@ -1722,7 +1724,7 @@ async function pickAsg(strategy, account, qty) {
   closeAsgMenus(false);
   if (!isDemoAcct(account) && !await confirmDlg(
       `Book ${strategy.toUpperCase()} on ${acctShort(account)} LIVE × ${qty}?`,
-      liveBookingNote(strategy, account), "Book live", true)) { refresh(); return; }
+      liveBookingNote(strategy, account), "Book live", false)) { refresh(); return; }
   const cur = (ST.book[strategy] || []).filter(a => a.account !== account);
   cur.push({account, qty});
   setBook(strategy, cur);
@@ -1735,23 +1737,35 @@ function editQty(ev, strategy, account, qty) {
   const inp = $("#qedit");
   inp.focus(); inp.select();
   let done = false;                 // one commit per edit, however many blurs follow
-  const commit = async () => {
+  // explicit: Enter. A blur -- a click anywhere else, Kill included -- never opens a dialog under
+  // the pointer: a live raise is reverted instead, and the page says so (review M2).
+  const commit = async (explicit) => {
     if (done) return;
     done = true;
     FREEZE = false;
     const v = parseInt(inp.value || "0", 10);
     if (v > 0 && v !== qty) {
-      if (v > qty && !isDemoAcct(account) && !await confirmDlg(
-          `Book ${strategy.toUpperCase()} on ${acctShort(account)} LIVE × ${v} (now × ${qty})?`,
-          liveBookingNote(strategy, account), "Book live", true)) { refresh(); return; }
+      if (v > qty && !isDemoAcct(account)) {
+        if (!explicit) {
+          toast(`${strategy.toUpperCase()} on ${acctShort(account)} stays × ${qty} — ` +
+                "press Enter to raise a LIVE booking.");
+          refresh(); return;
+        }
+        if (!await confirmDlg(
+            `Book ${strategy.toUpperCase()} on ${acctShort(account)} LIVE × ${v} (now × ${qty})?`,
+            liveBookingNote(strategy, account), "Book live", false)) { refresh(); return; }
+      }
       const cur = (ST.book[strategy] || []).map(a =>
         a.account === account ? {account, qty: v} : a);
       setBook(strategy, cur);
     } else refresh();
   };
-  inp.addEventListener("blur", commit);
+  inp.addEventListener("blur", () => commit(false));
   inp.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") inp.blur();
+    if (e.key === "Enter") {
+      commit(true);
+      if (document.activeElement === inp) inp.blur();   // no dialog opened: leave the field as before
+    }
     if (e.key === "Escape") { inp.value = qty; inp.blur(); }
   });
 }
