@@ -717,6 +717,14 @@ def test_the_shared_block_is_every_metric_on_the_months_all_three_chains_test():
     assert s["schemes"][2]["shared"]["stats"] == s["schemes"][2]["stats"]    # 1:3's full span IS the shared one
     assert s["schemes"][0]["shared"]["legs"]["n"] == 3 and s["schemes"][0]["legs"]["n"] == 4
     assert s["schemes"][1]["shared"]["legs"]["n"] == 2                      # the 04-05 leg reaches in by April
+    assert s["schemes"][1]["shared"]["legs"]["partial"] == 1                # ... and counts as one step
+    assert s["schemes"][0]["shared"]["legs"]["partial"] == 0 == s["schemes"][2]["shared"]["legs"]["partial"]
+    # that partial leg is judged on its shared month (April) alone
+    leg = [row for row in per[2]["steps"] if row["stitched"]][1]
+    apr = sum(t["net"] for t in tr[leg["cell"]] if t["date"][:7] == "2022-04") if leg["cell"] is not None else 0
+    full_leg = [row for row in per[2]["steps"] if row["stitched"]]
+    first_net = full_leg[0]["oos"]["net_profit"] if full_leg[0]["cell"] is not None else 0
+    assert s["schemes"][1]["shared"]["legs"]["profitable"] == (first_net > 0) + (apr > 0)
 
 
 def test_compare_summary_refuses_schemes_that_do_not_share_one_setup():

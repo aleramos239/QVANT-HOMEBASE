@@ -164,3 +164,12 @@ test('wfSchemeProblem: a compare over a window too short for 1:3 is refused befo
   assert.equal(X.wfSchemeProblem({ ...f, range: { ...f.range, wf: 3 } }, short), null);  // a single ratio: not this check
   assert.equal(X.wfSchemeProblem(f, { runnable: false, window: short.window }), null);  // a single-ratio scheme answer
 });
+
+test('the shared view labels a partly shared leg as one step judged on its shared months', () => {
+  const part = { ...CMP, schemes: CMP.schemes.map((c) => ({ ...c, shared: { ...c.shared, legs: { ...c.shared.legs, partial: c.test_months === 2 ? 1 : 0 } } })) };
+  const v = X.wfCompareTable(part, 'shared'), row = (k) => v.rows.find((r) => r.key === k);
+  assert.equal(row('legs').label, 'Steps (a partly shared leg counts as 1)');
+  assert.equal(row('legs_pct').label, '% of steps profitable (a partly shared leg judged on its shared months)');
+  assert.deepEqual(row('legs').cells.map((c) => c.text), ['44', '22 (1 partly shared)', '15']);
+  assert.equal(X.wfCompareTable(part, 'full').rows.find((r) => r.key === 'legs').label, 'Steps (stitched legs)');
+});

@@ -767,7 +767,10 @@ function wfCompareCell(key, c) {
     case 'avg_trade': return { text: signed(s.avg_trade), tone: toneOf(s.avg_trade) };
     case 'max_dd': return { text: Tr.money(s.max_drawdown), tone: toneOf(s.max_drawdown) };
     case 'sharpe': return { text: num(s.sharpe), tone: '' };
-    case 'legs': return { text: L.n == null ? '—' : `${int(L.n)}${L.no_pick ? ` (${int(L.no_pick)} no pick)` : ''}`, tone: '' };
+    case 'legs': {
+      const bits = [L.no_pick ? `${int(L.no_pick)} no pick` : '', L.partial ? `${int(L.partial)} partly shared` : ''].filter(Boolean);
+      return { text: L.n == null ? '—' : `${int(L.n)}${bits.length ? ` (${bits.join(', ')})` : ''}`, tone: '' };
+    }
     case 'legs_pct': return { text: L.pct_profitable == null ? '—' : `${rate(L.pct_profitable)} (${int(L.profitable)} of ${int(L.n)})`, tone: '' };
     case 'selects': return { text: L.first_select ? span(L.first_select, L.last_select) : '—', tone: '' };
     case 'errors': return { text: s.skipped_by_error == null ? '—' : int(s.skipped_by_error), tone: s.skipped_by_error > 0 ? 'down' : '' };
@@ -777,6 +780,10 @@ function wfCompareCell(key, c) {
 }
 /* Rows that only exist for the full spans: the phase chains, the selection months and the untested tail. */
 const WF_FULL_ONLY = new Set(['net_phases', 'sharpe_phases', 'selects', 'uncovered']);
+/* In the shared view a leg only partly inside the shared months counts as ONE step, judged on its shared months. */
+const WF_SHARED_LABELS = {
+  legs: 'Steps (a partly shared leg counts as 1)',
+  legs_pct: '% of steps profitable (a partly shared leg judged on its shared months)' };
 /* The side-by-side table: one column per scheme (header = its ratio), one row per metric. `view` 'shared' =
    every metric on the months all three chains test (the default: identical months per column); 'full' =
    each scheme's whole stitched chain (spans differ). */
@@ -786,7 +793,7 @@ function wfCompareTable(cmp, view = 'full') {
   return { head: cols.map((c) => ({ ratio: c.ratio, test_months: c.test_months,
     title: `Walk-forward ${c.ratio}: select on 1 month, hold the pick for ${c.test_months} — click to open its full result` })),
   rows: WF_COMPARE_ROWS.filter(([key]) => !shared || !WF_FULL_ONLY.has(key))
-    .map(([key, label]) => ({ key, label, cells: cols.map((c) => wfCompareCell(key, c)) })) };
+    .map(([key, label]) => ({ key, label: (shared && WF_SHARED_LABELS[key]) || label, cells: cols.map((c) => wfCompareCell(key, c)) })) };
 }
 /* Like the 1:N overview's line: strategy-error sessions inside the stitched chains, per scheme. */
 function wfCompareErrLine(cmp) {

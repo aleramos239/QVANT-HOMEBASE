@@ -280,12 +280,14 @@ def compute(cells: list[dict], months: list[str], *, trades_of, metric: str, min
         cov = [m for m in covered0 if m in sh]
         trs, sks = _in(sh, tr0), _in(sh, sk0)
         s_st = _stats(trs, sks, capital, cov)
-        n_leg = no_pick = prof = 0
+        # a leg only partly inside the shared months counts as ONE step, judged on its shared months alone
+        n_leg = no_pick = prof = partial = 0
         for k in chain(len(st), 0, test_months):
             ms = [m for m in st[k]["test"] if m in sh]
             if not ms:
                 continue
             n_leg += 1
+            partial += len(ms) < len(st[k]["test"])
             if rows[k]["cell"] is None:
                 no_pick += 1
             elif sum(t["net"] for t in leg(rows[k]["cell"], ms)[0]) > 0:
@@ -294,7 +296,7 @@ def compute(cells: list[dict], months: list[str], *, trades_of, metric: str, min
         extra["stitched_shared"] = {
             "months": cov, "n_months": len(cov), "span": [cov[0], cov[-1]] if cov else None, "stats": s_st,
             "per_month": per_month(s_st, len(cov)), "equity": report.equity(tns),
-            "legs": {"n": n_leg, "no_pick": no_pick, "profitable": prof,
+            "legs": {"n": n_leg, "no_pick": no_pick, "profitable": prof, "partial": partial,
                      "pct_profitable": round(prof / n_leg * 100, 2) if n_leg else None}}
     return {**extra,
         "scheme": {"select_months": SELECT_MONTHS, "test_months": test_months, "step_months": STEP_MONTHS,
