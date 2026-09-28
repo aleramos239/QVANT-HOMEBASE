@@ -46,9 +46,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import csv
 import datetime as dt
-import gzip
 import json
 import sys
 import time
@@ -57,6 +55,7 @@ from zoneinfo import ZoneInfo
 
 from . import config as config_mod
 from . import symbols
+from . import tickarchive
 from .broker.tradovate_ws import TradovateWS
 from .marketdata import MD_DEMO, MD_LIVE
 from .paths import state_dir
@@ -72,6 +71,7 @@ PAGE = 4096                 # the feed caps a tick request at about this
 MAX_PAGES = 3000            # ~12M ticks — far above any session
 SESSION_GRACE_MIN = 5       # record a session this long after its close
 LOOKBACK_DAYS = 3           # sessions to check on every run
+LIVE_LOOKBACK_DAYS = 30     # live recordings merged into the archive this far back
 PAGE_INTERVAL_S = 36.0      # <= 100 requests/hour: the chart service shares this login's 180/hour (its refills <= 60/h + a start-up burst of one getChart per root)
 PENALTY_MAX = 6             # give up a session after this many penalties in a row
 DEADLINE_ET = dt.time(8, 0)  # never still fetching this close to the open
@@ -305,36 +305,24 @@ async def sleep(s: float) -> None:      # one seam for the tests to remove the w
 
 
 # ------------------------------------------------------------------ writing
-def write_session(rows: list[dict], path: Path, *, root: str, contract: str,
-                  date: dt.date, start: dt.datetime, end: dt.datetime,
-                  stats: dict) -> dict:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    with gzip.open(tmp, "wt", newline="", compresslevel=6) as f:
-        w = csv.DictWriter(f, fieldnames=FIELDS)
-        w.writeheader()
-        w.writerows(rows)
-    tmp.replace(path)
-    spreads = [r["ask"] - r["bid"] for r in rows
-               if isinstance(r["bid"], float) and isinstance(r["ask"], float)]
-    inside = sum(1 for r in rows if isinstance(r["bid"], float) and isinstance(r["ask"], float)
-                 and r["bid"] <= r["price"] <= r["ask"])
-    iso = lambda ms: dt.datetime.fromtimestamp(ms / 1000, dt.timezone.utc).isoformat()  # noqa: E731
-    manifest = {
-        "root": root, "contract": contract, "session_date": date.isoformat(),
-        "session_start_utc": start.astimezone(dt.timezone.utc).isoformat(),
-        "session_end_utc": end.astimezone(dt.timezone.utc).isoformat(),
-        "ticks": len(rows),
-        "first_tick_utc": iso(rows[0]["ts_ms"]) if rows else None,
-        "last_tick_utc": iso(rows[-1]["ts_ms"]) if rows else None,
-        "complete": stats.get("complete", False), "pages": stats.get("pages"),
-        "median_spread": (sorted(spreads)[len(spreads) // 2] if spreads else None),
-        "trade_inside_bid_ask_pct": (round(100 * inside / len(spreads), 1) if spreads else None),
-        "bytes": path.stat().st_size, "fields": list(FIELDS),
-        "recorded_at_utc": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
-    }
-    path.with_suffix("").with_suffix(".json").write_text(json.dumps(manifest, indent=2) + "\n")
-    return manifest
+def store(root: str, date: dt.date, contract: str, path: Path, start: dt.datetime,
+          end: dt.datetime, fetched: list[tuple] = (), entry: dict | None = None,
+          include_live: bool = True) -> dict | None:
+    """Merge fetched rows (tickarchive rows) into the session's archive file --
+    with the live recording and whatever the file already holds
+    (homebase.tickarchive: merge, never replace). `entry` logs the fetch in the
+    manifest. A refused merge leaves every file as it was and is logged; None
+    then, or with nothing to write."""
+    try:
+        return tickarchive.merge_session(
+            path, root=root, contract=contract, date=date, start=start, end=end,
+            fetched=fetched, fetched_source=entry, include_live=include_live)
+    except tickarchive.MergeRefused as e:
+        log(f"{root} {date} {contract}: MERGE REFUSED, every file left as it was — {e}")
+    except Exception as e:  # noqa: BLE001 — a bad file must not stop the night; the original stays
+        log(f"{root} {date} {contract}: MERGE FAILED, the original is untouched — "
+            f"{type(e).__name__}: {e}")
+    return None
 
 
 # ------------------------------------------------------------------ token
@@ -440,118 +428,168 @@ class MDConn:
 
 
 # ------------------------------------------------------------------ the run
+def candidate_dates(now: dt.datetime, days: int = LOOKBACK_DAYS) -> list[dt.date]:
+    """Session dates a run looks at, oldest first: the last `days` days and
+    today -- today's first hours are over, and fetchable, long before its close."""
+    today = now.astimezone(ET).date()
+    return [today - dt.timedelta(days=i) for i in range(days, -1, -1)]
+
+
+def segment_state(prev: dict, s: dt.datetime, e: dt.datetime) -> tuple[bool, int | None]:
+    """(done, resume_ms) of segment [s, e] by the archive file's manifest.
+    Done once a fetch of it reached its start or ran the broker dry. A fetch
+    cut short (the 08:00 deadline, the page cap) paged back from the end
+    without a gap, so the next one resumes from the earliest tick it got."""
+    if not prev:
+        return False, None
+    if "sources" not in prev:
+        # a nightly file from before fetches were logged: it paged back from the
+        # close until the broker ran dry, so it holds everything from its first tick on
+        first = prev.get("first_tick_utc")
+        return (prev.get("source") != "massive" and bool(first)
+                and dt.datetime.fromisoformat(first) - s < dt.timedelta(minutes=5)), None
+    fr, to = s.astimezone(UTC).isoformat(), e.astimezone(UTC).isoformat()
+    resume = None
+    for src in prev["sources"]:
+        if src.get("kind") != "history" or (src.get("from_utc"), src.get("to_utc")) != (fr, to):
+            continue
+        if src.get("stop") in ("reached", "exhausted"):
+            return True, None
+        if src.get("earliest_ms") is not None:
+            resume = src["earliest_ms"] if resume is None else min(resume, src["earliest_ms"])
+    return False, resume
+
+
 def plan(roots, dates: list[dt.date], base: Path, now: dt.datetime) -> tuple[dict, list]:
     """The run's work: ({(root, date): session}, [segment jobs]), the jobs in
     fetch order -- earliest expiry first (docstring: every root's first hours
     before any root's long tail), then a session's first segment before its
-    later ones, then root priority (ROOTS order), then date. A segment already
-    gone from the broker's history is never asked for."""
+    later ones, then root priority (ROOTS order), then date. Only segments
+    that are over, not fetched yet, and still in the broker's history."""
     rank = {r: i for i, r in enumerate(ROOTS)}
+    grace = dt.timedelta(minutes=SESSION_GRACE_MIN)
     sessions, jobs = {}, []
     for date in dates:
+        if not is_session_day(date):
+            continue
+        start, end = session_bounds(date)
         for root in roots:
             contract = symbols.front_month(root, date)
             path = archive_path(root, date, contract, base)
-            if path.exists() and not from_massive(path):
-                continue                  # our own (bid/ask) recording stays
-            start, end = session_bounds(date)
-            segs = [(s, e) for s, e in utc_segments(start, end) if now < history_expiry(s)]
-            if not segs:
-                log(f"{root} {date} {contract}: gone from the broker's history (it keeps ticks "
-                    "from 00:00 UTC of the previous day) — skipped")
+            prev = tickarchive.load_manifest(path)
+            todo, gone = [], []
+            for s, e in utc_segments(start, end):
+                if now < e + grace:
+                    continue                            # not over yet
+                done, resume = segment_state(prev, s, e)
+                if done:
+                    continue
+                if now >= history_expiry(s):
+                    if now - history_expiry(s) < dt.timedelta(days=1):
+                        gone.append((s, e))             # said by the runs of the day it left
+                    continue
+                todo.append((s, e, resume))
+            for s, e in gone:
+                log(f"{root} {date} {contract}: {s.astimezone(ET):%m-%d %H:%M}-{e.astimezone(ET):%H:%M} ET "
+                    "left the broker's history before it was fetched — only the live recording "
+                    "or Massive can fill it")
+            if not todo:
                 continue
-            if segs[0][0] > start:
-                log(f"{root} {date} {contract}: {start:%H:%M}-{segs[0][0].astimezone(ET):%H:%M} ET "
-                    "is already gone from the broker's history — this capture will be PARTIAL")
             key = (root, date)
             sessions[key] = {"root": root, "date": date, "contract": contract, "path": path,
-                             "start": start, "end": end, "left": len(segs), "rows": [],
-                             "pages": 0, "secs": 0.0}
-            for s, e in segs:
-                jobs.append((history_expiry(s), s > start, rank.get(root, len(rank)), date, key, s, e))
+                             "start": start, "end": end}
+            for s, e, resume in todo:
+                jobs.append((history_expiry(s), s > start, rank.get(root, len(rank)), date, key,
+                             s, e, resume))
     jobs.sort(key=lambda j: j[:4])
     return sessions, jobs
 
 
-def _write_fetched(st: dict) -> dict | None:
-    """Write what one session's segments brought in (one row per tick id: the
-    00:00 UTC tick can arrive with both of its segments)."""
-    root, date, contract, path = st["root"], st["date"], st["contract"], st["path"]
-    rows = list({r["id"]: r for r in st["rows"]}.values()) if st["rows"] else []
-    rows.sort(key=lambda r: (r["ts_ms"], r["id"] or 0))
-    if not rows:
-        log(f"{root} {date} {contract}: no ticks served (buffer gone or holiday) — skipped")
-        return None
-    start_ms = int(st["start"].timestamp() * 1000)
-    stats = {"pages": st["pages"], "complete": rows[0]["ts_ms"] - start_ms < 5 * 60 * 1000}
-    if path.exists() and not stats["complete"]:
-        # a Massive file is the whole session; our partial capture
-        # would only shorten it (a late run last night did exactly that)
-        log(f"{root} {date} {contract}: only a PARTIAL capture and a full "
-            "backfill file is on disk — keeping the backfill")
-        return None
-    m = write_session(rows, path, root=root, contract=contract, date=date,
-                      start=st["start"], end=st["end"], stats=stats)
-    log(f"{root} {date} {contract}: {m['ticks']:,} ticks, {m['bytes'] / 1e6:.1f} MB, "
-        f"{st['pages']} pages, {st['secs']:.0f}s"
-        + ("" if m["complete"] else " — PARTIAL (buffer did not reach the open)"))
-    return m
+def _et_span(a: dt.datetime, b: dt.datetime) -> str:
+    return f"{a.astimezone(ET):%H:%M}-{b.astimezone(ET):%H:%M} ET"
 
 
 async def record(roots=ROOTS, dates: list[dt.date] | None = None,
                  base: Path = ARCHIVE, ws: TradovateWS | None = None,
                  now: dt.datetime | None = None) -> list[dict]:
+    """Fetch every segment the plan names, merging each into its session's
+    archive file as it lands; then merge the live recordings no fetch touched.
+    Returns the last manifest written per session."""
     now = now or now_et()
-    dates = dates if dates is not None else sessions_to_record(now)
+    dates = dates if dates is not None else candidate_dates(now)
     sessions, jobs = plan(roots, dates, base, now)
+    written: dict = {}
     if not jobs:
-        log("nothing to record — every complete session is on disk or gone from the broker")
-        return []
-    conn = ws if isinstance(ws, MDConn) else MDConn(ws)
-    own = ws is None
-    done = []
-    try:
-        for expiry, _, _, date, key, s, e in jobs:
-            st = sessions[key]
-            if deadline_passed():
-                log(f"deadline {DEADLINE_ET} ET — stopping the run here")
-                break
-            st["left"] -= 1
-            if now_et() >= expiry:
-                log(f"{st['root']} {date} {st['contract']}: {s.astimezone(ET):%m-%d %H:%M}-"
-                    f"{e.astimezone(ET):%H:%M} ET left the broker's history before its turn")
-            else:
+        log("nothing to fetch — every segment is in the archive or gone from the broker")
+    else:
+        conn = ws if isinstance(ws, MDConn) else MDConn(ws)
+        own = ws is None
+        grace = dt.timedelta(minutes=SESSION_GRACE_MIN)
+        try:
+            for expiry, _, _, date, key, s, e, resume in jobs:
+                st = sessions[key]
+                root, contract = st["root"], st["contract"]
+                if deadline_passed():
+                    log(f"deadline {DEADLINE_ET} ET — stopping the run here")
+                    break
+                if now_et() >= expiry:
+                    log(f"{root} {date} {contract} {_et_span(s, e)}: left the broker's history "
+                        "before its turn")
+                    continue
                 t0 = time.perf_counter()
+                until = e if resume is None else dt.datetime.fromtimestamp(resume / 1000, UTC)
                 try:
-                    rows, stats = await fetch_session(conn, st["contract"], s, e, expiry=expiry)
-                    st["rows"].extend(rows)
-                    st["pages"] += stats["pages"]
+                    rows, stats = await fetch_session(conn, contract, s, until, expiry=expiry)
                 except Exception as ex:  # noqa: BLE001 — one bad symbol must not stop the rest
-                    log(f"{st['root']} {date} {st['contract']}: FAILED {ex}")
-                st["secs"] += time.perf_counter() - t0
-            if st["left"] == 0:
-                m = _write_fetched(sessions.pop(key))
-                if m is not None:
-                    done.append(m)
-    finally:
-        for st in sessions.values():           # cut short (the deadline): keep what came in
-            if st["rows"]:
-                m = _write_fetched(st)
-                if m is not None:
-                    done.append(m)
-        if own:
-            await conn.close()
-    return done
+                    log(f"{root} {date} {contract} {_et_span(s, e)}: FAILED {ex}")
+                    continue
+                entry = {"kind": "history", "from_utc": s.astimezone(UTC).isoformat(),
+                         "to_utc": e.astimezone(UTC).isoformat(), "stop": stats["stop"],
+                         "pages": stats["pages"], "earliest_ms": stats["earliest_ms"],
+                         **({"resumed_from_ms": resume} if resume is not None else {})}
+                over = now_et() >= st["end"] + grace     # the live recording is final
+                n = len(rows)
+                fetched = [tickarchive.row_of(r) for r in rows]
+                del rows                                 # one copy in memory, not two (ES: 1.2M ticks)
+                man = store(root, date, contract, st["path"], st["start"], st["end"], fetched, entry,
+                            include_live=over)
+                del fetched
+                if man is not None:
+                    written[key] = man
+                log(f"{root} {date} {contract} {_et_span(s, e)}: {n:,} ticks, "
+                    f"{stats['pages']} pages, {time.perf_counter() - t0:.0f}s ({stats['stop']})"
+                    + ("" if man is None else f" — file {man['ticks']:,} ticks"
+                       + ("" if man["complete"] else ", PARTIAL")))
+        finally:
+            if own:
+                await conn.close()
+    for man in promote_live(roots, base, now_et()):
+        written[(man["root"], dt.date.fromisoformat(man["session_date"]))] = man
+    return list(written.values())
 
 
-def from_massive(path: Path) -> bool:
-    """True if the file on disk came from the Massive backfill (no bid/ask):
-    the recorder's own capture is richer and may replace it."""
-    m = path.with_suffix("").with_suffix(".json")
-    try:
-        return json.loads(m.read_text()).get("source") == "massive"
-    except (OSError, ValueError):
-        return False
+def promote_live(roots, base: Path, now: dt.datetime, days: int = LIVE_LOOKBACK_DAYS) -> list[dict]:
+    """Merge each over-and-done session's live recording the archive file does
+    not hold yet -- no fetch needed: a session already gone from the broker,
+    or a night the fetch never ran. The live file itself is only read."""
+    out = []
+    for root in roots:
+        for date in sessions_to_record(now, days):
+            start, end = session_bounds(date)
+            tag = date.isoformat()
+            for lp in sorted((base / root / str(date.year)).glob(f"{tag}_*{tickarchive.LIVE_SUFFIX}")):
+                contract = lp.name[len(tag) + 1:-len(tickarchive.LIVE_SUFFIX)]
+                path = archive_path(root, date, contract, base)
+                if tickarchive.live_merged(tickarchive.load_manifest(path), tickarchive.live_stamp(lp)):
+                    continue
+                man = store(root, date, contract, path, start, end)
+                if man is not None:
+                    live = next((s for s in reversed(man["sources"]) if s.get("kind") == "live"), {})
+                    log(f"{root} {date} {contract}: live recording merged ({live.get('ticks', 0):,} ticks, "
+                        f"{live.get('only_in_live', 0):,} the archive lacked) — file {man['ticks']:,} ticks"
+                        + ("" if man["complete"] else ", PARTIAL"))
+                    out.append(man)
+    return out
 
 
 def main(argv=None) -> int:

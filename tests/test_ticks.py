@@ -208,7 +208,20 @@ def test_deadline_stops_a_fetch_before_the_open(monkeypatch):
     assert got == [] and stats["pages"] == 0
 
 
-def test_recorder_replaces_a_massive_file_but_keeps_its_own(tmp_path, monkeypatch):
+def _massive_file(p, ts_ms_list, first_seq=900_000):
+    """A Massive backfill file as research/massive_ticks.py writes it: no
+    bid/ask, the exchange sequence number as `id`, the ns stamp in ts_ns."""
+    p.parent.mkdir(parents=True, exist_ok=True)
+    with gzip.open(p, "wt", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(T.FIELDS + ("ts_ns",))
+        for i, t in enumerate(ts_ms_list):
+            w.writerow((t, "1", 1, "", "", "", "", first_seq + i, t * 1_000_000 + 123))
+    p.with_suffix("").with_suffix(".json").write_text(json.dumps(
+        {"source": "massive", "complete": True, "ticks": len(ts_ms_list), "bid_ask": False}))
+
+
+def test_the_brokers_ticks_supersede_a_massive_file_where_they_cover_it(tmp_path, monkeypatch):
     NoWait(monkeypatch)
     start = dt.datetime(2026, 9, 21, 18, 0, tzinfo=ET)
     s = int(start.timestamp() * 1000)
@@ -220,13 +233,12 @@ def test_recorder_replaces_a_massive_file_but_keeps_its_own(tmp_path, monkeypatc
 
     monkeypatch.setattr(T, "fetch_page", pager)
     p = T.archive_path("NQ", dt.date(2026, 9, 22), "NQZ6", tmp_path)
-    p.parent.mkdir(parents=True)
-    p.write_bytes(b"massive")
-    p.with_suffix("").with_suffix(".json").write_text(json.dumps({"source": "massive"}))
+    _massive_file(p, [r["ts_ms"] for r in rows])                # the same 20 trades, from Massive
     out = run(T.record(roots=("NQ",), dates=[dt.date(2026, 9, 22)], base=tmp_path, ws=object()))
-    assert len(out) == 1 and out[0]["ticks"] == 20            # replaced
+    assert len(out) == 1 and out[0]["ticks"] == 20            # the broker's rows, once
+    assert out[0]["bid_ask"] and out[0]["source"] == "desk" and out[0]["massive_rows"] == 0
     assert run(T.record(roots=("NQ",), dates=[dt.date(2026, 9, 22)], base=tmp_path,
-                        ws=object())) == []                     # ours now: kept
+                        ws=object())) == []                     # fetched: nothing asked again
 
 
 def test_session_fetch_survives_a_dead_socket(monkeypatch):
@@ -268,12 +280,14 @@ def test_session_fetch_survives_a_dead_socket(monkeypatch):
     assert len(got) == 30 and conn.reconnects == 1 and len(built) == 1
 
 
-def test_partial_capture_never_replaces_a_full_backfill_file(tmp_path, monkeypatch):
+def test_a_partial_capture_never_shortens_a_full_backfill_file(tmp_path, monkeypatch):
+    """The broker still had only the session's last 12 minutes: the Massive
+    file's other trades all stay, the broker's rows take over where they are."""
     NoWait(monkeypatch)
-    end = dt.datetime(2026, 9, 22, 17, 0, tzinfo=ET)
-    e = int(end.timestamp() * 1000)
+    start, end = T.session_bounds(dt.date(2026, 9, 22))
+    s, e = int(start.timestamp() * 1000), int(end.timestamp() * 1000)
     rows = [{"ts_ms": e - i * 60_000, "price": 1.0, "size": 1, "bid": 0.75, "ask": 1.0,
-             "bid_size": 1, "ask_size": 1, "id": i} for i in range(12)]   # last 12 min only
+             "bid_size": 1, "ask_size": 1, "id": 5000 + i} for i in range(12)]   # last 12 min only
     rows.sort(key=lambda r: r["ts_ms"])
 
     async def pager(ws, contract, before_ms, n=T.PAGE, timeout_s=0, ticket=None):
@@ -281,11 +295,17 @@ def test_partial_capture_never_replaces_a_full_backfill_file(tmp_path, monkeypat
 
     monkeypatch.setattr(T, "fetch_page", pager)
     p = T.archive_path("NQ", dt.date(2026, 9, 22), "NQZ6", tmp_path)
-    p.parent.mkdir(parents=True)
-    p.write_bytes(b"massive-full-session")
-    p.with_suffix("").with_suffix(".json").write_text(json.dumps({"source": "massive"}))
+    massive = list(range(s, e + 1, 60_000))                     # a trade a minute, the whole session
+    _massive_file(p, massive)
     out = run(T.record(roots=("NQ",), dates=[dt.date(2026, 9, 22)], base=tmp_path, ws=object()))
-    assert out == [] and p.read_bytes() == b"massive-full-session"
+    with gzip.open(p, "rt") as f:
+        got = list(csv.DictReader(f))
+    broker = [r for r in got if not r["ts_ns"]]
+    kept = [r for r in got if r["ts_ns"]]
+    assert [int(r["id"]) for r in broker] == [5000 + i for i in range(11, -1, -1)]
+    assert {int(r["ts_ms"]) for r in kept} == {t for t in massive if t < rows[0]["ts_ms"] - 2000}
+    assert len(got) == out[0]["ticks"] == len(massive)          # every trade once, none lost
+    assert not out[0]["bid_ask"] and out[0]["massive_rows"] == len(kept)
 
 
 # ------------------------------------------------ the broker's history window (root cause of the
@@ -357,7 +377,7 @@ def test_the_plan_orders_segments_by_when_they_leave_the_broker(tmp_path):
     now = dt.datetime(2026, 9, 24, 17, 20, tzinfo=ET)              # Thursday, after the close
     sessions, jobs = T.plan(("NQ", "ES"), [dt.date(2026, 9, 23), dt.date(2026, 9, 24)], tmp_path, now)
     got = [(root, date.day, s.astimezone(ET).strftime("%d %H:%M"), e.astimezone(ET).strftime("%d %H:%M"))
-           for _, _, _, date, (root, _), s, e in jobs]
+           for _, _, _, date, (root, _), s, e, _ in jobs]
     assert got == [
         # gone at 20:00 ET today: the 24th's first hours, then what is left of the 23rd
         ("NQ", 24, "23 18:00", "23 20:00"), ("ES", 24, "23 18:00", "23 20:00"),
@@ -365,7 +385,7 @@ def test_the_plan_orders_segments_by_when_they_leave_the_broker(tmp_path):
         # gone at 20:00 ET tomorrow
         ("NQ", 24, "23 20:00", "24 17:00"), ("ES", 24, "23 20:00", "24 17:00"),
     ]
-    assert sessions[("NQ", dt.date(2026, 9, 23))]["left"] == 1       # its 18:00-20:00 ET is gone
+    assert sum(1 for j in jobs if j[4] == ("NQ", dt.date(2026, 9, 23))) == 1   # its 18:00-20:00 ET is gone
 
 
 def test_a_session_already_gone_asks_nothing_and_says_so(tmp_path, monkeypatch, capsys):
@@ -373,7 +393,7 @@ def test_a_session_already_gone_asks_nothing_and_says_so(tmp_path, monkeypatch, 
     broker = HistoryWindow(nw, {"NQZ6": _minute_ticks(dt.date(2026, 9, 24))}, page=10)
     monkeypatch.setattr(T, "fetch_page", broker.pager)
     assert run(T.record(roots=("NQ",), dates=[dt.date(2026, 9, 24)], base=tmp_path, ws=object())) == []
-    assert broker.asked == [] and "gone from the broker's history" in capsys.readouterr().out
+    assert broker.asked == [] and "left the broker's history" in capsys.readouterr().out
 
 
 def test_a_winter_session_loses_one_hour_at_19_et(tmp_path):
@@ -397,6 +417,109 @@ def test_a_segment_that_expires_mid_fetch_stops_asking(monkeypatch):
                                       expiry=T.history_expiry(start)))
     assert stats["stop"] == "expired" and len(broker.asked) == 4     # 19:58, +36 s x 3 < 20:00
     assert 0 < len(rows) < 120
+
+
+# ------------------------------------------------ merge, never replace (the nightly side)
+def _write_live(p, rows):
+    """The chart service's live recording: header + rows, one gzip member per flush."""
+    p.parent.mkdir(parents=True, exist_ok=True)
+    with open(p, "ab") as f:
+        body = "".join(",".join("" if r[k] in (None, "") else str(r[k]) for k in T.FIELDS) + "\n"
+                       for r in rows)
+        f.write(gzip.compress(((",".join(T.FIELDS) + "\n") if f.tell() == 0 else "").encode()
+                              + body.encode()))
+
+
+def _ids(p):
+    with gzip.open(p, "rt") as f:
+        return [int(r["id"]) for r in csv.DictReader(f)]
+
+
+def test_the_night_run_merges_the_live_recording_that_holds_the_lost_hours(tmp_path, monkeypatch):
+    """The 05:30 catch-up the morning after: the broker has only 20:00 ET on;
+    the live recording has the whole session but missed a restart's ticks.
+    The file: both, every tick once -- and the live file is left as it was."""
+    d = dt.date(2026, 9, 24)
+    nw = NoWait(monkeypatch, now=dt.datetime(2026, 9, 25, 5, 30, tzinfo=ET))
+    ticks = _minute_ticks(d)
+    broker = HistoryWindow(nw, {"NQZ6": ticks}, page=100)
+    monkeypatch.setattr(T, "fetch_page", broker.pager)
+    path = T.archive_path("NQ", d, "NQZ6", tmp_path)
+    lp = path.with_name("2026-09-24_NQZ6.live.csv.gz")
+    lost = {r["id"] for r in ticks[600:611]}                 # 04:00 ET: a restart dropped 11 ticks
+    _write_live(lp, [r for r in ticks if r["id"] not in lost])
+    live_bytes = lp.read_bytes()
+    out = run(T.record(roots=("NQ",), dates=[d], base=tmp_path, ws=object()))
+    assert _ids(path) == [r["id"] for r in ticks]            # 18:00 from live, 04:00 from the broker
+    assert lp.read_bytes() == live_bytes
+    m = out[0]
+    assert m["complete"] and m["ticks"] == len(ticks)
+    assert m["merge"]["only_in"] == {"history": 11, "live": 120}
+    assert [s["kind"] for s in m["sources"]] == ["history", "live"]
+
+
+def test_a_live_recording_is_merged_even_when_nothing_is_left_to_fetch(tmp_path, monkeypatch, capsys):
+    d = dt.date(2026, 9, 24)
+    nw = NoWait(monkeypatch, now=dt.datetime(2026, 9, 28, 5, 30, tzinfo=ET))   # long gone from the broker
+    broker = HistoryWindow(nw, {"NQZ6": []}, page=100)
+    monkeypatch.setattr(T, "fetch_page", broker.pager)
+    ticks = _minute_ticks(d)
+    path = T.archive_path("NQ", d, "NQZ6", tmp_path)
+    lp = path.with_name("2026-09-24_NQZ6.live.csv.gz")
+    _write_live(lp, ticks[:100])
+    out = run(T.record(roots=("NQ",), base=tmp_path, ws=object()))
+    today_head = int(dt.datetime(2026, 9, 28, 0, 0, tzinfo=UTC).timestamp() * 1000)
+    assert {b for c, b in broker.asked} == {today_head}     # only today's first hours were asked for
+    assert len(out) == 1 and _ids(path) == [r["id"] for r in ticks[:100]]
+    assert "live recording merged (100 ticks, 100 the archive lacked)" in capsys.readouterr().out
+    assert run(T.record(roots=("NQ",), base=tmp_path, ws=object())) == []    # already in
+    _write_live(lp, ticks[100:130])                            # the recorder appended
+    out = run(T.record(roots=("NQ",), base=tmp_path, ws=object()))
+    assert _ids(path) == [r["id"] for r in ticks[:130]] and out[0]["ticks"] == 130
+
+
+def test_todays_first_hours_are_fetched_at_0530_without_the_growing_live_file(tmp_path, monkeypatch):
+    d = dt.date(2026, 9, 24)
+    nw = NoWait(monkeypatch, now=dt.datetime(2026, 9, 24, 5, 30, tzinfo=ET))
+    ticks = _minute_ticks(d)
+    broker = HistoryWindow(nw, {"NQZ6": ticks}, page=100)
+    monkeypatch.setattr(T, "fetch_page", broker.pager)
+    path = T.archive_path("NQ", d, "NQZ6", tmp_path)
+    _write_live(path.with_name("2026-09-24_NQZ6.live.csv.gz"), ticks[:5])   # still being written
+    out = run(T.record(roots=("NQ",), dates=[d], base=tmp_path, ws=object()))
+    assert _ids(path) == [r["id"] for r in ticks[:121]]      # 18:00-20:00 ET (+ the 20:00 tick)
+    assert [s["kind"] for s in out[0]["sources"]] == ["history"] and not out[0]["complete"]
+    nw.now = dt.datetime(2026, 9, 24, 17, 20, tzinfo=ET)      # after the close: the rest, and the live file
+    out = run(T.record(roots=("NQ",), dates=[d], base=tmp_path, ws=object()))
+    assert _ids(path) == [r["id"] for r in ticks] and out[0]["complete"]
+    assert [s["kind"] for s in out[0]["sources"]] == ["history", "history", "live"]
+    assert all(b > int(dt.datetime(2026, 9, 24, 0, 0, tzinfo=UTC).timestamp() * 1000)
+               for c, b in broker.asked[-10:])              # the evening asked no 18:00-20:00 again
+
+
+def test_a_fetch_cut_short_by_the_deadline_resumes_where_it_stopped(tmp_path, monkeypatch):
+    d = dt.date(2026, 9, 24)
+    nw = NoWait(monkeypatch, now=dt.datetime(2026, 9, 24, 17, 20, tzinfo=ET))
+    ticks = _minute_ticks(d)
+    broker = HistoryWindow(nw, {"NQZ6": ticks}, page=100)
+    monkeypatch.setattr(T, "fetch_page", broker.pager)
+    tripped = {"on": False, "armed": True}
+
+    def deadline(now=None):             # 08:00 comes three pages into the long tail
+        if tripped["armed"] and len(broker.asked) >= 6:
+            tripped.update(on=True, armed=False)
+        return tripped["on"]
+    monkeypatch.setattr(T, "deadline_passed", deadline)
+    run(T.record(roots=("NQ",), dates=[d], base=tmp_path, ws=object()))
+    tripped["on"] = False               # the next evening
+    path = T.archive_path("NQ", d, "NQZ6", tmp_path)
+    man = json.loads(path.with_suffix("").with_suffix(".json").read_text())
+    cut = man["sources"][-1]
+    assert cut["stop"] == "deadline" and cut["earliest_ms"] is not None
+    asked = len(broker.asked)
+    run(T.record(roots=("NQ",), dates=[d], base=tmp_path, ws=object()))
+    assert broker.asked[asked] == ("NQZ6", cut["earliest_ms"])   # resumed, not restarted
+    assert _ids(path) == [r["id"] for r in ticks]
 
 
 class ChartSocket:
