@@ -21,6 +21,15 @@
      with an actual Spring, never CSS). -out for entrances/settling, -in for the (faster) exit. */
   --ease-spring-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-spring-in: cubic-bezier(0.4, 0, 1, 1);
+  /* Frosted glass (2026-09-28 feel pass): a floating/click-triggered chrome layer, never the surfaces the
+     trader reads a price or a fill off (see charts.css's own ".glass"/".glass-heavy" rule for the exact
+     list). Tinted toward the theme's own panel colour, not a neutral grey -- Apple's "materials tint toward
+     the surface they sit on." Two weights only ("bigger surfaces read as thicker"): -heavy for a dialog (the
+     biggest surface here), the plain weight for everything smaller (a menu, the draw toolbar, the replay
+     bar, a floating panel's own header). --glass-edge is the bright top edge WWDC 2018 calls "light catching
+     the material" -- a 1px top border, not a shadow. */
+  --glass-bg: rgba(255, 255, 255, .70); --glass-bg-heavy: rgba(255, 255, 255, .82);
+  --glass-edge: rgba(255, 255, 255, .8); --glass-blur: 14px; --glass-blur-heavy: 24px; --glass-saturate: 180%;
   color-scheme: light;
 }
 :root[data-theme="dark"] {
@@ -33,6 +42,8 @@
   --shadow-menu: 0 0 0 1px #2E2E2E, 0 4px 12px rgba(0, 0, 0, .5);
   --shadow-dialog: 0 0 0 1px #2E2E2E, 0 8px 32px rgba(0, 0, 0, .6);
   --backdrop: rgba(0, 0, 0, .5);
+  --glass-bg: rgba(15, 15, 15, .62); --glass-bg-heavy: rgba(15, 15, 15, .76);
+  --glass-edge: rgba(255, 255, 255, .08); --glass-saturate: 160%;
   color-scheme: dark;
 }
 
@@ -1081,6 +1092,46 @@ input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-o
 :where(.menu-i, .menu-row, .dlg-row, .dlg-group, .hb-news-title, .tst-run-row, .lg-row, .set-tab,
   .op-chead):active:not(:disabled) {
   background: var(--border);
+}
+
+/* ---- frosted glass (2026-09-28 feel pass) ----
+   Only genuinely floating/click-triggered CHROME: menus/popovers, dialogs, toasts, the draw toolbar, the
+   Bar Replay control bar, and a floating panel's own header (its body -- the order form, the DOM ladder --
+   stays the solid `--panel` it always was: the audit's exclusion list). The top toolbar and status bar sit
+   in normal document flow, never over the chart, so "if it reads well over the chart background" doesn't
+   apply to them here -- left solid, TradingView-plain, like the rest of the excluded surfaces.
+   `-webkit-` prefixed too: this ships inside a WKWebView, which needs it or the blur silently does nothing
+   (GOTCHAS.md). Each surface still keeps its existing shadow/box-shadow for depth -- glass replaces only the
+   background, not the elevation cue. */
+.menu, .hotkey-box, .toast, .draw-toolbar, .replay-bar, .hbpanel-head {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+}
+.menu, .hotkey-box, .toast { border-top: 1px solid var(--glass-edge); }
+.hbpanel-head { border-top: 1px solid var(--glass-edge); }   /* in ADDITION to its existing bottom border -- top and bottom separate it from both the titlebar above and the body below */
+.dialog {
+  background: var(--glass-bg-heavy);
+  backdrop-filter: blur(var(--glass-blur-heavy)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur-heavy)) saturate(var(--glass-saturate));
+  border-top: 1px solid var(--glass-edge);
+}
+/* never stack light glass on light glass: a swatch/template popover opened FROM a dialog (openMenu's own
+   `{ root: box }`, app.js) renders as the dialog's own DOM descendant -- solid there instead. */
+.dialog .menu { background: var(--panel); backdrop-filter: none; -webkit-backdrop-filter: none; border-top: none; }
+
+@media (prefers-reduced-transparency: reduce) {
+  .menu, .hotkey-box, .toast, .draw-toolbar, .replay-bar, .hbpanel-head, .dialog {
+    background: var(--panel); backdrop-filter: none; -webkit-backdrop-filter: none; border-top-color: var(--border);
+  }
+}
+@media (prefers-contrast: more) {
+  .menu, .hotkey-box, .toast, .draw-toolbar, .replay-bar, .dialog {
+    background: var(--panel); backdrop-filter: none; -webkit-backdrop-filter: none;
+    box-shadow: inset 0 0 0 1px var(--border), var(--shadow-menu);
+  }
+  .dialog { box-shadow: inset 0 0 0 1px var(--border), var(--shadow-dialog); }
+  .hbpanel-head { background: var(--pill); backdrop-filter: none; -webkit-backdrop-filter: none; border-top-color: var(--border); }
 }
 
 /* ---- Bar Replay start popover: a date field + time field, a month calendar, and quick times ---- */
