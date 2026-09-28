@@ -279,21 +279,163 @@ class POrder:
 _ORDER_FIELDS = {f.name for f in fields(POrder)} - {"min_seq"}
 
 
+class Planner:
+    """How a paper Market order fills AT ONCE (fast-paper) -- ONE per chart service, shared by every paper account's
+    book (PaperBooks; a PaperBook on its own makes its own). A plan is (src, [[price, qty], ...], ts_ms): the book's
+    levels taken, or the quote's touch, and that source's time -- or None: the next print (the engine's law).
+      * The book is CONSUMED: what paper fills took from a root's snapshot is remembered by its ts_ms, and the next
+        order walks what is left; a new snapshot starts over.
+      * A send to several accounts is ONE plan per root and side (begin / end): each account takes its slice of it,
+        in order -- they all fill now, or none does. Reads book_of / quote_of only; changes nothing but its own
+        memory of what was taken."""
+
+    def __init__(self, book_of: Optional[Callable[[str], Optional[dict]]] = None,
+                 quote_of: Optional[Callable[[str], Optional[dict]]] = None):
+        # read-only, each None when there is nothing (neither: print fills only)
+        self.book_of = book_of                       # root -> {bids, offers: [[price, size], ...] best first, ts_ms}
+        self.quote_of = quote_of                     # root -> {bid, ask, bid_size, ask_size, ts_ms}
+        self._taken: dict[str, tuple] = {}           # root -> (its snapshot's ts_ms, {(side, tick index): qty taken})
+        self._send: Optional[dict] = None            # during a send: (root, side) -> [src, parts left, ts_ms] | None
+
+    # ---- a send to several accounts (PaperBooks.act)
+    def begin(self, demand: dict, now_ms: int, last_ms: dict) -> None:
+        """demand: {(root, side): the whole send's quantity}; last_ms: root -> its last print (ms). One plan each."""
+        self._send = {}
+        for (root, side), qty in demand.items():
+            p = self._plan(root, side, qty, now_ms, last_ms.get(root))
+            self._send[(root, side)] = None if p is None else list(p)
+
+    def end(self) -> None:
+        self._send = None
+
+    def take(self, root: str, side: int, qty: int, now_ms: int, last_ms: Optional[int]) -> Optional[tuple]:
+        """One order's instant fill: its slice of the send's plan (the next qty of it) when this root and side were
+        planned for the send, else a plan of its own; None: the next print. What it takes from a book is remembered."""
+        planned = self._send.get((root, side), False) if self._send is not None else False
+        if planned is False:
+            p = self._plan(root, side, qty, now_ms, last_ms)
+        elif planned is None or sum(q for _, q in planned[1]) < qty:
+            return None
+        else:
+            mine, planned[1] = _split(planned[1], qty)
+            p = (planned[0], mine, planned[2])
+        if p is not None and p[0] == "book":
+            self._consume(root, side, p[2], p[1])
+        return p
+
+    def _consume(self, root: str, side: int, ts: int, parts: list) -> None:
+        tick = tick_size(root)
+        snap, used = self._taken.get(root, (None, {}))
+        if snap != ts:
+            used = {}                                # a new snapshot: nothing of it taken yet
+        for p, q in parts:
+            k = (side, round(p / tick))
+            used[k] = used.get(k, 0) + q
+        self._taken[root] = (ts, used)
+
+    # ---- the rules
+    def _plan(self, root: str, side: int, qty: int, now_ms: int, last_ms: Optional[int]) -> Optional[tuple]:
+        """ALL of qty or nothing, never a part; never while the market is not matching (_matching)."""
+        if not self._matching(root, now_ms, last_ms):
+            return None
+        tick = tick_size(root)
+        b = self.book_of(root) if self.book_of is not None else None
+        parts = self._book_parts(b, root, side, qty, now_ms, tick)
+        if parts is not None:
+            return "book", parts, b["ts_ms"]
+        q = self.quote_of(root) if self.quote_of is not None else None
+        px = self._quote_px(q, side, qty, now_ms, tick)
+        return None if px is None else ("quote", [[px, qty]], q["ts_ms"])
+
+    @staticmethod
+    def _matching(root: str, now_ms: int, last_ms: Optional[int]) -> bool:
+        """Is the market matching now? Open by the calendar (market_open), and a print on this root at most
+        LIVE_PRINT_MAX_AGE_S old (at most QUOTE_FILL_MAX_FUTURE_S ahead): a pre-open or halted market can show a fresh
+        book and quote no one trades at -- ES's Sunday pre-open book sat at 7805.75/7806.0, its first print was 7796.0."""
+        if last_ms is None or not market_open(now_ms, root):
+            return False
+        return -QUOTE_FILL_MAX_FUTURE_S * 1000 <= now_ms - last_ms <= LIVE_PRINT_MAX_AGE_S * 1000
+
+    @staticmethod
+    def _fresh(ts, now_ms: int) -> bool:
+        if not _finite(ts):
+            return False
+        age = now_ms - ts
+        return age <= QUOTE_FILL_MAX_AGE_S * 1000 and -age <= QUOTE_FILL_MAX_FUTURE_S * 1000
+
+    @staticmethod
+    def _sane(bid, ask, tick: float) -> bool:
+        """A touch to trade at: two positive prices on the tick grid, bid < ask, at most QUOTE_FILL_MAX_SPREAD_TICKS apart."""
+        if not (_finite(bid) and _finite(ask)) or bid <= 0:
+            return False
+        if tick_cmp(bid, to_tick(bid, tick), tick) or tick_cmp(ask, to_tick(ask, tick), tick):
+            return False
+        return tick_cmp(bid, ask, tick) < 0 and round((ask - bid) / tick) <= QUOTE_FILL_MAX_SPREAD_TICKS
+
+    def _book_parts(self, b, root: str, side: int, qty: int, now_ms: int, tick: float) -> Optional[list]:
+        """The live book walked for qty from the touch -- a buy up the offers, a sell down the bids -- over what paper
+        fills have not taken from this snapshot yet: [[price, qty taken], ...]; None when there is no book, or it is
+        stale, one-sided, crossed / locked / too wide at the touch, or the side it trades against has a level that is
+        not [price on the grid, whole size >= 1] or is out of order (fail closed: that book is not trusted at all), or
+        what is left of it shows less than qty in all."""
+        if not isinstance(b, dict) or not self._fresh(b.get("ts_ms"), now_ms):
+            return None
+        bids, offers = b.get("bids"), b.get("offers")
+        if not isinstance(bids, list) or not isinstance(offers, list) or not bids or not offers:
+            return None
+        levels = offers if side > 0 else bids
+        try:
+            if not self._sane(bids[0][0], offers[0][0], tick):
+                return None
+            prev = None
+            for p, s in levels:                  # every level: well formed, and worse than the one before it
+                if not (_finite(p) and _finite(s)) or s < 1 or s != int(s) or tick_cmp(p, to_tick(p, tick), tick):
+                    return None
+                if prev is not None and side * tick_cmp(p, prev, tick) <= 0:
+                    return None
+                prev = p
+        except (TypeError, ValueError, IndexError):
+            return None                          # a level that is not [price, size]
+        snap, used = self._taken.get(root, (None, {}))
+        if snap != b["ts_ms"]:
+            used = {}
+        parts, left = [], qty
+        for p, s in levels:
+            take = min(left, int(s) - used.get((side, round(p / tick)), 0))
+            if take <= 0:
+                continue                         # all of this level already taken by paper fills
+            parts.append([to_tick(p, tick), take])
+            left -= take
+            if not left:
+                return parts
+        return None                              # not enough displayed size for all of it: never a part
+
+    def _quote_px(self, q, side: int, qty: int, now_ms: int, tick: float) -> Optional[float]:
+        """The trade-row quote's touch: a buy's ask, a sell's bid -- or None when there is no quote, it is stale or not
+        sane, or qty is more than the size it displayed at that touch (unknown size: None)."""
+        if not isinstance(q, dict) or not self._fresh(q.get("ts_ms"), now_ms):
+            return None
+        bid, ask = q.get("bid"), q.get("ask")
+        size = q.get("ask_size") if side > 0 else q.get("bid_size")
+        if not self._sane(bid, ask, tick) or not _finite(size) or qty > size:
+            return None
+        return to_tick(ask if side > 0 else bid, tick)
+
+
 class PaperBook:
     def __init__(self, path: Optional[Path], *, roots=(), clock_ms: Callable[[], int] = lambda: int(time.time() * 1000),
                  costs: Optional[Costs] = None, mono: Callable[[], float] = time.monotonic,
                  log: Callable[[str], None] = lambda m: None, account_id: str = PAPER_ID, label: str = LABEL,
                  start_balance: float = START_BALANCE, quote_of: Optional[Callable[[str], Optional[dict]]] = None,
-                 book_of: Optional[Callable[[str], Optional[dict]]] = None):
+                 book_of: Optional[Callable[[str], Optional[dict]]] = None, planner: Optional[Planner] = None):
         if not is_paper_id(account_id):
             raise ValueError(f"not a paper account id: {account_id!r}")
         self.id, self.label, self.start_balance = account_id, label, float(start_balance)
         self.path = Path(path) if path is not None else None
         self.roots = {r.upper() for r in roots}
         self.clock_ms, self.mono, self.log = clock_ms, mono, log
-        # read-only, both None -> None when there is nothing (neither: print fills only)
-        self.book_of = book_of                       # root -> {bids, offers: [[price, size], ...] best first, ts_ms}
-        self.quote_of = quote_of                     # root -> {bid, ask, bid_size, ask_size, ts_ms}
+        # the instant fills: every account's shared one (PaperBooks), else one of its own over book_of / quote_of
+        self.planner = planner if planner is not None else Planner(book_of=book_of, quote_of=quote_of)
         self.costs = costs or Costs()
         self.orders: dict[str, POrder] = {}          # working + held, in the order they went live (engine.orders)
         self.pos: dict[str, dict] = {}               # root -> {symbol, net, avg}
@@ -598,7 +740,7 @@ class PaperBook:
         price, trigger, sl, tp = rnd(price), rnd(trigger), rnd(sl), rnd(tp)
         self._check_prices(root, side, typ, price, trigger, sl, tp, tick)
         now = self.clock_ms()
-        plan = self._plan(root, side, qty, now) if typ == "Market" else None
+        plan = self.planner.take(root, side, qty, now, self.last_ms.get(root)) if typ == "Market" else None
         contract = resolve_contract(root)
         base = {"root": root, "symbol": contract, "side": side, "qty": qty, "placed_ms": now,
                 "session": session_of(now, root)}
@@ -699,91 +841,8 @@ class PaperBook:
         if ids:
             self._do({"ev": "cancel", "ids": ids})
 
-    def _plan(self, root: str, side: int, qty: int, now_ms: int) -> Optional[tuple[str, list]]:
-        """How a Market order for `qty` placed now fills at once: ("book", [[price, qty], ...] -- the levels taken, in
-        order), else ("quote", [[touch, qty]]) -- or None: it waits for the next print (the engine's rule). ALL of
-        qty or nothing, never a part; never while the market is not matching (_matching). Reads only."""
-        if not self._matching(root, now_ms):
-            return None
-        tick = tick_size(root)
-        parts = self._book_parts(root, side, qty, now_ms, tick)
-        if parts is not None:
-            return "book", parts
-        px = self._quote_px(root, side, qty, now_ms, tick)
-        return None if px is None else ("quote", [[px, qty]])
-
-    def _matching(self, root: str, now_ms: int) -> bool:
-        """Is the market matching now? Open by the calendar (market_open), and a print on this root at most
-        LIVE_PRINT_MAX_AGE_S old (at most QUOTE_FILL_MAX_FUTURE_S ahead): a pre-open or halted market can show a fresh
-        book and quote no one trades at -- ES's Sunday pre-open book sat at 7805.75/7806.0, its first print was 7796.0."""
-        last = self.last_ms.get(root)
-        if last is None or not market_open(now_ms, root):
-            return False
-        return -QUOTE_FILL_MAX_FUTURE_S * 1000 <= now_ms - last <= LIVE_PRINT_MAX_AGE_S * 1000
-
-    @staticmethod
-    def _fresh(ts, now_ms: int) -> bool:
-        if not _finite(ts):
-            return False
-        age = now_ms - ts
-        return age <= QUOTE_FILL_MAX_AGE_S * 1000 and -age <= QUOTE_FILL_MAX_FUTURE_S * 1000
-
-    @staticmethod
-    def _sane(bid, ask, tick: float) -> bool:
-        """A touch to trade at: two positive prices on the tick grid, bid < ask, at most QUOTE_FILL_MAX_SPREAD_TICKS apart."""
-        if not (_finite(bid) and _finite(ask)) or bid <= 0:
-            return False
-        if tick_cmp(bid, to_tick(bid, tick), tick) or tick_cmp(ask, to_tick(ask, tick), tick):
-            return False
-        return tick_cmp(bid, ask, tick) < 0 and round((ask - bid) / tick) <= QUOTE_FILL_MAX_SPREAD_TICKS
-
-    def _book_parts(self, root: str, side: int, qty: int, now_ms: int, tick: float) -> Optional[list]:
-        """The live book (book_of) walked for qty from the touch -- a buy up the offers, a sell down the bids --
-        [[price, qty taken], ...]; None when there is no book, or it is stale, one-sided, crossed / locked / too wide
-        at the touch, or the side it trades against has a level that is not [price on the grid, whole size >= 1] or
-        is out of order (fail closed: that book is not trusted at all), or it shows less than qty in all."""
-        b = self.book_of(root) if self.book_of is not None else None
-        if not isinstance(b, dict) or not self._fresh(b.get("ts_ms"), now_ms):
-            return None
-        bids, offers = b.get("bids"), b.get("offers")
-        if not isinstance(bids, list) or not isinstance(offers, list) or not bids or not offers:
-            return None
-        levels = offers if side > 0 else bids
-        try:
-            if not self._sane(bids[0][0], offers[0][0], tick):
-                return None
-            prev = None
-            for p, s in levels:                  # every level: well formed, and worse than the one before it
-                if not (_finite(p) and _finite(s)) or s < 1 or s != int(s) or tick_cmp(p, to_tick(p, tick), tick):
-                    return None
-                if prev is not None and side * tick_cmp(p, prev, tick) <= 0:
-                    return None
-                prev = p
-        except (TypeError, ValueError, IndexError):
-            return None                          # a level that is not [price, size]
-        parts, left = [], qty
-        for p, s in levels:
-            take = min(left, int(s))
-            parts.append([to_tick(p, tick), take])
-            left -= take
-            if not left:
-                return parts
-        return None                              # not enough displayed size for all of it: never a part
-
-    def _quote_px(self, root: str, side: int, qty: int, now_ms: int, tick: float) -> Optional[float]:
-        """The trade-row quote's touch (quote_of): a buy's ask, a sell's bid -- or None when there is no quote, it is
-        stale or not sane, or qty is more than the size it displayed at that touch (unknown size: None)."""
-        q = self.quote_of(root) if self.quote_of is not None else None
-        if not isinstance(q, dict) or not self._fresh(q.get("ts_ms"), now_ms):
-            return None
-        bid, ask = q.get("bid"), q.get("ask")
-        size = q.get("ask_size") if side > 0 else q.get("bid_size")
-        if not self._sane(bid, ask, tick) or not _finite(size) or qty > size:
-            return None
-        return to_tick(ask if side > 0 else bid, tick)
-
-    def _instant_fill(self, o: POrder, src: str, parts: list, now_ms: int) -> None:
-        """A Market order just placed fills now, on the book's clock, for all of its qty (_plan): at the
+    def _instant_fill(self, o: POrder, src: str, parts: list, ts_ms: int, now_ms: int) -> None:
+        """A Market order just placed fills now, on the book's clock, for all of its qty (Planner.take): at the
         quantity-weighted average of `parts` -- one fill event like a print's, `src` "book" (its levels in `parts`) or
         "quote"; its bracket legs go live from the next print, as after a print fill."""
         self._fid += 1
@@ -792,9 +851,9 @@ class PaperBook:
             ev["parts"] = parts
         self._do(ev, seq=self.seq.get(o.root, 0))
 
-    def _market(self, root: str, side: int, qty: int, role: str, plan: Optional[tuple[str, list]] = None) -> None:
-        """A Market order to close (or, for a reverse, re-open): it fills at once by `plan` when the caller read one
-        (_plan), else on the next print."""
+    def _market(self, root: str, side: int, qty: int, role: str, plan: Optional[tuple] = None) -> None:
+        """A Market order to close (or, for a reverse, re-open): it fills at once by `plan` when the caller took one
+        (Planner.take), else on the next print."""
         now = self.clock_ms()
         o = POrder(id=self._next_id(), root=root, symbol=(self.pos.get(root) or {}).get("symbol") or resolve_contract(root),
                    side=side, type="Market", kind="market", price=None, trigger=None, qty=qty, role=role,
@@ -873,12 +932,13 @@ class PaperBook:
 
     def _flatten(self, root: str) -> dict:
         """Cancel every order in the root, then close the position at market: at once against the book or the quote
-        when one can take all of it (_plan), else on the next print."""
+        when one can take all of it (Planner.take), else on the next print."""
         self._cancel_all(root)
         net = (self.pos.get(root) or {}).get("net", 0)
         if net:
             side = -1 if net > 0 else 1
-            self._market(root, side, abs(net), "flat", self._plan(root, side, abs(net), self.clock_ms()))
+            self._market(root, side, abs(net), "flat",
+                         self.planner.take(root, side, abs(net), self.clock_ms(), self.last_ms.get(root)))
         return {"ok": True, "order_id": None, "error": None}
 
     def _reverse(self, root: str) -> dict:
@@ -890,12 +950,12 @@ class PaperBook:
         side, n = (-1 if net > 0 else 1), abs(net)
         # ONE read for both legs, of 2n: the close takes the first n of it, the open the next n -- both fill now, or
         # both wait for the next print, in order
-        plan = self._plan(root, side, 2 * n, self.clock_ms())
+        plan = self.planner.take(root, side, 2 * n, self.clock_ms(), self.last_ms.get(root))
         if plan is None:
             close = open_ = None
         else:
             first, rest = _split(plan[1], n)
-            close, open_ = (plan[0], first), (plan[0], rest)
+            close, open_ = (plan[0], first, plan[2]), (plan[0], rest, plan[2])
         self._cancel_all(root)
         self._market(root, side, n, "flat", close)
         self._market(root, side, n, "entry", open_)
@@ -918,6 +978,25 @@ class PaperBook:
         """An open position or any order (working, or a bracket leg waiting on its entry)."""
         return bool(self.orders) or any(p["net"] for p in self.pos.values())
 
+    def demand(self, action: str, body: dict) -> Optional[tuple[str, int, int]]:
+        """(root, side, qty) of the Market order `action` would send now -- an order's, a flatten's close, a reverse's
+        close + open -- or None: what PaperBooks.act plans a send's instant fills for, all accounts at once. A guess
+        that changes nothing: an action this body is refused or rejected for just leaves its slice untaken."""
+        root = body.get("root")
+        if not isinstance(root, str) or not _ROOT.fullmatch(root.upper()):
+            return None
+        root = root.upper()
+        if action == "order":
+            qty = body.get("qty")
+            if body.get("type") != "Market" or body.get("side") not in SIDES or isinstance(qty, bool) \
+                    or not isinstance(qty, int) or not 1 <= qty <= MAX_ORDER_QTY:
+                return None
+            return root, SIDES[body["side"]], qty
+        net = (self.pos.get(root) or {}).get("net", 0)
+        if action not in ("flatten", "reverse") or not net:
+            return None
+        return root, (-1 if net > 0 else 1), abs(net) * (2 if action == "reverse" else 1)
+
 
 LIMITS = {"max_order_qty": MAX_ORDER_QTY, "max_position_qty": MAX_POSITION_QTY}
 
@@ -936,8 +1015,9 @@ class PaperBooks:
                  quote_of: Optional[Callable[[str], Optional[dict]]] = None,
                  book_of: Optional[Callable[[str], Optional[dict]]] = None, on_change: Callable[[], None] = lambda: None):
         self.dir = Path(dir) if dir is not None else None
-        self.kw = {"roots": roots, "clock_ms": clock_ms, "costs": costs, "mono": mono, "log": log, "quote_of": quote_of,
-                   "book_of": book_of}
+        # ONE planner for every account: a send's plan is split between them, and what one took the next never retakes
+        self.planner = Planner(book_of=book_of, quote_of=quote_of)
+        self.kw = {"roots": roots, "clock_ms": clock_ms, "costs": costs, "mono": mono, "log": log, "planner": self.planner}
         self.clock_ms, self.log = clock_ms, log
         # fast-paper: called once the books changed -- after prints that filled or changed something, after an action,
         # a create or a remove -- so the chart service pushes them to the pages at once (server.py's paper_push);
@@ -1090,6 +1170,17 @@ class PaperBooks:
                 raise ValueError("account: a paper account id")
             ids = [body["account"]]
         results = {}
+        # the send's instant fills: ONE plan for all of its accounts' Market orders, each taking its slice in order
+        demand: dict = {}
+        for aid in ids:
+            d = self.books[aid].demand(action, body) if aid in self.books else None
+            if d is not None:
+                demand[d[:2]] = demand.get(d[:2], 0) + d[2]
+        last_ms: dict = {}                           # every book sees every print: the latest any of them saw
+        for b in self.books.values():
+            for r, ms in b.last_ms.items():
+                last_ms[r] = max(ms, last_ms.get(r, ms))
+        self.planner.begin(demand, self.clock_ms(), last_ms)
         try:
             for aid in ids:
                 b = self.books.get(aid)
@@ -1100,6 +1191,7 @@ class PaperBooks:
                 one = {**body, "accounts": [aid]} if "accounts" in body else body
                 results.update(b.act(action, one)["results"])
         finally:                                     # a later account's 400 must not hold back an earlier one's change
+            self.planner.end()
             if self.dirty:
                 self.on_change()
         return {"results": results}

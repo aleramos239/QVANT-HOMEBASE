@@ -1222,7 +1222,9 @@ def test_flatten_walks_the_book_and_a_reverse_takes_both_legs_from_one_read():
     assert net(b) == 0 and b.view()["orders"] == [] and (f["side"], f["qty"], f["parts"]) == ("Sell", 3, [[101.0, 2], [100.75, 1]])
     order(b, "Buy", "Market", qty=2)
     assert b.fills[-1]["parts"] == [[101.25, 1], [101.5, 1]]
-    # a reverse reads the book ONCE, for 4: the close takes the first 2 of it, the open the next 2
+    src["book"] = l2(bids=((101.0, 2), (100.75, 5)), offers=((101.25, 1), (101.5, 1), (102.0, 9)), age_ms=100)
+    # (a new snapshot: all of it on show again) a reverse reads the book ONCE, for 4: the close takes the first 2 of
+    # it, the open the next 2
     assert act(b, "reverse", accounts=[PAPER_ID], root="NQ")["ok"]
     assert [(f["role"], f["price"], f["parts"]) for f in b.fills][-2:] == \
         [("flat", 101.0, [[101.0, 2]]), ("entry", 100.75, [[100.75, 2]])]
@@ -1236,6 +1238,45 @@ def test_flatten_walks_the_book_and_a_reverse_takes_both_legs_from_one_read():
     src["book"], src["quote"] = None, q_(bid_size=4)                 # no book, the quote's bid shows 4: both at it
     assert act(b, "reverse", accounts=[PAPER_ID], root="NQ")["ok"]
     assert [(f["role"], f["price"], f["src"]) for f in b.fills][-2:] == [("flat", 99.75, "quote"), ("entry", 99.75, "quote")]
+
+
+def test_the_book_is_consumed_what_one_order_took_the_next_walks_past():
+    b, src = live(depth=l2(bids=((99.75, 4),), offers=((100.0, 2), (100.25, 3), (100.5, 2))))
+    order(b, "Buy", "Market", qty=3)
+    order(b, "Buy", "Market", qty=3)                                 # the same snapshot: what the first left
+    assert [f["parts"] for f in b.fills] == [[[100.0, 2], [100.25, 1]], [[100.25, 2], [100.5, 1]]]
+    order(b, "Sell", "Market", qty=4)                                # the other side is its own
+    assert b.fills[-1]["parts"] == [[99.75, 4]]
+    order(b, "Buy", "Market", qty=2)                                 # 1 left on show: never a part -- the next print
+    assert len(b.fills) == 3 and [o["type"] for o in b.view()["orders"]] == ["Market"]
+    act(b, "cancel-symbol", accounts=[PAPER_ID], root="NQ")
+    src["book"] = l2(bids=((99.75, 4),), offers=((100.0, 2), (100.25, 3), (100.5, 2)), age_ms=100)   # a new snapshot
+    order(b, "Buy", "Market", qty=2)                                 # ...starts over
+    assert b.fills[-1]["parts"] == [[100.0, 2]]
+
+
+def test_a_send_to_several_accounts_is_one_plan_each_taking_its_slice_in_order(tmp_path):
+    src = {"book": l2(offers=((100.0, 1), (100.25, 2), (100.5, 5)), age_ms=0)}
+    bs = pb.PaperBooks(tmp_path / "paper", roots=["NQ"], clock_ms=lambda: NOW_MS, book_of=lambda r: src["book"])
+    bs.create({"name": "Two"})
+    bs.create({"name": "Three"})
+    feed_all(bs, [("09:29:59", 100.0)])
+    assert all(r["ok"] for r in bs_order(bs, ["paper", "paper-2", "paper-3"], qty=2).values())   # one plan, for 6
+    assert [bs.books[a].fills[-1]["parts"] for a in ("paper", "paper-2", "paper-3")] == \
+        [[[100.0, 1], [100.25, 1]], [[100.25, 1], [100.5, 1]], [[100.5, 2]]]
+    bs_order(bs, ["paper", "paper-2"], qty=2)                        # 4 wanted, 2 left on show: neither fills now
+    assert [[o["type"] for o in bs.books[a].view()["orders"]] for a in ("paper", "paper-2")] == [["Market"], ["Market"]]
+    for a in ("paper", "paper-2"):
+        bs.books[a].act("cancel-symbol", {"client_id": f"x{a}", "accounts": [a], "root": "NQ"})
+    for px, n in ((90.0, 10), (91.0, 8)):                            # paper-2 (long 2): 18 more working on the buy side
+        assert bs.books["paper-2"].act("order", {"client_id": f"l{px}", "accounts": ["paper-2"], "root": "NQ",
+                                                 "side": "Buy", "type": "Limit", "price": px, "qty": n})["results"]["paper-2"]["ok"]
+    src["book"] = l2(offers=((100.0, 1), (100.25, 2)), age_ms=-1)     # a new snapshot
+    res = bs_order(bs, ["paper", "paper-2", "paper-3"], qty=1)        # paper-2 would pass 20: refused -- its slice
+    assert res["paper-2"]["refused"] and res["paper"]["ok"] and res["paper-3"]["ok"]   # goes to the next in line
+    assert (bs.books["paper"].fills[-1]["parts"], bs.books["paper-3"].fills[-1]["parts"]) == ([[100.0, 1]], [[100.25, 1]])
+    bs_order(bs, ["paper"], qty=1)                                   # the slice no one took is still there
+    assert bs.books["paper"].fills[-1]["parts"] == [[100.25, 1]]
 
 
 def test_an_instant_fill_is_logged_with_its_src_and_levels_and_survives_a_restart(tmp_path):
