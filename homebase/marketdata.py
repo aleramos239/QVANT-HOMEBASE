@@ -50,6 +50,18 @@ class TradovateMD:
     def connected(self) -> bool:
         return self._ws is not None and self._ws.connected
 
+    def rides_older_token(self) -> bool:
+        """True when this socket was authorized with an md token its login no longer
+        hands out (the login renewed since): it dies at the OLD token's expiry. False
+        when unknown (no socket, no provider, the provider gives nothing or raises)."""
+        if self._ws is None or self._token_provider is None:
+            return False
+        try:
+            current = self._token_provider() or ""
+        except Exception:  # noqa: BLE001 — unknown is not "older"
+            return False
+        return bool(current) and getattr(self._ws, "token", current) != current
+
     async def connect(self) -> None:
         md_token = ""
         if self._token_provider is not None:

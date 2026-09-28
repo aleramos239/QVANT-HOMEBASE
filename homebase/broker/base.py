@@ -278,6 +278,12 @@ class BrokerAdapter(abc.ABC):
                 print(f"[broker] {self.account_id}: listener error: {type(e).__name__}: {e}",
                       file=sys.stderr, flush=True)
 
+    def request_rtts_ms(self, since: float) -> dict[str, float]:
+        """Timing only: {request type: round trip in ms} of this adapter's broker
+        requests answered after `since` (a time.perf_counter() reading), the
+        latest per type. Default: none measured."""
+        return {}
+
     def trade_view(self) -> Optional[dict]:
         """Cached positions / working orders / cash for chart trading, with no
         broker call. None = this adapter cannot provide one."""

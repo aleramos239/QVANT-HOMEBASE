@@ -219,3 +219,138 @@ def test_a_placing_bot_day_pauses_flush_outside_the_window_too(tmp_path):
         return [e for e, _ in drain(q)]
 
     assert run(go()) == ["state"]                          # only the baseline; placing held the flush
+
+
+# --- publishing promptly: a finished action and a push publish at once, a burst once more ---
+
+
+def _order_row(oid, price=90.0):
+    return {"order_id": oid, "symbol": NQC, "side": "Buy", "type": "Limit", "qty": 1,
+            "price": price, "stop_price": None, "status": "Working"}
+
+
+LIMIT_A2 = {"client_id": "c1", "accounts": ["a2"], "root": "NQ", "side": "Buy", "qty": 1,
+            "type": "Limit", "price": 90.0}
+
+
+def _shows_its_order(ad):
+    """The order is accepted and the cache shows it -- with no push announcing it."""
+    orig = ad.place_order
+
+    async def place(req):
+        r = await orig(req)
+        ad.view["orders"] = [_order_row("77")]
+        return r
+
+    ad.place_order = place
+
+
+def test_a_finished_chart_order_publishes_its_account_at_once(tmp_path):
+    """Not at the next 0.5 s watch: the action's own end asks for the flush."""
+    desk, eng, ads, *_ = mkdesk(tmp_path)
+    _shows_its_order(ads["a2"])
+
+    async def go():
+        q = desk.subscribe()
+        desk.flush()                                             # baseline
+        out = await desk.order(dict(LIMIT_A2))
+        await asyncio.sleep(0)
+        return out, drain(q)
+
+    out, evs = run(go())
+    assert out["results"]["a2"]["ok"] is True
+    assert [e for e, _ in evs] == ["state", "result", "account"]
+    assert evs[2][1]["id"] == "a2" and evs[2][1]["orders"][0]["order_id"] == "77"
+
+
+def test_a_burst_of_pushes_goes_out_at_once_then_once_more_complete(tmp_path, monkeypatch):
+    monkeypatch.setattr("homebase.trading.FLUSH_GAP_S", 5.0)     # long: no wall-clock race
+    desk, eng, ads, *_ = mkdesk(tmp_path)
+    desk.attach("a1", ads["a1"])
+    a1 = ads["a1"]
+
+    async def go():
+        loop = asyncio.get_running_loop()
+        q = desk.subscribe()
+        desk.flush()
+        drain(q)
+        a1.view["orders"] = [_order_row("5", price=None)]        # the order push: no version yet
+        a1._notify("order", {"id": 5, "accountId": 1})
+        await asyncio.sleep(0)
+        first = drain(q)
+        a1.view["orders"] = [_order_row("5", price=91.0)]        # its version, then a position
+        a1._notify("orderVersion", {"orderId": 5})
+        a1.view["positions"] = [{"contract_id": 1, "symbol": NQC, "net": 1, "avg_price": 91.0}]
+        a1._notify("position", {"contractId": 1, "accountId": 1})
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        held = drain(q)                                          # inside the gap: collected
+        on, handle = desk._flush_handle                          # ONE flush, due at the gap's end
+        due_in = handle.when() - loop.time()
+        handle.cancel()
+        desk._flush_due(on)                                      # ...the gap is over
+        return first, held, due_in, drain(q)
+
+    first, held, due_in, rest = run(go())
+    assert [e for e, _ in first] == ["account"]                  # the first push: at once
+    assert held == [] and 4.0 < due_in <= 5.0
+    assert [e for e, _ in rest] == ["account"]                   # then ONE flush, complete
+    assert rest[0][1]["orders"][0]["price"] == 91.0 and rest[0][1]["positions"][0]["net"] == 1
+
+
+def test_a_flush_that_publishes_nothing_starts_no_gap(tmp_path, monkeypatch):
+    monkeypatch.setattr("homebase.trading.FLUSH_GAP_S", 5.0)
+    desk, eng, ads, *_ = mkdesk(tmp_path)
+    desk.attach("a1", ads["a1"])
+
+    async def go():
+        q = desk.subscribe()
+        desk.flush()
+        # refused (no such order): the action's flush finds nothing new to publish
+        await desk.cancel({"client_id": "c9", "account": "a1", "order_id": "404"})
+        await asyncio.sleep(0)
+        ads["a1"].view["positions"] = [{"contract_id": 1, "symbol": NQC, "net": 2,
+                                        "avg_price": 100.0}]
+        ads["a1"]._notify("position", {"contractId": 1, "accountId": 1})
+        await asyncio.sleep(0)
+        return [e for e, _ in drain(q)]
+
+    assert run(go()) == ["state", "result", "account"]          # the push was not held 5 s
+
+
+def test_a_chart_action_inside_the_pause_publishes_no_view(tmp_path):
+    """09:29:50-09:30:30: the finished action asks, the paused flush publishes nothing;
+    the watch after the pause does."""
+    desk, eng, ads, clock, *_ = mkdesk(tmp_path, et=(9, 29))
+    _shows_its_order(ads["a2"])                                   # a2 is not booked to a bot
+
+    async def go():
+        q = desk.subscribe()
+        desk.flush()                                             # baseline, before the pause
+        clock.dt += dt.timedelta(seconds=60)                      # 09:30:00: inside the pause
+        out = await desk.order(dict(LIMIT_A2))
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        during = [e for e, _ in drain(q)]
+        clock.dt += dt.timedelta(seconds=30)                      # 09:30:30: the pause is over
+        desk.flush()                                             # the WATCH_S loop's flush
+        return out, during, [e for e, _ in drain(q)]
+
+    out, during, after = run(go())
+    assert out["results"]["a2"]["ok"] is True
+    assert during == ["state", "result"] and after == ["account"]
+
+
+def test_a_bot_kill_publishes_the_bot_view_at_once(tmp_path):
+    desk, eng, ads, *_ = mkdesk(tmp_path)
+
+    async def go():
+        q = desk.subscribe()
+        desk.flush()
+        await desk.bot_kill({"client_id": "k1", "strategy": "nq930"})
+        await asyncio.sleep(0)
+        return drain(q)
+
+    evs = run(go())
+    assert [e for e, _ in evs] == ["state", "result", "bot"]
+    assert evs[2][1]["strategies"]["nq930"]["killed"] is True
