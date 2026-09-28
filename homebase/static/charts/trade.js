@@ -675,11 +675,15 @@ function lineLabel(g) {
 /* Positions never move (ruling S11: dragging a position's chip draws a NEW exit, never modifies the position); a Stop
    Limit can't be moved (the desk refuses it): cancel and place again. */
 function canDrag(g) { return g.kind !== 'position' && g.type !== 'StopLimit'; }
-/* A position's chip is just side, size and P&L ("LONG 1 · −$20", 2026-09-27: the user's call); its accounts go in the
-   chip's tooltip (lineTitle). Order / SL / TP lines still name theirs. */
+/* A position's chip is just side, size and P&L ("LONG 1 · −$20", 2026-09-27: the user's call), plus "· 2 accts" when it
+   merges several accounts (review of d6bdb2e: its × / exit drag acts on every one of them, so that must show); the
+   account names go in the chip's tooltip (lineTitle). Order / SL / TP lines still name theirs. */
 function lineText(g, last) {
   if (g.kind === 'order') return [lineLabel(g), whoText(g)].join(' · ');
-  if (g.kind === 'position') return [lineLabel(g), usd(linePnl(g, last))].filter(Boolean).join(' · ');
+  if (g.kind === 'position') {
+    const many = new Set(g.legs.map((l) => l.who)).size > 1;
+    return [lineLabel(g), usd(linePnl(g, last)), many ? whoText(g) : null].filter(Boolean).join(' · ');
+  }
   return [lineLabel(g), usd(linePnl(g, last)), whoText(g)].filter(Boolean).join(' · ');
 }
 /* The accounts a line holds, every one by name, for its chip's tooltip: "…041, …047". */
@@ -696,8 +700,9 @@ const withPrice = (g, price) => ({ ...g, price });
 
 /* ---- dragging a position's chip places an exit (2026-09-27, the desk's `exits` action) ----
    Pressing an editable position's chip (not its ×) and dragging it vertically draws a ghost exit line; which one is
-   decided live by the pointer against the position's AVERAGE ENTRY (exitKindAt): a TP on the winning side, an SL on
-   the losing side. Dropping it sends `exits` for the WHOLE position on each of its accounts (the desk / paper book
+   decided live by the pointer against the LAST TRADE (exitKindAt; review of d6bdb2e): for a long, below it is an SL
+   (a stop), above it a TP (a limit) -- the order type the desk places -- so a winning long can also place a
+   break-even / profit-locking stop above its entry; a short mirrored. Dropping it sends `exits` for the WHOLE position on each of its accounts (the desk / paper book
    makes it one OCO pair with an existing half). The position itself never moves (ruling S11).
    exitKinds says which exits may still be added: an SL while none of the position's accounts has a stop-type exit
    line in this root, a TP while none has a limit-type one (an existing SL / TP line is already draggable: move that);
@@ -710,19 +715,24 @@ function exitKinds(g, groups) {
   if (any((x, l) => l.pending === true)) return { sl: false, tp: false, pending: true };
   return { sl: !any((x) => x.kind === 'sl'), tp: !any((x) => x.kind === 'tp'), pending: false };
 }
-/* The exit a drag of position `g` to `price` would place: 'tp' beyond the average entry on the winning side, 'sl' on
-   the losing side, null exactly at it (tick-grid epsilon) or for anything that isn't a position with a price. */
-function exitKindAt(g, price) {
-  if (!g || g.kind !== 'position' || price == null || g.price == null || !Number.isFinite(price) || !Number.isFinite(g.price)) return null;
-  const d = (price - g.price) * (g.side === 'Buy' ? 1 : -1);
+/* The exit a drag of position `g` to `price` would place, against the last trade `last`: for a long an SL (stop) below
+   it and a TP (limit) above it, mirrored for a short; null exactly at it (tick-grid epsilon), with no last trade, or
+   for anything that isn't a position. Like exitDropError, the last known trade at any age counts (a quiet market's
+   trade goes "stale" often: freshQuote's ruling); only no price at all refuses. */
+function exitKindAt(g, price, last) {
+  const ok = (v) => v != null && Number.isFinite(v);
+  if (!g || g.kind !== 'position' || !ok(price) || !ok(last)) return null;
+  const d = (price - last) * (g.side === 'Buy' ? 1 : -1);
   return Math.abs(d) < 1e-9 ? null : d > 0 ? 'tp' : 'sl';
 }
-/* Why that kind of exit can't be added to the position (null = it can): the toast a refused drop shows. */
-function exitRefusal(kinds, kind) {
+/* Why a drop of that kind at that last trade can't go on (null = it can): the toast a refused drop shows. */
+function exitRefusal(kinds, kind, last) {
   if (!kinds || kinds.pending) return 'This position has a pending order — exits wait until it fills or is cancelled';
+  if (last == null || !Number.isFinite(last)) return "No recent price — can't place a stop or target";
+  if (kind !== 'sl' && kind !== 'tp') return 'Drag above or below the price';
   if (kind === 'sl' && !kinds.sl) return 'This position already has a stop — drag the SL line to move it';
   if (kind === 'tp' && !kinds.tp) return 'This position already has a target — drag the TP line to move it';
-  return kind === 'sl' || kind === 'tp' ? null : 'Drag above or below the entry to place an exit';
+  return null;
 }
 /* A press on a position chip is a drag only once the pointer has moved this many px vertically; less is a click,
    which does nothing. */

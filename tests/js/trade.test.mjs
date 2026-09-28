@@ -292,8 +292,8 @@ test('lines: merged positions, SL/TP legs with dollars, plain orders, bots\' ord
   assert.deepEqual(lines.map((g) => g.kind), ['position', 'sl', 'tp', 'order']);
   assert.deepEqual(lines.map((g) => g.editable), [true, true, true, true]);
   assert.deepEqual(lines.map((g) => T.lineText(g, 30910)),
-    ['LONG 3 · +$600', `SL 3 · ${M}$900 · 2 accts`, 'TP 2 · +$1,200 · …041', 'BUY LMT 1 · …041']);
-  assert.equal(T.lineText(lines[0], null), 'LONG 3');
+    ['LONG 3 · +$600 · 2 accts', `SL 3 · ${M}$900 · 2 accts`, 'TP 2 · +$1,200 · …041', 'BUY LMT 1 · …041']);
+  assert.equal(T.lineText(lines[0], null), 'LONG 3 · 2 accts');
   assert.equal(T.lineTitle(lines[0]), '…041, …047', 'the accounts go in the chip\'s tooltip');
   assert.deepEqual(lines[1].legs.map((l) => [l.account, l.order_id]), [['sim041', '11'], ['sim047', '21']]);
   assert.deepEqual(lines.map((g) => T.lineColor(g, P)), [P.up, P.down, P.up, P.accent]);
@@ -307,7 +307,7 @@ test('lines no account may manage (desk down / off, replay): every account\'s li
   const lines = T.linesFor(STATE, 'NQ', []);
   assert.deepEqual(lines.map((g) => g.editable), [false, false, false, false]);
   assert.deepEqual(lines.map((g) => T.lineText(g, 30910)),
-    ['LONG 3 · +$600', `SL 3 · ${M}$900 · 2 accts`, 'TP 2 · +$1,200 · …041', 'BUY LMT 1 · …041']);
+    ['LONG 3 · +$600 · 2 accts', `SL 3 · ${M}$900 · 2 accts`, 'TP 2 · +$1,200 · …041', 'BUY LMT 1 · …041']);
   assert.deepEqual(T.linesFor(STATE, 'NQ', undefined).map((g) => g.editable), [false, false, false, false]);
   assert.deepEqual(T.linesFor(STATE, 'ES', []).map((g) => T.lineText(g, 6490)), ['SHORT 1 · +$500']);
 });
@@ -1477,9 +1477,9 @@ test('exit kinds: SL only without an SL line on the position\'s accounts, TP onl
   assert.deepEqual(T.exitKinds(null, g3), { sl: false, tp: false, pending: false });
 });
 
-test('position chip text: side, size and P&L only -- no account name, whatever the accounts (the user\'s call)', () => {
+test('position chip text: side, size and P&L -- no account name; "· N accts" when it merges several (review of d6bdb2e)', () => {
   const pos = T.linesFor(STATE, 'NQ', ['sim041', 'sim047']).find((g) => g.kind === 'position');   // long 3 @ 30,900
-  assert.equal(T.lineText(pos, 30899), `LONG 3 · ${M}$60`);
+  assert.equal(T.lineText(pos, 30899), `LONG 3 · ${M}$60 · 2 accts`);
   const one = { ...pos, qty: 1, legs: [{ ...pos.legs[0], who: 'testing', qty: 1 }] };
   assert.equal(T.lineText(one, 30899), `LONG 1 · ${M}$20`);
   assert.equal(T.lineTitle(one), 'testing');
@@ -1488,36 +1488,45 @@ test('position chip text: side, size and P&L only -- no account name, whatever t
   assert.equal(T.lineText(T.exitGhost(pos, 'sl', 30885), null), `SL 3 · ${M}$900 · 2 accts`);
 });
 
-test('exit kind by side: a long takes a TP above its average entry and an SL below; a short the mirror; none at entry', () => {
+test('exit kind by side vs the LAST TRADE: a long takes an SL below it and a TP above; a short the mirror; none at it', () => {
   const long = T.linesFor(STATE, 'NQ', ['sim041', 'sim047']).find((g) => g.kind === 'position');   // long @ 30,900
   const short = T.linesFor(STATE, 'ES', ['live099']).find((g) => g.kind === 'position');          // short @ 6,500
-  assert.deepEqual([30900.25, 30899.75, 30900].map((p) => T.exitKindAt(long, p)), ['tp', 'sl', null]);
-  assert.deepEqual([6499.75, 6500.25, 6500].map((p) => T.exitKindAt(short, p)), ['tp', 'sl', null]);
-  // crossing the entry switches the kind, in both directions
-  assert.deepEqual([30910, 30901, 30900, 30899, 30890, 30905].map((p) => T.exitKindAt(long, p)), ['tp', 'tp', null, 'sl', 'sl', 'tp']);
-  assert.deepEqual([6490, 6510].map((p) => T.exitKindAt(short, p)), ['tp', 'sl']);
-  assert.equal(T.exitKindAt({ ...long, price: 64.01 }, 64.01 + 0), null);
-  assert.equal(T.exitKindAt({ ...long, price: 0.1 + 0.2 }, 0.3), null, 'float noise is not a side');
-  // it follows the AVERAGE entry, never the last trade
-  assert.equal(T.exitKindAt({ ...long, price: 30900.37 }, 30900.25), 'sl');
+  assert.deepEqual([30910.25, 30909.75, 30910].map((p) => T.exitKindAt(long, p, 30910)), ['tp', 'sl', null]);
+  assert.deepEqual([6489.75, 6490.25, 6490].map((p) => T.exitKindAt(short, p, 6490)), ['tp', 'sl', null]);
+  // a winning long can place a break-even / profit-locking STOP above its entry (the old entry rule made it a TP)
+  assert.equal(T.exitKindAt(long, 30905, 30910), 'sl');
+  // a losing long's target can sit below its entry
+  assert.equal(T.exitKindAt(long, 30895, 30890), 'tp');
+  // crossing the last trade switches the kind, both ways
+  assert.deepEqual([30920, 30911, 30910, 30909, 30890, 30915].map((p) => T.exitKindAt(long, p, 30910)), ['tp', 'tp', null, 'sl', 'sl', 'tp']);
+  assert.deepEqual([6480, 6510].map((p) => T.exitKindAt(short, p, 6490)), ['tp', 'sl']);
+  assert.equal(T.exitKindAt(long, 0.3, 0.1 + 0.2), null, 'float noise is not a side');
+  // the kind always agrees with the side check addExit runs (exitDropError), for both sides
+  for (const [g, last] of [[long, 30910], [short, 6490]]) for (const d of [-2, -0.25, 0.25, 2]) {
+    const p = last + d, k = T.exitKindAt(g, p, last);
+    assert.equal(T.exitDropError(g, k, p, last), null, `${g.side} ${k} @ ${p}`);
+  }
   const order = T.linesFor(STATE, 'NQ', ['sim041']).find((g) => g.kind === 'order');
-  assert.deepEqual([T.exitKindAt(order, 1), T.exitKindAt(null, 1), T.exitKindAt(long, null), T.exitKindAt(long, NaN)], [null, null, null, null]);
+  assert.deepEqual([T.exitKindAt(order, 1, 2), T.exitKindAt(null, 1, 2), T.exitKindAt(long, null, 2), T.exitKindAt(long, NaN, 2),
+    T.exitKindAt(long, 30900, null), T.exitKindAt(long, 30900, NaN)], [null, null, null, null, null, null]);
 });
 
-test('exit refusal: a kind the position already has, or a pending order, is refused with a reason; a free one is not', () => {
+test('exit refusal: a kind the position already has, a pending order, no last trade or a drop at it is refused with a reason', () => {
   const free = { sl: true, tp: true, pending: false };
-  assert.equal(T.exitRefusal(free, 'sl'), null);
-  assert.equal(T.exitRefusal(free, 'tp'), null);
-  assert.equal(T.exitRefusal({ sl: false, tp: true, pending: false }, 'sl'), 'This position already has a stop — drag the SL line to move it');
-  assert.equal(T.exitRefusal({ sl: false, tp: true, pending: false }, 'tp'), null);
-  assert.equal(T.exitRefusal({ sl: true, tp: false, pending: false }, 'tp'), 'This position already has a target — drag the TP line to move it');
-  assert.match(T.exitRefusal({ sl: false, tp: false, pending: true }, 'tp'), /pending order/);
-  assert.match(T.exitRefusal(null, 'sl'), /pending order/, 'no kinds: fail closed');
-  assert.ok(T.exitRefusal(free, null), 'no kind (at the entry): nothing to place');
+  assert.equal(T.exitRefusal(free, 'sl', 100), null);
+  assert.equal(T.exitRefusal(free, 'tp', 100), null);
+  assert.equal(T.exitRefusal({ sl: false, tp: true, pending: false }, 'sl', 100), 'This position already has a stop — drag the SL line to move it');
+  assert.equal(T.exitRefusal({ sl: false, tp: true, pending: false }, 'tp', 100), null);
+  assert.equal(T.exitRefusal({ sl: true, tp: false, pending: false }, 'tp', 100), 'This position already has a target — drag the TP line to move it');
+  assert.match(T.exitRefusal({ sl: false, tp: false, pending: true }, 'tp', 100), /pending order/);
+  assert.match(T.exitRefusal(null, 'sl', 100), /pending order/, 'no kinds: fail closed');
+  assert.equal(T.exitRefusal(free, null, null), "No recent price — can't place a stop or target");
+  assert.equal(T.exitRefusal(free, 'sl', NaN), "No recent price — can't place a stop or target");
+  assert.equal(T.exitRefusal(free, null, 100), 'Drag above or below the price');
   // wired to the desk's lines: …041 has both, …047 an SL -> the merged long refuses both
   const groups = T.linesFor(STATE, 'NQ', ['sim041', 'sim047']);
   const kinds = T.exitKinds(groups.find((g) => g.kind === 'position'), groups);
-  assert.ok(T.exitRefusal(kinds, 'sl') && T.exitRefusal(kinds, 'tp'));
+  assert.ok(T.exitRefusal(kinds, 'sl', 100) && T.exitRefusal(kinds, 'tp', 100));
 });
 
 test('exit drag click threshold: under EXIT_DRAG_PX of vertical movement is a click (nothing), at or past it a drag', () => {

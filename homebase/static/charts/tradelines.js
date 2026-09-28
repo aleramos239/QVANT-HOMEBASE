@@ -3,8 +3,8 @@
      - the Buy/Sell block under the legend, bid/ask "as of last trade" (ruling S10);
      - position / order / SL / TP lines (native price lines) with DOM chips that carry their text and a ×
        (ruling S8), draggable by the chip's text (order/SL/TP); a position never moves (ruling S11): dragging an
-       editable position's chip draws a ghost exit line instead -- a TP past its average entry on the winning side, an
-       SL on the losing side (HBTrade.exitKindAt) -- and, on release, places that exit for the whole position
+       editable position's chip draws a ghost exit line instead -- for a long an SL below the last trade and a TP
+       above it, mirrored for a short (HBTrade.exitKindAt) -- and, on release, places that exit for the whole position
        (HBTradeUI.addExit -> the desk's `exits`); a position chip reads just "LONG 1 · −$20";
      - the execution arrows: small horizontal arrows at each fill's price, drawn by a canvas primitive (ExecArrows)
        -- never the shared series markers (ruling S22; TradingView's shape since 2026-09-27).
@@ -595,10 +595,10 @@ class Overlay {
   }
 
   /* A position chip pressed (its text, not the ×) and dragged vertically: a ghost exit line follows the pointer
-     (tick-snapped, labelled with the whole position's projected P&L), a TP on the winning side of the average entry
-     and an SL on the losing side, switching as it crosses the entry (HBTrade.exitKindAt). A kind the position can't
-     take (it already has one, or a pending order blocks exits: HBTrade.exitKinds) shows struck through and its drop
-     only toasts why. Less than EXIT_DRAG_PX of vertical movement is a click: nothing. A drop inside the price pane
+     (tick-snapped, labelled with the whole position's projected P&L), for a long an SL below the last trade and a TP
+     above it (mirrored for a short), switching as it crosses that price (HBTrade.exitKindAt). A kind the position
+     can't take (it already has one, or a pending order blocks exits: HBTrade.exitKinds), no last trade, or a drop
+     exactly at it shows struck through and its drop only toasts why (HBTrade.exitRefusal). Less than EXIT_DRAG_PX of vertical movement is a click: nothing. A drop inside the price pane
      hands the exit to HBTradeUI.addExit (the side check against the last trade, the confirm and the send). Esc,
      pointercancel, a lost capture, window blur or the buttons gone cancel it and the ghost goes (LWC 5.2.1 delivers
      mouse events only: every exit path is ours). The position itself never moves (ruling S11). */
@@ -614,7 +614,7 @@ class Overlay {
     const kinds = kindsNow();
     let price = null, kind = null, moved = false, outside = true;   // nothing to send until the pointer has been inside the pane
     const line = c.candles.createPriceLine({ price: it.g.price, color: c.P.down, lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: '' });
-    line.applyOptions({ lineVisible: false, axisLabelVisible: false });   // shown once it has a price and a kind
+    line.applyOptions({ lineVisible: false, axisLabelVisible: false });   // shown once it has a price of its own
     const chip = mk('div', 'tl-chip ghost');
     chip.text = mk('span', 'tl-text');
     chip.append(chip.text);
@@ -633,19 +633,15 @@ class Overlay {
       const raw = c.candles.coordinateToPrice(y);
       if (raw == null) return;
       price = window.HBDrawings.roundToTick(raw, c.tick);
-      kind = T.exitKindAt(it.g, price);
-      if (!kind) {                                      // exactly at the entry: no exit either way
-        line.applyOptions({ lineVisible: false, axisLabelVisible: false });
-        this.ghost.price = null;
-        this.sync();
-        return;
-      }
-      const color = kind === 'sl' ? c.P.down : c.P.up;
+      const q = window.HBDeskClient.quotes[this.root], last = q ? q.last : null;
+      kind = T.exitKindAt(it.g, price, last);
+      const refused = T.exitRefusal(kinds, kind, last);
+      const color = kind === 'sl' ? c.P.down : kind === 'tp' ? c.P.up : c.P.accent;
       line.applyOptions({ price, color, lineVisible: true, axisLabelVisible: true });
       chip.style.setProperty('--c', color);
-      const q = window.HBDeskClient.quotes[this.root];
-      chip.text.textContent = T.lineText(T.exitGhost(it.g, kind, price), q ? q.last : null);
-      chip.classList.toggle('bad', !!T.exitRefusal(kinds, kind) || !!T.exitDropError(it.g, kind, price, q ? q.last : null));
+      chip.text.textContent = kind ? T.lineText(T.exitGhost(it.g, kind, price), last)
+        : last == null || !Number.isFinite(last) ? 'No price' : 'At price';
+      chip.classList.toggle('bad', !!refused || (!!kind && !!T.exitDropError(it.g, kind, price, last)));
       this.ghost.price = price;
       this.sync();
     };
@@ -661,8 +657,11 @@ class Overlay {
       this.ghost = null;
       this.dragging = null;
       this.endDrag = null;
-      if (commit && moved && !outside && price != null && kind && !this.dead) {
-        const refused = T.exitRefusal(kindsNow(), kind);   // the desk's lines may have changed mid-drag
+      if (commit && moved && !outside && price != null && !this.dead) {
+        // the desk's lines and the last trade may have changed mid-drag: decide on what they are now
+        const q = window.HBDeskClient.quotes[this.root], last = q ? q.last : null;
+        kind = T.exitKindAt(it.g, price, last);
+        const refused = T.exitRefusal(kindsNow(), kind, last);
         if (refused) window.HBDeskClient.toast('err', refused);
         else window.HBTradeUI.addExit(c, it.g, kind, price, c.shown.root, c.tick, { onCancel: () => this.render() });
       }
