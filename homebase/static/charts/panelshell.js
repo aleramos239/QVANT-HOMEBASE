@@ -320,6 +320,11 @@ function relayout() {
 function setOpen(id, v) {
   v = !!v;
   if (state.panels[id].open === v) return;
+  // no rAF loop left running on a panel this is about to close (detachClosed() removes its element from the
+  // DOM right after -- nothing would ever stop it otherwise), and no stale spring left to fight a reopen
+  // (coordinator review, 2026-09-28).
+  stopFloatAnim(id);
+  stopFlipAnim(id);
   state.panels[id] = { ...state.panels[id], open: v };
   if (v) ensureBuilt(id);
   relayout();
@@ -331,6 +336,8 @@ function toggle(id) { setOpen(id, !state.panels[id].open); }
 function setDocked(id, docked) {
   docked = !!docked;
   if (state.panels[id].docked === docked) return;
+  stopFloatAnim(id);   // same reasoning as setOpen above -- this is about to override left/top (float) or
+  stopFlipAnim(id);    // hand the element to flex layout entirely (dock); neither should still be racing a spring
   if (!docked) {
     const dr = dockEl.getBoundingClientRect();
     const seed = { x: Math.max(0, dr.left - 40), y: dr.top + 40, w: state.panels[id].w, h: state.panels[id].h };

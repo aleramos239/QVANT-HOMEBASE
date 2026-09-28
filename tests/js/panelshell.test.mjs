@@ -176,6 +176,28 @@ test('onWindowResize: a panel that needs no correction is left alone (nothing sp
   assert.equal(env.stopSpies.length, before);
 });
 
+test('setOpen(id, false): stops a panel\'s own in-flight settle spring before closing it (no rAF loop left running on a removed element)', () => {
+  const env = makeEnv();
+  const { HBPanelShell: shell } = env.window;
+  shell.setOpen('order', true);
+  shell.setDocked('order', false);
+  dragFloatingHeader(env, 'order', 150, 30);   // seeds a live settleFloat() spring
+  const before = env.stopSpies.length;
+  shell.setOpen('order', false);
+  assert.ok(env.stopSpies.length > before, 'closing the panel should have stopped its own settle spring');
+});
+
+test('setDocked(id, true): stops a floating panel\'s in-flight settle spring before handing it to the dock', () => {
+  const env = makeEnv();
+  const { HBPanelShell: shell } = env.window;
+  shell.setOpen('order', true);
+  shell.setDocked('order', false);
+  dragFloatingHeader(env, 'order', 150, 30);   // seeds a live settleFloat() spring
+  const before = env.stopSpies.length;
+  shell.setDocked('order', true);
+  assert.ok(env.stopSpies.length > before, 're-docking should have stopped the still-running float spring, not raced it');
+});
+
 test('the dock width grip drops its own release snap-back class on a fresh grab (a re-grab must track 1:1, not inherit the CSS transition)', () => {
   const env = makeEnv();
   const { HBPanelShell: shell } = env.window;
