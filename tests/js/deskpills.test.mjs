@@ -27,7 +27,8 @@ test('ARMED, LIVE, in position and ON each have their own, different look', () =
   const armed = rule('.pill.armed'), live = rule('.tag-live'), inpos = rule('.pill.inpos'), on = rule('.pill.on');
   assert.match(armed, /background:color-mix\(in oklch, var\(--destructive\)/, 'ARMED is filled red');
   assert.match(rule('.pill.armed::before'), /border-radius:9999px/, 'ARMED carries a light');
-  assert.match(live, /background:transparent/, 'LIVE is an outline, never filled');
+  assert.match(live, /background:var\(--card\)/, 'LIVE is an outline, never filled with red (solid card behind it on the glass)');
+  assert.doesNotMatch(live, /background:[^;]*destructive/);
   assert.match(live, /border:1px solid color-mix\(in oklch, var\(--destructive\)/);
   assert.match(inpos, /background:var\(--primary\)/, 'a position is solid black/white, not red');
   assert.doesNotMatch(inpos, /destructive|--neg/);

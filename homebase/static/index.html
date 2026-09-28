@@ -18,15 +18,68 @@
 <style>
   /* Page chrome — same language as the TradeCopier app: B&W chrome, the only
      hues are --pos/--neg for P&L-grade data, shadcn tokens for everything. */
+
+  /* ---- frosted glass + materialize (2026-09-28 glass pass) ----
+     The charts page's glass tokens (its feel pass: .50 / heavy .62, blur 20 / 30px, saturate
+     190%; dark .46 / .58, 170%), tinted toward this page's own card colour -- Apple's "materials
+     tint toward the surface they sit on". Two weights, "bigger surfaces read thicker": the plain
+     one for the sticky top bar, the cards and the toast; -heavy (more blur, a deeper shadow) for a
+     dialog and the + Assign menu that floats over a card. A dialog dims what is behind it (--scrim);
+     the menu and the toast never do. The page sits on a very faint tinted wash so the material has
+     something to read against. Money never goes translucent: ARMED, the LIVE tag and Kill are
+     solid chips on the glass, and text on glass gets a little more contrast (--glass-text-2). */
+  :root, :root[data-theme="light"]{
+    --glass-bg: color-mix(in srgb, var(--card) 50%, transparent);
+    --glass-bg-heavy: color-mix(in srgb, var(--card) 62%, transparent);
+    --glass-edge: rgb(255 255 255 / .85);
+    --glass-blur: 20px; --glass-blur-heavy: 30px; --glass-saturate: 190%;
+    --glass-shadow: 0 1px 2px rgb(0 0 0 / .04), 0 6px 20px rgb(0 0 0 / .05);
+    --glass-shadow-float: 0 2px 8px rgb(0 0 0 / .10), 0 10px 28px rgb(0 0 0 / .12);
+    --glass-shadow-heavy: 0 4px 12px rgb(0 0 0 / .10), 0 24px 64px rgb(0 0 0 / .26);
+    --glass-text-2: color-mix(in srgb, var(--muted-foreground) 55%, var(--foreground));
+    --scrim: rgb(0 0 0 / .25);
+    --page-wash: radial-gradient(1200px 720px at 0% 0%, oklch(0.93 0.03 250 / .55), transparent 62%),
+      radial-gradient(1000px 760px at 100% 100%, oklch(0.94 0.025 200 / .45), transparent 60%);
+    /* spring-SHAPED curves (critically damped, no overshoot), the charts page's: -out to arrive and
+       settle, the faster -in to leave */
+    --ease-spring-out: cubic-bezier(0.23, 1, 0.32, 1);
+    --ease-spring-in: cubic-bezier(0.4, 0, 1, 1);
+  }
+  :root[data-theme="dark"]{
+    --glass-bg: color-mix(in srgb, var(--card) 46%, transparent);
+    --glass-bg-heavy: color-mix(in srgb, var(--card) 58%, transparent);
+    --glass-edge: rgb(255 255 255 / .10); --glass-saturate: 170%;
+    --glass-shadow: 0 0 0 1px rgb(255 255 255 / .03), 0 6px 20px rgb(0 0 0 / .35);
+    --glass-shadow-float: 0 0 0 1px rgb(255 255 255 / .05), 0 10px 28px rgb(0 0 0 / .5);
+    --glass-shadow-heavy: 0 0 0 1px rgb(255 255 255 / .06), 0 24px 64px rgb(0 0 0 / .6);
+    --scrim: rgb(0 0 0 / .5);
+    --page-wash: radial-gradient(1200px 720px at 0% 0%, oklch(0.30 0.05 250 / .45), transparent 62%),
+      radial-gradient(1000px 760px at 100% 100%, oklch(0.28 0.04 200 / .35), transparent 60%);
+  }
   html, body { height: 100%; }
   body { margin: 0; background: var(--background); color: var(--foreground);
          font-family: var(--font-sans); font-size: 14px; line-height: 1.45; }
 
-  .app-shell{ display:flex; height:100vh; overflow:hidden; background:var(--background); }
-  .app-main{ flex:1; min-width:0; display:flex; flex-direction:column; overflow:hidden; }
+  .app-shell{ display:flex; height:100vh; overflow:hidden; background:var(--page-wash), var(--background); }
+  /* the column scrolls, and the top bar sticks to it: content passes UNDER the glass */
+  .app-main{ flex:1; min-width:0; display:flex; flex-direction:column; overflow-x:hidden; overflow-y:auto; }
   .inset-topbar{ display:flex; align-items:center; gap:10px; height:52px; padding:0 20px;
-    border-bottom:1px solid var(--border); flex-shrink:0; }
-  .scroll{ flex:1; overflow:auto; padding:22px 24px 48px; }
+    border-bottom:1px solid var(--border); flex-shrink:0;
+    /* z 48: above a lifted card (45) -- nothing on the page ever covers Arm / Disarm / Kill --
+       and below every dialog's scrim (50+) */
+    position:sticky; top:0; z-index:48; background:var(--glass-bg);
+    backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    -webkit-backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    border-top:1px solid var(--glass-edge); --muted-foreground:var(--glass-text-2); }
+  .scroll{ flex:1 0 auto; padding:22px 24px 48px; }
+  /* frosted cards (strategies, accounts, the activity log) */
+  .card{ background:var(--glass-bg);
+    backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    -webkit-backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    border-top-color:var(--glass-edge); box-shadow:var(--glass-shadow); --muted-foreground:var(--glass-text-2); }
+  /* a card is its own stacking context now (backdrop-filter): one holding an open + Assign menu is
+     lifted, or the next card would paint over the part of the menu that hangs below it */
+  .card:has(.amenu:not([hidden])){ position:relative; z-index:45; }
   .view-wrap{ max-width:980px; margin:0 auto; }
   .spacer{ flex:1; }
 
@@ -44,7 +97,7 @@
   .pill.armed::before{ content:""; width:7px; height:7px; border-radius:9999px; background:currentColor; }
   .tag-live{ display:inline-flex; align-items:center; white-space:nowrap; line-height:1.2;
     border:1px solid color-mix(in oklch, var(--destructive) 60%, transparent); border-radius:3px;
-    background:transparent; color:var(--destructive); padding:1px 5px;
+    background:var(--card); color:var(--destructive); padding:1px 5px;   /* solid on the glass card */
     font-size:10px; font-weight:700; letter-spacing:.06em; }
   .pill.inpos{ background:var(--primary); color:var(--primary-foreground); font-weight:600; }
   .pill.on{ background:transparent; border-color:var(--foreground); color:var(--foreground); }
@@ -71,11 +124,11 @@
   /* press-and-hold (the top bar's Kill) — the copier's hold-to-confirm pattern, revived: a
      ring fills while the button is held (--hold-ms, set from HOLD_MS); letting go early
      cancels and the ring runs back. */
-  .btn-kill{ background:transparent; color:var(--destructive); font-weight:600;
+  .btn-kill{ background:var(--card); color:var(--destructive); font-weight:600;   /* solid on the glass bar */
     border-color:color-mix(in oklch, var(--destructive) 55%, transparent); }
-  .btn-kill:hover{ background:color-mix(in oklch, var(--destructive) 8%, transparent); }
+  .btn-kill:hover{ background:color-mix(in oklch, var(--destructive) 8%, var(--card)); }
   .holdbtn{ position:relative; touch-action:none; -webkit-user-select:none; user-select:none; }
-  .holdbtn.holding{ background:color-mix(in oklch, var(--destructive) 14%, transparent); }
+  .holdbtn.holding{ background:color-mix(in oklch, var(--destructive) 14%, var(--card)); }
   .holdbtn .hold-ring{ width:16px; height:16px; transform:rotate(-90deg); }
   .holdbtn .hold-ring circle{ fill:none; stroke-width:2.5; }
   .holdbtn .hold-track{ stroke:color-mix(in oklch, currentColor 25%, transparent); }
@@ -159,10 +212,21 @@
   .clock{ font-family:var(--font-mono); font-size:12px; color:var(--muted-foreground);
     white-space:nowrap; }
   @media (max-width:860px){ .clock{ display:none; } }
-  #toast{ position:fixed; bottom:18px; left:50%; transform:translateX(-50%);
-    background:var(--card); color:var(--card-foreground); border:1px solid var(--border);
-    border-radius:var(--radius-md); padding:10px 16px; font-size:12.5px; display:none;
-    max-width:80%; font-family:var(--font-mono); box-shadow:0 4px 24px rgb(0 0 0 / .18); }
+  #toast{ position:fixed; bottom:18px; left:50%; z-index:80;
+    background:var(--glass-bg); color:var(--card-foreground); border:1px solid var(--border);
+    backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    -webkit-backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    border-top-color:var(--glass-edge); border-radius:var(--radius-md); padding:10px 16px; font-size:12.5px;
+    max-width:80%; font-family:var(--font-mono); box-shadow:var(--glass-shadow-float);
+    --muted-foreground:var(--glass-text-2);
+    /* materialize out of the bottom edge and back into it, the same path both ways */
+    transform-origin:50% 100%; visibility:hidden; opacity:0; pointer-events:none;
+    transform:translateX(-50%) translateY(8px) scale(.97); filter:blur(4px);
+    transition:opacity 120ms var(--ease-spring-in), transform 120ms var(--ease-spring-in),
+      filter 120ms var(--ease-spring-in), visibility 0s linear 120ms; }
+  #toast.show{ visibility:visible; opacity:1; pointer-events:auto; transform:translateX(-50%); filter:none;
+    transition:opacity 160ms var(--ease-spring-out), transform 160ms var(--ease-spring-out),
+      filter 160ms var(--ease-spring-out), visibility 0s; }
 
   /* connect modal */
   .bulb{ width:13px; height:13px; border-radius:50%; display:inline-block;
@@ -184,12 +248,26 @@
     align-self:center; }
   .chk .lbl{ font-weight:600; min-width:150px; }
   .chk .det{ color:var(--muted-foreground); }
-  .overlay{ position:fixed; inset:0; background:rgb(0 0 0 / .45); display:none;
-    align-items:center; justify-content:center; z-index:50; }
-  .overlay.open{ display:flex; }
-  .modal{ background:var(--card); color:var(--card-foreground); border:1px solid var(--border);
+  /* A dialog: the scrim dims what is behind it, the box is heavy glass that materializes out of
+     whatever opened it (transform-origin set at open) and leaves back along the same path. Open is
+     live at once -- visible and clickable immediately, the motion never gates a button. Closing,
+     the box is inert at once (hideOverlay) while it fades, and the scrim keeps swallowing clicks
+     until it is gone, so a double click can't land on the page beneath. */
+  .overlay{ position:fixed; inset:0; background:var(--scrim); display:flex;
+    align-items:center; justify-content:center; z-index:50; visibility:hidden; opacity:0;
+    transition:opacity 130ms var(--ease-spring-in), visibility 0s linear 130ms; }
+  .overlay.open{ visibility:visible; opacity:1; z-index:51;   /* over one still fading out */
+    transition:opacity 180ms var(--ease-spring-out), visibility 0s; }
+  .modal{ background:var(--glass-bg-heavy); color:var(--card-foreground); border:1px solid var(--border);
+    backdrop-filter:blur(var(--glass-blur-heavy)) saturate(var(--glass-saturate));
+    -webkit-backdrop-filter:blur(var(--glass-blur-heavy)) saturate(var(--glass-saturate));
+    border-top-color:var(--glass-edge); --muted-foreground:var(--glass-text-2);
     border-radius:var(--radius-lg); width:380px; max-width:92vw; padding:22px;
-    box-shadow:0 12px 40px rgb(0 0 0 / .28); }
+    box-shadow:var(--glass-shadow-heavy); }
+  .overlay .modal{ transform:scale(.96); filter:blur(6px);
+    transition:transform 130ms var(--ease-spring-in), filter 130ms var(--ease-spring-in); }
+  .overlay.open .modal{ transform:none; filter:none;
+    transition:transform 180ms var(--ease-spring-out), filter 180ms var(--ease-spring-out); }
   .modal h2{ margin:0 0 4px; font-size:1.05rem; font-weight:600; letter-spacing:-.01em; }
   .modal .sub{ margin:0 0 16px; font-size:12.5px; color:var(--muted-foreground); }
   .field{ margin-bottom:12px; }
@@ -264,9 +342,14 @@
     padding:4px 8px; font-size:12.5px; }
   .asg input{ width:52px; font-family:var(--font-mono); }
   .amenu{ position:absolute; top:calc(100% + 6px); left:0; z-index:40;
-    background:var(--card); border:1px solid var(--border);
-    border-radius:var(--radius-md); box-shadow:0 6px 24px rgb(0 0 0 / .14);
-    min-width:200px; padding:4px; }
+    background:var(--glass-bg-heavy); border:1px solid var(--border); border-top-color:var(--glass-edge);
+    backdrop-filter:blur(var(--glass-blur-heavy)) saturate(var(--glass-saturate));
+    -webkit-backdrop-filter:blur(var(--glass-blur-heavy)) saturate(var(--glass-saturate));
+    border-radius:var(--radius-md); box-shadow:var(--glass-shadow-float);
+    min-width:200px; padding:4px; transform-origin:0 0; }
+  .amenu:not([hidden]){ animation:hb-materialize 160ms var(--ease-spring-out); }
+  @keyframes hb-materialize{ from{ opacity:0; transform:scale(.95); filter:blur(4px); } }
+  @keyframes hb-fade{ from{ opacity:0; } }
   .amenu .mi2{ display:block; width:100%; text-align:left; border:none;
     background:none; color:var(--foreground); font-size:13px; padding:7px 10px;
     border-radius:var(--radius-sm); cursor:pointer; }
@@ -341,6 +424,27 @@
     *,*::before,*::after{ animation-duration:.01ms !important; transition-duration:.01ms !important; }
     /* the Kill ring is the hold's progress (how long to keep holding), not decoration: it keeps its pace */
     .holdbtn.holding .hold-fill{ transition-duration:var(--hold-ms, 1000ms) !important; }
+    /* surfaces: a short cross-fade only -- no scale, no blur, no travel */
+    .overlay{ transition:opacity 120ms ease, visibility 0s linear 120ms !important; }
+    .overlay.open{ transition:opacity 120ms ease, visibility 0s !important; }
+    .overlay .modal, .overlay.open .modal{ transform:none !important; filter:none !important; }
+    #toast{ transform:translateX(-50%) !important; filter:none !important;
+      transition:opacity 120ms ease, visibility 0s linear 120ms !important; }
+    #toast.show{ transition:opacity 120ms ease, visibility 0s !important; }
+    .amenu:not([hidden]){ animation:hb-fade 120ms ease !important; }
+  }
+  /* reduced transparency: every glass surface goes solid; more contrast: solid with a defined border */
+  @media (prefers-reduced-transparency: reduce){
+    .app-shell, .inset-topbar{ background:var(--background); }
+    .card, .modal, .amenu, #toast{ background:var(--card); }
+    .inset-topbar, .card, .modal, .amenu, #toast{ backdrop-filter:none; -webkit-backdrop-filter:none;
+      border-top-color:var(--border); }
+  }
+  @media (prefers-contrast: more){
+    .app-shell, .inset-topbar{ background:var(--background); }
+    .card, .modal, .amenu, #toast{ background:var(--card); border-color:var(--foreground); }
+    .inset-topbar{ border-top-color:transparent; border-bottom-color:var(--foreground); }
+    .inset-topbar, .card, .modal, .amenu, #toast{ backdrop-filter:none; -webkit-backdrop-filter:none; }
   }
   @media (max-width:720px){ .brand-tag{ display:none; } }
   @media (max-width:560px){
@@ -422,7 +526,7 @@
 </div>
 
 <div class="overlay" id="connectOverlay">
-  <div class="modal" style="width:440px" role="dialog" aria-modal="true" tabindex="-1" aria-label="Add an account">
+  <div class="modal" style="width:440px" role="dialog" aria-modal="true" tabindex="-1" inert aria-label="Add an account">
     <div class="wsteps">
       <span class="st" id="ws1"><span class="n">1</span>Broker</span><span class="ln"></span>
       <span class="st" id="ws2"><span class="n">2</span>Log in</span><span class="ln"></span>
@@ -513,7 +617,7 @@
 </div>
 
 <div class="overlay" id="resOverlay">
-  <div class="modal" style="width:600px" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="resName">
+  <div class="modal" style="width:600px" role="dialog" aria-modal="true" tabindex="-1" inert aria-labelledby="resName">
     <div class="cal-head">
       <span style="font-weight:600" id="resName">—</span>
       <span style="font-size:12px;color:var(--muted-foreground)" id="resSource"></span>
@@ -528,7 +632,7 @@
 </div>
 
 <div class="overlay" id="confirmOverlay" style="z-index:70">
-  <div class="modal" style="width:400px" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="cfTitle" aria-describedby="cfBody">
+  <div class="modal" style="width:400px" role="dialog" aria-modal="true" tabindex="-1" inert aria-labelledby="cfTitle" aria-describedby="cfBody">
     <h2 id="cfTitle" style="margin:0 0 6px;font-size:1.05rem;font-weight:600"></h2>
     <p id="cfBody" class="sub" style="margin:0 0 16px;font-size:13px;color:var(--muted-foreground)"></p>
     <div class="row-btns">
@@ -539,7 +643,7 @@
 </div>
 
 <div class="overlay" id="settingsOverlay">
-  <div class="modal" style="width:440px" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="settingsTitle">
+  <div class="modal" style="width:440px" role="dialog" aria-modal="true" tabindex="-1" inert aria-labelledby="settingsTitle">
     <div class="cal-head">
       <span style="font-weight:600" id="settingsTitle">Settings</span>
       <span class="spacer" style="flex:1"></span>
@@ -553,7 +657,7 @@
 </div>
 
 <div class="overlay" id="acctOverlay">
-  <div class="modal" style="width:780px;max-width:94vw" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="acctTitle">
+  <div class="modal" style="width:780px;max-width:94vw" role="dialog" aria-modal="true" tabindex="-1" inert aria-labelledby="acctTitle">
     <div class="cal-head">
       <span style="font-weight:600" id="acctTitle">Accounts</span>
       <span style="font-size:12px;color:var(--muted-foreground)" id="acctCount"></span>
@@ -567,7 +671,7 @@
 </div>
 
 <div class="overlay" id="algoOverlay">
-  <div class="modal" style="width:640px;max-width:94vw" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="algoTitle">
+  <div class="modal" style="width:640px;max-width:94vw" role="dialog" aria-modal="true" tabindex="-1" inert aria-labelledby="algoTitle">
     <div class="cal-head">
       <span style="font-weight:600" id="algoTitle">Manage algos</span>
       <span style="font-size:12px;color:var(--muted-foreground)" id="algoCount"></span>
@@ -581,7 +685,7 @@
 </div>
 
 <div class="overlay" id="liveOverlay">
-  <div class="modal" style="width:640px;max-width:94vw" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="liveName">
+  <div class="modal" style="width:640px;max-width:94vw" role="dialog" aria-modal="true" tabindex="-1" inert aria-labelledby="liveName">
     <div class="cal-head">
       <span style="font-weight:600" id="liveName">—</span>
       <span style="font-size:12px;color:var(--muted-foreground)" id="liveSince"></span>
@@ -599,7 +703,7 @@
 </div>
 
 <div class="overlay" id="checksOverlay">
-  <div class="modal" style="width:560px" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="checksTitle">
+  <div class="modal" style="width:560px" role="dialog" aria-modal="true" tabindex="-1" inert aria-labelledby="checksTitle">
     <div class="cal-head">
       <span class="bulb" id="bulbBig" style="cursor:default"></span>
       <span style="font-weight:600" id="checksTitle">System checks</span>
@@ -613,7 +717,7 @@
 </div>
 
 <div class="overlay" id="pineOverlay">
-  <div class="modal" style="width:680px" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="pineName">
+  <div class="modal" style="width:680px" role="dialog" aria-modal="true" tabindex="-1" inert aria-labelledby="pineName">
     <div class="cal-head">
       <span style="font-weight:600" id="pineName">—</span>
       <span style="font-size:12px;color:var(--muted-foreground);font-family:var(--font-mono)" id="pineFile"></span>
@@ -628,7 +732,7 @@
 </div>
 
 <div class="overlay" id="calOverlay">
-  <div class="modal" style="width:460px" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="calAcct">
+  <div class="modal" style="width:460px" role="dialog" aria-modal="true" tabindex="-1" inert aria-labelledby="calAcct">
     <div class="cal-head">
       <span style="font-weight:600" id="calAcct">—</span>
       <span class="spacer" style="flex:1"></span>
@@ -642,7 +746,7 @@
       <span class="tot" id="calTotal"></span></div>
   </div>
 </div>
-<div id="toast"></div>
+<div id="toast" role="status" aria-live="polite"></div>
 
 <script>
   (function(){ var a = document.getElementById('chartsLink'); if (a) a.href = location.protocol + '//' + location.hostname + ':8852/?v=25'; })();
@@ -661,8 +765,8 @@ let HIDDEN_ALGOS = (window.AlgoVisibility ? window.AlgoVisibility.loadHidden() :
 
 function toast(msg, ms = 4200) {
   const t = $("#toast");
-  t.textContent = msg; t.style.display = "block";
-  clearTimeout(t._h); t._h = setTimeout(() => t.style.display = "none", ms);
+  t.textContent = msg; t.classList.add("show");
+  clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), ms);
 }
 async function post(url, body) {
   if (DEMO) { toast("Preview mode — sample data, controls disabled."); return {ok: false}; }
@@ -699,12 +803,36 @@ const OVERLAY_CLOSE = {confirmOverlay: () => cfDone(false), settingsOverlay: () 
   pineOverlay: () => closePine(), calOverlay: () => closeCal()};
 const FOCUSABLE = "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), " +
   "textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
+/* Glass pass: a dialog is live the moment it opens (never inert, visible at once -- the motion never
+   gates a button), and inert the moment it starts closing: while it fades out nothing in it can be
+   focused, pressed or reached by a held key. It grows out of what opened it and shrinks back into
+   it (transform-origin at the trigger: the focused control, else what the pointer last pressed). */
+let LAST_PRESS = null, LAST_PRESS_AT = 0;
+document.addEventListener("pointerdown", (e) => {
+  LAST_PRESS = e.target && e.target.closest ? e.target.closest("button, a, [onclick]") : null;
+  LAST_PRESS_AT = Date.now();
+}, true);
+function openedFrom() {
+  const a = document.activeElement;
+  if (a && a !== document.body && a.getBoundingClientRect) return a;
+  return LAST_PRESS && Date.now() - LAST_PRESS_AT < 2000 && document.contains(LAST_PRESS) ? LAST_PRESS : null;
+}
+function growFrom(box, from) {
+  if (!box.style) return;
+  if (!from || !from.getBoundingClientRect) { box.style.transformOrigin = ""; return; }   // centre
+  const r = from.getBoundingClientRect();
+  box.style.transformOrigin = `${Math.round(r.left + r.width / 2 - box.offsetLeft)}px ` +
+    `${Math.round(r.top + r.height / 2 - box.offsetTop)}px`;
+}
 function showOverlay(id) {
   const el = $("#" + id);
   if (!el) return;
-  if (!OVERLAYS.some(o => o.el === el)) OVERLAYS.push({el, trigger: document.activeElement});
-  el.classList.add("open");
   const box = el.querySelector(".modal") || el;
+  const fresh = !OVERLAYS.some(o => o.el === el);
+  if (fresh) OVERLAYS.push({el, trigger: document.activeElement});
+  box.removeAttribute("inert");                              // live at once
+  if (fresh) growFrom(box, openedFrom());
+  el.classList.add("open");
   if (box.contains(document.activeElement)) return;          // already inside (a re-open)
   const first = box.querySelector("[data-autofocus]") || box;
   if (typeof first.focus === "function") first.focus();
@@ -712,6 +840,7 @@ function showOverlay(id) {
 function hideOverlay(id) {
   const el = $("#" + id);
   if (!el) return;
+  (el.querySelector(".modal") || el).setAttribute("inert", "");   // inert the moment it starts closing
   el.classList.remove("open");
   const i = OVERLAYS.findIndex(o => o.el === el);
   if (i < 0) return;
