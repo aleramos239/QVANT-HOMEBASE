@@ -61,6 +61,11 @@ RECYCLE = (dt.time(9, 10), dt.time(9, 19, 30))   # weekdays ET, = the desk's ear
 RECYCLE_CHECK_S = 20      # inside it, the token on disk is compared this often
 RECYCLE_PACE_S = 0.5      # between the rebuild's getCharts: no burst
 RECYCLE_BUDGET_MAX = 120  # rebuilt only if the hour's chart requests stay at most this after it
+# The swap itself can lose one tick per root: its copy on the new socket came before the
+# install (no handler yet), its copy on the old one after (handler gone). Nothing refills that
+# (no budget spent), so the recording gets a gap marker around the swap: (before, after) ms --
+# the old socket's copy may still be in flight, and exchange stamps vs this clock may skew.
+SWAP_GAP_MS = (2000, 1000)
 
 
 def in_quiet(ts_s: float) -> bool:
@@ -96,10 +101,12 @@ class TickFeed:
     def __init__(self, roots, on_ticks: Callable[[str, str, list], None],
                  on_subscribed: Optional[Callable[[str, str, Optional[int]], Awaitable[None]]] = None,
                  connect=None, sleep=asyncio.sleep, now=time.time,
-                 connect_env=connect_env, md_env: Optional[str] = None, fresh_token=None):
+                 connect_env=connect_env, md_env: Optional[str] = None, fresh_token=None,
+                 on_gap: Optional[Callable[[str, str, int, int], None]] = None):
         self.roots = [r.upper() for r in roots]
         self.on_ticks = on_ticks
         self.on_subscribed = on_subscribed
+        self.on_gap = on_gap        # (root, contract, start_ms, end_ms): a recording gap marker
         # md_env: the login in use. It moves only when run() installs a verified switch.
         self.md_env = md_env if md_env is not None else MD_ENV
         self._connect_env = connect_env
@@ -488,6 +495,14 @@ class TickFeed:
         self.error = None
         if recycle:
             self.recycle = {"day": self._recycled_day, "ok": True, "error": None}
+            # no refill (budget): a gap marker around the swap for every root it moved, so the
+            # archive and QA can see the tick it may have lost (SWAP_GAP_MS)
+            swap_ms = int(self._now() * 1000)
+            for r, c in ok if self.on_gap is not None else ():
+                try:
+                    self.on_gap(r, c, swap_ms - SWAP_GAP_MS[0], swap_ms + SWAP_GAP_MS[1])
+                except Exception as e:  # noqa: BLE001 — a marker never undoes the swap
+                    self.recycle["gap_error"] = f"{r}: {type(e).__name__}: {e}"
         else:
             self._resolve_pending(None)
             # gap refills start only now, on the installed socket and its login: their fetch

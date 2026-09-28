@@ -620,6 +620,8 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             feed_kwargs = {"md_env": settings_store.get()["md"]}
             if md_connect is not None:   # tests: a fake connect_env, never a real login
                 feed_kwargs["connect_env"] = md_connect
+            if recorder is not None:     # the early rebuild's swap: a gap marker, no refill
+                feed_kwargs["on_gap"] = recorder.mark_gap_span
             feed = TickFeed(roots, on_live, on_subscribed=_refill, **feed_kwargs)
         else:
             feed = feed_factory(roots, on_live, on_subscribed=_refill)

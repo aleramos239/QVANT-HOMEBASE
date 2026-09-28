@@ -1146,3 +1146,68 @@ def test_a_failed_rebuild_keeps_the_socket_serving_and_is_not_retried_that_day()
     assert f.switch_error is None and f.reconnects == 0      # the user's switch state untouched
     assert [k for k, _ in rig.connects] == ["ordinary", "demo"]
     assert ("NQ", [1055]) in rig.ticks
+
+
+def test_the_swap_marks_a_gap_for_every_root_it_moved_in_the_real_recording(tmp_path):
+    """The swap can lose one tick per root (its copies straddle the install) and nothing
+    refills it (budget): the recording gets a gap marker around the swap -- the real
+    LiveRecorder, in a temp dir, read back from the file the store reads."""
+    import json
+    from homebase.charts.recorder import LiveRecorder
+    from homebase.charts.session import session_date
+    from homebase.charts.store import gaps_path
+    from homebase.charts.tickfeed import SWAP_GAP_MS
+    rec = LiveRecorder(tmp_path)
+    old, new = _tok(FakeWS(), "md-1"), _tok(FakeWS(), "md-2")
+    rig = Rig(["NQ", "ES"], ordinary=lambda: old, env_socks={"demo": new}, now0=T_REBUILD)
+    rig.feed._fresh_token = lambda prefer_live: ("md-2", "demo")
+    rig.feed.on_gap = rec.mark_gap_span
+
+    async def body():
+        await rig.polls(3)
+        return rig.feed.ws
+
+    assert rig.drive(body) is new
+    d = session_date(int(T_REBUILD * 1000), "NQ")
+    marks = {r: json.loads(gaps_path(rec.path(r, d, symbols.resolve_contract(r))).read_text())
+             for r in ("NQ", "ES")}
+    (a, b), = marks["NQ"]
+    assert marks["ES"] == [[a, b]]                       # one marker per root, the same swap
+    assert b - a == sum(SWAP_GAP_MS)
+    assert T_REBUILD * 1000 <= a + SWAP_GAP_MS[0] <= rig.clock[0] * 1000
+    assert rig.feed.recycle["ok"] is True and "gap_error" not in rig.feed.recycle
+    assert [k for k, _ in rig.connects] == ["ordinary", "demo"]   # no refill, no other request
+
+
+def test_a_marker_that_fails_never_undoes_the_swap():
+    old, new = _tok(FakeWS(), "md-1"), _tok(FakeWS(), "md-2")
+    rig = Rig(["NQ"], ordinary=lambda: old, env_socks={"demo": new}, now0=T_REBUILD)
+    rig.feed._fresh_token = lambda prefer_live: ("md-2", "demo")
+
+    def disk_full(*a):
+        raise OSError("disk full")
+
+    rig.feed.on_gap = disk_full
+
+    async def body():
+        await rig.polls(3)
+        return rig.feed.ws
+
+    assert rig.drive(body) is new
+    assert rig.feed.recycle["ok"] is True and "disk full" in rig.feed.recycle["gap_error"]
+
+
+def test_the_chart_service_wires_the_swap_marker_to_its_recorder(tmp_path, monkeypatch):
+    import homebase.charts.server as cs
+    from homebase.charts.recorder import LiveRecorder
+    from tests.test_charts_settings_server import FakeMdWS, app_with
+    seen = {}
+
+    class Capture(cs.TickFeed):
+        def __init__(self, *a, **k):
+            seen.update(k)
+            super().__init__(*a, **k)
+
+    monkeypatch.setattr(cs, "TickFeed", Capture)
+    app_with(tmp_path, {"demo": FakeMdWS("demo")})
+    assert seen["on_gap"].__func__ is LiveRecorder.mark_gap_span
