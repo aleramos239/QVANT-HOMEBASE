@@ -732,13 +732,22 @@ function wfScheme(r) {
 const WF_COMPARE_EXTRA = '#9C27B0';     // a third line colour beside the palette's accent and warn
 function wfCompareColors(P) { return [P.accent, P.warn, WF_COMPARE_EXTRA]; }
 const WF_COMPARE_ROWS = [
-  ['span', 'Out-of-sample span'], ['net', 'Net $'], ['net_month', 'Net / month'], ['trades', 'Trades'],
+  ['span', 'Out-of-sample span'], ['net', 'Net $'], ['net_phases', 'Net across start months (min – max · mean)'],
+  ['net_month', 'Net / month'], ['trades', 'Trades'],
   ['win_rate', 'Win rate'], ['pf', 'Profit factor'], ['avg_trade', 'Avg trade $'], ['max_dd', 'Max drawdown $'],
-  ['sharpe', 'Sharpe'], ['legs', 'Steps (stitched legs)'], ['legs_pct', '% of steps profitable'],
+  ['sharpe', 'Sharpe'], ['sharpe_phases', 'Sharpe across start months (min – max · mean)'], ['legs', 'Steps (stitched legs)'], ['legs_pct', '% of steps profitable'],
   ['selects', 'Selection months (first → last)'], ['uncovered', 'Not tested out-of-sample']];
+/* A phase spread {min, max, mean, n}: the chains started 0 .. N-1 months later (1:1 has only one). */
+function phaseSpreadText(sp, fmt, nPhases) {
+  if (!sp) return '—';
+  if (nPhases === 1) return `${fmt(sp.min)} (one chain)`;
+  return `${fmt(sp.min)} – ${fmt(sp.max)} · mean ${fmt(sp.mean)}`;
+}
 function wfCompareCell(key, c) {
-  const s = c.stats || {}, L = c.legs || {}, pm = c.per_month || {};
+  const s = c.stats || {}, L = c.legs || {}, pm = c.per_month || {}, ps = c.phase_spread || {}, np = (c.phases || []).length;
   switch (key) {
+    case 'net_phases': return { text: phaseSpreadText(ps.net_profit, signed, np), tone: '' };
+    case 'sharpe_phases': return { text: phaseSpreadText(ps.sharpe, (v) => num(v), np), tone: '' };
     case 'span': return { text: c.span ? `${span(c.span[0], c.span[1])} · ${months_(c.n_months)}` : '—', tone: '' };
     case 'net': return { text: signed(s.net_profit), tone: toneOf(s.net_profit) };
     case 'net_month': return { text: signed(pm.net_profit), tone: toneOf(pm.net_profit) };
@@ -762,6 +771,13 @@ function wfCompareTable(cmp) {
     title: `Walk-forward ${c.ratio}: select on 1 month, hold the pick for ${c.test_months} — click to open its full result` })),
   rows: WF_COMPARE_ROWS.map(([key, label]) => ({ key, label, cells: cols.map((c) => wfCompareCell(key, c)) })) };
 }
+/* Said plainly when the start month of a chain moves its net more than switching the ratio does. */
+function wfComparePhaseLine(cmp) {
+  const pc = cmp && cmp.phase_check;
+  if (!pc || !pc.warning) return '';
+  return `Phase check: ${pc.warning} — the widest spread across start months is ${Tr.money(pc.widest_phase_spread)}, `
+    + `the gap between the three headline nets ${Tr.money(pc.gap_between_schemes)}`;
+}
 function wfCompareHead(cmp) {
   const c = cmp.scheme || {}, w = cmp.window || {};
   const win = w.start && w.end ? `${w.start} → ${w.end} · ` : '';
@@ -778,7 +794,7 @@ function strategyLabel(s) {
 const api = { strategyLabel, DEFAULT_MAX_CELLS, HARD_MAX_CELLS, GRID_WORKERS, maxCellsError, cellsWarning, stepValues, axisValues,
   parseValues, valueLabel, gridAxes, gridCount, gridProblems, gridBody, looksText, looksLine, heatPanels, heatMaxAbs,
   WF_METRICS, WF_RATIOS, WF_COMPARE, WF_MODES, isWfCompare, wfModeOf, wfModeLabel, WF_COMPARE_ROWS, wfCompareColors,
-  wfCompareCell, wfCompareTable, wfCompareHead, WF_STEP_HEADERS, WF_STEP_GROUPS, WF_SIDE_LABELS, WF_NEEDS_GRID, wfBody, wfProblems, wfLooksText,
+  wfCompareCell, wfCompareTable, wfCompareHead, wfComparePhaseLine, WF_STEP_HEADERS, WF_STEP_GROUPS, WF_SIDE_LABELS, WF_NEEDS_GRID, wfBody, wfProblems, wfLooksText,
   etaText, wfProgress, wfTiles, wfDrop, wfUncovered, wfStepRows, wfStability, wfPhases, wfScheme,
   heatLevel, cellView, gridProgress, RANGES, DEFAULT_RULES, defaults, restore, fromRun, rangeFromRun, isWalkforward,
   today, rangeSpec, rangeDates, rangeBody, parseDate, dateError, prettyDate, pillLabel, monthGrid, shiftMonth,

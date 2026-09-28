@@ -301,6 +301,14 @@ def _legs(r: dict) -> dict:
             "first_select": legs[0]["select"] if legs else None, "last_select": legs[-1]["select"] if legs else None}
 
 
+def _spread(vals) -> dict | None:
+    v = [x for x in vals if x is not None]
+    return None if not v else {"min": min(v), "max": max(v), "mean": round(sum(v) / len(v), 4), "n": len(v)}
+
+
+PHASE_WARNING = "the start month moves these more than the ratio does"
+
+
 COMPARE_NOTE = ("Same window, grid, costs, Select-by and Min-trades for all three. A longer test length "
                 "re-selects less often — one pick every N months, held for N months — so it has fewer "
                 "selection points and trades further from the month each pick was made on; and each stitched "
@@ -329,12 +337,22 @@ def compare_summary(results: dict) -> dict:
         cols.append({"test_months": n, "ratio": f"1:{n}", "n_steps": r["n_steps"], "looks": r["looks"],
                      "stats": so["stats"], "per_month": so["per_month"], "n_months": so["n_months"],
                      "span": [ms[0], ms[-1]] if ms else None, "uncovered": so["uncovered"],
-                     "legs": _legs(r), "equity": so["equity"]})
+                     "legs": _legs(r), "equity": so["equity"],
+                     # the headline is phase 0; the chains started 1 .. N-1 months later are as valid
+                     "phases": r["phases"],
+                     "phase_spread": {"net_profit": _spread(p["net_profit"] for p in r["phases"]),
+                                      "sharpe": _spread(p["sharpe"] for p in r["phases"])}})
+    nets = [c["stats"]["net_profit"] or 0.0 for c in cols]
+    gap = max(nets) - min(nets)
+    widest = max(((c["phase_spread"]["net_profit"] or {}).get("max", 0) - (c["phase_spread"]["net_profit"] or {}).get("min", 0))
+                 for c in cols)
     sc = first["scheme"]
     return {"compare": True, "window": first["window"], "n_cells": first["n_cells"],
             "scheme": {k: sc[k] for k in ("select_months", "step_months", "metric", "metric_label", "min_trades",
                                           "tie_break")},
-            "schemes": cols, "looks": sum(c["looks"] for c in cols), "note": COMPARE_NOTE}
+            "schemes": cols, "looks": sum(c["looks"] for c in cols), "note": COMPARE_NOTE,
+            "phase_check": {"gap_between_schemes": round(gap, 2), "widest_phase_spread": round(widest, 2),
+                            "warning": PHASE_WARNING if widest > gap else None}}
 
 
 def compare_scheme(start: str | None = None, end: str | None = None) -> dict:

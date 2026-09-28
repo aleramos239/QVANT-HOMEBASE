@@ -1896,6 +1896,8 @@ function renderWfCompare(container, cmp) {
   }
   t.append(thead, tbody);
   container.appendChild(t);
+  const phase = X.wfComparePhaseLine(cmp);
+  if (phase) container.appendChild(page.mk('div', 'tst-err', phase));
   container.appendChild(page.mk('div', 'tst-kv-line', cmp.note || ''));
   const chartWrap = page.mk('div', 'tst-chart');
   container.appendChild(chartWrap);

@@ -18,7 +18,10 @@ const col = (n, over = {}) => ({
   per_month: { net_profit: 25.5 * (n === 2 ? -1 : 1), trades: 2.1 },
   legs: { n: Math.ceil((48 - n) / n), no_pick: n === 1 ? 2 : 0, profitable: 10, pct_profitable: 21.28,
     first_select: '2021-01', last_select: n === 3 ? '2024-07' : '2024-11' },
-  equity: { t_ms: [1, 2], equity: [10, 20], drawdown: [0, 0] }, ...over });
+  equity: { t_ms: [1, 2], equity: [10, 20], drawdown: [0, 0] },
+  phases: Array.from({ length: n }, (_, p) => ({ phase: p, steps: 10, net_profit: 100 * (p + 1), trades: 5, sharpe: 0.5 + p })),
+  phase_spread: { net_profit: { min: 100, max: 100 * n, mean: 50 * (n + 1), n }, sharpe: { min: 0.5, max: n - 0.5, mean: n / 2, n } },
+  ...over });
 const CMP = { compare: true, window: { start: '2021-01', end: '2024-12' }, n_cells: 2, looks: 276,
   scheme: { select_months: 1, step_months: 1, metric: 'net_profit', metric_label: 'Net $', min_trades: 5, tie_break: 'x' },
   schemes: [col(1), col(2), col(3)], note: 'OOS only' };
@@ -59,8 +62,9 @@ test('wfLooksText: a compare preview says the three schemes are summed', () => {
 test('wfCompareTable: one column per scheme, the dollar metrics of the stitched OOS only', () => {
   const v = X.wfCompareTable(CMP);
   assert.deepEqual(v.head.map((h) => [h.ratio, h.test_months]), [['1:1', 1], ['1:2', 2], ['1:3', 3]]);
-  assert.deepEqual(v.rows.map((r) => r.label), ['Out-of-sample span', 'Net $', 'Net / month', 'Trades', 'Win rate',
-    'Profit factor', 'Avg trade $', 'Max drawdown $', 'Sharpe', 'Steps (stitched legs)', '% of steps profitable',
+  assert.deepEqual(v.rows.map((r) => r.label), ['Out-of-sample span', 'Net $', 'Net across start months (min – max · mean)',
+    'Net / month', 'Trades', 'Win rate', 'Profit factor', 'Avg trade $', 'Max drawdown $', 'Sharpe',
+    'Sharpe across start months (min – max · mean)', 'Steps (stitched legs)', '% of steps profitable',
     'Selection months (first → last)', 'Not tested out-of-sample']);
   const row = (k) => v.rows.find((r) => r.key === k).cells;
   assert.deepEqual(row('span').map((c) => c.text), ['2021-02 → 2024-12 · 47 months', '2021-02 → 2024-12 · 46 months',
@@ -99,4 +103,17 @@ test('wfCompareHead and the per-scheme colours', () => {
   assert.equal(c.length, 3);
   assert.equal(new Set(c).size, 3);
   assert.deepEqual(c.slice(0, 2), ['#2962FF', '#F7A600']);
+});
+
+test('the phase spread sits under the headline, and the warning says the start month moves it more', () => {
+  const v = X.wfCompareTable(CMP), row = (k) => v.rows.find((r) => r.key === k).cells;
+  assert.equal(row('net_phases')[0].text, '+$100 (one chain)');
+  assert.equal(row('net_phases')[2].text, '+$100 – +$300 · mean +$200');
+  assert.equal(row('sharpe_phases')[1].text, '0.50 – 1.50 · mean 1.00');
+  assert.equal(X.wfComparePhaseLine(CMP), '');
+  const warn = { ...CMP, phase_check: { gap_between_schemes: 150, widest_phase_spread: 480,
+    warning: 'the start month moves these more than the ratio does' } };
+  assert.equal(X.wfComparePhaseLine(warn), 'Phase check: the start month moves these more than the ratio does — '
+    + 'the widest spread across start months is $480, the gap between the three headline nets $150');
+  assert.equal(X.wfComparePhaseLine({ ...warn, phase_check: { ...warn.phase_check, warning: null } }), '');
 });

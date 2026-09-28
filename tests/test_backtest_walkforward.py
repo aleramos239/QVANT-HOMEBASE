@@ -654,8 +654,34 @@ def test_compare_summary_is_each_schemes_stitched_oos_and_nothing_in_sample():
     # out-of-sample only: no in-sample figure anywhere in the comparison
     import json as _json
     blob = _json.dumps(s)
-    for leak in ("stitched_is", '"drop"', '"is"', '"steps"', '"phases"'):
+    for leak in ("stitched_is", '"drop"', '"is"', '"steps": ['):      # the per-step table carries IS
         assert leak not in blob, leak
+
+
+def test_each_column_carries_its_phase_chains_and_their_spread():
+    per = _five_month_results()
+    s = wf.compare_summary(per)
+    for c in s["schemes"]:
+        ph = per[c["test_months"]]["phases"]
+        assert c["phases"] == ph and len(ph) == c["test_months"]
+        nets = [p["net_profit"] for p in ph]
+        assert c["phase_spread"]["net_profit"] == {"min": min(nets), "max": max(nets),
+                                                    "mean": round(sum(nets) / len(nets), 4), "n": len(nets)}
+        assert c["phase_spread"]["sharpe"]["n"] == len([p for p in ph if p["sharpe"] is not None])
+    three = s["schemes"][2]["phase_spread"]["net_profit"]
+    assert (three["min"], three["max"]) == (-480, 0)                  # phases -480 / -60 / 0
+    nets = [c["stats"]["net_profit"] for c in s["schemes"]]
+    pc = s["phase_check"]
+    assert pc["gap_between_schemes"] == round(max(nets) - min(nets), 2)
+    assert pc["widest_phase_spread"] == 480
+    assert (pc["warning"] is not None) == (480 > pc["gap_between_schemes"])
+    assert pc["warning"] in (None, "the start month moves these more than the ratio does")
+
+
+def test_the_phase_warning_is_off_when_the_ratio_moves_more_than_the_start_month():
+    per = _five_month_results()
+    per[1] = {**per[1], "stitched": {**per[1]["stitched"], "stats": {**per[1]["stitched"]["stats"], "net_profit": 10_000.0}}}
+    assert wf.compare_summary(per)["phase_check"]["warning"] is None
 
 
 def test_compare_summary_refuses_schemes_that_do_not_share_one_setup():
