@@ -265,3 +265,11 @@ test('parsePersisted with no stored dockOrientation (old saved state) falls back
   assert.equal(out.dockOrientation, 'stack');
   assert.deepEqual(out.dockOrder, ['dom', 'order']);
 });
+
+test('clampSideWidths: an uneven split lands exactly on the budget without dipping under the floor', () => {
+  for (const [a, b, budget] of [[480, 260, 600], [480, 260, 521], [400, 300, 650]]) {
+    const w = L.clampSideWidths({ order: a, dom: b }, ['order', 'dom'], budget);
+    assert.ok(Math.abs(w.order + w.dom - budget) < 1e-6, `sum ${w.order + w.dom} vs ${budget}`);
+    assert.ok(w.order >= L.DOCK_W_MIN - 1e-9 && w.dom >= L.DOCK_W_MIN - 1e-9);
+  }
+});

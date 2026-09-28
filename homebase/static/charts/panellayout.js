@@ -147,8 +147,11 @@ function clampSideWidths(widths, order, maxTotalW) {
   const total = w.reduce((a, b) => a + b, 0);
   const budget = Math.max(DOCK_W_MIN * n, num(maxTotalW, Infinity));
   if (total > budget) {
-    const scale = budget / total;
-    w = w.map((v) => Math.max(DOCK_W_MIN, v * scale));
+    // take the excess only from what each panel has above DOCK_W_MIN, in proportion: the sum lands exactly on
+    // the budget (budget >= DOCK_W_MIN * n, so the surplus always covers it) and no panel dips under the floor
+    // (a plain scale-then-floor overshot the budget on an uneven split -- review of 3b6d3b1)
+    const excess = total - budget, surplus = w.map((v) => v - DOCK_W_MIN), room = surplus.reduce((a, b) => a + b, 0);
+    if (room > 0) w = w.map((v, i) => v - excess * (surplus[i] / room));
   }
   const out = {};
   ids.forEach((id, i) => { out[id] = w[i]; });
