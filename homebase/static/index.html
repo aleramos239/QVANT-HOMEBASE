@@ -799,6 +799,10 @@ function toast(msg, ms = 4200) {
   t.textContent = msg; t.classList.add("show");
   clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), ms);
 }
+function toastHide() {
+  const t = $("#toast");
+  clearTimeout(t._h); t.classList.remove("show");
+}
 /* A money-critical failure -- a Kill that did not go through: red, solid, and it stays until the
    user dismisses it (a routine toast never replaces it). */
 function alertBar(msg) {
@@ -1008,11 +1012,24 @@ async function doDisarm() {
   await post("/api/arm", {armed: false}); refresh();
   toast("Disarmed — dry-run journaling only.");
 }
-/* A Kill that did not go through is never silent (review M1): no answer, a refusal (e.g. the write
-   guard's 403 / 415), an unreadable answer, or an account whose cancel or flatten failed -> a red
-   alert that stays until dismissed and says to flatten at the broker. A clean Kill says what it did,
-   in words. The call itself is unchanged: POST /api/kill, after the same confirm. */
-const killText = (v) => (typeof v === "string" ? v : JSON.stringify(v == null ? "no result" : v)).slice(0, 200);
+/* A Kill that did not go through is never silent (review M1): a refusal (e.g. the write guard's
+   403 / 415), an unreadable answer, no answer, or an account whose cancel or flatten failed -> a
+   red alert that stays until dismissed and says to flatten at the broker. A clean Kill says what it
+   did, in words. The call itself is unchanged: POST /api/kill, after the same confirm.
+
+   A Kill in flight is never silent either (second review): "Kill sent — waiting for the desk…" the
+   moment it goes out, and no answer within KILL_WAIT_MS escalates to the red alert -- the request
+   keeps waiting, and a late answer still reports (a late success takes that alert down). While one
+   is in flight, a second hold sends nothing ("Kill already running"), for up to KILL_BUSY_MS: a
+   dead connection must not lock Kill out for good. A network failure can come AFTER the request
+   reached the desk (which disarms first), so it never says "NOT sent" -- only a desk that answered
+   with a refusal certainly did not get it. */
+const KILL_WAIT_MS = 6000;
+const KILL_BUSY_MS = 30000;
+let KILL_AT = 0;                 // when the Kill in flight went out; 0: none
+const killInFlight = () => KILL_AT > 0 && Date.now() - KILL_AT < KILL_BUSY_MS;
+const killText = (v) => (v == null || v === "" ? "no reason given"
+  : typeof v === "string" ? v : JSON.stringify(v)).slice(0, 200);
 function killFailures(results) {
   return Object.entries(results || {}).map(([aid, v]) => {
     const why = [];
@@ -1023,27 +1040,49 @@ function killFailures(results) {
     return why.length ? `${acctShort(aid)} (${why.join("; ")})` : "";
   }).filter(Boolean);
 }
+function killReport(r, lateSecs) {
+  const late = lateSecs ? ` (the desk answered after ${lateSecs} s)` : "";
+  toastHide();
+  if (!r || typeof r !== "object")
+    return alertBar(`Kill NOT confirmed — the desk's answer was unreadable${late}. Check every account and flatten at the broker now.`);
+  if (r.ok !== true)
+    return alertBar(`Kill NOT sent — the desk refused it: ${killText(r.error || r.detail)}. Flatten at the broker now.`);
+  if (!r.results || typeof r.results !== "object")
+    return alertBar(`Kill NOT confirmed — the desk said ok but sent no account results${late}. Check every account and flatten at the broker now.`);
+  const bad = killFailures(r.results), n = Object.keys(r.results).length;
+  if (bad.length) return alertBar(`Kill FAILED on ${bad.join(" · ")}. Flatten ${bad.length === 1 ? "it" : "them"} at the broker now.`);
+  if (lateSecs) $("#alertBar").hidden = true;          // its "hasn't answered" is no longer true
+  toast((n ? `Kill sent — orders cancelled and positions flattened on ${n} account${n === 1 ? "" : "s"}; the desk is disarmed.`
+           : "Kill sent — the desk is disarmed (no connected account to flatten).") + late, 6000);
+}
+const killRunning = () => toast(`Kill already running — sent ${Math.round((Date.now() - KILL_AT) / 1000)} s ago; ` +
+  "waiting for the desk. Nothing more sent.");
 async function doKill() {
+  if (killInFlight()) return killRunning();
   if (!await confirmDlg("Kill everything?",
       "Cancels every working order and market-flattens every position on EVERY connected account, then disarms.",
       "Kill", true)) { toast("Kill cancelled — nothing sent."); return; }
-  let r;
-  try { r = await post("/api/kill"); }
-  catch (e) {
-    alertBar(e && e.name === "SyntaxError"   // r.json() on a non-JSON answer
-      ? "Kill NOT confirmed — the desk's answer was unreadable. Check every account and flatten at the broker now."
-      : `Kill NOT sent — the desk did not answer (${killText(e && e.message || String(e))}). Flatten at the broker now.`);
-    refresh(); return;
-  }
-  if (DEMO) { refresh(); return; }        // preview mode: post() already said nothing is sent
-  if (!r || r.ok !== true || !r.results || typeof r.results !== "object") {
-    alertBar(`Kill NOT sent — the desk refused it: ${killText(r && (r.error || r.detail))}. Flatten at the broker now.`);
-    refresh(); return;
-  }
-  const bad = killFailures(r.results), n = Object.keys(r.results).length;
-  if (bad.length) alertBar(`Kill FAILED on ${bad.join(" · ")}. Flatten ${bad.length === 1 ? "it" : "them"} at the broker now.`);
-  else toast(n ? `Kill sent — orders cancelled and positions flattened on ${n} account${n === 1 ? "" : "s"}; the desk is disarmed.`
-               : "Kill sent — the desk is disarmed (no connected account to flatten).", 6000);
+  if (killInFlight()) return killRunning();
+  if (DEMO) { await post("/api/kill"); refresh(); return; }   // preview mode: post() says nothing is sent
+  const at = KILL_AT = Date.now();
+  let slow = false;
+  toast("Kill sent — waiting for the desk…", KILL_BUSY_MS);
+  const timer = setTimeout(() => {
+    if (KILL_AT !== at) return;
+    slow = true;
+    toastHide();
+    alertBar(`Kill NOT confirmed — the desk hasn't answered in ${KILL_WAIT_MS / 1000} s. ` +
+             "Check the broker and flatten there now.");
+  }, KILL_WAIT_MS);
+  let r, err = null;
+  try { r = await post("/api/kill"); } catch (e) { err = e || new Error("no answer"); }
+  clearTimeout(timer);
+  if (KILL_AT === at) KILL_AT = 0;
+  if (err && err.name !== "SyntaxError") {
+    toastHide();
+    alertBar(`Kill NOT confirmed — the desk didn't answer (${killText(err.message || String(err))}). ` +
+             "Check the broker / flatten there now.");
+  } else killReport(err ? null : r, slow ? Math.round((Date.now() - at) / 1000) : 0);   // SyntaxError: unreadable
   refresh();
 }
 

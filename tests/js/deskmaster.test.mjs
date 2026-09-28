@@ -43,14 +43,17 @@ const KILL_OK = { ok: true, armed: false, strategies: {}, results: {
   a2: { cancel_all: { ok: true, error: null }, flatten_all: { ok: true, error: null } } } };
 
 function load({ st = { armed: false }, stale = false, confirm = true, answer = KILL_OK, demo = false } = {}) {
-  const els = { statusPill: fakeEl(), armBtn: fakeEl(), killBtn: fakeEl() };
-  const posts = [], toasts = [], confirms = [], refreshes = [], fetched = [], alerts = [];
+  const els = { statusPill: fakeEl(), armBtn: fakeEl(), killBtn: fakeEl(), alertBar: fakeEl() };
+  els.alertBar.hidden = false;
+  const posts = [], toasts = [], confirms = [], refreshes = [], fetched = [], alerts = [], hides = [];
   const win = fakeEl(), doc = fakeEl();
+  let settle = null;              // answer === 'later': the test resolves / rejects the Kill's POST itself
   doc.hidden = false;
   // a fake clock: setTimeout/clearTimeout run only when the test advances time
-  let now = 0, seq = 0;
+  let now = 1_000_000, seq = 0;
   const timers = new Map();
   const clock = {
+    get now() { return now; },
     advance(ms) {
       const until = now + ms;
       for (;;) {
@@ -71,13 +74,16 @@ function load({ st = { armed: false }, stale = false, confirm = true, answer = K
     STALE_WHY: '',
     $: (sel) => els[sel.replace(/^#/, '')] || null,
     toast: (t) => toasts.push(t),
+    toastHide: () => hides.push(true),
     alertBar: (t) => alerts.push(t),
+    Date: { now: () => now },
     acctShort: (id) => '…' + String(id).slice(-3),
     DEMO: demo,
     confirmDlg: async (title, body, action, destructive) => { confirms.push({ title, body, action, destructive }); return confirm; },
     post: async (url, body) => {
       posts.push(body === undefined ? { url } : { url, body });
       if (answer instanceof Error) throw answer;
+      if (answer === 'later') return new Promise((res, rej) => { settle = { res, rej }; });
       return typeof answer === 'function' ? answer(url) : JSON.parse(JSON.stringify(answer));
     },
     refresh: () => refreshes.push(true),
@@ -94,7 +100,8 @@ function load({ st = { armed: false }, stale = false, confirm = true, answer = K
   const ev = (type, props = {}) => ({ type, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; }, ...props });
   const fire = (el, type, props) => { const e = ev(type, props); for (const fn of el.listeners[type] || []) fn(e); return e; };
   const kill = els.killBtn;
-  return { api: ctx.api, els, kill, fire, clock, posts, toasts, confirms, refreshes, fetched, alerts, win, doc };
+  return { api: ctx.api, els, kill, fire, clock, posts, toasts, confirms, refreshes, fetched, alerts, hides, win, doc,
+    answer: (v) => settle.res(JSON.parse(JSON.stringify(v))), fail: (e) => settle.rej(e) };
 }
 
 const plain = (v) => JSON.parse(JSON.stringify(v));
@@ -352,12 +359,13 @@ async function kill(opts) {
   return s;
 }
 
-test('no answer from the desk: a lasting red alert says Kill was NOT sent and to flatten at the broker', async () => {
+test('a network failure never claims "NOT sent" (the desk may have got it and disarmed): NOT confirmed, flatten at the broker', async () => {
   const s = await kill({ answer: new TypeError('Failed to fetch') });
   assert.deepEqual(plain(s.posts), [{ url: '/api/kill' }], 'the same one call');
   assert.equal(s.alerts.length, 1);
-  assert.equal(s.alerts[0], 'Kill NOT sent — the desk did not answer (Failed to fetch). Flatten at the broker now.');
-  assert.equal(s.toasts.length, 0, 'never a reassuring toast');
+  assert.equal(s.alerts[0], "Kill NOT confirmed — the desk didn't answer (Failed to fetch). Check the broker / flatten there now.");
+  assert.deepEqual(s.toasts, ['Kill sent — waiting for the desk…'], 'the only toast is the one that went up as it was sent');
+  assert.ok(s.hides.length >= 1, 'and it came down when the alert went up');
 });
 
 test('an unreadable answer: NOT confirmed, check and flatten at the broker', async () => {
@@ -380,16 +388,98 @@ test('an account whose flatten or cancel failed: Kill FAILED on it, with the rea
     acct050: { cancel_all: { ok: false, error: 'rejected' }, flatten_all: { ok: true, error: null } } } } });
   assert.equal(s.alerts[0], 'Kill FAILED on …048 (FLATTEN FAILED: timeout) · …050 (CANCEL FAILED: rejected). ' +
     'Flatten them at the broker now.');
-  assert.equal(s.toasts.length, 0);
+  assert.deepEqual(s.toasts, ['Kill sent — waiting for the desk…'], 'no success toast');
 });
 
 test('a clean Kill with no connected account still says what happened; preview mode says nothing more', async () => {
   const s = await kill({ answer: { ok: true, results: {} } });
-  assert.equal(s.toasts[0], 'Kill sent — the desk is disarmed (no connected account to flatten).');
+  assert.equal(s.toasts[s.toasts.length - 1], 'Kill sent — the desk is disarmed (no connected account to flatten).');
   const d = await kill({ demo: true, answer: { ok: false } });
+  assert.deepEqual(plain(d.posts), [{ url: '/api/kill' }], 'the same call (post() itself refuses in preview)');
   assert.deepEqual(d.alerts, [], 'preview: post() already said nothing is sent');
   assert.deepEqual(d.toasts, []);
 });
+
+test('nits: a missing error reads "no reason given" (no stray quotes); ok with no results is NOT confirmed, not "refused"', async () => {
+  const s = await kill({ answer: { ok: true, results: { acct041: { cancel_all: { ok: false, error: null }, flatten_all: { ok: true } } } } });
+  assert.equal(s.alerts[0], 'Kill FAILED on …041 (CANCEL FAILED: no reason given). Flatten it at the broker now.');
+  const s2 = await kill({ answer: { ok: true, armed: false } });
+  assert.equal(s2.alerts[0], 'Kill NOT confirmed — the desk said ok but sent no account results. ' +
+    'Check every account and flatten at the broker now.');
+});
+
+// ---- a Kill in flight (second review) -------------------------------------------------------------
+test('a Kill in flight says so at once; no answer in 6 s escalates to the red alert, and it keeps waiting', async () => {
+  const s = load({ answer: 'later' });
+  const done = s.api.doKill();
+  await tick();
+  assert.deepEqual(plain(s.posts), [{ url: '/api/kill' }]);
+  assert.deepEqual(s.toasts, ['Kill sent — waiting for the desk…']);
+  s.clock.advance(5999);
+  assert.deepEqual(s.alerts, []);
+  s.clock.advance(1);
+  assert.deepEqual(s.alerts, ["Kill NOT confirmed — the desk hasn't answered in 6 s. Check the broker and flatten there now."]);
+  s.clock.advance(2000);
+  s.answer(KILL_OK);                                  // the desk answers after 8 s
+  await done;
+  assert.equal(s.toasts[s.toasts.length - 1],
+    'Kill sent — orders cancelled and positions flattened on 2 accounts; the desk is disarmed. (the desk answered after 8 s)');
+  assert.equal(s.els.alertBar.hidden, true, 'its "hasn\'t answered" alert comes down: it is no longer true');
+});
+
+test('a late FAILURE replaces the "hasn\'t answered" alert with what failed', async () => {
+  const s = load({ answer: 'later' });
+  const done = s.api.doKill();
+  await tick();
+  s.clock.advance(7000);
+  s.answer({ ok: true, results: { acct048: { cancel_all: { ok: true }, flatten_all: { ok: false, error: 'timeout' } } } });
+  await done;
+  assert.equal(s.alerts[s.alerts.length - 1], 'Kill FAILED on …048 (FLATTEN FAILED: timeout). Flatten it at the broker now.');
+  assert.equal(s.els.alertBar.hidden, false);
+});
+
+test('a late success takes the "hasn\'t answered" alert down; a late failure replaces it', () => {
+  const fn = HTML.slice(HTML.indexOf('function killReport('), HTML.indexOf('const killRunning'));
+  assert.match(fn, /if \(lateSecs\) \$\("#alertBar"\)\.hidden = true;/);
+  assert.ok(fn.indexOf('return alertBar(`Kill FAILED') < fn.indexOf('if (lateSecs) $("#alertBar").hidden = true;'),
+    'a failure is reported before any take-down');
+});
+
+test('while a Kill is in flight a second hold sends nothing and says "Kill already running" -- no second confirm', async () => {
+  const s = load({ answer: 'later' });
+  const first = s.api.doKill();
+  await tick();
+  s.clock.advance(3000);
+  await s.api.doKill();                               // a second hold completes
+  assert.equal(s.confirms.length, 1, 'no second "Kill everything?"');
+  assert.equal(s.posts.length, 1);
+  assert.equal(s.toasts[s.toasts.length - 1], 'Kill already running — sent 3 s ago; waiting for the desk. Nothing more sent.');
+  s.answer(KILL_OK);
+  await first;
+  const second = s.api.doKill();                      // answered: a new Kill is a new Kill
+  await tick();
+  assert.equal(s.confirms.length, 2);
+  assert.equal(s.posts.length, 2);
+  s.answer(KILL_OK);
+  await second;
+});
+
+test('a dead connection never locks Kill out: after 30 s with no answer a new Kill may go out', async () => {
+  const s = load({ answer: 'later' });
+  const first = s.api.doKill();
+  await tick();
+  s.clock.advance(29_999);
+  await s.api.doKill();
+  assert.equal(s.posts.length, 1);
+  s.clock.advance(1);
+  const again = s.api.doKill();
+  await tick();
+  assert.equal(s.posts.length, 2, 'the second request goes out (the desk serialises Kills)');
+  s.answer(KILL_OK);
+  await again;
+  void first;                                         // the dead request never answers -- and holds nothing up
+});
+
 
 test('the unknown-state tooltip no longer promises that Kill "works regardless"', () => {
   const { api, els } = load({ st: null });
