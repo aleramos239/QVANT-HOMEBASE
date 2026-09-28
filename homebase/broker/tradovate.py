@@ -281,7 +281,12 @@ class TradovateAdapter(BrokerAdapter):
         closed too and the adapter reads disconnected, so the supervisor retries it under
         its cooldown. Never an open socket whose authorize was refused that ad.connected
         reports up: the supervisor would skip it, the keepalive would try to renew (and log
-        in) on it every minute, and the 9:30 fire would send on it."""
+        in) on it every minute, and the 9:30 fire would send on it.
+
+        Known, left as is (a strategy-timing call, 2026-09-28 review): a rebuild still in
+        flight at 09:30:00.000 -- connect/authorize/sync take a few hundred ms -- makes the
+        fire refuse this account ("account not connected", journaled place_failed); the
+        engine never waits for a reconnect to finish."""
         self._connected = False
         old = self._ws
         if close_old and old is not None:

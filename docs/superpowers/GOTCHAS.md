@@ -48,7 +48,8 @@ treat the line as a requirement, not a suggestion.
   09:28–09:31, never 09:30:00–09:30:30 while the fire's orders may be in flight
   (`broker/tradovate.py` `renewal_due`, judged on the token the socket rides, not the
   latest one). Anything new that closes or rebuilds a broker socket keeps out of that
-  window too.
+  window too. A rebuild still in flight at 09:30:00 makes the fire refuse that account
+  ("account not connected"): known and left as is — the engine never waits on a reconnect.
 
 ## Numbers
 
