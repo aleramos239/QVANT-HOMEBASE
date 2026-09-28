@@ -51,20 +51,30 @@ test("the page's needsConfirm uses that policy, and asks whenever a switch turns
 });
 
 const BOUNCE = HTML.slice(HTML.indexOf('const SWITCH_AT = {};'), HTML.indexOf('function cfDone('));
-function load({ confirm = true, shadow = false, enabled = false } = {}) {
-  const posts = [], toasts = [], confirms = [], refreshes = [];
+const HELPERS = HTML.slice(HTML.indexOf('const killText = '), HTML.indexOf('function killFailures(')) +
+  HTML.slice(HTML.indexOf('const actErr = '), HTML.indexOf('const actFail = ')) +
+  HTML.slice(HTML.indexOf('function stepFailures('), HTML.indexOf('const REFUSED_WHY'));
+function load({ confirm = true, shadow = false, enabled = false, answer = { ok: true } } = {}) {
+  const posts = [], toasts = [], confirms = [], refreshes = [], alerts = [];
   const clock = { now: 1_000_000 };
   const ctx = vm.createContext({
     console, Date: { now: () => clock.now }, DOUBLE_CLICK_MS: 400,
     ST: { strategies: { nq930: { cfg: { enabled, shadow } }, ym930: { cfg: { enabled, shadow } } } },
     needsConfirm: (k, on, o) => AV.switchNeedsConfirm(k, on, o),
     confirmDlg: async (title, body, action, destructive) => { confirms.push({ title, body, action, destructive }); return confirm; },
-    post: async (url, body) => { posts.push({ url, body }); return { ok: true }; },
+    post: async (url, body) => {
+      posts.push({ url, body });
+      if (answer instanceof Error) throw answer;
+      return JSON.parse(JSON.stringify(typeof answer === 'function' ? answer(url, body) : answer));
+    },
     toast: (t) => toasts.push(t),
+    alertBar: (t) => alerts.push(t),
+    acctShort: (id) => '…' + String(id).slice(-3),
+    DEMO: false,
     refresh: () => refreshes.push(true),
   });
-  vm.runInContext(BOUNCE + STRAT + '\nglobalThis.api = { toggleStrat, flattenStrat };', ctx);
-  return { api: ctx.api, posts, toasts, confirms, refreshes, clock };
+  vm.runInContext(HELPERS + BOUNCE + STRAT + '\nglobalThis.api = { toggleStrat, flattenStrat };', ctx);
+  return { api: ctx.api, posts, toasts, confirms, refreshes, alerts, clock };
 }
 
 test('a strategy switched ON asks first, then the same POST /api/strategy', async () => {
@@ -138,4 +148,46 @@ test('the double-click guard is per switch: another strategy\'s switch is never 
 test("the chart-trading switch has the double-click guard too (the dialog's own guard is page-wide: deskdialogs)", () => {
   const ct = HTML.slice(HTML.indexOf('async function setChartTrading('), HTML.indexOf('const MD_CHOICES'));
   assert.match(ct, /if \(switchBounced\("chartTrading"\)\) return;/);
+});
+
+// ---- Flatten & turn off, and the OFF switch, believe only the desk (second review) ----------------
+test('a flatten whose steps failed is the red alert, with the account and the reason -- never "flattened"', async () => {
+  const s = load({ answer: { ok: true, enabled: false, results: {
+    acct048: ['market Sell 3: Order rejected: insufficient margin', 'not flat — stop/target left working'] } } });
+  await s.api.flattenStrat('nq930');
+  assert.deepEqual(s.toasts, []);
+  assert.deepEqual(s.alerts, ['NQ930 flatten — FLATTEN FAILED on …048 — market Sell 3 refused: Order rejected: insufficient margin; ' +
+    'not flat — stop/target left working. It is switched OFF; flatten what is left at the broker now.']);
+  const u = load({ answer: { ok: true, results: { acct048: ['position unreadable (timeout) — stop/target left working'] } } });
+  await u.api.flattenStrat('nq930');
+  assert.match(u.alerts[0], /FLATTEN FAILED on …048 — position unreadable \(timeout\)/);
+});
+
+test('a refused, dropped or unreadable flatten is the red alert; a clean one is the toast', async () => {
+  const refused = load({ answer: { error: 'origin not allowed' } });
+  await refused.api.flattenStrat('nq930');
+  assert.deepEqual(refused.alerts, ['NQ930 flatten NOT confirmed — the desk refused it: origin not allowed. Check its positions at the broker now.']);
+  const dropped = load({ answer: new TypeError('Failed to fetch') });
+  await dropped.api.flattenStrat('nq930');
+  assert.match(dropped.alerts[0], /^NQ930 flatten NOT confirmed — the desk didn't answer \(Failed to fetch\)\./);
+  const noResults = load({ answer: { ok: true, enabled: false } });
+  await noResults.api.flattenStrat('nq930');
+  assert.match(noResults.alerts[0], /the desk sent no account results/);
+  const clean = load({ answer: { ok: true, enabled: false, results: { acct048: ['market Sell 3: ok', 'cancel 1: ok'] } } });
+  await clean.api.flattenStrat('nq930');
+  assert.deepEqual(clean.toasts, ['NQ930 flattened and switched off.']);
+  assert.deepEqual(clean.alerts, []);
+});
+
+test('an OFF that did not land is the red alert (it may still trade); a failed ON is a toast (the safe side)', async () => {
+  const off = load({ enabled: true, answer: { error: 'origin not allowed' } });
+  await off.api.toggleStrat('nq930', false);
+  assert.deepEqual(off.alerts, ['NQ930 NOT switched off — the desk refused it: origin not allowed. It may still trade: switch it off again, or Kill.']);
+  const dropped = load({ enabled: true, answer: new TypeError('Failed to fetch') });
+  await dropped.api.toggleStrat('nq930', false);
+  assert.match(dropped.alerts[0], /^NQ930 NOT switched off — the desk didn't answer \(Failed to fetch\)\./);
+  const on = load({ answer: { error: 'origin not allowed' } });
+  await on.api.toggleStrat('nq930', true);
+  assert.deepEqual(on.toasts, ['NQ930 NOT switched on — the desk refused it: origin not allowed.']);
+  assert.deepEqual(on.alerts, []);
 });

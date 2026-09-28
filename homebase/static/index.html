@@ -1053,6 +1053,14 @@ let KILL_AT = 0;                 // when the Kill in flight went out; 0: none
 const killInFlight = () => KILL_AT > 0 && Date.now() - KILL_AT < KILL_BUSY_MS;
 const killText = (v) => (v == null || v === "" ? "no reason given"
   : typeof v === "string" ? v : JSON.stringify(v)).slice(0, 200);
+/* Why a desk write did not land, in words -- or "" when the desk answered {ok: true}. A network
+   error can come after the desk got the request, so it never claims the write was not sent. */
+function answerWhy(r, err) {
+  if (err) return err.name === "SyntaxError" ? "the desk's answer was unreadable"
+                                             : `the desk didn't answer (${killText(err.message || String(err))})`;
+  if (!r || typeof r !== "object") return "the desk's answer was unreadable";
+  return r.ok === true ? "" : `the desk refused it: ${killText(r.error || r.detail)}`;
+}
 function killFailures(results) {
   return Object.entries(results || {}).map(([aid, v]) => {
     const why = [];
@@ -2554,18 +2562,36 @@ async function toggleStrat(name, enabled) {
       "Turn ON " + name.toUpperCase() + "?",
       "It will run and execute on its assigned accounts from the next signal.",
       "Turn on", false)) { refresh(); return; }
-  const r = await post("/api/strategy", {strategy: name, enabled});
-  if (r.ok) toast(name.toUpperCase() + (enabled ? " is ON."
-    : " is OFF — it ignores signals; open positions are untouched."));
+  const N = name.toUpperCase();
+  let r, err = null;
+  try { r = await post("/api/strategy", {strategy: name, enabled}); } catch (e) { err = e || new Error("no answer"); }
   refresh();
+  if (DEMO) return;                        // preview mode: post() already said nothing is sent
+  const why = answerWhy(r, err);
+  if (!why) toast(N + (enabled ? " is ON." : " is OFF — it ignores signals; open positions are untouched."));
+  else if (enabled) toast(`${N} NOT switched on — ${why}.`, 8000);          // the safe side
+  else alertBar(`${N} NOT switched off — ${why}. It may still trade: switch it off again, or Kill.`);
 }
+/* Flatten & turn off believes only what the desk reports (second review): it answers ok:true
+   whatever happened to the flatten itself, with each account's steps in `results` -- read them
+   (stepFailures). A failed flatten, a refusal or a dropped / unreadable answer is the red alert:
+   a position may still be open. */
 async function flattenStrat(name) {
   if (!await confirmDlg("Flatten " + name.toUpperCase() + "?",
       "Cancels its resting entries, market-flattens its symbol on every account it acted on today, and switches the strategy OFF.",
       "Flatten & turn off", true)) return;
-  const r = await post("/api/strategy-flatten", {strategy: name});
-  if (r.ok) toast(name.toUpperCase() + " flattened and switched off.");
+  const N = name.toUpperCase();
+  let r, err = null;
+  try { r = await post("/api/strategy-flatten", {strategy: name}); } catch (e) { err = e || new Error("no answer"); }
   refresh();
+  if (DEMO) return;
+  const why = answerWhy(r, err);
+  if (why) return alertBar(`${N} flatten NOT confirmed — ${why}. Check its positions at the broker now.`);
+  const res = r.results && typeof r.results === "object" ? r.results : null;
+  if (!res) return alertBar(`${N} flatten NOT confirmed — the desk sent no account results. Check its positions at the broker now.`);
+  const bad = Object.entries(res).map(([a, steps]) => failText(stepFailures(steps), " on " + acctShort(a))).filter(Boolean);
+  if (bad.length) return alertBar(`${N} flatten — ${bad.join(" · ")}. It is switched OFF; flatten what is left at the broker now.`);
+  toast(`${N} flattened and switched off.`);
 }
 
 /* ---- accounts popup ---- */
