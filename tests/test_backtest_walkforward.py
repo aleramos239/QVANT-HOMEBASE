@@ -190,7 +190,7 @@ def test_compute_selects_tests_and_stitches_a_two_cell_grid_over_five_months():
     assert r["stability"] == {"changes": 1, "pairs": 1, "distinct": 2, "no_pick": 0, "top": {"cell": 0, "count": 1}}
     # stitched = step 0's three test months of cell 0, exactly the report column of those trades
     leg = [wf.to_ns(t) for t in tr[0] if "2022-02" <= t["date"][:7] <= "2022-04"]
-    col = report.column(leg, 50_000.0, [])
+    col = report.column(leg, 50_000.0, [], ["2022-02", "2022-03", "2022-04"])   # the grid spans the covered months
     st = r["stitched"]
     for k in ("net_profit", "profit_factor", "win_rate", "sharpe", "max_drawdown", "trades"):
         assert st["stats"][k] == col[k], k
@@ -744,3 +744,29 @@ def test_a_compare_job_keeps_to_the_two_slot_cap_and_the_930_pause(tmp_path, fak
     assert st["status"] == "queued" and st["paused"] == "paused for the 9:30 window" and len(spawned) == before
     m.cancel(wid2)
     release.set()
+
+
+# ---------------------------------------------------------------- the stitched Sharpe grid spans the covered months
+
+def test_the_stitched_sharpe_grid_spans_the_chains_months_not_first_to_last_trade():
+    """GOTCHAS: a flat no-pick month at the end of a chain is flat days, not outside the record.
+    Changes an existing 1:N Sharpe slightly -- only where the chain's ends were flat."""
+    months = ["2022-01", "2022-02", "2022-03", "2022-04"]
+    # one cell: wins January (the selection), trades Feb 1-4 (+, -, +, +) and nothing in March
+    tr = trades("2022-01", [100] * 5) + trades("2022-02", [50, -20, 40, 30])
+    cells = [{"i": 0, "params": {}, "months": wf.month_stats(tr, [], 50_000.0, months)}]
+    r = wf.compute(cells, months, trades_of=lambda i: (tr, []), metric="net_profit", min_trades=5,
+                   capital=50_000.0, test_months=2)
+    assert r["stitched"]["months"] == ["2022-02", "2022-03"]
+    leg = [wf.to_ns(t) for t in tr if t["date"][:7] == "2022-02"]
+    bounded = report.column(leg, 50_000.0, [], ["2022-02", "2022-03"])
+    first_to_last = report.column(leg, 50_000.0, [])
+    assert r["stitched"]["stats"]["sharpe"] == bounded["sharpe"]
+    assert bounded["sharpe"] < first_to_last["sharpe"]          # 41 flat weekdays more, same net
+    grid = report.weekday_daily_pnl(leg, [], ["2022-02", "2022-03"])
+    assert len(grid) == 20 + 23 and sum(grid) == 100              # Feb + Mar 2022 weekdays
+    assert len(report.weekday_daily_pnl(leg, [])) == 4            # the old first->last-trade grid
+    # a hole is still dropped from the bounded grid
+    assert len(report.weekday_daily_pnl(leg, [{"date": "2022-03-01", "reason": "no data"}], ["2022-02", "2022-03"])) == 42
+    # the phase chains use their own covered months too
+    assert r["phases"][0]["sharpe"] == r["stitched"]["stats"]["sharpe"]

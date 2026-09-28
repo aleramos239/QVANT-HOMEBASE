@@ -144,9 +144,11 @@ def to_ns(t: dict) -> dict:
     return {**t, "entry_ns": t["entry_ms"] * 1_000_000, "exit_ns": t["exit_ms"] * 1_000_000}
 
 
-def _stats(trades_ms: list[dict], skipped: list[dict], capital: float) -> dict:
+def _stats(trades_ms: list[dict], skipped: list[dict], capital: float, months: list[str] | None = None) -> dict:
+    """`months`: a stitched chain's covered months -- its Sharpe day grid spans exactly those months
+    (a flat no-pick month at either end is a flat stretch, not outside the record)."""
     tr = sorted((to_ns(t) for t in trades_ms), key=lambda t: (t["exit_ns"], t["entry_ns"]))
-    col = report.column(tr, capital, skipped)
+    col = report.column(tr, capital, skipped, months)
     out = {k: col[k] for k in STAT_KEYS if k != "skipped_by_error"}
     out["skipped_by_error"] = sum(1 for s in skipped if s["reason"].startswith("strategy error"))
     return out
@@ -243,8 +245,8 @@ def compute(cells: list[dict], months: list[str], *, trades_of, metric: str, min
     trades_ns = sorted((to_ns(t) for t in tr0), key=lambda t: (t["exit_ns"], t["entry_ns"]))
     phases = []
     for p in range(test_months):
-        tr, sk, _ = (tr0, sk0, None) if p == 0 else stitched(p)
-        s = _stats(tr, sk, capital)
+        tr, sk, cov = (tr0, sk0, covered0) if p == 0 else stitched(p)
+        s = _stats(tr, sk, capital, cov)
         phases.append({"phase": p, "steps": len(chain(len(st), p, test_months)), "net_profit": s["net_profit"],
                        "trades": s["trades"], "sharpe": s["sharpe"]})
 
@@ -252,7 +254,7 @@ def compute(cells: list[dict], months: list[str], *, trades_of, metric: str, min
     pairs = [(a, b) for a, b in zip(picks, picks[1:]) if a is not None and b is not None]
     counts = Counter(p for p in picks if p is not None)
     top = min(counts.items(), key=lambda kv: (-kv[1], kv[0])) if counts else None
-    oos, ins = _stats(tr0, sk0, capital), _stats(tri, ski, capital)
+    oos, ins = _stats(tr0, sk0, capital, covered0), _stats(tri, ski, capital, coveredi)
 
     def per_month(stats: dict, n: int) -> dict | None:
         return None if not n else {"net_profit": round((stats["net_profit"] or 0.0) / n, 2),
