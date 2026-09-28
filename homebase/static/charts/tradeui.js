@@ -5,9 +5,10 @@
 
    Trading is PER CHART, and the chart's ACCOUNTS are the switch (2026-09-27 accounts-per-chart plan, Task 1):
    each chart's cell config carries `trade: {accounts}` -- `trade.on` is retired -- and every order-sending
-   path takes its accounts from the chart it was started from (the Buy/Sell block, a chart-menu item, a line's
-   drag or ×, the order panel). Accounts are edited in that chart's ⚙ → Trading (settings-dialog.js, through
-   accountRows / toggleAccount / pickAlgo below); the old #tbTrade toolbar menu is gone. The bottom panel's
+   entry path takes its accounts from the chart it was started from (the Buy/Sell block, a chart-menu item, the
+   order panel). A line's drag, × or SL/TP handle acts on that line's OWN accounts, which may be any account the
+   desk lists as tradable (2026-09-27: no more "view only" for an unticked account's lines). Accounts are edited
+   in that chart's ⚙ → Trading (settings-dialog.js, through accountRows / toggleAccount / pickAlgo below); the old #tbTrade toolbar menu is gone. The bottom panel's
    per-account Close/Cancel act on the named account only (accountGate).
 
    A chart's algo (2026-09-27 plan, Task 3): `cell.cfg.algo` is set through setCellAlgo; its Kill (botKill) goes
@@ -16,7 +17,8 @@
    whatever the chart's Trading switch says (it is the emergency stop, not trading).
 
    Safety (ruling S4/S5, and the 2026-09-27 review of Tasks 3-4):
-     - every action re-reads its gate (the chart's mode from HBDesk.mode(that chart's trade), or the named
+     - every action re-reads its gate (the chart's mode from HBDesk.mode(that chart's trade) for a new entry, the
+       line gate -- any tradable desk account, lineGate -- for a line's drag / × / SL-TP handle, or the named
        account's gate) at the moment it actually sends, not at the moment the user clicked or the confirm dialog
        opened — the desk, the chart's accounts, its switch or a LIVE arm can all change while a dialog is open;
      - one action's send is in flight at a time (`withLock`): a second attempt while one is out is dropped, and
@@ -39,7 +41,7 @@ const busySubs = new Set();   // notified synchronously on every inFlight flip, 
 const tradeSubs = new Set();  // notified when a chart's trade config or a LIVE arm changes (the charts' overlays re-render)
 
 /* ---- one chart's trade config and mode ---- */
-/* The chart's {accounts}, sanitised; a missing chart has none (so it is view-only). */
+/* The chart's {accounts}, sanitised; a missing chart has none (so it places no new entries). */
 function tradeOf(cell) { return T.cellTrade(cell && cell.cfg ? cell.cfg.trade : null); }
 /* The root a chart is showing (the loaded one; its config's while nothing has loaded yet). */
 function rootOfCell(cell) { return !cell ? null : cell.shown ? cell.shown.root : (cell.cfg && cell.cfg.root) || null; }
@@ -72,8 +74,26 @@ function accountGate(account) {
   }
   return { mode: 'on', reason: '', accounts: [account] };
 }
-/* The accounts whose lines this chart may drag / close: its effective accounts, none while it cannot trade. */
-function editableIds(cell) { const m = effectiveMode(cell); return m.mode === 'on' ? m.accounts : []; }
+/* The mode for MANAGING existing lines (drag, ×, the SL/TP handles) on a chart (2026-09-27): any account the desk
+   lists as tradable (HBTrade.lineAccounts), not only the chart's ticked ones -- those decide where NEW entries go.
+   The desk up with chart trading on, and the chart not replaying (nor latched by a replay's end), as for entries;
+   a LIVE leg's arm is checked per line at send (findUnarmed), and the desk refuses a bot's order whatever we say. */
+function lineMode(cell) {
+  const g = D().gate();
+  if (g) return g;
+  const m = { mode: 'on', reason: '', accounts: T.lineAccounts(D().state) };
+  return T.replayGuard(T.replayHaltGuard(m, !!(cell && cell.cfg && cell.cfg.replayHalt)), !!(cell && cell.replay));
+}
+/* lineMode, re-run at send time: plus the chart still on the page and still showing the root. */
+function lineGate(cell, root) {
+  const m = lineMode(cell);
+  if (m.mode !== 'on') return m;
+  if (!page || !page.cells().includes(cell)) return { mode: 'none', reason: 'That chart is gone — nothing sent', accounts: [] };
+  if (rootOfCell(cell) !== root) return { mode: 'none', reason: 'This chart changed symbol — nothing sent', accounts: [] };
+  return m;
+}
+/* The accounts whose lines this chart may drag / close: lineMode's, none while it cannot. */
+function editableIds(cell) { const m = lineMode(cell); return m.mode === 'on' ? m.accounts : []; }
 /* The accounts whose execution markers this chart draws: its own accounts, minus an unarmed LIVE one
    (review item 5), whether or not its Trading is on. */
 function fillIds(cell) { return T.armedTicked(D().state, tradeOf(cell).accounts, liveConfirmed); }
@@ -334,17 +354,17 @@ function symbolAction(cell, kind, root) {
   confirm({ title, rows, action: verb, live: hasLive(rows) }).then((ok) => { if (ok) { confirmedAfterReplay(cell); guardedSend(kind, g, build); } });
 }
 
-/* A line may be moved / closed only from a chart whose effective accounts hold every one of its legs. */
-const NOT_THIS_CHART = "That line isn't on this chart's trading accounts — view only";
+/* A line may be moved / closed only while every one of its legs is on an account the desk lists as tradable. */
+const NOT_TRADABLE = "That line's account can't trade from the chart right now";
 
 function moveLine(cell, line, price, root, tick, { onCancel } = {}) {
   if (!T.canDrag(line)) { if (onCancel) onCancel(); return; }   // a Stop Limit can't be moved: cancel and place again
-  const g = () => cellGate(cell, root), gate = g();
+  const g = () => lineGate(cell, root), gate = g();
   if (gate.mode !== 'on') { D().toast('err', gate.reason); if (onCancel) onCancel(); return; }
   const accountIds = line.legs.map((l) => l.account);
   const unarmed = findUnarmed(accountIds);   // review item 5: refuse a LIVE leg that isn't armed this session
   if (unarmed) { D().toast('err', T.unarmedLiveMessage(unarmed)); if (onCancel) onCancel(); return; }
-  if (line.editable === false || !T.legsWithin(line, gate.accounts)) { D().toast('err', NOT_THIS_CHART); if (onCancel) onCancel(); return; }
+  if (line.editable === false || !T.legsWithin(line, gate.accounts)) { D().toast('err', NOT_TRADABLE); if (onCancel) onCancel(); return; }
   const rounded = T.roundTick(price, tick);
   if (rounded === T.roundTick(line.price, tick)) { if (onCancel) onCancel(); return; }   // M8: a zero-tick move sends nothing
   if (line.type) {   // I1/N2: re-run against the LAST KNOWN quote at any age -- a Limit dragged through (or
@@ -366,13 +386,13 @@ function moveLine(cell, line, price, root, tick, { onCancel } = {}) {
 
 /* × on a line: flatten for a position, cancel for the rest (SL/TP/plain orders). */
 function closeLine(cell, line, root, tick) {
-  const g = () => cellGate(cell, root), gate = g();
+  const g = () => lineGate(cell, root), gate = g();
   if (gate.mode !== 'on') { D().toast('err', gate.reason); return; }
   const isPosition = line.kind === 'position';
   const accounts = [...new Set(line.legs.map((l) => l.account))];
   const unarmed = findUnarmed(accounts);   // review item 5
   if (unarmed) { D().toast('err', T.unarmedLiveMessage(unarmed)); return; }
-  if (line.editable === false || !T.legsWithin(line, gate.accounts)) { D().toast('err', NOT_THIS_CHART); return; }
+  if (line.editable === false || !T.legsWithin(line, gate.accounts)) { D().toast('err', NOT_TRADABLE); return; }
   const action = isPosition ? 'flatten' : 'cancel';
   const build = (m) => {
     if (!T.legsWithin(line, m.accounts)) { D().toast('err', 'Accounts changed — review and try again'); return null; }
@@ -626,7 +646,7 @@ function mount(pg) {
 }
 
 window.HBTradeUI = { mount, placeOrder, symbolAction, flattenAccount, cancelOrder, closeLine, moveLine, confirm, busy,
-  onBusyChange, onTradeChange, effectiveMode, editableIds, fillIds, tradeOf, setCellTrade, setCellAlgo, botKill,
+  onBusyChange, onTradeChange, effectiveMode, lineMode, editableIds, fillIds, tradeOf, setCellTrade, setCellAlgo, botKill,
   killBusy, accountRows, toggleAccount, pickAlgo, armPending, paintDeskStatus, replayEnded, resumeLive,
   replayDestroyed, gridRebuilt };
 })();

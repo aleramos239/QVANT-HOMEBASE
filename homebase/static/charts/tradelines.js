@@ -5,9 +5,11 @@
        (ruling S8), draggable by the chip's text (order/SL/TP only — positions are not draggable: ruling S11);
      - the execution markers, through cell.setExtraMarkers('fills', …) (ruling S22).
    Trading is per chart, and the chart's ACCOUNTS are the switch (2026-09-27 accounts-per-chart plan, Task 1):
-   the block, the chart's account chips, and draggable / × lines exist only while THIS chart can trade, and
-   only for this chart's accounts; every other line (every account's, on a chart with no accounts) is view
-   only: no drag, no ×.
+   the block and the chart's account chips exist only while THIS chart can trade.
+   2026-09-27 (no more "view only"): a position / order / SL / TP line is manageable (drag, ×, the SL/TP handles)
+   for ANY account the desk lists as tradable, ticked on this chart or not; the chart's accounts still decide where
+   the Buy/Sell block's NEW entries go. A line stays read-only (no drag, no ×) only while its account can't trade
+   from the chart (not tradable, the desk down / off, this chart replaying).
    The chart's algo (2026-09-27 plan, Task 3), only while the chart's config carries one: a legend badge (bot icon,
    name, state pill, today's P&L, a red Kill -- offered whatever the Trading switch says), the bot's working orders
    as read-only "BOT …" lines (no drag, no ×), its fills today and its real past runs (HBDeskClient.botHistory) as
@@ -185,8 +187,8 @@ class Overlay {
   /* ---- lines: positions, working orders and SL/TP legs, merged per HBTrade.linesFor (ruling S8) ---- */
   paintLines(mode) {
     const Dc = window.HBDeskClient, root = this.root;
-    // every account's lines; only this chart's effective accounts' are editable (none while it cannot trade)
-    const groups = T.linesFor(Dc.state, root, mode.mode === 'on' ? mode.accounts : []);
+    // every account's lines; any tradable desk account's are editable (HBTradeUI.lineMode), not only this chart's
+    const groups = T.linesFor(Dc.state, root, window.HBTradeUI.editableIds(this.cell));
     const busy = window.HBTradeUI.busy();
     const seen = new Set();
     for (const g of groups) {

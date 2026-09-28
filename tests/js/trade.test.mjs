@@ -260,7 +260,7 @@ test('hiddenCellsLoaded: a chart beyond the visible grid is re-read like a load 
   assert.doesNotThrow(() => T.hiddenCellsLoaded(null, 0, PAPER_STATE));
 });
 
-test('legsWithin: a line may be moved / closed only when every leg\'s account is one of the chart\'s', () => {
+test('legsWithin: a line may be moved / closed only when every leg\'s account is one of the given (tradable) ones', () => {
   const g = { legs: [{ account: 'sim041' }, { account: 'sim047' }] };
   assert.equal(T.legsWithin(g, ['sim041', 'sim047']), true);
   assert.equal(T.legsWithin(g, ['sim041']), false);
@@ -302,24 +302,31 @@ test('lines: merged positions, SL/TP legs with dollars, plain orders, bots\' ord
   assert.equal(T.withPrice(lines[1], 1).editable, true);
 });
 
-test('lines on a chart with Trading off: every account\'s lines, all view only', () => {
+test('lines no account may manage (desk down / off, replay): every account\'s lines, read-only, no "view only" text', () => {
   const lines = T.linesFor(STATE, 'NQ', []);
   assert.deepEqual(lines.map((g) => g.editable), [false, false, false, false]);
   assert.deepEqual(lines.map((g) => T.lineText(g, 30910)),
-    ['LONG 3 · +$600 · 2 accts · view only', `SL 3 · ${M}$900 · 2 accts · view only`, 'TP 2 · +$1,200 · …041 · view only',
-      'BUY LMT 1 · …041 · view only']);
+    ['LONG 3 · +$600 · 2 accts', `SL 3 · ${M}$900 · 2 accts`, 'TP 2 · +$1,200 · …041', 'BUY LMT 1 · …041']);
   assert.deepEqual(T.linesFor(STATE, 'NQ', undefined).map((g) => g.editable), [false, false, false, false]);
-  assert.deepEqual(T.linesFor(STATE, 'ES', []).map((g) => T.lineText(g, 6490)), ['SHORT 1 · +$500 · …099 · view only']);
+  assert.deepEqual(T.linesFor(STATE, 'ES', []).map((g) => T.lineText(g, 6490)), ['SHORT 1 · +$500 · …099']);
 });
 
-test('lines on a chart trading some accounts: others\' lines stay view only, never merged into an editable one', () => {
+test('lineAccounts: every account the desk lists as tradable -- ticked on a chart or not; never an unlisted one', () => {
+  const st = { accounts: [acct('sim041', 'SIM0000041', 'demo'), acct('live099', 'FAKELIVE099', 'live'),
+    acct('sim047', 'SIM0000047', 'demo', { tradable: false }), acct('paper', 'PAPER', 'paper', { tradable: true })] };
+  assert.deepEqual(T.lineAccounts(st), ['sim041', 'live099', 'paper']);
+  assert.deepEqual(T.lineAccounts(null), []);
+  assert.deepEqual(T.lineAccounts({ accounts: [{ id: 'x', tradable: 'yes' }] }), [], 'tradable must be exactly true');
+});
+
+test('lines of some accounts editable: the others\' lines stay read-only, never merged into an editable one', () => {
   const lines = T.linesFor(STATE, 'NQ', ['sim047']);
   const byKey = (k, e) => lines.find((g) => g.kind === k && g.editable === e);
   assert.deepEqual(byKey('sl', true).legs.map((l) => l.account), ['sim047']);
   assert.deepEqual(byKey('sl', false).legs.map((l) => l.account), ['sim041']);
   assert.notEqual(byKey('sl', true).key, byKey('sl', false).key);
   assert.equal(T.lineText(byKey('sl', true), 30910), `SL 1 · ${M}$300 · …047`);
-  assert.equal(T.lineText(byKey('sl', false), 30910), `SL 2 · ${M}$600 · …041 · view only`);
+  assert.equal(T.lineText(byKey('sl', false), 30910), `SL 2 · ${M}$600 · …041`);
   for (const g of lines) if (g.editable) assert.ok(g.legs.every((l) => l.account === 'sim047'));
   // a Set works the same as an array
   assert.deepEqual(T.linesFor(STATE, 'NQ', new Set(['sim047'])).map((g) => g.key), lines.map((g) => g.key));

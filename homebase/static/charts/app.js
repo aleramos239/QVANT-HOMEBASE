@@ -57,7 +57,7 @@ const cur = () => cells[selected];
 /* ---- layout + selection ---- */
 function starter(i) {
   const [root, spec] = START[i % START.length];
-  return { root, spec, indicators: C.defaults(), trade: { accounts: [] }, algo: null };   // a fresh chart is view-only
+  return { root, spec, indicators: C.defaults(), trade: { accounts: [] }, algo: null };   // a fresh chart places no new entries
 }
 function saveLast() { try { localStorage.setItem('hb_charts_last', JSON.stringify(layout)); } catch (_) { /* storage off */ } }
 /* Anything that changes a chart outside the Settings dialog's own commit (Ok already marks dirty itself) reads
@@ -207,7 +207,7 @@ function hostFor(id) {
     onIndicatorMenu(cell, uid, o) { indicatorMenu(cell, uid, o); },
     onReplayGuard(cell, patch) { window.HBReplayUI.guardSymbolChange(cell, patch); },
     // final review I2(b), SAFETY ruling: any symbol change CLEARS that chart's accounts, so the new instrument
-    // is view-only until they are picked again (HBTrade.symbolChangeTrade, from cell.update)
+    // places no new entries until they are picked again (HBTrade.symbolChangeTrade, from cell.update)
     onSymbolChange(cell, off) {
       if (!off.cleared.length) return;   // nothing on the chart: nothing to clear, nothing to say
       window.HBTradeUI.setCellTrade(cell, off.trade);

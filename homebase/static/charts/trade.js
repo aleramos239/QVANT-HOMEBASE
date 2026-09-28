@@ -121,9 +121,10 @@ function clientId(now = Date.now()) { seq = (seq + 1) % 1e6; return `c${now.toSt
 
 /* ---- per-chart trading (2026-09-27 accounts-per-chart plan, Task 1) ----
    Each chart's cell config carries `trade: {accounts}` and `algo` (a desk strategy key, or null). The ACCOUNTS
-   are the switch: a non-empty list means the chart is trade-ready, an empty one means view-only. The old
+   are the switch: a non-empty list means the chart is trade-ready, an empty one places no new entries (its
+   lines stay manageable: lineAccounts). The old
    `trade.on` flag is RETIRED -- it is not read, not written, and an old layout's stored `on` is ignored.
-   Every order-sending path takes its accounts from the chart it was started from. */
+   Every entry path takes its accounts from the chart it was started from. */
 /* The cell config's trade, sanitised: accounts per idList. Always a fresh object, never an `on` key. */
 function cellTrade(raw) {
   const o = isObj(raw) ? raw : {};
@@ -402,12 +403,16 @@ function replayGuard(mode, inReplay) {
   return inReplay && mode && mode.mode === 'on' ? { mode: 'none', reason: 'Replay — trading is off', accounts: [] } : mode;
 }
 
-/* Whether every leg of a line belongs to `accounts` (a chart's effective accounts): the only lines a chart may
-   move or close. An empty or missing line never qualifies. */
+/* Whether every leg of a line belongs to `accounts` (the desk's tradable accounts, lineAccounts): the only lines a
+   chart may move or close. An empty or missing line never qualifies. */
 function legsWithin(line, accounts) {
   const ok = new Set(accounts || []);
   return !!line && Array.isArray(line.legs) && line.legs.length > 0 && line.legs.every((l) => ok.has(l.account));
 }
+/* The accounts whose lines ANY chart may manage (drag, ×, the SL/TP handles; 2026-09-27): every account the desk (or
+   the paper book) lists as tradable, whatever the chart has ticked -- the ticked ones only decide where NEW entries
+   go. An unlisted account is never in it (fail closed); a LIVE one still needs its arm at send time. */
+function lineAccounts(state) { return accountsOf(state).filter((a) => a && a.tradable === true).map((a) => a.id); }
 /* The chart's accounts as legend chips, "…047 DEMO": `active` when the account is in `activeIds` (the ones an order
    from this chart would go to right now); an account the desk does not list has no env. */
 function accountChips(state, accounts, activeIds) {
@@ -604,8 +609,9 @@ function rrText(risk, reward) { return risk > 0 && reward > 0 ? `1:${Number((rew
 /* Positions (merged by side + average price), SL/TP legs (an order opposite to the account's position in that
    contract: a stop type is SL, a limit is TP) and plain working orders, merged by kind + side + type + price, for
    EVERY account in `root` (Task 2: a chart never loses sight of a position). `editable` (an array or Set: the
-   chart's effective accounts, empty when its Trading is off) marks which lines may be dragged / closed; an editable
-   line and a view-only one are never merged together, so an action on a line can only reach editable accounts.
+   accounts whose lines may be managed from a chart -- lineAccounts, empty while the desk is down / off or the chart
+   replays) marks which lines may be dragged / closed; an editable line and a read-only one are never merged
+   together, so an action on a line can only reach editable accounts.
    A bot's own orders (owner set) are drawn by the bot overlay instead. */
 function linesFor(state, root, editable) {
   if (!state) return [];
@@ -662,9 +668,8 @@ function lineLabel(g) {
 /* Positions never drag (ruling S11); a Stop Limit can't be moved (the desk refuses it): cancel and place again. */
 function canDrag(g) { return g.kind !== 'position' && g.type !== 'StopLimit'; }
 function lineText(g, last) {
-  const view = g.editable === false ? 'view only' : null;
-  if (g.kind === 'order') return [lineLabel(g), whoText(g), view].filter(Boolean).join(' · ');
-  return [lineLabel(g), usd(linePnl(g, last)), whoText(g), view].filter(Boolean).join(' · ');
+  if (g.kind === 'order') return [lineLabel(g), whoText(g)].join(' · ');
+  return [lineLabel(g), usd(linePnl(g, last)), whoText(g)].filter(Boolean).join(' · ');
 }
 const PAPER_COLOR = '#7E57C2';   // charts.css --paper (light); cell.js's palette carries the theme's own as P.paper
 function lineColor(g, P) {
@@ -1402,7 +1407,7 @@ const api = { PREFS_KEY, QUOTE_STALE_MS, BOT_NAMES, parsePrefs, prefsText, oneCl
   killConfirm, killToasts, killBlock, killSold,
   enterConfirms, wireSend, symbolChangeTrade, resolveConfirmedAccounts, armedTicked, unarmedLiveMessage, freshQuote,
   needsQuoteForBracket, refuseIfMarketable, cellTrade, loadedTrade, cellAlgo, tradeBits, templateTrade, algoForRoot,
-  migrateTicked, deskGate, armedMode, replayGuard, legsWithin, accountChips, acctTick, hiddenCellsLoaded,
+  migrateTicked, deskGate, armedMode, replayGuard, legsWithin, lineAccounts, accountChips, acctTick, hiddenCellsLoaded,
   NO_ACCOUNTS, SYMBOL_CHANGE_ACCOUNTS_CLEARED, liveIds, liveDroppedMessage, envChip, algoBookings, algoForAccount,
   accountsForAlgo, algoTickAccounts, accountPickRows, deskStatusText,
   verifyLoaded, verifyCells, nextUnverified, unverifiedMode, CHECKING_ACCOUNTS, REPLAY_ENDED, replayHaltGuard,

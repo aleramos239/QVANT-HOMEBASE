@@ -509,7 +509,7 @@ a { color: inherit; }
   font-size: 12px; font-variant-numeric: tabular-nums; box-shadow: 0 0 0 1px var(--c); background: var(--panel); }
 .tl-text { padding: 0 8px; line-height: 22px; background: var(--c); color: #fff; white-space: nowrap; }
 .tl-chip.drag .tl-text { cursor: ns-resize; }
-.tl-chip.view .tl-text { background: var(--panel); color: var(--c); }   /* view only: no drag, no × (Task 2) */
+.tl-chip.view .tl-text { background: var(--panel); color: var(--c); }   /* read-only: no drag, no × (its account can't trade from the chart now) */
 .tl-x { width: 22px; color: var(--c); display: grid; place-items: center; }
 .tl-x:hover { background: var(--hover); }
 .tl-chip.bot .tl-text { background: var(--panel); color: var(--c); cursor: default; }

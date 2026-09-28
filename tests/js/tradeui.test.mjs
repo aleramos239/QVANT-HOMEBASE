@@ -404,3 +404,30 @@ test('one-click per surface: the chart block and the order panel read their own 
   assert.equal(dialogs.length, 2);
   Object.assign(desk.prefs, { oneClickChart: undefined, oneClickPanel: undefined });
 });
+
+test('no more "view only": a chart manages ANY tradable account\'s lines; the arm, replay and unlisted rules still hold', async () => {
+  reset();
+  const c = chart([]);                                        // nothing ticked on this chart
+  assert.deepEqual(UI.editableIds(c), ['sim041', 'live099']);
+  const line = (account, extra = {}) => ({ key: 'k', kind: 'order', side: 'Buy', type: 'Limit', price: 29990, qty: 1,
+    editable: true, legs: [{ account, who: '…', qty: 1, order_id: '77' }], ...extra });
+  UI.closeLine(c, line('sim041'), 'NQ', 0.25);                 // oneClick on: sends at once
+  await flush();
+  assert.deepEqual(desk.sent.map((s) => [s.action, s.body.account, s.body.order_id]), [['cancel', 'sim041', '77']]);
+  UI.moveLine(c, line('sim041'), 29980, 'NQ', 0.25);
+  await flush();
+  assert.deepEqual(desk.sent[1].body, { client_id: desk.sent[1].body.client_id, account: 'sim041', order_id: '77', price: 29980 });
+  UI.closeLine(c, line('live099'), 'NQ', 0.25);                // LIVE, not armed this session
+  await flush();
+  assert.equal(desk.sent.length, 2);
+  assert.match(desk.toasts.at(-1), /LIVE/);
+  UI.closeLine(c, line('ghost'), 'NQ', 0.25);                  // an account the desk does not list
+  await flush();
+  assert.equal(desk.sent.length, 2);
+  c.replay = { id: 'r' };                                     // a replaying chart manages nothing
+  assert.deepEqual(UI.editableIds(c), []);
+  UI.closeLine(c, line('sim041'), 'NQ', 0.25);
+  await flush();
+  assert.equal(desk.sent.length, 2);
+  assert.equal(desk.toasts.at(-1), 'Replay — trading is off');
+});
