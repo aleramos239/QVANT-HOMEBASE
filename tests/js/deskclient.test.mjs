@@ -77,3 +77,25 @@ test('fills waiting for an answer are bounded: only the last 50 are kept', async
   await sent;
   assert.deepEqual(toasts(), ['…041 · order accepted']);
 });
+
+test('only an order / flatten / reverse answer claims a held fill -- a modify or cancel answer never does', async () => {
+  const { D, reply, toasts } = load();
+  D.onMessage(fill(1, 7001));                                                     // another page's order, partly filled
+  D.onMessage(fill(2, 7002));
+  for (const [action, id] of [['modify', 7001], ['cancel', 7002]]) {              // this page then moves / cancels it
+    const sent = D.send(action, { client_id: action, account: 'sim041', order_id: id });
+    reply(id);
+    await sent;
+  }
+  assert.deepEqual(toasts().filter((t) => t.startsWith('Filled')), [], 'no fill claimed by a modify or cancel');
+  D.onMessage(fill(3, 7001, 30001.0));                                            // ours from now on: its next fill
+  assert.equal(toasts()[0], 'Filled 1 @ 30,001.00 · …041');
+  for (const [action, fid, oid] of [['flatten', 21, 9101], ['reverse', 22, 9102]]) {   // these name orders they
+    const sent = D.send(action, { client_id: action, accounts: ['sim041'], root: 'NQ' });  // just sent: a fill held
+    D.onMessage(fill(fid, oid));                                                            // before the answer is
+    assert.equal(toasts().filter((t) => t.startsWith('Filled')).length, fid === 21 ? 1 : 2);   // claimed by it
+    reply(oid);
+    await sent;
+  }
+  assert.equal(toasts().filter((t) => t.startsWith('Filled')).length, 3);
+});

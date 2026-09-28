@@ -18,6 +18,7 @@ const ours = new Set();   // order ids this page placed: their fills get a toast
 // here (the last UNCLAIMED_MAX, oldest first) for send() to claim it: one toast when the answer lands, never two
 const UNCLAIMED_MAX = 50;
 const unclaimed = [];
+const CLAIMS = ['order', 'flatten', 'reverse'];   // answers naming an order this page just SENT: only they claim
 let queued = null;
 
 function loadPrefs() { try { return T.parsePrefs(localStorage.getItem(T.PREFS_KEY)); } catch (_) { return T.parsePrefs(null); } }
@@ -81,7 +82,12 @@ async function send(action, body) {
     status = r.status;
     try { data = await r.json(); } catch (_) { data = null; }
   } catch (_) { data = { detail: 'chart service unreachable' }; }
-  if (data && data.results) for (const r of Object.values(data.results)) if (r && r.ok && r.order_id) claim(String(r.order_id));
+  // a modify / cancel answer names an order that already existed -- maybe another page's, with fills of its own
+  // held here: from now on it is ours (as before), but it never claims what was held
+  if (data && data.results) for (const r of Object.values(data.results)) {
+    if (!r || !r.ok || !r.order_id) continue;
+    if (CLAIMS.includes(action)) claim(String(r.order_id)); else ours.add(String(r.order_id));
+  }
   for (const t of T.resultToasts(action, status, data, desk.state)) toast(t.tone, t.text);
   return data;
 }
