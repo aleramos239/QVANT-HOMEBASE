@@ -344,6 +344,29 @@ a { color: inherit; }
 }
 .tpl-btn { display: inline-flex; align-items: center; gap: 6px; }
 .menu-tpl { min-width: 240px; }
+
+/* ---- floating per-drawing toolbar + its settings dialog (2026-09-27 draw-tools plan) ---- */
+.draw-toolbar { position: fixed; z-index: 6; display: flex; align-items: center; gap: 2px; padding: 3px;
+  border-radius: 8px; background: var(--panel); box-shadow: 0 0 0 1px var(--border), var(--shadow-dialog); }
+.dtb-btn { flex: none; width: 26px; height: 26px; display: grid; place-items: center; border-radius: 5px; color: var(--text); }
+.dtb-btn .ic { width: 15px; height: 15px; }
+.dtb-btn:hover, .dtb-btn.open, .dtb-btn[aria-pressed="true"] { background: var(--hover); }
+.dtb-btn.danger:hover { background: var(--down-soft); color: var(--down); }
+.dtb-sep { flex: none; width: 1px; height: 18px; margin: 0 2px; background: var(--border); }
+.dtb-swatch { flex: none; width: 22px; height: 22px; margin: 0 1px; padding: 3px; border-radius: 5px;
+  box-shadow: inset 0 0 0 1px var(--border); }
+.dtb-swatch i { display: block; width: 100%; height: 100%; border-radius: 3px; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .06); }
+.dtb-swatch:hover { box-shadow: inset 0 0 0 1px var(--text-2); }
+.dtb-num { width: 34px; height: 24px; padding: 0 4px; border: 1px solid var(--border); border-radius: 5px;
+  background: var(--panel); font-size: 12px; text-align: center; font-variant-numeric: tabular-nums; }
+.dtb-select { height: 24px; padding: 0 6px; border: 1px solid var(--border); border-radius: 5px; background: var(--panel); font-size: 12px; }
+.dtb-num:focus, .dtb-select:focus { border-color: var(--accent); }
+.dialog.drawstyle { width: min(360px, 92vw); height: min(420px, 78vh); max-height: none; }
+.dialog.drawstyle .set-tabs { width: 96px; padding: 8px 4px; }
+.dialog.drawstyle .set-tab { height: 32px; padding: 0 10px; font-size: 13px; }
+.dialog.drawstyle .set-pane { padding: 4px 16px 12px; }
+.dialog.drawstyle .set-row { grid-template-columns: minmax(0, 1fr) auto; }
+.dialog.drawstyle .menu-input { width: 100%; margin: 0; }
 .sb-event { font-weight: 600; }
 .ev-tip { position: absolute; z-index: 7; padding: 6px 8px; border-radius: 6px; background: var(--tip); color: #FFFFFF;
   font-size: 12px; line-height: 16px; white-space: nowrap; pointer-events: none; font-variant-numeric: tabular-nums; }

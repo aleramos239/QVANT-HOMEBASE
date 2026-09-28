@@ -269,7 +269,7 @@ test('release/4: practicing in replay, then a layout-TAB switch -- the next one-
   const el = () => ({ style: {}, dataset: {}, replaceChildren() {}, appendChild() {} });
   const ctx = vm.createContext({
     window: global.window, T, Cell, GRIDS: { 1: [1, 1], 2: [2, 1], 4: [2, 2], 6: [3, 2] }, $: () => el(), mk: () => el(),
-    closeHotkeyBox() {}, deskState: () => STATE, starter: () => ({ root: 'NQ', spec: '1m', indicators: [], trade: { accounts: [] } }),
+    closeHotkeyBox() {}, closeAllDrawToolbars() {}, deskState: () => STATE, starter: () => ({ root: 'NQ', spec: '1m', indicators: [], trade: { accounts: [] } }),
     hostFor: (id) => ({ id }), legendFolded: () => false, select() {}, saveLast() {}, dropLiveAccounts() {}, renderTabs() {},
     renderToolbar() {}, sbNote(t) { throw new Error('sbNote: ' + t); },
     // readLayout's safety half (HBTrade.loadedTrade) is pinned elsewhere; here: a NEW config object per load

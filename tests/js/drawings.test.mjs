@@ -114,9 +114,11 @@ test('hitTest misses a drawing whose points cannot be placed', () => {
   assert.equal(D.hitTest(trend, { x: 101, y: 102 }, { ...geo, x: () => null }), null);
 });
 
-test('handle positions: trend ends, rectangle corners, mid-pane for a horizontal line', () => {
+test('handle positions: trend ends, rectangle corners + side midpoints, mid-pane for a horizontal line', () => {
   assert.deepEqual(D.handlePoints(trend, geo), [[100, 100], [140, 140]]);
-  assert.deepEqual(D.handlePoints(rect, geo), [[110, 120], [130, 150], [110, 150], [130, 120]]);
+  // corners 0-3, then 4 top-mid, 5 bottom-mid (price only), 6 left-mid, 7 right-mid (time only)
+  assert.deepEqual(D.handlePoints(rect, geo),
+    [[110, 120], [130, 150], [110, 150], [130, 120], [120, 120], [120, 150], [110, 135], [130, 135]]);
   assert.deepEqual(D.handlePoints(hline, geo), [[200, 125]]);
   assert.equal(D.handlePoints(hline, { ...geo, y: () => null }), null);
 });
@@ -129,6 +131,39 @@ test('dragging a handle moves that point; rectangle side corners mix the two poi
   assert.deepEqual(D.setPoint(rect, 3, 5, 7).points, [{ t: bars[1].ms, p: 7 }, { t: 5, p: 850 }]);
   assert.deepEqual(D.setPoint(hline, 0, 5, 7), { id: 'c', type: 'hline', points: [{ p: 7 }] });
   assert.deepEqual(trend.points[1], { t: bars[4].ms, p: 860 });
+});
+
+test('rectangle side handles (2026-09-27 draw-tools plan): top/bottom move price only, left/right move time only', () => {
+  // rect = [{t: bars[1].ms, p: 880}, {t: bars[3].ms, p: 850}]: a is the higher (top) and earlier (left) point
+  assert.deepEqual(D.setPoint(rect, 4, 999, 900).points, [{ t: rect.points[0].t, p: 900 }, rect.points[1]]);   // top-mid: a's price only
+  assert.deepEqual(D.setPoint(rect, 5, 999, 800).points, [rect.points[0], { t: rect.points[1].t, p: 800 }]);   // bottom-mid: b's price only
+  assert.deepEqual(D.setPoint(rect, 6, bars[0].ms, 999).points,
+    [{ t: bars[0].ms, p: rect.points[0].p }, rect.points[1]]);                                                 // left-mid: a's time only
+  assert.deepEqual(D.setPoint(rect, 7, bars[4].ms, 999).points,
+    [rect.points[0], { t: bars[4].ms, p: rect.points[1].p }]);                                                 // right-mid: b's time only
+});
+
+test('a rectangle side dragged past the opposite side flips cleanly (top/bottom, left/right recompute fresh)', () => {
+  // top-mid (a, p 880) dragged to p 800 -- below b's 850: a becomes the lower point
+  const flippedV = D.setPoint(rect, 4, 999, 800);
+  assert.deepEqual(flippedV.points, [{ t: rect.points[0].t, p: 800 }, rect.points[1]]);
+  assert.ok(flippedV.points[0].p < flippedV.points[1].p);
+  // grabbing top-mid again on the flipped box now moves b (the point that reads as top now)
+  assert.deepEqual(D.setPoint(flippedV, 4, 999, 900).points, [flippedV.points[0], { ...flippedV.points[1], p: 900 }]);
+  // left-mid (a, t bar1) dragged past b's bar3: a becomes the later (right) point
+  const flippedH = D.setPoint(rect, 6, bars[4].ms, 999);
+  assert.deepEqual(flippedH.points, [{ t: bars[4].ms, p: rect.points[0].p }, rect.points[1]]);
+  assert.ok(flippedH.points[0].t > flippedH.points[1].t);
+  assert.deepEqual(D.setPoint(flippedH, 6, bars[0].ms, 999).points,
+    [flippedH.points[0], { ...flippedH.points[1], t: bars[0].ms }]);   // now moves b, the one that is actually left
+});
+
+test('hitTest: a rectangle\'s side-midpoint handles (4-7) take priority over its body', () => {
+  assert.deepEqual(D.hitTest(rect, { x: 120, y: 120 }, geo), { part: 'handle', index: 4 });   // top-mid
+  assert.deepEqual(D.hitTest(rect, { x: 120, y: 150 }, geo), { part: 'handle', index: 5 });   // bottom-mid
+  assert.deepEqual(D.hitTest(rect, { x: 110, y: 135 }, geo), { part: 'handle', index: 6 });   // left-mid
+  assert.deepEqual(D.hitTest(rect, { x: 130, y: 135 }, geo), { part: 'handle', index: 7 });   // right-mid
+  assert.deepEqual(D.hitTest(rect, { x: 120, y: 135 }, geo), { part: 'body' });                // dead centre: no handle nearby
 });
 
 test('moving shifts every point by whole bars and by price, on the tick grid', () => {
@@ -284,20 +319,23 @@ test('samePoints: two versions of a drawing on exactly the same points', () => {
    y = 1000 - p (so one pixel is four 0.25 ticks). opts: the rail's tool (it
    returns to the cursor after a placement, as on the page), the magnet, and
    the chart's bars (OHLC ones for the magnet). */
-function pointerRig(saved, { tool = 'cursor', magnet = { on: false, mode: 'weak' }, rigBars = bars, onPosition = () => {} } = {}) {
-  globalThis.window = { addEventListener() {}, removeEventListener() {} };
+function pointerRig(saved, { tool = 'cursor', magnet = { on: false, mode: 'weak' }, rigBars = bars, onPosition = () => {},
+  styleDefault = undefined, onDrawingSettings = undefined } = {}) {
+  globalThis.window = { addEventListener() {}, removeEventListener() {},
+    LightweightCharts: { LineStyle: { Solid: 0, Dotted: 1, Dashed: 2 } } };
   const chart = { applyOptions() {}, priceScale: () => ({ width: () => 60 }), panes: () => [{ getHeight: () => 1000 }],
     timeScale: () => ({ logicalToCoordinate: (i) => 100 + i * 10, coordinateToLogical: (x) => (x - 100) / 10 }) };
   const menuCalls = [];
   const cell = { shown: { root: 'NQ' }, el: { dataset: {} }, P: { accent: '#2962FF' }, chart, bars: rigBars, tick: 0.25,
     isTime: () => true, barMs: () => MIN, onMenu(e, dbl) { menuCalls.push(!!dbl); },
     box: { clientWidth: 460, getBoundingClientRect: () => ({ left: 0, top: 0 }), addEventListener() {}, removeEventListener() {} },
-    candles: { attachPrimitive() {}, priceToCoordinate: (p) => 1000 - p, coordinateToPrice: (y) => 1000 - y } };
+    candles: { attachPrimitive() {}, priceToCoordinate: (p) => 1000 - p, coordinateToPrice: (y) => 1000 - y,
+      createPriceLine: () => ({ applyOptions() {} }), removePriceLine() {} } };
   const f = fakeFetch((url, method) => (method === 'GET' ? { status: 200, body: saved } : null));
   const store = new D.Store({ fetchFn: f, delay: 0 });
   let now = tool;
   const ctl = new D.Controller(cell, { tool: () => now, toolDone() { now = 'cursor'; }, drawings: store,
-    magnet: () => magnet, onPosition });
+    magnet: () => magnet, onPosition, ...(styleDefault ? { styleDefault } : {}), ...(onDrawingSettings ? { onDrawingSettings } : {}) });
   const ev = (x, y, buttons = 1, metaKey = false) => ({ button: 0, buttons, ctrlKey: false, metaKey, clientX: x, clientY: y,
     preventDefault() {}, stopPropagation() {} });
   const gesture = async (path, metaKey = false) => {   // press at path[0], move through the rest, release at the last point
@@ -461,5 +499,139 @@ test('a double-click on a box opens its settings; on empty chart it opens the ch
   assert.deepEqual(opened, ['p']);
   assert.equal(R.ctl.sel, 'p');
   assert.deepEqual(R.menuCalls, [true]);   // only the empty-space double-click opened the chart menu (dbl = true)
+  R.done();
+});
+
+/* ---- 2026-09-27 draw-tools plan: Shift gestures, locked drawings, a new drawing's starting style ---- */
+const evAt = (x, y, { buttons = 1, shiftKey = false } = {}) => ({ button: 0, buttons, ctrlKey: false, metaKey: false,
+  shiftKey, clientX: x, clientY: y, preventDefault() {}, stopPropagation() {} });
+
+test('Shift + press-drag with the cursor tool starts the ruler, even over a drawing, without selecting it', async (t) => {
+  withWindow(t);
+  const R = pointerRig([trend], { tool: 'cursor' });
+  await R.store.ensure('NQ');
+  R.ctl.onDown(evAt(120, 120, { shiftKey: true }));   // squarely on the trend line's own body
+  assert.equal(R.ctl.sel, null);                       // the ruler wins, never the drawing under it
+  assert.ok(R.ctl.measure && !R.ctl.measure.done);
+  R.ctl.onMove(evAt(140, 100, { shiftKey: true }));
+  R.ctl.onUp(evAt(140, 100, { buttons: 0, shiftKey: true }));
+  assert.ok(R.ctl.measure && R.ctl.measure.done);
+  assert.deepEqual(R.store.list('NQ'), [trend]);       // nothing drawn, nothing moved
+  R.done();
+});
+
+test('a Shift+click with no drag drops the ruler instead of arming a 2nd click', async (t) => {
+  withWindow(t);
+  const R = pointerRig([], { tool: 'cursor' });
+  await R.store.ensure('NQ');
+  R.ctl.onDown(evAt(200, 200, { shiftKey: true }));
+  R.ctl.onUp(evAt(200, 200, { buttons: 0, shiftKey: true }));
+  assert.equal(R.ctl.measure, null);
+  assert.equal(R.ctl.mode, null);
+  R.ctl.onDown(evAt(120, 120));   // a later plain click must behave normally, not like a pending 2nd click
+  R.ctl.onUp(evAt(120, 120, { buttons: 0 }));
+  assert.deepEqual(R.store.list('NQ'), []);
+  R.done();
+});
+
+test('Shift while placing a trend line snaps to horizontal; releasing Shift mid-drag un-snaps', async (t) => {
+  withWindow(t);
+  const R = pointerRig([], { tool: 'trend' });
+  await R.store.ensure('NQ');
+  R.ctl.onDown(evAt(100, 100));                          // bar 0, p 900
+  R.ctl.onMove(evAt(140, 60, { shiftKey: true }));        // Shift held: stays at p 900 (perfectly horizontal)
+  assert.equal(R.ctl.place.points[1].p, 900);
+  R.ctl.onMove(evAt(140, 60, { shiftKey: false }));       // Shift released: back to the pointer's own price
+  assert.equal(R.ctl.place.points[1].p, 940);
+  R.ctl.onUp(evAt(140, 60, { buttons: 0, shiftKey: true }));   // Shift held again at release
+  await new Promise((r) => setTimeout(r, 5));
+  await flush();
+  const [d] = R.store.list('NQ');
+  assert.deepEqual(d.points.map((q) => q.p), [900, 900]);
+  R.done();
+});
+
+test('Shift while dragging a trend line\'s endpoint snaps it to the other endpoint\'s current price', async (t) => {
+  withWindow(t);
+  const line = { id: 'm', type: 'trend', points: [{ t: bars[1].ms, p: 900 }, { t: bars[3].ms, p: 860 }] };
+  const R = pointerRig([line], { tool: 'cursor' });
+  await R.store.ensure('NQ');
+  R.ctl.onDown(evAt(110, 100));                           // handle 0 (p 900)
+  R.ctl.onMove(evAt(112, 80, { shiftKey: true }));         // Shift: takes handle 1's price (860)
+  assert.equal(R.ctl.drag.cur.points[0].p, 860);
+  R.ctl.onMove(evAt(112, 80, { shiftKey: false }));        // released: the pointer's own price (920)
+  assert.equal(R.ctl.drag.cur.points[0].p, 920);
+  R.ctl.onUp(evAt(112, 80, { buttons: 0 }));
+  R.done();
+});
+
+test('a locked drawing can be selected but is never dragged or deleted', async (t) => {
+  withWindow(t);
+  const locked = { ...trend, locked: true };
+  const R = pointerRig([locked], { tool: 'cursor' });
+  await R.store.ensure('NQ');
+  await R.gesture([[120, 120], [130, 130]]);   // a real drag, on the body
+  assert.equal(R.ctl.sel, 'a');                // still selects
+  assert.deepEqual(R.store.list('NQ'), [locked]);   // never moved, never PUT
+  assert.equal(R.puts().length, 0);
+  assert.equal(R.ctl.deleteSelected(), false);
+  assert.deepEqual(R.store.list('NQ'), [locked]);
+  R.done();
+});
+
+test('an unlocked drawing behaves exactly as before (no regression from the lock check)', async (t) => {
+  withWindow(t);
+  const R = pointerRig([trend], { tool: 'cursor' });
+  await R.store.ensure('NQ');
+  assert.equal(R.ctl.deleteSelected(), false);   // nothing selected yet
+  R.ctl.onDown(evAt(120, 120));
+  R.ctl.onUp(evAt(120, 120, { buttons: 0 }));
+  assert.equal(R.ctl.sel, 'a');
+  assert.equal(R.ctl.deleteSelected(), true);
+  assert.deepEqual(R.store.list('NQ'), []);
+  R.done();
+});
+
+const DS = require('../../homebase/static/charts/drawstyle.js');
+
+test('a new trend/rect/hline gets that tool\'s built-in default style; long/short take none', async (t) => {
+  withWindow(t);
+  const trendRig = pointerRig([], { tool: 'trend' });
+  await trendRig.store.ensure('NQ');
+  await trendRig.gesture([[100, 100], [140, 60]]);
+  assert.deepEqual(trendRig.store.list('NQ')[0].style, DS.DEFAULTS.trend);
+  trendRig.done();
+
+  const rectRig = pointerRig([], { tool: 'rect' });
+  await rectRig.store.ensure('NQ');
+  await rectRig.gesture([[100, 100], [140, 60]]);
+  assert.deepEqual(rectRig.store.list('NQ')[0].style, DS.DEFAULTS.rect);
+  rectRig.done();
+
+  const hlineRig = pointerRig([], { tool: 'hline' });
+  await hlineRig.store.ensure('NQ');
+  hlineRig.ctl.onDown(evAt(100, 100));
+  hlineRig.ctl.onUp(evAt(100, 100, { buttons: 0 }));
+  await new Promise((r) => setTimeout(r, 5));
+  await flush();
+  assert.deepEqual(hlineRig.store.list('NQ')[0].style, DS.DEFAULTS.hline);
+  hlineRig.done();
+
+  const longRig = pointerRig([], { tool: 'long', rigBars: ohlc });
+  await longRig.store.ensure('NQ');
+  await longRig.gesture([[120, 85]]);
+  assert.equal('style' in longRig.store.list('NQ')[0], false);
+  longRig.done();
+});
+
+test('commit() prefers the host\'s saved default preset for that tool, still normalized against junk', async (t) => {
+  withWindow(t);
+  const R = pointerRig([], { tool: 'trend', styleDefault: (type) => (type === 'trend' ? { width: 4, junk: 1 } : null) });
+  await R.store.ensure('NQ');
+  await R.gesture([[100, 100], [140, 60]]);
+  const style = R.store.list('NQ')[0].style;
+  assert.equal(style.width, 4);                          // the saved default's field, kept
+  assert.equal(style.lineStyle, DS.DEFAULTS.trend.lineStyle);   // an untouched field still reads the built-in default
+  assert.equal('junk' in style, false);                   // a field the type doesn't take is dropped, not stored
   R.done();
 });

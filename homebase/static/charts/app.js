@@ -6,6 +6,7 @@
 (() => {
 'use strict';
 const C = window.HBCatalog, I = window.HBIcons, S = window.HBSettings, T = window.HBTrade, { Cell, badgeEl } = window.HBCell;
+const DS = window.HBDrawStyle;
 const GRIDS = { 1: [1, 1], 2: [2, 1], 4: [2, 2], 6: [3, 2] };
 const GRID_NAMES = { 1: '1 chart', 2: '2 charts side by side', 4: '2 × 2 charts', 6: '3 × 2 charts' };
 const STATUS_STALE_S = 6;   // the server sends a status every 2 s: this long without one = it is stuck
@@ -52,6 +53,7 @@ function mk(tag, cls, text) {
   return e;
 }
 function icon(name) { const s = mk('span', 'icw'); s.innerHTML = I[name] || ''; return s; }   // our own static SVG strings
+function button(cls, text) { const b = mk('button', cls, text); b.type = 'button'; return b; }
 const cur = () => cells[selected];
 
 /* ---- layout + selection ---- */
@@ -203,6 +205,9 @@ function hostFor(id) {
     onSettings(cell, uid) { settingsDialog(cell, uid); },
     onChartSettings(cell) { chartSettings(cell); },
     onPosition(cell, d) { positionDialog(cell, d); },
+    onDrawingSettings(cell, d) { drawingSettingsDialog(cell, d); },
+    onSelectionChanged(cell, d) { syncDrawToolbar(cell, d); },
+    styleDefault(type) { return drawStyleDefaults.get(type) || null; },
     onChartMenu(cell, at) { chartMenu(cell, at); },
     onIndicatorMenu(cell, uid, o) { indicatorMenu(cell, uid, o); },
     onReplayGuard(cell, patch) { window.HBReplayUI.guardSymbolChange(cell, patch); },
@@ -227,6 +232,7 @@ function hostFor(id) {
 
 function buildGrid() {
   closeHotkeyBox();   // it is anchored to a cell element the rebuild is about to destroy
+  closeAllDrawToolbars();   // anchored to cells this rebuild is about to destroy
   for (const c of cells) { window.HBReplayUI.cellDestroyed(c); c.destroy(); }
   cells = [];
   const grid = $('#grid'), [cols, rows] = GRIDS[layout.grid] || GRIDS[4], n = cols * rows;
@@ -1133,6 +1139,281 @@ function positionDialog(cell, d) {
   inputs.entry.select();
 }
 
+/* ---- 2026-09-27 draw-tools plan: the floating per-drawing toolbar + its settings dialog ---- */
+const DRAW_TYPES = ['trend', 'hline', 'rect'];          // the types that take a style object at all
+const isPosDrawing = (d) => d.type === 'long' || d.type === 'short';
+const drawStyleDefaults = new Map();                    // type -> that tool's saved "__default__" preset payload
+async function loadDrawStyleDefaults() {
+  for (const type of DRAW_TYPES) {
+    const all = await window.HBPresets.client(`drawing:${type}`).list();
+    if (all && window.HBPresets.DEFAULT_NAME in all) drawStyleDefaults.set(type, all[window.HBPresets.DEFAULT_NAME]);
+  }
+}
+/* A dialog-scoped menu host built around the page's own openMenu/closeMenu/placeMenu, the same
+   shape settings-dialog.js' own `host.toggleMenu` gives its swatch popovers and Template ▾ --
+   so presets.js' menu() (and the swatch popover below) work the same whether they open from
+   inside a dialog or from the floating toolbar directly on the chart. */
+function pageMenuHost() {
+  return { toggleMenu(anchor, cls, fill) { if (menuAnchor === anchor) { closeMenu(); return; } fill(openMenu(anchor, cls)); placeMenu(); },
+    closeMenu, placeMenu };
+}
+
+/* The swatch popover (palette + opacity), reused by the floating toolbar and the Style tab below:
+   `get()` reads the current colour, `set(newColor)` writes it (a live preview; the caller decides
+   what "live" means). Same look as settings-dialog.js' own swatchMenu. */
+function colorSwatchMenu(anchor, get, set) {
+  pageMenuHost().toggleMenu(anchor, 'menu-swatch', (m) => {
+    const grid = mk('div', 'sw-grid'), picks = [];
+    for (const hex of S.PALETTE.flat()) {
+      const b = mk('button', 'sw-cell');
+      b.type = 'button';
+      b.style.background = hex;
+      b.title = hex;
+      b.setAttribute('aria-label', hex);
+      b.onclick = () => { set(S.withAlpha(hex, S.alphaOf(get()))); sync(); };
+      picks.push([hex, b]);
+      grid.append(b);
+    }
+    const opRow = mk('div', 'sw-row'), op = mk('input'), pct = mk('span', 'sw-pct');
+    op.type = 'range'; op.min = '0'; op.max = '100'; op.step = '1';
+    op.setAttribute('aria-label', 'Opacity');
+    op.oninput = () => { set(S.withAlpha(S.hexOf(get()), Number(op.value) / 100)); sync(); };
+    opRow.append(mk('span', '', 'Opacity'), op, pct);
+    m.append(grid, opRow);
+    function sync() {
+      const c = get(), h = S.hexOf(c), a = Math.round(S.alphaOf(c) * 100);
+      for (const [x, b] of picks) b.classList.toggle('on', x === h);
+      op.value = String(a);
+      pct.textContent = `${a}%`;
+    }
+    sync();
+  });
+}
+
+/* Merges `patch` onto the drawing's saved color/locked/style (style fields renormalized for its
+   type, so a bad value never lands) and saves it -- every chart of the symbol, and this one's
+   toolbar/dialog through the usual drawings store subscription. */
+function patchDrawing(root, id, patch) {
+  const now = drawings.list(root).find((x) => x.id === id);
+  if (!now) return null;
+  const next = { ...now, ...patch };
+  if (patch.style) next.style = DS.normalize(now.type, { ...DS.normalize(now.type, now.style), ...patch.style });
+  drawings.replace(root, next);
+  markDirty();
+  return next;
+}
+
+/* ---- the floating toolbar: one per cell that has a selected trend/hline/rect/position ---- */
+const drawToolbars = new Map();   // cell -> {el, key} ("key" = id|type, so a same-drawing refresh patches in place)
+
+function closeDrawToolbar(cell) {
+  const t = drawToolbars.get(cell);
+  if (t) { t.el.remove(); drawToolbars.delete(cell); }
+}
+function closeAllDrawToolbars() { for (const cell of [...drawToolbars.keys()]) closeDrawToolbar(cell); }
+
+function drawToolbarButtons(cell, root, d) {
+  const wrap = mk('div', 'draw-toolbar');
+  const btn = (name, title) => { const b = mk('button', 'dtb-btn'); b.type = 'button'; b.title = title; b.setAttribute('aria-label', title); b.append(icon(name)); return b; };
+  if (!isPosDrawing(d)) {
+    const tpl = btn('bookmark', 'Template');
+    tpl.setAttribute('aria-haspopup', 'menu');
+    tpl.onclick = () => window.HBPresets.menu(pageMenuHost(), tpl, {
+      kind: `drawing:${d.type}`,
+      current: () => DS.normalize(d.type, (drawings.list(root).find((x) => x.id === d.id) || d).style),
+      apply(payload, { isDefault }) {
+        patchDrawing(root, d.id, { style: payload });
+        if (isDefault) drawStyleDefaults.set(d.type, payload);
+      },
+    });
+    wrap.append(tpl, mk('span', 'dtb-sep'));
+  }
+  const sw = mk('button', 'dtb-swatch'), swi = mk('i');
+  sw.type = 'button'; sw.title = 'Colour'; sw.setAttribute('aria-label', 'Colour');
+  swi.style.background = d.color || '#2962FF';
+  sw.append(swi);
+  sw.onclick = () => colorSwatchMenu(sw,
+    () => (drawings.list(root).find((x) => x.id === d.id) || d).color || '#2962FF',
+    (c) => { patchDrawing(root, d.id, { color: c }); swi.style.background = c; });
+  wrap.append(sw);
+  if (!isPosDrawing(d)) {
+    const style = DS.normalize(d.type, d.style);
+    const w = mk('input', 'dtb-num');
+    w.type = 'number'; w.min = '1'; w.max = '4'; w.step = '1'; w.value = String(style.width);
+    w.title = 'Width'; w.setAttribute('aria-label', 'Width');
+    w.onchange = () => { patchDrawing(root, d.id, { style: { width: Number(w.value) } }); w.value = String(DS.normalize(d.type, (drawings.list(root).find((x) => x.id === d.id) || {}).style).width); };
+    const ls = mk('select', 'dtb-select');
+    ls.setAttribute('aria-label', 'Line style');
+    for (const [v, text] of [['solid', 'Solid'], ['dashed', 'Dashed'], ['dotted', 'Dotted']]) { const o = mk('option', '', text); o.value = v; ls.append(o); }
+    ls.value = style.lineStyle;
+    ls.onchange = () => patchDrawing(root, d.id, { style: { lineStyle: ls.value } });
+    const gear = btn('gear', 'Settings');
+    gear.onclick = () => drawingSettingsDialog(cell, d);
+    wrap.append(w, ls, gear);
+  }
+  const lock = btn(d.locked ? 'lock' : 'lockOpen', d.locked ? 'Unlock' : 'Lock');
+  lock.setAttribute('aria-pressed', String(!!d.locked));
+  lock.onclick = () => patchDrawing(root, d.id, { locked: !d.locked });
+  const del = btn('trash', 'Delete');
+  del.classList.add('danger');
+  del.onclick = () => { if (cell.dc) cell.dc.deleteSelected(); };
+  wrap.append(mk('span', 'dtb-sep'), lock, del);
+  return { el: wrap, focused: () => wrap.contains(document.activeElement) };
+}
+
+/* Positions the toolbar centred above the drawing's own handle points, kept inside the chart's own
+   box (never the window: a chart near the page edge must not push it off-screen), a few px above
+   the topmost handle -- the same geometry the selection's own handle dots use. */
+function placeDrawToolbar(cell, el, d) {
+  const dc = cell.dc, geo = dc && dc.geo();
+  if (!geo) { el.style.visibility = 'hidden'; return; }
+  const D_ = window.HBDrawings, hs = D_.handlePoints(d, geo);
+  const anchor = hs && DS.toolbarAnchor(hs);
+  if (!anchor) { el.style.visibility = 'hidden'; return; }
+  el.style.visibility = '';
+  const r = cell.box.getBoundingClientRect(), w = el.offsetWidth, h = el.offsetHeight;
+  const x = Math.max(r.left + 2, Math.min(r.left + anchor.cx - w / 2, r.right - w - 2));
+  const y = Math.max(r.top + 2, r.top + anchor.top - h - 10);
+  el.style.left = `${x}px`;
+  el.style.top = `${y}px`;
+}
+
+/* Controller#refresh calls this on every selection-affecting change (host.onSelectionChanged): a
+   drawing (re)selected, deselected, moved, restyled. A same-drawing refresh patches the existing
+   toolbar's lock icon in place and repositions it -- it never rebuilds while one of its own inputs
+   has focus (GOTCHAS: never rebuild a container while an input inside it has focus). */
+function syncDrawToolbar(cell, d) {
+  if (!d) { closeDrawToolbar(cell); return; }
+  const root = cell.dc ? cell.dc.root : cell.cfg.root, key = `${d.id}|${d.type}`;
+  let t = drawToolbars.get(cell);
+  if (t && t.key === key) {
+    if (!t.focused()) {
+      const lock = t.el.querySelector('.dtb-btn[aria-pressed]');
+      if (lock) { lock.innerHTML = ''; lock.append(icon(d.locked ? 'lock' : 'lockOpen')); lock.setAttribute('aria-pressed', String(!!d.locked)); lock.title = d.locked ? 'Unlock' : 'Lock'; }
+      const sw = t.el.querySelector('.dtb-swatch i');
+      if (sw) sw.style.background = d.color || '#2962FF';
+    }
+  } else {
+    closeDrawToolbar(cell);
+    const built = drawToolbarButtons(cell, root, d);
+    $('#menuRoot').appendChild(built.el);
+    t = { el: built.el, key, focused: built.focused };
+    drawToolbars.set(cell, t);
+  }
+  placeDrawToolbar(cell, t.el, d);
+}
+
+/* Double-click on a trend/hline/rect: its own settings dialog -- Style / Text tabs, live preview
+   (through the same drawings store every chart of the symbol shares), OK keeps it, Cancel/×/Esc/a
+   backdrop click put it back exactly as it was, and a Template ▾ at the bottom-left (the same menu
+   the floating toolbar's Template button opens). */
+function drawingSettingsDialog(cell, d0) {
+  const root = cell.dc ? cell.dc.root : cell.cfg.root;
+  const orig = drawings.list(root).find((x) => x.id === d0.id);
+  if (!orig) return;
+  const atOpen = { color: orig.color || '#2962FF', style: DS.normalize(orig.type, orig.style) };
+  let work = { ...atOpen, style: { ...atOpen.style } }, tab = 'style', done = false;
+  const title = { trend: 'Trend line', rect: 'Rectangle', hline: 'Horizontal line' }[orig.type] || 'Drawing';
+  const box = openDialog(title, 'drawstyle');
+  const body = mk('div', 'set-body'), tabs = mk('div', 'set-tabs'), pane = mk('div', 'set-pane'), foot = mk('div', 'set-foot');
+  body.append(tabs, pane);
+  box.append(body, foot);
+
+  function preview() { patchDrawing(root, d0.id, { color: work.color, style: work.style }); }
+  function set(patch) { work = { ...work, ...patch }; preview(); }
+  function setStyle(patch) { work = { ...work, style: DS.normalize(orig.type, { ...work.style, ...patch }) }; preview(); renderPane(); }
+
+  function row(label, ctl) { const el = mk('div', 'set-row'), name = mk('div', 'set-name', label), c = mk('div', 'set-ctl'); c.append(ctl); el.append(name, c); return el; }
+  function colorCtl(get, setv) {
+    const b = mk('button', 'swatch'), i = mk('i');
+    i.style.background = get();
+    b.append(i);
+    b.onclick = () => colorSwatchMenu(b, get, (c) => { setv(c); i.style.background = c; });
+    return b;
+  }
+  function numberCtl(val, min, max, onchange) {
+    const n = mk('input', 'set-num');
+    n.type = 'number'; n.min = String(min); n.max = String(max); n.step = '1'; n.value = String(val);
+    n.onchange = () => onchange(Math.max(min, Math.min(max, Math.round(Number(n.value)) || min)));
+    return n;
+  }
+  function selectCtl(val, choices, onchange) {
+    const s = mk('select', 'set-select');
+    for (const [v, text] of choices) { const o = mk('option', '', text); o.value = v; s.append(o); }
+    s.value = val;
+    s.onchange = () => onchange(s.value);
+    return s;
+  }
+  function checkCtl(val, onchange) {
+    const c = mk('input'); c.type = 'checkbox'; c.checked = !!val; c.onchange = () => onchange(c.checked);
+    return c;
+  }
+  function textCtl(val, onchange) {
+    const inp = mk('input', 'menu-input'); inp.type = 'text'; inp.maxLength = DS.MAX_TEXT; inp.value = val;
+    inp.oninput = () => onchange(inp.value);
+    return inp;
+  }
+
+  function renderTabs() {
+    tabs.replaceChildren(...[['style', 'Style'], ['text', 'Text']].map(([id, label]) => {
+      const b = mk('button', 'set-tab' + (id === tab ? ' active' : ''), label);
+      b.type = 'button';
+      b.onclick = () => { if (tab !== id) { tab = id; renderTabs(); renderPane(); } };
+      return b;
+    }));
+  }
+  function renderPane() {
+    const rows = [];
+    if (tab === 'style') {
+      rows.push(mk('div', 'set-cap', 'LINE'));
+      rows.push(row('Colour', colorCtl(() => work.color, (c) => set({ color: c }))));
+      rows.push(row('Width', numberCtl(work.style.width, 1, 4, (v) => setStyle({ width: v }))));
+      rows.push(row('Style', selectCtl(work.style.lineStyle, [['solid', 'Solid'], ['dashed', 'Dashed'], ['dotted', 'Dotted']], (v) => setStyle({ lineStyle: v }))));
+      if (orig.type === 'trend') {
+        rows.push(row('Extend left', checkCtl(work.style.extendLeft, (v) => setStyle({ extendLeft: v }))));
+        rows.push(row('Extend right', checkCtl(work.style.extendRight, (v) => setStyle({ extendRight: v }))));
+      }
+      if (orig.type === 'rect') {
+        rows.push(mk('div', 'set-cap', 'FILL'));
+        rows.push(row('Fill', colorCtl(() => work.style.fillColor, (c) => setStyle({ fillColor: c }))));
+      }
+      if (orig.type === 'hline') rows.push(row('Price label', checkCtl(work.style.axisLabel, (v) => setStyle({ axisLabel: v }))));
+    } else {
+      rows.push(mk('div', 'set-cap', 'TEXT'));
+      rows.push(row('Text', textCtl(work.style.text, (v) => setStyle({ text: v }))));
+      rows.push(row('Font size', numberCtl(work.style.fontSize, 10, 28, (v) => setStyle({ fontSize: v }))));
+      rows.push(row('Colour', colorCtl(() => work.style.textColor, (c) => setStyle({ textColor: c }))));
+      rows.push(row('Bold', checkCtl(work.style.bold, (v) => setStyle({ bold: v }))));
+      const posChoices = DS.LABEL_POS[orig.type].map((p) => [p, p[0].toUpperCase() + p.slice(1)]);
+      rows.push(row('Position', selectCtl(work.style.labelPos, posChoices, (v) => setStyle({ labelPos: v }))));
+    }
+    pane.replaceChildren(...rows);
+  }
+
+  const tpl = button('btn btn-ghost tpl-btn'), chev = mk('span', 'icw sm');
+  chev.innerHTML = I.chevron;
+  tpl.append(mk('span', '', 'Template'), chev);
+  tpl.setAttribute('aria-haspopup', 'menu');
+  tpl.onclick = () => window.HBPresets.menu(pageMenuHost(), tpl, {
+    kind: `drawing:${orig.type}`,
+    current: () => work.style,
+    apply(payload, { isDefault }) {
+      work = { ...work, style: DS.normalize(orig.type, payload) };
+      preview();
+      renderPane();
+      if (isDefault) drawStyleDefaults.set(orig.type, payload);
+    },
+  });
+  const grow = mk('span', 'grow'), cancel = button('btn btn-ghost', 'Cancel'), ok = button('btn btn-solid', 'OK');
+  cancel.onclick = () => closeDialog();
+  ok.onclick = () => { done = true; closeDialog(); };
+  foot.append(tpl, grow, cancel, ok);
+  dlg.onClose = () => { if (!done) patchDrawing(root, d0.id, { color: atOpen.color, style: atOpen.style }); };
+
+  renderTabs();
+  renderPane();
+}
+
 /* The chart Settings dialog (settings-dialog.js): the toolbar gear opens it for the selected chart, a per-chart
    gear or the chart menu's Settings… for that chart. */
 function chartSettings(c = cur(), tab = null) {
@@ -1648,6 +1929,7 @@ async function init() {
   if (window.HBDeskClient) window.HBDeskClient.on((why) => { if (why.has('state') || why.has('account')) dropLiveAccounts(); });
   dropLiveAccounts();
   loadTabs();    // async: renderTabs() already painted the "+" from buildGrid's renderToolbar; this fills the rest
+  loadDrawStyleDefaults();   // async: host.styleDefault() reads whatever has landed by the time a drawing is placed
   connect();
   tick();
   setInterval(tick, 1000);

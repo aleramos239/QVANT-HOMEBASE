@@ -17,8 +17,8 @@ from fastapi.testclient import TestClient
 
 from homebase import symbols
 from homebase.charts.hub import Hub, Stream
-from homebase.charts.server import (MAX_DRAWINGS, MAX_TEMPLATE_BYTES, QUIET, Conn, check_drawings,
-                                    check_template_name, create_app)
+from homebase.charts.server import (MAX_DRAWINGS, MAX_PRESET_BYTES, MAX_TEMPLATE_BYTES, QUIET, Conn,
+                                    check_drawings, check_template_name, create_app)
 from homebase.charts.session import session_range_ms
 from homebase.charts.store import read_table
 from tests.charts_util import D, ET, rows, session_ms, weekdays_before, write_archive, write_gz
@@ -1405,6 +1405,154 @@ def test_a_bad_position_is_a_400_that_names_the_rule(tmp_path):
         r = client.put("/api/drawings/NQ", json=[pos("short", 100, 101, 105)])
         assert r.status_code == 400 and "target < entry < stop" in r.json()["detail"]
         assert client.get("/api/drawings/NQ").json() == []
+
+
+# ---- 2026-09-27 draw-tools plan: colour opacity, locked, and per-type style ----
+@pytest.mark.parametrize("color", ["#2962FF", "#000000", "#FFFFFF", "rgba(41,98,255,1)", "rgba(0,0,0,0)",
+                                   "rgba(41,98,255,.5)", "rgba(41,98,255,0.5)"])
+def test_color_accepts_hex_and_rgba(color):
+    assert check_drawings([{**HLINE, "color": color}])[0]["color"] == color
+
+
+@pytest.mark.parametrize("color", ["red", "#12345", "#GGGGGG", "rgba(256,0,0,1)", "rgba(0,0,0,1.5)",
+                                   "rgba(0,0,0,-0.1)", "rgba(0,0,0)", "hsl(0,0%,0%)", ""])
+def test_color_refuses_anything_else(color):
+    with pytest.raises(ValueError):
+        check_drawings([{**HLINE, "color": color}])
+
+
+def test_locked_roundtrips_on_any_kind():
+    assert check_drawings([{**TREND, "locked": True}])[0]["locked"] is True
+    assert check_drawings([{**HLINE, "locked": False}])[0]["locked"] is False
+    assert check_drawings([{**LONG, "locked": True}])[0]["locked"] is True
+    assert "locked" not in check_drawings([TREND])[0]
+
+
+@pytest.mark.parametrize("locked", ["yes", 1, None, "true"])
+def test_locked_refuses_non_bool(locked):
+    with pytest.raises(ValueError):
+        check_drawings([{**HLINE, "locked": locked}])
+
+
+TREND_STYLE = {"width": 3, "lineStyle": "dashed", "extendLeft": True, "extendRight": False,
+               "text": "Support", "fontSize": 14, "textColor": "#F23645", "bold": True, "labelPos": "below"}
+HLINE_STYLE = {"width": 2, "lineStyle": "dotted", "axisLabel": False, "labelPos": "middle"}
+RECT_STYLE = {"width": 1, "lineStyle": "solid", "fillColor": "rgba(0,150,0,.2)", "labelPos": "bottom"}
+
+
+def test_style_roundtrips_per_type():
+    assert check_drawings([{**TREND, "style": TREND_STYLE}])[0]["style"] == TREND_STYLE
+    assert check_drawings([{**HLINE, "style": HLINE_STYLE}])[0]["style"] == HLINE_STYLE
+    assert check_drawings([{**RECT, "style": RECT_STYLE}])[0]["style"] == RECT_STYLE
+
+
+def test_style_absent_or_empty_is_fine_the_old_look():
+    assert "style" not in check_drawings([TREND])[0]
+    assert "style" not in check_drawings([{**TREND, "style": {}}])[0]
+
+
+def test_style_drops_nothing_silently_it_fails_closed():
+    with pytest.raises(ValueError):
+        check_drawings([{**TREND, "style": {"junk": 1}}])
+    with pytest.raises(ValueError):   # extendLeft is a trend-only field
+        check_drawings([{**HLINE, "style": {"extendLeft": True}}])
+    with pytest.raises(ValueError):   # fillColor is rect-only
+        check_drawings([{**TREND, "style": {"fillColor": "#000000"}}])
+    with pytest.raises(ValueError):   # axisLabel is hline-only
+        check_drawings([{**RECT, "style": {"axisLabel": True}}])
+
+
+def test_style_is_not_allowed_at_all_on_positions():
+    with pytest.raises(ValueError):
+        check_drawings([{**LONG, "style": {"width": 2}}])
+    assert "style" not in check_drawings([{**LONG, "style": {}}])[0]
+
+
+STYLE_BAD = [
+    ("width zero", "trend", {"width": 0}), ("width too big", "trend", {"width": 5}),
+    ("width a float", "trend", {"width": 2.5}), ("width a bool", "trend", {"width": True}),
+    ("lineStyle unknown", "trend", {"lineStyle": "wavy"}),
+    ("extendLeft not a bool", "trend", {"extendLeft": "yes"}),
+    ("fontSize too small", "trend", {"fontSize": 9}), ("fontSize too big", "trend", {"fontSize": 29}),
+    ("fontSize a float", "trend", {"fontSize": 12.5}),
+    ("text too long", "trend", {"text": "x" * 201}), ("text not a string", "trend", {"text": 7}),
+    ("textColor a name", "trend", {"textColor": "red"}),
+    ("labelPos wrong for trend", "trend", {"labelPos": "top"}),   # rect's vocabulary, not a line's
+    ("labelPos wrong for rect", "rect", {"labelPos": "above"}),   # a line's vocabulary, not a rect's
+    ("fillColor bad", "rect", {"fillColor": "green"}),
+    ("axisLabel not a bool", "hline", {"axisLabel": 1}),
+    ("style not an object", "hline", []),
+]
+
+
+@pytest.mark.parametrize("why,kind,style", STYLE_BAD, ids=[b[0] for b in STYLE_BAD])
+def test_check_style_refuses(why, kind, style):
+    base = {"trend": TREND, "hline": HLINE, "rect": RECT}[kind]
+    with pytest.raises(ValueError):
+        check_drawings([{**base, "style": style}])
+
+
+def test_drawings_with_style_and_locked_roundtrip_over_the_wire(tmp_path):
+    trend = {**TREND, "locked": True, "style": TREND_STYLE}
+    with TestClient(replay_app(tmp_path), base_url="http://127.0.0.1:8852") as client:
+        assert client.put("/api/drawings/NQ", json=[trend]).status_code == 200
+        assert client.get("/api/drawings/NQ").json() == [trend]
+
+
+# ---- 2026-09-27 draw-tools plan: /api/presets (generic, drawing + indicator kinds) ----
+def test_presets_roundtrip(tmp_path):
+    with TestClient(replay_app(tmp_path), base_url="http://127.0.0.1:8852") as client:
+        assert client.get("/api/presets/drawing:trend").json() == {}
+        assert client.put("/api/presets/drawing:trend/Bold", json=TREND_STYLE).json() == {"ok": True}
+        assert client.put("/api/presets/drawing:trend/__default__", json={"width": 4}).json() == {"ok": True}
+        assert client.get("/api/presets/drawing:trend").json() == {"Bold": TREND_STYLE, "__default__": {"width": 4}}
+        assert client.get("/api/presets/drawing:rect").json() == {}   # a different kind: untouched
+        stored = json.loads((tmp_path / "state" / "presets.json").read_text())
+        assert stored == {"drawing:trend": {"Bold": TREND_STYLE, "__default__": {"width": 4}}}
+        assert client.put("/api/presets/drawing:trend/Bold", json={"width": 1}).status_code == 200
+        assert client.delete("/api/presets/drawing:trend/__default__").json() == {"ok": True}
+        assert client.get("/api/presets/drawing:trend").json() == {"Bold": {"width": 1}}
+        assert client.delete("/api/presets/drawing:trend/gone").status_code == 200   # deleting nothing is fine
+
+
+def test_presets_refuse_a_bad_kind(tmp_path):
+    with TestClient(replay_app(tmp_path), base_url="http://127.0.0.1:8852") as client:
+        for kind in ("sticker:trend", "drawing:Trend", "drawing"):
+            assert client.get(f"/api/presets/{kind}").status_code == 400, kind
+            assert client.put(f"/api/presets/{kind}/A", json={}).status_code == 400, kind
+            assert client.delete(f"/api/presets/{kind}/A").status_code == 400, kind
+
+
+def test_a_preset_is_a_json_object_of_at_most_16_kb(tmp_path):
+    def body(size):
+        return json.dumps({"x": "a" * (size - len('{"x": ""}'))})
+
+    with TestClient(replay_app(tmp_path), base_url="http://127.0.0.1:8852") as client:
+        def put(text):
+            return client.put("/api/presets/drawing:trend/t", content=text, headers={"content-type": "application/json"})
+
+        assert put(body(MAX_PRESET_BYTES)).status_code == 200
+        r = put(body(MAX_PRESET_BYTES + 1))
+        assert r.status_code == 400 and "16 KB" in r.json()["detail"]
+        for bad in ("[1, 2]", '"dark"', "null", "not json", '{"a": NaN}', '{"a": Infinity}'):
+            assert put(bad).status_code == 400, bad
+
+
+@pytest.mark.parametrize("name", ["x" * 41, "a/b", "a\\b", "a..b", "tab\there"])
+def test_preset_names_on_the_wire_are_refused(name, tmp_path):
+    with TestClient(replay_app(tmp_path), base_url="http://127.0.0.1:8852") as client:
+        r = client.put("/api/presets/drawing:trend/" + quote(name, safe=""), json={})
+        assert r.status_code == 400, name
+
+
+def test_preset_writes_from_another_site_are_refused(tmp_path):
+    evil = {"origin": "https://evil.example"}
+    with TestClient(replay_app(tmp_path), base_url="http://127.0.0.1:8852") as client:
+        assert client.put("/api/presets/drawing:trend/t", json={}, headers=evil).status_code == 403
+        assert client.get("/api/presets/drawing:trend").json() == {}
+        assert client.put("/api/presets/drawing:trend/t", json={},
+                          headers={"origin": "http://localhost:8852"}).status_code == 200
+        assert client.delete("/api/presets/drawing:trend/t", headers=evil).status_code == 403
 
 
 # ---- chart-settings templates ----
