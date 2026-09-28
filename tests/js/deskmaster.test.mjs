@@ -36,9 +36,13 @@ function fakeEl() {
   };
 }
 
-function load({ st = { armed: false }, stale = false, confirm = true } = {}) {
+const KILL_OK = { ok: true, armed: false, strategies: {}, results: {
+  a1: { cancel_all: { ok: true, error: null }, flatten_all: { ok: true, error: null } },
+  a2: { cancel_all: { ok: true, error: null }, flatten_all: { ok: true, error: null } } } };
+
+function load({ st = { armed: false }, stale = false, confirm = true, answer = KILL_OK, demo = false } = {}) {
   const els = { statusPill: fakeEl(), armBtn: fakeEl(), killBtn: fakeEl() };
-  const posts = [], toasts = [], confirms = [], refreshes = [], fetched = [];
+  const posts = [], toasts = [], confirms = [], refreshes = [], fetched = [], alerts = [];
   const win = fakeEl(), doc = fakeEl();
   doc.hidden = false;
   // a fake clock: setTimeout/clearTimeout run only when the test advances time
@@ -64,8 +68,15 @@ function load({ st = { armed: false }, stale = false, confirm = true } = {}) {
     DESK_STALE: stale,
     $: (sel) => els[sel.replace(/^#/, '')] || null,
     toast: (t) => toasts.push(t),
+    alertBar: (t) => alerts.push(t),
+    acctShort: (id) => '…' + String(id).slice(-3),
+    DEMO: demo,
     confirmDlg: async (title, body, action, destructive) => { confirms.push({ title, body, action, destructive }); return confirm; },
-    post: async (url, body) => { posts.push(body === undefined ? { url } : { url, body }); return { ok: true, results: { a1: 'ok' } }; },
+    post: async (url, body) => {
+      posts.push(body === undefined ? { url } : { url, body });
+      if (answer instanceof Error) throw answer;
+      return typeof answer === 'function' ? answer(url) : JSON.parse(JSON.stringify(answer));
+    },
     refresh: () => refreshes.push(true),
     fetch: async (url) => { fetched.push(url); throw new Error('the master controls must never fetch'); },
     setTimeout: (fn, ms) => { const id = ++seq; timers.set(id, { at: now + ms, fn }); return id; },
@@ -80,7 +91,7 @@ function load({ st = { armed: false }, stale = false, confirm = true } = {}) {
   const ev = (type, props = {}) => ({ type, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; }, ...props });
   const fire = (el, type, props) => { const e = ev(type, props); for (const fn of el.listeners[type] || []) fn(e); return e; };
   const kill = els.killBtn;
-  return { api: ctx.api, els, kill, fire, clock, posts, toasts, confirms, refreshes, fetched, win, doc };
+  return { api: ctx.api, els, kill, fire, clock, posts, toasts, confirms, refreshes, fetched, alerts, win, doc };
 }
 
 const plain = (v) => JSON.parse(JSON.stringify(v));
@@ -187,7 +198,8 @@ test('a pointer hold fires Kill once after HOLD_MS -- the SAME confirm and POST 
   assert.equal(confirms[0].destructive, true);
   assert.deepEqual(plain(posts), [{ url: '/api/kill' }]);
   assert.equal(refreshes.length, 1);
-  assert.match(toasts[toasts.length - 1], /^Kill:/);
+  assert.equal(toasts[toasts.length - 1],
+    'Kill sent — orders cancelled and positions flattened on 2 accounts; the desk is disarmed.', 'words, not raw JSON');
   assert.ok(!kill.classList.contains('holding'));
   clock.advance(5000);   // still held down: never a second fire from the same hold
   await tick();
@@ -322,4 +334,70 @@ test('a mouse click is not a hold; an assistive-tech click (no pointer, no key) 
   await tick();
   assert.equal(s.confirms.length, 1, 'VoiceOver cannot hold: it gets the same confirm');
   assert.equal(s.confirms[0].title, 'Kill everything?');
+});
+
+// ---- a Kill that did not go through is never silent (review M1) ---------------------------------
+async function kill(opts) {
+  const s = load(opts);
+  await s.api.doKill();
+  return s;
+}
+
+test('no answer from the desk: a lasting red alert says Kill was NOT sent and to flatten at the broker', async () => {
+  const s = await kill({ answer: new TypeError('Failed to fetch') });
+  assert.deepEqual(plain(s.posts), [{ url: '/api/kill' }], 'the same one call');
+  assert.equal(s.alerts.length, 1);
+  assert.equal(s.alerts[0], 'Kill NOT sent — the desk did not answer (Failed to fetch). Flatten at the broker now.');
+  assert.equal(s.toasts.length, 0, 'never a reassuring toast');
+});
+
+test('an unreadable answer: NOT confirmed, check and flatten at the broker', async () => {
+  const s = await kill({ answer: new SyntaxError('Unexpected token <') });
+  assert.match(s.alerts[0], /^Kill NOT confirmed — the desk's answer was unreadable\. .*flatten at the broker now\.$/);
+});
+
+test('a refusal (the write guard\'s 403): NOT sent, with the desk\'s own reason -- never "Kill: undefined"', async () => {
+  const s = await kill({ answer: { error: 'origin not allowed' } });
+  assert.equal(s.alerts[0], 'Kill NOT sent — the desk refused it: origin not allowed. Flatten at the broker now.');
+  const s2 = await kill({ answer: { detail: [{ msg: 'bad body' }] } });
+  assert.match(s2.alerts[0], /refused it: \[\{"msg":"bad body"\}\]/);
+  for (const t of [...s.toasts, ...s2.toasts]) assert.doesNotMatch(t, /undefined/);
+});
+
+test('an account whose flatten or cancel failed: Kill FAILED on it, with the reason, and flatten it at the broker', async () => {
+  const s = await kill({ answer: { ok: true, results: {
+    acct048: { cancel_all: { ok: true, error: null }, flatten_all: { ok: false, error: 'timeout' } },
+    acct049: { cancel_all: { ok: true, error: null }, flatten_all: { ok: true, error: null } },
+    acct050: { cancel_all: { ok: false, error: 'rejected' }, flatten_all: { ok: true, error: null } } } } });
+  assert.equal(s.alerts[0], 'Kill FAILED on …048 (FLATTEN FAILED: timeout) · …050 (CANCEL FAILED: rejected). ' +
+    'Flatten them at the broker now.');
+  assert.equal(s.toasts.length, 0);
+});
+
+test('a clean Kill with no connected account still says what happened; preview mode says nothing more', async () => {
+  const s = await kill({ answer: { ok: true, results: {} } });
+  assert.equal(s.toasts[0], 'Kill sent — the desk is disarmed (no connected account to flatten).');
+  const d = await kill({ demo: true, answer: { ok: false } });
+  assert.deepEqual(d.alerts, [], 'preview: post() already said nothing is sent');
+  assert.deepEqual(d.toasts, []);
+});
+
+test('the unknown-state tooltip no longer promises that Kill "works regardless"', () => {
+  const { api, els } = load({ st: null });
+  api.renderMaster();
+  assert.doesNotMatch(els.statusPill.title, /works regardless/);
+  assert.match(els.statusPill.title, /only the desk can carry it out: if it does not answer, flatten at the broker/);
+  assert.doesNotMatch(HTML, /works regardless/);
+});
+
+test('the alert is solid, red, above every dialog, and stays until dismissed', () => {
+  assert.match(HTML, /<div id="alertBar" role="alert" hidden>/);
+  const css = HTML.slice(HTML.indexOf('  #alertBar{'), HTML.indexOf('  #alertBar[hidden]'));
+  assert.match(css, /z-index:85;/);
+  assert.match(css, /background:var\(--card\);/);
+  assert.match(css, /border:1\.5px solid var\(--neg\);/);
+  assert.doesNotMatch(css, /backdrop-filter|glass/, 'money-critical text never goes translucent');
+  const fn = HTML.slice(HTML.indexOf('function alertBar('), HTML.indexOf('async function post('));
+  assert.doesNotMatch(fn, /setTimeout/, 'no auto-hide');
+  assert.match(fn, /\$\("#alertX"\)\.onclick = \(\) => \{ \$\("#alertBar"\)\.hidden = true; \};/);
 });
