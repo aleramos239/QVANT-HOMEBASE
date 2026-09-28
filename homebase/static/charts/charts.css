@@ -15,6 +15,28 @@
   --shadow-menu: 0 2px 8px rgba(0, 0, 0, .16);
   --shadow-dialog: 0 8px 32px rgba(0, 0, 0, .24);
   --backdrop: rgba(0, 0, 0, .25);
+  /* 2026-09-28 feel pass: strong, spring-SHAPED cubic-beziers (the built-in ease/ease-out keywords read as
+     flat next to these -- design-eng skill) for anything click-triggered that settles like the spring in
+     spring.js does (critically damped, no bounce -- bounce is reserved for gesture/momentum motion, done
+     with an actual Spring, never CSS). -out for entrances/settling, -in for the (faster) exit. */
+  --ease-spring-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-spring-in: cubic-bezier(0.4, 0, 1, 1);
+  /* Frosted glass (2026-09-28 feel pass): a floating/click-triggered chrome layer, never the surfaces the
+     trader reads a price or a fill off (see charts.css's own ".glass"/".glass-heavy" rule for the exact
+     list). Tinted toward the theme's own panel colour, not a neutral grey -- Apple's "materials tint toward
+     the surface they sit on." Two weights only ("bigger surfaces read as thicker"): -heavy for a dialog (the
+     biggest surface here), the plain weight for everything smaller (a menu, the draw toolbar, the replay
+     bar, a floating panel's own header). --glass-edge is the bright top edge WWDC 2018 calls "light catching
+     the material" -- a 1px top border, not a shadow. */
+  /* 2026-09-28: stronger at the user's request (was .70/.82, 14/24px) -- more of the chart shows through */
+  --glass-bg: rgba(255, 255, 255, .50); --glass-bg-heavy: rgba(255, 255, 255, .62);
+  --glass-edge: rgba(255, 255, 255, .85); --glass-blur: 20px; --glass-blur-heavy: 30px; --glass-saturate: 190%;
+  /* 2026-09-28: "more glass everywhere" -- the app frame's own subtle depth, so chrome that sits in normal
+     flow over the plain frame (the toolbar, the tab row, the rail, the status bar, ...) has something other
+     than one flat colour for its blur to pick up; a blur over true flat reads as nothing (the same problem
+     glass over the chart never has, since the chart is never flat). A soft, NEUTRAL (no hue) radial fade
+     from the top -- Apple-vibrancy-subtle, not a visible "gradient." */
+  --frame-wash: radial-gradient(1400px 700px at 50% -10%, #F6F6F6 0%, var(--frame) 65%);
   color-scheme: light;
 }
 :root[data-theme="dark"] {
@@ -27,13 +49,16 @@
   --shadow-menu: 0 0 0 1px #2E2E2E, 0 4px 12px rgba(0, 0, 0, .5);
   --shadow-dialog: 0 0 0 1px #2E2E2E, 0 8px 32px rgba(0, 0, 0, .6);
   --backdrop: rgba(0, 0, 0, .5);
+  --glass-bg: rgba(15, 15, 15, .46); --glass-bg-heavy: rgba(15, 15, 15, .58);
+  --glass-edge: rgba(255, 255, 255, .10); --glass-saturate: 170%;
+  --frame-wash: radial-gradient(1400px 700px at 50% -10%, #161616 0%, var(--frame) 65%);
   color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
-body { display: flex; flex-direction: column; overflow: hidden; background: var(--frame); color: var(--text);
-  font: 14px/1.25 var(--font); -webkit-font-smoothing: antialiased; }
+body { display: flex; flex-direction: column; overflow: hidden; background-color: var(--frame);
+  background-image: var(--frame-wash); color: var(--text); font: 14px/1.25 var(--font); -webkit-font-smoothing: antialiased; }
 button, input, select { font: inherit; color: inherit; }
 button { margin: 0; padding: 0; border: 0; background: none; cursor: pointer; }
 a { color: inherit; }
@@ -127,7 +152,8 @@ a { color: inherit; }
 /* ---- legend: DOM over the chart; only the badge and indicator rows take the mouse ---- */
 .legend { position: absolute; left: 8px; top: 7px; right: 80px; z-index: 5; display: flex; flex-direction: column;
   align-items: flex-start; gap: 1px; font-size: 13px; line-height: 20px; pointer-events: none; }
-.lg-title { display: flex; align-items: center; gap: 8px; max-width: 100%; font-size: 16px; line-height: 22px; white-space: nowrap; }
+.lg-title { display: flex; align-items: center; gap: 8px; max-width: 100%; font-size: 16px; line-height: 22px; white-space: nowrap;
+  letter-spacing: -.01em; }   /* 2026-09-28 feel pass: size-specific tracking (apple-design skill) -- tightened a hair above the 13-14px baseline, which stays at 0 */
 .grid[data-count="4"] .lg-title, .grid[data-count="6"] .lg-title { font-size: 14px; line-height: 20px; }
 .lg-logo { display: inline-flex; flex: none; }
 /* The instrument badge: our own text/shape circle, never a real exchange or brand logo (see HBCatalog.rootBadge). */
@@ -237,7 +263,7 @@ a { color: inherit; }
   background: var(--panel); border-radius: 8px; box-shadow: var(--shadow-dialog); }
 .dialog.small { width: min(380px, 92vw); }
 .dlg-head { flex: none; display: flex; align-items: center; justify-content: space-between; padding: 16px 12px 12px 20px;
-  font-size: 20px; font-weight: 600; }
+  font-size: 20px; font-weight: 600; letter-spacing: -.015em; }   /* the biggest text in the app -- size-specific tracking, feel pass */
 .dlg-x { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 6px; color: var(--text); }
 .dlg-x .ic { width: 20px; height: 20px; }
 .dlg-x:hover { background: var(--hover); }
@@ -602,6 +628,21 @@ a { color: inherit; }
 .pdock-split-v { flex: none; width: 6px; margin: 0 -3px; cursor: col-resize; z-index: 2; position: relative; }
 .pdock-split-v:hover { background: var(--accent-soft); }
 #floatLayer { position: fixed; inset: 0; pointer-events: none; z-index: 40; }
+
+/* ---- panel physics (2026-09-28 feel pass, panelshell.js) ----
+   A live drag/resize/splitter never transitions -- it must track the pointer 1:1, so these classes are
+   added only for the short release-time "snap back onto the hard-clamped value" after a grip/splitter/
+   resize handle rubber-banded past its limit, then removed once that settles (panelshell.js's snapAxisCSS /
+   snapRectCSS). The floating panel's own DOCK <-> FLOAT and reorder motion is a real spring (JS, transform-
+   only, animateDockFlip) and needs no CSS transition at all. */
+.pdock-snap-w { transition: width 180ms var(--ease-spring-out); }
+.pdock-snap-h { transition: height 180ms var(--ease-spring-out); }
+.pdock-snap-flex { transition: flex-grow 180ms var(--ease-spring-out); }
+.pdock-snap-rect { transition: left 180ms var(--ease-spring-out), top 180ms var(--ease-spring-out),
+  width 180ms var(--ease-spring-out), height 180ms var(--ease-spring-out); }
+@media (prefers-reduced-motion: reduce) {
+  .pdock-snap-w, .pdock-snap-h, .pdock-snap-flex, .pdock-snap-rect { transition: none; }
+}
 #floatLayer .hbpanel { pointer-events: auto; }
 
 .hbpanel { display: flex; flex-direction: column; min-height: 0; background: var(--panel); border-radius: 6px;
@@ -650,7 +691,7 @@ a { color: inherit; }
 
 .op-head { flex: none; display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 8px 0 14px; }
 .op-logo { display: inline-flex; flex: none; }
-.op-sym { flex: none; font-size: 15px; font-weight: 600; white-space: nowrap; }
+.op-sym { flex: none; font-size: 15px; font-weight: 600; white-space: nowrap; letter-spacing: -.01em; }
 .op-name { min-width: 0; color: var(--text-2); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .op-order { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .op-form { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; padding: 12px 14px 4px; display: flex; flex-direction: column; gap: 12px; }
@@ -692,7 +733,7 @@ a { color: inherit; }
 .op-tile.sell.on { color: #FFFFFF; background: var(--down); }
 .op-tile.buy.on { color: #FFFFFF; background: var(--accent); }
 .op-tile:hover { filter: brightness(1.05); }
-.op-tpx { font-size: 15px; font-weight: 600; }
+.op-tpx { font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
 .op-tlbl { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }
 .op-tile.stale .op-tpx { opacity: .5; }
 .op-spread { min-width: 22px; text-align: center; font-size: 12px; color: var(--text-2); }
@@ -747,7 +788,8 @@ a { color: inherit; }
 /* fast-paper: a press darkens at once; the chart's Buy/Sell or the panel's Send whose order is in flight then stays
    PRESSED -- not greyed like the other buttons -- until its send resolves, a thin bar running along its foot.
    Nothing changes size (no layout shift). */
-.tr-sell:active:not(:disabled), .tr-buy:active:not(:disabled), .op-send:active:not(:disabled) { filter: brightness(.9); }
+.tr-sell:active:not(:disabled), .tr-buy:active:not(:disabled), .op-send:active:not(:disabled),
+.op-tile:active:not(:disabled) { filter: brightness(.9); }
 .tr-sell.sending, .tr-buy.sending, .op-send.sending { position: relative; overflow: hidden; }
 .tr-sell.sending:disabled, .tr-buy.sending:disabled, .op-send.sending:disabled { opacity: 1; cursor: progress;
   filter: brightness(.86); box-shadow: inset 0 2px 4px rgba(0, 0, 0, .3); }
@@ -879,7 +921,7 @@ a { color: inherit; }
 .tst-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
 .tst-tiles-small { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 8px; }
 .tst-tile { padding: 8px 0; }
-.tst-tile-v { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.tst-tile-v { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -.012em; }
 .tst-tile-l { color: var(--text-2); font-size: 12px; margin-top: 2px; }
 .tst-tile-s { color: var(--text-2); font-size: 12px; }
 .tst-chart { height: 180px; margin-bottom: 16px; }
@@ -1032,6 +1074,151 @@ input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-o
 .btn-ghost:hover:not(:disabled) { box-shadow: inset 0 0 0 1px var(--ctl-border-hover); }
 .btn-danger:hover:not(:disabled) { background: color-mix(in srgb, var(--down) 88%, #000); }
 @media (prefers-reduced-motion: reduce) { .btn { transition: none; } .btn:active:not(:disabled) { transform: none; } }
+
+/* ---- instant press feedback (2026-09-28 feel pass) ----
+   Every OTHER pressable surface in the app gets the same on-pointerdown response `.btn` already had above:
+   Apple's "respond on pointer-down, not on release," Emil Kowalski's "buttons must feel responsive to
+   press" (design-eng skill). `:active` fires on the actual pointerdown for a real button/link, so this needs
+   no JS. Two shapes: a compact control (icon button, chip, tab-strip item, grid cell) scales down slightly;
+   a full-width LIST ROW (a menu item, a dialog row, the sidebar's own tabs) darkens instead, the same way
+   `.menu-i` already darkens on hover -- shrinking something that spans its container's width reads wrong.
+   `--press-scale` collapses to 1 under reduced motion, so the transition (never removed -- from 1 to 1 is
+   nothing to animate) simply has nothing to do.
+   Never applied here: the chart Buy/Sell block, the order panel's Send and its price tiles (their own
+   brightness `:active` cue, just above, stays as is -- a different, already-decided-on treatment for
+   anything trade-side) or any of the audit's excluded surfaces (the DOM ladder, order/position line chips,
+   the legend's own OHLC/indicator values, the chart canvas and axes). */
+:root { --press-scale: .97; }
+@media (prefers-reduced-motion: reduce) { :root { --press-scale: 1; } }
+:where(.tb-btn, .tb-pill, .rail-btn, .rail-corner, .tab-btn, .tab-add, .cell-gear, .ib, .menu-star, .menu-del,
+  .hbpanel-btn, .dtb-btn, .dtb-swatch, .dlg-x, .tst-icon-btn, .tst-btn, .tst-cal-nav, .grid-pick, .swatch,
+  .sw-cell, .dom-recentre, .bp-toggle, .bp-act, .op-type, .seg button, .hb-news-chip, .rp-chip, .tst-cal-d,
+  .tst-hcell, .tst-wf-cmp-col, .bp-tab, .tst-tab
+  ):active:not(:disabled) {
+  transform: scale(var(--press-scale));
+  transition: transform 100ms var(--ease-spring-out);
+}
+:where(.menu-i, .menu-row, .dlg-row, .dlg-group, .hb-news-title, .tst-run-row, .lg-row, .set-tab,
+  .op-chead):active:not(:disabled) {
+  background: var(--border);
+}
+
+/* ---- frosted glass (2026-09-28 feel pass; extended same day at the user's "more glass everywhere" request)
+   ----
+   Floating/click-triggered chrome (menus/popovers, dialogs, toasts, the draw toolbar, the Bar Replay control
+   bar, a floating panel's own header) PLUS the app's persistent chrome that sits in normal flow: the top
+   toolbar, the layout tab row, the drawing rail, the status bar, the bottom panel's tab strip, the Strategy
+   Tester's own sticky header, the per-chart gear corner, and a floating panel's outer frame edge. --frame-
+   wash (above) is what makes the normal-flow bars actually read as material instead of a flat tint (a blur
+   over one flat colour shows nothing) -- macOS-vibrancy-tasteful, not glossy: no colour, no glow, a few
+   percent of lightness.
+   Never here, per the audit's exclusion list and the user's own repeat of it: the chart canvas, price/time
+   axes, legend values, order/position lines and their chips, the Buy/Sell block, the DOM ladder's cells, a
+   floating panel's BODY (the order form, the DOM ladder -- .hbpanel-body is pinned solid below, since
+   .hbpanel's own frame is now translucent). Layout is untouched -- these bars still push the chart grid,
+   never overlay its plotted area.
+   `-webkit-` prefixed too: this ships inside a WKWebView, which needs it or the blur silently does nothing
+   (GOTCHAS.md). Each surface still keeps its existing shadow/box-shadow for depth -- glass replaces only the
+   background, not the elevation cue. */
+.menu, .hotkey-box, .toast, .draw-toolbar, .replay-bar, .hbpanel-head,
+.toolbar, .tabrow, .rail, .statusbar, .bp-bar, .tst-sticky, .cell-gear {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+}
+.menu, .hotkey-box, .toast, .draw-toolbar, .replay-bar, .toolbar, .tabrow, .bp-bar, .tst-sticky {
+  border-top: 1px solid var(--glass-edge);
+}
+.hbpanel-head { border-top: 1px solid var(--glass-edge); }   /* in ADDITION to its existing bottom border -- top and bottom separate it from both the titlebar above and the body below */
+.tabrow { border-bottom-color: var(--border); }   /* keep its own separator from the toolbar above -- glass alone reads too soft there */
+/* a floating panel's FRAME, not its fill: its own background sits directly behind .hbpanel-head, whose own
+   blur would otherwise stack on top of it (the exact "light glass on light glass" hazard .dialog .menu
+   avoids below) -- the visible, safe part of "frame" for this one is its outer edge. */
+.hbpanel.floating { border-color: var(--glass-edge); }
+.hbpanel-body { background: var(--panel); }   /* the order form / DOM ladder: always solid, never the frame's glass */
+.dialog {
+  background: var(--glass-bg-heavy);
+  backdrop-filter: blur(var(--glass-blur-heavy)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur-heavy)) saturate(var(--glass-saturate));
+  border-top: 1px solid var(--glass-edge);
+}
+/* never stack light glass on light glass: a swatch/template popover opened FROM a dialog (openMenu's own
+   `{ root: box }`, app.js) renders as the dialog's own DOM descendant -- solid there instead. */
+.dialog .menu { background: var(--panel); backdrop-filter: none; -webkit-backdrop-filter: none; border-top: none; }
+/* vibrancy (apple-design §12): over the clearer glass, muted captions get more contrast -- flat grey on a
+   translucent surface over a busy chart reads washed out */
+.menu .menu-h, .menu .menu-sub, .dialog .set-cap, .dialog .dlg-sub, .toast .toast-sub, .statusbar {
+  color: color-mix(in srgb, var(--text-2) 55%, var(--text));
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :root { --frame-wash: none; }
+  .menu, .hotkey-box, .toast, .draw-toolbar, .replay-bar, .hbpanel-head, .dialog,
+  .toolbar, .tabrow, .rail, .statusbar, .bp-bar, .tst-sticky, .cell-gear {
+    background: var(--panel); backdrop-filter: none; -webkit-backdrop-filter: none; border-top-color: var(--border);
+  }
+  .hbpanel.floating { border-color: var(--border); }
+}
+@media (prefers-contrast: more) {
+  .menu, .hotkey-box, .toast, .draw-toolbar, .replay-bar, .dialog,
+  .toolbar, .tabrow, .rail, .statusbar, .bp-bar, .tst-sticky {
+    background: var(--panel); backdrop-filter: none; -webkit-backdrop-filter: none;
+    box-shadow: inset 0 0 0 1px var(--border), var(--shadow-menu);
+  }
+  .dialog { box-shadow: inset 0 0 0 1px var(--border), var(--shadow-dialog); }
+  .hbpanel-head { background: var(--pill); backdrop-filter: none; -webkit-backdrop-filter: none; border-top-color: var(--border); }
+  .hbpanel.floating { border-color: var(--border); }
+  .cell-gear { background: var(--panel); backdrop-filter: none; -webkit-backdrop-filter: none; }
+}
+
+/* ---- enter/exit (2026-09-28 feel pass) ----
+   Every surface here rides the SAME `[data-motion]` attribute for both directions (spatial consistency:
+   enter and exit are the same transform/opacity/blur delta, just played forwards or backwards -- the
+   apple-design skill's "enter and exit along the same path"), toggled by HBSpring.materialize()/
+   dematerialize() (spring.js) from app.js's openMenu/closeMenu/openDialog/closeDialog, deskclient.js's
+   toast(), and the draw-toolbar/replay-bar's own build/teardown. CSS transitions, not a JS spring: none of
+   these are ever grabbed and re-dragged mid-animation the way a floating panel is, so Emil Kowalski's "use
+   transitions over keyframes for interruptible UI" is the simpler, cheaper, equally-correct tool here
+   (design-eng skill; see the audit doc's design-decision note). Critically damped shape throughout -- no
+   overshoot; bounce is reserved for gesture-driven motion, and nothing here is one. Exit is faster than
+   enter (Emil Kowalski: "release should always be snappy"). */
+.menu, .hotkey-box, .toast, .draw-toolbar, .replay-bar {
+  opacity: 1; transform: scale(1); filter: blur(0);
+  transition: opacity 160ms var(--ease-spring-out), transform 160ms var(--ease-spring-out),
+    filter 160ms var(--ease-spring-out), backdrop-filter 160ms var(--ease-spring-out);
+}
+.menu[data-motion], .hotkey-box[data-motion], .toast[data-motion], .draw-toolbar[data-motion], .replay-bar[data-motion] {
+  opacity: 0; transform: scale(.95); filter: blur(4px);
+}
+.menu[data-motion="leave"], .hotkey-box[data-motion="leave"], .toast[data-motion="leave"],
+.draw-toolbar[data-motion="leave"], .replay-bar[data-motion="leave"] {
+  transition-duration: 120ms; transition-timing-function: var(--ease-spring-in);
+}
+
+/* the dialog's dimming scrim: a plain opacity fade -- it's a dimming device, not a material (apple-design
+   skill's "dim to focus" is explicitly not vibrancy/translucency-as-hierarchy) */
+.backdrop { opacity: 1; transition: opacity 160ms var(--ease-spring-out); }
+.backdrop[data-motion] { opacity: 0; }
+.backdrop[data-motion="leave"] { transition-duration: 120ms; transition-timing-function: var(--ease-spring-in); }
+
+/* the dialog box itself: same materialize shape, always center-anchored (Emil Kowalski's one named exception
+   to "popovers scale from their trigger" -- a modal isn't anchored to anything, it's centered) */
+.dialog {
+  opacity: 1; transform: scale(1); filter: blur(0);
+  transition: opacity 180ms var(--ease-spring-out), transform 180ms var(--ease-spring-out),
+    filter 180ms var(--ease-spring-out), backdrop-filter 180ms var(--ease-spring-out);
+}
+.dialog[data-motion] { opacity: 0; transform: scale(.96); filter: blur(6px); }
+.dialog[data-motion="leave"] { transition-duration: 130ms; transition-timing-function: var(--ease-spring-in); }
+
+@media (prefers-reduced-motion: reduce) {
+  /* a short opacity cross-fade only -- no scale, no blur, no springs/bounce (apple-design + design-eng skills) */
+  .menu, .hotkey-box, .toast, .draw-toolbar, .replay-bar, .backdrop, .dialog {
+    transition-property: opacity; transition-duration: 150ms; transition-timing-function: ease;
+  }
+  .menu[data-motion], .hotkey-box[data-motion], .toast[data-motion], .draw-toolbar[data-motion],
+  .replay-bar[data-motion], .dialog[data-motion] { transform: none; filter: none; }
+}
 
 /* ---- Bar Replay start popover: a date field + time field, a month calendar, and quick times ---- */
 .menu.replay-menu { width: 300px; padding-bottom: 8px; }

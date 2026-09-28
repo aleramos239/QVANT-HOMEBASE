@@ -7,6 +7,7 @@
 'use strict';
 const C = window.HBCatalog, I = window.HBIcons, S = window.HBSettings, T = window.HBTrade, { Cell, badgeEl } = window.HBCell;
 const DS = window.HBDrawStyle;
+const M = window.HBSpring;   // the feel pass (2026-09-28): materialize()/dematerialize() for every menu/dialog/popover below
 const GRIDS = { 1: [1, 1], 2: [2, 1], 4: [2, 2], 6: [3, 2] };
 const GRID_NAMES = { 1: '1 chart', 2: '2 charts side by side', 4: '2 × 2 charts', 6: '3 × 2 charts' };
 const STATUS_STALE_S = 6;   // the server sends a status every 2 s: this long without one = it is stuck
@@ -29,6 +30,7 @@ let selected = 0;
 let nextId = 1;
 let statusAt = 0, statusLine = '';
 let menuEl = null, menuAnchor = null;
+let menuNeedsMaterialize = false;   // true right after openMenu(), consumed by the FIRST placeMenu() that follows
 let customWait = null;   // {cell, spec, err}: a custom interval sent from the open interval menu, awaiting the server
 let dlg = null;   // the open dialog: {back, box, focus}
 let tool = 'cursor';
@@ -312,36 +314,49 @@ function openMenu(anchor, cls, { right = false, root = null, at = null } = {}) {
   m.setAttribute('role', 'menu');
   (root || $('#menuRoot')).appendChild(m);
   menuEl = m; menuAnchor = anchor; menuRight = right; menuAt = at;
+  menuNeedsMaterialize = true;   // consumed by the placeMenu() the caller runs once content is filled in
   if (anchor) { anchor.classList.add('open'); anchor.setAttribute('aria-expanded', 'true'); }
   return m;
 }
+/* Positions the menu, then (the first time only, per open) materializes it anchored to whatever it was
+   actually placed against -- a trigger button, the rail flyout's own button, or the pointer for a context
+   menu (apple-design skill: "anchor interactions to their source"). Origin is expressed in the menu's own
+   local coordinates (offset from its own top-left), which is what CSS transform-origin wants. */
 function placeMenu() {
   if (!menuEl) return;
   const w = menuEl.offsetWidth, h = menuEl.offsetHeight;
+  let left, top, originX, originY;
   if (menuAt) {   // a context menu: at the pointer, kept inside the window
-    menuEl.style.left = Math.max(4, Math.min(menuAt.x, window.innerWidth - w - 4)) + 'px';
-    menuEl.style.top = Math.max(4, Math.min(menuAt.y, window.innerHeight - h - 4)) + 'px';
-    return;
-  }
-  if (menuRight) {
+    left = Math.max(4, Math.min(menuAt.x, window.innerWidth - w - 4));
+    top = Math.max(4, Math.min(menuAt.y, window.innerHeight - h - 4));
+    originX = menuAt.x - left; originY = menuAt.y - top;
+  } else if (menuRight) {
     const r = (menuAnchor.closest('.rail-split') || menuAnchor).getBoundingClientRect();
-    menuEl.style.left = (r.right + 8) + 'px';
-    menuEl.style.top = Math.max(4, Math.min(r.top, window.innerHeight - h - 4)) + 'px';
-    return;
+    left = r.right + 8;
+    top = Math.max(4, Math.min(r.top, window.innerHeight - h - 4));
+    originX = 0; originY = (r.top + r.height / 2) - top;   // grows rightward from the button's own middle
+  } else {
+    const r = menuAnchor.getBoundingClientRect(), below = r.bottom + 4;
+    left = Math.max(4, Math.min(r.left, window.innerWidth - w - 4));
+    // no room below (a dialog footer's menu, a swatch near the bottom): above the anchor instead
+    const above = r.top - 4 - h;
+    top = (below + h > window.innerHeight - 4 && above >= 4) ? above : below;
+    originX = (r.left + r.width / 2) - left;
+    originY = top === below ? 0 : h;   // below the anchor -> origin at the menu's own top edge; above -> its bottom edge
   }
-  const r = menuAnchor.getBoundingClientRect(), below = r.bottom + 4;
-  menuEl.style.left = Math.max(4, Math.min(r.left, window.innerWidth - w - 4)) + 'px';
-  // no room below (a dialog footer's menu, a swatch near the bottom): above the anchor instead
-  menuEl.style.top = (below + h > window.innerHeight - 4 && r.top - 4 - h >= 4 ? r.top - 4 - h : below) + 'px';
+  menuEl.style.left = `${left}px`; menuEl.style.top = `${top}px`;
+  if (menuNeedsMaterialize) { menuNeedsMaterialize = false; M.materialize(menuEl, `${originX}px ${originY}px`); }
 }
 function closeMenu() {
   if (!menuEl) return;
-  const back = menuAnchor && menuEl.contains(document.activeElement) ? menuAnchor : null;   // keyboard focus goes back to the button
-  menuEl.remove();
+  const el = menuEl;
+  const back = menuAnchor && el.contains(document.activeElement) ? menuAnchor : null;   // keyboard focus goes back to the button
   if (menuAnchor) { menuAnchor.classList.remove('open'); menuAnchor.setAttribute('aria-expanded', 'false'); }
   menuEl = menuAnchor = menuAt = null;
+  menuNeedsMaterialize = false;
   customWait = null;
   if (window.HBReplayUI) window.HBReplayUI.disarmPick();   // the Replay popover's "pick a start" arm, if any
+  M.dematerialize(el, () => el.remove());
   if (back) back.focus();
 }
 function toggleMenu(anchor, fill) {
@@ -462,8 +477,9 @@ function hotkeyAnchor(cell) {
 }
 function closeHotkeyBox() {
   if (!hotkeyBox) return;
-  hotkeyBox.el.remove();
+  const el = hotkeyBox.el;
   hotkeyBox = null;
+  M.dematerialize(el, () => el.remove());
 }
 /* A blur means "cancel" for both boxes, but Enter/Escape already call closeHotkeyBox() themselves before the
    blur fires (removing the focused input triggers one) — guarded by identity so that later blur is a no-op. */
@@ -495,6 +511,7 @@ function openTimeframeBox(cell, seed) {
   input.onblur = hotkeyBlur(input);
   box.append(input, err);
   $('#menuRoot').appendChild(box);
+  M.materialize(box, 'left top');   // anchored near the selected chart's own corner, not a specific button
   hotkeyBox = { el: box, input, kind: 'tf' };
   input.value = seed;
   input.focus();
@@ -542,6 +559,7 @@ function openSymbolBox(cell, seed) {
   input.onblur = hotkeyBlur(input);
   box.append(input, list);
   $('#menuRoot').appendChild(box);
+  M.materialize(box, 'left top');
   hotkeyBox = { el: box, input, kind: 'sym' };
   input.value = seed;
   render();
@@ -966,16 +984,19 @@ function openDialog(title, cls) {
   back.addEventListener('pointerdown', (e) => { if (e.target === back) closeDialog(); });
   $('#dialogRoot').appendChild(back);
   dlg = { back, box, focus: document.activeElement };
+  M.materialize(back);
+  M.materialize(box);   // no anchor -- a dialog always stays center-anchored (Emil Kowalski's own exception)
   return box;
 }
 
 function closeDialog() {
   if (!dlg) return;
   closeMenu();   // a menu or swatch popover open inside the dialog goes with it
-  const { back, focus, onClose } = dlg;
+  const { back, box, focus, onClose } = dlg;
   dlg = null;
-  back.remove();
   if (onClose) onClose();   // the Settings dialog puts every chart back unless Ok was pressed
+  M.dematerialize(back, () => {});   // the scrim fades in parallel; box (below) drives the actual removal
+  M.dematerialize(box, () => back.remove());
   if (focus && typeof focus.focus === 'function' && document.contains(focus)) focus.focus();
 }
 
@@ -1192,7 +1213,7 @@ const drawToolbars = new Map();   // cell -> {el, key} ("key" = id|type, so a sa
 
 function closeDrawToolbar(cell) {
   const t = drawToolbars.get(cell);
-  if (t) { t.el.remove(); drawToolbars.delete(cell); }
+  if (t) { drawToolbars.delete(cell); M.dematerialize(t.el, () => t.el.remove()); }
 }
 function closeAllDrawToolbars() { for (const cell of [...drawToolbars.keys()]) closeDrawToolbar(cell); }
 
@@ -1281,6 +1302,7 @@ function syncDrawToolbar(cell, d) {
     closeDrawToolbar(cell);
     const built = drawToolbarButtons(cell, root, d);
     $('#menuRoot').appendChild(built.el);
+    M.materialize(built.el);   // no fixed anchor -- it's placed against the selected drawing, not a button
     t = { el: built.el, key, focused: built.focused };
     drawToolbars.set(cell, t);
   }

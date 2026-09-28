@@ -23,6 +23,7 @@
 (() => {
 'use strict';
 const R = window.HBReplay;
+const M = window.HBSpring;   // the feel pass (2026-09-28): the control bar's own materialize()/dematerialize()
 
 const sessions = new WeakMap();   // Cell -> {pending, ov, date, cursorMs, speed, playing, done}
 let page = null;
@@ -715,6 +716,7 @@ class Overlay {
     bar.append(selectBtn, mk('span', 'rb-div'), backBtn, playBtn, fwdBtn, mk('span', 'rb-div'),
       speedBtn, mk('span', 'rb-div'), time, mk('span', 'rb-div'), realtimeBtn, exitBtn);
     cell.el.appendChild(bar);
+    M.materialize(bar);
     this.bar = bar;
     this.els = { playBtn, backBtn, speedBtn, time };
     s.ov = this;
@@ -984,7 +986,7 @@ class Overlay {
     try { this.cell.candles.detachPrimitive(this.hook); } catch (_) { /* the chart is already being removed */ }
     if (this.pill) this.pill.remove();
     if (this.dim) this.dim.remove();
-    if (this.bar) this.bar.remove();
+    if (this.bar) { const bar = this.bar; M.dematerialize(bar, () => bar.remove()); }
     delete this.cell.__rbSelectBtn;   // this Overlay's own Select-bar button is gone with the bar above
     this.destroyPractice();
     const s = sessions.get(this.cell);
