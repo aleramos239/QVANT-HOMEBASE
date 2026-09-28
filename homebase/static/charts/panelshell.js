@@ -352,6 +352,10 @@ function bringToFront(id) {
 function wireDockWidthGrip(grip) {
   let dragging = false, startX = 0, startW = 0;
   grip.addEventListener('pointerdown', (e) => {
+    // a re-grab within the ~220ms release snap-back is still wearing that transition -- drop it before the
+    // very next line's live style write, or this drag's 1:1 tracking would itself be (wrongly) animated
+    // (coordinator review, 2026-09-28).
+    dockEl.classList.remove('pdock-snap-w');
     dragging = true; startX = e.clientX; startW = state.dockWidth;
     try { grip.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
     window.addEventListener('blur', end);
@@ -401,6 +405,8 @@ function wireDockWidthGripSide(grip, ids) {
     ids.forEach((id) => { if (els[id]) els[id].root.style.width = `${clamped[id] + (id === id0 ? drift : 0)}px`; });
   };
   grip.addEventListener('pointerdown', (e) => {
+    dockEl.classList.remove('pdock-snap-w');   // see wireDockWidthGrip's own note
+    for (const id of ids) if (els[id]) els[id].root.classList.remove('pdock-snap-w');
     dragging = true; startX = e.clientX; startWidths = { ...state.dockWidths };
     try { grip.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
     window.addEventListener('blur', end);
@@ -434,6 +440,8 @@ function wireDockSideSplitter(split, ids, i) {
   let dragging = false, startX = 0, startWidths = null;
   const a = ids[i], b = ids[i + 1];
   split.addEventListener('pointerdown', (e) => {
+    if (els[a]) els[a].root.classList.remove('pdock-snap-w');   // see wireDockWidthGrip's own note
+    if (els[b]) els[b].root.classList.remove('pdock-snap-w');
     dragging = true; startX = e.clientX; startWidths = { ...state.dockWidths };
     try { split.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
     window.addEventListener('blur', end);
@@ -473,6 +481,8 @@ function wireDockSplitter(split, ids, i) {
   let dragging = false, startY = 0, startHeights = null;
   const a = ids[i], b = ids[i + 1];
   split.addEventListener('pointerdown', (e) => {
+    if (els[a]) els[a].root.classList.remove('pdock-snap-flex');   // see wireDockWidthGrip's own note
+    if (els[b]) els[b].root.classList.remove('pdock-snap-flex');
     dragging = true; startY = e.clientY; startHeights = { ...state.dockHeights };
     try { split.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
     window.addEventListener('blur', end);
@@ -707,6 +717,7 @@ function wireFloatResize(id, root) {
     let dragging = false, startX = 0, startY = 0, startRect = null;
     h.addEventListener('pointerdown', (e) => {
       if (state.panels[id].docked) return;
+      root.classList.remove('pdock-snap-rect');   // see wireDockWidthGrip's own note
       dragging = true; startX = e.clientX; startY = e.clientY;
       startRect = { x: state.panels[id].x, y: state.panels[id].y, w: state.panels[id].w, h: state.panels[id].h };
       try { h.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }

@@ -126,6 +126,12 @@ function makeEnv() {
   return { window: window_, document: document_, tbOrder, tbDom, stopSpies };
 }
 
+function findByClass(root, cls) {
+  if (root.classList && root.classList.contains(cls)) return root;
+  for (const c of root.children) { const f = findByClass(c, cls); if (f) return f; }
+  return null;
+}
+
 /* Drags a floating panel's header by (dx, dy) and releases -- the SAME pointerdown/pointermove/pointerup
    sequence a real drag fires, so it goes through wireHeaderDrag's real `end()` and, since the panel is
    already floating and lands somewhere still legal, settleFloat() -- which is what actually populates a
@@ -168,4 +174,23 @@ test('onWindowResize: a panel that needs no correction is left alone (nothing sp
   const before = env.stopSpies.length;
   env.window._fire('resize');   // same size -- clampFloatRect returns the identical rect
   assert.equal(env.stopSpies.length, before);
+});
+
+test('the dock width grip drops its own release snap-back class on a fresh grab (a re-grab must track 1:1, not inherit the CSS transition)', () => {
+  const env = makeEnv();
+  const { HBPanelShell: shell } = env.window;
+  shell.setOpen('order', true);   // docked by default -- the width grip only exists while something's docked
+  const dockEl = env.document.getElementById('pdock');
+  const grip = findByClass(dockEl, 'pdock-widthgrip');
+  assert.ok(grip, 'the dock width grip should exist once a panel is docked');
+  // a normal drag-release: snapAxisCSS (panelshell.js) always adds the class at release, relying on
+  // transitionend/its own timeout to remove it again later -- neither ever fires in this sandbox, so it
+  // lingers exactly the way a real ~220ms window would right after a real release.
+  grip.dispatchEvent(pointerEvent('pointerdown', 300, 100, { target: grip, t: 0 }));
+  grip.dispatchEvent(pointerEvent('pointermove', 260, 100, { t: 16 }));
+  grip.dispatchEvent(pointerEvent('pointerup', 260, 100, { t: 32 }));
+  assert.ok(dockEl.classList.contains('pdock-snap-w'), 'setup: the release should have left the snap-back class on');
+  // the re-grab itself -- before any pointermove -- must already have dropped it
+  grip.dispatchEvent(pointerEvent('pointerdown', 260, 100, { target: grip, t: 40 }));
+  assert.ok(!dockEl.classList.contains('pdock-snap-w'), 'a fresh grab should drop the lingering snap-back class immediately, not carry it into the new drag');
 });
