@@ -215,14 +215,22 @@ function wireDockWidthGrip(grip) {
   grip.addEventListener('pointerdown', (e) => {
     dragging = true; startX = e.clientX; startW = state.dockWidth;
     try { grip.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+    window.addEventListener('blur', end);
     e.preventDefault();
   });
   grip.addEventListener('pointermove', (e) => {
     if (!dragging) return;
+    if (!e.buttons) { end(e); return; }   // the button was released without a pointerup/cancel reaching us
     state.dockWidth = L.clampDockWidth(startW - (e.clientX - startX));
     dockEl.style.width = `${state.dockWidth}px`;
   });
-  const end = (e) => { if (!dragging) return; dragging = false; try { grip.releasePointerCapture(e.pointerId); } catch (_) { /* ignore */ } save(); };
+  const end = (e) => {
+    if (!dragging) return;
+    dragging = false;
+    try { grip.releasePointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+    window.removeEventListener('blur', end);
+    save();
+  };
   grip.addEventListener('pointerup', end);
   grip.addEventListener('pointercancel', end);
   grip.addEventListener('lostpointercapture', end);
@@ -237,17 +245,25 @@ function wireDockSplitter(split, ids, i) {
   split.addEventListener('pointerdown', (e) => {
     dragging = true; startY = e.clientY;
     try { split.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+    window.addEventListener('blur', end);
     e.preventDefault();
   });
   split.addEventListener('pointermove', (e) => {
     if (!dragging) return;
+    if (!e.buttons) { end(e); return; }   // the button was released without a pointerup/cancel reaching us
     const containerH = dockEl.getBoundingClientRect().height || 1;
     const delta = L.pixelsToFraction(e.clientY - startY, containerH);
     startY = e.clientY;
     state.dockHeights = L.applySplitterDrag(ids, state.dockHeights, i, delta);
     ids.forEach((id) => { if (els[id]) els[id].root.style.flexGrow = String(Math.max(0.0001, state.dockHeights[id] || 0)); });
   });
-  const end = (e) => { if (!dragging) return; dragging = false; try { split.releasePointerCapture(e.pointerId); } catch (_) { /* ignore */ } save(); };
+  const end = (e) => {
+    if (!dragging) return;
+    dragging = false;
+    try { split.releasePointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+    window.removeEventListener('blur', end);
+    save();
+  };
   split.addEventListener('pointerup', end);
   split.addEventListener('pointercancel', end);
   split.addEventListener('lostpointercapture', end);
@@ -273,10 +289,12 @@ function wireHeaderDrag(id, root, head) {
     mode = state.panels[id].docked ? null : 'float-move';
     bringToFront(id);
     try { head.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+    window.addEventListener('blur', end);
     e.preventDefault();
   });
   head.addEventListener('pointermove', (e) => {
     if (!dragging) return;
+    if (!e.buttons) { end(e); return; }   // the button was released without a pointerup/cancel reaching us
     const dx = e.clientX - startX, dy = e.clientY - startY;
     if (mode === null) {   // still docked: has it cleared the dock far enough to start floating?
       const dr = dockEl.getBoundingClientRect();
@@ -304,6 +322,7 @@ function wireHeaderDrag(id, root, head) {
     if (!dragging) return;
     dragging = false;
     try { head.releasePointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+    window.removeEventListener('blur', end);
     dockEl.classList.remove('drop-target');
     if (mode && !state.panels[id].docked && L.pointInRect(e.clientX, e.clientY, dockZoneRect())) {
       const targetIndex = dockDropIndex(e.clientY);
@@ -358,10 +377,12 @@ function wireFloatResize(id, root) {
       dragging = true; startX = e.clientX; startY = e.clientY;
       startRect = { x: state.panels[id].x, y: state.panels[id].y, w: state.panels[id].w, h: state.panels[id].h };
       try { h.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+      window.addEventListener('blur', end);
       e.preventDefault(); e.stopPropagation();
     });
     h.addEventListener('pointermove', (e) => {
       if (!dragging) return;
+      if (!e.buttons) { end(e); return; }   // the button was released without a pointerup/cancel reaching us
       const dx = e.clientX - startX, dy = e.clientY - startY;
       let { x, y, w, h: hh } = startRect;
       if (dir.includes('e')) w = startRect.w + dx;
@@ -374,7 +395,13 @@ function wireFloatResize(id, root) {
       e2.root.style.left = `${clamped.x}px`; e2.root.style.top = `${clamped.y}px`;
       e2.root.style.width = `${clamped.w}px`; e2.root.style.height = `${clamped.h}px`;
     });
-    const end = (e) => { if (!dragging) return; dragging = false; try { h.releasePointerCapture(e.pointerId); } catch (_) { /* ignore */ } save(); };
+    const end = (e) => {
+      if (!dragging) return;
+      dragging = false;
+      try { h.releasePointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+      window.removeEventListener('blur', end);
+      save();
+    };
     h.addEventListener('pointerup', end);
     h.addEventListener('pointercancel', end);
     h.addEventListener('lostpointercapture', end);
