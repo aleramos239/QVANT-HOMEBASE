@@ -6,11 +6,17 @@ const require = createRequire(import.meta.url);
 const S = require('../../homebase/static/charts/drawstyle.js');
 
 test('every drawing type has a default style with exactly its own fields', () => {
-  for (const type of ['trend', 'hline', 'rect']) {
+  for (const type of ['trend', 'hline']) {
     const d = S.normalize(type, {});
     assert.deepEqual(Object.keys(d).sort(), [...S.FIELDS[type]].sort());
     assert.deepEqual(d, S.DEFAULTS[type]);
   }
+  // rect's fillColor has no built-in default (unset = follow the theme's own accentSoft): the
+  // review finding this fixes is exactly that a fixed default here was wrong in dark theme
+  const rect = S.normalize('rect', {});
+  assert.deepEqual(Object.keys(rect).sort(), S.FIELDS.rect.filter((k) => k !== 'fillColor').sort());
+  assert.deepEqual(rect, S.DEFAULTS.rect);
+  assert.equal('fillColor' in S.DEFAULTS.rect, false);
   assert.deepEqual(S.normalize('long', {}), {});
   assert.deepEqual(S.normalize('short', { width: 3 }), {});   // long/short take no style fields at all
 });
@@ -59,8 +65,9 @@ test('isColor accepts #RRGGBB and rgba(r,g,b,a), refuses everything else', () =>
   }
 });
 
-test('fillColor / textColor fall back to the default on a bad colour', () => {
-  assert.equal(S.normalize('rect', { fillColor: 'green' }).fillColor, S.DEFAULTS.rect.fillColor);
+test('textColor falls back to the default on a bad colour; a bad fillColor drops the key (follows the theme)', () => {
+  assert.equal('fillColor' in S.normalize('rect', { fillColor: 'green' }), false);
+  assert.equal('fillColor' in S.normalize('rect', {}), false);
   assert.equal(S.normalize('trend', { textColor: 'green' }).textColor, S.DEFAULTS.trend.textColor);
   assert.equal(S.normalize('rect', { fillColor: 'rgba(0,150,0,.3)' }).fillColor, 'rgba(0,150,0,.3)');
 });

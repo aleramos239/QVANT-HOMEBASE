@@ -393,7 +393,11 @@ function drawShape(ctx, d, geo, P, paneW) {
     return;
   }
   const x = Math.min(x0, x1), y = Math.min(y0, y1), w = Math.abs(x1 - x0), h = Math.abs(y1 - y0);
-  ctx.fillStyle = style.fillColor;
+  // style.fillColor is unset ("follow the theme") on an old rect and on a fresh one with no
+  // explicit fill -- P.accentSoft is exactly what an unstyled rect always filled with (review
+  // finding: a fixed default here would have been the light theme's .10 even in dark, where an
+  // old rect used .20)
+  ctx.fillStyle = style.fillColor || P.accentSoft;
   ctx.fillRect(x, y, w, h);
   ctx.strokeRect(Math.round(x) + 0.5, Math.round(y) + 0.5, Math.round(w), Math.round(h));
   ctx.setLineDash([]);
