@@ -546,6 +546,23 @@ function feedSummary(s, weekday, minutes) {
   return { dot, text, textClass: warn ? 'warn' : '', title };
 }
 
+/* W1 (2026-09-28): which status-bar segments step out so the rest fits `avail` px. `items`, in bar order:
+   {width, gap, drop} -- `gap` the space it adds beside its neighbour, `drop` its rank (the lowest steps out first) or
+   null: never (the connection and desk state, a note, the licence credit). A segment steps out WHOLE, never cut, and
+   only while the bar still does not fit. The indexes to hide, ascending; [] when everything fits. */
+function statusDrops(avail, items) {
+  const list = Array.isArray(items) ? items : [];
+  let need = list.reduce((s, it, i) => s + (it.width || 0) + (i ? it.gap || 0 : 0), 0);
+  const ranked = list.map((it, i) => [it, i]).filter(([it]) => it.drop != null).sort((a, b) => a[0].drop - b[0].drop || b[1] - a[1]);
+  const out = [];
+  for (const [it, i] of ranked) {
+    if (need <= avail) break;
+    need -= (it.width || 0) + (it.gap || 0);
+    out.push(i);
+  }
+  return out.sort((a, b) => a - b);
+}
+
 function filter(query, group = 'All') {
   const q = String(query || '').trim().toLowerCase();
   return CATALOG.filter((d) => (group === 'All' || d.group === group)
@@ -555,7 +572,7 @@ function filter(query, group = 'All') {
 const api = { parseFavs, sortFavs, toggleFav, CATALOG, GROUPS, ROOT_NAMES, FAVOURITES, INTERVAL_GROUPS, LINE_COLORS, uid, def, clampParams, instance,
   defaults, serverKey, serverKeys, migrate, migrateLayout, label, legendValues, decimals, fmtPrice, fmtCompact,
   fmtSigned, change, parseSpec, specLabel, longLabel, toSpec, parseInterval, matchSymbols, rootName, rootBadge, filter,
-  ALWAYS_OPEN, marketOpen, fmtAge, feedSummary, REC_BUSY, staleAfter, sinceOpen, PANES, movable, placement,
+  ALWAYS_OPEN, marketOpen, fmtAge, feedSummary, statusDrops, REC_BUSY, staleAfter, sinceOpen, PANES, movable, placement,
   styleLineKeys, defaultStyle, clampStyle, cycleColor, sanitizePreset, normalizeHHMM };
 if (typeof window !== 'undefined') window.HBCatalog = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;

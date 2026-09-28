@@ -304,9 +304,17 @@ a { color: inherit; }
 .sb-feed.bad, .sb-note { color: var(--down); }
 .sb-feed.warn { color: var(--warn); }
 .sb-spacer { flex: 1; }
-/* the desk's own state (tradeui.js paintDeskStatus): the dot, the line, and the "Open the desk" link */
-.sb-desk { min-width: 0; display: flex; align-items: center; gap: 6px; overflow: hidden; white-space: nowrap; }
-.sb-desk > span:not(.sb-dot) { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* the desk's own state (tradeui.js paintDeskStatus): the dot, the state, this chart's reason, the limits, and the
+   "Open the desk" link */
+/* W1 (2026-09-28): the connection and the desk line never shrink or cut (flex: none) -- the desk line's optional parts
+   (this chart's reason, the limits) step out WHOLE instead, like every other lower-priority segment (app.js
+   fitStatusBar: .sb-drop). Only the feed's own text and a note may ellipsize, once all of those are out. An empty
+   segment takes no gap. Every segment carries its full text as a tooltip. */
+.sb-desk { flex: none; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.sb-mode, .sb-event, .sb-clock, .sb-opt, .sb-credit { flex: none; }
+.sb-note { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.statusbar > :empty:not(.sb-spacer):not(.sb-dot), .sb-desk > :empty:not(.sb-dot) { display: none; }
+.sb-drop { display: none !important; }
 .sb-desk-link { color: var(--accent); text-decoration: none; }
 .sb-desk-link:hover { text-decoration: underline; }
 #sbRec.warn { color: var(--warn); }
@@ -315,7 +323,6 @@ a { color: inherit; }
 .sb-credit { color: var(--text-2); text-decoration: none; display: inline-flex; align-items: center; }
 .sb-credit svg { width: 14px; height: 14px; }
 .sb-credit:hover { color: var(--text); text-decoration: underline; }
-@media (max-width: 760px) { .sb-opt { display: none; } }
 
 /* ---- chart Settings dialog (settings-dialog.js) ---- */
 .dialog.settings { width: min(820px, 94vw); height: min(600px, 88vh); max-height: none; }

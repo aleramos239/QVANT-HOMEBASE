@@ -986,6 +986,17 @@ function deskStatusText(desk, chartWhyText = '') {
     text: `Desk: connected · chart trading on · max ${lim.max_order_qty ?? '—'}/order, ${lim.max_position_qty ?? '—'}/position`
       + (chartWhyText ? ` · this chart: ${chartWhyText}` : '') };
 }
+/* W1 (2026-09-28): the same line in parts, for a status bar too narrow for all of it: `state` -- the desk's own
+   connection and switch -- is never cut; `why` (the selected chart's reason, or why the desk is unreachable) and
+   `limits` may step out (the page's fit decides); `text`, the whole line, is their tooltip. */
+function deskStatusParts(desk, chartWhyText = '') {
+  const s = deskStatusText(desk, chartWhyText), gate = deskGate(desk);
+  if (gate && gate.mode === 'down') return { ...s, state: 'Desk unreachable', why: `— ${gate.reason}`, limits: '' };
+  if (gate) return { ...s, state: s.text, why: '', limits: '' };
+  const lim = (desk.state && desk.state.limits) || {};
+  return { ...s, state: 'Desk: connected · chart trading on', why: chartWhyText ? `· this chart: ${chartWhyText}` : '',
+    limits: `· max ${lim.max_order_qty ?? '—'}/order, ${lim.max_position_qty ?? '—'}/position` };
+}
 /* Minor 6: the SELECTED chart's own short reason for the status bar ('' when it can trade). `mode` is its
    effective mode; the rest say why, most specific first. */
 function chartWhy({ replay = false, halted = false, accounts = [], unverified = [], state = null, liveConfirmed = null, mode = null } = {}) {
@@ -1541,7 +1552,7 @@ const api = { PREFS_KEY, BOT_NAMES, parsePrefs, prefsText, oneClickKey, short, r
   needsQuoteForBracket, refuseIfMarketable, cellTrade, loadedTrade, cellAlgo, tradeBits, templateTrade, algoForRoot,
   migrateTicked, deskGate, armedMode, liveSendIds, liveCueTitle, replayGuard, legsWithin, lineAccounts, accountChips, acctTick, hiddenCellsLoaded,
   NO_ACCOUNTS, SYMBOL_CHANGE_ACCOUNTS_CLEARED, liveIds, liveDroppedMessage, envChip, algoBookings, algoForAccount,
-  accountsForAlgo, algoTickAccounts, accountPickRows, deskStatusText,
+  accountsForAlgo, algoTickAccounts, accountPickRows, deskStatusText, deskStatusParts,
   verifyLoaded, verifyCells, nextUnverified, unverifiedMode, CHECKING_ACCOUNTS, REPLAY_ENDED, replayHaltGuard,
   replayEndPatch, sendsWithoutConfirm, chartWhy,
   PANEL_QTY_MAX, GTC_WARN, exitTriple, qtyFromRisk, exitSideError, panelOrder, sendLabel,

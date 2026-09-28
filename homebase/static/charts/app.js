@@ -1658,8 +1658,9 @@ function setTool(t) {
 function sbNote(text) {
   const el = $('#sbNote');
   el.textContent = text;
+  el.title = text;   // W1: in full, should a narrow bar cut it
   clearTimeout(noteTimer);
-  noteTimer = setTimeout(() => { el.textContent = ''; }, 8000);
+  noteTimer = setTimeout(() => { el.textContent = ''; el.title = ''; }, 8000);
 }
 
 function showTip(anchor, text) {
@@ -1750,7 +1751,8 @@ function renderNextEvent() {
   const el = $('#sbEvent'), c = cur(), E = window.HBEvents;
   const n = c ? E.nextText(E.shown(calendar, c.R), clockMs()) : null;
   el.hidden = !n;
-  if (n) { el.textContent = n.text; el.style.color = n.color; }
+  if (n && el.textContent !== n.text) { el.textContent = n.text; el.title = n.text; }   // W1: text (and a re-fit) only on change
+  if (n) el.style.color = n.color;
 }
 
 /* ---- bottom bar ---- */
@@ -1765,15 +1767,53 @@ function showStatus(s) {
     : s.mode === 'live' ? `Live · md ${s.md || ''}` : 'Disconnected';
   const feed = $('#sbFeed');
   feed.textContent = f.text;
-  feed.title = f.title;
+  feed.title = [f.text, f.title].filter(Boolean).join(' — ');   // W1: the whole text too, should a narrow bar cut it
   feed.className = 'sb-feed' + (f.textClass ? ' ' + f.textClass : '');
   const budget = $('#sbBudget');
   budget.textContent = s.mode === 'live' ? `md ${s.budget_hour ?? 0}/180` : '';
   budget.title = s.mode === 'live' ? `Chart requests this hour on the md login (limit 180) · ${s.clients ?? 0} page(s)` : '';
-  const recEl = $('#sbRec');
-  recEl.textContent = s.mode === 'live' && rec ? `rec buffered ${rec.buffered.toLocaleString('en-US')}` : '';
+  const recEl = $('#sbRec'), buffered = rec ? rec.buffered.toLocaleString('en-US') : '';
+  recEl.textContent = s.mode === 'live' && rec ? `rec ${buffered}` : '';   // W1: shortened; the tooltip says it in full
+  recEl.title = s.mode === 'live' && rec ? `Recorder: ${buffered} ticks buffered, not written yet` : '';
   recEl.classList.toggle('warn', !!(rec && rec.buffered >= C.REC_BUSY));
   statusLine = feed.textContent;
+}
+
+/* W1 (2026-09-28): a status bar too narrow for everything never cuts the connection or the desk state. Its lower-
+   priority segments step out WHOLE, lowest `data-drop` first (charts.html: the recorder, the md budget, the desk's
+   limits, the next event, the clock, this chart's reason; HBCatalog.statusDrops decides), each keeping its full text
+   in its tooltip, and the spacer's tooltip lists what stepped out. Re-fitted on any change of the bar's text or
+   visibility -- a MutationObserver, since tradeui.js paints the desk's line -- and on resize; the clock's own tick
+   never triggers it (tabular figures: its width does not change). */
+let fitRaf = 0;
+function scheduleFit() { if (!fitRaf) fitRaf = requestAnimationFrame(() => { fitRaf = 0; fitStatusBar(); }); }
+function fitStatusBar() {
+  const bar = $('#statusbar');
+  if (!bar) return;
+  for (const el of bar.querySelectorAll('.sb-drop')) el.classList.remove('sb-drop');
+  const cs = getComputedStyle(bar), gap = parseFloat(cs.columnGap) || 0;
+  const avail = bar.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
+  const shown = (el) => getComputedStyle(el).display !== 'none';
+  const items = [];
+  const add = (el, g) => items.push({ el, gap: g, width: el.id === 'sbSpacer' ? 0 : el.scrollWidth + 1,   // +1: sub-pixel text
+    drop: el.dataset.drop == null ? null : Number(el.dataset.drop) });
+  for (const el of bar.children) {
+    if (!shown(el)) continue;
+    if (el.id !== 'sbDesk') { add(el, gap); continue; }
+    const inner = parseFloat(getComputedStyle(el).columnGap) || 0;   // the desk line's parts count one by one
+    [...el.children].filter(shown).forEach((p, k) => add(p, k ? inner : gap));
+  }
+  if (items.length) items[0].gap = 0;
+  const out = C.statusDrops(avail, items).map((i) => items[i].el);
+  for (const el of out) el.classList.add('sb-drop');
+  $('#sbSpacer').title = out.length ? `Not shown at this width: ${out.map((el) => el.textContent.replace(/^[·—]\s*/, '')).join(' · ')}` : '';
+}
+function watchStatusBar() {
+  const bar = $('#statusbar'), clock = $('#sbClock');
+  new MutationObserver((list) => { if (list.some((m) => !clock.contains(m.target))) scheduleFit(); })
+    .observe(bar, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['hidden'] });
+  window.addEventListener('resize', scheduleFit);
+  scheduleFit();
 }
 
 /* The socket is open but no status came for STATUS_STALE_S (the chart
@@ -1967,6 +2007,7 @@ async function init() {
   connect();
   tick();
   setInterval(tick, 1000);
+  watchStatusBar();   // W1: after the first tick, so the clock is in the first fit
 }
 
 window.HBCharts = { get cells() { return cells; }, get layout() { return layout; }, get selected() { return selected; }, select, buildGrid };

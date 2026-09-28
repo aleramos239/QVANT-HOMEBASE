@@ -667,3 +667,19 @@ test('starred intervals: parse, sort in menu order, toggle', () => {
   assert.deepEqual(C.toggleFav(['time:60', 'time:300'], 'time:60'), ['time:300']);
   assert.deepEqual(C.toggleFav(['time:60'], 'time:45'), ['time:60', 'time:45'], 'a custom one goes after the listed ones');
 });
+
+/* W1 (2026-09-28): the status bar's fit -- lower-priority segments step out whole, lowest rank first, only while the
+   bar does not fit; a segment with no rank (the connection / desk state) never does. */
+test('W1: statusDrops -- whole segments step out lowest rank first, only while needed; unranked ones never', () => {
+  const seg = (width, drop = null, gap = 12) => ({ width, drop, gap });
+  const bar = [seg(8, null, 0), seg(90), seg(50), seg(190), seg(150, 6), seg(160, 3), seg(0), seg(200, 4), seg(70, 5), seg(60, 2), seg(60, 1), seg(14)];
+  const need = bar.reduce((s, it, i) => s + it.width + (i ? it.gap : 0), 0);
+  assert.deepEqual(C.statusDrops(need, bar), [], 'room for all: nothing steps out');
+  assert.deepEqual(C.statusDrops(need - 1, bar), [10], 'one px short: the lowest rank (1) alone');
+  assert.deepEqual(C.statusDrops(need - 80, bar), [9, 10], 'then rank 2 -- never more than needed');
+  assert.deepEqual(C.statusDrops(need - 300, bar), [5, 9, 10], 'ranks 1, 2, 3 free 316 px: enough, rank 4 stays');
+  assert.deepEqual(C.statusDrops(need - 400, bar), [5, 7, 9, 10], 'ranks 1, 2, 3, 4 in that order');
+  assert.deepEqual(C.statusDrops(0, bar), [4, 5, 7, 8, 9, 10], 'however narrow: only ranked segments, never the rest');
+  assert.deepEqual(C.statusDrops(100, []), []);
+  assert.deepEqual(C.statusDrops(100, null), []);
+});

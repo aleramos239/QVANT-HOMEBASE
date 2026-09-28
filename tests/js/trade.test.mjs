@@ -1647,3 +1647,17 @@ test('review round 2, C: a pending bracket leg moves only on its side of its PAR
   const leg3 = g2.find((g) => g.legs.some((l) => l.order_id === '3'));      // its entry is a Market: no price
   assert.equal(T.pendingMoveError(leg3, 30930, sl), "This bracket's entry has no price to check against — cancel it and place again");
 });
+
+/* W1 (2026-09-28): the desk's status line in parts -- the state never cut, the chart's reason and the limits may step
+   out -- with deskStatusText's whole line kept as the tooltip. */
+test('W1: deskStatusParts -- the never-cut state, the parts that may step out, the whole line as `text`', () => {
+  const up = T.deskStatusParts({ state: STATE }, 'arm LIVE …099');
+  assert.deepEqual([up.dot, up.state, up.why, up.limits, up.link],
+    ['ok', 'Desk: connected · chart trading on', '· this chart: arm LIVE …099', '· max 10/order, 20/position', false]);
+  assert.equal(up.text, T.deskStatusText({ state: STATE }, 'arm LIVE …099').text, 'the tooltip is the full line, unchanged');
+  assert.equal(T.deskStatusParts({ state: STATE }).why, '', 'no reason while the chart can trade');
+  const down = T.deskStatusParts({ state: null, down: 'connecting to the desk' }, 'replay');
+  assert.deepEqual([down.dot, down.state, down.why, down.limits], ['bad', 'Desk unreachable', '— connecting to the desk', '']);
+  const off = T.deskStatusParts({ state: { ...STATE, enabled: false } });
+  assert.deepEqual([off.dot, off.state, off.why, off.limits, off.link], ['warn', 'Chart trading is off on the desk', '', '', true]);
+});
