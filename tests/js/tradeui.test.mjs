@@ -408,7 +408,7 @@ test('one-click per surface: the chart block and the order panel read their own 
 test('no more "view only": a chart manages ANY tradable account\'s lines; the arm, replay and unlisted rules still hold', async () => {
   reset();
   const c = chart([]);                                        // nothing ticked on this chart
-  assert.deepEqual(UI.editableIds(c), ['sim041', 'live099']);
+  assert.deepEqual(UI.editableIds(c), ['sim041'], 'an unarmed LIVE account manages nothing (fix round 1, item 3)');
   const line = (account, extra = {}) => ({ key: 'k', kind: 'order', side: 'Buy', type: 'Limit', price: 29990, qty: 1,
     editable: true, legs: [{ account, who: '…', qty: 1, order_id: '77' }], ...extra });
   UI.closeLine(c, line('sim041'), 'NQ', 0.25);                 // oneClick on: sends at once
@@ -504,6 +504,39 @@ test('addExit: an unarmed LIVE position and a non-position line are refused befo
     assert.match(desk.toasts.at(-1), /LIVE/);
     UI.addExit(c, { ...short, kind: 'order' }, 'tp', 29990, 'NQ', 0.25);
     assert.equal(desk.sent.length, 0);
+  } finally {
+    desk.state = was;
+  }
+});
+
+test('fix round 1, item 3: a LIVE account disarmed while a line action\'s confirm is open gets nothing', async () => {
+  reset();
+  const pos = [{ symbol: 'NQZ6', net: 1, avg_price: 30000, root: 'NQ', point_value: 20 }];
+  const order = { order_id: '88', symbol: 'NQZ6', side: 'Sell', type: 'Stop', qty: 1, price: null, stop_price: 29990,
+    owner: null, status: 'Working' };
+  const was = desk.state;
+  desk.state = { ...STATE, accounts: [STATE.accounts[0], acct('live099', 'FAKELIVE099', 'live', { positions: pos, orders: [order] })] };
+  try {
+    const c = chart([]);
+    UI.toggleAccount(c, 'live099'); UI.toggleAccount(c, 'live099');   // armed (and ticked) this session
+    assert.deepEqual(UI.editableIds(c), ['sim041', 'live099']);
+    desk.prefs.oneClick = false;
+    const lines = T.linesFor(desk.state, 'NQ', UI.editableIds(c));
+    const posLine = lines.find((g) => g.kind === 'position'), sl = lines.find((g) => g.kind === 'sl');
+    // three line actions, each confirmed only after the LIVE account was unticked (which disarms it)
+    for (const start of [() => UI.closeLine(c, sl, 'NQ', 0.25), () => UI.moveLine(c, sl, 29980, 'NQ', 0.25),
+      () => UI.addExit(c, posLine, 'tp', 30010, 'NQ', 0.25)]) {
+      start();
+      assert.equal(dialogs.length, 1, 'the confirm is open');
+      UI.toggleAccount(c, 'live099');                                  // untick -> disarmed
+      assert.deepEqual(UI.editableIds(c), ['sim041']);
+      clickPrimary(dialogs[0].box.children.find((x) => x.className === 'dlg-foot').children[1].textContent);
+      await flush(); await flush();
+      assert.equal(desk.sent.length, 0, 'nothing reaches the disarmed LIVE account');
+      assert.equal(desk.toasts.at(-1), 'Accounts changed — review and try again');
+      dialogs.length = 0;
+      UI.toggleAccount(c, 'live099'); UI.toggleAccount(c, 'live099');   // re-arm for the next action
+    }
   } finally {
     desk.state = was;
   }

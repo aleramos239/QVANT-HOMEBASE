@@ -77,11 +77,13 @@ function accountGate(account) {
 /* The mode for MANAGING existing lines (drag, ×, the SL/TP handles) on a chart (2026-09-27): any account the desk
    lists as tradable (HBTrade.lineAccounts), not only the chart's ticked ones -- those decide where NEW entries go.
    The desk up with chart trading on, and the chart not replaying (nor latched by a replay's end), as for entries;
-   a LIVE leg's arm is checked per line at send (findUnarmed), and the desk refuses a bot's order whatever we say. */
+   a LIVE account only while it is armed THIS session (isArmedAccount) -- the same rule the entry path's armedMode
+   applies, and since lineGate re-runs this at send (guardedSend), a LIVE account disarmed while a confirm is open
+   drops out and the send refuses ("Accounts changed"). The desk refuses a bot's order whatever we say. */
 function lineMode(cell) {
   const g = D().gate();
   if (g) return g;
-  const m = { mode: 'on', reason: '', accounts: T.lineAccounts(D().state) };
+  const m = { mode: 'on', reason: '', accounts: T.lineAccounts(D().state).filter(isArmedAccount) };
   return T.replayGuard(T.replayHaltGuard(m, !!(cell && cell.cfg && cell.cfg.replayHalt)), !!(cell && cell.replay));
 }
 /* lineMode, re-run at send time: plus the chart still on the page and still showing the root. */
