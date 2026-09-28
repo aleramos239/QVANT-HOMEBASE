@@ -6,7 +6,9 @@
    bot, octagon-x, file-text, history, play, pause, skip-forward, skip-back (Bar Replay, 2026-09-27 plan),
    square (Strategy Tester), list-ordered, crosshair (DOM ladder, 2026-09-27 charts-depth plan),
    between-horizontal-start (Bar Replay Select bar, 2026-09-27 ui-controls-and-select-bar plan),
-   chevron-left, chevron-right, clock (the control system, same plan), star (starred intervals).
+   chevron-left, chevron-right, clock (the control system, same plan), star (starred intervals),
+   chevrons-right (Bar Replay "Jump to real-time"), dice-5 (Bar Replay "Select random bar",
+   2026-09-27 TV-parity plan).
 
    ISC License
 
@@ -80,5 +82,7 @@ window.HBIcons = {
   crosshair: svg('<circle cx="12" cy="12" r="10"/><line x1="22" x2="18" y1="12" y2="12"/><line x1="6" x2="2" y1="12" y2="12"/><line x1="12" x2="12" y1="6" y2="2"/><line x1="12" x2="12" y1="22" y2="18"/>'),
   selectBar: svg('<rect width="13" height="7" x="8" y="3" rx="1"/><path d="m2 9 3 3-3 3"/><rect width="13" height="7" x="8" y="14" rx="1"/>'),
   plus: svg('<path d="M5 12h14"/><path d="M12 5v14"/>'),   // lucide-static@1.48.0 "plus" -- the tab strip's Add tab button
+  chevronsRight: svg('<path d="m6 17 5-5-5-5"/><path d="m13 17 5-5-5-5"/>'),   // Bar Replay "Jump to real-time"
+  dice: svg('<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><path d="M16 8h.01"/><path d="M8 8h.01"/><path d="M8 16h.01"/><path d="M16 16h.01"/><path d="M12 12h.01"/>'),   // "dice-5" -- Bar Replay "Select random bar"
 };
 })();

@@ -1578,9 +1578,12 @@ function onKey(e) {
     return;
   }
   // Space plays/pauses, → steps -- only the selected cell while it replays, no input focused (returned above), no
-  // menu / hotkey box open, and never a key aimed at the order panel (its send button owns Space itself)
+  // menu / hotkey box open, and never a key aimed at the order panel (its send button owns Space itself).
+  // ArrowRight already covers Shift+→ (e.key is the same either way -- TradingView's own replay hotkey);
+  // Shift+↓ (2026-09-27 TV-parity plan) is added alongside Space for play/pause -- neither shift combo is
+  // bound to anything else on this page (no drawing tool or other shortcut here uses Shift+arrow).
   if (c && c.replay && !menuEl && !hotkeyBox && !(e.target.closest && e.target.closest('#opanel'))) {
-    if (e.code === 'Space') { e.preventDefault(); window.HBReplayUI.togglePlay(c); return; }
+    if (e.code === 'Space' || (e.shiftKey && e.key === 'ArrowDown')) { e.preventDefault(); window.HBReplayUI.togglePlay(c); return; }
     if (e.key === 'ArrowRight') { e.preventDefault(); window.HBReplayUI.step(c); return; }
   }
   if (e.key === 'Escape') {
