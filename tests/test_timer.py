@@ -66,7 +66,7 @@ class TapeMD(FakeMD):
 
     def __init__(self, **kw):
         super().__init__(**kw)
-        self._trades, self._hist, self._cid_sym = {}, {}, {}
+        self._trades, self._tape, self._cid_sym = {}, {}, {}
         self._received = 0.0
         self._clock = lambda: self._received
 

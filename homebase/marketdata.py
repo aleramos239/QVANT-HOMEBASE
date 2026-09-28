@@ -69,8 +69,9 @@ class TradovateMD:
             device_persist_path=sd / "tradovate.device.json")
         self._ws: Optional[TradovateWS] = None
         self._trades: dict[str, tuple[float, float]] = {}  # contract -> (price, unix ts)
-        # contract -> (unix time RECEIVED, price, the push's raw `timestamp`), oldest first
-        self._hist: dict[str, deque] = {}
+        # contract -> (unix time RECEIVED, price, the push's raw `timestamp`), oldest first.
+        # Not `_hist`: MarketFeed (a subclass) keeps its closed bars under that name.
+        self._tape: dict[str, deque] = {}
         self._cid_sym: dict[int, str] = {}                  # contractId -> contract
         self._clock = time.time                             # receive time (tests replace it)
 
@@ -129,10 +130,10 @@ class TradovateMD:
             if px is not None and sym:
                 px, seen = float(px), self._clock()
                 self._trades[sym] = (px, seen)
-                hist = self._hist.get(sym)
-                if hist is None:
-                    hist = self._hist[sym] = deque(maxlen=TRADE_HISTORY)
-                hist.append((seen, px, q.get("timestamp")))
+                tape = self._tape.get(sym)
+                if tape is None:
+                    tape = self._tape[sym] = deque(maxlen=TRADE_HISTORY)
+                tape.append((seen, px, q.get("timestamp")))
 
     def last(self, sym: str, before: Optional[float] = None) -> tuple[Optional[float], float]:
         """(latest trade price, unix time received) for one subscribed
@@ -153,7 +154,7 @@ class TradovateMD:
         """The kept trade push last(sym, before) answers from, for the journal:
         (unix time received, price, the push's raw `timestamp`, that parsed to
         unix seconds or None). None when there is none."""
-        for seen, px, raw in reversed(self._hist.get(sym, ())):
+        for seen, px, raw in reversed(self._tape.get(sym, ())):
             if before is None or seen < before:
                 return seen, px, raw, _stamp(raw)
         return None

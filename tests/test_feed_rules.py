@@ -62,6 +62,24 @@ def test_quiet_market_closes_on_the_clock():
     assert len(out) == 1 and out[0][2].ts.minute == 59 and f.current("NQ", 1) is None
 
 
+def test_quote_pushes_leave_the_feeds_bars_and_status_alone():
+    """Review 2026-09-28: MarketFeed subclasses TradovateMD, whose trade tape was named like
+    the feed's closed-bars dict (_hist). One quote push put a contract key among the
+    (root, minutes) keys, and status() raised. The tape is TradovateMD._tape now."""
+    f = mkfeed()
+    push(f, 7, [("2026-09-22T13:57Z", 1, 2, 0.5, 1.5, 10), ("2026-09-22T13:58Z", 1.5, 2, 1, 1.8, 11)])
+    push(f, 7, [], eoh=True)
+    f._cid_sym[3267315] = "NQZ6"                                          # as subscribe_quote would
+    for px in (24500.0, 24500.25):
+        f._on_event({"e": "md", "d": {"quotes": [
+            {"timestamp": "2026-09-22T13:58:30.000Z", "contractId": 3267315,
+             "entries": {"Trade": {"price": px, "size": 1}}}]}})
+    assert f.status() == {"connected": False, "watching": {"NQ/1m": {
+        "bars": 1, "last_close": "2026-09-22T13:57:00+00:00", "current": 1.8}}}
+    assert f.watching() == {("NQ", 1): 1}
+    assert f.last("NQZ6")[0] == 24500.25 and len(f._tape["NQZ6"]) == 2
+
+
 # --- the 10am rule --------------------------------------------------------------
 def candle(o, h, l, c, day="2026-09-22", n=30):
     """30 one-minute bars 09:30..09:59 ET whose aggregate is (o, h, l, c)."""
