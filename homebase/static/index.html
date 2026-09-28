@@ -1138,7 +1138,7 @@ function renderChecks() {
     : lvl === "warn" ? "Attention" : "Not ready";
   $("#checksList").innerHTML = r.checks.map(c => `
     <div class="chk"><span class="dot" style="background:${CHK_COLOR[c.level] || CHK_COLOR.info}"></span>
-      <span class="lbl">${c.label}</span><span class="det">${c.detail}</span></div>`).join("");
+      <span class="lbl">${esc(c.label)}</span><span class="det">${esc(c.detail)}</span></div>`).join("");
 }
 function openChecks() { renderChecks(); showOverlay("checksOverlay"); }
 function closeChecks() { hideOverlay("checksOverlay"); }
@@ -1480,8 +1480,8 @@ function stratCard(name, s) {
     ? (free.length ? `<div style="position:relative;display:inline-block;margin-top:8px">
         <button class="btn btn-outline btn-sm" onclick="toggleAsgMenu('${name}')" aria-haspopup="menu">+ Assign</button>
         <div class="amenu" id="amenu-${name}" role="menu" hidden>` +
-        free.map(id => `<button class="mi2" role="menuitem" onclick="pickAsg('${name}','${id}',${c.qty})">
-          ${accts[id].label || id}</button>`).join("") + `</div></div>` : "")
+        free.map(id => `<button class="mi2" role="menuitem" onclick="pickAsg('${name}',${jsArg(id)},${c.qty})">
+          ${esc(accts[id].label || id)}</button>`).join("") + `</div></div>` : "")
     : `<div class="mcap">add an account to run this strategy</div>`;
   const book = `<div class="slabel2">ACCOUNTS</div>${rows || ""}${addForm}`;
 
@@ -1528,7 +1528,7 @@ function render() {
     strip.style.display = "";
     strip.innerHTML = `<span class="headline">Not ready</span>` +
       probs.map(c => `<span class="ri ${c.level}">
-        <span class="rd ${c.level}"></span><b>${c.label}</b> ${String(c.detail).slice(0, 70)}${String(c.detail).length > 70 ? "…" : ""}</span>`).join("") +
+        <span class="rd ${c.level}"></span><b>${esc(c.label)}</b> ${esc(String(c.detail).slice(0, 70))}${String(c.detail).length > 70 ? "…" : ""}</span>`).join("") +
       `<span class="spacer"></span>` +
       (Object.values(s.accounts || {}).some(a => !a.connected)
         ? `<button class="btn btn-outline btn-sm" onclick="reconnectAcct('')"
@@ -1724,21 +1724,21 @@ function acctRow(id, extra) {
   const a = (ST.accounts || {})[id] || {label: id};
   const pnl = a.realized_pnl;
   const err = (!a.connected && a.error)
-    ? `<span class="kvi neg" style="font-size:11px;text-align:left;min-width:0">${String(a.error).slice(0, 46)}…</span>` : "";
+    ? `<span class="kvi neg" style="font-size:11px;text-align:left;min-width:0">${esc(String(a.error).slice(0, 46))}…</span>` : "";
   return `<div class="acct" style="padding:7px 0">
     <span class="dot ${a.connected ? "on" : "off"}" style="width:7px;height:7px"></span>
-    <span class="nm" style="font-size:13px">${a.label}</span>
+    <span class="nm" style="font-size:13px">${esc(a.label)}</span>
     ${a.env === "live" ? '<span class="tag-live" title="A live account — real money">LIVE</span>' : ""}
     ${extra.qty ? (extra.strategy
       ? `<span class="strats qty-edit" title="Click to change size"
-           onclick="editQty(event,'${extra.strategy}','${id}',${extra.qty})">×${extra.qty}</span>`
+           onclick="editQty(event,'${extra.strategy}',${jsArg(id)},${extra.qty})">×${extra.qty}</span>`
       : `<span class="strats">×${extra.qty}</span>`) : ""}
     ${err}<span class="spacer"></span>
     <span class="kvi">${usd(a.balance)}</span>
     <span class="kvi ${pnl > 0 ? "pos" : pnl < 0 ? "neg" : ""}">${pnl > 0 ? "+" : ""}${usd(pnl)}</span>
-    <button class="btn btn-outline btn-sm" onclick="openCal('${a.account || a.label}')">Calendar</button>
+    <button class="btn btn-outline btn-sm" onclick="openCal(${jsArg(a.account || a.label)})">Calendar</button>
     ${extra.strategy ? `<button class="x" style="border:none;background:none;color:var(--muted-foreground);cursor:pointer;font-size:14px"
-      onclick="removeAsg('${extra.strategy}','${id}')" title="Unassign">&times;</button>` : ""}
+      onclick="removeAsg('${extra.strategy}',${jsArg(id)})" title="Unassign">&times;</button>` : ""}
   </div>`;
 }
 
@@ -1972,8 +1972,8 @@ function renderAcctList() {
     const added = have.includes(String(a.name).toLowerCase());
     return `
     <div class="opt ${WIZ.pick === a.name ? "sel" : ""} ${added ? "disabled" : ""}"
-         onclick="${added ? "" : `WIZ.pick='${a.name}';renderAcctList()`}">
-      <span><span class="t">${a.name}</span><br>
+         onclick="${added ? "" : `WIZ.pick=${jsArg(a.name)};renderAcctList()`}">
+      <span><span class="t">${esc(a.name)}</span><br>
       <span class="sub">${added ? "already in the pool" :
         (a.active === false ? "inactive" : "active")}</span></span>
       <span class="spacer"></span><span class="radio"></span>
@@ -2007,6 +2007,11 @@ let PAPER = [], PAPER_BROKEN = "";
 const PAPER_ID_RE = /^paper(?:-[1-9][0-9]{0,5})?$/;   // the chart service's id rule: nothing else is ever rendered
 const esc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g,
   (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+/* A value as a JavaScript string literal inside an onclick="..." attribute: JSON makes it a string
+   literal JS can't break out of, esc() keeps the HTML attribute intact (esc alone is not enough --
+   the browser decodes &#39; back to ' before the JS runs). Account ids and names come from the
+   broker, so every inline handler that carries one uses this. */
+const jsArg = (v) => esc(JSON.stringify(String(v == null ? "" : v)));
 async function chartPost(path, body) {
   if (DEMO) { toast("Preview mode — sample data, controls disabled."); return {ok: false}; }
   try {
@@ -2498,11 +2503,11 @@ function openAccts() {
     ? ids.map(id => {
         const running = runningOn(id);
         return acctRow(id, {}).replace('<span class="spacer"></span>',
-          `<span class="strats">${running || "no strategy assigned"}</span><span class="spacer"></span>`)
-          .replace("</div>", `<button class="btn btn-outline btn-sm" onclick="reconnectAcct('${id}')"
+          `<span class="strats">${esc(running || "no strategy assigned")}</span><span class="spacer"></span>`)
+          .replace("</div>", `<button class="btn btn-outline btn-sm" onclick="reconnectAcct(${jsArg(id)})"
             title="Rebuild this account's broker connection">Reconnect</button>
             <button class="x" style="border:none;background:none;color:var(--muted-foreground);cursor:pointer;font-size:14px"
-            onclick="removeAcct('${id}')" title="Remove this account">&times;</button></div>`);
+            onclick="removeAcct(${jsArg(id)})" title="Remove this account">&times;</button></div>`);
       }).join("")
     : `<div class="mcap" style="padding:14px 0">no accounts yet — add one to start</div>`;
   renderPaper();

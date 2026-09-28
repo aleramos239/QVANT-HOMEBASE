@@ -56,7 +56,8 @@ test('a live account carries the LIVE tag, a demo account none; the algo manager
                       b: { label: 'Sim', env: 'demo', connected: true, balance: 1, realized_pnl: 0 } } },
     usd: (v) => '$' + v,
   });
-  vm.runInContext(block + '\nglobalThis.acctRow = acctRow;', ctx);
+  const escDefs = HTML.slice(HTML.indexOf('const esc = (v) =>'), HTML.indexOf('async function chartPost('));
+  vm.runInContext(escDefs + block + '\nglobalThis.acctRow = acctRow;', ctx);
   assert.match(ctx.acctRow('a', {}), /<span class="tag-live" title="A live account — real money">LIVE<\/span>/);
   assert.doesNotMatch(ctx.acctRow('b', {}), /LIVE/);
   assert.match(HTML, /`<span class="pill on" title="Switched on">ON<\/span>`/);
