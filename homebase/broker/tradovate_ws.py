@@ -313,8 +313,9 @@ class TradovateWS:
             "timeInForce": time_in_force,
             "isAutomated": True,
             "text": text,
+            # the Limit carries the same tag as the Stop, so both legs read as the chart's exits
             "other": {"action": action, "orderType": "Limit", "price": limit_price,
-                      "timeInForce": time_in_force},
+                      "timeInForce": time_in_force, "text": text},
         }
         # lowercase, like "order/placeoso": the web client's spelling (the
         # camelCase OSO route answered "Access is denied" live). Unverified live

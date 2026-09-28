@@ -324,8 +324,12 @@ def test_place_oco_sends_one_stop_with_its_limit_as_other_and_reads_both_ids(tmp
         "accountSpec": "APEX", "accountId": 66121477, "action": "Sell", "symbol": sym,
         "orderQty": 3, "orderType": "Stop", "stopPrice": 30210.25, "timeInForce": "GTC",
         "isAutomated": True, "text": "homebase:chart-exit",
-        "other": {"action": "Sell", "orderType": "Limit", "price": 30260.5, "timeInForce": "GTC"}}
+        "other": {"action": "Sell", "orderType": "Limit", "price": 30260.5, "timeInForce": "GTC",
+                  "text": "homebase:chart-exit"}}                # the TP leg carries the same tag
     assert sym.startswith("NQ") and len(sym) == 4           # the front contract, never the bare root
+    run(ad.place_oco("NQ", "Buy", 1, 30300.0, 30200.0, text="homebase:other-tag"))
+    other = json.loads(ad._ws.ws.sent[-1].split("\n", 3)[3])
+    assert other["text"] == other["other"]["text"] == "homebase:other-tag"
 
 
 def test_place_oco_reject_timeout_and_half_answers_are_not_ok(tmp_path):
