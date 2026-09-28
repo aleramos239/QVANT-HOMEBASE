@@ -129,6 +129,21 @@ async function fetchHistory(name, e, day, sig) {
   }
 }
 
+/* Toasts currently animating out (evicted for the cap, dismissed by hand, or their own timeout) --
+   dematerialize's actual .remove() is async (transitionend or a ~260ms backstop), so within one synchronous
+   burst of toast() calls a just-evicted element is STILL sitting in `root.children` for a while. Excluding
+   this set from both the "how many are showing" count and the victim pool is what makes the cap hold during
+   a burst: without it, every call in the burst re-counts (and can re-select) the same not-yet-gone elements,
+   so the cap is never actually enforced against a growing backlog (coordinator review, 2026-09-28). `evict`
+   is also the single path every removal goes through now, so a manual dismiss racing the auto-timeout (or
+   either racing a cap eviction) can never hand the same element to dematerialize twice. */
+const evicting = new Set();
+function evict(el) {
+  if (evicting.has(el)) return;
+  evicting.add(el);
+  M.dematerialize(el, () => { evicting.delete(el); el.remove(); });
+}
+
 function toast(tone, text) {
   const root = document.getElementById('toastRoot');
   if (!root) return;
@@ -138,24 +153,22 @@ function toast(tone, text) {
   msg.textContent = text;
   x.type = 'button'; x.className = 'toast-x'; x.setAttribute('aria-label', 'Dismiss');
   x.innerHTML = window.HBIcons.x;   // our own static SVG string
-  x.onclick = () => M.dematerialize(el, () => el.remove());
+  x.onclick = () => evict(el);
   el.append(msg, x);
   root.prepend(el);
   M.materialize(el, 'right top');   // the toasts column is pinned top-right (charts.css .toasts)
-  // Eviction now animates out (dematerialize), so a removal is no longer synchronous the way `.remove()` was
-  // -- re-checking `root.children.length` in a `while` here would spin forever (it never shrinks within this
-  // same tick). Decide every victim from ONE snapshot instead: oldest-first, a "check it" warning only once
-  // nothing else is left to take its place -- same rule as before, just computed all at once, not spun in a
-  // loop over a count that dematerialize will only actually shrink later.
-  const excess = root.children.length - TOAST_MAX;
+  // the oldest goes first -- a "check it" warning only once nothing else is left to take its place; both the
+  // count and the candidate pool exclude anything already evicting, so a burst never re-selects or over-counts it
+  const showing = root.children.length - evicting.size;
+  const excess = showing - TOAST_MAX;
   if (excess > 0) {
-    const oldestFirst = [...root.children].reverse();
+    const oldestFirst = [...root.children].filter((n) => !evicting.has(n)).reverse();
     const victims = [...oldestFirst.filter((n) => !n.classList.contains('warn')), ...oldestFirst.filter((n) => n.classList.contains('warn'))]
       .slice(0, excess);
-    for (const v of victims) M.dematerialize(v, () => v.remove());
+    for (const v of victims) evict(v);
   }
   const ms = TOAST_MS[tone] ?? 6000;
-  if (ms > 0) setTimeout(() => M.dematerialize(el, () => el.remove()), ms);
+  if (ms > 0) setTimeout(() => evict(el), ms);
 }
 
 /* The desk's state as the page sees it: the paper accounts (the chart service's own paper books, HBPaperClient)

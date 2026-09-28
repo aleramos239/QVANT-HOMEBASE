@@ -88,6 +88,8 @@ class Overlay {
     this.ghost = null;        // {chip, price}: a position chip's ghost exit line while one is dragged
     this.endDrag = null;      // set by startDrag; cancels a drag in progress (destroy mid-drag)
     this.fillIds = null;      // last JSON of the execution arrows' ids + colours handed to this.arrows
+    this.algoArrows = [];     // this cell's algo's own execution arrows (HBTrade.algoFillMarkers): set fresh by
+                               // paintAlgo() every render, just before paintMarkers() merges them into this.arrows
     this.dead = false;        // review M2: set in destroy(); render() (and any callback still holding this
                                // overlay, e.g. a cancelled drag's onCancel) becomes a no-op once true, so a
                                // destroyed overlay can never create an orphan price line on the cell's NEW chart
@@ -312,41 +314,45 @@ class Overlay {
     it.chip.classList.toggle('paper', !!it.g.paper);   // a PAPER account's line (Task 2): its colour comes via --c
   }
 
-  /* ---- execution arrows (ruling S22; horizontal since 2026-09-27); re-set only when the fills change ---- */
+  /* ---- execution arrows (ruling S22; horizontal since 2026-09-27); re-set only when the fills change ----
+     Manual fills (the chart's own ticked/armed accounts, owner-less) plus this.algoArrows (the chart's algo's own
+     executions, live + history, set by paintAlgo() just before this runs in render()) -- one merged layer, so an
+     algo's fill and a hand-placed one draw as the very same arrow. */
   paintMarkers() {
     const Dc = window.HBDeskClient;
-    const list = T.fillMarkers(Dc.state, this.root, window.HBTradeUI.fillIds(this.cell), this.cell.P, this.cell.tick);
+    const manual = T.fillMarkers(Dc.state, this.root, window.HBTradeUI.fillIds(this.cell), this.cell.P, this.cell.tick);
+    const list = this.algoArrows.length ? [...manual, ...this.algoArrows] : manual;
     const ids = JSON.stringify(list.map((m) => [m.id, m.color]));
     if (ids === this.fillIds) return;
     this.fillIds = ids;
     this.arrows.set(list);
   }
 
-  /* ---- the chart's algo (Task 3): badge, BOT lines, today's + past markers ---- */
+  /* ---- the chart's algo (Task 3): badge, BOT lines, its own executions (2026-09-28: as execution arrows, not
+     dot markers -- see paintMarkers) plus the "day it did not trade" flag ---- */
   paintAlgo() {
     const Dc = window.HBDeskClient, c = this.cell, q = Dc.quotes[this.root];
     const o = T.algoOverlay(Dc.state, c.cfg.algo, this.root, c.tick, c.P, q ? q.last : null, c.pv ?? null);
     this.paintBadge(o);
     this.paintBotLines(o ? o.lines : []);
-    let list = [];
-    if (o && c.bars.length) {   // only what falls inside the loaded bars (placeMarkers' own range), so a tip never
-                                 // belongs to a marker that is not drawn
+    let flags = [];
+    this.algoArrows = [];   // picked up by paintMarkers() right after this, in the same render() pass
+    if (o && c.bars.length) {   // only what falls inside the loaded bars, so a tip never belongs to an undrawn marker
       const hist = Dc.botHistory(o.key), s = Dc.state.bot.strategies[o.key], bars = c.bars, barMs = c.barMs();
       const from = bars[0].ms, to = barMs > 0 ? bars[bars.length - 1].ms + barMs : Infinity;
       // fix round 1, M3: today by the ET clock (the desk's own date), never the last bot view's `date`, which stays
       // on yesterday after midnight until the timer publishes again
       const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
-      list = o.markers.filter((m) => m.ms >= from && m.ms < to);
-      if (hist) {
-        list = [...T.pastRunMarkers(hist.runs, { key: o.key, s, state: Dc.state, tick: c.tick, pv: c.pv ?? null, P: c.P, from, to, today,
-          liveAccounts: o.liveAccounts }), ...list];
-      }
+      const runs = hist ? hist.runs : [];
+      flags = T.pastRunFlags(runs, { key: o.key, s, state: Dc.state, tick: c.tick, pv: c.pv ?? null, P: c.P, from, to, today,
+        liveAccounts: o.liveAccounts });
+      this.algoArrows = T.algoFillMarkers({ state: Dc.state, key: o.key, root: this.root, runs, tick: c.tick, pv: c.pv ?? null, P: c.P, from, to });
     }
-    this.tips = list.map((m) => ({ ms: m.ms, price: m.price, position: m.position, tip: m.tip }));
-    const ids = JSON.stringify(list.map((m) => [m.id, m.color, m.text]));
+    this.tips = flags.map((m) => ({ ms: m.ms, price: m.price, position: m.position, tip: m.tip }));
+    const ids = JSON.stringify(flags.map((m) => [m.id, m.color, m.text]));
     if (ids === this.botIds) return;
     this.botIds = ids;
-    this.cell.setExtraMarkers('bots', list.map(({ tip, account, ...m }) => m));   // the tip stays ours (this.tips)
+    this.cell.setExtraMarkers('bots', flags.map(({ tip, account, ...m }) => m));   // the tip stays ours (this.tips)
   }
 
   paintBadge(o) {

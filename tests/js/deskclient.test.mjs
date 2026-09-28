@@ -44,7 +44,7 @@ function load() {
   // newest first, as the page shows them
   const toasts = () => root.children.map((el) => el.children[0].textContent);
   D.onMessage({ type: 'desk', event: 'state', data: { enabled: true, bot: {}, accounts: [{ id: 'sim041', label: 'SIM0000041', env: 'demo' }] } });
-  return { D, reply, toasts };
+  return { D, reply, toasts, window, root };
 }
 const fill = (id, orderId, price = 30000.25) => ({ type: 'desk', event: 'fill',
   data: { account: 'sim041', fill: { id, order_id: orderId, symbol: 'NQZ6', side: 'Buy', qty: 1, price } } });
@@ -106,4 +106,26 @@ test('only an order / flatten / reverse answer claims a held fill -- a modify or
     await sent;
   }
   assert.equal(toasts().filter((t) => t.startsWith('Filled')).length, 3);
+});
+
+test('a burst of more than TOAST_MAX toasts in one synchronous tick evicts each excess toast exactly once', () => {
+  // TOAST_MAX is 5 (deskclient.js) -- not exported, so this pins the known value the same way the other
+  // tests here pin concrete counts. dematerialize's real removal never actually runs in this sandbox
+  // (setTimeout/addEventListener are stubs that never fire their callback -- deskclient.js's own header
+  // comment), which is exactly the condition that exposed the bug: every evicted toast stays in
+  // root.children for the rest of the burst, so a naive re-count of root.children.length on each call
+  // would re-select (and hand to dematerialize) the same still-present toasts over and over instead of
+  // reaching for genuinely new ones.
+  const { D, window, root } = load();
+  const calls = new Map();   // element -> how many times HBSpring.dematerialize was handed it
+  const realDematerialize = window.HBSpring.dematerialize;
+  window.HBSpring.dematerialize = (el, onDone) => { calls.set(el, (calls.get(el) || 0) + 1); return realDematerialize(el, onDone); };
+  for (let i = 0; i < 8; i++) D.toast('ok', `msg ${i}`);
+  assert.equal(root.children.length, 8, 'nothing physically removed yet -- dematerialize never completes in this sandbox');
+  const counts = [...calls.values()];
+  assert.equal(counts.length, 3, `8 toasts - TOAST_MAX 5 = 3 should have been handed to dematerialize, got ${counts.length}`);
+  assert.ok(counts.every((c) => c === 1), `no toast should be handed to dematerialize more than once: ${counts}`);
+  // the 3 oldest (first-sent) are the ones evicted -- msg0/msg1/msg2, never the newest
+  const evictedText = [...calls.keys()].map((el) => el.children[0].textContent).sort();
+  assert.deepEqual(evictedText, ['msg 0', 'msg 1', 'msg 2']);
 });

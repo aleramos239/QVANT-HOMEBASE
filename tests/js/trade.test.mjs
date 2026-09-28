@@ -551,6 +551,70 @@ test('past runs -> markers: entry arrow + exit circle per traded run, a grey fla
   assert.deepEqual(T.pastRunMarkers(null, { key: 'nq930', s, state: STATE, tick: 0.25, pv: 20, P, from: 0, to: Infinity, today: '' }), []);
 });
 
+test('pastRunFlags: pastRunMarkers, kept to only the "day it did not trade" square -- never an entry arrow or exit circle', () => {
+  const s = { ...NQ930, book: { sim041: 1, sim047: 10 } };
+  const opts = { key: 'nq930', s, state: STATE, tick: 0.25, pv: 20, P, from: at('2026-09-20T00:00:00Z'), to: at('2026-09-29T00:00:00Z'),
+    today: '2026-09-28', liveAccounts: ['sim041'] };
+  const flags = T.pastRunFlags(RUNS, opts);
+  assert.deepEqual(flags.map((m) => m.shape), ['square', 'square', 'square']);
+  assert.deepEqual(flags.map((m) => m.ms), [at('2026-09-23T13:30:00Z'), at('2026-09-24T13:30:00.088Z'), at('2026-09-25T13:30:00Z')]);
+  // exactly the square subset of the full pastRunMarkers list -- the two can never disagree
+  assert.deepEqual(flags, T.pastRunMarkers(RUNS, opts).filter((m) => m.shape === 'square'));
+  assert.deepEqual(T.pastRunFlags(null, opts), []);
+});
+
+test('etDateOf: an arbitrary ms as its ET calendar date, DST-safe day rollover', () => {
+  assert.equal(T.etDateOf(at('2026-09-22T13:30:01.000Z')), '2026-09-22');    // 13:30 UTC = 09:30 ET (EDT, UTC-4): same day
+  assert.equal(T.etDateOf(at('2026-09-23T03:30:00.000Z')), '2026-09-22');    // 03:30 UTC = 23:30 ET the PREVIOUS day
+  assert.equal(T.etDateOf(NaN), null);
+});
+
+test('algoFillMarkers: the chart\'s algo executions as execution arrows -- live fills on ANY account, blue buy / red sell, the key in the tip', () => {
+  // live only (no history): sim041's owner-less fill (id 1) is never the algo's; only the owned one (id 2) is
+  const live = T.algoFillMarkers({ state: STATE, key: 'nq930', root: 'NQ', runs: [], tick: 0.25, pv: 20, P });
+  assert.deepEqual(live, [{ id: 'afsim041:2', ms: at('2026-09-22T13:30:01.000Z'), price: 30910, side: 'Buy', color: P.accent,
+    tip: 'Buy 1 @ 30,910.00 · nq930 · …041' }]);
+  // another root's owned fill, and another strategy's owned fill, are both excluded
+  const st = structuredClone(STATE);
+  st.accounts[0].fills.push({ id: 3, order_id: '10', symbol: 'ESZ6', side: 'Sell', qty: 1, price: 6500, time: '2026-09-22T13:32:00.000Z', owner: 'nq930' },
+    { id: 4, order_id: '11', symbol: 'NQZ6', side: 'Sell', qty: 1, price: 30920, time: '2026-09-22T13:33:00.000Z', owner: 'ym930' });
+  assert.deepEqual(T.algoFillMarkers({ state: st, key: 'nq930', root: 'NQ', runs: [], tick: 0.25, pv: 20, P }), live);
+  // "on any account" -- not gated by a ticked/armed list (there is none here): a second account's owned fill merges in, ms-sorted
+  st.accounts[1].fills = [{ id: 5, order_id: '12', symbol: 'NQZ6', side: 'Sell', qty: 3, price: 30905, time: '2026-09-22T13:28:00.000Z', owner: 'nq930' }];
+  const two = T.algoFillMarkers({ state: st, key: 'nq930', root: 'NQ', runs: [], tick: 0.25, pv: 20, P });
+  assert.deepEqual(two.map((m) => m.id), ['afsim047:5', 'afsim041:2']);   // sim047's fill is earlier: sorted by time
+  assert.equal(two[0].tip, 'Sell 3 @ 30,905.00 · nq930 · …047');
+  assert.equal(two[0].color, P.down);
+});
+
+test('algoFillMarkers: bot-history runs become an entry arrow + an OPPOSITE-side exit arrow, its tip naming the exit kind', () => {
+  const hist = T.algoFillMarkers({ state: STATE, key: 'nq930', root: 'NQ', runs: RUNS, tick: 0.25, pv: 20, P });
+  // live (sim041, 2026-09-22) + every run that filled, EXCEPT the one the live fill's own (account, date) covers (RUNS[2])
+  assert.deepEqual(hist.map((m) => m.id), [
+    'ahnq930:2026-09-18:sim041:e', 'ahnq930:2026-09-18:sim041:x',
+    'ahnq930:2026-09-21:sim047:e', 'ahnq930:2026-09-21:sim047:x',
+    'afsim041:2',   // the live fill sorts here, between the 09-21 and 09-28 runs
+    'ahnq930:2026-09-28:sim041:e', 'ahnq930:2026-09-28:sim041:x']);
+  const [e0, x0, e1, x1, , e6, x6] = hist;
+  assert.deepEqual([e0.side, e0.color, e0.price, e0.tip], ['Buy', P.accent, 30100, 'Buy 1 @ 30,100.00 · nq930 · …041']);
+  assert.deepEqual([x0.side, x0.color, x0.price, x0.tip], ['Sell', P.down, 30115, 'Sell 1 @ 30,115.00 · TP · nq930 · …041']);
+  assert.equal(e1.tip, 'Buy 10 @ 30,120.25 · nq930 · …047');
+  assert.equal(x1.tip, 'Sell 10 @ 30,135.25 · TP · nq930 · …047');
+  assert.equal(x6.tip, 'Sell 1 @ 30,405.00 · Flat · nq930 · …041');   // exit kind 'flat' -> 'Flat'
+  assert.ok(!hist.some((m) => m.id.startsWith('ahnq930:2026-09-22:')), 'sim041/2026-09-22 is covered by the live fill: never drawn twice');
+  // no point value: no qty either (like runTip / pastRunMarkers), but the arrow still draws
+  const noPv = T.algoFillMarkers({ state: { accounts: [] }, key: 'nq930', root: 'NQ', runs: [RUNS[1]], tick: 0.25, pv: null, P });
+  assert.equal(noPv[0].tip, 'Buy @ 30,120.25 · nq930 · …047');
+  // a run with no account (the flag-only row) or no entry (no_fill) draws nothing here
+  assert.deepEqual(T.algoFillMarkers({ state: { accounts: [] }, key: 'nq930', root: 'NQ', runs: [RUNS[3], RUNS[4], RUNS[5]], tick: 0.25, pv: 20, P }), []);
+  // the loaded bar range clips HISTORY only -- a live fill is never clipped here (ExecArrows' own geometry does that at draw time)
+  const clipped = T.algoFillMarkers({ state: STATE, key: 'nq930', root: 'NQ', runs: RUNS, tick: 0.25, pv: 20, P,
+    from: at('2026-09-20T00:00:00Z'), to: at('2026-09-22T00:00:00Z') });
+  assert.deepEqual(clipped.map((m) => m.id), ['ahnq930:2026-09-21:sim047:e', 'ahnq930:2026-09-21:sim047:x', 'afsim041:2']);
+  assert.deepEqual(T.algoFillMarkers({ state: STATE, key: 'nq930', root: 'NQ', runs: null, tick: 0.25, pv: 20, P }),
+    [{ id: 'afsim041:2', ms: at('2026-09-22T13:30:01.000Z'), price: 30910, side: 'Buy', color: P.accent, tip: 'Buy 1 @ 30,910.00 · nq930 · …041' }]);
+});
+
 const PAPER_STRATS = [{ id: 'gc_nfpcpi', name: 'GC NFP/CPI (paper)', root: 'GC', params: { offset_pts: 2, sl_pts: 3, tp_pts: 6, qty: 1 } }];
 
 test('paper: the algo key round-trips, and its strategies list becomes an algoForRoot map (2026-09-27 paper plan, Task 2)', () => {

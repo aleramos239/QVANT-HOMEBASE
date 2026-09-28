@@ -320,6 +320,11 @@ function relayout() {
 function setOpen(id, v) {
   v = !!v;
   if (state.panels[id].open === v) return;
+  // no rAF loop left running on a panel this is about to close (detachClosed() removes its element from the
+  // DOM right after -- nothing would ever stop it otherwise), and no stale spring left to fight a reopen
+  // (coordinator review, 2026-09-28).
+  stopFloatAnim(id);
+  stopFlipAnim(id);
   state.panels[id] = { ...state.panels[id], open: v };
   if (v) ensureBuilt(id);
   relayout();
@@ -331,6 +336,8 @@ function toggle(id) { setOpen(id, !state.panels[id].open); }
 function setDocked(id, docked) {
   docked = !!docked;
   if (state.panels[id].docked === docked) return;
+  stopFloatAnim(id);   // same reasoning as setOpen above -- this is about to override left/top (float) or
+  stopFlipAnim(id);    // hand the element to flex layout entirely (dock); neither should still be racing a spring
   if (!docked) {
     const dr = dockEl.getBoundingClientRect();
     const seed = { x: Math.max(0, dr.left - 40), y: dr.top + 40, w: state.panels[id].w, h: state.panels[id].h };
@@ -352,6 +359,10 @@ function bringToFront(id) {
 function wireDockWidthGrip(grip) {
   let dragging = false, startX = 0, startW = 0;
   grip.addEventListener('pointerdown', (e) => {
+    // a re-grab within the ~220ms release snap-back is still wearing that transition -- drop it before the
+    // very next line's live style write, or this drag's 1:1 tracking would itself be (wrongly) animated
+    // (coordinator review, 2026-09-28).
+    dockEl.classList.remove('pdock-snap-w');
     dragging = true; startX = e.clientX; startW = state.dockWidth;
     try { grip.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
     window.addEventListener('blur', end);
@@ -401,6 +412,8 @@ function wireDockWidthGripSide(grip, ids) {
     ids.forEach((id) => { if (els[id]) els[id].root.style.width = `${clamped[id] + (id === id0 ? drift : 0)}px`; });
   };
   grip.addEventListener('pointerdown', (e) => {
+    dockEl.classList.remove('pdock-snap-w');   // see wireDockWidthGrip's own note
+    for (const id of ids) if (els[id]) els[id].root.classList.remove('pdock-snap-w');
     dragging = true; startX = e.clientX; startWidths = { ...state.dockWidths };
     try { grip.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
     window.addEventListener('blur', end);
@@ -434,6 +447,8 @@ function wireDockSideSplitter(split, ids, i) {
   let dragging = false, startX = 0, startWidths = null;
   const a = ids[i], b = ids[i + 1];
   split.addEventListener('pointerdown', (e) => {
+    if (els[a]) els[a].root.classList.remove('pdock-snap-w');   // see wireDockWidthGrip's own note
+    if (els[b]) els[b].root.classList.remove('pdock-snap-w');
     dragging = true; startX = e.clientX; startWidths = { ...state.dockWidths };
     try { split.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
     window.addEventListener('blur', end);
@@ -473,6 +488,8 @@ function wireDockSplitter(split, ids, i) {
   let dragging = false, startY = 0, startHeights = null;
   const a = ids[i], b = ids[i + 1];
   split.addEventListener('pointerdown', (e) => {
+    if (els[a]) els[a].root.classList.remove('pdock-snap-flex');   // see wireDockWidthGrip's own note
+    if (els[b]) els[b].root.classList.remove('pdock-snap-flex');
     dragging = true; startY = e.clientY; startHeights = { ...state.dockHeights };
     try { split.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
     window.addEventListener('blur', end);
@@ -707,6 +724,7 @@ function wireFloatResize(id, root) {
     let dragging = false, startX = 0, startY = 0, startRect = null;
     h.addEventListener('pointerdown', (e) => {
       if (state.panels[id].docked) return;
+      root.classList.remove('pdock-snap-rect');   // see wireDockWidthGrip's own note
       dragging = true; startX = e.clientX; startY = e.clientY;
       startRect = { x: state.panels[id].x, y: state.panels[id].y, w: state.panels[id].w, h: state.panels[id].h };
       try { h.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
@@ -757,6 +775,11 @@ function onWindowResize() {
   for (const id of floatingOpenIds()) {
     const clamped = L.clampFloatRect(state.panels[id], window.innerWidth, window.innerHeight);
     if (clamped.x !== state.panels[id].x || clamped.y !== state.panels[id].y || clamped.w !== state.panels[id].w || clamped.h !== state.panels[id].h) {
+      // a resize's own correction is authoritative -- never let a still-running settle spring or FLIP
+      // (from a drag that released right before the window shrank) go on fighting it for the corrected rect
+      // layoutFloats() is about to paint (coordinator review, 2026-09-28).
+      stopFloatAnim(id);
+      stopFlipAnim(id);
       state.panels[id] = { ...state.panels[id], ...clamped };
       floatChanged = true;
     }

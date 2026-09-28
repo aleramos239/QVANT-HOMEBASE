@@ -211,3 +211,53 @@ test('Spring#setTarget: updates the target (and, on Node, never throws without r
 test('prefersReducedMotion: false (never throws) when there is no window', () => {
   assert.equal(S.prefersReducedMotion(), false);
 });
+
+/* ---- dematerialize: inert + blur (GOTCHAS.md's keyboard-repeat class of bug -- a menu item that still had
+   focus when its own click started the menu closing must not go on collecting held-Enter repeats for the
+   ~100-260ms it takes to actually leave). A minimal element/document mock: no jsdom, just enough surface for
+   dematerialize's own calls to run, matching the shape tests/js/deskclient.test.mjs already uses. ---- */
+class MockEl {
+  constructor() { this.style = {}; this._listeners = {}; this.children = []; }
+  contains(node) {
+    if (node === this) return true;
+    return this.children.some((c) => c === node || (c.contains && c.contains(node)));
+  }
+  addEventListener(type, fn) { (this._listeners[type] ||= []).push(fn); }
+  removeEventListener(type, fn) { if (this._listeners[type]) this._listeners[type] = this._listeners[type].filter((f) => f !== fn); }
+  setAttribute() {}
+  removeAttribute() {}
+}
+function withDocument(activeElement, run) {
+  const saved = globalThis.document;
+  globalThis.document = { activeElement };
+  try { run(); } finally { globalThis.document = saved; }
+}
+
+test('dematerialize: sets inert and disables pointer-events immediately (blocks both mouse and keyboard reactivation)', () => {
+  const el = new MockEl();
+  S.dematerialize(el, () => {});
+  assert.equal(el.style.pointerEvents, 'none');
+  assert.equal(el.inert, true);
+});
+
+test('dematerialize: blurs the currently-focused element when it is INSIDE the closing node', () => {
+  const child = { blurred: false, blur() { this.blurred = true; } };
+  const el = new MockEl();
+  el.children.push(child);
+  withDocument(child, () => S.dematerialize(el, () => {}));
+  assert.equal(child.blurred, true);
+});
+
+test('dematerialize: leaves focus alone when the active element is OUTSIDE the closing node', () => {
+  const outsider = { blurred: false, blur() { this.blurred = true; } };
+  const el = new MockEl();   // outsider is never added as a child
+  withDocument(outsider, () => S.dematerialize(el, () => {}));
+  assert.equal(outsider.blurred, false);
+});
+
+test('dematerialize: never throws on an element with no contains() (a minimal DOM mock, e.g. a test harness)', () => {
+  const bareEl = { style: {}, addEventListener() {}, removeEventListener() {}, setAttribute() {} };   // no .contains
+  withDocument({}, () => {
+    assert.doesNotThrow(() => S.dematerialize(bareEl, () => {}));
+  });
+});
