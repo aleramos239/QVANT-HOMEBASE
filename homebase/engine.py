@@ -122,6 +122,7 @@ class Engine:
         self._killed: dict[str, set[str]] = {}
         self._kill_locks: dict[str, tuple] = {}    # strategy -> (loop, asyncio.Lock)
         self._kill_sleep = asyncio.sleep           # the kill's poll wait (tests replace it)
+        self._perf = time.perf_counter             # the legs' round-trip clock (tests replace it)
         self._needs_check_said: set = set()        # (date, strategy, account, at) journaled
         self._check_it_cancelled: set = set()      # (date, strategy, account): 12:55 entry cancels sent
         self._load_today()
@@ -458,12 +459,24 @@ class Engine:
         # the acks is held instead of dropped (on_fill -> _replay_early)
         st.status = "placing"
         buy, sell = self._legs(cfg, upper, lower, qty)
+        rtt: dict = {}
+
+        async def timed_leg(name: str, req: OrderRequest) -> OrderResult:
+            # timing only: each leg's OWN round trip (sent -> the broker's answer),
+            # journaled as leg_ms beside the prestage's prestage_rtt_ms
+            t = self._perf()
+            try:
+                return await ad.place_bracket(req)
+            finally:
+                rtt[name] = round((self._perf() - t) * 1000, 1)
+
         # Both legs go out together — the second no longer waits a full round
         # trip for the first. A leg that raises counts as rejected.
         r_up, r_dn = [r if isinstance(r, OrderResult) else OrderResult(ok=False, error=str(r))
-                      for r in await asyncio.gather(ad.place_bracket(buy),
-                                                    ad.place_bracket(sell),
+                      for r in await asyncio.gather(timed_leg("upper", buy),
+                                                    timed_leg("lower", sell),
                                                     return_exceptions=True)]
+        leg_ms = {"upper": rtt.get("upper"), "lower": rtt.get("lower")}
         if not (r_up.ok and r_dn.ok):
             # never leave half a straddle: cancel whichever leg did go in
             leg, err = ("upper", r_up.error) if not r_up.ok else ("lower", r_dn.error)
@@ -473,7 +486,8 @@ class Engine:
             st.status, st.exit_reason, st.note = "error", "error", f"{leg} leg: {err}"
             self._save()
             self.journal("place_failed", strategy=name, account=account, leg=leg,
-                         error=err, cancelled=survivor.order_id if survivor.ok else None)
+                         error=err, cancelled=survivor.order_id if survivor.ok else None,
+                         leg_ms=leg_ms)
             await self._replay_early(account)
             return {"ok": False, "reason": f"{leg} leg rejected: {err}"}
 
@@ -489,7 +503,10 @@ class Engine:
                      # anchor -> both legs acknowledged by the broker; the
                      # only latency the strategy is actually exposed to
                      place_ms=(None if t0 is None
-                               else round((time.time() - t0) * 1000)))
+                               else round((time.time() - t0) * 1000)),
+                     # each leg's own round trip: legs far apart = the broker
+                     # queues them; both far above prestage_rtt_ms = the open
+                     leg_ms=leg_ms)
         await self._replay_early(account)
         if self.killed_today(name):          # killed while the acks were outstanding
             await self._kill_after_ack(st, cfg, ad)

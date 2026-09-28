@@ -19,12 +19,14 @@ import asyncio
 import json
 import sys
 import time
+from collections import deque
 from typing import Any, Optional
 
 import websockets
 
 WS_DEMO = "wss://demo.tradovateapi.com/v1/websocket"
 WS_LIVE = "wss://live.tradovateapi.com/v1/websocket"
+RTTS_KEPT = 64      # the latest request round trips, for timing only
 
 
 def log(msg: str) -> None:
@@ -57,6 +59,10 @@ class TradovateWS:
         self.authorized = False
         # Pub/sub for unsolicited entity updates (fills, positions, orders, ...)
         self.event_handlers: list = []
+        # (perf_counter at the answer, endpoint, round trip ms) of the latest answered
+        # requests -- timing only, e.g. the prestage's broker round trip at 09:28:30
+        self.rtts: deque = deque(maxlen=RTTS_KEPT)
+        self._perf = time.perf_counter
 
     async def connect(self) -> None:
         log(f"connecting → {self.url}")
@@ -126,8 +132,11 @@ class TradovateWS:
         frame = f"{endpoint}\n{mid}\n{query}\n{body_str}"
         fut = asyncio.get_running_loop().create_future()
         self._pending[mid] = fut
+        sent = self._perf()
         await self.ws.send(frame)
         m = await asyncio.wait_for(fut, timeout=15)
+        done = self._perf()
+        self.rtts.append((done, endpoint, round((done - sent) * 1000, 1)))
         status = m.get("s")
         if status != 200:
             raise RuntimeError(f"{endpoint} failed: status={status} data={m.get('d')}")

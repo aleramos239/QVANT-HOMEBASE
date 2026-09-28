@@ -28,6 +28,24 @@ def _outside_the_quiet_window(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_broker_connections(monkeypatch):
+    """Tests never open broker connections (GOTCHAS): a test that reaches the Tradovate
+    auth's HTTP calls (login, renew, account list) or opens a broker websocket fails --
+    e.g. a reconnect() on the real clock, weekdays 09:10-10:00 ET, renews before the window.
+    pytest.fail raises a BaseException: the desk's `except Exception` fallbacks (a
+    best-effort renewal, the keepalive) can never swallow it into a pass."""
+    def refuse_http(*a, **k):
+        pytest.fail("a real Tradovate HTTP call from a test")
+
+    def refuse_socket(*a, **k):
+        pytest.fail("a real broker websocket from a test")
+
+    monkeypatch.setattr("homebase.broker.tradovate_auth.http_post_json", refuse_http)
+    monkeypatch.setattr("homebase.broker.tradovate_auth.http_get_json", refuse_http)
+    monkeypatch.setattr("homebase.broker.tradovate_ws.websockets.connect", refuse_socket)
+
+
+@pytest.fixture(autouse=True)
 def drafts_dir(tmp_path_factory, monkeypatch):
     """DRAFT strategies (homebase.draftstore): a fresh, empty tmp dir per test -- never ~/.homebase/strategies.
     Child processes (the draft host, runner exec) inherit it through the environment."""

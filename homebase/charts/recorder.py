@@ -20,7 +20,7 @@ import zlib
 from pathlib import Path
 
 from .. import ticks as T
-from .session import session_date
+from .session import session_date, split_by_session
 from .store import ARCHIVE, LIVE_SUFFIX, gaps_path, read_table
 
 REFILL_MAX_PAGES = 20
@@ -222,6 +222,11 @@ class LiveRecorder:
         gaps.append([int(start_ms), int(end_ms)])
         gp.parent.mkdir(parents=True, exist_ok=True)
         gp.write_text(json.dumps(gaps))
+
+    def mark_gap_span(self, root: str, contract: str, start_ms: int, end_ms: int) -> None:
+        """mark_gap over [start_ms, end_ms), cut at the session boundaries it spans."""
+        for d, a, b in split_by_session(root, int(start_ms), int(end_ms)):
+            self.mark_gap(root, d, contract, a, b)
 
 
 async def refill(ws, contract: str, from_ms: int, to_ms: int, *, page_fn=None,

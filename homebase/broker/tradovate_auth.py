@@ -284,17 +284,25 @@ class TradovateAuth:
         self._persist_tokens()
         return self.tokens
 
-    def ensure_valid(self, refresh_buffer_sec: int = 600) -> TradovateTokens:
+    def refresh(self) -> TradovateTokens:
+        """Renew now; if the renewal fails, log in again with the credentials
+        this session logged in with (none remembered -> the renewal's error)."""
+        try:
+            return self.renew()
+        except Exception:
+            if self._username and self._password:
+                return self.login(self._username, self._password)
+            raise
+
+    def ensure_valid(self, refresh_buffer_sec: float = 600,
+                     now: Optional[float] = None) -> TradovateTokens:
+        """Refresh when less than `refresh_buffer_sec` of the token's life is
+        left at `now` (unix seconds; default the current time)."""
         if not self.tokens:
             raise RuntimeError("Not logged in. Call login() first.")
-        now = time.time()
+        now = time.time() if now is None else now
         if self.tokens.expires_at_unix - now < refresh_buffer_sec:
-            try:
-                return self.renew()
-            except Exception:
-                if self._username and self._password:
-                    return self.login(self._username, self._password)
-                raise
+            return self.refresh()
         return self.tokens
 
     def _persist_tokens(self):

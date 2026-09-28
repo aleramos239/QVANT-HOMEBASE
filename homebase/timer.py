@@ -20,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import sys
+import time
 from typing import Callable
 from zoneinfo import ZoneInfo
 
@@ -212,7 +213,10 @@ class SelfTimer:
         (`position_unreadable`). An order whose contract is unresolved never
         skips by itself. Every decision is journaled, but a failing journal
         write never changes one (logged to stderr instead). Never raises on
-        a read: the stage must not fail on this check.
+        a read: the stage must not fail on this check. The read's own broker
+        round trips (timing only, no extra request) are journaled as
+        `prestage_rtt` {prestage_rtt_ms: {account: {request: ms}}}: the open's
+        baseline next to the fire's `placed` leg_ms.
 
         Ruling (2026-09-26): if the strategy's day is no longer idle —
         already placed, live, done, or errored, e.g. a desk restart between
@@ -308,14 +312,29 @@ class SelfTimer:
             except Exception as e:  # noqa: BLE001
                 cached_nets[aid] = (0, "position view: " + (str(e)[:120] or type(e).__name__))
 
+        rtts: dict = {}         # account -> {request: round trip ms}: timing only
+
+        def timed(aid, ad, since) -> None:
+            """The broker round trips of the read below (no extra request): the
+            open's baseline, next to the fire's own `placed` leg_ms."""
+            try:
+                got = ad.request_rtts_ms(since)
+            except Exception:  # noqa: BLE001 — timing never touches the check
+                return
+            if got:
+                rtts[aid] = got
+
         async def read(aid):
             ad = self.engine.adapters.get(aid)
             if ad is None or not ad.connected:
                 return aid, None, "not connected"
+            since = time.perf_counter()
             try:
                 return aid, await ad.get_net_position(s.symbol), None
             except Exception as e:  # noqa: BLE001
                 return aid, None, str(e)[:120] or type(e).__name__
+            finally:
+                timed(aid, ad, since)
 
         now = self.now_et()
         st["prestage_checked_at"] = now.strftime("%H:%M:%S")   # the REAL check
@@ -333,6 +352,8 @@ class SelfTimer:
                 nets = {aid: (net, err) for aid, net, err in got}
             except Exception as e:  # noqa: BLE001 — incl. the timeout
                 jnl("prestage_check_failed", error=str(e)[:200] or type(e).__name__)
+            if rtts:
+                jnl("prestage_rtt", prestage_rtt_ms=rtts)
 
         skipped, skipped_orders, skipped_unreadable = {}, {}, {}
         for aid in accounts:

@@ -53,16 +53,26 @@ Guards, per account (a refusal is one sentence the page shows as-is):
 
 Controller ruling (P2, 2026-09-26): the 09:30:00.000 bot fire runs on this
 same asyncio loop. ChartDesk's periodic view refresh (`run`), its
-refresh-after-push (`_on_entity` scheduling `flush` via `call_soon`) and the
-view rebuild + publish that `flush` does are paused 09:29:50-09:30:30 ET on
-weekdays, and also while ANY bot day state is `placing` (a broker ack is
-outstanding on this same loop). Fill events still publish immediately
-during the pause — `_on_entity` never rebuilds a view inline, so it stays
-O(1) regardless of the pause; a slow listener would delay the adapter's
-websocket reader. A settings change (`set_settings`: a disk write, a
-rebuild and a publish) is refused in the same pause, except one whose only
-effect is switching chart trading off. `disable()` (the desk's Kill) is
-never paused: an emergency switch-off must always take effect immediately.
+refresh-after-push and refresh-after-action (`_request_flush`, scheduling
+`flush`) and the view rebuild + publish that `flush` does are paused
+09:29:50-09:30:30 ET on weekdays, and also while ANY bot day state is
+`placing` (a broker ack is outstanding on this same loop). Fill events still
+publish immediately during the pause — `_on_entity` never rebuilds a view
+inline, so it stays O(1) regardless of the pause; a slow listener would
+delay the adapter's websocket reader. A settings change (`set_settings`: a
+disk write, a rebuild and a publish) is refused in the same pause, except
+one whose only effect is switching chart trading off. `disable()` (the
+desk's Kill) is never paused: an emergency switch-off must always take
+effect immediately.
+
+Publishing (2026-09-27): a broker push for an account, and every chart action
+when it finishes (its result is out), ask for a flush (`_request_flush`,
+O(1)). The first ask after a quiet spell flushes on the next loop tick; asks
+within FLUSH_GAP_S (25 ms) of a flush that published something are collected
+into one flush at the end of that gap, so a burst of pushes (order,
+orderVersion, bracket legs, position, cash) goes out at once and then once
+more, complete — never once per websocket frame. Nothing is published while
+paused (P2); the WATCH_S (0.5 s) loop stays the backstop.
 
 Guard 2 reads the adapter's pushed cache (`trade_view`), never the broker:
 an account whose cache is missing or not seeded yet (the seed still
@@ -101,6 +111,7 @@ FILLS_KEPT = 50
 DEDUP_TTL_S = 600.0
 SUB_QUEUE_MAX = 500
 WATCH_S = 0.5
+FLUSH_GAP_S = 0.025               # asks within this of a publishing flush wait for its end: one flush
 SIDES = ("Buy", "Sell")
 TYPES = ("Market", "Limit", "Stop", "StopLimit")
 TIFS = ("Day", "GTC")
@@ -494,7 +505,8 @@ class ChartDesk:
         self._last_ids: list | None = None
         self._last_acct: dict[str, dict] = {}
         self._last_bot: dict | None = None
-        self._flush_soon = False
+        self._flush_handle: Optional[tuple] = None     # (loop, handle): a flush asked for, not run yet
+        self._flush_gap_until = 0.0                    # loop.time(): asks before this wait for it
         self._journal_cache = bothistory.JournalCache()
 
     # --- pub/sub ------------------------------------------------------------
@@ -621,34 +633,62 @@ class ChartDesk:
                    for st in self.engine.day_states(name))
 
     # --- change detection ------------------------------------------------------
-    def flush(self) -> None:
+    def flush(self) -> bool:
         """Publish what changed since the last flush: the full state when the
         account list changed, else one `account` event per changed account
         and a `bot` event when the bot view changed. Nothing when nobody
         listens, and nothing while the 9:30 fire is protected (P2) — no view
         is rebuilt or serialized then; the next flush after the pause picks
-        up whatever changed in the meantime."""
-        self._flush_soon = False
+        up whatever changed in the meantime. True when it published."""
         if not self._subs or self._views_paused():
-            return
+            return False
         if list(self.cfg.accounts) != self._last_ids:
             self.publish_state()
-            return
+            return True
+        out = False
         for aid in self.cfg.accounts:
             v = self.account_view(aid)
             if v != self._last_acct.get(aid):
                 self._last_acct[aid] = v
                 self.publish("account", v)
+                out = True
         b = self.bot_view()
         if b != self._last_bot:
             self._last_bot = b
             self.publish("bot", b)
+            out = True
+        return out
 
-    def _safe_flush(self) -> None:
+    def _safe_flush(self) -> bool:
         try:
-            self.flush()
+            return self.flush()
         except Exception as e:  # noqa: BLE001 — views must never take the desk down
             _log(f"flush: {type(e).__name__}: {e}")
+            return False
+
+    def _request_flush(self) -> None:
+        """A push or a finished chart action wants its account's view out. O(1):
+        never a rebuild here (P2), only a flush scheduled on the loop — the next
+        tick after a quiet spell; FLUSH_GAP_S after the last flush that
+        published when asked sooner, so a burst goes out as one flush. A flush
+        already scheduled takes this change too. The flush itself is a no-op
+        while the views are paused; the WATCH_S loop stays the backstop."""
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:            # no running loop: the watch loop catches up
+            return
+        held = self._flush_handle
+        if held is not None and held[0] is loop:
+            return                      # one is scheduled on this loop: it takes this change too
+        wait = self._flush_gap_until - loop.time()
+        handle = (loop.call_later(wait, self._flush_due, loop) if wait > 0
+                  else loop.call_soon(self._flush_due, loop))
+        self._flush_handle = (loop, handle)
+
+    def _flush_due(self, loop) -> None:
+        self._flush_handle = None
+        if self._safe_flush():          # only a flush that published starts a gap
+            self._flush_gap_until = loop.time() + FLUSH_GAP_S
 
     async def run(self, interval_s: float = WATCH_S) -> None:
         """Publish what the pushes do not announce (connection state, the
@@ -679,18 +719,13 @@ class ChartDesk:
         """The adapter's push listener: O(1), never rebuilds a view inline
         (P2) — a slow listener here delays the adapter's websocket reader.
         A fill is recorded and published straight away, cheaply; everything
-        else only marks a flush pending (`call_soon`, run on a later tick of
+        else only asks for a flush (`_request_flush`: run on a later tick of
         the loop, itself a no-op while `_views_paused()`)."""
         if et == "fill":
             fv = self._fill_view(aid, ent)
             self._fills.setdefault(aid, deque(maxlen=FILLS_KEPT)).append(fv)
             self.publish("fill", {"account": aid, "fill": fv})
-        if not self._flush_soon:
-            try:
-                asyncio.get_running_loop().call_soon(self._safe_flush)
-                self._flush_soon = True
-            except RuntimeError:            # no running loop: the watch loop catches up
-                pass
+        self._request_flush()
 
     # --- settings (the desk page) ----------------------------------------------
     def set_settings(self, body) -> dict:
@@ -922,6 +957,7 @@ class ChartDesk:
         out = {"results": results}
         self._done[(action, cid)] = (self._mono(), out)
         self.publish("result", {"client_id": cid, "action": action, **out})
+        self._request_flush()           # the accounts' views follow at once, not at the next watch
         return out
 
     def _jsafe(self, event: str, **data) -> Optional[str]:
@@ -1323,6 +1359,7 @@ class ChartDesk:
                 out = {"ok": False, "results": {}, "error": f"internal error: {type(e).__name__}: {e}"}
             self._done[("bot-kill", cid)] = (self._mono(), out)
             self.publish("result", {"client_id": cid, "action": "bot-kill", **out})
+            self._request_flush()
             return out
 
         return await self._once("bot-kill", cid, work)

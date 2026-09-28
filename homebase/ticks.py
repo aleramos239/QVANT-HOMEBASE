@@ -283,15 +283,12 @@ def write_session(rows: list[dict], path: Path, *, root: str, contract: str,
 
 
 # ------------------------------------------------------------------ token
-def md_token(prefer_live: bool = True) -> tuple[str, str]:
-    """(md token, env) from an account the desk already logged in — never a
-    login of its own (logins are rate-limited and precious). prefer_live
-    (the default, for bulk paging) takes the LIVE login first so the demo
-    login the 9:30 feed rides stays clean; the chart service may prefer the
-    demo (Apex eval) login instead."""
-    cfg = config_mod.load()
+def _valid_md_tokens(accounts) -> list:
+    """[(account id, account, md token, expiry)] for each of `accounts` (config order kept)
+    whose md token on disk stays valid 2+ minutes from now."""
     now = dt.datetime.now(dt.timezone.utc)
-    for aid, a in sorted(cfg.accounts.items(), key=lambda kv: kv[1].live != prefer_live):
+    out = []
+    for aid, a in accounts:
         p = state_dir() / f"{aid}.tokens.json"
         if not p.exists():
             continue
@@ -301,8 +298,32 @@ def md_token(prefer_live: bool = True) -> tuple[str, str]:
         except (ValueError, TypeError):
             continue
         if d.get("md_access_token") and exp > now + dt.timedelta(minutes=2):
-            return d["md_access_token"], ("live" if a.live else "demo")
-    raise RuntimeError("no valid md token on disk — is the desk running and connected?")
+            out.append((aid, a, d["md_access_token"], exp))
+    return out
+
+
+def _freshest(cands: list):
+    """The candidate whose token expires last (the first of them on a tie): a socket dies
+    when its token does, so the freshest carries it furthest -- after the desk's early
+    renewal (09:10-09:19:30 ET) that is the renewed token, which lasts past 10:10."""
+    return max(cands, key=lambda c: c[3])
+
+
+def md_token(prefer_live: bool = True) -> tuple[str, str]:
+    """(md token, env) from an account the desk already logged in — never a
+    login of its own (logins are rate-limited and precious). prefer_live
+    (the default, for bulk paging) takes the LIVE login first so the demo
+    login the 9:30 feed rides stays clean; the chart service may prefer the
+    demo (Apex eval) login instead. Within the login taken, the token that
+    expires last (_freshest)."""
+    cfg = config_mod.load()
+    cands = _valid_md_tokens(sorted(cfg.accounts.items(),
+                                    key=lambda kv: kv[1].live != prefer_live))
+    if not cands:
+        raise RuntimeError("no valid md token on disk — is the desk running and connected?")
+    live = cands[0][1].live
+    _, a, tok, _ = _freshest([c for c in cands if c[1].live == live])
+    return tok, ("live" if a.live else "demo")
 
 
 def accounts_by_env() -> dict[str, "str | None"]:
@@ -310,24 +331,15 @@ def accounts_by_env() -> dict[str, "str | None"]:
     NOW for each env, or None (Task 4 fix round 1, review M2: the app-settings dialog shows this
     next to "Live"/"Apex (demo)" instead of a hard-coded account number, and it also makes a C2
     environment mismatch visible before a switch is even attempted -- a None here means that
-    login has no valid token, so a switch to it would fail). The first account per env with a
-    live token wins, same rule as md_token's own scan."""
+    login has no valid token, so a switch to it would fail). Per env the account whose token
+    expires last, same rule as md_token's own choice."""
     cfg = config_mod.load()
-    now = dt.datetime.now(dt.timezone.utc)
+    cands = _valid_md_tokens(cfg.accounts.items())
     out: dict[str, "str | None"] = {"live": None, "demo": None}
-    for aid, a in cfg.accounts.items():
-        env = "live" if a.live else "demo"
-        if out[env] is not None:
-            continue
-        p = state_dir() / f"{aid}.tokens.json"
-        if not p.exists():
-            continue
-        try:
-            d = json.loads(p.read_text())
-            exp = dt.datetime.fromisoformat(str(d.get("expiration_time", "")).replace("Z", "+00:00"))
-        except (ValueError, TypeError):
-            continue
-        if d.get("md_access_token") and exp > now + dt.timedelta(minutes=2):
+    for env, live in (("live", True), ("demo", False)):
+        mine = [c for c in cands if bool(c[1].live) == live]
+        if mine:
+            aid, a, _, _ = _freshest(mine)
             out[env] = a.label or a.account_name or aid
     return out
 

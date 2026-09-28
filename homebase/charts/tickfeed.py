@@ -23,7 +23,19 @@ is closed and the steady loop simply carries on watching the old socket)
 and the top of a cycle (nothing is up: the switch is that cycle's connect).
 With no switch requested, `run()` is main's loop, line for line
 (tests/test_charts_tickfeed_parity.py drives a frozen copy of main's
-run() against this one and compares every broker call and delivered tick).
+run() against this one and compares every broker call and delivered tick),
+plus one more hook that acts only weekdays 09:10-09:19:30 ET:
+
+Early rebuild (RECYCLE, 2026-09-28): the desk renews its tokens early then, so
+a socket still on the OLD md token would die at that token's expiry, maybe
+inside 09:20-09:35 while the user trades the open from these charts. In that
+window, at most once a day, a socket riding an md token other than the
+freshest one on disk for its login is rebuilt on it through `_switch` on the
+same login: make-before-break (the old socket serves until the new one is
+subscribed and installed -- no blank chart), one getChart per root paced
+RECYCLE_PACE_S apart, only while the hour's budget leaves room, no gap refills.
+A failure keeps the socket in use. Reconnects are unchanged: a socket that
+dies anyway reconnects at once, window or not, reading the freshest token.
 """
 from __future__ import annotations
 
@@ -41,6 +53,19 @@ MD_ENVS = ("live", "demo")
 BACKOFF_S = (5, 10, 20, 40, 80, 160, 300)
 HEALTHY_S = 600          # a connection that lived this long resets the backoff
 RETRY_REFUSED_S = 600    # a root the feed refused is asked again this often (and on every reconnect)
+# The desk renews its tokens early, weekdays 09:10-09:19:30 ET (broker/tradovate.py): a socket
+# still on the OLD md token dies at that token's expiry -- maybe inside 09:20-09:35, the open.
+# In that same window the socket is rebuilt on the freshest md token on disk, make-before-break
+# (_switch): the old one serves until the new one is subscribed and installed.
+RECYCLE = (dt.time(9, 10), dt.time(9, 19, 30))   # weekdays ET, = the desk's early-renewal window
+RECYCLE_CHECK_S = 20      # inside it, the token on disk is compared this often
+RECYCLE_PACE_S = 0.5      # between the rebuild's getCharts: no burst
+RECYCLE_BUDGET_MAX = 120  # rebuilt only if the hour's chart requests stay at most this after it
+# The swap itself can lose one tick per root: its copy on the new socket came before the
+# install (no handler yet), its copy on the old one after (handler gone). Nothing refills that
+# (no budget spent), so the recording gets a gap marker around the swap: (before, after) ms --
+# the old socket's copy may still be in flight, and exchange stamps vs this clock may skew.
+SWAP_GAP_MS = (2000, 1000)
 
 
 def in_quiet(ts_s: float) -> bool:
@@ -76,10 +101,12 @@ class TickFeed:
     def __init__(self, roots, on_ticks: Callable[[str, str, list], None],
                  on_subscribed: Optional[Callable[[str, str, Optional[int]], Awaitable[None]]] = None,
                  connect=None, sleep=asyncio.sleep, now=time.time,
-                 connect_env=connect_env, md_env: Optional[str] = None):
+                 connect_env=connect_env, md_env: Optional[str] = None, fresh_token=None,
+                 on_gap: Optional[Callable[[str, str, int, int], None]] = None):
         self.roots = [r.upper() for r in roots]
         self.on_ticks = on_ticks
         self.on_subscribed = on_subscribed
+        self.on_gap = on_gap        # (root, contract, start_ms, end_ms): a recording gap marker
         # md_env: the login in use. It moves only when run() installs a verified switch.
         self.md_env = md_env if md_env is not None else MD_ENV
         self._connect_env = connect_env
@@ -104,6 +131,11 @@ class TickFeed:
         self.switch_error: Optional[dict] = None     # the last failed switch, until one succeeds
         self._running = False
         self._wake: Optional[asyncio.Event] = None  # ends a backoff wait early for a switch or stop()
+        # the early rebuild (RECYCLE): (prefer_live) -> (md token, env), the freshest on disk
+        self._fresh_token = fresh_token or T.md_token
+        self._recycled_day: Optional[str] = None      # at most one rebuild a day
+        self._next_recycle_check = 0.0
+        self.recycle: Optional[dict] = None           # the last rebuild: {"day", "ok", "error"}
 
     def count_request(self, env: Optional[str] = None) -> None:
         """One chart request, charged to `env`'s login (default: the active one)."""
@@ -137,7 +169,7 @@ class TickFeed:
         now = self._now()
         return {"mode": "live", "md": self.md_env, "connected": self.connected, "error": self.error,
                 "md_mismatch": self.md_mismatch(), "switching_to": self._pending_env,
-                "switch_error": self.switch_error,
+                "switch_error": self.switch_error, "recycle": self.recycle,
                 "reconnects": self.reconnects, "budget_hour": self.budget_used(),
                 "roots": {r: {"contract": self.contracts.get(r),
                               "last_tick_age_s": (round(now - self.last_tick[r], 1)
@@ -303,6 +335,15 @@ class TickFeed:
                         except Exception:  # noqa: BLE001 — answered and recorded by _switch
                             pass
                         continue
+                    if await self._recycle_due():
+                        # RECYCLE (a socket is up, weekdays 09:10-09:19:30 ET): the same login
+                        # on the freshest md token on disk; a failure keeps this socket serving
+                        try:
+                            await self._switch(self.md_env, recycle=True)
+                            next_retry = self._now() + RETRY_REFUSED_S
+                        except Exception:  # noqa: BLE001 — recorded in self.recycle
+                            pass
+                        continue
                     if self.refused and self._now() >= next_retry and not self._quiet():
                         next_retry = self._now() + RETRY_REFUSED_S
                         for r in list(self.refused):
@@ -362,11 +403,43 @@ class TickFeed:
             else:
                 fut.set_exception(error)
 
-    async def _switch(self, env: str) -> None:
+    async def _recycle_due(self) -> bool:
+        """The early rebuild (RECYCLE): weekdays 09:10-09:19:30 ET, at most once a day, the
+        token on disk compared at most every RECYCLE_CHECK_S: due when the socket rides an
+        md token other than the freshest valid one for its login (the desk renewed it), and
+        the hour's chart requests stay at most RECYCLE_BUDGET_MAX after one getChart per
+        root. Outside the window it returns at once, without awaiting anything."""
+        now = self._now()
+        et = dt.datetime.fromtimestamp(now, ET)
+        if et.weekday() >= 5 or not RECYCLE[0] <= et.time() < RECYCLE[1]:
+            return False
+        day = et.date().isoformat()
+        if self._recycled_day == day or now < self._next_recycle_check:
+            return False
+        self._next_recycle_check = now + RECYCLE_CHECK_S
+        mine = getattr(self.ws, "token", None)
+        if not mine:
+            return False
+        try:   # small files, but never on this loop (GOTCHAS)
+            fresh, env = await asyncio.to_thread(self._fresh_token, self.md_env == "live")
+        except Exception:  # noqa: BLE001 — no valid token on disk: nothing to move to
+            return False
+        if env != self.md_env or not fresh or fresh == mine:
+            return False
+        if self.budget_used(self.md_env) + len(self.roots) > RECYCLE_BUDGET_MAX:
+            return False                  # the hour's budget stays for the open; asked again later
+        self._recycled_day = day
+        return True
+
+    async def _switch(self, env: str, *, recycle: bool = False) -> None:
         """Connect `env`'s login on a candidate socket, subscribe every root on it, verify, and
         only then install it. The socket in use (if any) keeps serving throughout and is closed
         only after the install. Any failure closes the candidate, touches nothing else, answers
-        the pending switch with the error and raises it. The requests are charged to `env`."""
+        the pending switch with the error and raises it. The requests are charged to `env`.
+
+        recycle: the early rebuild on the same login (RECYCLE) -- its getCharts paced
+        RECYCLE_PACE_S apart, no gap refills (the socket in use served until the install), and
+        the outcome recorded in self.recycle, never in the user's pending switch/switch_error."""
         old = self.ws if self.connected else None
         cand = None
         try:
@@ -381,10 +454,12 @@ class TickFeed:
             contracts: dict = {}
             refused: dict = {}
             ok: list = []
-            for r in self.roots:
+            for i, r in enumerate(self.roots):
                 if self._quiet():   # the 9:30 window opened mid-switch
                     raise RuntimeError("the 9:30 window opened during the switch — "
                                        "keeping the previous login")
+                if recycle and i:
+                    await self._sleep(RECYCLE_PACE_S)
                 try:
                     ok.append((r, await self.subscribe(r, cand=cand, subs=subs,
                                                        contracts=contracts, env=env)))
@@ -401,7 +476,10 @@ class TickFeed:
                     await cand.close()
                 except Exception:  # noqa: BLE001
                     pass
-            if isinstance(e, Exception):
+            if recycle:
+                self.recycle = {"day": self._recycled_day, "ok": False,
+                                "error": str(e) or type(e).__name__}
+            elif isinstance(e, Exception):
                 self._resolve_pending(e)
             raise
         # install: no await until the new socket routes, so no tick falls between the two
@@ -415,12 +493,23 @@ class TickFeed:
         self.subs, self.contracts, self.refused = subs, contracts, refused
         self.md_env = env
         self.error = None
-        self._resolve_pending(None)
-        # gap refills start only now, on the installed socket and its login: their fetch runs
-        # past this moment, so it covers every tick between each root's last delivery and the
-        # new socket routing
-        for r, c in ok:
-            self._refill_after(r, c, self.last_ms.get(r))
+        if recycle:
+            self.recycle = {"day": self._recycled_day, "ok": True, "error": None}
+            # no refill (budget): a gap marker around the swap for every root it moved, so the
+            # archive and QA can see the tick it may have lost (SWAP_GAP_MS)
+            swap_ms = int(self._now() * 1000)
+            for r, c in ok if self.on_gap is not None else ():
+                try:
+                    self.on_gap(r, c, swap_ms - SWAP_GAP_MS[0], swap_ms + SWAP_GAP_MS[1])
+                except Exception as e:  # noqa: BLE001 — a marker never undoes the swap
+                    self.recycle["gap_error"] = f"{r}: {type(e).__name__}: {e}"
+        else:
+            self._resolve_pending(None)
+            # gap refills start only now, on the installed socket and its login: their fetch
+            # runs past this moment, so it covers every tick between each root's last delivery
+            # and the new socket routing
+            for r, c in ok:
+                self._refill_after(r, c, self.last_ms.get(r))
         if old is not None:
             try:
                 await old.close()
