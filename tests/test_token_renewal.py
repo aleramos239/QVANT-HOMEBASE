@@ -398,6 +398,53 @@ def test_reconnect_renews_a_token_that_would_come_due_in_the_window(tmp_path, mo
     assert ad._auth.access_token == ("new1" if renews else "old")
 
 
+@pytest.mark.parametrize("now", [at(9, 28), at(9, 29, 59), at(9, 30, 59)])
+def test_a_rebuild_inside_the_fire_guard_never_renews_a_token_that_outlives_it(
+        tmp_path, monkeypatch, now):
+    """09:34 is < 10 min away: outside the guard the rebuild would renew (else log in),
+    unbounded. Inside it the token outlives 09:31:30: rebuilt on it as it is; the
+    keepalive renews it after the guard."""
+    up, ad, auth = reconnect_at(tmp_path, monkeypatch, now, at(9, 34))
+    assert up is True and (auth.renews, auth.logins) == (0, 0)
+    assert ad._auth.access_token == "old" and ad._ws_expires == ts(9, 34)
+
+
+def test_outside_the_guard_the_same_token_is_renewed_as_before(tmp_path, monkeypatch):
+    for now in (at(9, 27, 59), at(9, 31)):
+        up, ad, auth = reconnect_at(tmp_path, monkeypatch, now, at(9, 34))
+        assert up is True and auth.renews == 1 and ad._auth.access_token == "new1"
+
+
+def test_inside_the_guard_a_token_dying_before_093130_is_renewed_never_logged_in(
+        tmp_path, monkeypatch):
+    up, ad, auth = reconnect_at(tmp_path, monkeypatch, at(9, 29), at(9, 31, 29))
+    assert up is True and (auth.renews, auth.logins) == (1, 0) and ad._auth.access_token == "new1"
+    # the renew fails: rebuilt on the current (still valid) token -- no login
+    up, ad, auth = reconnect_at(tmp_path, monkeypatch, at(9, 29), at(9, 31, 29),
+                                renew_error="HTTP 503")
+    assert up is True and (auth.renews, auth.logins) == (1, 0) and ad._auth.access_token == "old"
+    # already expired, the renew fails: still no login from the rebuild
+    up, ad, auth = reconnect_at(tmp_path, monkeypatch, at(9, 29), at(9, 28),
+                                renew_error="HTTP 401")
+    assert (auth.renews, auth.logins) == (1, 0)
+
+
+def test_inside_the_guard_a_slow_renewal_is_capped(tmp_path, monkeypatch):
+    monkeypatch.setattr(tradovate, "GUARD_RENEW_S", 0.05)
+    release = threading.Event()
+
+    def hangs():
+        release.wait(5)
+        raise RuntimeError("late")
+
+    try:
+        up, ad, auth = reconnect_at(tmp_path, monkeypatch, at(9, 29, 50), at(9, 30, 40),
+                                    renew=hangs)
+    finally:
+        release.set()
+    assert up is True and ad._auth.access_token == "old" and auth.logins == 0
+
+
 def test_a_failed_best_effort_renewal_still_rebuilds_on_the_current_token(tmp_path, monkeypatch):
     """09:25, a token good to 09:44: the renew fails -- the socket is rebuilt on the valid
     token anyway, with no login spent (the old 10-minute rule's behaviour)."""

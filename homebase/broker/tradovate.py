@@ -43,6 +43,8 @@ RENEW_REBUILD_BY = dt.time(9, 29, 45)                 # a drop before this is re
 RENEW_FIRE_ACKS = (dt.time(9, 30), dt.time(9, 30, 30))  # [from, until): the fire's orders may be in flight
 RENEW_ACKS_CARRY = dt.time(9, 30, 5)                  # a socket living past this carries the fire and its acks
 RECONNECT_RENEW_S = 5.0                               # a reconnect's best-effort renewal waits at most this
+GUARD_OUTLIVES = dt.time(9, 31, 30)                   # a rebuild inside the guard renews only a token dying before this
+GUARD_RENEW_S = 2.0                                   # ...renew only, never a login, waiting at most this
 
 
 def _log(msg: str) -> None:
@@ -248,8 +250,11 @@ class TradovateAdapter(BrokerAdapter):
         except Exception:
             pass
         now = self._now()
-        await self._renew_before_the_window(now)
-        await asyncio.to_thread(self._auth.ensure_valid, RENEW_BUFFER_S, now.timestamp())
+        if in_fire_guard(now):
+            await self._renew_in_the_guard(now)      # bounded, renew only, never a login
+        else:
+            await self._renew_before_the_window(now)
+            await asyncio.to_thread(self._auth.ensure_valid, RENEW_BUFFER_S, now.timestamp())
         self._ws = self._new_socket()
         self._ws.event_handlers.append(self._on_ws_event)
         await self._ws.connect()
@@ -272,6 +277,26 @@ class TradovateAdapter(BrokerAdapter):
         tokens = self._auth.tokens
         self._ws_expires = tokens.expires_at_unix if tokens else 0.0
         return TradovateWS(token=self._auth.access_token, environment=self.env)
+
+    async def _renew_in_the_guard(self, now: dt.datetime) -> None:
+        """reconnect() inside the 09:28-09:31 fire guard: the rebuild must not wait, and
+        never runs ensure_valid's renew-then-login (unbounded HTTP) there. A token that
+        outlives 09:31:30 is used as it is; the keepalive renews it after the guard. One
+        that does not (it dies inside the guard or just after, or already has) is renewed:
+        renew only, at most GUARD_RENEW_S. On a failure the socket is built on the current
+        token anyway (an expired one fails its authorize: the reconnect fails fast). A
+        renewal answering after its cap leaves the socket on the older token, which the
+        keepalive then judges by that token's own expiry (_ws_expires)."""
+        tokens = self._auth.tokens
+        if tokens is None:
+            return
+        if tokens.expires_at_unix >= _et_at(now.astimezone(ET).date(), GUARD_OUTLIVES):
+            return
+        try:
+            await asyncio.wait_for(asyncio.to_thread(self._auth.renew), GUARD_RENEW_S)
+        except Exception as e:  # noqa: BLE001 — incl. the timeout
+            _log(f"{self.account_id}: renewal in the 9:30 fire guard failed "
+                 f"({type(e).__name__}: {e}) — rebuilding on the current token")
 
     async def _renew_before_the_window(self, now: dt.datetime) -> None:
         """reconnect(), weekdays 09:10-09:36 ET: the socket is being rebuilt anyway, so
