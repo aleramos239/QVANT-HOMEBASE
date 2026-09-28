@@ -47,8 +47,8 @@ market order capped at its limit (print +/- slip, never worse than the limit) wh
 than the limit; a print beyond the limit leaves it resting as an ordinary 1-tick-penetration limit. Prints the service missed (a feed gap) are never invented: a stop
 whose level was crossed inside the gap fills on the first print after it, paying the gap.
 
-Caps, as the desk's (trading.py guards 3 and 6): 1-10 contracts per order; the worst-case |net| in the contract
-(the position + every working order on the order's side + this order) at most 20; a buy stop above / a sell stop
+Caps, as the desk's (trading.py guards 3 and 6): 1-MAX_ORDER_QTY (35) contracts per order; the worst-case |net| in
+the contract (the position + every working order on the order's side + this order) at most MAX_POSITION_QTY (35); a buy stop above / a sell stop
 below the last print, a bracket on the losing / winning side of its entry, a Stop Limit's limit on the
 fill-allowing side of its trigger within 100 ticks. A Day entry expires when its session ends; the SL/TP legs of
 a filled position never expire (a paper position is never left naked overnight by the book itself).
