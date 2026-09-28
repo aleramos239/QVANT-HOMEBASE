@@ -264,12 +264,13 @@ def test_a_finished_chart_order_publishes_its_account_at_once(tmp_path):
 
 
 def test_a_burst_of_pushes_goes_out_at_once_then_once_more_complete(tmp_path, monkeypatch):
-    monkeypatch.setattr("homebase.trading.FLUSH_GAP_S", 0.2)
+    monkeypatch.setattr("homebase.trading.FLUSH_GAP_S", 5.0)     # long: no wall-clock race
     desk, eng, ads, *_ = mkdesk(tmp_path)
     desk.attach("a1", ads["a1"])
     a1 = ads["a1"]
 
     async def go():
+        loop = asyncio.get_running_loop()
         q = desk.subscribe()
         desk.flush()
         drain(q)
@@ -284,12 +285,15 @@ def test_a_burst_of_pushes_goes_out_at_once_then_once_more_complete(tmp_path, mo
         await asyncio.sleep(0)
         await asyncio.sleep(0)
         held = drain(q)                                          # inside the gap: collected
-        await asyncio.sleep(0.3)
-        return first, held, drain(q)
+        on, handle = desk._flush_handle                          # ONE flush, due at the gap's end
+        due_in = handle.when() - loop.time()
+        handle.cancel()
+        desk._flush_due(on)                                      # ...the gap is over
+        return first, held, due_in, drain(q)
 
-    first, held, rest = run(go())
+    first, held, due_in, rest = run(go())
     assert [e for e, _ in first] == ["account"]                  # the first push: at once
-    assert held == []
+    assert held == [] and 4.0 < due_in <= 5.0
     assert [e for e, _ in rest] == ["account"]                   # then ONE flush, complete
     assert rest[0][1]["orders"][0]["price"] == 91.0 and rest[0][1]["positions"][0]["net"] == 1
 

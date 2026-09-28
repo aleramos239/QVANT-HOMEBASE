@@ -1,6 +1,6 @@
-"""Token renewal never drops the broker socket 09:20-09:35 ET on weekdays (the 9:30 fire);
-it renews early, 09:10-09:20, instead. No network: injected clocks, a fake socket, and the
-auth's renew/login replaced.
+"""Token renewal keeps socket drops out of 09:20-09:35 ET on weekdays (the 9:30 fire); it
+renews early, 09:10-09:20, instead. No network: injected clocks, a fake socket, the auth's
+renew/login replaced, and any real HTTP call from this module fails the test.
 
 A renewal rolls the token, and a rolled token means the socket is closed and rebuilt by the
 supervisor -- on 2026-09-27 that happened at 18:38, 19:48 and 21:51 (every ~70 min), so
@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import threading
 
 import pytest
 
@@ -20,6 +21,15 @@ from tests.test_adapter_caches import SyncWS
 
 MON, SAT = dt.date(2026, 9, 14), dt.date(2026, 9, 19)       # EDT (UTC-4)
 WINTER_MON = dt.date(2026, 12, 14)                           # EST (UTC-5)
+
+
+@pytest.fixture(autouse=True)
+def _no_http(monkeypatch):
+    def refuse(*a, **k):
+        raise AssertionError("a real HTTP call from a test")
+
+    monkeypatch.setattr("homebase.broker.tradovate_auth.http_post_json", refuse)
+    monkeypatch.setattr("homebase.broker.tradovate_auth.http_get_json", refuse)
 
 
 def run(coro):
@@ -55,10 +65,15 @@ def ts(h, m, s=0, day=MON) -> float:
     ((9, 20, 0), (9, 33, 0), (True, "expires_in_window")),
     ((9, 20, 0), (9, 35, 59), (True, "expires_in_window")),
     ((9, 27, 59), (9, 33, 0), (True, "expires_in_window")),
-    ((9, 28, 0), (9, 33, 0), (False, "fire_guard")),      # never inside 09:28-09:31
-    ((9, 29, 59), (9, 30, 5), (False, "fire_guard")),
+    # fire guard 09:28-09:31: a socket whose token lives past 09:31 is never dropped...
+    ((9, 28, 0), (9, 33, 0), (False, "fire_guard")),
+    ((9, 29, 0), (9, 31, 0), (False, "fire_guard")),
     ((9, 30, 59), (9, 33, 0), (False, "fire_guard")),
-    ((9, 31, 0), (9, 33, 0), (True, "expires_in_window")),
+    ((9, 31, 0), (9, 33, 0), (True, "expires_in_window")),   # ...and is renewed right after
+    # ...one that dies inside the guard dies anyway: renewed at once, the earlier the better
+    ((9, 28, 0), (9, 30, 59), (True, "expires_in_guard")),
+    ((9, 29, 59), (9, 30, 5), (True, "expires_in_guard")),
+    ((9, 29, 0), (9, 28, 30), (True, "expires_in_guard")),   # already expired
 ])
 def test_the_rule_on_a_weekday(now, expires, want):
     assert renewal_due(at(*now), ts(*expires)) == want
@@ -124,116 +139,209 @@ def iso(when: dt.datetime) -> str:
     return when.astimezone(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
 
-def mkadapter(tmp_path, now, expires, *, refresh_error=None):
+class Auth:
+    """The adapter's real TradovateAuth with renew/login faked: its real refresh() and
+    ensure_valid() run on top. `renew_error` makes every renew fail; logins always fail
+    (and are counted): a test that logs in says so."""
+
+    def __init__(self, ad, now_fn, expires, renew_error=None):
+        self.ad, self.now_fn, self.renew_error = ad, now_fn, renew_error
+        self.renews, self.logins = 0, 0
+        auth = ad._auth
+        auth.tokens = TradovateTokens(access_token="old", expiration_time=iso(expires))
+        auth._username, auth._password = "u", "p"
+        auth.renew, auth.login = self.renew, self.login
+
+    def renew(self):
+        self.renews += 1
+        if self.renew_error:
+            raise RuntimeError(self.renew_error)
+        t = self.ad._auth.tokens
+        t.access_token = f"new{self.renews}"
+        t.expiration_time = iso(self.now_fn() + dt.timedelta(minutes=80))
+        return t
+
+    def login(self, u, p):
+        self.logins += 1
+        raise RuntimeError("Login failed: p-ticket")
+
+
+def mkadapter(tmp_path, now, expires, *, renew_error=None):
     ad = TradovateAdapter("acct", env="demo", keyring_key="k", state_dir=tmp_path)
-    ad._ws, ad._connected, ad._now = Sock(), True, (lambda: now)
-    ad._auth.tokens = TradovateTokens(access_token="old", expiration_time=iso(expires))
-    calls = []
-
-    def refresh():
-        calls.append(now)
-        if refresh_error:
-            raise RuntimeError(refresh_error)
-        ad._auth.tokens.access_token = f"new{len(calls)}"
-        ad._auth.tokens.expiration_time = iso(now + dt.timedelta(minutes=80))
-        return ad._auth.tokens
-
-    ad._auth.refresh = refresh
-    return ad, calls
+    clock = {"now": now}
+    ad._ws, ad._connected, ad._now = Sock(), True, (lambda: clock["now"])
+    return ad, Auth(ad, ad._now, expires, renew_error), clock
 
 
 def test_the_old_rule_would_have_dropped_the_socket_at_0927_now_it_holds(tmp_path):
-    ad, calls = mkadapter(tmp_path, at(9, 27), at(9, 36, 30))     # 9.5 min left
+    ad, auth, _ = mkadapter(tmp_path, at(9, 27), at(9, 36, 30))     # 9.5 min left
     assert run(ad._renew_if_needed()) is False
-    assert calls == [] and ad._ws.closed == 0 and ad._auth.access_token == "old"
+    assert auth.renews == 0 and ad._ws.closed == 0 and ad._auth.access_token == "old"
 
 
 def test_an_early_renewal_at_091959_rolls_the_token_and_drops_the_socket(tmp_path):
-    ad, calls = mkadapter(tmp_path, at(9, 19, 59), at(9, 40))
+    ad, auth, clock = mkadapter(tmp_path, at(9, 19, 59), at(9, 40))
     assert run(ad._renew_if_needed()) is True
-    assert len(calls) == 1 and ad._ws.closed == 1 and ad._auth.access_token == "new1"
+    assert auth.renews == 1 and ad._ws.closed == 1 and ad._auth.access_token == "new1"
     # the rebuilt token lives to 10:39:59: nothing more is due until after the window
-    ad._now = lambda: at(9, 29, 59)
-    assert run(ad._renew_if_needed()) is False and len(calls) == 1
+    clock["now"] = at(9, 29, 59)
+    assert run(ad._renew_if_needed()) is False and auth.renews == 1
+
+
+def test_an_early_renewal_never_spends_a_login(tmp_path):
+    """The token is still valid 09:10-09:20: a failed renew is retried at the next check,
+    never turned into a (rate-limited) login."""
+    ad, auth, _ = mkadapter(tmp_path, at(9, 15), at(9, 40), renew_error="HTTP 502")
+    with pytest.raises(RuntimeError, match="502"):
+        run(ad._renew_if_needed())
+    assert (auth.renews, auth.logins) == (1, 0)
+    assert ad._ws.closed == 0 and ad._auth.access_token == "old"   # a failure drops nothing
+    # < 10 min left: the old rule would renew here, login fallback included -- unchanged
+    ad, auth, _ = mkadapter(tmp_path, at(9, 15), at(9, 22), renew_error="HTTP 502")
+    with pytest.raises(RuntimeError, match="p-ticket"):
+        run(ad._renew_if_needed())
+    assert (auth.renews, auth.logins) == (1, 1)
 
 
 def test_a_token_that_would_expire_in_the_window_is_renewed_at_its_first_check(tmp_path):
-    ad, calls = mkadapter(tmp_path, at(9, 20, 3), at(9, 33))
+    ad, auth, _ = mkadapter(tmp_path, at(9, 20, 3), at(9, 33))
     assert run(ad._renew_if_needed()) is True
     assert ad._ws.closed == 1 and ad._auth.access_token == "new1"
 
 
-def test_nothing_is_ever_dropped_inside_the_fire_guard(tmp_path):
+def test_a_socket_that_carries_the_fire_guard_is_never_dropped_inside_it(tmp_path):
     for now in (at(9, 28), at(9, 29, 59), at(9, 30), at(9, 30, 59)):
-        ad, calls = mkadapter(tmp_path, now, at(9, 30, 30))          # expires inside the guard
+        ad, auth, _ = mkadapter(tmp_path, now, at(9, 33))           # lives past 09:31
         assert run(ad._renew_if_needed()) is False
-        assert calls == [] and ad._ws.closed == 0
+        assert auth.renews == 0 and ad._ws.closed == 0
 
 
-def test_a_renewal_whose_answer_lands_in_the_fire_guard_keeps_the_socket(tmp_path):
+def test_a_socket_that_dies_inside_the_fire_guard_is_renewed_at_once(tmp_path):
+    ad, auth, _ = mkadapter(tmp_path, at(9, 28), at(9, 29, 59))     # would die before the fire
+    assert run(ad._renew_if_needed()) is True
+    assert ad._ws.closed == 1 and ad._auth.access_token == "new1"
+
+
+def test_a_late_answer_inside_the_guard_keeps_a_socket_that_carries_it(tmp_path):
     """Decided at 09:27:59 (outside the guard), answered at 09:28:00.4 (a slow renewal):
-    the token rolls, but the socket is NOT dropped inside the guard -- it keeps its old,
-    still valid token until that expires."""
-    ad, calls = mkadapter(tmp_path, at(9, 27, 59), at(9, 33))
-    clock = {"now": at(9, 27, 59)}
-    ad._now = lambda: clock["now"]
-    rolled = ad._auth.refresh
+    the old token lives past 09:31, so the socket is NOT dropped inside the guard -- it
+    stays on that still valid token."""
+    ad, auth, clock = mkadapter(tmp_path, at(9, 27, 59), at(9, 33))
+    fast = auth.renew
 
     def slow():
         clock["now"] = at(9, 28) + dt.timedelta(milliseconds=400)
-        return rolled()
+        return fast()
 
-    ad._auth.refresh = slow
+    ad._auth.renew = slow
     assert run(ad._renew_if_needed()) is False
     assert ad._auth.access_token == "new1" and ad._ws.closed == 0
 
 
-def test_a_failed_renewal_drops_nothing(tmp_path):
-    ad, calls = mkadapter(tmp_path, at(9, 15), at(9, 40), refresh_error="HTTP 502")
-    with pytest.raises(RuntimeError, match="502"):
-        run(ad._renew_if_needed())
-    assert len(calls) == 1 and ad._ws.closed == 0 and ad._auth.access_token == "old"
+def test_a_late_answer_inside_the_guard_drops_a_socket_that_dies_in_it(tmp_path):
+    """Same, but the old token dies at 09:29:59: keeping it would lose the fire -- the
+    socket is dropped at once and rebuilt on the new token well before 09:30."""
+    ad, auth, clock = mkadapter(tmp_path, at(9, 27, 59), at(9, 29, 59))
+    fast = auth.renew
+
+    def slow():
+        clock["now"] = at(9, 28) + dt.timedelta(milliseconds=200)
+        return fast()
+
+    ad._auth.renew = slow
+    assert run(ad._renew_if_needed()) is True
+    assert ad._ws.closed == 1
+
+
+def test_a_socket_the_supervisor_replaced_during_the_renewal_is_not_dropped(tmp_path):
+    ad, auth, _ = mkadapter(tmp_path, at(18, 38), at(18, 45))
+    old, new = ad._ws, Sock()
+    fast = auth.renew
+
+    def renew_while_replaced():
+        ad._ws = new                     # the supervisor rebuilt it meanwhile
+        return fast()
+
+    ad._auth.renew = renew_while_replaced
+    assert run(ad._renew_if_needed()) is False
+    assert new.closed == 0 and old.closed == 0
 
 
 def test_the_normal_rule_is_unchanged_outside_the_windows(tmp_path):
-    ad, calls = mkadapter(tmp_path, at(18, 38), at(18, 47, 59))
+    ad, auth, _ = mkadapter(tmp_path, at(18, 38), at(18, 47, 59))
     assert run(ad._renew_if_needed()) is True and ad._ws.closed == 1
-    ad, calls = mkadapter(tmp_path, at(18, 38), at(18, 48, 1))
-    assert run(ad._renew_if_needed()) is False and calls == []
+    ad, auth, _ = mkadapter(tmp_path, at(18, 38), at(18, 48, 1))
+    assert run(ad._renew_if_needed()) is False and auth.renews == 0
+    # a failed renewal falls back to a login there, as it always did
+    ad, auth, _ = mkadapter(tmp_path, at(18, 38), at(18, 45), renew_error="HTTP 502")
+    with pytest.raises(RuntimeError, match="p-ticket"):
+        run(ad._renew_if_needed())
+    assert (auth.renews, auth.logins, ad._ws.closed) == (1, 1, 0)
 
 
-def test_reconnect_renews_a_token_that_would_come_due_in_the_window(tmp_path, monkeypatch):
-    """09:10-09:36 the socket is being rebuilt anyway: it gets a token that carries the
-    window, so no renewal drop follows it inside the window."""
+# --- reconnect: a rebuilt socket starts on a token that carries the window, best effort ----
+def reconnect_at(tmp_path, monkeypatch, now, expires, *, renew_error=None, renew=None):
     monkeypatch.setattr(tradovate, "TradovateWS", SyncWS)
-    got = []
-    for now, expires, renews in ((at(9, 15), at(9, 45, 59), True),
-                                 (at(9, 15), at(9, 46), False),
-                                 (at(9, 25), at(9, 44), True),       # would be due at 09:34
-                                 (at(12, 0), at(12, 11), False),     # normal rule outside
-                                 (at(12, 0), at(12, 9, 59), True)):
-        ad = TradovateAdapter("acct", env="demo", keyring_key="k", state_dir=tmp_path,
-                              account_selector={"account_name": "APEX"})
-        ad._now = lambda now=now: now
-        ad._auth.tokens = TradovateTokens(access_token="old", expiration_time=iso(expires))
-        seen = []
+    ad = TradovateAdapter("acct", env="demo", keyring_key="k", state_dir=tmp_path,
+                          account_selector={"account_name": "APEX"})
+    ad._now = lambda: now
+    auth = Auth(ad, ad._now, expires, renew_error)
+    if renew is not None:
+        ad._auth.renew = renew
 
-        def refresh(ad=ad, now=now, seen=seen):
-            seen.append(1)
-            ad._auth.tokens.access_token = "fresh"
-            ad._auth.tokens.expiration_time = iso(now + dt.timedelta(minutes=80))
-            return ad._auth.tokens
+    async def go():
+        await ad.reconnect()
+        up = ad.connected
+        await ad.close()
+        return up
 
-        ad._auth.refresh = refresh
+    return run(go()), ad, auth
 
-        async def go(ad=ad):
-            await ad.reconnect()
-            await ad.close()
 
-        run(go())
-        got.append((bool(seen), ad._auth.access_token))
-        assert bool(seen) is renews, (now, expires)
-    assert got[0] == (True, "fresh") and got[1] == (False, "old")
+@pytest.mark.parametrize("now, expires, renews", [
+    (at(9, 15), at(9, 45, 59), 1),       # would come due in the window: renewed now
+    (at(9, 15), at(9, 46), 0),           # carries the window
+    (at(9, 25), at(9, 44), 1),           # would be due at 09:34
+    (at(9, 29), at(9, 44), 0),           # inside the fire guard: the rebuild never waits
+    (at(12, 0), at(12, 11), 0),          # the normal rule outside
+    (at(12, 0), at(12, 9, 59), 1),
+])
+def test_reconnect_renews_a_token_that_would_come_due_in_the_window(tmp_path, monkeypatch,
+                                                                   now, expires, renews):
+    up, ad, auth = reconnect_at(tmp_path, monkeypatch, now, expires)
+    assert up is True and auth.renews == renews and auth.logins == 0
+    assert ad._auth.access_token == ("new1" if renews else "old")
+
+
+def test_a_failed_best_effort_renewal_still_rebuilds_on_the_current_token(tmp_path, monkeypatch):
+    """09:25, a token good to 09:44: the renew fails -- the socket is rebuilt on the valid
+    token anyway, with no login spent (the old 10-minute rule's behaviour)."""
+    up, ad, auth = reconnect_at(tmp_path, monkeypatch, at(9, 25), at(9, 44),
+                                renew_error="HTTP 503")
+    assert up is True and (auth.renews, auth.logins) == (1, 0)
+    assert ad._auth.access_token == "old"
+
+
+def test_a_slow_best_effort_renewal_never_holds_the_rebuild(tmp_path, monkeypatch):
+    monkeypatch.setattr(tradovate, "RECONNECT_RENEW_S", 0.05)
+    release = threading.Event()
+
+    def hangs():
+        release.wait(5)
+        raise RuntimeError("late")
+
+    try:
+        up, ad, auth = reconnect_at(tmp_path, monkeypatch, at(9, 25), at(9, 44), renew=hangs)
+    finally:
+        release.set()
+    assert up is True and ad._auth.access_token == "old" and auth.logins == 0
+
+
+def test_a_token_too_close_to_expiry_is_still_renewed_as_before(tmp_path, monkeypatch):
+    """< 10 min left: the normal rule (renew, else log in) runs as it always did, and a
+    reconnect whose renew and login both fail still fails."""
+    with pytest.raises(RuntimeError, match="p-ticket"):
+        reconnect_at(tmp_path, monkeypatch, at(9, 25), at(9, 34), renew_error="HTTP 503")
 
 
 # --- the auth: ensure_valid / refresh, no network --------------------------------------

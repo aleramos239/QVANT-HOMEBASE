@@ -4,10 +4,8 @@ position read (prestage_rtt_ms) as the baseline -- network vs broker queueing at
 No network: fake sockets, injected clocks."""
 from __future__ import annotations
 
-import datetime as dt
 import json
 
-from homebase.broker.base import OrderResult
 from homebase.broker.tradovate_ws import TradovateWS
 from tests.test_engine import ALERT, FakeAdapter, journal_events, mkengine, run, st_of
 from tests.test_prestage import CountingAdapter, mk2
