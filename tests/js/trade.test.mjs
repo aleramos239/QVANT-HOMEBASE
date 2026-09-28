@@ -52,8 +52,8 @@ test('prefs: defaults, clamps, de-duplicated ticks, garbage in -> defaults', () 
 
 test('prefs: the two one-click switches take the old single value on first read, then keep their own', () => {
   const old = (v) => T.parsePrefs(JSON.stringify({ oneClick: v, qty: 2 }));
-  assert.equal(old(false).oneClickChart, false);
-  assert.equal(old(false).oneClickPanel, false);
+  assert.equal(old(false).oneClickChart, true, 'the old single pref is not carried over');
+  assert.equal(old(false).oneClickPanel, true);
   assert.equal(old(true).oneClickChart, true);
   assert.equal(old(true).oneClickPanel, true);
   const own = T.parsePrefs(JSON.stringify({ oneClick: false, oneClickChart: true, oneClickPanel: false }));

@@ -36,8 +36,8 @@ const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
    `ticked` is the RETIRED global account list: nothing routes orders from it any more (2026-09-27 plan, Task 2).
    It is still parsed only so the page can migrate an old list onto one chart once (migrateTicked), then clear it.
    One-click is TWO switches (⚙ → Trading, ONE-CLICK TRADING; 2026-09-27): `oneClickChart` (the chart's Sell/qty/Buy
-   block) and `oneClickPanel` (the order panel's Send), both default ON; a stored pref from before the split takes
-   the old single `oneClick` value for both (its first read). `oneClick` itself stays the switch of every other
+   block) and `oneClickPanel` (the order panel's Send), both default ON (the old single `oneClick` value is not carried
+   over: it was stored OFF for nearly everyone, and the user wants these ON). `oneClick` itself stays the switch of every other
    path (a line's drag / ×, the SL/TP handles, the chart menu, the bottom panel): the confirm's "Don't ask again".
    The SL/TP tick defaults are retired (no editor any more): always 0, whatever an old stored pref holds, so nothing
    invisible can attach a bracket. `qty` is the chart block's quantity box. */
@@ -46,8 +46,7 @@ function parsePrefs(text) {
   try { o = JSON.parse(text); } catch (_) { o = null; }
   if (!isObj(o)) o = {};
   const ticked = idList(o.ticked);
-  const old = typeof o.oneClick === 'boolean' ? o.oneClick : true;
-  const sw = (v) => (typeof v === 'boolean' ? v : old);
+  const sw = (v) => (typeof v === 'boolean' ? v : true);   // ON until the user turns it off (the old single pref is not migrated)
   return { ticked, oneClick: o.oneClick === true, oneClickChart: sw(o.oneClickChart), oneClickPanel: sw(o.oneClickPanel),
     qty: int(o.qty, 1, QTY_MAX, 1), slTicks: 0, tpTicks: 0 };
 }
