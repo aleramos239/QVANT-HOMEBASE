@@ -144,7 +144,8 @@ a { color: inherit; }
 /* ---- legend: DOM over the chart; only the badge and indicator rows take the mouse ---- */
 .legend { position: absolute; left: 8px; top: 7px; right: 80px; z-index: 5; display: flex; flex-direction: column;
   align-items: flex-start; gap: 1px; font-size: 13px; line-height: 20px; pointer-events: none; }
-.lg-title { display: flex; align-items: center; gap: 8px; max-width: 100%; font-size: 16px; line-height: 22px; white-space: nowrap; }
+.lg-title { display: flex; align-items: center; gap: 8px; max-width: 100%; font-size: 16px; line-height: 22px; white-space: nowrap;
+  letter-spacing: -.01em; }   /* 2026-09-28 feel pass: size-specific tracking (apple-design skill) -- tightened a hair above the 13-14px baseline, which stays at 0 */
 .grid[data-count="4"] .lg-title, .grid[data-count="6"] .lg-title { font-size: 14px; line-height: 20px; }
 .lg-logo { display: inline-flex; flex: none; }
 /* The instrument badge: our own text/shape circle, never a real exchange or brand logo (see HBCatalog.rootBadge). */
@@ -254,7 +255,7 @@ a { color: inherit; }
   background: var(--panel); border-radius: 8px; box-shadow: var(--shadow-dialog); }
 .dialog.small { width: min(380px, 92vw); }
 .dlg-head { flex: none; display: flex; align-items: center; justify-content: space-between; padding: 16px 12px 12px 20px;
-  font-size: 20px; font-weight: 600; }
+  font-size: 20px; font-weight: 600; letter-spacing: -.015em; }   /* the biggest text in the app -- size-specific tracking, feel pass */
 .dlg-x { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 6px; color: var(--text); }
 .dlg-x .ic { width: 20px; height: 20px; }
 .dlg-x:hover { background: var(--hover); }
@@ -682,7 +683,7 @@ a { color: inherit; }
 
 .op-head { flex: none; display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 8px 0 14px; }
 .op-logo { display: inline-flex; flex: none; }
-.op-sym { flex: none; font-size: 15px; font-weight: 600; white-space: nowrap; }
+.op-sym { flex: none; font-size: 15px; font-weight: 600; white-space: nowrap; letter-spacing: -.01em; }
 .op-name { min-width: 0; color: var(--text-2); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .op-order { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .op-form { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; padding: 12px 14px 4px; display: flex; flex-direction: column; gap: 12px; }
@@ -724,7 +725,7 @@ a { color: inherit; }
 .op-tile.sell.on { color: #FFFFFF; background: var(--down); }
 .op-tile.buy.on { color: #FFFFFF; background: var(--accent); }
 .op-tile:hover { filter: brightness(1.05); }
-.op-tpx { font-size: 15px; font-weight: 600; }
+.op-tpx { font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
 .op-tlbl { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }
 .op-tile.stale .op-tpx { opacity: .5; }
 .op-spread { min-width: 22px; text-align: center; font-size: 12px; color: var(--text-2); }
@@ -912,7 +913,7 @@ a { color: inherit; }
 .tst-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
 .tst-tiles-small { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 8px; }
 .tst-tile { padding: 8px 0; }
-.tst-tile-v { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.tst-tile-v { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -.012em; }
 .tst-tile-l { color: var(--text-2); font-size: 12px; margin-top: 2px; }
 .tst-tile-s { color: var(--text-2); font-size: 12px; }
 .tst-chart { height: 180px; margin-bottom: 16px; }
