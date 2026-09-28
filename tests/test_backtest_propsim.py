@@ -71,7 +71,7 @@ def test_rule_files_and_the_unconfirmed_label():
     ids = {r["id"]: r for r in list_rules()}
     assert set(ids) == {"lucid-flex-50k@2026-09-27", "lucid-flex-50k-dll@2026-09-27b", "lucid-pro-50k@2026-09-27b",
                         "lucid-pro-50k-no-dll@2026-09-27b", "topstep-50k@2026-09-27b", "apex-legacy-50k@2026-09-27b",
-                        "apex-eod-50k@2026-09-27b"}
+                        "apex-eod-50k@2026-09-27b", "apex-legacy-300k@2026-09-28"}
     assert ids["lucid-flex-50k@2026-09-27"] == {"id": "lucid-flex-50k@2026-09-27", "name": "LucidFlex 50K",
                                                 "version": "2026-09-27", "confirmed": True}
     assert ids["lucid-pro-50k@2026-09-27b"] == {"id": "lucid-pro-50k@2026-09-27b", "name": "LucidPro 50K · $1,200 daily limit",
@@ -99,7 +99,22 @@ def test_the_apex_placeholder_is_gone():
     the Apex files that exist now carry the account holder's own numbers (2026-09-27)."""
     assert not (RULES_DIR / "apex-50k@unconfirmed.json").exists()
     assert sorted(p.name for p in RULES_DIR.glob("apex*")) == ["apex-eod-50k@2026-09-27b.json",
+                                                              "apex-legacy-300k@2026-09-28.json",
                                                               "apex-legacy-50k@2026-09-27b.json"]
+
+
+def test_apex_legacy_300k_is_the_account_holders_numbers():
+    """Account holder 2026-09-28: $20,000 target, $7,500 EOD trail locking at +$100 once the EOD
+    peak reaches +$7,600, no daily loss limit, 35 minis; min days / consistency as the Legacy 50K."""
+    r = load_rules("apex-legacy-300k@2026-09-28")
+    assert (r["account_size"], r["eval_target"], r["trailing_mll"], r["lock_at"], r["lock_floor"]) == \
+        (300000, 20000, 7500, 7600, 100)
+    assert r["daily_loss_limit"] is None and r["consistency"] is None and r["eval_min_days"] == 1
+    assert r["cap_micros"] == 350 and r["confirmed"] is False
+    one_win = engine.run_eval([20000.0], r)
+    assert one_win["outcome"] == "pass" and one_win["day"] == 1
+    assert engine.run_eval([-7490.0, 0.0], r)["outcome"] == "timeout"      # $10 above the floor survives
+    assert engine.run_eval([-7500.0], r)["outcome"] == "bust"              # touching the floor busts
 
 
 def test_flex_2026_09_27_reaffirms_the_2026_08_numbers_so_nothing_moves():
