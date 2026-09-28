@@ -17,7 +17,8 @@ const between = (a, b) => HTML.slice(HTML.indexOf(a), HTML.indexOf(b));
 const BLOCK = between('/* ---- readiness, as the page shows it (W4) ----', '/* ---- render ---- */');
 const HELPERS = between('const fmt = (v, d = 2)', '/* ---- theme ---- */') +
   between('function acctShort(', 'function liveBookingNote(') +
-  between('const esc = (v) =>', 'async function chartPost(');
+  between('const esc = (v) =>', 'async function chartPost(') +
+  between('const killText = ', 'async function doKill(');
 
 function fakeEl() {
   const listeners = {};
@@ -89,9 +90,11 @@ test('money rows carry their prices, sizes, accounts and P&L; failures are marke
     fill_vs_anchor: -0.25, sibling_cancelled: false, sibling_error: 'timeout' });
   assert.equal(sib.tone, 'neg');
   assert.match(sib.text, /^NQ930 sold 3 @ 30,706 on …049 \(-0\.25 vs trigger\) — the other side was NOT cancelled: timeout$/);
-  const kill = line({ event: 'kill_switch', results: { a: { cancel_all: { ok: true }, flatten_all: { ok: false, error: 'x' } },
+  const kill = line({ event: 'kill_switch', results: { apex2941870000048: { cancel_all: { ok: true }, flatten_all: { ok: false, error: 'x' } },
     b: { cancel_all: { ok: true }, flatten_all: { ok: true } } } });
-  assert.deepEqual({ ...kill }, { text: 'Kill everything — 2 accounts cancelled and flattened, desk disarmed · 1 FAILED — check it', tone: 'neg' });
+  assert.deepEqual({ ...kill }, { text: 'Kill everything — FAILED on APEX…048 (FLATTEN FAILED: x); desk disarmed', tone: 'neg' });
+  assert.deepEqual({ ...line({ event: 'kill_switch', results: { b: { cancel_all: { ok: true }, flatten_all: { ok: true } } } }) },
+    { text: 'Kill everything — 1 account cancelled and flattened, desk disarmed', tone: 'warn' });
 });
 
 test('the desk\'s own events read plainly: arm, book, toggle, timer, refusals', () => {
@@ -253,4 +256,63 @@ test('the card labels say what they mean', () => {
   assert.match(HTML, />Flatten &amp; turn off<\/button>/);
   assert.doesNotMatch(HTML, /Flatten · off/);
   assert.match(between('async function flattenStrat(', '/* ---- accounts popup ---- */'), /"Flatten & turn off", true/);
+});
+
+// ---- a failed flatten or cancel never reads as success (review M3) -------------------------------
+test('a flatten whose steps say it failed reads FLATTEN FAILED, with the reason, in red', () => {
+  const unread = line({ event: 'manual_flatten', strategy: 'nq930', results: {
+    '1234567049': ['position unreadable (timeout) — stop/target left working'] } });
+  assert.deepEqual({ ...unread }, { text: 'NQ930 flatten — FLATTEN FAILED on …049 — position unreadable (timeout) — ' +
+    'stop/target left working', tone: 'neg' });
+  const refused = line({ event: 'manual_flatten', strategy: 'nq930', results: {
+    '1234567049': ['market Sell 3: Access is denied', 'not flat — stop/target left working'] } });
+  assert.equal(refused.text, 'NQ930 flatten — FLATTEN FAILED on …049 — market Sell 3 refused: Access is denied; ' +
+    'not flat — stop/target left working');
+  assert.equal(refused.tone, 'neg');
+});
+
+test('a flatten that went out but left an order behind reads CANCEL FAILED; a clean one reads flattened', () => {
+  const leftover = line({ event: 'manual_flatten', strategy: 'nq930', results: {
+    '1234567049': ['market Sell 3: ok', 'cancel 123: ok', 'cancel 124: order not found'],
+    'lucid-eval-1': ['cancel 7: ok'] } });
+  assert.deepEqual({ ...leftover }, { text: 'NQ930 flatten — CANCEL FAILED on …049 — order 124: order not found', tone: 'neg' });
+  assert.deepEqual({ ...line({ event: 'manual_flatten', strategy: 'nq930', results: {
+    '1234567049': ['market Sell 3: ok', 'cancel 123: ok'] } }) }, { text: 'NQ930 flattened on 1 account', tone: '' });
+  assert.equal(line({ event: 'manual_flatten', strategy: 'nq930', results: {} }).text, 'NQ930 flatten — nothing of its was open today');
+  const odd = line({ event: 'manual_flatten', strategy: 'nq930', results: { '1234567049': { weird: true } } });
+  assert.deepEqual({ ...odd }, { text: 'NQ930 flatten — CHECK IT on …049 — its result is unreadable', tone: 'neg' },
+    'a result it cannot read is never called a success');
+});
+
+test('the clock, the kill and the emergency paths read their steps too', () => {
+  const eod = line({ event: 'clock_flat', strategy: 'nq930', account: '1234567049', actions: ['market Sell 3: ok', 'cancel 9: rejected'] });
+  assert.deepEqual({ ...eod }, { text: 'NQ930 flattened on …049 at the end-of-day time · CANCEL FAILED — order 9: rejected', tone: 'neg' });
+  assert.deepEqual({ ...line({ event: 'clock_flat', strategy: 'nq930', account: '1234567049', actions: ['market Sell 3: ok'] }) },
+    { text: 'NQ930 flattened on …049 at the end-of-day time', tone: '' });
+  assert.equal(line({ event: 'clock_flat_failed', strategy: 'nq930', account: '1234567049',
+    actions: ['position unreadable (x) — stop/target left working'] }).text,
+    'NQ930 end-of-day FLATTEN FAILED on …049 — position unreadable (x) — stop/target left working');
+  assert.equal(line({ event: 'killed_run_entries_cancelled', strategy: 'nq930', account: '1234567049',
+    actions: ['cancel 5: ok', 'cancel 6: timeout'] }).text, "NQ930 on …049: the killed run's entries — CANCEL FAILED — order 6: timeout");
+  const killed = line({ event: 'strategy_killed', strategy: 'nq930', results: {
+    '1234567049': { ok: false, actions: ['cancel entry 5: ok', 'check it — position unreadable (x); position not fully attributed; stops left working'] },
+    'lucid-eval-1': { ok: true, note: 'nothing to do' } } });
+  assert.equal(killed.tone, 'neg');
+  assert.match(killed.text, /^NQ930 killed for today — CHECK …049: CHECK IT — check it — position unreadable/);
+  const emergency = line({ event: 'both_filled_emergency', strategy: 'nq930', account: '1234567049',
+    actions: ['market Buy 3: Access is denied', 'not flat — stop/target left working'] });
+  assert.match(emergency.text, /emergency flatten · FLATTEN FAILED — market Buy 3 refused: Access is denied/);
+  assert.match(line({ event: 'both_filled_emergency', strategy: 'nq930', account: '1234567049',
+    actions: ['market Buy 3: ok', 'cancel 1: ok'] }).text, /emergency flatten done$/);
+  assert.deepEqual({ ...line({ event: 'sibling_cancel_retry', strategy: 'nq930', account: '1234567049', ok: false, error: 'x' }) },
+    { text: 'NQ930: CANCEL FAILED on …049 — the other entry is still working: x', tone: 'neg' });
+});
+
+test('the chart\'s own flatten / cancel lead with FAILED when they fail', () => {
+  assert.deepEqual({ ...line({ event: 'manual_flatten', source: 'chart', account: '1234567049', contract: 'NQZ6', ok: false, error: 'timeout' }) },
+    { text: 'Chart: FLATTEN FAILED on …049 (NQZ6) — timeout', tone: 'neg' });
+  assert.deepEqual({ ...line({ event: 'manual_cancel', source: 'chart', scope: 'order', account: '1234567049', contract: 'NQZ6', ok: false, error: 'gone' }) },
+    { text: 'Chart: CANCEL FAILED on …049 (NQZ6) — gone', tone: 'neg' });
+  assert.equal(line({ event: 'manual_flatten', source: 'chart', account: '1234567049', contract: 'NQZ6', ok: true }).text,
+    'Chart: flattened NQZ6 on …049');
 });

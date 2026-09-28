@@ -1177,6 +1177,28 @@ const actStrat = (r) => String(r.strategy || "").toUpperCase();
 const actOn = (r) => r.account ? " on " + acctShort(r.account) : "";
 const actErr = (e) => (typeof e === "string" ? e : JSON.stringify(e == null ? "" : e)).slice(0, 160);
 const actFail = (r) => r.ok ? "" : " — FAILED: " + actErr(r.error);
+/* A flatten or cancel reports its steps as text -- "market Sell 3: ok", "cancel 123: ok" -- and a
+   failure in the same list: "market Sell 3: <error>", "not flat — stop/target left working",
+   "position unreadable (…) — stop/target left working", "cancel [entry] 123: <error>", "… — check
+   it" (engine.py). Read them; never assume the benign case (review M3). A result that is not a
+   list of steps cannot be read, so it says so. */
+function stepFailures(steps) {
+  const f = {flatten: [], cancel: [], check: []};
+  if (!Array.isArray(steps)) { f.check.push("its result is unreadable"); return f; }
+  for (const raw of steps) {
+    const s = String(raw);
+    let m;
+    if ((m = /^market (Buy|Sell) (\d+): (.*)$/.exec(s))) { if (m[3] !== "ok") f.flatten.push(`market ${m[1]} ${m[2]} refused: ${m[3]}`); }
+    else if (/^(not flat|position unreadable)/.test(s)) f.flatten.push(s);
+    else if ((m = /^cancel (?:entry )?(\S+): (.*)$/.exec(s))) { if (m[2] !== "ok") f.cancel.push(`order ${m[1]}: ${m[2]}`); }
+    else if (/check it/.test(s)) f.check.push(s);
+  }
+  return f;
+}
+function failText(f, where) {
+  return [["flatten", "FLATTEN FAILED"], ["cancel", "CANCEL FAILED"], ["check", "CHECK IT"]]
+    .filter(([k]) => f[k].length).map(([k, what]) => `${what}${where} — ${f[k].map(actErr).join("; ")}`).join(" · ");
+}
 const REFUSED_WHY = {unknown_or_disabled: "it is off", not_a_straddle: "it runs off the price feed, not alerts",
   killed: "it was killed today", already_traded: "it already acted today", outside_window: "outside its time window",
   bad_prices: "the prices were unreadable", inverted_prices: "upper was below lower",
@@ -1193,10 +1215,9 @@ function actWould(r) {
 const ACTIVITY = {
   armed_toggled: (r) => [r.armed ? "Desk ARMED — signals place real orders" : "Desk disarmed — signals are journaled only"],
   kill_switch: (r) => {
-    const res = Object.values(r.results || {});
-    const bad = res.filter(x => !(x && x.cancel_all && x.cancel_all.ok && x.flatten_all && x.flatten_all.ok)).length;
-    return [`Kill everything — ${res.length} account${res.length === 1 ? "" : "s"} cancelled and flattened, desk disarmed` +
-      (bad ? ` · ${bad} FAILED — check ${bad === 1 ? "it" : "them"}` : ""), bad ? "neg" : "warn"];
+    const n = Object.keys(r.results || {}).length, bad = killFailures(r.results);   // the account-wide sweep is the truth
+    return bad.length ? [`Kill everything — FAILED on ${bad.join(" · ")}; desk disarmed`, "neg"]
+      : [`Kill everything — ${n} account${n === 1 ? "" : "s"} cancelled and flattened, desk disarmed`, "warn"];
   },
   chart_trading_set: (r, prev) => {
     if (r.cause) return [`Chart trading switched OFF by ${r.cause === "kill" ? "Kill everything" : r.cause}`, "warn"];
@@ -1257,38 +1278,63 @@ const ACTIVITY = {
   brackets_moved: (r) => r.moved === true ? [`${actStrat(r)} stop/target moved to the fill${actOn(r)}: SL ${fmtPx(r.sl)} · TP ${fmtPx(r.tp)}`]
     : r.moved === false ? [`${actStrat(r)} couldn't move stop/target${actOn(r)} — ${actErr(r.error)} (the trigger levels still protect it)`, "warn"]
     : [`${actStrat(r)} stop/target stay${actOn(r)} — ${actErr(r.moved)}`],
-  both_filled_emergency: (r) => [`${actStrat(r)}: BOTH sides filled${actOn(r)} — emergency flatten`, "neg"],
+  both_filled_emergency: (r) => {
+    const t = failText(stepFailures(r.actions), "");
+    return [`${actStrat(r)}: BOTH sides filled${actOn(r)} — emergency flatten ${t ? "· " + t : "done"}`, "neg"];
+  },
   exit_fill: (r) => [`${actStrat(r)} exited${actOn(r)}${EXIT_AT[r.reason] || ""} @ ${fmtPx(r.fill)}` +
       (r.pnl != null ? `, ${r.pnl > 0 ? "+" : ""}${usd(r.pnl)}` : ""), r.pnl > 0 ? "pos" : r.pnl < 0 ? "neg" : ""],
-  sibling_cancel_retry: (r) => [`${actStrat(r)} re-cancelling the other side${actOn(r)}${r.ok === false ? " — failed: " + actErr(r.error) : ""}`,
-    r.ok === false ? "warn" : ""],
+  sibling_cancel_retry: (r) => r.ok === false
+    ? [`${actStrat(r)}: CANCEL FAILED${actOn(r)} — the other entry is still working: ${actErr(r.error)}`, "neg"]
+    : [`${actStrat(r)} re-cancelled the other side${actOn(r)}`],
   fill_recovered_on_reconnect: (r) => [`${actStrat(r)} entry (${r.side}) found${actOn(r)} after reconnecting`, "warn"],
   entry_found_by_check: (r) => [`${actStrat(r)} entry (${r.side}) found${actOn(r)} by the order check — its fill message was missed`, "warn"],
   exit_recovered_on_reconnect: (r) => [`${actStrat(r)}${actOn(r)} closed while disconnected — found on reconnect`, "warn"],
   cancelled_unfilled: (r) => [`${actStrat(r)}${actOn(r)}: no fill by the cancel time — entries cancelled`],
   cancel_raced_fill: (r) => [`${actStrat(r)}${actOn(r)}: filled as the entries were cancelled — now in position (${r.net})`, "warn"],
-  clock_flat: (r) => [`${actStrat(r)} flattened${actOn(r)} at the end-of-day time`],
-  clock_flat_failed: (r) => [`${actStrat(r)} end-of-day flatten FAILED${actOn(r)} — check it`, "neg"],
+  clock_flat: (r) => {
+    const t = failText(stepFailures(r.actions), "");
+    return [`${actStrat(r)} flattened${actOn(r)} at the end-of-day time${t ? " · " + t : ""}`, t ? "neg" : ""];
+  },
+  clock_flat_failed: (r) => [`${actStrat(r)} end-of-day FLATTEN FAILED${actOn(r)} — ` +
+    (failText(stepFailures(r.actions), "").replace(/^FLATTEN FAILED — /, "") || "check it"), "neg"],
   killed_run_needs_check: (r) => [`${actStrat(r)}${actOn(r)} needs a check — killed, but still ${r.status} at ${r.at}`, "neg"],
-  killed_run_entries_cancelled: (r) => [`${actStrat(r)}${actOn(r)}: the killed run's entries were cancelled`],
+  killed_run_entries_cancelled: (r) => {
+    const t = failText(stepFailures(r.actions), "");
+    return t ? [`${actStrat(r)}${actOn(r)}: the killed run's entries — ${t}`, "neg"]
+             : [`${actStrat(r)}${actOn(r)}: the killed run's entries were cancelled`];
+  },
   strategy_kill_requested: (r) => [`${actStrat(r)} kill requested${r.source === "chart" ? " from the chart" : ""}`, "warn"],
   strategy_killed: (r) => {
-    const bad = Object.values(r.results || {}).filter(x => x && x.ok === false).length;
-    return [`${actStrat(r)} killed for today${bad ? ` — ${bad} account${bad === 1 ? "" : "s"} need a check` : ""}`, bad ? "neg" : "warn"];
+    const bad = Object.entries(r.results || {}).filter(([, x]) => !x || x.ok === false)
+      .map(([a, x]) => `${acctShort(a)}: ` + (failText(stepFailures((x && x.actions) || []), "") || actErr((x && x.error) || "needs a check")));
+    return bad.length ? [`${actStrat(r)} killed for today — CHECK ${bad.join(" · ")}`, "neg"]
+                      : [`${actStrat(r)} killed for today`, "warn"];
   },
   strategy_kill_check: (r) => [`${actStrat(r)} kill${actOn(r)} needs a check — ${actErr(r.reason)}`, "neg"],
-  strategy_killed_after_ack: (r) => [`${actStrat(r)} kill finished${actOn(r)} once its orders were acknowledged${r.ok === false ? " — needs a check" : ""}`,
-    r.ok === false ? "neg" : ""],
+  strategy_killed_after_ack: (r) => {
+    const t = failText(stepFailures(r.actions || []), "");
+    return (r.ok === false || t)
+      ? [`${actStrat(r)} kill${actOn(r)}, once its orders were acknowledged — ${t || "needs a check"}`, "neg"]
+      : [`${actStrat(r)} kill finished${actOn(r)} once its orders were acknowledged`];
+  },
   strategy_kill_failed: (r) => [`${actStrat(r)} kill FAILED${actOn(r)} — ${actErr(r.error)}`, "neg"],
-  manual_flatten: (r) => r.source === "chart"
-    ? [`Chart: flattened ${r.contract || ""}${actOn(r)}${actFail(r)}`, r.ok ? "" : "neg"]
-    : [`${actStrat(r)} flattened on every account it acted on today`],
+  manual_flatten: (r) => {
+    if (r.source === "chart") return r.ok ? [`Chart: flattened ${r.contract || ""}${actOn(r)}`]
+      : [`Chart: FLATTEN FAILED${actOn(r)}${r.contract ? ` (${r.contract})` : ""} — ${actErr(r.error)}`, "neg"];
+    const res = Object.entries(r.results || {});
+    const bad = res.map(([a, steps]) => failText(stepFailures(steps), " on " + acctShort(a))).filter(Boolean);
+    if (bad.length) return [`${actStrat(r)} flatten — ${bad.join(" · ")}`, "neg"];
+    return [res.length ? `${actStrat(r)} flattened on ${res.length} account${res.length === 1 ? "" : "s"}`
+                       : `${actStrat(r)} flatten — nothing of its was open today`];
+  },
   manual_order: (r) => [`Chart order${actOn(r)}: ${r.side} ${r.qty} ${r.contract || r.root || ""} ${r.type || ""}` +
       (r.price != null ? ` @ ${fmtPx(r.price)}` : r.trigger != null ? ` @ ${fmtPx(r.trigger)}` : "") +
       (r.ok ? "" : " — REFUSED: " + actErr(r.error)), r.ok ? "" : "neg"],
   manual_modify: (r) => [`Chart: order moved to ${fmtPx(r.price)}${actOn(r)}${r.contract ? ` (${r.contract})` : ""}${actFail(r)}`, r.ok ? "" : "neg"],
-  manual_cancel: (r) => [`Chart: ${r.scope === "symbol" ? `cancelled every ${r.contract || ""} order` : "cancelled an order"}${actOn(r)}${actFail(r)}`,
-    r.ok ? "" : "neg"],
+  manual_cancel: (r) => r.ok
+    ? [`Chart: ${r.scope === "symbol" ? `cancelled every ${r.contract || ""} order` : "cancelled an order"}${actOn(r)}`]
+    : [`Chart: CANCEL FAILED${actOn(r)}${r.contract ? ` (${r.contract})` : ""} — ${actErr(r.error)}`, "neg"],
   manual_exits: (r) => [`Chart: exits set${actOn(r)}${r.contract ? " " + r.contract : ""} — ` +
       [r.sl != null ? "SL " + fmtPx(r.sl) : "", r.tp != null ? "TP " + fmtPx(r.tp) : ""].filter(Boolean).join(" · ") + actFail(r),
     r.ok ? "" : "neg"],
