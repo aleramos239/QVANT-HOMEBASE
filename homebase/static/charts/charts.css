@@ -15,6 +15,12 @@
   --shadow-menu: 0 2px 8px rgba(0, 0, 0, .16);
   --shadow-dialog: 0 8px 32px rgba(0, 0, 0, .24);
   --backdrop: rgba(0, 0, 0, .25);
+  /* 2026-09-28 feel pass: strong, spring-SHAPED cubic-beziers (the built-in ease/ease-out keywords read as
+     flat next to these -- design-eng skill) for anything click-triggered that settles like the spring in
+     spring.js does (critically damped, no bounce -- bounce is reserved for gesture/momentum motion, done
+     with an actual Spring, never CSS). -out for entrances/settling, -in for the (faster) exit. */
+  --ease-spring-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-spring-in: cubic-bezier(0.4, 0, 1, 1);
   color-scheme: light;
 }
 :root[data-theme="dark"] {
@@ -602,6 +608,21 @@ a { color: inherit; }
 .pdock-split-v { flex: none; width: 6px; margin: 0 -3px; cursor: col-resize; z-index: 2; position: relative; }
 .pdock-split-v:hover { background: var(--accent-soft); }
 #floatLayer { position: fixed; inset: 0; pointer-events: none; z-index: 40; }
+
+/* ---- panel physics (2026-09-28 feel pass, panelshell.js) ----
+   A live drag/resize/splitter never transitions -- it must track the pointer 1:1, so these classes are
+   added only for the short release-time "snap back onto the hard-clamped value" after a grip/splitter/
+   resize handle rubber-banded past its limit, then removed once that settles (panelshell.js's snapAxisCSS /
+   snapRectCSS). The floating panel's own DOCK <-> FLOAT and reorder motion is a real spring (JS, transform-
+   only, animateDockFlip) and needs no CSS transition at all. */
+.pdock-snap-w { transition: width 180ms var(--ease-spring-out); }
+.pdock-snap-h { transition: height 180ms var(--ease-spring-out); }
+.pdock-snap-flex { transition: flex-grow 180ms var(--ease-spring-out); }
+.pdock-snap-rect { transition: left 180ms var(--ease-spring-out), top 180ms var(--ease-spring-out),
+  width 180ms var(--ease-spring-out), height 180ms var(--ease-spring-out); }
+@media (prefers-reduced-motion: reduce) {
+  .pdock-snap-w, .pdock-snap-h, .pdock-snap-flex, .pdock-snap-rect { transition: none; }
+}
 #floatLayer .hbpanel { pointer-events: auto; }
 
 .hbpanel { display: flex; flex-direction: column; min-height: 0; background: var(--panel); border-radius: 6px;
