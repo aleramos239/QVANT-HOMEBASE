@@ -14,6 +14,10 @@ const HISTORY_TTL = 60000, HISTORY_RETRY = { 503: 30000, other: 60000 };
 const desk = { state: null, down: 'connecting to the desk', quotes: {}, prefs: loadPrefs() };
 const subs = new Set();
 const ours = new Set();   // order ids this page placed: their fills get a toast (ruling S3)
+// fast-paper: a market order can fill before its POST's answer names it -- a fill of an order not (yet) ours waits
+// here (the last UNCLAIMED_MAX, oldest first) for send() to claim it: one toast when the answer lands, never two
+const UNCLAIMED_MAX = 50;
+const unclaimed = [];
 let queued = null;
 
 function loadPrefs() { try { return T.parsePrefs(localStorage.getItem(T.PREFS_KEY)); } catch (_) { return T.parsePrefs(null); } }
@@ -49,9 +53,21 @@ function onMessage(m) {
     if (i >= 0) list[i] = d; else list.push(d);
   } else if (m.event === 'bot') desk.state.bot = d;
   else if (m.event === 'fill') {
-    if (d && d.fill && ours.has(String(d.fill.order_id))) toast('ok', T.fillText(d, desk.state, tickFor(T.rootOf(d.fill.symbol))));
+    if (d && d.fill) {
+      if (ours.has(String(d.fill.order_id))) fillToast(d);
+      else if (unclaimed.push(d) > UNCLAIMED_MAX) unclaimed.shift();
+    }
   } else return;   // result: this page's own answers come back on its POST (ruling S3)
   emit(m.event);
+}
+function fillToast(d) { toast('ok', T.fillText(d, desk.state, tickFor(T.rootOf(d.fill.symbol)))); }
+/* An order this page placed: its fills get a toast from now on -- and at once any that landed before its answer. */
+function claim(id) {
+  ours.add(id);
+  for (let i = 0; i < unclaimed.length;) {
+    if (String(unclaimed[i].fill.order_id) === id) fillToast(unclaimed.splice(i, 1)[0]);
+    else i++;
+  }
 }
 function tickFor(root) {
   const c = (window.HBCharts ? window.HBCharts.cells : []).find((x) => x.shown && x.shown.root === root);
@@ -65,7 +81,7 @@ async function send(action, body) {
     status = r.status;
     try { data = await r.json(); } catch (_) { data = null; }
   } catch (_) { data = { detail: 'chart service unreachable' }; }
-  if (data && data.results) for (const r of Object.values(data.results)) if (r && r.ok && r.order_id) ours.add(String(r.order_id));
+  if (data && data.results) for (const r of Object.values(data.results)) if (r && r.ok && r.order_id) claim(String(r.order_id));
   for (const t of T.resultToasts(action, status, data, desk.state)) toast(t.tone, t.text);
   return data;
 }
