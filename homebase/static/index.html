@@ -163,9 +163,13 @@
   .bulb{ width:13px; height:13px; border-radius:50%; display:inline-block;
     cursor:pointer; background:var(--muted-foreground); opacity:.5;
     vertical-align:middle; flex:none; }
-  .bulb.ok{ background:#22c55e; opacity:1; box-shadow:0 0 7px rgb(34 197 94 / .8); }
-  .bulb.warn{ background:#f59e0b; opacity:1; box-shadow:0 0 7px rgb(245 158 11 / .8); }
-  .bulb.bad{ background:#ef4444; opacity:1; box-shadow:0 0 8px rgb(239 68 68 / .9);
+  /* status colours come from the theme (--pos / --warn / --neg), light and dark alike. --warn is
+     new in shadcn.css (2026-09-28): the fallback keeps an amber bulb visible under a cached copy
+     of that (unversioned) stylesheet -- an undefined var would paint it transparent. */
+  .bulb.ok{ background:var(--pos); opacity:1; box-shadow:0 0 7px color-mix(in oklch, var(--pos) 80%, transparent); }
+  .bulb.warn{ background:var(--warn, oklch(0.7 0.16 70)); opacity:1;
+    box-shadow:0 0 7px color-mix(in oklch, var(--warn, oklch(0.7 0.16 70)) 80%, transparent); }
+  .bulb.bad{ background:var(--neg); opacity:1; box-shadow:0 0 8px color-mix(in oklch, var(--neg) 90%, transparent);
     animation:bulbpulse 1.2s ease-in-out infinite; }
   @keyframes bulbpulse{ 50%{ opacity:.45; } }
   .chk{ display:flex; gap:10px; align-items:baseline; padding:7px 2px;
@@ -805,7 +809,8 @@ holdToFire($("#killBtn"), doKill,
   () => toast("Kill not sent — press and hold for a second to kill everything."));
 
 /* ---- the bulb ---- */
-const CHK_COLOR = {ok: "#22c55e", info: "#94a3b8", warn: "#f59e0b", bad: "#ef4444"};
+const CHK_COLOR = {ok: "var(--pos)", info: "var(--muted-foreground)", warn: "var(--warn, oklch(0.7 0.16 70))",
+                   bad: "var(--neg)"};   // theme tokens, never hex (W6)
 function bulbLevel(r) {
   if (!r) return null;
   if (r.checks.some(c => c.level === "bad")) return "bad";
@@ -829,7 +834,7 @@ function renderChecks() {
   $("#checksTitle").textContent = lvl === "ok" ? "All good — ready to trade"
     : lvl === "warn" ? "Attention" : "Not ready";
   $("#checksList").innerHTML = r.checks.map(c => `
-    <div class="chk"><span class="dot" style="background:${CHK_COLOR[c.level] || "#94a3b8"}"></span>
+    <div class="chk"><span class="dot" style="background:${CHK_COLOR[c.level] || CHK_COLOR.info}"></span>
       <span class="lbl">${c.label}</span><span class="det">${c.detail}</span></div>`).join("");
 }
 function openChecks() { renderChecks(); $("#checksOverlay").classList.add("open"); }
