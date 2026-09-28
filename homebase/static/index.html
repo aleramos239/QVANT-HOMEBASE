@@ -251,8 +251,12 @@
     border:1.5px solid var(--neg); font-size:13px; font-weight:600; line-height:1.4;
     box-shadow:0 8px 28px rgb(0 0 0 / .22); }
   #alertBar[hidden]{ display:none; }
+  /* while a dialog is open the alert sits under its scrim, so it can never cover the dialog's own
+     buttons -- in a short, narrow window it would sit right on them, and a retried Kill must not
+     need the alert dismissed first (second review). It is back on top when the dialog closes. */
+  body.dialog-open #alertBar{ z-index:49; }
   #alertX{ border:none; background:none; color:inherit; cursor:pointer; font-size:16px; line-height:1; padding:0 2px; }
-  #toast.show{ visibility:visible; opacity:1; pointer-events:auto; transform:translateX(-50%); filter:none;
+  #toast.show{ visibility:visible; opacity:1; pointer-events:none; transform:translateX(-50%); filter:none;   /* a status: never takes a click */
     transition:opacity 160ms var(--ease-spring-out), transform 160ms var(--ease-spring-out),
       filter 160ms var(--ease-spring-out), visibility 0s; }
 
@@ -902,6 +906,7 @@ function showOverlay(id) {
   const box = el.querySelector(".modal") || el;
   const fresh = !OVERLAYS.some(o => o.el === el);
   if (fresh) { OVERLAYS.push({el, trigger: document.activeElement}); el._openedAt = Date.now(); }
+  document.body.classList.add("dialog-open");                 // the red alert steps under its scrim
   box.removeAttribute("inert");                              // live at once
   if (fresh) growFrom(box, openedFrom());
   el.classList.add("open");
@@ -918,6 +923,7 @@ function hideOverlay(id) {
   const i = OVERLAYS.findIndex(o => o.el === el);
   if (i < 0) return;
   const {trigger} = OVERLAYS.splice(i, 1)[0];
+  if (!OVERLAYS.length) document.body.classList.remove("dialog-open");
   const at = document.activeElement;
   if (!at || at === document.body || el.contains(at)) restoreFocus(trigger);   // never steal it
 }

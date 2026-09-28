@@ -459,3 +459,17 @@ test('a touch hold that opens the confirm cannot answer it on lift: a click whos
   assert.ok(!s.doc.click({ detail: 1, target: go }).stopped, 'a deliberate tap answers it');
   s.api.cfDone(false);
 });
+
+test('while a dialog is open the red alert steps under its scrim -- it can never cover the dialog\'s buttons', () => {
+  const s = load();
+  s.api.showOverlay('settingsOverlay');
+  assert.ok(s.body.classList.contains('dialog-open'));
+  s.api.confirmDlg('Kill everything?', 'body', 'Kill', true);
+  s.api.cfDone(false);
+  assert.ok(s.body.classList.contains('dialog-open'), 'Settings is still open under it');
+  s.api.hideOverlay('settingsOverlay');
+  assert.ok(!s.body.classList.contains('dialog-open'), 'back on top once no dialog is open');
+  const css = HTML.slice(HTML.indexOf('<style>'), HTML.indexOf('</style>'));
+  assert.match(css, /body\.dialog-open #alertBar\{ z-index:49; \}/, 'under every scrim (50+)');
+  assert.match(css, /#toast\.show\{[^}]*pointer-events:none;/, 'a toast never takes a click either');
+});
