@@ -10,10 +10,17 @@ import vm from 'node:vm';
 const require = createRequire(import.meta.url);
 const T = require('../../homebase/static/charts/trade.js');
 const SRC = readFileSync(new URL('../../homebase/static/charts/deskclient.js', import.meta.url), 'utf8');
+// the real thing, loaded into the same sandbox (script order: spring.js loads before deskclient.js in
+// charts.html too) -- toast() calls window.HBSpring.materialize()/dematerialize() since the 2026-09-28 feel
+// pass, so a fake toast root needs enough of a DOM (.style, add/removeEventListener) for those to run.
+const SPRING_SRC = readFileSync(new URL('../../homebase/static/charts/spring.js', import.meta.url), 'utf8');
 
 class El {
-  constructor(tag) { this.tagName = tag; this.children = []; this.parent = null; this.className = ''; this.textContent = ''; }
+  constructor(tag) { this.tagName = tag; this.children = []; this.parent = null; this.className = ''; this.textContent = ''; this.style = {}; }
   setAttribute() {}
+  removeAttribute() {}
+  addEventListener() {}
+  removeEventListener() {}
   append(...n) { for (const c of n) { c.parent = this; this.children.push(c); } }
   prepend(n) { n.parent = this; this.children.unshift(n); }
   remove() { if (this.parent) this.parent.children = this.parent.children.filter((c) => c !== this); }
@@ -29,6 +36,7 @@ function load() {
     document: { getElementById: (id) => (id === 'toastRoot' ? root : null), createElement: (t) => new El(t) },
     fetch: () => new Promise((resolve) => answers.push(resolve)),
   });
+  vm.runInContext(SPRING_SRC, ctx);
   vm.runInContext(SRC, ctx);
   const D = window.HBDeskClient;
   const reply = (orderId) => answers.shift()({ status: 200,

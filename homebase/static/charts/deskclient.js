@@ -9,6 +9,7 @@
 (() => {
 'use strict';
 const T = window.HBTrade;
+const M = window.HBSpring;   // the feel pass (2026-09-28): toast()'s own materialize()/dematerialize()
 const TOAST_MS = { ok: 5000, err: 10000, warn: 0 }, TOAST_MAX = 5;   // 0: a warning ("check it") stays until dismissed
 const HISTORY_TTL = 60000, HISTORY_RETRY = { 503: 30000, other: 60000 };
 const desk = { state: null, down: 'connecting to the desk', quotes: {}, prefs: loadPrefs() };
@@ -137,15 +138,24 @@ function toast(tone, text) {
   msg.textContent = text;
   x.type = 'button'; x.className = 'toast-x'; x.setAttribute('aria-label', 'Dismiss');
   x.innerHTML = window.HBIcons.x;   // our own static SVG string
-  x.onclick = () => el.remove();
+  x.onclick = () => M.dematerialize(el, () => el.remove());
   el.append(msg, x);
   root.prepend(el);
-  while (root.children.length > TOAST_MAX) {   // the oldest goes first -- a "check it" warning only when nothing else can
-    const old = [...root.children].reverse().find((n) => !n.classList.contains('warn')) || root.lastChild;
-    old.remove();
+  M.materialize(el, 'right top');   // the toasts column is pinned top-right (charts.css .toasts)
+  // Eviction now animates out (dematerialize), so a removal is no longer synchronous the way `.remove()` was
+  // -- re-checking `root.children.length` in a `while` here would spin forever (it never shrinks within this
+  // same tick). Decide every victim from ONE snapshot instead: oldest-first, a "check it" warning only once
+  // nothing else is left to take its place -- same rule as before, just computed all at once, not spun in a
+  // loop over a count that dematerialize will only actually shrink later.
+  const excess = root.children.length - TOAST_MAX;
+  if (excess > 0) {
+    const oldestFirst = [...root.children].reverse();
+    const victims = [...oldestFirst.filter((n) => !n.classList.contains('warn')), ...oldestFirst.filter((n) => n.classList.contains('warn'))]
+      .slice(0, excess);
+    for (const v of victims) M.dematerialize(v, () => v.remove());
   }
   const ms = TOAST_MS[tone] ?? 6000;
-  if (ms > 0) setTimeout(() => el.remove(), ms);
+  if (ms > 0) setTimeout(() => M.dematerialize(el, () => el.remove()), ms);
 }
 
 /* The desk's state as the page sees it: the paper accounts (the chart service's own paper books, HBPaperClient)

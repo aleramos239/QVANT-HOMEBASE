@@ -1134,6 +1134,55 @@ input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-o
   .hbpanel-head { background: var(--pill); backdrop-filter: none; -webkit-backdrop-filter: none; border-top-color: var(--border); }
 }
 
+/* ---- enter/exit (2026-09-28 feel pass) ----
+   Every surface here rides the SAME `[data-motion]` attribute for both directions (spatial consistency:
+   enter and exit are the same transform/opacity/blur delta, just played forwards or backwards -- the
+   apple-design skill's "enter and exit along the same path"), toggled by HBSpring.materialize()/
+   dematerialize() (spring.js) from app.js's openMenu/closeMenu/openDialog/closeDialog, deskclient.js's
+   toast(), and the draw-toolbar/replay-bar's own build/teardown. CSS transitions, not a JS spring: none of
+   these are ever grabbed and re-dragged mid-animation the way a floating panel is, so Emil Kowalski's "use
+   transitions over keyframes for interruptible UI" is the simpler, cheaper, equally-correct tool here
+   (design-eng skill; see the audit doc's design-decision note). Critically damped shape throughout -- no
+   overshoot; bounce is reserved for gesture-driven motion, and nothing here is one. Exit is faster than
+   enter (Emil Kowalski: "release should always be snappy"). */
+.menu, .hotkey-box, .toast, .draw-toolbar, .replay-bar {
+  opacity: 1; transform: scale(1); filter: blur(0);
+  transition: opacity 160ms var(--ease-spring-out), transform 160ms var(--ease-spring-out),
+    filter 160ms var(--ease-spring-out), backdrop-filter 160ms var(--ease-spring-out);
+}
+.menu[data-motion], .hotkey-box[data-motion], .toast[data-motion], .draw-toolbar[data-motion], .replay-bar[data-motion] {
+  opacity: 0; transform: scale(.95); filter: blur(4px);
+}
+.menu[data-motion="leave"], .hotkey-box[data-motion="leave"], .toast[data-motion="leave"],
+.draw-toolbar[data-motion="leave"], .replay-bar[data-motion="leave"] {
+  transition-duration: 120ms; transition-timing-function: var(--ease-spring-in);
+}
+
+/* the dialog's dimming scrim: a plain opacity fade -- it's a dimming device, not a material (apple-design
+   skill's "dim to focus" is explicitly not vibrancy/translucency-as-hierarchy) */
+.backdrop { opacity: 1; transition: opacity 160ms var(--ease-spring-out); }
+.backdrop[data-motion] { opacity: 0; }
+.backdrop[data-motion="leave"] { transition-duration: 120ms; transition-timing-function: var(--ease-spring-in); }
+
+/* the dialog box itself: same materialize shape, always center-anchored (Emil Kowalski's one named exception
+   to "popovers scale from their trigger" -- a modal isn't anchored to anything, it's centered) */
+.dialog {
+  opacity: 1; transform: scale(1); filter: blur(0);
+  transition: opacity 180ms var(--ease-spring-out), transform 180ms var(--ease-spring-out),
+    filter 180ms var(--ease-spring-out), backdrop-filter 180ms var(--ease-spring-out);
+}
+.dialog[data-motion] { opacity: 0; transform: scale(.96); filter: blur(6px); }
+.dialog[data-motion="leave"] { transition-duration: 130ms; transition-timing-function: var(--ease-spring-in); }
+
+@media (prefers-reduced-motion: reduce) {
+  /* a short opacity cross-fade only -- no scale, no blur, no springs/bounce (apple-design + design-eng skills) */
+  .menu, .hotkey-box, .toast, .draw-toolbar, .replay-bar, .backdrop, .dialog {
+    transition-property: opacity; transition-duration: 150ms; transition-timing-function: ease;
+  }
+  .menu[data-motion], .hotkey-box[data-motion], .toast[data-motion], .draw-toolbar[data-motion],
+  .replay-bar[data-motion], .dialog[data-motion] { transform: none; filter: none; }
+}
+
 /* ---- Bar Replay start popover: a date field + time field, a month calendar, and quick times ---- */
 .menu.replay-menu { width: 300px; padding-bottom: 8px; }
 .rp-fields { display: grid; grid-template-columns: 1fr 104px; gap: 8px; padding: 4px 12px 8px; }
