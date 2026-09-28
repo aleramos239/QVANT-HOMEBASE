@@ -461,6 +461,108 @@ def test_after_the_accept_window_a_late_start_still_never_fires(tmp_path):
     assert not any(e["event"] in ("timer_fired", "dry_run", "placed") for e in ev)
 
 
+# --- loud: a late fire and a miss are kept in the timer status, with why (the pill, readiness)
+def test_the_status_keeps_a_fires_lateness_and_why(tmp_path):
+    timer, engine, md, clock = mk(tmp_path, md=TapeMD(snapshot={"NQ": 24619.0}))
+    at(clock, 9, 31, 4, 250000); run(timer.tick())               # a restart at 09:31:04.25
+    st = timer.status()["strategies"]["nq930"]
+    assert {k: st[k] for k in ("stage", "anchor", "late", "late_s", "reason")} == \
+        {"stage": "fired", "anchor": 24619.0, "late": True, "late_s": 64.25, "reason": "late_start"}
+
+    root = tmp_path / "on-time"
+    root.mkdir()
+    timer, engine, md, clock = mk(root)
+    _drive_to_fire(timer, clock)
+    st = timer.status()["strategies"]["nq930"]
+    assert (st["stage"], st["late"], st["late_s"], "reason" in st) == ("fired", False, 0.0, False)
+
+
+def _missed(root):
+    return [(e["strategy"], e["reason"], e["late_s"], e["window_end"])
+            for e in events(root) if e["event"] == "timer_missed"]
+
+
+def test_a_missed_window_says_why_in_the_status_and_the_journal_once_a_day(tmp_path):
+    """The desk down through the accept window: missed, with why (late_start: it came up after
+    the window) and late_s -- journaled ONCE, however often it restarts that day."""
+    for hh, mm in ((11, 0), (14, 19), (23, 3)):                  # three restarts, one day
+        timer, engine, md, clock = mk(tmp_path, armed=True)
+        at(clock, hh, mm); run(timer.tick())
+        st = timer.status()["strategies"]["nq930"]
+        assert (st["stage"], st["reason"], st["late_s"]) == ("missed", "late_start", 5400.0), (hh, mm)
+    assert _missed(tmp_path) == [("nq930", "late_start", 5400.0, "09:45")]
+    assert md.subs == [] and engine.adapters["main"].brackets == []
+
+
+def test_a_miss_says_whether_it_was_switched_on_late_or_never_reached_in_time(tmp_path):
+    timer, engine, md, clock = mk(tmp_path)
+    at(clock, 9, 21); run(timer.tick())                          # nq930 gated
+    _add_ym(engine)                                              # ym930 switched on at 10:00
+    at(clock, 10, 0); run(timer.tick())                          # nq930: the loop stalled 09:21 -> 10:00
+    st = timer.status()["strategies"]
+    assert (st["nq930"]["stage"], st["nq930"]["reason"]) == ("missed", "window_closed")
+    assert (st["ym930"]["stage"], st["ym930"]["reason"]) == ("missed", "late_switch_on")
+    assert sorted(_missed(tmp_path)) == [("nq930", "window_closed", 1800.0, "09:45"),
+                                         ("ym930", "late_switch_on", 1800.0, "09:45")]
+
+
+@pytest.mark.parametrize("status", ["placed", "live", "done"])
+def test_a_restart_after_the_window_on_a_day_that_acted_is_done_not_missed(tmp_path, status):
+    """Live 2026-09-28: nq930 fired at 09:30, the desk restarted at 09:45:31 and journaled
+    timer_missed for it. Now a problem, that would be a false alarm: it is done, quietly."""
+    timer, engine, md, clock = mk(tmp_path, armed=True)
+    engine._state("nq930", "main").status = status
+    at(clock, 9, 45, 31); run(timer.tick())
+    assert timer.status()["strategies"]["nq930"]["stage"] == "done"
+    assert _missed(tmp_path) == [] and not any(e["event"] == "timer_deferred" for e in events(tmp_path))
+
+
+def test_a_restart_after_the_window_keeps_what_the_earlier_run_decided(tmp_path):
+    """A fire that placed nothing (disarmed here; live nq930_1030 has no book, so the engine
+    refuses it), a chop day, an error: a restart after the window keeps what the earlier run
+    decided, from today's journal -- never 'missed', nothing journaled again. A prestage's
+    account-level skip decides nothing."""
+    timer, engine, md, clock = mk(tmp_path, md=TapeMD(snapshot={"NQ": 24619.0}))
+    at(clock, 9, 31, 4, 250000); run(timer.tick())               # nq930 fires late: a dry run
+    engine.journal("timer_skipped", strategy="es930", reason="gate_chop", adx=14.24)
+    engine.journal("timer_error", strategy="rty930", error="no fresh trade for the anchor")
+    engine.journal("timer_skipped", strategy="cl930", reason="manual_position", account="main")
+    before = len(events(tmp_path))
+    timer, engine, md, clock = mk(tmp_path, md=TapeMD())          # the desk restarts after the window
+    for extra in ("es930", "rty930", "cl930"):
+        timer.cfg.strategies[extra] = StrategyCfg(symbol="ES", qty=1, offset_pts=5.0, sl_pts=2.0,
+                                                  tp_pts=6.0, enabled=True, self_fire=True)
+    at(clock, 11, 0); run(timer.tick())
+    st = timer.status()["strategies"]
+    assert {k: st["nq930"][k] for k in ("stage", "anchor", "late", "late_s", "reason")} == \
+        {"stage": "fired", "anchor": 24619.0, "late": True, "late_s": 64.25, "reason": "late_start"}
+    assert (st["es930"]["stage"], st["es930"]["gate"], st["es930"]["adx"]) == ("skipped", False, 14.24)
+    assert (st["rty930"]["stage"], st["rty930"]["error"]) == ("error", "no fresh trade for the anchor")
+    assert (st["cl930"]["stage"], st["cl930"]["reason"]) == ("missed", "late_start")
+    assert [(e["event"], e["strategy"]) for e in events(tmp_path)[before:]] == [("timer_missed", "cl930")]
+
+
+def test_a_killed_day_after_the_window_is_skipped_not_missed(tmp_path):
+    timer, engine, md, clock = mk(tmp_path, armed=True)
+    engine.kill_today("nq930")
+    at(clock, 11, 0); run(timer.tick())
+    st = timer.status()["strategies"]["nq930"]
+    assert (st["stage"], st["killed"]) == ("skipped", True) and _missed(tmp_path) == []
+
+
+def test_a_mangled_journal_still_says_the_miss(tmp_path):
+    """Bad bytes, a torn line, lines that are no object, yesterday's outcome: none decides
+    today, none crashes the timer."""
+    (tmp_path / "journal.jsonl").write_bytes(
+        b'\xff\xfe{"et": "2026-09-14T09:30:00", "event": "timer_\n[1]\nnull\n"timer_fired"\n'
+        b'{"et": "2026-09-11T09:30:00-04:00", "event": "timer_fired", "strategy": "nq930"}\n')
+    timer, engine, md, clock = mk(tmp_path, armed=True)
+    at(clock, 11, 0); run(timer.tick())
+    assert timer.status()["strategies"]["nq930"]["stage"] == "missed"
+    lines = (tmp_path / "journal.jsonl").read_text(errors="replace").splitlines()
+    assert [json.loads(l)["reason"] for l in lines if '"timer_missed"' in l] == ["late_start"]
+
+
 def test_a_late_fire_goes_out_as_its_anchor_is_read_not_behind_a_later_stage(tmp_path):
     """A restart at 09:31: nq930 gates, stages and fires late; ym930 stages after it and its
     subscription takes 1.5 s. nq930's orders are out at 09:31:00, on NQ's price then."""

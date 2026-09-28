@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import json
 import sys
 import time
 from typing import Callable
@@ -61,6 +62,35 @@ MIN_GATE_BARS = 110        # RMA needs history to converge: at 119 bars the
 PRESTAGE_READ_S = 2.0      # every booked account's position, read concurrently, at most this long
 PRESTAGE_MARGIN_S = 0.5    # ...and never closer than this to 09:30:00 (ruling P6)
 
+# why a fire was late, or a day missed, in plain words (the review, readiness; the
+# charts pill, homebase/static/charts/trade.js, keeps the same words)
+LATE_WHY = {"late_start": "the desk started after the open",
+            "late_switch_on": "it was switched on after the open",
+            "late_stage": "it was not staged by the open"}
+MISS_WHY = {"late_start": "the desk started after the accept window closed",
+            "late_switch_on": "it was switched on after the accept window closed",
+            "window_closed": "the accept window closed before it could fire"}
+# a timer outcome in the journal -> the stage it leaves (after a restart: what stands)
+DECIDED = {"timer_fired": "fired", "timer_skipped": "skipped", "timer_error": "error",
+           "timer_deferred": "done", "timer_missed": "missed"}
+
+
+def fire_clock(late_s) -> str:
+    """09:30:00 + late_s as the fire's ET wall time to the second: "9:31:04"."""
+    s = FIRE_T.hour * 3600 + FIRE_T.minute * 60 + FIRE_T.second + int(float(late_s or 0))
+    return f"{s // 3600}:{s % 3600 // 60:02d}:{s % 60:02d}"
+
+
+def late_why(reason, late_s) -> str:
+    """A late fire's reason in plain words: "the fire ran 2.1 s late"."""
+    if reason == "late_fire":
+        return f"the fire ran {float(late_s or 0):.1f} s late"
+    return LATE_WHY.get(reason, f"it fired {float(late_s or 0):.1f} s past the open")
+
+
+def miss_why(reason) -> str:
+    return MISS_WHY.get(reason, "its accept window closed before it fired")
+
 
 def _et_ms(ts) -> str | None:
     """unix seconds -> ET "HH:MM:SS.mmm"; None when it is no usable instant."""
@@ -95,6 +125,7 @@ class SelfTimer:
         self._gate_attempt: float = 0.0
         self.days: dict = {}          # date -> {strategy: state dict}
         self._up_at: dt.datetime | None = None   # this timer's first tick: the desk came up
+        self._decided_day: tuple = (None, {})     # (date, today's journaled outcomes): _decided
 
     def now_et(self) -> dt.datetime:
         return self._now().astimezone(ET)
@@ -185,9 +216,7 @@ class SelfTimer:
         end = _hhmm(s.accept_until_et)
         if t > end:
             if st["stage"] in ("idle", "gated", "staged"):
-                st["stage"] = "missed"
-                self.engine.journal("timer_missed", strategy=name,
-                                    at=str(t), window_end=s.accept_until_et)
+                self._closed(name, s, st, date)
             sub = self._subs.pop(s.symbol, None)
             if sub is not None and self._md is not None:
                 await self._md.unsubscribe_quote(sub)
@@ -260,15 +289,17 @@ class SelfTimer:
                     **({"reason": self._late_why(st, fire_at)} if late else {}),
                     "anchor_source": "current" if late else "pre_open",
                     **self._stamps(sub, cut)}
+            lateness = {k: info[k] for k in ("late", "late_s", "reason") if k in info}
             # freshness on the timer's own clock: the wall clock the pushes are received on
             if px is None or now.timestamp() - seen > QUOTE_MAX_AGE_S:
                 st.update(stage="error",
                           error=("no fresh trade for the anchor" if late else
-                                 "no fresh trade received before 09:30:00 for the anchor"))
+                                 "no fresh trade received before 09:30:00 for the anchor"),
+                          **lateness)
                 self.engine.journal("timer_error", strategy=name,
                                     error=st["error"], **info)
                 return
-            st.update(anchor=px, stage="fired")
+            st.update(anchor=px, stage="fired", **lateness)   # a late one shows loud (status)
             return self._fire(name, s, px, info)   # tick() fires all due at once
 
     def _late_why(self, st, fire_at) -> str:
@@ -286,6 +317,70 @@ class SelfTimer:
             return "late_stage"
         return ("late_switch_on" if self._up_at is not None and self._up_at <= fire_at
                 else "late_start")
+
+    def _closed(self, name, s, st, date) -> None:
+        """The accept window closed on a strategy this timer never fired,
+        skipped or deferred today. A day that acted is done, a killed one
+        skipped; after a restart, what the desk's earlier run decided (today's
+        journal) stands, unsaid again. Only a day nothing decided is MISSED --
+        with why (late_start: the desk came up after the window; late_switch_on:
+        first seen after it; window_closed: known in time, never fired: a
+        stall, a gate retry) -- journaled once per strategy per day."""
+        if self.engine.day_status(name) != "idle":
+            st["stage"] = "done"
+            return
+        if self.engine.killed_today(name):
+            st.update(stage="skipped", killed=True)
+            return
+        e = self._decided(date).get(name)
+        if e is not None:
+            st.update(stage=DECIDED[e["event"]],
+                      **{k: e[k] for k in ("anchor", "late", "late_s", "reason", "error", "adx")
+                         if k in e})
+            if e.get("reason") == "gate_chop":
+                st["gate"] = False
+            elif e.get("reason") == "killed":
+                st["killed"] = True
+            return
+        now = self._now()
+        day = dt.date.fromisoformat(date)
+        fire_at = dt.datetime.combine(day, FIRE_T, tzinfo=ET)
+        end_at = dt.datetime.combine(day, _hhmm(s.accept_until_et), tzinfo=ET)
+        seen = st.get("seen_at")
+        reason = ("late_start" if self._up_at is None or self._up_at > end_at else
+                  "late_switch_on" if seen is not None and seen > _et_ms(end_at.timestamp()) else
+                  "window_closed")
+        late_s = round(now.timestamp() - fire_at.timestamp(), 3)
+        st.update(stage="missed", reason=reason, late_s=late_s)
+        self.engine.journal("timer_missed", strategy=name, reason=reason,
+                            at=_et_ms(now.timestamp()), late_s=late_s,
+                            window_end=s.accept_until_et)
+
+    def _decided(self, date: str) -> dict:
+        """strategy -> today's last timer outcome in the journal (fired,
+        skipped, error, deferred, missed), read once per date -- only ever
+        after an accept window closed. A prestage's account-level skip decides
+        nothing. An unreadable journal decides nothing either, and never
+        raises into the timer."""
+        if self._decided_day[0] != date:
+            out: dict = {}
+            try:
+                p = self.engine.journal_path
+                for line in (p.read_text(errors="replace").splitlines() if p.exists() else ()):
+                    if '"timer_' not in line:
+                        continue
+                    try:
+                        e = json.loads(line)
+                    except ValueError:
+                        continue
+                    if isinstance(e, dict) and e.get("event") in DECIDED and e.get("strategy") \
+                            and str(e.get("et", "")).startswith(date) \
+                            and not (e["event"] == "timer_skipped" and e.get("account")):
+                        out[str(e["strategy"])] = e
+            except Exception as ex:  # noqa: BLE001 — a missed day is said, never a crash
+                print(f"homebase timer: reading today's journal failed: {ex!r}", file=sys.stderr)
+            self._decided_day = (date, out)
+        return self._decided_day[1]
 
     def _stamps(self, sub, cut) -> dict:
         """The anchor's push (the one last(sub, before=cut) answers from) and the

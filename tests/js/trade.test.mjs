@@ -419,7 +419,6 @@ test('algo badge: the state pill from the bot view', () => {
   assert.equal(pill({ day_status: 'idle', timer: { stage: 'staged', gate: true, adx: 30 } }).state, 'armed');
   const chop = pill({ day_status: 'idle', timer: { stage: 'skipped', gate: false, adx: 14.24 } });
   assert.deepEqual([chop.state, chop.tip], ['skipped', 'Skipped today — CHOP ADX 14.2']);
-  assert.equal(pill({ day_status: 'idle', timer: { stage: 'missed' } }).state, 'skipped');
   assert.equal(pill({ day_status: 'idle', timer: null }).state, 'idle');
   assert.equal(pill({ day_status: 'done', killed: true }).state, 'killed');
   assert.equal(pill({ day_status: 'idle', timer: { stage: 'skipped', killed: true } }).state, 'killed');
@@ -431,6 +430,43 @@ test('algo badge: the state pill from the bot view', () => {
   assert.deepEqual([ck.state, ck.text, ck.tone], ['check it', 'CHECK IT', 'warn']);
   assert.match(ck.tip, /stops were left working/);
   assert.match(ck.tip, /verify the position/);
+});
+
+test('algo badge: a late fire is loud all day -- amber, "· late", when and why first in the tip', () => {
+  const pill = (patch) => T.botPill(botState(patch).bot.strategies.nq930);
+  const late = (reason, lateS) => ({ stage: 'fired', gate: true, adx: 30, anchor: 24619, late: true, late_s: lateS, reason });
+  const armed = pill({ day_status: 'placed', timer: late('late_start', 64.25) });
+  assert.deepEqual([armed.state, armed.text, armed.tone], ['armed', 'armed · late', 'warn']);
+  assert.equal(armed.tip, 'Fired late at 9:31:04 · the desk started after the open — Its entry orders are working, waiting for a fill');
+  assert.equal(pill({ day_status: 'live', timer: late('late_fire', 2.1) }).tip,
+    'Fired late at 9:30:02 · the fire ran 2.1 s late — In a position, its stop and target working');
+  assert.deepEqual(['placing', 'done'].map((d) => pill({ day_status: d, timer: late('late_stage', 3) }).text),
+    ['placing · late', 'done · late']);
+  assert.match(pill({ day_status: 'done', timer: late('late_switch_on', 180) }).tip,
+    /^Fired late at 9:33:00 · it was switched on after the open — /);
+  assert.match(pill({ day_status: 'done', timer: late('late_stage', 3) }).tip, /· it was not staged by the open — /);
+  // journaled only (disarmed) or refused: the day stays idle -- still amber, and says nothing was placed
+  const dry = pill({ day_status: 'idle', timer: late('late_start', 64.25) });
+  assert.deepEqual([dry.state, dry.tone, dry.tip],
+    ['fired late', 'warn', 'Fired late at 9:31:04 · the desk started after the open — nothing placed']);
+  // on time: exactly as before
+  const onTime = pill({ day_status: 'placed', timer: { stage: 'fired', gate: true, late: false, late_s: 0.002 } });
+  assert.deepEqual([onTime.text, onTime.tone], ['armed', 'live']);
+  assert.equal(pill({ day_status: 'idle', timer: { stage: 'fired', late: false, late_s: 0 } }).state, 'idle');
+  // error, killed and CHECK IT keep their say over a late fire
+  assert.equal(pill({ day_status: 'error', timer: late('late_start', 64) }).state, 'error');
+  assert.equal(pill({ day_status: 'placed', killed: true, timer: late('late_start', 64) }).state, 'killed');
+});
+
+test('algo badge: a missed window is amber and says why, not a grey "skipped"', () => {
+  const pill = (patch) => T.botPill(botState(patch).bot.strategies.nq930);
+  const missed = (reason) => pill({ day_status: 'idle', timer: { stage: 'missed', reason, late_s: 5400 } });
+  assert.deepEqual([missed('late_start').state, missed('late_start').text, missed('late_start').tone],
+    ['missed', 'missed', 'warn']);
+  assert.equal(missed('late_start').tip, 'Missed today: the desk started after the accept window closed');
+  assert.equal(missed('late_switch_on').tip, 'Missed today: it was switched on after the accept window closed');
+  assert.equal(missed('window_closed').tip, 'Missed today: the accept window closed before it could fire');
+  assert.equal(missed(undefined).tip, 'Missed today: its accept window closed before it fired');   // older desks
 });
 
 test('algo badge: today\'s P&L -- realized, plus an open trade at the last price', () => {
