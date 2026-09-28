@@ -292,7 +292,10 @@ a { color: inherit; }
 .sb-desk-link { color: var(--accent); text-decoration: none; }
 .sb-desk-link:hover { text-decoration: underline; }
 #sbRec.warn { color: var(--warn); }
-.sb-credit { color: var(--text-2); text-decoration: none; }
+/* the Lightweight Charts attribution its licence NOTICE asks for (a TradingView link on the page): a small
+   Lucide info icon now, the full credit in its tooltip -- never removed */
+.sb-credit { color: var(--text-2); text-decoration: none; display: inline-flex; align-items: center; }
+.sb-credit svg { width: 14px; height: 14px; }
 .sb-credit:hover { color: var(--text); text-decoration: underline; }
 @media (max-width: 760px) { .sb-opt { display: none; } }
 
