@@ -170,6 +170,24 @@ def test_nothing_is_ever_dropped_inside_the_fire_guard(tmp_path):
         assert calls == [] and ad._ws.closed == 0
 
 
+def test_a_renewal_whose_answer_lands_in_the_fire_guard_keeps_the_socket(tmp_path):
+    """Decided at 09:27:59 (outside the guard), answered at 09:28:00.4 (a slow renewal):
+    the token rolls, but the socket is NOT dropped inside the guard -- it keeps its old,
+    still valid token until that expires."""
+    ad, calls = mkadapter(tmp_path, at(9, 27, 59), at(9, 33))
+    clock = {"now": at(9, 27, 59)}
+    ad._now = lambda: clock["now"]
+    rolled = ad._auth.refresh
+
+    def slow():
+        clock["now"] = at(9, 28) + dt.timedelta(milliseconds=400)
+        return rolled()
+
+    ad._auth.refresh = slow
+    assert run(ad._renew_if_needed()) is False
+    assert ad._auth.access_token == "new1" and ad._ws.closed == 0
+
+
 def test_a_failed_renewal_drops_nothing(tmp_path):
     ad, calls = mkadapter(tmp_path, at(9, 15), at(9, 40), refresh_error="HTTP 502")
     with pytest.raises(RuntimeError, match="502"):

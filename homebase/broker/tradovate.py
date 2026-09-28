@@ -67,7 +67,9 @@ def renewal_due(now: dt.datetime, expires_at: float) -> tuple[bool, str]:
                    could miss the fire (the rebuild takes up to ~5 s, and a failed one backs off
                    5 minutes) or cut the acks. A token that still expires in here -- every
                    renewal since 09:10 having failed -- dies at its expiry and the supervisor
-                   rebuilds the socket (renewing, else logging in).
+                   rebuilds the socket (renewing, else logging in). A renewal decided before
+                   09:28 whose answer lands inside the guard keeps the socket on its old token
+                   (_renew_if_needed): still valid until it expires, then rebuilt on the new.
       An unknown expiry is never renewed inside the quiet window.
     Any other time, and weekends: the normal rule, < RENEW_BUFFER_S left ("normal")."""
     et = now.astimezone(ET)
@@ -84,6 +86,11 @@ def renewal_due(now: dt.datetime, expires_at: float) -> tuple[bool, str]:
                 and expires_at - RENEW_BUFFER_S < carry:
             return True, "early"
     return expires_at - et.timestamp() < RENEW_BUFFER_S, "normal"
+
+
+def in_fire_guard(now: dt.datetime) -> bool:
+    et = now.astimezone(ET)
+    return et.weekday() < 5 and RENEW_FIRE_GUARD[0] <= et.time() < RENEW_FIRE_GUARD[1]
 
 
 def reconnect_buffer_s(now: dt.datetime) -> float:
@@ -1128,6 +1135,18 @@ class TradovateAdapter(BrokerAdapter):
         await asyncio.to_thread(self._auth.refresh)
         after = self._auth.access_token
         if after and after != before and self._ws:
+            landed = self._now()
+            if in_fire_guard(landed):
+                # the answer came late (a slow renewal, a login fallback) and landed inside
+                # the fire guard: never a drop there. The socket keeps its old token, valid
+                # until it expires; Tradovate then closes it and the supervisor rebuilds it
+                # on the new one, no login needed.
+                self.audit({"event": "token_renewed", "account": self.account_id, "why": why,
+                            "socket_kept": True})
+                _log(f"{self.account_id}: token renewed at {clock} ({why}), answered at "
+                     f"{landed.astimezone(ET).strftime('%H:%M:%S')} ET inside the fire guard "
+                     "— the socket stays on its old token until it expires")
+                return False
             self.audit({"event": "token_renewed", "account": self.account_id, "why": why})
             _log(f"{self.account_id}: token renewed at {clock} ({why}) — rebuilding the socket")
             try:
