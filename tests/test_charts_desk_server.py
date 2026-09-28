@@ -6,16 +6,18 @@ import asyncio
 import datetime as dt
 import json
 import queue
+import threading
 
 import httpx
 import pytest
 from fastapi.testclient import TestClient
 from starlette.middleware.cors import CORSMiddleware
 
+from homebase.charts import server
 from homebase.charts.desk import NO_LINK, DeskLink
 from homebase.charts.server import create_app
 from tests.charts_util import D, rows, session_ms
-from tests.test_charts_server import archive, next_of
+from tests.test_charts_server import archive, next_of, next_within
 
 KEY = "cd" * 32
 BASE_URL = "http://127.0.0.1:8852"      # the Host guard refuses TestClient's default "testserver"
@@ -100,6 +102,33 @@ def test_desk_state_fans_out_to_the_page(tmp_path):
         else:
             raise AssertionError("no desk state reached the page")
     assert m["data"]["enabled"] is True
+
+
+def test_a_desk_event_reaches_the_page_as_it_arrives_not_at_the_pump(tmp_path, monkeypatch):
+    """fast-paper: Fanout.publish hands a desk event to every page with room AT ONCE; the pump's desk_fan.flush() only
+    serves a page that had none. Pinned with the pump stopped (PUMP_S an hour)."""
+    monkeypatch.setattr(server, "PUMP_S", 3600.0)
+    go = threading.Event()
+
+    async def body():
+        yield b'event: state\ndata: {"enabled": true, "accounts": [], "bot": {}}\n\n'
+        while not go.is_set():
+            await asyncio.sleep(0.01)
+        yield b'event: account\ndata: {"id": "sim047", "balance": 1}\n\n'
+        yield b'event: fill\ndata: {"account": "sim047", "fill": {"order_id": "9"}}\n\n'
+        await asyncio.Event().wait()
+
+    def handler(req):
+        return httpx.Response(200, content=body(), headers={"content-type": "text/event-stream"})
+
+    kp = key_file(tmp_path)
+    app = live_app(tmp_path, desk_factory=lambda fan: DeskLink(
+        fan, key_path=kp, transport=httpx.MockTransport(handler)))
+    with TestClient(app, base_url=BASE_URL) as c, c.websocket_connect("/ws", headers=WS_HOST) as ws:
+        next_within(ws, "desk", lambda m: m.get("event") == "state")      # the greeting, or the state as it came
+        go.set()                                                         # now the desk sends two more
+        assert next_within(ws, "desk", lambda m: m.get("event") == "account")["data"] == {"id": "sim047", "balance": 1}
+        assert next_within(ws, "desk", lambda m: m.get("event") == "fill")["data"]["fill"] == {"order_id": "9"}
 
 
 def test_quotes_reach_the_page_as_of_the_last_trade(tmp_path):

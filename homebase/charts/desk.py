@@ -133,6 +133,7 @@ class Quotes:
 
     def __init__(self):
         self._q: dict[str, dict] = {}
+        self._at: dict[str, int] = {}        # root -> ts_ms of the row that set its bid/ask (quote_of)
         self._dirty: set[str] = set()
 
     def note(self, root: str, rows: list) -> None:
@@ -143,9 +144,19 @@ class Quotes:
             bid, ask = _f(r.get("bid")), _f(r.get("ask"))
             if bid is not None and ask is not None and bid <= ask:
                 q["bid"], q["ask"] = bid, ask
+                self._at[root] = int(r["ts_ms"])
             q["last"], q["ts_ms"] = float(r["price"]), int(r["ts_ms"])
         self._q[root] = q
         self._dirty.add(root)
+
+    def quote_of(self, root: str) -> Optional[dict]:
+        """{bid, ask, ts_ms} for the paper book's market fills (paperbook.py), or None before any sane bid/ask.
+        ts_ms is the time of the row that SET that bid/ask -- not the last trade's: a later row with no quote keeps
+        the old pair, which is only as fresh as its own row. Read-only: snapshot() and drain() are unchanged."""
+        q, at = self._q.get(root), self._at.get(root)
+        if q is None or at is None:
+            return None
+        return {"bid": q["bid"], "ask": q["ask"], "ts_ms": at}
 
     def snapshot(self) -> dict:
         return {r: dict(q) for r, q in self._q.items()}

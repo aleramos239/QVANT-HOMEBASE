@@ -55,6 +55,7 @@ from .tickfeed import SwitchInProgress, TickFeed
 
 STATIC = Path(__file__).resolve().parent.parent / "static"
 PUMP_S = 0.25                 # <= 4 updates a second per chart
+PAPER_PUSH_GAP_S = 0.05       # a PAPER account change reaches the pages at once, at most one push per 50 ms
 STATUS_S = 2.0                # a status to every page this often (the page greys it after 6 s without)
 CLOSE_GRACE_MS = 1500         # a time bar closes this long after its end if no tick closed it
 ROLL_GRACE_MS = 60_000        # a 24/7 root rolls at 18:00 with no dead hour: its old session's last
@@ -361,6 +362,33 @@ class Conn:
             self.dead = True
 
 
+class Throttle:
+    """fn() soon after kick(), at most once every `gap_s` (fast-paper: the PAPER accounts' push). The first kick
+    after a quiet spell runs it on the loop's next turn -- never inside the caller, so the tick path and a POST
+    return first; a kick inside the gap schedules ONE trailing run at the gap's end, which every later kick joins.
+    No running loop (a direct call from a test): nothing is scheduled -- the pump's own check is the backstop."""
+
+    def __init__(self, fn, gap_s: float):
+        self.fn, self.gap_s = fn, gap_s
+        self.last = -math.inf           # when fn last ran (time.monotonic, the asyncio loop's own clock)
+        self.handle = None              # its scheduled run, while one is pending
+
+    def kick(self) -> None:
+        if self.handle is not None:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        wait = self.last + self.gap_s - time.monotonic()
+        self.handle = loop.call_later(wait, self._run) if wait > 0 else loop.call_soon(self._run)
+
+    def _run(self) -> None:
+        self.handle = None
+        self.last = time.monotonic()
+        self.fn()
+
+
 def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | None = None,
                speed: float = 10.0, start_et: dt.time = dt.time(9, 25), feed_factory=None,
                now_ms=None, state: Path | None = None, calendar_fetch=None,
@@ -406,14 +434,28 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                         backtest_file=sd / "paper" / "backtest.json",
                         busy=lambda: PAPER_ROOT in refill_running or PAPER_ROOT in refill_pending, log=log)
     paper_job: list = []
+    quotes = Quotes()                     # bid/ask per root for the Buy/Sell buttons (desk.py) -- and, while fresh,
+                                          # the price a PAPER market order fills at (paperbook.py, quote_of)
+
+    def push_paper() -> None:
+        """The PAPER accounts to every page, when they changed. Run by paper_push only: at once on a change, at most
+        one push per PAPER_PUSH_GAP_S; the pump's dirty check is the backstop. (fan and book: defined below.)"""
+        try:
+            if book is not None and book.dirty:
+                fan(book.message())
+        except Exception as e:  # noqa: BLE001 — a push must never take the service down
+            log(f"paper push: {type(e).__name__}: {e}")
+
+    paper_push = Throttle(push_paper, PAPER_PUSH_GAP_S)
     # the PAPER account (paperbook.py, Task 2): the page trades it like a desk account; the backtester's fill law
     # on the live prints below, persisted to paper/book.jsonl. Live only -- a replay has none (its routes answer
     # 503), so a replayed price never fills it and never touches the saved book. It never reaches the desk.
     # Task 2b: several paper accounts, each its own book (the first, "paper", keeps paper/book.jsonl untouched)
-    book = None if replay else PaperBooks(sd / "paper", roots=roots, clock_ms=lambda: clock(), log=log)
+    # fast-paper: a Market fills at the quote at once (quote_of); every change is pushed at once (on_change)
+    book = None if replay else PaperBooks(sd / "paper", roots=roots, clock_ms=lambda: clock(), log=log,
+                                          quote_of=quotes.quote_of, on_change=paper_push.kick)
     recorder = None if replay else LiveRecorder(base)
     conns: set[Conn] = set()
-    quotes = Quotes()                     # bid/ask per root for the Buy/Sell buttons (desk.py)
     desk_fan = Fanout()                   # desk events fanned out to every page, bounded per page
 
     def fan(msg: dict) -> None:
@@ -724,9 +766,9 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                     conn.send({**msg, "id": cid})
                 for m in quotes.drain():
                     fan(m)
-                desk_fan.flush()
+                desk_fan.flush()                # only a page that had no room: a desk event goes out as it arrives
                 if book is not None and book.dirty:
-                    fan(book.message())         # the PAPER account changed: every page, like a desk account event
+                    paper_push.kick()           # the backstop: a PAPER change nothing announced still reaches every page
                 replays.pump()
                 chart_error[0] = None
             except Exception as e:  # noqa: BLE001 — the pump must never die

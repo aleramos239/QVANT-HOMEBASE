@@ -11,13 +11,14 @@ import time
 from pathlib import Path
 from urllib.parse import quote
 
+import anyio
 import pytest
 from fastapi import WebSocket, WebSocketDisconnect
 from fastapi.testclient import TestClient
 
 from homebase import symbols
 from homebase.charts.hub import Hub, Stream
-from homebase.charts.server import (MAX_DRAWINGS, MAX_PRESET_BYTES, MAX_TEMPLATE_BYTES, QUIET, Conn,
+from homebase.charts.server import (MAX_DRAWINGS, MAX_PRESET_BYTES, MAX_TEMPLATE_BYTES, QUIET, Conn, Throttle,
                                     check_drawings, check_template_name, create_app)
 from homebase.charts.session import session_range_ms
 from homebase.charts.store import read_table
@@ -32,6 +33,21 @@ def next_of(ws, kind, limit=200):
         if m.get("type") == kind:
             return m
     raise AssertionError(f"no {kind!r} message")
+
+
+def next_within(ws, kind, pred=lambda m: True, within_s=5.0):
+    """The next `kind` message that satisfies pred, or TimeoutError -- never a hang. TestClient's receive has no timeout
+    of its own, so the wait runs on the session's own portal under anyio.fail_after: a test that stops the pump
+    (PUMP_S an hour) must FAIL when a message never comes, not freeze the suite."""
+    async def get():
+        with anyio.fail_after(within_s):
+            while True:
+                raw = await ws._send_rx.receive()
+                ws._raise_on_close(raw)
+                m = json.loads(raw["text"])
+                if m.get("type") == kind and pred(m):
+                    return m
+    return ws.portal.call(get)
 
 
 def archive(tmp_path):
@@ -1736,3 +1752,35 @@ def test_the_host_guard_passes_loopback_and_leaves_the_page_itself_alone(tmp_pat
         # two Host headers are ambiguous: refused
         r = client.get("/api/layouts", headers=[("host", "127.0.0.1:8852"), ("host", "evil.example")])
         assert r.status_code == 403
+
+
+# ---- fast-paper: the PAPER accounts' push, at once and at most once per gap (server.Throttle) -------------------
+def test_the_throttle_runs_on_the_next_loop_turn_then_at_most_once_per_gap_with_one_trailing_run():
+    async def go():
+        loop = asyncio.get_running_loop()
+        ran = []
+        t = Throttle(lambda: ran.append(loop.time()), 0.05)
+        for _ in range(5):
+            t.kick()
+        assert ran == []                                  # never inside the caller: the tick path returns first
+        await asyncio.sleep(0)
+        assert len(ran) == 1                              # ...and it runs on the loop's very next turn
+        for _ in range(5):
+            t.kick()                                      # inside the gap: ONE trailing run, every later kick joins it
+        await asyncio.sleep(0)
+        assert len(ran) == 1
+        await asyncio.sleep(0.15)
+        assert len(ran) == 2 and ran[1] - ran[0] >= 0.045
+        await asyncio.sleep(0.06)                         # a quiet spell: the next kick is at once again
+        t.kick()
+        await asyncio.sleep(0)
+        assert len(ran) == 3
+
+    asyncio.run(go())
+
+
+def test_the_throttle_without_a_running_loop_schedules_nothing():
+    ran = []
+    t = Throttle(lambda: ran.append(1), 0.05)
+    t.kick()                                              # a direct call (a test, a thread): the pump is the backstop
+    assert ran == [] and t.handle is None

@@ -195,6 +195,20 @@ def test_quotes_keep_the_last_sane_bid_ask_and_drain_changes_once():
     assert "ES" not in q.snapshot()
 
 
+def test_quote_of_is_the_last_sane_pair_as_fresh_as_its_own_row():
+    """fast-paper: the paper book's read of the quote. A later row with no (or a crossed) quote keeps the old pair --
+    and must not make it look newer than the row that carried it."""
+    q = Quotes()
+    assert q.quote_of("NQ") is None
+    q.note("NQ", [{"ts_ms": 1, "price": 100.0, "bid": "", "ask": ""}])
+    assert q.quote_of("NQ") is None                                          # a trade, never a quote yet
+    q.note("NQ", [{"ts_ms": 2, "price": 100.0, "bid": 99.75, "ask": 100.0},
+                  {"ts_ms": 3, "price": 100.25, "bid": "", "ask": ""},
+                  {"ts_ms": 4, "price": 100.5, "bid": 100.75, "ask": 100.5}])
+    assert q.quote_of("NQ") == {"bid": 99.75, "ask": 100.0, "ts_ms": 2}
+    assert q.snapshot() == {"NQ": {"bid": 99.75, "ask": 100.0, "last": 100.5, "ts_ms": 4}}   # the desk's shape: unchanged
+
+
 def test_the_chart_service_never_subscribes_quotes():
     """Ruling 2026-09-26: bid/ask come from the ticks. An md quote
     subscription could spend the budget of the login the 9:30 anchor uses."""

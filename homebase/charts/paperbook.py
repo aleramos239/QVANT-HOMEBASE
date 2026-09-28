@@ -7,18 +7,27 @@ or homebase.charts.desk (tests/test_charts_paperbook.py asserts it, transitively
 connection. It is NOT the forward-test runner (paper.py, "paper:<id>" algos, /api/paper/strategies|history):
 that one re-runs a strategy on the prints; this one is an account the viewer trades by hand.
 
-Fill law -- homebase/backtest/engine.py, line for line (cited where each rule is applied):
+Fill law -- homebase/backtest/engine.py, line for line (cited where each rule is applied), with ONE exception:
+  * a MARKET order this book places (an entry, a flatten's or a reverse's close, a reverse's open) fills AT ONCE, on
+    placement, at the chart service's live quote (server.py's Quotes, injected as `quote_of`): a buy at the best
+    ask, a sell at the best bid, no slip -- the price a 1-lot market order really takes (2026-09-27 fast-paper, the
+    user's decision). Only while that quote is fresh (its bid/ask at most QUOTE_FILL_MAX_AGE_S old on this book's
+    clock, at most QUOTE_FILL_MAX_FUTURE_S ahead of it) and sane (bid < ask, both on the tick grid, a spread of at
+    most QUOTE_FILL_MAX_SPREAD_TICKS); otherwise the engine's market rule below applies. Every fill says which law
+    made it: `src` "quote" | "print";
   * a STOP (and a stop-loss) fills on TOUCH -- a buy on the first print >= its price, a sell on the first print
     <= it -- at max(price, print) + slip for a buy, min(price, print) - slip for a sell: a gap costs the gap
     (engine.py L4-7, L295-296, L306);
   * a LIMIT (and a target) needs 1-TICK PENETRATION -- a buy fills only on a print <= price - tick, a sell only on
     one >= price + tick -- AT the limit, no slip (engine.py L8-10, L297-300, L303-304);
-  * a MARKET order fills at the first print after it goes live, +/- slip (engine.py L11, L292-293, L308);
+  * a MARKET order with no usable quote fills at the first print after it goes live, +/- slip (engine.py L11,
+    L292-293, L308);
   * $4 per round turn per contract, charged when a position is reduced (engine.py L98, L373);
-  * slippage 1 tick per side on market and stop fills only (engine.py L99, L267);
+  * slippage 1 tick per side on PRINT fills of market and stop orders only (engine.py L99, L267): the backtester's
+    +1 tick stands in for the print a market order waits for; a quote fill already pays the spread and takes none;
   * every price comparison is `tick_cmp`-tolerant and every price `to_tick`-snapped (engine.py L23-28, L53-67);
   * orders that trigger on the same print fill oldest first; a bracket's SL/TP go live from the print AFTER
-    the entry's (engine.py L13-14, L19, L313-326, L351-357).
+    the entry's -- after a quote fill, from the first print after it (engine.py L13-14, L19, L313-326, L351-357).
 "Goes live": an order accepted between two prints may fill from the next print this book sees (the real-time
 analogue of the engine's min_i with placement_ms = 0). A Stop Limit (the engine has none) triggers like a stop,
 never fills on its trigger print (pessimistic, like the engine's bracket rule), and on the NEXT print fills like a
@@ -81,6 +90,9 @@ MAX_POSITION_QTY = 20             # the desk's per-position cap (trading.py guar
 STOPLIMIT_MAX_TICKS = 100         # the desk's (trading.py check_prices)
 QUOTE_MAX_AGE_S = 30.0            # the desk's (trading.py, not imported): an exit needs a print at most this old
 QUOTE_MAX_FUTURE_S = 5.0          # ...and at most this far ahead of this book's clock
+QUOTE_FILL_MAX_AGE_S = 2.0        # a Market fills at the quote only while its bid/ask are at most this old...
+QUOTE_FILL_MAX_FUTURE_S = 1.0     # ...at most this far ahead of this book's clock (more: the clock is off -- no fill)
+QUOTE_FILL_MAX_SPREAD_TICKS = 20  # ...and at most this wide; otherwise it waits for the next print, as before
 FILLS_KEPT = 50                   # fills in the account view (the desk's FILLS_KEPT)
 DEDUP_TTL_S = 600.0
 ACTIONS = ("order", "modify", "cancel", "exits", "cancel-symbol", "flatten", "reverse")
@@ -248,13 +260,14 @@ class PaperBook:
     def __init__(self, path: Optional[Path], *, roots=(), clock_ms: Callable[[], int] = lambda: int(time.time() * 1000),
                  costs: Optional[Costs] = None, mono: Callable[[], float] = time.monotonic,
                  log: Callable[[str], None] = lambda m: None, account_id: str = PAPER_ID, label: str = LABEL,
-                 start_balance: float = START_BALANCE):
+                 start_balance: float = START_BALANCE, quote_of: Optional[Callable[[str], Optional[dict]]] = None):
         if not is_paper_id(account_id):
             raise ValueError(f"not a paper account id: {account_id!r}")
         self.id, self.label, self.start_balance = account_id, label, float(start_balance)
         self.path = Path(path) if path is not None else None
         self.roots = {r.upper() for r in roots}
         self.clock_ms, self.mono, self.log = clock_ms, mono, log
+        self.quote_of = quote_of                     # root -> {bid, ask, ts_ms} | None (read-only); None: print fills only
         self.costs = costs or Costs()
         self.orders: dict[str, POrder] = {}          # working + held, in the order they went live (engine.orders)
         self.pos: dict[str, dict] = {}               # root -> {symbol, net, avg}
@@ -325,8 +338,9 @@ class PaperBook:
             o.kind, o.min_seq = "triggered", seq + 1
         elif kind == "rest":                         # a triggered Stop Limit whose first print was beyond its limit
             self.orders[ev["id"]].kind = "limit"
-        elif kind == "fill":
-            self._fill(self.orders[ev["id"]], float(ev["price"]), int(ev["ts_ns"]), int(ev["fid"]), seq)
+        elif kind == "fill":                         # a log from before `src` was written: every fill was a print's
+            self._fill(self.orders[ev["id"]], float(ev["price"]), int(ev["ts_ns"]), int(ev["fid"]), seq,
+                       ev.get("src", "print"))
         else:
             raise ValueError(f"unknown event {kind!r}")
 
@@ -337,7 +351,7 @@ class PaperBook:
         for c in [c for c in self.orders.values() if c.parent == oid and c.status == "held"]:
             del self.orders[c.id]                    # an entry cancelled: its bracket legs never go live
 
-    def _fill(self, o: POrder, price: float, ts_ns: int, fid: int, seq: int) -> None:
+    def _fill(self, o: POrder, price: float, ts_ns: int, fid: int, seq: int, src: str = "print") -> None:
         del self.orders[o.id]
         self._fid = max(self._fid, fid)
         pv = point_value(o.root) or 0.0
@@ -370,7 +384,7 @@ class PaperBook:
             c.status, c.min_seq = "working", seq + 1
             self.orders[c.id] = c
         self.fills.append({"id": fid, "order_id": o.id, "symbol": o.symbol, "side": SIDE_NAME[s], "qty": q,
-                           "price": price, "time": _iso(ts_ns), "owner": None, "role": o.role,
+                           "price": price, "time": _iso(ts_ns), "owner": None, "role": o.role, "src": src,
                            **({"pnl": pnl} if pnl is not None else {})})
 
     # ---- prints -------------------------------------------------------------------------------------------
@@ -409,7 +423,7 @@ class PaperBook:
                 continue
             self._fid += 1
             self._do({"ev": "fill", "id": hit.id, "price": self._fill_price(hit, px, tick), "ts_ns": ts_ns,
-                      "fid": self._fid}, seq=s)
+                      "fid": self._fid, "src": "print"}, seq=s)
 
     def _triggers(self, o: POrder, px: float, tick: float) -> bool:
         if o.kind in ("market", "triggered"):                            # engine.py L292-293 (a triggered Stop
@@ -556,6 +570,7 @@ class PaperBook:
         price, trigger, sl, tp = rnd(price), rnd(trigger), rnd(sl), rnd(tp)
         self._check_prices(root, side, typ, price, trigger, sl, tp, tick)
         now = self.clock_ms()
+        qpx = self._quote_px(root, side, now) if typ == "Market" else None
         contract = resolve_contract(root)
         base = {"root": root, "symbol": contract, "side": side, "qty": qty, "placed_ms": now,
                 "session": session_of(now, root)}
@@ -570,6 +585,8 @@ class PaperBook:
             legs.append(POrder(id=self._next_id(), type="Limit", kind="limit", price=tp, trigger=None, tif="GTC",
                                role="tp", parent=eid, oco=eid, status="held", **{**base, "side": -side}))
         self._do({"ev": "place", "orders": [_od(o) for o in (entry, *legs)]}, seq=self.seq.get(root, 0))
+        if qpx is not None:
+            self._quote_fill(entry, qpx, now)        # its bracket legs go live from the next print (_fill)
         return {"ok": True, "order_id": eid, "error": None}
 
     def _check_prices(self, root, side, typ, price, trigger, sl, tp, tick) -> None:
@@ -654,12 +671,45 @@ class PaperBook:
         if ids:
             self._do({"ev": "cancel", "ids": ids})
 
-    def _market(self, root: str, side: int, qty: int, role: str) -> None:
+    def _quote_px(self, root: str, side: int, now_ms: int) -> Optional[float]:
+        """The price a Market order placed now takes at the quote (quote_of): a buy the best ask, a sell the best bid
+        -- or None, and it waits for the next print (the engine's rule), when there is no quote_of or no quote, or
+        it is stale (its bid/ask older than QUOTE_FILL_MAX_AGE_S on this book's clock, or more than
+        QUOTE_FILL_MAX_FUTURE_S ahead of it), crossed or locked (bid >= ask), off the tick grid, or wider than
+        QUOTE_FILL_MAX_SPREAD_TICKS. Reads only: nothing changes here."""
+        q = self.quote_of(root) if self.quote_of is not None else None
+        if not isinstance(q, dict):
+            return None
+        bid, ask, ts = q.get("bid"), q.get("ask"), q.get("ts_ms")
+        if not (_finite(bid) and _finite(ask) and _finite(ts)) or bid <= 0:
+            return None
+        age = now_ms - ts
+        if age > QUOTE_FILL_MAX_AGE_S * 1000 or -age > QUOTE_FILL_MAX_FUTURE_S * 1000:
+            return None
+        tick = tick_size(root)
+        if tick_cmp(bid, to_tick(bid, tick), tick) or tick_cmp(ask, to_tick(ask, tick), tick):
+            return None
+        if tick_cmp(bid, ask, tick) >= 0 or round((ask - bid) / tick) > QUOTE_FILL_MAX_SPREAD_TICKS:
+            return None
+        return to_tick(ask if side > 0 else bid, tick)
+
+    def _quote_fill(self, o: POrder, price: float, now_ms: int) -> None:
+        """A Market order just placed fills at `price` (_quote_px) at this moment on the book's clock -- the same
+        fill event as a print's, `src` "quote"; its bracket legs go live from the next print, as after a print fill."""
+        self._fid += 1
+        self._do({"ev": "fill", "id": o.id, "price": price, "ts_ns": now_ms * 1_000_000, "fid": self._fid,
+                  "src": "quote"}, seq=self.seq.get(o.root, 0))
+
+    def _market(self, root: str, side: int, qty: int, role: str, qpx: Optional[float] = None) -> None:
+        """A Market order to close (or, for a reverse, re-open): it fills at `qpx` at once when the caller read a
+        usable quote (_quote_px), else on the next print."""
         now = self.clock_ms()
         o = POrder(id=self._next_id(), root=root, symbol=(self.pos.get(root) or {}).get("symbol") or resolve_contract(root),
                    side=side, type="Market", kind="market", price=None, trigger=None, qty=qty, role=role,
                    placed_ms=now, session=session_of(now, root))
         self._do({"ev": "place", "orders": [_od(o)]}, seq=self.seq.get(root, 0))
+        if qpx is not None:
+            self._quote_fill(o, qpx, now)
 
     def _exits(self, root: str, sl: Optional[float], tp: Optional[float], expected_net: int) -> dict:
         """The desk's `exits` (trading.py ChartDesk._exits_one, exit_levels), on this book: an SL and/or TP for the
@@ -730,11 +780,13 @@ class PaperBook:
         return {"ok": True, "order_id": None, "error": None}
 
     def _flatten(self, root: str) -> dict:
-        """Cancel every order in the root, then close the position at market (it fills on the next print)."""
+        """Cancel every order in the root, then close the position at market: at the quote at once when it is usable
+        (_quote_px), else on the next print."""
         self._cancel_all(root)
         net = (self.pos.get(root) or {}).get("net", 0)
         if net:
-            self._market(root, -1 if net > 0 else 1, abs(net), "flat")
+            side = -1 if net > 0 else 1
+            self._market(root, side, abs(net), "flat", self._quote_px(root, side, self.clock_ms()))
         return {"ok": True, "order_id": None, "error": None}
 
     def _reverse(self, root: str) -> dict:
@@ -743,10 +795,11 @@ class PaperBook:
             raise Refused(f"no {root} position on {self.label} to reverse")
         if abs(net) > MAX_ORDER_QTY or abs(net) > MAX_POSITION_QTY:
             raise Refused(f"reversing {abs(net)} is over the per-order limit ({MAX_ORDER_QTY})")
-        self._cancel_all(root)
         side = -1 if net > 0 else 1
-        self._market(root, side, abs(net), "flat")       # the close, then the open: both on the next print, in order
-        self._market(root, side, abs(net), "entry")
+        qpx = self._quote_px(root, side, self.clock_ms())   # ONE read for both legs: both fill at it, or both wait
+        self._cancel_all(root)
+        self._market(root, side, abs(net), "flat", qpx)  # the close, then the open: at the quote now, or both on the
+        self._market(root, side, abs(net), "entry", qpx)  # next print, in order
         return {"ok": True, "order_id": str(self._id), "error": None}
 
     # ---- what the page sees (the desk's account_view shape: trading.py ChartDesk.account_view) -----------------
@@ -780,10 +833,15 @@ class PaperBooks:
 
     def __init__(self, dir: Optional[Path], *, roots=(), clock_ms: Callable[[], int] = lambda: int(time.time() * 1000),
                  costs: Optional[Costs] = None, mono: Callable[[], float] = time.monotonic,
-                 log: Callable[[str], None] = lambda m: None):
+                 log: Callable[[str], None] = lambda m: None,
+                 quote_of: Optional[Callable[[str], Optional[dict]]] = None, on_change: Callable[[], None] = lambda: None):
         self.dir = Path(dir) if dir is not None else None
-        self.kw = {"roots": roots, "clock_ms": clock_ms, "costs": costs, "mono": mono, "log": log}
+        self.kw = {"roots": roots, "clock_ms": clock_ms, "costs": costs, "mono": mono, "log": log, "quote_of": quote_of}
         self.clock_ms, self.log = clock_ms, log
+        # fast-paper: called once the books changed -- after prints that filled or changed something, after an action,
+        # a create or a remove -- so the chart service pushes them to the pages at once (server.py's paper_push);
+        # it must return at once (it only schedules)
+        self.on_change = on_change
         self.books: dict[str, PaperBook] = {}
         self.meta: dict[str, dict] = {}
         self.next = 2
@@ -882,6 +940,8 @@ class PaperBooks:
     def on_ticks(self, root: str, rows: list) -> None:
         for b in self.books.values():
             b.on_ticks(root, rows)
+        if self.dirty:
+            self.on_change()
 
     @property
     def dirty(self) -> bool:
@@ -929,14 +989,18 @@ class PaperBooks:
                 raise ValueError("account: a paper account id")
             ids = [body["account"]]
         results = {}
-        for aid in ids:
-            b = self.books.get(aid)
-            if b is None:
-                results[aid] = {"ok": False, "order_id": None, "error": f"paper account {aid} does not exist",
-                                "refused": True}
-                continue
-            one = {**body, "accounts": [aid]} if "accounts" in body else body
-            results.update(b.act(action, one)["results"])
+        try:
+            for aid in ids:
+                b = self.books.get(aid)
+                if b is None:
+                    results[aid] = {"ok": False, "order_id": None, "error": f"paper account {aid} does not exist",
+                                    "refused": True}
+                    continue
+                one = {**body, "accounts": [aid]} if "accounts" in body else body
+                results.update(b.act(action, one)["results"])
+        finally:                                     # a later account's 400 must not hold back an earlier one's change
+            if self.dirty:
+                self.on_change()
         return {"results": results}
 
     # ---- create / remove ----
@@ -968,6 +1032,7 @@ class PaperBooks:
             del self.books[aid], self.meta[aid]
             raise
         self._dirty = True
+        self.on_change()
         return {"ok": True, "account": self.books[aid].view()}
 
     def remove(self, body) -> dict:
@@ -1005,6 +1070,7 @@ class PaperBooks:
                                                     "realized_pnl": v["realized_pnl"],
                                                     "log": archived.name if archived else None})
         self._dirty = True
+        self.on_change()
         return {"ok": True, "archived": archived.name if archived else None}
 
 
