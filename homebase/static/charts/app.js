@@ -406,7 +406,9 @@ function symbolMenu() {
     if (!hits.length) list.appendChild(mk('div', 'menu-empty', 'No matching symbol'));
   };
   input.oninput = render;
-  input.onkeydown = (e) => { if (e.key === 'Enter') { const first = list.querySelector('.menu-i'); if (first) first.click(); } };
+  // S7: never a held key's repeat -- the pick hands focus back to #tbSymbol, where the next repeat would reopen this
+  // menu and pick the FIRST symbol of the full list
+  input.onkeydown = (e) => { if (e.key === 'Enter') { if (e.repeat) return; const first = list.querySelector('.menu-i'); if (first) first.click(); } };
   m.append(input, list);
   render();
   input.focus();
@@ -461,7 +463,7 @@ function intervalMenu() {
     c.update({ spec: s });
   };
   apply.onclick = go;
-  input.onkeydown = (e) => { if (e.key === 'Enter') go(); };
+  input.onkeydown = (e) => { if (e.key === 'Enter') { if (e.repeat) return; go(); } };   // S7: one sub per press, never per repeat
   row.append(input, apply);
   m.append(row, err);
 }
@@ -505,7 +507,7 @@ function openTimeframeBox(cell, seed) {
   };
   input.oninput = () => { err.hidden = true; };
   input.onkeydown = (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); apply(); }
+    if (e.key === 'Enter') { e.preventDefault(); if (e.repeat) return; apply(); }   // S7: never a held key's repeat
     else if (e.key === 'Escape') { e.preventDefault(); closeHotkeyBox(); }
   };
   input.onblur = hotkeyBlur(input);
@@ -545,6 +547,7 @@ function openSymbolBox(cell, seed) {
   input.onkeydown = (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
+      if (e.repeat) return;   // S7: never a held key's repeat
       const h = hits();
       if (h.length) pick(h[Math.min(active, h.length - 1)]);
     } else if (e.key === 'Escape') {
@@ -783,7 +786,7 @@ function renameTab(oldName) {
     renderTabs();
   };
   ok.onclick = go;
-  input.onkeydown = (e) => { if (e.key === 'Enter') go(); };
+  input.onkeydown = (e) => { if (e.key === 'Enter') { if (e.repeat) return; go(); } };   // S7: one rename POST per press
   row.append(input, ok);
   m.append(row, err);
   placeMenu();
@@ -1059,7 +1062,8 @@ function indicatorsDialog() {
     if (had) groups.querySelector('.active').focus();
   };
   input.oninput = render;
-  input.onkeydown = (e) => { if (e.key === 'Enter') { const first = list.querySelector('.dlg-row'); if (first) first.click(); } };
+  // S7: the dialog stays open after an add, so a held Enter's repeat would add the same indicator again and again
+  input.onkeydown = (e) => { if (e.key === 'Enter') { if (e.repeat) return; const first = list.querySelector('.dlg-row'); if (first) first.click(); } };
   renderGroups();
   render();
   input.focus();
@@ -1124,7 +1128,7 @@ function positionDialog(cell, d) {
     drawings.replace(root, { ...now, qty, points: [{ t: now.points[0].t, p: entry }, { t: now.points[1].t, p: target },
       { t: now.points[2].t, p: stop }] });
   };
-  form.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') ok.click(); });
+  form.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') { if (e.repeat) return; ok.click(); } });   // S7
   foot.append(cancel, ok);
   box.append(form, err, foot);
   inputs.entry.focus();
@@ -1619,7 +1623,7 @@ function chartTemplateMenu(cell, at) {
       doSave();
     };
     go.onclick = save;
-    input.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } };
+    input.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); if (e.repeat) return; save(); } };   // S7: one PUT per press
     rowEl.append(input, go);
     saveRow.replaceWith(rowEl);
     input.focus();

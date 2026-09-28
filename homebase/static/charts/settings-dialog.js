@@ -435,7 +435,7 @@ function mount(box, host) {
         set(key, S.withAlpha(v, S.alphaOf(cur())));
         sync();
       };
-      hex.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); takeHex(); } };
+      hex.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); if (e.repeat) return; takeHex(); } };   // S7
       hex.onchange = takeHex;
       def.onclick = () => { err.hidden = true; set(key, null); sync(); };
       hexRow.append(hex, def);
@@ -509,7 +509,7 @@ function mount(box, host) {
           host.closeMenu();
         };
         go.onclick = save;
-        input.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } };
+        input.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); if (e.repeat) return; save(); } };   // S7: one PUT per press
         rowEl.append(input, go);
         wrap.append(rowEl, opts);
         saveAs.replaceWith(wrap);

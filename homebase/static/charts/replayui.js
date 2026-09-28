@@ -637,7 +637,7 @@ function fillMenu(m, cell) {
     doStart(cell, date, time);
   };
   go.onclick = submit;
-  const onEnter = (e) => { if (e.key === 'Enter') submit(); };
+  const onEnter = (e) => { if (e.key === 'Enter') { if (e.repeat) return; submit(); } };   // S7: one start per press, never per repeat
   d.inp.onkeydown = onEnter;
   t.inp.onkeydown = onEnter;
   const foot = mk('div', 'rp-foot');
