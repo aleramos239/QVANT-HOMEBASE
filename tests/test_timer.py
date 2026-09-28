@@ -26,12 +26,13 @@ def run(coro):
 
 
 class FakeMD:
-    def __init__(self, bars=None, last_trade=None):
+    def __init__(self, bars=None, last_trade=None, clock=None):
         self.connected = True
         self.bars = bars if bars is not None else FIX["bars"]
         self.last_trade = last_trade          # default price for any feed
         self.prices: dict = {}                # per-feed prices, if set
         self.subs = []
+        self.clock = clock                    # the timer's clock: a trade is received "now"
 
     async def connect(self): ...
     async def daily_bars(self, symbol, n=60): return self.bars[-n:]
@@ -42,30 +43,47 @@ class FakeMD:
     def last(self, sym, before=None):
         # these fixed prices stand for trades printed before the open: every cutoff passes them
         px = self.prices.get(sym, self.last_trade)
-        return (px, time.time()) if px is not None else (None, 0.0)
+        seen = self.clock().timestamp() if self.clock else time.time()
+        return (px, seen) if px is not None else (None, 0.0)
+
+    def trade_push(self, sym, before=None):
+        return None                           # no tape: the journal's stamp fields stay null
+
+
+def iso_z(when):
+    """An aware datetime as Tradovate's quote `timestamp`: ISO, ms, UTC 'Z'."""
+    return when.astimezone(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
 class TapeMD(FakeMD):
-    """Trades arrive as Tradovate quote pushes the exchange stamped, and are kept
-    and read back by the REAL TradovateMD code (_on_event / last)."""
+    """Trades arrive as Tradovate quote pushes, and are kept and read back by the REAL
+    TradovateMD code (_on_event / last / trade_push). Each push is RECEIVED at a local
+    time the test sets, whatever `timestamp` the exchange put on it."""
     _on_event = TradovateMD._on_event
     last = TradovateMD.last
+    trade_push = TradovateMD.trade_push
+    SAME = object()
 
     def __init__(self, **kw):
         super().__init__(**kw)
         self._trades, self._hist, self._cid_sym = {}, {}, {}
+        self._received = 0.0
+        self._clock = lambda: self._received
 
     async def subscribe_quote(self, symbol):
         self._cid_sym[1000 + len(self._cid_sym)] = symbol      # the reply's subscriptionId
         return await super().subscribe_quote(symbol)
 
-    def push(self, symbol, when, px):
-        """One trade push for a subscribed `symbol`, stamped by the exchange at `when`."""
+    def push(self, symbol, seen, px, stamp=SAME):
+        """One trade push for a subscribed `symbol`, RECEIVED at local `seen`. The exchange
+        stamped it `stamp`: by default the same instant (ISO ms 'Z'); None = no timestamp."""
         cid = next(c for c, s in self._cid_sym.items() if s == symbol)
-        stamp = when.astimezone(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
-        self._on_event({"e": "md", "d": {"quotes": [
-            {"timestamp": stamp, "contractId": cid,
-             "entries": {"Trade": {"price": px, "size": 1}}}]}})
+        q = {"contractId": cid, "entries": {"Trade": {"price": px, "size": 1}}}
+        stamp = iso_z(seen) if stamp is TapeMD.SAME else stamp
+        if stamp is not None:
+            q["timestamp"] = stamp
+        self._received = seen.timestamp()
+        self._on_event({"e": "md", "d": {"quotes": [q]}})
 
 
 def et(h, m, s=0, us=0, date=(2026, 9, 14)):
@@ -89,7 +107,7 @@ def mk(tmp_path, *, last_trade=24500.0, clock=None, armed=False, md=None):
     engine = Engine(cfg, {"main": FakeAdapter("main")}, now_fn=clock,
                     root=tmp_path)
     if md is None:
-        md = FakeMD(last_trade=last_trade)
+        md = FakeMD(last_trade=last_trade, clock=clock)
     timer = SelfTimer(cfg, engine, md_factory=lambda: md, now_fn=clock)
     return timer, engine, md, clock
 
@@ -241,16 +259,18 @@ def test_due_strategies_fire_together(tmp_path):
 
 
 # --- the fire's grace: orders go out within FIRE_LATE_MAX_S of 09:30:00.000, on the
-# --- last trade the exchange stamped BEFORE 09:30:00.000 (the research anchor), or not at all
-def test_staged_at_092959_9_fires_at_093000_on_the_last_trade_stamped_before_the_open(tmp_path):
+# --- last trade RECEIVED before 09:30:00.000 (the research anchor), or not at all
+def test_staged_at_092959_9_fires_at_093000_on_the_last_trade_received_before_the_open(tmp_path):
     timer, engine, md, clock = mk(tmp_path, md=TapeMD())
     at(clock, 9, 21); run(timer.tick())                          # gate
     at(clock, 9, 29, 59, 900000); run(timer.tick())              # stage: the quote is subscribed
     assert timer.status()["strategies"]["nq930"]["stage"] == "staged"
     md.push("NQ", et(9, 29, 59, 950000), 24500.0)
-    md.push("NQ", et(9, 29, 59, 999000), 24500.25)               # the last print before the open
-    md.push("NQ", et(9, 30, 0), 24503.0)                         # the opening millisecond: not before it
-    md.push("NQ", et(9, 30, 0, 20000), 24507.5)                  # (a local clock running behind sees these)
+    md.push("NQ", et(9, 29, 59, 999000), 24500.25,               # the last print received before the open --
+            stamp=iso_z(et(9, 30, 0, 4000)))                      # its stamp says after: never read
+    md.push("NQ", et(9, 30, 0), 24503.0,                          # received AT the open: not before it,
+            stamp=iso_z(et(9, 29, 59, 990000)))                   # however early it was stamped
+    md.push("NQ", et(9, 30, 0, 20000), 24507.5)
     step = timer._sleep_s()
     assert abs(step - 0.1) < 1e-6                                # exactly the time left
     clock.dt += dt.timedelta(seconds=step); run(timer.tick())    # 09:30:00.000
@@ -273,6 +293,63 @@ def test_a_tick_at_093000_4_still_fires_and_still_on_the_pre_open_trade(tmp_path
     assert st["stage"] == "fired" and st["anchor"] == 24500.0
     assert [(e["upper"], e["lower"]) for e in events(tmp_path) if e["event"] == "dry_run"] == \
         [(24510.0, 24490.0)]
+
+
+@pytest.mark.parametrize("stamp", [None, "2026-09-14T09:29:59.990", 1789392599990, "not a time",
+                                   {"t": 1}, "2026-09-14T13:29:59.990z"],
+                         ids=["missing", "no-zone", "epoch-ms", "garbage", "an-object", "lowercase-z"])
+def test_the_fire_never_needs_the_pushes_own_timestamp(tmp_path, stamp):
+    """Review 2026-09-28: the quote push's `timestamp` has never been seen live. Missing,
+    zone-less, epoch-ms or anything else, the fire anchors exactly as before: on the last
+    trade received before 09:30:00.000."""
+    timer, engine, md, clock = mk(tmp_path, md=TapeMD())
+    at(clock, 9, 21); run(timer.tick())
+    at(clock, 9, 29); run(timer.tick())                          # staged
+    md.push("NQ", et(9, 29, 59, 990000), 24500.0, stamp=stamp)
+    md.push("NQ", et(9, 30, 0, 200000), 24511.0, stamp=stamp)    # after the open
+    at(clock, 9, 30, 0, 300000); run(timer.tick())
+    st = timer.status()["strategies"]["nq930"]
+    assert st["stage"] == "fired" and st["anchor"] == 24500.0
+    fired = [e for e in events(tmp_path) if e["event"] == "timer_fired"]
+    assert len(fired) == 1 and fired[0]["anchor_seen"] == "09:29:59.990"
+    assert fired[0]["anchor_stamp_raw"] == (None if stamp is None else str(stamp)[:40])
+
+
+def test_the_fire_journals_the_anchor_push_and_the_newest_push(tmp_path):
+    """For the first live mornings: when each push was received, the `timestamp` it carried
+    (raw, parsed to ET) and received minus stamped -- the field's format and the clock/feed
+    skew, measured."""
+    timer, engine, md, clock = mk(tmp_path, md=TapeMD())
+    at(clock, 9, 21); run(timer.tick())
+    at(clock, 9, 29); run(timer.tick())                          # staged
+    md.push("NQ", et(9, 29, 59, 990000), 24500.0,                # 30 ms in flight
+            stamp=iso_z(et(9, 29, 59, 960000)))
+    md.push("NQ", et(9, 30, 0, 300000), 24511.0,                 # an epoch-ms number, 42 ms in flight
+            stamp=round(et(9, 30, 0, 258000).timestamp() * 1000))
+    at(clock, 9, 30, 0, 400000); run(timer.tick())
+    fired = next(e for e in events(tmp_path) if e["event"] == "timer_fired")
+    assert {k: fired[k] for k in fired if k.startswith(("anchor_", "newest_"))} == {
+        "anchor_seen": "09:29:59.990", "anchor_stamp_raw": "2026-09-14T13:29:59.960Z",
+        "anchor_stamp": "09:29:59.960", "anchor_lag_ms": 30,
+        "newest_seen": "09:30:00.300", "newest_stamp_raw": "1789392600258",
+        "newest_stamp": "09:30:00.258", "newest_lag_ms": 42}
+    assert fired["anchor"] == 24500.0
+
+
+def test_an_anchor_refusal_journals_the_pushes_it_saw(tmp_path):
+    timer, engine, md, clock = mk(tmp_path, md=TapeMD())
+    at(clock, 9, 21); run(timer.tick())
+    at(clock, 9, 29); run(timer.tick())                          # staged
+    md.push("NQ", et(9, 30, 0, 100000), 24511.0, stamp=None)     # the first print arrives after the open
+    at(clock, 9, 30, 0, 200000); run(timer.tick())
+    st = timer.status()["strategies"]["nq930"]
+    assert st["stage"] == "error" and "anchor" in st["error"]
+    err = next(e for e in events(tmp_path) if e["event"] == "timer_error")
+    assert {k: err[k] for k in err if k.startswith(("anchor_", "newest_"))} == {
+        "anchor_seen": None, "anchor_stamp_raw": None, "anchor_stamp": None, "anchor_lag_ms": None,
+        "newest_seen": "09:30:00.100", "newest_stamp_raw": None, "newest_stamp": None,
+        "newest_lag_ms": None}
+    assert not any(e["event"] in ("timer_fired", "dry_run") for e in events(tmp_path))
 
 
 @pytest.mark.parametrize("hms", [(9, 30, 2), (9, 37, 0), (9, 44, 59)])
@@ -403,34 +480,50 @@ def test_the_fire_the_grace_and_the_anchor_follow_new_york_time_across_dst(tmp_p
     assert engine.adapters["main"].brackets == []
 
 
-def test_the_md_anchor_is_the_last_trade_the_exchange_stamped_before_the_open(tmp_path, monkeypatch):
-    """TradovateMD.last(before=): only a push the exchange stamped strictly before the
-    cutoff (the research's "last print before 09:30:00.000"), whenever it is asked."""
+def test_the_md_anchor_is_the_last_trade_received_before_the_open(tmp_path, monkeypatch):
+    """TradovateMD.last(before=): the latest trade from a push RECEIVED strictly before the
+    cutoff (the research's "last print before 09:30:00.000"), whenever it is asked -- by the
+    local receive clock; the push's own `timestamp` is kept, raw, for the journal only."""
     import homebase.marketdata as md_mod
     monkeypatch.setattr(md_mod, "state_dir", lambda: tmp_path)
     m = TradovateMD("k", "demo", token_provider=lambda: "tok")
     m._cid_sym.update({3267315: "NQZ6", 4706811: "YMZ6"})
+    now = {"t": 0.0}
+    m._clock = lambda: now["t"]
 
-    def push(stamp, px, cid=3267315):
+    def push(seen, px, stamp=None, cid=3267315):
         q = {"contractId": cid, "entries": {"Trade": {"price": px, "size": 1}}}
         if stamp is not None:
             q["timestamp"] = stamp
+        now["t"] = seen.timestamp()
         m._on_event({"e": "md", "d": {"quotes": [q]}})
 
     cut = et(9, 30).timestamp()
     assert m.last("NQZ6", before=cut) == (None, 0.0)             # nothing yet
-    push("2026-09-14T13:29:59.950Z", 24500.0)
-    push("2026-09-14T13:29:59.999Z", 24500.25)                   # the last print before the open
-    push("2026-09-14T13:29:59.999Z", 46000.0, cid=4706811)       # another contract's: never NQ's
-    push("2026-09-14T13:30:00.000Z", 24503.0)                    # the opening millisecond
-    push("2026-09-14T13:30:00.180Z", 24509.5)
-    push(None, 24511.0)                                          # no stamp: cannot prove "before"
-    push("2026-09-14T09:29:59.990", 24401.0)                     # no zone: cannot either
-    push("not a time", 24402.0)
-    px, seen = m.last("NQZ6", before=cut)
-    assert px == 24500.25 and time.time() - seen < 5
-    assert m.last("NQZ6")[0] == 24402.0                          # no cutoff: the latest, as ever
+    assert m.trade_push("NQZ6") is None
+    push(et(9, 29, 59, 950000), 24500.0, "2026-09-14T13:29:59.920Z")
+    push(et(9, 29, 59, 999000), 24500.25, None)                  # the last print received before the open
+    push(et(9, 29, 59, 999500), 46000.0, cid=4706811)            # another contract's: never NQ's
+    push(et(9, 30, 0), 24503.0, "2026-09-14T13:29:59.990Z")      # received AT the open: not before it
+    push(et(9, 30, 0, 180000), 24509.5, 1789392600150)           # epoch ms
+    assert m.last("NQZ6", before=cut) == (24500.25, et(9, 29, 59, 999000).timestamp())
+    assert m.last("NQZ6") == (24509.5, et(9, 30, 0, 180000).timestamp())   # no cutoff: the latest
     assert m.last("YMZ6", before=cut)[0] == 46000.0
+    assert m.trade_push("NQZ6", cut) == (et(9, 29, 59, 999000).timestamp(), 24500.25, None, None)
+    seen, px, raw, stamp = m.trade_push("NQZ6")
+    assert (px, raw, stamp) == (24509.5, 1789392600150, 1789392600.15)
     for i in range(TRADE_HISTORY):                               # a flood after the open ...
-        push("2026-09-14T13:30:00.500Z", 24520.0 + i * 0.25)
+        push(et(9, 30, 0, 500000), 24520.0 + i * 0.25)
     assert m.last("NQZ6", before=cut) == (None, 0.0)             # ... refuses, never a later print
+
+
+def test_a_pushes_timestamp_parses_only_as_iso_with_a_zone_or_epoch_ms():
+    from homebase.marketdata import _stamp
+    t = et(9, 29, 59, 950000).timestamp()
+    for v in ("2026-09-14T13:29:59.950Z", "2026-09-14T13:29:59.950z", " 2026-09-14T13:29:59.950Z ",
+              "2026-09-14T13:29:59.95+00:00", "2026-09-14T09:29:59.950-04:00",
+              round(t * 1000), float(round(t * 1000))):
+        assert _stamp(v) == pytest.approx(t, abs=1e-6), v
+    for v in (None, "", "2026-09-14T13:29:59.950", "not a time", True, float("nan"),
+              float("inf"), {"t": 1}, [1]):
+        assert _stamp(v) is None, v
