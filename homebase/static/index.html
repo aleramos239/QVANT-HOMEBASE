@@ -143,12 +143,17 @@
     font-size:12px; font-family:var(--font-mono); }
   .strat .card-footer .btn{ font-family:var(--font-sans); }
 
-  .feed{ font-family:var(--font-mono); font-size:12.5px; max-height:340px; overflow-y:auto; }
-  .feed-row{ padding:5px 0; border-bottom:1px solid var(--border); white-space:pre-wrap; display:flex; gap:9px; }
+  .feed{ font-size:12.5px; max-height:340px; overflow-y:auto; }
+  .feed-row{ padding:5px 0; border-bottom:1px solid var(--border); display:flex; flex-wrap:wrap;
+    column-gap:9px; cursor:pointer; }
   .feed-row:last-child{ border-bottom:none; }
-  .feed .t{ color:var(--muted-foreground); flex:0 0 62px; }
-  .feed .e{ flex:0 0 150px; font-weight:600; }
-  .feed .d{ color:var(--muted-foreground); overflow-wrap:anywhere; }
+  .feed .t{ color:var(--muted-foreground); flex:0 0 62px; font-family:var(--font-mono);
+    font-variant-numeric:tabular-nums; }
+  .feed .h{ flex:1; min-width:0; overflow-wrap:anywhere; }
+  .feed .h.pos{ color:var(--pos); } .feed .h.neg{ color:var(--neg); }
+  .feed .h.warn{ color:color-mix(in oklch, var(--warn, oklch(0.7 0.16 70)) 70%, var(--foreground)); }
+  .feed .raw{ flex:0 0 100%; padding:3px 0 0 71px; font-family:var(--font-mono); font-size:11.5px;
+    color:var(--muted-foreground); white-space:pre-wrap; overflow-wrap:anywhere; }
   .feed-empty{ color:var(--muted-foreground); font-size:13px; padding:18px 0; }
 
   .clock{ font-family:var(--font-mono); font-size:12px; color:var(--muted-foreground);
@@ -402,7 +407,10 @@
 
       <div class="sec-head" style="margin-top:26px">
         <span class="h">Activity</span>
-        <span class="hint">every alert, order, fill and safety event as it happens</span>
+        <span class="hint">every alert, order, fill and safety event as it happens — hover or click a row for its raw line</span>
+        <span class="spacer"></span>
+        <button class="btn btn-ghost btn-sm" type="button" id="feedRawBtn" aria-pressed="false"
+          title="Show every row's raw journal line">Raw</button>
       </div>
       <div class="card"><div class="card-content" style="padding-top:14px">
         <div id="feed" class="feed"><div class="feed-empty">Waiting for events…</div></div>
@@ -827,7 +835,7 @@ function renderBulb(r) {
   if ($("#checksOverlay").classList.contains("open")) renderChecks();
 }
 function renderChecks() {
-  const r = ST && ST.readiness;
+  const r = ST && readinessShown(ST.readiness, ST);
   if (!r) return;
   const lvl = bulbLevel(r);
   $("#bulbBig").className = "bulb" + (lvl ? " " + lvl : "");
@@ -841,6 +849,249 @@ function openChecks() { renderChecks(); $("#checksOverlay").classList.add("open"
 function closeChecks() { $("#checksOverlay").classList.remove("open"); }
 $("#checksOverlay").addEventListener("click", (e) => {
   if (e.target === e.currentTarget) closeChecks();
+});
+
+/* ---- readiness, as the page shows it (W4) ----
+   The desk's readiness flags an enabled straddle still idle once its accept window has passed:
+   "no signal arrived" (red), or "no signal today" (amber) for a gated one. For a strategy that
+   could not have fired today that is a false alarm, so the check is shown as info (grey: out of
+   the Not-ready strip, never turning the bulb) with the reason instead -- nothing is dropped:
+     - it is not booked on any account;
+     - today's fire refused it for having no accounts booked, or for being off;
+     - it was switched on only after today's 9:30 fire (its switch's last flip before 9:30 was
+       OFF, or -- none in view -- its first flip after 9:30 was ON);
+     - it was added after the fire: the timer first saw it after its window (timer_missed) on a
+       day the desk did fire at 9:30, with the journal in view reaching back past 9:30.
+   The only evidence is the desk's own journal tail (ST.journal, newest first). When that cannot
+   show the strategy was out of today's fire, the alarm stands -- fail toward showing. */
+const FIRE_AT = "09:30:00";
+const IN_THE_FIRE = /^(timer_(fired|gate|skipped|error|deferred)|prestage_)/;
+function outOfTodaysFire(name, st) {
+  if (!((st.book || {})[name] || []).length) return "not booked on any account — nothing could fire";
+  const journal = Array.isArray(st.journal) ? st.journal.filter(r => r && typeof r === "object") : [];
+  const today = String(st.et_now || "").slice(0, 10);
+  const rows = journal.filter(r => String(r.et || "").slice(0, 10) === today).reverse();   // oldest first
+  const at = (r) => String(r.et).slice(11, 19);
+  const mine = rows.filter(r => r.strategy === name);
+  if (mine.some(r => r.event === "alert_refused" && r.source !== "test" && at(r) >= "09:29:00" &&
+                     (r.reason === "no_assignments" || r.reason === "unknown_or_disabled")))
+    return "was not booked (or was off) at today's 9:30 fire — nothing was due today";
+  const flips = mine.filter(r => r.event === "strategy_toggled");
+  const before = flips.filter(r => at(r) <= FIRE_AT), after = flips.filter(r => at(r) > FIRE_AT);
+  if (before.length ? before[before.length - 1].enabled === false : (after.length > 0 && after[0].enabled === true))
+    return "switched on after today's 9:30 fire — its first run is the next trading day";
+  const oldest = String((journal[journal.length - 1] || {}).et || "");
+  if (oldest && oldest < today + "T" + FIRE_AT &&
+      mine.some(r => r.event === "timer_missed") && !mine.some(r => IN_THE_FIRE.test(r.event)) &&
+      rows.some(r => r.event === "timer_fired" && r.strategy !== name))
+    return "added after today's 9:30 fire — its first run is the next trading day";
+  return "";
+}
+function readinessShown(r, st) {
+  if (!r || !Array.isArray(r.checks) || !st) return r;
+  let changed = false;
+  const checks = r.checks.map(c => {
+    if (!c || (c.level !== "bad" && c.level !== "warn") || !/^no signal/.test(String(c.detail || ""))
+        || !((st.strategies || {})[c.label])) return c;
+    const why = outOfTodaysFire(c.label, st);
+    if (!why) return c;
+    changed = true;
+    return {...c, level: "info", detail: why};
+  });
+  return changed ? {...r, checks, ready: !checks.some(c => c && c.level === "bad")} : r;
+}
+
+/* ---- activity log (W4): what happened, in plain words ----
+   One sentence per journal row -- "Connected APEX…048 (login)", "Chart-trading limits set to
+   50 / 100", "NQ930 bought 3 @ 30,726.50 on …049" -- instead of `event key=value`. The raw line
+   stays one step away: the row's tooltip, a click on the row, or Raw in the section head for
+   every row. An event this table doesn't know still reads as words, and a row it can't read
+   falls back to them too -- never blank, never a crash. Text is escaped (it is the broker's own
+   words, sometimes). tone: "neg" a failure that needs eyes, "warn" a refusal or skip, "pos" /
+   "neg" a closed trade's P&L, "" plain. */
+const fmtPx = (v) => v == null || v === "" || !isFinite(v) ? "—" : Number(v).toLocaleString("en-US",
+  Number.isInteger(Number(v)) ? {} : {minimumFractionDigits: 2, maximumFractionDigits: 6});
+const actStrat = (r) => String(r.strategy || "").toUpperCase();
+const actOn = (r) => r.account ? " on " + acctShort(r.account) : "";
+const actErr = (e) => (typeof e === "string" ? e : JSON.stringify(e == null ? "" : e)).slice(0, 160);
+const actFail = (r) => r.ok ? "" : " — FAILED: " + actErr(r.error);
+const REFUSED_WHY = {unknown_or_disabled: "it is off", not_a_straddle: "it runs off the price feed, not alerts",
+  killed: "it was killed today", already_traded: "it already acted today", outside_window: "outside its time window",
+  bad_prices: "the prices were unreadable", inverted_prices: "upper was below lower",
+  bad_spread: "the spread did not match its offset", no_assignments: "no accounts are booked",
+  all_accounts_skipped: "every booked account holds a manual position or order",
+  bad_signal: "the signal was incomplete", levels_wrong_side: "its stop/target were on the wrong side"};
+const EXIT_AT = {tp: " at the target", sl: " at the stop"};
+function actWould(r) {
+  if (r.upper != null || r.lower != null)
+    return `Buy stop ${fmtPx(r.upper)} / Sell stop ${fmtPx(r.lower)} × ${r.qty}`;
+  return `${r.side} ${r.qty} ${r.entry || ""}${r.entry_price != null ? " @ " + fmtPx(r.entry_price) : ""}` +
+    ` · SL ${fmtPx(r.sl)} · TP ${fmtPx(r.tp)}`;
+}
+const ACTIVITY = {
+  armed_toggled: (r) => [r.armed ? "Desk ARMED — signals place real orders" : "Desk disarmed — signals are journaled only"],
+  kill_switch: (r) => {
+    const res = Object.values(r.results || {});
+    const bad = res.filter(x => !(x && x.cancel_all && x.cancel_all.ok && x.flatten_all && x.flatten_all.ok)).length;
+    return [`Kill everything — ${res.length} account${res.length === 1 ? "" : "s"} cancelled and flattened, desk disarmed` +
+      (bad ? ` · ${bad} FAILED — check ${bad === 1 ? "it" : "them"}` : ""), bad ? "neg" : "warn"];
+  },
+  chart_trading_set: (r, prev) => {
+    if (r.cause) return [`Chart trading switched OFF by ${r.cause === "kill" ? "Kill everything" : r.cause}`, "warn"];
+    const lim = `${r.max_order_qty} / ${r.max_position_qty}`;
+    const flip = !!prev && prev.enabled !== undefined && !!prev.enabled !== !!r.enabled;
+    const limits = !!prev && prev.max_order_qty != null &&
+      (prev.max_order_qty !== r.max_order_qty || prev.max_position_qty !== r.max_position_qty);
+    if (flip && !limits) return [`Chart trading turned ${r.enabled ? "ON" : "OFF"}`];
+    if (limits && !flip) return [`Chart-trading limits set to ${lim}`];
+    return [`Chart trading ${r.enabled ? "ON" : "OFF"} · limits ${lim}`];
+  },
+  broker_connected: (r) => [`Connected ${acctShort(r.account)}${r.mode ? ` (${r.mode})` : ""}`],
+  reconnect_fell_back_to_login: (r) => [`${acctShort(r.account)}: reconnect failed, logging in again — ${actErr(r.error)}`, "warn"],
+  reconcile_error: (r) => [`${acctShort(r.account)}: couldn't re-check its orders after connecting — ${actErr(r.error)}`, "neg"],
+  manual_reconnect: (r) => {
+    const res = Object.entries(r.results || {}), bad = res.filter(([, v]) => !(v && v.ok));
+    return [`Reconnect: ${res.length - bad.length} of ${res.length} reconnected` +
+      (bad.length ? ` · failed: ${bad.map(([k]) => acctShort(k)).join(", ")}` : ""), bad.length ? "neg" : ""];
+  },
+  account_added: (r) => [`Added account ${acctShort(r.account)}${r.live ? " — LIVE" : " (demo)"}`],
+  account_removed: (r) => [`Removed account ${acctShort(r.account)}`],
+  book_updated: (r) => {
+    const a = Array.isArray(r.assignments) ? r.assignments : [];
+    return [a.length ? `${actStrat(r)} booked on ` + a.map(x => `${acctShort(x.account)} ×${x.qty}`).join(", ")
+                     : `${actStrat(r)} unbooked from every account`];
+  },
+  strategy_toggled: (r) => [`${actStrat(r)} switched ${r.enabled ? "ON" : "OFF"}${r.cause === "manual_flatten" ? " (Flatten & turn off)" : ""}`],
+  timer_gate: (r) => r.gate === true ? [`${actStrat(r)} gate open — trend day (ADX ${fmt(r.adx, 1)})`]
+    : r.gate === false ? [`${actStrat(r)} gate closed — chop day (ADX ${fmt(r.adx, 1)}), no trade today`]
+    : [`${actStrat(r)} gate unknown — only ${r.bars} daily bars, it will not fire`, "warn"],
+  timer_fired: (r) => r.result
+    ? [`${actStrat(r)} fired at 9:30 — anchor ${fmtPx(r.anchor)}${r.note ? " · " + actErr(r.note) : ""}`]
+    : [`${actStrat(r)} fired at 9:30 — anchor ${fmtPx(r.anchor)} — refused: ${actErr(r.note)}`, "warn"],
+  timer_skipped: (r) => r.reason === "gate_chop" ? [`${actStrat(r)} skipped today — chop (ADX ${fmt(r.adx, 1)})`]
+    : r.reason === "killed" ? [`${actStrat(r)} skipped — killed today`]
+    : r.reason === "manual_position" ? [`${actStrat(r)} skips ${acctShort(r.account)} today — it holds a manual position (${r.net > 0 ? "+" : ""}${r.net})`, "warn"]
+    : r.reason === "manual_order" ? [`${actStrat(r)} skips ${acctShort(r.account)} today — a manual order is working`, "warn"]
+    : [`${actStrat(r)} skipped — ${actErr(r.reason)}`, "warn"],
+  timer_missed: (r) => [`${actStrat(r)} missed today's window (it closed at ${r.window_end})`, "warn"],
+  timer_deferred: (r) => [`${actStrat(r)} timer stood down — it already acted today (${r.status})`],
+  timer_error: (r) => [`${actStrat(r)} timer error — ${actErr(r.error)}`, "neg"],
+  timer_loop_error: (r) => [`Timer error — ${actErr(r.error)}`, "neg"],
+  prestage_rtt: (r) => [`${actStrat(r)} staged for the 9:30 fire`],
+  prestage_check_failed: (r) => [`${actStrat(r)} pre-open check failed${actOn(r)} — ${actErr(r.error)}`, "warn"],
+  morning_readiness: (r) => r.ready ? ["Morning check: ready to trade"]
+    : [`Morning check: NOT ready — ${(r.problems || []).map(actErr).join(" · ")}`, "neg"],
+  alert_refused: (r) => [`${actStrat(r)} signal refused — ${REFUSED_WHY[r.reason] || actErr(r.reason)}`, "warn"],
+  signal_refused: (r) => [`${actStrat(r)} signal refused — ${REFUSED_WHY[r.reason] || actErr(r.reason)}`, "warn"],
+  dry_run: (r) => [`${actStrat(r)} dry run${actOn(r)}: would place ${actWould(r)}`],
+  shadow_signal: (r) => [`${actStrat(r)} shadow signal${actOn(r)}: would place ${actWould(r)}`],
+  placed: (r) => [`${actStrat(r)} placed${actOn(r)}: ${actWould(r)}${r.place_ms != null ? ` (${r.place_ms} ms)` : ""}`],
+  place_failed: (r) => [`${actStrat(r)} order REJECTED${actOn(r)}${r.leg ? ` — ${r.leg} leg` : ""} — ${actErr(r.error)}`, "neg"],
+  fill_matched_by_side: (r) => [`${actStrat(r)} fill${actOn(r)} matched by side (it came without an order id)`],
+  entry_fill: (r) => [`${actStrat(r)} ${r.side === "Sell" ? "sold" : "bought"}${r.qty_filled != null ? " " + r.qty_filled : ""} @ ${fmtPx(r.fill)}${actOn(r)}` +
+      (r.fill_vs_anchor ? ` (${r.fill_vs_anchor > 0 ? "+" : ""}${r.fill_vs_anchor} vs trigger)` : "") +
+      (r.sibling_cancelled === false ? ` — the other side was NOT cancelled: ${actErr(r.sibling_error)}` : ""),
+    r.sibling_cancelled === false ? "neg" : ""],
+  brackets_moved: (r) => r.moved === true ? [`${actStrat(r)} stop/target moved to the fill${actOn(r)}: SL ${fmtPx(r.sl)} · TP ${fmtPx(r.tp)}`]
+    : r.moved === false ? [`${actStrat(r)} couldn't move stop/target${actOn(r)} — ${actErr(r.error)} (the trigger levels still protect it)`, "warn"]
+    : [`${actStrat(r)} stop/target stay${actOn(r)} — ${actErr(r.moved)}`],
+  both_filled_emergency: (r) => [`${actStrat(r)}: BOTH sides filled${actOn(r)} — emergency flatten`, "neg"],
+  exit_fill: (r) => [`${actStrat(r)} exited${actOn(r)}${EXIT_AT[r.reason] || ""} @ ${fmtPx(r.fill)}` +
+      (r.pnl != null ? `, ${r.pnl > 0 ? "+" : ""}${usd(r.pnl)}` : ""), r.pnl > 0 ? "pos" : r.pnl < 0 ? "neg" : ""],
+  sibling_cancel_retry: (r) => [`${actStrat(r)} re-cancelling the other side${actOn(r)}${r.ok === false ? " — failed: " + actErr(r.error) : ""}`,
+    r.ok === false ? "warn" : ""],
+  fill_recovered_on_reconnect: (r) => [`${actStrat(r)} entry (${r.side}) found${actOn(r)} after reconnecting`, "warn"],
+  entry_found_by_check: (r) => [`${actStrat(r)} entry (${r.side}) found${actOn(r)} by the order check — its fill message was missed`, "warn"],
+  exit_recovered_on_reconnect: (r) => [`${actStrat(r)}${actOn(r)} closed while disconnected — found on reconnect`, "warn"],
+  cancelled_unfilled: (r) => [`${actStrat(r)}${actOn(r)}: no fill by the cancel time — entries cancelled`],
+  cancel_raced_fill: (r) => [`${actStrat(r)}${actOn(r)}: filled as the entries were cancelled — now in position (${r.net})`, "warn"],
+  clock_flat: (r) => [`${actStrat(r)} flattened${actOn(r)} at the end-of-day time`],
+  clock_flat_failed: (r) => [`${actStrat(r)} end-of-day flatten FAILED${actOn(r)} — check it`, "neg"],
+  killed_run_needs_check: (r) => [`${actStrat(r)}${actOn(r)} needs a check — killed, but still ${r.status} at ${r.at}`, "neg"],
+  killed_run_entries_cancelled: (r) => [`${actStrat(r)}${actOn(r)}: the killed run's entries were cancelled`],
+  strategy_kill_requested: (r) => [`${actStrat(r)} kill requested${r.source === "chart" ? " from the chart" : ""}`, "warn"],
+  strategy_killed: (r) => {
+    const bad = Object.values(r.results || {}).filter(x => x && x.ok === false).length;
+    return [`${actStrat(r)} killed for today${bad ? ` — ${bad} account${bad === 1 ? "" : "s"} need a check` : ""}`, bad ? "neg" : "warn"];
+  },
+  strategy_kill_check: (r) => [`${actStrat(r)} kill${actOn(r)} needs a check — ${actErr(r.reason)}`, "neg"],
+  strategy_killed_after_ack: (r) => [`${actStrat(r)} kill finished${actOn(r)} once its orders were acknowledged${r.ok === false ? " — needs a check" : ""}`,
+    r.ok === false ? "neg" : ""],
+  strategy_kill_failed: (r) => [`${actStrat(r)} kill FAILED${actOn(r)} — ${actErr(r.error)}`, "neg"],
+  manual_flatten: (r) => r.source === "chart"
+    ? [`Chart: flattened ${r.contract || ""}${actOn(r)}${actFail(r)}`, r.ok ? "" : "neg"]
+    : [`${actStrat(r)} flattened on every account it acted on today`],
+  manual_order: (r) => [`Chart order${actOn(r)}: ${r.side} ${r.qty} ${r.contract || r.root || ""} ${r.type || ""}` +
+      (r.price != null ? ` @ ${fmtPx(r.price)}` : r.trigger != null ? ` @ ${fmtPx(r.trigger)}` : "") +
+      (r.ok ? "" : " — REFUSED: " + actErr(r.error)), r.ok ? "" : "neg"],
+  manual_modify: (r) => [`Chart: order moved to ${fmtPx(r.price)}${actOn(r)}${r.contract ? ` (${r.contract})` : ""}${actFail(r)}`, r.ok ? "" : "neg"],
+  manual_cancel: (r) => [`Chart: ${r.scope === "symbol" ? `cancelled every ${r.contract || ""} order` : "cancelled an order"}${actOn(r)}${actFail(r)}`,
+    r.ok ? "" : "neg"],
+  manual_exits: (r) => [`Chart: exits set${actOn(r)}${r.contract ? " " + r.contract : ""} — ` +
+      [r.sl != null ? "SL " + fmtPx(r.sl) : "", r.tp != null ? "TP " + fmtPx(r.tp) : ""].filter(Boolean).join(" · ") + actFail(r),
+    r.ok ? "" : "neg"],
+  manual_reverse: (r) => [`Chart: reverse ${r.contract || ""}${actOn(r)} — ${r.step === "flatten" ? "flattened" : `opened ${r.side} ${r.qty}`}${actFail(r)}`,
+    r.ok ? "" : "neg"],
+  manual_refused: (r) => [`Chart ${r.action || "action"} refused${actOn(r)} — ${actErr(r.reason)}`, "warn"],
+  manual_error: (r) => [`Chart ${r.action || "action"} error${actOn(r)} — ${actErr(r.error)}`, "neg"],
+  feed_started: (r) => [`Price feed started${Array.isArray(r.watching) && r.watching.length ? " — " + r.watching.join(", ") : ""}`],
+  feed_stopped: (r) => [`Price feed stopped — ${actErr(r.reason)}`],
+  feed_error: (r) => [`Price feed error${r.strategy ? ` (${actStrat(r)})` : ""} — ${actErr(r.error)}${r.penalized ? " — rate-limited, retrying in 5 min" : ""}`, "neg"],
+  feed_loop_error: (r) => [`Price feed error — ${actErr(r.error)}`, "neg"],
+  rule_error: (r) => [`${actStrat(r)} rule error — ${actErr(r.error)}`, "neg"],
+  clock_error: (r) => [`Clock error — ${actErr(r.error)}`, "neg"],
+  desk_key_error: (r) => [`Desk key problem — ${actErr(r.error)}`, "neg"],
+  selftest_order: (r) => [`Self-test order${actOn(r)}${r.placed ? (r.placed.ok ? " — placed and cancelled" : " — refused: " + actErr(r.placed.error)) : ""}`,
+    r.placed && !r.placed.ok ? "warn" : ""],
+  selftest_order_rest: (r) => [`Self-test order${actOn(r)} (REST) — HTTP ${r.http_status}`],
+};
+function activityLine(r, prev) {
+  const f = ACTIVITY[r.event];
+  if (f) {
+    try {
+      const [text, tone] = f(r, prev);
+      if (text) return {text, tone: tone || ""};
+    } catch (_) { /* a row this formatter can't read falls back to plain words below */ }
+  }
+  const what = String(r.event || "event").replace(/_/g, " ");
+  return {text: what.charAt(0).toUpperCase() + what.slice(1) + (r.strategy ? " — " + actStrat(r) : "") + actOn(r),
+          tone: /error|fail/.test(String(r.event)) ? "neg" : ""};
+}
+function activityRaw(r) {
+  const {ts, et, event, ...rest} = r;
+  return [event, ...Object.entries(rest).map(([k, v]) =>
+    `${k}=${typeof v === "object" ? JSON.stringify(v) : v}`)].join("  ");
+}
+let FEED_ROWS = [], FEED_SIG = null, FEED_RAW = false;
+const FEED_OPEN = new Set();   // rows opened to their raw line, by ts|et|event|account
+function renderActivity(journal) {
+  FEED_ROWS = (Array.isArray(journal) ? journal : []).filter(r => r && typeof r === "object");
+  const sig = JSON.stringify([FEED_ROWS, FEED_RAW, [...FEED_OPEN]]);
+  if (sig === FEED_SIG) return;           // nothing changed: leave the rows (and a hovered tooltip) alone
+  FEED_SIG = sig;
+  $("#feed").innerHTML = FEED_ROWS.map((r, i) => {
+    const prev = r.event === "chart_trading_set" ? FEED_ROWS.slice(i + 1).find(o => o.event === r.event) : null;
+    const {text, tone} = activityLine(r, prev);
+    const raw = activityRaw(r), key = `${r.ts}|${r.et}|${r.event}|${r.account || ""}`, open = FEED_RAW || FEED_OPEN.has(key);
+    return `<div class="feed-row${open ? " open" : ""}" data-k="${esc(key)}" title="${esc(raw)}">` +
+      `<span class="t">${esc(String(r.et || "").slice(11, 19))}</span>` +
+      `<span class="h${tone ? " " + tone : ""}">${esc(text)}</span>` +
+      (open ? `<span class="raw">${esc(raw)}</span>` : "") + `</div>`;
+  }).join("") || '<div class="feed-empty">Waiting for events…</div>';
+}
+$("#feed").addEventListener("click", (e) => {
+  const row = e.target && e.target.closest && e.target.closest(".feed-row");
+  if (!row || FEED_RAW) return;
+  const sel = window.getSelection && window.getSelection();
+  if (sel && String(sel) !== "") return;   // selecting text to copy is not a click to open
+  const k = row.getAttribute("data-k");
+  if (FEED_OPEN.has(k)) FEED_OPEN.delete(k); else FEED_OPEN.add(k);
+  renderActivity(FEED_ROWS);
+});
+$("#feedRawBtn").addEventListener("click", () => {
+  FEED_RAW = !FEED_RAW;
+  $("#feedRawBtn").setAttribute("aria-pressed", String(FEED_RAW));
+  renderActivity(FEED_ROWS);
 });
 
 /* ---- render ---- */
@@ -877,7 +1128,7 @@ function stratCard(name, s) {
               "net": usd(lv.net), "avg/trade": usd(lv.avg_trade),
               "avg slip": (lv.avg_slip_pts ?? "—") + " pts",
               "days": lv.days})
-    : `<div class="mcap">no live trades yet — this strip earns itself</div>`);
+    : `<div class="mcap">No live trades yet</div>`);
 
   // the accounts running this strategy — full rows, balance + P&L + Calendar
   const accts = ST.accounts || {};
@@ -910,7 +1161,7 @@ function stratCard(name, s) {
     </div>
     <div class="card-content">${research}${live}${book}</div>
     <div class="card-footer" style="justify-content:flex-end;gap:8px">
-      <button class="btn btn-outline btn-sm" onclick="flattenStrat('${name}')">Flatten · off</button>
+      <button class="btn btn-outline btn-sm" onclick="flattenStrat('${name}')" title="Flattens its positions and switches it off">Flatten &amp; turn off</button>
       ${test}</div>
   </div>`;
 }
@@ -924,7 +1175,7 @@ function render() {
 
   // readiness: silent when fine, loud when not; dismissable — but a
   // dismissed strip returns the moment the SET of problems changes
-  const r = s.readiness;
+  const r = readinessShown(s.readiness, s);   // a "no signal" that could not have fired reads as info (W4)
   renderBulb(r);
   const strip = $("#readyStrip");
   const probs = r ? r.checks.filter(c => c.level === "bad" || c.level === "warn") : [];
@@ -963,15 +1214,7 @@ function render() {
   } else hint.style.display = "none";
   if ($("#algoOverlay").classList.contains("open")) renderAlgoMgr();
 
-  const feed = $("#feed");
-  const rows = (s.journal || []).map(r => {
-    const {ts, et, event, ...rest} = r;
-    const kv = Object.entries(rest).map(([k, v]) =>
-      `${k}=${typeof v === "object" ? JSON.stringify(v) : v}`).join("  ");
-    return `<div class="feed-row"><span class="t">${(et || "").slice(11, 19)}</span>
-      <span class="e">${event}</span><span class="d">${kv}</span></div>`;
-  }).join("");
-  feed.innerHTML = rows || '<div class="feed-empty">Waiting for events…</div>';
+  renderActivity(s.journal);
 }
 
 async function refresh() {
@@ -1852,7 +2095,7 @@ async function toggleStrat(name, enabled) {
 async function flattenStrat(name) {
   if (!await confirmDlg("Flatten " + name.toUpperCase() + "?",
       "Cancels its resting entries, market-flattens its symbol on every account it acted on today, and switches the strategy OFF.",
-      "Flatten & off", true)) return;
+      "Flatten & turn off", true)) return;
   const r = await post("/api/strategy-flatten", {strategy: name});
   if (r.ok) toast(name.toUpperCase() + " flattened and switched off.");
   refresh();
