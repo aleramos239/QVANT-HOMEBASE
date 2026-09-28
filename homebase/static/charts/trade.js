@@ -1134,6 +1134,10 @@ function etMs(date, hhmm) {
   }
   return ms;
 }
+/* An arbitrary ms as its ET calendar date, "YYYY-MM-DD" (en-CA gives that order directly) -- what bot-history's
+   `date` field already is (paintAlgo's `today` is this applied to "now"), generalised to ANY timestamp so a live
+   fill can be matched to the run it covers on any day, not only today (algoFillMarkers). */
+function etDateOf(ms) { return Number.isFinite(ms) ? new Date(ms).toLocaleDateString('en-CA', { timeZone: 'America/New_York' }) : null; }
 /* The contracts a past run traded: from its P&L when that solves to a whole number (exact: bothistory computes the P&L
    from these very prices and qty); otherwise null -- never today's book size for a past day (fix round 1, M2). */
 function runQty(run, pv) {
@@ -1194,6 +1198,66 @@ function pastRunMarkers(runs, { key, s, state, tick, pv, P, from, to, today, liv
     if (inRange(ms)) out.push({ id: `${id}:f`, ms, position: 'aboveBar', shape: 'square', size: 0.5, color: GREY, text: '', tip: runTip(run, who, tick, null) });
   }
   return out.sort((a, b) => a.ms - b.ms);
+}
+/* pastRunMarkers, kept to only its "day it did not trade" flag (shape 'square') -- the entry arrow + exit circle
+   it also computes are retired from the chart (2026-09-28 plan): a chart's algo now draws its executions through
+   algoFillMarkers, on the very same horizontal-arrow layer as a manual fill, never its own dot markers. A thin
+   filter over the one pass pastRunMarkers already makes, so the two can never disagree on range or today. */
+function pastRunFlags(runs, opts) { return pastRunMarkers(runs, opts).filter((m) => m.shape === 'square'); }
+
+/* ---- a chart's algo executions, as the SAME horizontal arrows as a manual fill (2026-09-28 plan) ----
+   Replaces the overlay's old entry/exit dot markers (amber arrow + green/red/amber circle) with the very shapes
+   fillMarkers already draws for a manual fill: blue buy / red sell, on the shared execution-arrow layer, so an
+   algo's fill and a hand-placed one read the same way. `key` is the chart's algo (a desk strategy); `runs` is
+   its bot-history (GET /api/desk/bot-history's `.runs`, or []).
+     live: every fill the desk tags `owner === key`, for THIS root, on ANY account -- not only the chart's own
+       ticked ones (an algo's fill belongs to the chart that shows it, whoever else is ticked there). Exact, so
+       it always wins over the journal's echo of the same execution.
+     history: an entry arrow (the run's own side) and an exit arrow (the OPPOSITE side; its tooltip names the
+       exit kind) per run that filled, inside [from, to) -- EXCEPT a (account, ET date) a live fill above already
+       covers: that day is drawn from the live fill alone, never twice. A run with no account (the "every booked
+       account" flag row) or no entry (no_fill / skipped / refused) has nothing to draw here -- pastRunFlags
+       still covers it as the grey "no trade" marker, unchanged.
+   `tip`: "Buy 3 @ 30,726.00 · nq930 · …049" (an entry, live or history), "Sell 3 @ 30,718.50 · SL · nq930 ·
+   …049" (an exit, its kind between the price and the strategy key); qty from the fill itself (live) or
+   HBTrade.runQty (history) -- left out when neither knows it, exactly like runTip. */
+function algoFillMarkers({ state, key, root, runs, tick = 0.01, pv = null, P, from = -Infinity, to = Infinity }) {
+  const out = [], covered = new Set();   // "account|ET date" a live fill of this algo already covers
+  const tip = (side, qty, price, exitKind, who) => {
+    const bits = [`${side}${qty != null ? ` ${qty}` : ''} @ ${Cat.fmtPrice(price, tick)}`];
+    if (exitKind) bits.push(EXIT_WORDS[exitKind] || 'Exit');
+    bits.push(key, who);
+    return bits.join(' · ');
+  };
+  for (const a of accountsOf(state)) {
+    for (const f of a.fills || []) {
+      if (f.owner !== key || rootOf(f.symbol) !== root) continue;
+      const ms = Date.parse(f.time);
+      if (!Number.isFinite(ms) || !Number.isFinite(f.price)) continue;
+      covered.add(`${a.id}|${etDateOf(ms)}`);
+      const buy = f.side === 'Buy';
+      out.push({ id: `af${a.id}:${f.id}`, ms, price: f.price, side: f.side, color: buy ? P.accent : P.down,
+        tip: tip(f.side, f.qty, f.price, null, short(a)) });
+    }
+  }
+  for (const run of Array.isArray(runs) ? runs : []) {
+    if (!isObj(run) || typeof run.date !== 'string' || typeof run.account !== 'string') continue;
+    if (covered.has(`${run.account}|${run.date}`)) continue;
+    const e = isObj(run.entry) ? run.entry : null;
+    if (!e || e.price == null || !Number.isFinite(e.ts)) continue;
+    const who = whoOf(state, run.account), qty = runQty(run, pv), buy = e.side === 'Buy', id = `ah${key}:${run.date}:${run.account}`;
+    if (e.ts >= from && e.ts < to) {
+      out.push({ id: `${id}:e`, ms: e.ts, price: e.price, side: e.side, color: buy ? P.accent : P.down,
+        tip: tip(e.side, qty, e.price, null, who) });
+    }
+    const x = isObj(run.exit) ? run.exit : null;
+    if (x && x.price != null && Number.isFinite(x.ts) && x.ts >= from && x.ts < to) {
+      const xSide = e.side === 'Buy' ? 'Sell' : 'Buy', xBuy = xSide === 'Buy';
+      out.push({ id: `${id}:x`, ms: x.ts, price: x.price, side: xSide, color: xBuy ? P.accent : P.down,
+        tip: tip(xSide, qty, x.price, x.kind, who) });
+    }
+  }
+  return out.sort((p, q) => p.ms - q.ms);
 }
 /* The tip of the marker nearest (x, y) within r px, or null. points: [{x, y, tip}]. */
 function nearestTip(points, x, y, r) {
@@ -1531,7 +1595,8 @@ function routeSend(action, body, send) {
 const api = { PREFS_KEY, QUOTE_STALE_MS, BOT_NAMES, parsePrefs, prefsText, oneClickKey, short, rootOf, orderPrice, isPending, abbr, inferType, menuText,
   roundTick, bracket, orderBody, clientId, tradeMode, quoteView, usd, money, pnl, rrText, linesFor, linePnl, lineLabel,
   lineText, lineTitle, lineColor, canDrag, withPrice, exitKinds, exitKindAt, exitRefusal, EXIT_DRAG_PX, pastClick, pendingMoveError, exitGhost, exitDropError, expectedNet, exitsBody, exitsTitle, orderTitle, confirmOrder, actionTitle, resultToasts, fillText, fillMarkers, execArrow, botName, positionRows, orderRows, fillRows, accountRows, etTime, diffRows,
-  algoName, algoLabel, algoChoices, algoAccounts, botPill, botToday, algoOverlay, etMs, pastRunMarkers, nearestTip, historySig,
+  algoName, algoLabel, algoChoices, algoAccounts, botPill, botToday, algoOverlay, etMs, etDateOf, pastRunMarkers, pastRunFlags,
+  algoFillMarkers, nearestTip, historySig,
   killConfirm, killToasts, killBlock, killSold,
   enterConfirms, wireSend, sendingSide, symbolChangeTrade, resolveConfirmedAccounts, armedTicked, unarmedLiveMessage, freshQuote,
   needsQuoteForBracket, refuseIfMarketable, cellTrade, loadedTrade, cellAlgo, tradeBits, templateTrade, algoForRoot,
