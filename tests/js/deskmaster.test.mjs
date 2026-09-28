@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
-/* The desk page's (homebase/static/index.html, :8850) master controls -- ARMED/SHADOW, Arm/Disarm
+/* The desk page's (homebase/static/index.html, :8850) master controls -- ARMED/DISARMED, Arm/Disarm
    and the press-and-hold Kill everything -- un-buried from Settings into the top bar (2026-09-28,
    Apple-design audit S2). The inline block runs for real in a vm sandbox (the deskpaper /
    desksettings technique) with a fake clock, so a hold is driven event by event:
@@ -118,10 +118,11 @@ test('ST == null: the pill asserts nothing, no Arm/Disarm (fail closed), and Kil
   assert.equal(els.statusPill.textContent, 'desk unreachable');
 });
 
-test('disarmed: the pill says SHADOW and the button is Arm -- the SAME confirm and POST as before', async () => {
+test('disarmed: the pill says DISARMED and the button is Arm -- the SAME confirm and POST as before', async () => {
   const { api, els, confirms, posts, refreshes, toasts } = load({ st: { armed: false } });
   api.renderMaster();
-  assert.equal(els.statusPill.textContent, 'SHADOW');
+  assert.equal(els.statusPill.textContent, 'DISARMED');
+  assert.equal(els.statusPill.className, 'pill idle');
   assert.equal(els.armBtn.style.display, '');
   assert.equal(els.armBtn.textContent, 'Arm');
   assert.equal(els.armBtn.onclick, api.doArm);
@@ -144,6 +145,7 @@ test('armed: the pill says ARMED and the button is Disarm -- immediate, no confi
   const { api, els, confirms, posts, refreshes } = load({ st: { armed: true } });
   api.renderMaster();
   assert.equal(els.statusPill.textContent, 'ARMED');
+  assert.equal(els.statusPill.className, 'pill armed', 'ARMED has its own unmistakable look');
   assert.equal(els.armBtn.textContent, 'Disarm');
   assert.equal(els.armBtn.onclick, api.doDisarm);
   await els.armBtn.onclick();

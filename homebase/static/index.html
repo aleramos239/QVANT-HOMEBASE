@@ -34,7 +34,21 @@
     border:1px solid transparent; border-radius:var(--radius-sm); padding:2px 8px;
     font-size:0.75rem; font-weight:500; line-height:1.2;
     background:var(--secondary); color:var(--secondary-foreground); }
-  .pill.live{ background:var(--primary); color:var(--primary-foreground); font-weight:600; letter-spacing:.02em; }
+  /* Four meanings, four looks (2026-09-28, S4 -- one solid pill used to mean all of them):
+     ARMED  the desk places real orders: solid red with a light, the page's only solid red token
+     LIVE   a real-money account: a red outline tag, never filled
+     in position  a strategy holds a position today: solid black/white
+     ON     a strategy is switched on: an outline with a dot */
+  .pill.armed{ background:color-mix(in oklch, var(--destructive) 75%, black);
+    color:var(--destructive-foreground); font-weight:700; letter-spacing:.04em; }
+  .pill.armed::before{ content:""; width:7px; height:7px; border-radius:9999px; background:currentColor; }
+  .tag-live{ display:inline-flex; align-items:center; white-space:nowrap; line-height:1.2;
+    border:1px solid color-mix(in oklch, var(--destructive) 60%, transparent); border-radius:3px;
+    background:transparent; color:var(--destructive); padding:1px 5px;
+    font-size:10px; font-weight:700; letter-spacing:.06em; }
+  .pill.inpos{ background:var(--primary); color:var(--primary-foreground); font-weight:600; }
+  .pill.on{ background:transparent; border-color:var(--foreground); color:var(--foreground); }
+  .pill.on::before{ content:""; width:6px; height:6px; border-radius:9999px; background:currentColor; }
   .pill.idle{ background:transparent; border-color:var(--border); color:var(--muted-foreground); }
   .pill.won{ background:color-mix(in oklch, var(--pos) 15%, transparent); color:var(--pos); border-color:color-mix(in oklch, var(--pos) 30%, transparent); }
   .pill.lost{ background:color-mix(in oklch, var(--neg) 15%, transparent); color:var(--neg); border-color:color-mix(in oklch, var(--neg) 30%, transparent); }
@@ -678,7 +692,7 @@ $("#confirmOverlay").addEventListener("click", (e) => {
   if (e.target === e.currentTarget) cfDone(false);
 });
 
-/* ---- master controls (top bar): ARMED/SHADOW, Arm/Disarm, Kill everything ----
+/* ---- master controls (top bar): ARMED/DISARMED, Arm/Disarm, Kill everything ----
    2026-09-28 (Apple-design audit S2): out of Settings and into the top bar -- always visible, no
    dialog to open, nothing to scroll past. The three handlers are UNCHANGED: the same confirmDlg,
    the same POSTs to the desk's own /api/arm and /api/kill (Arm confirms, Disarm is immediate,
@@ -718,8 +732,8 @@ function renderMaster() {
     return;
   }
   const armed = !!ST.armed;
-  pill.className = (armed ? "pill live" : "pill idle") + (DESK_STALE ? " stale" : "");
-  pill.textContent = (armed ? "ARMED" : "SHADOW") + (DESK_STALE ? " · stale" : "");
+  pill.className = (armed ? "pill armed" : "pill idle") + (DESK_STALE ? " stale" : "");
+  pill.textContent = (armed ? "ARMED" : "DISARMED") + (DESK_STALE ? " · stale" : "");
   pill.title = (armed ? "ARMED — signals place REAL orders; SL/TP ride broker-side"
                       : "Disarmed — signals are validated and journaled only") +
     (DESK_STALE ? ". Last known state: the desk is not answering." : "");
@@ -815,12 +829,17 @@ $("#checksOverlay").addEventListener("click", (e) => {
 });
 
 /* ---- render ---- */
-const STATUS_PILL = {idle: "pill idle", placing: "pill", placed: "pill", live: "pill live",
+/* A strategy's day status as a pill -- its own look, never the ARMED red or the LIVE tag (S4):
+   "live" (a position is open) reads "in position", "placed" (entries resting) "orders working".
+   The desk's own word stays in the tooltip. */
+const STATUS_PILL = {idle: "pill idle", placing: "pill", placed: "pill", live: "pill inpos",
                      done: "pill idle", error: "pill lost"};
+const STATUS_TEXT = {placed: "orders working", live: "in position"};
+const dayPill = (st) => `<span class="${STATUS_PILL[st] || "pill idle"}" title="Today: ${st}">${STATUS_TEXT[st] || st}</span>`;
 
 function stratCard(name, s) {
   const c = s.cfg;
-  const pill = `<span class="${STATUS_PILL[s.day_status] || "pill idle"}">${s.day_status}</span>`;
+  const pill = dayPill(s.day_status);
   const onoff = `<button class="switch" aria-checked="${c.enabled}"
     title="${c.enabled ? "ON — this strategy runs and executes" : "OFF — ignores all signals"}"
     onclick="toggleStrat('${name}', ${!c.enabled})"></button>`;
@@ -1097,7 +1116,7 @@ function acctRow(id, extra) {
   return `<div class="acct" style="padding:7px 0">
     <span class="dot ${a.connected ? "on" : "off"}" style="width:7px;height:7px"></span>
     <span class="nm" style="font-size:13px">${a.label}</span>
-    ${a.env === "live" ? '<span class="pill live" style="font-size:10px">LIVE</span>' : ""}
+    ${a.env === "live" ? '<span class="tag-live" title="A live account — real money">LIVE</span>' : ""}
     ${extra.qty ? (extra.strategy
       ? `<span class="strats qty-edit" title="Click to change size"
            onclick="editQty(event,'${extra.strategy}','${id}',${extra.qty})">×${extra.qty}</span>`
@@ -1231,7 +1250,7 @@ function setEnv(env) {
     : "Demo is the safe default.";
   n.style.color = env === "live" ? "var(--destructive)" : "";
   $("#envTag2").innerHTML = env === "live"
-    ? '<span class="pill live" style="font-size:11px;vertical-align:middle">LIVE</span>' : "";
+    ? '<span class="tag-live" style="vertical-align:middle" title="A live login — real money">LIVE</span>' : "";
 }
 async function wizNext1() {
   if (WIZ.env === "live" && !(await confirmDlg("Connect a LIVE account?",
@@ -1865,9 +1884,9 @@ function renderAlgoMgr() {
   $("#algoCount").textContent = rows.length + " algo" + (rows.length === 1 ? "" : "s");
   $("#algoList").innerHTML = rows.length
     ? rows.map(a => {
-        const statusPill = `<span class="${STATUS_PILL[a.day_status] || "pill idle"}">${a.day_status}</span>`;
+        const statusPill = dayPill(a.day_status);
         const onPill = a.enabled
-          ? `<span class="pill live">ON</span>` : `<span class="pill idle">OFF</span>`;
+          ? `<span class="pill on" title="Switched on">ON</span>` : `<span class="pill idle" title="Switched off">OFF</span>`;
         const note = a.locked
           ? `<span class="mcap" style="margin:2px 0 0">${a.lockReason}</span>` : "";
         return `<div class="acct" style="padding:9px 0;align-items:flex-start">
