@@ -25,7 +25,9 @@ const FIELDS = {
 const DEFAULTS = {
   trend: { width: 2, lineStyle: 'solid', extendLeft: false, extendRight: false, text: '', fontSize: 12,
     textColor: '#2962FF', bold: false, labelPos: 'above' },
-  hline: { width: 1, lineStyle: 'dashed', axisLabel: true, text: '', fontSize: 12,
+  // width 1 / solid / axisLabel on is today's look (the hline price line, unstyled) -- an old
+  // drawing with no `style` at all must render exactly as it did before this plan
+  hline: { width: 1, lineStyle: 'solid', axisLabel: true, text: '', fontSize: 12,
     textColor: '#2962FF', bold: false, labelPos: 'above' },
   rect: { width: 1, lineStyle: 'solid', fillColor: 'rgba(41,98,255,0.10)', text: '', fontSize: 12,
     textColor: '#2962FF', bold: false, labelPos: 'top' },
@@ -80,6 +82,21 @@ function starting(type, preset) {
 
 function dashFor(style) { return DASH[(style && style.lineStyle) || 'solid'] || DASH.solid; }
 
+/* A trend line's two pixel endpoints [x0,y0,x1,y1], stretched to the pane's screen edges (x = 0,
+   x = paneW) on the left and/or right (style.extendLeft / extendRight) along the same slope.
+   "Left"/"right" are screen directions, not which of the two stored points is which -- a line
+   drawn right-to-left still extends left off its leftmost pixel. A vertical segment (x0 === x1)
+   has no left/right to extend into and is returned unchanged. */
+function extendLine(x0, y0, x1, y1, paneW, left, right) {
+  if ((!left && !right) || x0 === x1) return [x0, y0, x1, y1];
+  const m = (y1 - y0) / (x1 - x0), atX = (fromX, fromY, toX) => fromY + m * (toX - fromX);
+  const flip = x0 > x1;
+  let [lx, ly, rx, ry] = flip ? [x1, y1, x0, y0] : [x0, y0, x1, y1];
+  if (left) { ly = atX(lx, ly, 0); lx = 0; }
+  if (right) { ry = atX(rx, ry, paneW); rx = paneW; }
+  return flip ? [rx, ry, lx, ly] : [lx, ly, rx, ry];
+}
+
 /* Where a text label sits, in pixels, given the drawing's already-computed handle points (as
    handlePoints() in drawings.js returns them) and the pane's width (hline centres on the pane,
    like the measure box does). Returns {x, y, baseline: 'top'|'middle'|'bottom'} -- the caller sets
@@ -120,7 +137,7 @@ function shouldStartRuler(tool, shiftKey) { return tool === 'cursor' && !!shiftK
 function snapEndpointPrice(otherPrice, proposedPrice, shiftHeld) { return shiftHeld ? otherPrice : proposedPrice; }
 
 const api = { LINE_STYLES, LABEL_POS, FIELDS, DEFAULTS, MAX_TEXT, isColor, isValidField, normalize, starting,
-  dashFor, labelAnchor, shouldStartRuler, snapEndpointPrice };
+  dashFor, extendLine, labelAnchor, shouldStartRuler, snapEndpointPrice };
 if (typeof window !== 'undefined') window.HBDrawStyle = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

@@ -12,6 +12,7 @@
 (function () {
 'use strict';
 const Cat = (typeof window !== 'undefined' && window.HBCatalog) || (typeof require === 'function' ? require('./catalog.js') : null);
+const DS = (typeof window !== 'undefined' && window.HBDrawStyle) || (typeof require === 'function' ? require('./drawstyle.js') : null);
 const HANDLE_TOL = 6;   // px: a handle this close is grabbed
 const LINE_TOL = 5;     // px: a line this close is hit
 
@@ -322,9 +323,10 @@ class Primitive {
       const pc = { tick: c.cell.tick, pv: c.cell.pv, bars: c.cell.bars, size: mediaSize, font: `12px ${window.HBCell.FONT}` };
       for (const d of c.items()) {
         if (isPos(d)) Pos().drawPosition(ctx, d, geo, P, { ...pc, selected: d.id === c.sel });
-        else if (d.type !== 'hline') drawShape(ctx, d, geo, P);
+        else if (d.type === 'hline') drawHlineLabel(ctx, d, geo, P, mediaSize.width);
+        else drawShape(ctx, d, geo, P, mediaSize.width);
       }
-      if (c.place) drawShape(ctx, c.place, geo, P);
+      if (c.place) drawShape(ctx, c.place, geo, P, mediaSize.width);
       const sel = c.selectedDrawing(), hs = sel && handlePoints(sel, geo);
       if (hs) {
         ctx.fillStyle = P.handleFill;
@@ -337,22 +339,51 @@ class Primitive {
   }
 }
 
-function drawShape(ctx, d, geo, P) {
+/* The optional text label (style.text): trend/hline above/below/middle the line, rect inside top/
+   middle/bottom -- DS.labelAnchor (pure) says where; this only paints it. No background box (a
+   plain caption, like TradingView's line labels), unlike the measure box's callout. */
+function drawLabel(ctx, type, hs, style, paneW) {
+  if (!style.text) return;
+  const a = DS.labelAnchor(type, hs, style.labelPos, paneW);
+  if (!a) return;
+  ctx.font = `${style.bold ? 'bold ' : ''}${style.fontSize}px ${window.HBCell.FONT}`;
+  ctx.fillStyle = style.textColor;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = a.baseline;
+  ctx.fillText(style.text, a.x, a.y);
+}
+
+/* A horizontal line's own line is a native Lightweight Charts price line (Controller#refresh), so
+   this only draws its optional text label on the canvas layer, at the same style the price line
+   itself was just given. */
+function drawHlineLabel(ctx, d, geo, P, paneW) {
   const hs = handlePoints(d, geo);
   if (!hs) return;
+  drawLabel(ctx, 'hline', hs, DS.normalize('hline', d.style), paneW);
+}
+
+function drawShape(ctx, d, geo, P, paneW) {
+  const hs = handlePoints(d, geo);
+  if (!hs) return;
+  const style = DS.normalize(d.type, d.style);
   const [[x0, y0], [x1, y1]] = hs;
   ctx.strokeStyle = d.color || P.accent;
+  ctx.lineWidth = style.width;
+  ctx.setLineDash(DS.dashFor(style));
   if (d.type === 'trend') {
-    ctx.lineWidth = 2;
+    const [ex0, ey0, ex1, ey1] = DS.extendLine(x0, y0, x1, y1, paneW, style.extendLeft, style.extendRight);
     ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(ex0, ey0); ctx.lineTo(ex1, ey1); ctx.stroke();
+    ctx.setLineDash([]);
+    drawLabel(ctx, 'trend', hs, style, paneW);
     return;
   }
   const x = Math.min(x0, x1), y = Math.min(y0, y1), w = Math.abs(x1 - x0), h = Math.abs(y1 - y0);
-  ctx.fillStyle = P.accentSoft;
+  ctx.fillStyle = style.fillColor;
   ctx.fillRect(x, y, w, h);
-  ctx.lineWidth = 1;
   ctx.strokeRect(Math.round(x) + 0.5, Math.round(y) + 0.5, Math.round(w), Math.round(h));
+  ctx.setLineDash([]);
+  drawLabel(ctx, 'rect', hs, style, paneW);
 }
 
 function drawMeasure(ctx, m, geo, P, mctx, size) {
@@ -393,6 +424,7 @@ class Controller {
     this.downAt = null;    // pane point of the press that started placing
     this.drag = null;      // moving / reshaping: {orig, part, index, from, down, moving, cur}
     this.owned = false;    // this gesture switched the chart's panning off
+    this.shiftRuler = false;   // this.measure is a Shift+drag ruler (cursor tool), not the measure TOOL itself
     this.hlines = new Map();   // drawing id -> its price line
     this.prim = new Primitive(this);
     cell.candles.attachPrimitive(this.prim);
@@ -475,8 +507,11 @@ class Controller {
     for (const d of this.items()) {
       if (d.type !== 'hline') continue;
       seen.add(d.id);
-      const opts = { price: d.points[0].p, color: d.color || P.accent, lineWidth: d.id === this.sel ? 2 : 1,
-        lineStyle: window.LightweightCharts.LineStyle.Solid, axisLabelVisible: true, title: '' };
+      const style = DS.normalize('hline', d.style), LS = window.LightweightCharts.LineStyle;
+      const LMAP = { solid: LS.Solid, dashed: LS.Dashed, dotted: LS.Dotted };
+      const opts = { price: d.points[0].p, color: d.color || P.accent,
+        lineWidth: Math.min(4, style.width + (d.id === this.sel ? 1 : 0)),
+        lineStyle: LMAP[style.lineStyle] ?? LS.Solid, axisLabelVisible: style.axisLabel, title: '' };
       const line = this.hlines.get(d.id);
       if (line) line.applyOptions(opts); else this.hlines.set(d.id, this.cell.candles.createPriceLine(opts));
     }
@@ -501,17 +536,39 @@ class Controller {
     if (this.cell.chart) this.cell.chart.applyOptions({ handleScroll: true, handleScale: true });
   }
 
+  /* A trend line being placed: its second point's price, Shift-snapped to the first point's (a
+     perfectly horizontal line) while Shift is held; releasing Shift on a later move goes back to
+     the pointer's own price (DS.snapEndpointPrice: no state, just the flag on this call). */
+  placedEnd(at, shiftKey) {
+    const p = this.place && this.place.type === 'trend' ? DS.snapEndpointPrice(this.place.points[0].p, at.p, shiftKey) : at.p;
+    return { t: at.t, p };
+  }
+
   onDown(e) {
     // left button only, and not Ctrl+press: on macOS that is a right-click, and its context menu takes the mouse-up
     if (e.button !== 0 || e.ctrlKey || !this.cell.chart) return;
     const pt = this.local(e), tool = this.host.tool();
     if (this.measure && this.measure.done) { this.measure = null; this.prim.redraw(); }
     if (!this.inPane(pt)) return;
+    // Shift + press-drag with the cursor tool starts the ruler (the measure tool's own gesture),
+    // taking priority over selecting/moving whatever is under the pointer, and never pans.
+    if (DS.shouldStartRuler(tool, e.shiftKey)) {
+      const at = this.at(pt, e);
+      if (!at) return;
+      this.own(e);
+      const start = { t: at.t, p: at.p };
+      this.measure = { a: start, b: start, done: false };
+      this.shiftRuler = true;
+      this.mode = 'drag';
+      this.downAt = pt;
+      this.prim.redraw();
+      return;
+    }
     if (tool !== 'cursor') {
       const at = this.at(pt, e);
       if (!at) return;
       this.own(e);
-      if (this.mode === 'click') { this.finish(at); return; }
+      if (this.mode === 'click') { this.finish(this.place ? this.placedEnd(at, e.shiftKey) : at); return; }
       if (tool === 'hline') { this.commit({ type: 'hline', points: [{ p: at.p }] }); return; }
       if (tool === 'long' || tool === 'short') { this.commit(this.newPosition(tool, at)); return; }
       const start = { t: at.t, p: at.p };
@@ -535,8 +592,9 @@ class Controller {
     if (!d) { if (this.sel) { this.sel = null; this.refresh(); } return; }   // empty chart: deselect, let it pan
     this.own(e);
     this.sel = d.id;
-    this.drag = { orig: d, part: hit.part, index: hit.index, from: this.at(pt), down: pt, moving: false, cur: null };
-    this.setCursor('grabbing');
+    // a locked drawing can still be selected (so its toolbar shows, with Unlock) but never dragged
+    this.drag = d.locked ? null : { orig: d, part: hit.part, index: hit.index, from: this.at(pt), down: pt, moving: false, cur: null };
+    this.setCursor(d.locked ? null : 'grabbing');
     this.refresh();
   }
 
@@ -546,7 +604,7 @@ class Controller {
     if (this.place || (this.measure && !this.measure.done)) {
       const at = this.at(this.local(e), e);
       if (!at) return;
-      const end = { t: at.t, p: at.p };
+      const end = this.place ? this.placedEnd(at, e.shiftKey) : { t: at.t, p: at.p };
       if (this.place) this.place = { ...this.place, points: [this.place.points[0], end] };
       else this.measure = { ...this.measure, b: end };
       this.prim.redraw();
@@ -559,7 +617,9 @@ class Controller {
     this.drag.moving = true;
     const at = this.at(pt, part === 'handle' ? e : null);
     if (!at) return;
-    this.drag.cur = part === 'handle' ? setPoint(orig, index, at.t, at.p, this.ctx())
+    // dragging a trend line's own endpoint: Shift snaps it to the OTHER endpoint's current price
+    const p = part === 'handle' && orig.type === 'trend' ? DS.snapEndpointPrice(orig.points[1 - index].p, at.p, e.shiftKey) : at.p;
+    this.drag.cur = part === 'handle' ? setPoint(orig, index, at.t, p, this.ctx())
       : moveDrawing(orig, Math.round(at.L) - Math.round(from.L), at.p - from.p, this.cell.tick, this.ctx());
     this.refresh();
   }
@@ -569,9 +629,14 @@ class Controller {
     if (this.place || (this.measure && !this.measure.done)) {
       if (this.mode !== 'drag') return;
       const pt = this.local(e);
-      if (Math.hypot(pt.x - this.downAt.x, pt.y - this.downAt.y) < MOVE_PX) { this.mode = 'click'; this.release(); return; }
+      if (Math.hypot(pt.x - this.downAt.x, pt.y - this.downAt.y) < MOVE_PX) {
+        // a Shift+click with no real drag: nothing to measure, drop it rather than arming a 2nd click
+        if (this.shiftRuler) { this.measure = null; this.mode = null; this.downAt = null; this.shiftRuler = false; this.release(); this.prim.redraw(); return; }
+        this.mode = 'click'; this.release(); return;
+      }
       const at = this.at(pt, e);
-      if (at) this.finish(at);
+      this.shiftRuler = false;
+      if (at) this.finish(this.place ? this.placedEnd(at, e.shiftKey) : at);
       return;
     }
     if (!this.drag) return;
@@ -587,6 +652,7 @@ class Controller {
     const end = { t: at.t, p: at.p };
     this.mode = null;
     this.downAt = null;
+    this.shiftRuler = false;
     this.release();
     if (this.measure && !this.measure.done) {
       this.measure = { ...this.measure, b: end, done: true };
@@ -601,8 +667,18 @@ class Controller {
     this.commit(d);
   }
 
+  /* A fresh drawing's style: that tool's saved default preset (host.styleDefault, when the page
+     provides one) merged over the type's built-in default -- DS.starting also re-normalizes, so a
+     stale or hand-edited preset can never land an invalid field on a new drawing. long/short and
+     the measure tool's own placements (no `type` style at all) get none. */
+  startingStyle(type) {
+    const preset = this.host.styleDefault ? this.host.styleDefault(type) : null;
+    return DS.FIELDS[type] && DS.FIELDS[type].length ? DS.starting(type, preset) : null;
+  }
+
   commit(d) {
-    const full = { id: newId(), ...d, color: '#2962FF' };
+    const style = this.startingStyle(d.type);
+    const full = { id: newId(), ...d, color: '#2962FF', ...(style ? { style } : {}) };
     this.sel = full.id;
     this.release();
     this.host.drawings.add(this.root, full);   // every chart of this symbol refreshes
@@ -635,8 +711,16 @@ class Controller {
       this.host.onPosition(this.cell, all[i]);
       return;
     }
-    // on any other drawing: its own behaviour (none yet), no menu
-    if (all.some((d) => hitTest(d, pt, geo))) return;
+    // trend / hline / rect: its own settings dialog (2026-09-27 draw-tools plan)
+    for (let i = all.length - 1; i >= 0; i--) {
+      if (isPos(all[i]) || !hitTest(all[i], pt, geo)) continue;
+      e.preventDefault();
+      e.stopPropagation();
+      this.sel = all[i].id;
+      this.refresh();
+      if (this.host.onDrawingSettings) this.host.onDrawingSettings(this.cell, all[i]);
+      return;
+    }
     // empty chart space: the chart menu (spec §7), and not Lightweight Charts' own double-click
     e.stopPropagation();
     this.cell.onMenu(e, true);
@@ -644,7 +728,7 @@ class Controller {
 
   toolChanged() {
     if (this.place || (this.measure && !this.measure.done)) {
-      this.place = null; this.measure = null; this.mode = null; this.downAt = null;
+      this.place = null; this.measure = null; this.mode = null; this.downAt = null; this.shiftRuler = false;
       this.release();
       this.prim.redraw();
     }
@@ -661,7 +745,7 @@ class Controller {
   abort() {
     if (!this.held()) return false;
     if (this.drag) this.drag = null;
-    else { this.place = null; this.measure = null; this.mode = null; this.downAt = null; }
+    else { this.place = null; this.measure = null; this.mode = null; this.downAt = null; this.shiftRuler = false; }
     this.release();
     this.setCursor(null);
     this.refresh();
@@ -671,7 +755,7 @@ class Controller {
   escape() {
     if (this.abort()) return true;
     if (this.place || this.measure) {   // a placement waiting for its 2nd click, or a finished measure
-      this.place = null; this.measure = null; this.mode = null; this.downAt = null;
+      this.place = null; this.measure = null; this.mode = null; this.downAt = null; this.shiftRuler = false;
       this.release();
       this.prim.redraw();
       return true;
@@ -680,8 +764,11 @@ class Controller {
     return false;
   }
 
+  /* Never on a locked drawing (its toolbar's Unlock, or the settings dialog, is the way off). */
   deleteSelected() {
     if (!this.sel) return false;
+    const d = this.selectedDrawing();
+    if (d && d.locked) return false;
     const id = this.sel;
     this.sel = null;
     this.host.drawings.remove(this.root, id);
