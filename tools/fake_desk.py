@@ -330,6 +330,14 @@ class FakeDesk:
             net = p["net"] if p else 0
             if why is None and not net:
                 why = f"no {symbol} position on {a['label']} to protect"
+            if why is None and net != it.expected(aid):
+                why = (f"the {symbol} position on {a['label']} changed since you confirmed "
+                       f"({it.expected(aid):+d} → {net:+d}) — nothing done")
+            if why is None and any((a["legs"].get(oid) or {}).get("sl") or (a["legs"].get(oid) or {}).get("tp")
+                                   for oid, o in a["orders"].items() if o["symbol"] == symbol):
+                # a pending entry here still carries its bracket (the desk: a Suspended OSO leg)
+                why = (f"a pending order's bracket is waiting in {symbol} on {a['label']} — "
+                       "cancel it or let it fill first")
             if why is None:
                 out = "Sell" if net > 0 else "Buy"
                 ex = [o for o in a["orders"].values() if o["symbol"] == symbol and o["side"] == out]

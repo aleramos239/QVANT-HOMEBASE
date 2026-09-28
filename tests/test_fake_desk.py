@@ -289,7 +289,12 @@ def test_bot_kill_before_the_fire_just_marks_it_killed():
 def test_exits_add_a_tp_to_a_positions_stop_as_one_oco_pair():
     c = client()
     assert order(c, qty=2, sl_price=30890.0).json()["results"]["sim041"]["ok"]
-    body = {"client_id": "e1", "accounts": ["sim041"], "root": "NQ", "tp_price": 30920.0, "quotes": Q}
+    body = {"client_id": "e1", "accounts": ["sim041"], "root": "NQ", "tp_price": 30920.0, "quotes": Q,
+            "expected_net": {"sim041": 2}}
+    changed = {**body, "client_id": "e0", "expected_net": {"sim041": 3}}
+    r = c.post("/api/trade/exits", json=changed, headers=H).json()["results"]["sim041"]
+    assert r["refused"] and "changed since you confirmed (+3 → +2)" in r["error"]
+    assert c.post("/api/trade/exits", json={**body, "expected_net": {}}, headers=H).status_code == 400
     assert c.post("/api/trade/exits", json=body, headers=H).json()["results"]["sim041"]["ok"] is True
     a = acct(c)
     assert sorted((o["type"], o["qty"], o["price"] or o["stop_price"], o["tif"]) for o in a["orders"]) == \
@@ -300,3 +305,14 @@ def test_exits_add_a_tp_to_a_positions_stop_as_one_oco_pair():
     body = {**body, "client_id": "e2", "sl_price": 30950.0, "tp_price": None}
     r = c.post("/api/trade/exits", json=body, headers=H).json()["results"]["sim041"]
     assert r["refused"] and "no NQZ6 position" in r["error"]
+
+
+def test_exits_refuse_while_a_pending_entry_carries_its_bracket():
+    c = client()
+    assert order(c, qty=1).json()["results"]["sim041"]["ok"]                       # long 1
+    assert order(c, cid="c2", type="Limit", price=30890.0, sl_price=30880.0).json()["results"]["sim041"]["ok"]
+    body = {"client_id": "e1", "accounts": ["sim041"], "root": "NQ", "tp_price": 30920.0, "quotes": Q,
+            "expected_net": {"sim041": 1}}
+    r = c.post("/api/trade/exits", json=body, headers=H).json()["results"]["sim041"]
+    assert r["refused"] and r["error"] == \
+        "a pending order's bracket is waiting in NQZ6 on SIM0000041 — cancel it or let it fill first"

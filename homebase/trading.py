@@ -269,10 +269,32 @@ class ExitsIntent:
     root: str
     sl_price: Optional[float]
     tp_price: Optional[float]
+    expected_net: tuple = ()          # ((account, signed net the confirm showed), ...)
+
+    def expected(self, aid: str) -> int:
+        return dict(self.expected_net)[aid]
+
+
+EXPECTED_NET = "expected_net: {account: the signed position the confirm showed} for every account"
+
+
+def _expected_net(body: dict, accounts: tuple) -> tuple:
+    """The position each account held when the confirm was shown (signed: +long / -short), one per account.
+    Required: an exit is sized to |net| at send, so a position that changed since must refuse, not resize."""
+    e = body.get("expected_net")
+    if not isinstance(e, dict) or len(e) > 40:
+        raise ValueError(EXPECTED_NET)
+    out = []
+    for aid in accounts:
+        v = e.get(aid)
+        if isinstance(v, bool) or not isinstance(v, int) or v == 0 or abs(v) > HARD_MAX_POSITION_QTY:
+            raise ValueError(EXPECTED_NET)
+        out.append((aid, v))
+    return tuple(out)
 
 
 def parse_exits(body) -> ExitsIntent:
-    """{client_id, accounts: [...] | account, root, sl_price?, tp_price?}: at
+    """{client_id, accounts: [...] | account, root, sl_price?, tp_price?, expected_net}: at
     least one price. `accounts` or `account`, never both."""
     body = _obj(body)
     if "accounts" in body and "account" in body:
@@ -282,12 +304,27 @@ def parse_exits(body) -> ExitsIntent:
     tp = _price(body.get("tp_price"), "tp_price")
     if sl is None and tp is None:
         raise ValueError("an sl_price or a tp_price is required")
-    return ExitsIntent(_client_id(body), accounts, _root(body), sl, tp)
+    return ExitsIntent(_client_id(body), accounts, _root(body), sl, tp, _expected_net(body, accounts))
 
 
 EXIT_TIF = "GTC"            # the OSO brackets' legs are GTC (tradovate_ws.place_oso): exits match them
 EXIT_TEXT = "homebase:chart-exit"
 EXITS_MISMATCH = "exits don't match the position — manage them in the order panel"
+CANCEL_CONFIRM_S = 3.0      # an exit being replaced must show Canceled in the pushed cache within this
+CANCEL_POLL_S = 0.1
+CHECK_NOW = "CHECK THIS POSITION'S PROTECTION NOW"
+
+
+def pending_refusal(orders: list, where: str) -> Optional[str]:
+    """Fail closed on any order in the contract that is not plainly Working: a Suspended one is a pending
+    entry's OSO bracket leg (it would be taken for the position's own exit), anything else (PendingNew,
+    PendingReplace, no status) is in flux. None = every order is Working."""
+    odd = [o for o in orders if o.get("status") != "Working"]
+    if not odd:
+        return None
+    if any(o.get("status") == "Suspended" for o in odd):
+        return f"a pending order's bracket is waiting in {where} — cancel it or let it fill first"
+    return f"an order in {where} is {odd[0].get('status') or 'in an unknown state'} — try again in a moment"
 
 
 def exit_levels(net: int, exits: list, sl_new, tp_new, last: Optional[float]) -> tuple:
@@ -438,8 +475,10 @@ class ChartDesk:
     def __init__(self, cfg: AppCfg, engine, adapters: dict, acct_status: dict, *,
                  timer_status: Callable[[], dict] | None = None,
                  save: Callable[[AppCfg], None] | None = None,
-                 mono: Callable[[], float] = time.monotonic):
+                 mono: Callable[[], float] = time.monotonic,
+                 sleep=asyncio.sleep):
         self.cfg, self.engine, self.adapters, self.acct_status = cfg, engine, adapters, acct_status
+        self._sleep = sleep                            # injectable: the exits' cancel wait (tests)
         self.timer_status = timer_status or (lambda: {"date": None, "strategies": {}})
         self._save = save or config_mod.save
         self._mono = mono
@@ -1063,13 +1102,17 @@ class ChartDesk:
         The naked window (accepted tradeoff, 2026-09-27): a broker cannot link
         an order that is already working into a new OCO, so adding the missing
         half to an existing SL (or TP) CANCELS the existing exit and then
-        places the pair with its price kept. Between the cancel's ack and the
-        pair's ack the position has no working protection (one broker round
-        trip). It is kept as short as possible: every check runs BEFORE the
-        cancel; the position is re-read after it (the old exit may have filled
-        instead), and a DEFINITE refusal of the pair re-places the original
-        exit alone at once. A pair whose outcome is unknown (a timeout: it may
-        be working) is not doubled up; that result says so, loudly."""
+        places the pair with its price kept. Between the old exit's cancel and
+        the pair's ack the position has no working protection. It is kept as
+        short as it can safely be: every check runs BEFORE the cancel; a
+        cancel's ack only means "accepted", so the pair waits until the pushed
+        cache shows the old exit Canceled (at most CANCEL_CONFIRM_S) -- Filled,
+        still working or unknown by then places NOTHING (a pair on a position
+        that just closed would open one the other way; a cancel rejected later
+        would leave two stops) and says so loudly; the position is re-read
+        after that; and a DEFINITE refusal of the pair re-places the original
+        exit alone at once. A result whose outcome is unknown (a timeout: it
+        may be working) is never doubled up, and says so loudly."""
         ad, view, label = self._gate(aid)
         contract = self._contract(it.root)
         self._lock(aid, contract, label)
@@ -1081,6 +1124,13 @@ class ChartDesk:
                   if p.get("symbol") == contract)
         if not net:
             raise Refused(f"no {contract} position on {label} to protect")
+        if net != it.expected(aid):              # the confirm showed another position: never resize
+            raise Refused(f"the {contract} position on {label} changed since you confirmed "
+                          f"({it.expected(aid):+d} → {net:+d}) — nothing done")
+        mine = [o for o in view.get("orders", []) if o.get("symbol") == contract]
+        pending = pending_refusal(mine, f"{contract} on {label}")
+        if pending:
+            raise Refused(pending)
         try:
             broker_net = await ad.get_net_position(contract)
         except Exception as e:  # noqa: BLE001 — unreadable is not "as cached"
@@ -1088,7 +1138,6 @@ class ChartDesk:
         if broker_net != net:
             raise Refused(f"the {contract} position on {label} is changing — try again in a moment")
         exit_side = "Sell" if net > 0 else "Buy"
-        mine = [o for o in view.get("orders", []) if o.get("symbol") == contract]
         if any(o.get("side") not in SIDES for o in mine):
             raise Refused(EXITS_MISMATCH)
         exits = [o for o in mine if o.get("side") == exit_side]
@@ -1109,6 +1158,7 @@ class ChartDesk:
         steps: dict = {}
         if kept is not None:
             kid = str(kept.get("order_id"))
+            what = "stop" if kept is ex_sl else "target"
             if kid in bots:                    # re-checked right before the cancel
                 raise Refused("that exit belongs to a bot — it can't be changed from the chart")
             c = await _call(ad.cancel_order_by_id(kid))
@@ -1117,18 +1167,26 @@ class ChartDesk:
                 return self._exits_done(it, aid, contract, exit_side, qty, sl, tp, steps, False, None,
                                         f"the existing exit could not be cancelled ({c.error}) "
                                         "— nothing changed")
+            status = await self._cancel_settled(ad, kid)       # the ack was only "accepted"
+            steps["cancel"]["status"] = status
+            if status != "Canceled":
+                why = (f"the old {what} FILLED while it was being replaced" if status == "Filled" else
+                       f"the old {what}'s cancel was not confirmed within {CANCEL_CONFIRM_S:.0f} s "
+                       f"(status: {status or 'unknown'})")
+                return self._exits_done(it, aid, contract, exit_side, qty, sl, tp, steps, False, None,
+                                        f"{why} — NO new exit was placed; {CHECK_NOW}")
             try:
                 after = await ad.get_net_position(contract)
             except Exception as e:  # noqa: BLE001
                 after = None
                 steps["recheck_error"] = str(e)
             if after != net:
-                # the old exit may have filled (flat now: a new pair could OPEN a position),
-                # or the position is unreadable: put nothing new on, say so loudly
+                # the position moved (or is unreadable) although the old exit was cancelled:
+                # put nothing new on, say so loudly
                 return self._exits_done(it, aid, contract, exit_side, qty, sl, tp, steps, False, None,
                                         f"the {contract} position changed while its exit was being "
                                         f"replaced (now {after if after is not None else 'unreadable'}) "
-                                        "— NO exit was placed; check the position and its protection")
+                                        f"— NO exit was placed; {CHECK_NOW}")
             try:                               # the Kill or the 09:20 lock may have landed meanwhile
                 self._still_allowed(aid, contract, label, "nothing new placed")
             except Refused as e:
@@ -1152,15 +1210,34 @@ class ChartDesk:
                           "tp_order_id": (r.raw or {}).get("tp_order_id")}
         if r.order_id:
             self._placed(aid, contract, exit_side, qty, r)
+        if not r.ok and ((r.raw or {}).get("outcome_unknown") or r.order_id):
+            # it may be working at the broker: never doubled up, never reported as a plain refusal --
+            # with or without an exit before it
+            gone = " and the old exit was cancelled" if kept is not None else ""
+            return self._exits_done(it, aid, contract, exit_side, qty, sl, tp, steps, False, r.order_id,
+                                    f"the {'SL/TP pair' if pair else 'exit'}'s outcome is unknown "
+                                    f"({r.error}){gone} — {CHECK_NOW}")
         if r.ok or kept is None:
             return self._exits_done(it, aid, contract, exit_side, qty, sl, tp, steps, r.ok, r.order_id,
                                     r.error)
-        if (r.raw or {}).get("outcome_unknown") or r.order_id:
-            return self._exits_done(it, aid, contract, exit_side, qty, sl, tp, steps, False, r.order_id,
-                                    f"the SL/TP pair's outcome is unknown ({r.error}) and the old exit "
-                                    "was cancelled — CHECK THIS POSITION'S PROTECTION NOW")
         return await self._exits_restore(it, aid, contract, exit_side, qty, sl, tp, steps, kept, ad,
                                          f"the SL/TP pair was refused ({r.error})")
+
+    async def _cancel_settled(self, ad, oid: str) -> Optional[str]:
+        """After a cancel's ack (only "accepted"): poll the adapter -- its pushed
+        order cache; no broker call for an order it already holds -- until
+        `oid` shows Canceled or Filled, or CANCEL_CONFIRM_S has passed. Returns
+        the last status seen (None: unreadable). Only "Canceled" lets a swap
+        go on."""
+        deadline = self._mono() + CANCEL_CONFIRM_S
+        while True:
+            try:
+                status = await ad.get_order_status(oid)
+            except Exception:  # noqa: BLE001 — unreadable is not cancelled
+                status = None
+            if status in ("Canceled", "Filled") or self._mono() >= deadline:
+                return status
+            await self._sleep(CANCEL_POLL_S)
 
     async def _exits_restore(self, it, aid, contract, exit_side, qty, sl, tp, steps, kept, ad,
                              why: str) -> dict:
