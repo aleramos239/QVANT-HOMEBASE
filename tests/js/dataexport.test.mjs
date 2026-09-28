@@ -142,6 +142,15 @@ test('missingSummary reports a count, singular/plural, or nothing when complete'
   assert.equal(DE.missingSummary({ sessions_total: 1, missing: ['2026-09-01'] }), '1 of 1 session missing (no file)');
 });
 
+test('gapsSummary counts known gaps (a live recording\'s own sidecar) across the sessions that have them', () => {
+  assert.equal(DE.gapsSummary(null), '');
+  assert.equal(DE.gapsSummary({ missing_hours: {} }), '');
+  assert.equal(DE.gapsSummary({ missing_hours: { '2026-09-24': [[1, 2]] } }),
+    '1 known gap within 1 session on disk');
+  assert.equal(DE.gapsSummary({ missing_hours: { '2026-09-24': [[1, 2], [3, 4]], '2026-09-25': [[5, 6]] } }),
+    '3 known gaps within 2 sessions on disk');
+});
+
 /* ---- TYPES table ---- */
 
 test('TYPES: level3 is disabled with a reason; level2 needs levels and is depth-only', () => {

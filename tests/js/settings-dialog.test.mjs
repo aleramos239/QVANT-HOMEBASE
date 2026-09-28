@@ -588,6 +588,23 @@ test('Data tab: a missing session shows the warning; none hides it', async () =>
   assert.equal(findText(why, '2 of 4 sessions missing (no file)') != null, true);
 });
 
+test('Data tab: a KNOWN GAP in an otherwise-present session shows too, even with no session fully missing', async () => {
+  const cell = makeCell('time:60');
+  const { exp } = makeExportHost({
+    coverage: async () => ({ sessions_total: 2, missing: [], missing_hours: { '2026-09-01': [[1000, 2000]] } }),
+  });
+  const { box } = openData(cell, exp);
+  await flush();
+  const startIn = descend(box, (el) => el.tagName === 'input' && el.getAttribute('aria-label') === 'From date');
+  const endIn = descend(box, (el) => el.tagName === 'input' && el.getAttribute('aria-label') === 'To date');
+  startIn.value = '2026-09-01'; startIn.oninput(); startIn.onblur();
+  endIn.value = '2026-09-02'; endIn.oninput(); endIn.onblur();
+  await flush();
+  const why = box.querySelector('.set-why');
+  assert.equal(why.hidden, false, 'the box shows even though no session is fully missing');
+  assert.equal(findText(why, '1 known gap within 1 session on disk') != null, true);
+});
+
 test('Data tab: Start builds the request from the form, then polling reaches done with a Show in Finder button', async () => {
   const cell = makeCell('time:60');
   const { exp, calls } = makeExportHost({

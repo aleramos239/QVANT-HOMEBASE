@@ -141,8 +141,19 @@ function missingSummary(cov) {
   return `${n} of ${cov.sessions_total} session${cov.sessions_total === 1 ? '' : 's'} missing (no file)`;
 }
 
+/* The KNOWN-gap line for sessions that DO have a file (a live recording's own gaps -- free, no
+   tick decode): "2 known gaps within 1 session on disk", or '' when there are none / not checked. */
+function gapsSummary(cov) {
+  const mh = cov && cov.missing_hours;
+  const dates = mh ? Object.keys(mh) : [];
+  if (!dates.length) return '';
+  const n = dates.reduce((sum, d) => sum + ((mh[d] && mh[d].length) || 0), 0);
+  if (!n) return '';
+  return `${n} known gap${n === 1 ? '' : 's'} within ${dates.length} session${dates.length === 1 ? '' : 's'} on disk`;
+}
+
 const api = { ROOTS, TIMEFRAMES, TYPES, TYPE_OF, QUICK_PICKS, quickRange, backSessions, is247,
-  buildRequest, previewName, fmtInt, fmtBytes, progress, missingSummary };
+  buildRequest, previewName, fmtInt, fmtBytes, progress, missingSummary, gapsSummary };
 if (typeof window !== 'undefined') window.HBDataExport = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

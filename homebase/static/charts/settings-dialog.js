@@ -165,16 +165,23 @@ function mount(box, host) {
 
   function dataPaintCoverage() {
     if (!dataCovBox) return;
-    const cov = dataState.coverage, msg = DX.missingSummary(cov);
-    if (!msg) { dataCovBox.hidden = true; dataCovBox.replaceChildren(); return; }
+    const cov = dataState.coverage, msg = DX.missingSummary(cov), gaps = DX.gapsSummary(cov);
+    if (!msg && !gaps) { dataCovBox.hidden = true; dataCovBox.replaceChildren(); return; }
     dataCovBox.hidden = false;
-    const icon = mk('span', 'icw sm');
-    icon.innerHTML = I.triangleAlert;
-    const parts = [icon, mk('span', '', msg)];
-    if (cov.missing && cov.missing.length) {
-      const shown = cov.missing.slice(0, 8).join(', ');
-      const more = cov.missing.length > 8 ? ` + ${cov.missing.length - 8} more` : '';
-      parts.push(mk('span', 'set-unit', ` (${shown}${more})`));
+    const parts = [];
+    if (msg) {
+      const icon = mk('span', 'icw sm');
+      icon.innerHTML = I.triangleAlert;
+      parts.push(icon, mk('span', '', msg));
+      if (cov.missing && cov.missing.length) {
+        const shown = cov.missing.slice(0, 8).join(', ');
+        const more = cov.missing.length > 8 ? ` + ${cov.missing.length - 8} more` : '';
+        parts.push(mk('span', 'set-unit', ` (${shown}${more})`));
+      }
+    }
+    if (gaps) {
+      if (parts.length) parts.push(mk('br'));
+      parts.push(mk('span', 'set-unit', gaps));
     }
     dataCovBox.replaceChildren(...parts);
   }
