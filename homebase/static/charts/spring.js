@@ -217,10 +217,20 @@ function materialize(el, origin) {
    that never fires `transitionend` (a hidden ancestor, several properties racing, a reduced-motion zero-
    duration override) never leaks the node. Disables pointer-events immediately: a leaving menu/dialog/toast
    must never still be clickable, even for the one frame before it's actually removed (its buttons' onclick
-   handlers are still attached until `onDone` removes the node). */
+   handlers are still attached until `onDone` removes the node).
+
+   pointer-events alone only blocks the MOUSE, not the keyboard: a menu item that already had focus when its
+   own click closed the menu stays focused and clickable-by-Enter for the whole leave transition otherwise --
+   GOTCHAS.md: "a held key has sent duplicate orders here before." `inert` (blocks focus and all input,
+   keyboard included, for the whole subtree) plus an explicit blur of whatever's currently focused inside
+   `el` closes both paths, regardless of which one a given engine's `inert` implementation actually covers. */
 function dematerialize(el, onDone) {
   if (!el) { if (onDone) onDone(); return; }
   el.style.pointerEvents = 'none';
+  try { el.inert = true; } catch (_) { /* engine predates `inert`: pointer-events + the explicit blur below still hold */ }
+  if (typeof document !== 'undefined' && document.activeElement && typeof el.contains === 'function' && el.contains(document.activeElement)) {
+    try { document.activeElement.blur(); } catch (_) { /* not a focusable/blurrable node */ }
+  }
   let done = false;
   const finish = () => {
     if (done) return;
