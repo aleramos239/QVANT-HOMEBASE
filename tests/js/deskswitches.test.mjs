@@ -135,9 +135,7 @@ test('the double-click guard is per switch: another strategy\'s switch is never 
   assert.equal(s.posts.length, 2);
 });
 
-test("a double-click's second half on the confirm's scrim is not a Cancel; the chart-trading switch has the guard too", () => {
-  const scrim = HTML.slice(HTML.indexOf('$("#confirmOverlay").addEventListener("click"'), HTML.indexOf('/* ---- master controls (top bar)'));
-  assert.match(scrim, /if \(e\.target === e\.currentTarget && !\(e\.detail >= 2\)\) cfDone\(false\);/);
+test("the chart-trading switch has the double-click guard too (the dialog's own guard is page-wide: deskdialogs)", () => {
   const ct = HTML.slice(HTML.indexOf('async function setChartTrading('), HTML.indexOf('const MD_CHOICES'));
   assert.match(ct, /if \(switchBounced\("chartTrading"\)\) return;/);
 });

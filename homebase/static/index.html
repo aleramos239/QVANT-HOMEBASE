@@ -863,9 +863,23 @@ function growFrom(box, from) {
   box.style.transformOrigin = `${Math.round(r.left + r.width / 2 - box.offsetLeft)}px ` +
     `${Math.round(r.top + r.height / 2 - box.offsetTop)}px`;
 }
+/* A double-click's second half must never act on a dialog it didn't mean to touch. It lands where
+   the first half landed -- and a dialog that the first half OPENED can have its primary button
+   right there (at narrow widths "Turn on", "Flatten & turn off" and "Book live" sit under the
+   switch / button / menu item that opened them), while a dialog that the first half CLOSED leaves
+   the page beneath exposed. So for DOUBLE_CLICK_MS after any dialog opens or starts closing, a
+   repeat click (detail >= 2) is dropped before it reaches anything. A single, deliberate click
+   (detail 1) always goes through at once. */
+const DOUBLE_CLICK_MS = 400;
+let OVERLAY_OPENED_AT = -Infinity, OVERLAY_CLOSED_AT = -Infinity;
+const secondHalf = (e) => e.detail >= 2 && Date.now() - Math.max(OVERLAY_OPENED_AT, OVERLAY_CLOSED_AT) < DOUBLE_CLICK_MS;
+document.addEventListener("click", (e) => { if (secondHalf(e)) { e.preventDefault(); e.stopPropagation(); } }, true);
+// its press must not move focus either (it would pull focus off the dialog's Cancel onto the page)
+document.addEventListener("mousedown", (e) => { if (secondHalf(e)) e.preventDefault(); }, true);
 function showOverlay(id) {
   const el = $("#" + id);
   if (!el) return;
+  OVERLAY_OPENED_AT = Date.now();
   const box = el.querySelector(".modal") || el;
   const fresh = !OVERLAYS.some(o => o.el === el);
   if (fresh) OVERLAYS.push({el, trigger: document.activeElement});
@@ -876,15 +890,6 @@ function showOverlay(id) {
   const first = box.querySelector("[data-autofocus]") || box;
   if (typeof first.focus === "function") first.focus();
 }
-/* The one click a closing dialog must not pass through: a double-click's second half, which lands
-   on whatever sat under the button just pressed. For DOUBLE_CLICK_MS after any dialog starts
-   closing, a repeat click (detail >= 2) is dropped before it reaches anything; a single,
-   deliberate click (detail 1) always goes through at once. */
-const DOUBLE_CLICK_MS = 400;
-let OVERLAY_CLOSED_AT = -Infinity;
-document.addEventListener("click", (e) => {
-  if (e.detail >= 2 && Date.now() - OVERLAY_CLOSED_AT < DOUBLE_CLICK_MS) { e.preventDefault(); e.stopPropagation(); }
-}, true);
 function hideOverlay(id) {
   const el = $("#" + id);
   if (!el) return;
@@ -979,8 +984,7 @@ function cfDone(v) {
   if (cb) cb(v);
 }
 $("#confirmOverlay").addEventListener("click", (e) => {
-  // a double-click's second half (detail 2) on the scrim is not a "no" to the dialog its first half opened
-  if (e.target === e.currentTarget && !(e.detail >= 2)) cfDone(false);
+  if (e.target === e.currentTarget) cfDone(false);
 });
 
 /* ---- master controls (top bar): ARMED/DISARMED, Arm/Disarm, Kill everything ----

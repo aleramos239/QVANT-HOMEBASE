@@ -418,3 +418,27 @@ test('after a dialog closes, a double-click\'s second half is dropped for 400 ms
   e = s.doc.click({ detail: 2 });
   assert.ok(!e.stopped, 'after the window, clicks are the page\'s own business again');
 });
+
+test('a double-click never acts on the dialog its first half opened: repeat clicks are dropped for 400 ms after an open', () => {
+  const s = load();
+  const answer = s.api.confirmDlg('Turn ON ES_OPEN?', 'body', 'Turn on', false);   // click 1 opened it
+  let e = s.doc.click({ detail: 2 });                   // click 2 lands on "Turn on", right where the switch was
+  assert.ok(e.stopped && e.defaultPrevented, 'dropped before it reaches the button');
+  s.clock.now += 399;
+  assert.ok(s.doc.click({ detail: 3 }).stopped, 'a triple-click too');
+  assert.ok(!s.doc.click({ detail: 1 }).stopped, 'a deliberate click is never dropped');
+  s.clock.now += 1;
+  assert.ok(!s.doc.click({ detail: 2 }).stopped, 'after 400 ms the dialog is the user\'s again');
+  assert.match(HTML, /document\.addEventListener\("mousedown", \(e\) => \{ if \(secondHalf\(e\)\) e\.preventDefault\(\); \}, true\);/,
+    "the second half's press never pulls focus off the dialog's Cancel");
+  s.api.cfDone(false);
+  return answer;
+});
+
+test("the scrim's own Cancel handler no longer special-cases double-clicks (the page-wide guard drops them first)", () => {
+  const scrim = HTML.slice(HTML.indexOf('$("#confirmOverlay").addEventListener("click"'), HTML.indexOf('/* ---- master controls (top bar)'));
+  assert.match(scrim, /if \(e\.target === e\.currentTarget\) cfDone\(false\);/);
+  assert.doesNotMatch(scrim, /detail/);
+  const show = HTML.slice(HTML.indexOf('function showOverlay('), HTML.indexOf('function hideOverlay('));
+  assert.match(show, /OVERLAY_OPENED_AT = Date\.now\(\);/);
+});
