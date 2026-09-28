@@ -35,9 +35,10 @@ _SEED_BACKOFF_CAP = 60.0    # seconds between cache-seed retries, at most
 # included. renewal_due() keeps renewal drops out of 09:19:30-09:35 ET on weekdays.
 ET = ZoneInfo("America/New_York")
 RENEW_BUFFER_S = 600.0                                # the normal rule: renew with < 10 min left
-RENEW_EARLY_FROM = dt.time(9, 10)                     # [09:10, 09:19:30): renew early if due before 09:36
+RENEW_EARLY_FROM = dt.time(9, 10)                     # [09:10, 09:19:30): renew early if due before 10:00
 RENEW_QUIET = (dt.time(9, 19, 30), dt.time(9, 35))    # [from, until): no renewal drop (the gate's md connect: 09:20)
 RENEW_CARRY_UNTIL = dt.time(9, 36)                    # a token must live past this: the first check after 09:35
+RENEW_HOLD_UNTIL = dt.time(10, 0)                     # early/rebuild renewals: nothing comes due before this
 RENEW_FIRE_GUARD = (dt.time(9, 28), dt.time(9, 31))   # [from, until): a socket living through it is never dropped
 RENEW_REBUILD_BY = dt.time(9, 29, 45)                 # a drop before this is rebuilt before the fire (5 s + connect)
 RENEW_FIRE_ACKS = (dt.time(9, 30), dt.time(9, 30, 30))  # [from, until): the fire's orders may be in flight
@@ -62,8 +63,9 @@ def renewal_due(now: dt.datetime, expires_at: float) -> tuple[bool, str]:
     whatever the auth has renewed to since. Checked once a minute. Weekdays, ET:
 
       09:10-09:19:30  "early": renew if the token would come due (RENEW_BUFFER_S left) before
-                   09:36, i.e. it expires before 09:46 -- the drop and the reconnect land 10+
-                   minutes before the fire, and nothing comes due inside the quiet window.
+                   10:00, i.e. it expires before 10:10 -- the drop and the reconnect land 10+
+                   minutes before the fire, nothing comes due inside the quiet window, and the
+                   first drop after the fire lands after 10:00 (the 9:30 trade may be open).
                    It ends at 09:19:30, so its drop and reconnect are over before the timer's
                    09:20:00 market-data connect reads this login's md token. While 10+ min
                    are left: renew only, never a login (logins are rate-limited); a failure
@@ -95,7 +97,7 @@ def renewal_due(now: dt.datetime, expires_at: float) -> tuple[bool, str]:
                 return _in_fire_guard(et, expires_at)
             return True, "expires_in_window"
         if RENEW_EARLY_FROM <= t < RENEW_QUIET[0] and expires_at \
-                and expires_at - RENEW_BUFFER_S < carry:
+                and expires_at - RENEW_BUFFER_S < _et_at(et.date(), RENEW_HOLD_UNTIL):
             return True, "early"
     return expires_at - et.timestamp() < RENEW_BUFFER_S, "normal"
 
@@ -121,13 +123,14 @@ def in_fire_guard(now: dt.datetime) -> bool:
 
 def reconnect_buffer_s(now: dt.datetime) -> float:
     """The token life a socket being REBUILT (reconnect) should start with: normally
-    RENEW_BUFFER_S; weekdays 09:10-09:36 ET, enough that it never comes due before 09:36, so
-    the rebuilt socket needs no renewal drop inside the quiet window. Best effort only
-    (TradovateAdapter._renew_before_the_window): never at the cost of the rebuild."""
+    RENEW_BUFFER_S; weekdays 09:10-10:00 ET, enough that it never comes due before 10:00, so
+    the rebuilt socket needs no renewal drop in the quiet window nor in the 9:30 trade's
+    first half hour. Best effort only (TradovateAdapter._renew_before_the_window): never
+    at the cost of the rebuild."""
     et = now.astimezone(ET)
-    if et.weekday() < 5 and RENEW_EARLY_FROM <= et.time() < RENEW_CARRY_UNTIL:
-        left_to_carry = _et_at(et.date(), RENEW_CARRY_UNTIL) - et.timestamp()
-        return max(RENEW_BUFFER_S, left_to_carry + RENEW_BUFFER_S)
+    if et.weekday() < 5 and RENEW_EARLY_FROM <= et.time() < RENEW_HOLD_UNTIL:
+        left_to_hold = _et_at(et.date(), RENEW_HOLD_UNTIL) - et.timestamp()
+        return max(RENEW_BUFFER_S, left_to_hold + RENEW_BUFFER_S)
     return RENEW_BUFFER_S
 
 
@@ -301,8 +304,8 @@ class TradovateAdapter(BrokerAdapter):
                  f"({type(e).__name__}: {e}) — rebuilding on the current token")
 
     async def _renew_before_the_window(self, now: dt.datetime) -> None:
-        """reconnect(), weekdays 09:10-09:36 ET: the socket is being rebuilt anyway, so
-        start it on a token that carries the quiet window (reconnect_buffer_s) -- best
+        """reconnect(), weekdays 09:10-10:00 ET: the socket is being rebuilt anyway, so
+        start it on a token that lasts past 10:00 without a renewal (reconnect_buffer_s) -- best
         effort only. Renew, never a login; never inside the fire guard (the rebuild must
         not wait); at most RECONNECT_RENEW_S. On any failure the socket is rebuilt on the
         current token, which ensure_valid's normal rule still checks -- exactly as before."""
@@ -311,7 +314,7 @@ class TradovateAdapter(BrokerAdapter):
             return
         left = tokens.expires_at_unix - now.timestamp()
         if not RENEW_BUFFER_S <= left < reconnect_buffer_s(now):
-            return          # it carries the window, or the normal rule renews it anyway
+            return          # it lasts past 10:00, or the normal rule renews it anyway
         try:
             await asyncio.wait_for(asyncio.to_thread(self._auth.renew), RECONNECT_RENEW_S)
         except Exception as e:  # noqa: BLE001 — incl. the timeout
@@ -1197,7 +1200,7 @@ class TradovateAdapter(BrokerAdapter):
 
         WHEN is renewal_due()'s rule, judged on the token the SOCKET rides (it dies
         when that one expires): an early renewal 09:10-09:19:30 ET on weekdays so
-        that none is due 09:19:30-09:35; in there only a socket that would die anyway is
+        that none is due before 10:00; 09:19:30-09:35 only a socket that would die anyway is
         dropped, never one that carries the 09:28-09:31 fire guard, never under the
         fire's acks. A socket left on an older token than the auth holds (a late
         answer kept it, a renewal raced a rebuild) is dropped by the same rule

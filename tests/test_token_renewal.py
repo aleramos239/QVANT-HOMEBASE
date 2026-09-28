@@ -41,10 +41,13 @@ def ts(h, m, s=0, day=MON) -> float:
     ((9, 0, 0), (9, 11, 0), (False, "normal")),
     ((9, 0, 0), (9, 9, 59), (True, "normal")),
     ((9, 9, 59), (9, 40, 0), (False, "normal")),          # 30 min left, early zone not open yet
-    # early zone 09:10-09:20: renew if due (10 min left) before 09:36 = expires before 09:46
+    # early zone 09:10-09:19:30: renew if due (10 min left) before 10:00 = expires before 10:10
     ((9, 10, 0), (9, 40, 0), (True, "early")),
     ((9, 19, 29), (9, 45, 59), (True, "early")),          # 09:19:29: the last early second
-    ((9, 19, 29), (9, 46, 0), (False, "normal")),         # lasts: nothing due inside the window
+    ((9, 19, 29), (9, 46, 0), (True, "early")),           # would come due at 09:36: the trade may be open
+    ((9, 10, 0), (10, 9, 59), (True, "early")),
+    ((9, 19, 29), (10, 9, 59), (True, "early")),
+    ((9, 19, 29), (10, 10, 0), (False, "normal")),        # lasts: nothing due before 10:00
     ((9, 19, 30), (9, 45, 59), (False, "quiet")),         # 09:19:30: clear of the 09:20 md connect
     ((9, 19, 59), (9, 45, 59), (False, "quiet")),
     ((9, 19, 30), (9, 33, 0), (True, "expires_in_window")),
@@ -101,27 +104,29 @@ def test_the_window_is_eastern_time_in_winter_too():
     assert renewal_due(early, ts(9, 45, day=WINTER_MON)) == (True, "early")
 
 
-def test_a_token_renewed_by_the_early_rule_never_comes_due_in_the_window():
+def test_a_token_renewed_by_the_early_rule_never_comes_due_before_10():
     """Whatever time the early check runs, what it leaves (or renews to: 80 min) is never
-    due before 09:36 -- so no quiet-window check ever wants a renewal."""
+    due before 10:00 -- so no check 09:19:30-09:59 wants a renewal: the first drop after
+    the fire lands after 10:00, while the 9:30 trade may be open."""
     for early_s in range(0, 570, 29):                      # 09:10:00-09:19:29
         now = at(9, 10) + dt.timedelta(seconds=early_s)
         for exp_min in range(0, 100):
             exp = now.timestamp() + exp_min * 60
             due, _ = renewal_due(now, exp)
             left = now.timestamp() + 80 * 60 if due else exp       # renewed: a fresh 80-min token
-            for check in range(19 * 60 + 30, 35 * 60, 60):         # every minute 09:19:30-09:34:30
+            for check in range(19 * 60 + 30, 60 * 60, 60):         # every minute 09:19:30-09:59:30
                 q = at(9, 0) + dt.timedelta(seconds=check)
-                assert renewal_due(q, left) == (False, "quiet"), (now, exp_min, q)
+                assert renewal_due(q, left)[0] is False, (now, exp_min, q)
 
 
 @pytest.mark.parametrize("now, want", [
     ((9, 9, 59), 600.0),
-    ((9, 10, 0), 26 * 60 + 600.0),        # a rebuilt socket must carry the window: expiry >= 09:46
-    ((9, 15, 0), 21 * 60 + 600.0),
-    ((9, 30, 0), 6 * 60 + 600.0),
-    ((9, 35, 59), 1 + 600.0),
-    ((9, 36, 0), 600.0),
+    ((9, 10, 0), 50 * 60 + 600.0),        # a rebuilt socket should last to 10:00: expiry >= 10:10
+    ((9, 15, 0), 45 * 60 + 600.0),
+    ((9, 30, 0), 30 * 60 + 600.0),
+    ((9, 40, 0), 20 * 60 + 600.0),
+    ((9, 59, 59), 1 + 600.0),
+    ((10, 0, 0), 600.0),
 ])
 def test_a_rebuilt_socket_starts_with_a_token_that_carries_the_window(now, want):
     assert reconnect_buffer_s(at(*now)) == pytest.approx(want)
@@ -388,7 +393,9 @@ def reconnect_at(tmp_path, monkeypatch, now, expires, *, renew_error=None, renew
 
 @pytest.mark.parametrize("now, expires, renews", [
     (at(9, 15), at(9, 45, 59), 1),       # would come due in the window: renewed now
-    (at(9, 15), at(9, 46), 0),           # carries the window
+    (at(9, 15), at(10, 9, 59), 1),       # would come due before 10:00: renewed now
+    (at(9, 15), at(10, 10), 0),          # lasts past 10:00
+    (at(9, 40), at(10, 5), 1),           # after the window, before 10:00: still renewed
     (at(9, 25), at(9, 44), 1),           # would be due at 09:34
     (at(9, 29), at(9, 44), 0),           # inside the fire guard: the rebuild never waits
     (at(12, 0), at(12, 11), 0),          # the normal rule outside
