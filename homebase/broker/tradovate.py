@@ -225,13 +225,7 @@ class TradovateAdapter(BrokerAdapter):
                 f"python -m homebase.secrets_store set {self.keyring_key}"
             )
         await asyncio.to_thread(self._auth.login, creds["username"], creds["password"])
-        self._ws = self._new_socket()
-        self._ws.event_handlers.append(self._on_ws_event)
-        await self._ws.connect()
-        await self._ws.authorize()
-        sync = await self._ws.user_sync()
-        self._ingest_sync(sync)
-        self._connected = True
+        await self._open_socket()
         self._schedule_seed()
         # a repeat connect() used to stack a new keepalive on top of the old one
         # every time — a night of drops leaked dozens of them
@@ -249,6 +243,7 @@ class TradovateAdapter(BrokerAdapter):
         callback, dedup cache, and fill queue so mirroring resumes transparently.
         Recovery is driven by the engine's connection supervisor."""
         self._stop_seed()
+        self._connected = False             # until the new socket is authorized and synced
         try:
             if self._ws:
                 await self._ws.close()
@@ -260,19 +255,43 @@ class TradovateAdapter(BrokerAdapter):
         else:
             await self._renew_before_the_window(now)
             await asyncio.to_thread(self._auth.ensure_valid, RENEW_BUFFER_S, now.timestamp())
-        self._ws = self._new_socket()
-        self._ws.event_handlers.append(self._on_ws_event)
-        await self._ws.connect()
-        await self._ws.authorize()
-        sync = await self._ws.user_sync()
-        self._ingest_sync(sync)
-        self._connected = True
+        await self._open_socket(close_old=False)      # closed above, before the renewal
         self._schedule_seed()
         if self._consumer is None or self._consumer.done():
             self._consumer = asyncio.create_task(self._consume_fills())
         if self._keepalive is None or self._keepalive.done():
             self._keepalive = asyncio.create_task(self._keepalive_loop())
         self.audit({"event": "adapter_reconnected", "account": self.account_id})
+
+    async def _open_socket(self, *, close_old: bool = True) -> None:
+        """Replace the socket: close the old one (connect() used to leak it; reconnect()
+        closed it already), then a new one on the auth's current token -- connect,
+        authorize, user sync -- and only then connected. On ANY failure the new socket is
+        closed too and the adapter reads disconnected, so the supervisor retries it under
+        its cooldown. Never an open socket whose authorize was refused that ad.connected
+        reports up: the supervisor would skip it, the keepalive would try to renew (and log
+        in) on it every minute, and the 9:30 fire would send on it."""
+        self._connected = False
+        old = self._ws
+        if close_old and old is not None:
+            try:
+                await old.close()
+            except Exception:  # noqa: BLE001
+                pass
+        ws = self._ws = self._new_socket()
+        ws.event_handlers.append(self._on_ws_event)
+        try:
+            await ws.connect()
+            await ws.authorize()
+            self._ingest_sync(await ws.user_sync())
+        except BaseException:
+            self._connected = False
+            try:
+                await ws.close()
+            except Exception:  # noqa: BLE001
+                pass
+            raise
+        self._connected = True
 
     def _new_socket(self) -> TradovateWS:
         """A socket on the auth's current token, remembering THAT token's expiry: Tradovate
@@ -289,7 +308,8 @@ class TradovateAdapter(BrokerAdapter):
         outlives 09:31:30 is used as it is; the keepalive renews it after the guard. One
         that does not (it dies inside the guard or just after, or already has) is renewed:
         renew only, at most GUARD_RENEW_S. On a failure the socket is built on the current
-        token anyway (an expired one fails its authorize: the reconnect fails fast). A
+        token if it is still valid; an already expired one raises instead -- its authorize
+        would be refused -- so the reconnect fails fast and the supervisor takes over. A
         renewal answering after its cap leaves the socket on the older token, which the
         keepalive then judges by that token's own expiry (_ws_expires)."""
         tokens = self._auth.tokens
@@ -300,8 +320,12 @@ class TradovateAdapter(BrokerAdapter):
         try:
             await asyncio.wait_for(asyncio.to_thread(self._auth.renew), GUARD_RENEW_S)
         except Exception as e:  # noqa: BLE001 — incl. the timeout
-            _log(f"{self.account_id}: renewal in the 9:30 fire guard failed "
-                 f"({type(e).__name__}: {e}) — rebuilding on the current token")
+            why = f"{type(e).__name__}: {e}"
+            if 0 < self._auth.tokens.expires_at_unix <= self._now().timestamp():
+                raise RuntimeError(f"the token has expired and its renewal failed in the "
+                                   f"9:30 fire guard ({why})") from e
+            _log(f"{self.account_id}: renewal in the 9:30 fire guard failed ({why}) "
+                 "— rebuilding on the current token")
 
     async def _renew_before_the_window(self, now: dt.datetime) -> None:
         """reconnect(), weekdays 09:10-10:00 ET: the socket is being rebuilt anyway, so

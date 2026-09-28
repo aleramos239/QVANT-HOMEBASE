@@ -17,6 +17,7 @@ from homebase.broker import tradovate
 from homebase.broker.tradovate import (ET, TradovateAdapter, reconnect_buffer_s,
                                        renewal_due)
 from homebase.broker.tradovate_auth import TradovateAuth, TradovateTokens
+from homebase.config import AccountCfg, AppCfg
 from tests.test_adapter_caches import SyncWS
 
 MON, SAT = dt.date(2026, 9, 14), dt.date(2026, 9, 19)       # EDT (UTC-4)
@@ -373,8 +374,9 @@ def test_the_normal_rule_is_unchanged_outside_the_windows(tmp_path):
 
 
 # --- reconnect: a rebuilt socket starts on a token that carries the window, best effort ----
-def reconnect_at(tmp_path, monkeypatch, now, expires, *, renew_error=None, renew=None):
-    monkeypatch.setattr(tradovate, "TradovateWS", SyncWS)
+def reconnect_at(tmp_path, monkeypatch, now, expires, *, renew_error=None, renew=None,
+                 ws_cls=SyncWS):
+    monkeypatch.setattr(tradovate, "TradovateWS", ws_cls)
     ad = TradovateAdapter("acct", env="demo", keyring_key="k", state_dir=tmp_path,
                           account_selector={"account_name": "APEX"})
     ad._now = lambda: now
@@ -433,10 +435,19 @@ def test_inside_the_guard_a_token_dying_before_093130_is_renewed_never_logged_in
     up, ad, auth = reconnect_at(tmp_path, monkeypatch, at(9, 29), at(9, 31, 29),
                                 renew_error="HTTP 503")
     assert up is True and (auth.renews, auth.logins) == (1, 0) and ad._auth.access_token == "old"
-    # already expired, the renew fails: still no login from the rebuild
-    up, ad, auth = reconnect_at(tmp_path, monkeypatch, at(9, 29), at(9, 28),
-                                renew_error="HTTP 401")
-    assert (auth.renews, auth.logins) == (1, 0)
+    # already expired, the renew fails: the rebuild fails fast -- no socket built on a
+    # token whose authorize would be refused, and no login from the rebuild
+    built = []
+
+    class Counting(SyncWS):
+        def __init__(self, *a, **k):
+            built.append(1)
+            super().__init__(*a, **k)
+
+    with pytest.raises(RuntimeError, match="expired"):
+        reconnect_at(tmp_path, monkeypatch, at(9, 29), at(9, 28), renew_error="HTTP 401",
+                     ws_cls=Counting)
+    assert built == []
 
 
 def test_inside_the_guard_a_slow_renewal_is_capped(tmp_path, monkeypatch):
@@ -532,6 +543,103 @@ def test_a_token_too_close_to_expiry_is_still_renewed_as_before(tmp_path, monkey
     reconnect whose renew and login both fail still fails."""
     with pytest.raises(RuntimeError, match="p-ticket"):
         reconnect_at(tmp_path, monkeypatch, at(9, 25), at(9, 34), renew_error="HTTP 503")
+
+
+# --- a socket whose authorize is refused is never left open and "connected" -------------
+class RefusedWS(SyncWS):
+    """Connects (the 'o' frame), then Tradovate refuses its authorize."""
+    made: list = []
+
+    def __init__(self, token=None, environment="demo"):
+        super().__init__(token, environment)
+        self.token, self.closes = token, 0
+        RefusedWS.made.append(self)
+
+    async def authorize(self):
+        raise RuntimeError("authorize failed: {'s': 401, 'd': 'Access is denied'}")
+
+    async def close(self):
+        self.closes += 1
+        self.connected = False
+
+
+def test_a_refused_authorize_leaves_the_adapter_disconnected_and_both_sockets_closed(
+        tmp_path, monkeypatch):
+    RefusedWS.made = []
+    old = Sock("old")
+    ad = TradovateAdapter("acct", env="demo", keyring_key="k", state_dir=tmp_path,
+                          account_selector={"account_name": "APEX"})
+    ad._now = lambda: at(12, 0)
+    Auth(ad, ad._now, at(13, 0))
+    ad._ws, ad._connected = old, True                      # it was up
+    monkeypatch.setattr(tradovate, "TradovateWS", RefusedWS)
+    with pytest.raises(RuntimeError, match="authorize failed"):
+        run(ad.reconnect())
+    new, = RefusedWS.made
+    assert ad._connected is False and ad.connected is False
+    assert old.closed == 1 and new.closes == 1               # neither left open
+
+
+def test_connect_closes_the_old_socket_and_a_refused_one(tmp_path, monkeypatch):
+    monkeypatch.setattr(tradovate, "get_credentials", lambda k: {"username": "u", "password": "p"})
+    ad = TradovateAdapter("acct", env="demo", keyring_key="k", state_dir=tmp_path,
+                          account_selector={"account_name": "APEX"})
+    ad._now = lambda: at(12, 0)
+
+    def login(u, p):
+        ad._auth.tokens = TradovateTokens(access_token="fresh", expiration_time=iso(at(13, 20)))
+        return ad._auth.tokens
+
+    ad._auth.login = login
+    old = Sock("old")
+    ad._ws, ad._connected = old, False                     # the supervisor's login fallback
+    monkeypatch.setattr(tradovate, "TradovateWS", TokWS)
+
+    async def up():
+        await ad.connect()
+        state = (ad.connected, ad._ws.token)
+        await ad.close()
+        return state
+
+    assert run(up()) == (True, "fresh") and old.closed == 1    # connect() used to leak it
+    RefusedWS.made = []
+    monkeypatch.setattr(tradovate, "TradovateWS", RefusedWS)
+    with pytest.raises(RuntimeError, match="authorize failed"):
+        run(ad.connect())
+    assert ad._connected is False and ad.connected is False and RefusedWS.made[0].closes == 1
+
+
+def test_a_refused_rebuild_gets_the_supervisors_cooldown_not_a_login_a_minute(
+        tmp_path, monkeypatch):
+    """The reviewer's case: inside the fire guard, a token that already expired and whose
+    renewal fails. The rebuild fails fast; the adapter reads disconnected, so the supervisor
+    (not the keepalive) owns it: one login fallback, then its cooldown -- never a keepalive
+    renewing and logging in every minute on an open, refused socket."""
+    import homebase.config as config_mod
+    from homebase.server import create_app
+    from tests.test_broker_reconnect_cooldown import _run_broker_loop_passes
+    for mod in ("homebase.paths", "homebase.engine", "homebase.server"):
+        monkeypatch.setattr(f"{mod}.state_dir", lambda: tmp_path)
+    monkeypatch.setattr(config_mod, "config_path", lambda: tmp_path / "config.json")
+    monkeypatch.setattr(tradovate, "get_credentials", lambda k: {"username": "u", "password": "p"})
+    monkeypatch.setattr(tradovate, "TradovateWS", RefusedWS)
+    cfg = AppCfg(armed=True, webhook_secret="s",
+                 accounts={"main": AccountCfg(keyring_key="k", account_name="APEX")},
+                 book={}, strategies={})
+    ad = TradovateAdapter("main", env="demo", keyring_key="k", state_dir=tmp_path,
+                          account_selector={"account_name": "APEX"})
+    ad._now = lambda: at(9, 29)
+    auth = Auth(ad, ad._now, at(9, 28, 30), renew_error="HTTP 401")   # expired, renew refused
+    dead = Sock("old")
+    dead.connected = False                                 # its socket just died; the adapter
+    ad._ws, ad._connected = dead, True                     # was up (the flag stays set)
+    app = create_app(cfg, {"main": ad}, background=False)
+    _run_broker_loop_passes(app, monkeypatch, passes=3, now=3_000_000.0)
+    assert (auth.renews, auth.logins) == (1, 1)            # the rebuild, then ONE login fallback
+    assert app.state.login_cooldown["main"] == pytest.approx(3_000_000.0 + 1800)
+    assert ad.connected is False and ad._connected is False
+    run(ad._keepalive_loop())                              # not connected: it returns at once
+    assert (auth.renews, auth.logins) == (1, 1)
 
 
 # --- the suite's broker guard (tests/conftest.py) can't be swallowed --------------------
