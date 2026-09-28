@@ -274,6 +274,12 @@ a { color: inherit; }
 .dlg-row { width: 100%; height: 32px; display: flex; align-items: center; gap: 8px; padding: 0 20px; text-align: left; }
 .dlg-row:hover, .dlg-row:focus-visible { background: var(--hover); }
 .dlg-name { flex: 1; }
+/* W5 (2026-09-28): an indicator row carries a one-line description under its name, muted like TradingView's
+   secondary text; cut with an ellipsis if the dialog is narrow (the row's tooltip has it in full) */
+.dlg-row.has-desc { height: auto; min-height: 46px; padding-top: 5px; padding-bottom: 5px; }
+.dlg-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.dlg-txt .dlg-name { line-height: 20px; }
+.dlg-desc { color: var(--text-2); font-size: 12px; line-height: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dlg-grp { color: var(--text-2); font-size: 12px; }
 .dlg-row .ic { width: 16px; height: 16px; color: var(--accent); }
 .dlg-empty { padding: 12px 20px; color: var(--text-2); }

@@ -1035,11 +1035,14 @@ function indicatorsDialog() {
     const q = input.value.trim(), hits = C.filter(q, group);
     const had = list.contains(document.activeElement) ? document.activeElement.dataset.id : null;   // keyboard focus
     list.replaceChildren(...hits.map((d) => {
-      const row = mk('button', 'dlg-row');
+      const row = mk('button', 'dlg-row has-desc');
       row.type = 'button';
-      row.title = `Add ${d.name}`;
+      row.title = `Add ${d.name} — ${d.desc}`;
       row.dataset.id = d.id;
-      row.append(mk('span', 'dlg-name', d.name));
+      // W5 (2026-09-28): what it shows, in one plain line under its name (muted, TradingView-style)
+      const txt = mk('span', 'dlg-txt');
+      txt.append(mk('span', 'dlg-name', d.name), mk('span', 'dlg-desc', d.desc));
+      row.append(txt);
       if (q && group === 'All') row.append(mk('span', 'dlg-grp', d.group));
       if (c.cfg.indicators.some((x) => x.id === d.id)) row.append(icon('check'));
       row.onclick = () => {

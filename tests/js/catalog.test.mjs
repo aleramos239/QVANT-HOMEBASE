@@ -683,3 +683,24 @@ test('W1: statusDrops -- whole segments step out lowest rank first, only while n
   assert.deepEqual(C.statusDrops(100, []), []);
   assert.deepEqual(C.statusDrops(100, null), []);
 });
+
+/* W5 (2026-09-28): the Indicators dialog shows one plain line under each indicator's name -- so every catalog entry
+   needs one: a real sentence of its own (not the name again), one line, short enough for the dialog's list. */
+test('W5: every catalog entry has a one-line, plain description of its own', () => {
+  assert.ok(C.CATALOG.length >= 15);
+  const seen = new Set();
+  for (const d of C.CATALOG) {
+    assert.equal(typeof d.desc, 'string', `${d.id} has a description`);
+    const t = d.desc.trim();
+    assert.ok(t.length >= 20 && t.length <= 85, `${d.id}: 20-85 characters (${t.length})`);
+    assert.equal(t, d.desc, `${d.id}: no stray spaces`);
+    assert.doesNotMatch(t, /\n/, `${d.id}: one line`);
+    assert.notEqual(t.toLowerCase(), d.name.toLowerCase(), `${d.id}: more than its name`);
+    assert.ok(!seen.has(t), `${d.id}: its own words`);
+    seen.add(t);
+  }
+  // the three the audit named, saying what they draw
+  assert.match(C.def('bigorders').desc, /median size/);
+  assert.match(C.def('imbalance').desc, /top 10/);
+  assert.match(C.def('bigprints').desc, /sellers hit the bid/);
+});
