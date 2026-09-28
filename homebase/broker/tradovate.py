@@ -1275,6 +1275,11 @@ class TradovateAdapter(BrokerAdapter):
                      f"{landed.astimezone(ET).strftime('%H:%M:%S')} ET — no drop allowed now, "
                      "the socket stays on its token until the rule allows one")
                 return False
+        if not self._connected:
+            # the renewal's answer came while the supervisor is (re)opening the socket: never
+            # close one mid-open. Built on the older token, it is judged stale by the next
+            # check once it is up, and dropped when the rule allows -- no second renewal.
+            return False
         cur = self._ws
         cur_token = getattr(cur, "token", None)
         due_token = ws_token if stale else auth_token     # the token whose socket was due

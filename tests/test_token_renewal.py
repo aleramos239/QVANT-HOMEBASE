@@ -361,6 +361,29 @@ def test_a_healthy_rebuild_on_another_fresh_token_survives_a_late_answer_before_
     assert run(ad._renew_if_needed()) is False and ad._ws.closed == 0
 
 
+def test_a_late_renewal_answer_never_closes_a_socket_the_supervisor_is_still_opening(tmp_path):
+    """The renewal is in flight when the socket dies; the supervisor starts a rebuild on the
+    OLD token (the adapter reads disconnected until it is up) and the renewal then answers.
+    The socket mid-open is left alone; once up, it rides an older token than the auth and
+    the next check drops it when the rule allows -- without renewing again."""
+    ad, auth, clock = mkadapter(tmp_path, at(18, 38), at(18, 45))
+    opening = Sock("old")
+    fast = auth.renew
+
+    def renew_during_a_rebuild():
+        ad._ws, ad._connected = opening, False             # the supervisor's _open_socket()
+        ad._ws_expires = ts(18, 45)                        # ... on the token of that moment
+        return fast()
+
+    ad._auth.renew = renew_during_a_rebuild
+    assert run(ad._renew_if_needed()) is False
+    assert opening.closed == 0 and ad._auth.access_token == "new1"
+    ad._connected = True                                   # the rebuild came up, on "old"
+    clock["now"] = at(18, 39)
+    assert run(ad._renew_if_needed()) is True              # stale: 6 min left, the normal rule
+    assert opening.closed == 1 and auth.renews == 1        # dropped, no second renewal
+
+
 def test_the_normal_rule_is_unchanged_outside_the_windows(tmp_path):
     ad, auth, _ = mkadapter(tmp_path, at(18, 38), at(18, 47, 59))
     assert run(ad._renew_if_needed()) is True and ad._ws.closed == 1
