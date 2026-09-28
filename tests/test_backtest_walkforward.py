@@ -583,3 +583,163 @@ def test_execute_without_prop_sim_writes_a_skipped_marker(tmp_path):
     write_json(d / "request.json", {**read_json(d / "request.json"), "propsim": False})
     meta = R.execute(d, TapeStore(nq_archive(tmp_path / "ticks"), tmp_path / "cache"))
     assert "skipped" in read_json(d / "propsim.json") and meta["propsim_error"] is False
+
+
+# ---------------------------------------------------------------- compare: 1:1 · 1:2 · 1:3 from one grid run
+
+def test_a_compare_job_is_the_same_grid_and_counts_every_schemes_steps():
+    g, one = wf.validate_wf(wbody(compare=True)), wf.validate_wf(wbody(test_months=3))
+    w = g["walkforward"]
+    assert w["compare"] is True and w["test_months"] is None and w["ratios"] == [1, 2, 3]
+    assert w["n_steps_by"] == {"1": 47, "2": 46, "3": 45} and w["n_steps"] == 138
+    assert (w["metric"], w["min_trades"], w["months"]) == ("net_profit", 5, one["walkforward"]["months"])
+    # the cells ARE a 1:N job's cells: one full-window run each, whatever the ratio
+    assert [c["req"] for c in g["cells"]] == [c["req"] for c in one["cells"]]
+    assert (g["range"], g["axes"], g["qty"], g["commission"], g["slippage_ticks"]) == \
+        (one["range"], one["axes"], one["qty"], one["commission"], one["slippage_ticks"])
+
+
+def test_compare_refuses_a_ratio_a_non_bool_and_a_window_too_short_for_1to3():
+    with pytest.raises(ValueError, match="without test_months"):
+        wf.validate_wf(wbody(compare=True, test_months=2))
+    for bad in (1, "true", None):
+        with pytest.raises(ValueError, match="compare"):
+            wf.validate_wf(wbody(compare=bad))
+    # Jan-Mar fits 1:1 and 1:2 but not 1:3: a comparison with an empty column is refused
+    with pytest.raises(ValueError, match="too short to compare"):
+        wf.validate_wf(wbody(compare=True, range={"kind": "custom", "start": "2024-01-01", "end": "2024-03-31"}))
+    g = wf.validate_wf(wbody(compare=False))
+    assert g["walkforward"]["test_months"] == 3 and not g["walkforward"].get("compare")
+
+
+def test_the_compare_scheme_sums_each_ratios_steps():
+    sc = wf.compare_scheme()
+    assert sc["compare"] is True and sc["n_steps"] == 138 and sc["runnable"] is True
+    assert sc["n_steps_by"] == {"1": 47, "2": 46, "3": 45}
+    assert wf.compare_scheme("2024-01-01", "2024-03-31")["runnable"] is False
+
+
+def _five_month_results():
+    months = ["2022-01", "2022-02", "2022-03", "2022-04", "2022-05"]
+    tr = five_month_cells()
+    cells = [{"i": i, "params": {"offset_pts": 10.0 + i}, "months": wf.month_stats(tr[i], [], 50_000.0, months)}
+             for i in (0, 1)]
+    return {n: wf.compute(cells, months, trades_of=lambda i: (tr[i], []), metric="net_profit", min_trades=5,
+                          capital=50_000.0, test_months=n) for n in (1, 2, 3)}
+
+
+def test_compare_summary_is_each_schemes_stitched_oos_and_nothing_in_sample():
+    per = _five_month_results()
+    s = wf.compare_summary(per)
+    assert s["compare"] is True and [c["ratio"] for c in s["schemes"]] == ["1:1", "1:2", "1:3"]
+    assert s["looks"] == sum(r["looks"] for r in per.values()) == 2 * (4 + 3 + 2)
+    assert s["window"] == {"start": "2022-01", "end": "2022-05"} and s["n_cells"] == 2
+    for c in s["schemes"]:
+        r = per[c["test_months"]]
+        assert c["stats"] == r["stitched"]["stats"] and c["equity"] == r["stitched"]["equity"]
+        assert c["n_months"] == r["stitched"]["n_months"] and c["n_steps"] == r["n_steps"]
+        assert c["span"] == [r["stitched"]["months"][0], r["stitched"]["months"][-1]]
+        for k in ("net_profit", "trades", "win_rate", "profit_factor", "avg_trade", "max_drawdown", "sharpe"):
+            assert k in c["stats"], k
+    # 1:1 chain = steps 0..3 (select Jan..Apr, test Feb..May); 1:3 chain = step 0 only (test Feb-Apr)
+    one, three = s["schemes"][0], s["schemes"][2]
+    assert one["span"] == ["2022-02", "2022-05"] and three["span"] == ["2022-02", "2022-04"]
+    assert three["uncovered"] == ["2022-05"] and one["uncovered"] == []
+    assert one["legs"]["n"] == 4 and three["legs"]["n"] == 1
+    legs1 = [row for row in per[1]["steps"] if row["stitched"]]
+    assert one["legs"]["no_pick"] == sum(1 for row in legs1 if row["cell"] is None)
+    assert one["legs"]["profitable"] == sum(1 for row in legs1 if row["oos"] and row["oos"]["net_profit"] > 0)
+    assert one["legs"]["pct_profitable"] == round(one["legs"]["profitable"] / 4 * 100, 2)
+    assert three["legs"]["profitable"] == 0 and three["legs"]["pct_profitable"] == 0.0     # -480 on its one leg
+    # out-of-sample only: no in-sample figure anywhere in the comparison
+    import json as _json
+    blob = _json.dumps(s)
+    for leak in ("stitched_is", '"drop"', '"is"', '"steps"', '"phases"'):
+        assert leak not in blob, leak
+
+
+def test_compare_summary_refuses_schemes_that_do_not_share_one_setup():
+    per = _five_month_results()
+    per[2] = {**per[2], "scheme": {**per[2]["scheme"], "min_trades": 3}}
+    with pytest.raises(ValueError, match="do not share"):
+        wf.compare_summary(per)
+    with pytest.raises(ValueError, match="no schemes"):
+        wf.compare_summary({})
+
+
+def test_a_compare_job_runs_each_cell_once_and_equals_three_separate_walkforwards(tmp_path, fake, tester_shared):
+    release, fail, spawned = fake
+    m = WalkForwardManager(tmp_path)
+    wid = m.submit(wbody(compare=True))
+    st = m.status(wid)
+    assert st["total"] == 2 and st["walkforward"]["compare"] is True
+    release.set()
+    st = wait_wf(m, wid)
+    assert st["status"] == "done", st.get("error")
+    assert len(spawned) == 2                                   # 2 cells run once -- not 3 x 2
+    assert st["looks_added"] == 2 * 138 and grid.read_looks(tester_shared / "looks.json") == {"nq930": 276}
+    s = m.compare(wid)
+    assert [c["test_months"] for c in s["schemes"]] == [1, 2, 3] and s["looks"] == 276
+    with pytest.raises(ValueError, match="comparison"):
+        m.result(wid)                                          # a compare job has no single result
+    with pytest.raises(ValueError, match="test_months"):
+        m.result(wid, 4)
+    # each scheme IS the ordinary 1:N result a separate job produces over the same cells
+    for n in (1, 2, 3):
+        sep = m.submit(wbody(test_months=n))
+        assert wait_wf(m, sep)["status"] == "done"
+        assert m.result(wid, n) == m.result(sep) == m.result(sep, n)
+        col = s["schemes"][n - 1]
+        assert col["stats"] == m.result(sep)["stitched"]["stats"]
+        with pytest.raises(ValueError, match="not a comparison"):
+            m.compare(sep)
+        with pytest.raises(ValueError, match=f"1:{n}, not"):
+            m.result(sep, 1 + n % 3)
+    assert m.list()[-1]["compare"] is True and m.list()[0]["compare"] is False
+    m2 = WalkForwardManager(tmp_path)                          # a restart reads it back, counted once
+    assert m2.compare(wid) == s and m2.result(wid, 2) == m.result(wid, 2)
+    assert grid.read_looks(tester_shared / "looks.json") == {"nq930": 276 + 2 * 138}
+
+
+def test_a_cancelled_compare_job_counts_nothing_and_has_no_results(tmp_path, fake, tester_shared):
+    release, fail, spawned = fake
+    m = WalkForwardManager(tmp_path)
+    wid = m.submit(wbody(compare=True))
+    t = time.monotonic() + 5
+    while len(spawned) < 2 and time.monotonic() < t:
+        time.sleep(0.01)
+    assert m.cancel(wid)["status"] == "cancelled"
+    release.set()
+    time.sleep(0.2)
+    assert m.status(wid)["status"] == "cancelled"
+    assert grid.read_looks(tester_shared / "looks.json") == {}
+    with pytest.raises(ValueError, match="cancelled"):
+        m.compare(wid)
+    with pytest.raises(ValueError, match="cancelled"):
+        m.result(wid, 1)
+    assert not list(m.dir(wid).glob("result*.json")) and not (m.dir(wid) / "compare.json").exists()
+
+
+def test_a_compare_job_keeps_to_the_two_slot_cap_and_the_930_pause(tmp_path, fake, tester_shared, monkeypatch):
+    from homebase.backtest import slots
+    release, fail, spawned = fake
+    monkeypatch.setitem(TRADES, 2, TRADES[0])
+    three = [{"key": "offset_pts", "values": [10, 12, 14]}, {"key": "sl_pts", "values": [5]}]
+    m = WalkForwardManager(tmp_path)
+    wid = m.submit(wbody(compare=True, axes=three))
+    t = time.monotonic() + 5
+    while len(spawned) < 2 and time.monotonic() < t:
+        time.sleep(0.01)
+    time.sleep(0.2)
+    assert len(spawned) == 2                                   # the machine-wide cap: two at once, one queued
+    assert sorted(c["status"] for c in m.status(wid)["cells"]) == ["queued", "running", "running"]
+    m.cancel(wid)
+    # inside 09:20-09:35 ET nothing starts: the job queues and says so
+    monkeypatch.setattr(slots, "et_now", lambda: dt.datetime(2026, 9, 28, 9, 25, tzinfo=slots.ET))
+    before = len(spawned)
+    wid2 = m.submit(wbody(compare=True))
+    time.sleep(0.3)
+    st = m.status(wid2)
+    assert st["status"] == "queued" and st["paused"] == "paused for the 9:30 window" and len(spawned) == before
+    m.cancel(wid2)
+    release.set()

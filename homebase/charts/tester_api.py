@@ -35,15 +35,20 @@
     GET  /api/tester/grid/{id}/cell/{i}/bundle   a cell's full run bundle (the same shape as a run's)
     GET  /api/tester/grids               recent grids, newest first
     GET  /api/tester/looks               {strategy: heat-map cells ever run}
-    POST /api/tester/walkforward         the grid body + {metric?, min_trades?} -> {id}: 1 month to select, the
-                                          next 3 to test, stepping monthly, over the body's own range
-                                          (homebase.backtest.walkforward)
+    POST /api/tester/walkforward         the grid body + {metric?, min_trades?, test_months? | compare?} -> {id}:
+                                          1 month to select, the next N to test, stepping monthly, over the
+                                          body's own range; `compare: true` = ONE job (one grid run) selected
+                                          and stitched at 1:1, 1:2 and 1:3 (homebase.backtest.walkforward)
     GET  /api/tester/walkforward/{id}    status, per-cell status (never full-window P&L), progress, eta_s
-    GET  /api/tester/walkforward/{id}/result   the steps, the stitched OOS equity + stats (409 until done)
+    GET  /api/tester/walkforward/{id}/result   the steps, the stitched OOS equity + stats (409 until done);
+                                          ?test_months=N picks a compare job's 1:N scheme (a compare job
+                                          without it is a 409)
+    GET  /api/tester/walkforward/{id}/compare  a compare job's three stitched OOS results side by side
     POST /api/tester/walkforward/{id}/cancel
     GET  /api/tester/walkforwards        recent walk-forwards, newest first
-    GET  /api/tester/walkforward-scheme  ?test_months=1|2|3&start=&end= — the step count for that ratio
-                                          and window, plus the metrics and defaults (no job needed)
+    GET  /api/tester/walkforward-scheme  ?test_months=1|2|3|compare&start=&end= — the step count for that
+                                          ratio and window (compare: the three summed, and each), plus the
+                                          metrics and defaults (no job needed)
     POST /api/tester/montecarlo          {run_id | grid_id + cell, paths?, mode?, seed?, floor?} ->
                                           homebase.backtest.stats.montecarlo.run() over a DONE run's trades,
                                           resampled by day (<= 10,000 paths, <= 2,000,000 day-steps; seed
@@ -315,10 +320,23 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         return wfs.status(wid)
 
     @r.get("/walkforward/{wid}/result")
-    def walkforward_result(wid: str):
+    def walkforward_result(wid: str, test_months: str | None = None):
+        known_wf(wid)
+        n = None
+        if test_months is not None:
+            if test_months not in ("1", "2", "3"):
+                raise HTTPException(400, "test_months: one of 1, 2, 3 (the 1:N walk-forward ratio)")
+            n = int(test_months)
+        try:
+            return wfs.result(wid, n)
+        except ValueError as e:
+            raise HTTPException(409, str(e)) from None
+
+    @r.get("/walkforward/{wid}/compare")
+    def walkforward_compare(wid: str):
         known_wf(wid)
         try:
-            return wfs.result(wid)
+            return wfs.compare(wid)
         except ValueError as e:
             raise HTTPException(409, str(e)) from None
 
@@ -334,6 +352,8 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         the ratio and the window the range picker currently shows. `test_months` is parsed strictly:
         "2" is 1:2, "2.0" or "5" is a 400, never coerced."""
         try:
+            if test_months == "compare":
+                return walkforward.compare_scheme(start=start, end=end)
             n = walkforward.TEST_MONTHS if test_months is None else (
                 int(test_months) if test_months.isdigit() else test_months)
             return walkforward.scheme(start=start, end=end, test_months=n)

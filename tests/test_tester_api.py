@@ -465,3 +465,29 @@ def test_rescoring_a_heatmap_cell(tmp_path):
         assert r.json() == P.evaluate(b["trades"], PRO, n_paths=P.N_PATHS, rules=P.load_rules(PRO))
         assert c.post("/api/tester/propsim", json={"grid_id": gid, "cell": 9, "prop_rules": PRO}).status_code == 404
         assert c.post("/api/tester/propsim", json={"grid_id": gid, "prop_rules": PRO}).status_code == 400
+
+
+def test_a_compare_walkforward_serves_three_schemes_and_their_oos_side_by_side(tmp_path):
+    with client(tmp_path) as c:
+        wid = c.post("/api/tester/walkforward", json={**WF, "compare": True}).json()["id"]
+        st = poll_wf(c, wid)
+        assert st["status"] == "done", st.get("error")
+        assert st["walkforward"]["compare"] is True and st["looks_added"] == 2 * (47 + 46 + 45)
+        s = c.get(f"/api/tester/walkforward/{wid}/compare").json()
+        assert [x["ratio"] for x in s["schemes"]] == ["1:1", "1:2", "1:3"] and "stitched_is" not in s
+        r = c.get(f"/api/tester/walkforward/{wid}/result")
+        assert r.status_code == 409 and "comparison" in r.json()["detail"]
+        for n in (1, 2, 3):
+            one = c.get(f"/api/tester/walkforward/{wid}/result", params={"test_months": n}).json()
+            assert one["scheme"]["test_months"] == n and one["stitched"]["stats"] == s["schemes"][n - 1]["stats"]
+        assert c.get(f"/api/tester/walkforward/{wid}/result", params={"test_months": "4"}).status_code == 400
+        assert c.get("/api/tester/walkforwards").json()[0]["compare"] is True
+        r = c.post("/api/tester/walkforward", json={**WF, "compare": True, "test_months": 1})
+        assert r.status_code == 400 and "without test_months" in r.json()["detail"]
+        sc = c.get("/api/tester/walkforward-scheme", params={"test_months": "compare"}).json()
+        assert sc["n_steps"] == 138 and sc["n_steps_by"] == {"1": 47, "2": 46, "3": 45}
+        one = c.post("/api/tester/walkforward", json={**WF, "test_months": 1}).json()["id"]
+        assert poll_wf(c, one)["status"] == "done"
+        assert c.get(f"/api/tester/walkforward/{one}/compare").status_code == 409
+        assert c.get(f"/api/tester/walkforward/{one}/result", params={"test_months": 1}).status_code == 200
+        assert c.get(f"/api/tester/walkforward/{one}/result", params={"test_months": 2}).status_code == 409

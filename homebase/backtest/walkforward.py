@@ -48,12 +48,26 @@ looks counter is unreadable shows no result and counts nothing. The full-window 
 never served (no cell bundles, no cell summaries): only selection-month stats of the PICKED cell and
 the test legs are shown.
 
+Compare (1:1 · 1:2 · 1:3 side by side). A job submitted with `compare: true` (and no test_months) runs
+the grid ONCE -- the cells are exactly a 1:N job's cells, since a cell always runs over the whole window
+whatever the ratio -- then selects and stitches it three times, at 1:1, 1:2 and 1:3, from the same
+per-month cache. The three schemes therefore share the window, the grid, the costs, Select-by and
+Min-trades by construction, cost 1x the backtests (not 3x), and are one job for cancel / progress /
+reload-resume, queued through the same 2-slot cap and the 09:20-09:35 ET pause. Each scheme's full
+result is written as result-N.json (the ordinary 1:N result shape, served by `result(id, N)`), and
+compare.json holds only their STITCHED OUT-OF-SAMPLE numbers side by side (compare_summary: no
+in-sample figure crosses into it). Looks: the three schemes' selections are three separate searches,
+so the job counts the SUM of their cells x steps -- the conservative reading. The window must fit a full
+1:3 cycle, so no column is ever empty.
+
 Metrics use the report's own conventions (report.column: net of costs, Sharpe on the weekday grid, a
 session the run skipped dropped from that grid).
 
     <base>/walkforward/<id>/grid.json         the job: axes, costs, walkforward config, per-cell status
     <base>/walkforward/<id>/cells/NN/         a run dir (+ months.json, the per-month cache)
     <base>/walkforward/<id>/result.json       the steps, the stitched equity + stats (when done)
+    <base>/walkforward/<id>/result-N.json     a compare job: scheme 1:N's result (the same shape)
+    <base>/walkforward/<id>/compare.json      a compare job: the three stitched OOS side by side
 """
 from __future__ import annotations
 
@@ -274,6 +288,62 @@ def compute(cells: list[dict], months: list[str], *, trades_of, metric: str, min
     }
 
 
+def _legs(r: dict) -> dict:
+    """The stitched chain's legs (its steps): how many, how many had no pick, how many made money
+    out-of-sample. A no-pick leg is flat -- counted as a leg, never as a profitable one."""
+    legs = [row for row in r["steps"] if row["stitched"]]
+    picked = [row for row in legs if row["oos"] is not None]
+    prof = sum(1 for row in picked if (row["oos"]["net_profit"] or 0) > 0)
+    return {"n": len(legs), "no_pick": len(legs) - len(picked), "profitable": prof,
+            "pct_profitable": round(prof / len(legs) * 100, 2) if legs else None,
+            "first_select": legs[0]["select"] if legs else None, "last_select": legs[-1]["select"] if legs else None}
+
+
+COMPARE_NOTE = ("Same window, grid, costs, Select-by and Min-trades for all three. A longer test length "
+                "re-selects less often -- one pick every N months, held for N months -- so it has fewer "
+                "selection points and trades further from the month each pick was made on; and each stitched "
+                "out-of-sample chain covers slightly different months (see each scheme's span). "
+                "Out-of-sample only: no in-sample number is shown here.")
+
+
+def compare_summary(results: dict) -> dict:
+    """{N: compute(..., test_months=N)} -> the three STITCHED OUT-OF-SAMPLE results side by side.
+    Deliberately built from `stitched` alone (never `stitched_is` / `drop` / per-step `is`), so an
+    in-sample number cannot leak into the comparison."""
+    ns = sorted(results)
+    if not ns:
+        raise ValueError("compare: no schemes")
+    first = results[ns[0]]
+    for n in ns:
+        r = results[n]
+        if r["window"] != first["window"] or r["n_cells"] != first["n_cells"] or \
+                {k: r["scheme"][k] for k in ("metric", "min_trades", "select_months", "step_months")} != \
+                {k: first["scheme"][k] for k in ("metric", "min_trades", "select_months", "step_months")}:
+            raise ValueError("compare: the schemes do not share one window / grid / selection rule")
+    cols = []
+    for n in ns:
+        r, so = results[n], results[n]["stitched"]
+        ms = so["months"]
+        cols.append({"test_months": n, "ratio": f"1:{n}", "n_steps": r["n_steps"], "looks": r["looks"],
+                     "stats": so["stats"], "per_month": so["per_month"], "n_months": so["n_months"],
+                     "span": [ms[0], ms[-1]] if ms else None, "uncovered": so["uncovered"],
+                     "legs": _legs(r), "equity": so["equity"]})
+    sc = first["scheme"]
+    return {"compare": True, "window": first["window"], "n_cells": first["n_cells"],
+            "scheme": {k: sc[k] for k in ("select_months", "step_months", "metric", "metric_label", "min_trades",
+                                          "tie_break")},
+            "schemes": cols, "looks": sum(c["looks"] for c in cols), "note": COMPARE_NOTE}
+
+
+def compare_scheme(start: str | None = None, end: str | None = None) -> dict:
+    """scheme() for a compare job: each ratio's step count, and their sum (= looks per cell)."""
+    by = {n: scheme(start, end, n) for n in RATIOS}
+    base = by[TEST_MONTHS]
+    return {**base, "compare": True, "test_months": None, "n_steps": sum(v["n_steps"] for v in by.values()),
+            "n_steps_by": {str(n): v["n_steps"] for n, v in by.items()},
+            "runnable": all(v["n_steps"] for v in by.values())}
+
+
 def scheme(start: str | None = None, end: str | None = None, test_months: int = TEST_MONTHS) -> dict:
     """What the page needs before a job exists (review M5: the step count comes from here, not a
     client constant) -- for the ratio and window the picker currently shows. A window too short
@@ -307,6 +377,11 @@ def validate_wf(body) -> dict:
     if not isinstance(body, dict):
         raise ValueError("the body is a JSON object")
     b = dict(body)
+    compare = b.pop("compare", False)
+    if type(compare) is not bool:
+        raise ValueError("compare: true or false")
+    if compare and "test_months" in b:
+        raise ValueError("compare runs 1:1, 1:2 and 1:3 together: send it without test_months")
     test_months = ratio(b.pop("test_months", TEST_MONTHS))
     if isinstance(b.get("range"), dict) and b["range"].get("kind") == "is_months":
         raise ValueError("a walk-forward steps whole calendar months, so it cannot run on IS months only "
@@ -322,6 +397,17 @@ def validate_wf(body) -> dict:
     for c in g["cells"]:
         c["req"]["propsim"] = False          # the full-window prop sim is never shown here (review M4)
     months = month_list(dt.date.fromisoformat(g["range"]["start"]), dt.date.fromisoformat(g["range"]["end"]))
+    if compare:
+        by = {n: len(steps(months, n)) for n in RATIOS}
+        if not all(by.values()):
+            raise ValueError(f"{g['range']['label']}: too short to compare -- 1:{max(RATIOS)} needs one full cycle "
+                             f"({SELECT_MONTHS} selection month + {max(RATIOS)} test months of whole calendar months)")
+        g["walkforward"] = {"metric": metric, "metric_label": METRICS[metric], "min_trades": min_trades,
+                            "select_months": SELECT_MONTHS, "test_months": None, "compare": True,
+                            "ratios": list(RATIOS), "step_months": STEP_MONTHS, "months": months,
+                            "n_steps": sum(by.values()), "n_steps_by": {str(n): v for n, v in by.items()},
+                            "tie_break": TIE_BREAK, "stitch": "; ".join(f"1:{n}: {stitch_rule(n)}" for n in RATIOS)}
+        return g
     st = steps(months, test_months)
     if not st:
         raise ValueError(f"{g['range']['label']} at 1:{test_months}: too short for one full walk-forward cycle "
@@ -396,7 +482,7 @@ class WalkForwardManager(GridManager):
             cfg = st["walkforward"]
             capital = st["capital"]
         bad = [c for c in cells if c["status"] != "done"]
-        result, err = None, None
+        result, err, per = None, None, None
         if bad:
             err = (f"{len(bad)} of {len(cells)} cells did not finish (first: cell {bad[0]['i']}: "
                    f"{bad[0].get('error') or bad[0]['status']}) -- no selection over a partial grid, no looks counted")
@@ -413,9 +499,16 @@ class WalkForwardManager(GridManager):
                     cdir = d / "cells" / f"{i:02d}"
                     return read_json(cdir / "trades.json") or [], _run_skipped(read_json(cdir / "run.json"))
 
-                result = compute(ins, cfg["months"], trades_of=trades_of, metric=cfg["metric"],
-                                 min_trades=cfg["min_trades"], capital=capital,
-                                 test_months=cfg.get("test_months", TEST_MONTHS))
+                if cfg.get("compare"):
+                    per = {n: compute(ins, cfg["months"], trades_of=trades_of, metric=cfg["metric"],
+                                      min_trades=cfg["min_trades"], capital=capital, test_months=n)
+                           for n in cfg.get("ratios") or RATIOS}
+                    result = compare_summary(per)
+                else:
+                    per = None
+                    result = compute(ins, cfg["months"], trades_of=trades_of, metric=cfg["metric"],
+                                     min_trades=cfg["min_trades"], capital=capital,
+                                     test_months=cfg.get("test_months", TEST_MONTHS))
             except Exception as e:  # noqa: BLE001 -- the page must see why
                 err = f"selection failed: {type(e).__name__}: {e}"
         with self._cv:
@@ -428,7 +521,12 @@ class WalkForwardManager(GridManager):
                     err, result = f"the looks counter is unreadable, so the result is withheld: {e}", None
                     st["looks_error"] = str(e)
             if result is not None:
-                write_json(d / "result.json", result)
+                if per is not None:                 # the schemes first: compare.json existing means all three do
+                    for n, r in per.items():
+                        write_json(d / f"result-{n}.json", r)
+                    write_json(d / "compare.json", result)
+                else:
+                    write_json(d / "result.json", result)
                 st.update(status="done", looks_added=result["looks"])
             else:
                 st.update(status="error", error=err)
@@ -450,12 +548,35 @@ class WalkForwardManager(GridManager):
         st["eta_s"] = None if st.get("paused") or st.get("status") in FINAL else _eta(st, prog)
         return st
 
-    def result(self, gid: str) -> dict:
+    def _done(self, gid: str) -> tuple[Path, dict]:
         d = self.dir(gid)
         st = self.status(gid)
         if st.get("status") != "done":
             raise ValueError(f"walk-forward {gid} is {st.get('status')}, not done")
+        return d, st.get("walkforward") or {}
+
+    def result(self, gid: str, test_months: int | None = None) -> dict:
+        """A 1:N job's result; for a compare job, scheme 1:`test_months`'s (the same shape).
+        ValueError when not done, or when the ratio does not belong to this job."""
+        d, cfg = self._done(gid)
+        if cfg.get("compare"):
+            if test_months is None:
+                raise ValueError(f"walk-forward {gid} is a 1:1 · 1:2 · 1:3 comparison: ask for one scheme "
+                                 "(test_months=1|2|3), or for the comparison itself")
+            n = ratio(test_months)
+            if n not in (cfg.get("ratios") or RATIOS):
+                raise ValueError(f"walk-forward {gid} has no 1:{n} scheme")
+            return read_json(d / f"result-{n}.json")
+        if test_months is not None and ratio(test_months) != cfg.get("test_months", TEST_MONTHS):
+            raise ValueError(f"walk-forward {gid} is 1:{cfg.get('test_months', TEST_MONTHS)}, not 1:{test_months}")
         return read_json(d / "result.json")
+
+    def compare(self, gid: str) -> dict:
+        """A compare job's side-by-side stitched out-of-sample summary."""
+        d, cfg = self._done(gid)
+        if not cfg.get("compare"):
+            raise ValueError(f"walk-forward {gid} is a single 1:{cfg.get('test_months', TEST_MONTHS)} run, not a comparison")
+        return read_json(d / "compare.json")
 
     def cell_bundle(self, gid: str, i: int) -> dict:
         raise KeyError(f"{gid}/{i}: a walk-forward's full-window cells are never served")
@@ -465,4 +586,6 @@ class WalkForwardManager(GridManager):
         for g in out:
             j = read_json(self.grids / g["id"] / "grid.json", {}) or {}
             g["metric"] = (j.get("walkforward") or {}).get("metric")
+            g["compare"] = bool((j.get("walkforward") or {}).get("compare"))
+            g["test_months"] = (j.get("walkforward") or {}).get("test_months")
         return out
