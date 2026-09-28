@@ -1014,7 +1014,9 @@ function indicatorsDialog() {
       if (q && group === 'All') row.append(mk('span', 'dlg-grp', d.group));
       if (c.cfg.indicators.some((x) => x.id === d.id)) row.append(icon('check'));
       row.onclick = () => {
-        const inst = C.instance(d.id), style = C.defaultStyle(d.id, c.cfg.indicators);
+        const saved = indicatorDefaults.get(d.id);   // "Save as default" in the settings dialog's Template ▾
+        const inst = C.instance(d.id, saved && saved.params);
+        const style = saved && saved.style ? saved.style : C.defaultStyle(d.id, c.cfg.indicators);
         if (style) inst.style = style;   // Task 2/3: a new instance never repeats a same-id sibling's colour
         c.update({ indicators: [...c.cfg.indicators, inst] });
         render();
@@ -1056,8 +1058,10 @@ function settingsDialog(cell, uid) {
       placeMenu();
     },
     closeMenu,
+    placeMenu,
     commit(changed) { if (changed) markDirty(); closeDialog(); },
     cancel: closeDialog,
+    onDefaultApplied: (id, payload) => indicatorDefaults.set(id, payload),
   });
   dlg.onClose = ctl.revert;   // Cancel, ×, Esc, a backdrop click: the instance back to what it was at open
 }
@@ -1114,6 +1118,19 @@ async function loadDrawStyleDefaults() {
   for (const type of DRAW_TYPES) {
     const all = await window.HBPresets.client(`drawing:${type}`).list();
     if (all && window.HBPresets.DEFAULT_NAME in all) drawStyleDefaults.set(type, all[window.HBPresets.DEFAULT_NAME]);
+  }
+}
+/* id -> that indicator's saved "__default__" preset ({params, style}, already run through
+   C.sanitizePreset so a stale/junk payload can never reach a chart) -- the Indicators dialog's addIndicator
+   path (indicatorsDialog below) reads this instead of the catalog's own defaults when one is saved. Only
+   indicators that can even open the settings dialog (params, or a Style tab) can have a template at all --
+   see settingsDialog's own guard. */
+const indicatorDefaults = new Map();
+async function loadIndicatorDefaults() {
+  const ids = C.CATALOG.filter((d) => d.params.length || C.styleLineKeys(d.id)).map((d) => d.id);
+  for (const id of ids) {
+    const all = await window.HBPresets.client(`indicator:${id}`).list();
+    if (all && window.HBPresets.DEFAULT_NAME in all) indicatorDefaults.set(id, C.sanitizePreset(id, all[window.HBPresets.DEFAULT_NAME]));
   }
 }
 /* A dialog-scoped menu host built around the page's own openMenu/closeMenu/placeMenu, the same
@@ -1897,6 +1914,7 @@ async function init() {
   dropLiveAccounts();
   loadTabs();    // async: renderTabs() already painted the "+" from buildGrid's renderToolbar; this fills the rest
   loadDrawStyleDefaults();   // async: host.styleDefault() reads whatever has landed by the time a drawing is placed
+  loadIndicatorDefaults();   // async: indicatorsDialog's addIndicator path reads whatever has landed by then
   connect();
   tick();
   setInterval(tick, 1000);

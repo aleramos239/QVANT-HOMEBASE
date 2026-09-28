@@ -229,6 +229,20 @@ function clampStyle(id, style) {
   return out;
 }
 
+/* A preset payload ({params, style}) loaded from the presets store (or typed by hand into the JSON file), run
+   through clampParams/clampStyle so a junk or stale payload can never reach a chart: an unknown/out-of-range
+   param falls back to its catalog default, and a style with no line keys (an indicator with no Style tab, or
+   one saved before a catalog change added a line) falls back to defaultStyle's fresh colours. Used by the
+   indicator settings dialog's Template ▾ (Save as…/Apply default/Apply one of the list) and by the page's
+   own indicator-defaults cache (app.js's loadIndicatorDefaults, the add-indicator path). */
+function sanitizePreset(id, payload) {
+  const p = payload && typeof payload === 'object' ? payload : {};
+  const params = clampParams(id, p.params);
+  const keys = styleLineKeys(id);
+  const style = keys ? (clampStyle(id, p.style) || defaultStyle(id, [])) : null;
+  return { params, style };
+}
+
 function defaults() { return [instance('volume'), instance('vwap'), instance('levels'), instance('footprint')]; }
 
 /* The VWAP wire key (studies.py's VWAP anchor) for this instance's params: "vwap"/"vwap:rth" unchanged;
@@ -512,7 +526,7 @@ const api = { parseFavs, sortFavs, toggleFav, CATALOG, GROUPS, ROOT_NAMES, FAVOU
   defaults, serverKey, serverKeys, migrate, migrateLayout, label, legendValues, decimals, fmtPrice, fmtCompact,
   fmtSigned, change, parseSpec, specLabel, longLabel, toSpec, parseInterval, matchSymbols, rootName, rootBadge, filter,
   ALWAYS_OPEN, marketOpen, fmtAge, feedSummary, REC_BUSY, staleAfter, sinceOpen, PANES, movable, placement,
-  styleLineKeys, defaultStyle, clampStyle, cycleColor };
+  styleLineKeys, defaultStyle, clampStyle, cycleColor, sanitizePreset };
 if (typeof window !== 'undefined') window.HBCatalog = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

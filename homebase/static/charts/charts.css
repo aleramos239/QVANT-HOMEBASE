@@ -303,7 +303,6 @@ a { color: inherit; }
 .dialog.indicator-settings .set-tabs { width: 140px; }
 .dialog.indicator-settings .set-pane { padding: 4px 20px 12px; }
 .dialog.indicator-settings .set-pane .field { padding: 8px 0; }   /* the pane already has the side gutter */
-.ind-tpl-spot { color: var(--text-2); font-size: 13px; cursor: default; }   /* Task 5: reserved, not wired up */
 .set-body { flex: 1; min-height: 0; display: flex; border-top: 1px solid var(--border); }
 .set-tabs { flex: none; width: 220px; display: flex; flex-direction: column; gap: 2px; padding: 8px; overflow: auto;
   border-right: 1px solid var(--border); }

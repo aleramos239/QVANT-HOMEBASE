@@ -229,6 +229,26 @@ test('clampStyle: malformed or missing fields fall back per line, and a style-le
   assert.equal(C.clampStyle('levels', { main: {} }), null);   // no Style tab at all
 });
 
+test('sanitizePreset: a loaded preset payload runs through clampParams/clampStyle -- junk can never reach a chart', () => {
+  const clean = C.sanitizePreset('ema', { params: { length: 9, source: 'hl2' }, style: { main: { color: '#123456', width: 3, dash: 'dotted', visible: false } } });
+  assert.deepEqual(clean.params, { length: 9, source: 'hl2' });
+  assert.deepEqual(clean.style, { main: { color: '#123456', width: 3, dash: 'dotted', visible: false } });
+
+  // malformed params/style fall back per-field, not the whole payload
+  const bad = C.sanitizePreset('ema', { params: { length: 'nope', source: 'bogus' }, style: { main: { color: 'not-a-colour', width: 99, dash: 'zigzag' } } });
+  assert.deepEqual(bad.params, { length: 20, source: 'close' });
+  assert.equal(bad.style.main.color, C.defaultStyle('ema', []).main.color);
+  assert.equal(bad.style.main.width, 1);
+
+  // missing/non-object payload, or a payload for an indicator with no Style tab: never throws
+  assert.deepEqual(C.sanitizePreset('ema', {}), { params: { length: 20, source: 'close' }, style: C.defaultStyle('ema', []) });
+  assert.deepEqual(C.sanitizePreset('ema', null), { params: { length: 20, source: 'close' }, style: C.defaultStyle('ema', []) });
+  assert.deepEqual(C.sanitizePreset('levels', { params: { junk: 1 }, style: { main: {} } }), { params: {}, style: null });
+
+  // an indicator with a Style tab but no saved style at all -- fresh defaultStyle, not null
+  assert.deepEqual(C.sanitizePreset('ema', { params: {} }).style, C.defaultStyle('ema', []));
+});
+
 test('a new instance of an indicator already on the chart does not repeat its colour (Task 2)', () => {
   const chart = [C.instance('vwap')];
   chart[0].style = C.defaultStyle('vwap', []);

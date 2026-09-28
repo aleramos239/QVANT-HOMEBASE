@@ -80,15 +80,23 @@ function menuBtn(text) {
    same way around openMenu/closeMenu/placeMenu).
    opts: {kind, current(): payload to save, apply(payload, { isDefault }): apply one to the working
    state (isDefault true for "Apply default" / a click on a row saved as the default, so the
-   caller can tell a Template pick apart from picking the default back)}. */
-function menu(host, anchor, { kind, current, apply }) {
+   caller can tell a Template pick apart from picking the default back), extra: an optional list of
+   {label, onclick()} rendered as plain menu rows after "Apply default" and before the saved-preset
+   list (the indicator dialog's "Reset to factory settings" -- a plain-JS reset, nothing to do with
+   the store, so it does not belong in this generic helper's own three actions)}. */
+function menu(host, anchor, { kind, current, apply, extra }) {
   const store = client(kind);
   host.toggleMenu(anchor, 'menu-tpl', (m) => {
     const list = mk('div'), err = mk('div', 'menu-err');
     const saveAs = menuBtn('Save as…'), saveDefault = menuBtn('Save as default'), applyDefault = menuBtn('Apply default');
+    const extraBtns = (extra || []).map(({ label, onclick }) => {
+      const b = menuBtn(label);
+      b.onclick = () => { host.closeMenu(); onclick(); };
+      return b;
+    });
     err.hidden = true;
     err.setAttribute('role', 'alert');
-    m.append(saveAs, saveDefault, applyDefault, mk('div', 'menu-sep'), list, err);
+    m.append(saveAs, saveDefault, applyDefault, ...extraBtns, mk('div', 'menu-sep'), list, err);
     const fail = (text) => { err.textContent = text; err.hidden = false; host.placeMenu(); };
     applyDefault.onclick = async () => {
       const all = await store.list();

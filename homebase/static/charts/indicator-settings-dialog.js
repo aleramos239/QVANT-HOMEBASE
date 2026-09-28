@@ -3,11 +3,18 @@
    indicator with no Style tab -- catalog.js's styleLineKeys -- skips straight to a single Inputs pane, same as
    the params-only dialog this replaces). Every change previews live on the chart; Cancel/×/Esc/a backdrop
    click restore it; Ok keeps it. Follows settings-dialog.js's mount(box, host) shape:
-     host: {cell, uid, closeMenu(), toggleMenu(anchor, cls, fill(menuEl)), placeMenu(), commit(changed), cancel()}
-   A bottom-left "Template ▾" spot is left for a parallel branch's generic presets store -- not built here. */
+     host: {cell, uid, closeMenu(), toggleMenu(anchor, cls, fill(menuEl)), placeMenu(), commit(changed), cancel(),
+            onDefaultApplied(id, payload) -- optional, so the page's indicator-defaults cache (app.js) can be
+            re-synced the instant "Apply default" is clicked, the same way the drawing toolbar's Template ▾
+            re-syncs drawStyleDefaults}
+   The bottom-left "Template ▾" wires the generic presets store (presets.js) exactly like the drawing tools'
+   own Template ▾ (app.js's drawToolbarButtons/drawingSettingsDialog): kind `indicator:<id>`, a payload of
+   {params, style}, "Reset to factory settings" as this dialog's own extra menu row (presets.js' menu() supports
+   it generically; it is not one of the store's three built-in actions). */
 (() => {
 'use strict';
 const C = window.HBCatalog;
+const I = window.HBIcons;
 const DASH = [['solid', 'Solid'], ['dashed', 'Dashed'], ['dotted', 'Dotted']];
 const WIDTHS = [1, 2, 3, 4].map((n) => [String(n), String(n)]);
 const LINE_LABEL = { vwap: { main: 'VWAP', band1: 'Band 1', band2: 'Band 2', band3: 'Band 3' },
@@ -189,11 +196,35 @@ function mount(box, host) {
     });
   }
 
+  /* Reset to factory settings: back to the catalog's own defaults, not atOpen (which is whatever the instance
+     held when the dialog opened -- possibly already a saved/default preset). Params -> clampParams({}) fills
+     every key with its catalog def; style -> a fresh defaultStyle (siblings excludes this instance, same as a
+     brand-new instance's colour pick would if it were the only one on the chart). */
+  function resetToFactory() {
+    vals = C.clampParams(inst.id, {});
+    if (lineKeys) style = C.defaultStyle(inst.id, cell.cfg.indicators.filter((x) => x.uid !== uid));
+    renderPane();
+    preview();
+  }
+
   const cancel = button('btn btn-ghost', 'Cancel'), ok = button('btn btn-primary', 'OK'), grow = mk('span', 'grow');
-  // Task 5: a parallel branch is building a generic presets store (/api/presets/<kind>, presets.js) for a
-  // Template ▾ menu here -- deliberately not built in this change.
-  const tplSpot = mk('span', 'ind-tpl-spot', 'Template ▾');
-  tplSpot.title = 'Reserved for the presets store (/api/presets/<kind>, presets.js) -- not built in this change';
+  const tpl = button('btn btn-ghost tpl-btn'), chev = mk('span', 'icw sm');
+  chev.innerHTML = I.chevron;
+  tpl.append(mk('span', '', 'Template'), chev);
+  tpl.setAttribute('aria-haspopup', 'menu');
+  tpl.onclick = () => window.HBPresets.menu(host, tpl, {
+    kind: `indicator:${inst.id}`,
+    current: () => ({ params: vals, style }),
+    apply(payload, { isDefault }) {
+      const clean = C.sanitizePreset(inst.id, payload);
+      vals = clean.params;
+      if (lineKeys) style = clean.style;
+      renderPane();
+      preview();
+      if (isDefault && host.onDefaultApplied) host.onDefaultApplied(inst.id, clean);
+    },
+    extra: [{ label: 'Reset to factory settings', onclick: resetToFactory }],
+  });
   cancel.onclick = () => host.cancel();
   ok.onclick = () => {
     flush();
@@ -204,7 +235,7 @@ function mount(box, host) {
     cell.update({ indicators: cell.cfg.indicators.map((x) => (x.uid === uid ? patch : x)) });
     host.commit(JSON.stringify(params) !== JSON.stringify(atOpen.params) || JSON.stringify(style) !== JSON.stringify(atOpen.style));
   };
-  foot.append(tplSpot, grow, cancel, ok);
+  foot.append(tpl, grow, cancel, ok);
 
   renderTabs();
   renderPane();

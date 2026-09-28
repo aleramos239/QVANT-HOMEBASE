@@ -120,3 +120,44 @@ test('client(kind).list returns null on a network error or a non-OK response', a
   const bad = P.client('drawing:trend', fakeFetch(() => ({ status: 500, body: {} })));
   assert.equal(await bad.list(), null);
 });
+
+/* menu()'s three built-in actions (Save as.../Save as default/Apply default) are covered end to end by
+   settings-dialog.test.mjs' own templateMenu (near-identical shape); this covers only what this file adds
+   on top for the indicator dialog -- an `extra` list of plain menu rows (its "Reset to factory settings",
+   nothing to do with the store) rendered after "Apply default" and before the saved-preset list, each one
+   closing the menu and firing its own onclick, same as the built-in rows do. */
+test('menu(): an `extra` row renders after Apply default, closes the menu and fires its own onclick', () => {
+  const P = withDom(load);
+  withDom(() => {
+    let fill = null;
+    const host = { toggleMenu(anchor, cls, f) { fill = f; }, closeMenu() { host.closed = true; }, placeMenu() {} };
+    let resetCalled = false;
+    P.menu(host, new FakeEl('button'), {
+      kind: 'indicator:ema',
+      current: () => ({ params: {}, style: null }),
+      apply() {},
+      extra: [{ label: 'Reset to factory settings', onclick: () => { resetCalled = true; } }],
+    });
+    const m = new FakeEl('div');
+    fill(m);
+    const rows = m.children.filter((c) => c.tagName === 'button').map((b) => b.children[0] && b.children[0].textContent);
+    assert.deepEqual(rows, ['Save as…', 'Save as default', 'Apply default', 'Reset to factory settings']);
+    const resetBtn = m.children.find((c) => c.tagName === 'button' && c.children[0] && c.children[0].textContent === 'Reset to factory settings');
+    resetBtn.onclick();
+    assert.equal(resetCalled, true);
+    assert.equal(host.closed, true);
+  });
+});
+
+test('menu(): no `extra` option (the drawing tools\' own call) renders only the three built-in rows', () => {
+  const P = withDom(load);
+  withDom(() => {
+    let fill = null;
+    const host = { toggleMenu(anchor, cls, f) { fill = f; }, closeMenu() {}, placeMenu() {} };
+    P.menu(host, new FakeEl('button'), { kind: 'drawing:trend', current: () => ({}), apply() {} });
+    const m = new FakeEl('div');
+    fill(m);
+    const rows = m.children.filter((c) => c.tagName === 'button').map((b) => b.children[0] && b.children[0].textContent);
+    assert.deepEqual(rows, ['Save as…', 'Save as default', 'Apply default']);
+  });
+});
