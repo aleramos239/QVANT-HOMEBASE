@@ -119,6 +119,14 @@
 
   /* master controls (top bar): the armed state + Arm/Disarm + a press-and-hold Kill */
   .master{ display:inline-flex; align-items:center; gap:8px; }
+  /* Nothing in the top bar may change width when its text changes, at any width: a Kill hold
+     cancels when the pointer leaves the button, so the button must never move under it. The pill
+     sits in a fixed slot (it hugs Arm; the slot fits its longest text, "desk unreachable"), Arm has
+     a fixed width and is hidden by visibility (its space kept), and the clock has a fixed width. */
+  .pill-slot{ display:inline-flex; justify-content:flex-end; width:7.75rem; flex:none; }
+  #armBtn{ width:4.75rem; flex:none; }
+  #armBtn.gone{ visibility:hidden; }
+  .inset-topbar > *{ flex-shrink:0; }
   .master .pill.stale{ opacity:.6; border-style:dashed; }
 
   /* press-and-hold (the top bar's Kill) — the copier's hold-to-confirm pattern, revived: a
@@ -210,8 +218,10 @@
   .feed-empty{ color:var(--muted-foreground); font-size:13px; padding:18px 0; }
 
   .clock{ font-family:var(--font-mono); font-size:12px; color:var(--muted-foreground);
-    white-space:nowrap; }
-  @media (max-width:860px){ .clock{ display:none; } }
+    white-space:nowrap; display:inline-block; width:11rem; text-align:right; overflow:hidden; }
+  /* the top bar never overflows (its right end -- Kill, Settings, theme -- never slides off-screen):
+     the clock goes first, then the brand tag, then the bar wraps */
+  @media (max-width:980px){ .clock{ display:none; } }
   #toast{ position:fixed; bottom:18px; left:50%; z-index:80;
     background:var(--glass-bg); color:var(--card-foreground); border:1px solid var(--border);
     backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-saturate));
@@ -455,10 +465,13 @@
     .inset-topbar{ border-top-color:transparent; border-bottom-color:var(--foreground); }
     .inset-topbar, .card, .modal, .amenu, #toast{ backdrop-filter:none; -webkit-backdrop-filter:none; }
   }
-  @media (max-width:720px){ .brand-tag{ display:none; } }
-  @media (max-width:560px){
+  @media (max-width:780px){ .brand-tag{ display:none; } }
+  @media (max-width:680px){
     .inset-topbar{ height:auto; min-height:52px; flex-wrap:wrap; row-gap:8px; padding:8px 12px; }
     .wordmark{ display:none; }
+    /* narrower than the three master controls: they wrap inside their own group (fixed widths, so
+       the wrap never depends on the status text) */
+    .master{ flex-wrap:wrap; justify-content:flex-end; row-gap:8px; max-width:100%; }
   }
 </style>
 </head>
@@ -477,8 +490,8 @@
       <span class="clock" id="clock">—</span>
       <span class="bulb" id="bulb" onclick="openChecks()" title="connecting…"></span>
       <div class="master" role="group" aria-label="Desk master controls">
-        <span id="statusPill" class="pill idle" role="status" title="Desk status unknown — connecting…">connecting…</span>
-        <button class="btn btn-outline btn-sm" type="button" id="armBtn" style="display:none">Arm</button>
+        <span class="pill-slot"><span id="statusPill" class="pill idle" role="status" title="Desk status unknown — connecting…">connecting…</span></span>
+        <button class="btn btn-outline btn-sm gone" type="button" id="armBtn" disabled aria-hidden="true">Arm</button>
         <button class="btn btn-sm btn-kill holdbtn" type="button" id="killBtn"
           title="Kill everything — press and hold for 1 second. Cancels every working order and flattens every position on every connected account, then disarms."
           aria-label="Kill everything (press and hold)">
@@ -1011,7 +1024,9 @@ function renderMaster() {
     pill.textContent = DESK_STALE ? "desk unreachable" : "connecting…";
     pill.title = "Desk status unknown — Arm/Disarm show once the desk answers. Kill is still offered, " +
       "but only the desk can carry it out: if it does not answer, flatten at the broker.";
-    arm.style.display = "none";          // fail closed: no Arm/Disarm while the state is unknown
+    arm.classList.add("gone");          // fail closed: no Arm/Disarm while the state is unknown --
+    arm.disabled = true;                // hidden by visibility, its space kept, so nothing moves Kill
+    arm.setAttribute("aria-hidden", "true");
     arm.onclick = null;
     return;
   }
@@ -1021,7 +1036,9 @@ function renderMaster() {
   pill.title = (armed ? "ARMED — signals place REAL orders; SL/TP ride broker-side"
                       : "Disarmed — signals are validated and journaled only") +
     (DESK_STALE ? ". Last known state: the desk is not answering." : "");
-  arm.style.display = "";
+  arm.classList.remove("gone");
+  arm.disabled = false;
+  arm.removeAttribute("aria-hidden");
   arm.textContent = armed ? "Disarm" : "Arm";
   arm.title = armed ? "Disarm: signals are journaled only" : "Arm: signals place real orders (asks first)";
   arm.onclick = armed ? doDisarm : doArm;

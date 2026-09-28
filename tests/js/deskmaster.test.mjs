@@ -24,7 +24,9 @@ function fakeEl() {
   const listeners = {};
   return {
     listeners,
-    textContent: '', className: '', title: '', onclick: null,
+    textContent: '', className: '', title: '', onclick: null, disabled: false, attrs: {},
+    setAttribute(k, v) { this.attrs[k] = String(v); },
+    removeAttribute(k) { delete this.attrs[k]; },
     style: { _p: {}, display: '', setProperty(k, v) { this._p[k] = v; } },
     classList: {
       _s: new Set(),
@@ -121,7 +123,9 @@ test('ST == null: the pill asserts nothing, no Arm/Disarm (fail closed), and Kil
   const { api, els, kill } = load({ st: null });
   api.renderMaster();
   assert.equal(els.statusPill.textContent, 'connecting…');
-  assert.equal(els.armBtn.style.display, 'none');
+  assert.ok(els.armBtn.classList.contains('gone'), 'hidden -- by visibility, its space kept');
+  assert.equal(els.armBtn.disabled, true);
+  assert.equal(els.armBtn.attrs['aria-hidden'], 'true');
   assert.equal(els.armBtn.onclick, null);
   assert.ok((kill.listeners.pointerdown || []).length && (kill.listeners.keydown || []).length, 'Kill works regardless');
   api.DESK_STALE = true;
@@ -134,7 +138,9 @@ test('disarmed: the pill says DISARMED and the button is Arm -- the SAME confirm
   api.renderMaster();
   assert.equal(els.statusPill.textContent, 'DISARMED');
   assert.equal(els.statusPill.className, 'pill idle');
-  assert.equal(els.armBtn.style.display, '');
+  assert.ok(!els.armBtn.classList.contains('gone'));
+  assert.equal(els.armBtn.disabled, false);
+  assert.equal(els.armBtn.attrs['aria-hidden'], undefined);
   assert.equal(els.armBtn.textContent, 'Arm');
   assert.equal(els.armBtn.onclick, api.doArm);
   await els.armBtn.onclick();
@@ -402,4 +408,26 @@ test('the alert is solid, red, above every dialog, and stays until dismissed', (
   const fn = HTML.slice(HTML.indexOf('function alertBar('), HTML.indexOf('async function post('));
   assert.doesNotMatch(fn, /setTimeout/, 'no auto-hide');
   assert.match(fn, /\$\("#alertX"\)\.onclick = \(\) => \{ \$\("#alertBar"\)\.hidden = true; \};/);
+});
+
+// ---- nothing in the top bar moves Kill when a status text changes (review minor) ---------------
+test('the pill, Arm and the clock have fixed widths, and Arm hides without giving up its space', () => {
+  const css = (sel) => { const i = HTML.indexOf('  ' + sel + '{'); assert.ok(i >= 0, sel); return HTML.slice(i, HTML.indexOf('}', i) + 1); };
+  assert.match(css('.pill-slot'), /width:7\.75rem; flex:none;/, 'fits "desk unreachable", the longest pill text');
+  assert.match(css('#armBtn'), /width:4\.75rem; flex:none;/, 'fits "Disarm"');
+  assert.match(css('#armBtn.gone'), /visibility:hidden;/);
+  assert.match(css('.clock'), /display:inline-block; width:11rem;/);
+  assert.match(css('.inset-topbar > *'), /flex-shrink:0;/);
+  assert.match(HTML, /<span class="pill-slot"><span id="statusPill"/);
+  const fn = HTML.slice(HTML.indexOf('function renderMaster('), HTML.indexOf('/* Press-and-hold:'));
+  assert.doesNotMatch(fn, /style\.display/, 'never display:none -- that would reflow the bar under a held Kill');
+});
+
+test('the bar sheds the clock, then the brand tag, then wraps -- never overflowing its right end', () => {
+  const at = (px) => HTML.indexOf(`@media (max-width:${px}px)`);
+  assert.ok(at(980) > 0 && /@media \(max-width:980px\)\{ \.clock\{ display:none; \} \}/.test(HTML));
+  assert.ok(/@media \(max-width:780px\)\{ \.brand-tag\{ display:none; \} \}/.test(HTML));
+  const narrow = HTML.slice(at(680), HTML.indexOf('\n  }\n', at(680)));
+  assert.match(narrow, /\.inset-topbar\{ height:auto; min-height:52px; flex-wrap:wrap;/);
+  assert.match(narrow, /\.master\{ flex-wrap:wrap; justify-content:flex-end;/);
 });
