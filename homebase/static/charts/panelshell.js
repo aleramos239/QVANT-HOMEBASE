@@ -49,6 +49,7 @@ function floatingOpenIds() { return L.IDS.filter((id) => state.panels[id].open &
 /* ---- build each panel's chrome once; content is mounted into `.hbpanel-body` once, by the caller's def ---- */
 function buildChrome(id) {
   const root = mk('div', 'hbpanel');
+  root.id = `panel-${id}`;   // aria-controls target for #tbOrder / #tbDom (charts.html)
   root.dataset.panel = id;
   const head = mk('div', 'hbpanel-head');
   const title = mk('span', 'hbpanel-title', undefined);
@@ -430,7 +431,9 @@ function mount(pg, defsIn) {
   floatLayer = document.getElementById('floatLayer');
   if (!dockEl || !floatLayer) return;
   state = load();
-  for (const id of L.IDS) if (state.panels[id].open) ensureBuilt(id);
+  // built once at mount regardless of open state (matches orderpanel.js's own "the form is built ONCE" rule,
+  // and keeps #panel-order / #panel-dom real DOM ids from the start for #tbOrder/#tbDom's aria-controls)
+  for (const id of L.IDS) ensureBuilt(id);
   relayout();
   window.addEventListener('resize', onWindowResize);
   const tbOrder = document.getElementById('tbOrder'), tbDom = document.getElementById('tbDom');
