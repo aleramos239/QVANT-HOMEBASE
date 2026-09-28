@@ -463,6 +463,7 @@ class PaperBook:
         self.seq: dict[str, int] = {}                # prints seen per root (this process)
         self.last: dict[str, float] = {}             # the last print per root
         self.last_ms: dict[str, int] = {}            # ...and its time (epoch ms): an exit refuses a stale one
+        self.last_ns: dict[str, int] = {}            # ...to the ns: no instant fill is stamped before it
         self.session: dict[str, str] = {}            # the session of that print per root
         self._until: dict[str, int] = {}             # ...valid until this ms (its next roll): no clock maths per print
         self._id = 0
@@ -587,7 +588,7 @@ class PaperBook:
         s = self.seq[root] = self.seq.get(root, 0) + 1
         self.last[root] = px
         ms = ts_ns // 1_000_000
-        self.last_ms[root] = ms
+        self.last_ms[root], self.last_ns[root] = ms, ts_ns
         if root not in self._until or ms >= self._until[root]:
             sess, self._until[root] = session_of(ms, root), _session_until(ms, root)
             if self.session.get(root) != sess:
@@ -774,7 +775,7 @@ class PaperBook:
                                role="tp", parent=eid, oco=eid, status="held", **{**base, "side": -side}))
         self._do({"ev": "place", "orders": [_od(o) for o in (entry, *legs)]}, seq=self.seq.get(root, 0))
         if plan is not None:
-            self._instant_fill(entry, *plan, now)    # its bracket legs go live from the next print (_fill)
+            self._instant_fill(entry, *plan)         # its bracket legs go live from the next print (_fill)
         return {"ok": True, "order_id": eid, "error": None}
 
     def _check_prices(self, root, side, typ, price, trigger, sl, tp, tick) -> None:
@@ -859,12 +860,14 @@ class PaperBook:
         if ids:
             self._do({"ev": "cancel", "ids": ids})
 
-    def _instant_fill(self, o: POrder, src: str, parts: list, ts_ms: int, now_ms: int) -> None:
-        """A Market order just placed fills now, on the book's clock, for all of its qty (Planner.take): at the
-        quantity-weighted average of `parts` -- one fill event like a print's, `src` "book" (its levels in `parts`) or
-        "quote"; its bracket legs go live from the next print, as after a print fill."""
+    def _instant_fill(self, o: POrder, src: str, parts: list, ts_ms: int) -> None:
+        """A Market order just placed fills now for all of its qty (Planner.take): at the quantity-weighted average of
+        `parts` -- one fill event like a print's, `src` "book" (its levels in `parts`) or "quote"; its bracket legs go
+        live from the next print, as after a print fill. Stamped at its source's time (the book's / the quote's), but
+        never before the root's last print: the fills stay in order with the print fills."""
         self._fid += 1
-        ev = {"ev": "fill", "id": o.id, "price": _avg(parts), "ts_ns": now_ms * 1_000_000, "fid": self._fid, "src": src}
+        ts_ns = max(ts_ms * 1_000_000, self.last_ns.get(o.root, 0))
+        ev = {"ev": "fill", "id": o.id, "price": _avg(parts), "ts_ns": ts_ns, "fid": self._fid, "src": src}
         if src == "book":
             ev["parts"] = parts
         self._do(ev, seq=self.seq.get(o.root, 0))
@@ -878,7 +881,7 @@ class PaperBook:
                    placed_ms=now, session=session_of(now, root))
         self._do({"ev": "place", "orders": [_od(o)]}, seq=self.seq.get(root, 0))
         if plan is not None:
-            self._instant_fill(o, *plan, now)
+            self._instant_fill(o, *plan)
 
     def _exits(self, root: str, sl: Optional[float], tp: Optional[float], expected_net: int) -> dict:
         """The desk's `exits` (trading.py ChartDesk._exits_one, exit_levels), on this book: an SL and/or TP for the

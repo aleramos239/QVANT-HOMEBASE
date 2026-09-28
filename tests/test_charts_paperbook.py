@@ -1100,7 +1100,7 @@ def test_a_market_buy_fills_at_once_at_the_ask_and_a_sell_at_the_bid_with_no_sli
     r = order(b, "Buy", "Market", qty=2)                             # no print needed: the quote is the price
     assert r["ok"] and fills(b) == [("Buy", 2, 100.0)] and net(b) == 2 and b.view()["orders"] == []
     f = b.fills[-1]
-    assert (f["src"], f["order_id"], f["time"]) == ("quote", r["order_id"], pb._iso(T0)) and "parts" not in f
+    assert (f["src"], f["order_id"], f["time"]) == ("quote", r["order_id"], pb._iso(T0 - 500_000_000)) and "parts" not in f
     order(b, "Sell", "Market", qty=2)
     assert fills(b)[-1] == ("Sell", 2, 99.75) and net(b) == 0
     assert b.realized == pytest.approx(-0.25 * 20 * 2 - 8.0)         # the spread, once; $4 a round turn per contract
@@ -1222,6 +1222,23 @@ def test_a_level_priced_at_zero_or_over_40_ticks_from_the_touch_ends_the_walk():
         assert fills(d) == [] and [o["type"] for o in d.view()["orders"]] == ["Market"]
 
 
+def test_an_instant_fill_is_stamped_at_its_sources_time_never_before_the_last_print(tmp_path):
+    b, src = live(quote=q_(age_ms=500), depth=l2(age_ms=300), printed_ms=1000, tmp_path=tmp_path)
+    order(b, "Buy", "Market")
+    last = T0 - 100_000_000 - 123                                             # then a print newer than both, to the ns
+    b.on_print("NQ", last, 100.0)
+    src["book"] = None
+    order(b, "Buy", "Market")                                                 # (the quote, now)
+    fills_logged = [e for e in map(json.loads, (tmp_path / "paper" / "book.jsonl").read_text().splitlines())
+                    if e["ev"] == "fill"]
+    assert [(e["src"], e["ts_ns"]) for e in fills_logged] == [("book", T0 - 300_000_000), ("quote", last)]
+    c, _ = live(depth=l2(age_ms=300), printed_ms=100)
+    order(c, "Sell", "Market", sl=100.5)                                      # stamped at the print, 100 ms before
+    c.on_print("NQ", T0 - 50_000_000, 100.5)                                  # its stop, on the next print
+    assert [f["role"] for f in c.fills] == ["entry", "sl"]
+    assert [f["time"] for f in c.fills] == [pb._iso(T0 - 100_000_000), pb._iso(T0 - 50_000_000)]   # in order
+
+
 def test_the_book_limits_are_inclusive():
     for depth in (l2(age_ms=2000), l2(age_ms=-1000), l2(bids=((95.0, 1),))):   # 2 s old, 1 s ahead, 20 ticks wide
         b, _ = live(depth=depth)
@@ -1323,7 +1340,7 @@ def test_an_instant_fill_is_logged_with_its_src_and_levels_and_survives_a_restar
     log = [json.loads(x) for x in (tmp_path / "paper" / "book.jsonl").read_text().splitlines()]
     assert [e["ev"] for e in log] == ["place", "fill"]
     assert {k: log[1][k] for k in ("price", "ts_ns", "src", "parts")} == \
-        {"price": 100.125, "ts_ns": NOW_MS * 1_000_000, "src": "book", "parts": [[100.0, 1], [100.25, 1]]}
+        {"price": 100.125, "ts_ns": (NOW_MS - 300) * 1_000_000, "src": "book", "parts": [[100.0, 1], [100.25, 1]]}
     again = book(tmp_path)                                           # a restart replays the log: no book needed
     f = again.fills[-1]
     assert (net(again), again.pos["NQ"]["avg"], f["src"], f["parts"]) == (2, 100.125, "book", [[100.0, 1], [100.25, 1]])
