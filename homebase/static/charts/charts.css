@@ -1109,7 +1109,7 @@ input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-o
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
 }
-.menu, .hotkey-box, .toast { border-top: 1px solid var(--glass-edge); }
+.menu, .hotkey-box, .toast, .draw-toolbar, .replay-bar { border-top: 1px solid var(--glass-edge); }
 .hbpanel-head { border-top: 1px solid var(--glass-edge); }   /* in ADDITION to its existing bottom border -- top and bottom separate it from both the titlebar above and the body below */
 .dialog {
   background: var(--glass-bg-heavy);
