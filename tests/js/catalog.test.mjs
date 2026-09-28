@@ -6,10 +6,13 @@ const require = createRequire(import.meta.url);
 const C = require('../../homebase/static/charts/catalog.js');
 const strip = (list) => list.map(({ id, params, visible }) => ({ id, params, visible }));
 
+const VWAP_DEFAULT_PARAMS = { anchor: 'eth', customTime: '02:00',
+  band1On: false, band1Mult: 1, band2On: false, band2Mult: 2, band3On: false, band3Mult: 3 };
+
 test('a new chart gets volume, VWAP (ETH), session levels and a 3x footprint', () => {
   assert.deepEqual(strip(C.defaults()), [
     { id: 'volume', params: {}, visible: true },
-    { id: 'vwap', params: { anchor: 'eth', bands: false }, visible: true },
+    { id: 'vwap', params: VWAP_DEFAULT_PARAMS, visible: true },
     { id: 'levels', params: {}, visible: true },
     { id: 'footprint', params: { imbalance: 3 }, visible: true }]);
 });
@@ -29,12 +32,36 @@ test('server keys follow the study wire names and are deduplicated', () => {
   assert.deepEqual(C.serverKeys([]), []);
 });
 
+test('VWAP wire keys follow the anchor: eth/rth unchanged, week/month/custom new', () => {
+  assert.equal(C.serverKey(C.instance('vwap')), 'vwap');
+  assert.equal(C.serverKey(C.instance('vwap', { anchor: 'rth' })), 'vwap:rth');
+  assert.equal(C.serverKey(C.instance('vwap', { anchor: 'week' })), 'vwap:week');
+  assert.equal(C.serverKey(C.instance('vwap', { anchor: 'month' })), 'vwap:month');
+  assert.equal(C.serverKey(C.instance('vwap', { anchor: 'custom', customTime: '02:00' })), 'vwap:t0200');
+  assert.equal(C.serverKey(C.instance('vwap', { anchor: 'custom', customTime: '23:59' })), 'vwap:t2359');
+  // an invalid customTime never reaches serverKey: clampParams already fell back to the default 02:00
+  assert.equal(C.serverKey(C.instance('vwap', { anchor: 'custom', customTime: 'nope' })), 'vwap:t0200');
+});
+
+test('SMA/EMA wire keys add a :source only when it is not close; VWMA/ADX never take one', () => {
+  assert.equal(C.serverKey(C.instance('ema', { length: 20 })), 'ema:20');
+  assert.equal(C.serverKey(C.instance('ema', { length: 20, source: 'close' })), 'ema:20');
+  assert.equal(C.serverKey(C.instance('ema', { length: 20, source: 'hl2' })), 'ema:20:hl2');
+  assert.equal(C.serverKey(C.instance('sma', { length: 50, source: 'ohlc4' })), 'sma:50:ohlc4');
+  assert.equal(C.serverKey(C.instance('vwma', { length: 9 })), 'vwma:9');
+  assert.equal(C.serverKey(C.instance('adx', { length: 14 })), 'adx:14');
+});
+
 test('params are clamped to their range and type', () => {
-  assert.deepEqual(C.clampParams('ema', { length: 0 }), { length: 1 });
-  assert.deepEqual(C.clampParams('ema', { length: 5000 }), { length: 1000 });
-  assert.deepEqual(C.clampParams('ema', { length: '12.6' }), { length: 13 });
-  assert.deepEqual(C.clampParams('ema', { length: 'abc' }), { length: 20 });
-  assert.deepEqual(C.clampParams('ema', {}), { length: 20 });
+  assert.deepEqual(C.clampParams('ema', { length: 0 }), { length: 1, source: 'close' });
+  assert.deepEqual(C.clampParams('ema', { length: 5000 }), { length: 1000, source: 'close' });
+  assert.deepEqual(C.clampParams('ema', { length: '12.6' }), { length: 13, source: 'close' });
+  assert.deepEqual(C.clampParams('ema', { length: 'abc' }), { length: 20, source: 'close' });
+  assert.deepEqual(C.clampParams('ema', {}), { length: 20, source: 'close' });
+  assert.deepEqual(C.clampParams('ema', { length: 20, source: 'hl2' }), { length: 20, source: 'hl2' });
+  assert.deepEqual(C.clampParams('ema', { length: 20, source: 'bogus' }), { length: 20, source: 'close' });
+  assert.deepEqual(C.clampParams('sma', { length: 20, source: 'ohlc4' }), { length: 20, source: 'ohlc4' });
+  assert.deepEqual(C.clampParams('vwma', { length: 9 }), { length: 9 });   // no Source param for VWMA
   assert.deepEqual(C.clampParams('footprint', { imbalance: 2.5 }), { imbalance: 2.5 });
   assert.deepEqual(C.clampParams('footprint', { imbalance: -1 }), { imbalance: 0 });
   assert.deepEqual(C.clampParams('bigprints', { min: 0 }), { min: 1 });
@@ -43,8 +70,15 @@ test('params are clamped to their range and type', () => {
   assert.deepEqual(C.clampParams('bigorders', { multiple: 999 }), { multiple: 50 });
   assert.deepEqual(C.clampParams('imbalance', { junk: 1 }), {});
   assert.deepEqual(C.clampParams('heatmap', { junk: 1 }), {});
-  assert.deepEqual(C.clampParams('vwap', { anchor: 'xyz', bands: 'yes' }), { anchor: 'eth', bands: false });
-  assert.deepEqual(C.clampParams('vwap', { anchor: 'rth', bands: true, junk: 1 }), { anchor: 'rth', bands: true });
+  assert.deepEqual(C.clampParams('vwap', { anchor: 'xyz', customTime: 'nope' }), VWAP_DEFAULT_PARAMS);
+  assert.deepEqual(C.clampParams('vwap', { anchor: 'rth', junk: 1 }), { ...VWAP_DEFAULT_PARAMS, anchor: 'rth' });
+  assert.deepEqual(C.clampParams('vwap', { anchor: 'custom', customTime: '9:30' }),
+    { ...VWAP_DEFAULT_PARAMS, anchor: 'custom' });   // bad HH:MM shape: customTime falls back, anchor stands
+  assert.deepEqual(C.clampParams('vwap', { anchor: 'custom', customTime: '09:30' }),
+    { ...VWAP_DEFAULT_PARAMS, anchor: 'custom', customTime: '09:30' });
+  assert.deepEqual(C.clampParams('vwap', { anchor: 'week', band1On: true, band1Mult: 1.5 }),
+    { ...VWAP_DEFAULT_PARAMS, anchor: 'week', band1On: true, band1Mult: 1.5 });
+  assert.deepEqual(C.clampParams('vwap', { band1Mult: 99 }), { ...VWAP_DEFAULT_PARAMS, band1Mult: 10 });   // clamped to max
   assert.deepEqual(C.clampParams('volume', { any: 1 }), {});
 });
 
@@ -55,10 +89,10 @@ test('a Build-1 chart (st form) migrates field by field', () => {
   assert.equal(m.root, 'ES');
   assert.equal(m.spec, 'tick:1000');
   assert.deepEqual(strip(m.indicators), [
-    { id: 'vwap', params: { anchor: 'rth', bands: true }, visible: true },
-    { id: 'ema', params: { length: 9 }, visible: true },
-    { id: 'ema', params: { length: 21 }, visible: true },
-    { id: 'sma', params: { length: 50 }, visible: true },
+    { id: 'vwap', params: { ...VWAP_DEFAULT_PARAMS, anchor: 'rth', band1On: true, band2On: true }, visible: true },
+    { id: 'ema', params: { length: 9, source: 'close' }, visible: true },
+    { id: 'ema', params: { length: 21, source: 'close' }, visible: true },
+    { id: 'sma', params: { length: 50, source: 'close' }, visible: true },
     { id: 'vwma', params: { length: 20 }, visible: true },
     { id: 'levels', params: {}, visible: true },
     { id: 'volume', params: {}, visible: true },
@@ -83,7 +117,7 @@ test('switched-off Build-1 studies are dropped', () => {
 test('new-form configs are sanitised: unknown ids dropped, params clamped, uid and visible kept', () => {
   const m = C.migrate({ root: 'NQ', spec: 'time:300', indicators: [
     { uid: 'keep', id: 'ema', params: { length: 0 }, visible: false }, { uid: 'x', id: 'nope' }, null] });
-  assert.deepEqual(m.indicators, [{ uid: 'keep', id: 'ema', params: { length: 1 }, visible: false }]);
+  assert.deepEqual(m.indicators, [{ uid: 'keep', id: 'ema', params: { length: 1, source: 'close' }, visible: false }]);
   const fresh = C.migrate({ root: 'NQ', spec: 'time:60', indicators: [{ id: 'sma' }] }).indicators[0];
   assert.ok(fresh.uid);
   assert.equal(fresh.visible, true);
@@ -110,6 +144,12 @@ test('legend labels', () => {
   assert.equal(C.label(C.instance('sma')), 'SMA 50');
   assert.equal(C.label(C.instance('vwap')), 'VWAP');
   assert.equal(C.label(C.instance('vwap', { anchor: 'rth' })), 'VWAP RTH');
+  assert.equal(C.label(C.instance('vwap', { anchor: 'week' })), 'VWAP W');
+  assert.equal(C.label(C.instance('vwap', { anchor: 'month' })), 'VWAP M');
+  assert.equal(C.label(C.instance('vwap', { anchor: 'custom', customTime: '02:00' })), 'VWAP 02:00');
+  assert.equal(C.label(C.instance('vwap', { anchor: 'custom', customTime: '16:00' })), 'VWAP 16:00');
+  assert.equal(C.label(C.instance('ema', { length: 20, source: 'hl2' })), 'EMA 20 HL2');
+  assert.equal(C.label(C.instance('sma', { length: 50 })), 'SMA 50');   // default source (close): no suffix
   assert.equal(C.label(C.instance('adx')), 'ADX 14');
   assert.equal(C.label(C.instance('footprint')), 'Footprint 3×');
   assert.equal(C.label(C.instance('footprint', { imbalance: 0 })), 'Footprint');
@@ -133,6 +173,78 @@ test('legend values per indicator', () => {
   for (const id of ['volume', 'delta', 'levels', 'footprint', 'profile', 'bigprints', 'bigorders', 'imbalance', 'heatmap']) {
     assert.deepEqual(C.legendValues(C.instance(id), bar, colors, 0.25), [], id);
   }
+});
+
+// ---- per-instance style (Task 3): styleLineKeys / defaultStyle / clampStyle / cycleColor ----
+test('styleLineKeys: a Style tab per plotted line for the drawn indicators, none for canvas/fixed-colour ones', () => {
+  assert.deepEqual(C.styleLineKeys('vwap'), ['main', 'band1', 'band2', 'band3']);
+  assert.deepEqual(C.styleLineKeys('adx'), ['adx', 'pdi', 'mdi']);
+  assert.deepEqual(C.styleLineKeys('ema'), ['main']);
+  assert.deepEqual(C.styleLineKeys('sma'), ['main']);
+  assert.deepEqual(C.styleLineKeys('vwma'), ['main']);
+  assert.deepEqual(C.styleLineKeys('cumdelta'), ['main']);
+  for (const id of ['delta', 'levels', 'footprint', 'profile', 'bigprints', 'bigorders', 'imbalance', 'heatmap', 'volume']) {
+    assert.equal(C.styleLineKeys(id), null, id);
+  }
+  assert.equal(C.styleLineKeys('nope'), null);
+});
+
+test('cycleColor: the first instance keeps its traditional colour, later ones advance and never repeat it', () => {
+  assert.equal(C.cycleColor('vwap', []), '#9C27B0');
+  assert.equal(C.cycleColor('vwap', [{ id: 'vwap' }]), C.LINE_COLORS[0]);
+  assert.equal(C.cycleColor('vwap', [{ id: 'vwap' }, { id: 'vwap' }]), C.LINE_COLORS.filter((c) => c !== '#9C27B0')[1]);
+  assert.notEqual(C.cycleColor('vwap', [{ id: 'vwap' }]), '#9C27B0');
+  assert.equal(C.cycleColor('ema', []), C.LINE_COLORS[0]);
+  assert.equal(C.cycleColor('ema', [{ id: 'ema' }]), C.LINE_COLORS[1]);
+  assert.equal(C.cycleColor('ema', [{ id: 'vwap' }]), C.LINE_COLORS[0]);   // only same-id siblings count
+  assert.equal(C.cycleColor('cumdelta', []), '#FF6D00');
+});
+
+test('defaultStyle: one entry per Style-tab line, width/dash/visible sane, null when there is no Style tab', () => {
+  const vs = C.defaultStyle('vwap', []);
+  assert.deepEqual(Object.keys(vs).sort(), ['band1', 'band2', 'band3', 'main']);
+  assert.equal(vs.main.color, '#9C27B0');
+  assert.equal(vs.main.width, 2);
+  assert.equal(vs.main.dash, 'solid');
+  assert.equal(vs.band1.dash, 'dashed');
+  for (const k of ['main', 'band1', 'band2', 'band3']) assert.equal(vs[k].visible, true);
+  const second = C.defaultStyle('vwap', [{ id: 'vwap' }]);
+  assert.notEqual(second.main.color, vs.main.color);
+  const adx = C.defaultStyle('adx', []);
+  assert.equal(adx.pdi.color, '#089981');
+  assert.equal(adx.mdi.color, '#F23645');
+  assert.equal(C.defaultStyle('levels', []), null);
+  assert.equal(C.defaultStyle('nope', []), null);
+});
+
+test('clampStyle: malformed or missing fields fall back per line, and a style-less indicator clamps to null', () => {
+  const bad = C.clampStyle('ema', { main: { color: 'not-a-colour', width: 99, dash: 'zigzag', visible: 'yes' } });
+  assert.equal(bad.main.color, C.defaultStyle('ema', []).main.color);
+  assert.equal(bad.main.width, 1);
+  assert.equal(bad.main.dash, 'solid');
+  assert.equal(bad.main.visible, true);
+  const good = C.clampStyle('ema', { main: { color: '#123456', width: 3, dash: 'dotted', visible: false } });
+  assert.deepEqual(good, { main: { color: '#123456', width: 3, dash: 'dotted', visible: false } });
+  assert.equal(C.clampStyle('ema', null), null);
+  assert.equal(C.clampStyle('levels', { main: {} }), null);   // no Style tab at all
+});
+
+test('a new instance of an indicator already on the chart does not repeat its colour (Task 2)', () => {
+  const chart = [C.instance('vwap')];
+  chart[0].style = C.defaultStyle('vwap', []);
+  const second = C.instance('vwap');
+  second.style = C.defaultStyle('vwap', chart);
+  assert.notEqual(second.style.main.color, chart[0].style.main.color);
+});
+
+test('migrate carries a persisted style over (clamped); an instance with none keeps rendering unstyled', () => {
+  const m = C.migrate({ root: 'NQ', spec: 'time:60', indicators: [
+    { uid: 'a', id: 'ema', params: { length: 9 }, style: { main: { color: '#ABCDEF', width: 3, dash: 'dotted', visible: false } } },
+    { uid: 'b', id: 'ema', params: { length: 9 } },
+    { uid: 'c', id: 'levels', params: {}, style: { main: { color: '#ABCDEF' } } }] });
+  assert.deepEqual(m.indicators[0].style, { main: { color: '#ABCDEF', width: 3, dash: 'dotted', visible: false } });
+  assert.equal('style' in m.indicators[1], false);
+  assert.equal('style' in m.indicators[2], false);   // levels has no Style tab: a stray style is dropped
 });
 
 test('prices use the tick size decimals with thousands separators', () => {

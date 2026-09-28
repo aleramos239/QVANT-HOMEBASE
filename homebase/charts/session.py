@@ -70,6 +70,31 @@ def is_rth(ts_ms: int, session: str) -> bool:
     return t.date().isoformat() == session and t.time() >= RTH_OPEN
 
 
+def week_key(session: str) -> tuple[int, int]:
+    """The ISO (year, week) of a session date -- stable Monday..Friday (ISO weeks run Monday..Sunday), so it
+    changes exactly at the week's first session, whatever weekday a holiday leaves that session on. Used by the
+    VWAP "week" anchor, which resets at the week's first session open (Sunday 18:00 ET)."""
+    y, w, _ = dt.date.fromisoformat(session).isocalendar()
+    return (y, w)
+
+
+def month_key(session: str) -> tuple[int, int]:
+    """The (year, month) of a session date, by CME trade date -- changes exactly at the first session whose
+    date falls in a new calendar month. Used by the VWAP "month" anchor."""
+    d = dt.date.fromisoformat(session)
+    return (d.year, d.month)
+
+
+def custom_anchor_key(ts_ms: int, hh: int, mm: int) -> dt.datetime:
+    """The start (an aware ET datetime) of the daily anchor period containing ts_ms for a reset at hh:mm ET:
+    the most recent hh:mm-ET instant at or before ts_ms. Computed via ET wall-clock conversion (not a fixed
+    UTC offset), so a DST change keeps the boundary at the correct local wall-clock instant on both sides of
+    the transition -- see studies.VWAP for how a Study built on closed bars uses this."""
+    t = dt.datetime.fromtimestamp(ts_ms / 1000, ET)
+    today = t.replace(hour=hh, minute=mm, second=0, microsecond=0)
+    return today if t >= today else today - _DAY
+
+
 @lru_cache(maxsize=65536)
 def _et_offset_s(hour: int) -> int:
     return int(dt.datetime.fromtimestamp(hour * 3600, ET).utcoffset().total_seconds())
