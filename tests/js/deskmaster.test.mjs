@@ -84,7 +84,9 @@ function load({ st = { armed: false }, stale = false, confirm = true, answer = K
       posts.push(body === undefined ? { url } : { url, body });
       if (answer instanceof Error) throw answer;
       if (answer === 'later') return new Promise((res, rej) => { settle = { res, rej }; });
-      return typeof answer === 'function' ? answer(url) : JSON.parse(JSON.stringify(answer));
+      if (typeof answer === 'function') return answer(url, body);
+      if (url === '/api/arm' && answer === KILL_OK) return { ok: true, armed: body.armed };   // the desk, doing as asked
+      return JSON.parse(JSON.stringify(answer));
     },
     refresh: () => refreshes.push(true),
     fetch: async (url) => { fetched.push(url); throw new Error('the master controls must never fetch'); },
@@ -566,4 +568,42 @@ test('while a menu or size edit holds updates, the pill goes stale after 5 s -- 
   s.clock.now = 10000; await s.api.refresh();
   assert.equal(s.api.stale, false);
   assert.equal(s.fetched.length, 2);
+});
+
+// ---- Arm / Disarm believe only the desk's answer (second review) -----------------------------------
+test('a refused Disarm (403) is the red alert, never "Disarmed"', async () => {
+  const s = load({ st: { armed: true }, answer: { error: 'origin not allowed' } });
+  s.api.renderMaster();
+  await s.els.armBtn.onclick();
+  assert.deepEqual(plain(s.posts), [{ url: '/api/arm', body: { armed: false } }]);
+  assert.deepEqual(s.toasts, []);
+  assert.deepEqual(s.alerts, ['Disarm NOT confirmed — the desk refused it: origin not allowed. The desk may still be ARMED: ' +
+    'press Kill, or disarm again.']);
+});
+
+test('a Disarm whose connection drops is the red alert -- never an uncaught error', async () => {
+  const s = load({ st: { armed: true }, answer: new TypeError('Failed to fetch') });
+  s.api.renderMaster();
+  await s.els.armBtn.onclick();
+  assert.match(s.alerts[0], /^Disarm NOT confirmed — the desk didn't answer \(Failed to fetch\)\./);
+  assert.equal(s.refreshes.length, 1);
+});
+
+test('a desk that answers ok but still says ARMED is not a Disarm', async () => {
+  const s = load({ st: { armed: true }, answer: () => ({ ok: true, armed: true }) });
+  await s.api.doDisarm();
+  assert.match(s.alerts[0], /^Disarm NOT confirmed — the desk says it is still ARMED\./);
+});
+
+test('a refused or dropped Arm says NOT armed (the safe side: a toast), never "Armed"', async () => {
+  const s = load({ st: { armed: false }, answer: { error: 'origin not allowed' } });
+  await s.api.doArm();
+  assert.deepEqual(s.toasts, ['NOT armed — the desk refused it: origin not allowed.']);
+  assert.deepEqual(s.alerts, []);
+  const d = load({ st: { armed: false }, answer: new TypeError('Failed to fetch') });
+  await d.api.doArm();
+  assert.deepEqual(d.toasts, ["NOT armed — the desk didn't answer (Failed to fetch)."]);
+  const u = load({ st: { armed: false }, answer: new SyntaxError('Unexpected token <') });
+  await u.api.doArm();
+  assert.deepEqual(u.toasts, ["NOT armed — the desk's answer was unreadable."]);
 });

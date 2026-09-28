@@ -1001,17 +1001,34 @@ $("#confirmOverlay").addEventListener("click", (e) => {
    fail closed, never assert a state it doesn't know -- but Kill is always offered (only the desk can
    carry it out; if it doesn't answer, the page says so -- flatten at the broker). While refresh() is
    failing, the last-known state is marked stale (DESK_STALE). */
+/* Arm / Disarm believe only the desk's answer (second review): {ok: true, armed: <what was asked>}.
+   Anything else -- a refusal (the write guard's 403), a dropped connection, an unreadable answer, a
+   desk that says the other thing -- is said. A Disarm that didn't land is the red alert: signals may
+   still place real orders. A failed Arm leaves the desk on the safe side, so a toast says it. */
+async function setArmed(want) {
+  let r, err = null;
+  try { r = await post("/api/arm", {armed: want}); } catch (e) { err = e || new Error("no answer"); }
+  refresh();
+  if (DEMO) return;                        // preview mode: post() already said nothing is sent
+  if (!err && r && r.ok === true && r.armed === want) {
+    toast(want ? "Armed — signals now place real orders." : "Disarmed — dry-run journaling only.");
+    return;
+  }
+  const why = err ? (err.name === "SyntaxError" ? "the desk's answer was unreadable"
+                                               : `the desk didn't answer (${killText(err.message || String(err))})`)
+    : !r || typeof r !== "object" ? "the desk's answer was unreadable"
+    : r.ok !== true ? `the desk refused it: ${killText(r.error || r.detail)}`
+    : `the desk says it is ${r.armed ? "still ARMED" : "disarmed"}`;
+  if (want) toast(`NOT armed — ${why}.`, 8000);
+  else alertBar(`Disarm NOT confirmed — ${why}. The desk may still be ARMED: press Kill, or disarm again.`);
+}
 async function doArm() {
   if (!await confirmDlg("Arm the desk?",
       "Signals will place REAL bracketed orders on every account assigned in the book.",
       "Arm", false)) return;
-  await post("/api/arm", {armed: true}); refresh();
-  toast("Armed — signals now place real orders.");
+  await setArmed(true);
 }
-async function doDisarm() {
-  await post("/api/arm", {armed: false}); refresh();
-  toast("Disarmed — dry-run journaling only.");
-}
+async function doDisarm() { await setArmed(false); }
 /* A Kill that did not go through is never silent (review M1): a refusal (e.g. the write guard's
    403 / 415), an unreadable answer, no answer, or an account whose cancel or flatten failed -> a
    red alert that stays until dismissed and says to flatten at the broker. A clean Kill says what it
