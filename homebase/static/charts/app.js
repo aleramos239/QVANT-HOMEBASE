@@ -1549,7 +1549,7 @@ function onKey(e) {
   }
   // Space plays/pauses, → steps -- only the selected cell while it replays, no input focused (returned above), no
   // menu / hotkey box open, and never a key aimed at the order panel (its send button owns Space itself)
-  if (c && c.replay && !menuEl && !hotkeyBox && !(e.target.closest && e.target.closest('#opanel'))) {
+  if (c && c.replay && !menuEl && !hotkeyBox && !(e.target.closest && e.target.closest('.hbpanel'))) {
     if (e.code === 'Space') { e.preventDefault(); window.HBReplayUI.togglePlay(c); return; }
     if (e.key === 'ArrowRight') { e.preventDefault(); window.HBReplayUI.step(c); return; }
   }
@@ -1572,7 +1572,6 @@ async function init() {
   $('#tbGrid').onclick = () => toggleMenu($('#tbGrid'), gridMenu);
   $('#tbSettings').onclick = () => chartSettings();
   $('#tbTheme').onclick = toggleTheme;
-  $('#tbDom').onclick = () => window.HBOrderPanel.openTab('dom');
   for (const b of document.querySelectorAll('#rail [data-tool]')) {
     b.onclick = () => setTool(b.dataset.tool === tool && tool !== 'cursor' ? 'cursor' : b.dataset.tool);
   }
@@ -1609,7 +1608,13 @@ async function init() {
   window.HBNewsUI.mount(page);                 // 2026-09-27 news-ui plan, Task 4: registers the News tab
   window.HBPanel.mount(page);                 // Task 4
   window.HBTradeUI.mount(page);                // Task 5 (it also owns the desk's line in the status bar)
-  window.HBOrderPanel.mount(page);             // order-panel plan Task 3: the right dock (follows the selected chart)
+  // 2026-09-27 panels plan: Order and DOM are each their own floating/dockable panel now. HBPanelShell owns
+  // the chrome (open/close, dock/float, drag, resize, persistence); it hands each module a plain container to
+  // fill ONCE (mount) and a setVisible callback -- neither module ever touches the page's layout itself.
+  window.HBPanelShell.mount(page, {
+    order: { mount: (container) => window.HBOrderPanel.mount(page, container), setVisible: (v) => window.HBOrderPanel.setVisible(v) },
+    dom: { mount: (container) => window.HBDomUI.mount(container, page), setVisible: (v) => window.HBDomUI.setVisible(v) },
+  });
   window.HBReplayUI.mount(page);
   buildGrid();   // after the mounts: page.overlays must be filled before any cell's build() reads host.overlays()
   migrateTickedOnce();
