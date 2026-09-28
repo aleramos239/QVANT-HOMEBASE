@@ -1763,6 +1763,10 @@ function editQty(ev, strategy, account, qty) {
   inp.addEventListener("blur", () => commit(false));
   inp.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
+      // (review M4) Enter's own default action would land on whatever has focus AFTER this handler
+      // -- the confirm's Cancel, which the dialog just focused -- and cancel it. Stop it first.
+      e.preventDefault();
+      if (e.repeat) return;
       commit(true);
       if (document.activeElement === inp) inp.blur();   // no dialog opened: leave the field as before
     }

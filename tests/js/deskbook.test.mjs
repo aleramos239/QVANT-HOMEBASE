@@ -152,6 +152,20 @@ test('raising a LIVE booking\'s size with Enter asks first; the new size is what
     assignments: [{ account: '1234567885', qty: 5 }] } }]);
 });
 
+test('Enter never lands on the confirm it opens: its default action is stopped first (review M4)', async () => {
+  const s = load({ book: { nq930_1030: [{ account: '1234567885', qty: 3 }] } });
+  editSize(s, 'nq930_1030', '1234567885', 3, 5);
+  assert.equal(s.enterEvent.defaultPrevented, true,
+    "otherwise the Enter keypress reaches the dialog's focused Cancel and answers it");
+  assert.equal(s.confirms.length, 1);
+  const rep = { key: 'Enter', repeat: true, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } };
+  for (const f of s.qedit.listeners.keydown) f(rep);
+  assert.equal(rep.defaultPrevented, true);
+  await tick();
+  assert.equal(s.confirms.length, 1, 'a held Enter asks once');
+  assert.equal(s.posts.length, 1);
+});
+
 test('Cancel on a live size raise sends nothing', async () => {
   const s = load({ confirm: false, book: { nq930_1030: [{ account: '1234567885', qty: 3 }] } });
   editSize(s, 'nq930_1030', '1234567885', 3, 5);
