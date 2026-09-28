@@ -28,8 +28,9 @@
      biggest surface here), the plain weight for everything smaller (a menu, the draw toolbar, the replay
      bar, a floating panel's own header). --glass-edge is the bright top edge WWDC 2018 calls "light catching
      the material" -- a 1px top border, not a shadow. */
-  --glass-bg: rgba(255, 255, 255, .70); --glass-bg-heavy: rgba(255, 255, 255, .82);
-  --glass-edge: rgba(255, 255, 255, .8); --glass-blur: 14px; --glass-blur-heavy: 24px; --glass-saturate: 180%;
+  /* 2026-09-28: stronger at the user's request (was .70/.82, 14/24px) -- more of the chart shows through */
+  --glass-bg: rgba(255, 255, 255, .50); --glass-bg-heavy: rgba(255, 255, 255, .62);
+  --glass-edge: rgba(255, 255, 255, .85); --glass-blur: 20px; --glass-blur-heavy: 30px; --glass-saturate: 190%;
   color-scheme: light;
 }
 :root[data-theme="dark"] {
@@ -42,8 +43,8 @@
   --shadow-menu: 0 0 0 1px #2E2E2E, 0 4px 12px rgba(0, 0, 0, .5);
   --shadow-dialog: 0 0 0 1px #2E2E2E, 0 8px 32px rgba(0, 0, 0, .6);
   --backdrop: rgba(0, 0, 0, .5);
-  --glass-bg: rgba(15, 15, 15, .62); --glass-bg-heavy: rgba(15, 15, 15, .76);
-  --glass-edge: rgba(255, 255, 255, .08); --glass-saturate: 160%;
+  --glass-bg: rgba(15, 15, 15, .46); --glass-bg-heavy: rgba(15, 15, 15, .58);
+  --glass-edge: rgba(255, 255, 255, .10); --glass-saturate: 170%;
   color-scheme: dark;
 }
 
@@ -1120,6 +1121,11 @@ input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-o
 /* never stack light glass on light glass: a swatch/template popover opened FROM a dialog (openMenu's own
    `{ root: box }`, app.js) renders as the dialog's own DOM descendant -- solid there instead. */
 .dialog .menu { background: var(--panel); backdrop-filter: none; -webkit-backdrop-filter: none; border-top: none; }
+/* vibrancy (apple-design §12): over the clearer glass, muted captions get more contrast -- flat grey on a
+   translucent surface over a busy chart reads washed out */
+.menu .menu-h, .menu .menu-sub, .dialog .set-cap, .dialog .dlg-sub, .toast .toast-sub {
+  color: color-mix(in srgb, var(--text-2) 55%, var(--text));
+}
 
 @media (prefers-reduced-transparency: reduce) {
   .menu, .hotkey-box, .toast, .draw-toolbar, .replay-bar, .hbpanel-head, .dialog {
