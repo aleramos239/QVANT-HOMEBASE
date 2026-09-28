@@ -467,7 +467,7 @@ function quoteView(q, tick, nowMs) {
 
 /* ---- the order panel (2026-09-27 order-panel plan, Task 3) ---- */
 const PANEL_TYPES = ['Market', 'Limit', 'Stop', 'StopLimit'];
-const PANEL_QTY_MAX = 10;           // the panel's own cap per order (the desk's limits still decide)
+const PANEL_QTY_MAX = 50;           // the panel's ceiling = the desk's HARD_MAX_ORDER_QTY; the desk's live max_order_qty decides (2026-09-28: 35 for the Apex 300K)
 const STOPLIMIT_MAX_TICKS = 100;    // the desk's: a Stop Limit's limit at most this far from its trigger
 const num = (v) => (v == null || v === '' ? NaN : Number(v));
 /* Typed numbers, strictly (fix round 1, review Minor 5): surrounding spaces are fine; commas, hex, exponents, signs

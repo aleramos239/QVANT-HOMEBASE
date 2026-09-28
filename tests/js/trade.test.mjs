@@ -1050,7 +1050,7 @@ test('panelOrder: the SL / TP side, a Stop Limit\'s SL beyond the TRIGGER and TP
   assert.equal(ss({ tp: 30896 }).ok, true);
 });
 
-test('panelOrder: no quote refuses; a stale quote refuses only a Market with an exit; qty 1-10', () => {
+test('panelOrder: no quote refuses; a stale quote refuses only a Market with an exit; qty bounds', () => {
   const po = (o) => T.panelOrder({ side: 'Buy', type: 'Market', qty: 1, price: null, trigger: null, sl: null, tp: null,
     tif: 'Day', risk: null, quote: Q, nowMs: NOW, ...NQ, ...o });
   for (const type of ['Market', 'Limit', 'Stop', 'StopLimit']) {
@@ -1063,9 +1063,9 @@ test('panelOrder: no quote refuses; a stale quote refuses only a Market with an 
   assert.match(po({ quote: stale, tp: 30910 }).error, /no recent price/i);
   assert.equal(po({ quote: stale }).ok, true);                                   // no exit: nothing to compute
   assert.equal(po({ quote: stale, type: 'Limit', price: 30899, sl: 30895 }).ok, true);   // measured from its own price
-  // quantity: whole, 1-10
-  assert.equal(po({ qty: 10 }).ok, true);
-  for (const qty of [0, 11, 1.5, -1, NaN, null]) assert.match(po({ qty }).error, /quantity/i, String(qty));
+  // quantity: whole, 1-PANEL_QTY_MAX
+  assert.equal(po({ qty: T.PANEL_QTY_MAX }).ok, true);
+  for (const qty of [0, T.PANEL_QTY_MAX + 1, 1.5, -1, NaN, null]) assert.match(po({ qty }).error, /quantity/i, String(qty));
   assert.equal(po({ qty: 4, qtyMax: 3 }).ok, false);
 });
 
@@ -1077,7 +1077,7 @@ test('panelOrder: USD risk sizes from the stop; under one contract, no stop, or 
   assert.match(po({ risk: 50 }).error, /under one contract/i);
   assert.match(po({ sl: null }).error, /stop loss/i);
   for (const risk of [0, -5, NaN, '']) assert.match(po({ risk }).error, /enter the usd risk/i, String(risk));
-  assert.match(po({ risk: 5000 }).error, /quantity/i);   // 50 contracts
+  assert.match(po({ risk: (T.PANEL_QTY_MAX + 1) * 100 }).error, /quantity/i);   // PANEL_QTY_MAX + 1 contracts
   assert.match(po({ pv: null }).error, /point value/i);
   // Market: the stop measured from the last trade (30900 here, 20 ticks)
   assert.equal(po({ type: 'Market', price: null }).qty, 5);
