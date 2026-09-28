@@ -1022,13 +1022,19 @@ async function setArmed(want) {
   if (want) toast(`NOT armed — ${why}.`, 8000);
   else alertBar(`Disarm NOT confirmed — ${why}. The desk may still be ARMED: press Kill, or disarm again.`);
 }
+/* The Arm/Disarm button is a switch too: a double-click is one flip (switchBounced). Without it, a
+   double-clicked Disarm re-paints as Arm under the second click and pops "Arm the desk?". */
 async function doArm() {
+  if (switchBounced("desk")) return;
   if (!await confirmDlg("Arm the desk?",
       "Signals will place REAL bracketed orders on every account assigned in the book.",
       "Arm", false)) return;
   await setArmed(true);
 }
-async function doDisarm() { await setArmed(false); }
+async function doDisarm() {
+  if (switchBounced("desk")) return;
+  await setArmed(false);
+}
 /* A Kill that did not go through is never silent (review M1): a refusal (e.g. the write guard's
    403 / 415), an unreadable answer, no answer, or an account whose cancel or flatten failed -> a
    red alert that stays until dismissed and says to flatten at the broker. A clean Kill says what it

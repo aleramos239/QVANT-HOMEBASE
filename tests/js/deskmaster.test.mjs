@@ -77,6 +77,7 @@ function load({ st = { armed: false }, stale = false, confirm = true, answer = K
     toastHide: () => hides.push(true),
     alertBar: (t) => alerts.push(t),
     Date: { now: () => now },
+    DOUBLE_CLICK_MS: 400,
     acctShort: (id) => '…' + String(id).slice(-3),
     DEMO: demo,
     confirmDlg: async (title, body, action, destructive) => { confirms.push({ title, body, action, destructive }); return confirm; },
@@ -95,7 +96,8 @@ function load({ st = { armed: false }, stale = false, confirm = true, answer = K
     window: win,
     document: doc,
   });
-  vm.runInContext(BLOCK + `
+  const bounce = HTML.slice(HTML.indexOf('const SWITCH_AT = {};'), HTML.indexOf('function cfDone('));
+  vm.runInContext(bounce + BLOCK + `
     globalThis.api = { renderMaster, doArm, doDisarm, doKill, holdToFire, HOLD_MS,
       get ST() { return ST; }, set ST(v) { ST = v; },
       get DESK_STALE() { return DESK_STALE; }, set DESK_STALE(v) { DESK_STALE = v; } };`, ctx);
@@ -606,4 +608,21 @@ test('a refused or dropped Arm says NOT armed (the safe side: a toast), never "A
   const u = load({ st: { armed: false }, answer: new SyntaxError('Unexpected token <') });
   await u.api.doArm();
   assert.deepEqual(u.toasts, ["NOT armed — the desk's answer was unreadable."]);
+});
+
+test('double-clicking Disarm is one flip: the re-painted Arm under the second click never pops "Arm the desk?"', async () => {
+  const s = load({ st: { armed: true } });
+  s.api.renderMaster();
+  await s.els.armBtn.onclick();                        // click 1: Disarm
+  s.api.ST = { armed: false };
+  s.api.renderMaster();                                // the button is Arm now
+  s.clock.advance(250);
+  await s.els.armBtn.onclick();                        // click 2 lands on Arm
+  assert.equal(s.confirms.length, 0, 'no "Arm the desk?"');
+  assert.deepEqual(plain(s.posts), [{ url: '/api/arm', body: { armed: false } }]);
+  s.clock.advance(400);
+  const later = s.api.doArm();                         // a deliberate Arm later asks as usual
+  await tick();
+  assert.equal(s.confirms.length, 1);
+  await later;
 });
