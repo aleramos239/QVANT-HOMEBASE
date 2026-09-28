@@ -117,10 +117,12 @@ test('the phase spread sits under the headline, and the warning says the start m
   assert.equal(row('net_phases')[2].text, '+$100 – +$300 · mean +$200');
   assert.equal(row('sharpe_phases')[1].text, '0.50 – 1.50 · mean 1.00');
   assert.equal(X.wfComparePhaseLine(CMP), '');
-  const warn = { ...CMP, phase_check: { gap_between_schemes: 150, widest_phase_spread: 480,
-    warning: 'the start month moves these more than the ratio does' } };
+  const warn = { ...CMP, phase_check: { gap_shared: 150, gap_full: 900, widest_phase_spread: 480, gap_quoted: 'shared',
+    gap_quoted_value: 150, warning: 'the start month moves these more than the ratio does' } };
   assert.equal(X.wfComparePhaseLine(warn), 'Phase check: the start month moves these more than the ratio does — '
-    + 'the widest spread across start months is $480, the gap between the three headline nets $150');
+    + 'the widest net spread across start months (full-span chains) is $480, the gap between the three shared-months headline nets $150');
+  const full = { ...warn, phase_check: { ...warn.phase_check, gap_quoted: 'full', gap_quoted_value: 90 } };
+  assert.ok(X.wfComparePhaseLine(full).endsWith('the gap between the three full-span headline nets $90'));
   assert.equal(X.wfComparePhaseLine({ ...warn, phase_check: { ...warn.phase_check, warning: null } }), '');
 });
 

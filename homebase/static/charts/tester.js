@@ -805,8 +805,9 @@ function wfSharedCaption(cmp) {
 function wfComparePhaseLine(cmp) {
   const pc = cmp && cmp.phase_check;
   if (!pc || !pc.warning) return '';
-  return `Phase check: ${pc.warning} — the widest spread across start months is ${Tr.money(pc.widest_phase_spread)}, `
-    + `the gap between the three headline nets ${Tr.money(pc.gap_between_schemes)}`;
+  const which = pc.gap_quoted === 'full' ? 'full-span' : 'shared-months';
+  return `Phase check: ${pc.warning} — the widest net spread across start months (full-span chains) is `
+    + `${Tr.money(pc.widest_phase_spread)}, the gap between the three ${which} headline nets ${Tr.money(pc.gap_quoted_value)}`;
 }
 function wfCompareHead(cmp) {
   const c = cmp.scheme || {}, w = cmp.window || {}, b = cmp.looks_basis;

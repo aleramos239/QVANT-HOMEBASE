@@ -398,8 +398,11 @@ def compare_summary(results: dict, shared_blocks: dict | None = None, shared_mon
                      "phase_spread": {"net_profit": _spread(p["net_profit"] for p in r["phases"]),
                                       "sharpe": _spread(p["sharpe"] for p in r["phases"])},
                      "shared": (shared_blocks or {}).get(n)})
-    nets = [c["stats"]["net_profit"] or 0.0 for c in cols]
-    gap = max(nets) - min(nets)
+    def gap(nets):
+        return None if not nets else round(max(nets) - min(nets), 2)
+    gap_full = gap([c["stats"]["net_profit"] or 0.0 for c in cols])
+    gap_shared = gap([c["shared"]["stats"]["net_profit"] or 0.0 for c in cols if c.get("shared")]) \
+        if all(c.get("shared") for c in cols) else None
     widest = max(((c["phase_spread"]["net_profit"] or {}).get("max", 0) - (c["phase_spread"]["net_profit"] or {}).get("min", 0))
                  for c in cols)
     sc = first["scheme"]
@@ -414,8 +417,17 @@ def compare_summary(results: dict, shared_blocks: dict | None = None, shared_mon
             "shared_months": None if shared_months is None else {
                 "months": shared_months, "n": len(shared_months),
                 "span": [shared_months[0], shared_months[-1]] if shared_months else None},
-            "phase_check": {"gap_between_schemes": round(gap, 2), "widest_phase_spread": round(widest, 2),
-                            "warning": PHASE_WARNING if widest > gap else None}}
+            # the phase spread (full-span chains) against EITHER headline gap; the quoted gap prefers the
+            # shared-months one, the default view
+            "phase_check": _phase_check(round(widest, 2), gap_shared, gap_full)}
+
+
+def _phase_check(widest: float, gap_shared: float | None, gap_full: float) -> dict:
+    over_shared = gap_shared is not None and widest > gap_shared
+    quoted = "shared" if over_shared else ("full" if widest > gap_full else None)
+    return {"widest_phase_spread": widest, "gap_shared": gap_shared, "gap_full": gap_full,
+            "warning": PHASE_WARNING if quoted else None, "gap_quoted": quoted,
+            "gap_quoted_value": {"shared": gap_shared, "full": gap_full}.get(quoted)}
 
 
 def compare_scheme(start: str | None = None, end: str | None = None) -> dict:

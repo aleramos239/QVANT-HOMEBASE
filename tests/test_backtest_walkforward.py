@@ -680,9 +680,9 @@ def test_each_column_carries_its_phase_chains_and_their_spread():
     assert (three["min"], three["max"]) == (-480, 0)                  # phases -480 / -60 / 0
     nets = [c["stats"]["net_profit"] for c in s["schemes"]]
     pc = s["phase_check"]
-    assert pc["gap_between_schemes"] == round(max(nets) - min(nets), 2)
+    assert pc["gap_full"] == round(max(nets) - min(nets), 2) and pc["gap_shared"] is None     # no shared blocks here
     assert pc["widest_phase_spread"] == 480
-    assert (pc["warning"] is not None) == (480 > pc["gap_between_schemes"])
+    assert (pc["warning"] is not None) == (480 > pc["gap_full"])
     assert pc["warning"] in (None, "the start month moves these more than the ratio does")
 
 
@@ -844,3 +844,23 @@ def test_each_column_counts_its_strategy_error_sessions():
     for c in s["schemes"]:
         assert c["stats"]["skipped_by_error"] == per[c["test_months"]]["stitched"]["stats"]["skipped_by_error"] == 1
         assert c["shared"]["stats"]["skipped_by_error"] == 1                # March is a shared month
+
+
+def test_the_phase_warning_fires_on_either_gap_and_quotes_the_shared_one_first():
+    pc = wf._phase_check
+    assert pc(480.0, 100.0, 900.0) == {"widest_phase_spread": 480.0, "gap_shared": 100.0, "gap_full": 900.0,
+                                       "warning": wf.PHASE_WARNING, "gap_quoted": "shared", "gap_quoted_value": 100.0}
+    w = pc(480.0, 900.0, 100.0)                          # only the full-span gap is narrower: still warned
+    assert w["warning"] and (w["gap_quoted"], w["gap_quoted_value"]) == ("full", 100.0)
+    assert pc(480.0, 100.0, 50.0)["gap_quoted"] == "shared"               # both: the default view's gap
+    assert pc(480.0, 900.0, 900.0)["warning"] is None
+    assert pc(480.0, None, 100.0)["gap_quoted"] == "full"
+    # end to end: the shared gap is computed from the shared blocks
+    months = ["2022-01", "2022-02", "2022-03", "2022-04", "2022-05"]
+    tr = five_month_cells()
+    cells = [{"i": i, "params": {"offset_pts": 10.0 + i}, "months": wf.month_stats(tr[i], [], 50_000.0, months)}
+             for i in (0, 1)]
+    _, s = wf.compare_results(cells, months, trades_of=lambda i: (tr[i], []), metric="net_profit", min_trades=5,
+                              capital=50_000.0)
+    sh = [c["shared"]["stats"]["net_profit"] for c in s["schemes"]]
+    assert s["phase_check"]["gap_shared"] == round(max(sh) - min(sh), 2)
