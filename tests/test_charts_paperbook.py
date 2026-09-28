@@ -135,10 +135,13 @@ def test_a_brackets_legs_go_live_on_the_print_after_the_entry_and_one_cancels_th
     b = book()
     feed(b, [("09:29:59", 100.0)])
     assert order(b, "Buy", "Stop", price=101.0, sl=99.0, tp=103.0)["ok"]
-    assert [o["type"] for o in b.view()["orders"]] == ["Stop"]          # the legs wait on their entry
+    # the legs wait on their entry: shown "Suspended" (the broker's OSO legs look the same; fix round 1, item 2)
+    assert [(o["type"], o["role"], o["status"]) for o in b.view()["orders"]] == \
+        [("Stop", "entry", "Working"), ("Stop", "sl", "Suspended"), ("Limit", "tp", "Suspended")]
     feed(b, [("09:30:01", 104.0)])                                      # entry through the TP level: TP not live yet
     assert fills(b) == [("Buy", 1, 104.25)] and net(b) == 1
-    assert sorted((o["type"], o["role"]) for o in b.view()["orders"]) == [("Limit", "tp"), ("Stop", "sl")]
+    assert sorted((o["type"], o["role"], o["status"]) for o in b.view()["orders"]) == \
+        [("Limit", "tp", "Working"), ("Stop", "sl", "Working")]
     feed(b, [("09:30:02", 103.25)])                                     # 1-tick through the TP
     assert fills(b)[-1] == ("Sell", 1, 103.0) and net(b) == 0
     assert b.view()["orders"] == []                                    # the SL went with it
@@ -811,8 +814,9 @@ def long3(b):
     assert net(b) == 3
 
 
-def exits(b, **kw):
-    return act(b, "exits", accounts=[PAPER_ID], root="NQ", **kw)
+def exits(b, expect=None, **kw):
+    """`expect`: the position the confirm showed (default: the book's own, or 1 when flat)."""
+    return act(b, "exits", accounts=[PAPER_ID], root="NQ", expected_net={PAPER_ID: expect or net(b) or 1}, **kw)
 
 
 def test_paper_exits_both_at_once_are_one_oco_pair_for_the_whole_position():
@@ -912,7 +916,8 @@ def test_paper_exits_need_a_price_and_split_across_paper_accounts(tmp_path):
     feed_all(bs, [("09:29:59", 100.0)])
     bs_order(bs, [PAPER_ID, "paper-2"], qty=2)
     feed_all(bs, [("09:30:01", 100.0)])
-    res = bs.act("exits", {"client_id": "e1", "accounts": [PAPER_ID, "paper-2"], "root": "NQ", "sl_price": 98.0})
+    res = bs.act("exits", {"client_id": "e1", "accounts": [PAPER_ID, "paper-2"], "root": "NQ", "sl_price": 98.0,
+                           "expected_net": {PAPER_ID: 2, "paper-2": 2}})
     assert res["results"][PAPER_ID]["ok"] and res["results"]["paper-2"]["ok"]
     assert all(len(bk.orders) == 1 for bk in bs.books.values())
 
@@ -924,3 +929,59 @@ def test_paper_exits_survive_a_restart(tmp_path):
     again = book(tmp_path)
     assert sorted((o.type, o.price, o.oco is not None) for o in again.orders.values()) == \
         [("Limit", 103.0, True), ("Stop", 98.0, True)]
+
+
+# ---- exits, review fix round 1 -------------------------------------------------------------------------
+def test_paper_exits_refuse_while_a_pending_entrys_bracket_is_held():
+    """Item 2: long 1 + a working Buy Limit @ 99 with its bracket SL held: dragging a TP never touches that leg."""
+    b = book()
+    feed(b, [("09:29:59", 100.0)])
+    order(b, "Buy", "Market")
+    feed(b, [("09:30:01", 100.0)])
+    assert order(b, "Buy", "Limit", price=99.0, sl=97.0)["ok"]
+    rows = b.view()["orders"]
+    assert [(o["type"], o["side"], o["status"]) for o in rows] == [("Limit", "Buy", "Working"), ("Stop", "Sell", "Suspended")]
+    before = dict(b.orders)
+    r = exits(b, tp_price=103.0)
+    assert r["refused"] and r["error"] == "a pending order's bracket is waiting in NQ on PAPER — cancel it or let it fill first"
+    assert b.orders == before
+    leg = rows[1]["order_id"]                                   # the held leg can be moved and cancelled, like a broker's
+    assert act(b, "modify", account=PAPER_ID, order_id=leg, price=96.0)["ok"]
+    assert b.orders[leg].price == 96.0 and b.orders[leg].status == "held"
+    assert act(b, "cancel", account=PAPER_ID, order_id=leg)["ok"] and leg not in b.orders
+    assert exits(b, tp_price=103.0)["ok"] is True               # nothing held any more
+
+
+def test_paper_exits_refuse_a_position_other_than_the_one_confirmed():
+    """Item 5."""
+    b = book()
+    long3(b)
+    r = exits(b, expect=2, sl_price=98.0)
+    assert r["refused"] and r["error"] == "the NQ position on PAPER changed since you confirmed (+2 → +3) — nothing done"
+    assert "(-3 → +3)" in exits(b, expect=-3, sl_price=98.0)["error"]
+    for bad in (None, {}, {PAPER_ID: 0}, {PAPER_ID: True}, {PAPER_ID: 2.0}, {"paper-2": 3}):
+        body = {"accounts": [PAPER_ID], "root": "NQ", "sl_price": 98.0}
+        if bad is not None:
+            body["expected_net"] = bad
+        with pytest.raises(ValueError, match="expected_net"):
+            act(b, "exits", **body)
+    assert b.orders == {}
+
+
+def test_paper_exits_need_a_streamed_root_and_a_fresh_print():
+    """Item 7: the desk's QUOTE_MAX_AGE_S (30 s) and QUOTE_MAX_FUTURE_S (5 s), against the book's clock."""
+    clock = {"ms": T0 // 1_000_000}
+    b = PaperBook(None, roots=["NQ"], clock_ms=lambda: clock["ms"])
+    long3(b)                                                    # last print 09:30:01, the clock at 09:30:00
+    clock["ms"] += 32_000                                       # 31 s after the last print (09:30:01)
+    r = exits(b, sl_price=98.0)
+    assert r["refused"] and r["error"] == "no NQ print in the last 30 s — an exit needs a fresh price"
+    clock["ms"] -= 2_000                                        # 29 s
+    assert exits(b, sl_price=98.0)["ok"] is True
+    ahead = PaperBook(None, roots=["NQ"], clock_ms=lambda: T0 // 1_000_000 - 6_000)   # the print 7 s ahead of us
+    long3(ahead)
+    assert "fresh price" in exits(ahead, sl_price=98.0)["error"]
+    other = PaperBook(None, roots=["ES"], clock_ms=lambda: T0 // 1_000_000)
+    feed(other, [("09:29:59", 100.0)], root="NQ")
+    r = act(other, "exits", accounts=[PAPER_ID], root="NQ", sl_price=98.0, expected_net={PAPER_ID: 1})
+    assert r["refused"] and r["error"] == "NQ is not streamed by this chart service — no prints to fill against"

@@ -79,6 +79,8 @@ DESK_ORIGINS = frozenset({"http://localhost:8850", "http://127.0.0.1:8850"})
 MAX_ORDER_QTY = 10                # the desk's per-order cap (trading.py guard 3)
 MAX_POSITION_QTY = 20             # the desk's per-position cap (trading.py guard 3)
 STOPLIMIT_MAX_TICKS = 100         # the desk's (trading.py check_prices)
+QUOTE_MAX_AGE_S = 30.0            # the desk's (trading.py, not imported): an exit needs a print at most this old
+QUOTE_MAX_FUTURE_S = 5.0          # ...and at most this far ahead of this book's clock
 FILLS_KEPT = 50                   # fills in the account view (the desk's FILLS_KEPT)
 DEDUP_TTL_S = 600.0
 ACTIONS = ("order", "modify", "cancel", "exits", "cancel-symbol", "flatten", "reverse")
@@ -261,6 +263,7 @@ class PaperBook:
         self.fills: deque = deque(maxlen=FILLS_KEPT)
         self.seq: dict[str, int] = {}                # prints seen per root (this process)
         self.last: dict[str, float] = {}             # the last print per root
+        self.last_ms: dict[str, int] = {}            # ...and its time (epoch ms): an exit refuses a stale one
         self.session: dict[str, str] = {}            # the session of that print per root
         self._until: dict[str, int] = {}             # ...valid until this ms (its next roll): no clock maths per print
         self._id = 0
@@ -382,6 +385,7 @@ class PaperBook:
         s = self.seq[root] = self.seq.get(root, 0) + 1
         self.last[root] = px
         ms = ts_ns // 1_000_000
+        self.last_ms[root] = ms
         if root not in self._until or ms >= self._until[root]:
             sess, self._until[root] = session_of(ms, root), _session_until(ms, root)
             if self.session.get(root) != sess:
@@ -496,8 +500,12 @@ class PaperBook:
             sl, tp = _price(body.get("sl_price"), "sl_price"), _price(body.get("tp_price"), "tp_price")
             if sl is None and tp is None:
                 raise ValueError("an sl_price or a tp_price is required")
+            exp = body.get("expected_net")                # the desk's rule (trading.py _expected_net)
+            want = exp.get(self.id) if isinstance(exp, dict) else None
+            if isinstance(want, bool) or not isinstance(want, int) or want == 0 or abs(want) > MAX_POSITION_QTY:
+                raise ValueError("expected_net: {account: the signed position the confirm showed} for every account")
             root = self._root(body)
-            return self._once(action, cid, lambda: self._exits(root, sl, tp))
+            return self._once(action, cid, lambda: self._exits(root, sl, tp, want))
         if action in ("modify", "cancel"):
             oid = self._order_id(body)
             if action == "modify":
@@ -596,8 +604,10 @@ class PaperBook:
                 raise Refused("the target must be on the winning side of the entry")
 
     def _find(self, oid: str) -> POrder:
+        """A working order, or a pending entry's bracket leg (held, shown "Suspended"): both can be moved or cancelled,
+        as the broker's suspended OSO legs can -- the page draws and offers them the same way."""
         o = self.orders.get(oid)
-        if o is None or o.status != "working":
+        if o is None or o.status not in ("working", "held"):
             raise Refused(f"order {oid} is not working on {self.label}")
         return o
 
@@ -632,19 +642,29 @@ class PaperBook:
                    placed_ms=now, session=session_of(now, root))
         self._do({"ev": "place", "orders": [_od(o)]}, seq=self.seq.get(root, 0))
 
-    def _exits(self, root: str, sl: Optional[float], tp: Optional[float]) -> dict:
+    def _exits(self, root: str, sl: Optional[float], tp: Optional[float], expected_net: int) -> dict:
         """The desk's `exits` (trading.py ChartDesk._exits_one, exit_levels), on this book: an SL and/or TP for the
         WHOLE open position, ending as one Stop and/or one Limit -- an OCO pair (one `oco` group: the first fill
-        cancels its twin, _fill) when both. Refused the same way (fail closed): no position, an exit-side order that
-        is not a plain Stop/Limit, more than one of either, one not sized to the position, a new SL/TP where one
-        already works, or a level at/through the last print. Adding the missing half cancels the existing exit and
-        places the pair with its price kept, in one synchronous step (no print can land between them here). The
-        Stop is always placed BEFORE the Limit, so if one print could ever trigger both, the oldest-first rule fills
-        the stop (pessimistic, like the engine's same-bar rule)."""
+        cancels its twin, _fill) when both. Refused the same way (fail closed): a root this service does not stream,
+        no position, a position other than the one the confirm showed (`expected_net`), a pending entry's bracket
+        leg still held in the root (it would be taken for the position's exit), an exit-side order that is not a
+        plain Stop/Limit, more than one of either, one not sized to the position, a new SL/TP where one already
+        works, no print in the desk's QUOTE_MAX_AGE_S, or a level at/through the last print. Adding the missing half
+        cancels the existing exit and places the pair with its price kept, in one synchronous step (no print can land
+        between them here). The Stop is always placed BEFORE the Limit, so if one print could ever trigger both, the
+        oldest-first rule fills the stop (pessimistic, like the engine's same-bar rule)."""
+        if self.roots and root not in self.roots:
+            raise Refused(f"{root} is not streamed by this chart service — no prints to fill against")
         pos = self.pos.get(root) or {}
         net = pos.get("net", 0)
         if not net:
             raise Refused(f"no {root} position on {self.label} to protect")
+        if net != expected_net:
+            raise Refused(f"the {root} position on {self.label} changed since you confirmed "
+                          f"({expected_net:+d} → {net:+d}) — nothing done")
+        if any(o.root == root and o.status == "held" for o in self.orders.values()):
+            raise Refused(f"a pending order's bracket is waiting in {root} on {self.label} — "
+                          "cancel it or let it fill first")
         tick = tick_size(root)
         sign, qty = (1 if net > 0 else -1), abs(net)
         exits = [o for o in self._working(root) if o.side == -sign]
@@ -662,6 +682,9 @@ class PaperBook:
         last = self.last.get(root)
         if last is None:
             raise Refused(f"no {root} print yet — an exit needs a price to check against")
+        age_ms = self.clock_ms() - self.last_ms.get(root, 0)
+        if age_ms > QUOTE_MAX_AGE_S * 1000 or -age_ms > QUOTE_MAX_FUTURE_S * 1000:
+            raise Refused(f"no {root} print in the last {QUOTE_MAX_AGE_S:.0f} s — an exit needs a fresh price")
         if sl is not None and not sign * tick_cmp(last, sl, tick) > 0:
             raise Refused(f"the stop loss must be {'below' if sign > 0 else 'above'} the last price ({last:,})")
         if tp is not None and not sign * tick_cmp(tp, last, tick) > 0:
@@ -715,7 +738,9 @@ class PaperBook:
                 "connected": True, "error": None, "tradable": True,
                 "start_balance": self.start_balance, "balance": round(self.start_balance + self.realized, 2), "realized_pnl": round(self.realized, 2),
                 "positions": positions,
-                "orders": [_order_view(o) for o in self.orders.values() if o.status == "working"],
+                # a pending entry's bracket legs too, as "Suspended" rows -- the broker's OSO legs look the same
+                # (fix round 1, item 2): the page must see them, and never take one for the position's own exit
+                "orders": [_order_view(o) for o in self.orders.values()],
                 "fills": list(self.fills), "strategies": []}
 
     def busy(self) -> bool:
@@ -976,7 +1001,8 @@ def _order_view(o: POrder) -> dict:
     stop = o.price if o.type == "Stop" else o.trigger if o.type == "StopLimit" else None
     limit = o.price if o.type in ("Limit", "StopLimit") else None
     row = {"order_id": o.id, "symbol": o.symbol, "side": SIDE_NAME[o.side], "type": o.type, "qty": o.qty,
-           "price": limit, "stop_price": stop, "status": "Working", "tif": o.tif, "owner": None, "role": o.role}
+           "price": limit, "stop_price": stop, "status": "Working" if o.status == "working" else "Suspended",
+           "tif": o.tif, "owner": None, "role": o.role}
     if o.type == "StopLimit":
         row["trigger"] = o.trigger
     return row
