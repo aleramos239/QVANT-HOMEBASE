@@ -757,6 +757,11 @@ function onWindowResize() {
   for (const id of floatingOpenIds()) {
     const clamped = L.clampFloatRect(state.panels[id], window.innerWidth, window.innerHeight);
     if (clamped.x !== state.panels[id].x || clamped.y !== state.panels[id].y || clamped.w !== state.panels[id].w || clamped.h !== state.panels[id].h) {
+      // a resize's own correction is authoritative -- never let a still-running settle spring or FLIP
+      // (from a drag that released right before the window shrank) go on fighting it for the corrected rect
+      // layoutFloats() is about to paint (coordinator review, 2026-09-28).
+      stopFloatAnim(id);
+      stopFlipAnim(id);
       state.panels[id] = { ...state.panels[id], ...clamped };
       floatChanged = true;
     }
