@@ -134,7 +134,7 @@ function mount(box, host) {
         ctl.value = vals[p.key];   // back to the last valid value, never p.def
       };
       ctl.onblur = settle;
-      ctl.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); settle(); } };
+      ctl.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); if (e.repeat) return; settle(); } };   // S7
       ctl.id = id;
       lab.htmlFor = id;
       row.append(lab, ctl, err);
@@ -207,7 +207,7 @@ function mount(box, host) {
         err.hidden = true;
         style[key].color = v; dot.style.background = v; sync(); preview();
       };
-      hex.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); takeHex(); } };
+      hex.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); if (e.repeat) return; takeHex(); } };   // S7
       hex.onchange = takeHex;
       hexRow.append(hex);
       m.append(grid, hexRow, err);

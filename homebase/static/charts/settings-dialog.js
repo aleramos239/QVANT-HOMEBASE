@@ -167,6 +167,10 @@ function mount(box, host) {
       const b = button('set-tab' + (i === tab ? ' active' : '')), ic = mk('span', 'icw');
       b.setAttribute('role', 'tab');
       b.setAttribute('aria-selected', String(i === tab));
+      // W3 (2026-09-28): at <= 640 px the label is hidden (icons only, charts.css) -- its name stays a tooltip and the
+      // tab's accessible name
+      b.title = t.label;
+      b.setAttribute('aria-label', t.label);
       ic.innerHTML = I[t.icon] || '';   // our own static SVG strings
       b.append(ic, mk('span', '', t.label));
       b.onclick = () => { if (tab !== i) { tab = i; renderTabs(); renderPane(); } };
@@ -435,7 +439,7 @@ function mount(box, host) {
         set(key, S.withAlpha(v, S.alphaOf(cur())));
         sync();
       };
-      hex.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); takeHex(); } };
+      hex.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); if (e.repeat) return; takeHex(); } };   // S7
       hex.onchange = takeHex;
       def.onclick = () => { err.hidden = true; set(key, null); sync(); };
       hexRow.append(hex, def);
@@ -509,7 +513,7 @@ function mount(box, host) {
           host.closeMenu();
         };
         go.onclick = save;
-        input.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } };
+        input.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); if (e.repeat) return; save(); } };   // S7: one PUT per press
         rowEl.append(input, go);
         wrap.append(rowEl, opts);
         saveAs.replaceWith(wrap);

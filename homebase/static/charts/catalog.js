@@ -47,29 +47,36 @@ const SOURCE = { key: 'source', label: 'Source', type: 'choice', choices: SOURCE
 const BAND = (n, def) => [
   { key: `band${n}On`, label: `Band ${n}`, type: 'bool', def: false },
   { key: `band${n}Mult`, label: `Band ${n} multiplier`, type: 'num', min: 0.1, max: 10, step: 0.1, def }];
+/* W5 (2026-09-28): `desc` is the one plain line the Indicators dialog shows under each name (TradingView-style). */
 const CATALOG = [
-  { id: 'volume', group: 'Volume', name: 'Volume', params: [], pane: 'main' },
-  { id: 'vwap', group: 'VWAP', name: 'VWAP', params: [
+  { id: 'volume', group: 'Volume', name: 'Volume', params: [], pane: 'main',
+    desc: 'Contracts traded per bar; green when buyers outweighed sellers, else red' },
+  { id: 'vwap', group: 'VWAP', name: 'VWAP', desc: 'Volume-weighted average price since its anchor (session, RTH…), optional bands', params: [
     { key: 'anchor', label: 'Anchor', type: 'choice',
       choices: [['eth', 'Session'], ['rth', 'RTH'], ['custom', 'Custom time'], ['week', 'Week'], ['month', 'Month']], def: 'eth' },
     { key: 'customTime', label: 'Time (ET)', type: 'time', def: '02:00' },
     ...BAND(1, 1), ...BAND(2, 2), ...BAND(3, 3)] },
-  { id: 'ema', group: 'Moving averages', name: 'EMA', params: [LENGTH(20), SOURCE] },
-  { id: 'sma', group: 'Moving averages', name: 'SMA', params: [LENGTH(50), SOURCE] },
-  { id: 'vwma', group: 'Moving averages', name: 'VWMA', params: [LENGTH(20)] },
-  { id: 'adx', group: 'Trend', name: 'ADX / DMI', params: [LENGTH(14)], pane: 'own' },
-  { id: 'levels', group: 'Levels', name: 'Session levels', params: [] },
-  { id: 'footprint', group: 'Order flow', name: 'Footprint', params: [
+  { id: 'ema', group: 'Moving averages', name: 'EMA', params: [LENGTH(20), SOURCE],
+    desc: 'Exponential moving average of the last N bars; recent bars count more' },
+  { id: 'sma', group: 'Moving averages', name: 'SMA', params: [LENGTH(50), SOURCE], desc: 'Simple moving average: the plain average of the last N bars' },
+  { id: 'vwma', group: 'Moving averages', name: 'VWMA', params: [LENGTH(20)], desc: 'Moving average of the last N bars, each bar weighted by its volume' },
+  { id: 'adx', group: 'Trend', name: 'ADX / DMI', params: [LENGTH(14)], pane: 'own',
+    desc: 'Trend strength (ADX) with the +DI / −DI direction lines, in a pane of its own' },
+  { id: 'levels', group: 'Levels', name: 'Session levels', params: [],
+    desc: 'Prior session high / low / close, overnight high / low and RTH open, as lines' },
+  { id: 'footprint', group: 'Order flow', name: 'Footprint', desc: 'Sells at bid and buys at ask per price in each bar, shown when zoomed in', params: [
     { key: 'imbalance', label: 'Imbalance ratio', type: 'num', min: 0, max: 20, step: 0.5, def: 3 }] },
-  { id: 'profile', group: 'Order flow', name: 'Volume profile', params: [] },
-  { id: 'delta', group: 'Order flow', name: 'Delta', params: [], pane: 'own' },
-  { id: 'cumdelta', group: 'Order flow', name: 'Cumulative delta', params: [], pane: 'own' },
-  { id: 'bigprints', group: 'Order flow', name: 'Big prints', params: [
+  { id: 'profile', group: 'Order flow', name: 'Volume profile', params: [],
+    desc: 'Volume traded at each price this session, its point of control and 70% value area' },
+  { id: 'delta', group: 'Order flow', name: 'Delta', params: [], pane: 'own', desc: 'Buy minus sell volume in each bar: which side was hitting the market harder' },
+  { id: 'cumdelta', group: 'Order flow', name: 'Cumulative delta', params: [], pane: 'own',
+    desc: "Running total of each bar's buy-minus-sell volume, reset every session" },
+  { id: 'bigprints', group: 'Order flow', name: 'Big prints', desc: 'Single N+ contract trades: green = buyers lifted the offer, red = sellers hit the bid', params: [
     { key: 'min', label: 'Minimum size', type: 'int', min: 1, max: 100000, def: 25 }] },
-  { id: 'bigorders', group: 'Order flow', name: 'Big orders', params: [
+  { id: 'bigorders', group: 'Order flow', name: 'Big orders', desc: "Resting book orders of N× the last minute's median size or more, drawn as lines", params: [
     { key: 'multiple', label: 'Multiple', type: 'num', min: 1, max: 50, step: 0.5, def: 5 }] },
-  { id: 'imbalance', group: 'Order flow', name: 'Imbalance', params: [] },
-  { id: 'heatmap', group: 'Order flow', name: 'Liquidity heatmap', params: [] },
+  { id: 'imbalance', group: 'Order flow', name: 'Imbalance', params: [], desc: 'Bid vs ask size resting in the top 10 book levels, as a gauge in the legend' },
+  { id: 'heatmap', group: 'Order flow', name: 'Liquidity heatmap', params: [], desc: 'Resting book size at each price over time, drawn behind the candles' },
 ];
 const BY_ID = Object.fromEntries(CATALOG.map((d) => [d.id, d]));
 const FAVOURITES = [['1m', 'time:60'], ['5m', 'time:300'], ['15m', 'time:900'], ['1h', 'time:3600'], ['4h', 'time:14400'], ['D', 'time:86400']];
@@ -546,6 +553,23 @@ function feedSummary(s, weekday, minutes) {
   return { dot, text, textClass: warn ? 'warn' : '', title };
 }
 
+/* W1 (2026-09-28): which status-bar segments step out so the rest fits `avail` px. `items`, in bar order:
+   {width, gap, drop} -- `gap` the space it adds beside its neighbour, `drop` its rank (the lowest steps out first) or
+   null: never (the connection and desk state, a note, the licence credit). A segment steps out WHOLE, never cut, and
+   only while the bar still does not fit. The indexes to hide, ascending; [] when everything fits. */
+function statusDrops(avail, items) {
+  const list = Array.isArray(items) ? items : [];
+  let need = list.reduce((s, it, i) => s + (it.width || 0) + (i ? it.gap || 0 : 0), 0);
+  const ranked = list.map((it, i) => [it, i]).filter(([it]) => it.drop != null).sort((a, b) => a[0].drop - b[0].drop || b[1] - a[1]);
+  const out = [];
+  for (const [it, i] of ranked) {
+    if (need <= avail) break;
+    need -= (it.width || 0) + (it.gap || 0);
+    out.push(i);
+  }
+  return out.sort((a, b) => a - b);
+}
+
 function filter(query, group = 'All') {
   const q = String(query || '').trim().toLowerCase();
   return CATALOG.filter((d) => (group === 'All' || d.group === group)
@@ -555,7 +579,7 @@ function filter(query, group = 'All') {
 const api = { parseFavs, sortFavs, toggleFav, CATALOG, GROUPS, ROOT_NAMES, FAVOURITES, INTERVAL_GROUPS, LINE_COLORS, uid, def, clampParams, instance,
   defaults, serverKey, serverKeys, migrate, migrateLayout, label, legendValues, decimals, fmtPrice, fmtCompact,
   fmtSigned, change, parseSpec, specLabel, longLabel, toSpec, parseInterval, matchSymbols, rootName, rootBadge, filter,
-  ALWAYS_OPEN, marketOpen, fmtAge, feedSummary, REC_BUSY, staleAfter, sinceOpen, PANES, movable, placement,
+  ALWAYS_OPEN, marketOpen, fmtAge, feedSummary, statusDrops, REC_BUSY, staleAfter, sinceOpen, PANES, movable, placement,
   styleLineKeys, defaultStyle, clampStyle, cycleColor, sanitizePreset, normalizeHHMM };
 if (typeof window !== 'undefined') window.HBCatalog = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;

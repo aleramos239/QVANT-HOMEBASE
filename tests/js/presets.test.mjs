@@ -161,3 +161,42 @@ test('menu(): no `extra` option (the drawing tools\' own call) renders only the 
     assert.deepEqual(rows, ['Save as…', 'Save as default', 'Apply default']);
   });
 });
+
+/* S7 (2026-09-28 safety pass): the drawing / indicator Template ▾ "Save as…" field saves once per Enter PRESS -- a
+   held key's auto-repeat (e.repeat) never sends another PUT. The client's fetch is stubbed: nothing leaves the test. */
+test('S7: menu() Save as… -- Enter saves once; a held Enter\'s repeats never save again', async () => {
+  const P = withDom(load);
+  const hadFetch = globalThis.fetch, puts = [];
+  globalThis.fetch = async (url, init) => {
+    if (init && init.method === 'PUT') puts.push(url);
+    return { ok: true, status: 200, json: async () => ({}) };
+  };
+  try {
+    const hadWindow = globalThis.window, hadDoc = globalThis.document;
+    globalThis.document = { createElement: (tag) => new FakeEl(tag) };
+    globalThis.window = { HBIcons: { x: '<svg></svg>' }, document: globalThis.document };
+    try {
+      let fill = null;
+      const host = { toggleMenu(anchor, cls, f) { fill = f; }, closeMenu() {}, placeMenu() {} };
+      P.menu(host, new FakeEl('button'), { kind: 'drawing:trend', current: () => ({ color: '#2962FF' }), apply() {} });
+      const m = new FakeEl('div');
+      fill(m);
+      const saveAs = m.children.find((c) => c.tagName === 'button' && c.children[0] && c.children[0].textContent === 'Save as…');
+      saveAs.onclick();
+      const row = m.children.find((c) => c.className === 'menu-custom');
+      const input = row.children.find((c) => c.tagName === 'input');
+      input.value = 'Thin blue';
+      const key = (repeat) => ({ key: 'Enter', repeat, preventDefault() {} });
+      input.onkeydown(key(true));
+      await new Promise((r) => setImmediate(r));
+      assert.deepEqual(puts, [], 'a repeat alone never saves');
+      input.onkeydown(key(false));
+      input.onkeydown(key(true)); input.onkeydown(key(true));
+      await new Promise((r) => setImmediate(r));
+      assert.deepEqual(puts, ['/api/presets/drawing%3Atrend/Thin%20blue'], 'exactly one PUT');
+    } finally {
+      if (hadWindow === undefined) delete globalThis.window; else globalThis.window = hadWindow;
+      if (hadDoc === undefined) delete globalThis.document; else globalThis.document = hadDoc;
+    }
+  } finally { globalThis.fetch = hadFetch; }
+});

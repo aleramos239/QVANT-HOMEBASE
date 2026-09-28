@@ -118,7 +118,34 @@ function step(i, n, key) {
 }
 
 const main = builtins(createRegistry());   // the page's menu
-const api = { SECTIONS, createRegistry, builtins, register: main.register, items: main.items, paneItems, copyText,
+/* W2 (2026-09-28): where a popup menu goes and how tall it may be, so it never runs past the space it can show in (the
+   interval menu ran past the window's bottom, its Custom row out of reach). `bounds` {left, top, right, bottom}: the
+   window -- or the dialog a menu opened from, which clips it; `mode`: 'below' its trigger's rect `r` (above instead
+   only when below has no room and above does, or more), 'right' of it (a rail flyout), or 'at' the pointer `at` {x, y}
+   (a context menu); `w` / `h` the menu's natural size. Returns {left, top, maxHeight, originX, originY}: page
+   coordinates; maxHeight null when its own height fits, else the room it has (it scrolls inside); the origin for its
+   materialize, in the menu's own box. */
+const MENU_MARGIN = 4, MENU_GAP = 4, FLYOUT_GAP = 8;
+function fitMenu({ mode = 'below', r = null, at = null, w, h, bounds, margin = MENU_MARGIN }) {
+  const B = bounds, room = Math.max(0, B.bottom - B.top - 2 * margin);
+  const clampX = (x) => Math.max(B.left + margin, Math.min(x, B.right - w - margin));
+  const clampY = (y, H) => Math.max(B.top + margin, Math.min(y, B.bottom - H - margin));
+  const cap = (H) => (H < h ? H : null);
+  if (mode === 'at') {
+    const H = Math.min(h, room), left = clampX(at.x), top = clampY(at.y, H);
+    return { left, top, maxHeight: cap(H), originX: at.x - left, originY: at.y - top };
+  }
+  if (mode === 'right') {
+    const H = Math.min(h, room), left = r.right + FLYOUT_GAP, top = clampY(r.top, H);
+    return { left, top, maxHeight: cap(H), originX: 0, originY: r.top + r.height / 2 - top };
+  }
+  const below = r.bottom + MENU_GAP, spaceBelow = B.bottom - margin - below, spaceAbove = r.top - MENU_GAP - (B.top + margin);
+  const up = h > spaceBelow && (h <= spaceAbove || spaceAbove > spaceBelow);
+  const H = Math.max(0, Math.min(h, up ? spaceAbove : spaceBelow)), left = clampX(r.left);
+  return { left, top: up ? r.top - MENU_GAP - H : below, maxHeight: cap(H), originX: r.left + r.width / 2 - left, originY: up ? H : 0 };
+}
+
+const api = { SECTIONS, createRegistry, builtins, fitMenu, register: main.register, items: main.items, paneItems, copyText,
   copyLabel, armText, step, readFolded, toggleFolded, isFolded };
 if (typeof window !== 'undefined') window.HBChartMenu = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;

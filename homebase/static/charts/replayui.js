@@ -23,6 +23,7 @@
 (() => {
 'use strict';
 const R = window.HBReplay;
+const M = window.HBSpring;   // the feel pass (2026-09-28): the control bar's own materialize()/dematerialize()
 
 const sessions = new WeakMap();   // Cell -> {pending, ov, date, cursorMs, speed, playing, done}
 let page = null;
@@ -62,7 +63,11 @@ function todayEt() { return TODAY_FMT.format(new Date()); }
 /* ---- entering / leaving a session ---- */
 /* Force every one of this cell's overlays (its trade block among them) to re-render right now, off the usual
    bar-update cadence -- so hiding real trading never waits on the next quote or bar. */
-function refreshOverlays(cell) { for (const o of cell.ov) if (o.onBars) o.onBars(); }
+function refreshOverlays(cell) {
+  for (const o of cell.ov) if (o.onBars) o.onBars();
+  // the order panel's LIVE ring/tag follow the same gate: repaint it now too, not on its next tick (review item 3)
+  if (window.HBOrderPanel && window.HBOrderPanel.setRoot) window.HBOrderPanel.setRoot();
+}
 
 function doStart(cell, date, time) {
   if (!cell || !cell.host) return;
@@ -636,7 +641,7 @@ function fillMenu(m, cell) {
     doStart(cell, date, time);
   };
   go.onclick = submit;
-  const onEnter = (e) => { if (e.key === 'Enter') submit(); };
+  const onEnter = (e) => { if (e.key === 'Enter') { if (e.repeat) return; submit(); } };   // S7: one start per press, never per repeat
   d.inp.onkeydown = onEnter;
   t.inp.onkeydown = onEnter;
   const foot = mk('div', 'rp-foot');
@@ -715,6 +720,7 @@ class Overlay {
     bar.append(selectBtn, mk('span', 'rb-div'), backBtn, playBtn, fwdBtn, mk('span', 'rb-div'),
       speedBtn, mk('span', 'rb-div'), time, mk('span', 'rb-div'), realtimeBtn, exitBtn);
     cell.el.appendChild(bar);
+    M.materialize(bar);
     this.bar = bar;
     this.els = { playBtn, backBtn, speedBtn, time };
     s.ov = this;
@@ -984,7 +990,7 @@ class Overlay {
     try { this.cell.candles.detachPrimitive(this.hook); } catch (_) { /* the chart is already being removed */ }
     if (this.pill) this.pill.remove();
     if (this.dim) this.dim.remove();
-    if (this.bar) this.bar.remove();
+    if (this.bar) { const bar = this.bar; M.dematerialize(bar, () => bar.remove()); }
     delete this.cell.__rbSelectBtn;   // this Overlay's own Select-bar button is gone with the bar above
     this.destroyPractice();
     const s = sessions.get(this.cell);
