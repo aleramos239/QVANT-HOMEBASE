@@ -1591,7 +1591,7 @@ def test_a_template_is_a_json_object_of_at_most_16_kb(tmp_path):
         assert client.get("/api/templates").json() == {"t": json.loads(body(MAX_TEMPLATE_BYTES))}
 
 
-@pytest.mark.parametrize("name", ["", "x" * 41, "a/b", "a\\b", "..", "a..b", "tab\there", "nul\x00", "del\x7f"])
+@pytest.mark.parametrize("name", ["", "x" * 41, "a/b", "a\\b", ".", "..", "a..b", "tab\there", "nul\x00", "del\x7f"])
 def test_check_template_name_refuses(name):
     with pytest.raises(ValueError):
         check_template_name(name)

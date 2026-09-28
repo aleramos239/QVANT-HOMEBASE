@@ -297,9 +297,13 @@ def check_drawings(body) -> list:
 
 def check_template_name(name) -> str:
     """A chart-settings template's name: 1-40 characters, no / \\ .. and no
-    control characters (it rides in the URL path). ValueError otherwise."""
+    control characters (it rides in the URL path), and not "." on its own
+    (the browser resolves /api/templates/. as a path step, landing on the
+    list route rather than this name). ValueError otherwise."""
     if not isinstance(name, str) or not 1 <= len(name) <= MAX_TEMPLATE_NAME:
         raise ValueError(f"a template name has 1-{MAX_TEMPLATE_NAME} characters")
+    if name == ".":
+        raise ValueError('a template name cannot be "."')
     if "/" in name or "\\" in name or ".." in name or any(ord(ch) < 32 or ord(ch) == 127 for ch in name):
         raise ValueError("a template name has no / \\ .. or control characters")
     return name

@@ -29,11 +29,15 @@ def check_kind(kind) -> str:
 
 
 def check_preset_name(name) -> str:
-    """1-40 characters, no / \\ .. or control characters (it rides in the URL path) -- the same
-    rule as check_template_name in server.py. __default__ is valid input here like any other name;
-    nothing in this file treats it specially."""
+    """1-40 characters, no / \\ .. or control characters (it rides in the URL path), and not "."
+    on its own (the browser resolves /api/presets/<kind>/. as a path step, landing on the list
+    route rather than this name) -- the same rule as check_template_name in server.py.
+    __default__ is valid input here like any other name; nothing in this file treats it
+    specially."""
     if not isinstance(name, str) or not 1 <= len(name) <= MAX_PRESET_NAME:
         raise ValueError(f"a preset name has 1-{MAX_PRESET_NAME} characters")
+    if name == ".":
+        raise ValueError('a preset name cannot be "."')
     if "/" in name or "\\" in name or ".." in name or any(ord(ch) < 32 or ord(ch) == 127 for ch in name):
         raise ValueError("a preset name has no / \\ .. or control characters")
     return name
