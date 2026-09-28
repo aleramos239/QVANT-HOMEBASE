@@ -1037,3 +1037,112 @@ def test_a_switch_while_down_to_a_login_refusing_every_root_backs_off_normally()
     rig.drive(body)
     waits = [s for s in rig.slept if s != 1]
     assert waits[:2] == [5, 10] and 600 not in waits and rig.feed.md_env == "demo"
+
+
+# ------------------------------------------------------------------ the early rebuild (RECYCLE)
+# 2026-09-28: the desk renews its tokens early (weekdays 09:10-09:19:30 ET); a socket still on
+# the old md token is rebuilt on the freshest one then, make-before-break, so it cannot die at
+# the old token's expiry during the open the user trades from these charts.
+
+T_REBUILD = dt.datetime(2026, 9, 14, 9, 15, tzinfo=ET).timestamp()     # a Monday, in the window
+
+
+def _tok(ws, token):
+    ws.token = token
+    return ws
+
+
+def test_the_rebuild_window_is_the_desks_early_renewal_window():
+    from homebase.broker import tradovate
+    from homebase.charts.tickfeed import RECYCLE
+    assert RECYCLE == (tradovate.RENEW_EARLY_FROM, tradovate.RENEW_QUIET[0])
+
+
+def test_a_socket_on_an_older_md_token_is_rebuilt_make_before_break_before_0920():
+    from homebase.charts.tickfeed import RECYCLE_PACE_S
+    old, new = _tok(FakeWS(), "md-1"), _tok(FakeWS(), "md-2")
+    rig = Rig(["NQ", "ES", "GC"], ordinary=lambda: old, env_socks={"demo": new}, now0=T_REBUILD)
+    rig.feed._fresh_token = lambda prefer_live: ("md-2", "demo")
+
+    async def body():
+        await rig.polls(3)
+        _push(new, 101, 77)                                  # the new socket routes
+        return rig.feed.ws, rig.feed.connected
+
+    in_use, up = rig.drive(body)
+    f = rig.feed
+    assert in_use is new and up and not old.connected and f._on_event not in old.event_handlers
+    assert [b["symbol"] for _, b in new.sent] == [symbols.resolve_contract(r)
+                                                  for r in ("NQ", "ES", "GC")]
+    assert rig.slept.count(RECYCLE_PACE_S) == 2              # 3 getCharts, paced: no burst
+    # the startup's refills only (one per root, on the old socket): none after the rebuild,
+    # the old socket served until the install -- there is no gap to fill
+    assert [(r, w) for r, _, w in rig.refills] == [("NQ", old), ("ES", old), ("GC", old)]
+    assert f.recycle["ok"] is True and f.switch_error is None and f.md_env == "demo"
+    assert ("NQ", [1077]) in rig.ticks and f.reconnects == 0
+    assert [k for k, _ in rig.connects] == ["ordinary", "demo"]
+
+
+@pytest.mark.parametrize("start, disk, budget_used", [
+    ((2026, 9, 14, 9, 15), ("md-1", "demo"), 0),      # already on the freshest token
+    ((2026, 9, 14, 9, 19, 30), ("md-2", "demo"), 0),  # the window is over: reconnects as today
+    ((2026, 9, 14, 9, 5), ("md-2", "demo"), 0),       # not yet
+    ((2026, 9, 19, 9, 15), ("md-2", "demo"), 0),      # Saturday
+    ((2026, 9, 14, 9, 15), ("md-2", "live"), 0),      # only the other login has a fresh one
+    ((2026, 9, 14, 9, 15), ("md-2", "demo"), 118),    # the hour's budget: kept for the open
+])
+def test_no_rebuild_unless_due(start, disk, budget_used):
+    old = _tok(FakeWS(), "md-1")
+    rig = Rig(["NQ", "ES", "GC"], ordinary=lambda: old, env_socks={"demo": _tok(FakeWS(), "x")},
+              now0=dt.datetime(*start, tzinfo=ET).timestamp())
+    rig.feed._fresh_token = lambda prefer_live: disk
+    rig.feed._requests["demo"] = [rig.clock[0]] * budget_used
+
+    async def body():
+        await rig.up()
+        await rig.polls(4)
+        return rig.feed.ws, old.connected
+
+    in_use, up = rig.drive(body)
+    assert in_use is old and up and rig.feed.recycle is None
+    assert [k for k, _ in rig.connects] == ["ordinary"]
+
+
+def test_one_rebuild_a_day():
+    from homebase.charts.tickfeed import RECYCLE_CHECK_S
+    old, new, newer = (_tok(FakeWS(), t) for t in ("md-1", "md-2", "md-3"))
+    rig = Rig(["NQ"], ordinary=lambda: old, env_socks={"demo": [new, newer]}, now0=T_REBUILD)
+    disk = {"tok": "md-2"}
+    rig.feed._fresh_token = lambda prefer_live: (disk["tok"], "demo")
+
+    async def body():
+        await rig.up()
+        await rig.polls(2)
+        disk["tok"] = "md-3"                                 # renewed again the same morning
+        await rig.polls(RECYCLE_CHECK_S * 3)
+        return rig.feed.ws
+
+    assert rig.drive(body) is new and [k for k, _ in rig.connects] == ["ordinary", "demo"]
+
+
+def test_a_failed_rebuild_keeps_the_socket_serving_and_is_not_retried_that_day():
+    from homebase.charts.tickfeed import RECYCLE_CHECK_S
+    old = _tok(FakeWS(), "md-1")
+    refusing = _tok(FakeWS(replies=[{"errorText": "Access is denied"}] * 3), "md-2")
+    rig = Rig(["NQ", "ES", "GC"], ordinary=lambda: old,
+              env_socks={"demo": [refusing, _tok(FakeWS(), "md-2")]}, now0=T_REBUILD)
+    rig.feed._fresh_token = lambda prefer_live: ("md-2", "demo")
+
+    async def body():
+        await rig.up()
+        await rig.polls(RECYCLE_CHECK_S * 3)
+        _push(old, 101, 55)
+        return rig.feed.ws, old.connected
+
+    in_use, up = rig.drive(body)
+    f = rig.feed
+    assert in_use is old and up and not refusing.connected
+    assert f.recycle["ok"] is False and "refused every symbol" in f.recycle["error"]
+    assert f.switch_error is None and f.reconnects == 0      # the user's switch state untouched
+    assert [k for k, _ in rig.connects] == ["ordinary", "demo"]
+    assert ("NQ", [1055]) in rig.ticks
