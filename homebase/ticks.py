@@ -19,6 +19,26 @@ drives the 9:30 feed is never penalized.
 
 Session date D = 18:00 ET on D-1 -> 17:00 ET on D (Mon's starts Sunday).
 
+The broker's history window (root cause of the 18:00-20:00 ET hole, found
+2026-09-28 in this job's own log and manifests): the md feed serves tick
+history from 00:00 UTC of the PREVIOUS UTC day onwards, nothing older.
+  * all 19 partial nightly files start at 00:00:00.0xx UTC of their session
+    date (00:00:37 at most, for thin markets), and all were recorded after
+    00:00 UTC of the day after;
+  * the one complete file, NQ 2026-09-24, was finished at 23:10 UTC that same
+    day, reaches the 18:00 ET open, and its first tick id is NQ 09-23's last
+    id + 1 -- paging across 00:00 UTC works, the cut is not in our requests;
+  * every request for a session that ended before 00:00 UTC of the previous
+    day came back empty ("no ticks served").
+So session D's first hours -- 18:00 ET on D-1 to 00:00 UTC on D, i.e.
+18:00-20:00 ET (18:00-19:00 in winter) -- leave the window at 00:00 UTC on
+D+1: 20:00 ET (19:00) on D itself, three hours after the close. The rest of D
+stays until 00:00 UTC on D+2. The job used to page each session backwards
+from the close, one root after another, so it reached those first hours
+last, hours after they were gone. Now a session is cut at 00:00 UTC into
+segments, and segments are fetched earliest-expiry first (every root's first
+hours before any root's long tail), each paged backwards from its own end.
+
     python -m homebase.ticks                # every complete, missing session
     python -m homebase.ticks --date 2026-09-22 --roots NQ,ES
 """
@@ -42,6 +62,8 @@ from .marketdata import MD_DEMO, MD_LIVE
 from .paths import state_dir
 
 ET = ZoneInfo("America/New_York")
+UTC = dt.timezone.utc
+HISTORY_UTC_DAYS = 2        # the feed serves ticks from 00:00 UTC of the previous UTC day (docstring)
 # priority order: if the 08:00 deadline cuts a night short, the important
 # ones are done first
 ROOTS = ("NQ", "ES", "YM", "RTY", "GC", "SI", "CL", "ZN", "NG", "HG")
@@ -86,6 +108,28 @@ def sessions_to_record(now: dt.datetime, days: int = LOOKBACK_DAYS) -> list[dt.d
 
 def archive_path(root: str, date: dt.date, contract: str, base: Path = ARCHIVE) -> Path:
     return base / root / str(date.year) / f"{date.isoformat()}_{contract}.csv.gz"
+
+
+def now_et() -> dt.datetime:        # one seam for the tests to move the clock
+    return dt.datetime.now(ET)
+
+
+def history_expiry(t: dt.datetime) -> dt.datetime:
+    """The moment the broker stops serving a tick stamped t: 00:00 UTC two
+    days after t's UTC date (it serves from 00:00 UTC of the previous day)."""
+    d = t.astimezone(UTC).date() + dt.timedelta(days=HISTORY_UTC_DAYS)
+    return dt.datetime.combine(d, dt.time(0), UTC)
+
+
+def utc_segments(start: dt.datetime, end: dt.datetime) -> list[tuple[dt.datetime, dt.datetime]]:
+    """[start, end] cut at every 00:00 UTC: each piece leaves the broker's
+    history at one moment (history_expiry of its start)."""
+    out, s, end = [], start.astimezone(UTC), end.astimezone(UTC)
+    while s < end:
+        cut = dt.datetime.combine(s.date() + dt.timedelta(days=1), dt.time(0), UTC)
+        out.append((s, min(cut, end)))
+        s = min(cut, end)
+    return out
 
 
 # ------------------------------------------------------------------ fetching
@@ -184,20 +228,29 @@ async def fetch_page(ws: TradovateWS, contract: str, before_ms: int,
 
 
 async def fetch_session(ws: TradovateWS, contract: str, start: dt.datetime,
-                        end: dt.datetime, page_fn=None) -> tuple[list[dict], dict]:
-    """Page backwards from the session close until the open (or the buffer
-    runs dry). Returns (rows ascending, stats)."""
+                        end: dt.datetime, page_fn=None,
+                        expiry: dt.datetime | None = None) -> tuple[list[dict], dict]:
+    """Page backwards from `end` (a session's close, or a segment's end) until
+    `start` (or the buffer runs dry). Returns (rows ascending, stats):
+    stats["stop"] says why it stopped -- "reached" (a page went past `start`:
+    everything in [start, end] is in), "exhausted" (the buffer ran dry first),
+    "deadline", "expired" (`expiry` passed mid-fetch: the broker no longer has
+    the rest) or "max_pages"."""
     page_fn = page_fn or fetch_page
     start_ms, end_ms = int(start.timestamp() * 1000), int(end.timestamp() * 1000)
     before, seen, rows, pages, penalties = end_ms, set(), [], 0, 0
-    last_req = 0.0
+    last_req, stop, earliest = 0.0, "max_pages", None
     while pages < MAX_PAGES:
-        if deadline_passed():
-            log(f"{contract}: deadline {DEADLINE_ET} ET — stopping this session here")
-            break
         gap = PAGE_INTERVAL_S - (time.monotonic() - last_req)
         if pages and gap > 0:
             await sleep(gap)
+        if deadline_passed():                       # checked after the wait: it may cross 08:00
+            log(f"{contract}: deadline {DEADLINE_ET} ET — stopping this session here")
+            stop = "deadline"
+            break
+        if expiry is not None and now_et() >= expiry:
+            stop = "expired"                        # the broker no longer has the rest
+            break
         last_req = time.monotonic()
         if isinstance(ws, MDConn):
             sock = await ws.ensure()
@@ -226,16 +279,18 @@ async def fetch_session(ws: TradovateWS, contract: str, start: dt.datetime,
         new = [r for r in page if r["id"] not in seen and r["ts_ms"] >= start_ms
                and r["ts_ms"] < end_ms + 1]
         if not page or not any(r["id"] not in seen for r in page):
+            stop = "exhausted"
             break                                   # buffer exhausted
         seen.update(r["id"] for r in page)
         rows.extend(new)
         earliest = page[0]["ts_ms"]
         if earliest < start_ms:
+            stop = "reached"
             break                                   # reached the open
         before = earliest if earliest < before else before - 1
     rows.sort(key=lambda r: (r["ts_ms"], r["id"] or 0))
     complete = bool(rows) and rows[0]["ts_ms"] - start_ms < 5 * 60 * 1000  # within 5 min of the open
-    return rows, {"pages": pages, "complete": complete}
+    return rows, {"pages": pages, "complete": complete, "stop": stop, "earliest_ms": earliest}
 
 
 def deadline_passed(now: dt.datetime | None = None) -> bool:
@@ -385,50 +440,105 @@ class MDConn:
 
 
 # ------------------------------------------------------------------ the run
-async def record(roots=ROOTS, dates: list[dt.date] | None = None,
-                 base: Path = ARCHIVE, ws: TradovateWS | None = None,
-                 now: dt.datetime | None = None) -> list[dict]:
-    now = now or dt.datetime.now(ET)
-    dates = dates if dates is not None else sessions_to_record(now)
-    todo = []
+def plan(roots, dates: list[dt.date], base: Path, now: dt.datetime) -> tuple[dict, list]:
+    """The run's work: ({(root, date): session}, [segment jobs]), the jobs in
+    fetch order -- earliest expiry first (docstring: every root's first hours
+    before any root's long tail), then a session's first segment before its
+    later ones, then root priority (ROOTS order), then date. A segment already
+    gone from the broker's history is never asked for."""
+    rank = {r: i for i, r in enumerate(ROOTS)}
+    sessions, jobs = {}, []
     for date in dates:
         for root in roots:
             contract = symbols.front_month(root, date)
             path = archive_path(root, date, contract, base)
             if path.exists() and not from_massive(path):
                 continue                  # our own (bid/ask) recording stays
-            todo.append((date, root, contract, path))
-    if not todo:
-        log("nothing to record — every complete session is on disk")
+            start, end = session_bounds(date)
+            segs = [(s, e) for s, e in utc_segments(start, end) if now < history_expiry(s)]
+            if not segs:
+                log(f"{root} {date} {contract}: gone from the broker's history (it keeps ticks "
+                    "from 00:00 UTC of the previous day) — skipped")
+                continue
+            if segs[0][0] > start:
+                log(f"{root} {date} {contract}: {start:%H:%M}-{segs[0][0].astimezone(ET):%H:%M} ET "
+                    "is already gone from the broker's history — this capture will be PARTIAL")
+            key = (root, date)
+            sessions[key] = {"root": root, "date": date, "contract": contract, "path": path,
+                             "start": start, "end": end, "left": len(segs), "rows": [],
+                             "pages": 0, "secs": 0.0}
+            for s, e in segs:
+                jobs.append((history_expiry(s), s > start, rank.get(root, len(rank)), date, key, s, e))
+    jobs.sort(key=lambda j: j[:4])
+    return sessions, jobs
+
+
+def _write_fetched(st: dict) -> dict | None:
+    """Write what one session's segments brought in (one row per tick id: the
+    00:00 UTC tick can arrive with both of its segments)."""
+    root, date, contract, path = st["root"], st["date"], st["contract"], st["path"]
+    rows = list({r["id"]: r for r in st["rows"]}.values()) if st["rows"] else []
+    rows.sort(key=lambda r: (r["ts_ms"], r["id"] or 0))
+    if not rows:
+        log(f"{root} {date} {contract}: no ticks served (buffer gone or holiday) — skipped")
+        return None
+    start_ms = int(st["start"].timestamp() * 1000)
+    stats = {"pages": st["pages"], "complete": rows[0]["ts_ms"] - start_ms < 5 * 60 * 1000}
+    if path.exists() and not stats["complete"]:
+        # a Massive file is the whole session; our partial capture
+        # would only shorten it (a late run last night did exactly that)
+        log(f"{root} {date} {contract}: only a PARTIAL capture and a full "
+            "backfill file is on disk — keeping the backfill")
+        return None
+    m = write_session(rows, path, root=root, contract=contract, date=date,
+                      start=st["start"], end=st["end"], stats=stats)
+    log(f"{root} {date} {contract}: {m['ticks']:,} ticks, {m['bytes'] / 1e6:.1f} MB, "
+        f"{st['pages']} pages, {st['secs']:.0f}s"
+        + ("" if m["complete"] else " — PARTIAL (buffer did not reach the open)"))
+    return m
+
+
+async def record(roots=ROOTS, dates: list[dt.date] | None = None,
+                 base: Path = ARCHIVE, ws: TradovateWS | None = None,
+                 now: dt.datetime | None = None) -> list[dict]:
+    now = now or now_et()
+    dates = dates if dates is not None else sessions_to_record(now)
+    sessions, jobs = plan(roots, dates, base, now)
+    if not jobs:
+        log("nothing to record — every complete session is on disk or gone from the broker")
         return []
     conn = ws if isinstance(ws, MDConn) else MDConn(ws)
     own = ws is None
     done = []
     try:
-        for date, root, contract, path in todo:
-            start, end = session_bounds(date)
-            t0 = time.perf_counter()
-            try:
-                rows, stats = await fetch_session(conn, contract, start, end)
-            except Exception as e:  # noqa: BLE001 — one bad symbol must not stop the rest
-                log(f"{root} {date} {contract}: FAILED {e}")
-                continue
-            if not rows:
-                log(f"{root} {date} {contract}: no ticks served (buffer gone or holiday) — skipped")
-                continue
-            if path.exists() and not stats.get("complete"):
-                # a Massive file is the whole session; our partial capture
-                # would only shorten it (a late run last night did exactly that)
-                log(f"{root} {date} {contract}: only a PARTIAL capture and a full "
-                    "backfill file is on disk — keeping the backfill")
-                continue
-            m = write_session(rows, path, root=root, contract=contract, date=date,
-                              start=start, end=end, stats=stats)
-            done.append(m)
-            log(f"{root} {date} {contract}: {m['ticks']:,} ticks, {m['bytes'] / 1e6:.1f} MB, "
-                f"{stats['pages']} pages, {time.perf_counter() - t0:.0f}s"
-                + ("" if m["complete"] else " — PARTIAL (buffer did not reach the open)"))
+        for expiry, _, _, date, key, s, e in jobs:
+            st = sessions[key]
+            if deadline_passed():
+                log(f"deadline {DEADLINE_ET} ET — stopping the run here")
+                break
+            st["left"] -= 1
+            if now_et() >= expiry:
+                log(f"{st['root']} {date} {st['contract']}: {s.astimezone(ET):%m-%d %H:%M}-"
+                    f"{e.astimezone(ET):%H:%M} ET left the broker's history before its turn")
+            else:
+                t0 = time.perf_counter()
+                try:
+                    rows, stats = await fetch_session(conn, st["contract"], s, e, expiry=expiry)
+                    st["rows"].extend(rows)
+                    st["pages"] += stats["pages"]
+                except Exception as ex:  # noqa: BLE001 — one bad symbol must not stop the rest
+                    log(f"{st['root']} {date} {st['contract']}: FAILED {ex}")
+                st["secs"] += time.perf_counter() - t0
+            if st["left"] == 0:
+                m = _write_fetched(sessions.pop(key))
+                if m is not None:
+                    done.append(m)
     finally:
+        for st in sessions.values():           # cut short (the deadline): keep what came in
+            if st["rows"]:
+                m = _write_fetched(st)
+                if m is not None:
+                    done.append(m)
         if own:
             await conn.close()
     return done

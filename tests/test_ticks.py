@@ -84,15 +84,19 @@ def _fake_pager(all_rows, page=5):
 
 
 class NoWait:
-    """Replace the recorder's sleeps; record what it wanted to wait."""
+    """Replace the recorder's sleeps; record what it wanted to wait. The job's
+    clock (T.now_et) starts at `now` and moves only by those waits."""
 
-    def __init__(self, monkeypatch):
+    def __init__(self, monkeypatch, now=dt.datetime(2026, 9, 22, 17, 30, tzinfo=ET)):
         self.waits = []
+        self.now = now
 
         async def fake(s):
             self.waits.append(round(s, 1))
+            self.now += dt.timedelta(seconds=s)
         monkeypatch.setattr(T, "sleep", fake)
         monkeypatch.setattr(T, "deadline_passed", lambda now=None: False)
+        monkeypatch.setattr(T, "now_et", lambda: self.now)
 
 
 def test_fetch_session_pages_back_to_the_open_and_dedupes(tmp_path, monkeypatch):
@@ -282,6 +286,117 @@ def test_partial_capture_never_replaces_a_full_backfill_file(tmp_path, monkeypat
     p.with_suffix("").with_suffix(".json").write_text(json.dumps({"source": "massive"}))
     out = run(T.record(roots=("NQ",), dates=[dt.date(2026, 9, 22)], base=tmp_path, ws=object()))
     assert out == [] and p.read_bytes() == b"massive-full-session"
+
+
+# ------------------------------------------------ the broker's history window (root cause of the
+# 18:00-20:00 ET hole: T's docstring)
+UTC = dt.timezone.utc
+
+
+class HistoryWindow:
+    """A fake md history with the broker's window: a request is served only
+    the ticks stamped at or after 00:00 UTC of the PREVIOUS UTC day by the
+    job's clock -- at most `page` of them, the latest at or before before_ms."""
+
+    def __init__(self, nw, ticks, page):
+        self.nw, self.ticks, self.page, self.asked = nw, ticks, page, []
+
+    async def pager(self, ws, contract, before_ms, n=T.PAGE, timeout_s=0, ticket=None):
+        self.asked.append((contract, before_ms))
+        today = self.nw.now.astimezone(UTC).date()
+        edge = dt.datetime.combine(today - dt.timedelta(days=1), dt.time(0), UTC)
+        edge_ms = int(edge.timestamp() * 1000)
+        return [r for r in self.ticks[contract] if edge_ms <= r["ts_ms"] <= before_ms][-self.page:]
+
+
+def _minute_ticks(date, first_id=1):
+    """One tick a minute through session `date` (18:00 ET the day before -> 17:00 ET)."""
+    start, end = T.session_bounds(date)
+    s, e = int(start.timestamp() * 1000), int(end.timestamp() * 1000)
+    return [{"ts_ms": t, "price": 1.0, "size": 1, "bid": 0.75, "ask": 1.0, "bid_size": 1,
+             "ask_size": 1, "id": first_id + i} for i, t in enumerate(range(s, e, 60_000))]
+
+
+def _et(ms):
+    return dt.datetime.fromtimestamp(ms / 1000, ET)
+
+
+def test_the_fake_window_reproduces_the_hole_the_old_order_left(monkeypatch):
+    """The archive's failure, replayed: paged back from the close one root
+    after another from 17:20 ET, the later roots reach their 18:00-20:00 ET
+    after 20:00 ET (00:00 UTC), when the broker has already dropped them --
+    and the capture starts at exactly 20:00 ET, like every partial file."""
+    d = dt.date(2026, 9, 24)
+    nw = NoWait(monkeypatch, now=dt.datetime(2026, 9, 24, 17, 20, tzinfo=ET))
+    broker = HistoryWindow(nw, {c: _minute_ticks(d) for c in ("NQZ6", "ESZ6", "YMZ6")}, page=10)
+    start, end = T.session_bounds(d)
+    firsts = []
+    for c in ("NQZ6", "ESZ6", "YMZ6"):
+        rows, _ = run(T.fetch_session(None, c, start, end, page_fn=broker.pager))
+        firsts.append(_et(rows[0]["ts_ms"]).strftime("%H:%M"))
+    assert firsts == ["18:00", "20:00", "20:00"]
+
+
+def test_every_roots_first_hours_are_fetched_before_the_broker_drops_them(tmp_path, monkeypatch):
+    d = dt.date(2026, 9, 24)
+    nw = NoWait(monkeypatch, now=dt.datetime(2026, 9, 24, 17, 20, tzinfo=ET))
+    broker = HistoryWindow(nw, {c: _minute_ticks(d) for c in ("NQZ6", "ESZ6", "YMZ6")}, page=10)
+    monkeypatch.setattr(T, "fetch_page", broker.pager)
+    out = run(T.record(roots=("NQ", "ES", "YM"), dates=[d], base=tmp_path, ws=object()))
+    assert sorted(m["contract"] for m in out) == ["ESZ6", "NQZ6", "YMZ6"]
+    for m in out:
+        assert m["ticks"] == 23 * 60 and m["complete"]
+        assert m["first_tick_utc"] == "2026-09-23T22:00:00+00:00"          # the 18:00 ET open
+    assert nw.now > dt.datetime(2026, 9, 24, 20, 0, tzinfo=ET)            # the run went past 00:00 UTC
+    midnight = int(dt.datetime(2026, 9, 24, 0, 0, tzinfo=UTC).timestamp() * 1000)
+    first_tail = next(i for i, (c, b) in enumerate(broker.asked) if b > midnight)
+    assert {c for c, _ in broker.asked[:first_tail]} == {"NQZ6", "ESZ6", "YMZ6"}   # heads first
+
+
+def test_the_plan_orders_segments_by_when_they_leave_the_broker(tmp_path):
+    now = dt.datetime(2026, 9, 24, 17, 20, tzinfo=ET)              # Thursday, after the close
+    sessions, jobs = T.plan(("NQ", "ES"), [dt.date(2026, 9, 23), dt.date(2026, 9, 24)], tmp_path, now)
+    got = [(root, date.day, s.astimezone(ET).strftime("%d %H:%M"), e.astimezone(ET).strftime("%d %H:%M"))
+           for _, _, _, date, (root, _), s, e in jobs]
+    assert got == [
+        # gone at 20:00 ET today: the 24th's first hours, then what is left of the 23rd
+        ("NQ", 24, "23 18:00", "23 20:00"), ("ES", 24, "23 18:00", "23 20:00"),
+        ("NQ", 23, "22 20:00", "23 17:00"), ("ES", 23, "22 20:00", "23 17:00"),
+        # gone at 20:00 ET tomorrow
+        ("NQ", 24, "23 20:00", "24 17:00"), ("ES", 24, "23 20:00", "24 17:00"),
+    ]
+    assert sessions[("NQ", dt.date(2026, 9, 23))]["left"] == 1       # its 18:00-20:00 ET is gone
+
+
+def test_a_session_already_gone_asks_nothing_and_says_so(tmp_path, monkeypatch, capsys):
+    nw = NoWait(monkeypatch, now=dt.datetime(2026, 9, 26, 17, 20, tzinfo=ET))   # Saturday
+    broker = HistoryWindow(nw, {"NQZ6": _minute_ticks(dt.date(2026, 9, 24))}, page=10)
+    monkeypatch.setattr(T, "fetch_page", broker.pager)
+    assert run(T.record(roots=("NQ",), dates=[dt.date(2026, 9, 24)], base=tmp_path, ws=object())) == []
+    assert broker.asked == [] and "gone from the broker's history" in capsys.readouterr().out
+
+
+def test_a_winter_session_loses_one_hour_at_19_et(tmp_path):
+    """Standard time: 00:00 UTC is 19:00 ET, so only 18:00-19:00 ET sits in the
+    earlier UTC day, and it leaves the broker at 19:00 ET on the session day."""
+    start, end = T.session_bounds(dt.date(2026, 12, 15))
+    segs = T.utc_segments(start, end)
+    assert [(s.astimezone(ET).strftime("%H:%M"), e.astimezone(ET).strftime("%H:%M")) for s, e in segs] \
+        == [("18:00", "19:00"), ("19:00", "17:00")]
+    assert T.history_expiry(segs[0][0]) == dt.datetime(2026, 12, 15, 19, 0, tzinfo=ET)
+    assert T.history_expiry(segs[1][0]) == dt.datetime(2026, 12, 16, 19, 0, tzinfo=ET)
+
+
+def test_a_segment_that_expires_mid_fetch_stops_asking(monkeypatch):
+    nw = NoWait(monkeypatch, now=dt.datetime(2026, 9, 24, 19, 58, tzinfo=ET))
+    d = dt.date(2026, 9, 24)
+    broker = HistoryWindow(nw, {"NQZ6": _minute_ticks(d)}, page=10)
+    start, _ = T.session_bounds(d)
+    mid = T.utc_segments(*T.session_bounds(d))[0][1]
+    rows, stats = run(T.fetch_session(None, "NQZ6", start, mid, page_fn=broker.pager,
+                                      expiry=T.history_expiry(start)))
+    assert stats["stop"] == "expired" and len(broker.asked) == 4     # 19:58, +36 s x 3 < 20:00
+    assert 0 < len(rows) < 120
 
 
 class ChartSocket:
