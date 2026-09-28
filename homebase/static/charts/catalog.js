@@ -40,13 +40,22 @@ function marketOpen(root, weekday, minutes) {
 }
 const GROUPS = ['All', 'VWAP', 'Moving averages', 'Trend', 'Levels', 'Volume', 'Order flow'];
 const LENGTH = (def) => ({ key: 'length', label: 'Length', type: 'int', min: 1, max: 1000, def });
+// SMA/EMA (studies.py SOURCES): "sma:50"/"ema:20" keep meaning close -- the source param defaults to it.
+const SOURCES = [['close', 'Close'], ['open', 'Open'], ['high', 'High'], ['low', 'Low'],
+  ['hl2', 'HL2'], ['hlc3', 'HLC3'], ['ohlc4', 'OHLC4']];
+const SOURCE = { key: 'source', label: 'Source', type: 'choice', choices: SOURCES, def: 'close' };
+const BAND = (n, def) => [
+  { key: `band${n}On`, label: `Band ${n}`, type: 'bool', def: false },
+  { key: `band${n}Mult`, label: `Band ${n} multiplier`, type: 'num', min: 0.1, max: 10, step: 0.1, def }];
 const CATALOG = [
   { id: 'volume', group: 'Volume', name: 'Volume', params: [], pane: 'main' },
   { id: 'vwap', group: 'VWAP', name: 'VWAP', params: [
-    { key: 'anchor', label: 'Anchor', type: 'choice', choices: [['eth', 'ETH'], ['rth', 'RTH']], def: 'eth' },
-    { key: 'bands', label: 'Bands (1σ and 2σ)', type: 'bool', def: false }] },
-  { id: 'ema', group: 'Moving averages', name: 'EMA', params: [LENGTH(20)] },
-  { id: 'sma', group: 'Moving averages', name: 'SMA', params: [LENGTH(50)] },
+    { key: 'anchor', label: 'Anchor', type: 'choice',
+      choices: [['eth', 'Session'], ['rth', 'RTH'], ['custom', 'Custom time'], ['week', 'Week'], ['month', 'Month']], def: 'eth' },
+    { key: 'customTime', label: 'Time (ET)', type: 'time', def: '02:00' },
+    ...BAND(1, 1), ...BAND(2, 2), ...BAND(3, 3)] },
+  { id: 'ema', group: 'Moving averages', name: 'EMA', params: [LENGTH(20), SOURCE] },
+  { id: 'sma', group: 'Moving averages', name: 'SMA', params: [LENGTH(50), SOURCE] },
   { id: 'vwma', group: 'Moving averages', name: 'VWMA', params: [LENGTH(20)] },
   { id: 'adx', group: 'Trend', name: 'ADX / DMI', params: [LENGTH(14)], pane: 'own' },
   { id: 'levels', group: 'Levels', name: 'Session levels', params: [] },
@@ -104,6 +113,8 @@ function placement(inst) {
   return PANES.includes(inst.pane) ? inst.pane : d.pane;
 }
 
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+
 function clampParams(id, params) {
   const d = def(id), src = params && typeof params === 'object' ? params : {}, out = {};
   if (!d) return out;
@@ -111,6 +122,7 @@ function clampParams(id, params) {
     const v = src[p.key];
     if (p.type === 'bool') out[p.key] = typeof v === 'boolean' ? v : p.def;
     else if (p.type === 'choice') out[p.key] = p.choices.some(([c]) => c === v) ? v : p.def;
+    else if (p.type === 'time') out[p.key] = typeof v === 'string' && HHMM.test(v) ? v : p.def;
     else {
       let n = v === null || v === '' || typeof v === 'boolean' ? NaN : Number(v);
       if (!Number.isFinite(n)) n = p.def;
@@ -123,7 +135,11 @@ function clampParams(id, params) {
 
 /* A fresh instance of `id`: a new uid, clamped params, and — for a pane-type indicator — its placement. `extra`
    (a stored indicator, e.g. from a chart template, spec §8) carries `visible` and `pane` over; anything it
-   leaves out, or a pane that cannot move, takes today's default. */
+   leaves out, or a pane that cannot move, takes today's default. No `style` here: an instance from this path
+   (defaults(), a template, migrate()'s Build-1 path) keeps rendering through cell.js's legacy hardcoded
+   palette unless a `style` was explicitly restored — see migrate()'s modern-format branch and the Indicators
+   dialog's addIndicator(), which is the one path that attaches a fresh style (Task 2/3: a new instance of an
+   indicator already on the chart must not repeat its colour). */
 function instance(id, params, extra) {
   const d = def(id);
   if (!d) return null;
@@ -132,13 +148,90 @@ function instance(id, params, extra) {
   return inst;
 }
 
+/* Every plotted-line key of `id`'s Style tab (cell.js's buildSeries case, in draw order), or null: an
+   indicator with no per-line style (levels, footprint, profile, big prints, imbalance, heatmap, volume --
+   canvas-drawn or a single fixed colour not worth a Style tab). */
+const STYLE_LINES = { vwap: ['main', 'band1', 'band2', 'band3'], ema: ['main'], sma: ['main'], vwma: ['main'],
+  adx: ['adx', 'pdi', 'mdi'], cumdelta: ['main'] };
+// delta has no Style tab: it draws a per-bar up/down-coloured histogram, not a single line -- style-able
+// the same way would need its own up/down fields, not this one-colour-per-key shape (spec: "unless trivial").
+function styleLineKeys(id) { return STYLE_LINES[id] || null; }
+
+const VWAP_DEFAULT = '#9C27B0';   // cell.js palette().vwap -- today's single-VWAP purple, kept as the first colour
+const UP_DEFAULT = '#089981', DOWN_DEFAULT = '#F23645';   // palette().up/.down -- theme-independent
+const DASH_STYLES = ['solid', 'dashed', 'dotted'];
+
+/* The colour a FRESH instance of `id` gets, cycling so two instances of the same indicator never match: the
+   first keeps the indicator's traditional single-instance colour (so an unremarkable single VWAP still looks
+   like it always has), and each further one advances through LINE_COLORS. `siblings` is the indicator list
+   BEFORE this new instance is added. */
+function cycleColor(id, siblings) {
+  const n = (siblings || []).filter((x) => x.id === id).length;
+  const first = id === 'vwap' ? VWAP_DEFAULT : id === 'cumdelta' || id === 'delta' ? '#FF6D00' : LINE_COLORS[0];
+  if (n === 0) return first;
+  const rest = LINE_COLORS.filter((c) => c !== first);
+  return rest[(n - 1) % rest.length];
+}
+
+function lineStyle(color, width, dash) { return { color, width, dash, visible: true }; }
+
+/* A fresh per-line style {color, width (1-4), dash ('solid'|'dashed'|'dotted'), visible} for every line of a
+   NEW instance of `id`, or null when `id` has no Style tab. `siblings`: see cycleColor. */
+function defaultStyle(id, siblings) {
+  const keys = styleLineKeys(id);
+  if (!keys) return null;
+  const color = cycleColor(id, siblings);
+  switch (id) {
+    case 'vwap': return { main: lineStyle(color, 2, 'solid'), band1: lineStyle(color, 1, 'dashed'),
+      band2: lineStyle(color, 1, 'dashed'), band3: lineStyle(color, 1, 'dashed') };
+    case 'adx': return { adx: lineStyle(color, 2, 'solid'), pdi: lineStyle(UP_DEFAULT, 1, 'solid'),
+      mdi: lineStyle(DOWN_DEFAULT, 1, 'solid') };
+    default: return { main: lineStyle(color, id === 'cumdelta' ? 2 : 1, 'solid') };   // ema, sma, vwma, delta, cumdelta
+  }
+}
+
+function clampLineStyle(v, fallback) {
+  const o = v && typeof v === 'object' ? v : {};
+  return { color: typeof o.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(o.color) ? o.color : fallback.color,
+    width: [1, 2, 3, 4].includes(+o.width) ? +o.width : fallback.width,
+    dash: DASH_STYLES.includes(o.dash) ? o.dash : fallback.dash,
+    visible: typeof o.visible === 'boolean' ? o.visible : fallback.visible };
+}
+
+/* `style` (as persisted, or straight from the Style tab) clamped to `id`'s line keys, or null: no style tab,
+   or nothing usable to clamp -- the caller then leaves the instance with no `style` field at all, so it keeps
+   rendering through cell.js's legacy hardcoded palette exactly as it does today. */
+function clampStyle(id, style) {
+  const keys = styleLineKeys(id);
+  if (!keys || !style || typeof style !== 'object') return null;
+  const fallback = defaultStyle(id, []);
+  const out = {};
+  for (const k of keys) out[k] = clampLineStyle(style[k], fallback[k]);
+  return out;
+}
+
 function defaults() { return [instance('volume'), instance('vwap'), instance('levels'), instance('footprint')]; }
+
+/* The VWAP wire key (studies.py's VWAP anchor) for this instance's params: "vwap"/"vwap:rth" unchanged;
+   "vwap:week"/"vwap:month"; "vwap:t0200" for a custom HH:MM ET (colon stripped -- wire keys use ':' as their
+   own delimiter). An invalid/missing customTime never reaches here: clampParams already fell back to its
+   default. */
+function vwapServerKey(p) {
+  switch (p.anchor) {
+    case 'rth': return 'vwap:rth';
+    case 'week': return 'vwap:week';
+    case 'month': return 'vwap:month';
+    case 'custom': return `vwap:t${(HHMM.test(p.customTime) ? p.customTime : '02:00').replace(':', '')}`;
+    default: return 'vwap';
+  }
+}
 
 function serverKey(inst) {
   const p = inst.params || {};
   switch (inst.id) {
-    case 'vwap': return p.anchor === 'rth' ? 'vwap:rth' : 'vwap';
-    case 'ema': case 'sma': case 'vwma': case 'adx': return `${inst.id}:${p.length}`;
+    case 'vwap': return vwapServerKey(p);
+    case 'ema': case 'sma': return `${inst.id}:${p.length}${p.source && p.source !== 'close' ? `:${p.source}` : ''}`;
+    case 'vwma': case 'adx': return `${inst.id}:${p.length}`;
     case 'levels': case 'cumdelta': case 'profile': return inst.id;
     default: return null;
   }
@@ -157,6 +250,8 @@ function migrate(cfg) {
       const o = { uid: typeof x.uid === 'string' && x.uid ? x.uid : uid(), id: x.id,
         params: clampParams(x.id, x.params), visible: x.visible !== false };
       if (movable(x.id)) o.pane = placement(x);
+      const st = clampStyle(x.id, x.style);   // absent/malformed: no `style` -- renders as it always has
+      if (st) o.style = st;
       return o;
     });
     return { root, spec, indicators };
@@ -164,7 +259,8 @@ function migrate(cfg) {
   if (!c.st || typeof c.st !== 'object') return { root, spec, indicators: defaults() };
   const st = { ...ST0, ...c.st }, out = [];
   const add = (id, params) => out.push(instance(id, params));
-  if (st.vwap) add('vwap', { anchor: st.vwapAnchor, bands: !!st.vwapBands });
+  // Build-1's one "Bands (1σ and 2σ)" toggle becomes today's band 1 (×1) + band 2 (×2), both on.
+  if (st.vwap) add('vwap', { anchor: st.vwapAnchor, band1On: !!st.vwapBands, band1Mult: 1, band2On: !!st.vwapBands, band2Mult: 2 });
   for (const f of ['ema1', 'ema2']) if (+st[f] > 0) add('ema', { length: +st[f] });
   if (+st.sma > 0) add('sma', { length: +st.sma });
   if (+st.vwma > 0) add('vwma', { length: +st.vwma });
@@ -188,8 +284,15 @@ function label(inst) {
   const d = def(inst.id), p = inst.params || {};
   if (!d) return String(inst.id);
   switch (inst.id) {
-    case 'vwap': return p.anchor === 'rth' ? 'VWAP RTH' : 'VWAP';
-    case 'ema': case 'sma': case 'vwma': return `${d.name} ${p.length}`;
+    case 'vwap':
+      if (p.anchor === 'rth') return 'VWAP RTH';
+      if (p.anchor === 'week') return 'VWAP W';
+      if (p.anchor === 'month') return 'VWAP M';
+      if (p.anchor === 'custom') return `VWAP ${HHMM.test(p.customTime) ? p.customTime : '02:00'}`;
+      return 'VWAP';
+    case 'ema': case 'sma':
+      return p.source && p.source !== 'close' ? `${d.name} ${p.length} ${p.source.toUpperCase()}` : `${d.name} ${p.length}`;
+    case 'vwma': return `${d.name} ${p.length}`;
     case 'adx': return `ADX ${p.length}`;
     case 'footprint': return p.imbalance > 0 ? `Footprint ${p.imbalance}×` : 'Footprint';
     case 'bigprints': return `Big prints ≥${p.min}`;
@@ -389,7 +492,8 @@ function filter(query, group = 'All') {
 const api = { CATALOG, GROUPS, ROOT_NAMES, FAVOURITES, INTERVAL_GROUPS, LINE_COLORS, uid, def, clampParams, instance,
   defaults, serverKey, serverKeys, migrate, migrateLayout, label, legendValues, decimals, fmtPrice, fmtCompact,
   fmtSigned, change, parseSpec, specLabel, longLabel, toSpec, parseInterval, matchSymbols, rootName, rootBadge, filter,
-  ALWAYS_OPEN, marketOpen, fmtAge, feedSummary, REC_BUSY, staleAfter, sinceOpen, PANES, movable, placement };
+  ALWAYS_OPEN, marketOpen, fmtAge, feedSummary, REC_BUSY, staleAfter, sinceOpen, PANES, movable, placement,
+  styleLineKeys, defaultStyle, clampStyle, cycleColor };
 if (typeof window !== 'undefined') window.HBCatalog = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

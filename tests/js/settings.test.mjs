@@ -211,7 +211,7 @@ test('buildTemplate: settings always, indicators (no uid, movable ones keep pane
   const full = S.buildTemplate(CHART, { interval: true });
   assert.deepEqual(full.settings, { prevClose: true });
   assert.deepEqual(full.indicators, [{ id: 'delta', params: {}, visible: true, pane: 'main' },
-    { id: 'ema', params: { length: 9 }, visible: false }]);
+    { id: 'ema', params: { length: 9, source: 'close' }, visible: false }]);
   assert.equal('uid' in full.indicators[0], false);
   assert.equal('pane' in full.indicators[1], false);   // EMA never moves: no pane, whatever the source carried
   assert.equal(full.spec, 'time:300');

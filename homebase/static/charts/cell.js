@@ -596,6 +596,8 @@ class Cell {
     const P = this.P;
     let ci = 0, pane = 0;
     this.paneUid = [null];
+    const DASH = { solid: LW.LineStyle.Solid, dashed: LW.LineStyle.Dashed, dotted: LW.LineStyle.Dotted };
+    const dash = (d) => DASH[d] || LW.LineStyle.Solid;
     const add = (inst, src, part, type, opts, where) => {
       const overlay = where === 0 && !opts.priceScaleId;   // on the price pane's own scale (not the volume overlay)
       const auto = overlay && this.R.scalePriceOnly ? { autoscaleInfoProvider: NO_SCALE } : {};
@@ -621,36 +623,54 @@ class Cell {
           pin(s, where, VOL_TOP);
           break;
         }
-        case 'vwap':
-          this.colorOf[inst.uid] = P.vwap;
-          line(inst, k, null, P.vwap, 2);
-          if (inst.params.bands) {
-            for (const b of ['u1', 'l1', 'u2', 'l2']) line(inst, k, b, P.band, 1, 0, { lineStyle: LW.LineStyle.Dashed, lastValueVisible: false });
+        case 'vwap': {
+          // inst.style (Task 3): a fresh instance always carries one (catalog.js's addIndicator); an instance
+          // saved before Style existed carries none, and renders through this same fixed purple as always.
+          const st = inst.style || {};
+          const main = st.main || { color: P.vwap, width: 2, dash: 'solid', visible: true };
+          this.colorOf[inst.uid] = main.color;
+          line(inst, k, null, main.color, main.width, 0, { lineStyle: dash(main.dash), visible: main.visible !== false });
+          for (let n = 1; n <= 3; n++) {
+            if (!inst.params[`band${n}On`]) continue;
+            const mult = inst.params[`band${n}Mult`] || n, bs = st[`band${n}`] || { color: P.band, width: 1, dash: 'dashed', visible: true };
+            for (const sign of [1, -1]) {   // part: the signed sd multiplier itself -- point() just applies it
+              line(inst, k, mult * sign, bs.color, bs.width, 0,
+                { lineStyle: dash(bs.dash), lastValueVisible: false, visible: bs.visible !== false });
+            }
           }
           break;
+        }
         case 'ema': case 'sma': case 'vwma': {
-          const color = P.lines[ci++ % P.lines.length];
+          const st = inst.style && inst.style.main;
+          const color = st ? st.color : P.lines[ci++ % P.lines.length];
           this.colorOf[inst.uid] = color;
-          line(inst, k, null, color, 1);
+          line(inst, k, null, color, st ? st.width : 1, 0, st ? { lineStyle: dash(st.dash), visible: st.visible !== false } : {});
           break;
         }
         case 'adx': {
           const { where, scale } = spot(inst);
-          const a = line(inst, k, null, P.text, 2, where, scale);
-          line(inst, k, 'p', P.up, 1, where, scale); line(inst, k, 'm', P.down, 1, where, scale);
+          const st = inst.style || {};
+          const mn = st.adx || { color: P.text, width: 2, dash: 'solid', visible: true };
+          const pd = st.pdi || { color: P.up, width: 1, dash: 'solid', visible: true };
+          const md = st.mdi || { color: P.down, width: 1, dash: 'solid', visible: true };
+          const a = line(inst, k, null, mn.color, mn.width, where, { ...scale, lineStyle: dash(mn.dash), visible: mn.visible !== false });
+          line(inst, k, 'p', pd.color, pd.width, where, { ...scale, lineStyle: dash(pd.dash), visible: pd.visible !== false });
+          line(inst, k, 'm', md.color, md.width, where, { ...scale, lineStyle: dash(md.dash), visible: md.visible !== false });
           pin(a, where, MAIN_TOP);   // the three lines share the one scale
           break;
         }
-        case 'delta': {
+        case 'delta': {   // a per-bar up/down-coloured histogram, not a single-colour line: inputs only (it has none)
           const { where, scale } = spot(inst);
           pin(add(inst, '__delta', null, LW.HistogramSeries, { lastValueVisible: true, priceFormat: { ...WHOLE }, ...scale }, where),
             where, MAIN_TOP);
           break;
         }
         case 'cumdelta': {
-          this.colorOf[inst.uid] = P.cum;
+          const st = (inst.style && inst.style.main) || { color: P.cum, width: 2, dash: 'solid', visible: true };
+          this.colorOf[inst.uid] = st.color;
           const { where, scale } = spot(inst);
-          pin(line(inst, k, null, P.cum, 2, where, { priceFormat: { ...WHOLE }, ...scale }), where, MAIN_TOP);
+          pin(line(inst, k, null, st.color, st.width, where,
+            { priceFormat: { ...WHOLE }, ...scale, lineStyle: dash(st.dash), visible: st.visible !== false }), where, MAIN_TOP);
           break;
         }
         default:   // levels, footprint, profile, big prints: price lines, layers and markers
@@ -678,8 +698,9 @@ class Cell {
     this.rows = this.cfg.indicators.map((inst) => {
       const off = inst.visible === false, row = mk('div', 'lg-row' + (off ? ' off' : '')), vals = mk('span', 'lg-vals');
       const btns = mk('span', 'lg-btns'), hasParams = C.def(inst.id).params.length > 0;
+      const hasSettings = hasParams || !!C.styleLineKeys(inst.id);   // a Style-only indicator (cumdelta) still gets a gear
       btns.append(iconButton(off ? 'eyeOff' : 'eye', off ? 'Show' : 'Hide', 'eye'));
-      if (hasParams) btns.append(iconButton('gear', 'Settings', 'gear'));
+      if (hasSettings) btns.append(iconButton('gear', 'Settings', 'gear'));
       btns.append(iconButton('x', 'Remove', 'x'));
       if (C.movable(inst.id)) {   // TradingView's "More": move to the price pane / to a pane below
         const more = iconButton('ellipsis', 'More', 'more');
@@ -797,9 +818,12 @@ class Cell {
     if (F.change) parts.push(val(ch.text, ch.up ? R.bodyUp : R.bodyDown));
     if (F.volume) parts.push(kv('Vol', C.fmtCompact(b.v), col), kv('Δ', C.fmtSigned(b.d), b.d >= 0 ? P.up : P.down));
     this.lg.ohlc.replaceChildren(...parts);
-    const colors = { text: P.text, up: P.up, down: P.down, vwap: P.vwap, cum: P.cum };
     for (const r of this.rows) {
-      const vs = F.indValues ? C.legendValues(r.inst, b, { ...colors, line: this.colorOf[r.inst.uid] || P.accent }, dt) : [];
+      // vwap/cumdelta are single-colour indicators too (Task 3): their legend VALUE reads in the same
+      // per-instance colour as their line, not the old fixed palette, once a style gives them one.
+      const own = this.colorOf[r.inst.uid];
+      const colors = { text: P.text, up: P.up, down: P.down, line: own || P.accent, vwap: own || P.vwap, cum: own || P.cum };
+      const vs = F.indValues ? C.legendValues(r.inst, b, colors, dt) : [];
       r.vals.replaceChildren(...vs.map((x) => val(x.text, x.color)));
     }
   }
@@ -864,8 +888,9 @@ class Cell {
     if (v == null) return { time };
     if (typeof v === 'number') return { time, value: v };
     if (l.src.startsWith('vwap')) {
-      if (v.vwap == null || (l.part && v.sd == null)) return { time };
-      return { time, value: v.vwap + ({ u1: 1, l1: -1, u2: 2, l2: -2 }[l.part] || 0) * (v.sd || 0) };
+      // l.part: null for the main line, else the signed sd multiplier itself (buildSeries's band n * +-1).
+      if (v.vwap == null || (l.part != null && v.sd == null)) return { time };
+      return { time, value: v.vwap + (l.part != null ? l.part : 0) * (v.sd || 0) };
     }
     if (l.src.startsWith('adx')) {
       const x = l.part === 'p' ? v.pdi : l.part === 'm' ? v.mdi : v.adx;
