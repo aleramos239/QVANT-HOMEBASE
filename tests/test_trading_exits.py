@@ -393,3 +393,35 @@ def test_an_unknown_outcome_is_loud_even_with_no_exit_before(tmp_path):
     assert r["error"] == "the SL/TP pair's outcome is unknown (OCO failed: timeout) — " \
                          "CHECK THIS POSITION'S PROTECTION NOW"
     assert ad.orders == []
+
+
+def test_a_cancel_confirmed_just_after_the_wait_puts_the_old_exit_back(tmp_path):
+    """Round 2, B: the 3 s wait ran out, but one more look shows Canceled -- the position would be naked, so the
+    old exit is re-placed at its price and the result says so; nothing new is placed."""
+    desk, eng, ad, clock = setup(tmp_path, orders=[SL])
+    ad.cancel_ends = "PendingCancel"
+    real = ad.get_order_status
+
+    looks_after = []
+
+    async def status(oid):
+        if sum(ad.slept) >= 3.0 - 1e-9:          # the wait's last look still sees PendingCancel; the next one Canceled
+            looks_after.append(oid)
+            if len(looks_after) == 2:
+                ad.order_status[oid] = "Canceled"
+        return await real(oid)
+
+    ad.get_order_status = status
+    r = exits(desk, clock, tp_price=110.0)
+    assert r["ok"] is False
+    assert "confirmed only after the 3 s wait" in r["error"] and "the original stop was put back" in r["error"]
+    assert ad.ocos == [] and [(o.order_type, o.stop_price, o.qty) for o in ad.orders] == [("Stop", 95.0, 3)]
+    steps = journal(tmp_path)[-1]["steps"]
+    assert steps["cancel"]["status_after_wait"] == "Canceled" and steps["restore"]["ok"] is True
+
+
+def test_still_not_canceled_after_the_extra_look_stays_loud_and_restores_nothing(tmp_path):
+    desk, eng, ad, clock = setup(tmp_path, orders=[SL])
+    ad.cancel_ends = "PendingCancel"
+    r = exits(desk, clock, tp_price=110.0)
+    assert r["error"].endswith("CHECK THIS POSITION'S PROTECTION NOW") and ad.orders == [] and ad.ocos == []

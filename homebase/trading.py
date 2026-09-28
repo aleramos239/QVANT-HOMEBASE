@@ -1169,8 +1169,21 @@ class ChartDesk:
                                         "— nothing changed")
             status = await self._cancel_settled(ad, kid)       # the ack was only "accepted"
             steps["cancel"]["status"] = status
+            if status not in ("Canceled", "Filled"):
+                # one last look: a cancel that landed just after the wait leaves the position naked --
+                # put the old exit back rather than walk away
+                try:
+                    status = await ad.get_order_status(kid)
+                except Exception:  # noqa: BLE001
+                    status = None
+                steps["cancel"]["status_after_wait"] = status
+                if status == "Canceled":
+                    return await self._exits_restore(
+                        it, aid, contract, exit_side, qty, sl, tp, steps, kept, ad,
+                        f"the old {what}'s cancel was confirmed only after the {CANCEL_CONFIRM_S:.0f} s wait "
+                        "— no new exit was placed")
             if status != "Canceled":
-                why = (f"the old {what} FILLED while it was being replaced" if status == "Filled" else
+                why =(f"the old {what} FILLED while it was being replaced" if status == "Filled" else
                        f"the old {what}'s cancel was not confirmed within {CANCEL_CONFIRM_S:.0f} s "
                        f"(status: {status or 'unknown'})")
                 return self._exits_done(it, aid, contract, exit_side, qty, sl, tp, steps, False, None,
