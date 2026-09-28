@@ -472,7 +472,7 @@ def test_a_compare_walkforward_serves_three_schemes_and_their_oos_side_by_side(t
         wid = c.post("/api/tester/walkforward", json={**WF, "compare": True}).json()["id"]
         st = poll_wf(c, wid)
         assert st["status"] == "done", st.get("error")
-        assert st["walkforward"]["compare"] is True and st["looks_added"] == 2 * (47 + 46 + 45)
+        assert st["walkforward"]["compare"] is True and st["looks_added"] == 2 * 47 * 3
         s = c.get(f"/api/tester/walkforward/{wid}/compare").json()
         assert [x["ratio"] for x in s["schemes"]] == ["1:1", "1:2", "1:3"] and "stitched_is" not in s
         r = c.get(f"/api/tester/walkforward/{wid}/result")
@@ -485,7 +485,7 @@ def test_a_compare_walkforward_serves_three_schemes_and_their_oos_side_by_side(t
         r = c.post("/api/tester/walkforward", json={**WF, "compare": True, "test_months": 1})
         assert r.status_code == 400 and "without test_months" in r.json()["detail"]
         sc = c.get("/api/tester/walkforward-scheme", params={"test_months": "compare"}).json()
-        assert sc["n_steps"] == 138 and sc["n_steps_by"] == {"1": 47, "2": 46, "3": 45}
+        assert sc["n_steps"] == 47 and sc["looks_per_cell"] == 141 and sc["n_steps_by"] == {"1": 47, "2": 46, "3": 45}
         one = c.post("/api/tester/walkforward", json={**WF, "test_months": 1}).json()["id"]
         assert poll_wf(c, one)["status"] == "done"
         assert c.get(f"/api/tester/walkforward/{one}/compare").status_code == 409

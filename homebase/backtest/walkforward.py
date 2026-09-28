@@ -56,9 +56,11 @@ Min-trades by construction, cost 1x the backtests (not 3x), and are one job for 
 reload-resume, queued through the same 2-slot cap and the 09:20-09:35 ET pause. Each scheme's full
 result is written as result-N.json (the ordinary 1:N result shape, served by `result(id, N)`), and
 compare.json holds only their STITCHED OUT-OF-SAMPLE numbers side by side (compare_summary: no
-in-sample figure crosses into it). Looks: the three schemes' selections are three separate searches,
-so the job counts the SUM of their cells x steps -- the conservative reading. The window must fit a full
-1:3 cycle, so no column is ever empty.
+in-sample figure crosses into it). Looks: a month's pick depends only on that month's grid, so the
+three schemes make IDENTICAL picks -- one search, over 1:1's selection months (a superset of 1:2's and
+1:3's). The job counts cells x the 1:1 steps, times CHOICE_PENALTY (3): choosing the best-looking ratio
+from the table is itself a selection, made on out-of-sample numbers. The window must fit a full 1:3
+cycle, so no column is ever empty.
 
 Metrics use the report's own conventions (report.column: net of costs, Sharpe on the weekday grid, a
 session the run skipped dropped from that grid).
@@ -339,11 +341,21 @@ def _spread(vals) -> dict | None:
 PHASE_WARNING = "the start month moves these more than the ratio does"
 
 
+CHOICE_PENALTY = len(RATIOS)   # picking one of the three ratios off the table is a 3-way selection
+
+
+def compare_looks(n_cells: int, months: list[str]) -> int:
+    """One search (the picks are identical across schemes) over 1:1's selection months, x the ratio choice."""
+    return n_cells * len(steps(months, min(RATIOS))) * CHOICE_PENALTY
+
+
 COMPARE_NOTE = ("Same window, grid, costs, Select-by and Min-trades for all three. A longer test length "
                 "re-selects less often — one pick every N months, held for N months — so it has fewer "
                 "selection points and trades further from the month each pick was made on; and each stitched "
                 "out-of-sample chain covers slightly different months (see each scheme's span). "
-                "Out-of-sample only: no in-sample number is shown here.")
+                "Out-of-sample only: no in-sample number is shown here. But picking the best-looking ratio "
+                "from this table is itself a selection made on out-of-sample data — the chosen column is no "
+                "longer a clean out-of-sample result (the looks count a ×3 penalty for that choice).")
 
 
 def compare_results(cells: list[dict], months: list[str], *, trades_of, metric: str, min_trades: int,
@@ -376,7 +388,7 @@ def compare_summary(results: dict, shared_blocks: dict | None = None, shared_mon
     for n in ns:
         r, so = results[n], results[n]["stitched"]
         ms = so["months"]
-        cols.append({"test_months": n, "ratio": f"1:{n}", "n_steps": r["n_steps"], "looks": r["looks"],
+        cols.append({"test_months": n, "ratio": f"1:{n}", "n_steps": r["n_steps"],
                      "stats": so["stats"], "per_month": so["per_month"], "n_months": so["n_months"],
                      "span": [ms[0], ms[-1]] if ms else None, "uncovered": so["uncovered"],
                      "legs": _legs(r), "equity": so["equity"],
@@ -393,7 +405,11 @@ def compare_summary(results: dict, shared_blocks: dict | None = None, shared_mon
     return {"compare": True, "window": first["window"], "n_cells": first["n_cells"],
             "scheme": {k: sc[k] for k in ("select_months", "step_months", "metric", "metric_label", "min_trades",
                                           "tie_break")},
-            "schemes": cols, "looks": sum(c["looks"] for c in cols), "note": COMPARE_NOTE,
+            "schemes": cols, "note": COMPARE_NOTE,
+            # the picks are the same in every scheme: one search over the most selection months, x3 for the choice
+            "looks": first["n_cells"] * max(r["n_steps"] for r in results.values()) * CHOICE_PENALTY,
+            "looks_basis": {"cells": first["n_cells"], "select_months": max(r["n_steps"] for r in results.values()),
+                            "choice_penalty": CHOICE_PENALTY},
             "shared_months": None if shared_months is None else {
                 "months": shared_months, "n": len(shared_months),
                 "span": [shared_months[0], shared_months[-1]] if shared_months else None},
@@ -402,10 +418,13 @@ def compare_summary(results: dict, shared_blocks: dict | None = None, shared_mon
 
 
 def compare_scheme(start: str | None = None, end: str | None = None) -> dict:
-    """scheme() for a compare job: each ratio's step count, and their sum (= looks per cell)."""
+    """scheme() for a compare job: the 1:1 selection months (one search -- the picks are identical across
+    schemes), each ratio's step count, and the x3 choice penalty (looks per cell = n_steps x penalty)."""
     by = {n: scheme(start, end, n) for n in RATIOS}
     base = by[TEST_MONTHS]
-    return {**base, "compare": True, "test_months": None, "n_steps": sum(v["n_steps"] for v in by.values()),
+    n1 = by[min(RATIOS)]["n_steps"]
+    return {**base, "compare": True, "test_months": None, "n_steps": n1, "choice_penalty": CHOICE_PENALTY,
+            "looks_per_cell": n1 * CHOICE_PENALTY,
             "n_steps_by": {str(n): v["n_steps"] for n, v in by.items()},
             "runnable": all(v["n_steps"] for v in by.values())}
 
@@ -471,7 +490,9 @@ def validate_wf(body) -> dict:
         g["walkforward"] = {"metric": metric, "metric_label": METRICS[metric], "min_trades": min_trades,
                             "select_months": SELECT_MONTHS, "test_months": None, "compare": True,
                             "ratios": list(RATIOS), "step_months": STEP_MONTHS, "months": months,
-                            "n_steps": sum(by.values()), "n_steps_by": {str(n): v for n, v in by.items()},
+                            "n_steps": by[min(RATIOS)], "choice_penalty": CHOICE_PENALTY,
+                            "looks_per_cell": by[min(RATIOS)] * CHOICE_PENALTY,
+                            "n_steps_by": {str(n): v for n, v in by.items()},
                             "tie_break": TIE_BREAK, "stitch": "; ".join(f"1:{n}: {stitch_rule(n)}" for n in RATIOS)}
         return g
     st = steps(months, test_months)

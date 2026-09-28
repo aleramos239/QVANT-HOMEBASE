@@ -630,10 +630,11 @@ function wfProblems(f, s, rows, minTrades) {
   return null;
 }
 /* nSteps comes from GET /api/tester/walkforward-scheme (review M5); '' until it has loaded. */
-function wfLooksText(cells, nSteps, compare = false) {
+/* `penalty` (a compare job): the ×3 for choosing a ratio off the table -- the picks themselves are one search. */
+function wfLooksText(cells, nSteps, penalty = 1) {
   if (!Number.isInteger(nSteps)) return '';
-  return `${int(cells)} cell${cells === 1 ? '' : 's'} × ${nSteps} selection months${compare ? ' (1:1 + 1:2 + 1:3)' : ''}`
-    + ` = ${int(cells * nSteps)} looks`;
+  const pen = penalty > 1 ? ` × ${penalty} (choosing a ratio off the table)` : '';
+  return `${int(cells)} cell${cells === 1 ? '' : 's'} × ${nSteps} selection months${pen} = ${int(cells * nSteps * penalty)} looks`;
 }
 function etaText(s) {
   if (s == null || !Number.isFinite(s)) return '';
@@ -791,10 +792,11 @@ function wfComparePhaseLine(cmp) {
     + `the gap between the three headline nets ${Tr.money(pc.gap_between_schemes)}`;
 }
 function wfCompareHead(cmp) {
-  const c = cmp.scheme || {}, w = cmp.window || {};
+  const c = cmp.scheme || {}, w = cmp.window || {}, b = cmp.looks_basis;
   const win = w.start && w.end ? `${w.start} → ${w.end} · ` : '';
   return `${win}Walk-forward 1:1 · 1:2 · 1:3 — one grid run, select on ${c.select_months} month by ${c.metric_label} `
-    + `(≥ ${c.min_trades} trades), stepping monthly · ${int(cmp.n_cells)} cells · ${int(cmp.looks)} looks counted`;
+    + `(≥ ${c.min_trades} trades), stepping monthly · ${int(cmp.looks)} looks counted`
+    + (b ? ` (${int(b.cells)} cells × ${int(b.select_months)} selection months × ${b.choice_penalty} for choosing a ratio)` : '');
 }
 
 /* A strategy's name in the picker: a DRAFT (~/.homebase/strategies, written by Claude or by hand) says so,

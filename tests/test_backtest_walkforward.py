@@ -591,7 +591,8 @@ def test_a_compare_job_is_the_same_grid_and_counts_every_schemes_steps():
     g, one = wf.validate_wf(wbody(compare=True)), wf.validate_wf(wbody(test_months=3))
     w = g["walkforward"]
     assert w["compare"] is True and w["test_months"] is None and w["ratios"] == [1, 2, 3]
-    assert w["n_steps_by"] == {"1": 47, "2": 46, "3": 45} and w["n_steps"] == 138
+    assert w["n_steps_by"] == {"1": 47, "2": 46, "3": 45} and w["n_steps"] == 47       # one search: 1:1's months
+    assert w["choice_penalty"] == 3 and w["looks_per_cell"] == 141
     assert (w["metric"], w["min_trades"], w["months"]) == ("net_profit", 5, one["walkforward"]["months"])
     # the cells ARE a 1:N job's cells: one full-window run each, whatever the ratio
     assert [c["req"] for c in g["cells"]] == [c["req"] for c in one["cells"]]
@@ -614,7 +615,8 @@ def test_compare_refuses_a_ratio_a_non_bool_and_a_window_too_short_for_1to3():
 
 def test_the_compare_scheme_sums_each_ratios_steps():
     sc = wf.compare_scheme()
-    assert sc["compare"] is True and sc["n_steps"] == 138 and sc["runnable"] is True
+    assert sc["compare"] is True and sc["n_steps"] == 47 and sc["runnable"] is True
+    assert sc["choice_penalty"] == 3 and sc["looks_per_cell"] == 141
     assert sc["n_steps_by"] == {"1": 47, "2": 46, "3": 45}
     assert wf.compare_scheme("2024-01-01", "2024-03-31")["runnable"] is False
 
@@ -632,7 +634,13 @@ def test_compare_summary_is_each_schemes_stitched_oos_and_nothing_in_sample():
     per = _five_month_results()
     s = wf.compare_summary(per)
     assert s["compare"] is True and [c["ratio"] for c in s["schemes"]] == ["1:1", "1:2", "1:3"]
-    assert s["looks"] == sum(r["looks"] for r in per.values()) == 2 * (4 + 3 + 2)
+    # the picks are identical across schemes (a month's pick depends on that month's grid alone): one
+    # search over 1:1's 4 selection months, x3 for choosing a ratio off the table
+    for n in (2, 3):
+        assert {r["select"]: r["cell"] for r in per[n]["steps"]}.items() <= {r["select"]: r["cell"] for r in per[1]["steps"]}.items()
+    assert s["looks"] == 2 * 4 * 3 == wf.compare_looks(2, ["2022-01", "2022-02", "2022-03", "2022-04", "2022-05"])
+    assert s["looks_basis"] == {"cells": 2, "select_months": 4, "choice_penalty": 3}
+    assert "clean out-of-sample" in s["note"] and "selection made on out-of-sample" in s["note"]
     assert s["window"] == {"start": "2022-01", "end": "2022-05"} and s["n_cells"] == 2
     for c in s["schemes"]:
         r = per[c["test_months"]]
@@ -730,9 +738,9 @@ def test_a_compare_job_runs_each_cell_once_and_equals_three_separate_walkforward
     st = wait_wf(m, wid)
     assert st["status"] == "done", st.get("error")
     assert len(spawned) == 2                                   # 2 cells run once -- not 3 x 2
-    assert st["looks_added"] == 2 * 138 and grid.read_looks(tester_shared / "looks.json") == {"nq930": 276}
+    assert st["looks_added"] == 2 * 47 * 3 and grid.read_looks(tester_shared / "looks.json") == {"nq930": 282}
     s = m.compare(wid)
-    assert [c["test_months"] for c in s["schemes"]] == [1, 2, 3] and s["looks"] == 276
+    assert [c["test_months"] for c in s["schemes"]] == [1, 2, 3] and s["looks"] == 282
     with pytest.raises(ValueError, match="comparison"):
         m.result(wid)                                          # a compare job has no single result
     with pytest.raises(ValueError, match="test_months"):
@@ -752,7 +760,7 @@ def test_a_compare_job_runs_each_cell_once_and_equals_three_separate_walkforward
     assert listed[wid]["compare"] is True and listed[sep]["compare"] is False and listed[sep]["test_months"] == 3
     m2 = WalkForwardManager(tmp_path)                          # a restart reads it back, counted once
     assert m2.compare(wid) == s and m2.result(wid, 2) == m.result(wid, 2)
-    assert grid.read_looks(tester_shared / "looks.json") == {"nq930": 276 + 2 * 138}
+    assert grid.read_looks(tester_shared / "looks.json") == {"nq930": 282 + 2 * (47 + 46 + 45)}
 
 
 def test_a_cancelled_compare_job_counts_nothing_and_has_no_results(tmp_path, fake, tester_shared):

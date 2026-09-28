@@ -1395,7 +1395,7 @@ function syncHeat() {
   }
   const total = X.looksLine(looksMap[strategyId] || 0, (grid && grid.looks_error) || (wf && wf.looks_error) || looksErr);
   const preview = g.axes && X.isWalkforward(form)
-    ? X.wfLooksText(n, wfScheme && wfScheme.n_steps, !!(wfScheme && wfScheme.compare)) : '';
+    ? X.wfLooksText(n, wfScheme && wfScheme.n_steps, (wfScheme && wfScheme.compare && wfScheme.choice_penalty) || 1) : '';
   heatLooksEl.textContent = preview ? `${preview} · ${total}` : total;
   const runBtnEl = heatRunEl && heatRunEl.querySelector('.tst-run');
   if (runBtnEl) runBtnEl.disabled = !!prob;

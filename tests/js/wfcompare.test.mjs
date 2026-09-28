@@ -26,7 +26,8 @@ const col = (n, over = {}) => ({
   phases: Array.from({ length: n }, (_, p) => ({ phase: p, steps: 10, net_profit: 100 * (p + 1), trades: 5, sharpe: 0.5 + p })),
   phase_spread: { net_profit: { min: 100, max: 100 * n, mean: 50 * (n + 1), n }, sharpe: { min: 0.5, max: n - 0.5, mean: n / 2, n } },
   ...over });
-const CMP = { compare: true, window: { start: '2021-01', end: '2024-12' }, n_cells: 2, looks: 276,
+const CMP = { compare: true, window: { start: '2021-01', end: '2024-12' }, n_cells: 2, looks: 282,
+  looks_basis: { cells: 2, select_months: 47, choice_penalty: 3 },
   scheme: { select_months: 1, step_months: 1, metric: 'net_profit', metric_label: 'Net $', min_trades: 5, tie_break: 'x' },
   schemes: [col(1), col(2), col(3)], note: 'OOS only',
   shared_months: { months: [], n: 44, span: ['2021-02', '2024-10'] } };
@@ -59,8 +60,8 @@ test('wfModeOf / wfModeLabel: a job matches the pill by ratio or by compare', ()
   assert.equal(X.wfModeLabel({ compare: true }), '1:1 · 1:2 · 1:3 compare');
 });
 
-test('wfLooksText: a compare preview says the three schemes are summed', () => {
-  assert.equal(X.wfLooksText(2, 138, true), '2 cells × 138 selection months (1:1 + 1:2 + 1:3) = 276 looks');
+test('wfLooksText: a compare preview is one search times the ×3 ratio choice', () => {
+  assert.equal(X.wfLooksText(2, 47, 3), '2 cells × 47 selection months × 3 (choosing a ratio off the table) = 282 looks');
   assert.equal(X.wfLooksText(2, 45), '2 cells × 45 selection months = 90 looks');
 });
 
@@ -103,7 +104,7 @@ test('wfCompareCell: missing numbers read as dashes, never as zero', () => {
 
 test('wfCompareHead and the per-scheme colours', () => {
   assert.equal(X.wfCompareHead(CMP), '2021-01 → 2024-12 · Walk-forward 1:1 · 1:2 · 1:3 — one grid run, select on 1 month '
-    + 'by Net $ (≥ 5 trades), stepping monthly · 2 cells · 276 looks counted');
+    + 'by Net $ (≥ 5 trades), stepping monthly · 282 looks counted (2 cells × 47 selection months × 3 for choosing a ratio)');
   const c = X.wfCompareColors({ accent: '#2962FF', warn: '#F7A600' });
   assert.equal(c.length, 3);
   assert.equal(new Set(c).size, 3);
