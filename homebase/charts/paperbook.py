@@ -335,17 +335,23 @@ class Planner:
 
     # ---- the rules
     def _plan(self, root: str, side: int, qty: int, now_ms: int, last_ms: Optional[int]) -> Optional[tuple]:
-        """ALL of qty or nothing, never a part; never while the market is not matching (_matching)."""
+        """ALL of qty or nothing, never a part; never while the market is not matching (_matching). The NEWER of a
+        usable book and a usable quote decides (a tie: the book): a book too thin for qty, or a quote whose touch
+        shows less than qty, is the next print -- never the other, older source."""
         if not self._matching(root, now_ms, last_ms):
             return None
         tick = tick_size(root)
         b = self.book_of(root) if self.book_of is not None else None
-        parts = self._book_parts(b, root, side, qty, now_ms, tick)
-        if parts is not None:
-            return "book", parts, b["ts_ms"]
+        b = b if self._usable_book(b, side, now_ms, tick) else None
         q = self.quote_of(root) if self.quote_of is not None else None
-        px = self._quote_px(q, side, qty, now_ms, tick)
-        return None if px is None else ("quote", [[px, qty]], q["ts_ms"])
+        q = q if self._usable_quote(q, now_ms, tick) else None
+        if b is not None and (q is None or q["ts_ms"] <= b["ts_ms"]):
+            parts = self._walk(b, root, side, qty, tick)
+            return None if parts is None else ("book", parts, b["ts_ms"])
+        if q is not None:
+            px = self._quote_px(q, side, qty, tick)
+            return None if px is None else ("quote", [[px, qty]], q["ts_ms"])
+        return None
 
     @staticmethod
     def _matching(root: str, now_ms: int, last_ms: Optional[int]) -> bool:
@@ -372,30 +378,36 @@ class Planner:
             return False
         return tick_cmp(bid, ask, tick) < 0 and round((ask - bid) / tick) <= QUOTE_FILL_MAX_SPREAD_TICKS
 
-    def _book_parts(self, b, root: str, side: int, qty: int, now_ms: int, tick: float) -> Optional[list]:
-        """The live book walked for qty from the touch -- a buy up the offers, a sell down the bids -- over what paper
-        fills have not taken from this snapshot yet: [[price, qty taken], ...]; None when there is no book, or it is
-        stale, one-sided, crossed / locked / too wide at the touch, or the side it trades against has a level that is
-        not [price on the grid, whole size >= 1] or is out of order (fail closed: that book is not trusted at all), or
-        what is left of it shows less than qty in all."""
+    def _usable_book(self, b, side: int, now_ms: int, tick: float) -> bool:
+        """A book to trade against: fresh, two-sided, a sane touch, and every level of the side it trades against
+        [price on the grid, whole size >= 1], each worse than the one before (fail closed: else it is not trusted)."""
         if not isinstance(b, dict) or not self._fresh(b.get("ts_ms"), now_ms):
-            return None
+            return False
         bids, offers = b.get("bids"), b.get("offers")
         if not isinstance(bids, list) or not isinstance(offers, list) or not bids or not offers:
-            return None
-        levels = offers if side > 0 else bids
+            return False
         try:
             if not self._sane(bids[0][0], offers[0][0], tick):
-                return None
+                return False
             prev = None
-            for p, s in levels:                  # every level: well formed, and worse than the one before it
+            for p, s in (offers if side > 0 else bids):
                 if not (_finite(p) and _finite(s)) or s < 1 or s != int(s) or tick_cmp(p, to_tick(p, tick), tick):
-                    return None
+                    return False
                 if prev is not None and side * tick_cmp(p, prev, tick) <= 0:
-                    return None
+                    return False
                 prev = p
         except (TypeError, ValueError, IndexError):
-            return None                          # a level that is not [price, size]
+            return False                         # a level that is not [price, size]
+        return True
+
+    def _usable_quote(self, q, now_ms: int, tick: float) -> bool:
+        return isinstance(q, dict) and self._fresh(q.get("ts_ms"), now_ms) and self._sane(q.get("bid"), q.get("ask"), tick)
+
+    def _walk(self, b: dict, root: str, side: int, qty: int, tick: float) -> Optional[list]:
+        """A usable book walked for qty from the touch -- a buy up the offers, a sell down the bids -- over what paper
+        fills have not taken from this snapshot yet: [[price, qty taken], ...]; None when what is left of it shows
+        less than qty in all (never a part)."""
+        levels = b["offers"] if side > 0 else b["bids"]
         snap, used = self._taken.get(root, (None, {}))
         if snap != b["ts_ms"]:
             used = {}
@@ -410,16 +422,14 @@ class Planner:
                 return parts
         return None                              # not enough displayed size for all of it: never a part
 
-    def _quote_px(self, q, side: int, qty: int, now_ms: int, tick: float) -> Optional[float]:
-        """The trade-row quote's touch: a buy's ask, a sell's bid -- or None when there is no quote, it is stale or not
-        sane, or qty is more than the size it displayed at that touch (unknown size: None)."""
-        if not isinstance(q, dict) or not self._fresh(q.get("ts_ms"), now_ms):
-            return None
-        bid, ask = q.get("bid"), q.get("ask")
+    @staticmethod
+    def _quote_px(q: dict, side: int, qty: int, tick: float) -> Optional[float]:
+        """A usable quote's touch: a buy's ask, a sell's bid -- or None when qty is more than the size it displayed at
+        that touch (unknown size: None)."""
         size = q.get("ask_size") if side > 0 else q.get("bid_size")
-        if not self._sane(bid, ask, tick) or not _finite(size) or qty > size:
+        if not _finite(size) or qty > size:
             return None
-        return to_tick(ask if side > 0 else bid, tick)
+        return to_tick(q["ask"] if side > 0 else q["bid"], tick)
 
 
 class PaperBook:

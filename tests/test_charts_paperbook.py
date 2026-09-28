@@ -1151,17 +1151,26 @@ def test_a_market_order_walks_the_live_book_for_all_of_its_size_at_the_weighted_
     assert b.realized == pytest.approx((99.5625 - 100.25) * 20 * 3 - 12.0)   # no slip; $4 a contract a round turn
 
 
-def test_a_book_too_thin_for_all_of_it_leaves_the_quote_only_if_its_touch_shows_all_of_it():
-    thin = l2(offers=((100.0, 1), (100.25, 2)))                      # 3 lots on show
-    b, _ = live(quote=q_(ask_size=5), depth=thin)
+def test_a_fresh_book_too_thin_for_all_of_it_is_the_next_print_never_an_older_quote():
+    thin = l2(offers=((100.0, 1), (100.25, 2)))                      # 3 lots on show, 300 ms old
+    b, src = live(quote=q_(ask_size=5, age_ms=500), depth=thin)       # an OLDER quote that shows 5 at its touch
     order(b, "Buy", "Market", qty=4)
-    assert fills(b) == [("Buy", 4, 100.0)] and b.fills[-1]["src"] == "quote"   # never 3 from the book, 1 later
-    c, _ = live(quote=q_(ask_size=3), depth=thin)
-    feed(c, [("09:29:59", 100.0)])
-    order(c, "Buy", "Market", qty=4)
-    assert fills(c) == []                                            # neither shows 4: the next print, all of it
-    feed(c, [("09:30:01", 100.5)])
-    assert fills(c) == [("Buy", 4, 100.75)] and c.fills[-1]["src"] == "print"
+    assert fills(b) == [] and [o["type"] for o in b.view()["orders"]] == ["Market"]   # never 3 now and 1 later either
+    b.on_print("NQ", T0 + 1_000_000_000, 100.5)
+    assert fills(b) == [("Buy", 4, 100.75)] and b.fills[-1]["src"] == "print"
+
+
+def test_the_newer_of_the_book_and_the_quote_decides_and_a_tie_is_the_book():
+    deep = l2(offers=((100.0, 1), (100.25, 1), (100.5, 5)))           # 300 ms old
+    b, src = live(quote=q_(ask=100.25, bid=100.0, age_ms=100), depth=deep)   # a NEWER quote: its touch, not the book
+    order(b, "Buy", "Market", qty=2)
+    assert (b.fills[-1]["src"], b.fills[-1]["price"]) == ("quote", 100.25)
+    src["quote"] = q_(ask=100.25, bid=100.0, age_ms=100, ask_size=1)    # ...and its touch too small: the next print,
+    order(b, "Buy", "Market", qty=2)                                   # not the older book
+    assert len(b.fills) == 1 and [o["type"] for o in b.view()["orders"]] == ["Market"]
+    c, _ = live(quote=q_(ask=100.25, bid=100.0, age_ms=300), depth=deep)   # the same time: the book
+    order(c, "Buy", "Market", qty=2)
+    assert (c.fills[-1]["src"], c.fills[-1]["parts"]) == ("book", [[100.0, 1], [100.25, 1]])
 
 
 @pytest.mark.parametrize("why, depth", [
