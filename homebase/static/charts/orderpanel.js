@@ -27,7 +27,6 @@ const UI = () => window.HBTradeUI;
 
 const TYPES = [['Market', 'Market'], ['Limit', 'Limit'], ['Stop', 'Stop'], ['StopLimit', 'Stop Limit']];
 const UNITS = [['usd', '$'], ['ticks', 'ticks'], ['price', 'price']];
-const STALE_MS = 10000;                // the tiles dim when the quote's last trade is older than this
 
 let page = null;
 let el = null;                          // the content container HBPanelShell hands us
@@ -141,24 +140,15 @@ function build() {
   const tiles = mk('div', 'op-tiles');
   ui.tile = {};
   for (const side of ['Sell', 'Buy']) {
+    // 2026-09-28 (the user): a tile is just its side -- no bid / ask, no spread; it picks the side, Send sends
     const b = mk('button', `op-tile ${side === 'Buy' ? 'buy' : 'sell'}`);
     b.type = 'button';
     b.setAttribute('aria-pressed', 'false');
-    const px = mk('span', 'op-tpx', '—');
-    b.append(px, mk('span', 'op-tlbl', side));
+    b.append(mk('span', 'op-tlbl', side));
     b.onclick = () => { st.side = side; paint(); };
-    ui.tile[side] = { b, px };
+    ui.tile[side] = { b };
   }
-  ui.spread = mk('span', 'op-spread');
-  // S5: while the quote is stale the spread's slot shows the stale tag instead -- centred over it without taking its
-  // width, so the Sell / Buy tiles never move (paint)
-  ui.spreadText = mk('span');
-  ui.stale = mk('span', 'hb-stale');
-  ui.stale.hidden = true;
-  ui.staleText = mk('span');
-  ui.stale.append(icon('clock'), ui.staleText);
-  ui.spread.append(ui.spreadText, ui.stale);
-  tiles.append(ui.tile.Sell.b, ui.spread, ui.tile.Buy.b);
+  tiles.append(ui.tile.Sell.b, ui.tile.Buy.b);
 
   const types = mk('div', 'op-types');
   types.setAttribute('role', 'tablist');
@@ -381,19 +371,9 @@ function paint() {
   if (flashPending) { flashPending = false; flashChips(); }   // another chart: its accounts are the ones an order goes to now (fix round 1)
 
 
-  // tiles: bid / ask (the last trade when a side is missing), the spread in ticks, dim when stale -- and then (S5) the
-  // stale tag, a clock and the quote's age, in the spread's place
-  const view = T.quoteView(c.q, c.tick, c.now), stale = !T.freshQuote(c.q, c.now, STALE_MS);
-  const tag = T.staleTag(stale, c.q && Number.isFinite(c.q.ts_ms) ? c.now - c.q.ts_ms : null);
-  ui.tile.Sell.px.textContent = view.bid;
-  ui.tile.Buy.px.textContent = view.ask;
-  ui.spreadText.textContent = tag.show ? '' : view.spread;
-  ui.stale.hidden = !tag.show;
-  ui.staleText.textContent = tag.text;
-  ui.spread.title = tag.show ? tag.title : view.spread ? `Spread: ${view.spread} tick${view.spread === '1' ? '' : 's'}` : '';
+  // the side tiles: which side the order is (no prices on them since 2026-09-28)
   for (const side of ['Sell', 'Buy']) {
     ui.tile[side].b.classList.toggle('on', st.side === side);
-    ui.tile[side].b.classList.toggle('stale', stale);
     ui.tile[side].b.setAttribute('aria-pressed', String(st.side === side));
   }
   for (const [id, b] of Object.entries(ui.types)) { b.classList.toggle('on', st.type === id); b.setAttribute('aria-selected', String(st.type === id)); }
@@ -540,7 +520,7 @@ function mount(pg, container) {
   D().on(() => paint());                 // desk / quote / prefs events: patch in place, never rebuild
   UI().onBusyChange(() => paint());
   UI().onTradeChange(() => paint());     // a chart's Trading switch / accounts, a LIVE arm
-  setInterval(() => { if (visible) paint(); }, 1000);   // a quote going stale with no event
+  setInterval(() => { if (visible) paint(); }, 1000);   // a quote going stale with no event (a Market's exits then refuse)
   paint();
 }
 

@@ -545,38 +545,27 @@ a { color: inherit; }
 
 /* ---- chart trading on the chart ---- */
 .lg-trade { display: inline-flex; align-items: stretch; gap: 4px; margin-top: 4px; pointer-events: auto; font-variant-numeric: tabular-nums; }
-.tr-sell, .tr-buy { min-width: 76px; height: 38px; padding: 2px 8px; border-radius: 4px; color: #fff; display: flex; flex-direction: column;
+/* 2026-09-28 (the user): plain SELL / BUY at market -- no bid / ask, no spread. One line each, a FIXED width that
+   already fits the S1 LIVE tag, so nothing ever changes size: not a quote, not the tag. TradingView-plain (no glass). */
+.tr-sell, .tr-buy { width: 76px; height: 28px; padding: 0 4px; border-radius: 4px; color: #fff; display: flex;
   align-items: center; justify-content: center; line-height: 16px; }
 .tr-sell { background: var(--down); } .tr-buy { background: var(--accent); }
 .tr-sell:hover, .tr-buy:hover { filter: brightness(1.08); }
-.tr-px { font-size: 13px; font-weight: 600; } .tr-lbl { font-size: 11px; letter-spacing: .04em; }
-.lg-trade.stale .tr-px { opacity: .55; }
+.tr-px { font-size: 13px; font-weight: 600; } .tr-lbl { font-size: 11px; letter-spacing: .04em; }   /* .tr-px: the Bar Replay practice buttons' */
+.lg-trade .tr-lbl { font-size: 12px; font-weight: 600; }
 /* S1, the LIVE cue (2026-09-28 safety pass): while the NEXT send from the chart's Buy/Sell block or the order panel's
    Send reaches a LIVE account (HBTradeUI.liveCue -- the send path's own account set), a red ring round it and a LIVE
    tag on each send button, one-click on or off. Nothing here takes space: the ring is an absolutely positioned
-   pseudo-element outside the buttons, the tag sits inside a label line that already fits it (the buttons'
-   min-width), so the block never moves or resizes when it appears or goes. Demo / paper: none of it. */
-.lg-trade { position: relative; }
+   pseudo-element outside the buttons, the tag sits inside a label that already fits it (the buttons' fixed width),
+   so the block never moves or resizes when it appears or goes. Demo / paper: none of it. */
+.lg-trade { position: relative; align-self: flex-start; }   /* the slot's top: a taller accounts column never moves it */
 .lg-trade.live::before, .op-sendwrap.live::before { content: ''; position: absolute; inset: -3px; border: 2px solid var(--down);
   border-radius: 6px; pointer-events: none; }
 .tr-lbl { display: inline-flex; align-items: center; gap: 4px; }
 .tr-live { flex: none; padding: 0 3px; border-radius: 3px; background: #FFFFFF; color: var(--down); font-size: 9px;
   font-weight: 700; line-height: 12px; letter-spacing: .04em; }
 .tr-mid { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
-/* S5, the stale tag (2026-09-28 safety pass): beside a dimmed (stale) bid / ask -- in the spread's own slot, on the
-   chart's Buy/Sell block and in the order panel -- a clock and the quote's age, so staleness never rests on opacity
-   and a hover alone. The prices themselves stay plain (only the dim they already had). Solid amber with dark text,
-   like the algo badge's CHECK IT pill: legible over the chart, which the block has no background against. */
-.hb-stale { display: inline-flex; align-items: center; gap: 2px; padding: 0 4px; border-radius: 3px; background: var(--warn);
-  color: #131722; font-size: 10px; font-weight: 700; line-height: 14px; letter-spacing: 0; white-space: nowrap;
-  font-variant-numeric: tabular-nums; vertical-align: middle; cursor: default; }
-.hb-stale .ic { width: 10px; height: 10px; stroke-width: 2.4; }
-.tr-spread { min-height: 20px; }   /* the slot keeps its line whether it holds the spread, the stale tag or nothing */
-.op-spread { position: relative; }
-.op-spread .hb-stale { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); flex-direction: column;
-  gap: 0; padding: 2px; line-height: 12px; }   /* stacked and centred: takes none of the column's width */
 .tr-qty { width: 48px; height: 22px; text-align: center; border: 1px solid var(--border); border-radius: 4px; background: var(--panel); font-size: 12px; }
-.tr-spread { font-size: 11px; color: var(--text-2); }
 /* the chart's trading accounts beside the block, "…047 DEMO" (Task 2); dimmed when not trading right now */
 .lg-tradeslot { display: flex; align-items: center; flex-wrap: wrap; gap: 0 6px; }
 .tr-accts { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px; margin-top: 4px; pointer-events: auto; }
@@ -739,19 +728,15 @@ a { color: inherit; }
 .dom-chip-order.dom-chip-buy { background: var(--accent); }
 .dom-idle { flex: 1; display: grid; place-items: center; padding: 24px; color: var(--text-2); font-size: 13px; text-align: center; }
 
-/* Sell / Buy tiles with the spread between them */
-.op-tiles { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
-.op-tile { height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
-  border-radius: 6px; line-height: 18px; }
+/* Sell / Buy side tiles: just the side (2026-09-28, the user: no bid / ask or spread on them); a fixed height */
+.op-tiles { display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 6px; }
+.op-tile { height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 6px; line-height: 18px; }
 .op-tile.sell { color: var(--down); background: var(--down-soft); }
 .op-tile.buy { color: var(--accent); background: var(--accent-soft); }
 .op-tile.sell.on { color: #FFFFFF; background: var(--down); }
 .op-tile.buy.on { color: #FFFFFF; background: var(--accent); }
 .op-tile:hover { filter: brightness(1.05); }
-.op-tpx { font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
-.op-tlbl { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }
-.op-tile.stale .op-tpx { opacity: .5; }
-.op-spread { min-width: 22px; text-align: center; font-size: 12px; color: var(--text-2); }
+.op-tlbl { font-size: 13px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
 
 /* order type tabs: Market | Limit | Stop | Stop Limit */
 .op-types { display: flex; padding: 2px; border-radius: 6px; background: var(--pill); }

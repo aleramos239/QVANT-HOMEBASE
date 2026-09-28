@@ -2,11 +2,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 
-/* The order panel's two safety cues (2026-09-28 safety pass), through the REAL orderpanel.js + tradeui.js under a small
-   DOM shim with a fake desk (nothing opens a connection; nothing is sent here at all):
+/* The order panel after the 2026-09-28 safety pass, through the REAL orderpanel.js + tradeui.js under a small DOM shim
+   with a fake desk (nothing opens a connection; nothing is sent here at all):
      - S1: the Send's red ring (its wrapper's `live` class) and LIVE tag follow HBTradeUI.liveCue -- the send path's
        own account set -- for the chart the panel follows, one-click on or off;
-     - S5: a stale quote puts the stale tag (a clock and the age) in the spread's slot, the prices kept as they are. */
+     - the user's call the same day: the side tiles carry no bid / ask and no spread any more -- and the quote-freshness
+       GUARD is untouched: a Market order with an exit still refuses on a stale quote, with its own message. */
 const require = createRequire(import.meta.url);
 const T = require('../../homebase/static/charts/trade.js');
 const Cat = require('../../homebase/static/charts/catalog.js');
@@ -121,30 +122,29 @@ test('S1 on the order panel: the ring + LIVE tag appear exactly while liveCue na
   assert.equal(tag().hidden, true);
 });
 
-test('S5 on the order panel: a stale quote shows the clock tag with its age in the spread\'s slot; fresh shows the spread', () => {
+test('the side tiles are just Sell / Buy -- no bid / ask, no spread -- and the stale-quote guard still refuses', () => {
   cell.cfg.trade = { accounts: ['sim041'] };
-  const spread = () => byClass(box, 'op-spread'), chip = () => byClass(box, 'hb-stale');
   desk.quotes.NQ = { bid: 30000, ask: 30000.25, last: 30000.25, ts_ms: NOW - 1000 };
   OP.setRoot();
-  assert.equal(chip().hidden, true, 'fresh: no stale tag');
-  assert.equal(spread().textContent, '1', 'fresh: the spread in ticks');
-  assert.equal(byClass(box, 'op-tile').cls.has('stale'), false);
+  const tiles = [];
+  (function walk(n) { for (const c of n.children || []) { if (typeof c !== 'object') continue; if (c.cls.has('op-tile')) tiles.push(c); walk(c); } })(box);
+  assert.deepEqual(tiles.map((t) => t.textContent), ['Sell', 'Buy'], 'the side alone, no price');
+  assert.equal(byClass(box, 'op-spread'), null, 'no spread between them');
 
+  // a Market order with a stop loss still needs a FRESH quote (panelOrder -> freshQuote, 10 s): unchanged, only the
+  // display went
+  const slSwitch = find(box, (e) => e.attrs.role === 'switch' && e.attrs['aria-label'] === 'Stop loss');
+  const slValue = find(box, (e) => e.attrs['aria-label'] === 'Stop loss value');
+  slSwitch.onclick();
+  slValue.value = '10';
+  for (const fn of slValue.listeners.input || []) fn();
+  assert.equal(byClass(box, 'op-reason').textContent, '', 'fresh: the order may go');
+  assert.equal(send().disabled, false);
   desk.quotes.NQ = { ...desk.quotes.NQ, ts_ms: NOW - 42_000 };
   OP.setRoot();
-  assert.equal(chip().hidden, false, 'stale: the tag shows');
-  assert.equal(chip().textContent, '42s', 'with the age');
-  assert.equal(spread().title, 'Stale: no trade for 42s — bid / ask are from the last trade');
-  assert.equal(byClass(box, 'op-tile').cls.has('stale'), true, 'the tiles keep their dim');
-  assert.equal(find(byClass(box, 'op-tile'), (e) => e.cls.has('op-tpx')).textContent, '30,000.00', 'the price itself stays plain');
-  assert.equal(spread().textContent, '42s', "the spread's own text gives way to the tag (one slot)");
-
-  desk.quotes.NQ = { ...desk.quotes.NQ, ts_ms: NOW - 3 * 60_000 };
-  OP.setRoot();
-  assert.equal(chip().textContent, '3m', 'the age keeps counting on each paint');
-
-  desk.quotes.NQ = { ...desk.quotes.NQ, ts_ms: NOW - 500 };
-  OP.setRoot();
-  assert.equal(chip().hidden, true, 'fresh again: the tag goes');
-  assert.equal(spread().textContent, '1');
+  assert.equal(byClass(box, 'op-reason').textContent, "No recent price — can't attach your stop/target");
+  assert.equal(send().disabled, true, 'stale: refused, exactly as before');
+  slSwitch.onclick();                                         // the stop off again: a plain Market needs no fresh quote
+  assert.equal(byClass(box, 'op-reason').textContent, '');
+  assert.equal(send().disabled, false);
 });

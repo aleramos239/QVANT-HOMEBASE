@@ -268,13 +268,6 @@ test('legsWithin: a line may be moved / closed only when every leg\'s account is
   assert.equal(T.legsWithin(null, ['sim041']), false);
 });
 
-test('quote view: prices, spread in ticks, stale after 30 s', () => {
-  const q = { bid: 30900, ask: 30900.5, last: 30900.5, ts_ms: 1000 };
-  assert.deepEqual(T.quoteView(q, 0.25, 2000), { bid: '30,900.00', ask: '30,900.50', spread: '2', stale: false, age: 1000 });
-  assert.equal(T.quoteView(q, 0.25, 32000).stale, true);
-  assert.deepEqual(T.quoteView(null, 0.25, 0), { bid: '—', ask: '—', spread: '', stale: true, age: null });
-});
-
 test('money: signed dollars with a true minus, RR 1:X', () => {
   assert.deepEqual([450, -1212.5, 0, null].map(T.usd), ['+$450', `${M}$1,212.50`, '$0', null]);
   assert.deepEqual([450, -3, null].map(T.money), ['$450', `${M}$3`, '—']);

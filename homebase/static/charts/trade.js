@@ -19,7 +19,6 @@ const Pos = need('HBPosition', './position.js');
 const MINUS = '−';
 const PREFS_KEY = 'hb_trade_prefs';
 const QTY_MAX = 10000;          // a sanity clamp only: the desk's limits decide
-const QUOTE_STALE_MS = 30000;   // the desk's QUOTE_MAX_AGE_S: an older quote is shown greyed
 const BOT_NAMES = { nq930: '9:30 bot', ym930: '9:30 bot', nq10am: '10am bot' };
 const ET = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hourCycle: 'h23', hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
@@ -468,38 +467,6 @@ function acctTick(account, accounts, liveConfirmed) {
 function unarmedLiveMessage(account) {
   const label = (account && (account.label || account.id)) || 'account';
   return `Arm LIVE account ${label} in the chart's ⚙ → Trading first`;
-}
-
-/* The Buy/Sell block's texts: bid / ask (the last trade when one side is missing), the spread in ticks, stale when
-   the quote's trade is over 30 s old against nowMs (the replay clock in a replay). */
-function quoteView(q, tick, nowMs) {
-  if (!q || (q.bid == null && q.ask == null && q.last == null)) return { bid: '—', ask: '—', spread: '', stale: true, age: null };
-  const bid = q.bid ?? q.last, ask = q.ask ?? q.last, age = Number.isFinite(q.ts_ms) ? nowMs - q.ts_ms : null;
-  const n = tick > 0 && q.bid != null && q.ask != null ? Math.round((q.ask - q.bid) / tick) : null;
-  return { bid: Cat.fmtPrice(bid, tick), ask: Cat.fmtPrice(ask, tick), spread: n == null ? '' : String(n),
-    stale: age == null || age > QUOTE_STALE_MS, age };
-}
-
-/* ---- S5, the stale tag (2026-09-28 safety pass) ----
-   A quote whose last trade is older than a surface's own limit (the Buy/Sell block: quoteView's 30 s; the order
-   panel: freshQuote's 10 s) already dims its prices; the tag -- a clock and this age -- sits beside them, so a stale
-   price never rests on opacity and a hover alone. ageText: whole units, rounded down: "42s", "5m", "2h", "3d"; "—"
-   with no trade time at all. */
-function ageText(ms) {
-  if (ms == null || !Number.isFinite(ms)) return '—';
-  const s = Math.floor(Math.max(0, ms) / 1000);
-  if (s < 60) return `${s}s`;
-  if (s < 3600) return `${Math.floor(s / 60)}m`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h`;
-  return `${Math.floor(s / 86400)}d`;
-}
-/* The tag for a surface's OWN stale verdict (never re-decided here) and the quote's age in ms (null: no trade time):
-   {show, text, title}. A fresh quote shows none. */
-function staleTag(stale, ageMs) {
-  if (!stale) return { show: false, text: '', title: '' };
-  const known = ageMs != null && Number.isFinite(ageMs);
-  return { show: true, text: ageText(ageMs),
-    title: known ? `Stale: no trade for ${ageText(ageMs)} — bid / ask are from the last trade` : 'Stale: no trade yet' };
 }
 
 /* ---- the order panel (2026-09-27 order-panel plan, Task 3) ---- */
@@ -1565,8 +1532,8 @@ function routeSend(action, body, send) {
   return Promise.all(out);
 }
 
-const api = { PREFS_KEY, QUOTE_STALE_MS, BOT_NAMES, parsePrefs, prefsText, oneClickKey, short, rootOf, orderPrice, isPending, abbr, inferType, menuText,
-  roundTick, bracket, orderBody, clientId, tradeMode, quoteView, ageText, staleTag, usd, money, pnl, rrText, linesFor, linePnl, lineLabel,
+const api = { PREFS_KEY, BOT_NAMES, parsePrefs, prefsText, oneClickKey, short, rootOf, orderPrice, isPending, abbr, inferType, menuText,
+  roundTick, bracket, orderBody, clientId, tradeMode, usd, money, pnl, rrText, linesFor, linePnl, lineLabel,
   lineText, lineTitle, lineColor, canDrag, withPrice, exitKinds, exitKindAt, exitRefusal, EXIT_DRAG_PX, pastClick, pendingMoveError, exitGhost, exitDropError, expectedNet, exitsBody, exitsTitle, orderTitle, confirmOrder, actionTitle, resultToasts, fillText, fillMarkers, execArrow, botName, positionRows, orderRows, fillRows, accountRows, etTime, diffRows,
   algoName, algoLabel, algoChoices, algoAccounts, botPill, botToday, algoOverlay, etMs, pastRunMarkers, nearestTip, historySig,
   killConfirm, killToasts, killBlock, killSold,
