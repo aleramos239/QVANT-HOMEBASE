@@ -121,6 +121,17 @@ def in_fire_guard(now: dt.datetime) -> bool:
     return et.weekday() < 5 and RENEW_FIRE_GUARD[0] <= et.time() < RENEW_FIRE_GUARD[1]
 
 
+def rebuild_renew_cap_s(now: dt.datetime) -> float:
+    """How long a rebuild's best-effort renewal may hold the rebuild: GUARD_RENEW_S from the
+    fire guard's end to 10:00 on weekdays (the 9:30 trade may be open: while the socket is
+    down its fills are not heard), RECONNECT_RENEW_S otherwise. Inside the guard the rebuild
+    runs _renew_in_the_guard instead (GUARD_RENEW_S as well)."""
+    et = now.astimezone(ET)
+    if et.weekday() < 5 and RENEW_FIRE_GUARD[1] <= et.time() < RENEW_HOLD_UNTIL:
+        return GUARD_RENEW_S
+    return RECONNECT_RENEW_S
+
+
 def reconnect_buffer_s(now: dt.datetime) -> float:
     """The token life a socket being REBUILT (reconnect) should start with: normally
     RENEW_BUFFER_S; weekdays 09:10-10:00 ET, enough that it never comes due before 10:00, so
@@ -331,8 +342,9 @@ class TradovateAdapter(BrokerAdapter):
         """reconnect(), weekdays 09:10-10:00 ET: the socket is being rebuilt anyway, so
         start it on a token that lasts past 10:00 without a renewal (reconnect_buffer_s) -- best
         effort only. Renew, never a login; never inside the fire guard (the rebuild must
-        not wait); at most RECONNECT_RENEW_S. On any failure the socket is rebuilt on the
-        current token, which ensure_valid's normal rule still checks -- exactly as before."""
+        not wait); at most rebuild_renew_cap_s (2 s from 09:31 to 10:00, else 5 s). On any
+        failure the socket is rebuilt on the current token, which ensure_valid's normal rule
+        still checks -- exactly as before."""
         tokens = self._auth.tokens
         if tokens is None or in_fire_guard(now):
             return
@@ -340,7 +352,7 @@ class TradovateAdapter(BrokerAdapter):
         if not RENEW_BUFFER_S <= left < reconnect_buffer_s(now):
             return          # it lasts past 10:00, or the normal rule renews it anyway
         try:
-            await asyncio.wait_for(asyncio.to_thread(self._auth.renew), RECONNECT_RENEW_S)
+            await asyncio.wait_for(asyncio.to_thread(self._auth.renew), rebuild_renew_cap_s(now))
         except Exception as e:  # noqa: BLE001 — incl. the timeout
             # a renewal still running after the cap may yet roll the token: the socket then
             # rides the older one, and the keepalive judges it by that token (_ws_expires)

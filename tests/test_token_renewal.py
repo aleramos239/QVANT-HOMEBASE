@@ -538,6 +538,37 @@ def test_a_renewal_answering_after_its_cap_leaves_a_socket_the_keepalive_still_d
     assert dropped is True and auth.renews == 1                # no second renewal
 
 
+@pytest.mark.parametrize("now, cap", [
+    ((9, 15, 0), "RECONNECT_RENEW_S"),
+    ((9, 31, 0), "GUARD_RENEW_S"),        # the 9:30 trade may be open: the rebuild must not wait
+    ((9, 45, 0), "GUARD_RENEW_S"),
+    ((9, 59, 59), "GUARD_RENEW_S"),
+    ((10, 0, 0), "RECONNECT_RENEW_S"),
+])
+def test_a_rebuilds_best_effort_renewal_waits_2s_from_0931_to_10(now, cap):
+    from homebase.broker.tradovate import rebuild_renew_cap_s
+    assert rebuild_renew_cap_s(at(*now)) == getattr(tradovate, cap)
+    assert rebuild_renew_cap_s(at(*now, day=SAT)) == tradovate.RECONNECT_RENEW_S
+
+
+def test_a_slow_renewal_holds_a_rebuild_after_the_fire_2s_at_most(tmp_path, monkeypatch):
+    import time as _time
+    monkeypatch.setattr(tradovate, "RECONNECT_RENEW_S", 30.0)
+    monkeypatch.setattr(tradovate, "GUARD_RENEW_S", 0.05)
+    release = threading.Event()
+
+    def hangs():
+        release.wait(4)
+        raise RuntimeError("late")
+
+    t0 = _time.monotonic()
+    try:
+        up, ad, auth = reconnect_at(tmp_path, monkeypatch, at(9, 40), at(10, 5), renew=hangs)
+    finally:
+        release.set()
+    assert up is True and _time.monotonic() - t0 < 2.0 and auth.logins == 0
+
+
 def test_a_token_too_close_to_expiry_is_still_renewed_as_before(tmp_path, monkeypatch):
     """< 10 min left: the normal rule (renew, else log in) runs as it always did, and a
     reconnect whose renew and login both fail still fails."""
