@@ -68,6 +68,7 @@ function load({ st = { armed: false }, stale = false, confirm = true, answer = K
     console,
     ST: st,
     DESK_STALE: stale,
+    STALE_WHY: '',
     $: (sel) => els[sel.replace(/^#/, '')] || null,
     toast: (t) => toasts.push(t),
     alertBar: (t) => alerts.push(t),
@@ -176,7 +177,7 @@ test('a stale desk keeps the last-known state but says it is stale', () => {
   api.renderMaster();
   assert.equal(els.statusPill.textContent, 'ARMED · stale');
   assert.match(els.statusPill.className, /\bstale\b/);
-  assert.match(els.statusPill.title, /not answering/);
+  assert.match(els.statusPill.title, /Last known state — the desk is not answering\./);
 });
 
 test('the master controls never call fetch -- they only talk to the desk (post/refresh)', async () => {
@@ -438,4 +439,40 @@ test('the stale pill is never faded: a dashed edge, full-strength text (measured
   assert.match(rule('.master .pill.idle.stale'), /color:var\(--foreground\);/);
   assert.match(rule('.master .pill.armed.stale'), /border-color:var\(--destructive-foreground\);/);
   assert.doesNotMatch(HTML, /\.pill\.stale\{[^}]*opacity/, 'opacity would pull the text under 4.5:1');
+});
+
+// ---- an open menu or size edit holds updates, but never leaves the pill asserting a state ------
+const REFRESH = HTML.slice(HTML.indexOf('const FREEZE_STALE_MS'), HTML.indexOf('/* ---- PREVIEW MODE'));
+function loadRefresh() {
+  const clock = { now: 0 }, fetched = [], masters = [], renders = [];
+  const ctx = vm.createContext({
+    Date: { now: () => clock.now }, FREEZE: false, DEMO: false, ST: { armed: true }, DESK_STALE: false, STALE_WHY: '',
+    fetch: async (u) => { fetched.push(u); return { json: async () => ({ armed: true }) }; },
+    render: () => renders.push(1), renderMaster: () => masters.push(1), renderSettings() {},
+    $: () => ({ textContent: '', classList: { contains: () => false } }),
+  });
+  vm.runInContext(REFRESH + `
+    globalThis.api = { refresh, get stale() { return DESK_STALE; }, get why() { return STALE_WHY; },
+      set freeze(v) { FREEZE = v; } };`, ctx);
+  return { api: ctx.api, clock, fetched, masters, renders };
+}
+
+test('while a menu or size edit holds updates, the pill goes stale after 5 s -- with no extra request', async () => {
+  const s = loadRefresh();
+  await s.api.refresh();                         // a fresh status at t=0
+  assert.equal(s.fetched.length, 1);
+  s.api.freeze = true;                           // + Assign menu opens
+  s.clock.now = 2500; await s.api.refresh();
+  s.clock.now = 5000; await s.api.refresh();
+  assert.equal(s.api.stale, false, 'not yet: 5 s is the limit');
+  s.clock.now = 7500; await s.api.refresh();
+  assert.equal(s.api.stale, true);
+  assert.equal(s.api.why, 'updates pause while a menu or a size edit is open');
+  assert.equal(s.masters.length, 1, 'the top bar is repainted, the cards (and the open menu) are not');
+  assert.equal(s.renders.length, 1);
+  assert.equal(s.fetched.length, 1, 'no request while frozen');
+  s.api.freeze = false;                          // the menu closes: the next tick is fresh again
+  s.clock.now = 10000; await s.api.refresh();
+  assert.equal(s.api.stale, false);
+  assert.equal(s.fetched.length, 2);
 });

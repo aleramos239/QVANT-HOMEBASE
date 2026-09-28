@@ -782,6 +782,7 @@
 const $ = (s) => document.querySelector(s);
 let ST = null;
 let DESK_STALE = false;   // true while refresh() is failing: ST is the last-known state, not current
+let STALE_WHY = "";       // why it is stale, for the pill's tooltip
 const DEMO = new URLSearchParams(location.search).has("demo");
 
 /* ---- algo manager: which algo cards show on the home page ----
@@ -1050,7 +1051,7 @@ function renderMaster() {
   pill.textContent = (armed ? "ARMED" : "DISARMED") + (DESK_STALE ? " · stale" : "");
   pill.title = (armed ? "ARMED — signals place REAL orders; SL/TP ride broker-side"
                       : "Disarmed — signals are validated and journaled only") +
-    (DESK_STALE ? ". Last known state: the desk is not answering." : "");
+    (DESK_STALE ? `. Last known state — ${STALE_WHY || "the desk is not answering"}.` : "");
   arm.classList.remove("gone");
   arm.disabled = false;
   arm.removeAttribute("aria-hidden");
@@ -1557,12 +1558,25 @@ function render() {
   renderActivity(s.journal);
 }
 
+/* An open + Assign menu or size edit holds updates (FREEZE) so a repaint never wipes it -- but the
+   top bar must not keep asserting a state nothing is checking: after FREEZE_STALE_MS without a
+   fresh status, the pill goes stale ("· stale", dashed) until the next refresh after the menu or
+   edit closes. No extra request is made for it. */
+const FREEZE_STALE_MS = 5000;
+let LAST_FRESH = Date.now();      // when ST last came from the desk
 async function refresh() {
-  if (FREEZE) return;             // don't wipe an open menu or qty edit
-  if (DEMO) { ST = demoStatus(); DESK_STALE = false; render(); return; }
-  try { ST = await (await fetch("/api/status")).json(); DESK_STALE = false; render(); }
+  if (FREEZE) {                   // don't wipe an open menu or qty edit
+    if (!DESK_STALE && Date.now() - LAST_FRESH > FREEZE_STALE_MS) {
+      DESK_STALE = true; STALE_WHY = "updates pause while a menu or a size edit is open";
+      renderMaster();
+    }
+    return;
+  }
+  if (DEMO) { ST = demoStatus(); DESK_STALE = false; LAST_FRESH = Date.now(); render(); return; }
+  try { ST = await (await fetch("/api/status")).json(); DESK_STALE = false; LAST_FRESH = Date.now(); render(); }
   catch {
     DESK_STALE = true;   // ST is now the last-known state, not current -- the top bar shows it as stale
+    STALE_WHY = "the desk is not answering";
     $("#clock").textContent = "server unreachable";
     renderMaster();
     if ($("#settingsOverlay").classList.contains("open")) renderSettings();
