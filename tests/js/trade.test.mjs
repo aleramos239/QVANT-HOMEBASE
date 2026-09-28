@@ -41,13 +41,30 @@ const PAPER_STATE = { ...STATE, accounts: [...STATE.accounts, acct('paper', 'PAP
 
 
 test('prefs: defaults, clamps, de-duplicated ticks, garbage in -> defaults', () => {
-  const dflt = { ticked: [], oneClick: false, qty: 1, slTicks: 0, tpTicks: 0 };
+  const dflt = { ticked: [], oneClick: false, oneClickChart: true, oneClickPanel: true, qty: 1, slTicks: 0, tpTicks: 0 };
   assert.deepEqual(T.parsePrefs(null), dflt);
   assert.deepEqual(T.parsePrefs('garbage'), dflt);
   assert.deepEqual(T.parsePrefs('[1]'), dflt);
   assert.deepEqual(T.parsePrefs(JSON.stringify({ ticked: ['a', 'a', 5, ''], oneClick: true, qty: 3.6, slTicks: -2, tpTicks: '8' })),
-    { ticked: ['a'], oneClick: true, qty: 4, slTicks: 0, tpTicks: 8 });
-  assert.equal(T.prefsText({ qty: 0 }), JSON.stringify({ ticked: [], oneClick: false, qty: 1, slTicks: 0, tpTicks: 0 }));
+    { ticked: ['a'], oneClick: true, oneClickChart: true, oneClickPanel: true, qty: 4, slTicks: 0, tpTicks: 0 });
+  assert.equal(T.prefsText({ qty: 0 }), JSON.stringify(dflt));
+});
+
+test('prefs: the two one-click switches take the old single value on first read, then keep their own', () => {
+  const old = (v) => T.parsePrefs(JSON.stringify({ oneClick: v, qty: 2 }));
+  assert.equal(old(false).oneClickChart, false);
+  assert.equal(old(false).oneClickPanel, false);
+  assert.equal(old(true).oneClickChart, true);
+  assert.equal(old(true).oneClickPanel, true);
+  const own = T.parsePrefs(JSON.stringify({ oneClick: false, oneClickChart: true, oneClickPanel: false }));
+  assert.deepEqual([own.oneClick, own.oneClickChart, own.oneClickPanel], [false, true, false]);
+  assert.equal(T.parsePrefs(JSON.stringify({ oneClickChart: 'yes' })).oneClickChart, true, 'garbage -> the default');
+});
+
+test('prefs: stored SL/TP tick defaults can no longer attach a bracket', () => {
+  const p = T.parsePrefs(JSON.stringify({ slTicks: 20, tpTicks: 40 }));
+  assert.deepEqual([p.slTicks, p.tpTicks], [0, 0]);
+  assert.deepEqual(T.bracket('Buy', 30900, p, 0.25), { sl: null, tp: null });
 });
 
 test('names: short account, contract root', () => {
@@ -1301,6 +1318,13 @@ test('Important 2: replayEndPatch / sendsWithoutConfirm -- ANY replay end forces
   assert.equal(T.sendsWithoutConfirm({ oneClick: true }, { replayConfirm: true }), false);
   assert.equal(T.sendsWithoutConfirm({ oneClick: false }, {}), false);
   assert.equal(T.sendsWithoutConfirm({ oneClick: true }, null), true);
+  // each surface reads its own switch; anything else reads oneClick
+  const p = { oneClick: false, oneClickChart: true, oneClickPanel: false };
+  assert.equal(T.sendsWithoutConfirm(p, {}, 'chart'), true);
+  assert.equal(T.sendsWithoutConfirm(p, {}, 'panel'), false);
+  assert.equal(T.sendsWithoutConfirm(p, {}, null), false);
+  assert.equal(T.sendsWithoutConfirm(p, { replayConfirm: true }, 'chart'), false);
+  assert.deepEqual(['chart', 'panel', null, 'menu'].map(T.oneClickKey), ['oneClickChart', 'oneClickPanel', 'oneClick', 'oneClick']);
 });
 
 test('Minor 6: chartWhy -- the selected chart\'s short reason for the status bar', () => {

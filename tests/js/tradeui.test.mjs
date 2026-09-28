@@ -383,3 +383,24 @@ test('PAPER: the real send path routes the paper part to the paper client only; 
     delete global.window.HBPaperClient;
   }
 });
+
+test('one-click per surface: the chart block and the order panel read their own switch, the menu reads oneClick', async () => {
+  reset();
+  const c = chart(['sim041']);
+  Object.assign(desk.prefs, { oneClick: false, oneClickChart: true, oneClickPanel: false });
+  UI.placeOrder({ cell: c, root: 'NQ', side: 'Buy', type: 'Market', qty: 1, surface: 'chart' });
+  await flush();
+  assert.equal(dialogs.length, 0);
+  assert.equal(desk.sent.length, 1, 'the chart block sends at once');
+  UI.placeOrder({ cell: c, root: 'NQ', side: 'Buy', type: 'Market', qty: 1, surface: 'panel' });
+  await flush();
+  assert.equal(dialogs.length, 1, 'the order panel asks first');
+  assert.equal(desk.sent.length, 1);
+  clickPrimary('Buy');
+  await flush();
+  assert.equal(desk.sent.length, 2);
+  UI.placeOrder({ cell: c, root: 'NQ', side: 'Sell', type: 'Market', qty: 1 });   // the chart menu: oneClick (off)
+  await flush();
+  assert.equal(dialogs.length, 2);
+  Object.assign(desk.prefs, { oneClickChart: undefined, oneClickPanel: undefined });
+});

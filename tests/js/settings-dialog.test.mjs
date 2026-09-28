@@ -219,7 +219,7 @@ function makeTradeHost(cell, state = TR_STATE) {
     armPending: () => arming,
     onTradeChange: (fn) => { subs.add(fn); return () => subs.delete(fn); },
     tradeWhy: () => { const m = T.tradeMode({ state }, cell.cfg.trade); return m.mode === 'on' ? '' : m.reason; },
-    prefs: () => ({ oneClick: false, qty: 1, slTicks: 0, tpTicks: 0 }),
+    prefs: () => ({ oneClick: false, oneClickChart: true, oneClickPanel: false, qty: 1, slTicks: 0, tpTicks: 0 }),
     setPrefs: () => {},
     algoChoices: () => T.algoChoices(state, cell.cfg.root, cell.cfg.algo),
     setAlgo: (c, v) => {
@@ -264,7 +264,7 @@ function openTrading(cell, extra = {}) {
   return { box, host, dlg, rows, click };
 }
 
-test('Trading tab: one row per account, the env chips, the algo note, and the all-charts defaults caption', () => {
+test('Trading tab: one row per account, the env chips, the algo note, and the ONE-CLICK TRADING switches', () => {
   const cell = makeCell('time:60');
   cell.cfg.root = 'NQ';
   cell.cfg.trade = { accounts: [] };
@@ -277,7 +277,11 @@ test('Trading tab: one row per account, the env chips, the algo note, and the al
   const paperChip = rows()[2].children[2];   // checkbox, label, env chip, balance, dot
   assert.equal(paperChip.textContent, 'PAPER');
   assert.equal(paperChip.className, 'env paper', 'the PAPER chip carries its own (amber) class');
-  assert.equal(findText(box, 'These apply to every chart.') != null, true);
+  assert.equal(findText(box, 'ONE-CLICK TRADING') != null, true);
+  assert.equal(findText(box, 'Every chart. Off: that surface asks to confirm first.') != null, true);
+  for (const gone of ['DEFAULTS (all charts)', 'Default quantity', 'Stop loss (ticks)', 'Take profit (ticks)', 'One-click trading']) {
+    assert.equal(findText(box, gone), null, `${gone} is gone`);
+  }
   assert.equal(findText(box, "No accounts on this chart — pick one in the chart's ⚙ → Trading") != null, true);
 });
 
@@ -368,4 +372,22 @@ test('Task 2b: "+ Add paper account" under the ACCOUNTS list creates one through
   assert.equal(link.hidden, false);
   const noHost = openTrading(makeCell('time:60'), { createPaperAccount: undefined });
   assert.equal(findText(noHost.box, '+ Add paper account'), null);
+});
+
+test('Trading tab: the two one-click switches show and flip their own pref only', () => {
+  const cell = makeCell('time:60');
+  cell.cfg.root = 'NQ';
+  cell.cfg.trade = { accounts: [] };
+  cell.cfg.algo = null;
+  const prefs = { oneClick: false, oneClickChart: true, oneClickPanel: false, qty: 1, slTicks: 0, tpTicks: 0 };
+  const { box } = openTrading(cell, { prefs: () => prefs, setPrefs: (p) => Object.assign(prefs, p) });
+  const sw = (label) => descend({ children: [box] }, (c) => c.getAttribute && c.getAttribute('aria-label') === label);
+  const chart = sw('Chart buttons'), panel = sw('Order panel');
+  assert.equal(chart.getAttribute('aria-checked'), 'true');
+  assert.equal(panel.getAttribute('aria-checked'), 'false');
+  panel.onclick();
+  assert.deepEqual([prefs.oneClickChart, prefs.oneClickPanel, prefs.oneClick], [true, true, false]);
+  assert.equal(panel.getAttribute('aria-checked'), 'true');
+  chart.onclick();
+  assert.deepEqual([prefs.oneClickChart, prefs.oneClickPanel, prefs.oneClick], [false, true, false]);
 });

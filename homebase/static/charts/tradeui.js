@@ -182,7 +182,8 @@ function findOrder(account, order_id) {
 }
 
 /* ---- the confirm dialog (the pattern app.js already uses) ---- */
-function confirm({ title, rows = [], note = '', warn = '', each = '', live = false, action, tone = 'accent', oneClickBox = true }) {
+function confirm({ title, rows = [], note = '', warn = '', each = '', live = false, action, tone = 'accent', oneClickBox = true,
+  oneClickPref = 'oneClick' }) {
   const Dc = D();
   return new Promise((resolve) => {
     let done = false;
@@ -211,7 +212,7 @@ function confirm({ title, rows = [], note = '', warn = '', each = '', live = fal
     yes.onclick = () => {
       if (yes.disabled) return;                            // a double click never fires this twice (review item 2)
       yes.disabled = true; no.disabled = true;
-      if (ck.checked) Dc.setPrefs({ oneClick: true });
+      if (ck.checked) Dc.setPrefs({ [oneClickPref]: true });   // the switch of the surface that asked (HBTrade.oneClickKey)
       page.setDialogClose(null);
       page.closeDialog();
       finish(true);
@@ -242,8 +243,10 @@ function confirm({ title, rows = [], note = '', warn = '', each = '', live = fal
        defaults; frozen here with everything else, exactly like the M1 bracket;
      - `trigger`: a Stop Limit's trigger (`price` is then its limit);
      - `tif`: 'Day' | 'GTC' for a resting order (a Market order is Day only: none sent).
-   Without them (the Buy/Sell block, the chart menu) the body is exactly what it always was. */
-function placeOrder({ cell, root, side, type, price = null, qty, exits = undefined, trigger = null, tif = null }) {
+   Without them (the Buy/Sell block, the chart menu) the body is exactly what it always was.
+   `surface`: 'chart' (the Sell/qty/Buy block) or 'panel' (the order panel) picks that surface's one-click switch;
+   anything else (the chart menu) reads the general one (HBTrade.oneClickKey). */
+function placeOrder({ cell, root, side, type, price = null, qty, exits = undefined, trigger = null, tif = null, surface = null }) {
   const g = () => cellGate(cell, root), gate = g();
   if (gate.mode !== 'on') { D().toast('err', gate.reason); return; }
   const tick = cell.tick, pv = cell.pv ?? null;
@@ -302,14 +305,14 @@ function placeOrder({ cell, root, side, type, price = null, qty, exits = undefin
     return T.orderBody({ clientId: T.clientId(), accounts: resolved.accounts, root, side, qty, type, price: px, sl, tp,
       trigger: trig, tif: tf });
   };
-  if (T.sendsWithoutConfirm(D().prefs, cell.cfg)) { guardedSend('order', g, build); return; }   // not right after a replay
+  if (T.sendsWithoutConfirm(D().prefs, cell.cfg, surface)) { guardedSend('order', g, build); return; }   // not right after a replay
   const preview = build(gate);
   // shown === gate.accounts here, so only the inferType re-check can abort a preview -- the market moved
   // between the chart-menu's right-click (where `type` was inferred) and picking the item just now.
   if (preview == null) return;
   const c = T.confirmOrder(preview, D().state, D().quotes[root], pv, tick);
   confirm({ title: c.title, rows: c.accounts.map((a) => ({ label: a.label, env: a.env })), note: c.bracket,
-    warn: c.warn, each: c.each, live: c.live, action: side, tone: side === 'Sell' ? 'down' : 'accent' })
+    warn: c.warn, each: c.each, live: c.live, action: side, tone: side === 'Sell' ? 'down' : 'accent', oneClickPref: T.oneClickKey(surface) })
     .then((ok) => { if (ok) { confirmedAfterReplay(cell); guardedSend('order', g, build); } });
 }
 

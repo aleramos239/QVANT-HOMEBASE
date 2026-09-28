@@ -103,12 +103,11 @@ const TABS = [
     ['ALGO', [
       { label: 'Algo', algo: true },
     ]],
-    ['DEFAULTS (all charts)', [
-      { label: 'One-click trading', pref: { key: 'oneClick', kind: 'switch' } },
-      { label: 'Default quantity', pref: { key: 'qty', min: 1, max: 10000 } },
-      { label: 'Stop loss (ticks)', pref: { key: 'slTicks', min: 0, max: 10000, note: '0 = off' } },
-      { label: 'Take profit (ticks)', pref: { key: 'tpTicks', min: 0, max: 10000, note: '0 = off' } },
-      { caption: 'These apply to every chart.' },
+    // viewer-wide (every chart): sends from that surface skip the confirm dialog while its switch is on
+    ['ONE-CLICK TRADING', [
+      { label: 'Chart buttons', pref: { key: 'oneClickChart', kind: 'switch' } },
+      { label: 'Order panel', pref: { key: 'oneClickPanel', kind: 'switch' } },
+      { caption: 'Every chart. Off: that surface asks to confirm first.' },
     ]],
   ] },
 ];
@@ -341,7 +340,7 @@ function mount(box, host) {
       ctl.append(n);
       if (unit) ctl.append(mk('span', 'set-unit', unit));
     }
-    if (r.pref) {   // a viewer-wide trade preference (one-click, qty, SL/TP ticks): every chart's, not this one's
+    if (r.pref) {   // a viewer-wide trade preference (the one-click switches): every chart's, not this one's
       const { key, kind, min, max, note } = r.pref, cur = host.prefs ? host.prefs() : {};
       if (kind === 'switch') {
         const sw = button('switch' + (cur[key] ? ' on' : ''));

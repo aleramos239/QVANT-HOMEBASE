@@ -144,7 +144,7 @@ class Overlay {
   /* ---- the Buy/Sell block ---- */
   trade(side) {
     if (window.HBTradeUI.busy()) return;
-    window.HBTradeUI.placeOrder({ cell: this.cell, root: this.root, side, type: 'Market', qty: window.HBDeskClient.prefs.qty });
+    window.HBTradeUI.placeOrder({ cell: this.cell, root: this.root, side, type: 'Market', qty: window.HBDeskClient.prefs.qty, surface: 'chart' });
   }
 
   paintBlock(mode) {

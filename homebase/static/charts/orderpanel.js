@@ -310,7 +310,7 @@ function send() {
   if (!c.order.ok) { paint(); D().toast('err', c.order.error); return; }
   const o = c.order;
   UI().placeOrder({ cell, root: c.root, side: o.side, type: o.type, price: o.price, trigger: o.trigger, qty: o.qty,
-    tif: o.tif, exits: { sl: o.sl, tp: o.tp } });
+    tif: o.tif, exits: { sl: o.sl, tp: o.tp }, surface: 'panel' });
 }
 
 /* ---- form changes that write an input (never while it has focus) ---- */
@@ -336,7 +336,8 @@ function setRisk(on) {
   if (on && !st.sl.on) st.sl.on = true;
   paint();
 }
-/* The exits back to the all-charts tick defaults (0 = off, ⚙ → Trading): at mount and on a symbol change. */
+/* The exits back to off (the retired SL/TP tick defaults are always 0: HBTrade.parsePrefs): at mount and on a
+   symbol change. */
 function resetExits() {
   const p = D().prefs;
   for (const [k, n] of [['tp', p.tpTicks], ['sl', p.slTicks]]) {

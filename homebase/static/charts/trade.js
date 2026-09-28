@@ -34,15 +34,26 @@ const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
 
 /* ---- preferences (per viewer: localStorage hb_trade_prefs) ----
    `ticked` is the RETIRED global account list: nothing routes orders from it any more (2026-09-27 plan, Task 2).
-   It is still parsed only so the page can migrate an old list onto one chart once (migrateTicked), then clear it. */
+   It is still parsed only so the page can migrate an old list onto one chart once (migrateTicked), then clear it.
+   One-click is TWO switches (⚙ → Trading, ONE-CLICK TRADING; 2026-09-27): `oneClickChart` (the chart's Sell/qty/Buy
+   block) and `oneClickPanel` (the order panel's Send), both default ON; a stored pref from before the split takes
+   the old single `oneClick` value for both (its first read). `oneClick` itself stays the switch of every other
+   path (a line's drag / ×, the SL/TP handles, the chart menu, the bottom panel): the confirm's "Don't ask again".
+   The SL/TP tick defaults are retired (no editor any more): always 0, whatever an old stored pref holds, so nothing
+   invisible can attach a bracket. `qty` is the chart block's quantity box. */
 function parsePrefs(text) {
   let o = null;
   try { o = JSON.parse(text); } catch (_) { o = null; }
   if (!isObj(o)) o = {};
   const ticked = idList(o.ticked);
-  return { ticked, oneClick: o.oneClick === true, qty: int(o.qty, 1, QTY_MAX, 1),
-    slTicks: int(o.slTicks, 0, QTY_MAX, 0), tpTicks: int(o.tpTicks, 0, QTY_MAX, 0) };
+  const old = typeof o.oneClick === 'boolean' ? o.oneClick : true;
+  const sw = (v) => (typeof v === 'boolean' ? v : old);
+  return { ticked, oneClick: o.oneClick === true, oneClickChart: sw(o.oneClickChart), oneClickPanel: sw(o.oneClickPanel),
+    qty: int(o.qty, 1, QTY_MAX, 1), slTicks: 0, tpTicks: 0 };
 }
+/* Which one-click switch a send surface reads: the chart block's, the order panel's, or (anything else) `oneClick`. */
+const ONE_CLICK_KEYS = { chart: 'oneClickChart', panel: 'oneClickPanel' };
+function oneClickKey(surface) { return ONE_CLICK_KEYS[surface] || 'oneClick'; }
 const prefsText = (p) => JSON.stringify(parsePrefs(JSON.stringify(p)));
 
 /* ---- names ---- */
@@ -382,8 +393,11 @@ function replayHaltGuard(mode, halted) {
 /* What a replay's end sets on the chart's config: `replayHalt` only for an end the user did not choose, and
    `replayConfirm` for ANY end -- the first real order afterwards always shows the confirm, one-click or not. */
 function replayEndPatch(involuntary) { return { replayHalt: !!involuntary, replayConfirm: true }; }
-/* Whether a chart-started send may skip the confirm dialog: one-click on, and no replay end pending its confirm. */
-function sendsWithoutConfirm(prefs, cfg) { return !!(prefs && prefs.oneClick) && !(isObj(cfg) && cfg.replayConfirm); }
+/* Whether a chart-started send may skip the confirm dialog: that surface's one-click switch on (oneClickKey), and no
+   replay end pending its confirm. */
+function sendsWithoutConfirm(prefs, cfg, surface = null) {
+  return !!(prefs && prefs[oneClickKey(surface)] === true) && !(isObj(cfg) && cfg.replayConfirm);
+}
 function replayGuard(mode, inReplay) {
   return inReplay && mode && mode.mode === 'on' ? { mode: 'none', reason: 'Replay — trading is off', accounts: [] } : mode;
 }
@@ -1381,7 +1395,7 @@ function routeSend(action, body, send) {
   return Promise.all(out);
 }
 
-const api = { PREFS_KEY, QUOTE_STALE_MS, BOT_NAMES, parsePrefs, prefsText, short, rootOf, orderPrice, abbr, inferType, menuText,
+const api = { PREFS_KEY, QUOTE_STALE_MS, BOT_NAMES, parsePrefs, prefsText, oneClickKey, short, rootOf, orderPrice, abbr, inferType, menuText,
   roundTick, bracket, orderBody, clientId, tradeMode, quoteView, usd, money, pnl, rrText, linesFor, linePnl, lineLabel,
   lineText, lineColor, canDrag, withPrice, orderTitle, confirmOrder, actionTitle, resultToasts, fillText, fillMarkers, botName, positionRows, orderRows, fillRows, accountRows, etTime, diffRows,
   algoName, algoLabel, algoChoices, algoAccounts, botPill, botToday, algoOverlay, etMs, pastRunMarkers, nearestTip, historySig,
