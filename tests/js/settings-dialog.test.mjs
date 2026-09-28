@@ -417,3 +417,21 @@ test('S7: Template ▾ Save as… -- Enter saves once; a held Enter\'s repeats n
   assert.deepEqual(saved, ['Held key'], 'exactly one save');
   assert.equal(prevented, 5, 'every Enter, repeat or not, is still kept from its default action');
 });
+
+/* W3 (2026-09-28): at <= 640 px the Settings tabs show icons only (charts.css hides the label) -- each keeps its name
+   as a tooltip and as its accessible name. */
+test('W3: every Settings tab carries its label as title and aria-label', () => {
+  const cell = makeCell('time:60');
+  const { host } = makeHost(cell, []);
+  const box = new FakeEl('div');
+  SD.mount(box, host);
+  const tabs = [];
+  descend(box, (el) => { if (el.classList && el.classList.contains('set-tab')) tabs.push(el); return false; });
+  assert.ok(tabs.length >= 6, `found ${tabs.length} tabs`);
+  for (const t of tabs) {
+    const label = t.children[1].textContent;
+    assert.ok(label, 'a visible label');
+    assert.equal(t.title, label);
+    assert.equal(t.getAttribute('aria-label'), label);
+  }
+});

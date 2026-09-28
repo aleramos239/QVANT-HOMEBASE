@@ -167,6 +167,10 @@ function mount(box, host) {
       const b = button('set-tab' + (i === tab ? ' active' : '')), ic = mk('span', 'icw');
       b.setAttribute('role', 'tab');
       b.setAttribute('aria-selected', String(i === tab));
+      // W3 (2026-09-28): at <= 640 px the label is hidden (icons only, charts.css) -- its name stays a tooltip and the
+      // tab's accessible name
+      b.title = t.label;
+      b.setAttribute('aria-label', t.label);
       ic.innerHTML = I[t.icon] || '';   // our own static SVG strings
       b.append(ic, mk('span', '', t.label));
       b.onclick = () => { if (tab !== i) { tab = i; renderTabs(); renderPane(); } };
