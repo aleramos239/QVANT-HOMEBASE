@@ -72,10 +72,13 @@ test('params are clamped to their range and type', () => {
   assert.deepEqual(C.clampParams('heatmap', { junk: 1 }), {});
   assert.deepEqual(C.clampParams('vwap', { anchor: 'xyz', customTime: 'nope' }), VWAP_DEFAULT_PARAMS);
   assert.deepEqual(C.clampParams('vwap', { anchor: 'rth', junk: 1 }), { ...VWAP_DEFAULT_PARAMS, anchor: 'rth' });
+  // "9:30" is loose keyboard entry, not an error: it normalises to "09:30" like the other shorthands do
   assert.deepEqual(C.clampParams('vwap', { anchor: 'custom', customTime: '9:30' }),
-    { ...VWAP_DEFAULT_PARAMS, anchor: 'custom' });   // bad HH:MM shape: customTime falls back, anchor stands
+    { ...VWAP_DEFAULT_PARAMS, anchor: 'custom', customTime: '09:30' });
   assert.deepEqual(C.clampParams('vwap', { anchor: 'custom', customTime: '09:30' }),
     { ...VWAP_DEFAULT_PARAMS, anchor: 'custom', customTime: '09:30' });
+  assert.deepEqual(C.clampParams('vwap', { anchor: 'custom', customTime: 'lunchtime' }),
+    { ...VWAP_DEFAULT_PARAMS, anchor: 'custom' });   // genuinely unparseable: falls back to the factory default
   assert.deepEqual(C.clampParams('vwap', { anchor: 'week', band1On: true, band1Mult: 1.5 }),
     { ...VWAP_DEFAULT_PARAMS, anchor: 'week', band1On: true, band1Mult: 1.5 });
   assert.deepEqual(C.clampParams('vwap', { band1Mult: 99 }), { ...VWAP_DEFAULT_PARAMS, band1Mult: 10 });   // clamped to max
@@ -188,6 +191,25 @@ test('legend values per indicator', () => {
   for (const id of ['volume', 'delta', 'levels', 'footprint', 'profile', 'bigprints', 'bigorders', 'imbalance', 'heatmap']) {
     assert.deepEqual(C.legendValues(C.instance(id), bar, colors, 0.25), [], id);
   }
+});
+
+test('normalizeHHMM: loose keyboard entry (H:MM/HH:MM/HMM/HHMM) zero-pads to the canonical HH:MM, or null', () => {
+  assert.equal(C.normalizeHHMM('9:30'), '09:30');
+  assert.equal(C.normalizeHHMM('09:30'), '09:30');
+  assert.equal(C.normalizeHHMM('930'), '09:30');
+  assert.equal(C.normalizeHHMM('0930'), '09:30');
+  assert.equal(C.normalizeHHMM(' 9:30 '), '09:30');
+  assert.equal(C.normalizeHHMM('0:00'), '00:00');
+  assert.equal(C.normalizeHHMM('23:59'), '23:59');
+  assert.equal(C.normalizeHHMM('2359'), '23:59');
+  assert.equal(C.normalizeHHMM('000'), '00:00');    // HMM, 1-digit hour
+  assert.equal(C.normalizeHHMM('24:00'), null);      // HH out of range
+  assert.equal(C.normalizeHHMM('12:60'), null);      // MM out of range
+  assert.equal(C.normalizeHHMM('2400'), null);
+  assert.equal(C.normalizeHHMM('99'), null);         // too short for HMM/HHMM
+  assert.equal(C.normalizeHHMM('lunchtime'), null);
+  assert.equal(C.normalizeHHMM(''), null);
+  assert.equal(C.normalizeHHMM(null), null);
 });
 
 // ---- per-instance style (Task 3): styleLineKeys / defaultStyle / clampStyle / cycleColor ----
