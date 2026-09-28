@@ -1815,6 +1815,16 @@ function connect() {
   };
 }
 
+/* A resize grip (the bottom panel's #bpResize, an order panel's own grip) or any other focusable control
+   living inside the bottom panel or the order panel already owns Arrow keys for its own resize/nav while it
+   has focus -- the global REPLAY hotkeys below must never also fire on top of that. Keyed off the panels'
+   own containers (.hbpanel: the Order / DOM panels, docked or floating; #pdock; #bpanel) rather than a specific grip class/selector, since another
+   branch replaces the order panel's own grip markup with a new panel shell (coordinator review, fix round 3). */
+function focusInPanel() {
+  const a = document.activeElement;
+  return !!(a && a.closest && a.closest('.hbpanel, #pdock, #bpanel'));
+}
+
 /* ---- keyboard ---- */
 function onKey(e) {
   if (dlg) {
@@ -1844,9 +1854,16 @@ function onKey(e) {
     return;
   }
   // Space plays/pauses, → steps -- only the selected cell while it replays, no input focused (returned above), no
-  // menu / hotkey box open, and never a key aimed at the order panel (its send button owns Space itself)
-  if (c && c.replay && !menuEl && !hotkeyBox && !(e.target.closest && e.target.closest('.hbpanel'))) {
-    if (e.code === 'Space') { e.preventDefault(); window.HBReplayUI.togglePlay(c); return; }
+  // menu / hotkey box open, and never a key aimed at the order panel (its send button owns Space itself).
+  // ArrowRight already covers Shift+→ (e.key is the same either way -- TradingView's own replay hotkey);
+  // Shift+↓ (2026-09-27 TV-parity plan) is added alongside Space for play/pause -- neither shift combo is
+  // bound to anything else on this page (no drawing tool or other shortcut here uses Shift+arrow).
+  // !e.repeat (coordinator review, fix round 3): auto-repeat otherwise re-fires play/pause or steps a bar
+  // over and over for as long as the key is held -- the GOTCHAS.md keyboard-repeat class of bug.
+  // !focusInPanel(): a resize grip or any other focusable control inside the bottom/order panel owns its own
+  // Arrow keys while focused (coordinator review, fix round 3) -- replaces the narrower #opanel target check.
+  if (c && c.replay && !e.repeat && !menuEl && !hotkeyBox && !focusInPanel()) {
+    if (e.code === 'Space' || (e.shiftKey && e.key === 'ArrowDown')) { e.preventDefault(); window.HBReplayUI.togglePlay(c); return; }
     if (e.key === 'ArrowRight') { e.preventDefault(); window.HBReplayUI.step(c); return; }
   }
   if (e.key === 'Escape') {

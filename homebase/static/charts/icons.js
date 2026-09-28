@@ -7,7 +7,8 @@
    square (Strategy Tester), list-ordered, crosshair (DOM ladder, 2026-09-27 charts-depth plan),
    between-horizontal-start (Bar Replay Select bar, 2026-09-27 ui-controls-and-select-bar plan),
    chevron-left, chevron-right, clock (the control system, same plan), star (starred intervals), lock, lock-open, bookmark
-   (the drawing style toolbar and Template menu, 2026-09-27 draw-tools plan).
+   (the drawing style toolbar and Template menu, 2026-09-27 draw-tools plan), chevrons-right (Bar Replay
+   "Jump to real-time"), dice-5 (Bar Replay "Select random bar", 2026-09-27 TV-parity plan).
 
    ISC License
 
@@ -84,5 +85,7 @@ window.HBIcons = {
   lock: svg('<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>'),
   lockOpen: svg('<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>'),
   bookmark: svg('<path d="M17 3a2 2 0 0 1 2 2v15a1 1 0 0 1-1.496.868l-4.512-2.578a2 2 0 0 0-1.984 0l-4.512 2.578A1 1 0 0 1 5 20V5a2 2 0 0 1 2-2z"/>'),
+  chevronsRight: svg('<path d="m6 17 5-5-5-5"/><path d="m13 17 5-5-5-5"/>'),   // Bar Replay "Jump to real-time"
+  dice: svg('<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><path d="M16 8h.01"/><path d="M8 8h.01"/><path d="M8 16h.01"/><path d="M16 16h.01"/><path d="M12 12h.01"/>'),   // "dice-5" -- Bar Replay "Select random bar"
 };
 })();

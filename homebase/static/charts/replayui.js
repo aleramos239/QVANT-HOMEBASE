@@ -69,6 +69,12 @@ function doStart(cell, date, time) {
   if (!R.validStart(date, time, todayEt())) { cell.note(`date: ${R.FIRST_DATE} to yesterday, time HH:MM (ET)`); return; }
   disarmPick();
   lastPick = { date, time };
+  // Select bar ▾'s "Select date…" and "First available date" rows call this while ALREADY replaying --
+  // overwriting `sessions` below would otherwise drop that old session's practice trades on the floor
+  // (fix round 2, Important 1). Same save every other end-of-session path already makes (clearSession,
+  // cellDestroyed), and the same shape of note resetPracticeForRewind gives a rewind past an open position.
+  const wasReplaying = !!cell.replay;
+  if (wasReplaying) savePracticeSession(cell, sessions.get(cell));
   // set BEFORE the send: effectiveMode reads cell.replay synchronously, so the block/menu/lines are hidden
   // from this instant, not from whenever replay_state happens to arrive (safety: never a gap).
   cell.replay = { date, cursorMs: 0, speed: 'bar', playing: false, done: false };
@@ -82,6 +88,7 @@ function doStart(cell, date, time) {
   // from this instant -- an exit, a reconnect or a `stopped` before the first replay_state cannot open a gap.
   refreshOverlays(cell);
   cell.host.send(R.startOp(cell.id, date, time));
+  if (wasReplaying) cell.note('Practice book reset — new replay session started');
 }
 
 /* localStorage.getItem/setItem, each its own try/catch (Global Constraints): the finished practice session
@@ -309,38 +316,112 @@ function pickBar(cell, clientX) {
   return picked && { ...picked, i };
 }
 
+/* Bar Replay (2026-09-27 TV-parity plan, Task 1): clicking the toolbar button enters replay with Select bar
+   ALREADY ACTIVE -- the vertical blue cutoff line follows the mouse with the future dimmed, exactly like an
+   already-replaying chart's own Select-bar (armPointerPick, shared below); a click picks the start bar and
+   begins the session (doStart). A small floating bar (buildPreBar) sits under the mouse the whole time so the
+   other three ways to start (Select date…, Select random bar, First available date -- fillSelectMenu) are one
+   click away without first having to enter a session. Esc: nothing has been picked yet at this point (no
+   session exists), so it always fully exits -- matches TV, and there is no "prior cursor" to fall back to. */
 function armPick(cell) {
-  disarmPick();
-  disarmSelectBar();   // the two picking modes are mutually exclusive on a chart
-  const box = cell.box;
-  box.classList.add('replay-arm');
-  const onClick = (e) => {
-    // task-1-review.md (Minor): swallow the click outright, on or off a bar -- while armed, nothing else on
-    // this chart (a drawing tool, a future click-based control under the pointer) should ever see it.
-    e.preventDefault();
-    e.stopPropagation();
-    const picked = pickBar(cell, e.clientX);
-    if (!picked) return;
-    if (page) page.closeMenu();   // also disarms (see disarmPick's call site in app.js's closeMenu)
-    doStart(cell, picked.date, picked.time);
-  };
-  box.addEventListener('click', onClick, true);
-  armed = { cell, cleanup: () => { box.classList.remove('replay-arm'); box.removeEventListener('click', onClick, true); } };
+  const mini = buildPreBar(cell);
+  const state = armPointerPick(cell, mini.selectBtn, (picked) => doStart(cell, picked.date, picked.time), () => disarmPick());
+  armed = { cell, cleanup: () => { state.cleanup(); mini.remove(); } };
 }
 /* Idempotent: app.js's closeMenu() calls this unconditionally on every close, armed or not. */
 function disarmPick() { if (armed) { armed.cleanup(); armed = null; } }
+
+/* The pre-session mini control bar: shown only while armPick's picker is up (no session yet, so the full
+   floating control bar -- Overlay.build(), further down -- does not exist to host it). Just "Select bar ▾"
+   (fillSelectMenu's own four ways in, reused verbatim from the in-session control bar) and an ×, matching
+   how little of TradingView's own bar is meaningful before a start bar is even chosen. */
+function buildPreBar(cell) {
+  const bar = mk('div', 'replay-bar');
+  const selectBtn = mk('button', 'rb-select', 'Select bar');
+  selectBtn.type = 'button';
+  selectBtn.title = 'Select bar';
+  selectBtn.prepend(icon('selectBar'));
+  selectBtn.appendChild(icon('chevron'));
+  selectBtn.onclick = () => page.toggleMenu(selectBtn, () => fillSelectMenu(page.openMenu(selectBtn, 'menu-replay-select'), cell, selectBtn));
+  const xBtn = iconBtn('x', 'Cancel');
+  xBtn.onclick = () => disarmPick();
+  bar.append(selectBtn, xBtn);
+  cell.el.appendChild(bar);
+  return { selectBtn, remove: () => bar.remove() };
+}
+
+/* Select bar ▾'s four ways in -- TradingView's own dropdown, and the SAME menu whether nothing has started yet
+   (buildPreBar's button) or a session is already running (the control bar's own button, Overlay.build()):
+     - Select bar: (re-)arm the click-to-pick crosshair -- armPick (cold) or armSelectBar (already replaying).
+     - Select date…: the pre-existing typed date/time + calendar popover (fillMenu) -- doStart() either starts
+       fresh or, mid-session, restarts at the new date/time (TV's own "select date" behaviour).
+     - Select random bar: a uniformly random bar of whatever is on screen right now (this session's own bars
+       while replaying -- same-day jump; the live chart's own bars otherwise -- a fresh start there).
+     - First available date: the archive's very first session (R.FIRST_DATE), at its own open.
+   `anchor`: the button this menu is hanging off of, reused for the "Select date…" popover's own anchor. */
+function fillSelectMenu(m, cell, anchor) {
+  const row = (name, label, run) => {
+    const b = mk('button', 'menu-i', label);
+    b.type = 'button';
+    b.prepend(icon(name));
+    b.onclick = () => { page.closeMenu(); run(); };
+    m.appendChild(b);
+  };
+  row('selectBar', 'Select bar', () => { if (cell.replay) armSelectBar(cell, cell.__rbSelectBtn || null); else armPick(cell); });
+  row('calendar', 'Select date…', () => fillMenu(page.openMenu(anchor, 'menu-replay'), cell));
+  row('dice', 'Select random bar', () => selectRandomBar(cell));
+  row('history', 'First available date', () => doStart(cell, R.FIRST_DATE, '09:30'));
+}
+
+/* Select random bar: a uniformly random index of whatever `cell.bars` holds right now (R.randomBarIndex is
+   the pure bounds check; Math.random() itself never crosses into replay.js -- isolation is about the desk,
+   not about randomness, so this is fine here). Mid-session it is a jump, exactly like a manual Select-bar
+   click on that same random bar (R.selectBarPlan's own same-day guard and the position-rewind reset both
+   still apply); otherwise it is a fresh start at that bar's own date/time. */
+function selectRandomBar(cell) {
+  if (!cell.bars || !cell.bars.length) return;
+  const i = R.randomBarIndex(cell.bars.length);
+  const picked = i == null ? null : R.barAt(cell.bars, i);
+  if (!picked) return;
+  if (!cell.replay) { doStart(cell, picked.date, picked.time); return; }
+  const s = sessions.get(cell);
+  if (!s) return;
+  const plan = R.selectBarPlan(cell.id, s.date, s.cursorMs, picked);
+  if (!plan) { cell.note("Select random bar: only within this replay's own session"); return; }
+  if (plan.backward && s.sim && s.sim.position) resetPracticeForRewind(cell, s);
+  cell.host.send(plan.op);
+}
+
+/* Back one bar: the LAST bar the chart shows is always the cursor's own (pickBar/armSelectBar's convention);
+   R.backOnePick resolves the one before it. A jump to it (the same primitive the HH:MM box and Select-bar
+   already use) is the only backward primitive barreplay.py has -- there is no true "undo one step", so this
+   shares jump's own minute granularity (a sub-minute bar can land back on the SAME minute); omitted (the
+   button disables, Overlay.refresh()) rather than faked whenever fewer than two bars exist to step between. */
+function backOneBar(cell) {
+  const s = sessions.get(cell);
+  if (!s || !cell.bars) return;
+  const picked = R.backOnePick(cell.bars);
+  if (!picked || picked.date !== s.date) return;
+  if (s.sim && s.sim.position) resetPracticeForRewind(cell, s);
+  cell.host.send(R.ctlOp(cell.id, 'jump', { to_et: picked.time }));
+}
+
+/* "Jump to real-time": TradingView's own name for leaving replay and returning to the live feed. The engine
+   has exactly one way back to live (barreplay.py's replay_stop, answered by a `reset` the page resubscribes
+   live from) -- there is no partial/live-preview state to jump into instead, so this is exitReplay under TV's
+   own name and icon, sitting where TV puts it, rather than inventing a third, fake, in-between mode. */
+function jumpToRealtime(cell) { exitReplay(cell); }
 
 /* ---- Task 2 (2026-09-27 ui-controls-and-select-bar plan): "Select bar" -- click the exact bar on an
    ALREADY-replaying chart to jump the cursor there, TradingView's own Select bar. Armed from the floating
    control bar's own button (Overlay.build(), below), not from the Replay popover's own armPick() -- the two
    are mutually exclusive on a chart (each disarms the other on entry) but otherwise independent: armPick
    starts a NEW replay from a stopped chart; this jumps an ALREADY-replaying one via replay_ctl's existing
-   `jump`, exactly like the floating bar's own HH:MM jump box (rb-jump) already does, just resolved by
-   clicking a bar instead of typing a time.
+   `jump` -- the SAME op fillMenu's typed date/time (Select bar ▾'s "Select date…") and Select random bar
+   send, just resolved by clicking a bar instead.
 
-   Safety: picking is read-only navigation -- the only send here is `plan.op` (a replay_ctl jump), the same
-   op the pre-existing jump box already sends; nothing here ever touches cell.replay's own on/off, an order,
-   or T.replayGuard's choke point. */
+   Safety: picking is read-only navigation -- the only send here is `plan.op` (a replay_ctl jump); nothing
+   here ever touches cell.replay's own on/off, an order, or T.replayGuard's choke point. */
 
 /* One picking chart at a time (mirrors `armed` above): re-arming the SAME cell's button (or a different
    cell's) always starts from a clean slate. */
@@ -376,10 +457,19 @@ function commitSelectBar(cell, picked) {
 /* The vertical marker + bar highlight + ET label, all plain DOM appended to cell.el (exactly where
    replay-dim/replay-bar already live -- .panel .chart is `inset: 0`, so a coordinate straight off
    chart.timeScale()/priceScale() needs no further offset). Positioned on every pointermove; hidden over the
-   price axis or once nothing resolves. */
-function armSelectBar(cell, btn) {
-  disarmSelectBar();
+   price axis or once nothing resolves. Shared by BOTH picking modes (2026-09-27 TV-parity plan): a cold start
+   (armPick, above -- no session yet, `commit` calls doStart) and an already-replaying chart's own Select-bar
+   re-pick (armSelectBar, below -- `commit` calls commitSelectBar). `btn` (nullable) gets the '.active' class
+   for as long as this stays armed -- the pre-session mini bar's own Select-bar button, or the in-session
+   control bar's, or none at all (a fresh armPick has no persistent button of its own to mark). `onEscape` is
+   the one thing that differs between the two modes: which module-level `armed`/`selArmed` var Esc clears
+   (task-1-review.md Minor: "swallow the click outright" -- e.preventDefault/stopPropagation -- applies to
+   BOTH modes exactly alike, since neither should ever let a drawing tool or a future click-based control see
+   a picking click). Returns {cleanup} for the caller to fold into its own armed-state bookkeeping (armPick
+   also owns a mini bar to tear down; armSelectBar owns nothing extra). */
+function armPointerPick(cell, btn, commit, onEscape) {
   disarmPick();
+  disarmSelectBar();   // the two picking modes are mutually exclusive on a chart
   if (btn) btn.classList.add('active');
   cell.box.classList.add('replay-pick-on');
   const line = mk('div', 'replay-pick-line');
@@ -418,21 +508,19 @@ function armSelectBar(cell, btn) {
   const onMove = (e) => place(e.clientX, e.clientY);
   const onLeave = () => hide();
   const onClick = (e) => {
-    // exactly armPick's own "swallow the click outright" (task-1-review.md Minor): while armed, nothing else
-    // on this chart sees it, on or off a bar.
     e.preventDefault();
     e.stopPropagation();
     const picked = place(e.clientX, e.clientY);
-    if (picked) commitSelectBar(cell, picked);
+    if (picked) commit(picked);
   };
-  const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); disarmSelectBar(); } };
+  const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); onEscape(); } };
 
   cell.box.addEventListener('pointermove', onMove);
   cell.box.addEventListener('pointerleave', onLeave);
   cell.box.addEventListener('click', onClick, true);
   window.addEventListener('keydown', onKey, true);
 
-  selArmed = { cell, cleanup: () => {
+  return { cleanup: () => {
     if (btn) btn.classList.remove('active');
     cell.box.classList.remove('replay-pick-on');
     cell.box.removeEventListener('pointermove', onMove);
@@ -441,6 +529,10 @@ function armSelectBar(cell, btn) {
     window.removeEventListener('keydown', onKey, true);
     line.remove(); band.remove(); label.remove();
   } };
+}
+
+function armSelectBar(cell, btn) {
+  selArmed = { cell, ...armPointerPick(cell, btn, (picked) => commitSelectBar(cell, picked), () => disarmSelectBar()) };
 }
 
 /* ---- the toolbar button's popover: a date and a time (typed, or picked from the calendar and the quick
@@ -551,7 +643,9 @@ function fillMenu(m, cell) {
   foot.append(mk('div', 'menu-hint', 'or click a point on the selected chart'), go);
   m.append(fields, cal, quick, err, foot);
   drawCal(); drawQuick();
-  armPick(cell);
+  // no armPick() here (2026-09-27 TV-parity plan): Select bar ▾'s "Select date…" is reached from a state
+  // that is already armed (the pre-session mini bar) or already replaying (the control bar) -- this popover
+  // is purely the typed path, and does not itself arm chart-click picking.
   d.inp.focus();
   d.inp.select();
 }
@@ -564,8 +658,6 @@ class Hook {   // a primitive that draws nothing, called before every redraw of 
   detached() { cancelAnimationFrame(this.raf); this.raf = 0; }
 }
 
-const JUMP_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
-
 class Overlay {
   constructor(cell, pg) {
     this.cell = cell; this.page = pg; this.dead = false; this.els = null; this.pill = null; this.dim = null; this.bar = null;
@@ -577,61 +669,54 @@ class Overlay {
     if (s) this.build(s);
   }
 
+  /* 2026-09-27 TV-parity plan: one TradingView-style control bar -- Select bar ▾ | back/play/forward | Speed ▾
+     | the clock | Jump to real-time / × | the merged PRACTICE block (buildPractice, once s.sim exists) --
+     dividers (.rb-div) between each group, exactly TV's own rhythm. No separate HH:MM jump box any more
+     (Select bar ▾'s own "Select date…" replaces it) and no separate Select-bar icon button (folded into the
+     same dropdown) -- both are now fillSelectMenu, shared with the pre-session mini bar (buildPreBar). */
   build(s) {
+    const cell = this.cell;
     this.pill = mk('span', 'replay-pill', 'REPLAY');
-    this.cell.el.querySelector('.lg-title').appendChild(this.pill);
+    cell.el.querySelector('.lg-title').appendChild(this.pill);
 
     this.dim = mk('div', 'replay-dim');
-    this.cell.el.appendChild(this.dim);
+    cell.el.appendChild(this.dim);
 
     const bar = mk('div', 'replay-bar');
-    const jumpBtn = iconBtn('skipBack', 'Jump to…');
-    const jumpRow = mk('span', 'rb-jump');
-    const jumpInput = mk('input');
-    jumpInput.type = 'text'; jumpInput.placeholder = 'HH:MM'; jumpInput.setAttribute('aria-label', 'Jump to time (ET)');
-    const jumpErr = mk('span', 'rb-err', 'HH:MM (ET)');   // task-1-review.md (Minor): shown on a bad jump time
-    jumpErr.hidden = true;
-    jumpErr.setAttribute('role', 'alert');
-    jumpRow.append(jumpInput, jumpErr);
-    jumpBtn.onclick = () => {
-      jumpRow.classList.toggle('open');
-      if (jumpRow.classList.contains('open')) { jumpInput.value = ''; jumpErr.hidden = true; jumpInput.focus(); }
-    };
-    jumpInput.onkeydown = (e) => {
-      if (e.key === 'Escape') { e.stopPropagation(); jumpRow.classList.remove('open'); return; }
-      if (e.key !== 'Enter') return;
-      const to = jumpInput.value.trim();
-      if (!JUMP_RE.test(to)) { jumpErr.hidden = false; return; }
-      jumpErr.hidden = true;
-      jumpRow.classList.remove('open');
-      this.cell.host.send(R.ctlOp(this.cell.id, 'jump', { to_et: to }));
-    };
 
-    // Select bar (Task 2): sits left of the transport controls (play/step), matching TradingView's own
-    // placement -- right after the existing HH:MM jump group, which this replaces the typing half of.
-    const selectBtn = iconBtn('selectBar', 'Select bar');
-    selectBtn.onclick = () => {
-      if (selArmed && selArmed.cell === this.cell) disarmSelectBar();
-      else armSelectBar(this.cell, selectBtn);
-    };
+    const selectBtn = mk('button', 'rb-select', 'Select bar');
+    selectBtn.type = 'button';
+    selectBtn.title = 'Select bar';
+    selectBtn.prepend(icon('selectBar'));
+    selectBtn.appendChild(icon('chevron'));
+    selectBtn.onclick = () => this.page.toggleMenu(selectBtn, () => fillSelectMenu(this.page.openMenu(selectBtn, 'menu-replay-select'), cell, selectBtn));
+    cell.__rbSelectBtn = selectBtn;   // fillSelectMenu's own "Select bar" row re-arms through THIS button
 
+    const backBtn = iconBtn('skipBack', 'Back one bar');
+    backBtn.onclick = () => backOneBar(cell);
     const playBtn = iconBtn('play', 'Play');
-    playBtn.onclick = () => togglePlay(this.cell);
-    const stepBtn = iconBtn('skipForward', 'Step one bar');
-    stepBtn.onclick = () => step(this.cell);
+    playBtn.onclick = () => togglePlay(cell);
+    const fwdBtn = iconBtn('skipForward', 'Forward one bar');
+    fwdBtn.onclick = () => step(cell);
 
     const speedBtn = mk('button', 'rb-speed', R.speedLabel(s.speed));
     speedBtn.type = 'button';
+    speedBtn.title = 'Speed';
+    speedBtn.appendChild(icon('chevron'));
     speedBtn.onclick = () => this.page.toggleMenu(speedBtn, () => this.fillSpeed(this.page.openMenu(speedBtn, 'menu-speed')));
 
     const time = mk('span', 'rb-time');
-    const exitBtn = iconBtn('x', 'Exit replay');
-    exitBtn.onclick = () => exitReplay(this.cell);
 
-    bar.append(jumpBtn, jumpRow, selectBtn, playBtn, stepBtn, speedBtn, time, exitBtn);
-    this.cell.el.appendChild(bar);
+    const realtimeBtn = iconBtn('chevronsRight', 'Jump to real-time');
+    realtimeBtn.onclick = () => jumpToRealtime(cell);
+    const exitBtn = iconBtn('x', 'Exit replay');
+    exitBtn.onclick = () => exitReplay(cell);
+
+    bar.append(selectBtn, mk('span', 'rb-div'), backBtn, playBtn, fwdBtn, mk('span', 'rb-div'),
+      speedBtn, mk('span', 'rb-div'), time, mk('span', 'rb-div'), realtimeBtn, exitBtn);
+    cell.el.appendChild(bar);
     this.bar = bar;
-    this.els = { playBtn, speedBtn, time };
+    this.els = { playBtn, backBtn, speedBtn, time };
     s.ov = this;
     this.buildPractice(s);
     this.refresh(s);
@@ -639,34 +724,41 @@ class Overlay {
 
   /* ---- Task 2: the PRACTICE Buy/Sell block, its lines, and the P&L strip -- built only once s.sim exists
      (onState() creates it once cell.tick/cell.pv are known for this session's date). No desk reference. ---- */
+  /* Task 1 (2026-09-27 TV-parity plan): the PRACTICE Buy/Sell/Flatten block, the qty box and the P&L strip are
+     now appended into THIS Overlay's own control bar (this.bar) instead of the chart's legend corner -- one
+     merged bar, like TradingView's own replay toolbar. The lines/chips (a separate absolutely-positioned
+     layer, unchanged) still live on cell.el since they track price coordinates, not the bar. */
   buildPractice(s) {
-    if (!s.sim) return;
+    if (!s.sim || this.prBlock) return;
     const cell = this.cell;
-    const block = mk('div', 'lg-trade');
-    const tag = mk('span', 'pr-tag', 'PRACTICE');
-    const sellBtn = mk('button', 'tr-sell'), sellPx = mk('span', 'tr-px', '—');
+    this.bar.append(mk('span', 'rb-div'), mk('span', 'pr-tag', 'PRACTICE'));
+    const sellBtn = mk('button', 'rb-side rb-sell'), sellPx = mk('span', 'tr-px', '—');
     sellBtn.type = 'button';
-    sellBtn.append(sellPx, mk('span', 'tr-lbl', 'SELL'));
+    sellBtn.title = 'Practice: sell at the market';
+    sellBtn.append(mk('span', 'tr-lbl', 'SELL'), sellPx);
     sellBtn.onclick = () => placePractice(cell, 'Sell', 'Market', null);
-    const mid = mk('div', 'tr-mid'), qty = mk('input');
-    qty.type = 'number'; qty.min = '1'; qty.step = '1'; qty.className = 'tr-qty'; qty.value = String(s.qty || 1);
+    const qty = mk('input');
+    qty.type = 'number'; qty.min = '1'; qty.step = '1'; qty.className = 'rb-qty'; qty.value = String(s.qty || 1);
     qty.setAttribute('aria-label', 'Practice quantity');
     qty.onchange = () => {
       const n = Math.max(1, Math.round(Number(qty.value)) || 1);
       qty.value = String(n);
       const sess = sessions.get(cell); if (sess) sess.qty = n;
     };
-    mid.appendChild(qty);
-    const buyBtn = mk('button', 'tr-buy'), buyPx = mk('span', 'tr-px', '—');
+    const buyBtn = mk('button', 'rb-side rb-buy'), buyPx = mk('span', 'tr-px', '—');
     buyBtn.type = 'button';
-    buyBtn.append(buyPx, mk('span', 'tr-lbl', 'BUY'));
+    buyBtn.title = 'Practice: buy at the market';
+    buyBtn.append(mk('span', 'tr-lbl', 'BUY'), buyPx);
     buyBtn.onclick = () => placePractice(cell, 'Buy', 'Market', null);
-    block.append(tag, sellBtn, mid, buyBtn);
-    cell.el.querySelector('.lg-tradeslot').appendChild(block);
-    this.prBlock = block; this.prQty = qty; this.prSellPx = sellPx; this.prBuyPx = buyPx;
-
-    this.prPnl = mk('div', 'replay-pnl');
-    cell.el.appendChild(this.prPnl);
+    const flattenBtn = mk('button', 'rb-flatten', 'Flatten');
+    flattenBtn.type = 'button';
+    flattenBtn.title = 'Practice: close the open position';
+    flattenBtn.onclick = () => flattenPractice(cell);
+    const pnl = mk('span', 'rb-pnl');
+    this.bar.append(sellBtn, qty, buyBtn, flattenBtn, pnl);
+    this.prBlock = sellBtn;   // a truthy marker: "the practice block exists" (existing call sites check this)
+    this.prQty = qty; this.prSellPx = sellPx; this.prBuyPx = buyPx;
+    this.prSellBtn = sellBtn; this.prBuyBtn = buyBtn; this.prFlattenBtn = flattenBtn; this.prPnl = pnl;
 
     this.prLayer = mk('div', 'tl-layer');
     cell.el.appendChild(this.prLayer);
@@ -686,9 +778,11 @@ class Overlay {
     // enter() itself refuses a second entry/position (PracticeSim.enter); disabling the buttons here just
     // makes that visible instead of a silent no-op click.
     const busy = !!s.sim.position || s.sim.orders.some((o) => o.role === 'entry');
-    this.prBlock.querySelectorAll('.tr-buy, .tr-sell').forEach((b) => { b.disabled = busy; });
+    this.prSellBtn.disabled = busy;
+    this.prBuyBtn.disabled = busy;
+    this.prFlattenBtn.disabled = !s.sim.position;
     const n = s.sim.tradeCount();
-    this.prPnl.textContent = `Practice — Open ${T.usd(s.sim.openPnl(last)) ?? '$0'} · Realized `
+    this.prPnl.textContent = `Open ${T.usd(s.sim.openPnl(last)) ?? '$0'} · Realized `
       + `${T.usd(s.sim.realizedPnl()) ?? '$0'} · ${n} trade${n === 1 ? '' : 's'}`;
     this.refreshPracticeLines(s);
   }
@@ -821,16 +915,19 @@ class Overlay {
     this.prEndDrag = () => end(false);
   }
 
+  /* this.bar (removed wholesale by destroy() just before this runs) carries every practice DOM element now
+     (Task 1: merged into the same control bar) -- only the price-line layer and its drag state are its own
+     to clean up here. */
   destroyPractice() {
     if (this.prDragging && this.prEndDrag) this.prEndDrag();
-    if (this.prBlock) this.prBlock.remove();
-    if (this.prPnl) this.prPnl.remove();
     if (this.prLayer) this.prLayer.remove();
     if (this.prItems) { for (const it of this.prItems.values()) { try { this.cell.candles.removePriceLine(it.line); } catch (_) { /* chart already gone */ } } }
   }
 
+  /* TV-style Speed menu (2026-09-27 TV-parity plan): R.SPEED_MENU is SPEEDS TV-ordered (fastest first, "Bar"
+     last) -- the SAME engine speeds, just presented the way TradingView's own dropdown lists them. */
   fillSpeed(m) {
-    for (const sp of R.SPEEDS) {
+    for (const sp of R.SPEED_MENU) {
       const b = mk('button', 'menu-i', R.speedLabel(sp));
       b.type = 'button';
       b.onclick = () => { this.page.closeMenu(); this.cell.host.send(R.ctlOp(this.cell.id, 'speed', { speed: sp })); };
@@ -846,8 +943,15 @@ class Overlay {
     this.els.playBtn.title = s.done ? 'Replay finished' : (s.playing ? 'Pause' : 'Play');
     this.els.playBtn.setAttribute('aria-label', this.els.playBtn.title);
     this.els.playBtn.disabled = !!s.done;
-    this.els.speedBtn.textContent = R.speedLabel(s.speed);
-    this.els.time.textContent = R.fmtCursor(s.cursorMs) + (s.done ? ' · done' : '');
+    // "Back one bar" (Task 1): nothing to step back to with fewer than two bars -- disabled, never faked.
+    this.els.backBtn.disabled = !this.cell.bars || this.cell.bars.length < 2;
+    this.els.speedBtn.replaceChildren(document.createTextNode(R.speedLabel(s.speed)), icon('chevron'));
+    // the clock honours the chart's own Time format (HBSettings.clockText via cell.R.timeFormat), like every
+    // other time this page prints -- compact, TradingView-style ("Sep 25 '26  09:14 ET" / "...  9:14 AM ET").
+    const compact = R.fmtCursorCompact(s.cursorMs), S = window.HBSettings;
+    const hm = compact ? (S ? S.clockText(compact.hm, this.cell.R ? this.cell.R.timeFormat : '24h') : compact.hm) : '';
+    this.els.time.replaceChildren(mk('span', 'rb-time-d', compact ? compact.date : ''),
+      document.createTextNode(compact ? `${hm} ET${s.done ? ' · done' : ''}` : ''));
     this.reposition(s);
     // the practice sim (Task 2) is created by onState() once cell.tick/cell.pv are known, which can be AFTER
     // this Overlay's own build() already ran without it (build() -> onState() -> refresh(), same first pass).
@@ -881,6 +985,7 @@ class Overlay {
     if (this.pill) this.pill.remove();
     if (this.dim) this.dim.remove();
     if (this.bar) this.bar.remove();
+    delete this.cell.__rbSelectBtn;   // this Overlay's own Select-bar button is gone with the bar above
     this.destroyPractice();
     const s = sessions.get(this.cell);
     if (s && s.ov === this) s.ov = null;
@@ -893,12 +998,17 @@ function mount(pg) {
   registerPracticeMenu();
   const btn = document.getElementById('tbReplay');
   if (!btn) return;
+  // 2026-09-27 TV-parity plan, Task 1: clicking Bar Replay enters with Select bar already active (armPick),
+  // not the old date/time popover first -- matches TradingView's own toolbar button. A second click while
+  // already armed disarms (a plain toggle, like every other toolbar button here); a click while a chart is
+  // ALREADY replaying does nothing new -- re-picking from there is the control bar's own Select bar ▾.
   btn.onclick = () => {
+    if (armed) { disarmPick(); return; }
     const cell = page.cur();
-    if (cell) page.toggleMenu(btn, () => fillMenu(page.openMenu(btn, 'menu-replay'), cell));
+    if (cell && !cell.replay) armPick(cell);
   };
 }
 
 window.HBReplayUI = { mount, overlay: (cell, pg) => new Overlay(cell, pg), onState, onError, onBarUpdate,
-  cellDestroyed, onReconnect, togglePlay, step, disarmPick, guardSymbolChange, exitReplay };
+  cellDestroyed, onReconnect, togglePlay, step, disarmPick, guardSymbolChange, exitReplay, doStart };
 })();

@@ -732,7 +732,6 @@ a { color: inherit; }
 .switch:disabled { opacity: .5; cursor: default; }
 
 /* ---- Bar Replay (2026-09-27 plan, Task 1) ---- */
-.replay-arm .chart, .replay-arm .chart * { cursor: crosshair !important; }
 .replay-menu { display: flex; flex-direction: column; }
 .replay-menu .menu-hint { padding: 2px 12px 8px; color: var(--text-2); font-size: 12px; }
 .dlg-text { padding: 0 20px 16px; color: var(--text); font-size: 13px; }
@@ -748,15 +747,19 @@ a { color: inherit; }
 .replay-bar .ib:hover { background: var(--hover); }
 .replay-bar .ib:disabled { opacity: .5; cursor: default; }
 .replay-bar .ib:disabled:hover { background: none; }
-.replay-bar .rb-jump { display: none; align-items: center; }
-.replay-bar .rb-jump.open { display: inline-flex; }
-.replay-bar .rb-jump input { width: 60px; height: 22px; padding: 0 6px; margin-left: 2px; border: 1px solid var(--border);
-  border-radius: 4px; background: var(--panel); font-size: 12px; }
-.replay-bar .rb-jump input:focus { border-color: var(--accent); }
-.replay-bar .rb-err { padding-left: 6px; color: var(--down); font-size: 11px; white-space: nowrap; }
-.replay-bar .rb-speed { height: 24px; padding: 0 8px; border-radius: 4px; color: var(--text); }
-.replay-bar .rb-speed:hover { background: var(--hover); }
-.replay-bar .rb-time { padding: 0 6px; color: var(--text); white-space: nowrap; }
+.replay-bar .rb-speed, .replay-bar .rb-select { height: 24px; padding: 0 8px; border-radius: 4px; color: var(--text);
+  display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.replay-bar .rb-speed:hover, .replay-bar .rb-select:hover { background: var(--hover); }
+.replay-bar .rb-select .icw:last-child { width: 12px; height: 12px; opacity: .7; }   /* the dropdown caret */
+.replay-bar .rb-time { padding: 0 6px; color: var(--text); white-space: nowrap; display: inline-flex; align-items: baseline; gap: 5px; }
+.replay-bar .rb-time-d { color: var(--text-2); font-size: 11px; }
+/* one column divider between each control GROUP -- TradingView's own control-bar rhythm */
+.replay-bar .rb-div { flex: none; width: 1px; height: 18px; margin: 0 3px; background: var(--border); }
+.replay-bar .rb-flatten { height: 24px; padding: 0 10px; border-radius: 4px; color: var(--text); white-space: nowrap;
+  box-shadow: inset 0 0 0 1px var(--ctl-border); }
+.replay-bar .rb-flatten:hover:not(:disabled) { background: var(--hover); }
+.replay-bar .rb-flatten:disabled { opacity: .4; cursor: default; }
+.replay-bar .rb-pnl { padding: 0 6px; color: var(--text-2); white-space: nowrap; }
 /* Select bar (2026-09-27 ui-controls-and-select-bar plan, Task 2): armed state of its own toolbar button,
    the crosshair over the chart while armed, and its vertical marker/bar highlight/ET label. */
 .replay-bar .ib.active { background: var(--accent-soft); color: var(--accent); }
@@ -770,10 +773,17 @@ a { color: inherit; }
 .pr-tag { align-self: center; margin-right: 2px; padding: 2px 6px; border-radius: 4px; background: var(--warn);
   color: #131722; font-size: 10px; font-weight: 700; letter-spacing: .04em; white-space: nowrap; }
 .tr-buy:disabled, .tr-sell:disabled { opacity: .5; cursor: default; filter: none; }
-/* the P&L strip, just above the floating control bar */
-.replay-pnl { position: absolute; left: 50%; bottom: 44px; z-index: 6; transform: translateX(-50%);
-  padding: 3px 10px; border-radius: 8px; background: var(--panel); box-shadow: var(--shadow-menu);
-  font-size: 12px; color: var(--text); white-space: nowrap; pointer-events: none; font-variant-numeric: tabular-nums; }
+/* ---- Task 1 (TV-parity plan): practice trading merged into the SAME floating control bar, TradingView-style
+   -- compact Buy/Sell (the legend slot's own .tr-buy/.tr-sell are 38px tall, sized for the chart corner; the
+   control bar is 24px, so these are their own smaller variant, same colours). ---- */
+.replay-bar .rb-side { height: 24px; min-width: 54px; padding: 0 8px; border-radius: 4px; color: #fff;
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px; font-weight: 600;
+  font-size: 12px; white-space: nowrap; }
+.replay-bar .rb-side.rb-sell { background: var(--down); } .replay-bar .rb-side.rb-buy { background: var(--accent); }
+.replay-bar .rb-side:hover:not(:disabled) { filter: brightness(1.08); }
+.replay-bar .rb-side:disabled { opacity: .5; cursor: default; filter: none; }
+.replay-bar .rb-qty { width: 40px; height: 24px; text-align: center; border: 1px solid var(--border); border-radius: 4px;
+  background: var(--panel); font-size: 12px; }
 /* ---- Strategy Tester tab (testerui.js) ---- */
 .tst { display: flex; flex-direction: column; min-height: 100%; }
 /* The header, the holdout banner (conditionally shown/hidden between them) and the inner tab bar sit in
@@ -934,26 +944,26 @@ a { color: inherit; }
    soft 3px ring -- never the page-wide 2px outline on top of it. Heights stay each control's own, so
    nothing reflows. Declared last so it wins over the per-control rules above at equal specificity. */
 :where(.menu-input, .hotkey-input, .field input[type="number"], .field input[type="text"], .set-select, .set-num,
-  .sw-hex, .op-in, .op-sel, .tst-num, .tst-date-in, .tst-heat-vals, .replay-bar .rb-jump input, .ctl-in) {
+  .sw-hex, .op-in, .op-sel, .tst-num, .tst-date-in, .tst-heat-vals, .ctl-in) {
   border: 1px solid var(--ctl-border); background-color: var(--panel); color: var(--text);
   font-variant-numeric: tabular-nums; caret-color: var(--accent);
   transition: border-color 120ms ease, box-shadow 120ms ease; }
 :where(.menu-input, .hotkey-input, .field input[type="number"], .field input[type="text"], .set-select, .set-num,
-  .sw-hex, .op-in, .op-sel, .tst-num, .tst-date-in, .tst-heat-vals, .replay-bar .rb-jump input, .ctl-in):hover:not(:disabled):not(:focus) {
+  .sw-hex, .op-in, .op-sel, .tst-num, .tst-date-in, .tst-heat-vals, .ctl-in):hover:not(:disabled):not(:focus) {
   border-color: var(--ctl-border-hover); }
 :where(.menu-input, .hotkey-input, .field input[type="number"], .field input[type="text"], .set-select, .set-num,
-  .sw-hex, .op-in, .op-sel, .tst-num, .tst-date-in, .tst-heat-vals, .replay-bar .rb-jump input, .ctl-in):focus {
+  .sw-hex, .op-in, .op-sel, .tst-num, .tst-date-in, .tst-heat-vals, .ctl-in):focus {
   outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 :where(.menu-input, .hotkey-input, .field input, .set-num, .sw-hex, .op-in, .tst-num, .tst-date-in, .tst-heat-vals,
-  .replay-bar .rb-jump input, .ctl-in)::placeholder { color: var(--ctl-placeholder); opacity: 1; }
+  .ctl-in)::placeholder { color: var(--ctl-placeholder); opacity: 1; }
 :where(.menu-input, .hotkey-input, .field input[type="number"], .field input[type="text"], .set-select, .set-num,
-  .sw-hex, .op-in, .op-sel, .tst-num, .tst-date-in, .tst-heat-vals, .replay-bar .rb-jump input, .ctl-in):disabled {
+  .sw-hex, .op-in, .op-sel, .tst-num, .tst-date-in, .tst-heat-vals, .ctl-in):disabled {
   background-color: var(--ctl-bg-disabled); color: var(--text-2); cursor: default; }
 :where(.menu-input, .hotkey-input, .field input, .set-num, .sw-hex, .op-in, .tst-num, .tst-date-in, .tst-heat-vals,
-  .replay-bar .rb-jump input, .ctl-in, .set-select, .op-sel)[aria-invalid="true"] {
+  .ctl-in, .set-select, .op-sel)[aria-invalid="true"] {
   border-color: var(--down); }
 :where(.menu-input, .hotkey-input, .field input, .set-num, .sw-hex, .op-in, .tst-num, .tst-date-in, .tst-heat-vals,
-  .replay-bar .rb-jump input, .ctl-in, .set-select, .op-sel)[aria-invalid="true"]:focus {
+  .ctl-in, .set-select, .op-sel)[aria-invalid="true"]:focus {
   box-shadow: 0 0 0 3px var(--down-soft); }
 /* the search boxes that wrap a bare input: the box carries the same border and ring */
 .dlg-search { border-color: var(--ctl-border); transition: border-color 120ms ease, box-shadow 120ms ease; }
