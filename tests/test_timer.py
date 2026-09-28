@@ -49,6 +49,9 @@ class FakeMD:
     def trade_push(self, sym, before=None):
         return None                           # no tape: the journal's stamp fields stay null
 
+    def pushes(self, sym):
+        return 0 if self.prices.get(sym, self.last_trade) is None else 1
+
 
 def iso_z(when):
     """An aware datetime as Tradovate's quote `timestamp`: ISO, ms, UTC 'Z'."""
@@ -62,11 +65,12 @@ class TapeMD(FakeMD):
     _on_event = TradovateMD._on_event
     last = TradovateMD.last
     trade_push = TradovateMD.trade_push
+    pushes = TradovateMD.pushes
     SAME = object()
 
     def __init__(self, snapshot=None, **kw):
         super().__init__(**kw)
-        self._trades, self._tape, self._cid_sym = {}, {}, {}
+        self._trades, self._tape, self._cid_sym, self._pushes = {}, {}, {}, {}
         self._received = 0.0
         self._clock = lambda: self._received
         self.snapshot = dict(snapshot or {})  # symbol -> the trade its subscription's first quote carries
@@ -376,6 +380,76 @@ def test_an_anchor_refusal_journals_the_pushes_it_saw(tmp_path):
         "newest_seen": "09:30:00.100", "newest_stamp_raw": None, "newest_stamp": None,
         "newest_lag_ms": None}
     assert not any(e["event"] in ("timer_fired", "dry_run") for e in events(tmp_path))
+
+
+def _bid_only(md, symbol, seen):
+    """A quote push with no trade in it (the bid moved), received at `seen`."""
+    cid = next(c for c, s in md._cid_sym.items() if s == symbol)
+    md._received = seen.timestamp()
+    md._on_event({"e": "md", "d": {"quotes": [
+        {"contractId": cid, "entries": {"Bid": {"price": 24499.75, "size": 3}}}]}})
+
+
+def _refusal(root):
+    e = next(e for e in events(root) if e["event"] == "timer_error")
+    return e["cause"], e["error"], e["pushes"], e.get("age_s"), e["late"]
+
+
+def test_an_anchor_refusal_says_which_it_is_and_how_many_pushes_came(tmp_path):
+    """Review 2026-09-28: one text covered five causes. On time: no push at all, none
+    received before 09:30:00.000 with a trade, or the last one too old (its age)."""
+    def staged(name):
+        root = tmp_path / name
+        root.mkdir()
+        timer, engine, md, clock = mk(root, md=TapeMD())
+        at(clock, 9, 21); run(timer.tick())
+        at(clock, 9, 29); run(timer.tick())
+        return root, timer, md, clock
+
+    root, timer, md, clock = staged("none")
+    at(clock, 9, 30); run(timer.tick())
+    assert _refusal(root) == ("no_pushes", "no anchor: no quote pushes at all for NQ", 0, None, False)
+    assert timer.status()["strategies"]["nq930"]["error"] == "no anchor: no quote pushes at all for NQ"
+
+    root, timer, md, clock = staged("after")
+    _bid_only(md, "NQ", et(9, 29, 59, 500000))                   # before the open, but no trade
+    md.push("NQ", et(9, 30, 0, 100000), 24511.0)                 # a trade, after it
+    at(clock, 9, 30, 0, 200000); run(timer.tick())
+    assert _refusal(root) == (
+        "none_before_open", "no anchor: none of 2 quote pushes for NQ had a trade before 09:30:00.000",
+        2, None, False)
+
+    root, timer, md, clock = staged("stale")
+    md.push("NQ", et(9, 29, 40), 24500.0)                        # 20 s before the fire
+    at(clock, 9, 30); run(timer.tick())
+    assert _refusal(root) == (
+        "stale_trade", "no anchor: last trade before 09:30:00.000 is 20.0 s old (1 quote push, NQ)",
+        1, 20.0, False)
+
+
+def test_a_late_refusal_says_which_it_is_too(tmp_path):
+    root = tmp_path / "no-trade"
+    root.mkdir()
+    timer, engine, md, clock = mk(root, md=TapeMD())
+    at(clock, 9, 21); run(timer.tick())
+    at(clock, 9, 29); run(timer.tick())                          # staged
+    for s in (50, 55):
+        _bid_only(md, "NQ", et(9, 30, s))
+    at(clock, 9, 31); run(timer.tick())                          # the loop stalled a minute
+    assert _refusal(root) == ("no_trade", "no anchor: none of 2 quote pushes for NQ had a trade",
+                              2, None, True)
+
+    root = tmp_path / "stale"
+    root.mkdir()
+    timer, engine, md, clock = mk(root, md=TapeMD())
+    at(clock, 9, 21); run(timer.tick())
+    at(clock, 9, 29); run(timer.tick())
+    md.push("NQ", et(9, 30, 30), 24520.0)
+    _bid_only(md, "NQ", et(9, 30, 59))
+    at(clock, 9, 31); run(timer.tick())
+    assert _refusal(root) == ("stale_trade", "no anchor: newest trade is 30.0 s old (2 quote pushes, NQ)",
+                              2, 30.0, True)
+    assert timer.status()["strategies"]["nq930"]["reason"] == "late_fire"
 
 
 def fired(root):
@@ -731,6 +805,11 @@ def test_the_md_anchor_is_the_last_trade_received_before_the_open(tmp_path, monk
     assert m.trade_push("NQZ6", cut) == (et(9, 29, 59, 999000).timestamp(), 24500.25, None, None)
     seen, px, raw, stamp = m.trade_push("NQZ6")
     assert (px, raw, stamp) == (24509.5, 1789392600150, 1789392600.15)
+    m._on_event({"e": "md", "d": {"quotes": [                    # no trade in it; an unknown contract
+        {"contractId": 3267315, "entries": {"Bid": {"price": 24509.25, "size": 2}}},
+        {"contractId": 999, "entries": {"Trade": {"price": 1.0, "size": 1}}}]}})
+    assert (m.pushes("NQZ6"), m.pushes("YMZ6"), m.pushes("ESZ6")) == (5, 1, 0)   # every push, trade or not
+    assert m.last("NQZ6")[0] == 24509.5
     for i in range(TRADE_HISTORY):                               # a flood after the open ...
         push(et(9, 30, 0, 500000), 24520.0 + i * 0.25)
     assert m.last("NQZ6", before=cut) == (None, 0.0)             # ... refuses, never a later print

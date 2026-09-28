@@ -292,15 +292,38 @@ class SelfTimer:
             lateness = {k: info[k] for k in ("late", "late_s", "reason") if k in info}
             # freshness on the timer's own clock: the wall clock the pushes are received on
             if px is None or now.timestamp() - seen > QUOTE_MAX_AGE_S:
-                st.update(stage="error",
-                          error=("no fresh trade for the anchor" if late else
-                                 "no fresh trade received before 09:30:00 for the anchor"),
-                          **lateness)
-                self.engine.journal("timer_error", strategy=name,
-                                    error=st["error"], **info)
+                cause, error, told = self._no_anchor(sub, px, now.timestamp() - seen, late)
+                st.update(stage="error", error=error, **lateness)
+                self.engine.journal("timer_error", strategy=name, error=error,
+                                    cause=cause, **told, **info)
                 return
             st.update(anchor=px, stage="fired", **lateness)   # a late one shows loud (status)
             return self._fire(name, s, px, info)   # tick() fires all due at once
+
+    def _no_anchor(self, sub, px, age, late) -> tuple[str, str, dict]:
+        """Why a fire has no anchor, told apart -> (cause, error, journal fields),
+        with the contract's quote push count: no_pushes (none at all);
+        none_before_open (on time: none received before 09:30:00.000 brought a
+        trade); no_trade (late: none brought one); stale_trade (the trade is
+        older than QUOTE_MAX_AGE_S: its age)."""
+        try:
+            n = int(self._md.pushes(sub)) if self._md is not None else 0
+        except Exception:  # noqa: BLE001 — the refusal stands; only its count is unknown
+            n = None
+        of = f"{'?' if n is None else n} quote push{'' if n == 1 else 'es'}"
+        if px is None and n == 0:
+            return "no_pushes", f"no anchor: no quote pushes at all for {sub}", {"pushes": 0}
+        if px is None and late:
+            return "no_trade", f"no anchor: none of {of} for {sub} had a trade", {"pushes": n}
+        if px is None:
+            return ("none_before_open",
+                    f"no anchor: none of {of} for {sub} had a trade before 09:30:00.000",
+                    {"pushes": n})
+        age = round(age, 1)
+        return ("stale_trade",
+                (f"no anchor: newest trade is {age} s old ({of}, {sub})" if late else
+                 f"no anchor: last trade before 09:30:00.000 is {age} s old ({of}, {sub})"),
+                {"pushes": n, "age_s": age})
 
     def _late_why(self, st, fire_at) -> str:
         """Why a fire is past FIRE_LATE_MAX_S. late_fire: staged before the

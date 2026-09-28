@@ -72,6 +72,7 @@ class TradovateMD:
         # contract -> (unix time RECEIVED, price, the push's raw `timestamp`), oldest first.
         # Not `_hist`: MarketFeed (a subclass) keeps its closed bars under that name.
         self._tape: dict[str, deque] = {}
+        self._pushes: dict[str, int] = {}                   # contract -> quote pushes received
         self._cid_sym: dict[int, str] = {}                  # contractId -> contract
         self._clock = time.time                             # receive time (tests replace it)
 
@@ -127,6 +128,8 @@ class TradovateMD:
             tr = (q.get("entries") or {}).get("Trade") or {}
             px = tr.get("price")
             sym = self._cid_sym.get(q.get("contractId"))
+            if sym:
+                self._pushes[sym] = self._pushes.get(sym, 0) + 1
             if px is not None and sym:
                 px, seen = float(px), self._clock()
                 self._trades[sym] = (px, seen)
@@ -149,6 +152,10 @@ class TradovateMD:
             return self._trades.get(sym, (None, 0.0))
         p = self.trade_push(sym, before)
         return (p[1], p[0]) if p is not None else (None, 0.0)
+
+    def pushes(self, sym: str) -> int:
+        """Quote pushes received for one subscribed contract, a trade in them or not."""
+        return self._pushes.get(sym, 0)
 
     def trade_push(self, sym: str, before: Optional[float] = None) -> Optional[tuple]:
         """The kept trade push last(sym, before) answers from, for the journal:

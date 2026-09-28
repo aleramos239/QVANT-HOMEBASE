@@ -95,6 +95,18 @@ def test_a_miss_is_a_problem_and_says_why(tmp_path, monkeypatch):
     assert "timer_missed: " in out and "PROBLEMS — none" not in out
 
 
+def test_an_anchor_refusal_reads_whole_in_the_problems(tmp_path, monkeypatch):
+    _patch(monkeypatch, tmp_path)
+    _write_journal(tmp_path, [
+        {"ts": 1, "et": f"{DATE}T09:30:00", "event": "timer_error", "strategy": "nq930",
+         "error": "no anchor: last trade before 09:30:00.000 is 20.0 s old (1 quote push, NQZ6)",
+         "cause": "stale_trade", "pushes": 1, "age_s": 20.0, "late": False, "late_s": 0.0,
+         "anchor_source": "pre_open"}])
+    out = review(DATE)
+    assert ("09:30:00  timer_error: nq930 — no anchor: last trade before 09:30:00.000 is 20.0 s old "
+            "(1 quote push, NQZ6)") in out
+
+
 def test_a_restart_after_the_window_keeps_its_one_line(tmp_path, monkeypatch):
     """Journals from before the miss was said once a day: a line per restart."""
     _patch(monkeypatch, tmp_path)

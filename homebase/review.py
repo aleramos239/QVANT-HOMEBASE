@@ -186,6 +186,9 @@ def review(date: str) -> str:
                 f"{fire_clock(e.get('late_s'))}, {e.get('late_s')} s past 09:30:00 — "
                 f"{late_why(e.get('reason'), e.get('late_s'))}")
             continue
+        if e.get("event") == "timer_error" and e.get("cause"):   # no anchor: its words, whole
+            add(f"  {e['et'][11:19]}  timer_error: {e.get('strategy')} — {e.get('error')}")
+            continue
         if e.get("event") == "timer_missed":
             if e.get("strategy") in missed:    # older journals: one per restart
                 continue
