@@ -270,7 +270,7 @@
   .amenu .mi2{ display:block; width:100%; text-align:left; border:none;
     background:none; color:var(--foreground); font-size:13px; padding:7px 10px;
     border-radius:var(--radius-sm); cursor:pointer; }
-  .amenu .mi2:hover{ background:var(--secondary); }
+  .amenu .mi2:hover, .amenu .mi2:focus-visible{ background:var(--secondary); outline:none; }
   .qty-edit{ cursor:pointer; border-bottom:1px dashed var(--muted-foreground); }
   .qty-input{ width:44px; font-family:var(--font-mono); font-size:12px;
     background:var(--background); color:var(--foreground);
@@ -422,7 +422,7 @@
 </div>
 
 <div class="overlay" id="connectOverlay">
-  <div class="modal" style="width:440px">
+  <div class="modal" style="width:440px" role="dialog" aria-modal="true" tabindex="-1" aria-label="Add an account">
     <div class="wsteps">
       <span class="st" id="ws1"><span class="n">1</span>Broker</span><span class="ln"></span>
       <span class="st" id="ws2"><span class="n">2</span>Log in</span><span class="ln"></span>
@@ -513,12 +513,12 @@
 </div>
 
 <div class="overlay" id="resOverlay">
-  <div class="modal" style="width:600px">
+  <div class="modal" style="width:600px" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="resName">
     <div class="cal-head">
       <span style="font-weight:600" id="resName">—</span>
       <span style="font-size:12px;color:var(--muted-foreground)" id="resSource"></span>
       <span class="spacer" style="flex:1"></span>
-      <button class="cal-nav" onclick="closeRes()" title="Close">&times;</button>
+      <button class="cal-nav" onclick="closeRes()" title="Close" aria-label="Close">&times;</button>
     </div>
     <div id="resChart" style="margin-top:8px"></div>
     <div class="mcap" id="resChartCap"></div>
@@ -528,22 +528,22 @@
 </div>
 
 <div class="overlay" id="confirmOverlay" style="z-index:70">
-  <div class="modal" style="width:400px">
+  <div class="modal" style="width:400px" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="cfTitle" aria-describedby="cfBody">
     <h2 id="cfTitle" style="margin:0 0 6px;font-size:1.05rem;font-weight:600"></h2>
     <p id="cfBody" class="sub" style="margin:0 0 16px;font-size:13px;color:var(--muted-foreground)"></p>
     <div class="row-btns">
-      <button class="btn btn-outline" onclick="cfDone(false)">Cancel</button>
+      <button class="btn btn-outline" id="cfCancel" data-autofocus onclick="cfDone(false)">Cancel</button>
       <button class="btn btn-default" id="cfGo" onclick="cfDone(true)">Confirm</button>
     </div>
   </div>
 </div>
 
 <div class="overlay" id="settingsOverlay">
-  <div class="modal" style="width:440px">
+  <div class="modal" style="width:440px" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="settingsTitle">
     <div class="cal-head">
-      <span style="font-weight:600">Settings</span>
+      <span style="font-weight:600" id="settingsTitle">Settings</span>
       <span class="spacer" style="flex:1"></span>
-      <button class="cal-nav" onclick="closeSettings()" title="Close">&times;</button>
+      <button class="cal-nav" onclick="closeSettings()" title="Close" aria-label="Close">&times;</button>
     </div>
     <div id="settingsBody">
       <div id="settingsTrading"></div>
@@ -553,13 +553,13 @@
 </div>
 
 <div class="overlay" id="acctOverlay">
-  <div class="modal" style="width:780px;max-width:94vw">
+  <div class="modal" style="width:780px;max-width:94vw" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="acctTitle">
     <div class="cal-head">
-      <span style="font-weight:600">Accounts</span>
+      <span style="font-weight:600" id="acctTitle">Accounts</span>
       <span style="font-size:12px;color:var(--muted-foreground)" id="acctCount"></span>
       <span class="spacer" style="flex:1"></span>
       <button class="btn btn-outline btn-sm" onclick="closeAccts();openConnect()">+ Add account</button>
-      <button class="cal-nav" onclick="closeAccts()" title="Close">&times;</button>
+      <button class="cal-nav" onclick="closeAccts()" title="Close" aria-label="Close">&times;</button>
     </div>
     <div id="acctList2"></div>
     <div id="paperList"></div>
@@ -567,12 +567,12 @@
 </div>
 
 <div class="overlay" id="algoOverlay">
-  <div class="modal" style="width:640px;max-width:94vw">
+  <div class="modal" style="width:640px;max-width:94vw" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="algoTitle">
     <div class="cal-head">
-      <span style="font-weight:600">Manage algos</span>
+      <span style="font-weight:600" id="algoTitle">Manage algos</span>
       <span style="font-size:12px;color:var(--muted-foreground)" id="algoCount"></span>
       <span class="spacer" style="flex:1"></span>
-      <button class="cal-nav" onclick="closeAlgoMgr()" title="Close">&times;</button>
+      <button class="cal-nav" onclick="closeAlgoMgr()" title="Close" aria-label="Close">&times;</button>
     </div>
     <p class="mcap" style="margin:0 0 8px">Hiding is display only — it never changes whether an
       algo trades. An algo that's live (on AND booked to an account) always shows here.</p>
@@ -581,15 +581,15 @@
 </div>
 
 <div class="overlay" id="liveOverlay">
-  <div class="modal" style="width:640px;max-width:94vw">
+  <div class="modal" style="width:640px;max-width:94vw" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="liveName">
     <div class="cal-head">
       <span style="font-weight:600" id="liveName">—</span>
       <span style="font-size:12px;color:var(--muted-foreground)" id="liveSince"></span>
       <span class="spacer" style="flex:1"></span>
-      <button class="cal-nav" onclick="liveStep(-1)">&lsaquo;</button>
+      <button class="cal-nav" onclick="liveStep(-1)" aria-label="Previous month">&lsaquo;</button>
       <span class="m" id="liveMonth">—</span>
-      <button class="cal-nav" onclick="liveStep(1)">&rsaquo;</button>
-      <button class="cal-nav" onclick="closeLive()" title="Close">&times;</button>
+      <button class="cal-nav" onclick="liveStep(1)" aria-label="Next month">&rsaquo;</button>
+      <button class="cal-nav" onclick="closeLive()" title="Close" aria-label="Close">&times;</button>
     </div>
     <div class="cal-grid" id="liveGrid"></div>
     <div class="cal-foot"><span id="liveNote"></span><span class="tot" id="liveTotal"></span></div>
@@ -599,12 +599,12 @@
 </div>
 
 <div class="overlay" id="checksOverlay">
-  <div class="modal" style="width:560px">
+  <div class="modal" style="width:560px" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="checksTitle">
     <div class="cal-head">
       <span class="bulb" id="bulbBig" style="cursor:default"></span>
       <span style="font-weight:600" id="checksTitle">System checks</span>
       <span class="spacer" style="flex:1"></span>
-      <button class="cal-nav" onclick="closeChecks()" title="Close">&times;</button>
+      <button class="cal-nav" onclick="closeChecks()" title="Close" aria-label="Close">&times;</button>
     </div>
     <div id="checksList" style="margin-top:6px"></div>
     <p class="mcap" style="margin:10px 0 0">Green = ready to trade. Amber = attention,
@@ -613,13 +613,13 @@
 </div>
 
 <div class="overlay" id="pineOverlay">
-  <div class="modal" style="width:680px">
+  <div class="modal" style="width:680px" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="pineName">
     <div class="cal-head">
       <span style="font-weight:600" id="pineName">—</span>
       <span style="font-size:12px;color:var(--muted-foreground);font-family:var(--font-mono)" id="pineFile"></span>
       <span class="spacer" style="flex:1"></span>
       <button class="btn btn-outline btn-sm" onclick="copyPine()">Copy</button>
-      <button class="cal-nav" onclick="closePine()" title="Close">&times;</button>
+      <button class="cal-nav" onclick="closePine()" title="Close" aria-label="Close">&times;</button>
     </div>
     <pre id="pineSrc" style="font-family:var(--font-mono);font-size:11.5px;line-height:1.5;
       background:var(--secondary);border:1px solid var(--border);border-radius:var(--radius-md);
@@ -628,14 +628,14 @@
 </div>
 
 <div class="overlay" id="calOverlay">
-  <div class="modal" style="width:460px">
+  <div class="modal" style="width:460px" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="calAcct">
     <div class="cal-head">
       <span style="font-weight:600" id="calAcct">—</span>
       <span class="spacer" style="flex:1"></span>
-      <button class="cal-nav" onclick="calStep(-1)">&lsaquo;</button>
+      <button class="cal-nav" onclick="calStep(-1)" aria-label="Previous month">&lsaquo;</button>
       <span class="m" id="calMonth">—</span>
-      <button class="cal-nav" onclick="calStep(1)">&rsaquo;</button>
-      <button class="cal-nav" onclick="closeCal()" title="Close">&times;</button>
+      <button class="cal-nav" onclick="calStep(1)" aria-label="Next month">&rsaquo;</button>
+      <button class="cal-nav" onclick="closeCal()" title="Close" aria-label="Close">&times;</button>
     </div>
     <div class="cal-grid" id="calGrid"></div>
     <div class="cal-foot"><span id="calNote"></span>
@@ -682,6 +682,87 @@ $("#themeToggle").onclick = () => {
   try { localStorage.setItem("hb_theme", next); } catch (_) {}
 };
 
+/* ---- overlays: one open/close path for every dialog and the + Assign menu (W7) ----
+   Every .modal is role="dialog" aria-modal="true" in the markup. showOverlay remembers what had
+   focus (the trigger) and moves focus in: the dialog's [data-autofocus] control -- the confirm's
+   Cancel, the safe default -- or else the dialog itself. hideOverlay gives focus back to the
+   trigger, or to its twin (same onclick) when a 2.5 s re-render has replaced it. Esc closes the
+   topmost dialog exactly like its Cancel / × (one layer per press: a held Esc's auto-repeat is
+   ignored), and Tab stays inside it. Page-wide, a held Enter/Space never activates a control
+   through auto-repeat (GOTCHAS: a held key has sent duplicate orders here before) -- which
+   matters more now that focus lands inside a dialog while the key that opened it may still be
+   down. The + Assign menu gets Esc, focus in and back, and the arrow keys. Nothing here sends. */
+const OVERLAYS = [];   // the open dialogs, topmost last: {el, trigger}
+const OVERLAY_CLOSE = {confirmOverlay: () => cfDone(false), settingsOverlay: () => closeSettings(),
+  connectOverlay: () => closeConnect(), resOverlay: () => closeRes(), acctOverlay: () => closeAccts(),
+  algoOverlay: () => closeAlgoMgr(), liveOverlay: () => closeLive(), checksOverlay: () => closeChecks(),
+  pineOverlay: () => closePine(), calOverlay: () => closeCal()};
+const FOCUSABLE = "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), " +
+  "textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
+function showOverlay(id) {
+  const el = $("#" + id);
+  if (!el) return;
+  if (!OVERLAYS.some(o => o.el === el)) OVERLAYS.push({el, trigger: document.activeElement});
+  el.classList.add("open");
+  const box = el.querySelector(".modal") || el;
+  if (box.contains(document.activeElement)) return;          // already inside (a re-open)
+  const first = box.querySelector("[data-autofocus]") || box;
+  if (typeof first.focus === "function") first.focus();
+}
+function hideOverlay(id) {
+  const el = $("#" + id);
+  if (!el) return;
+  el.classList.remove("open");
+  const i = OVERLAYS.findIndex(o => o.el === el);
+  if (i < 0) return;
+  const {trigger} = OVERLAYS.splice(i, 1)[0];
+  const at = document.activeElement;
+  if (!at || at === document.body || el.contains(at)) restoreFocus(trigger);   // never steal it
+}
+function restoreFocus(t) {
+  if (!t || t === document.body) return;
+  let el = t;
+  if (!document.contains(el)) {                              // replaced by a re-render: its twin
+    const oc = t.getAttribute && t.getAttribute("onclick");
+    el = oc ? [...document.querySelectorAll("[onclick]")].find(x => x.getAttribute("onclick") === oc) : null;
+  }
+  if (el && typeof el.focus === "function") el.focus();
+}
+function trapTab(e, overlay) {
+  const box = overlay.querySelector(".modal") || overlay;
+  const f = [...box.querySelectorAll(FOCUSABLE)].filter(x => x.offsetParent !== null);
+  const at = document.activeElement;
+  if (!f.length) { e.preventDefault(); box.focus(); return; }
+  const first = f[0], last = f[f.length - 1];
+  if (!box.contains(at) || at === box) { e.preventDefault(); (e.shiftKey ? last : first).focus(); }
+  else if (e.shiftKey && at === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && at === last) { e.preventDefault(); first.focus(); }
+}
+const ACTIVATES = "button, a[href], [role='button'], [role='menuitem']";
+document.addEventListener("keydown", (e) => {
+  if ((e.key === "Enter" || e.key === " ") && e.repeat) {
+    if (e.target && e.target.closest && e.target.closest(ACTIVATES)) e.preventDefault();
+    return;                                                  // a held key never re-activates a control
+  }
+  const top = OVERLAYS.length ? OVERLAYS[OVERLAYS.length - 1] : null;
+  if (e.key === "Escape") {
+    if (e.repeat) { e.preventDefault(); return; }            // one layer per press
+    if (top) { e.preventDefault(); (OVERLAY_CLOSE[top.el.id] || (() => hideOverlay(top.el.id)))(); }
+    else if (closeAsgMenus(true)) e.preventDefault();
+    return;
+  }
+  if (e.key === "Tab" && top) { trapTab(e, top.el); return; }
+  if (!top && ASG_OPEN && ["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) {
+    const items = [...ASG_OPEN.menu.querySelectorAll(".mi2")];
+    if (!items.length) return;
+    const i = items.indexOf(document.activeElement), n = items.length;
+    const k = e.key === "Home" ? 0 : e.key === "End" ? n - 1
+      : e.key === "ArrowDown" ? (i + 1) % n : (i - 1 + n) % n;
+    e.preventDefault();
+    items[k].focus();
+  }
+}, true);   // capture: ahead of any control's own key handling
+
 /* ---- confirmation popup (every consequential action asks here; Kill is also a hold first) ---- */
 let CONFIRM_CB = null;
 function confirmDlg(title, body, action, destructive) {
@@ -692,7 +773,7 @@ function confirmDlg(title, body, action, destructive) {
     b.textContent = action || "Confirm";
     b.className = "btn " + (destructive ? "btn-destructive" : "btn-default");
     CONFIRM_CB = res;
-    $("#confirmOverlay").classList.add("open");
+    showOverlay("confirmOverlay");   // focus lands on Cancel, the safe default
   });
 }
 /* The desk's ONE confirm policy for every switch (S6): ask only when a flip turns ON something
@@ -706,7 +787,7 @@ function needsConfirm(kind, turningOn, opts) {
     ? AV.switchNeedsConfirm(kind, turningOn, opts) : !!turningOn;
 }
 function cfDone(v) {
-  $("#confirmOverlay").classList.remove("open");
+  hideOverlay("confirmOverlay");
   const cb = CONFIRM_CB; CONFIRM_CB = null;
   if (cb) cb(v);
 }
@@ -845,8 +926,8 @@ function renderChecks() {
     <div class="chk"><span class="dot" style="background:${CHK_COLOR[c.level] || CHK_COLOR.info}"></span>
       <span class="lbl">${c.label}</span><span class="det">${c.detail}</span></div>`).join("");
 }
-function openChecks() { renderChecks(); $("#checksOverlay").classList.add("open"); }
-function closeChecks() { $("#checksOverlay").classList.remove("open"); }
+function openChecks() { renderChecks(); showOverlay("checksOverlay"); }
+function closeChecks() { hideOverlay("checksOverlay"); }
 $("#checksOverlay").addEventListener("click", (e) => {
   if (e.target === e.currentTarget) closeChecks();
 });
@@ -1137,9 +1218,9 @@ function stratCard(name, s) {
   const free = Object.keys(accts).filter(id => !asg.some(a => a.account === id));
   const addForm = Object.keys(accts).length
     ? (free.length ? `<div style="position:relative;display:inline-block;margin-top:8px">
-        <button class="btn btn-outline btn-sm" onclick="toggleAsgMenu('${name}')">+ Assign</button>
-        <div class="amenu" id="amenu-${name}" hidden>` +
-        free.map(id => `<button class="mi2" onclick="pickAsg('${name}','${id}',${c.qty})">
+        <button class="btn btn-outline btn-sm" onclick="toggleAsgMenu('${name}')" aria-haspopup="menu">+ Assign</button>
+        <div class="amenu" id="amenu-${name}" role="menu" hidden>` +
+        free.map(id => `<button class="mi2" role="menuitem" onclick="pickAsg('${name}','${id}',${c.qty})">
           ${accts[id].label || id}</button>`).join("") + `</div></div>` : "")
     : `<div class="mcap">add an account to run this strategy</div>`;
   const book = `<div class="slabel2">ACCOUNTS</div>${rows || ""}${addForm}`;
@@ -1399,12 +1480,24 @@ function removeAsg(strategy, account) {
   setBook(strategy, cur);
 }
 let FREEZE = false;               // pause re-render while a menu/edit is open
+let ASG_OPEN = null;              // the open + Assign menu: {menu, trigger} (W7: Esc, focus, arrows)
 function toggleAsgMenu(strategy) {
   const m = $("#amenu-" + strategy);
   const open = m.hidden;
   document.querySelectorAll(".amenu").forEach(x => x.hidden = true);
   m.hidden = !open;
   FREEZE = !m.hidden;
+  ASG_OPEN = m.hidden ? null : {menu: m, trigger: m.previousElementSibling};
+  if (ASG_OPEN) { const first = m.querySelector(".mi2"); if (first) first.focus(); }   // focus goes in
+}
+/* Close any open + Assign menu; `refocus` (Esc) hands focus back to its + Assign button. */
+function closeAsgMenus(refocus) {
+  const was = ASG_OPEN;
+  document.querySelectorAll(".amenu").forEach(x => x.hidden = true);
+  ASG_OPEN = null;
+  if (!document.getElementById("qedit")) FREEZE = false;
+  if (refocus && was && was.trigger && document.contains(was.trigger)) was.trigger.focus();
+  return !!was;
 }
 /* Booking a LIVE account onto a strategy asks first (2026-09-28, Apple-design audit S3): it is the
    step that makes a live account trade real money, so it gets the same dialog as connecting one
@@ -1445,7 +1538,7 @@ function liveBookingNote(strategy, account) {
 }
 async function pickAsg(strategy, account, qty) {
   FREEZE = false;
-  document.querySelectorAll(".amenu").forEach(x => x.hidden = true);
+  closeAsgMenus(false);
   if (!isDemoAcct(account) && !await confirmDlg(
       `Book ${strategy.toUpperCase()} on ${acctShort(account)} LIVE × ${qty}?`,
       liveBookingNote(strategy, account), "Book live", true)) { refresh(); return; }
@@ -1483,8 +1576,7 @@ function editQty(ev, strategy, account, qty) {
 }
 document.addEventListener("click", (e) => {
   if (!e.target.closest(".amenu") && !String(e.target.getAttribute?.("onclick") || "").includes("toggleAsgMenu")) {
-    document.querySelectorAll(".amenu").forEach(x => x.hidden = true);
-    if (!document.getElementById("qedit")) FREEZE = false;
+    closeAsgMenus(false);
   }
 });
 function mstrip(rows) {
@@ -1495,7 +1587,7 @@ function mstrip(rows) {
 /* ---- connect wizard ---- */
 let WIZ = {saved: null, key: null, accounts: [], pick: null, env: "demo"};
 function openConnect() {
-  setEnv("demo"); wizGoto(1); $("#connectOverlay").classList.add("open");
+  setEnv("demo"); wizGoto(1); showOverlay("connectOverlay");
 }
 function setEnv(env) {
   if (WIZ.env !== env) WIZ.saved = null;          // saved logins are per env
@@ -1518,7 +1610,7 @@ async function wizNext1() {
   wizGoto(2);
 }
 function closeConnect() {
-  $("#connectOverlay").classList.remove("open");
+  hideOverlay("connectOverlay");
   const p = $("#cPass"); if (p) p.value = "";
 }
 function wizGoto(n) {
@@ -1903,7 +1995,7 @@ async function applyMd() {
 }
 
 function openSettings() {
-  $("#settingsOverlay").classList.add("open");
+  showOverlay("settingsOverlay");
   renderSettings();   // CHART TRADING shows right away -- it never waits on the chart service
   loadSettings();
   loadChartStatus();
@@ -1911,7 +2003,7 @@ function openSettings() {
   if (!DEMO) MD_POLL = setInterval(loadChartStatus, 2500);   // preview mode never polls :8852
 }
 function closeSettings() {
-  $("#settingsOverlay").classList.remove("open");
+  hideOverlay("settingsOverlay");
   clearInterval(MD_POLL);
   MD_POLL = null;
 }
@@ -2001,7 +2093,7 @@ async function openRes(name) {
   $("#resSource").textContent = r.source || "";
   $("#resChart").innerHTML = `<div class="mcap">loading curve…</div>`;
   $("#resChartCap").textContent = "";
-  $("#resOverlay").classList.add("open");
+  showOverlay("resOverlay");
   try {
     const d = await (await fetch("/api/research-equity?strategy=" +
                                  encodeURIComponent(name))).json();
@@ -2050,7 +2142,7 @@ async function openRes(name) {
     $("#resChart").innerHTML = `<div class="mcap">curve unavailable</div>`;
   }
 }
-function closeRes() { $("#resOverlay").classList.remove("open"); }
+function closeRes() { hideOverlay("resOverlay"); }
 $("#resOverlay").addEventListener("click", (e) => {
   if (e.target === e.currentTarget) closeRes();
 });
@@ -2124,9 +2216,9 @@ function openAccts() {
     : `<div class="mcap" style="padding:14px 0">no accounts yet — add one to start</div>`;
   renderPaper();
   loadPaper();
-  $("#acctOverlay").classList.add("open");
+  showOverlay("acctOverlay");
 }
-function closeAccts() { $("#acctOverlay").classList.remove("open"); }
+function closeAccts() { hideOverlay("acctOverlay"); }
 async function removeAcct(id) {
   closeAccts();
   if (!await confirmDlg("Remove " + id + "?",
@@ -2172,8 +2264,8 @@ function renderAlgoMgr() {
       }).join("")
     : `<div class="mcap" style="padding:14px 0">no algos configured yet</div>`;
 }
-function openAlgoMgr() { renderAlgoMgr(); $("#algoOverlay").classList.add("open"); }
-function closeAlgoMgr() { $("#algoOverlay").classList.remove("open"); }
+function openAlgoMgr() { renderAlgoMgr(); showOverlay("algoOverlay"); }
+function closeAlgoMgr() { hideOverlay("algoOverlay"); }
 /* "Show on home page" never asks, either way, under the desk's one confirm policy (S6):
    hiding a card is display only and changes nothing that trades -- switchNeedsConfirm(
    "visibility", ...) is false both ways -- and a card that could trade is locked visible. */
@@ -2199,7 +2291,7 @@ let LIVE = {name: "", d: new Date(), data: null};
 async function openLive(name) {
   LIVE.name = name; LIVE.d = new Date(); LIVE.data = null;
   $("#liveName").textContent = name.toUpperCase() + " · LIVE";
-  $("#liveOverlay").classList.add("open");
+  showOverlay("liveOverlay");
   renderLive();
   try {
     const r = await fetch("/api/strategy-live?strategy=" + encodeURIComponent(name));
@@ -2208,7 +2300,7 @@ async function openLive(name) {
   renderLive();
 }
 function liveStep(n) { LIVE.d.setMonth(LIVE.d.getMonth() + n); renderLive(); }
-function closeLive() { $("#liveOverlay").classList.remove("open"); }
+function closeLive() { hideOverlay("liveOverlay"); }
 $("#liveOverlay").addEventListener("click", (e) => {
   if (e.target === e.currentTarget) closeLive();
 });
@@ -2261,7 +2353,7 @@ async function openPine(name) {
   $("#pineName").textContent = name.toUpperCase();
   $("#pineFile").textContent = "";
   $("#pineSrc").textContent = "loading…";
-  $("#pineOverlay").classList.add("open");
+  showOverlay("pineOverlay");
   try {
     const d = await (await fetch("/api/pine?strategy=" +
                                  encodeURIComponent(name))).json();
@@ -2270,7 +2362,7 @@ async function openPine(name) {
       "no Pine source on file for this strategy";
   } catch (_) { $("#pineSrc").textContent = "source unavailable"; }
 }
-function closePine() { $("#pineOverlay").classList.remove("open"); }
+function closePine() { hideOverlay("pineOverlay"); }
 function copyPine() {
   navigator.clipboard.writeText($("#pineSrc").textContent)
     .then(() => toast("Pine source copied — paste into the TradingView editor."));
@@ -2283,9 +2375,9 @@ $("#pineOverlay").addEventListener("click", (e) => {
 let CAL = {account: "", d: new Date()};
 function openCal(account) {
   CAL.account = account; CAL.d = new Date();
-  $("#calOverlay").classList.add("open"); loadCal();
+  showOverlay("calOverlay"); loadCal();
 }
-function closeCal() { $("#calOverlay").classList.remove("open"); }
+function closeCal() { hideOverlay("calOverlay"); }
 function calStep(n) { CAL.d.setMonth(CAL.d.getMonth() + n); loadCal(); }
 $("#calOverlay").addEventListener("click", (e) => {
   if (e.target === e.currentTarget) closeCal();
