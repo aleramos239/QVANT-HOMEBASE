@@ -1,6 +1,8 @@
-/* Homebase Charts — HBDomUI: the Level 2 ladder's DOM (2026-09-27 charts-depth plan, Task 1). Hosted in the
-   order panel's DOM tab (orderpanel.js); follows the SELECTED chart's root. READ-ONLY: nothing here places,
-   drags or cancels anything -- a click on a row does nothing that sends.
+/* Homebase Charts — HBDomUI: the Level 2 ladder's DOM (2026-09-27 charts-depth plan, Task 1). Its own
+   floating/dockable panel since the 2026-09-27 panels plan (HBPanelShell owns the chrome; this file only
+   fills the container it's handed and follows the SELECTED chart's root on its own, re-resolved every paint
+   tick rather than cached, same discipline orderpanel.js uses for its own chart reference). READ-ONLY: nothing
+   here places, drags or cancels anything -- a click on a row does nothing that sends.
 
    Depth reaches the page as {"type":"depth", root, ts, bids, offers} over the existing /ws socket (app.js's
    routing hands it to onDepth), the top levels each side, a null ts meaning the book is gone. This file keeps
@@ -35,6 +37,7 @@ let dirty = false;
 
 /* ---- small helpers ---- */
 function mkEl(tag, cls, text) { return page.mk(tag, cls, text); }
+function selectedCell() { const C = window.HBCharts; return C ? C.cells[C.selected] || null : null; }
 function currentLast() {
   const q = D().quotes[cur.root];
   return q && Number.isFinite(q.last) ? q.last : null;
@@ -210,7 +213,12 @@ function mount(el, pg) {
   container = el;
   page = pg;
   build();
-  setInterval(() => { if (dirty) { dirty = false; if (visible) paint(); } }, PAINT_MIN_MS);
+  // no longer driven by orderpanel.js's own paint (it's a separate panel now): resolve the selected chart
+  // itself, on the same cadence, the same way orderpanel.js resolves it fresh rather than caching a reference
+  setInterval(() => {
+    sync(selectedCell());
+    if (dirty) { dirty = false; if (visible) paint(); }
+  }, PAINT_MIN_MS);
 }
 
 window.HBDomUI = { mount, sync, setVisible, onDepth, onDisconnect };
