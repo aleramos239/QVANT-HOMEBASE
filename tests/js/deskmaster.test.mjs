@@ -431,3 +431,11 @@ test('the bar sheds the clock, then the brand tag, then wraps -- never overflowi
   assert.match(narrow, /\.inset-topbar\{ height:auto; min-height:52px; flex-wrap:wrap;/);
   assert.match(narrow, /\.master\{ flex-wrap:wrap; justify-content:flex-end;/);
 });
+
+test('the stale pill is never faded: a dashed edge, full-strength text (measured >= 5.4:1 in both themes)', () => {
+  const rule = (sel) => { const i = HTML.indexOf('  ' + sel + '{'); assert.ok(i >= 0, sel); return HTML.slice(i, HTML.indexOf('}', i) + 1); };
+  assert.equal(rule('.master .pill.stale'), '  .master .pill.stale{ border-style:dashed; }');
+  assert.match(rule('.master .pill.idle.stale'), /color:var\(--foreground\);/);
+  assert.match(rule('.master .pill.armed.stale'), /border-color:var\(--destructive-foreground\);/);
+  assert.doesNotMatch(HTML, /\.pill\.stale\{[^}]*opacity/, 'opacity would pull the text under 4.5:1');
+});

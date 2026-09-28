@@ -127,7 +127,11 @@
   #armBtn{ width:4.75rem; flex:none; }
   #armBtn.gone{ visibility:hidden; }
   .inset-topbar > *{ flex-shrink:0; }
-  .master .pill.stale{ opacity:.6; border-style:dashed; }
+  /* stale (the last-known state, not current): a dashed edge and "· stale" -- never faded; the text
+     keeps >= 4.5:1 (review). DISARMED goes full foreground on the glass; ARMED keeps its solid red. */
+  .master .pill.stale{ border-style:dashed; }
+  .master .pill.idle.stale{ color:var(--foreground); border-color:var(--foreground); }
+  .master .pill.armed.stale{ border-color:var(--destructive-foreground); }
 
   /* press-and-hold (the top bar's Kill) — the copier's hold-to-confirm pattern, revived: a
      ring fills while the button is held (--hold-ms, set from HOLD_MS); letting go early
