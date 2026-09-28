@@ -1674,11 +1674,23 @@ async function refresh() {
     return;
   }
   if (DEMO) { ST = demoStatus(); DESK_STALE = false; LAST_FRESH = Date.now(); render(); return; }
-  try { ST = await (await fetch("/api/status")).json(); DESK_STALE = false; LAST_FRESH = Date.now(); render(); }
+  /* Only a real status replaces ST (second review): an HTTP error with a JSON body (the write
+     guard's 403) or a body without a boolean `armed` used to become ST -- and the pill then read
+     DISARMED, a state nobody reported. Anything else keeps the last-known state, marked stale. */
+  let refused = "";
+  try {
+    const res = await fetch("/api/status");
+    let d = null;
+    try { d = await res.json(); } catch (_) { d = null; }
+    if (!res.ok) refused = `the desk answered HTTP ${res.status}` + (d && d.error ? ": " + String(d.error).slice(0, 80) : "");
+    else if (!d || typeof d !== "object" || typeof d.armed !== "boolean") refused = "the desk's status was unreadable";
+    if (refused) throw new Error(refused);
+    ST = d; DESK_STALE = false; LAST_FRESH = Date.now(); render();
+  }
   catch {
     DESK_STALE = true;   // ST is now the last-known state, not current -- the top bar shows it as stale
-    STALE_WHY = "the desk is not answering";
-    $("#clock").textContent = "server unreachable";
+    STALE_WHY = refused || "the desk is not answering";
+    $("#clock").textContent = refused ? "status error" : "server unreachable";
     renderMaster();
     if ($("#settingsOverlay").classList.contains("open")) renderSettings();
   }

@@ -538,18 +538,24 @@ test('the stale pill is never faded: a dashed edge, full-strength text (measured
 
 // ---- an open menu or size edit holds updates, but never leaves the pill asserting a state ------
 const REFRESH = HTML.slice(HTML.indexOf('const FREEZE_STALE_MS'), HTML.indexOf('/* ---- PREVIEW MODE'));
-function loadRefresh() {
+function loadRefresh({ st = { armed: true }, reply = () => ({ ok: true, status: 200, body: { armed: true } }) } = {}) {
   const clock = { now: 0 }, fetched = [], masters = [], renders = [];
+  const clockEl = { textContent: '', classList: { contains: () => false } };
   const ctx = vm.createContext({
-    Date: { now: () => clock.now }, FREEZE: false, DEMO: false, ST: { armed: true }, DESK_STALE: false, STALE_WHY: '',
-    fetch: async (u) => { fetched.push(u); return { json: async () => ({ armed: true }) }; },
+    Date: { now: () => clock.now }, FREEZE: false, DEMO: false, ST: st, DESK_STALE: false, STALE_WHY: '',
+    fetch: async (u) => {
+      fetched.push(u);
+      const a = reply();
+      if (a instanceof Error) throw a;
+      return { ok: a.ok, status: a.status, json: async () => { if (a.body instanceof Error) throw a.body; return a.body; } };
+    },
     render: () => renders.push(1), renderMaster: () => masters.push(1), renderSettings() {},
-    $: () => ({ textContent: '', classList: { contains: () => false } }),
+    $: (sel) => (sel === '#clock' ? clockEl : { textContent: '', classList: { contains: () => false } }),
   });
   vm.runInContext(REFRESH + `
     globalThis.api = { refresh, get stale() { return DESK_STALE; }, get why() { return STALE_WHY; },
-      set freeze(v) { FREEZE = v; } };`, ctx);
-  return { api: ctx.api, clock, fetched, masters, renders };
+      get ST() { return ST; }, set freeze(v) { FREEZE = v; } };`, ctx);
+  return { api: ctx.api, clock, fetched, masters, renders, clockEl };
 }
 
 test('while a menu or size edit holds updates, the pill goes stale after 5 s -- with no extra request', async () => {
@@ -625,4 +631,31 @@ test('double-clicking Disarm is one flip: the re-painted Arm under the second cl
   await tick();
   assert.equal(s.confirms.length, 1);
   await later;
+});
+
+test('a JSON error from /api/status never becomes the state: the last-known one stays, marked stale with the reason', async () => {
+  const s = loadRefresh({ reply: () => ({ ok: false, status: 403, body: { error: 'host not allowed' } }) });
+  await s.api.refresh();
+  assert.deepEqual(plain(s.api.ST), { armed: true }, 'ST is not replaced by {error: ...} (which read as DISARMED)');
+  assert.equal(s.api.stale, true);
+  assert.equal(s.api.why, 'the desk answered HTTP 403: host not allowed');
+  assert.equal(s.clockEl.textContent, 'status error');
+  assert.equal(s.renders.length, 0);
+  assert.equal(s.masters.length, 1);
+});
+
+test('a 200 without a boolean "armed" is not a status either; a first load that fails keeps ST null (unknown)', async () => {
+  const s = loadRefresh({ reply: () => ({ ok: true, status: 200, body: { detail: 'weird' } }) });
+  await s.api.refresh();
+  assert.deepEqual(plain(s.api.ST), { armed: true });
+  assert.equal(s.api.why, "the desk's status was unreadable");
+  const f = loadRefresh({ st: null, reply: () => ({ ok: false, status: 500, body: new SyntaxError('Unexpected token I') }) });
+  await f.api.refresh();
+  assert.equal(f.api.ST, null, 'never assert a state it does not know');
+  assert.equal(f.api.stale, true);
+  assert.equal(f.api.why, 'the desk answered HTTP 500', 'a plain-text 500 says what it was, not "not answering"');
+  const n = loadRefresh({ reply: () => new TypeError('Failed to fetch') });
+  await n.api.refresh();
+  assert.equal(n.api.why, 'the desk is not answering');
+  assert.equal(n.clockEl.textContent, 'server unreachable');
 });
