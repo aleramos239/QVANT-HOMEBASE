@@ -115,12 +115,78 @@ function pointInRect(px, py, rect) {
   return px >= rect.x && px <= rect.x + rect.w && py >= rect.y && py <= rect.y + rect.h;
 }
 
+/* ---- side-by-side docking (2026-09-27 panels-side plan): two docked panels can sit stacked (top/bottom,
+   the original layout) or side by side (left/right) instead. Orientation is a per-dock flag, not per-panel --
+   with only 2 panel ids it always describes the relationship between the pair. ---- */
+const ORIENTATIONS = ['stack', 'side'];
+function normalizeOrientation(o) { return o === 'side' ? 'side' : 'stack'; }
+
+/* Which drop zone a pointer at (px, py) is over, relative to the OTHER docked panel's rect: the outer
+   `edgeFraction` of the width is a left/right band (-> side by side), the rest splits top/bottom by the
+   vertical midpoint (-> stacked). Boundary values (exactly at the edge band or the midpoint) fall to the
+   non-edge / top side -- `<` and `>`, never `<=`/`>=`, so a hit test at the exact fraction is deterministic
+   and documented rather than fragile. Returns null outside the rect or for a degenerate (zero-size) one. */
+function dockDropZone(px, py, rect, edgeFraction = 0.3) {
+  if (!rect || !(rect.w > 0) || !(rect.h > 0) || !pointInRect(px, py, rect)) return null;
+  const relX = (px - rect.x) / rect.w;
+  if (relX < edgeFraction) return 'left';
+  if (relX > 1 - edgeFraction) return 'right';
+  return (py - rect.y) < rect.h / 2 ? 'top' : 'bottom';
+}
+
+/* Per-id pixel widths for a side-by-side pair, clamped to [DOCK_W_MIN, DOCK_W_MAX] each and, when their sum
+   would exceed `maxTotalW` (the viewport minus the rail and the grid's own minimum), scaled down together --
+   never below DOCK_W_MIN, even if that means the clamped total still exceeds a too-small viewport (a tiny
+   window beats an unusably-clamped one, same tradeoff as clampFloatRect). */
+function clampSideWidths(widths, order, maxTotalW) {
+  const ids = Array.isArray(order) ? order : [];
+  const n = ids.length;
+  if (n === 0) return {};
+  const src = widths && typeof widths === 'object' ? widths : {};
+  let w = ids.map((id) => clampDockWidth(src[id], DOCK_W_MIN, DOCK_W_MAX));
+  const total = w.reduce((a, b) => a + b, 0);
+  const budget = Math.max(DOCK_W_MIN * n, num(maxTotalW, Infinity));
+  if (total > budget) {
+    const scale = budget / total;
+    w = w.map((v) => Math.max(DOCK_W_MIN, v * scale));
+  }
+  const out = {};
+  ids.forEach((id, i) => { out[id] = w[i]; });
+  return out;
+}
+function sideTotalWidth(widths, order) {
+  return (Array.isArray(order) ? order : []).reduce((s, id) => s + num(widths[id], 0), 0);
+}
+/* Dragging the vertical splitter between two side-by-side panels: moves `deltaPx` from one to the other,
+   each held to at least DOCK_W_MIN so neither panel can be dragged to nothing. Total width is unchanged. */
+function applySideSplitDrag(widths, order, splitterIndex, deltaPx) {
+  const ids = Array.isArray(order) ? order : [];
+  const i = splitterIndex, j = splitterIndex + 1;
+  if (i < 0 || j >= ids.length || !Number.isFinite(deltaPx)) return { ...widths };
+  const a = ids[i], b = ids[j];
+  const pairSum = num(widths[a], DOCK_W_MIN) + num(widths[b], DOCK_W_MIN);
+  const na = clamp(num(widths[a], DOCK_W_MIN) + deltaPx, DOCK_W_MIN, Math.max(DOCK_W_MIN, pairSum - DOCK_W_MIN));
+  const nb = pairSum - na;
+  return { ...widths, [a]: na, [b]: nb };
+}
+/* The dock's own width grip, in side-by-side mode, grows/shrinks the panel nearest the grip (the dock's
+   leftmost panel, order[0]) rather than the whole stack proportionally -- simplest mental model, and the
+   grip already lives at the dock's left edge, right against that panel. */
+function applyGripDragSide(widths, order, deltaPx) {
+  const ids = Array.isArray(order) ? order : [];
+  if (!ids.length) return { ...widths };
+  const id0 = ids[0];
+  return { ...widths, [id0]: clampDockWidth(num(widths[id0], DOCK_W_DEFAULT) + deltaPx, DOCK_W_MIN, DOCK_W_MAX) };
+}
+
 /* ---- persisted state: default shape, and a defensive parse of whatever localStorage handed back ---- */
 function defaultState() {
   return {
     dockWidth: DOCK_W_DEFAULT,
     dockOrder: [...IDS],
     dockHeights: {},
+    dockOrientation: 'stack',   // 'stack' (top/bottom, the original layout) | 'side' (left/right)
+    dockWidths: {},             // per-id px width, side-by-side only; empty = DOCK_W_DEFAULT each
     panels: {
       order: { open: false, docked: true, x: 96, y: 96, w: 320, h: 480 },
       dom: { open: false, docked: true, x: 440, y: 96, w: 320, h: 480 },
@@ -148,10 +214,15 @@ function sanitizeState(raw, defaults) {
   const dockHeightsStored = {};
   const sh = src.dockHeights && typeof src.dockHeights === 'object' ? src.dockHeights : {};
   for (const id of knownIds) if (Number.isFinite(sh[id]) && sh[id] > 0) dockHeightsStored[id] = sh[id];
+  const dockWidthsStored = {};
+  const sw = src.dockWidths && typeof src.dockWidths === 'object' ? src.dockWidths : {};
+  for (const id of knownIds) if (Number.isFinite(sw[id]) && sw[id] > 0) dockWidthsStored[id] = sw[id];
   return {
     dockWidth: clampDockWidth(src.dockWidth, DOCK_W_MIN, DOCK_W_MAX),
     dockOrder: normalizeOrder(src.dockOrder, knownIds),
     dockHeights: dockHeightsStored,
+    dockOrientation: normalizeOrientation(src.dockOrientation),   // anything old/garbage -> 'stack'
+    dockWidths: dockWidthsStored,
     panels,
   };
 }
@@ -164,9 +235,10 @@ function parsePersisted(json, defaults) {
 }
 
 const api = {
-  IDS, DOCK_W_MIN, DOCK_W_MAX, DOCK_W_DEFAULT, FLOAT_W_MIN, FLOAT_H_MIN, DOCK_MIN_FRACTION,
+  IDS, DOCK_W_MIN, DOCK_W_MAX, DOCK_W_DEFAULT, FLOAT_W_MIN, FLOAT_H_MIN, DOCK_MIN_FRACTION, ORIENTATIONS,
   clamp, clampDockWidth, clampFloatRect, normalizeOrder, reorderList, dockHeights, applySplitterDrag,
   pixelsToFraction, dockSlots, pointInRect, defaultState, sanitizeState, parsePersisted,
+  normalizeOrientation, dockDropZone, clampSideWidths, sideTotalWidth, applySideSplitDrag, applyGripDragSide,
 };
 if (typeof window !== 'undefined') window.HBPanelLayout = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;

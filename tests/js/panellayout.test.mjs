@@ -148,3 +148,120 @@ test('defaultState shape has both known panels, closed, docked', () => {
     assert.equal(d.panels[id].docked, true);
   }
 });
+
+/* ---- side-by-side docking (2026-09-27 panels-side plan) ---- */
+
+test('defaultState starts stacked with no stored side widths', () => {
+  const d = L.defaultState();
+  assert.equal(d.dockOrientation, 'stack');
+  assert.deepEqual(d.dockWidths, {});
+});
+
+test('normalizeOrientation only ever returns a known orientation', () => {
+  assert.equal(L.normalizeOrientation('side'), 'side');
+  assert.equal(L.normalizeOrientation('stack'), 'stack');
+  assert.equal(L.normalizeOrientation('sideways'), 'stack');
+  assert.equal(L.normalizeOrientation(undefined), 'stack');
+  assert.equal(L.normalizeOrientation(null), 'stack');
+});
+
+test('dockDropZone hit-tests the outer edge bands as left/right and the rest as top/bottom', () => {
+  const rect = { x: 100, y: 200, w: 200, h: 100 };   // edgeFraction default 0.3 -> bands at relX < .3 / > .7
+  assert.equal(L.dockDropZone(120, 220, rect), 'left');     // relX .1
+  assert.equal(L.dockDropZone(280, 220, rect), 'right');    // relX .9
+  assert.equal(L.dockDropZone(200, 210, rect), 'top');      // relX .5, top half
+  assert.equal(L.dockDropZone(200, 280, rect), 'bottom');   // relX .5, bottom half
+});
+
+test('dockDropZone boundary values fall to the non-edge side, and the midpoint falls to bottom', () => {
+  const rect = { x: 0, y: 0, w: 100, h: 100 };
+  assert.equal(L.dockDropZone(30, 10, rect), 'top');       // relX exactly .3 -> not "< .3", so not left
+  assert.equal(L.dockDropZone(70, 10, rect), 'top');       // relX exactly .7 -> not "> .7", so not right
+  assert.equal(L.dockDropZone(50, 50, rect), 'bottom');    // exactly the vertical midpoint: dy < h/2 is false at dy=50
+});
+
+test('dockDropZone returns null outside the rect, and for a degenerate rect', () => {
+  const rect = { x: 0, y: 0, w: 100, h: 100 };
+  assert.equal(L.dockDropZone(-1, 50, rect), null);
+  assert.equal(L.dockDropZone(50, 101, rect), null);
+  assert.equal(L.dockDropZone(50, 50, null), null);
+  assert.equal(L.dockDropZone(50, 50, { x: 0, y: 0, w: 0, h: 100 }), null);
+});
+
+test('dockDropZone honors a custom edgeFraction', () => {
+  const rect = { x: 0, y: 0, w: 100, h: 100 };   // relX = .15 throughout: inside a .1 band, outside a .3 one
+  assert.equal(L.dockDropZone(15, 50, rect, 0.1), 'bottom');   // narrower band: no longer counts as an edge
+  assert.equal(L.dockDropZone(15, 50, rect, 0.3), 'left');     // wider band: same point now IS the edge
+});
+
+test('clampSideWidths clamps each panel to its own min/max', () => {
+  const out = L.clampSideWidths({ order: 50, dom: 9999 }, ['order', 'dom'], 10000);
+  assert.equal(out.order, L.DOCK_W_MIN);
+  assert.equal(out.dom, L.DOCK_W_MAX);
+});
+
+test('clampSideWidths defaults an unstored panel to DOCK_W_DEFAULT before clamping', () => {
+  const out = L.clampSideWidths({}, ['order', 'dom'], 10000);
+  assert.equal(out.order, L.DOCK_W_DEFAULT);
+  assert.equal(out.dom, L.DOCK_W_DEFAULT);
+});
+
+test('clampSideWidths scales both down together when the pair would exceed the viewport budget', () => {
+  const out = L.clampSideWidths({ order: 400, dom: 400 }, ['order', 'dom'], 700);
+  assert.ok(Math.abs(out.order + out.dom - 700) < 1e-6);
+  assert.ok(Math.abs(out.order - out.dom) < 1e-6);   // scaled proportionally, so an even split stays even
+  assert.ok(out.order >= L.DOCK_W_MIN && out.dom >= L.DOCK_W_MIN);
+});
+
+test('clampSideWidths never shrinks a panel below DOCK_W_MIN even when the budget is impossibly small', () => {
+  const out = L.clampSideWidths({ order: 300, dom: 300 }, ['order', 'dom'], 100);
+  assert.equal(out.order, L.DOCK_W_MIN);
+  assert.equal(out.dom, L.DOCK_W_MIN);
+});
+
+test('sideTotalWidth sums the two panels\' widths', () => {
+  assert.equal(L.sideTotalWidth({ order: 300, dom: 260 }, ['order', 'dom']), 560);
+  assert.equal(L.sideTotalWidth({}, []), 0);
+});
+
+test('applySideSplitDrag transfers px between the two panels and holds the DOCK_W_MIN floor', () => {
+  const widths = { order: 320, dom: 320 };
+  const grown = L.applySideSplitDrag(widths, ['order', 'dom'], 0, 40);
+  assert.equal(grown.order, 360);
+  assert.equal(grown.dom, 280);
+  assert.equal(grown.order + grown.dom, 640);   // total unchanged, only the split moves
+  const floored = L.applySideSplitDrag(widths, ['order', 'dom'], 0, -1000);
+  assert.equal(floored.order, L.DOCK_W_MIN);
+  assert.equal(floored.dom, 640 - L.DOCK_W_MIN);
+  assert.deepEqual(L.applySideSplitDrag(widths, ['order'], 0, 40), { ...widths });   // no j: unchanged
+});
+
+test('applyGripDragSide grows/shrinks the leftmost (order[0]) panel only, clamped to its own min/max', () => {
+  const grown = L.applyGripDragSide({ order: 320, dom: 320 }, ['order', 'dom'], 30);
+  assert.equal(grown.order, 350);
+  assert.equal(grown.dom, 320);   // untouched
+  const flooredOut = L.applyGripDragSide({ order: 270, dom: 320 }, ['order', 'dom'], -1000);
+  assert.equal(flooredOut.order, L.DOCK_W_MIN);
+  assert.deepEqual(L.applyGripDragSide({}, [], 10), {});
+});
+
+test('sanitizeState degrades dockOrientation to stack on garbage, and only keeps positive finite dockWidths', () => {
+  const d = L.defaultState();
+  const out = L.sanitizeState({ dockOrientation: 'sideways', dockWidths: { order: 300, dom: -5, ghost: 200 } }, d);
+  assert.equal(out.dockOrientation, 'stack');
+  assert.deepEqual(out.dockWidths, { order: 300 });
+});
+
+test('sanitizeState keeps a valid persisted side orientation and its widths', () => {
+  const d = L.defaultState();
+  const out = L.sanitizeState({ dockOrientation: 'side', dockWidths: { order: 300, dom: 280 } }, d);
+  assert.equal(out.dockOrientation, 'side');
+  assert.deepEqual(out.dockWidths, { order: 300, dom: 280 });
+});
+
+test('parsePersisted with no stored dockOrientation (old saved state) falls back to stacked', () => {
+  const d = L.defaultState();
+  const out = L.parsePersisted(JSON.stringify({ dockWidth: 340, dockOrder: ['dom', 'order'] }), d);
+  assert.equal(out.dockOrientation, 'stack');
+  assert.deepEqual(out.dockOrder, ['dom', 'order']);
+});

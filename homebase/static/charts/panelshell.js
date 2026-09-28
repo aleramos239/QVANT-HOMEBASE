@@ -17,6 +17,7 @@ const L = window.HBPanelLayout;
 const KEY = 'hb_charts_panels';
 const TITLES = { order: 'Order', dom: 'DOM' };
 const DRAG_OUT_PX = 24;     // a docked header must clear the dock by this much before it starts floating
+const GRID_MIN_W = 240;     // the chart grid never gets crushed under this, however wide a side-by-side dock asks to be
 
 let state = L.defaultState();
 let defs = {};              // id -> { mount(container, page), setVisible(bool) }
@@ -97,19 +98,62 @@ function reparentPreservingFocus(node, parent, before) {
 }
 
 /* ---- layout: dock column + floating layer, from `state` ---- */
+/* The width budget for a side-by-side dock: the .main row's own width minus the drawing rail and the chart
+   grid's minimum, so the grid never gets crushed to nothing however wide the two panels ask to be. */
+function dockMaxTotalWidth() {
+  const main = dockEl && (dockEl.closest('.main') || dockEl.parentElement);
+  const mainW = main ? main.clientWidth : window.innerWidth;
+  const rail = document.getElementById('rail');
+  const railW = rail ? rail.offsetWidth : 0;
+  return Math.max(L.DOCK_W_MIN * 2, mainW - railW - GRID_MIN_W);
+}
 function layoutDock() {
   const ids = dockedOpenIds();
   dockEl.replaceChildren();
-  if (!ids.length) { dockEl.hidden = true; return; }
+  if (!ids.length) { dockEl.hidden = true; dockEl.classList.remove('side'); return; }
   dockEl.hidden = false;
-  dockEl.style.width = `${state.dockWidth}px`;
-  const heights = L.dockHeights(ids, state.dockHeights);
-  for (const id of ids) if (Number.isFinite(heights[id])) state.dockHeights[id] = heights[id];
+  const isSide = state.dockOrientation === 'side' && ids.length === 2;
+  dockEl.classList.toggle('side', isSide);
   const grip = mk('div', 'pdock-widthgrip');
   grip.setAttribute('role', 'separator');
   grip.setAttribute('aria-orientation', 'vertical');
   grip.setAttribute('aria-label', 'Resize the dock');
   grip.tabIndex = 0;
+
+  if (isSide) {
+    const widths = L.clampSideWidths(state.dockWidths, ids, dockMaxTotalWidth());
+    ids.forEach((id) => { state.dockWidths[id] = widths[id]; });
+    dockEl.style.width = `${L.sideTotalWidth(widths, ids)}px`;
+    wireDockWidthGripSide(grip, ids);
+    dockEl.appendChild(grip);
+    ids.forEach((id, i) => {
+      const e = els[id] || buildChrome(id);
+      els[id] = e;
+      e.root.classList.add('docked');
+      e.root.classList.remove('floating');
+      e.root.style.position = '';
+      e.root.style.left = e.root.style.top = e.root.style.height = '';
+      e.root.style.flexGrow = e.root.style.flexBasis = '';
+      e.root.style.width = `${widths[id]}px`;
+      e.toggleIcon.innerHTML = window.HBIcons.extLink;
+      e.toggleBtn.title = `Float ${TITLES[id]}`;
+      e.toggleBtn.setAttribute('aria-label', `Float ${TITLES[id]}`);
+      reparentPreservingFocus(e.root, dockEl);
+      if (i < ids.length - 1) {
+        const split = mk('div', 'pdock-split-v');
+        split.setAttribute('role', 'separator');
+        split.setAttribute('aria-orientation', 'vertical');
+        split.setAttribute('aria-label', `Resize ${TITLES[id]} / ${TITLES[ids[i + 1]]}`);
+        wireDockSideSplitter(split, ids, i);
+        dockEl.appendChild(split);
+      }
+    });
+    return;
+  }
+
+  dockEl.style.width = `${state.dockWidth}px`;
+  const heights = L.dockHeights(ids, state.dockHeights);
+  for (const id of ids) if (Number.isFinite(heights[id])) state.dockHeights[id] = heights[id];
   wireDockWidthGrip(grip);
   dockEl.appendChild(grip);
   ids.forEach((id, i) => {
@@ -240,6 +284,73 @@ function wireDockWidthGrip(grip) {
     else if (e.key === 'ArrowRight') { e.preventDefault(); state.dockWidth = L.clampDockWidth(state.dockWidth - 16); dockEl.style.width = `${state.dockWidth}px`; save(); }
   });
 }
+/* ---- the dock's width grip, side-by-side variant: grows/shrinks the leftmost panel (order[0], the one the
+   grip sits against) and re-clamps the whole pair against the viewport budget. ---- */
+function wireDockWidthGripSide(grip, ids) {
+  let dragging = false, startX = 0, startWidths = null;
+  const apply = (dx) => {
+    // the grip is at the dock's LEFT edge: dragging it left (dx < 0) grows the dock, same sense as the stack grip
+    const raw = L.applyGripDragSide(startWidths, ids, -dx);
+    const clamped = L.clampSideWidths(raw, ids, dockMaxTotalWidth());
+    ids.forEach((id) => { state.dockWidths[id] = clamped[id]; });
+    dockEl.style.width = `${L.sideTotalWidth(clamped, ids)}px`;
+    ids.forEach((id) => { if (els[id]) els[id].root.style.width = `${clamped[id]}px`; });
+  };
+  grip.addEventListener('pointerdown', (e) => {
+    dragging = true; startX = e.clientX; startWidths = { ...state.dockWidths };
+    try { grip.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+    window.addEventListener('blur', end);
+    e.preventDefault();
+  });
+  grip.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    if (!e.buttons) { end(e); return; }   // the button was released without a pointerup/cancel reaching us
+    apply(e.clientX - startX);
+  });
+  const end = (e) => {
+    if (!dragging) return;
+    dragging = false;
+    try { grip.releasePointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+    window.removeEventListener('blur', end);
+    save();
+  };
+  grip.addEventListener('pointerup', end);
+  grip.addEventListener('pointercancel', end);
+  grip.addEventListener('lostpointercapture', end);
+  grip.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowLeft') { e.preventDefault(); startWidths = { ...state.dockWidths }; apply(-16); save(); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); startWidths = { ...state.dockWidths }; apply(16); save(); }
+  });
+}
+/* ---- the vertical splitter between two side-by-side docked panels: absolute px, not a fraction of a fixed
+   container (the dock's total width itself moves with the split), unlike the stacked splitter below. ---- */
+function wireDockSideSplitter(split, ids, i) {
+  let dragging = false, startX = 0;
+  split.addEventListener('pointerdown', (e) => {
+    dragging = true; startX = e.clientX;
+    try { split.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+    window.addEventListener('blur', end);
+    e.preventDefault();
+  });
+  split.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    if (!e.buttons) { end(e); return; }   // the button was released without a pointerup/cancel reaching us
+    const dx = e.clientX - startX;
+    startX = e.clientX;
+    state.dockWidths = L.applySideSplitDrag(state.dockWidths, ids, i, dx);
+    ids.forEach((id) => { if (els[id]) els[id].root.style.width = `${state.dockWidths[id]}px`; });
+  });
+  const end = (e) => {
+    if (!dragging) return;
+    dragging = false;
+    try { split.releasePointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+    window.removeEventListener('blur', end);
+    save();
+  };
+  split.addEventListener('pointerup', end);
+  split.addEventListener('pointercancel', end);
+  split.addEventListener('lostpointercapture', end);
+}
 /* ---- the horizontal splitter between two adjacent docked panels ---- */
 function wireDockSplitter(split, ids, i) {
   let dragging = false, startY = 0;
@@ -276,6 +387,59 @@ function dockZoneRect() {
   if (!dockEl.hidden) { const r = dockEl.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; }
   const w = 28; return { x: Math.max(0, window.innerWidth - w), y: 0, w, h: window.innerHeight };
 }
+/* ---- stack-vs-side drop zones: while one panel is being dragged and exactly one OTHER panel is already
+   docked+open, the target for a drop is that other panel's own rect, split into top/bottom/left/right bands
+   (HBPanelLayout.dockDropZone). With 0 or >=2 other docked panels there is nothing to arrange against, so the
+   drop falls back to the plain "somewhere in the dock" behaviour (dockZoneRect + dockDropIndex). ---- */
+function otherDockedId(id) {
+  const ids = dockedOpenIds().filter((x) => x !== id);
+  return ids.length === 1 ? ids[0] : null;
+}
+function targetPanelRect(id) {
+  const e = id && els[id];
+  if (!e || !e.root.isConnected) return null;
+  const r = e.root.getBoundingClientRect();
+  return { x: r.left, y: r.top, w: r.width, h: r.height };
+}
+function resolveDropZone(id, clientX, clientY) {
+  if (dockEl.hidden) return { otherId: null, zone: null };
+  const otherId = otherDockedId(id);
+  const zone = otherId ? L.dockDropZone(clientX, clientY, targetPanelRect(otherId)) : null;
+  return { otherId, zone };
+}
+let paintedZoneId = null;
+function paintDropZone(targetId, zone) {
+  if (paintedZoneId && paintedZoneId !== targetId && els[paintedZoneId]) {
+    els[paintedZoneId].root.classList.remove('drop-top', 'drop-bottom', 'drop-left', 'drop-right');
+  }
+  const e = targetId && els[targetId];
+  if (e) {
+    e.root.classList.toggle('drop-top', zone === 'top');
+    e.root.classList.toggle('drop-bottom', zone === 'bottom');
+    e.root.classList.toggle('drop-left', zone === 'left');
+    e.root.classList.toggle('drop-right', zone === 'right');
+  }
+  paintedZoneId = zone ? targetId : null;
+}
+function clearDropZone() { paintDropZone(null, null); }
+/* Applies a resolved zone to the persisted arrangement: top/bottom -> stacked, above/below the target;
+   left/right -> side by side, before/after it. Falls back to a plain index-based dock insert when there is no
+   single other docked panel to arrange against (dropping the very first/only panel into the dock). */
+function applyDockDrop(draggedId, otherId, zone, clientY) {
+  state.panels[draggedId] = { ...state.panels[draggedId], docked: true };
+  if (otherId && zone) {
+    if (zone === 'left' || zone === 'right') {
+      state.dockOrientation = 'side';
+      state.dockOrder = zone === 'left' ? [draggedId, otherId] : [otherId, draggedId];
+    } else {
+      state.dockOrientation = 'stack';
+      state.dockOrder = zone === 'top' ? [draggedId, otherId] : [otherId, draggedId];
+    }
+  } else {
+    const targetIndex = dockDropIndex(clientY);
+    state.dockOrder = L.reorderList(state.dockOrder, draggedId, targetIndex);
+  }
+}
 
 /* ---- header drag: move a floating panel, drag a docked one out to float, drag a floating one onto the dock
    to dock it, or reorder within the dock ---- */
@@ -298,9 +462,12 @@ function wireHeaderDrag(id, root, head) {
     if (!e.buttons) { end(e); return; }   // the button was released without a pointerup/cancel reaching us
     const dx = e.clientX - startX, dy = e.clientY - startY;
     if (mode === null) {   // still docked: has it cleared the dock far enough to start floating?
+      const { otherId, zone } = resolveDropZone(id, e.clientX, e.clientY);
+      paintDropZone(otherId, zone);
       const dr = dockEl.getBoundingClientRect();
       if (e.clientX < dr.left - DRAG_OUT_PX || dockEl.hidden) {
         mode = 'convert';
+        clearDropZone();
         const w = root.offsetWidth || state.panels[id].w, h = root.offsetHeight || state.panels[id].h;
         startRect = { x: e.clientX - 20, y: e.clientY - 12, w, h };
         state.panels[id] = { ...state.panels[id], docked: false, ...L.clampFloatRect(startRect, window.innerWidth, window.innerHeight) };
@@ -309,8 +476,10 @@ function wireHeaderDrag(id, root, head) {
       }
       return;
     }
-    const zone = dockZoneRect();
-    dockEl.classList.toggle('drop-target', L.pointInRect(e.clientX, e.clientY, zone));
+    const { otherId, zone } = resolveDropZone(id, e.clientX, e.clientY);
+    paintDropZone(otherId, zone);
+    const inDock = zone || L.pointInRect(e.clientX, e.clientY, dockZoneRect());
+    dockEl.classList.toggle('drop-target', !!inDock && !zone);   // whole-dock outline only when no specific zone
     const rect = mode === 'convert'
       ? { x: e.clientX - 20, y: e.clientY - 12, w: startRect.w, h: startRect.h }
       : { x: startRect.x + dx, y: startRect.y + dy, w: startRect.w, h: startRect.h };
@@ -325,19 +494,26 @@ function wireHeaderDrag(id, root, head) {
     try { head.releasePointerCapture(e.pointerId); } catch (_) { /* ignore */ }
     window.removeEventListener('blur', end);
     dockEl.classList.remove('drop-target');
-    if (mode && !state.panels[id].docked && L.pointInRect(e.clientX, e.clientY, dockZoneRect())) {
-      const targetIndex = dockDropIndex(e.clientY);
-      state.panels[id] = { ...state.panels[id], docked: true };
-      state.dockOrder = L.reorderList(state.dockOrder, id, targetIndex);
+    clearDropZone();
+    const { otherId, zone } = resolveDropZone(id, e.clientX, e.clientY);
+    const inDock = zone || L.pointInRect(e.clientX, e.clientY, dockZoneRect());
+    if (mode && !state.panels[id].docked && inDock) {
+      applyDockDrop(id, otherId, zone, e.clientY);
       relayout();
     } else if (mode) {
       relayout();
     } else if (state.panels[id].docked) {
-      // a plain press-release inside the dock, no float conversion: treat as a reorder gesture too, so a
-      // small drag up/down still reshuffles the stack without needing to leave it first
-      const targetIndex = dockDropIndex(e.clientY);
-      const cur = dockedOpenIds();
-      if (cur.length > 1) { state.dockOrder = L.reorderList(state.dockOrder, id, targetIndex); relayout(); }
+      // a plain press-release inside the dock, no float conversion: a zone against the other docked panel
+      // switches stack<->side and/or reorders; otherwise treat it as a plain reorder gesture, so a small drag
+      // up/down still reshuffles the stack without needing to leave it first
+      if (otherId && zone) {
+        applyDockDrop(id, otherId, zone, e.clientY);
+        relayout();
+      } else {
+        const targetIndex = dockDropIndex(e.clientY);
+        const cur = dockedOpenIds();
+        if (cur.length > 1) { state.dockOrder = L.reorderList(state.dockOrder, id, targetIndex); relayout(); }
+      }
     }
     mode = null;
     save();
@@ -412,15 +588,30 @@ function wireFloatResize(id, root) {
 /* Any floating panel is re-clamped into the (possibly new) viewport on a window resize, so a browser shrink
    never leaves one stranded off-screen. */
 function onWindowResize() {
-  let changed = false;
+  let floatChanged = false;
   for (const id of floatingOpenIds()) {
     const clamped = L.clampFloatRect(state.panels[id], window.innerWidth, window.innerHeight);
     if (clamped.x !== state.panels[id].x || clamped.y !== state.panels[id].y || clamped.w !== state.panels[id].w || clamped.h !== state.panels[id].h) {
       state.panels[id] = { ...state.panels[id], ...clamped };
-      changed = true;
+      floatChanged = true;
     }
   }
-  if (changed) { layoutFloats(); save(); }
+  // a side-by-side dock's two widths need re-clamping too: a browser shrink must never leave the pair wider
+  // than the (now smaller) budget, crushing the chart grid.
+  let dockChanged = false;
+  if (state.dockOrientation === 'side' && dockEl && !dockEl.hidden) {
+    const ids = dockedOpenIds();
+    if (ids.length === 2) {
+      const clampedW = L.clampSideWidths(state.dockWidths, ids, dockMaxTotalWidth());
+      if (ids.some((id) => clampedW[id] !== state.dockWidths[id])) {
+        ids.forEach((id) => { state.dockWidths[id] = clampedW[id]; });
+        dockChanged = true;
+      }
+    }
+  }
+  if (floatChanged) layoutFloats();
+  if (dockChanged) layoutDock();
+  if (floatChanged || dockChanged) save();
 }
 
 /* ---- public API ---- */
