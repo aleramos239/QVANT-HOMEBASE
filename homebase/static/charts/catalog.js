@@ -241,14 +241,27 @@ function serverKeys(list) { return [...new Set((list || []).map(serverKey).filte
 
 /* A saved chart config of any vintage as {root, spec, indicators}. The spec is
    normalised as the server answers it (a Build-1 "tick:0750" is "tick:750"). */
+/* A stored vwap params object from BEFORE this anchor/bands rework: the indicators-array format (like
+   Build-1's "st" form, migrated a few lines below) could already carry {anchor, bands}. `bands` is not a
+   param key any more, so clampParams alone would silently drop it -- translate it into today's band 1 (x1) +
+   band 2 (x2) on/off FIRST, the same mapping the st-form branch uses. A params object that never had `bands`
+   passes through untouched. */
+function migrateVwapParams(params) {
+  const src = params && typeof params === 'object' ? params : {};
+  if (typeof src.bands !== 'boolean') return src;
+  const { bands, ...rest } = src;
+  return { ...rest, band1On: bands, band1Mult: 1, band2On: bands, band2Mult: 2 };
+}
+
 function migrate(cfg) {
   const c = cfg && typeof cfg === 'object' ? cfg : {};
   const root = typeof c.root === 'string' && c.root ? c.root.toUpperCase() : 'NQ';
   const spec = toSpec(c.spec) || 'time:60';
   if (Array.isArray(c.indicators)) {
     const indicators = c.indicators.filter((x) => x && def(x.id)).map((x) => {
+      const params = x.id === 'vwap' ? migrateVwapParams(x.params) : x.params;
       const o = { uid: typeof x.uid === 'string' && x.uid ? x.uid : uid(), id: x.id,
-        params: clampParams(x.id, x.params), visible: x.visible !== false };
+        params: clampParams(x.id, params), visible: x.visible !== false };
       if (movable(x.id)) o.pane = placement(x);
       const st = clampStyle(x.id, x.style);   // absent/malformed: no `style` -- renders as it always has
       if (st) o.style = st;

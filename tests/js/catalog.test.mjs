@@ -123,6 +123,21 @@ test('new-form configs are sanitised: unknown ids dropped, params clamped, uid a
   assert.equal(fresh.visible, true);
 });
 
+test('a pre-rework indicators-array vwap ({anchor, bands}) migrates bands into band 1 (x1) + band 2 (x2), not lost', () => {
+  const on = C.migrate({ root: 'NQ', spec: 'time:60',
+    indicators: [{ uid: 'v', id: 'vwap', params: { anchor: 'rth', bands: true }, visible: true }] }).indicators[0];
+  assert.deepEqual(on.params, { ...VWAP_DEFAULT_PARAMS, anchor: 'rth', band1On: true, band2On: true });
+
+  const off = C.migrate({ root: 'NQ', spec: 'time:60',
+    indicators: [{ uid: 'v', id: 'vwap', params: { anchor: 'eth', bands: false }, visible: true }] }).indicators[0];
+  assert.deepEqual(off.params, VWAP_DEFAULT_PARAMS);
+
+  // a params object that never had `bands` (today's shape, or one with no bands key at all) passes through
+  const plain = C.migrate({ root: 'NQ', spec: 'time:60',
+    indicators: [{ uid: 'v', id: 'vwap', params: { anchor: 'week' }, visible: true }] }).indicators[0];
+  assert.deepEqual(plain.params, { ...VWAP_DEFAULT_PARAMS, anchor: 'week' });
+});
+
 test('garbage configs become a default NQ 1m chart', () => {
   const m = C.migrate(null);
   assert.equal(m.root, 'NQ');
