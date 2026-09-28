@@ -1,0 +1,323 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
+
+/* The desk page's (homebase/static/index.html, :8850) master controls -- ARMED/SHADOW, Arm/Disarm
+   and the press-and-hold Kill everything -- un-buried from Settings into the top bar (2026-09-28,
+   Apple-design audit S2). The inline block runs for real in a vm sandbox (the deskpaper /
+   desksettings technique) with a fake clock, so a hold is driven event by event:
+     - the handlers are the SAME as before: Arm confirms, Disarm is immediate, Kill keeps its
+       confirm; the same POSTs to /api/arm and /api/kill, nothing else, never fetch;
+     - Kill fires only after HOLD_MS held without a break, exactly once per hold: letting go,
+       dragging off, pointercancel, lost buttons, a context menu, blur and a hidden page cancel;
+     - a key's auto-repeat never starts, restarts or fires a hold (GOTCHAS: a held key has sent
+       duplicate orders here before). */
+const HTML = readFileSync(new URL('../../homebase/static/index.html', import.meta.url), 'utf8');
+const BLOCK = HTML.slice(
+  HTML.indexOf('/* ---- master controls (top bar)'),
+  HTML.indexOf('/* ---- the bulb ---- */'));
+
+async function tick(n = 12) { for (let i = 0; i < n; i++) await Promise.resolve(); }
+
+function fakeEl() {
+  const listeners = {};
+  return {
+    listeners,
+    textContent: '', className: '', title: '', onclick: null,
+    style: { _p: {}, display: '', setProperty(k, v) { this._p[k] = v; } },
+    classList: {
+      _s: new Set(),
+      add(c) { this._s.add(c); },
+      remove(c) { this._s.delete(c); },
+      contains(c) { return this._s.has(c); },
+    },
+    addEventListener(type, fn) { (listeners[type] ||= []).push(fn); },
+  };
+}
+
+function load({ st = { armed: false }, stale = false, confirm = true } = {}) {
+  const els = { statusPill: fakeEl(), armBtn: fakeEl(), killBtn: fakeEl() };
+  const posts = [], toasts = [], confirms = [], refreshes = [], fetched = [];
+  const win = fakeEl(), doc = fakeEl();
+  doc.hidden = false;
+  // a fake clock: setTimeout/clearTimeout run only when the test advances time
+  let now = 0, seq = 0;
+  const timers = new Map();
+  const clock = {
+    advance(ms) {
+      const until = now + ms;
+      for (;;) {
+        const due = [...timers.entries()].filter(([, t]) => t.at <= until).sort((a, b) => a[1].at - b[1].at)[0];
+        if (!due) break;
+        timers.delete(due[0]);
+        now = due[1].at;
+        due[1].fn();
+      }
+      now = until;
+    },
+    get pending() { return timers.size; },
+  };
+  const ctx = vm.createContext({
+    console,
+    ST: st,
+    DESK_STALE: stale,
+    $: (sel) => els[sel.replace(/^#/, '')] || null,
+    toast: (t) => toasts.push(t),
+    confirmDlg: async (title, body, action, destructive) => { confirms.push({ title, body, action, destructive }); return confirm; },
+    post: async (url, body) => { posts.push(body === undefined ? { url } : { url, body }); return { ok: true, results: { a1: 'ok' } }; },
+    refresh: () => refreshes.push(true),
+    fetch: async (url) => { fetched.push(url); throw new Error('the master controls must never fetch'); },
+    setTimeout: (fn, ms) => { const id = ++seq; timers.set(id, { at: now + ms, fn }); return id; },
+    clearTimeout: (id) => { timers.delete(id); },
+    window: win,
+    document: doc,
+  });
+  vm.runInContext(BLOCK + `
+    globalThis.api = { renderMaster, doArm, doDisarm, doKill, holdToFire, HOLD_MS,
+      get ST() { return ST; }, set ST(v) { ST = v; },
+      get DESK_STALE() { return DESK_STALE; }, set DESK_STALE(v) { DESK_STALE = v; } };`, ctx);
+  const ev = (type, props = {}) => ({ type, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; }, ...props });
+  const fire = (el, type, props) => { const e = ev(type, props); for (const fn of el.listeners[type] || []) fn(e); return e; };
+  const kill = els.killBtn;
+  return { api: ctx.api, els, kill, fire, clock, posts, toasts, confirms, refreshes, fetched, win, doc };
+}
+
+const plain = (v) => JSON.parse(JSON.stringify(v));
+
+// ---- where the controls live ------------------------------------------------------------------
+test('the top bar holds the master controls -- status, Arm/Disarm and a press-and-hold Kill with its ring', () => {
+  const header = HTML.slice(HTML.indexOf('<header class="inset-topbar">'), HTML.indexOf('</header>'));
+  assert.match(header, /id="statusPill"/);
+  assert.match(header, /id="armBtn"/);
+  assert.match(header, /<button class="btn btn-sm btn-kill holdbtn" type="button" id="killBtn"/);
+  assert.match(header, /class="hold-ring"[\s\S]*class="hold-fill"/);
+  assert.match(header, /press and hold/i);
+  assert.equal((HTML.match(/id="killBtn"/g) || []).length, 1, 'exactly one Kill control on the page');
+  assert.doesNotMatch(HTML, /tradeKillBtn|tradeArmBtn/, 'the Settings copies are gone -- one obvious place');
+});
+
+test('the status pill is a plain status (it no longer opens Settings), and render()/refresh() repaint the bar', () => {
+  assert.doesNotMatch(HTML, /id="statusPill"[^>]*onclick/);
+  const render = HTML.slice(HTML.indexOf('function render() {'), HTML.indexOf('async function refresh()'));
+  assert.match(render, /renderMaster\(\);/);
+  const refresh = HTML.slice(HTML.indexOf('async function refresh()'), HTML.indexOf('/* ---- PREVIEW MODE'));
+  assert.match(refresh, /catch \{[\s\S]*renderMaster\(\);/, 'a failing refresh marks the top bar stale');
+});
+
+// ---- the armed state and Arm / Disarm ----------------------------------------------------------
+test('ST == null: the pill asserts nothing, no Arm/Disarm (fail closed), and Kill is still wired', () => {
+  const { api, els, kill } = load({ st: null });
+  api.renderMaster();
+  assert.equal(els.statusPill.textContent, 'connecting…');
+  assert.equal(els.armBtn.style.display, 'none');
+  assert.equal(els.armBtn.onclick, null);
+  assert.ok((kill.listeners.pointerdown || []).length && (kill.listeners.keydown || []).length, 'Kill works regardless');
+  api.DESK_STALE = true;
+  api.renderMaster();
+  assert.equal(els.statusPill.textContent, 'desk unreachable');
+});
+
+test('disarmed: the pill says SHADOW and the button is Arm -- the SAME confirm and POST as before', async () => {
+  const { api, els, confirms, posts, refreshes, toasts } = load({ st: { armed: false } });
+  api.renderMaster();
+  assert.equal(els.statusPill.textContent, 'SHADOW');
+  assert.equal(els.armBtn.style.display, '');
+  assert.equal(els.armBtn.textContent, 'Arm');
+  assert.equal(els.armBtn.onclick, api.doArm);
+  await els.armBtn.onclick();
+  assert.equal(confirms.length, 1);
+  assert.equal(confirms[0].title, 'Arm the desk?');
+  assert.deepEqual(plain(posts), [{ url: '/api/arm', body: { armed: true } }]);
+  assert.equal(refreshes.length, 1);
+  assert.match(toasts[0], /Armed/);
+});
+
+test('a declined Arm confirm never POSTs', async () => {
+  const { api, els, posts } = load({ st: { armed: false }, confirm: false });
+  api.renderMaster();
+  await els.armBtn.onclick();
+  assert.deepEqual(posts, []);
+});
+
+test('armed: the pill says ARMED and the button is Disarm -- immediate, no confirm, same POST', async () => {
+  const { api, els, confirms, posts, refreshes } = load({ st: { armed: true } });
+  api.renderMaster();
+  assert.equal(els.statusPill.textContent, 'ARMED');
+  assert.equal(els.armBtn.textContent, 'Disarm');
+  assert.equal(els.armBtn.onclick, api.doDisarm);
+  await els.armBtn.onclick();
+  assert.equal(confirms.length, 0, 'Disarm only makes things safer: it never asks');
+  assert.deepEqual(plain(posts), [{ url: '/api/arm', body: { armed: false } }]);
+  assert.equal(refreshes.length, 1);
+});
+
+test('a stale desk keeps the last-known state but says it is stale', () => {
+  const { api, els } = load({ st: { armed: true }, stale: true });
+  api.renderMaster();
+  assert.equal(els.statusPill.textContent, 'ARMED · stale');
+  assert.match(els.statusPill.className, /\bstale\b/);
+  assert.match(els.statusPill.title, /not answering/);
+});
+
+test('the master controls never call fetch -- they only talk to the desk (post/refresh)', async () => {
+  const { api, fetched } = load({ st: { armed: false } });
+  await api.doArm();
+  await api.doDisarm();
+  await api.doKill();
+  assert.deepEqual(fetched, []);
+});
+
+// ---- the press-and-hold Kill ------------------------------------------------------------------
+test('a pointer hold fires Kill once after HOLD_MS -- the SAME confirm and POST /api/kill as before', async () => {
+  const { api, kill, fire, clock, confirms, posts, refreshes, toasts } = load();
+  assert.equal(api.HOLD_MS, 1000);
+  assert.equal(kill.style._p['--hold-ms'], '1000ms', 'the ring runs on the same clock as the timer');
+  fire(kill, 'pointerdown', { button: 0, isPrimary: true });
+  assert.ok(kill.classList.contains('holding'), 'the ring starts filling on the press itself');
+  clock.advance(999);
+  await tick();
+  assert.equal(confirms.length, 0, 'nothing before the hold completes');
+  clock.advance(1);
+  await tick();
+  assert.equal(confirms.length, 1);
+  assert.equal(confirms[0].title, 'Kill everything?');
+  assert.equal(confirms[0].destructive, true);
+  assert.deepEqual(plain(posts), [{ url: '/api/kill' }]);
+  assert.equal(refreshes.length, 1);
+  assert.match(toasts[toasts.length - 1], /^Kill:/);
+  assert.ok(!kill.classList.contains('holding'));
+  clock.advance(5000);   // still held down: never a second fire from the same hold
+  await tick();
+  assert.equal(confirms.length, 1);
+  fire(kill, 'pointerup');
+  assert.equal(toasts.filter((t) => /not sent/.test(t)).length, 0, 'letting go after it fired is not an early release');
+});
+
+test('letting go early cancels: nothing is sent, the ring runs back, and it says so', async () => {
+  const { kill, fire, clock, confirms, posts, toasts } = load();
+  fire(kill, 'pointerdown', { button: 0 });
+  clock.advance(600);
+  fire(kill, 'pointerup');
+  assert.ok(!kill.classList.contains('holding'));
+  assert.equal(clock.pending, 0);
+  clock.advance(5000);
+  await tick();
+  assert.equal(confirms.length, 0);
+  assert.deepEqual(posts, []);
+  assert.match(toasts[0], /Kill not sent — press and hold/);
+});
+
+test('every way a pointer hold can break cancels it: leave, pointercancel, lost buttons, context menu, blur, hidden page', async () => {
+  const breaks = [
+    (s) => s.fire(s.kill, 'pointerleave'),
+    (s) => s.fire(s.kill, 'pointercancel'),
+    (s) => s.fire(s.kill, 'pointermove', { buttons: 0 }),
+    (s) => s.fire(s.kill, 'contextmenu'),
+    (s) => s.fire(s.kill, 'blur'),
+    (s) => s.fire(s.win, 'blur'),
+    (s) => { s.doc.hidden = true; s.fire(s.doc, 'visibilitychange'); },
+  ];
+  for (const brk of breaks) {
+    const s = load();
+    s.fire(s.kill, 'pointerdown', { button: 0 });
+    s.clock.advance(500);
+    brk(s);
+    s.clock.advance(5000);
+    await tick();
+    assert.equal(s.confirms.length, 0, brk.toString());
+    assert.ok(!s.kill.classList.contains('holding'), brk.toString());
+  }
+  const s = load();   // a move WITH the button still down is not a break
+  s.fire(s.kill, 'pointerdown', { button: 0 });
+  s.fire(s.kill, 'pointermove', { buttons: 1 });
+  s.clock.advance(1000);
+  await tick();
+  assert.equal(s.confirms.length, 1);
+});
+
+test('only the primary button holds: a right-click or a second touch never starts one', async () => {
+  const s = load();
+  s.fire(s.kill, 'pointerdown', { button: 2 });
+  s.fire(s.kill, 'pointerdown', { button: 0, isPrimary: false });
+  s.clock.advance(3000);
+  await tick();
+  assert.equal(s.confirms.length, 0);
+});
+
+test('keyboard: holding Space fires once after HOLD_MS; its auto-repeat neither restarts nor re-fires it', async () => {
+  const { kill, fire, clock, confirms, posts } = load();
+  const down = fire(kill, 'keydown', { key: ' ', repeat: false });
+  assert.equal(down.defaultPrevented, true, 'no page scroll, no native click');
+  for (let t = 0; t < 40; t++) {        // ~33 ms auto-repeat for 1.3 s
+    clock.advance(33);
+    const rep = fire(kill, 'keydown', { key: ' ', repeat: true });
+    assert.equal(rep.defaultPrevented, true);
+  }
+  await tick();
+  assert.equal(confirms.length, 1, 'fired exactly once');
+  assert.deepEqual(plain(posts), [{ url: '/api/kill' }]);
+  fire(kill, 'keyup', { key: ' ' });
+  clock.advance(5000);
+  await tick();
+  assert.equal(confirms.length, 1);
+});
+
+test('keyboard: an auto-repeat alone (a key already held when focus arrived) never fires', async () => {
+  const { kill, fire, clock, confirms } = load();
+  for (let t = 0; t < 100; t++) {
+    fire(kill, 'keydown', { key: 'Enter', repeat: true });
+    clock.advance(33);
+  }
+  await tick();
+  assert.equal(confirms.length, 0);
+  assert.ok(!kill.classList.contains('holding'));
+});
+
+test('keyboard: releasing Enter early cancels; releasing some other key does not', async () => {
+  const s = load();
+  const down = s.fire(s.kill, 'keydown', { key: 'Enter', repeat: false });
+  assert.equal(down.defaultPrevented, true, "Enter's native click never happens");
+  s.clock.advance(300);
+  s.fire(s.kill, 'keyup', { key: 'Shift' });
+  assert.ok(s.kill.classList.contains('holding'), 'another key coming up is not a release');
+  s.clock.advance(300);
+  s.fire(s.kill, 'keyup', { key: 'Enter' });
+  s.clock.advance(5000);
+  await tick();
+  assert.equal(s.confirms.length, 0);
+  assert.match(s.toasts[0], /Kill not sent/);
+});
+
+test('each hold fires at most once; a fresh press after it fires again (one confirm per hold)', async () => {
+  const s = load();
+  s.fire(s.kill, 'pointerdown', { button: 0 });
+  s.clock.advance(1000);
+  await tick();
+  s.fire(s.kill, 'pointerup');
+  s.fire(s.kill, 'pointerdown', { button: 0 });
+  s.clock.advance(1000);
+  await tick();
+  assert.equal(s.confirms.length, 2);
+  assert.deepEqual(plain(s.posts), [{ url: '/api/kill' }, { url: '/api/kill' }]);
+});
+
+test('a declined confirm after the hold sends nothing', async () => {
+  const s = load({ confirm: false });
+  s.fire(s.kill, 'pointerdown', { button: 0 });
+  s.clock.advance(1000);
+  await tick();
+  assert.equal(s.confirms.length, 1);
+  assert.deepEqual(s.posts, []);
+});
+
+test('a mouse click is not a hold; an assistive-tech click (no pointer, no key) goes to the confirm', async () => {
+  const s = load();
+  s.fire(s.kill, 'click', { detail: 1 });
+  await tick();
+  assert.equal(s.confirms.length, 0, 'a plain click never kills');
+  s.fire(s.kill, 'click', { detail: 0 });
+  await tick();
+  assert.equal(s.confirms.length, 1, 'VoiceOver cannot hold: it gets the same confirm');
+  assert.equal(s.confirms[0].title, 'Kill everything?');
+});

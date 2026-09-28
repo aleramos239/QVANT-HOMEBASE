@@ -4,18 +4,19 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
 /* The desk page's (homebase/static/index.html, :8850) Settings dialog block (2026-09-27
-   desk-settings plan + arm/kill follow-up + fix round 1), run for real in a sandbox -- the same
-   technique as deskpaper.test.mjs: slice the inline block out of the page and run it in a vm
-   context with a minimal fake DOM/fetch/confirm. Covers, per the fix-round review:
-     I1 -- TRADING is built ONCE and only ever patched in place: #tradeKillBtn (and any focus on
-       it) is the SAME node across renderSettings()/loadChartStatus() repaints, never replaced.
-       MARKET DATA lives in its own container and is skipped when nothing in it changed.
-     I2 -- ST == null renders "Desk status unknown", no Arm/Disarm toggle, Kill still present.
+   desk-settings plan + fix round 1; Arm/Disarm/Kill moved to the top bar 2026-09-28 -- their
+   tests are in deskmaster.test.mjs), run for real in a sandbox -- the same technique as
+   deskpaper.test.mjs: slice the inline block out of the page and run it in a vm context with a
+   minimal fake DOM/fetch/confirm. Covers, per the fix-round review:
+     I1 -- CHART TRADING is built ONCE and only ever patched in place: #ctSwitch / #ctSave (and
+       any focus on them) are the SAME nodes across renderSettings()/loadChartStatus() repaints,
+       never replaced. MARKET DATA lives in its own container and is skipped when nothing in it
+       changed.
+     I2 -- ST == null: CHART TRADING still builds (nothing asserted), no throw.
      I3 -- DEMO guards applyMd/loadSettings/loadChartStatus: never touches fetch, same toast
        post() uses.
      I4 -- covered in the Python/HTML grep, not here (no JS surface).
-   Plus the original TRADING/MARKET DATA coverage (status line, caption, escaping, Apply
-   stage/apply/failure-snapback). */
+   Plus the original MARKET DATA coverage (escaping, Apply stage/apply/failure-snapback). */
 const HTML = readFileSync(new URL('../../homebase/static/index.html', import.meta.url), 'utf8');
 const BLOCK = HTML.slice(
   HTML.indexOf('/* ---- Settings (2026-09-27 desk-settings plan'),
@@ -31,7 +32,7 @@ const CHART = 'http://127.0.0.1:8852';
 async function tick(n = 12) { for (let i = 0; i < n; i++) await Promise.resolve(); }
 
 // Ids that exist in the static HTML from page load (the overlay's own containers) -- everything
-// else (#tradingPill, #tradeArmBtn, #ctSwitch, #mdApply, ...) is only "in the DOM" once some
+// else (#ctSwitch, #ctSave, #mdApply, ...) is only "in the DOM" once some
 // container's innerHTML has actually been built with it, exactly like the real page: $("#ctSwitch")
 // must return null before Settings has ever been opened, so a stray top-level `.onclick = ...`
 // on it would throw here just like it would in a real browser.
@@ -109,8 +110,8 @@ function load({ armed = false, confirm = true, demo = false, fetchAnswers = {}, 
   });
   vm.runInContext(BLOCK + `
     globalThis.api = {
-      openSettings, closeSettings, renderSettings, updateTrading, renderMarketData,
-      doArm, doDisarm, doKill, applyMd, loadSettings, loadChartStatus,
+      openSettings, closeSettings, renderSettings, renderMarketData,
+      applyMd, loadSettings, loadChartStatus,
       renderChartTrading, setChartTrading,
       get ST() { return ST; }, set ST(v) { ST = v; },
       get MD() { return MD; }, get MD_STAGED() { return MD_STAGED; },
@@ -119,161 +120,86 @@ function load({ armed = false, confirm = true, demo = false, fetchAnswers = {}, 
   return { api: ctx.api, els, doc, fetched, posts, toasts, confirms, refreshes, listeners };
 }
 
-// ---- I1: TRADING is built once and patched in place -------------------------------------------
-test('TRADING and MARKET DATA render into their own, separate containers', () => {
+// ---- I1: CHART TRADING is built once and patched in place ------------------------------------
+test('CHART TRADING and MARKET DATA render into their own, separate containers', () => {
   const { api, els } = load();
   api.renderSettings();
-  assert.match(els.settingsTrading.innerHTML, /TRADING/);
+  assert.match(els.settingsTrading.innerHTML, /CHART TRADING/);
   assert.match(els.settingsMarketData.innerHTML, /MARKET DATA/);
   assert.doesNotMatch(els.settingsTrading.innerHTML, /MARKET DATA/);
-  assert.doesNotMatch(els.settingsMarketData.innerHTML, /TRADING/);
+  assert.doesNotMatch(els.settingsMarketData.innerHTML, /CHART TRADING/);
 });
 
-test('#tradeKillBtn is the SAME node across renderSettings() repaints -- it is never rebuilt', () => {
+test('#ctSwitch / #ctSave are the SAME nodes across renderSettings() repaints -- never rebuilt', () => {
   const { api, els } = load({ armed: false });
   api.renderSettings();
-  const first = els.tradeKillBtn;
-  assert.ok(first, 'built once');
+  const sw = els.ctSwitch, save = els.ctSave;
+  assert.ok(sw && save, 'built once');
   api.renderSettings();
   api.renderSettings();
-  assert.equal(els.tradeKillBtn, first, 'renderSettings() must patch TRADING in place, never rebuild it');
+  assert.equal(els.ctSwitch, sw, 'renderSettings() must patch CHART TRADING in place, never rebuild it');
+  assert.equal(els.ctSave, save);
 });
 
-test('#tradeKillBtn survives loadChartStatus() -- the poll that used to force a full rebuild', async () => {
+test('#ctSwitch survives loadChartStatus() -- a MARKET DATA-only poll never touches CHART TRADING', async () => {
   const { api, els } = load({
     armed: true,
     fetchAnswers: { [`${CHART}/api/status`]: { body: { md: 'demo', armed: true } } },
   });
   api.renderSettings();
-  const first = els.tradeKillBtn;
+  const sw = els.ctSwitch, html = els.settingsTrading.innerHTML;
   await api.loadChartStatus();
-  assert.equal(els.tradeKillBtn, first, 'a MARKET DATA-only poll must never touch the TRADING node');
-  assert.equal(els.tradeKillBtn.onclick, api.doKill);
+  assert.equal(els.ctSwitch, sw);
+  assert.equal(els.settingsTrading.innerHTML, html);
 });
 
-test('TRADING patches the status line/pill/toggle in place when ST changes, without rebuilding', () => {
-  const { api, els } = load({ armed: false });
-  api.renderSettings();
-  const killNode = els.tradeKillBtn, toggleNode = els.tradeArmBtn;
-  assert.match(els.tradingText.textContent, /Disarmed/);
-  assert.match(els.tradeArmBtn.textContent, /Arm/);
-
-  api.ST = { armed: true };
-  api.updateTrading();
-  assert.equal(els.tradeKillBtn, killNode);
-  assert.equal(els.tradeArmBtn, toggleNode, 'the toggle button itself is patched, not replaced');
-  assert.match(els.tradingText.textContent, /ARMED — signals place real orders/);
-  assert.match(els.tradeArmBtn.textContent, /Disarm/);
-});
-
-test('MARKET DATA is rebuilt only when its own inputs changed (a no-op poll leaves its nodes alone)', async () => {
-  const { api, els } = load({
-    fetchAnswers: { [`${CHART}/api/settings`]: { body: { md: 'demo', accounts: { live: null, demo: null } } } },
-  });
+test('opening Settings paints the chart-trading switch and limits from ST at once, not on the next 2.5 s refresh', () => {
+  const { api, els } = load();
+  api.ST = { armed: false, chart_trading: { enabled: true, max_order_qty: 7, max_position_qty: 14 } };
   api.openSettings();
-  await tick();
-  const applyNode = els.mdApply;
-  assert.ok(applyNode);
-  await api.loadChartStatus();   // GET /api/status answers with no new data -> same signature
-  assert.equal(els.mdApply, applyNode, 'nothing changed: MARKET DATA must not be rebuilt');
+  assert.equal(els.ctSwitch.getAttribute('aria-checked'), 'true');
+  assert.equal(els.ctMaxOrder.value, 7);
+  assert.equal(els.ctMaxPos.value, 14);
 });
 
-test('the Kill caption is rendered verbatim, and the toggle button label follows the armed state', () => {
+test('Settings holds no Arm / Disarm / Kill any more -- it says they are in the top bar (one place for them)', () => {
   const { api, els } = load();
   api.renderSettings();
-  assert.match(els.settingsTrading.innerHTML, /Cancels every working order and flattens every\s+position on every connected account, then disarms\./);
-  assert.match(els.settingsTrading.innerHTML, />Kill everything</);
-  assert.match(els.tradeArmBtn.textContent, /Arm/);
-  api.ST = { armed: true };
-  api.updateTrading();
-  assert.match(els.tradeArmBtn.textContent, /Disarm/);
+  const html = els.settingsTrading.innerHTML;
+  assert.match(html, /Arm, Disarm and Kill everything are in the top bar\./);
+  assert.doesNotMatch(html, /tradeKillBtn|tradeArmBtn|tradingPill|>Kill everything</);
+  assert.doesNotMatch(BLOCK, /post\("\/api\/(arm|kill)"/, 'the Settings block never arms, disarms or kills');
 });
 
-test('clicking the toggle while disarmed calls doArm -- the SAME confirmDlg and POST the old Arm button used', async () => {
-  const { api, els, confirms, posts, refreshes, toasts } = load({ armed: false });
-  api.renderSettings();
-  assert.ok(els.tradeArmBtn.onclick, 'the Arm/Disarm toggle is wired');
-  await els.tradeArmBtn.onclick();
-  assert.equal(confirms.length, 1);
-  assert.equal(confirms[0].title, 'Arm the desk?');
-  assert.deepEqual(JSON.parse(JSON.stringify(posts)), [{ url: '/api/arm', body: { armed: true } }]);
-  assert.equal(refreshes.length, 1);
-  assert.match(toasts[0], /Armed/);
-});
-
-test('clicking the toggle while armed calls doDisarm directly (no confirm), same POST as the old Disarm button', async () => {
-  const { api, els, confirms, posts, refreshes } = load({ armed: true });
-  api.renderSettings();
-  await els.tradeArmBtn.onclick();
-  assert.equal(confirms.length, 0, 'Disarm never confirms, same as the old top-bar button');
-  assert.deepEqual(JSON.parse(JSON.stringify(posts)), [{ url: '/api/arm', body: { armed: false } }]);
-  assert.equal(refreshes.length, 1);
-});
-
-test('a declined confirm on Arm never POSTs', async () => {
-  const { api, els, posts } = load({ armed: false, confirm: false });
-  api.renderSettings();
-  await els.tradeArmBtn.onclick();
-  assert.deepEqual(JSON.parse(JSON.stringify(posts)), []);
-});
-
-test('Kill everything uses the SAME confirm + POST /api/kill as the old top-bar button', async () => {
-  const { api, els, confirms, posts, refreshes, toasts } = load();
-  api.renderSettings();
-  await els.tradeKillBtn.onclick();
-  assert.equal(confirms.length, 1);
-  assert.equal(confirms[0].title, 'Kill everything?');
-  assert.equal(confirms[0].destructive, true);
-  assert.deepEqual(JSON.parse(JSON.stringify(posts)), [{ url: '/api/kill' }]);
-  assert.equal(refreshes.length, 1);
-  assert.match(toasts[toasts.length - 1], /Kill:/);
-});
-
-test('clicking the pill or the gear (openSettings) never calls post', () => {
-  const { api, posts } = load();
-  api.openSettings();
-  assert.deepEqual(posts, []);
-});
-
-test('TRADING never calls fetch -- it only talks to the desk (post/refresh), never the CHART service', async () => {
+test('CHART TRADING never calls fetch -- it only talks to the desk (post/refresh), never the CHART service', async () => {
   const { api, els, fetched } = load({ armed: false });
+  api.ST = { armed: false, chart_trading: { enabled: false, max_order_qty: 10, max_position_qty: 20 } };
   api.renderSettings();
-  await els.tradeArmBtn.onclick();
-  await els.tradeKillBtn.onclick();
+  await els.ctSwitch.onclick();
+  await els.ctSave.onclick();
   assert.deepEqual(fetched, []);
 });
 
-test('TRADING renders and its buttons keep working even when the chart service is unreachable', async () => {
+test('CHART TRADING renders and its switch keeps working even when the chart service is unreachable', async () => {
   const { api, els, posts } = load({
     armed: true,
     fetchAnswers: { [`${CHART}/api/settings`]: new Error('refused'), [`${CHART}/api/status`]: new Error('refused') },
   });
+  api.ST = { armed: true, chart_trading: { enabled: true, max_order_qty: 10, max_position_qty: 20 } };
   api.openSettings();
   await tick();
-  assert.match(els.settingsTrading.innerHTML, /TRADING/);
+  assert.match(els.settingsTrading.innerHTML, /CHART TRADING/);
   assert.match(els.settingsMarketData.innerHTML, /Charts service not reachable from this page\./);
-  await els.tradeArmBtn.onclick();
-  assert.deepEqual(JSON.parse(JSON.stringify(posts)), [{ url: '/api/arm', body: { armed: false } }]);
+  await els.ctSwitch.onclick();   // ON -> OFF: the safe direction, no confirm
+  assert.deepEqual(JSON.parse(JSON.stringify(posts)), [{ url: '/api/chart-trading', body: { enabled: false } }]);
 });
 
-// ---- I2: an unknown desk state never asserts "Disarmed" ---------------------------------------
-test('I2: ST == null shows "Desk status unknown", hides the Arm/Disarm toggle, and keeps Kill present', () => {
+// ---- I2: an unknown desk state never throws and asserts nothing -------------------------------
+test('I2: ST == null still builds CHART TRADING, leaves the switch as built, and never throws', () => {
   const { api, els } = load({ armed: null });
-  api.renderSettings();
-  assert.match(els.tradingText.textContent, /Desk status unknown — connecting…/);
-  assert.equal(els.tradingToggleRow.style.display, 'none');
-  assert.ok(els.tradeKillBtn, 'Kill is still built and present when the desk state is unknown');
-  assert.equal(els.tradeKillBtn.onclick, api.doKill);
-});
-
-test('I2: going from unknown to a known armed state reveals the toggle again', () => {
-  const { api, els } = load({ armed: null });
-  api.renderSettings();
-  assert.equal(els.tradingToggleRow.style.display, 'none');
-  api.ST = { armed: false };
-  api.updateTrading();
-  assert.equal(els.tradingToggleRow.style.display, '');
-  assert.match(els.tradeArmBtn.textContent, /Arm/);
+  assert.doesNotThrow(() => api.renderSettings());
+  assert.ok(els.ctSwitch);
+  assert.equal(els.ctSwitch.getAttribute('aria-checked'), undefined, 'no state painted from an unknown desk');
 });
 
 // ---- I3: preview mode never touches the CHART service ------------------------------------------
@@ -408,17 +334,6 @@ test('renderChartTrading is a safe no-op while the dialog has never been opened 
   const { api } = load();   // buildTrading() has never run: #ctSwitch etc. do not exist yet
   assert.doesNotThrow(() => api.renderChartTrading({ enabled: true, max_order_qty: 5, max_position_qty: 10 }));
   assert.doesNotThrow(() => api.renderChartTrading(null));
-});
-
-test('Chart trading sits below Arm/Disarm and above Kill, under its own sub-heading', () => {
-  const { api, els } = load();
-  api.renderSettings();
-  const html = els.settingsTrading.innerHTML;
-  const armRow = html.indexOf('id="tradeArmBtn"');
-  const heading = html.indexOf('Chart trading');
-  const ctRow = html.indexOf('id="ctSwitch"');
-  const killRow = html.indexOf('id="tradeKillBtn"');
-  assert.ok(armRow < heading && heading < ctRow && ctRow < killRow, 'Arm/Disarm < "Chart trading" < ctSwitch < Kill');
 });
 
 test('once built, renderChartTrading patches the switch/state/limits in place -- never rebuilding', () => {
