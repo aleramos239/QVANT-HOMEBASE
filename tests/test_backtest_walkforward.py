@@ -864,3 +864,26 @@ def test_the_phase_warning_fires_on_either_gap_and_quotes_the_shared_one_first()
                               capital=50_000.0)
     sh = [c["shared"]["stats"]["net_profit"] for c in s["schemes"]]
     assert s["phase_check"]["gap_shared"] == round(max(sh) - min(sh), 2)
+
+
+def test_the_selection_side_sharpe_grid_is_only_the_non_contiguous_selection_months_at_1to3():
+    """At 1:3 the chain's selection months are m0, m3, m6 ... -- not contiguous. The IS Sharpe grid is those
+    months' weekdays only; the old first->last-trade grid also counted the TEST months between them as flat
+    in-sample days, which pulled the IS Sharpe down and so understated the IS -> OOS Sharpe drop."""
+    months = [f"2022-{m:02d}" for m in range(1, 8)]                  # Jan..Jul: 1:3 steps 0..3, chain 0 and 3
+    tr = []
+    for m in months:
+        tr += trades(m, [100, -40, 80, 60, 30])                      # the one cell trades every month
+    cells = [{"i": 0, "params": {}, "months": wf.month_stats(tr, [], 50_000.0, months)}]
+    r = wf.compute(cells, months, trades_of=lambda i: (tr, []), metric="net_profit", min_trades=5,
+                   capital=50_000.0, test_months=3)
+    assert r["stitched_is"]["months"] == ["2022-01", "2022-04"]      # non-contiguous
+    is_tr = sorted((wf.to_ns(t) for t in tr if t["date"][:7] in ("2022-01", "2022-04")),
+                   key=lambda t: (t["exit_ns"], t["entry_ns"]))
+    grid = report.weekday_daily_pnl(is_tr, [], ["2022-01", "2022-04"])
+    assert len(grid) == 21 + 21                                      # Jan + Apr 2022 weekdays, nothing between
+    new = report.column(is_tr, 50_000.0, [], ["2022-01", "2022-04"])["sharpe"]
+    old = report.column(is_tr, 50_000.0, [])["sharpe"]               # Jan 3 -> Apr 7 incl. Feb/Mar as flat days
+    assert r["stitched_is"]["stats"]["sharpe"] == new
+    assert new > old                                                 # the old grid understated the IS Sharpe
+    assert r["drop"]["sharpe"] == round(r["stitched"]["stats"]["sharpe"] - new, 4)
