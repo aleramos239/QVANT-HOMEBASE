@@ -63,7 +63,11 @@ function todayEt() { return TODAY_FMT.format(new Date()); }
 /* ---- entering / leaving a session ---- */
 /* Force every one of this cell's overlays (its trade block among them) to re-render right now, off the usual
    bar-update cadence -- so hiding real trading never waits on the next quote or bar. */
-function refreshOverlays(cell) { for (const o of cell.ov) if (o.onBars) o.onBars(); }
+function refreshOverlays(cell) {
+  for (const o of cell.ov) if (o.onBars) o.onBars();
+  // the order panel's LIVE ring/tag follow the same gate: repaint it now too, not on its next tick (review item 3)
+  if (window.HBOrderPanel && window.HBOrderPanel.setRoot) window.HBOrderPanel.setRoot();
+}
 
 function doStart(cell, date, time) {
   if (!cell || !cell.host) return;

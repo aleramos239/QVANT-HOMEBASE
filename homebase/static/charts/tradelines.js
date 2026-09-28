@@ -726,7 +726,7 @@ function mk(tag, cls, text) {
 }
 /* S1: the LIVE tag (hidden until a send from here reaches a LIVE account) and a Buy/Sell label carrying it. */
 function liveTag() { const t = mk('span', 'tr-live', 'LIVE'); t.hidden = true; return t; }
-function sideLabel(tag, text) { const l = mk('span', 'tr-lbl'); l.append(tag, text); return l; }
+function sideLabel(tag, text) { const l = mk('span', 'tr-lbl'); l.append(tag, ' ', text); return l; }   // the space: a screen reader says "LIVE SELL", not "LIVESELL"
 
 window.HBTradeLines = { overlay: (cell, page) => new Overlay(cell, page) };
 })();
