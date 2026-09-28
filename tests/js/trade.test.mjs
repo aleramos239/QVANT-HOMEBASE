@@ -1510,3 +1510,39 @@ test('exits body and confirm title', () => {
   const parts = T.splitSend('exits', T.exitsBody({ clientId: 'c', accounts: ['sim041', 'paper'], root: 'NQ', kind: 'sl', price: 1 }));
   assert.deepEqual([parts.desk.accounts, parts.paper.accounts], [['sim041'], ['paper']]);
 });
+
+test('fix round 1, item 2: a pending entry\'s Suspended bracket leg is never the position\'s SL / TP, and hides both handles', () => {
+  // long 1 @ 30,900 + a working Buy Limit 1 @ 30,890 whose OSO stop (Sell Stop @ 30,885) waits Suspended
+  const st = { accounts: [acct('sim041', 'SIM0000041', 'demo', {
+    positions: [{ symbol: 'NQZ6', net: 1, avg_price: 30900, root: 'NQ', point_value: 20 }],
+    orders: [
+      { order_id: '80', symbol: 'NQZ6', side: 'Buy', type: 'Limit', qty: 1, price: 30890, stop_price: null, owner: null, status: 'Working' },
+      { order_id: '81', symbol: 'NQZ6', side: 'Sell', type: 'Stop', qty: 1, price: null, stop_price: 30885, owner: null, status: 'Suspended' }] })] };
+  const groups = T.linesFor(st, 'NQ', ['sim041']);
+  const leg = groups.find((g) => g.legs.some((l) => l.order_id === '81'));
+  assert.equal(leg.kind, 'order', 'drawn as the plain order it is, never as the position\'s SL');
+  assert.equal(leg.legs[0].pending, true);
+  assert.equal(T.lineText(leg, 30900), 'SELL STP 1 · …041');
+  const pos = groups.find((g) => g.kind === 'position');
+  assert.deepEqual(T.exitHandles(pos, groups), { sl: false, tp: false });
+  // once it is Working (the entry filled), it is an exit like any other
+  st.accounts[0].orders[1].status = 'Working';
+  st.accounts[0].orders.splice(0, 1);
+  const g2 = T.linesFor(st, 'NQ', ['sim041']);
+  assert.equal(g2.find((g) => g.legs.some((l) => l.order_id === '81')).kind, 'sl');
+  assert.deepEqual(T.exitHandles(g2.find((g) => g.kind === 'position'), g2), { sl: false, tp: true });
+  assert.deepEqual([null, undefined, 'Working', 'Suspended', 'PendingNew'].map((status) => T.isPending({ status })),
+    [false, false, false, true, true]);
+});
+
+test('fix round 1, item 2: another account\'s pending leg never hides this position\'s handles', () => {
+  const pos = (net) => [{ symbol: 'NQZ6', net, avg_price: 30900, root: 'NQ', point_value: 20 }];
+  const st = { accounts: [acct('sim041', 'SIM0000041', 'demo', { positions: pos(1) }),
+    acct('sim047', 'SIM0000047', 'demo', { positions: pos(-1), orders: [
+      { order_id: '91', symbol: 'NQZ6', side: 'Buy', type: 'Stop', qty: 1, price: null, stop_price: 30950, owner: null, status: 'Suspended' }] })] };
+  const groups = T.linesFor(st, 'NQ', ['sim041', 'sim047']);
+  const long = groups.find((g) => g.kind === 'position' && g.side === 'Buy');
+  const short = groups.find((g) => g.kind === 'position' && g.side === 'Sell');
+  assert.deepEqual(T.exitHandles(long, groups), { sl: true, tp: true });
+  assert.deepEqual(T.exitHandles(short, groups), { sl: false, tp: false });
+});

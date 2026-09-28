@@ -79,6 +79,10 @@ function orderPrice(o) {
   if (/stop/i.test(String(o.type || ''))) return o.stop_price ?? o.price ?? null;
   return o.price ?? o.stop_price ?? null;
 }
+/* A row the broker (or the paper book) says is not plainly Working: a pending entry's Suspended OSO leg, a
+   PendingNew / PendingReplace. A row with no status at all is read as Working (older fixtures; the desk itself
+   refuses exits on anything that is not exactly "Working"). */
+function isPending(o) { return !!o && o.status != null && o.status !== 'Working'; }
 const ABBR = { Limit: 'LMT', Stop: 'STP', StopLimit: 'STP LMT', Market: 'MKT', TrailingStop: 'TRAIL' };
 const abbr = (t) => ABBR[t] || String(t || '').toUpperCase();
 
@@ -634,13 +638,17 @@ function linesFor(state, root, editable) {
       const at = orderPrice(o);
       if (o.owner || at == null || rootOf(o.symbol) !== root) continue;
       const p = pos.find((x) => x.symbol === o.symbol);
-      const exit = !!p && ((p.net > 0 && o.side === 'Sell') || (p.net < 0 && o.side === 'Buy'));
+      // a row that is not plainly Working (a pending entry's Suspended OSO leg, a PendingNew) is never the position's
+      // own SL / TP -- it is drawn as the plain order it is (fix round 1, item 2; the desk refuses exits meanwhile)
+      const pending = isPending(o);
+      const exit = !pending && !!p && ((p.net > 0 && o.side === 'Sell') || (p.net < 0 && o.side === 'Buy'));
       const kind = !exit ? 'order' : /stop/i.test(o.type) ? 'sl' : /limit/i.test(o.type) ? 'tp' : 'order';
       const limit = o.type === 'StopLimit' ? o.price ?? null : undefined;   // drawn at the trigger, labelled with both
       add(`${pre}|${kind}|${o.side}|${o.type}|${at}${limit !== undefined ? `|${limit}` : ''}`,
         { kind, side: o.side, type: o.type, price: at, editable: ed, ...pp, ...(limit !== undefined ? { limit } : {}) },
         { account: a.id, who, qty: Number(o.qty) || 0, order_id: String(o.order_id),
-          avg: p ? p.avg_price : null, s: p ? (p.net > 0 ? 1 : -1) : 0, pv: p ? p.point_value ?? null : null });
+          avg: p ? p.avg_price : null, s: p ? (p.net > 0 ? 1 : -1) : 0, pv: p ? p.point_value ?? null : null,
+          ...(pending ? { pending: true } : {}) });
     }
   }
   return [...groups.values()];
@@ -684,12 +692,15 @@ const withPrice = (g, price) => ({ ...g, price });
    An editable position line offers an "SL" handle while none of its accounts has a stop-type exit line in this root,
    and a "TP" handle while none has a limit-type one (an existing SL / TP line is already draggable: move that).
    Dragging one draws a ghost exit line; dropping it sends `exits` for the WHOLE position on each of its accounts (the
-   desk / paper book makes it one OCO pair with an existing half). */
+   desk / paper book makes it one OCO pair with an existing half). No handle at all while any of those accounts has
+   a pending order in this root (a Suspended bracket leg of an entry not filled yet, a PendingNew): the desk and the
+   paper book refuse exits then (fix round 1, item 2). */
 function exitHandles(g, groups) {
   if (!g || g.kind !== 'position' || g.editable !== true) return { sl: false, tp: false };
   const mine = new Set(g.legs.map((l) => l.account));
-  const has = (kind) => (groups || []).some((x) => x.kind === kind && x.legs.some((l) => mine.has(l.account)));
-  return { sl: !has('sl'), tp: !has('tp') };
+  const any = (fn) => (groups || []).some((x) => x.legs.some((l) => mine.has(l.account) && fn(x, l)));
+  if (any((x, l) => l.pending === true)) return { sl: false, tp: false };
+  return { sl: !any((x) => x.kind === 'sl'), tp: !any((x) => x.kind === 'tp') };
 }
 /* The ghost exit line a handle drag draws: the position's legs at `price`, labelled like a real SL / TP line
    ("SL 3 · −$600 · …047": the projected P&L of the whole position if it fills there). */
@@ -1442,7 +1453,7 @@ function routeSend(action, body, send) {
   return Promise.all(out);
 }
 
-const api = { PREFS_KEY, QUOTE_STALE_MS, BOT_NAMES, parsePrefs, prefsText, oneClickKey, short, rootOf, orderPrice, abbr, inferType, menuText,
+const api = { PREFS_KEY, QUOTE_STALE_MS, BOT_NAMES, parsePrefs, prefsText, oneClickKey, short, rootOf, orderPrice, isPending, abbr, inferType, menuText,
   roundTick, bracket, orderBody, clientId, tradeMode, quoteView, usd, money, pnl, rrText, linesFor, linePnl, lineLabel,
   lineText, lineColor, canDrag, withPrice, exitHandles, exitGhost, exitDropError, exitsBody, exitsTitle, orderTitle, confirmOrder, actionTitle, resultToasts, fillText, fillMarkers, execArrow, botName, positionRows, orderRows, fillRows, accountRows, etTime, diffRows,
   algoName, algoLabel, algoChoices, algoAccounts, botPill, botToday, algoOverlay, etMs, pastRunMarkers, nearestTip, historySig,
