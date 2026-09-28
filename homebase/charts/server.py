@@ -37,6 +37,7 @@ from .depth import DEPTH_ARCHIVE, Depth, DepthRecorder
 from .depthgrid import (MAX_COLS as DEPTH_MAX_COLS, MAX_SPAN_MS as DEPTH_MAX_SPAN_MS, Busy, HistoryPool, Paused,
                         paused_reason)
 from .desk import Fanout, Quotes, register as register_desk
+from .export import export_router
 from .history import History
 from .hub import Hub, Stream
 from .news import News
@@ -888,6 +889,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             tester.manager.shutdown()   # never leave a runner child orphaned
             tester.grids.shutdown()     # ... nor a heat-map cell's
             tester.wfs.shutdown()       # ... nor a walk-forward cell's
+            export_rt.manager.shutdown()  # nor a data-export child
             for job in paper_job:       # nor the paper comparison's (terminated and reaped)
                 job.stop()
 
@@ -1008,6 +1010,10 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
 
     tester = tester_router(browser_write_ok, base, Path(state) / "tester" if state else None, notify=fan_count)
     app.include_router(tester)
+
+    export_rt = export_router(browser_write_ok, base, depth_base or DEPTH_ARCHIVE,
+                              Path(state) / "export" if state else None)
+    app.include_router(export_rt)
 
     @app.get("/api/settings")
     async def get_settings(request: Request, response: Response):
