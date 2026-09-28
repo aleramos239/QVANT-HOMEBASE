@@ -621,3 +621,52 @@ test('review round 2, C: moveLine checks a pending leg against its entry, not th
     desk.state = was;
   }
 });
+
+test('fast-paper: the order in flight names its button ("sending") from the click until its send resolves', async () => {
+  reset();
+  const c = chart(['sim041']);
+  const was = desk.send;
+  let release = null;
+  desk.send = (action, body) => { desk.sent.push({ action, body }); return new Promise((r) => { release = r; }); };
+  const flips = [];
+  const unsub = UI.onBusyChange((v) => flips.push([v, UI.sending() ? UI.sending().side : null]));
+  Object.assign(desk.prefs, { oneClickChart: true, oneClickPanel: false });
+  try {
+    UI.placeOrder({ cell: c, root: 'NQ', side: 'Sell', type: 'Market', qty: 1, surface: 'chart' });
+    // in the click itself, synchronously: the lock, and the button that holds it (the subscribers see both at once)
+    assert.deepEqual(UI.sending(), { surface: 'chart', cell: c, side: 'Sell' });
+    assert.deepEqual(flips, [[true, 'Sell']]);
+    assert.equal(T.sendingSide(UI.sending(), 'chart', c), 'Sell');
+    await flush();
+    assert.equal(desk.sent.length, 1);
+    assert.equal(UI.sending().side, 'Sell', 'still pressed: the send has not resolved');
+    release();
+    await flush();
+    assert.equal(UI.sending(), null);
+    assert.equal(UI.busy(), false);
+    assert.deepEqual(flips, [[true, 'Sell'], [false, null]]);
+    // the order panel through its confirm: nothing reads "sending" while the dialog is open; its Send does after OK
+    UI.placeOrder({ cell: c, root: 'NQ', side: 'Buy', type: 'Market', qty: 1, surface: 'panel' });
+    assert.equal(dialogs.length, 1);
+    assert.equal(UI.sending(), null);
+    clickPrimary('Buy');
+    await flush();
+    assert.equal(T.sendingSide(UI.sending(), 'panel', null), 'Buy');
+    assert.equal(T.sendingSide(UI.sending(), 'chart', c), null, "the chart's block is not the one sending");
+    release();
+    await flush();
+    assert.equal(UI.sending(), null);
+    // any other send (here a one-click Flatten) holds the lock but names no Buy/Sell/Send button
+    UI.symbolAction(c, 'flatten', 'NQ');
+    assert.equal(UI.busy(), true);
+    assert.equal(UI.sending(), null);
+    await flush();
+    release();
+    await flush();
+    assert.equal(UI.busy(), false);
+  } finally {
+    desk.send = was;
+    unsub();
+    Object.assign(desk.prefs, { oneClickChart: undefined, oneClickPanel: undefined });
+  }
+});

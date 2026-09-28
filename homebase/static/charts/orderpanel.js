@@ -418,11 +418,13 @@ function paint() {
   ui.send.textContent = T.sendLabel(st.side, qtyText, c.root, st.type);
   ui.send.classList.toggle('buy', st.side === 'Buy');
   ui.send.classList.toggle('sell', st.side === 'Sell');
+  ui.send.classList.toggle('sending', !!T.sendingSide(UI().sending(), 'panel', null));   // fast-paper: pressed until it resolves
   ui.send.disabled = !!reason;
   ui.reason.textContent = m.mode !== 'on' ? '' : reason;   // the mode's reason already shows under the accounts
 }
 function paintIdle(text) {
   ui.send.disabled = true;
+  ui.send.classList.remove('sending');
   ui.send.textContent = 'Buy';
   ui.reason.textContent = text;
   ui.chips.replaceChildren();

@@ -69,3 +69,32 @@ test('createAccount posts a name and a starting balance to the chart service\'s 
   assert.equal(fetched[0].url, '/api/paper/accounts/create');
   assert.deepEqual(JSON.parse(fetched[0].opts.body), { name: 'Scalps', start_balance: 25000 });
 });
+
+test('fast-paper: a fill pushed BEFORE its order\'s answer is announced once the answer names the order, and only once', async () => {
+  let answer = null;
+  const window = {};
+  const ctx = vm.createContext({ window, console, fetch: () => new Promise((r) => { answer = r; }) });
+  vm.runInContext(SRC, ctx);
+  const P = window.HBPaperClient, seen = [];
+  P.onFill((f) => seen.push([f.account, f.id, f.order_id]));
+  const push = (...fills) => P.onBook({ type: 'paperbook', accounts: [{ id: 'paper', env: 'paper', fills }] });
+  const reply = (orderId) => answer({ status: 200, json: async () => ({ results: { paper: { ok: true, order_id: orderId, error: null } } }) });
+  const f1 = { id: 1, order_id: '3' }, f2 = { id: 2, order_id: '7' }, f3 = { id: 3, order_id: '8' }, f4 = { id: 4, order_id: '7' };
+  push(f1);                                               // history
+  const sent = P.send('order', { client_id: 'c1', accounts: ['paper'] });   // in flight...
+  push(f1, f2);                                           // ...its fill at the quote is pushed first
+  push(f1, f2, f3);                                       // another page's order fills too
+  assert.deepEqual(seen, [], 'not ours yet: nothing announced');
+  reply('7');
+  await sent;
+  assert.deepEqual(seen, [['paper', 2, '7']], 'announced as the answer lands -- only our order');
+  push(f1, f2, f3, f4);
+  assert.deepEqual(seen, [['paper', 2, '7'], ['paper', 4, '7']], 'never twice; a later fill of it the usual way');
+  const f5 = { id: 5, order_id: '9' };
+  const late = P.send('order', { client_id: 'c2', accounts: ['paper'] });
+  push(f1, f2, f3, f4, f5);
+  push(f2, f3, f4);                                       // f5 scrolled out of the book's list before the answer came
+  reply('9');
+  await late;
+  assert.equal(seen.length, 2, 'a fill the book no longer shows is not kept');
+});

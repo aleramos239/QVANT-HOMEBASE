@@ -307,6 +307,16 @@ function wireSend(b, send, { blur = false } = {}) {
   b.addEventListener('blur', () => { spaceDown = false; });
 }
 
+/* fast-paper: which of a surface's send buttons shows "sending" (pressed until its send resolves): the side of the one
+   send in flight (HBTradeUI.sending() -- {surface, cell, side}, or null) when THIS surface started it -- the chart's
+   Buy/Sell block ('chart': that chart's own block only, `cell`) or the order panel ('panel': whichever chart it
+   follows now). null: none of its buttons (another surface's send, or none in flight). */
+function sendingSide(sending, surface, cell) {
+  if (!sending || sending.surface !== surface) return null;
+  if (surface === 'chart' && sending.cell !== cell) return null;
+  return sending.side === 'Buy' || sending.side === 'Sell' ? sending.side : null;
+}
+
 /* ---- safety review (2026-09-27 review of Task 5, and its follow-up review of Tasks 5+6) ---- */
 /* Enter in the confirm dialog: confirms only when focus is on the primary button, or on a non-button element
    (the checkbox, an unfocusable row) -- never on ×, Cancel, or any other button, and never a held key
@@ -1523,7 +1533,7 @@ const api = { PREFS_KEY, QUOTE_STALE_MS, BOT_NAMES, parsePrefs, prefsText, oneCl
   lineText, lineTitle, lineColor, canDrag, withPrice, exitKinds, exitKindAt, exitRefusal, EXIT_DRAG_PX, pastClick, pendingMoveError, exitGhost, exitDropError, expectedNet, exitsBody, exitsTitle, orderTitle, confirmOrder, actionTitle, resultToasts, fillText, fillMarkers, execArrow, botName, positionRows, orderRows, fillRows, accountRows, etTime, diffRows,
   algoName, algoLabel, algoChoices, algoAccounts, botPill, botToday, algoOverlay, etMs, pastRunMarkers, nearestTip, historySig,
   killConfirm, killToasts, killBlock, killSold,
-  enterConfirms, wireSend, symbolChangeTrade, resolveConfirmedAccounts, armedTicked, unarmedLiveMessage, freshQuote,
+  enterConfirms, wireSend, sendingSide, symbolChangeTrade, resolveConfirmedAccounts, armedTicked, unarmedLiveMessage, freshQuote,
   needsQuoteForBracket, refuseIfMarketable, cellTrade, loadedTrade, cellAlgo, tradeBits, templateTrade, algoForRoot,
   migrateTicked, deskGate, armedMode, replayGuard, legsWithin, lineAccounts, accountChips, acctTick, hiddenCellsLoaded,
   NO_ACCOUNTS, SYMBOL_CHANGE_ACCOUNTS_CLEARED, liveIds, liveDroppedMessage, envChip, algoBookings, algoForAccount,

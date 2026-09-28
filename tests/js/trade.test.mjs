@@ -1180,6 +1180,17 @@ test('wireSend (I1): {blur: true} drops focus after a pointer click, so no later
   assert.equal(plain.blurs, 0);            // the order panel keeps its focus (its own keyboard send is deliberate)
 });
 
+test('sendingSide (fast-paper): only the surface that sent the order -- and for a chart block, only that chart\'s', () => {
+  const c = {}, d = {};
+  assert.equal(T.sendingSide(null, 'chart', c), null);                                             // nothing in flight
+  assert.equal(T.sendingSide({ surface: 'chart', cell: c, side: 'Buy' }, 'chart', c), 'Buy');
+  assert.equal(T.sendingSide({ surface: 'chart', cell: c, side: 'Sell' }, 'chart', d), null);      // another chart's block
+  assert.equal(T.sendingSide({ surface: 'chart', cell: c, side: 'Sell' }, 'panel', null), null);
+  assert.equal(T.sendingSide({ surface: 'panel', cell: c, side: 'Sell' }, 'panel', null), 'Sell'); // whichever chart it follows
+  assert.equal(T.sendingSide({ surface: null, cell: c, side: 'Buy' }, 'chart', c), null);          // the chart menu: no button
+  assert.equal(T.sendingSide({ surface: 'chart', cell: c, side: 'Flatten' }, 'chart', c), null);
+});
+
 test('symbolChangeTrade (I2b): a new symbol CLEARS the chart\'s accounts; same symbol: nothing', () => {
   const cfg = { root: 'NQ', trade: { accounts: ['sim041', 'sim047'] } };
   assert.deepEqual(T.symbolChangeTrade(cfg, { root: 'GC' }),

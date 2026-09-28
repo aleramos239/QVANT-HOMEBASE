@@ -215,6 +215,11 @@ class Overlay {
     if (document.activeElement !== this.qty) this.qty.value = String(Dc.prefs.qty);
     const busy = window.HBTradeUI.busy();
     this.buyBtn.disabled = this.sellBtn.disabled = busy;
+    // fast-paper: the button whose order is in flight reads pressed ("sending") from its click until the send resolves;
+    // the other greys as before (charts.css .sending -- no size change)
+    const side = T.sendingSide(window.HBTradeUI.sending(), 'chart', this.cell);
+    this.buyBtn.classList.toggle('sending', side === 'Buy');
+    this.sellBtn.classList.toggle('sending', side === 'Sell');
   }
 
   /* The chart's accounts next to the block whenever it has any; one not in the chart's effective set right

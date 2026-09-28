@@ -744,7 +744,21 @@ a { color: inherit; }
 .op-send.sell { background: var(--down); }
 .op-send:hover:not(:disabled) { filter: brightness(1.08); }
 .op-send:disabled { opacity: .45; cursor: default; }
-.op-reason { min-height: 16px; padding-top: 6px; color: var(--text-2); font-size: 12px; text-align: center; }
+/* fast-paper: a press darkens at once; the chart's Buy/Sell or the panel's Send whose order is in flight then stays
+   PRESSED -- not greyed like the other buttons -- until its send resolves, a thin bar running along its foot.
+   Nothing changes size (no layout shift). */
+.tr-sell:active:not(:disabled), .tr-buy:active:not(:disabled), .op-send:active:not(:disabled) { filter: brightness(.9); }
+.tr-sell.sending, .tr-buy.sending, .op-send.sending { position: relative; overflow: hidden; }
+.tr-sell.sending:disabled, .tr-buy.sending:disabled, .op-send.sending:disabled { opacity: 1; cursor: progress;
+  filter: brightness(.86); box-shadow: inset 0 2px 4px rgba(0, 0, 0, .3); }
+.tr-sell.sending::after, .tr-buy.sending::after, .op-send.sending::after { content: ''; position: absolute; left: 0; bottom: 0;
+  width: 40%; height: 2px; background: rgba(255, 255, 255, .85); animation: hb-sending .8s ease-in-out infinite; }
+@keyframes hb-sending { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+@media (prefers-reduced-motion: reduce) {
+  .tr-sell.sending::after, .tr-buy.sending::after, .op-send.sending::after { animation: none; width: 100%; opacity: .6; }
+}
+/* fast-paper: one line (21px) reserved, so "Sending…" appearing under Send never moves Send itself (no layout shift) */
+.op-reason { min-height: 21px; padding-top: 6px; color: var(--text-2); font-size: 12px; line-height: 15px; text-align: center; }
 
 .switch:disabled { opacity: .5; cursor: default; }
 

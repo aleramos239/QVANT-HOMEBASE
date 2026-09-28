@@ -91,12 +91,18 @@ const book = { accounts: [], limits: null };
 const fillSubs = new Set();
 const ours = new Set();   // "<account>:<order id>" this page placed: their fills are announced (onFill)
 let seenFills = null;     // "<account>:<fill id>" of the last push (null: none yet -- the first announces nothing)
+// fast-paper: a Market fills at the quote AT ONCE and its push can reach the page before the POST's answer names the
+// order -- so a NEW fill of an order not (yet) ours waits here ("<account>:<fill id>" -> fill) for send() to claim it;
+// only fills the book still shows are kept
+const unclaimed = new Map();
 /* The paper accounts in the desk's account shape ([] before the service has sent any). */
 function accounts() { return book.accounts; }
 function limits() { return book.limits; }
 function onFill(fn) { fillSubs.add(fn); return () => fillSubs.delete(fn); }
+function announce(list) { for (const f of list) for (const fn of [...fillSubs]) { try { fn(f); } catch (e) { console.error(e); } } }
 /* A /ws {"type":"paperbook", accounts, limits} push: the latest views; announces fills of our own orders it adds
-   ({...fill, account}). Anything that is not a paper account is dropped. */
+   ({...fill, account}) -- or keeps them for send() when their order's answer has not landed yet. Anything that is
+   not a paper account is dropped. */
 function onBook(m) {
   const list = (m && Array.isArray(m.accounts) ? m.accounts : [])
     .filter((a) => a && typeof a === 'object' && typeof a.id === 'string' && PAPER_ID_RE.test(a.id));
@@ -106,13 +112,25 @@ function onBook(m) {
       if (!f) continue;
       const k = `${a.id}:${f.id}`;
       seen.add(k);
-      if (seenFills && !seenFills.has(k) && ours.has(`${a.id}:${f.order_id}`)) fresh.push({ ...f, account: a.id });
+      if (!seenFills || seenFills.has(k)) continue;           // history, or already looked at
+      if (ours.has(`${a.id}:${f.order_id}`)) fresh.push({ ...f, account: a.id });
+      else unclaimed.set(k, { ...f, account: a.id });
     }
   }
+  for (const k of [...unclaimed.keys()]) if (!seen.has(k)) unclaimed.delete(k);
   seenFills = seen;
   book.accounts = list;
   book.limits = (m && m.limits) || null;
-  for (const f of fresh) for (const fn of [...fillSubs]) { try { fn(f); } catch (e) { console.error(e); } }
+  announce(fresh);
+}
+/* An order this page placed: its fills are announced from now on -- and at once any a push already brought. */
+function claim(account, orderId) {
+  ours.add(`${account}:${orderId}`);
+  const early = [];
+  for (const [k, f] of unclaimed) {
+    if (f.account === account && String(f.order_id) === String(orderId)) { early.push(f); unclaimed.delete(k); }
+  }
+  announce(early);
 }
 /* POST /api/paper/{action} -> {status, data}; anything but the six book actions (a Kill) is refused here, unsent. */
 async function send(action, body) {
@@ -123,7 +141,7 @@ async function send(action, body) {
     status = r.status;
     try { data = await r.json(); } catch (_) { data = null; }
   } catch (_) { data = { detail: 'chart service unreachable' }; }
-  if (data && data.results) for (const [id, r] of Object.entries(data.results)) if (r && r.ok && r.order_id) ours.add(`${id}:${r.order_id}`);
+  if (data && data.results) for (const [id, r] of Object.entries(data.results)) if (r && r.ok && r.order_id) claim(id, r.order_id);
   return { status, data };
 }
 /* Task 2b: a new paper account -> {status, data} (data.account on success, data.detail on a refusal). */

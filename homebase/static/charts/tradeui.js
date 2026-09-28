@@ -37,6 +37,7 @@ let armLive = null;      // the account id mid-arm (first click), or null
 let armTimer = 0;
 const liveConfirmed = new Set();   // LIVE accounts armed THIS session (never persisted: ruling S5 + the review note)
 let inFlight = false;    // one send at a time (review item 2; the 2026-09-27 review of Task 5 makes this a toast, not a silent drop)
+let sendingFrom = null;  // fast-paper: {surface, cell, side} of the order in flight -- its button shows "sending" (HBTrade.sendingSide)
 const busySubs = new Set();   // notified synchronously on every inFlight flip, so the panel and the chart's lines grey out immediately
 const tradeSubs = new Set();  // notified when a chart's trade config or a LIVE arm changes (the charts' overlays re-render)
 
@@ -150,19 +151,24 @@ function setKilling(key, v) {
   for (const fn of [...busySubs]) { try { fn(inFlight); } catch (e) { console.error(e); } }   // the badges repaint
 }
 function busy() { return inFlight; }
+/* fast-paper: the order in flight's {surface, cell, side} (placeOrder's), or null -- set and cleared with busy(), in the
+   same synchronous flip, so a Buy/Sell/Send button reads "sending" from its click until the send resolves. */
+function sending() { return sendingFrom; }
 function onBusyChange(fn) { busySubs.add(fn); return () => busySubs.delete(fn); }
-function setInFlight(v) {
+function setInFlight(v, origin = null) {
   inFlight = v;
+  sendingFrom = v ? origin : null;
   for (const fn of [...busySubs]) { try { fn(v); } catch (e) { console.error(e); } }
 }
 
 /* One send (or one sequential batch of them, for a per-leg modify/cancel) at a time, its gate (a function: the
    chart's cellGate, or the panel's accountGate) re-checked right before it goes out. buildBody(m) returns a body object, an array of bodies (sent in order), or null/undefined
    to abort silently (a specific toast — mode reason, accounts-changed, price-moved — already covers the "why").
-   A second attempt while one is in flight now toasts instead of dropping silently (review item 3). */
-function guardedSend(action, gate, buildBody) {
+   A second attempt while one is in flight now toasts instead of dropping silently (review item 3). `origin`: the
+   button that started it (sending()). */
+function guardedSend(action, gate, buildBody, origin = null) {
   if (inFlight) { D().toast('err', 'Another action is in flight'); return; }
-  setInFlight(true);
+  setInFlight(true, origin);
   Promise.resolve().then(() => {
     const m = gate();
     if (m.mode !== 'on') { D().toast('err', m.reason); return null; }
@@ -327,7 +333,8 @@ function placeOrder({ cell, root, side, type, price = null, qty, exits = undefin
     return T.orderBody({ clientId: T.clientId(), accounts: resolved.accounts, root, side, qty, type, price: px, sl, tp,
       trigger: trig, tif: tf });
   };
-  if (T.sendsWithoutConfirm(D().prefs, cell.cfg, surface)) { guardedSend('order', g, build); return; }   // not right after a replay
+  const origin = { surface, cell, side };   // fast-paper: that button reads "sending" while this order is in flight
+  if (T.sendsWithoutConfirm(D().prefs, cell.cfg, surface)) { guardedSend('order', g, build, origin); return; }   // not right after a replay
   const preview = build(gate);
   // shown === gate.accounts here, so only the inferType re-check can abort a preview -- the market moved
   // between the chart-menu's right-click (where `type` was inferred) and picking the item just now.
@@ -335,7 +342,7 @@ function placeOrder({ cell, root, side, type, price = null, qty, exits = undefin
   const c = T.confirmOrder(preview, D().state, D().quotes[root], pv, tick);
   confirm({ title: c.title, rows: c.accounts.map((a) => ({ label: a.label, env: a.env })), note: c.bracket,
     warn: c.warn, each: c.each, live: c.live, action: side, tone: side === 'Sell' ? 'down' : 'accent', oneClickPref: T.oneClickKey(surface) })
-    .then((ok) => { if (ok) { confirmedAfterReplay(cell); guardedSend('order', g, build); } });
+    .then((ok) => { if (ok) { confirmedAfterReplay(cell); guardedSend('order', g, build, origin); } });
 }
 
 function symbolAction(cell, kind, root) {
@@ -686,7 +693,7 @@ function mount(pg) {
 }
 
 window.HBTradeUI = { mount, placeOrder, symbolAction, flattenAccount, cancelOrder, closeLine, moveLine, addExit, confirm, busy,
-  onBusyChange, onTradeChange, effectiveMode, lineMode, editableIds, fillIds, tradeOf, setCellTrade, setCellAlgo, botKill,
+  sending, onBusyChange, onTradeChange, effectiveMode, lineMode, editableIds, fillIds, tradeOf, setCellTrade, setCellAlgo, botKill,
   killBusy, accountRows, toggleAccount, pickAlgo, armPending, paintDeskStatus, replayEnded, resumeLive,
   replayDestroyed, gridRebuilt };
 })();
