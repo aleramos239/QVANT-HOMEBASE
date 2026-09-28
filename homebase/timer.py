@@ -117,13 +117,30 @@ class SelfTimer:
         date = now.date().isoformat()
         day = self._day(date)
         t = now.time()
-        fires = []
+        mine = []
         for name, s in self.cfg.strategies.items():
             if not (s.enabled and getattr(s, "self_fire", False)
                     and getattr(s, "kind", "straddle") == "straddle"):
                 continue                     # bars strategies run off the feed
-            st = day.setdefault(name, {"stage": "idle", "gate": None,
-                                       "adx": None, "anchor": None})
+            mine.append((name, s, day.setdefault(name, {"stage": "idle", "gate": None,
+                                                        "adx": None, "anchor": None})))
+        # Staged by an earlier tick, a strategy reaches its fire with no await
+        # (the anchor is a read of the quote already kept): every one due fires
+        # first, together -- no strategy waits on another's broker round trip --
+        # and before any other strategy advances: a gate retry, a stage or an md
+        # reconnect can take seconds, and would hold these orders on levels read
+        # at 09:30:00.000.
+        staged = [m for m in mine if m[2]["stage"] == "staged"]
+        rest = [m for m in mine if m[2]["stage"] != "staged"]
+        await self._settle(await self._advance_all(staged, t, date))
+        await self._settle(await self._advance_all(rest, t, date))
+
+    async def _advance_all(self, todo, t, date) -> list:
+        """_advance each (name, cfg, state) in turn. A fire is launched the moment
+        _advance returns it, so it never waits behind a later strategy's gate or
+        stage. -> [(name, state, fire task)]"""
+        fires = []
+        for name, s, st in todo:
             try:
                 fire = await self._advance(name, s, st, t, date)
             except Exception as e:  # noqa: BLE001 — journal, never die
@@ -132,9 +149,11 @@ class SelfTimer:
                 self.engine.journal("timer_error", strategy=name, error=str(e))
                 continue
             if fire is not None:
-                fires.append((name, st, fire))
-        # everything due at 9:30 fires together — no strategy waits on
-        # another's broker round trip
+                fires.append((name, st, asyncio.ensure_future(fire)))
+        return fires
+
+    async def _settle(self, fires) -> None:
+        """Wait for every launched fire; one that raised is its strategy's error."""
         results = await asyncio.gather(*(f for _, _, f in fires),
                                        return_exceptions=True)
         for (name, st, _), r in zip(fires, results):
@@ -145,7 +164,8 @@ class SelfTimer:
 
     async def _advance(self, name, s, st, t, date):
         """Move one strategy along its stages; at 9:30 return its fire
-        (a coroutine) so tick() can launch every due fire at once."""
+        (a coroutine) for tick() to launch -- with no await on the way when
+        the strategy was already staged."""
         # HARD upper bound. Without it every stage test is "t >= <time>",
         # which is true at 11pm too: a restart any time after 9:30 would
         # stage and fire immediately on a stale anchor. (The engine's accept
@@ -456,8 +476,8 @@ class SelfTimer:
             st["skipped_unreadable"] = skipped_unreadable
 
     async def _fire(self, name, s, st, px, fire_at, stamps) -> None:
-        # checked again AT the fire: another strategy's gate or stage earlier
-        # in this same tick can hold it past the grace
+        # checked again AT the fire: its task may start a moment after the
+        # anchor read (tick() launches it at once, never behind another's stage)
         if self._missed_late(name, st, fire_at, "late_fire"):
             return
         out = await self.engine.handle_alert(

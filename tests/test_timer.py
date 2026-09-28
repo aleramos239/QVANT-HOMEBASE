@@ -385,30 +385,50 @@ def test_a_staged_strategy_whose_tick_wakes_past_the_grace_is_missed(tmp_path):
     assert engine.adapters["main"].brackets == []
 
 
-def test_a_fire_held_past_the_grace_inside_its_own_tick_is_missed(tmp_path):
-    """nq930 checks in on time at 09:30:00.000, but ym930 -- switched on just before the
-    open -- stages in the same tick and its quote subscription takes 1.5 s: nq930's orders
-    would leave at 09:30:01.5 on levels from 09:30:00. Neither fires; nothing is placed."""
-    timer, engine, md, clock = mk(tmp_path, armed=True)
-    at(clock, 9, 21); run(timer.tick())
-    at(clock, 9, 29); run(timer.tick())                          # nq930 staged
-    _add_ym(engine)                                              # ym930 switched on
+def _slow_ym_stage(engine, md, clock, sent):
+    """ym930 switched on just before the open: its quote subscription takes 1.5 s (YM's
+    print arrives as it answers). Every bracket sent is recorded with the clock's ET time."""
+    _add_ym(engine)
     sub = md.subscribe_quote
 
     async def slow(symbol):
+        out = await sub(symbol)
         if symbol == "YM":
             clock.dt += dt.timedelta(seconds=1.5)                # its round trip holds the tick
-        return await sub(symbol)
+            md.push("YM", clock.dt, 46010.0)
+        return out
 
-    md.subscribe_quote = slow
+    ad = engine.adapters["main"]
+    place = ad.place_bracket
+
+    async def timed(req):
+        sent.append((req.symbol, req.side, req.price, clock.dt.astimezone(ET).time()))
+        return await place(req)
+
+    md.subscribe_quote, ad.place_bracket = slow, timed
+
+
+def test_an_on_time_fire_goes_out_before_another_strategy_stages_in_its_tick(tmp_path):
+    """Review 2026-09-28: nq930 checks in on time at 09:30:00.000, but ym930 -- switched on
+    just before the open -- stages in the same tick, and its quote subscription takes 1.5 s.
+    nq930 was staged by an earlier tick: it fires first, its orders out at 09:30:00.000 on the
+    last trade received before the open, whatever ym930's stage costs. ym930 staged past the
+    grace: missed."""
+    timer, engine, md, clock = mk(tmp_path, armed=True, md=TapeMD())
+    at(clock, 9, 21); run(timer.tick())
+    at(clock, 9, 29); run(timer.tick())                          # nq930 staged
+    md.push("NQ", et(9, 29, 59, 990000), 24500.0)
+    sent = []
+    _slow_ym_stage(engine, md, clock, sent)
     at(clock, 9, 30); run(timer.tick())
+    assert sent == [("NQ", "Buy", 24510.0, dt.time(9, 30)), ("NQ", "Sell", 24490.0, dt.time(9, 30))]
     st = timer.status()["strategies"]
-    assert st["nq930"]["stage"] == st["ym930"]["stage"] == "missed"
+    assert (st["nq930"]["stage"], st["nq930"]["anchor"]) == ("fired", 24500.0)
+    assert st["ym930"]["stage"] == "missed"
     ev = events(tmp_path)
-    assert {e["strategy"]: (e["reason"], e["late_s"]) for e in ev if e["event"] == "timer_missed"} == \
-        {"nq930": ("late_fire", 1.5), "ym930": ("late_start", 1.5)}
-    assert not any(e["event"] in ("timer_fired", "dry_run", "placed") for e in ev)
-    assert engine.adapters["main"].brackets == []
+    assert [e["strategy"] for e in ev if e["event"] == "timer_fired"] == ["nq930"]
+    assert [(e["strategy"], e["reason"], e["late_s"]) for e in ev if e["event"] == "timer_missed"] == \
+        [("ym930", "late_start", 1.5)]
 
 
 @pytest.mark.parametrize("status", ["placed", "live", "done"])
