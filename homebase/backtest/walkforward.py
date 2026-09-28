@@ -208,9 +208,10 @@ def chain_months(months: list[str], test_months: int) -> list[str]:
 
 def compute(cells: list[dict], months: list[str], *, trades_of, metric: str, min_trades: int,
             capital: float, test_months: int = TEST_MONTHS, shared_months: list[str] | None = None) -> dict:
-    """`shared_months` (a compare job): also the stitched chain restricted to those months, under the
+    """cells: [{i, params, months: {m: stats}}]; trades_of(i) -> (trades_ms, skipped) of a PICKED cell.
+
+    `shared_months` (a compare job): also the stitched chain restricted to those months, under the
     key `stitched_shared` -- the caller pops it, so the ordinary result shape is unchanged."""
-    """cells: [{i, params, months: {m: stats}}]; trades_of(i) -> (trades_ms, skipped) of a PICKED cell."""
     st = steps(months, test_months)
     params = {c["i"]: c["params"] for c in cells}
     cache: dict[int, tuple[list, list]] = {}
