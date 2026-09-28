@@ -978,7 +978,12 @@ function indicatorsDialog() {
       row.append(mk('span', 'dlg-name', d.name));
       if (q && group === 'All') row.append(mk('span', 'dlg-grp', d.group));
       if (c.cfg.indicators.some((x) => x.id === d.id)) row.append(icon('check'));
-      row.onclick = () => { c.update({ indicators: [...c.cfg.indicators, C.instance(d.id)] }); render(); };
+      row.onclick = () => {
+        const inst = C.instance(d.id), style = C.defaultStyle(d.id, c.cfg.indicators);
+        if (style) inst.style = style;   // Task 2/3: a new instance never repeats a same-id sibling's colour
+        c.update({ indicators: [...c.cfg.indicators, inst] });
+        render();
+      };
       return row;
     }));
     if (!hits.length) list.appendChild(mk('div', 'dlg-empty', 'No indicators match'));
@@ -1002,62 +1007,24 @@ function indicatorsDialog() {
   input.focus();
 }
 
-/* The gear on a legend row: one field per param; OK clamps, applies, resubscribes if needed. */
+/* The gear on a legend row (or the indicator's own menu): the TradingView-style Inputs/Style dialog
+   (indicator-settings-dialog.js). Nothing to show for an indicator with no params and no Style tab. */
 function settingsDialog(cell, uid) {
   const inst = cell.cfg.indicators.find((x) => x.uid === uid), d = inst && C.def(inst.id);
-  if (!d || !d.params.length) return;
-  const box = openDialog(d.name, 'small'), form = mk('div', 'dlg-fields'), vals = { ...inst.params };
-  for (const p of d.params) {
-    const row = mk('div', 'field'), id = `f-${uid}-${p.key}`, lab = mk('label', '', p.label);
-    let ctl;
-    if (p.type === 'bool') {
-      ctl = mk('input');
-      ctl.type = 'checkbox';
-      ctl.checked = !!vals[p.key];
-      ctl.onchange = () => { vals[p.key] = ctl.checked; };
-    } else if (p.type === 'choice') {
-      ctl = mk('div', 'seg');
-      ctl.setAttribute('role', 'radiogroup');
-      ctl.setAttribute('aria-label', p.label);
-      const draw = () => {
-        const had = ctl.contains(document.activeElement);   // keyboard focus stays on the chosen button
-        ctl.replaceChildren(...p.choices.map(([v, text]) => {
-          const b = mk('button', vals[p.key] === v ? 'on' : '', text);
-          b.type = 'button';
-          b.setAttribute('role', 'radio');
-          b.setAttribute('aria-checked', String(vals[p.key] === v));
-          b.onclick = () => { vals[p.key] = v; draw(); };
-          return b;
-        }));
-        if (had) ctl.querySelector('.on').focus();
-      };
-      draw();
-    } else {
-      ctl = mk('input');
-      ctl.type = 'number';
-      ctl.min = p.min; ctl.max = p.max; ctl.step = p.step || 1;
-      ctl.value = vals[p.key];
-      ctl.oninput = () => { vals[p.key] = ctl.value; };
-    }
-    ctl.id = id;
-    lab.htmlFor = id;
-    row.append(lab, ctl);
-    form.appendChild(row);
-  }
-  const foot = mk('div', 'dlg-foot'), cancel = mk('button', 'btn btn-ghost', 'Cancel'), ok = mk('button', 'btn btn-primary', 'OK');
-  cancel.type = 'button';
-  ok.type = 'button';
-  cancel.onclick = closeDialog;
-  ok.onclick = () => {
-    const params = C.clampParams(inst.id, vals);
-    closeDialog();
-    cell.update({ indicators: cell.cfg.indicators.map((x) => (x.uid === uid ? { ...x, params } : x)) });
-  };
-  form.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') ok.click(); });
-  foot.append(cancel, ok);
-  box.append(form, foot);
-  const first = form.querySelector('input, button');
-  if (first) first.focus();
+  if (!d || (!d.params.length && !C.styleLineKeys(inst.id))) return;
+  const box = openDialog(d.name, 'settings indicator-settings');
+  const ctl = window.HBIndicatorSettings.mount(box, {
+    cell, uid,
+    toggleMenu(anchor, cls, fill) {
+      if (menuAnchor === anchor) { closeMenu(); return; }
+      fill(openMenu(anchor, cls, { root: box }));
+      placeMenu();
+    },
+    closeMenu,
+    commit(changed) { if (changed) markDirty(); closeDialog(); },
+    cancel: closeDialog,
+  });
+  dlg.onClose = ctl.revert;   // Cancel, ×, Esc, a backdrop click: the instance back to what it was at open
 }
 
 /* Double-click on a long/short box: Entry, Target, Stop (rounded to the tick) and Qty. OK checks the order for
