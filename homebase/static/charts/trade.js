@@ -38,7 +38,7 @@ const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
    One-click is TWO switches (⚙ → Trading, ONE-CLICK TRADING; 2026-09-27): `oneClickChart` (the chart's Sell/qty/Buy
    block) and `oneClickPanel` (the order panel's Send), both default ON (the old single `oneClick` value is not carried
    over: it was stored OFF for nearly everyone, and the user wants these ON). `oneClick` itself stays the switch of every other
-   path (a line's drag / ×, the SL/TP handles, the chart menu, the bottom panel): the confirm's "Don't ask again".
+   path (a line's drag / ×, a position chip's exit drag, the chart menu, the bottom panel): the confirm's "Don't ask again".
    The SL/TP tick defaults are retired (no editor any more): always 0, whatever an old stored pref holds, so nothing
    invisible can attach a bracket. `qty` is the chart block's quantity box. */
 function parsePrefs(text) {
@@ -412,7 +412,7 @@ function legsWithin(line, accounts) {
   const ok = new Set(accounts || []);
   return !!line && Array.isArray(line.legs) && line.legs.length > 0 && line.legs.every((l) => ok.has(l.account));
 }
-/* The accounts whose lines ANY chart may manage (drag, ×, the SL/TP handles; 2026-09-27): every account the desk (or
+/* The accounts whose lines ANY chart may manage (drag, ×, a position chip's exit drag; 2026-09-27): every account the desk (or
    the paper book) lists as tradable, whatever the chart has ticked -- the ticked ones only decide where NEW entries
    go. An unlisted account is never in it (fail closed); a LIVE one still needs its arm at send time. */
 function lineAccounts(state) { return accountsOf(state).filter((a) => a && a.tradable === true).map((a) => a.id); }
@@ -672,12 +672,18 @@ function lineLabel(g) {
   if (g.type === 'StopLimit') return `${g.side.toUpperCase()} STP LMT ${px(g.limit)} (trig ${px(g.price)}) ${g.qty}`;
   return `${g.side.toUpperCase()} ${abbr(g.type)} ${g.qty}`;
 }
-/* Positions never drag (ruling S11); a Stop Limit can't be moved (the desk refuses it): cancel and place again. */
+/* Positions never move (ruling S11: dragging a position's chip draws a NEW exit, never modifies the position); a Stop
+   Limit can't be moved (the desk refuses it): cancel and place again. */
 function canDrag(g) { return g.kind !== 'position' && g.type !== 'StopLimit'; }
+/* A position's chip is just side, size and P&L ("LONG 1 · −$20", 2026-09-27: the user's call); its accounts go in the
+   chip's tooltip (lineTitle). Order / SL / TP lines still name theirs. */
 function lineText(g, last) {
   if (g.kind === 'order') return [lineLabel(g), whoText(g)].join(' · ');
+  if (g.kind === 'position') return [lineLabel(g), usd(linePnl(g, last))].filter(Boolean).join(' · ');
   return [lineLabel(g), usd(linePnl(g, last)), whoText(g)].filter(Boolean).join(' · ');
 }
+/* The accounts a line holds, every one by name, for its chip's tooltip: "…041, …047". */
+function lineTitle(g) { return [...new Set(((g && g.legs) || []).map((l) => l.who))].join(', '); }
 const PAPER_COLOR = '#7E57C2';   // charts.css --paper (light); cell.js's palette carries the theme's own as P.paper
 function lineColor(g, P) {
   if (g.paper) return P.paper || PAPER_COLOR;   // a PAPER line: the paper colour whatever its kind (its text says which)
@@ -688,20 +694,40 @@ function lineColor(g, P) {
 }
 const withPrice = (g, price) => ({ ...g, price });
 
-/* ---- the SL / TP drag handles on a position's chip (2026-09-27, the desk's `exits` action) ----
-   An editable position line offers an "SL" handle while none of its accounts has a stop-type exit line in this root,
-   and a "TP" handle while none has a limit-type one (an existing SL / TP line is already draggable: move that).
-   Dragging one draws a ghost exit line; dropping it sends `exits` for the WHOLE position on each of its accounts (the
-   desk / paper book makes it one OCO pair with an existing half). No handle at all while any of those accounts has
-   a pending order in this root (a Suspended bracket leg of an entry not filled yet, a PendingNew): the desk and the
-   paper book refuse exits then (fix round 1, item 2). */
-function exitHandles(g, groups) {
-  if (!g || g.kind !== 'position' || g.editable !== true) return { sl: false, tp: false };
+/* ---- dragging a position's chip places an exit (2026-09-27, the desk's `exits` action) ----
+   Pressing an editable position's chip (not its ×) and dragging it vertically draws a ghost exit line; which one is
+   decided live by the pointer against the position's AVERAGE ENTRY (exitKindAt): a TP on the winning side, an SL on
+   the losing side. Dropping it sends `exits` for the WHOLE position on each of its accounts (the desk / paper book
+   makes it one OCO pair with an existing half). The position itself never moves (ruling S11).
+   exitKinds says which exits may still be added: an SL while none of the position's accounts has a stop-type exit
+   line in this root, a TP while none has a limit-type one (an existing SL / TP line is already draggable: move that);
+   neither while any of those accounts has a pending order in this root (a Suspended bracket leg of an entry not filled
+   yet, a PendingNew): the desk and the paper book refuse exits then (fix round 1, item 2). */
+function exitKinds(g, groups) {
+  if (!g || g.kind !== 'position' || g.editable !== true) return { sl: false, tp: false, pending: false };
   const mine = new Set(g.legs.map((l) => l.account));
   const any = (fn) => (groups || []).some((x) => x.legs.some((l) => mine.has(l.account) && fn(x, l)));
-  if (any((x, l) => l.pending === true)) return { sl: false, tp: false };
-  return { sl: !any((x) => x.kind === 'sl'), tp: !any((x) => x.kind === 'tp') };
+  if (any((x, l) => l.pending === true)) return { sl: false, tp: false, pending: true };
+  return { sl: !any((x) => x.kind === 'sl'), tp: !any((x) => x.kind === 'tp'), pending: false };
 }
+/* The exit a drag of position `g` to `price` would place: 'tp' beyond the average entry on the winning side, 'sl' on
+   the losing side, null exactly at it (tick-grid epsilon) or for anything that isn't a position with a price. */
+function exitKindAt(g, price) {
+  if (!g || g.kind !== 'position' || price == null || g.price == null || !Number.isFinite(price) || !Number.isFinite(g.price)) return null;
+  const d = (price - g.price) * (g.side === 'Buy' ? 1 : -1);
+  return Math.abs(d) < 1e-9 ? null : d > 0 ? 'tp' : 'sl';
+}
+/* Why that kind of exit can't be added to the position (null = it can): the toast a refused drop shows. */
+function exitRefusal(kinds, kind) {
+  if (!kinds || kinds.pending) return 'This position has a pending order — exits wait until it fills or is cancelled';
+  if (kind === 'sl' && !kinds.sl) return 'This position already has a stop — drag the SL line to move it';
+  if (kind === 'tp' && !kinds.tp) return 'This position already has a target — drag the TP line to move it';
+  return kind === 'sl' || kind === 'tp' ? null : 'Drag above or below the entry to place an exit';
+}
+/* A press on a position chip is a drag only once the pointer has moved this many px vertically; less is a click,
+   which does nothing. */
+const EXIT_DRAG_PX = 4;
+function pastClick(y0, y) { return Number.isFinite(y0) && Number.isFinite(y) && Math.abs(y - y0) >= EXIT_DRAG_PX; }
 /* Why a line with pending (Suspended / held) bracket legs can't move to `price` (null = it can; review round 2, C). A
    pending leg is not live: it is checked against its PARENT entry order's price, never the last trade -- a stop on
    the losing side of the entry (a Stop Limit entry's trigger), a target on the winning side (its limit). A parent
@@ -721,7 +747,7 @@ function pendingMoveError(line, price, state) {
   }
   return null;
 }
-/* The ghost exit line a handle drag draws: the position's legs at `price`, labelled like a real SL / TP line
+/* The ghost exit line a position-chip drag draws: the position's legs at `price`, labelled like a real SL / TP line
    ("SL 3 · −$600 · …047": the projected P&L of the whole position if it fills there). */
 function exitGhost(g, kind, price) { return { ...g, key: `ghost|${kind}`, kind, type: kind === 'sl' ? 'Stop' : 'Limit', price }; }
 /* Why an exit at `price` can't go on (null = it can): an SL beyond the last trade on the losing side, a TP beyond it on
@@ -1484,7 +1510,7 @@ function routeSend(action, body, send) {
 
 const api = { PREFS_KEY, QUOTE_STALE_MS, BOT_NAMES, parsePrefs, prefsText, oneClickKey, short, rootOf, orderPrice, isPending, abbr, inferType, menuText,
   roundTick, bracket, orderBody, clientId, tradeMode, quoteView, usd, money, pnl, rrText, linesFor, linePnl, lineLabel,
-  lineText, lineColor, canDrag, withPrice, exitHandles, pendingMoveError, exitGhost, exitDropError, expectedNet, exitsBody, exitsTitle, orderTitle, confirmOrder, actionTitle, resultToasts, fillText, fillMarkers, execArrow, botName, positionRows, orderRows, fillRows, accountRows, etTime, diffRows,
+  lineText, lineTitle, lineColor, canDrag, withPrice, exitKinds, exitKindAt, exitRefusal, EXIT_DRAG_PX, pastClick, pendingMoveError, exitGhost, exitDropError, expectedNet, exitsBody, exitsTitle, orderTitle, confirmOrder, actionTitle, resultToasts, fillText, fillMarkers, execArrow, botName, positionRows, orderRows, fillRows, accountRows, etTime, diffRows,
   algoName, algoLabel, algoChoices, algoAccounts, botPill, botToday, algoOverlay, etMs, pastRunMarkers, nearestTip, historySig,
   killConfirm, killToasts, killBlock, killSold,
   enterConfirms, wireSend, symbolChangeTrade, resolveConfirmedAccounts, armedTicked, unarmedLiveMessage, freshQuote,

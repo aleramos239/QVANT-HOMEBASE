@@ -475,7 +475,7 @@ test('addExit: the dropped SL / TP goes out as `exits` for the whole position, f
     const c = chart([]);                                           // nothing ticked: lines are still manageable
     const groups = T.linesFor(desk.state, 'NQ', UI.editableIds(c));
     const long = groups.find((g) => g.kind === 'position' && !g.paper), paper = groups.find((g) => g.kind === 'position' && g.paper);
-    assert.deepEqual(T.exitHandles(long, groups), { sl: true, tp: true });
+    assert.deepEqual(T.exitKinds(long, groups), { sl: true, tp: true, pending: false });
     desk.prefs.oneClick = false;                                   // the confirm shows first
     UI.addExit(c, long, 'tp', 30010.1, 'NQ', 0.25);
     assert.equal(dialogs.length, 1);

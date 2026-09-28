@@ -2,14 +2,15 @@
    like every host.overlays() entry):
      - the Buy/Sell block under the legend, bid/ask "as of last trade" (ruling S10);
      - position / order / SL / TP lines (native price lines) with DOM chips that carry their text and a ×
-       (ruling S8), draggable by the chip's text (order/SL/TP only — positions are not draggable: ruling S11); an
-       editable position's chip carries small "SL" / "TP" handles (only for a half it lacks) that drag a ghost exit
-       line and, on release, place that exit for the whole position (HBTradeUI.addExit -> the desk's `exits`);
+       (ruling S8), draggable by the chip's text (order/SL/TP); a position never moves (ruling S11): dragging an
+       editable position's chip draws a ghost exit line instead -- a TP past its average entry on the winning side, an
+       SL on the losing side (HBTrade.exitKindAt) -- and, on release, places that exit for the whole position
+       (HBTradeUI.addExit -> the desk's `exits`); a position chip reads just "LONG 1 · −$20";
      - the execution arrows: small horizontal arrows at each fill's price, drawn by a canvas primitive (ExecArrows)
        -- never the shared series markers (ruling S22; TradingView's shape since 2026-09-27).
    Trading is per chart, and the chart's ACCOUNTS are the switch (2026-09-27 accounts-per-chart plan, Task 1):
    the block and the chart's account chips exist only while THIS chart can trade.
-   2026-09-27 (no more "view only"): a position / order / SL / TP line is manageable (drag, ×, the SL/TP handles)
+   2026-09-27 (no more "view only"): a position / order / SL / TP line is manageable (drag, ×, a position chip's exit drag)
    for ANY account the desk lists as tradable, ticked on this chart or not; the chart's accounts still decide where
    the Buy/Sell block's NEW entries go. A line stays read-only (no drag, no ×) only while its account can't trade
    from the chart (not tradable, the desk down / off, this chart replaying).
@@ -82,8 +83,8 @@ class Overlay {
     this.page = page;
     this.root = cell.shown.root;
     this.items = new Map();   // key -> {g, line, chip}
-    this.dragging = null;     // the key mid-drag (a line's own drag, or a position's SL / TP handle), or null
-    this.ghost = null;        // {chip, price}: the SL / TP handle's ghost line while one is dragged
+    this.dragging = null;     // the key mid-drag (a line's own drag, or a position chip's exit drag), or null
+    this.ghost = null;        // {chip, price}: a position chip's ghost exit line while one is dragged
     this.endDrag = null;      // set by startDrag; cancels a drag in progress (destroy mid-drag)
     this.fillIds = null;      // last JSON of the execution arrows' ids + colours handed to this.arrows
     this.dead = false;        // review M2: set in destroy(); render() (and any callback still holding this
@@ -256,7 +257,7 @@ class Overlay {
         it.g = g;
         it.line.applyOptions({ price: g.price, color: T.lineColor(g, this.cell.P) });
       }
-      this.wireChip(it, !g.editable, busy, T.exitHandles(g, groups));
+      this.wireChip(it, !g.editable, busy);
       this.paint(it);
     }
     for (const [key, it] of [...this.items]) {
@@ -282,37 +283,14 @@ class Overlay {
     return chip;
   }
 
-  /* A position chip's "SL" / "TP" handle (2026-09-27): a small box between the text and the ×, dragged (never
-     clicked) to place that exit -- the position itself still never drags (ruling S11). Built on first need. */
-  handle(chip, kind) {
-    const k = kind === 'sl' ? 'hSl' : 'hTp';
-    if (!chip[k]) {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = `tl-h tl-h-${kind}`;
-      b.textContent = kind.toUpperCase();
-      b.title = kind === 'sl' ? 'Drag to place a stop loss for the whole position' : 'Drag to place a take profit for the whole position';
-      b.setAttribute('aria-label', kind === 'sl' ? 'Drag to add a stop loss' : 'Drag to add a take profit');
-      b.onclick = (e) => e.preventDefault();   // a click alone does nothing: the exit is placed by dragging
-      chip.insertBefore(b, chip.btn);
-      chip[k] = b;
-    }
-    return chip[k];
-  }
-
-  wireChip(it, readonly, busy, handles = { sl: false, tp: false }) {
+  wireChip(it, readonly, busy) {
     const { chip, g } = it;
-    const draggable = !readonly && !busy && T.canDrag(g);   // positions and Stop Limits never drag
-    chip.classList.toggle('drag', draggable);
+    const draggable = !readonly && !busy && T.canDrag(g);   // positions and Stop Limits never move
+    const exits = !readonly && !busy && g.kind === 'position';   // a position's chip drags a NEW exit instead
+    chip.classList.toggle('drag', draggable || exits);
     chip.classList.toggle('view', readonly);
-    for (const kind of ['sl', 'tp']) {
-      const on = !readonly && !busy && !!handles[kind];
-      if (!on && !chip[kind === 'sl' ? 'hSl' : 'hTp']) continue;
-      const h = this.handle(chip, kind);
-      h.hidden = !on;
-      h.onpointerdown = on ? (e) => this.startExitDrag(e, g.key, kind) : null;
-    }
-    chip.text.onpointerdown = draggable ? (e) => this.startDrag(e, g.key) : null;
+    chip.text.onpointerdown = draggable ? (e) => this.startDrag(e, g.key) : exits ? (e) => this.startExitDrag(e, g.key) : null;
+    chip.title = g.kind === 'position' ? T.lineTitle(g) : '';
     chip.btn.hidden = readonly;
     chip.btn.disabled = busy;   // review item 3: never clickable while a send is already in flight
     chip.btn.onclick = readonly || busy ? null : () => window.HBTradeUI.closeLine(this.cell, it.g, this.root, this.cell.tick);
@@ -555,7 +533,7 @@ class Overlay {
       it.chip.hidden = off;
       if (!off) { it.chip.style.right = `${right}px`; it.chip.style.transform = `translateY(${Math.round(y) - 11}px)`; }
     }
-    const gh = this.ghost;   // an SL / TP handle's ghost line, mid-drag
+    const gh = this.ghost;   // a position chip's ghost exit line, mid-drag
     if (gh) {
       const y = gh.price == null ? null : c.candles.priceToCoordinate(gh.price);
       const off = y == null || y < 0 || y > paneH;
@@ -616,25 +594,30 @@ class Overlay {
     this.endDrag = () => end(false);
   }
 
-  /* An SL / TP handle pressed on a position chip: a ghost exit line follows the pointer (tick-snapped, labelled with
-     the whole position's projected P&L); release inside the price pane hands it to HBTradeUI.addExit (the side check,
-     the confirm and the send). Esc, pointercancel, a lost capture, window blur or the buttons gone cancel it and the
-     ghost goes (LWC 5.2.1 delivers mouse events only: every exit path is ours). */
-  startExitDrag(e, key, kind) {
+  /* A position chip pressed (its text, not the ×) and dragged vertically: a ghost exit line follows the pointer
+     (tick-snapped, labelled with the whole position's projected P&L), a TP on the winning side of the average entry
+     and an SL on the losing side, switching as it crosses the entry (HBTrade.exitKindAt). A kind the position can't
+     take (it already has one, or a pending order blocks exits: HBTrade.exitKinds) shows struck through and its drop
+     only toasts why. Less than EXIT_DRAG_PX of vertical movement is a click: nothing. A drop inside the price pane
+     hands the exit to HBTradeUI.addExit (the side check against the last trade, the confirm and the send). Esc,
+     pointercancel, a lost capture, window blur or the buttons gone cancel it and the ghost goes (LWC 5.2.1 delivers
+     mouse events only: every exit path is ours). The position itself never moves (ruling S11). */
+  startExitDrag(e, key) {
     if (e.button !== 0) return;
     if (this.dragging && this.endDrag) this.endDrag();
     e.preventDefault(); e.stopPropagation();
     const c = this.cell, it = this.items.get(key), grip = e.currentTarget;
     if (!it || !c.chart) return;
-    const top = c.box.getBoundingClientRect().top;
-    const color = kind === 'sl' ? c.P.down : c.P.up;
-    let price = null, outside = true;   // nothing to send until the pointer has been inside the pane
-    const line = c.candles.createPriceLine({ price: it.g.price, color, lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: '' });
-    line.applyOptions({ lineVisible: false, axisLabelVisible: false });   // shown once it has a price of its own
+    const top = c.box.getBoundingClientRect().top, y0 = e.clientY;
+    // which exits this position may still take, from the desk's CURRENT lines (re-read at the drop)
+    const kindsNow = () => T.exitKinds(it.g, T.linesFor(window.HBDeskClient.state, this.root, window.HBTradeUI.editableIds(c)));
+    const kinds = kindsNow();
+    let price = null, kind = null, moved = false, outside = true;   // nothing to send until the pointer has been inside the pane
+    const line = c.candles.createPriceLine({ price: it.g.price, color: c.P.down, lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: '' });
+    line.applyOptions({ lineVisible: false, axisLabelVisible: false });   // shown once it has a price and a kind
     const chip = mk('div', 'tl-chip ghost');
     chip.text = mk('span', 'tl-text');
     chip.append(chip.text);
-    chip.style.setProperty('--c', color);
     chip.hidden = true;
     this.layer.appendChild(chip);
     this.ghost = { chip, price: null };
@@ -642,16 +625,27 @@ class Overlay {
     this.dragging = key;
     const move = (ev) => {
       if (ev.buttons === 0) { lost(); return; }
+      if (!moved && !T.pastClick(y0, ev.clientY)) return;   // still a click
+      moved = true;
       const paneH = c.chart ? c.chart.panes()[0].getHeight() : 0, y = ev.clientY - top;
       outside = y < 0 || y > paneH;
       if (outside) return;                               // frozen at its last in-pane price
       const raw = c.candles.coordinateToPrice(y);
       if (raw == null) return;
       price = window.HBDrawings.roundToTick(raw, c.tick);
-      line.applyOptions({ price, lineVisible: true, axisLabelVisible: true });
+      kind = T.exitKindAt(it.g, price);
+      if (!kind) {                                      // exactly at the entry: no exit either way
+        line.applyOptions({ lineVisible: false, axisLabelVisible: false });
+        this.ghost.price = null;
+        this.sync();
+        return;
+      }
+      const color = kind === 'sl' ? c.P.down : c.P.up;
+      line.applyOptions({ price, color, lineVisible: true, axisLabelVisible: true });
+      chip.style.setProperty('--c', color);
       const q = window.HBDeskClient.quotes[this.root];
       chip.text.textContent = T.lineText(T.exitGhost(it.g, kind, price), q ? q.last : null);
-      chip.classList.toggle('bad', !!T.exitDropError(it.g, kind, price, q ? q.last : null));
+      chip.classList.toggle('bad', !!T.exitRefusal(kinds, kind) || !!T.exitDropError(it.g, kind, price, q ? q.last : null));
       this.ghost.price = price;
       this.sync();
     };
@@ -667,8 +661,10 @@ class Overlay {
       this.ghost = null;
       this.dragging = null;
       this.endDrag = null;
-      if (commit && !outside && price != null && !this.dead) {
-        window.HBTradeUI.addExit(c, it.g, kind, price, c.shown.root, c.tick, { onCancel: () => this.render() });
+      if (commit && moved && !outside && price != null && kind && !this.dead) {
+        const refused = T.exitRefusal(kindsNow(), kind);   // the desk's lines may have changed mid-drag
+        if (refused) window.HBDeskClient.toast('err', refused);
+        else window.HBTradeUI.addExit(c, it.g, kind, price, c.shown.root, c.tick, { onCancel: () => this.render() });
       }
       this.render();
     };

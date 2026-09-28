@@ -292,8 +292,9 @@ test('lines: merged positions, SL/TP legs with dollars, plain orders, bots\' ord
   assert.deepEqual(lines.map((g) => g.kind), ['position', 'sl', 'tp', 'order']);
   assert.deepEqual(lines.map((g) => g.editable), [true, true, true, true]);
   assert.deepEqual(lines.map((g) => T.lineText(g, 30910)),
-    ['LONG 3 · +$600 · 2 accts', `SL 3 · ${M}$900 · 2 accts`, 'TP 2 · +$1,200 · …041', 'BUY LMT 1 · …041']);
-  assert.equal(T.lineText(lines[0], null), 'LONG 3 · 2 accts');
+    ['LONG 3 · +$600', `SL 3 · ${M}$900 · 2 accts`, 'TP 2 · +$1,200 · …041', 'BUY LMT 1 · …041']);
+  assert.equal(T.lineText(lines[0], null), 'LONG 3');
+  assert.equal(T.lineTitle(lines[0]), '…041, …047', 'the accounts go in the chip\'s tooltip');
   assert.deepEqual(lines[1].legs.map((l) => [l.account, l.order_id]), [['sim041', '11'], ['sim047', '21']]);
   assert.deepEqual(lines.map((g) => T.lineColor(g, P)), [P.up, P.down, P.up, P.accent]);
   assert.equal(T.lineText(T.withPrice(lines[1], 30880), 30910), `SL 3 · ${M}$1,200 · 2 accts`);
@@ -306,9 +307,9 @@ test('lines no account may manage (desk down / off, replay): every account\'s li
   const lines = T.linesFor(STATE, 'NQ', []);
   assert.deepEqual(lines.map((g) => g.editable), [false, false, false, false]);
   assert.deepEqual(lines.map((g) => T.lineText(g, 30910)),
-    ['LONG 3 · +$600 · 2 accts', `SL 3 · ${M}$900 · 2 accts`, 'TP 2 · +$1,200 · …041', 'BUY LMT 1 · …041']);
+    ['LONG 3 · +$600', `SL 3 · ${M}$900 · 2 accts`, 'TP 2 · +$1,200 · …041', 'BUY LMT 1 · …041']);
   assert.deepEqual(T.linesFor(STATE, 'NQ', undefined).map((g) => g.editable), [false, false, false, false]);
-  assert.deepEqual(T.linesFor(STATE, 'ES', []).map((g) => T.lineText(g, 6490)), ['SHORT 1 · +$500 · …099']);
+  assert.deepEqual(T.linesFor(STATE, 'ES', []).map((g) => T.lineText(g, 6490)), ['SHORT 1 · +$500']);
 });
 
 test('lineAccounts: every account the desk lists as tradable -- ticked on a chart or not; never an unlisted one', () => {
@@ -1416,7 +1417,8 @@ test('PAPER: its lines never merge with a desk account\'s, and carry its tag and
   const paper = pos.find((g) => g.paper), desk = pos.find((g) => !g.paper && g.editable);
   assert.ok(paper && desk && paper.key !== desk.key, 'same side and price, still two lines');
   assert.deepEqual(paper.legs.map((l) => l.account), ['paper']);
-  assert.match(T.lineText(paper, 30910), /^LONG 1 · \+\$200 · PAPER$/);
+  assert.equal(T.lineText(paper, 30910), 'LONG 1 · +$200');   // PAPER shows by its colour and tooltip
+  assert.equal(T.lineTitle(paper), 'PAPER');
   assert.equal(T.lineColor(paper, Pp), '#7E57C2');
   assert.equal(T.lineColor(desk, Pp), P.up);
   const sl = T.linesFor(st, 'NQ', ['paper']).find((g) => g.paper && g.kind === 'sl');
@@ -1456,23 +1458,73 @@ test('Task 2b fix round 1 (M6): a long paper name is trimmed in chips and lines;
   assert.equal(T.short({ id: 'paper', label: 'PAPER', env: 'paper' }), 'PAPER');
 });
 
-/* ---- the SL / TP drag handles (2026-09-27, the desk's `exits`) ---- */
-test('exit handles: SL only without an SL line on the position\'s accounts, TP only without a TP; editable positions only', () => {
+/* ---- a position chip's exit drag (2026-09-27, the desk's `exits`) ---- */
+test('exit kinds: SL only without an SL line on the position\'s accounts, TP only without a TP; editable positions only', () => {
   const groups = T.linesFor(STATE, 'NQ', ['sim041', 'sim047']);
   const pos = groups.find((g) => g.kind === 'position');
-  assert.deepEqual(T.exitHandles(pos, groups), { sl: false, tp: false });          // …041 has both, …047 an SL
+  assert.deepEqual(T.exitKinds(pos, groups), { sl: false, tp: false, pending: false });          // …041 has both, …047 an SL
   const st = structuredClone(STATE);
   st.accounts[0].orders = st.accounts[0].orders.filter((o) => o.order_id !== '12'); // …041's TP gone
   const g2 = T.linesFor(st, 'NQ', ['sim041', 'sim047']);
-  assert.deepEqual(T.exitHandles(g2.find((g) => g.kind === 'position'), g2), { sl: false, tp: true });
+  assert.deepEqual(T.exitKinds(g2.find((g) => g.kind === 'position'), g2), { sl: false, tp: true, pending: false });
   st.accounts[0].orders = [];
   st.accounts[1].orders = [];
   const g3 = T.linesFor(st, 'NQ', ['sim041', 'sim047']);
-  assert.deepEqual(T.exitHandles(g3.find((g) => g.kind === 'position'), g3), { sl: true, tp: true });
+  assert.deepEqual(T.exitKinds(g3.find((g) => g.kind === 'position'), g3), { sl: true, tp: true, pending: false });
   const ro = T.linesFor(st, 'NQ', []);
-  assert.deepEqual(T.exitHandles(ro.find((g) => g.kind === 'position'), ro), { sl: false, tp: false }, 'read-only: none');
-  assert.deepEqual(T.exitHandles(g3.find((g) => g.kind === 'order'), g3), { sl: false, tp: false });
-  assert.deepEqual(T.exitHandles(null, g3), { sl: false, tp: false });
+  assert.deepEqual(T.exitKinds(ro.find((g) => g.kind === 'position'), ro), { sl: false, tp: false, pending: false }, 'read-only: none');
+  assert.deepEqual(T.exitKinds(g3.find((g) => g.kind === 'order'), g3), { sl: false, tp: false, pending: false });
+  assert.deepEqual(T.exitKinds(null, g3), { sl: false, tp: false, pending: false });
+});
+
+test('position chip text: side, size and P&L only -- no account name, whatever the accounts (the user\'s call)', () => {
+  const pos = T.linesFor(STATE, 'NQ', ['sim041', 'sim047']).find((g) => g.kind === 'position');   // long 3 @ 30,900
+  assert.equal(T.lineText(pos, 30899), `LONG 3 · ${M}$60`);
+  const one = { ...pos, qty: 1, legs: [{ ...pos.legs[0], who: 'testing', qty: 1 }] };
+  assert.equal(T.lineText(one, 30899), `LONG 1 · ${M}$20`);
+  assert.equal(T.lineTitle(one), 'testing');
+  assert.equal(T.lineTitle(null), '');
+  // order / SL / TP lines keep their account names
+  assert.equal(T.lineText(T.exitGhost(pos, 'sl', 30885), null), `SL 3 · ${M}$900 · 2 accts`);
+});
+
+test('exit kind by side: a long takes a TP above its average entry and an SL below; a short the mirror; none at entry', () => {
+  const long = T.linesFor(STATE, 'NQ', ['sim041', 'sim047']).find((g) => g.kind === 'position');   // long @ 30,900
+  const short = T.linesFor(STATE, 'ES', ['live099']).find((g) => g.kind === 'position');          // short @ 6,500
+  assert.deepEqual([30900.25, 30899.75, 30900].map((p) => T.exitKindAt(long, p)), ['tp', 'sl', null]);
+  assert.deepEqual([6499.75, 6500.25, 6500].map((p) => T.exitKindAt(short, p)), ['tp', 'sl', null]);
+  // crossing the entry switches the kind, in both directions
+  assert.deepEqual([30910, 30901, 30900, 30899, 30890, 30905].map((p) => T.exitKindAt(long, p)), ['tp', 'tp', null, 'sl', 'sl', 'tp']);
+  assert.deepEqual([6490, 6510].map((p) => T.exitKindAt(short, p)), ['tp', 'sl']);
+  assert.equal(T.exitKindAt({ ...long, price: 64.01 }, 64.01 + 0), null);
+  assert.equal(T.exitKindAt({ ...long, price: 0.1 + 0.2 }, 0.3), null, 'float noise is not a side');
+  // it follows the AVERAGE entry, never the last trade
+  assert.equal(T.exitKindAt({ ...long, price: 30900.37 }, 30900.25), 'sl');
+  const order = T.linesFor(STATE, 'NQ', ['sim041']).find((g) => g.kind === 'order');
+  assert.deepEqual([T.exitKindAt(order, 1), T.exitKindAt(null, 1), T.exitKindAt(long, null), T.exitKindAt(long, NaN)], [null, null, null, null]);
+});
+
+test('exit refusal: a kind the position already has, or a pending order, is refused with a reason; a free one is not', () => {
+  const free = { sl: true, tp: true, pending: false };
+  assert.equal(T.exitRefusal(free, 'sl'), null);
+  assert.equal(T.exitRefusal(free, 'tp'), null);
+  assert.equal(T.exitRefusal({ sl: false, tp: true, pending: false }, 'sl'), 'This position already has a stop — drag the SL line to move it');
+  assert.equal(T.exitRefusal({ sl: false, tp: true, pending: false }, 'tp'), null);
+  assert.equal(T.exitRefusal({ sl: true, tp: false, pending: false }, 'tp'), 'This position already has a target — drag the TP line to move it');
+  assert.match(T.exitRefusal({ sl: false, tp: false, pending: true }, 'tp'), /pending order/);
+  assert.match(T.exitRefusal(null, 'sl'), /pending order/, 'no kinds: fail closed');
+  assert.ok(T.exitRefusal(free, null), 'no kind (at the entry): nothing to place');
+  // wired to the desk's lines: …041 has both, …047 an SL -> the merged long refuses both
+  const groups = T.linesFor(STATE, 'NQ', ['sim041', 'sim047']);
+  const kinds = T.exitKinds(groups.find((g) => g.kind === 'position'), groups);
+  assert.ok(T.exitRefusal(kinds, 'sl') && T.exitRefusal(kinds, 'tp'));
+});
+
+test('exit drag click threshold: under EXIT_DRAG_PX of vertical movement is a click (nothing), at or past it a drag', () => {
+  assert.equal(T.EXIT_DRAG_PX, 4);
+  assert.deepEqual([0, 3, -3, 3.9, 4, -4, 40].map((d) => T.pastClick(100, 100 + d)), [false, false, false, false, true, true, true]);
+  assert.equal(T.pastClick(100, NaN), false);
+  assert.equal(T.pastClick(undefined, 120), false);
 });
 
 test('exit ghost: labelled like an SL / TP line with the whole position\'s projected P&L', () => {
@@ -1512,7 +1564,7 @@ test('exits body and confirm title', () => {
   assert.deepEqual([parts.desk.accounts, parts.paper.accounts], [['sim041'], ['paper']]);
 });
 
-test('fix round 1, item 2: a pending entry\'s Suspended bracket leg is never the position\'s SL / TP, and hides both handles', () => {
+test('fix round 1, item 2: a pending entry\'s Suspended bracket leg is never the position\'s SL / TP, and blocks both exits', () => {
   // long 1 @ 30,900 + a working Buy Limit 1 @ 30,890 whose OSO stop (Sell Stop @ 30,885) waits Suspended
   const st = { accounts: [acct('sim041', 'SIM0000041', 'demo', {
     positions: [{ symbol: 'NQZ6', net: 1, avg_price: 30900, root: 'NQ', point_value: 20 }],
@@ -1525,18 +1577,18 @@ test('fix round 1, item 2: a pending entry\'s Suspended bracket leg is never the
   assert.equal(leg.legs[0].pending, true);
   assert.equal(T.lineText(leg, 30900), 'SELL STP 1 · …041');
   const pos = groups.find((g) => g.kind === 'position');
-  assert.deepEqual(T.exitHandles(pos, groups), { sl: false, tp: false });
+  assert.deepEqual(T.exitKinds(pos, groups), { sl: false, tp: false, pending: true });
   // once it is Working (the entry filled), it is an exit like any other
   st.accounts[0].orders[1].status = 'Working';
   st.accounts[0].orders.splice(0, 1);
   const g2 = T.linesFor(st, 'NQ', ['sim041']);
   assert.equal(g2.find((g) => g.legs.some((l) => l.order_id === '81')).kind, 'sl');
-  assert.deepEqual(T.exitHandles(g2.find((g) => g.kind === 'position'), g2), { sl: false, tp: true });
+  assert.deepEqual(T.exitKinds(g2.find((g) => g.kind === 'position'), g2), { sl: false, tp: true, pending: false });
   assert.deepEqual([null, undefined, 'Working', 'Suspended', 'PendingNew'].map((status) => T.isPending({ status })),
     [false, false, false, true, true]);
 });
 
-test('fix round 1, item 2: another account\'s pending leg never hides this position\'s handles', () => {
+test('fix round 1, item 2: another account\'s pending leg never blocks this position\'s exits', () => {
   const pos = (net) => [{ symbol: 'NQZ6', net, avg_price: 30900, root: 'NQ', point_value: 20 }];
   const st = { accounts: [acct('sim041', 'SIM0000041', 'demo', { positions: pos(1) }),
     acct('sim047', 'SIM0000047', 'demo', { positions: pos(-1), orders: [
@@ -1544,8 +1596,8 @@ test('fix round 1, item 2: another account\'s pending leg never hides this posit
   const groups = T.linesFor(st, 'NQ', ['sim041', 'sim047']);
   const long = groups.find((g) => g.kind === 'position' && g.side === 'Buy');
   const short = groups.find((g) => g.kind === 'position' && g.side === 'Sell');
-  assert.deepEqual(T.exitHandles(long, groups), { sl: true, tp: true });
-  assert.deepEqual(T.exitHandles(short, groups), { sl: false, tp: false });
+  assert.deepEqual(T.exitKinds(long, groups), { sl: true, tp: true, pending: false });
+  assert.deepEqual(T.exitKinds(short, groups), { sl: false, tp: false, pending: true });
 });
 
 test('fix round 1, item 5: expectedNet -- the signed position per account the confirm shows', () => {

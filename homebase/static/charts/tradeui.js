@@ -6,7 +6,7 @@
    Trading is PER CHART, and the chart's ACCOUNTS are the switch (2026-09-27 accounts-per-chart plan, Task 1):
    each chart's cell config carries `trade: {accounts}` -- `trade.on` is retired -- and every order-sending
    entry path takes its accounts from the chart it was started from (the Buy/Sell block, a chart-menu item, the
-   order panel). A line's drag, × or SL/TP handle acts on that line's OWN accounts, which may be any account the
+   order panel). A line's drag, × or a position chip's exit drag acts on that line's OWN accounts, which may be any account the
    desk lists as tradable (2026-09-27: no more "view only" for an unticked account's lines). Accounts are edited
    in that chart's ⚙ → Trading (settings-dialog.js, through accountRows / toggleAccount / pickAlgo below); the old #tbTrade toolbar menu is gone. The bottom panel's
    per-account Close/Cancel act on the named account only (accountGate).
@@ -18,7 +18,7 @@
 
    Safety (ruling S4/S5, and the 2026-09-27 review of Tasks 3-4):
      - every action re-reads its gate (the chart's mode from HBDesk.mode(that chart's trade) for a new entry, the
-       line gate -- any tradable desk account, lineGate -- for a line's drag / × / SL-TP handle, or the named
+       line gate -- any tradable desk account, lineGate -- for a line's drag / × / a position chip's exit drag, or the named
        account's gate) at the moment it actually sends, not at the moment the user clicked or the confirm dialog
        opened — the desk, the chart's accounts, its switch or a LIVE arm can all change while a dialog is open;
      - one action's send is in flight at a time (`withLock`): a second attempt while one is out is dropped, and
@@ -74,7 +74,7 @@ function accountGate(account) {
   }
   return { mode: 'on', reason: '', accounts: [account] };
 }
-/* The mode for MANAGING existing lines (drag, ×, the SL/TP handles) on a chart (2026-09-27): any account the desk
+/* The mode for MANAGING existing lines (drag, ×, a position chip's exit drag) on a chart (2026-09-27): any account the desk
    lists as tradable (HBTrade.lineAccounts), not only the chart's ticked ones -- those decide where NEW entries go.
    The desk up with chart trading on, and the chart not replaying (nor latched by a replay's end), as for entries;
    a LIVE account only while it is armed THIS session (isArmedAccount) -- the same rule the entry path's armedMode
@@ -390,7 +390,7 @@ function moveLine(cell, line, price, root, tick, { onCancel } = {}) {
     .then((ok) => { if (ok) { confirmedAfterReplay(cell); guardedSend('modify', g, build); } else if (onCancel) onCancel(); });
 }
 
-/* A position's SL / TP handle dropped at `price` (tradelines.js): `exits` for the WHOLE position on each of the line's
+/* A position chip's exit drag dropped at `price` (tradelines.js): `exits` for the WHOLE position on each of the line's
    accounts -- the desk / paper book turns it into one OCO pair with an existing half. The line gate as a drag's, the
    LIVE arm per account, the side of the LAST trade at the drop AND again at send (a price that moved through it
    refuses: nothing sent). What the confirm shows -- accounts, kind, price and the position's size per account
