@@ -2,7 +2,9 @@
    like every host.overlays() entry):
      - the Buy/Sell block under the legend, bid/ask "as of last trade" (ruling S10);
      - position / order / SL / TP lines (native price lines) with DOM chips that carry their text and a ×
-       (ruling S8), draggable by the chip's text (order/SL/TP only — positions are not draggable: ruling S11);
+       (ruling S8), draggable by the chip's text (order/SL/TP only — positions are not draggable: ruling S11); an
+       editable position's chip carries small "SL" / "TP" handles (only for a half it lacks) that drag a ghost exit
+       line and, on release, place that exit for the whole position (HBTradeUI.addExit -> the desk's `exits`);
      - the execution arrows: small horizontal arrows at each fill's price, drawn by a canvas primitive (ExecArrows)
        -- never the shared series markers (ruling S22; TradingView's shape since 2026-09-27).
    Trading is per chart, and the chart's ACCOUNTS are the switch (2026-09-27 accounts-per-chart plan, Task 1):
@@ -80,7 +82,8 @@ class Overlay {
     this.page = page;
     this.root = cell.shown.root;
     this.items = new Map();   // key -> {g, line, chip}
-    this.dragging = null;     // the key mid-drag, or null
+    this.dragging = null;     // the key mid-drag (a line's own drag, or a position's SL / TP handle), or null
+    this.ghost = null;        // {chip, price}: the SL / TP handle's ghost line while one is dragged
     this.endDrag = null;      // set by startDrag; cancels a drag in progress (destroy mid-drag)
     this.fillIds = null;      // last JSON of the execution arrows' ids + colours handed to this.arrows
     this.dead = false;        // review M2: set in destroy(); render() (and any callback still holding this
@@ -253,7 +256,7 @@ class Overlay {
         it.g = g;
         it.line.applyOptions({ price: g.price, color: T.lineColor(g, this.cell.P) });
       }
-      this.wireChip(it, !g.editable, busy);
+      this.wireChip(it, !g.editable, busy, T.exitHandles(g, groups));
       this.paint(it);
     }
     for (const [key, it] of [...this.items]) {
@@ -279,11 +282,36 @@ class Overlay {
     return chip;
   }
 
-  wireChip(it, readonly, busy) {
+  /* A position chip's "SL" / "TP" handle (2026-09-27): a small box between the text and the ×, dragged (never
+     clicked) to place that exit -- the position itself still never drags (ruling S11). Built on first need. */
+  handle(chip, kind) {
+    const k = kind === 'sl' ? 'hSl' : 'hTp';
+    if (!chip[k]) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = `tl-h tl-h-${kind}`;
+      b.textContent = kind.toUpperCase();
+      b.title = kind === 'sl' ? 'Drag to place a stop loss for the whole position' : 'Drag to place a take profit for the whole position';
+      b.setAttribute('aria-label', kind === 'sl' ? 'Drag to add a stop loss' : 'Drag to add a take profit');
+      b.onclick = (e) => e.preventDefault();   // a click alone does nothing: the exit is placed by dragging
+      chip.insertBefore(b, chip.btn);
+      chip[k] = b;
+    }
+    return chip[k];
+  }
+
+  wireChip(it, readonly, busy, handles = { sl: false, tp: false }) {
     const { chip, g } = it;
     const draggable = !readonly && !busy && T.canDrag(g);   // positions and Stop Limits never drag
     chip.classList.toggle('drag', draggable);
     chip.classList.toggle('view', readonly);
+    for (const kind of ['sl', 'tp']) {
+      const on = !readonly && !busy && !!handles[kind];
+      if (!on && !chip[kind === 'sl' ? 'hSl' : 'hTp']) continue;
+      const h = this.handle(chip, kind);
+      h.hidden = !on;
+      h.onpointerdown = on ? (e) => this.startExitDrag(e, g.key, kind) : null;
+    }
     chip.text.onpointerdown = draggable ? (e) => this.startDrag(e, g.key) : null;
     chip.btn.hidden = readonly;
     chip.btn.disabled = busy;   // review item 3: never clickable while a send is already in flight
@@ -527,6 +555,13 @@ class Overlay {
       it.chip.hidden = off;
       if (!off) { it.chip.style.right = `${right}px`; it.chip.style.transform = `translateY(${Math.round(y) - 11}px)`; }
     }
+    const gh = this.ghost;   // an SL / TP handle's ghost line, mid-drag
+    if (gh) {
+      const y = gh.price == null ? null : c.candles.priceToCoordinate(gh.price);
+      const off = y == null || y < 0 || y > paneH;
+      gh.chip.hidden = off;
+      if (!off) { gh.chip.style.right = `${right}px`; gh.chip.style.transform = `translateY(${Math.round(y) - 11}px)`; }
+    }
   }
 
   /* on .tl-text; the pointer is captured by the chip, so the chart never pans */
@@ -576,6 +611,73 @@ class Overlay {
     grip.addEventListener('pointerup', up);
     grip.addEventListener('pointercancel', lost);
     grip.addEventListener('lostpointercapture', lost);   // I2: capture lost with no up/cancel (a system gesture, e.g.)
+    window.addEventListener('keydown', esc, true);
+    window.addEventListener('blur', lost);
+    this.endDrag = () => end(false);
+  }
+
+  /* An SL / TP handle pressed on a position chip: a ghost exit line follows the pointer (tick-snapped, labelled with
+     the whole position's projected P&L); release inside the price pane hands it to HBTradeUI.addExit (the side check,
+     the confirm and the send). Esc, pointercancel, a lost capture, window blur or the buttons gone cancel it and the
+     ghost goes (LWC 5.2.1 delivers mouse events only: every exit path is ours). */
+  startExitDrag(e, key, kind) {
+    if (e.button !== 0) return;
+    if (this.dragging && this.endDrag) this.endDrag();
+    e.preventDefault(); e.stopPropagation();
+    const c = this.cell, it = this.items.get(key), grip = e.currentTarget;
+    if (!it || !c.chart) return;
+    const top = c.box.getBoundingClientRect().top;
+    const color = kind === 'sl' ? c.P.down : c.P.up;
+    let price = null, outside = true;   // nothing to send until the pointer has been inside the pane
+    const line = c.candles.createPriceLine({ price: it.g.price, color, lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: '' });
+    line.applyOptions({ lineVisible: false, axisLabelVisible: false });   // shown once it has a price of its own
+    const chip = mk('div', 'tl-chip ghost');
+    chip.text = mk('span', 'tl-text');
+    chip.append(chip.text);
+    chip.style.setProperty('--c', color);
+    chip.hidden = true;
+    this.layer.appendChild(chip);
+    this.ghost = { chip, price: null };
+    grip.setPointerCapture(e.pointerId);
+    this.dragging = key;
+    const move = (ev) => {
+      if (ev.buttons === 0) { lost(); return; }
+      const paneH = c.chart ? c.chart.panes()[0].getHeight() : 0, y = ev.clientY - top;
+      outside = y < 0 || y > paneH;
+      if (outside) return;                               // frozen at its last in-pane price
+      const raw = c.candles.coordinateToPrice(y);
+      if (raw == null) return;
+      price = window.HBDrawings.roundToTick(raw, c.tick);
+      line.applyOptions({ price, lineVisible: true, axisLabelVisible: true });
+      const q = window.HBDeskClient.quotes[this.root];
+      chip.text.textContent = T.lineText(T.exitGhost(it.g, kind, price), q ? q.last : null);
+      chip.classList.toggle('bad', !!T.exitDropError(it.g, kind, price, q ? q.last : null));
+      this.ghost.price = price;
+      this.sync();
+    };
+    const end = (commit) => {
+      grip.removeEventListener('pointermove', move);
+      grip.removeEventListener('pointerup', up);
+      grip.removeEventListener('pointercancel', lost);
+      grip.removeEventListener('lostpointercapture', lost);
+      window.removeEventListener('keydown', esc, true);
+      window.removeEventListener('blur', lost);
+      if (c.chart) c.candles.removePriceLine(line);
+      chip.remove();
+      this.ghost = null;
+      this.dragging = null;
+      this.endDrag = null;
+      if (commit && !outside && price != null && !this.dead) {
+        window.HBTradeUI.addExit(c, it.g, kind, price, c.shown.root, c.tick, { onCancel: () => this.render() });
+      }
+      this.render();
+    };
+    const up = () => end(true), lost = () => end(false);
+    const esc = (ev) => { if (ev.key === 'Escape') { ev.stopPropagation(); ev.preventDefault(); end(false); } };
+    grip.addEventListener('pointermove', move);
+    grip.addEventListener('pointerup', up);
+    grip.addEventListener('pointercancel', lost);
+    grip.addEventListener('lostpointercapture', lost);
     window.addEventListener('keydown', esc, true);
     window.addEventListener('blur', lost);
     this.endDrag = () => end(false);

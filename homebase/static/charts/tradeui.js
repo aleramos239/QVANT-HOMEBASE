@@ -384,6 +384,37 @@ function moveLine(cell, line, price, root, tick, { onCancel } = {}) {
     .then((ok) => { if (ok) { confirmedAfterReplay(cell); guardedSend('modify', g, build); } else if (onCancel) onCancel(); });
 }
 
+/* A position's SL / TP handle dropped at `price` (tradelines.js): `exits` for the WHOLE position on each of the line's
+   accounts -- the desk / paper book turns it into one OCO pair with an existing half. The line gate as a drag's, the
+   LIVE arm per account, the side of the LAST trade at the drop AND again at send (a price that moved through it
+   refuses: nothing sent). What the confirm shows -- accounts, kind, price -- is frozen and is exactly what is sent. */
+function addExit(cell, line, kind, price, root, tick, { onCancel } = {}) {
+  const cancel = (msg) => { if (msg) D().toast('err', msg); if (onCancel) onCancel(); };
+  if (!line || line.kind !== 'position' || (kind !== 'sl' && kind !== 'tp')) return cancel(null);
+  const g = () => lineGate(cell, root), gate = g();
+  if (gate.mode !== 'on') return cancel(gate.reason);
+  const accounts = [...new Set(line.legs.map((l) => l.account))];
+  const unarmed = findUnarmed(accounts);
+  if (unarmed) return cancel(T.unarmedLiveMessage(unarmed));
+  if (line.editable === false || !T.legsWithin(line, gate.accounts)) return cancel(NOT_TRADABLE);
+  const at = T.roundTick(price, tick);
+  const q0 = D().quotes[root], bad = T.exitDropError(line, kind, at, q0 ? q0.last : null);
+  if (bad) return cancel(bad);
+  const build = (m) => {
+    if (!T.legsWithin(line, m.accounts)) { D().toast('err', 'Accounts changed — review and try again'); return null; }
+    const q = D().quotes[root];
+    if (T.exitDropError(line, kind, at, q ? q.last : null)) { D().toast('err', 'Price moved through your stop/target — nothing sent'); return null; }
+    return T.exitsBody({ clientId: T.clientId(), accounts, root, kind, price: at });
+  };
+  if (T.sendsWithoutConfirm(D().prefs, cell.cfg)) { guardedSend('exits', g, build); return; }
+  const rows = acctRows(accounts);
+  const ghost = T.exitGhost(line, kind, at), usd = T.usd(T.linePnl(ghost, null));
+  confirm({ title: T.exitsTitle(line, kind, at, tick), rows, note: usd ? `If it fills: ${usd}` : '',
+    each: accounts.length > 1 ? `the whole position on each of ${accounts.length} accounts` : '',
+    action: kind === 'sl' ? 'Add stop' : 'Add target', tone: kind === 'sl' ? 'down' : 'accent', live: hasLive(rows) })
+    .then((ok) => { if (ok) { confirmedAfterReplay(cell); guardedSend('exits', g, build); } else if (onCancel) onCancel(); });
+}
+
 /* × on a line: flatten for a position, cancel for the rest (SL/TP/plain orders). */
 function closeLine(cell, line, root, tick) {
   const g = () => lineGate(cell, root), gate = g();
@@ -645,7 +676,7 @@ function mount(pg) {
   }
 }
 
-window.HBTradeUI = { mount, placeOrder, symbolAction, flattenAccount, cancelOrder, closeLine, moveLine, confirm, busy,
+window.HBTradeUI = { mount, placeOrder, symbolAction, flattenAccount, cancelOrder, closeLine, moveLine, addExit, confirm, busy,
   onBusyChange, onTradeChange, effectiveMode, lineMode, editableIds, fillIds, tradeOf, setCellTrade, setCellAlgo, botKill,
   killBusy, accountRows, toggleAccount, pickAlgo, armPending, paintDeskStatus, replayEnded, resumeLive,
   replayDestroyed, gridRebuilt };

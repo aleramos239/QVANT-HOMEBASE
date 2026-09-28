@@ -681,6 +681,36 @@ function lineColor(g, P) {
 }
 const withPrice = (g, price) => ({ ...g, price });
 
+/* ---- the SL / TP drag handles on a position's chip (2026-09-27, the desk's `exits` action) ----
+   An editable position line offers an "SL" handle while none of its accounts has a stop-type exit line in this root,
+   and a "TP" handle while none has a limit-type one (an existing SL / TP line is already draggable: move that).
+   Dragging one draws a ghost exit line; dropping it sends `exits` for the WHOLE position on each of its accounts (the
+   desk / paper book makes it one OCO pair with an existing half). */
+function exitHandles(g, groups) {
+  if (!g || g.kind !== 'position' || g.editable !== true) return { sl: false, tp: false };
+  const mine = new Set(g.legs.map((l) => l.account));
+  const has = (kind) => (groups || []).some((x) => x.kind === kind && x.legs.some((l) => mine.has(l.account)));
+  return { sl: !has('sl'), tp: !has('tp') };
+}
+/* The ghost exit line a handle drag draws: the position's legs at `price`, labelled like a real SL / TP line
+   ("SL 3 · −$600 · …047": the projected P&L of the whole position if it fills there). */
+function exitGhost(g, kind, price) { return { ...g, key: `ghost|${kind}`, kind, type: kind === 'sl' ? 'Stop' : 'Limit', price }; }
+/* Why an exit at `price` can't go on (null = it can): an SL beyond the last trade on the losing side, a TP beyond it on
+   the winning side -- at or through it would be marketable. No last trade: refused (fail closed). */
+function exitDropError(g, kind, price, last) {
+  if (last == null || !Number.isFinite(last)) return "No recent price — can't place a stop or target";
+  const long = g.side === 'Buy', what = kind === 'sl' ? 'stop loss' : 'target';
+  const ok = kind === 'sl' ? (long ? price < last : price > last) : (long ? price > last : price < last);
+  const where = (kind === 'sl') === long ? 'below' : 'above';
+  return ok ? null : `A ${what} on a ${long ? 'long' : 'short'} must be ${where} the last price (${px(last)})`;
+}
+/* The `exits` body: the position's accounts, one price (the other side stays whatever the desk has). */
+function exitsBody({ clientId, accounts, root, kind, price }) {
+  return { client_id: clientId, accounts: [...accounts], root, [kind === 'sl' ? 'sl_price' : 'tp_price']: price };
+}
+/* The confirm's title: "Add TP 3 @ 30,885.00 · …047". */
+function exitsTitle(g, kind, price, tick) { return `Add ${kind.toUpperCase()} ${g.qty} @ ${Cat.fmtPrice(price, tick)} · ${whoText(g)}`; }
+
 /* ---- confirm dialog ---- */
 const TYPE_NAMES = { StopLimit: 'Stop Limit' };
 const GTC_WARN = "GTC stays working overnight — if it's still working at 09:28 the 9:30 bot skips this account";
@@ -717,7 +747,7 @@ function actionTitle(kind, { root, line, from, to }, tick) {
 }
 
 /* ---- toasts (ruling S3) ---- */
-const VERB = { order: 'order accepted', modify: 'order moved', cancel: 'order cancelled', 'cancel-symbol': 'orders cancelled',
+const VERB = { order: 'order accepted', modify: 'order moved', cancel: 'order cancelled', exits: 'exit placed', 'cancel-symbol': 'orders cancelled',
   flatten: 'flattened', reverse: 'reversed' };
 function resultToasts(action, status, data, state) {
   if (action === 'bot-kill') return killToasts(status, data, state);
@@ -1415,7 +1445,7 @@ function routeSend(action, body, send) {
 
 const api = { PREFS_KEY, QUOTE_STALE_MS, BOT_NAMES, parsePrefs, prefsText, oneClickKey, short, rootOf, orderPrice, abbr, inferType, menuText,
   roundTick, bracket, orderBody, clientId, tradeMode, quoteView, usd, money, pnl, rrText, linesFor, linePnl, lineLabel,
-  lineText, lineColor, canDrag, withPrice, orderTitle, confirmOrder, actionTitle, resultToasts, fillText, fillMarkers, execArrow, botName, positionRows, orderRows, fillRows, accountRows, etTime, diffRows,
+  lineText, lineColor, canDrag, withPrice, exitHandles, exitGhost, exitDropError, exitsBody, exitsTitle, orderTitle, confirmOrder, actionTitle, resultToasts, fillText, fillMarkers, execArrow, botName, positionRows, orderRows, fillRows, accountRows, etTime, diffRows,
   algoName, algoLabel, algoChoices, algoAccounts, botPill, botToday, algoOverlay, etMs, pastRunMarkers, nearestTip, historySig,
   killConfirm, killToasts, killBlock, killSold,
   enterConfirms, wireSend, symbolChangeTrade, resolveConfirmedAccounts, armedTicked, unarmedLiveMessage, freshQuote,

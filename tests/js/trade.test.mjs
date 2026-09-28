@@ -1455,3 +1455,58 @@ test('Task 2b fix round 1 (M6): a long paper name is trimmed in chips and lines;
   assert.equal(T.short({ id: 'paper-2', label: 'A very long paper account name', env: 'paper' }), 'A very long p…');
   assert.equal(T.short({ id: 'paper', label: 'PAPER', env: 'paper' }), 'PAPER');
 });
+
+/* ---- the SL / TP drag handles (2026-09-27, the desk's `exits`) ---- */
+test('exit handles: SL only without an SL line on the position\'s accounts, TP only without a TP; editable positions only', () => {
+  const groups = T.linesFor(STATE, 'NQ', ['sim041', 'sim047']);
+  const pos = groups.find((g) => g.kind === 'position');
+  assert.deepEqual(T.exitHandles(pos, groups), { sl: false, tp: false });          // …041 has both, …047 an SL
+  const st = structuredClone(STATE);
+  st.accounts[0].orders = st.accounts[0].orders.filter((o) => o.order_id !== '12'); // …041's TP gone
+  const g2 = T.linesFor(st, 'NQ', ['sim041', 'sim047']);
+  assert.deepEqual(T.exitHandles(g2.find((g) => g.kind === 'position'), g2), { sl: false, tp: true });
+  st.accounts[0].orders = [];
+  st.accounts[1].orders = [];
+  const g3 = T.linesFor(st, 'NQ', ['sim041', 'sim047']);
+  assert.deepEqual(T.exitHandles(g3.find((g) => g.kind === 'position'), g3), { sl: true, tp: true });
+  const ro = T.linesFor(st, 'NQ', []);
+  assert.deepEqual(T.exitHandles(ro.find((g) => g.kind === 'position'), ro), { sl: false, tp: false }, 'read-only: none');
+  assert.deepEqual(T.exitHandles(g3.find((g) => g.kind === 'order'), g3), { sl: false, tp: false });
+  assert.deepEqual(T.exitHandles(null, g3), { sl: false, tp: false });
+});
+
+test('exit ghost: labelled like an SL / TP line with the whole position\'s projected P&L', () => {
+  const pos = T.linesFor(STATE, 'NQ', ['sim041', 'sim047']).find((g) => g.kind === 'position');   // long 3 @ 30,900
+  assert.equal(T.lineText(T.exitGhost(pos, 'tp', 30930), null), 'TP 3 · +$1,800 · 2 accts');
+  assert.equal(T.lineText(T.exitGhost(pos, 'sl', 30885), null), `SL 3 · ${M}$900 · 2 accts`);
+  const short = T.linesFor(STATE, 'ES', ['live099']).find((g) => g.kind === 'position');          // short 1 @ 6,500
+  assert.equal(T.lineText(T.exitGhost(short, 'tp', 6490), null), 'TP 1 · +$500 · …099');
+  assert.equal(T.exitGhost(pos, 'sl', 1).type, 'Stop');
+});
+
+test('exit drop side: an SL beyond the last trade on the losing side, a TP on the winning side; no price refuses', () => {
+  const long = { side: 'Buy' }, short = { side: 'Sell' };
+  assert.equal(T.exitDropError(long, 'sl', 30890, 30900), null);
+  assert.equal(T.exitDropError(long, 'tp', 30910, 30900), null);
+  assert.equal(T.exitDropError(short, 'sl', 30910, 30900), null);
+  assert.equal(T.exitDropError(short, 'tp', 30890, 30900), null);
+  assert.equal(T.exitDropError(long, 'sl', 30900, 30900), 'A stop loss on a long must be below the last price (30,900.00)');
+  assert.equal(T.exitDropError(long, 'tp', 30899.75, 30900), 'A target on a long must be above the last price (30,900.00)');
+  assert.equal(T.exitDropError(short, 'sl', 30890, 30900), 'A stop loss on a short must be above the last price (30,900.00)');
+  assert.equal(T.exitDropError(short, 'tp', 30910, 30900), 'A target on a short must be below the last price (30,900.00)');
+  assert.equal(T.exitDropError(long, 'sl', 30890, null), "No recent price — can't place a stop or target");
+});
+
+test('exits body and confirm title', () => {
+  assert.deepEqual(T.exitsBody({ clientId: 'c', accounts: ['paper-2'], root: 'NQ', kind: 'tp', price: 30885 }),
+    { client_id: 'c', accounts: ['paper-2'], root: 'NQ', tp_price: 30885 });
+  assert.deepEqual(T.exitsBody({ clientId: 'c', accounts: ['a', 'b'], root: 'NQ', kind: 'sl', price: 1 }),
+    { client_id: 'c', accounts: ['a', 'b'], root: 'NQ', sl_price: 1 });
+  const g = { qty: 3, legs: [{ who: 'testing' }] };
+  assert.equal(T.exitsTitle(g, 'tp', 30885, 0.25), 'Add TP 3 @ 30,885.00 · testing');
+  assert.equal(T.exitsTitle({ qty: 1, legs: [{ who: '…047' }, { who: '…041' }] }, 'sl', 30885, 0.25), 'Add SL 1 @ 30,885.00 · 2 accts');
+  assert.deepEqual(T.resultToasts('exits', 200, { results: { sim041: { ok: true } } }, STATE), [{ tone: 'ok', text: '…041 · exit placed' }]);
+  // a mixed desk + paper send splits like every other action
+  const parts = T.splitSend('exits', T.exitsBody({ clientId: 'c', accounts: ['sim041', 'paper'], root: 'NQ', kind: 'sl', price: 1 }));
+  assert.deepEqual([parts.desk.accounts, parts.paper.accounts], [['sim041'], ['paper']]);
+});

@@ -513,6 +513,16 @@ a { color: inherit; }
 .tl-x { width: 22px; color: var(--c); display: grid; place-items: center; }
 .tl-x:hover { background: var(--hover); }
 .tl-chip.bot .tl-text { background: var(--panel); color: var(--c); cursor: default; }
+/* a position chip's SL / TP drag handles (2026-09-27): small outlined boxes, TradingView's; dragged, never clicked */
+.tl-h { align-self: center; height: 16px; margin-left: 4px; padding: 0 4px; border-radius: 3px; font-size: 10px; font-weight: 600;
+  line-height: 16px; letter-spacing: .02em; color: var(--hc); background: var(--panel); box-shadow: inset 0 0 0 1px var(--hc);
+  cursor: ns-resize; touch-action: none; }
+.tl-h:hover { background: var(--hc); color: #fff; }
+.tl-h-sl { --hc: var(--down); }
+.tl-h-tp { --hc: var(--up); }
+.tl-h + .tl-x { margin-left: 2px; }
+.tl-chip.ghost { pointer-events: none; opacity: .92; }
+.tl-chip.ghost.bad .tl-text { background: var(--panel); color: var(--c); text-decoration: line-through; }   /* marketable: won't send */
 
 /* ---- the chart's algo (Task 3): the legend badge -- bot icon, name, state pill, today's P&L, Kill ---- */
 .lg-bots { display: inline-flex; align-items: center; gap: 6px; height: 22px; margin-top: 3px; padding: 0 2px 0 6px; border-radius: 4px;

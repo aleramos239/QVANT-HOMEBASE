@@ -431,3 +431,80 @@ test('no more "view only": a chart manages ANY tradable account\'s lines; the ar
   assert.equal(desk.sent.length, 2);
   assert.equal(desk.toasts.at(-1), 'Replay — trading is off');
 });
+
+test('addExit: the dropped SL / TP goes out as `exits` for the whole position, frozen, split desk / paper', async () => {
+  reset();
+  const paperSent = [];
+  const pos = (net) => [{ symbol: 'NQZ6', net, avg_price: 30000, root: 'NQ', point_value: 20 }];
+  const was = desk.state;
+  desk.state = T.withPaper({ ...STATE, accounts: [acct('sim041', 'SIM0000041', 'demo', { positions: pos(2) }), STATE.accounts[1]] },
+    acct('paper', 'PAPER', 'paper', { positions: pos(2) }));
+  global.window.HBPaperClient = {
+    send(action, body) { paperSent.push({ action, body }); return Promise.resolve({ status: 200, data: { results: { paper: { ok: true } } } }); },
+  };
+  try {
+    const c = chart([]);                                           // nothing ticked: lines are still manageable
+    const groups = T.linesFor(desk.state, 'NQ', UI.editableIds(c));
+    const long = groups.find((g) => g.kind === 'position' && !g.paper), paper = groups.find((g) => g.kind === 'position' && g.paper);
+    assert.deepEqual(T.exitHandles(long, groups), { sl: true, tp: true });
+    desk.prefs.oneClick = false;                                   // the confirm shows first
+    UI.addExit(c, long, 'tp', 30010.1, 'NQ', 0.25);
+    assert.equal(dialogs.length, 1);
+    assert.equal(dialogs[0].title, 'Add TP 2 @ 30,010.00 · …041');
+    desk.quotes.NQ = { ...desk.quotes.NQ, last: 30001 };           // the market moves (still below the TP): unchanged body
+    clickPrimary('Add target');
+    await flush(); await flush();
+    assert.equal(desk.sent.length, 1);
+    assert.deepEqual(desk.sent[0], { action: 'exits', body: { client_id: desk.sent[0].body.client_id, accounts: ['sim041'], root: 'NQ', tp_price: 30010 } });
+
+    desk.prefs.oneClick = true;                                    // one-click: straight to the paper book, never the desk
+    UI.addExit(c, paper, 'sl', 29990, 'NQ', 0.25);
+    await flush(); await flush();
+    assert.equal(desk.sent.length, 1);
+    assert.deepEqual(paperSent.map((s) => [s.action, s.body.accounts, s.body.sl_price]), [['exits', ['paper'], 29990]]);
+
+    let cancelled = 0;
+    UI.addExit(c, long, 'sl', 30002, 'NQ', 0.25, { onCancel: () => cancelled++ });   // above the last trade: marketable
+    await flush();
+    assert.equal(cancelled, 1);
+    assert.equal(desk.toasts.at(-1), 'A stop loss on a long must be below the last price (30,001.00)');
+    assert.equal(desk.sent.length + paperSent.length, 2, 'nothing sent');
+
+    desk.prefs.oneClick = false;                                   // moved through the level while the dialog was open
+    UI.addExit(c, long, 'sl', 29995, 'NQ', 0.25);
+    desk.quotes.NQ = { ...desk.quotes.NQ, last: 29994 };
+    clickPrimary('Add stop');
+    await flush(); await flush();
+    assert.equal(desk.toasts.at(-1), 'Price moved through your stop/target — nothing sent');
+    assert.equal(desk.sent.length, 1);
+
+    c.replay = { id: 'r' };                                        // a replaying chart places nothing
+    UI.addExit(c, long, 'sl', 29990, 'NQ', 0.25);
+    await flush();
+    assert.equal(desk.toasts.at(-1), 'Replay — trading is off');
+    assert.equal(desk.sent.length + paperSent.length, 2);
+  } finally {
+    desk.state = was;
+    desk.quotes.NQ = { bid: 30000, ask: 30000.25, last: 30000.25, ts_ms: 0 };
+    delete global.window.HBPaperClient;
+  }
+});
+
+test('addExit: an unarmed LIVE position and a non-position line are refused before any dialog', async () => {
+  reset();
+  const was = desk.state;
+  desk.state = { ...STATE, accounts: [acct('live099', 'FAKELIVE099', 'live', {
+    positions: [{ symbol: 'NQZ6', net: -1, avg_price: 30000, root: 'NQ', point_value: 20 }] })] };
+  try {
+    const c = chart([]);
+    const short = T.linesFor(desk.state, 'NQ', UI.editableIds(c)).find((g) => g.kind === 'position');
+    UI.addExit(c, short, 'tp', 29990, 'NQ', 0.25);
+    await flush();
+    assert.equal(dialogs.length, 0);
+    assert.match(desk.toasts.at(-1), /LIVE/);
+    UI.addExit(c, { ...short, kind: 'order' }, 'tp', 29990, 'NQ', 0.25);
+    assert.equal(desk.sent.length, 0);
+  } finally {
+    desk.state = was;
+  }
+});
