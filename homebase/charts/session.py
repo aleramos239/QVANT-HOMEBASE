@@ -89,9 +89,17 @@ def custom_anchor_key(ts_ms: int, hh: int, mm: int) -> dt.datetime:
     """The start (an aware ET datetime) of the daily anchor period containing ts_ms for a reset at hh:mm ET:
     the most recent hh:mm-ET instant at or before ts_ms. Computed via ET wall-clock conversion (not a fixed
     UTC offset), so a DST change keeps the boundary at the correct local wall-clock instant on both sides of
-    the transition -- see studies.VWAP for how a Study built on closed bars uses this."""
+    the transition -- see studies.VWAP for how a Study built on closed bars uses this.
+
+    fold is pinned to 0 on the anchor candidate ("today"), never inherited from ts_ms's own fold: on the
+    fall-back Sunday, an hh:mm inside the repeated hour is ambiguous, and `.replace()` otherwise carries
+    whichever fold ts_ms happened to land in. A bar in the second (fold=1) pass through hh:mm would then
+    build its own anchor candidate at fold=1 -- a UTC instant an hour later than the first pass's fold=0
+    candidate -- so it would look like a NEW period and reset twice. Pinning fold=0 makes "today" always the
+    first (earlier) occurrence, so every bar at or after it, in either pass through the repeated hour, keys to
+    the same period and resets only once."""
     t = dt.datetime.fromtimestamp(ts_ms / 1000, ET)
-    today = t.replace(hour=hh, minute=mm, second=0, microsecond=0)
+    today = t.replace(hour=hh, minute=mm, second=0, microsecond=0, fold=0)
     return today if t >= today else today - _DAY
 
 
