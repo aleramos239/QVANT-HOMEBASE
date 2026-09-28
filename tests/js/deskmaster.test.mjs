@@ -403,6 +403,7 @@ test('the alert is solid, red, above every dialog, and stays until dismissed', (
   assert.match(HTML, /<div id="alertBar" role="alert" hidden>/);
   const css = HTML.slice(HTML.indexOf('  #alertBar{'), HTML.indexOf('  #alertBar[hidden]'));
   assert.match(css, /z-index:85;/);
+  assert.match(css, /position:fixed; bottom:84px;/, 'never over the top bar, however tall it wraps -- Kill stays reachable');
   assert.match(css, /background:var\(--card\);/);
   assert.match(css, /border:1\.5px solid var\(--neg\);/);
   assert.doesNotMatch(css, /backdrop-filter|glass/, 'money-critical text never goes translucent');

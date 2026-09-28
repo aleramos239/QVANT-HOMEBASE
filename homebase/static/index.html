@@ -239,8 +239,9 @@
     transition:opacity 120ms var(--ease-spring-in), transform 120ms var(--ease-spring-in),
       filter 120ms var(--ease-spring-in), visibility 0s linear 120ms; }
   /* a money-critical failure (a Kill that did not go through): solid red, never glass, above every
-     dialog, and it stays until dismissed -- a routine toast never replaces it */
-  #alertBar{ position:fixed; top:64px; left:50%; transform:translateX(-50%); z-index:85;
+     dialog, and it stays until dismissed -- a routine toast never replaces it. Anchored to the
+     bottom, above the toast: the top bar grows when it wraps, and nothing may cover Kill. */
+  #alertBar{ position:fixed; bottom:84px; left:50%; transform:translateX(-50%); z-index:85;
     display:flex; align-items:flex-start; gap:12px; width:max-content; max-width:min(720px, calc(100vw - 32px));
     padding:10px 10px 10px 14px; border-radius:var(--radius-md); background:var(--card); color:var(--neg);
     border:1.5px solid var(--neg); font-size:13px; font-weight:600; line-height:1.4;
