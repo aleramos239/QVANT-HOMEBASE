@@ -240,6 +240,19 @@ def test_a_strategy_that_needs_bars_inside_the_window_is_never_deferred(tmp_path
     assert len(made) == 1 and made[0].connected
 
 
+def test_a_strategy_opening_at_0935_exactly_is_not_deferred_past_its_first_bar(tmp_path,
+                                                                              monkeypatch):
+    app, log, current, made = feed_app(tmp_path, monkeypatch,
+                                       {"at935": bars_strategy(start="09:35", until="09:50")})
+    run(app.state.feed_step(mon(9, 22)))
+    assert len(made) == 1 and made[0].connected
+    (tmp_path / "b").mkdir()
+    app2, _, _, made2 = feed_app(tmp_path / "b", monkeypatch,
+                                 {"at936": bars_strategy(start="09:36", until="09:50")})
+    run(app2.state.feed_step(mon(9, 22)))
+    assert made2 == []                                    # 09:36: the 09:35 reconnect is in time
+
+
 def test_a_new_bars_subscription_waits_for_0935_too(tmp_path, monkeypatch):
     app, log, current, made = feed_app(tmp_path, monkeypatch, {"nq10am": bars_strategy()})
     step = app.state.feed_step

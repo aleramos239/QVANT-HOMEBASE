@@ -128,13 +128,14 @@ def feed_window(now_et) -> bool:
 def feed_deferred(now_et, strategies: dict) -> bool:
     """Weekdays 09:20-09:35 ET a price-feed (re)connect or a new bars subscription --
     market-data requests on the login the 9:30 bot's quote may ride -- waits for 09:35,
-    unless an enabled bars strategy's accept window opens before 09:35 and is not over (it
-    needs bars now). The (re)connect at 09:35 loads the warm-up history again, so a rule
-    that starts later (nq10am: 09:59) loses nothing."""
+    unless an enabled bars strategy's accept window opens by 09:35 and is not over (it needs
+    bars then, and one opening at 09:35 exactly must not lose its first bar to the wait).
+    The (re)connect at 09:35 loads the warm-up history again, so a rule that starts later
+    (nq10am: 09:59) loses nothing."""
     t = now_et.time()
     if now_et.weekday() >= 5 or not FEED_QUIET[0] <= t < FEED_QUIET[1]:
         return False
-    return not any(_hhmm(s.accept_from_et) < FEED_QUIET[1] and t <= _hhmm(s.accept_until_et)
+    return not any(_hhmm(s.accept_from_et) <= FEED_QUIET[1] and t <= _hhmm(s.accept_until_et)
                    for s in strategies.values())
 
 
