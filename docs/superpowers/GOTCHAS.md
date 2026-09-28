@@ -41,6 +41,9 @@ treat the line as a requirement, not a suggestion.
   quantity, accounts. Never recompute at send.
 - **A kill or flatten acts on its own position only**, capped at its own filled quantity, and never
   removes protection from a position it cannot fully attribute.
+- **No broker socket drop 09:20–09:35 ET on weekdays.** A token renewal drops the socket, so it
+  renews early (09:10–09:20) instead (`broker/tradovate.py` `renewal_due`). Anything new that
+  closes or rebuilds a broker socket keeps out of that window too.
 
 ## Numbers
 

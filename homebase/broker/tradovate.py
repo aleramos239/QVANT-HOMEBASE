@@ -9,11 +9,13 @@ from the OS keychain via `secrets_store`, keyed by the account's `keyring_key`.
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
 import sys
 import time
 from collections import deque
 from pathlib import Path
 from typing import Callable, Optional
+from zoneinfo import ZoneInfo
 
 from .. import symbols
 from ..paths import state_dir as _default_state_dir
@@ -26,9 +28,74 @@ from .tradovate_ws import TradovateWS, _ws_is_closed
 _SEEN_FILL_CAP = 20000
 _SEED_BACKOFF_CAP = 60.0    # seconds between cache-seed retries, at most
 
+# --- token renewal vs the 9:30 fire (2026-09-27) ------------------------------------------
+# A renewal rolls the token and so DROPS the socket (_renew_if_needed); the supervisor
+# (server._broker_loop, every 5 s) rebuilds it. Tokens live 80 min, so the old "renew with
+# < 10 min left" rule dropped the socket every ~70 min, at whatever time that fell -- 09:29:5x
+# included. renewal_due() keeps every renewal drop out of 09:20-09:35 ET on weekdays.
+ET = ZoneInfo("America/New_York")
+RENEW_BUFFER_S = 600.0                                # the normal rule: renew with < 10 min left
+RENEW_EARLY_FROM = dt.time(9, 10)                     # [09:10, 09:20): renew early if due before 09:36
+RENEW_QUIET = (dt.time(9, 20), dt.time(9, 35))        # [from, until): no renewal drop
+RENEW_CARRY_UNTIL = dt.time(9, 36)                    # a token must live past this: the first check after 09:35
+RENEW_FIRE_GUARD = (dt.time(9, 28), dt.time(9, 31))   # [from, until): no renewal drop, whatever the token
+
 
 def _log(msg: str) -> None:
     print(f"[tradovate] {msg}", file=sys.stderr, flush=True)
+
+
+def _et_at(day: dt.date, t: dt.time) -> float:
+    return dt.datetime.combine(day, t, tzinfo=ET).timestamp()
+
+
+def renewal_due(now: dt.datetime, expires_at: float) -> tuple[bool, str]:
+    """Should the keepalive renew the token -- and so drop the socket -- at `now`?
+    -> (due, why). `now` is timezone-aware; `expires_at` the token's expiry in unix seconds
+    (0 = unknown). Checked once a minute. Weekdays, ET:
+
+      09:10-09:20  "early": renew if the token would come due (RENEW_BUFFER_S left) before
+                   09:36, i.e. it expires before 09:46 -- the drop and the reconnect land 10+
+                   minutes before the fire, and nothing comes due inside the quiet window.
+                   09:19:59 is still early.
+      09:20-09:35  "quiet": NO renewal, even with < 10 min left -- unless the token would
+                   EXPIRE before 09:36 ("expires_in_window": Tradovate closes its socket at the
+                   expiry anyway, and the first check after 09:35 may come too late): then at
+                   once, i.e. at the window's first check (~09:20), 8+ minutes before the fire.
+                   Only possible when every early renewal failed.
+      09:28-09:31  "fire_guard": never a renewal drop, whatever the token: a planned drop here
+                   could miss the fire (the rebuild takes up to ~5 s, and a failed one backs off
+                   5 minutes) or cut the acks. A token that still expires in here -- every
+                   renewal since 09:10 having failed -- dies at its expiry and the supervisor
+                   rebuilds the socket (renewing, else logging in).
+      An unknown expiry is never renewed inside the quiet window.
+    Any other time, and weekends: the normal rule, < RENEW_BUFFER_S left ("normal")."""
+    et = now.astimezone(ET)
+    if et.weekday() < 5:
+        t = et.time()
+        carry = _et_at(et.date(), RENEW_CARRY_UNTIL)
+        if RENEW_QUIET[0] <= t < RENEW_QUIET[1]:
+            if not expires_at or expires_at >= carry:
+                return False, "quiet"
+            if RENEW_FIRE_GUARD[0] <= t < RENEW_FIRE_GUARD[1]:
+                return False, "fire_guard"
+            return True, "expires_in_window"
+        if RENEW_EARLY_FROM <= t < RENEW_QUIET[0] and expires_at \
+                and expires_at - RENEW_BUFFER_S < carry:
+            return True, "early"
+    return expires_at - et.timestamp() < RENEW_BUFFER_S, "normal"
+
+
+def reconnect_buffer_s(now: dt.datetime) -> float:
+    """The token life a socket being REBUILT (reconnect) must start with: normally
+    RENEW_BUFFER_S; weekdays 09:10-09:36 ET, enough that it never comes due before 09:36, so
+    the rebuilt socket needs no renewal drop inside the quiet window. The socket is being
+    rebuilt anyway: renewing here costs one HTTPS call, never an extra drop."""
+    et = now.astimezone(ET)
+    if et.weekday() < 5 and RENEW_EARLY_FROM <= et.time() < RENEW_CARRY_UNTIL:
+        left_to_carry = _et_at(et.date(), RENEW_CARRY_UNTIL) - et.timestamp()
+        return max(RENEW_BUFFER_S, left_to_carry + RENEW_BUFFER_S)
+    return RENEW_BUFFER_S
 
 
 STOPLIMIT_INCOMPLETE = "a Stop Limit order needs both a limit price and a trigger"
@@ -96,6 +163,7 @@ class TradovateAdapter(BrokerAdapter):
         self._cash_pushed = False                 # a cashBalance push landed while the seed read it
         self._seed_task: Optional[asyncio.Task] = None
         self._seed_sleep = asyncio.sleep          # the seed's retry backoff (tests replace it)
+        self._now = lambda: dt.datetime.now(dt.timezone.utc)   # the renewal rule's clock (tests replace it)
         self.caches_seeded = False                # position/cash read after the last (re)connect
 
     @property
@@ -149,7 +217,8 @@ class TradovateAdapter(BrokerAdapter):
                 await self._ws.close()
         except Exception:
             pass
-        await asyncio.to_thread(self._auth.ensure_valid)
+        now = self._now()        # 09:10-09:36 weekdays: a token that carries the quiet window
+        await asyncio.to_thread(self._auth.ensure_valid, reconnect_buffer_s(now), now.timestamp())
         self._ws = TradovateWS(token=self._auth.access_token, environment=self.env)
         self._ws.event_handlers.append(self._on_ws_event)
         await self._ws.connect()
@@ -1030,12 +1099,30 @@ class TradovateAdapter(BrokerAdapter):
         at expiry, mid-trade. Instead, when the token rolls we close the
         stale-token socket so the engine's connection supervisor rebuilds it on
         the fresh token (a clean reconnect that also recovers any fill missed in
-        the gap). Returns True if the socket was dropped for renewal."""
+        the gap). Returns True if the socket was dropped for renewal.
+
+        WHEN is renewal_due()'s rule: never a drop 09:20-09:35 ET on weekdays
+        (the 9:30 fire), an early renewal 09:10-09:20 instead. A failed renewal
+        raises and drops nothing (the token did not roll)."""
+        tokens = self._auth.tokens
+        expires_at = tokens.expires_at_unix if tokens else 0.0
+        now = self._now()
+        due, why = renewal_due(now, expires_at)
+        clock = now.astimezone(ET).strftime("%H:%M:%S ET")
+        if not due:
+            if why != "normal" and expires_at - now.timestamp() < RENEW_BUFFER_S:
+                # held against the normal rule: only when every early renewal failed
+                until = dt.datetime.fromtimestamp(expires_at, ET).strftime("%H:%M:%S") \
+                    if expires_at else "an unknown time"
+                _log(f"{self.account_id}: token renewal held at {clock} ({why}) — "
+                     f"it expires at {until} ET")
+            return False
         before = self._auth.access_token
-        await asyncio.to_thread(self._auth.ensure_valid, 600)
+        await asyncio.to_thread(self._auth.refresh)
         after = self._auth.access_token
         if after and after != before and self._ws:
-            self.audit({"event": "token_renewed", "account": self.account_id})
+            self.audit({"event": "token_renewed", "account": self.account_id, "why": why})
+            _log(f"{self.account_id}: token renewed at {clock} ({why}) — rebuilding the socket")
             try:
                 await self._ws.close()
             except Exception:
