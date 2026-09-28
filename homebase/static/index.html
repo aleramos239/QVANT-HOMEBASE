@@ -683,6 +683,16 @@ function confirmDlg(title, body, action, destructive) {
     $("#confirmOverlay").classList.add("open");
   });
 }
+/* The desk's ONE confirm policy for every switch (S6): ask only when a flip turns ON something
+   that can place orders; never when it makes things safer (OFF, Disarm) or changes nothing that
+   trades (Manage algos' "Show on home page"). The rule lives in algo-visibility.js
+   (switchNeedsConfirm) so it is unit tested; without it -- no module, or a cached copy from
+   before it had the rule -- ask whenever a switch turns something on (fail toward asking). */
+function needsConfirm(kind, turningOn, opts) {
+  const AV = window.AlgoVisibility;
+  return AV && typeof AV.switchNeedsConfirm === "function"
+    ? AV.switchNeedsConfirm(kind, turningOn, opts) : !!turningOn;
+}
 function cfDone(v) {
   $("#confirmOverlay").classList.remove("open");
   const cb = CONFIRM_CB; CONFIRM_CB = null;
@@ -1513,7 +1523,7 @@ function renderChartTrading(ct) {
 }
 async function setChartTrading(enabled) {
   const ct = (ST && ST.chart_trading) || {};
-  if (enabled && !await confirmDlg("Turn chart trading ON?",
+  if (needsConfirm("chartTrading", enabled) && !await confirmDlg("Turn chart trading ON?",
       `The chart page can then place REAL orders on the accounts you tick there — at most ${ct.max_order_qty} per order and ${ct.max_position_qty} per position. The 9:30 bot's symbol stays locked 09:20–09:35 ET on its accounts. The desk's Kill switches it off.`,
       "Turn on", false)) { refresh(); return; }
   try {
@@ -1817,16 +1827,21 @@ async function reconnectAcct(id) {
   refresh();
 }
 
-/* ---- strategy on/off + flatten ---- */
+/* ---- strategy on/off + flatten ----
+   The on/off switch follows the desk's one confirm policy (S6, the chart-trading switch's
+   pattern): turning a strategy ON asks -- it trades from its next signal; turning it OFF never
+   asks -- it only makes things safer, and it never touches an open position (the toast says so;
+   Flatten does that). A SHADOW strategy never places an order, so switching it on asks nothing
+   either. Same POST /api/strategy either way. */
 async function toggleStrat(name, enabled) {
-  const ok = await confirmDlg(
-    (enabled ? "Turn ON " : "Turn OFF ") + name.toUpperCase() + "?",
-    enabled ? "It will run and execute on its assigned accounts from the next signal."
-            : "It will ignore all signals until turned back on (open positions are untouched — use Flatten for that).",
-    enabled ? "Turn on" : "Turn off", !enabled);
-  if (!ok) { refresh(); return; }
+  const c = ((((ST && ST.strategies) || {})[name]) || {}).cfg || {};
+  if (needsConfirm("strategy", enabled, {shadow: !!c.shadow}) && !await confirmDlg(
+      "Turn ON " + name.toUpperCase() + "?",
+      "It will run and execute on its assigned accounts from the next signal.",
+      "Turn on", false)) { refresh(); return; }
   const r = await post("/api/strategy", {strategy: name, enabled});
-  if (r.ok) toast(name.toUpperCase() + (enabled ? " is ON." : " is OFF."));
+  if (r.ok) toast(name.toUpperCase() + (enabled ? " is ON."
+    : " is OFF — it ignores signals; open positions are untouched."));
   refresh();
 }
 async function flattenStrat(name) {
@@ -1911,6 +1926,9 @@ function renderAlgoMgr() {
 }
 function openAlgoMgr() { renderAlgoMgr(); $("#algoOverlay").classList.add("open"); }
 function closeAlgoMgr() { $("#algoOverlay").classList.remove("open"); }
+/* "Show on home page" never asks, either way, under the desk's one confirm policy (S6):
+   hiding a card is display only and changes nothing that trades -- switchNeedsConfirm(
+   "visibility", ...) is false both ways -- and a card that could trade is locked visible. */
 function toggleAlgoHidden(name, currentlyVisible) {
   if (!window.AlgoVisibility) return;
   // currentlyVisible -> user wants to hide it; already-hidden -> unhide.

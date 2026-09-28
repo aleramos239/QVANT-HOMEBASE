@@ -1,7 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import vm from 'node:vm';
+
+const require = createRequire(import.meta.url);
+const AV = require('../../homebase/static/algo-visibility.js');   // the desk's one confirm policy (S6)
 
 /* The desk page's (homebase/static/index.html, :8850) Settings dialog block (2026-09-27
    desk-settings plan + fix round 1; Arm/Disarm/Kill moved to the top bar 2026-09-28 -- their
@@ -93,6 +97,7 @@ function load({ armed = false, confirm = true, demo = false, fetchAnswers = {}, 
     esc,
     toast: (t) => toasts.push(t),
     confirmDlg: async (title, body, action, destructive) => { confirms.push({ title, body, action, destructive }); return confirm; },
+    needsConfirm: (kind, on, opts) => AV.switchNeedsConfirm(kind, on, opts),
     post: async (url, body) => { posts.push({ url, body }); return { ok: true }; },
     refresh: () => refreshes.push(true),
     setInterval: () => 0,
@@ -370,6 +375,15 @@ test('the chart-trading switch calls setChartTrading, which confirms before turn
   assert.equal(confirms.length, 1);
   assert.match(confirms[0].title, /Turn chart trading ON/);
   assert.deepEqual(JSON.parse(JSON.stringify(posts)), [{ url: '/api/chart-trading', body: { enabled: true } }]);
+});
+
+test('the chart-trading switch never asks when turning OFF -- the safer direction (S6)', async () => {
+  const { api, els, confirms, posts } = load();
+  api.renderSettings();
+  api.ST = { armed: false, chart_trading: { enabled: true, max_order_qty: 10, max_position_qty: 20 } };
+  await els.ctSwitch.onclick();
+  assert.equal(confirms.length, 0);
+  assert.deepEqual(JSON.parse(JSON.stringify(posts)), [{ url: '/api/chart-trading', body: { enabled: false } }]);
 });
 
 test('Save limits POSTs the two number inputs\' parsed values, same endpoint as before', async () => {
