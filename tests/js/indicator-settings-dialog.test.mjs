@@ -34,6 +34,7 @@ class FakeEl {
 const require = createRequire(import.meta.url);
 global.window = global.window || {};
 global.window.HBCatalog = require('../../homebase/static/charts/catalog.js');
+global.window.HBIcons = global.window.HBIcons || new Proxy({}, { get: () => '' });   // the Template button's chevron (merge with the presets wiring)
 global.document = { createElement: (tag) => new FakeEl(tag), activeElement: null };
 global.requestAnimationFrame = (fn) => { fn(); return 1; };
 global.cancelAnimationFrame = () => {};
