@@ -7,13 +7,15 @@ Per enabled strategy with self_fire (all times ET, weekdays only):
     9:28:30     prestage — subscribe the live quote, warm everything
     9:30:00     anchor = the last trade OF ITS OWN SYMBOL received before
                 09:30:00.000 → engine.handle_alert(
-                source="timer"); every strategy due fires at the same moment,
-                and only within FIRE_LATE_MAX_S of 09:30:00.000 — later (a
-                desk restart, a late switch-on, a stalled loop) it is missed
+                source="timer"); every strategy due fires at the same moment.
+                A fire more than FIRE_LATE_MAX_S past 09:30:00.000 (a desk
+                restart, a late switch-on, a slow stage, a stalled loop)
+                still goes out while the accept window is open, on the
+                latest trade at that moment — journaled late, with why
     9:31        unsubscribe, done
 
 Fail-safe by construction: no gate reading → no fire; stale quote → no
-fire; past the fire's grace → no fire; day already acted (e.g. the TV
+fire; accept window over → no fire; day already acted (e.g. the TV
 alert beat us) → no fire. Every decision is journaled. The TV alert stays
 a cross-check — when disarmed both paths journal dry runs (free anchor
 A/B); when armed the second arrival is refused by the one-trade-per-day
@@ -39,14 +41,16 @@ STAGE_T = dt.time(9, 28, 30)
 FIRE_T = dt.time(9, 30, 0)
 DONE_T = dt.time(9, 31)
 TICK_S = 0.2
-FIRE_LATE_MAX_S = 1.0      # fire moment later than this after 09:30:00.000 -> MISSED, never
-                           # fired. _sleep_s lands the fire tick ON 09:30:00.000 (late by loop
-                           # jitter: ms); a stage on the tick across the open adds up to one
-                           # TICK_S (0.2 s) plus its own round trips: 1 s is ~5 ticks of room.
-                           # The anchor does not ride on it (the last trade RECEIVED before
-                           # 09:30:00.000, however late the fire): it only bounds how old the
-                           # levels are when the orders go out. Past it = a desk restart, a
-                           # strategy switched on / booked after the open, a stalled loop.
+FIRE_LATE_MAX_S = 1.0      # a fire moment within this of 09:30:00.000 is ON TIME: anchored on
+                           # the last trade RECEIVED before 09:30:00.000 (the research anchor).
+                           # _sleep_s lands the fire tick ON 09:30:00.000 (late by loop jitter:
+                           # ms); a stage on the tick across the open adds up to one TICK_S
+                           # (0.2 s) plus its own round trips: 1 s is ~5 ticks of room. Past it
+                           # (a desk restart, a strategy switched on after the open, a slow
+                           # stage, a stalled loop) the fire is LATE: it still goes out while
+                           # the accept window is open, on the latest trade at that moment --
+                           # both stops sit offset_pts either side of the current price, so
+                           # nothing is placed through the market -- journaled late, with why.
 QUOTE_MAX_AGE_S = 15.0     # anchor must come from a trade this fresh
 STAMP_RAW_MAX = 40         # a quote push's raw `timestamp`, as journaled
 GATE_RETRY_S = 60.0
@@ -90,6 +94,7 @@ class SelfTimer:
         self._subs: dict[str, str] = {}   # strategy symbol -> quote feed (contract)
         self._gate_attempt: float = 0.0
         self.days: dict = {}          # date -> {strategy: state dict}
+        self._up_at: dt.datetime | None = None   # this timer's first tick: the desk came up
 
     def now_et(self) -> dt.datetime:
         return self._now().astimezone(ET)
@@ -112,6 +117,8 @@ class SelfTimer:
 
     async def tick(self) -> None:
         now = self.now_et()
+        if self._up_at is None:
+            self._up_at = now
         if now.weekday() >= 5:
             return
         date = now.date().isoformat()
@@ -122,8 +129,11 @@ class SelfTimer:
             if not (s.enabled and getattr(s, "self_fire", False)
                     and getattr(s, "kind", "straddle") == "straddle"):
                 continue                     # bars strategies run off the feed
-            mine.append((name, s, day.setdefault(name, {"stage": "idle", "gate": None,
-                                                        "adx": None, "anchor": None})))
+            st = day.get(name)
+            if st is None:                   # first seen (seen_at: a late fire's why)
+                st = day[name] = {"stage": "idle", "gate": None, "adx": None,
+                                  "anchor": None, "seen_at": _et_ms(now.timestamp())}
+            mine.append((name, s, st))
         # Staged by an earlier tick, a strategy reaches its fire with no await
         # (the anchor is a read of the quote already kept): every one due fires
         # first, together -- no strategy waits on another's broker round trip --
@@ -170,7 +180,8 @@ class SelfTimer:
         # which is true at 11pm too: a restart any time after 9:30 would
         # stage and fire immediately on a stale anchor. (The engine's accept
         # window catches it, but the timer must not try in the first place.)
-        # Inside the window, FIRE_LATE_MAX_S does the same from 09:30:01.
+        # Inside the window a fire past FIRE_LATE_MAX_S still goes out: late,
+        # on the latest trade.
         end = _hhmm(s.accept_until_et)
         if t > end:
             if st["stage"] in ("idle", "gated", "staged"):
@@ -216,7 +227,7 @@ class SelfTimer:
             if s.symbol not in self._subs:
                 self._subs[s.symbol] = await md.subscribe_quote(s.symbol)
             await self._prestage_skip(name, s, st)
-            st["stage"] = "staged"
+            st.update(stage="staged", staged_at=_et_ms(self._now().timestamp()))
 
         if st["stage"] == "staged" and t >= FIRE_T:
             if st["gate"] is False:
@@ -236,23 +247,45 @@ class SelfTimer:
                                     status=day)
                 return
             fire_at = dt.datetime.combine(dt.date.fromisoformat(date), FIRE_T, tzinfo=ET)
-            # staged by an earlier tick: this tick woke late; staged just now:
-            # the desk (re)started, or it was switched on / booked, after the open
-            if self._missed_late(name, st, fire_at,
-                                 "late_fire" if stage == "staged" else "late_start"):
-                return
-            cut, sub = fire_at.timestamp(), self._subs.get(s.symbol)
+            now = self._now()
+            late_s = now.timestamp() - fire_at.timestamp()
+            late = late_s > FIRE_LATE_MAX_S
+            # On time: the last trade received before 09:30:00.000, the research
+            # anchor. Late, the accept window still open: the latest trade now --
+            # both stops sit offset_pts either side of the current price, so
+            # nothing is placed through the market.
+            cut, sub = (None if late else fire_at.timestamp()), self._subs.get(s.symbol)
             px, seen = self._md.last(sub, before=cut) if self._md else (None, 0.0)
-            stamps = self._stamps(sub, cut)
+            info = {"late": late, "late_s": round(late_s, 3),
+                    **({"reason": self._late_why(st, fire_at)} if late else {}),
+                    "anchor_source": "current" if late else "pre_open",
+                    **self._stamps(sub, cut)}
             # freshness on the timer's own clock: the wall clock the pushes are received on
-            if px is None or self._now().timestamp() - seen > QUOTE_MAX_AGE_S:
+            if px is None or now.timestamp() - seen > QUOTE_MAX_AGE_S:
                 st.update(stage="error",
-                          error="no fresh trade received before 09:30:00 for the anchor")
+                          error=("no fresh trade for the anchor" if late else
+                                 "no fresh trade received before 09:30:00 for the anchor"))
                 self.engine.journal("timer_error", strategy=name,
-                                    error=st["error"], **stamps)
+                                    error=st["error"], **info)
                 return
             st.update(anchor=px, stage="fired")
-            return self._fire(name, s, st, px, fire_at, stamps)   # tick() fires all due at once
+            return self._fire(name, s, px, info)   # tick() fires all due at once
+
+    def _late_why(self, st, fire_at) -> str:
+        """Why a fire is past FIRE_LATE_MAX_S. late_fire: staged before the
+        open, the fire's own tick ran late (a stalled loop, a sleeping
+        machine). late_stage: seen by the open, staged only after it (a slow
+        gate or stage, a gate retry). late_start: this timer -- the desk --
+        came up after the open. late_switch_on: the desk was up, but the
+        strategy was first seen after the open (switched on then)."""
+        at_open = _et_ms(fire_at.timestamp())       # "09:30:00.000": the same day's
+        staged, seen = st.get("staged_at"), st.get("seen_at")   # ET times compare as text
+        if staged is not None and staged < at_open:
+            return "late_fire"
+        if seen is not None and seen <= at_open:
+            return "late_stage"
+        return ("late_switch_on" if self._up_at is not None and self._up_at <= fire_at
+                else "late_start")
 
     def _stamps(self, sub, cut) -> dict:
         """The anchor's push (the one last(sub, before=cut) answers from) and the
@@ -263,20 +296,6 @@ class SelfTimer:
         except Exception:  # noqa: BLE001 — diagnostics never touch the fire
             anchor = newest = None
         return {**_push_fields("anchor", anchor), **_push_fields("newest", newest)}
-
-    def _missed_late(self, name, st, fire_at, reason) -> bool:
-        """True, with the day marked missed and journaled, when now is more
-        than FIRE_LATE_MAX_S past 09:30:00.000: the open has moved on, so the
-        straddle is never placed on it."""
-        now = self._now()
-        late = now.timestamp() - fire_at.timestamp()
-        if late <= FIRE_LATE_MAX_S:
-            return False
-        st.update(stage="missed", anchor=None)
-        self.engine.journal("timer_missed", strategy=name, reason=reason,
-                            at=now.astimezone(ET).strftime("%H:%M:%S.%f")[:-3],
-                            late_s=round(late, 3), grace_s=FIRE_LATE_MAX_S)
-        return True
 
     async def _prestage_skip(self, name, s, st) -> None:
         """User-approved (spec 2026-09-26): a booked account that already holds
@@ -475,24 +494,20 @@ class SelfTimer:
         if skipped_unreadable:
             st["skipped_unreadable"] = skipped_unreadable
 
-    async def _fire(self, name, s, st, px, fire_at, stamps) -> None:
-        # checked again AT the fire: its task may start a moment after the
-        # anchor read (tick() launches it at once, never behind another's stage)
-        if self._missed_late(name, st, fire_at, "late_fire"):
-            return
+    async def _fire(self, name, s, px, info) -> None:
         out = await self.engine.handle_alert(
             {"strategy": name, "upper": px + s.offset_pts,
              "lower": px - s.offset_pts}, source="timer")
         self.engine.journal("timer_fired", strategy=name, anchor=px,
                             result=out.get("ok"),
-                            note=out.get("reason") or out.get("note"), **stamps)
+                            note=out.get("reason") or out.get("note"), **info)
 
     def _sleep_s(self) -> float:
         """One tick — except when a strategy is staged and 9:30:00 is closer
         than that: then exactly the time left, so the fire lands on
-        9:30:00.000 instead of up to a tick late. (The anchor does not ride on
-        this: it is the last trade RECEIVED before 09:30:00.000, as in the
-        research, however late the fire — see FIRE_LATE_MAX_S.)"""
+        9:30:00.000 instead of up to a tick late: on time, anchored on the
+        last trade received before 09:30:00.000 as in the research (see
+        FIRE_LATE_MAX_S)."""
         now = self.now_et()
         staged = any(st.get("stage") == "staged"
                      for st in self.days.get(now.date().isoformat(), {}).values())

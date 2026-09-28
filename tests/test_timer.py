@@ -64,15 +64,19 @@ class TapeMD(FakeMD):
     trade_push = TradovateMD.trade_push
     SAME = object()
 
-    def __init__(self, **kw):
+    def __init__(self, snapshot=None, **kw):
         super().__init__(**kw)
         self._trades, self._tape, self._cid_sym = {}, {}, {}
         self._received = 0.0
         self._clock = lambda: self._received
+        self.snapshot = dict(snapshot or {})  # symbol -> the trade its subscription's first quote carries
 
     async def subscribe_quote(self, symbol):
         self._cid_sym[1000 + len(self._cid_sym)] = symbol      # the reply's subscriptionId
-        return await super().subscribe_quote(symbol)
+        out = await super().subscribe_quote(symbol)
+        if symbol in self.snapshot:                             # received as the subscription answers
+            self.push(symbol, self.clock(), self.snapshot[symbol])
+        return out
 
     def push(self, symbol, seen, px, stamp=SAME):
         """One trade push for a subscribed `symbol`, RECEIVED at local `seen`. The exchange
@@ -84,6 +88,12 @@ class TapeMD(FakeMD):
             q["timestamp"] = stamp
         self._received = seen.timestamp()
         self._on_event({"e": "md", "d": {"quotes": [q]}})
+
+
+def stamps(e):
+    """A journal line's fields for the anchor push and the newest push (timer._push_fields)."""
+    return {f"{p}_{k}": e[f"{p}_{k}"] for p in ("anchor", "newest")
+            for k in ("seen", "stamp_raw", "stamp", "lag_ms")}
 
 
 def et(h, m, s=0, us=0, date=(2026, 9, 14)):
@@ -108,6 +118,8 @@ def mk(tmp_path, *, last_trade=24500.0, clock=None, armed=False, md=None):
                     root=tmp_path)
     if md is None:
         md = FakeMD(last_trade=last_trade, clock=clock)
+    elif md.clock is None:
+        md.clock = clock
     timer = SelfTimer(cfg, engine, md_factory=lambda: md, now_fn=clock)
     return timer, engine, md, clock
 
@@ -258,8 +270,8 @@ def test_due_strategies_fire_together(tmp_path):
     assert st["nq930"]["stage"] == st["ym930"]["stage"] == "fired"
 
 
-# --- the fire's grace: orders go out within FIRE_LATE_MAX_S of 09:30:00.000, on the
-# --- last trade RECEIVED before 09:30:00.000 (the research anchor), or not at all
+# --- on time: within FIRE_LATE_MAX_S of 09:30:00.000, on the last trade RECEIVED before
+# --- 09:30:00.000 (the research anchor)
 def test_staged_at_092959_9_fires_at_093000_on_the_last_trade_received_before_the_open(tmp_path):
     timer, engine, md, clock = mk(tmp_path, md=TapeMD())
     at(clock, 9, 21); run(timer.tick())                          # gate
@@ -295,6 +307,20 @@ def test_a_tick_at_093000_4_still_fires_and_still_on_the_pre_open_trade(tmp_path
         [(24510.0, 24490.0)]
 
 
+@pytest.mark.parametrize("us, late", [(0, False), (1000, True)])
+def test_the_grace_ends_at_exactly_fire_late_max_s(tmp_path, us, late):
+    """09:30:01.000 is still on time (the pre-open anchor); 09:30:01.001 is late (the latest)."""
+    assert FIRE_LATE_MAX_S == 1.0
+    timer, engine, md, clock = mk(tmp_path, md=TapeMD())
+    at(clock, 9, 21); run(timer.tick())
+    at(clock, 9, 29); run(timer.tick())                          # staged
+    md.push("NQ", et(9, 29, 59, 980000), 24500.0)
+    md.push("NQ", et(9, 30, 0, 900000), 24512.0)
+    at(clock, 9, 30, 1, us); run(timer.tick())
+    assert fired(tmp_path) == [("nq930", late, round(1 + us / 1e6, 3), "late_fire" if late else None,
+                                "current" if late else "pre_open", 24512.0 if late else 24500.0)]
+
+
 @pytest.mark.parametrize("stamp", [None, "2026-09-14T09:29:59.990", 1789392599990, "not a time",
                                    {"t": 1}, "2026-09-14T13:29:59.990z"],
                          ids=["missing", "no-zone", "epoch-ms", "garbage", "an-object", "lowercase-z"])
@@ -328,12 +354,12 @@ def test_the_fire_journals_the_anchor_push_and_the_newest_push(tmp_path):
             stamp=round(et(9, 30, 0, 258000).timestamp() * 1000))
     at(clock, 9, 30, 0, 400000); run(timer.tick())
     fired = next(e for e in events(tmp_path) if e["event"] == "timer_fired")
-    assert {k: fired[k] for k in fired if k.startswith(("anchor_", "newest_"))} == {
+    assert stamps(fired) == {
         "anchor_seen": "09:29:59.990", "anchor_stamp_raw": "2026-09-14T13:29:59.960Z",
         "anchor_stamp": "09:29:59.960", "anchor_lag_ms": 30,
         "newest_seen": "09:30:00.300", "newest_stamp_raw": "1789392600258",
         "newest_stamp": "09:30:00.258", "newest_lag_ms": 42}
-    assert fired["anchor"] == 24500.0
+    assert (fired["anchor"], fired["anchor_source"]) == (24500.0, "pre_open")
 
 
 def test_an_anchor_refusal_journals_the_pushes_it_saw(tmp_path):
@@ -345,44 +371,108 @@ def test_an_anchor_refusal_journals_the_pushes_it_saw(tmp_path):
     st = timer.status()["strategies"]["nq930"]
     assert st["stage"] == "error" and "anchor" in st["error"]
     err = next(e for e in events(tmp_path) if e["event"] == "timer_error")
-    assert {k: err[k] for k in err if k.startswith(("anchor_", "newest_"))} == {
+    assert stamps(err) == {
         "anchor_seen": None, "anchor_stamp_raw": None, "anchor_stamp": None, "anchor_lag_ms": None,
         "newest_seen": "09:30:00.100", "newest_stamp_raw": None, "newest_stamp": None,
         "newest_lag_ms": None}
     assert not any(e["event"] in ("timer_fired", "dry_run") for e in events(tmp_path))
 
 
+def fired(root):
+    """timer_fired lines: (strategy, late, late_s, reason, anchor_source, anchor)."""
+    return [(e["strategy"], e["late"], e["late_s"], e.get("reason"), e["anchor_source"], e["anchor"])
+            for e in events(root) if e["event"] == "timer_fired"]
+
+
+# --- the account holder's rule (2026-09-28): a LATE fire still fires, while the accept window
+# --- is open, on the latest trade at that moment -- journaled late, with why
 @pytest.mark.parametrize("hms", [(9, 30, 2), (9, 37, 0), (9, 44, 59)])
-def test_a_restart_after_the_grace_on_an_idle_day_is_missed_and_places_nothing(tmp_path, hms):
-    """The desk (re)starts -- or the strategy is switched on / booked -- after the open on a
-    day it has not traded: it gates and stages as ever, but never fires on a post-open price."""
-    timer, engine, md, clock = mk(tmp_path, armed=True)          # ARMED: a fire would place
+def test_a_restart_after_the_grace_fires_late_on_the_price_at_that_moment(tmp_path, hms):
+    """The desk (re)starts after the open on a day it has not traded: it gates and stages as
+    ever and fires, the window still open, on the latest trade -- both stops offset_pts either
+    side of the current price. A fresh md has no pre-open print at all."""
+    timer, engine, md, clock = mk(tmp_path, armed=True, md=TapeMD(snapshot={"NQ": 24619.0}))
     at(clock, *hms); run(timer.tick())                           # a fresh SelfTimer = a restart
     st = timer.status()["strategies"]["nq930"]
-    assert st["stage"] == "missed" and st["anchor"] is None
-    miss = [e for e in events(tmp_path) if e["event"] == "timer_missed"]
-    assert [(e["reason"], e["at"], e["grace_s"]) for e in miss] == \
-        [("late_start", "%02d:%02d:%02d.000" % hms, FIRE_LATE_MAX_S)]
-    assert miss[0]["late_s"] == (hms[1] - 30) * 60 + hms[2]
-    at(clock, *hms, 500000); run(timer.tick())                   # the next tick: still missed, said once
-    assert timer.status()["strategies"]["nq930"]["stage"] == "missed"
-    ev = events(tmp_path)
-    assert sum(e["event"] == "timer_missed" for e in ev) == 1
-    assert not any(e["event"] in ("timer_fired", "dry_run", "placed") for e in ev)
-    assert engine.adapters["main"].brackets == [] and engine.adapters["main"].orders == []
+    assert st["stage"] == "fired" and st["anchor"] == 24619.0
+    assert [(b.side, b.price) for b in engine.adapters["main"].brackets] == \
+        [("Buy", 24629.0), ("Sell", 24609.0)]
+    late_s = (hms[1] - 30) * 60 + hms[2]
+    assert fired(tmp_path) == [("nq930", True, late_s, "late_start", "current", 24619.0)]
+    ev = next(e for e in events(tmp_path) if e["event"] == "timer_fired")
+    assert ev["anchor_seen"] == ev["newest_seen"] == "%02d:%02d:%02d.000" % hms
+    at(clock, *hms, 500000); run(timer.tick())                   # the next tick: fired once
+    assert len(fired(tmp_path)) == 1
+    assert not any(e["event"] == "timer_missed" for e in events(tmp_path))
 
 
-def test_a_staged_strategy_whose_tick_wakes_past_the_grace_is_missed(tmp_path):
-    timer, engine, md, clock = mk(tmp_path, armed=True)
+def test_a_staged_strategy_whose_tick_wakes_past_the_grace_fires_late_on_the_current_price(tmp_path):
+    timer, engine, md, clock = mk(tmp_path, armed=True, md=TapeMD())
     at(clock, 9, 21); run(timer.tick())
     at(clock, 9, 29); run(timer.tick())                          # staged in time
+    md.push("NQ", et(9, 29, 59, 990000), 24500.0)               # the pre-open print: not the anchor now
+    md.push("NQ", et(9, 30, 2, 800000), 24531.0)
     at(clock, 9, 30, 3); run(timer.tick())                       # ... but the loop stalled 3 s
+    assert fired(tmp_path) == [("nq930", True, 3.0, "late_fire", "current", 24531.0)]
+    assert [(b.side, b.price) for b in engine.adapters["main"].brackets] == \
+        [("Buy", 24541.0), ("Sell", 24521.0)]
+
+
+def test_seen_before_the_open_but_staged_after_it_fires_late_as_a_late_stage(tmp_path):
+    """First seen at 09:29:59.9; its gate's daily bars take 2 s, so it stages at 09:30:01.9
+    and the next tick fires it -- late, on the price then: late_stage, not a late tick."""
+    timer, engine, md, clock = mk(tmp_path, md=TapeMD(snapshot={"NQ": 24520.0}))
+    bars = md.daily_bars
+
+    async def slow_bars(symbol, n=60):
+        clock.dt += dt.timedelta(seconds=2)
+        return await bars(symbol, n)
+
+    md.daily_bars = slow_bars
+    at(clock, 9, 29, 59, 900000); run(timer.tick())
+    st = timer.status()["strategies"]["nq930"]
+    assert (st["stage"], st["seen_at"], st["staged_at"]) == ("staged", "09:29:59.900", "09:30:01.900")
+    at(clock, 9, 30, 2); run(timer.tick())
+    assert fired(tmp_path) == [("nq930", True, 2.0, "late_stage", "current", 24520.0)]
+    assert [(e["upper"], e["lower"]) for e in events(tmp_path) if e["event"] == "dry_run"] == \
+        [(24530.0, 24510.0)]
+
+
+def test_switched_on_after_the_open_fires_late_and_the_on_time_one_stays_pre_open(tmp_path):
+    timer, engine, md, clock = mk(tmp_path, md=TapeMD(snapshot={"YM": 46050.0}))
+    at(clock, 9, 21); run(timer.tick())
+    at(clock, 9, 29); run(timer.tick())                          # nq930 staged
+    md.push("NQ", et(9, 29, 59, 990000), 24500.0)
+    md.push("NQ", et(9, 30, 0, 100000), 24511.0)                 # after the open
+    at(clock, 9, 30); run(timer.tick())                          # nq930 fires on time
+    _add_ym(engine)                                              # ym930 switched on at 09:33
+    at(clock, 9, 33); run(timer.tick())
+    assert fired(tmp_path) == [("nq930", False, 0.0, None, "pre_open", 24500.0),
+                               ("ym930", True, 180.0, "late_switch_on", "current", 46050.0)]
+
+
+def test_after_the_accept_window_a_late_start_still_never_fires(tmp_path):
+    timer, engine, md, clock = mk(tmp_path, armed=True, md=TapeMD(snapshot={"NQ": 24619.0}))
+    at(clock, 9, 45, 1); run(timer.tick())                       # the window closed at 09:45:00
     assert timer.status()["strategies"]["nq930"]["stage"] == "missed"
+    assert md.subs == [] and engine.adapters["main"].brackets == []
     ev = events(tmp_path)
-    assert [(e["reason"], e["late_s"]) for e in ev if e["event"] == "timer_missed"] == \
-        [("late_fire", 3.0)]
-    assert not any(e["event"] in ("timer_fired", "placed") for e in ev)
-    assert engine.adapters["main"].brackets == []
+    assert [e["window_end"] for e in ev if e["event"] == "timer_missed"] == ["09:45"]
+    assert not any(e["event"] in ("timer_fired", "dry_run", "placed") for e in ev)
+
+
+def test_a_late_fire_goes_out_as_its_anchor_is_read_not_behind_a_later_stage(tmp_path):
+    """A restart at 09:31: nq930 gates, stages and fires late; ym930 stages after it and its
+    subscription takes 1.5 s. nq930's orders are out at 09:31:00, on NQ's price then."""
+    timer, engine, md, clock = mk(tmp_path, armed=True, md=TapeMD(snapshot={"NQ": 24619.0}))
+    sent = []
+    _slow_ym_stage(engine, md, clock, sent)
+    at(clock, 9, 31); run(timer.tick())
+    assert sent == [("NQ", "Buy", 24629.0, dt.time(9, 31)), ("NQ", "Sell", 24609.0, dt.time(9, 31)),
+                    ("YM", "Buy", 46030.0, dt.time(9, 31, 1, 500000)),
+                    ("YM", "Sell", 45990.0, dt.time(9, 31, 1, 500000))]
+    assert fired(tmp_path) == [("nq930", True, 60.0, "late_start", "current", 24619.0),
+                               ("ym930", True, 61.5, "late_start", "current", 46010.0)]
 
 
 def _slow_ym_stage(engine, md, clock, sent):
@@ -394,7 +484,8 @@ def _slow_ym_stage(engine, md, clock, sent):
     async def slow(symbol):
         out = await sub(symbol)
         if symbol == "YM":
-            clock.dt += dt.timedelta(seconds=1.5)                # its round trip holds the tick
+            await asyncio.sleep(0.01)                            # a real round trip: other tasks run
+            clock.dt += dt.timedelta(seconds=1.5)                # ... and it holds this tick 1.5 s
             md.push("YM", clock.dt, 46010.0)
         return out
 
@@ -412,8 +503,8 @@ def test_an_on_time_fire_goes_out_before_another_strategy_stages_in_its_tick(tmp
     """Review 2026-09-28: nq930 checks in on time at 09:30:00.000, but ym930 -- switched on
     just before the open -- stages in the same tick, and its quote subscription takes 1.5 s.
     nq930 was staged by an earlier tick: it fires first, its orders out at 09:30:00.000 on the
-    last trade received before the open, whatever ym930's stage costs. ym930 staged past the
-    grace: missed."""
+    last trade received before the open, whatever ym930's stage costs. ym930, staged 1.5 s
+    past the open, fires late on YM's price then."""
     timer, engine, md, clock = mk(tmp_path, armed=True, md=TapeMD())
     at(clock, 9, 21); run(timer.tick())
     at(clock, 9, 29); run(timer.tick())                          # nq930 staged
@@ -421,14 +512,15 @@ def test_an_on_time_fire_goes_out_before_another_strategy_stages_in_its_tick(tmp
     sent = []
     _slow_ym_stage(engine, md, clock, sent)
     at(clock, 9, 30); run(timer.tick())
-    assert sent == [("NQ", "Buy", 24510.0, dt.time(9, 30)), ("NQ", "Sell", 24490.0, dt.time(9, 30))]
+    assert sent == [("NQ", "Buy", 24510.0, dt.time(9, 30)), ("NQ", "Sell", 24490.0, dt.time(9, 30)),
+                    ("YM", "Buy", 46030.0, dt.time(9, 30, 1, 500000)),
+                    ("YM", "Sell", 45990.0, dt.time(9, 30, 1, 500000))]
     st = timer.status()["strategies"]
     assert (st["nq930"]["stage"], st["nq930"]["anchor"]) == ("fired", 24500.0)
-    assert st["ym930"]["stage"] == "missed"
-    ev = events(tmp_path)
-    assert [e["strategy"] for e in ev if e["event"] == "timer_fired"] == ["nq930"]
-    assert [(e["strategy"], e["reason"], e["late_s"]) for e in ev if e["event"] == "timer_missed"] == \
-        [("ym930", "late_start", 1.5)]
+    assert (st["ym930"]["stage"], st["ym930"]["anchor"]) == ("fired", 46010.0)
+    assert fired(tmp_path) == [("nq930", False, 0.0, None, "pre_open", 24500.0),
+                               ("ym930", True, 1.5, "late_stage", "current", 46010.0)]
+    assert not any(e["event"] == "timer_missed" for e in events(tmp_path))
 
 
 @pytest.mark.parametrize("status", ["placed", "live", "done"])
@@ -445,8 +537,8 @@ def test_a_restart_after_the_open_on_a_day_that_already_fired_is_still_done(tmp_
 
 def test_weekends_stay_quiet_and_a_closed_weekday_is_any_weekday(tmp_path):
     """Weekends: nothing at all, on time or late. The timer keeps no holiday calendar, so a
-    closed weekday (Christmas, a Friday) runs the weekday rules: on time with no trade it
-    refuses as it always has, and a late start is missed like on any other day."""
+    closed weekday (Christmas, a Friday) runs the weekday rules: with no trade it refuses,
+    on time as it always has and late alike."""
     for i, hms in enumerate(((9, 30, 0, 400000), (9, 37, 0))):
         root = tmp_path / f"sat{i}"
         root.mkdir()
@@ -469,10 +561,13 @@ def test_weekends_stay_quiet_and_a_closed_weekday_is_any_weekday(tmp_path):
 
     root = tmp_path / "xmas-late"
     root.mkdir()
-    timer, engine, md, clock = mk(root)
+    timer, engine, md, clock = mk(root, md=TapeMD())             # a restart at 09:37: no print comes
     at(clock, 9, 37, date=xmas); run(timer.tick())
-    assert timer.status()["strategies"]["nq930"]["stage"] == "missed"
-    assert [e["reason"] for e in events(root) if e["event"] == "timer_missed"] == ["late_start"]
+    st = timer.status()["strategies"]["nq930"]
+    assert st["stage"] == "error" and "anchor" in st["error"]
+    assert [(e["late"], e["reason"]) for e in events(root) if e["event"] == "timer_error"] == \
+        [(True, "late_start")]
+    assert not any(e["event"] in ("timer_missed", "timer_fired", "dry_run") for e in events(root))
 
 
 @pytest.mark.parametrize("date", [(2026, 3, 9), (2026, 11, 2), (2026, 1, 5)])
@@ -493,11 +588,13 @@ def test_the_fire_the_grace_and_the_anchor_follow_new_york_time_across_dst(tmp_p
 
     root = tmp_path / "late"
     root.mkdir()
-    timer, engine, md, clock = mk(root, armed=True)
+    timer, engine, md, clock = mk(root, armed=True, md=TapeMD(snapshot={"NQ": 24519.0}))
     at(clock, 9, 30, 2, date=date); run(timer.tick())
-    assert [(e["reason"], e["at"], e["late_s"]) for e in events(root)
-            if e["event"] == "timer_missed"] == [("late_start", "09:30:02.000", 2.0)]
-    assert engine.adapters["main"].brackets == []
+    assert fired(root) == [("nq930", True, 2.0, "late_start", "current", 24519.0)]
+    ev = next(e for e in events(root) if e["event"] == "timer_fired")
+    assert ev["anchor_seen"] == "09:30:02.000"
+    assert [(b.side, b.price) for b in engine.adapters["main"].brackets] == \
+        [("Buy", 24529.0), ("Sell", 24509.0)]
 
 
 def test_the_md_anchor_is_the_last_trade_received_before_the_open(tmp_path, monkeypatch):
