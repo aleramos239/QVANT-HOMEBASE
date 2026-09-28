@@ -324,28 +324,33 @@ function openMenu(anchor, cls, { right = false, root = null, at = null } = {}) {
    local coordinates (offset from its own top-left), which is what CSS transform-origin wants. */
 function placeMenu() {
   if (!menuEl) return;
-  const w = menuEl.offsetWidth, h = menuEl.offsetHeight;
-  let left, top, originX, originY;
-  if (menuAt) {   // a context menu: at the pointer, kept inside the window
-    left = Math.max(4, Math.min(menuAt.x, window.innerWidth - w - 4));
-    top = Math.max(4, Math.min(menuAt.y, window.innerHeight - h - 4));
-    originX = menuAt.x - left; originY = menuAt.y - top;
-  } else if (menuRight) {
-    const r = (menuAnchor.closest('.rail-split') || menuAnchor).getBoundingClientRect();
-    left = r.right + 8;
-    top = Math.max(4, Math.min(r.top, window.innerHeight - h - 4));
-    originX = 0; originY = (r.top + r.height / 2) - top;   // grows rightward from the button's own middle
-  } else {
-    const r = menuAnchor.getBoundingClientRect(), below = r.bottom + 4;
-    left = Math.max(4, Math.min(r.left, window.innerWidth - w - 4));
-    // no room below (a dialog footer's menu, a swatch near the bottom): above the anchor instead
-    const above = r.top - 4 - h;
-    top = (below + h > window.innerHeight - 4 && above >= 4) ? above : below;
-    originX = (r.left + r.width / 2) - left;
-    originY = top === below ? 0 : h;   // below the anchor -> origin at the menu's own top edge; above -> its bottom edge
+  // W2 (2026-09-28): its natural height (up to the CSS cap), then fitted to the room it has -- a menu taller than that
+  // gets a max-height and scrolls inside (HBChartMenu.fitMenu): at the pointer (a context menu), right of a rail
+  // button (a flyout), or under its toolbar button, above it only when that side has the room (a dialog footer's
+  // menu, a swatch near the bottom)
+  menuEl.style.maxHeight = '';
+  const w = menuEl.offsetWidth, h = menuEl.offsetHeight, box = fixedBox(menuEl), cb = box ? box.getBoundingClientRect() : null;
+  const bounds = { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
+  if (cb) Object.assign(bounds, { left: Math.max(0, cb.left), top: Math.max(0, cb.top),
+    right: Math.min(bounds.right, cb.right), bottom: Math.min(bounds.bottom, cb.bottom) });   // a dialog clips its menus
+  const trigger = menuAt ? null : menuRight ? (menuAnchor.closest('.rail-split') || menuAnchor) : menuAnchor;
+  const p = window.HBChartMenu.fitMenu({ mode: menuAt ? 'at' : menuRight ? 'right' : 'below', at: menuAt,
+    r: trigger ? trigger.getBoundingClientRect() : null, w, h, bounds });
+  // fixed inside a dialog = laid out in that dialog's own box, not the window's (its glass makes it the containing
+  // block): without this the Settings dialog's Template ▾ opened a dialog's width to the right of its button
+  const ox = cb ? cb.left + box.clientLeft : 0, oy = cb ? cb.top + box.clientTop : 0;
+  menuEl.style.maxHeight = p.maxHeight == null ? '' : `${p.maxHeight}px`;
+  menuEl.style.left = `${p.left - ox}px`; menuEl.style.top = `${p.top - oy}px`;
+  if (menuNeedsMaterialize) { menuNeedsMaterialize = false; M.materialize(menuEl, `${p.originX}px ${p.originY}px`); }
+}
+/* The element a position:fixed menu is laid out against when it is not the window: the nearest ancestor with a
+   transform, filter, backdrop-filter or perspective -- a dialog, whose glass does exactly that. null: the window. */
+function fixedBox(el) {
+  for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) {
+    const s = getComputedStyle(a);
+    if ([s.transform, s.filter, s.backdropFilter, s.webkitBackdropFilter, s.perspective].some((v) => v && v !== 'none')) return a;
   }
-  menuEl.style.left = `${left}px`; menuEl.style.top = `${top}px`;
-  if (menuNeedsMaterialize) { menuNeedsMaterialize = false; M.materialize(menuEl, `${originX}px ${originY}px`); }
+  return null;
 }
 function closeMenu() {
   if (!menuEl) return;
