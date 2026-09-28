@@ -33,8 +33,8 @@ from fastapi.staticfiles import StaticFiles
 from . import config as config_mod
 from . import secrets_store
 from .broker.base import AccountNotOnLogin, BrokerAdapter, OrderRequest
-from .broker.tradovate import TradovateAdapter
-from .engine import Engine
+from .broker.tradovate import RENEW_EARLY_FROM, RENEW_QUIET, TradovateAdapter
+from .engine import Engine, _hhmm
 from .feed import MarketFeed
 from .marketdata import TradovateMD
 from .rules import RULES
@@ -53,6 +53,7 @@ READINESS_FROM = (9, 25)
 FEED_FROM = (8, 55)        # the price feed runs through the RTH day, weekdays
 FEED_UNTIL = (16, 10)
 FEED_RETRY_S = 30
+FEED_QUIET = (dt.time(9, 20), dt.time(9, 35))   # weekdays ET: no non-urgent feed (re)connect
 
 
 def _equity_path() -> Path:
@@ -122,6 +123,33 @@ def feed_window(now_et) -> bool:
         return False
     import datetime as dt
     return dt.time(*FEED_FROM) <= now_et.time() <= dt.time(*FEED_UNTIL)
+
+
+def feed_deferred(now_et, strategies: dict) -> bool:
+    """Weekdays 09:20-09:35 ET a price-feed (re)connect or a new bars subscription --
+    market-data requests on the login the 9:30 bot's quote may ride -- waits for 09:35,
+    unless an enabled bars strategy's accept window opens before 09:35 and is not over (it
+    needs bars now). The (re)connect at 09:35 loads the warm-up history again, so a rule
+    that starts later (nq10am: 09:59) loses nothing."""
+    t = now_et.time()
+    if now_et.weekday() >= 5 or not FEED_QUIET[0] <= t < FEED_QUIET[1]:
+        return False
+    return not any(_hhmm(s.accept_from_et) < FEED_QUIET[1] and t <= _hhmm(s.accept_until_et)
+                   for s in strategies.values())
+
+
+def feed_recycle_window(now_et) -> bool:
+    """Weekdays, the early-renewal window (09:10-09:19:30 ET, broker/tradovate.py): a feed
+    on an older md token than its login now holds is rebuilt on the new one before 09:20,
+    so it cannot die at the old token's expiry inside 09:20-09:35."""
+    return now_et.weekday() < 5 and RENEW_EARLY_FROM <= now_et.time() < RENEW_QUIET[0]
+
+
+def _rides_older_token(feed) -> bool:
+    try:
+        return bool(feed.rides_older_token())
+    except Exception:  # noqa: BLE001 — unknown is not "older"
+        return False
 
 
 def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
@@ -222,6 +250,10 @@ def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
             else:
                 checks.append({"level": "ok", "label": "Price feed",
                                "detail": "live bars flowing"})
+        elif feed_deferred(now_et, {n: enabled[n] for n in bars}):
+            checks.append({"level": "warn", "label": "Price feed",
+                           "detail": "down — reconnects at 09:35 (no market-data requests around "
+                                     "the 9:30 fire); " + ", ".join(bars) + " needs bars only later"})
         else:
             checks.append({"level": "bad", "label": "Price feed",
                            "detail": "down — " + ", ".join(bars) + " cannot see price"})
@@ -280,17 +312,32 @@ def _md_token_of(ad) -> str:
     return tok if (tok and ad.connected) else ""
 
 
+def _md_expiry_of(ad) -> float:
+    """Unix expiry of the token the adapter's md token came with; 0 when unknown."""
+    try:
+        return float(getattr(getattr(getattr(ad, "_auth", None), "tokens", None),
+                             "expires_at_unix", 0) or 0)
+    except Exception:  # noqa: BLE001
+        return 0.0
+
+
 def md_source(cfg: config_mod.AppCfg, adapters: dict):
     """Market data rides ONE login: its env's md host AND its md token — a
     token only works on its own env's host. Demo first: the proven feed, and
-    a live account then needs no md subscription of its own. Returns
+    a live account then needs no md subscription of its own. Within that env,
+    the connected login whose token expires LAST (config order on a tie): an
+    md socket dies when its token does, so the freshest carries it furthest —
+    after the early renewal (09:10-09:19:30 ET) the timer's 09:20 / 09:28:30
+    md socket starts on a token that lasts past 10:10. Returns
     (keyring_key, env, token_provider)."""
     ranked = sorted(cfg.accounts.items(), key=lambda kv: kv[1].live)
-    for aid, a in ranked:
-        ad = adapters.get(aid)
-        if a.keyring_key and ad is not None and _md_token_of(ad):
-            return (a.keyring_key, "live" if a.live else "demo",
-                    lambda ad=ad: _md_token_of(ad))
+    up = [(a, adapters[aid]) for aid, a in ranked
+          if a.keyring_key and adapters.get(aid) is not None and _md_token_of(adapters[aid])]
+    if up:
+        live = up[0][0].live
+        a, ad = max((c for c in up if c[0].live == live), key=lambda c: _md_expiry_of(c[1]))
+        return (a.keyring_key, "live" if a.live else "demo",
+                lambda ad=ad: _md_token_of(ad))
     for aid, a in ranked:            # nothing connected: that login logs in
         if a.keyring_key:
             return a.keyring_key, "live" if a.live else "demo", None
@@ -352,7 +399,16 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                 await _feed_close("window closed" if strategies else "no bars strategy enabled")
             return []
         f = feed_box["feed"]
+        if f is not None and f.connected and feed_recycle_window(now_et) \
+                and _rides_older_token(f):
+            # an early renewal rolled its login's md token: rebuild now, on the new one --
+            # riding the old one, it would die at that token's expiry, maybe in 09:20-09:35
+            await _feed_close("recycled onto the renewed market-data token before 09:20")
+            f = None
+        deferred = feed_deferred(now_et, strategies)
         if f is None or not f.connected:
+            if deferred:
+                return []      # no md (re)connect around the 9:30 fire: at 09:35, with history
             if _t.time() < feed_box["retry_at"]:
                 return []
             try:
@@ -374,7 +430,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                 engine.journal("feed_error", error=str(e)[:200], penalized=penalized)
                 return []
         for s in strategies.values():           # a strategy enabled after start
-            if (s.symbol, int(s.bar_minutes)) not in f.watching():
+            if (s.symbol, int(s.bar_minutes)) not in f.watching() and not deferred:
                 try:
                     await f.watch_bars(s.symbol, int(s.bar_minutes), int(s.warmup_bars))
                 except Exception as e:  # noqa: BLE001
