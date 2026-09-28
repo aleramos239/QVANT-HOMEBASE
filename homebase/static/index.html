@@ -877,7 +877,18 @@ function growFrom(box, from) {
 const DOUBLE_CLICK_MS = 400;
 let OVERLAY_OPENED_AT = -Infinity, OVERLAY_CLOSED_AT = -Infinity;
 const secondHalf = (e) => e.detail >= 2 && Date.now() - Math.max(OVERLAY_OPENED_AT, OVERLAY_CLOSED_AT) < DOUBLE_CLICK_MS;
-document.addEventListener("click", (e) => { if (secondHalf(e)) { e.preventDefault(); e.stopPropagation(); } }, true);
+/* A pointer click whose press began BEFORE the dialog it lands in opened is not an answer to that
+   dialog (second review): a touch hold on Kill ends with the finger lifting over the confirm that
+   the hold itself just opened, and the browser's click for that lift would cancel it -- or, over a
+   button, answer it. Keyboard clicks (detail 0) are never touched: they have no press. */
+const staleGesture = (e) => {
+  if (!(e.detail > 0) || !e.target || !e.target.closest) return false;
+  const ov = e.target.closest(".overlay.open");
+  return !!ov && LAST_PRESS_AT < (ov._openedAt || 0);
+};
+document.addEventListener("click", (e) => {
+  if (secondHalf(e) || staleGesture(e)) { e.preventDefault(); e.stopPropagation(); }
+}, true);
 // its press must not move focus either (it would pull focus off the dialog's Cancel onto the page)
 document.addEventListener("mousedown", (e) => { if (secondHalf(e)) e.preventDefault(); }, true);
 function showOverlay(id) {
@@ -886,7 +897,7 @@ function showOverlay(id) {
   OVERLAY_OPENED_AT = Date.now();
   const box = el.querySelector(".modal") || el;
   const fresh = !OVERLAYS.some(o => o.el === el);
-  if (fresh) OVERLAYS.push({el, trigger: document.activeElement});
+  if (fresh) { OVERLAYS.push({el, trigger: document.activeElement}); el._openedAt = Date.now(); }
   box.removeAttribute("inert");                              // live at once
   if (fresh) growFrom(box, openedFrom());
   el.classList.add("open");

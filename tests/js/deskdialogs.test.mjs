@@ -442,3 +442,20 @@ test("the scrim's own Cancel handler no longer special-cases double-clicks (the 
   const show = HTML.slice(HTML.indexOf('function showOverlay('), HTML.indexOf('function hideOverlay('));
   assert.match(show, /OVERLAY_OPENED_AT = Date\.now\(\);/);
 });
+
+test('a touch hold that opens the confirm cannot answer it on lift: a click whose press began before the dialog opened is dropped', () => {
+  const s = load();
+  s.doc.press(s.body);                                   // the finger goes down (on Kill) ...
+  s.clock.now += 1000;
+  s.api.confirmDlg('Kill everything?', 'body', 'Kill', true);   // ... the hold completes: the confirm opens
+  s.clock.now += 600;
+  const scrim = s.confirm, go = s.confirm.querySelector('[id=cfGo]');
+  let e = s.doc.click({ detail: 1, target: scrim });     // the lift's click lands on the scrim
+  assert.ok(e.stopped, 'not a Cancel');
+  e = s.doc.click({ detail: 1, target: go });            // or on the dialog's own button
+  assert.ok(e.stopped, 'not a Kill either');
+  assert.ok(!s.doc.click({ detail: 0, target: go }).stopped, 'the keyboard (no press) is never dropped');
+  s.doc.press(go);                                      // a real tap, after the dialog opened
+  assert.ok(!s.doc.click({ detail: 1, target: go }).stopped, 'a deliberate tap answers it');
+  s.api.cfDone(false);
+});
