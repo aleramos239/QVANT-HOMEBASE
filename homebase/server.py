@@ -677,25 +677,45 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         engine.journal("armed_toggled", armed=cfg.armed)
         return {"ok": True, "armed": cfg.armed}
 
+    kill_lock_box: dict = {}
+
+    def _kill_lock() -> asyncio.Lock:
+        """The Kill's own lock, bound to the running loop (a TestClient and a
+        bare asyncio.run each bring their own)."""
+        loop = asyncio.get_running_loop()
+        held = kill_lock_box.get("lock")
+        if held is None or held[0] is not loop:
+            held = kill_lock_box["lock"] = (loop, asyncio.Lock())
+        return held[1]
+
     @app.post("/api/kill")
     async def kill():
+        """Disarm, switch chart trading off, then cancel and flatten everything.
+
+        Two Kills never overlap (second review, 2026-09-28): flatten_today reads
+        each net position and market-sells it, so two at once on a slow broker
+        could both sell. The disarm is immediate for every Kill -- it never waits
+        -- and the broker work runs one Kill at a time: a second Kill waits for
+        the first, then runs in full (a retry after a partial failure must still
+        act)."""
         cfg.armed = False
         desk.disable(cause="kill")          # chart trading off too; never raises
         config_mod.save(cfg)
-        # every strategy's own orders first, with the proven per-order calls;
-        # then the account-wide calls sweep up anything else
-        strategies = await engine.flatten_today()
-        results = {}
-        for aid, ad in adapters.items():
-            r = {}
-            for call in ("cancel_all", "flatten_all"):
-                try:
-                    x = await getattr(ad, call)()
-                    r[call] = {"ok": x.ok, "error": x.error}
-                except Exception as e:  # noqa: BLE001 — kill always finishes
-                    r[call] = {"ok": False, "error": str(e)}
-            results[aid] = r
-        engine.journal("kill_switch", results=results, strategies=strategies)
+        async with _kill_lock():
+            # every strategy's own orders first, with the proven per-order calls;
+            # then the account-wide calls sweep up anything else
+            strategies = await engine.flatten_today()
+            results = {}
+            for aid, ad in adapters.items():
+                r = {}
+                for call in ("cancel_all", "flatten_all"):
+                    try:
+                        x = await getattr(ad, call)()
+                        r[call] = {"ok": x.ok, "error": x.error}
+                    except Exception as e:  # noqa: BLE001 — kill always finishes
+                        r[call] = {"ok": False, "error": str(e)}
+                results[aid] = r
+            engine.journal("kill_switch", results=results, strategies=strategies)
         return {"ok": True, "armed": False, "results": results,
                 "strategies": strategies}
 

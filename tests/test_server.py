@@ -310,6 +310,64 @@ def test_kill_disarms_and_clears_every_account(client):
     assert "main" in r["results"]
 
 
+def _kill_endpoint(app):
+    return next(r.endpoint for r in app.routes if getattr(r, "path", None) == "/api/kill")
+
+
+def test_two_kills_at_once_never_run_the_flatten_concurrently(client):
+    """Second review (2026-09-28): flatten_today reads each net position and market-sells it,
+    so two overlapping Kills on a slow broker could both sell. They run one after the other."""
+    import asyncio
+    engine, kill = client.app.state.engine, _kill_endpoint(client.app)
+    active, peak, trace = 0, 0, []
+
+    async def slow_flatten():
+        nonlocal active, peak
+        active += 1
+        peak = max(peak, active)
+        trace.append("in")
+        await asyncio.sleep(0.05)                      # a slow broker
+        trace.append("out")
+        active -= 1
+        return {}
+
+    engine.flatten_today = slow_flatten
+
+    async def both():
+        return await asyncio.gather(kill(), kill())
+
+    first, second = asyncio.run(both())
+    assert peak == 1
+    assert trace == ["in", "out", "in", "out"]         # the second runs in full, after the first
+    assert first["armed"] is False and second["armed"] is False
+    ad = client.adapter
+    assert ad.cancel_all_calls == 2 and ad.flatten_calls == 2
+
+
+def test_a_second_kill_disarms_at_once_even_while_the_first_is_still_flattening(client):
+    import asyncio
+    engine, cfg, kill = client.app.state.engine, client.app.state.cfg, _kill_endpoint(client.app)
+
+    async def slow_flatten():
+        await asyncio.sleep(0.05)
+        return {}
+
+    engine.flatten_today = slow_flatten
+
+    async def scenario():
+        t1 = asyncio.create_task(kill())
+        await asyncio.sleep(0.01)                      # the first Kill is inside its flatten
+        cfg.armed = True                               # re-armed meanwhile
+        t2 = asyncio.create_task(kill())
+        await asyncio.sleep(0)                         # the second starts: it disarms before it waits
+        armed_now = cfg.armed
+        await asyncio.gather(t1, t2)
+        return armed_now
+
+    assert asyncio.run(scenario()) is False
+    assert cfg.armed is False
+
+
 def _readiness(now_et_hhmm, *, armed=True, timer_stage=None, feed=None, power=None,
                shadow=False):
     import datetime as dt
