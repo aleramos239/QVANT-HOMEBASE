@@ -37,6 +37,7 @@ strategy look like a quiet zero:
 """
 from __future__ import annotations
 
+import datetime as dt
 import math
 
 from .propsim import weekday_grid as _propsim_weekday_grid
@@ -65,14 +66,36 @@ def daily_pnl(trades: list[dict]) -> list[float]:
     return [by[d] for d in sorted(by)]
 
 
-def weekday_daily_pnl(trades: list[dict], skipped: list[dict] | None = None) -> list[float]:
+def _months_grid(trades: list[dict], months) -> tuple[list[float], list[str]]:
+    """The weekday grid over every day of `months` ('YYYY-MM'), not first->last trade: a walk-forward
+    chain's no-pick / no-trade months at its ends are flat days it was on the hook for (GOTCHAS: days a
+    strategy chose to skip are flat days, not data holes). A weekend session that traded is kept."""
+    by: dict[str, float] = {}
+    for t in trades:
+        by[t["date"]] = by.get(t["date"], 0.0) + t["net"]
+    days = set(by)
+    for m in months:
+        d = dt.date.fromisoformat(m + "-01")
+        while d.strftime("%Y-%m") == m:
+            if d.weekday() < 5:
+                days.add(d.isoformat())
+            d += dt.timedelta(days=1)
+    dates = sorted(days)
+    return [by.get(d, 0.0) for d in dates], dates
+
+
+def weekday_daily_pnl(trades: list[dict], skipped: list[dict] | None = None, months=None) -> list[float]:
     """The Sharpe/Sortino day grid (Item 1): the same weekday grid
     `homebase.backtest.propsim.weekday_grid` builds for the prop-eval Monte Carlo —
     every Mon-Fri from these trades' first to last session date, 0.0 net on a
     weekday nothing traded — with every SKIPPED date (a strategy error or a
     coverage/data hole, `skipped=[{"date", "reason"}, ...]`) dropped from the grid
-    entirely: a hole in the record is not a real flat trading day."""
-    pnls, _flags, dates = _propsim_weekday_grid(trades)
+    entirely: a hole in the record is not a real flat trading day. `months` (a walk-forward
+    chain's covered months) bounds the grid by those months instead of first->last trade."""
+    if months is not None:
+        pnls, dates = _months_grid(trades, months)
+    else:
+        pnls, _flags, dates = _propsim_weekday_grid(trades)
     if not skipped:
         return pnls
     holes = {s["date"] for s in skipped}
@@ -107,11 +130,11 @@ def drawdown_pct(trades: list[dict], capital: float) -> float:
     return worst
 
 
-def column(trades: list[dict], capital: float, skipped: list[dict] | None = None) -> dict:
+def column(trades: list[dict], capital: float, skipped: list[dict] | None = None, months=None) -> dict:
     p = pack(to_ledger(trades))
     n = p["n_trades"]
     daily = daily_pnl(trades)
-    grid = weekday_daily_pnl(trades, skipped)
+    grid = weekday_daily_pnl(trades, skipped, months)
     return {
         "net_profit": p["net"], "net_profit_pct": p["net"] / capital * 100.0,
         "gross_profit": p["gross_profit"], "gross_loss": p["gross_loss"],

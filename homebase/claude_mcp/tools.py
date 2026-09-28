@@ -102,13 +102,17 @@ SPECS = [
     _spec("walkforward", "Walk-forward over a heat-map grid: select the best cell on 1 month, test it on the next "
           "`ratio` months, step monthly, stitch the out-of-sample legs. Returns stitched OOS vs in-sample stats "
           "(per month), the drop, pick stability and the per-step table. The strategy must be "
-          "session_independent. Pass walkforward_id to keep waiting on an existing one.",
+          "session_independent. Pass walkforward_id to keep waiting on an existing one. A 1:1 · 1:2 · 1:3 compare "
+          "job (started from the chart page) returns its side-by-side stitched OOS summary; pass test_months with "
+          "its walkforward_id for one scheme's full result.",
           {"strategy": {"type": "string"}, "axes": _AXES, "ratio": {"type": "integer", "enum": [1, 2, 3], "default": 3},
            "metric": {"type": "string", "enum": ["net_profit", "sharpe", "profit_factor", "t_stat"]},
            "min_trades": {"type": "integer", "minimum": 1, "maximum": 1000},
            "inputs": _INPUTS, "range": _RANGE, "costs": _COSTS, "prop_rules": _PROP,
            "max_cells": {"type": "integer", "minimum": 1, "maximum": 400}, "wait_s": _WAIT,
-           "walkforward_id": {"type": "string", "description": "Wait on this existing walk-forward."}}),
+           "walkforward_id": {"type": "string", "description": "Wait on this existing walk-forward."},
+           "test_months": {"type": "integer", "enum": [1, 2, 3],
+                           "description": "With walkforward_id: which scheme's full result (a compare job's 1:N)."}}),
     _spec("montecarlo", "Monte Carlo over a finished run's (or heat-map cell's) trades, resampled by day: "
           "max-drawdown / final-net / losing-streak percentiles, P(ruin) below the floor and P(prop pass).",
           {**_RUN_REF, "paths": {"type": "integer", "minimum": 1, "maximum": 10000},
@@ -322,6 +326,41 @@ def _q(s: str) -> str:
     return urllib.parse.quote(str(s), safe="")
 
 
+def _compare_text(wid: str, s: dict) -> str:
+    """A compare job's summary: the three stitched OUT-OF-SAMPLE results side by side (nothing in-sample)."""
+    sc, w, lb = s.get("scheme") or {}, s.get("window") or {}, s.get("looks_basis") or {}
+    sm = s.get("shared_months") or {}
+    cols = s.get("schemes") or []
+    lines = [f"Walk-forward compare {wid} · 1:1 · 1:2 · 1:3 · select by {sc.get('metric_label')} (>= {sc.get('min_trades')} "
+             f"trades) · {w.get('start')} -> {w.get('end')} · {s.get('looks')} looks ({lb.get('cells')} cells x "
+             f"{lb.get('select_months')} selection months x {lb.get('choice_penalty')} for choosing a ratio)", ""]
+    span = "–".join(sm.get("span") or []) or "none"
+    lines += [f"Shared months ({span}, {sm.get('n', 0)} months every scheme tests OOS):",
+              _table(STAT_HEAD + ["net $/month", "legs", "% legs +", "errors"],
+                     [_stat_row(c.get("ratio"), (c.get("shared") or {}).get("stats"))
+                      + [_usd(((c.get("shared") or {}).get("per_month") or {}).get("net_profit")),
+                         ((c.get("shared") or {}).get("legs") or {}).get("n", "—"),
+                         _num(((c.get("shared") or {}).get("legs") or {}).get("pct_profitable"), "{:.1f}%"),
+                         ((c.get("shared") or {}).get("stats") or {}).get("skipped_by_error", "—")] for c in cols]), ""]
+    rows = []
+    for c in cols:
+        ps = (c.get("phase_spread") or {}).get("net_profit") or {}
+        rows.append(_stat_row(c.get("ratio"), c.get("stats"))
+                    + ["–".join(c.get("span") or []) or "—", _usd((c.get("per_month") or {}).get("net_profit")),
+                       f"{_usd(ps.get('min'))}..{_usd(ps.get('max'))} (mean {_usd(ps.get('mean'))})",
+                       (c.get("legs") or {}).get("n", "—"), _num((c.get("legs") or {}).get("pct_profitable"), "{:.1f}%"),
+                       (c.get("stats") or {}).get("skipped_by_error", "—")])
+    lines += ["Full spans (each stitched chain as run; spans differ):",
+              _table(STAT_HEAD + ["OOS span", "net $/month", "net across start months", "legs", "% legs +", "errors"], rows),
+              ""]
+    warn = (s.get("phase_check") or {}).get("warning")
+    if warn:
+        lines.append(f"Phase check: {warn}.")
+    lines += [s.get("note") or "", "",
+              f"Next: walkforward(walkforward_id={wid!r}, test_months=1|2|3) for one scheme's full result"]
+    return "\n".join(lines)
+
+
 class Toolbox:
     def __init__(self, client: Client | None = None, *, sleep=time.sleep, clock=time.monotonic,
                  poll_s: float = 1.0):
@@ -475,7 +514,9 @@ class Toolbox:
 
     def t_walkforward(self, strategy=None, axes=None, ratio=3, metric=None, min_trades=None, inputs=None,
                       range=None, costs=None, prop_rules=None, max_cells=None, wait_s=None,  # noqa: A002
-                      walkforward_id=None) -> str:
+                      walkforward_id=None, test_months=None) -> str:
+        if test_months is not None and (type(test_months) is not int or test_months not in (1, 2, 3)):
+            raise ToolError("test_months: 1, 2 or 3")
         wid = walkforward_id
         if wid is None:
             body = self._grid_body(strategy, axes, inputs, range, costs, prop_rules, max_cells)
@@ -491,7 +532,10 @@ class Toolbox:
                     f"Call walkforward(walkforward_id={wid!r}) to keep waiting.")
         if st.get("status") != "done":
             raise ToolError(f"Walk-forward {wid} {st.get('status')}: {st.get('error') or ''}".strip())
-        r = self.c.get(f"/api/tester/walkforward/{_q(wid)}/result")
+        if (st.get("walkforward") or {}).get("compare") and test_months is None:
+            return _compare_text(wid, self.c.get(f"/api/tester/walkforward/{_q(wid)}/compare"))
+        q = "" if test_months is None else f"?test_months={test_months}"
+        r = self.c.get(f"/api/tester/walkforward/{_q(wid)}/result{q}")
         sch, so, si = r.get("scheme") or {}, r.get("stitched") or {}, r.get("stitched_is") or {}
         drop = r.get("drop") or {}
         pm_o, pm_i = so.get("per_month") or {}, si.get("per_month") or {}

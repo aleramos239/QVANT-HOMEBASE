@@ -931,6 +931,15 @@ a { color: inherit; }
 .tst-wf-steps th.tst-wf-group { text-align: center; color: var(--text-2); border-bottom: 1px solid var(--border); }
 .tst-wf-steps tr.tst-wf-chain td { background: color-mix(in srgb, var(--accent) 8%, transparent); }
 .tst-wf-steps td.tst-wf-changed { color: var(--warn); }
+/* the walk-forward comparison: one clickable column per scheme */
+.tst-wf-cmp { margin-bottom: 8px; }
+.tst-wf-cmp-col { display: inline-flex; align-items: center; gap: 6px; padding: 2px 6px; border-radius: 4px; color: var(--text);
+  font-size: inherit; font-weight: 600; white-space: nowrap; }
+.tst-wf-cmp-col:hover { background: var(--hover); }
+.tst-wf-cmp td.tst-wf-cmp-cell { cursor: pointer; white-space: nowrap; }
+.tst-wf-cmp tr:hover td.tst-wf-cmp-cell { background: var(--hover); }
+.tst-wf-pickbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 10px; margin-bottom: 8px;
+  border-radius: 6px; background: var(--accent-soft); font-size: 12px; color: var(--text); }
 .tst-heat-table { border-collapse: separate; border-spacing: 2px; font-size: 12px; font-variant-numeric: tabular-nums; margin-bottom: 12px; }
 .tst-heat-table th { color: var(--text-2); font-weight: 400; padding: 0 8px; white-space: nowrap; }
 .tst-heat-table th.num { text-align: right; }
@@ -1035,3 +1044,4 @@ input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-o
 .rp-foot { display: flex; align-items: center; gap: 8px; padding: 8px 12px 0; }
 .rp-foot .menu-hint { flex: 1; padding: 0; color: var(--text-2); font-size: 12px; line-height: 1.3; }
 .replay-menu .menu-err { padding: 4px 12px 0; }
+.tst-wf-cmp-toggle { margin: 8px 0; }

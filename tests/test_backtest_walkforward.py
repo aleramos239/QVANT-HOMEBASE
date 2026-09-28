@@ -190,7 +190,7 @@ def test_compute_selects_tests_and_stitches_a_two_cell_grid_over_five_months():
     assert r["stability"] == {"changes": 1, "pairs": 1, "distinct": 2, "no_pick": 0, "top": {"cell": 0, "count": 1}}
     # stitched = step 0's three test months of cell 0, exactly the report column of those trades
     leg = [wf.to_ns(t) for t in tr[0] if "2022-02" <= t["date"][:7] <= "2022-04"]
-    col = report.column(leg, 50_000.0, [])
+    col = report.column(leg, 50_000.0, [], ["2022-02", "2022-03", "2022-04"])   # the grid spans the covered months
     st = r["stitched"]
     for k in ("net_profit", "profit_factor", "win_rate", "sharpe", "max_drawdown", "trades"):
         assert st["stats"][k] == col[k], k
@@ -583,3 +583,315 @@ def test_execute_without_prop_sim_writes_a_skipped_marker(tmp_path):
     write_json(d / "request.json", {**read_json(d / "request.json"), "propsim": False})
     meta = R.execute(d, TapeStore(nq_archive(tmp_path / "ticks"), tmp_path / "cache"))
     assert "skipped" in read_json(d / "propsim.json") and meta["propsim_error"] is False
+
+
+# ---------------------------------------------------------------- compare: 1:1 · 1:2 · 1:3 from one grid run
+
+def test_a_compare_job_is_the_same_grid_and_counts_every_schemes_steps():
+    g, one = wf.validate_wf(wbody(compare=True)), wf.validate_wf(wbody(test_months=3))
+    w = g["walkforward"]
+    assert w["compare"] is True and w["test_months"] is None and w["ratios"] == [1, 2, 3]
+    assert w["n_steps_by"] == {"1": 47, "2": 46, "3": 45} and w["n_steps"] == 47       # one search: 1:1's months
+    assert w["choice_penalty"] == 3 and w["looks_per_cell"] == 141
+    assert (w["metric"], w["min_trades"], w["months"]) == ("net_profit", 5, one["walkforward"]["months"])
+    # the cells ARE a 1:N job's cells: one full-window run each, whatever the ratio
+    assert [c["req"] for c in g["cells"]] == [c["req"] for c in one["cells"]]
+    assert (g["range"], g["axes"], g["qty"], g["commission"], g["slippage_ticks"]) == \
+        (one["range"], one["axes"], one["qty"], one["commission"], one["slippage_ticks"])
+
+
+def test_compare_refuses_a_ratio_a_non_bool_and_a_window_too_short_for_1to3():
+    with pytest.raises(ValueError, match="without test_months"):
+        wf.validate_wf(wbody(compare=True, test_months=2))
+    for bad in (1, "true", None):
+        with pytest.raises(ValueError, match="compare"):
+            wf.validate_wf(wbody(compare=bad))
+    # Jan-Mar fits 1:1 and 1:2 but not 1:3: a comparison with an empty column is refused
+    with pytest.raises(ValueError, match="too short to compare"):
+        wf.validate_wf(wbody(compare=True, range={"kind": "custom", "start": "2024-01-01", "end": "2024-03-31"}))
+    g = wf.validate_wf(wbody(compare=False))
+    assert g["walkforward"]["test_months"] == 3 and not g["walkforward"].get("compare")
+
+
+def test_the_compare_scheme_sums_each_ratios_steps():
+    sc = wf.compare_scheme()
+    assert sc["compare"] is True and sc["n_steps"] == 47 and sc["runnable"] is True
+    assert sc["choice_penalty"] == 3 and sc["looks_per_cell"] == 141
+    assert sc["n_steps_by"] == {"1": 47, "2": 46, "3": 45}
+    assert wf.compare_scheme("2024-01-01", "2024-03-31")["runnable"] is False
+
+
+def _five_month_results():
+    months = ["2022-01", "2022-02", "2022-03", "2022-04", "2022-05"]
+    tr = five_month_cells()
+    cells = [{"i": i, "params": {"offset_pts": 10.0 + i}, "months": wf.month_stats(tr[i], [], 50_000.0, months)}
+             for i in (0, 1)]
+    return {n: wf.compute(cells, months, trades_of=lambda i: (tr[i], []), metric="net_profit", min_trades=5,
+                          capital=50_000.0, test_months=n) for n in (1, 2, 3)}
+
+
+def test_compare_summary_is_each_schemes_stitched_oos_and_nothing_in_sample():
+    per = _five_month_results()
+    s = wf.compare_summary(per)
+    assert s["compare"] is True and [c["ratio"] for c in s["schemes"]] == ["1:1", "1:2", "1:3"]
+    # the picks are identical across schemes (a month's pick depends on that month's grid alone): one
+    # search over 1:1's 4 selection months, x3 for choosing a ratio off the table
+    for n in (2, 3):
+        assert {r["select"]: r["cell"] for r in per[n]["steps"]}.items() <= {r["select"]: r["cell"] for r in per[1]["steps"]}.items()
+    assert s["looks"] == 2 * 4 * 3 == wf.compare_looks(2, ["2022-01", "2022-02", "2022-03", "2022-04", "2022-05"])
+    assert s["looks_basis"] == {"cells": 2, "select_months": 4, "choice_penalty": 3}
+    assert "clean out-of-sample" in s["note"] and "selection made on out-of-sample" in s["note"]
+    assert s["window"] == {"start": "2022-01", "end": "2022-05"} and s["n_cells"] == 2
+    for c in s["schemes"]:
+        r = per[c["test_months"]]
+        assert c["stats"] == r["stitched"]["stats"] and c["equity"] == r["stitched"]["equity"]
+        assert c["n_months"] == r["stitched"]["n_months"] and c["n_steps"] == r["n_steps"]
+        assert c["span"] == [r["stitched"]["months"][0], r["stitched"]["months"][-1]]
+        for k in ("net_profit", "trades", "win_rate", "profit_factor", "avg_trade", "max_drawdown", "sharpe"):
+            assert k in c["stats"], k
+    # 1:1 chain = steps 0..3 (select Jan..Apr, test Feb..May); 1:3 chain = step 0 only (test Feb-Apr)
+    one, three = s["schemes"][0], s["schemes"][2]
+    assert one["span"] == ["2022-02", "2022-05"] and three["span"] == ["2022-02", "2022-04"]
+    assert three["uncovered"] == ["2022-05"] and one["uncovered"] == []
+    assert one["legs"]["n"] == 4 and three["legs"]["n"] == 1
+    legs1 = [row for row in per[1]["steps"] if row["stitched"]]
+    assert one["legs"]["no_pick"] == sum(1 for row in legs1 if row["cell"] is None)
+    assert one["legs"]["profitable"] == sum(1 for row in legs1 if row["oos"] and row["oos"]["net_profit"] > 0)
+    assert one["legs"]["pct_profitable"] == round(one["legs"]["profitable"] / 4 * 100, 2)
+    assert three["legs"]["profitable"] == 0 and three["legs"]["pct_profitable"] == 0.0     # -480 on its one leg
+    # out-of-sample only: no in-sample figure anywhere in the comparison
+    import json as _json
+    blob = _json.dumps(s)
+    for leak in ("stitched_is", '"drop"', '"is"', '"steps": ['):      # the per-step table carries IS
+        assert leak not in blob, leak
+
+
+def test_each_column_carries_its_phase_chains_and_their_spread():
+    per = _five_month_results()
+    s = wf.compare_summary(per)
+    for c in s["schemes"]:
+        ph = per[c["test_months"]]["phases"]
+        assert c["phases"] == ph and len(ph) == c["test_months"]
+        nets = [p["net_profit"] for p in ph]
+        assert c["phase_spread"]["net_profit"] == {"min": min(nets), "max": max(nets),
+                                                    "mean": round(sum(nets) / len(nets), 4), "n": len(nets)}
+        assert c["phase_spread"]["sharpe"]["n"] == len([p for p in ph if p["sharpe"] is not None])
+    three = s["schemes"][2]["phase_spread"]["net_profit"]
+    assert (three["min"], three["max"]) == (-480, 0)                  # phases -480 / -60 / 0
+    nets = [c["stats"]["net_profit"] for c in s["schemes"]]
+    pc = s["phase_check"]
+    assert pc["gap_full"] == round(max(nets) - min(nets), 2) and pc["gap_shared"] is None     # no shared blocks here
+    assert pc["widest_phase_spread"] == 480
+    assert (pc["warning"] is not None) == (480 > pc["gap_full"])
+    assert pc["warning"] in (None, "the start month moves these more than the ratio does")
+
+
+def test_the_phase_warning_is_off_when_the_ratio_moves_more_than_the_start_month():
+    per = _five_month_results()
+    per[1] = {**per[1], "stitched": {**per[1]["stitched"], "stats": {**per[1]["stitched"]["stats"], "net_profit": 10_000.0}}}
+    assert wf.compare_summary(per)["phase_check"]["warning"] is None
+
+
+def test_the_shared_block_is_every_metric_on_the_months_all_three_chains_test():
+    months = ["2022-01", "2022-02", "2022-03", "2022-04", "2022-05"]
+    tr = five_month_cells()
+    cells = [{"i": i, "params": {"offset_pts": 10.0 + i}, "months": wf.month_stats(tr[i], [], 50_000.0, months)}
+             for i in (0, 1)]
+    kw = dict(trades_of=lambda i: (tr[i], []), metric="net_profit", min_trades=5, capital=50_000.0)
+    per, s = wf.compare_results(cells, months, **kw)
+    shared = ["2022-02", "2022-03", "2022-04"]                     # 1:3's span, inside 1:1's and 1:2's
+    assert [wf.chain_months(months, n) for n in (1, 2, 3)] == [months[1:], months[1:], shared]
+    assert s["shared_months"] == {"months": shared, "n": 3, "span": ["2022-02", "2022-04"]}
+    for n in (1, 2, 3):
+        assert per[n] == wf.compute(cells, months, test_months=n, **kw)      # the ordinary result, untouched
+        c = s["schemes"][n - 1]
+        sh = c["shared"]
+        oos = [t for t in per[n]["stitched"]["trades"] if t["date"][:7] in shared]
+        ns = sorted((wf.to_ns(t) for t in oos), key=lambda t: (t["exit_ns"], t["entry_ns"]))
+        col = report.column(ns, 50_000.0, [], shared)
+        for k in ("net_profit", "trades", "win_rate", "profit_factor", "avg_trade", "max_drawdown", "sharpe"):
+            assert sh["stats"][k] == col[k], (n, k)
+        assert sh["months"] == shared and sh["n_months"] == 3 and sh["span"] == ["2022-02", "2022-04"]
+        assert sh["per_month"]["net_profit"] == round(col["net_profit"] / 3, 2)
+        assert sh["equity"] == report.equity(ns)
+    assert s["schemes"][2]["shared"]["stats"] == s["schemes"][2]["stats"]    # 1:3's full span IS the shared one
+    assert s["schemes"][0]["shared"]["legs"]["n"] == 3 and s["schemes"][0]["legs"]["n"] == 4
+    assert s["schemes"][1]["shared"]["legs"]["n"] == 2                      # the 04-05 leg reaches in by April
+    assert s["schemes"][1]["shared"]["legs"]["partial"] == 1                # ... and counts as one step
+    assert s["schemes"][0]["shared"]["legs"]["partial"] == 0 == s["schemes"][2]["shared"]["legs"]["partial"]
+    # that partial leg is judged on its shared month (April) alone
+    leg = [row for row in per[2]["steps"] if row["stitched"]][1]
+    apr = sum(t["net"] for t in tr[leg["cell"]] if t["date"][:7] == "2022-04") if leg["cell"] is not None else 0
+    full_leg = [row for row in per[2]["steps"] if row["stitched"]]
+    first_net = full_leg[0]["oos"]["net_profit"] if full_leg[0]["cell"] is not None else 0
+    assert s["schemes"][1]["shared"]["legs"]["profitable"] == (first_net > 0) + (apr > 0)
+
+
+def test_compare_summary_refuses_schemes_that_do_not_share_one_setup():
+    per = _five_month_results()
+    per[2] = {**per[2], "scheme": {**per[2]["scheme"], "min_trades": 3}}
+    with pytest.raises(ValueError, match="do not share"):
+        wf.compare_summary(per)
+    with pytest.raises(ValueError, match="no schemes"):
+        wf.compare_summary({})
+
+
+def test_a_compare_job_runs_each_cell_once_and_equals_three_separate_walkforwards(tmp_path, fake, tester_shared):
+    release, fail, spawned = fake
+    m = WalkForwardManager(tmp_path)
+    wid = m.submit(wbody(compare=True))
+    st = m.status(wid)
+    assert st["total"] == 2 and st["walkforward"]["compare"] is True
+    release.set()
+    st = wait_wf(m, wid)
+    assert st["status"] == "done", st.get("error")
+    assert len(spawned) == 2                                   # 2 cells run once -- not 3 x 2
+    assert st["looks_added"] == 2 * 47 * 3 and grid.read_looks(tester_shared / "looks.json") == {"nq930": 282}
+    s = m.compare(wid)
+    assert [c["test_months"] for c in s["schemes"]] == [1, 2, 3] and s["looks"] == 282
+    with pytest.raises(ValueError, match="comparison"):
+        m.result(wid)                                          # a compare job has no single result
+    with pytest.raises(ValueError, match="test_months"):
+        m.result(wid, 4)
+    # each scheme IS the ordinary 1:N result a separate job produces over the same cells
+    for n in (1, 2, 3):
+        sep = m.submit(wbody(test_months=n))
+        assert wait_wf(m, sep)["status"] == "done"
+        assert m.result(wid, n) == m.result(sep) == m.result(sep, n)
+        col = s["schemes"][n - 1]
+        assert col["stats"] == m.result(sep)["stitched"]["stats"]
+        with pytest.raises(ValueError, match="not a comparison"):
+            m.compare(sep)
+        with pytest.raises(ValueError, match=f"1:{n}, not"):
+            m.result(sep, 1 + n % 3)
+    listed = {g["id"]: g for g in m.list()}                  # ids sort by second + random suffix: look up by id
+    assert listed[wid]["compare"] is True and listed[sep]["compare"] is False and listed[sep]["test_months"] == 3
+    m2 = WalkForwardManager(tmp_path)                          # a restart reads it back, counted once
+    assert m2.compare(wid) == s and m2.result(wid, 2) == m.result(wid, 2)
+    assert grid.read_looks(tester_shared / "looks.json") == {"nq930": 282 + 2 * (47 + 46 + 45)}
+
+
+def test_a_cancelled_compare_job_counts_nothing_and_has_no_results(tmp_path, fake, tester_shared):
+    release, fail, spawned = fake
+    m = WalkForwardManager(tmp_path)
+    wid = m.submit(wbody(compare=True))
+    t = time.monotonic() + 5
+    while len(spawned) < 2 and time.monotonic() < t:
+        time.sleep(0.01)
+    assert m.cancel(wid)["status"] == "cancelled"
+    release.set()
+    time.sleep(0.2)
+    assert m.status(wid)["status"] == "cancelled"
+    assert grid.read_looks(tester_shared / "looks.json") == {}
+    with pytest.raises(ValueError, match="cancelled"):
+        m.compare(wid)
+    with pytest.raises(ValueError, match="cancelled"):
+        m.result(wid, 1)
+    assert not list(m.dir(wid).glob("result*.json")) and not (m.dir(wid) / "compare.json").exists()
+
+
+def test_a_compare_job_keeps_to_the_two_slot_cap_and_the_930_pause(tmp_path, fake, tester_shared, monkeypatch):
+    from homebase.backtest import slots
+    release, fail, spawned = fake
+    monkeypatch.setitem(TRADES, 2, TRADES[0])
+    three = [{"key": "offset_pts", "values": [10, 12, 14]}, {"key": "sl_pts", "values": [5]}]
+    m = WalkForwardManager(tmp_path)
+    wid = m.submit(wbody(compare=True, axes=three))
+    t = time.monotonic() + 5
+    while len(spawned) < 2 and time.monotonic() < t:
+        time.sleep(0.01)
+    time.sleep(0.2)
+    assert len(spawned) == 2                                   # the machine-wide cap: two at once, one queued
+    assert sorted(c["status"] for c in m.status(wid)["cells"]) == ["queued", "running", "running"]
+    m.cancel(wid)
+    # inside 09:20-09:35 ET nothing starts: the job queues and says so
+    monkeypatch.setattr(slots, "et_now", lambda: dt.datetime(2026, 9, 28, 9, 25, tzinfo=slots.ET))
+    before = len(spawned)
+    wid2 = m.submit(wbody(compare=True))
+    time.sleep(0.3)
+    st = m.status(wid2)
+    assert st["status"] == "queued" and st["paused"] == "paused for the 9:30 window" and len(spawned) == before
+    m.cancel(wid2)
+    release.set()
+
+
+# ---------------------------------------------------------------- the stitched Sharpe grid spans the covered months
+
+def test_the_stitched_sharpe_grid_spans_the_chains_months_not_first_to_last_trade():
+    """GOTCHAS: a flat no-pick month at the end of a chain is flat days, not outside the record.
+    Changes an existing 1:N Sharpe slightly -- only where the chain's ends were flat."""
+    months = ["2022-01", "2022-02", "2022-03", "2022-04"]
+    # one cell: wins January (the selection), trades Feb 1-4 (+, -, +, +) and nothing in March
+    tr = trades("2022-01", [100] * 5) + trades("2022-02", [50, -20, 40, 30])
+    cells = [{"i": 0, "params": {}, "months": wf.month_stats(tr, [], 50_000.0, months)}]
+    r = wf.compute(cells, months, trades_of=lambda i: (tr, []), metric="net_profit", min_trades=5,
+                   capital=50_000.0, test_months=2)
+    assert r["stitched"]["months"] == ["2022-02", "2022-03"]
+    leg = [wf.to_ns(t) for t in tr if t["date"][:7] == "2022-02"]
+    bounded = report.column(leg, 50_000.0, [], ["2022-02", "2022-03"])
+    first_to_last = report.column(leg, 50_000.0, [])
+    assert r["stitched"]["stats"]["sharpe"] == bounded["sharpe"]
+    assert bounded["sharpe"] < first_to_last["sharpe"]          # 41 flat weekdays more, same net
+    grid = report.weekday_daily_pnl(leg, [], ["2022-02", "2022-03"])
+    assert len(grid) == 20 + 23 and sum(grid) == 100              # Feb + Mar 2022 weekdays
+    assert len(report.weekday_daily_pnl(leg, [])) == 4            # the old first->last-trade grid
+    # a hole is still dropped from the bounded grid
+    assert len(report.weekday_daily_pnl(leg, [{"date": "2022-03-01", "reason": "no data"}], ["2022-02", "2022-03"])) == 42
+    # the phase chains use their own covered months too
+    assert r["phases"][0]["sharpe"] == r["stitched"]["stats"]["sharpe"]
+
+
+def test_each_column_counts_its_strategy_error_sessions():
+    months = ["2022-01", "2022-02", "2022-03", "2022-04", "2022-05"]
+    tr = five_month_cells()
+    cells = [{"i": i, "params": {"offset_pts": 10.0 + i}, "months": wf.month_stats(tr[i], [], 50_000.0, months)}
+             for i in (0, 1)]
+    err = [{"date": "2022-03-15", "reason": "strategy error: boom"}]
+    per, s = wf.compare_results(cells, months, trades_of=lambda i: (tr[i], err), metric="net_profit", min_trades=5,
+                                capital=50_000.0)
+    for c in s["schemes"]:
+        assert c["stats"]["skipped_by_error"] == per[c["test_months"]]["stitched"]["stats"]["skipped_by_error"] == 1
+        assert c["shared"]["stats"]["skipped_by_error"] == 1                # March is a shared month
+
+
+def test_the_phase_warning_fires_on_either_gap_and_quotes_the_shared_one_first():
+    pc = wf._phase_check
+    assert pc(480.0, 100.0, 900.0) == {"widest_phase_spread": 480.0, "gap_shared": 100.0, "gap_full": 900.0,
+                                       "warning": wf.PHASE_WARNING, "gap_quoted": "shared", "gap_quoted_value": 100.0}
+    w = pc(480.0, 900.0, 100.0)                          # only the full-span gap is narrower: still warned
+    assert w["warning"] and (w["gap_quoted"], w["gap_quoted_value"]) == ("full", 100.0)
+    assert pc(480.0, 100.0, 50.0)["gap_quoted"] == "shared"               # both: the default view's gap
+    assert pc(480.0, 900.0, 900.0)["warning"] is None
+    assert pc(480.0, None, 100.0)["gap_quoted"] == "full"
+    # end to end: the shared gap is computed from the shared blocks
+    months = ["2022-01", "2022-02", "2022-03", "2022-04", "2022-05"]
+    tr = five_month_cells()
+    cells = [{"i": i, "params": {"offset_pts": 10.0 + i}, "months": wf.month_stats(tr[i], [], 50_000.0, months)}
+             for i in (0, 1)]
+    _, s = wf.compare_results(cells, months, trades_of=lambda i: (tr[i], []), metric="net_profit", min_trades=5,
+                              capital=50_000.0)
+    sh = [c["shared"]["stats"]["net_profit"] for c in s["schemes"]]
+    assert s["phase_check"]["gap_shared"] == round(max(sh) - min(sh), 2)
+
+
+def test_the_selection_side_sharpe_grid_is_only_the_non_contiguous_selection_months_at_1to3():
+    """At 1:3 the chain's selection months are m0, m3, m6 ... -- not contiguous. The IS Sharpe grid is those
+    months' weekdays only; the old first->last-trade grid also counted the TEST months between them as flat
+    in-sample days, which pulled the IS Sharpe down and so understated the IS -> OOS Sharpe drop."""
+    months = [f"2022-{m:02d}" for m in range(1, 8)]                  # Jan..Jul: 1:3 steps 0..3, chain 0 and 3
+    tr = []
+    for m in months:
+        tr += trades(m, [100, -40, 80, 60, 30])                      # the one cell trades every month
+    cells = [{"i": 0, "params": {}, "months": wf.month_stats(tr, [], 50_000.0, months)}]
+    r = wf.compute(cells, months, trades_of=lambda i: (tr, []), metric="net_profit", min_trades=5,
+                   capital=50_000.0, test_months=3)
+    assert r["stitched_is"]["months"] == ["2022-01", "2022-04"]      # non-contiguous
+    is_tr = sorted((wf.to_ns(t) for t in tr if t["date"][:7] in ("2022-01", "2022-04")),
+                   key=lambda t: (t["exit_ns"], t["entry_ns"]))
+    grid = report.weekday_daily_pnl(is_tr, [], ["2022-01", "2022-04"])
+    assert len(grid) == 21 + 21                                      # Jan + Apr 2022 weekdays, nothing between
+    new = report.column(is_tr, 50_000.0, [], ["2022-01", "2022-04"])["sharpe"]
+    old = report.column(is_tr, 50_000.0, [])["sharpe"]               # Jan 3 -> Apr 7 incl. Feb/Mar as flat days
+    assert r["stitched_is"]["stats"]["sharpe"] == new
+    assert new > old                                                 # the old grid understated the IS Sharpe
+    assert r["drop"]["sharpe"] == round(r["stitched"]["stats"]["sharpe"] - new, 4)
