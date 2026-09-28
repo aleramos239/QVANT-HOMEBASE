@@ -52,6 +52,7 @@ const FIELDS = [
   bool('evHigh', true), bool('evMedium', true), bool('evLow', false), bool('evHoliday', false),
   { key: 'evCountries', type: 'list', def: Object.freeze(['USD']) },   // currency codes, upper-case, sorted
   bool('evLines', true),
+  choice('newsOnChart', 'bursts', ['all', 'bursts', 'off']),   // news bubbles: every headline + bursts / big moves with news / none
 ];
 const DEFAULTS = Object.freeze(Object.fromEntries(FIELDS.map((f) => [f.key, f.def])));
 /* The colours that follow the theme while never changed, and the HBCell.palette() key each takes. */

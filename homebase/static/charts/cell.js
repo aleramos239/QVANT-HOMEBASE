@@ -242,6 +242,7 @@ class Cell {
     this.syncEth();
     if (this.cd) this.cd.redraw();
     this.redrawEvents();
+    for (const o of this.ov) { if (o && o.onSettings) { try { o.onSettings(); } catch (e) { console.error(e); } } }
     this.legendRows();
     this.legend(this.hover);
   }

@@ -94,6 +94,10 @@ const TABS = [
       { label: 'Currencies', chips: 'evCountries' },
       { label: 'Vertical lines for high impact', check: 'evLines' },
     ]],
+    ['NEWS', [
+      { label: 'News on chart', select: { key: 'newsOnChart', choices: [
+        ['bursts', 'Big moves with news only'], ['all', 'All headlines and moves'], ['off', 'Off']] } },
+    ]],
   ] },
   { id: 'trading', label: 'Trading', icon: 'bot', sections: [
     // the chart's ACCOUNTS are what makes it trade-ready at all, so they come first

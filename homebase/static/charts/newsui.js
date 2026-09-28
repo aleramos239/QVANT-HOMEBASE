@@ -209,6 +209,7 @@ class Overlay {
   }
 
   onBars() { this.render(); }
+  onSettings() { this.render(); }   // the chart's "News on chart" setting changed (cell.applySettings)
 
   /* The loaded-bar range this chart can actually place a marker in (tradelines.js's own convention for its
      bot/paper markers) -- not the visible viewport, but bounded well short of "every headline ever stored". */
@@ -229,9 +230,10 @@ class Overlay {
       return;
     }
     const filtered = N.filterItems(store.items, store.filter);
-    const hlist = N.headlineMarkers(filtered, { fromMs: r.fromMs, toMs: r.toMs, nowMs: Date.now() });
+    const show = N.chartNews(this.cell.R && this.cell.R.newsOnChart, store.bursts, store.items);   // ⚙ → Events → News
+    const hlist = show.headlines ? N.headlineMarkers(filtered, { fromMs: r.fromMs, toMs: r.toMs, nowMs: Date.now() }) : [];
     const root = (this.cell.shown || this.cell.cfg).root;
-    const blist = N.burstMarkers(store.bursts, { root, fromMs: r.fromMs, toMs: r.toMs }, store.items);
+    const blist = N.burstMarkers(show.bursts, { root, fromMs: r.fromMs, toMs: r.toMs }, store.items);
     const hSig = JSON.stringify(hlist.map((m) => [m.id, m.color]));
     if (hSig !== this.newsSig) { this.newsSig = hSig; this.cell.setExtraMarkers('news', hlist.map(({ tip, ...m }) => m)); }
     const bSig = JSON.stringify(blist.map((m) => [m.id, m.color]));
