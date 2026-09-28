@@ -1903,6 +1903,8 @@ function renderWfCompare(container, cmp) {
   container.appendChild(wfCompareTableEl(cmp, 'shared'));
   const phase = X.wfComparePhaseLine(cmp);
   if (phase) container.appendChild(page.mk('div', 'tst-err', phase));
+  const errs = X.wfCompareErrLine(cmp);
+  if (errs) container.appendChild(page.mk('div', 'tst-err', errs));
   container.appendChild(page.mk('div', 'tst-kv-line', cmp.note || ''));
   const chartWrap = page.mk('div', 'tst-chart');
   container.appendChild(chartWrap);

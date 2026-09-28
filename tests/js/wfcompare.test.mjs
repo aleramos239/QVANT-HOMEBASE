@@ -71,7 +71,7 @@ test('wfCompareTable: one column per scheme, the dollar metrics of the stitched 
   assert.deepEqual(v.rows.map((r) => r.label), ['Out-of-sample span', 'Net $', 'Net across start months (min – max · mean)',
     'Net / month', 'Trades', 'Win rate', 'Profit factor', 'Avg trade $', 'Max drawdown $', 'Sharpe',
     'Sharpe across start months (min – max · mean)', 'Steps (stitched legs)', '% of steps profitable',
-    'Selection months (first → last)', 'Not tested out-of-sample']);
+    'Selection months (first → last)', 'Not tested out-of-sample', 'Strategy-error sessions']);
   const row = (k) => v.rows.find((r) => r.key === k).cells;
   assert.deepEqual(row('span').map((c) => c.text), ['2021-02 → 2024-12 · 47 months', '2021-02 → 2024-12 · 46 months',
     '2021-02 → 2024-10 · 44 months']);
@@ -140,4 +140,13 @@ test('the shared-months view: identical months in every column, full-span-only r
   // a column with no shared block reads as dashes, never zeros
   const bare = { ...CMP, schemes: [{ ...col(1), shared: null }] };
   assert.equal(X.wfCompareTable(bare, 'shared').rows.find((r) => r.key === 'net').cells[0].text, '—');
+});
+
+test('strategy-error sessions show per column, and a line names the schemes that have any', () => {
+  const bad = { ...CMP, schemes: [col(1), col(2, { stats: { ...col(2).stats, skipped_by_error: 3 } }), col(3)] };
+  const cells = X.wfCompareTable(bad).rows.find((r) => r.key === 'errors').cells;
+  assert.deepEqual(cells.map((c) => [c.text, c.tone]), [['0', ''], ['3', 'down'], ['0', '']]);
+  assert.equal(X.wfCompareErrLine(bad), 'Strategy-error sessions inside the stitched chains: 1:2 3');
+  assert.equal(X.wfCompareErrLine(CMP), '');
+  assert.ok(X.wfCompareTable(bad, 'shared').rows.some((r) => r.key === 'errors'));
 });

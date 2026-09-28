@@ -831,3 +831,16 @@ def test_the_stitched_sharpe_grid_spans_the_chains_months_not_first_to_last_trad
     assert len(report.weekday_daily_pnl(leg, [{"date": "2022-03-01", "reason": "no data"}], ["2022-02", "2022-03"])) == 42
     # the phase chains use their own covered months too
     assert r["phases"][0]["sharpe"] == r["stitched"]["stats"]["sharpe"]
+
+
+def test_each_column_counts_its_strategy_error_sessions():
+    months = ["2022-01", "2022-02", "2022-03", "2022-04", "2022-05"]
+    tr = five_month_cells()
+    cells = [{"i": i, "params": {"offset_pts": 10.0 + i}, "months": wf.month_stats(tr[i], [], 50_000.0, months)}
+             for i in (0, 1)]
+    err = [{"date": "2022-03-15", "reason": "strategy error: boom"}]
+    per, s = wf.compare_results(cells, months, trades_of=lambda i: (tr[i], err), metric="net_profit", min_trades=5,
+                                capital=50_000.0)
+    for c in s["schemes"]:
+        assert c["stats"]["skipped_by_error"] == per[c["test_months"]]["stitched"]["stats"]["skipped_by_error"] == 1
+        assert c["shared"]["stats"]["skipped_by_error"] == 1                # March is a shared month

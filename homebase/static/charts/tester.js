@@ -737,7 +737,8 @@ const WF_COMPARE_ROWS = [
   ['net_month', 'Net / month'], ['trades', 'Trades'],
   ['win_rate', 'Win rate'], ['pf', 'Profit factor'], ['avg_trade', 'Avg trade $'], ['max_dd', 'Max drawdown $'],
   ['sharpe', 'Sharpe'], ['sharpe_phases', 'Sharpe across start months (min – max · mean)'], ['legs', 'Steps (stitched legs)'], ['legs_pct', '% of steps profitable'],
-  ['selects', 'Selection months (first → last)'], ['uncovered', 'Not tested out-of-sample']];
+  ['selects', 'Selection months (first → last)'], ['uncovered', 'Not tested out-of-sample'],
+  ['errors', 'Strategy-error sessions']];
 /* A phase spread {min, max, mean, n}: the chains started 0 .. N-1 months later (1:1 has only one). */
 function phaseSpreadText(sp, fmt, nPhases) {
   if (!sp) return '—';
@@ -761,6 +762,7 @@ function wfCompareCell(key, c) {
     case 'legs': return { text: L.n == null ? '—' : `${int(L.n)}${L.no_pick ? ` (${int(L.no_pick)} no pick)` : ''}`, tone: '' };
     case 'legs_pct': return { text: L.pct_profitable == null ? '—' : `${rate(L.pct_profitable)} (${int(L.profitable)} of ${int(L.n)})`, tone: '' };
     case 'selects': return { text: L.first_select ? span(L.first_select, L.last_select) : '—', tone: '' };
+    case 'errors': return { text: s.skipped_by_error == null ? '—' : int(s.skipped_by_error), tone: s.skipped_by_error > 0 ? 'down' : '' };
     case 'uncovered': return { text: (c.uncovered || []).length ? c.uncovered.join(', ') : '—', tone: '' };
     default: return { text: '—', tone: '' };
   }
@@ -777,6 +779,13 @@ function wfCompareTable(cmp, view = 'full') {
     title: `Walk-forward ${c.ratio}: select on 1 month, hold the pick for ${c.test_months} — click to open its full result` })),
   rows: WF_COMPARE_ROWS.filter(([key]) => !shared || !WF_FULL_ONLY.has(key))
     .map(([key, label]) => ({ key, label, cells: cols.map((c) => wfCompareCell(key, c)) })) };
+}
+/* Like the 1:N overview's line: strategy-error sessions inside the stitched chains, per scheme. */
+function wfCompareErrLine(cmp) {
+  const bad = ((cmp && cmp.schemes) || []).filter((c) => (c.stats || {}).skipped_by_error > 0);
+  if (!bad.length) return '';
+  return 'Strategy-error sessions inside the stitched chains: '
+    + bad.map((c) => `${c.ratio} ${int(c.stats.skipped_by_error)}`).join(' · ');
 }
 /* The shared block's caption: which months every column covers. */
 function wfSharedCaption(cmp) {
@@ -808,7 +817,7 @@ function strategyLabel(s) {
 const api = { strategyLabel, DEFAULT_MAX_CELLS, HARD_MAX_CELLS, GRID_WORKERS, maxCellsError, cellsWarning, stepValues, axisValues,
   parseValues, valueLabel, gridAxes, gridCount, gridProblems, gridBody, looksText, looksLine, heatPanels, heatMaxAbs,
   WF_METRICS, WF_RATIOS, WF_COMPARE, WF_MODES, isWfCompare, wfModeOf, wfModeLabel, WF_COMPARE_ROWS, wfCompareColors,
-  wfCompareCell, wfCompareTable, wfCompareHead, wfComparePhaseLine, wfSharedCaption, WF_STEP_HEADERS, WF_STEP_GROUPS, WF_SIDE_LABELS, WF_NEEDS_GRID, wfBody, wfProblems, wfLooksText,
+  wfCompareCell, wfCompareTable, wfCompareHead, wfComparePhaseLine, wfSharedCaption, wfCompareErrLine, WF_STEP_HEADERS, WF_STEP_GROUPS, WF_SIDE_LABELS, WF_NEEDS_GRID, wfBody, wfProblems, wfLooksText,
   etaText, wfProgress, wfTiles, wfDrop, wfUncovered, wfStepRows, wfStability, wfPhases, wfScheme,
   heatLevel, cellView, gridProgress, RANGES, DEFAULT_RULES, defaults, restore, fromRun, rangeFromRun, isWalkforward,
   today, rangeSpec, rangeDates, rangeBody, parseDate, dateError, prettyDate, pillLabel, monthGrid, shiftMonth,
