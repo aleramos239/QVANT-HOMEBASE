@@ -963,13 +963,23 @@ function needsConfirm(kind, turningOn, opts) {
   return AV && typeof AV.switchNeedsConfirm === "function"
     ? AV.switchNeedsConfirm(kind, turningOn, opts) : !!turningOn;
 }
+/* A double-click on a switch is one flip, never two (review): a second click on the same switch
+   within DOUBLE_CLICK_MS is ignored -- so a double-clicked ON strategy turns OFF once (OFF never
+   asks) and never pops a "Turn ON?" right after, and a double-clicked OFF one asks once. */
+const SWITCH_AT = {};
+function switchBounced(key) {
+  const now = Date.now(), last = SWITCH_AT[key] === undefined ? -Infinity : SWITCH_AT[key];
+  SWITCH_AT[key] = now;
+  return now - last < DOUBLE_CLICK_MS;
+}
 function cfDone(v) {
   hideOverlay("confirmOverlay");
   const cb = CONFIRM_CB; CONFIRM_CB = null;
   if (cb) cb(v);
 }
 $("#confirmOverlay").addEventListener("click", (e) => {
-  if (e.target === e.currentTarget) cfDone(false);
+  // a double-click's second half (detail 2) on the scrim is not a "no" to the dialog its first half opened
+  if (e.target === e.currentTarget && !(e.detail >= 2)) cfDone(false);
 });
 
 /* ---- master controls (top bar): ARMED/DISARMED, Arm/Disarm, Kill everything ----
@@ -2158,6 +2168,7 @@ function renderChartTrading(ct) {
   }
 }
 async function setChartTrading(enabled) {
+  if (switchBounced("chartTrading")) return;         // a double-click is one flip
   const ct = (ST && ST.chart_trading) || {};
   if (needsConfirm("chartTrading", enabled) && !await confirmDlg("Turn chart trading ON?",
       `The chart page can then place REAL orders on the accounts you tick there — at most ${ct.max_order_qty} per order and ${ct.max_position_qty} per position. The 9:30 bot's symbol stays locked 09:20–09:35 ET on its accounts. The desk's Kill switches it off.`,
@@ -2470,6 +2481,7 @@ async function reconnectAcct(id) {
    Flatten does that). A SHADOW strategy never places an order, so switching it on asks nothing
    either. Same POST /api/strategy either way. */
 async function toggleStrat(name, enabled) {
+  if (switchBounced("strategy:" + name)) return;    // a double-click is one flip
   const c = ((((ST && ST.strategies) || {})[name]) || {}).cfg || {};
   if (needsConfirm("strategy", enabled, {shadow: !!c.shadow}) && !await confirmDlg(
       "Turn ON " + name.toUpperCase() + "?",

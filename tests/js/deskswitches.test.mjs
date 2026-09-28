@@ -50,19 +50,21 @@ test("the page's needsConfirm uses that policy, and asks whenever a switch turns
   assert.equal(stale.nc('strategy', false), false);
 });
 
-function load({ confirm = true, shadow = false } = {}) {
+const BOUNCE = HTML.slice(HTML.indexOf('const SWITCH_AT = {};'), HTML.indexOf('function cfDone('));
+function load({ confirm = true, shadow = false, enabled = false } = {}) {
   const posts = [], toasts = [], confirms = [], refreshes = [];
+  const clock = { now: 1_000_000 };
   const ctx = vm.createContext({
-    console,
-    ST: { strategies: { nq930: { cfg: { enabled: false, shadow } } } },
+    console, Date: { now: () => clock.now }, DOUBLE_CLICK_MS: 400,
+    ST: { strategies: { nq930: { cfg: { enabled, shadow } }, ym930: { cfg: { enabled, shadow } } } },
     needsConfirm: (k, on, o) => AV.switchNeedsConfirm(k, on, o),
     confirmDlg: async (title, body, action, destructive) => { confirms.push({ title, body, action, destructive }); return confirm; },
     post: async (url, body) => { posts.push({ url, body }); return { ok: true }; },
     toast: (t) => toasts.push(t),
     refresh: () => refreshes.push(true),
   });
-  vm.runInContext(STRAT + '\nglobalThis.api = { toggleStrat, flattenStrat };', ctx);
-  return { api: ctx.api, posts, toasts, confirms, refreshes };
+  vm.runInContext(BOUNCE + STRAT + '\nglobalThis.api = { toggleStrat, flattenStrat };', ctx);
+  return { api: ctx.api, posts, toasts, confirms, refreshes, clock };
 }
 
 test('a strategy switched ON asks first, then the same POST /api/strategy', async () => {
@@ -110,4 +112,32 @@ test("Manage algos' Show-on-home-page switch never asks, either way", () => {
   assert.doesNotMatch(fn, /confirmDlg\(/);
   assert.equal(AV.switchNeedsConfirm('visibility', true), false);
   assert.equal(AV.switchNeedsConfirm('visibility', false), false);
+});
+
+test('a double-click on an ON switch is one flip: OFF once, then no "Turn ON?" from the second click', async () => {
+  const s = load({ enabled: true });
+  await s.api.toggleStrat('nq930', false);          // click 1: OFF, no prompt (the safe direction)
+  s.clock.now += 150;
+  await s.api.toggleStrat('nq930', true);           // click 2 lands on the re-painted, now-OFF switch
+  assert.deepEqual(plain(s.posts), [{ url: '/api/strategy', body: { strategy: 'nq930', enabled: false } }]);
+  assert.equal(s.confirms.length, 0, 'the second click never opens a "Turn ON?"');
+  s.clock.now += 400;
+  await s.api.toggleStrat('nq930', true);           // a deliberate click later works as usual
+  assert.equal(s.confirms.length, 1);
+  assert.equal(s.confirms[0].title, 'Turn ON NQ930?');
+});
+
+test('the double-click guard is per switch: another strategy\'s switch is never swallowed', async () => {
+  const s = load({ enabled: true });
+  await s.api.toggleStrat('nq930', false);
+  s.clock.now += 100;
+  await s.api.toggleStrat('ym930', false);
+  assert.equal(s.posts.length, 2);
+});
+
+test("a double-click's second half on the confirm's scrim is not a Cancel; the chart-trading switch has the guard too", () => {
+  const scrim = HTML.slice(HTML.indexOf('$("#confirmOverlay").addEventListener("click"'), HTML.indexOf('/* ---- master controls (top bar)'));
+  assert.match(scrim, /if \(e\.target === e\.currentTarget && !\(e\.detail >= 2\)\) cfDone\(false\);/);
+  const ct = HTML.slice(HTML.indexOf('async function setChartTrading('), HTML.indexOf('const MD_CHOICES'));
+  assert.match(ct, /if \(switchBounced\("chartTrading"\)\) return;/);
 });

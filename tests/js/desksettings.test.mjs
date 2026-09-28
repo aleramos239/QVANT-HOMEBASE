@@ -98,6 +98,7 @@ function load({ armed = false, confirm = true, demo = false, fetchAnswers = {}, 
     toast: (t) => toasts.push(t),
     confirmDlg: async (title, body, action, destructive) => { confirms.push({ title, body, action, destructive }); return confirm; },
     needsConfirm: (kind, on, opts) => AV.switchNeedsConfirm(kind, on, opts),
+    switchBounced: () => false,   // the double-click guard (tested in deskswitches)
     showOverlay: (id) => el(id).classList.add('open'),      // the page's one open/close path (W7)
     hideOverlay: (id) => el(id).classList.remove('open'),
     post: async (url, body) => { posts.push({ url, body }); return { ok: true }; },
