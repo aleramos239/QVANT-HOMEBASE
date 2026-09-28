@@ -13,9 +13,10 @@ Fill law -- homebase/backtest/engine.py, line for line (cited where each rule is
       1. against the live Level 2 book (depth.py, injected as `book_of`): walked from the touch -- a buy up the
          offers, a sell down the bids -- level by level until the quantity is taken, at the quantity-weighted
          average of the levels taken (the fill records each level: `parts`) -- when that book is fresh and sane and
-         shows the whole quantity;
-      2. else at the trade-row quote (server.py's Quotes, injected as `quote_of`): a buy at its ask, a sell at its
-         bid -- only when the quantity is at most the size it displayed there;
+         no older than the quote; shows less than the whole quantity: the next print (never the older quote);
+      2. else at the trade-row quote (server.py's Quotes, injected as `quote_of`) -- only when the book is unusable or
+         older, and the quantity is at most the size it displayed at its touch: a buy at max(its ask, that row's
+         trade), a sell at min(its bid, that trade) (conservative);
       3. else the engine's market rule below: the next print, +1 tick.
     Fresh: its time at most QUOTE_FILL_MAX_AGE_S behind this book's clock and at most QUOTE_FILL_MAX_FUTURE_S ahead
     of it (more: the clock is off -- fail closed). Sane: bid < ask, every price used on the tick grid, the touch at
@@ -293,7 +294,7 @@ class Planner:
                  quote_of: Optional[Callable[[str], Optional[dict]]] = None):
         # read-only, each None when there is nothing (neither: print fills only)
         self.book_of = book_of                       # root -> {bids, offers: [[price, size], ...] best first, ts_ms}
-        self.quote_of = quote_of                     # root -> {bid, ask, bid_size, ask_size, ts_ms}
+        self.quote_of = quote_of                     # root -> {bid, ask, trade, bid_size, ask_size, ts_ms}
         self._taken: dict[str, tuple] = {}           # root -> (its snapshot's ts_ms, {(side, tick index): qty taken})
         self._send: Optional[dict] = None            # during a send: (root, side) -> [src, parts left, ts_ms] | None
 
@@ -424,12 +425,14 @@ class Planner:
 
     @staticmethod
     def _quote_px(q: dict, side: int, qty: int, tick: float) -> Optional[float]:
-        """A usable quote's touch: a buy's ask, a sell's bid -- or None when qty is more than the size it displayed at
-        that touch (unknown size: None)."""
+        """A usable quote's price, conservatively: a buy max(ask, the row's trade), a sell min(bid, that trade) -- a
+        row whose trade went through its own touch has likely moved it -- or None when qty is more than the size it
+        displayed at that touch, or the size or the trade is unknown or not a price on the grid (fail closed)."""
         size = q.get("ask_size") if side > 0 else q.get("bid_size")
-        if not _finite(size) or qty > size:
+        trade = q.get("trade")
+        if not _finite(size) or qty > size or not _finite(trade) or trade <= 0 or tick_cmp(trade, to_tick(trade, tick), tick):
             return None
-        return to_tick(q["ask"] if side > 0 else q["bid"], tick)
+        return to_tick(max(q["ask"], trade) if side > 0 else min(q["bid"], trade), tick)
 
 
 class PaperBook:

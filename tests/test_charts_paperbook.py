@@ -1017,8 +1017,9 @@ NOW_MS = T0 // 1_000_000                       # the fixture book's clock
 
 
 def q_(bid=99.75, ask=100.0, age_ms=500, now_ms=NOW_MS, **kw):
-    """A trade-row quote as Quotes.quote_of gives it: age_ms before the book's clock, 5 lots shown each side."""
-    return {"bid": bid, "ask": ask, "bid_size": 5, "ask_size": 5, "ts_ms": now_ms - age_ms, **kw}
+    """A trade-row quote as Quotes.quote_of gives it: age_ms before the book's clock, 5 lots shown each side, its row's
+    trade at the ask (neutral for both sides)."""
+    return {"bid": bid, "ask": ask, "trade": ask, "bid_size": 5, "ask_size": 5, "ts_ms": now_ms - age_ms, **kw}
 
 
 def l2(bids=((99.75, 2), (99.5, 1), (99.25, 3)), offers=((100.0, 1), (100.25, 1), (100.5, 5)), age_ms=300,
@@ -1118,6 +1119,8 @@ def test_a_market_buy_fills_at_once_at_the_ask_and_a_sell_at_the_bid_with_no_sli
     ("no time", {k: v for k, v in q_().items() if k != "ts_ms"}),
     ("no size at the touch", q_(ask_size=None)),
     ("less size at the touch than the order", q_(ask_size=1)),
+    ("no trade price", q_(trade=None)),
+    ("a trade off the grid", q_(trade=100.1)),
 ])
 def test_with_no_book_an_unusable_quote_leaves_a_market_order_to_the_next_print(why, quote):
     b, _ = live(quote=quote)
@@ -1128,12 +1131,21 @@ def test_with_no_book_an_unusable_quote_leaves_a_market_order_to_the_next_print(
     assert fills(b) == [("Buy", 2, 100.75)] and b.fills[-1]["src"] == "print"   # the engine's law: print + 1 tick
 
 
+def test_the_quote_prices_conservatively_against_its_rows_own_trade():
+    """A row whose trade went through its own touch has likely moved it: a buy pays max(ask, trade), a sell gets
+    min(bid, trade); a trade inside the spread never improves either."""
+    for side, trade, want in (("Buy", 100.5, 100.5), ("Buy", 99.75, 100.0), ("Sell", 99.5, 99.5), ("Sell", 100.0, 99.75)):
+        b, _ = live(quote=q_(bid=99.75, ask=100.0, trade=trade))
+        order(b, side, "Market", qty=2)
+        assert (b.fills[-1]["src"], b.fills[-1]["price"]) == ("quote", want), (side, trade)
+
+
 def test_the_quote_limits_are_inclusive_and_the_grid_check_is_epsilon_tolerant():
     for quote in (q_(age_ms=2000), q_(age_ms=-1000), q_(bid=95.0), q_(ask_size=2)):   # 2 s old, 1 s ahead, 20 ticks
         b, _ = live(quote=quote)                                                      # wide, the order's size shown
         order(b, "Buy", "Market", qty=2)
         assert fills(b) == [("Buy", 2, 100.0)] and b.fills[-1]["src"] == "quote", quote
-    c, _ = live(quote={**q_(), "bid": 64.01, "ask": 64.01 + 0.01}, root="CL", px=64.02)
+    c, _ = live(quote=q_(bid=64.01, ask=64.01 + 0.01), root="CL", px=64.02)
     order(c, "Buy", "Market", root="CL")                             # 64.02000000000001 is on the grid
     assert fills(c) == [("Buy", 1, 64.02)]
 

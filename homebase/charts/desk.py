@@ -133,7 +133,7 @@ class Quotes:
 
     def __init__(self):
         self._q: dict[str, dict] = {}
-        self._at: dict[str, dict] = {}       # root -> {ts_ms, bid_size, ask_size} of the row that set its bid/ask
+        self._at: dict[str, dict] = {}       # root -> {ts_ms, trade, bid_size, ask_size} of the row that set its bid/ask
         self._dirty: set[str] = set()
 
     def note(self, root: str, rows: list) -> None:
@@ -144,17 +144,17 @@ class Quotes:
             bid, ask = _f(r.get("bid")), _f(r.get("ask"))
             if bid is not None and ask is not None and bid <= ask:
                 q["bid"], q["ask"] = bid, ask
-                self._at[root] = {"ts_ms": int(r["ts_ms"]), "bid_size": _f(r.get("bid_size")),
+                self._at[root] = {"ts_ms": int(r["ts_ms"]), "trade": float(r["price"]), "bid_size": _f(r.get("bid_size")),
                                   "ask_size": _f(r.get("ask_size"))}
             q["last"], q["ts_ms"] = float(r["price"]), int(r["ts_ms"])
         self._q[root] = q
         self._dirty.add(root)
 
     def quote_of(self, root: str) -> Optional[dict]:
-        """{bid, ask, bid_size, ask_size, ts_ms} for the paper book's market fills (paperbook.py), or None before any
-        sane bid/ask. All from the row that SET that bid/ask -- ts_ms is its time, not the last trade's: a later row
-        with no quote keeps the old pair, which is only as fresh as its own row. A size the row lacked is None.
-        Read-only: snapshot() and drain() are unchanged."""
+        """{bid, ask, trade, bid_size, ask_size, ts_ms} for the paper book's market fills (paperbook.py), or None
+        before any sane bid/ask. All from the row that SET that bid/ask -- its trade price, and its time, not the last
+        trade's: a later row with no quote keeps the old pair, which is only as fresh as its own row. A size the row
+        lacked is None. Read-only: snapshot() and drain() are unchanged."""
         q, at = self._q.get(root), self._at.get(root)
         if q is None or at is None:
             return None

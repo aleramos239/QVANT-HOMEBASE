@@ -205,10 +205,11 @@ def test_quote_of_is_the_last_sane_pair_as_fresh_as_its_own_row():
     q.note("NQ", [{"ts_ms": 2, "price": 100.0, "bid": 99.75, "ask": 100.0, "bid_size": 3, "ask_size": 7},
                   {"ts_ms": 3, "price": 100.25, "bid": "", "ask": "", "bid_size": 1, "ask_size": 1},
                   {"ts_ms": 4, "price": 100.5, "bid": 100.75, "ask": 100.5, "bid_size": 1, "ask_size": 1}])
-    assert q.quote_of("NQ") == {"bid": 99.75, "ask": 100.0, "bid_size": 3, "ask_size": 7, "ts_ms": 2}   # sizes: its row's
-    q.note("NQ", [{"ts_ms": 5, "price": 100.0, "bid": 99.75, "ask": 100.0, "bid_size": "", "ask_size": 2}])
-    assert q.quote_of("NQ") == {"bid": 99.75, "ask": 100.0, "bid_size": None, "ask_size": 2, "ts_ms": 5}
-    assert q.snapshot() == {"NQ": {"bid": 99.75, "ask": 100.0, "last": 100.0, "ts_ms": 5}}   # the desk's shape: unchanged
+    assert q.quote_of("NQ") == {"bid": 99.75, "ask": 100.0, "trade": 100.0, "bid_size": 3, "ask_size": 7,
+                                "ts_ms": 2}                                   # its trade and sizes: that row's
+    q.note("NQ", [{"ts_ms": 5, "price": 100.25, "bid": 99.75, "ask": 100.0, "bid_size": "", "ask_size": 2}])
+    assert q.quote_of("NQ") == {"bid": 99.75, "ask": 100.0, "trade": 100.25, "bid_size": None, "ask_size": 2, "ts_ms": 5}
+    assert q.snapshot() == {"NQ": {"bid": 99.75, "ask": 100.0, "last": 100.25, "ts_ms": 5}}   # the desk's shape: unchanged
 
 
 def test_the_chart_service_never_subscribes_quotes():
