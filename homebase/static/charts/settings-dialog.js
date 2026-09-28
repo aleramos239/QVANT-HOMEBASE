@@ -40,6 +40,7 @@ const TABS = [
     ['DATA', [
       { label: 'Precision', select: { key: 'precision', choices: PRECISION, parse: asPrecision } },
       { label: 'Timezone', select: { key: 'timezone', choices: S.TIMEZONES.map(([k, text]) => [k, text]) } },
+      { label: 'Time format', select: { key: 'timeFormat', choices: [['24h', '24-hour (19:30)'], ['12h', '12-hour (7:30 PM)']] } },
       { label: 'Electronic trading hours background', check: 'ethBg', colors: [['ethBgColor', '']] },
     ]],
   ] },

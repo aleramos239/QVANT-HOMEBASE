@@ -267,3 +267,14 @@ test('the Events fields: High and Medium on, USD, lines on; currencies cleaned a
   n.evCountries.push('JPY');                                       // a copy: the defaults never change
   assert.deepEqual(S.DEFAULTS.evCountries, ['USD']);
 });
+
+test('clockText: the Time format setting (24h default, 12h AM/PM)', () => {
+  const S2 = S;
+  assert.equal(S2.clockText('19:30', '24h'), '19:30');
+  assert.equal(S2.clockText('19:30', '12h'), '7:30 PM');
+  assert.equal(S2.clockText('00:05:09', '12h'), '12:05:09 AM');
+  assert.equal(S2.clockText('12:00', '12h'), '12:00 PM');
+  assert.equal(S2.clockText('09:15', '12h'), '9:15 AM');
+  assert.equal(S2.clockText('garbage', '12h'), 'garbage');
+  assert.equal(S.DEFAULTS.timeFormat, '24h');
+});

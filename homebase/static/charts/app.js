@@ -1476,7 +1476,8 @@ function clockEt() {
 }
 
 function tick() {
-  $('#sbClock').textContent = `${ET_CLOCK.format(new Date())} ET`;
+  const sc = cells[selected], fmt = sc && sc.R ? sc.R.timeFormat : '24h';   // the selected chart's Time format
+  $('#sbClock').textContent = `${window.HBSettings.clockText(ET_CLOCK.format(new Date()), fmt)} ET`;
   greyIfStale();
   const et = clockEt();
   for (const c of cells) c.tickSecond(et);
