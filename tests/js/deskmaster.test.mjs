@@ -316,13 +316,15 @@ test('each hold fires at most once; a fresh press after it fires again (one conf
   assert.deepEqual(plain(s.posts), [{ url: '/api/kill' }, { url: '/api/kill' }]);
 });
 
-test('a declined confirm after the hold sends nothing', async () => {
+test('a declined confirm after the hold sends nothing, and says so', async () => {
   const s = load({ confirm: false });
   s.fire(s.kill, 'pointerdown', { button: 0 });
   s.clock.advance(1000);
   await tick();
   assert.equal(s.confirms.length, 1);
   assert.deepEqual(s.posts, []);
+  assert.deepEqual(s.toasts, ['Kill cancelled — nothing sent.']);
+  assert.deepEqual(s.alerts, []);
 });
 
 test('a mouse click is not a hold; an assistive-tech click (no pointer, no key) goes to the confirm', async () => {

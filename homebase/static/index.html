@@ -982,7 +982,7 @@ function killFailures(results) {
 async function doKill() {
   if (!await confirmDlg("Kill everything?",
       "Cancels every working order and market-flattens every position on EVERY connected account, then disarms.",
-      "Kill", true)) return;
+      "Kill", true)) { toast("Kill cancelled — nothing sent."); return; }
   let r;
   try { r = await post("/api/kill"); }
   catch (e) {
