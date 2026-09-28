@@ -97,8 +97,8 @@ _LOOKALIKE = str.maketrans({                      # letters that pass for p/a/e/
     "\u0433": "r", "\u0413": "r"})
 # the desk page (:8850) may create / remove / list paper accounts -- EXACTLY these origins, only on those routes
 DESK_ORIGINS = frozenset({"http://localhost:8850", "http://127.0.0.1:8850"})
-MAX_ORDER_QTY = 10                # the desk's per-order cap (trading.py guard 3)
-MAX_POSITION_QTY = 20             # the desk's per-position cap (trading.py guard 3)
+MAX_ORDER_QTY = 35                # the desk's per-order cap (trading.py guard 3; the account holder set 35 on 2026-09-28)
+MAX_POSITION_QTY = 35             # the desk's per-position cap (trading.py guard 3; 35 since 2026-09-28)
 STOPLIMIT_MAX_TICKS = 100         # the desk's (trading.py check_prices)
 QUOTE_MAX_AGE_S = 30.0            # the desk's (trading.py, not imported): an exit needs a print at most this old
 QUOTE_MAX_FUTURE_S = 5.0          # ...and at most this far ahead of this book's clock
