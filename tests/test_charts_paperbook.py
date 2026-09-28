@@ -985,3 +985,26 @@ def test_paper_exits_need_a_streamed_root_and_a_fresh_print():
     feed(other, [("09:29:59", 100.0)], root="NQ")
     r = act(other, "exits", accounts=[PAPER_ID], root="NQ", sl_price=98.0, expected_net={PAPER_ID: 1})
     assert r["refused"] and r["error"] == "NQ is not streamed by this chart service — no prints to fill against"
+
+
+def test_a_held_bracket_leg_moves_only_on_its_side_of_its_entry():
+    """Review round 2, C: a pending entry's legs are checked against the ENTRY's price, not the last print."""
+    b = book()
+    feed(b, [("09:29:59", 100.0)])
+    assert order(b, "Buy", "Limit", price=95.0, sl=93.0, tp=98.0)["ok"]     # entry 95 below the market
+    rows = {o["role"]: o["order_id"] for o in b.view()["orders"]}
+    mv = lambda oid, px: act(b, "modify", account=PAPER_ID, order_id=oid, price=px)
+    r = mv(rows["sl"], 96.0)                                               # above the entry: not a stop loss any more
+    assert r["refused"] and r["error"] == "the stop loss must be on the losing side of its entry (95.0)"
+    assert mv(rows["sl"], 94.0)["ok"] and b.orders[rows["sl"]].price == 94.0   # below the entry, though far below last
+    assert mv(rows["tp"], 94.75)["error"] == "the target must be on the winning side of its entry (95.0)"
+    assert mv(rows["tp"], 99.0)["ok"]                                         # 99 < last 100: fine for a pending leg
+    b.orders[rows["tp"]].parent = "999"                                    # the entry can't be identified: refused
+    assert "can't find the entry" in mv(rows["tp"], 99.5)["error"]
+    s = book()                                                              # a short entry's legs mirror it
+    feed(s, [("09:29:59", 100.0)])
+    order(s, "Sell", "StopLimit", price=98.5, trigger=99.0, sl=101.0, tp=96.0)
+    legs = {o["role"]: o["order_id"] for o in s.view()["orders"]}
+    assert "losing side of its entry (99.0)" in act(s, "modify", account=PAPER_ID, order_id=legs["sl"], price=98.75)["error"]
+    assert "winning side of its entry (98.5)" in act(s, "modify", account=PAPER_ID, order_id=legs["tp"], price=98.75)["error"]
+    assert act(s, "modify", account=PAPER_ID, order_id=legs["tp"], price=97.0)["ok"]

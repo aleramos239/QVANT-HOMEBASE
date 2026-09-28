@@ -369,8 +369,12 @@ function moveLine(cell, line, price, root, tick, { onCancel } = {}) {
   if (line.editable === false || !T.legsWithin(line, gate.accounts)) { D().toast('err', NOT_TRADABLE); if (onCancel) onCancel(); return; }
   const rounded = T.roundTick(price, tick);
   if (rounded === T.roundTick(line.price, tick)) { if (onCancel) onCancel(); return; }   // M8: a zero-tick move sends nothing
-  if (line.type) {   // I1/N2: re-run against the LAST KNOWN quote at any age -- a Limit dragged through (or
-                      // onto) the market must not silently fill; no quote at all refuses outright.
+  // review round 2, C: a pending (Suspended / held) bracket leg is not live -- it is checked against its PARENT
+  // entry's price instead of the market; an unidentifiable parent refuses
+  const pendingMsg = T.pendingMoveError(line, rounded, D().state);
+  if (pendingMsg) { D().toast('err', pendingMsg); if (onCancel) onCancel(); return; }
+  if (line.type && line.legs.some((l) => l.pending !== true)) {   // I1/N2: re-run against the LAST KNOWN quote at any
+                      // age -- a Limit dragged through (or onto) the market must not silently fill; no quote refuses.
     const kind = /stop/i.test(line.type) ? 'Stop' : 'Limit';
     const msg = T.refuseIfMarketable(line.side, rounded, D().quotes[root], kind);
     if (msg) { D().toast('err', msg); if (onCancel) onCancel(); return; }

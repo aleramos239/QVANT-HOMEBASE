@@ -767,6 +767,10 @@ class TradovateAdapter(BrokerAdapter):
                                else o.get("stopPrice")),
                 "status": o.get("ordStatus"),
                 "tif": ov.get("timeInForce") or o.get("timeInForce") or None}
+            if o.get("parentId") is not None:
+                # an OSO bracket leg's entry (Tradovate's Order.parentId): the page checks a pending leg's
+                # move against that entry's price (review round 2, C); absent -> the page refuses the move
+                row["parent_id"] = str(o["parentId"])
             if row["type"] == "StopLimit":
                 row["trigger"] = row["stop_price"]     # price = the limit, trigger = stopPrice
             orders.append(row)

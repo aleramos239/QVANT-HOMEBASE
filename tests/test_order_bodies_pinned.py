@@ -388,3 +388,18 @@ def test_a_fill_that_cannot_be_counted_is_still_dispatched_exactly_as_before(tmp
     ad._on_ws_event({"e": "props", "d": {"entityType": "fill", "entity": ent}})
     assert got == [ent] and notified == ["fill"]
     assert 9 not in ad._order_filled
+
+
+def test_trade_view_rows_carry_an_oso_legs_parent_only_when_the_broker_names_one(tmp_path):
+    """Review round 2, C: a Suspended bracket leg names its entry (Order.parentId) so the page can check a move
+    against the entry's price; a row without one carries no key (the page then refuses the move)."""
+    ad, _ = mkadapter(tmp_path)
+    ad._contracts[7] = "NQZ6"
+    ad._orders = {
+        5: {"id": 5, "accountId": 66121477, "contractId": 7, "action": "Buy", "ordStatus": "Working"},
+        6: {"id": 6, "accountId": 66121477, "contractId": 7, "action": "Sell", "ordStatus": "Suspended", "parentId": 5}}
+    ad._order_versions = {5: {"orderId": 5, "orderType": "Limit", "orderQty": 1, "price": 90.0},
+                          6: {"orderId": 6, "orderType": "Stop", "orderQty": 1, "stopPrice": 85.0}}
+    rows = {o["order_id"]: o for o in ad.trade_view()["orders"]}
+    assert rows["6"]["parent_id"] == "5" and rows["6"]["status"] == "Suspended"
+    assert "parent_id" not in rows["5"]

@@ -619,10 +619,29 @@ class PaperBook:
             raise Refused(f"only Limit and Stop orders can be moved (this one is {o.type})")
         tick = tick_size(o.root)
         px = to_tick(price, tick)
-        if o.type == "Stop":
+        if o.status == "held":
+            self._check_held_leg(o, px, tick)
+        elif o.type == "Stop":
             self._check_prices(o.root, o.side, "Stop", px, None, None, None, tick)
         self._do({"ev": "modify", "id": oid, "price": px})
         return {"ok": True, "order_id": oid, "error": None}
+
+    def _check_held_leg(self, o: POrder, px: float, tick: float) -> None:
+        """A pending entry's bracket leg (review round 2, C) is not live: it is checked against its PARENT entry's
+        price, as the bracket was when placed (_check_prices): the stop on the losing side of the entry (a Stop
+        Limit's trigger), the target on the winning side (its limit). No parent, or a parent with no price (a Market
+        entry): refused -- fail closed."""
+        p = self.orders.get(o.parent) if o.parent else None
+        if p is None or o.role not in ("sl", "tp"):
+            raise Refused(f"can't find the entry of bracket leg {o.id} on {self.label} — cancel it and place again")
+        ref = (p.trigger if p.type == "StopLimit" else p.price) if o.role == "sl" else p.price
+        if ref is None:
+            raise Refused(f"the entry of bracket leg {o.id} has no price to check against — cancel it and place again")
+        sgn = p.side
+        if o.role == "sl" and not sgn * tick_cmp(ref, px, tick) > 0:
+            raise Refused(f"the stop loss must be on the losing side of its entry ({ref:,})")
+        if o.role == "tp" and not sgn * tick_cmp(px, ref, tick) > 0:
+            raise Refused(f"the target must be on the winning side of its entry ({ref:,})")
 
     def _cancel(self, oid: str) -> dict:
         self._find(oid)
@@ -1005,6 +1024,8 @@ def _order_view(o: POrder) -> dict:
            "tif": o.tif, "owner": None, "role": o.role}
     if o.type == "StopLimit":
         row["trigger"] = o.trigger
+    if o.status == "held" and o.parent:
+        row["parent_id"] = o.parent            # a pending leg's entry: the page checks a move against its price
     return row
 
 

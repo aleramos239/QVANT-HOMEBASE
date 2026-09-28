@@ -566,3 +566,29 @@ test('fix round 1, item 5: the size the confirm showed is frozen -- a position t
     desk.state = was;
   }
 });
+
+test('review round 2, C: moveLine checks a pending leg against its entry, not the market, and refuses an unknown entry', async () => {
+  reset();
+  const was = desk.state;
+  desk.state = { ...STATE, accounts: [acct('sim041', 'SIM0000041', 'demo', { orders: [
+    { order_id: '80', symbol: 'NQZ6', side: 'Buy', type: 'Limit', qty: 1, price: 29990, stop_price: null, owner: null, status: 'Working' },
+    { order_id: '81', symbol: 'NQZ6', side: 'Sell', type: 'Limit', qty: 1, price: 29995, stop_price: null, owner: null, status: 'Suspended', parent_id: '80' },
+    { order_id: '82', symbol: 'NQZ6', side: 'Sell', type: 'Stop', qty: 1, price: null, stop_price: 29980, owner: null, status: 'Suspended' }] })] };
+  try {
+    const c = chart([]);
+    const lines = T.linesFor(desk.state, 'NQ', UI.editableIds(c));
+    const tp = lines.find((g) => g.legs.some((l) => l.order_id === '81')), orphan = lines.find((g) => g.legs.some((l) => l.order_id === '82'));
+    UI.moveLine(c, tp, 29996, 'NQ', 0.25);        // a Sell Limit below the market (30,000.25): fine for a pending TP
+    await flush();
+    assert.deepEqual(desk.sent.map((s) => [s.action, s.body.order_id, s.body.price]), [['modify', '81', 29996]]);
+    UI.moveLine(c, tp, 29985, 'NQ', 0.25);        // below its entry 29,990: refused
+    await flush();
+    assert.equal(desk.toasts.at(-1), 'A target on a pending buy must stay above its entry (29,990.00)');
+    UI.moveLine(c, orphan, 29975, 'NQ', 0.25);
+    await flush();
+    assert.equal(desk.toasts.at(-1), "Can't find this bracket's entry order — cancel it and place again");
+    assert.equal(desk.sent.length, 1);
+  } finally {
+    desk.state = was;
+  }
+});

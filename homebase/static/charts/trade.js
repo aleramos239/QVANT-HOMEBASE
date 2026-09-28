@@ -648,7 +648,7 @@ function linesFor(state, root, editable) {
         { kind, side: o.side, type: o.type, price: at, editable: ed, ...pp, ...(limit !== undefined ? { limit } : {}) },
         { account: a.id, who, qty: Number(o.qty) || 0, order_id: String(o.order_id),
           avg: p ? p.avg_price : null, s: p ? (p.net > 0 ? 1 : -1) : 0, pv: p ? p.point_value ?? null : null,
-          ...(pending ? { pending: true } : {}) });
+          ...(pending ? { pending: true, parent: o.parent_id != null ? String(o.parent_id) : null } : {}) });
     }
   }
   return [...groups.values()];
@@ -701,6 +701,25 @@ function exitHandles(g, groups) {
   const any = (fn) => (groups || []).some((x) => x.legs.some((l) => mine.has(l.account) && fn(x, l)));
   if (any((x, l) => l.pending === true)) return { sl: false, tp: false };
   return { sl: !any((x) => x.kind === 'sl'), tp: !any((x) => x.kind === 'tp') };
+}
+/* Why a line with pending (Suspended / held) bracket legs can't move to `price` (null = it can; review round 2, C). A
+   pending leg is not live: it is checked against its PARENT entry order's price, never the last trade -- a stop on
+   the losing side of the entry (a Stop Limit entry's trigger), a target on the winning side (its limit). A parent
+   that can't be found in the account's orders, or has no price (a Market entry), refuses: fail closed. */
+function pendingMoveError(line, price, state) {
+  const legs = ((line && line.legs) || []).filter((l) => l.pending === true);
+  const sl = /stop/i.test(String((line && line.type) || ''));
+  for (const l of legs) {
+    const a = accountsOf(state).find((x) => x.id === l.account);
+    const p = a && l.parent != null ? (a.orders || []).find((o) => String(o.order_id) === String(l.parent)) : null;
+    if (!p) return "Can't find this bracket's entry order — cancel it and place again";
+    const ref = p.type === 'StopLimit' ? (sl ? p.stop_price ?? null : p.price ?? null) : p.type === 'Market' ? null : orderPrice(p);
+    const s = p.side === 'Buy' ? 1 : p.side === 'Sell' ? -1 : 0;
+    if (ref == null || !Number.isFinite(ref) || !s) return "This bracket's entry has no price to check against — cancel it and place again";
+    if (sl && !(s * (ref - price) > 0)) return `A stop on a pending ${p.side.toLowerCase()} must stay ${s > 0 ? 'below' : 'above'} its entry (${px(ref)})`;
+    if (!sl && !(s * (price - ref) > 0)) return `A target on a pending ${p.side.toLowerCase()} must stay ${s > 0 ? 'above' : 'below'} its entry (${px(ref)})`;
+  }
+  return null;
 }
 /* The ghost exit line a handle drag draws: the position's legs at `price`, labelled like a real SL / TP line
    ("SL 3 · −$600 · …047": the projected P&L of the whole position if it fills there). */
@@ -1465,7 +1484,7 @@ function routeSend(action, body, send) {
 
 const api = { PREFS_KEY, QUOTE_STALE_MS, BOT_NAMES, parsePrefs, prefsText, oneClickKey, short, rootOf, orderPrice, isPending, abbr, inferType, menuText,
   roundTick, bracket, orderBody, clientId, tradeMode, quoteView, usd, money, pnl, rrText, linesFor, linePnl, lineLabel,
-  lineText, lineColor, canDrag, withPrice, exitHandles, exitGhost, exitDropError, expectedNet, exitsBody, exitsTitle, orderTitle, confirmOrder, actionTitle, resultToasts, fillText, fillMarkers, execArrow, botName, positionRows, orderRows, fillRows, accountRows, etTime, diffRows,
+  lineText, lineColor, canDrag, withPrice, exitHandles, pendingMoveError, exitGhost, exitDropError, expectedNet, exitsBody, exitsTitle, orderTitle, confirmOrder, actionTitle, resultToasts, fillText, fillMarkers, execArrow, botName, positionRows, orderRows, fillRows, accountRows, etTime, diffRows,
   algoName, algoLabel, algoChoices, algoAccounts, botPill, botToday, algoOverlay, etMs, pastRunMarkers, nearestTip, historySig,
   killConfirm, killToasts, killBlock, killSold,
   enterConfirms, wireSend, symbolChangeTrade, resolveConfirmedAccounts, armedTicked, unarmedLiveMessage, freshQuote,

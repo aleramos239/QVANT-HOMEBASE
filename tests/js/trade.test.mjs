@@ -1555,3 +1555,30 @@ test('fix round 1, item 5: expectedNet -- the signed position per account the co
   assert.deepEqual(T.expectedNet(short), { live099: -1 });
   assert.deepEqual(T.expectedNet(null), {});
 });
+
+test('review round 2, C: a pending bracket leg moves only on its side of its PARENT entry, never checked against the market', () => {
+  const st = { accounts: [acct('sim041', 'SIM0000041', 'demo', { orders: [
+    { order_id: '80', symbol: 'NQZ6', side: 'Buy', type: 'Limit', qty: 1, price: 30890, stop_price: null, owner: null, status: 'Working' },
+    { order_id: '81', symbol: 'NQZ6', side: 'Sell', type: 'Stop', qty: 1, price: null, stop_price: 30885, owner: null, status: 'Suspended', parent_id: '80' },
+    { order_id: '82', symbol: 'NQZ6', side: 'Sell', type: 'Limit', qty: 1, price: 30900, stop_price: null, owner: null, status: 'Suspended', parent_id: 80 },
+    { order_id: '83', symbol: 'NQZ6', side: 'Sell', type: 'Stop', qty: 1, price: null, stop_price: 30880, owner: null, status: 'Suspended' }] })] };
+  const lines = T.linesFor(st, 'NQ', ['sim041']);
+  const of = (id) => lines.find((g) => g.legs.some((l) => l.order_id === id));
+  assert.equal(T.pendingMoveError(of('81'), 30880, st), null);
+  assert.equal(T.pendingMoveError(of('81'), 30895, st), 'A stop on a pending buy must stay below its entry (30,890.00)');
+  assert.equal(T.pendingMoveError(of('82'), 30950, st), null);
+  assert.equal(T.pendingMoveError(of('82'), 30890, st), 'A target on a pending buy must stay above its entry (30,890.00)');
+  assert.equal(T.pendingMoveError(of('83'), 30870, st), "Can't find this bracket's entry order — cancel it and place again");
+  assert.equal(T.pendingMoveError(lines.find((g) => g.legs.some((l) => l.order_id === '80')), 1, st), null, 'a working order: not this check');
+  const sl = { accounts: [acct('p', 'PAPER', 'paper', { orders: [
+    { order_id: '1', symbol: 'NQZ6', side: 'Sell', type: 'StopLimit', qty: 1, price: 30895, stop_price: 30900, owner: null, status: 'Working' },
+    { order_id: '2', symbol: 'NQZ6', side: 'Buy', type: 'Stop', qty: 1, price: null, stop_price: 30910, owner: null, status: 'Suspended', parent_id: '1' },
+    { order_id: '3', symbol: 'NQZ6', side: 'Buy', type: 'Stop', qty: 1, price: null, stop_price: 30920, owner: null, status: 'Suspended', parent_id: '4' },
+    { order_id: '4', symbol: 'NQZ6', side: 'Sell', type: 'Market', qty: 1, price: null, stop_price: null, owner: null, status: 'Working' }] })] };
+  const g2 = T.linesFor(sl, 'NQ', ['p']);
+  const leg2 = g2.find((g) => g.legs.some((l) => l.order_id === '2'));
+  assert.equal(T.pendingMoveError(leg2, 30905, sl), null);                  // above the short's trigger 30,900
+  assert.match(T.pendingMoveError(leg2, 30899, sl), /must stay above its entry \(30,900\.00\)/);
+  const leg3 = g2.find((g) => g.legs.some((l) => l.order_id === '3'));      // its entry is a Market: no price
+  assert.equal(T.pendingMoveError(leg3, 30930, sl), "This bracket's entry has no price to check against — cancel it and place again");
+});
