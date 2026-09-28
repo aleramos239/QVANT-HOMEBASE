@@ -5,15 +5,19 @@ Per enabled strategy with self_fire (all times ET, weekdays only):
     9:20        gate — daily bars from market data, house ADX(14) TREND test
                 (ungated strategies skip straight to staged)
     9:28:30     prestage — subscribe the live quote, warm everything
-    9:30:00     anchor = last trade OF ITS OWN SYMBOL → engine.handle_alert(
-                source="timer"); every strategy due fires at the same moment
+    9:30:00     anchor = the last trade OF ITS OWN SYMBOL that the exchange
+                stamped before 09:30:00.000 → engine.handle_alert(
+                source="timer"); every strategy due fires at the same moment,
+                and only within FIRE_LATE_MAX_S of 09:30:00.000 — later (a
+                desk restart, a late switch-on, a stalled loop) it is missed
     9:31        unsubscribe, done
 
 Fail-safe by construction: no gate reading → no fire; stale quote → no
-fire; day already acted (e.g. the TV alert beat us) → no fire. Every
-decision is journaled. The TV alert stays a cross-check — when disarmed
-both paths journal dry runs (free anchor A/B); when armed the second
-arrival is refused by the one-trade-per-day rule.
+fire; past the fire's grace → no fire; day already acted (e.g. the TV
+alert beat us) → no fire. Every decision is journaled. The TV alert stays
+a cross-check — when disarmed both paths journal dry runs (free anchor
+A/B); when armed the second arrival is refused by the one-trade-per-day
+rule.
 """
 from __future__ import annotations
 
@@ -35,6 +39,14 @@ STAGE_T = dt.time(9, 28, 30)
 FIRE_T = dt.time(9, 30, 0)
 DONE_T = dt.time(9, 31)
 TICK_S = 0.2
+FIRE_LATE_MAX_S = 1.0      # fire moment later than this after 09:30:00.000 -> MISSED, never
+                           # fired. _sleep_s lands the fire tick ON 09:30:00.000 (late by loop
+                           # jitter: ms); a stage on the tick across the open adds up to one
+                           # TICK_S (0.2 s) plus its own round trips: 1 s is ~5 ticks of room.
+                           # The anchor does not ride on it (the last trade the exchange stamped
+                           # before 09:30:00.000, however late the fire): it only bounds how old
+                           # the levels are when the orders go out. Past it = a desk restart, a
+                           # strategy switched on / booked after the open, a stalled loop.
 QUOTE_MAX_AGE_S = 15.0     # anchor must come from a trade this fresh
 GATE_RETRY_S = 60.0
 GATE_BARS = 250            # ask for plenty; Tradovate serves ~120 dailies
@@ -116,6 +128,7 @@ class SelfTimer:
         # which is true at 11pm too: a restart any time after 9:30 would
         # stage and fire immediately on a stale anchor. (The engine's accept
         # window catches it, but the timer must not try in the first place.)
+        # Inside the window, FIRE_LATE_MAX_S does the same from 09:30:01.
         end = _hhmm(s.accept_until_et)
         if t > end:
             if st["stage"] in ("idle", "gated", "staged"):
@@ -180,16 +193,38 @@ class SelfTimer:
                 self.engine.journal("timer_deferred", strategy=name,
                                     status=day)
                 return
+            fire_at = dt.datetime.combine(dt.date.fromisoformat(date), FIRE_T, tzinfo=ET)
+            # staged by an earlier tick: this tick woke late; staged just now:
+            # the desk (re)started, or it was switched on / booked, after the open
+            if self._missed_late(name, st, fire_at,
+                                 "late_fire" if stage == "staged" else "late_start"):
+                return
             import time as _t
-            px, seen = (self._md.last(self._subs.get(s.symbol))
+            px, seen = (self._md.last(self._subs.get(s.symbol),
+                                      before=fire_at.timestamp())
                         if self._md else (None, 0.0))
             if px is None or _t.time() - seen > QUOTE_MAX_AGE_S:
-                st.update(stage="error", error="no fresh trade for the anchor")
+                st.update(stage="error",
+                          error="no fresh trade stamped before 09:30:00 for the anchor")
                 self.engine.journal("timer_error", strategy=name,
                                     error=st["error"])
                 return
             st.update(anchor=px, stage="fired")
-            return self._fire(name, s, px)      # tick() fires all due at once
+            return self._fire(name, s, st, px, fire_at)   # tick() fires all due at once
+
+    def _missed_late(self, name, st, fire_at, reason) -> bool:
+        """True, with the day marked missed and journaled, when now is more
+        than FIRE_LATE_MAX_S past 09:30:00.000: the open has moved on, so the
+        straddle is never placed on it."""
+        now = self._now()
+        late = now.timestamp() - fire_at.timestamp()
+        if late <= FIRE_LATE_MAX_S:
+            return False
+        st.update(stage="missed", anchor=None)
+        self.engine.journal("timer_missed", strategy=name, reason=reason,
+                            at=now.astimezone(ET).strftime("%H:%M:%S.%f")[:-3],
+                            late_s=round(late, 3), grace_s=FIRE_LATE_MAX_S)
+        return True
 
     async def _prestage_skip(self, name, s, st) -> None:
         """User-approved (spec 2026-09-26): a booked account that already holds
@@ -388,7 +423,11 @@ class SelfTimer:
         if skipped_unreadable:
             st["skipped_unreadable"] = skipped_unreadable
 
-    async def _fire(self, name, s, px) -> None:
+    async def _fire(self, name, s, st, px, fire_at) -> None:
+        # checked again AT the fire: another strategy's gate or stage earlier
+        # in this same tick can hold it past the grace
+        if self._missed_late(name, st, fire_at, "late_fire"):
+            return
         out = await self.engine.handle_alert(
             {"strategy": name, "upper": px + s.offset_pts,
              "lower": px - s.offset_pts}, source="timer")
@@ -399,8 +438,9 @@ class SelfTimer:
     def _sleep_s(self) -> float:
         """One tick — except when a strategy is staged and 9:30:00 is closer
         than that: then exactly the time left, so the fire lands on
-        9:30:00.000 instead of up to a tick late (and the anchor is the last
-        trade BEFORE the open, as in the research, not one after it)."""
+        9:30:00.000 instead of up to a tick late. (The anchor does not ride on
+        this: it is the last trade the exchange stamped before 09:30:00.000,
+        as in the research, however late the fire — see FIRE_LATE_MAX_S.)"""
         now = self.now_et()
         staged = any(st.get("stage") == "staged"
                      for st in self.days.get(now.date().isoformat(), {}).values())

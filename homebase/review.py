@@ -64,7 +64,12 @@ def review(date: str) -> str:
             who = f" {e['account']}" if e.get("account") else ""
             add(f"  {t}  SKIPPED{who} — {e.get('reason')}")
         elif ev == "timer_missed":
-            if not seen_missed:      # one line, however many restarts
+            if e.get("reason") in ("late_start", "late_fire"):   # past the fire's grace
+                why = ("the desk restarted, or the bot was switched on, after the open"
+                       if e.get("reason") == "late_start" else "the timer was held up")
+                add(f"  {t}  MISSED the open — at {e.get('at')}, {e.get('late_s')} s past "
+                    f"09:30:00 (grace {e.get('grace_s')} s): {why}; nothing placed")
+            elif not seen_missed:      # one line, however many restarts
                 add(f"  {t}  MISSED the window (service restarted after "
                     f"{e.get('window_end')})")
                 seen_missed = True

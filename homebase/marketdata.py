@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import time
+from collections import deque
 from typing import Optional
 
 from .broker.tradovate_auth import TradovateAuth
@@ -19,10 +20,24 @@ from .secrets_store import get_credentials
 
 MD_DEMO = "wss://md-demo.tradovateapi.com/v1/websocket"
 MD_LIVE = "wss://md.tradovateapi.com/v1/websocket"
+TRADE_HISTORY = 4096       # trade pushes kept per contract, for last(before=...)
 
 from zoneinfo import ZoneInfo  # noqa: E402
 
 ET = ZoneInfo("America/New_York")
+
+
+def _stamp(v) -> Optional[float]:
+    """A quote push's exchange timestamp ("2026-09-14T13:29:59.950Z") as unix
+    seconds. None when it is missing, unparseable or has no zone: such a push
+    can never prove it printed before an instant."""
+    if not isinstance(v, str):
+        return None
+    try:
+        t = dt.datetime.fromisoformat(v.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return t.timestamp() if t.tzinfo is not None else None
 
 
 class TradovateMD:
@@ -44,6 +59,8 @@ class TradovateMD:
             device_persist_path=sd / "tradovate.device.json")
         self._ws: Optional[TradovateWS] = None
         self._trades: dict[str, tuple[float, float]] = {}  # contract -> (price, unix ts)
+        # contract -> (exchange stamp | None, price, unix ts seen), oldest first
+        self._hist: dict[str, deque] = {}
         self._cid_sym: dict[int, str] = {}                  # contractId -> contract
 
     @property
@@ -99,12 +116,28 @@ class TradovateMD:
             px = tr.get("price")
             sym = self._cid_sym.get(q.get("contractId"))
             if px is not None and sym:
-                self._trades[sym] = (float(px), time.time())
+                px, seen = float(px), time.time()
+                self._trades[sym] = (px, seen)
+                hist = self._hist.get(sym)
+                if hist is None:
+                    hist = self._hist[sym] = deque(maxlen=TRADE_HISTORY)
+                hist.append((_stamp(q.get("timestamp")), px, seen))
 
-    def last(self, sym: str) -> tuple[Optional[float], float]:
+    def last(self, sym: str, before: Optional[float] = None) -> tuple[Optional[float], float]:
         """(latest trade price, unix time seen) for one subscribed contract —
-        never another contract's price."""
-        return self._trades.get(sym, (None, 0.0))
+        never another contract's price.
+
+        With `before` (unix seconds): the latest trade from a push the
+        EXCHANGE stamped strictly before that instant, however late this is
+        asked; a push stamped at or after it, or with no usable stamp, is never
+        the answer. (None, 0.0) when none is kept: nothing arrived before it,
+        or TRADE_HISTORY later pushes have already pushed it out."""
+        if before is None:
+            return self._trades.get(sym, (None, 0.0))
+        for ts, px, seen in reversed(self._hist.get(sym, ())):
+            if ts is not None and ts < before:
+                return px, seen
+        return None, 0.0
 
     @staticmethod
     def resolve(canonical: str) -> str:
