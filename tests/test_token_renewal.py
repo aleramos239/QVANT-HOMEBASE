@@ -477,6 +477,26 @@ def test_a_token_too_close_to_expiry_is_still_renewed_as_before(tmp_path, monkey
         reconnect_at(tmp_path, monkeypatch, at(9, 25), at(9, 34), renew_error="HTTP 503")
 
 
+# --- the suite's broker guard (tests/conftest.py) can't be swallowed --------------------
+def test_a_real_renewal_inside_a_best_effort_path_fails_the_test(tmp_path, monkeypatch):
+    """_renew_before_the_window catches Exception (a failed renewal must never fail the
+    rebuild): the guard raises pytest's Failed, a BaseException, so a test that reached
+    the real renew endpoint through it still fails."""
+    monkeypatch.setattr(tradovate, "TradovateWS", SyncWS)
+    ad = TradovateAdapter("acct", env="demo", keyring_key="k", state_dir=tmp_path,
+                          account_selector={"account_name": "APEX"})
+    ad._now = lambda: at(9, 25)
+    ad._auth.tokens = TradovateTokens(access_token="old", expiration_time=iso(at(9, 44)))
+    with pytest.raises(pytest.fail.Exception, match="real Tradovate HTTP"):
+        run(ad.reconnect())                                # the REAL renew(): refused
+
+
+def test_a_real_broker_websocket_fails_the_test():
+    from homebase.broker.tradovate_ws import TradovateWS
+    with pytest.raises(pytest.fail.Exception, match="real broker websocket"):
+        run(TradovateWS(token="t").connect())
+
+
 # --- the auth: ensure_valid / refresh, no network --------------------------------------
 def test_ensure_valid_reads_the_given_clock_and_refresh_falls_back_to_a_login(tmp_path):
     auth = TradovateAuth(env="demo", token_persist_path=tmp_path / "t.json",

@@ -28,15 +28,21 @@ def _outside_the_quiet_window(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _no_broker_http(monkeypatch):
+def _no_broker_connections(monkeypatch):
     """Tests never open broker connections (GOTCHAS): a test that reaches the Tradovate
-    auth's HTTP calls (login, renew, account list) fails instead of calling the broker --
-    e.g. a reconnect() on the real clock, weekdays 09:10-09:36 ET, renews before the window."""
-    def refuse(*a, **k):
-        raise AssertionError("a real Tradovate HTTP call from a test")
+    auth's HTTP calls (login, renew, account list) or opens a broker websocket fails --
+    e.g. a reconnect() on the real clock, weekdays 09:10-10:00 ET, renews before the window.
+    pytest.fail raises a BaseException: the desk's `except Exception` fallbacks (a
+    best-effort renewal, the keepalive) can never swallow it into a pass."""
+    def refuse_http(*a, **k):
+        pytest.fail("a real Tradovate HTTP call from a test")
 
-    monkeypatch.setattr("homebase.broker.tradovate_auth.http_post_json", refuse)
-    monkeypatch.setattr("homebase.broker.tradovate_auth.http_get_json", refuse)
+    def refuse_socket(*a, **k):
+        pytest.fail("a real broker websocket from a test")
+
+    monkeypatch.setattr("homebase.broker.tradovate_auth.http_post_json", refuse_http)
+    monkeypatch.setattr("homebase.broker.tradovate_auth.http_get_json", refuse_http)
+    monkeypatch.setattr("homebase.broker.tradovate_ws.websockets.connect", refuse_socket)
 
 
 @pytest.fixture(autouse=True)
