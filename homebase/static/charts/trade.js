@@ -390,6 +390,21 @@ function armedMode(m, state, liveConfirmed) {
   return accounts.length ? { mode: 'on', reason: '', accounts }
     : { mode: 'none', reason: "Arm the LIVE account for this chart in the chart's ⚙ → Trading", accounts: [] };
 }
+/* S1, the LIVE cue (2026-09-28 safety pass): the LIVE accounts among `mode`'s -- `mode` being the very gate a
+   chart's send reads (HBTradeUI.liveCue hands in cellGate's own answer: the set placeOrder freezes as `shown` and
+   sends to), so the red ring and LIVE tag on the Buy/Sell block and the order panel's Send can never disagree
+   with where the next order goes. [] unless the mode is 'on' (a refused send reaches nothing). The one-click
+   switches are deliberately not an input: they decide whether a click asks first, never where the order goes. */
+function liveSendIds(mode, state) {
+  if (!mode || mode.mode !== 'on' || !Array.isArray(mode.accounts)) return [];
+  const list = accountsOf(state);
+  return mode.accounts.filter((id) => { const a = list.find((x) => x.id === id); return !!a && a.env === 'live'; });
+}
+/* The cue's tooltip, naming the real-money accounts by label; '' for none. */
+function liveCueTitle(ids, state) {
+  const who = (ids || []).map((id) => { const a = accountsOf(state).find((x) => x.id === id); return (a && a.label) || id; });
+  return who.length ? `LIVE — an order from here goes to real-money account${who.length > 1 ? 's' : ''} ${who.join(', ')}` : '';
+}
 /* A chart in replay can never trade (2026-09-27 bar-replay plan, Global Constraints): its Buy/Sell block,
    chart-menu trading items and draggable order lines are hidden for the duration. The chart KEEPS its
    accounts across a replay (they are the switch now, and replay must not throw them away): this guard alone
@@ -1535,7 +1550,7 @@ const api = { PREFS_KEY, QUOTE_STALE_MS, BOT_NAMES, parsePrefs, prefsText, oneCl
   killConfirm, killToasts, killBlock, killSold,
   enterConfirms, wireSend, sendingSide, symbolChangeTrade, resolveConfirmedAccounts, armedTicked, unarmedLiveMessage, freshQuote,
   needsQuoteForBracket, refuseIfMarketable, cellTrade, loadedTrade, cellAlgo, tradeBits, templateTrade, algoForRoot,
-  migrateTicked, deskGate, armedMode, replayGuard, legsWithin, lineAccounts, accountChips, acctTick, hiddenCellsLoaded,
+  migrateTicked, deskGate, armedMode, liveSendIds, liveCueTitle, replayGuard, legsWithin, lineAccounts, accountChips, acctTick, hiddenCellsLoaded,
   NO_ACCOUNTS, SYMBOL_CHANGE_ACCOUNTS_CLEARED, liveIds, liveDroppedMessage, envChip, algoBookings, algoForAccount,
   accountsForAlgo, algoTickAccounts, accountPickRows, deskStatusText,
   verifyLoaded, verifyCells, nextUnverified, unverifiedMode, CHECKING_ACCOUNTS, REPLAY_ENDED, replayHaltGuard,

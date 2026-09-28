@@ -240,12 +240,20 @@ function build() {
   accts.append(ahead, ui.chips, ui.why);
 
   const foot = mk('div', 'op-foot');
-  ui.send = mk('button', 'op-send buy', 'Buy');
+  // S1: the wrapper carries the LIVE ring (outside the button, so a disabled Send never dims it); the button its LIVE
+  // tag ahead of the label text (paintLive). Neither changes the Send's size.
+  ui.sendWrap = mk('div', 'op-sendwrap');
+  ui.send = mk('button', 'op-send buy');
   ui.send.type = 'button';
+  ui.sendLive = mk('span', 'tr-live', 'LIVE');
+  ui.sendLive.hidden = true;
+  ui.sendText = mk('span', 'op-send-t', 'Buy');
+  ui.send.append(ui.sendLive, ' ', ui.sendText);   // a real space: read as "LIVE Buy …" (collapsed while the tag is hidden)
   T.wireSend(ui.send, send);
+  ui.sendWrap.append(ui.send);
   ui.reason = mk('div', 'op-reason');
   ui.reason.setAttribute('role', 'status');
-  foot.append(ui.send, ui.reason);
+  foot.append(ui.sendWrap, ui.reason);
 
   ui.order.append(ui.form, accts, foot);
 
@@ -415,17 +423,27 @@ function paint() {
   const busy = UI().busy();
   const reason = m.mode !== 'on' ? m.reason : !c.order.ok ? c.order.error : busy ? 'Sending…' : '';
   const qtyText = c.order.ok ? c.order.qty : c.qty;
-  ui.send.textContent = T.sendLabel(st.side, qtyText, c.root, st.type);
+  ui.sendText.textContent = T.sendLabel(st.side, qtyText, c.root, st.type);
+  paintLive(UI().liveCue(cell, root));   // S1: from the send path's own account set, one-click on or off
   ui.send.classList.toggle('buy', st.side === 'Buy');
   ui.send.classList.toggle('sell', st.side === 'Sell');
   ui.send.classList.toggle('sending', !!T.sendingSide(UI().sending(), 'panel', null));   // fast-paper: pressed until it resolves
   ui.send.disabled = !!reason;
   ui.reason.textContent = m.mode !== 'on' ? '' : reason;   // the mode's reason already shows under the accounts
 }
+/* S1: the red ring round Send and its LIVE tag while the selected chart's next order reaches a LIVE account (`ids`:
+   HBTradeUI.liveCue, the send path's own set); none otherwise. */
+function paintLive(ids) {
+  const on = ids.length > 0, title = on ? T.liveCueTitle(ids, D().state) : '';
+  ui.sendWrap.classList.toggle('live', on);
+  ui.sendLive.hidden = !on;
+  if (ui.sendWrap.title !== title) ui.sendWrap.title = title;
+}
 function paintIdle(text) {
   ui.send.disabled = true;
   ui.send.classList.remove('sending');
-  ui.send.textContent = 'Buy';
+  ui.sendText.textContent = 'Buy';
+  paintLive([]);   // no chart to send from: nothing can reach a LIVE account
   ui.reason.textContent = text;
   ui.chips.replaceChildren();
   acctKey = null;
