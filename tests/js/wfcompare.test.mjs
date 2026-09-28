@@ -19,12 +19,17 @@ const col = (n, over = {}) => ({
   legs: { n: Math.ceil((48 - n) / n), no_pick: n === 1 ? 2 : 0, profitable: 10, pct_profitable: 21.28,
     first_select: '2021-01', last_select: n === 3 ? '2024-07' : '2024-11' },
   equity: { t_ms: [1, 2], equity: [10, 20], drawdown: [0, 0] },
+  shared: { months: ['2021-02'], n_months: 44, span: ['2021-02', '2024-10'], per_month: { net_profit: 10 * n, trades: 2 },
+    stats: { net_profit: 440 * n, trades: 90 + n, win_rate: 50, profit_factor: 1.2, avg_trade: 4.4, max_drawdown: -900,
+      sharpe: 0.3 * n, skipped_by_error: 0 }, legs: { n: Math.ceil(44 / n), no_pick: 0, profitable: 5, pct_profitable: 50 },
+    equity: { t_ms: [3], equity: [5], drawdown: [0] } },
   phases: Array.from({ length: n }, (_, p) => ({ phase: p, steps: 10, net_profit: 100 * (p + 1), trades: 5, sharpe: 0.5 + p })),
   phase_spread: { net_profit: { min: 100, max: 100 * n, mean: 50 * (n + 1), n }, sharpe: { min: 0.5, max: n - 0.5, mean: n / 2, n } },
   ...over });
 const CMP = { compare: true, window: { start: '2021-01', end: '2024-12' }, n_cells: 2, looks: 276,
   scheme: { select_months: 1, step_months: 1, metric: 'net_profit', metric_label: 'Net $', min_trades: 5, tie_break: 'x' },
-  schemes: [col(1), col(2), col(3)], note: 'OOS only' };
+  schemes: [col(1), col(2), col(3)], note: 'OOS only',
+  shared_months: { months: [], n: 44, span: ['2021-02', '2024-10'] } };
 
 test('the compare mode rides the range pill: label, restore and run body', () => {
   assert.deepEqual(X.WF_MODES, [1, 2, 3, 'compare']);
@@ -116,4 +121,22 @@ test('the phase spread sits under the headline, and the warning says the start m
   assert.equal(X.wfComparePhaseLine(warn), 'Phase check: the start month moves these more than the ratio does — '
     + 'the widest spread across start months is $480, the gap between the three headline nets $150');
   assert.equal(X.wfComparePhaseLine({ ...warn, phase_check: { ...warn.phase_check, warning: null } }), '');
+});
+
+test('the shared-months view: identical months in every column, full-span-only rows left out', () => {
+  const v = X.wfCompareTable(CMP, 'shared'), row = (k) => v.rows.find((r) => r.key === k);
+  for (const k of ['net_phases', 'sharpe_phases', 'selects', 'uncovered']) assert.equal(row(k), undefined, k);
+  assert.deepEqual(row('span').cells.map((c) => c.text), Array(3).fill('2021-02 → 2024-10 · 44 months'));
+  assert.deepEqual(row('net').cells.map((c) => c.text), ['+$440', '+$880', '+$1,320']);
+  assert.equal(row('trades').cells[0].text, '91');
+  assert.equal(row('legs').cells[1].text, '22');
+  assert.equal(row('legs_pct').cells[2].text, '50.0% (5 of 15)');
+  // the full view is the default and keeps its own numbers
+  assert.equal(X.wfCompareTable(CMP).rows.find((r) => r.key === 'net').cells[0].text, '+$1,234.50');
+  assert.equal(X.wfSharedCaption(CMP), 'SHARED MONTHS · 2021-02 → 2024-10 · 44 months every scheme tests out-of-sample — the default view');
+  assert.equal(X.wfSharedCaption({ shared_months: { months: [], n: 0, span: null } }),
+    'SHARED MONTHS · none — the three chains test no month in common');
+  // a column with no shared block reads as dashes, never zeros
+  const bare = { ...CMP, schemes: [{ ...col(1), shared: null }] };
+  assert.equal(X.wfCompareTable(bare, 'shared').rows.find((r) => r.key === 'net').cells[0].text, '—');
 });

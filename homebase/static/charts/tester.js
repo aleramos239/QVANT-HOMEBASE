@@ -764,12 +764,24 @@ function wfCompareCell(key, c) {
     default: return { text: '—', tone: '' };
   }
 }
-/* The side-by-side table: one column per scheme (header = its ratio), one row per metric. */
-function wfCompareTable(cmp) {
-  const cols = (cmp && cmp.schemes) || [];
+/* Rows that only exist for the full spans: the phase chains, the selection months and the untested tail. */
+const WF_FULL_ONLY = new Set(['net_phases', 'sharpe_phases', 'selects', 'uncovered']);
+/* The side-by-side table: one column per scheme (header = its ratio), one row per metric. `view` 'shared' =
+   every metric on the months all three chains test (the default: identical months per column); 'full' =
+   each scheme's whole stitched chain (spans differ). */
+function wfCompareTable(cmp, view = 'full') {
+  const shared = view === 'shared';
+  const cols = ((cmp && cmp.schemes) || []).map((c) => (shared ? { ...c, ...(c.shared || { stats: {}, legs: {}, per_month: {}, span: null }) } : c));
   return { head: cols.map((c) => ({ ratio: c.ratio, test_months: c.test_months,
     title: `Walk-forward ${c.ratio}: select on 1 month, hold the pick for ${c.test_months} — click to open its full result` })),
-  rows: WF_COMPARE_ROWS.map(([key, label]) => ({ key, label, cells: cols.map((c) => wfCompareCell(key, c)) })) };
+  rows: WF_COMPARE_ROWS.filter(([key]) => !shared || !WF_FULL_ONLY.has(key))
+    .map(([key, label]) => ({ key, label, cells: cols.map((c) => wfCompareCell(key, c)) })) };
+}
+/* The shared block's caption: which months every column covers. */
+function wfSharedCaption(cmp) {
+  const sm = cmp && cmp.shared_months;
+  if (!sm || !sm.span) return 'SHARED MONTHS · none — the three chains test no month in common';
+  return `SHARED MONTHS · ${span(sm.span[0], sm.span[1])} · ${months_(sm.n)} every scheme tests out-of-sample — the default view`;
 }
 /* Said plainly when the start month of a chain moves its net more than switching the ratio does. */
 function wfComparePhaseLine(cmp) {
@@ -794,7 +806,7 @@ function strategyLabel(s) {
 const api = { strategyLabel, DEFAULT_MAX_CELLS, HARD_MAX_CELLS, GRID_WORKERS, maxCellsError, cellsWarning, stepValues, axisValues,
   parseValues, valueLabel, gridAxes, gridCount, gridProblems, gridBody, looksText, looksLine, heatPanels, heatMaxAbs,
   WF_METRICS, WF_RATIOS, WF_COMPARE, WF_MODES, isWfCompare, wfModeOf, wfModeLabel, WF_COMPARE_ROWS, wfCompareColors,
-  wfCompareCell, wfCompareTable, wfCompareHead, wfComparePhaseLine, WF_STEP_HEADERS, WF_STEP_GROUPS, WF_SIDE_LABELS, WF_NEEDS_GRID, wfBody, wfProblems, wfLooksText,
+  wfCompareCell, wfCompareTable, wfCompareHead, wfComparePhaseLine, wfSharedCaption, WF_STEP_HEADERS, WF_STEP_GROUPS, WF_SIDE_LABELS, WF_NEEDS_GRID, wfBody, wfProblems, wfLooksText,
   etaText, wfProgress, wfTiles, wfDrop, wfUncovered, wfStepRows, wfStability, wfPhases, wfScheme,
   heatLevel, cellView, gridProgress, RANGES, DEFAULT_RULES, defaults, restore, fromRun, rangeFromRun, isWalkforward,
   today, rangeSpec, rangeDates, rangeBody, parseDate, dateError, prettyDate, pillLabel, monthGrid, shiftMonth,

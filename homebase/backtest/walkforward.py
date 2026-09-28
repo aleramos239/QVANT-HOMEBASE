@@ -198,8 +198,16 @@ def pick(by_cell: dict, metric: str, min_trades: int) -> int | None:
     return None if best is None else best[1]
 
 
+def chain_months(months: list[str], test_months: int) -> list[str]:
+    """The months the phase-0 stitched chain tests out-of-sample -- fixed by the scheme, not the picks."""
+    st = steps(months, test_months)
+    return [m for k in chain(len(st), 0, test_months) for m in st[k]["test"]]
+
+
 def compute(cells: list[dict], months: list[str], *, trades_of, metric: str, min_trades: int,
-            capital: float, test_months: int = TEST_MONTHS) -> dict:
+            capital: float, test_months: int = TEST_MONTHS, shared_months: list[str] | None = None) -> dict:
+    """`shared_months` (a compare job): also the stitched chain restricted to those months, under the
+    key `stitched_shared` -- the caller pops it, so the ordinary result shape is unchanged."""
     """cells: [{i, params, months: {m: stats}}]; trades_of(i) -> (trades_ms, skipped) of a PICKED cell."""
     st = steps(months, test_months)
     params = {c["i"]: c["params"] for c in cells}
@@ -263,7 +271,29 @@ def compute(cells: list[dict], months: list[str], *, trades_of, metric: str, min
     pm_oos, pm_is = per_month(oos, len(covered0)), per_month(ins, len(coveredi))
     d_pm = None if pm_oos is None or pm_is is None else round(pm_oos["net_profit"] - pm_is["net_profit"], 2)
     tested = set(covered0)
-    return {
+    extra = {}
+    if shared_months is not None:
+        sh = set(shared_months)
+        cov = [m for m in covered0 if m in sh]
+        trs, sks = _in(sh, tr0), _in(sh, sk0)
+        s_st = _stats(trs, sks, capital, cov)
+        n_leg = no_pick = prof = 0
+        for k in chain(len(st), 0, test_months):
+            ms = [m for m in st[k]["test"] if m in sh]
+            if not ms:
+                continue
+            n_leg += 1
+            if rows[k]["cell"] is None:
+                no_pick += 1
+            elif sum(t["net"] for t in leg(rows[k]["cell"], ms)[0]) > 0:
+                prof += 1
+        tns = sorted((to_ns(t) for t in trs), key=lambda t: (t["exit_ns"], t["entry_ns"]))
+        extra["stitched_shared"] = {
+            "months": cov, "n_months": len(cov), "span": [cov[0], cov[-1]] if cov else None, "stats": s_st,
+            "per_month": per_month(s_st, len(cov)), "equity": report.equity(tns),
+            "legs": {"n": n_leg, "no_pick": no_pick, "profitable": prof,
+                     "pct_profitable": round(prof / n_leg * 100, 2) if n_leg else None}}
+    return {**extra,
         "scheme": {"select_months": SELECT_MONTHS, "test_months": test_months, "step_months": STEP_MONTHS,
                    "ratio": f"1:{test_months}",
                    "metric": metric, "metric_label": METRICS.get(metric, metric), "min_trades": min_trades,
@@ -316,7 +346,19 @@ COMPARE_NOTE = ("Same window, grid, costs, Select-by and Min-trades for all thre
                 "Out-of-sample only: no in-sample number is shown here.")
 
 
-def compare_summary(results: dict) -> dict:
+def compare_results(cells: list[dict], months: list[str], *, trades_of, metric: str, min_trades: int,
+                    capital: float, ratios=RATIOS) -> tuple[dict, dict]:
+    """({N: the ordinary 1:N result}, the side-by-side summary). The shared block is every metric on
+    the months ALL the schemes' stitched chains test (the shortest span, 1:3's), so the columns cover
+    identical months; the full spans stay beside it."""
+    shared = sorted(set.intersection(*(set(chain_months(months, n)) for n in ratios)))
+    per = {n: compute(cells, months, trades_of=trades_of, metric=metric, min_trades=min_trades, capital=capital,
+                      test_months=n, shared_months=shared) for n in ratios}
+    blocks = {n: per[n].pop("stitched_shared") for n in per}
+    return per, compare_summary(per, blocks, shared)
+
+
+def compare_summary(results: dict, shared_blocks: dict | None = None, shared_months: list[str] | None = None) -> dict:
     """{N: compute(..., test_months=N)} -> the three STITCHED OUT-OF-SAMPLE results side by side.
     Deliberately built from `stitched` alone (never `stitched_is` / `drop` / per-step `is`), so an
     in-sample number cannot leak into the comparison."""
@@ -341,7 +383,8 @@ def compare_summary(results: dict) -> dict:
                      # the headline is phase 0; the chains started 1 .. N-1 months later are as valid
                      "phases": r["phases"],
                      "phase_spread": {"net_profit": _spread(p["net_profit"] for p in r["phases"]),
-                                      "sharpe": _spread(p["sharpe"] for p in r["phases"])}})
+                                      "sharpe": _spread(p["sharpe"] for p in r["phases"])},
+                     "shared": (shared_blocks or {}).get(n)})
     nets = [c["stats"]["net_profit"] or 0.0 for c in cols]
     gap = max(nets) - min(nets)
     widest = max(((c["phase_spread"]["net_profit"] or {}).get("max", 0) - (c["phase_spread"]["net_profit"] or {}).get("min", 0))
@@ -351,6 +394,9 @@ def compare_summary(results: dict) -> dict:
             "scheme": {k: sc[k] for k in ("select_months", "step_months", "metric", "metric_label", "min_trades",
                                           "tie_break")},
             "schemes": cols, "looks": sum(c["looks"] for c in cols), "note": COMPARE_NOTE,
+            "shared_months": None if shared_months is None else {
+                "months": shared_months, "n": len(shared_months),
+                "span": [shared_months[0], shared_months[-1]] if shared_months else None},
             "phase_check": {"gap_between_schemes": round(gap, 2), "widest_phase_spread": round(widest, 2),
                             "warning": PHASE_WARNING if widest > gap else None}}
 
@@ -520,10 +566,9 @@ class WalkForwardManager(GridManager):
                     return read_json(cdir / "trades.json") or [], _run_skipped(read_json(cdir / "run.json"))
 
                 if cfg.get("compare"):
-                    per = {n: compute(ins, cfg["months"], trades_of=trades_of, metric=cfg["metric"],
-                                      min_trades=cfg["min_trades"], capital=capital, test_months=n)
-                           for n in cfg.get("ratios") or RATIOS}
-                    result = compare_summary(per)
+                    per, result = compare_results(ins, cfg["months"], trades_of=trades_of, metric=cfg["metric"],
+                                                  min_trades=cfg["min_trades"], capital=capital,
+                                                  ratios=tuple(cfg.get("ratios") or RATIOS))
                 else:
                     per = None
                     result = compute(ins, cfg["months"], trades_of=trades_of, metric=cfg["metric"],

@@ -684,6 +684,33 @@ def test_the_phase_warning_is_off_when_the_ratio_moves_more_than_the_start_month
     assert wf.compare_summary(per)["phase_check"]["warning"] is None
 
 
+def test_the_shared_block_is_every_metric_on_the_months_all_three_chains_test():
+    months = ["2022-01", "2022-02", "2022-03", "2022-04", "2022-05"]
+    tr = five_month_cells()
+    cells = [{"i": i, "params": {"offset_pts": 10.0 + i}, "months": wf.month_stats(tr[i], [], 50_000.0, months)}
+             for i in (0, 1)]
+    kw = dict(trades_of=lambda i: (tr[i], []), metric="net_profit", min_trades=5, capital=50_000.0)
+    per, s = wf.compare_results(cells, months, **kw)
+    shared = ["2022-02", "2022-03", "2022-04"]                     # 1:3's span, inside 1:1's and 1:2's
+    assert [wf.chain_months(months, n) for n in (1, 2, 3)] == [months[1:], months[1:], shared]
+    assert s["shared_months"] == {"months": shared, "n": 3, "span": ["2022-02", "2022-04"]}
+    for n in (1, 2, 3):
+        assert per[n] == wf.compute(cells, months, test_months=n, **kw)      # the ordinary result, untouched
+        c = s["schemes"][n - 1]
+        sh = c["shared"]
+        oos = [t for t in per[n]["stitched"]["trades"] if t["date"][:7] in shared]
+        ns = sorted((wf.to_ns(t) for t in oos), key=lambda t: (t["exit_ns"], t["entry_ns"]))
+        col = report.column(ns, 50_000.0, [], shared)
+        for k in ("net_profit", "trades", "win_rate", "profit_factor", "avg_trade", "max_drawdown", "sharpe"):
+            assert sh["stats"][k] == col[k], (n, k)
+        assert sh["months"] == shared and sh["n_months"] == 3 and sh["span"] == ["2022-02", "2022-04"]
+        assert sh["per_month"]["net_profit"] == round(col["net_profit"] / 3, 2)
+        assert sh["equity"] == report.equity(ns)
+    assert s["schemes"][2]["shared"]["stats"] == s["schemes"][2]["stats"]    # 1:3's full span IS the shared one
+    assert s["schemes"][0]["shared"]["legs"]["n"] == 3 and s["schemes"][0]["legs"]["n"] == 4
+    assert s["schemes"][1]["shared"]["legs"]["n"] == 2                      # the 04-05 leg reaches in by April
+
+
 def test_compare_summary_refuses_schemes_that_do_not_share_one_setup():
     per = _five_month_results()
     per[2] = {**per[2], "scheme": {**per[2]["scheme"], "min_trades": 3}}
