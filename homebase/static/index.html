@@ -1298,18 +1298,23 @@ const actFail = (r) => r.ok ? "" : " — FAILED: " + actErr(r.error);
 /* A flatten or cancel reports its steps as text -- "market Sell 3: ok", "cancel 123: ok" -- and a
    failure in the same list: "market Sell 3: <error>", "not flat — stop/target left working",
    "position unreadable (…) — stop/target left working", "cancel [entry] 123: <error>", "… — check
-   it" (engine.py). Read them; never assume the benign case (review M3). A result that is not a
-   list of steps cannot be read, so it says so. */
+   it" (engine.py). Read them; never assume the benign case (review M3). A step counts as done only
+   when it matches one of the engine's own OK forms; anything else -- an error that runs over several
+   lines, a step this page doesn't know -- is a failure or CHECK IT (second review). A result that
+   is not a list of steps cannot be read, so it says so. */
+const STEP_OK = [/^market (Buy|Sell) \d+: ok$/, /^cancel (entry )?\S+: ok$/, /^the account is already flat$/];
 function stepFailures(steps) {
   const f = {flatten: [], cancel: [], check: []};
   if (!Array.isArray(steps)) { f.check.push("its result is unreadable"); return f; }
   for (const raw of steps) {
-    const s = String(raw);
+    const s = String(raw).trim();
+    if (STEP_OK.some(re => re.test(s))) continue;
+    const one = s.replace(/\s+/g, " ");               // an error over several lines reads as one
     let m;
-    if ((m = /^market (Buy|Sell) (\d+): (.*)$/.exec(s))) { if (m[3] !== "ok") f.flatten.push(`market ${m[1]} ${m[2]} refused: ${m[3]}`); }
-    else if (/^(not flat|position unreadable)/.test(s)) f.flatten.push(s);
-    else if ((m = /^cancel (?:entry )?(\S+): (.*)$/.exec(s))) { if (m[2] !== "ok") f.cancel.push(`order ${m[1]}: ${m[2]}`); }
-    else if (/check it/.test(s)) f.check.push(s);
+    if ((m = /^market (Buy|Sell) (\d+): ([\s\S]*)$/.exec(s))) f.flatten.push(`market ${m[1]} ${m[2]} refused: ${m[3].replace(/\s+/g, " ")}`);
+    else if (/^(not flat|position unreadable)/.test(s)) f.flatten.push(one);
+    else if ((m = /^cancel (?:entry )?(\S+): ([\s\S]*)$/.exec(s))) f.cancel.push(`order ${m[1]}: ${m[2].replace(/\s+/g, " ")}`);
+    else f.check.push(one);                           // "check it", "status unknown", or a step it doesn't know
   }
   return f;
 }

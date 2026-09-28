@@ -53,7 +53,7 @@ test("the page's needsConfirm uses that policy, and asks whenever a switch turns
 const BOUNCE = HTML.slice(HTML.indexOf('const SWITCH_AT = {};'), HTML.indexOf('function cfDone('));
 const HELPERS = HTML.slice(HTML.indexOf('const killText = '), HTML.indexOf('function killFailures(')) +
   HTML.slice(HTML.indexOf('const actErr = '), HTML.indexOf('const actFail = ')) +
-  HTML.slice(HTML.indexOf('function stepFailures('), HTML.indexOf('const REFUSED_WHY'));
+  HTML.slice(HTML.indexOf('const STEP_OK = '), HTML.indexOf('const REFUSED_WHY'));
 function load({ confirm = true, shadow = false, enabled = false, answer = { ok: true } } = {}) {
   const posts = [], toasts = [], confirms = [], refreshes = [], alerts = [];
   const clock = { now: 1_000_000 };

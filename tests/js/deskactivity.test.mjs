@@ -316,3 +316,18 @@ test('the chart\'s own flatten / cancel lead with FAILED when they fail', () => 
   assert.equal(line({ event: 'manual_flatten', source: 'chart', account: '1234567049', contract: 'NQZ6', ok: true }).text,
     'Chart: flattened NQZ6 on …049');
 });
+
+test('a step reads as done only in one of the engine\'s OK forms; a multi-line error or an unknown step never passes (second review)', () => {
+  const multi = line({ event: 'manual_flatten', strategy: 'nq930', results: {
+    '1234567049': ['market Sell 3: ok', 'cancel 11: Client error 404\nFor more information check: https://x'] } });
+  assert.deepEqual({ ...multi }, { text: 'NQ930 flatten — CANCEL FAILED on …049 — order 11: Client error 404 For more information check: https://x',
+    tone: 'neg' });
+  const eod = line({ event: 'clock_flat', strategy: 'nq930', account: '1234567049', actions: ['market Buy 2: ok', 'cancel entry 12: rejected\nsecond line'] });
+  assert.deepEqual({ ...eod }, { text: 'NQ930 flattened on …049 at the end-of-day time · CANCEL FAILED — order 12: rejected second line', tone: 'neg' });
+  const unknown = line({ event: 'manual_flatten', strategy: 'nq930', results: { '1234567049': ['market Sell 3: ok', 'something new happened'] } });
+  assert.deepEqual({ ...unknown }, { text: 'NQ930 flatten — CHECK IT on …049 — something new happened', tone: 'neg' });
+  const refusedMulti = line({ event: 'manual_flatten', strategy: 'nq930', results: { '1234567049': ['market Sell 3: rejected\nby risk', 'not flat — stop/target left working'] } });
+  assert.match(refusedMulti.text, /FLATTEN FAILED on …049 — market Sell 3 refused: rejected by risk; not flat/);
+  const flatAlready = line({ event: 'manual_flatten', strategy: 'nq930', results: { '1234567049': ['the account is already flat', 'cancel entry 5: ok'] } });
+  assert.deepEqual({ ...flatAlready }, { text: 'NQ930 flattened on 1 account', tone: '' });
+});
