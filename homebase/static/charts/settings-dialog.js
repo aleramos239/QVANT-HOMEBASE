@@ -15,7 +15,7 @@
    accounts binding) live in HBTradeUI / HBTrade, never here: this file only paints and reports clicks. */
 (() => {
 'use strict';
-const S = window.HBSettings, I = window.HBIcons;
+const S = window.HBSettings, I = window.HBIcons, DX = window.HBDataExport;
 const LINE = [['solid', 'Solid'], ['dotted', 'Dotted'], ['dashed', 'Dashed']];
 const PRECISION = [['', 'Default'], ...[0, 1, 2, 3, 4, 5, 6].map((n) => [String(n), n ? (10 ** -n).toFixed(n) : '1'])];
 const FONT_SIZES = [10, 11, 12, 13, 14, 15, 16].map((n) => [String(n), String(n)]);
@@ -115,6 +115,11 @@ const TABS = [
       { caption: 'Every chart. Off: that surface asks to confirm first.' },
     ]],
   ] },
+  { id: 'data', label: 'Data', icon: 'download', sections: [
+    ['EXPORT', [
+      { data: true },
+    ]],
+  ] },
 ];
 
 function mk(tag, cls, text) {
@@ -141,6 +146,120 @@ function mount(box, host) {
   let algoKey = '';                       // what the Algo select was last built from, so it rebuilds only on a real change
   let acctKey = '';                       // and what the ACCOUNTS rows were last built from, for the same reason
   const acctCells = new Map();            // account id -> {cb, bal, dot}: focus restore, and in-place updates
+
+  /* ---- the Data tab's live parts (2026-09-28 data-export plan) ---- */
+  // every element more than one function below touches; all null while the tab is not open (renderPane)
+  let dataJobBox = null, dataCovBox = null, dataPreview = null, dataErr = null,
+    dataContractSel = null, dataRangeCap = null, dataStartBtn = null;
+  let dataPollId = 0;                     // setInterval id for the active job's poll, 0 while none is running
+  // survive a tab switch within the same dialog session (a market/date pick, or a running job, must not
+  // reset just because the viewer looked at another tab and came back)
+  const dataForm = { root: (DX && DX.ROOTS[0]) || 'NQ', type: 'candles', contract: 'front', timeframe: '5m',
+    start: '', end: '', hours: 'full', tz: 'et', ts_format: 'iso', format: 'csv', levels: 10 };
+  const dataState = { meta: null, coverage: null, job: null, status: null, error: '' };
+  function stopDataPoll() { if (dataPollId) { clearInterval(dataPollId); dataPollId = 0; } }
+
+  function dataUpdatePreview() {
+    if (dataPreview) dataPreview.textContent = dataForm.start && dataForm.end ? `File: ${DX.previewName({ ...dataForm })}` : '';
+  }
+
+  function dataPaintCoverage() {
+    if (!dataCovBox) return;
+    const cov = dataState.coverage, msg = DX.missingSummary(cov);
+    if (!msg) { dataCovBox.hidden = true; dataCovBox.replaceChildren(); return; }
+    dataCovBox.hidden = false;
+    const icon = mk('span', 'icw sm');
+    icon.innerHTML = I.triangleAlert;
+    const parts = [icon, mk('span', '', msg)];
+    if (cov.missing && cov.missing.length) {
+      const shown = cov.missing.slice(0, 8).join(', ');
+      const more = cov.missing.length > 8 ? ` + ${cov.missing.length - 8} more` : '';
+      parts.push(mk('span', 'set-unit', ` (${shown}${more})`));
+    }
+    dataCovBox.replaceChildren(...parts);
+  }
+
+  async function dataRefreshCoverage() {
+    dataUpdatePreview();
+    if (!dataForm.start || !dataForm.end) { dataState.coverage = null; dataPaintCoverage(); return; }
+    const { root, type, contract, start, end } = dataForm;
+    const cov = await host.export.coverage(root, type, contract, start, end);
+    // a stale reply (the viewer changed the market/type/dates again before this one landed) is dropped
+    if (dataForm.root !== root || dataForm.type !== type || dataForm.contract !== contract
+      || dataForm.start !== start || dataForm.end !== end) return;
+    dataState.coverage = cov;
+    dataPaintCoverage();
+  }
+
+  async function dataRefreshMeta() {
+    const { root, type } = dataForm;
+    dataState.meta = null;
+    if (dataContractSel) { dataContractSel.replaceChildren(); dataContractSel.disabled = true; }
+    if (dataRangeCap) dataRangeCap.textContent = 'Checking what is on disk…';
+    const meta = await host.export.meta(root, type);
+    if (dataForm.root !== root || dataForm.type !== type) return;   // superseded meanwhile
+    dataState.meta = meta;
+    if (dataContractSel) {
+      dataContractSel.disabled = false;
+      const opts = [['front', 'Front month (auto)'], ...((meta && meta.contracts) || []).map((c) => [c, c])];
+      dataContractSel.replaceChildren(...opts.map(([v, t]) => { const o = mk('option', '', t); o.value = v; return o; }));
+      dataContractSel.value = dataForm.contract;
+    }
+    if (dataRangeCap) {
+      dataRangeCap.textContent = meta && meta.range ? `On disk: ${meta.range[0]} to ${meta.range[1]}`
+        : 'No data on disk yet for this market and data type';
+    }
+    dataRefreshCoverage();
+  }
+
+  function dataPaintJob() {
+    if (!dataJobBox) return;
+    const st = dataState.status;
+    dataJobBox.hidden = !st;
+    if (dataStartBtn) dataStartBtn.disabled = !!(st && !DX.progress(st).final);
+    if (!st) { dataJobBox.replaceChildren(); return; }
+    const p = DX.progress(st);
+    const parts = [];
+    if (!p.final) {
+      const bar = document.createElement('progress');
+      bar.className = 'tst-progress';
+      bar.max = 1;                         // a fresh element each repaint: indeterminate until .value is set
+      if (p.frac != null) bar.value = p.frac;
+      const text = mk('span', 'tst-progress-text', p.text);
+      const cancel = button('btn btn-ghost', 'Cancel export');
+      cancel.onclick = async () => {
+        cancel.disabled = true;
+        const { data } = await host.export.cancel(dataState.job);
+        if (data) { dataState.status = data; dataPaintJob(); }
+        stopDataPoll();
+      };
+      parts.push(bar, text, cancel);
+    } else if (st.status === 'done') {
+      const res = st.result || {};
+      const line = mk('div', 'set-note',
+        `${res.name || ''} — ${DX.fmtInt(res.rows)} rows, ${DX.fmtBytes(res.bytes)}`);
+      const reveal = button('btn btn-ghost', 'Show in Finder');
+      const revealIcon = mk('span', 'icw sm');
+      revealIcon.innerHTML = I.folderOpen;
+      reveal.prepend(revealIcon);
+      reveal.onclick = async () => {
+        reveal.disabled = true;
+        try { await host.export.reveal(dataState.job); } finally { reveal.disabled = false; }
+      };
+      parts.push(line, reveal);
+    } else {
+      parts.push(mk('div', 'set-acct-err', p.text));
+    }
+    dataJobBox.replaceChildren(...parts);
+  }
+
+  async function dataPollTick() {
+    if (!dataState.job) { stopDataPoll(); return; }
+    const st = await host.export.status(dataState.job);
+    dataState.status = st;
+    dataPaintJob();
+    if (!st || DX.progress(st).final) stopDataPoll();
+  }
 
   const body = mk('div', 'set-body'), tabs = mk('div', 'set-tabs'), pane = mk('div', 'set-pane'), foot = mk('div', 'set-foot');
   tabs.setAttribute('role', 'tablist');
@@ -185,6 +304,7 @@ function mount(box, host) {
     acctBox = acctWhy = algoSel = null;
     algoKey = acctKey = '';
     acctCells.clear();
+    dataJobBox = dataCovBox = dataPreview = dataErr = null;   // this tab's live parts: null while it is not open
     pane.replaceChildren(...TABS[tab].sections.flatMap(([cap, rows]) => [mk('div', 'set-cap', cap), ...rows.map(row)]));
     pane.scrollTop = 0;
     paint();
@@ -299,6 +419,178 @@ function mount(box, host) {
     algoSel.value = cur;
   }
 
+  /* ---- the Data (export) tab (2026-09-28 data-export plan) ---- */
+  function dataTab() {
+    const box = mk('div', 'set-data');
+    if (!host.export) { box.append(mk('div', 'set-note', 'Export is not available.')); return box; }
+    const f = dataForm;
+
+    function ctlRow(label, ...ctls) {
+      const el = mk('div', 'set-row'), name = mk('label', 'set-name', label), ctl = mk('div', 'set-ctl');
+      ctl.append(...ctls);
+      el.append(name, ctl);
+      return el;
+    }
+    function selectOf(label, choices, value, onchange) {
+      const s = mk('select', 'set-select');
+      s.setAttribute('aria-label', label);
+      for (const c of choices) {
+        const [v, text, disabled, title] = c;
+        const o = mk('option', '', text);
+        o.value = v;
+        if (disabled) o.disabled = true;
+        if (title) o.title = title;   // a disabled option's reason: a hover tip, never widens the closed select
+        s.append(o);
+      }
+      s.value = value;
+      s.onchange = () => onchange(s.value);   // read via closure, not the event -- works the same under a real
+      return s;                               // browser (which ignores the unused event arg) and the node harness
+    }
+
+    function rebuild() {
+      box.replaceChildren(...buildRows());
+      dataUpdatePreview();
+      dataPaintCoverage();
+      dataPaintJob();
+      dataRefreshMeta();     // async: repopulates the contract list + the on-disk range, then coverage
+    }
+
+    function buildRows() {
+      const info = DX.TYPE_OF[f.type];
+      const rows = [];
+      let startInput, endInput;   // declared here: the quick-pick buttons below reference them, built after
+
+      rows.push(ctlRow('Market', selectOf('Market', DX.ROOTS.map((r) => [r, r]), f.root, (v) => {
+        f.root = v;
+        f.contract = 'front';
+        rebuild();
+      })));
+
+      if (info.needsContract) {
+        dataContractSel = selectOf('Contract', [['front', 'Front month (auto)']], f.contract, (v) => {
+          f.contract = v;
+          dataRefreshCoverage();
+        });
+        dataContractSel.disabled = true;
+        rows.push(ctlRow('Contract', dataContractSel));
+      } else {
+        dataContractSel = null;   // level2/level3: no per-contract choice (depth is recorded per root, not per symbol)
+      }
+
+      rows.push(ctlRow('Data type', selectOf('Data type',
+        DX.TYPES.map((t) => [t.value, t.label, t.disabled, t.reason]), f.type, (v) => {
+        f.type = v;
+        f.contract = 'front';
+        if (DX.TYPE_OF[f.type].depthOnly && f.root !== 'NQ' && f.root !== 'ES') f.root = 'NQ';
+        rebuild();
+      })));
+      const l3 = DX.TYPE_OF.level3;
+      rows.push(mk('div', 'set-note', `${l3.label} isn't offered: ${l3.reason}`));
+
+      if (info.needsTimeframe) {
+        rows.push(ctlRow('Timeframe', selectOf('Timeframe', DX.TIMEFRAMES.map((t) => [t, t]), f.timeframe, (v) => {
+          f.timeframe = v;
+          dataUpdatePreview();
+        })));
+      }
+      if (info.needsLevels) {
+        const n = mk('input', 'set-num');
+        n.type = 'number'; n.min = '1'; n.max = '10'; n.step = '1'; n.value = String(f.levels);
+        n.setAttribute('aria-label', 'Order book levels');
+        n.onchange = () => { f.levels = Math.min(10, Math.max(1, Math.round(Number(n.value)) || 1)); n.value = String(f.levels); };
+        rows.push(ctlRow('Levels (1-10)', n));
+      }
+      rows.push(mk('div', 'set-note', info.columns + (info.note ? ` — ${info.note}` : '')));
+
+      dataRangeCap = mk('div', 'set-note', 'Checking what is on disk…');
+      rows.push(dataRangeCap);
+
+      rows.push(mk('div', 'set-cap', 'DATE RANGE'));
+      const quickCtl = mk('div', 'set-ctl wrap');
+      for (const [key, label] of DX.QUICK_PICKS) {
+        const b = button('btn btn-ghost', label);
+        b.onclick = () => {
+          const avail = (dataState.meta && dataState.meta.range) || null;
+          const got = DX.quickRange(key, new Date(), DX.is247(f.root), avail);
+          if (!got) return;
+          f.start = got.start; f.end = got.end;
+          startInput.value = f.start; endInput.value = f.end;
+          dataRefreshCoverage();
+        };
+        quickCtl.append(b);
+      }
+      const quickRow = mk('div', 'set-row'), quickName = mk('label', 'set-name', 'Quick range');
+      quickRow.append(quickName, quickCtl);
+      rows.push(quickRow);
+
+      startInput = mk('input', 'set-num set-date');   // wide enough for YYYY-MM-DD; never type="date" (GOTCHAS)
+      startInput.type = 'text'; startInput.placeholder = 'YYYY-MM-DD'; startInput.maxLength = 10;
+      startInput.spellcheck = false; startInput.value = f.start;
+      startInput.setAttribute('aria-label', 'From date');
+      startInput.oninput = () => { f.start = startInput.value.trim(); dataUpdatePreview(); };
+      startInput.onblur = () => dataRefreshCoverage();
+      endInput = mk('input', 'set-num set-date');
+      endInput.type = 'text'; endInput.placeholder = 'YYYY-MM-DD'; endInput.maxLength = 10;
+      endInput.spellcheck = false; endInput.value = f.end;
+      endInput.setAttribute('aria-label', 'To date');
+      endInput.oninput = () => { f.end = endInput.value.trim(); dataUpdatePreview(); };
+      endInput.onblur = () => dataRefreshCoverage();
+      rows.push(ctlRow('From', startInput));
+      rows.push(ctlRow('To', endInput));
+      rows.push(ctlRow('Hours', selectOf('Hours', [['full', 'Full session'], ['rth', 'RTH 09:30–16:00 ET']],
+        f.hours, (v) => { f.hours = v; })));
+
+      dataCovBox = mk('div', 'set-why');
+      dataCovBox.hidden = true;
+      rows.push(dataCovBox);
+
+      rows.push(mk('div', 'set-cap', 'OUTPUT'));
+      rows.push(ctlRow('Timestamps', selectOf('Timezone', [['et', 'ET'], ['utc', 'UTC']], f.tz, (v) => { f.tz = v; }),
+        selectOf('Timestamp format', [['iso', 'ISO (ms)'], ['epoch', 'Epoch (ms)']], f.ts_format,
+          (v) => { f.ts_format = v; })));
+      rows.push(ctlRow('Format', selectOf('File format', [['csv', 'CSV'], ['gz', 'CSV .gz']], f.format, (v) => {
+        f.format = v;
+        dataUpdatePreview();
+      })));
+
+      dataPreview = mk('div', 'set-note', '');
+      rows.push(dataPreview);
+      dataErr = mk('div', 'set-acct-err');
+      dataErr.hidden = true;
+      rows.push(dataErr);
+
+      dataStartBtn = button('btn btn-primary', 'Start export');
+      dataStartBtn.onclick = async () => {
+        dataErr.hidden = true;
+        const { body, error } = DX.buildRequest(f);
+        if (error) { dataErr.textContent = error; dataErr.hidden = false; return; }
+        dataStartBtn.disabled = true;
+        const { data } = await host.export.start(body);
+        if (!data || !data.id) {
+          dataErr.textContent = (data && data.detail) || 'Could not start the export';
+          dataErr.hidden = false;
+          dataStartBtn.disabled = false;
+          return;
+        }
+        dataState.job = data.id;
+        dataState.status = { status: 'queued' };
+        dataPaintJob();
+        stopDataPoll();
+        dataPollId = setInterval(dataPollTick, 700);
+      };
+      rows.push(ctlRow('', dataStartBtn));
+
+      dataJobBox = mk('div', 'set-job');
+      dataJobBox.hidden = true;
+      rows.push(dataJobBox);
+
+      return rows;
+    }
+
+    rebuild();
+    return box;
+  }
+
   function row(r) {
     if (r.accounts) {   // the ACCOUNTS list: a block of its own, not a label + control row
       const el = mk('div', 'set-accts');
@@ -310,6 +602,7 @@ function mount(box, host) {
       paintAccounts();
       return el;
     }
+    if (r.data) return dataTab();
     if (r.caption) return mk('div', 'set-note', r.caption);
     const el = mk('div', 'set-row'), name = mk('label', 'set-name'), ctl = mk('div', 'set-ctl');
     if (r.check) {
@@ -558,6 +851,7 @@ function mount(box, host) {
   ok.onclick = () => {
     flush();
     stopWatching();
+    stopDataPoll();
     cell.setSettings(S.overrides(work));
     done = true;
     host.commit(host.cells().some((c) => {
@@ -597,6 +891,7 @@ function mount(box, host) {
        since a template Apply can have changed any of those too (spec §8) — at open. After Ok: nothing. */
     revert() {
       stopWatching();
+      stopDataPoll();
       if (done) return;
       done = true;
       flush();

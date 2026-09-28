@@ -971,6 +971,37 @@ async function writeTemplate(method, name, body) {
   return `${what} failed (${r.status})` + (detail ? ': ' + detail : '');
 }
 
+/* ---- the Settings > Data tab's client (2026-09-28 data-export plan): homebase/charts/export.py's
+   /api/export/* -- meta/coverage/status are reads (null on any failure); start/cancel/reveal are
+   writes, {status, data} like HBPaperClient.createAccount, so the dialog can show the server's own
+   refusal text (a second export already running, the 9:30 quiet window, a bad range). */
+const dataExport = {
+  async meta(root, type) {
+    try { const r = await fetch(`/api/export/meta?root=${encodeURIComponent(root)}&type=${encodeURIComponent(type)}`);
+      return r.ok ? await r.json() : null; } catch (_) { return null; }
+  },
+  async coverage(root, type, contract, start, end) {
+    const q = new URLSearchParams({ root, type, contract, start, end });
+    try { const r = await fetch(`/api/export/coverage?${q}`); return r.ok ? await r.json() : null; } catch (_) { return null; }
+  },
+  async status(id) {
+    try { const r = await fetch(`/api/export/${encodeURIComponent(id)}`); return r.ok ? await r.json() : null; } catch (_) { return null; }
+  },
+  start: (body) => postExport('/api/export/start', body),
+  cancel: (id) => postExport(`/api/export/${encodeURIComponent(id)}/cancel`),
+  reveal: (id) => postExport(`/api/export/${encodeURIComponent(id)}/reveal`),
+};
+async function postExport(path, body) {
+  let status = 0, data = null;
+  try {
+    const r = await fetch(path, body === undefined ? { method: 'POST' }
+      : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    status = r.status;
+    try { data = await r.json(); } catch (_) { data = null; }
+  } catch (_) { data = { detail: 'chart service unreachable' }; }
+  return { status, data };
+}
+
 /* ---- dialogs ---- */
 function openDialog(title, cls) {
   closeMenu();
@@ -1444,6 +1475,7 @@ function chartSettings(c = cur(), tab = null) {
     tab,                  // which tab to open on: the order panel's "Change" asks for 'trading'
     cells: () => cells,
     templates,
+    export: dataExport,   // 2026-09-28 data-export plan: the Data tab
     tradeBits: (x) => T.tradeBits(x.cfg),                               // Task 2: what a template save adds
     applyTrade: (x, raw) => applyTemplateTrade(x, raw, { quiet: true }),  // a template Apply (saved on Ok)
     restoreTrade: restoreTemplateTrade,                                   // Cancel

@@ -8,7 +8,8 @@
    between-horizontal-start (Bar Replay Select bar, 2026-09-27 ui-controls-and-select-bar plan),
    chevron-left, chevron-right, clock (the control system, same plan), star (starred intervals), lock, lock-open, bookmark
    (the drawing style toolbar and Template menu, 2026-09-27 draw-tools plan), chevrons-right (Bar Replay
-   "Jump to real-time"), dice-5 (Bar Replay "Select random bar", 2026-09-27 TV-parity plan).
+   "Jump to real-time"), dice-5 (Bar Replay "Select random bar", 2026-09-27 TV-parity plan),
+   download, folder-open, triangle-alert (Settings -> Data tab, 2026-09-28 data-export plan).
 
    ISC License
 
@@ -87,5 +88,8 @@ window.HBIcons = {
   bookmark: svg('<path d="M17 3a2 2 0 0 1 2 2v15a1 1 0 0 1-1.496.868l-4.512-2.578a2 2 0 0 0-1.984 0l-4.512 2.578A1 1 0 0 1 5 20V5a2 2 0 0 1 2-2z"/>'),
   chevronsRight: svg('<path d="m6 17 5-5-5-5"/><path d="m13 17 5-5-5-5"/>'),   // Bar Replay "Jump to real-time"
   dice: svg('<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><path d="M16 8h.01"/><path d="M8 8h.01"/><path d="M8 16h.01"/><path d="M16 16h.01"/><path d="M12 12h.01"/>'),   // "dice-5" -- Bar Replay "Select random bar"
+  download: svg('<path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/>'),   // Settings -> Data tab
+  folderOpen: svg('<path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/>'),   // "Show in Finder"
+  triangleAlert: svg('<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>'),   // missing sessions in the export range
 };
 })();
