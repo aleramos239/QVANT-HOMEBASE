@@ -126,6 +126,15 @@ function labelAnchor(type, hs, pos, paneWidth) {
   return null;
 }
 
+/* The floating per-drawing toolbar's anchor, in pixels: centred above the drawing's own handle
+   points (their bounding box), the same box a selection's handle dots are drawn in. Null with no
+   handle points (the drawing is off the loaded bars). */
+function toolbarAnchor(hs) {
+  if (!hs || !hs.length) return null;
+  const xs = hs.map((p) => p[0]), ys = hs.map((p) => p[1]);
+  return { cx: (Math.min(...xs) + Math.max(...xs)) / 2, top: Math.min(...ys) };
+}
+
 /* ---- Shift gestures (pure decisions; drawings.js's Controller applies them) ---- */
 /* Shift + press-drag with the cursor tool starts the ruler (the measure tool's own behaviour),
    instead of panning or moving a drawing. */
@@ -137,7 +146,7 @@ function shouldStartRuler(tool, shiftKey) { return tool === 'cursor' && !!shiftK
 function snapEndpointPrice(otherPrice, proposedPrice, shiftHeld) { return shiftHeld ? otherPrice : proposedPrice; }
 
 const api = { LINE_STYLES, LABEL_POS, FIELDS, DEFAULTS, MAX_TEXT, isColor, isValidField, normalize, starting,
-  dashFor, extendLine, labelAnchor, shouldStartRuler, snapEndpointPrice };
+  dashFor, extendLine, labelAnchor, toolbarAnchor, shouldStartRuler, snapEndpointPrice };
 if (typeof window !== 'undefined') window.HBDrawStyle = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

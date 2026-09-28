@@ -140,6 +140,14 @@ test('extendLine: a vertical segment cannot extend left/right', () => {
   assert.deepEqual(S.extendLine(50, 10, 50, 90, 400, true, true), [50, 10, 50, 90]);
 });
 
+test('toolbarAnchor: centred above the drawing\'s own bounding box', () => {
+  assert.deepEqual(S.toolbarAnchor([[10, 20], [110, 80]]), { cx: 60, top: 20 });
+  assert.deepEqual(S.toolbarAnchor([[10, 20], [110, 80], [10, 80], [110, 20]]), { cx: 60, top: 20 });
+  assert.deepEqual(S.toolbarAnchor([[50, 30]]), { cx: 50, top: 30 });   // hline's one handle
+  assert.equal(S.toolbarAnchor(null), null);
+  assert.equal(S.toolbarAnchor([]), null);
+});
+
 test('shouldStartRuler: only the cursor tool + Shift', () => {
   assert.equal(S.shouldStartRuler('cursor', true), true);
   assert.equal(S.shouldStartRuler('cursor', false), false);

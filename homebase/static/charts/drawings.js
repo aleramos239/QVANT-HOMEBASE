@@ -534,6 +534,9 @@ class Controller {
     }
     if (this.sel && !this.selectedDrawing()) this.sel = null;
     this.prim.redraw();
+    // the floating per-drawing toolbar (2026-09-27 draw-tools plan): told on every refresh (a
+    // selection change, a drag, a store update under the current selection), never polled
+    if (this.host.onSelectionChanged) this.host.onSelectionChanged(this.cell, this.selectedDrawing());
   }
 
   /* This gesture is ours. Lightweight Charts 5.2.1 listens to mouse events
