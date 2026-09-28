@@ -6,7 +6,8 @@
    bot, octagon-x, file-text, history, play, pause, skip-forward, skip-back (Bar Replay, 2026-09-27 plan),
    square (Strategy Tester), list-ordered, crosshair (DOM ladder, 2026-09-27 charts-depth plan),
    between-horizontal-start (Bar Replay Select bar, 2026-09-27 ui-controls-and-select-bar plan),
-   chevron-left, chevron-right, clock (the control system, same plan).
+   chevron-left, chevron-right, clock (the control system, same plan), lock, lock-open, bookmark
+   (the drawing style toolbar and Template menu, 2026-09-27 draw-tools plan).
 
    ISC License
 
@@ -79,5 +80,8 @@ window.HBIcons = {
   crosshair: svg('<circle cx="12" cy="12" r="10"/><line x1="22" x2="18" y1="12" y2="12"/><line x1="6" x2="2" y1="12" y2="12"/><line x1="12" x2="12" y1="6" y2="2"/><line x1="12" x2="12" y1="22" y2="18"/>'),
   selectBar: svg('<rect width="13" height="7" x="8" y="3" rx="1"/><path d="m2 9 3 3-3 3"/><rect width="13" height="7" x="8" y="14" rx="1"/>'),
   plus: svg('<path d="M5 12h14"/><path d="M12 5v14"/>'),   // lucide-static@1.48.0 "plus" -- the tab strip's Add tab button
+  lock: svg('<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>'),
+  lockOpen: svg('<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>'),
+  bookmark: svg('<path d="M17 3a2 2 0 0 1 2 2v15a1 1 0 0 1-1.496.868l-4.512-2.578a2 2 0 0 0-1.984 0l-4.512 2.578A1 1 0 0 1 5 20V5a2 2 0 0 1 2-2z"/>'),
 };
 })();

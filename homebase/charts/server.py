@@ -42,6 +42,7 @@ from .hub import Hub, Stream
 from .news import News
 from .paper import ROOT as PAPER_ROOT, STRATEGY_ID as PAPER_ID, BacktestJob, PaperRunner, describe as paper_describe
 from .paperbook import DESK_ORIGINS, PaperBooks, _cors, desk_origin_refusal, register as register_paperbook
+from .presets import MAX_PRESET_BYTES, PresetsStore
 from .recorder import REFILL_MAX_PAGES, LiveRecorder, refill
 from .replay import ReplayFeed
 from .session import ET, always_open, et_wall_s, session_date, session_range_ms, split_by_session
@@ -75,6 +76,20 @@ POSITION_QTY_MAX = 10_000     # a long/short box's quantity
 MAX_TEMPLATE_BYTES = 16 * 1024   # one chart-settings template, as JSON
 MAX_TEMPLATE_NAME = 40
 _HEX_COLOR = re.compile(r"#[0-9A-Fa-f]{6}")
+# 2026-09-27 draw-tools plan: a drawing's colour (and style.fillColor / style.textColor) may also
+# carry opacity, the same shape the chart-settings colours already use (settings.js' fmtColor).
+_RGBA_COLOR = re.compile(r"rgba\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(0|1|0?\.\d+)\s*\)")
+DRAWING_LINE_STYLES = ("solid", "dashed", "dotted")
+DRAWING_LABEL_POS = {"trend": ("above", "below", "middle"), "hline": ("above", "below", "middle"),
+                     "rect": ("top", "middle", "bottom")}
+# exactly the style fields each drawing type takes (drawstyle.js' FIELDS mirrors this)
+DRAWING_STYLE_FIELDS = {
+    "trend": {"width", "lineStyle", "extendLeft", "extendRight", "text", "fontSize", "textColor", "bold", "labelPos"},
+    "hline": {"width", "lineStyle", "axisLabel", "text", "fontSize", "textColor", "bold", "labelPos"},
+    "rect": {"width", "lineStyle", "fillColor", "text", "fontSize", "textColor", "bold", "labelPos"},
+    "long": set(), "short": set(),
+}
+MAX_DRAWING_LABEL_TEXT = 200
 # Task 4 app-settings plan, Fix round 1 (review of bdaccbd):
 BOT_BUSY_STATUSES = ("placing", "placed", "live", "error")   # C3: trading.BOT_BUSY + "error"
 MD_SWITCH_MARGIN_START = dt.time(9, 15)   # I4: a margin before QUIET[0] itself -- a switch's own
@@ -151,13 +166,86 @@ def _check_position(kind: str, pts: list) -> None:
         raise ValueError("a short has target < entry < stop")
 
 
+def _valid_color(s) -> bool:
+    """#RRGGBB, or rgba(r,g,b,a) with r/g/b <= 255 and a in [0,1] (2026-09-27 draw-tools plan:
+    widened from hex-only so a drawing's colour can carry opacity, the same shape the chart
+    settings' own colours already use -- settings.js' fmtColor)."""
+    if not isinstance(s, str):
+        return False
+    if _HEX_COLOR.fullmatch(s):
+        return True
+    m = _RGBA_COLOR.fullmatch(s)
+    if not m:
+        return False
+    r, g, b = int(m.group(1)), int(m.group(2)), int(m.group(3))
+    return r <= 255 and g <= 255 and b <= 255
+
+
+def check_style(kind: str, style) -> dict:
+    """A drawing's optional visual style, stripped to exactly the fields that type takes (junk, a
+    field the type does not carry, or one with a wrong type/range/length fails the whole PUT --
+    fail closed, never silently dropped): width 1-4 and lineStyle solid/dashed/dotted (trend,
+    hline, rect); extendLeft/extendRight (trend only); fillColor (rect only); axisLabel (hline
+    only); text (<= 200 characters), fontSize 10-28, textColor, bold and labelPos (trend/hline:
+    above/below/middle; rect: top/middle/bottom) on trend, hline and rect. long/short take no style
+    object (DRAWING_STYLE_FIELDS[kind] is empty for them: any key at all raises). ValueError (with
+    a message for the page) on anything outside this."""
+    if not isinstance(style, dict):
+        raise ValueError("style: an object")
+    allowed = DRAWING_STYLE_FIELDS.get(kind, set())
+    for key in style:
+        if key not in allowed:
+            raise ValueError(f"style.{key} does not apply to a {kind}")
+    out = {}
+    if "width" in style:
+        w = style["width"]
+        if not isinstance(w, int) or isinstance(w, bool) or not 1 <= w <= 4:
+            raise ValueError("style.width: a whole number from 1 to 4")
+        out["width"] = w
+    if "lineStyle" in style:
+        if style["lineStyle"] not in DRAWING_LINE_STYLES:
+            raise ValueError("style.lineStyle: solid, dashed or dotted")
+        out["lineStyle"] = style["lineStyle"]
+    for key in ("extendLeft", "extendRight", "axisLabel", "bold"):
+        if key in style:
+            if not isinstance(style[key], bool):
+                raise ValueError(f"style.{key}: true or false")
+            out[key] = style[key]
+    if "fillColor" in style:
+        if not _valid_color(style["fillColor"]):
+            raise ValueError("style.fillColor: #RRGGBB or rgba(r,g,b,a)")
+        out["fillColor"] = style["fillColor"]
+    if "text" in style:
+        t = style["text"]
+        if not isinstance(t, str) or len(t) > MAX_DRAWING_LABEL_TEXT:
+            raise ValueError(f"style.text: a string of at most {MAX_DRAWING_LABEL_TEXT} characters")
+        out["text"] = t
+    if "fontSize" in style:
+        fs = style["fontSize"]
+        if not isinstance(fs, int) or isinstance(fs, bool) or not 10 <= fs <= 28:
+            raise ValueError("style.fontSize: a whole number from 10 to 28")
+        out["fontSize"] = fs
+    if "textColor" in style:
+        if not _valid_color(style["textColor"]):
+            raise ValueError("style.textColor: #RRGGBB or rgba(r,g,b,a)")
+        out["textColor"] = style["textColor"]
+    if "labelPos" in style:
+        choices = DRAWING_LABEL_POS.get(kind, ())
+        if style["labelPos"] not in choices:
+            raise ValueError(f"style.labelPos: {', '.join(choices)}")
+        out["labelPos"] = style["labelPos"]
+    return out
+
+
 def check_drawings(body) -> list:
     """The page's drawings for one symbol, validated and stripped to what
-    the page draws: [{id, type, points: [{t?, p}], color?, qty?}]. A long /
-    short position is [entry, target, stop] with target and stop on the
-    box's right edge (same t), stop < entry < target (long) or target <
-    entry < stop (short), and an optional qty 1-10000 (kept for positions
-    only). ValueError (with a message for the page) on anything else."""
+    the page draws: [{id, type, points: [{t?, p}], color?, qty?, locked?,
+    style?}]. A long / short position is [entry, target, stop] with target
+    and stop on the box's right edge (same t), stop < entry < target (long)
+    or target < entry < stop (short), and an optional qty 1-10000 (kept for
+    positions only). `style` (2026-09-27 draw-tools plan) is per-type --
+    see check_style. ValueError (with a message for the page) on anything
+    else."""
     if not isinstance(body, list) or len(body) > MAX_DRAWINGS:
         raise ValueError(f"drawings are a list of at most {MAX_DRAWINGS}")
     out = []
@@ -192,9 +280,17 @@ def check_drawings(body) -> list:
                     raise ValueError(f"qty: a whole number from 1 to {POSITION_QTY_MAX}")
                 item["qty"] = q
         if "color" in d:
-            if not isinstance(d["color"], str) or not _HEX_COLOR.fullmatch(d["color"]):
-                raise ValueError("color: #RRGGBB")
+            if not _valid_color(d["color"]):
+                raise ValueError("color: #RRGGBB or rgba(r,g,b,a)")
             item["color"] = d["color"]
+        if "locked" in d:
+            if not isinstance(d["locked"], bool):
+                raise ValueError("locked: true or false")
+            item["locked"] = d["locked"]
+        if "style" in d:
+            style = check_style(kind, d["style"])
+            if style:
+                item["style"] = style
         out.append(item)
     return out
 
@@ -276,6 +372,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
     layout_order_path = sd / "layout_order.json"   # 2026-09-27 layout-tabs: the tab strip's left-to-right order
     drawings_path = sd / "drawings.json"
     templates_path = sd / "templates.json"
+    presets_store = PresetsStore(sd / "presets.json")   # 2026-09-27 draw-tools plan: generic, drawing + (later) indicator
     # Task 4, 2026-09-27 app-settings plan: the market-data login choice (more app-wide settings
     # land in the same file later). MD_ENV is the default until the user picks one.
     settings_store = SettingsStore(sd / "settings.json")
@@ -1110,6 +1207,43 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         all_ = read_json(templates_path)
         all_.pop(name, None)
         write_json(templates_path, all_)
+        return {"ok": True}
+
+    # 2026-09-27 draw-tools plan: a generic named-preset store, by "kind" ("drawing:<tool>" today,
+    # "indicator:<tool>" once the indicator dialog reuses it). Same write guard, same atomic write,
+    # same body-size cap and JSON-object-only rule as templates above.
+    @app.get("/api/presets/{kind}")
+    async def get_presets(kind: str):
+        try:
+            return presets_store.list(kind)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+
+    @app.put("/api/presets/{kind}/{name:path}")
+    async def put_preset(kind: str, name: str, request: Request):
+        browser_write_ok(request)
+        raw = await request.body()
+        if len(raw) > MAX_PRESET_BYTES:
+            raise HTTPException(400, f"a preset is at most {MAX_PRESET_BYTES // 1024} KB of JSON")
+        try:
+            body = json.loads(raw, parse_constant=_no_constant)
+        except ValueError:
+            raise HTTPException(400, "the body is not JSON") from None
+        if not isinstance(body, dict):
+            raise HTTPException(400, "a preset is a JSON object")
+        try:
+            presets_store.put(kind, name, body)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+        return {"ok": True}
+
+    @app.delete("/api/presets/{kind}/{name:path}")
+    async def delete_preset(kind: str, name: str, request: Request):
+        browser_write_ok(request)
+        try:
+            presets_store.delete(kind, name)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
         return {"ok": True}
 
     @app.get("/api/paper/strategies")
