@@ -1,7 +1,9 @@
-/* Homebase Charts — HBOrderPanel: TradingView's order panel, docked on the right of the chart page
-   (2026-09-27 order-panel plan, Task 3). It follows the SELECTED chart: that chart's instrument, quote, tick and
-   point value, and that chart's own trading accounts (2026-09-27 algo-per-chart plan, "Trading per chart"). On a
-   chart whose Trading is off it is greyed out and cannot send.
+/* Homebase Charts — HBOrderPanel: TradingView's order panel (2026-09-27 order-panel plan, Task 3; split into
+   its own floating/dockable panel by the 2026-09-27 panels plan — HBPanelShell owns the chrome: open/close,
+   dock/float, drag, resize. This file only fills the container HBPanelShell hands it and never touches the
+   page's layout itself). It follows the SELECTED chart: that chart's instrument, quote, tick and point value,
+   and that chart's own trading accounts (2026-09-27 algo-per-chart plan, "Trading per chart"). On a chart
+   whose Trading is off it is greyed out and cannot send.
 
    Money path:
      - the send resolves the chart at CLICK time (HBCharts.cells[HBCharts.selected]) -- never a chart reference
@@ -23,16 +25,14 @@ const Cat = window.HBCatalog;
 const D = () => window.HBDeskClient;
 const UI = () => window.HBTradeUI;
 
-const KEY = 'hb_charts_opanel';        // {open, w}: per viewer, a convenience only
-const W_MIN = 280, W_MAX = 420, W_DEF = 320;
 const TYPES = [['Market', 'Market'], ['Limit', 'Limit'], ['Stop', 'Stop'], ['StopLimit', 'Stop Limit']];
 const UNITS = [['usd', '$'], ['ticks', 'ticks'], ['price', 'price']];
 const STALE_MS = 10000;                // the tiles dim when the quote's last trade is older than this
 
 let page = null;
-let el = null;                          // the <aside>
+let el = null;                          // the content container HBPanelShell hands us
 let ui = null;                          // element references, built once
-let open = false, width = W_DEF, tab = 'order';
+let visible = false;                    // HBPanelShell.setVisible: the panel is open (docked or floating)
 let seen = { cell: null, root: null };  // the chart the form was last painted for
 let formRoot = null;                    // the symbol the form's prices were typed for (reset when it changes)
 let acctKey = null, logoRoot = null;
@@ -54,10 +54,6 @@ function icon(name) { const s = mk('span', 'icw'); s.innerHTML = window.HBIcons[
 function fmtIn(v, tick) { return Number.isFinite(v) ? v.toFixed(Cat.decimals(tick)) : ''; }
 function selectedCell() { const C = window.HBCharts; return C ? C.cells[C.selected] || null : null; }
 function focused(input) { return document.activeElement === input; }
-function load() {
-  try { const v = JSON.parse(localStorage.getItem(KEY) || 'null'); return v && typeof v === 'object' ? v : null; } catch (_) { return null; }
-}
-function save() { try { localStorage.setItem(KEY, JSON.stringify({ open, w: width })); } catch (_) { /* storage off: this session only */ } }
 function sw(label) {
   const b = mk('button', 'switch');
   b.type = 'button';
@@ -137,26 +133,9 @@ function build() {
   ui.logo = mk('span', 'op-logo');
   ui.sym = mk('span', 'op-sym', '—');
   ui.name = mk('span', 'op-name');
-  ui.close = mk('button', 'op-x');
-  ui.close.type = 'button'; ui.close.title = 'Close'; ui.close.setAttribute('aria-label', 'Close the order panel');
-  ui.close.appendChild(icon('x'));
-  ui.close.onclick = () => setOpen(false);
-  head.append(ui.logo, ui.sym, ui.name, mk('span', 'op-spacer'), ui.close);
+  head.append(ui.logo, ui.sym, ui.name);
 
-  const tabs = mk('div', 'op-tabs');
-  tabs.setAttribute('role', 'tablist');
-  ui.tabs = {};
-  for (const [id, text] of [['order', 'Order'], ['dom', 'DOM']]) {
-    const b = mk('button', 'op-tab', text);
-    b.type = 'button'; b.setAttribute('role', 'tab');
-    b.onclick = () => { tab = id; paint(); };
-    ui.tabs[id] = b;
-    tabs.appendChild(b);
-  }
-
-  // ---- the Order tab ----
   ui.order = mk('div', 'op-order');
-  ui.order.setAttribute('role', 'tabpanel');
   ui.form = mk('div', 'op-form');
 
   const tiles = mk('div', 'op-tiles');
@@ -270,19 +249,7 @@ function build() {
 
   ui.order.append(ui.form, accts, foot);
 
-  // ---- the DOM tab: the Level 2 ladder (HBDomUI), read-only, follows the selected chart's root ----
-  ui.dom = mk('div', 'op-dom');
-  ui.dom.setAttribute('role', 'tabpanel');
-  window.HBDomUI.mount(ui.dom, page);
-
-  ui.grip = mk('div', 'op-resize');
-  ui.grip.setAttribute('role', 'separator');
-  ui.grip.setAttribute('aria-orientation', 'vertical');
-  ui.grip.setAttribute('aria-label', 'Resize the order panel');
-  ui.grip.tabIndex = 0;
-  wireResize(ui.grip);
-
-  el.replaceChildren(ui.grip, head, tabs, ui.order, ui.dom);
+  el.replaceChildren(head, ui.order);
 }
 
 /* A collapsible section (TradingView's "Exits", "Extra settings"): its header toggles st[key]. */
@@ -355,14 +322,7 @@ function symbolChanged() {
 /* ---- paint: texts, classes and disabled states in place ---- */
 function paint() {
   if (!ui) return;
-  el.hidden = !open;
-  el.style.width = `${width}px`;
-  const tb = document.getElementById('tbOrder');
-  if (tb) { tb.setAttribute('aria-pressed', String(open)); tb.classList.toggle('active', open); }
-  const tbDom = document.getElementById('tbDom'), domOn = window.HBDom.pressed({ open, tab }, 'dom');
-  if (tbDom) { tbDom.setAttribute('aria-pressed', String(domOn)); tbDom.classList.toggle('active', domOn); }
   const cell = selectedCell(), root = cell && cell.shown ? cell.shown.root : null;
-  window.HBDomUI.sync(cell);   // the ladder follows the selected chart even while the Order tab is showing
   if (cell !== seen.cell || root !== seen.root) {
     if (seen.cell && cell !== seen.cell) flashPending = true;   // shown once this chart's accounts paint (it may still be loading)
     seen = { cell, root };
@@ -371,11 +331,7 @@ function paint() {
     if (formRoot !== null) symbolChanged();
     formRoot = root;
   }
-  if (!open) { flashPending = false; window.HBDomUI.setVisible(false); return; }
-  for (const [id, b] of Object.entries(ui.tabs)) { b.setAttribute('aria-selected', String(tab === id)); b.classList.toggle('on', tab === id); }
-  ui.order.hidden = tab !== 'order';
-  ui.dom.hidden = tab !== 'dom';
-  window.HBDomUI.setVisible(tab === 'dom');
+  if (!visible) { flashPending = false; return; }
 
   // header: the badge (rebuilt only on a symbol change), the root and its name
   if (root !== logoRoot) { logoRoot = root; ui.logo.replaceChildren(...(root ? [window.HBCell.badgeEl(root, 20)] : [])); }
@@ -518,7 +474,7 @@ function paintAccounts(t, m) {
 /* ---- the price pick: the chart calls this while a price field has focus (app.js onPick) ---- */
 function activePick() {
   const a = document.activeElement;
-  return open && tab === 'order' && a && el.contains(a) && a.dataset && a.dataset.pick && !a.closest('[hidden]') ? a : null;
+  return visible && a && el.contains(a) && a.dataset && a.dataset.pick && !a.closest('[hidden]') ? a : null;
 }
 function wantsPick() { return !!activePick(); }
 function pickPrice(price) {
@@ -532,65 +488,29 @@ function pickPrice(price) {
   setTimeout(() => { if (document.contains(inp)) inp.focus(); }, 0);   // keep picking: focus stays on the field
 }
 
-/* ---- open / width ---- */
-function setOpen(v) {
-  open = !!v;
-  save();
-  paint();
-}
-function toggle() { setOpen(!open); }
-/* The toolbar's DOM button (review 12): opens the panel onto the DOM tab, or closes it when the DOM tab is
-   already showing; pressed while it is. */
-function openTab(id) {
-  const next = window.HBDom.toggleTab({ open, tab }, id);
-  tab = next.tab;
-  if (next.open !== open) { open = next.open; save(); }
-  paint();
+/* HBPanelShell calls this whenever the panel opens, closes, or switches dock/float (its content never changes
+   size-driven behaviour, only whether it's worth painting at all). */
+function setVisible(v) {
+  visible = !!v;
+  if (visible) paint();
 }
 function setRoot() { paint(); }   // the selected chart (or its symbol) changed: the panel re-reads it
-function wireResize(g) {
-  let drag = false;
-  const apply = (w) => { width = Math.min(W_MAX, Math.max(W_MIN, Math.round(w))); el.style.width = `${width}px`; };
-  g.addEventListener('pointerdown', (e) => {
-    drag = true;
-    try { g.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
-    e.preventDefault();
-  });
-  g.addEventListener('pointermove', (e) => { if (drag) apply(el.getBoundingClientRect().right - e.clientX); });
-  const end = (e) => {
-    if (!drag) return;
-    drag = false;
-    try { g.releasePointerCapture(e.pointerId); } catch (_) { /* ignore */ }
-    save();
-  };
-  g.addEventListener('pointerup', end);
-  g.addEventListener('pointercancel', end);
-  g.addEventListener('lostpointercapture', end);
-  g.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowLeft') { e.preventDefault(); apply(width + 16); save(); }
-    else if (e.key === 'ArrowRight') { e.preventDefault(); apply(width - 16); save(); }
-  });
-}
 
-function mount(pg) {
+function mount(pg, container) {
   page = pg;
-  el = document.getElementById('opanel');
+  el = container;
   if (!el) return;
-  const saved = load();
-  width = saved && Number.isFinite(saved.w) ? Math.min(W_MAX, Math.max(W_MIN, saved.w)) : W_DEF;
-  open = !!(saved && saved.open === true);
+  el.classList.add('opanel');
   st.qty = String(Math.min(T.PANEL_QTY_MAX, Math.max(1, D().prefs.qty)));
   build();
   ui.qty.value = st.qty;
   resetExits();
-  const tb = document.getElementById('tbOrder');
-  if (tb) tb.onclick = toggle;
   D().on(() => paint());                 // desk / quote / prefs events: patch in place, never rebuild
   UI().onBusyChange(() => paint());
   UI().onTradeChange(() => paint());     // a chart's Trading switch / accounts, a LIVE arm
-  setInterval(() => { if (open) paint(); }, 1000);   // a quote going stale with no event
+  setInterval(() => { if (visible) paint(); }, 1000);   // a quote going stale with no event
   paint();
 }
 
-window.HBOrderPanel = { mount, toggle, setRoot, pickPrice, wantsPick, openTab };
+window.HBOrderPanel = { mount, setRoot, pickPrice, wantsPick, setVisible };
 })();
