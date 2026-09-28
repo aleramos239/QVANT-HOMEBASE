@@ -31,6 +31,12 @@
   /* 2026-09-28: stronger at the user's request (was .70/.82, 14/24px) -- more of the chart shows through */
   --glass-bg: rgba(255, 255, 255, .50); --glass-bg-heavy: rgba(255, 255, 255, .62);
   --glass-edge: rgba(255, 255, 255, .85); --glass-blur: 20px; --glass-blur-heavy: 30px; --glass-saturate: 190%;
+  /* 2026-09-28: "more glass everywhere" -- the app frame's own subtle depth, so chrome that sits in normal
+     flow over the plain frame (the toolbar, the tab row, the rail, the status bar, ...) has something other
+     than one flat colour for its blur to pick up; a blur over true flat reads as nothing (the same problem
+     glass over the chart never has, since the chart is never flat). A soft, NEUTRAL (no hue) radial fade
+     from the top -- Apple-vibrancy-subtle, not a visible "gradient." */
+  --frame-wash: radial-gradient(1400px 700px at 50% -10%, #F6F6F6 0%, var(--frame) 65%);
   color-scheme: light;
 }
 :root[data-theme="dark"] {
@@ -45,13 +51,14 @@
   --backdrop: rgba(0, 0, 0, .5);
   --glass-bg: rgba(15, 15, 15, .46); --glass-bg-heavy: rgba(15, 15, 15, .58);
   --glass-edge: rgba(255, 255, 255, .10); --glass-saturate: 170%;
+  --frame-wash: radial-gradient(1400px 700px at 50% -10%, #161616 0%, var(--frame) 65%);
   color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
-body { display: flex; flex-direction: column; overflow: hidden; background: var(--frame); color: var(--text);
-  font: 14px/1.25 var(--font); -webkit-font-smoothing: antialiased; }
+body { display: flex; flex-direction: column; overflow: hidden; background-color: var(--frame);
+  background-image: var(--frame-wash); color: var(--text); font: 14px/1.25 var(--font); -webkit-font-smoothing: antialiased; }
 button, input, select { font: inherit; color: inherit; }
 button { margin: 0; padding: 0; border: 0; background: none; cursor: pointer; }
 a { color: inherit; }
@@ -1096,22 +1103,39 @@ input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-o
   background: var(--border);
 }
 
-/* ---- frosted glass (2026-09-28 feel pass) ----
-   Only genuinely floating/click-triggered CHROME: menus/popovers, dialogs, toasts, the draw toolbar, the
-   Bar Replay control bar, and a floating panel's own header (its body -- the order form, the DOM ladder --
-   stays the solid `--panel` it always was: the audit's exclusion list). The top toolbar and status bar sit
-   in normal document flow, never over the chart, so "if it reads well over the chart background" doesn't
-   apply to them here -- left solid, TradingView-plain, like the rest of the excluded surfaces.
+/* ---- frosted glass (2026-09-28 feel pass; extended same day at the user's "more glass everywhere" request)
+   ----
+   Floating/click-triggered chrome (menus/popovers, dialogs, toasts, the draw toolbar, the Bar Replay control
+   bar, a floating panel's own header) PLUS the app's persistent chrome that sits in normal flow: the top
+   toolbar, the layout tab row, the drawing rail, the status bar, the bottom panel's tab strip, the Strategy
+   Tester's own sticky header, the per-chart gear corner, and a floating panel's outer frame edge. --frame-
+   wash (above) is what makes the normal-flow bars actually read as material instead of a flat tint (a blur
+   over one flat colour shows nothing) -- macOS-vibrancy-tasteful, not glossy: no colour, no glow, a few
+   percent of lightness.
+   Never here, per the audit's exclusion list and the user's own repeat of it: the chart canvas, price/time
+   axes, legend values, order/position lines and their chips, the Buy/Sell block, the DOM ladder's cells, a
+   floating panel's BODY (the order form, the DOM ladder -- .hbpanel-body is pinned solid below, since
+   .hbpanel's own frame is now translucent). Layout is untouched -- these bars still push the chart grid,
+   never overlay its plotted area.
    `-webkit-` prefixed too: this ships inside a WKWebView, which needs it or the blur silently does nothing
    (GOTCHAS.md). Each surface still keeps its existing shadow/box-shadow for depth -- glass replaces only the
    background, not the elevation cue. */
-.menu, .hotkey-box, .toast, .draw-toolbar, .replay-bar, .hbpanel-head {
+.menu, .hotkey-box, .toast, .draw-toolbar, .replay-bar, .hbpanel-head,
+.toolbar, .tabrow, .rail, .statusbar, .bp-bar, .tst-sticky, .cell-gear {
   background: var(--glass-bg);
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
 }
-.menu, .hotkey-box, .toast, .draw-toolbar, .replay-bar { border-top: 1px solid var(--glass-edge); }
+.menu, .hotkey-box, .toast, .draw-toolbar, .replay-bar, .toolbar, .tabrow, .bp-bar, .tst-sticky {
+  border-top: 1px solid var(--glass-edge);
+}
 .hbpanel-head { border-top: 1px solid var(--glass-edge); }   /* in ADDITION to its existing bottom border -- top and bottom separate it from both the titlebar above and the body below */
+.tabrow { border-bottom-color: var(--border); }   /* keep its own separator from the toolbar above -- glass alone reads too soft there */
+/* a floating panel's FRAME, not its fill: its own background sits directly behind .hbpanel-head, whose own
+   blur would otherwise stack on top of it (the exact "light glass on light glass" hazard .dialog .menu
+   avoids below) -- the visible, safe part of "frame" for this one is its outer edge. */
+.hbpanel.floating { border-color: var(--glass-edge); }
+.hbpanel-body { background: var(--panel); }   /* the order form / DOM ladder: always solid, never the frame's glass */
 .dialog {
   background: var(--glass-bg-heavy);
   backdrop-filter: blur(var(--glass-blur-heavy)) saturate(var(--glass-saturate));
@@ -1123,22 +1147,28 @@ input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-o
 .dialog .menu { background: var(--panel); backdrop-filter: none; -webkit-backdrop-filter: none; border-top: none; }
 /* vibrancy (apple-design §12): over the clearer glass, muted captions get more contrast -- flat grey on a
    translucent surface over a busy chart reads washed out */
-.menu .menu-h, .menu .menu-sub, .dialog .set-cap, .dialog .dlg-sub, .toast .toast-sub {
+.menu .menu-h, .menu .menu-sub, .dialog .set-cap, .dialog .dlg-sub, .toast .toast-sub, .statusbar {
   color: color-mix(in srgb, var(--text-2) 55%, var(--text));
 }
 
 @media (prefers-reduced-transparency: reduce) {
-  .menu, .hotkey-box, .toast, .draw-toolbar, .replay-bar, .hbpanel-head, .dialog {
+  :root { --frame-wash: none; }
+  .menu, .hotkey-box, .toast, .draw-toolbar, .replay-bar, .hbpanel-head, .dialog,
+  .toolbar, .tabrow, .rail, .statusbar, .bp-bar, .tst-sticky, .cell-gear {
     background: var(--panel); backdrop-filter: none; -webkit-backdrop-filter: none; border-top-color: var(--border);
   }
+  .hbpanel.floating { border-color: var(--border); }
 }
 @media (prefers-contrast: more) {
-  .menu, .hotkey-box, .toast, .draw-toolbar, .replay-bar, .dialog {
+  .menu, .hotkey-box, .toast, .draw-toolbar, .replay-bar, .dialog,
+  .toolbar, .tabrow, .rail, .statusbar, .bp-bar, .tst-sticky {
     background: var(--panel); backdrop-filter: none; -webkit-backdrop-filter: none;
     box-shadow: inset 0 0 0 1px var(--border), var(--shadow-menu);
   }
   .dialog { box-shadow: inset 0 0 0 1px var(--border), var(--shadow-dialog); }
   .hbpanel-head { background: var(--pill); backdrop-filter: none; -webkit-backdrop-filter: none; border-top-color: var(--border); }
+  .hbpanel.floating { border-color: var(--border); }
+  .cell-gear { background: var(--panel); backdrop-filter: none; -webkit-backdrop-filter: none; }
 }
 
 /* ---- enter/exit (2026-09-28 feel pass) ----
