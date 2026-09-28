@@ -391,3 +391,47 @@ test('Trading tab: the two one-click switches show and flip their own pref only'
   chart.onclick();
   assert.deepEqual([prefs.oneClickChart, prefs.oneClickPanel, prefs.oneClick], [false, true, false]);
 });
+
+/* S7 (2026-09-28 safety pass): the Template ▾ "Save as…" field saves once per Enter PRESS -- a held key's
+   auto-repeat (e.repeat) never sends another PUT (GOTCHAS.md: a held key has sent duplicates here before). */
+test('S7: Template ▾ Save as… -- Enter saves once; a held Enter\'s repeats never save again', async () => {
+  const cell = makeCell('time:60');
+  const { host } = makeHost(cell, []);
+  const saved = [];
+  host.templates.save = async (name, body) => { saved.push(name); return null; };
+  const box = new FakeEl('div');
+  SD.mount(box, host);
+  box.querySelector('.tpl-btn').onclick();
+  await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+  findText(host.menu(), 'Save as…').parentNode.onclick();
+  const input = descend(host.menu(), (el) => el.tagName === 'input' && el.classList.contains('menu-input'));
+  input.value = 'Held key';
+  let prevented = 0;
+  const key = (repeat) => ({ key: 'Enter', repeat, preventDefault() { prevented++; } });
+  input.onkeydown(key(true));                      // a repeat that arrives first (focus landed mid-hold): nothing
+  await Promise.resolve();
+  assert.deepEqual(saved, []);
+  input.onkeydown(key(false));                     // the press itself
+  input.onkeydown(key(true)); input.onkeydown(key(true)); input.onkeydown(key(true));   // its auto-repeat
+  await Promise.resolve(); await Promise.resolve();
+  assert.deepEqual(saved, ['Held key'], 'exactly one save');
+  assert.equal(prevented, 5, 'every Enter, repeat or not, is still kept from its default action');
+});
+
+/* W3 (2026-09-28): at <= 640 px the Settings tabs show icons only (charts.css hides the label) -- each keeps its name
+   as a tooltip and as its accessible name. */
+test('W3: every Settings tab carries its label as title and aria-label', () => {
+  const cell = makeCell('time:60');
+  const { host } = makeHost(cell, []);
+  const box = new FakeEl('div');
+  SD.mount(box, host);
+  const tabs = [];
+  descend(box, (el) => { if (el.classList && el.classList.contains('set-tab')) tabs.push(el); return false; });
+  assert.ok(tabs.length >= 6, `found ${tabs.length} tabs`);
+  for (const t of tabs) {
+    const label = t.children[1].textContent;
+    assert.ok(label, 'a visible label');
+    assert.equal(t.title, label);
+    assert.equal(t.getAttribute('aria-label'), label);
+  }
+});

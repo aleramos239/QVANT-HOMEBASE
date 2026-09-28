@@ -9,7 +9,7 @@
     document.documentElement.setAttribute('data-theme', (_t === 'light' || _t === 'dark') ? _t : 'light');
   } catch (_) { document.documentElement.setAttribute('data-theme', 'light'); }
 </script>
-<link rel="stylesheet" href="/static/charts/charts.css?v=27">
+<link rel="stylesheet" href="/static/charts/charts.css?v=29">
 </head>
 <body>
 <div class="tabrow">
@@ -62,56 +62,59 @@
   <div class="bp-body" id="bpBody"></div>
 </section>
 <div class="toasts" id="toastRoot" aria-live="polite"></div>
-<footer class="statusbar">
+<footer class="statusbar" id="statusbar">
+  <!-- W1: data-drop ranks the segments that step out WHOLE when the bar is too narrow (the lowest first, app.js
+       fitStatusBar); the connection and desk state never do -->
   <span class="sb-dot" id="sbDot"></span><span class="sb-mode" id="sbMode">Connecting…</span><span class="sb-feed" id="sbFeed"></span>
-  <span class="sb-desk" id="sbDesk"><span class="sb-dot" id="sbDeskDot"></span><span id="sbDeskText"></span><a class="sb-desk-link" id="sbDeskLink" href="#" target="_blank" rel="noopener" hidden>Open the desk</a></span>
-  <span class="sb-spacer"></span>
+  <span class="sb-desk" id="sbDesk"><span class="sb-dot" id="sbDeskDot"></span><span class="sb-desk-state" id="sbDeskText"></span><span class="sb-desk-why" id="sbDeskWhy" data-drop="6"></span><span class="sb-desk-lim" id="sbDeskLim" data-drop="3"></span><a class="sb-desk-link" id="sbDeskLink" href="#" target="_blank" rel="noopener" hidden>Open the desk</a></span>
+  <span class="sb-spacer" id="sbSpacer"></span>
   <span class="sb-note" id="sbNote" role="status"></span>
-  <span class="sb-event" id="sbEvent" hidden></span>
-  <span class="sb-clock" id="sbClock"></span><span class="sb-opt" id="sbBudget"></span><span class="sb-opt" id="sbRec"></span>
+  <span class="sb-event" id="sbEvent" hidden data-drop="4"></span>
+  <span class="sb-clock" id="sbClock" data-drop="5" title="Eastern Time"></span><span class="sb-opt" id="sbBudget" data-drop="2"></span><span class="sb-opt" id="sbRec" data-drop="1"></span>
   <a class="sb-credit" id="sbCredit" href="https://www.tradingview.com/" target="_blank" rel="noopener noreferrer" title="Charts: TradingView Lightweight Charts™ · Copyright (c) 2025 TradingView, Inc. · https://www.tradingview.com/" aria-label="Charts: TradingView Lightweight Charts™ (attribution)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></a>
 </footer>
 <div id="menuRoot"></div>
 <div id="dialogRoot"></div>
 <div class="rail-tip" id="railTip" role="status" hidden></div>
-<script src="/static/nobacknav.js?v=27"></script>
-<script src="/static/vendor/lightweight-charts-5.2.1.js?v=27"></script>
-<script src="/static/charts/icons.js?v=27"></script>
-<script src="/static/charts/catalog.js?v=27"></script>
-<script src="/static/charts/primitives.js?v=27"></script>
-<script src="/static/charts/drawstyle.js?v=27"></script>
-<script src="/static/charts/drawings.js?v=27"></script>
-<script src="/static/charts/position.js?v=27"></script>
-<script src="/static/charts/settings.js?v=27"></script>
-<script src="/static/charts/events.js?v=27"></script>
-<script src="/static/charts/news.js?v=27"></script>
-<script src="/static/charts/scrollback.js?v=27"></script>
-<script src="/static/charts/cell.js?v=27"></script>
-<script src="/static/charts/settings-dialog.js?v=27"></script>
-<script src="/static/charts/indicator-settings-dialog.js?v=27"></script>
-<script src="/static/charts/chartmenu.js?v=27"></script>
-<script src="/static/charts/trade.js?v=27"></script>
-<script src="/static/charts/fillquality.js?v=27"></script>
-<script src="/static/charts/deskclient.js?v=27"></script>
-<script src="/static/charts/paperclient.js?v=27"></script>
-<script src="/static/charts/dom.js?v=27"></script>
-<script src="/static/charts/domui.js?v=27"></script>
-<script src="/static/charts/panel.js?v=27"></script>
-<script src="/static/charts/tradeui.js?v=27"></script>
-<script src="/static/charts/tradelines.js?v=27"></script>
-<script src="/static/charts/newsui.js?v=27"></script>
-<script src="/static/charts/tester.js?v=27"></script>
-<script src="/static/charts/testerui.js?v=27"></script>
-<script src="/static/charts/testerlayer.js?v=27"></script>
-<script src="/static/charts/l2layer.js?v=27"></script>
-<script src="/static/charts/liquidity.js?v=27"></script>
-<script src="/static/charts/replay.js?v=27"></script>
-<script src="/static/charts/replayui.js?v=27"></script>
-<script src="/static/charts/orderpanel.js?v=27"></script>
-<script src="/static/charts/panellayout.js?v=27"></script>
-<script src="/static/charts/panelshell.js?v=27"></script>
-<script src="/static/charts/layouts.js?v=27"></script>
-<script src="/static/charts/presets.js?v=27"></script>
-<script src="/static/charts/app.js?v=27"></script>
+<script src="/static/nobacknav.js?v=29"></script>
+<script src="/static/vendor/lightweight-charts-5.2.1.js?v=29"></script>
+<script src="/static/charts/icons.js?v=29"></script>
+<script src="/static/charts/spring.js?v=29"></script>
+<script src="/static/charts/catalog.js?v=29"></script>
+<script src="/static/charts/primitives.js?v=29"></script>
+<script src="/static/charts/drawstyle.js?v=29"></script>
+<script src="/static/charts/drawings.js?v=29"></script>
+<script src="/static/charts/position.js?v=29"></script>
+<script src="/static/charts/settings.js?v=29"></script>
+<script src="/static/charts/events.js?v=29"></script>
+<script src="/static/charts/news.js?v=29"></script>
+<script src="/static/charts/scrollback.js?v=29"></script>
+<script src="/static/charts/cell.js?v=29"></script>
+<script src="/static/charts/settings-dialog.js?v=29"></script>
+<script src="/static/charts/indicator-settings-dialog.js?v=29"></script>
+<script src="/static/charts/chartmenu.js?v=29"></script>
+<script src="/static/charts/trade.js?v=29"></script>
+<script src="/static/charts/fillquality.js?v=29"></script>
+<script src="/static/charts/deskclient.js?v=29"></script>
+<script src="/static/charts/paperclient.js?v=29"></script>
+<script src="/static/charts/dom.js?v=29"></script>
+<script src="/static/charts/domui.js?v=29"></script>
+<script src="/static/charts/panel.js?v=29"></script>
+<script src="/static/charts/tradeui.js?v=29"></script>
+<script src="/static/charts/tradelines.js?v=29"></script>
+<script src="/static/charts/newsui.js?v=29"></script>
+<script src="/static/charts/tester.js?v=29"></script>
+<script src="/static/charts/testerui.js?v=29"></script>
+<script src="/static/charts/testerlayer.js?v=29"></script>
+<script src="/static/charts/l2layer.js?v=29"></script>
+<script src="/static/charts/liquidity.js?v=29"></script>
+<script src="/static/charts/replay.js?v=29"></script>
+<script src="/static/charts/replayui.js?v=29"></script>
+<script src="/static/charts/orderpanel.js?v=29"></script>
+<script src="/static/charts/panellayout.js?v=29"></script>
+<script src="/static/charts/panelshell.js?v=29"></script>
+<script src="/static/charts/layouts.js?v=29"></script>
+<script src="/static/charts/presets.js?v=29"></script>
+<script src="/static/charts/app.js?v=29"></script>
 </body>
 </html>

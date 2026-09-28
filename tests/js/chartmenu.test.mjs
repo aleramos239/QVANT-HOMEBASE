@@ -149,3 +149,51 @@ test('arrow keys walk the items and wrap; Home/End jump; nothing to walk = -1', 
   assert.equal(M.step(1, 3, 'Tab'), 1);
   assert.equal(M.step(-1, 0, 'ArrowDown'), -1);
 });
+
+/* W2 (2026-09-28): a popup menu never runs past the space it can show in -- the interval menu's Custom row sat below
+   the window's bottom edge. fitMenu places it and caps its height (it scrolls inside) against `bounds`: the window, or
+   the dialog it opened from. */
+const WIN = (w, h) => ({ left: 0, top: 0, right: w, bottom: h });
+const rect = (left, top, width, height) => ({ left, top, width, height, right: left + width, bottom: top + height });
+
+test('W2 fitMenu: under its trigger when it fits, above only when that side has the room -- no cap either way', () => {
+  const btn = rect(300, 38, 34, 34);
+  assert.deepEqual(M.fitMenu({ r: btn, w: 200, h: 300, bounds: WIN(1280, 800) }),
+    { left: 300, top: 76, maxHeight: null, originX: 17, originY: 0 });   // grown from the button's middle
+  const foot = rect(250, 656, 110, 32);                          // a dialog footer's Template ▾ near the bottom
+  const up = M.fitMenu({ r: foot, w: 240, h: 122, bounds: WIN(1280, 700) });
+  assert.deepEqual([up.top, up.maxHeight, up.originY], [656 - 4 - 122, null, 122], 'above, grown from its bottom edge');
+});
+
+test('W2 fitMenu: too tall for either side -- the roomier side, its height capped to the window (it scrolls inside)', () => {
+  const iv = rect(295, 38, 34, 34);                               // the interval menu's toolbar button
+  for (const vh of [800, 600, 480]) {
+    const p = M.fitMenu({ r: iv, w: 274, h: 900, bounds: WIN(1280, vh) });
+    assert.equal(p.top, 76, 'still under its button');
+    assert.equal(p.maxHeight, vh - 4 - 76, `capped to the room below at ${vh} px`);
+    assert.equal(p.top + p.maxHeight, vh - 4, 'its bottom 4 px inside the window: the Custom row is reachable');
+  }
+  const low = rect(300, 500, 40, 30);                             // more room above: it goes up, capped there
+  const p = M.fitMenu({ r: low, w: 200, h: 700, bounds: WIN(1280, 600) });
+  assert.deepEqual([p.top, p.maxHeight, p.originY], [4, 500 - 4 - 4, 500 - 4 - 4], 'the room above: 4 px gap, 4 px margin');
+});
+
+test('W2 fitMenu: a context menu at the pointer and a rail flyout stay inside, capped when taller than the window', () => {
+  const at = M.fitMenu({ mode: 'at', at: { x: 1250, y: 780 }, w: 240, h: 300, bounds: WIN(1280, 800) });
+  assert.deepEqual([at.left, at.top, at.maxHeight], [1280 - 240 - 4, 800 - 300 - 4, null]);
+  assert.deepEqual([at.originX, at.originY], [1250 - at.left, 780 - at.top], 'grows from the pointer');
+  const tall = M.fitMenu({ mode: 'at', at: { x: 10, y: 300 }, w: 240, h: 1000, bounds: WIN(1280, 600) });
+  assert.deepEqual([tall.top, tall.maxHeight], [4, 592]);
+  const fly = M.fitMenu({ mode: 'right', r: rect(8, 560, 36, 36), w: 180, h: 90, bounds: WIN(1280, 600) });
+  assert.deepEqual([fly.left, fly.top, fly.maxHeight], [8 + 36 + 8, 600 - 90 - 4, null]);
+});
+
+test('W2 fitMenu: inside a dialog (which clips its menus) the dialog is the bounds -- kept within it', () => {
+  const dialog = { left: 230, top: 100, right: 1050, bottom: 700 };
+  const swatch = rect(1000, 300, 28, 28);                          // a colour swatch near the dialog's right edge
+  const p = M.fitMenu({ r: swatch, w: 252, h: 180, bounds: dialog });
+  assert.equal(p.left, 1050 - 252 - 4, 'pulled left to stay inside the dialog');
+  assert.ok(p.top + 180 <= 700 - 4 && p.top >= 100 + 4);
+  const tpl = M.fitMenu({ r: rect(250, 656, 110, 32), w: 240, h: 600, bounds: dialog });
+  assert.deepEqual([tpl.top, tpl.maxHeight], [100 + 4, 656 - 4 - (100 + 4)], 'too tall for the dialog: capped to its room above');
+});

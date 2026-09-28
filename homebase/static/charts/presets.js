@@ -122,7 +122,7 @@ function menu(host, anchor, { kind, current, apply, extra }) {
         host.closeMenu();
       };
       go.onclick = save;
-      input.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } };
+      input.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); if (e.repeat) return; save(); } };   // S7: one PUT per press
       rowEl.append(input, go);
       saveAs.replaceWith(rowEl);
       input.focus();

@@ -7,6 +7,7 @@
 'use strict';
 const C = window.HBCatalog, I = window.HBIcons, S = window.HBSettings, T = window.HBTrade, { Cell, badgeEl } = window.HBCell;
 const DS = window.HBDrawStyle;
+const M = window.HBSpring;   // the feel pass (2026-09-28): materialize()/dematerialize() for every menu/dialog/popover below
 const GRIDS = { 1: [1, 1], 2: [2, 1], 4: [2, 2], 6: [3, 2] };
 const GRID_NAMES = { 1: '1 chart', 2: '2 charts side by side', 4: '2 × 2 charts', 6: '3 × 2 charts' };
 const STATUS_STALE_S = 6;   // the server sends a status every 2 s: this long without one = it is stuck
@@ -29,6 +30,7 @@ let selected = 0;
 let nextId = 1;
 let statusAt = 0, statusLine = '';
 let menuEl = null, menuAnchor = null;
+let menuNeedsMaterialize = false;   // true right after openMenu(), consumed by the FIRST placeMenu() that follows
 let customWait = null;   // {cell, spec, err}: a custom interval sent from the open interval menu, awaiting the server
 let dlg = null;   // the open dialog: {back, box, focus}
 let tool = 'cursor';
@@ -312,36 +314,54 @@ function openMenu(anchor, cls, { right = false, root = null, at = null } = {}) {
   m.setAttribute('role', 'menu');
   (root || $('#menuRoot')).appendChild(m);
   menuEl = m; menuAnchor = anchor; menuRight = right; menuAt = at;
+  menuNeedsMaterialize = true;   // consumed by the placeMenu() the caller runs once content is filled in
   if (anchor) { anchor.classList.add('open'); anchor.setAttribute('aria-expanded', 'true'); }
   return m;
 }
+/* Positions the menu, then (the first time only, per open) materializes it anchored to whatever it was
+   actually placed against -- a trigger button, the rail flyout's own button, or the pointer for a context
+   menu (apple-design skill: "anchor interactions to their source"). Origin is expressed in the menu's own
+   local coordinates (offset from its own top-left), which is what CSS transform-origin wants. */
 function placeMenu() {
   if (!menuEl) return;
-  const w = menuEl.offsetWidth, h = menuEl.offsetHeight;
-  if (menuAt) {   // a context menu: at the pointer, kept inside the window
-    menuEl.style.left = Math.max(4, Math.min(menuAt.x, window.innerWidth - w - 4)) + 'px';
-    menuEl.style.top = Math.max(4, Math.min(menuAt.y, window.innerHeight - h - 4)) + 'px';
-    return;
+  // W2 (2026-09-28): its natural height (up to the CSS cap), then fitted to the room it has -- a menu taller than that
+  // gets a max-height and scrolls inside (HBChartMenu.fitMenu): at the pointer (a context menu), right of a rail
+  // button (a flyout), or under its toolbar button, above it only when that side has the room (a dialog footer's
+  // menu, a swatch near the bottom)
+  menuEl.style.maxHeight = '';
+  const w = menuEl.offsetWidth, h = menuEl.offsetHeight, box = fixedBox(menuEl), cb = box ? box.getBoundingClientRect() : null;
+  const bounds = { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
+  if (cb) Object.assign(bounds, { left: Math.max(0, cb.left), top: Math.max(0, cb.top),
+    right: Math.min(bounds.right, cb.right), bottom: Math.min(bounds.bottom, cb.bottom) });   // a dialog clips its menus
+  const trigger = menuAt ? null : menuRight ? (menuAnchor.closest('.rail-split') || menuAnchor) : menuAnchor;
+  const p = window.HBChartMenu.fitMenu({ mode: menuAt ? 'at' : menuRight ? 'right' : 'below', at: menuAt,
+    r: trigger ? trigger.getBoundingClientRect() : null, w, h, bounds });
+  // fixed inside a dialog = laid out in that dialog's own box, not the window's (its glass makes it the containing
+  // block): without this the Settings dialog's Template ▾ opened a dialog's width to the right of its button
+  const ox = cb ? cb.left + box.clientLeft : 0, oy = cb ? cb.top + box.clientTop : 0;
+  menuEl.style.maxHeight = p.maxHeight == null ? '' : `${p.maxHeight}px`;
+  menuEl.style.left = `${p.left - ox}px`; menuEl.style.top = `${p.top - oy}px`;
+  if (menuNeedsMaterialize) { menuNeedsMaterialize = false; M.materialize(menuEl, `${p.originX}px ${p.originY}px`); }
+}
+/* The element a position:fixed menu is laid out against when it is not the window: the nearest ancestor with a
+   transform, filter, backdrop-filter or perspective -- a dialog, whose glass does exactly that. null: the window. */
+function fixedBox(el) {
+  for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) {
+    const s = getComputedStyle(a);
+    if ([s.transform, s.filter, s.backdropFilter, s.webkitBackdropFilter, s.perspective].some((v) => v && v !== 'none')) return a;
   }
-  if (menuRight) {
-    const r = (menuAnchor.closest('.rail-split') || menuAnchor).getBoundingClientRect();
-    menuEl.style.left = (r.right + 8) + 'px';
-    menuEl.style.top = Math.max(4, Math.min(r.top, window.innerHeight - h - 4)) + 'px';
-    return;
-  }
-  const r = menuAnchor.getBoundingClientRect(), below = r.bottom + 4;
-  menuEl.style.left = Math.max(4, Math.min(r.left, window.innerWidth - w - 4)) + 'px';
-  // no room below (a dialog footer's menu, a swatch near the bottom): above the anchor instead
-  menuEl.style.top = (below + h > window.innerHeight - 4 && r.top - 4 - h >= 4 ? r.top - 4 - h : below) + 'px';
+  return null;
 }
 function closeMenu() {
   if (!menuEl) return;
-  const back = menuAnchor && menuEl.contains(document.activeElement) ? menuAnchor : null;   // keyboard focus goes back to the button
-  menuEl.remove();
+  const el = menuEl;
+  const back = menuAnchor && el.contains(document.activeElement) ? menuAnchor : null;   // keyboard focus goes back to the button
   if (menuAnchor) { menuAnchor.classList.remove('open'); menuAnchor.setAttribute('aria-expanded', 'false'); }
   menuEl = menuAnchor = menuAt = null;
+  menuNeedsMaterialize = false;
   customWait = null;
   if (window.HBReplayUI) window.HBReplayUI.disarmPick();   // the Replay popover's "pick a start" arm, if any
+  M.dematerialize(el, () => el.remove());
   if (back) back.focus();
 }
 function toggleMenu(anchor, fill) {
@@ -391,7 +411,9 @@ function symbolMenu() {
     if (!hits.length) list.appendChild(mk('div', 'menu-empty', 'No matching symbol'));
   };
   input.oninput = render;
-  input.onkeydown = (e) => { if (e.key === 'Enter') { const first = list.querySelector('.menu-i'); if (first) first.click(); } };
+  // S7: never a held key's repeat -- the pick hands focus back to #tbSymbol, where the next repeat would reopen this
+  // menu and pick the FIRST symbol of the full list
+  input.onkeydown = (e) => { if (e.key === 'Enter') { if (e.repeat) return; const first = list.querySelector('.menu-i'); if (first) first.click(); } };
   m.append(input, list);
   render();
   input.focus();
@@ -446,7 +468,7 @@ function intervalMenu() {
     c.update({ spec: s });
   };
   apply.onclick = go;
-  input.onkeydown = (e) => { if (e.key === 'Enter') go(); };
+  input.onkeydown = (e) => { if (e.key === 'Enter') { if (e.repeat) return; go(); } };   // S7: one sub per press, never per repeat
   row.append(input, apply);
   m.append(row, err);
 }
@@ -462,8 +484,9 @@ function hotkeyAnchor(cell) {
 }
 function closeHotkeyBox() {
   if (!hotkeyBox) return;
-  hotkeyBox.el.remove();
+  const el = hotkeyBox.el;
   hotkeyBox = null;
+  M.dematerialize(el, () => el.remove());
 }
 /* A blur means "cancel" for both boxes, but Enter/Escape already call closeHotkeyBox() themselves before the
    blur fires (removing the focused input triggers one) — guarded by identity so that later blur is a no-op. */
@@ -489,12 +512,13 @@ function openTimeframeBox(cell, seed) {
   };
   input.oninput = () => { err.hidden = true; };
   input.onkeydown = (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); apply(); }
+    if (e.key === 'Enter') { e.preventDefault(); if (e.repeat) return; apply(); }   // S7: never a held key's repeat
     else if (e.key === 'Escape') { e.preventDefault(); closeHotkeyBox(); }
   };
   input.onblur = hotkeyBlur(input);
   box.append(input, err);
   $('#menuRoot').appendChild(box);
+  M.materialize(box, 'left top');   // anchored near the selected chart's own corner, not a specific button
   hotkeyBox = { el: box, input, kind: 'tf' };
   input.value = seed;
   input.focus();
@@ -528,6 +552,7 @@ function openSymbolBox(cell, seed) {
   input.onkeydown = (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
+      if (e.repeat) return;   // S7: never a held key's repeat
       const h = hits();
       if (h.length) pick(h[Math.min(active, h.length - 1)]);
     } else if (e.key === 'Escape') {
@@ -542,6 +567,7 @@ function openSymbolBox(cell, seed) {
   input.onblur = hotkeyBlur(input);
   box.append(input, list);
   $('#menuRoot').appendChild(box);
+  M.materialize(box, 'left top');
   hotkeyBox = { el: box, input, kind: 'sym' };
   input.value = seed;
   render();
@@ -765,7 +791,7 @@ function renameTab(oldName) {
     renderTabs();
   };
   ok.onclick = go;
-  input.onkeydown = (e) => { if (e.key === 'Enter') go(); };
+  input.onkeydown = (e) => { if (e.key === 'Enter') { if (e.repeat) return; go(); } };   // S7: one rename POST per press
   row.append(input, ok);
   m.append(row, err);
   placeMenu();
@@ -966,16 +992,19 @@ function openDialog(title, cls) {
   back.addEventListener('pointerdown', (e) => { if (e.target === back) closeDialog(); });
   $('#dialogRoot').appendChild(back);
   dlg = { back, box, focus: document.activeElement };
+  M.materialize(back);
+  M.materialize(box);   // no anchor -- a dialog always stays center-anchored (Emil Kowalski's own exception)
   return box;
 }
 
 function closeDialog() {
   if (!dlg) return;
   closeMenu();   // a menu or swatch popover open inside the dialog goes with it
-  const { back, focus, onClose } = dlg;
+  const { back, box, focus, onClose } = dlg;
   dlg = null;
-  back.remove();
   if (onClose) onClose();   // the Settings dialog puts every chart back unless Ok was pressed
+  M.dematerialize(back, () => {});   // the scrim fades in parallel; box (below) drives the actual removal
+  M.dematerialize(box, () => back.remove());
   if (focus && typeof focus.focus === 'function' && document.contains(focus)) focus.focus();
 }
 
@@ -1006,11 +1035,14 @@ function indicatorsDialog() {
     const q = input.value.trim(), hits = C.filter(q, group);
     const had = list.contains(document.activeElement) ? document.activeElement.dataset.id : null;   // keyboard focus
     list.replaceChildren(...hits.map((d) => {
-      const row = mk('button', 'dlg-row');
+      const row = mk('button', 'dlg-row has-desc');
       row.type = 'button';
-      row.title = `Add ${d.name}`;
+      row.title = `Add ${d.name} — ${d.desc}`;
       row.dataset.id = d.id;
-      row.append(mk('span', 'dlg-name', d.name));
+      // W5 (2026-09-28): what it shows, in one plain line under its name (muted, TradingView-style)
+      const txt = mk('span', 'dlg-txt');
+      txt.append(mk('span', 'dlg-name', d.name), mk('span', 'dlg-desc', d.desc));
+      row.append(txt);
       if (q && group === 'All') row.append(mk('span', 'dlg-grp', d.group));
       if (c.cfg.indicators.some((x) => x.id === d.id)) row.append(icon('check'));
       row.onclick = () => {
@@ -1038,7 +1070,8 @@ function indicatorsDialog() {
     if (had) groups.querySelector('.active').focus();
   };
   input.oninput = render;
-  input.onkeydown = (e) => { if (e.key === 'Enter') { const first = list.querySelector('.dlg-row'); if (first) first.click(); } };
+  // S7: the dialog stays open after an add, so a held Enter's repeat would add the same indicator again and again
+  input.onkeydown = (e) => { if (e.key === 'Enter') { if (e.repeat) return; const first = list.querySelector('.dlg-row'); if (first) first.click(); } };
   renderGroups();
   render();
   input.focus();
@@ -1103,7 +1136,7 @@ function positionDialog(cell, d) {
     drawings.replace(root, { ...now, qty, points: [{ t: now.points[0].t, p: entry }, { t: now.points[1].t, p: target },
       { t: now.points[2].t, p: stop }] });
   };
-  form.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') ok.click(); });
+  form.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') { if (e.repeat) return; ok.click(); } });   // S7
   foot.append(cancel, ok);
   box.append(form, err, foot);
   inputs.entry.focus();
@@ -1192,7 +1225,7 @@ const drawToolbars = new Map();   // cell -> {el, key} ("key" = id|type, so a sa
 
 function closeDrawToolbar(cell) {
   const t = drawToolbars.get(cell);
-  if (t) { t.el.remove(); drawToolbars.delete(cell); }
+  if (t) { drawToolbars.delete(cell); M.dematerialize(t.el, () => t.el.remove()); }
 }
 function closeAllDrawToolbars() { for (const cell of [...drawToolbars.keys()]) closeDrawToolbar(cell); }
 
@@ -1281,6 +1314,7 @@ function syncDrawToolbar(cell, d) {
     closeDrawToolbar(cell);
     const built = drawToolbarButtons(cell, root, d);
     $('#menuRoot').appendChild(built.el);
+    M.materialize(built.el);   // no fixed anchor -- it's placed against the selected drawing, not a button
     t = { el: built.el, key, focused: built.focused };
     drawToolbars.set(cell, t);
   }
@@ -1597,7 +1631,7 @@ function chartTemplateMenu(cell, at) {
       doSave();
     };
     go.onclick = save;
-    input.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } };
+    input.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); if (e.repeat) return; save(); } };   // S7: one PUT per press
     rowEl.append(input, go);
     saveRow.replaceWith(rowEl);
     input.focus();
@@ -1632,8 +1666,9 @@ function setTool(t) {
 function sbNote(text) {
   const el = $('#sbNote');
   el.textContent = text;
+  el.title = text;   // W1: in full, should a narrow bar cut it
   clearTimeout(noteTimer);
-  noteTimer = setTimeout(() => { el.textContent = ''; }, 8000);
+  noteTimer = setTimeout(() => { el.textContent = ''; el.title = ''; }, 8000);
 }
 
 function showTip(anchor, text) {
@@ -1724,7 +1759,8 @@ function renderNextEvent() {
   const el = $('#sbEvent'), c = cur(), E = window.HBEvents;
   const n = c ? E.nextText(E.shown(calendar, c.R), clockMs()) : null;
   el.hidden = !n;
-  if (n) { el.textContent = n.text; el.style.color = n.color; }
+  if (n && el.textContent !== n.text) { el.textContent = n.text; el.title = n.text; }   // W1: text (and a re-fit) only on change
+  if (n) el.style.color = n.color;
 }
 
 /* ---- bottom bar ---- */
@@ -1739,15 +1775,53 @@ function showStatus(s) {
     : s.mode === 'live' ? `Live · md ${s.md || ''}` : 'Disconnected';
   const feed = $('#sbFeed');
   feed.textContent = f.text;
-  feed.title = f.title;
+  feed.title = [f.text, f.title].filter(Boolean).join(' — ');   // W1: the whole text too, should a narrow bar cut it
   feed.className = 'sb-feed' + (f.textClass ? ' ' + f.textClass : '');
   const budget = $('#sbBudget');
   budget.textContent = s.mode === 'live' ? `md ${s.budget_hour ?? 0}/180` : '';
   budget.title = s.mode === 'live' ? `Chart requests this hour on the md login (limit 180) · ${s.clients ?? 0} page(s)` : '';
-  const recEl = $('#sbRec');
-  recEl.textContent = s.mode === 'live' && rec ? `rec buffered ${rec.buffered.toLocaleString('en-US')}` : '';
+  const recEl = $('#sbRec'), buffered = rec ? rec.buffered.toLocaleString('en-US') : '';
+  recEl.textContent = s.mode === 'live' && rec ? `rec ${buffered}` : '';   // W1: shortened; the tooltip says it in full
+  recEl.title = s.mode === 'live' && rec ? `Recorder: ${buffered} ticks buffered, not written yet` : '';
   recEl.classList.toggle('warn', !!(rec && rec.buffered >= C.REC_BUSY));
   statusLine = feed.textContent;
+}
+
+/* W1 (2026-09-28): a status bar too narrow for everything never cuts the connection or the desk state. Its lower-
+   priority segments step out WHOLE, lowest `data-drop` first (charts.html: the recorder, the md budget, the desk's
+   limits, the next event, the clock, this chart's reason; HBCatalog.statusDrops decides), each keeping its full text
+   in its tooltip, and the spacer's tooltip lists what stepped out. Re-fitted on any change of the bar's text or
+   visibility -- a MutationObserver, since tradeui.js paints the desk's line -- and on resize; the clock's own tick
+   never triggers it (tabular figures: its width does not change). */
+let fitRaf = 0;
+function scheduleFit() { if (!fitRaf) fitRaf = requestAnimationFrame(() => { fitRaf = 0; fitStatusBar(); }); }
+function fitStatusBar() {
+  const bar = $('#statusbar');
+  if (!bar) return;
+  for (const el of bar.querySelectorAll('.sb-drop')) el.classList.remove('sb-drop');
+  const cs = getComputedStyle(bar), gap = parseFloat(cs.columnGap) || 0;
+  const avail = bar.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
+  const shown = (el) => getComputedStyle(el).display !== 'none';
+  const items = [];
+  const add = (el, g) => items.push({ el, gap: g, width: el.id === 'sbSpacer' ? 0 : el.scrollWidth + 1,   // +1: sub-pixel text
+    drop: el.dataset.drop == null ? null : Number(el.dataset.drop) });
+  for (const el of bar.children) {
+    if (!shown(el)) continue;
+    if (el.id !== 'sbDesk') { add(el, gap); continue; }
+    const inner = parseFloat(getComputedStyle(el).columnGap) || 0;   // the desk line's parts count one by one
+    [...el.children].filter(shown).forEach((p, k) => add(p, k ? inner : gap));
+  }
+  if (items.length) items[0].gap = 0;
+  const out = C.statusDrops(avail, items).map((i) => items[i].el);
+  for (const el of out) el.classList.add('sb-drop');
+  $('#sbSpacer').title = out.length ? `Not shown at this width: ${out.map((el) => el.textContent.replace(/^[·—]\s*/, '')).join(' · ')}` : '';
+}
+function watchStatusBar() {
+  const bar = $('#statusbar'), clock = $('#sbClock');
+  new MutationObserver((list) => { if (list.some((m) => !clock.contains(m.target))) scheduleFit(); })
+    .observe(bar, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['hidden'] });
+  window.addEventListener('resize', scheduleFit);
+  scheduleFit();
 }
 
 /* The socket is open but no status came for STATUS_STALE_S (the chart
@@ -1941,6 +2015,7 @@ async function init() {
   connect();
   tick();
   setInterval(tick, 1000);
+  watchStatusBar();   // W1: after the first tick, so the clock is in the first fit
 }
 
 window.HBCharts = { get cells() { return cells; }, get layout() { return layout; }, get selected() { return selected; }, select, buildGrid };

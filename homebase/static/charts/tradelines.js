@@ -1,6 +1,7 @@
 /* Homebase Charts — HBTradeLines: trading on the chart itself, one overlay per chart (rebuilt with it,
    like every host.overlays() entry):
-     - the Buy/Sell block under the legend, bid/ask "as of last trade" (ruling S10);
+     - the Buy/Sell block under the legend: plain SELL / BUY at market, the quantity between them (2026-09-28, the
+       user: no bid / ask on it any more -- ruling S10's "as of last trade" prices are gone);
      - position / order / SL / TP lines (native price lines) with DOM chips that carry their text and a ×
        (ruling S8), draggable by the chip's text (order/SL/TP); a position never moves (ruling S11): dragging an
        editable position's chip draws a ghost exit line instead -- for a long an SL below the last trade and a TP
@@ -98,18 +99,21 @@ class Overlay {
     this.block.hidden = true;
     this.sellBtn = document.createElement('button');
     this.sellBtn.type = 'button'; this.sellBtn.className = 'tr-sell';
-    this.sellPx = document.createElement('span'); this.sellPx.className = 'tr-px';
-    this.sellBtn.append(this.sellPx, mk('span', 'tr-lbl', 'SELL'));
+    // 2026-09-28 (the user): just SELL and BUY -- no bid / ask, no spread: a click sells / buys at market, wherever the
+    // price is (the send itself is unchanged). S1: each label carries a LIVE tag, shown while the next send reaches a
+    // LIVE account (paintBlock) -- inside the button's fixed width, so the block never changes size when it appears
+    this.sellLive = liveTag();
+    this.buyLive = liveTag();
+    this.liveKey = null;
+    this.sellBtn.append(sideLabel(this.sellLive, 'SELL'));
     this.mid = document.createElement('div'); this.mid.className = 'tr-mid';
     this.qty = document.createElement('input');
     this.qty.type = 'number'; this.qty.min = '1'; this.qty.step = '1'; this.qty.setAttribute('aria-label', 'Quantity');
     this.qty.className = 'tr-qty';
-    this.spread = document.createElement('span'); this.spread.className = 'tr-spread';
-    this.mid.append(this.qty, this.spread);
+    this.mid.append(this.qty);
     this.buyBtn = document.createElement('button');
     this.buyBtn.type = 'button'; this.buyBtn.className = 'tr-buy';
-    this.buyPx = document.createElement('span'); this.buyPx.className = 'tr-px';
-    this.buyBtn.append(this.buyPx, mk('span', 'tr-lbl', 'BUY'));
+    this.buyBtn.append(sideLabel(this.buyLive, 'BUY'));
     this.block.append(this.sellBtn, this.mid, this.buyBtn);
     // I1 (final review): a real pointer click, or Enter / Space with no auto-repeat -- never the click a held key
     // (or a menu handing focus back to a focused BUY) makes; a pointer click drops focus (HBTrade.wireSend)
@@ -206,14 +210,14 @@ class Overlay {
     const on = mode.mode === 'on';
     this.block.hidden = !on;
     if (!on) return;
-    const Dc = window.HBDeskClient, view = T.quoteView(Dc.quotes[this.root], this.cell.tick, this.page.clockMs());
-    this.block.classList.toggle('stale', view.stale);
-    this.sellPx.textContent = view.bid;
-    this.buyPx.textContent = view.ask;
-    this.spread.textContent = view.spread ? `${view.spread}t` : '';
-    let title = 'Bid / ask as of the last trade';
-    if (view.stale) title += view.age != null ? ` — no trade for ${Math.round(view.age / 1000)} s` : ' — no trade yet';
-    this.block.title = title;
+    const Dc = window.HBDeskClient;
+    // S1: the LIVE cue -- a red ring round the block and a LIVE tag on each side -- from the send path's own account
+    // set (HBTradeUI.liveCue: cellGate's answer), one-click on or off; re-read on every render (desk, arm, trade events)
+    const live = window.HBTradeUI.liveCue(this.cell, this.root), liveTitle = T.liveCueTitle(live, Dc.state);
+    this.block.classList.toggle('live', live.length > 0);
+    this.sellLive.hidden = this.buyLive.hidden = !live.length;
+    if (liveTitle !== this.liveKey) { this.liveKey = liveTitle; this.sellLive.title = this.buyLive.title = liveTitle; }
+    this.block.title = liveTitle ? `Sell / buy at market · ${liveTitle}` : 'Sell / buy at market';
     if (document.activeElement !== this.qty) this.qty.value = String(Dc.prefs.qty);
     const busy = window.HBTradeUI.busy();
     this.buyBtn.disabled = this.sellBtn.disabled = busy;
@@ -720,6 +724,9 @@ function mk(tag, cls, text) {
   if (text != null) e.textContent = text;
   return e;
 }
+/* S1: the LIVE tag (hidden until a send from here reaches a LIVE account) and a Buy/Sell label carrying it. */
+function liveTag() { const t = mk('span', 'tr-live', 'LIVE'); t.hidden = true; return t; }
+function sideLabel(tag, text) { const l = mk('span', 'tr-lbl'); l.append(tag, ' ', text); return l; }   // the space: a screen reader says "LIVE SELL", not "LIVESELL"
 
 window.HBTradeLines = { overlay: (cell, page) => new Overlay(cell, page) };
 })();

@@ -27,7 +27,6 @@ const UI = () => window.HBTradeUI;
 
 const TYPES = [['Market', 'Market'], ['Limit', 'Limit'], ['Stop', 'Stop'], ['StopLimit', 'Stop Limit']];
 const UNITS = [['usd', '$'], ['ticks', 'ticks'], ['price', 'price']];
-const STALE_MS = 10000;                // the tiles dim when the quote's last trade is older than this
 
 let page = null;
 let el = null;                          // the content container HBPanelShell hands us
@@ -141,16 +140,15 @@ function build() {
   const tiles = mk('div', 'op-tiles');
   ui.tile = {};
   for (const side of ['Sell', 'Buy']) {
+    // 2026-09-28 (the user): a tile is just its side -- no bid / ask, no spread; it picks the side, Send sends
     const b = mk('button', `op-tile ${side === 'Buy' ? 'buy' : 'sell'}`);
     b.type = 'button';
     b.setAttribute('aria-pressed', 'false');
-    const px = mk('span', 'op-tpx', '—');
-    b.append(px, mk('span', 'op-tlbl', side));
+    b.append(mk('span', 'op-tlbl', side));
     b.onclick = () => { st.side = side; paint(); };
-    ui.tile[side] = { b, px };
+    ui.tile[side] = { b };
   }
-  ui.spread = mk('span', 'op-spread');
-  tiles.append(ui.tile.Sell.b, ui.spread, ui.tile.Buy.b);
+  tiles.append(ui.tile.Sell.b, ui.tile.Buy.b);
 
   const types = mk('div', 'op-types');
   types.setAttribute('role', 'tablist');
@@ -240,12 +238,20 @@ function build() {
   accts.append(ahead, ui.chips, ui.why);
 
   const foot = mk('div', 'op-foot');
-  ui.send = mk('button', 'op-send buy', 'Buy');
+  // S1: the wrapper carries the LIVE ring (outside the button, so a disabled Send never dims it); the button its LIVE
+  // tag ahead of the label text (paintLive). Neither changes the Send's size.
+  ui.sendWrap = mk('div', 'op-sendwrap');
+  ui.send = mk('button', 'op-send buy');
   ui.send.type = 'button';
+  ui.sendLive = mk('span', 'tr-live', 'LIVE');
+  ui.sendLive.hidden = true;
+  ui.sendText = mk('span', 'op-send-t', 'Buy');
+  ui.send.append(ui.sendLive, ' ', ui.sendText);   // a real space: read as "LIVE Buy …" (collapsed while the tag is hidden)
   T.wireSend(ui.send, send);
+  ui.sendWrap.append(ui.send);
   ui.reason = mk('div', 'op-reason');
   ui.reason.setAttribute('role', 'status');
-  foot.append(ui.send, ui.reason);
+  foot.append(ui.sendWrap, ui.reason);
 
   ui.order.append(ui.form, accts, foot);
 
@@ -365,15 +371,9 @@ function paint() {
   if (flashPending) { flashPending = false; flashChips(); }   // another chart: its accounts are the ones an order goes to now (fix round 1)
 
 
-  // tiles: bid / ask (the last trade when a side is missing), the spread in ticks, dim when stale
-  const view = T.quoteView(c.q, c.tick, c.now), stale = !T.freshQuote(c.q, c.now, STALE_MS);
-  ui.tile.Sell.px.textContent = view.bid;
-  ui.tile.Buy.px.textContent = view.ask;
-  ui.spread.textContent = view.spread;
-  ui.spread.title = view.spread ? `Spread: ${view.spread} tick${view.spread === '1' ? '' : 's'}` : '';
+  // the side tiles: which side the order is (no prices on them since 2026-09-28)
   for (const side of ['Sell', 'Buy']) {
     ui.tile[side].b.classList.toggle('on', st.side === side);
-    ui.tile[side].b.classList.toggle('stale', stale);
     ui.tile[side].b.setAttribute('aria-pressed', String(st.side === side));
   }
   for (const [id, b] of Object.entries(ui.types)) { b.classList.toggle('on', st.type === id); b.setAttribute('aria-selected', String(st.type === id)); }
@@ -415,17 +415,27 @@ function paint() {
   const busy = UI().busy();
   const reason = m.mode !== 'on' ? m.reason : !c.order.ok ? c.order.error : busy ? 'Sending…' : '';
   const qtyText = c.order.ok ? c.order.qty : c.qty;
-  ui.send.textContent = T.sendLabel(st.side, qtyText, c.root, st.type);
+  ui.sendText.textContent = T.sendLabel(st.side, qtyText, c.root, st.type);
+  paintLive(UI().liveCue(cell, root));   // S1: from the send path's own account set, one-click on or off
   ui.send.classList.toggle('buy', st.side === 'Buy');
   ui.send.classList.toggle('sell', st.side === 'Sell');
   ui.send.classList.toggle('sending', !!T.sendingSide(UI().sending(), 'panel', null));   // fast-paper: pressed until it resolves
   ui.send.disabled = !!reason;
   ui.reason.textContent = m.mode !== 'on' ? '' : reason;   // the mode's reason already shows under the accounts
 }
+/* S1: the red ring round Send and its LIVE tag while the selected chart's next order reaches a LIVE account (`ids`:
+   HBTradeUI.liveCue, the send path's own set); none otherwise. */
+function paintLive(ids) {
+  const on = ids.length > 0, title = on ? T.liveCueTitle(ids, D().state) : '';
+  ui.sendWrap.classList.toggle('live', on);
+  ui.sendLive.hidden = !on;
+  if (ui.sendWrap.title !== title) ui.sendWrap.title = title;
+}
 function paintIdle(text) {
   ui.send.disabled = true;
   ui.send.classList.remove('sending');
-  ui.send.textContent = 'Buy';
+  ui.sendText.textContent = 'Buy';
+  paintLive([]);   // no chart to send from: nothing can reach a LIVE account
   ui.reason.textContent = text;
   ui.chips.replaceChildren();
   acctKey = null;
@@ -510,7 +520,7 @@ function mount(pg, container) {
   D().on(() => paint());                 // desk / quote / prefs events: patch in place, never rebuild
   UI().onBusyChange(() => paint());
   UI().onTradeChange(() => paint());     // a chart's Trading switch / accounts, a LIVE arm
-  setInterval(() => { if (visible) paint(); }, 1000);   // a quote going stale with no event
+  setInterval(() => { if (visible) paint(); }, 1000);   // a quote going stale with no event (a Market's exits then refuse)
   paint();
 }
 

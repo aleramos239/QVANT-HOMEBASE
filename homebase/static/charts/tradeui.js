@@ -65,6 +65,12 @@ function cellGate(cell, root) {
   if (rootOfCell(cell) !== root) return { mode: 'none', reason: 'This chart changed symbol — nothing sent', accounts: [] };
   return m;
 }
+/* S1 (2026-09-28 safety pass): the LIVE accounts an order from this chart would reach right now -- cellGate's own
+   answer, the exact set placeOrder freezes as `shown` and sends to, never a recomputation -- so the red ring and
+   LIVE tag on the Buy/Sell block and the order panel's Send follow every tick, arm, desk and replay change with the
+   send itself. Presentation only: the send re-checks its own gate at click and at send as before. `root`: the
+   symbol the surface was painted for. */
+function liveCue(cell, root) { return T.liveSendIds(cellGate(cell, root), D().state); }
 /* The bottom panel's per-account gate: the desk up and on, and the named account armed if it is LIVE. */
 function accountGate(account) {
   const g = D().gate();
@@ -668,9 +674,15 @@ function paintDeskStatus() {
   const why = cell ? T.chartWhy({ replay: !!cell.replay, halted: !!(cell.cfg && cell.cfg.replayHalt),
     accounts: tradeOf(cell).accounts, unverified: cell.cfg && cell.cfg.unverified, state: D().state, liveConfirmed,
     mode: effectiveMode(cell) }) : '';
-  const s = T.deskStatusText({ state: D().state, down: D().down }, why);
+  // W1: in parts -- the state is never cut, the chart's reason and the limits may step out on a narrow bar (app.js
+  // fitStatusBar) -- with the whole line as the tooltip
+  const s = T.deskStatusParts({ state: D().state, down: D().down }, why);
+  const whyEl = document.getElementById('sbDeskWhy'), limEl = document.getElementById('sbDeskLim'), box = document.getElementById('sbDesk');
   dot.className = 'sb-dot ' + s.dot;
-  text.textContent = s.text;
+  text.textContent = s.state;
+  if (whyEl) whyEl.textContent = s.why;
+  if (limEl) limEl.textContent = s.limits;
+  if (box) box.title = s.text;
   link.hidden = !s.link;
   if (s.link && page) link.href = page.deskUrl();
 }
@@ -693,7 +705,7 @@ function mount(pg) {
 }
 
 window.HBTradeUI = { mount, placeOrder, symbolAction, flattenAccount, cancelOrder, closeLine, moveLine, addExit, confirm, busy,
-  sending, onBusyChange, onTradeChange, effectiveMode, lineMode, editableIds, fillIds, tradeOf, setCellTrade, setCellAlgo, botKill,
+  sending, onBusyChange, onTradeChange, effectiveMode, liveCue, lineMode, editableIds, fillIds, tradeOf, setCellTrade, setCellAlgo, botKill,
   killBusy, accountRows, toggleAccount, pickAlgo, armPending, paintDeskStatus, replayEnded, resumeLive,
   replayDestroyed, gridRebuilt };
 })();

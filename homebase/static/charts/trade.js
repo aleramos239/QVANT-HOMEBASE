@@ -19,7 +19,6 @@ const Pos = need('HBPosition', './position.js');
 const MINUS = '−';
 const PREFS_KEY = 'hb_trade_prefs';
 const QTY_MAX = 10000;          // a sanity clamp only: the desk's limits decide
-const QUOTE_STALE_MS = 30000;   // the desk's QUOTE_MAX_AGE_S: an older quote is shown greyed
 const BOT_NAMES = { nq930: '9:30 bot', ym930: '9:30 bot', nq10am: '10am bot' };
 const ET = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hourCycle: 'h23', hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
@@ -390,6 +389,21 @@ function armedMode(m, state, liveConfirmed) {
   return accounts.length ? { mode: 'on', reason: '', accounts }
     : { mode: 'none', reason: "Arm the LIVE account for this chart in the chart's ⚙ → Trading", accounts: [] };
 }
+/* S1, the LIVE cue (2026-09-28 safety pass): the LIVE accounts among `mode`'s -- `mode` being the very gate a
+   chart's send reads (HBTradeUI.liveCue hands in cellGate's own answer: the set placeOrder freezes as `shown` and
+   sends to), so the red ring and LIVE tag on the Buy/Sell block and the order panel's Send can never disagree
+   with where the next order goes. [] unless the mode is 'on' (a refused send reaches nothing). The one-click
+   switches are deliberately not an input: they decide whether a click asks first, never where the order goes. */
+function liveSendIds(mode, state) {
+  if (!mode || mode.mode !== 'on' || !Array.isArray(mode.accounts)) return [];
+  const list = accountsOf(state);
+  return mode.accounts.filter((id) => { const a = list.find((x) => x.id === id); return !!a && a.env === 'live'; });
+}
+/* The cue's tooltip, naming the real-money accounts by label; '' for none. */
+function liveCueTitle(ids, state) {
+  const who = (ids || []).map((id) => { const a = accountsOf(state).find((x) => x.id === id); return (a && a.label) || id; });
+  return who.length ? `LIVE — an order from here goes to real-money account${who.length > 1 ? 's' : ''} ${who.join(', ')}` : '';
+}
 /* A chart in replay can never trade (2026-09-27 bar-replay plan, Global Constraints): its Buy/Sell block,
    chart-menu trading items and draggable order lines are hidden for the duration. The chart KEEPS its
    accounts across a replay (they are the switch now, and replay must not throw them away): this guard alone
@@ -453,16 +467,6 @@ function acctTick(account, accounts, liveConfirmed) {
 function unarmedLiveMessage(account) {
   const label = (account && (account.label || account.id)) || 'account';
   return `Arm LIVE account ${label} in the chart's ⚙ → Trading first`;
-}
-
-/* The Buy/Sell block's texts: bid / ask (the last trade when one side is missing), the spread in ticks, stale when
-   the quote's trade is over 30 s old against nowMs (the replay clock in a replay). */
-function quoteView(q, tick, nowMs) {
-  if (!q || (q.bid == null && q.ask == null && q.last == null)) return { bid: '—', ask: '—', spread: '', stale: true, age: null };
-  const bid = q.bid ?? q.last, ask = q.ask ?? q.last, age = Number.isFinite(q.ts_ms) ? nowMs - q.ts_ms : null;
-  const n = tick > 0 && q.bid != null && q.ask != null ? Math.round((q.ask - q.bid) / tick) : null;
-  return { bid: Cat.fmtPrice(bid, tick), ask: Cat.fmtPrice(ask, tick), spread: n == null ? '' : String(n),
-    stale: age == null || age > QUOTE_STALE_MS, age };
 }
 
 /* ---- the order panel (2026-09-27 order-panel plan, Task 3) ---- */
@@ -981,6 +985,17 @@ function deskStatusText(desk, chartWhyText = '') {
   return { dot: 'ok', link: false,
     text: `Desk: connected · chart trading on · max ${lim.max_order_qty ?? '—'}/order, ${lim.max_position_qty ?? '—'}/position`
       + (chartWhyText ? ` · this chart: ${chartWhyText}` : '') };
+}
+/* W1 (2026-09-28): the same line in parts, for a status bar too narrow for all of it: `state` -- the desk's own
+   connection and switch -- is never cut; `why` (the selected chart's reason, or why the desk is unreachable) and
+   `limits` may step out (the page's fit decides); `text`, the whole line, is their tooltip. */
+function deskStatusParts(desk, chartWhyText = '') {
+  const s = deskStatusText(desk, chartWhyText), gate = deskGate(desk);
+  if (gate && gate.mode === 'down') return { ...s, state: 'Desk unreachable', why: `— ${gate.reason}`, limits: '' };
+  if (gate) return { ...s, state: s.text, why: '', limits: '' };
+  const lim = (desk.state && desk.state.limits) || {};
+  return { ...s, state: 'Desk: connected · chart trading on', why: chartWhyText ? `· this chart: ${chartWhyText}` : '',
+    limits: `· max ${lim.max_order_qty ?? '—'}/order, ${lim.max_position_qty ?? '—'}/position` };
 }
 /* Minor 6: the SELECTED chart's own short reason for the status bar ('' when it can trade). `mode` is its
    effective mode; the rest say why, most specific first. */
@@ -1592,17 +1607,17 @@ function routeSend(action, body, send) {
   return Promise.all(out);
 }
 
-const api = { PREFS_KEY, QUOTE_STALE_MS, BOT_NAMES, parsePrefs, prefsText, oneClickKey, short, rootOf, orderPrice, isPending, abbr, inferType, menuText,
-  roundTick, bracket, orderBody, clientId, tradeMode, quoteView, usd, money, pnl, rrText, linesFor, linePnl, lineLabel,
+const api = { PREFS_KEY, BOT_NAMES, parsePrefs, prefsText, oneClickKey, short, rootOf, orderPrice, isPending, abbr, inferType, menuText,
+  roundTick, bracket, orderBody, clientId, tradeMode, usd, money, pnl, rrText, linesFor, linePnl, lineLabel,
   lineText, lineTitle, lineColor, canDrag, withPrice, exitKinds, exitKindAt, exitRefusal, EXIT_DRAG_PX, pastClick, pendingMoveError, exitGhost, exitDropError, expectedNet, exitsBody, exitsTitle, orderTitle, confirmOrder, actionTitle, resultToasts, fillText, fillMarkers, execArrow, botName, positionRows, orderRows, fillRows, accountRows, etTime, diffRows,
   algoName, algoLabel, algoChoices, algoAccounts, botPill, botToday, algoOverlay, etMs, etDateOf, pastRunMarkers, pastRunFlags,
   algoFillMarkers, nearestTip, historySig,
   killConfirm, killToasts, killBlock, killSold,
   enterConfirms, wireSend, sendingSide, symbolChangeTrade, resolveConfirmedAccounts, armedTicked, unarmedLiveMessage, freshQuote,
   needsQuoteForBracket, refuseIfMarketable, cellTrade, loadedTrade, cellAlgo, tradeBits, templateTrade, algoForRoot,
-  migrateTicked, deskGate, armedMode, replayGuard, legsWithin, lineAccounts, accountChips, acctTick, hiddenCellsLoaded,
+  migrateTicked, deskGate, armedMode, liveSendIds, liveCueTitle, replayGuard, legsWithin, lineAccounts, accountChips, acctTick, hiddenCellsLoaded,
   NO_ACCOUNTS, SYMBOL_CHANGE_ACCOUNTS_CLEARED, liveIds, liveDroppedMessage, envChip, algoBookings, algoForAccount,
-  accountsForAlgo, algoTickAccounts, accountPickRows, deskStatusText,
+  accountsForAlgo, algoTickAccounts, accountPickRows, deskStatusText, deskStatusParts,
   verifyLoaded, verifyCells, nextUnverified, unverifiedMode, CHECKING_ACCOUNTS, REPLAY_ENDED, replayHaltGuard,
   replayEndPatch, sendsWithoutConfirm, chartWhy,
   PANEL_QTY_MAX, GTC_WARN, exitTriple, qtyFromRisk, exitSideError, panelOrder, sendLabel,
