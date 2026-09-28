@@ -268,7 +268,10 @@ function computeErrorText() {
   const base = serverError || X.problems(form, schemaFor(strategyId));
   if (base) return base;
   // a walk-forward needs the heat-map's axis grid: say where to set one rather than refusing silently
-  if (X.isWalkforward(form)) return X.wfProblems(form, schemaFor(strategyId), currentHeatRows(), wfPrefs().minTrades) || '';
+  if (X.isWalkforward(form)) {
+    return X.wfSchemeProblem(form, wfScheme)
+      || X.wfProblems(form, schemaFor(strategyId), currentHeatRows(), wfPrefs().minTrades) || '';
+  }
   return '';
 }
 /* A cheap, focus-preserving update for the fields a viewer types into (qty/commission/slippage):
@@ -459,6 +462,7 @@ function runArea() {
     runBtn.type = 'button';
     runBtn.append(page.icon('play'), document.createTextNode(' ' + runLabelFor()));
     runBtn.onclick = startRun;
+    runBtn.disabled = !!X.wfSchemeProblem(form, wfScheme);
     wrap.appendChild(runBtn);
   }
   return wrap;
@@ -1394,8 +1398,9 @@ function syncHeat() {
     heatWarnEl.hidden = !heatWarnEl.textContent;
   }
   const total = X.looksLine(looksMap[strategyId] || 0, (grid && grid.looks_error) || (wf && wf.looks_error) || looksErr);
-  const preview = g.axes && X.isWalkforward(form)
-    ? X.wfLooksText(n, wfScheme && wfScheme.n_steps, (wfScheme && wfScheme.compare && wfScheme.choice_penalty) || 1) : '';
+  const short = X.wfSchemeProblem(form, wfScheme);
+  const preview = short || (g.axes && X.isWalkforward(form)
+    ? X.wfLooksText(n, wfScheme && wfScheme.n_steps, (wfScheme && wfScheme.compare && wfScheme.choice_penalty) || 1) : '');
   heatLooksEl.textContent = preview ? `${preview} · ${total}` : total;
   const runBtnEl = heatRunEl && heatRunEl.querySelector('.tst-run');
   if (runBtnEl) runBtnEl.disabled = !!prob;
@@ -1403,8 +1408,10 @@ function syncHeat() {
 /* syncHeat is called from syncRunState, so it must not call back into it: only the header's own
    error line and Run label need refreshing when an axis edit changes what Run would do. */
 function syncRunStateLabelOnly() {
+  const short = X.wfSchemeProblem(form, wfScheme);   // a compare over a window too short for 1:3: Run is off
+  if (runBtn) runBtn.disabled = !!short;
   if (!X.isWalkforward(form) || !errEl) return;
-  const text = serverError || X.problems(form, schemaFor(strategyId))
+  const text = serverError || X.problems(form, schemaFor(strategyId)) || short
     || X.wfProblems(form, schemaFor(strategyId), currentHeatRows(), wfPrefs().minTrades) || '';
   errEl.textContent = text;
   errEl.hidden = !text;

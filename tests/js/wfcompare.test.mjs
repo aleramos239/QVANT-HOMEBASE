@@ -150,3 +150,15 @@ test('strategy-error sessions show per column, and a line names the schemes that
   assert.equal(X.wfCompareErrLine(CMP), '');
   assert.ok(X.wfCompareTable(bad, 'shared').rows.some((r) => r.key === 'errors'));
 });
+
+test('wfSchemeProblem: a compare over a window too short for 1:3 is refused before Run', () => {
+  const f = { ...X.defaults(STRAT), range: { id: 'custom', start: '2024-01-01', end: '2024-03-31', wf: 'compare' } };
+  const short = { compare: true, runnable: false, window: { start: '2024-01-01', end: '2024-03-31' } };
+  assert.equal(X.wfSchemeProblem(f, short), 'Window too short to compare 1:1 · 1:2 · 1:3 (1:3 needs 1 selection month + 3 test months)');
+  assert.ok(X.wfSchemeProblem(f, short).startsWith('Window too short to compare 1:1 · 1:2 · 1:3'));
+  assert.equal(X.wfSchemeProblem(f, { ...short, runnable: true }), null);
+  assert.equal(X.wfSchemeProblem(f, null), null);                                   // not loaded yet
+  assert.equal(X.wfSchemeProblem(f, { ...short, window: { start: '2021-01-01', end: '2024-12-31' } }), null);   // another window's answer
+  assert.equal(X.wfSchemeProblem({ ...f, range: { ...f.range, wf: 3 } }, short), null);  // a single ratio: not this check
+  assert.equal(X.wfSchemeProblem(f, { runnable: false, window: short.window }), null);  // a single-ratio scheme answer
+});

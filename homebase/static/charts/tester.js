@@ -629,6 +629,14 @@ function wfProblems(f, s, rows, minTrades) {
   if (!Number.isInteger(minTrades) || minTrades < 1 || minTrades > WF_MIN_TRADES_MAX) return `Min trades: a whole number 1 to ${WF_MIN_TRADES_MAX}`;
   return null;
 }
+/* A compare needs one full 1:3 cycle. `sc` = GET /api/tester/walkforward-scheme?test_months=compare for the
+   window the pill shows (an answer for another window is ignored: the server refuses it anyway). */
+const WF_COMPARE_TOO_SHORT = 'Window too short to compare 1:1 · 1:2 · 1:3 (1:3 needs 1 selection month + 3 test months)';
+function wfSchemeProblem(f, sc) {
+  if (!isWfCompare(f) || !sc || !sc.compare || sc.runnable !== false) return null;
+  const d = rangeDates(f.range), w = sc.window || {};
+  return w.start === d.start && w.end === d.end ? WF_COMPARE_TOO_SHORT : null;
+}
 /* nSteps comes from GET /api/tester/walkforward-scheme (review M5); '' until it has loaded. */
 /* `penalty` (a compare job): the ×3 for choosing a ratio off the table -- the picks themselves are one search. */
 function wfLooksText(cells, nSteps, penalty = 1) {
@@ -817,7 +825,7 @@ function strategyLabel(s) {
 const api = { strategyLabel, DEFAULT_MAX_CELLS, HARD_MAX_CELLS, GRID_WORKERS, maxCellsError, cellsWarning, stepValues, axisValues,
   parseValues, valueLabel, gridAxes, gridCount, gridProblems, gridBody, looksText, looksLine, heatPanels, heatMaxAbs,
   WF_METRICS, WF_RATIOS, WF_COMPARE, WF_MODES, isWfCompare, wfModeOf, wfModeLabel, WF_COMPARE_ROWS, wfCompareColors,
-  wfCompareCell, wfCompareTable, wfCompareHead, wfComparePhaseLine, wfSharedCaption, wfCompareErrLine, WF_STEP_HEADERS, WF_STEP_GROUPS, WF_SIDE_LABELS, WF_NEEDS_GRID, wfBody, wfProblems, wfLooksText,
+  wfCompareCell, wfCompareTable, wfCompareHead, wfComparePhaseLine, wfSharedCaption, wfCompareErrLine, wfSchemeProblem, WF_COMPARE_TOO_SHORT, WF_STEP_HEADERS, WF_STEP_GROUPS, WF_SIDE_LABELS, WF_NEEDS_GRID, wfBody, wfProblems, wfLooksText,
   etaText, wfProgress, wfTiles, wfDrop, wfUncovered, wfStepRows, wfStability, wfPhases, wfScheme,
   heatLevel, cellView, gridProgress, RANGES, DEFAULT_RULES, defaults, restore, fromRun, rangeFromRun, isWalkforward,
   today, rangeSpec, rangeDates, rangeBody, parseDate, dateError, prettyDate, pillLabel, monthGrid, shiftMonth,
