@@ -1129,8 +1129,49 @@ function toggleAsgMenu(strategy) {
   m.hidden = !open;
   FREEZE = !m.hidden;
 }
-function pickAsg(strategy, account, qty) {
+/* Booking a LIVE account onto a strategy asks first (2026-09-28, Apple-design audit S3): it is the
+   step that makes a live account trade real money, so it gets the same dialog as connecting one
+   or arming the desk. A demo account books at once, exactly as before. The account's environment
+   is re-read at click time, and one the desk does not list counts as live (fail closed: ask).
+   The dialog names the strategy, the account and the size that will be sent -- frozen from the
+   click. The rest of the book is read after the answer, so a change that landed meanwhile (an
+   account unbooked in another window) is never written back. Cancel sends nothing. Raising a
+   live booking's size asks the same way; lowering it, or unbooking (removeAsg), never asks --
+   the safer direction (the desk's one confirm policy). */
+function isDemoAcct(id) {
+  const a = ((ST && ST.accounts) || {})[id];
+  return !!a && a.env === "demo";
+}
+/* "APEX…048" / "…885": a broker's long numbered name shortened the way the chart page shows it,
+   keeping a short letter prefix when there is one; a plain label ("Lucid Funded") stays whole. */
+function acctShort(id) {
+  const a = ((ST && ST.accounts) || {})[id];
+  const s = String((a && a.label) || id || "");
+  if (s.length < 10 || (s.match(/[0-9]/g) || []).length < 5) return s;
+  const pre = (/^[A-Za-z]+/.exec(s) || [""])[0];
+  return (pre.length <= 8 ? pre.toUpperCase() : "") + "…" + s.slice(-3);
+}
+function liveBookingNote(strategy, account) {
+  const c = ((((ST && ST.strategies) || {})[strategy]) || {}).cfg || {};
+  const a = ((ST && ST.accounts) || {})[account];
+  const full = String((a && a.label) || account || "");
+  const acct = full !== acctShort(account) ? ` Account ${full}.` : "";
+  if (!a) return `This account is not in the desk's list right now, so it is treated as LIVE.${acct}`;
+  if (c.shadow) return "It is a SHADOW strategy: its signals are journaled, never placed — the booking " +
+    `stands if that changes.${acct}`;
+  const when = c.kind === "bars" ? "on its next signal" : c.self_fire ? "at the next 9:30 fire" : "on its next alert";
+  const idle = [];
+  if (!c.enabled) idle.push(strategy.toUpperCase() + " is off");
+  if (ST && !ST.armed) idle.push("the desk is disarmed");
+  return `It will trade real money ${when}.` +
+    (idle.length ? ` Right now ${idle.join(" and ")}, so nothing is placed until that changes.` : "") + acct;
+}
+async function pickAsg(strategy, account, qty) {
   FREEZE = false;
+  document.querySelectorAll(".amenu").forEach(x => x.hidden = true);
+  if (!isDemoAcct(account) && !await confirmDlg(
+      `Book ${strategy.toUpperCase()} on ${acctShort(account)} LIVE × ${qty}?`,
+      liveBookingNote(strategy, account), "Book live", true)) { refresh(); return; }
   const cur = (ST.book[strategy] || []).filter(a => a.account !== account);
   cur.push({account, qty});
   setBook(strategy, cur);
@@ -1142,10 +1183,16 @@ function editQty(ev, strategy, account, qty) {
   span.outerHTML = `<input class="qty-input" id="qedit" type="number" min="1" value="${qty}">`;
   const inp = $("#qedit");
   inp.focus(); inp.select();
-  const commit = () => {
+  let done = false;                 // one commit per edit, however many blurs follow
+  const commit = async () => {
+    if (done) return;
+    done = true;
     FREEZE = false;
     const v = parseInt(inp.value || "0", 10);
     if (v > 0 && v !== qty) {
+      if (v > qty && !isDemoAcct(account) && !await confirmDlg(
+          `Book ${strategy.toUpperCase()} on ${acctShort(account)} LIVE × ${v} (now × ${qty})?`,
+          liveBookingNote(strategy, account), "Book live", true)) { refresh(); return; }
       const cur = (ST.book[strategy] || []).map(a =>
         a.account === account ? {account, qty: v} : a);
       setBook(strategy, cur);
