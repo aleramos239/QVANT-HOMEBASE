@@ -656,7 +656,10 @@ class Controller {
       if (at) this.finish(this.place ? this.placedEnd(at, e.shiftKey) : at);
       return;
     }
-    if (!this.drag) return;
+    // a press on a LOCKED drawing sets no this.drag (onDown), but this.own(e) still ran there --
+    // release() must still run here, or panning/zoom stays off until some later gesture happens to
+    // call it (review finding: a locked-drawing click left the chart pan/zoom disabled)
+    if (!this.drag) { this.release(); return; }
     const { orig, cur } = this.drag;
     this.drag = null;
     this.release();
@@ -752,9 +755,11 @@ class Controller {
     this.setCursor(null);
   }
 
-  /* A gesture that needs the button held: moving / reshaping a drawing, or a placement or measure being
-     dragged out (one waiting for its 2nd click is not). */
-  held() { return !!this.drag || this.mode === 'drag'; }
+  /* A gesture that needs the button held: moving / reshaping a drawing, placing/measuring dragged
+     out, or a press on a LOCKED drawing (this.drag is null there, but own() still ran and pan/zoom
+     is still off) -- exactly `this.owned` (own() is always called before any of drag/mode='drag'
+     is set, so this also covers both of those; one waiting for a 2nd click is not owned). */
+  held() { return this.owned; }
 
   /* Undo a held gesture: a moved drawing goes back (and stays selected), a placement or measure being dragged
      out is dropped (the tool stays); panning and zoom come back on. Esc, and a release that never reaches us:
