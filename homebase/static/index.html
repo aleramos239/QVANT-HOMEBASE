@@ -62,7 +62,11 @@
 
   .app-shell{ display:flex; height:100vh; overflow:hidden; background:var(--page-wash), var(--background); }
   /* the column scrolls, and the top bar sticks to it: content passes UNDER the glass */
-  .app-main{ flex:1; min-width:0; display:flex; flex-direction:column; overflow-x:hidden; overflow-y:auto; }
+  /* scrollbar-gutter: a space-taking scrollbar (macOS "always show scroll bars", a mouse attached)
+     appearing as the page grows must not shift the sticky top bar -- a Kill hold cancels when the
+     pointer leaves the button (second review) */
+  .app-main{ flex:1; min-width:0; display:flex; flex-direction:column; overflow-x:hidden; overflow-y:auto;
+    scrollbar-gutter:stable; }
   .inset-topbar{ display:flex; align-items:center; gap:10px; height:52px; padding:0 20px;
     border-bottom:1px solid var(--border); flex-shrink:0;
     /* z 48: above a lifted card (45) -- nothing on the page ever covers Arm / Disarm / Kill --

@@ -659,3 +659,9 @@ test('a 200 without a boolean "armed" is not a status either; a first load that 
   assert.equal(n.api.why, 'the desk is not answering');
   assert.equal(n.clockEl.textContent, 'server unreachable');
 });
+
+test('a space-taking scrollbar appearing never shifts the top bar: the column reserves its gutter', () => {
+  const i = HTML.indexOf('  .app-main{');
+  const rule = HTML.slice(i, HTML.indexOf('}', i) + 1);
+  assert.match(rule, /overflow-y:auto;\s*scrollbar-gutter:stable;/);
+});
