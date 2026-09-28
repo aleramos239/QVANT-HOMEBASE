@@ -988,6 +988,13 @@ class TradovateAdapter(BrokerAdapter):
             return OrderResult(ok=False, error=str(e))
 
     # ------------------------------------------------------------ reads
+    def request_rtts_ms(self, since: float) -> dict[str, float]:
+        """Timing only: {endpoint: round trip ms} of this socket's requests answered
+        after `since` (time.perf_counter), the latest per endpoint. No broker call."""
+        ws = self._ws
+        rtts = getattr(ws, "rtts", None) if ws is not None else None
+        return {ep: ms for done, ep, ms in list(rtts or ()) if done >= since}
+
     async def get_net_position(self, symbol: str) -> int:
         """Net position in `symbol`. RAISES when it can't be read: an
         unreadable position is not flat (a swallowed 404 once read as 0 for a
