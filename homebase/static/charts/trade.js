@@ -1015,28 +1015,37 @@ function chartWhy({ replay = false, halted = false, accounts = [], unverified = 
 
 const fmt1 = (v) => (v == null || !Number.isFinite(v) ? '—' : v.toFixed(1));
 function gateText(t) { return t.gate === true ? `TREND ADX ${fmt1(t.adx)}` : t.gate === false ? `CHOP ADX ${fmt1(t.adx)}` : ''; }
-/* Why the 9:30 timer fired late or missed its window, in plain words: homebase/timer.py's reason codes, and the
-   same words as its LATE_WHY / MISS_WHY. */
+/* Why the 9:30 timer fired late or off the pre-open anchor, waits or missed its window, in plain words:
+   homebase/timer.py's reason codes, and the same words as its LATE_WHY / MISS_WHY / late_why. */
 const LATE_WHY = { late_start: 'the desk started after the open', late_switch_on: 'it was switched on after the open',
-  late_stage: 'it was not staged by the open' };
+  late_stage: 'it was not staged by the open', no_pre_open_quote: 'it had no fresh quote before the open' };
 const MISS_WHY = { late_start: 'the desk started after the accept window closed',
   late_switch_on: 'it was switched on after the accept window closed',
-  window_closed: 'the accept window closed before it could fire' };
+  window_closed: 'the accept window closed before it could fire',
+  no_fresh_quote: 'no fresh quote came before the accept window closed' };
+/* 09:30:00 + `lateS` as "9:31:04" (ET, to the second). */
+function fireClock(lateS) {
+  const at = 9 * 3600 + 30 * 60 + Math.floor(Number(lateS) || 0), two = (n) => String(n).padStart(2, '0');
+  return `${Math.floor(at / 3600)}:${two(Math.floor((at % 3600) / 60))}:${two(at % 60)}`;
+}
 /* "Fired late at 9:31:04 · the desk started after the open" for a fire past the open's grace (timer.py
-   FIRE_LATE_MAX_S: it still fired, on the price then); '' for any other timer state. */
+   FIRE_LATE_MAX_S: it still fired, on the price then), "Fired at 9:30:00, off the pre-open anchor · ..." for one
+   on time on the price then; '' for any other timer state. */
 function lateText(t) {
-  if (t.stage !== 'fired' || t.late !== true) return '';
-  const s = Number(t.late_s) || 0, at = 9 * 3600 + 30 * 60 + Math.floor(s), two = (n) => String(n).padStart(2, '0');
-  const why = t.reason === 'late_fire' ? `the fire ran ${s.toFixed(1)} s late`
-    : (LATE_WHY[t.reason] || `it fired ${s.toFixed(1)} s past the open`);
-  return `Fired late at ${Math.floor(at / 3600)}:${two(Math.floor((at % 3600) / 60))}:${two(at % 60)} · ${why}`;
+  if (t.stage !== 'fired' || !(t.late === true || t.anchor_source === 'current')) return '';
+  const s = Number(t.late_s) || 0, w = Number(t.waited_s) || 0;
+  const why = t.reason === 'waited_for_quote' ? `it waited ${w.toFixed(1)} s for a fresh quote`
+    : (t.reason === 'late_fire' ? `the fire ran ${(s - w).toFixed(1)} s late`
+      : (LATE_WHY[t.reason] || `it fired ${s.toFixed(1)} s past the open`))
+      + (w ? `, then waited ${w.toFixed(1)} s for a fresh quote` : '');
+  return `${t.late === true ? `Fired late at ${fireClock(s)}` : `Fired at ${fireClock(s)}, off the pre-open anchor`} · ${why}`;
 }
 /* The badge's state pill from the bot view: {state, text, tone, tip}. state is one of idle / armed / placing /
    in trade / done / skipped / killed / shadow, plus 'check it' (a killed run the desk could not fully account
-   for: amber), 'off' (disabled on the desk), 'error', 'missed' (amber: the accept window closed before the timer
-   fired, and why) and 'fired late' (amber: a late fire that placed nothing). A late fire that did place keeps its
-   state but turns amber for the day: "armed · late", its tip leading with when and why.
-   tone: idle | live | warn | err. */
+   for: amber), 'off' (disabled on the desk), 'error', 'waiting' (amber: no fresh quote to anchor on yet, since when
+   and why), 'missed' (amber: the accept window closed before the timer fired, and why) and 'fired late' (amber: a
+   late or off-anchor fire that placed nothing). One that did place keeps its state but turns amber for the day:
+   "armed · late", its tip leading with when and why. tone: idle | live | warn | err. */
 function botPill(s) {
   const t = (s && isObj(s.timer) && s.timer) || {}, accts = Object.values((s && isObj(s.accounts) && s.accounts) || {});
   const pill = (state, tone, tip = '') => ({ state, text: state === 'check it' ? 'CHECK IT' : state, tone, tip });
@@ -1057,6 +1066,9 @@ function botPill(s) {
   if (d === 'placed') return loud(pill('armed', 'live', 'Its entry orders are working, waiting for a fill'));
   if (d === 'done') return loud(pill('done', 'idle', 'Done for today'));
   if (late) return pill('fired late', 'warn', `${late} — nothing placed`);   // disarmed, or refused
+  if (t.stage === 'waiting') {
+    return pill('waiting', 'warn', `Waiting for a quote since ${fireClock(t.wait_late_s)} · ${t.wait_text || 'no fresh trade yet'}`);
+  }
   if (t.stage === 'skipped') return pill('skipped', 'idle', `Skipped today${gate ? ` — ${gate}` : ''}`);
   if (t.stage === 'missed') {
     return pill('missed', 'warn', `Missed today: ${MISS_WHY[t.reason] || 'its accept window closed before it fired'}`);

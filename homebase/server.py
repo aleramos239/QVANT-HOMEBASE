@@ -40,7 +40,7 @@ from .marketdata import TradovateMD
 from .rules import RULES
 from .metrics import live_metrics, strategy_live_detail
 from .paths import state_dir
-from .timer import FIRE_T, SelfTimer, fire_clock, late_why, miss_why
+from .timer import FIRE_T, SelfTimer, fire_clock, fire_said, miss_why, off_anchor
 from . import desk_api
 from .trading import ChartDesk
 
@@ -155,16 +155,18 @@ def _rides_older_token(feed) -> bool:
 
 def _timer_day(tst: dict | None, status: str, s, armed: bool) -> tuple[str, str] | None:
     """A self-fire straddle's day as its timer saw it, from the open on, as
-    (level, detail): a late fire (loud, whatever it placed), a miss, a timer
-    error, a skip, a fire that placed nothing. None: the day status says it."""
+    (level, detail): a late or off-anchor fire (loud, whatever it placed), a
+    wait for a quote, a miss, a timer error, a skip, a fire that placed
+    nothing. None: the day status says it."""
     tst = tst or {}
     stage = tst.get("stage")
-    if stage == "fired" and tst.get("late") is True:
-        return "warn", (f"fired late at {fire_clock(tst.get('late_s'))} · "
-                        f"{late_why(tst.get('reason'), tst.get('late_s'))} · "
-                        + (status if status != "idle" else "nothing placed"))
+    if stage == "fired" and off_anchor(tst):
+        return "warn", f"{fire_said(tst)} · " + (status if status != "idle" else "nothing placed")
     if status != "idle":
         return None
+    if stage == "waiting":
+        return "bad", (f"waiting for a quote since {fire_clock(tst.get('wait_late_s'))} — "
+                       f"{tst.get('wait_text')}")
     if stage == "missed":
         return "bad", "missed today — " + miss_why(tst.get("reason"))
     if stage == "error":

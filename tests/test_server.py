@@ -399,6 +399,21 @@ def test_readiness_says_a_late_fire_loud_whatever_it_placed(tmp_path):
     assert got == [("warn", "fired late at 9:31:04 · the desk started after the open · nothing placed")]
 
 
+def test_readiness_says_a_wait_for_a_quote_and_an_off_anchor_fire(tmp_path):
+    got, ready = _readiness_day(tmp_path, (9, 33), {
+        "stage": "waiting", "gate": True, "wait_reason": "no_pushes", "wait_late_s": 0.0,
+        "wait_text": "no quote pushes at all for NQZ6"})
+    assert got == [("bad", "waiting for a quote since 9:30:00 — no quote pushes at all for NQZ6")]
+    assert not ready
+    got, ready = _readiness_day(tmp_path, (9, 33), {
+        "stage": "fired", "anchor": 46012.0, "late": False, "late_s": 0.2, "anchor_source": "current",
+        "reason": "waited_for_quote", "waited_s": 0.2}, status="placed")
+    assert got == [("warn", "fired at 9:30:00, off the pre-open anchor · it waited 0.2 s for a fresh "
+                            "quote · placed")] and ready
+    got, _ = _readiness_day(tmp_path, (10, 0), {"stage": "missed", "reason": "no_fresh_quote"})
+    assert got == [("bad", "missed today — no fresh quote came before the accept window closed")]
+
+
 def test_readiness_from_the_open_describes_the_day_the_timer_had(tmp_path):
     got, ready = _readiness_day(tmp_path, (10, 0), {"stage": "skipped", "gate": False, "adx": 14.24},
                                 gated=True)

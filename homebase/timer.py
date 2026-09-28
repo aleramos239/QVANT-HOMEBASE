@@ -11,12 +11,16 @@ Per enabled strategy with self_fire (all times ET, weekdays only):
                 A fire more than FIRE_LATE_MAX_S past 09:30:00.000 (a desk
                 restart, a late switch-on, a slow stage, a stalled loop)
                 still goes out while the accept window is open, on the
-                latest trade at that moment — journaled late, with why
+                latest trade at that moment — journaled late, with why.
+                No fresh trade yet (none at all, or the newest too old):
+                it waits, trying every tick, and fires on the first fresh
+                trade — until the accept window closes: then missed
     9:31        unsubscribe, done
 
-Fail-safe by construction: no gate reading → no fire; stale quote → no
-fire; accept window over → no fire; day already acted (e.g. the TV
-alert beat us) → no fire. Every decision is journaled. The TV alert stays
+Fail-safe by construction: no gate reading → no fire; no fresh quote → no
+fire (yet); accept window over → no fire; day already acted (e.g. the TV
+alert beat us) → no fire; fired once → never again that day, restarts
+included. Every decision is journaled. The TV alert stays
 a cross-check — when disarmed both paths journal dry runs (free anchor
 A/B); when armed the second arrival is refused by the one-trade-per-day
 rule.
@@ -62,17 +66,21 @@ MIN_GATE_BARS = 110        # RMA needs history to converge: at 119 bars the
 PRESTAGE_READ_S = 2.0      # every booked account's position, read concurrently, at most this long
 PRESTAGE_MARGIN_S = 0.5    # ...and never closer than this to 09:30:00 (ruling P6)
 
-# why a fire was late, or a day missed, in plain words (the review, readiness; the
-# charts pill, homebase/static/charts/trade.js, keeps the same words)
+# why a fire was late or off the pre-open anchor, or a day missed, in plain words (the
+# review, readiness; the charts pill, homebase/static/charts/trade.js, keeps the same words)
 LATE_WHY = {"late_start": "the desk started after the open",
             "late_switch_on": "it was switched on after the open",
-            "late_stage": "it was not staged by the open"}
+            "late_stage": "it was not staged by the open",
+            "no_pre_open_quote": "it had no fresh quote before the open"}
 MISS_WHY = {"late_start": "the desk started after the accept window closed",
             "late_switch_on": "it was switched on after the accept window closed",
-            "window_closed": "the accept window closed before it could fire"}
+            "window_closed": "the accept window closed before it could fire",
+            "no_fresh_quote": "no fresh quote came before the accept window closed"}
 # a timer outcome in the journal -> the stage it leaves (after a restart: what stands)
 DECIDED = {"timer_fired": "fired", "timer_skipped": "skipped", "timer_error": "error",
            "timer_deferred": "done", "timer_missed": "missed"}
+# a fire's status fields, as the journal also has them (a restart restores them)
+FIRED_KEYS = ("anchor", "late", "late_s", "reason", "anchor_source", "waited_s")
 
 
 def fire_clock(late_s) -> str:
@@ -81,11 +89,31 @@ def fire_clock(late_s) -> str:
     return f"{s // 3600}:{s % 3600 // 60:02d}:{s % 60:02d}"
 
 
-def late_why(reason, late_s) -> str:
-    """A late fire's reason in plain words: "the fire ran 2.1 s late"."""
+def late_why(reason, late_s, waited_s=None) -> str:
+    """Why a fire was late or off the pre-open anchor, in plain words: "the
+    fire ran 2.1 s late", "it waited 600.2 s for a fresh quote"."""
+    waited = float(waited_s or 0)
+    if reason == "waited_for_quote":
+        return f"it waited {waited:.1f} s for a fresh quote"
     if reason == "late_fire":
-        return f"the fire ran {float(late_s or 0):.1f} s late"
-    return LATE_WHY.get(reason, f"it fired {float(late_s or 0):.1f} s past the open")
+        why = f"the fire ran {float(late_s or 0) - waited:.1f} s late"
+    else:
+        why = LATE_WHY.get(reason, f"it fired {float(late_s or 0):.1f} s past the open")
+    return why + (f", then waited {waited:.1f} s for a fresh quote" if waited else "")
+
+
+def off_anchor(e: dict) -> bool:
+    """A timer fire past its grace, or not on the pre-open anchor: said loud."""
+    return e.get("late") is True or e.get("anchor_source") == "current"
+
+
+def fire_said(e: dict) -> str:
+    """A loud fire (off_anchor) in plain words: "fired late at 9:31:04 · the desk
+    started after the open"; "fired at 9:30:00, off the pre-open anchor · it had
+    no fresh quote before the open"."""
+    lead = (f"fired late at {fire_clock(e.get('late_s'))}" if e.get("late") is True
+            else f"fired at {fire_clock(e.get('late_s'))}, off the pre-open anchor")
+    return f"{lead} · {late_why(e.get('reason'), e.get('late_s'), e.get('waited_s'))}"
 
 
 def miss_why(reason) -> str:
@@ -165,14 +193,14 @@ class SelfTimer:
                 st = day[name] = {"stage": "idle", "gate": None, "adx": None,
                                   "anchor": None, "seen_at": _et_ms(now.timestamp())}
             mine.append((name, s, st))
-        # Staged by an earlier tick, a strategy reaches its fire with no await
-        # (the anchor is a read of the quote already kept): every one due fires
-        # first, together -- no strategy waits on another's broker round trip --
-        # and before any other strategy advances: a gate retry, a stage or an md
-        # reconnect can take seconds, and would hold these orders on levels read
-        # at 09:30:00.000.
-        staged = [m for m in mine if m[2]["stage"] == "staged"]
-        rest = [m for m in mine if m[2]["stage"] != "staged"]
+        # Staged by an earlier tick (or waiting for a quote), a strategy reaches
+        # its fire with no await (the anchor is a read of the quote already
+        # kept): every one due fires first, together -- no strategy waits on
+        # another's broker round trip -- and before any other strategy
+        # advances: a gate retry, a stage or an md reconnect can take seconds,
+        # and would hold these orders on levels read at 09:30:00.000.
+        staged = [m for m in mine if m[2]["stage"] in ("staged", "waiting")]
+        rest = [m for m in mine if m[2]["stage"] not in ("staged", "waiting")]
         await self._settle(await self._advance_all(staged, t, date))
         await self._settle(await self._advance_all(rest, t, date))
 
@@ -215,21 +243,23 @@ class SelfTimer:
         # on the latest trade.
         end = _hhmm(s.accept_until_et)
         if t > end:
-            if st["stage"] in ("idle", "gated", "staged"):
+            if st["stage"] in ("idle", "gated", "staged", "waiting"):
                 self._closed(name, s, st, date)
-            sub = self._subs.pop(s.symbol, None)
-            if sub is not None and self._md is not None:
-                await self._md.unsubscribe_quote(sub)
+            if not self._quote_needed(s.symbol, name):
+                sub = self._subs.pop(s.symbol, None)
+                if sub is not None and self._md is not None:
+                    await self._md.unsubscribe_quote(sub)
             return
 
-        if st["stage"] in ("idle", "gated", "staged") and self.engine.killed_today(name):
+        if st["stage"] in ("idle", "gated", "staged", "waiting") and self.engine.killed_today(name):
             st.update(stage="skipped", killed=True)       # the per-strategy Kill: never fire today
             self.engine.journal("timer_skipped", strategy=name, reason="killed")
         stage = st["stage"]
         if stage in ("fired", "skipped", "done", "error", "missed"):
             if stage == "error" and t < STAGE_T:
                 st["stage"] = "idle"        # errors before staging retry
-            elif t >= DONE_T and s.symbol in self._subs:
+            elif t >= DONE_T and s.symbol in self._subs \
+                    and not self._quote_needed(s.symbol, name):
                 await self._md.unsubscribe_quote(self._subs.pop(s.symbol))
             else:
                 return
@@ -258,7 +288,7 @@ class SelfTimer:
             await self._prestage_skip(name, s, st)
             st.update(stage="staged", staged_at=_et_ms(self._now().timestamp()))
 
-        if st["stage"] == "staged" and t >= FIRE_T:
+        if st["stage"] in ("staged", "waiting") and t >= FIRE_T:
             if st["gate"] is False:
                 st["stage"] = "skipped"
                 self.engine.journal("timer_skipped", strategy=name,
@@ -276,54 +306,107 @@ class SelfTimer:
                                     status=day)
                 return
             fire_at = dt.datetime.combine(dt.date.fromisoformat(date), FIRE_T, tzinfo=ET)
+            if st["stage"] == "staged" and self._up_at is not None and self._up_at > fire_at:
+                e = self._decided(date).get(name)        # the desk came up after the open:
+                if e is not None and e["event"] == "timer_fired":   # did its earlier run fire?
+                    st.update(stage="fired", **{k: e[k] for k in FIRED_KEYS if k in e})
+                    return                  # once a day, restarts or not (dry runs too)
             now = self._now()
-            late_s = now.timestamp() - fire_at.timestamp()
+            now_ts = now.timestamp()
+            late_s = now_ts - fire_at.timestamp()
             late = late_s > FIRE_LATE_MAX_S
+            sub = self._subs.get(s.symbol)
             # On time: the last trade received before 09:30:00.000, the research
-            # anchor. Late, the accept window still open: the latest trade now --
-            # both stops sit offset_pts either side of the current price, so
-            # nothing is placed through the market.
-            cut, sub = (None if late else fire_at.timestamp()), self._subs.get(s.symbol)
-            px, seen = self._md.last(sub, before=cut) if self._md else (None, 0.0)
+            # anchor. Late -- or on time with no fresh pre-open trade -- the
+            # accept window still open: the latest trade now; both stops sit
+            # offset_pts either side of the current price, so nothing is placed
+            # through the market. Freshness is judged on the timer's own clock
+            # (the wall clock the pushes are received on). No fresh trade at
+            # all: wait for one, every tick -- never final (_wait).
+            got, source = (None if late else self._fresh(sub, fire_at.timestamp(), now_ts)), "pre_open"
+            if got is None:
+                got, source = self._fresh(sub, None, now_ts), "current"
+            if got is None:
+                return self._wait(name, st, sub, now_ts, late, late_s, fire_at)
+            waited = st["stage"] == "waiting"
+            if source == "pre_open":
+                reason = None
+            elif waited:                    # late before the wait: that; on time: the wait
+                reason = st.get("wait_why") or "waited_for_quote"
+            else:
+                reason = self._late_why(st, fire_at) if late else "no_pre_open_quote"
             info = {"late": late, "late_s": round(late_s, 3),
-                    **({"reason": self._late_why(st, fire_at)} if late else {}),
-                    "anchor_source": "current" if late else "pre_open",
-                    **self._stamps(sub, cut)}
-            lateness = {k: info[k] for k in ("late", "late_s", "reason") if k in info}
-            # freshness on the timer's own clock: the wall clock the pushes are received on
-            if px is None or now.timestamp() - seen > QUOTE_MAX_AGE_S:
-                cause, error, told = self._no_anchor(sub, px, now.timestamp() - seen, late)
-                st.update(stage="error", error=error, **lateness)
-                self.engine.journal("timer_error", strategy=name, error=error,
-                                    cause=cause, **told, **info)
-                return
-            st.update(anchor=px, stage="fired", **lateness)   # a late one shows loud (status)
-            return self._fire(name, s, px, info)   # tick() fires all due at once
+                    **({"reason": reason} if reason else {}),
+                    "anchor_source": source,
+                    **({"waited_s": round(late_s - st["wait_late_s"], 3),
+                        "wait_reason": st.get("wait_reason")} if waited else {}),
+                    **self._stamps(sub, fire_at.timestamp() if source == "pre_open" else None)}
+            st.update(anchor=got[0], stage="fired",       # a late or off-anchor one shows loud
+                      **{k: info[k] for k in FIRED_KEYS if k in info})
+            return self._fire(name, s, got[0], info)   # tick() fires all due at once
 
-    def _no_anchor(self, sub, px, age, late) -> tuple[str, str, dict]:
-        """Why a fire has no anchor, told apart -> (cause, error, journal fields),
-        with the contract's quote push count: no_pushes (none at all);
-        none_before_open (on time: none received before 09:30:00.000 brought a
-        trade); no_trade (late: none brought one); stale_trade (the trade is
-        older than QUOTE_MAX_AGE_S: its age)."""
+    def _fresh(self, sub, before, now_ts):
+        """(price, received) of the latest trade received before `before` (None:
+        the latest of all) -- or None: there is none, or it is older than
+        QUOTE_MAX_AGE_S."""
+        px, seen = self._md.last(sub, before=before) if self._md is not None else (None, 0.0)
+        return (px, seen) if px is not None and now_ts - seen <= QUOTE_MAX_AGE_S else None
+
+    def _wait(self, name, st, sub, now_ts, late, late_s, fire_at) -> None:
+        """No fresh trade to anchor on yet -- never final: the account holder
+        would rather it fire. It tries again every tick, and fires on the
+        first fresh trade (anchor_source current), until the accept window
+        closes (_closed: missed, no_fresh_quote). One timer_waiting line when
+        the wait starts, with why and the push count -- never one a tick; the
+        status says "waiting" and why, kept current as the cause changes."""
+        cause, text, told = self._no_anchor(sub, now_ts)
+        if st["stage"] == "waiting":
+            if cause != st.get("wait_reason"):
+                st.update(wait_reason=cause, wait_text=text)
+            return
+        why = self._late_why(st, fire_at) if late else None   # late already: that is why
+        st.update(stage="waiting", wait_reason=cause, wait_text=text,
+                  wait_late_s=round(late_s, 3), wait_why=why)
         try:
-            n = int(self._md.pushes(sub)) if self._md is not None else 0
-        except Exception:  # noqa: BLE001 — the refusal stands; only its count is unknown
+            self.engine.journal("timer_waiting", strategy=name, reason=cause, text=text, **told,
+                                late=late, late_s=round(late_s, 3),
+                                **({"late_reason": why} if why else {}),
+                                **self._stamps(sub, None if late else fire_at.timestamp()))
+        except Exception as e:  # noqa: BLE001 — a failed line never ends the wait
+            print(f"homebase timer: journal timer_waiting for {name} failed: {e!r}", file=sys.stderr)
+
+    def _no_anchor(self, sub, now_ts) -> tuple[str, str, dict]:
+        """Why there is no fresh trade to anchor on, told apart -> (cause, text,
+        journal fields), with the contract's quote push count: no_pushes (none
+        at all), no_trade (pushes, none with a trade), stale_trade (the newest
+        trade is older than QUOTE_MAX_AGE_S: its age). A dead md socket is said.
+        Never raises: the wait stands, only what it knows shrinks."""
+        md = self._md
+        try:
+            n = int(md.pushes(sub)) if md is not None else 0
+        except Exception:  # noqa: BLE001
             n = None
+        try:
+            px, seen = md.last(sub) if md is not None else (None, 0.0)
+        except Exception:  # noqa: BLE001
+            px, seen = None, 0.0
+        down = "" if md is not None and getattr(md, "connected", False) \
+            else " (market data disconnected)"
         of = f"{'?' if n is None else n} quote push{'' if n == 1 else 'es'}"
         if px is None and n == 0:
-            return "no_pushes", f"no anchor: no quote pushes at all for {sub}", {"pushes": 0}
-        if px is None and late:
-            return "no_trade", f"no anchor: none of {of} for {sub} had a trade", {"pushes": n}
+            return "no_pushes", f"no quote pushes at all for {sub}{down}", {"pushes": 0}
         if px is None:
-            return ("none_before_open",
-                    f"no anchor: none of {of} for {sub} had a trade before 09:30:00.000",
-                    {"pushes": n})
-        age = round(age, 1)
-        return ("stale_trade",
-                (f"no anchor: newest trade is {age} s old ({of}, {sub})" if late else
-                 f"no anchor: last trade before 09:30:00.000 is {age} s old ({of}, {sub})"),
+            return "no_trade", f"none of {of} for {sub} had a trade{down}", {"pushes": n}
+        age = round(now_ts - seen, 1)
+        return ("stale_trade", f"newest trade is {age} s old ({of}, {sub}){down}",
                 {"pushes": n, "age_s": age})
+
+    def _quote_needed(self, symbol, but) -> bool:
+        """Another strategy on this symbol is staged or waiting for a quote: its
+        feed must not be unsubscribed from under it."""
+        return any(n != but and st.get("stage") in ("staged", "waiting")
+                   and getattr(self.cfg.strategies.get(n), "symbol", None) == symbol
+                   for day in self.days.values() for n, st in day.items())
 
     def _late_why(self, st, fire_at) -> str:
         """Why a fire is past FIRE_LATE_MAX_S. late_fire: staged before the
@@ -346,20 +429,21 @@ class SelfTimer:
         skipped or deferred today. A day that acted is done, a killed one
         skipped; after a restart, what the desk's earlier run decided (today's
         journal) stands, unsaid again. Only a day nothing decided is MISSED --
-        with why (late_start: the desk came up after the window; late_switch_on:
-        first seen after it; window_closed: known in time, never fired: a
-        stall, a gate retry) -- journaled once per strategy per day."""
+        with why (no_fresh_quote: it waited for a quote to the end;
+        late_start: the desk came up after the window; late_switch_on: first
+        seen after it; window_closed: known in time, never fired: a stall, a
+        gate retry) -- journaled once per strategy per day."""
         if self.engine.day_status(name) != "idle":
             st["stage"] = "done"
             return
         if self.engine.killed_today(name):
             st.update(stage="skipped", killed=True)
             return
-        e = self._decided(date).get(name)
+        waited = st["stage"] == "waiting"        # this run tried: its wait is the day
+        e = None if waited else self._decided(date).get(name)
         if e is not None:
             st.update(stage=DECIDED[e["event"]],
-                      **{k: e[k] for k in ("anchor", "late", "late_s", "reason", "error", "adx")
-                         if k in e})
+                      **{k: e[k] for k in FIRED_KEYS + ("error", "adx") if k in e})
             if e.get("reason") == "gate_chop":
                 st["gate"] = False
             elif e.get("reason") == "killed":
@@ -370,21 +454,26 @@ class SelfTimer:
         fire_at = dt.datetime.combine(day, FIRE_T, tzinfo=ET)
         end_at = dt.datetime.combine(day, _hhmm(s.accept_until_et), tzinfo=ET)
         seen = st.get("seen_at")
-        reason = ("late_start" if self._up_at is None or self._up_at > end_at else
+        reason = ("no_fresh_quote" if waited else
+                  "late_start" if self._up_at is None or self._up_at > end_at else
                   "late_switch_on" if seen is not None and seen > _et_ms(end_at.timestamp()) else
                   "window_closed")
         late_s = round(now.timestamp() - fire_at.timestamp(), 3)
+        wait = ({"wait_reason": st.get("wait_reason"), "text": st.get("wait_text"),
+                 "waited_s": round(late_s - st.get("wait_late_s", 0.0), 3)} if waited else {})
         st.update(stage="missed", reason=reason, late_s=late_s)
         self.engine.journal("timer_missed", strategy=name, reason=reason,
                             at=_et_ms(now.timestamp()), late_s=late_s,
-                            window_end=s.accept_until_et)
+                            window_end=s.accept_until_et, **wait)
 
     def _decided(self, date: str) -> dict:
-        """strategy -> today's last timer outcome in the journal (fired,
-        skipped, error, deferred, missed), read once per date -- only ever
-        after an accept window closed. A prestage's account-level skip decides
-        nothing. An unreadable journal decides nothing either, and never
-        raises into the timer."""
+        """strategy -> today's timer outcome in the journal: its fire if it
+        fired (a fire stands, whatever a later restart logged), else its last
+        outcome (skipped, error, deferred, missed). Read once per date, and
+        only after an accept window closed or at the first fire attempt of a
+        desk that came up after the open -- never on an on-time fire. A
+        prestage's account-level skip decides nothing. An unreadable journal
+        decides nothing either, and never raises into the timer."""
         if self._decided_day[0] != date:
             out: dict = {}
             try:
@@ -399,7 +488,9 @@ class SelfTimer:
                     if isinstance(e, dict) and e.get("event") in DECIDED and e.get("strategy") \
                             and str(e.get("et", "")).startswith(date) \
                             and not (e["event"] == "timer_skipped" and e.get("account")):
-                        out[str(e["strategy"])] = e
+                        prior = out.get(str(e["strategy"]))
+                        if prior is None or prior["event"] != "timer_fired":
+                            out[str(e["strategy"])] = e
             except Exception as ex:  # noqa: BLE001 — a missed day is said, never a crash
                 print(f"homebase timer: reading today's journal failed: {ex!r}", file=sys.stderr)
             self._decided_day = (date, out)

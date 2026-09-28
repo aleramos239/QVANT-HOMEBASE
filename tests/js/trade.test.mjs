@@ -458,6 +458,31 @@ test('algo badge: a late fire is loud all day -- amber, "· late", when and why 
   assert.equal(pill({ day_status: 'placed', killed: true, timer: late('late_start', 64) }).state, 'killed');
 });
 
+test('algo badge: waiting for a quote, and a fire off the pre-open anchor, are amber and say why', () => {
+  const pill = (patch) => T.botPill(botState(patch).bot.strategies.nq930);
+  const wait = pill({ day_status: 'idle', timer: { stage: 'waiting', gate: true, wait_reason: 'no_pushes',
+    wait_late_s: 62.2, wait_text: 'no quote pushes at all for NQZ6' } });
+  assert.deepEqual([wait.state, wait.text, wait.tone], ['waiting', 'waiting', 'warn']);
+  assert.equal(wait.tip, 'Waiting for a quote since 9:31:02 · no quote pushes at all for NQZ6');
+  // on time, on the price then (no fresh pre-open trade): loud like a late one
+  const off = pill({ day_status: 'placed', timer: { stage: 'fired', late: false, late_s: 0.2, anchor_source: 'current',
+    reason: 'no_pre_open_quote' } });
+  assert.deepEqual([off.text, off.tone], ['armed · late', 'warn']);
+  assert.match(off.tip, /^Fired at 9:30:00, off the pre-open anchor · it had no fresh quote before the open — /);
+  const waited = pill({ day_status: 'live', timer: { stage: 'fired', late: true, late_s: 600.2,
+    anchor_source: 'current', reason: 'waited_for_quote', waited_s: 600.2 } });
+  assert.match(waited.tip, /^Fired late at 9:40:00 · it waited 600\.2 s for a fresh quote — /);
+  const startThenWait = pill({ day_status: 'placed', timer: { stage: 'fired', late: true, late_s: 62.2,
+    anchor_source: 'current', reason: 'late_start', waited_s: 2.2 } });
+  assert.match(startThenWait.tip,
+    /^Fired late at 9:31:02 · the desk started after the open, then waited 2\.2 s for a fresh quote — /);
+  const stall = pill({ day_status: 'placed', timer: { stage: 'fired', late: true, late_s: 61.2,
+    anchor_source: 'current', reason: 'late_fire', waited_s: 1.2 } });
+  assert.match(stall.tip, /^Fired late at 9:31:01 · the fire ran 60\.0 s late, then waited 1\.2 s for a fresh quote — /);
+  assert.equal(pill({ day_status: 'idle', timer: { stage: 'missed', reason: 'no_fresh_quote' } }).tip,
+    'Missed today: no fresh quote came before the accept window closed');
+});
+
 test('algo badge: a missed window is amber and says why, not a grey "skipped"', () => {
   const pill = (patch) => T.botPill(botState(patch).bot.strategies.nq930);
   const missed = (reason) => pill({ day_status: 'idle', timer: { stage: 'missed', reason, late_s: 5400 } });
