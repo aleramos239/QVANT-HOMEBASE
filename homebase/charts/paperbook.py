@@ -19,8 +19,10 @@ Fill law -- homebase/backtest/engine.py, line for line (cited where each rule is
       3. else the engine's market rule below: the next print, +1 tick.
     Fresh: its time at most QUOTE_FILL_MAX_AGE_S behind this book's clock and at most QUOTE_FILL_MAX_FUTURE_S ahead
     of it (more: the clock is off -- fail closed). Sane: bid < ask, every price used on the tick grid, the touch at
-    most QUOTE_FILL_MAX_SPREAD_TICKS wide (and a book two-sided, each side in order, whole sizes). Every fill says
-    which law made it: `src` "book" | "quote" | "print";
+    most QUOTE_FILL_MAX_SPREAD_TICKS wide (and a book two-sided, each side in order, whole sizes). Never while the
+    market is not matching: in a classic root's 17:00-18:00 ET break or its weekend (market_open), or with no print
+    on the root in LIVE_PRINT_MAX_AGE_S (a halt, a closed market's snapshot). Every fill says which law made it:
+    `src` "book" | "quote" | "print";
   * a STOP (and a stop-loss) fills on TOUCH -- a buy on the first print >= its price, a sell on the first print
     <= it -- at max(price, print) + slip for a buy, min(price, print) - slip for a sell: a gap costs the gap
     (engine.py L4-7, L295-296, L306);
@@ -102,6 +104,8 @@ QUOTE_MAX_FUTURE_S = 5.0          # ...and at most this far ahead of this book's
 QUOTE_FILL_MAX_AGE_S = 2.0        # a Market fills at once against a book / quote at most this old...
 QUOTE_FILL_MAX_FUTURE_S = 1.0     # ...at most this far ahead of this book's clock (more: the clock is off -- no fill)
 QUOTE_FILL_MAX_SPREAD_TICKS = 20  # ...and at most this wide; otherwise it waits for the next print, as before
+LIVE_PRINT_MAX_AGE_S = 30.0       # ...and only while that root printed this recently (a halt, a closed market's
+                                  # subscribe-time snapshot: no instant fill)
 FILLS_KEPT = 50                   # fills in the account view (the desk's FILLS_KEPT)
 DEDUP_TTL_S = 600.0
 ACTIONS = ("order", "modify", "cancel", "exits", "cancel-symbol", "flatten", "reverse")
@@ -133,6 +137,16 @@ def session_of(ts_ms: int, root: str) -> str:
         while d.weekday() >= 5:
             d += dt.timedelta(days=1)
     return d.isoformat()
+
+
+def market_open(ts_ms: int, root: str) -> bool:
+    """Whether `root` matches at this moment by session_of's calendar: session D opens 18:00 ET the day before D and
+    closes 17:00 on D, weekends filed into Monday -- so never in a classic root's 17:00-18:00 break, never Friday
+    17:00 to Sunday 18:00. A 24/7 root always. Holidays and halts are not in it: the print-age rule covers those."""
+    if root in _ALWAYS_OPEN:
+        return True
+    d = dt.date.fromisoformat(session_of(ts_ms, root))
+    return ts_ms >= dt.datetime.combine(d - dt.timedelta(days=1), dt.time(18, 0), _ET).timestamp() * 1000
 
 
 def _session_until(ts_ms: int, root: str) -> int:
@@ -688,13 +702,24 @@ class PaperBook:
     def _plan(self, root: str, side: int, qty: int, now_ms: int) -> Optional[tuple[str, list]]:
         """How a Market order for `qty` placed now fills at once: ("book", [[price, qty], ...] -- the levels taken, in
         order), else ("quote", [[touch, qty]]) -- or None: it waits for the next print (the engine's rule). ALL of
-        qty or nothing, never a part. Reads only: nothing changes here."""
+        qty or nothing, never a part; never while the market is not matching (_matching). Reads only."""
+        if not self._matching(root, now_ms):
+            return None
         tick = tick_size(root)
         parts = self._book_parts(root, side, qty, now_ms, tick)
         if parts is not None:
             return "book", parts
         px = self._quote_px(root, side, qty, now_ms, tick)
         return None if px is None else ("quote", [[px, qty]])
+
+    def _matching(self, root: str, now_ms: int) -> bool:
+        """Is the market matching now? Open by the calendar (market_open), and a print on this root at most
+        LIVE_PRINT_MAX_AGE_S old (at most QUOTE_FILL_MAX_FUTURE_S ahead): a pre-open or halted market can show a fresh
+        book and quote no one trades at -- ES's Sunday pre-open book sat at 7805.75/7806.0, its first print was 7796.0."""
+        last = self.last_ms.get(root)
+        if last is None or not market_open(now_ms, root):
+            return False
+        return -QUOTE_FILL_MAX_FUTURE_S * 1000 <= now_ms - last <= LIVE_PRINT_MAX_AGE_S * 1000
 
     @staticmethod
     def _fresh(ts, now_ms: int) -> bool:

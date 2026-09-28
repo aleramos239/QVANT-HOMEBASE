@@ -1016,22 +1016,82 @@ def test_a_held_bracket_leg_moves_only_on_its_side_of_its_entry():
 NOW_MS = T0 // 1_000_000                       # the fixture book's clock
 
 
-def q_(bid=99.75, ask=100.0, age_ms=500, **kw):
+def q_(bid=99.75, ask=100.0, age_ms=500, now_ms=NOW_MS, **kw):
     """A trade-row quote as Quotes.quote_of gives it: age_ms before the book's clock, 5 lots shown each side."""
-    return {"bid": bid, "ask": ask, "bid_size": 5, "ask_size": 5, "ts_ms": NOW_MS - age_ms, **kw}
+    return {"bid": bid, "ask": ask, "bid_size": 5, "ask_size": 5, "ts_ms": now_ms - age_ms, **kw}
 
 
-def l2(bids=((99.75, 2), (99.5, 1), (99.25, 3)), offers=((100.0, 1), (100.25, 1), (100.5, 5)), age_ms=300):
+def l2(bids=((99.75, 2), (99.5, 1), (99.25, 3)), offers=((100.0, 1), (100.25, 1), (100.5, 5)), age_ms=300,
+       now_ms=NOW_MS):
     """A Level 2 book as Depth.book_of gives it: best first, age_ms before the book's clock."""
-    return {"bids": [list(x) for x in bids], "offers": [list(x) for x in offers], "ts_ms": NOW_MS - age_ms}
+    return {"bids": [list(x) for x in bids], "offers": [list(x) for x in offers], "ts_ms": now_ms - age_ms}
 
 
-def live(quote=None, depth=None, root="NQ", tmp_path=None):
-    """A book whose quote_of / book_of answer src["quote"] / src["book"] for `root` -- the tests change src in place."""
+def live(quote=None, depth=None, root="NQ", tmp_path=None, clock_ns=T0, printed_ms=1000, px=100.0):
+    """A book whose quote_of / book_of answer src["quote"] / src["book"] for `root` -- the tests change src in place --
+    on a market that is matching: `root` printed `px` printed_ms before the clock (None: no print yet)."""
     src = {"quote": quote, "book": depth}
-    b = book(tmp_path, root=root, quote_of=lambda r: src["quote"] if r == root else None,
+    b = book(tmp_path, root=root, clock_ns=clock_ns, quote_of=lambda r: src["quote"] if r == root else None,
              book_of=lambda r: src["book"] if r == root else None)
+    if printed_ms is not None:
+        b.on_print(root, clock_ns - printed_ms * 1_000_000, px)
     return b, src
+
+
+def et(d, hms):
+    return et_ns(dt.date.fromisoformat(d), hms)
+
+
+@pytest.mark.parametrize("when, open_", [
+    ("2024-03-05 16:59:59", True), ("2024-03-05 17:00:00", False), ("2024-03-05 17:59:59", False),   # a Tuesday break
+    ("2024-03-05 18:00:00", True),
+    ("2024-03-08 16:59:59", True), ("2024-03-08 17:00:00", False), ("2024-03-08 20:00:00", False),   # Friday close
+    ("2024-03-09 12:00:00", False),                                                                   # Saturday
+    ("2024-03-10 17:59:59", False), ("2024-03-10 18:00:00", True),                                   # Sunday open
+])
+def test_market_open_follows_the_session_calendar(when, open_):
+    d, hms = when.split()
+    assert pb.market_open(et(d, hms) // 1_000_000, "NQ") is open_
+    assert pb.market_open(et(d, hms) // 1_000_000, "BTC") is True                  # a 24/7 root: always
+
+
+@pytest.mark.parametrize("why, when, printed_ms", [
+    ("the daily break", "2024-03-05 17:30:00", 1000),
+    ("Friday after the close", "2024-03-08 17:30:00", 1000),
+    ("Saturday", "2024-03-09 12:00:00", 1000),
+    ("a halt: no print in 30 s", "2024-03-05 10:00:00", 30_001),
+    ("no print yet", "2024-03-05 10:00:00", None),
+    ("a print over 1 s ahead of the clock", "2024-03-05 10:00:00", -1001),
+])
+def test_no_instant_fill_while_the_market_is_not_matching(why, when, printed_ms):
+    d, hms = when.split()
+    now = et(d, hms)
+    b, _ = live(quote=q_(now_ms=now // 1_000_000), depth=l2(now_ms=now // 1_000_000), clock_ns=now,
+                printed_ms=printed_ms)
+    assert order(b, "Buy", "Market")["ok"]
+    assert fills(b) == [] and [o["type"] for o in b.view()["orders"]] == ["Market"]   # it waits for a print
+
+
+def test_the_print_age_limit_is_inclusive_and_a_24_7_root_trades_on_saturday():
+    b, _ = live(quote=q_(), depth=l2(), printed_ms=30_000)
+    order(b, "Buy", "Market")
+    assert b.fills[-1]["src"] == "book"
+    sat = et("2024-03-09", "12:00:00")
+    c, _ = live(quote=q_(bid=60000.0, ask=60005.0, now_ms=sat // 1_000_000), root="BTC", clock_ns=sat, px=60005.0)
+    order(c, "Buy", "Market", root="BTC")                          # BTC's tick is 5.0
+    assert (c.fills[-1]["src"], c.fills[-1]["price"]) == ("quote", 60005.0)
+
+
+def test_a_pre_open_book_never_fills_a_paper_order():
+    """ES, Sunday: the pre-open book was fresh at 7805.75 / 7806.0 and the first print was 7796.0 -- an instant buy
+    would have been down $500 on its first tick. It waits for that print instead."""
+    now = et("2024-03-10", "17:59:50")
+    q = q_(bid=7805.75, ask=7806.0, now_ms=now // 1_000_000)
+    depth = l2(bids=((7805.75, 3),), offers=((7806.0, 4),), now_ms=now // 1_000_000)
+    b, _ = live(quote=q, depth=depth, root="ES", clock_ns=now, printed_ms=None)
+    assert order(b, "Buy", "Market", root="ES")["ok"] and fills(b) == []
+    b.on_print("ES", et("2024-03-10", "18:00:00") + 500_000_000, 7796.0)
+    assert fills(b) == [("Buy", 1, 7796.25)] and b.fills[-1]["src"] == "print"
 
 
 def test_a_market_buy_fills_at_once_at_the_ask_and_a_sell_at_the_bid_with_no_slip():
@@ -1073,7 +1133,7 @@ def test_the_quote_limits_are_inclusive_and_the_grid_check_is_epsilon_tolerant()
         b, _ = live(quote=quote)                                                      # wide, the order's size shown
         order(b, "Buy", "Market", qty=2)
         assert fills(b) == [("Buy", 2, 100.0)] and b.fills[-1]["src"] == "quote", quote
-    c, _ = live(quote={**q_(), "bid": 64.01, "ask": 64.01 + 0.01}, root="CL")
+    c, _ = live(quote={**q_(), "bid": 64.01, "ask": 64.01 + 0.01}, root="CL", px=64.02)
     order(c, "Buy", "Market", root="CL")                             # 64.02000000000001 is on the grid
     assert fills(c) == [("Buy", 1, 64.02)]
 
@@ -1203,6 +1263,9 @@ def test_every_paper_account_fills_at_once_and_each_change_is_announced(tmp_path
                        book_of=lambda r: src["book"], on_change=lambda: changed.append(1))
     bs.create({"name": "Two"})
     assert len(changed) == 1
+    bs.message()
+    feed_all(bs, [("09:29:59", 100.0)])                              # the market is matching: a print, no change
+    assert len(changed) == 1
     res = bs_order(bs, ["paper", "paper-2"])
     assert all(r["ok"] for r in res.values()) and len(changed) == 2            # one announcement per action
     assert [b.fills[-1]["price"] for b in bs.books.values()] == [100.0, 100.0]
@@ -1244,13 +1307,19 @@ def test_the_service_walks_its_own_live_level2_book(tmp_path):
     PAPER market order walks."""
     from tests.test_charts_depth import NQ as NQ_CONTRACT, FakeWS, subs
     from tests.test_charts_depth_server import LiveFeed, wait_for
+    class TickingFeed(LiveFeed):                                    # ...that also delivers the prints it is given
+        def __call__(self, roots, on_ticks, on_subscribed=None):
+            self.on_ticks = on_ticks
+            return super().__call__(roots, on_ticks, on_subscribed)
+
     ws = FakeWS()
-    live_feed = LiveFeed(ws)
+    live_feed = TickingFeed(ws)
     app = create_app(roots=["NQ"], base=tmp_path / "ticks", feed_factory=live_feed,
                      now_ms=lambda: session_ms(CD, 9, 45), state=tmp_path / "state",
                      depth_roots=("NQ",), depth_base=tmp_path / "depth")
     with TestClient(app, base_url=BASE_URL) as c:
         wait_for(lambda: subs(ws) == [NQ_CONTRACT] and c.get("/api/status").json()["depth"]["NQ"]["subscribed"])
+        live_feed.q.put(lambda: live_feed.on_ticks("NQ", "NQZ6", rows(session_ms(CD, 9, 44, 59), [100.0])))  # matching
         live_feed.q.put(lambda: ws.push(111, [(99.75, 2)], [(100.0, 1), (100.25, 4)]))   # stamped at the clock
         wait_for(lambda: c.get("/api/status").json()["depth"]["NQ"]["levels"] == [1, 2])
         body = {"client_id": "l2", "accounts": [PAPER_ID], "root": "NQ", "side": "Buy", "qty": 3, "type": "Market"}
