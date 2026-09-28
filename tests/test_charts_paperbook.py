@@ -1206,6 +1206,22 @@ def test_an_unusable_book_leaves_the_quote(why, depth):
     assert fills(b) == [("Buy", 2, 100.0)] and b.fills[-1]["src"] == "quote"
 
 
+def test_a_level_priced_at_zero_or_over_40_ticks_from_the_touch_ends_the_walk():
+    far = l2(offers=((100.0, 1), (100.25, 1), (110.25, 5)))          # 110.25: 41 ticks from the 100.0 touch
+    b, _ = live(quote=q_(age_ms=900), depth=far)
+    order(b, "Buy", "Market", qty=3)
+    assert fills(b) == [] and [o["type"] for o in b.view()["orders"]] == ["Market"]   # 2 before it: the next print
+    order(b, "Buy", "Market", qty=2)                                  # what is before it is enough for 2
+    assert b.fills[-1]["parts"] == [[100.0, 1], [100.25, 1]]
+    c, _ = live(depth=l2(offers=((100.0, 1), (100.25, 1), (110.0, 5))))   # 40 ticks: still walked
+    order(c, "Buy", "Market", qty=3)
+    assert c.fills[-1]["parts"] == [[100.0, 1], [100.25, 1], [110.0, 1]]
+    for zero in (0.0, -0.25):                                         # a bid at or below 0 (within 40 ticks here)
+        d, _ = live(depth=l2(bids=((5.0, 1), (zero, 5)), offers=((5.25, 5),)), px=5.0)
+        order(d, "Sell", "Market", qty=2)
+        assert fills(d) == [] and [o["type"] for o in d.view()["orders"]] == ["Market"]
+
+
 def test_the_book_limits_are_inclusive():
     for depth in (l2(age_ms=2000), l2(age_ms=-1000), l2(bids=((95.0, 1),))):   # 2 s old, 1 s ahead, 20 ticks wide
         b, _ = live(depth=depth)

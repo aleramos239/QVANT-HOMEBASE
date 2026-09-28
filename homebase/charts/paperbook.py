@@ -107,6 +107,7 @@ QUOTE_FILL_MAX_FUTURE_S = 1.0     # ...at most this far ahead of this book's clo
 QUOTE_FILL_MAX_SPREAD_TICKS = 20  # ...and at most this wide; otherwise it waits for the next print, as before
 LIVE_PRINT_MAX_AGE_S = 30.0       # ...and only while that root printed this recently (a halt, a closed market's
                                   # subscribe-time snapshot: no instant fill)
+BOOK_WALK_MAX_TICKS = 40          # a book level further than this from the touch, or priced <= 0, ends the walk
 FILLS_KEPT = 50                   # fills in the account view (the desk's FILLS_KEPT)
 DEDUP_TTL_S = 600.0
 ACTIONS = ("order", "modify", "cancel", "exits", "cancel-symbol", "flatten", "reverse")
@@ -407,13 +408,17 @@ class Planner:
     def _walk(self, b: dict, root: str, side: int, qty: int, tick: float) -> Optional[list]:
         """A usable book walked for qty from the touch -- a buy up the offers, a sell down the bids -- over what paper
         fills have not taken from this snapshot yet: [[price, qty taken], ...]; None when what is left of it shows
-        less than qty in all (never a part)."""
+        less than qty in all (never a part). A level priced <= 0, or more than BOOK_WALK_MAX_TICKS from the touch,
+        ends the walk: what is before it is all there is."""
         levels = b["offers"] if side > 0 else b["bids"]
+        touch = levels[0][0]
         snap, used = self._taken.get(root, (None, {}))
         if snap != b["ts_ms"]:
             used = {}
         parts, left = [], qty
         for p, s in levels:
+            if p <= 0 or round(abs(p - touch) / tick) > BOOK_WALK_MAX_TICKS:
+                return None
             take = min(left, int(s) - used.get((side, round(p / tick)), 0))
             if take <= 0:
                 continue                         # all of this level already taken by paper fills
