@@ -377,3 +377,44 @@ def test_the_package_never_references_the_desk_or_a_trading_route():
     homebase_imports = {i for i in imports if i.startswith(("homebase", ".."))}
     assert homebase_imports <= {"..", "homebase.claude_mcp"}, homebase_imports     # only draftstore via `..`
     assert "from .. import draftstore" in src["tools.py"]
+
+
+CWID = "20260927-120003-nq930-c0de"
+_SHARED = {"stats": COL, "per_month": {"net_profit": 50.0}, "legs": {"n": 4, "pct_profitable": 50.0},
+           "span": ["2021-02", "2021-04"]}
+
+
+def test_walkforward_on_a_compare_job_returns_the_side_by_side_summary_or_one_scheme(fake):
+    fake.routes.update({
+        ("GET", f"/api/tester/walkforward/{CWID}"): {"id": CWID, "status": "done",
+                                                     "walkforward": {"compare": True, "test_months": None}},
+        ("GET", f"/api/tester/walkforward/{CWID}/compare"): {
+            "compare": True, "scheme": {"metric_label": "Net $", "min_trades": 5},
+            "window": {"start": "2021-01", "end": "2021-06"}, "looks": 30,
+            "looks_basis": {"cells": 2, "select_months": 5, "choice_penalty": 3},
+            "shared_months": {"n": 3, "span": ["2021-02", "2021-04"]},
+            "phase_check": {"warning": "the start month moves these more than the ratio does"},
+            "note": "picking the best ratio is itself a selection",
+            "schemes": [{"ratio": f"1:{n}", "test_months": n, "stats": COL, "span": ["2021-02", "2021-06"],
+                         "per_month": {"net_profit": 37.4}, "legs": {"n": 5 // n, "pct_profitable": 40.0},
+                         "phase_spread": {"net_profit": {"min": -10.0, "max": 90.0, "mean": 40.0}},
+                         "shared": _SHARED} for n in (1, 2, 3)]},
+        ("GET", f"/api/tester/walkforward/{CWID}/result?test_months=2"):
+            fake.routes[("GET", f"/api/tester/walkforward/{WID}/result")],
+    })
+    b = box(fake)
+    text = b.call("walkforward", {"walkforward_id": CWID})
+    assert fake.last()["path"] == f"/api/tester/walkforward/{CWID}/compare"
+    assert "Shared months (2021-02–2021-04, 3 months" in text and "Full spans" in text
+    assert "| 1:1 |" in text and "| 1:3 |" in text and "30 looks (2 cells x 5 selection months x 3" in text
+    assert "Phase check: the start month moves these more than the ratio does." in text
+    assert "-$10..$90 (mean $40)" in text and "picking the best ratio is itself a selection" in text
+    assert "stitched_is" not in text and "Drop IS->OOS" not in text
+    text = b.call("walkforward", {"walkforward_id": CWID, "test_months": 2})
+    assert fake.last()["path"] == f"/api/tester/walkforward/{CWID}/result?test_months=2"
+    assert "stitched OOS" in text
+    with pytest.raises(ToolError):
+        b.call("walkforward", {"walkforward_id": CWID, "test_months": 4})
+    # an ordinary job: no test_months -> /result, exactly as before
+    b.call("walkforward", {"walkforward_id": WID})
+    assert fake.last()["path"] == f"/api/tester/walkforward/{WID}/result"
