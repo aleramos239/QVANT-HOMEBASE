@@ -551,7 +551,13 @@ class PaperBook:
             net += s * q
         else:
             closed, was = min(q, abs(net)), (1 if net > 0 else -1)
-            gross = was * (price - avg) * pv * closed         # engine.py L372
+            # a book fill's levels: the first `closed` of them closed the position, the rest (through zero) opened
+            # the new one -- each at the levels it took, like a reverse's legs (fast-paper)
+            shut, rest = _split(parts, closed) if parts else (None, None)
+            if shut:
+                gross = was * pv * sum((p_ - avg) * n for p_, n in shut)
+            else:
+                gross = was * (price - avg) * pv * closed     # engine.py L372
             comm = self.costs.commission_rt * closed          # engine.py L373: per round turn, per contract
             pnl = round(gross - comm, 2)
             self.realized += gross - comm
@@ -560,7 +566,7 @@ class PaperBook:
             if net == 0:
                 avg = 0.0
             elif (net > 0) != (was > 0):
-                avg = price                                   # through zero: the rest opened at this fill
+                avg = _avg(rest) if rest else price           # through zero: the rest opened at this fill
         self.pos[o.root] = {"symbol": p["symbol"] if p["net"] else o.symbol, "net": net, "avg": avg}
         if o.oco is not None:                                 # a bracket leg filled: its twin is cancelled
             for x in [x for x in self.orders.values() if x.oco == o.oco]:

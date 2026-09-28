@@ -1159,8 +1159,8 @@ def test_a_market_order_walks_the_live_book_for_all_of_its_size_at_the_weighted_
     order(b, "Sell", "Market", qty=4)                                # bids 99.75 x2, 99.5 x1, 99.25 x3
     f = b.fills[-1]
     assert (f["src"], f["price"], f["parts"]) == ("book", 99.5625, [[99.75, 2], [99.5, 1], [99.25, 1]])
-    assert net(b) == -1 and b.pos["NQ"]["avg"] == 99.5625            # 3 closed, 1 opened short at the fill
-    assert b.realized == pytest.approx((99.5625 - 100.25) * 20 * 3 - 12.0)   # no slip; $4 a contract a round turn
+    assert net(b) == -1 and b.pos["NQ"]["avg"] == 99.25              # 3 closed (99.75 x2, 99.5), 1 opened at 99.25
+    assert b.realized == pytest.approx(((99.75 - 100.25) * 2 + (99.5 - 100.25)) * 20 - 12.0)   # no slip; $4 a round turn
 
 
 def test_a_fresh_book_too_thin_for_all_of_it_is_the_next_print_never_an_older_quote():
@@ -1331,6 +1331,19 @@ def test_a_send_to_several_accounts_is_one_plan_each_taking_its_slice_in_order(t
     assert (bs.books["paper"].fills[-1]["parts"], bs.books["paper-3"].fills[-1]["parts"]) == ([[100.0, 1]], [[100.25, 1]])
     bs_order(bs, ["paper"], qty=1)                                   # the slice no one took is still there
     assert bs.books["paper"].fills[-1]["parts"] == [[100.25, 1]]
+
+
+def test_one_order_through_zero_closes_and_opens_at_the_levels_each_part_took(tmp_path):
+    b, src = live(depth=l2(offers=((100.0, 5),)), tmp_path=tmp_path)
+    order(b, "Buy", "Market")                                         # long 1 at 100.0
+    src["book"] = l2(bids=((100.25, 1), (100.0, 2)), offers=((100.5, 5),), age_ms=100)
+    order(b, "Sell", "Market", qty=3)                                 # 100.25 x1 closes it, 100.0 x2 opens the short
+    f = b.fills[-1]
+    assert (f["price"], f["parts"]) == (100.083333, [[100.25, 1], [100.0, 2]])
+    assert f["pnl"] == 0.25 * 20 - 4.0 and b.realized == pytest.approx(1.0)   # the closing lot's own level, not the average
+    assert (net(b), b.pos["NQ"]["avg"]) == (-2, 100.0)
+    again = book(tmp_path)                                            # the log replays to the same
+    assert (net(again), again.pos["NQ"]["avg"], again.realized) == (-2, 100.0, pytest.approx(1.0))
 
 
 def test_an_instant_fill_is_logged_with_its_src_and_levels_and_survives_a_restart(tmp_path):
