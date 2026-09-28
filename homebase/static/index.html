@@ -270,12 +270,13 @@
   /* A dialog: the scrim dims what is behind it, the box is heavy glass that materializes out of
      whatever opened it (transform-origin set at open) and leaves back along the same path. Open is
      live at once -- visible and clickable immediately, the motion never gates a button. Closing,
-     the box is inert at once (hideOverlay) while it fades, and the scrim keeps swallowing clicks
-     until it is gone, so a double click can't land on the page beneath. */
+     the box is inert at once (hideOverlay) and the fading scrim stops taking the pointer at once
+     (review: it must never swallow the next deliberate click -- Kill's included); a double-click's
+     second half, which would land on whatever sat under the button, is dropped by the page. */
   .overlay{ position:fixed; inset:0; background:var(--scrim); display:flex;
     align-items:center; justify-content:center; z-index:50; visibility:hidden; opacity:0;
-    transition:opacity 130ms var(--ease-spring-in), visibility 0s linear 130ms; }
-  .overlay.open{ visibility:visible; opacity:1; z-index:51;   /* over one still fading out */
+    pointer-events:none; transition:opacity 130ms var(--ease-spring-in), visibility 0s linear 130ms; }
+  .overlay.open{ visibility:visible; opacity:1; z-index:51; pointer-events:auto;   /* over one still fading out */
     transition:opacity 180ms var(--ease-spring-out), visibility 0s; }
   .modal{ background:var(--glass-bg-heavy); color:var(--card-foreground); border:1px solid var(--border);
     backdrop-filter:blur(var(--glass-blur-heavy)) saturate(var(--glass-saturate));
@@ -869,9 +870,19 @@ function showOverlay(id) {
   const first = box.querySelector("[data-autofocus]") || box;
   if (typeof first.focus === "function") first.focus();
 }
+/* The one click a closing dialog must not pass through: a double-click's second half, which lands
+   on whatever sat under the button just pressed. For DOUBLE_CLICK_MS after any dialog starts
+   closing, a repeat click (detail >= 2) is dropped before it reaches anything; a single,
+   deliberate click (detail 1) always goes through at once. */
+const DOUBLE_CLICK_MS = 400;
+let OVERLAY_CLOSED_AT = -Infinity;
+document.addEventListener("click", (e) => {
+  if (e.detail >= 2 && Date.now() - OVERLAY_CLOSED_AT < DOUBLE_CLICK_MS) { e.preventDefault(); e.stopPropagation(); }
+}, true);
 function hideOverlay(id) {
   const el = $("#" + id);
   if (!el) return;
+  OVERLAY_CLOSED_AT = Date.now();
   (el.querySelector(".modal") || el).setAttribute("inert", "");   // inert the moment it starts closing
   el.classList.remove("open");
   const i = OVERLAYS.findIndex(o => o.el === el);

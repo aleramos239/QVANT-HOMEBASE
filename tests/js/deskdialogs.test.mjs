@@ -82,6 +82,12 @@ function makeDom() {
   const listeners = [];
   doc.addEventListener = (type, fn, capture) => listeners.push({ type, fn, capture });
   doc.press = (target) => { for (const l of listeners) if (l.type === 'pointerdown') l.fn({ type: 'pointerdown', target }); };
+  doc.click = (props) => {   // capture listeners first, like a browser; reports whether the click got through
+    const e = { type: 'click', detail: 1, defaultPrevented: false, stopped: false,
+      preventDefault() { this.defaultPrevented = true; }, stopPropagation() { this.stopped = true; }, ...props };
+    for (const l of listeners) if (l.type === 'click' && l.capture) l.fn(e);
+    return e;
+  };
   doc.key = (props) => {
     const e = { type: 'keydown', repeat: false, shiftKey: false, target: doc.activeElement, defaultPrevented: false,
       preventDefault() { this.defaultPrevented = true; }, ...props };
@@ -108,8 +114,9 @@ function load() {
     h('button', { class: 'mi2', role: 'menuitem', id: 'i1' }), h('button', { class: 'mi2', role: 'menuitem', id: 'i2' }),
     h('button', { class: 'mi2', role: 'menuitem', id: 'i3' })));
   const closes = [];
+  const clock = { now: 1_000_000 };
   const ctx = vm.createContext({
-    console, document: doc,
+    console, document: doc, Date: { now: () => clock.now },
     $: (sel) => doc.getElementById(sel.replace(/^#/, '')),
     closeSettings: () => { closes.push('settings'); ctx.hideOverlay('settingsOverlay'); },
     closeConnect() {}, closeRes() {}, closeAccts() {}, closeAlgoMgr() {}, closeLive() {}, closeChecks() {}, closePine() {}, closeCal() {},
@@ -118,7 +125,7 @@ function load() {
     globalThis.showOverlay = showOverlay; globalThis.hideOverlay = hideOverlay;
     globalThis.api = { showOverlay, hideOverlay, confirmDlg, cfDone, toggleAsgMenu, closeAsgMenus,
       get open() { return OVERLAYS.map((o) => o.el.id); }, get asg() { return ASG_OPEN; } };`, ctx);
-  return { api: ctx.api, doc, h, body, trigger, other, settings, confirm, card, plus, menu, closes };
+  return { api: ctx.api, doc, h, body, trigger, other, settings, confirm, card, plus, menu, closes, clock };
 }
 
 // ---- the markup ---------------------------------------------------------------------------------
@@ -331,12 +338,12 @@ test('with nothing focused (a mouse click), the dialog grows from what the point
   assert.equal(box.style.transformOrigin, '110px 50px');
 });
 
-test('CSS: the closed dialog stays hit-testable only while it fades (its scrim eats a double click), opens with no delay', () => {
+test('CSS: a closing dialog stops taking the pointer at once (its fade never swallows a click); it opens with no delay', () => {
   const closed = ruleOf('.overlay'), open = ruleOf('.overlay.open');
   assert.match(closed, /visibility:hidden; opacity:0;/);
-  assert.match(closed, /transition:opacity 130ms var\(--ease-spring-in\), visibility 0s linear 130ms;/,
-    'visibility waits exactly the exit, then the scrim stops taking clicks');
-  assert.doesNotMatch(closed, /pointer-events:none/, 'no click falls through to the page mid-fade');
+  assert.match(closed, /pointer-events:none;/, 'the next deliberate click -- Kill included -- goes straight through');
+  assert.match(closed, /transition:opacity 130ms var\(--ease-spring-in\), visibility 0s linear 130ms;/, 'it still fades');
+  assert.match(open, /pointer-events:auto;/);
   assert.match(open, /visibility:visible; opacity:1;/);
   assert.match(open, /visibility 0s;/, 'opening is visible and clickable at once, never delayed');
   assert.match(ruleOf('.overlay .modal'), /transform:scale\(\.96\); filter:blur\(6px\)/);
@@ -397,4 +404,17 @@ test('the toast materializes by class (glass, above any dialog) and is announced
   assert.match(fn, /classList\.add\("show"\)/);
   assert.match(fn, /classList\.remove\("show"\)/);
   assert.match(ruleOf('#toast'), /z-index:80;/);
+});
+
+test('after a dialog closes, a double-click\'s second half is dropped for 400 ms; a single click always goes through', () => {
+  const s = load();
+  s.api.confirmDlg('Book NQ930 on …885 LIVE × 3?', 'body', 'Book live', false);
+  s.api.cfDone(true);                                    // click 1 of a double-click: answered
+  let e = s.doc.click({ detail: 2 });                   // click 2 lands wherever the button was
+  assert.ok(e.stopped && e.defaultPrevented, 'it never reaches the page beneath the dialog');
+  e = s.doc.click({ detail: 1 });
+  assert.ok(!e.stopped && !e.defaultPrevented, 'a deliberate click is never delayed or dropped');
+  s.clock.now += 400;
+  e = s.doc.click({ detail: 2 });
+  assert.ok(!e.stopped, 'after the window, clicks are the page\'s own business again');
 });
