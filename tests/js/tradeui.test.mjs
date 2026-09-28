@@ -167,6 +167,35 @@ test('Important 2: a destroyed chart and a refused replay_start latch too', () =
   assert.equal(UI.effectiveMode(d).reason, T.REPLAY_ENDED);
 });
 
+/* fix round 3 (coordinator review of feat/replay-tv): Select bar ▾'s "Select date…" and "First available
+   date" both call doStart() while a session is ALREADY running -- it must save that old session's practice
+   trades (savePracticeSession) before overwriting `sessions`, exactly like every other end-of-session path
+   (clearSession, cellDestroyed) already does, and say so with the same shape of note resetPracticeForRewind
+   gives a rewind past an open position. */
+test('doStart, called mid-session, notes the reset (Select date… / First available date overwriting a session)', () => {
+  reset();
+  const c = chart(['sim041']);
+  const notes = [];
+  c.note = (m) => notes.push(m);
+  RUI.onState(c, { id: 'c1', date: '2026-09-24', cursor_ms: 0, speed: 1 });   // session A is running
+  assert.equal(c.replay.date, '2026-09-24');
+  RUI.doStart(c, '2026-09-20', '09:30');                                     // Select date… / First available date
+  assert.equal(c.replay.date, '2026-09-20', 'the session is overwritten, not merged, exactly as before');
+  assert.ok(notes.some((n) => n.includes('Practice book reset')),
+    'the same "Practice book reset" shape of note the rewind-past-a-position path gives');
+});
+
+test('doStart: starting fresh (nothing was replaying yet) never shows the reset note', () => {
+  reset();
+  const c = chart(['sim041']);
+  const notes = [];
+  c.note = (m) => notes.push(m);
+  assert.equal(c.replay, null);
+  RUI.doStart(c, '2026-09-20', '09:30');
+  assert.equal(c.replay.date, '2026-09-20');
+  assert.deepEqual(notes, []);
+});
+
 /* ---- fix round 2 (task-1-rereview.md): the replay-end latch survives ANY grid rebuild ----
    app.js's buildGrid destroys every cell (HBReplayUI.cellDestroyed) and then builds new ones -- from a NEW layout
    object when it is a layout load (or a layout-tab switch), so a flag on the old cell config would be thrown

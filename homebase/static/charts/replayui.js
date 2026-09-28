@@ -69,6 +69,12 @@ function doStart(cell, date, time) {
   if (!R.validStart(date, time, todayEt())) { cell.note(`date: ${R.FIRST_DATE} to yesterday, time HH:MM (ET)`); return; }
   disarmPick();
   lastPick = { date, time };
+  // Select bar ▾'s "Select date…" and "First available date" rows call this while ALREADY replaying --
+  // overwriting `sessions` below would otherwise drop that old session's practice trades on the floor
+  // (fix round 2, Important 1). Same save every other end-of-session path already makes (clearSession,
+  // cellDestroyed), and the same shape of note resetPracticeForRewind gives a rewind past an open position.
+  const wasReplaying = !!cell.replay;
+  if (wasReplaying) savePracticeSession(cell, sessions.get(cell));
   // set BEFORE the send: effectiveMode reads cell.replay synchronously, so the block/menu/lines are hidden
   // from this instant, not from whenever replay_state happens to arrive (safety: never a gap).
   cell.replay = { date, cursorMs: 0, speed: 'bar', playing: false, done: false };
@@ -82,6 +88,7 @@ function doStart(cell, date, time) {
   // from this instant -- an exit, a reconnect or a `stopped` before the first replay_state cannot open a gap.
   refreshOverlays(cell);
   cell.host.send(R.startOp(cell.id, date, time));
+  if (wasReplaying) cell.note('Practice book reset — new replay session started');
 }
 
 /* localStorage.getItem/setItem, each its own try/catch (Global Constraints): the finished practice session
@@ -1003,5 +1010,5 @@ function mount(pg) {
 }
 
 window.HBReplayUI = { mount, overlay: (cell, pg) => new Overlay(cell, pg), onState, onError, onBarUpdate,
-  cellDestroyed, onReconnect, togglePlay, step, disarmPick, guardSymbolChange, exitReplay };
+  cellDestroyed, onReconnect, togglePlay, step, disarmPick, guardSymbolChange, exitReplay, doStart };
 })();
