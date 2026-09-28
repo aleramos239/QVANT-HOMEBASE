@@ -487,3 +487,14 @@ test('matchSymbols: empty query returns every root, unfiltered', () => {
 test('matchSymbols: no match returns an empty list', () => {
   assert.deepEqual(C.matchSymbols('Q', ['NQ', 'ES', 'YM', 'GC']), []);
 });
+
+test('starred intervals: parse, sort in menu order, toggle', () => {
+  const dflt = C.FAVOURITES.map(([, s]) => s);
+  assert.deepEqual(C.parseFavs(null), dflt);
+  assert.deepEqual(C.parseFavs('junk'), dflt);
+  assert.deepEqual(C.parseFavs('[]'), []);
+  assert.deepEqual(C.parseFavs(JSON.stringify(['time:3600', 'time:60', 'bogus', 'time:60', 7])), ['time:60', 'time:3600']);
+  assert.deepEqual(C.toggleFav(['time:60', 'time:3600'], 'time:300'), ['time:60', 'time:300', 'time:3600']);
+  assert.deepEqual(C.toggleFav(['time:60', 'time:300'], 'time:60'), ['time:300']);
+  assert.deepEqual(C.toggleFav(['time:60'], 'time:45'), ['time:60', 'time:45'], 'a custom one goes after the listed ones');
+});

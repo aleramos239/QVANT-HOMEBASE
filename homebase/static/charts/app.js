@@ -262,14 +262,19 @@ function select(i) {
 }
 
 /* ---- toolbar ---- */
+/* The starred intervals (per browser; a blocked store just means the defaults). */
+const FAVS_KEY = 'hb_iv_favs';
+function loadFavs() { try { return C.parseFavs(localStorage.getItem(FAVS_KEY)); } catch (_) { return C.parseFavs(null); } }
+function saveFavs(list) { try { localStorage.setItem(FAVS_KEY, JSON.stringify(list)); } catch (_) { /* stays for this page */ } }
+let ivFavs = loadFavs();
 function renderToolbar() {
   const c = cur();
   if (!c) return;
   const { root, spec } = c.cfg;
   $('#tbSymbolText').textContent = root;
   $('#tbSymbol').title = `${root} · ${C.rootName(root) || 'symbol'} — change symbol`;
-  const favs = C.FAVOURITES.slice(), box = $('#tbFavs');
-  if (!favs.some(([, s]) => s === spec)) favs.push([C.specLabel(spec), spec]);
+  const favs = ivFavs.map((s) => [C.specLabel(s), s]), box = $('#tbFavs');
+  if (!favs.some(([, s]) => s === spec)) favs.push([C.specLabel(spec), spec]);   // the current one, even if not starred
   const had = box.contains(document.activeElement) ? document.activeElement.dataset.spec : null;   // keyboard focus
   box.replaceChildren(...favs.map(([label, s]) => {
     const b = mk('button', 'tb-btn iv' + (s === spec ? ' active' : ''), label);
@@ -386,12 +391,36 @@ function symbolMenu() {
   input.focus();
 }
 
+/* The star at the right of an interval menu row: toggles it on the toolbar row without picking it or closing. */
+function starBtn(s) {
+  const st = mk('span', 'menu-star');
+  const paint = () => {
+    const on = ivFavs.includes(s);
+    st.classList.toggle('on', on);
+    st.title = on ? 'Remove from favorites' : 'Add to favorites';
+    st.setAttribute('aria-label', st.title);
+    st.setAttribute('aria-pressed', String(on));
+  };
+  st.setAttribute('role', 'button');
+  st.replaceChildren(icon('star'));
+  paint();
+  st.onclick = (e) => {
+    e.stopPropagation();
+    ivFavs = C.toggleFav(ivFavs, s);
+    saveFavs(ivFavs);
+    paint();
+    renderToolbar();
+  };
+  return st;
+}
 function intervalMenu() {
   const m = openMenu($('#tbIntervals'), 'menu-iv'), c = cur(), spec = c.cfg.spec;
   for (const [group, specs] of C.INTERVAL_GROUPS) {
     m.appendChild(mk('div', 'menu-h', group));
     for (const s of specs) {
-      m.appendChild(menuItem(C.longLabel(s), '', () => { closeMenu(); if (c.cfg.spec !== s) c.update({ spec: s }); }, s === spec));
+      const it = menuItem(C.longLabel(s), '', () => { closeMenu(); if (c.cfg.spec !== s) c.update({ spec: s }); }, s === spec);
+      it.appendChild(starBtn(s));
+      m.appendChild(it);
     }
   }
   m.appendChild(mk('div', 'menu-h', 'Custom'));
