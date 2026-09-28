@@ -1582,7 +1582,9 @@ function onKey(e) {
   // ArrowRight already covers Shift+→ (e.key is the same either way -- TradingView's own replay hotkey);
   // Shift+↓ (2026-09-27 TV-parity plan) is added alongside Space for play/pause -- neither shift combo is
   // bound to anything else on this page (no drawing tool or other shortcut here uses Shift+arrow).
-  if (c && c.replay && !menuEl && !hotkeyBox && !(e.target.closest && e.target.closest('#opanel'))) {
+  // !e.repeat (coordinator review, fix round 3): auto-repeat otherwise re-fires play/pause or steps a bar
+  // over and over for as long as the key is held -- the GOTCHAS.md keyboard-repeat class of bug.
+  if (c && c.replay && !e.repeat && !menuEl && !hotkeyBox && !(e.target.closest && e.target.closest('#opanel'))) {
     if (e.code === 'Space' || (e.shiftKey && e.key === 'ArrowDown')) { e.preventDefault(); window.HBReplayUI.togglePlay(c); return; }
     if (e.key === 'ArrowRight') { e.preventDefault(); window.HBReplayUI.step(c); return; }
   }
