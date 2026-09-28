@@ -32,11 +32,11 @@ _SEED_BACKOFF_CAP = 60.0    # seconds between cache-seed retries, at most
 # A renewal rolls the token and so DROPS the socket (_renew_if_needed); the supervisor
 # (server._broker_loop, every 5 s) rebuilds it. Tokens live 80 min, so the old "renew with
 # < 10 min left" rule dropped the socket every ~70 min, at whatever time that fell -- 09:29:5x
-# included. renewal_due() keeps renewal drops out of 09:20-09:35 ET on weekdays.
+# included. renewal_due() keeps renewal drops out of 09:19:30-09:35 ET on weekdays.
 ET = ZoneInfo("America/New_York")
 RENEW_BUFFER_S = 600.0                                # the normal rule: renew with < 10 min left
-RENEW_EARLY_FROM = dt.time(9, 10)                     # [09:10, 09:20): renew early if due before 09:36
-RENEW_QUIET = (dt.time(9, 20), dt.time(9, 35))        # [from, until): no renewal drop
+RENEW_EARLY_FROM = dt.time(9, 10)                     # [09:10, 09:19:30): renew early if due before 09:36
+RENEW_QUIET = (dt.time(9, 19, 30), dt.time(9, 35))    # [from, until): no renewal drop (the gate's md connect: 09:20)
 RENEW_CARRY_UNTIL = dt.time(9, 36)                    # a token must live past this: the first check after 09:35
 RENEW_FIRE_GUARD = (dt.time(9, 28), dt.time(9, 31))   # [from, until): a socket living through it is never dropped
 RENEW_REBUILD_BY = dt.time(9, 29, 45)                 # a drop before this is rebuilt before the fire (5 s + connect)
@@ -61,12 +61,14 @@ def renewal_due(now: dt.datetime, expires_at: float) -> tuple[bool, str]:
     unknown), of the token the SOCKET was authorized with: Tradovate closes the socket then,
     whatever the auth has renewed to since. Checked once a minute. Weekdays, ET:
 
-      09:10-09:20  "early": renew if the token would come due (RENEW_BUFFER_S left) before
+      09:10-09:19:30  "early": renew if the token would come due (RENEW_BUFFER_S left) before
                    09:36, i.e. it expires before 09:46 -- the drop and the reconnect land 10+
                    minutes before the fire, and nothing comes due inside the quiet window.
-                   09:19:59 is still early. While 10+ min are left: renew only, never a
-                   login (logins are rate-limited); a failure retries at the next check.
-      09:20-09:35  "quiet": NO renewal, even with < 10 min left -- unless the token would
+                   It ends at 09:19:30, so its drop and reconnect are over before the timer's
+                   09:20:00 market-data connect reads this login's md token. While 10+ min
+                   are left: renew only, never a login (logins are rate-limited); a failure
+                   retries at the next check.
+      09:19:30-09:35  "quiet": NO renewal, even with < 10 min left -- unless the token would
                    EXPIRE before 09:36 ("expires_in_window": Tradovate closes its socket at the
                    expiry anyway, and the first check after 09:35 may come too late): then at
                    once, i.e. at the window's first check (~09:20), 8+ minutes before the fire.
@@ -1194,8 +1196,8 @@ class TradovateAdapter(BrokerAdapter):
         the gap). Returns True if the socket was dropped for renewal.
 
         WHEN is renewal_due()'s rule, judged on the token the SOCKET rides (it dies
-        when that one expires): an early renewal 09:10-09:20 ET on weekdays so that
-        none is due 09:20-09:35; in there only a socket that would die anyway is
+        when that one expires): an early renewal 09:10-09:19:30 ET on weekdays so
+        that none is due 09:19:30-09:35; in there only a socket that would die anyway is
         dropped, never one that carries the 09:28-09:31 fire guard, never under the
         fire's acks. A socket left on an older token than the auth holds (a late
         answer kept it, a renewal raced a rebuild) is dropped by the same rule

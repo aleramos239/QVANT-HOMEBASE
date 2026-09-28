@@ -43,8 +43,11 @@ def ts(h, m, s=0, day=MON) -> float:
     ((9, 9, 59), (9, 40, 0), (False, "normal")),          # 30 min left, early zone not open yet
     # early zone 09:10-09:20: renew if due (10 min left) before 09:36 = expires before 09:46
     ((9, 10, 0), (9, 40, 0), (True, "early")),
-    ((9, 19, 59), (9, 45, 59), (True, "early")),          # 09:19:59 renew allowed
-    ((9, 19, 59), (9, 46, 0), (False, "normal")),         # lasts: nothing due inside the window
+    ((9, 19, 29), (9, 45, 59), (True, "early")),          # 09:19:29: the last early second
+    ((9, 19, 29), (9, 46, 0), (False, "normal")),         # lasts: nothing due inside the window
+    ((9, 19, 30), (9, 45, 59), (False, "quiet")),         # 09:19:30: clear of the 09:20 md connect
+    ((9, 19, 59), (9, 45, 59), (False, "quiet")),
+    ((9, 19, 30), (9, 33, 0), (True, "expires_in_window")),
     ((9, 15, 0), (10, 35, 0), (False, "normal")),         # a fresh token
     # quiet 09:20-09:35: held even with < 10 min left, if it lives past 09:36
     ((9, 20, 0), (9, 40, 0), (False, "quiet")),
@@ -101,13 +104,13 @@ def test_the_window_is_eastern_time_in_winter_too():
 def test_a_token_renewed_by_the_early_rule_never_comes_due_in_the_window():
     """Whatever time the early check runs, what it leaves (or renews to: 80 min) is never
     due before 09:36 -- so no quiet-window check ever wants a renewal."""
-    for early_s in range(0, 600, 29):
+    for early_s in range(0, 570, 29):                      # 09:10:00-09:19:29
         now = at(9, 10) + dt.timedelta(seconds=early_s)
         for exp_min in range(0, 100):
             exp = now.timestamp() + exp_min * 60
             due, _ = renewal_due(now, exp)
             left = now.timestamp() + 80 * 60 if due else exp       # renewed: a fresh 80-min token
-            for check in range(20 * 60, 35 * 60, 60):              # every minute 09:20-09:34
+            for check in range(19 * 60 + 30, 35 * 60, 60):         # every minute 09:19:30-09:34:30
                 q = at(9, 0) + dt.timedelta(seconds=check)
                 assert renewal_due(q, left) == (False, "quiet"), (now, exp_min, q)
 
@@ -182,8 +185,8 @@ def test_the_old_rule_would_have_dropped_the_socket_at_0927_now_it_holds(tmp_pat
     assert auth.renews == 0 and ad._ws.closed == 0 and ad._auth.access_token == "old"
 
 
-def test_an_early_renewal_at_091959_rolls_the_token_and_drops_the_socket(tmp_path):
-    ad, auth, clock = mkadapter(tmp_path, at(9, 19, 59), at(9, 40))
+def test_an_early_renewal_at_091929_rolls_the_token_and_drops_the_socket(tmp_path):
+    ad, auth, clock = mkadapter(tmp_path, at(9, 19, 29), at(9, 40))
     assert run(ad._renew_if_needed()) is True
     assert auth.renews == 1 and ad._ws.closed == 1 and ad._auth.access_token == "new1"
     # the rebuilt token lives to 10:39:59: nothing more is due until after the window
