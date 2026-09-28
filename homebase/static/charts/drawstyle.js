@@ -29,8 +29,11 @@ const DEFAULTS = {
   // drawing with no `style` at all must render exactly as it did before this plan
   hline: { width: 1, lineStyle: 'solid', axisLabel: true, text: '', fontSize: 12,
     textColor: '#2962FF', bold: false, labelPos: 'above' },
-  rect: { width: 1, lineStyle: 'solid', fillColor: 'rgba(41,98,255,0.10)', text: '', fontSize: 12,
-    textColor: '#2962FF', bold: false, labelPos: 'top' },
+  // no fillColor here on purpose: unset means "follow the theme" (P.accentSoft -- .10 light,
+  // .20 dark), exactly like an old rect drawn before this plan. A fixed default would have been
+  // wrong in dark theme (review finding): normalize() below omits the key entirely rather than
+  // filling in one theme's value.
+  rect: { width: 1, lineStyle: 'solid', text: '', fontSize: 12, textColor: '#2962FF', bold: false, labelPos: 'top' },
   long: {}, short: {},
 };
 /* Canvas dash patterns (ctx.setLineDash), keyed the same as lineStyle. */
@@ -69,7 +72,15 @@ function isValidField(type, key, v) {
 function normalize(type, style) {
   const allowed = FIELDS[isDrawingType(type) ? type : ''] || [], def = DEFAULTS[type] || {};
   const src = style && typeof style === 'object' ? style : {}, out = {};
-  for (const key of allowed) out[key] = isValidField(type, key, src[key]) ? src[key] : def[key];
+  for (const key of allowed) {
+    if (isValidField(type, key, src[key])) { out[key] = src[key]; continue; }
+    // fillColor has no built-in default (unset = "follow the theme", see DEFAULTS.rect above): an
+    // invalid/absent value drops the key entirely rather than filling in one theme's colour, and
+    // this PUTs cleanly too (check_style in server.py only looks at a `style.fillColor` that is
+    // actually present).
+    if (key === 'fillColor' && def[key] == null) continue;
+    out[key] = def[key];
+  }
   return out;
 }
 

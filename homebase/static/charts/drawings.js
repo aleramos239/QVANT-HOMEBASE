@@ -393,7 +393,11 @@ function drawShape(ctx, d, geo, P, paneW) {
     return;
   }
   const x = Math.min(x0, x1), y = Math.min(y0, y1), w = Math.abs(x1 - x0), h = Math.abs(y1 - y0);
-  ctx.fillStyle = style.fillColor;
+  // style.fillColor is unset ("follow the theme") on an old rect and on a fresh one with no
+  // explicit fill -- P.accentSoft is exactly what an unstyled rect always filled with (review
+  // finding: a fixed default here would have been the light theme's .10 even in dark, where an
+  // old rect used .20)
+  ctx.fillStyle = style.fillColor || P.accentSoft;
   ctx.fillRect(x, y, w, h);
   ctx.strokeRect(Math.round(x) + 0.5, Math.round(y) + 0.5, Math.round(w), Math.round(h));
   ctx.setLineDash([]);
@@ -656,7 +660,10 @@ class Controller {
       if (at) this.finish(this.place ? this.placedEnd(at, e.shiftKey) : at);
       return;
     }
-    if (!this.drag) return;
+    // a press on a LOCKED drawing sets no this.drag (onDown), but this.own(e) still ran there --
+    // release() must still run here, or panning/zoom stays off until some later gesture happens to
+    // call it (review finding: a locked-drawing click left the chart pan/zoom disabled)
+    if (!this.drag) { this.release(); return; }
     const { orig, cur } = this.drag;
     this.drag = null;
     this.release();
@@ -752,9 +759,11 @@ class Controller {
     this.setCursor(null);
   }
 
-  /* A gesture that needs the button held: moving / reshaping a drawing, or a placement or measure being
-     dragged out (one waiting for its 2nd click is not). */
-  held() { return !!this.drag || this.mode === 'drag'; }
+  /* A gesture that needs the button held: moving / reshaping a drawing, placing/measuring dragged
+     out, or a press on a LOCKED drawing (this.drag is null there, but own() still ran and pan/zoom
+     is still off) -- exactly `this.owned` (own() is always called before any of drag/mode='drag'
+     is set, so this also covers both of those; one waiting for a 2nd click is not owned). */
+  held() { return this.owned; }
 
   /* Undo a held gesture: a moved drawing goes back (and stays selected), a placement or measure being dragged
      out is dropped (the tool stays); panning and zoom come back on. Esc, and a release that never reaches us:

@@ -1359,7 +1359,8 @@ function drawingSettingsDialog(cell, d0) {
       }
       if (orig.type === 'rect') {
         rows.push(mk('div', 'set-cap', 'FILL'));
-        rows.push(row('Fill', colorCtl(() => work.style.fillColor, (c) => setStyle({ fillColor: c }))));
+        // unset (follows the theme) previews as the theme's own accentSoft, never a fixed default
+        rows.push(row('Fill', colorCtl(() => work.style.fillColor || cell.P.accentSoft, (c) => setStyle({ fillColor: c }))));
       }
       if (orig.type === 'hline') rows.push(row('Price label', checkCtl(work.style.axisLabel, (v) => setStyle({ axisLabel: v }))));
     } else {

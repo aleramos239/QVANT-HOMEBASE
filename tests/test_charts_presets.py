@@ -29,7 +29,7 @@ def test_check_preset_name_accepts(name):
     assert check_preset_name(name) == name
 
 
-@pytest.mark.parametrize("name", ["", "x" * (MAX_PRESET_NAME + 1), "a/b", "a\\b", "..", "a..b", "tab\there", "nul\x00", 7, None])
+@pytest.mark.parametrize("name", ["", "x" * (MAX_PRESET_NAME + 1), "a/b", "a\\b", ".", "..", "a..b", "tab\there", "nul\x00", 7, None])
 def test_check_preset_name_refuses(name):
     with pytest.raises(ValueError):
         check_preset_name(name)

@@ -323,7 +323,8 @@ function pointerRig(saved, { tool = 'cursor', magnet = { on: false, mode: 'weak'
   styleDefault = undefined, onDrawingSettings = undefined } = {}) {
   globalThis.window = { addEventListener() {}, removeEventListener() {},
     LightweightCharts: { LineStyle: { Solid: 0, Dotted: 1, Dashed: 2 } } };
-  const chart = { applyOptions() {}, priceScale: () => ({ width: () => 60 }), panes: () => [{ getHeight: () => 1000 }],
+  const applyCalls = [];
+  const chart = { applyOptions(o) { applyCalls.push(o); }, priceScale: () => ({ width: () => 60 }), panes: () => [{ getHeight: () => 1000 }],
     timeScale: () => ({ logicalToCoordinate: (i) => 100 + i * 10, coordinateToLogical: (x) => (x - 100) / 10 }) };
   const menuCalls = [];
   const cell = { shown: { root: 'NQ' }, el: { dataset: {} }, P: { accent: '#2962FF' }, chart, bars: rigBars, tick: 0.25,
@@ -345,7 +346,7 @@ function pointerRig(saved, { tool = 'cursor', magnet = { on: false, mode: 'weak'
     await new Promise((r) => setTimeout(r, 5));   // the store's (0 ms) save debounce
     await flush();
   };
-  return { ctl, store, gesture, tool: () => now, puts: () => f.calls.filter((c) => c.method === 'PUT'), menuCalls,
+  return { ctl, store, gesture, tool: () => now, puts: () => f.calls.filter((c) => c.method === 'PUT'), menuCalls, applyCalls,
     done() { ctl.destroy(); } };
 }
 
@@ -576,6 +577,31 @@ test('a locked drawing can be selected but is never dragged or deleted', async (
   assert.equal(R.puts().length, 0);
   assert.equal(R.ctl.deleteSelected(), false);
   assert.deepEqual(R.store.list('NQ'), [locked]);
+  R.done();
+});
+
+test('review finding: a press on a locked drawing still releases pan/zoom on mouseup (no drag is set, but own() ran)', async (t) => {
+  withWindow(t);
+  const locked = { ...trend, locked: true };
+  const R = pointerRig([locked], { tool: 'cursor' });
+  await R.store.ensure('NQ');
+  await R.gesture([[120, 120], [130, 130]]);   // press, a bit of movement, release -- all on the locked drawing's body
+  const owned = R.applyCalls.filter((o) => o.handleScroll === false && o.handleScale === false);
+  assert.equal(owned.length, 1);                                             // own() disabled panning/zoom exactly once
+  assert.deepEqual(R.applyCalls.at(-1), { handleScroll: true, handleScale: true });   // and onUp's release() restored it
+  R.done();
+});
+
+test('review finding: a locked-drawing press also releases pan/zoom if the button is lost before mouseup (blur/pointercancel)', async (t) => {
+  withWindow(t);
+  const locked = { ...trend, locked: true };
+  const R = pointerRig([locked], { tool: 'cursor' });
+  await R.store.ensure('NQ');
+  R.ctl.onDown({ button: 0, buttons: 1, ctrlKey: false, metaKey: false, clientX: 120, clientY: 120, preventDefault() {}, stopPropagation() {} });
+  assert.deepEqual(R.applyCalls.at(-1), { handleScroll: false, handleScale: false });
+  assert.equal(R.ctl.held(), true);      // this.owned, even though this.drag is null (locked)
+  assert.equal(R.ctl.abort(), true);     // what the window's blur / a pointercancel calls
+  assert.deepEqual(R.applyCalls.at(-1), { handleScroll: true, handleScale: true });
   R.done();
 });
 
