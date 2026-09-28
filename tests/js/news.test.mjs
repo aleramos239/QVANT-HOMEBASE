@@ -169,3 +169,17 @@ test('burstMarkers: only the given root, in range; direction picks the position 
   assert.equal(out[0].position, 'belowBar');
   assert.equal(out[0].text, '⚡');
 });
+
+test('chartNews: the "News on chart" setting — bursts-with-news by default, all, or off', () => {
+  const items = [{ id: 'h1', t_ms: 1_000_000, title: 'Fed', source: 'fj' }];
+  const withNews = { root: 'NQ', t_ms: 1_000_000, dir: 'up', ratio: 4, move_ticks: 12, near_news: [items[0]] };
+  const bare = { root: 'NQ', t_ms: 9_000_000_000, dir: 'down', ratio: 3, move_ticks: 8, near_news: [] };
+  const d = N.chartNews(undefined, [withNews, bare], items);
+  assert.equal(d.headlines, false);
+  assert.deepEqual(d.bursts, [withNews]);
+  assert.deepEqual(N.chartNews('junk', [withNews, bare], items), d, 'unknown -> the default');
+  const all = N.chartNews('all', [withNews, bare], items);
+  assert.equal(all.headlines, true);
+  assert.deepEqual(all.bursts, [withNews, bare]);
+  assert.deepEqual(N.chartNews('off', [withNews, bare], items), { headlines: false, bursts: [] });
+});

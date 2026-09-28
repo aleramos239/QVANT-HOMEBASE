@@ -32,6 +32,7 @@ const FIELDS = [
   // Symbol · DATA
   { key: 'precision', type: 'precision', def: null },   // null: Default (from the tick size); else 0-6 decimals
   choice('timezone', 'exchange', TIMEZONES.map(([k]) => k)),
+  choice('timeFormat', '24h', ['24h', '12h']),
   bool('ethBg', false), color('ethBgColor', 'rgba(120,123,134,.08)'),
   // Status line
   bool('title', true), choice('titleMode', 'both', ['ticker', 'description', 'both']),
@@ -52,6 +53,7 @@ const FIELDS = [
   bool('evHigh', true), bool('evMedium', true), bool('evLow', false), bool('evHoliday', false),
   { key: 'evCountries', type: 'list', def: Object.freeze(['USD']) },   // currency codes, upper-case, sorted
   bool('evLines', true),
+  choice('newsOnChart', 'bursts', ['all', 'bursts', 'off']),   // news bubbles: every headline + bursts / big moves with news / none
 ];
 const DEFAULTS = Object.freeze(Object.fromEntries(FIELDS.map((f) => [f.key, f.def])));
 /* The colours that follow the theme while never changed, and the HBCell.palette() key each takes. */
@@ -288,7 +290,16 @@ const PALETTE = [
   ['#000000', '#801922', '#E65100', '#F57F17', '#1B5E20', '#00332A', '#006064', '#0C3299', '#311B92', '#880E4F'],
 ];
 
-const api = { FIELDS, DEFAULTS, THEMED, LINE_STYLE, TIMEZONES, PALETTE, CLEAR, parseColor, fmtColor, hexOf, alphaOf,
+/* A 24-hour "HH:MM" or "HH:MM:SS" as the chart's time format: '12h' -> "7:05 PM" / "7:05:09 PM", else unchanged. */
+function clockText(hms, fmt) {
+  if (fmt !== '12h' || typeof hms !== 'string') return hms;
+  const m = /^(\d{2}):(\d{2})(:\d{2})?$/.exec(hms);
+  if (!m) return hms;
+  const h = Number(m[1]);
+  return `${h % 12 || 12}:${m[2]}${m[3] || ''} ${h < 12 ? 'AM' : 'PM'}`;
+}
+
+const api = { clockText, FIELDS, DEFAULTS, THEMED, LINE_STYLE, TIMEZONES, PALETTE, CLEAR, parseColor, fmtColor, hexOf, alphaOf,
   withAlpha, normalize, overrides, resolve, chartOptions, candleOptions, scaleMargins, legendFlags, barColor,
   barColorsByPrevClose, splitLabel, legendLabel, titleText, zoneOffsetMs, wallSeconds, outsideRth, barCloseEt,
   fmtCountdown, templateNameError, buildTemplate, applyTemplate };

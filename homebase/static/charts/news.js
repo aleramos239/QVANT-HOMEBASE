@@ -170,7 +170,18 @@ function burstMarkers(bursts, { root, fromMs, toMs, cap = BURSTS_CAP, upColor = 
   }));
 }
 
+/* What a chart shows for its "News on chart" setting (newsOnChart): 'all' = every headline dot + every burst,
+   'bursts' (the default) = only bursts with at least one linked headline (a big move with news behind it), no
+   plain headline dots; 'off' = nothing. An unknown mode reads as the default. -> {headlines: bool, bursts: list}. */
+function chartNews(mode, bursts, items) {
+  const m = mode === 'all' || mode === 'off' ? mode : 'bursts';
+  if (m === 'off') return { headlines: false, bursts: [] };
+  const list = bursts || [];
+  return { headlines: m === 'all', bursts: m === 'all' ? list : list.filter((b) => burstLinkedNews(b, items).length > 0) };
+}
+
 const api = {
+  chartNews,
   SOURCE_LABELS, ITEMS_CAP, FLASH_MS, LINK_MS, MARKERS_CAP, BURSTS_CAP,
   sourceLabel, isTrump, etTime,
   mergeItems, matchesFilter, filterItems, availableSources, availableTags, isBreaking,

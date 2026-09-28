@@ -40,6 +40,7 @@ const TABS = [
     ['DATA', [
       { label: 'Precision', select: { key: 'precision', choices: PRECISION, parse: asPrecision } },
       { label: 'Timezone', select: { key: 'timezone', choices: S.TIMEZONES.map(([k, text]) => [k, text]) } },
+      { label: 'Time format', select: { key: 'timeFormat', choices: [['24h', '24-hour (19:30)'], ['12h', '12-hour (7:30 PM)']] } },
       { label: 'Electronic trading hours background', check: 'ethBg', colors: [['ethBgColor', '']] },
     ]],
   ] },
@@ -93,6 +94,10 @@ const TABS = [
       { label: 'Holiday', check: 'evHoliday', dot: '#9598A1' },
       { label: 'Currencies', chips: 'evCountries' },
       { label: 'Vertical lines for high impact', check: 'evLines' },
+    ]],
+    ['NEWS', [
+      { label: 'News on chart', select: { key: 'newsOnChart', choices: [
+        ['bursts', 'Big moves with news only'], ['all', 'All headlines and moves'], ['off', 'Off']] } },
     ]],
   ] },
   { id: 'trading', label: 'Trading', icon: 'bot', sections: [

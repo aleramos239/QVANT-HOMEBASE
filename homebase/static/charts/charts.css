@@ -176,6 +176,13 @@ a { color: inherit; }
   white-space: nowrap; }
 .menu-i:hover, .menu-i:focus-visible { background: var(--hover); }
 .menu-i.active { color: var(--accent); }
+/* the interval menu's star (starred = on the toolbar row), TradingView's: faint until hovered, gold when on */
+.menu-star { margin-left: auto; display: inline-flex; padding: 4px; border-radius: 4px; color: var(--text-2); opacity: 0; }
+.menu-star .icw svg { width: 16px; height: 16px; }
+.menu-i:hover .menu-star, .menu-star:focus-visible { opacity: 1; }
+.menu-star:hover { background: var(--hover); }
+.menu-star.on { opacity: 1; color: #F7C600; }
+.menu-star.on svg { fill: currentColor; }
 .menu-i:disabled { opacity: .5; cursor: default; }
 .menu-i:disabled:hover { background: none; }
 .menu-t { flex: 1; overflow: hidden; text-overflow: ellipsis; }

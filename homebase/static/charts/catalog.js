@@ -64,6 +64,25 @@ const CATALOG = [
 ];
 const BY_ID = Object.fromEntries(CATALOG.map((d) => [d.id, d]));
 const FAVOURITES = [['1m', 'time:60'], ['5m', 'time:300'], ['15m', 'time:900'], ['1h', 'time:3600'], ['4h', 'time:14400'], ['D', 'time:86400']];
+/* The starred intervals (the toolbar row), from their stored JSON: valid specs only, each once, in the
+   interval menu's order (a custom one after the listed ones, in the order starred); junk/none -> the defaults.
+   An empty stored list is kept empty (the user unstarred everything). */
+function parseFavs(text) {
+  let a = null;
+  try { a = JSON.parse(text); } catch (_) { a = null; }
+  if (!Array.isArray(a)) return FAVOURITES.map(([, s]) => s);
+  const out = [];
+  for (const s of a) if (typeof s === 'string' && parseSpec(s) && !out.includes(s)) out.push(s);
+  return sortFavs(out);
+}
+function sortFavs(specs) {
+  const order = INTERVAL_GROUPS.flatMap(([, s]) => s), rank = (s) => { const i = order.indexOf(s); return i < 0 ? order.length : i; };
+  return specs.map((s, i) => [s, i]).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map(([s]) => s);
+}
+/* Star / unstar one interval: a new sorted list. */
+function toggleFav(specs, spec) {
+  return specs.includes(spec) ? specs.filter((s) => s !== spec) : sortFavs([...specs, spec]);
+}
 const INTERVAL_GROUPS = [
   ['Seconds', ['time:5', 'time:15', 'time:30']],
   ['Minutes', ['time:60', 'time:120', 'time:180', 'time:300', 'time:600', 'time:900', 'time:1800']],
@@ -386,7 +405,7 @@ function filter(query, group = 'All') {
     && (!q || d.name.toLowerCase().includes(q) || d.group.toLowerCase().includes(q) || d.id.includes(q)));
 }
 
-const api = { CATALOG, GROUPS, ROOT_NAMES, FAVOURITES, INTERVAL_GROUPS, LINE_COLORS, uid, def, clampParams, instance,
+const api = { parseFavs, sortFavs, toggleFav, CATALOG, GROUPS, ROOT_NAMES, FAVOURITES, INTERVAL_GROUPS, LINE_COLORS, uid, def, clampParams, instance,
   defaults, serverKey, serverKeys, migrate, migrateLayout, label, legendValues, decimals, fmtPrice, fmtCompact,
   fmtSigned, change, parseSpec, specLabel, longLabel, toSpec, parseInterval, matchSymbols, rootName, rootBadge, filter,
   ALWAYS_OPEN, marketOpen, fmtAge, feedSummary, REC_BUSY, staleAfter, sinceOpen, PANES, movable, placement };

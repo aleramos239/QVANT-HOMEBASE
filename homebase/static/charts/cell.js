@@ -87,12 +87,12 @@ function badgeEl(root, size) {
 }
 
 /* Time-axis labels like TradingView's: year, month name, day of month, HH:MM(:SS). */
-function tickLabel(t, type) {
+function tickLabel(t, type, fmt) {
   const d = new Date(t * 1000);
   if (type === 0) return String(d.getUTCFullYear());
   if (type === 1) return MONTHS[d.getUTCMonth()];
   if (type === 2) return String(d.getUTCDate());
-  return d.toISOString().slice(11, type === 4 ? 19 : 16);
+  return S.clockText(d.toISOString().slice(11, type === 4 ? 19 : 16), fmt);
 }
 
 class Cell {
@@ -176,7 +176,7 @@ class Cell {
     const d = new Date(this.real(tt) * 1000), s = d.toISOString(), ms = this.barMs();
     const day = `${DAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} '${s.slice(2, 4)}`;
     if (ms >= 86400000) return day;
-    return `${day}  ${s.slice(11, ms >= 60000 ? 16 : 19)}`;
+    return `${day}  ${S.clockText(s.slice(11, ms >= 60000 ? 16 : 19), this.R.timeFormat)}`;
   }
 
   title() {
@@ -231,6 +231,10 @@ class Cell {
     this.title();
     if (!this.chart) return;
     if (was.timezone !== R.timezone) { this.retime(); this.restyle(); return; }
+    if (was.timeFormat !== R.timeFormat) {
+      this.chart.applyOptions({ timeScale: { tickMarkFormatter: (t, type) => tickLabel(this.real(t), type, this.R.timeFormat) },
+        localization: { timeFormatter: (t) => this.fullTime(t) } });
+    }
     const o = S.chartOptions(R);
     this.chart.applyOptions({ ...o, rightPriceScale: { ...o.rightPriceScale, scaleMargins: S.scaleMargins(R) } });
     this.candles.applyOptions(this.candleOpts());
@@ -242,6 +246,7 @@ class Cell {
     this.syncEth();
     if (this.cd) this.cd.redraw();
     this.redrawEvents();
+    for (const o of this.ov) { if (o && o.onSettings) { try { o.onSettings(); } catch (e) { console.error(e); } } }
     this.legendRows();
     this.legend(this.hover);
   }
@@ -548,7 +553,7 @@ class Cell {
       grid: o.grid,
       rightPriceScale: { ...o.rightPriceScale, scaleMargins: S.scaleMargins(R) },
       timeScale: { ...o.timeScale, timeVisible: true, secondsVisible: sub,
-        tickMarkFormatter: (t, type) => tickLabel(this.real(t), type) },
+        tickMarkFormatter: (t, type) => tickLabel(this.real(t), type, this.R.timeFormat) },
       localization: { timeFormatter: (t) => this.fullTime(t) },
       crosshair: { mode: this.magnetXhair ? LW.CrosshairMode.MagnetOHLC : LW.CrosshairMode.Normal,
         vertLine: { ...o.crosshair.vertLine, labelBackgroundColor: P.crossLabel },
