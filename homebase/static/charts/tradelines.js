@@ -108,6 +108,10 @@ class Overlay {
     this.qty.type = 'number'; this.qty.min = '1'; this.qty.step = '1'; this.qty.setAttribute('aria-label', 'Quantity');
     this.qty.className = 'tr-qty';
     this.spread = document.createElement('span'); this.spread.className = 'tr-spread';
+    // S5: while the quote is stale the spread's own slot shows the stale tag instead (paintQuote): same slot, same line
+    this.spreadText = mk('span');
+    this.stale = staleChip();
+    this.spread.append(this.spreadText, this.stale.el);
     this.mid.append(this.qty, this.spread);
     this.buyBtn = document.createElement('button');
     this.buyBtn.type = 'button'; this.buyBtn.className = 'tr-buy';
@@ -196,6 +200,9 @@ class Overlay {
     this.unsub = window.HBDeskClient.on(() => this.render());
     this.unsubBusy = window.HBTradeUI.onBusyChange(() => this.render());
     this.unsubTrade = window.HBTradeUI.onTradeChange(() => this.render());   // this (or any) chart's trade config / a LIVE arm
+    // S5: once a second while the block shows, its quote's age counts on and a quiet quote goes stale on time -- a
+    // quiet market sends no desk event to repaint it
+    this.quoteTimer = setInterval(() => { if (!this.dead && !this.block.hidden) this.paintQuote(); }, 1000);
     this.render();
   }
 
@@ -209,21 +216,14 @@ class Overlay {
     const on = mode.mode === 'on';
     this.block.hidden = !on;
     if (!on) return;
-    const Dc = window.HBDeskClient, view = T.quoteView(Dc.quotes[this.root], this.cell.tick, this.page.clockMs());
-    this.block.classList.toggle('stale', view.stale);
-    this.sellPx.textContent = view.bid;
-    this.buyPx.textContent = view.ask;
-    this.spread.textContent = view.spread ? `${view.spread}t` : '';
-    let title = 'Bid / ask as of the last trade';
-    if (view.stale) title += view.age != null ? ` — no trade for ${Math.round(view.age / 1000)} s` : ' — no trade yet';
+    const Dc = window.HBDeskClient;
     // S1: the LIVE cue -- a red ring round the block and a LIVE tag on each side -- from the send path's own account
     // set (HBTradeUI.liveCue: cellGate's answer), one-click on or off; re-read on every render (desk, arm, trade events)
     const live = window.HBTradeUI.liveCue(this.cell, this.root), liveTitle = T.liveCueTitle(live, Dc.state);
     this.block.classList.toggle('live', live.length > 0);
     this.sellLive.hidden = this.buyLive.hidden = !live.length;
     if (liveTitle !== this.liveKey) { this.liveKey = liveTitle; this.sellLive.title = this.buyLive.title = liveTitle; }
-    if (liveTitle) title += ` · ${liveTitle}`;
-    this.block.title = title;
+    this.paintQuote();
     if (document.activeElement !== this.qty) this.qty.value = String(Dc.prefs.qty);
     const busy = window.HBTradeUI.busy();
     this.buyBtn.disabled = this.sellBtn.disabled = busy;
@@ -232,6 +232,25 @@ class Overlay {
     const side = T.sendingSide(window.HBTradeUI.sending(), 'chart', this.cell);
     this.buyBtn.classList.toggle('sending', side === 'Buy');
     this.sellBtn.classList.toggle('sending', side === 'Sell');
+  }
+
+  /* The block's bid / ask (dimmed while stale, as before), the spread -- or in its place, while the quote is stale,
+     the stale tag: a clock and the quote's age (S5) -- and the block's tooltip. From paintBlock, and once a second on
+     its own (quoteTimer). The prices themselves stay plain. */
+  paintQuote() {
+    const view = T.quoteView(window.HBDeskClient.quotes[this.root], this.cell.tick, this.page.clockMs());
+    const tag = T.staleTag(view.stale, view.age);
+    this.block.classList.toggle('stale', view.stale);
+    this.sellPx.textContent = view.bid;
+    this.buyPx.textContent = view.ask;
+    this.spreadText.textContent = !tag.show && view.spread ? `${view.spread}t` : '';
+    this.stale.el.hidden = !tag.show;
+    this.stale.text.textContent = tag.text;
+    this.stale.el.title = tag.title;
+    let title = 'Bid / ask as of the last trade';
+    if (view.stale) title += view.age != null ? ` — no trade for ${Math.round(view.age / 1000)} s` : ' — no trade yet';
+    if (this.liveKey) title += ` · ${this.liveKey}`;   // S1's tooltip, set by paintBlock
+    this.block.title = title;
   }
 
   /* The chart's accounts next to the block whenever it has any; one not in the chart's effective set right
@@ -697,6 +716,7 @@ class Overlay {
 
   destroy() {
     this.dead = true;   // review M2: any callback still holding this overlay (e.g. a cancelled drag's onCancel) becomes a no-op
+    clearInterval(this.quoteTimer);
     if (this.dragging && this.endDrag) this.endDrag();
     this.unsub();
     this.unsubBusy();
@@ -729,6 +749,14 @@ function mk(tag, cls, text) {
 /* S1: the LIVE tag (hidden until a send from here reaches a LIVE account) and a Buy/Sell label carrying it. */
 function liveTag() { const t = mk('span', 'tr-live', 'LIVE'); t.hidden = true; return t; }
 function sideLabel(tag, text) { const l = mk('span', 'tr-lbl'); l.append(tag, text); return l; }
+/* S5: the stale tag -- a Lucide clock and the quote's age -- hidden until the quote is stale. */
+function staleChip() {
+  const el = mk('span', 'hb-stale'), ic = mk('span', 'icw'), text = mk('span');
+  ic.innerHTML = window.HBIcons.clock;   // our own static SVG string
+  el.append(ic, text);
+  el.hidden = true;
+  return { el, text };
+}
 
 window.HBTradeLines = { overlay: (cell, page) => new Overlay(cell, page) };
 })();

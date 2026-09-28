@@ -563,6 +563,18 @@ a { color: inherit; }
 .tr-live { flex: none; padding: 0 3px; border-radius: 3px; background: #FFFFFF; color: var(--down); font-size: 9px;
   font-weight: 700; line-height: 12px; letter-spacing: .04em; }
 .tr-mid { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+/* S5, the stale tag (2026-09-28 safety pass): beside a dimmed (stale) bid / ask -- in the spread's own slot, on the
+   chart's Buy/Sell block and in the order panel -- a clock and the quote's age, so staleness never rests on opacity
+   and a hover alone. The prices themselves stay plain (only the dim they already had). Solid amber with dark text,
+   like the algo badge's CHECK IT pill: legible over the chart, which the block has no background against. */
+.hb-stale { display: inline-flex; align-items: center; gap: 2px; padding: 0 4px; border-radius: 3px; background: var(--warn);
+  color: #131722; font-size: 10px; font-weight: 700; line-height: 14px; letter-spacing: 0; white-space: nowrap;
+  font-variant-numeric: tabular-nums; vertical-align: middle; cursor: default; }
+.hb-stale .ic { width: 10px; height: 10px; stroke-width: 2.4; }
+.tr-spread { min-height: 20px; }   /* the slot keeps its line whether it holds the spread, the stale tag or nothing */
+.op-spread { position: relative; }
+.op-spread .hb-stale { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); flex-direction: column;
+  gap: 0; padding: 2px; line-height: 12px; }   /* stacked and centred: takes none of the column's width */
 .tr-qty { width: 48px; height: 22px; text-align: center; border: 1px solid var(--border); border-radius: 4px; background: var(--panel); font-size: 12px; }
 .tr-spread { font-size: 11px; color: var(--text-2); }
 /* the chart's trading accounts beside the block, "…047 DEMO" (Task 2); dimmed when not trading right now */

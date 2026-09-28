@@ -480,6 +480,28 @@ function quoteView(q, tick, nowMs) {
     stale: age == null || age > QUOTE_STALE_MS, age };
 }
 
+/* ---- S5, the stale tag (2026-09-28 safety pass) ----
+   A quote whose last trade is older than a surface's own limit (the Buy/Sell block: quoteView's 30 s; the order
+   panel: freshQuote's 10 s) already dims its prices; the tag -- a clock and this age -- sits beside them, so a stale
+   price never rests on opacity and a hover alone. ageText: whole units, rounded down: "42s", "5m", "2h", "3d"; "—"
+   with no trade time at all. */
+function ageText(ms) {
+  if (ms == null || !Number.isFinite(ms)) return '—';
+  const s = Math.floor(Math.max(0, ms) / 1000);
+  if (s < 60) return `${s}s`;
+  if (s < 3600) return `${Math.floor(s / 60)}m`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h`;
+  return `${Math.floor(s / 86400)}d`;
+}
+/* The tag for a surface's OWN stale verdict (never re-decided here) and the quote's age in ms (null: no trade time):
+   {show, text, title}. A fresh quote shows none. */
+function staleTag(stale, ageMs) {
+  if (!stale) return { show: false, text: '', title: '' };
+  const known = ageMs != null && Number.isFinite(ageMs);
+  return { show: true, text: ageText(ageMs),
+    title: known ? `Stale: no trade for ${ageText(ageMs)} — bid / ask are from the last trade` : 'Stale: no trade yet' };
+}
+
 /* ---- the order panel (2026-09-27 order-panel plan, Task 3) ---- */
 const PANEL_TYPES = ['Market', 'Limit', 'Stop', 'StopLimit'];
 const PANEL_QTY_MAX = 50;           // the panel's ceiling = the desk's HARD_MAX_ORDER_QTY; the desk's live max_order_qty decides (2026-09-28: 35 for the Apex 300K)
@@ -1544,7 +1566,7 @@ function routeSend(action, body, send) {
 }
 
 const api = { PREFS_KEY, QUOTE_STALE_MS, BOT_NAMES, parsePrefs, prefsText, oneClickKey, short, rootOf, orderPrice, isPending, abbr, inferType, menuText,
-  roundTick, bracket, orderBody, clientId, tradeMode, quoteView, usd, money, pnl, rrText, linesFor, linePnl, lineLabel,
+  roundTick, bracket, orderBody, clientId, tradeMode, quoteView, ageText, staleTag, usd, money, pnl, rrText, linesFor, linePnl, lineLabel,
   lineText, lineTitle, lineColor, canDrag, withPrice, exitKinds, exitKindAt, exitRefusal, EXIT_DRAG_PX, pastClick, pendingMoveError, exitGhost, exitDropError, expectedNet, exitsBody, exitsTitle, orderTitle, confirmOrder, actionTitle, resultToasts, fillText, fillMarkers, execArrow, botName, positionRows, orderRows, fillRows, accountRows, etTime, diffRows,
   algoName, algoLabel, algoChoices, algoAccounts, botPill, botToday, algoOverlay, etMs, pastRunMarkers, nearestTip, historySig,
   killConfirm, killToasts, killBlock, killSold,

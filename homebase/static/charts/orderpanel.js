@@ -150,6 +150,14 @@ function build() {
     ui.tile[side] = { b, px };
   }
   ui.spread = mk('span', 'op-spread');
+  // S5: while the quote is stale the spread's slot shows the stale tag instead -- centred over it without taking its
+  // width, so the Sell / Buy tiles never move (paint)
+  ui.spreadText = mk('span');
+  ui.stale = mk('span', 'hb-stale');
+  ui.stale.hidden = true;
+  ui.staleText = mk('span');
+  ui.stale.append(icon('clock'), ui.staleText);
+  ui.spread.append(ui.spreadText, ui.stale);
   tiles.append(ui.tile.Sell.b, ui.spread, ui.tile.Buy.b);
 
   const types = mk('div', 'op-types');
@@ -373,12 +381,16 @@ function paint() {
   if (flashPending) { flashPending = false; flashChips(); }   // another chart: its accounts are the ones an order goes to now (fix round 1)
 
 
-  // tiles: bid / ask (the last trade when a side is missing), the spread in ticks, dim when stale
+  // tiles: bid / ask (the last trade when a side is missing), the spread in ticks, dim when stale -- and then (S5) the
+  // stale tag, a clock and the quote's age, in the spread's place
   const view = T.quoteView(c.q, c.tick, c.now), stale = !T.freshQuote(c.q, c.now, STALE_MS);
+  const tag = T.staleTag(stale, c.q && Number.isFinite(c.q.ts_ms) ? c.now - c.q.ts_ms : null);
   ui.tile.Sell.px.textContent = view.bid;
   ui.tile.Buy.px.textContent = view.ask;
-  ui.spread.textContent = view.spread;
-  ui.spread.title = view.spread ? `Spread: ${view.spread} tick${view.spread === '1' ? '' : 's'}` : '';
+  ui.spreadText.textContent = tag.show ? '' : view.spread;
+  ui.stale.hidden = !tag.show;
+  ui.staleText.textContent = tag.text;
+  ui.spread.title = tag.show ? tag.title : view.spread ? `Spread: ${view.spread} tick${view.spread === '1' ? '' : 's'}` : '';
   for (const side of ['Sell', 'Buy']) {
     ui.tile[side].b.classList.toggle('on', st.side === side);
     ui.tile[side].b.classList.toggle('stale', stale);
