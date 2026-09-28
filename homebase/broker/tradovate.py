@@ -1211,10 +1211,11 @@ class TradovateAdapter(BrokerAdapter):
                 return False
         cur = self._ws
         cur_token = getattr(cur, "token", None)
-        if cur is None or (cur_token and cur_token == self._auth.access_token):
-            return False                  # already on the newest token (the supervisor rebuilt it)
-        if not cur_token and cur is not ws:
-            return False                  # replaced meanwhile, on a token we cannot tell: left alone
+        due_token = ws_token if stale else auth_token     # the token whose socket was due
+        if cur is None or not (cur_token == due_token if cur_token else cur is ws):
+            # the supervisor rebuilt it meanwhile on another token (the newest, or its own
+            # renewal's): that socket is healthy; its own recorded expiry governs it from now
+            return False
         self.audit({"event": "token_renewed", "account": self.account_id, "why": why,
                     **({"stale_socket": True} if stale else {})})
         _log(f"{self.account_id}: " + ("socket on an older token" if stale else "token renewed")

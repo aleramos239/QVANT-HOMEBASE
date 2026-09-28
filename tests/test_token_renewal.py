@@ -315,7 +315,8 @@ def test_a_socket_left_on_an_older_token_follows_its_own_expiry(tmp_path):
 
 
 def test_a_renewal_that_raced_a_rebuild_drops_the_rebuild_only_if_it_rides_the_old_token(tmp_path):
-    for rebuilt_on, dropped in (("old", True), ("new1", False), (None, False)):
+    # 'new2': the rebuild's own renewal produced another fresh token -- healthy, left alone
+    for rebuilt_on, dropped in (("old", True), ("new1", False), ("new2", False), (None, False)):
         ad, auth, _ = mkadapter(tmp_path, at(18, 38), at(18, 45))
         first = ad._ws
         fast = auth.renew
@@ -327,6 +328,28 @@ def test_a_renewal_that_raced_a_rebuild_drops_the_rebuild_only_if_it_rides_the_o
         ad._auth.renew = renew_while_rebuilt
         assert run(ad._renew_if_needed()) is dropped, rebuilt_on
         assert ad._ws.closed == int(dropped) and first.closed == 0
+
+
+def test_a_healthy_rebuild_on_another_fresh_token_survives_a_late_answer_before_the_fire(tmp_path):
+    """Due at 09:29:20 (the token dies 09:29:30); the socket dies, the supervisor rebuilds
+    at ~09:29:33 on 'new2' (its own renew/login); the keepalive's slow renewal answers at
+    09:29:50 with 'new1'. The rebuild is healthy and must survive: no rebuild would fit
+    before 09:30:00 again."""
+    ad, auth, clock = mkadapter(tmp_path, at(9, 29, 20), at(9, 29, 30))
+    fast = auth.renew
+
+    def slow():
+        ad._ws = Sock("new2")
+        ad._ws_expires = at(10, 49, 33).timestamp()
+        clock["now"] = at(9, 29, 50)
+        return fast()
+
+    ad._auth.renew = slow
+    assert run(ad._renew_if_needed()) is False
+    assert ad._ws.token == "new2" and ad._ws.closed == 0
+    # from then on it is judged on its own token: never due in the window
+    clock["now"] = at(9, 30, 10)
+    assert run(ad._renew_if_needed()) is False and ad._ws.closed == 0
 
 
 def test_the_normal_rule_is_unchanged_outside_the_windows(tmp_path):
