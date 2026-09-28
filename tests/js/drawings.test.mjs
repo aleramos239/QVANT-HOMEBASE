@@ -114,9 +114,11 @@ test('hitTest misses a drawing whose points cannot be placed', () => {
   assert.equal(D.hitTest(trend, { x: 101, y: 102 }, { ...geo, x: () => null }), null);
 });
 
-test('handle positions: trend ends, rectangle corners, mid-pane for a horizontal line', () => {
+test('handle positions: trend ends, rectangle corners + side midpoints, mid-pane for a horizontal line', () => {
   assert.deepEqual(D.handlePoints(trend, geo), [[100, 100], [140, 140]]);
-  assert.deepEqual(D.handlePoints(rect, geo), [[110, 120], [130, 150], [110, 150], [130, 120]]);
+  // corners 0-3, then 4 top-mid, 5 bottom-mid (price only), 6 left-mid, 7 right-mid (time only)
+  assert.deepEqual(D.handlePoints(rect, geo),
+    [[110, 120], [130, 150], [110, 150], [130, 120], [120, 120], [120, 150], [110, 135], [130, 135]]);
   assert.deepEqual(D.handlePoints(hline, geo), [[200, 125]]);
   assert.equal(D.handlePoints(hline, { ...geo, y: () => null }), null);
 });
@@ -129,6 +131,39 @@ test('dragging a handle moves that point; rectangle side corners mix the two poi
   assert.deepEqual(D.setPoint(rect, 3, 5, 7).points, [{ t: bars[1].ms, p: 7 }, { t: 5, p: 850 }]);
   assert.deepEqual(D.setPoint(hline, 0, 5, 7), { id: 'c', type: 'hline', points: [{ p: 7 }] });
   assert.deepEqual(trend.points[1], { t: bars[4].ms, p: 860 });
+});
+
+test('rectangle side handles (2026-09-27 draw-tools plan): top/bottom move price only, left/right move time only', () => {
+  // rect = [{t: bars[1].ms, p: 880}, {t: bars[3].ms, p: 850}]: a is the higher (top) and earlier (left) point
+  assert.deepEqual(D.setPoint(rect, 4, 999, 900).points, [{ t: rect.points[0].t, p: 900 }, rect.points[1]]);   // top-mid: a's price only
+  assert.deepEqual(D.setPoint(rect, 5, 999, 800).points, [rect.points[0], { t: rect.points[1].t, p: 800 }]);   // bottom-mid: b's price only
+  assert.deepEqual(D.setPoint(rect, 6, bars[0].ms, 999).points,
+    [{ t: bars[0].ms, p: rect.points[0].p }, rect.points[1]]);                                                 // left-mid: a's time only
+  assert.deepEqual(D.setPoint(rect, 7, bars[4].ms, 999).points,
+    [rect.points[0], { t: bars[4].ms, p: rect.points[1].p }]);                                                 // right-mid: b's time only
+});
+
+test('a rectangle side dragged past the opposite side flips cleanly (top/bottom, left/right recompute fresh)', () => {
+  // top-mid (a, p 880) dragged to p 800 -- below b's 850: a becomes the lower point
+  const flippedV = D.setPoint(rect, 4, 999, 800);
+  assert.deepEqual(flippedV.points, [{ t: rect.points[0].t, p: 800 }, rect.points[1]]);
+  assert.ok(flippedV.points[0].p < flippedV.points[1].p);
+  // grabbing top-mid again on the flipped box now moves b (the point that reads as top now)
+  assert.deepEqual(D.setPoint(flippedV, 4, 999, 900).points, [flippedV.points[0], { ...flippedV.points[1], p: 900 }]);
+  // left-mid (a, t bar1) dragged past b's bar3: a becomes the later (right) point
+  const flippedH = D.setPoint(rect, 6, bars[4].ms, 999);
+  assert.deepEqual(flippedH.points, [{ t: bars[4].ms, p: rect.points[0].p }, rect.points[1]]);
+  assert.ok(flippedH.points[0].t > flippedH.points[1].t);
+  assert.deepEqual(D.setPoint(flippedH, 6, bars[0].ms, 999).points,
+    [flippedH.points[0], { ...flippedH.points[1], t: bars[0].ms }]);   // now moves b, the one that is actually left
+});
+
+test('hitTest: a rectangle\'s side-midpoint handles (4-7) take priority over its body', () => {
+  assert.deepEqual(D.hitTest(rect, { x: 120, y: 120 }, geo), { part: 'handle', index: 4 });   // top-mid
+  assert.deepEqual(D.hitTest(rect, { x: 120, y: 150 }, geo), { part: 'handle', index: 5 });   // bottom-mid
+  assert.deepEqual(D.hitTest(rect, { x: 110, y: 135 }, geo), { part: 'handle', index: 6 });   // left-mid
+  assert.deepEqual(D.hitTest(rect, { x: 130, y: 135 }, geo), { part: 'handle', index: 7 });   // right-mid
+  assert.deepEqual(D.hitTest(rect, { x: 120, y: 135 }, geo), { part: 'body' });                // dead centre: no handle nearby
 });
 
 test('moving shifts every point by whole bars and by price, on the tick grid', () => {

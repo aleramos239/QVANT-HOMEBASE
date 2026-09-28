@@ -96,9 +96,11 @@ function distToSegment(px, py, ax, ay, bx, by) {
   return Math.hypot(px - (ax + u * dx), py - (ay + u * dy));
 }
 
-/* Pixel positions [[x, y], ...] of drawing d's handles, or null when a point
-   cannot be placed: trend 0/1 = its points; rect 0 (t0,p0), 1 (t1,p1),
-   2 (t0,p1), 3 (t1,p0); hline 0 = the middle of the pane. */
+/* Pixel positions [[x, y], ...] of drawing d's handles, or null when a point cannot be placed:
+   trend 0/1 = its points; rect 0 (t0,p0), 1 (t1,p1), 2 (t0,p1), 3 (t1,p0), then its four side
+   midpoints (TradingView-style) -- 4 top, 5 bottom (price only; "top" is whichever corner has the
+   higher price, matching a price axis that runs upward), 6 left, 7 right (time only; "left" is
+   whichever corner is earlier); hline 0 = the middle of the pane. */
 function handlePoints(d, geo) {
   if (isPos(d)) return Pos().handles(d, geo);
   const P = d.points;
@@ -108,7 +110,10 @@ function handlePoints(d, geo) {
   }
   const x0 = geo.x(P[0].t), x1 = geo.x(P[1].t), y0 = geo.y(P[0].p), y1 = geo.y(P[1].p);
   if (x0 == null || x1 == null || y0 == null || y1 == null) return null;
-  return d.type === 'rect' ? [[x0, y0], [x1, y1], [x0, y1], [x1, y0]] : [[x0, y0], [x1, y1]];
+  if (d.type !== 'rect') return [[x0, y0], [x1, y1]];
+  const midX = (x0 + x1) / 2, midY = (y0 + y1) / 2;
+  const top = Math.min(y0, y1), bot = Math.max(y0, y1), left = Math.min(x0, x1), right = Math.max(x0, x1);
+  return [[x0, y0], [x1, y1], [x0, y1], [x1, y0], [midX, top], [midX, bot], [left, midY], [right, midY]];
 }
 
 /* What of drawing d is under pt: a handle (by index), the body, or nothing. */
@@ -127,16 +132,25 @@ function hitTest(d, pt, geo) {
   return inside ? { part: 'body' } : null;
 }
 
-/* d with handle k moved to (t, p); a rectangle's side corners (2, 3) take
-   their time from one stored point and their price from the other; a long /
-   short box's handles are clamped by HBPosition.setHandle (ctx = the chart's
-   {bars, isTime, barMs, tick}). */
+/* d with handle k moved to (t, p); a rectangle's side corners (2, 3) take their time from one
+   stored point and their price from the other; a rectangle's four side midpoints (4-7, see
+   handlePoints) move only the one dimension their side is drawn on -- top/bottom (4/5) change
+   whichever stored point currently holds the higher/lower price, left/right (6/7) whichever holds
+   the earlier/later time, so dragging a side past the opposite one flips the box cleanly (which
+   point is "top" is re-read from `d` fresh next time, never cached); a long / short box's handles
+   are clamped by HBPosition.setHandle (ctx = the chart's {bars, isTime, barMs, tick}). */
 function setPoint(d, k, t, p, ctx) {
   if (isPos(d)) return Pos().setHandle(d, k, t, p, ctx);
   if (d.type === 'hline') return { ...d, points: [{ p }] };
   const [a, b] = d.points;
   let points;
-  if (d.type === 'rect') {
+  if (d.type === 'rect' && k >= 4) {
+    const aIsTop = a.p >= b.p, aIsLeft = a.t <= b.t;
+    if (k === 4) points = aIsTop ? [{ ...a, p }, b] : [a, { ...b, p }];
+    else if (k === 5) points = aIsTop ? [a, { ...b, p }] : [{ ...a, p }, b];
+    else if (k === 6) points = aIsLeft ? [{ ...a, t }, b] : [a, { ...b, t }];
+    else points = aIsLeft ? [a, { ...b, t }] : [{ ...a, t }, b];
+  } else if (d.type === 'rect') {
     points = [[{ t, p }, b], [a, { t, p }], [{ t, p: a.p }, { t: b.t, p }], [{ t: a.t, p }, { t, p: b.p }]][k];
   } else points = k === 0 ? [{ t, p }, b] : [a, { t, p }];
   return { ...d, points };
