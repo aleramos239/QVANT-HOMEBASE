@@ -100,6 +100,46 @@ function dayOpen(iso, today) {
 /* The speed menu's label: "1×" .. "60×", "Bar". */
 function speedLabel(s) { return s === 'bar' ? 'Bar' : `${s}×`; }
 
+/* TradingView orders its Speed menu fastest-first, with the frame-by-frame "Bar" mode last -- purely a
+   presentation order over the SAME engine speeds (SPEEDS above, barreplay.py's own SPEEDS tuple): the
+   engine has no continuous multiplier (a literal TV menu also offers 0.5×/0.3×/0.1× etc, which nothing
+   server-side can honour), only the discrete steps SPEEDS already lists, so the dropdown offers exactly
+   those, TV-ordered and TV-labelled (speedLabel above). */
+const SPEED_MENU = [60, 30, 10, 5, 2, 1, 'bar'];
+
+const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/* The merged control bar's compact clock label: {date: "Sep 25 '26", hm: "09:14"} -- the caller applies the
+   chart's own Time format (HBSettings.clockText) to `hm` (this module never reads settings.js: isolation).
+   null for anything that is not a finite instant, same convention as fmtCursor. */
+function fmtCursorCompact(ms) {
+  if (!Number.isFinite(ms)) return null;
+  const p = {};
+  for (const x of CURSOR_FMT.formatToParts(new Date(ms))) p[x.type] = x.value;
+  const mi = Number(p.month) - 1;
+  return { date: `${MONTH_ABBR[mi]} ${p.day} '${p.year.slice(2)}`, hm: `${p.hour}:${p.minute}` };
+}
+
+/* Select random bar: a uniformly random index into a `len`-long bars array. `rand` (a 0..1 float, or a
+   function returning one) is injectable for the test suite; Math.random() otherwise. null for an
+   empty/invalid array, matching clampLogical's own convention above. */
+function randomBarIndex(len, rand) {
+  if (!Number.isInteger(len) || len <= 0) return null;
+  const raw = typeof rand === 'function' ? rand() : rand;
+  const r = Number.isFinite(raw) && raw >= 0 && raw < 1 ? raw : Math.random();
+  return Math.min(len - 1, Math.floor(r * len));
+}
+
+/* Back one bar: the previous bar's own {date, time} -- one index back from the LAST bar in `bars` (a
+   replaying chart's array always ends at the cursor's own bar, the same convention pickBar()/armSelectBar()
+   already rely on). null with fewer than two bars (nothing to step back to). Committed as a replay_ctl
+   `jump` (replayui's backOneBar()), so it shares jump's own HH:MM (minute) granularity -- a bar shorter than
+   a minute can land back on the SAME minute rather than strictly earlier; there is no finer stepping
+   primitive in barreplay.py to do better, and "Back one bar" is omitted rather than faked wherever this
+   would not actually move the cursor (replayui checks). */
+function backOnePick(bars) {
+  return Array.isArray(bars) && bars.length >= 2 ? barAt(bars, bars.length - 2) : null;
+}
+
 /* ---- ws op builders (protocol: homebase/charts/barreplay.py) ---- */
 /* Starting a replay always begins at speed "bar" (paused, one bar at a time): the floating bar's speed menu
    changes it afterwards through ctlOp('speed', ...). */
@@ -454,8 +494,8 @@ function pushPracticeSession(existing, session) {
   return list.length > PRACTICE_MAX ? list.slice(list.length - PRACTICE_MAX) : list;
 }
 
-const api = { FIRST_DATE, SPEEDS, parseState, fmtCursor, validStart, typeDate, typeTime, tidyDate, tidyTime, startError, dayOpen, speedLabel, startOp, ctlOp, stopOp,
-  clampLogical, barAt, fmtPickLabel, etHM, selectBarPlan,
+const api = { FIRST_DATE, SPEEDS, SPEED_MENU, parseState, fmtCursor, fmtCursorCompact, validStart, typeDate, typeTime, tidyDate, tidyTime, startError, dayOpen, speedLabel, startOp, ctlOp, stopOp,
+  clampLogical, barAt, fmtPickLabel, etHM, selectBarPlan, randomBarIndex, backOnePick,
   DEFAULT_COSTS, toTick, tickCmp, firstAtOrAbove, firstAtOrBelow, triggerIndex, fillPrice, PracticeSim,
   barPrints, BarFeed, POINT_VALUE, pointValue, PRACTICE_KEY, PRACTICE_MAX, practiceSession, pushPracticeSession };
 if (typeof window !== 'undefined') window.HBReplay = api;

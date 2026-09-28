@@ -457,3 +457,42 @@ test('dayOpen: weekdays inside the archive and before today only', () => {
   assert.equal(R.dayOpen('2021-09-21', today), false);   // before the archive
   assert.equal(R.dayOpen('2026-09-27', today), false);   // today
 });
+
+/* ---- 2026-09-27 TV-parity plan: the Speed menu order, the compact clock, Select random bar's bounds, and
+   Back one bar's pick. ---- */
+
+test('SPEED_MENU: the SAME engine speeds as SPEEDS, TV-ordered (fastest first, "Bar" last)', () => {
+  assert.deepEqual([...R.SPEED_MENU].sort(), [...R.SPEEDS].sort());   // exactly the engine's own set
+  assert.deepEqual(R.SPEED_MENU, [60, 30, 10, 5, 2, 1, 'bar']);
+  assert.equal(R.SPEED_MENU[R.SPEED_MENU.length - 1], 'bar');
+});
+
+test('fmtCursorCompact: "Mon D \'YY" + a bare "HH:MM" (2024-03-08 is EST, UTC-5); null off a bad instant', () => {
+  const ms = Date.UTC(2024, 2, 8, 14, 31, 5);   // 09:31:05 EST
+  assert.deepEqual(R.fmtCursorCompact(ms), { date: "Mar 08 '24", hm: '09:31' });
+  const dst = Date.UTC(2024, 6, 8, 13, 31, 5);   // 09:31:05 EDT
+  assert.deepEqual(R.fmtCursorCompact(dst), { date: "Jul 08 '24", hm: '09:31' });
+  assert.equal(R.fmtCursorCompact(null), null);
+  assert.equal(R.fmtCursorCompact(NaN), null);
+});
+
+test('randomBarIndex: uniform over [0, len), injectable rand for determinism; null off an empty/invalid array', () => {
+  assert.equal(R.randomBarIndex(10, 0), 0);            // rand=0 -> the first bar
+  assert.equal(R.randomBarIndex(10, 0.9999), 9);        // rand just under 1 -> the last bar, never len
+  assert.equal(R.randomBarIndex(10, () => 0.5), 5);     // a function is called for its value
+  assert.equal(R.randomBarIndex(1, 0.5), 0);
+  assert.equal(R.randomBarIndex(0), null);
+  assert.equal(R.randomBarIndex(-3), null);
+  assert.equal(R.randomBarIndex('nope'), null);
+  // an out-of-[0,1) rand (a broken injected fn) falls back to Math.random() rather than throwing or going OOB
+  const i = R.randomBarIndex(10, 7);
+  assert.ok(Number.isInteger(i) && i >= 0 && i < 10);
+});
+
+test('backOnePick: the bar before the LAST one; null with fewer than two bars', () => {
+  const bars = [{ s: '2026-09-25', t: 34200 }, { s: '2026-09-25', t: 34260 }, { s: '2026-09-25', t: 34320 }];
+  assert.deepEqual(R.backOnePick(bars), { date: '2026-09-25', time: '09:31' });   // bars[1], not bars[2]
+  assert.equal(R.backOnePick([bars[0]]), null);
+  assert.equal(R.backOnePick([]), null);
+  assert.equal(R.backOnePick(null), null);
+});
