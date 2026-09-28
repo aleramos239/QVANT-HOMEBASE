@@ -714,9 +714,19 @@ function exitDropError(g, kind, price, last) {
   const where = (kind === 'sl') === long ? 'below' : 'above';
   return ok ? null : `A ${what} on a ${long ? 'long' : 'short'} must be ${where} the last price (${px(last)})`;
 }
-/* The `exits` body: the position's accounts, one price (the other side stays whatever the desk has). */
-function exitsBody({ clientId, accounts, root, kind, price }) {
-  return { client_id: clientId, accounts: [...accounts], root, [kind === 'sl' ? 'sl_price' : 'tp_price']: price };
+/* The position each account of a position line holds, signed (+long / −short): what the confirm shows ("Add SL 3"),
+   frozen and sent as `expected_net` -- the desk and the paper book refuse if it changed, never resize (fix round 1,
+   item 5). */
+function expectedNet(g) {
+  const out = {};
+  for (const l of (g && g.legs) || []) out[l.account] = (out[l.account] || 0) + l.s * l.qty;
+  return out;
+}
+/* The `exits` body: the position's accounts, one price (the other side stays whatever the desk has), and the
+   position each account held when the confirm was shown. */
+function exitsBody({ clientId, accounts, root, kind, price, expected }) {
+  return { client_id: clientId, accounts: [...accounts], root, [kind === 'sl' ? 'sl_price' : 'tp_price']: price,
+    expected_net: Object.fromEntries(accounts.map((a) => [a, expected[a]])) };
 }
 /* The confirm's title: "Add TP 3 @ 30,885.00 · …047". */
 function exitsTitle(g, kind, price, tick) { return `Add ${kind.toUpperCase()} ${g.qty} @ ${Cat.fmtPrice(price, tick)} · ${whoText(g)}`; }
@@ -1455,7 +1465,7 @@ function routeSend(action, body, send) {
 
 const api = { PREFS_KEY, QUOTE_STALE_MS, BOT_NAMES, parsePrefs, prefsText, oneClickKey, short, rootOf, orderPrice, isPending, abbr, inferType, menuText,
   roundTick, bracket, orderBody, clientId, tradeMode, quoteView, usd, money, pnl, rrText, linesFor, linePnl, lineLabel,
-  lineText, lineColor, canDrag, withPrice, exitHandles, exitGhost, exitDropError, exitsBody, exitsTitle, orderTitle, confirmOrder, actionTitle, resultToasts, fillText, fillMarkers, execArrow, botName, positionRows, orderRows, fillRows, accountRows, etTime, diffRows,
+  lineText, lineColor, canDrag, withPrice, exitHandles, exitGhost, exitDropError, expectedNet, exitsBody, exitsTitle, orderTitle, confirmOrder, actionTitle, resultToasts, fillText, fillMarkers, execArrow, botName, positionRows, orderRows, fillRows, accountRows, etTime, diffRows,
   algoName, algoLabel, algoChoices, algoAccounts, botPill, botToday, algoOverlay, etMs, pastRunMarkers, nearestTip, historySig,
   killConfirm, killToasts, killBlock, killSold,
   enterConfirms, wireSend, symbolChangeTrade, resolveConfirmedAccounts, armedTicked, unarmedLiveMessage, freshQuote,

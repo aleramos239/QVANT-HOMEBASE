@@ -451,17 +451,21 @@ test('addExit: the dropped SL / TP goes out as `exits` for the whole position, f
     UI.addExit(c, long, 'tp', 30010.1, 'NQ', 0.25);
     assert.equal(dialogs.length, 1);
     assert.equal(dialogs[0].title, 'Add TP 2 @ 30,010.00 · …041');
+    const warn = dialogs[0].box.children[0].children.find((x) => x.className === 'cf-note cf-warn');
+    assert.equal(warn && warn.textContent, T.GTC_WARN, 'exits stay GTC: the confirm says so (item 8)');
     desk.quotes.NQ = { ...desk.quotes.NQ, last: 30001 };           // the market moves (still below the TP): unchanged body
     clickPrimary('Add target');
     await flush(); await flush();
     assert.equal(desk.sent.length, 1);
-    assert.deepEqual(desk.sent[0], { action: 'exits', body: { client_id: desk.sent[0].body.client_id, accounts: ['sim041'], root: 'NQ', tp_price: 30010 } });
+    assert.deepEqual(desk.sent[0], { action: 'exits', body: { client_id: desk.sent[0].body.client_id, accounts: ['sim041'], root: 'NQ',
+      tp_price: 30010, expected_net: { sim041: 2 } } }, 'the size the confirm showed rides along (item 5)');
 
     desk.prefs.oneClick = true;                                    // one-click: straight to the paper book, never the desk
     UI.addExit(c, paper, 'sl', 29990, 'NQ', 0.25);
     await flush(); await flush();
     assert.equal(desk.sent.length, 1);
-    assert.deepEqual(paperSent.map((s) => [s.action, s.body.accounts, s.body.sl_price]), [['exits', ['paper'], 29990]]);
+    assert.deepEqual(paperSent.map((s) => [s.action, s.body.accounts, s.body.sl_price, s.body.expected_net]),
+      [['exits', ['paper'], 29990, { paper: 2 }]]);
 
     let cancelled = 0;
     UI.addExit(c, long, 'sl', 30002, 'NQ', 0.25, { onCancel: () => cancelled++ });   // above the last trade: marketable
@@ -537,6 +541,27 @@ test('fix round 1, item 3: a LIVE account disarmed while a line action\'s confir
       dialogs.length = 0;
       UI.toggleAccount(c, 'live099'); UI.toggleAccount(c, 'live099');   // re-arm for the next action
     }
+  } finally {
+    desk.state = was;
+  }
+});
+
+test('fix round 1, item 5: the size the confirm showed is frozen -- a position that grows meanwhile is not resized here', async () => {
+  reset();
+  const was = desk.state;
+  const withNet = (net) => ({ ...STATE, accounts: [acct('sim041', 'SIM0000041', 'demo', {
+    positions: [{ symbol: 'NQZ6', net, avg_price: 30000, root: 'NQ', point_value: 20 }] })] });
+  desk.state = withNet(2);
+  try {
+    const c = chart([]);
+    const line = T.linesFor(desk.state, 'NQ', UI.editableIds(c)).find((g) => g.kind === 'position');
+    desk.prefs.oneClick = false;
+    UI.addExit(c, line, 'sl', 29990, 'NQ', 0.25);
+    assert.equal(dialogs[0].title, 'Add SL 2 @ 29,990.00 · …041');
+    desk.state = withNet(3);                                    // it grew while the dialog was open
+    clickPrimary('Add stop');
+    await flush(); await flush();
+    assert.deepEqual(desk.sent[0].body.expected_net, { sim041: 2 }, 'what was shown: the desk refuses the mismatch');
   } finally {
     desk.state = was;
   }

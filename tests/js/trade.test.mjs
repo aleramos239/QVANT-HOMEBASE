@@ -1498,16 +1498,17 @@ test('exit drop side: an SL beyond the last trade on the losing side, a TP on th
 });
 
 test('exits body and confirm title', () => {
-  assert.deepEqual(T.exitsBody({ clientId: 'c', accounts: ['paper-2'], root: 'NQ', kind: 'tp', price: 30885 }),
-    { client_id: 'c', accounts: ['paper-2'], root: 'NQ', tp_price: 30885 });
-  assert.deepEqual(T.exitsBody({ clientId: 'c', accounts: ['a', 'b'], root: 'NQ', kind: 'sl', price: 1 }),
-    { client_id: 'c', accounts: ['a', 'b'], root: 'NQ', sl_price: 1 });
+  assert.deepEqual(T.exitsBody({ clientId: 'c', accounts: ['paper-2'], root: 'NQ', kind: 'tp', price: 30885, expected: { 'paper-2': -3 } }),
+    { client_id: 'c', accounts: ['paper-2'], root: 'NQ', tp_price: 30885, expected_net: { 'paper-2': -3 } });
+  assert.deepEqual(T.exitsBody({ clientId: 'c', accounts: ['a', 'b'], root: 'NQ', kind: 'sl', price: 1, expected: { a: 2, b: 1, z: 9 } }),
+    { client_id: 'c', accounts: ['a', 'b'], root: 'NQ', sl_price: 1, expected_net: { a: 2, b: 1 } });
   const g = { qty: 3, legs: [{ who: 'testing' }] };
   assert.equal(T.exitsTitle(g, 'tp', 30885, 0.25), 'Add TP 3 @ 30,885.00 · testing');
   assert.equal(T.exitsTitle({ qty: 1, legs: [{ who: '…047' }, { who: '…041' }] }, 'sl', 30885, 0.25), 'Add SL 1 @ 30,885.00 · 2 accts');
   assert.deepEqual(T.resultToasts('exits', 200, { results: { sim041: { ok: true } } }, STATE), [{ tone: 'ok', text: '…041 · exit placed' }]);
   // a mixed desk + paper send splits like every other action
-  const parts = T.splitSend('exits', T.exitsBody({ clientId: 'c', accounts: ['sim041', 'paper'], root: 'NQ', kind: 'sl', price: 1 }));
+  const parts = T.splitSend('exits', T.exitsBody({ clientId: 'c', accounts: ['sim041', 'paper'], root: 'NQ', kind: 'sl', price: 1,
+    expected: { sim041: 2, paper: 1 } }));
   assert.deepEqual([parts.desk.accounts, parts.paper.accounts], [['sim041'], ['paper']]);
 });
 
@@ -1545,4 +1546,12 @@ test('fix round 1, item 2: another account\'s pending leg never hides this posit
   const short = groups.find((g) => g.kind === 'position' && g.side === 'Sell');
   assert.deepEqual(T.exitHandles(long, groups), { sl: true, tp: true });
   assert.deepEqual(T.exitHandles(short, groups), { sl: false, tp: false });
+});
+
+test('fix round 1, item 5: expectedNet -- the signed position per account the confirm shows', () => {
+  const long = T.linesFor(STATE, 'NQ', ['sim041', 'sim047']).find((g) => g.kind === 'position');   // …041 +2, …047 +1
+  assert.deepEqual(T.expectedNet(long), { sim041: 2, sim047: 1 });
+  const short = T.linesFor(STATE, 'ES', ['live099']).find((g) => g.kind === 'position');
+  assert.deepEqual(T.expectedNet(short), { live099: -1 });
+  assert.deepEqual(T.expectedNet(null), {});
 });

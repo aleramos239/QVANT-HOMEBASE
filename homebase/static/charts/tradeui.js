@@ -389,7 +389,9 @@ function moveLine(cell, line, price, root, tick, { onCancel } = {}) {
 /* A position's SL / TP handle dropped at `price` (tradelines.js): `exits` for the WHOLE position on each of the line's
    accounts -- the desk / paper book turns it into one OCO pair with an existing half. The line gate as a drag's, the
    LIVE arm per account, the side of the LAST trade at the drop AND again at send (a price that moved through it
-   refuses: nothing sent). What the confirm shows -- accounts, kind, price -- is frozen and is exactly what is sent. */
+   refuses: nothing sent). What the confirm shows -- accounts, kind, price and the position's size per account
+   (`expected_net`: the desk refuses if it changed since) -- is frozen and is exactly what is sent. Exits are GTC, and
+   the confirm says so (the GTC warning, as any GTC order's). */
 function addExit(cell, line, kind, price, root, tick, { onCancel } = {}) {
   const cancel = (msg) => { if (msg) D().toast('err', msg); if (onCancel) onCancel(); };
   if (!line || line.kind !== 'position' || (kind !== 'sl' && kind !== 'tp')) return cancel(null);
@@ -402,16 +404,17 @@ function addExit(cell, line, kind, price, root, tick, { onCancel } = {}) {
   const at = T.roundTick(price, tick);
   const q0 = D().quotes[root], bad = T.exitDropError(line, kind, at, q0 ? q0.last : null);
   if (bad) return cancel(bad);
+  const expected = T.expectedNet(line);   // frozen with the price: the size the confirm shows
   const build = (m) => {
     if (!T.legsWithin(line, m.accounts)) { D().toast('err', 'Accounts changed — review and try again'); return null; }
     const q = D().quotes[root];
     if (T.exitDropError(line, kind, at, q ? q.last : null)) { D().toast('err', 'Price moved through your stop/target — nothing sent'); return null; }
-    return T.exitsBody({ clientId: T.clientId(), accounts, root, kind, price: at });
+    return T.exitsBody({ clientId: T.clientId(), accounts, root, kind, price: at, expected });
   };
   if (T.sendsWithoutConfirm(D().prefs, cell.cfg)) { guardedSend('exits', g, build); return; }
   const rows = acctRows(accounts);
   const ghost = T.exitGhost(line, kind, at), usd = T.usd(T.linePnl(ghost, null));
-  confirm({ title: T.exitsTitle(line, kind, at, tick), rows, note: usd ? `If it fills: ${usd}` : '',
+  confirm({ title: T.exitsTitle(line, kind, at, tick), rows, note: usd ? `If it fills: ${usd}` : '', warn: T.GTC_WARN,
     each: accounts.length > 1 ? `the whole position on each of ${accounts.length} accounts` : '',
     action: kind === 'sl' ? 'Add stop' : 'Add target', tone: kind === 'sl' ? 'down' : 'accent', live: hasLive(rows) })
     .then((ok) => { if (ok) { confirmedAfterReplay(cell); guardedSend('exits', g, build); } else if (onCancel) onCancel(); });
