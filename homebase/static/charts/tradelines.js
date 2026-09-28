@@ -3,7 +3,8 @@
      - the Buy/Sell block under the legend, bid/ask "as of last trade" (ruling S10);
      - position / order / SL / TP lines (native price lines) with DOM chips that carry their text and a ×
        (ruling S8), draggable by the chip's text (order/SL/TP only — positions are not draggable: ruling S11);
-     - the execution markers, through cell.setExtraMarkers('fills', …) (ruling S22).
+     - the execution arrows: small horizontal arrows at each fill's price, drawn by a canvas primitive (ExecArrows)
+       -- never the shared series markers (ruling S22; TradingView's shape since 2026-09-27).
    Trading is per chart, and the chart's ACCOUNTS are the switch (2026-09-27 accounts-per-chart plan, Task 1):
    the block and the chart's account chips exist only while THIS chart can trade.
    2026-09-27 (no more "view only"): a position / order / SL / TP line is manageable (drag, ×, the SL/TP handles)
@@ -29,6 +30,50 @@ class Hook {
   detached() { cancelAnimationFrame(this.raf); this.raf = 0; }
 }
 
+/* The execution arrows (HBTrade.fillMarkers / execArrow): a canvas series primitive, so the chart itself repaints
+   them on every scroll, zoom and autoscale -- nothing is rebuilt. Each arrow sits on the bar that holds its fill
+   (HBDrawings.barIndexAt; none before the first loaded bar or past the last one's end). */
+class ExecArrows {
+  constructor(cell) {
+    this.cell = cell;
+    this.list = [];
+    this._views = [{ zOrder: () => 'top', renderer: () => ({ draw: (t) => this.draw(t) }) }];
+  }
+  attached({ requestUpdate }) { this.requestUpdate = requestUpdate; }
+  detached() { this.requestUpdate = null; }
+  updateAllViews() {}
+  paneViews() { return this._views; }
+  set(list) { this.list = list; if (this.requestUpdate) this.requestUpdate(); }
+  /* [{a: fill spec, s: execArrow shape}] for the fills inside the loaded bars, in pixels. */
+  shapes() {
+    const c = this.cell;
+    if (!c.chart || !c.bars.length || !this.list.length) return [];
+    const ts = c.chart.timeScale(), bars = c.bars, barMs = c.barMs();
+    const end = barMs > 0 ? bars[bars.length - 1].ms + barMs : Infinity, sp = ts.options().barSpacing;
+    const out = [];
+    for (const a of this.list) {
+      if (!(a.ms >= bars[0].ms) || a.ms >= end) continue;
+      const x = ts.timeToCoordinate(bars[window.HBDrawings.barIndexAt(bars, a.ms)].tt), y = c.candles.priceToCoordinate(a.price);
+      if (x == null || y == null) continue;
+      out.push({ a, s: T.execArrow(x, y, sp) });
+    }
+    return out;
+  }
+  draw(target) {
+    const list = this.shapes();
+    if (!list.length) return;
+    target.useMediaCoordinateSpace(({ context: ctx }) => {
+      for (const { a, s } of list) {
+        ctx.beginPath();
+        s.pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+        ctx.closePath();
+        ctx.fillStyle = a.color;
+        ctx.fill();
+      }
+    });
+  }
+}
+
 class Overlay {
   constructor(cell, page) {
     this.cell = cell;
@@ -37,7 +82,7 @@ class Overlay {
     this.items = new Map();   // key -> {g, line, chip}
     this.dragging = null;     // the key mid-drag, or null
     this.endDrag = null;      // set by startDrag; cancels a drag in progress (destroy mid-drag)
-    this.fillIds = null;      // last JSON.stringify of the fill marker ids sent to setExtraMarkers
+    this.fillIds = null;      // last JSON of the execution arrows' ids + colours handed to this.arrows
     this.dead = false;        // review M2: set in destroy(); render() (and any callback still holding this
                                // overlay, e.g. a cancelled drag's onCancel) becomes a no-op once true, so a
                                // destroyed overlay can never create an orphan price line on the cell's NEW chart
@@ -136,6 +181,8 @@ class Overlay {
 
     this.hook = new Hook(() => this.sync());
     cell.candles.attachPrimitive(this.hook);
+    this.arrows = new ExecArrows(cell);   // the execution arrows (2026-09-27): drawn here, not as series markers
+    cell.candles.attachPrimitive(this.arrows);
 
     this.unsub = window.HBDeskClient.on(() => this.render());
     this.unsubBusy = window.HBTradeUI.onBusyChange(() => this.render());
@@ -250,14 +297,14 @@ class Overlay {
     it.chip.classList.toggle('paper', !!it.g.paper);   // a PAPER account's line (Task 2): its colour comes via --c
   }
 
-  /* ---- execution markers (ruling S22); re-set only when the fill ids change ---- */
+  /* ---- execution arrows (ruling S22; horizontal since 2026-09-27); re-set only when the fills change ---- */
   paintMarkers() {
     const Dc = window.HBDeskClient;
-    const list = T.fillMarkers(Dc.state, this.root, window.HBTradeUI.fillIds(this.cell), this.cell.P);
-    const ids = JSON.stringify(list.map((m) => m.id));
+    const list = T.fillMarkers(Dc.state, this.root, window.HBTradeUI.fillIds(this.cell), this.cell.P, this.cell.tick);
+    const ids = JSON.stringify(list.map((m) => [m.id, m.color]));
     if (ids === this.fillIds) return;
     this.fillIds = ids;
-    this.cell.setExtraMarkers('fills', list);
+    this.arrows.set(list);
   }
 
   /* ---- the chart's algo (Task 3): badge, BOT lines, today's + past markers ---- */
@@ -430,11 +477,12 @@ class Overlay {
     }
   }
 
-  /* The tooltip of the bot or paper marker under the mouse (HBTrade.nearestTip within 10 px). */
+  /* The tooltip of the bot or paper marker, or the execution arrow, under the mouse (HBTrade.nearestTip within 10 px). */
   hoverTip(p) {
     const c = this.cell, all = this.tips.length || this.ptips.length ? [...this.tips, ...this.ptips] : this.tips;
-    if (this.dead || !c.chart || !p || !p.point || !all.length || !c.bars.length) { this.tip.hidden = true; return; }
-    const D = window.HBDrawings, ts = c.chart.timeScale(), pts = [];
+    const arrows = this.dead || !c.chart ? [] : this.arrows.shapes();
+    if (this.dead || !c.chart || !p || !p.point || !(all.length || arrows.length) || !c.bars.length) { this.tip.hidden = true; return; }
+    const D = window.HBDrawings, ts = c.chart.timeScale(), pts = arrows.map(({ a, s }) => ({ x: s.hover[0], y: s.hover[1], tip: a.tip }));
     for (const m of all) {
       const i = D.barIndexAt(c.bars, m.ms);
       if (i < 0) continue;
@@ -551,8 +599,8 @@ class Overlay {
     this.badges.remove();
     this.pbadge.remove();
     this.pstats.remove();
-    if (this.cell.chart) this.cell.candles.detachPrimitive(this.hook);
-    this.cell.setExtraMarkers('fills', []);
+    if (this.cell.chart) { this.cell.candles.detachPrimitive(this.hook); this.cell.candles.detachPrimitive(this.arrows); }
+    this.cell.setExtraMarkers('fills', []);   // the key the pre-arrow markers used: never left behind
     this.cell.setExtraMarkers('bots', []);
     this.cell.setExtraMarkers('paper', []);
   }

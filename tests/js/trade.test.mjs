@@ -363,10 +363,27 @@ test('toasts: one per account from the desk, the proxy detail otherwise; fills',
   assert.equal(T.fillText({ account: 'sim041', fill: { side: 'Buy', qty: 2, price: 30910.25 } }, STATE, 0.25), 'Filled 2 @ 30,910.25 · …041');
 });
 
-test('execution markers: the chart\'s accounts, manual fills only, at the fill price', () => {
+test('execution arrows: the chart\'s accounts, manual fills only, at the fill price, blue buy / red sell, a tip', () => {
   assert.deepEqual(T.fillMarkers(STATE, 'NQ', [], P), []);
-  assert.deepEqual(T.fillMarkers(STATE, 'NQ', ['sim041'], P), [{ id: 'fsim041:1', ms: Date.parse('2026-09-22T13:31:12.000Z'), price: 30900,
-    position: 'atPriceBottom', shape: 'arrowUp', color: P.accent, text: '' }]);
+  assert.deepEqual(T.fillMarkers(STATE, 'NQ', ['sim041'], P, 0.25), [{ id: 'fsim041:1', ms: Date.parse('2026-09-22T13:31:12.000Z'), price: 30900,
+    side: 'Buy', color: P.accent, tip: 'Buy 2 @ 30,900.00 · …041' }]);
+  const st = structuredClone(STATE);
+  st.accounts[0].fills.push({ ...st.accounts[0].fills[0], id: 2, side: 'Sell' }, { ...st.accounts[0].fills[0], id: 3, price: null });
+  assert.deepEqual(T.fillMarkers(st, 'NQ', ['sim041'], P).map((m) => [m.side, m.color]), [['Buy', P.accent], ['Sell', P.down]]);
+  for (const m of T.fillMarkers(st, 'NQ', ['sim041'], P)) assert.equal('text' in m || 'shape' in m || 'position' in m, false);
+});
+
+test('execution arrow geometry: horizontal, tip just left of the bar at the fill price, small, pointing right', () => {
+  const a = T.execArrow(100, 50, 10);                        // bar centred at x 100, spacing 10: body half-width ~4
+  assert.deepEqual(a.tip, [94, 50]);
+  const xs = a.pts.map((p) => p[0]), ys = a.pts.map((p) => p[1]);
+  assert.equal(Math.max(...xs), 94, 'the tip is the right-most point: it points right');
+  assert.ok(Math.max(...xs) < 100 - 4, 'left of the candle body');
+  assert.ok(Math.max(...xs) - Math.min(...xs) <= 10 && Math.max(...ys) - Math.min(...ys) <= 7, 'small');
+  assert.deepEqual([Math.min(...ys), Math.max(...ys)], [46.5, 53.5]);
+  assert.equal(a.hover[1], 50);
+  assert.deepEqual(T.execArrow(100, 50, 200).tip, [88, 50], 'a wide zoom never pushes it far from its bar');
+  assert.deepEqual(T.execArrow(100, 50, 0).tip, [98, 50]);
 });
 
 /* ---- the algo on a chart (2026-09-27 plan, Task 3) ---- */
@@ -1404,8 +1421,8 @@ test('PAPER: its lines never merge with a desk account\'s, and carry its tag and
   assert.equal(T.lineColor(desk, Pp), P.up);
   const sl = T.linesFor(st, 'NQ', ['paper']).find((g) => g.paper && g.kind === 'sl');
   assert.equal(T.lineColor(sl, Pp), '#7E57C2');
-  const mk = T.fillMarkers(st, 'NQ', ['paper'], Pp);
-  assert.deepEqual(mk.map((x) => [x.color, x.text]), [['#7E57C2', 'PAPER']]);
+  const mk = T.fillMarkers(st, 'NQ', ['paper'], Pp);            // its execution arrow: no tag, the buy/sell colour
+  assert.deepEqual(mk.map((x) => [x.color, x.text, x.tip.endsWith('· PAPER')]), [[P.accent, undefined, true]]);
 });
 
 /* ---- several paper accounts (2026-09-27 Task 2b) ---- */

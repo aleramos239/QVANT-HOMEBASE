@@ -735,21 +735,34 @@ function fillText(ev, state, tick) {
   return `Filled ${f.qty} @ ${Cat.fmtPrice(f.price, tick || 0.01)} · ${a ? short(a) : ev.account}`;
 }
 
-/* ---- markers ({ms, …} for HBDrawings.placeMarkers) ---- */
-/* `ids`: the chart's accounts (LIVE ones only once armed). */
-function fillMarkers(state, root, ids, P) {
+/* ---- execution arrows (2026-09-27): TradingView's, not series markers ----
+   One small HORIZONTAL arrow per fill, just left of the bar that holds the fill, pointing right AT the fill price.
+   Lightweight Charts' series markers only point up / down, so tradelines.js draws these itself (a canvas series
+   primitive, repainted by the chart on every scroll / zoom) -- they never touch the shared markers map.
+   `ids`: the chart's accounts (LIVE ones only once armed). Blue for a buy, red for a sell, on every account type
+   (the PAPER account included: no tag, no colour of its own). `tip`: the hover text. */
+function fillMarkers(state, root, ids, P, tick = 0.01) {
   const ticked = new Set(ids || []), out = [];
   for (const a of accountsOf(state)) {
     if (!ticked.has(a.id)) continue;
     for (const f of a.fills || []) {
       const ms = Date.parse(f.time);
-      if (f.owner || rootOf(f.symbol) !== root || !Number.isFinite(ms)) continue;
-      const buy = f.side === 'Buy', paper = a.env === 'paper';   // a PAPER fill: tagged, in the paper colour (Task 2)
-      out.push({ id: `f${a.id}:${f.id}`, ms, price: f.price, position: buy ? 'atPriceBottom' : 'atPriceTop',
-        shape: buy ? 'arrowUp' : 'arrowDown', color: paper ? P.paper || PAPER_COLOR : buy ? P.accent : P.down, text: paper ? 'PAPER' : '' });
+      if (f.owner || rootOf(f.symbol) !== root || !Number.isFinite(ms) || !Number.isFinite(f.price)) continue;
+      const buy = f.side === 'Buy';
+      out.push({ id: `f${a.id}:${f.id}`, ms, price: f.price, side: buy ? 'Buy' : 'Sell', color: buy ? P.accent : P.down,
+        tip: `${buy ? 'Buy' : 'Sell'} ${f.qty} @ ${Cat.fmtPrice(f.price, tick)} · ${short(a)}` });
     }
   }
   return out;
+}
+/* The arrow's outline in pixels for a bar centred at x (bar spacing `spacing`) and a fill at y: its tip sits just
+   left of the candle body (half the body, ~0.4 of the spacing, plus a 2 px gap, capped so a wide zoom never pushes
+   it far from its bar), a 5 px head 3.5 px either side of y and a 4 px shaft 1 px thick. `hover`: its middle. */
+const ARROW = { head: 5, half: 3.5, shaft: 4, thick: 1, gap: 2, maxOff: 10 };
+function execArrow(x, y, spacing) {
+  const A = ARROW, tx = x - Math.min(A.maxOff, Math.max(0, spacing) * 0.4) - A.gap, hx = tx - A.head, sx = hx - A.shaft;
+  return { tip: [tx, y], hover: [(tx + sx) / 2, y],
+    pts: [[tx, y], [hx, y - A.half], [hx, y - A.thick], [sx, y - A.thick], [sx, y + A.thick], [hx, y + A.thick], [hx, y + A.half]] };
 }
 
 /* ---- the algo on a chart (2026-09-27 plan, Task 3) ----
@@ -1402,7 +1415,7 @@ function routeSend(action, body, send) {
 
 const api = { PREFS_KEY, QUOTE_STALE_MS, BOT_NAMES, parsePrefs, prefsText, oneClickKey, short, rootOf, orderPrice, abbr, inferType, menuText,
   roundTick, bracket, orderBody, clientId, tradeMode, quoteView, usd, money, pnl, rrText, linesFor, linePnl, lineLabel,
-  lineText, lineColor, canDrag, withPrice, orderTitle, confirmOrder, actionTitle, resultToasts, fillText, fillMarkers, botName, positionRows, orderRows, fillRows, accountRows, etTime, diffRows,
+  lineText, lineColor, canDrag, withPrice, orderTitle, confirmOrder, actionTitle, resultToasts, fillText, fillMarkers, execArrow, botName, positionRows, orderRows, fillRows, accountRows, etTime, diffRows,
   algoName, algoLabel, algoChoices, algoAccounts, botPill, botToday, algoOverlay, etMs, pastRunMarkers, nearestTip, historySig,
   killConfirm, killToasts, killBlock, killSold,
   enterConfirms, wireSend, symbolChangeTrade, resolveConfirmedAccounts, armedTicked, unarmedLiveMessage, freshQuote,
