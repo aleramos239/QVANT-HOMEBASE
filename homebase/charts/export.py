@@ -142,8 +142,19 @@ def depth_range(depth_base: Path, root: str) -> tuple[str, str] | None:
 
 
 def depth_file(depth_base: Path, root: str, d: dt.date) -> Path | None:
-    matches = sorted((Path(depth_base) / root / str(d.year)).glob(f"{d.isoformat()}_*.depth.jsonl.gz"))
-    return matches[-1] if matches else None
+    """The session's depth file -- ranked by size (a roll day can list BOTH the outgoing and the
+    incoming contract; only one of them was actually subscribed and has any real depth in it).
+    The same cheap-signal rule TickStore uses to rank a manifest-less (live) tick file: never a
+    decode just to pick, and never merely the alphabetically last name."""
+    matches = (Path(depth_base) / root / str(d.year)).glob(f"{d.isoformat()}_*.depth.jsonl.gz")
+
+    def size(p: Path) -> int:
+        try:
+            return p.stat().st_size
+        except OSError:
+            return -1
+
+    return max(matches, key=lambda p: (size(p), p.name), default=None)
 
 
 def _pick_file(store: TickStore, root: str, d: dt.date, contract: str):

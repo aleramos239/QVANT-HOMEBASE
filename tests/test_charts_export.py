@@ -96,6 +96,20 @@ def test_depth_sessions_and_range(tmp_path):
     assert E.depth_range(tmp_path, "ES") is None
 
 
+def test_depth_file_picks_the_busiest_contract_on_a_roll_day_not_the_alphabetically_last(tmp_path):
+    """A roll day can list both the outgoing and incoming contract's depth file (NQU6 rolls to
+    NQZ6 -- 'Z' sorts after 'U', so the old alphabetically-last bug always picked NQZ6 even on a
+    day NQU6 was still the one actually subscribed and busy)."""
+    t0 = session_ms(D, 9, 30)
+    busy = [depth_line(t0 + i * 1000, [[100.0 + i, 1]], [[100.25 + i, 1]]) for i in range(50)]
+    write_depth(tmp_path, "NQ", D, "NQU6", busy)                                     # busy: still the front month
+    write_depth(tmp_path, "NQ", D, "NQZ6", [depth_line(t0, [[200.0, 1]], [[200.25, 1]])])   # thin: barely subscribed
+    got = E.depth_file(tmp_path, "NQ", D)
+    assert got.name.startswith(f"{D.isoformat()}_NQU6")
+    rows = list(E.iter_level2(tmp_path, "NQ", D, 1, E.TsFmt("et", "epoch", False)))
+    assert len(rows) == 50 and rows[0][1] == 100.0   # the busy contract's own rows, not the thin one's
+
+
 # ---------------------------------------------------------------------------- missing / gaps
 
 def test_missing_ticks_and_missing_depth(tmp_path):
