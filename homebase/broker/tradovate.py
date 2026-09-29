@@ -162,6 +162,13 @@ def _reject_reason(d) -> str:
     return ""
 
 
+# One TradovateAuth (one token) per Tradovate login, shared by every entry on it
+# (share_auth=True, the desk's build_adapter): a startup or a renewal costs one login /
+# one renewal per USER, not per entry (2026-09-29, five entries on one Apex user). Each
+# entry keeps its own socket and its own pinned account.
+_SHARED_AUTHS: dict = {}
+
+
 class TradovateAdapter(BrokerAdapter):
     platform = "tradovate"
 
@@ -174,6 +181,7 @@ class TradovateAdapter(BrokerAdapter):
         account_selector: Optional[dict] = None,
         audit: Optional[Callable[[dict], None]] = None,
         state_dir: Optional[Path] = None,
+        share_auth: bool = False,
     ):
         super().__init__(account_id, live=(env == "live"))
         self.env = env
@@ -182,11 +190,14 @@ class TradovateAdapter(BrokerAdapter):
         self.audit = audit or (lambda e: None)
         state_dir = state_dir or _default_state_dir()
         state_dir.mkdir(parents=True, exist_ok=True)
-        self._auth = TradovateAuth(
+        shared = _SHARED_AUTHS.get((self.keyring_key, env)) if share_auth else None
+        self._auth = shared or TradovateAuth(
             env=env,
             token_persist_path=state_dir / f"{account_id}.tokens.json",
             device_persist_path=state_dir / f"{account_id}.device.json",
         )
+        if share_auth and shared is None:
+            _SHARED_AUTHS[(self.keyring_key, env)] = self._auth
         self._ws: Optional[TradovateWS] = None
         self._acct_num: Optional[int] = None
         self._acct_name: str = ""
@@ -1314,12 +1325,19 @@ class TradovateAdapter(BrokerAdapter):
                      f"the socket's token expires at {until} ET")
             return False
         if not stale:
-            # a renewal only the early rule asks for (RENEW_BUFFER_S still left): renew only
-            # -- never spend a (rate-limited) login on it; a failure retries at the next check
-            extra = why == "early" and expires_at - now.timestamp() >= RENEW_BUFFER_S
-            await asyncio.to_thread(self._auth.renew if extra else self._auth.refresh)
-            if not self._auth.access_token or self._auth.access_token == auth_token:
-                return False                                  # it did not roll
+            async with self._renew_lock():
+                if self._auth.access_token != auth_token:
+                    # a sibling on the same login renewed while this one waited: no second
+                    # renewal -- this socket is simply on an older token, dropped by the
+                    # same rule, judged again now
+                    stale = True
+                    if not self._auth.access_token or not renewal_due(self._now(), expires_at)[0]:
+                        return False
+                else:
+                    await self._renew_now(why, expires_at, now, auth_token)
+                    if not self._auth.access_token or self._auth.access_token == auth_token:
+                        return False                          # it did not roll
+        if not stale:
             landed = self._now()
             if not renewal_due(landed, expires_at)[0]:
                 # the answer came late (a slow renewal, a login fallback) into a moment the
@@ -1352,6 +1370,24 @@ class TradovateAdapter(BrokerAdapter):
         except Exception:
             pass
         return True
+
+    def _renew_lock(self) -> asyncio.Lock:
+        """One renewal at a time per token: the lock lives on the (possibly shared) auth."""
+        lk = getattr(self._auth, "renew_lock", None)
+        if lk is None:
+            lk = asyncio.Lock()
+            try:
+                self._auth.renew_lock = lk
+            except Exception:  # noqa: BLE001 — an auth that takes no attributes: unshared
+                pass
+        return lk
+
+    async def _renew_now(self, why: str, expires_at: float, now: dt.datetime,
+                         auth_token) -> None:
+        # a renewal only the early rule asks for (RENEW_BUFFER_S still left): renew only
+        # -- never spend a (rate-limited) login on it; a failure retries at the next check
+        extra = why == "early" and expires_at - now.timestamp() >= RENEW_BUFFER_S
+        await asyncio.to_thread(self._auth.renew if extra else self._auth.refresh)
 
     async def _keepalive_loop(self) -> None:
         try:

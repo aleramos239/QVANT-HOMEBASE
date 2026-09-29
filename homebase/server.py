@@ -52,6 +52,8 @@ GONE_CONFIRM_S = 300       # an account missing from its login is removed only w
                            # successful sync at least this much later still misses it
 GONE_QUIET = (dt.time(9, 20), dt.time(9, 35))   # weekdays ET: never unbook/remove in here
 NOTICES_KEPT = 10
+INPLACE_RETRY_S = (10, 60)   # a dropped socket whose token is still valid, while its user's
+                             # logins are paused: retry in place 10 s, doubling to 60 s
 EQUITY_INTERVAL_S = 60
 JOURNAL_TAIL = 60
 READINESS_FROM = (9, 25)
@@ -353,8 +355,9 @@ def md_source(cfg: config_mod.AppCfg, adapters: dict):
 def build_adapter(account_id: str, a: config_mod.AccountCfg) -> BrokerAdapter:
     env = "live" if a.live else "demo"
     sel = {"account_name": a.account_name} if a.account_name else None
+    # entries on one login share its token: one login / renewal per Tradovate user
     return TradovateAdapter(account_id, env=env, keyring_key=a.keyring_key,
-                            account_selector=sel)
+                            account_selector=sel, share_auth=bool(a.keyring_key))
 
 
 def build_feed(cfg: config_mod.AppCfg, adapters: dict) -> MarketFeed:
@@ -555,6 +558,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         await ad.observe_fills(engine.on_fill)
         desk.attach(aid, ad)
         _parked.pop(aid, None)
+        _inplace_streak.pop(aid, None)
         _no_accounts_warned.discard(aid)
         if _gone.pop(aid, None) is not None:
             engine.journal("account_back", account=aid)
@@ -570,6 +574,13 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         return mode
 
     _login_cooldown: dict[str, float] = {}   # account id -> unix ts of next try
+    _inplace_streak: dict[str, int] = {}     # failed in-place-only retries in a row
+
+    def _token_left(aid: str) -> float:
+        import time as _t
+        tokens = getattr(getattr(adapters.get(aid), "_auth", None), "tokens", None)
+        exp = getattr(tokens, "expires_at_unix", 0) or 0
+        return exp - _t.time() if exp else 0.0
 
     def _connect_failed(aid: str, e: Exception) -> None:
         """Record a failed (re)connect. An account missing from its login is PARKED:
@@ -598,6 +609,14 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                 _notice(f"your {_login_label(aid)} login listed no accounts — nothing was "
                         "removed; check the login at Tradovate", account=aid, level="warn")
         acct_status[aid] = {"connected": False, "error": msg}
+        if isinstance(e, LoginDeferred) and _token_left(aid) > 120:
+            # the socket dropped, its token is still good, only the login fallback was
+            # refused (a 429 cool-down, the cap): no login is spent retrying in place,
+            # so do it soon -- a healthy entry must not sit out 5 minutes before the fire
+            n = _inplace_streak[aid] = _inplace_streak.get(aid, 0) + 1
+            lo, hi = INPLACE_RETRY_S
+            _login_cooldown[aid] = _t.time() + min(lo * 2 ** (n - 1), hi)
+            return
         # NEVER hammer the login endpoint: auth rejections and rate-limit
         # tickets wait 30 min; anything else 5 min (the user's LoginBudget
         # gates the login itself on top of this)
