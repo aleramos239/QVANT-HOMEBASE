@@ -355,6 +355,84 @@ def test_readiness_timer_must_be_gated_before_the_open():
     assert ready
 
 
+def _readiness_day(tmp_path, hms, tst, *, armed=True, status=None, gated=False):
+    """compute_readiness on a Wednesday at `hms` ET with nq930's timer state `tst`
+    (and its day status) -> (nq930's checks, ready)."""
+    import datetime as dt
+    from zoneinfo import ZoneInfo
+    from homebase.engine import Engine
+    from homebase.server import compute_readiness
+    now = dt.datetime(2026, 9, 23, *hms, tzinfo=ZoneInfo("America/New_York"))
+    cfg = AppCfg(armed=armed, webhook_secret="s",
+                 accounts={"main": AccountCfg(keyring_key="k", account_name="MAIN")},
+                 book={"nq930": [{"account": "main", "qty": 3}]},
+                 strategies={"nq930": StrategyCfg(
+                     symbol="NQ", qty=3, offset_pts=10.0, sl_pts=5.0, tp_pts=15.0,
+                     enabled=True, gated=gated, self_fire=True)})
+    eng = Engine(cfg, {"main": FakeAdapter("main")},
+                 now_fn=lambda: now.astimezone(dt.timezone.utc), root=tmp_path)
+    if status:
+        eng._state("nq930", "main").status = status
+    r = compute_readiness(now, cfg, eng, {"main": {"connected": True}}, None,
+                          {"date": "2026-09-23", "strategies": {"nq930": tst}}, None)
+    return [(c["level"], c["detail"]) for c in r["checks"] if c["label"] == "nq930"], r["ready"]
+
+
+def test_readiness_after_the_window_says_a_missed_day_is_missed(tmp_path):
+    """Review 2026-09-28: after 09:45 a missed self-fire day read "gated day (expected)"."""
+    for gated in (True, False):
+        got, ready = _readiness_day(tmp_path, (10, 0), {"stage": "missed", "reason": "late_start",
+                                                         "late_s": 1800.0}, gated=gated)
+        assert got == [("bad", "missed today — the desk started after the accept window closed")]
+        assert not ready
+
+
+def test_readiness_says_a_late_fire_loud_whatever_it_placed(tmp_path):
+    late = {"stage": "fired", "anchor": 24619.0, "late": True, "late_s": 64.25, "reason": "late_start"}
+    got, ready = _readiness_day(tmp_path, (9, 40), late, status="placed")
+    assert got == [("warn", "fired late at 9:31:04 · the desk started after the open · placed")]
+    assert ready
+    got, _ = _readiness_day(tmp_path, (10, 0), {**late, "reason": "late_fire", "late_s": 2.1},
+                            status="done")
+    assert got == [("warn", "fired late at 9:30:02 · the fire ran 2.1 s late · done")]
+    got, _ = _readiness_day(tmp_path, (10, 0), late, armed=False)          # a dry run
+    assert got == [("warn", "fired late at 9:31:04 · the desk started after the open · nothing placed")]
+
+
+def test_readiness_says_a_wait_for_a_quote_and_an_off_anchor_fire(tmp_path):
+    got, ready = _readiness_day(tmp_path, (9, 33), {
+        "stage": "waiting", "gate": True, "wait_reason": "no_pushes", "wait_late_s": 0.0,
+        "wait_text": "no quote pushes at all for NQZ6"})
+    assert got == [("bad", "waiting for a quote since 9:30:00 — no quote pushes at all for NQZ6")]
+    assert not ready
+    got, ready = _readiness_day(tmp_path, (9, 33), {
+        "stage": "fired", "anchor": 46012.0, "late": False, "late_s": 0.2, "anchor_source": "current",
+        "reason": "waited_for_quote", "waited_s": 0.2}, status="placed")
+    assert got == [("warn", "fired at 9:30:00, off the pre-open anchor · it waited 0.2 s for a fresh "
+                            "quote · placed")] and ready
+    got, _ = _readiness_day(tmp_path, (10, 0), {"stage": "missed", "reason": "no_fresh_quote"})
+    assert got == [("bad", "missed today — no fresh quote came before the accept window closed")]
+
+
+def test_readiness_from_the_open_describes_the_day_the_timer_had(tmp_path):
+    got, ready = _readiness_day(tmp_path, (10, 0), {"stage": "skipped", "gate": False, "adx": 14.24},
+                                gated=True)
+    assert got == [("ok", "skipped today — CHOP ADX 14.2")] and ready
+    got, _ = _readiness_day(tmp_path, (10, 0), {"stage": "skipped", "killed": True})
+    assert got == [("ok", "skipped today — killed")]
+    got, ready = _readiness_day(tmp_path, (9, 31), {"stage": "error", "error": "no fresh trade"})
+    assert got == [("bad", "timer error: no fresh trade")] and not ready
+    on_time = {"stage": "fired", "anchor": 24500.0, "late": False, "late_s": 0.002}
+    assert _readiness_day(tmp_path, (10, 0), on_time, armed=False)[0] == \
+        [("info", "fired at the open — journaled only (disarmed)")]
+    assert _readiness_day(tmp_path, (10, 0), on_time)[0] == \
+        [("warn", "fired at the open, but nothing was placed — see the journal")]
+    assert _readiness_day(tmp_path, (10, 0), on_time, status="done")[0] == [("ok", "done")]
+    # before the open the 09:21-09:30 check speaks, once
+    got, _ = _readiness_day(tmp_path, (9, 25), {"stage": "error", "error": "md down"})
+    assert got == [("bad", "timer error: md down")]
+
+
 def test_readiness_disarmed_is_a_warning_not_a_red():
     by, ready = _readiness((9, 0), armed=False)
     assert by["Mode"]["level"] == "warn" and "DISARMED" in by["Mode"]["detail"]

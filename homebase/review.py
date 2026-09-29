@@ -18,9 +18,16 @@ from pathlib import Path
 from .config import load as load_cfg
 from .contracts import point_value, tick_size
 from .paths import state_dir
+from .timer import fire_clock, fire_said, late_why, miss_why, off_anchor
 
-BAD = {"place_failed", "timer_error", "clock_error", "both_filled_emergency",
+BAD = {"place_failed", "timer_error", "timer_missed", "clock_error", "both_filled_emergency",
        "hook_rejected", "alert_refused", "cancel_raced_fill"}
+
+
+def _loud(e: dict) -> bool:
+    """A timer fire past its grace, or off the pre-open anchor: a problem even
+    when it placed (timer.FIRE_LATE_MAX_S, timer.off_anchor)."""
+    return e.get("event") == "timer_fired" and off_anchor(e)
 
 
 def events(date: str) -> list[dict]:
@@ -53,7 +60,8 @@ def review(date: str) -> str:
 
     # --- did it fire, and how fast (chronological) ---
     add("\nSIGNAL")
-    sig = {"timer_gate", "timer_skipped", "timer_missed", "timer_fired", "dry_run"}
+    sig = {"timer_gate", "timer_skipped", "timer_waiting", "timer_missed", "timer_fired",
+           "dry_run"}
     seen_missed = False
     for e in sorted((x for x in evs if x.get("event") in sig),
                     key=lambda x: x.get("ts", 0)):
@@ -63,11 +71,23 @@ def review(date: str) -> str:
         elif ev == "timer_skipped":
             who = f" {e['account']}" if e.get("account") else ""
             add(f"  {t}  SKIPPED{who} — {e.get('reason')}")
+        elif ev == "timer_waiting":    # said once, when the wait starts
+            add(f"  {t}  WAITING for a fresh quote — {e.get('strategy')}: {e.get('text')}")
         elif ev == "timer_missed":
-            if not seen_missed:      # one line, however many restarts
+            if e.get("reason"):        # said once per strategy per day (timer._closed)
+                add(f"  {t}  MISSED {e.get('strategy')} — {miss_why(e.get('reason'))} "
+                    f"({e.get('window_end')})"
+                    + (f", last: {e.get('text')}" if e.get("text") else "") + "; nothing placed")
+            elif not seen_missed:      # older journals: one line, however many restarts
                 add(f"  {t}  MISSED the window (service restarted after "
                     f"{e.get('window_end')})")
                 seen_missed = True
+        elif ev == "timer_fired" and _loud(e):
+            what = "FIRED LATE" if e.get("late") is True else "FIRED OFF THE PRE-OPEN ANCHOR"
+            add(f"  {t}  {what} at {fire_clock(e.get('late_s'))}, {e.get('late_s')} s past "
+                f"09:30:00 — {late_why(e.get('reason'), e.get('late_s'), e.get('waited_s'), e.get('wait_reason'))} · "
+                f"anchor {e.get('anchor')}, the latest trade then (not the last before the "
+                f"open) · accepted={e.get('result')}" + (f" · {e.get('note')}" if e.get("note") else ""))
         elif ev == "timer_fired":
             add(f"  {t}  FIRED · anchor {e.get('anchor')} · accepted={e.get('result')}"
                 + (f" · {e.get('note')}" if e.get("note") else ""))
@@ -162,10 +182,18 @@ def review(date: str) -> str:
             add(f"  {e['et'][11:19]}  {e.get('account')}  flattened by the 15:55 clock")
 
     # --- trouble ---
-    bad = sorted((e for e in evs if e.get("event") in BAD),
+    bad = sorted((e for e in evs if e.get("event") in BAD or _loud(e)),
                  key=lambda x: x.get("ts", 0))
     add("\nPROBLEMS" if bad else "\nPROBLEMS — none")
+    missed = set()
     for e in bad:
+        if _loud(e):
+            add(f"  {e['et'][11:19]}  {e.get('strategy')} {fire_said(e)}")
+            continue
+        if e.get("event") == "timer_missed":
+            if e.get("strategy") in missed:    # older journals: one per restart
+                continue
+            missed.add(e.get("strategy"))
         rest = {k: (v[:60] + "…" if isinstance(v, str) and len(v) > 60 else v)
                 for k, v in e.items() if k not in ("ts", "et", "event")}
         add(f"  {e['et'][11:19]}  {e['event']}: {json.dumps(rest)[:140]}")

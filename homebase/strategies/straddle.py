@@ -1,7 +1,7 @@
 """Open straddles: OCO stop entries at anchor +/- offset, brackets re-priced to the fill.
 
 Mirrors the desk: the anchor is the last print BEFORE the fire time (the timer
-fires at 09:30:00.000 on the last trade it has seen); the legs are exactly
+fires at 09:30:00.000 on the last trade received before it); the legs are exactly
 engine._legs (buy stop at anchor + offset with SL trigger - sl / TP trigger + tp,
 sell stop mirrored); after the fill both brackets move to the fill, like
 engine._move_brackets; unfilled entries are cancelled at cancel_et; an open

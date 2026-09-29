@@ -41,7 +41,7 @@ from .marketdata import TradovateMD
 from .rules import RULES
 from .metrics import live_metrics, strategy_live_detail
 from .paths import state_dir
-from .timer import SelfTimer
+from .timer import FIRE_T, SelfTimer, fire_clock, fire_said, miss_why, off_anchor
 from . import desk_api
 from .trading import ChartDesk
 
@@ -162,6 +162,37 @@ def _rides_older_token(feed) -> bool:
         return False
 
 
+def _timer_day(tst: dict | None, status: str, s, armed: bool) -> tuple[str, str] | None:
+    """A self-fire straddle's day as its timer saw it, from the open on, as
+    (level, detail): a late or off-anchor fire (loud, whatever it placed), a
+    wait for a quote, a miss, a timer error, a skip, a fire that placed
+    nothing. None: the day status says it."""
+    tst = tst or {}
+    stage = tst.get("stage")
+    if stage == "fired" and off_anchor(tst):
+        return "warn", f"{fire_said(tst)} · " + (status if status != "idle" else "nothing placed")
+    if status != "idle":
+        return None
+    if stage == "waiting":
+        return "bad", (f"waiting for a quote since {fire_clock(tst.get('wait_late_s'))} — "
+                       f"{tst.get('wait_text')}")
+    if stage == "missed":
+        return "bad", "missed today — " + miss_why(tst.get("reason"))
+    if stage == "error":
+        return "bad", "timer error: " + str(tst.get("error"))[:80]
+    if stage == "skipped":
+        adx = tst.get("adx")
+        chop = "CHOP" + (f" ADX {adx:.1f}" if isinstance(adx, (int, float)) else "")
+        return "ok", "skipped today — " + ("killed" if tst.get("killed") else
+                                            chop if tst.get("gate") is False else "skipped")
+    if stage == "fired":
+        if armed and not getattr(s, "shadow", False):
+            return "warn", "fired at the open, but nothing was placed — see the journal"
+        return "info", "fired at the open — journaled only (" + (
+            "shadow" if getattr(s, "shadow", False) else "disarmed") + ")"
+    return None
+
+
 def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
                       acct_status: dict, feed_status: dict | None = None,
                       timer_status: dict | None = None,
@@ -224,10 +255,14 @@ def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
         sym = getattr(cfg.strategies.get(name), "symbol", "?")
         orders = tst.get("skipped_orders") or {}
         unreadable = tst.get("skipped_unreadable") or {}
+        unsynced = tst.get("skipped_unsynced") or {}
         checked_at = tst.get("prestage_checked_at") or "09:28:30"   # the real check time
         for aid, net in (tst.get("skipped_accounts") or {}).items():
             a = cfg.accounts.get(aid)
-            if net:
+            if aid in unsynced:
+                detail = (f"{name} skipped today — its positions and orders were not synced "
+                          f"at {checked_at}: unknown, never taken as flat")
+            elif net:
                 detail = (f"{name} skipped today — holds {int(net):+d} {sym} "
                           f"(manual position at {checked_at})")
             elif aid in unreadable:
@@ -267,6 +302,7 @@ def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
         else:
             checks.append({"level": "bad", "label": "Price feed",
                            "detail": "down — " + ", ".join(bars) + " cannot see price"})
+    tstrats = (timer_status or {}).get("strategies") or {}
     for name, s in enabled.items():
         status = engine.day_status(name)
         h, m = s.accept_until_et.split(":")
@@ -275,7 +311,14 @@ def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
             if status != "idle":
                 checks.append({"level": "ok", "label": name, "detail": status})
             continue                     # a rule with no setup today is normal
-        if weekday and after_window and status == "idle":
+        # from the open, a self-fire straddle's own timer says what its day was
+        # (09:21-09:30 has its own check above)
+        told = (_timer_day(tstrats.get(name), status, s, cfg.armed)
+                if weekday and getattr(s, "self_fire", False) and now_et.time() >= FIRE_T
+                else None)
+        if told is not None:
+            checks.append({"level": told[0], "label": name, "detail": told[1]})
+        elif weekday and after_window and status == "idle":
             if s.gated:
                 checks.append({"level": "warn", "label": name,
                                "detail": "no signal today — gated day (expected) "
