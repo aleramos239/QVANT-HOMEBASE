@@ -318,6 +318,102 @@ def prior_sources(prev: dict) -> list[dict]:
              "pages": prev.get("pages"), "at_utc": prev.get("recorded_at_utc")}]
 
 
+# ------------------------------------------------------------------ what a file holds, by tick id
+# The broker's tick id is one gap-free counter per contract (module docstring),
+# so a file's broker ticks are fully described by RUNS of consecutive ids,
+# [id_lo, id_hi, ts_lo, ts_hi]: whatever lies between two runs is missing,
+# exactly (id_lo of the next - id_hi - 1 ticks, between ts_hi and ts_lo).
+def union_runs(a: list, b: list) -> list:
+    """Two run lists as one: overlapping or adjacent runs joined."""
+    out: list = []
+    for r in sorted([list(x) for x in a] + [list(x) for x in b]):
+        if out and r[0] <= out[-1][1] + 1:
+            last = out[-1]
+            if r[1] > last[1]:
+                last[1], last[3] = r[1], r[3]
+        else:
+            out.append(r)
+    return out
+
+
+def runs_of(pairs) -> list:
+    """[(id, ts), ...] in any order -> runs of consecutive ids."""
+    out: list = []
+    for i, t in sorted(pairs):
+        if out and i <= out[-1][1]:
+            continue                            # the same id again
+        if out and i == out[-1][1] + 1:
+            out[-1][1], out[-1][3] = i, t
+        else:
+            out.append([i, i, t, t])
+    return out
+
+
+def _complete_members(data: bytes) -> tuple[bytes, int]:
+    """The text of every whole gzip member in `data` and where the last one
+    ends: a member torn by a write in progress (the live recorder appends one a
+    second) is left for next time. Fed 4 KB at a time, so a day's ~57k members
+    decode in one linear pass."""
+    mv, n, pos, out = memoryview(data), len(data), 0, []
+    while pos < n:
+        d, parts, start = zlib.decompressobj(wbits=31), [], pos
+        while not d.eof and pos < n:
+            chunk = mv[pos:pos + 4096]
+            try:
+                parts.append(d.decompress(chunk))
+            except zlib.error:
+                return b"".join(out), start
+            pos += len(chunk)
+        if not d.eof:
+            return b"".join(out), start
+        pos -= len(d.unused_data)
+        out.extend(parts)
+    return b"".join(out), pos
+
+
+def _scan_text(text: bytes, header: list | None) -> tuple[list, list]:
+    """(header, [(id, ts)] of the broker rows) of CSV text; rows without the
+    header's width are skipped (a Massive row, with ts_ns, has no broker id)."""
+    rd = csv.reader(io.StringIO(text.decode("utf-8", "replace")))
+    if header is None:
+        header = next(rd, None) or []
+    ix = {c: i for i, c in enumerate(header)}
+    it, iid, ins, n = ix.get("ts_ms"), ix.get("id"), ix.get("ts_ns"), len(header)
+    pairs = []
+    if it is None or iid is None:
+        return header, pairs
+    for r in rd:
+        if len(r) != n or r == header or not r[iid] or (ins is not None and r[ins]):
+            continue
+        pairs.append((int(r[iid]), int(r[it])))
+    return header, pairs
+
+
+def file_runs(path: Path, cache: dict) -> dict:
+    """{"runs": [[id_lo, id_hi, ts_lo, ts_hi], ...]} of an archive or live
+    file, memoized in `cache` (JSON-able). A file that only grew since (a live
+    recording: one gzip member appended a second) is read from where the last
+    read ended; anything else is read whole again."""
+    try:
+        st = path.stat()
+    except OSError:
+        return {"runs": []}
+    key = str(path)
+    c = cache.get(key)
+    if c and c.get("ino") == st.st_ino and c.get("mtime_ns") == st.st_mtime_ns and c.get("size") == st.st_size:
+        return c
+    grow = bool(c and c.get("ino") == st.st_ino and c.get("offset", 0) <= st.st_size and c.get("header"))
+    offset = c["offset"] if grow else 0
+    with open(path, "rb") as f:
+        f.seek(offset)
+        text, used = _complete_members(f.read())
+    header, pairs = _scan_text(text, c["header"] if grow else None)
+    out = {"ino": st.st_ino, "size": st.st_size, "mtime_ns": st.st_mtime_ns, "offset": offset + used,
+           "header": header, "runs": union_runs(c["runs"] if grow else [], runs_of(pairs))}
+    cache[key] = out
+    return out
+
+
 # ------------------------------------------------------------------ coverage
 COVERAGE_VERSION = 1
 HOUR_MS = 3_600_000
@@ -331,26 +427,10 @@ NOT_MODELLED = (
     "file already holds is flagged 'filed_under_next_session'.")
 
 
-def verified_spans(sources: list[dict]) -> list[tuple[int, int]]:
-    """[lo, hi] ms stretches the broker's history served in full, merged, from
-    the merge log: a fetch paged back without a gap from where it started (its
-    segment's end, or where a cut-short fetch resumed) down to its earliest
-    tick -- or to its segment's start when it went past it ("reached")."""
-    spans = []
-    for s in sources:
-        if s.get("kind") != "history" or not s.get("to_utc"):
-            continue
-        hi = s.get("resumed_from_ms") or ms_of(s["to_utc"])
-        if s.get("stop") == "reached" and s.get("from_utc"):
-            lo = ms_of(s["from_utc"])
-        elif s.get("earliest_ms") is not None:
-            lo = s["earliest_ms"]
-        else:
-            continue
-        spans.append((lo, hi))
-    spans.sort()
+def merge_spans(spans) -> list[tuple[int, int]]:
+    """[lo, hi] stretches, sorted, overlapping or touching ones joined."""
     out: list[list[int]] = []
-    for lo, hi in spans:
+    for lo, hi in sorted(spans):
         if out and lo <= out[-1][1]:
             out[-1][1] = max(out[-1][1], hi)
         else:
@@ -358,8 +438,51 @@ def verified_spans(sources: list[dict]) -> list[tuple[int, int]]:
     return [(a, b) for a, b in out]
 
 
-def _covers(spans, a: int, b: int) -> bool:
+def uncovered(spans, a: int, b: int) -> list[tuple[int, int]]:
+    """The parts of [a, b] no span (merged, sorted) covers; a single instant
+    (a == b) is either covered or itself."""
+    if a == b:
+        return [] if covers(spans, a, a) else [(a, a)]
+    out, x = [], a
+    for lo, hi in spans:
+        if hi <= x or lo >= b:
+            continue
+        if lo > x:
+            out.append((x, lo))
+        x = max(x, hi)
+        if x >= b:
+            break
+    if x < b:
+        out.append((x, b))
+    return out
+
+
+def verified_spans(sources: list[dict]) -> list[tuple[int, int]]:
+    """[lo, hi] ms stretches the broker's history served in full, merged, from
+    the merge log: a fetch paged back without a gap from where it started down
+    to its earliest tick -- or to the start of the stretch it was asked for
+    when it went past it ("reached") or found nothing older ("exhausted": the
+    stretch lies inside the broker's window, so there is nothing older in it).
+    A fetch cut short vouches only for what it paged through."""
+    spans = []
+    for s in sources:
+        if s.get("kind") != "history" or not s.get("to_utc"):
+            continue
+        hi = s.get("resumed_from_ms") or ms_of(s["to_utc"])
+        if s.get("stop") in ("reached", "exhausted") and s.get("from_utc"):
+            lo = ms_of(s["from_utc"])
+        elif s.get("earliest_ms") is not None:
+            lo = s["earliest_ms"]
+        else:
+            continue
+        spans.append((lo, hi))
+    return merge_spans(spans)
+
+
+def covers(spans, a: int, b: int) -> bool:
+    """Is [a, b] inside one verified span?"""
     return any(lo <= a and b <= hi for lo, hi in spans)
+
 
 
 def coverage(rows: list[tuple], *, root: str, date: dt.date, start: dt.datetime, end: dt.datetime,
@@ -410,7 +533,7 @@ def coverage(rows: list[tuple], *, root: str, date: dt.date, start: dt.datetime,
         if 0 < i < len(b_ts):                   # broker ticks on both sides: their ids decide
             proven = b_id[i] == b_id[i - 1] + 1
         else:                                   # at an end of the file: a fetch that covered it
-            proven = _covers(spans, a, b)
+            proven = covers(spans, a, b)
         if proven:
             quiet += 1
             continue
@@ -427,8 +550,8 @@ def coverage(rows: list[tuple], *, root: str, date: dt.date, start: dt.datetime,
                 missing += gap                              # no Massive row stands in for them
     first = ts[0] if ts else None
     last = ts[-1] if ts else None
-    head_ok = first is not None and (first - start_ms < EDGE_MS or _covers(spans, start_ms, start_ms))
-    tail_ok = last is not None and (stop_ms - last < EDGE_MS or _covers(spans, end_ms, end_ms))
+    head_ok = first is not None and (first - start_ms < EDGE_MS or covers(spans, start_ms, start_ms))
+    tail_ok = last is not None and (stop_ms - last < EDGE_MS or covers(spans, end_ms, end_ms))
     et = start.tzinfo
 
     def hhmm(ms):

@@ -83,18 +83,20 @@ def test_the_report_lists_every_hole_by_root_session_and_hour(tmp_path, capsys):
     assert got["2026-09-28"]["status"] == "complete"
     assert got["2026-09-25"]["status"] == "partial"
     assert [(h["from_et"], h["to_et"], h["at"]) for h in got["2026-09-25"]["holes"]] == [("18:00", "20:00", "open")]
-    assert got["2026-09-24"] == {"session": "2026-09-24", "contract": "NQZ6", "status": "missing", "flags": []}
+    assert got["2026-09-24"] == {"session": "2026-09-24", "contract": "NQZ6", "status": "missing", "flags": [],
+                                 "needs_massive": True}
     assert got["2026-09-23"]["status"] == "live_only" and got["2026-09-23"]["holes"] == []
     assert got["2026-09-22"]["source"] == "massive"
     assert [(h["from_et"], h["to_et"], h["at"]) for h in got["2026-09-22"]["holes"]] == [("13:00", "15:00", "inside")]
     assert got["2026-09-07"]["flags"] == ["filed_under_next_session"]
     assert rep["summary"] == {"roots": 1, "sessions": 16, "complete": 11, "partial": 2, "live_only": 1,
-                              "missing": 2, "hole_hours": 4.0, "missing_ids": 0}
+                              "missing": 2, "hole_hours": 4.0, "missing_ids": 0, "needs_massive": 3}
+    assert got["2026-09-25"]["holes"][0]["needs_massive"] and got["2026-09-24"]["needs_massive"]
     assert json.loads(out.read_text())["summary"] == rep["summary"]
     assert "not_modelled" in rep and "Thanksgiving" in rep["not_modelled"]
     line = capsys.readouterr().out
     assert "coverage, last 16 sessions x 1 roots: 11 complete, 2 partial (4 hole-hours, 0 missing tick ids), " \
-           "1 live-only, 2 missing" in line
+           "1 live-only, 2 missing; 3 need Massive" in line
 
 
 def test_a_second_report_reads_only_the_files_that_changed(tmp_path, monkeypatch):
@@ -150,7 +152,7 @@ def test_the_cli_writes_the_report_after_the_night_run_even_when_it_fails(tmp_pa
     rep = json.loads((tmp_path / "state" / "tick_coverage.json").read_text())
     assert rep["summary"]["sessions"] == 4
     out = capsys.readouterr().out
-    assert "run failed: md socket refused" in out and "coverage, last 4 sessions x 1 roots" in out
+    assert "run failed: RuntimeError: md socket refused" in out and "coverage, last 4 sessions x 1 roots" in out
 
 
 def test_coverage_needs_no_market_data_and_rescan_waits_for_no_other_writer(tmp_path, monkeypatch, capsys):

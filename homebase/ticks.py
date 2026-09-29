@@ -1,21 +1,27 @@
-"""Daily tick archive: every trade (price, size, bid/ask at the trade) for
-each root's front month, one gzip CSV per session, filed under
+"""Tick archive: every trade (price, size, bid/ask at the trade) for each
+root's front month, one gzip CSV per session, filed under
 ~/futures_ticks/<ROOT>/<YYYY>/<session-date>_<contract>.csv.gz + a .json
 manifest.
 
-The broker's md feed serves tick history only ~1-2 days back, so this runs
-daily after the 17:00 ET session close and fetches the whole session by
-paging backwards from the close (about 4,096 ticks a page). A run is
-idempotent: sessions already on disk are skipped, so a run that was missed
-(laptop asleep) catches up on the next one, as long as the buffer still
-reaches. A session is recorded only once it is over.
+Two things feed it. The chart service records every tick as it happens
+(<date>_<contract>.live.csv.gz). This job -- run every hour, at load, and at
+17:20 / 05:30 (deploy/com.ramosquant.homebase-ticks.plist.template) -- fetches
+from the broker's tick history exactly what the archive file and the live
+recording lack, and merges all of it into the archive file
+(homebase.tickarchive: merge, never replace). What is missing is found by the
+broker's tick id, one gap-free counter per contract: the ticks between two
+runs of consecutive ids (a restart, a dead battery), an open or a close no
+fetch has vouched for yet, a recording that stopped, or the whole session
+when nothing was recorded (missing()). A run with nothing to do says nothing.
 
 The feed allows 180 chart requests per hour per login (learned 2026-09-22:
 a 116-page burst drew "Rate limit exceeded" penalties for the next hour).
-So pages are paced (~170/hour), a penalty reply is honored (wait p-time,
-resend with its p-ticket), the run stops at a hard deadline before the
-open, and it spends the LIVE login's md budget so the demo login that
-drives the 9:30 feed is never penalized.
+So pages are paced (<= 100/hour: the chart service shares the login). At
+night (outside 08:00-17:05 ET on weekdays) a run goes on until done or 08:00
+and waits out a penalty (p-time, then its p-ticket); by day a run spends at
+most DAY_PAGES pages, never runs 09:20-09:35 ET, and a penalty or a refused
+connection ends it until the next run. Only the LIVE login's md budget is
+spent -- never the demo (Apex) login the 9:30 feed rides.
 
 Session date D = 18:00 ET on D-1 -> 17:00 ET on D (Mon's starts Sunday).
 
@@ -35,11 +41,11 @@ So session D's first hours -- 18:00 ET on D-1 to 00:00 UTC on D, i.e.
 D+1: 20:00 ET (19:00) on D itself, three hours after the close. The rest of D
 stays until 00:00 UTC on D+2. The job used to page each session backwards
 from the close, one root after another, so it reached those first hours
-last, hours after they were gone. Now a session is cut at 00:00 UTC into
-segments, and segments are fetched earliest-expiry first (every root's first
-hours before any root's long tail), each paged backwards from its own end.
+last, hours after they were gone. Now every missing stretch is cut at 00:00
+UTC into pieces, fetched earliest-expiry first (every root's first hours
+before any root's long tail), each paged backwards from its own end.
 
-    python -m homebase.ticks                # every segment still to fetch, then the report
+    python -m homebase.ticks                # fetch and merge whatever is missing (hourly)
     python -m homebase.ticks --date 2026-09-22 --roots NQ,ES
     python -m homebase.ticks --coverage     # only homebase/.state/tick_coverage.json
     python -m homebase.ticks --rescan       # recent manifests' `complete` from their hours
@@ -63,6 +69,7 @@ from . import config as config_mod
 from . import symbols
 from . import tickarchive
 from .broker.tradovate_ws import TradovateWS
+from .charts import QUIET as CHARTS_QUIET
 from .marketdata import MD_DEMO, MD_LIVE
 from .paths import state_dir
 
@@ -70,11 +77,13 @@ ET = ZoneInfo("America/New_York")
 UTC = dt.timezone.utc
 HISTORY_UTC_DAYS = 2        # the feed serves ticks from 00:00 UTC of the previous UTC day (docstring)
 # priority order: if the 08:00 deadline cuts a night short, the important
-# ones are done first. The archive's 15 roots (the Massive backfill's too):
-# about 880 pages a weekday at PAGE_INTERVAL_S (NQ ~150, ES ~310, ZN ~160, CL ~58,
-# RTY ~37, GC ~36, NG ~28, YM ~18, 6E/6J/6B/MBT ~50 together, SI 13, HG 9, BTC 2),
-# ~8.8 h of the 14.7 h between 17:20 and the 08:00 deadline; the first hours,
-# fetched first, are ~26 pages (~16 min). A night cut short resumes the next one.
+# ones are done first. The archive's 15 roots (the Massive backfill's too).
+# Budget: with the live recording, a session costs its two edge pages plus a
+# page or so per gap -- ~30-100 pages a night for all 15. With nothing recorded
+# live, a weekday is ~880 pages (NQ ~150, ES ~310, ZN ~160, CL ~58, RTY ~37,
+# GC ~36, NG ~28, YM ~18, 6E/6J/6B/MBT ~50 together, SI 13, HG 9, BTC 2):
+# ~8.8 h at PAGE_INTERVAL_S of the 14.7 h between 17:20 and 08:00, the first
+# hours (~26 pages, ~16 min) first. What a night leaves, the next runs take.
 ROOTS = ("NQ", "ES", "YM", "RTY", "GC", "SI", "CL", "ZN", "NG", "HG", "6E", "6J", "6B", "BTC", "MBT")
 ARCHIVE = Path.home() / "futures_ticks"
 PAGE = 4096                 # the feed caps a tick request at about this
@@ -84,7 +93,7 @@ LOOKBACK_DAYS = 3           # sessions to check on every run
 LIVE_LOOKBACK_DAYS = 30     # live recordings merged into the archive this far back
 PAGE_INTERVAL_S = 36.0      # <= 100 requests/hour: the chart service shares this login's 180/hour (its refills <= 60/h + a start-up burst of one getChart per root)
 PENALTY_MAX = 6             # give up a session after this many penalties in a row
-DEADLINE_ET = dt.time(8, 0)  # never still fetching this close to the open
+DEADLINE_ET = dt.time(8, 0)  # a night run stops here; daytime runs are capped (DAY_PAGES)
 FIELDS = ("ts_ms", "price", "size", "bid", "ask", "bid_size", "ask_size", "id")
 
 
@@ -258,24 +267,32 @@ async def fetch_page(ws: TradovateWS, contract: str, before_ms: int,
 
 async def fetch_session(ws: TradovateWS, contract: str, start: dt.datetime,
                         end: dt.datetime, page_fn=None,
-                        expiry: dt.datetime | None = None) -> tuple[list[dict], dict]:
-    """Page backwards from `end` (a session's close, or a segment's end) until
+                        expiry: dt.datetime | None = None, *, max_pages: int | None = None,
+                        deadline: bool = True, halt=None,
+                        penalty_stop: bool = False) -> tuple[list[dict], dict]:
+    """Page backwards from `end` (a session's close, or a gap's end) until
     `start` (or the buffer runs dry). Returns (rows ascending, stats):
     stats["stop"] says why it stopped -- "reached" (a page went past `start`:
     everything in [start, end] is in), "exhausted" (the buffer ran dry first),
-    "deadline", "expired" (`expiry` passed mid-fetch: the broker no longer has
-    the rest) or "max_pages"."""
+    "deadline" (08:00 ET, when `deadline`), "halted" (`halt()` said so),
+    "expired" (`expiry` passed mid-fetch: the broker no longer has the rest)
+    or "max_pages". penalty_stop: a rate-limit reply raises Penalty at once
+    instead of being waited out (the daytime pass backs off to its next run)."""
     page_fn = page_fn or fetch_page
     start_ms, end_ms = int(start.timestamp() * 1000), int(end.timestamp() * 1000)
     before, seen, rows, pages, penalties = end_ms, set(), [], 0, 0
     last_req, stop, earliest = 0.0, "max_pages", None
-    while pages < MAX_PAGES:
+    cap = MAX_PAGES if max_pages is None else min(MAX_PAGES, max_pages)
+    while pages < cap:
         gap = PAGE_INTERVAL_S - (time.monotonic() - last_req)
         if pages and gap > 0:
             await sleep(gap)
-        if deadline_passed():                       # checked after the wait: it may cross 08:00
+        if deadline and deadline_passed():          # checked after the wait: it may cross 08:00
             log(f"{contract}: deadline {DEADLINE_ET} ET — stopping this session here")
             stop = "deadline"
+            break
+        if halt is not None and halt():
+            stop = "halted"
             break
         if expiry is not None and now_et() >= expiry:
             stop = "expired"                        # the broker no longer has the rest
@@ -294,6 +311,8 @@ async def fetch_session(ws: TradovateWS, contract: str, start: dt.datetime,
                 continue
             raise
         except Penalty as pen:
+            if penalty_stop:
+                raise
             penalties += 1
             if penalties > PENALTY_MAX:
                 raise RuntimeError(f"{contract}: {penalties} penalties in a row — {pen}")
@@ -461,128 +480,175 @@ class MDConn:
                 pass
 
 
-# ------------------------------------------------------------------ the run
+# ------------------------------------------------------------------ what is missing
+# Every run -- hourly, on load, and at 17:20 / 05:30 (deploy plist) -- looks at
+# what the archive file and the live recording of each recent session hold, as
+# runs of consecutive broker tick ids (tickarchive.file_runs), and fetches only
+# what lies outside them: the ticks between two runs (a restart, a dead
+# battery), an open or a close no history fetch has vouched for yet, a
+# recording that stopped, or the whole session when nothing was recorded.
+# A stretch the broker was already asked for in full is never asked again.
+STALE_MS = 15 * 60 * 1000       # a running session's recording this far behind the clock has stopped
+DAY_PAGES = 45                  # a daytime run's pages: the chart service keeps most of the login's 180/h
+QUIET = CHARTS_QUIET            # 09:20-09:35 ET, around the 9:30 fire: not one request (the charts' own)
+_EMPTY = {"runs": []}
+ASKED = "_asked"                # cache key: stretches the broker had nothing for, and no file holds
+
+
+def in_quiet(now: dt.datetime) -> bool:
+    t = now.astimezone(ET)
+    return t.weekday() < 5 and QUIET[0] <= t.time() < QUIET[1]
+
+
+def _ms(t: dt.datetime) -> int:
+    return int(t.timestamp() * 1000)
+
+
+def _utc(ms: int) -> dt.datetime:
+    return dt.datetime.fromtimestamp(ms / 1000, UTC)
+
+
 def candidate_dates(now: dt.datetime, days: int = LOOKBACK_DAYS) -> list[dt.date]:
-    """Session dates a run looks at, oldest first: the last `days` days and
-    today -- today's first hours are over, and fetchable, long before its close."""
+    """Session dates a run looks at, oldest first: the last `days` days, today
+    and tomorrow -- a session is under way from 18:00 the evening before, and
+    its hours are fetchable as soon as they are over."""
     today = now.astimezone(ET).date()
-    return [today - dt.timedelta(days=i) for i in range(days, -1, -1)]
+    return [today - dt.timedelta(days=i) for i in range(days, -2, -1)]
 
 
-def segment_state(prev: dict, s: dt.datetime, e: dt.datetime) -> tuple[bool, int | None]:
-    """(done, resume_ms) of segment [s, e] by the archive file's manifest.
-    Done once a fetch of it reached its start or ran the broker dry. A fetch
-    cut short (the 08:00 deadline, the page cap) paged back from the end
-    without a gap, so the next one resumes from the earliest tick it got. A
-    nightly file from before fetches were logged ("legacy") paged back from
-    the close until the broker ran dry: done from its first tick on."""
-    fr, to = s.astimezone(UTC).isoformat(), e.astimezone(UTC).isoformat()
-    s_ms, e_ms = int(s.timestamp() * 1000), int(e.timestamp() * 1000)
-    resume = None
-    for src in tickarchive.prior_sources(prev):
-        if src.get("kind") != "history":
-            continue
-        if src.get("stop") == "legacy":
-            lo, hi = src.get("earliest_ms"), tickarchive.ms_of(src.get("to_utc"))
-            if lo is not None and hi is not None and lo - s_ms < tickarchive.EDGE_MS and hi >= e_ms:
-                return True, None
-            continue
-        if (src.get("from_utc"), src.get("to_utc")) != (fr, to):
-            continue
-        if src.get("stop") in ("reached", "exhausted"):
-            return True, None
-        if src.get("earliest_ms") is not None:
-            resume = src["earliest_ms"] if resume is None else min(resume, src["earliest_ms"])
-    return False, resume
+def missing(root: str, date: dt.date, base: Path, now: dt.datetime, cache: dict,
+            prev_last: int | None = None) -> tuple[list, dict]:
+    """([(from_ms, to_ms, why)], info): what session `date` lacks so far. The
+    open is proven by the previous session's last tick id + 1 (prev_last) or a
+    history fetch; the close (once the session is over) by a history fetch."""
+    start, end = session_bounds(date, root)
+    s_ms, e_ms, now_ms = _ms(start), _ms(end), _ms(now)
+    grace = SESSION_GRACE_MIN * 60_000
+    over = now_ms >= e_ms + grace
+    horizon = e_ms if over else min(e_ms, now_ms - grace)
+    contract = symbols.front_month(root, date)
+    path = archive_path(root, date, contract, base)
+    info = {"root": root, "date": date, "contract": contract, "path": path, "start": start,
+            "end": end, "over": over, "last_id": None}
+    if horizon <= s_ms:
+        return [], info
+    fa = tickarchive.file_runs(path, cache) if path.exists() else _EMPTY
+    fl = tickarchive.file_runs(tickarchive.live_path(path), cache)
+    runs = tickarchive.union_runs(fa["runs"], fl["runs"])
+    # Massive rows do not count: while the broker still has a stretch, its ticks (with bid/ask)
+    # are fetched and take over (tickarchive.merge); a stretch it no longer has is not a job
+    spans = tickarchive.merge_spans(
+        tickarchive.verified_spans(tickarchive.prior_sources(tickarchive.load_manifest(path)))
+        + [tuple(x) for x in cache.get(ASKED, {}).get(f"{root} {date}", [])])
+    gaps = []
+    if not runs:
+        gaps.append((s_ms, horizon, "nothing recorded"))
+    else:
+        info["last_id"] = runs[-1][1]
+        if prev_last is None or runs[0][0] != prev_last + 1:
+            gaps.append((s_ms, runs[0][2], "the open"))
+        for r0, r1 in zip(runs, runs[1:]):
+            gaps.append((r0[3], r1[2], f"{r1[0] - r0[1] - 1:,} ticks"))
+        if over:
+            gaps.append((runs[-1][3], e_ms, "the close"))
+        elif horizon - runs[-1][3] > STALE_MS:
+            gaps.append((runs[-1][3], horizon, "the recording stopped"))
+    return [(x, y, why) for a, b, why in gaps for x, y in tickarchive.uncovered(spans, a, b)], info
 
 
-def plan(roots, dates: list[dt.date], base: Path, now: dt.datetime) -> tuple[dict, list]:
-    """The run's work: ({(root, date): session}, [segment jobs]), the jobs in
-    fetch order -- earliest expiry first (docstring: every root's first hours
-    before any root's long tail), then a session's first segment before its
-    later ones, then root priority (ROOTS order), then date. Only segments
-    that are over, not fetched yet, and still in the broker's history."""
+def plan(roots, dates: list[dt.date], base: Path, now: dt.datetime,
+         cache: dict | None = None) -> tuple[dict, list]:
+    """The run's work: ({(root, date): session info}, [jobs]), each job a piece
+    of a missing stretch within one UTC day (it leaves the broker's history at
+    one moment), in fetch order -- earliest expiry first (the module docstring:
+    every root's first hours before any root's long tail), a session's open
+    before its later pieces, root priority (ROOTS order), date. A piece already
+    gone from the broker is not a job: it is said once, the hour it goes (the
+    coverage report marks it "needs Massive")."""
+    cache = {} if cache is None else cache
     rank = {r: i for i, r in enumerate(ROOTS)}
-    grace = dt.timedelta(minutes=SESSION_GRACE_MIN)
     sessions, jobs = {}, []
-    for date in dates:
-        for root in roots:
+    for root in roots:
+        prev = None
+        for date in sorted(dates):
             if not is_session_day(date, root):
                 continue
-            start, end = session_bounds(date, root)
-            contract = symbols.front_month(root, date)
-            path = archive_path(root, date, contract, base)
-            prev = tickarchive.load_manifest(path)
-            todo, gone = [], []
-            for s, e in utc_segments(start, end):
-                if now < e + grace:
-                    continue                            # not over yet
-                done, resume = segment_state(prev, s, e)
-                if done:
-                    continue
-                if now >= history_expiry(s):
-                    if now - history_expiry(s) < dt.timedelta(days=1):
-                        gone.append((s, e))             # said by the runs of the day it left
-                    continue
-                todo.append((s, e, resume))
-            for s, e in gone:
-                log(f"{root} {date} {contract}: {s.astimezone(ET):%m-%d %H:%M}-{e.astimezone(ET):%H:%M} ET "
-                    "left the broker's history before it was fetched — only the live recording "
-                    "or Massive can fill it")
-            if not todo:
-                continue
+            front = symbols.front_month(root, date)
+            gaps, info = missing(root, date, base, now, cache,
+                                 prev_last=prev[1] if prev and prev[0] == front else None)
+            prev = (front, info["last_id"]) if info["last_id"] is not None else None
             key = (root, date)
-            sessions[key] = {"root": root, "date": date, "contract": contract, "path": path,
-                             "start": start, "end": end}
-            for s, e, resume in todo:
-                jobs.append((history_expiry(s), s > start, rank.get(root, len(rank)), date, key,
-                             s, e, resume))
-    jobs.sort(key=lambda j: j[:4])
+            s_ms = _ms(info["start"])
+            for a, b, why in gaps:
+                for s, e in (utc_segments(_utc(a), _utc(b)) if b > a else [(_utc(a), _utc(b))]):
+                    exp = history_expiry(s)
+                    if now >= exp:
+                        if now - exp < dt.timedelta(minutes=70):
+                            log(f"{root} {date} {info['contract']} {_et_span(s, e)} ({why}): left the "
+                                "broker's history before it was fetched — needs Massive")
+                        continue
+                    sessions[key] = info
+                    jobs.append((exp, _ms(s) > s_ms, rank.get(root, len(rank)), date, key, s, e, why))
+    jobs.sort(key=lambda j: (j[0], j[1], j[2], j[3], j[5]))
     return sessions, jobs
 
 
 def _et_span(a: dt.datetime, b: dt.datetime) -> str:
-    return f"{a.astimezone(ET):%H:%M}-{b.astimezone(ET):%H:%M} ET"
+    return f"{a.astimezone(ET):%m-%d %H:%M:%S}-{b.astimezone(ET):%H:%M:%S} ET"
 
 
 async def record(roots=ROOTS, dates: list[dt.date] | None = None,
                  base: Path = ARCHIVE, ws: TradovateWS | None = None,
-                 now: dt.datetime | None = None) -> list[dict]:
-    """Fetch every segment the plan names, merging each into its session's
-    archive file as it lands; then merge the live recordings no fetch touched.
-    Returns the last manifest written per session."""
+                 now: dt.datetime | None = None, *, cache: dict | None = None,
+                 day: bool | None = None) -> list[dict]:
+    """Fetch what the plan names, merging each piece into its session's archive
+    file as it lands, then merge the live recordings no fetch touched. At night
+    (outside 08:00-17:05 ET on weekdays) it runs until done or 08:00 and waits
+    out a rate-limit reply; by day it spends at most DAY_PAGES pages, never
+    inside 09:20-09:35 ET, and a rate-limit reply or a refused connection ends
+    it until the next run. Says nothing when there is nothing to do. Returns
+    the last manifest written per session."""
     now = now or now_et()
+    day = deadline_passed(now) if day is None else day
+    cache = {} if cache is None else cache
     dates = dates if dates is not None else candidate_dates(now)
-    sessions, jobs = plan(roots, dates, base, now)
+    sessions, jobs = plan(roots, dates, base, now, cache)
     written: dict = {}
-    if not jobs:
-        log("nothing to fetch — every segment is in the archive or gone from the broker")
-    else:
+    if jobs:
         conn = ws if isinstance(ws, MDConn) else MDConn(ws)
         own = ws is None
+        budget = DAY_PAGES if day else None
         grace = dt.timedelta(minutes=SESSION_GRACE_MIN)
         try:
-            for expiry, _, _, date, key, s, e, resume in jobs:
+            for expiry, _, _, date, key, s, e, why in jobs:
                 st = sessions[key]
                 root, contract = st["root"], st["contract"]
-                if deadline_passed():
-                    log(f"deadline {DEADLINE_ET} ET — stopping the run here")
+                if in_quiet(now_et()) or (budget is not None and budget <= 0):
+                    break
+                if not day and deadline_passed():
+                    log(f"deadline {DEADLINE_ET} ET — the daytime runs take it from here")
                     break
                 if now_et() >= expiry:
-                    log(f"{root} {date} {contract} {_et_span(s, e)}: left the broker's history "
-                        "before its turn")
+                    log(f"{root} {date} {contract} {_et_span(s, e)}: left the broker's history before its turn")
                     continue
                 t0 = time.perf_counter()
-                until = e if resume is None else dt.datetime.fromtimestamp(resume / 1000, UTC)
                 try:
-                    rows, stats = await fetch_session(conn, contract, s, until, expiry=expiry)
-                except Exception as ex:  # noqa: BLE001 — one bad symbol must not stop the rest
+                    rows, stats = await fetch_session(
+                        conn, contract, s, e, expiry=expiry, max_pages=budget, deadline=not day,
+                        halt=lambda: in_quiet(now_et()), penalty_stop=day)
+                except Penalty as pen:
+                    log(f"rate-limited ({pen}) — backing off until the next run")
+                    break
+                except Exception as ex:  # noqa: BLE001 — one bad symbol must not stop the night
                     log(f"{root} {date} {contract} {_et_span(s, e)}: FAILED {ex}")
+                    if day or not str(ex).startswith(f"{contract}:"):
+                        break      # the connection (no token, a 429/502, no network): the next run retries
                     continue
+                if budget is not None:
+                    budget -= stats["pages"]
                 entry = {"kind": "history", "from_utc": s.astimezone(UTC).isoformat(),
-                         "to_utc": e.astimezone(UTC).isoformat(), "stop": stats["stop"],
-                         "pages": stats["pages"], "earliest_ms": stats["earliest_ms"],
-                         **({"resumed_from_ms": resume} if resume is not None else {})}
+                         "to_utc": e.astimezone(UTC).isoformat(), "why": why, "stop": stats["stop"],
+                         "pages": stats["pages"], "earliest_ms": stats["earliest_ms"]}
                 over = now_et() >= st["end"] + grace     # the live recording is final
                 n = len(rows)
                 fetched = [tickarchive.row_of(r) for r in rows]
@@ -592,7 +658,12 @@ async def record(roots=ROOTS, dates: list[dt.date] | None = None,
                 del fetched
                 if man is not None:
                     written[key] = man
-                log(f"{root} {date} {contract} {_et_span(s, e)}: {n:,} ticks, "
+                elif n == 0 and stats["stop"] in ("reached", "exhausted"):
+                    # nothing there and no file to log it in: remember it, never ask again
+                    lo = s if stats["stop"] == "reached" or stats["earliest_ms"] is None \
+                        else _utc(stats["earliest_ms"])
+                    cache.setdefault(ASKED, {}).setdefault(f"{root} {date}", []).append([_ms(lo), _ms(e)])
+                log(f"{root} {date} {contract} {_et_span(s, e)} ({why}): {n:,} ticks, "
                     f"{stats['pages']} pages, {time.perf_counter() - t0:.0f}s ({stats['stop']})"
                     + ("" if man is None else f" — file {man['ticks']:,} ticks"
                        + ("" if man["complete"] else ", PARTIAL")))
@@ -628,30 +699,63 @@ def promote_live(roots, base: Path, now: dt.datetime, days: int = LIVE_LOOKBACK_
     return out
 
 
+class Busy(RuntimeError):
+    """Another tick-archive run holds the lock."""
+
+
 @contextlib.contextmanager
 def archive_lock(path: Path):
-    """One writer of the archive at a time (the nightly run, --rescan, a
-    manual fill): an exclusive lock on `path`, never waited for."""
+    """One writer of the archive at a time (a run, --rescan, a manual fill):
+    an exclusive lock on `path`, never waited for."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "a") as f:
         try:
             fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
-            raise RuntimeError(f"another tick-archive run holds {path} — try again when it is done") from None
+            raise Busy(f"another tick-archive run holds {path} — try again when it is done") from None
         try:
             yield
         finally:
             fcntl.flock(f, fcntl.LOCK_UN)
 
 
+REPORT_EVERY = dt.timedelta(hours=12)    # a run with nothing to do still refreshes the report this often
+
+
 def coverage_report(roots, base: Path, sessions: int) -> None:
     """Write homebase/.state/tick_coverage.json and log its summary line; a
-    failure here is logged, never raised (the night's data is already written)."""
+    failure here is logged, never raised (the run's data is already written)."""
     from . import tickcoverage                    # it imports this module
     try:
         tickcoverage.write_report(roots, base, now_et(), state_dir() / "tick_coverage.json", sessions)
     except Exception as e:  # noqa: BLE001
         log(f"coverage report failed: {type(e).__name__}: {e}")
+
+
+def report_due(path: Path) -> bool:
+    try:
+        age = dt.datetime.now(UTC) - dt.datetime.fromtimestamp(path.stat().st_mtime, UTC)
+    except OSError:
+        return True
+    return age >= REPORT_EVERY
+
+
+def load_cache(path: Path) -> dict:
+    try:
+        return json.loads(path.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def prune_cache(cache: dict, now: dt.datetime, days: int = LIVE_LOOKBACK_DAYS + 5) -> None:
+    """Forget files and sessions older than the live lookback (the cache only
+    speeds up the runs; anything dropped is simply read again)."""
+    cut = (now.astimezone(ET).date() - dt.timedelta(days=days)).isoformat()
+    for k in [k for k in cache if k != ASKED and (Path(k).name[:10] < cut or not Path(k).exists())]:
+        del cache[k]
+    asked = cache.get(ASKED, {})
+    for k in [k for k in asked if k.split(" ")[-1] < cut]:
+        del asked[k]
 
 
 def fill_from_massive(a, roots, base: Path) -> int:
@@ -708,30 +812,50 @@ def main(argv=None) -> int:
         if a.holes == bool(a.dates):
             ap.error("--fill-from-massive needs exactly one of --holes or --dates")
         return fill_from_massive(a, roots, base)
-    try:
-        with archive_lock(state_dir() / "ticks.lock"):
-            if a.rescan:
-                from . import tickcoverage
+    if a.rescan:
+        from . import tickcoverage
+        try:
+            with archive_lock(state_dir() / "ticks.lock"):
                 n = tickcoverage.rescan(roots, base, now_et(), a.sessions)
                 log(f"rescan: {n} manifest(s) rewritten with their hour-by-hour coverage")
                 coverage_report(roots, base, a.sessions)
-                return 0
-            dates = [dt.date.fromisoformat(a.date)] if a.date else None
-            if deadline_passed():
-                log(f"past {DEADLINE_ET} ET on a trading day — the feed's budget is the desk's now; "
-                    "run again after 17:05")
-                return 0
+        except Busy as e:
+            log(str(e))
+            return 1
+        return 0
+    return run(roots, [dt.date.fromisoformat(a.date)] if a.date else None, base, a.sessions)
+
+
+def run(roots, dates, base: Path, sessions: int = 30) -> int:
+    """One run of the job (launchd: hourly, on load, 17:20 and 05:30): fetch
+    and merge whatever is missing (record), then the coverage report when the
+    run changed something or the last report is REPORT_EVERY old. Silent when
+    there is nothing to do; never inside 09:20-09:35 ET; a run already in
+    progress (the lock) is left to it."""
+    if in_quiet(now_et()):
+        return 0
+    cache_path = state_dir() / "tick_runs.json"
+    rc = 0
+    try:
+        with archive_lock(state_dir() / "ticks.lock"):
+            cache = load_cache(cache_path)
+            written: list = []
             try:
-                asyncio.run(record(roots, dates, base))
+                written = asyncio.run(record(roots, dates, base, cache=cache))
             except Exception as e:  # noqa: BLE001
-                log(f"run failed: {e}")
-                return 1
+                log(f"run failed: {type(e).__name__}: {e}")
+                rc = 1
             finally:
-                coverage_report(roots, base, a.sessions)
-    except RuntimeError as e:
-        log(str(e))
-        return 1
-    return 0
+                try:
+                    prune_cache(cache, now_et())
+                    tickarchive.atomic_write(cache_path, json.dumps(cache).encode())
+                except OSError as e:
+                    log(f"could not save {cache_path.name}: {e}")
+                if written or rc or report_due(state_dir() / "tick_coverage.json"):
+                    coverage_report(roots, base, sessions)
+    except Busy:
+        return 0                                  # the run in progress does the work
+    return rc
 
 
 if __name__ == "__main__":

@@ -91,8 +91,16 @@ def _filed_under_next(base: Path, root: str, date: dt.date) -> bool:
     return False
 
 
-def session_entry(base: Path, root: str, date: dt.date, cache: dict) -> dict:
-    """One session's line in the report."""
+def gone(t_ms: int, now: dt.datetime | None) -> bool:
+    """Has the broker's history already dropped the tick stamped t_ms?"""
+    return now is not None and now >= T.history_expiry(dt.datetime.fromtimestamp(t_ms / 1000, A.UTC))
+
+
+def session_entry(base: Path, root: str, date: dt.date, cache: dict,
+                  now: dt.datetime | None = None) -> dict:
+    """One session's line in the report. With `now`, every hole -- and a
+    missing session -- says whether the broker's history still has it
+    ("needs_massive": only Massive can fill it now)."""
     archive, live = front_files(base, root, date)
     entry = {"session": date.isoformat(), "contract": symbols.front_month(root, date)}
     best = None
@@ -112,11 +120,17 @@ def session_entry(base: Path, root: str, date: dt.date, cache: dict) -> dict:
         cov = _file_coverage(p, {}, root, date, cache, base)
         entry.update(status="live_only", file=str(p.relative_to(base)))
     else:
-        entry.update(status="missing", flags=["filed_under_next_session"]
-                     if _filed_under_next(base, root, date) else [])
+        holiday = _filed_under_next(base, root, date)
+        entry.update(status="missing", flags=["filed_under_next_session"] if holiday else [])
+        if now is not None:                       # an exchange holiday has nothing anywhere to fill
+            entry["needs_massive"] = not holiday and gone(
+                int(T.session_bounds(date, root)[0].timestamp() * 1000), now)
         return entry
     entry.update({k: cov[k] for k in ("holes", "hole_hours", "missing_ids", "head_ok", "tail_ok",
                                       "early_close_et")})
+    if now is not None:
+        entry["holes"] = [{**h, "needs_massive": gone(A.ms_of(h["start_utc"]), now)} for h in entry["holes"]]
+        entry["needs_massive"] = any(h["needs_massive"] for h in entry["holes"])
     others = [q.name for q in archive + live if q != p]
     if others:
         entry["other_files"] = others
@@ -131,13 +145,14 @@ def report_sessions(root: str, now: dt.datetime, n: int = REPORT_SESSIONS) -> li
 def build_report(roots, base: Path, now: dt.datetime, n: int = REPORT_SESSIONS,
                  cache: dict | None = None) -> dict:
     cache = {} if cache is None else cache
-    out = {r: [session_entry(base, r, d, cache) for d in report_sessions(r, now, n)] for r in roots}
+    out = {r: [session_entry(base, r, d, cache, now) for d in report_sessions(r, now, n)] for r in roots}
     es = [e for es in out.values() for e in es]
     summary = {"roots": len(out), "sessions": len(es),
                **{s: sum(1 for e in es if e["status"] == s)
                   for s in ("complete", "partial", "live_only", "missing")},
                "hole_hours": round(sum(e.get("hole_hours", 0) for e in es), 2),
-               "missing_ids": sum(e.get("missing_ids", 0) for e in es)}
+               "missing_ids": sum(e.get("missing_ids", 0) for e in es),
+               "needs_massive": sum(1 for e in es if e.get("needs_massive"))}
     return {"generated_at_utc": A.now_utc(), "archive": str(base), "sessions_per_root": n,
             "summary": summary, "not_modelled": A.NOT_MODELLED, "roots": out}
 
@@ -147,7 +162,7 @@ def summary_line(rep: dict, path: Path) -> str:
     return (f"coverage, last {rep['sessions_per_root']} sessions x {s['roots']} roots: "
             f"{s['complete']} complete, {s['partial']} partial ({s['hole_hours']:g} hole-hours, "
             f"{s['missing_ids']:,} missing tick ids), {s['live_only']} live-only, "
-            f"{s['missing']} missing -> {path}")
+            f"{s['missing']} missing; {s['needs_massive']} need Massive -> {path}")
 
 
 def write_report(roots, base: Path, now: dt.datetime, path: Path, n: int = REPORT_SESSIONS) -> dict:

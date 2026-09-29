@@ -229,10 +229,6 @@ def scan_raw(path: Path, wanted: set) -> dict:
 
 
 # ------------------------------------------------------------------ what to fill
-def _gone(t_ms: int, now: dt.datetime) -> bool:
-    return now >= T.history_expiry(dt.datetime.fromtimestamp(t_ms / 1000, A.UTC))
-
-
 def targets(roots, base: Path, now: dt.datetime, *, dates=None, since: dt.date = SINCE,
             include_fetchable: bool = False) -> list[dict]:
     """What to fill: every (root, session) of `dates`, or with dates None every
@@ -250,7 +246,7 @@ def targets(roots, base: Path, now: dt.datetime, *, dates=None, since: dt.date =
         for d in sorted(days):
             start, end = T.session_bounds(d, root)
             s_ms, e_ms = int(start.timestamp() * 1000), int(end.timestamp() * 1000)
-            e = C.session_entry(base, root, d, {})
+            e = C.session_entry(base, root, d, {}, now)
             contract = symbols.front_month(root, d)
             path = T.archive_path(root, d, contract, base)
             if e["status"] == "missing":
@@ -264,7 +260,7 @@ def targets(roots, base: Path, now: dt.datetime, *, dates=None, since: dt.date =
                 if not e.get("tail_ok", True) and not any(h["at"] == "close" for h in holes):
                     spans.append((e_ms - A.EDGE_MS, e_ms, "ticks stop early"))
             if dates is None:
-                spans = [sp for sp in spans if include_fetchable or _gone(sp[0], now)]
+                spans = [sp for sp in spans if include_fetchable or C.gone(sp[0], now)]
                 if not spans:
                     continue
             if e.get("file"):                              # the archive file that holds it now

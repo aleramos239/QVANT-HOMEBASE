@@ -199,7 +199,7 @@ def test_a_legacy_manifest_becomes_the_first_entry_of_the_merge_log(tmp_path):
                                  "at_utc": "2026-09-26T10:12:12+00:00"}
     assert man["pages"] == 8 and man["ticks"] == 4
     assert A.verified_spans(man["sources"]) == [(S, int(END.timestamp() * 1000))]
-    assert T.segment_state(man, *T.utc_segments(START, END)[1]) == (True, None)
+    assert A.covers(A.verified_spans(man["sources"]), S + 60_000, int(END.timestamp() * 1000))
 
 
 # ------------------------------------------------------------------ hour-by-hour coverage (item C)
