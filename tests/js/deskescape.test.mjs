@@ -107,3 +107,32 @@ test('the Accounts dialog builds each row with replacer functions: $-patterns in
     assert.deepEqual(calls[0].slice(1), [ID], 'the exact id, $-patterns and all');
   }
 });
+
+test('saved logins: the typed key and label are escaped, the key reaches pickLogin / delLogin exactly, the selection reads data-login', async () => {
+  const KEY = "tv:demo:bob'); window.__pwn2=1;//", LABEL = 'BOB<img src=x onerror="window.__pwn3=1">';
+  const box = { innerHTML: '' }, opts = [];
+  const ctx = vm.createContext({
+    WIZ: { env: 'demo', saved: KEY },
+    fetch: async () => ({ json: async () => ({ logins: [{ key: KEY, label: LABEL, env: 'demo', in_use: true }] }) }),
+    $: (sel) => (sel === '#savedLogins' ? box : { style: {}, classList: { toggle() {} }, focus() {} }),
+    document: { querySelectorAll: () => opts },
+  });
+  vm.runInContext(ESC + between('async function loadLogins()', 'async function delLogin(') +
+    '\nglobalThis.loadLogins = loadLogins; globalThis.loadLoginsPaint = loadLoginsPaint;', ctx);
+  await ctx.loadLogins();
+  const html = box.innerHTML;
+  assert.doesNotMatch(html, /<img/);
+  assert.match(html, /BOB&lt;img src=x onerror=&quot;window\.__pwn3=1&quot;&gt;/);
+  const handlers = [...html.matchAll(/onclick="([^"]*)"/g)].map((m) => m[1]);
+  assert.equal(handlers.length, 2);
+  const pick = runHandler(handlers[0], ['pickLogin']);
+  assert.deepEqual(pick.calls, [['pickLogin', KEY]]);
+  const del = runHandler(handlers[1].replace('event.stopPropagation();', ''), ['delLogin']);
+  assert.deepEqual(del.calls, [['delLogin', KEY]]);
+  // the selection is read back from data-login, not parsed out of the handler
+  const el = { cls: new Set(), classList: { toggle(c, on) { on ? el.cls.add(c) : el.cls.delete(c); } },
+    getAttribute: (k) => (k === 'data-login' ? decode(/data-login="([^"]*)"/.exec(html)[1]) : null) };
+  opts.push(el);
+  ctx.loadLoginsPaint();
+  assert.ok(el.cls.has('sel'));
+});

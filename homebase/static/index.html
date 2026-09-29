@@ -2053,12 +2053,14 @@ async function loadLogins() {
   if (!d.logins.length) { box.innerHTML =
     `<p class="wnote" style="margin:0 0 10px">none yet — type a login below</p>`;
     pickLogin(null); return; }
+  // a saved login's key and label are text the user typed (second review): escaped, the key passed to
+  // the handlers as a JS string literal (jsArg), and read back for the selection from data-login
   box.innerHTML = d.logins.map(l => `
-    <div class="opt ${WIZ.saved === l.key ? "sel" : ""}" onclick="pickLogin('${l.key}')">
-      <span><span class="t">${l.label}</span><br>
-      <span class="sub">${l.env}${l.in_use ? " · connected now" : ""}</span></span>
+    <div class="opt ${WIZ.saved === l.key ? "sel" : ""}" data-login="${esc(l.key)}" onclick="pickLogin(${jsArg(l.key)})">
+      <span><span class="t">${esc(l.label)}</span><br>
+      <span class="sub">${esc(l.env)}${l.in_use ? " · connected now" : ""}</span></span>
       <span class="spacer"></span>
-      <button class="x" onclick="event.stopPropagation();delLogin('${l.key}')" title="Forget this login">&times;</button>
+      <button class="x" onclick="event.stopPropagation();delLogin(${jsArg(l.key)})" title="Forget this login">&times;</button>
       <span class="radio"></span>
     </div>`).join("");
   if (WIZ.saved === null && d.logins.length) pickLogin(d.logins[0].key);
@@ -2072,8 +2074,7 @@ function pickLogin(key) {
 }
 function loadLoginsPaint() {
   document.querySelectorAll("#savedLogins .opt").forEach(el => {
-    const k = el.getAttribute("onclick").match(/'([^']*)'/)[1];
-    el.classList.toggle("sel", WIZ.saved === k);
+    el.classList.toggle("sel", WIZ.saved === el.getAttribute("data-login"));
   });
 }
 async function delLogin(key) {
