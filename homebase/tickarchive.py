@@ -711,8 +711,10 @@ def merge_session(path: Path, *, root: str, contract: str, date: dt.date, start:
     prev = load_manifest(path)
     sources: list = []                  # (name, rows), on disk first: it wins a disagreement
     new_sources: list[dict] = []
-    if fetched_source is not None:
+    if isinstance(fetched_source, dict):             # one fetch's entry
         new_sources.append({**fetched_source, "ticks": len(fetched), "at_utc": now_utc()})
+    elif fetched_source:                              # a run's pieces of this session, merged at once
+        new_sources.extend({**x, "at_utc": now_utc()} for x in fetched_source)
     if path.exists():
         if not read_header(path):
             raise MergeRefused(f"{path.name} is on disk but unreadable -- left as it is")
@@ -736,6 +738,14 @@ def merge_session(path: Path, *, root: str, contract: str, date: dt.date, start:
     if only_if_added and not m.stats.get("massive_added") and not fetched \
             and not any(s.get("kind") == "live" for s in new_sources):
         return None
+    if path.exists() and len(m.rows) == m.stats["read"].get("archive", -1) and not m.stats["quotes_filled"] \
+            and not m.stats.get("massive_added") and not m.stats["massive_dropped_near_broker"]:
+        # nothing new arrived: the file stays as it is, only the manifest learns what was asked
+        fields = tuple(read_header(path))
+        man = build_manifest(root=root, contract=contract, date=date, start=start, end=end, m=m,
+                             fields=fields, path=path, prev=prev, new_sources=new_sources)
+        write_manifest(path, man)
+        return man
     if massive_source is not None:
         new_sources.append({**massive_source, "rows_added": m.stats.get("massive_added", 0),
                             "at_utc": now_utc()})

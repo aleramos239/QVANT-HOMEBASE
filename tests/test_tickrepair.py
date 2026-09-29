@@ -328,3 +328,31 @@ def test_one_empty_reply_is_asked_again_once_before_it_is_believed(tmp_path, mon
     one_run = len(broker.asked) // 2
     assert len(broker.asked) == 2 * one_run and one_run >= 1   # runs 1 and 2 asked, run 3 did not
     assert cache[T.ASKED] and not cache.get(T.EMPTY_ONCE)
+
+
+def test_a_sessions_pieces_are_merged_once_a_run(tmp_path, monkeypatch):
+    """Review 10: each fetched piece used to rewrite the whole session file (ES:
+    1.3M rows read, written and verified again per restart gap)."""
+    nw, ticks, broker, path = battery_day(tmp_path, monkeypatch, dt.datetime(2026, 9, 29, 21, 0, tzinfo=ET))
+    lp = path.with_name("2026-09-29_NQZ6.live.csv.gz")
+    lp.unlink()
+    _write_live(lp, [r for i, r in enumerate(ticks) if i not in (200, 300, 500, 700)])   # four restarts after 20:00 ET
+    merges = []
+    real = A.merge_session
+    monkeypatch.setattr(A, "merge_session", lambda *a, **k: (merges.append(1), real(*a, **k))[1])
+    out = run(T.record(roots=("NQ",), dates=[D], base=tmp_path, ws=object(), cache={}, day=False))
+    assert len(merges) == 1              # four gaps and the close, all leaving the broker together: one merge
+    assert out[0]["complete"] and _ids(path) == [r["id"] for r in ticks]
+
+
+def test_a_merge_that_brings_nothing_new_leaves_the_file_and_updates_the_manifest(tmp_path):
+    path = T.archive_path("NQ", D, "NQZ6", tmp_path)
+    rows = [A.row_of(r) for r in _minute_ticks(D)[:50]]
+    start, end = T.session_bounds(D)
+    A.merge_session(path, root="NQ", contract="NQZ6", date=D, start=start, end=end, fetched=rows,
+                    fetched_source={"kind": "history"})
+    before = (path.read_bytes(), path.stat().st_mtime_ns)
+    man = A.merge_session(path, root="NQ", contract="NQZ6", date=D, start=start, end=end, fetched=rows[:5],
+                          fetched_source={"kind": "history", "why": "the close", "stop": "reached"})
+    assert (path.read_bytes(), path.stat().st_mtime_ns) == before
+    assert A.load_manifest(path)["sources"][-1]["why"] == "the close" and man["ticks"] == 50

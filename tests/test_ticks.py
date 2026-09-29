@@ -459,8 +459,8 @@ def test_the_night_run_merges_the_live_recording_that_holds_the_lost_hours(tmp_p
     assert lp.read_bytes() == live_bytes
     m = out[0]
     assert m["complete"] and m["ticks"] == len(ticks)
-    assert [(x["kind"], x.get("why")) for x in m["sources"]] == [("history", "11 ticks"), ("live", None),
-                                                                ("history", "the close")]
+    assert [(x["kind"], x.get("why")) for x in m["sources"]] == [("history", "11 ticks"),
+                                                                ("history", "the close"), ("live", None)]
     assert len(broker.asked) == 2                            # one page each: the gap, the close
 
 

@@ -372,19 +372,21 @@ def refused_still(cache: dict | None, root: str, date: dt.date, path: Path) -> b
 
 
 def store(root: str, date: dt.date, contract: str, path: Path, start: dt.datetime,
-          end: dt.datetime, fetched: list[tuple] = (), entry: dict | None = None,
+          end: dt.datetime, fetched: list[tuple] = (), entry=None,
           include_live: bool = True, cache: dict | None = None) -> dict | None:
     """Merge fetched rows (tickarchive rows) into the session's archive file --
     with the live recording and whatever the file already holds
     (homebase.tickarchive: merge, never replace). `entry` logs the fetch in the
-    manifest. A refused or failed merge leaves every file as it was, is logged,
+    manifest (one entry, or a list of them). A refused or failed merge leaves every file as it was, is logged,
     and is remembered in `cache` with the files' stamps, so the next runs do
     not fetch the same ticks again for nothing; None then, or with nothing to
     write."""
     try:
+        entries = [entry] if isinstance(entry, dict) else list(entry or [])
         return tickarchive.merge_session(
             path, root=root, contract=contract, date=date, start=start, end=end,
-            fetched=fetched, fetched_source=entry, include_live=include_live)
+            fetched=fetched, fetched_source=[{k: v for k, v in x.items() if not k.startswith("_")}
+                                             for x in entries] or None, include_live=include_live)
     except Exception as e:  # noqa: BLE001 — a bad file must not stop the night; the original stays
         what = "MERGE REFUSED" if isinstance(e, tickarchive.MergeRefused) else "MERGE FAILED"
         log(f"{root} {date} {contract}: {what}, every file left as it was — {type(e).__name__}: {e} "
@@ -729,10 +731,39 @@ async def record(roots=ROOTS, dates: list[dt.date] | None = None,
         own = ws is None
         budget = DAY_PAGES if day else None
         grace = dt.timedelta(minutes=SESSION_GRACE_MIN)
+        pending: dict = {}          # (root, date) -> this run's fetched rows and fetch entries, not merged yet
+
+        def flush() -> None:
+            """Merge each session's pieces fetched so far -- one merge per session, not per piece.
+            Done before the run moves on to pieces that leave the broker later (what was fetched
+            because it was about to expire is on disk at once) and when the run ends, any way."""
+            for k in list(pending):
+                p, st = pending.pop(k), sessions[k]
+                over = now_et() >= st["end"] + grace       # the live recording is final
+                man = store(st["root"], st["date"], st["contract"], st["path"], st["start"], st["end"],
+                            p["rows"], p["entries"], include_live=over, cache=cache)
+                if man is not None:
+                    written[k] = man
+                    log(f"{st['root']} {st['date']} {st['contract']}: file {man['ticks']:,} ticks"
+                        + ("" if man["complete"] else ", PARTIAL"))
+                    continue
+                for ent in p["entries"]:
+                    vouch = ent["stop"] == "reached" or (ent["stop"] == "exhausted" and (
+                        ent["earliest_ms"] is not None or ent.get("confirmed")))
+                    if ent["_n"] == 0 and vouch:
+                        # nothing there and no file to log it in: remember it, never ask again
+                        lo = ent["earliest_ms"] if ent["stop"] == "exhausted" and ent["earliest_ms"] \
+                            else tickarchive.ms_of(ent["from_utc"])
+                        cache.setdefault(ASKED, {}).setdefault(f"{st['root']} {st['date']}", []).append(
+                            [lo, tickarchive.ms_of(ent["to_utc"])])
+        group = None
         try:
             for expiry, _, _, date, key, s, e, why in jobs:
                 st = sessions[key]
                 root, contract = st["root"], st["contract"]
+                if expiry != group:
+                    flush()
+                    group = expiry
                 if in_quiet(now_et()) or (budget is not None and budget <= 0):
                     break
                 if not day and deadline_passed():
@@ -761,34 +792,23 @@ async def record(roots=ROOTS, dates: list[dt.date] | None = None,
                     budget -= stats["pages"]
                 entry = {"kind": "history", "from_utc": s.astimezone(UTC).isoformat(),
                          "to_utc": e.astimezone(UTC).isoformat(), "why": why, "stop": stats["stop"],
-                         "pages": stats["pages"], "earliest_ms": stats["earliest_ms"]}
-                empty = stats["stop"] == "exhausted" and stats["earliest_ms"] is None
-                if empty:           # the broker answered nothing at all: believed the second time only
+                         "pages": stats["pages"], "earliest_ms": stats["earliest_ms"], "_n": len(rows)}
+                if stats["stop"] == "exhausted" and stats["earliest_ms"] is None:
+                    # the broker answered nothing at all: believed the second time only (a later run)
                     once = cache.setdefault(EMPTY_ONCE, {})
                     k = f"{root} {_ms(s)} {date}"
                     if once.pop(k, None) is not None:
                         entry["confirmed"] = True
                     else:
                         once[k] = tickarchive.now_utc()
-                over = now_et() >= st["end"] + grace     # the live recording is final
-                n = len(rows)
-                fetched = [tickarchive.row_of(r) for r in rows]
+                p = pending.setdefault(key, {"rows": [], "entries": []})
+                p["rows"].extend(tickarchive.row_of(r) for r in rows)
+                p["entries"].append(entry)
+                log(f"{root} {date} {contract} {_et_span(s, e)} ({why}): {len(rows):,} ticks, "
+                    f"{stats['pages']} pages, {time.perf_counter() - t0:.0f}s ({stats['stop']})")
                 del rows                                 # one copy in memory, not two (ES: 1.2M ticks)
-                man = store(root, date, contract, st["path"], st["start"], st["end"], fetched, entry,
-                            include_live=over, cache=cache)
-                del fetched
-                if man is not None:
-                    written[key] = man
-                elif n == 0 and stats["stop"] in ("reached", "exhausted") and (not empty or entry.get("confirmed")):
-                    # nothing there and no file to log it in: remember it, never ask again
-                    lo = s if stats["stop"] == "reached" or stats["earliest_ms"] is None \
-                        else _utc(stats["earliest_ms"])
-                    cache.setdefault(ASKED, {}).setdefault(f"{root} {date}", []).append([_ms(lo), _ms(e)])
-                log(f"{root} {date} {contract} {_et_span(s, e)} ({why}): {n:,} ticks, "
-                    f"{stats['pages']} pages, {time.perf_counter() - t0:.0f}s ({stats['stop']})"
-                    + ("" if man is None else f" — file {man['ticks']:,} ticks"
-                       + ("" if man["complete"] else ", PARTIAL")))
         finally:
+            flush()
             if own:
                 await conn.close()
     for man in promote_live(roots, base, now_et(), cache=cache):
