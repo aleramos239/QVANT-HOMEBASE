@@ -11,6 +11,26 @@ from homebase.server import create_app
 from tests.test_engine import FakeAdapter
 
 
+class SeededFakeAdapter(FakeAdapter):
+    """FakeAdapter + Task 2's cached order view (trade_view), seeded and flat by
+    default -- like a real adapter past its post-(re)connect read. /api/accounts/remove
+    (2026-09-29 review) reads exactly this: caches_seeded and trade_view()'s positions/
+    orders. Plain FakeAdapter deliberately has neither (base BrokerAdapter.trade_view()
+    is None = "no view", which other code, e.g. the 9:30 prestage check, reads as
+    "trivially connected" -- giving every FakeAdapter a view would change THAT
+    behaviour too, so this stays a server-tests-only subclass)."""
+
+    def __init__(self, account_id="fake-acct"):
+        super().__init__(account_id)
+        self.caches_seeded = True
+        self.working_orders: list[dict] = []
+
+    def trade_view(self):
+        positions = [{"symbol": "NQ", "net": self.net}] if self.net else []
+        return {"seeded": self.caches_seeded, "positions": positions,
+                "orders": list(self.working_orders)}
+
+
 @pytest.fixture()
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr("homebase.paths.state_dir", lambda: tmp_path)
@@ -25,7 +45,7 @@ def client(tmp_path, monkeypatch):
                  strategies={"nq930": StrategyCfg(symbol="NQ", qty=3,
                                                   offset_pts=10.0, sl_pts=5.0,
                                                   tp_pts=15.0, enabled=True)})
-    adapters = {"main": FakeAdapter("main")}
+    adapters = {"main": SeededFakeAdapter("main")}
     created = []                       # every adapter the app builds (probes too)
 
     def factory(aid, a):
@@ -179,6 +199,57 @@ def test_accounts_remove_unassigns_and_drops(client):
     assert "main" not in client.app.state.adapters
     assert client.post("/api/accounts/remove",
                        json={"account": "nope"}).status_code == 404
+
+
+def test_accounts_remove_refused_when_not_connected_or_not_seeded(client):
+    client.adapter._connected = False
+    r = client.post("/api/accounts/remove", json={"account": "main"})
+    assert r.status_code == 409 and "not connected" in r.json()["detail"]
+    client.adapter._connected = True
+    client.adapter.caches_seeded = False
+    r = client.post("/api/accounts/remove", json={"account": "main"})
+    assert r.status_code == 409 and "not connected" in r.json()["detail"]
+    assert "main" in client.app.state.cfg.accounts
+
+
+def test_accounts_remove_refused_with_an_open_position(client):
+    client.adapter.net = 1
+    r = client.post("/api/accounts/remove", json={"account": "main"})
+    assert r.status_code == 409 and "open position" in r.json()["detail"]
+    assert "main" in client.app.state.cfg.accounts
+
+
+def test_accounts_remove_refused_with_a_working_order(client):
+    client.adapter.working_orders = [{"order_id": "1", "symbol": "NQ"}]
+    r = client.post("/api/accounts/remove", json={"account": "main"})
+    assert r.status_code == 409 and "working order" in r.json()["detail"]
+    assert "main" in client.app.state.cfg.accounts
+
+
+def test_accounts_remove_refused_while_placing_placed_or_live_today(client):
+    engine = client.app.state.engine
+    for status in ("placing", "placed", "live"):
+        st = engine._state("nq930", "main")
+        st.status = status
+        r = client.post("/api/accounts/remove", json={"account": "main"})
+        assert r.status_code == 409 and status in r.json()["detail"]
+        assert "main" in client.app.state.cfg.accounts
+    st.status = "done"
+    assert client.post("/api/accounts/remove",
+                       json={"account": "main"}).json()["ok"] is True
+
+
+def test_accounts_remove_from_mcp_refused_in_the_930_window(client):
+    import datetime as dt
+    from zoneinfo import ZoneInfo
+    engine = client.app.state.engine
+    engine.now_et = lambda: dt.datetime(2026, 9, 23, 9, 15, tzinfo=ZoneInfo("America/New_York"))  # Wed
+    r = client.post("/api/accounts/remove", json={"account": "main", "source": "mcp"})
+    assert r.status_code == 409 and "09:10-09:35" in r.json()["detail"]
+    assert "main" in client.app.state.cfg.accounts
+    # the same request from the dashboard (no source: mcp) is not window-gated
+    assert client.post("/api/accounts/remove",
+                       json={"account": "main"}).json()["ok"] is True
 
 
 def test_manual_reconnect_endpoint(client):

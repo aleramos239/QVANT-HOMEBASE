@@ -225,6 +225,17 @@ def test_account_remove_surfaces_a_refusal(desk, charts):
         box(desk, charts).call("account_remove", {"account": "sim041"})
 
 
+def test_account_remove_description_matches_the_servers_actual_refusal_rules():
+    """2026-09-29 review: the server refuses unless connected+seeded, flat (no position, no working
+    order) and not placing/placed/live today -- the tool description must say so, not just "a
+    position or a working order"."""
+    from homebase.claude_mcp.desk_tools import SPECS
+    desc = next(s["description"] for s in SPECS if s["name"] == "account_remove")
+    for phrase in ("caches seeded", "no working order", "placing, placed or live",
+                  "09:10-09:35"):
+        assert phrase in desc, f"account_remove description missing {phrase!r}"
+
+
 @pytest.mark.parametrize("tool,args", [
     ("account_reconnect", {}), ("account_remove", {"account": "sim041"}),
     ("export_start", {"root": "NQ", "type": "candles", "start": "2026-01-01", "end": "2026-01-02",

@@ -1263,25 +1263,40 @@ def create_app(cfg: config_mod.AppCfg | None = None,
     @app.post("/api/accounts/remove")
     async def accounts_remove(request: Request):
         """Remove an account from the pool: unassign it from every strategy,
-        close its adapter, drop it. Refused while it holds an open position."""
+        close its adapter, drop it. Refused (409) unless the adapter is
+        connected with its caches seeded, its cached view shows no position
+        in any symbol and no working order, and today's day-states show it
+        neither placing, placed nor live. An MCP-sourced request is also
+        refused 09:10-09:35 ET on weekdays, server-side (never only the
+        tool's own client-side check). This is NOT the path the login-loop
+        fix's automatic gone-account removal takes (_gone_step -> _drop_account
+        directly) -- that keeps removing a truly gone account on its own terms."""
         body = await request.json()
         aid = str(body.get("account") or "")
         if aid not in cfg.accounts:
             raise HTTPException(404, f"unknown account {aid!r}")
+        from_mcp = str(body.get("source") or "") == "mcp"
+        if from_mcp and _in_gone_quiet(engine.now_et(), GONE_CHECK_QUIET):
+            raise HTTPException(409, "refused: not 09:10-09:35 ET on weekdays "
+                                "(the 9:30 window) — try again after 09:35")
         ad = adapters.get(aid)
-        if ad is not None and ad.connected:
-            try:
-                for s in cfg.strategies.values():
-                    if await ad.get_net_position(s.symbol):
-                        raise HTTPException(409, "account has an open position "
-                                            "— flatten first")
-            except HTTPException:
-                raise
-            except Exception as e:  # noqa: BLE001 — unreadable is NOT flat
-                raise HTTPException(409, f"can't read the position ({e}) — "
-                                    "try again once it's connected")
+        if ad is None or not ad.connected or not getattr(ad, "caches_seeded", False):
+            raise HTTPException(409, "account not connected (or its caches haven't "
+                                "seeded yet) — try again once it's connected")
+        view = ad.trade_view()
+        if view is None:
+            raise HTTPException(409, "can't read this adapter's cached view — "
+                                "try again once it's connected")
+        if view.get("positions"):
+            raise HTTPException(409, "account has an open position — flatten first")
+        if view.get("orders"):
+            raise HTTPException(409, "account has a working order — cancel it first")
+        for st in engine.day_states_for_account(aid):
+            if st.status in ("placing", "placed", "live"):
+                raise HTTPException(409, f"account is {st.status} in "
+                                    f"{st.strategy!r} today — wait for it to finish")
         await _drop_account(aid)
-        if str(body.get("source") or "") == "mcp":
+        if from_mcp:
             engine.journal("mcp_action", tool="account_remove", account=aid)
         return {"ok": True, "removed": aid}
 

@@ -108,8 +108,10 @@ SPECS = [
           "button. Refused 09:20-09:35 ET on weekdays.",
           {"account": {"type": "string", "description": "An account id (default: every account)."}}),
     _spec("account_remove", "Remove one account from the pool: unassigns it from every strategy, "
-          "closes its connection, drops it. Refused while it holds a position or a working order, "
-          "and 09:20-09:35 ET on weekdays.",
+          "closes its connection, drops it. Refused (409) unless the account is connected with its "
+          "caches seeded, its cached view shows no position in any symbol and no working order, and "
+          "it is not placing, placed or live in any strategy today -- and refused 09:10-09:35 ET on "
+          "weekdays (both here and, again, on the desk itself).",
           {"account": {"type": "string"}}, ["account"]),
     _spec("export_start", "Start a data export job on the charts service (candles, ticks, level 1 "
           "quotes or level 2 depth, to a CSV file) -- needs feat/data-export merged and the charts "
