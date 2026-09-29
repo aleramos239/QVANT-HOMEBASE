@@ -307,8 +307,9 @@ async def fetch_session(ws: TradovateWS, contract: str, start: dt.datetime,
             page = await page_fn(sock, contract, before)
             penalties = 0
         except (RuntimeError, ConnectionError, OSError) as e:
-            if isinstance(ws, MDConn) and "not connected" in str(e) and pages < MAX_PAGES:
-                await sleep(2)                      # rebuilt on the next loop
+            if isinstance(ws, MDConn) and "not connected" in str(e) and ws.dropped < DROPS_MAX:
+                ws.dropped += 1                     # rebuilt on the next loop, after a backoff
+                await sleep(5 * 2 ** (ws.dropped - 1))
                 continue
             raise
         except Penalty as pen:
@@ -470,6 +471,9 @@ async def connect_md(prefer_live: bool = True, strict: bool = False) -> Tradovat
     return ws
 
 
+DROPS_MAX = 3                   # a socket found dead mid-fetch is rebuilt this often a run (5, 10, 20 s apart)
+
+
 class Pacer:
     """At most one chart request per PAGE_INTERVAL_S, across every fetch that
     shares it (MDConn: the whole run -- a job's first page included). Timed by
@@ -548,6 +552,7 @@ class MDConn(Pacer):
         super().__init__()
         self.ws = ws
         self.reconnects = 0
+        self.dropped = 0            # sockets found dead mid-fetch this run (DROPS_MAX, then the run stops)
         self.budget = budget
 
     async def pace(self) -> None:

@@ -683,3 +683,30 @@ def test_the_night_job_never_falls_back_to_the_login_the_930_bot_rides(tmp_path,
         T.md_token(strict=True)
     (tmp_path / "live1.tokens.json").write_text(json.dumps({"md_access_token": "tok-live", "expiration_time": exp}))
     assert T.md_token(strict=True) == ("tok-live", "live")
+
+
+def test_a_socket_that_keeps_dying_is_rebuilt_three_times_a_run_then_given_up(monkeypatch):
+    """Review 8: 'websocket not connected' was retried every 2 s without end."""
+    nw = NoWait(monkeypatch, now=dt.datetime(2026, 9, 24, 21, 0, tzinfo=ET))
+
+    class Sock:
+        connected = True
+
+        async def close(self):
+            pass
+
+    async def fake_connect(**kw):
+        return Sock()
+    monkeypatch.setattr(T, "connect_md", fake_connect)
+    calls = []
+
+    async def dead(ws, contract, before_ms, n=T.PAGE, timeout_s=0, ticket=None):
+        calls.append(before_ms)
+        raise RuntimeError("websocket not connected")
+    start, end = T.session_bounds(dt.date(2026, 9, 24))
+    conn = T.MDConn(Sock())
+    import pytest
+    with pytest.raises(RuntimeError, match="not connected"):
+        run(T.fetch_session(conn, "NQZ6", start, end, page_fn=dead))
+    assert len(calls) == T.DROPS_MAX + 1 and conn.dropped == T.DROPS_MAX
+    assert [w for w in nw.waits if w in (5.0, 10.0, 20.0)] == [5.0, 10.0, 20.0]
