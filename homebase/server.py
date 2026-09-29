@@ -2,6 +2,7 @@
 
     GET  /                   dashboard
     GET  /api/status         everything the dashboard renders
+    GET  /api/journal        journal events for a day, filterable, newest first
     POST /api/arm            {"armed": true|false} — the master switch
     POST /api/kill           cancel + flatten EVERY account + disarm
     POST /api/test-alert     synthetic dry-run signal; REFUSED while armed
@@ -617,6 +618,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
 
     @app.get("/api/status")
     async def status():
+        import time as _t
         accounts = {}
         for aid, a in cfg.accounts.items():
             ad = adapters.get(aid)
@@ -627,8 +629,10 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             s = acct_status.get(aid, {})
             if s.get("error") and not m.get("error"):
                 m["error"] = s["error"]
+            cooldown_s = max(0.0, _login_cooldown.get(aid, 0) - _t.time())
             accounts[aid] = {"label": a.label or a.account_name or aid,
-                             "env": "live" if a.live else "demo", **m}
+                             "env": "live" if a.live else "demo",
+                             "cooldown_s": round(cooldown_s, 1) if cooldown_s else 0, **m}
         live = live_metrics(state_dir() / "journal.jsonl")
         journal = []
         jp = state_dir() / "journal.jsonl"
@@ -668,6 +672,32 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             },
             "journal": journal,
         }
+
+    @app.get("/api/journal")
+    async def journal_query(date: str | None = None, event: str | None = None,
+                            account: str | None = None, limit: int = 200):
+        """Journal events, newest first, for a day (default today ET) -- unlike /api/status's
+        fixed JOURNAL_TAIL preview, this one takes a date and filters, for a real read of what
+        happened (the MCP desk_journal tool; the dashboard doesn't call this)."""
+        limit = max(1, min(int(limit), 2000))
+        day = date or engine.now_et().date().isoformat()
+        jp = state_dir() / "journal.jsonl"
+        out = []
+        if jp.exists():
+            for line in jp.read_text().splitlines():
+                try:
+                    rec = json.loads(line)
+                except ValueError:
+                    continue
+                if str(rec.get("et", "")).split("T", 1)[0] != day:
+                    continue
+                if event and rec.get("event") != event:
+                    continue
+                if account and rec.get("account") != account:
+                    continue
+                out.append(rec)
+        out.reverse()
+        return {"date": day, "count": len(out), "events": out[:limit]}
 
     @app.post("/api/arm")
     async def arm(request: Request):
@@ -849,6 +879,9 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                 acct_status[aid] = {"connected": False, "error": str(e)}
                 results[aid] = {"ok": False, "error": str(e)[:200]}
         engine.journal("manual_reconnect", results=results)
+        if str(body.get("source") or "") == "mcp":
+            engine.journal("mcp_action", tool="account_reconnect", account=only or "all",
+                           results=results)
         return {"ok": all(r["ok"] for r in results.values()) if results else False,
                 "results": results}
 
@@ -883,6 +916,8 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             with contextlib.suppress(Exception):
                 await old.close()
         engine.journal("account_removed", account=aid)
+        if str(body.get("source") or "") == "mcp":
+            engine.journal("mcp_action", tool="account_remove", account=aid)
         return {"ok": True, "removed": aid}
 
     @app.get("/api/diag-permissions")
