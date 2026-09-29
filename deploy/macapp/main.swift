@@ -51,15 +51,12 @@ enum Tab: Int, CaseIterable {
     }
 }
 
-class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, NSToolbarDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate {
     var window: NSWindow!
     var webViews: [Tab: WKWebView] = [:]
     var currentTab: Tab = .desk
-    var tabSegmented: NSSegmentedControl?
 
     private let lastTabKey = "HomebaseLastTab"
-    private let toolbarID = NSToolbar.Identifier("HomebaseToolbar")
-    private let tabSwitcherID = NSToolbarItem.Identifier("HomebaseTabSwitcher")
 
     func applicationDidFinishLaunching(_ n: Notification) {
         buildMenu()   // without this, ⌘V/⌘C/⌘A do nothing on macOS
@@ -71,7 +68,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
         win.center()
         win.setFrameAutosaveName("HomebaseMain")
         window = win
-        setupToolbar()
 
         let saved = UserDefaults.standard.object(forKey: lastTabKey) as? Int
         let startTab = saved.flatMap { Tab(rawValue: $0) } ?? .desk
@@ -132,7 +128,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
         for (t, v) in webViews { v.isHidden = (t != tab) }
         currentTab = tab
         UserDefaults.standard.set(tab.rawValue, forKey: lastTabKey)
-        tabSegmented?.selectedSegment = tab.rawValue
         window.makeFirstResponder(target)
     }
 
@@ -220,37 +215,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
         webViews[currentTab]?.reloadFromOrigin()
     }
 
-    // ---- toolbar: a Desk/Charts/Backtest segmented switcher in the title bar ----
-    private func setupToolbar() {
-        let toolbar = NSToolbar(identifier: toolbarID)
-        toolbar.delegate = self
-        toolbar.displayMode = .iconAndLabel
-        window.toolbar = toolbar
-        window.toolbarStyle = .unified
-    }
-
-    func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier itemIdentifier: NSToolbarItem.Identifier,
-                 willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
-        guard itemIdentifier == tabSwitcherID else { return nil }
-        let seg = NSSegmentedControl(labels: Tab.allCases.map { $0.title }, trackingMode: .selectOne,
-                                     target: self, action: #selector(segmentChanged(_:)))
-        seg.segmentStyle = .texturedRounded
-        seg.selectedSegment = currentTab.rawValue
-        tabSegmented = seg
-        let item = NSToolbarItem(itemIdentifier: tabSwitcherID)
-        item.view = seg
-        item.label = "Tabs"
-        item.paletteLabel = "Desk / Charts / Backtest"
-        return item
-    }
-
-    func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] { [tabSwitcherID] }
-    func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] { [tabSwitcherID] }
-
-    @objc private func segmentChanged(_ sender: NSSegmentedControl) {
-        if let tab = Tab(rawValue: sender.selectedSegment) { showTab(tab) }
-    }
-
     @objc private func selectTabFromMenu(_ sender: NSMenuItem) {
         if let tab = Tab(rawValue: sender.tag) { showTab(tab) }
     }
@@ -284,7 +248,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
                      keyEquivalent: "a")
         editItem.submenu = edit
 
-        // Desk/Charts/Backtest, ⌘1/⌘2/⌘3 -- the same switch the toolbar segmented control drives
+        // Desk/Charts/Backtest, ⌘1/⌘2/⌘3 -- the app's only native tab switch; the pages carry their own in-page switcher (plain links this app intercepts)
         let viewItem = NSMenuItem()
         main.addItem(viewItem)
         let viewMenu = NSMenu(title: "View")
