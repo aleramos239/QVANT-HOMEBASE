@@ -368,6 +368,32 @@ def test_a_second_kill_disarms_at_once_even_while_the_first_is_still_flattening(
     assert cfg.armed is False
 
 
+def test_the_global_kill_never_flattens_alongside_a_per_strategy_kill(client):
+    """A chart's per-strategy Kill (engine.kill_strategy) and the desk's Kill both read the
+    net and market-sell: they must never flatten at the same time."""
+    import asyncio
+    engine, kill = client.app.state.engine, _kill_endpoint(client.app)
+    active, peak = 0, 0
+
+    async def busy(*_a, **_k):
+        nonlocal active, peak
+        active += 1
+        peak = max(peak, active)
+        await asyncio.sleep(0.05)
+        active -= 1
+        return {}
+
+    engine.flatten_today = busy
+    engine._kill_one = busy
+
+    async def scenario():
+        await asyncio.gather(engine.kill_strategy("nq930"), kill())
+        await asyncio.gather(kill(), engine.kill_strategy("nq930"))
+
+    asyncio.run(scenario())
+    assert peak == 1
+
+
 def _readiness(now_et_hhmm, *, armed=True, timer_stage=None, feed=None, power=None,
                shadow=False):
     import datetime as dt

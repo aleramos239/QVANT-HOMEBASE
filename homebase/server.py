@@ -701,7 +701,9 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         cfg.armed = False
         desk.disable(cause="kill")          # chart trading off too; never raises
         config_mod.save(cfg)
-        async with _kill_lock():
+        # ... and never alongside a per-strategy Kill from the chart (engine.kill_strategy):
+        # the broker work also holds every strategy's own kill lock
+        async with _kill_lock(), engine.all_kill_locks():
             # every strategy's own orders first, with the proven per-order calls;
             # then the account-wide calls sweep up anything else
             strategies = await engine.flatten_today()
