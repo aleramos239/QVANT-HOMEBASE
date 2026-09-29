@@ -292,3 +292,21 @@ def test_private_logins_after_a_refusal_respect_the_hourly_cap(desk, monkeypatch
         run(desk.app.state.broker_loop())
     assert all(ad.privates == 1 for ad in ads.values())
     assert logins["n"] == 0          # no "first login" exemption for a private entry
+
+
+@pytest.mark.parametrize("when, expires", [
+    (at(11, 0), at(11, 5)),          # ensure_valid (normal rebuild)
+    (at(9, 12), at(9, 40)),          # _renew_before_the_window
+    (at(9, 29), at(9, 30)),          # _renew_in_the_guard
+])
+def test_a_failed_renewal_in_a_rebuild_stamps_the_shared_auth(tmp_path, when, expires):
+    """N3: the reconnect paths stamp renew_failed_at too, so siblings hold off."""
+    a, b, auth, _ = _renew_pair(tmp_path, when, expires, renew_error="HTTP 500")
+
+    async def no_socket(*, close_old=True):
+        raise RuntimeError("stop before the socket")
+
+    a._open_socket = no_socket
+    with pytest.raises(Exception):
+        run(a.reconnect())
+    assert getattr(a._auth, "renew_failed_at", 0) == when.timestamp()

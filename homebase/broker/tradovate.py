@@ -323,8 +323,12 @@ class TradovateAdapter(BrokerAdapter):
             await self._renew_in_the_guard(now)      # bounded, renew only, never a login
         else:
             await self._renew_before_the_window(now)
-            await asyncio.to_thread(self._auth.ensure_valid, self._rebuild_buffer_s(now),
-                                    now.timestamp())
+            try:
+                await asyncio.to_thread(self._auth.ensure_valid, self._rebuild_buffer_s(now),
+                                        now.timestamp())
+            except Exception:
+                self._mark_renew_failed()
+                raise
         await self._open_socket(close_old=False)      # closed above, before the renewal
         self._schedule_seed()
         if self._consumer is None or self._consumer.done():
@@ -395,6 +399,7 @@ class TradovateAdapter(BrokerAdapter):
         try:
             await asyncio.wait_for(asyncio.to_thread(self._auth.renew), GUARD_RENEW_S)
         except Exception as e:  # noqa: BLE001 — incl. the timeout
+            self._mark_renew_failed()
             why = f"{type(e).__name__}: {e}"
             if 0 < self._auth.tokens.expires_at_unix <= self._now().timestamp():
                 raise RuntimeError(f"the token has expired and its renewal failed in the "
@@ -418,6 +423,7 @@ class TradovateAdapter(BrokerAdapter):
         try:
             await asyncio.wait_for(asyncio.to_thread(self._auth.renew), rebuild_renew_cap_s(now))
         except Exception as e:  # noqa: BLE001 — incl. the timeout
+            self._mark_renew_failed()
             # a renewal still running after the cap may yet roll the token: the socket then
             # rides the older one, and the keepalive judges it by that token (_ws_expires)
             _log(f"{self.account_id}: renewal before the 9:30 window failed "
@@ -1464,9 +1470,13 @@ class TradovateAdapter(BrokerAdapter):
         try:
             await asyncio.to_thread(self._auth.renew if extra else self._auth.refresh)
         except Exception:
-            with contextlib.suppress(Exception):
-                self._auth.renew_failed_at = self._now().timestamp()
+            self._mark_renew_failed()
             raise
+
+    def _mark_renew_failed(self) -> None:
+        """Stamp the (possibly shared) auth: siblings hold their renewals RENEW_FAIL_HOLD_S."""
+        with contextlib.suppress(Exception):
+            self._auth.renew_failed_at = self._now().timestamp()
 
     async def _keepalive_loop(self) -> None:
         try:
