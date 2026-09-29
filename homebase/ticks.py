@@ -20,8 +20,10 @@ So pages are paced (<= 100/hour: the chart service shares the login). At
 night (outside 08:00-17:05 ET on weekdays) a run goes on until done or 08:00
 and waits out a penalty (p-time, then its p-ticket); by day a run spends at
 most DAY_PAGES pages, never runs 09:20-09:35 ET, and a penalty or a refused
-connection ends it until the next run. Only the LIVE login's md budget is
-spent -- never the demo (Apex) login the 9:30 feed rides.
+connection ends it until the next run. The job's requests plus the chart
+service's (it publishes them, charts/md_usage.json) stay under SHARED_MD_CAP
+an hour. Only the LIVE login's md budget is spent -- never the demo (Apex)
+login the 9:30 feed rides.
 
 Session date D = 18:00 ET on D-1 -> 17:00 ET on D (Mon's starts Sunday).
 
@@ -468,6 +470,54 @@ class Pacer:
         self.last = now_et().timestamp()
 
 
+SHARED_MD_CAP = 150             # the live login's 180 chart requests/h, less a margin: the job's and
+                                # the chart service's together (it publishes its own: charts/md_usage.json)
+
+
+class BudgetSpent(RuntimeError):
+    """The live login's hour is spent (with the chart service's requests): a daytime run stops."""
+
+
+class Budget:
+    """The live login's chart requests in the last hour -- this job's (`own`,
+    epoch seconds, kept across runs in the runs cache) plus the chart
+    service's, as it publishes them. Before each request: under SHARED_MD_CAP
+    it goes; over it a daytime run stops (BudgetSpent), a night run waits for
+    the oldest request to age out."""
+
+    def __init__(self, own: list, charts_usage: Path | None = None, day: bool = False):
+        self.own, self.charts_usage, self.day = own, charts_usage, day
+
+    def _charts(self) -> list[float]:
+        if self.charts_usage is None:
+            return []
+        try:
+            return [float(t) for t in json.loads(self.charts_usage.read_text())["requests"].get("live", [])]
+        except (OSError, ValueError, KeyError, TypeError, AttributeError):
+            return []
+
+    def used(self) -> list[float]:
+        cut = now_et().timestamp() - 3600
+        self.own[:] = [t for t in self.own if t > cut]
+        return sorted(self.own + [t for t in self._charts() if t > cut])
+
+    async def room(self) -> None:
+        while True:
+            used = self.used()
+            if len(used) < SHARED_MD_CAP:
+                return
+            if self.day:
+                raise BudgetSpent(f"{len(used)} live-login chart requests in the last hour with the "
+                                  "chart service's")
+            wait = max(30.0, used[len(used) - SHARED_MD_CAP] + 3600 - now_et().timestamp())
+            log(f"the live login's hour is spent ({len(used)} requests with the chart service's) — "
+                f"waiting {wait:.0f}s")
+            await sleep(wait)
+
+    def sent(self) -> None:
+        self.own.append(now_et().timestamp())
+
+
 class MDConn(Pacer):
     """The md socket for a whole run. A run of several hours outlives the
     token it started with: the socket then closes and, without this, every
@@ -475,10 +525,21 @@ class MDConn(Pacer):
     GC, SI and all of that day's sessions lost). ensure() rebuilds the
     socket on the freshest token on disk (the desk renews it)."""
 
-    def __init__(self, ws: TradovateWS | None = None):
+    def __init__(self, ws: TradovateWS | None = None, budget: Budget | None = None):
         super().__init__()
         self.ws = ws
         self.reconnects = 0
+        self.budget = budget
+
+    async def pace(self) -> None:
+        await super().pace()
+        if self.budget is not None:
+            await self.budget.room()
+
+    def sent(self) -> None:
+        super().sent()
+        if self.budget is not None:
+            self.budget.sent()
 
     async def ensure(self) -> TradovateWS:
         if self.ws is None or not getattr(self.ws, "connected", True):
@@ -513,6 +574,7 @@ DAY_PAGES = 45                  # a daytime run's pages: the chart service keeps
 QUIET = CHARTS_QUIET            # 09:20-09:35 ET, around the 9:30 fire: not one request (the charts' own)
 _EMPTY = {"runs": []}
 ASKED = "_asked"                # cache key: stretches the broker had nothing for, and no file holds
+MD_USED = "_md"                 # cache key: this job's chart requests in the last hour (epoch s)
 
 
 def in_quiet(now: dt.datetime) -> bool:
@@ -622,7 +684,7 @@ def _et_span(a: dt.datetime, b: dt.datetime) -> str:
 async def record(roots=ROOTS, dates: list[dt.date] | None = None,
                  base: Path = ARCHIVE, ws: TradovateWS | None = None,
                  now: dt.datetime | None = None, *, cache: dict | None = None,
-                 day: bool | None = None) -> list[dict]:
+                 day: bool | None = None, charts_usage: Path | None = None) -> list[dict]:
     """Fetch what the plan names, merging each piece into its session's archive
     file as it lands, then merge the live recordings no fetch touched. At night
     (outside 08:00-17:05 ET on weekdays) it runs until done or 08:00 and waits
@@ -637,7 +699,8 @@ async def record(roots=ROOTS, dates: list[dt.date] | None = None,
     sessions, jobs = plan(roots, dates, base, now, cache)
     written: dict = {}
     if jobs:
-        conn = ws if isinstance(ws, MDConn) else MDConn(ws)
+        conn = ws if isinstance(ws, MDConn) else MDConn(ws, Budget(cache.setdefault(MD_USED, []),
+                                                                    charts_usage, day))
         own = ws is None
         budget = DAY_PAGES if day else None
         grace = dt.timedelta(minutes=SESSION_GRACE_MIN)
@@ -660,6 +723,9 @@ async def record(roots=ROOTS, dates: list[dt.date] | None = None,
                         halt=lambda: in_quiet(now_et()), penalty_stop=day)
                 except Penalty as pen:
                     log(f"rate-limited ({pen}) — backing off until the next run")
+                    break
+                except BudgetSpent as bs:
+                    log(f"{bs} — the next run goes on")
                     break
                 except Exception as ex:  # noqa: BLE001 — one bad symbol must not stop the night
                     log(f"{root} {date} {contract} {_et_span(s, e)}: FAILED {ex}")
@@ -773,7 +839,7 @@ def prune_cache(cache: dict, now: dt.datetime, days: int = LIVE_LOOKBACK_DAYS + 
     """Forget files and sessions older than the live lookback (the cache only
     speeds up the runs; anything dropped is simply read again)."""
     cut = (now.astimezone(ET).date() - dt.timedelta(days=days)).isoformat()
-    for k in [k for k in cache if k != ASKED and (Path(k).name[:10] < cut or not Path(k).exists())]:
+    for k in [k for k in cache if not k.startswith("_") and (Path(k).name[:10] < cut or not Path(k).exists())]:
         del cache[k]
     asked = cache.get(ASKED, {})
     for k in [k for k in asked if k.split(" ")[-1] < cut]:
@@ -863,7 +929,8 @@ def run(roots, dates, base: Path, sessions: int = 30) -> int:
             cache = load_cache(cache_path)
             written: list = []
             try:
-                written = asyncio.run(record(roots, dates, base, cache=cache))
+                written = asyncio.run(record(roots, dates, base, cache=cache,
+                                             charts_usage=state_dir() / "charts" / "md_usage.json"))
             except Exception as e:  # noqa: BLE001
                 log(f"run failed: {type(e).__name__}: {e}")
                 rc = 1

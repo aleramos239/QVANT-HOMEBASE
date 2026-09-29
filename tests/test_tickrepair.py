@@ -254,3 +254,32 @@ def test_every_request_of_a_run_is_paced_even_a_jobs_first(tmp_path, monkeypatch
     run(T.record(roots=("NQ", "ES", "YM"), dates=[D], base=tmp_path, ws=object(), day=False))
     assert len(stamps) >= 3
     assert all((b - a).total_seconds() >= T.PAGE_INTERVAL_S for a, b in zip(stamps, stamps[1:]))
+
+
+def test_the_job_leaves_the_live_login_what_the_chart_service_uses(tmp_path, monkeypatch, capsys):
+    """Review 5: the chart service publishes its hourly live-login requests; a
+    daytime run spends only what is left under the shared cap."""
+    nw, ticks, broker, path = battery_day(tmp_path, monkeypatch, dt.datetime(2026, 9, 29, 10, 10, tzinfo=ET),
+                                          page=2)
+    usage = tmp_path / "md_usage.json"
+    now_s = nw.now.timestamp()
+    usage.write_text(__import__("json").dumps({"requests": {
+        "live": [now_s - 20 * i for i in range(T.SHARED_MD_CAP - 10)], "demo": [now_s] * 500}}))
+    run(_record_with_conn(tmp_path, usage))
+    assert len(broker.asked) == 10 and "the next run goes on" in capsys.readouterr().out
+
+
+def _record_with_conn(base, usage, day=True):
+    cache = {}
+    conn = T.MDConn(object(), T.Budget(cache.setdefault(T.MD_USED, []), usage, day))
+    return T.record(roots=("NQ",), dates=[D], base=base, ws=conn, cache=cache, day=day)
+
+
+def test_a_night_run_waits_for_the_login_hour_to_free_up(tmp_path, monkeypatch, capsys):
+    nw, ticks, broker, path = battery_day(tmp_path, monkeypatch, dt.datetime(2026, 9, 29, 21, 0, tzinfo=ET))
+    usage = tmp_path / "md_usage.json"
+    now_s = nw.now.timestamp()
+    usage.write_text(__import__("json").dumps({"requests": {"live": [now_s - 3000 + i for i in range(150)]}}))
+    run(_record_with_conn(tmp_path, usage, day=False))
+    assert broker.asked and "the live login's hour is spent" in capsys.readouterr().out
+    assert nw.now.timestamp() >= now_s + 600                   # it waited until those aged out

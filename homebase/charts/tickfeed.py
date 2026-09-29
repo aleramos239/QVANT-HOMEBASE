@@ -41,6 +41,8 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import json
+import os
 import time
 from typing import Awaitable, Callable, Optional
 
@@ -52,7 +54,8 @@ from .session import ET
 MD_ENVS = ("live", "demo")
 BACKOFF_S = (5, 10, 20, 40, 80, 160, 300)
 HEALTHY_S = 600          # a connection that lived this long resets the backoff
-RETRY_REFUSED_S = 600    # a root the feed refused is asked again this often (and on every reconnect)
+RETRY_REFUSED_S = 600    # a root the feed refused is asked again after this, then 2x, 4x ... (and on every reconnect)
+RETRY_REFUSED_MAX = 4 * 3600   # ... but at least every 4 h: a refused root must not eat the NQ/ES refill budget
 # The desk renews its tokens early, weekdays 09:10-09:19:30 ET (broker/tradovate.py): a socket
 # still on the OLD md token dies at that token's expiry -- maybe inside 09:20-09:35, the open.
 # In that same window the socket is rebuilt on the freshest md token on disk, make-before-break
@@ -102,7 +105,7 @@ class TickFeed:
                  on_subscribed: Optional[Callable[[str, str, Optional[int]], Awaitable[None]]] = None,
                  connect=None, sleep=asyncio.sleep, now=time.time,
                  connect_env=connect_env, md_env: Optional[str] = None, fresh_token=None,
-                 on_gap: Optional[Callable[[str, str, int, int], None]] = None):
+                 on_gap: Optional[Callable[[str, str, int, int], None]] = None, usage_path=None):
         self.roots = [r.upper() for r in roots]
         self.on_ticks = on_ticks
         self.on_subscribed = on_subscribed
@@ -121,6 +124,11 @@ class TickFeed:
         self.last_ms: dict[str, int] = {}          # root -> newest tick timestamp delivered
         self.refused: dict[str, str] = {}          # root -> why the feed refused it
         self._requests: dict[str, list[float]] = {}   # per login: each has its own 180/h
+        # published for the tick archive job, which shares the live login's 180/h:
+        # {"requests": {env: [epoch s of each chart request in the last hour]}}
+        self.usage_path = usage_path
+        self._retry_at: dict[str, float] = {}      # refused root -> when it is asked again
+        self._retry_n: dict[str, int] = {}         # refused root -> refusals in a row
         self.reconnects = 0
         self.error: Optional[str] = None
         self._stop = False
@@ -140,6 +148,19 @@ class TickFeed:
     def count_request(self, env: Optional[str] = None) -> None:
         """One chart request, charged to `env`'s login (default: the active one)."""
         self._requests.setdefault(env or self.md_env, []).append(self._now())
+        self._publish_usage()
+
+    def _publish_usage(self) -> None:
+        if self.usage_path is None:
+            return
+        cut = self._now() - 3600
+        body = {"requests": {e: [t for t in ts if t > cut] for e, ts in self._requests.items()}}
+        try:
+            tmp = self.usage_path.with_name(self.usage_path.name + ".tmp")
+            tmp.write_text(json.dumps(body))
+            os.replace(tmp, self.usage_path)
+        except OSError:
+            pass                                   # the job then just counts itself: never break the feed
 
     def budget_used(self, env: Optional[str] = None) -> int:
         """Chart requests in the last hour on `env`'s login (default: the active one)."""
@@ -259,8 +280,13 @@ class TickFeed:
             contract = await self.subscribe(root)
         except Refused as e:
             self.refused[root] = str(e)
+            n = self._retry_n.get(root, 0)
+            self._retry_at[root] = self._now() + min(RETRY_REFUSED_S * 2 ** n, RETRY_REFUSED_MAX)
+            self._retry_n[root] = n + 1
             return
         self.refused.pop(root, None)
+        self._retry_at.pop(root, None)
+        self._retry_n.pop(root, None)
         self._refill_after(root, contract, since)
 
     def _refill_after(self, root: str, contract: str, since: Optional[int]) -> None:
@@ -268,6 +294,15 @@ class TickFeed:
             t = asyncio.create_task(self.on_subscribed(root, contract, since))
             self._tasks.add(t)
             t.add_done_callback(lambda t, root=root: self._on_subscribed_done(root, t))
+
+    def _refused_due(self) -> list[str]:
+        """Refused roots whose retry time has come (exponential per root). A root refused
+        on a switch's candidate socket gets its first retry time here."""
+        now = self._now()
+        for r in self.refused:
+            self._retry_at.setdefault(r, now + RETRY_REFUSED_S)
+            self._retry_n.setdefault(r, 1)
+        return [r for r in self.refused if now >= self._retry_at[r]]
 
     def _quiet(self) -> bool:
         """Inside the 09:20-09:35 ET window around the 9:30 fire."""
@@ -321,7 +356,6 @@ class TickFeed:
                         # nothing subscribed: the socket or the login is sick, not a symbol
                         refused_all = True
                         raise Refused("every symbol refused")
-                next_retry = self._now() + RETRY_REFUSED_S
                 while not self._stop and self.connected:
                     await self._sleep(1)
                     if self._pending_env is not None:
@@ -331,7 +365,6 @@ class TickFeed:
                         # reconnect, no backoff (re-review N2).
                         try:
                             await self._switch(self._pending_env)
-                            next_retry = self._now() + RETRY_REFUSED_S
                         except Exception:  # noqa: BLE001 — answered and recorded by _switch
                             pass
                         continue
@@ -340,13 +373,12 @@ class TickFeed:
                         # on the freshest md token on disk; a failure keeps this socket serving
                         try:
                             await self._switch(self.md_env, recycle=True)
-                            next_retry = self._now() + RETRY_REFUSED_S
                         except Exception:  # noqa: BLE001 — recorded in self.recycle
                             pass
                         continue
-                    if self.refused and self._now() >= next_retry and not self._quiet():
-                        next_retry = self._now() + RETRY_REFUSED_S
-                        for r in list(self.refused):
+                    due = self._refused_due() if self.refused else []
+                    if due and not self._quiet():
+                        for r in due:
                             if self._quiet():   # a round can straddle 09:20; re-check every root, not once
                                 break
                             await self._start(r)
@@ -369,6 +401,10 @@ class TickFeed:
             wait = BACKOFF_S[min(attempt, len(BACKOFF_S) - 1)]
             if refused_all:
                 wait = max(wait, RETRY_REFUSED_S)   # each such round costs one getChart per root
+                wait = self._extend_past_quiet(wait)
+            elif attempt >= 1:
+                # the first reconnect goes at once (the charts at the open); a reconnect that
+                # already failed waits out 09:20-09:35 rather than keep hitting md at the 9:30 fire
                 wait = self._extend_past_quiet(wait)
             await self._backoff(wait)
             attempt += 1

@@ -670,6 +670,8 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                 feed_kwargs["connect_env"] = md_connect
             if recorder is not None:     # the early rebuild's swap: a gap marker, no refill
                 feed_kwargs["on_gap"] = recorder.mark_gap_span
+            # the tick archive job shares the live login's 180/h: it reads this and subtracts it
+            feed_kwargs["usage_path"] = sd / "md_usage.json"
             feed = TickFeed(roots, on_live, on_subscribed=_refill, **feed_kwargs)
         else:
             feed = feed_factory(roots, on_live, on_subscribed=_refill)
