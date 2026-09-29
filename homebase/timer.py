@@ -75,7 +75,9 @@ LATE_WHY = {"late_start": "the desk started after the open",
 MISS_WHY = {"late_start": "the desk started after the accept window closed",
             "late_switch_on": "it was switched on after the accept window closed",
             "window_closed": "the accept window closed before it could fire",
-            "no_fresh_quote": "no fresh quote came before the accept window closed"}
+            "no_fresh_quote": "no fresh quote came before the accept window closed",
+            "accounts_not_ready": "its accounts were not connected and synced before the "
+                                  "accept window closed"}
 # a timer outcome in the journal -> the stage it leaves (after a restart: what stands)
 DECIDED = {"timer_fired": "fired", "timer_skipped": "skipped", "timer_error": "error",
            "timer_deferred": "done", "timer_missed": "missed"}
@@ -89,17 +91,20 @@ def fire_clock(late_s) -> str:
     return f"{s // 3600}:{s % 3600 // 60:02d}:{s % 60:02d}"
 
 
-def late_why(reason, late_s, waited_s=None) -> str:
+def late_why(reason, late_s, waited_s=None, wait_reason=None) -> str:
     """Why a fire was late or off the pre-open anchor, in plain words: "the
     fire ran 2.1 s late", "it waited 600.2 s for a fresh quote"."""
     waited = float(waited_s or 0)
-    if reason == "waited_for_quote":
-        return f"it waited {waited:.1f} s for a fresh quote"
+    what = ("its accounts to connect and sync"
+            if reason == "waited_for_accounts" or str(wait_reason).startswith("account")
+            else "a fresh quote")
+    if reason in ("waited_for_quote", "waited_for_accounts"):
+        return f"it waited {waited:.1f} s for {what}"
     if reason == "late_fire":
         why = f"the fire ran {float(late_s or 0) - waited:.1f} s late"
     else:
         why = LATE_WHY.get(reason, f"it fired {float(late_s or 0):.1f} s past the open")
-    return why + (f", then waited {waited:.1f} s for a fresh quote" if waited else "")
+    return why + (f", then waited {waited:.1f} s for {what}" if waited else "")
 
 
 def off_anchor(e: dict) -> bool:
@@ -113,7 +118,7 @@ def fire_said(e: dict) -> str:
     no fresh quote before the open"."""
     lead = (f"fired late at {fire_clock(e.get('late_s'))}" if e.get("late") is True
             else f"fired at {fire_clock(e.get('late_s'))}, off the pre-open anchor")
-    return f"{lead} · {late_why(e.get('reason'), e.get('late_s'), e.get('waited_s'))}"
+    return f"{lead} · {late_why(e.get('reason'), e.get('late_s'), e.get('waited_s'), e.get('wait_reason'))}"
 
 
 def miss_why(reason) -> str:
@@ -139,6 +144,56 @@ def _push_fields(prefix: str, p) -> dict:
             f"{prefix}_stamp": _et_ms(ts) if ts is not None else None,
             f"{prefix}_lag_ms": (round((seen - ts) * 1000)
                                  if seen is not None and ts is not None else None)}
+
+
+def _orders_in(view, sym):
+    """Working orders in the bot's symbol from an adapter's cached view
+    (trade_view()["orders"], the engine's substring rule: NQ also claims MNQZ6)
+    -> (order ids, problems | None). An unresolved contract never matches."""
+    mine, unresolved, bad = [], [], 0
+    for o in ((view or {}).get("orders") or []):
+        try:
+            if o.get("symbol") is None:
+                unresolved.append(str(o.get("order_id")))
+            elif sym in str(o["symbol"]).upper():
+                mine.append(str(o.get("order_id")))
+        except Exception:  # noqa: BLE001 — one bad cached order must not hide the rest
+            bad += 1
+    problems = []
+    if unresolved:
+        problems.append(f"working order(s) {', '.join(unresolved)}: contract unresolved")
+    if bad:
+        problems.append(f"{bad} malformed cached order(s) ignored")
+    return mine, ("; ".join(problems) if problems else None)
+
+
+def _positions_in(view, sym):
+    """The same substring rule as _orders_in, on the adapter's cached
+    positions (trade_view()["positions"]): a naked MNQ position, or a
+    different-expiry NQ position, is caught even when the pinned
+    contract's own broker-read net (below) is flat. NEVER summed
+    across contracts — a hedged MNQZ6 +1 / MNQH6 -1 book still holds
+    a position in the bot's symbol, so any single matching contract
+    with a non-zero net is enough; the reported net is that
+    contract's own value (the first non-zero match)."""
+    net, unresolved, bad = 0, [], 0
+    for p in ((view or {}).get("positions") or []):
+        try:
+            net_p = int(p.get("net") or 0)
+            if not net_p:
+                continue
+            if p.get("symbol") is None:
+                unresolved.append(str(p.get("contract_id")))
+            elif sym in str(p["symbol"]).upper() and not net:
+                net = net_p
+        except Exception:  # noqa: BLE001 — one bad cached position must not hide the rest
+            bad += 1
+    problems = []
+    if unresolved:
+        problems.append(f"position(s) {', '.join(unresolved)}: contract unresolved")
+    if bad:
+        problems.append(f"{bad} malformed cached position(s) ignored")
+    return net, ("; ".join(problems) if problems else None)
 
 
 class SelfTimer:
@@ -329,10 +384,16 @@ class SelfTimer:
             if got is None:
                 return self._wait(name, st, sub, now_ts, late, late_s, fire_at)
             waited = st["stage"] == "waiting"
+            if late or waited:              # a late start's accounts may still be logging in
+                unready = self._late_accounts(name, s)
+                if unready is not None:
+                    return self._wait(name, st, sub, now_ts, late, late_s, fire_at, unready)
             if source == "pre_open":
                 reason = None
             elif waited:                    # late before the wait: that; on time: the wait
-                reason = st.get("wait_why") or "waited_for_quote"
+                reason = st.get("wait_why") or (
+                    "waited_for_accounts" if str(st.get("wait_reason")).startswith("account")
+                    else "waited_for_quote")
             else:
                 reason = self._late_why(st, fire_at) if late else "no_pre_open_quote"
             info = {"late": late, "late_s": round(late_s, 3),
@@ -352,14 +413,16 @@ class SelfTimer:
         px, seen = self._md.last(sub, before=before) if self._md is not None else (None, 0.0)
         return (px, seen) if px is not None and now_ts - seen <= QUOTE_MAX_AGE_S else None
 
-    def _wait(self, name, st, sub, now_ts, late, late_s, fire_at) -> None:
+    def _wait(self, name, st, sub, now_ts, late, late_s, fire_at, unready=None) -> None:
         """No fresh trade to anchor on yet -- never final: the account holder
         would rather it fire. It tries again every tick, and fires on the
         first fresh trade (anchor_source current), until the accept window
         closes (_closed: missed, no_fresh_quote). One timer_waiting line when
         the wait starts, with why and the push count -- never one a tick; the
-        status says "waiting" and why, kept current as the cause changes."""
-        cause, text, told = self._no_anchor(sub, now_ts)
+        status says "waiting" and why, kept current as the cause changes.
+        `unready`: (cause, text, fields) when the anchor is there but a booked
+        account is not (_late_accounts)."""
+        cause, text, told = unready or self._no_anchor(sub, now_ts)
         if st["stage"] == "waiting":
             if cause != st.get("wait_reason"):
                 st.update(wait_reason=cause, wait_text=text)
@@ -374,6 +437,41 @@ class SelfTimer:
                                 **self._stamps(sub, None if late else fire_at.timestamp()))
         except Exception as e:  # noqa: BLE001 — a failed line never ends the wait
             print(f"homebase timer: journal timer_waiting for {name} failed: {e!r}", file=sys.stderr)
+
+    def _late_accounts(self, name, s):
+        """Before a late fire, or one after a wait: every booked account (not
+        already skipped) must be connected with its trade cache seeded -- a desk
+        that came up after the open may still be logging in or syncing -- else
+        (cause, text, fields) to wait on. Then the cached half of the prestage
+        (_prestage_skip) runs again on each: a manual order or position in the
+        symbol skips that account for the day, journaled once. No broker call.
+        The book is read now, so an account booked during a wait is checked too.
+        An adapter that keeps no cache (trade_view() None) is judged connected."""
+        sym, skipped = s.symbol.upper(), self.engine.skipped_today(name)
+        for a in assignments(self.cfg, name):
+            aid = a["account"]
+            if aid in skipped:
+                continue
+            ad = self.engine.adapters.get(aid)
+            if ad is None or not ad.connected:
+                return "account_down", f"{aid} is not connected", {"account": aid}
+            try:
+                view = ad.trade_view()
+            except Exception as e:  # noqa: BLE001 — unknown: wait, never guess
+                return ("account_unseeded", f"{aid}: its cached view failed ({str(e)[:80]})",
+                        {"account": aid})
+            if view is None:
+                continue
+            if view.get("seeded") is not True:
+                return ("account_unseeded", f"{aid}: its positions and orders are not synced yet",
+                        {"account": aid})
+            mine, net = _orders_in(view, sym)[0], _positions_in(view, sym)[0]
+            if net or mine:
+                self.engine.skip_today(name, aid)
+                self.engine.journal("timer_skipped", strategy=name,
+                                    reason="manual_position" if net else "manual_order",
+                                    account=aid, net=int(net or 0), orders=mine, late=True)
+        return None
 
     def _no_anchor(self, sub, now_ts) -> tuple[str, str, dict]:
         """Why there is no fresh trade to anchor on, told apart -> (cause, text,
@@ -454,7 +552,8 @@ class SelfTimer:
         fire_at = dt.datetime.combine(day, FIRE_T, tzinfo=ET)
         end_at = dt.datetime.combine(day, _hhmm(s.accept_until_et), tzinfo=ET)
         seen = st.get("seen_at")
-        reason = ("no_fresh_quote" if waited else
+        reason = (("accounts_not_ready" if str(st.get("wait_reason")).startswith("account")
+                   else "no_fresh_quote") if waited else
                   "late_start" if self._up_at is None or self._up_at > end_at else
                   "late_switch_on" if seen is not None and seen > _et_ms(end_at.timestamp()) else
                   "window_closed")
@@ -565,51 +664,6 @@ class SelfTimer:
             except Exception as e:  # noqa: BLE001
                 return None, "cached view: " + (str(e)[:120] or type(e).__name__)
 
-        def orders_in(view):
-            mine, unresolved, bad = [], [], 0
-            for o in ((view or {}).get("orders") or []):
-                try:
-                    if o.get("symbol") is None:
-                        unresolved.append(str(o.get("order_id")))
-                    elif sym in str(o["symbol"]).upper():
-                        mine.append(str(o.get("order_id")))
-                except Exception:  # noqa: BLE001 — one bad cached order must not hide the rest
-                    bad += 1
-            problems = []
-            if unresolved:
-                problems.append(f"working order(s) {', '.join(unresolved)}: contract unresolved")
-            if bad:
-                problems.append(f"{bad} malformed cached order(s) ignored")
-            return mine, ("; ".join(problems) if problems else None)
-
-        def positions_in(view):
-            """The same substring rule as orders_in, on the adapter's cached
-            positions (trade_view()["positions"]): a naked MNQ position, or a
-            different-expiry NQ position, is caught even when the pinned
-            contract's own broker-read net (below) is flat. NEVER summed
-            across contracts — a hedged MNQZ6 +1 / MNQH6 -1 book still holds
-            a position in the bot's symbol, so any single matching contract
-            with a non-zero net is enough; the reported net is that
-            contract's own value (the first non-zero match)."""
-            net, unresolved, bad = 0, [], 0
-            for p in ((view or {}).get("positions") or []):
-                try:
-                    net_p = int(p.get("net") or 0)
-                    if not net_p:
-                        continue
-                    if p.get("symbol") is None:
-                        unresolved.append(str(p.get("contract_id")))
-                    elif sym in str(p["symbol"]).upper() and not net:
-                        net = net_p
-                except Exception:  # noqa: BLE001 — one bad cached position must not hide the rest
-                    bad += 1
-            problems = []
-            if unresolved:
-                problems.append(f"position(s) {', '.join(unresolved)}: contract unresolved")
-            if bad:
-                problems.append(f"{bad} malformed cached position(s) ignored")
-            return net, ("; ".join(problems) if problems else None)
-
         views = {aid: cached_view(aid) for aid in accounts}
         orders, cached_nets, view_errors = {}, {}, {}
         for aid, (view, verr) in views.items():
@@ -619,11 +673,11 @@ class SelfTimer:
                 cached_nets[aid] = (0, None)
                 continue
             try:
-                orders[aid] = orders_in(view)
+                orders[aid] = _orders_in(view, sym)
             except Exception as e:  # noqa: BLE001 — a malformed cache must not crash the stage
                 orders[aid] = ([], "order view: " + (str(e)[:120] or type(e).__name__))
             try:
-                cached_nets[aid] = positions_in(view)
+                cached_nets[aid] = _positions_in(view, sym)
             except Exception as e:  # noqa: BLE001
                 cached_nets[aid] = (0, "position view: " + (str(e)[:120] or type(e).__name__))
 

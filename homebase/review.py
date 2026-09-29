@@ -85,7 +85,7 @@ def review(date: str) -> str:
         elif ev == "timer_fired" and _loud(e):
             what = "FIRED LATE" if e.get("late") is True else "FIRED OFF THE PRE-OPEN ANCHOR"
             add(f"  {t}  {what} at {fire_clock(e.get('late_s'))}, {e.get('late_s')} s past "
-                f"09:30:00 — {late_why(e.get('reason'), e.get('late_s'), e.get('waited_s'))} · "
+                f"09:30:00 — {late_why(e.get('reason'), e.get('late_s'), e.get('waited_s'), e.get('wait_reason'))} · "
                 f"anchor {e.get('anchor')}, the latest trade then (not the last before the "
                 f"open) · accepted={e.get('result')}" + (f" · {e.get('note')}" if e.get("note") else ""))
         elif ev == "timer_fired":

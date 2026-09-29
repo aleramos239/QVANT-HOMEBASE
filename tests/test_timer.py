@@ -1043,3 +1043,103 @@ def test_a_failed_waiting_line_never_ends_the_wait(tmp_path, monkeypatch):
     md.push("NQ", et(9, 30, 1), 24520.0)
     at(clock, 9, 30, 1, 200000); run(timer.tick())
     assert fired(tmp_path) == [("nq930", True, 1.2, "waited_for_quote", "current", 24520.0)]
+
+
+# --- review round 2: a late fire needs its accounts connected and synced, and never twice ---
+class ViewAdapter(FakeAdapter):
+    """A FakeAdapter with the real adapter's cached view (trade_view): what the prestage reads."""
+
+    def __init__(self, aid, orders=(), positions=(), seeded=True, connected=True):
+        super().__init__(aid)
+        self.view = {"orders": list(orders), "positions": list(positions), "seeded": seeded}
+        self._connected = connected
+
+    def trade_view(self):
+        return self.view
+
+
+def test_a_restart_while_the_fires_orders_are_in_flight_never_places_again(tmp_path):
+    """Round 2, R1: the legs reached the broker and the desk died before the acks. "placing"
+    is saved before the legs go out, so the restarted desk sees a day that acted."""
+    loop = asyncio.new_event_loop()
+    timer, engine, md, clock = mk(tmp_path, armed=True, md=TapeMD())
+    at(clock, 9, 21); loop.run_until_complete(timer.tick())
+    at(clock, 9, 29); loop.run_until_complete(timer.tick())
+    md.push("NQ", et(9, 29, 59, 900000), 24500.0)
+    ad = engine.adapters["main"]
+    hang = asyncio.Event()
+
+    async def sent_then_hang(req):
+        ad.brackets.append(req)
+        await hang.wait()
+
+    ad.place_bracket = sent_then_hang
+    at(clock, 9, 30)
+    with pytest.raises((asyncio.TimeoutError, TimeoutError)):
+        loop.run_until_complete(asyncio.wait_for(timer.tick(), 0.05))   # the crash
+    loop.close()
+    assert json.loads((tmp_path / "day-2026-09-14.json").read_text())["nq930@main"]["status"] == "placing"
+    timer2, engine2, md2, clock = mk(tmp_path, armed=True, md=TapeMD(snapshot={"NQ": 24512.0}))
+    at(clock, 9, 30, 3); run(timer2.tick())
+    at(clock, 9, 30, 3, 200000); run(timer2.tick())
+    assert timer2.status()["strategies"]["nq930"]["stage"] == "done"
+    assert engine2.adapters["main"].brackets == [] and len(ad.brackets) == 2
+
+
+def test_a_late_start_waits_for_its_account_to_sync_and_skips_a_manual_position(tmp_path):
+    """Round 2, R4: the desk came up at 09:31; its adapter logs in and syncs while the timer
+    waits. The prestage ran before any cached view existed -- the late fire runs its cached
+    half again: the manual NQ +2 skips the account, nothing is placed on top of it."""
+    timer, engine, md, clock = mk(tmp_path, armed=True, md=TapeMD(snapshot={"NQ": 24520.0}))
+    engine.adapters["main"] = ViewAdapter("main", seeded=False, connected=False)
+    at(clock, 9, 31); run(timer.tick())
+    st = timer.status()["strategies"]["nq930"]
+    assert (st["stage"], st["wait_reason"]) == ("waiting", "account_down")
+    engine.adapters["main"]._connected = True
+    at(clock, 9, 31, 0, 200000); run(timer.tick())
+    assert timer.status()["strategies"]["nq930"]["wait_reason"] == "account_unseeded"
+    real = engine.adapters["main"] = ViewAdapter(
+        "main", positions=[{"contract_id": 1, "symbol": "NQZ6", "net": 2}])
+    md.push("NQ", et(9, 31, 0, 350000), 24521.0)
+    at(clock, 9, 31, 0, 400000); run(timer.tick())
+    ev = events(tmp_path)
+    assert [(e["account"], e["reason"], e["net"]) for e in ev
+            if e["event"] == "timer_skipped"] == [("main", "manual_position", 2)]
+    assert real.brackets == [] and [w["reason"] for w in ev if w["event"] == "timer_waiting"] == \
+        ["account_down"]
+
+
+def test_a_late_start_whose_adapter_is_still_logging_in_waits_then_fires(tmp_path):
+    """Round 2, R5: it used to fire at once -- "account not connected", the day lost."""
+    timer, engine, md, clock = mk(tmp_path, armed=True, md=TapeMD(snapshot={"NQ": 24520.0}))
+    engine.adapters["main"]._connected = False
+    at(clock, 9, 31); run(timer.tick())
+    engine.adapters["main"]._connected = True
+    md.push("NQ", et(9, 31, 0, 900000), 24522.0)
+    at(clock, 9, 31, 1); run(timer.tick())
+    assert fired(tmp_path) == [("nq930", True, 61.0, "late_start", "current", 24522.0)]
+    assert engine.day_status("nq930") == "placed"
+    assert not any(e["event"] == "place_failed" for e in events(tmp_path))
+    e = next(e for e in events(tmp_path) if e["event"] == "timer_fired")
+    assert (e["waited_s"], e["wait_reason"]) == (1.0, "account_down")
+
+
+def test_an_account_booked_during_a_wait_is_checked_before_the_fire(tmp_path):
+    timer, engine, md, clock = _waiting(tmp_path)                # waits: no quote
+    engine.cfg.accounts["a2"] = AccountCfg(keyring_key="k", account_name="A2")
+    engine.cfg.book["nq930"].append({"account": "a2", "qty": 1})
+    a2 = engine.adapters["a2"] = ViewAdapter("a2", orders=[{"order_id": "9", "symbol": "NQZ6"}])
+    md.push("NQ", et(9, 30, 5), 24520.0)
+    at(clock, 9, 30, 5, 200000); run(timer.tick())
+    assert [(e["account"], e["reason"]) for e in events(tmp_path) if e["event"] == "timer_skipped"] == \
+        [("a2", "manual_order")]
+    assert a2.brackets == [] and len(engine.adapters["main"].brackets) == 2
+
+
+def test_the_window_closing_on_an_account_wait_says_so(tmp_path):
+    timer, engine, md, clock = mk(tmp_path, armed=True, md=TapeMD(snapshot={"NQ": 24520.0}))
+    engine.adapters["main"]._connected = False
+    at(clock, 9, 44); run(timer.tick())
+    at(clock, 9, 45, 1); run(timer.tick())
+    st = timer.status()["strategies"]["nq930"]
+    assert (st["stage"], st["reason"]) == ("missed", "accounts_not_ready")

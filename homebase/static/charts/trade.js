@@ -1022,7 +1022,8 @@ const LATE_WHY = { late_start: 'the desk started after the open', late_switch_on
 const MISS_WHY = { late_start: 'the desk started after the accept window closed',
   late_switch_on: 'it was switched on after the accept window closed',
   window_closed: 'the accept window closed before it could fire',
-  no_fresh_quote: 'no fresh quote came before the accept window closed' };
+  no_fresh_quote: 'no fresh quote came before the accept window closed',
+  accounts_not_ready: 'its accounts were not connected and synced before the accept window closed' };
 /* 09:30:00 + `lateS` as "9:31:04" (ET, to the second). */
 function fireClock(lateS) {
   const at = 9 * 3600 + 30 * 60 + Math.floor(Number(lateS) || 0), two = (n) => String(n).padStart(2, '0');
@@ -1034,10 +1035,12 @@ function fireClock(lateS) {
 function lateText(t) {
   if (t.stage !== 'fired' || !(t.late === true || t.anchor_source === 'current')) return '';
   const s = Number(t.late_s) || 0, w = Number(t.waited_s) || 0;
-  const why = t.reason === 'waited_for_quote' ? `it waited ${w.toFixed(1)} s for a fresh quote`
+  const what = t.reason === 'waited_for_accounts' || String(t.wait_reason).startsWith('account')
+    ? 'its accounts to connect and sync' : 'a fresh quote';
+  const why = ['waited_for_quote', 'waited_for_accounts'].includes(t.reason) ? `it waited ${w.toFixed(1)} s for ${what}`
     : (t.reason === 'late_fire' ? `the fire ran ${(s - w).toFixed(1)} s late`
       : (LATE_WHY[t.reason] || `it fired ${s.toFixed(1)} s past the open`))
-      + (w ? `, then waited ${w.toFixed(1)} s for a fresh quote` : '');
+      + (w ? `, then waited ${w.toFixed(1)} s for ${what}` : '');
   return `${t.late === true ? `Fired late at ${fireClock(s)}` : `Fired at ${fireClock(s)}, off the pre-open anchor`} · ${why}`;
 }
 /* The badge's state pill from the bot view: {state, text, tone, tip}. state is one of idle / armed / placing /

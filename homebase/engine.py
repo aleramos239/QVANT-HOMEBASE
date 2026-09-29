@@ -458,6 +458,7 @@ class Engine:
         # from here a second signal is refused, and an entry fill that beats
         # the acks is held instead of dropped (on_fill -> _replay_early)
         st.status = "placing"
+        self._save()     # durable before the legs go out: a restart mid-flight sees a day that acted
         buy, sell = self._legs(cfg, upper, lower, qty)
         rtt: dict = {}
 
