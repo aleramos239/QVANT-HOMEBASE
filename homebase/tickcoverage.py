@@ -61,16 +61,16 @@ def _file_coverage(path: Path, man: dict, root: str, date: dt.date, cache: dict,
     if hit and hit.get("bytes") == st.st_size and hit.get("mtime_ns") == st.st_mtime_ns \
             and hit.get("coverage", {}).get("version") == A.COVERAGE_VERSION:
         return hit["coverage"]
-    start, end = T.session_bounds(date)
+    start, end = T.session_bounds(date, root)
     cov = A.coverage(list(A.iter_rows(path)), root=root, date=date, start=start, end=end,
                      sources=A.prior_sources(man))
     cache[key] = {"bytes": st.st_size, "mtime_ns": st.st_mtime_ns, "coverage": cov}
     return cov
 
 
-def _next_session(date: dt.date) -> dt.date:
+def _next_session(root: str, date: dt.date) -> dt.date:
     d = date + dt.timedelta(days=1)
-    while not T.is_session_day(d):
+    while not T.is_session_day(d, root):
         d += dt.timedelta(days=1)
     return d
 
@@ -79,8 +79,8 @@ def _filed_under_next(base: Path, root: str, date: dt.date) -> bool:
     """A missing session whose trades the next session's file already holds
     (it starts before its own 18:00 open): an exchange holiday, the trades
     filed under the next trade date -- Massive does that (Labor Day 2026)."""
-    nxt = _next_session(date)
-    start, _ = T.session_bounds(nxt)
+    nxt = _next_session(root, date)
+    start, _ = T.session_bounds(nxt, root)
     for p in front_files(base, root, nxt)[0]:
         first = A.ms_of(A.load_manifest(p).get("first_tick_utc"))
         if first is not None and first < start.timestamp() * 1000 - A.HOUR_MS:
@@ -122,7 +122,7 @@ def session_entry(base: Path, root: str, date: dt.date, cache: dict) -> dict:
 
 def report_sessions(root: str, now: dt.datetime, n: int = REPORT_SESSIONS) -> list[dt.date]:
     """The root's last n sessions that are over, newest first."""
-    return sorted(T.sessions_to_record(now, 2 * n + 7), reverse=True)[:n]
+    return sorted(T.sessions_to_record(now, 2 * n + 7, root), reverse=True)[:n]
 
 
 def build_report(roots, base: Path, now: dt.datetime, n: int = REPORT_SESSIONS,

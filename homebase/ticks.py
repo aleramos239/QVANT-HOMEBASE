@@ -50,6 +50,7 @@ import argparse
 import asyncio
 import contextlib
 import datetime as dt
+import decimal
 import fcntl
 import json
 import sys
@@ -68,8 +69,12 @@ ET = ZoneInfo("America/New_York")
 UTC = dt.timezone.utc
 HISTORY_UTC_DAYS = 2        # the feed serves ticks from 00:00 UTC of the previous UTC day (docstring)
 # priority order: if the 08:00 deadline cuts a night short, the important
-# ones are done first
-ROOTS = ("NQ", "ES", "YM", "RTY", "GC", "SI", "CL", "ZN", "NG", "HG")
+# ones are done first. The archive's 15 roots (the Massive backfill's too):
+# about 880 pages a weekday at PAGE_INTERVAL_S (NQ ~150, ES ~310, ZN ~160, CL ~58,
+# RTY ~37, GC ~36, NG ~28, YM ~18, 6E/6J/6B/MBT ~50 together, SI 13, HG 9, BTC 2),
+# ~8.8 h of the 14.7 h between 17:20 and the 08:00 deadline; the first hours,
+# fetched first, are ~26 pages (~16 min). A night cut short resumes the next one.
+ROOTS = ("NQ", "ES", "YM", "RTY", "GC", "SI", "CL", "ZN", "NG", "HG", "6E", "6J", "6B", "BTC", "MBT")
 ARCHIVE = Path.home() / "futures_ticks"
 PAGE = 4096                 # the feed caps a tick request at about this
 MAX_PAGES = 3000            # ~12M ticks — far above any session
@@ -87,27 +92,37 @@ def log(msg: str) -> None:
 
 
 # ------------------------------------------------------------------ sessions
-def session_bounds(date: dt.date) -> tuple[dt.datetime, dt.datetime]:
-    """(start, end) as aware ET datetimes: 18:00 the day before -> 17:00."""
+def always_open(root: str | None) -> bool:
+    """CME crypto (BTC, MBT) trades 24/7: a session every day -- the chart
+    service's list (homebase.charts.session.ALWAYS_OPEN), so both file a tick
+    under the same session."""
+    from .charts.session import always_open as open_24_7    # it imports this module
+    return open_24_7(root)
+
+
+def session_bounds(date: dt.date, root: str | None = None) -> tuple[dt.datetime, dt.datetime]:
+    """(start, end) as aware ET datetimes: 18:00 the day before -> 17:00; a
+    24/7 root's session runs 18:00 -> 18:00 (homebase.charts.session)."""
     start = dt.datetime.combine(date - dt.timedelta(days=1), dt.time(18, 0), ET)
-    end = dt.datetime.combine(date, dt.time(17, 0), ET)
+    end = dt.datetime.combine(date, dt.time(18 if always_open(root) else 17, 0), ET)
     return start, end
 
 
-def is_session_day(date: dt.date) -> bool:
-    return date.weekday() < 5
+def is_session_day(date: dt.date, root: str | None = None) -> bool:
+    return always_open(root) or date.weekday() < 5
 
 
-def session_complete(date: dt.date, now: dt.datetime) -> bool:
-    _, end = session_bounds(date)
+def session_complete(date: dt.date, now: dt.datetime, root: str | None = None) -> bool:
+    _, end = session_bounds(date, root)
     return now >= end + dt.timedelta(minutes=SESSION_GRACE_MIN)
 
 
-def sessions_to_record(now: dt.datetime, days: int = LOOKBACK_DAYS) -> list[dt.date]:
+def sessions_to_record(now: dt.datetime, days: int = LOOKBACK_DAYS,
+                       root: str | None = None) -> list[dt.date]:
     """Complete sessions within the lookback, oldest first."""
     today = now.astimezone(ET).date()
     out = [today - dt.timedelta(days=i) for i in range(days + 1)]
-    return sorted(d for d in out if is_session_day(d) and session_complete(d, now))
+    return sorted(d for d in out if is_session_day(d, root) and session_complete(d, now, root))
 
 
 def archive_path(root: str, date: dt.date, contract: str, base: Path = ARCHIVE) -> Path:
@@ -137,18 +152,27 @@ def utc_segments(start: dt.datetime, end: dt.datetime) -> list[tuple[dt.datetime
 
 
 # ------------------------------------------------------------------ fetching
+def price_decimals(tick: float) -> int:
+    """Decimals that hold every multiple of `tick` exactly: at least 6 (what the
+    archive always used), more for a finer tick -- 6J's 0.0000005 needs 7, and
+    rounding its prices to 6 would move every odd half-tick by 5e-7."""
+    exp = decimal.Decimal(repr(float(tick))).normalize().as_tuple().exponent if tick else 0
+    return max(6, -exp)
+
+
 def _unpack(packet: dict) -> list[dict]:
     """One chart packet -> tick rows. Prices ride as tick offsets from the
     packet's base price bp; timestamps as ms offsets from bt."""
     bp, bt, ts = packet.get("bp", 0), packet.get("bt", 0), packet.get("ts") or 0.0
+    nd = price_decimals(ts)
     rows = []
     for t in packet.get("tks", []) or []:
         rows.append({
             "ts_ms": bt + t.get("t", 0),
-            "price": round((bp + t.get("p", 0)) * ts, 6),
+            "price": round((bp + t.get("p", 0)) * ts, nd),
             "size": t.get("s"),
-            "bid": round((bp + t["b"]) * ts, 6) if t.get("b") is not None else "",
-            "ask": round((bp + t["a"]) * ts, 6) if t.get("a") is not None else "",
+            "bid": round((bp + t["b"]) * ts, nd) if t.get("b") is not None else "",
+            "ask": round((bp + t["a"]) * ts, nd) if t.get("a") is not None else "",
             "bid_size": t.get("bs", ""),
             "ask_size": t.get("as", ""),
             "id": t.get("id"),
@@ -356,19 +380,24 @@ def _freshest(cands: list):
     return max(cands, key=lambda c: c[3])
 
 
-def md_token(prefer_live: bool = True) -> tuple[str, str]:
+def md_token(prefer_live: bool = True, strict: bool = False) -> tuple[str, str]:
     """(md token, env) from an account the desk already logged in — never a
     login of its own (logins are rate-limited and precious). prefer_live
     (the default, for bulk paging) takes the LIVE login first so the demo
     login the 9:30 feed rides stays clean; the chart service may prefer the
     demo (Apex eval) login instead. Within the login taken, the token that
-    expires last (_freshest)."""
+    expires last (_freshest). strict (the nightly job): the preferred login
+    or nothing -- never a fallback to the other one."""
     cfg = config_mod.load()
     cands = _valid_md_tokens(sorted(cfg.accounts.items(),
                                     key=lambda kv: kv[1].live != prefer_live))
     if not cands:
         raise RuntimeError("no valid md token on disk — is the desk running and connected?")
     live = cands[0][1].live
+    if strict and bool(live) != prefer_live:
+        want = "live" if prefer_live else "demo"
+        raise RuntimeError(f"no valid {want} md token on disk — the tick archive never pages on the "
+                           "other login (the demo login feeds the 9:30 bot); is the live account connected?")
     _, a, tok, _ = _freshest([c for c in cands if c[1].live == live])
     return tok, ("live" if a.live else "demo")
 
@@ -391,8 +420,8 @@ def accounts_by_env() -> dict[str, "str | None"]:
     return out
 
 
-async def connect_md(prefer_live: bool = True) -> TradovateWS:
-    tok, env = md_token(prefer_live)
+async def connect_md(prefer_live: bool = True, strict: bool = False) -> TradovateWS:
+    tok, env = md_token(prefer_live, strict)
     ws = TradovateWS(tok, env)
     ws.url = MD_LIVE if env == "live" else MD_DEMO
     await ws.connect()
@@ -420,7 +449,7 @@ class MDConn:
                     await self.ws.close()
                 except Exception:  # noqa: BLE001
                     pass
-            self.ws = await connect_md()
+            self.ws = await connect_md(strict=True)      # the live login's budget, never the 9:30 bot's
         return self.ws
 
     async def close(self) -> None:
@@ -476,10 +505,10 @@ def plan(roots, dates: list[dt.date], base: Path, now: dt.datetime) -> tuple[dic
     grace = dt.timedelta(minutes=SESSION_GRACE_MIN)
     sessions, jobs = {}, []
     for date in dates:
-        if not is_session_day(date):
-            continue
-        start, end = session_bounds(date)
         for root in roots:
+            if not is_session_day(date, root):
+                continue
+            start, end = session_bounds(date, root)
             contract = symbols.front_month(root, date)
             path = archive_path(root, date, contract, base)
             prev = tickarchive.load_manifest(path)
@@ -580,8 +609,8 @@ def promote_live(roots, base: Path, now: dt.datetime, days: int = LIVE_LOOKBACK_
     or a night the fetch never ran. The live file itself is only read."""
     out = []
     for root in roots:
-        for date in sessions_to_record(now, days):
-            start, end = session_bounds(date)
+        for date in sessions_to_record(now, days, root):
+            start, end = session_bounds(date, root)
             tag = date.isoformat()
             for lp in sorted((base / root / str(date.year)).glob(f"{tag}_*{tickarchive.LIVE_SUFFIX}")):
                 contract = lp.name[len(tag) + 1:-len(tickarchive.LIVE_SUFFIX)]
@@ -651,9 +680,6 @@ def main(argv=None) -> int:
                 coverage_report(roots, base, a.sessions)
                 return 0
             dates = [dt.date.fromisoformat(a.date)] if a.date else None
-            if dates and not session_complete(dates[0], now_et()):
-                log(f"session {dates[0]} is not over yet (ends 17:00 ET) — nothing to do")
-                return 0
             if deadline_passed():
                 log(f"past {DEADLINE_ET} ET on a trading day — the feed's budget is the desk's now; "
                     "run again after 17:05")

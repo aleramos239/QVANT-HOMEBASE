@@ -55,11 +55,10 @@ def test_from_row_parses_blank_quotes_and_strings():
     assert t == Tick(5, 10.0, 3, BUY, 7)
 
 
-def test_live_recorder_covers_the_nightly_archive_roots_plus_bitcoin():
-    # Bitcoin trades 24/7: the nightly job's weekday 18:00 -> 17:00 fetch
-    # cannot capture it, so the chart service is its only recorder
+def test_live_recorder_covers_every_root_of_the_nightly_archive():
+    # the nightly job merges this recording into the archive: same 15 roots
     from homebase.charts import DEFAULT_ROOTS
-    assert set(DEFAULT_ROOTS) == set(T.ROOTS) | {"BTC"}
+    assert DEFAULT_ROOTS == T.ROOTS and len(T.ROOTS) == 15
 
 
 def test_bitcoin_contract_spec():

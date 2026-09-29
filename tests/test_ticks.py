@@ -261,7 +261,8 @@ def test_session_fetch_survives_a_dead_socket(monkeypatch):
 
     built = []
 
-    async def fake_connect():
+    async def fake_connect(**kw):
+        assert kw == {"strict": True}              # the nightly never falls back to the demo login
         built.append(Sock())
         return built[-1]
 
@@ -589,3 +590,79 @@ def test_fetch_page_on_a_shared_socket_keeps_only_its_own_chart():
     assert [r["id"] for r in got] == [1, 2, 3, 4, 5]         # no foreign row, none missing
     assert {r["price"] for r in got} == {20_000.0}
     assert ws.sent[-1] == ("md/cancelChart", {"subscriptionId": 12})
+
+
+# ------------------------------------------------------------------ all 15 archive roots (item D)
+def test_the_archive_records_all_fifteen_roots_in_priority_order():
+    assert T.ROOTS == ("NQ", "ES", "YM", "RTY", "GC", "SI", "CL", "ZN", "NG", "HG",
+                       "6E", "6J", "6B", "BTC", "MBT")
+
+
+def test_fx_is_quarterly_and_crypto_monthly():
+    # 6E/6J/6B: H M U Z, rolled a week before the 3rd Friday (FX expires the Monday
+    # before the 3rd Wednesday, so never a dying contract). Checked 2026-09-28 against
+    # the Massive files' tick counts 2025-26: 6E and 6J agree every session; 6B's
+    # volume moved one day earlier twice (2026-06-11, 09-10).
+    for r in ("6E", "6J", "6B"):
+        assert front_month(r, dt.date(2026, 9, 10)) == f"{r}U6"
+        assert front_month(r, dt.date(2026, 9, 11)) == f"{r}Z6"
+        assert front_month(r, dt.date(2026, 12, 11)) == f"{r}H7"
+    # BTC/MBT: every month, rolled two days before the last-Friday expiry
+    for r in ("BTC", "MBT"):
+        assert front_month(r, dt.date(2026, 10, 27)) == f"{r}V6"
+        assert front_month(r, dt.date(2026, 10, 28)) == f"{r}X6"
+
+
+def test_crypto_sessions_run_18_to_18_every_day_like_the_live_recorder():
+    from homebase.charts.session import session_date, session_range_ms
+    sat = dt.date(2026, 9, 26)
+    start, end = T.session_bounds(sat, "BTC")
+    assert (start, end) == (dt.datetime(2026, 9, 25, 18, 0, tzinfo=ET), dt.datetime(2026, 9, 26, 18, 0, tzinfo=ET))
+    assert session_range_ms(sat, "BTC") == (int(start.timestamp() * 1000), int(end.timestamp() * 1000))
+    assert session_date(int(end.timestamp() * 1000) - 1, "BTC") == sat
+    assert T.is_session_day(sat, "MBT") and not T.is_session_day(sat, "NQ")
+    assert T.session_bounds(dt.date(2026, 9, 25), "NQ")[1].hour == 17
+
+
+def test_a_weekend_run_fetches_crypto_only(tmp_path):
+    now = dt.datetime(2026, 9, 27, 5, 30, tzinfo=ET)                   # Sunday morning
+    _, jobs = T.plan(T.ROOTS, T.candidate_dates(now), tmp_path, now)
+    got = sorted({(key[0], key[1].isoformat()) for *_, key, s, e, r in jobs})
+    # Friday's session ended at 18:00 Fri, Saturday's at 18:00 Sat; Sunday's first
+    # hours (18:00-20:00 Sat) are over: all still in the broker's two UTC days
+    assert got == [("BTC", "2026-09-26"), ("BTC", "2026-09-27"), ("MBT", "2026-09-26"), ("MBT", "2026-09-27")]
+
+
+def test_a_weekday_evening_fetches_every_roots_first_hours_first(tmp_path):
+    now = dt.datetime(2026, 9, 29, 17, 20, tzinfo=ET)
+    _, jobs = T.plan(T.ROOTS, [dt.date(2026, 9, 29)], tmp_path, now)
+    heads = [key[0] for *_, key, s, e, r in jobs[:15]]
+    assert heads == list(T.ROOTS)                                     # every root's 18:00-20:00 ET first
+    assert all(s == T.session_bounds(dt.date(2026, 9, 29), key[0])[0] for *_, key, s, e, r in jobs[:15])
+    tails = [key[0] for *_, key, s, e, r in jobs[15:]]
+    assert tails == list(T.ROOTS[:13])            # BTC/MBT's session runs to 18:00: their rest waits
+
+
+def test_6j_prices_keep_their_seventh_decimal():
+    rows = T._unpack({"bp": 13785, "bt": 0, "ts": 5e-07,
+                      "tks": [{"t": 0, "p": 0, "s": 1, "b": -1, "a": 0, "id": 1},
+                              {"t": 1, "p": 1, "s": 2, "b": 0, "a": 1, "id": 2}]})
+    assert [r["price"] for r in rows] == [0.0068925, 0.006893]
+    assert (rows[0]["bid"], rows[0]["ask"]) == (0.006892, 0.0068925)
+    assert T.price_decimals(0.25) == T.price_decimals(0.015625) == 6 and T.price_decimals(5e-07) == 7
+
+
+def test_the_night_job_never_falls_back_to_the_login_the_930_bot_rides(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    import pytest
+    cfg = SimpleNamespace(accounts={"demo1": SimpleNamespace(live=False),
+                                    "live1": SimpleNamespace(live=True)})
+    monkeypatch.setattr(T.config_mod, "load", lambda: cfg)
+    monkeypatch.setattr(T, "state_dir", lambda: tmp_path)
+    exp = (dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=1)).isoformat()
+    (tmp_path / "demo1.tokens.json").write_text(json.dumps({"md_access_token": "tok-demo", "expiration_time": exp}))
+    assert T.md_token() == ("tok-demo", "demo")          # the chart service may still fall back
+    with pytest.raises(RuntimeError, match="never pages on the other login"):
+        T.md_token(strict=True)
+    (tmp_path / "live1.tokens.json").write_text(json.dumps({"md_access_token": "tok-live", "expiration_time": exp}))
+    assert T.md_token(strict=True) == ("tok-live", "live")
