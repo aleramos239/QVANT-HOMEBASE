@@ -10,6 +10,13 @@
    that still resolves to HBTrade (unchanged behaviour); on Backtest, HBTrade doesn't exist and it
    resolves here instead.
 
+   inferType/menuText moved here 2026-09-29 (review): replayui.js's Practice menu calls
+   T.inferType/T.menuText through that exact HBTrade-or-HBTradePure fallback, and on the Backtest
+   page T resolved to this module -- which didn't have them, so the whole Buy/Sell/Flatten block
+   silently vanished from the menu (a thrown TypeError, not a missing module: T itself was always
+   defined). Both are pure (inferType reads only the quote it's handed; menuText only needs Cat,
+   already required above), so they belong here, not in trade.js.
+
    `isObj`/`idList`/`int` below are tiny private duplicates of trade.js's own copies (parsePrefs
    needs them) — not shared, on purpose: trade.js uses them far more broadly than this file does,
    so sharing would pull in more coupling than the five names above are worth.
@@ -56,6 +63,20 @@ function bracket(side, ref, prefs, tick) {
     tp: prefs.tpTicks > 0 ? roundTick(ref + s * prefs.tpTicks * tick, tick) : null };
 }
 
+/* The clicked (or dragged-to) price's marketability: a buy AT OR ABOVE the ask is a Stop
+   (marketable), strictly below it a Limit (passive); a sell AT OR BELOW the bid is a Stop,
+   strictly above it a Limit. No ask/bid: the last trade; no quote at all: null (no order items).
+   The touch itself counts as marketable (>= / <=): a TP dragged exactly onto the price is refused
+   the same as one dragged through it, since a limit order resting right at the touch fills
+   essentially immediately. (trade.js's own doc, verbatim -- this is that exact function.) */
+function inferType(side, price, q) {
+  if (!q || price == null) return null;
+  if (side === 'Buy') { const a = q.ask ?? q.last; return a == null ? null : price >= a ? 'Stop' : 'Limit'; }
+  const b = q.bid ?? q.last;
+  return b == null ? null : price <= b ? 'Stop' : 'Limit';
+}
+function menuText(side, qty, price, type, tick) { return `${side} ${qty} @ ${Cat.fmtPrice(price, tick)} ${type}`; }
+
 const sign = (v) => (v > 0 ? '+' : v < 0 ? MINUS : '');
 function usd(v) { return v == null || !Number.isFinite(v) ? null : sign(Math.round(v * 100)) + Pos.fmtUsd(v); }
 function money(v) { return v == null || !Number.isFinite(v) ? '—' : (Math.round(v * 100) < 0 ? MINUS : '') + Pos.fmtUsd(v); }
@@ -72,7 +93,8 @@ function pointValue(root) {
   return v == null ? null : v;
 }
 
-const api = { PREFS_KEY, parsePrefs, prefsText, bracket, roundTick, money, usd, POINT_VALUE, pointValue };
+const api = { PREFS_KEY, parsePrefs, prefsText, bracket, roundTick, money, usd, POINT_VALUE, pointValue,
+  inferType, menuText };
 if (typeof window !== 'undefined') window.HBTradePure = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

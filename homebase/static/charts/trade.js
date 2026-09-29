@@ -16,11 +16,12 @@ const need = (name, file) => (typeof window !== 'undefined' && window[name]) || 
 const Cat = need('HBCatalog', './catalog.js');
 const Pos = need('HBPosition', './position.js');
 // 2026-09-28 three-tabs plan: the genuinely pure half of this file -- prefs parsing, bracket math,
-// money formatting -- lives in tradepure.js so pages with no trading module (the Backtest tab)
-// can use it without trade.js itself. Re-exported below unchanged; every existing caller here
-// keeps using the bare names exactly as before.
+// money formatting, order-type inference and its menu text (2026-09-29: moved inferType/menuText
+// here too, see tradepure.js's own doc) -- lives in tradepure.js so pages with no trading module
+// (the Backtest tab) can use it without trade.js itself. Re-exported below unchanged; every
+// existing caller here keeps using the bare names exactly as before.
 const TP = need('HBTradePure', './tradepure.js');
-const { PREFS_KEY, parsePrefs, prefsText, bracket, roundTick, money, usd } = TP;
+const { PREFS_KEY, parsePrefs, prefsText, bracket, roundTick, money, usd, inferType, menuText } = TP;
 
 const BOT_NAMES = { nq930: '9:30 bot', ym930: '9:30 bot', nq10am: '10am bot' };
 const ET = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hourCycle: 'h23', hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -80,19 +81,8 @@ function isPending(o) { return !!o && o.status != null && o.status !== 'Working'
 const ABBR = { Limit: 'LMT', Stop: 'STP', StopLimit: 'STP LMT', Market: 'MKT', TrailingStop: 'TRAIL' };
 const abbr = (t) => ABBR[t] || String(t || '').toUpperCase();
 
-/* The clicked (or dragged-to) price's marketability: a buy AT OR ABOVE the ask is a Stop (marketable), strictly
-   below it a Limit (passive); a sell AT OR BELOW the bid is a Stop, strictly above it a Limit. No ask/bid: the
-   last trade; no quote at all: null (no order items). The touch itself counts as marketable (>= / <=,
-   re-review Minor 1): a TP dragged exactly onto the price is refused the same as one dragged through it, since
-   a limit order resting right at the touch fills essentially immediately. */
-function inferType(side, price, q) {
-  if (!q || price == null) return null;
-  if (side === 'Buy') { const a = q.ask ?? q.last; return a == null ? null : price >= a ? 'Stop' : 'Limit'; }
-  const b = q.bid ?? q.last;
-  return b == null ? null : price <= b ? 'Stop' : 'Limit';
-}
-function menuText(side, qty, price, type, tick) { return `${side} ${qty} @ ${Cat.fmtPrice(price, tick)} ${type}`; }
-// roundTick and bracket now live in tradepure.js (re-exported above, unchanged) -- PracticeSim needs bracket too.
+// inferType/menuText/roundTick/bracket now live in tradepure.js (re-exported above, unchanged) --
+// PracticeSim needs bracket too, and replayui.js's Practice menu needs inferType/menuText.
 /* A Stop Limit's `price` is its limit and `trigger` its trigger (sent only with a Stop Limit). `tif` (Day | GTC) is
    sent only when given: the desk defaults to Day. */
 function orderBody({ clientId, accounts, root, side, qty, type, price = null, sl = null, tp = null, trigger = null, tif = null }) {

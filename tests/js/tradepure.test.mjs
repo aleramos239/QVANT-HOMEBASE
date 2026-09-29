@@ -14,7 +14,8 @@ test('HBTradePure exposes exactly the re-exported names, nothing money/desk-shap
   // POINT_VALUE/pointValue (opus review, three-tabs): moved here from replay.js, re-exported there
   // unchanged, and read directly by fillquality.js -- see tradepure.js's own docstring.
   assert.deepEqual(Object.keys(TP).sort(),
-    ['PREFS_KEY', 'bracket', 'money', 'parsePrefs', 'prefsText', 'roundTick', 'usd', 'POINT_VALUE', 'pointValue'].sort());
+    ['PREFS_KEY', 'bracket', 'money', 'parsePrefs', 'prefsText', 'roundTick', 'usd', 'POINT_VALUE', 'pointValue',
+      'inferType', 'menuText'].sort());
   assert.equal(TP.PREFS_KEY, 'hb_trade_prefs');
 });
 
@@ -24,6 +25,17 @@ test('HBTradePure.pointValue: the eight roots replay.js/fillquality.js both need
   assert.equal(TP.pointValue('ES'), 50);
   assert.equal(TP.pointValue('XX'), null);
   assert.equal(TP.pointValue(null), null);
+});
+
+test('HBTradePure.inferType/menuText: the Practice menu\'s fallback when trade.js is not loaded '
+     + '(2026-09-29 review: moved here from trade.js -- the Backtest page fell back to HBTradePure '
+     + 'for these two and they did not exist, so the whole Buy/Sell/Flatten block vanished)', () => {
+  const q = { bid: 30900, ask: 30900.25, last: 30900.1 };
+  assert.equal(TP.inferType('Buy', 30901, q), 'Stop');
+  assert.equal(TP.inferType('Buy', 30900, q), 'Limit');
+  assert.equal(TP.inferType('Sell', 30900, q), 'Stop');
+  assert.equal(TP.inferType('Buy', 30901, null), null);
+  assert.equal(TP.menuText('Buy', 2, 30900, 'Limit', 0.25), 'Buy 2 @ 30,900.00 Limit');
 });
 
 test('prefs: defaults, clamps, de-duplicated ticks, garbage in -> defaults', () => {

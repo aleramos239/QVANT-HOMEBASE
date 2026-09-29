@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
 
 /* 2026-09-28 three-tabs plan: the Backtest page must load no trading module and expose no trading
    global. Same technique replay.test.mjs's own "isolation" test uses (source text, not a live DOM --
@@ -149,6 +152,16 @@ test('app.js: every T. (HBTrade) dereference is reachable only when T is defined
     'function-span detection did not find known functions -- app.js\'s top-level function style changed');
 
   const funcGuardRe = /if\s*\([^)]*\bT\b[^)]*\)\s*return|if\s*\(\s*!window\.HBTradeUI\)\s*return/;
+  // Two call sites are safe by a pattern this checker's line/function-guard regexes don't model,
+  // each verified by hand (2026-09-29 review) -- everything else must pass the general checks:
+  const KNOWN_SAFE = [
+    // co-excluded-module ternary: HBPaperClient and T (HBTrade) always load/unload together, same
+    // as the `window.HBPaperClient ?` pattern the file's own doc above already calls out.
+    { fn: 'deskStrategies', needle: 'window.HBPaperClient ? T.paperStrategiesMap' },
+    // `hidden` is `T ? T.hiddenCellsLoaded(...) : []` two lines above (never both T and a non-empty
+    // hidden) -- `if (hidden.length)` here can only reach T.liveDroppedMessage when T is defined.
+    { fn: 'buildGrid', needle: "if (hidden.length) window.HBDeskClient?.toast('err', T.liveDroppedMessage" },
+  ];
   const problems = [];
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -157,12 +170,46 @@ test('app.js: every T. (HBTrade) dereference is reachable only when T is defined
     if (i >= capStartLine && i <= capEndLine) continue;   // the whole bundle is already gated
     const span = spans.find((s) => i >= s.start && i <= s.end);
     if (span && span.name === 'positionDialog') continue;   // local [E, T, S] shadow, not HBTrade
+    if (span && KNOWN_SAFE.some((k) => k.fn === span.name && line.includes(k.needle))) continue;
+    // A bare `line.lastIndexOf('?', tIdx)` treats ANY '?' earlier on the line as a guard, even one
+    // from an unrelated expression (optional chaining on something else, a second statement after a
+    // ';', another ternary entirely) that guards nothing here (2026-09-29 review: this is exactly
+    // how `if (hidden.length) window.HBDeskClient?.toast('err', T.liveDroppedMessage(...))` above
+    // used to slip through -- the '?' in `HBDeskClient?.toast` has nothing to do with T). The guard
+    // only counts when that '?' is a ternary whose condition is the word T itself (`T ? T.x() :
+    // ...`) -- the one same-line pattern this file actually uses.
     const qIdx = line.lastIndexOf('?', tIdx);
-    const selfGuarded = qIdx >= 0 && line.slice(qIdx, tIdx).indexOf(':') < 0;
+    const selfGuarded = qIdx >= 0 && line.slice(qIdx, tIdx).indexOf(':') < 0
+      && /\bT\s*$/.test(line.slice(0, qIdx));
     if (selfGuarded) continue;
     if (!span) { problems.push(`line ${i + 1}: T. outside any top-level function span: ${line.trim()}`); continue; }
     const body = lines.slice(span.start, i + 1).join('\n');
     if (!funcGuardRe.test(body)) problems.push(`line ${i + 1} (in ${span.name}): unguarded -- ${line.trim()}`);
+  }
+  assert.deepEqual(problems, []);
+});
+
+/* 2026-09-29 review: replayui.js's Practice menu called T.inferType/T.menuText where T = window.HBTrade
+   || window.HBTradePure -- T is NEVER undefined there (HBTradePure always loads on Backtest), so none of
+   the checks above catch this family of bug at all; the failure is a missing MEMBER on the fallback
+   object, not a missing object. inferType/menuText moved into tradepure.js to fix it (see its own doc);
+   this test is the standing guarantee against the next one: every T./Tr. member reference in a file that
+   falls back to HBTradePure must actually exist on HBTradePure's exported api, not only on HBTrade. */
+test('every file that falls back to HBTrade || HBTradePure only calls members HBTradePure actually has', () => {
+  const TP = require('../../homebase/static/charts/tradepure.js');
+  const tpNames = new Set(Object.keys(TP));
+  // (source file, the local name that `window.HBTrade || window.HBTradePure` (or need()'s equivalent) is
+  // bound to in that file) -- every file this fallback pattern appears in, per tradepure.js's own doc.
+  const FALLBACK_FILES = [['replayui.js', 'T'], ['tester.js', 'Tr'], ['testerui.js', 'Tr']];
+  const stripComments = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+  const problems = [];
+  for (const [file, varName] of FALLBACK_FILES) {
+    const text = stripComments(src(file));
+    const re = new RegExp(`\\b${varName}\\.([A-Za-z_][A-Za-z0-9_]*)`, 'g');
+    let m;
+    while ((m = re.exec(text))) {
+      if (!tpNames.has(m[1])) problems.push(`${file}: ${varName}.${m[1]} is not in HBTradePure's exports`);
+    }
   }
   assert.deepEqual(problems, []);
 });
