@@ -159,6 +159,36 @@ def test_readiness_reflects_accounts_and_book(client):
                for c in r2["checks"])
 
 
+def test_journal_endpoint_skips_lines_that_are_not_json_objects(client, tmp_path):
+    rows = [
+        '{"et": "2026-09-22T09:30:00", "event": "armed_toggled", "armed": true}',
+        "not json at all",                              # bad JSON -- skipped
+        "5",                                             # valid JSON, but not an object -- skipped
+        '[1, 2, 3]',                                     # valid JSON, but not an object -- skipped
+        '{"et": "2026-09-22T09:31:00", "event": "account_added", "account": "main"}',
+    ]
+    (tmp_path / "journal.jsonl").write_text("\n".join(rows) + "\n")
+    d = client.get("/api/journal", params={"date": "2026-09-22"}).json()
+    assert d["count"] == 2
+    assert [e["event"] for e in d["events"]] == ["account_added", "armed_toggled"]  # newest first
+
+
+def test_journal_endpoint_reads_off_the_event_loop(client, tmp_path, monkeypatch):
+    import asyncio
+    calls = []
+    orig = asyncio.to_thread
+
+    async def spy(fn, *a, **k):
+        calls.append(fn.__name__)
+        return await orig(fn, *a, **k)
+
+    monkeypatch.setattr(asyncio, "to_thread", spy)
+    (tmp_path / "journal.jsonl").write_text(
+        '{"et": "2026-09-22T09:30:00", "event": "armed_toggled"}\n')
+    client.get("/api/journal", params={"date": "2026-09-22"})
+    assert calls == ["_read_journal_records"]
+
+
 def test_calendar_close_over_close(client, tmp_path):
     from homebase import server as S
     for date, eq in [("2026-09-09", 50000.0), ("2026-09-10", 50250.0),

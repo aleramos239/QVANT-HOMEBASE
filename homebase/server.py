@@ -1026,6 +1026,22 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             "journal": journal,
         }
 
+    def _read_journal_records(jp: Path) -> list[dict]:
+        """The blocking half of /api/journal: read the file and parse each line, off the
+        event loop (asyncio.to_thread). A line that isn't valid JSON, or parses to
+        something other than an object (a bare number/string/array), is skipped."""
+        if not jp.exists():
+            return []
+        out = []
+        for line in jp.read_text().splitlines():
+            try:
+                rec = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(rec, dict):
+                out.append(rec)
+        return out
+
     @app.get("/api/journal")
     async def journal_query(date: str | None = None, event: str | None = None,
                             account: str | None = None, limit: int = 200):
@@ -1035,20 +1051,16 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         limit = max(1, min(int(limit), 2000))
         day = date or engine.now_et().date().isoformat()
         jp = state_dir() / "journal.jsonl"
+        records = await asyncio.to_thread(_read_journal_records, jp)
         out = []
-        if jp.exists():
-            for line in jp.read_text().splitlines():
-                try:
-                    rec = json.loads(line)
-                except ValueError:
-                    continue
-                if str(rec.get("et", "")).split("T", 1)[0] != day:
-                    continue
-                if event and rec.get("event") != event:
-                    continue
-                if account and rec.get("account") != account:
-                    continue
-                out.append(rec)
+        for rec in records:
+            if str(rec.get("et", "")).split("T", 1)[0] != day:
+                continue
+            if event and rec.get("event") != event:
+                continue
+            if account and rec.get("account") != account:
+                continue
+            out.append(rec)
         out.reverse()
         return {"date": day, "count": len(out), "events": out[:limit]}
 
