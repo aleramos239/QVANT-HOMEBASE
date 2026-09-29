@@ -261,8 +261,8 @@ def test_a_weekend_crypto_session_comes_from_mondays_file(tmp_path):
     raw_file(raw, "cme", mon, [("BTCV6", t, "87185.000000000", 1) for t in weekend])
     out = M.fill(("BTC",), base, NOW, dates=[sat], raw=raw, s3=s3(FakeMassive({})))
     first, last = A.ms_of(out[0]["first_tick_utc"]), A.ms_of(out[0]["last_tick_utc"])
-    assert first == s and last == int(end.timestamp() * 1000)                # its own 24 h only
-    assert out[0]["ticks"] == 24 * 60 + 1 and out[0]["contract"] == "BTCV6"
+    assert first == s and last == int(end.timestamp() * 1000) - 60_000       # its own 24 h only: the
+    assert out[0]["ticks"] == 24 * 60 and out[0]["contract"] == "BTCV6"       # 18:00:00 print opens Sunday's
 
 
 def test_the_cli_needs_holes_or_dates(capsys):

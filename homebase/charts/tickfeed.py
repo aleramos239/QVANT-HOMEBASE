@@ -49,7 +49,7 @@ from typing import Awaitable, Callable, Optional
 from .. import symbols
 from .. import ticks as T
 from . import MD_ENV, QUIET
-from .session import ET
+from .session import ET, session_date
 
 MD_ENVS = ("live", "demo")
 BACKOFF_S = (5, 10, 20, 40, 80, 160, 300)
@@ -69,6 +69,16 @@ RECYCLE_BUDGET_MAX = 120  # rebuilt only if the hour's chart requests stay at mo
 # (no budget spent), so the recording gets a gap marker around the swap: (before, after) ms --
 # the old socket's copy may still be in flight, and exchange stamps vs this clock may skew.
 SWAP_GAP_MS = (2000, 1000)
+
+
+def session_contract(root: str, ts_s: float) -> str:
+    """The contract a bare root is recorded under: the front month of the SESSION
+    under way at ts_s (after 18:00 ET that is tomorrow's) -- exactly what the tick
+    archive job fetches and files that session under (homebase.ticks). A root
+    already naming a contract passes through."""
+    if any(ch.isdigit() for ch in root):
+        return symbols.resolve_contract(root)
+    return symbols.front_month(root.upper(), session_date(int(ts_s * 1000), root))
 
 
 def in_quiet(ts_s: float) -> bool:
@@ -219,7 +229,7 @@ class TickFeed:
         keeps routing through self.subs untouched), and a p-ticket is a refusal, not a wait:
         a switch must never stall inside the PUT or spend a penalty on the target login."""
         try:
-            contract = symbols.resolve_contract(root)
+            contract = session_contract(root, time.time())   # the wall clock, like date.today() was
         except ValueError as e:
             raise Refused(f"{root}: no front contract ({e})") from None
         body = {"symbol": contract,

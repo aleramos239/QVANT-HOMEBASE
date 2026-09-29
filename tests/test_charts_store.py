@@ -104,3 +104,12 @@ def test_pick_and_load_are_none_when_only_file_is_a_dangling_symlink(tmp_path):
     assert st.files("NQ", D) == []
     assert st.pick("NQ", D) is None
     assert st.load("NQ", D) is None
+
+
+def test_the_desk_and_the_backfill_spelling_of_one_contract_are_one_contract(tmp_path):
+    """Review nit: NGX6 (desk) and NGX26 (Massive) are the same November 2026 contract."""
+    write_archive(tmp_path, "NG", D, "NGX26", rows(session_ms(D, 9, 30), [1.0] * 30), complete=False)
+    write_archive(tmp_path, "NG", D, "NGX6", rows(session_ms(D, 9, 30), [1.0] * 20), complete=True)
+    write_archive(tmp_path, "NG", D, "NGZ6", rows(session_ms(D, 9, 30), [1.0] * 25), complete=True)
+    f = TickStore(tmp_path).pick("NG", D)
+    assert f.contract == "NGX6" and f.complete          # X6/X26 (30 ticks) beats Z6 (25); its complete file

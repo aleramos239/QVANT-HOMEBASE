@@ -711,3 +711,25 @@ def test_a_socket_that_keeps_dying_is_rebuilt_three_times_a_run_then_given_up(mo
         run(T.fetch_session(conn, "NQZ6", start, end, page_fn=dead))
     assert len(calls) == T.DROPS_MAX + 1 and conn.dropped == T.DROPS_MAX
     assert [w for w in nw.waits if w in (5.0, 10.0, 20.0)] == [5.0, 10.0, 20.0]
+
+
+def test_a_24_7_sessions_1800_print_belongs_to_the_next_session_like_the_recorder():
+    """Review nit: the job included a BTC tick at exactly 18:00:00.000 in both
+    sessions; the recorder files it in the next one only."""
+    from homebase.charts.session import session_date
+    d = dt.date(2026, 9, 29)
+    s, e = (int(x.timestamp() * 1000) for x in T.session_bounds(d, "BTC"))
+    assert T.in_session("BTC", s, s, e) and not T.in_session("BTC", e, s, e)
+    assert session_date(e, "BTC") == d + dt.timedelta(days=1)
+    s, e = (int(x.timestamp() * 1000) for x in T.session_bounds(d, "NQ"))
+    assert T.in_session("NQ", e, s, e)                        # 17:00:00.000 closes a classic session
+
+
+def test_the_recorder_files_a_bare_root_under_the_sessions_front_month(monkeypatch):
+    """Review nit: the recorder resolved today's front month, the job the
+    session's. At 18:30 ET on a roll eve the session is tomorrow's: both agree."""
+    from homebase.charts.tickfeed import session_contract
+    eve = dt.datetime(2026, 12, 10, 18, 30, tzinfo=ET).timestamp()     # NQ rolls on Dec 11
+    assert session_contract("NQ", eve) == front_month("NQ", dt.date(2026, 12, 11)) == "NQH7"
+    assert session_contract("NQ", eve - 3600) == "NQZ6"             # 17:30: still the 10th's session
+    assert session_contract("NQZ6", eve) == "NQZ6"

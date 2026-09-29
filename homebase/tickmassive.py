@@ -364,7 +364,7 @@ def fill(roots, base: Path, now: dt.datetime, *, dates=None, since: dt.date = SI
                 wanted = {C.contract_key(x["contract"]) for x in tg if (ex, d) in x["raw"]}
                 by_file[key] = scan_raw(raw_path(raw, ex, d), wanted)
             got = by_file[key]
-            rows += [r for r in got["rows"][k] if s_ms <= int(r[A.TS]) <= e_ms]
+            rows += [r for r in got["rows"][k] if T.in_session(t["root"], int(r[A.TS]), s_ms, e_ms)]
             corr += got["corrections"][k]
             files.append(f"{ex}/{d.isoformat()}.csv.gz")
         rows.sort(key=lambda r: (int(r[A.TSNS]), int(r[A.ID])))

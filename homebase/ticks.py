@@ -120,6 +120,14 @@ def session_bounds(date: dt.date, root: str | None = None) -> tuple[dt.datetime,
     return start, end
 
 
+def in_session(root: str | None, ts_ms: int, start_ms: int, end_ms: int) -> bool:
+    """Does a tick stamped ts_ms belong to the session [start, end]? A classic
+    root's close is inclusive (the 17:00 hour trades nothing); a 24/7 root's is
+    not: its 18:00:00.000 tick opens the next session (homebase.charts.session.
+    session_date files it there too)."""
+    return start_ms <= ts_ms and (ts_ms < end_ms if always_open(root) else ts_ms <= end_ms)
+
+
 def is_session_day(date: dt.date, root: str | None = None) -> bool:
     return always_open(root) or date.weekday() < 5
 
@@ -802,7 +810,8 @@ async def record(roots=ROOTS, dates: list[dt.date] | None = None,
                     else:
                         once[k] = tickarchive.now_utc()
                 p = pending.setdefault(key, {"rows": [], "entries": []})
-                p["rows"].extend(tickarchive.row_of(r) for r in rows)
+                s_ms, e_ms = _ms(st["start"]), _ms(st["end"])
+                p["rows"].extend(tickarchive.row_of(r) for r in rows if in_session(root, r["ts_ms"], s_ms, e_ms))
                 p["entries"].append(entry)
                 log(f"{root} {date} {contract} {_et_span(s, e)} ({why}): {len(rows):,} ticks, "
                     f"{stats['pages']} pages, {time.perf_counter() - t0:.0f}s ({stats['stop']})")

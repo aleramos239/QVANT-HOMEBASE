@@ -16,6 +16,7 @@ import csv
 import datetime as dt
 import gzip
 import json
+import re
 import zlib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -108,6 +109,15 @@ def ticks_from_table(header: list[str], recs: list[list[str]],
     return out, quotes
 
 
+_CONTRACT = re.compile(r"^([A-Z0-9]+?)([FGHJKMNQUVXZ])(\d{1,2})$")
+
+
+def _key(contract: str) -> str:
+    """One name per contract: the desk writes NGX6, the Massive backfill NGX26."""
+    m = _CONTRACT.match(contract)
+    return f"{m.group(1)}{m.group(2)}{m.group(3)[-1]}" if m else contract
+
+
 class TickStore:
     def __init__(self, base: Path = ARCHIVE):
         self.base = Path(base)
@@ -149,10 +159,10 @@ class TickStore:
             return None
 
         def rank(c):
-            arch = [f.ticks for f in fs if f.contract == c and not f.live]
-            return (1, max(arch)) if arch else (0, max(f.ticks for f in fs if f.contract == c))
-        contract = max(sorted({f.contract for f in fs}), key=rank)
-        fs = [f for f in fs if f.contract == contract]
+            arch = [f.ticks for f in fs if _key(f.contract) == c and not f.live]
+            return (1, max(arch)) if arch else (0, max(f.ticks for f in fs if _key(f.contract) == c))
+        contract = max(sorted({_key(f.contract) for f in fs}), key=rank)
+        fs = [f for f in fs if _key(f.contract) == contract]
         for group in ([f for f in fs if not f.live and f.complete],
                       [f for f in fs if f.live],
                       [f for f in fs if not f.live]):
