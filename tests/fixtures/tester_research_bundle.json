@@ -35,519 +35,691 @@
   "hlines": [
    {
     "date": "2021-03-02",
+    "end_ms": 1614718800000,
     "name": "anchor",
     "price": 100.0,
-    "role": "anchor"
+    "role": "anchor",
+    "t_ms": 1614695400000
    },
    {
     "date": "2021-03-02",
+    "end_ms": 1614718800000,
     "name": "Long entry +10",
     "price": 110.0,
-    "role": "entry"
+    "role": "entry",
+    "t_ms": 1614695400000
    },
    {
     "date": "2021-03-02",
+    "end_ms": 1614718800000,
     "name": "Short entry \u221210 (not filled)",
     "price": 90.0,
-    "role": "entry"
+    "role": "entry",
+    "t_ms": 1614695400000
    },
    {
     "date": "2021-03-02",
+    "end_ms": 1614718800000,
     "name": "Long SL (planned)",
     "price": 105.0,
-    "role": "sl"
+    "role": "sl",
+    "t_ms": 1614695400000
    },
    {
     "date": "2021-03-02",
+    "end_ms": 1614718800000,
     "name": "Long TP (planned)",
     "price": 125.0,
-    "role": "tp"
+    "role": "tp",
+    "t_ms": 1614695400000
    },
    {
     "date": "2021-03-02",
+    "end_ms": 1614718800000,
     "name": "Short SL (not filled)",
     "price": 95.0,
-    "role": "sl"
+    "role": "sl",
+    "t_ms": 1614695400000
    },
    {
     "date": "2021-03-02",
+    "end_ms": 1614718800000,
     "name": "Short TP (not filled)",
     "price": 75.0,
-    "role": "tp"
+    "role": "tp",
+    "t_ms": 1614695400000
    },
    {
     "date": "2021-03-02",
+    "end_ms": 1614718800000,
     "name": "Long SL",
     "price": 105.25,
-    "role": "sl"
+    "role": "sl",
+    "t_ms": 1614695401000
    },
    {
     "date": "2021-03-02",
+    "end_ms": 1614718800000,
     "name": "Long TP",
     "price": 125.25,
-    "role": "tp"
+    "role": "tp",
+    "t_ms": 1614695401000
    },
    {
     "date": "2021-07-14",
+    "end_ms": 1626292800000,
     "name": "anchor",
     "price": 100.0,
-    "role": "anchor"
+    "role": "anchor",
+    "t_ms": 1626269400000
    },
    {
     "date": "2021-07-14",
+    "end_ms": 1626292800000,
     "name": "Long entry +10",
     "price": 110.0,
-    "role": "entry"
+    "role": "entry",
+    "t_ms": 1626269400000
    },
    {
     "date": "2021-07-14",
+    "end_ms": 1626292800000,
     "name": "Short entry \u221210 (not filled)",
     "price": 90.0,
-    "role": "entry"
+    "role": "entry",
+    "t_ms": 1626269400000
    },
    {
     "date": "2021-07-14",
+    "end_ms": 1626292800000,
     "name": "Long SL (planned)",
     "price": 105.0,
-    "role": "sl"
+    "role": "sl",
+    "t_ms": 1626269400000
    },
    {
     "date": "2021-07-14",
+    "end_ms": 1626292800000,
     "name": "Long TP (planned)",
     "price": 125.0,
-    "role": "tp"
+    "role": "tp",
+    "t_ms": 1626269400000
    },
    {
     "date": "2021-07-14",
+    "end_ms": 1626292800000,
     "name": "Short SL (not filled)",
     "price": 95.0,
-    "role": "sl"
+    "role": "sl",
+    "t_ms": 1626269400000
    },
    {
     "date": "2021-07-14",
+    "end_ms": 1626292800000,
     "name": "Short TP (not filled)",
     "price": 75.0,
-    "role": "tp"
+    "role": "tp",
+    "t_ms": 1626269400000
    },
    {
     "date": "2021-07-14",
+    "end_ms": 1626292800000,
     "name": "Long SL",
     "price": 105.25,
-    "role": "sl"
+    "role": "sl",
+    "t_ms": 1626269401000
    },
    {
     "date": "2021-07-14",
+    "end_ms": 1626292800000,
     "name": "Long TP",
     "price": 125.25,
-    "role": "tp"
+    "role": "tp",
+    "t_ms": 1626269401000
    },
    {
     "date": "2022-01-05",
+    "end_ms": 1641416400000,
     "name": "anchor",
     "price": 100.0,
-    "role": "anchor"
+    "role": "anchor",
+    "t_ms": 1641393000000
    },
    {
     "date": "2022-01-05",
+    "end_ms": 1641416400000,
     "name": "Long entry +10 (not filled)",
     "price": 110.0,
-    "role": "entry"
+    "role": "entry",
+    "t_ms": 1641393000000
    },
    {
     "date": "2022-01-05",
+    "end_ms": 1641416400000,
     "name": "Short entry \u221210 (not filled)",
     "price": 90.0,
-    "role": "entry"
+    "role": "entry",
+    "t_ms": 1641393000000
    },
    {
     "date": "2022-01-05",
+    "end_ms": 1641416400000,
     "name": "Long SL (not filled)",
     "price": 105.0,
-    "role": "sl"
+    "role": "sl",
+    "t_ms": 1641393000000
    },
    {
     "date": "2022-01-05",
+    "end_ms": 1641416400000,
     "name": "Long TP (not filled)",
     "price": 125.0,
-    "role": "tp"
+    "role": "tp",
+    "t_ms": 1641393000000
    },
    {
     "date": "2022-01-05",
+    "end_ms": 1641416400000,
     "name": "Short SL (not filled)",
     "price": 95.0,
-    "role": "sl"
+    "role": "sl",
+    "t_ms": 1641393000000
    },
    {
     "date": "2022-01-05",
+    "end_ms": 1641416400000,
     "name": "Short TP (not filled)",
     "price": 75.0,
-    "role": "tp"
+    "role": "tp",
+    "t_ms": 1641393000000
    },
    {
     "date": "2022-06-15",
+    "end_ms": 1655323200000,
     "name": "anchor",
     "price": 100.0,
-    "role": "anchor"
+    "role": "anchor",
+    "t_ms": 1655299800000
    },
    {
     "date": "2022-06-15",
+    "end_ms": 1655323200000,
     "name": "Long entry +10",
     "price": 110.0,
-    "role": "entry"
+    "role": "entry",
+    "t_ms": 1655299800000
    },
    {
     "date": "2022-06-15",
+    "end_ms": 1655323200000,
     "name": "Short entry \u221210 (not filled)",
     "price": 90.0,
-    "role": "entry"
+    "role": "entry",
+    "t_ms": 1655299800000
    },
    {
     "date": "2022-06-15",
+    "end_ms": 1655323200000,
     "name": "Long SL (planned)",
     "price": 105.0,
-    "role": "sl"
+    "role": "sl",
+    "t_ms": 1655299800000
    },
    {
     "date": "2022-06-15",
+    "end_ms": 1655323200000,
     "name": "Long TP (planned)",
     "price": 125.0,
-    "role": "tp"
+    "role": "tp",
+    "t_ms": 1655299800000
    },
    {
     "date": "2022-06-15",
+    "end_ms": 1655323200000,
     "name": "Short SL (not filled)",
     "price": 95.0,
-    "role": "sl"
+    "role": "sl",
+    "t_ms": 1655299800000
    },
    {
     "date": "2022-06-15",
+    "end_ms": 1655323200000,
     "name": "Short TP (not filled)",
     "price": 75.0,
-    "role": "tp"
+    "role": "tp",
+    "t_ms": 1655299800000
    },
    {
     "date": "2022-06-15",
+    "end_ms": 1655323200000,
     "name": "Long SL",
     "price": 105.25,
-    "role": "sl"
+    "role": "sl",
+    "t_ms": 1655299801000
    },
    {
     "date": "2022-06-15",
+    "end_ms": 1655323200000,
     "name": "Long TP",
     "price": 125.25,
-    "role": "tp"
+    "role": "tp",
+    "t_ms": 1655299801000
    },
    {
     "date": "2022-11-09",
+    "end_ms": 1668027600000,
     "name": "anchor",
     "price": 100.0,
-    "role": "anchor"
+    "role": "anchor",
+    "t_ms": 1668004200000
    },
    {
     "date": "2022-11-09",
+    "end_ms": 1668027600000,
     "name": "Long entry +10",
     "price": 110.0,
-    "role": "entry"
+    "role": "entry",
+    "t_ms": 1668004200000
    },
    {
     "date": "2022-11-09",
+    "end_ms": 1668027600000,
     "name": "Short entry \u221210 (not filled)",
     "price": 90.0,
-    "role": "entry"
+    "role": "entry",
+    "t_ms": 1668004200000
    },
    {
     "date": "2022-11-09",
+    "end_ms": 1668027600000,
     "name": "Long SL (planned)",
     "price": 105.0,
-    "role": "sl"
+    "role": "sl",
+    "t_ms": 1668004200000
    },
    {
     "date": "2022-11-09",
+    "end_ms": 1668027600000,
     "name": "Long TP (planned)",
     "price": 125.0,
-    "role": "tp"
+    "role": "tp",
+    "t_ms": 1668004200000
    },
    {
     "date": "2022-11-09",
+    "end_ms": 1668027600000,
     "name": "Short SL (not filled)",
     "price": 95.0,
-    "role": "sl"
+    "role": "sl",
+    "t_ms": 1668004200000
    },
    {
     "date": "2022-11-09",
+    "end_ms": 1668027600000,
     "name": "Short TP (not filled)",
     "price": 75.0,
-    "role": "tp"
+    "role": "tp",
+    "t_ms": 1668004200000
    },
    {
     "date": "2022-11-09",
+    "end_ms": 1668027600000,
     "name": "Long SL",
     "price": 105.25,
-    "role": "sl"
+    "role": "sl",
+    "t_ms": 1668004201000
    },
    {
     "date": "2022-11-09",
+    "end_ms": 1668027600000,
     "name": "Long TP",
     "price": 125.25,
-    "role": "tp"
+    "role": "tp",
+    "t_ms": 1668004201000
    },
    {
     "date": "2023-02-08",
+    "end_ms": 1675890000000,
     "name": "anchor",
     "price": 100.0,
-    "role": "anchor"
+    "role": "anchor",
+    "t_ms": 1675866600000
    },
    {
     "date": "2023-02-08",
+    "end_ms": 1675890000000,
     "name": "Long entry +10",
     "price": 110.0,
-    "role": "entry"
+    "role": "entry",
+    "t_ms": 1675866600000
    },
    {
     "date": "2023-02-08",
+    "end_ms": 1675890000000,
     "name": "Short entry \u221210 (not filled)",
     "price": 90.0,
-    "role": "entry"
+    "role": "entry",
+    "t_ms": 1675866600000
    },
    {
     "date": "2023-02-08",
+    "end_ms": 1675890000000,
     "name": "Long SL (planned)",
     "price": 105.0,
-    "role": "sl"
+    "role": "sl",
+    "t_ms": 1675866600000
    },
    {
     "date": "2023-02-08",
+    "end_ms": 1675890000000,
     "name": "Long TP (planned)",
     "price": 125.0,
-    "role": "tp"
+    "role": "tp",
+    "t_ms": 1675866600000
    },
    {
     "date": "2023-02-08",
+    "end_ms": 1675890000000,
     "name": "Short SL (not filled)",
     "price": 95.0,
-    "role": "sl"
+    "role": "sl",
+    "t_ms": 1675866600000
    },
    {
     "date": "2023-02-08",
+    "end_ms": 1675890000000,
     "name": "Short TP (not filled)",
     "price": 75.0,
-    "role": "tp"
+    "role": "tp",
+    "t_ms": 1675866600000
    },
    {
     "date": "2023-02-08",
+    "end_ms": 1675890000000,
     "name": "Long SL",
     "price": 105.25,
-    "role": "sl"
+    "role": "sl",
+    "t_ms": 1675866601000
    },
    {
     "date": "2023-02-08",
+    "end_ms": 1675890000000,
     "name": "Long TP",
     "price": 125.25,
-    "role": "tp"
+    "role": "tp",
+    "t_ms": 1675866601000
    },
    {
     "date": "2023-06-07",
+    "end_ms": 1686168000000,
     "name": "anchor",
     "price": 100.0,
-    "role": "anchor"
+    "role": "anchor",
+    "t_ms": 1686144600000
    },
    {
     "date": "2023-06-07",
+    "end_ms": 1686168000000,
     "name": "Long entry +10 (not filled)",
     "price": 110.0,
-    "role": "entry"
+    "role": "entry",
+    "t_ms": 1686144600000
    },
    {
     "date": "2023-06-07",
+    "end_ms": 1686168000000,
     "name": "Short entry \u221210 (not filled)",
     "price": 90.0,
-    "role": "entry"
+    "role": "entry",
+    "t_ms": 1686144600000
    },
    {
     "date": "2023-06-07",
+    "end_ms": 1686168000000,
     "name": "Long SL (not filled)",
     "price": 105.0,
-    "role": "sl"
+    "role": "sl",
+    "t_ms": 1686144600000
    },
    {
     "date": "2023-06-07",
+    "end_ms": 1686168000000,
     "name": "Long TP (not filled)",
     "price": 125.0,
-    "role": "tp"
+    "role": "tp",
+    "t_ms": 1686144600000
    },
    {
     "date": "2023-06-07",
+    "end_ms": 1686168000000,
     "name": "Short SL (not filled)",
     "price": 95.0,
-    "role": "sl"
+    "role": "sl",
+    "t_ms": 1686144600000
    },
    {
     "date": "2023-06-07",
+    "end_ms": 1686168000000,
     "name": "Short TP (not filled)",
     "price": 75.0,
-    "role": "tp"
+    "role": "tp",
+    "t_ms": 1686144600000
    },
    {
     "date": "2023-09-20",
+    "end_ms": 1695240000000,
     "name": "anchor",
     "price": 100.0,
-    "role": "anchor"
+    "role": "anchor",
+    "t_ms": 1695216600000
    },
    {
     "date": "2023-09-20",
+    "end_ms": 1695240000000,
     "name": "Long entry +10",
     "price": 110.0,
-    "role": "entry"
+    "role": "entry",
+    "t_ms": 1695216600000
    },
    {
     "date": "2023-09-20",
+    "end_ms": 1695240000000,
     "name": "Short entry \u221210 (not filled)",
     "price": 90.0,
-    "role": "entry"
+    "role": "entry",
+    "t_ms": 1695216600000
    },
    {
     "date": "2023-09-20",
+    "end_ms": 1695240000000,
     "name": "Long SL (planned)",
     "price": 105.0,
-    "role": "sl"
+    "role": "sl",
+    "t_ms": 1695216600000
    },
    {
     "date": "2023-09-20",
+    "end_ms": 1695240000000,
     "name": "Long TP (planned)",
     "price": 125.0,
-    "role": "tp"
+    "role": "tp",
+    "t_ms": 1695216600000
    },
    {
     "date": "2023-09-20",
+    "end_ms": 1695240000000,
     "name": "Short SL (not filled)",
     "price": 95.0,
-    "role": "sl"
+    "role": "sl",
+    "t_ms": 1695216600000
    },
    {
     "date": "2023-09-20",
+    "end_ms": 1695240000000,
     "name": "Short TP (not filled)",
     "price": 75.0,
-    "role": "tp"
+    "role": "tp",
+    "t_ms": 1695216600000
    },
    {
     "date": "2023-09-20",
+    "end_ms": 1695240000000,
     "name": "Long SL",
     "price": 105.25,
-    "role": "sl"
+    "role": "sl",
+    "t_ms": 1695216601000
    },
    {
     "date": "2023-09-20",
+    "end_ms": 1695240000000,
     "name": "Long TP",
     "price": 125.25,
-    "role": "tp"
+    "role": "tp",
+    "t_ms": 1695216601000
    },
    {
     "date": "2024-03-05",
+    "end_ms": 1709672400000,
     "name": "anchor",
     "price": 100.0,
-    "role": "anchor"
+    "role": "anchor",
+    "t_ms": 1709649000000
    },
    {
     "date": "2024-03-05",
+    "end_ms": 1709672400000,
     "name": "Long entry +10",
     "price": 110.0,
-    "role": "entry"
+    "role": "entry",
+    "t_ms": 1709649000000
    },
    {
     "date": "2024-03-05",
+    "end_ms": 1709672400000,
     "name": "Short entry \u221210 (not filled)",
     "price": 90.0,
-    "role": "entry"
+    "role": "entry",
+    "t_ms": 1709649000000
    },
    {
     "date": "2024-03-05",
+    "end_ms": 1709672400000,
     "name": "Long SL (planned)",
     "price": 105.0,
-    "role": "sl"
+    "role": "sl",
+    "t_ms": 1709649000000
    },
    {
     "date": "2024-03-05",
+    "end_ms": 1709672400000,
     "name": "Long TP (planned)",
     "price": 125.0,
-    "role": "tp"
+    "role": "tp",
+    "t_ms": 1709649000000
    },
    {
     "date": "2024-03-05",
+    "end_ms": 1709672400000,
     "name": "Short SL (not filled)",
     "price": 95.0,
-    "role": "sl"
+    "role": "sl",
+    "t_ms": 1709649000000
    },
    {
     "date": "2024-03-05",
+    "end_ms": 1709672400000,
     "name": "Short TP (not filled)",
     "price": 75.0,
-    "role": "tp"
+    "role": "tp",
+    "t_ms": 1709649000000
    },
    {
     "date": "2024-03-05",
+    "end_ms": 1709672400000,
     "name": "Long SL",
     "price": 105.25,
-    "role": "sl"
+    "role": "sl",
+    "t_ms": 1709649001000
    },
    {
     "date": "2024-03-05",
+    "end_ms": 1709672400000,
     "name": "Long TP",
     "price": 125.25,
-    "role": "tp"
+    "role": "tp",
+    "t_ms": 1709649001000
    },
    {
     "date": "2024-08-21",
+    "end_ms": 1724270400000,
     "name": "anchor",
     "price": 100.0,
-    "role": "anchor"
+    "role": "anchor",
+    "t_ms": 1724247000000
    },
    {
     "date": "2024-08-21",
+    "end_ms": 1724270400000,
     "name": "Long entry +10",
     "price": 110.0,
-    "role": "entry"
+    "role": "entry",
+    "t_ms": 1724247000000
    },
    {
     "date": "2024-08-21",
+    "end_ms": 1724270400000,
     "name": "Short entry \u221210 (not filled)",
     "price": 90.0,
-    "role": "entry"
+    "role": "entry",
+    "t_ms": 1724247000000
    },
    {
     "date": "2024-08-21",
+    "end_ms": 1724270400000,
     "name": "Long SL (planned)",
     "price": 105.0,
-    "role": "sl"
+    "role": "sl",
+    "t_ms": 1724247000000
    },
    {
     "date": "2024-08-21",
+    "end_ms": 1724270400000,
     "name": "Long TP (planned)",
     "price": 125.0,
-    "role": "tp"
+    "role": "tp",
+    "t_ms": 1724247000000
    },
    {
     "date": "2024-08-21",
+    "end_ms": 1724270400000,
     "name": "Short SL (not filled)",
     "price": 95.0,
-    "role": "sl"
+    "role": "sl",
+    "t_ms": 1724247000000
    },
    {
     "date": "2024-08-21",
+    "end_ms": 1724270400000,
     "name": "Short TP (not filled)",
     "price": 75.0,
-    "role": "tp"
+    "role": "tp",
+    "t_ms": 1724247000000
    },
    {
     "date": "2024-08-21",
+    "end_ms": 1724270400000,
     "name": "Long SL",
     "price": 105.25,
-    "role": "sl"
+    "role": "sl",
+    "t_ms": 1724247001000
    },
    {
     "date": "2024-08-21",
+    "end_ms": 1724270400000,
     "name": "Long TP",
     "price": 125.25,
-    "role": "tp"
+    "role": "tp",
+    "t_ms": 1724247001000
    }
   ],
   "plots": {}

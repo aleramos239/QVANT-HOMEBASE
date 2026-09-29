@@ -120,6 +120,7 @@ class Order:
     fill_px: float | None = None
     fill_sl: float | None = None
     fill_tp: float | None = None
+    fill_ms: int | None = None      # when it filled (the print's time): where the moved bracket starts
 
 
 @dataclass(eq=False)
@@ -176,7 +177,7 @@ class SessionResult:
     date: str
     trades: list = field(default_factory=list)
     plots: dict = field(default_factory=dict)     # name -> [[t_ms, value], ...]
-    hlines: list = field(default_factory=list)    # [{name, price, date, role}]
+    hlines: list = field(default_factory=list)    # [{name, price, date, role, t_ms, end_ms}]
     skip: str | None = None                       # the strategy's reason for no trade
 
 
@@ -250,7 +251,10 @@ class Ctx:
         the leg that never filled) before the session ends."""
         if role not in ROLES:
             raise ValueError(f"role must be one of {', '.join(ROLES)}, not {role!r}")
-        rec = {"name": name, "price": price, "date": self.date.isoformat(), "role": role}
+        # t_ms: when the strategy placed it; the page starts the line there (end_ms, the session
+        # window's close, is stamped by run_session) instead of at the session's first bar.
+        rec = {"name": name, "price": price, "date": self.date.isoformat(), "role": role,
+               "t_ms": self._s.now // 1_000_000}
         self._s.res.hlines.append(rec)
         return rec
 
@@ -357,6 +361,7 @@ class _Sim:
             pos.tp = Order(self._ids, -o.side, "limit", tp, o.qty, k + 1, role="tp", pos=pos)
             self.orders.append(pos.tp)
         o.fill_px, o.fill_sl, o.fill_tp = fill, sl, tp      # recording only (Order.fill_px)
+        o.fill_ms = int(self.ts[k]) // 1_000_000
         self.positions.append(pos)
 
     def _close(self, pos: Position, fill: float, k: int, reason: str) -> None:
@@ -456,4 +461,6 @@ def run_session(strategy, tape, costs: Costs, qty: int = 1, daily: list | None =
     sim.advance(hi)
     sim.i = hi
     sim.flatten("eod")
+    for rec in sim.res.hlines:
+        rec["end_ms"] = t1 // 1_000_000
     return sim.res

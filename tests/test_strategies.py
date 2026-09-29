@@ -291,3 +291,67 @@ def test_nq10am_plots_the_gate_even_on_a_day_the_gate_refuses():
     assert res.trades == [] and res.hlines == []
     [[_, pos]] = res.plots["Close position"]
     assert pos == round(0.5 / 28.0, 4)                                  # close near the LOW: no long
+
+
+# ---------------------------------------------------------------- display only: the gate on the chart (2026-09-29)
+#
+# The straddle plots the ADX reading its gate judged (and the line it judged it against) once per
+# session, at the fire. Plots and level timestamps are DISPLAY: nothing a run trades or reports may
+# move because of them. The proof is a run with every plot/hline call turned into a no-op -- the
+# pre-change behaviour -- compared trade for trade and number for number.
+
+def _gate_day(min_adx, gate=True):
+    d = dt.date(2024, 12, 31)
+    tp = _tape("NQ", d, [("09:29:59", 100.0), ("09:30:01", 111.0), ("09:31", 140.0), ("09:40", 90.0)])
+    return run_session(NQ930({**STRADDLE, "adx_gate": gate, "adx_min": min_adx}), tp, Costs(),
+                       daily=GATE_FIX["bars"])
+
+
+def test_straddle_plots_the_adx_its_gate_judged_and_the_threshold_it_judged_it_against():
+    ok, adx = trend_gate(GATE_FIX["bars"][-GATE_BARS:], 20.0)
+    for min_adx in (20.0, 99.0):                       # a gate that lets the day trade, and one that refuses it
+        res = _gate_day(min_adx)
+        fire = et_ns(dt.date(2024, 12, 31), "09:30:00") // 1_000_000
+        assert res.plots == {"ADX(14)": [[fire, adx]], "ADX gate min": [[fire, min_adx]]}
+    assert _gate_day(99.0).skip and _gate_day(99.0).trades == []
+    assert _gate_day(20.0, gate=False).plots == {}     # gate off: nothing to show, nothing plotted
+
+
+def test_the_adx_gate_is_not_plotted_when_it_cannot_be_read():
+    d = dt.date(2024, 12, 31)
+    tp = _tape("NQ", d, [("09:29:59", 100.0), ("09:31", 140.0)])
+    res = run_session(NQ930({"adx_gate": True}), tp, Costs(), daily=GATE_FIX["bars"][:100])
+    assert res.plots == {} and "unknown" in res.skip
+
+
+def test_a_level_records_when_it_was_placed_and_where_its_session_window_ends():
+    d = dt.date(2024, 12, 31)
+    tp = _tape("NQ", d, [("09:29:59", 100.0), ("09:30:01", 106.0), ("09:31", 125.0)])
+    res = run_session(NQ930(STRADDLE), tp, Costs())
+    fire, close = (et_ns(d, t) // 1_000_000 for t in ("09:30:00", "16:00"))
+    fill = et_ns(d, "09:30:01") // 1_000_000
+    by = {h["name"]: h["t_ms"] for h in res.hlines}
+    assert by["anchor"] == fire and by["Long SL (planned)"] == fire     # placed at the fire...
+    assert by["Long SL"] == by["Long TP"] == fill                       # ...the moved bracket exists from the fill
+    assert {h["end_ms"] for h in res.hlines} == {close}                 # ...and all are drawn to the window's close
+
+
+def _strip_display(monkeypatch):
+    """The engine as it was before this change: plots and levels recorded nowhere."""
+    from homebase.backtest import engine
+    monkeypatch.setattr(engine.Ctx, "plot", lambda self, *a, **k: None)
+    monkeypatch.setattr(engine.Ctx, "hline", lambda self, name, price, role="level": {"name": name})
+
+
+@pytest.mark.parametrize("gate,min_adx", [(True, 20.0), (True, 99.0), (False, 20.0)])
+def test_plots_and_level_stamps_never_move_a_trade_or_a_number(monkeypatch, gate, min_adx):
+    from homebase.backtest import report
+    with_display = _gate_day(min_adx, gate)
+    _strip_display(monkeypatch)
+    without = _gate_day(min_adx, gate)
+    assert without.plots == {} and with_display.plots == ({} if not gate else with_display.plots)
+    ledger = lambda r: json.dumps([t.to_dict() for t in r.trades], sort_keys=True)     # noqa: E731
+    assert ledger(with_display) == ledger(without)
+    assert with_display.skip == without.skip
+    rep = lambda r: json.dumps(report.build([t.to_dict() for t in r.trades], 50_000.0), sort_keys=True, default=str)  # noqa: E731
+    assert rep(with_display) == rep(without)
