@@ -331,3 +331,8 @@ test('a step reads as done only in one of the engine\'s OK forms; a multi-line e
   const flatAlready = line({ event: 'manual_flatten', strategy: 'nq930', results: { '1234567049': ['the account is already flat', 'cancel entry 5: ok'] } });
   assert.deepEqual({ ...flatAlready }, { text: 'NQ930 flattened on 1 account', tone: '' });
 });
+
+test("a kill step the engine reports as a no-op ('already killed — nothing to do') reads as done", () => {
+  assert.deepEqual({ ...line({ event: 'manual_flatten', strategy: 'nq930', results: { '1234567049': ['already killed — nothing to do'] } }) },
+    { text: 'NQ930 flattened on 1 account', tone: '' });
+});

@@ -1323,7 +1323,8 @@ const actFail = (r) => r.ok ? "" : " — FAILED: " + actErr(r.error);
    when it matches one of the engine's own OK forms; anything else -- an error that runs over several
    lines, a step this page doesn't know -- is a failure or CHECK IT (second review). A result that
    is not a list of steps cannot be read, so it says so. */
-const STEP_OK = [/^market (Buy|Sell) \d+: ok$/, /^cancel (entry )?\S+: ok$/, /^the account is already flat$/];
+const STEP_OK = [/^market (Buy|Sell) \d+: ok$/, /^cancel (entry )?\S+: ok$/, /^the account is already flat$/,
+                 /^already killed — nothing to do$/];
 function stepFailures(steps) {
   const f = {flatten: [], cancel: [], check: []};
   if (!Array.isArray(steps)) { f.check.push("its result is unreadable"); return f; }
