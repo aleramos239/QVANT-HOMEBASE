@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Backtest · Homebase</title>
+<script>
+  try { var _t = localStorage.getItem('hb_theme');
+    document.documentElement.setAttribute('data-theme', (_t === 'light' || _t === 'dark') ? _t : 'light');
+  } catch (_) { document.documentElement.setAttribute('data-theme', 'light'); }
+</script>
+<!-- 2026-09-28 three-tabs plan: the same chart shell as charts.html, minus every trading module
+     (deskclient/paperclient/tradeui/tradelines/orderpanel/dom/domui/trade.js, and the Level 2/News
+     overlays not named in the design's scope) -- see docs/superpowers/specs/2026-09-28-three-tabs-design.md.
+     window.HB_PAGE tells the shared app.js/panel.js which storage namespace (layouts, the bottom
+     panel's default) and /ws page kind to use. -->
+<script>window.HB_PAGE = 'backtest';</script>
+<link rel="stylesheet" href="/static/charts/charts.css?v=29">
+</head>
+<body>
+<div class="tabrow">
+  <a class="tb-btn" id="tbDesk" href="#" title="Back to the desk"><span class="icw" data-icon="desk"></span><span class="tb-label">Desk</span></a>
+  <span class="tb-sep"></span>
+  <div class="tabstrip" id="tabStrip" role="tablist" aria-label="Layout tabs"></div>
+</div>
+<header class="toolbar" role="toolbar" aria-label="Chart toolbar">
+  <button class="tb-pill" id="tbSymbol" type="button" aria-haspopup="menu" aria-expanded="false"><span class="icw" data-icon="search"></span><span id="tbSymbolText">NQ</span></button>
+  <span class="tb-sep"></span>
+  <div class="tb-group" id="tbFavs" role="group" aria-label="Interval"></div>
+  <button class="tb-btn tb-icon" id="tbIntervals" type="button" title="More intervals" aria-haspopup="menu" aria-expanded="false"><span class="icw sm" data-icon="chevron"></span></button>
+  <span class="tb-sep"></span>
+  <button class="tb-btn" id="tbIndicators" type="button" title="Indicators"><span class="icw" data-icon="indicators"></span><span class="tb-label">Indicators</span></button>
+  <span class="tb-sep"></span>
+  <button class="tb-btn" id="tbReplay" type="button" title="Bar Replay" aria-haspopup="menu" aria-expanded="false"><span class="icw" data-icon="history"></span><span class="tb-label">Replay</span></button>
+  <span class="tb-sep"></span>
+  <button class="tb-btn" id="tbGrid" type="button" title="Chart layout" aria-haspopup="menu" aria-expanded="false"><span class="thumb" id="tbGridThumb"></span><span class="icw sm" data-icon="chevron"></span></button>
+  <span class="tb-spacer"></span>
+  <button class="tb-btn tb-icon" id="tbSettings" type="button" title="Chart settings" aria-label="Chart settings" aria-haspopup="dialog"><span class="icw" data-icon="gear"></span></button>
+  <button class="tb-btn tb-icon" id="tbTheme" type="button" title="Dark theme"><span class="icw" data-icon="moon"></span></button>
+</header>
+<div class="main">
+  <nav class="rail" id="rail" aria-label="Drawing tools">
+    <button class="rail-btn" type="button" data-tool="cursor" title="Cursor" aria-pressed="true"><span class="icw" data-icon="cursor"></span></button>
+    <button class="rail-btn" type="button" data-tool="trend" title="Trend line" aria-pressed="false"><span class="icw" data-icon="trend"></span></button>
+    <button class="rail-btn" type="button" data-tool="hline" title="Horizontal line" aria-pressed="false"><span class="icw" data-icon="hline"></span></button>
+    <button class="rail-btn" type="button" data-tool="rect" title="Rectangle" aria-pressed="false"><span class="icw" data-icon="rect"></span></button>
+    <button class="rail-btn" type="button" data-tool="long" title="Long position" aria-pressed="false"><span class="icw" data-icon="long"></span></button>
+    <button class="rail-btn" type="button" data-tool="short" title="Short position" aria-pressed="false"><span class="icw" data-icon="short"></span></button>
+    <button class="rail-btn" type="button" data-tool="measure" title="Measure" aria-pressed="false"><span class="icw" data-icon="measure"></span></button>
+    <span class="rail-sep"></span>
+    <div class="rail-split">
+      <button class="rail-btn" type="button" id="railMagnet" title="Magnet off" aria-label="Magnet off" aria-pressed="false"><span class="icw" data-icon="magnet"></span></button>
+      <button class="rail-corner" type="button" id="railMagnetMore" title="Magnet mode" aria-label="Magnet mode" aria-haspopup="menu" aria-expanded="false"></button>
+    </div>
+    <button class="rail-btn" type="button" id="railClear" title="Remove drawings"><span class="icw" data-icon="trash"></span></button>
+  </nav>
+  <div class="grid" id="grid"></div>
+  <aside class="pdock" id="pdock" aria-label="Docked panels" hidden></aside>
+</div>
+<div id="floatLayer" aria-label="Floating panels"></div>
+<section class="bpanel" id="bpanel" aria-label="Strategy Tester and Bar Replay">
+  <div class="bp-resize" id="bpResize" role="separator" aria-orientation="horizontal" aria-label="Resize the panel" tabindex="0"></div>
+  <div class="bp-bar"><div class="bp-tabs" id="bpTabs" role="tablist"></div><span class="bp-spacer"></span>
+    <button class="bp-toggle" id="bpToggle" type="button" aria-label="Open the panel" title="Open the panel"><span class="icw" data-icon="chevronUp"></span></button></div>
+  <div class="bp-body" id="bpBody"></div>
+</section>
+<div class="toasts" id="toastRoot" aria-live="polite"></div>
+<footer class="statusbar" id="statusbar">
+  <!-- W1: data-drop ranks the segments that step out WHOLE when the bar is too narrow (the lowest first, app.js
+       fitStatusBar); the connection and desk state never do -->
+  <span class="sb-dot" id="sbDot"></span><span class="sb-mode" id="sbMode">Connecting…</span><span class="sb-feed" id="sbFeed"></span>
+  <span class="sb-desk" id="sbDesk"><span class="sb-dot" id="sbDeskDot"></span><span class="sb-desk-state" id="sbDeskText"></span><span class="sb-desk-why" id="sbDeskWhy" data-drop="6"></span><span class="sb-desk-lim" id="sbDeskLim" data-drop="3"></span><a class="sb-desk-link" id="sbDeskLink" href="#" target="_blank" rel="noopener" hidden>Open the desk</a></span>
+  <span class="sb-spacer" id="sbSpacer"></span>
+  <span class="sb-note" id="sbNote" role="status"></span>
+  <span class="sb-event" id="sbEvent" hidden data-drop="4"></span>
+  <span class="sb-clock" id="sbClock" data-drop="5" title="Eastern Time"></span><span class="sb-opt" id="sbBudget" data-drop="2"></span><span class="sb-opt" id="sbRec" data-drop="1"></span>
+  <a class="sb-credit" id="sbCredit" href="https://www.tradingview.com/" target="_blank" rel="noopener noreferrer" title="Charts: TradingView Lightweight Charts™ · Copyright (c) 2025 TradingView, Inc. · https://www.tradingview.com/" aria-label="Charts: TradingView Lightweight Charts™ (attribution)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></a>
+</footer>
+<div id="menuRoot"></div>
+<div id="dialogRoot"></div>
+<div class="rail-tip" id="railTip" role="status" hidden></div>
+<script src="/static/nobacknav.js?v=29"></script>
+<script src="/static/vendor/lightweight-charts-5.2.1.js?v=29"></script>
+<script src="/static/charts/icons.js?v=29"></script>
+<script src="/static/charts/spring.js?v=29"></script>
+<script src="/static/charts/catalog.js?v=29"></script>
+<script src="/static/charts/primitives.js?v=29"></script>
+<script src="/static/charts/drawstyle.js?v=29"></script>
+<script src="/static/charts/drawings.js?v=29"></script>
+<script src="/static/charts/position.js?v=29"></script>
+<script src="/static/charts/settings.js?v=29"></script>
+<script src="/static/charts/events.js?v=29"></script>
+<script src="/static/charts/scrollback.js?v=29"></script>
+<script src="/static/charts/cell.js?v=29"></script>
+<script src="/static/charts/settings-dialog.js?v=29"></script>
+<script src="/static/charts/indicator-settings-dialog.js?v=29"></script>
+<script src="/static/charts/chartmenu.js?v=29"></script>
+<script src="/static/charts/tradepure.js?v=29"></script>
+<script src="/static/charts/panel.js?v=29"></script>
+<script src="/static/charts/tester.js?v=29"></script>
+<script src="/static/charts/testerui.js?v=29"></script>
+<script src="/static/charts/testerlayer.js?v=29"></script>
+<script src="/static/charts/replay.js?v=29"></script>
+<script src="/static/charts/replayui.js?v=29"></script>
+<script src="/static/charts/panellayout.js?v=29"></script>
+<script src="/static/charts/layouts.js?v=29"></script>
+<script src="/static/charts/presets.js?v=29"></script>
+<script src="/static/charts/app.js?v=29"></script>
+</body>
+</html>

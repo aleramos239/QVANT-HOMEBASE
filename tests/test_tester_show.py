@@ -38,16 +38,23 @@ def recv_type(ws, kind, n=50):
     raise AssertionError(f"no {kind} message")
 
 
-def test_show_broadcasts_to_every_open_page(tmp_path):
+def test_show_broadcasts_to_every_open_backtest_page_and_not_to_charts(tmp_path):
+    """2026-09-28 three-tabs plan: the Strategy Tester lives on the Backtest tab only now, so
+    show_on_chart targets connections that identified themselves as /ws?page=backtest -- never a
+    plain /ws (Charts tab) connection, even though it is also open."""
     with client(tmp_path) as c:
         rid = done_run(c)
-        with c.websocket_connect("/ws", headers=WS) as a, c.websocket_connect("/ws", headers=WS) as b:
+        with c.websocket_connect("/ws", headers=WS) as charts_page, \
+             c.websocket_connect("/ws?page=backtest", headers=WS) as bt_a, \
+             c.websocket_connect("/ws?page=backtest", headers=WS) as bt_b:
             r = c.post("/api/tester/show", json={"run_id": rid, "focus": {"trade_index": 0}}, headers=LOCAL)
             assert r.status_code == 200 and r.json() == {"ok": True, "pages": 2, "run_id": rid,
                                                          "focus": {"trade_index": 0}}
-            for ws in (a, b):
+            for ws in (bt_a, bt_b):
                 assert recv_type(ws, "tester_show") == {"type": "tester_show", "run_id": rid,
                                                         "focus": {"trade_index": 0}}
+            # the Charts-tab connection is untouched by the broadcast: still just its own initial status
+            assert charts_page.receive_json()["type"] == "status"
 
 
 def test_show_with_no_page_open_says_zero(tmp_path):

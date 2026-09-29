@@ -6,8 +6,12 @@
 (() => {
 'use strict';
 const T = window.HBTrade;
-const STATE_KEY = 'hb_panel';
-const DEFAULT_H = 260, MIN_H = 120;
+// 2026-09-28 three-tabs plan: the Backtest tab wants the Strategy Tester open and bigger by default
+// (its only tab there -- Positions/Orders/Fills/Accounts/Fill quality never register on that page) --
+// its own storage key so that default is real and persists independently of the Charts tab's panel.
+const IS_BACKTEST = typeof window !== 'undefined' && window.HB_PAGE === 'backtest';
+const STATE_KEY = IS_BACKTEST ? 'hb_panel_backtest' : 'hb_panel';
+const DEFAULT_H = IS_BACKTEST ? 420 : 260, MIN_H = 120;
 
 const elPanel = document.getElementById('bpanel');
 const elResize = document.getElementById('bpResize');
@@ -406,7 +410,8 @@ function mount(pg) {
   applyHeight(saved && Number.isFinite(saved.h) ? saved.h : DEFAULT_H);
   if (saved && typeof saved.tab === 'string' && tabs.some((t) => t.id === saved.tab)) activeId = saved.tab;
   renderTabsBar();
-  isOpen = !!(saved && saved.open === true);
+  // no saved state yet on the Backtest tab: open by default (its Strategy Tester tab is the point of the page)
+  isOpen = saved ? saved.open === true : IS_BACKTEST;
   elPanel.classList.toggle('open', isOpen);
   const label = isOpen ? 'Close the panel' : 'Open the panel';
   elToggle.setAttribute('aria-label', label);

@@ -142,6 +142,34 @@ def test_layouts_roundtrip(tmp_path):
         assert client.get("/api/layouts").json() == {}
 
 
+def test_backtest_layouts_are_a_separate_namespace_from_charts(tmp_path):
+    """2026-09-28 three-tabs plan: /api/bt/layouts (+ /api/bt/layout-order) are the Backtest tab's
+    own store -- writing one namespace never touches the other's file on disk, and each keeps its
+    own tab order."""
+    app = create_app(roots=["NQ"], base=archive(tmp_path), replay=D, speed=1,
+                     start_et=dt.time(9, 30), state=tmp_path / "state")
+    with TestClient(app, base_url="http://127.0.0.1:8852") as client:
+        charts_lay = {"grid": 1, "cells": [{"root": "NQ", "spec": "time:60", "st": {}}]}
+        bt_lay = {"grid": 4, "cells": [{"root": "NQ", "spec": "time:300", "st": {}}]}
+        assert client.put("/api/layouts/main", json=charts_lay).status_code == 200
+        assert client.put("/api/bt/layouts/main", json=bt_lay).status_code == 200
+        # same name, different namespace: each store holds its own body for "main"
+        assert client.get("/api/layouts").json() == {"main": charts_lay}
+        assert client.get("/api/bt/layouts").json() == {"main": bt_lay}
+        assert (tmp_path / "state" / "layouts.json").exists()
+        assert (tmp_path / "state" / "layouts_backtest.json").exists()
+
+        assert client.put("/api/layout-order", json=["main"]).status_code == 200
+        assert client.put("/api/bt/layout-order", json=["main", "second"]).status_code == 200
+        assert client.get("/api/layout-order").json() == ["main"]
+        assert client.get("/api/bt/layout-order").json() == ["main", "second"]
+
+        # deleting the Charts copy never touches the Backtest copy
+        assert client.delete("/api/layouts/main").status_code == 200
+        assert client.get("/api/layouts").json() == {}
+        assert client.get("/api/bt/layouts").json() == {"main": bt_lay}
+
+
 def test_rename_layout_moves_it_atomically_in_one_request(tmp_path):
     """2026-09-27 layout-tabs plan, coordinator ruling: rename is a single server-side move, never a
     client PUT-new-then-DELETE-old (a failed DELETE there would leave two copies with no way to tell
@@ -527,8 +555,8 @@ def test_ws_handler_ends_cleanly_after_close_mid_prepare(tmp_path, monkeypatch):
     cap: dict = {}
     orig_conn_init = Conn.__init__
 
-    def conn_init(self, ws):
-        orig_conn_init(self, ws)
+    def conn_init(self, ws, page="charts"):
+        orig_conn_init(self, ws, page=page)
         cap["conn"], cap["loop"] = self, asyncio.get_running_loop()
 
     monkeypatch.setattr(Conn, "__init__", conn_init)

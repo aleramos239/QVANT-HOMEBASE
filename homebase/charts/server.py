@@ -332,8 +332,11 @@ class Conn:
     writer task, so one slow page can never stall the pump; a page that
     falls SEND_QUEUE_MAX messages behind is disconnected (it reconnects)."""
 
-    def __init__(self, ws: WebSocket):
+    def __init__(self, ws: WebSocket, page: str = "charts"):
         self.ws = ws
+        # 2026-09-28 three-tabs plan: which page this socket is (?page=backtest on /ws, "charts" by
+        # default) -- lets fan_count target only Backtest-tab connections (show_on_chart).
+        self.page = page
         self.q: asyncio.Queue = asyncio.Queue(maxsize=SEND_QUEUE_MAX)
         self.dead = False
         self.task = asyncio.create_task(self._writer())
@@ -402,6 +405,10 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
     sd.mkdir(parents=True, exist_ok=True)
     layouts_path = sd / "layouts.json"
     layout_order_path = sd / "layout_order.json"   # 2026-09-27 layout-tabs: the tab strip's left-to-right order
+    # 2026-09-28 three-tabs plan: the Backtest tab's own chart layouts, a separate namespace from the
+    # Charts tab's above -- drawings/settings/templates/presets stay shared (unchanged, below).
+    bt_layouts_path = sd / "layouts_backtest.json"
+    bt_layout_order_path = sd / "layout_order_backtest.json"
     drawings_path = sd / "drawings.json"
     templates_path = sd / "templates.json"
     presets_store = PresetsStore(sd / "presets.json")   # 2026-09-27 draw-tools plan: generic, drawing + (later) indicator
@@ -899,6 +906,14 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
     async def index():
         return FileResponse(STATIC / "charts.html", headers={"cache-control": "no-cache"})
 
+    @app.get("/backtest")
+    async def backtest_index():
+        """2026-09-28 three-tabs plan: the same chart shell as / (charts.html), minus every trading
+        module -- see docs/superpowers/specs/2026-09-28-three-tabs-design.md. Its own page, not a
+        query param on /, so a plain <link> to it works with no JS and WKWebView's navigation
+        delegate can tell the two apart by path alone."""
+        return FileResponse(STATIC / "backtest.html", headers={"cache-control": "no-cache"})
+
     @app.get("/api/status")
     async def api_status(request: Request, response: Response):
         """Desk-settings plan: also answers the desk page's origin (the last switch error and
@@ -1002,9 +1017,16 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
 
     register_desk(app, link=link, quotes=quotes, browser_write_ok=browser_write_ok)
     register_paperbook(app, books=book, browser_write_ok=browser_write_ok)
-    def fan_count(msg: dict) -> int:      # POST /api/tester/show: tell every page, say how many there were
-        fan(msg)
-        return len(conns)
+    def fan_count(msg: dict) -> int:
+        """The tester router's only notify callback: progress/grid updates and POST /api/tester/show.
+        2026-09-28 three-tabs plan: the Strategy Tester lives on the Backtest tab only now, so this
+        targets Backtest-tab connections only (conn.page == "backtest", set from /ws?page=backtest) --
+        show_on_chart's "no chart page is open" refusal is accurate again once Backtest, not Charts,
+        is what must be open."""
+        bt = [c for c in conns if c.page == "backtest"]
+        for c in bt:
+            c.send(msg)
+        return len(bt)
 
     tester = tester_router(browser_write_ok, base, Path(state) / "tester" if state else None, notify=fan_count)
     app.include_router(tester)
@@ -1145,69 +1167,78 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             raise HTTPException(502, f"{type(e).__name__}: {e}") from None
         return settings_store.get()
 
-    @app.get("/api/layouts")
-    async def get_layouts():
-        return read_json(layouts_path)
+    def register_layout_routes(route_prefix: str, layouts_path: Path, layout_order_path: Path) -> None:
+        """The layouts + layout-order routes, parametrized by prefix and backing files -- registered
+        once for /api (the Charts tab) and once for /api/bt (the Backtest tab, 2026-09-28 three-tabs
+        plan): each tab's chart layouts are a separate namespace, so writing one never touches the
+        other's file on disk. Route bodies identical to before this split."""
 
-    @app.put("/api/layouts/{name:path}")
-    async def put_layout(name: str, request: Request):
-        browser_write_ok(request)
-        body = await request.json()
-        if not isinstance(body, dict) or not isinstance(body.get("cells"), list):
-            raise HTTPException(400, "a layout is {grid, cells: [...]}")
-        all_ = read_json(layouts_path)
-        all_[name] = body
-        write_json(layouts_path, all_)
-        return {"ok": True}
+        @app.get(f"{route_prefix}/layouts")
+        async def get_layouts():
+            return read_json(layouts_path)
 
-    @app.delete("/api/layouts/{name:path}")
-    async def delete_layout(name: str, request: Request):
-        browser_write_ok(request)
-        all_ = read_json(layouts_path)
-        all_.pop(name, None)
-        write_json(layouts_path, all_)
-        return {"ok": True}
-
-    @app.post("/api/layouts/{name:path}/rename")
-    async def rename_layout(name: str, request: Request):
-        """One atomic dict-key move plus the same temp-file+rename write as every other layouts.json
-        write (write_json) -- never a client-side PUT-new-then-DELETE-old, which would leave two copies
-        on disk (and no way to tell which is live) if the DELETE leg failed after a successful PUT.
-        A crash or a full disk here lands exactly like any other write_json failure: the file on disk is
-        untouched (see test_a_failed_rename_leaves_the_saved_layouts_untouched), never half-renamed."""
-        browser_write_ok(request)
-        body = await request.json()
-        new = body.get("to") if isinstance(body, dict) else None
-        if not isinstance(new, str) or not new:
-            raise HTTPException(400, "a rename is {to: <new name>}")
-        # the browser resolves /api/layouts/. and /.. as path steps: the PUT/DELETE route would miss it
-        if new in (".", ".."):
-            raise HTTPException(400, "“.” and “..” cannot be layout names")
-        all_ = read_json(layouts_path)
-        if name not in all_:
-            raise HTTPException(404, f"{name!r} is not a saved layout")
-        if new == name:
+        @app.put(f"{route_prefix}/layouts/{{name:path}}")
+        async def put_layout(name: str, request: Request):
+            browser_write_ok(request)
+            body = await request.json()
+            if not isinstance(body, dict) or not isinstance(body.get("cells"), list):
+                raise HTTPException(400, "a layout is {grid, cells: [...]}")
+            all_ = read_json(layouts_path)
+            all_[name] = body
+            write_json(layouts_path, all_)
             return {"ok": True}
-        if new in all_:
-            raise HTTPException(409, f"a layout named {new!r} already exists")
-        all_[new] = all_.pop(name)
-        write_json(layouts_path, all_)
-        return {"ok": True}
 
-    @app.get("/api/layout-order")
-    async def get_layout_order():
-        # a distinct path from /api/layouts/{name:path} on purpose -- sharing the prefix would make
-        # "order" just another layout name under that route, whichever one FastAPI matched first
-        return read_json_list(layout_order_path)
+        @app.delete(f"{route_prefix}/layouts/{{name:path}}")
+        async def delete_layout(name: str, request: Request):
+            browser_write_ok(request)
+            all_ = read_json(layouts_path)
+            all_.pop(name, None)
+            write_json(layouts_path, all_)
+            return {"ok": True}
 
-    @app.put("/api/layout-order")
-    async def put_layout_order(request: Request):
-        browser_write_ok(request)
-        body = await request.json()
-        if not isinstance(body, list) or not all(isinstance(x, str) for x in body):
-            raise HTTPException(400, "a layout order is a list of names")
-        write_json(layout_order_path, body)
-        return {"ok": True}
+        @app.post(f"{route_prefix}/layouts/{{name:path}}/rename")
+        async def rename_layout(name: str, request: Request):
+            """One atomic dict-key move plus the same temp-file+rename write as every other layouts.json
+            write (write_json) -- never a client-side PUT-new-then-DELETE-old, which would leave two copies
+            on disk (and no way to tell which is live) if the DELETE leg failed after a successful PUT.
+            A crash or a full disk here lands exactly like any other write_json failure: the file on disk is
+            untouched (see test_a_failed_rename_leaves_the_saved_layouts_untouched), never half-renamed."""
+            browser_write_ok(request)
+            body = await request.json()
+            new = body.get("to") if isinstance(body, dict) else None
+            if not isinstance(new, str) or not new:
+                raise HTTPException(400, "a rename is {to: <new name>}")
+            # the browser resolves .../. and .../.. as path steps: the PUT/DELETE route would miss it
+            if new in (".", ".."):
+                raise HTTPException(400, "“.” and “..” cannot be layout names")
+            all_ = read_json(layouts_path)
+            if name not in all_:
+                raise HTTPException(404, f"{name!r} is not a saved layout")
+            if new == name:
+                return {"ok": True}
+            if new in all_:
+                raise HTTPException(409, f"a layout named {new!r} already exists")
+            all_[new] = all_.pop(name)
+            write_json(layouts_path, all_)
+            return {"ok": True}
+
+        @app.get(f"{route_prefix}/layout-order")
+        async def get_layout_order():
+            # a distinct path from .../layouts/{name:path} on purpose -- sharing the prefix would make
+            # "order" just another layout name under that route, whichever one FastAPI matched first
+            return read_json_list(layout_order_path)
+
+        @app.put(f"{route_prefix}/layout-order")
+        async def put_layout_order(request: Request):
+            browser_write_ok(request)
+            body = await request.json()
+            if not isinstance(body, list) or not all(isinstance(x, str) for x in body):
+                raise HTTPException(400, "a layout order is a list of names")
+            write_json(layout_order_path, body)
+            return {"ok": True}
+
+    register_layout_routes("/api", layouts_path, layout_order_path)
+    register_layout_routes("/api/bt", bt_layouts_path, bt_layout_order_path)
 
     @app.get("/api/drawings/{root}")
     async def get_drawings(root: str):
@@ -1387,7 +1418,8 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             await sock.close(code=1008)
             return
         await sock.accept()
-        conn = Conn(sock)
+        page = sock.query_params.get("page", "charts")
+        conn = Conn(sock, page=page if page == "backtest" else "charts")
         conns.add(conn)
         conn.send({"type": "status", **status()})
         if paper.current is not None:

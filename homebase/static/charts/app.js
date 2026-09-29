@@ -8,6 +8,12 @@
 const C = window.HBCatalog, I = window.HBIcons, S = window.HBSettings, T = window.HBTrade, { Cell, badgeEl } = window.HBCell;
 const DS = window.HBDrawStyle;
 const M = window.HBSpring;   // the feel pass (2026-09-28): materialize()/dematerialize() for every menu/dialog/popover below
+// 2026-09-28 three-tabs plan: the Backtest tab's chart layouts are a separate namespace from the
+// Charts tab's -- window.HB_PAGE (set by backtest.html before this file loads; absent on charts.html)
+// picks the server route prefix and the on-screen-layout localStorage key. Everything else (drawings,
+// settings, templates, presets, favourites, theme) stays the same shared key/route on both pages.
+const LAYOUTS_BASE = window.HB_PAGE === 'backtest' ? '/api/bt' : '/api';
+const LAST_KEY = window.HB_PAGE === 'backtest' ? 'hb_backtest_last' : 'hb_charts_last';
 const GRIDS = { 1: [1, 1], 2: [2, 1], 4: [2, 2], 6: [3, 2] };
 const GRID_NAMES = { 1: '1 chart', 2: '2 charts side by side', 4: '2 × 2 charts', 6: '3 × 2 charts' };
 const STATUS_STALE_S = 6;   // the server sends a status every 2 s: this long without one = it is stuck
@@ -63,7 +69,7 @@ function starter(i) {
   const [root, spec] = START[i % START.length];
   return { root, spec, indicators: C.defaults(), trade: { accounts: [] }, algo: null };   // a fresh chart places no new entries
 }
-function saveLast() { try { localStorage.setItem('hb_charts_last', JSON.stringify(layout)); } catch (_) { /* storage off */ } }
+function saveLast() { try { localStorage.setItem(LAST_KEY, JSON.stringify(layout)); } catch (_) { /* storage off */ } }
 /* Anything that changes a chart outside the Settings dialog's own commit (Ok already marks dirty itself) reads
    the layout as Unsaved the same way: a template apply, removing a chart's indicators, or moving one between
    the price pane and its own — like editing anything else in the layout. */
@@ -87,7 +93,7 @@ function toggleLegendFolded(cell) {
 }
 function loadLast() {
   try {
-    const v = JSON.parse(localStorage.getItem('hb_charts_last') || 'null');
+    const v = JSON.parse(localStorage.getItem(LAST_KEY) || 'null');
     if (v && Array.isArray(v.cells)) {
       layout = { ...readLayout(v), name: typeof v.name === 'string' ? v.name : '', dirty: v.dirty === true };
       lastRaw = v.cells;
@@ -677,7 +683,7 @@ function layoutBody() {
 async function putLayout(name, body = layoutBody()) {
   let r;
   try {
-    r = await fetch('/api/layouts/' + encodeURIComponent(name), { method: 'PUT',
+    r = await fetch(`${LAYOUTS_BASE}/layouts/` + encodeURIComponent(name), { method: 'PUT',
       headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   } catch (e) { return 'save failed: ' + (e && e.message ? e.message : 'network error'); }
   if (r.ok) return '';
@@ -689,7 +695,7 @@ async function putLayout(name, body = layoutBody()) {
 /* Best-effort: the strip's order is cosmetic (never trade config), so a failed write only means the
    NEXT reload sees the old order -- worth logging, never worth blocking a click over. */
 function persistOrder() {
-  fetch('/api/layout-order', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(tabOrder) })
+  fetch(`${LAYOUTS_BASE}/layout-order`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(tabOrder) })
     .catch(() => { /* next load falls back to A-Z for anything unordered (HBLayouts.orderNames) */ });
 }
 
@@ -786,7 +792,7 @@ function renameTab(oldName) {
     }
     let r;
     try {
-      r = await fetch(`/api/layouts/${encodeURIComponent(oldName)}/rename`, { method: 'POST',
+      r = await fetch(`${LAYOUTS_BASE}/layouts/${encodeURIComponent(oldName)}/rename`, { method: 'POST',
         headers: { 'content-type': 'application/json' }, body: JSON.stringify({ to: next }) });
     } catch (e) { menuErr(err, 'rename failed: ' + (e && e.message ? e.message : 'network error')); return; }
     if (!r.ok) {
@@ -842,7 +848,7 @@ function deleteLayoutTab(name) {
   del.onclick = async () => {
     del.disabled = true;
     let r = null;
-    try { r = await fetch('/api/layouts/' + encodeURIComponent(name), { method: 'DELETE' }); } catch (_) { /* r stays null */ }
+    try { r = await fetch(`${LAYOUTS_BASE}/layouts/` + encodeURIComponent(name), { method: 'DELETE' }); } catch (_) { /* r stays null */ }
     if (!r || !r.ok) { del.disabled = false; sbNote(`delete failed${r ? ` (${r.status})` : ': network error'}`); return; }
     closeDialog();
     delete layoutsCache[name];
@@ -947,7 +953,7 @@ function renderTabs() {
 async function loadTabs() {
   let all = null, order = null;
   try {
-    const [ra, ro] = await Promise.all([fetch('/api/layouts'), fetch('/api/layout-order')]);
+    const [ra, ro] = await Promise.all([fetch(`${LAYOUTS_BASE}/layouts`), fetch(`${LAYOUTS_BASE}/layout-order`)]);
     all = ra.ok ? await ra.json() : null;
     order = ro.ok ? await ro.json() : null;
   } catch (_) { /* keep whatever we had */ }
@@ -1875,7 +1881,9 @@ function tick() {
 
 /* ---- the chart service ---- */
 function connect() {
-  ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
+  // 2026-09-28 three-tabs plan: ?page=backtest tells the server which connections show_on_chart may target
+  const wsPage = window.HB_PAGE === 'backtest' ? '?page=backtest' : '';
+  ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws${wsPage}`);
   ws.onopen = () => {
     statusAt = Date.now();
     window.HBReplayUI?.onReconnect(cells);   // a fresh connection carries no replay sessions from the old one
