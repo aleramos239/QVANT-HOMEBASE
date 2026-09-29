@@ -455,6 +455,7 @@ class TradovateAdapter(BrokerAdapter):
             # listed these other accounts -- never a failed, 429'd or empty one
             err.listed = [str(a.get("name") or a.get("nickname") or a.get("id"))
                           for a in accounts]
+            err.user_id = getattr(self._auth.tokens, "user_id", None)
             raise err
         pinned = chosen is not None
         if chosen is None:

@@ -51,6 +51,8 @@ RECONNECT_INTERVAL_S = 5   # cheap now: reconnects reuse the token
 GONE_CONFIRM_S = 300       # an account missing from its login is removed only when a 2nd
                            # successful sync at least this much later still misses it
 GONE_QUIET = (dt.time(9, 20), dt.time(9, 35))   # weekdays ET: never unbook/remove in here
+GONE_CHECK_QUIET = (dt.time(9, 10), dt.time(9, 35))   # ... and never a confirming re-sync
+GONE_CHECK_TIMEOUT_S = 30  # a confirming re-sync runs in its own task, at most this long
 NOTICES_KEPT = 10
 INPLACE_RETRY_S = (10, 60)   # a dropped socket whose token is still valid, while its user's
                              # logins are paused: retry in place 10 s, doubling to 60 s
@@ -399,8 +401,12 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         tail = _login_key(aid).rsplit(":", 1)[-1].split("_", 1)[0]
         return tail.capitalize() if tail else "Tradovate"
 
-    def _in_gone_quiet(now_et) -> bool:
-        return now_et.weekday() < 5 and GONE_QUIET[0] <= now_et.time() < GONE_QUIET[1]
+    def _in_gone_quiet(now_et, span=GONE_QUIET) -> bool:
+        return now_et.weekday() < 5 and span[0] <= now_et.time() < span[1]
+
+    _login_uid: dict[str, object] = {}       # login key -> the Tradovate user id first seen
+    _login_suspect: set[str] = set()         # login keys already warned "may have changed"
+    _gone_tasks: dict[str, asyncio.Task] = {}
 
     def _login_key(aid: str) -> str:
         a = cfg.accounts.get(aid)
@@ -560,10 +566,22 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         _parked.pop(aid, None)
         _inplace_streak.pop(aid, None)
         _no_accounts_warned.discard(aid)
-        if _gone.pop(aid, None) is not None:
-            engine.journal("account_back", account=aid)
-            _notice(f"{_short(aid)} is back on your {_login_label(aid)} login — it was "
-                    "unbooked; book it again if you want it trading", account=aid)
+        uid = getattr(getattr(getattr(ad, "_auth", None), "tokens", None), "user_id", None)
+        if uid:
+            _login_uid.setdefault(key, uid)
+        g = _gone.pop(aid, None)
+        if g is not None:
+            restored = []
+            for name, rows in (g.get("booked") or {}).items():
+                have = cfg.book.setdefault(name, [])
+                for r in rows:
+                    if not any(x.get("account") == aid for x in have):
+                        have.append(dict(r))
+                        restored.append(name)
+            if restored:
+                config_mod.save(cfg)
+            engine.journal("account_back", account=aid, rebooked=restored)
+            _notice(f"{_short(aid)} is back on your {_login_label(aid)} login", account=aid)
         acct_status[aid] = {"connected": True, "error": None}
         engine.journal("broker_connected", account=aid,
                        broker_account=a.account_name, mode=mode)
@@ -625,17 +643,42 @@ def create_app(cfg: config_mod.AppCfg | None = None,
 
     def _note_gone(aid: str, e: AccountNotOnLogin) -> None:
         """A successful sync listed the login's accounts and this entry's is not among
-        them. The first sighting starts the clock (the unbook runs in _gone_step, outside
-        09:20-09:35); one at least GONE_CONFIRM_S later confirms the removal. An error
-        without the listing (a failed, 429'd or empty sync) is never evidence."""
+        them. The first sighting parks it and journals account_gone; one at least
+        GONE_CONFIRM_S later confirms: _gone_step then unbooks and removes it (outside
+        09:20-09:35). Never evidence: a failed, 429'd or empty sync (no listing), a login
+        whose Tradovate user changed, or one where not only a MINORITY of the login's
+        pinned entries is missing -- that is a changed login, not a closed account: park,
+        warn, touch nothing."""
         import time as _t
-        if not getattr(e, "listed", None):
+        listed = getattr(e, "listed", None)
+        if not listed:
+            return
+        key, live = _login_key(aid), cfg.accounts[aid].live
+        pins = {x: (a.account_name or "").lower() for x, a in cfg.accounts.items()
+                if _login_key(x) == key and a.live == live and a.account_name}
+        have = {str(n).lower() for n in listed}
+        missing = [x for x, pin in pins.items() if pin not in have]
+        uid, was = getattr(e, "user_id", None), _login_uid.get(key)
+        if (uid and was and uid != was) or 2 * len(missing) >= len(pins):
+            _gone.pop(aid, None)
+            if key not in _login_suspect:
+                _login_suspect.add(key)
+                engine.journal("login_changed_suspect", login=key, missing=missing,
+                               user_changed=bool(uid and was and uid != was),
+                               login_lists=list(listed))
+                _notice(f"your {_login_label(aid)} login no longer lists "
+                        f"{', '.join(_short(x) for x in missing) or _short(aid)} — the login may "
+                        "have changed; nothing was unbooked or removed. Check it at Tradovate",
+                        account=aid, level="warn")
             return
         now = _t.time()
         g = _gone.get(aid)
         if g is None:
             _gone[aid] = {"first": now, "next_check": now + GONE_CONFIRM_S,
-                          "unbooked": False, "confirmed": False, "listed": list(e.listed)}
+                          "confirmed": False, "listed": list(listed)}
+            engine.journal("account_gone", account=aid, login_lists=list(listed))
+            _notice(f"{_short(aid)} is no longer on your {_login_label(aid)} login — parked; "
+                    "removed from the desk if a second check agrees", account=aid)
         elif now - g["first"] >= GONE_CONFIRM_S:
             g["confirmed"] = True
 
@@ -656,41 +699,42 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                 await old.close()
         engine.journal("account_removed", account=aid, **journal_extra)
 
+    async def _gone_check(aid: str) -> None:
+        """One confirming re-sync, in its own task: it never holds the supervisor."""
+        try:
+            await asyncio.wait_for(_connect_account(aid), GONE_CHECK_TIMEOUT_S)
+        except Exception as e:  # noqa: BLE001 — _note_gone judges it
+            _connect_failed(aid, e)
+
     async def _gone_step() -> None:
-        """Act on accounts that left their login: unbook at once, one confirming
-        sync GONE_CONFIRM_S later, then remove. Never inside 09:20-09:35 ET."""
+        """Accounts that left their login: one confirming re-sync GONE_CONFIRM_S after the
+        first sighting (never 09:10-09:35 ET), then -- confirmed -- unbook and remove
+        (never 09:20-09:35 ET). The bookings are kept in case it comes back."""
         import time as _t
-        if not _gone or _in_gone_quiet(engine.now_et()):
+        if not _gone:
             return
+        now_et = engine.now_et()
         for aid, g in list(_gone.items()):
             if aid not in cfg.accounts:
                 _gone.pop(aid, None)
                 continue
-            if not g["unbooked"]:
-                g["unbooked"] = True
-                was = [n for n, rows in cfg.book.items()
-                       if any(r.get("account") == aid for r in rows)]
-                for name in was:
-                    cfg.book[name] = [r for r in cfg.book[name] if r.get("account") != aid]
-                if was:
-                    config_mod.save(cfg)
-                engine.journal("account_gone", account=aid, unbooked=was,
-                               login_lists=g["listed"])
-                _notice(f"{_short(aid)} is no longer on your {_login_label(aid)} login — "
-                        "unbooked; it is removed from the desk if a second check agrees",
-                        account=aid)
-            if not g["confirmed"] and _t.time() >= g["next_check"]:
-                g["next_check"] = _t.time() + GONE_CONFIRM_S
-                try:
-                    await _connect_account(aid)        # it came back: _gone cleared there
+            if g["confirmed"]:
+                if _in_gone_quiet(now_et):
                     continue
-                except Exception as e:  # noqa: BLE001 — _note_gone judges it
-                    _connect_failed(aid, e)
-            if g["confirmed"] and aid in _gone:
+                g["booked"] = {n: [dict(r) for r in rows if r.get("account") == aid]
+                               for n, rows in cfg.book.items()
+                               if any(r.get("account") == aid for r in rows)}
                 line = (f"{_short(aid)} is no longer on your {_login_label(aid)} login — "
                         "removed from the desk")           # worded before the entry goes
-                await _drop_account(aid, reason="not on the login any more")
+                await _drop_account(aid, reason="not on the login any more",
+                                    unbooked=sorted(g["booked"]))
                 _notice(line, account=aid)
+                continue
+            t = _gone_tasks.get(aid)
+            if (t is None or t.done()) and _t.time() >= g["next_check"] \
+                    and not _in_gone_quiet(now_et, GONE_CHECK_QUIET):
+                g["next_check"] = _t.time() + GONE_CONFIRM_S
+                _gone_tasks[aid] = asyncio.create_task(_gone_check(aid))
 
     async def _broker_loop():
         import time as _t
@@ -813,6 +857,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
     app.state.login_budget = budget
     app.state.parked = _parked
     app.state.gone = _gone
+    app.state.login_uid = _login_uid
     app.state.refresh_snapshots = _refresh_snapshots
     app.state.notices = notices
     app.state.feed_box = feed_box
