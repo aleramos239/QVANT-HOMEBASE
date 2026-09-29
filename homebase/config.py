@@ -11,6 +11,7 @@ appear under many strategies.
 from __future__ import annotations
 
 import json
+import os
 import logging
 from dataclasses import asdict, dataclass, field
 
@@ -204,7 +205,12 @@ def save(cfg: AppCfg) -> None:
     d = asdict(cfg)
     d["webhook_secret"] = ""      # the webhook is gone (2026-09-27): never persist a secret
     d["public_hook_url"] = ""
-    config_path().write_text(json.dumps(d, indent=2, ensure_ascii=False) + "\n")
+    # atomic: a crash mid-write must never leave a truncated config (the desk now
+    # rewrites it on its own, e.g. removing a closed account)
+    path = config_path()
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(d, indent=2, ensure_ascii=False) + "\n")
+    os.replace(tmp, path)
 
 
 def assignments(cfg: AppCfg, strategy: str) -> list[dict]:

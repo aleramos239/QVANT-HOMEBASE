@@ -97,3 +97,20 @@ def test_status_polls_never_reach_the_broker(desk):
     for _ in range(10):
         st = desk.get("/api/status").json()
     assert reads == [] and set(st["accounts"]) == {"dead", "live"}
+def test_config_save_is_atomic(tmp_path, monkeypatch):
+    from homebase import config as config_mod
+    from homebase.config import AppCfg
+    p = tmp_path / "config.json"
+    monkeypatch.setattr(config_mod, "config_path", lambda: p)
+    config_mod.save(AppCfg())
+    before = p.read_text()
+
+    def boom(*a, **k):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(config_mod.os, "replace", boom)
+    try:
+        config_mod.save(AppCfg(armed=True))
+    except OSError:
+        pass
+    assert p.read_text() == before                               # never half-written
