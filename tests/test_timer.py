@@ -1295,3 +1295,32 @@ def test_the_restart_journal_read_runs_off_the_event_loop(tmp_path, monkeypatch)
     timer, engine, md, clock = mk(tmp_path, md=TapeMD(snapshot={"NQ": 24619.0}))
     at(clock, 9, 31); run(timer.tick())
     assert seen == ["_read_decided"]
+
+
+# --- final review, A: one down account never holds the whole book past ACCOUNT_WAIT_MAX_S ---
+def test_a_down_account_holds_a_late_fire_45_s_then_the_ready_ones_place(tmp_path):
+    from homebase.timer import ACCOUNT_WAIT_MAX_S
+    assert ACCOUNT_WAIT_MAX_S == 45.0
+    timer, engine, md, clock = mk(tmp_path, armed=True, md=TapeMD(snapshot={"NQ": 24520.0}))
+    engine.cfg.accounts.update(a=AccountCfg(keyring_key="k", account_name="A"),
+                               b=AccountCfg(keyring_key="k", account_name="B"),
+                               c=AccountCfg(keyring_key="k", account_name="C"))
+    engine.cfg.book["nq930"] = [{"account": x, "qty": 1} for x in ("a", "b", "c")]
+    a = engine.adapters["a"] = ViewAdapter("a")
+    b = engine.adapters["b"] = ViewAdapter("b", connected=False)          # down all morning
+    c = engine.adapters["c"] = ViewAdapter("c", seeded=False)             # up, never synced
+    at(clock, 9, 31); run(timer.tick())                          # a late start: b is down -> wait
+    for s in (10, 30, 44):
+        md.push("NQ", et(9, 31, s), 24520.0)
+        at(clock, 9, 31, s, 100000); run(timer.tick())
+    assert fired(tmp_path) == [] and timer.status()["strategies"]["nq930"]["stage"] == "waiting"
+    md.push("NQ", et(9, 31, 45), 24524.0)
+    at(clock, 9, 31, 45, 100000); run(timer.tick())              # 45.1 s into the wait
+    assert [(r.side, r.price) for r in a.brackets] == [("Buy", 24534.0), ("Sell", 24514.0)]
+    assert b.brackets == [] and c.brackets == []
+    ev = events(tmp_path)
+    assert [(e["account"], e["error"]) for e in ev if e["event"] == "place_failed"] == \
+        [("b", "account not connected")]
+    assert [(e["account"], e["reason"]) for e in ev if e["event"] == "timer_skipped"] == \
+        [("c", "account_unsynced")]
+    assert fired(tmp_path) == [("nq930", True, 105.1, "late_start", "current", 24524.0)]

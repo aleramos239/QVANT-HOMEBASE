@@ -70,6 +70,8 @@ MIN_GATE_BARS = 110        # RMA needs history to converge: at 119 bars the
 PRESTAGE_READ_S = 2.0      # every booked account's position, read concurrently, at most this long
 PRESTAGE_MARGIN_S = 0.5    # ...and never closer than this to 09:30:00 (ruling P6)
 MD_RETRY_S = 30.0          # a wait on a dead md socket reconnects at most this often, token only
+ACCOUNT_WAIT_MAX_S = 45.0  # a late fire waits this long (from the wait's start) for unready accounts,
+                           # then fires on the ready ones: one down account must not cost the rest
 
 # why a fire was late or off the pre-open anchor, or a day missed, in plain words (the
 # review, readiness; the charts pill, homebase/static/charts/trade.js, keeps the same words)
@@ -440,7 +442,8 @@ class SelfTimer:
                 return self._wait(name, st, sub, now_ts, late, late_s, fire_at)
             waited = st["stage"] == "waiting"
             if late or waited:              # a late start's accounts may still be logging in
-                unready = self._late_accounts(name, s)
+                unready = self._late_accounts(name, s, give_up=waited and (
+                    late_s - st["wait_late_s"] >= ACCOUNT_WAIT_MAX_S))
                 if unready is not None:
                     return self._wait(name, st, sub, now_ts, late, late_s, fire_at, unready)
             if source == "pre_open":
@@ -493,7 +496,7 @@ class SelfTimer:
         except Exception as e:  # noqa: BLE001 — a failed line never ends the wait
             print(f"homebase timer: journal timer_waiting for {name} failed: {e!r}", file=sys.stderr)
 
-    def _late_accounts(self, name, s):
+    def _late_accounts(self, name, s, give_up=False):
         """Before a late fire, or one after a wait: every booked account (not
         already skipped) must be connected with its trade cache seeded -- a desk
         that came up after the open may still be logging in or syncing -- else
@@ -501,7 +504,11 @@ class SelfTimer:
         (_prestage_skip) runs again on each: a manual order or position in the
         symbol skips that account for the day, journaled once. No broker call.
         The book is read now, so an account booked during a wait is checked too.
-        An adapter that keeps no cache (trade_view() None) is judged connected."""
+        An adapter that keeps no cache (trade_view() None) is judged connected.
+        give_up (ACCOUNT_WAIT_MAX_S into the wait): no more waiting -- a down
+        account is left to the engine (place_failed, as on time), a connected
+        one whose cache is not synced is skipped (its manual position cannot be
+        checked), and the fire goes out on the ready ones."""
         sym, skipped = s.symbol.upper(), self.engine.skipped_today(name)
         for a in assignments(self.cfg, name):
             aid = a["account"]
@@ -509,17 +516,24 @@ class SelfTimer:
                 continue
             ad = self.engine.adapters.get(aid)
             if ad is None or not ad.connected:
+                if give_up:
+                    continue                # the engine: place_failed, account not connected
                 return "account_down", f"{aid} is not connected", {"account": aid}
             try:
-                view = ad.trade_view()
+                view, err = ad.trade_view(), None
             except Exception as e:  # noqa: BLE001 — unknown: wait, never guess
-                return ("account_unseeded", f"{aid}: its cached view failed ({str(e)[:80]})",
-                        {"account": aid})
+                view, err = None, f"{aid}: its cached view failed ({str(e)[:80]})"
+            if err is None and view is not None and view.get("seeded") is not True:
+                err = f"{aid}: its positions and orders are not synced yet"
+            if err is not None:
+                if not give_up:
+                    return "account_unseeded", err, {"account": aid}
+                self.engine.skip_today(name, aid)
+                self.engine.journal("timer_skipped", strategy=name, reason="account_unsynced",
+                                    account=aid, error=err, late=True)
+                continue
             if view is None:
                 continue
-            if view.get("seeded") is not True:
-                return ("account_unseeded", f"{aid}: its positions and orders are not synced yet",
-                        {"account": aid})
             mine, net = _orders_in(view, sym)[0], _positions_in(view, sym)[0]
             if net or mine:
                 self.engine.skip_today(name, aid)
