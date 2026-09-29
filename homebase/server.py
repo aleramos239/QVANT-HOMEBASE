@@ -246,10 +246,14 @@ def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
         sym = getattr(cfg.strategies.get(name), "symbol", "?")
         orders = tst.get("skipped_orders") or {}
         unreadable = tst.get("skipped_unreadable") or {}
+        unsynced = tst.get("skipped_unsynced") or {}
         checked_at = tst.get("prestage_checked_at") or "09:28:30"   # the real check time
         for aid, net in (tst.get("skipped_accounts") or {}).items():
             a = cfg.accounts.get(aid)
-            if net:
+            if aid in unsynced:
+                detail = (f"{name} skipped today — its positions and orders were not synced "
+                          f"at {checked_at}: unknown, never taken as flat")
+            elif net:
                 detail = (f"{name} skipped today — holds {int(net):+d} {sym} "
                           f"(manual position at {checked_at})")
             elif aid in unreadable:

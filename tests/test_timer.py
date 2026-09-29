@@ -1371,3 +1371,25 @@ def test_the_desks_own_strategy_orders_never_count_as_manual(tmp_path):
     assert [(r.qty, r.price) for r in ad.brackets][2:] == [(1, 24560.0), (1, 24520.0)]
     assert timer._own_orders("main") >= {st.upper_id, st.lower_id, st.up_sl_id, st.up_tp_id,
                                           st.dn_sl_id, st.dn_tp_id} - {None}      # every strategy's
+
+
+# --- an unsynced cached view at the prestage is UNKNOWN, never flat ---------------------------
+def test_an_unsynced_view_at_the_prestage_skips_the_account_never_reads_as_flat(tmp_path):
+    from homebase.server import compute_readiness
+    timer, engine, md, clock = mk(tmp_path, armed=True, md=TapeMD())
+    engine.cfg.accounts["b"] = AccountCfg(keyring_key="k", account_name="B", label="B")
+    engine.cfg.book["nq930"].append({"account": "b", "qty": 1})
+    main = engine.adapters["main"] = ViewAdapter("main", seeded=False)   # its MNQ position: not in yet
+    b = engine.adapters["b"] = ViewAdapter("b")
+    at(clock, 9, 21); run(timer.tick())
+    at(clock, 9, 28, 30); run(timer.tick())                      # the prestage
+    md.push("NQ", et(9, 29, 59, 990000), 24500.0)
+    at(clock, 9, 30); run(timer.tick())
+    assert [(e["account"], e["reason"]) for e in events(tmp_path) if e["event"] == "timer_skipped"] == \
+        [("main", "view_unsynced")]
+    assert main.brackets == [] and [(r.qty, r.price) for r in b.brackets] == [(1, 24510.0), (1, 24490.0)]
+    r = compute_readiness(engine.now_et(), engine.cfg, engine,
+                          {"main": {"connected": True}, "b": {"connected": True}},
+                          timer_status=timer.status())
+    assert {"level": "bad", "label": "MAIN", "detail": "nq930 skipped today — its positions and "
+            "orders were not synced at 09:28:30: unknown, never taken as flat"} in r["checks"]

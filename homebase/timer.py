@@ -748,10 +748,17 @@ class SelfTimer:
                 return None, "cached view: " + (str(e)[:120] or type(e).__name__)
 
         views = {aid: cached_view(aid) for aid in accounts}
-        orders, cached_nets, view_errors = {}, {}, {}
+        orders, cached_nets, view_errors, unsynced = {}, {}, {}, {}
+        # A view not yet synced reads as empty: its manual orders, its MNQ or other-expiry
+        # positions would pass as flat -- UNKNOWN, never flat: skip the account. (A stage
+        # past the grace fires late, and the late fire waits for the sync itself.)
+        opened = dt.datetime.combine(self.now_et().date(), FIRE_T, tzinfo=ET)
+        on_time = (self.now_et() - opened).total_seconds() <= FIRE_LATE_MAX_S
         for aid, (view, verr) in views.items():
             view_errors[aid] = verr
-            if verr is not None:
+            unsynced[aid] = on_time and verr is None and view is not None \
+                and view.get("seeded") is not True
+            if verr is not None or unsynced[aid]:
                 orders[aid] = ([], None)
                 cached_nets[aid] = (0, None)
                 continue
@@ -808,9 +815,15 @@ class SelfTimer:
             if rtts:
                 jnl("prestage_rtt", prestage_rtt_ms=rtts)
 
-        skipped, skipped_orders, skipped_unreadable = {}, {}, {}
+        skipped, skipped_orders, skipped_unreadable, skipped_unsynced = {}, {}, {}, {}
         for aid in accounts:
             net, err = nets.get(aid, (None, None))
+            if unsynced[aid]:
+                skipped[aid], skipped_unsynced[aid] = int(net or 0), True
+                self.engine.skip_today(name, aid)
+                jnl("timer_skipped", reason="view_unsynced", account=aid, net=int(net or 0),
+                    error="cached view: positions and orders not synced yet")
+                continue
             mine, problem = orders[aid]
             cached_net, pos_problem = cached_nets[aid]
             if err is not None:
@@ -840,6 +853,8 @@ class SelfTimer:
             st["skipped_orders"] = skipped_orders
         if skipped_unreadable:
             st["skipped_unreadable"] = skipped_unreadable
+        if skipped_unsynced:
+            st["skipped_unsynced"] = skipped_unsynced
 
     async def _fire(self, name, s, px, info) -> None:
         out = await self.engine.handle_alert(
