@@ -51,7 +51,7 @@ from .store import ARCHIVE, TickStore
 from .studies import make
 from .tick import SideClassifier, from_row
 from .tester_api import tester_router
-from .tickfeed import SwitchInProgress, TickFeed
+from .tickfeed import SwitchInProgress, TickFeed, session_contract
 
 STATIC = Path(__file__).resolve().parent.parent / "static"
 PUMP_S = 0.25                 # <= 4 updates a second per chart
@@ -493,7 +493,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         sess = store.load(root, d)
         ticks = sess.ticks if sess else []
         hub.start_today(root, d, ticks, {
-            "date": d.isoformat(), "contract": sess.contract if sess else symbols.resolve_contract(root),
+            "date": d.isoformat(), "contract": sess.contract if sess else session_contract(root, clock() / 1000),
             "source": "live", "approx": bool(sess and ticks and not sess.bid_ask),
             "gaps": [[et_wall_s(a), et_wall_s(b)] for a, b in (sess.gaps if sess else [])]})
         if root == PAPER_ROOT:
@@ -670,6 +670,8 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                 feed_kwargs["connect_env"] = md_connect
             if recorder is not None:     # the early rebuild's swap: a gap marker, no refill
                 feed_kwargs["on_gap"] = recorder.mark_gap_span
+            # the tick archive job shares the live login's 180/h: it reads this and subtracts it
+            feed_kwargs["usage_path"] = sd / "md_usage.json"
             feed = TickFeed(roots, on_live, on_subscribed=_refill, **feed_kwargs)
         else:
             feed = feed_factory(roots, on_live, on_subscribed=_refill)
@@ -837,7 +839,8 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                     "source": "replay", "approx": False, "gaps": []})
         else:
             for r in roots:
-                d, contract = session_date(clock(), r), symbols.resolve_contract(r)
+                d = session_date(clock(), r)
+                contract = session_contract(r, clock() / 1000)
                 last = recorder.last_ts(r, d, contract)
                 if last is None and always_open(r):
                     # just past a 24/7 root's 18:00 roll: resume from the old session's tail

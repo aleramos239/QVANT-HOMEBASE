@@ -443,7 +443,8 @@ def test_a_refused_root_is_not_retried_inside_the_0920_0935_quiet_window():
 
     feed = TickFeed(["NQ", "BTC"], lambda *a: None, connect=connect, sleep=sleep, now=lambda: clock[0])
     run(feed.run())
-    assert asked == [dt.time(9, 12), dt.time(9, 35), dt.time(9, 45), dt.time(9, 55)]   # 09:22 is skipped
+    # 09:22 falls in the window: asked at 09:35; then twice the wait (review 5): 09:55
+    assert asked == [dt.time(9, 12), dt.time(9, 35), dt.time(9, 55)]
 
 
 def test_a_refused_retry_round_stops_mid_round_when_the_quiet_window_opens():
@@ -479,7 +480,9 @@ def test_a_refused_retry_round_stops_mid_round_when_the_quiet_window_opens():
     feed = TickFeed(["NQ", "BTC", "GC", "SI"], lambda *a: None, connect=connect, sleep=sleep, now=lambda: clock[0])
     run(feed.run())
     retried = [b["symbol"] for _, b in ws.sent[4:]]     # calls after the 4 initial subscribes
-    assert retried == [symbols.resolve_contract("BTC")]        # GC and SI wait for the window to close
+    # each root keeps its own clock (refused 15 s apart): BTC and GC come due before 09:20,
+    # SI's turn is 09:20:14 -- inside the window, so it waits for it to close
+    assert retried == [symbols.resolve_contract("BTC"), symbols.resolve_contract("GC")]
 
 
 # ------------------------------------------------------------------ switch_md
@@ -1211,3 +1214,73 @@ def test_the_chart_service_wires_the_swap_marker_to_its_recorder(tmp_path, monke
     monkeypatch.setattr(cs, "TickFeed", Capture)
     app_with(tmp_path, {"demo": FakeMdWS("demo")})
     assert seen["on_gap"].__func__ is LiveRecorder.mark_gap_span
+
+
+def test_a_refused_root_backs_off_exponentially_and_resets_when_it_subscribes():
+    """Review 5: a refused root was asked every 10 min for ever (3 refused FX
+    roots = 18 getCharts an hour of the live login's 180). Now 10, 20, 40 min
+    ... at most 4 h; a success resets it."""
+    t0 = dt.datetime(2026, 9, 24, 11, 0, tzinfo=ET).timestamp()
+    clock = [t0]
+    btc = symbols.resolve_contract("BTC")
+    asked, ok = [], {"from": t0 + 5 * 3600}
+
+    class WS(FakeWS):
+        async def request(self, ep, body=""):
+            if body["symbol"] == btc:
+                asked.append(round((clock[0] - t0) / 60))
+                if clock[0] < ok["from"]:
+                    self.sent.append((ep, body))
+                    return {"errorText": "no entitlement"}
+            return await super().request(ep, body)
+
+    ws = WS()
+
+    async def connect():
+        return ws
+
+    async def sleep(_s):
+        await asyncio.sleep(0)
+        clock[0] += 60
+        if clock[0] >= t0 + 7 * 3600:
+            feed.stop()
+
+    feed = TickFeed(["NQ", "BTC"], lambda *a: None, connect=connect, sleep=sleep, now=lambda: clock[0])
+    run(feed.run())
+    assert asked[:5] == [0, 10, 30, 70, 150]             # minutes after 11:00: +10, +20, +40, +80
+    assert asked[5] == 310 and "BTC" not in feed.refused  # +160, now entitled
+    assert feed._retry_n == {}
+
+
+def test_the_feed_publishes_its_hourly_chart_requests_for_the_tick_job(tmp_path):
+    clock = [1_790_000_000.0]
+    feed = TickFeed(["NQ"], lambda *a: None, now=lambda: clock[0], usage_path=tmp_path / "md_usage.json")
+    feed.count_request("live")
+    clock[0] += 3000
+    feed.count_request("live")
+    feed.count_request("demo")
+    clock[0] += 1000
+    feed.count_request("live")
+    got = __import__("json").loads((tmp_path / "md_usage.json").read_text())
+    assert got == {"requests": {"live": [1_790_003_000.0, 1_790_004_000.0], "demo": [1_790_003_000.0]}}
+
+
+def test_a_failed_reconnect_waits_out_the_0930_window_but_the_first_one_goes_at_once():
+    t0 = dt.datetime(2026, 9, 24, 9, 24, tzinfo=ET).timestamp()
+    clock, waits, tries = [t0], [], []
+
+    async def connect():
+        tries.append(clock[0])
+        raise OSError("network is down")
+
+    async def sleep(s):
+        await asyncio.sleep(0)
+        waits.append(s)
+        clock[0] += s
+        if len(tries) >= 3:
+            feed.stop()
+
+    feed = TickFeed(["NQ"], lambda *a: None, connect=connect, sleep=sleep, now=lambda: clock[0])
+    run(feed.run())
+    assert waits[0] == 5                                   # the first reconnect: at once
+    assert dt.datetime.fromtimestamp(tries[2], ET).time() >= dt.time(9, 35)   # then past 09:35

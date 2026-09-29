@@ -52,6 +52,21 @@ The desk plist must include `--timeout-graceful-shutdown 5` (regenerate from
 the template), otherwise the chart service's SSE link makes desk restarts
 hang until SIGKILL.
 
+## Tick archive
+
+`python -m homebase.ticks` (launchd `com.ramosquant.homebase-ticks`: hourly, at load, 17:20 and 05:30 ET) keeps
+`~/futures_ticks` complete. Each run reads what the archive file and the chart service's live recording of every
+recent session hold -- by the broker's tick id, one gap-free counter per contract -- and fetches from the broker's
+tick history only what is missing, then merges everything into the archive file (never replaces; the live file is
+only read). The broker keeps ticks from 00:00 UTC of the previous day only, so a session's first hours are gone at
+20:00 ET on the session day: the pieces that leave first are fetched first. By day a run spends at most 45 pages and
+never runs 09:20–09:35 ET; the live login only. A run with nothing to do says nothing.
+
+- `homebase/.state/tick_coverage.json`: every root's last 30 sessions hour by hour -- holes, missing tick ids, and
+  what only Massive can still fill ("needs_massive"); one summary line in `ticks.log`. `--coverage` rewrites it.
+- `--rescan`: writes each recent file's hour-by-hour coverage into its manifest (`complete` there checks every hour).
+- `--fill-from-massive --holes [--dry-run]`: the manual, one-shot Massive fill (homebase/tickmassive.py).
+
 ## Charts
 
 `python -m homebase.charts` (launchd `com.ramosquant.homebase-charts`, port 8852) is the chart half
@@ -60,11 +75,12 @@ session levels, footprint, delta, cumulative delta, big prints, volume profile. 
 cannot place orders and cannot slow the trading app. It records every live tick to
 `~/futures_ticks/<ROOT>/<YYYY>/<date>_<contract>.live.csv.gz`; past sessions come from the archive.
 
-- Records live ticks for the nightly archive's 10 symbols (NQ ES YM RTY GC SI CL ZN NG HG) plus Bitcoin (BTC); `--roots` narrows it.
-- BTC (CME crypto) trades 24/7: a session every day, 18:00 → 18:00 ET, weekends included. Only the chart service records
-  it (the nightly job's weekday 18:00 → 17:00 fetch cannot). Never Massive-backfill BTC over dates the chart service
-  recorded: the store prefers a complete archive file to the live one, and Massive files follow CME trade dates (a
-  Monday file can hold the weekend's trades), so the weekend would be charted twice.
+- Records live ticks for the tick archive's 15 symbols (NQ ES YM RTY GC SI CL ZN NG HG 6E 6J 6B BTC MBT); `--roots`
+  narrows it. The tick job (below) merges this recording into the archive and fills what it missed.
+- BTC and MBT (CME crypto) trade 24/7: a session every day, 18:00 → 18:00 ET, weekends included -- in the chart
+  service and the tick job alike. Never run `research/massive_ticks.py convert` over dates the desk recorded (from
+  2026-09-23): it files Massive's CME trade dates (a Monday file holds the weekend's trades) and replaces an incomplete
+  desk file whole. `python -m homebase.ticks --fill-from-massive` cuts each session to its own hours and merges.
 - Replay any archived session (records nothing): `python -m homebase.charts --replay 2026-09-22 --roots NQ,ES,YM --speed 20 --port 8853`
 - md login: the Apex eval by default; `HOMEBASE_CHARTS_MD=live` switches to the live login.
 - Budget: one chart request per root per connection; gap refills ≤ 60/hour, never 09:20–09:35 ET.

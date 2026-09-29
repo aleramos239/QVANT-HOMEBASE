@@ -16,11 +16,12 @@ PORT = 8852
 # optional md requests (gap refills, refused-symbol retries)
 QUIET = (dt.time(9, 20), dt.time(9, 35))
 # the live recorder captures the nightly tick archive's symbols
-# (homebase.ticks.ROOTS), so the two can be compared and the nightly job can
-# later shrink to a gap-filler — plus Bitcoin, which trades 24/7: the nightly
-# job's weekday 18:00 -> 17:00 fetch cannot capture it, so this service is
-# its only recorder
-DEFAULT_ROOTS = ("NQ", "ES", "YM", "RTY", "GC", "SI", "CL", "ZN", "NG", "HG", "BTC")
+# (homebase.ticks.ROOTS, all 15 of the archive's roots): the nightly job
+# merges this recording into the archive (it holds the first hours of every
+# session, which the broker's history drops at 00:00 UTC the next day) and
+# fills the ticks this one missed from the broker's history
+DEFAULT_ROOTS = ("NQ", "ES", "YM", "RTY", "GC", "SI", "CL", "ZN", "NG", "HG",
+                 "6E", "6J", "6B", "BTC", "MBT")
 # whose md socket feeds the charts: "demo" = the Apex eval login (default;
 # confirmed by the Task 14 spike), "live" = the live account's login
 # ("LIVE" or " live" means live; anything unrecognised is "demo", which is what
