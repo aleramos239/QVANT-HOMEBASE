@@ -11,9 +11,9 @@
     document.documentElement.setAttribute('data-theme', (_t==='light'||_t==='dark') ? _t : 'light');
   }catch(_){ document.documentElement.setAttribute('data-theme','light'); }
 </script>
-<link rel="stylesheet" href="/static/shadcn.css">
+<link rel="stylesheet" href="/static/shadcn.css?v=2">
 <script src="/static/vendor/lightweight-charts.js"></script>
-<script src="/static/algo-visibility.js?v=1"></script>
+<script src="/static/algo-visibility.js?v=2"></script>
 <script src="/static/nobacknav.js?v=1"></script>
 <style>
   /* Page chrome — same language as the TradeCopier app: B&W chrome, the only
@@ -508,7 +508,7 @@
       </span>
       <span class="wordmark" style="font-weight:600;font-size:0.9375rem;letter-spacing:-.01em">Homebase</span>
       <span class="pill idle brand-tag" style="margin-left:2px">Ramos Quant</span>
-      <a class="btn btn-outline btn-sm" id="chartsLink" href="http://localhost:8852/?v=27" style="margin-left:6px">Charts</a>
+      <a class="btn btn-outline btn-sm" id="chartsLink" href="http://localhost:8852/?v=31" style="margin-left:6px">Charts</a>
       <span class="spacer"></span>
       <span class="clock" id="clock">—</span>
       <span class="bulb" id="bulb" onclick="openChecks()" title="connecting…"></span>
@@ -797,7 +797,7 @@
   <button type="button" id="alertX" title="Dismiss" aria-label="Dismiss">&times;</button></div>
 
 <script>
-  (function(){ var a = document.getElementById('chartsLink'); if (a) a.href = location.protocol + '//' + location.hostname + ':8852/?v=27'; })();
+  (function(){ var a = document.getElementById('chartsLink'); if (a) a.href = location.protocol + '//' + location.hostname + ':8852/?v=31'; })();
 const $ = (s) => document.querySelector(s);
 let ST = null;
 let DESK_STALE = false;   // true while refresh() is failing: ST is the last-known state, not current
