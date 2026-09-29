@@ -1348,3 +1348,26 @@ def test_a_placing_left_by_a_crash_turns_into_an_error_to_check_and_never_fires_
     timer, engine, md, clock = mk(tmp_path, armed=True, clock=clock)   # another restart: said once
     assert [(e["account"], e["error"], e["after_restart"]) for e in events(tmp_path)
             if e["event"] == "place_failed"] == [("main", PLACING_UNKNOWN, True)]
+
+
+# --- final review, C: another of this desk's strategies' orders are not "manual" ------------
+def test_the_desks_own_strategy_orders_never_count_as_manual(tmp_path):
+    """nq930b switched on after nq930 placed on the same account and symbol: nq930's working
+    straddle is the desk's own, not a manual order -- nq930b is not skipped for it."""
+    timer, engine, md, clock = mk(tmp_path, armed=True, md=TapeMD())
+    ad = engine.adapters["main"] = ViewAdapter("main")
+    at(clock, 9, 21); run(timer.tick())
+    at(clock, 9, 29); run(timer.tick())
+    md.push("NQ", et(9, 29, 59, 990000), 24500.0)
+    at(clock, 9, 30); run(timer.tick())                          # nq930 places: main-101 / main-102
+    st = engine._state("nq930", "main")
+    ad.view["orders"] = [{"order_id": i, "symbol": "NQZ6"} for i in (st.upper_id, st.lower_id)]
+    engine.cfg.strategies["nq930b"] = StrategyCfg(
+        symbol="NQ", qty=1, offset_pts=20.0, sl_pts=5.0, tp_pts=15.0, enabled=True, self_fire=True)
+    engine.cfg.book["nq930b"] = [{"account": "main", "qty": 1}]
+    md.push("NQ", et(9, 33), 24540.0)
+    at(clock, 9, 33, 0, 200000); run(timer.tick())
+    assert not any(e["event"] == "timer_skipped" for e in events(tmp_path))
+    assert [(r.qty, r.price) for r in ad.brackets][2:] == [(1, 24560.0), (1, 24520.0)]
+    assert timer._own_orders("main") >= {st.upper_id, st.lower_id, st.up_sl_id, st.up_tp_id,
+                                          st.dn_sl_id, st.dn_tp_id} - {None}      # every strategy's

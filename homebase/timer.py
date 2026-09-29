@@ -534,13 +534,21 @@ class SelfTimer:
                 continue
             if view is None:
                 continue
-            mine, net = _orders_in(view, sym)[0], _positions_in(view, sym)[0]
+            mine = [o for o in _orders_in(view, sym)[0] if o not in self._own_orders(aid)]
+            net = _positions_in(view, sym)[0]
             if net or mine:
                 self.engine.skip_today(name, aid)
                 self.engine.journal("timer_skipped", strategy=name,
                                     reason="manual_position" if net else "manual_order",
                                     account=aid, net=int(net or 0), orders=mine, late=True)
         return None
+
+    def _own_orders(self, aid) -> set:
+        """Order ids this desk's strategies placed on the account today (entries and
+        brackets, from the engine's day states): never mistaken for manual ones."""
+        return {str(i) for st in self.engine.day_states_for_account(aid)
+                for i in (st.upper_id, st.lower_id, st.up_sl_id, st.up_tp_id,
+                          st.dn_sl_id, st.dn_tp_id) if i}
 
     def _no_anchor(self, sub, now_ts) -> tuple[str, str, dict]:
         """Why there is no fresh trade to anchor on, told apart -> (cause, text,
@@ -748,7 +756,8 @@ class SelfTimer:
                 cached_nets[aid] = (0, None)
                 continue
             try:
-                orders[aid] = _orders_in(view, sym)
+                mine_, problem_ = _orders_in(view, sym)
+                orders[aid] = ([o for o in mine_ if o not in self._own_orders(aid)], problem_)
             except Exception as e:  # noqa: BLE001 — a malformed cache must not crash the stage
                 orders[aid] = ([], "order view: " + (str(e)[:120] or type(e).__name__))
             try:
