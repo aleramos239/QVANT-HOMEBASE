@@ -370,8 +370,9 @@ def coverage(rows: list[tuple], *, root: str, date: dt.date, start: dt.datetime,
     17:00 ET, the 17:00-18:00 break outside it; weekends have no session; a
     known equity-index half day ends at 13:15 ET). A HOLE is an expected hour
     without a single tick, unless it is proven quiet: the broker's ticks just
-    before and after it have consecutive ids (nothing traded in between), or a
-    history fetch that covered it in full found nothing. MISSING_IDS: broker
+    before and after it have consecutive ids (nothing traded in between) --
+    or, at an end of the file where there is no tick on one side, a history
+    fetch that covered it in full found nothing. MISSING_IDS: broker
     ids skipped inside the file where no Massive row stands in for them.
     head_ok / tail_ok: a tick within 5 min of the open / close, or a history
     fetch covering it. Complete = ticks, no hole, no missing id, both ends."""
@@ -406,7 +407,11 @@ def coverage(rows: list[tuple], *, root: str, date: dt.date, start: dt.datetime,
         if n:
             continue
         i = bisect.bisect_left(b_ts, a)
-        if _covers(spans, a, b) or (0 < i < len(b_ts) and b_id[i] == b_id[i - 1] + 1):
+        if 0 < i < len(b_ts):                   # broker ticks on both sides: their ids decide
+            proven = b_id[i] == b_id[i - 1] + 1
+        else:                                   # at an end of the file: a fetch that covered it
+            proven = _covers(spans, a, b)
+        if proven:
             quiet += 1
             continue
         if holes and holes[-1][1] == a:
@@ -503,12 +508,13 @@ def live_merged(prev: dict, stamp: dict | None) -> bool:
 def merge_session(path: Path, *, root: str, contract: str, date: dt.date, start: dt.datetime,
                   end: dt.datetime, fetched: list[tuple] = (), fetched_source: dict | None = None,
                   include_live: bool = True, massive_new: list[tuple] = (),
-                  massive_source: dict | None = None) -> dict | None:
+                  massive_source: dict | None = None, only_if_added: bool = False) -> dict | None:
     """Merge whatever this session has -- `fetched` broker rows, the live
     recording (if `include_live`), the archive file on disk, `massive_new` --
     into its archive file. Returns the new manifest, or None when there is
-    nothing at all. Raises MergeRefused (nothing written) if the file on disk
-    cannot be read or the ids disagree."""
+    nothing at all (or, with only_if_added, when neither Massive nor the live
+    file adds anything: the file is left as it is). Raises MergeRefused
+    (nothing written) if the file on disk cannot be read or the ids disagree."""
     prev = load_manifest(path)
     sources: list[tuple[str, list[tuple]]] = []
     new_sources: list[dict] = []
@@ -530,6 +536,9 @@ def merge_session(path: Path, *, root: str, contract: str, date: dt.date, start:
         return None
     m = merge(sources, massive_new)
     if not m.rows:
+        return None
+    if only_if_added and not m.stats.get("massive_added") and not fetched \
+            and not any(s.get("kind") == "live" for s in new_sources):
         return None
     if massive_source is not None:
         new_sources.append({**massive_source, "rows_added": m.stats.get("massive_added", 0),

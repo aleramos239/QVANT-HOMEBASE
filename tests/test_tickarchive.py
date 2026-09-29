@@ -282,3 +282,13 @@ def test_the_manifest_complete_is_the_coverages(tmp_path):
     write_live(A.live_path(path), minute_rows(DAY, range(0, 130)))
     man = merge_session(path)
     assert man["complete"] and man["coverage"]["hole_hours"] == 0
+
+
+def test_a_fetch_log_never_hides_ids_that_skip():
+    """A 'reached' fetch vouches for its stretch, but where ticks stand on both
+    sides of an empty hour their ids decide: 60 skipped ids are a hole."""
+    kept = [m for m in range(23 * 60) if not 8 * 60 <= m < 9 * 60]
+    whole = {"kind": "history", "stop": "reached", "from_utc": START.astimezone(A.UTC).isoformat(),
+             "to_utc": END.astimezone(A.UTC).isoformat(), "earliest_ms": S - 60_000}
+    c = cov(minute_rows(DAY, kept), sources=[whole])
+    assert c["missing_ids"] == 60 and [h["from_et"] for h in c["holes"]] == ["02:00"]

@@ -26,12 +26,15 @@ REPORT_SESSIONS = 30
 _CONTRACT = re.compile(r"^([A-Z0-9]+?)([FGHJKMNQUVXZ])(\d{1,2})$")
 
 
+def contract_key(ticker: str):
+    """(root, month, the year's last digit) -- NGX6 and NGX26 alike (a session
+    never lists two contracts ten years apart) -- or None for anything else."""
+    m = _CONTRACT.match(ticker)
+    return (m.group(1), m.group(2), m.group(3)[-1]) if m else None
+
+
 def same_contract(a: str, b: str) -> bool:
-    """NGX6 == NGX26: root, month and the year's last digit (a session never
-    lists two contracts ten years apart)."""
-    ma, mb = _CONTRACT.match(a), _CONTRACT.match(b)
-    return bool(ma and mb) and (ma.group(1), ma.group(2), ma.group(3)[-1]) == \
-        (mb.group(1), mb.group(2), mb.group(3)[-1])
+    return contract_key(a) is not None and contract_key(a) == contract_key(b)
 
 
 def front_files(base: Path, root: str, date: dt.date) -> tuple[list[Path], list[Path]]:

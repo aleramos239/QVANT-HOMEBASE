@@ -43,6 +43,7 @@ hours before any root's long tail), each paged backwards from its own end.
     python -m homebase.ticks --date 2026-09-22 --roots NQ,ES
     python -m homebase.ticks --coverage     # only homebase/.state/tick_coverage.json
     python -m homebase.ticks --rescan       # recent manifests' `complete` from their hours
+    python -m homebase.ticks --fill-from-massive --holes --dry-run   # manual: homebase.tickmassive
 """
 from __future__ import annotations
 
@@ -653,6 +654,24 @@ def coverage_report(roots, base: Path, sessions: int) -> None:
         log(f"coverage report failed: {type(e).__name__}: {e}")
 
 
+def fill_from_massive(a, roots, base: Path) -> int:
+    from . import tickmassive                     # it imports this module
+    dates = [dt.date.fromisoformat(x.strip()) for x in a.dates.split(",") if x.strip()] if a.dates else None
+    kw = dict(dates=dates, since=dt.date.fromisoformat(a.since), include_fetchable=a.include_fetchable,
+              raw=Path(a.raw_dir))
+    try:
+        if a.dry_run:
+            tickmassive.fill(roots, base, now_et(), dry_run=True, **kw)
+            return 0
+        with archive_lock(state_dir() / "ticks.lock"):
+            tickmassive.fill(roots, base, now_et(), **kw)
+            coverage_report(roots, base, a.sessions)
+    except Exception as e:  # noqa: BLE001 — Refused, the lock, the network: said, never a key in it
+        log(f"massive: {type(e).__name__}: {e}")
+        return 1
+    return 0
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--date", help="one session date YYYY-MM-DD (default: every "
@@ -665,12 +684,30 @@ def main(argv=None) -> int:
                     help="write each recent front-month file's hour-by-hour coverage into its "
                          "manifest (data files untouched), then the report (no market data)")
     ap.add_argument("--sessions", type=int, default=30, help="sessions per root the report covers")
+    fm = ap.add_argument_group("Massive gap-fill (manual, off by default; homebase.tickmassive)")
+    fm.add_argument("--fill-from-massive", action="store_true",
+                    help="fill the archive from Massive flat files (env MASSIVE_S3_KEY / MASSIVE_S3_SECRET)")
+    fm.add_argument("--holes", action="store_true",
+                    help="every session since --since the coverage check finds missing or holed, "
+                         "once the broker no longer has it")
+    fm.add_argument("--dates", help="these session dates instead, YYYY-MM-DD[,YYYY-MM-DD...]")
+    fm.add_argument("--since", default="2026-09-22", help="--holes: the first session to look at")
+    fm.add_argument("--include-fetchable", action="store_true",
+                    help="--holes: also what the broker's history still has")
+    fm.add_argument("--dry-run", action="store_true",
+                    help="list every file, hour and MB it would touch; download and write nothing")
+    fm.add_argument("--raw-dir", default=str(Path.home() / "massive_raw"),
+                    help="Massive's raw files, kept here (research/massive_ticks.py's layout)")
     a = ap.parse_args(argv)
     roots = tuple(r.strip().upper() for r in a.roots.split(",") if r.strip())
     base = Path(a.dir)
     if a.coverage:
         coverage_report(roots, base, a.sessions)
         return 0
+    if a.fill_from_massive:
+        if a.holes == bool(a.dates):
+            ap.error("--fill-from-massive needs exactly one of --holes or --dates")
+        return fill_from_massive(a, roots, base)
     try:
         with archive_lock(state_dir() / "ticks.lock"):
             if a.rescan:
