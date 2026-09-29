@@ -30,6 +30,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import json
+import re
 import sys
 import time
 from typing import Callable
@@ -127,6 +128,11 @@ def fire_said(e: dict) -> str:
 
 def miss_why(reason) -> str:
     return MISS_WHY.get(reason, "its accept window closed before it fired")
+
+
+def _shape(text: str) -> str:
+    """A wait's text without its numbers (push counts, ages): what changes its state."""
+    return re.sub(r"\d+(\.\d+)?", "#", text).replace("pushes", "push")
 
 
 def _et_ms(ts) -> str | None:
@@ -280,11 +286,16 @@ class SelfTimer:
         for name, s in self.cfg.strategies.items():
             if not (s.enabled and getattr(s, "self_fire", False)
                     and getattr(s, "kind", "straddle") == "straddle"):
+                off = day.get(name)          # switched off before it fired: remember it
+                if off is not None and off["stage"] in ("idle", "gated", "staged", "waiting"):
+                    off["off"] = True
                 continue                     # bars strategies run off the feed
             st = day.get(name)
             if st is None:                   # first seen (seen_at: a late fire's why)
                 st = day[name] = {"stage": "idle", "gate": None, "adx": None,
                                   "anchor": None, "seen_at": _et_ms(now.timestamp())}
+            elif st.pop("off", None):        # ... and on again (a late fire's why)
+                st["switched_on_at"] = _et_ms(now.timestamp())
             mine.append((name, s, st))
         # Staged by an earlier tick (or waiting for a quote), a strategy reaches
         # its fire with no await (the anchor is a read of the quote already
@@ -339,7 +350,7 @@ class SelfTimer:
         end = _hhmm(s.accept_until_et)
         if t > end:
             if st["stage"] in ("idle", "gated", "staged", "waiting"):
-                self._closed(name, s, st, date)
+                await self._closed(name, s, st, date)
             if not self._quote_needed(s.symbol, name):
                 sub = self._subs.pop(s.symbol, None)
                 if sub is not None and self._md is not None:
@@ -358,6 +369,14 @@ class SelfTimer:
                 await self._md.unsubscribe_quote(self._subs.pop(s.symbol))
             else:
                 return
+
+        opened = dt.datetime.combine(dt.date.fromisoformat(date), FIRE_T, tzinfo=ET)
+        if st["stage"] == "idle" and t >= FIRE_T and self._up_at is not None \
+                and self._up_at > opened:   # the desk came up after the open: did its
+            e = (await self._decided(date)).get(name)            # earlier run fire? then
+            if e is not None and e["event"] == "timer_fired":    # no gate, no prestage and
+                st.update(stage="fired", **{k: e[k] for k in FIRED_KEYS if k in e})
+                return                      # no fire: once a day, restarts or not (dry runs too)
 
         if st["stage"] == "idle" and t >= GATE_T:
             if not s.gated:
@@ -401,11 +420,6 @@ class SelfTimer:
                                     status=day)
                 return
             fire_at = dt.datetime.combine(dt.date.fromisoformat(date), FIRE_T, tzinfo=ET)
-            if st["stage"] == "staged" and self._up_at is not None and self._up_at > fire_at:
-                e = self._decided(date).get(name)        # the desk came up after the open:
-                if e is not None and e["event"] == "timer_fired":   # did its earlier run fire?
-                    st.update(stage="fired", **{k: e[k] for k in FIRED_KEYS if k in e})
-                    return                  # once a day, restarts or not (dry runs too)
             now = self._now()
             now_ts = now.timestamp()
             late_s = now_ts - fire_at.timestamp()
@@ -465,7 +479,7 @@ class SelfTimer:
         account is not (_late_accounts)."""
         cause, text, told = unready or self._no_anchor(sub, now_ts)
         if st["stage"] == "waiting":
-            if cause != st.get("wait_reason"):
+            if _shape(text) != _shape(st.get("wait_text") or ""):   # a new state, not a new count
                 st.update(wait_reason=cause, wait_text=text)
             return
         why = self._late_why(st, fire_at) if late else None   # late already: that is why
@@ -556,6 +570,8 @@ class SelfTimer:
         strategy was first seen after the open (switched on then)."""
         at_open = _et_ms(fire_at.timestamp())       # "09:30:00.000": the same day's
         staged, seen = st.get("staged_at"), st.get("seen_at")   # ET times compare as text
+        if (st.get("switched_on_at") or "") > at_open:          # off, then on after the open
+            return "late_switch_on"
         if staged is not None and staged < at_open:
             return "late_fire"
         if seen is not None and seen <= at_open:
@@ -563,7 +579,7 @@ class SelfTimer:
         return ("late_switch_on" if self._up_at is not None and self._up_at <= fire_at
                 else "late_start")
 
-    def _closed(self, name, s, st, date) -> None:
+    async def _closed(self, name, s, st, date) -> None:
         """The accept window closed on a strategy this timer never fired,
         skipped or deferred today. A day that acted is done, a killed one
         skipped; after a restart, what the desk's earlier run decided (today's
@@ -579,7 +595,7 @@ class SelfTimer:
             st.update(stage="skipped", killed=True)
             return
         waited = st["stage"] == "waiting"        # this run tried: its wait is the day
-        e = None if waited else self._decided(date).get(name)
+        e = None if waited else (await self._decided(date)).get(name)
         if e is not None:
             st.update(stage=DECIDED[e["event"]],
                       **{k: e[k] for k in FIRED_KEYS + ("error", "adx") if k in e})
@@ -606,35 +622,39 @@ class SelfTimer:
                             at=_et_ms(now.timestamp()), late_s=late_s,
                             window_end=s.accept_until_et, **wait)
 
-    def _decided(self, date: str) -> dict:
+    async def _decided(self, date: str) -> dict:
         """strategy -> today's timer outcome in the journal: its fire if it
         fired (a fire stands, whatever a later restart logged), else its last
-        outcome (skipped, error, deferred, missed). Read once per date, and
-        only after an accept window closed or at the first fire attempt of a
-        desk that came up after the open -- never on an on-time fire. A
-        prestage's account-level skip decides nothing. An unreadable journal
-        decides nothing either, and never raises into the timer."""
+        outcome (skipped, error, deferred, missed). Read once per date, off the
+        event loop (a big journal: ~100 ms), and only after an accept window
+        closed or when a desk that came up after the open first sees a
+        strategy -- never on an on-time fire."""
         if self._decided_day[0] != date:
-            out: dict = {}
-            try:
-                p = self.engine.journal_path
-                for line in (p.read_text(errors="replace").splitlines() if p.exists() else ()):
-                    if '"timer_' not in line:
-                        continue
-                    try:
-                        e = json.loads(line)
-                    except ValueError:
-                        continue
-                    if isinstance(e, dict) and e.get("event") in DECIDED and e.get("strategy") \
-                            and str(e.get("et", "")).startswith(date) \
-                            and not (e["event"] == "timer_skipped" and e.get("account")):
-                        prior = out.get(str(e["strategy"]))
-                        if prior is None or prior["event"] != "timer_fired":
-                            out[str(e["strategy"])] = e
-            except Exception as ex:  # noqa: BLE001 — a missed day is said, never a crash
-                print(f"homebase timer: reading today's journal failed: {ex!r}", file=sys.stderr)
-            self._decided_day = (date, out)
+            self._decided_day = (date, await asyncio.to_thread(self._read_decided, date))
         return self._decided_day[1]
+
+    def _read_decided(self, date: str) -> dict:
+        """_decided's read. A prestage's account-level skip decides nothing. An
+        unreadable journal decides nothing either, and never raises."""
+        out: dict = {}
+        try:
+            p = self.engine.journal_path
+            for line in (p.read_text(errors="replace").splitlines() if p.exists() else ()):
+                if '"timer_' not in line:
+                    continue
+                try:
+                    e = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(e, dict) and e.get("event") in DECIDED and e.get("strategy") \
+                        and str(e.get("et", "")).startswith(date) \
+                        and not (e["event"] == "timer_skipped" and e.get("account")):
+                    prior = out.get(str(e["strategy"]))
+                    if prior is None or prior["event"] != "timer_fired":
+                        out[str(e["strategy"])] = e
+        except Exception as ex:  # noqa: BLE001 — a missed day is said, never a crash
+            print(f"homebase timer: reading today's journal failed: {ex!r}", file=sys.stderr)
+        return out
 
     def _stamps(self, sub, cut) -> dict:
         """The anchor's push (the one last(sub, before=cut) answers from) and the

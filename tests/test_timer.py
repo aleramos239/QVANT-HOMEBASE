@@ -961,8 +961,9 @@ def test_a_wait_across_restarts_fires_once(tmp_path):
     at(clock, 9, 31); run(timer.tick())                          # run 2 fires, late_start
     at(clock, 9, 31, 0, 200000); run(timer.tick())
     timer, engine3, md, clock = mk(tmp_path, armed=True, md=TapeMD(snapshot={"NQ": 24650.0}))
-    at(clock, 9, 32); run(timer.tick())                          # run 3: the day acted
-    assert timer.status()["strategies"]["nq930"]["stage"] == "done"
+    at(clock, 9, 32); run(timer.tick())                          # run 3: the journal says it fired
+    st = timer.status()["strategies"]["nq930"]
+    assert (st["stage"], st["anchor"]) == ("fired", 24619.0) and md.subs == []   # no gate, no subscribe
     assert fired(tmp_path) == [("nq930", True, 60.0, "late_start", "current", 24619.0)]
     assert [(b.side, b.price) for b in engine2.adapters["main"].brackets] == \
         [("Buy", 24629.0), ("Sell", 24609.0)]
@@ -1251,3 +1252,46 @@ def test_tradovate_md_without_a_token_refuses_rather_than_log_in(tmp_path, monke
     with pytest.raises(RuntimeError, match="not logging in"):
         run(m.connect(allow_login=False))
     assert not m.connected
+
+
+# --- review round 2, item 5 ------------------------------------------------------------------
+def test_switched_off_then_on_after_the_open_is_a_late_switch_on(tmp_path):
+    timer, engine, md, clock = mk(tmp_path, md=TapeMD())
+    at(clock, 9, 21); run(timer.tick())
+    at(clock, 9, 29); run(timer.tick())                          # staged
+    engine.cfg.strategies["nq930"].enabled = False
+    at(clock, 9, 29, 30); run(timer.tick())
+    at(clock, 9, 30); run(timer.tick())                          # off at the open: nothing
+    engine.cfg.strategies["nq930"].enabled = True
+    md.push("NQ", et(9, 33), 24540.0)
+    at(clock, 9, 33, 0, 200000); run(timer.tick())
+    assert fired(tmp_path) == [("nq930", True, 180.2, "late_switch_on", "current", 24540.0)]
+
+
+def test_the_wait_text_follows_a_new_state_not_a_new_count(tmp_path):
+    timer, engine, md, clock = _waiting(tmp_path)                # no quote pushes at all
+    for i in (1, 2):
+        _bid_only(md, "NQ", et(9, 30, i))
+        at(clock, 9, 30, i, 100000); run(timer.tick())
+    st = timer.status()["strategies"]["nq930"]
+    assert st["wait_text"] == "none of 1 quote push for NQ had a trade"   # the count moved: not a state
+    md.connected = False
+    timer._md_retry_at = float("inf")                            # (no reconnect in this test)
+    at(clock, 9, 30, 3); run(timer.tick())
+    assert timer.status()["strategies"]["nq930"]["wait_text"] == \
+        "none of 2 quote pushes for NQ had a trade (market data disconnected)"
+    assert [w[0] for w in waits(tmp_path)] == ["no_pushes"]
+
+
+def test_the_restart_journal_read_runs_off_the_event_loop(tmp_path, monkeypatch):
+    seen = []
+    real = asyncio.to_thread
+
+    async def spy(fn, *a, **k):
+        seen.append(getattr(fn, "__name__", fn))
+        return await real(fn, *a, **k)
+
+    monkeypatch.setattr("homebase.timer.asyncio.to_thread", spy)
+    timer, engine, md, clock = mk(tmp_path, md=TapeMD(snapshot={"NQ": 24619.0}))
+    at(clock, 9, 31); run(timer.tick())
+    assert seen == ["_read_decided"]
