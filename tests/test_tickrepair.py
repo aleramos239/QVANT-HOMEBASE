@@ -283,3 +283,33 @@ def test_a_night_run_waits_for_the_login_hour_to_free_up(tmp_path, monkeypatch, 
     run(_record_with_conn(tmp_path, usage, day=False))
     assert broker.asked and "the live login's hour is spent" in capsys.readouterr().out
     assert nw.now.timestamp() >= now_s + 600                   # it waited until those aged out
+
+
+def test_a_refused_merge_is_not_fetched_again_until_its_files_change(tmp_path, monkeypatch, capsys):
+    """Review 7: a merge refused (here: an archive file that does not read) used
+    to be re-fetched, and refused, every hour."""
+    nw, ticks, broker, path = battery_day(tmp_path, monkeypatch, dt.datetime(2026, 9, 29, 10, 10, tzinfo=ET))
+    path.write_bytes(b"not a gzip file")
+    cache = {}
+    run(T.record(roots=("NQ",), dates=[D], base=tmp_path, ws=object(), cache=cache, day=True))
+    asked = len(broker.asked)
+    assert asked and capsys.readouterr().out.count("MERGE REFUSED") == 1
+    run(T.record(roots=("NQ",), dates=[D], base=tmp_path, ws=object(), cache=cache, day=True))
+    assert len(broker.asked) == asked and capsys.readouterr().out == ""
+    path.unlink()                                                # someone deals with it
+    run(T.record(roots=("NQ",), dates=[D], base=tmp_path, ws=object(), cache=cache, day=True))
+    assert len(broker.asked) > asked and held(path, ticks[:16 * 60 + 1])
+
+
+def test_store_remembers_a_refusal_with_the_files_stamps(tmp_path, capsys):
+    path = T.archive_path("NQ", D, "NQZ6", tmp_path)
+    path.parent.mkdir(parents=True)
+    path.write_bytes(b"not a gzip file")
+    cache = {}
+    start, end = T.session_bounds(D)
+    assert T.store("NQ", D, "NQZ6", path, start, end, [A.row_of(_minute_ticks(D)[0])], cache=cache) is None
+    assert "MERGE REFUSED" in capsys.readouterr().out and T.refused_still(cache, "NQ", D, path)
+    nw = dt.datetime(2026, 9, 29, 10, 10, tzinfo=ET)
+    assert T.missing("NQ", D, tmp_path, nw, cache)[0] == []    # left alone ...
+    path.write_bytes(b"someone fixed it, or not")
+    assert not T.refused_still(cache, "NQ", D, path)            # ... until its file changes

@@ -355,23 +355,42 @@ async def sleep(s: float) -> None:      # one seam for the tests to remove the w
 
 
 # ------------------------------------------------------------------ writing
+REFUSED = "_refused"            # cache key: sessions whose merge was refused, with their files' stamps
+
+
+def files_stamp(path: Path) -> list:
+    """What the archive file and its live recording are right now (size, mtime)."""
+    return [tickarchive.live_stamp(path), tickarchive.live_stamp(tickarchive.live_path(path))]
+
+
+def refused_still(cache: dict | None, root: str, date: dt.date, path: Path) -> bool:
+    """Was this session's merge refused, and are its files still exactly as then?
+    Then it is left alone (no fetch, no merge) until someone changes them."""
+    got = (cache or {}).get(REFUSED, {}).get(f"{root} {date}")
+    return bool(got) and got.get("stamp") == files_stamp(path)
+
+
 def store(root: str, date: dt.date, contract: str, path: Path, start: dt.datetime,
           end: dt.datetime, fetched: list[tuple] = (), entry: dict | None = None,
-          include_live: bool = True) -> dict | None:
+          include_live: bool = True, cache: dict | None = None) -> dict | None:
     """Merge fetched rows (tickarchive rows) into the session's archive file --
     with the live recording and whatever the file already holds
     (homebase.tickarchive: merge, never replace). `entry` logs the fetch in the
-    manifest. A refused merge leaves every file as it was and is logged; None
-    then, or with nothing to write."""
+    manifest. A refused or failed merge leaves every file as it was, is logged,
+    and is remembered in `cache` with the files' stamps, so the next runs do
+    not fetch the same ticks again for nothing; None then, or with nothing to
+    write."""
     try:
         return tickarchive.merge_session(
             path, root=root, contract=contract, date=date, start=start, end=end,
             fetched=fetched, fetched_source=entry, include_live=include_live)
-    except tickarchive.MergeRefused as e:
-        log(f"{root} {date} {contract}: MERGE REFUSED, every file left as it was — {e}")
     except Exception as e:  # noqa: BLE001 — a bad file must not stop the night; the original stays
-        log(f"{root} {date} {contract}: MERGE FAILED, the original is untouched — "
-            f"{type(e).__name__}: {e}")
+        what = "MERGE REFUSED" if isinstance(e, tickarchive.MergeRefused) else "MERGE FAILED"
+        log(f"{root} {date} {contract}: {what}, every file left as it was — {type(e).__name__}: {e} "
+            "(left alone until its files change)")
+        if cache is not None:
+            cache.setdefault(REFUSED, {})[f"{root} {date}"] = {
+                "stamp": files_stamp(path), "why": f"{type(e).__name__}: {e}", "at": tickarchive.now_utc()}
     return None
 
 
@@ -612,7 +631,7 @@ def missing(root: str, date: dt.date, base: Path, now: dt.datetime, cache: dict,
     path = archive_path(root, date, contract, base)
     info = {"root": root, "date": date, "contract": contract, "path": path, "start": start,
             "end": end, "over": over, "last_id": None}
-    if horizon <= s_ms:
+    if horizon <= s_ms or refused_still(cache, root, date, path):
         return [], info
     fa = tickarchive.file_runs(path, cache) if path.exists() else _EMPTY
     fl = tickarchive.file_runs(tickarchive.live_path(path), cache)
@@ -742,7 +761,7 @@ async def record(roots=ROOTS, dates: list[dt.date] | None = None,
                 fetched = [tickarchive.row_of(r) for r in rows]
                 del rows                                 # one copy in memory, not two (ES: 1.2M ticks)
                 man = store(root, date, contract, st["path"], st["start"], st["end"], fetched, entry,
-                            include_live=over)
+                            include_live=over, cache=cache)
                 del fetched
                 if man is not None:
                     written[key] = man
@@ -758,12 +777,13 @@ async def record(roots=ROOTS, dates: list[dt.date] | None = None,
         finally:
             if own:
                 await conn.close()
-    for man in promote_live(roots, base, now_et()):
+    for man in promote_live(roots, base, now_et(), cache=cache):
         written[(man["root"], dt.date.fromisoformat(man["session_date"]))] = man
     return list(written.values())
 
 
-def promote_live(roots, base: Path, now: dt.datetime, days: int = LIVE_LOOKBACK_DAYS) -> list[dict]:
+def promote_live(roots, base: Path, now: dt.datetime, days: int = LIVE_LOOKBACK_DAYS,
+                 cache: dict | None = None) -> list[dict]:
     """Merge each over-and-done session's live recording the archive file does
     not hold yet -- no fetch needed: a session already gone from the broker,
     or a night the fetch never ran. The live file itself is only read."""
@@ -775,9 +795,10 @@ def promote_live(roots, base: Path, now: dt.datetime, days: int = LIVE_LOOKBACK_
             for lp in sorted((base / root / str(date.year)).glob(f"{tag}_*{tickarchive.LIVE_SUFFIX}")):
                 contract = lp.name[len(tag) + 1:-len(tickarchive.LIVE_SUFFIX)]
                 path = archive_path(root, date, contract, base)
-                if tickarchive.live_merged(tickarchive.load_manifest(path), tickarchive.live_stamp(lp)):
+                if tickarchive.live_merged(tickarchive.load_manifest(path), tickarchive.live_stamp(lp)) \
+                        or refused_still(cache, root, date, path):
                     continue
-                man = store(root, date, contract, path, start, end)
+                man = store(root, date, contract, path, start, end, cache=cache)
                 if man is not None:
                     live = next((s for s in reversed(man["sources"]) if s.get("kind") == "live"), {})
                     log(f"{root} {date} {contract}: live recording merged ({live.get('ticks', 0):,} ticks, "
@@ -841,9 +862,10 @@ def prune_cache(cache: dict, now: dt.datetime, days: int = LIVE_LOOKBACK_DAYS + 
     cut = (now.astimezone(ET).date() - dt.timedelta(days=days)).isoformat()
     for k in [k for k in cache if not k.startswith("_") and (Path(k).name[:10] < cut or not Path(k).exists())]:
         del cache[k]
-    asked = cache.get(ASKED, {})
-    for k in [k for k in asked if k.split(" ")[-1] < cut]:
-        del asked[k]
+    for key in (ASKED, REFUSED):
+        d = cache.get(key, {})
+        for k in [k for k in d if k.split(" ")[-1] < cut]:
+            del d[k]
 
 
 def fill_from_massive(a, roots, base: Path) -> int:
