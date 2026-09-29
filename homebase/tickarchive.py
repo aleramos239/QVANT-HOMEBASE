@@ -14,11 +14,12 @@ per contract, gap-free, the same in the history and the live stream. Checked
 (n == last - first + 1, 21 files, 5.3M ticks), NQ 09-24's first id is 09-23's
 last + 1, and ES's live 09-28 recording starts at id 10,114,406, the id after
 the 09-25 history file's last tick. So broker rows merge BY ID: a tick either
-source has is kept once, with the bid/ask of whichever source has them (the
-first source listed wins a disagreement -- the history). A tick id that comes
-back with a different time, price or size is a conflict: the first source's
-version stays and the conflict is counted; more than a handful means the ids
-are not what we think, and the merge is refused (the originals stay).
+source has is kept once, with the bid/ask of whichever source has them. What
+is already on disk wins a disagreement (the archive file, then the live
+recording, then a fresh fetch): a written tick is never rewritten. A tick id
+that comes back with a different time, price or size is a conflict: the
+on-disk version stays and it is counted; more than CONFLICTS_REFUSED refuse
+the merge (the originals stay).
 
 A Massive row (it has `ts_ns`) carries no broker id -- its `id` is the
 exchange channel's sequence number, repeated across the price levels of one
@@ -56,7 +57,7 @@ BROKER_COLS = COLS[:8]
 TS, PX, SZ, BID, ASK, BIDSZ, ASKSZ, ID, TSNS = range(9)
 LIVE_SUFFIX = ".live.csv.gz"            # = homebase.charts.store.LIVE_SUFFIX (a test holds them equal)
 MASSIVE_GUARD_MS = 2000
-CONFLICTS_REFUSED = 100                 # more same-id disagreements than this: the ids are not one space
+CONFLICTS_REFUSED = 5                   # more same-id disagreements than this: refuse, change nothing
 SOURCES_KEPT = 40                       # the manifest's merge log keeps this many entries
 
 
@@ -133,7 +134,7 @@ def _near(sorted_ts: list[int], ts: int, guard: int) -> bool:
 
 
 def merge(sources, massive_new: list[tuple] = (), guard_ms: int = MASSIVE_GUARD_MS) -> Merged:
-    """The union of `sources` ([(name, rows)], the first wins a disagreement;
+    """The union of `sources` ([(name, rows)], the first -- on disk -- wins a disagreement;
     rows may be a stream, read once) plus `massive_new` (Massive rows offered
     to fill holes). Module docstring for the rules; raises MergeRefused when
     the ids disagree too often."""
@@ -639,10 +640,8 @@ def merge_session(path: Path, *, root: str, contract: str, date: dt.date, start:
     file adds anything: the file is left as it is). Raises MergeRefused
     (nothing written) if the file on disk cannot be read or the ids disagree."""
     prev = load_manifest(path)
-    sources: list[tuple[str, list[tuple]]] = []
+    sources: list = []                  # (name, rows), on disk first: it wins a disagreement
     new_sources: list[dict] = []
-    if fetched:
-        sources.append(("history", list(fetched)))
     if fetched_source is not None:
         new_sources.append({**fetched_source, "ticks": len(fetched), "at_utc": now_utc()})
     if path.exists():
@@ -653,8 +652,9 @@ def merge_session(path: Path, *, root: str, contract: str, date: dt.date, start:
     stamp = live_stamp(lp) if include_live else None      # taken BEFORE the read: a row appended
     if stamp is not None and not live_merged(prev, stamp):  # meanwhile makes the next run merge again
         sources.append(("live", iter_rows(lp)))
-        live_entry = {"kind": "live", **stamp, "at_utc": now_utc()}
-        new_sources.append(live_entry)
+        new_sources.append({"kind": "live", **stamp, "at_utc": now_utc()})
+    if fetched:
+        sources.append(("history", fetched))
     if not sources and not massive_new:
         return None
     m = merge(sources, massive_new)

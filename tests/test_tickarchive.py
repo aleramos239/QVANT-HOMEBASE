@@ -75,8 +75,8 @@ def test_the_fetch_and_the_live_recording_merge_by_tick_id(tmp_path):
     assert sha(lp) == before                                   # only ever read
     assert man["ticks"] == 120 and man["first_id"] == 1000 and man["last_id"] == 1119
     assert [s["kind"] for s in man["sources"]] == ["history", "live"]
-    assert man["merge"]["only_in"] == {"history": 26, "live": 20}   # 100-119 + 40-45 / 0-19
-    assert man["merge"]["quotes_filled"] == 8                  # 27, 37 ... 97 from the live file
+    assert man["merge"]["only_in"] == {"live": 20, "history": 26}   # 0-19 / 100-119 + 40-45
+    assert man["merge"]["quotes_filled"] == 7                  # 23, 33, 53 ... 93 from the fetch
     live_src = man["sources"][1]
     assert live_src["file"] == lp.name and live_src["bytes"] == lp.stat().st_size
 
@@ -92,12 +92,26 @@ def test_a_merged_live_file_is_not_read_again_until_it_changes(tmp_path):
     assert man["merge"]["read"]["live"] == 12 and man["ticks"] == 12
 
 
-def test_a_tick_id_that_changes_between_sources_keeps_the_historys_version(tmp_path):
+def test_a_tick_id_that_changes_between_sources_keeps_the_version_on_disk(tmp_path):
     path = T.archive_path("NQ", DAY, "NQZ6", tmp_path)
     write_live(A.live_path(path), [tick(1, price=20001.0)])
     man = merge_session(path, fetched=[tick(1, price=20000.0)], fetched_source={"kind": "history"})
     assert man["merge"]["id_conflicts"] == 1 and man["merge"]["conflict_ids"] == [1001]
-    assert A.read_rows(path)[1][0][A.PX] == "20000.0"
+    assert A.read_rows(path)[1][0][A.PX] == "20001.0"          # the live recording, already written
+    merge_session(path, fetched=[tick(1, price=19999.0)], fetched_source={"kind": "history"})
+    assert A.read_rows(path)[1][0][A.PX] == "20001.0"          # the archive's, once merged
+
+
+def test_more_than_five_conflicting_ids_refuse_the_merge(tmp_path):
+    path = T.archive_path("NQ", DAY, "NQZ6", tmp_path)
+    merge_session(path, fetched=[tick(i) for i in range(10)], fetched_source={"kind": "history"})
+    merge_session(path, fetched=[tick(i, price=1.0) if i < 5 else tick(i) for i in range(10)],
+                  fetched_source={"kind": "history"})             # five: kept, counted
+    kept = sha(path)
+    with pytest.raises(A.MergeRefused, match="6 tick ids disagree"):
+        merge_session(path, fetched=[tick(i, price=1.0) if i < 6 else tick(i) for i in range(10)],
+                      fetched_source={"kind": "history"})
+    assert sha(path) == kept
 
 
 def test_ids_that_disagree_wholesale_refuse_the_merge_and_leave_every_file(tmp_path):
