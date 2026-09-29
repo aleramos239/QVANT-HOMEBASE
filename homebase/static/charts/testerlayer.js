@@ -100,7 +100,7 @@ function valueAt(data, t) {
    "(planned)" bracket (the one the trigger sized, before the engine moved it to the fill) and a
    "(not filled)" leg are the same colour as their live counterpart, dimmed and more finely dashed. */
 
-const LABEL_MIN_PX = 80;         // a level narrower than this draws its line but no text (a zoomed-out fortnight must not be a wall of names)
+const LABEL_MIN_PX = 150;        // a level narrower than this draws its line but no text (a zoomed-out fortnight must not be a wall of names)
 const LABEL_ROW_H = 12;          // px between two stacked labels
 const DIMMED = /\((?:planned|not filled)\)/;
 const LIVE_DASH = [4, 3], DIM_DASH = [1, 5], LEVEL_DASH = [1, 3];
@@ -333,7 +333,6 @@ async function runJump(env, i, target = null, { select = true, avoidSelected = f
 /* ================================================================== browser half ================================================================== */
 
 const PLOT_PANE_H = 90;   // px, = cell.js PANE_H: the gate/indicator sub-pane
-const FONT = '11px -apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif';
 const FONT_SM = '10px -apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif';
 const ZONE_ALPHA = 0.14, ZONE_ALPHA_SEL = 0.28;   // the boxes: light for every trade, stronger for the selected one
 const MAX_ARROWS = 400, MAX_LABELS = 120;          // beyond this many trades in view, arrows / P&L text step out
@@ -468,6 +467,7 @@ class TesterMarks {
 
   /* TradingView's position boxes: a green one entry -> TP, a red one entry -> SL, over the trade's own time span. */
   drawZones(ctx, f) {
+    const outline = f.trades.length <= MAX_ARROWS;     // a fortnight of thousands: fills only
     for (const s of f.trades) {
       const { g } = s;
       const zones = [[g.ty, f.P.up], [g.sy, f.P.down]];
@@ -477,8 +477,10 @@ class TesterMarks {
         ctx.globalAlpha = s.sel ? ZONE_ALPHA_SEL : ZONE_ALPHA;
         ctx.fillStyle = color; ctx.fillRect(g.x0, top, g.x1 - g.x0, h);
         // an outline keeps a zone readable on a candle of its own colour, and a thin one from vanishing
-        ctx.globalAlpha = s.sel ? 1 : 0.55;
-        ctx.lineWidth = 1; ctx.strokeStyle = color; ctx.strokeRect(g.x0 + 0.5, top + 0.5, g.x1 - g.x0 - 1, Math.max(0, h - 1));
+        if (!outline && !s.sel) continue;
+        const edge = (w, style, a) => { ctx.globalAlpha = a; ctx.lineWidth = w; ctx.strokeStyle = style; ctx.strokeRect(g.x0 + 0.5, top + 0.5, g.x1 - g.x0 - 1, Math.max(0, h - 1)); };
+        edge(3, f.P.bg, s.sel ? 0.7 : 0.45);            // a casing, so the outline holds on a candle of its own colour
+        edge(1, color, s.sel ? 1 : 0.7);
       }
     }
     ctx.globalAlpha = 1;
