@@ -43,9 +43,12 @@ import json
 import os
 import re
 import secrets
+import shutil
+import signal
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
 from typing import Callable, Iterator
 
@@ -509,6 +512,40 @@ def in_quiet(now: dt.datetime) -> bool:
     return t.weekday() < 5 and QUIET[0] <= t.time() < QUIET[1]
 
 
+class _AdoptedProc:
+    """A subprocess.Popen stand-in for a job _recover() found still alive after an unclean
+    restart: this process never launched it, so there is no real Popen handle -- only its pid.
+    Same shape _watch()/cancel() already use (poll/wait/terminate/kill), backed by signals and a
+    poll loop instead of the OS's real child-reaping. No .hb_log: that fd belongs to whichever
+    process opened it (the one before the restart); this one only ever reads log.txt from disk."""
+
+    def __init__(self, pid: int):
+        self.pid = pid
+
+    def poll(self):
+        return None if _alive(self.pid) else 0
+
+    def wait(self, timeout: float | None = None) -> int:
+        t0 = time.monotonic()
+        while _alive(self.pid):
+            if timeout is not None and time.monotonic() - t0 > timeout:
+                raise subprocess.TimeoutExpired(cmd="adopted-export", timeout=timeout)
+            time.sleep(0.1)
+        return 0
+
+    def terminate(self) -> None:
+        try:
+            os.kill(self.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+
+    def kill(self) -> None:
+        try:
+            os.kill(self.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+
 class ExportManager:
     """The chart service's handle on export jobs (thread-safe; no asyncio). One at a time."""
 
@@ -527,13 +564,26 @@ class ExportManager:
         self._recover()
 
     def _recover(self) -> None:
-        """Jobs a previous service process left queued/running are dead now (the chart service
-        restarted): never shown as stuck forever."""
-        for st_path in self.jobs.glob("*/status.json"):
+        """A job a previous service process left queued/running: dead (its pid is gone) is never
+        shown as stuck forever -- errored. Still ALIVE (an export outlives the chart service
+        restarting -- it is its own process, not a child the restart takes down with it) is
+        ADOPTED as _active and watched exactly like one this instance launched, so "one export at
+        a time" still holds and its own eventual done/error status.json write is still honored."""
+        adopted = False
+        for st_path in sorted(self.jobs.glob("*/status.json")):
             st = read_json(st_path, {}) or {}
-            if st.get("status") in ("queued", "running") and not _alive(st.get("pid")):
+            if st.get("status") not in ("queued", "running"):
+                continue
+            pid = st.get("pid")
+            if not _alive(pid):
                 st.update(status="error", error="interrupted (the chart service restarted)", updated=_now())
                 write_json(st_path, st)
+            elif not adopted:                     # at most one: submit() never let a second one start
+                adopted = True
+                jid = st_path.parent.name
+                proc = _AdoptedProc(pid)
+                self._active = (jid, proc)
+                threading.Thread(target=self._watch, args=(jid, proc), daemon=True).start()
 
     def dir(self, jid: str) -> Path:
         if not JOB_ID_RE.match(jid or "") or not (self.jobs / jid).is_dir():
@@ -557,7 +607,6 @@ class ExportManager:
                                                "updated": _now()})
                 proc = self._launch(d)
             except BaseException:
-                import shutil
                 shutil.rmtree(d, ignore_errors=True)
                 raise
             self._active = (jid, proc)
@@ -581,7 +630,9 @@ class ExportManager:
         try:
             code = proc.wait()
         finally:
-            proc.hb_log.close()
+            log = getattr(proc, "hb_log", None)   # None for an _AdoptedProc: that fd belongs to another process
+            if log is not None:
+                log.close()
         with self._lock:
             if self._active is not None and self._active[0] == jid:
                 self._active = None

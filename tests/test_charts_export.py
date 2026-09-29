@@ -12,6 +12,7 @@ import io
 import json
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -434,6 +435,37 @@ def test_export_manager_recovers_a_stale_running_job_from_a_dead_pid(tmp_path):
     E.ExportManager(base, archive=tmp_path / "ticks", depth_base=tmp_path / "depth", out_dir=tmp_path / "downloads")
     st = json.loads((d / "status.json").read_text())
     assert st["status"] == "error" and "interrupted" in st["error"]
+
+
+def test_export_manager_adopts_a_still_alive_job_after_an_unclean_restart(tmp_path):
+    """A restart of the chart service does not kill an export child (its own process, no --archive
+    tie to the parent's lifetime): the NEW ExportManager instance must pick it back up as _active,
+    not just leave it dangling while accepting a second job on top of it."""
+    base = tmp_path / "state"
+    d = base / "jobs" / "20260101-000000-deadbeef"
+    d.mkdir(parents=True)
+    proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+    # this test process IS proc's real parent (unlike production: there, the chart service that
+    # launched an export is the one that restarted, so the export reparents to init and is reaped
+    # promptly on its own) -- reap it as soon as it dies, in the background, so _alive() (os.kill)
+    # stops seeing a lingering zombie and _AdoptedProc.wait() does not sit out the full timeout.
+    reaper = threading.Thread(target=proc.wait, daemon=True)
+    reaper.start()
+    try:
+        E.write_json(d / "status.json", {"id": d.name, "status": "running", "pid": proc.pid, "updated": E._now()})
+        mgr = E.ExportManager(base, archive=tmp_path / "ticks", depth_base=tmp_path / "depth",
+                              out_dir=tmp_path / "downloads")
+        assert mgr._active is not None and mgr._active[0] == d.name
+        with pytest.raises(ValueError, match="already running"):
+            mgr.submit({"root": "NQ", "type": "ticks", "start": D.isoformat(), "end": D.isoformat()})
+        st = mgr.cancel(d.name)                 # also proves the adopted stand-in answers terminate()/wait()
+        assert st["status"] == "cancelled"
+        reaper.join(timeout=5)
+        assert not reaper.is_alive(), "cancel() must actually have killed it"
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+        reaper.join(timeout=5)
 
 
 def test_export_manager_reveal_only_offers_that_jobs_own_finished_file(tmp_path):
