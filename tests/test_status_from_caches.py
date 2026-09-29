@@ -97,6 +97,35 @@ def test_status_polls_never_reach_the_broker(desk):
     for _ in range(10):
         st = desk.get("/api/status").json()
     assert reads == [] and set(st["accounts"]) == {"dead", "live"}
+
+
+# ---------------------------------------------------------------- review 2026-09-29
+def test_a_sibling_rebuilt_during_the_read_keeps_its_newer_data(tmp_path):
+    answer, _ = broker(positions=[{"accountId": SIB, "contractId": 3267315, "netPos": 4}],
+                       cash=[{"accountId": SIB, "amount": 1.0}])
+    a = _adapter(tmp_path, answer, "a", ME)
+    b = _adapter(tmp_path, broker()[0], "b", SIB)
+    b._cash = {"accountId": SIB, "amount": 48000.0}
+    orig = a._ws.position_list
+
+    async def list_while_b_reseeds():
+        out = await orig()
+        b._seed_gen += 1                     # b rebuilt + re-seeded meanwhile
+        return out
+
+    a._ws.position_list = list_while_b_reseeds
+    run(a.refresh_snapshot([b]))
+    assert b._positions == {} and b._cash["amount"] == 48000.0
+
+
+def test_an_odd_answer_never_empties_the_caches(tmp_path):
+    answer, _ = broker(positions={"error": "x"}, cash=[])
+    a = _adapter(tmp_path, answer)
+    push(a, "position", {"accountId": ME, "contractId": 3267315, "netPos": 2})
+    run(a.refresh_snapshot())
+    assert run(a.get_metrics())["open_positions"] == [{"symbol": "NQZ6", "net": 2}]
+
+
 def test_the_refresh_groups_by_login_and_env(desk):
     desk.app.state.cfg.accounts["live"].live = True              # same key, other env
     calls = []

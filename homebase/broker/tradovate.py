@@ -226,6 +226,7 @@ class TradovateAdapter(BrokerAdapter):
         self.caches_seeded = False                # position/cash read after the last (re)connect
         self._login_budget = None                 # the desk's per-user LoginBudget (server sets it)
         self._cache_ts = 0.0                      # unix time the position/cash caches last changed
+        self._seed_gen = 0                        # bumped by every seed start/stop
 
     @property
     def login_budget(self):
@@ -624,6 +625,7 @@ class TradovateAdapter(BrokerAdapter):
         """Forget the caches' seeded state and stop any seed still reading the
         OLD socket, so a stale snapshot can never mark the new one seeded."""
         self.caches_seeded = False
+        self._seed_gen += 1
         if self._seed_task is not None and not self._seed_task.done():
             self._seed_task.cancel()
 
@@ -631,6 +633,7 @@ class TradovateAdapter(BrokerAdapter):
         """Positions + cash read in the BACKGROUND after a (re)connect: it
         never delays the connect the 9:30 bot is waiting on."""
         try:
+            self._seed_gen += 1
             if self._seed_task is not None and not self._seed_task.done():
                 self._seed_task.cancel()
             self._seed_task = asyncio.create_task(self._seed_caches())
@@ -703,13 +706,18 @@ class TradovateAdapter(BrokerAdapter):
                    if t.caches_seeded and t._acct_num is not None and t.connected]
         if not targets:
             return
+        marks = {id(t): (t._ws, t._seed_gen) for t in targets}
         for t in targets:
             t._pos_pushed.clear()
             t._cash_pushed = False
         positions = await ws.position_list()
         cash = await ws.cash_balance_list()
+        if not isinstance(positions, list) or not isinstance(cash, list):
+            return                          # an odd answer is never "flat" / "no cash"
         now = time.time()
         for t in targets:
+            if marks[id(t)] != (t._ws, t._seed_gen) or not t.caches_seeded:
+                continue      # rebuilt / re-seeded while the read was out: its data is newer
             me = t._acct_num
             snap = {p["contractId"]: p for p in positions or []
                     if isinstance(p, dict) and p.get("accountId") == me
