@@ -96,11 +96,14 @@ def read_header(path: Path) -> list[str]:
         return []
 
 
-def iter_rows(path: Path):
+def iter_rows(path: Path, strict: bool = False):
     """Every row of an archive or live file as the 9 archive columns (missing
     ones ''), streamed. A live file holds one gzip member per flush and may end
     in a member torn by a crash: the torn tail is dropped, never raised
-    (homebase.charts.store.read_table's rule); a repeated header is skipped."""
+    (homebase.charts.store.read_table's rule); a repeated header is skipped.
+    strict (an archive file about to be rewritten): a torn member, a row of
+    the wrong width or a repeated header raises MergeRefused instead -- what
+    cannot be read whole is never merged over."""
     try:
         with gzip.open(path, "rt", newline="") as fh:
             rd = csv.reader(fh)
@@ -109,9 +112,13 @@ def iter_rows(path: Path):
             pos = [header.index(c) if c in header else None for c in COLS]
             for rec in rd:
                 if len(rec) != n or rec == header:
+                    if strict:
+                        raise MergeRefused(f"{path.name}: a malformed row -- left as it is")
                     continue
                 yield tuple(rec[i] if i is not None else "" for i in pos)
-    except (EOFError, zlib.error, OSError):
+    except (EOFError, zlib.error, OSError) as e:
+        if strict:
+            raise MergeRefused(f"{path.name} does not read whole ({e}) -- left as it is") from None
         return
 
 
@@ -707,7 +714,7 @@ def merge_session(path: Path, *, root: str, contract: str, date: dt.date, start:
     if path.exists():
         if not read_header(path):
             raise MergeRefused(f"{path.name} is on disk but unreadable -- left as it is")
-        sources.append(("archive", iter_rows(path)))
+        sources.append(("archive", iter_rows(path, strict=True)))
     lp = live_path(path)
     stamp = live_stamp(lp) if include_live else None      # taken BEFORE the read: a row appended
     if stamp is not None and not live_merged(prev, stamp):  # meanwhile makes the next run merge again
@@ -718,6 +725,10 @@ def merge_session(path: Path, *, root: str, contract: str, date: dt.date, start:
     if not sources and not massive_new:
         return None
     m = merge(sources, massive_new)
+    want = prev.get("ticks") if path.exists() else None
+    if isinstance(want, int) and m.stats["read"].get("archive", 0) < want:
+        raise MergeRefused(f"{path.name}: {m.stats['read'].get('archive', 0):,} rows read back, its manifest "
+                           f"says {want:,} -- left as it is")
     if not m.rows:
         return None
     if only_if_added and not m.stats.get("massive_added") and not fetched \

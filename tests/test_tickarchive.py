@@ -338,3 +338,26 @@ def test_inside_an_id_gap_only_its_two_edge_ticks_are_guarded():
     c = cov(m.rows, sources=[{"kind": "history", "stop": "reached", "from_utc": A.iso_ms(S),
                               "to_utc": A.iso_ms(S + 40_000_000)}])
     assert c["missing_ids"] == 0 and c["massive_edge_ms"] == 1000 and not c["complete"]
+
+
+def test_an_archive_that_does_not_read_whole_is_never_merged_over(tmp_path):
+    """Review 6: the archive was read leniently (a torn tail dropped), so a cut
+    file would have been rewritten short."""
+    path = T.archive_path("NQ", DAY, "NQZ6", tmp_path)
+    merge_session(path, fetched=[tick(i) for i in range(2000)], fetched_source={"kind": "history"})
+    data = path.read_bytes()
+    path.write_bytes(data[:len(data) // 2])                       # cut mid-stream
+    cut = sha(path)
+    with pytest.raises(A.MergeRefused, match="does not read whole"):
+        merge_session(path, fetched=[tick(3000)], fetched_source={"kind": "history"})
+    assert sha(path) == cut
+
+
+def test_fewer_rows_than_the_manifest_counts_refuse_the_merge(tmp_path):
+    path = T.archive_path("NQ", DAY, "NQZ6", tmp_path)
+    man = merge_session(path, fetched=[tick(i) for i in range(10)], fetched_source={"kind": "history"})
+    A.write_manifest(path, {**man, "ticks": 12})                  # the file lost two somewhere
+    kept = sha(path)
+    with pytest.raises(A.MergeRefused, match="10 rows read back, its manifest says 12"):
+        merge_session(path, fetched=[tick(20)], fetched_source={"kind": "history"})
+    assert sha(path) == kept
