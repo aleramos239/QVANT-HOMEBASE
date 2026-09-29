@@ -32,8 +32,12 @@ const TYPES = [
 ];
 const TYPE_OF = Object.fromEntries(TYPES.map((t) => [t.value, t]));
 
-const QUICK_PICKS = [['last5', 'Last 5 sessions'], ['month', 'This month'],
-  ['3months', 'Last 3 months'], ['all', 'All']];
+/* Short labels: compact enough that all four fit on one line at the dialog's default width
+   (full sentences wrapped, and at a fixed row height the wrapped line got covered by the row
+   below -- reported with screenshots). The row still wraps cleanly (.tall) at narrower widths;
+   this just makes wrapping the exception, not the default. */
+const QUICK_PICKS = [['last5', '5 sessions'], ['month', 'This month'],
+  ['3months', '3 months'], ['all', 'All']];
 
 /* The 24/7 roots among the 15 (session.ALWAYS_OPEN, minus ETH/MET, which never appear in this
    export's own root list) -- "Last 5 sessions" counts weekends for these, not for the rest. */

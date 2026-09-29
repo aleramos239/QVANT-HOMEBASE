@@ -449,6 +449,7 @@ a { color: inherit; }
 /* ---- the Settings > Data (export) tab (2026-09-28 data-export plan) ---- */
 .set-data .set-date { width: 112px; font-variant-numeric: tabular-nums; }
 .set-data .set-ctl.wrap { flex-wrap: wrap; justify-content: flex-end; row-gap: 6px; }
+.set-data .quick-btn { height: 26px; padding: 0 10px; font-size: 12px; }   /* short labels: all four fit on one line */
 .set-job { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 0 2px; }
 .set-job .tst-progress { flex: 1 1 120px; }
 

@@ -520,7 +520,7 @@ function mount(box, host) {
       rows.push(mk('div', 'set-cap', 'DATE RANGE'));
       const quickCtl = mk('div', 'set-ctl wrap');
       for (const [key, label] of DX.QUICK_PICKS) {
-        const b = button('btn btn-ghost', label);
+        const b = button('btn btn-ghost quick-btn', label);   // compact: short labels, all four fit on one line
         b.onclick = () => {
           const avail = (dataState.meta && dataState.meta.range) || null;
           const got = DX.quickRange(key, new Date(), DX.is247(f.root), avail);
