@@ -517,7 +517,7 @@
       </span>
       <span class="wordmark" style="font-weight:600;font-size:0.9375rem;letter-spacing:-.01em">Homebase</span>
       <span class="pill idle brand-tag" style="margin-left:2px">Ramos Quant</span>
-      <nav class="pgsw" id="pgSw" aria-label="Pages"><a href="http://localhost:8850/" data-page="desk" aria-current="page">Desk</a><a href="http://localhost:8852/?v=32" data-page="charts">Charts</a><a href="http://localhost:8852/backtest?v=32" data-page="backtest">Backtest</a></nav>
+      <nav class="pgsw" id="pgSw" aria-label="Pages"><a href="http://localhost:8850/" data-page="desk" aria-current="page">Desk</a><a href="http://localhost:8852/?v=33" data-page="charts">Charts</a><a href="http://localhost:8852/backtest?v=33" data-page="backtest">Backtest</a></nav>
       <span class="spacer"></span>
       <span class="clock" id="clock">—</span>
       <span class="bulb" id="bulb" onclick="openChecks()" title="connecting…"></span>
@@ -808,7 +808,7 @@
 <script>
   (function(){   // page switcher: plain links built from the host (the Mac app turns a click into a tab switch)
     var sw = document.getElementById('pgSw'); if (!sw) return;
-    var base = location.protocol + '//' + location.hostname, V = '?v=32';
+    var base = location.protocol + '//' + location.hostname, V = '?v=33';
     var u = { desk: base + ':8850/', charts: base + ':8852/' + V, backtest: base + ':8852/backtest' + V };
     Array.prototype.forEach.call(sw.querySelectorAll('a[data-page]'), function(a){
       a.href = u[a.getAttribute('data-page')];

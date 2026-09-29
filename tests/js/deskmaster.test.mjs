@@ -542,7 +542,7 @@ test('the bar sheds the clock, then the brand tag, then the wordmark, then wraps
   assert.match(narrow, /\.master\{ flex-wrap:wrap; justify-content:flex-end;/);
 });
 
-test('the page switcher: three plain links, the current page marked, hrefs built from the host with ?v=32', () => {
+test('the page switcher: three plain links, the current page marked, hrefs built from the host with ?v=33', () => {
   const nav = HTML.slice(HTML.indexOf('<nav class="pgsw"'), HTML.indexOf('</nav>', HTML.indexOf('<nav class="pgsw"')));
   assert.deepEqual([...nav.matchAll(/data-page="(\w+)"/g)].map((m) => m[1]), ['desk', 'charts', 'backtest']);
   assert.equal([...nav.matchAll(/aria-current="page"/g)].length, 1);
@@ -552,7 +552,7 @@ test('the page switcher: three plain links, the current page marked, hrefs built
   assert.match(js, /':8850\/'/);
   assert.match(js, /':8852\/' \+ V/);
   assert.match(js, /':8852\/backtest' \+ V/);
-  assert.match(js, /V = '\?v=32'/);
+  assert.match(js, /V = '\?v=33'/);
 });
 
 test('the stale pill is never faded: a dashed edge, full-strength text (measured >= 5.4:1 in both themes)', () => {
