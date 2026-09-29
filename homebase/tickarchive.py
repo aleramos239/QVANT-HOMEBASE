@@ -58,6 +58,7 @@ TS, PX, SZ, BID, ASK, BIDSZ, ASKSZ, ID, TSNS = range(9)
 LIVE_SUFFIX = ".live.csv.gz"            # = homebase.charts.store.LIVE_SUFFIX (a test holds them equal)
 MASSIVE_GUARD_MS = 2000
 CONFLICTS_REFUSED = 5                   # more same-id disagreements than this: refuse, change nothing
+ID_SPACE_REFUSED = 5                    # more same trades under different ids than this: refuse too
 SOURCES_KEPT = 40                       # the manifest's merge log keeps this many entries
 
 
@@ -128,6 +129,20 @@ class Merged:
     stats: dict = field(default_factory=dict)
 
 
+def _trade(r: tuple) -> tuple:
+    return (int(r[TS]), float(r[PX]), int(r[SZ]), float(r[BID]) if r[BID] else None,
+            float(r[ASK]) if r[ASK] else None)
+
+
+def _twins(counts: dict) -> int:
+    """Trades (as _trade keys) that two different sources hold, each only it holds."""
+    names, n = list(counts), 0
+    for i, a in enumerate(names):
+        for b in names[i + 1:]:
+            n += sum(min(c, counts[b][k]) for k, c in counts[a].items() if k in counts[b])
+    return n
+
+
 def _near(sorted_ts: list[int], ts: int, guard: int) -> bool:
     i = bisect.bisect_left(sorted_ts, ts - guard)
     return i < len(sorted_ts) and sorted_ts[i] <= ts + guard
@@ -179,6 +194,14 @@ def merge(sources, massive_new: list[tuple] = (), guard_ms: int = MASSIVE_GUARD_
     if len(conflicts) > CONFLICTS_REFUSED:
         raise MergeRefused(f"{len(conflicts)} tick ids disagree between sources (time/price/size), "
                            f"e.g. {conflicts[:5]} -- not one id space; nothing merged")
+    # the id-space guard: a tick only one source has, whose twin -- same time, price, size, bid,
+    # ask -- only another source has under ANOTHER id, is one trade counted twice
+    excl = {n: ids - set().union(*(o for m, o in per_source.items() if m != n))
+            for n, ids in per_source.items()}
+    twins = _twins({n: Counter(_trade(by_id[k]) for k in e) for n, e in excl.items() if e})
+    if twins > ID_SPACE_REFUSED:
+        raise MergeRefused(f"{twins} ticks appear under different ids in different sources -- "
+                           "not one id space; nothing merged")
     broker = list(by_id.values()) + [r for r, n in noid.items() for _ in range(n)]
     broker_ts = sorted(int(r[TS]) for r in broker)
     kept_old = [r for r in massive_old if not _near(broker_ts, int(r[TS]), guard_ms)]
@@ -197,11 +220,11 @@ def merge(sources, massive_new: list[tuple] = (), guard_ms: int = MASSIVE_GUARD_
     rows = broker + kept_old + added
     rows.sort(key=sort_key)
     ids = set(by_id)
-    only = {n: len(s - set().union(*(o for m, o in per_source.items() if m != n)))
-            for n, s in per_source.items()}
+    only = {n: len(e) for n, e in excl.items()}
     stats = {"broker_ticks": len(broker), "massive_rows": len(kept_old) + len(added),
              "read": read, "only_in": only,
              "id_overlap": overlap, "id_conflicts": len(conflicts), "conflict_ids": conflicts[:10],
+             "id_twins": twins,
              "quotes_filled": quotes_filled, "quote_disagreements": quote_disagreements,
              "massive_dropped_near_broker": len(massive_old) - len(kept_old)}
     if massive_new:

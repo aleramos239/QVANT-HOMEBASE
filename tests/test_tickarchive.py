@@ -306,3 +306,14 @@ def test_a_fetch_log_never_hides_ids_that_skip():
              "to_utc": END.astimezone(A.UTC).isoformat(), "earliest_ms": S - 60_000}
     c = cov(minute_rows(DAY, kept), sources=[whole])
     assert c["missing_ids"] == 60 and [h["from_et"] for h in c["holes"]] == ["02:00"]
+
+
+def test_the_same_trades_under_other_ids_refuse_the_merge():
+    """Review 3: rows identical in time, price, size and quote but under disjoint
+    ids used to merge into a double count."""
+    rows = [tick(i) for i in range(50)]
+    other = [r[:A.ID] + (str(90_000 + i),) + ("",) for i, r in enumerate(rows)]
+    with pytest.raises(A.MergeRefused, match="50 ticks appear under different ids"):
+        A.merge([("history", rows), ("live", other)])
+    m = A.merge([("history", rows[:5]), ("live", other[:5])])
+    assert m.stats["id_twins"] == 5                               # a handful: kept, counted
