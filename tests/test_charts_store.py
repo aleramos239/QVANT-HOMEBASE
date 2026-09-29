@@ -36,6 +36,26 @@ def test_roll_day_picks_the_busiest_contract(tmp_path):
     assert TickStore(tmp_path).pick("NQ", D).contract == "NQZ6"
 
 
+def test_a_front_month_with_an_honest_hole_never_loses_to_a_complete_back_month(tmp_path):
+    """The archive's `complete` now checks every hour (a Massive front month with
+    13:00-15:00 missing says so): the busiest contract is still the session's."""
+    write_archive(tmp_path, "NQ", D, "NQZ6", rows(session_ms(D, 9, 30), [1.0] * 50), complete=False)
+    write_archive(tmp_path, "NQ", D, "NQH7", rows(session_ms(D, 9, 30), [1.0] * 3), complete=True)
+    f = TickStore(tmp_path).pick("NQ", D)
+    assert f.contract == "NQZ6" and not f.live and not f.complete
+    write_gz(tmp_path / "NQ" / "2026" / f"{D}_NQZ6.live.csv.gz", rows(session_ms(D, 9, 30), [1.0] * 50))
+    f = TickStore(tmp_path).pick("NQ", D)
+    assert f.contract == "NQZ6" and f.live                  # its live file beats its partial archive
+
+
+def test_a_contract_only_the_live_recorder_has_ranks_after_an_archived_one(tmp_path):
+    write_archive(tmp_path, "NQ", D, "NQZ6", rows(session_ms(D, 9, 30), [1.0] * 2), complete=True)
+    write_gz(tmp_path / "NQ" / "2026" / f"{D}_NQH7.live.csv.gz", rows(session_ms(D, 9, 30), [1.0] * 90))
+    assert TickStore(tmp_path).pick("NQ", D).contract == "NQZ6"
+    write_gz(tmp_path / "ES" / "2026" / f"{D}_ESZ6.live.csv.gz", rows(session_ms(D, 9, 30), [1.0] * 2))
+    assert TickStore(tmp_path).pick("ES", D).live             # nothing archived: the live file
+
+
 def test_load_live_sorts_dedupes_and_reads_gaps(tmp_path):
     r = rows(session_ms(D, 9, 30), [100.0, 100.25, 100.5])
     live = write_gz(tmp_path / "NQ" / "2026" / f"{D}_NQZ6.live.csv.gz", [r[2], r[0], r[1], r[0]])

@@ -39,14 +39,18 @@ last, hours after they were gone. Now a session is cut at 00:00 UTC into
 segments, and segments are fetched earliest-expiry first (every root's first
 hours before any root's long tail), each paged backwards from its own end.
 
-    python -m homebase.ticks                # every complete, missing session
+    python -m homebase.ticks                # every segment still to fetch, then the report
     python -m homebase.ticks --date 2026-09-22 --roots NQ,ES
+    python -m homebase.ticks --coverage     # only homebase/.state/tick_coverage.json
+    python -m homebase.ticks --rescan       # recent manifests' `complete` from their hours
 """
 from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
 import datetime as dt
+import fcntl
 import json
 import sys
 import time
@@ -439,19 +443,21 @@ def segment_state(prev: dict, s: dt.datetime, e: dt.datetime) -> tuple[bool, int
     """(done, resume_ms) of segment [s, e] by the archive file's manifest.
     Done once a fetch of it reached its start or ran the broker dry. A fetch
     cut short (the 08:00 deadline, the page cap) paged back from the end
-    without a gap, so the next one resumes from the earliest tick it got."""
-    if not prev:
-        return False, None
-    if "sources" not in prev:
-        # a nightly file from before fetches were logged: it paged back from the
-        # close until the broker ran dry, so it holds everything from its first tick on
-        first = prev.get("first_tick_utc")
-        return (prev.get("source") != "massive" and bool(first)
-                and dt.datetime.fromisoformat(first) - s < dt.timedelta(minutes=5)), None
+    without a gap, so the next one resumes from the earliest tick it got. A
+    nightly file from before fetches were logged ("legacy") paged back from
+    the close until the broker ran dry: done from its first tick on."""
     fr, to = s.astimezone(UTC).isoformat(), e.astimezone(UTC).isoformat()
+    s_ms, e_ms = int(s.timestamp() * 1000), int(e.timestamp() * 1000)
     resume = None
-    for src in prev["sources"]:
-        if src.get("kind") != "history" or (src.get("from_utc"), src.get("to_utc")) != (fr, to):
+    for src in tickarchive.prior_sources(prev):
+        if src.get("kind") != "history":
+            continue
+        if src.get("stop") == "legacy":
+            lo, hi = src.get("earliest_ms"), tickarchive.ms_of(src.get("to_utc"))
+            if lo is not None and hi is not None and lo - s_ms < tickarchive.EDGE_MS and hi >= e_ms:
+                return True, None
+            continue
+        if (src.get("from_utc"), src.get("to_utc")) != (fr, to):
             continue
         if src.get("stop") in ("reached", "exhausted"):
             return True, None
@@ -592,26 +598,75 @@ def promote_live(roots, base: Path, now: dt.datetime, days: int = LIVE_LOOKBACK_
     return out
 
 
+@contextlib.contextmanager
+def archive_lock(path: Path):
+    """One writer of the archive at a time (the nightly run, --rescan, a
+    manual fill): an exclusive lock on `path`, never waited for."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a") as f:
+        try:
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise RuntimeError(f"another tick-archive run holds {path} — try again when it is done") from None
+        try:
+            yield
+        finally:
+            fcntl.flock(f, fcntl.LOCK_UN)
+
+
+def coverage_report(roots, base: Path, sessions: int) -> None:
+    """Write homebase/.state/tick_coverage.json and log its summary line; a
+    failure here is logged, never raised (the night's data is already written)."""
+    from . import tickcoverage                    # it imports this module
+    try:
+        tickcoverage.write_report(roots, base, now_et(), state_dir() / "tick_coverage.json", sessions)
+    except Exception as e:  # noqa: BLE001
+        log(f"coverage report failed: {type(e).__name__}: {e}")
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--date", help="one session date YYYY-MM-DD (default: every "
                                    "complete session in the last 3 days)")
     ap.add_argument("--roots", default=",".join(ROOTS))
     ap.add_argument("--dir", default=str(ARCHIVE))
+    ap.add_argument("--coverage", action="store_true",
+                    help="only write homebase/.state/tick_coverage.json (no market data)")
+    ap.add_argument("--rescan", action="store_true",
+                    help="write each recent front-month file's hour-by-hour coverage into its "
+                         "manifest (data files untouched), then the report (no market data)")
+    ap.add_argument("--sessions", type=int, default=30, help="sessions per root the report covers")
     a = ap.parse_args(argv)
     roots = tuple(r.strip().upper() for r in a.roots.split(",") if r.strip())
-    dates = [dt.date.fromisoformat(a.date)] if a.date else None
-    if dates and not session_complete(dates[0], dt.datetime.now(ET)):
-        log(f"session {dates[0]} is not over yet (ends 17:00 ET) — nothing to do")
-        return 0
-    if deadline_passed():
-        log(f"past {DEADLINE_ET} ET on a trading day — the feed's budget is the desk's now; "
-            "run again after 17:05")
+    base = Path(a.dir)
+    if a.coverage:
+        coverage_report(roots, base, a.sessions)
         return 0
     try:
-        asyncio.run(record(roots, dates, Path(a.dir)))
-    except Exception as e:  # noqa: BLE001
-        log(f"run failed: {e}")
+        with archive_lock(state_dir() / "ticks.lock"):
+            if a.rescan:
+                from . import tickcoverage
+                n = tickcoverage.rescan(roots, base, now_et(), a.sessions)
+                log(f"rescan: {n} manifest(s) rewritten with their hour-by-hour coverage")
+                coverage_report(roots, base, a.sessions)
+                return 0
+            dates = [dt.date.fromisoformat(a.date)] if a.date else None
+            if dates and not session_complete(dates[0], now_et()):
+                log(f"session {dates[0]} is not over yet (ends 17:00 ET) — nothing to do")
+                return 0
+            if deadline_passed():
+                log(f"past {DEADLINE_ET} ET on a trading day — the feed's budget is the desk's now; "
+                    "run again after 17:05")
+                return 0
+            try:
+                asyncio.run(record(roots, dates, base))
+            except Exception as e:  # noqa: BLE001
+                log(f"run failed: {e}")
+                return 1
+            finally:
+                coverage_report(roots, base, a.sessions)
+    except RuntimeError as e:
+        log(str(e))
         return 1
     return 0
 

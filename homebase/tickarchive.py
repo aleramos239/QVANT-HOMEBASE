@@ -44,6 +44,7 @@ import io
 import json
 import os
 import zlib
+from array import array
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -209,7 +210,7 @@ def merge(sources, massive_new: list[tuple] = (), guard_ms: int = MASSIVE_GUARD_
 
 
 # ------------------------------------------------------------------ write
-def _atomic_bytes(path: Path, data: bytes) -> None:
+def atomic_write(path: Path, data: bytes) -> None:
     tmp = path.with_name(path.name + ".tmp")
     with open(tmp, "wb") as f:
         f.write(data)
@@ -296,9 +297,15 @@ def now_utc() -> str:
     return dt.datetime.now(UTC).isoformat(timespec="seconds")
 
 
+def ms_of(iso: str | None) -> int | None:
+    return int(dt.datetime.fromisoformat(iso).timestamp() * 1000) if iso else None
+
+
 def prior_sources(prev: dict) -> list[dict]:
-    """The merge log of a manifest written before merges were recorded: one
-    entry describing what the file was."""
+    """A manifest's merge log. One written before merges were logged gets one
+    entry saying what the file was: a Massive backfill, or a nightly fetch --
+    which paged back from the close until the broker ran dry, so it covered
+    everything from its first tick to the close ("legacy")."""
     if "sources" in prev:
         return list(prev["sources"])
     if not prev:
@@ -306,8 +313,134 @@ def prior_sources(prev: dict) -> list[dict]:
     if prev.get("source") == "massive":
         return [{"kind": "massive", "file": prev.get("source_file"), "rows": prev.get("ticks"),
                  "at_utc": prev.get("recorded_at_utc")}]
-    return [{"kind": "history", "ticks": prev.get("ticks"), "pages": prev.get("pages"),
-             "stop": "reached" if prev.get("complete") else None, "at_utc": prev.get("recorded_at_utc")}]
+    return [{"kind": "history", "stop": "legacy", "to_utc": prev.get("session_end_utc"),
+             "earliest_ms": ms_of(prev.get("first_tick_utc")), "ticks": prev.get("ticks"),
+             "pages": prev.get("pages"), "at_utc": prev.get("recorded_at_utc")}]
+
+
+# ------------------------------------------------------------------ coverage
+COVERAGE_VERSION = 1
+HOUR_MS = 3_600_000
+EDGE_MS = 5 * 60 * 1000             # ticks this close to the open / the close count as reaching it
+NOT_MODELLED = (
+    "Known: the 17:00-18:00 ET break, weekends, CME crypto trading 24/7 (BTC, MBT), and the "
+    "equity-index 13:15 ET half days (homebase.backtest.tape.early_close_et). NOT known: full-day "
+    "exchange holidays and holiday halts (e.g. 13:00 ET on Thanksgiving, Labor Day, July 4), and "
+    "early closes of non-equity roots -- a 'close' hole, or a missing weekday session, may be the "
+    "exchange's schedule rather than lost data. A missing session whose trades the next session's "
+    "file already holds is flagged 'filed_under_next_session'.")
+
+
+def verified_spans(sources: list[dict]) -> list[tuple[int, int]]:
+    """[lo, hi] ms stretches the broker's history served in full, merged, from
+    the merge log: a fetch paged back without a gap from where it started (its
+    segment's end, or where a cut-short fetch resumed) down to its earliest
+    tick -- or to its segment's start when it went past it ("reached")."""
+    spans = []
+    for s in sources:
+        if s.get("kind") != "history" or not s.get("to_utc"):
+            continue
+        hi = s.get("resumed_from_ms") or ms_of(s["to_utc"])
+        if s.get("stop") == "reached" and s.get("from_utc"):
+            lo = ms_of(s["from_utc"])
+        elif s.get("earliest_ms") is not None:
+            lo = s["earliest_ms"]
+        else:
+            continue
+        spans.append((lo, hi))
+    spans.sort()
+    out: list[list[int]] = []
+    for lo, hi in spans:
+        if out and lo <= out[-1][1]:
+            out[-1][1] = max(out[-1][1], hi)
+        else:
+            out.append([lo, hi])
+    return [(a, b) for a, b in out]
+
+
+def _covers(spans, a: int, b: int) -> bool:
+    return any(lo <= a and b <= hi for lo, hi in spans)
+
+
+def coverage(rows: list[tuple], *, root: str, date: dt.date, start: dt.datetime, end: dt.datetime,
+             sources: list[dict] = ()) -> dict:
+    """Hour-by-hour coverage of one session file (rows in file order).
+
+    Expected hours: every clock hour from the open to the close (18:00 ET ->
+    17:00 ET, the 17:00-18:00 break outside it; weekends have no session; a
+    known equity-index half day ends at 13:15 ET). A HOLE is an expected hour
+    without a single tick, unless it is proven quiet: the broker's ticks just
+    before and after it have consecutive ids (nothing traded in between), or a
+    history fetch that covered it in full found nothing. MISSING_IDS: broker
+    ids skipped inside the file where no Massive row stands in for them.
+    head_ok / tail_ok: a tick within 5 min of the open / close, or a history
+    fetch covering it. Complete = ticks, no hole, no missing id, both ends."""
+    from .backtest.tape import early_close_et          # stdlib-only; the repo's half-day calendar
+    if any(int(a[TS]) > int(b[TS]) for a, b in zip(rows, rows[1:])):
+        rows = sorted(rows, key=sort_key)               # a live file: refills append older rows
+    start_ms, end_ms = int(start.timestamp() * 1000), int(end.timestamp() * 1000)
+    close = early_close_et(root, date)
+    stop_ms = end_ms
+    if close is not None:
+        stop_ms = min(end_ms, int(dt.datetime.combine(date, dt.time.fromisoformat(close),
+                                                      start.tzinfo).timestamp() * 1000))
+    ts = array("q")
+    b_ts, b_id, m_ts = array("q"), array("q"), array("q")
+    for r in rows:
+        t = int(r[TS])
+        ts.append(t)
+        if is_massive(r):
+            m_ts.append(t)
+        elif r[ID]:
+            b_ts.append(t)
+            b_id.append(int(r[ID]))
+    spans = verified_spans(list(sources))
+    buckets = []
+    a = start_ms
+    while a < stop_ms:
+        b = min(a + HOUR_MS, stop_ms)
+        buckets.append((a, b, bisect.bisect_left(ts, b) - bisect.bisect_left(ts, a)))
+        a += HOUR_MS
+    holes, quiet = [], 0
+    for a, b, n in buckets:
+        if n:
+            continue
+        i = bisect.bisect_left(b_ts, a)
+        if _covers(spans, a, b) or (0 < i < len(b_ts) and b_id[i] == b_id[i - 1] + 1):
+            quiet += 1
+            continue
+        if holes and holes[-1][1] == a:
+            holes[-1][1] = b
+        else:
+            holes.append([a, b])
+    missing = 0
+    for k in range(1, len(b_id)):
+        gap = b_id[k] - b_id[k - 1] - 1
+        if gap > 0:
+            j = bisect.bisect_right(m_ts, b_ts[k - 1])
+            if not (j < len(m_ts) and m_ts[j] < b_ts[k]):
+                missing += gap                              # no Massive row stands in for them
+    first = ts[0] if ts else None
+    last = ts[-1] if ts else None
+    head_ok = first is not None and (first - start_ms < EDGE_MS or _covers(spans, start_ms, start_ms))
+    tail_ok = last is not None and (stop_ms - last < EDGE_MS or _covers(spans, end_ms, end_ms))
+    et = start.tzinfo
+
+    def hhmm(ms):
+        return dt.datetime.fromtimestamp(ms / 1000, et).strftime("%H:%M")
+    return {
+        "version": COVERAGE_VERSION,
+        "expected_hours": len(buckets), "hours_with_ticks": sum(1 for *_, n in buckets if n),
+        "quiet_hours": quiet,
+        "holes": [{"from_et": hhmm(a), "to_et": hhmm(b), "start_utc": iso_ms(a), "end_utc": iso_ms(b),
+                   "hours": round((b - a) / HOUR_MS, 2),
+                   "at": "open" if a == start_ms else "close" if b == stop_ms else "inside"}
+                  for a, b in holes],
+        "hole_hours": round(sum(b - a for a, b in holes) / HOUR_MS, 2),
+        "missing_ids": missing, "head_ok": head_ok, "tail_ok": tail_ok,
+        "early_close_et": close,
+        "complete": bool(ts) and not holes and missing == 0 and head_ok and tail_ok,
+    }
 
 
 def build_manifest(*, root: str, contract: str, date: dt.date, start: dt.datetime, end: dt.datetime,
@@ -316,26 +449,25 @@ def build_manifest(*, root: str, contract: str, date: dt.date, start: dt.datetim
     quoted = [r for r in broker if r[BID] and r[ASK]]
     spreads = sorted(float(r[ASK]) - float(r[BID]) for r in quoted)
     inside = sum(1 for r in quoted if float(r[BID]) <= float(r[PX]) <= float(r[ASK]))
-    ids = sorted(m.ids)
     first = int(m.rows[0][TS]) if m.rows else None
     last = int(m.rows[-1][TS]) if m.rows else None
-    start_ms, end_ms = int(start.timestamp() * 1000), int(end.timestamp() * 1000)
-    edge = 5 * 60 * 1000                # ticks within 5 min of the open AND of the close
     sources = (prior_sources(prev) + new_sources)[-SOURCES_KEPT:]
+    cov = coverage(m.rows, root=root, date=date, start=start, end=end, sources=sources)
     return {
         "root": root, "contract": contract, "session_date": date.isoformat(),
         "session_start_utc": start.astimezone(UTC).isoformat(),
         "session_end_utc": end.astimezone(UTC).isoformat(),
         "ticks": len(m.rows),
         "first_tick_utc": iso_ms(first), "last_tick_utc": iso_ms(last),
-        "complete": first is not None and first - start_ms < edge and end_ms - last < edge,
+        "complete": cov["complete"],
         "source": "massive" if not broker else "desk",
         "bid_ask": bool(broker) and not m.massive,
         "broker_ticks": len(broker), "massive_rows": m.massive,
-        "first_id": ids[0] if ids else None, "last_id": ids[-1] if ids else None,
+        "first_id": min(m.ids) if m.ids else None, "last_id": max(m.ids) if m.ids else None,
         "pages": sum(s.get("pages") or 0 for s in sources if s.get("kind") == "history"),
         "median_spread": spreads[len(spreads) // 2] if spreads else None,
         "trade_inside_bid_ask_pct": round(100 * inside / len(quoted), 1) if quoted else None,
+        "coverage": cov,
         "sources": sources,
         "merge": m.stats,
         "bytes": path.stat().st_size, "fields": list(fields),
@@ -344,7 +476,7 @@ def build_manifest(*, root: str, contract: str, date: dt.date, start: dt.datetim
 
 
 def write_manifest(path: Path, man: dict) -> None:
-    _atomic_bytes(manifest_path(path), (json.dumps(man, indent=2) + "\n").encode())
+    atomic_write(manifest_path(path), (json.dumps(man, indent=2) + "\n").encode())
 
 
 # ------------------------------------------------------------------ one session

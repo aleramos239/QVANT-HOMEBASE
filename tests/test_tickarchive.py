@@ -186,11 +186,99 @@ def test_a_file_with_massive_rows_keeps_their_ns_stamps(tmp_path):
 
 
 def test_a_legacy_manifest_becomes_the_first_entry_of_the_merge_log(tmp_path):
+    """A nightly file from before merges were logged paged back from the close
+    until the broker ran dry: it vouches for everything from its first tick on."""
     path = T.archive_path("NQ", DAY, "NQZ6", tmp_path)
     merge_session(path, fetched=[tick(i) for i in range(3)])
-    A.manifest_path(path).write_text(json.dumps({"ticks": 3, "complete": False, "pages": 7,
-                                                 "recorded_at_utc": "2026-09-26T10:12:12+00:00"}))
+    A.manifest_path(path).write_text(json.dumps({
+        "ticks": 3, "complete": False, "pages": 7, "session_end_utc": END.astimezone(A.UTC).isoformat(),
+        "first_tick_utc": A.iso_ms(S), "recorded_at_utc": "2026-09-26T10:12:12+00:00"}))
     man = merge_session(path, fetched=[tick(3)], fetched_source={"kind": "history", "pages": 1})
-    assert man["sources"][0] == {"kind": "history", "ticks": 3, "pages": 7, "stop": None,
+    assert man["sources"][0] == {"kind": "history", "stop": "legacy", "to_utc": END.astimezone(A.UTC).isoformat(),
+                                 "earliest_ms": S, "ticks": 3, "pages": 7,
                                  "at_utc": "2026-09-26T10:12:12+00:00"}
     assert man["pages"] == 8 and man["ticks"] == 4
+    assert A.verified_spans(man["sources"]) == [(S, int(END.timestamp() * 1000))]
+    assert T.segment_state(man, *T.utc_segments(START, END)[1]) == (True, None)
+
+
+# ------------------------------------------------------------------ hour-by-hour coverage (item C)
+def minute_rows(date, minutes, ids=None):
+    """A broker tick at each minute offset from the session open; ids default to the offsets."""
+    start, _ = T.session_bounds(date)
+    s = int(start.timestamp() * 1000)
+    ids = ids if ids is not None else list(minutes)
+    return [A.row_of({"ts_ms": s + m * 60_000, "price": 1.0, "size": 1, "bid": 0.75, "ask": 1.0,
+                      "id": 1 + i}) for m, i in zip(minutes, ids)]
+
+
+def cov(rows, date=DAY, root="NQ", sources=()):
+    start, end = T.session_bounds(date)
+    return A.coverage(rows, root=root, date=date, start=start, end=end, sources=list(sources))
+
+
+def test_a_full_session_is_complete_hour_by_hour():
+    c = cov(minute_rows(DAY, range(23 * 60)))
+    assert c["complete"] and c["expected_hours"] == 23 == c["hours_with_ticks"] and c["holes"] == []
+
+
+def test_an_empty_hour_is_quiet_when_the_ids_run_on_and_a_hole_when_they_skip():
+    kept = [m for m in range(23 * 60) if not 8 * 60 <= m < 9 * 60]      # 02:00-03:00 ET: no tick
+    quiet = cov(minute_rows(DAY, kept, ids=list(range(len(kept)))))     # ids consecutive across it
+    assert quiet["complete"] and quiet["quiet_hours"] == 1 and quiet["holes"] == []
+    lost = cov(minute_rows(DAY, kept))                                  # 60 ids skipped across it
+    assert not lost["complete"] and lost["missing_ids"] == 60
+    assert [(h["from_et"], h["to_et"], h["at"]) for h in lost["holes"]] == [("02:00", "03:00", "inside")]
+
+
+def test_the_brokers_window_edge_is_a_hole_at_the_open():
+    c = cov(minute_rows(DAY, range(120, 23 * 60)))       # a nightly file from 20:00 ET on
+    assert not c["complete"] and not c["head_ok"] and c["tail_ok"] and c["missing_ids"] == 0
+    assert c["holes"] == [{"from_et": "18:00", "to_et": "20:00", "hours": 2.0, "at": "open",
+                           "start_utc": "2026-09-27T22:00:00+00:00", "end_utc": "2026-09-28T00:00:00+00:00"}]
+    assert c["hole_hours"] == 2.0
+
+
+def test_a_history_fetch_that_went_past_a_quiet_first_hour_proves_it_quiet():
+    kept = list(range(70, 23 * 60))                      # a thin market: first trade 19:10 ET
+    head = {"kind": "history", "stop": "reached", "from_utc": START.astimezone(A.UTC).isoformat(),
+            "to_utc": "2026-09-28T00:00:00+00:00", "earliest_ms": S - 60_000}
+    tail = {"kind": "history", "stop": "exhausted", "from_utc": "2026-09-28T00:00:00+00:00",
+            "to_utc": END.astimezone(A.UTC).isoformat(), "earliest_ms": S + 120 * 60_000}
+    c = cov(minute_rows(DAY, kept, ids=list(range(len(kept)))), sources=[head, tail])
+    assert c["complete"] and c["quiet_hours"] == 1 and c["head_ok"]
+    assert not cov(minute_rows(DAY, kept, ids=list(range(len(kept)))))["complete"]   # unproven: a hole
+
+
+def test_massive_rows_in_a_gap_stand_in_for_the_skipped_ids():
+    rows = minute_rows(DAY, [m for m in range(23 * 60) if not 200 <= m < 400])    # ids 200-399 lost
+    gap = cov(rows)
+    assert gap["missing_ids"] == 200 and gap["hole_hours"] == 2.0            # 21:20-00:40: two whole hours
+    fill = [massive(S + m * 60_000 + 30_000, 7000 + m) for m in range(200, 400)]
+    c = cov(sorted(rows + fill, key=A.sort_key))
+    assert c["missing_ids"] == 0 and c["holes"] == [] and c["complete"]
+
+
+def test_the_equity_half_day_ends_at_1315_other_roots_are_flagged_not_guessed():
+    fri = dt.date(2026, 11, 27)                          # the day after Thanksgiving (EST)
+    until_1315 = range(0, 19 * 60 + 15)                  # 18:00 ET Thu -> 13:14 ET Fri
+    nq = cov(minute_rows(fri, until_1315), date=fri, root="NQ")
+    assert nq["complete"] and nq["early_close_et"] == "13:15" and nq["expected_hours"] == 20
+    gc = cov(minute_rows(fri, until_1315), date=fri, root="GC")
+    assert not gc["complete"] and gc["early_close_et"] is None
+    assert [(h["from_et"], h["to_et"], h["at"]) for h in gc["holes"]] == [("14:00", "17:00", "close")]
+
+
+def test_a_live_files_out_of_order_refill_is_sorted_first():
+    rows = minute_rows(DAY, range(23 * 60))
+    assert cov(rows[600:] + rows[:600])["complete"]      # a refill appended the older rows last
+
+
+def test_the_manifest_complete_is_the_coverages(tmp_path):
+    path = T.archive_path("NQ", DAY, "NQZ6", tmp_path)
+    man = merge_session(path, fetched=minute_rows(DAY, range(120, 23 * 60)),
+                        fetched_source={"kind": "history", "stop": "exhausted"})
+    assert not man["complete"] and man["coverage"]["holes"][0]["at"] == "open"
+    write_live(A.live_path(path), minute_rows(DAY, range(0, 130)))
+    man = merge_session(path)
+    assert man["complete"] and man["coverage"]["hole_hours"] == 0

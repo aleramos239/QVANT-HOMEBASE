@@ -138,7 +138,21 @@ class TickStore:
         return out
 
     def pick(self, root: str, d: dt.date) -> SessionFile | None:
+        """The session's contract first -- the one whose archive counts the most
+        ticks (a contract only the live recorder has ranks after every archived
+        one) -- then that contract's best file: complete archive > live >
+        incomplete archive. So a front month whose manifest honestly says
+        "incomplete" (an hour missing) never loses to a thin back month that
+        happens to be complete."""
         fs = self.files(root, d)
+        if not fs:
+            return None
+
+        def rank(c):
+            arch = [f.ticks for f in fs if f.contract == c and not f.live]
+            return (1, max(arch)) if arch else (0, max(f.ticks for f in fs if f.contract == c))
+        contract = max(sorted({f.contract for f in fs}), key=rank)
+        fs = [f for f in fs if f.contract == contract]
         for group in ([f for f in fs if not f.live and f.complete],
                       [f for f in fs if f.live],
                       [f for f in fs if not f.live]):
