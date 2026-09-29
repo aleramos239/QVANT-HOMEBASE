@@ -214,6 +214,7 @@ class TradovateAdapter(BrokerAdapter):
         self._ws_expires = 0.0                    # expiry of the token the current socket was authorized with
         self.caches_seeded = False                # position/cash read after the last (re)connect
         self._login_budget = None                 # the desk's per-user LoginBudget (server sets it)
+        self._cache_ts = 0.0                      # unix time the position/cash caches last changed
 
     @property
     def login_budget(self):
@@ -560,6 +561,7 @@ class TradovateAdapter(BrokerAdapter):
             return False
         self._positions[cid] = {**self._positions.get(cid, {}), **ent}
         self._pos_pushed.add(cid)
+        self._cache_ts = time.time()
         if cid not in self._contracts:
             self._want_contract(cid)
         return True
@@ -569,6 +571,7 @@ class TradovateAdapter(BrokerAdapter):
             return False
         self._cash = {**self._cash, **ent}
         self._cash_pushed = True
+        self._cache_ts = time.time()
         return True
 
     def _want_contract(self, cid) -> None:
@@ -670,8 +673,44 @@ class TradovateAdapter(BrokerAdapter):
             await self._lookup_contract(cid, announce=False)   # "sync" covers it
         if self._ws is not ws:
             return                         # the socket was replaced: its own seed runs
+        self._cache_ts = time.time()
         self.caches_seeded = True
         self._notify("sync", {})
+
+    async def refresh_snapshot(self, siblings=()) -> None:
+        """The slow background refresh (the desk's equity loop, once a minute per
+        Tradovate user): ONE position/list + cashBalance/list on this socket. Both
+        list every account under the login, so the siblings on the same login are
+        refreshed from the same answer. Like the seed, a push that landed while the
+        read was in flight is newer and wins. An adapter whose seed has not finished
+        is skipped (the seed owns the push flags until then)."""
+        ws = self._ws
+        if ws is None or not self.connected:
+            return
+        targets = [t for t in (self, *siblings)
+                   if t.caches_seeded and t._acct_num is not None and t.connected]
+        if not targets:
+            return
+        for t in targets:
+            t._pos_pushed.clear()
+            t._cash_pushed = False
+        positions = await ws.position_list()
+        cash = await ws.cash_balance_list()
+        now = time.time()
+        for t in targets:
+            me = t._acct_num
+            snap = {p["contractId"]: p for p in positions or []
+                    if isinstance(p, dict) and p.get("accountId") == me
+                    and p.get("contractId") is not None}
+            snap.update({c: t._positions[c] for c in t._pos_pushed if c in t._positions})
+            t._positions = snap
+            if not t._cash_pushed:
+                t._cash = next((b for b in cash or []
+                                if isinstance(b, dict) and b.get("accountId") == me), t._cash)
+            for cid in snap:
+                if cid not in t._contracts:
+                    t._want_contract(cid)
+            t._cache_ts = now
 
     def _enqueue_fill(self, ent: dict) -> None:
         """Queue a fill for the consumer; a full queue is surfaced as an audit
@@ -1202,39 +1241,34 @@ class TradovateAdapter(BrokerAdapter):
     _WORKING_STATUSES = {"Working", "PendingNew", "Pending", "Suspended", "PendingReplace"}
 
     async def get_metrics(self) -> dict:
+        """The dashboard snapshot, from the push-fed caches ONLY: no broker request.
+        The desk page polls this every 2.5 s; reading cashBalance/list + position/list
+        per poll ran the Apex user into 429 (2026-09-29). The pushes keep the caches
+        current; the desk's once-a-minute refresh_snapshot covers anything they miss.
+        cache_age_s says how old the newest change is (None = never filled)."""
         m = await super().get_metrics()
         m["account"] = self._acct_name or None
-        if self._ws is None or self._acct_num is None:
+        m["cache_seeded"] = self.caches_seeded
+        m["cache_age_s"] = round(time.time() - self._cache_ts, 1) if self._cache_ts else None
+        if self._acct_num is None:
             return m
-        try:
-            bal = await self.get_balance()
-            m["balance"] = bal.get("amount")
-            m["realized_pnl"] = bal.get("realizedPnL")
-        except Exception:
-            pass
-        try:
-            positions = []
-            for p in await self._ws.position_list():
-                if p.get("accountId") != self._acct_num:
-                    continue
+        if self._cash:
+            m["balance"] = self._cash.get("amount")
+            m["realized_pnl"] = self._cash.get("realizedPnL")
+        positions = []
+        for cid, p in list(self._positions.items()):
+            try:
                 net = int(p.get("netPos") or 0)
-                if net == 0:
-                    continue
-                cid = p.get("contractId")
-                symbol = self._contracts.get(cid, "") if cid is not None else ""
-                if not symbol and cid is not None:
-                    try:
-                        c = await self._ws.contract_item(cid)
-                        symbol = (c or {}).get("name", "")
-                        if symbol:
-                            self._contracts[cid] = symbol
-                    except Exception:
-                        pass
-                positions.append({"symbol": symbol or f"#{cid}", "net": net})
-            m["open_positions"] = positions
-            m["open_position_count"] = len(positions)
-        except Exception:
-            pass
+            except (TypeError, ValueError):
+                continue
+            if net == 0:
+                continue
+            symbol = self._contracts.get(cid, "")
+            if not symbol:
+                self._want_contract(cid)       # resolved once, in the background
+            positions.append({"symbol": symbol or f"#{cid}", "net": net})
+        m["open_positions"] = positions
+        m["open_position_count"] = len(positions)
         # Working orders: count from the cache, scoped to this account.
         m["working_orders"] = sum(
             1 for o in self._orders.values()

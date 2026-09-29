@@ -275,24 +275,3 @@ def test_a_healthy_entry_keeps_placing_orders_while_its_user_cools(desk, monkeyp
     out = run(desk.app.state.engine.handle_alert(dict(ALERT), force_window=True))
     assert out["ok"] and out["armed"]
     assert [r.side for r in live.brackets] == ["Buy", "Sell"]
-
-
-def test_status_polls_skip_the_reads_of_a_cooling_user(desk):
-    live = desk.adapters["live"]
-    reads = {"n": 0}
-    orig = live.get_metrics
-
-    async def counted():
-        reads["n"] += 1
-        return await orig()
-
-    live.get_metrics = counted
-    desk.get("/api/status")
-    assert reads["n"] == 1
-    desk.app.state.login_budget.note_error(KEY, S429)
-    for _ in range(5):
-        st = desk.get("/api/status").json()["accounts"]["live"]
-    assert reads["n"] == 1 and st["stale"] is True and st["connected"] is True
-    desk.clock.t += lb.COOLDOWN_DEFAULT_S + 1
-    desk.get("/api/status")
-    assert reads["n"] == 2

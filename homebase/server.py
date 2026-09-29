@@ -381,7 +381,6 @@ def create_app(cfg: config_mod.AppCfg | None = None,
     _gone: dict[str, dict] = {}
     _no_accounts_warned: set[str] = set()
     notices: list[dict] = []                 # one-liners for the desk page (status payload)
-    _last_metrics: dict[str, dict] = {}      # entry -> its last status snapshot
 
     def _notice(text: str, **kw) -> None:
         notices.append({"et": engine.now_et().isoformat(timespec="seconds"),
@@ -697,12 +696,31 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                     _connect_failed(aid, e)
             await asyncio.sleep(RECONNECT_INTERVAL_S)
 
+    async def _refresh_snapshots() -> None:
+        """The caches' slow refresh: ONE position/list + cashBalance/list per
+        Tradovate user (its lists cover every account under the login), on the first
+        connected entry that can do it. Skipped for a user in a 429 cool-down and
+        09:20-09:35 ET (the fire's socket carries only the fire)."""
+        if _in_gone_quiet(engine.now_et()):
+            return
+        by_user: dict[str, list] = {}
+        for aid, ad in list(adapters.items()):
+            if aid in cfg.accounts and ad.connected and hasattr(ad, "refresh_snapshot"):
+                by_user.setdefault(_login_key(aid), []).append(ad)
+        for key, ads in by_user.items():
+            if budget.cooling(key):
+                continue
+            try:
+                await ads[0].refresh_snapshot(ads[1:])
+            except Exception as e:  # noqa: BLE001 — the pushes still carry the caches
+                budget.note_error(key, e)
+
     async def _equity_loop():
         while True:
+            with contextlib.suppress(Exception):
+                await _refresh_snapshots()
             for aid, ad in list(adapters.items()):
-                if budget.cooling(_login_key(aid)):
-                    continue                 # a 429'd user: no snapshot reads
-                try:
+                try:        # from the caches: no broker request
                     if ad.connected:
                         m = await ad.get_metrics()
                         if m.get("balance") is not None and m.get("account"):
@@ -776,6 +794,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
     app.state.login_budget = budget
     app.state.parked = _parked
     app.state.gone = _gone
+    app.state.refresh_snapshots = _refresh_snapshots
     app.state.notices = notices
     app.state.feed_box = feed_box
     app.state.desk = desk
@@ -796,18 +815,10 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         accounts = {}
         for aid, a in cfg.accounts.items():
             ad = adapters.get(aid)
-            last = _last_metrics.get(aid)
-            if ad is not None and last is not None and budget.cooling(_login_key(aid)):
-                # a 429'd user: no balance/position reads (2 requests per account per
-                # page poll); the last snapshot, marked stale, with the live link state
-                m = {**last, "connected": ad.connected, "stale": True}
-            else:
-                try:
-                    m = await ad.get_metrics() if ad else {"connected": False}
-                    if ad is not None:
-                        _last_metrics[aid] = dict(m)
-                except Exception as e:  # noqa: BLE001
-                    m = {"connected": False, "error": f"metrics: {e}"}
+            try:        # the adapters' caches only: a poll costs Tradovate nothing
+                m = await ad.get_metrics() if ad else {"connected": False}
+            except Exception as e:  # noqa: BLE001
+                m = {"connected": False, "error": f"metrics: {e}"}
             s = acct_status.get(aid, {})
             if s.get("error") and not m.get("error"):
                 m["error"] = s["error"]
