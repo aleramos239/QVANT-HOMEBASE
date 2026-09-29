@@ -68,6 +68,7 @@ MIN_GATE_BARS = 110        # RMA needs history to converge: at 119 bars the
                            # 100 it drifts 0.35 — below 110, refuse to gate
 PRESTAGE_READ_S = 2.0      # every booked account's position, read concurrently, at most this long
 PRESTAGE_MARGIN_S = 0.5    # ...and never closer than this to 09:30:00 (ruling P6)
+MD_RETRY_S = 30.0          # a wait on a dead md socket reconnects at most this often, token only
 
 # why a fire was late or off the pre-open anchor, or a day missed, in plain words (the
 # review, readiness; the charts pill, homebase/static/charts/trade.js, keeps the same words)
@@ -212,6 +213,7 @@ class SelfTimer:
         self.days: dict = {}          # date -> {strategy: state dict}
         self._up_at: dt.datetime | None = None   # this timer's first tick: the desk came up
         self._decided_day: tuple = (None, {})     # (date, today's journaled outcomes): _decided
+        self._md_retry_at: float = float("-inf")  # the wait's last md reconnect (timer clock)
 
     def now_et(self) -> dt.datetime:
         return self._now().astimezone(ET)
@@ -226,11 +228,44 @@ class SelfTimer:
         date = self.now_et().date().isoformat()
         return {"date": date, "strategies": self._day(date)}
 
-    async def _ensure_md(self):
+    async def _ensure_md(self, allow_login: bool = True):
+        """The md socket, (re)built when there is none or it died. A new socket
+        has no subscriptions: _subs is cleared and every symbol a staged or
+        waiting strategy needs is subscribed on it again."""
         if self._md is None or not self._md.connected:
             self._md = self._md_factory()
-            await self._md.connect()
+            self._subs.clear()
+            await (self._md.connect() if allow_login else self._md.connect(allow_login=False))
+            for sym in self._symbols_needed():
+                self._subs[sym] = await self._md.subscribe_quote(sym)
         return self._md
+
+    def _symbols_needed(self) -> list:
+        """The symbols of today's strategies that are staged or waiting for a quote."""
+        return sorted({getattr(self.cfg.strategies.get(n), "symbol", None)
+                       for day in self.days.values() for n, st in day.items()
+                       if st.get("stage") in ("staged", "waiting")} - {None})
+
+    async def _md_retry(self) -> None:
+        """From a wait only: a dead md socket, or a waiting symbol with no
+        subscription, gets one reconnect / resubscribe at most every MD_RETRY_S
+        -- on an md token from a connected login, NEVER the password login.
+        Journaled (timer_md_retry) at that pace, never a tick."""
+        md, need = self._md, self._symbols_needed()
+        if md is not None and md.connected and all(sym in self._subs for sym in need):
+            return
+        now = self._now().timestamp()
+        if now - self._md_retry_at < MD_RETRY_S:
+            return
+        self._md_retry_at = now
+        try:
+            md = await self._ensure_md(allow_login=False)
+            for sym in need:
+                if sym not in self._subs:
+                    self._subs[sym] = await md.subscribe_quote(sym)
+            self.engine.journal("timer_md_retry", ok=True, subscribed=sorted(self._subs))
+        except Exception as e:  # noqa: BLE001 — the wait stands; the next try is MD_RETRY_S away
+            self.engine.journal("timer_md_retry", ok=False, error=str(e)[:200])
 
     async def tick(self) -> None:
         now = self.now_et()
@@ -257,6 +292,8 @@ class SelfTimer:
         # another's broker round trip -- and before any other strategy
         # advances: a gate retry, a stage or an md reconnect can take seconds,
         # and would hold these orders on levels read at 09:30:00.000.
+        if any(m[2]["stage"] == "waiting" for m in mine):
+            await self._md_retry()           # a no-op while the md socket is up and subscribed
         staged = [m for m in mine if m[2]["stage"] in ("staged", "waiting")]
         rest = [m for m in mine if m[2]["stage"] not in ("staged", "waiting")]
         await self._settle(await self._advance_all(staged, t, date))

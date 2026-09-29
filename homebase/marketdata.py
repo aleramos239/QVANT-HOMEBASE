@@ -92,13 +92,18 @@ class TradovateMD:
             return False
         return bool(current) and getattr(self._ws, "token", current) != current
 
-    async def connect(self) -> None:
+    async def connect(self, allow_login: bool = True) -> None:
+        """allow_login=False: only on an md token a connected login already holds;
+        never the password login below (Tradovate logins are scarce -- a login loop
+        at the open means 429s and a lost 09:30): raise instead."""
         md_token = ""
         if self._token_provider is not None:
             try:
                 md_token = self._token_provider() or ""
             except Exception:  # noqa: BLE001 — fall through to a real login
                 md_token = ""
+        if not md_token and not allow_login:
+            raise RuntimeError("no md token from a connected login -- not logging in for it")
         if not md_token:
             creds = get_credentials(self.keyring_key)
             if not creds or not creds.get("username"):

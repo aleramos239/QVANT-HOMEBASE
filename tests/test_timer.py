@@ -33,8 +33,13 @@ class FakeMD:
         self.prices: dict = {}                # per-feed prices, if set
         self.subs = []
         self.clock = clock                    # the timer's clock: a trade is received "now"
+        self.token, self.logins = True, 0     # an md token from a connected login; password logins
 
-    async def connect(self): ...
+    async def connect(self, allow_login=True):
+        if not allow_login and not self.token:
+            raise RuntimeError("no md token from a connected login -- not logging in for it")
+        self.logins += not self.token
+        self.connected = True
     async def daily_bars(self, symbol, n=60): return self.bars[-n:]
     async def subscribe_quote(self, symbol):
         self.subs.append(symbol); return symbol
@@ -1181,3 +1186,68 @@ def test_a_pre_open_trade_older_than_pre_open_max_age_means_a_dead_feed(tmp_path
     md.push("NQ", et(9, 30, 0, 300000), 24508.0)                 # the feed comes back after the open
     at(clock, 9, 30, 0, 400000); run(timer.tick())
     assert fired(tmp_path) == [("nq930", False, 0.4, "waited_for_quote", "current", 24508.0)]
+
+
+# --- review round 2, item 4: a dead md socket recovers -- on a token, never a login -------
+def test_a_dead_md_socket_reconnects_from_the_wait_and_fires(tmp_path):
+    """R3: the md socket died before the open; the wait reconnects (token only), subscribes
+    NQ on the new socket -- _subs no longer claims the dead one's -- and fires."""
+    timer, engine, md1, clock = mk(tmp_path, md=TapeMD())
+    at(clock, 9, 21); run(timer.tick())
+    at(clock, 9, 29); run(timer.tick())                          # NQ on md1
+    md2 = TapeMD(clock=clock)
+    timer._md_factory = lambda: md2
+    md1.connected = False                                        # dies: no trade reaches the open
+    at(clock, 9, 30); run(timer.tick())
+    assert timer.status()["strategies"]["nq930"]["stage"] == "waiting"
+    at(clock, 9, 30, 0, 200000); run(timer.tick())               # the wait's reconnect
+    assert md2.subs == ["NQ"] and timer._md is md2 and md2.logins == 0
+    md2.push("NQ", et(9, 30, 0, 300000), 24507.0)
+    at(clock, 9, 30, 0, 400000); run(timer.tick())
+    assert fired(tmp_path) == [("nq930", False, 0.4, "waited_for_quote", "current", 24507.0)]
+    assert [e["ok"] for e in events(tmp_path) if e["event"] == "timer_md_retry"] == [True]
+
+
+def test_the_wait_never_logs_in_for_md_and_retries_at_most_every_30_s(tmp_path):
+    timer, engine, md1, clock = mk(tmp_path, md=TapeMD())
+    built = []
+
+    def factory():
+        built.append(TapeMD(clock=clock))
+        built[-1].token = False                                  # no connected login holds a token
+        built[-1].connected = False                              # a new socket is down until it connects
+        return built[-1]
+
+    at(clock, 9, 21); run(timer.tick())
+    at(clock, 9, 29); run(timer.tick())
+    timer._md_factory = factory
+    md1.connected = False
+    for i in range(0, 65 * 5):                                   # 65 s of 0.2 s ticks from 09:30
+        clock.dt = et(9, 30).astimezone(UTC) + dt.timedelta(seconds=i * 0.2)
+        run(timer.tick())
+    tries = [e for e in events(tmp_path) if e["event"] == "timer_md_retry"]
+    assert [(e["ok"], "not logging in" in e["error"]) for e in tries] == [(False, True)] * 3
+    assert sum(m.logins for m in built) == 0 and len(built) == 3
+    assert timer.status()["strategies"]["nq930"]["stage"] == "waiting"
+
+
+def test_a_rebuilt_md_socket_is_subscribed_to_every_staged_symbol(tmp_path):
+    timer, engine, md1, clock = mk(tmp_path, md=TapeMD())
+    at(clock, 9, 21); run(timer.tick())
+    at(clock, 9, 28, 30); run(timer.tick())                      # nq930 staged on md1
+    md2 = TapeMD(clock=clock)
+    timer._md_factory = lambda: md2
+    md1.connected = False
+    _add_ym(engine)                                              # ym930 stages: the stage rebuilds md
+    at(clock, 9, 29); run(timer.tick())
+    assert sorted(md2.subs) == ["NQ", "YM"] and timer._subs == {"NQ": "NQ", "YM": "YM"}
+
+
+def test_tradovate_md_without_a_token_refuses_rather_than_log_in(tmp_path, monkeypatch):
+    import homebase.marketdata as md_mod
+    monkeypatch.setattr(md_mod, "state_dir", lambda: tmp_path)
+    monkeypatch.setattr(md_mod, "get_credentials", lambda key: pytest.fail("read the password"))
+    m = TradovateMD("k", "demo", token_provider=lambda: "")
+    with pytest.raises(RuntimeError, match="not logging in"):
+        run(m.connect(allow_login=False))
+    assert not m.connected
