@@ -126,7 +126,7 @@ function clearSession(cell, involuntary) {
   savePracticeSession(cell, sessions.get(cell));
   sessions.delete(cell);
   cell.replay = null;
-  window.HBTradeUI.replayEnded(cell, involuntary);
+  window.HBTradeUI?.replayEnded(cell, involuntary);
   refreshOverlays(cell);
 }
 
@@ -174,7 +174,7 @@ function onError(cell, msg) {
   if (!cell || !msg) return;
   if (msg.op === 'replay_start') {
     sessions.delete(cell); cell.replay = null;
-    window.HBTradeUI.replayEnded(cell, true);   // an error end is never the user's choice
+    window.HBTradeUI?.replayEnded(cell, true);   // an error end is never the user's choice
     refreshOverlays(cell);
   }
   if (typeof msg.error === 'string') cell.note(msg.error);
@@ -195,9 +195,11 @@ function onBarUpdate(cell, m) {
 }
 
 /* The SAME global SL/TP-tick prefs real trading uses (hb_trade_prefs) -- HBTrade.parsePrefs/PREFS_KEY are pure
-   (no desk reference: isolation), the desk client just wraps this exact read/write for its own purposes. */
+   (no desk reference: isolation), the desk client just wraps this exact read/write for its own purposes.
+   2026-09-28 three-tabs plan: on the Backtest tab trade.js itself never loads -- these are the same pure
+   functions from tradepure.js either way. */
 function readPrefs() {
-  const T = window.HBTrade;
+  const T = window.HBTrade || window.HBTradePure;
   try { return T.parsePrefs(localStorage.getItem(T.PREFS_KEY)); } catch (_) { return T.parsePrefs(null); }
 }
 
@@ -207,7 +209,7 @@ function placePractice(cell, side, kind, price) {
   if (!s || !s.sim) return;
   const ref = kind === 'Market' ? s.lastPrice : price;
   if (ref == null) return;   // no price yet to size a bracket from (or to fill a limit/stop against)
-  const { sl, tp } = window.HBTrade.bracket(side, ref, readPrefs(), cell.tick);
+  const { sl, tp } = (window.HBTrade || window.HBTradePure).bracket(side, ref, readPrefs(), cell.tick);
   const o = s.sim.enter(side === 'Buy' ? 1 : -1, kind.toLowerCase(), kind === 'Market' ? null : price, s.qty || 1, sl, tp);
   if (o && s.ov) s.ov.refreshPractice(s);
 }
@@ -227,7 +229,7 @@ function registerPracticeMenu() {
   window.HBChartMenu.register('trading', (ctx) => {
     const cell = ctx.cell, s = sessions.get(cell);
     if (!cell.replay || !s || !s.sim || ctx.price == null) return [];
-    const T = window.HBTrade, q = { last: s.lastPrice, bid: s.lastPrice, ask: s.lastPrice }, qty = s.qty || 1;
+    const T = window.HBTrade || window.HBTradePure, q = { last: s.lastPrice, bid: s.lastPrice, ask: s.lastPrice }, qty = s.qty || 1;
     const price = T.roundTick(ctx.price, ctx.tick), out = [];
     // task-2-review.md Minor 3: grey these out the same way the block's own Buy/Sell disable (PracticeSim.enter
     // would refuse them anyway) instead of leaving a silent no-op click.
@@ -254,7 +256,7 @@ function cellDestroyed(cell) {
   cell.replay = null;
   // held by grid position (HBTradeUI.replayDestroyed): a layout load rebuilds from new configs, so a flag on this
   // cell's config alone would be lost; buildGrid re-applies it to the chart that takes this position
-  window.HBTradeUI.replayDestroyed(cell);
+  window.HBTradeUI?.replayDestroyed(cell);
 }
 
 /* A symbol or interval change on a replaying chart (cell.js's update() guard): the server auto-stops a
@@ -777,7 +779,7 @@ class Overlay {
      price, the P&L strip and the lines all follow the last trade as it streams in. */
   refreshPractice(s) {
     if (this.dead || !this.prBlock || !s.sim) return;
-    const T = window.HBTrade, Cat = window.HBCatalog, tick = this.cell.tick, last = s.lastPrice;
+    const T = window.HBTrade || window.HBTradePure, Cat = window.HBCatalog, tick = this.cell.tick, last = s.lastPrice;
     const text = last == null ? '—' : Cat.fmtPrice(last, tick);
     this.prSellPx.textContent = text;
     this.prBuyPx.textContent = text;

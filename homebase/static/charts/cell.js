@@ -440,7 +440,9 @@ class Cell {
     const was = this.shown;
     // final review I2(b), SAFETY: a new symbol switches this chart's Trading off (its accounts kept) before the
     // change applies -- every path (palette, toolbar menu, a dialog) comes through here
-    const offTrade = window.HBTrade.symbolChangeTrade(this.cfg, patch);   // trade.js loads after this file: read at call time
+    // trade.js loads after this file (read at call time); absent entirely on a page with no trading concept
+    // (2026-09-28 three-tabs plan, the Backtest tab) -- a symbol change there has no Trading switch to turn off.
+    const offTrade = window.HBTrade ? window.HBTrade.symbolChangeTrade(this.cfg, patch) : null;
     if (offTrade && this.host.onSymbolChange) this.host.onSymbolChange(this, offTrade);
     Object.assign(this.cfg, patch);
     this.title();

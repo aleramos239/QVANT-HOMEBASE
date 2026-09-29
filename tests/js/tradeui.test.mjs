@@ -263,7 +263,9 @@ test('fix round 2: app.js buildGrid re-applies the latch after building, for eve
   const { readFileSync } = await import('node:fs');
   const src = readFileSync(new URL('../../homebase/static/charts/app.js', import.meta.url), 'utf8');
   const body = src.slice(src.indexOf('function buildGrid()'), src.indexOf('function select('));
-  const destroyed = body.indexOf('HBReplayUI.cellDestroyed'), rebuilt = body.indexOf('HBTradeUI.gridRebuilt(cells)');
+  // 2026-09-28 three-tabs plan: both calls are now optional-chained (HBReplayUI/HBTradeUI may not be
+  // loaded -- the Backtest/Charts tabs respectively), so the substring check follows suit.
+  const destroyed = body.indexOf('HBReplayUI?.cellDestroyed'), rebuilt = body.indexOf('HBTradeUI?.gridRebuilt(cells)');
   assert.ok(destroyed >= 0 && rebuilt > destroyed, 'buildGrid: cellDestroyed over the old cells, then gridRebuilt(cells) over the new');
   assert.ok(body.indexOf('new Cell(') < rebuilt, 'gridRebuilt runs once the new cells exist');
 });

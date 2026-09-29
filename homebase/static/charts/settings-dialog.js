@@ -134,8 +134,11 @@ function mount(box, host) {
   const atOpen = new Map(host.cells().map((c) => [c, {
     settings: c.settings(), indicators: JSON.parse(JSON.stringify(c.cfg.indicators)), spec: c.cfg.spec, trade: tradeBits(c),
   }]));
+  // 2026-09-28 three-tabs plan: the host offers no trade capabilities at all on a page with no trading
+  // module (the Backtest tab) -- the Trading tab itself has nothing to show there, so it is left out.
+  const tabList = host.accountRows ? TABS : TABS.filter((t) => t.id !== 'trading');
   // host.tab: which tab to open on (the order panel's "Change" opens Trading); anything else starts on Symbol
-  let work = S.normalize(cell.settings()), tab = Math.max(0, TABS.findIndex((t) => t.id === host.tab)), done = false, raf = 0;
+  let work = S.normalize(cell.settings()), tab = Math.max(0, tabList.findIndex((t) => t.id === host.tab)), done = false, raf = 0;
   const swatches = new Map();   // colour key -> the <i> inside its swatch button
   let acctBox = null, acctWhy = null, algoSel = null;   // the Trading tab's live parts (null while it is not open)
   let algoKey = '';                       // what the Algo select was last built from, so it rebuilds only on a real change
@@ -163,7 +166,7 @@ function mount(box, host) {
 
   function renderTabs() {
     const had = tabs.contains(document.activeElement);
-    tabs.replaceChildren(...TABS.map((t, i) => {
+    tabs.replaceChildren(...tabList.map((t, i) => {
       const b = button('set-tab' + (i === tab ? ' active' : '')), ic = mk('span', 'icw');
       b.setAttribute('role', 'tab');
       b.setAttribute('aria-selected', String(i === tab));
@@ -185,7 +188,7 @@ function mount(box, host) {
     acctBox = acctWhy = algoSel = null;
     algoKey = acctKey = '';
     acctCells.clear();
-    pane.replaceChildren(...TABS[tab].sections.flatMap(([cap, rows]) => [mk('div', 'set-cap', cap), ...rows.map(row)]));
+    pane.replaceChildren(...tabList[tab].sections.flatMap(([cap, rows]) => [mk('div', 'set-cap', cap), ...rows.map(row)]));
     pane.scrollTop = 0;
     paint();
   }

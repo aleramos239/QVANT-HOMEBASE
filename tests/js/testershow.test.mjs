@@ -84,7 +84,8 @@ test('strategyLabel: drafts say DRAFT, a broken one says it does not load', () =
 });
 
 test('the page routes /ws tester_show to HBTesterUI.show, and the handler plans through showPlan', () => {
-  assert.match(src('app.js'), /m\.type === 'tester_show'\) \{ window\.HBTesterUI\.show\(m\); return; \}/);
+  // 2026-09-28 three-tabs plan: optional-chained (HBTesterUI never loads on the Charts tab any more)
+  assert.match(src('app.js'), /m\.type === 'tester_show'\) \{ window\.HBTesterUI\?\.show\(m\); return; \}/);
   const ui = src('testerui.js');
   assert.match(ui, /show: showFromClaude/);
   const body = ui.slice(ui.indexOf('async function showFromClaude'), ui.indexOf('/* ================', ui.indexOf('async function showFromClaude')));

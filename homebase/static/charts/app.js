@@ -109,11 +109,13 @@ function readLayout(v) {
     const r = raw[i] && typeof raw[i] === 'object' ? raw[i] : {};
     const s = r.settings, o = S.overrides(s && typeof s === 'object' ? s : {});
     if (Object.keys(o).length) c.settings = o;
-    const t = T.loadedTrade(r.trade, st);
+    // T (HBTrade) is absent on a page with no trading concept (2026-09-28 three-tabs plan, the
+    // Backtest tab): such a chart simply carries no accounts/algo, same as an untouched fresh one.
+    const t = T ? T.loadedTrade(r.trade, st) : { accounts: [], unverified: [], droppedLive: [] };
     c.trade = { accounts: t.accounts };
     c.unverified = t.unverified;   // what the desk has not vouched for yet: dropped if it turns out LIVE
     pendingDroppedLive.push(...t.droppedLive);
-    c.algo = T.cellAlgo(r.algo);
+    c.algo = T ? T.cellAlgo(r.algo) : null;
   });
   return lay;
 }
@@ -125,14 +127,14 @@ const deskState = () => (window.HBDeskClient && window.HBDeskClient.state) || nu
    take it away. Says so once, naming the accounts. */
 function dropLiveAccounts() {
   const st = deskState();
-  if (!st) return;
+  if (!st || !T) return;   // no desk state, or no trading module at all (the Backtest tab): nothing to drop
   const dropped = [...pendingDroppedLive];
   pendingDroppedLive = [];
   const v = T.verifyCells(layout.cells, st);
   dropped.push(...v.dropped);
-  for (const i of v.changed) if (cells[i]) window.HBTradeUI.setCellTrade(cells[i], cells[i].cfg.trade, { quiet: true });
+  for (const i of v.changed) if (cells[i]) window.HBTradeUI?.setCellTrade(cells[i], cells[i].cfg.trade, { quiet: true });
   if (v.changed.length) saveLast();
-  if (dropped.length) window.HBDeskClient.toast('err', T.liveDroppedMessage([...new Set(dropped)], st));
+  if (dropped.length) window.HBDeskClient?.toast('err', T.liveDroppedMessage([...new Set(dropped)], st));
 }
 
 /* The desk's strategies (for an algo's symbol), merged with the paper strategies (2026-09-27 paper-forward-test
@@ -149,17 +151,22 @@ function deskStrategies() {
 /* A template's trade / algo onto one chart: only the keys the template stored; a LIVE account in it is dropped
    like any load (HBTrade.templateTrade -> loadedTrade); its algo is kept only while the desk confirms it trades
    this chart's symbol (templates never store a symbol). `quiet`: the caller saves (the Settings dialog: on Ok). */
+// applyTemplateTrade/restoreTemplateTrade/migrateTickedOnce are only ever reached through paths this
+// file itself guards (the settings-dialog trade-capability bundle below, and migrateTickedOnce's own
+// call site) -- each also starts with its own guard, so none of the three assumes that wiring forever.
 function applyTemplateTrade(cell, raw, { quiet = false } = {}) {
+  if (!window.HBTradeUI) return;
   const st = deskState(), bits = T.templateTrade(raw, st);
   if ('algo' in bits) window.HBTradeUI.setCellAlgo(cell, T.algoForRoot(bits.algo, cell.cfg.root, deskStrategies()), { quiet });
   if (bits.trade) window.HBTradeUI.setCellTrade(cell, bits.trade, { quiet, mark: bits.unverified });
-  if (bits.droppedLive.length) window.HBDeskClient.toast('err', T.liveDroppedMessage(bits.droppedLive, st));
+  if (bits.droppedLive.length) window.HBDeskClient?.toast('err', T.liveDroppedMessage(bits.droppedLive, st));
 }
 /* The Settings dialog's Cancel: a chart's accounts and algo as they were at open (HBTrade.tradeBits). Every id
    the restore puts BACK (one no longer on the chart) goes through the same unverified-id drop as a load (fix
    round 1, Minor 3): a cancelled dialog can never bring back a LIVE account, armed or not. Ids still on the
    chart keep whatever mark they already had. */
 function restoreTemplateTrade(cell, bits) {
+  if (!window.HBTradeUI) return;
   window.HBTradeUI.setCellAlgo(cell, T.cellAlgo(bits && bits.algo), { quiet: true });
   const have = window.HBTradeUI.tradeOf(cell).accounts, next = T.cellTrade(bits && bits.trade);
   window.HBTradeUI.setCellTrade(cell, next, { quiet: true, mark: next.accounts.filter((id) => !have.includes(id)) });
@@ -168,8 +175,10 @@ function restoreTemplateTrade(cell, bits) {
 
 /* The one-time migration of the retired global ticked list onto the SELECTED chart, when that chart has no
    trade config of its own yet (a pre-Task-2 layout, or a fresh one). Other charts get nothing.
-   The old list is then cleared, so this never runs again. */
+   The old list is then cleared, so this never runs again. Nothing to migrate without a desk (or trading
+   module) at all -- the Backtest tab. */
 function migrateTickedOnce() {
+  if (!window.HBDeskClient || !T) return;
   const Dc = window.HBDeskClient, ticked = Dc.prefs.ticked;
   if (!ticked || !ticked.length) return;
   const c = cur(), moved = c ? T.migrateTicked(lastRaw[selected], ticked) : null;
@@ -212,13 +221,16 @@ function hostFor(id) {
     styleDefault(type) { return drawStyleDefaults.get(type) || null; },
     onChartMenu(cell, at) { chartMenu(cell, at); },
     onIndicatorMenu(cell, uid, o) { indicatorMenu(cell, uid, o); },
-    onReplayGuard(cell, patch) { window.HBReplayUI.guardSymbolChange(cell, patch); },
+    // 2026-09-28 three-tabs plan: HBReplayUI/HBTradeUI/HBDeskClient/T (HBTrade) may not be loaded at
+    // all (the Backtest tab has no HBReplayUI-driven real-trading guard; the Charts tab has no Tester/
+    // Replay any more) -- every call below is guarded so this shared cell host works on either page.
+    onReplayGuard(cell, patch) { window.HBReplayUI?.guardSymbolChange(cell, patch); },
     // final review I2(b), SAFETY ruling: any symbol change CLEARS that chart's accounts, so the new instrument
     // places no new entries until they are picked again (HBTrade.symbolChangeTrade, from cell.update)
     onSymbolChange(cell, off) {
       if (!off.cleared.length) return;   // nothing on the chart: nothing to clear, nothing to say
-      window.HBTradeUI.setCellTrade(cell, off.trade);
-      window.HBDeskClient.toast('err', T.SYMBOL_CHANGE_ACCOUNTS_CLEARED);
+      window.HBTradeUI?.setCellTrade(cell, off.trade);
+      window.HBDeskClient?.toast('err', T?.SYMBOL_CHANGE_ACCOUNTS_CLEARED);
     },
     changed() { saveLast(); renderToolbar(); },
     tool: () => tool,
@@ -235,11 +247,12 @@ function hostFor(id) {
 function buildGrid() {
   closeHotkeyBox();   // it is anchored to a cell element the rebuild is about to destroy
   closeAllDrawToolbars();   // anchored to cells this rebuild is about to destroy
-  for (const c of cells) { window.HBReplayUI.cellDestroyed(c); c.destroy(); }
+  for (const c of cells) { window.HBReplayUI?.cellDestroyed(c); c.destroy(); }
   cells = [];
   const grid = $('#grid'), [cols, rows] = GRIDS[layout.grid] || GRIDS[4], n = cols * rows;
   // a chart kept beyond the visible grid is re-read like a load: its LIVE accounts drop, the rest stay
-  const hidden = T.hiddenCellsLoaded(layout.cells, n, deskState());
+  // (T absent -- the Backtest tab -- means nothing was ever live on it: an empty hidden list)
+  const hidden = T ? T.hiddenCellsLoaded(layout.cells, n, deskState()) : [];
   grid.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
   grid.style.gridTemplateRows = `repeat(${rows}, minmax(0, 1fr))`;
   grid.dataset.count = String(n);
@@ -254,17 +267,17 @@ function buildGrid() {
   }
   // fix round 2: a chart destroyed mid-replay latches whatever chart now sits at its grid position -- for EVERY
   // caller (a layout load, a layout-tab switch, a grid-size change): HBTradeUI holds the positions
-  window.HBTradeUI.gridRebuilt(cells);
+  window.HBTradeUI?.gridRebuilt(cells);
   select(Math.min(selected, n - 1));
-  if (hidden.length) window.HBDeskClient.toast('err', T.liveDroppedMessage(hidden, deskState()));
+  if (hidden.length) window.HBDeskClient?.toast('err', T.liveDroppedMessage(hidden, deskState()));
 }
 
 function select(i) {
   if (i < 0 || i >= cells.length) return;
   selected = i;
   cells.forEach((c, k) => c.setSelected(k === i));
-  if (page) window.HBOrderPanel.setRoot(panelRoot());   // so does the order panel (it re-reads the chart itself)
-  if (page) window.HBTradeUI.paintDeskStatus();         // and the status bar's "this chart: …" (Minor 6)
+  if (page) window.HBOrderPanel?.setRoot(panelRoot());   // so does the order panel (it re-reads the chart itself)
+  if (page) window.HBTradeUI?.paintDeskStatus();         // and the status bar's "this chart: …" (Minor 6)
   renderToolbar();
   syncCrosshair();
 }
@@ -584,7 +597,7 @@ function panelRoot() { const c = cur(); return c && c.shown ? c.shown.root : nul
 
 function onLoaded(cell) {
   algoBefore.delete(cell);   // a history arrived: whatever symbol it is on now, the algo decision stands
-  if (page && cell === cur()) window.HBOrderPanel.setRoot(panelRoot());   // its symbol / tick / point value may be new
+  if (page && cell === cur()) window.HBOrderPanel?.setRoot(panelRoot());   // its symbol / tick / point value may be new
   if (customWait && customWait.cell === cell && cell.shown.spec === customWait.spec) closeMenu();
 }
 
@@ -595,7 +608,7 @@ function onRefused(cell, tried, text) {
   const was = algoBefore.get(cell);
   if (was && cell.cfg.root === was.root) {   // rolled back to the symbol the algo was on: the algo comes back too
     algoBefore.delete(cell);
-    window.HBTradeUI.setCellAlgo(cell, was.algo, { quiet: true });
+    window.HBTradeUI?.setCellAlgo(cell, was.algo, { quiet: true });
     saveLast();
   }
   if (customWait && customWait.cell === cell && menuEl) {
@@ -1439,11 +1452,11 @@ function chartSettings(c = cur(), tab = null) {
   if (!c) return;
   select(cells.indexOf(c));
   const box = openDialog('Settings', 'settings');
-  const ctl = window.HBSettingsDialog.mount(box, {
-    cell: c,
-    tab,                  // which tab to open on: the order panel's "Change" asks for 'trading'
-    cells: () => cells,
-    templates,
+  // 2026-09-28 three-tabs plan: the whole trade-capability bundle is offered to the dialog only
+  // when HBTradeUI is loaded (the Charts tab) -- settings-dialog.js already treats every one of
+  // these as optional (host.accountRows ? ... : ...), so leaving them out on the Backtest tab is
+  // enough to hide the Trading tab's content there, with no change to settings-dialog.js's logic.
+  const tradeCapabilities = window.HBTradeUI ? {
     tradeBits: (x) => T.tradeBits(x.cfg),                               // Task 2: what a template save adds
     applyTrade: (x, raw) => applyTemplateTrade(x, raw, { quiet: true }),  // a template Apply (saved on Ok)
     restoreTrade: restoreTemplateTrade,                                   // Cancel
@@ -1468,6 +1481,13 @@ function chartSettings(c = cur(), tab = null) {
       const offDesk = window.HBDeskClient.on((why) => { if (why.has('state') || why.has('account')) fn(); });
       return () => { offTrade(); offDesk(); };
     },
+  } : {};
+  const ctl = window.HBSettingsDialog.mount(box, {
+    cell: c,
+    tab,                  // which tab to open on: the order panel's "Change" asks for 'trading'
+    cells: () => cells,
+    templates,
+    ...tradeCapabilities,
     countries: () => [...new Set(calendar.map((e) => e.country))].sort(),
     toggleMenu(anchor, cls, fill) {   // menus and popovers open inside the dialog (above its backdrop)
       if (menuAnchor === anchor) { closeMenu(); return; }
@@ -1858,33 +1878,34 @@ function connect() {
   ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
   ws.onopen = () => {
     statusAt = Date.now();
-    window.HBReplayUI.onReconnect(cells);   // a fresh connection carries no replay sessions from the old one
+    window.HBReplayUI?.onReconnect(cells);   // a fresh connection carries no replay sessions from the old one
     for (const c of cells) { c.clearInflight(); c.subscribe(true); }
   };
   ws.onmessage = (e) => {
     let m;
     try { m = JSON.parse(e.data); } catch (_) { return; }
     if (m.type === 'status') { statusAt = Date.now(); showStatus(m); return; }
-    if (m.type === 'desk' || m.type === 'quote') { window.HBDeskClient.onMessage(m); return; }
-    if (m.type === 'paper') { window.HBPaperClient.onMessage(m); return; }
-    if (m.type === 'paperbook') { window.HBPaperClient.onBook(m); window.HBDeskClient.bookChanged(); return; }   // the PAPER account
-    if (m.type === 'depth') { window.HBDomUI.onDepth(m); window.HBL2Layer.onDepth(m); window.HBLiquidity.onDepth(m); return; }
-    if (m.type === 'news' || m.type === 'burst' || m.type === 'burst_update') { window.HBNewsUI.onMessage(m); return; }
-    if (m.type === 'tester_show') { window.HBTesterUI.show(m); return; }   // Claude's "show on chart" (POST /api/tester/show)
+    // 2026-09-28 three-tabs plan: none of these modules load on the Backtest tab; a safe no-op there.
+    if (m.type === 'desk' || m.type === 'quote') { window.HBDeskClient?.onMessage(m); return; }
+    if (m.type === 'paper') { window.HBPaperClient?.onMessage(m); return; }
+    if (m.type === 'paperbook') { window.HBPaperClient?.onBook(m); window.HBDeskClient?.bookChanged(); return; }   // the PAPER account
+    if (m.type === 'depth') { window.HBDomUI?.onDepth(m); window.HBL2Layer?.onDepth(m); window.HBLiquidity?.onDepth(m); return; }
+    if (m.type === 'news' || m.type === 'burst' || m.type === 'burst_update') { window.HBNewsUI?.onMessage(m); return; }
+    if (m.type === 'tester_show') { window.HBTesterUI?.show(m); return; }   // Claude's "show on chart" (POST /api/tester/show)
     const c = cells.find((x) => x.id === m.id);
     if (!c) return;
     if (m.type === 'history') c.onHistory(m);
     else if (m.type === 'older') c.onOlder(m);
-    else if (m.type === 'update') { c.onUpdate(m); if (c.replay) window.HBReplayUI.onBarUpdate(c, m); }
+    else if (m.type === 'update') { c.onUpdate(m); if (c.replay) window.HBReplayUI?.onBarUpdate(c, m); }
     else if (m.type === 'reset') c.subscribe(true);
     else if (m.type === 'error') c.onError(m.error);
-    else if (m.type === 'replay_state') window.HBReplayUI.onState(c, m);
-    else if (m.type === 'replay_error') window.HBReplayUI.onError(c, m);
+    else if (m.type === 'replay_state') window.HBReplayUI?.onState(c, m);
+    else if (m.type === 'replay_error') window.HBReplayUI?.onError(c, m);
   };
   ws.onclose = () => {
     showStatus({ connected: false, error: 'chart service unreachable — retrying' });
     // the books went with the socket: the ladder says "Book stale", the lines go, the heatmap leaves a gap
-    window.HBDomUI.onDisconnect(); window.HBL2Layer.onDisconnect(); window.HBLiquidity.onDisconnect();
+    window.HBDomUI?.onDisconnect(); window.HBL2Layer?.onDisconnect(); window.HBLiquidity?.onDisconnect();
     setTimeout(connect, 2000);
   };
 }
@@ -1983,28 +2004,34 @@ async function init() {
     // the switch alone is not saved as "on" anywhere a load could bring back (loadedTrade)
     tradeChanged(cell, accountsChanged) { if (accountsChanged) markDirty(); else saveLast(); },
   };
-  page.overlays.push(window.HBTradeLines.overlay);   // Task 6: the per-chart Buy/Sell block, lines and markers
-  page.overlays.push(window.HBReplayUI.overlay);     // Bar Replay: the floating control bar, dimming and REPLAY pill
-  page.overlays.push(window.HBTesterLayer.overlay);  // Task 10: the tester's trades, plots and jump on the root's chart
-  page.overlays.push(window.HBL2Layer.overlay);      // charts-l2-news-ui Task 2: big-order lines + the imbalance gauge
-  page.overlays.push(window.HBLiquidity.overlay);    // charts-l2-news-ui Task 3: the liquidity heatmap behind the candles
-  page.overlays.push(window.HBNewsUI.overlay);       // 2026-09-27 news-ui plan, Task 4: headline ticks + burst markers
+  // 2026-09-28 three-tabs plan: every module below is optional now -- the Charts tab no longer loads
+  // HBReplayUI/HBTesterUI/HBTesterLayer; the Backtest tab loads none of the trading modules at all
+  // (HBTradeLines/HBTradeUI/HBOrderPanel/HBDomUI/HBPanelShell/HBL2Layer/HBLiquidity/HBNewsUI). Each
+  // overlay push and mount call is guarded so this one shared init sequence works on either page.
+  if (window.HBTradeLines) page.overlays.push(window.HBTradeLines.overlay);   // Task 6: the per-chart Buy/Sell block, lines and markers
+  if (window.HBReplayUI) page.overlays.push(window.HBReplayUI.overlay);     // Bar Replay: the floating control bar, dimming and REPLAY pill
+  if (window.HBTesterLayer) page.overlays.push(window.HBTesterLayer.overlay);  // Task 10: the tester's trades, plots and jump on the root's chart
+  if (window.HBL2Layer) page.overlays.push(window.HBL2Layer.overlay);      // charts-l2-news-ui Task 2: big-order lines + the imbalance gauge
+  if (window.HBLiquidity) page.overlays.push(window.HBLiquidity.overlay);    // charts-l2-news-ui Task 3: the liquidity heatmap behind the candles
+  if (window.HBNewsUI) page.overlays.push(window.HBNewsUI.overlay);       // 2026-09-27 news-ui plan, Task 4: headline ticks + burst markers
   // M8 (tester review): HBTesterUI.mount registers the 'tester' tab via HBPanel.addTab, so it runs BEFORE
   // HBPanel.mount reads a saved {tab: 'tester'} -- otherwise a saved tester tab is not restored on reload.
-  window.HBTesterUI.mount(page);               // Task 9
-  window.HBNewsUI.mount(page);                 // 2026-09-27 news-ui plan, Task 4: registers the News tab
-  window.HBPanel.mount(page);                 // Task 4
-  window.HBTradeUI.mount(page);                // Task 5 (it also owns the desk's line in the status bar)
+  if (window.HBTesterUI) window.HBTesterUI.mount(page);               // Task 9
+  if (window.HBNewsUI) window.HBNewsUI.mount(page);                 // 2026-09-27 news-ui plan, Task 4: registers the News tab
+  window.HBPanel.mount(page);                 // Task 4 -- the bottom-panel shell itself is generic, loads on both pages
+  if (window.HBTradeUI) window.HBTradeUI.mount(page);                // Task 5 (it also owns the desk's line in the status bar)
   // 2026-09-27 panels plan: Order and DOM are each their own floating/dockable panel now. HBPanelShell owns
   // the chrome (open/close, dock/float, drag, resize, persistence); it hands each module a plain container to
   // fill ONCE (mount) and a setVisible callback -- neither module ever touches the page's layout itself.
-  window.HBPanelShell.mount(page, {
-    order: { mount: (container) => window.HBOrderPanel.mount(page, container), setVisible: (v) => window.HBOrderPanel.setVisible(v) },
-    dom: { mount: (container) => window.HBDomUI.mount(container, page), setVisible: (v) => window.HBDomUI.setVisible(v) },
-  });
-  window.HBReplayUI.mount(page);
+  if (window.HBOrderPanel && window.HBDomUI && window.HBPanelShell) {
+    window.HBPanelShell.mount(page, {
+      order: { mount: (container) => window.HBOrderPanel.mount(page, container), setVisible: (v) => window.HBOrderPanel.setVisible(v) },
+      dom: { mount: (container) => window.HBDomUI.mount(container, page), setVisible: (v) => window.HBDomUI.setVisible(v) },
+    });
+  }
+  if (window.HBReplayUI) window.HBReplayUI.mount(page);
   buildGrid();   // after the mounts: page.overlays must be filled before any cell's build() reads host.overlays()
-  migrateTickedOnce();
+  if (window.HBDeskClient) migrateTickedOnce();
   // Global Constraints: no LIVE account survives a load. The layout was restored before the desk answered, so
   // the drop is (re-)run every time its account list changes -- and once now, in case it already has.
   if (window.HBDeskClient) window.HBDeskClient.on((why) => { if (why.has('state') || why.has('account')) dropLiveAccounts(); });

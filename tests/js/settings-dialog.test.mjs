@@ -427,7 +427,9 @@ test('W3: every Settings tab carries its label as title and aria-label', () => {
   SD.mount(box, host);
   const tabs = [];
   descend(box, (el) => { if (el.classList && el.classList.contains('set-tab')) tabs.push(el); return false; });
-  assert.ok(tabs.length >= 6, `found ${tabs.length} tabs`);
+  // the bare host offers no trade capabilities (no host.accountRows), so the Trading tab is left out
+  // (2026-09-28 three-tabs plan: this is what the Backtest tab's host looks like) -- 5 of the 6, not 6.
+  assert.ok(tabs.length >= 5, `found ${tabs.length} tabs`);
   for (const t of tabs) {
     const label = t.children[1].textContent;
     assert.ok(label, 'a visible label');

@@ -40,7 +40,8 @@
 (() => {
 'use strict';
 const X = window.HBTester;
-const Tr = window.HBTrade;
+// 2026-09-28 three-tabs plan: trade.js never loads on the Backtest tab; money/usd come from tradepure.js instead.
+const Tr = window.HBTrade || window.HBTradePure;
 
 const COST_FIELDS = [['qty', 'Qty', 1, 100, 1], ['commission', 'Commission $/RT (per contract)', 0, 100, 0.01],
   ['slippage_ticks', 'Slippage (ticks)', 0, 20, 0.25]];
