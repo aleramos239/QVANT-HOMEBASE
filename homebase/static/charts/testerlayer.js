@@ -378,12 +378,17 @@ class Overlay {
   }
 }
 
-/* What showPlan needs to know about one live chart. Fails closed: no HBTradeUI to ask = trade-ready. */
+/* What showPlan needs to know about one live chart. Fails closed on the Charts tab: no HBTradeUI to
+   ask = trade-ready, so a chart's trade state is never guessed wrong. The Backtest tab has no
+   HBTradeUI at all -- EVER, not just "not answered yet" -- so failing closed there would read every
+   chart as trade-ready and leave showPlan (Claude's show_on_chart, and a List-of-trades click) with
+   nowhere to land; every chart is free instead. */
 function chartFacts(c) {
+  const onBacktest = typeof window !== 'undefined' && window.HB_PAGE === 'backtest';
   const TU = typeof window !== 'undefined' ? window.HBTradeUI : null;
   const tr = TU && TU.tradeOf ? TU.tradeOf(c) : null;
   return { root: (c.shown || c.cfg).root, replay: !!c.replay,
-    tradeReady: !tr || !!(c.cfg && c.cfg.algo) || !!(tr.accounts && tr.accounts.length) };
+    tradeReady: !onBacktest && (!tr || !!(c.cfg && c.cfg.algo) || !!(tr.accounts && tr.accounts.length)) };
 }
 
 let PAGE = null;   // the page interface (same singleton every overlay() call hands us): jump()'s own home

@@ -12,17 +12,20 @@
 'use strict';
 // Looked up lazily (not cached at load time): in the page, script tag order should not matter
 // here, and in Node, require() only resolves once this module is asked to run.
-function replay() { return (typeof window !== 'undefined' && window.HBReplay) || (typeof require === 'function' ? require('./replay.js') : null); }
+// Opus review (three-tabs): this used to read window.HBReplay, which broke the instant Bar Replay
+// (and so replay.js) left the Charts tab -- POINT_VALUE/pointValue now live in tradepure.js, loaded
+// on every page trade.js or this file itself needs (Charts always has it; see charts.html).
+function tradePure() { return (typeof window !== 'undefined' && window.HBTradePure) || (typeof require === 'function' ? require('./tradepure.js') : null); }
 
-// root -> minimum price increment (homebase/contracts.py's _SPECS; the same 8 roots replay.js's
-// own POINT_VALUE fallback covers, verified there for the practice feature). Only used to turn a
-// slip in TICKS into a dollar figure when no chart happens to be open on that root already.
+// root -> minimum price increment (homebase/contracts.py's _SPECS; the same 8 roots tradepure.js's
+// own POINT_VALUE fallback covers). Only used to turn a slip in TICKS into a dollar figure when no
+// chart happens to be open on that root already.
 const TICK_SIZE = { NQ: 0.25, ES: 0.25, YM: 1.0, RTY: 0.10, GC: 0.10, SI: 0.005, CL: 0.01, BTC: 5.0 };
 
 /* USD value of one tick, one contract, for `root` -- null if either half is unknown. */
 function tickValue(root) {
   const ts = TICK_SIZE[String(root || '').toUpperCase()];
-  const R = replay(), pv = R ? R.pointValue(root) : null;
+  const TP = tradePure(), pv = TP ? TP.pointValue(root) : null;
   return (ts == null || pv == null) ? null : ts * pv;
 }
 

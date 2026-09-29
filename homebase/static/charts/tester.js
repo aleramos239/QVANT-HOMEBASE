@@ -10,7 +10,9 @@
 'use strict';
 const need = (name, file) => (typeof window !== 'undefined' && window[name]) || (typeof require === 'function' ? require(file) : null);
 const Cat = need('HBCatalog', './catalog.js');
-const Tr = need('HBTrade', './trade.js');
+// 2026-09-28 three-tabs plan: on the Backtest tab, trade.js itself never loads (no trading module
+// does) -- only its pure money formatters (money/usd) are needed here, from tradepure.js instead.
+const Tr = need('HBTrade', './trade.js') || need('HBTradePure', './tradepure.js');
 
 const MINUS = '−';
 const DEFAULT_RULES = 'lucid-flex-50k@2026-09-27';

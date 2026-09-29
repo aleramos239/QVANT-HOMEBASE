@@ -3,12 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Charts · Homebase</title>
+<title>Backtest · Homebase</title>
 <script>
   try { var _t = localStorage.getItem('hb_theme');
     document.documentElement.setAttribute('data-theme', (_t === 'light' || _t === 'dark') ? _t : 'light');
   } catch (_) { document.documentElement.setAttribute('data-theme', 'light'); }
 </script>
+<!-- 2026-09-28 three-tabs plan: the same chart shell as charts.html, minus every trading module
+     (deskclient/paperclient/tradeui/tradelines/orderpanel/dom/domui/trade.js, and the Level 2/News
+     overlays not named in the design's scope) -- see docs/superpowers/specs/2026-09-28-three-tabs-design.md.
+     window.HB_PAGE tells the shared app.js/panel.js which storage namespace (layouts, the bottom
+     panel's default) and /ws page kind to use. -->
+<script>window.HB_PAGE = 'backtest';</script>
 <link rel="stylesheet" href="/static/charts/charts.css?v=30">
 </head>
 <body>
@@ -25,12 +31,10 @@
   <span class="tb-sep"></span>
   <button class="tb-btn" id="tbIndicators" type="button" title="Indicators"><span class="icw" data-icon="indicators"></span><span class="tb-label">Indicators</span></button>
   <span class="tb-sep"></span>
-  <!-- 2026-09-28 three-tabs plan: Bar Replay moved to the Backtest tab (its own #tbReplay there) -->
+  <button class="tb-btn" id="tbReplay" type="button" title="Bar Replay" aria-haspopup="menu" aria-expanded="false"><span class="icw" data-icon="history"></span><span class="tb-label">Replay</span></button>
+  <span class="tb-sep"></span>
   <button class="tb-btn" id="tbGrid" type="button" title="Chart layout" aria-haspopup="menu" aria-expanded="false"><span class="thumb" id="tbGridThumb"></span><span class="icw sm" data-icon="chevron"></span></button>
   <span class="tb-spacer"></span>
-  <button class="tb-btn" id="tbOrder" type="button" title="Order panel" aria-pressed="false" aria-controls="panel-order"><span class="icw" data-icon="panelRight"></span><span class="tb-label">Order</span></button>
-  <button class="tb-btn" id="tbDom" type="button" title="DOM (Level 2 ladder)" aria-pressed="false" aria-controls="panel-dom"><span class="icw" data-icon="listOrdered"></span><span class="tb-label">DOM</span></button>
-  <span class="tb-sep"></span>
   <button class="tb-btn tb-icon" id="tbSettings" type="button" title="Chart settings" aria-label="Chart settings" aria-haspopup="dialog"><span class="icw" data-icon="gear"></span></button>
   <button class="tb-btn tb-icon" id="tbTheme" type="button" title="Dark theme"><span class="icw" data-icon="moon"></span></button>
 </header>
@@ -54,7 +58,7 @@
   <aside class="pdock" id="pdock" aria-label="Docked panels" hidden></aside>
 </div>
 <div id="floatLayer" aria-label="Floating panels"></div>
-<section class="bpanel" id="bpanel" aria-label="Trading and Strategy Tester">
+<section class="bpanel" id="bpanel" aria-label="Strategy Tester and Bar Replay">
   <div class="bp-resize" id="bpResize" role="separator" aria-orientation="horizontal" aria-label="Resize the panel" tabindex="0"></div>
   <div class="bp-bar"><div class="bp-tabs" id="bpTabs" role="tablist"></div><span class="bp-spacer"></span>
     <button class="bp-toggle" id="bpToggle" type="button" aria-label="Open the panel" title="Open the panel"><span class="icw" data-icon="chevronUp"></span></button></div>
@@ -87,30 +91,19 @@
 <script src="/static/charts/settings.js?v=30"></script>
 <script src="/static/charts/dataexport.js?v=30"></script>
 <script src="/static/charts/events.js?v=30"></script>
-<script src="/static/charts/news.js?v=30"></script>
 <script src="/static/charts/scrollback.js?v=30"></script>
 <script src="/static/charts/cell.js?v=30"></script>
 <script src="/static/charts/settings-dialog.js?v=30"></script>
 <script src="/static/charts/indicator-settings-dialog.js?v=30"></script>
 <script src="/static/charts/chartmenu.js?v=30"></script>
 <script src="/static/charts/tradepure.js?v=30"></script>
-<script src="/static/charts/trade.js?v=30"></script>
-<script src="/static/charts/fillquality.js?v=30"></script>
-<script src="/static/charts/deskclient.js?v=30"></script>
-<script src="/static/charts/paperclient.js?v=30"></script>
-<script src="/static/charts/dom.js?v=30"></script>
-<script src="/static/charts/domui.js?v=30"></script>
 <script src="/static/charts/panel.js?v=30"></script>
-<script src="/static/charts/tradeui.js?v=30"></script>
-<script src="/static/charts/tradelines.js?v=30"></script>
-<script src="/static/charts/newsui.js?v=30"></script>
-<!-- 2026-09-28 three-tabs plan: Strategy Tester + Bar Replay moved to the Backtest tab
-     (backtest.html loads tester.js/testerui.js/testerlayer.js/replay.js/replayui.js) -->
-<script src="/static/charts/l2layer.js?v=30"></script>
-<script src="/static/charts/liquidity.js?v=30"></script>
-<script src="/static/charts/orderpanel.js?v=30"></script>
+<script src="/static/charts/tester.js?v=30"></script>
+<script src="/static/charts/testerui.js?v=30"></script>
+<script src="/static/charts/testerlayer.js?v=30"></script>
+<script src="/static/charts/replay.js?v=30"></script>
+<script src="/static/charts/replayui.js?v=30"></script>
 <script src="/static/charts/panellayout.js?v=30"></script>
-<script src="/static/charts/panelshell.js?v=30"></script>
 <script src="/static/charts/layouts.js?v=30"></script>
 <script src="/static/charts/presets.js?v=30"></script>
 <script src="/static/charts/app.js?v=30"></script>

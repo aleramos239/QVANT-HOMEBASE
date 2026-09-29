@@ -6,8 +6,12 @@
 (() => {
 'use strict';
 const T = window.HBTrade;
-const STATE_KEY = 'hb_panel';
-const DEFAULT_H = 260, MIN_H = 120;
+// 2026-09-28 three-tabs plan: the Backtest tab wants the Strategy Tester open and bigger by default
+// (its only tab there -- Positions/Orders/Fills/Accounts/Fill quality never register on that page) --
+// its own storage key so that default is real and persists independently of the Charts tab's panel.
+const IS_BACKTEST = typeof window !== 'undefined' && window.HB_PAGE === 'backtest';
+const STATE_KEY = IS_BACKTEST ? 'hb_panel_backtest' : 'hb_panel';
+const DEFAULT_H = IS_BACKTEST ? 420 : 260, MIN_H = 120;
 
 const elPanel = document.getElementById('bpanel');
 const elResize = document.getElementById('bpResize');
@@ -180,7 +184,9 @@ function renderFills(target) {
    never fires on a quote (TAB_EVENTS below), so there is no per-row state (a Close/Cancel button,
    focus) a rebuild could lose. */
 const FQ = window.HBFillQuality;
-const BOT_KEYS = Object.keys(T.BOT_NAMES);
+// 2026-09-28 three-tabs plan: T (HBTrade) is not loaded on the Backtest tab -- this tab is never
+// added there (see the addTab calls below), but the module still evaluates top to bottom.
+const BOT_KEYS = T ? Object.keys(T.BOT_NAMES) : [];
 let fqStrategy = BOT_KEYS[0] || null;
 
 const FQ_HEAD = [{ text: 'Date' }, { text: 'Account' }, { text: 'Latency (ms)', cls: 'num' },
@@ -406,7 +412,8 @@ function mount(pg) {
   applyHeight(saved && Number.isFinite(saved.h) ? saved.h : DEFAULT_H);
   if (saved && typeof saved.tab === 'string' && tabs.some((t) => t.id === saved.tab)) activeId = saved.tab;
   renderTabsBar();
-  isOpen = !!(saved && saved.open === true);
+  // no saved state yet on the Backtest tab: open by default (its Strategy Tester tab is the point of the page)
+  isOpen = saved ? saved.open === true : IS_BACKTEST;
   elPanel.classList.toggle('open', isOpen);
   const label = isOpen ? 'Close the panel' : 'Open the panel';
   elToggle.setAttribute('aria-label', label);
@@ -420,12 +427,17 @@ function mount(pg) {
 
 /* The built-in tabs (every account: ruling S6). Registered immediately -- addTab only needs the
    static DOM, not `page` -- so later modules (Task 9's Strategy Tester) can add theirs the same
-   way, in script order, before app.js calls mount(). */
-addTab({ id: 'positions', label: 'Positions', render: renderPositions });
-addTab({ id: 'orders', label: 'Orders', render: renderOrders });
-addTab({ id: 'fills', label: 'Fills', render: renderFills });
-addTab({ id: 'accounts', label: 'Accounts', render: renderAccounts });
-addTab({ id: 'fillq', label: 'Fill quality', render: renderFillQuality });
+   way, in script order, before app.js calls mount().
+   2026-09-28 three-tabs plan: these five are trading tabs -- on the Backtest tab (no HBTrade, no
+   HBDeskClient loaded at all) there is nothing for them to show, so they are left unregistered
+   there; the Strategy Tester (testerui.js's own addTab) is that page's only bottom-panel tab. */
+if (T) {
+  addTab({ id: 'positions', label: 'Positions', render: renderPositions });
+  addTab({ id: 'orders', label: 'Orders', render: renderOrders });
+  addTab({ id: 'fills', label: 'Fills', render: renderFills });
+  addTab({ id: 'accounts', label: 'Accounts', render: renderAccounts });
+  addTab({ id: 'fillq', label: 'Fill quality', render: renderFillQuality });
+}
 
 window.HBPanel = { mount, addTab, show, refresh, isShowing };
 })();
