@@ -509,3 +509,34 @@ def test_export_manager_active_prefers_the_running_job_over_an_older_finished_on
         assert got["id"] == jid2 and got["status"] == "running"
     finally:
         mgr._active[1].kill()
+
+
+def _fake_job_dir(base, n):
+    jid = f"202601{(n % 28) + 1:02d}-{n:06d}-{n:08x}"
+    d = base / "jobs" / jid
+    d.mkdir(parents=True)
+    E.write_json(d / "status.json", {"id": jid, "status": "done", "updated": E._now()})
+    return jid
+
+
+def test_prune_keeps_only_the_most_recent_max_jobs_dirs_at_startup(tmp_path):
+    base = tmp_path / "state"
+    ids = [_fake_job_dir(base, n) for n in range(E.MAX_JOBS + 5)]
+    E.ExportManager(base, archive=tmp_path / "ticks", depth_base=tmp_path / "depth", out_dir=tmp_path / "downloads")
+    left = sorted(p.name for p in (base / "jobs").iterdir())
+    assert len(left) == E.MAX_JOBS
+    assert left == sorted(ids)[-E.MAX_JOBS:]    # the oldest 5 are gone, the newest MAX_JOBS remain
+
+
+def test_prune_runs_after_every_submit_and_never_touches_the_active_job(tmp_path):
+    base = tmp_path / "state"
+    for n in range(E.MAX_JOBS):   # already at the cap, so the new (active) job pushes out the oldest fake
+        _fake_job_dir(base, n)
+    write_archive(tmp_path / "ticks", "NQ", D, "NQZ6", rows(session_ms(D, 9, 30), [100.0]))
+    mgr = E.ExportManager(base, archive=tmp_path / "ticks", depth_base=tmp_path / "depth",
+                          out_dir=tmp_path / "downloads")
+    jid = mgr.submit({"root": "NQ", "type": "ticks", "start": D.isoformat(), "end": D.isoformat()})
+    left = {p.name for p in mgr.jobs.iterdir()}
+    assert len(left) == E.MAX_JOBS               # one fake pruned to make room for the new one
+    assert jid in left                            # the just-submitted (and still active) job always survives
+    poll(mgr, jid)

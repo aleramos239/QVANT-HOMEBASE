@@ -77,6 +77,7 @@ RTH_START, RTH_END = dt.time(9, 30), dt.time(16, 0)
 L2_LEVELS_MAX = 10
 FINAL = {"done", "error", "cancelled"}
 JOB_ID_RE = re.compile(r"^\d{8}-\d{6}-[0-9a-f]{8}$")
+MAX_JOBS = 20             # job dirs kept on disk; older ones (never the active one) are pruned
 _CONTRACT_RE = re.compile(r"[A-Z0-9]{2,12}")
 
 
@@ -562,6 +563,23 @@ class ExportManager:
         self._active: tuple[str, subprocess.Popen] | None = None
         self._cancelled: set[str] = set()
         self._recover()
+        self._prune()
+
+    def _prune(self) -> None:
+        """Keeps the most recent MAX_JOBS job dirs on disk (job ids sort chronologically), plus
+        the active job if for some reason it is not already among them (it always will be in
+        practice: only one job is ever active, and its id is necessarily the newest at that
+        point). Called at startup (a cap newly added to an existing deployment) and after every
+        submit() (ongoing hygiene)."""
+        with self._lock:
+            active_jid = self._active[0] if self._active else None
+        names = sorted(p.name for p in self.jobs.iterdir() if JOB_ID_RE.match(p.name))
+        keep = set(names[-MAX_JOBS:])
+        if active_jid:
+            keep.add(active_jid)
+        for n in names:
+            if n not in keep:
+                shutil.rmtree(self.jobs / n, ignore_errors=True)
 
     def _recover(self) -> None:
         """A job a previous service process left queued/running: dead (its pid is gone) is never
@@ -611,6 +629,7 @@ class ExportManager:
                 raise
             self._active = (jid, proc)
         threading.Thread(target=self._watch, args=(jid, proc), daemon=True).start()
+        self._prune()
         return jid
 
     def _launch(self, job_dir: Path) -> subprocess.Popen:
