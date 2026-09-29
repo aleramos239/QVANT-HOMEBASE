@@ -1,4 +1,6 @@
-"""The HTTP client for the chart service's tester API -- loopback only, /api/tester/* only.
+"""The HTTP client for the chart service (:8852) -- loopback only, a fixed path prefix (default
+/api/tester/*; desk_tools.py's export client passes /api/export/* -- still the same chart
+service, never the desk).
 
 How a non-browser caller passes the chart service's guards (homebase/charts/server.py):
   * HostGuard + tester_api.host_ok: urllib sends `Host: 127.0.0.1:8852` itself -- on netguard's loopback
@@ -34,13 +36,14 @@ def base_url() -> str:
 
 
 class Client:
-    def __init__(self, url: str | None = None, timeout: float = 60.0):
+    def __init__(self, url: str | None = None, timeout: float = 60.0, prefix: str | tuple = PREFIX):
         self.url = url or base_url()
         self.timeout = timeout
+        self.prefix = prefix   # str or tuple of allowed path prefixes (str.startswith takes either)
 
     def _req(self, method: str, path: str, body=None):
-        if not path.startswith(PREFIX):
-            raise ToolError(f"refused: {path} is not a Strategy Tester route")
+        if not path.startswith(self.prefix):
+            raise ToolError(f"refused: {path} is not an allowed route")
         data = None
         headers = {"Accept": "application/json", "Origin": self.url}
         if method != "GET":

@@ -19,6 +19,8 @@ from zoneinfo import ZoneInfo
 
 from .. import draftstore
 from .client import Client, ToolError, base_url
+from .desk_tools import SPECS as DESK_SPECS
+from .desk_tools import DeskMixin
 
 ET = ZoneInfo("America/New_York")
 FINAL = ("done", "error", "cancelled")
@@ -158,7 +160,7 @@ SPECS = [
            "code": {"type": "string", "description": "The complete Python source."}}, ["name", "code"]),
     _spec("delete_draft", "Delete a DRAFT strategy's file (its finished runs stay listed).",
           {"name": {"type": "string", "description": "The draft's name (without draft_)."}}, ["name"]),
-]
+] + DESK_SPECS
 
 
 # ---------------------------------------------------------------- formatting
@@ -361,12 +363,14 @@ def _compare_text(wid: str, s: dict) -> str:
     return "\n".join(lines)
 
 
-class Toolbox:
+class Toolbox(DeskMixin):
     def __init__(self, client: Client | None = None, *, sleep=time.sleep, clock=time.monotonic,
-                 poll_s: float = 1.0):
+                 poll_s: float = 1.0, desk=None, charts_export=None):
         self._client = client
         self.sleep, self.clock, self.poll_s = sleep, clock, poll_s
         self._bundles: OrderedDict = OrderedDict()
+        self._desk = desk               # a DeskClient, or None to build one lazily (desk_tools.DeskMixin)
+        self._charts_export = charts_export
 
     @property
     def c(self) -> Client:
