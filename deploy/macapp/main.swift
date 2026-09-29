@@ -160,7 +160,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
         // would be a bad place to land mid-session. Applied to all three tabs, not just Desk: the
         // same reasoning holds for Charts/Backtest, and a single uniform rule is easier to trust.
         decisionHandler(.cancel)
-        NSWorkspace.shared.open(url)
+        openExternal(url)
     }
 
     // target="_blank" / window.open(): a link to one of our own tabs switches there instead of
@@ -172,10 +172,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDe
             if let target = tabFor(url: url) {
                 showTab(target)
             } else {
-                NSWorkspace.shared.open(url)
+                openExternal(url)
             }
         }
         return nil
+    }
+
+    /// Hand a URL to the user's default browser -- but only http/https (2026-09-29 review):
+    /// NSWorkspace.shared.open(url) on anything else (file:, a custom app-registered scheme, ...)
+    /// would let a page this viewer merely navigated to launch an arbitrary local file or app, not
+    /// just open a browser tab. Every call site above reaches this instead of NSWorkspace directly.
+    private func openExternal(_ url: URL) {
+        guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else {
+            return
+        }
+        NSWorkspace.shared.open(url)
     }
 
     /// Which tab a URL belongs to, by origin (scheme+host+port) and, for Charts/Backtest which
