@@ -48,6 +48,10 @@ from .trading import ChartDesk
 STATIC = Path(__file__).resolve().parent / "static"
 CLOCK_INTERVAL_S = 1       # also paces the sibling-cancel backstop (cache reads)
 RECONNECT_INTERVAL_S = 5   # cheap now: reconnects reuse the token
+GONE_CONFIRM_S = 300       # an account missing from its login is removed only when a 2nd
+                           # successful sync at least this much later still misses it
+GONE_QUIET = (dt.time(9, 20), dt.time(9, 35))   # weekdays ET: never unbook/remove in here
+NOTICES_KEPT = 10
 EQUITY_INTERVAL_S = 60
 JOURNAL_TAIL = 60
 READINESS_FROM = (9, 25)
@@ -373,6 +377,27 @@ def create_app(cfg: config_mod.AppCfg | None = None,
     budget.journal = engine.journal
     _logged_in_once: set[str] = set()        # entries that spent their first login
     _parked: dict[str, str] = {}             # entry -> why (its account is not on its login)
+    # entry -> its account-gone state: first/next_check (unix), unbooked, confirmed
+    _gone: dict[str, dict] = {}
+    _no_accounts_warned: set[str] = set()
+    notices: list[dict] = []                 # one-liners for the desk page (status payload)
+
+    def _notice(text: str, **kw) -> None:
+        notices.append({"et": engine.now_et().isoformat(timespec="seconds"),
+                        "text": text, **kw})
+        del notices[:-NOTICES_KEPT]
+
+    def _short(aid: str) -> str:
+        a = cfg.accounts.get(aid)
+        name = (a.account_name if a is not None else "") or aid
+        return "…" + name[-3:] if len(name) > 6 else name
+
+    def _login_label(aid: str) -> str:
+        tail = _login_key(aid).rsplit(":", 1)[-1].split("_", 1)[0]
+        return tail.capitalize() if tail else "Tradovate"
+
+    def _in_gone_quiet(now_et) -> bool:
+        return now_et.weekday() < 5 and GONE_QUIET[0] <= now_et.time() < GONE_QUIET[1]
 
     def _login_key(aid: str) -> str:
         a = cfg.accounts.get(aid)
@@ -530,6 +555,11 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         await ad.observe_fills(engine.on_fill)
         desk.attach(aid, ad)
         _parked.pop(aid, None)
+        _no_accounts_warned.discard(aid)
+        if _gone.pop(aid, None) is not None:
+            engine.journal("account_back", account=aid)
+            _notice(f"{_short(aid)} is back on your {_login_label(aid)} login — it was "
+                    "unbooked; book it again if you want it trading", account=aid)
         acct_status[aid] = {"connected": True, "error": None}
         engine.journal("broker_connected", account=aid,
                        broker_account=a.account_name, mode=mode)
@@ -558,7 +588,15 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             acct_status[aid] = {"connected": False, "parked": True,
                                 "error": f"account {name} is not on this login — "
                                          f"remove it from the desk ({msg[:160]})"}
+            _note_gone(aid, e)
             return
+        if "login exposes no accounts" in msg:
+            # never evidence that an account is gone: warn, act on nothing
+            if aid not in _no_accounts_warned:
+                _no_accounts_warned.add(aid)
+                engine.journal("login_lists_no_accounts", account=aid, login=_login_key(aid))
+                _notice(f"your {_login_label(aid)} login listed no accounts — nothing was "
+                        "removed; check the login at Tradovate", account=aid, level="warn")
         acct_status[aid] = {"connected": False, "error": msg}
         # NEVER hammer the login endpoint: auth rejections and rate-limit
         # tickets wait 30 min; anything else 5 min (the user's LoginBudget
@@ -566,10 +604,83 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         slow = ("Login failed" in msg or "p-ticket" in msg or "p-captcha" in msg)
         _login_cooldown[aid] = _t.time() + (1800 if slow else 300)
 
+    def _note_gone(aid: str, e: AccountNotOnLogin) -> None:
+        """A successful sync listed the login's accounts and this entry's is not among
+        them. The first sighting starts the clock (the unbook runs in _gone_step, outside
+        09:20-09:35); one at least GONE_CONFIRM_S later confirms the removal. An error
+        without the listing (a failed, 429'd or empty sync) is never evidence."""
+        import time as _t
+        if not getattr(e, "listed", None):
+            return
+        now = _t.time()
+        g = _gone.get(aid)
+        if g is None:
+            _gone[aid] = {"first": now, "next_check": now + GONE_CONFIRM_S,
+                          "unbooked": False, "confirmed": False, "listed": list(e.listed)}
+        elif now - g["first"] >= GONE_CONFIRM_S:
+            g["confirmed"] = True
+
+    async def _drop_account(aid: str, **journal_extra) -> None:
+        """Unassign an entry from every strategy, drop it from the pool, close it."""
+        for name in list(cfg.book):
+            cfg.book[name] = [a for a in cfg.book[name]
+                              if a.get("account") != aid]
+        cfg.accounts.pop(aid, None)
+        config_mod.save(cfg)
+        acct_status.pop(aid, None)
+        _parked.pop(aid, None)
+        _gone.pop(aid, None)
+        _login_cooldown.pop(aid, None)
+        old = adapters.pop(aid, None)
+        if old is not None:
+            with contextlib.suppress(Exception):
+                await old.close()
+        engine.journal("account_removed", account=aid, **journal_extra)
+
+    async def _gone_step() -> None:
+        """Act on accounts that left their login: unbook at once, one confirming
+        sync GONE_CONFIRM_S later, then remove. Never inside 09:20-09:35 ET."""
+        import time as _t
+        if not _gone or _in_gone_quiet(engine.now_et()):
+            return
+        for aid, g in list(_gone.items()):
+            if aid not in cfg.accounts:
+                _gone.pop(aid, None)
+                continue
+            if not g["unbooked"]:
+                g["unbooked"] = True
+                was = [n for n, rows in cfg.book.items()
+                       if any(r.get("account") == aid for r in rows)]
+                for name in was:
+                    cfg.book[name] = [r for r in cfg.book[name] if r.get("account") != aid]
+                if was:
+                    config_mod.save(cfg)
+                engine.journal("account_gone", account=aid, unbooked=was,
+                               login_lists=g["listed"])
+                _notice(f"{_short(aid)} is no longer on your {_login_label(aid)} login — "
+                        "unbooked; it is removed from the desk if a second check agrees",
+                        account=aid)
+            if not g["confirmed"] and _t.time() >= g["next_check"]:
+                g["next_check"] = _t.time() + GONE_CONFIRM_S
+                try:
+                    await _connect_account(aid)        # it came back: _gone cleared there
+                    continue
+                except Exception as e:  # noqa: BLE001 — _note_gone judges it
+                    _connect_failed(aid, e)
+            if g["confirmed"] and aid in _gone:
+                line = (f"{_short(aid)} is no longer on your {_login_label(aid)} login — "
+                        "removed from the desk")           # worded before the entry goes
+                await _drop_account(aid, reason="not on the login any more")
+                _notice(line, account=aid)
+
     async def _broker_loop():
         import time as _t
         while True:
             budget.tick()                    # a cool-down's one "ended" line
+            try:
+                await _gone_step()
+            except Exception as e:  # noqa: BLE001 — never kill the supervisor
+                engine.journal("account_gone_error", error=str(e)[:200])
             for aid in list(cfg.accounts):
                 if aid in _parked:
                     continue                 # only a manual Reconnect retries it
@@ -663,6 +774,8 @@ def create_app(cfg: config_mod.AppCfg | None = None,
     app.state.login_cooldown = _login_cooldown
     app.state.login_budget = budget
     app.state.parked = _parked
+    app.state.gone = _gone
+    app.state.notices = notices
     app.state.feed_box = feed_box
     app.state.desk = desk
     app.include_router(desk_api.trade_router(desk), prefix="/api/trade")
@@ -707,6 +820,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             "timer": timer.status(),
             "feed": feed_status(),
             "accounts": accounts,
+            "notices": notices[::-1],      # newest first, one line each, page wording
             "book": cfg.book,
             "strategies": {
                 name: {
@@ -938,19 +1052,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             except Exception as e:  # noqa: BLE001 — unreadable is NOT flat
                 raise HTTPException(409, f"can't read the position ({e}) — "
                                     "try again once it's connected")
-        for name in list(cfg.book):
-            cfg.book[name] = [a for a in cfg.book[name]
-                              if a.get("account") != aid]
-        cfg.accounts.pop(aid)
-        config_mod.save(cfg)
-        acct_status.pop(aid, None)
-        _parked.pop(aid, None)
-        _login_cooldown.pop(aid, None)
-        old = adapters.pop(aid, None)
-        if old is not None:
-            with contextlib.suppress(Exception):
-                await old.close()
-        engine.journal("account_removed", account=aid)
+        await _drop_account(aid)
         return {"ok": True, "removed": aid}
 
     @app.get("/api/diag-permissions")

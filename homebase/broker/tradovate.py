@@ -437,8 +437,13 @@ class TradovateAdapter(BrokerAdapter):
             self._acct_num, self._acct_name, self.pinned_ok = None, "", False
             have = ", ".join(str(a.get("name") or a.get("nickname") or a.get("id"))
                              for a in accounts)
-            raise AccountNotOnLogin(
+            err = AccountNotOnLogin(
                 f"account {want_name or want_id} not on this login (has: {have})")
+            # the evidence the desk may act on (account_gone): a SUCCESSFUL sync that
+            # listed these other accounts -- never a failed, 429'd or empty one
+            err.listed = [str(a.get("name") or a.get("nickname") or a.get("id"))
+                          for a in accounts]
+            raise err
         pinned = chosen is not None
         if chosen is None:
             active = [a for a in accounts if a.get("active", True)]
