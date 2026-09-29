@@ -1324,3 +1324,27 @@ def test_a_down_account_holds_a_late_fire_45_s_then_the_ready_ones_place(tmp_pat
     assert [(e["account"], e["reason"]) for e in ev if e["event"] == "timer_skipped"] == \
         [("c", "account_unsynced")]
     assert fired(tmp_path) == [("nq930", True, 105.1, "late_start", "current", 24524.0)]
+
+
+# --- final review, B: a "placing" a crash left behind never pins the day -------------------
+def test_a_placing_left_by_a_crash_turns_into_an_error_to_check_and_never_fires_again(tmp_path):
+    from homebase.engine import PLACING_UNKNOWN
+    from homebase.trading import ChartDesk
+    timer, engine, md, clock = mk(tmp_path, armed=True)
+    engine._state("nq930", "main").status = "placing"            # the acks never came: the desk died
+    engine._save()
+    at(clock, 9, 35)
+    timer, engine, md, clock = mk(tmp_path, armed=True, clock=clock)   # the restart
+    st = engine._state("nq930", "main")
+    assert (st.status, st.note, engine.day_status("nq930")) == ("error", PLACING_UNKNOWN, "error")
+    run(timer.tick())
+    assert timer.status()["strategies"]["nq930"]["stage"] == "done"   # not idle: never fired again
+    assert engine.adapters["main"].brackets == []
+    desk = ChartDesk(engine.cfg, engine, engine.adapters, {"main": {"connected": True}},
+                     timer_status=timer.status)
+    assert desk.views_paused() is False
+    out = run(engine.kill_strategy("nq930"))
+    assert "pending" not in json.dumps(out)
+    timer, engine, md, clock = mk(tmp_path, armed=True, clock=clock)   # another restart: said once
+    assert [(e["account"], e["error"], e["after_restart"]) for e in events(tmp_path)
+            if e["event"] == "place_failed"] == [("main", PLACING_UNKNOWN, True)]

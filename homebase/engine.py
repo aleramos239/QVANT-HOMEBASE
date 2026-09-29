@@ -50,6 +50,7 @@ WORKING = {"Working", "PendingNew", "Pending", "Suspended", "PendingReplace"}
 TERMINAL = {"Filled", "Canceled", "Rejected", "Expired"}    # an order that can never fill (more)
 KILL_POLL_S, KILL_POLL_N = 0.25, 12     # the kill waits up to 3 s for its entry cancels to settle
 MARKET_OUT_FAILED = "check it — market-out reported failure; verify the position"
+PLACING_UNKNOWN = "placement outcome unknown after a restart — check the broker"
 SIBLING_RETRY_S = 2.0
 
 
@@ -143,6 +144,18 @@ class Engine:
             data = json.loads(p.read_text())
             self.states = {k: DayState(**v) for k, v in data.items()
                            if "account" in v}   # drop pre-book records
+            # "placing" saved by a desk that died with the acks outstanding: nothing will
+            # ever settle it here (it would pause the chart views, park fills and keep a
+            # Kill "pending" all day). Not idle, so never fired again: an error to check.
+            unknown = [st for st in self.states.values()
+                       if st.status == "placing" and st.date == self._today()]
+            for st in unknown:
+                st.status, st.exit_reason = "error", "error"
+                st.note = PLACING_UNKNOWN
+                self.journal("place_failed", strategy=st.strategy, account=st.account,
+                             error=PLACING_UNKNOWN, after_restart=True)
+            if unknown:
+                self._save()
         self._load_skips_from_journal()
 
     def _load_skips_from_journal(self) -> None:
