@@ -2,11 +2,14 @@
 // the trading process is the launchd service; closing this window changes
 // nothing about execution.
 //
-// 2026-09-28 three-tabs plan: Desk / Charts / Backtest, each its own WKWebView
-// (own WKProcessPool, so a heavy Backtest run can't stall the live chart's
-// renderer where WebKit allows separate WebContent processes), built lazily
-// the first time its tab is opened and kept alive after that. See
+// 2026-09-28 three-tabs plan: Desk / Charts / Backtest, each its own WKWebView, built lazily the
+// first time its tab is opened and kept alive after that. See
 // docs/superpowers/specs/2026-09-28-three-tabs-design.md.
+//
+// Link handling (opus review): a top-level navigation or a target="_blank"/window.open() to one of
+// the three tabs' own URLs switches to that tab instead of loading a second copy of it; to anything
+// else, it opens in the user's default browser instead -- a tab, the Desk tab most of all, never
+// navigates away from its own page to somewhere this app doesn't recognise.
 import Cocoa
 import WebKit
 
@@ -48,7 +51,7 @@ enum Tab: Int, CaseIterable {
     }
 }
 
-class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, NSToolbarDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, NSToolbarDelegate {
     var window: NSWindow!
     var webViews: [Tab: WKWebView] = [:]
     var currentTab: Tab = .desk
@@ -112,6 +115,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, NSTool
         let wv = WKWebView(frame: window.contentView!.bounds, configuration: config)
         wv.autoresizingMask = [.width, .height]
         wv.navigationDelegate = self
+        wv.uiDelegate = self
         wv.isHidden = true
         window.contentView!.addSubview(wv)
         webViews[tab] = wv
@@ -141,12 +145,37 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, NSTool
               let sourceTab = tab(for: webView) else {
             decisionHandler(.allow); return
         }
-        if let target = tabFor(url: url), target != sourceTab {
-            decisionHandler(.cancel)
-            showTab(target)
+        if let target = tabFor(url: url) {
+            if target != sourceTab {
+                decisionHandler(.cancel)
+                showTab(target)
+            } else {
+                decisionHandler(.allow)
+            }
             return
         }
-        decisionHandler(.allow)
+        // Opus review (three-tabs): a URL that isn't one of our own three tabs must never navigate
+        // a tab away from its own page -- the Desk tab most of all, since this app is a VIEWER onto
+        // the live desk, not a general browser, and losing that view to some external link/redirect
+        // would be a bad place to land mid-session. Applied to all three tabs, not just Desk: the
+        // same reasoning holds for Charts/Backtest, and a single uniform rule is easier to trust.
+        decisionHandler(.cancel)
+        NSWorkspace.shared.open(url)
+    }
+
+    // target="_blank" / window.open(): a link to one of our own tabs switches there instead of
+    // opening a second window (opus review, three-tabs); anything else opens in the user's default
+    // browser. Either way, no new WKWebView is created -- returning nil tells WebKit so.
+    func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
+                 for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+        if let url = navigationAction.request.url {
+            if let target = tabFor(url: url) {
+                showTab(target)
+            } else {
+                NSWorkspace.shared.open(url)
+            }
+        }
+        return nil
     }
 
     /// Which tab a URL belongs to, by origin (scheme+host+port) and, for Charts/Backtest which
