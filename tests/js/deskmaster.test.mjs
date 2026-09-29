@@ -43,7 +43,7 @@ const KILL_OK = { ok: true, armed: false, strategies: {}, results: {
   a2: { cancel_all: { ok: true, error: null }, flatten_all: { ok: true, error: null } } } };
 
 function load({ st = { armed: false }, stale = false, confirm = true, answer = KILL_OK, demo = false } = {}) {
-  const els = { statusPill: fakeEl(), armBtn: fakeEl(), killBtn: fakeEl(), alertBar: fakeEl() };
+  const els = { statusPill: fakeEl(), armBtn: fakeEl(), killBtn: fakeEl(), alertBar: fakeEl(), alertText: fakeEl() };
   els.alertBar.hidden = false;
   const posts = [], toasts = [], confirms = [], refreshes = [], fetched = [], alerts = [], hides = [];
   const win = fakeEl(), doc = fakeEl();
@@ -75,7 +75,7 @@ function load({ st = { armed: false }, stale = false, confirm = true, answer = K
     $: (sel) => els[sel.replace(/^#/, '')] || null,
     toast: (t) => toasts.push(t),
     toastHide: () => hides.push(true),
-    alertBar: (t) => alerts.push(t),
+    alertBar: (t) => { alerts.push(t); els.alertText.textContent = t; els.alertBar.hidden = false; },
     Date: { now: () => now },
     DOUBLE_CLICK_MS: 400,
     acctShort: (id) => '…' + String(id).slice(-3),
@@ -431,6 +431,17 @@ test('a Kill in flight says so at once; no answer in 6 s escalates to the red al
   assert.equal(s.els.alertBar.hidden, true, 'its "hasn\'t answered" alert comes down: it is no longer true');
 });
 
+test('a late Kill success never takes down a DIFFERENT failure that replaced the timeout alert', async () => {
+  const s = load({ answer: 'later' });
+  const done = s.api.doKill();
+  await tick();
+  s.clock.advance(7000);                              // the timeout alert is up ...
+  s.els.alertText.textContent = 'Disarm NOT confirmed — the desk refused it: x.';   // ... then another failure replaces it
+  s.answer(KILL_OK);
+  await done;
+  assert.equal(s.els.alertBar.hidden, false, 'the Disarm failure stays up');
+});
+
 test('a late FAILURE replaces the "hasn\'t answered" alert with what failed', async () => {
   const s = load({ answer: 'later' });
   const done = s.api.doKill();
@@ -444,8 +455,8 @@ test('a late FAILURE replaces the "hasn\'t answered" alert with what failed', as
 
 test('a late success takes the "hasn\'t answered" alert down; a late failure replaces it', () => {
   const fn = HTML.slice(HTML.indexOf('function killReport('), HTML.indexOf('const killRunning'));
-  assert.match(fn, /if \(lateSecs\) \$\("#alertBar"\)\.hidden = true;/);
-  assert.ok(fn.indexOf('return alertBar(`Kill FAILED') < fn.indexOf('if (lateSecs) $("#alertBar").hidden = true;'),
+  assert.match(fn, /if \(lateSecs && \$\("#alertText"\)\.textContent === KILL_SLOW_TEXT\) \$\("#alertBar"\)\.hidden = true;/);
+  assert.ok(fn.indexOf('return alertBar(`Kill FAILED') < fn.indexOf('if (lateSecs && '),
     'a failure is reported before any take-down');
 });
 

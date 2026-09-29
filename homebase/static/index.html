@@ -1070,6 +1070,8 @@ async function doDisarm() {
    with a refusal certainly did not get it. */
 const KILL_WAIT_MS = 6000;
 const KILL_BUSY_MS = 30000;
+const KILL_SLOW_TEXT = `Kill NOT confirmed — the desk hasn't answered in ${KILL_WAIT_MS / 1000} s. ` +
+  "Check the broker and flatten there now.";
 let KILL_AT = 0;                 // when the Kill in flight went out; 0: none
 const killInFlight = () => KILL_AT > 0 && Date.now() - KILL_AT < KILL_BUSY_MS;
 const killText = (v) => (v == null || v === "" ? "no reason given"
@@ -1103,7 +1105,8 @@ function killReport(r, lateSecs) {
     return alertBar(`Kill NOT confirmed — the desk said ok but sent no account results${late}. Check every account and flatten at the broker now.`);
   const bad = killFailures(r.results), n = Object.keys(r.results).length;
   if (bad.length) return alertBar(`Kill FAILED on ${bad.join(" · ")}. Flatten ${bad.length === 1 ? "it" : "them"} at the broker now.`);
-  if (lateSecs) $("#alertBar").hidden = true;          // its "hasn't answered" is no longer true
+  // its "hasn't answered" is no longer true -- but only take down THAT alert, never another failure's
+  if (lateSecs && $("#alertText").textContent === KILL_SLOW_TEXT) $("#alertBar").hidden = true;
   toast((n ? `Kill sent — orders cancelled and positions flattened on ${n} account${n === 1 ? "" : "s"}; the desk is disarmed.`
            : "Kill sent — the desk is disarmed (no connected account to flatten).") + late, 6000);
 }
@@ -1123,8 +1126,7 @@ async function doKill() {
     if (KILL_AT !== at) return;
     slow = true;
     toastHide();
-    alertBar(`Kill NOT confirmed — the desk hasn't answered in ${KILL_WAIT_MS / 1000} s. ` +
-             "Check the broker and flatten there now.");
+    alertBar(KILL_SLOW_TEXT);
   }, KILL_WAIT_MS);
   let r, err = null;
   try { r = await post("/api/kill"); } catch (e) { err = e || new Error("no answer"); }
