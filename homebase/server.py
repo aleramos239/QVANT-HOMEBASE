@@ -760,13 +760,17 @@ def create_app(cfg: config_mod.AppCfg | None = None,
     async def _drop_account(aid: str, **journal_extra) -> None:
         """Unassign an entry from every strategy, drop it from the pool, close it. An
         in-flight gone re-check is cancelled first, and the account's connect lock is
-        held, so a removed adapter is never reconnected behind the removal."""
+        held, so a removed adapter is never reconnected behind the removal. Also waits
+        for the Kill lock (2026-09-29 review): the Kill sweep reads `adapters` and calls
+        each one's cancel_all/flatten_all in turn, so a removal mid-sweep must wait its
+        turn rather than pop an entry out from under it (this covers every removal path,
+        the manual endpoint AND the gone-account auto-removal below, alike)."""
         t = _gone_tasks.pop(aid, None)
         if t is not None and not t.done():
             t.cancel()
             with contextlib.suppress(BaseException):
                 await t
-        async with _connect_locks.setdefault(aid, asyncio.Lock()):
+        async with _kill_lock(), _connect_locks.setdefault(aid, asyncio.Lock()):
             await _drop_account_locked(aid, **journal_extra)
         _connect_locks.pop(aid, None)
 
@@ -1087,7 +1091,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             # then the account-wide calls sweep up anything else
             strategies = await engine.flatten_today()
             results = {}
-            for aid, ad in adapters.items():
+            for aid, ad in list(adapters.items()):
                 r = {}
                 for call in ("cancel_all", "flatten_all"):
                     try:

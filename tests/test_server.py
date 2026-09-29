@@ -465,6 +465,38 @@ def test_the_global_kill_never_flattens_alongside_a_per_strategy_kill(client):
     assert peak == 1
 
 
+def test_a_removal_during_a_kill_waits_and_the_kill_still_sweeps_every_account(client):
+    """2026-09-29 review: _drop_account now waits for the Kill lock too, so a removal that lands
+    mid-Kill can't pop an entry out of `adapters` while the sweep is iterating it."""
+    import asyncio
+    app = client.app
+    app.state.cfg.accounts["second"] = AccountCfg(keyring_key="k2", account_name="SECOND")
+    app.state.adapters["second"] = SeededFakeAdapter("second")
+    kill = _kill_endpoint(app)
+    engine, drop_account = app.state.engine, app.state.drop_account
+
+    async def slow_flatten():
+        await asyncio.sleep(0.05)
+        return {}
+
+    engine.flatten_today = slow_flatten
+
+    async def scenario():
+        t_kill = asyncio.create_task(kill())
+        await asyncio.sleep(0.01)                     # the Kill holds its lock, mid flatten_today
+        t_drop = asyncio.create_task(drop_account("second"))
+        await asyncio.sleep(0.01)                     # the removal is queued behind the Kill lock
+        still_there = "second" in app.state.adapters
+        kill_result = await t_kill
+        await t_drop
+        return still_there, kill_result
+
+    still_there, kill_result = asyncio.run(scenario())
+    assert still_there is True                        # not popped mid-sweep
+    assert set(kill_result["results"]) == {"main", "second"}   # the sweep saw both
+    assert "second" not in app.state.adapters          # the removal ran after, and completed
+
+
 def _readiness(now_et_hhmm, *, armed=True, timer_stage=None, feed=None, power=None,
                shadow=False):
     import datetime as dt
