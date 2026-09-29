@@ -2019,9 +2019,27 @@ function onKey(e) {
   }
 }
 
+// Page switcher (Desk · Charts · Backtest): plain links built from location.hostname; the charts/backtest
+// URLs carry the same ?v this page's own assets do. Inside the Mac app the link interception turns a click into
+// a tab switch; in a browser they are ordinary links. The current page's own link does nothing (a reload of the
+// page you are already on is never what the click means).
+function initPageSwitcher() {
+  const sw = $('#pgSw');
+  if (!sw) return;
+  const css = document.querySelector('link[rel="stylesheet"][href*="charts.css"]');
+  const m = css && /[?&]v=([^&#]+)/.exec(css.getAttribute('href') || '');
+  const q = m ? `?v=${m[1]}` : '';
+  const base = `${location.protocol}//${location.hostname}`;
+  const urls = { desk: `${base}:8850/`, charts: `${base}:8852/${q}`, backtest: `${base}:8852/backtest${q}` };
+  for (const a of sw.querySelectorAll('a[data-page]')) {
+    a.href = urls[a.dataset.page];
+    if (a.getAttribute('aria-current') === 'page') a.addEventListener('click', (e) => e.preventDefault());
+  }
+}
+
 async function init() {
   for (const n of document.querySelectorAll('[data-icon]')) n.innerHTML = I[n.dataset.icon] || '';
-  $('#tbDesk').href = `${location.protocol}//${location.hostname}:8850/`;
+  initPageSwitcher();
   try { const r = await fetch('/api/symbols'); if (r.ok) meta = await r.json(); } catch (_) { /* keep the fallback */ }
   loadLast();
   $('#tbSymbol').onclick = () => toggleMenu($('#tbSymbol'), symbolMenu);
