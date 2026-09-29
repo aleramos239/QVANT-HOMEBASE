@@ -268,16 +268,12 @@ const TRADES = [
   { date: '2024-01-03', side: 'short', qty: 1, entry_ms: Date.parse('2024-01-03T14:30:02Z'), entry_price: 16800, exit_ms: Date.parse('2024-01-03T14:35:00Z'),
     exit_price: 16805, exit_reason: 'sl', sl: 16805, tp: 16785, net: -104, mae_usd: 100, mfe_usd: 20, seconds: 298 }];
 
-test('trades: sort, cells, chart marks', () => {
+test('trades: sort, cells', () => {
   assert.deepEqual(X.sortTrades(TRADES, 'net', -1), [0, 1]);
   assert.deepEqual(X.sortTrades(TRADES, 'net', 1), [1, 0]);
   assert.deepEqual(X.sortTrades(TRADES, 'n', 1), [0, 1]);
   assert.deepEqual(X.tradeCells(TRADES[1], 1, 0.25), ['2', 'Short', '2024-01-03 09:30:02', '16,800.00', '2024-01-03 09:35:00', '16,805.00',
     'SL', '1', `${M}$104`, `${M}$100`, '+$20', '4m 58s']);
-  const P = { accent: 'A', down: 'D', up: 'U' };
-  assert.deepEqual(X.tradeMarks(TRADES, P)[3], { id: 'tx1', ms: TRADES[1].exit_ms, price: 16805, position: 'atPriceMiddle', shape: 'circle',
-    color: 'D', text: `${M}$104`, size: 0.6 });
-  assert.equal(X.tradeMarks(TRADES, P)[2].shape, 'arrowDown');
 });
 
 test('I2: MAE always reads as a loss (the engine only ever hands it a >= 0 magnitude); MFE keeps its "+"', () => {

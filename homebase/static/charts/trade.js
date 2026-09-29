@@ -21,7 +21,7 @@ const Pos = need('HBPosition', './position.js');
 // (the Backtest tab) can use it without trade.js itself. Re-exported below unchanged; every
 // existing caller here keeps using the bare names exactly as before.
 const TP = need('HBTradePure', './tradepure.js');
-const { PREFS_KEY, parsePrefs, prefsText, bracket, roundTick, money, usd, inferType, menuText } = TP;
+const { PREFS_KEY, parsePrefs, prefsText, bracket, roundTick, money, usd, inferType, menuText, execArrow } = TP;
 
 const BOT_NAMES = { nq930: '9:30 bot', ym930: '9:30 bot', nq10am: '10am bot' };
 const ET = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hourCycle: 'h23', hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -847,15 +847,7 @@ function fillMarkers(state, root, ids, P, tick = 0.01) {
   }
   return out;
 }
-/* The arrow's outline in pixels for a bar centred at x (bar spacing `spacing`) and a fill at y: its tip sits just
-   left of the candle body (half the body, ~0.4 of the spacing, plus a 2 px gap, capped so a wide zoom never pushes
-   it far from its bar), a 5 px head 3.5 px either side of y and a 4 px shaft 1 px thick. `hover`: its middle. */
-const ARROW = { head: 5, half: 3.5, shaft: 4, thick: 1, gap: 2, maxOff: 10 };
-function execArrow(x, y, spacing) {
-  const A = ARROW, tx = x - Math.min(A.maxOff, Math.max(0, spacing) * 0.4) - A.gap, hx = tx - A.head, sx = hx - A.shaft;
-  return { tip: [tx, y], hover: [(tx + sx) / 2, y],
-    pts: [[tx, y], [hx, y - A.half], [hx, y - A.thick], [sx, y - A.thick], [sx, y + A.thick], [hx, y + A.thick], [hx, y + A.half]] };
-}
+// execArrow (the execution arrow's outline) lives in tradepure.js: the Strategy Tester draws the same arrow.
 
 /* ---- the algo on a chart (2026-09-27 plan, Task 3) ----
    A chart's `algo` (a desk strategy key) draws that bot's run: a legend badge (name, state pill, today's P&L, Kill),

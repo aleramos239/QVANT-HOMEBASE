@@ -1285,3 +1285,9 @@ input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-o
 .rp-foot .menu-hint { flex: 1; padding: 0; color: var(--text-2); font-size: 12px; line-height: 1.3; }
 .replay-menu .menu-err { padding: 4px 12px 0; }
 .tst-wf-cmp-toggle { margin: 8px 0; }
+
+/* The Strategy Tester's plotted series, listed under the chart's own legend (testerlayer.js). */
+.lg-tester { display: flex; flex-direction: column; align-items: flex-start; }
+.lg-tester[hidden] { display: none; }
+.lg-tst .lg-sw { width: 10px; height: 2px; border-radius: 1px; flex: none; }
+.lg-tst .lg-vals { color: var(--text2); font-variant-numeric: tabular-nums; }

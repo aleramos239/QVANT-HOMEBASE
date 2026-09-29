@@ -817,12 +817,13 @@ async function showFromClaude(m) {
   if (!panelOk) notes.push('open the Strategy Tester tab to see it (the panel stays put while a chart has accounts)');
   // the chart: planned NOW (the grid may have been rebuilt, a chart may have started replaying)
   const cells = page.cells(), want = b.run.strategy.root;
-  const plan = L.showPlan(cells.map(L.chartFacts), cells.indexOf(page.cur()), want, { avoidSelected: true });
+  const avoidSelected = L.claudeAvoidsSelected();   // the Backtest tab has no order panel for the selected chart to protect
+  const plan = L.showPlan(cells.map(L.chartFacts), cells.indexOf(page.cur()), want, { avoidSelected });
   if (plan.index < 0) { page.sbNote([`Loaded ${what} into the Strategy Tester`, plan.reason, ...notes].join(' · ')); return; }
   const cell = cells[plan.index];
   const i = L.focusTrade(b.trades, focus);
   if (i != null) {
-    await L.jump(i, cell, { select: false });
+    await L.jump(i, cell, { select: false, avoidSelected });   // if the chart is rebuilt mid-jump, the re-plan keeps Claude's rule
     if (notes.length) page.sbNote(notes.join(' · '));
     return;
   }

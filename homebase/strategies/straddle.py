@@ -68,6 +68,10 @@ class OpenStraddle(Strategy):
                 if ok is None:
                     ctx.skip("trend gate unknown (under 110 daily bars)")
                     return
+                # Display only (plots never reach an order): the reading the gate just judged and the
+                # line it was judged against, so a skipped day says on the chart why.
+                ctx.plot("ADX(14)", ctx.now_ns, adx)
+                ctx.plot("ADX gate min", ctx.now_ns, self.p["adx_min"])
                 if not ok:
                     ctx.skip(f"trend gate: ADX {adx} <= {self.p['adx_min']:g}")
                     return
@@ -105,10 +109,11 @@ class OpenStraddle(Strategy):
         that never triggered has its three levels renamed " (not filled)"."""
         for o, side, recs in self.geometry:
             if o.status == "filled":
+                # ... and the moved bracket exists from the FILL, not from this end-of-day recording
                 if o.fill_sl is not None:
-                    ctx.hline(f"{side} SL", o.fill_sl, role="sl")
+                    ctx.hline(f"{side} SL", o.fill_sl, role="sl")["t_ms"] = o.fill_ms
                 if o.fill_tp is not None:
-                    ctx.hline(f"{side} TP", o.fill_tp, role="tp")
+                    ctx.hline(f"{side} TP", o.fill_tp, role="tp")["t_ms"] = o.fill_ms
             else:
                 for rec in recs:
                     rec["name"] = rec["name"].replace(" (planned)", "") + " (not filled)"

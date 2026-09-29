@@ -15,7 +15,7 @@ test('HBTradePure exposes exactly the re-exported names, nothing money/desk-shap
   // unchanged, and read directly by fillquality.js -- see tradepure.js's own docstring.
   assert.deepEqual(Object.keys(TP).sort(),
     ['PREFS_KEY', 'bracket', 'money', 'parsePrefs', 'prefsText', 'roundTick', 'usd', 'POINT_VALUE', 'pointValue',
-      'inferType', 'menuText'].sort());
+      'inferType', 'menuText', 'execArrow'].sort());
   assert.equal(TP.PREFS_KEY, 'hb_trade_prefs');
 });
 

@@ -3,7 +3,7 @@
        the walk-forward ratios that compose with them, and a typed custom range), the request body,
        Run vs Update report;
      - the progress text;
-     - the report's tiles, tables, trade rows, badges and chart marks;
+     - the report's tiles, tables, trade rows, badges;
      - the interval a jump to an old trade can use.
    No browser globals at load time: the Node tests load this file directly. */
 (function () {
@@ -408,18 +408,6 @@ function tradeCells(t, i, tick) {
   return [String(i + 1), t.side === 'long' ? 'Long' : 'Short', fmtEt(t.entry_ms), Cat.fmtPrice(t.entry_price, tick), fmtEt(t.exit_ms),
     Cat.fmtPrice(t.exit_price, tick), String(t.exit_reason || '').toUpperCase(), String(t.qty), signed(t.net),
     t.mae_usd ? MINUS + Tr.money(Math.abs(t.mae_usd)) : '$0', signed(t.mfe_usd), dur(t.seconds)];
-}
-/* Entry ▲/▼ at the entry price, exit ● at the exit price with the net $ (ruling S21); {ms,…} for placeMarkers. */
-function tradeMarks(trades, P) {
-  const out = [];
-  trades.forEach((t, i) => {
-    const long = t.side === 'long';
-    out.push({ id: `te${i}`, ms: t.entry_ms, price: t.entry_price, position: long ? 'atPriceBottom' : 'atPriceTop',
-      shape: long ? 'arrowUp' : 'arrowDown', color: long ? P.accent : P.down, text: '' });
-    out.push({ id: `tx${i}`, ms: t.exit_ms, price: t.exit_price, position: 'atPriceMiddle', shape: 'circle',
-      color: t.net >= 0 ? P.up : P.down, text: signed(t.net), size: 0.6 });
-  });
-  return out;
 }
 function equitySeries(eq) {
   const out = { equity: [], drawdown: [] };
@@ -841,7 +829,7 @@ const api = { strategyLabel, DEFAULT_MAX_CELLS, HARD_MAX_CELLS, GRID_WORKERS, ma
   today, rangeSpec, rangeDates, rangeBody, parseDate, dateError, prettyDate, pillLabel, monthGrid, shiftMonth,
   problems, inputError, body,
   key, runLabel, progress, pct, rate, num, dur, fmtEt, tiles, badges, propView, evalOptions, propShown, mcHeadline, mcTiles, mcHistogram, compareRows, paramsDiff,
-  summaryRows, periodRows, sortTrades, tradeCells, tradeMarks, equitySeries, reachSpec, toneOf };
+  summaryRows, periodRows, sortTrades, tradeCells, equitySeries, reachSpec, toneOf };
 if (typeof window !== 'undefined') window.HBTester = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();
