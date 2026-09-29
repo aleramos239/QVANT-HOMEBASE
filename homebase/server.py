@@ -766,11 +766,11 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         09:20-09:35 ET (the fire's socket carries only the fire)."""
         if _in_gone_quiet(engine.now_et()):
             return
-        by_user: dict[str, list] = {}
+        by_user: dict[tuple, list] = {}
         for aid, ad in list(adapters.items()):
             if aid in cfg.accounts and ad.connected and hasattr(ad, "refresh_snapshot"):
-                by_user.setdefault(_login_key(aid), []).append(ad)
-        for key, ads in by_user.items():
+                by_user.setdefault((_login_key(aid), cfg.accounts[aid].live), []).append(ad)
+        for (key, _live), ads in by_user.items():
             if budget.cooling(key):
                 continue
             try:

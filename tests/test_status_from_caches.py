@@ -97,6 +97,19 @@ def test_status_polls_never_reach_the_broker(desk):
     for _ in range(10):
         st = desk.get("/api/status").json()
     assert reads == [] and set(st["accounts"]) == {"dead", "live"}
+def test_the_refresh_groups_by_login_and_env(desk):
+    desk.app.state.cfg.accounts["live"].live = True              # same key, other env
+    calls = []
+    for aid, ad in desk.adapters.items():
+        async def refresh(siblings=(), aid=aid):
+            calls.append(aid)
+        ad.refresh_snapshot = refresh
+    desk.app.state.engine.now_et = lambda: dt.datetime(
+        2026, 9, 29, 11, 0, tzinfo=dt.timezone(dt.timedelta(hours=-4)))
+    run(desk.app.state.refresh_snapshots())
+    assert sorted(calls) == ["dead", "live"]
+
+
 def test_config_save_is_atomic(tmp_path, monkeypatch):
     from homebase import config as config_mod
     from homebase.config import AppCfg
