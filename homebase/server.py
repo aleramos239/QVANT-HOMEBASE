@@ -1296,17 +1296,24 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             raise HTTPException(409, "refused: not 09:10-09:35 ET on weekdays "
                                 "(the 9:30 window) — try again after 09:35")
         ad = adapters.get(aid)
-        if ad is None or not ad.connected or not getattr(ad, "caches_seeded", False):
+        readable = (ad is not None and ad.connected
+                    and getattr(ad, "caches_seeded", False))
+        if readable:
+            view = ad.trade_view()
+            if view is None:
+                raise HTTPException(409, "can't read this adapter's cached view — "
+                                    "try again once it's connected")
+            if view.get("positions"):
+                raise HTTPException(409, "account has an open position — flatten first")
+            if view.get("orders"):
+                raise HTTPException(409, "account has a working order — cancel it first")
+        elif from_mcp:
+            # Claude never removes an account whose state it can't read
             raise HTTPException(409, "account not connected (or its caches haven't "
                                 "seeded yet) — try again once it's connected")
-        view = ad.trade_view()
-        if view is None:
-            raise HTTPException(409, "can't read this adapter's cached view — "
-                                "try again once it's connected")
-        if view.get("positions"):
-            raise HTTPException(409, "account has an open position — flatten first")
-        if view.get("orders"):
-            raise HTTPException(409, "account has a working order — cancel it first")
+        # else: the account holder's own Remove (the desk page confirms it) of an
+        # account the desk can't read -- a blown / closed / broken-login entry.
+        # Their call: it has nothing the desk can manage anyway.
         for st in engine.day_states_for_account(aid):
             if st.status in ("placing", "placed", "live"):
                 raise HTTPException(409, f"account is {st.status} in "

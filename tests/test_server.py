@@ -231,15 +231,31 @@ def test_accounts_remove_unassigns_and_drops(client):
                        json={"account": "nope"}).status_code == 404
 
 
-def test_accounts_remove_refused_when_not_connected_or_not_seeded(client):
+def test_accounts_remove_from_mcp_refused_when_not_connected_or_not_seeded(client):
     client.adapter._connected = False
-    r = client.post("/api/accounts/remove", json={"account": "main"})
+    r = client.post("/api/accounts/remove", json={"account": "main", "source": "mcp"})
     assert r.status_code == 409 and "not connected" in r.json()["detail"]
     client.adapter._connected = True
     client.adapter.caches_seeded = False
-    r = client.post("/api/accounts/remove", json={"account": "main"})
+    r = client.post("/api/accounts/remove", json={"account": "main", "source": "mcp"})
     assert r.status_code == 409 and "not connected" in r.json()["detail"]
     assert "main" in client.app.state.cfg.accounts
+
+
+def test_the_account_holders_own_remove_of_an_unreadable_account_goes_through(client):
+    # a blown / closed / broken-login entry the desk can't read: the page's own
+    # confirmed Remove is the account holder's call (2026-09-29)
+    client.adapter._connected = False
+    r = client.post("/api/accounts/remove", json={"account": "main"})
+    assert r.status_code == 200 and r.json()["removed"] == "main"
+    assert "main" not in client.app.state.cfg.accounts
+
+
+def test_the_account_holders_remove_still_refused_while_live_today(client):
+    client.adapter._connected = False
+    client.app.state.engine._state("nq930", "main").status = "placed"
+    r = client.post("/api/accounts/remove", json={"account": "main"})
+    assert r.status_code == 409 and "placed" in r.json()["detail"]
 
 
 def test_accounts_remove_refused_with_an_open_position(client):
