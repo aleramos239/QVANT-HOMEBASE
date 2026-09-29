@@ -9,6 +9,7 @@ from the OS keychain via `secrets_store`, keyed by the account's `keyring_key`.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import datetime as dt
 import sys
 import time
@@ -191,14 +192,23 @@ class TradovateAdapter(BrokerAdapter):
         self.audit = audit or (lambda e: None)
         state_dir = state_dir or _default_state_dir()
         state_dir.mkdir(parents=True, exist_ok=True)
+        self._token_path = state_dir / f"{account_id}.tokens.json"
+        self._device_path = state_dir / f"{account_id}.device.json"
         shared = _SHARED_AUTHS.get((self.keyring_key, env)) if share_auth else None
         self._auth = shared or TradovateAuth(
-            env=env,
-            token_persist_path=state_dir / f"{account_id}.tokens.json",
-            device_persist_path=state_dir / f"{account_id}.device.json",
-        )
+            env=env, token_persist_path=self._token_path,
+            device_persist_path=self._device_path)
         if share_auth and shared is None:
             _SHARED_AUTHS[(self.keyring_key, env)] = self._auth
+        elif shared is not None:
+            # the shared token lands in EVERY sharing entry's {aid}.tokens.json: the chart
+            # service / recorder (ticks._valid_md_tokens) read them per entry, so removing
+            # any one entry never leaves the login without an md token on disk
+            if self._token_path not in shared.persist_paths:
+                shared.persist_paths.append(self._token_path)
+            if shared.tokens is not None:
+                with contextlib.suppress(Exception):
+                    shared._persist_tokens()
         self._ws: Optional[TradovateWS] = None
         self._acct_num: Optional[int] = None
         self._acct_name: str = ""

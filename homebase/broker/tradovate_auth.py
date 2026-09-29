@@ -195,6 +195,7 @@ class TradovateAuth:
         self.ws_url = WS_ENDPOINTS[env]
         here = Path(__file__).resolve().parent
         self.token_persist_path = token_persist_path or (here / "tokens.json")
+        self.persist_paths: list = [self.token_persist_path]   # a shared token: every entry's file
         self.device_persist_path = device_persist_path or (here / "device.json")
         self.device_id = get_or_create_device_id(self.device_persist_path)
         self.tokens: Optional[TradovateTokens] = None
@@ -333,12 +334,13 @@ class TradovateAuth:
             "has_live": self.tokens.has_live,
             "has_funded": self.tokens.has_funded,
         }
-        self.token_persist_path.parent.mkdir(parents=True, exist_ok=True)
-        self.token_persist_path.write_text(json.dumps(data, indent=2))
-        try:
-            self.token_persist_path.chmod(0o600)   # owner-only: holds live tokens
-        except OSError:
-            pass
+        for path in list(getattr(self, "persist_paths", None) or [self.token_persist_path]):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(data, indent=2))
+            try:
+                path.chmod(0o600)   # owner-only: holds live tokens
+            except OSError:
+                pass
 
     def load_tokens(self) -> Optional[TradovateTokens]:
         if not self.token_persist_path.exists():
