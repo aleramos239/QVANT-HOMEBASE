@@ -9,6 +9,7 @@ from the OS keychain via `secrets_store`, keyed by the account's `keyring_key`.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import datetime as dt
 import sys
 import time
@@ -162,6 +163,16 @@ def _reject_reason(d) -> str:
     return ""
 
 
+# One TradovateAuth (one token) per Tradovate login, shared by every entry on it
+# (share_auth=True, the desk's build_adapter): a startup or a renewal costs one login /
+# one renewal per USER, not per entry (2026-09-29, five entries on one Apex user). Each
+# entry keeps its own socket and its own pinned account.
+_SHARED_AUTHS: dict = {}
+CONTRACT_RETRY_S = 60          # a failed contract/item is not asked again for this long
+COOL_RENEW_WITHIN_S = 180      # a 429'd user renews only a token that dies within this
+RENEW_FAIL_HOLD_S = 60         # after a failed renewal, siblings on the token wait this long
+
+
 class TradovateAdapter(BrokerAdapter):
     platform = "tradovate"
 
@@ -174,6 +185,7 @@ class TradovateAdapter(BrokerAdapter):
         account_selector: Optional[dict] = None,
         audit: Optional[Callable[[dict], None]] = None,
         state_dir: Optional[Path] = None,
+        share_auth: bool = False,
     ):
         super().__init__(account_id, live=(env == "live"))
         self.env = env
@@ -182,11 +194,23 @@ class TradovateAdapter(BrokerAdapter):
         self.audit = audit or (lambda e: None)
         state_dir = state_dir or _default_state_dir()
         state_dir.mkdir(parents=True, exist_ok=True)
-        self._auth = TradovateAuth(
-            env=env,
-            token_persist_path=state_dir / f"{account_id}.tokens.json",
-            device_persist_path=state_dir / f"{account_id}.device.json",
-        )
+        self._token_path = state_dir / f"{account_id}.tokens.json"
+        self._device_path = state_dir / f"{account_id}.device.json"
+        shared = _SHARED_AUTHS.get((self.keyring_key, env)) if share_auth else None
+        self._auth = shared or TradovateAuth(
+            env=env, token_persist_path=self._token_path,
+            device_persist_path=self._device_path)
+        if share_auth and shared is None:
+            _SHARED_AUTHS[(self.keyring_key, env)] = self._auth
+        elif shared is not None:
+            # the shared token lands in EVERY sharing entry's {aid}.tokens.json: the chart
+            # service / recorder (ticks._valid_md_tokens) read them per entry, so removing
+            # any one entry never leaves the login without an md token on disk
+            if self._token_path not in shared.persist_paths:
+                shared.persist_paths.append(self._token_path)
+            if shared.tokens is not None:
+                with contextlib.suppress(Exception):
+                    shared._persist_tokens()
         self._ws: Optional[TradovateWS] = None
         self._acct_num: Optional[int] = None
         self._acct_name: str = ""
@@ -213,6 +237,40 @@ class TradovateAdapter(BrokerAdapter):
         self._now = lambda: dt.datetime.now(dt.timezone.utc)   # the renewal rule's clock (tests replace it)
         self._ws_expires = 0.0                    # expiry of the token the current socket was authorized with
         self.caches_seeded = False                # position/cash read after the last (re)connect
+        self._login_budget = None                 # the desk's per-user LoginBudget (server sets it)
+        self._cache_ts = 0.0                      # unix time the position/cash caches last changed
+        self._seed_gen = 0                        # bumped by every seed start/stop
+        self._contract_failed: dict = {}          # contractId -> unix time contract/item failed
+
+    @property
+    def auth_shared(self) -> bool:
+        """True while this entry rides its login's shared token."""
+        return _SHARED_AUTHS.get((self.keyring_key, self.env)) is self._auth
+
+    def go_private(self) -> None:
+        """Leave the shared token for a private one (no token yet: the next connect logs
+        in on it, under the budget). For a sibling whose socket the shared token was
+        refused on: its login must never re-roll the token every other entry rides.
+        Private stays private (until a restart)."""
+        shared = self._auth
+        if not self.auth_shared:
+            return
+        with contextlib.suppress(ValueError, AttributeError):
+            shared.persist_paths.remove(self._token_path)
+        self._auth = TradovateAuth(env=self.env, token_persist_path=self._token_path,
+                                   device_persist_path=self._device_path)
+        self.login_budget = self._login_budget        # re-wire the refresh's login guard
+
+    @property
+    def login_budget(self):
+        return self._login_budget
+
+    @login_budget.setter
+    def login_budget(self, budget) -> None:
+        """The desk's per-Tradovate-user login budget: the token refresh's login fallback
+        asks it first (a 429'd or over-budget user renews only, never logs in)."""
+        self._login_budget = budget
+        self._auth.login_guard = budget.guard(self.keyring_key) if budget is not None else None
 
     @property
     def connected(self) -> bool:
@@ -265,7 +323,12 @@ class TradovateAdapter(BrokerAdapter):
             await self._renew_in_the_guard(now)      # bounded, renew only, never a login
         else:
             await self._renew_before_the_window(now)
-            await asyncio.to_thread(self._auth.ensure_valid, RENEW_BUFFER_S, now.timestamp())
+            try:
+                await asyncio.to_thread(self._auth.ensure_valid, self._rebuild_buffer_s(now),
+                                        now.timestamp())
+            except Exception:
+                self._mark_renew_failed()
+                raise
         await self._open_socket(close_old=False)      # closed above, before the renewal
         self._schedule_seed()
         if self._consumer is None or self._consumer.done():
@@ -336,6 +399,7 @@ class TradovateAdapter(BrokerAdapter):
         try:
             await asyncio.wait_for(asyncio.to_thread(self._auth.renew), GUARD_RENEW_S)
         except Exception as e:  # noqa: BLE001 — incl. the timeout
+            self._mark_renew_failed()
             why = f"{type(e).__name__}: {e}"
             if 0 < self._auth.tokens.expires_at_unix <= self._now().timestamp():
                 raise RuntimeError(f"the token has expired and its renewal failed in the "
@@ -359,6 +423,7 @@ class TradovateAdapter(BrokerAdapter):
         try:
             await asyncio.wait_for(asyncio.to_thread(self._auth.renew), rebuild_renew_cap_s(now))
         except Exception as e:  # noqa: BLE001 — incl. the timeout
+            self._mark_renew_failed()
             # a renewal still running after the cap may yet roll the token: the socket then
             # rides the older one, and the keepalive judges it by that token (_ws_expires)
             _log(f"{self.account_id}: renewal before the 9:30 window failed "
@@ -425,8 +490,14 @@ class TradovateAdapter(BrokerAdapter):
             self._acct_num, self._acct_name, self.pinned_ok = None, "", False
             have = ", ".join(str(a.get("name") or a.get("nickname") or a.get("id"))
                              for a in accounts)
-            raise AccountNotOnLogin(
+            err = AccountNotOnLogin(
                 f"account {want_name or want_id} not on this login (has: {have})")
+            # the evidence the desk may act on (account_gone): a SUCCESSFUL sync that
+            # listed these other accounts -- never a failed, 429'd or empty one
+            err.listed = [str(a.get("name") or a.get("nickname") or a.get("id"))
+                          for a in accounts]
+            err.user_id = getattr(self._auth.tokens, "user_id", None)
+            raise err
         pinned = chosen is not None
         if chosen is None:
             active = [a for a in accounts if a.get("active", True)]
@@ -543,6 +614,7 @@ class TradovateAdapter(BrokerAdapter):
             return False
         self._positions[cid] = {**self._positions.get(cid, {}), **ent}
         self._pos_pushed.add(cid)
+        self._cache_ts = time.time()
         if cid not in self._contracts:
             self._want_contract(cid)
         return True
@@ -552,6 +624,7 @@ class TradovateAdapter(BrokerAdapter):
             return False
         self._cash = {**self._cash, **ent}
         self._cash_pushed = True
+        self._cache_ts = time.time()
         return True
 
     def _want_contract(self, cid) -> None:
@@ -560,6 +633,8 @@ class TradovateAdapter(BrokerAdapter):
         unresolved."""
         if cid in self._contract_lookups or self._ws is None:
             return
+        if time.time() - self._contract_failed.get(cid, -1e9) < CONTRACT_RETRY_S:
+            return                          # failed lately: not again on every status poll
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
@@ -584,6 +659,7 @@ class TradovateAdapter(BrokerAdapter):
                     if o_cid == cid and o.get("ordStatus") in self._WORKING_STATUSES:
                         self._notify_mine("order", o)
         except Exception as e:  # noqa: BLE001 — shown unresolved; chart trading refuses meanwhile
+            self._contract_failed[cid] = time.time()
             _log(f"{self.account_id}: contract/item {cid} failed: {e}")
         finally:
             self._contract_lookups.discard(cid)
@@ -592,6 +668,7 @@ class TradovateAdapter(BrokerAdapter):
         """Forget the caches' seeded state and stop any seed still reading the
         OLD socket, so a stale snapshot can never mark the new one seeded."""
         self.caches_seeded = False
+        self._seed_gen += 1
         if self._seed_task is not None and not self._seed_task.done():
             self._seed_task.cancel()
 
@@ -599,6 +676,7 @@ class TradovateAdapter(BrokerAdapter):
         """Positions + cash read in the BACKGROUND after a (re)connect: it
         never delays the connect the 9:30 bot is waiting on."""
         try:
+            self._seed_gen += 1
             if self._seed_task is not None and not self._seed_task.done():
                 self._seed_task.cancel()
             self._seed_task = asyncio.create_task(self._seed_caches())
@@ -653,8 +731,49 @@ class TradovateAdapter(BrokerAdapter):
             await self._lookup_contract(cid, announce=False)   # "sync" covers it
         if self._ws is not ws:
             return                         # the socket was replaced: its own seed runs
+        self._cache_ts = time.time()
         self.caches_seeded = True
         self._notify("sync", {})
+
+    async def refresh_snapshot(self, siblings=()) -> None:
+        """The slow background refresh (the desk's equity loop, once a minute per
+        Tradovate user): ONE position/list + cashBalance/list on this socket. Both
+        list every account under the login, so the siblings on the same login are
+        refreshed from the same answer. Like the seed, a push that landed while the
+        read was in flight is newer and wins. An adapter whose seed has not finished
+        is skipped (the seed owns the push flags until then)."""
+        ws = self._ws
+        if ws is None or not self.connected:
+            return
+        targets = [t for t in (self, *siblings)
+                   if t.caches_seeded and t._acct_num is not None and t.connected]
+        if not targets:
+            return
+        marks = {id(t): (t._ws, t._seed_gen) for t in targets}
+        for t in targets:
+            t._pos_pushed.clear()
+            t._cash_pushed = False
+        positions = await ws.position_list()
+        cash = await ws.cash_balance_list()
+        if not isinstance(positions, list) or not isinstance(cash, list):
+            return                          # an odd answer is never "flat" / "no cash"
+        now = time.time()
+        for t in targets:
+            if marks[id(t)] != (t._ws, t._seed_gen) or not t.caches_seeded:
+                continue      # rebuilt / re-seeded while the read was out: its data is newer
+            me = t._acct_num
+            snap = {p["contractId"]: p for p in positions or []
+                    if isinstance(p, dict) and p.get("accountId") == me
+                    and p.get("contractId") is not None}
+            snap.update({c: t._positions[c] for c in t._pos_pushed if c in t._positions})
+            t._positions = snap
+            if not t._cash_pushed:
+                t._cash = next((b for b in cash or []
+                                if isinstance(b, dict) and b.get("accountId") == me), t._cash)
+            for cid in snap:
+                if cid not in t._contracts:
+                    t._want_contract(cid)
+            t._cache_ts = now
 
     def _enqueue_fill(self, ent: dict) -> None:
         """Queue a fill for the consumer; a full queue is surfaced as an audit
@@ -1185,39 +1304,34 @@ class TradovateAdapter(BrokerAdapter):
     _WORKING_STATUSES = {"Working", "PendingNew", "Pending", "Suspended", "PendingReplace"}
 
     async def get_metrics(self) -> dict:
+        """The dashboard snapshot, from the push-fed caches ONLY: no broker request.
+        The desk page polls this every 2.5 s; reading cashBalance/list + position/list
+        per poll ran the Apex user into 429 (2026-09-29). The pushes keep the caches
+        current; the desk's once-a-minute refresh_snapshot covers anything they miss.
+        cache_age_s says how old the newest change is (None = never filled)."""
         m = await super().get_metrics()
         m["account"] = self._acct_name or None
-        if self._ws is None or self._acct_num is None:
+        m["cache_seeded"] = self.caches_seeded
+        m["cache_age_s"] = round(time.time() - self._cache_ts, 1) if self._cache_ts else None
+        if self._acct_num is None:
             return m
-        try:
-            bal = await self.get_balance()
-            m["balance"] = bal.get("amount")
-            m["realized_pnl"] = bal.get("realizedPnL")
-        except Exception:
-            pass
-        try:
-            positions = []
-            for p in await self._ws.position_list():
-                if p.get("accountId") != self._acct_num:
-                    continue
+        if self._cash:
+            m["balance"] = self._cash.get("amount")
+            m["realized_pnl"] = self._cash.get("realizedPnL")
+        positions = []
+        for cid, p in list(self._positions.items()):
+            try:
                 net = int(p.get("netPos") or 0)
-                if net == 0:
-                    continue
-                cid = p.get("contractId")
-                symbol = self._contracts.get(cid, "") if cid is not None else ""
-                if not symbol and cid is not None:
-                    try:
-                        c = await self._ws.contract_item(cid)
-                        symbol = (c or {}).get("name", "")
-                        if symbol:
-                            self._contracts[cid] = symbol
-                    except Exception:
-                        pass
-                positions.append({"symbol": symbol or f"#{cid}", "net": net})
-            m["open_positions"] = positions
-            m["open_position_count"] = len(positions)
-        except Exception:
-            pass
+            except (TypeError, ValueError):
+                continue
+            if net == 0:
+                continue
+            symbol = self._contracts.get(cid, "")
+            if not symbol:
+                self._want_contract(cid)       # resolved once, in the background
+            positions.append({"symbol": symbol or f"#{cid}", "net": net})
+        m["open_positions"] = positions
+        m["open_position_count"] = len(positions)
         # Working orders: count from the cache, scoped to this account.
         m["working_orders"] = sum(
             1 for o in self._orders.values()
@@ -1262,13 +1376,25 @@ class TradovateAdapter(BrokerAdapter):
                 _log(f"{self.account_id}: token renewal held at {clock} ({why}) — "
                      f"the socket's token expires at {until} ET")
             return False
+        if not stale and self._renewal_held(why, expires_at, now):
+            return False
         if not stale:
-            # a renewal only the early rule asks for (RENEW_BUFFER_S still left): renew only
-            # -- never spend a (rate-limited) login on it; a failure retries at the next check
-            extra = why == "early" and expires_at - now.timestamp() >= RENEW_BUFFER_S
-            await asyncio.to_thread(self._auth.renew if extra else self._auth.refresh)
-            if not self._auth.access_token or self._auth.access_token == auth_token:
-                return False                                  # it did not roll
+            async with self._renew_lock():
+                if self._auth.access_token == auth_token and self._renewal_held(
+                        why, expires_at, self._now()):
+                    return False            # a sibling's renewal failed while this one waited
+                if self._auth.access_token != auth_token:
+                    # a sibling on the same login renewed while this one waited: no second
+                    # renewal -- this socket is simply on an older token, dropped by the
+                    # same rule, judged again now
+                    stale = True
+                    if not self._auth.access_token or not renewal_due(self._now(), expires_at)[0]:
+                        return False
+                else:
+                    await self._renew_now(why, expires_at, now, auth_token)
+                    if not self._auth.access_token or self._auth.access_token == auth_token:
+                        return False                          # it did not roll
+        if not stale:
             landed = self._now()
             if not renewal_due(landed, expires_at)[0]:
                 # the answer came late (a slow renewal, a login fallback) into a moment the
@@ -1302,6 +1428,56 @@ class TradovateAdapter(BrokerAdapter):
             pass
         return True
 
+    def _renew_lock(self) -> asyncio.Lock:
+        """One renewal at a time per token: the lock lives on the (possibly shared) auth."""
+        lk = getattr(self._auth, "renew_lock", None)
+        if lk is None:
+            lk = asyncio.Lock()
+            try:
+                self._auth.renew_lock = lk
+            except Exception:  # noqa: BLE001 — an auth that takes no attributes: unshared
+                pass
+        return lk
+
+    def _cooling(self) -> bool:
+        b = self._login_budget
+        return bool(b is not None and b.cooling(self.keyring_key))
+
+    def _renewal_held(self, why: str, expires_at: float, now: dt.datetime) -> bool:
+        """On top of renewal_due (unchanged): a token whose renewal failed under
+        RENEW_FAIL_HOLD_S ago is not renewed again by a sibling; while the user is in a 429
+        cool-down only a token dying within COOL_RENEW_WITHIN_S is (the 09:10 early
+        renewal is kept as it is: renew-only, one per token, it protects the fire)."""
+        left = expires_at - now.timestamp()
+        failed = getattr(self._auth, "renew_failed_at", 0.0) or 0.0
+        if now.timestamp() - failed < RENEW_FAIL_HOLD_S and left > 2 * RENEW_FAIL_HOLD_S:
+            return True
+        return why != "early" and self._cooling() and left > COOL_RENEW_WITHIN_S
+
+    def _rebuild_buffer_s(self, now: dt.datetime) -> float:
+        """ensure_valid's buffer for an in-place rebuild: the normal RENEW_BUFFER_S, but
+        only COOL_RENEW_WITHIN_S while the user cools down or a renewal just failed."""
+        failed = getattr(self._auth, "renew_failed_at", 0.0) or 0.0
+        if self._cooling() or now.timestamp() - failed < RENEW_FAIL_HOLD_S:
+            return COOL_RENEW_WITHIN_S
+        return RENEW_BUFFER_S
+
+    async def _renew_now(self, why: str, expires_at: float, now: dt.datetime,
+                         auth_token) -> None:
+        # a renewal only the early rule asks for (RENEW_BUFFER_S still left): renew only
+        # -- never spend a (rate-limited) login on it; a failure retries at the next check
+        extra = why == "early" and expires_at - now.timestamp() >= RENEW_BUFFER_S
+        try:
+            await asyncio.to_thread(self._auth.renew if extra else self._auth.refresh)
+        except Exception:
+            self._mark_renew_failed()
+            raise
+
+    def _mark_renew_failed(self) -> None:
+        """Stamp the (possibly shared) auth: siblings hold their renewals RENEW_FAIL_HOLD_S."""
+        with contextlib.suppress(Exception):
+            self._auth.renew_failed_at = self._now().timestamp()
+
     async def _keepalive_loop(self) -> None:
         try:
             while self._connected:
@@ -1311,6 +1487,8 @@ class TradovateAdapter(BrokerAdapter):
                 try:
                     await self._renew_if_needed()
                 except Exception as e:
+                    if self._login_budget is not None:       # a 429'd renewal cools the user
+                        self._login_budget.note_error(self.keyring_key, e)
                     _log(f"{self.account_id}: keepalive error: {e}")
                     self.audit({"event": "keepalive_error",
                                 "account": self.account_id, "error": str(e)})

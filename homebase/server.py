@@ -33,6 +33,7 @@ from fastapi.staticfiles import StaticFiles
 from . import config as config_mod
 from . import secrets_store
 from .broker.base import AccountNotOnLogin, BrokerAdapter, OrderRequest
+from .broker.login_budget import LoginBudget, LoginDeferred, is_rate_limited
 from .broker.tradovate import RENEW_EARLY_FROM, RENEW_QUIET, TradovateAdapter
 from .engine import Engine, _hhmm
 from .feed import MarketFeed
@@ -47,6 +48,14 @@ from .trading import ChartDesk
 STATIC = Path(__file__).resolve().parent / "static"
 CLOCK_INTERVAL_S = 1       # also paces the sibling-cancel backstop (cache reads)
 RECONNECT_INTERVAL_S = 5   # cheap now: reconnects reuse the token
+GONE_CONFIRM_S = 300       # an account missing from its login is removed only when a 2nd
+                           # successful sync at least this much later still misses it
+GONE_QUIET = (dt.time(9, 20), dt.time(9, 35))   # weekdays ET: never unbook/remove in here
+GONE_CHECK_QUIET = (dt.time(9, 10), dt.time(9, 35))   # ... and never a confirming re-sync
+GONE_CHECK_TIMEOUT_S = 30  # a confirming re-sync runs in its own task, at most this long
+NOTICES_KEPT = 10
+INPLACE_RETRY_S = (10, 60)   # a dropped socket whose token is still valid, while its user's
+                             # logins are paused: retry in place 10 s, doubling to 60 s
 EQUITY_INTERVAL_S = 60
 JOURNAL_TAIL = 60
 READINESS_FROM = (9, 25)
@@ -348,8 +357,9 @@ def md_source(cfg: config_mod.AppCfg, adapters: dict):
 def build_adapter(account_id: str, a: config_mod.AccountCfg) -> BrokerAdapter:
     env = "live" if a.live else "demo"
     sel = {"account_name": a.account_name} if a.account_name else None
+    # entries on one login share its token: one login / renewal per Tradovate user
     return TradovateAdapter(account_id, env=env, keyring_key=a.keyring_key,
-                            account_selector=sel)
+                            account_selector=sel, share_auth=bool(a.keyring_key))
 
 
 def build_feed(cfg: config_mod.AppCfg, adapters: dict) -> MarketFeed:
@@ -360,11 +370,49 @@ def build_feed(cfg: config_mod.AppCfg, adapters: dict) -> MarketFeed:
 def create_app(cfg: config_mod.AppCfg | None = None,
                adapters: dict[str, BrokerAdapter] | None = None,
                *, background: bool = True,
-               adapter_factory=build_adapter, feed_factory=build_feed) -> FastAPI:
+               adapter_factory=build_adapter, feed_factory=build_feed,
+               login_budget: LoginBudget | None = None) -> FastAPI:
     cfg = cfg or config_mod.load()
     adapters: dict[str, BrokerAdapter] = adapters if adapters is not None else {}
     engine = Engine(cfg, adapters)
     acct_status: dict[str, dict] = {}
+    # logins are budgeted per Tradovate USER (the login key), never per entry: five
+    # entries on one Apex user each falling back to a login ran it into 429 (2026-09-29)
+    budget = login_budget or LoginBudget()
+    budget.journal = engine.journal
+    _logged_in_once: set[str] = set()        # entries that logged in / rode the shared token
+    _login_first_spent: set[tuple] = set()   # (login key, live): its one exempt first login
+    _went_private: set[str] = set()          # entries refused on the shared token
+    _parked: dict[str, str] = {}             # entry -> why (its account is not on its login)
+    # entry -> its account-gone state: first/next_check (unix), unbooked, confirmed
+    _gone: dict[str, dict] = {}
+    _no_accounts_warned: set[str] = set()
+    notices: list[dict] = []                 # one-liners for the desk page (status payload)
+
+    def _notice(text: str, **kw) -> None:
+        notices.append({"et": engine.now_et().isoformat(timespec="seconds"),
+                        "text": text, **kw})
+        del notices[:-NOTICES_KEPT]
+
+    def _short(aid: str) -> str:
+        a = cfg.accounts.get(aid)
+        name = (a.account_name if a is not None else "") or aid
+        return "…" + name[-3:] if len(name) > 6 else name
+
+    def _login_label(aid: str) -> str:
+        tail = _login_key(aid).rsplit(":", 1)[-1].split("_", 1)[0]
+        return tail.capitalize() if tail else "Tradovate"
+
+    def _in_gone_quiet(now_et, span=GONE_QUIET) -> bool:
+        return now_et.weekday() < 5 and span[0] <= now_et.time() < span[1]
+
+    _login_uid: dict[str, object] = {}       # login key -> the Tradovate user id first seen
+    _login_suspect: set[str] = set()         # login keys already warned "may have changed"
+    _gone_tasks: dict[str, asyncio.Task] = {}
+
+    def _login_key(aid: str) -> str:
+        a = cfg.accounts.get(aid)
+        return (a.keyring_key if a is not None else "") or aid
 
     def _md_factory():
         key, env, provider = md_source(cfg, adapters)
@@ -462,21 +510,68 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         return {**st, "error": feed_box["error"],
                 "window": feed_window(engine.now_et())}
 
-    async def _connect_account(aid: str, force_login: bool = False) -> str:
+    _connect_locks: dict[str, asyncio.Lock] = {}
+
+    async def _connect_account(aid: str, force_login: bool = False,
+                               manual: bool = False) -> str:
+        """One (re)connect per account at a time (the supervisor, a manual Reconnect and
+        a gone re-check can race), and never for an account no longer on the desk."""
+        async with _connect_locks.setdefault(aid, asyncio.Lock()):
+            if aid not in cfg.accounts:
+                raise RuntimeError(f"{aid} is no longer on the desk")
+            return await _connect_account_locked(aid, force_login, manual)
+
+    async def _connect_account_locked(aid: str, force_login: bool = False,
+                                      manual: bool = False) -> str:
         """(Re)connect one account. Prefers an in-place reconnect on the token
         it already holds — no login spent — and only falls back to a full
         login. A drop used to cost a full login every time: ~20/hour on a
-        sleeping laptop against Tradovate's ~5/hour limit."""
+        sleeping laptop against Tradovate's ~5/hour limit. Every login goes
+        through the user's LoginBudget (429 cool-down, hourly cap, backoff;
+        `manual` skips only the backoff); refused, it raises LoginDeferred."""
         a = cfg.accounts[aid]
+        key = _login_key(aid)
         ad = adapters.get(aid)
         if ad is None:
             ad = adapters[aid] = adapter_factory(aid, a)
+        if hasattr(ad, "login_budget") and ad.login_budget is not budget:
+            ad.login_budget = budget        # the token refresh's login fallback asks it too
+
+        login_id = (key, a.live)
+
+        async def _login(fell_back_from=None) -> None:
+            # the cap/backoff exemption is ONE first login per Tradovate login per process
+            # (its entries share the token), never for an entry that went private
+            first = (aid not in _logged_in_once and login_id not in _login_first_spent
+                     and aid not in _went_private)
+            why = budget.blocked(key, first=first, manual=manual)
+            if why:
+                raise LoginDeferred(why if fell_back_from is None else
+                                    f"{str(fell_back_from)[:120]} — no login fallback: {why}")
+            if fell_back_from is not None:
+                engine.journal("reconnect_fell_back_to_login", account=aid,
+                               error=str(fell_back_from)[:200])
+            _logged_in_once.add(aid)
+            _login_first_spent.add(login_id)
+            budget.record_login(key)
+            try:
+                await ad.connect()
+            except AccountNotOnLogin:
+                budget.login_result(key)    # the login itself worked
+                raise
+            except Exception as e:  # noqa: BLE001
+                budget.login_result(key, e)
+                raise
+            budget.login_result(key)
+
         mode = "login"
         has_token = bool(getattr(getattr(ad, "_auth", None), "tokens", None))
         if has_token and not force_login and hasattr(ad, "reconnect"):
             try:
                 await ad.reconnect()
                 mode = "reconnect"
+                _logged_in_once.add(aid)           # on the shared token: the login's
+                _login_first_spent.add(login_id)   # first login is spent already
             except AccountNotOnLogin:
                 # Permanent: the pin is wrong for THIS login, not a dropped
                 # socket. A full login would just burn the shared keyring
@@ -484,13 +579,38 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                 # never be there — never retry it as a transient drop.
                 raise
             except Exception as e:  # noqa: BLE001 — fall back to a real login
-                engine.journal("reconnect_fell_back_to_login", account=aid,
-                               error=str(e)[:200])
-                await ad.connect()
+                budget.note_error(key, e)          # a 429 cools the whole user down
+                if (getattr(ad, "auth_shared", False) and "authorize failed" in str(e)
+                        and not is_rate_limited(e)):
+                    # the shared token was refused on THIS socket: its login must never
+                    # re-roll the token every sibling rides -- a private one, budgeted
+                    ad.go_private()
+                    _went_private.add(aid)
+                    engine.journal("shared_token_refused", account=aid, error=str(e)[:200])
+                await _login(fell_back_from=e)
         else:
-            await ad.connect()
+            await _login()
         await ad.observe_fills(engine.on_fill)
         desk.attach(aid, ad)
+        _parked.pop(aid, None)
+        _inplace_streak.pop(aid, None)
+        _no_accounts_warned.discard(aid)
+        uid = getattr(getattr(getattr(ad, "_auth", None), "tokens", None), "user_id", None)
+        if uid:
+            _login_uid.setdefault(key, uid)
+        g = _gone.pop(aid, None)
+        if g is not None:
+            restored = []
+            for name, rows in (g.get("booked") or {}).items():
+                have = cfg.book.setdefault(name, [])
+                for r in rows:
+                    if not any(x.get("account") == aid for x in have):
+                        have.append(dict(r))
+                        restored.append(name)
+            if restored:
+                config_mod.save(cfg)
+            engine.journal("account_back", account=aid, rebooked=restored)
+            _notice(f"{_short(aid)} is back on your {_login_label(aid)} login", account=aid)
         acct_status[aid] = {"connected": True, "error": None}
         engine.journal("broker_connected", account=aid,
                        broker_account=a.account_name, mode=mode)
@@ -501,11 +621,175 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         return mode
 
     _login_cooldown: dict[str, float] = {}   # account id -> unix ts of next try
+    _inplace_streak: dict[str, int] = {}     # failed in-place-only retries in a row
+
+    def _token_left(aid: str) -> float:
+        import time as _t
+        tokens = getattr(getattr(adapters.get(aid), "_auth", None), "tokens", None)
+        exp = getattr(tokens, "expires_at_unix", 0) or 0
+        return exp - _t.time() if exp else 0.0
+
+    def _connect_failed(aid: str, e: Exception) -> None:
+        """Record a failed (re)connect. An account missing from its login is PARKED:
+        never retried automatically (the loop would log in on the shared user every
+        few minutes forever -- apex...049, closed at Apex, 2026-09-29), only by a
+        manual Reconnect, once per click."""
+        import time as _t
+        if aid not in cfg.accounts:
+            return                           # removed meanwhile: nothing to record
+        msg = str(e)
+        if isinstance(e, AccountNotOnLogin):
+            a = cfg.accounts.get(aid)
+            name = (a.account_name if a is not None else "") or aid
+            if aid not in _parked:
+                engine.journal("account_parked", account=aid, error=msg[:200])
+            _parked[aid] = msg
+            _login_cooldown.pop(aid, None)
+            acct_status[aid] = {"connected": False, "parked": True,
+                                "error": f"account {name} is not on this login — "
+                                         f"remove it from the desk ({msg[:160]})"}
+            _note_gone(aid, e)
+            return
+        if "login exposes no accounts" in msg:
+            # never evidence that an account is gone: warn, act on nothing
+            if aid not in _no_accounts_warned:
+                _no_accounts_warned.add(aid)
+                engine.journal("login_lists_no_accounts", account=aid, login=_login_key(aid))
+                _notice(f"your {_login_label(aid)} login listed no accounts — nothing was "
+                        "removed; check the login at Tradovate", account=aid, level="warn")
+        acct_status[aid] = {"connected": False, "error": msg}
+        if isinstance(e, LoginDeferred) and _token_left(aid) > 120:
+            # the socket dropped, its token is still good, only the login fallback was
+            # refused (a 429 cool-down, the cap): no login is spent retrying in place,
+            # so do it soon -- a healthy entry must not sit out 5 minutes before the fire
+            n = _inplace_streak[aid] = _inplace_streak.get(aid, 0) + 1
+            lo, hi = INPLACE_RETRY_S
+            _login_cooldown[aid] = _t.time() + min(lo * 2 ** (n - 1), hi)
+            return
+        # NEVER hammer the login endpoint: auth rejections and rate-limit
+        # tickets wait 30 min; anything else 5 min (the user's LoginBudget
+        # gates the login itself on top of this)
+        slow = ("Login failed" in msg or "p-ticket" in msg or "p-captcha" in msg)
+        _login_cooldown[aid] = _t.time() + (1800 if slow else 300)
+
+    def _note_gone(aid: str, e: AccountNotOnLogin) -> None:
+        """A successful sync listed the login's accounts and this entry's is not among
+        them. The first sighting parks it and journals account_gone; one at least
+        GONE_CONFIRM_S later confirms: _gone_step then unbooks and removes it (outside
+        09:20-09:35). Never evidence: a failed, 429'd or empty sync (no listing), a login
+        whose Tradovate user changed, or one where not only a MINORITY of the login's
+        pinned entries is missing -- that is a changed login, not a closed account: park,
+        warn, touch nothing."""
+        import time as _t
+        listed = getattr(e, "listed", None)
+        if not listed or aid not in cfg.accounts:
+            return
+        key, live = _login_key(aid), cfg.accounts[aid].live
+        pins = {x: (a.account_name or "").lower() for x, a in cfg.accounts.items()
+                if _login_key(x) == key and a.live == live and a.account_name}
+        have = {str(n).lower() for n in listed}
+        missing = [x for x, pin in pins.items() if pin not in have]
+        uid, was = getattr(e, "user_id", None), _login_uid.get(key)
+        if (uid and was and uid != was) or 2 * len(missing) >= len(pins):
+            _gone.pop(aid, None)
+            if key not in _login_suspect:
+                _login_suspect.add(key)
+                engine.journal("login_changed_suspect", login=key, missing=missing,
+                               user_changed=bool(uid and was and uid != was),
+                               login_lists=list(listed))
+                _notice(f"your {_login_label(aid)} login no longer lists "
+                        f"{', '.join(_short(x) for x in missing) or _short(aid)} — the login may "
+                        "have changed; nothing was unbooked or removed. Check it at Tradovate",
+                        account=aid, level="warn")
+            return
+        now = _t.time()
+        g = _gone.get(aid)
+        if g is None:
+            _gone[aid] = {"first": now, "next_check": now + GONE_CONFIRM_S,
+                          "confirmed": False, "listed": list(listed)}
+            engine.journal("account_gone", account=aid, login_lists=list(listed))
+            _notice(f"{_short(aid)} is no longer on your {_login_label(aid)} login — parked; "
+                    "removed from the desk if a second check agrees", account=aid)
+        elif now - g["first"] >= GONE_CONFIRM_S:
+            g["confirmed"] = True
+
+    async def _drop_account(aid: str, **journal_extra) -> None:
+        """Unassign an entry from every strategy, drop it from the pool, close it. An
+        in-flight gone re-check is cancelled first, and the account's connect lock is
+        held, so a removed adapter is never reconnected behind the removal."""
+        t = _gone_tasks.pop(aid, None)
+        if t is not None and not t.done():
+            t.cancel()
+            with contextlib.suppress(BaseException):
+                await t
+        async with _connect_locks.setdefault(aid, asyncio.Lock()):
+            await _drop_account_locked(aid, **journal_extra)
+        _connect_locks.pop(aid, None)
+
+    async def _drop_account_locked(aid: str, **journal_extra) -> None:
+        for name in list(cfg.book):
+            cfg.book[name] = [a for a in cfg.book[name]
+                              if a.get("account") != aid]
+        cfg.accounts.pop(aid, None)
+        config_mod.save(cfg)
+        acct_status.pop(aid, None)
+        _parked.pop(aid, None)
+        _gone.pop(aid, None)
+        _login_cooldown.pop(aid, None)
+        old = adapters.pop(aid, None)
+        if old is not None:
+            with contextlib.suppress(Exception):
+                await old.close()
+        engine.journal("account_removed", account=aid, **journal_extra)
+
+    async def _gone_check(aid: str) -> None:
+        """One confirming re-sync, in its own task: it never holds the supervisor."""
+        try:
+            await asyncio.wait_for(_connect_account(aid), GONE_CHECK_TIMEOUT_S)
+        except Exception as e:  # noqa: BLE001 — _note_gone judges it
+            _connect_failed(aid, e)
+
+    async def _gone_step() -> None:
+        """Accounts that left their login: one confirming re-sync GONE_CONFIRM_S after the
+        first sighting (never 09:10-09:35 ET), then -- confirmed -- unbook and remove
+        (never 09:20-09:35 ET). The bookings are kept in case it comes back."""
+        import time as _t
+        if not _gone:
+            return
+        now_et = engine.now_et()
+        for aid, g in list(_gone.items()):
+            if aid not in cfg.accounts:
+                _gone.pop(aid, None)
+                continue
+            if g["confirmed"]:
+                if _in_gone_quiet(now_et):
+                    continue
+                g["booked"] = {n: [dict(r) for r in rows if r.get("account") == aid]
+                               for n, rows in cfg.book.items()
+                               if any(r.get("account") == aid for r in rows)}
+                line = (f"{_short(aid)} is no longer on your {_login_label(aid)} login — "
+                        "removed from the desk")           # worded before the entry goes
+                await _drop_account(aid, reason="not on the login any more",
+                                    unbooked=sorted(g["booked"]))
+                _notice(line, account=aid)
+                continue
+            t = _gone_tasks.get(aid)
+            if (t is None or t.done()) and _t.time() >= g["next_check"] \
+                    and not _in_gone_quiet(now_et, GONE_CHECK_QUIET):
+                g["next_check"] = _t.time() + GONE_CONFIRM_S
+                _gone_tasks[aid] = asyncio.create_task(_gone_check(aid))
 
     async def _broker_loop():
         import time as _t
         while True:
+            budget.tick()                    # a cool-down's one "ended" line
+            try:
+                await _gone_step()
+            except Exception as e:  # noqa: BLE001 — never kill the supervisor
+                engine.journal("account_gone_error", error=str(e)[:200])
             for aid in list(cfg.accounts):
+                if aid in _parked:
+                    continue                 # only a manual Reconnect retries it
                 ad = adapters.get(aid)
                 if ad is not None and ad.connected:
                     continue
@@ -515,22 +799,34 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                     await _connect_account(aid)
                     _login_cooldown.pop(aid, None)
                 except Exception as e:  # noqa: BLE001 — report, back off
-                    msg = str(e)
-                    acct_status[aid] = {"connected": False, "error": msg}
-                    # NEVER hammer the login endpoint: auth rejections,
-                    # rate-limit tickets, and a pin missing from the login
-                    # (permanent until the config or the login changes) wait
-                    # 30 min; anything else 5 min.
-                    slow = (isinstance(e, AccountNotOnLogin)
-                            or "Login failed" in msg or "p-ticket" in msg
-                            or "p-captcha" in msg)
-                    _login_cooldown[aid] = _t.time() + (1800 if slow else 300)
+                    _connect_failed(aid, e)
             await asyncio.sleep(RECONNECT_INTERVAL_S)
+
+    async def _refresh_snapshots() -> None:
+        """The caches' slow refresh: ONE position/list + cashBalance/list per
+        Tradovate user (its lists cover every account under the login), on the first
+        connected entry that can do it. Skipped for a user in a 429 cool-down and
+        09:20-09:35 ET (the fire's socket carries only the fire)."""
+        if _in_gone_quiet(engine.now_et()):
+            return
+        by_user: dict[tuple, list] = {}
+        for aid, ad in list(adapters.items()):
+            if aid in cfg.accounts and ad.connected and hasattr(ad, "refresh_snapshot"):
+                by_user.setdefault((_login_key(aid), cfg.accounts[aid].live), []).append(ad)
+        for (key, _live), ads in by_user.items():
+            if budget.cooling(key):
+                continue
+            try:
+                await ads[0].refresh_snapshot(ads[1:])
+            except Exception as e:  # noqa: BLE001 — the pushes still carry the caches
+                budget.note_error(key, e)
 
     async def _equity_loop():
         while True:
+            with contextlib.suppress(Exception):
+                await _refresh_snapshots()
             for aid, ad in list(adapters.items()):
-                try:
+                try:        # from the caches: no broker request
                     if ad.connected:
                         m = await ad.get_metrics()
                         if m.get("balance") is not None and m.get("account"):
@@ -601,6 +897,15 @@ def create_app(cfg: config_mod.AppCfg | None = None,
     app.state.connect_account = _connect_account
     app.state.broker_loop = _broker_loop
     app.state.login_cooldown = _login_cooldown
+    app.state.login_budget = budget
+    app.state.parked = _parked
+    app.state.gone = _gone
+    app.state.login_uid = _login_uid
+    app.state.gone_step = _gone_step
+    app.state.drop_account = _drop_account
+    app.state.connect_failed = _connect_failed
+    app.state.refresh_snapshots = _refresh_snapshots
+    app.state.notices = notices
     app.state.feed_box = feed_box
     app.state.desk = desk
     app.include_router(desk_api.trade_router(desk), prefix="/api/trade")
@@ -620,7 +925,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         accounts = {}
         for aid, a in cfg.accounts.items():
             ad = adapters.get(aid)
-            try:
+            try:        # the adapters' caches only: a poll costs Tradovate nothing
                 m = await ad.get_metrics() if ad else {"connected": False}
             except Exception as e:  # noqa: BLE001
                 m = {"connected": False, "error": f"metrics: {e}"}
@@ -645,6 +950,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             "timer": timer.status(),
             "feed": feed_status(),
             "accounts": accounts,
+            "notices": notices[::-1],      # newest first, one line each, page wording
             "book": cfg.book,
             "strategies": {
                 name: {
@@ -790,11 +1096,11 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         config_mod.save(cfg)
         engine.journal("account_added", account=aid, live=live)
         try:
-            await _connect_account(aid)
+            await _connect_account(aid, manual=True)
         except Exception as e:  # noqa: BLE001
-            acct_status[aid] = {"connected": False, "error": str(e)}
+            _connect_failed(aid, e)
             return {"ok": True, "account": aid, "connected": False,
-                    "error": str(e)}
+                    "error": acct_status[aid]["error"]}
         return {"ok": True, "account": aid, "connected": True}
 
     @app.post("/api/strategy")
@@ -828,8 +1134,11 @@ def create_app(cfg: config_mod.AppCfg | None = None,
 
     @app.post("/api/accounts/reconnect")
     async def accounts_reconnect(request: Request):
-        """Manual reconnect for one account (or all). Clears any login backoff —
-        the user is explicitly asking — and reconciles positions afterwards."""
+        """Manual reconnect for one account (or all). Clears the account's retry
+        cooldown and the user's login backoff -- the user is explicitly asking --
+        but never a 429 cool-down or the hourly login cap. One attempt each: a
+        parked account (not on its login) is retried once and stays parked if it
+        still is not there. Reconciles positions afterwards."""
         try:
             body = await request.json()
         except Exception:  # noqa: BLE001 — empty body = all accounts
@@ -842,12 +1151,13 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                 results[aid] = {"ok": False, "error": "unknown account"}
                 continue
             _login_cooldown.pop(aid, None)
-            try:
-                mode = await _connect_account(aid)
+            try:     # one attempt: a parked account stays parked if it fails again
+                mode = await _connect_account(aid, manual=True)
+                _login_cooldown.pop(aid, None)
                 results[aid] = {"ok": True, "mode": mode}
             except Exception as e:  # noqa: BLE001 — surface the reason
-                acct_status[aid] = {"connected": False, "error": str(e)}
-                results[aid] = {"ok": False, "error": str(e)[:200]}
+                _connect_failed(aid, e)
+                results[aid] = {"ok": False, "error": acct_status[aid]["error"][:200]}
         engine.journal("manual_reconnect", results=results)
         return {"ok": all(r["ok"] for r in results.values()) if results else False,
                 "results": results}
@@ -872,17 +1182,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             except Exception as e:  # noqa: BLE001 — unreadable is NOT flat
                 raise HTTPException(409, f"can't read the position ({e}) — "
                                     "try again once it's connected")
-        for name in list(cfg.book):
-            cfg.book[name] = [a for a in cfg.book[name]
-                              if a.get("account") != aid]
-        cfg.accounts.pop(aid)
-        config_mod.save(cfg)
-        acct_status.pop(aid, None)
-        old = adapters.pop(aid, None)
-        if old is not None:
-            with contextlib.suppress(Exception):
-                await old.close()
-        engine.journal("account_removed", account=aid)
+        await _drop_account(aid)
         return {"ok": True, "removed": aid}
 
     @app.get("/api/diag-permissions")
