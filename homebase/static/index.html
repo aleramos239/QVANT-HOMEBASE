@@ -169,6 +169,15 @@
   .ready .ri b{ color:var(--foreground); font-weight:600; }
   .ready .ri.bad b{ color:var(--neg); }
   .ready .headline{ font-weight:600; color:var(--foreground); }
+  /* the desk's own notices (status.notices): plain lines, shown once, dismissed together */
+  .notices{ display:flex; align-items:flex-start; gap:12px; border:1px solid var(--border);
+    border-radius:var(--radius-md); background:var(--card); padding:8px 10px 8px 14px; margin:0 0 14px;
+    font-size:12.5px; color:var(--foreground); }
+  .notices[hidden]{ display:none; }
+  .notices .list{ flex:1; min-width:0; display:flex; flex-direction:column; gap:3px; }
+  .notices .t{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; color:var(--muted-foreground);
+    margin-right:9px; }
+  .notices .x{ border:none; background:none; color:var(--muted-foreground); cursor:pointer; font-size:15px; padding:0 2px; }
   .ready.notready{ border-color:color-mix(in oklch, var(--neg) 35%, transparent); }
   .ready.notready .headline{ color:var(--neg); }
 
@@ -529,6 +538,7 @@
     <div class="scroll">
     <div class="view-wrap">
 
+      <div class="notices" id="noticeStrip" role="status" hidden></div>
       <div class="ready notready" id="readyStrip" style="display:none"></div>
 
       <div class="sec-head" style="margin-top:8px">
@@ -1304,6 +1314,34 @@ function readinessShown(r, st) {
   return changed ? {...r, checks, ready: !checks.some(c => c && c.level === "bad")} : r;
 }
 
+/* ---- the desk's notices ----
+   status.notices: one-liners the desk writes for this page, newest first -- e.g. "…049 is no longer
+   on your Apex login — removed from the desk". An older desk sends none (absent or not a list:
+   nothing shows). Each notice shows once: dismissing marks the ones on screen seen (kept per viewer,
+   in this browser), and a seen notice never comes back. Text is escaped. */
+let NOTICES_SEEN = new Set();
+try { NOTICES_SEEN = new Set(JSON.parse(localStorage.getItem("hb_notices_seen") || "[]")); } catch (_) {}
+const noticeKey = (n) => `${n.et || ""}|${n.text}`;
+function renderNotices(list) {
+  const el = $("#noticeStrip");
+  if (!el) return;
+  const fresh = (Array.isArray(list) ? list : [])
+    .filter(n => n && typeof n.text === "string" && n.text && !NOTICES_SEEN.has(noticeKey(n)));
+  const sig = JSON.stringify(fresh.map(noticeKey));
+  if (el._sig === sig) return;               // unchanged: leave the nodes alone
+  el._sig = sig;
+  el.hidden = !fresh.length;
+  if (!fresh.length) { el.innerHTML = ""; return; }
+  el.innerHTML = `<div class="list">` + fresh.map(n =>
+      `<div><span class="t">${esc(String(n.et || "").slice(11, 16))}</span>${esc(n.text)}</div>`).join("") +
+    `</div><button type="button" class="x" title="Dismiss — these won't show again" aria-label="Dismiss notices">&times;</button>`;
+  el.querySelector("button.x").addEventListener("click", () => {
+    for (const n of fresh) NOTICES_SEEN.add(noticeKey(n));
+    try { localStorage.setItem("hb_notices_seen", JSON.stringify([...NOTICES_SEEN].slice(-200))); } catch (_) {}
+    el.hidden = true; el.innerHTML = ""; el._sig = "[]";
+  });
+}
+
 /* ---- activity log (W4): what happened, in plain words ----
    One sentence per journal row -- "Connected APEX…048 (login)", "Chart-trading limits set to
    50 / 100", "NQ930 bought 3 @ 30,726.50 on …049" -- instead of `event key=value`. The raw line
@@ -1675,6 +1713,7 @@ function render() {
   if ($("#algoOverlay").classList.contains("open")) renderAlgoMgr();
 
   renderActivity(s.journal);
+  renderNotices(s.notices);
 }
 
 /* An open + Assign menu or size edit holds updates (FREEZE) so a repaint never wipes it -- but the
