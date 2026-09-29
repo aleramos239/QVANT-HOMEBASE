@@ -78,7 +78,12 @@ def ticks_from_table(header: list[str], recs: list[list[str]],
                      live: bool = False) -> tuple[list[Tick], bool]:
     """Classified ticks + whether the file carries quotes. A live file is
     deduped by id and re-sorted by (time, id) first: a gap refill appends
-    OLDER ticks after newer ones. (list.sort is stable.)"""
+    OLDER ticks after newer ones. (list.sort is stable.)
+
+    homebase.charts.export._ordered() re-implements exactly this dedup/sort rule over the RAW
+    rows (this function's Tick objects drop bid_size/ask_size, which export needs) -- keep the
+    two in lock-step; tests/test_charts_export.py's test_ordered_matches_ticks_from_table pins
+    them against the same fixture."""
     if not header:
         return [], False
     ix = {k: i for i, k in enumerate(header)}

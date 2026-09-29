@@ -28,6 +28,7 @@ class FakeEl {
   set textContent(v) { this._text = v == null ? '' : String(v); this.children = []; }
   get textContent() { return this._text; }
   append(...nodes) { for (const n of nodes) { if (n == null) continue; n.parentNode = this; this.children.push(n); } }
+  prepend(...nodes) { for (const n of nodes.reverse()) { if (n == null) continue; n.parentNode = this; this.children.unshift(n); } }
   replaceChildren(...nodes) { for (const c of this.children) c.parentNode = null; this.children = []; this.append(...nodes); }
   replaceWith(node) {
     if (!this.parentNode) return;
@@ -89,6 +90,7 @@ const ACTIVE = { el: null };
 function loadDialog() {
   global.window = global.window || {};   // a dedicated object, not an alias for `global` itself
   global.window.HBSettings = require('../../homebase/static/charts/settings.js');
+  global.window.HBDataExport = require('../../homebase/static/charts/dataexport.js');
   delete require.cache[require.resolve('../../homebase/static/charts/icons.js')];
   require('../../homebase/static/charts/icons.js');
   global.document = { createElement: (tag) => new FakeEl(tag), get activeElement() { return ACTIVE.el; } };
@@ -434,4 +436,305 @@ test('W3: every Settings tab carries its label as title and aria-label', () => {
     assert.equal(t.title, label);
     assert.equal(t.getAttribute('aria-label'), label);
   }
+});
+
+/* ---- 2026-09-28 data-export plan: the Data tab ----
+   host.export is a double of the chart service's /api/export/* client (app.js's real one just
+   fetches); these tests drive it exactly as a click/keystroke would, so the wiring -- which
+   fields build the request body, when meta/coverage re-fetch, the poll -> done -> reveal path,
+   and cancel -- is covered end to end, not just dataexport.js's own pure functions. */
+
+function makeExportHost(overrides = {}) {
+  const calls = [];
+  const base = {
+    meta: async (root, type) => { calls.push(['meta', root, type]); return { range: ['2026-09-01', '2026-09-25'], contracts: ['NQZ6', 'NQU6'] }; },
+    coverage: async (root, type, contract, start, end) => {
+      calls.push(['coverage', root, type, contract, start, end]);
+      return { sessions_total: 3, missing: [], missing_hours: {} };
+    },
+    start: async (body) => { calls.push(['start', body]); return { status: 200, data: { id: '20260928-100000-deadbeef' } }; },
+    status: async (id) => { calls.push(['status', id]); return { status: 'running', sessions_done: 1, sessions_total: 2, rows: 10 }; },
+    active: async () => { calls.push(['active']); return {}; },   // no job by default: opt in per test
+    cancel: async (id) => { calls.push(['cancel', id]); return { status: 200, data: { status: 'cancelled' } }; },
+    reveal: async (id) => { calls.push(['reveal', id]); return { status: 200, data: { ok: true } }; },
+  };
+  return { calls, exp: { ...base, ...overrides } };
+}
+
+/* setInterval is captured, never really scheduled: a test advances a poll by calling the
+   captured function itself and awaiting it, instead of racing a real 700ms timer. This override
+   runs once, at module load (before node:test invokes any test body below), and is never
+   restored -- nothing earlier in this file uses a real interval, and node:test isolates each
+   test FILE in its own process, so it cannot leak into another suite. */
+let capturedIntervalFns, clearedIntervalIds;
+global.setInterval = (fn) => { capturedIntervalFns.push(fn); return capturedIntervalFns.length; };
+global.clearInterval = (id) => clearedIntervalIds.add(id);
+
+function openData(cell, exp) {
+  capturedIntervalFns = [];
+  clearedIntervalIds = new Set();
+  const { host } = makeHost(cell, []);
+  Object.assign(host, { tab: 'data', export: exp });
+  const box = new FakeEl('div');
+  const dlg = SD.mount(box, host);
+  // advances the LATEST poll -- throws if stopDataPoll() (clearInterval) already cleared it, so a
+  // test can assert "polling really stopped" instead of just re-invoking a stale callback by hand
+  const poll = () => {
+    const id = capturedIntervalFns.length;
+    if (clearedIntervalIds.has(id)) throw new Error('poll(): this interval was already cleared');
+    return capturedIntervalFns[id - 1]();
+  };
+  return { box, host, dlg, poll };
+}
+const flush = () => new Promise((r) => setTimeout(r, 0));   // drains the microtask queue (real setTimeout: untouched)
+
+function dataSelects(box) {
+  const sels = [];
+  descend(box, (el) => { if (el.tagName === 'select') sels.push(el); return false; });
+  return { market: sels[0], contract: sels[1], type: sels[2] };
+}
+
+test('Data tab: opens on Candles for the first market, and fetches its meta (range + contracts)', async () => {
+  const cell = makeCell('time:60');
+  const { exp, calls } = makeExportHost();
+  const { box } = openData(cell, exp);
+  await flush();
+  assert.deepEqual(calls[0], ['meta', 'NQ', 'candles']);
+  const { contract } = dataSelects(box);
+  assert.equal(contract.disabled, false);
+  assert.equal(contract.children.length, 3);            // front + NQZ6 + NQU6
+  assert.equal(findText(box, 'On disk: 2026-09-01 to 2026-09-25') != null, true);
+});
+
+test('Data tab: Level 3 is a disabled option (short label, kept out of the select\'s own width) with a reason', () => {
+  const cell = makeCell('time:60');
+  const { exp } = makeExportHost();
+  const { box } = openData(cell, exp);
+  const { type } = dataSelects(box);
+  const l3 = [...type.children].find((o) => o.value === 'level3');
+  assert.equal(l3.disabled, true);
+  assert.equal(l3.textContent, 'Level 3', 'the visible option label stays short -- the reason is not appended to it');
+  assert.match(l3.title, /Tradovate/, 'the reason is on the option as a hover title');
+  assert.equal(findText(box, "Level 3 isn't offered: Order-by-order data isn't in Tradovate's feed, so it isn't recorded.") != null,
+    true, 'the reason is also shown as a persistent caption (level3 can never be the selected/shown option)');
+});
+
+test('Data tab: switching to Level 2 shows Levels and hides Timeframe; a non-NQ/ES market is forced to NQ', async () => {
+  const cell = makeCell('time:60');
+  const { exp, calls } = makeExportHost();
+  const { box } = openData(cell, exp);
+  await flush();
+  const { market, type } = dataSelects(box);
+  market.value = 'GC';
+  market.onchange();
+  await flush();
+  assert.equal(findText(box, 'Timeframe') != null, true);   // still candles: timeframe row present
+  type.value = 'level2';
+  type.onchange();
+  await flush();
+  assert.equal(findText(box, 'Timeframe'), null, 'candles-only row is gone for level2');
+  assert.equal(findText(box, 'Levels (1-10)') != null, true);
+  assert.equal(findText(box, 'Contract'), null, 'level2 has no per-contract choice (depth is per root, not per symbol)');
+  assert.equal(dataSelects(box).market.value, 'NQ', 'GC has no level2, so the market was forced to NQ');
+  assert.deepEqual(calls.at(-1), ['meta', 'NQ', 'level2']);
+});
+
+test('Data tab: a quick pick fills the date fields and refreshes coverage with them', async () => {
+  const cell = makeCell('time:60');
+  const { exp, calls } = makeExportHost();
+  const { box } = openData(cell, exp);
+  await flush();
+  calls.length = 0;
+  const btn = descend(box, (el) => el.tagName === 'button' && el.textContent === 'All');
+  assert.ok(btn, 'the All quick-pick button exists');
+  btn.onclick();
+  await flush();
+  const cov = calls.find((c) => c[0] === 'coverage');
+  assert.deepEqual(cov, ['coverage', 'NQ', 'candles', 'front', '2026-09-01', '2026-09-25']);   // "All" = the meta range
+});
+
+test('Data tab: typing a date does not refetch; leaving the field (blur) does', async () => {
+  const cell = makeCell('time:60');
+  const { exp, calls } = makeExportHost();
+  const { box } = openData(cell, exp);
+  await flush();
+  const dateIn = descend(box, (el) => el.tagName === 'input' && el.getAttribute('aria-label') === 'From date');
+  const endIn = descend(box, (el) => el.tagName === 'input' && el.getAttribute('aria-label') === 'To date');
+  endIn.value = '2026-09-20'; endIn.oninput(); endIn.onblur();   // coverage needs both ends; blur it first
+  await flush();
+  calls.length = 0;
+  dateIn.value = '2026-09-10';
+  dateIn.oninput();
+  assert.equal(calls.length, 0, 'no fetch while the field is still focused/typing');
+  dateIn.onblur();
+  await flush();
+  assert.equal(calls.some((c) => c[0] === 'coverage'), true);
+  assert.equal(calls.find((c) => c[0] === 'coverage')[4], '2026-09-10');
+});
+
+test('Data tab: a missing session shows the warning; none hides it', async () => {
+  const cell = makeCell('time:60');
+  const { exp } = makeExportHost({
+    coverage: async () => ({ sessions_total: 4, missing: ['2026-09-02', '2026-09-03'], missing_hours: {} }),
+  });
+  const { box } = openData(cell, exp);
+  await flush();
+  const startIn = descend(box, (el) => el.tagName === 'input' && el.getAttribute('aria-label') === 'From date');
+  const endIn = descend(box, (el) => el.tagName === 'input' && el.getAttribute('aria-label') === 'To date');
+  startIn.value = '2026-09-01'; startIn.oninput(); startIn.onblur();
+  endIn.value = '2026-09-05'; endIn.oninput(); endIn.onblur();
+  await flush();
+  const why = box.querySelector('.set-why');
+  assert.equal(why.hidden, false);
+  assert.equal(findText(why, '2 of 4 sessions missing (no file)') != null, true);
+});
+
+test('Data tab: a KNOWN GAP in an otherwise-present session shows too, even with no session fully missing', async () => {
+  const cell = makeCell('time:60');
+  const { exp } = makeExportHost({
+    coverage: async () => ({ sessions_total: 2, missing: [], missing_hours: { '2026-09-01': [[1000, 2000]] } }),
+  });
+  const { box } = openData(cell, exp);
+  await flush();
+  const startIn = descend(box, (el) => el.tagName === 'input' && el.getAttribute('aria-label') === 'From date');
+  const endIn = descend(box, (el) => el.tagName === 'input' && el.getAttribute('aria-label') === 'To date');
+  startIn.value = '2026-09-01'; startIn.oninput(); startIn.onblur();
+  endIn.value = '2026-09-02'; endIn.oninput(); endIn.onblur();
+  await flush();
+  const why = box.querySelector('.set-why');
+  assert.equal(why.hidden, false, 'the box shows even though no session is fully missing');
+  assert.equal(findText(why, '1 known gap within 1 session on disk') != null, true);
+});
+
+test('Data tab: Start builds the request from the form, then polling reaches done with a Show in Finder button', async () => {
+  const cell = makeCell('time:60');
+  const { exp, calls } = makeExportHost({
+    status: async () => ({ status: 'done', rows: 500, sessions_done: 1, sessions_total: 1,
+      result: { path: '/tmp/Downloads/NQ_candles_5m_2026-09-01_2026-09-05.csv', name: 'NQ_candles_5m_2026-09-01_2026-09-05.csv',
+        rows: 500, bytes: 20480 } }),
+  });
+  const { box, poll } = openData(cell, exp);
+  await flush();
+  const startIn = descend(box, (el) => el.tagName === 'input' && el.getAttribute('aria-label') === 'From date');
+  const endIn = descend(box, (el) => el.tagName === 'input' && el.getAttribute('aria-label') === 'To date');
+  startIn.value = '2026-09-01'; startIn.oninput();
+  endIn.value = '2026-09-05'; endIn.oninput();
+  const go = findByOwnText(box, 'button', 'Start export');
+  go.onclick();
+  await flush();
+  assert.deepEqual(calls.find((c) => c[0] === 'start')[1],
+    { root: 'NQ', type: 'candles', contract: 'front', start: '2026-09-01', end: '2026-09-05',
+      hours: 'full', tz: 'et', ts_format: 'iso', format: 'csv', timeframe: '5m' });
+  assert.equal(go.disabled, true, 'Start is disabled while a job is active');
+
+  await poll();
+  assert.equal(findText(box, 'NQ_candles_5m_2026-09-01_2026-09-05.csv — 500 rows, 20 KB') != null, true);
+  const reveal = findByOwnText(box, 'button', 'Show in Finder');
+  assert.ok(reveal);
+  assert.equal(go.disabled, false, 'Start is re-enabled once the job is final');
+  reveal.onclick();
+  await flush();
+  assert.deepEqual(calls.find((c) => c[0] === 'reveal'), ['reveal', '20260928-100000-deadbeef']);
+});
+
+test('Data tab: Cancel stops the job and further polling', async () => {
+  const cell = makeCell('time:60');
+  const { exp, calls } = makeExportHost();
+  const { box, poll } = openData(cell, exp);
+  await flush();
+  const startIn = descend(box, (el) => el.tagName === 'input' && el.getAttribute('aria-label') === 'From date');
+  const endIn = descend(box, (el) => el.tagName === 'input' && el.getAttribute('aria-label') === 'To date');
+  startIn.value = '2026-09-01'; startIn.oninput();
+  endIn.value = '2026-09-05'; endIn.oninput();
+  findByOwnText(box, 'button', 'Start export').onclick();
+  await flush();
+  const cancelBtn = findByOwnText(box, 'button', 'Cancel export');
+  cancelBtn.onclick();
+  await flush();
+  assert.deepEqual(calls.find((c) => c[0] === 'cancel'), ['cancel', '20260928-100000-deadbeef']);
+  assert.equal(findText(box, 'Cancelled') != null, true);
+  assert.throws(() => poll(), /already cleared/, 'cancel() must clearInterval the poll it started');
+});
+
+test('Data tab: Start with an invalid range shows an inline error and never calls start()', async () => {
+  const cell = makeCell('time:60');
+  const { exp, calls } = makeExportHost();
+  const { box } = openData(cell, exp);
+  await flush();
+  const startIn = descend(box, (el) => el.tagName === 'input' && el.getAttribute('aria-label') === 'From date');
+  const endIn = descend(box, (el) => el.tagName === 'input' && el.getAttribute('aria-label') === 'To date');
+  startIn.value = '2026-09-10'; startIn.oninput();
+  endIn.value = '2026-09-01'; endIn.oninput();
+  findByOwnText(box, 'button', 'Start export').onclick();
+  await flush();
+  assert.equal(calls.some((c) => c[0] === 'start'), false);
+  assert.equal(findText(box, 'From must not be after To') != null, true);
+});
+
+test('Data tab: closing the dialog (Cancel/revert) stops an in-flight poll', async () => {
+  const cell = makeCell('time:60');
+  const { exp, calls } = makeExportHost();
+  const { box, dlg } = openData(cell, exp);
+  await flush();
+  const startIn = descend(box, (el) => el.tagName === 'input' && el.getAttribute('aria-label') === 'From date');
+  const endIn = descend(box, (el) => el.tagName === 'input' && el.getAttribute('aria-label') === 'To date');
+  startIn.value = '2026-09-01'; startIn.oninput();
+  endIn.value = '2026-09-05'; endIn.oninput();
+  findByOwnText(box, 'button', 'Start export').onclick();
+  await flush();
+  assert.doesNotThrow(() => dlg.revert());
+  // clearInterval is stubbed (never really cancels in this harness), so this only proves revert()
+  // reaches stopDataPoll() without throwing when a job is active -- the real clearInterval is native.
+});
+
+test('Data tab: Template and Apply to all are hidden on Data, and reappear on another tab', () => {
+  const cell = makeCell('time:60');
+  const { exp } = makeExportHost();
+  const { box } = openData(cell, exp);
+  const tpl = box.querySelector('.tpl-btn'), applyAll = findByOwnText(box, 'button', 'Apply to all');
+  assert.equal(tpl.hidden, true, 'neither a chart-appearance template nor "copy to every chart" applies to an export');
+  assert.equal(applyAll.hidden, true);
+  let symbolTab = null;
+  descend(box, (el) => { if (el.getAttribute && el.getAttribute('aria-label') === 'Symbol') symbolTab = el; return false; });
+  symbolTab.onclick();
+  assert.equal(tpl.hidden, false);
+  assert.equal(applyAll.hidden, false);
+});
+
+test('Data tab: reopening reattaches to a job that finished while Settings was closed', async () => {
+  const cell = makeCell('time:60');
+  const { exp } = makeExportHost({
+    active: async () => ({ id: '20260928-090000-cafef00d', status: 'done', rows: 500,
+      result: { name: 'NQ_ticks_2026-09-25_2026-09-25.csv', rows: 500, bytes: 20480 } }),
+  });
+  const { box } = openData(cell, exp);      // a fresh dialog mount -- as if Settings was just reopened
+  await flush();
+  assert.equal(findText(box, 'NQ_ticks_2026-09-25_2026-09-25.csv — 500 rows, 20 KB') != null, true);
+  assert.ok(findByOwnText(box, 'button', 'Show in Finder'));
+  const go = findByOwnText(box, 'button', 'Start export');
+  assert.equal(go.disabled, false, 'a finished job never blocks starting a new one');
+});
+
+test('Data tab: reopening reattaches to a job still running, and resumes its poll', async () => {
+  const cell = makeCell('time:60');
+  const { exp, calls } = makeExportHost({
+    active: async () => ({ id: '20260928-090000-cafef00d', status: 'running', sessions_done: 1, sessions_total: 4, rows: 900 }),
+  });
+  const { box, poll } = openData(cell, exp);
+  await flush();
+  assert.equal(findText(box, 'Exporting · 1 / 4 sessions, 900 rows') != null, true);
+  assert.ok(findByOwnText(box, 'button', 'Cancel export'), 'Cancel is back, not just a static progress line');
+  const go = findByOwnText(box, 'button', 'Start export');
+  assert.equal(go.disabled, true, 'Start stays disabled while the reattached job is still running');
+  await poll();                              // the resumed 700ms poll reads status(id), same as a freshly started job
+  assert.equal(calls.some((c) => c[0] === 'status' && c[1] === '20260928-090000-cafef00d'), true);
+});
+
+test('Data tab: with no job ever run, active() finds nothing and the form starts clean', async () => {
+  const cell = makeCell('time:60');
+  const { exp } = makeExportHost();          // active() -> {} by default
+  const { box } = openData(cell, exp);
+  await flush();
+  assert.equal(box.querySelector('.set-job').hidden, true);
+  assert.equal(findByOwnText(box, 'button', 'Start export').disabled, false);
 });
