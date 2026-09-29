@@ -140,3 +140,75 @@ from tests.test_engine import FakeAdapter  # noqa: E402
 from tests.test_token_renewal import iso  # noqa: E402
 
 
+def test_the_shared_token_lands_in_every_sharing_entrys_file(tmp_path, monkeypatch):
+    mk = lambda aid: TradovateAdapter(aid, env="demo", keyring_key="tv:demo:apex",  # noqa: E731
+                                      state_dir=tmp_path, share_auth=True)
+    a, b, c = mk("a"), mk("b"), mk("c")
+    exp = dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=80)
+    a._auth.tokens = TradovateTokens(access_token="T", md_access_token="MD",
+                                     expiration_time=iso(exp))
+    a._auth._persist_tokens()
+    monkeypatch.setattr(ticks, "state_dir", lambda: tmp_path)
+    got = ticks._valid_md_tokens([("b", None), ("c", None)])     # "a" removed: still fine
+    assert [(g[0], g[2]) for g in got] == [("b", "MD"), ("c", "MD")]
+    c.go_private()                                               # a private entry: its own file
+    a._auth.tokens.md_access_token = "MD2"
+    a._auth._persist_tokens()
+    assert [g[2] for g in ticks._valid_md_tokens([("b", None), ("c", None)])] == ["MD2", "MD"]
+
+
+def test_go_private_leaves_the_shared_token_alone(tmp_path):
+    mk = lambda aid: TradovateAdapter(aid, env="demo", keyring_key="tv:demo:apex",  # noqa: E731
+                                      state_dir=tmp_path, share_auth=True)
+    a, b = mk("a"), mk("b")
+    shared = a._auth
+    shared.tokens = TradovateTokens(access_token="SHARED")
+    b.login_budget = LoginBudget()
+    b.go_private()
+    assert b._auth is not shared and b._auth.tokens is None and not b.auth_shared
+    assert a.auth_shared and shared.tokens.access_token == "SHARED"
+    assert b._auth.login_guard is not None                       # its login is budgeted
+    b._auth.login = lambda u, p: setattr(b._auth, "tokens", TradovateTokens("PRIVATE"))
+    b._auth.login("u", "p")
+    assert shared.tokens.access_token == "SHARED"                # never re-rolled
+    b2 = mk("b")                                                 # a new process shares again
+    assert b2.auth_shared
+
+
+class _SharedFake(FakeAdapter):
+    def __init__(self, aid):
+        super().__init__(aid)
+        self.auth_shared, self.privates = True, 0
+
+    def go_private(self):
+        self.privates += 1
+        self.auth_shared = False
+
+
+@pytest.mark.parametrize("err, private, logins", [
+    ("authorize failed: {'s': 401, 'd': 'Access is denied'}", 1, 1),   # refused: private login
+    ("authorize failed: {'s': 429, 'd': None}", 0, 0),                 # 429: cool-down, nothing
+])
+def test_a_sibling_refused_on_the_shared_token(desk, err, private, logins):
+    ad = _SharedFake("live")
+    desk.adapters["live"] = ad
+    ad._connected, ad._auth = False, NS(tokens=NS(access_token="SHARED",
+                                                 expires_at_unix=desk.clock.t + 3600))
+    n = {"login": 0}
+
+    async def reconnect():
+        raise RuntimeError(err)
+
+    async def connect():
+        n["login"] += 1
+        ad._connected = True
+
+    ad.reconnect, ad.connect = reconnect, connect
+    try:
+        run(desk.app.state.connect_account("live"))
+    except Exception:  # noqa: BLE001 — the 429 path is deferred
+        pass
+    assert ad.privates == private and n["login"] == logins
+    assert (desk.app.state.login_budget.cooling(KEY) > 0) is (private == 0)
+
+

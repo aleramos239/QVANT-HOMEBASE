@@ -241,6 +241,25 @@ class TradovateAdapter(BrokerAdapter):
         self._contract_failed: dict = {}          # contractId -> unix time contract/item failed
 
     @property
+    def auth_shared(self) -> bool:
+        """True while this entry rides its login's shared token."""
+        return _SHARED_AUTHS.get((self.keyring_key, self.env)) is self._auth
+
+    def go_private(self) -> None:
+        """Leave the shared token for a private one (no token yet: the next connect logs
+        in on it, under the budget). For a sibling whose socket the shared token was
+        refused on: its login must never re-roll the token every other entry rides.
+        Private stays private (until a restart)."""
+        shared = self._auth
+        if not self.auth_shared:
+            return
+        with contextlib.suppress(ValueError, AttributeError):
+            shared.persist_paths.remove(self._token_path)
+        self._auth = TradovateAuth(env=self.env, token_persist_path=self._token_path,
+                                   device_persist_path=self._device_path)
+        self.login_budget = self._login_budget        # re-wire the refresh's login guard
+
+    @property
     def login_budget(self):
         return self._login_budget
 

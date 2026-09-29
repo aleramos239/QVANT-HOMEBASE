@@ -33,7 +33,7 @@ from fastapi.staticfiles import StaticFiles
 from . import config as config_mod
 from . import secrets_store
 from .broker.base import AccountNotOnLogin, BrokerAdapter, OrderRequest
-from .broker.login_budget import LoginBudget, LoginDeferred
+from .broker.login_budget import LoginBudget, LoginDeferred, is_rate_limited
 from .broker.tradovate import RENEW_EARLY_FROM, RENEW_QUIET, TradovateAdapter
 from .engine import Engine, _hhmm
 from .feed import MarketFeed
@@ -558,6 +558,12 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                 raise
             except Exception as e:  # noqa: BLE001 — fall back to a real login
                 budget.note_error(key, e)          # a 429 cools the whole user down
+                if (getattr(ad, "auth_shared", False) and "authorize failed" in str(e)
+                        and not is_rate_limited(e)):
+                    # the shared token was refused on THIS socket: its login must never
+                    # re-roll the token every sibling rides -- a private one, budgeted
+                    ad.go_private()
+                    engine.journal("shared_token_refused", account=aid, error=str(e)[:200])
                 await _login(fell_back_from=e)
         else:
             await _login()
