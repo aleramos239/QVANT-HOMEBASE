@@ -212,3 +212,40 @@ def test_a_sibling_refused_on_the_shared_token(desk, err, private, logins):
     assert (desk.app.state.login_budget.cooling(KEY) > 0) is (private == 0)
 
 
+def _renew_pair(tmp_path, now, expires, renew_error=None):
+    a, auth, clock = mkadapter(tmp_path, now, expires, renew_error=renew_error)
+    b = TradovateAdapter("acct2", env="demo", keyring_key="k", state_dir=tmp_path)
+    b._auth = a._auth
+    b._ws, b._connected, b._now, b._ws_expires = Sock(), True, a._now, a._ws_expires
+    return a, b, auth, clock
+
+
+def test_siblings_skip_renewing_for_60s_after_a_failed_renewal(tmp_path):
+    a, b, auth, clock = _renew_pair(tmp_path, at(11, 0), at(11, 5), renew_error="HTTP 500")
+    with pytest.raises(RuntimeError):
+        run(a._renew_if_needed())
+    assert auth.renews == 1
+    assert run(b._renew_if_needed()) is False and auth.renews == 1    # held
+    clock["now"] = at(11, 1, 1)
+    with pytest.raises(RuntimeError):
+        run(b._renew_if_needed())
+    assert auth.renews == 2
+
+
+def test_a_cooling_user_renews_only_a_token_about_to_die(tmp_path):
+    a, auth, clock = mkadapter(tmp_path, at(11, 0), at(11, 8))       # due by the normal rule
+    budget = LoginBudget(clock=lambda: at(11, 0).timestamp())
+    budget.note_error("k", "status=429")
+    a.login_budget = budget
+    assert run(a._renew_if_needed()) is False and auth.renews == 0
+    assert a._rebuild_buffer_s(at(11, 0)) == tradovate.COOL_RENEW_WITHIN_S
+    clock["now"] = at(11, 5, 30)                                       # 2.5 min left
+    assert run(a._renew_if_needed()) is True and auth.renews == 1
+
+
+def test_a_cooling_user_keeps_the_0910_early_renewal(tmp_path):
+    a, auth, _ = mkadapter(tmp_path, at(9, 12), at(9, 40))
+    budget = LoginBudget(clock=lambda: at(9, 12).timestamp())
+    budget.note_error("k", "status=429")
+    a.login_budget = budget
+    assert run(a._renew_if_needed()) is True and auth.renews == 1

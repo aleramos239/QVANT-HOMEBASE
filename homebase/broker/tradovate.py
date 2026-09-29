@@ -169,6 +169,8 @@ def _reject_reason(d) -> str:
 # entry keeps its own socket and its own pinned account.
 _SHARED_AUTHS: dict = {}
 CONTRACT_RETRY_S = 60          # a failed contract/item is not asked again for this long
+COOL_RENEW_WITHIN_S = 180      # a 429'd user renews only a token that dies within this
+RENEW_FAIL_HOLD_S = 60         # after a failed renewal, siblings on the token wait this long
 
 
 class TradovateAdapter(BrokerAdapter):
@@ -321,7 +323,8 @@ class TradovateAdapter(BrokerAdapter):
             await self._renew_in_the_guard(now)      # bounded, renew only, never a login
         else:
             await self._renew_before_the_window(now)
-            await asyncio.to_thread(self._auth.ensure_valid, RENEW_BUFFER_S, now.timestamp())
+            await asyncio.to_thread(self._auth.ensure_valid, self._rebuild_buffer_s(now),
+                                    now.timestamp())
         await self._open_socket(close_old=False)      # closed above, before the renewal
         self._schedule_seed()
         if self._consumer is None or self._consumer.done():
@@ -1367,8 +1370,13 @@ class TradovateAdapter(BrokerAdapter):
                 _log(f"{self.account_id}: token renewal held at {clock} ({why}) — "
                      f"the socket's token expires at {until} ET")
             return False
+        if not stale and self._renewal_held(why, expires_at, now):
+            return False
         if not stale:
             async with self._renew_lock():
+                if self._auth.access_token == auth_token and self._renewal_held(
+                        why, expires_at, self._now()):
+                    return False            # a sibling's renewal failed while this one waited
                 if self._auth.access_token != auth_token:
                     # a sibling on the same login renewed while this one waited: no second
                     # renewal -- this socket is simply on an older token, dropped by the
@@ -1425,12 +1433,40 @@ class TradovateAdapter(BrokerAdapter):
                 pass
         return lk
 
+    def _cooling(self) -> bool:
+        b = self._login_budget
+        return bool(b is not None and b.cooling(self.keyring_key))
+
+    def _renewal_held(self, why: str, expires_at: float, now: dt.datetime) -> bool:
+        """On top of renewal_due (unchanged): a token whose renewal failed under
+        RENEW_FAIL_HOLD_S ago is not renewed again by a sibling; while the user is in a 429
+        cool-down only a token dying within COOL_RENEW_WITHIN_S is (the 09:10 early
+        renewal is kept as it is: renew-only, one per token, it protects the fire)."""
+        left = expires_at - now.timestamp()
+        failed = getattr(self._auth, "renew_failed_at", 0.0) or 0.0
+        if now.timestamp() - failed < RENEW_FAIL_HOLD_S and left > 2 * RENEW_FAIL_HOLD_S:
+            return True
+        return why != "early" and self._cooling() and left > COOL_RENEW_WITHIN_S
+
+    def _rebuild_buffer_s(self, now: dt.datetime) -> float:
+        """ensure_valid's buffer for an in-place rebuild: the normal RENEW_BUFFER_S, but
+        only COOL_RENEW_WITHIN_S while the user cools down or a renewal just failed."""
+        failed = getattr(self._auth, "renew_failed_at", 0.0) or 0.0
+        if self._cooling() or now.timestamp() - failed < RENEW_FAIL_HOLD_S:
+            return COOL_RENEW_WITHIN_S
+        return RENEW_BUFFER_S
+
     async def _renew_now(self, why: str, expires_at: float, now: dt.datetime,
                          auth_token) -> None:
         # a renewal only the early rule asks for (RENEW_BUFFER_S still left): renew only
         # -- never spend a (rate-limited) login on it; a failure retries at the next check
         extra = why == "early" and expires_at - now.timestamp() >= RENEW_BUFFER_S
-        await asyncio.to_thread(self._auth.renew if extra else self._auth.refresh)
+        try:
+            await asyncio.to_thread(self._auth.renew if extra else self._auth.refresh)
+        except Exception:
+            with contextlib.suppress(Exception):
+                self._auth.renew_failed_at = self._now().timestamp()
+            raise
 
     async def _keepalive_loop(self) -> None:
         try:
