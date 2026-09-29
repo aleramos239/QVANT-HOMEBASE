@@ -9,7 +9,7 @@
     document.documentElement.setAttribute('data-theme', (_t === 'light' || _t === 'dark') ? _t : 'light');
   } catch (_) { document.documentElement.setAttribute('data-theme', 'light'); }
 </script>
-<link rel="stylesheet" href="/static/charts/charts.css?v=29">
+<link rel="stylesheet" href="/static/charts/charts.css?v=30">
 </head>
 <body>
 <div class="tabrow">
@@ -25,8 +25,7 @@
   <span class="tb-sep"></span>
   <button class="tb-btn" id="tbIndicators" type="button" title="Indicators"><span class="icw" data-icon="indicators"></span><span class="tb-label">Indicators</span></button>
   <span class="tb-sep"></span>
-  <button class="tb-btn" id="tbReplay" type="button" title="Bar Replay" aria-haspopup="menu" aria-expanded="false"><span class="icw" data-icon="history"></span><span class="tb-label">Replay</span></button>
-  <span class="tb-sep"></span>
+  <!-- 2026-09-28 three-tabs plan: Bar Replay moved to the Backtest tab (its own #tbReplay there) -->
   <button class="tb-btn" id="tbGrid" type="button" title="Chart layout" aria-haspopup="menu" aria-expanded="false"><span class="thumb" id="tbGridThumb"></span><span class="icw sm" data-icon="chevron"></span></button>
   <span class="tb-spacer"></span>
   <button class="tb-btn" id="tbOrder" type="button" title="Order panel" aria-pressed="false" aria-controls="panel-order"><span class="icw" data-icon="panelRight"></span><span class="tb-label">Order</span></button>
@@ -76,45 +75,43 @@
 <div id="menuRoot"></div>
 <div id="dialogRoot"></div>
 <div class="rail-tip" id="railTip" role="status" hidden></div>
-<script src="/static/nobacknav.js?v=29"></script>
-<script src="/static/vendor/lightweight-charts-5.2.1.js?v=29"></script>
-<script src="/static/charts/icons.js?v=29"></script>
-<script src="/static/charts/spring.js?v=29"></script>
-<script src="/static/charts/catalog.js?v=29"></script>
-<script src="/static/charts/primitives.js?v=29"></script>
-<script src="/static/charts/drawstyle.js?v=29"></script>
-<script src="/static/charts/drawings.js?v=29"></script>
-<script src="/static/charts/position.js?v=29"></script>
-<script src="/static/charts/settings.js?v=29"></script>
-<script src="/static/charts/events.js?v=29"></script>
-<script src="/static/charts/news.js?v=29"></script>
-<script src="/static/charts/scrollback.js?v=29"></script>
-<script src="/static/charts/cell.js?v=29"></script>
-<script src="/static/charts/settings-dialog.js?v=29"></script>
-<script src="/static/charts/indicator-settings-dialog.js?v=29"></script>
-<script src="/static/charts/chartmenu.js?v=29"></script>
-<script src="/static/charts/trade.js?v=29"></script>
-<script src="/static/charts/fillquality.js?v=29"></script>
-<script src="/static/charts/deskclient.js?v=29"></script>
-<script src="/static/charts/paperclient.js?v=29"></script>
-<script src="/static/charts/dom.js?v=29"></script>
-<script src="/static/charts/domui.js?v=29"></script>
-<script src="/static/charts/panel.js?v=29"></script>
-<script src="/static/charts/tradeui.js?v=29"></script>
-<script src="/static/charts/tradelines.js?v=29"></script>
-<script src="/static/charts/newsui.js?v=29"></script>
-<script src="/static/charts/tester.js?v=29"></script>
-<script src="/static/charts/testerui.js?v=29"></script>
-<script src="/static/charts/testerlayer.js?v=29"></script>
-<script src="/static/charts/l2layer.js?v=29"></script>
-<script src="/static/charts/liquidity.js?v=29"></script>
-<script src="/static/charts/replay.js?v=29"></script>
-<script src="/static/charts/replayui.js?v=29"></script>
-<script src="/static/charts/orderpanel.js?v=29"></script>
-<script src="/static/charts/panellayout.js?v=29"></script>
-<script src="/static/charts/panelshell.js?v=29"></script>
-<script src="/static/charts/layouts.js?v=29"></script>
-<script src="/static/charts/presets.js?v=29"></script>
-<script src="/static/charts/app.js?v=29"></script>
+<script src="/static/nobacknav.js?v=30"></script>
+<script src="/static/vendor/lightweight-charts-5.2.1.js?v=30"></script>
+<script src="/static/charts/icons.js?v=30"></script>
+<script src="/static/charts/spring.js?v=30"></script>
+<script src="/static/charts/catalog.js?v=30"></script>
+<script src="/static/charts/primitives.js?v=30"></script>
+<script src="/static/charts/drawstyle.js?v=30"></script>
+<script src="/static/charts/drawings.js?v=30"></script>
+<script src="/static/charts/position.js?v=30"></script>
+<script src="/static/charts/settings.js?v=30"></script>
+<script src="/static/charts/events.js?v=30"></script>
+<script src="/static/charts/news.js?v=30"></script>
+<script src="/static/charts/scrollback.js?v=30"></script>
+<script src="/static/charts/cell.js?v=30"></script>
+<script src="/static/charts/settings-dialog.js?v=30"></script>
+<script src="/static/charts/indicator-settings-dialog.js?v=30"></script>
+<script src="/static/charts/chartmenu.js?v=30"></script>
+<script src="/static/charts/tradepure.js?v=30"></script>
+<script src="/static/charts/trade.js?v=30"></script>
+<script src="/static/charts/fillquality.js?v=30"></script>
+<script src="/static/charts/deskclient.js?v=30"></script>
+<script src="/static/charts/paperclient.js?v=30"></script>
+<script src="/static/charts/dom.js?v=30"></script>
+<script src="/static/charts/domui.js?v=30"></script>
+<script src="/static/charts/panel.js?v=30"></script>
+<script src="/static/charts/tradeui.js?v=30"></script>
+<script src="/static/charts/tradelines.js?v=30"></script>
+<script src="/static/charts/newsui.js?v=30"></script>
+<!-- 2026-09-28 three-tabs plan: Strategy Tester + Bar Replay moved to the Backtest tab
+     (backtest.html loads tester.js/testerui.js/testerlayer.js/replay.js/replayui.js) -->
+<script src="/static/charts/l2layer.js?v=30"></script>
+<script src="/static/charts/liquidity.js?v=30"></script>
+<script src="/static/charts/orderpanel.js?v=30"></script>
+<script src="/static/charts/panellayout.js?v=30"></script>
+<script src="/static/charts/panelshell.js?v=30"></script>
+<script src="/static/charts/layouts.js?v=30"></script>
+<script src="/static/charts/presets.js?v=30"></script>
+<script src="/static/charts/app.js?v=30"></script>
 </body>
 </html>

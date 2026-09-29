@@ -95,3 +95,16 @@ test('panel.js gives the Backtest tab its own bottom-panel storage key and defau
   assert.ok(p.includes("IS_BACKTEST ? 'hb_panel_backtest' : 'hb_panel'"));
   assert.ok(p.includes('isOpen = saved ? saved.open === true : IS_BACKTEST'));
 });
+
+/* Regression (caught only by the headless-browser check, not by node --test: panel.js's own
+   module-top-level `Object.keys(T.BOT_NAMES)` and its five unconditional addTab() calls for
+   Positions/Orders/Fills/Accounts/Fill quality threw / registered on the Backtest tab, since T
+   (HBTrade) is never loaded there -- the crash aborted panel.js before it ever set window.HBPanel,
+   which then made testerui.js's own mount() throw too ("Cannot read properties of undefined
+   (reading 'addTab')"). Node's require()-based tests never caught this because trade.js's need()
+   helper falls back to a real require() in Node, masking exactly the case a <script> tag can't. */
+test('panel.js never dereferences T (HBTrade) unconditionally, and its five built-in trading tabs are gated on it', () => {
+  const p = src('panel.js');
+  assert.ok(p.includes('const BOT_KEYS = T ? Object.keys(T.BOT_NAMES) : [];'));
+  assert.ok(p.includes("if (T) {\n  addTab({ id: 'positions'"));
+});
