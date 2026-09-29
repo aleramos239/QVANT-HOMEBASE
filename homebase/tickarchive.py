@@ -525,6 +525,8 @@ def verified_spans(sources: list[dict]) -> list[tuple[int, int]]:
         if s.get("kind") != "history" or not s.get("to_utc"):
             continue
         hi = s.get("resumed_from_ms") or ms_of(s["to_utc"])
+        if s.get("stop") == "exhausted" and s.get("earliest_ms") is None and not s.get("confirmed"):
+            continue                    # one empty reply vouches for nothing: asked again next run
         if s.get("stop") in ("reached", "exhausted") and s.get("from_utc"):
             lo = ms_of(s["from_utc"])
         elif s.get("earliest_ms") is not None:

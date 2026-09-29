@@ -313,3 +313,18 @@ def test_store_remembers_a_refusal_with_the_files_stamps(tmp_path, capsys):
     assert T.missing("NQ", D, tmp_path, nw, cache)[0] == []    # left alone ...
     path.write_bytes(b"someone fixed it, or not")
     assert not T.refused_still(cache, "NQ", D, path)            # ... until its file changes
+
+
+def test_one_empty_reply_is_asked_again_once_before_it_is_believed(tmp_path, monkeypatch):
+    """Review 9: a stretch was vouched for (never asked again) on a single empty
+    reply -- which a glitch can give as well as a quiet market."""
+    nw = NoWait(monkeypatch, now=dt.datetime(2026, 9, 29, 10, 10, tzinfo=ET))
+    broker = HistoryWindow(nw, {"NQZ6": []}, page=100)
+    monkeypatch.setattr(T, "fetch_page", broker.pager)
+    cache = {}
+    for _ in range(3):
+        nw.now = dt.datetime(2026, 9, 29, 10, 10, tzinfo=ET)       # the same stretch each time
+        run(T.record(roots=("NQ",), dates=[D], base=tmp_path, ws=object(), cache=cache, day=True))
+    one_run = len(broker.asked) // 2
+    assert len(broker.asked) == 2 * one_run and one_run >= 1   # runs 1 and 2 asked, run 3 did not
+    assert cache[T.ASKED] and not cache.get(T.EMPTY_ONCE)

@@ -480,9 +480,10 @@ def test_a_live_recording_is_merged_even_when_nothing_is_left_to_fetch(tmp_path,
     assert len(out) == 1 and _ids(path) == [r["id"] for r in ticks[:100]]
     assert "live recording merged (100 ticks, 100 the archive lacked)" in capsys.readouterr().out
     asked = len(broker.asked)
-    nw.now = dt.datetime(2026, 9, 28, 5, 30, tzinfo=ET)      # the same moment: nothing new has happened
-    assert run(T.record(roots=("NQ",), base=tmp_path, ws=object(), cache=cache)) == []   # already in
-    assert len(broker.asked) == asked                        # the broker had nothing: not asked again
+    for _ in range(2):   # the broker's one empty reply is asked once more (review 9), then believed
+        nw.now = dt.datetime(2026, 9, 28, 5, 30, tzinfo=ET)  # the same moment: nothing new has happened
+        assert run(T.record(roots=("NQ",), base=tmp_path, ws=object(), cache=cache)) == []   # already in
+    assert len(broker.asked) == 2 * asked
     _write_live(lp, ticks[100:130])                            # the recorder appended
     out = run(T.record(roots=("NQ",), base=tmp_path, ws=object(), cache=cache))
     assert _ids(path) == [r["id"] for r in ticks[:130]] and out[0]["ticks"] == 130

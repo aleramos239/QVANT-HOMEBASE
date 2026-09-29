@@ -599,6 +599,7 @@ QUIET = CHARTS_QUIET            # 09:20-09:35 ET, around the 9:30 fire: not one 
 _EMPTY = {"runs": []}
 ASKED = "_asked"                # cache key: stretches the broker had nothing for, and no file holds
 MD_USED = "_md"                 # cache key: this job's chart requests in the last hour (epoch s)
+EMPTY_ONCE = "_empty"           # cache key: stretches that got ONE empty reply (a second, later, vouches)
 
 
 def in_quiet(now: dt.datetime) -> bool:
@@ -761,6 +762,14 @@ async def record(roots=ROOTS, dates: list[dt.date] | None = None,
                 entry = {"kind": "history", "from_utc": s.astimezone(UTC).isoformat(),
                          "to_utc": e.astimezone(UTC).isoformat(), "why": why, "stop": stats["stop"],
                          "pages": stats["pages"], "earliest_ms": stats["earliest_ms"]}
+                empty = stats["stop"] == "exhausted" and stats["earliest_ms"] is None
+                if empty:           # the broker answered nothing at all: believed the second time only
+                    once = cache.setdefault(EMPTY_ONCE, {})
+                    k = f"{root} {_ms(s)} {date}"
+                    if once.pop(k, None) is not None:
+                        entry["confirmed"] = True
+                    else:
+                        once[k] = tickarchive.now_utc()
                 over = now_et() >= st["end"] + grace     # the live recording is final
                 n = len(rows)
                 fetched = [tickarchive.row_of(r) for r in rows]
@@ -770,7 +779,7 @@ async def record(roots=ROOTS, dates: list[dt.date] | None = None,
                 del fetched
                 if man is not None:
                     written[key] = man
-                elif n == 0 and stats["stop"] in ("reached", "exhausted"):
+                elif n == 0 and stats["stop"] in ("reached", "exhausted") and (not empty or entry.get("confirmed")):
                     # nothing there and no file to log it in: remember it, never ask again
                     lo = s if stats["stop"] == "reached" or stats["earliest_ms"] is None \
                         else _utc(stats["earliest_ms"])
@@ -867,7 +876,7 @@ def prune_cache(cache: dict, now: dt.datetime, days: int = LIVE_LOOKBACK_DAYS + 
     cut = (now.astimezone(ET).date() - dt.timedelta(days=days)).isoformat()
     for k in [k for k in cache if not k.startswith("_") and (Path(k).name[:10] < cut or not Path(k).exists())]:
         del cache[k]
-    for key in (ASKED, REFUSED):
+    for key in (ASKED, REFUSED, EMPTY_ONCE):
         d = cache.get(key, {})
         for k in [k for k in d if k.split(" ")[-1] < cut]:
             del d[k]
