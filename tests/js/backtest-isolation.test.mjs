@@ -108,3 +108,61 @@ test('panel.js never dereferences T (HBTrade) unconditionally, and its five buil
   assert.ok(p.includes('const BOT_KEYS = T ? Object.keys(T.BOT_NAMES) : [];'));
   assert.ok(p.includes("if (T) {\n  addTab({ id: 'positions'"));
 });
+
+/* Opus review (three-tabs): three more unguarded `T.` (HBTrade) call sites turned up in app.js after
+   the first isolation pass -- layoutBody (a new/renamed/autosaved layout tab), applySymbol (picking a
+   symbol from the toolbar search) and the chart menu's "Save this chart as template..." -- each one
+   crashed the instant it ran on the Backtest tab. Rather than hardcode that specific list (which the
+   NEXT miss, by definition, won't be on), this walks every top-level function in app.js and fails on
+   any `T.` dereference that isn't either self-guarded on its own line (`cond ? T.x() : ...` -- covers
+   `T ?` and the co-excluded-module ternaries like `window.HBPaperClient ?`, since HBPaperClient and T
+   are always loaded/excluded together) or covered by an earlier `if (...!T...) return` /
+   `if (!window.HBTradeUI) return` in the same function. `positionDialog`'s `const [E, T, S] =
+   d.points` is a local shadow (Entry/Target/Stop), not HBTrade, and is the one named exception; the
+   tradeCapabilities bundle (chartSettings) is gated as a whole (`window.HBTradeUI ? { ... } : {}`),
+   so its own T. references inside are skipped instead of needing their own guard, same as the file's
+   existing pattern. Run this over any other shared-shell file added to the T./Tr. family later, not
+   only app.js. */
+test('app.js: every T. (HBTrade) dereference is reachable only when T is defined', () => {
+  const text = src('app.js');
+  const lines = text.split('\n');
+
+  const capStartLine = lines.findIndex((l) => l.includes('const tradeCapabilities = window.HBTradeUI ? {'));
+  const capEndLine = lines.findIndex((l, i) => i > capStartLine && l.trim() === '} : {};');
+  assert.ok(capStartLine >= 0 && capEndLine > capStartLine, 'the tradeCapabilities bundle markers moved -- update this test');
+
+  const spans = [];
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^function (\w+)\(/.exec(lines[i]);
+    if (!m) continue;
+    let depth = 0, started = false, end = i;
+    for (let j = i; j < lines.length; j++) {
+      for (const ch of lines[j]) {
+        if (ch === '{') { depth++; started = true; }
+        else if (ch === '}') { depth--; }
+      }
+      if (started && depth <= 0) { end = j; break; }
+    }
+    spans.push({ start: i, end, name: m[1] });
+  }
+  assert.ok(spans.some((s) => s.name === 'layoutBody') && spans.some((s) => s.name === 'applySymbol'),
+    'function-span detection did not find known functions -- app.js\'s top-level function style changed');
+
+  const funcGuardRe = /if\s*\([^)]*\bT\b[^)]*\)\s*return|if\s*\(\s*!window\.HBTradeUI\)\s*return/;
+  const problems = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const tIdx = line.search(/\bT\./);
+    if (tIdx < 0) continue;
+    if (i >= capStartLine && i <= capEndLine) continue;   // the whole bundle is already gated
+    const span = spans.find((s) => i >= s.start && i <= s.end);
+    if (span && span.name === 'positionDialog') continue;   // local [E, T, S] shadow, not HBTrade
+    const qIdx = line.lastIndexOf('?', tIdx);
+    const selfGuarded = qIdx >= 0 && line.slice(qIdx, tIdx).indexOf(':') < 0;
+    if (selfGuarded) continue;
+    if (!span) { problems.push(`line ${i + 1}: T. outside any top-level function span: ${line.trim()}`); continue; }
+    const body = lines.slice(span.start, i + 1).join('\n');
+    if (!funcGuardRe.test(body)) problems.push(`line ${i + 1} (in ${span.name}): unguarded -- ${line.trim()}`);
+  }
+  assert.deepEqual(problems, []);
+});
