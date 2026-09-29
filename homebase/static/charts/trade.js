@@ -15,10 +15,13 @@
 const need = (name, file) => (typeof window !== 'undefined' && window[name]) || (typeof require === 'function' ? require(file) : null);
 const Cat = need('HBCatalog', './catalog.js');
 const Pos = need('HBPosition', './position.js');
+// 2026-09-28 three-tabs plan: the genuinely pure half of this file -- prefs parsing, bracket math,
+// money formatting -- lives in tradepure.js so pages with no trading module (the Backtest tab)
+// can use it without trade.js itself. Re-exported below unchanged; every existing caller here
+// keeps using the bare names exactly as before.
+const TP = need('HBTradePure', './tradepure.js');
+const { PREFS_KEY, parsePrefs, prefsText, bracket, roundTick, money, usd } = TP;
 
-const MINUS = '−';
-const PREFS_KEY = 'hb_trade_prefs';
-const QTY_MAX = 10000;          // a sanity clamp only: the desk's limits decide
 const BOT_NAMES = { nq930: '9:30 bot', ym930: '9:30 bot', nq10am: '10am bot' };
 const ET = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hourCycle: 'h23', hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
@@ -39,20 +42,12 @@ const isObj = (o) => !!o && typeof o === 'object' && !Array.isArray(o);
    over: it was stored OFF for nearly everyone, and the user wants these ON). `oneClick` itself stays the switch of every other
    path (a line's drag / ×, a position chip's exit drag, the chart menu, the bottom panel): the confirm's "Don't ask again".
    The SL/TP tick defaults are retired (no editor any more): always 0, whatever an old stored pref holds, so nothing
-   invisible can attach a bracket. `qty` is the chart block's quantity box. */
-function parsePrefs(text) {
-  let o = null;
-  try { o = JSON.parse(text); } catch (_) { o = null; }
-  if (!isObj(o)) o = {};
-  const ticked = idList(o.ticked);
-  const sw = (v) => (typeof v === 'boolean' ? v : true);   // ON until the user turns it off (the old single pref is not migrated)
-  return { ticked, oneClick: o.oneClick === true, oneClickChart: sw(o.oneClickChart), oneClickPanel: sw(o.oneClickPanel),
-    qty: int(o.qty, 1, QTY_MAX, 1), slTicks: 0, tpTicks: 0 };
-}
+   invisible can attach a bracket. `qty` is the chart block's quantity box.
+   `parsePrefs`/`prefsText`/`PREFS_KEY` themselves now live in tradepure.js (2026-09-28 three-tabs
+   plan) and are re-exported above unchanged -- PracticeSim reads the exact same stored prefs. */
 /* Which one-click switch a send surface reads: the chart block's, the order panel's, or (anything else) `oneClick`. */
 const ONE_CLICK_KEYS = { chart: 'oneClickChart', panel: 'oneClickPanel' };
 function oneClickKey(surface) { return ONE_CLICK_KEYS[surface] || 'oneClick'; }
-const prefsText = (p) => JSON.stringify(parsePrefs(JSON.stringify(p)));
 
 /* ---- names ---- */
 /* "…047": the last 3 characters of an account's label (or id) -- except the PAPER account, whose short name is
@@ -97,15 +92,7 @@ function inferType(side, price, q) {
   return b == null ? null : price <= b ? 'Stop' : 'Limit';
 }
 function menuText(side, qty, price, type, tick) { return `${side} ${qty} @ ${Cat.fmtPrice(price, tick)} ${type}`; }
-function roundTick(p, tick) { return tick > 0 ? Number((Math.round(p / tick) * tick).toFixed(Cat.decimals(tick))) : p; }
-
-/* SL/TP from the tick defaults (0 = off) around ref: the order's price, or the last trade for a Market order. */
-function bracket(side, ref, prefs, tick) {
-  if (ref == null || !(tick > 0)) return { sl: null, tp: null };
-  const s = side === 'Buy' ? 1 : -1;
-  return { sl: prefs.slTicks > 0 ? roundTick(ref - s * prefs.slTicks * tick, tick) : null,
-    tp: prefs.tpTicks > 0 ? roundTick(ref + s * prefs.tpTicks * tick, tick) : null };
-}
+// roundTick and bracket now live in tradepure.js (re-exported above, unchanged) -- PracticeSim needs bracket too.
 /* A Stop Limit's `price` is its limit and `trigger` its trigger (sent only with a Stop Limit). `tif` (Day | GTC) is
    sent only when given: the desk defaults to Day. */
 function orderBody({ clientId, accounts, root, side, qty, type, price = null, sl = null, tp = null, trigger = null, tif = null }) {
@@ -613,11 +600,7 @@ function sendLabel(side, qty, root, type) {
   return [side, qty >= 1 ? String(qty) : null, root, TYPE_WORDS[type] || String(type || '').toUpperCase()].filter(Boolean).join(' ');
 }
 /* ---- money ---- */
-const sign = (v) => (v > 0 ? '+' : v < 0 ? MINUS : '');
-/* "+$450" · "−$1,212.50" · "$0"; null when unknown. */
-function usd(v) { return v == null || !Number.isFinite(v) ? null : sign(Math.round(v * 100)) + Pos.fmtUsd(v); }
-/* Unsigned unless negative: "$50,000" · "−$3"; "—" when unknown. */
-function money(v) { return v == null || !Number.isFinite(v) ? '—' : (Math.round(v * 100) < 0 ? MINUS : '') + Pos.fmtUsd(v); }
+// sign/usd/money now live in tradepure.js (re-exported above, unchanged) -- the Strategy Tester needs money/usd too.
 /* qty contracts from `from` to `to`, s = 1 long / −1 short; null without a point value or a price. */
 function pnl(from, to, s, qty, pv) { return pv == null || from == null || to == null ? null : (to - from) * s * qty * pv; }
 function rrText(risk, reward) { return risk > 0 && reward > 0 ? `1:${Number((reward / risk).toFixed(2))}` : null; }
