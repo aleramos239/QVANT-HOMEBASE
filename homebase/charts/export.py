@@ -237,7 +237,11 @@ def columns(kind: str, levels: int = 10) -> list[str]:
 def _ordered(header: list[str], recs: list[list[str]], live: bool) -> list[list[str]]:
     """A live file's rows, deduped by id and re-sorted by (time, id) -- store.ticks_from_table's
     own live-refill rule, replicated here (not imported) because this keeps every raw column
-    (bid_size/ask_size), which ticks_from_table's Tick objects drop."""
+    (bid_size/ask_size), which ticks_from_table's Tick objects drop. Keep this in lock-step with
+    that function's dedup/sort rule -- tests/test_charts_export.py's
+    test_ordered_matches_ticks_from_table pins the two against the same fixture, so a divergence
+    fails loudly instead of silently mismatching ticks/level1 against what the live chart (and
+    TickStore.load) would show for the same session."""
     if not live:
         return recs
     idx = {k: i for i, k in enumerate(header)}

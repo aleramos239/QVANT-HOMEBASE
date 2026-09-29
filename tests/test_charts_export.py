@@ -21,7 +21,7 @@ import pytest
 
 from homebase.charts import export as E
 from homebase.charts.session import ET
-from homebase.charts.store import TickStore, gaps_path
+from homebase.charts.store import TickStore, gaps_path, read_table, ticks_from_table
 from tests.charts_util import D, rows, session_ms, write_archive, write_gz
 
 D2 = D + dt.timedelta(days=1)             # the next session (a Friday, D is a Thursday)
@@ -194,6 +194,35 @@ def test_front_month_rolls_per_session_and_an_explicit_contract_stays_pinned(tmp
     pinned = [row for d in (D, D2) for row in E.iter_candles(st, "NQ", d, "NQU6", spec, ts)]
     assert [round(row[1]) for row in pinned] == [100]               # D2 has no NQU6 file at all
     assert E.missing_ticks(st, "NQ", [D, D2], contract="NQU6") == [D2.isoformat()]
+
+
+# ---------------------------------------------------------------- _ordered vs. ticks_from_table
+
+def test_ordered_matches_ticks_from_table(tmp_path):
+    """export._ordered() is a hand-rolled copy of store.ticks_from_table's live dedup/sort rule
+    (kept separate so it can keep bid_size/ask_size, which ticks_from_table's Tick objects drop --
+    see both functions' docstrings). One fixture, fed to both: a duplicate id (a gap refill can
+    resend a row) and rows arriving out of time order, exactly what a live file's later flushes
+    can produce. If the two ever disagree, this fails -- not a silent mismatch between what an
+    export shows and what the live chart / TickStore.load would show for the same session."""
+    t0 = session_ms(D, 9, 30)
+    recs = (rows(t0, [100.0, 100.25, 100.5], first_id=1)          # ids 1, 2, 3 at t0, t0+1s, t0+2s
+            + rows(t0 + 500, [99.0], first_id=2)                    # id 2's RESEND (a gap refill):
+            + rows(t0 - 2000, [98.0], first_id=0))                  # id 0: an OLDER row, refilled late
+    path = write_gz(tmp_path / "f.live.csv.gz", recs)
+    header, raw = read_table(path)
+
+    got_ordered = E._ordered(header, raw, live=True)
+    idx = {k: i for i, k in enumerate(header)}
+    ordered_ids = [int(r[idx["id"]]) for r in got_ordered]
+
+    ticks, _ = ticks_from_table(header, raw, live=True)
+    tick_ids = [t.id for t in ticks]
+
+    # id 2's resend (the later, ts=t0+500ms copy) is dropped -- the FIRST-seen copy (ts=t0+1s)
+    # survives; id 0 (ts before everything else) sorts to the front
+    assert ordered_ids == tick_ids == [0, 1, 2, 3]
+    assert len(got_ordered) == len(ticks) == 4
 
 
 # ------------------------------------------------------------------------------------- ticks / L1
