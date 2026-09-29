@@ -1656,6 +1656,11 @@ function render() {
   $("#strats").innerHTML = Object.entries(s.strategies)
     .filter(([n]) => visibleNames.has(n))
     .map(([n, v]) => stratCard(n, v)).join("");
+  // the cards were rebuilt: an + Assign menu that lived in them is gone -- so is its hold on updates
+  if (ASG_OPEN && !document.contains(ASG_OPEN.menu)) {
+    ASG_OPEN = null;
+    if (!document.getElementById("qedit")) FREEZE = false;
+  }
   const hiddenCount = algoVis.filter(a => !a.visible).length;
   const hint = $("#algoHiddenHint");
   if (hiddenCount) {
@@ -1695,7 +1700,12 @@ async function refresh() {
     if (!res.ok) refused = `the desk answered HTTP ${res.status}` + (d && d.error ? ": " + String(d.error).slice(0, 80) : "");
     else if (!d || typeof d !== "object" || typeof d.armed !== "boolean") refused = "the desk's status was unreadable";
     if (refused) throw new Error(refused);
-    ST = d; DESK_STALE = false; LAST_FRESH = Date.now(); render();
+    ST = d; DESK_STALE = false; STALE_WHY = ""; LAST_FRESH = Date.now();
+    // (second review) a menu or size edit that opened while this was in flight is never wiped: the
+    // cards wait for the next refresh after it closes -- repainting them removed an open + Assign
+    // menu (leaving updates paused with no menu on screen) and an open size edit (whose blur then
+    // wrote the half-typed size). The top bar is its own, so it still gets the fresh state.
+    if (FREEZE) renderMaster(); else render();
   }
   catch {
     DESK_STALE = true;   // ST is now the last-known state, not current -- the top bar shows it as stale

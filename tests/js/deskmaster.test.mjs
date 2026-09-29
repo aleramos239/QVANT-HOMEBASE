@@ -538,7 +538,7 @@ test('the stale pill is never faded: a dashed edge, full-strength text (measured
 
 // ---- an open menu or size edit holds updates, but never leaves the pill asserting a state ------
 const REFRESH = HTML.slice(HTML.indexOf('const FREEZE_STALE_MS'), HTML.indexOf('/* ---- PREVIEW MODE'));
-function loadRefresh({ st = { armed: true }, reply = () => ({ ok: true, status: 200, body: { armed: true } }) } = {}) {
+function loadRefresh({ st = { armed: true }, reply = () => ({ ok: true, status: 200, body: { armed: true } }), freezeInFlight = false } = {}) {
   const clock = { now: 0 }, fetched = [], masters = [], renders = [];
   const clockEl = { textContent: '', classList: { contains: () => false } };
   const ctx = vm.createContext({
@@ -546,6 +546,7 @@ function loadRefresh({ st = { armed: true }, reply = () => ({ ok: true, status: 
     fetch: async (u) => {
       fetched.push(u);
       const a = reply();
+      if (freezeInFlight) ctx.api.freeze = true;   // a menu / size edit opens while this request is in flight
       if (a instanceof Error) throw a;
       return { ok: a.ok, status: a.status, json: async () => { if (a.body instanceof Error) throw a.body; return a.body; } };
     },
@@ -664,4 +665,18 @@ test('a space-taking scrollbar appearing never shifts the top bar: the column re
   const i = HTML.indexOf('  .app-main{');
   const rule = HTML.slice(i, HTML.indexOf('}', i) + 1);
   assert.match(rule, /overflow-y:auto;\s*scrollbar-gutter:stable;/);
+});
+
+test('a menu or size edit that opens while a status is in flight is never wiped: only the top bar repaints', async () => {
+  const s = loadRefresh({ freezeInFlight: true, reply: () => ({ ok: true, status: 200, body: { armed: false } }) });
+  await s.api.refresh();
+  assert.equal(s.renders.length, 0, 'the cards (and the open menu / edit in them) are left alone');
+  assert.equal(s.masters.length, 1, 'the top bar still shows the fresh state');
+  assert.deepEqual(plain(s.api.ST), { armed: false });
+  assert.equal(s.api.stale, false);
+});
+
+test('when the cards are rebuilt anyway, an + Assign menu that lived in them lets go of the update hold', () => {
+  const fn = HTML.slice(HTML.indexOf('function render() {'), HTML.indexOf('async function refresh()'));
+  assert.match(fn, /if \(ASG_OPEN && !document\.contains\(ASG_OPEN\.menu\)\) \{\s*ASG_OPEN = null;\s*if \(!document\.getElementById\("qedit"\)\) FREEZE = false;/);
 });
