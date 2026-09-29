@@ -685,3 +685,17 @@ test('Data tab: closing the dialog (Cancel/revert) stops an in-flight poll', asy
   // clearInterval is stubbed (never really cancels in this harness), so this only proves revert()
   // reaches stopDataPoll() without throwing when a job is active -- the real clearInterval is native.
 });
+
+test('Data tab: Template and Apply to all are hidden on Data, and reappear on another tab', () => {
+  const cell = makeCell('time:60');
+  const { exp } = makeExportHost();
+  const { box } = openData(cell, exp);
+  const tpl = box.querySelector('.tpl-btn'), applyAll = findByOwnText(box, 'button', 'Apply to all');
+  assert.equal(tpl.hidden, true, 'neither a chart-appearance template nor "copy to every chart" applies to an export');
+  assert.equal(applyAll.hidden, true);
+  let symbolTab = null;
+  descend(box, (el) => { if (el.getAttribute && el.getAttribute('aria-label') === 'Symbol') symbolTab = el; return false; });
+  symbolTab.onclick();
+  assert.equal(tpl.hidden, false);
+  assert.equal(applyAll.hidden, false);
+});

@@ -315,6 +315,11 @@ function mount(box, host) {
     pane.replaceChildren(...TABS[tab].sections.flatMap(([cap, rows]) => [mk('div', 'set-cap', cap), ...rows.map(row)]));
     pane.scrollTop = 0;
     paint();
+    // a template is chart-appearance/indicators/interval/trade -- none of it applies to an export;
+    // Apply to all would silently do nothing useful here too, so both stay hidden on this tab
+    const onData = TABS[tab].id === 'data';
+    tpl.hidden = onData;
+    applyAll.hidden = onData;
   }
 
   /* ---- the Trading tab's ACCOUNTS list (2026-09-27 accounts-per-chart plan, Task 1) ----
