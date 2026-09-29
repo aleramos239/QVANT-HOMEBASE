@@ -2,7 +2,8 @@
    Onyx — shadcn/ui design system, ported to ONE shared vanilla stylesheet.
    Neutral base (black & white), new-york look. Theme via data-theme on <html>.
    No @import, no external fonts. The ONLY hues allowed are the P&L tokens
-   --pos / --neg (green / red) for profit/loss/win-rate DATA. Chrome stays B&W.
+   --pos / --neg (green / red) for profit/loss/win-rate DATA, and --warn (amber) with
+   them for a status light's "attention". Chrome stays B&W.
    ============================================================================ */
 
 /* ---- Tokens ---------------------------------------------------------------- */
@@ -39,9 +40,10 @@
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
 
-  /* P&L data colors — the ONLY hues allowed */
+  /* P&L data colors — the ONLY hues allowed (--warn: a status light's amber) */
   --pos: oklch(0.62 0.17 150);
   --neg: oklch(0.58 0.22 27);
+  --warn: oklch(0.7 0.16 70);
 
   /* derived radii */
   --radius-sm: calc(var(--radius) - 4px);
@@ -107,6 +109,7 @@
 
   --pos: oklch(0.7 0.17 155);
   --neg: oklch(0.68 0.2 25);
+  --warn: oklch(0.8 0.15 80);
 }
 
 /* ---- Reset / base ---------------------------------------------------------- */

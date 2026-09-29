@@ -24,6 +24,10 @@
  * If the stored preference is missing, unreadable, or not the expected
  * shape, everything is shown — the safe failure is seeing more, never less.
  *
+ * Also home to the desk page's one confirm policy for every switch
+ * (switchNeedsConfirm): the "Show on home page" switch never asks, because
+ * hiding a card never changes what trades.
+ *
  * UMD-ish export so this loads as a plain <script> on the desk page
  * (window.AlgoVisibility) and as a CommonJS module under `node --test`.
  */
@@ -158,6 +162,21 @@
     return out;
   }
 
+  // The desk page's ONE confirm policy for every switch (2026-09-28, Apple-design audit
+  // S6; the chart-trading switch's pattern): ask only when a flip turns ON something that
+  // can place orders -- a strategy (unless SHADOW: it never places one), chart trading,
+  // the desk's Arm. Never when it makes things safer (OFF, Disarm), and never for this
+  // module's own "Show on home page" switch: hiding a card changes nothing that trades
+  // (and a card that could trade is locked visible anyway). An unknown switch asks when
+  // turned on -- fail toward asking.
+  var SWITCH_CAN_TRADE = { strategy: true, chartTrading: true, desk: true, visibility: false };
+
+  function switchNeedsConfirm(kind, turningOn, opts) {
+    if (!turningOn) return false;
+    if (kind === "strategy" && opts && opts.shadow) return false;
+    return SWITCH_CAN_TRADE[kind] !== false;
+  }
+
   // Returns a new hidden-list with `name` added or removed. Refuses to add
   // a name that is currently locked (belt-and-braces on top of
   // computeVisibility already ignoring it) — the UI should never call this
@@ -187,5 +206,6 @@
     saveHidden: saveHidden,
     computeVisibility: computeVisibility,
     withHidden: withHidden,
+    switchNeedsConfirm: switchNeedsConfirm,
   };
 });

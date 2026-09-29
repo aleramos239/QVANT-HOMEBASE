@@ -31,6 +31,7 @@ be aggregated straight from the journal. State survives restarts.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import datetime as dt
 import json
 import sys
@@ -742,6 +743,17 @@ class Engine:
         if held is None or held[0] is not loop:
             held = self._kill_locks[name] = (loop, asyncio.Lock())
         return held[1]
+
+    @contextlib.asynccontextmanager
+    async def all_kill_locks(self):
+        """Every strategy's kill lock, taken in a fixed (sorted) order -- the
+        desk's global Kill holds them all while it flattens, so it never runs
+        alongside a per-strategy Kill (both read the net and market-sell). A
+        per-strategy Kill holds only its own, so the fixed order cannot deadlock."""
+        async with contextlib.AsyncExitStack() as stack:
+            for name in sorted(self.cfg.strategies):
+                await stack.enter_async_context(self._kill_lock(name))
+            yield
 
     async def kill_strategy(self, name: str, **journal_extra) -> dict:
         """The per-strategy Kill. Marks `name` killed for today FIRST (no

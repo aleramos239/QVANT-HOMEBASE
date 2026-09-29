@@ -18,15 +18,72 @@
 <style>
   /* Page chrome — same language as the TradeCopier app: B&W chrome, the only
      hues are --pos/--neg for P&L-grade data, shadcn tokens for everything. */
+
+  /* ---- frosted glass + materialize (2026-09-28 glass pass) ----
+     The charts page's glass tokens (its feel pass: .50 / heavy .62, blur 20 / 30px, saturate
+     190%; dark .46 / .58, 170%), tinted toward this page's own card colour -- Apple's "materials
+     tint toward the surface they sit on". Two weights, "bigger surfaces read thicker": the plain
+     one for the sticky top bar, the cards and the toast; -heavy (more blur, a deeper shadow) for a
+     dialog and the + Assign menu that floats over a card. A dialog dims what is behind it (--scrim);
+     the menu and the toast never do. The page sits on a very faint tinted wash so the material has
+     something to read against. Money never goes translucent: ARMED, the LIVE tag and Kill are
+     solid chips on the glass, and text on glass gets a little more contrast (--glass-text-2). */
+  :root, :root[data-theme="light"]{
+    --glass-bg: color-mix(in srgb, var(--card) 50%, transparent);
+    --glass-bg-heavy: color-mix(in srgb, var(--card) 62%, transparent);
+    --glass-edge: rgb(255 255 255 / .85);
+    --glass-blur: 20px; --glass-blur-heavy: 30px; --glass-saturate: 190%;
+    --glass-shadow: 0 1px 2px rgb(0 0 0 / .04), 0 6px 20px rgb(0 0 0 / .05);
+    --glass-shadow-float: 0 2px 8px rgb(0 0 0 / .10), 0 10px 28px rgb(0 0 0 / .12);
+    --glass-shadow-heavy: 0 4px 12px rgb(0 0 0 / .10), 0 24px 64px rgb(0 0 0 / .26);
+    --glass-text-2: color-mix(in srgb, var(--muted-foreground) 55%, var(--foreground));
+    --scrim: rgb(0 0 0 / .25);
+    --page-wash: radial-gradient(1200px 720px at 0% 0%, oklch(0.93 0.03 250 / .55), transparent 62%),
+      radial-gradient(1000px 760px at 100% 100%, oklch(0.94 0.025 200 / .45), transparent 60%);
+    /* spring-SHAPED curves (critically damped, no overshoot), the charts page's: -out to arrive and
+       settle, the faster -in to leave */
+    --ease-spring-out: cubic-bezier(0.23, 1, 0.32, 1);
+    --ease-spring-in: cubic-bezier(0.4, 0, 1, 1);
+  }
+  :root[data-theme="dark"]{
+    --glass-bg: color-mix(in srgb, var(--card) 46%, transparent);
+    --glass-bg-heavy: color-mix(in srgb, var(--card) 58%, transparent);
+    --glass-edge: rgb(255 255 255 / .10); --glass-saturate: 170%;
+    --glass-shadow: 0 0 0 1px rgb(255 255 255 / .03), 0 6px 20px rgb(0 0 0 / .35);
+    --glass-shadow-float: 0 0 0 1px rgb(255 255 255 / .05), 0 10px 28px rgb(0 0 0 / .5);
+    --glass-shadow-heavy: 0 0 0 1px rgb(255 255 255 / .06), 0 24px 64px rgb(0 0 0 / .6);
+    --scrim: rgb(0 0 0 / .5);
+    --page-wash: radial-gradient(1200px 720px at 0% 0%, oklch(0.30 0.05 250 / .45), transparent 62%),
+      radial-gradient(1000px 760px at 100% 100%, oklch(0.28 0.04 200 / .35), transparent 60%);
+  }
   html, body { height: 100%; }
   body { margin: 0; background: var(--background); color: var(--foreground);
          font-family: var(--font-sans); font-size: 14px; line-height: 1.45; }
 
-  .app-shell{ display:flex; height:100vh; overflow:hidden; background:var(--background); }
-  .app-main{ flex:1; min-width:0; display:flex; flex-direction:column; overflow:hidden; }
+  .app-shell{ display:flex; height:100vh; overflow:hidden; background:var(--page-wash), var(--background); }
+  /* the column scrolls, and the top bar sticks to it: content passes UNDER the glass */
+  /* scrollbar-gutter: a space-taking scrollbar (macOS "always show scroll bars", a mouse attached)
+     appearing as the page grows must not shift the sticky top bar -- a Kill hold cancels when the
+     pointer leaves the button (second review) */
+  .app-main{ flex:1; min-width:0; display:flex; flex-direction:column; overflow-x:hidden; overflow-y:auto;
+    scrollbar-gutter:stable; }
   .inset-topbar{ display:flex; align-items:center; gap:10px; height:52px; padding:0 20px;
-    border-bottom:1px solid var(--border); flex-shrink:0; }
-  .scroll{ flex:1; overflow:auto; padding:22px 24px 48px; }
+    border-bottom:1px solid var(--border); flex-shrink:0;
+    /* z 48: above a lifted card (45) -- nothing on the page ever covers Arm / Disarm / Kill --
+       and below every dialog's scrim (50+) */
+    position:sticky; top:0; z-index:48; background:var(--glass-bg);
+    backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    -webkit-backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    border-top:1px solid var(--glass-edge); --muted-foreground:var(--glass-text-2); }
+  .scroll{ flex:1 0 auto; padding:22px 24px 48px; }
+  /* frosted cards (strategies, accounts, the activity log) */
+  .card{ background:var(--glass-bg);
+    backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    -webkit-backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    border-top-color:var(--glass-edge); box-shadow:var(--glass-shadow); --muted-foreground:var(--glass-text-2); }
+  /* a card is its own stacking context now (backdrop-filter): one holding an open + Assign menu is
+     lifted, or the next card would paint over the part of the menu that hangs below it */
+  .card:has(.amenu:not([hidden])){ position:relative; z-index:45; }
   .view-wrap{ max-width:980px; margin:0 auto; }
   .spacer{ flex:1; }
 
@@ -34,7 +91,21 @@
     border:1px solid transparent; border-radius:var(--radius-sm); padding:2px 8px;
     font-size:0.75rem; font-weight:500; line-height:1.2;
     background:var(--secondary); color:var(--secondary-foreground); }
-  .pill.live{ background:var(--primary); color:var(--primary-foreground); font-weight:600; letter-spacing:.02em; }
+  /* Four meanings, four looks (2026-09-28, S4 -- one solid pill used to mean all of them):
+     ARMED  the desk places real orders: solid red with a light, the page's only solid red token
+     LIVE   a real-money account: a red outline tag, never filled
+     in position  a strategy holds a position today: solid black/white
+     ON     a strategy is switched on: an outline with a dot */
+  .pill.armed{ background:color-mix(in oklch, var(--destructive) 75%, black);
+    color:var(--destructive-foreground); font-weight:700; letter-spacing:.04em; }
+  .pill.armed::before{ content:""; width:7px; height:7px; border-radius:9999px; background:currentColor; }
+  .tag-live{ display:inline-flex; align-items:center; white-space:nowrap; line-height:1.2;
+    border:1px solid color-mix(in oklch, var(--destructive) 60%, transparent); border-radius:3px;
+    background:var(--card); color:var(--destructive); padding:1px 5px;   /* solid on the glass card */
+    font-size:10px; font-weight:700; letter-spacing:.06em; }
+  .pill.inpos{ background:var(--primary); color:var(--primary-foreground); font-weight:600; }
+  .pill.on{ background:transparent; border-color:var(--foreground); color:var(--foreground); }
+  .pill.on::before{ content:""; width:6px; height:6px; border-radius:9999px; background:currentColor; }
   .pill.idle{ background:transparent; border-color:var(--border); color:var(--muted-foreground); }
   .pill.won{ background:color-mix(in oklch, var(--pos) 15%, transparent); color:var(--pos); border-color:color-mix(in oklch, var(--pos) 30%, transparent); }
   .pill.lost{ background:color-mix(in oklch, var(--neg) 15%, transparent); color:var(--neg); border-color:color-mix(in oklch, var(--neg) 30%, transparent); }
@@ -50,13 +121,38 @@
   .hero p{ margin:2px 0 0; color:var(--muted-foreground); font-size:13px; max-width:420px; }
   .hero .actions{ margin-left:auto; display:flex; gap:10px; }
 
-  /* hold-to-confirm (red/black fill sweeps while held) — copier pattern */
-  .holdbtn{ position:relative; overflow:hidden; }
-  .holdbtn .holdfill{ position:absolute; left:0; top:0; bottom:0; width:0;
-    background:var(--text); opacity:.22; transition:width 150ms linear; }
-  .holdbtn.holding .holdfill{ width:100%; transition:width 1.1s linear; }
+  /* master controls (top bar): the armed state + Arm/Disarm + a press-and-hold Kill */
+  .master{ display:inline-flex; align-items:center; gap:8px; }
+  /* Nothing in the top bar may change width when its text changes, at any width: a Kill hold
+     cancels when the pointer leaves the button, so the button must never move under it. The pill
+     sits in a fixed slot (it hugs Arm; the slot fits its longest text, "desk unreachable"), Arm has
+     a fixed width and is hidden by visibility (its space kept), and the clock has a fixed width. */
+  .pill-slot{ display:inline-flex; justify-content:flex-end; width:7.75rem; flex:none; }
+  #armBtn{ width:4.75rem; flex:none; }
+  #armBtn.gone{ visibility:hidden; }
+  .inset-topbar > *{ flex-shrink:0; }
+  /* stale (the last-known state, not current): a dashed edge and "· stale" -- never faded; the text
+     keeps >= 4.5:1 (review). DISARMED goes full foreground on the glass; ARMED keeps its solid red. */
+  .master .pill.stale{ border-style:dashed; }
+  .master .pill.idle.stale{ color:var(--foreground); border-color:var(--foreground); }
+  .master .pill.armed.stale{ border-color:var(--destructive-foreground); }
+
+  /* press-and-hold (the top bar's Kill) — the copier's hold-to-confirm pattern, revived: a
+     ring fills while the button is held (--hold-ms, set from HOLD_MS); letting go early
+     cancels and the ring runs back. */
+  .btn-kill{ background:var(--card); color:var(--destructive); font-weight:600;   /* solid on the glass bar */
+    border-color:color-mix(in oklch, var(--destructive) 55%, transparent); }
+  .btn-kill:hover{ background:color-mix(in oklch, var(--destructive) 8%, var(--card)); }
+  .holdbtn{ position:relative; touch-action:none; -webkit-user-select:none; user-select:none; }
+  .holdbtn.holding{ background:color-mix(in oklch, var(--destructive) 14%, var(--card)); }
+  .holdbtn .hold-ring{ width:16px; height:16px; transform:rotate(-90deg); }
+  .holdbtn .hold-ring circle{ fill:none; stroke-width:2.5; }
+  .holdbtn .hold-track{ stroke:color-mix(in oklch, currentColor 25%, transparent); }
+  .holdbtn .hold-fill{ stroke:currentColor; stroke-dasharray:50.3; stroke-dashoffset:50.3;
+    transition:stroke-dashoffset 150ms linear; }
+  .holdbtn.holding .hold-fill{ stroke-dashoffset:0;
+    transition:stroke-dashoffset var(--hold-ms, 1000ms) linear; }
   .holdbtn .hold-lbl{ position:relative; }
-  .holdbtn small{ font-weight:500; opacity:.7; }
 
   /* readiness strip */
   .ready{ display:flex; align-items:center; gap:16px; flex-wrap:wrap;
@@ -73,6 +169,15 @@
   .ready .ri b{ color:var(--foreground); font-weight:600; }
   .ready .ri.bad b{ color:var(--neg); }
   .ready .headline{ font-weight:600; color:var(--foreground); }
+  /* the desk's own notices (status.notices): plain lines, shown once, dismissed together */
+  .notices{ display:flex; align-items:flex-start; gap:12px; border:1px solid var(--border);
+    border-radius:var(--radius-md); background:var(--card); padding:8px 10px 8px 14px; margin:0 0 14px;
+    font-size:12.5px; color:var(--foreground); }
+  .notices[hidden]{ display:none; }
+  .notices .list{ flex:1; min-width:0; display:flex; flex-direction:column; gap:3px; }
+  .notices .t{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; color:var(--muted-foreground);
+    margin-right:9px; }
+  .notices .x{ border:none; background:none; color:var(--muted-foreground); cursor:pointer; font-size:15px; padding:0 2px; }
   .ready.notready{ border-color:color-mix(in oklch, var(--neg) 35%, transparent); }
   .ready.notready .headline{ color:var(--neg); }
 
@@ -116,29 +221,65 @@
     font-size:12px; font-family:var(--font-mono); }
   .strat .card-footer .btn{ font-family:var(--font-sans); }
 
-  .feed{ font-family:var(--font-mono); font-size:12.5px; max-height:340px; overflow-y:auto; }
-  .feed-row{ padding:5px 0; border-bottom:1px solid var(--border); white-space:pre-wrap; display:flex; gap:9px; }
+  .feed{ font-size:12.5px; max-height:340px; overflow-y:auto; }
+  .feed-row{ padding:5px 0; border-bottom:1px solid var(--border); display:flex; flex-wrap:wrap;
+    column-gap:9px; cursor:pointer; }
   .feed-row:last-child{ border-bottom:none; }
-  .feed .t{ color:var(--muted-foreground); flex:0 0 62px; }
-  .feed .e{ flex:0 0 150px; font-weight:600; }
-  .feed .d{ color:var(--muted-foreground); overflow-wrap:anywhere; }
+  .feed .t{ color:var(--muted-foreground); flex:0 0 62px; font-family:var(--font-mono);
+    font-variant-numeric:tabular-nums; }
+  .feed .h{ flex:1; min-width:0; overflow-wrap:anywhere; }
+  .feed .h.pos{ color:var(--pos); } .feed .h.neg{ color:var(--neg); }
+  .feed .h.warn{ color:color-mix(in oklch, var(--warn, oklch(0.7 0.16 70)) 70%, var(--foreground)); }
+  .feed .raw{ flex:0 0 100%; padding:3px 0 0 71px; font-family:var(--font-mono); font-size:11.5px;
+    color:var(--muted-foreground); white-space:pre-wrap; overflow-wrap:anywhere; }
   .feed-empty{ color:var(--muted-foreground); font-size:13px; padding:18px 0; }
 
   .clock{ font-family:var(--font-mono); font-size:12px; color:var(--muted-foreground);
-    white-space:nowrap; }
-  @media (max-width:860px){ .clock{ display:none; } }
-  #toast{ position:fixed; bottom:18px; left:50%; transform:translateX(-50%);
-    background:var(--card); color:var(--card-foreground); border:1px solid var(--border);
-    border-radius:var(--radius-md); padding:10px 16px; font-size:12.5px; display:none;
-    max-width:80%; font-family:var(--font-mono); box-shadow:0 4px 24px rgb(0 0 0 / .18); }
+    white-space:nowrap; display:inline-block; width:11rem; text-align:right; overflow:hidden; }
+  /* the top bar never overflows (its right end -- Kill, Settings, theme -- never slides off-screen):
+     the clock goes first, then the brand tag, then the bar wraps */
+  @media (max-width:980px){ .clock{ display:none; } }
+  #toast{ position:fixed; bottom:18px; left:50%; z-index:80;
+    background:var(--glass-bg); color:var(--card-foreground); border:1px solid var(--border);
+    backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    -webkit-backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    border-top-color:var(--glass-edge); border-radius:var(--radius-md); padding:10px 16px; font-size:12.5px;
+    max-width:80%; font-family:var(--font-mono); box-shadow:var(--glass-shadow-float);
+    --muted-foreground:var(--glass-text-2);
+    /* materialize out of the bottom edge and back into it, the same path both ways */
+    transform-origin:50% 100%; visibility:hidden; opacity:0; pointer-events:none;
+    transform:translateX(-50%) translateY(8px) scale(.97); filter:blur(4px);
+    transition:opacity 120ms var(--ease-spring-in), transform 120ms var(--ease-spring-in),
+      filter 120ms var(--ease-spring-in), visibility 0s linear 120ms; }
+  /* a money-critical failure (a Kill that did not go through): solid red, never glass, above every
+     dialog, and it stays until dismissed -- a routine toast never replaces it. Anchored to the
+     bottom, above the toast: the top bar grows when it wraps, and nothing may cover Kill. */
+  #alertBar{ position:fixed; bottom:84px; left:50%; transform:translateX(-50%); z-index:85;
+    display:flex; align-items:flex-start; gap:12px; width:max-content; max-width:min(720px, calc(100vw - 32px));
+    padding:10px 10px 10px 14px; border-radius:var(--radius-md); background:var(--card); color:var(--neg);
+    border:1.5px solid var(--neg); font-size:13px; font-weight:600; line-height:1.4;
+    box-shadow:0 8px 28px rgb(0 0 0 / .22); }
+  #alertBar[hidden]{ display:none; }
+  /* while a dialog is open the alert sits under its scrim, so it can never cover the dialog's own
+     buttons -- in a short, narrow window it would sit right on them, and a retried Kill must not
+     need the alert dismissed first (second review). It is back on top when the dialog closes. */
+  body.dialog-open #alertBar{ z-index:49; }
+  #alertX{ border:none; background:none; color:inherit; cursor:pointer; font-size:16px; line-height:1; padding:0 2px; }
+  #toast.show{ visibility:visible; opacity:1; pointer-events:none; transform:translateX(-50%); filter:none;   /* a status: never takes a click */
+    transition:opacity 160ms var(--ease-spring-out), transform 160ms var(--ease-spring-out),
+      filter 160ms var(--ease-spring-out), visibility 0s; }
 
   /* connect modal */
   .bulb{ width:13px; height:13px; border-radius:50%; display:inline-block;
     cursor:pointer; background:var(--muted-foreground); opacity:.5;
     vertical-align:middle; flex:none; }
-  .bulb.ok{ background:#22c55e; opacity:1; box-shadow:0 0 7px rgb(34 197 94 / .8); }
-  .bulb.warn{ background:#f59e0b; opacity:1; box-shadow:0 0 7px rgb(245 158 11 / .8); }
-  .bulb.bad{ background:#ef4444; opacity:1; box-shadow:0 0 8px rgb(239 68 68 / .9);
+  /* status colours come from the theme (--pos / --warn / --neg), light and dark alike. --warn is
+     new in shadcn.css (2026-09-28): the fallback keeps an amber bulb visible under a cached copy
+     of that (unversioned) stylesheet -- an undefined var would paint it transparent. */
+  .bulb.ok{ background:var(--pos); opacity:1; box-shadow:0 0 7px color-mix(in oklch, var(--pos) 80%, transparent); }
+  .bulb.warn{ background:var(--warn, oklch(0.7 0.16 70)); opacity:1;
+    box-shadow:0 0 7px color-mix(in oklch, var(--warn, oklch(0.7 0.16 70)) 80%, transparent); }
+  .bulb.bad{ background:var(--neg); opacity:1; box-shadow:0 0 8px color-mix(in oklch, var(--neg) 90%, transparent);
     animation:bulbpulse 1.2s ease-in-out infinite; }
   @keyframes bulbpulse{ 50%{ opacity:.45; } }
   .chk{ display:flex; gap:10px; align-items:baseline; padding:7px 2px;
@@ -148,12 +289,27 @@
     align-self:center; }
   .chk .lbl{ font-weight:600; min-width:150px; }
   .chk .det{ color:var(--muted-foreground); }
-  .overlay{ position:fixed; inset:0; background:rgb(0 0 0 / .45); display:none;
-    align-items:center; justify-content:center; z-index:50; }
-  .overlay.open{ display:flex; }
-  .modal{ background:var(--card); color:var(--card-foreground); border:1px solid var(--border);
+  /* A dialog: the scrim dims what is behind it, the box is heavy glass that materializes out of
+     whatever opened it (transform-origin set at open) and leaves back along the same path. Open is
+     live at once -- visible and clickable immediately, the motion never gates a button. Closing,
+     the box is inert at once (hideOverlay) and the fading scrim stops taking the pointer at once
+     (review: it must never swallow the next deliberate click -- Kill's included); a double-click's
+     second half, which would land on whatever sat under the button, is dropped by the page. */
+  .overlay{ position:fixed; inset:0; background:var(--scrim); display:flex;
+    align-items:center; justify-content:center; z-index:50; visibility:hidden; opacity:0;
+    pointer-events:none; transition:opacity 130ms var(--ease-spring-in), visibility 0s linear 130ms; }
+  .overlay.open{ visibility:visible; opacity:1; z-index:51; pointer-events:auto;   /* over one still fading out */
+    transition:opacity 180ms var(--ease-spring-out), visibility 0s; }
+  .modal{ background:var(--glass-bg-heavy); color:var(--card-foreground); border:1px solid var(--border);
+    backdrop-filter:blur(var(--glass-blur-heavy)) saturate(var(--glass-saturate));
+    -webkit-backdrop-filter:blur(var(--glass-blur-heavy)) saturate(var(--glass-saturate));
+    border-top-color:var(--glass-edge); --muted-foreground:var(--glass-text-2);
     border-radius:var(--radius-lg); width:380px; max-width:92vw; padding:22px;
-    box-shadow:0 12px 40px rgb(0 0 0 / .28); }
+    box-shadow:var(--glass-shadow-heavy); }
+  .overlay .modal{ transform:scale(.96); filter:blur(6px);
+    transition:transform 130ms var(--ease-spring-in), filter 130ms var(--ease-spring-in); }
+  .overlay.open .modal{ transform:none; filter:none;
+    transition:transform 180ms var(--ease-spring-out), filter 180ms var(--ease-spring-out); }
   .modal h2{ margin:0 0 4px; font-size:1.05rem; font-weight:600; letter-spacing:-.01em; }
   .modal .sub{ margin:0 0 16px; font-size:12.5px; color:var(--muted-foreground); }
   .field{ margin-bottom:12px; }
@@ -228,13 +384,18 @@
     padding:4px 8px; font-size:12.5px; }
   .asg input{ width:52px; font-family:var(--font-mono); }
   .amenu{ position:absolute; top:calc(100% + 6px); left:0; z-index:40;
-    background:var(--card); border:1px solid var(--border);
-    border-radius:var(--radius-md); box-shadow:0 6px 24px rgb(0 0 0 / .14);
-    min-width:200px; padding:4px; }
+    background:var(--glass-bg-heavy); border:1px solid var(--border); border-top-color:var(--glass-edge);
+    backdrop-filter:blur(var(--glass-blur-heavy)) saturate(var(--glass-saturate));
+    -webkit-backdrop-filter:blur(var(--glass-blur-heavy)) saturate(var(--glass-saturate));
+    border-radius:var(--radius-md); box-shadow:var(--glass-shadow-float);
+    min-width:200px; padding:4px; transform-origin:0 0; }
+  .amenu:not([hidden]){ animation:hb-materialize 160ms var(--ease-spring-out); }
+  @keyframes hb-materialize{ from{ opacity:0; transform:scale(.95); filter:blur(4px); } }
+  @keyframes hb-fade{ from{ opacity:0; } }
   .amenu .mi2{ display:block; width:100%; text-align:left; border:none;
     background:none; color:var(--foreground); font-size:13px; padding:7px 10px;
     border-radius:var(--radius-sm); cursor:pointer; }
-  .amenu .mi2:hover{ background:var(--secondary); }
+  .amenu .mi2:hover, .amenu .mi2:focus-visible{ background:var(--secondary); outline:none; }
   .qty-edit{ cursor:pointer; border-bottom:1px dashed var(--muted-foreground); }
   .qty-input{ width:44px; font-family:var(--font-mono); font-size:12px;
     background:var(--background); color:var(--foreground);
@@ -303,6 +464,37 @@
 
   @media (prefers-reduced-motion: reduce){
     *,*::before,*::after{ animation-duration:.01ms !important; transition-duration:.01ms !important; }
+    /* the Kill ring is the hold's progress (how long to keep holding), not decoration: it keeps its pace */
+    .holdbtn.holding .hold-fill{ transition-duration:var(--hold-ms, 1000ms) !important; }
+    /* surfaces: a short cross-fade only -- no scale, no blur, no travel */
+    .overlay{ transition:opacity 120ms ease, visibility 0s linear 120ms !important; }
+    .overlay.open{ transition:opacity 120ms ease, visibility 0s !important; }
+    .overlay .modal, .overlay.open .modal{ transform:none !important; filter:none !important; }
+    #toast{ transform:translateX(-50%) !important; filter:none !important;
+      transition:opacity 120ms ease, visibility 0s linear 120ms !important; }
+    #toast.show{ transition:opacity 120ms ease, visibility 0s !important; }
+    .amenu:not([hidden]){ animation:hb-fade 120ms ease !important; }
+  }
+  /* reduced transparency: every glass surface goes solid; more contrast: solid with a defined border */
+  @media (prefers-reduced-transparency: reduce){
+    .app-shell, .inset-topbar{ background:var(--background); }
+    .card, .modal, .amenu, #toast{ background:var(--card); }
+    .inset-topbar, .card, .modal, .amenu, #toast{ backdrop-filter:none; -webkit-backdrop-filter:none;
+      border-top-color:var(--border); }
+  }
+  @media (prefers-contrast: more){
+    .app-shell, .inset-topbar{ background:var(--background); }
+    .card, .modal, .amenu, #toast{ background:var(--card); border-color:var(--foreground); }
+    .inset-topbar{ border-top-color:transparent; border-bottom-color:var(--foreground); }
+    .inset-topbar, .card, .modal, .amenu, #toast{ backdrop-filter:none; -webkit-backdrop-filter:none; }
+  }
+  @media (max-width:780px){ .brand-tag{ display:none; } }
+  @media (max-width:680px){
+    .inset-topbar{ height:auto; min-height:52px; flex-wrap:wrap; row-gap:8px; padding:8px 12px; }
+    .wordmark{ display:none; }
+    /* narrower than the three master controls: they wrap inside their own group (fixed widths, so
+       the wrap never depends on the status text) */
+    .master{ flex-wrap:wrap; justify-content:flex-end; row-gap:8px; max-width:100%; }
   }
 </style>
 </head>
@@ -314,13 +506,22 @@
       <span style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:var(--radius-md);background:var(--primary);color:var(--primary-foreground);flex-shrink:0">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 9.5V21h14V9.5"/></svg>
       </span>
-      <span style="font-weight:600;font-size:0.9375rem;letter-spacing:-.01em">Homebase</span>
-      <span class="pill idle" style="margin-left:2px">Ramos Quant</span>
+      <span class="wordmark" style="font-weight:600;font-size:0.9375rem;letter-spacing:-.01em">Homebase</span>
+      <span class="pill idle brand-tag" style="margin-left:2px">Ramos Quant</span>
       <a class="btn btn-outline btn-sm" id="chartsLink" href="http://localhost:8852/?v=27" style="margin-left:6px">Charts</a>
       <span class="spacer"></span>
       <span class="clock" id="clock">—</span>
       <span class="bulb" id="bulb" onclick="openChecks()" title="connecting…"></span>
-      <span id="statusPill" class="pill idle" onclick="openSettings()" style="cursor:pointer">connecting…</span>
+      <div class="master" role="group" aria-label="Desk master controls">
+        <span class="pill-slot"><span id="statusPill" class="pill idle" role="status" title="Desk status unknown — connecting…">connecting…</span></span>
+        <button class="btn btn-outline btn-sm gone" type="button" id="armBtn" disabled aria-hidden="true">Arm</button>
+        <button class="btn btn-sm btn-kill holdbtn" type="button" id="killBtn"
+          title="Kill everything — press and hold for 1 second. Cancels every working order and flattens every position on every connected account, then disarms."
+          aria-label="Kill everything (press and hold)">
+          <svg class="hold-ring" viewBox="0 0 20 20" aria-hidden="true"><circle class="hold-track" cx="10" cy="10" r="8"/><circle class="hold-fill" cx="10" cy="10" r="8"/></svg>
+          <span class="hold-lbl">Kill all</span>
+        </button>
+      </div>
       <button class="btn btn-outline btn-sm btn-icon" type="button" id="settingsBtn" onclick="openSettings()"
         title="Settings" aria-label="Settings" aria-haspopup="dialog">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75"
@@ -337,6 +538,7 @@
     <div class="scroll">
     <div class="view-wrap">
 
+      <div class="notices" id="noticeStrip" role="status" hidden></div>
       <div class="ready notready" id="readyStrip" style="display:none"></div>
 
       <div class="sec-head" style="margin-top:8px">
@@ -355,7 +557,10 @@
 
       <div class="sec-head" style="margin-top:26px">
         <span class="h">Activity</span>
-        <span class="hint">every alert, order, fill and safety event as it happens</span>
+        <span class="hint">every alert, order, fill and safety event as it happens — hover or click a row for its raw line</span>
+        <span class="spacer"></span>
+        <button class="btn btn-ghost btn-sm" type="button" id="feedRawBtn" aria-pressed="false"
+          title="Show every row's raw journal line">Raw</button>
       </div>
       <div class="card"><div class="card-content" style="padding-top:14px">
         <div id="feed" class="feed"><div class="feed-empty">Waiting for events…</div></div>
@@ -367,7 +572,7 @@
 </div>
 
 <div class="overlay" id="connectOverlay">
-  <div class="modal" style="width:440px">
+  <div class="modal" style="width:440px" role="dialog" aria-modal="true" tabindex="-1" inert aria-label="Add an account">
     <div class="wsteps">
       <span class="st" id="ws1"><span class="n">1</span>Broker</span><span class="ln"></span>
       <span class="st" id="ws2"><span class="n">2</span>Log in</span><span class="ln"></span>
@@ -458,12 +663,12 @@
 </div>
 
 <div class="overlay" id="resOverlay">
-  <div class="modal" style="width:600px">
+  <div class="modal" style="width:600px" role="dialog" aria-modal="true" tabindex="-1" inert aria-labelledby="resName">
     <div class="cal-head">
       <span style="font-weight:600" id="resName">—</span>
       <span style="font-size:12px;color:var(--muted-foreground)" id="resSource"></span>
       <span class="spacer" style="flex:1"></span>
-      <button class="cal-nav" onclick="closeRes()" title="Close">&times;</button>
+      <button class="cal-nav" onclick="closeRes()" title="Close" aria-label="Close">&times;</button>
     </div>
     <div id="resChart" style="margin-top:8px"></div>
     <div class="mcap" id="resChartCap"></div>
@@ -473,22 +678,22 @@
 </div>
 
 <div class="overlay" id="confirmOverlay" style="z-index:70">
-  <div class="modal" style="width:400px">
+  <div class="modal" style="width:400px" role="dialog" aria-modal="true" tabindex="-1" inert aria-labelledby="cfTitle" aria-describedby="cfBody">
     <h2 id="cfTitle" style="margin:0 0 6px;font-size:1.05rem;font-weight:600"></h2>
     <p id="cfBody" class="sub" style="margin:0 0 16px;font-size:13px;color:var(--muted-foreground)"></p>
     <div class="row-btns">
-      <button class="btn btn-outline" onclick="cfDone(false)">Cancel</button>
+      <button class="btn btn-outline" id="cfCancel" data-autofocus onclick="cfDone(false)">Cancel</button>
       <button class="btn btn-default" id="cfGo" onclick="cfDone(true)">Confirm</button>
     </div>
   </div>
 </div>
 
 <div class="overlay" id="settingsOverlay">
-  <div class="modal" style="width:440px">
+  <div class="modal" style="width:440px" role="dialog" aria-modal="true" tabindex="-1" inert aria-labelledby="settingsTitle">
     <div class="cal-head">
-      <span style="font-weight:600">Settings</span>
+      <span style="font-weight:600" id="settingsTitle">Settings</span>
       <span class="spacer" style="flex:1"></span>
-      <button class="cal-nav" onclick="closeSettings()" title="Close">&times;</button>
+      <button class="cal-nav" onclick="closeSettings()" title="Close" aria-label="Close">&times;</button>
     </div>
     <div id="settingsBody">
       <div id="settingsTrading"></div>
@@ -498,13 +703,13 @@
 </div>
 
 <div class="overlay" id="acctOverlay">
-  <div class="modal" style="width:780px;max-width:94vw">
+  <div class="modal" style="width:780px;max-width:94vw" role="dialog" aria-modal="true" tabindex="-1" inert aria-labelledby="acctTitle">
     <div class="cal-head">
-      <span style="font-weight:600">Accounts</span>
+      <span style="font-weight:600" id="acctTitle">Accounts</span>
       <span style="font-size:12px;color:var(--muted-foreground)" id="acctCount"></span>
       <span class="spacer" style="flex:1"></span>
       <button class="btn btn-outline btn-sm" onclick="closeAccts();openConnect()">+ Add account</button>
-      <button class="cal-nav" onclick="closeAccts()" title="Close">&times;</button>
+      <button class="cal-nav" onclick="closeAccts()" title="Close" aria-label="Close">&times;</button>
     </div>
     <div id="acctList2"></div>
     <div id="paperList"></div>
@@ -512,12 +717,12 @@
 </div>
 
 <div class="overlay" id="algoOverlay">
-  <div class="modal" style="width:640px;max-width:94vw">
+  <div class="modal" style="width:640px;max-width:94vw" role="dialog" aria-modal="true" tabindex="-1" inert aria-labelledby="algoTitle">
     <div class="cal-head">
-      <span style="font-weight:600">Manage algos</span>
+      <span style="font-weight:600" id="algoTitle">Manage algos</span>
       <span style="font-size:12px;color:var(--muted-foreground)" id="algoCount"></span>
       <span class="spacer" style="flex:1"></span>
-      <button class="cal-nav" onclick="closeAlgoMgr()" title="Close">&times;</button>
+      <button class="cal-nav" onclick="closeAlgoMgr()" title="Close" aria-label="Close">&times;</button>
     </div>
     <p class="mcap" style="margin:0 0 8px">Hiding is display only — it never changes whether an
       algo trades. An algo that's live (on AND booked to an account) always shows here.</p>
@@ -526,15 +731,15 @@
 </div>
 
 <div class="overlay" id="liveOverlay">
-  <div class="modal" style="width:640px;max-width:94vw">
+  <div class="modal" style="width:640px;max-width:94vw" role="dialog" aria-modal="true" tabindex="-1" inert aria-labelledby="liveName">
     <div class="cal-head">
       <span style="font-weight:600" id="liveName">—</span>
       <span style="font-size:12px;color:var(--muted-foreground)" id="liveSince"></span>
       <span class="spacer" style="flex:1"></span>
-      <button class="cal-nav" onclick="liveStep(-1)">&lsaquo;</button>
+      <button class="cal-nav" onclick="liveStep(-1)" aria-label="Previous month">&lsaquo;</button>
       <span class="m" id="liveMonth">—</span>
-      <button class="cal-nav" onclick="liveStep(1)">&rsaquo;</button>
-      <button class="cal-nav" onclick="closeLive()" title="Close">&times;</button>
+      <button class="cal-nav" onclick="liveStep(1)" aria-label="Next month">&rsaquo;</button>
+      <button class="cal-nav" onclick="closeLive()" title="Close" aria-label="Close">&times;</button>
     </div>
     <div class="cal-grid" id="liveGrid"></div>
     <div class="cal-foot"><span id="liveNote"></span><span class="tot" id="liveTotal"></span></div>
@@ -544,12 +749,12 @@
 </div>
 
 <div class="overlay" id="checksOverlay">
-  <div class="modal" style="width:560px">
+  <div class="modal" style="width:560px" role="dialog" aria-modal="true" tabindex="-1" inert aria-labelledby="checksTitle">
     <div class="cal-head">
       <span class="bulb" id="bulbBig" style="cursor:default"></span>
       <span style="font-weight:600" id="checksTitle">System checks</span>
       <span class="spacer" style="flex:1"></span>
-      <button class="cal-nav" onclick="closeChecks()" title="Close">&times;</button>
+      <button class="cal-nav" onclick="closeChecks()" title="Close" aria-label="Close">&times;</button>
     </div>
     <div id="checksList" style="margin-top:6px"></div>
     <p class="mcap" style="margin:10px 0 0">Green = ready to trade. Amber = attention,
@@ -558,13 +763,13 @@
 </div>
 
 <div class="overlay" id="pineOverlay">
-  <div class="modal" style="width:680px">
+  <div class="modal" style="width:680px" role="dialog" aria-modal="true" tabindex="-1" inert aria-labelledby="pineName">
     <div class="cal-head">
       <span style="font-weight:600" id="pineName">—</span>
       <span style="font-size:12px;color:var(--muted-foreground);font-family:var(--font-mono)" id="pineFile"></span>
       <span class="spacer" style="flex:1"></span>
       <button class="btn btn-outline btn-sm" onclick="copyPine()">Copy</button>
-      <button class="cal-nav" onclick="closePine()" title="Close">&times;</button>
+      <button class="cal-nav" onclick="closePine()" title="Close" aria-label="Close">&times;</button>
     </div>
     <pre id="pineSrc" style="font-family:var(--font-mono);font-size:11.5px;line-height:1.5;
       background:var(--secondary);border:1px solid var(--border);border-radius:var(--radius-md);
@@ -573,27 +778,30 @@
 </div>
 
 <div class="overlay" id="calOverlay">
-  <div class="modal" style="width:460px">
+  <div class="modal" style="width:460px" role="dialog" aria-modal="true" tabindex="-1" inert aria-labelledby="calAcct">
     <div class="cal-head">
       <span style="font-weight:600" id="calAcct">—</span>
       <span class="spacer" style="flex:1"></span>
-      <button class="cal-nav" onclick="calStep(-1)">&lsaquo;</button>
+      <button class="cal-nav" onclick="calStep(-1)" aria-label="Previous month">&lsaquo;</button>
       <span class="m" id="calMonth">—</span>
-      <button class="cal-nav" onclick="calStep(1)">&rsaquo;</button>
-      <button class="cal-nav" onclick="closeCal()" title="Close">&times;</button>
+      <button class="cal-nav" onclick="calStep(1)" aria-label="Next month">&rsaquo;</button>
+      <button class="cal-nav" onclick="closeCal()" title="Close" aria-label="Close">&times;</button>
     </div>
     <div class="cal-grid" id="calGrid"></div>
     <div class="cal-foot"><span id="calNote"></span>
       <span class="tot" id="calTotal"></span></div>
   </div>
 </div>
-<div id="toast"></div>
+<div id="toast" role="status" aria-live="polite"></div>
+<div id="alertBar" role="alert" hidden><span id="alertText"></span>
+  <button type="button" id="alertX" title="Dismiss" aria-label="Dismiss">&times;</button></div>
 
 <script>
   (function(){ var a = document.getElementById('chartsLink'); if (a) a.href = location.protocol + '//' + location.hostname + ':8852/?v=27'; })();
 const $ = (s) => document.querySelector(s);
 let ST = null;
 let DESK_STALE = false;   // true while refresh() is failing: ST is the last-known state, not current
+let STALE_WHY = "";       // why it is stale, for the pill's tooltip
 const DEMO = new URLSearchParams(location.search).has("demo");
 
 /* ---- algo manager: which algo cards show on the home page ----
@@ -606,9 +814,21 @@ let HIDDEN_ALGOS = (window.AlgoVisibility ? window.AlgoVisibility.loadHidden() :
 
 function toast(msg, ms = 4200) {
   const t = $("#toast");
-  t.textContent = msg; t.style.display = "block";
-  clearTimeout(t._h); t._h = setTimeout(() => t.style.display = "none", ms);
+  t.textContent = msg; t.classList.add("show");
+  clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), ms);
 }
+function toastHide() {
+  const t = $("#toast");
+  clearTimeout(t._h); t.classList.remove("show");
+}
+/* A money-critical failure -- a Kill that did not go through: red, solid, and it stays until the
+   user dismisses it (a routine toast never replaces it). */
+function alertBar(msg) {
+  const b = $("#alertBar");
+  $("#alertText").textContent = msg;
+  b.hidden = false;
+}
+$("#alertX").onclick = () => { $("#alertBar").hidden = true; };
 async function post(url, body) {
   if (DEMO) { toast("Preview mode — sample data, controls disabled."); return {ok: false}; }
   const r = await fetch(url, {method: "POST", headers: {"Content-Type": "application/json"},
@@ -627,7 +847,141 @@ $("#themeToggle").onclick = () => {
   try { localStorage.setItem("hb_theme", next); } catch (_) {}
 };
 
-/* ---- confirmation popup (replaces hold-to-confirm) ---- */
+/* ---- overlays: one open/close path for every dialog and the + Assign menu (W7) ----
+   Every .modal is role="dialog" aria-modal="true" in the markup. showOverlay remembers what had
+   focus (the trigger) and moves focus in: the dialog's [data-autofocus] control -- the confirm's
+   Cancel, the safe default -- or else the dialog itself. hideOverlay gives focus back to the
+   trigger, or to its twin (same onclick) when a 2.5 s re-render has replaced it. Esc closes the
+   topmost dialog exactly like its Cancel / × (one layer per press: a held Esc's auto-repeat is
+   ignored), and Tab stays inside it. Page-wide, a held Enter/Space never activates a control
+   through auto-repeat (GOTCHAS: a held key has sent duplicate orders here before) -- which
+   matters more now that focus lands inside a dialog while the key that opened it may still be
+   down. The + Assign menu gets Esc, focus in and back, and the arrow keys. Nothing here sends. */
+const OVERLAYS = [];   // the open dialogs, topmost last: {el, trigger}
+const OVERLAY_CLOSE = {confirmOverlay: () => cfDone(false), settingsOverlay: () => closeSettings(),
+  connectOverlay: () => closeConnect(), resOverlay: () => closeRes(), acctOverlay: () => closeAccts(),
+  algoOverlay: () => closeAlgoMgr(), liveOverlay: () => closeLive(), checksOverlay: () => closeChecks(),
+  pineOverlay: () => closePine(), calOverlay: () => closeCal()};
+const FOCUSABLE = "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), " +
+  "textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
+/* Glass pass: a dialog is live the moment it opens (never inert, visible at once -- the motion never
+   gates a button), and inert the moment it starts closing: while it fades out nothing in it can be
+   focused, pressed or reached by a held key. It grows out of what opened it and shrinks back into
+   it (transform-origin at the trigger: the focused control, else what the pointer last pressed). */
+let LAST_PRESS = null, LAST_PRESS_AT = 0;
+document.addEventListener("pointerdown", (e) => {
+  LAST_PRESS = e.target && e.target.closest ? e.target.closest("button, a, [onclick]") : null;
+  LAST_PRESS_AT = Date.now();
+}, true);
+function openedFrom() {
+  const a = document.activeElement;
+  if (a && a !== document.body && a.getBoundingClientRect) return a;
+  return LAST_PRESS && Date.now() - LAST_PRESS_AT < 2000 && document.contains(LAST_PRESS) ? LAST_PRESS : null;
+}
+function growFrom(box, from) {
+  if (!box.style) return;
+  if (!from || !from.getBoundingClientRect) { box.style.transformOrigin = ""; return; }   // centre
+  const r = from.getBoundingClientRect();
+  box.style.transformOrigin = `${Math.round(r.left + r.width / 2 - box.offsetLeft)}px ` +
+    `${Math.round(r.top + r.height / 2 - box.offsetTop)}px`;
+}
+/* A double-click's second half must never act on a dialog it didn't mean to touch. It lands where
+   the first half landed -- and a dialog that the first half OPENED can have its primary button
+   right there (at narrow widths "Turn on", "Flatten & turn off" and "Book live" sit under the
+   switch / button / menu item that opened them), while a dialog that the first half CLOSED leaves
+   the page beneath exposed. So for DOUBLE_CLICK_MS after any dialog opens or starts closing, a
+   repeat click (detail >= 2) is dropped before it reaches anything. A single, deliberate click
+   (detail 1) always goes through at once. */
+const DOUBLE_CLICK_MS = 400;
+let OVERLAY_OPENED_AT = -Infinity, OVERLAY_CLOSED_AT = -Infinity;
+const secondHalf = (e) => e.detail >= 2 && Date.now() - Math.max(OVERLAY_OPENED_AT, OVERLAY_CLOSED_AT) < DOUBLE_CLICK_MS;
+/* A pointer click whose press began BEFORE the dialog it lands in opened is not an answer to that
+   dialog (second review): a touch hold on Kill ends with the finger lifting over the confirm that
+   the hold itself just opened, and the browser's click for that lift would cancel it -- or, over a
+   button, answer it. Keyboard clicks (detail 0) are never touched: they have no press. */
+const staleGesture = (e) => {
+  if (!(e.detail > 0) || !e.target || !e.target.closest) return false;
+  const ov = e.target.closest(".overlay.open");
+  return !!ov && LAST_PRESS_AT < (ov._openedAt || 0);
+};
+document.addEventListener("click", (e) => {
+  if (secondHalf(e) || staleGesture(e)) { e.preventDefault(); e.stopPropagation(); }
+}, true);
+// its press must not move focus either (it would pull focus off the dialog's Cancel onto the page)
+document.addEventListener("mousedown", (e) => { if (secondHalf(e)) e.preventDefault(); }, true);
+function showOverlay(id) {
+  const el = $("#" + id);
+  if (!el) return;
+  OVERLAY_OPENED_AT = Date.now();
+  const box = el.querySelector(".modal") || el;
+  const fresh = !OVERLAYS.some(o => o.el === el);
+  if (fresh) { OVERLAYS.push({el, trigger: document.activeElement}); el._openedAt = Date.now(); }
+  document.body.classList.add("dialog-open");                 // the red alert steps under its scrim
+  box.removeAttribute("inert");                              // live at once
+  if (fresh) growFrom(box, openedFrom());
+  el.classList.add("open");
+  if (box.contains(document.activeElement)) return;          // already inside (a re-open)
+  const first = box.querySelector("[data-autofocus]") || box;
+  if (typeof first.focus === "function") first.focus();
+}
+function hideOverlay(id) {
+  const el = $("#" + id);
+  if (!el) return;
+  OVERLAY_CLOSED_AT = Date.now();
+  (el.querySelector(".modal") || el).setAttribute("inert", "");   // inert the moment it starts closing
+  el.classList.remove("open");
+  const i = OVERLAYS.findIndex(o => o.el === el);
+  if (i < 0) return;
+  const {trigger} = OVERLAYS.splice(i, 1)[0];
+  if (!OVERLAYS.length) document.body.classList.remove("dialog-open");
+  const at = document.activeElement;
+  if (!at || at === document.body || el.contains(at)) restoreFocus(trigger);   // never steal it
+}
+function restoreFocus(t) {
+  if (!t || t === document.body) return;
+  let el = t;
+  if (!document.contains(el)) {                              // replaced by a re-render: its twin
+    const oc = t.getAttribute && t.getAttribute("onclick");
+    el = oc ? [...document.querySelectorAll("[onclick]")].find(x => x.getAttribute("onclick") === oc) : null;
+  }
+  if (el && typeof el.focus === "function") el.focus();
+}
+function trapTab(e, overlay) {
+  const box = overlay.querySelector(".modal") || overlay;
+  const f = [...box.querySelectorAll(FOCUSABLE)].filter(x => x.offsetParent !== null);
+  const at = document.activeElement;
+  if (!f.length) { e.preventDefault(); box.focus(); return; }
+  const first = f[0], last = f[f.length - 1];
+  if (!box.contains(at) || at === box) { e.preventDefault(); (e.shiftKey ? last : first).focus(); }
+  else if (e.shiftKey && at === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && at === last) { e.preventDefault(); first.focus(); }
+}
+const ACTIVATES = "button, a[href], [role='button'], [role='menuitem']";
+document.addEventListener("keydown", (e) => {
+  if ((e.key === "Enter" || e.key === " ") && e.repeat) {
+    if (e.target && e.target.closest && e.target.closest(ACTIVATES)) e.preventDefault();
+    return;                                                  // a held key never re-activates a control
+  }
+  const top = OVERLAYS.length ? OVERLAYS[OVERLAYS.length - 1] : null;
+  if (e.key === "Escape") {
+    if (e.repeat) { e.preventDefault(); return; }            // one layer per press
+    if (top) { e.preventDefault(); (OVERLAY_CLOSE[top.el.id] || (() => hideOverlay(top.el.id)))(); }
+    else if (closeAsgMenus(true)) e.preventDefault();
+    return;
+  }
+  if (e.key === "Tab" && top) { trapTab(e, top.el); return; }
+  if (!top && ASG_OPEN && ["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) {
+    const items = [...ASG_OPEN.menu.querySelectorAll(".mi2")];
+    if (!items.length) return;
+    const i = items.indexOf(document.activeElement), n = items.length;
+    const k = e.key === "Home" ? 0 : e.key === "End" ? n - 1
+      : e.key === "ArrowDown" ? (i + 1) % n : (i - 1 + n) % n;
+    e.preventDefault();
+    items[k].focus();
+  }
+}, true);   // capture: ahead of any control's own key handling
+
+/* ---- confirmation popup (every consequential action asks here; Kill is also a hold first) ---- */
 let CONFIRM_CB = null;
 function confirmDlg(title, body, action, destructive) {
   return new Promise((res) => {
@@ -637,11 +991,30 @@ function confirmDlg(title, body, action, destructive) {
     b.textContent = action || "Confirm";
     b.className = "btn " + (destructive ? "btn-destructive" : "btn-default");
     CONFIRM_CB = res;
-    $("#confirmOverlay").classList.add("open");
+    showOverlay("confirmOverlay");   // focus lands on Cancel, the safe default
   });
 }
+/* The desk's ONE confirm policy for every switch (S6): ask only when a flip turns ON something
+   that can place orders; never when it makes things safer (OFF, Disarm) or changes nothing that
+   trades (Manage algos' "Show on home page"). The rule lives in algo-visibility.js
+   (switchNeedsConfirm) so it is unit tested; without it -- no module, or a cached copy from
+   before it had the rule -- ask whenever a switch turns something on (fail toward asking). */
+function needsConfirm(kind, turningOn, opts) {
+  const AV = window.AlgoVisibility;
+  return AV && typeof AV.switchNeedsConfirm === "function"
+    ? AV.switchNeedsConfirm(kind, turningOn, opts) : !!turningOn;
+}
+/* A double-click on a switch is one flip, never two (review): a second click on the same switch
+   within DOUBLE_CLICK_MS is ignored -- so a double-clicked ON strategy turns OFF once (OFF never
+   asks) and never pops a "Turn ON?" right after, and a double-clicked OFF one asks once. */
+const SWITCH_AT = {};
+function switchBounced(key) {
+  const now = Date.now(), last = SWITCH_AT[key] === undefined ? -Infinity : SWITCH_AT[key];
+  SWITCH_AT[key] = now;
+  return now - last < DOUBLE_CLICK_MS;
+}
 function cfDone(v) {
-  $("#confirmOverlay").classList.remove("open");
+  hideOverlay("confirmOverlay");
   const cb = CONFIRM_CB; CONFIRM_CB = null;
   if (cb) cb(v);
 }
@@ -649,8 +1022,216 @@ $("#confirmOverlay").addEventListener("click", (e) => {
   if (e.target === e.currentTarget) cfDone(false);
 });
 
+/* ---- master controls (top bar): ARMED/DISARMED, Arm/Disarm, Kill everything ----
+   2026-09-28 (Apple-design audit S2): out of Settings and into the top bar -- always visible, no
+   dialog to open, nothing to scroll past. The three handlers are UNCHANGED: the same confirmDlg,
+   the same POSTs to the desk's own /api/arm and /api/kill (Arm confirms, Disarm is immediate,
+   Kill keeps its confirm). They talk only to the desk itself (ST, refreshed every 2.5 s) -- never
+   the CHART service. The nodes are static markup, never rebuilt, so a press, a hold or keyboard
+   focus on them survives every repaint. ST == null (the desk not heard from yet): no Arm/Disarm --
+   fail closed, never assert a state it doesn't know -- but Kill is always offered (only the desk can
+   carry it out; if it doesn't answer, the page says so -- flatten at the broker). While refresh() is
+   failing, the last-known state is marked stale (DESK_STALE). */
+/* Arm / Disarm believe only the desk's answer (second review): {ok: true, armed: <what was asked>}.
+   Anything else -- a refusal (the write guard's 403), a dropped connection, an unreadable answer, a
+   desk that says the other thing -- is said. A Disarm that didn't land is the red alert: signals may
+   still place real orders. A failed Arm leaves the desk on the safe side, so a toast says it. */
+async function setArmed(want) {
+  let r, err = null;
+  try { r = await post("/api/arm", {armed: want}); } catch (e) { err = e || new Error("no answer"); }
+  refresh();
+  if (DEMO) return;                        // preview mode: post() already said nothing is sent
+  if (!err && r && r.ok === true && r.armed === want) {
+    toast(want ? "Armed — signals now place real orders." : "Disarmed — dry-run journaling only.");
+    return;
+  }
+  const why = err ? (err.name === "SyntaxError" ? "the desk's answer was unreadable"
+                                               : `the desk didn't answer (${killText(err.message || String(err))})`)
+    : !r || typeof r !== "object" ? "the desk's answer was unreadable"
+    : r.ok !== true ? `the desk refused it: ${killText(r.error || r.detail)}`
+    : `the desk says it is ${r.armed ? "still ARMED" : "disarmed"}`;
+  if (want) toast(`NOT armed — ${why}.`, 8000);
+  else alertBar(`Disarm NOT confirmed — ${why}. The desk may still be ARMED: press Kill, or disarm again.`);
+}
+/* The Arm/Disarm button is a switch too: a double-click is one flip (switchBounced). Without it, a
+   double-clicked Disarm re-paints as Arm under the second click and pops "Arm the desk?". */
+async function doArm() {
+  if (switchBounced("desk")) return;
+  if (!await confirmDlg("Arm the desk?",
+      "Signals will place REAL bracketed orders on every account assigned in the book.",
+      "Arm", false)) return;
+  await setArmed(true);
+}
+async function doDisarm() {
+  if (switchBounced("desk")) return;
+  await setArmed(false);
+}
+/* A Kill that did not go through is never silent (review M1): a refusal (e.g. the write guard's
+   403 / 415), an unreadable answer, no answer, or an account whose cancel or flatten failed -> a
+   red alert that stays until dismissed and says to flatten at the broker. A clean Kill says what it
+   did, in words. The call itself is unchanged: POST /api/kill, after the same confirm.
+
+   A Kill in flight is never silent either (second review): "Kill sent — waiting for the desk…" the
+   moment it goes out, and no answer within KILL_WAIT_MS escalates to the red alert -- the request
+   keeps waiting, and a late answer still reports (a late success takes that alert down). While one
+   is in flight, a second hold sends nothing ("Kill already running"), for up to KILL_BUSY_MS: a
+   dead connection must not lock Kill out for good. A network failure can come AFTER the request
+   reached the desk (which disarms first), so it never says "NOT sent" -- only a desk that answered
+   with a refusal certainly did not get it. */
+const KILL_WAIT_MS = 6000;
+const KILL_BUSY_MS = 30000;
+const KILL_SLOW_TEXT = `Kill NOT confirmed — the desk hasn't answered in ${KILL_WAIT_MS / 1000} s. ` +
+  "Check the broker and flatten there now.";
+let KILL_AT = 0;                 // when the Kill in flight went out; 0: none
+const killInFlight = () => KILL_AT > 0 && Date.now() - KILL_AT < KILL_BUSY_MS;
+const killText = (v) => (v == null || v === "" ? "no reason given"
+  : typeof v === "string" ? v : JSON.stringify(v)).slice(0, 200);
+/* Why a desk write did not land, in words -- or "" when the desk answered {ok: true}. A network
+   error can come after the desk got the request, so it never claims the write was not sent. */
+function answerWhy(r, err) {
+  if (err) return err.name === "SyntaxError" ? "the desk's answer was unreadable"
+                                             : `the desk didn't answer (${killText(err.message || String(err))})`;
+  if (!r || typeof r !== "object") return "the desk's answer was unreadable";
+  return r.ok === true ? "" : `the desk refused it: ${killText(r.error || r.detail)}`;
+}
+function killFailures(results) {
+  return Object.entries(results || {}).map(([aid, v]) => {
+    const why = [];
+    for (const [call, what] of [["flatten_all", "FLATTEN FAILED"], ["cancel_all", "CANCEL FAILED"]]) {
+      const x = v && v[call];
+      if (!x || x.ok !== true) why.push(`${what}: ${killText(x && x.error)}`);
+    }
+    return why.length ? `${acctShort(aid)} (${why.join("; ")})` : "";
+  }).filter(Boolean);
+}
+function killReport(r, lateSecs) {
+  const late = lateSecs ? ` (the desk answered after ${lateSecs} s)` : "";
+  toastHide();
+  if (!r || typeof r !== "object")
+    return alertBar(`Kill NOT confirmed — the desk's answer was unreadable${late}. Check every account and flatten at the broker now.`);
+  if (r.ok !== true)
+    return alertBar(`Kill NOT sent — the desk refused it: ${killText(r.error || r.detail)}. Flatten at the broker now.`);
+  if (!r.results || typeof r.results !== "object")
+    return alertBar(`Kill NOT confirmed — the desk said ok but sent no account results${late}. Check every account and flatten at the broker now.`);
+  const bad = killFailures(r.results), n = Object.keys(r.results).length;
+  if (bad.length) return alertBar(`Kill FAILED on ${bad.join(" · ")}. Flatten ${bad.length === 1 ? "it" : "them"} at the broker now.`);
+  // its "hasn't answered" is no longer true -- but only take down THAT alert, never another failure's
+  if (lateSecs && $("#alertText").textContent === KILL_SLOW_TEXT) $("#alertBar").hidden = true;
+  toast((n ? `Kill sent — orders cancelled and positions flattened on ${n} account${n === 1 ? "" : "s"}; the desk is disarmed.`
+           : "Kill sent — the desk is disarmed (no connected account to flatten).") + late, 6000);
+}
+const killRunning = () => toast(`Kill already running — sent ${Math.round((Date.now() - KILL_AT) / 1000)} s ago; ` +
+  "waiting for the desk. Nothing more sent.");
+async function doKill() {
+  if (killInFlight()) return killRunning();
+  if (!await confirmDlg("Kill everything?",
+      "Cancels every working order and market-flattens every position on EVERY connected account, then disarms.",
+      "Kill", true)) { toast("Kill cancelled — nothing sent."); return; }
+  if (killInFlight()) return killRunning();
+  if (DEMO) { await post("/api/kill"); refresh(); return; }   // preview mode: post() says nothing is sent
+  const at = KILL_AT = Date.now();
+  let slow = false;
+  toast("Kill sent — waiting for the desk…", KILL_BUSY_MS);
+  const timer = setTimeout(() => {
+    if (KILL_AT !== at) return;
+    slow = true;
+    toastHide();
+    alertBar(KILL_SLOW_TEXT);
+  }, KILL_WAIT_MS);
+  let r, err = null;
+  try { r = await post("/api/kill"); } catch (e) { err = e || new Error("no answer"); }
+  clearTimeout(timer);
+  if (KILL_AT === at) KILL_AT = 0;
+  if (err && err.name !== "SyntaxError") {
+    toastHide();
+    alertBar(`Kill NOT confirmed — the desk didn't answer (${killText(err.message || String(err))}). ` +
+             "Check the broker / flatten there now.");
+  } else killReport(err ? null : r, slow ? Math.round((Date.now() - at) / 1000) : 0);   // SyntaxError: unreadable
+  refresh();
+}
+
+function renderMaster() {
+  const pill = $("#statusPill"), arm = $("#armBtn");
+  if (!pill || !arm) return;
+  if (ST == null) {
+    pill.className = "pill idle";
+    pill.textContent = DESK_STALE ? "desk unreachable" : "connecting…";
+    pill.title = "Desk status unknown — Arm/Disarm show once the desk answers. Kill is still offered, " +
+      "but only the desk can carry it out: if it does not answer, flatten at the broker.";
+    arm.classList.add("gone");          // fail closed: no Arm/Disarm while the state is unknown --
+    arm.disabled = true;                // hidden by visibility, its space kept, so nothing moves Kill
+    arm.setAttribute("aria-hidden", "true");
+    arm.onclick = null;
+    return;
+  }
+  const armed = !!ST.armed;
+  pill.className = (armed ? "pill armed" : "pill idle") + (DESK_STALE ? " stale" : "");
+  pill.textContent = (armed ? "ARMED" : "DISARMED") + (DESK_STALE ? " · stale" : "");
+  pill.title = (armed ? "ARMED — signals place REAL orders; SL/TP ride broker-side"
+                      : "Disarmed — signals are validated and journaled only") +
+    (DESK_STALE ? `. Last known state — ${STALE_WHY || "the desk is not answering"}.` : "");
+  arm.classList.remove("gone");
+  arm.disabled = false;
+  arm.removeAttribute("aria-hidden");
+  arm.textContent = armed ? "Disarm" : "Arm";
+  arm.title = armed ? "Disarm: signals are journaled only" : "Arm: signals place real orders (asks first)";
+  arm.onclick = armed ? doDisarm : doArm;
+}
+
+/* Press-and-hold: fire() runs once, only after `btn` has been held HOLD_MS without a break -- the
+   primary pointer button, or Space/Enter while it has focus. Letting go early, dragging off it,
+   pointercancel, the buttons going missing, a context menu, the window losing focus or the page
+   hiding all cancel (GOTCHAS: an owned gesture must never stick). A key's auto-repeat (e.repeat)
+   never starts, restarts or fires a hold, and a hold that fired needs a fresh press to fire again
+   (GOTCHAS: a held key has sent duplicate orders here before). The ring is CSS (.holding fills it
+   over --hold-ms); the timer is the truth. onCancel runs when a started hold is let go early.
+   A click with no pointer and no key behind it (e.detail 0: VoiceOver / Switch Control, which
+   cannot hold) goes straight to fire() -- which for Kill is still its confirm dialog. */
+const HOLD_MS = 1000;
+function holdToFire(btn, fire, onCancel) {
+  let timer = null, by = null;          // by: "pointer", or the key that started the running hold
+  btn.style.setProperty("--hold-ms", HOLD_MS + "ms");
+  const start = (how) => {
+    if (timer) return;
+    by = how;
+    btn.classList.add("holding");
+    timer = setTimeout(() => {
+      timer = null; by = null;
+      btn.classList.remove("holding");
+      fire();
+    }, HOLD_MS);
+  };
+  const cancel = () => {
+    if (!timer) return;
+    clearTimeout(timer); timer = null; by = null;
+    btn.classList.remove("holding");
+    if (onCancel) onCancel();
+  };
+  const holdKey = (e) => e.key === " " || e.key === "Enter";
+  btn.addEventListener("pointerdown", (e) => { if (e.button === 0 && e.isPrimary !== false) start("pointer"); });
+  btn.addEventListener("pointerup", () => { if (by === "pointer") cancel(); });
+  btn.addEventListener("pointerleave", () => { if (by === "pointer") cancel(); });
+  btn.addEventListener("pointercancel", cancel);
+  btn.addEventListener("pointermove", (e) => { if (by === "pointer" && e.buttons === 0) cancel(); });
+  btn.addEventListener("contextmenu", (e) => { e.preventDefault(); cancel(); });
+  btn.addEventListener("keydown", (e) => {
+    if (!holdKey(e)) return;
+    e.preventDefault();                 // never the button's own click (Enter) nor a page scroll (Space)
+    if (!e.repeat) start(e.key);        // an auto-repeat never starts, restarts or fires a hold
+  });
+  btn.addEventListener("keyup", (e) => { if (holdKey(e) && by === e.key) cancel(); });
+  btn.addEventListener("click", (e) => { if (e.detail === 0 && !timer) fire(); });
+  btn.addEventListener("blur", cancel);
+  window.addEventListener("blur", cancel);
+  document.addEventListener("visibilitychange", () => { if (document.hidden) cancel(); });
+  return {cancel, get holding() { return timer !== null; }};
+}
+holdToFire($("#killBtn"), doKill,
+  () => toast("Kill not sent — press and hold for a second to kill everything."));
+
 /* ---- the bulb ---- */
-const CHK_COLOR = {ok: "#22c55e", info: "#94a3b8", warn: "#f59e0b", bad: "#ef4444"};
+const CHK_COLOR = {ok: "var(--pos)", info: "var(--muted-foreground)", warn: "var(--warn, oklch(0.7 0.16 70))",
+                   bad: "var(--neg)"};   // theme tokens, never hex (W6)
 function bulbLevel(r) {
   if (!r) return null;
   if (r.checks.some(c => c.level === "bad")) return "bad";
@@ -667,29 +1248,357 @@ function renderBulb(r) {
   if ($("#checksOverlay").classList.contains("open")) renderChecks();
 }
 function renderChecks() {
-  const r = ST && ST.readiness;
+  const r = ST && readinessShown(ST.readiness, ST);
   if (!r) return;
   const lvl = bulbLevel(r);
   $("#bulbBig").className = "bulb" + (lvl ? " " + lvl : "");
   $("#checksTitle").textContent = lvl === "ok" ? "All good — ready to trade"
     : lvl === "warn" ? "Attention" : "Not ready";
   $("#checksList").innerHTML = r.checks.map(c => `
-    <div class="chk"><span class="dot" style="background:${CHK_COLOR[c.level] || "#94a3b8"}"></span>
-      <span class="lbl">${c.label}</span><span class="det">${c.detail}</span></div>`).join("");
+    <div class="chk"><span class="dot" style="background:${CHK_COLOR[c.level] || CHK_COLOR.info}"></span>
+      <span class="lbl">${esc(c.label)}</span><span class="det">${esc(c.detail)}</span></div>`).join("");
 }
-function openChecks() { renderChecks(); $("#checksOverlay").classList.add("open"); }
-function closeChecks() { $("#checksOverlay").classList.remove("open"); }
+function openChecks() { renderChecks(); showOverlay("checksOverlay"); }
+function closeChecks() { hideOverlay("checksOverlay"); }
 $("#checksOverlay").addEventListener("click", (e) => {
   if (e.target === e.currentTarget) closeChecks();
 });
 
+/* ---- readiness, as the page shows it (W4) ----
+   The desk's readiness flags an enabled straddle still idle once its accept window has passed:
+   "no signal arrived" (red), or "no signal today" (amber) for a gated one. For a strategy that
+   could not have fired today that is a false alarm, so the check is shown as info (grey: out of
+   the Not-ready strip, never turning the bulb) with the reason instead -- nothing is dropped:
+     - it is not booked on any account;
+     - today's fire refused it for having no accounts booked, or for being off;
+     - it was switched on only after today's 9:30 fire (its switch's last flip before 9:30 was
+       OFF, or -- none in view -- its first flip after 9:30 was ON);
+     - it was added after the fire: the timer first saw it after its window (timer_missed) on a
+       day the desk did fire at 9:30, with the journal in view reaching back past 9:30.
+   The only evidence is the desk's own journal tail (ST.journal, newest first). When that cannot
+   show the strategy was out of today's fire, the alarm stands -- fail toward showing. */
+const FIRE_AT = "09:30:00";
+const IN_THE_FIRE = /^(timer_(fired|gate|skipped|error|deferred)|prestage_)/;
+function outOfTodaysFire(name, st) {
+  if (!((st.book || {})[name] || []).length) return "not booked on any account — nothing could fire";
+  const journal = Array.isArray(st.journal) ? st.journal.filter(r => r && typeof r === "object") : [];
+  const today = String(st.et_now || "").slice(0, 10);
+  const rows = journal.filter(r => String(r.et || "").slice(0, 10) === today).reverse();   // oldest first
+  const at = (r) => String(r.et).slice(11, 19);
+  const mine = rows.filter(r => r.strategy === name);
+  if (mine.some(r => r.event === "alert_refused" && r.source !== "test" && at(r) >= "09:29:00" &&
+                     (r.reason === "no_assignments" || r.reason === "unknown_or_disabled")))
+    return "was not booked (or was off) at today's 9:30 fire — nothing was due today";
+  const flips = mine.filter(r => r.event === "strategy_toggled");
+  const before = flips.filter(r => at(r) <= FIRE_AT), after = flips.filter(r => at(r) > FIRE_AT);
+  if (before.length ? before[before.length - 1].enabled === false : (after.length > 0 && after[0].enabled === true))
+    return "switched on after today's 9:30 fire — its first run is the next trading day";
+  const oldest = String((journal[journal.length - 1] || {}).et || "");
+  if (oldest && oldest < today + "T" + FIRE_AT &&
+      mine.some(r => r.event === "timer_missed") && !mine.some(r => IN_THE_FIRE.test(r.event)) &&
+      rows.some(r => r.event === "timer_fired" && r.strategy !== name))
+    return "added after today's 9:30 fire — its first run is the next trading day";
+  return "";
+}
+function readinessShown(r, st) {
+  if (!r || !Array.isArray(r.checks) || !st) return r;
+  let changed = false;
+  const checks = r.checks.map(c => {
+    if (!c || (c.level !== "bad" && c.level !== "warn") || !/^no signal/.test(String(c.detail || ""))
+        || !((st.strategies || {})[c.label])) return c;
+    const why = outOfTodaysFire(c.label, st);
+    if (!why) return c;
+    changed = true;
+    return {...c, level: "info", detail: why};
+  });
+  return changed ? {...r, checks, ready: !checks.some(c => c && c.level === "bad")} : r;
+}
+
+/* ---- the desk's notices ----
+   status.notices: one-liners the desk writes for this page, newest first -- e.g. "…049 is no longer
+   on your Apex login — removed from the desk". An older desk sends none (absent or not a list:
+   nothing shows). Each notice shows once: dismissing marks the ones on screen seen (kept per viewer,
+   in this browser), and a seen notice never comes back. Text is escaped. */
+let NOTICES_SEEN = new Set();
+try { NOTICES_SEEN = new Set(JSON.parse(localStorage.getItem("hb_notices_seen") || "[]")); } catch (_) {}
+const noticeKey = (n) => `${n.et || ""}|${n.text}`;
+function renderNotices(list) {
+  const el = $("#noticeStrip");
+  if (!el) return;
+  const fresh = (Array.isArray(list) ? list : [])
+    .filter(n => n && typeof n.text === "string" && n.text && !NOTICES_SEEN.has(noticeKey(n)));
+  const sig = JSON.stringify(fresh.map(noticeKey));
+  if (el._sig === sig) return;               // unchanged: leave the nodes alone
+  el._sig = sig;
+  el.hidden = !fresh.length;
+  if (!fresh.length) { el.innerHTML = ""; return; }
+  el.innerHTML = `<div class="list">` + fresh.map(n =>
+      `<div><span class="t">${esc(String(n.et || "").slice(11, 16))}</span>${esc(n.text)}</div>`).join("") +
+    `</div><button type="button" class="x" title="Dismiss — these won't show again" aria-label="Dismiss notices">&times;</button>`;
+  el.querySelector("button.x").addEventListener("click", () => {
+    for (const n of fresh) NOTICES_SEEN.add(noticeKey(n));
+    try { localStorage.setItem("hb_notices_seen", JSON.stringify([...NOTICES_SEEN].slice(-200))); } catch (_) {}
+    el.hidden = true; el.innerHTML = ""; el._sig = "[]";
+  });
+}
+
+/* ---- activity log (W4): what happened, in plain words ----
+   One sentence per journal row -- "Connected APEX…048 (login)", "Chart-trading limits set to
+   50 / 100", "NQ930 bought 3 @ 30,726.50 on …049" -- instead of `event key=value`. The raw line
+   stays one step away: the row's tooltip, a click on the row, or Raw in the section head for
+   every row. An event this table doesn't know still reads as words, and a row it can't read
+   falls back to them too -- never blank, never a crash. Text is escaped (it is the broker's own
+   words, sometimes). tone: "neg" a failure that needs eyes, "warn" a refusal or skip, "pos" /
+   "neg" a closed trade's P&L, "" plain. */
+const fmtPx = (v) => v == null || v === "" || !isFinite(v) ? "—" : Number(v).toLocaleString("en-US",
+  Number.isInteger(Number(v)) ? {} : {minimumFractionDigits: 2, maximumFractionDigits: 6});
+const actStrat = (r) => String(r.strategy || "").toUpperCase();
+const actOn = (r) => r.account ? " on " + acctShort(r.account) : "";
+const actErr = (e) => (typeof e === "string" ? e : JSON.stringify(e == null ? "" : e)).slice(0, 160);
+const actFail = (r) => r.ok ? "" : " — FAILED: " + actErr(r.error);
+/* A flatten or cancel reports its steps as text -- "market Sell 3: ok", "cancel 123: ok" -- and a
+   failure in the same list: "market Sell 3: <error>", "not flat — stop/target left working",
+   "position unreadable (…) — stop/target left working", "cancel [entry] 123: <error>", "… — check
+   it" (engine.py). Read them; never assume the benign case (review M3). A step counts as done only
+   when it matches one of the engine's own OK forms; anything else -- an error that runs over several
+   lines, a step this page doesn't know -- is a failure or CHECK IT (second review). A result that
+   is not a list of steps cannot be read, so it says so. */
+const STEP_OK = [/^market (Buy|Sell) \d+: ok$/, /^cancel (entry )?\S+: ok$/, /^the account is already flat$/,
+                 /^already killed — nothing to do$/];
+function stepFailures(steps) {
+  const f = {flatten: [], cancel: [], check: []};
+  if (!Array.isArray(steps)) { f.check.push("its result is unreadable"); return f; }
+  for (const raw of steps) {
+    const s = String(raw).trim();
+    if (STEP_OK.some(re => re.test(s))) continue;
+    const one = s.replace(/\s+/g, " ");               // an error over several lines reads as one
+    let m;
+    if ((m = /^market (Buy|Sell) (\d+): ([\s\S]*)$/.exec(s))) f.flatten.push(`market ${m[1]} ${m[2]} refused: ${m[3].replace(/\s+/g, " ")}`);
+    else if (/^(not flat|position unreadable)/.test(s)) f.flatten.push(one);
+    else if ((m = /^cancel (?:entry )?(\S+): ([\s\S]*)$/.exec(s))) f.cancel.push(`order ${m[1]}: ${m[2].replace(/\s+/g, " ")}`);
+    else f.check.push(one);                           // "check it", "status unknown", or a step it doesn't know
+  }
+  return f;
+}
+function failText(f, where) {
+  return [["flatten", "FLATTEN FAILED"], ["cancel", "CANCEL FAILED"], ["check", "CHECK IT"]]
+    .filter(([k]) => f[k].length).map(([k, what]) => `${what}${where} — ${f[k].map(actErr).join("; ")}`).join(" · ");
+}
+const REFUSED_WHY = {unknown_or_disabled: "it is off", not_a_straddle: "it runs off the price feed, not alerts",
+  killed: "it was killed today", already_traded: "it already acted today", outside_window: "outside its time window",
+  bad_prices: "the prices were unreadable", inverted_prices: "upper was below lower",
+  bad_spread: "the spread did not match its offset", no_assignments: "no accounts are booked",
+  all_accounts_skipped: "every booked account holds a manual position or order",
+  bad_signal: "the signal was incomplete", levels_wrong_side: "its stop/target were on the wrong side"};
+const EXIT_AT = {tp: " at the target", sl: " at the stop"};
+function actWould(r) {
+  if (r.upper != null || r.lower != null)
+    return `Buy stop ${fmtPx(r.upper)} / Sell stop ${fmtPx(r.lower)} × ${r.qty}`;
+  return `${r.side} ${r.qty} ${r.entry || ""}${r.entry_price != null ? " @ " + fmtPx(r.entry_price) : ""}` +
+    ` · SL ${fmtPx(r.sl)} · TP ${fmtPx(r.tp)}`;
+}
+const ACTIVITY = {
+  armed_toggled: (r) => [r.armed ? "Desk ARMED — signals place real orders" : "Desk disarmed — signals are journaled only"],
+  kill_switch: (r) => {
+    const n = Object.keys(r.results || {}).length, bad = killFailures(r.results);   // the account-wide sweep is the truth
+    return bad.length ? [`Kill everything — FAILED on ${bad.join(" · ")}; desk disarmed`, "neg"]
+      : [`Kill everything — ${n} account${n === 1 ? "" : "s"} cancelled and flattened, desk disarmed`, "warn"];
+  },
+  chart_trading_set: (r, prev) => {
+    if (r.cause) return [`Chart trading switched OFF by ${r.cause === "kill" ? "Kill everything" : r.cause}`, "warn"];
+    const lim = `${r.max_order_qty} / ${r.max_position_qty}`;
+    const flip = !!prev && prev.enabled !== undefined && !!prev.enabled !== !!r.enabled;
+    const limits = !!prev && prev.max_order_qty != null &&
+      (prev.max_order_qty !== r.max_order_qty || prev.max_position_qty !== r.max_position_qty);
+    if (flip && !limits) return [`Chart trading turned ${r.enabled ? "ON" : "OFF"}`];
+    if (limits && !flip) return [`Chart-trading limits set to ${lim}`];
+    return [`Chart trading ${r.enabled ? "ON" : "OFF"} · limits ${lim}`];
+  },
+  broker_connected: (r) => [`Connected ${acctShort(r.account)}${r.mode ? ` (${r.mode})` : ""}`],
+  reconnect_fell_back_to_login: (r) => [`${acctShort(r.account)}: reconnect failed, logging in again — ${actErr(r.error)}`, "warn"],
+  reconcile_error: (r) => [`${acctShort(r.account)}: couldn't re-check its orders after connecting — ${actErr(r.error)}`, "neg"],
+  manual_reconnect: (r) => {
+    const res = Object.entries(r.results || {}), bad = res.filter(([, v]) => !(v && v.ok));
+    return [`Reconnect: ${res.length - bad.length} of ${res.length} reconnected` +
+      (bad.length ? ` · failed: ${bad.map(([k]) => acctShort(k)).join(", ")}` : ""), bad.length ? "neg" : ""];
+  },
+  account_added: (r) => [`Added account ${acctShort(r.account)}${r.live ? " — LIVE" : " (demo)"}`],
+  account_removed: (r) => [`Removed account ${acctShort(r.account)}`],
+  book_updated: (r) => {
+    const a = Array.isArray(r.assignments) ? r.assignments : [];
+    return [a.length ? `${actStrat(r)} booked on ` + a.map(x => `${acctShort(x.account)} ×${x.qty}`).join(", ")
+                     : `${actStrat(r)} unbooked from every account`];
+  },
+  strategy_toggled: (r) => [`${actStrat(r)} switched ${r.enabled ? "ON" : "OFF"}${r.cause === "manual_flatten" ? " (Flatten & turn off)" : ""}`],
+  timer_gate: (r) => r.gate === true ? [`${actStrat(r)} gate open — trend day (ADX ${fmt(r.adx, 1)})`]
+    : r.gate === false ? [`${actStrat(r)} gate closed — chop day (ADX ${fmt(r.adx, 1)}), no trade today`]
+    : [`${actStrat(r)} gate unknown — only ${r.bars} daily bars, it will not fire`, "warn"],
+  timer_fired: (r) => r.result
+    ? [`${actStrat(r)} fired at 9:30 — anchor ${fmtPx(r.anchor)}${r.note ? " · " + actErr(r.note) : ""}`]
+    : [`${actStrat(r)} fired at 9:30 — anchor ${fmtPx(r.anchor)} — refused: ${actErr(r.note)}`, "warn"],
+  timer_skipped: (r) => r.reason === "gate_chop" ? [`${actStrat(r)} skipped today — chop (ADX ${fmt(r.adx, 1)})`]
+    : r.reason === "killed" ? [`${actStrat(r)} skipped — killed today`]
+    : r.reason === "manual_position" ? [`${actStrat(r)} skips ${acctShort(r.account)} today — it holds a manual position (${r.net > 0 ? "+" : ""}${r.net})`, "warn"]
+    : r.reason === "manual_order" ? [`${actStrat(r)} skips ${acctShort(r.account)} today — a manual order is working`, "warn"]
+    : [`${actStrat(r)} skipped — ${actErr(r.reason)}`, "warn"],
+  timer_missed: (r) => [`${actStrat(r)} missed today's window (it closed at ${r.window_end})`, "warn"],
+  timer_deferred: (r) => [`${actStrat(r)} timer stood down — it already acted today (${r.status})`],
+  timer_error: (r) => [`${actStrat(r)} timer error — ${actErr(r.error)}`, "neg"],
+  timer_loop_error: (r) => [`Timer error — ${actErr(r.error)}`, "neg"],
+  prestage_rtt: (r) => [`${actStrat(r)} staged for the 9:30 fire`],
+  prestage_check_failed: (r) => [`${actStrat(r)} pre-open check failed${actOn(r)} — ${actErr(r.error)}`, "warn"],
+  morning_readiness: (r) => r.ready ? ["Morning check: ready to trade"]
+    : [`Morning check: NOT ready — ${(r.problems || []).map(actErr).join(" · ")}`, "neg"],
+  alert_refused: (r) => [`${actStrat(r)} signal refused — ${REFUSED_WHY[r.reason] || actErr(r.reason)}`, "warn"],
+  signal_refused: (r) => [`${actStrat(r)} signal refused — ${REFUSED_WHY[r.reason] || actErr(r.reason)}`, "warn"],
+  dry_run: (r) => [`${actStrat(r)} dry run${actOn(r)}: would place ${actWould(r)}`],
+  shadow_signal: (r) => [`${actStrat(r)} shadow signal${actOn(r)}: would place ${actWould(r)}`],
+  placed: (r) => [`${actStrat(r)} placed${actOn(r)}: ${actWould(r)}${r.place_ms != null ? ` (${r.place_ms} ms)` : ""}`],
+  place_failed: (r) => [`${actStrat(r)} order REJECTED${actOn(r)}${r.leg ? ` — ${r.leg} leg` : ""} — ${actErr(r.error)}`, "neg"],
+  fill_matched_by_side: (r) => [`${actStrat(r)} fill${actOn(r)} matched by side (it came without an order id)`],
+  entry_fill: (r) => [`${actStrat(r)} ${r.side === "Sell" ? "sold" : "bought"}${r.qty_filled != null ? " " + r.qty_filled : ""} @ ${fmtPx(r.fill)}${actOn(r)}` +
+      (r.fill_vs_anchor ? ` (${r.fill_vs_anchor > 0 ? "+" : ""}${r.fill_vs_anchor} vs trigger)` : "") +
+      (r.sibling_cancelled === false ? ` — the other side was NOT cancelled: ${actErr(r.sibling_error)}` : ""),
+    r.sibling_cancelled === false ? "neg" : ""],
+  brackets_moved: (r) => r.moved === true ? [`${actStrat(r)} stop/target moved to the fill${actOn(r)}: SL ${fmtPx(r.sl)} · TP ${fmtPx(r.tp)}`]
+    : r.moved === false ? [`${actStrat(r)} couldn't move stop/target${actOn(r)} — ${actErr(r.error)} (the trigger levels still protect it)`, "warn"]
+    : [`${actStrat(r)} stop/target stay${actOn(r)} — ${actErr(r.moved)}`],
+  both_filled_emergency: (r) => {
+    const t = failText(stepFailures(r.actions), "");
+    return [`${actStrat(r)}: BOTH sides filled${actOn(r)} — emergency flatten ${t ? "· " + t : "done"}`, "neg"];
+  },
+  exit_fill: (r) => [`${actStrat(r)} exited${actOn(r)}${EXIT_AT[r.reason] || ""} @ ${fmtPx(r.fill)}` +
+      (r.pnl != null ? `, ${r.pnl > 0 ? "+" : ""}${usd(r.pnl)}` : ""), r.pnl > 0 ? "pos" : r.pnl < 0 ? "neg" : ""],
+  sibling_cancel_retry: (r) => r.ok === false
+    ? [`${actStrat(r)}: CANCEL FAILED${actOn(r)} — the other entry is still working: ${actErr(r.error)}`, "neg"]
+    : [`${actStrat(r)} re-cancelled the other side${actOn(r)}`],
+  fill_recovered_on_reconnect: (r) => [`${actStrat(r)} entry (${r.side}) found${actOn(r)} after reconnecting`, "warn"],
+  entry_found_by_check: (r) => [`${actStrat(r)} entry (${r.side}) found${actOn(r)} by the order check — its fill message was missed`, "warn"],
+  exit_recovered_on_reconnect: (r) => [`${actStrat(r)}${actOn(r)} closed while disconnected — found on reconnect`, "warn"],
+  cancelled_unfilled: (r) => [`${actStrat(r)}${actOn(r)}: no fill by the cancel time — entries cancelled`],
+  cancel_raced_fill: (r) => [`${actStrat(r)}${actOn(r)}: filled as the entries were cancelled — now in position (${r.net})`, "warn"],
+  clock_flat: (r) => {
+    const t = failText(stepFailures(r.actions), "");
+    return [`${actStrat(r)} flattened${actOn(r)} at the end-of-day time${t ? " · " + t : ""}`, t ? "neg" : ""];
+  },
+  clock_flat_failed: (r) => [`${actStrat(r)} end-of-day FLATTEN FAILED${actOn(r)} — ` +
+    (failText(stepFailures(r.actions), "").replace(/^FLATTEN FAILED — /, "") || "check it"), "neg"],
+  killed_run_needs_check: (r) => [`${actStrat(r)}${actOn(r)} needs a check — killed, but still ${r.status} at ${r.at}`, "neg"],
+  killed_run_entries_cancelled: (r) => {
+    const t = failText(stepFailures(r.actions), "");
+    return t ? [`${actStrat(r)}${actOn(r)}: the killed run's entries — ${t}`, "neg"]
+             : [`${actStrat(r)}${actOn(r)}: the killed run's entries were cancelled`];
+  },
+  strategy_kill_requested: (r) => [`${actStrat(r)} kill requested${r.source === "chart" ? " from the chart" : ""}`, "warn"],
+  strategy_killed: (r) => {
+    const bad = Object.entries(r.results || {}).filter(([, x]) => !x || x.ok === false)
+      .map(([a, x]) => `${acctShort(a)}: ` + (failText(stepFailures((x && x.actions) || []), "") || actErr((x && x.error) || "needs a check")));
+    return bad.length ? [`${actStrat(r)} killed for today — CHECK ${bad.join(" · ")}`, "neg"]
+                      : [`${actStrat(r)} killed for today`, "warn"];
+  },
+  strategy_kill_check: (r) => [`${actStrat(r)} kill${actOn(r)} needs a check — ${actErr(r.reason)}`, "neg"],
+  strategy_killed_after_ack: (r) => {
+    const t = failText(stepFailures(r.actions || []), "");
+    return (r.ok === false || t)
+      ? [`${actStrat(r)} kill${actOn(r)}, once its orders were acknowledged — ${t || "needs a check"}`, "neg"]
+      : [`${actStrat(r)} kill finished${actOn(r)} once its orders were acknowledged`];
+  },
+  strategy_kill_failed: (r) => [`${actStrat(r)} kill FAILED${actOn(r)} — ${actErr(r.error)}`, "neg"],
+  manual_flatten: (r) => {
+    if (r.source === "chart") return r.ok ? [`Chart: flattened ${r.contract || ""}${actOn(r)}`]
+      : [`Chart: FLATTEN FAILED${actOn(r)}${r.contract ? ` (${r.contract})` : ""} — ${actErr(r.error)}`, "neg"];
+    const res = Object.entries(r.results || {});
+    const bad = res.map(([a, steps]) => failText(stepFailures(steps), " on " + acctShort(a))).filter(Boolean);
+    if (bad.length) return [`${actStrat(r)} flatten — ${bad.join(" · ")}`, "neg"];
+    return [res.length ? `${actStrat(r)} flattened on ${res.length} account${res.length === 1 ? "" : "s"}`
+                       : `${actStrat(r)} flatten — nothing of its was open today`];
+  },
+  manual_order: (r) => [`Chart order${actOn(r)}: ${r.side} ${r.qty} ${r.contract || r.root || ""} ${r.type || ""}` +
+      (r.price != null ? ` @ ${fmtPx(r.price)}` : r.trigger != null ? ` @ ${fmtPx(r.trigger)}` : "") +
+      (r.ok ? "" : " — REFUSED: " + actErr(r.error)), r.ok ? "" : "neg"],
+  manual_modify: (r) => [`Chart: order moved to ${fmtPx(r.price)}${actOn(r)}${r.contract ? ` (${r.contract})` : ""}${actFail(r)}`, r.ok ? "" : "neg"],
+  manual_cancel: (r) => r.ok
+    ? [`Chart: ${r.scope === "symbol" ? `cancelled every ${r.contract || ""} order` : "cancelled an order"}${actOn(r)}`]
+    : [`Chart: CANCEL FAILED${actOn(r)}${r.contract ? ` (${r.contract})` : ""} — ${actErr(r.error)}`, "neg"],
+  manual_exits: (r) => [`Chart: exits set${actOn(r)}${r.contract ? " " + r.contract : ""} — ` +
+      [r.sl != null ? "SL " + fmtPx(r.sl) : "", r.tp != null ? "TP " + fmtPx(r.tp) : ""].filter(Boolean).join(" · ") + actFail(r),
+    r.ok ? "" : "neg"],
+  manual_reverse: (r) => [`Chart: reverse ${r.contract || ""}${actOn(r)} — ${r.step === "flatten" ? "flattened" : `opened ${r.side} ${r.qty}`}${actFail(r)}`,
+    r.ok ? "" : "neg"],
+  manual_refused: (r) => [`Chart ${r.action || "action"} refused${actOn(r)} — ${actErr(r.reason)}`, "warn"],
+  manual_error: (r) => [`Chart ${r.action || "action"} error${actOn(r)} — ${actErr(r.error)}`, "neg"],
+  feed_started: (r) => [`Price feed started${Array.isArray(r.watching) && r.watching.length ? " — " + r.watching.join(", ") : ""}`],
+  feed_stopped: (r) => [`Price feed stopped — ${actErr(r.reason)}`],
+  feed_error: (r) => [`Price feed error${r.strategy ? ` (${actStrat(r)})` : ""} — ${actErr(r.error)}${r.penalized ? " — rate-limited, retrying in 5 min" : ""}`, "neg"],
+  feed_loop_error: (r) => [`Price feed error — ${actErr(r.error)}`, "neg"],
+  rule_error: (r) => [`${actStrat(r)} rule error — ${actErr(r.error)}`, "neg"],
+  clock_error: (r) => [`Clock error — ${actErr(r.error)}`, "neg"],
+  desk_key_error: (r) => [`Desk key problem — ${actErr(r.error)}`, "neg"],
+  selftest_order: (r) => [`Self-test order${actOn(r)}${r.placed ? (r.placed.ok ? " — placed and cancelled" : " — refused: " + actErr(r.placed.error)) : ""}`,
+    r.placed && !r.placed.ok ? "warn" : ""],
+  selftest_order_rest: (r) => [`Self-test order${actOn(r)} (REST) — HTTP ${r.http_status}`],
+};
+function activityLine(r, prev) {
+  const f = ACTIVITY[r.event];
+  if (f) {
+    try {
+      const [text, tone] = f(r, prev);
+      if (text) return {text, tone: tone || ""};
+    } catch (_) { /* a row this formatter can't read falls back to plain words below */ }
+  }
+  const what = String(r.event || "event").replace(/_/g, " ");
+  return {text: what.charAt(0).toUpperCase() + what.slice(1) + (r.strategy ? " — " + actStrat(r) : "") + actOn(r),
+          tone: /error|fail/.test(String(r.event)) ? "neg" : ""};
+}
+function activityRaw(r) {
+  const {ts, et, event, ...rest} = r;
+  return [event, ...Object.entries(rest).map(([k, v]) =>
+    `${k}=${typeof v === "object" ? JSON.stringify(v) : v}`)].join("  ");
+}
+let FEED_ROWS = [], FEED_SIG = null, FEED_RAW = false;
+const FEED_OPEN = new Set();   // rows opened to their raw line, by ts|et|event|account
+function renderActivity(journal) {
+  FEED_ROWS = (Array.isArray(journal) ? journal : []).filter(r => r && typeof r === "object");
+  const sig = JSON.stringify([FEED_ROWS, FEED_RAW, [...FEED_OPEN]]);
+  if (sig === FEED_SIG) return;           // nothing changed: leave the rows (and a hovered tooltip) alone
+  FEED_SIG = sig;
+  $("#feed").innerHTML = FEED_ROWS.map((r, i) => {
+    const prev = r.event === "chart_trading_set" ? FEED_ROWS.slice(i + 1).find(o => o.event === r.event) : null;
+    const {text, tone} = activityLine(r, prev);
+    const raw = activityRaw(r), key = `${r.ts}|${r.et}|${r.event}|${r.account || ""}`, open = FEED_RAW || FEED_OPEN.has(key);
+    return `<div class="feed-row${open ? " open" : ""}" data-k="${esc(key)}" title="${esc(raw)}">` +
+      `<span class="t">${esc(String(r.et || "").slice(11, 19))}</span>` +
+      `<span class="h${tone ? " " + tone : ""}">${esc(text)}</span>` +
+      (open ? `<span class="raw">${esc(raw)}</span>` : "") + `</div>`;
+  }).join("") || '<div class="feed-empty">Waiting for events…</div>';
+}
+$("#feed").addEventListener("click", (e) => {
+  const row = e.target && e.target.closest && e.target.closest(".feed-row");
+  if (!row || FEED_RAW) return;
+  const sel = window.getSelection && window.getSelection();
+  if (sel && String(sel) !== "") return;   // selecting text to copy is not a click to open
+  const k = row.getAttribute("data-k");
+  if (FEED_OPEN.has(k)) FEED_OPEN.delete(k); else FEED_OPEN.add(k);
+  renderActivity(FEED_ROWS);
+});
+$("#feedRawBtn").addEventListener("click", () => {
+  FEED_RAW = !FEED_RAW;
+  $("#feedRawBtn").setAttribute("aria-pressed", String(FEED_RAW));
+  renderActivity(FEED_ROWS);
+});
+
 /* ---- render ---- */
-const STATUS_PILL = {idle: "pill idle", placing: "pill", placed: "pill", live: "pill live",
+/* A strategy's day status as a pill -- its own look, never the ARMED red or the LIVE tag (S4):
+   "live" (a position is open) reads "in position", "placed" (entries resting) "orders working".
+   The desk's own word stays in the tooltip. */
+const STATUS_PILL = {idle: "pill idle", placing: "pill", placed: "pill", live: "pill inpos",
                      done: "pill idle", error: "pill lost"};
+const STATUS_TEXT = {placed: "orders working", live: "in position"};
+const dayPill = (st) => `<span class="${STATUS_PILL[st] || "pill idle"}" title="Today: ${st}">${STATUS_TEXT[st] || st}</span>`;
 
 function stratCard(name, s) {
   const c = s.cfg;
-  const pill = `<span class="${STATUS_PILL[s.day_status] || "pill idle"}">${s.day_status}</span>`;
+  const pill = dayPill(s.day_status);
   const onoff = `<button class="switch" aria-checked="${c.enabled}"
     title="${c.enabled ? "ON — this strategy runs and executes" : "OFF — ignores all signals"}"
     onclick="toggleStrat('${name}', ${!c.enabled})"></button>`;
@@ -712,7 +1621,7 @@ function stratCard(name, s) {
               "net": usd(lv.net), "avg/trade": usd(lv.avg_trade),
               "avg slip": (lv.avg_slip_pts ?? "—") + " pts",
               "days": lv.days})
-    : `<div class="mcap">no live trades yet — this strip earns itself</div>`);
+    : `<div class="mcap">No live trades yet</div>`);
 
   // the accounts running this strategy — full rows, balance + P&L + Calendar
   const accts = ST.accounts || {};
@@ -721,10 +1630,10 @@ function stratCard(name, s) {
   const free = Object.keys(accts).filter(id => !asg.some(a => a.account === id));
   const addForm = Object.keys(accts).length
     ? (free.length ? `<div style="position:relative;display:inline-block;margin-top:8px">
-        <button class="btn btn-outline btn-sm" onclick="toggleAsgMenu('${name}')">+ Assign</button>
-        <div class="amenu" id="amenu-${name}" hidden>` +
-        free.map(id => `<button class="mi2" onclick="pickAsg('${name}','${id}',${c.qty})">
-          ${accts[id].label || id}</button>`).join("") + `</div></div>` : "")
+        <button class="btn btn-outline btn-sm" onclick="toggleAsgMenu('${name}')" aria-haspopup="menu">+ Assign</button>
+        <div class="amenu" id="amenu-${name}" role="menu" hidden>` +
+        free.map(id => `<button class="mi2" role="menuitem" onclick="pickAsg('${name}',${jsArg(id)},${c.qty})">
+          ${esc(accts[id].label || id)}</button>`).join("") + `</div></div>` : "")
     : `<div class="mcap">add an account to run this strategy</div>`;
   const book = `<div class="slabel2">ACCOUNTS</div>${rows || ""}${addForm}`;
 
@@ -745,7 +1654,7 @@ function stratCard(name, s) {
     </div>
     <div class="card-content">${research}${live}${book}</div>
     <div class="card-footer" style="justify-content:flex-end;gap:8px">
-      <button class="btn btn-outline btn-sm" onclick="flattenStrat('${name}')">Flatten · off</button>
+      <button class="btn btn-outline btn-sm" onclick="flattenStrat('${name}')" title="Flattens its positions and switches it off">Flatten &amp; turn off</button>
       ${test}</div>
   </div>`;
 }
@@ -753,17 +1662,13 @@ function stratCard(name, s) {
 function render() {
   const s = ST;
   $("#clock").textContent = s.et_now.replace("T", " · ").slice(0, 21) + " ET";
-  const pill = $("#statusPill");
-  pill.textContent = s.armed ? "ARMED" : "SHADOW";
-  pill.className = s.armed ? "pill live" : "pill idle";
-  pill.title = s.armed ? "Signals place real orders — SL/TP ride broker-side"
-    : "Signals are validated and journaled only";
+  renderMaster();
   renderChartTrading(s.chart_trading);
   if ($("#settingsOverlay").classList.contains("open")) renderSettings();
 
   // readiness: silent when fine, loud when not; dismissable — but a
   // dismissed strip returns the moment the SET of problems changes
-  const r = s.readiness;
+  const r = readinessShown(s.readiness, s);   // a "no signal" that could not have fired reads as info (W4)
   renderBulb(r);
   const strip = $("#readyStrip");
   const probs = r ? r.checks.filter(c => c.level === "bad" || c.level === "warn") : [];
@@ -775,7 +1680,7 @@ function render() {
     strip.style.display = "";
     strip.innerHTML = `<span class="headline">Not ready</span>` +
       probs.map(c => `<span class="ri ${c.level}">
-        <span class="rd ${c.level}"></span><b>${c.label}</b> ${String(c.detail).slice(0, 70)}${String(c.detail).length > 70 ? "…" : ""}</span>`).join("") +
+        <span class="rd ${c.level}"></span><b>${esc(c.label)}</b> ${esc(String(c.detail).slice(0, 70))}${String(c.detail).length > 70 ? "…" : ""}</span>`).join("") +
       `<span class="spacer"></span>` +
       (Object.values(s.accounts || {}).some(a => !a.connected)
         ? `<button class="btn btn-outline btn-sm" onclick="reconnectAcct('')"
@@ -792,6 +1697,11 @@ function render() {
   $("#strats").innerHTML = Object.entries(s.strategies)
     .filter(([n]) => visibleNames.has(n))
     .map(([n, v]) => stratCard(n, v)).join("");
+  // the cards were rebuilt: an + Assign menu that lived in them is gone -- so is its hold on updates
+  if (ASG_OPEN && !document.contains(ASG_OPEN.menu)) {
+    ASG_OPEN = null;
+    if (!document.getElementById("qedit")) FREEZE = false;
+  }
   const hiddenCount = algoVis.filter(a => !a.visible).length;
   const hint = $("#algoHiddenHint");
   if (hiddenCount) {
@@ -802,24 +1712,48 @@ function render() {
   } else hint.style.display = "none";
   if ($("#algoOverlay").classList.contains("open")) renderAlgoMgr();
 
-  const feed = $("#feed");
-  const rows = (s.journal || []).map(r => {
-    const {ts, et, event, ...rest} = r;
-    const kv = Object.entries(rest).map(([k, v]) =>
-      `${k}=${typeof v === "object" ? JSON.stringify(v) : v}`).join("  ");
-    return `<div class="feed-row"><span class="t">${(et || "").slice(11, 19)}</span>
-      <span class="e">${event}</span><span class="d">${kv}</span></div>`;
-  }).join("");
-  feed.innerHTML = rows || '<div class="feed-empty">Waiting for events…</div>';
+  renderActivity(s.journal);
+  renderNotices(s.notices);
 }
 
+/* An open + Assign menu or size edit holds updates (FREEZE) so a repaint never wipes it -- but the
+   top bar must not keep asserting a state nothing is checking: after FREEZE_STALE_MS without a
+   fresh status, the pill goes stale ("· stale", dashed) until the next refresh after the menu or
+   edit closes. No extra request is made for it. */
+const FREEZE_STALE_MS = 5000;
+let LAST_FRESH = Date.now();      // when ST last came from the desk
 async function refresh() {
-  if (FREEZE) return;             // don't wipe an open menu or qty edit
-  if (DEMO) { ST = demoStatus(); DESK_STALE = false; render(); return; }
-  try { ST = await (await fetch("/api/status")).json(); DESK_STALE = false; render(); }
+  if (FREEZE) {                   // don't wipe an open menu or qty edit
+    if (!DESK_STALE && Date.now() - LAST_FRESH > FREEZE_STALE_MS) {
+      DESK_STALE = true; STALE_WHY = "updates pause while a menu or a size edit is open";
+      renderMaster();
+    }
+    return;
+  }
+  if (DEMO) { ST = demoStatus(); DESK_STALE = false; LAST_FRESH = Date.now(); render(); return; }
+  /* Only a real status replaces ST (second review): an HTTP error with a JSON body (the write
+     guard's 403) or a body without a boolean `armed` used to become ST -- and the pill then read
+     DISARMED, a state nobody reported. Anything else keeps the last-known state, marked stale. */
+  let refused = "";
+  try {
+    const res = await fetch("/api/status");
+    let d = null;
+    try { d = await res.json(); } catch (_) { d = null; }
+    if (!res.ok) refused = `the desk answered HTTP ${res.status}` + (d && d.error ? ": " + String(d.error).slice(0, 80) : "");
+    else if (!d || typeof d !== "object" || typeof d.armed !== "boolean") refused = "the desk's status was unreadable";
+    if (refused) throw new Error(refused);
+    ST = d; DESK_STALE = false; STALE_WHY = ""; LAST_FRESH = Date.now();
+    // (second review) a menu or size edit that opened while this was in flight is never wiped: the
+    // cards wait for the next refresh after it closes -- repainting them removed an open + Assign
+    // menu (leaving updates paused with no menu on screen) and an open size edit (whose blur then
+    // wrote the half-typed size). The top bar is its own, so it still gets the fresh state.
+    if (FREEZE) renderMaster(); else render();
+  }
   catch {
-    DESK_STALE = true;   // ST is now the last-known state, not current -- Settings shows it as stale
-    $("#clock").textContent = "server unreachable";
+    DESK_STALE = true;   // ST is now the last-known state, not current -- the top bar shows it as stale
+    STALE_WHY = refused || "the desk is not answering";
+    $("#clock").textContent = refused ? "status error" : "server unreachable";
+    renderMaster();
     if ($("#settingsOverlay").classList.contains("open")) renderSettings();
   }
 }
@@ -950,9 +1884,9 @@ function demoStatus() {
   };
 }
 
-/* Chart trading (orders from the chart page; the desk decides) now lives in Settings' TRADING
-   section (below Arm/Disarm, above Kill) -- see buildTrading()/renderChartTrading() there. A
-   Kill switches it off, so it has to live somewhere the user can always turn it back on. */
+/* Chart trading (orders from the chart page; the desk decides) lives in Settings' CHART TRADING
+   section -- see buildTrading()/renderChartTrading() there. A Kill switches it off, so it has to
+   live somewhere the user can always turn it back on. Arm/Disarm/Kill are in the top bar. */
 
 async function testFire(name) {
   const r = await post("/api/test-alert", {strategy: name});
@@ -965,21 +1899,21 @@ function acctRow(id, extra) {
   const a = (ST.accounts || {})[id] || {label: id};
   const pnl = a.realized_pnl;
   const err = (!a.connected && a.error)
-    ? `<span class="kvi neg" style="font-size:11px;text-align:left;min-width:0">${String(a.error).slice(0, 46)}…</span>` : "";
+    ? `<span class="kvi neg" style="font-size:11px;text-align:left;min-width:0">${esc(String(a.error).slice(0, 46))}…</span>` : "";
   return `<div class="acct" style="padding:7px 0">
     <span class="dot ${a.connected ? "on" : "off"}" style="width:7px;height:7px"></span>
-    <span class="nm" style="font-size:13px">${a.label}</span>
-    ${a.env === "live" ? '<span class="pill live" style="font-size:10px">LIVE</span>' : ""}
+    <span class="nm" style="font-size:13px">${esc(a.label)}</span>
+    ${a.env === "live" ? '<span class="tag-live" title="A live account — real money">LIVE</span>' : ""}
     ${extra.qty ? (extra.strategy
       ? `<span class="strats qty-edit" title="Click to change size"
-           onclick="editQty(event,'${extra.strategy}','${id}',${extra.qty})">×${extra.qty}</span>`
+           onclick="editQty(event,'${extra.strategy}',${jsArg(id)},${extra.qty})">×${extra.qty}</span>`
       : `<span class="strats">×${extra.qty}</span>`) : ""}
     ${err}<span class="spacer"></span>
     <span class="kvi">${usd(a.balance)}</span>
     <span class="kvi ${pnl > 0 ? "pos" : pnl < 0 ? "neg" : ""}">${pnl > 0 ? "+" : ""}${usd(pnl)}</span>
-    <button class="btn btn-outline btn-sm" onclick="openCal('${a.account || a.label}')">Calendar</button>
+    <button class="btn btn-outline btn-sm" onclick="openCal(${jsArg(a.account || a.label)})">Calendar</button>
     ${extra.strategy ? `<button class="x" style="border:none;background:none;color:var(--muted-foreground);cursor:pointer;font-size:14px"
-      onclick="removeAsg('${extra.strategy}','${id}')" title="Unassign">&times;</button>` : ""}
+      onclick="removeAsg('${extra.strategy}',${jsArg(id)})" title="Unassign">&times;</button>` : ""}
   </div>`;
 }
 
@@ -994,15 +1928,70 @@ function removeAsg(strategy, account) {
   setBook(strategy, cur);
 }
 let FREEZE = false;               // pause re-render while a menu/edit is open
+let ASG_OPEN = null;              // the open + Assign menu: {menu, trigger} (W7: Esc, focus, arrows)
 function toggleAsgMenu(strategy) {
   const m = $("#amenu-" + strategy);
   const open = m.hidden;
   document.querySelectorAll(".amenu").forEach(x => x.hidden = true);
   m.hidden = !open;
   FREEZE = !m.hidden;
+  ASG_OPEN = m.hidden ? null : {menu: m, trigger: m.previousElementSibling};
+  if (ASG_OPEN) { const first = m.querySelector(".mi2"); if (first) first.focus(); }   // focus goes in
 }
-function pickAsg(strategy, account, qty) {
+/* Close any open + Assign menu; `refocus` (Esc) hands focus back to its + Assign button. */
+function closeAsgMenus(refocus) {
+  const was = ASG_OPEN;
+  document.querySelectorAll(".amenu").forEach(x => x.hidden = true);
+  ASG_OPEN = null;
+  if (!document.getElementById("qedit")) FREEZE = false;
+  if (refocus && was && was.trigger && document.contains(was.trigger)) was.trigger.focus();
+  return !!was;
+}
+/* Booking a LIVE account onto a strategy asks first (2026-09-28, Apple-design audit S3): it is the
+   step that makes a live account trade real money, so it gets the same dialog as connecting one
+   or arming the desk. A demo account books at once, exactly as before. The account's environment
+   is re-read at click time, and one the desk does not list counts as live (fail closed: ask).
+   The dialog names the strategy, the account and the size that will be sent -- frozen from the
+   click. The rest of the book is read after the answer, so a change that landed meanwhile (an
+   account unbooked in another window) is never written back. Cancel sends nothing. Raising a
+   live booking's size asks the same way -- but only from Enter: a blur (a click anywhere else,
+   Kill included) never opens a dialog, it reverts the raise and says so (review M2). Lowering a
+   size, or unbooking (removeAsg), never asks -- the safer direction (the desk's one confirm
+   policy). "Book live" is the neutral primary button, never Kill's red. */
+function isDemoAcct(id) {
+  const a = ((ST && ST.accounts) || {})[id];
+  return !!a && a.env === "demo";
+}
+/* "APEX…048" / "…885": a broker's long numbered name shortened the way the chart page shows it,
+   keeping a short letter prefix when there is one; a plain label ("Lucid Funded") stays whole. */
+function acctShort(id) {
+  const a = ((ST && ST.accounts) || {})[id];
+  const s = String((a && a.label) || id || "");
+  if (s.length < 10 || (s.match(/[0-9]/g) || []).length < 5) return s;
+  const pre = (/^[A-Za-z]+/.exec(s) || [""])[0];
+  return (pre.length <= 8 ? pre.toUpperCase() : "") + "…" + s.slice(-3);
+}
+function liveBookingNote(strategy, account) {
+  const c = ((((ST && ST.strategies) || {})[strategy]) || {}).cfg || {};
+  const a = ((ST && ST.accounts) || {})[account];
+  const full = String((a && a.label) || account || "");
+  const acct = full !== acctShort(account) ? ` Account ${full}.` : "";
+  if (!a) return `This account is not in the desk's list right now, so it is treated as LIVE.${acct}`;
+  if (c.shadow) return "It is a SHADOW strategy: its signals are journaled, never placed — the booking " +
+    `stands if that changes.${acct}`;
+  const when = c.kind === "bars" ? "on its next signal" : c.self_fire ? "at the next 9:30 fire" : "on its next alert";
+  const idle = [];
+  if (!c.enabled) idle.push(strategy.toUpperCase() + " is off");
+  if (ST && !ST.armed) idle.push("the desk is disarmed");
+  return `It will trade real money ${when}.` +
+    (idle.length ? ` Right now ${idle.join(" and ")}, so nothing is placed until that changes.` : "") + acct;
+}
+async function pickAsg(strategy, account, qty) {
   FREEZE = false;
+  closeAsgMenus(false);
+  if (!isDemoAcct(account) && !await confirmDlg(
+      `Book ${strategy.toUpperCase()} on ${acctShort(account)} LIVE × ${qty}?`,
+      liveBookingNote(strategy, account), "Book live", false)) { refresh(); return; }
   const cur = (ST.book[strategy] || []).filter(a => a.account !== account);
   cur.push({account, qty});
   setBook(strategy, cur);
@@ -1014,25 +2003,46 @@ function editQty(ev, strategy, account, qty) {
   span.outerHTML = `<input class="qty-input" id="qedit" type="number" min="1" value="${qty}">`;
   const inp = $("#qedit");
   inp.focus(); inp.select();
-  const commit = () => {
+  let done = false;                 // one commit per edit, however many blurs follow
+  // explicit: Enter. A blur -- a click anywhere else, Kill included -- never opens a dialog under
+  // the pointer: a live raise is reverted instead, and the page says so (review M2).
+  const commit = async (explicit) => {
+    if (done) return;
+    done = true;
     FREEZE = false;
     const v = parseInt(inp.value || "0", 10);
     if (v > 0 && v !== qty) {
+      if (v > qty && !isDemoAcct(account)) {
+        if (!explicit) {
+          toast(`${strategy.toUpperCase()} on ${acctShort(account)} stays × ${qty} — ` +
+                "press Enter to raise a LIVE booking.");
+          refresh(); return;
+        }
+        if (!await confirmDlg(
+            `Book ${strategy.toUpperCase()} on ${acctShort(account)} LIVE × ${v} (now × ${qty})?`,
+            liveBookingNote(strategy, account), "Book live", false)) { refresh(); return; }
+      }
       const cur = (ST.book[strategy] || []).map(a =>
         a.account === account ? {account, qty: v} : a);
       setBook(strategy, cur);
     } else refresh();
   };
-  inp.addEventListener("blur", commit);
+  inp.addEventListener("blur", () => commit(false));
   inp.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") inp.blur();
+    if (e.key === "Enter") {
+      // (review M4) Enter's own default action would land on whatever has focus AFTER this handler
+      // -- the confirm's Cancel, which the dialog just focused -- and cancel it. Stop it first.
+      e.preventDefault();
+      if (e.repeat) return;
+      commit(true);
+      if (document.activeElement === inp) inp.blur();   // no dialog opened: leave the field as before
+    }
     if (e.key === "Escape") { inp.value = qty; inp.blur(); }
   });
 }
 document.addEventListener("click", (e) => {
   if (!e.target.closest(".amenu") && !String(e.target.getAttribute?.("onclick") || "").includes("toggleAsgMenu")) {
-    document.querySelectorAll(".amenu").forEach(x => x.hidden = true);
-    if (!document.getElementById("qedit")) FREEZE = false;
+    closeAsgMenus(false);
   }
 });
 function mstrip(rows) {
@@ -1043,7 +2053,7 @@ function mstrip(rows) {
 /* ---- connect wizard ---- */
 let WIZ = {saved: null, key: null, accounts: [], pick: null, env: "demo"};
 function openConnect() {
-  setEnv("demo"); wizGoto(1); $("#connectOverlay").classList.add("open");
+  setEnv("demo"); wizGoto(1); showOverlay("connectOverlay");
 }
 function setEnv(env) {
   if (WIZ.env !== env) WIZ.saved = null;          // saved logins are per env
@@ -1056,7 +2066,7 @@ function setEnv(env) {
     : "Demo is the safe default.";
   n.style.color = env === "live" ? "var(--destructive)" : "";
   $("#envTag2").innerHTML = env === "live"
-    ? '<span class="pill live" style="font-size:11px;vertical-align:middle">LIVE</span>' : "";
+    ? '<span class="tag-live" style="vertical-align:middle" title="A live login — real money">LIVE</span>' : "";
 }
 async function wizNext1() {
   if (WIZ.env === "live" && !(await confirmDlg("Connect a LIVE account?",
@@ -1066,7 +2076,7 @@ async function wizNext1() {
   wizGoto(2);
 }
 function closeConnect() {
-  $("#connectOverlay").classList.remove("open");
+  hideOverlay("connectOverlay");
   const p = $("#cPass"); if (p) p.value = "";
 }
 function wizGoto(n) {
@@ -1085,12 +2095,14 @@ async function loadLogins() {
   if (!d.logins.length) { box.innerHTML =
     `<p class="wnote" style="margin:0 0 10px">none yet — type a login below</p>`;
     pickLogin(null); return; }
+  // a saved login's key and label are text the user typed (second review): escaped, the key passed to
+  // the handlers as a JS string literal (jsArg), and read back for the selection from data-login
   box.innerHTML = d.logins.map(l => `
-    <div class="opt ${WIZ.saved === l.key ? "sel" : ""}" onclick="pickLogin('${l.key}')">
-      <span><span class="t">${l.label}</span><br>
-      <span class="sub">${l.env}${l.in_use ? " · connected now" : ""}</span></span>
+    <div class="opt ${WIZ.saved === l.key ? "sel" : ""}" data-login="${esc(l.key)}" onclick="pickLogin(${jsArg(l.key)})">
+      <span><span class="t">${esc(l.label)}</span><br>
+      <span class="sub">${esc(l.env)}${l.in_use ? " · connected now" : ""}</span></span>
       <span class="spacer"></span>
-      <button class="x" onclick="event.stopPropagation();delLogin('${l.key}')" title="Forget this login">&times;</button>
+      <button class="x" onclick="event.stopPropagation();delLogin(${jsArg(l.key)})" title="Forget this login">&times;</button>
       <span class="radio"></span>
     </div>`).join("");
   if (WIZ.saved === null && d.logins.length) pickLogin(d.logins[0].key);
@@ -1104,8 +2116,7 @@ function pickLogin(key) {
 }
 function loadLoginsPaint() {
   document.querySelectorAll("#savedLogins .opt").forEach(el => {
-    const k = el.getAttribute("onclick").match(/'([^']*)'/)[1];
-    el.classList.toggle("sel", WIZ.saved === k);
+    el.classList.toggle("sel", WIZ.saved === el.getAttribute("data-login"));
   });
 }
 async function delLogin(key) {
@@ -1137,8 +2148,8 @@ function renderAcctList() {
     const added = have.includes(String(a.name).toLowerCase());
     return `
     <div class="opt ${WIZ.pick === a.name ? "sel" : ""} ${added ? "disabled" : ""}"
-         onclick="${added ? "" : `WIZ.pick='${a.name}';renderAcctList()`}">
-      <span><span class="t">${a.name}</span><br>
+         onclick="${added ? "" : `WIZ.pick=${jsArg(a.name)};renderAcctList()`}">
+      <span><span class="t">${esc(a.name)}</span><br>
       <span class="sub">${added ? "already in the pool" :
         (a.active === false ? "inactive" : "active")}</span></span>
       <span class="spacer"></span><span class="radio"></span>
@@ -1172,6 +2183,11 @@ let PAPER = [], PAPER_BROKEN = "";
 const PAPER_ID_RE = /^paper(?:-[1-9][0-9]{0,5})?$/;   // the chart service's id rule: nothing else is ever rendered
 const esc = (v) => String(v == null ? "" : v).replace(/[&<>"']/g,
   (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+/* A value as a JavaScript string literal inside an onclick="..." attribute: JSON makes it a string
+   literal JS can't break out of, esc() keeps the HTML attribute intact (esc alone is not enough --
+   the browser decodes &#39; back to ' before the JS runs). Account ids and names come from the
+   broker, so every inline handler that carries one uses this. */
+const jsArg = (v) => esc(JSON.stringify(String(v == null ? "" : v)));
 async function chartPost(path, body) {
   if (DEMO) { toast("Preview mode — sample data, controls disabled."); return {ok: false}; }
   try {
@@ -1248,59 +2264,26 @@ async function removePaper(id) {
   loadPaper();
 }
 
-/* ---- Settings (2026-09-27 desk-settings plan; fix round 1) ----
+/* ---- Settings (2026-09-27 desk-settings plan; fix round 1; 2026-09-28 master controls out) ----
    Moved here from the charts page, per the user's call. GET/PUT /api/settings and GET /api/status
    live in the CHART service (:8852) -- this page only asks it, over the same exact-origin CORS
    the paper-account routes above already use (charts/paperbook.py's DESK_ORIGINS, now shared by
    charts/server.py's /api/settings and /api/status too). No native dialogs: this page's own
-   overlay/modal pattern. Two sections, TRADING first, each with its OWN container
+   overlay/modal pattern. Two sections, CHART TRADING first, each with its OWN container
    (#settingsTrading / #settingsMarketData) so a rebuild of one never touches the other's nodes
-   (GOTCHAS: never rebuild a container that might have focus -- patch in place). TRADING is built
-   ONCE and only ever patched in place (status text, pill class, the toggle's label/class) --
-   #tradeKillBtn is never replaced, so a click or keyboard focus on it survives every repaint from
-   render()'s 2.5s ST refresh and loadChartStatus's own poll.
-
-   TRADING (arm/kill follow-up): Arm/Disarm/Kill, moved from the top bar into this dialog's
-   first section. These three handlers are UNCHANGED from the top-bar buttons they replace --
-   same confirmDlg, same POSTs to the desk's own /api/arm and /api/kill, same-origin as today.
-   They talk only to the desk itself (ST, already refreshed every 2.5s) -- never the CHART
-   service, so TRADING keeps working even when MARKET DATA reads "Charts service not reachable".
-   When ST is null (desk not yet heard from) TRADING shows "Desk status unknown" with no
-   Arm/Disarm toggle -- fail closed, never assert a safe state it doesn't know -- but Kill stays
-   enabled. When refresh() is failing, the last-known state is marked stale (DESK_STALE). */
-async function doArm() {
-  if (!await confirmDlg("Arm the desk?",
-      "Signals will place REAL bracketed orders on every account assigned in the book.",
-      "Arm", false)) return;
-  await post("/api/arm", {armed: true}); refresh();
-  toast("Armed — signals now place real orders.");
-}
-async function doDisarm() {
-  await post("/api/arm", {armed: false}); refresh();
-  toast("Disarmed — dry-run journaling only.");
-}
-async function doKill() {
-  if (!await confirmDlg("Kill everything?",
-      "Cancels every working order and market-flattens every position on EVERY connected account, then disarms.",
-      "Kill", true)) return;
-  const r = await post("/api/kill");
-  toast("Kill: " + JSON.stringify(r.results)); refresh();
-}
-
+   (GOTCHAS: never rebuild a container that might have focus -- patch in place). CHART TRADING is
+   built ONCE and only ever patched in place (renderChartTrading): a click or keyboard focus in it
+   survives every repaint from render()'s 2.5s ST refresh and loadChartStatus's own poll.
+   Arm/Disarm/Kill left this dialog for the top bar (2026-09-28, "master controls" above); the
+   section says where they went, so nobody hunts for them here. */
 let tradingEls = null;   // built once into #settingsTrading; never rebuilt after that
 function buildTrading() {
   if (tradingEls) return tradingEls;
   const root = $("#settingsTrading");
   if (!root) return null;
   root.innerHTML = `
-    <div class="slabel">TRADING</div>
-    <p class="wnote" style="margin-top:0" id="tradingLine">
-      <span class="pill idle" id="tradingPill">—</span> <span id="tradingText"></span></p>
-    <div class="row-btns" style="justify-content:flex-start;margin:8px 0 16px" id="tradingToggleRow">
-      <button class="btn btn-sm btn-default" id="tradeArmBtn" type="button"></button>
-    </div>
-
-    <div class="slabel" style="margin-top:16px">Chart trading</div>
+    <div class="slabel">CHART TRADING</div>
+    <p class="wnote" style="margin-top:0">Arm, Disarm and Kill everything are in the top bar.</p>
     <div class="acct" style="padding:4px 0;gap:12px;flex-wrap:wrap">
       <button class="switch" id="ctSwitch" aria-checked="false"
         title="OFF — the chart page cannot trade"></button>
@@ -1313,18 +2296,8 @@ function buildTrading() {
       <input id="ctMaxPos" type="number" min="1" max="100" step="1"
         style="width:64px;padding:5px 8px;border:1px solid var(--input);border-radius:var(--radius-md);background:var(--background);color:var(--foreground)">
       <button class="btn btn-outline btn-sm" id="ctSave">Save limits</button>
-    </div>
-
-    <p class="wnote" style="margin-top:16px">Cancels every working order and flattens every
-      position on every connected account, then disarms.</p>
-    <div class="row-btns" style="justify-content:flex-start;margin:8px 0">
-      <button class="btn btn-destructive btn-sm" id="tradeKillBtn" type="button">Kill everything</button>
     </div>`;
-  tradingEls = {
-    pill: $("#tradingPill"), text: $("#tradingText"),
-    toggleRow: $("#tradingToggleRow"), toggle: $("#tradeArmBtn"), kill: $("#tradeKillBtn"),
-  };
-  tradingEls.kill.onclick = doKill;   // wired once -- this node is never replaced
+  tradingEls = {sw: $("#ctSwitch"), save: $("#ctSave")};
   // Chart trading's own handlers -- UNCHANGED bodies, just wired here instead of at page load
   // (these ids exist only from here on, once Settings has been opened for the first time).
   $("#ctSwitch").onclick = () =>
@@ -1344,10 +2317,10 @@ function buildTrading() {
   return tradingEls;
 }
 
-/* Chart trading (orders from the chart page; the desk decides) -- patched in place exactly like
-   updateTrading(), and guarded for the (common) case Settings has never been opened yet: render()
-   calls this on every 2.5s ST refresh whether or not the dialog is open, so it must never throw
-   before buildTrading() has run once. */
+/* Chart trading (orders from the chart page; the desk decides) -- patched in place, and guarded
+   for the (common) case Settings has never been opened yet: render() calls this on every 2.5s ST
+   refresh whether or not the dialog is open, so it must never throw before buildTrading() has run
+   once. */
 function renderChartTrading(ct) {
   const sw = $("#ctSwitch");
   if (!sw || !ct) return;   // not yet built (Settings never opened), or no chart_trading in ST
@@ -1361,8 +2334,9 @@ function renderChartTrading(ct) {
   }
 }
 async function setChartTrading(enabled) {
+  if (switchBounced("chartTrading")) return;         // a double-click is one flip
   const ct = (ST && ST.chart_trading) || {};
-  if (enabled && !await confirmDlg("Turn chart trading ON?",
+  if (needsConfirm("chartTrading", enabled) && !await confirmDlg("Turn chart trading ON?",
       `The chart page can then place REAL orders on the accounts you tick there — at most ${ct.max_order_qty} per order and ${ct.max_position_qty} per position. The 9:30 bot's symbol stays locked 09:20–09:35 ET on its accounts. The desk's Kill switches it off.`,
       "Turn on", false)) { refresh(); return; }
   try {
@@ -1373,27 +2347,6 @@ async function setChartTrading(enabled) {
     toast("Couldn't reach the desk", 5000);
   }
   refresh();
-}
-function updateTrading() {
-  const els = buildTrading();
-  if (!els) return;
-  if (ST == null) {
-    els.pill.className = "pill idle";
-    els.pill.textContent = "—";
-    els.text.textContent = "Desk status unknown — connecting…";
-    els.toggleRow.style.display = "none";   // fail closed: no Arm/Disarm while the state is unknown
-    els.toggle.onclick = null;
-    return;
-  }
-  const armed = !!ST.armed;
-  const stale = DESK_STALE ? " (stale — desk unreachable)" : "";
-  els.toggleRow.style.display = "";
-  els.pill.className = armed ? "pill live" : "pill idle";
-  els.pill.textContent = armed ? "ARMED" : "SHADOW";
-  els.text.textContent = (armed ? "ARMED — signals place real orders" : "Disarmed — signals are journaled only") + stale;
-  els.toggle.className = "btn btn-sm " + (armed ? "btn-outline" : "btn-default");
-  els.toggle.textContent = armed ? "Disarm" : "Arm";
-  els.toggle.onclick = armed ? doDisarm : doArm;
 }
 
 const MD_CHOICES = [
@@ -1489,7 +2442,8 @@ function renderMarketData() {
 }
 
 function renderSettings() {
-  updateTrading();     // patches in place -- never rebuilds, so Kill/focus survive
+  buildTrading();                                  // once; patched in place from then on
+  renderChartTrading(ST && ST.chart_trading);      // the switch + limits as the desk has them now
   renderMarketData();  // rebuilds only its own container, and only when its inputs changed
 }
 
@@ -1514,15 +2468,15 @@ async function applyMd() {
 }
 
 function openSettings() {
-  $("#settingsOverlay").classList.add("open");
-  renderSettings();   // TRADING shows right away -- it never waits on the chart service
+  showOverlay("settingsOverlay");
+  renderSettings();   // CHART TRADING shows right away -- it never waits on the chart service
   loadSettings();
   loadChartStatus();
   clearInterval(MD_POLL);
   if (!DEMO) MD_POLL = setInterval(loadChartStatus, 2500);   // preview mode never polls :8852
 }
 function closeSettings() {
-  $("#settingsOverlay").classList.remove("open");
+  hideOverlay("settingsOverlay");
   clearInterval(MD_POLL);
   MD_POLL = null;
 }
@@ -1612,7 +2566,7 @@ async function openRes(name) {
   $("#resSource").textContent = r.source || "";
   $("#resChart").innerHTML = `<div class="mcap">loading curve…</div>`;
   $("#resChartCap").textContent = "";
-  $("#resOverlay").classList.add("open");
+  showOverlay("resOverlay");
   try {
     const d = await (await fetch("/api/research-equity?strategy=" +
                                  encodeURIComponent(name))).json();
@@ -1661,7 +2615,7 @@ async function openRes(name) {
     $("#resChart").innerHTML = `<div class="mcap">curve unavailable</div>`;
   }
 }
-function closeRes() { $("#resOverlay").classList.remove("open"); }
+function closeRes() { hideOverlay("resOverlay"); }
 $("#resOverlay").addEventListener("click", (e) => {
   if (e.target === e.currentTarget) closeRes();
 });
@@ -1686,25 +2640,49 @@ async function reconnectAcct(id) {
   refresh();
 }
 
-/* ---- strategy on/off + flatten ---- */
+/* ---- strategy on/off + flatten ----
+   The on/off switch follows the desk's one confirm policy (S6, the chart-trading switch's
+   pattern): turning a strategy ON asks -- it trades from its next signal; turning it OFF never
+   asks -- it only makes things safer, and it never touches an open position (the toast says so;
+   Flatten does that). A SHADOW strategy never places an order, so switching it on asks nothing
+   either. Same POST /api/strategy either way. */
 async function toggleStrat(name, enabled) {
-  const ok = await confirmDlg(
-    (enabled ? "Turn ON " : "Turn OFF ") + name.toUpperCase() + "?",
-    enabled ? "It will run and execute on its assigned accounts from the next signal."
-            : "It will ignore all signals until turned back on (open positions are untouched — use Flatten for that).",
-    enabled ? "Turn on" : "Turn off", !enabled);
-  if (!ok) { refresh(); return; }
-  const r = await post("/api/strategy", {strategy: name, enabled});
-  if (r.ok) toast(name.toUpperCase() + (enabled ? " is ON." : " is OFF."));
+  if (switchBounced("strategy:" + name)) return;    // a double-click is one flip
+  const c = ((((ST && ST.strategies) || {})[name]) || {}).cfg || {};
+  if (needsConfirm("strategy", enabled, {shadow: !!c.shadow}) && !await confirmDlg(
+      "Turn ON " + name.toUpperCase() + "?",
+      "It will run and execute on its assigned accounts from the next signal.",
+      "Turn on", false)) { refresh(); return; }
+  const N = name.toUpperCase();
+  let r, err = null;
+  try { r = await post("/api/strategy", {strategy: name, enabled}); } catch (e) { err = e || new Error("no answer"); }
   refresh();
+  if (DEMO) return;                        // preview mode: post() already said nothing is sent
+  const why = answerWhy(r, err);
+  if (!why) toast(N + (enabled ? " is ON." : " is OFF — it ignores signals; open positions are untouched."));
+  else if (enabled) toast(`${N} NOT switched on — ${why}.`, 8000);          // the safe side
+  else alertBar(`${N} NOT switched off — ${why}. It may still trade: switch it off again, or Kill.`);
 }
+/* Flatten & turn off believes only what the desk reports (second review): it answers ok:true
+   whatever happened to the flatten itself, with each account's steps in `results` -- read them
+   (stepFailures). A failed flatten, a refusal or a dropped / unreadable answer is the red alert:
+   a position may still be open. */
 async function flattenStrat(name) {
   if (!await confirmDlg("Flatten " + name.toUpperCase() + "?",
       "Cancels its resting entries, market-flattens its symbol on every account it acted on today, and switches the strategy OFF.",
-      "Flatten & off", true)) return;
-  const r = await post("/api/strategy-flatten", {strategy: name});
-  if (r.ok) toast(name.toUpperCase() + " flattened and switched off.");
+      "Flatten & turn off", true)) return;
+  const N = name.toUpperCase();
+  let r, err = null;
+  try { r = await post("/api/strategy-flatten", {strategy: name}); } catch (e) { err = e || new Error("no answer"); }
   refresh();
+  if (DEMO) return;
+  const why = answerWhy(r, err);
+  if (why) return alertBar(`${N} flatten NOT confirmed — ${why}. Check its positions at the broker now.`);
+  const res = r.results && typeof r.results === "object" ? r.results : null;
+  if (!res) return alertBar(`${N} flatten NOT confirmed — the desk sent no account results. Check its positions at the broker now.`);
+  const bad = Object.entries(res).map(([a, steps]) => failText(stepFailures(steps), " on " + acctShort(a))).filter(Boolean);
+  if (bad.length) return alertBar(`${N} flatten — ${bad.join(" · ")}. It is switched OFF; flatten what is left at the broker now.`);
+  toast(`${N} flattened and switched off.`);
 }
 
 /* ---- accounts popup ---- */
@@ -1720,19 +2698,21 @@ function openAccts() {
   $("#acctList2").innerHTML = ids.length
     ? ids.map(id => {
         const running = runningOn(id);
+        // replacer FUNCTIONS, never strings: a replacement string reads $&, $`, $$ … specially, and an
+        // account id is the broker's text -- "$`" in one used to splice the row into itself (second review)
         return acctRow(id, {}).replace('<span class="spacer"></span>',
-          `<span class="strats">${running || "no strategy assigned"}</span><span class="spacer"></span>`)
-          .replace("</div>", `<button class="btn btn-outline btn-sm" onclick="reconnectAcct('${id}')"
+          () => `<span class="strats">${esc(running || "no strategy assigned")}</span><span class="spacer"></span>`)
+          .replace("</div>", () => `<button class="btn btn-outline btn-sm" onclick="reconnectAcct(${jsArg(id)})"
             title="Rebuild this account's broker connection">Reconnect</button>
             <button class="x" style="border:none;background:none;color:var(--muted-foreground);cursor:pointer;font-size:14px"
-            onclick="removeAcct('${id}')" title="Remove this account">&times;</button></div>`);
+            onclick="removeAcct(${jsArg(id)})" title="Remove this account">&times;</button></div>`);
       }).join("")
     : `<div class="mcap" style="padding:14px 0">no accounts yet — add one to start</div>`;
   renderPaper();
   loadPaper();
-  $("#acctOverlay").classList.add("open");
+  showOverlay("acctOverlay");
 }
-function closeAccts() { $("#acctOverlay").classList.remove("open"); }
+function closeAccts() { hideOverlay("acctOverlay"); }
 async function removeAcct(id) {
   closeAccts();
   if (!await confirmDlg("Remove " + id + "?",
@@ -1753,9 +2733,9 @@ function renderAlgoMgr() {
   $("#algoCount").textContent = rows.length + " algo" + (rows.length === 1 ? "" : "s");
   $("#algoList").innerHTML = rows.length
     ? rows.map(a => {
-        const statusPill = `<span class="${STATUS_PILL[a.day_status] || "pill idle"}">${a.day_status}</span>`;
+        const statusPill = dayPill(a.day_status);
         const onPill = a.enabled
-          ? `<span class="pill live">ON</span>` : `<span class="pill idle">OFF</span>`;
+          ? `<span class="pill on" title="Switched on">ON</span>` : `<span class="pill idle" title="Switched off">OFF</span>`;
         const note = a.locked
           ? `<span class="mcap" style="margin:2px 0 0">${a.lockReason}</span>` : "";
         return `<div class="acct" style="padding:9px 0;align-items:flex-start">
@@ -1778,8 +2758,11 @@ function renderAlgoMgr() {
       }).join("")
     : `<div class="mcap" style="padding:14px 0">no algos configured yet</div>`;
 }
-function openAlgoMgr() { renderAlgoMgr(); $("#algoOverlay").classList.add("open"); }
-function closeAlgoMgr() { $("#algoOverlay").classList.remove("open"); }
+function openAlgoMgr() { renderAlgoMgr(); showOverlay("algoOverlay"); }
+function closeAlgoMgr() { hideOverlay("algoOverlay"); }
+/* "Show on home page" never asks, either way, under the desk's one confirm policy (S6):
+   hiding a card is display only and changes nothing that trades -- switchNeedsConfirm(
+   "visibility", ...) is false both ways -- and a card that could trade is locked visible. */
 function toggleAlgoHidden(name, currentlyVisible) {
   if (!window.AlgoVisibility) return;
   // currentlyVisible -> user wants to hide it; already-hidden -> unhide.
@@ -1802,7 +2785,7 @@ let LIVE = {name: "", d: new Date(), data: null};
 async function openLive(name) {
   LIVE.name = name; LIVE.d = new Date(); LIVE.data = null;
   $("#liveName").textContent = name.toUpperCase() + " · LIVE";
-  $("#liveOverlay").classList.add("open");
+  showOverlay("liveOverlay");
   renderLive();
   try {
     const r = await fetch("/api/strategy-live?strategy=" + encodeURIComponent(name));
@@ -1811,7 +2794,7 @@ async function openLive(name) {
   renderLive();
 }
 function liveStep(n) { LIVE.d.setMonth(LIVE.d.getMonth() + n); renderLive(); }
-function closeLive() { $("#liveOverlay").classList.remove("open"); }
+function closeLive() { hideOverlay("liveOverlay"); }
 $("#liveOverlay").addEventListener("click", (e) => {
   if (e.target === e.currentTarget) closeLive();
 });
@@ -1864,7 +2847,7 @@ async function openPine(name) {
   $("#pineName").textContent = name.toUpperCase();
   $("#pineFile").textContent = "";
   $("#pineSrc").textContent = "loading…";
-  $("#pineOverlay").classList.add("open");
+  showOverlay("pineOverlay");
   try {
     const d = await (await fetch("/api/pine?strategy=" +
                                  encodeURIComponent(name))).json();
@@ -1873,7 +2856,7 @@ async function openPine(name) {
       "no Pine source on file for this strategy";
   } catch (_) { $("#pineSrc").textContent = "source unavailable"; }
 }
-function closePine() { $("#pineOverlay").classList.remove("open"); }
+function closePine() { hideOverlay("pineOverlay"); }
 function copyPine() {
   navigator.clipboard.writeText($("#pineSrc").textContent)
     .then(() => toast("Pine source copied — paste into the TradingView editor."));
@@ -1886,9 +2869,9 @@ $("#pineOverlay").addEventListener("click", (e) => {
 let CAL = {account: "", d: new Date()};
 function openCal(account) {
   CAL.account = account; CAL.d = new Date();
-  $("#calOverlay").classList.add("open"); loadCal();
+  showOverlay("calOverlay"); loadCal();
 }
-function closeCal() { $("#calOverlay").classList.remove("open"); }
+function closeCal() { hideOverlay("calOverlay"); }
 function calStep(n) { CAL.d.setMonth(CAL.d.getMonth() + n); loadCal(); }
 $("#calOverlay").addEventListener("click", (e) => {
   if (e.target === e.currentTarget) closeCal();
