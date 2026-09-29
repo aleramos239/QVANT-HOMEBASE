@@ -93,8 +93,18 @@ function pointValue(root) {
   return v == null ? null : v;
 }
 
+/* The arrow's outline in pixels for a bar centred at x (bar spacing `spacing`) and a fill at y: its tip sits just
+   left of the candle body (half the body, ~0.4 of the spacing, plus a 2 px gap, capped so a wide zoom never pushes
+   it far from its bar), a 5 px head 3.5 px either side of y and a 4 px shaft 1 px thick. `hover`: its middle. */
+const ARROW = { head: 5, half: 3.5, shaft: 4, thick: 1, gap: 2, maxOff: 10 };
+function execArrow(x, y, spacing) {
+  const A = ARROW, tx = x - Math.min(A.maxOff, Math.max(0, spacing) * 0.4) - A.gap, hx = tx - A.head, sx = hx - A.shaft;
+  return { tip: [tx, y], hover: [(tx + sx) / 2, y],
+    pts: [[tx, y], [hx, y - A.half], [hx, y - A.thick], [sx, y - A.thick], [sx, y + A.thick], [hx, y + A.thick], [hx, y + A.half]] };
+}
+
 const api = { PREFS_KEY, parsePrefs, prefsText, bracket, roundTick, money, usd, POINT_VALUE, pointValue,
-  inferType, menuText };
+  inferType, menuText, execArrow };
 if (typeof window !== 'undefined') window.HBTradePure = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

@@ -822,7 +822,7 @@ async function showFromClaude(m) {
   const cell = cells[plan.index];
   const i = L.focusTrade(b.trades, focus);
   if (i != null) {
-    await L.jump(i, cell, { select: false });
+    await L.jump(i, cell, { select: false, avoidSelected: true });   // if the chart is rebuilt mid-jump, the re-plan keeps Claude's rule
     if (notes.length) page.sbNote(notes.join(' · '));
     return;
   }

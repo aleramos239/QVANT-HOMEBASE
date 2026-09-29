@@ -106,7 +106,7 @@ test('the page routes /ws tester_show to HBTesterUI.show, and the handler plans 
   const body = ui.slice(ui.indexOf('async function showFromClaude'), ui.indexOf('/* ================', ui.indexOf('async function showFromClaude')));
   assert.match(body, /L\.showPlan\(cells\.map\(L\.chartFacts\), cells\.indexOf\(page\.cur\(\)\), want, \{ avoidSelected: true \}\)/);
   assert.match(body, /busyNow\(\)/);                               // refused while this page has its own job
-  assert.match(body, /await L\.jump\(i, cell, \{ select: false \}\)/);   // the planned chart, selection untouched
+  assert.match(body, /await L\.jump\(i, cell, \{ select: false, avoidSelected: true \}\)/);   // the planned chart, selection untouched
   assert.doesNotMatch(body, /page\.select\(/);                     // never moves the selection (order panel target)
   assert.match(body, /if \(panelOk\) window\.HBPanel\.show\('tester'\)/); // no panel swap while a chart has accounts
   assert.doesNotMatch(body, /\/api\/(?!tester\/)/);
@@ -114,9 +114,11 @@ test('the page routes /ws tester_show to HBTesterUI.show, and the handler plans 
 
 test('a click in List of trades plans through showPlan too, and never touches a trade-ready chart', () => {
   const tl = src('testerlayer.js');
-  const jump = tl.slice(tl.indexOf('async function jump('), tl.indexOf('const api = {'));
-  assert.match(jump, /showPlan\(cells\.map\(chartFacts\), cells\.indexOf\(PAGE\.cur\(\)\), root, \{ avoidSelected: false \}\)/);
-  assert.match(jump, /if \(chartFacts\(cell\)\.tradeReady\) \{ PAGE\.sbNote/);
+  const jump = tl.slice(tl.indexOf('async function runJump('), tl.indexOf('/* ====='));
+  assert.match(tl, /runJump\(\{ U: window\.HBTesterUI, page: PAGE, tester: window\.HBTester, cat: window\.HBCatalog, chartFacts \}, i, target, opts\)/);
+  assert.match(jump, /showPlan\(cells\.map\(env\.chartFacts\), cells\.indexOf\(page\.cur\(\)\), root, \{ avoidSelected \}\)/);
+  assert.match(jump, /avoidSelected = false/);                                  // a click may use the selected chart
+  assert.match(jump, /if \(env\.chartFacts\(cell\)\.tradeReady\) \{ page\.sbNote/);
   assert.ok(jump.indexOf('tradeReady') < jump.indexOf('cell.update('));   // checked before anything changes
 });
 
