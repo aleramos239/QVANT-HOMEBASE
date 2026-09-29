@@ -179,11 +179,19 @@ def _broker_cover(ticks: list[tuple[int, int]], noid_ts: list[int], edge: int):
     return covered
 
 
-def merge(sources, massive_new: list[tuple] = (), edge_ms: int = MASSIVE_EDGE_MS) -> Merged:
+def merge(sources, massive_new: list[tuple] = (), edge_ms: int = MASSIVE_EDGE_MS,
+         seams: int = 1) -> Merged:
     """The union of `sources` ([(name, rows)], the first -- on disk -- wins a disagreement;
     rows may be a stream, read once) plus `massive_new` (Massive rows offered
     to fill holes). Module docstring for the rules; raises MergeRefused when
-    the ids disagree too often."""
+    the ids disagree too often.
+
+    `seams` is the number of separate holes/edges this merge is bridging (tickmassive.py's
+    `len(t["what"])`, one target -> one merge). The id-space (twin) guard scales with it:
+    max(ID_SPACE_REFUSED, seams * 2) -- a real busy NQ hour produces roughly one false twin
+    per seam being filled (2026-09-29 review measured 10/20/40 holes giving 10/15/22 twins),
+    so a fixed threshold of 5 refused sessions that were merging perfectly fine. Default 1
+    (a single seam, or an unscoped caller): unchanged from the old fixed ID_SPACE_REFUSED."""
     by_id: dict[int, tuple] = {}
     noid: Counter = Counter()           # broker rows without an id: union of the per-source counts
     massive_old: list[tuple] = []
@@ -230,9 +238,10 @@ def merge(sources, massive_new: list[tuple] = (), edge_ms: int = MASSIVE_EDGE_MS
     excl = {n: ids - set().union(*(o for m, o in per_source.items() if m != n))
             for n, ids in per_source.items()}
     twins = _twins({n: Counter(_trade(by_id[k]) for k in e) for n, e in excl.items() if e})
-    if twins > ID_SPACE_REFUSED:
-        raise MergeRefused(f"{twins} ticks appear under different ids in different sources -- "
-                           "not one id space; nothing merged")
+    twins_refused = max(ID_SPACE_REFUSED, seams * 2)
+    if twins > twins_refused:
+        raise MergeRefused(f"{twins} ticks appear under different ids in different sources "
+                           f"(> {twins_refused} for {seams} seam(s)) -- not one id space; nothing merged")
     broker = list(by_id.values()) + [r for r, n in noid.items() for _ in range(n)]
     covered = _broker_cover(sorted(((int(r[TS]), int(r[ID])) for r in by_id.values())),
                             sorted(int(r[TS]) for r in noid), edge_ms)
@@ -701,13 +710,15 @@ def live_merged(prev: dict, stamp: dict | None) -> bool:
 def merge_session(path: Path, *, root: str, contract: str, date: dt.date, start: dt.datetime,
                   end: dt.datetime, fetched: list[tuple] = (), fetched_source: dict | None = None,
                   include_live: bool = True, massive_new: list[tuple] = (),
-                  massive_source: dict | None = None, only_if_added: bool = False) -> dict | None:
+                  massive_source: dict | None = None, only_if_added: bool = False,
+                  seams: int = 1) -> dict | None:
     """Merge whatever this session has -- `fetched` broker rows, the live
     recording (if `include_live`), the archive file on disk, `massive_new` --
     into its archive file. Returns the new manifest, or None when there is
     nothing at all (or, with only_if_added, when neither Massive nor the live
     file adds anything: the file is left as it is). Raises MergeRefused
-    (nothing written) if the file on disk cannot be read or the ids disagree."""
+    (nothing written) if the file on disk cannot be read or the ids disagree.
+    `seams` (merge()'s own doc) is the number of holes/edges massive_new is filling."""
     prev = load_manifest(path)
     sources: list = []                  # (name, rows), on disk first: it wins a disagreement
     new_sources: list[dict] = []
@@ -728,7 +739,7 @@ def merge_session(path: Path, *, root: str, contract: str, date: dt.date, start:
         sources.append(("history", fetched))
     if not sources and not massive_new:
         return None
-    m = merge(sources, massive_new)
+    m = merge(sources, massive_new, seams=seams)
     want = prev.get("ticks") if path.exists() else None
     if isinstance(want, int) and m.stats["read"].get("archive", 0) < want:
         raise MergeRefused(f"{path.name}: {m.stats['read'].get('archive', 0):,} rows read back, its manifest "

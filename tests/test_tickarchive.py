@@ -321,6 +321,34 @@ def test_the_same_trades_under_other_ids_refuse_the_merge():
     assert m.stats["id_twins"] == 5                               # a handful: kept, counted
 
 
+def test_the_twin_guard_scales_with_seams():
+    """2026-09-29 review: a fixed ID_SPACE_REFUSED=5 refused real busy-hour merges that were
+    filling several holes at once (roughly one false twin per seam). `seams` raises the limit to
+    max(ID_SPACE_REFUSED, seams * 2)."""
+    rows = [tick(i) for i in range(8)]
+    other = [r[:A.ID] + (str(90_000 + i),) + ("",) for i, r in enumerate(rows)]
+    with pytest.raises(A.MergeRefused, match="8 ticks appear under different ids"):
+        A.merge([("history", rows), ("live", other)])                      # seams=1 (default): max(5,2)=5, 8>5
+    with pytest.raises(A.MergeRefused):
+        A.merge([("history", rows), ("live", other)], seams=3)             # max(5,6)=6, 8>6
+    m = A.merge([("history", rows), ("live", other)], seams=4)             # max(5,8)=8, 8 is not > 8
+    assert m.stats["id_twins"] == 8
+
+
+def test_merge_session_passes_seams_through_to_the_twin_guard(tmp_path):
+    path = T.archive_path("NQ", DAY, "NQZ6", tmp_path)
+    rows = [tick(i) for i in range(8)]
+    other = [r[:A.ID] + (str(90_000 + i),) + ("",) for i, r in enumerate(rows)]
+    assert A.merge_session(path, root="NQ", contract="NQZ6", date=DAY, start=START, end=END,
+                           fetched=rows, fetched_source={"kind": "history"}) is not None
+    with pytest.raises(A.MergeRefused):
+        A.merge_session(path, root="NQ", contract="NQZ6", date=DAY, start=START, end=END,
+                        fetched=other, fetched_source={"kind": "history"})   # default seams=1
+    man = A.merge_session(path, root="NQ", contract="NQZ6", date=DAY, start=START, end=END,
+                          fetched=other, fetched_source={"kind": "history"}, seams=4)
+    assert man is not None and man["merge"]["id_twins"] == 8
+
+
 def test_inside_an_id_gap_only_its_two_edge_ticks_are_guarded():
     """Review 4: a 500 s gap (1000 ids) in a tick-every-500 ms tape, Massive every
     100 ms inside. Rows within 500 ms of the gap's edge ticks are dropped (they

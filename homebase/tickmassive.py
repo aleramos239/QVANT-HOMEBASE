@@ -374,7 +374,8 @@ def fill(roots, base: Path, now: dt.datetime, *, dates=None, since: dt.date = SI
                                   start=t["start"], end=t["end"], include_live=over,
                                   massive_new=rows, only_if_added=True,
                                   massive_source={"kind": "massive", "files": files, "offered": len(rows),
-                                                  "correction_rows": corr})
+                                                  "correction_rows": corr},
+                                  seams=max(1, len(t["what"])))
         except A.MergeRefused as e:
             log(f"{t['root']} {t['date']} {t['contract']}: MERGE REFUSED, left as it was — {e}")
             continue
