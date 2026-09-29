@@ -131,6 +131,15 @@
   #armBtn{ width:4.75rem; flex:none; }
   #armBtn.gone{ visibility:hidden; }
   .inset-topbar > *{ flex-shrink:0; }
+  /* page switcher (Desk · Charts · Backtest): plain links, one segmented group; the current page is aria-current */
+  .pgsw{ display:inline-flex; align-items:center; gap:2px; height:32px; padding:3px;
+    border:1px solid var(--border); border-radius:var(--radius-md); box-sizing:border-box; }
+  .pgsw a{ display:inline-flex; align-items:center; height:24px; padding:0 9px; border-radius:calc(var(--radius-md) - 3px);
+    font-size:0.8125rem; font-weight:500; line-height:1; color:var(--muted-foreground); text-decoration:none;
+    transition:background-color 150ms ease, color 150ms ease; }
+  .pgsw a:hover{ color:var(--foreground); }
+  .pgsw a[aria-current="page"]{ background:var(--secondary); color:var(--foreground); }
+  .pgsw a:focus-visible{ outline:2px solid var(--ring, var(--foreground)); outline-offset:-2px; }
   /* stale (the last-known state, not current): a dashed edge and "· stale" -- never faded; the text
      keeps >= 4.5:1 (review). DISARMED goes full foreground on the glass; ARMED keeps its solid red. */
   .master .pill.stale{ border-style:dashed; }
@@ -237,8 +246,8 @@
   .clock{ font-family:var(--font-mono); font-size:12px; color:var(--muted-foreground);
     white-space:nowrap; display:inline-block; width:11rem; text-align:right; overflow:hidden; }
   /* the top bar never overflows (its right end -- Kill, Settings, theme -- never slides off-screen):
-     the clock goes first, then the brand tag, then the bar wraps */
-  @media (max-width:980px){ .clock{ display:none; } }
+     the clock goes first, then the brand tag, then the wordmark, then the bar wraps (the page switcher took ~190px) */
+  @media (max-width:1120px){ .clock{ display:none; } }
   #toast{ position:fixed; bottom:18px; left:50%; z-index:80;
     background:var(--glass-bg); color:var(--card-foreground); border:1px solid var(--border);
     backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-saturate));
@@ -488,10 +497,10 @@
     .inset-topbar{ border-top-color:transparent; border-bottom-color:var(--foreground); }
     .inset-topbar, .card, .modal, .amenu, #toast{ backdrop-filter:none; -webkit-backdrop-filter:none; }
   }
-  @media (max-width:780px){ .brand-tag{ display:none; } }
-  @media (max-width:680px){
+  @media (max-width:930px){ .brand-tag{ display:none; } }
+  @media (max-width:820px){ .wordmark{ display:none; } }
+  @media (max-width:740px){
     .inset-topbar{ height:auto; min-height:52px; flex-wrap:wrap; row-gap:8px; padding:8px 12px; }
-    .wordmark{ display:none; }
     /* narrower than the three master controls: they wrap inside their own group (fixed widths, so
        the wrap never depends on the status text) */
     .master{ flex-wrap:wrap; justify-content:flex-end; row-gap:8px; max-width:100%; }
@@ -508,7 +517,7 @@
       </span>
       <span class="wordmark" style="font-weight:600;font-size:0.9375rem;letter-spacing:-.01em">Homebase</span>
       <span class="pill idle brand-tag" style="margin-left:2px">Ramos Quant</span>
-      <a class="btn btn-outline btn-sm" id="chartsLink" href="http://localhost:8852/?v=31" style="margin-left:6px">Charts</a>
+      <nav class="pgsw" id="pgSw" aria-label="Pages"><a href="http://localhost:8850/" data-page="desk" aria-current="page">Desk</a><a href="http://localhost:8852/?v=32" data-page="charts">Charts</a><a href="http://localhost:8852/backtest?v=32" data-page="backtest">Backtest</a></nav>
       <span class="spacer"></span>
       <span class="clock" id="clock">—</span>
       <span class="bulb" id="bulb" onclick="openChecks()" title="connecting…"></span>
@@ -797,7 +806,15 @@
   <button type="button" id="alertX" title="Dismiss" aria-label="Dismiss">&times;</button></div>
 
 <script>
-  (function(){ var a = document.getElementById('chartsLink'); if (a) a.href = location.protocol + '//' + location.hostname + ':8852/?v=31'; })();
+  (function(){   // page switcher: plain links built from the host (the Mac app turns a click into a tab switch)
+    var sw = document.getElementById('pgSw'); if (!sw) return;
+    var base = location.protocol + '//' + location.hostname, V = '?v=32';
+    var u = { desk: base + ':8850/', charts: base + ':8852/' + V, backtest: base + ':8852/backtest' + V };
+    Array.prototype.forEach.call(sw.querySelectorAll('a[data-page]'), function(a){
+      a.href = u[a.getAttribute('data-page')];
+      if (a.getAttribute('aria-current') === 'page') a.addEventListener('click', function(e){ e.preventDefault(); });
+    });
+  })();
 const $ = (s) => document.querySelector(s);
 let ST = null;
 let DESK_STALE = false;   // true while refresh() is failing: ST is the last-known state, not current

@@ -530,13 +530,29 @@ test('the pill, Arm and the clock have fixed widths, and Arm hides without givin
   assert.doesNotMatch(fn, /style\.display/, 'never display:none -- that would reflow the bar under a held Kill');
 });
 
-test('the bar sheds the clock, then the brand tag, then wraps -- never overflowing its right end', () => {
+test('the bar sheds the clock, then the brand tag, then the wordmark, then wraps -- never overflowing its right end', () => {
+  // the page switcher (Desk / Charts / Backtest, ~190px) sits in the bar: each breakpoint keeps >= 15px of margin
+  // over the width the bar needs (the classic 15px scrollbar is inside a media query's width)
   const at = (px) => HTML.indexOf(`@media (max-width:${px}px)`);
-  assert.ok(at(980) > 0 && /@media \(max-width:980px\)\{ \.clock\{ display:none; \} \}/.test(HTML));
-  assert.ok(/@media \(max-width:780px\)\{ \.brand-tag\{ display:none; \} \}/.test(HTML));
-  const narrow = HTML.slice(at(680), HTML.indexOf('\n  }\n', at(680)));
+  assert.ok(at(1120) > 0 && /@media \(max-width:1120px\)\{ \.clock\{ display:none; \} \}/.test(HTML));
+  assert.ok(/@media \(max-width:930px\)\{ \.brand-tag\{ display:none; \} \}/.test(HTML));
+  assert.ok(/@media \(max-width:820px\)\{ \.wordmark\{ display:none; \} \}/.test(HTML));
+  const narrow = HTML.slice(at(740), HTML.indexOf('\n  }\n', at(740)));
   assert.match(narrow, /\.inset-topbar\{ height:auto; min-height:52px; flex-wrap:wrap;/);
   assert.match(narrow, /\.master\{ flex-wrap:wrap; justify-content:flex-end;/);
+});
+
+test('the page switcher: three plain links, the current page marked, hrefs built from the host with ?v=32', () => {
+  const nav = HTML.slice(HTML.indexOf('<nav class="pgsw"'), HTML.indexOf('</nav>', HTML.indexOf('<nav class="pgsw"')));
+  assert.deepEqual([...nav.matchAll(/data-page="(\w+)"/g)].map((m) => m[1]), ['desk', 'charts', 'backtest']);
+  assert.equal([...nav.matchAll(/aria-current="page"/g)].length, 1);
+  assert.match(nav, /data-page="desk" aria-current="page"/);
+  assert.doesNotMatch(HTML, /chartsLink/);
+  const js = HTML.slice(HTML.indexOf("var sw = document.getElementById('pgSw')"));
+  assert.match(js, /':8850\/'/);
+  assert.match(js, /':8852\/' \+ V/);
+  assert.match(js, /':8852\/backtest' \+ V/);
+  assert.match(js, /V = '\?v=32'/);
 });
 
 test('the stale pill is never faded: a dashed edge, full-strength text (measured >= 5.4:1 in both themes)', () => {
