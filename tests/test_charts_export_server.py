@@ -117,3 +117,17 @@ def test_cancel_and_status_of_an_unknown_job_are_404(tmp_path, monkeypatch):
     with client(tmp_path, monkeypatch) as c:
         assert c.get("/api/export/not-a-real-id").status_code == 404
         assert c.post("/api/export/not-a-real-id/cancel").status_code == 404
+
+
+def test_active_lets_the_data_tab_reattach_after_settings_is_reopened(tmp_path, monkeypatch):
+    write_archive(tmp_path / "ticks", "NQ", D, "NQZ6", rows(session_ms(D, 9, 30), [100.0]))
+    with client(tmp_path, monkeypatch) as c:
+        assert c.get("/api/export/active").json() == {}
+        r = c.post("/api/export/start", json={"root": "NQ", "type": "ticks",
+                                              "start": D.isoformat(), "end": D.isoformat()})
+        jid = r.json()["id"]
+        st = poll(c, jid)
+        assert st["status"] == "done"
+        # a brand new "Settings reopened" request sees the same finished job, with no id in hand
+        again = c.get("/api/export/active").json()
+        assert again["id"] == jid and again["status"] == "done" and again["result"]["rows"] == 1

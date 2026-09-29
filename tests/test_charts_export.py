@@ -431,3 +431,35 @@ def test_export_manager_reveal_only_offers_that_jobs_own_finished_file(tmp_path)
     st = poll(mgr, jid)
     p = mgr.reveal(jid)
     assert str(p) == st["result"]["path"]
+
+
+def test_export_manager_active_is_empty_with_no_job_ever_submitted(tmp_path):
+    assert app_manager(tmp_path).active() == {}
+
+
+def test_export_manager_active_returns_the_finished_job_after_it_completes(tmp_path):
+    write_archive(tmp_path / "ticks", "NQ", D, "NQZ6", rows(session_ms(D, 9, 30), [100.0]))
+    mgr = app_manager(tmp_path)
+    jid = mgr.submit({"root": "NQ", "type": "ticks", "start": D.isoformat(), "end": D.isoformat()})
+    poll(mgr, jid)
+    got = mgr.active()
+    assert got["id"] == jid and got["status"] == "done" and got["rows"] == 1
+
+
+def test_export_manager_active_prefers_the_running_job_over_an_older_finished_one(tmp_path):
+    write_archive(tmp_path / "ticks", "NQ", D, "NQZ6", rows(session_ms(D, 9, 30), [100.0]))
+    mgr = app_manager(tmp_path)
+    jid1 = mgr.submit({"root": "NQ", "type": "ticks", "start": D.isoformat(), "end": D.isoformat()})
+    poll(mgr, jid1)
+    assert mgr.active()["id"] == jid1
+    # simulate a second, still-running job without racing a real one (same trick as the cancel test)
+    jid2 = "20260101-000000-deadbeef"
+    d = mgr.jobs / jid2
+    d.mkdir(parents=True)
+    E.write_json(d / "status.json", {"id": jid2, "status": "running", "updated": E._now()})
+    mgr._active = (jid2, subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"]))
+    try:
+        got = mgr.active()
+        assert got["id"] == jid2 and got["status"] == "running"
+    finally:
+        mgr._active[1].kill()

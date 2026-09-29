@@ -591,6 +591,17 @@ class ExportManager:
     def status(self, jid: str) -> dict:
         return read_json(self.dir(jid) / "status.json", {}) or {}
 
+    def active(self) -> dict:
+        """The running job, or else the most recently submitted one (job ids sort chronologically)
+        -- so reopening Settings can reattach to it: its Cancel/progress if still running, or its
+        Done/error line if it already finished. {} when there has never been a job."""
+        with self._lock:
+            active = self._active
+        if active is not None:
+            return self.status(active[0])
+        dirs = sorted(p.name for p in self.jobs.iterdir() if JOB_ID_RE.match(p.name))
+        return self.status(dirs[-1]) if dirs else {}
+
     def cancel(self, jid: str) -> dict:
         d = self.dir(jid)
         with self._lock:
@@ -715,6 +726,12 @@ def export_router(write_ok: Callable[[Request], None], archive: Path, depth_base
     def schema():
         return {"roots": list(ROOTS), "depth_roots": list(DEPTH_ROOTS),
                 "timeframes": [k for k, _ in TIMEFRAMES], "types": [*TYPES, "level3"]}
+
+    @r.get("/active")
+    def active():
+        """The running job, or else the most recent one -- so the Data tab can reattach to it
+        (Cancel, progress, or a Done/error line) after Settings is closed and reopened."""
+        return mgr.active()
 
     @r.get("/meta")
     def meta(root: str, type: str):

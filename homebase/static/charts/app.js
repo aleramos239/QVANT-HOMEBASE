@@ -987,6 +987,10 @@ const dataExport = {
   async status(id) {
     try { const r = await fetch(`/api/export/${encodeURIComponent(id)}`); return r.ok ? await r.json() : null; } catch (_) { return null; }
   },
+  /* The running job, or else the last one -- lets a freshly reopened Data tab reattach to it. */
+  async active() {
+    try { const r = await fetch('/api/export/active'); return r.ok ? await r.json() : null; } catch (_) { return null; }
+  },
   start: (body) => postExport('/api/export/start', body),
   cancel: (id) => postExport(`/api/export/${encodeURIComponent(id)}/cancel`),
   reveal: (id) => postExport(`/api/export/${encodeURIComponent(id)}/reveal`),

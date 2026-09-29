@@ -454,6 +454,7 @@ function makeExportHost(overrides = {}) {
     },
     start: async (body) => { calls.push(['start', body]); return { status: 200, data: { id: '20260928-100000-deadbeef' } }; },
     status: async (id) => { calls.push(['status', id]); return { status: 'running', sessions_done: 1, sessions_total: 2, rows: 10 }; },
+    active: async () => { calls.push(['active']); return {}; },   // no job by default: opt in per test
     cancel: async (id) => { calls.push(['cancel', id]); return { status: 200, data: { status: 'cancelled' } }; },
     reveal: async (id) => { calls.push(['reveal', id]); return { status: 200, data: { ok: true } }; },
   };
@@ -698,4 +699,42 @@ test('Data tab: Template and Apply to all are hidden on Data, and reappear on an
   symbolTab.onclick();
   assert.equal(tpl.hidden, false);
   assert.equal(applyAll.hidden, false);
+});
+
+test('Data tab: reopening reattaches to a job that finished while Settings was closed', async () => {
+  const cell = makeCell('time:60');
+  const { exp } = makeExportHost({
+    active: async () => ({ id: '20260928-090000-cafef00d', status: 'done', rows: 500,
+      result: { name: 'NQ_ticks_2026-09-25_2026-09-25.csv', rows: 500, bytes: 20480 } }),
+  });
+  const { box } = openData(cell, exp);      // a fresh dialog mount -- as if Settings was just reopened
+  await flush();
+  assert.equal(findText(box, 'NQ_ticks_2026-09-25_2026-09-25.csv — 500 rows, 20 KB') != null, true);
+  assert.ok(findByOwnText(box, 'button', 'Show in Finder'));
+  const go = findByOwnText(box, 'button', 'Start export');
+  assert.equal(go.disabled, false, 'a finished job never blocks starting a new one');
+});
+
+test('Data tab: reopening reattaches to a job still running, and resumes its poll', async () => {
+  const cell = makeCell('time:60');
+  const { exp, calls } = makeExportHost({
+    active: async () => ({ id: '20260928-090000-cafef00d', status: 'running', sessions_done: 1, sessions_total: 4, rows: 900 }),
+  });
+  const { box, poll } = openData(cell, exp);
+  await flush();
+  assert.equal(findText(box, 'Exporting · 1 / 4 sessions, 900 rows') != null, true);
+  assert.ok(findByOwnText(box, 'button', 'Cancel export'), 'Cancel is back, not just a static progress line');
+  const go = findByOwnText(box, 'button', 'Start export');
+  assert.equal(go.disabled, true, 'Start stays disabled while the reattached job is still running');
+  await poll();                              // the resumed 700ms poll reads status(id), same as a freshly started job
+  assert.equal(calls.some((c) => c[0] === 'status' && c[1] === '20260928-090000-cafef00d'), true);
+});
+
+test('Data tab: with no job ever run, active() finds nothing and the form starts clean', async () => {
+  const cell = makeCell('time:60');
+  const { exp } = makeExportHost();          // active() -> {} by default
+  const { box } = openData(cell, exp);
+  await flush();
+  assert.equal(box.querySelector('.set-job').hidden, true);
+  assert.equal(findByOwnText(box, 'button', 'Start export').disabled, false);
 });

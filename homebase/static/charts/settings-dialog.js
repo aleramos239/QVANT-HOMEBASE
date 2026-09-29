@@ -268,6 +268,22 @@ function mount(box, host) {
     if (!st || DX.progress(st).final) stopDataPoll();
   }
 
+  /* Reattaches to whatever export is running or last ran (GET /api/export/active), so closing and
+     reopening Settings does not lose a job's Cancel/progress or its Done/error line. A no-op once
+     this dialog session already has one (a fresh Start, or an earlier attach). */
+  async function dataAttachActive() {
+    if (dataState.job || !host.export.active) return;
+    const st = await host.export.active();
+    if (!st || !st.id || dataState.job) return;   // superseded meanwhile by a Start or another attach
+    dataState.job = st.id;
+    dataState.status = st;
+    dataPaintJob();
+    if (!DX.progress(st).final) {
+      stopDataPoll();
+      dataPollId = setInterval(dataPollTick, 700);
+    }
+  }
+
   const body = mk('div', 'set-body'), tabs = mk('div', 'set-tabs'), pane = mk('div', 'set-pane'), foot = mk('div', 'set-foot');
   tabs.setAttribute('role', 'tablist');
   tabs.setAttribute('aria-orientation', 'vertical');
@@ -601,6 +617,7 @@ function mount(box, host) {
     }
 
     rebuild();
+    dataAttachActive();
     return box;
   }
 
