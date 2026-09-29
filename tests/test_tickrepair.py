@@ -43,10 +43,10 @@ def test_a_dead_battery_hole_is_filled_by_day_and_the_next_run_is_quiet(tmp_path
     run(T.record(roots=("NQ",), dates=[D], base=tmp_path, ws=object(), cache=cache, day=True))
     assert held(path, ticks[:16 * 60 + 1])                    # 18:00 -> 10:00, nothing missing
     man = A.load_manifest(path)
-    assert [s["why"] for s in man["sources"]] == ["the open", "360 ticks"]
-    assert [s["kind"] for s in man["sources"]] == ["history", "history"]   # the growing live file: not merged yet
+    assert [s["why"] for s in man["sources"]] == ["360 ticks"]   # the first tick is the 18:00:00.000 open
+    assert [s["kind"] for s in man["sources"]] == ["history"]     # the growing live file: not merged yet
     out = capsys.readouterr().out
-    assert "(360 ticks): 362 ticks, 4 pages" in out and len(broker.asked) == 2 + 4   # the open: 2 pages here
+    assert "(360 ticks): 362 ticks, 4 pages" in out and len(broker.asked) == 4
     asked = len(broker.asked)
     run(T.record(roots=("NQ",), dates=[D], base=tmp_path, ws=object(), cache=cache, day=True))
     assert len(broker.asked) == asked and capsys.readouterr().out == ""      # nothing to do: silent
@@ -235,3 +235,22 @@ def test_an_evening_run_already_covers_the_session_that_began_at_18(tmp_path, mo
     run(T.record(roots=("NQ",), base=tmp_path, ws=object(), day=False))
     got = _ids(T.archive_path("NQ", nxt, "NQZ6", tmp_path))
     assert len(got) == 176                                  # 18:00 -> 20:55 ET, the evening so far
+
+
+def test_every_request_of_a_run_is_paced_even_a_jobs_first(tmp_path, monkeypatch):
+    """Review 1: the 36 s pace held within a fetch but not between jobs (0 s at 17:20)."""
+    nw = NoWait(monkeypatch, now=dt.datetime(2026, 9, 29, 17, 20, tzinfo=ET))
+    books, stamps = {}, []
+    for r in ("NQ", "ES", "YM"):
+        c = T.symbols.front_month(r, D)
+        books[c] = _minute_ticks(D, first_id=1000)
+        _write_live(A.live_path(T.archive_path(r, D, c, tmp_path)), books[c][:-30])
+    hw = HistoryWindow(nw, books, page=4096)
+
+    async def pager(ws, contract, before_ms, n=T.PAGE, timeout_s=0, ticket=None):
+        stamps.append(nw.now)
+        return await hw.pager(ws, contract, before_ms)
+    monkeypatch.setattr(T, "fetch_page", pager)
+    run(T.record(roots=("NQ", "ES", "YM"), dates=[D], base=tmp_path, ws=object(), day=False))
+    assert len(stamps) >= 3
+    assert all((b - a).total_seconds() >= T.PAGE_INTERVAL_S for a, b in zip(stamps, stamps[1:]))

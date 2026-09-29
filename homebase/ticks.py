@@ -281,12 +281,11 @@ async def fetch_session(ws: TradovateWS, contract: str, start: dt.datetime,
     page_fn = page_fn or fetch_page
     start_ms, end_ms = int(start.timestamp() * 1000), int(end.timestamp() * 1000)
     before, seen, rows, pages, penalties = end_ms, set(), [], 0, 0
-    last_req, stop, earliest = 0.0, "max_pages", None
+    stop, earliest = "max_pages", None
+    pacer = ws if isinstance(ws, MDConn) else Pacer()   # one run's socket paces EVERY request it sends
     cap = MAX_PAGES if max_pages is None else min(MAX_PAGES, max_pages)
     while pages < cap:
-        gap = PAGE_INTERVAL_S - (time.monotonic() - last_req)
-        if pages and gap > 0:
-            await sleep(gap)
+        await pacer.pace()
         if deadline and deadline_passed():          # checked after the wait: it may cross 08:00
             log(f"{contract}: deadline {DEADLINE_ET} ET — stopping this session here")
             stop = "deadline"
@@ -297,7 +296,7 @@ async def fetch_session(ws: TradovateWS, contract: str, start: dt.datetime,
         if expiry is not None and now_et() >= expiry:
             stop = "expired"                        # the broker no longer has the rest
             break
-        last_req = time.monotonic()
+        pacer.sent()
         if isinstance(ws, MDConn):
             sock = await ws.ensure()
         else:
@@ -318,6 +317,7 @@ async def fetch_session(ws: TradovateWS, contract: str, start: dt.datetime,
                 raise RuntimeError(f"{contract}: {penalties} penalties in a row — {pen}")
             log(f"{contract}: {pen} — waiting {pen.wait_s + 1:.0f}s, resending with its ticket")
             await sleep(pen.wait_s + 1)
+            pacer.sent()
             try:
                 page = await page_fn(sock, contract, before, ticket=pen.ticket)
             except Penalty as again:
@@ -449,7 +449,26 @@ async def connect_md(prefer_live: bool = True, strict: bool = False) -> Tradovat
     return ws
 
 
-class MDConn:
+class Pacer:
+    """At most one chart request per PAGE_INTERVAL_S, across every fetch that
+    shares it (MDConn: the whole run -- a job's first page included). Timed by
+    now_et(), so the tests' clock drives it too; a clock that jumps back never
+    makes it wait more than one interval."""
+
+    def __init__(self):
+        self.last: float | None = None
+
+    async def pace(self) -> None:
+        if self.last is not None:
+            gap = PAGE_INTERVAL_S - (now_et().timestamp() - self.last)
+            if gap > 0:
+                await sleep(min(gap, PAGE_INTERVAL_S))
+
+    def sent(self) -> None:
+        self.last = now_et().timestamp()
+
+
+class MDConn(Pacer):
     """The md socket for a whole run. A run of several hours outlives the
     token it started with: the socket then closes and, without this, every
     later session fails "websocket not connected" (2026-09-22 17:20 run:
@@ -457,6 +476,7 @@ class MDConn:
     socket on the freshest token on disk (the desk renews it)."""
 
     def __init__(self, ws: TradovateWS | None = None):
+        super().__init__()
         self.ws = ws
         self.reconnects = 0
 
@@ -580,6 +600,8 @@ def plan(roots, dates: list[dt.date], base: Path, now: dt.datetime,
             key = (root, date)
             s_ms = _ms(info["start"])
             for a, b, why in gaps:
+                if b <= a and why in ("the open", "the close"):
+                    continue                # the edge tick sits on the boundary: nothing lies between
                 for s, e in (utc_segments(_utc(a), _utc(b)) if b > a else [(_utc(a), _utc(b))]):
                     exp = history_expiry(s)
                     if now >= exp:
