@@ -7,6 +7,7 @@ Tradovate user a minute covers what the pushes miss. Fake sockets only.
 """
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 
 from homebase.broker.login_budget import LoginBudget
@@ -124,6 +125,25 @@ def test_an_odd_answer_never_empties_the_caches(tmp_path):
     push(a, "position", {"accountId": ME, "contractId": 3267315, "netPos": 2})
     run(a.refresh_snapshot())
     assert run(a.get_metrics())["open_positions"] == [{"symbol": "NQZ6", "net": 2}]
+
+
+def test_a_failed_contract_lookup_is_not_retried_for_60s(tmp_path, monkeypatch):
+    answer, sent = broker(positions=[], cash=[])
+    a = _adapter(tmp_path, answer)
+    now = {"t": 1_000_000.0}
+    monkeypatch.setattr("homebase.broker.tradovate.time.time", lambda: now["t"])
+
+    async def polls():
+        push(a, "position", {"accountId": ME, "contractId": 555, "netPos": 1})   # unknown id
+        for _ in range(3):
+            await a.get_metrics()
+            await asyncio.sleep(0)
+        now["t"] += 61
+        await a.get_metrics()
+        await asyncio.sleep(0)
+
+    run(polls())
+    assert [e for e, *_ in sent].count("contract/item") == 2      # first + after 60 s
 
 
 def test_the_refresh_groups_by_login_and_env(desk):

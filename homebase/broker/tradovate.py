@@ -167,6 +167,7 @@ def _reject_reason(d) -> str:
 # one renewal per USER, not per entry (2026-09-29, five entries on one Apex user). Each
 # entry keeps its own socket and its own pinned account.
 _SHARED_AUTHS: dict = {}
+CONTRACT_RETRY_S = 60          # a failed contract/item is not asked again for this long
 
 
 class TradovateAdapter(BrokerAdapter):
@@ -227,6 +228,7 @@ class TradovateAdapter(BrokerAdapter):
         self._login_budget = None                 # the desk's per-user LoginBudget (server sets it)
         self._cache_ts = 0.0                      # unix time the position/cash caches last changed
         self._seed_gen = 0                        # bumped by every seed start/stop
+        self._contract_failed: dict = {}          # contractId -> unix time contract/item failed
 
     @property
     def login_budget(self):
@@ -593,6 +595,8 @@ class TradovateAdapter(BrokerAdapter):
         unresolved."""
         if cid in self._contract_lookups or self._ws is None:
             return
+        if time.time() - self._contract_failed.get(cid, -1e9) < CONTRACT_RETRY_S:
+            return                          # failed lately: not again on every status poll
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
@@ -617,6 +621,7 @@ class TradovateAdapter(BrokerAdapter):
                     if o_cid == cid and o.get("ordStatus") in self._WORKING_STATUSES:
                         self._notify_mine("order", o)
         except Exception as e:  # noqa: BLE001 — shown unresolved; chart trading refuses meanwhile
+            self._contract_failed[cid] = time.time()
             _log(f"{self.account_id}: contract/item {cid} failed: {e}")
         finally:
             self._contract_lookups.discard(cid)
