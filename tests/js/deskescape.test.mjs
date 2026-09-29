@@ -82,3 +82,28 @@ test('the Not-ready strip, the + Assign menu, the accounts dialog and the connec
   // (strategy names -- toggleAlgoHidden('${a.name}') -- are the desk's own config, not broker text)
   assert.doesNotMatch(HTML, /'\$\{id\}'|WIZ\.pick='\$\{a\.name\}'|'\$\{a\.account/, 'no broker id is quoted raw into an inline handler');
 });
+
+test('the Accounts dialog builds each row with replacer functions: $-patterns in a broker id stay literal', () => {
+  const ID = "ev\"il'<b>$`$&$$\\u0022</b>";
+  const block = between('function openAccts() {', 'function closeAccts()');
+  assert.match(block, /\.replace\('<span class="spacer"><\/span>',\s*\(\) => `/);
+  assert.match(block, /\.replace\("<\/div>", \(\) => `/);
+  const els = { acctCount: { textContent: '' }, acctList2: { innerHTML: '' } };
+  const ctx = vm.createContext({
+    ST: { accounts: { [ID]: { label: 'L', env: 'live', connected: true, account: ID, balance: 1, realized_pnl: 0 } },
+          book: { nq930: [{ account: ID, qty: 3 }] } },
+    $: (sel) => els[sel.replace(/^#/, '')], usd: (v) => '$' + v,
+    renderPaper() {}, loadPaper() {}, showOverlay() {},
+  });
+  vm.runInContext(ESC + between('/* ---- account row (rendered inside strategy cards) ---- */', '/* ---- the book (assignments) ---- */') +
+    block + '\nglobalThis.openAccts = openAccts;', ctx);
+  ctx.openAccts();
+  const html = els.acctList2.innerHTML;
+  assert.equal((html.match(/<div class="acct"/g) || []).length, 1, 'one row, not spliced into itself');
+  const handlers = [...html.matchAll(/onclick="([^"]*)"/g)].map((m) => m[1]).filter((h) => /reconnectAcct|removeAcct/.test(h));
+  assert.equal(handlers.length, 2);
+  for (const h of handlers) {
+    const { calls } = runHandler(h, ['reconnectAcct', 'removeAcct']);
+    assert.deepEqual(calls[0].slice(1), [ID], 'the exact id, $-patterns and all');
+  }
+});

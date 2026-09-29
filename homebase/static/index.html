@@ -2655,9 +2655,11 @@ function openAccts() {
   $("#acctList2").innerHTML = ids.length
     ? ids.map(id => {
         const running = runningOn(id);
+        // replacer FUNCTIONS, never strings: a replacement string reads $&, $`, $$ … specially, and an
+        // account id is the broker's text -- "$`" in one used to splice the row into itself (second review)
         return acctRow(id, {}).replace('<span class="spacer"></span>',
-          `<span class="strats">${esc(running || "no strategy assigned")}</span><span class="spacer"></span>`)
-          .replace("</div>", `<button class="btn btn-outline btn-sm" onclick="reconnectAcct(${jsArg(id)})"
+          () => `<span class="strats">${esc(running || "no strategy assigned")}</span><span class="spacer"></span>`)
+          .replace("</div>", () => `<button class="btn btn-outline btn-sm" onclick="reconnectAcct(${jsArg(id)})"
             title="Rebuild this account's broker connection">Reconnect</button>
             <button class="x" style="border:none;background:none;color:var(--muted-foreground);cursor:pointer;font-size:14px"
             onclick="removeAcct(${jsArg(id)})" title="Remove this account">&times;</button></div>`);
