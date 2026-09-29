@@ -9,8 +9,10 @@ it reads a local file (homebase/.state/tick_coverage.json) straight off disk, sa
 package's own draftstore reads/writes -- no request goes out for it.
 
 OPERATE tools (account_reconnect, account_remove, export_start, export_status) all:
-  * refuse inside the 09:20-09:35 ET weekday window -- cheaply, before any request, mirroring the
-    tester tools' own "not 09:20-09:35 ET" refusal wording;
+  * refuse inside the 09:10-09:35 ET weekday window -- cheaply, before any request (2026-09-29
+    review: widened from 09:20, to match the desk's own server-side MCP refusal window on
+    account_remove -- GONE_CHECK_QUIET in server.py -- rather than the tester tools' narrower
+    "not 09:20-09:35 ET", which stays as it was: no live account is at risk there);
   * go through a client that sends the Origin header the target's write-guard wants (netguard on
     the desk, the same origin check on the charts service);
   * pass `source: "mcp"` on desk writes, so the desk's own journal (already written by these two
@@ -38,7 +40,7 @@ from .client import Client, ToolError
 from .desk_client import DeskClient
 
 ET = ZoneInfo("America/New_York")
-QUIET = (dt.time(9, 20), dt.time(9, 35))          # weekdays ET: no OPERATE tool starts here
+QUIET = (dt.time(9, 10), dt.time(9, 35))          # weekdays ET: no OPERATE tool starts here
 EXPORT_PREFIX = "/api/export/"
 LAUNCHD_LABELS = {"desk": "com.ramosquant.homebase", "charts": "com.ramosquant.homebase-charts",
                   "ticks": "com.ramosquant.homebase-ticks"}
@@ -57,7 +59,7 @@ def _in_quiet(now: dt.datetime) -> bool:
 
 def _refuse_if_quiet(now: dt.datetime) -> None:
     if _in_quiet(now):
-        raise ToolError("refused: not 09:20-09:35 ET on weekdays (the 9:30 window) -- try again after 09:35")
+        raise ToolError("refused: not 09:10-09:35 ET on weekdays (the 9:30 window) -- try again after 09:35")
 
 
 def _usd(v):
@@ -103,10 +105,15 @@ SPECS = [
           {"root": {"type": "string", "description": "Only this root, e.g. NQ (default: every root)."}}),
     _spec("services_health", "Whether the desk and charts service answer, their launchd PIDs, the "
           "nightly tick job's last log lines, and each recorder's most recent archive file time."),
-    _spec("account_reconnect", "Reconnect one account (or every account, if none named): clears "
-          "its login backoff and reconciles positions, exactly like the dashboard's Reconnect "
-          "button. Refused 09:20-09:35 ET on weekdays.",
-          {"account": {"type": "string", "description": "An account id (default: every account)."}}),
+    _spec("account_reconnect", "Reconnect disconnected accounts: clears their login backoff and "
+          "reconciles positions, exactly like the dashboard's Reconnect button. Named account: only "
+          "that one, and only if it's disconnected. No account named: every disconnected account "
+          "(never a healthy one). Pass force=true to reconnect a specific account (or, with none "
+          "named, every account) even if it's already connected. Refused 09:10-09:35 ET on weekdays.",
+          {"account": {"type": "string", "description": "An account id (default: every "
+                      "disconnected account)."},
+           "force": {"type": "boolean", "description": "Reconnect even an already-connected "
+                    "account (default: false -- disconnected only)."}}),
     _spec("account_remove", "Remove one account from the pool: unassigns it from every strategy, "
           "closes its connection, drops it. Refused (409) unless the account is connected with its "
           "caches seeded, its cached view shows no position in any symbol and no working order, and "
@@ -115,7 +122,7 @@ SPECS = [
           {"account": {"type": "string"}}, ["account"]),
     _spec("export_start", "Start a data export job on the charts service (candles, ticks, level 1 "
           "quotes or level 2 depth, to a CSV file) -- needs feat/data-export merged and the charts "
-          "service restarted; refused 09:20-09:35 ET on weekdays and while another export runs.",
+          "service restarted; refused 09:10-09:35 ET on weekdays and while another export runs.",
           {"root": {"type": "string", "description": "e.g. NQ."},
            "type": {"type": "string", "enum": ["candles", "ticks", "level1", "level2"]},
            "start": {"type": "string", "description": "YYYY-MM-DD"},
@@ -130,7 +137,7 @@ SPECS = [
                       "description": "level2 only, default 10."}},
           ["root", "type", "start", "end"]),
     _spec("export_status", "An export job's status (queued/running/done/error/cancelled, "
-          "progress, and its file once done). Refused 09:20-09:35 ET on weekdays.",
+          "progress, and its file once done). Refused 09:10-09:35 ET on weekdays.",
           {"id": {"type": "string", "description": "A job id from export_start."}}, ["id"]),
 ]
 
@@ -303,17 +310,37 @@ class DeskMixin:
 
     # ---- account_reconnect / account_remove
 
-    def t_account_reconnect(self, account=None) -> str:
+    def t_account_reconnect(self, account=None, force=False) -> str:
+        """Disconnected accounts only, by default -- a healthy one is left alone unless force=true
+        (2026-09-29 review: this used to reconnect EVERYTHING, named account or not, even one that
+        was already fine). Named + already connected + no force: refused outright, before any
+        write. No account named: every disconnected account (or, with force, every account) --
+        the desk's own endpoint takes one account at a time, so this loops."""
         _refuse_if_quiet(self._now_et())
-        body = {"source": "mcp"}
+        force = bool(force)
+        accounts = (self.desk.get("/api/status") or {}).get("accounts") or {}
         if account:
-            body["account"] = account
-        r = self.desk.post("/api/accounts/reconnect", body)
-        results = r.get("results") or {}
+            if not force and (accounts.get(account) or {}).get("connected"):
+                raise ToolError(f"{account} is already connected -- pass force=true to reconnect "
+                                "it anyway (account_reconnect only touches disconnected accounts "
+                                "by default)")
+            targets = [account]
+        else:
+            targets = (list(accounts) if force
+                      else [aid for aid, a in accounts.items() if not a.get("connected")])
+            if not targets:
+                return ("Every account is already connected -- nothing to do "
+                        "(pass force=true to reconnect anyway).")
+        results = {}
+        for aid in targets:
+            r = self.desk.post("/api/accounts/reconnect", {"source": "mcp", "account": aid})
+            results.update(r.get("results") or {})
         rows = [[aid, "ok" if v.get("ok") else "FAILED", v.get("mode") or v.get("error") or ""]
                 for aid, v in results.items()]
-        return (f"Reconnect {'all accounts' if not account else account}: "
-                f"{'ok' if r.get('ok') else 'one or more failed'}\n" + _table(["account", "result", "detail"], rows))
+        label = account or ("every account" if force else "every disconnected account")
+        ok = bool(results) and all(v.get("ok") for v in results.values())
+        return (f"Reconnect {label}: {'ok' if ok else 'one or more failed'}\n"
+                + _table(["account", "result", "detail"], rows))
 
     def t_account_remove(self, account: str) -> str:
         _refuse_if_quiet(self._now_et())

@@ -1,6 +1,6 @@
 """The desk-bridge MCP tools (homebase/claude_mcp/desk_tools.py, desk_client.py): each tool's
 request shape and formatting against a fake desk (:8850) and a fake charts service (:8852), the
-09:20-09:35 ET OPERATE refusal, the mcp_action journal tag, and data_coverage's local file read.
+09:10-09:35 ET OPERATE refusal, the mcp_action journal tag, and data_coverage's local file read.
 Route-level safety (no tool or route here can trade) is pinned in test_claude_mcp.py, which scans
 this whole package; this file is about behavior, not that pin."""
 from __future__ import annotations
@@ -199,8 +199,9 @@ def test_services_health_reports_an_unreachable_desk(desk, charts, monkeypatch, 
 # ---------------------------------------------------------------- operate: quiet window + origin + source
 
 def test_account_reconnect_sends_source_mcp_and_origin(desk, charts):
+    """sim041 is connected in STATUS -- reconnecting it by name needs force=true (2026-09-29 review)."""
     b = box(desk, charts)
-    text = b.call("account_reconnect", {"account": "sim041"})
+    text = b.call("account_reconnect", {"account": "sim041", "force": True})
     post = desk.last("POST")
     assert post["route"] == "/api/accounts/reconnect"
     assert post["body"] == {"source": "mcp", "account": "sim041"}
@@ -208,9 +209,38 @@ def test_account_reconnect_sends_source_mcp_and_origin(desk, charts):
     assert "sim041" in text and "ok" in text
 
 
-def test_account_reconnect_all_when_no_account_given(desk, charts):
+def test_account_reconnect_named_and_already_connected_is_refused_without_force(desk, charts):
+    with pytest.raises(ToolError, match="already connected"):
+        box(desk, charts).call("account_reconnect", {"account": "sim041"})
+    assert not desk.requests or all(r["route"] != "/api/accounts/reconnect" for r in desk.requests)
+
+
+def test_account_reconnect_named_disconnected_account_needs_no_force(desk, charts):
+    text = box(desk, charts).call("account_reconnect", {"account": "sim042"})
+    assert desk.last("POST")["body"] == {"source": "mcp", "account": "sim042"}
+    assert "sim042" in text
+
+
+def test_account_reconnect_defaults_to_disconnected_accounts_only(desk, charts):
+    """No account named: only sim042 (disconnected) is touched -- sim041 (connected) is left alone."""
     box(desk, charts).call("account_reconnect", {})
-    assert desk.last("POST")["body"] == {"source": "mcp"}
+    posts = [r for r in desk.requests if r["route"] == "/api/accounts/reconnect"]
+    assert [p["body"] for p in posts] == [{"source": "mcp", "account": "sim042"}]
+
+
+def test_account_reconnect_force_true_reconnects_every_account(desk, charts):
+    box(desk, charts).call("account_reconnect", {"force": True})
+    posts = [r for r in desk.requests if r["route"] == "/api/accounts/reconnect"]
+    assert {p["body"]["account"] for p in posts} == {"sim041", "sim042"}
+
+
+def test_account_reconnect_nothing_to_do_when_everything_is_already_connected(desk, charts):
+    desk.routes[("GET", "/api/status")] = {**STATUS, "accounts": {
+        "sim041": {"connected": True, "account": "SIM41", "error": None, "cooldown_s": 0,
+                  "open_position_count": 1, "working_orders": 2}}}
+    text = box(desk, charts).call("account_reconnect", {})
+    assert "nothing to do" in text
+    assert not any(r["route"] == "/api/accounts/reconnect" for r in desk.requests)
 
 
 def test_account_remove_sends_source_mcp(desk, charts):
@@ -244,7 +274,23 @@ def test_account_remove_description_matches_the_servers_actual_refusal_rules():
 ])
 def test_every_operate_tool_is_refused_in_the_930_window(desk, charts, tool, args):
     b = box(desk, charts, now=IN_QUIET)
-    with pytest.raises(ToolError, match="09:20-09:35"):
+    with pytest.raises(ToolError, match="09:10-09:35"):
+        b.call(tool, args)
+    assert not desk.requests and not charts.requests
+
+
+@pytest.mark.parametrize("tool,args", [
+    ("account_reconnect", {}), ("account_remove", {"account": "sim041"}),
+    ("export_start", {"root": "NQ", "type": "candles", "start": "2026-01-01", "end": "2026-01-02",
+                      "timeframe": "1m"}),
+    ("export_status", {"id": "20260101-000000-abcd1234"}),
+])
+def test_every_operate_tool_is_refused_at_915_too(desk, charts, tool, args):
+    """2026-09-29 review: the OPERATE quiet window widened from 09:20 to 09:10 -- 09:15 used to
+    be allowed and now must be refused, same as 09:27."""
+    at_915 = dt.datetime(2026, 9, 29, 9, 15, tzinfo=ET)
+    b = box(desk, charts, now=at_915)
+    with pytest.raises(ToolError, match="09:10-09:35"):
         b.call(tool, args)
     assert not desk.requests and not charts.requests
 
