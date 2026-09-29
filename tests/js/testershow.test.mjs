@@ -77,6 +77,21 @@ test('chartFacts: accounts or an algo make a chart trade-ready; no HBTradeUI fai
   } finally { delete globalThis.window; }
 });
 
+/* Opus review fix (three-tabs): the Backtest tab has no HBTradeUI at all, ever -- not "hasn't
+   answered yet" like a fresh Charts-tab connection -- so failing closed there (every chart reads
+   trade-ready) left showPlan with nowhere to land: show_on_chart and a List-of-trades click could
+   never find a chart to use. Every chart on Backtest must read tradeReady: false, unconditionally,
+   even one with accounts/an algo saved in its config from before it moved there. */
+test('chartFacts: on the Backtest tab every chart is tradeReady: false, never fails closed', () => {
+  const cell = (cfg, extra = {}) => ({ cfg: { root: 'NQ', ...cfg }, ...extra });
+  globalThis.window = { HB_PAGE: 'backtest' };   // no HBTradeUI at all on this page
+  try {
+    assert.equal(L.chartFacts(cell({})).tradeReady, false);
+    assert.equal(L.chartFacts(cell({ trade: { accounts: ['D1'] } })).tradeReady, false);
+    assert.equal(L.chartFacts(cell({ algo: 'nq930' })).tradeReady, false);
+  } finally { delete globalThis.window; }
+});
+
 test('strategyLabel: drafts say DRAFT, a broken one says it does not load', () => {
   assert.equal(X.strategyLabel({ id: 'nq930', name: 'NQ 9:30 Straddle' }), 'NQ 9:30 Straddle');
   assert.equal(X.strategyLabel({ id: 'draft_x', name: 'My ORB', draft: true }), 'DRAFT · My ORB');
