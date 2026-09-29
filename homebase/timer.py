@@ -56,7 +56,10 @@ FIRE_LATE_MAX_S = 1.0      # a fire moment within this of 09:30:00.000 is ON TIM
                            # the accept window is open, on the latest trade at that moment --
                            # both stops sit offset_pts either side of the current price, so
                            # nothing is placed through the market -- journaled late, with why.
-QUOTE_MAX_AGE_S = 15.0     # anchor must come from a trade this fresh
+PRE_OPEN_MAX_AGE_S = 5.0   # the pre-open anchor: NQ prints many times a second at 09:29:59, so an
+                           # older last trade means a dead feed, not a quiet market -- wait instead
+CURRENT_MAX_AGE_S = 1.5    # a late / off-anchor fire's "current" price: any older and the stops are
+                           # not offset_pts around the market as it is now -- wait for a newer one
 STAMP_RAW_MAX = 40         # a quote push's raw `timestamp`, as journaled
 GATE_RETRY_S = 60.0
 GATE_BARS = 250            # ask for plenty; Tradovate serves ~120 dailies
@@ -378,9 +381,10 @@ class SelfTimer:
             # through the market. Freshness is judged on the timer's own clock
             # (the wall clock the pushes are received on). No fresh trade at
             # all: wait for one, every tick -- never final (_wait).
-            got, source = (None if late else self._fresh(sub, fire_at.timestamp(), now_ts)), "pre_open"
+            got, source = (None if late else self._fresh(sub, fire_at.timestamp(), now_ts,
+                                                         PRE_OPEN_MAX_AGE_S)), "pre_open"
             if got is None:
-                got, source = self._fresh(sub, None, now_ts), "current"
+                got, source = self._fresh(sub, None, now_ts, CURRENT_MAX_AGE_S), "current"
             if got is None:
                 return self._wait(name, st, sub, now_ts, late, late_s, fire_at)
             waited = st["stage"] == "waiting"
@@ -406,12 +410,12 @@ class SelfTimer:
                       **{k: info[k] for k in FIRED_KEYS if k in info})
             return self._fire(name, s, got[0], info)   # tick() fires all due at once
 
-    def _fresh(self, sub, before, now_ts):
+    def _fresh(self, sub, before, now_ts, max_age):
         """(price, received) of the latest trade received before `before` (None:
         the latest of all) -- or None: there is none, or it is older than
-        QUOTE_MAX_AGE_S."""
+        `max_age` seconds (received, on the timer's clock)."""
         px, seen = self._md.last(sub, before=before) if self._md is not None else (None, 0.0)
-        return (px, seen) if px is not None and now_ts - seen <= QUOTE_MAX_AGE_S else None
+        return (px, seen) if px is not None and now_ts - seen <= max_age else None
 
     def _wait(self, name, st, sub, now_ts, late, late_s, fire_at, unready=None) -> None:
         """No fresh trade to anchor on yet -- never final: the account holder
@@ -477,7 +481,7 @@ class SelfTimer:
         """Why there is no fresh trade to anchor on, told apart -> (cause, text,
         journal fields), with the contract's quote push count: no_pushes (none
         at all), no_trade (pushes, none with a trade), stale_trade (the newest
-        trade is older than QUOTE_MAX_AGE_S: its age). A dead md socket is said.
+        trade is too old for the anchor: its age). A dead md socket is said.
         Never raises: the wait stands, only what it knows shrinks."""
         md = self._md
         try:

@@ -1143,3 +1143,41 @@ def test_the_window_closing_on_an_account_wait_says_so(tmp_path):
     at(clock, 9, 45, 1); run(timer.tick())
     st = timer.status()["strategies"]["nq930"]
     assert (st["stage"], st["reason"]) == ("missed", "accounts_not_ready")
+
+
+# --- review round 2, item 2: how old an anchor may be --------------------------------------
+def test_a_late_fire_never_goes_out_on_a_quote_older_than_current_max_age(tmp_path):
+    """R2: a stalled tick at 09:30:12 found a trade received 09:29:59.9 (12.1 s old) and
+    fired on it. The late anchor must be at most CURRENT_MAX_AGE_S old: it waits."""
+    from homebase.timer import CURRENT_MAX_AGE_S
+    assert CURRENT_MAX_AGE_S == 1.5
+    timer, engine, md, clock = mk(tmp_path, armed=True, md=TapeMD())
+    at(clock, 9, 21); run(timer.tick())
+    at(clock, 9, 29); run(timer.tick())
+    md.push("NQ", et(9, 29, 59, 900000), 24500.0)
+    at(clock, 9, 30, 12); run(timer.tick())
+    assert timer.status()["strategies"]["nq930"]["stage"] == "waiting"
+    md.push("NQ", et(9, 30, 10, 400000), 24531.0)                # 1.6 s old at the next tick: still no
+    at(clock, 9, 30, 12, 200000); run(timer.tick())
+    assert fired(tmp_path) == []
+    md.push("NQ", et(9, 30, 11), 24533.0)                        # 1.4 s old at 09:30:12.4: yes
+    at(clock, 9, 30, 12, 400000); run(timer.tick())
+    assert fired(tmp_path) == [("nq930", True, 12.4, "late_fire", "current", 24533.0)]
+
+
+@pytest.mark.parametrize("age_s, fires_pre_open", [(4.9, True), (5.1, False)])
+def test_a_pre_open_trade_older_than_pre_open_max_age_means_a_dead_feed(tmp_path, age_s, fires_pre_open):
+    from homebase.timer import PRE_OPEN_MAX_AGE_S
+    assert PRE_OPEN_MAX_AGE_S == 5.0
+    timer, engine, md, clock = mk(tmp_path, md=TapeMD())
+    at(clock, 9, 21); run(timer.tick())
+    at(clock, 9, 29); run(timer.tick())
+    md.push("NQ", et(9, 30) - dt.timedelta(seconds=age_s), 24500.0)
+    at(clock, 9, 30); run(timer.tick())
+    if fires_pre_open:
+        assert fired(tmp_path) == [("nq930", False, 0.0, None, "pre_open", 24500.0)]
+        return
+    assert timer.status()["strategies"]["nq930"]["wait_reason"] == "stale_trade"
+    md.push("NQ", et(9, 30, 0, 300000), 24508.0)                 # the feed comes back after the open
+    at(clock, 9, 30, 0, 400000); run(timer.tick())
+    assert fired(tmp_path) == [("nq930", False, 0.4, "waited_for_quote", "current", 24508.0)]
