@@ -1,9 +1,12 @@
 #!/bin/bash
-# Build ~/Applications/Homebase.app — a native WKWebView window onto the
-# dashboard. Idempotent; rebuild any time. Requires Xcode CLT (swiftc).
+# Build Homebase.app -- a native WKWebView window onto the dashboard (Desk / Charts / Backtest
+# tabs). Idempotent; rebuild any time. Requires Xcode CLT (swiftc).
+#
+# Usage: build_app.sh [output .app path]   -- defaults to ~/Applications/Homebase.app.
+# A test build passes its own scratch path so it never touches the installed app.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
-APP="$HOME/Applications/Homebase.app"
+APP="${1:-$HOME/Applications/Homebase.app}"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 cat > "$APP/Contents/Info.plist" <<'EOF'
