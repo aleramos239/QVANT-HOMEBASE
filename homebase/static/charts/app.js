@@ -675,7 +675,9 @@ function layoutBody() {
   return { grid: layout.grid, cells: layout.cells.map((c) => {
     const { root, spec, indicators, settings } = c;
     const base = settings && Object.keys(settings).length ? { root, spec, indicators, settings } : { root, spec, indicators };
-    return { ...base, ...T.tradeBits(c) };
+    // T (HBTrade) is not loaded on the Backtest tab (2026-09-28 three-tabs plan): a saved layout
+    // there simply carries no trade bits, same as any other chart with no accounts/algo.
+    return { ...base, ...(T ? T.tradeBits(c) : {}) };
   }) };
 }
 
