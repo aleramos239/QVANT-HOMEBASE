@@ -10,9 +10,20 @@ const require = createRequire(import.meta.url);
 const TP = require('../../homebase/static/charts/tradepure.js');
 const M = '−';
 
-test('HBTradePure exposes exactly the five re-exported names, nothing money/desk-shaped', () => {
-  assert.deepEqual(Object.keys(TP).sort(), ['PREFS_KEY', 'bracket', 'money', 'parsePrefs', 'prefsText', 'roundTick', 'usd'].sort());
+test('HBTradePure exposes exactly the re-exported names, nothing money/desk-shaped', () => {
+  // POINT_VALUE/pointValue (opus review, three-tabs): moved here from replay.js, re-exported there
+  // unchanged, and read directly by fillquality.js -- see tradepure.js's own docstring.
+  assert.deepEqual(Object.keys(TP).sort(),
+    ['PREFS_KEY', 'bracket', 'money', 'parsePrefs', 'prefsText', 'roundTick', 'usd', 'POINT_VALUE', 'pointValue'].sort());
   assert.equal(TP.PREFS_KEY, 'hb_trade_prefs');
+});
+
+test('HBTradePure.pointValue: the eight roots replay.js/fillquality.js both need, null for anything else', () => {
+  assert.deepEqual(TP.POINT_VALUE, { NQ: 20, ES: 50, YM: 5, RTY: 50, GC: 100, SI: 5000, CL: 1000, BTC: 5 });
+  assert.equal(TP.pointValue('nq'), 20);
+  assert.equal(TP.pointValue('ES'), 50);
+  assert.equal(TP.pointValue('XX'), null);
+  assert.equal(TP.pointValue(null), null);
 });
 
 test('prefs: defaults, clamps, de-duplicated ticks, garbage in -> defaults', () => {

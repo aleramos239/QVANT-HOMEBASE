@@ -18,6 +18,10 @@
    reading this file's own source text, and replayui.js's. */
 (function () {
 'use strict';
+const need = (name, file) => (typeof window !== 'undefined' && window[name]) || (typeof require === 'function' ? require(file) : null);
+// POINT_VALUE/pointValue live in tradepure.js (opus review, three-tabs plan) -- re-exported below
+// unchanged, so this file's own callers (replayui.js's R.pointValue) see no difference.
+const TP = need('HBTradePure', './tradepure.js');
 
 const FIRST_DATE = '2021-09-22';       // the archive's first session (barreplay.py FIRST_DATE)
 const SPEEDS = [1, 2, 5, 10, 30, 60, 'bar'];
@@ -465,15 +469,10 @@ class BarFeed {
   }
 }
 
-/* USD per 1.00 price move, per contract -- homebase/contracts.py's _SPECS, verified here for the roots the
-   practice feature is checked against. The chart's own `cell.pv` (from the server's `history`/`point_value`,
-   itself computed from contracts.py) is the single source of truth and is preferred whenever it is known;
-   this is only the fallback for the rare gap before a chart's first history arrives. */
-const POINT_VALUE = { NQ: 20, ES: 50, YM: 5, RTY: 50, GC: 100, SI: 5000, CL: 1000, BTC: 5 };
-function pointValue(root) {
-  const v = POINT_VALUE[String(root || '').toUpperCase()];
-  return v == null ? null : v;
-}
+// POINT_VALUE/pointValue: see tradepure.js -- re-exported here unchanged (this file's own docstring
+// on them, and their "verified here for the roots the practice feature is checked against" note,
+// moved there with them).
+const { POINT_VALUE, pointValue } = TP;
 
 /* ---- the practice session log (localStorage key hb.practice; replayui.js does the actual try/catch'd
    localStorage.getItem/setItem -- Global Constraints: "localStorage only through try/catch") ---- */

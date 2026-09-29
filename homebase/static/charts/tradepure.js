@@ -60,7 +60,19 @@ const sign = (v) => (v > 0 ? '+' : v < 0 ? MINUS : '');
 function usd(v) { return v == null || !Number.isFinite(v) ? null : sign(Math.round(v * 100)) + Pos.fmtUsd(v); }
 function money(v) { return v == null || !Number.isFinite(v) ? '—' : (Math.round(v * 100) < 0 ? MINUS : '') + Pos.fmtUsd(v); }
 
-const api = { PREFS_KEY, parsePrefs, prefsText, bracket, roundTick, money, usd };
+/* USD per 1.00 price move, per contract -- homebase/contracts.py's _SPECS (opus review, three-tabs:
+   moved here from replay.js, which fillquality.js used to reach through window.HBReplay -- that
+   broke once Bar Replay left the Charts tab and replay.js stopped loading there). A chart's own
+   `cell.pv` (from the server's `history`/`point_value`) is the single source of truth wherever it
+   is known; this is the fallback for the gap before a chart's first history arrives, and for
+   fillquality.js's rows, which price a root that may have no chart open on it at all. */
+const POINT_VALUE = { NQ: 20, ES: 50, YM: 5, RTY: 50, GC: 100, SI: 5000, CL: 1000, BTC: 5 };
+function pointValue(root) {
+  const v = POINT_VALUE[String(root || '').toUpperCase()];
+  return v == null ? null : v;
+}
+
+const api = { PREFS_KEY, parsePrefs, prefsText, bracket, roundTick, money, usd, POINT_VALUE, pointValue };
 if (typeof window !== 'undefined') window.HBTradePure = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();
