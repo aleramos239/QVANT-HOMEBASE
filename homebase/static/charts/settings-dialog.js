@@ -527,6 +527,7 @@ function mount(box, host) {
         quickCtl.append(b);
       }
       const quickRow = mk('div', 'set-row'), quickName = mk('label', 'set-name', 'Quick range');
+      quickRow.classList.add('tall');   // the buttons wrap at narrow widths; a fixed 40px row clips/overlaps them
       quickRow.append(quickName, quickCtl);
       rows.push(quickRow);
 
