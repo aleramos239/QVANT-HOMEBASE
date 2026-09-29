@@ -385,10 +385,13 @@ def store(root: str, date: dt.date, contract: str, path: Path, start: dt.datetim
     """Merge fetched rows (tickarchive rows) into the session's archive file --
     with the live recording and whatever the file already holds
     (homebase.tickarchive: merge, never replace). `entry` logs the fetch in the
-    manifest (one entry, or a list of them). A refused or failed merge leaves every file as it was, is logged,
-    and is remembered in `cache` with the files' stamps, so the next runs do
-    not fetch the same ticks again for nothing; None then, or with nothing to
-    write."""
+    manifest (one entry, or a list of them). A refused or failed merge leaves every file as it was,
+    and is logged either way. Only a refusal (tickarchive.MergeRefused -- the files themselves
+    disagree, or don't verify) is remembered in `cache` with the files' stamps, so the next runs
+    don't re-fetch and re-refuse the same ticks for nothing; a merge that merely FAILED (a transient
+    read/write error, nothing about the data itself) is never cached refused -- its condition may no
+    longer hold by the next run, and caching it would leave a session silently unfilled after the
+    disk hiccup (or whatever it was) passed. None either way, or with nothing to write."""
     try:
         entries = [entry] if isinstance(entry, dict) else list(entry or [])
         return tickarchive.merge_session(
@@ -396,10 +399,11 @@ def store(root: str, date: dt.date, contract: str, path: Path, start: dt.datetim
             fetched=fetched, fetched_source=[{k: v for k, v in x.items() if not k.startswith("_")}
                                              for x in entries] or None, include_live=include_live)
     except Exception as e:  # noqa: BLE001 — a bad file must not stop the night; the original stays
-        what = "MERGE REFUSED" if isinstance(e, tickarchive.MergeRefused) else "MERGE FAILED"
+        refused = isinstance(e, tickarchive.MergeRefused)
+        what = "MERGE REFUSED" if refused else "MERGE FAILED"
         log(f"{root} {date} {contract}: {what}, every file left as it was — {type(e).__name__}: {e} "
             "(left alone until its files change)")
-        if cache is not None:
+        if cache is not None and refused:
             cache.setdefault(REFUSED, {})[f"{root} {date}"] = {
                 "stamp": files_stamp(path), "why": f"{type(e).__name__}: {e}", "at": tickarchive.now_utc()}
     return None

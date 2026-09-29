@@ -128,6 +128,38 @@ def test_fetch_session_marks_partial_when_the_buffer_runs_dry(monkeypatch):
     assert len(got) == 12 and not stats["complete"]
 
 
+def test_store_only_caches_a_true_refusal_never_a_transient_exception(tmp_path, monkeypatch, capsys):
+    """2026-09-29 review: a MergeRefused (the files themselves disagree, or don't verify) is
+    remembered so the next run doesn't re-fetch and re-refuse for nothing. A merge that merely
+    FAILED (a transient read/write error, nothing about the data) must NOT be cached refused --
+    its condition may no longer hold next run, and caching it would leave the session silently
+    unfilled after the hiccup passed."""
+    path = T.archive_path("NQ", dt.date(2026, 9, 22), "NQZ6", tmp_path)
+    start = dt.datetime(2026, 9, 22, 18, 0, tzinfo=ET)
+    end = dt.datetime(2026, 9, 22, 19, 0, tzinfo=ET)
+
+    def refuses(*a, **k):
+        raise T.tickarchive.MergeRefused("ids disagree")
+
+    monkeypatch.setattr(T.tickarchive, "merge_session", refuses)
+    cache: dict = {}
+    out = T.store("NQ", dt.date(2026, 9, 22), "NQZ6", path, start, end, cache=cache)
+    assert out is None
+    assert "MERGE REFUSED" in capsys.readouterr().out
+    assert "NQ 2026-09-22" in cache[T.REFUSED]
+
+    def fails(*a, **k):
+        raise OSError("disk hiccup")
+
+    monkeypatch.setattr(T.tickarchive, "merge_session", fails)
+    cache = {}
+    out = T.store("NQ", dt.date(2026, 9, 22), "NQZ6", path, start, end, cache=cache)
+    assert out is None
+    assert "MERGE FAILED" in capsys.readouterr().out
+    assert cache == {}                                # nothing remembered: retry next run
+    assert T.refused_still(cache, "NQ", dt.date(2026, 9, 22), path) is False
+
+
 def test_record_writes_file_and_manifest_then_skips(tmp_path, monkeypatch):
     NoWait(monkeypatch)
     start = dt.datetime(2026, 9, 21, 18, 0, tzinfo=ET)
