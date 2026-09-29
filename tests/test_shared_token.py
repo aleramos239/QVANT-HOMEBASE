@@ -249,3 +249,46 @@ def test_a_cooling_user_keeps_the_0910_early_renewal(tmp_path):
     budget.note_error("k", "status=429")
     a.login_budget = budget
     assert run(a._renew_if_needed()) is True and auth.renews == 1
+
+
+def test_private_logins_after_a_refusal_respect_the_hourly_cap(desk, monkeypatch):
+    """N1: the first-login exemption is once per LOGIN, never after go_private."""
+    from homebase.broker import login_budget as lb
+    ads = {}
+    for aid in ("dead", "live"):
+        ad = _SharedFake(aid)
+        desk.adapters[aid] = ad
+        ad._connected = False
+        ad._auth = NS(tokens=NS(access_token="SHARED", expires_at_unix=desk.clock.t + 3600))
+        ads[aid] = ad
+    logins = {"n": 0}
+
+    def wire(ad):
+        async def reconnect():
+            raise RuntimeError("authorize failed: {'s': 401, 'd': 'Access is denied'}")
+
+        async def connect():
+            logins["n"] += 1
+            raise RuntimeError("Login failed: bad credentials")
+
+        ad.reconnect, ad.connect = reconnect, connect
+
+    for ad in ads.values():
+        wire(ad)
+    for _ in range(lb.MAX_LOGINS_PER_HOUR):      # the login's hour is already used up
+        desk.app.state.login_budget.record_login(KEY)
+    real = asyncio.sleep
+    n = {"i": 0}
+
+    async def fake_sleep(_s):
+        await real(0)
+        n["i"] += 1
+        desk.clock.t += 60
+        if n["i"] >= 30:
+            raise _Stop
+
+    monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+    with pytest.raises(_Stop):
+        run(desk.app.state.broker_loop())
+    assert all(ad.privates == 1 for ad in ads.values())
+    assert logins["n"] == 0          # no "first login" exemption for a private entry

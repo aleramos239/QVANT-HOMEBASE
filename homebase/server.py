@@ -380,7 +380,9 @@ def create_app(cfg: config_mod.AppCfg | None = None,
     # entries on one Apex user each falling back to a login ran it into 429 (2026-09-29)
     budget = login_budget or LoginBudget()
     budget.journal = engine.journal
-    _logged_in_once: set[str] = set()        # entries that spent their first login
+    _logged_in_once: set[str] = set()        # entries that logged in / rode the shared token
+    _login_first_spent: set[tuple] = set()   # (login key, live): its one exempt first login
+    _went_private: set[str] = set()          # entries refused on the shared token
     _parked: dict[str, str] = {}             # entry -> why (its account is not on its login)
     # entry -> its account-gone state: first/next_check (unix), unbooked, confirmed
     _gone: dict[str, dict] = {}
@@ -524,8 +526,14 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         if hasattr(ad, "login_budget") and ad.login_budget is not budget:
             ad.login_budget = budget        # the token refresh's login fallback asks it too
 
+        login_id = (key, a.live)
+
         async def _login(fell_back_from=None) -> None:
-            why = budget.blocked(key, first=aid not in _logged_in_once, manual=manual)
+            # the cap/backoff exemption is ONE first login per Tradovate login per process
+            # (its entries share the token), never for an entry that went private
+            first = (aid not in _logged_in_once and login_id not in _login_first_spent
+                     and aid not in _went_private)
+            why = budget.blocked(key, first=first, manual=manual)
             if why:
                 raise LoginDeferred(why if fell_back_from is None else
                                     f"{str(fell_back_from)[:120]} — no login fallback: {why}")
@@ -533,6 +541,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                 engine.journal("reconnect_fell_back_to_login", account=aid,
                                error=str(fell_back_from)[:200])
             _logged_in_once.add(aid)
+            _login_first_spent.add(login_id)
             budget.record_login(key)
             try:
                 await ad.connect()
@@ -550,6 +559,8 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             try:
                 await ad.reconnect()
                 mode = "reconnect"
+                _logged_in_once.add(aid)           # on the shared token: the login's
+                _login_first_spent.add(login_id)   # first login is spent already
             except AccountNotOnLogin:
                 # Permanent: the pin is wrong for THIS login, not a dropped
                 # socket. A full login would just burn the shared keyring
@@ -563,6 +574,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                     # the shared token was refused on THIS socket: its login must never
                     # re-roll the token every sibling rides -- a private one, budgeted
                     ad.go_private()
+                    _went_private.add(aid)
                     engine.journal("shared_token_refused", account=aid, error=str(e)[:200])
                 await _login(fell_back_from=e)
         else:
