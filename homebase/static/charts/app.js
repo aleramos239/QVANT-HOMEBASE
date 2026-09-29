@@ -412,7 +412,8 @@ function menuErr(el, text) {
 function applySymbol(cell, r) {
   if (cell.cfg.root === r) return;
   if (!algoBefore.has(cell)) algoBefore.set(cell, { root: cell.cfg.root, algo: cell.cfg.algo ?? null });
-  cell.update({ root: r, algo: T.algoForRoot(cell.cfg.algo, r, deskStrategies()) });
+  // T (HBTrade) is not loaded on the Backtest tab: a symbol change there has no algo to carry over.
+  cell.update({ root: r, algo: T ? T.algoForRoot(cell.cfg.algo, r, deskStrategies()) : null });
 }
 
 function symbolMenu() {
