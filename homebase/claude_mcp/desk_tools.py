@@ -32,6 +32,7 @@ import datetime as dt
 import json
 import subprocess
 import time
+import urllib.parse
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -51,6 +52,12 @@ JOURNAL_LIMIT_MAX = 500
 
 def _now_et() -> dt.datetime:
     return dt.datetime.now(ET)
+
+
+def _q(s: str) -> str:
+    """Same one-liner tools.py's own _q uses for a path segment -- duplicated, not imported: tools.py
+    imports DeskMixin from this module, so the reverse import would be circular."""
+    return urllib.parse.quote(str(s), safe="")
 
 
 def _in_quiet(now: dt.datetime) -> bool:
@@ -373,7 +380,7 @@ class DeskMixin:
 
     def t_export_status(self, id: str) -> str:  # noqa: A002
         _refuse_if_quiet(self._now_et())
-        r = self._export_call("GET", f"/api/export/{id}")
+        r = self._export_call("GET", f"/api/export/{_q(id)}")
         lines = [f"Export {id}: {r.get('status')}" + (f" ({r.get('phase')})" if r.get("phase") else "")]
         if r.get("sessions_total"):
             lines.append(f"Sessions: {r.get('sessions_done', 0)}/{r['sessions_total']} · rows {r.get('rows', 0):,}")

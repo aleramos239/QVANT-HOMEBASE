@@ -320,6 +320,16 @@ def test_export_start_and_status_request_shape(desk, charts):
     assert "running" in text and "reading" in text and "1/4" in text
 
 
+def test_export_status_quotes_the_id_like_the_tester_tools(desk, charts):
+    """The id is a path segment -- one holding a '/' or '?' must not be read as extra
+    path segments or a query string (same _q() the tester tools already use)."""
+    from urllib.parse import urlsplit
+    charts.routes[("GET", "/api/export/weird%2Fid%3F")] = {"id": "weird/id?", "status": "done"}
+    box(desk, charts).call("export_status", {"id": "weird/id?"})
+    req = charts.last("GET")
+    assert urlsplit(req["path"]).path == "/api/export/weird%2Fid%3F"
+
+
 def test_export_start_guards_a_service_that_does_not_have_it_yet(desk, charts):
     # no ("POST", "/api/export/start") route registered -> the fake answers 404
     with pytest.raises(ToolError, match="feat/data-export"):
