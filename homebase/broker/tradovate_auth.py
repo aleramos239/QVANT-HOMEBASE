@@ -200,6 +200,9 @@ class TradovateAuth:
         self.tokens: Optional[TradovateTokens] = None
         self._username: Optional[str] = None
         self._password: Optional[str] = None
+        # refresh()'s login fallback asks this first (login_budget.LoginGuard: allow(err)
+        # -> bool, done(err)); None = unbudgeted, as before
+        self.login_guard = None
 
     @property
     def access_token(self) -> Optional[str]:
@@ -289,9 +292,20 @@ class TradovateAuth:
         this session logged in with (none remembered -> the renewal's error)."""
         try:
             return self.renew()
-        except Exception:
+        except Exception as e:
             if self._username and self._password:
-                return self.login(self._username, self._password)
+                guard = self.login_guard
+                if guard is not None and not guard.allow(e):
+                    raise        # the user's login budget says no: the renewal's error
+                try:
+                    tokens = self.login(self._username, self._password)
+                except Exception as le:
+                    if guard is not None:
+                        guard.done(le)
+                    raise
+                if guard is not None:
+                    guard.done(None)
+                return tokens
             raise
 
     def ensure_valid(self, refresh_buffer_sec: float = 600,

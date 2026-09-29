@@ -213,6 +213,18 @@ class TradovateAdapter(BrokerAdapter):
         self._now = lambda: dt.datetime.now(dt.timezone.utc)   # the renewal rule's clock (tests replace it)
         self._ws_expires = 0.0                    # expiry of the token the current socket was authorized with
         self.caches_seeded = False                # position/cash read after the last (re)connect
+        self._login_budget = None                 # the desk's per-user LoginBudget (server sets it)
+
+    @property
+    def login_budget(self):
+        return self._login_budget
+
+    @login_budget.setter
+    def login_budget(self, budget) -> None:
+        """The desk's per-Tradovate-user login budget: the token refresh's login fallback
+        asks it first (a 429'd or over-budget user renews only, never logs in)."""
+        self._login_budget = budget
+        self._auth.login_guard = budget.guard(self.keyring_key) if budget is not None else None
 
     @property
     def connected(self) -> bool:
@@ -1311,6 +1323,8 @@ class TradovateAdapter(BrokerAdapter):
                 try:
                     await self._renew_if_needed()
                 except Exception as e:
+                    if self._login_budget is not None:       # a 429'd renewal cools the user
+                        self._login_budget.note_error(self.keyring_key, e)
                     _log(f"{self.account_id}: keepalive error: {e}")
                     self.audit({"event": "keepalive_error",
                                 "account": self.account_id, "error": str(e)})

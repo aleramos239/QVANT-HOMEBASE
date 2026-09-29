@@ -44,7 +44,9 @@ def _run_broker_loop_passes(app, monkeypatch, *, passes, now):
         run(app.state.broker_loop())
 
 
-def test_a_missing_pin_gets_one_attempt_then_the_slow_cooldown(client, monkeypatch):
+def test_a_missing_pin_gets_one_attempt_then_is_parked(client, monkeypatch):
+    """2026-09-29: the 30-min cooldown still re-synced (and on a 429, re-logged in on)
+    the shared user forever. A missing pin is parked: no automatic retry at all."""
     ad = client.adapter
     ad._connected = False
     ad._auth = type("Auth", (), {"tokens": {"a": 1}})()  # has_token -> try reconnect first
@@ -61,11 +63,14 @@ def test_a_missing_pin_gets_one_attempt_then_the_slow_cooldown(client, monkeypat
     ad.connect = connect
 
     _run_broker_loop_passes(client.app, monkeypatch, passes=2, now=1_000_000.0)
+    # hours later, still nothing
+    _run_broker_loop_passes(client.app, monkeypatch, passes=3, now=1_000_000.0 + 6 * 3600)
 
-    # exactly one attempt across both passes: the 2nd pass is still cooling down
     assert calls == {"reconnect": 1, "connect": 0}
-    assert client.app.state.login_cooldown["main"] == pytest.approx(1_000_000.0 + 1800)
-    assert client.app.state.cfg  # sanity: fixture still wired
+    assert "main" in client.app.state.parked
+    assert "main" not in client.app.state.login_cooldown
+    st = client.get("/api/status").json()
+    assert "remove it from the desk" in str(st)
 
 
 def test_a_reconnect_that_raises_the_pin_error_never_falls_back_to_connect(client):

@@ -33,6 +33,7 @@ from fastapi.staticfiles import StaticFiles
 from . import config as config_mod
 from . import secrets_store
 from .broker.base import AccountNotOnLogin, BrokerAdapter, OrderRequest
+from .broker.login_budget import LoginBudget, LoginDeferred
 from .broker.tradovate import RENEW_EARLY_FROM, RENEW_QUIET, TradovateAdapter
 from .engine import Engine, _hhmm
 from .feed import MarketFeed
@@ -360,11 +361,22 @@ def build_feed(cfg: config_mod.AppCfg, adapters: dict) -> MarketFeed:
 def create_app(cfg: config_mod.AppCfg | None = None,
                adapters: dict[str, BrokerAdapter] | None = None,
                *, background: bool = True,
-               adapter_factory=build_adapter, feed_factory=build_feed) -> FastAPI:
+               adapter_factory=build_adapter, feed_factory=build_feed,
+               login_budget: LoginBudget | None = None) -> FastAPI:
     cfg = cfg or config_mod.load()
     adapters: dict[str, BrokerAdapter] = adapters if adapters is not None else {}
     engine = Engine(cfg, adapters)
     acct_status: dict[str, dict] = {}
+    # logins are budgeted per Tradovate USER (the login key), never per entry: five
+    # entries on one Apex user each falling back to a login ran it into 429 (2026-09-29)
+    budget = login_budget or LoginBudget()
+    budget.journal = engine.journal
+    _logged_in_once: set[str] = set()        # entries that spent their first login
+    _parked: dict[str, str] = {}             # entry -> why (its account is not on its login)
+
+    def _login_key(aid: str) -> str:
+        a = cfg.accounts.get(aid)
+        return (a.keyring_key if a is not None else "") or aid
 
     def _md_factory():
         key, env, provider = md_source(cfg, adapters)
@@ -462,15 +474,42 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         return {**st, "error": feed_box["error"],
                 "window": feed_window(engine.now_et())}
 
-    async def _connect_account(aid: str, force_login: bool = False) -> str:
+    async def _connect_account(aid: str, force_login: bool = False,
+                               manual: bool = False) -> str:
         """(Re)connect one account. Prefers an in-place reconnect on the token
         it already holds — no login spent — and only falls back to a full
         login. A drop used to cost a full login every time: ~20/hour on a
-        sleeping laptop against Tradovate's ~5/hour limit."""
+        sleeping laptop against Tradovate's ~5/hour limit. Every login goes
+        through the user's LoginBudget (429 cool-down, hourly cap, backoff;
+        `manual` skips only the backoff); refused, it raises LoginDeferred."""
         a = cfg.accounts[aid]
+        key = _login_key(aid)
         ad = adapters.get(aid)
         if ad is None:
             ad = adapters[aid] = adapter_factory(aid, a)
+        if hasattr(ad, "login_budget") and ad.login_budget is not budget:
+            ad.login_budget = budget        # the token refresh's login fallback asks it too
+
+        async def _login(fell_back_from=None) -> None:
+            why = budget.blocked(key, first=aid not in _logged_in_once, manual=manual)
+            if why:
+                raise LoginDeferred(why if fell_back_from is None else
+                                    f"{str(fell_back_from)[:120]} — no login fallback: {why}")
+            if fell_back_from is not None:
+                engine.journal("reconnect_fell_back_to_login", account=aid,
+                               error=str(fell_back_from)[:200])
+            _logged_in_once.add(aid)
+            budget.record_login(key)
+            try:
+                await ad.connect()
+            except AccountNotOnLogin:
+                budget.login_result(key)    # the login itself worked
+                raise
+            except Exception as e:  # noqa: BLE001
+                budget.login_result(key, e)
+                raise
+            budget.login_result(key)
+
         mode = "login"
         has_token = bool(getattr(getattr(ad, "_auth", None), "tokens", None))
         if has_token and not force_login and hasattr(ad, "reconnect"):
@@ -484,13 +523,13 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                 # never be there — never retry it as a transient drop.
                 raise
             except Exception as e:  # noqa: BLE001 — fall back to a real login
-                engine.journal("reconnect_fell_back_to_login", account=aid,
-                               error=str(e)[:200])
-                await ad.connect()
+                budget.note_error(key, e)          # a 429 cools the whole user down
+                await _login(fell_back_from=e)
         else:
-            await ad.connect()
+            await _login()
         await ad.observe_fills(engine.on_fill)
         desk.attach(aid, ad)
+        _parked.pop(aid, None)
         acct_status[aid] = {"connected": True, "error": None}
         engine.journal("broker_connected", account=aid,
                        broker_account=a.account_name, mode=mode)
@@ -502,10 +541,38 @@ def create_app(cfg: config_mod.AppCfg | None = None,
 
     _login_cooldown: dict[str, float] = {}   # account id -> unix ts of next try
 
+    def _connect_failed(aid: str, e: Exception) -> None:
+        """Record a failed (re)connect. An account missing from its login is PARKED:
+        never retried automatically (the loop would log in on the shared user every
+        few minutes forever -- apex...049, closed at Apex, 2026-09-29), only by a
+        manual Reconnect, once per click."""
+        import time as _t
+        msg = str(e)
+        if isinstance(e, AccountNotOnLogin):
+            a = cfg.accounts.get(aid)
+            name = (a.account_name if a is not None else "") or aid
+            if aid not in _parked:
+                engine.journal("account_parked", account=aid, error=msg[:200])
+            _parked[aid] = msg
+            _login_cooldown.pop(aid, None)
+            acct_status[aid] = {"connected": False, "parked": True,
+                                "error": f"account {name} is not on this login — "
+                                         f"remove it from the desk ({msg[:160]})"}
+            return
+        acct_status[aid] = {"connected": False, "error": msg}
+        # NEVER hammer the login endpoint: auth rejections and rate-limit
+        # tickets wait 30 min; anything else 5 min (the user's LoginBudget
+        # gates the login itself on top of this)
+        slow = ("Login failed" in msg or "p-ticket" in msg or "p-captcha" in msg)
+        _login_cooldown[aid] = _t.time() + (1800 if slow else 300)
+
     async def _broker_loop():
         import time as _t
         while True:
+            budget.tick()                    # a cool-down's one "ended" line
             for aid in list(cfg.accounts):
+                if aid in _parked:
+                    continue                 # only a manual Reconnect retries it
                 ad = adapters.get(aid)
                 if ad is not None and ad.connected:
                     continue
@@ -515,21 +582,14 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                     await _connect_account(aid)
                     _login_cooldown.pop(aid, None)
                 except Exception as e:  # noqa: BLE001 — report, back off
-                    msg = str(e)
-                    acct_status[aid] = {"connected": False, "error": msg}
-                    # NEVER hammer the login endpoint: auth rejections,
-                    # rate-limit tickets, and a pin missing from the login
-                    # (permanent until the config or the login changes) wait
-                    # 30 min; anything else 5 min.
-                    slow = (isinstance(e, AccountNotOnLogin)
-                            or "Login failed" in msg or "p-ticket" in msg
-                            or "p-captcha" in msg)
-                    _login_cooldown[aid] = _t.time() + (1800 if slow else 300)
+                    _connect_failed(aid, e)
             await asyncio.sleep(RECONNECT_INTERVAL_S)
 
     async def _equity_loop():
         while True:
             for aid, ad in list(adapters.items()):
+                if budget.cooling(_login_key(aid)):
+                    continue                 # a 429'd user: no snapshot reads
                 try:
                     if ad.connected:
                         m = await ad.get_metrics()
@@ -601,6 +661,8 @@ def create_app(cfg: config_mod.AppCfg | None = None,
     app.state.connect_account = _connect_account
     app.state.broker_loop = _broker_loop
     app.state.login_cooldown = _login_cooldown
+    app.state.login_budget = budget
+    app.state.parked = _parked
     app.state.feed_box = feed_box
     app.state.desk = desk
     app.include_router(desk_api.trade_router(desk), prefix="/api/trade")
@@ -790,11 +852,11 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         config_mod.save(cfg)
         engine.journal("account_added", account=aid, live=live)
         try:
-            await _connect_account(aid)
+            await _connect_account(aid, manual=True)
         except Exception as e:  # noqa: BLE001
-            acct_status[aid] = {"connected": False, "error": str(e)}
+            _connect_failed(aid, e)
             return {"ok": True, "account": aid, "connected": False,
-                    "error": str(e)}
+                    "error": acct_status[aid]["error"]}
         return {"ok": True, "account": aid, "connected": True}
 
     @app.post("/api/strategy")
@@ -828,8 +890,11 @@ def create_app(cfg: config_mod.AppCfg | None = None,
 
     @app.post("/api/accounts/reconnect")
     async def accounts_reconnect(request: Request):
-        """Manual reconnect for one account (or all). Clears any login backoff —
-        the user is explicitly asking — and reconciles positions afterwards."""
+        """Manual reconnect for one account (or all). Clears the account's retry
+        cooldown and the user's login backoff -- the user is explicitly asking --
+        but never a 429 cool-down or the hourly login cap. One attempt each: a
+        parked account (not on its login) is retried once and stays parked if it
+        still is not there. Reconciles positions afterwards."""
         try:
             body = await request.json()
         except Exception:  # noqa: BLE001 — empty body = all accounts
@@ -842,12 +907,13 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                 results[aid] = {"ok": False, "error": "unknown account"}
                 continue
             _login_cooldown.pop(aid, None)
-            try:
-                mode = await _connect_account(aid)
+            try:     # one attempt: a parked account stays parked if it fails again
+                mode = await _connect_account(aid, manual=True)
+                _login_cooldown.pop(aid, None)
                 results[aid] = {"ok": True, "mode": mode}
             except Exception as e:  # noqa: BLE001 — surface the reason
-                acct_status[aid] = {"connected": False, "error": str(e)}
-                results[aid] = {"ok": False, "error": str(e)[:200]}
+                _connect_failed(aid, e)
+                results[aid] = {"ok": False, "error": acct_status[aid]["error"][:200]}
         engine.journal("manual_reconnect", results=results)
         return {"ok": all(r["ok"] for r in results.values()) if results else False,
                 "results": results}
@@ -878,6 +944,8 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         cfg.accounts.pop(aid)
         config_mod.save(cfg)
         acct_status.pop(aid, None)
+        _parked.pop(aid, None)
+        _login_cooldown.pop(aid, None)
         old = adapters.pop(aid, None)
         if old is not None:
             with contextlib.suppress(Exception):
