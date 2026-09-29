@@ -293,3 +293,57 @@ def test_an_account_that_comes_back_is_kept_with_its_bookings(desk, monkeypatch)
     back = [e for e in _events(desk) if e["event"] == "account_back"]
     assert back and back[0]["rebooked"] == ["nq930"]
     assert "account_removed" not in [e["event"] for e in _events(desk)]
+
+
+def test_a_removal_cancels_an_in_flight_recheck_and_is_never_reconnected(desk, monkeypatch):
+    """N2: per-account connect lock; a removed account is never reconnected."""
+    ad = desk.adapters["apex049"]
+    _fails_with(ad, _gone_err())
+    _loop(desk, monkeypatch, passes=2, step=5)                   # first sighting
+    desk.clock.advance(GONE_CONFIRM_S + 1)
+    started, hung = [], asyncio.Event()
+
+    async def hang():
+        started.append(1)
+        await hung.wait()
+
+    ad.reconnect = ad.connect = hang
+    state = desk.app.state
+
+    async def scenario():
+        await state.gone_step()                                  # spawns the re-check task
+        for _ in range(3):
+            await _REAL_SLEEP(0)
+        assert started == [1]                                    # in flight, holding the lock
+        await state.drop_account("apex049")                      # cancels it, then removes
+        with pytest.raises(RuntimeError, match="no longer on the desk"):
+            await state.connect_account("apex049")
+
+    run(scenario())
+    assert "apex049" not in desk.cfg.accounts and "apex049" not in desk.adapters
+    assert "apex049" not in state.gone and "apex049" not in state.parked
+    state.connect_failed("apex049", _gone_err()())               # a late failure: ignored
+    assert "apex049" not in state.gone and "apex049" not in state.parked
+
+
+def test_connects_of_one_account_never_overlap(desk):
+    ad = desk.adapters["apex049"]
+    ad._connected = False
+    ad._auth = type("Auth", (), {"tokens": {"a": 1}})()
+    live, peak = {"n": 0}, {"n": 0}
+
+    async def reconnect():
+        live["n"] += 1
+        peak["n"] = max(peak["n"], live["n"])
+        await _REAL_SLEEP(0)
+        await _REAL_SLEEP(0)
+        live["n"] -= 1
+        ad._connected = True
+
+    ad.reconnect = reconnect
+
+    async def race():
+        await asyncio.gather(*(desk.app.state.connect_account("apex049") for _ in range(3)))
+
+    run(race())
+    assert peak["n"] == 1

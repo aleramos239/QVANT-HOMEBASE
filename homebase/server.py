@@ -510,8 +510,19 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         return {**st, "error": feed_box["error"],
                 "window": feed_window(engine.now_et())}
 
+    _connect_locks: dict[str, asyncio.Lock] = {}
+
     async def _connect_account(aid: str, force_login: bool = False,
                                manual: bool = False) -> str:
+        """One (re)connect per account at a time (the supervisor, a manual Reconnect and
+        a gone re-check can race), and never for an account no longer on the desk."""
+        async with _connect_locks.setdefault(aid, asyncio.Lock()):
+            if aid not in cfg.accounts:
+                raise RuntimeError(f"{aid} is no longer on the desk")
+            return await _connect_account_locked(aid, force_login, manual)
+
+    async def _connect_account_locked(aid: str, force_login: bool = False,
+                                      manual: bool = False) -> str:
         """(Re)connect one account. Prefers an in-place reconnect on the token
         it already holds — no login spent — and only falls back to a full
         login. A drop used to cost a full login every time: ~20/hour on a
@@ -624,6 +635,8 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         few minutes forever -- apex...049, closed at Apex, 2026-09-29), only by a
         manual Reconnect, once per click."""
         import time as _t
+        if aid not in cfg.accounts:
+            return                           # removed meanwhile: nothing to record
         msg = str(e)
         if isinstance(e, AccountNotOnLogin):
             a = cfg.accounts.get(aid)
@@ -669,7 +682,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         warn, touch nothing."""
         import time as _t
         listed = getattr(e, "listed", None)
-        if not listed:
+        if not listed or aid not in cfg.accounts:
             return
         key, live = _login_key(aid), cfg.accounts[aid].live
         pins = {x: (a.account_name or "").lower() for x, a in cfg.accounts.items()
@@ -701,7 +714,19 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             g["confirmed"] = True
 
     async def _drop_account(aid: str, **journal_extra) -> None:
-        """Unassign an entry from every strategy, drop it from the pool, close it."""
+        """Unassign an entry from every strategy, drop it from the pool, close it. An
+        in-flight gone re-check is cancelled first, and the account's connect lock is
+        held, so a removed adapter is never reconnected behind the removal."""
+        t = _gone_tasks.pop(aid, None)
+        if t is not None and not t.done():
+            t.cancel()
+            with contextlib.suppress(BaseException):
+                await t
+        async with _connect_locks.setdefault(aid, asyncio.Lock()):
+            await _drop_account_locked(aid, **journal_extra)
+        _connect_locks.pop(aid, None)
+
+    async def _drop_account_locked(aid: str, **journal_extra) -> None:
         for name in list(cfg.book):
             cfg.book[name] = [a for a in cfg.book[name]
                               if a.get("account") != aid]
@@ -876,6 +901,9 @@ def create_app(cfg: config_mod.AppCfg | None = None,
     app.state.parked = _parked
     app.state.gone = _gone
     app.state.login_uid = _login_uid
+    app.state.gone_step = _gone_step
+    app.state.drop_account = _drop_account
+    app.state.connect_failed = _connect_failed
     app.state.refresh_snapshots = _refresh_snapshots
     app.state.notices = notices
     app.state.feed_box = feed_box
