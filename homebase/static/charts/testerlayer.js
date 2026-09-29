@@ -224,6 +224,12 @@ function showPlan(charts, selected, root, { avoidSelected = true } = {}) {
     + `${avoidSelected ? ' and the selected chart' : ''} are never taken over. Clear a chart's accounts (or add one), then try again.` };
 }
 
+/* Claude's show keeps off the SELECTED chart because the order panel and DOM follow it -- and the Backtest tab has
+   neither (no trading module loads there), so on it the selected chart is as free as any other. Without this a
+   one-chart layout (the Backtest tab's natural one) had NO chart Claude's show could use: the run loaded, the
+   chart stayed at the live bars and a status line said why. */
+const claudeAvoidsSelected = () => !(typeof window !== 'undefined' && window.HB_PAGE === 'backtest');
+
 /* The trade a show request focuses: {trade_index} as given (when it exists); {date} the first trade on or
    after that session date, else the last one before it; {time_ms} the first trade still open at or after
    that instant (exit_ms >= t), else the last one. null when there are no trades or no focus. Pure. */
@@ -866,7 +872,7 @@ function jump(i, target = null, opts = {}) {
 }
 
 const api = { overlay, jump, runJump, settleFocus, viewShows, tradesInRange, sessionIndex, plotPoints, plotPane, isConstant, valueAt,
-  showPlan, focusTrade, chartFacts, hlineStyle, hlineLabel, hlineTip, levelText, stackLabels, placeLabels, dedupeLevels, labelsFit,
+  showPlan, claudeAvoidsSelected, focusTrade, chartFacts, hlineStyle, hlineLabel, hlineTip, levelText, stackLabels, placeLabels, dedupeLevels, labelsFit,
   boxGeometry, fillSides, thinLabels, tradeTip, LABEL_MIN_PX, MIN_BOX_W };
 if (typeof window !== 'undefined') window.HBTesterLayer = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
