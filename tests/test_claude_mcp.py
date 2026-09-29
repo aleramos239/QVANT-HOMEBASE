@@ -1,5 +1,7 @@
 """The Claude MCP server (homebase.claude_mcp): the JSON-RPC protocol, each tool's request shape against a
-fake chart service, draft writes, and the pins that it has no trading tools and touches no desk route."""
+fake chart service, draft writes, and the pins that no tool -- tester or desk-bridge alike -- can trade,
+arm, kill, flatten or book. The desk-bridge tools themselves (desk_status, account_reconnect, ...) are
+tested in test_claude_mcp_desk.py against a fake desk; this file's pins cover the whole package."""
 from __future__ import annotations
 
 import io
@@ -349,7 +351,11 @@ def test_the_client_refuses_anything_but_loopback_and_tester_routes(monkeypatch)
 
 # ---------------------------------------------------------------- no trading, ever
 
-FORBIDDEN_TOOL_WORDS = ("order", "trade_", "place", "arm", "kill", "flatten", "account", "desk", "paper",
+# "desk" and "account" are no longer forbidden IN A TOOL NAME: the desk-bridge tools read the desk
+# and its accounts by design (desk_status, account_reconnect, account_remove). What stays forbidden
+# is anything that places, arms, kills, flattens or books -- see the route-level pin below, which is
+# the real enforcement (DeskClient's exact allowlist, never a tool name spelling).
+FORBIDDEN_TOOL_WORDS = ("order", "trade_", "place", "arm", "kill", "flatten", "book", "paper",
                         "position", "broker", "live", "setting", "market_data", "algo", "bot")
 
 
@@ -357,26 +363,44 @@ def test_no_tool_can_trade():
     names = tools.Toolbox().names()
     assert names == ["list_strategies", "read_strategy", "backtest", "heatmap", "walkforward", "montecarlo",
                      "prop_eval", "list_prop_rules", "list_runs", "get_run", "trades", "show_on_chart",
-                     "cancel", "write_strategy", "delete_draft"]
+                     "cancel", "write_strategy", "delete_draft", "desk_status", "desk_journal",
+                     "desk_readiness", "data_coverage", "services_health", "account_reconnect",
+                     "account_remove", "export_start", "export_status"]
     for n in names:
         assert not any(w in n for w in FORBIDDEN_TOOL_WORDS), n
 
 
-def test_the_package_never_references_the_desk_or_a_trading_route():
+# The desk-bridge tools (homebase/claude_mcp/desk_client.py, desk_tools.py) legitimately say "desk",
+# "8850" and "/api/accounts/..." now -- the pin moves from "never mention the desk" to "never reach a
+# route that trades". FORBIDDEN_ROUTES is the spec's own list; ALLOWED_DESK_ROUTES is DeskClient's
+# entire allowlist (checked against the live constants, not just this copy of it).
+FORBIDDEN_ROUTES = ("/api/order", "/api/kill", "/api/arm", "/api/book", "/api/strategy",
+                    "/api/chart-trading", "/api/flatten", "/api/desk/", "/api/paper", "/api/settings",
+                    "/api/bot", "/api/md", "/api/accounts/add")
+
+
+def test_the_package_only_ever_reaches_known_safe_routes():
+    """Every /api/... path string anywhere in the package must be a tester route, an export route,
+    or one of DeskClient's four exact desk routes -- and none of the routes the spec calls out
+    (order/kill/arm/book/strategy/chart-trading/flatten, or the charts service's desk relay that
+    places orders) may appear at all, by name or by tool."""
+    from homebase.claude_mcp import desk_client
     src = {p.name: p.read_text() for p in MCP_DIR.glob("*.py")}
     assert src
+    assert desk_client.ALLOWED_GET == frozenset({"/api/status", "/api/journal"})
+    assert desk_client.ALLOWED_POST == frozenset({"/api/accounts/reconnect", "/api/accounts/remove"})
+    allowed_desk = desk_client.ALLOWED_GET | desk_client.ALLOWED_POST
     for name, text in src.items():
-        assert "8850" not in text, name
-        assert not re.search(r"\bdesk\b", text, re.I), name
-        for path in re.findall(r"/api/[\w/{}.-]*", text):
-            assert path.startswith("/api/tester/"), (name, path)
-        for bad in ("/api/order", "/api/chart-trading", "/api/paper", "/api/settings", "/api/bot", "/api/arm",
-                    "/api/kill", "/api/accounts", "/api/md"):
+        for bad in FORBIDDEN_ROUTES:
             assert bad not in text, (name, bad)
+        for path in re.findall(r"/api/[\w/{}.-]*", text):
+            ok = path.startswith("/api/tester/") or path.startswith("/api/export/") or path in allowed_desk
+            assert ok, (name, path)
     imports = set(re.findall(r"^\s*(?:from|import)\s+([\w.]+)", "\n".join(src.values()), re.M))
     homebase_imports = {i for i in imports if i.startswith(("homebase", ".."))}
-    assert homebase_imports <= {"..", "homebase.claude_mcp"}, homebase_imports     # only draftstore via `..`
+    assert homebase_imports <= {"..", "homebase.claude_mcp"}, homebase_imports     # draftstore, paths via `..`
     assert "from .. import draftstore" in src["tools.py"]
+    assert "from .. import paths" in src["desk_tools.py"]
 
 
 CWID = "20260927-120003-nq930-c0de"
