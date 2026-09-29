@@ -25,11 +25,16 @@ A Massive row (it has `ts_ns`) carries no broker id -- its `id` is the
 exchange channel's sequence number, repeated across the price levels of one
 match -- and it is one row per match and price level where the broker sends
 one per fill (2.4x the rows, the same volume hour by hour: NG 2026-09-22). So
-a Massive row is kept only where no broker tick is within MASSIVE_GUARD_MS of
-it: only in a stretch the broker's data does not cover. The two stamp the
-same trade 1 ms apart typically, 416 ms at worst (3,052 isolated NG trades,
-2026-09-28); the guard is five times that. Rows within the guard of a broker
-tick are the same trades as those ticks, or a hole's edge: never counted twice.
+a Massive row is kept only where the broker's ids say ticks are missing: never
+between two broker ticks whose ids are consecutive (nothing traded there that
+the file lacks), and inside a gap -- or before the first / after the last
+broker tick -- never within MASSIVE_EDGE_MS of the gap's two edge ticks, which
+may be the same trades stamped a little apart. The two stamp one trade 1 ms
+apart typically, 416 ms at worst (3,052 isolated NG trades, 2026-09-28; NQ/ES
+not yet measured: no session is in both sources until the fill downloads a
+desk-recorded date, e.g. cme 2026-09-23 against NQ's 20:00-17:00 -- re-measure
+then, read-only). What the edge windows leave unfilled is reported by the
+coverage (massive_edge_ms), and a session with any is not "complete".
 
 Written atomically: a temporary file beside the target, read back and checked
 (every broker tick id of every source present, the Massive row count, the
@@ -56,7 +61,7 @@ COLS = ("ts_ms", "price", "size", "bid", "ask", "bid_size", "ask_size", "id", "t
 BROKER_COLS = COLS[:8]
 TS, PX, SZ, BID, ASK, BIDSZ, ASKSZ, ID, TSNS = range(9)
 LIVE_SUFFIX = ".live.csv.gz"            # = homebase.charts.store.LIVE_SUFFIX (a test holds them equal)
-MASSIVE_GUARD_MS = 2000
+MASSIVE_EDGE_MS = 500                   # a gap's edge ticks may be the same trades as Massive rows this near
 CONFLICTS_REFUSED = 5                   # more same-id disagreements than this: refuse, change nothing
 ID_SPACE_REFUSED = 5                    # more same trades under different ids than this: refuse too
 SOURCES_KEPT = 40                       # the manifest's merge log keeps this many entries
@@ -148,7 +153,26 @@ def _near(sorted_ts: list[int], ts: int, guard: int) -> bool:
     return i < len(sorted_ts) and sorted_ts[i] <= ts + guard
 
 
-def merge(sources, massive_new: list[tuple] = (), guard_ms: int = MASSIVE_GUARD_MS) -> Merged:
+def _broker_cover(ticks: list[tuple[int, int]], noid_ts: list[int], edge: int):
+    """covered(ts): does the broker already hold the trade(s) a Massive row at
+    ts would add? Yes between two broker ticks with consecutive ids; yes
+    within `edge` of the tick on either side of a gap (or of the first / last
+    tick); yes near a broker row without an id; else no."""
+    b_ts = [t for t, _ in ticks]
+    b_id = [i for _, i in ticks]
+
+    def covered(t: int) -> bool:
+        if _near(noid_ts, t, edge):
+            return True
+        i = bisect.bisect_right(b_ts, t)
+        prev, nxt = i - 1, i
+        if prev >= 0 and nxt < len(b_ts) and b_id[nxt] == b_id[prev] + 1:
+            return True
+        return (prev >= 0 and t - b_ts[prev] <= edge) or (nxt < len(b_ts) and b_ts[nxt] - t <= edge)
+    return covered
+
+
+def merge(sources, massive_new: list[tuple] = (), edge_ms: int = MASSIVE_EDGE_MS) -> Merged:
     """The union of `sources` ([(name, rows)], the first -- on disk -- wins a disagreement;
     rows may be a stream, read once) plus `massive_new` (Massive rows offered
     to fill holes). Module docstring for the rules; raises MergeRefused when
@@ -203,12 +227,13 @@ def merge(sources, massive_new: list[tuple] = (), guard_ms: int = MASSIVE_GUARD_
         raise MergeRefused(f"{twins} ticks appear under different ids in different sources -- "
                            "not one id space; nothing merged")
     broker = list(by_id.values()) + [r for r, n in noid.items() for _ in range(n)]
-    broker_ts = sorted(int(r[TS]) for r in broker)
-    kept_old = [r for r in massive_old if not _near(broker_ts, int(r[TS]), guard_ms)]
+    covered = _broker_cover(sorted(((int(r[TS]), int(r[ID])) for r in by_id.values())),
+                            sorted(int(r[TS]) for r in noid), edge_ms)
+    kept_old = [r for r in massive_old if not covered(int(r[TS]))]
     have_m = Counter((int(r[TSNS]), float(r[PX]), int(r[SZ])) for r in massive_old)
     added, near_broker, duplicates = [], 0, 0
     for r in massive_new:
-        if _near(broker_ts, int(r[TS]), guard_ms):
+        if covered(int(r[TS])):
             near_broker += 1
             continue
         k = (int(r[TSNS]), float(r[PX]), int(r[SZ]))
@@ -521,8 +546,11 @@ def coverage(rows: list[tuple], *, root: str, date: dt.date, start: dt.datetime,
     or, at an end of the file where there is no tick on one side, a history
     fetch that covered it in full found nothing. MISSING_IDS: broker
     ids skipped inside the file where no Massive row stands in for them.
-    head_ok / tail_ok: a tick within 5 min of the open / close, or a history
-    fetch covering it. Complete = ticks, no hole, no missing id, both ends."""
+    MASSIVE_EDGE_MS: where Massive rows do stand in, the time at the gap's
+    edges they cannot fill (the merge's edge windows) -- unknown, so not
+    complete. head_ok / tail_ok: a tick within 5 min of the open / close, or
+    a history fetch covering it. Complete = ticks, no hole, no missing id, no
+    unfilled edge, both ends."""
     from .backtest.tape import early_close_et          # stdlib-only; the repo's half-day calendar
     if any(int(a[TS]) > int(b[TS]) for a, b in zip(rows, rows[1:])):
         rows = sorted(rows, key=sort_key)               # a live file: refills append older rows
@@ -565,13 +593,22 @@ def coverage(rows: list[tuple], *, root: str, date: dt.date, start: dt.datetime,
             holes[-1][1] = b
         else:
             holes.append([a, b])
-    missing = 0
+    missing = edge_ms = 0
+
+    def has_massive(a, b):
+        j = bisect.bisect_right(m_ts, a)
+        return j < len(m_ts) and m_ts[j] < b
     for k in range(1, len(b_id)):
         gap = b_id[k] - b_id[k - 1] - 1
         if gap > 0:
-            j = bisect.bisect_right(m_ts, b_ts[k - 1])
-            if not (j < len(m_ts) and m_ts[j] < b_ts[k]):
-                missing += gap                              # no Massive row stands in for them
+            if has_massive(b_ts[k - 1], b_ts[k]):     # Massive stands in, but not at the two edges
+                edge_ms += min(2 * MASSIVE_EDGE_MS, b_ts[k] - b_ts[k - 1])
+            else:
+                missing += gap
+    if b_ts and m_ts and m_ts[0] < b_ts[0]:           # Massive before the broker's first tick
+        edge_ms += min(MASSIVE_EDGE_MS, b_ts[0] - m_ts[0])
+    if b_ts and m_ts and m_ts[-1] > b_ts[-1]:         # ... or after its last
+        edge_ms += min(MASSIVE_EDGE_MS, m_ts[-1] - b_ts[-1])
     first = ts[0] if ts else None
     last = ts[-1] if ts else None
     head_ok = first is not None and (first - start_ms < EDGE_MS or covers(spans, start_ms, start_ms))
@@ -589,9 +626,9 @@ def coverage(rows: list[tuple], *, root: str, date: dt.date, start: dt.datetime,
                    "at": "open" if a == start_ms else "close" if b == stop_ms else "inside"}
                   for a, b in holes],
         "hole_hours": round(sum(b - a for a, b in holes) / HOUR_MS, 2),
-        "missing_ids": missing, "head_ok": head_ok, "tail_ok": tail_ok,
+        "missing_ids": missing, "massive_edge_ms": edge_ms, "head_ok": head_ok, "tail_ok": tail_ok,
         "early_close_et": close,
-        "complete": bool(ts) and not holes and missing == 0 and head_ok and tail_ok,
+        "complete": bool(ts) and not holes and missing == 0 and edge_ms == 0 and head_ok and tail_ok,
     }
 
 

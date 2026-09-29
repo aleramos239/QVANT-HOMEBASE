@@ -228,10 +228,11 @@ def test_the_fill_merges_only_what_the_archive_lacks(tmp_path, capsys):
     assert len(broker) == 23 * 60 - 120 and all(r["bid"] for r in broker)        # untouched
     assert [int(r["ts_ms"]) for r in massive] == minute_ms(dt.date(2026, 9, 23), range(0, 120))
     assert massive[0]["ts_ns"] == str(open_ms * 1_000_000 + 123) and massive[0]["price"] == "20000.25"
-    assert nq["complete"] and nq["merge"]["massive_added"] == 120 and not nq["bid_ask"]
+    assert nq["merge"]["massive_added"] == 120 and not nq["bid_ask"]
+    assert nq["coverage"]["holes"] == [] and nq["coverage"]["massive_edge_ms"] == 500   # before 20:00: unknown
     assert nq["sources"][-1]["kind"] == "massive" and nq["sources"][-1]["files"] == ["cme/2026-09-23.csv.gz"]
     es = next(m for m in tg if m["root"] == "ES")
-    assert es["source"] == "massive" and es["ticks"] == 23 * 60 and es["complete"]
+    assert es["source"] == "massive" and es["ticks"] == 23 * 60 and es["complete"]       # no broker tick: no edge
     assert run_again_adds_nothing(base, raw, capsys)
 
 
@@ -275,6 +276,6 @@ def test_a_fill_needs_credentials_only_for_what_is_not_on_disk(tmp_path, monkeyp
     monkeypatch.delenv("MASSIVE_S3_SECRET", raising=False)
     base, raw = archive(tmp_path)
     out = M.fill(("NQ",), base, NOW, dates=[dt.date(2026, 9, 23)], raw=raw)     # its raw file is on disk
-    assert out[0]["complete"]
+    assert out[0]["merge"]["massive_added"] == 120
     with pytest.raises(M.Refused, match="must be downloaded"):
         M.fill(("NQ",), base, NOW, dates=[dt.date(2026, 9, 24)], raw=raw)

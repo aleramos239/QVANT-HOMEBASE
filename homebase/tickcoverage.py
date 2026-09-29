@@ -126,8 +126,8 @@ def session_entry(base: Path, root: str, date: dt.date, cache: dict,
             entry["needs_massive"] = not holiday and gone(
                 int(T.session_bounds(date, root)[0].timestamp() * 1000), now)
         return entry
-    entry.update({k: cov[k] for k in ("holes", "hole_hours", "missing_ids", "head_ok", "tail_ok",
-                                      "early_close_et")})
+    entry.update({k: cov.get(k, 0) for k in ("holes", "hole_hours", "missing_ids", "massive_edge_ms",
+                                             "head_ok", "tail_ok", "early_close_et")})
     if now is not None:
         entry["holes"] = [{**h, "needs_massive": gone(A.ms_of(h["start_utc"]), now)} for h in entry["holes"]]
         entry["needs_massive"] = any(h["needs_massive"] for h in entry["holes"])

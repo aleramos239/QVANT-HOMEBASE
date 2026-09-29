@@ -173,16 +173,17 @@ def test_a_torn_live_tail_is_dropped_not_raised(tmp_path):
 
 
 def test_massive_rows_fill_only_stretches_no_broker_tick_covers():
-    broker = [tick(i, ts=S + 60_000 + i * 100) for i in range(10)]          # S+60.0 s .. S+60.9 s
-    old = [massive(S, 1), massive(S + 57_000, 2),      # 3 s and more from any broker tick: kept
-           massive(S + 60_450, 3),                     # the same trade as a broker tick: dropped
-           massive(S + 62_800, 4)]                     # 1.9 s after the last broker tick: dropped
+    broker = [tick(i, ts=S + 60_000 + i * 100) for i in range(10)]          # S+60.0 s .. S+60.9 s, ids run on
+    old = [massive(S, 1), massive(S + 57_000, 2),      # before the broker's first tick, > 500 ms off: kept
+           massive(S + 60_450, 3),                     # between consecutive ids: the broker has it: dropped
+           massive(S + 60_950, 5),                     # 50 ms after the last broker tick: its edge: dropped
+           massive(S + 62_800, 4)]                     # 1.9 s after it: nothing says the broker has it: kept
     m = A.merge([("history", broker), ("archive", old)])
     kept = [r for r in m.rows if A.is_massive(r)]
-    assert [r[A.ID] for r in kept] == ["1", "2"] and m.stats["massive_dropped_near_broker"] == 2
+    assert [r[A.ID] for r in kept] == ["1", "2", "4"] and m.stats["massive_dropped_near_broker"] == 2
     new = [massive(S, 1), massive(S + 30_000, 9), massive(S + 60_010, 10)]
     m = A.merge([("history", broker), ("archive", old)], massive_new=new)
-    assert [r[A.ID] for r in m.rows if A.is_massive(r)] == ["1", "9", "2"]
+    assert [r[A.ID] for r in m.rows if A.is_massive(r)] == ["1", "9", "2", "4"]
     assert (m.stats["massive_added"], m.stats["massive_already_on_file"],
             m.stats["massive_skipped_near_broker"]) == (1, 1, 1)
 
@@ -270,7 +271,8 @@ def test_massive_rows_in_a_gap_stand_in_for_the_skipped_ids():
     assert gap["missing_ids"] == 200 and gap["hole_hours"] == 2.0            # 21:20-00:40: two whole hours
     fill = [massive(S + m * 60_000 + 30_000, 7000 + m) for m in range(200, 400)]
     c = cov(sorted(rows + fill, key=A.sort_key))
-    assert c["missing_ids"] == 0 and c["holes"] == [] and c["complete"]
+    assert c["missing_ids"] == 0 and c["holes"] == []
+    assert c["massive_edge_ms"] == 1000 and not c["complete"]      # its two edges: unknown, said
 
 
 def test_the_equity_half_day_ends_at_1315_other_roots_are_flagged_not_guessed():
@@ -317,3 +319,22 @@ def test_the_same_trades_under_other_ids_refuse_the_merge():
         A.merge([("history", rows), ("live", other)])
     m = A.merge([("history", rows[:5]), ("live", other[:5])])
     assert m.stats["id_twins"] == 5                               # a handful: kept, counted
+
+
+def test_inside_an_id_gap_only_its_two_edge_ticks_are_guarded():
+    """Review 4: a 500 s gap (1000 ids) in a tick-every-500 ms tape, Massive every
+    100 ms inside. Rows within 500 ms of the gap's edge ticks are dropped (they
+    may be those very trades); every other row lands; the edges stay unknown."""
+    br, i, t, hole = [], 1, S, (S + 36_000_000, S + 36_500_000)
+    while t < S + 40_000_000:
+        if not hole[0] < t < hole[1]:
+            br.append(tick(0, ts=t)[:A.ID] + (str(i), ""))
+        i, t = i + 1, t + 500
+    mv = [massive(x, 7) for x in range(hole[0] + 50, hole[1], 100)]
+    m = A.merge([("history", br)], mv)
+    added = [int(r[A.TS]) for r in m.rows if A.is_massive(r)]
+    assert min(added) - hole[0] > 500 and hole[1] - max(added) > 500
+    assert m.stats["massive_added"] == len(mv) - 10               # 5 at each edge
+    c = cov(m.rows, sources=[{"kind": "history", "stop": "reached", "from_utc": A.iso_ms(S),
+                              "to_utc": A.iso_ms(S + 40_000_000)}])
+    assert c["missing_ids"] == 0 and c["massive_edge_ms"] == 1000 and not c["complete"]
