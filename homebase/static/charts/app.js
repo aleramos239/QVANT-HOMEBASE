@@ -1636,8 +1636,9 @@ function chartTemplateMenu(cell, at) {
     input.setAttribute('aria-label', 'Template name');
     const doSave = async () => {
       const name = input.value.trim();
+      // T (HBTrade) is not loaded on the Backtest tab: a saved template there carries no trade bits.
       const body = { ...S.buildTemplate({ settings: cell.settings(), indicators: cell.cfg.indicators, spec: cell.cfg.spec }),
-        ...T.tradeBits(cell.cfg) };   // Task 2: the chart's accounts and algo too (never its Trading switch)
+        ...(T ? T.tradeBits(cell.cfg) : {}) };   // Task 2: the chart's accounts and algo too (never its Trading switch)
       const res = await templates.save(name, body);
       if (res) { fail(res); return; }
       names.add(name);
