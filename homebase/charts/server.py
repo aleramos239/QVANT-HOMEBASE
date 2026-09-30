@@ -48,7 +48,7 @@ from .recorder import REFILL_MAX_PAGES, LiveRecorder, refill
 from .replay import ReplayFeed
 from .session import ET, always_open, et_wall_s, session_date, session_range_ms, split_by_session
 from .settings_store import MD_CHOICES, SettingsStore
-from .store import ARCHIVE, TickStore
+from .store import ARCHIVE, TickStore, splice_tail
 from .studies import make
 from .tick import SideClassifier, from_row
 from .tester_api import tester_router
@@ -63,6 +63,8 @@ ROLL_GRACE_MS = 60_000        # a 24/7 root rolls at 18:00 with no dead hour: it
                               # prints can reach us after the clock passed 18:00 and are kept this long
 REFILL_BUDGET = 60            # this process's own chart requests per hour
 SEND_QUEUE_MAX = 400
+REPAIR_POLL_S = 60.0           # how often today's archive files are stat'ed for a repair that landed (a stat per root)
+REPAIR_SPLICE_MS = 600_000     # the hub tape's ticks this recent (before a repair load began) may still be unflushed/new
 PAPER_POLL_S = 0.25            # the paper runner is asked this often; it runs at most once a second
 TIMEFRAMES = [["5s", "time:5"], ["15s", "time:15"], ["30s", "time:30"], ["1m", "time:60"],
               ["2m", "time:120"], ["3m", "time:180"], ["5m", "time:300"], ["10m", "time:600"],
@@ -491,6 +493,8 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
     refill_pending: dict[str, dict] = {}  # root -> {frm, contract} while WAITING for the lock
     refill_running: set[str] = set()      # roots whose runner loop is alive (waiting or fetching)
 
+    repair_seen: dict[str, tuple | None] = {}   # root -> the archive files' stamp today's tape was built from
+
     def reseed(root: str) -> None:
         """Rebuild today's tape for root from disk (after a refill). Runs on
         the loop and blocks it for a second or two — rare, and this process
@@ -498,8 +502,14 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         if recorder is not None:
             recorder.flush()
         d = session_date(clock(), root)
+        repair_seen[root] = store.archive_stamp(root, d)    # BEFORE the read: a repair landing mid-load re-triggers
         sess = store.load(root, d)
-        ticks = sess.ticks if sess else []
+        _apply_today(root, d, sess)
+
+    def _apply_today(root: str, d: dt.date, sess, ticks=None) -> None:
+        """Hand a loaded session (store.load's; `ticks` overrides its tape) to the hub and the paper runner."""
+        if ticks is None:
+            ticks = sess.ticks if sess else []
         hub.start_today(root, d, ticks, {
             "date": d.isoformat(), "contract": sess.contract if sess else session_contract(root, clock() / 1000),
             "source": "live", "approx": bool(sess and ticks and not sess.bid_ask),
@@ -514,6 +524,36 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                                gaps=sess.gaps if sess else [])
             except Exception as e:  # noqa: BLE001 — paper work must never break the charts
                 log(f"paper seed: {type(e).__name__}: {e}")
+
+    async def _repair_check(root: str) -> None:
+        """The hourly repair job fills a session's missing stretch (a Mac that was off) into the
+        ARCHIVE file; the chart reads the live file plus that archive (store.load's union), but today's
+        tape was built at startup. When the archive files' stamp moved, load the union in a worker
+        thread (the big read never touches the loop), splice onto it whatever the hub tape holds that
+        the files do not yet (the last second's unflushed ticks), and reseed the hub with the result --
+        what a gap refill already does. Only on a change: a stat per poll, a read per repair."""
+        d = session_date(clock(), root)
+        stamp = await asyncio.to_thread(store.archive_stamp, root, d)
+        if stamp is None or stamp == repair_seen.get(root):
+            return
+        t0 = clock()
+        sess = await asyncio.to_thread(store.load, root, d)
+        await _quiet_wait()                         # never reset the charts across the 9:30 fire
+        if sess is None or hub.today_date.get(root) != d or session_date(clock(), root) != d:
+            return                                  # the session rolled meanwhile: the next poll decides
+        ticks = splice_tail(sess.ticks, hub.today.get(root, ()), t0 - REPAIR_SPLICE_MS)
+        repair_seen[root] = stamp
+        log(f"{root}: repaired archive picked up -- tape {len(hub.today.get(root, ()))} -> {len(ticks)} ticks")
+        _apply_today(root, d, sess, ticks)
+
+    async def repair_loop() -> None:
+        while True:
+            await asyncio.sleep(REPAIR_POLL_S)      # not the `sleep` seam: tests patch it to 0
+            for root in roots:
+                try:
+                    await _repair_check(root)
+                except Exception as e:  # noqa: BLE001 — the repair pickup must never take the service down
+                    log(f"{root}: repair pickup: {type(e).__name__}: {e}")
 
     async def _quiet_wait() -> None:
         while QUIET[0] <= dt.datetime.fromtimestamp(clock() / 1000, ET).time() < QUIET[1]:
@@ -856,6 +896,8 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                 start_last[r] = last
                 reseed(r)
         tasks = [asyncio.create_task(pump()), asyncio.create_task(feed.run())]
+        if not replay:
+            tasks.append(asyncio.create_task(repair_loop()))
         if calendar_fetch is not None:
             tasks.append(asyncio.create_task(calendar_loop()))
         if news_fetch is not None:

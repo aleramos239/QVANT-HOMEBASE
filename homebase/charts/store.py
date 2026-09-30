@@ -6,9 +6,13 @@ Two kinds of file live side by side under ~/futures_ticks/<ROOT>/<YYYY>/:
   <date>_<contract>.live.csv.gz  the chart service's own live recording
                                  (+ <date>_<contract>.live.gaps)
 
-Per session ONE file is used, never a merge (Massive and Tradovate ids are
-different spaces): complete archive > live > incomplete archive; on a roll
-day the contract with the most ticks wins.
+Per session ONE contract is used (on a roll day the one with the most ticks),
+and per contract: complete archive alone > live + incomplete archive > either
+alone. The last case is a UNION: the live file as it always was, plus the
+archive's ticks whose tick ids it lacks (the live version of a shared id stays):
+the hourly repair job files the ticks a dead Mac never recorded into
+the incomplete archive, and the live file alone would leave that hole on the
+chart until the nightly merge. Read-only -- nothing here ever writes a file.
 """
 from __future__ import annotations
 
@@ -17,10 +21,14 @@ import datetime as dt
 import gzip
 import json
 import re
+import threading
 import zlib
-from dataclasses import dataclass, field
+from bisect import bisect_left
+from operator import itemgetter
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
+from .. import tickarchive as TA
 from .tick import SideClassifier, Tick
 
 ARCHIVE = Path.home() / "futures_ticks"
@@ -35,6 +43,7 @@ class SessionFile:
     complete: bool
     ticks: int            # manifest count (archive) or file size (live): ranking only
     bid_ask: bool         # False for a Massive backfill (sides are tick-rule only)
+    merge_with: Path | None = None   # a live file's incomplete archive of the same contract: load() returns both, unioned
 
 
 @dataclass
@@ -114,6 +123,8 @@ def ticks_from_table(header: list[str], recs: list[list[str]],
     return out, quotes
 
 
+_TIME_ID = itemgetter(0, 4)        # Tick's (ts_ms, id)
+
 _CONTRACT = re.compile(r"^([A-Z0-9]+?)([FGHJKMNQUVXZ])(\d{1,2})$")
 
 
@@ -123,9 +134,62 @@ def _key(contract: str) -> str:
     return f"{m.group(1)}{m.group(2)}{m.group(3)[-1]}" if m else contract
 
 
+def _stamp(p: Path) -> tuple[int, int] | None:
+    try:
+        st = p.stat()
+    except OSError:
+        return None
+    return st.st_size, st.st_mtime_ns
+
+
+def _root_of(p: Path) -> str:
+    return p.parent.parent.name
+
+
+def _date_of(p: Path) -> dt.date:
+    return dt.date.fromisoformat(p.name[:10])
+
+
+def splice_tail(loaded: list[Tick], current, since_ms: int) -> list[Tick]:
+    """`loaded` (the session as the files hold it) plus the ticks of `current` (the hub's live tape)
+    at/after since_ms that it lacks -- by tick id, or by (time, price, size) for an id-less tick.
+    For the live service: the files were read in a worker thread, so the ticks that arrived
+    meanwhile (and the recorder's unflushed second) exist only on the tape. Older tape ticks are
+    all on disk already; `loaded` is returned as is when nothing is missing."""
+    cur = list(current)
+    i = len(cur)
+    while i > 0 and cur[i - 1].ts_ms >= since_ms:
+        i -= 1
+    tail = cur[i:]
+    if not tail:
+        return loaded
+    j = bisect_left(loaded, since_ms, key=lambda t: t.ts_ms)
+    have_id = {t.id for t in loaded[j:] if t.id}
+    have_key = {(t.ts_ms, t.price, t.size) for t in loaded[j:] if not t.id}
+    extra = []
+    for t in tail:
+        if t.id:
+            if t.id in have_id:
+                continue
+            have_id.add(t.id)
+        else:
+            k = (t.ts_ms, t.price, t.size)
+            if k in have_key:
+                continue
+            have_key.add(k)
+        extra.append(t)
+    if not extra:
+        return loaded
+    return loaded[:j] + sorted(loaded[j:] + extra, key=lambda t: (t.ts_ms, t.id))
+
+
 class TickStore:
+    MERGE_MEMO = 4          # parsed incomplete archives kept (each is small)
+
     def __init__(self, base: Path = ARCHIVE):
         self.base = Path(base)
+        self._archive_memo: dict[tuple, tuple] = {}     # (archive path, (size, mtime)) -> its parsed ticks, oldest first
+        self._merged_lock = threading.Lock()
 
     def files(self, root: str, d: dt.date) -> list[SessionFile]:
         tag = d.isoformat()
@@ -168,12 +232,30 @@ class TickStore:
             return (1, max(arch)) if arch else (0, max(f.ticks for f in fs if _key(f.contract) == c))
         contract = max(sorted({_key(f.contract) for f in fs}), key=rank)
         fs = [f for f in fs if _key(f.contract) == contract]
-        for group in ([f for f in fs if not f.live and f.complete],
-                      [f for f in fs if f.live],
-                      [f for f in fs if not f.live]):
-            if group:
-                return max(group, key=lambda f: f.ticks)
-        return None
+        done = [f for f in fs if not f.live and f.complete]
+        if done:
+            return max(done, key=lambda f: f.ticks)
+        live = [f for f in fs if f.live]
+        part = [f for f in fs if not f.live]
+        if live:
+            f = max(live, key=lambda f: f.ticks)
+            if part:
+                return replace(f, merge_with=max(part, key=lambda a: a.ticks).path)
+            return f
+        return max(part, key=lambda f: f.ticks) if part else None
+
+    def archive_stamp(self, root: str, d: dt.date) -> tuple | None:
+        """(name, size, mtime_ns) of every non-live tick file of session d, sorted; None if there
+        is none. Cheap (a glob and stats): the live service compares it to learn that the hourly
+        repair job (or the nightly merge) rewrote an archive file under a session it already holds."""
+        out = []
+        for f in self.files(root, d):
+            if f.live:
+                continue
+            st = _stamp(f.path)
+            if st is not None:
+                out.append((f.path.name, *st))
+        return tuple(sorted(out)) or None
 
     def sessions(self, root: str) -> list[dt.date]:
         ds = set()
@@ -188,15 +270,83 @@ class TickStore:
         if not f.live:
             return []
         try:
-            return json.loads(gaps_path(f.path).read_text())
+            gaps = json.loads(gaps_path(f.path).read_text())
         except (OSError, ValueError):
             return []
+        if f.merge_with is not None and gaps:
+            gaps = self._minus_archive(f.merge_with, gaps)
+        return gaps
+
+    @staticmethod
+    def _minus_archive(arch: Path, gaps: list) -> list:
+        """The live file's gap markers minus the stretches the incomplete archive's manifest vouches
+        for (tickarchive.verified_spans: the broker's history served in full there). A marker stays
+        exactly where ticks are still missing; with no readable manifest every marker stays."""
+        try:
+            spans = TA.verified_spans(TA.prior_sources(TA.load_manifest(arch)))
+            if not spans:
+                return gaps
+            out = []
+            for a, b in gaps:
+                out.extend([x, y] for x, y in TA.uncovered(spans, int(a), int(b)))
+            return out
+        except (TypeError, ValueError, KeyError):
+            return gaps
+
+    def _archive_side(self, arch: Path) -> tuple | None:
+        """(ticks, tick-id set, any quotes) of an incomplete archive file, parsed once per (size, mtime)
+        of THAT file: the live file changes every second, the archive only when the repair job
+        writes it. The memo is tiny (an archive is a fraction of a live file)."""
+        st = _stamp(arch)                               # BEFORE the read: a write landing mid-read re-misses next time
+        if st is None:
+            return None
+        key = (str(arch), st)
+        with self._merged_lock:
+            hit = self._archive_memo.get(key)
+        if hit is not None:
+            return hit
+        header, recs = read_table(arch)
+        ticks, quotes = ticks_from_table(header, recs, live=True)
+        side = (ticks, {t.id for t in ticks if t.id}, quotes)
+        with self._merged_lock:
+            self._archive_memo[key] = side
+            while len(self._archive_memo) > self.MERGE_MEMO:
+                self._archive_memo.pop(next(iter(self._archive_memo)))
+        return side
+
+    def _with_archive(self, f: SessionFile, ticks: list[Tick], quotes: bool) -> tuple[list[Tick], bool]:
+        """The live file's ticks plus the incomplete archive's ticks whose ids the live file lacks
+        (the live version of a shared id stays; an archive row without an id -- a Massive fill -- is
+        added only where the live file has nothing within MASSIVE_NEAR_MS), sorted by (time, id).
+        Nothing to add -> `ticks` itself, untouched."""
+        side = self._archive_side(f.merge_with)
+        if side is None:
+            return ticks, quotes
+        a_ticks, a_ids, a_quotes = side
+        live_ids = {t.id for t in ticks if t.id}
+        new = []
+        for t in a_ticks:
+            if t.id:
+                if t.id not in live_ids:
+                    new.append(t)
+            else:
+                i = bisect_left(ticks, t.ts_ms - TA.MASSIVE_EDGE_MS, key=lambda x: x.ts_ms)
+                if i >= len(ticks) or ticks[i].ts_ms > t.ts_ms + TA.MASSIVE_EDGE_MS:
+                    new.append(t)
+        if not new:
+            return ticks, quotes
+        return sorted(ticks + new, key=_TIME_ID), quotes or a_quotes
 
     def load(self, root: str, d: dt.date) -> Session | None:
+        """The session's ticks. READ-ONLY. A live file with an incomplete archive beside it comes
+        back with the archive's ticks it lacks added (see the module docstring); the live side is
+        read exactly as it always was and the archive side is cached by the archive's own stamp."""
         f = self.pick(root, d)
         if f is None:
             return None
         header, recs = read_table(f.path)
         ticks, quotes = ticks_from_table(header, recs, live=f.live)
+        if f.live and f.merge_with is not None:
+            ticks, quotes = self._with_archive(f, ticks, quotes)
         return Session(root, d, f.contract, "live" if f.live else "archive",
                        ticks, quotes, self.gaps(f))
