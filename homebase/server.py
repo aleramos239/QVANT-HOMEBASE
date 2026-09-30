@@ -1179,6 +1179,9 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         """Validate a login (saved or new; demo by default, live on request)
         with a throwaway probe and return every account under it. Nothing is
         added to the pool yet — that is /api/accounts/add, one per account."""
+        # the probe is a real login that re-rolls the login's shared token: never
+        # in the 9:30 window, like the adds it leads to
+        _refuse_adding_now()
         body = await request.json()
         env = "live" if str(body.get("env") or "").lower() == "live" else "demo"
         saved = str(body.get("saved_key") or "")
