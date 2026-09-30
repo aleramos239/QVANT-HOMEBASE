@@ -237,3 +237,42 @@ def test_splice_tail_keeps_only_what_the_files_lack():
     out = splice_tail(loaded, tape, 2000)
     assert [(t.ts_ms, t.id) for t in out] == [(1000, 1), (2000, 2), (3000, 0), (3000, 3), (3500, 4)]
     assert splice_tail(loaded, tape[:3], 2000) is loaded
+
+
+def _vouch(arch, *spans):
+    """Rewrite the archive manifest's merge log: the broker's history served these [from_ms, to_ms] stretches in full."""
+    import json
+    mp = arch.with_name(arch.name[:-len(".csv.gz")] + ".json")
+    man = json.loads(mp.read_text())
+    iso = lambda ms: dt.datetime.fromtimestamp(ms / 1000, dt.timezone.utc).isoformat()  # noqa: E731
+    man["sources"] = [{"kind": "history", "from_utc": iso(a), "to_utc": iso(b), "stop": "reached", "pages": 1}
+                      for a, b in spans]
+    mp.write_text(json.dumps(man))
+
+
+def test_gap_markers_the_archive_covers_are_dropped_and_the_rest_stay(tmp_path):
+    import json
+    t = lambda h, m: session_ms(D, h, m)  # noqa: E731
+    arch = write_archive(tmp_path, "NQ", D, "NQZ6", rows(t(1, 0), [100.0] * 3, first_id=1), complete=False)
+    live = _live(tmp_path, rows(t(9, 30), [110.0], first_id=100))
+    gaps = gaps_path(live)
+    gaps.write_text(json.dumps([[t(1, 0), t(3, 0)],       # inside the vouched 00:30-05:00: gone
+                                [t(4, 0), t(6, 0)],       # only its first hour vouched: 05:00-06:00 stays
+                                [t(8, 0), t(8, 30)]]))    # nothing vouched there: stays whole
+    _vouch(arch, (t(0, 30), t(5, 0)))
+    st = TickStore(tmp_path)
+    assert st.gaps(st.pick("NQ", D)) == [[t(5, 0), t(6, 0)], [t(8, 0), t(8, 30)]]
+    assert st.load("NQ", D).gaps == [[t(5, 0), t(6, 0)], [t(8, 0), t(8, 30)]]
+    assert json.loads(gaps.read_text())[0] == [t(1, 0), t(3, 0)]          # the marker file itself is never touched
+
+
+def test_gap_markers_all_stay_without_a_vouching_manifest_or_an_archive(tmp_path):
+    import json
+    t = lambda h, m: session_ms(D, h, m)  # noqa: E731
+    write_archive(tmp_path, "NQ", D, "NQZ6", rows(t(1, 0), [100.0], first_id=1), complete=False)   # no merge log
+    live = _live(tmp_path, rows(t(9, 30), [110.0], first_id=100))
+    gaps_path(live).write_text(json.dumps([[t(1, 0), t(3, 0)]]))
+    st = TickStore(tmp_path)
+    assert st.load("NQ", D).gaps == [[t(1, 0), t(3, 0)]]
+    (tmp_path / "NQ" / "2026" / f"{D}_NQZ6.csv.gz").unlink()
+    assert TickStore(tmp_path).load("NQ", D).gaps == [[t(1, 0), t(3, 0)]]

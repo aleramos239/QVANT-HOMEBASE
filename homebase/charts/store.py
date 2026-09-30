@@ -270,9 +270,28 @@ class TickStore:
         if not f.live:
             return []
         try:
-            return json.loads(gaps_path(f.path).read_text())
+            gaps = json.loads(gaps_path(f.path).read_text())
         except (OSError, ValueError):
             return []
+        if f.merge_with is not None and gaps:
+            gaps = self._minus_archive(f.merge_with, gaps)
+        return gaps
+
+    @staticmethod
+    def _minus_archive(arch: Path, gaps: list) -> list:
+        """The live file's gap markers minus the stretches the incomplete archive's manifest vouches
+        for (tickarchive.verified_spans: the broker's history served in full there). A marker stays
+        exactly where ticks are still missing; with no readable manifest every marker stays."""
+        try:
+            spans = TA.verified_spans(TA.prior_sources(TA.load_manifest(arch)))
+            if not spans:
+                return gaps
+            out = []
+            for a, b in gaps:
+                out.extend([x, y] for x, y in TA.uncovered(spans, int(a), int(b)))
+            return out
+        except (TypeError, ValueError, KeyError):
+            return gaps
 
     def _archive_side(self, arch: Path) -> tuple | None:
         """(ticks, tick-id set, any quotes) of an incomplete archive file, parsed once per (size, mtime)
