@@ -46,7 +46,14 @@ class History:
 
     def _cache_file(self, root: str, d: dt.date, f) -> Path:
         return self.cache_dir / (f"v{CACHE_VERSION}_{root}_{d.isoformat()}_{f.contract}_"
-                                 f"{'live' if f.live else 'arch'}.m1.pkl")
+                                 f"{'live' if f.live else 'arch'}{'+arch' if f.merge_with else ''}.m1.pkl")
+
+    @staticmethod
+    def _src_ns(f) -> int:
+        """The newest mtime of the file(s) a session's ticks come from (a live file unioned with its
+        incomplete archive has two: a repair landing in either one must rebuild the cache)."""
+        ns = f.path.stat().st_mtime_ns
+        return max(ns, f.merge_with.stat().st_mtime_ns) if f.merge_with else ns
 
     def cached(self, root: str, d: dt.date) -> bool:
         """Is session d's 1-minute cache built and current (no older than its tick file)? True with no file."""
@@ -54,7 +61,7 @@ class History:
         if f is None:
             return True
         try:
-            return self._cache_file(root, d, f).stat().st_mtime_ns >= f.path.stat().st_mtime_ns
+            return self._cache_file(root, d, f).stat().st_mtime_ns >= self._src_ns(f)
         except OSError:
             return False
 
@@ -65,7 +72,7 @@ class History:
         cp = self._cache_file(root, d, f)
         src_ns = None
         try:
-            src_ns = f.path.stat().st_mtime_ns          # the source BEFORE its ticks are read
+            src_ns = self._src_ns(f)                        # the source BEFORE its ticks are read
             if cp.stat().st_mtime_ns >= src_ns:
                 with open(cp, "rb") as fh:
                     return pickle.load(fh)

@@ -117,3 +117,21 @@ def test_info_labels_the_session(tmp_path):
     assert info["source"] == "live" and len(info["gaps"]) == 1
     assert info["gaps"][0][1] - info["gaps"][0][0] == 300
     assert h.info("YM", D)["source"] is None
+
+
+def test_a_repair_landing_in_the_archive_beside_a_live_file_rebuilds_the_cache(tmp_path):
+    """Today's live file + its incomplete archive are ONE session: the 1-minute cache must notice
+    the archive changing, not just the live file."""
+    from tests.charts_util import rows as mk
+    base = tmp_path / "ticks"
+    live = write_gz(base / "NQ" / "2026" / f"{D}_NQZ6.live.csv.gz", mk(session_ms(D, 9, 30), [100.0] * 5, first_id=100))
+    arch = write_archive(base, "NQ", D, "NQZ6", mk(session_ms(D, 1, 0), [90.0] * 3, first_id=1), complete=False)
+    now = time.time()
+    os.utime(live, (now - 50, now - 50))
+    os.utime(arch, (now - 50, now - 50))
+    store = TickStore(base)
+    h = History(store, cache_dir=tmp_path / "cache")
+    assert sum(b.v for b in h.minutes("NQ", D)) == 8 and h.cached("NQ", D)
+    write_gz(arch, mk(session_ms(D, 1, 0), [90.0] * 6, first_id=1))         # the repair fetched 3 more
+    assert not h.cached("NQ", D)
+    assert sum(b.v for b in History(store, cache_dir=tmp_path / "cache").minutes("NQ", D)) == 11

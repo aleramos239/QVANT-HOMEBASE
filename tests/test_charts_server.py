@@ -1812,3 +1812,60 @@ def test_the_throttle_without_a_running_loop_schedules_nothing():
     t = Throttle(lambda: ran.append(1), 0.05)
     t.kick()                                              # a direct call (a test, a thread): the pump is the backstop
     assert ran == [] and t.handle is None
+
+
+def test_a_repair_landing_in_the_archive_reaches_a_running_service_without_a_restart(tmp_path, monkeypatch):
+    """The Mac was off 00:39-09:04; the hourly repair job later files that stretch into the incomplete
+    archive beside the live file. The running service notices the archive changed, loads the union in a
+    worker thread and reseeds today's tape: the chart gains the missing bars with no restart."""
+    base = tmp_path / "ticks"
+    write_gz(base / "NQ" / "2026" / f"{D}_NQZ6.live.csv.gz", rows(session_ms(D, 9, 40), [100.0, 100.25], first_id=100))
+    monkeypatch.setattr("homebase.charts.server.REPAIR_POLL_S", 0.05)
+    loaded_in: list = []
+    loop_thread: dict = {}
+    real_load = __import__("homebase.charts.store", fromlist=["TickStore"]).TickStore.load
+
+    def spy(self, root, d):
+        loaded_in.append(threading.get_ident() == loop_thread.get("id"))
+        return real_load(self, root, d)
+
+    class Feed:
+        def __init__(self, roots, on_ticks, on_subscribed=None):
+            self.ws = None
+
+        async def run(self):
+            loop_thread["id"] = threading.get_ident()          # the event loop's thread
+            while True:
+                await asyncio.sleep(0.01)
+
+        def stop(self):
+            pass
+
+        def budget_used(self):
+            return 0
+
+        def count_request(self):
+            pass
+
+        def status(self):
+            return {"mode": "live", "connected": True, "error": None, "roots": {}, "budget_hour": 0, "reconnects": 0}
+
+    app = create_app(roots=["NQ"], base=base, feed_factory=Feed, now_ms=lambda: session_ms(D, 9, 45),
+                     state=tmp_path / "state")
+    with TestClient(app, base_url="http://127.0.0.1:8852") as client:
+        with client.websocket_connect("/ws", headers={"host": "localhost:8852"}) as ws:
+            ws.send_json({"op": "sub", "id": "a", "root": "nq", "spec": "time:60", "studies": []})
+            h1 = next_of(ws, "history")
+            today1 = [b for b in h1["bars"] if b["s"] == D.isoformat()]
+            assert sum(b["v"] for b in today1) == 2
+            monkeypatch.setattr("homebase.charts.store.TickStore.load", spy)
+            write_archive(base, "NQ", D, "NQZ6", rows(session_ms(D, 3, 0), [90.0] * 7, first_id=1), complete=False)
+            assert next_within(ws, "reset", within_s=10)
+            ws.send_json({"op": "sub", "id": "a", "root": "nq", "spec": "time:60", "studies": []})
+            h2 = next_of(ws, "history")
+            today2 = [b for b in h2["bars"] if b["s"] == D.isoformat()]
+            assert sum(b["v"] for b in today2) == 9              # 2 live + 7 repaired, none doubled
+            n = len(loaded_in)
+            time.sleep(0.4)                                      # unchanged archive: no re-merge on later polls
+            assert len(loaded_in) == n
+    assert loaded_in and loop_thread and not any(loaded_in)      # every repair load ran off the event loop's thread
