@@ -410,10 +410,10 @@
     border:1px solid var(--input); border-radius:var(--radius-md);
     padding:4px 8px; font-size:12.5px; }
   .asg input{ width:52px; font-family:var(--font-mono); }
+  /* a menu is a list you read over other cards' text: solid, never glass (the translucent one let the card
+     below show through its rows) */
   .amenu{ position:absolute; top:calc(100% + 6px); left:0; z-index:40;
-    background:var(--glass-bg-heavy); border:1px solid var(--border); border-top-color:var(--glass-edge);
-    backdrop-filter:blur(var(--glass-blur-heavy)) saturate(var(--glass-saturate));
-    -webkit-backdrop-filter:blur(var(--glass-blur-heavy)) saturate(var(--glass-saturate));
+    background:var(--card); border:1px solid var(--border); border-top-color:var(--glass-edge);
     border-radius:var(--radius-md); box-shadow:var(--glass-shadow-float);
     min-width:200px; padding:4px; transform-origin:0 0; }
   .amenu:not([hidden]){ animation:hb-materialize 160ms var(--ease-spring-out); }
