@@ -94,6 +94,8 @@ SESSION_GRACE_MIN = 5       # record a session this long after its close
 LOOKBACK_DAYS = 3           # sessions to check on every run
 LIVE_LOOKBACK_DAYS = 30     # live recordings merged into the archive this far back
 PAGE_INTERVAL_S = 36.0      # <= 100 requests/hour: the chart service shares this login's 180/hour (its refills <= 60/h + a start-up burst of one getChart per root)
+TOKEN_WAIT_S = 300          # no md token on disk yet (the desk still reconnecting after a wake): wait this long...
+TOKEN_POLL_S = 30           # ...looking every this often, then give up until the next run
 PENALTY_MAX = 6             # give up a session after this many penalties in a row
 DEADLINE_ET = dt.time(8, 0)  # a night run stops here; daytime runs are capped (DAY_PAGES)
 FIELDS = ("ts_ms", "price", "size", "bid", "ask", "bid_size", "ask_size", "id")
@@ -410,6 +412,11 @@ def store(root: str, date: dt.date, contract: str, path: Path, start: dt.datetim
 
 
 # ------------------------------------------------------------------ token
+class NoMdToken(RuntimeError):
+    """No md token on disk yet -- the desk has not (re)connected and written one. The only
+    failure a run waits out; it never logs in to get one."""
+
+
 def _valid_md_tokens(accounts) -> list:
     """[(account id, account, md token, expiry)] for each of `accounts` (config order kept)
     whose md token on disk stays valid 2+ minutes from now."""
@@ -448,7 +455,7 @@ def md_token(prefer_live: bool = True, strict: bool = False) -> tuple[str, str]:
     cands = _valid_md_tokens(sorted(cfg.accounts.items(),
                                     key=lambda kv: kv[1].live != prefer_live))
     if not cands:
-        raise RuntimeError("no valid md token on disk — is the desk running and connected?")
+        raise NoMdToken("no valid md token on disk — is the desk running and connected?")
     live = cands[0][1].live
     if strict and bool(live) != prefer_live:
         want = "live" if prefer_live else "demo"
@@ -983,12 +990,29 @@ def main(argv=None) -> int:
     return run(roots, [dt.date.fromisoformat(a.date)] if a.date else None, base, a.sessions)
 
 
-def run(roots, dates, base: Path, sessions: int = 30) -> int:
+def _wait_for_token(left: float, poll_s: float, sleep) -> tuple[bool, float]:
+    """Poll the token files (a read of the disk -- never a login) every poll_s until one
+    is valid or `left` seconds are used up, or 09:20-09:35 ET begins. (found, seconds left)."""
+    while left > 0:
+        if in_quiet(now_et()) or in_quiet(now_et() + dt.timedelta(seconds=poll_s)):
+            return False, left           # never wait into 09:20-09:35
+        sleep(poll_s)
+        left -= poll_s
+        if _valid_md_tokens(config_mod.load().accounts.items()):
+            return True, left
+    return False, 0.0
+
+
+def run(roots, dates, base: Path, sessions: int = 30, *, sleep=time.sleep,
+        token_wait_s: float = TOKEN_WAIT_S, token_poll_s: float = TOKEN_POLL_S) -> int:
     """One run of the job (launchd: hourly, on load, 17:20 and 05:30): fetch
     and merge whatever is missing (record), then the coverage report when the
     run changed something or the last report is REPORT_EVERY old. Silent when
     there is nothing to do; never inside 09:20-09:35 ET; a run already in
-    progress (the lock) is left to it."""
+    progress (the lock) is left to it. A run that fails ONLY for want of a valid md token
+    (it ran right after a wake, before the desk reconnected and wrote one) waits for the
+    token and retries within itself, every token_poll_s for up to token_wait_s, then gives
+    up quietly until the next run; it never logs in."""
     if in_quiet(now_et()):
         return 0
     cache_path = state_dir() / "tick_runs.json"
@@ -998,8 +1022,21 @@ def run(roots, dates, base: Path, sessions: int = 30) -> int:
             cache = load_cache(cache_path)
             written: list = []
             try:
-                written = asyncio.run(record(roots, dates, base, cache=cache,
-                                             charts_usage=state_dir() / "charts" / "md_usage.json"))
+                left = token_wait_s
+                while True:
+                    try:
+                        written = asyncio.run(record(roots, dates, base, cache=cache,
+                                                     charts_usage=state_dir() / "charts" / "md_usage.json"))
+                        break
+                    except NoMdToken:
+                        if left == token_wait_s:
+                            log(f"no valid md token on disk yet — waiting for the desk "
+                                f"(looking every {token_poll_s:g} s for up to {token_wait_s / 60:g} min)")
+                        found, left = _wait_for_token(left, token_poll_s, sleep)
+                        if not found:
+                            log("still no valid md token — the desk is not connected; "
+                                "nothing fetched, the next run tries again")
+                            break
             except Exception as e:  # noqa: BLE001
                 log(f"run failed: {type(e).__name__}: {e}")
                 rc = 1

@@ -356,3 +356,83 @@ def test_a_merge_that_brings_nothing_new_leaves_the_file_and_updates_the_manifes
                           fetched_source={"kind": "history", "why": "the close", "stop": "reached"})
     assert (path.read_bytes(), path.stat().st_mtime_ns) == before
     assert A.load_manifest(path)["sources"][-1]["why"] == "the close" and man["ticks"] == 50
+
+
+# ---- waiting for the desk's md token (2026-09-30: the 09:03 run started right after a wake, before the
+# desk had reconnected and written its token at 09:05, and waited a whole hour for the next run)
+class TokenDesk:
+    """A run whose record() fails with NoMdToken until `after` polls have passed, a fake sleep that
+    is the only clock, and the token file the desk writes (read for real by _wait_for_token)."""
+
+    def __init__(self, tmp_path, monkeypatch, *, after, now=dt.datetime(2026, 9, 30, 9, 3, tzinfo=ET)):
+        from types import SimpleNamespace
+        self.state = tmp_path / "state"
+        self.state.mkdir()
+        self.after, self.sleeps, self.calls, self.now = after, [], 0, now
+        monkeypatch.setattr(T, "state_dir", lambda: self.state)
+        monkeypatch.setattr(T.config_mod, "load", lambda: SimpleNamespace(
+            accounts={"acct": SimpleNamespace(live=True)}))
+        monkeypatch.setattr(T, "now_et", lambda: self.now)
+        monkeypatch.setattr(T, "report_due", lambda p: False)
+
+        async def record(*a, **k):
+            self.calls += 1
+            if not (self.state / "acct.tokens.json").exists():
+                raise T.NoMdToken("no valid md token on disk — is the desk running and connected?")
+            return []
+        monkeypatch.setattr(T, "record", record)
+
+    def sleep(self, s):
+        self.sleeps.append(s)
+        self.now += dt.timedelta(seconds=s)
+        if self.after is not None and len(self.sleeps) >= self.after:
+            exp = (dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=1)).isoformat()
+            (self.state / "acct.tokens.json").write_text(
+                '{"md_access_token": "t", "expiration_time": "%s"}' % exp)
+
+
+def test_a_run_before_the_desk_has_a_token_waits_and_retries_within_itself(tmp_path, monkeypatch, capsys):
+    d = TokenDesk(tmp_path, monkeypatch, after=4)
+    assert T.run(("NQ",), [D], tmp_path, sleep=d.sleep) == 0
+    assert d.sleeps == [30, 30, 30, 30] and d.calls == 2          # tried, waited 2 min, tried again
+    out = capsys.readouterr().out
+    assert "waiting for the desk" in out and "still no valid md token" not in out and "run failed" not in out
+
+
+def test_no_token_within_five_minutes_gives_up_quietly_until_the_next_run(tmp_path, monkeypatch, capsys):
+    d = TokenDesk(tmp_path, monkeypatch, after=None)
+    assert T.run(("NQ",), [D], tmp_path, sleep=d.sleep) == 0       # not a failure: the next hourly run tries again
+    assert d.sleeps == [30] * 10 and d.calls == 1                  # 10 x 30 s = 5 min, then out
+    out = capsys.readouterr().out
+    assert "still no valid md token" in out and "run failed" not in out
+
+
+def test_the_wait_ends_at_0920_and_a_late_run_does_not_wait_into_the_window(tmp_path, monkeypatch, capsys):
+    d = TokenDesk(tmp_path, monkeypatch, after=None, now=dt.datetime(2026, 9, 30, 9, 18, 45, tzinfo=ET))
+    assert T.run(("NQ",), [D], tmp_path, sleep=d.sleep) == 0
+    assert d.sleeps == [30, 30] and d.now == dt.datetime(2026, 9, 30, 9, 19, 45, tzinfo=ET)   # the next 30 s would cross 09:20
+    assert d.calls == 1 and "still no valid md token" in capsys.readouterr().out
+
+
+def test_only_a_missing_token_is_waited_out(tmp_path, monkeypatch, capsys):
+    d = TokenDesk(tmp_path, monkeypatch, after=None)
+
+    async def broken(*a, **k):
+        raise RuntimeError("boom")
+    monkeypatch.setattr(T, "record", broken)
+    assert T.run(("NQ",), [D], tmp_path, sleep=d.sleep) == 1
+    assert d.sleeps == [] and "run failed: RuntimeError: boom" in capsys.readouterr().out
+
+
+def test_md_token_says_NoMdToken_only_when_there_is_no_token_at_all(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    monkeypatch.setattr(T.config_mod, "load", lambda: SimpleNamespace(
+        accounts={"demo1": SimpleNamespace(live=False)}))
+    monkeypatch.setattr(T, "state_dir", lambda: tmp_path)
+    with pytest.raises(T.NoMdToken, match="no valid md token on disk"):
+        T.md_token()
+    exp = (dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=1)).isoformat()
+    (tmp_path / "demo1.tokens.json").write_text('{"md_access_token": "t", "expiration_time": "%s"}' % exp)
+    with pytest.raises(RuntimeError, match="never pages on the other login") as e:
+        T.md_token(strict=True)                 # a token exists, for the wrong login: not "not yet"
+    assert not isinstance(e.value, T.NoMdToken)
