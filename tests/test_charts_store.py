@@ -140,15 +140,24 @@ def test_live_plus_incomplete_archive_loads_as_their_deduped_union(tmp_path):
     assert [t.ts_ms for t in s.ticks] == sorted(t.ts_ms for t in s.ticks)
 
 
-def test_a_conflicting_id_takes_the_archive_version_and_quotes_fill_from_either_side(tmp_path):
+def test_a_shared_id_keeps_the_live_version(tmp_path):
     a = rows(session_ms(D, 9, 30), [100.0, 101.0], first_id=1)
-    b = rows(session_ms(D, 9, 30), [100.0, 101.0], first_id=1)
-    a[0].update(bid="", ask="")                     # the archive row has no quote: live's fills it
-    b[1]["price"] = 101.25                           # one disagreement (<= the refusal threshold): archive wins
+    b = rows(session_ms(D, 9, 30), [100.0, 101.25], first_id=1)
+    a[0].update(bid="", ask="")
     write_archive(tmp_path, "NQ", D, "NQZ6", a, complete=False)
     _live(tmp_path, b)
     s = TickStore(tmp_path).load("NQ", D)
-    assert [t.price for t in s.ticks] == [100.0, 101.0] and s.bid_ask
+    assert [t.price for t in s.ticks] == [100.0, 101.25] and s.bid_ask
+
+
+def test_an_id_less_archive_row_is_added_only_where_live_has_nothing_near(tmp_path):
+    arch = rows(session_ms(D, 9, 30), [1.0, 2.0, 3.0], step_ms=10_000, first_id=1)
+    for r in arch:
+        r["id"] = ""
+    write_archive(tmp_path, "NQ", D, "NQZ6", arch, complete=False)
+    _live(tmp_path, rows(session_ms(D, 9, 30), [7.0], first_id=50))          # live has a tick at +0s only
+    s = TickStore(tmp_path).load("NQ", D)
+    assert [t.price for t in s.ticks] == [7.0, 2.0, 3.0]
 
 
 def test_a_complete_archive_wins_alone(tmp_path):
@@ -177,12 +186,23 @@ def test_an_archive_update_is_picked_up_and_the_union_is_cached_until_then(tmp_p
     before = st.archive_stamp("NQ", D)
     s1 = st.load("NQ", D)
     assert len(s1.ticks) == 3
-    assert st.load("NQ", D).ticks is s1.ticks                      # unchanged files: the cached union
+    parsed = []
+    import homebase.charts.store as mod
+    real = mod.read_table
+    mod.read_table = lambda p: parsed.append(p.name) or real(p)
+    try:
+        st.load("NQ", D)
+        assert parsed == [f"{D}_NQZ6.live.csv.gz"]              # unchanged archive: only the live side is read again
+        write_gz(tmp_path / "NQ" / "2026" / f"{D}_NQZ6.live.csv.gz", morning + rows(session_ms(D, 9, 31), [1.0], first_id=300))
+        parsed.clear()
+        assert len(st.load("NQ", D).ticks) == 4 and parsed == [f"{D}_NQZ6.live.csv.gz"]
+    finally:
+        mod.read_table = real
     # the hourly repair lands more ticks (an atomic replace, as tickarchive does)
     write_gz(arch, rows(session_ms(D, 1, 0), [100.0, 100.25, 100.5, 100.75], first_id=1))
     assert st.archive_stamp("NQ", D) != before
     s2 = st.load("NQ", D)
-    assert len(s2.ticks) == 6 and s2.ticks is not s1.ticks
+    assert len(s2.ticks) == 7
 
 
 def test_load_writes_nothing(tmp_path):
@@ -199,15 +219,15 @@ def test_load_writes_nothing(tmp_path):
     assert snap() == before and arch.exists() and live.exists()
 
 
-def test_an_unmergeable_pair_falls_back_to_the_live_file(tmp_path):
-    # the same ids with different trades everywhere: not one id space -> merge refuses, live alone is used
+def test_an_archive_in_another_id_space_never_overrides_the_live_file(tmp_path):
+    # the same ids with different trades everywhere: the live version of every shared id stays
     a = rows(session_ms(D, 9, 30), [100.0 + i for i in range(10)], first_id=1)
     b = rows(session_ms(D, 9, 30), [500.0 + i for i in range(10)], first_id=1)
     write_archive(tmp_path, "NQ", D, "NQZ6", a, complete=False)
     _live(tmp_path, b)
     st = TickStore(tmp_path)
     s = st.load("NQ", D)
-    assert [t.price for t in s.ticks] == [500.0 + i for i in range(10)] and st.merge_refused
+    assert [t.price for t in s.ticks] == [500.0 + i for i in range(10)]
 
 
 def test_splice_tail_keeps_only_what_the_files_lack():

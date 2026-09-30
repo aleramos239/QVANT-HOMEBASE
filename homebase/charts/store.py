@@ -8,9 +8,9 @@ Two kinds of file live side by side under ~/futures_ticks/<ROOT>/<YYYY>/:
 
 Per session ONE contract is used (on a roll day the one with the most ticks),
 and per contract: complete archive alone > live + incomplete archive > either
-alone. The last case is a UNION, deduped by tick id with tickarchive.merge's
-rules (the archive's version wins a disagreement, quotes are kept where either
-has them): the hourly repair job files the ticks a dead Mac never recorded into
+alone. The last case is a UNION: the live file as it always was, plus the
+archive's ticks whose tick ids it lacks (the live version of a shared id stays):
+the hourly repair job files the ticks a dead Mac never recorded into
 the incomplete archive, and the live file alone would leave that hole on the
 chart until the nightly merge. Read-only -- nothing here ever writes a file.
 """
@@ -24,6 +24,7 @@ import re
 import threading
 import zlib
 from bisect import bisect_left
+from operator import itemgetter
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
@@ -122,6 +123,8 @@ def ticks_from_table(header: list[str], recs: list[list[str]],
     return out, quotes
 
 
+_TIME_ID = itemgetter(0, 4)        # Tick's (ts_ms, id)
+
 _CONTRACT = re.compile(r"^([A-Z0-9]+?)([FGHJKMNQUVXZ])(\d{1,2})$")
 
 
@@ -181,13 +184,12 @@ def splice_tail(loaded: list[Tick], current, since_ms: int) -> list[Tick]:
 
 
 class TickStore:
-    MERGE_MEMO = 2          # a merged session is ~150 bytes a tick: keep only the newest couple
+    MERGE_MEMO = 4          # parsed incomplete archives kept (each is small)
 
     def __init__(self, base: Path = ARCHIVE):
         self.base = Path(base)
-        self._merged: dict[tuple, Session] = {}     # (both files' path+size+mtime) -> the union, oldest first
+        self._archive_memo: dict[tuple, tuple] = {}     # (archive path, (size, mtime)) -> its parsed ticks, oldest first
         self._merged_lock = threading.Lock()
-        self.merge_refused: dict[str, str] = {}     # live file name -> why its union was not used (visibility/tests)
 
     def files(self, root: str, d: dt.date) -> list[SessionFile]:
         tag = d.isoformat()
@@ -272,45 +274,60 @@ class TickStore:
         except (OSError, ValueError):
             return []
 
-    def _union(self, f: SessionFile) -> Session | None:
-        """f (live) unioned with its incomplete archive, cached by both files' (size, mtime).
-        None when tickarchive.merge refuses (the two are not one id space): the caller then
-        uses the live file alone, exactly as before."""
-        arch = f.merge_with
-        a, b = _stamp(arch), _stamp(f.path)          # BEFORE the read: a write that lands mid-read re-misses next time
-        if a is None or b is None:
+    def _archive_side(self, arch: Path) -> tuple | None:
+        """(ticks, tick-id set, any quotes) of an incomplete archive file, parsed once per (size, mtime)
+        of THAT file: the live file changes every second, the archive only when the repair job
+        writes it. The memo is tiny (an archive is a fraction of a live file)."""
+        st = _stamp(arch)                               # BEFORE the read: a write landing mid-read re-misses next time
+        if st is None:
             return None
-        key = (str(arch), a, str(f.path), b)
+        key = (str(arch), st)
         with self._merged_lock:
-            hit = self._merged.get(key)
+            hit = self._archive_memo.get(key)
         if hit is not None:
             return hit
-        try:
-            m = TA.merge([("archive", TA.iter_rows(arch)), ("live", TA.iter_rows(f.path))])
-        except (TA.MergeRefused, ValueError) as e:
-            self.merge_refused[f.path.name] = str(e)
-            return None
-        self.merge_refused.pop(f.path.name, None)
-        ticks, quotes = ticks_from_table(list(TA.COLS), m.rows, live=True)
-        sess = Session(_root_of(f.path), _date_of(f.path), f.contract, "live", ticks, quotes, [])
+        header, recs = read_table(arch)
+        ticks, quotes = ticks_from_table(header, recs, live=True)
+        side = (ticks, {t.id for t in ticks if t.id}, quotes)
         with self._merged_lock:
-            self._merged[key] = sess
-            while len(self._merged) > self.MERGE_MEMO:
-                self._merged.pop(next(iter(self._merged)))
-        return sess
+            self._archive_memo[key] = side
+            while len(self._archive_memo) > self.MERGE_MEMO:
+                self._archive_memo.pop(next(iter(self._archive_memo)))
+        return side
+
+    def _with_archive(self, f: SessionFile, ticks: list[Tick], quotes: bool) -> tuple[list[Tick], bool]:
+        """The live file's ticks plus the incomplete archive's ticks whose ids the live file lacks
+        (the live version of a shared id stays; an archive row without an id -- a Massive fill -- is
+        added only where the live file has nothing within MASSIVE_NEAR_MS), sorted by (time, id).
+        Nothing to add -> `ticks` itself, untouched."""
+        side = self._archive_side(f.merge_with)
+        if side is None:
+            return ticks, quotes
+        a_ticks, a_ids, a_quotes = side
+        live_ids = {t.id for t in ticks if t.id}
+        new = []
+        for t in a_ticks:
+            if t.id:
+                if t.id not in live_ids:
+                    new.append(t)
+            else:
+                i = bisect_left(ticks, t.ts_ms - TA.MASSIVE_EDGE_MS, key=lambda x: x.ts_ms)
+                if i >= len(ticks) or ticks[i].ts_ms > t.ts_ms + TA.MASSIVE_EDGE_MS:
+                    new.append(t)
+        if not new:
+            return ticks, quotes
+        return sorted(ticks + new, key=_TIME_ID), quotes or a_quotes
 
     def load(self, root: str, d: dt.date) -> Session | None:
         """The session's ticks. READ-ONLY. A live file with an incomplete archive beside it comes
-        back as their union (see the module docstring); .ticks of a cached union is shared between
-        callers -- treat it as immutable (list(...) before changing)."""
+        back with the archive's ticks it lacks added (see the module docstring); the live side is
+        read exactly as it always was and the archive side is cached by the archive's own stamp."""
         f = self.pick(root, d)
         if f is None:
             return None
-        if f.live and f.merge_with is not None:
-            u = self._union(f)
-            if u is not None:
-                return replace(u, gaps=self.gaps(f))      # gaps are tiny and change on their own
         header, recs = read_table(f.path)
         ticks, quotes = ticks_from_table(header, recs, live=f.live)
+        if f.live and f.merge_with is not None:
+            ticks, quotes = self._with_archive(f, ticks, quotes)
         return Session(root, d, f.contract, "live" if f.live else "archive",
                        ticks, quotes, self.gaps(f))
