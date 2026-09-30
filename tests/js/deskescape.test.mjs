@@ -77,7 +77,7 @@ test('the Not-ready strip, the + Assign menu, the accounts dialog and the connec
   assert.match(HTML, /onclick="pickAsg\('\$\{name\}',\$\{jsArg\(id\)\},\$\{c\.qty\}\)">\s*\$\{esc\(accts\[id\]\.label \|\| id\)\}/);
   assert.match(HTML, /onclick="reconnectAcct\(\$\{jsArg\(id\)\}\)"/);
   assert.match(HTML, /onclick="removeAcct\(\$\{jsArg\(id\)\}\)"/);
-  assert.match(HTML, /WIZ\.pick=\$\{jsArg\(a\.name\)\};renderAcctList\(\)/);
+  assert.match(HTML, /onchange="wizTick\(\$\{jsArg\(a\.name\)\}, this\.checked\)"/);
   assert.match(HTML, /<span class="t">\$\{esc\(a\.name\)\}<\/span>/);
   // (strategy names -- toggleAlgoHidden('${a.name}') -- are the desk's own config, not broker text)
   assert.doesNotMatch(HTML, /'\$\{id\}'|WIZ\.pick='\$\{a\.name\}'|'\$\{a\.account/, 'no broker id is quoted raw into an inline handler');

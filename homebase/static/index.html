@@ -368,6 +368,24 @@
   .opt .x{ border:none; background:none; color:var(--muted-foreground);
     font-size:15px; cursor:pointer; padding:2px 6px; }
   .opt .x:hover{ color:var(--neg); }
+  /* the accounts step: one checkbox row per account under the login */
+  .acl{ max-height:44vh; overflow-y:auto; margin:6px -4px 0; padding:0 4px; }
+  .copt{ display:flex; align-items:center; gap:12px; border:1px solid var(--border);
+    border-radius:var(--radius-lg); padding:9px 12px; cursor:pointer; margin-bottom:6px; }
+  .copt:hover{ background:var(--secondary); }
+  .copt:has(input:checked){ border-color:var(--foreground); }
+  .copt:has(input:focus-visible){ outline:2px solid var(--ring); outline-offset:1px; }
+  .copt.disabled{ opacity:.55; cursor:not-allowed; background:none; }
+  .copt input{ width:16px; height:16px; margin:0; accent-color:var(--primary); flex-shrink:0; }
+  .copt .t{ font-weight:600; font-size:13.5px; }
+  .copt .sub{ font-size:12px; color:var(--muted-foreground); }
+  .copt.all{ background:var(--secondary); margin-bottom:10px; }
+  .wres{ list-style:none; margin:10px 0 0; padding:0; max-height:44vh; overflow-y:auto; }
+  .wres li{ padding:8px 0; border-top:1px solid var(--border); font-size:13px; }
+  .wres li:first-child{ border-top:none; }
+  .wres .t{ display:block; font-weight:600; overflow-wrap:anywhere; }
+  .wres .why{ display:block; color:var(--muted-foreground); }
+  .wres .why.bad{ color:var(--neg); }
 
   /* metric strips (research + live) */
   .mstrip{ display:flex; flex-wrap:wrap; gap:4px 18px; padding:8px 0 2px; }
@@ -659,13 +677,22 @@
     </div>
 
     <div id="wstep3" style="display:none">
-      <h2>Add an account</h2>
-      <p class="sub">Pick one to add to the pool — run the wizard again to add
-        more. You assign accounts to strategies from the portfolio.</p>
-      <div id="acctList"></div>
+      <h2>Add accounts</h2>
+      <p class="sub">Tick the accounts to add to the pool. None of them is booked to a
+        strategy — you do that yourself from the portfolio.</p>
+      <div id="acctList" class="acl"></div>
       <div class="row-btns">
         <button class="btn btn-outline" onclick="wizGoto(2)">&larr; Back</button>
-        <button class="btn btn-default" id="cUse" onclick="useAccount()">Add this account</button>
+        <button class="btn btn-default" id="cUse" onclick="addSelected()" disabled>Add accounts</button>
+      </div>
+    </div>
+
+    <div id="wstep4" style="display:none">
+      <h2 id="wresTitle" tabindex="-1">Done</h2>
+      <p class="sub" id="wresSub"></p>
+      <ul class="wres" id="wresList"></ul>
+      <div class="row-btns">
+        <button class="btn btn-default" id="wDone" onclick="closeConnect()">Done</button>
       </div>
     </div>
   </div>
@@ -2068,7 +2095,7 @@ function mstrip(rows) {
 }
 
 /* ---- connect wizard ---- */
-let WIZ = {saved: null, key: null, accounts: [], pick: null, env: "demo"};
+let WIZ = {saved: null, key: null, accounts: [], picks: new Set(), env: "demo", busy: false};
 function openConnect() {
   setEnv("demo"); wizGoto(1); showOverlay("connectOverlay");
 }
@@ -2098,10 +2125,10 @@ function closeConnect() {
 }
 function wizGoto(n) {
   $("#wstepP").style.display = "none";
-  for (const i of [1, 2, 3]) {
+  for (const i of [1, 2, 3, 4]) {
     $("#wstep" + i).style.display = i === n ? "" : "none";
     const st = $("#ws" + i);
-    st.className = "st" + (i === n ? " cur" : i < n ? " done" : "");
+    if (st) st.className = "st" + (i === n || (i === 3 && n === 4) ? " cur" : i < n ? " done" : "");
   }
   if (n === 2) loadLogins();
 }
@@ -2150,41 +2177,100 @@ async function doConnect() {
     if (r.ok) {
       WIZ.key = r.key;
       WIZ.accounts = r.accounts || [];
-      WIZ.pick = WIZ.accounts.length ? WIZ.accounts[0].name : null;
+      WIZ.picks = new Set();
       renderAcctList(); wizGoto(3);
+      const first = document.querySelector("#acctList input:not([disabled])");
+      (first || document.querySelector("#wstep3 .btn-outline")).focus();
     } else toast("Connect failed — " + (r.error || r.detail || "unknown"), 6000);
   } finally { btn.disabled = false; btn.textContent = "Find my accounts"; refresh(); }
 }
+/* The accounts step: every account under the login, one checkbox each plus Select all. The server says
+   which are already on the desk (on_desk, by the broker account the entry is pinned to or rides); those
+   can't be ticked. Every broker-supplied name is escaped, and reaches its handler through jsArg. */
+const wizOnDesk = (a) => a.on_desk !== undefined ? !!a.on_desk
+  : Object.keys((ST && ST.accounts) || {}).includes(String(a.name).toLowerCase());
+const wizAddable = () => WIZ.accounts.filter(a => !wizOnDesk(a));
 function renderAcctList() {
   const el = $("#acctList");
   if (!WIZ.accounts.length) { el.innerHTML =
     `<p class="wnote">the login verified but exposed no account list — if it
-     should have accounts, check the login on the broker side.</p>`; return; }
-  const have = Object.keys((ST && ST.accounts) || {});
-  el.innerHTML = WIZ.accounts.map(a => {
-    const added = have.includes(String(a.name).toLowerCase());
+     should have accounts, check the login on the broker side.</p>`; wizCount(); return; }
+  const rows = WIZ.accounts.map(a => {
+    const added = wizOnDesk(a);
     return `
-    <div class="opt ${WIZ.pick === a.name ? "sel" : ""} ${added ? "disabled" : ""}"
-         onclick="${added ? "" : `WIZ.pick=${jsArg(a.name)};renderAcctList()`}">
+    <label class="copt ${added ? "disabled" : ""}">
+      <input type="checkbox" ${added ? "disabled" : ""} ${!added && WIZ.picks.has(a.name) ? "checked" : ""}
+             onchange="wizTick(${jsArg(a.name)}, this.checked)">
       <span><span class="t">${esc(a.name)}</span><br>
-      <span class="sub">${added ? "already in the pool" :
-        (a.active === false ? "inactive" : "active")}</span></span>
-      <span class="spacer"></span><span class="radio"></span>
-    </div>`;
+      <span class="sub">${added ? "already added" : (a.active === false ? "inactive" : "active")}</span></span>
+    </label>`;
   }).join("");
+  el.innerHTML = `<label class="copt all ${wizAddable().length ? "" : "disabled"}">
+      <input type="checkbox" id="wAll" ${wizAddable().length ? "" : "disabled"} onchange="wizAll(this.checked)">
+      <span class="t">Select all</span></label>` + rows;
+  wizCount();
 }
-async function useAccount() {
+function wizTick(name, on) {
+  if (on) WIZ.picks.add(name); else WIZ.picks.delete(name);
+  wizCount();
+}
+function wizAll(on) {
+  WIZ.picks = new Set(on ? wizAddable().map(a => a.name) : []);
+  document.querySelectorAll("#acctList .copt:not(.all) input:not([disabled])").forEach(c => { c.checked = on; });
+  wizCount();
+}
+function wizCount() {
+  const n = wizAddable().filter(a => WIZ.picks.has(a.name)).length, all = wizAddable().length;
+  const btn = $("#cUse");
+  btn.disabled = n === 0;
+  btn.textContent = n === 0 ? "Add accounts" : n === 1 ? "Add 1 account" : "Add " + n + " accounts";
+  const box = $("#wAll");
+  if (box) { box.checked = all > 0 && n === all; box.indeterminate = n > 0 && n < all; }
+}
+/* One line per account, in plain words. `r` is the desk's answer, or a refusal ({detail}). */
+function wizResult(r) {
+  const rows = (r && r.results) || [];
+  const said = {
+    added: (x) => x.connected
+      ? ["Added and connected" + (x.mode === "login" ? " — it had to log in again." : "."), ""]
+      : ["Added, but not connected yet" + (x.error ? ": " + x.error : "."), "bad"],
+    exists: () => ["Already on the desk.", ""],
+    failed: (x) => /^not tried — /.test(x.error || "")
+      ? ["Not tried: " + x.error.replace(/^not tried — /, "") + ". Add it again later.", "bad"]
+      : ["Not added: " + (x.error || "unknown reason"), "bad"],
+  };
+  const nAdd = rows.filter(x => x.status === "added").length;
+  const title = !rows.length ? "Nothing was added"
+    : nAdd ? "Added " + nAdd + (nAdd === 1 ? " account" : " accounts")
+    : rows.every(x => x.status === "exists") ? "Already on the desk" : "Nothing was added";
+  const sub = !rows.length ? (r && (r.detail || r.error)) || "The desk didn't answer — check it and try again."
+    : "None of them is booked to a strategy yet — book them from the portfolio when you're ready." +
+      (WIZ.env === "live" ? " These are LIVE accounts." : "");
+  return {title, sub, html: rows.map(x => {
+    const [text, cls] = (said[x.status] || said.failed)(x);
+    return `<li><span class="t">${esc(x.name)}</span><span class="why ${cls}">${esc(text)}</span></li>`;
+  }).join("")};
+}
+async function addSelected() {
+  const names = wizAddable().filter(a => WIZ.picks.has(a.name)).map(a => a.name);
+  if (!names.length || WIZ.busy) return;
+  WIZ.busy = true;
   const btn = $("#cUse"); btn.disabled = true; btn.textContent = "Adding…";
-  try {
-    const r = await post("/api/accounts/add",
-                         {key: WIZ.key, account_name: WIZ.pick || ""});
-    if (r.ok) {
-      toast((r.connected ? "Added and connected — " + r.account
-            : "Added — connecting: " + (r.error || "")) +
-            (WIZ.env === "live" ? " · LIVE — assign it to a strategy to trade" : ""), 6000);
-      closeConnect();
-    } else toast("Failed — " + (r.error || r.detail || "unknown"), 6000);
-  } finally { btn.disabled = false; btn.textContent = "Add this account"; refresh(); }
+  let r;
+  try { r = await post("/api/accounts/add-many", {key: WIZ.key, accounts: names}); }
+  catch (_) { r = null; }
+  finally { WIZ.busy = false; refresh(); }
+  const out = wizResult(r);
+  if (!$("#connectOverlay").classList.contains("open")) {      // closed with Esc while it ran
+    toast(out.title + (out.sub && !(r && r.results) ? " — " + out.sub : ""), 6000);
+    return;
+  }
+  $("#wresTitle").textContent = out.title;
+  $("#wresSub").textContent = out.sub;
+  $("#wresList").innerHTML = out.html;
+  WIZ.picks = new Set();
+  wizGoto(4);
+  $("#wDone").focus();                                          // focus follows the step; Esc / Done close it
 }
 $("#connectOverlay").addEventListener("click", (e) => {
   if (e.target === e.currentTarget) closeConnect();
@@ -2214,7 +2300,7 @@ async function chartPost(path, body) {
   } catch (_) { return {ok: false, detail: "the chart service (:8852) is not reachable"}; }
 }
 function wizPaper() {
-  for (const i of [1, 2, 3]) $("#wstep" + i).style.display = "none";
+  for (const i of [1, 2, 3, 4]) $("#wstep" + i).style.display = "none";
   $("#wstepP").style.display = "";
   $("#pErr").style.display = "none";
   $("#pName").value = ""; $("#pBal").value = "50000";

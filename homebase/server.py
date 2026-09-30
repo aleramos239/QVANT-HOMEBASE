@@ -55,6 +55,7 @@ GONE_QUIET = (dt.time(9, 20), dt.time(9, 35))   # weekdays ET: never unbook/remo
 GONE_CHECK_QUIET = (dt.time(9, 10), dt.time(9, 35))   # ... and never a confirming re-sync
 GONE_CHECK_TIMEOUT_S = 30  # a confirming re-sync runs in its own task, at most this long
 NOTICES_KEPT = 10
+ADD_MANY_MAX = 60           # accounts in one "add several" (a prop firm hands out ~20)
 INPLACE_RETRY_S = (10, 60)   # a dropped socket whose token is still valid, while its user's
                              # logins are paused: retry in place 10 s, doubling to 60 s
 EQUITY_INTERVAL_S = 60
@@ -449,6 +450,26 @@ def create_app(cfg: config_mod.AppCfg | None = None,
 
     def _in_gone_quiet(now_et, span=GONE_QUIET) -> bool:
         return now_et.weekday() < 5 and span[0] <= now_et.time() < span[1]
+
+    _listed: dict[str, set[str]] = {}        # login key -> account names its last probe listed
+    _add_lock = asyncio.Lock()               # one "add accounts" at a time
+
+    def _refuse_adding_now() -> None:
+        if _in_gone_quiet(engine.now_et()):
+            raise HTTPException(409, "refused: accounts aren't added 09:20-09:35 ET on weekdays "
+                                "(the 9:30 window) — try again after 09:35")
+
+    def _on_desk(key: str, name: str) -> str | None:
+        """The desk entry that already carries this broker account of this login: pinned
+        to it, or -- unpinned -- riding it (the connected adapter says which)."""
+        low = name.lower()
+        for aid, a in cfg.accounts.items():
+            if a.keyring_key != key:
+                continue
+            pinned = a.account_name or getattr(adapters.get(aid), "_acct_name", "") or ""
+            if pinned.lower() == low or aid == low:
+                return aid
+        return None
 
     _login_uid: dict[str, object] = {}       # login key -> the Tradovate user id first seen
     _login_suspect: set[str] = set()         # login keys already warned "may have changed"
@@ -1175,16 +1196,31 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             key = f"tv:{env}:{username.lower()}"
             secrets_store.set_credentials(key, username=username,
                                           password=password)
+        # the probe is a real login: it goes through the user's budget like every other
+        # (a 429 cool-down or the hourly cap refuses it; the wizard shows why). It is the
+        # ONE login of an "add several" -- the entries then ride the token it leaves on
+        # the shared auth (reconnect, no login).
+        login_id = (key, env == "live")
+        why = budget.blocked(key, first=login_id not in _login_first_spent, manual=True)
+        if why:
+            return {"ok": False, "error": why, "key": key}
+        _login_first_spent.add(login_id)
+        budget.record_login(key)
         probe = adapter_factory("probe", config_mod.AccountCfg(
             keyring_key=key, live=(env == "live")))
         try:
             await probe.connect()
             accounts = probe.list_accounts() if hasattr(probe, "list_accounts") else []
+            budget.login_result(key)
         except Exception as e:  # noqa: BLE001 — surface to the wizard
+            budget.login_result(key, e)
             return {"ok": False, "error": str(e), "key": key}
         finally:
             with contextlib.suppress(Exception):
                 await probe.close()
+        _listed[key] = {str(a.get("name") or "").lower() for a in accounts}
+        accounts = [{**a, "on_desk": _on_desk(key, str(a.get("name") or "")) is not None}
+                    for a in accounts]
         return {"ok": True, "key": key, "env": env, "accounts": accounts}
 
     @app.post("/api/accounts/add")
@@ -1195,6 +1231,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         body = await request.json()
         key = str(body.get("key") or "")
         account_name = str(body.get("account_name") or "").strip()
+        _refuse_adding_now()
         if not key or not secrets_store.get_credentials(key):
             raise HTTPException(400, "unknown login key")
         if not account_name:
@@ -1213,6 +1250,84 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             return {"ok": True, "account": aid, "connected": False,
                     "error": acct_status[aid]["error"]}
         return {"ok": True, "account": aid, "connected": True}
+
+    @app.post("/api/accounts/add-many")
+    async def accounts_add_many(request: Request):
+        """Add several accounts of ONE login (the wizard's checkboxes). Each becomes a
+        normal entry pinned to its own broker account -- never booked, never assigned to
+        a strategy: booking stays the account holder's call. One at a time, on the shared
+        token the wizard's probe left (reconnect, no login): N accounts cost the probe's
+        ONE login, and the batch stops at the first failure that could spend another
+        (a login refused, a socket error), so it never turns into N logins. Refused
+        09:20-09:35 ET on weekdays, before and between accounts.
+        Answers one row per requested account: added (connected or not, with why),
+        exists (already on the desk) or failed (with the reason)."""
+        body = await request.json()
+        key = str(body.get("key") or "")
+        raw = body.get("accounts")
+        if not isinstance(raw, list) or not raw or not all(isinstance(n, str) for n in raw):
+            raise HTTPException(400, "accounts: a list of account names required")
+        names: list[str] = []
+        for n in raw:
+            n = n.strip()
+            if n and n.lower() not in {x.lower() for x in names}:
+                names.append(n)
+        if not names:
+            raise HTTPException(400, "accounts: a list of account names required")
+        if len(names) > ADD_MANY_MAX:
+            raise HTTPException(400, f"at most {ADD_MANY_MAX} accounts at a time")
+        _refuse_adding_now()
+        if not key or not secrets_store.get_credentials(key):
+            raise HTTPException(400, "unknown login key")
+        listed = _listed.get(key)
+        if listed is None:
+            raise HTTPException(409, "look this login's accounts up first (Find my accounts)")
+        live = _key_env(key) == "live"
+        rows: list[dict] = []
+        stop = ""                    # why the rest were not tried
+        async with _add_lock:
+            for name in names:
+                low = name.lower()
+                row = {"name": name}
+                rows.append(row)
+                if not stop and _in_gone_quiet(engine.now_et()):
+                    stop = "adding stops 09:20-09:35 ET (the 9:30 window)"
+                if stop:
+                    row.update(status="failed", error=f"not tried — {stop}")
+                    continue
+                if low not in listed:
+                    row.update(status="failed", error="not on this login")
+                    continue
+                have = _on_desk(key, name)
+                if have is not None:
+                    row.update(status="exists", id=have)
+                    continue
+                if low in cfg.accounts:
+                    row.update(status="failed", error="another entry on the desk already "
+                               "uses this id")
+                    continue
+                cfg.accounts[low] = config_mod.AccountCfg(
+                    keyring_key=key, account_name=name, live=live, label=name)
+                config_mod.save(cfg)
+                engine.journal("account_added", account=low, live=live, batch=True)
+                row.update(status="added", id=low)
+                try:
+                    row["mode"] = await _connect_account(low, manual=True)
+                    row["connected"] = True
+                    if row["mode"] == "login":
+                        # the shared token did not carry it, so it spent a login: the
+                        # next one could too -- stop here, the rest can be added again
+                        stop = "the previous account had to log in again"
+                except Exception as e:  # noqa: BLE001 — recorded, reported per account
+                    _connect_failed(low, e)
+                    row["connected"] = False
+                    row["error"] = str((acct_status.get(low) or {}).get("error") or e)[:200]
+                    if not isinstance(e, AccountNotOnLogin):
+                        stop = "the connection failed (" + str(e)[:120] + ")"
+        counts = {s: sum(1 for r in rows if r["status"] == s)
+                  for s in ("added", "exists", "failed")}
+        engine.journal("accounts_added_batch", login=key, live=live, **counts)
+        return {"ok": not counts["failed"], "results": rows, **counts}
 
     @app.post("/api/strategy")
     async def strategy_toggle(request: Request):

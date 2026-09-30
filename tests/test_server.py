@@ -2,6 +2,9 @@
 calendar. No network."""
 from __future__ import annotations
 
+import datetime as dt
+from zoneinfo import ZoneInfo
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -55,6 +58,9 @@ def client(tmp_path, monkeypatch):
         return ad
 
     app = create_app(cfg, adapters, background=False, adapter_factory=factory)
+    # a fixed weekday 10:00 ET: adding / removing accounts is refused 09:20-09:35, and these tests
+    # must not depend on the hour they run in
+    app.state.engine.now_et = lambda: dt.datetime(2026, 9, 30, 10, 0, tzinfo=ZoneInfo("America/New_York"))
     # the desk as its page reaches it (Task 5b: writes need an allowed Host)
     with TestClient(app, base_url="http://127.0.0.1:8850") as c:
         c.app = app
