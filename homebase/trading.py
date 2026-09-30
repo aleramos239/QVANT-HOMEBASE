@@ -532,14 +532,20 @@ class ChartDesk:
 
     def publish_state(self) -> None:
         snap = self.snapshot()
-        self._last_ids = list(self.cfg.accounts)
+        self._last_ids = list(self._accts())
         self._last_acct = {v["id"]: v for v in snap["accounts"]}
         self._last_bot = snap["bot"]
         self.publish("state", snap)
 
     # --- views ----------------------------------------------------------------
+    def _accts(self) -> dict:
+        """The broker accounts of the desk's pool: a paper account (homebase.broker.paper) is traded by the
+        algos through its own adapter and by the chart page through the chart service's paper book -- never
+        through the chart-trading path (views, orders, guards) that is built for broker accounts."""
+        return {aid: a for aid, a in self.cfg.accounts.items() if not a.paper}
+
     def _label(self, aid: str) -> str:
-        a = self.cfg.accounts.get(aid)
+        a = self._accts().get(aid)
         return (a.label or a.account_name or aid) if a else aid
 
     def _bot_orders(self, aid: str) -> dict[str, str]:
@@ -556,7 +562,7 @@ class ChartDesk:
                 if any(r.get("account") == aid for r in assignments(self.cfg, n))]
 
     def account_view(self, aid: str) -> dict:
-        a = self.cfg.accounts[aid]
+        a = self._accts()[aid]
         ad = self.adapters.get(aid)
         lv = (ad.trade_view() if ad is not None else None) or {}
         bot = self._bot_orders(aid)
@@ -603,7 +609,7 @@ class ChartDesk:
         return {"enabled": ct.enabled,
                 "limits": {"max_order_qty": ct.max_order_qty,
                            "max_position_qty": ct.max_position_qty},
-                "accounts": [self.account_view(a) for a in self.cfg.accounts],
+                "accounts": [self.account_view(a) for a in self._accts()],
                 "bot": self.bot_view()}
 
     # --- controller ruling P2: protect the 9:30 fire from view work ------------
@@ -642,11 +648,11 @@ class ChartDesk:
         up whatever changed in the meantime. True when it published."""
         if not self._subs or self._views_paused():
             return False
-        if list(self.cfg.accounts) != self._last_ids:
+        if list(self._accts()) != self._last_ids:
             self.publish_state()
             return True
         out = False
-        for aid in self.cfg.accounts:
+        for aid in self._accts():
             v = self.account_view(aid)
             if v != self._last_acct.get(aid):
                 self._last_acct[aid] = v
@@ -782,18 +788,18 @@ class ChartDesk:
         """Two config accounts on the same login pinned to the same broker
         account: neither may trade from the chart (orders, limits and the
         bot lock are all per config account, so they would not add up)."""
-        a = self.cfg.accounts.get(aid)
+        a = self._accts().get(aid)
         if a is None or not a.account_name:
             return False
         key = (a.keyring_key, a.account_name.strip().lower())
-        return sum(1 for b in self.cfg.accounts.values()
+        return sum(1 for b in self._accts().values()
                    if (b.keyring_key, (b.account_name or "").strip().lower()) == key) > 1
 
     def _gate(self, aid: str) -> tuple:
         """Guards 1, 2 and 5. Returns (adapter, live view, label)."""
         if not self.cfg.chart_trading.enabled:
             raise Refused("chart trading is off — switch it on on the desk page")
-        a = self.cfg.accounts.get(aid)
+        a = self._accts().get(aid)
         if a is None:
             raise Refused(f"unknown account {aid!r}")
         label = self._label(aid)
@@ -920,7 +926,7 @@ class ChartDesk:
         """One action at a time per account: its guards and broker calls see
         a settled account (a second click waits, then counts the first's
         reservation). Different accounts still run concurrently."""
-        if aid not in self.cfg.accounts:
+        if aid not in self._accts():
             return contextlib.nullcontext()          # refused by _gate at once; no lock to grow
         loop = asyncio.get_running_loop()
         held = self._locks.get(aid)

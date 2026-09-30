@@ -103,6 +103,9 @@
     border:1px solid color-mix(in oklch, var(--destructive) 60%, transparent); border-radius:3px;
     background:var(--card); color:var(--destructive); padding:1px 5px;   /* solid on the glass card */
     font-size:10px; font-weight:700; letter-spacing:.06em; }
+  .tag-paper{ display:inline-flex; align-items:center; white-space:nowrap; line-height:1.2;
+    border:1px solid var(--border); border-radius:3px; background:var(--card); color:var(--muted-foreground);
+    padding:1px 5px; font-size:10px; font-weight:700; letter-spacing:.06em; }
   .pill.inpos{ background:var(--primary); color:var(--primary-foreground); font-weight:600; }
   .pill.on{ background:transparent; border-color:var(--foreground); color:var(--foreground); }
   .pill.on::before{ content:""; width:6px; height:6px; border-radius:9999px; background:currentColor; }
@@ -1948,6 +1951,7 @@ function acctRow(id, extra) {
     <span class="dot ${a.connected ? "on" : "off"}" style="width:7px;height:7px"></span>
     <span class="nm" style="font-size:13px">${esc(a.label)}</span>
     ${a.env === "live" ? '<span class="tag-live" title="A live account — real money">LIVE</span>' : ""}
+    ${a.env === "paper" ? '<span class="tag-paper" title="A paper account — simulated fills on the live prints, no money">PAPER</span>' : ""}
     ${extra.qty ? (extra.strategy
       ? `<span class="strats qty-edit" title="Click to change size"
            onclick="editQty(event,'${extra.strategy}',${jsArg(id)},${extra.qty})">×${extra.qty}</span>`
@@ -2004,7 +2008,7 @@ function closeAsgMenus(refocus) {
    policy). "Book live" is the neutral primary button, never Kill's red. */
 function isDemoAcct(id) {
   const a = ((ST && ST.accounts) || {})[id];
-  return !!a && a.env === "demo";
+  return !!a && (a.env === "demo" || a.env === "paper");     // paper: no money at all
 }
 /* "APEX…048" / "…885": a broker's long numbered name shortened the way the chart page shows it,
    keeping a short letter prefix when there is one; a plain label ("Lucid Funded") stays whole. */
