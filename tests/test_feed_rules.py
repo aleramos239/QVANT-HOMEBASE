@@ -269,3 +269,92 @@ def test_watch_bars_clears_a_penalty_with_its_ticket():
     assert sym.startswith("NQ")
     assert len(sent) == 2 and sent[0].get("p-ticket") is None and sent[1]["p-ticket"] == "TKT"
     assert f._watch[9] == ("NQ", 1)
+
+
+# --- the 9:30 open rules (open_long / open_short) ---------------------------------------
+OPEN_CFG = StrategyCfg(symbol="NQ", qty=1, offset_pts=0, sl_pts=11.25, tp_pts=30.0, kind="bars")
+
+
+def minute_bars(*hhmm_close, day=30):
+    return [Bar(dt.datetime(2026, 9, day, h, m, tzinfo=ET).astimezone(UTC), c, c, c, c, 5, "NQ", 1)
+            for (h, m), c in hhmm_close]
+
+
+def test_open_rules_fire_on_the_0929_close_with_tick_levels():
+    from homebase.rules import open_long, open_short
+    bars = minute_bars(((9, 28), 30000.0), ((9, 29), 30010.25))
+    now = dt.datetime(2026, 9, 30, 9, 30, 0, tzinfo=ET)
+    lo = open_long(bars, now, OPEN_CFG)
+    assert (lo.side, lo.entry, lo.entry_price, lo.ref_px, lo.tp_rr) == ("Buy", "Market", None, 30010.25, None)
+    assert (lo.sl_px, lo.tp_px) == (30010.25 - 45 * 0.25, 30010.25 + 120 * 0.25)
+    sh = open_short(bars, now, OPEN_CFG)
+    assert (sh.side, sh.sl_px, sh.tp_px) == ("Sell", 30010.25 + 45 * 0.25, 30010.25 - 120 * 0.25)
+    assert RULES["open_long"] is open_long and RULES["open_short"] is open_short
+
+
+def test_open_rules_only_the_0929_close_and_only_their_day():
+    from homebase.rules import open_long
+    now = dt.datetime(2026, 9, 30, 9, 31, 0, tzinfo=ET)
+    assert open_long(minute_bars(((9, 28), 30000.0)), now, OPEN_CFG) is None      # too early
+    assert open_long(minute_bars(((9, 30), 30000.0)), now, OPEN_CFG) is None      # too late
+    assert open_long([], now, OPEN_CFG) is None
+    assert open_long(minute_bars(((9, 29), 30000.0)), now, OPEN_CFG).side == "Buy"
+    for day in (22, 29):                                                          # any other day
+        assert open_long(minute_bars(((9, 29), 30000.0), day=day), now, OPEN_CFG) is None
+    oct1 = Bar(dt.datetime(2026, 10, 1, 9, 29, tzinfo=ET).astimezone(UTC), 1, 1, 1, 1, 5, "NQ", 1)
+    assert open_long([oct1], now, OPEN_CFG) is None
+
+
+def test_fixed_distance_rule_moves_both_levels_to_the_fill(tmp_path):
+    from homebase.broker.base import FillEvent
+    from homebase.rules import open_long
+    cfg = AppCfg(armed=True, accounts={"main": AccountCfg(keyring_key="k", account_name="MAIN")},
+                 book={"nq_open_long": [{"account": "main", "qty": 2}]},
+                 strategies={"nq_open_long": StrategyCfg(
+                     symbol="NQ", qty=1, offset_pts=0, sl_pts=11.25, tp_pts=30.0, enabled=True,
+                     kind="bars", rule="open_long", accept_from_et="09:29", accept_until_et="09:31")})
+    ad = FakeAdapter("main")
+    eng = Engine(cfg, {"main": ad}, now_fn=Clock(13, 30), root=tmp_path)     # 09:30 ET
+    sig = open_long(minute_bars(((9, 29), 30000.0)), None, OPEN_CFG)
+    assert run(eng.handle_signal("nq_open_long", sig))["ok"]
+    b = ad.brackets[0]
+    assert (b.side, b.order_type, b.qty, b.stop_price, b.tp_price) == ("Buy", "Market", 2, 29988.75, 30030.0)
+    st = eng._state("nq_open_long", "main")
+    run(eng.on_fill(FillEvent(account_id="main", symbol="NQZ6", side="Buy", qty=2,
+                              price=30000.75, raw={"orderId": st.upper_id})))   # 3 ticks of slippage
+    # both brackets follow the fill: 45 ticks under, 120 ticks over
+    assert sorted(ad.modified) == sorted([(f"{st.upper_id}-sl", "Stop", 29989.5),
+                                          (f"{st.upper_id}-tp", "Limit", 30030.75)])
+    assert (st.sl_px, st.tp_px) == (29989.5, 30030.75)
+    run(eng.on_fill(FillEvent(account_id="main", symbol="NQZ6", side="Sell", qty=2,
+                              price=29989.5, raw={"orderId": "sl-child"})))
+    assert st.status == "done" and st.exit_reason == "sl"
+
+
+def test_fixed_distance_rule_filled_at_the_reference_moves_nothing(tmp_path):
+    from homebase.broker.base import FillEvent
+    from homebase.rules import open_short
+    cfg = AppCfg(armed=True, accounts={"main": AccountCfg(keyring_key="k", account_name="MAIN")},
+                 book={"nq_open_short": [{"account": "main", "qty": 1}]},
+                 strategies={"nq_open_short": StrategyCfg(
+                     symbol="NQ", qty=1, offset_pts=0, sl_pts=11.25, tp_pts=30.0, enabled=True,
+                     kind="bars", rule="open_short", accept_from_et="09:29", accept_until_et="09:31")})
+    ad = FakeAdapter("main")
+    eng = Engine(cfg, {"main": ad}, now_fn=Clock(13, 30), root=tmp_path)
+    run(eng.handle_signal("nq_open_short", open_short(minute_bars(((9, 29), 30000.0)), None, OPEN_CFG)))
+    st = eng._state("nq_open_short", "main")
+    run(eng.on_fill(FillEvent(account_id="main", symbol="NQZ6", side="Sell", qty=1,
+                              price=30000.0, raw={"orderId": st.lower_id})))
+    assert ad.modified == [] and (st.sl_px, st.tp_px) == (30011.25, 29970.0)
+
+
+def test_open_strategies_ship_off_unbooked_and_for_one_day():
+    from homebase.config import _defaults
+    d = _defaults()
+    for name, side_rule in (("nq_open_long", "open_long"), ("nq_open_short", "open_short")):
+        s = d.strategies[name]
+        assert (s.symbol, s.kind, s.rule, s.bar_minutes) == ("NQ", "bars", side_rule, 1)
+        assert (s.sl_pts, s.tp_pts) == (45 * 0.25, 120 * 0.25)
+        assert s.enabled is False and s.shadow is False
+        assert (s.accept_from_et, s.accept_until_et) == ("09:29", "09:31")
+        assert name not in d.book

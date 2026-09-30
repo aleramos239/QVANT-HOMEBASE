@@ -13,7 +13,7 @@
 </script>
 <link rel="stylesheet" href="/static/shadcn.css?v=2">
 <script src="/static/vendor/lightweight-charts.js"></script>
-<script src="/static/algo-visibility.js?v=2"></script>
+<script src="/static/algo-visibility.js?v=3"></script>
 <script src="/static/nobacknav.js?v=1"></script>
 <style>
   /* Page chrome — same language as the TradeCopier app: B&W chrome, the only
@@ -1708,7 +1708,7 @@ function render() {
   } else strip.style.display = "none";
 
   const algoVis = window.AlgoVisibility
-    ? window.AlgoVisibility.computeVisibility(s.strategies, s.book, HIDDEN_ALGOS)
+    ? window.AlgoVisibility.computeVisibility(s.strategies, s.book, HIDDEN_ALGOS, s.accounts)
     : Object.keys(s.strategies).map(n => ({name: n, visible: true}));
   const visibleNames = new Set(algoVis.filter(a => a.visible).map(a => a.name));
   $("#strats").innerHTML = Object.entries(s.strategies)
@@ -2746,7 +2746,7 @@ $("#acctOverlay").addEventListener("click", (e) => {
 /* ---- algo manager popup: choose which algos show on the home page ---- */
 function renderAlgoMgr() {
   if (!ST || !window.AlgoVisibility) return;
-  const rows = window.AlgoVisibility.computeVisibility(ST.strategies, ST.book, HIDDEN_ALGOS);
+  const rows = window.AlgoVisibility.computeVisibility(ST.strategies, ST.book, HIDDEN_ALGOS, ST.accounts);
   $("#algoCount").textContent = rows.length + " algo" + (rows.length === 1 ? "" : "s");
   $("#algoList").innerHTML = rows.length
     ? rows.map(a => {
@@ -2785,7 +2785,7 @@ function toggleAlgoHidden(name, currentlyVisible) {
   // currentlyVisible -> user wants to hide it; already-hidden -> unhide.
   // withHidden() itself also refuses to hide a locked algo, so a stale
   // click on a supposedly-disabled control can't sneak one past the rule.
-  const rows = window.AlgoVisibility.computeVisibility(ST.strategies, ST.book, HIDDEN_ALGOS);
+  const rows = window.AlgoVisibility.computeVisibility(ST.strategies, ST.book, HIDDEN_ALGOS, ST.accounts);
   const row = rows.find(r => r.name === name);
   const locked = !!(row && row.locked);
   HIDDEN_ALGOS = window.AlgoVisibility.withHidden(HIDDEN_ALGOS, name, currentlyVisible, locked);

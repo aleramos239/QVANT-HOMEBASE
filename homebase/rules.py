@@ -81,6 +81,37 @@ def nq_10am_continuation(bars: list[Bar], now_et: dt.datetime, cfg) -> Optional[
                   ref_px=ref, tp_rr=0.75, note=stats)
 
 
+OPEN_930_DAY = "2026-09-30"   # the one ET day open_long/open_short trade (asked 2026-09-29)
+
+
+def _open_930(side: str, bars: list[Bar], cfg) -> Optional[Signal]:
+    """Market at the 09:30 open (on the 09:29 bar's close), SL cfg.sl_pts / TP
+    cfg.tp_pts from that close; the engine moves both to the fill. On
+    OPEN_930_DAY only."""
+    if not bars:
+        return None
+    last = bars[-1]
+    t = last.ts.astimezone(ET)
+    if (t.hour, t.minute) != (9, 29) or last.minutes != 1:
+        return None                                  # fires once, on the 09:29 close
+    if t.date().isoformat() != OPEN_930_DAY:
+        return None
+    tick = tick_size(cfg.symbol) or 0.25
+    ref, sign = last.c, (1 if side == "Buy" else -1)
+    return Signal(side, "Market", None, _to_tick(ref - sign * cfg.sl_pts, tick),
+                  _to_tick(ref + sign * cfg.tp_pts, tick), ref_px=ref)
+
+
+def open_long(bars: list[Bar], now_et: dt.datetime, cfg) -> Optional[Signal]:
+    return _open_930("Buy", bars, cfg)
+
+
+def open_short(bars: list[Bar], now_et: dt.datetime, cfg) -> Optional[Signal]:
+    return _open_930("Sell", bars, cfg)
+
+
 RULES: dict[str, Callable] = {
     "nq_10am_continuation": nq_10am_continuation,
+    "open_long": open_long,
+    "open_short": open_short,
 }

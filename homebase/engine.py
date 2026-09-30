@@ -643,7 +643,10 @@ class Engine:
         tick = tick_size(cfg.symbol) or 0.25
         sl_id, tp_id = ((st.up_sl_id, st.up_tp_id) if st.entry_side == "Buy"
                         else (st.dn_sl_id, st.dn_tp_id))
-        if st.sl_px is not None:
+        # a rule whose config gives SL/TP points (open_long/open_short) moves
+        # both levels to the fill below, like a straddle
+        fixed = st.tp_rr is None and cfg.sl_pts > 0 and cfg.tp_pts > 0
+        if st.sl_px is not None and not fixed:
             # a rule's absolute stop stays; the target follows the fill at the
             # rule's RR (a rule without tp_rr keeps its absolute target too)
             if st.tp_rr is None:
@@ -673,6 +676,11 @@ class Engine:
         errs = [f"{k}: {r if isinstance(r, Exception) else r.error}"
                 for k, r in zip(("sl", "tp"), res)
                 if isinstance(r, Exception) or not r.ok]
+        if st.sl_px is not None:             # a fixed-distance rule: record the levels that moved
+            for k, px, r in zip(("sl_px", "tp_px"), (sl, tp), res):
+                if not isinstance(r, Exception) and r.ok:
+                    setattr(st, k, px)
+            self._save()
         return {**out, "moved": not errs, **({"error": "; ".join(errs)} if errs else {})}
 
     def _journal_moved(self, st: DayState, moved) -> None:

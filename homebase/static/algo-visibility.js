@@ -84,12 +84,32 @@
     return false;
   }
 
+  // An "error" day that never reached the broker (e.g. a placement refused
+  // with a 429): every run is "error" with no order id and no fill, AND the
+  // broker view (/api/status accounts) shows each of those accounts
+  // connected, flat, with no working orders. Without the broker view it is
+  // NOT cleared — a timed-out placement can be live at the broker with no id.
+  var ORDER_ID_KEYS = ["upper_id", "lower_id", "up_sl_id", "up_tp_id", "dn_sl_id", "dn_tp_id"];
+
+  function errorLeftNothing(dayStatus, accounts, broker) {
+    if (dayStatus !== "error" || !broker || !Array.isArray(accounts) || !accounts.length) return false;
+    return accounts.every(function (r) {
+      if (!r || r.status !== "error" || r.entry_fill != null || (r.entry_qty || 0) > 0) return false;
+      if (ORDER_ID_KEYS.some(function (k) { return r[k]; })) return false;
+      var b = broker[r.account];
+      return !!b && b.connected === true && b.open_position_count === 0 && b.working_orders === 0;
+    });
+  }
+
   // The single source of truth for "can this algo's card be hidden right
   // now". Returns {locked, reason} — reason is one of LOCK_REASON's values,
   // in priority order (tradable beats activity beats check), or null.
-  function lockInfo(cfg, bookRows, dayStatus, accounts, killed) {
+  // broker: /api/status `accounts` (optional; only used to clear an error day).
+  function lockInfo(cfg, bookRows, dayStatus, accounts, killed, broker) {
     if (isTradable(cfg, bookRows)) return { locked: true, reason: LOCK_REASON.TRADABLE };
-    if (hasActivityToday(dayStatus)) return { locked: true, reason: LOCK_REASON.ACTIVITY };
+    if (hasActivityToday(dayStatus) && !errorLeftNothing(dayStatus, accounts, broker)) {
+      return { locked: true, reason: LOCK_REASON.ACTIVITY };
+    }
     if (needsHumanCheck(accounts, killed)) return { locked: true, reason: LOCK_REASON.CHECK };
     return { locked: false, reason: null };
   }
@@ -131,7 +151,7 @@
   // stored hide-list, decide what shows. `hiddenList` may be `undefined`,
   // corrupt JSON already parsed to garbage, or a clean array — this
   // function tolerates all of them via normalizeHidden.
-  function computeVisibility(strategies, book, hiddenList) {
+  function computeVisibility(strategies, book, hiddenList, broker) {
     strategies = strategies || {};
     book = book || {};
     var hidden = {};
@@ -142,7 +162,7 @@
       var entry = strategies[name] || {};
       var cfg = entry.cfg || {};
       var bookRows = book[name];
-      var lock = lockInfo(cfg, bookRows, entry.day_status, entry.accounts, entry.killed);
+      var lock = lockInfo(cfg, bookRows, entry.day_status, entry.accounts, entry.killed, broker);
       // A locked algo can never be hidden, no matter what's stored.
       var wantsHidden = !lock.locked && !!hidden[name];
       out.push({

@@ -160,6 +160,22 @@ def _defaults() -> AppCfg:
                              "maxDD": "−$1,447", "days green": "63.6%"},
                     "caveat": "post-hoc filter, ~130 cells on one window — shadow only",
                 }),
+            # 9:30 open, one direction each: market on the 09:29 close, TP 120 ticks /
+            # SL 45 ticks, both moved to the fill. Added 2026-09-29 at the account
+            # holder's request for 2026-09-30 only (rules.OPEN_930_DAY). Ships off and
+            # unbooked: the user books the accounts and enables it.
+            **{f"nq_open_{side}": StrategyCfg(
+                symbol="NQ", qty=1, offset_pts=0.0, sl_pts=11.25, tp_pts=30.0,
+                accept_from_et="09:29", accept_until_et="09:31",
+                enabled=False, self_fire=True, kind="bars", rule=f"open_{side}",
+                bar_minutes=1, warmup_bars=60,
+                metrics={
+                    "source": f"added 2026-09-29 at the account holder's request: {side} at the "
+                              "9:30 open, 2026-09-30 only",
+                    "rows": {"entry": "market, 09:30 ET", "TP": "120 ticks · 30 pts · $600/mini",
+                             "SL": "45 ticks · 11.25 pts · $225/mini", "day": "2026-09-30"},
+                    "caveat": "no backtest — a one-day directional trade",
+                }) for side in ("long", "short")},
         },
     )
 

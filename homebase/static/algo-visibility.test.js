@@ -194,3 +194,49 @@ test("loadHidden round-trips a clean list through a working storage", () => {
   AV.saveHidden(["ym930", "gc_open"], storage);
   assert.deepEqual(AV.loadHidden(storage).sort(), ["gc_open", "ym930"]);
 });
+
+// An "error" day whose placement never reached the broker (the 2026-09-29 429 on
+// nq930_1030): no order id on any run, and the broker shows each account flat with
+// no working orders -> hideable. Anything short of that stays locked.
+function failedRun(extra) {
+  return Object.assign({ account: "apex053", status: "error", upper_id: null, lower_id: null,
+                         up_sl_id: null, up_tp_id: null, dn_sl_id: null, dn_tp_id: null,
+                         entry_fill: null, entry_qty: 0, check_it: false }, extra);
+}
+const FLAT = { apex053: { connected: true, open_position_count: 0, working_orders: 0 } };
+
+function errorStrategies(run) {
+  return { nq930_1030: strat({ day_status: "error", accounts: [run] }) };
+}
+
+test("an error that placed nothing, on a flat account, can be hidden", () => {
+  const out = AV.computeVisibility(errorStrategies(failedRun()), {}, ["nq930_1030"], FLAT);
+  assert.equal(out[0].locked, false);
+  assert.equal(out[0].visible, false);
+});
+
+test("an error stays locked without the broker's view, or when it is not flat", () => {
+  const s = errorStrategies(failedRun());
+  assert.equal(AV.computeVisibility(s, {}, [])[0].locked, true);            // no broker view
+  for (const b of [{ connected: false, open_position_count: 0, working_orders: 0 },
+                   { connected: true, open_position_count: 1, working_orders: 0 },
+                   { connected: true, open_position_count: 0, working_orders: 2 }]) {
+    const out = AV.computeVisibility(s, {}, [], { apex053: b });
+    assert.equal(out[0].locked, true);
+    assert.equal(out[0].lockReason, AV.LOCK_REASON.ACTIVITY);
+  }
+  assert.equal(AV.computeVisibility(s, {}, [], {})[0].locked, true);         // account unknown
+});
+
+test("an error with any order id or fill stays locked", () => {
+  for (const extra of [{ upper_id: "123" }, { dn_tp_id: "9" }, { entry_fill: 30000 },
+                       { entry_qty: 1 }, { status: "live" }]) {
+    const out = AV.computeVisibility(errorStrategies(failedRun(extra)), {}, [], FLAT);
+    assert.equal(out[0].locked, true, JSON.stringify(extra));
+  }
+});
+
+test("a placed or live day is never unlocked by a flat broker view", () => {
+  const s = { nq930: strat({ day_status: "live", accounts: [failedRun({ status: "live" })] }) };
+  assert.equal(AV.computeVisibility(s, {}, [], FLAT)[0].locked, true);
+});
