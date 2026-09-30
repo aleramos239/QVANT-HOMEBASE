@@ -436,3 +436,26 @@ def test_md_token_says_NoMdToken_only_when_there_is_no_token_at_all(tmp_path, mo
     with pytest.raises(RuntimeError, match="never pages on the other login") as e:
         T.md_token(strict=True)                 # a token exists, for the wrong login: not "not yet"
     assert not isinstance(e.value, T.NoMdToken)
+
+
+def test_a_refusal_under_an_older_merge_rule_is_tried_again(tmp_path):
+    path = T.archive_path("NQ", D, "NQZ6", tmp_path)
+    path.parent.mkdir(parents=True)
+    path.write_bytes(b"x")
+    cache = {T.REFUSED: {f"NQ {D}": {"stamp": T.files_stamp(path), "why": "old"}}}     # no rules recorded
+    assert not T.refused_still(cache, "NQ", D, path)
+    cache[T.REFUSED][f"NQ {D}"]["rules"] = A.MERGE_RULES
+    assert T.refused_still(cache, "NQ", D, path)
+
+
+def test_a_recorder_that_kept_a_tick_a_minute_is_one_job_not_one_per_minute(tmp_path, monkeypatch):
+    """GC 2026-09-29 05:00-06:00 ET: 75 one-minute gaps were 75 paced pages (45 minutes)."""
+    nw = NoWait(monkeypatch, now=dt.datetime(2026, 9, 29, 10, 10, tzinfo=ET))
+    ticks = _minute_ticks(D)
+    path = T.archive_path("NQ", D, "NQZ6", tmp_path)
+    kept = [r for i, r in enumerate(ticks) if i < 6 * 60 or i % 2 == 0 or i > 7 * 60]   # 00:00-01:00 ET: every other tick
+    _write_live(path.with_name("2026-09-29_NQZ6.live.csv.gz"), kept)
+    gaps = T.missing("NQ", D, tmp_path, nw.now, {})[0]
+    inside = [g for g in gaps if g[2].endswith("gaps")]
+    assert len(inside) == 1 and inside[0][2].startswith("30 ticks in 30 gaps")       # one job for the hour
+    assert inside[0][0] < inside[0][1]

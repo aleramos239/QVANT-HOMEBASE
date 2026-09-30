@@ -378,7 +378,8 @@ def refused_still(cache: dict | None, root: str, date: dt.date, path: Path) -> b
     """Was this session's merge refused, and are its files still exactly as then?
     Then it is left alone (no fetch, no merge) until someone changes them."""
     got = (cache or {}).get(REFUSED, {}).get(f"{root} {date}")
-    return bool(got) and got.get("stamp") == files_stamp(path)
+    return bool(got) and got.get("stamp") == files_stamp(path) \
+        and got.get("rules") == tickarchive.MERGE_RULES      # a loosened rule gets a second try
 
 
 def store(root: str, date: dt.date, contract: str, path: Path, start: dt.datetime,
@@ -407,7 +408,7 @@ def store(root: str, date: dt.date, contract: str, path: Path, start: dt.datetim
             "(left alone until its files change)")
         if cache is not None and refused:
             cache.setdefault(REFUSED, {})[f"{root} {date}"] = {
-                "stamp": files_stamp(path), "why": f"{type(e).__name__}: {e}", "at": tickarchive.now_utc()}
+                "stamp": files_stamp(path), "rules": tickarchive.MERGE_RULES, "why": f"{type(e).__name__}: {e}", "at": tickarchive.now_utc()}
     return None
 
 
@@ -614,6 +615,7 @@ class MDConn(Pacer):
 # battery), an open or a close no history fetch has vouched for yet, a
 # recording that stopped, or the whole session when nothing was recorded.
 # A stretch the broker was already asked for in full is never asked again.
+BRIDGE_TICKS = PAGE // 2        # gaps with at most this many held ticks between them are fetched as one
 STALE_MS = 15 * 60 * 1000       # a running session's recording this far behind the clock has stopped
 DAY_PAGES = 45                  # a daytime run's pages: the chart service keeps most of the login's 180/h
 QUIET = CHARTS_QUIET            # 09:20-09:35 ET, around the 9:30 fire: not one request (the charts' own)
@@ -675,8 +677,19 @@ def missing(root: str, date: dt.date, base: Path, now: dt.datetime, cache: dict,
         info["last_id"] = runs[-1][1]
         if prev_last is None or runs[0][0] != prev_last + 1:
             gaps.append((s_ms, runs[0][2], "the open"))
+        # Each gap alone costs a paced page (PAGE_INTERVAL_S) however few ticks it lacks, and a recorder
+        # that kept a tick a minute leaves hundreds of them (GC 2026-09-29 05:00-06:00 ET: 75 one-minute
+        # jobs, 45 minutes, while the FX opens expired in the queue behind them). A run of at most
+        # BRIDGE_TICKS between two gaps costs less to page through than a page of its own: one job.
+        inner: list = []                    # [from_ms, to_ms, ids missing, ticks in the run after it, gaps]
         for r0, r1 in zip(runs, runs[1:]):
-            gaps.append((r0[3], r1[2], f"{r1[0] - r0[1] - 1:,} ticks"))
+            g = [r0[3], r1[2], r1[0] - r0[1] - 1, r1[1] - r1[0] + 1, 1]
+            if inner and inner[-1][3] <= BRIDGE_TICKS:
+                inner[-1][1:] = [g[1], inner[-1][2] + g[2], g[3], inner[-1][4] + 1]
+            else:
+                inner.append(g)
+        for a, b, n, _, k in inner:
+            gaps.append((a, b, f"{n:,} ticks" + (f" in {k} gaps" if k > 1 else "")))
         if over:
             gaps.append((runs[-1][3], e_ms, "the close"))
         elif horizon - runs[-1][3] > STALE_MS:

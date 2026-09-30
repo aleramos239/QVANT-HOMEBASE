@@ -17,9 +17,12 @@ the 09-25 history file's last tick. So broker rows merge BY ID: a tick either
 source has is kept once, with the bid/ask of whichever source has them. What
 is already on disk wins a disagreement (the archive file, then the live
 recording, then a fresh fetch): a written tick is never rewritten. A tick id
-that comes back with a different time, price or size is a conflict: the
-on-disk version stays and it is counted; more than CONFLICTS_REFUSED refuse
-the merge (the originals stay).
+that comes back with a different time or price is a conflict: the on-disk
+version stays and it is counted; more than CONFLICTS_REFUSED refuse the merge
+(the originals stay). A different SIZE at the same id, time and price is the
+same trade counted differently (the live stream and the history disagree on
+~5% of GC's ticks): on-disk stays, it is counted (size_disagreements), and the
+merge is refused only when it is wholesale (SIZE_DISAGREE_*).
 
 A Massive row (it has `ts_ns`) carries no broker id -- its `id` is the
 exchange channel's sequence number, repeated across the price levels of one
@@ -62,7 +65,12 @@ BROKER_COLS = COLS[:8]
 TS, PX, SZ, BID, ASK, BIDSZ, ASKSZ, ID, TSNS = range(9)
 LIVE_SUFFIX = ".live.csv.gz"            # = homebase.charts.store.LIVE_SUFFIX (a test holds them equal)
 MASSIVE_EDGE_MS = 500                   # a gap's edge ticks may be the same trades as Massive rows this near
-CONFLICTS_REFUSED = 5                   # more same-id disagreements than this: refuse, change nothing
+CONFLICTS_REFUSED = 5                   # more same-id disagreements (time/price) than this: refuse, change nothing
+SIZE_DISAGREE_MIN = 20                  # a same-id, same-time, same-price tick whose SIZE differs is the same
+SIZE_DISAGREE_SHARE = 0.25              # trade counted differently (GC 2026-09-29: live 2 vs history 1 on ~5% of
+                                        # ticks): kept as on disk and counted; refused only past this many AND
+                                        # this share of the id overlap (a wrong unit, not a stray fill)
+MERGE_RULES = 2                         # bump when a merge rule loosens: sessions refused under an older rule retry
 ID_SPACE_REFUSED = 5                    # more same trades under different ids than this: refuse too
 SOURCES_KEPT = 40                       # the manifest's merge log keeps this many entries
 
@@ -198,7 +206,7 @@ def merge(sources, massive_new: list[tuple] = (), edge_ms: int = MASSIVE_EDGE_MS
     per_source: dict[str, set] = {}
     read: dict[str, int] = {}
     conflicts: list[int] = []
-    overlap = quotes_filled = quote_disagreements = 0
+    overlap = quotes_filled = quote_disagreements = size_disagreements = 0
     for name, rows in sources:
         mine: set = per_source.setdefault(name, set())
         here: Counter = Counter()
@@ -218,9 +226,11 @@ def merge(sources, massive_new: list[tuple] = (), edge_ms: int = MASSIVE_EDGE_MS
                 by_id[k] = r
                 continue
             overlap += 1
-            if (int(have[TS]), float(have[PX]), int(have[SZ])) != (int(r[TS]), float(r[PX]), int(r[SZ])):
+            if (int(have[TS]), float(have[PX])) != (int(r[TS]), float(r[PX])):
                 conflicts.append(k)
                 continue                                    # the first source's version stays
+            if int(have[SZ]) != int(r[SZ]):
+                size_disagreements += 1                     # same trade, sized differently: on-disk stays
             if not (have[BID] and have[ASK]) and r[BID] and r[ASK]:
                 by_id[k] = have[:BID] + r[BID:ID] + have[ID:]
                 quotes_filled += 1
@@ -233,6 +243,9 @@ def merge(sources, massive_new: list[tuple] = (), edge_ms: int = MASSIVE_EDGE_MS
     if len(conflicts) > CONFLICTS_REFUSED:
         raise MergeRefused(f"{len(conflicts)} tick ids disagree between sources (time/price/size), "
                            f"e.g. {conflicts[:5]} -- not one id space; nothing merged")
+    if size_disagreements > max(SIZE_DISAGREE_MIN, SIZE_DISAGREE_SHARE * overlap):
+        raise MergeRefused(f"{size_disagreements} of {overlap} overlapping ticks carry a different size "
+                           "between sources -- not one feed; nothing merged")
     # the id-space guard: a tick only one source has, whose twin -- same time, price, size, bid,
     # ask -- only another source has under ANOTHER id, is one trade counted twice
     excl = {n: ids - set().union(*(o for m, o in per_source.items() if m != n))
@@ -265,6 +278,7 @@ def merge(sources, massive_new: list[tuple] = (), edge_ms: int = MASSIVE_EDGE_MS
     stats = {"broker_ticks": len(broker), "massive_rows": len(kept_old) + len(added),
              "read": read, "only_in": only,
              "id_overlap": overlap, "id_conflicts": len(conflicts), "conflict_ids": conflicts[:10],
+             "size_disagreements": size_disagreements,
              "id_twins": twins,
              "quotes_filled": quotes_filled, "quote_disagreements": quote_disagreements,
              "massive_dropped_near_broker": len(massive_old) - len(kept_old)}

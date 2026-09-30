@@ -389,3 +389,32 @@ def test_fewer_rows_than_the_manifest_counts_refuse_the_merge(tmp_path):
     with pytest.raises(A.MergeRefused, match="10 rows read back, its manifest says 12"):
         merge_session(path, fetched=[tick(20)], fetched_source={"kind": "history"})
     assert sha(path) == kept
+
+
+def test_a_size_that_differs_at_the_same_id_time_and_price_is_counted_not_refused(tmp_path):
+    """GC 2026-09-29: the live stream said 2 lots where the history said 1, at the same
+    id, ms and price, on ~5% of ticks -- 50 of them refused a whole hour's repair."""
+    path = T.archive_path("NQ", DAY, "NQZ6", tmp_path)
+    write_live(A.live_path(path), [tick(i) for i in range(400)])
+    resized = [A.row_of({"ts_ms": int(r[A.TS]), "price": float(r[A.PX]), "size": int(r[A.SZ]) + 1,
+                         "bid": r[A.BID], "ask": r[A.ASK], "bid_size": r[A.BIDSZ], "ask_size": r[A.ASKSZ],
+                         "id": int(r[A.ID])}) if i % 20 == 0 else r
+               for i, r in enumerate(tick(i) for i in range(400))]       # 20 of 400: 5%
+    man = merge_session(path, fetched=resized + [tick(i) for i in range(400, 410)],
+                        fetched_source={"kind": "history"})
+    assert man["merge"]["size_disagreements"] == 20 and man["merge"]["id_conflicts"] == 0
+    assert man["ticks"] == 410                                        # the new ids landed
+    by_id = {int(r[A.ID]): r for r in A.read_rows(path)[1]}
+    assert by_id[1000][A.SZ] == tick(0)[A.SZ]                         # on disk wins, as for any disagreement
+
+
+def test_sizes_that_disagree_wholesale_refuse_the_merge(tmp_path):
+    path = T.archive_path("NQ", DAY, "NQZ6", tmp_path)
+    merge_session(path, fetched=[tick(i) for i in range(300)], fetched_source={"kind": "history"})
+    kept = sha(path)
+    doubled = [A.row_of({"ts_ms": int(r[A.TS]), "price": float(r[A.PX]), "size": int(r[A.SZ]) * 2,
+                         "bid": r[A.BID], "ask": r[A.ASK], "bid_size": r[A.BIDSZ], "ask_size": r[A.ASKSZ],
+                         "id": int(r[A.ID])}) for r in (tick(i) for i in range(300))]
+    with pytest.raises(A.MergeRefused, match="different size"):
+        merge_session(path, fetched=doubled, fetched_source={"kind": "history"})
+    assert sha(path) == kept
