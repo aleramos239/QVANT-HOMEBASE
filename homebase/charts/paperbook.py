@@ -782,7 +782,9 @@ class PaperBook:
         self._do({"ev": "place", "orders": [_od(o) for o in (entry, *legs)]}, seq=self.seq.get(root, 0))
         if plan is not None:
             self._instant_fill(entry, *plan)         # its bracket legs go live from the next print (_fill)
-        return {"ok": True, "order_id": eid, "error": None}
+        # the legs' ids ride along for the desk's paper adapter (the engine moves them by id); the page ignores them
+        return {"ok": True, "order_id": eid, "error": None,
+                **{f"{l.role}_order_id": l.id for l in legs}}
 
     def _check_prices(self, root, side, typ, price, trigger, sl, tp, tick) -> None:
         """trading.py check_prices, against this book's own last print (any age: the page checked freshness)."""

@@ -27,6 +27,7 @@ import os
 from dataclasses import asdict
 from pathlib import Path
 
+import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -35,6 +36,7 @@ from . import config as config_mod
 from . import secrets_store
 from .broker.base import AccountNotOnLogin, BrokerAdapter, OrderRequest
 from .broker.login_budget import LoginBudget, LoginDeferred, is_rate_limited
+from .broker.paper import BASE_URL as PAPER_URL, PaperAdapter
 from .broker.tradovate import RENEW_EARLY_FROM, RENEW_QUIET, TradovateAdapter
 from .engine import Engine, _hhmm
 from .feed import MarketFeed
@@ -400,6 +402,8 @@ def md_source(cfg: config_mod.AppCfg, adapters: dict):
 
 
 def build_adapter(account_id: str, a: config_mod.AccountCfg) -> BrokerAdapter:
+    if a.paper:                      # a chart-service paper account: no login, no broker (broker/paper.py)
+        return PaperAdapter(account_id)
     env = "live" if a.live else "demo"
     sel = {"account_name": a.account_name} if a.account_name else None
     # entries on one login share its token: one login / renewal per Tradovate user
@@ -416,11 +420,13 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                adapters: dict[str, BrokerAdapter] | None = None,
                *, background: bool = True,
                adapter_factory=build_adapter, feed_factory=build_feed,
-               login_budget: LoginBudget | None = None) -> FastAPI:
+               login_budget: LoginBudget | None = None,
+               paper_client: httpx.AsyncClient | None = None) -> FastAPI:
     cfg = cfg or config_mod.load()
     adapters: dict[str, BrokerAdapter] = adapters if adapters is not None else {}
     engine = Engine(cfg, adapters)
     acct_status: dict[str, dict] = {}
+    paper_http = paper_client or httpx.AsyncClient(base_url=PAPER_URL, timeout=5.0)   # the paper accounts list
     # logins are budgeted per Tradovate USER (the login key), never per entry: five
     # entries on one Apex user each falling back to a login ran it into 429 (2026-09-29)
     budget = login_budget or LoginBudget()
@@ -605,6 +611,9 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         login_id = (key, a.live)
 
         async def _login(fell_back_from=None) -> None:
+            if a.paper:              # nothing to log in to: the chart service's book, no budget spent
+                await ad.connect()
+                return
             # the cap/backoff exemption is ONE first login per Tradovate login per process
             # (its entries share the token), never for an entry that went private
             first = (aid not in _logged_in_once and login_id not in _login_first_spent
@@ -656,7 +665,8 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         else:
             await _login()
         await ad.observe_fills(engine.on_fill)
-        desk.attach(aid, ad)
+        if not a.paper:              # the chart page trades a paper account through its own book, never the desk
+            desk.attach(aid, ad)
         _parked.pop(aid, None)
         _inplace_streak.pop(aid, None)
         _no_accounts_warned.discard(aid)
@@ -678,7 +688,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             _notice(f"{_short(aid)} is back on your {_login_label(aid)} login", account=aid)
         acct_status[aid] = {"connected": True, "error": None}
         engine.journal("broker_connected", account=aid,
-                       broker_account=a.account_name, mode=mode)
+                       broker_account=a.account_name, mode="paper" if a.paper else mode)
         try:
             await engine.reconcile_account(aid)
         except Exception as e:  # noqa: BLE001 — never block the connect on it
@@ -848,10 +858,37 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                 g["next_check"] = _t.time() + GONE_CONFIRM_S
                 _gone_tasks[aid] = asyncio.create_task(_gone_check(aid))
 
+    async def _sync_paper() -> None:
+        """Every chart-service paper account is an account of the desk's pool (assignable to an algo in
+        + Assign) -- one per paper id, labelled "<name> (paper)". Added here, never by hand; removed only
+        with the account on the Charts page (its adapter then fails to read the book and drops out of
+        the readiness checks). Never adds during the 9:30 window, and a service that is down adds nothing."""
+        if not (background or paper_client is not None) or _in_gone_quiet(engine.now_et()):
+            return                   # a test app reaches no service it was not handed
+        try:
+            r = await paper_http.get("/api/paper/accounts")
+            r.raise_for_status()
+            rows = r.json()["accounts"]
+        except Exception:  # noqa: BLE001 — the chart service is down: the adapters say so themselves
+            return
+        for row in rows:
+            aid = str(row["id"])
+            if aid in cfg.accounts:
+                continue
+            label = str(row.get("label") or aid)
+            cfg.accounts[aid] = config_mod.AccountCfg(paper=True, label=f"{label} (paper)", account_name=label)
+            config_mod.save(cfg)
+            engine.journal("account_added", account=aid, live=False, paper=True)
+        gone = {aid for aid, a in cfg.accounts.items() if a.paper} - {str(r["id"]) for r in rows}
+        for aid in gone:
+            acct_status[aid] = {"connected": False, "error": "this paper account no longer exists on the Charts page"}
+
     async def _broker_loop():
         import time as _t
         while True:
             budget.tick()                    # a cool-down's one "ended" line
+            with contextlib.suppress(Exception):
+                await _sync_paper()
             try:
                 await _gone_step()
             except Exception as e:  # noqa: BLE001 — never kill the supervisor
@@ -955,12 +992,15 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             for ad in adapters.values():
                 with contextlib.suppress(Exception):
                     await ad.close()
+            with contextlib.suppress(Exception):
+                await paper_http.aclose()
 
     app = FastAPI(title="Ramos Quant Homebase", lifespan=lifespan)
     app.state.engine = engine
     app.state.cfg = cfg
     app.state.adapters = adapters
     app.state.feed_step = feed_step
+    app.state.sync_paper = _sync_paper
     # test-only hooks onto the broker reconnect loop (never called by the
     # app itself outside `background=True`'s lifespan task)
     app.state.connect_account = _connect_account
@@ -1004,7 +1044,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                 m["error"] = s["error"]
             cooldown_s = max(0.0, _login_cooldown.get(aid, 0) - _t.time())
             accounts[aid] = {"label": a.label or a.account_name or aid,
-                             "env": "live" if a.live else "demo",
+                             "env": "paper" if a.paper else "live" if a.live else "demo",
                              "cooldown_s": round(cooldown_s, 1) if cooldown_s else 0, **m}
         live = live_metrics(state_dir() / "journal.jsonl")
         journal = []
@@ -1409,6 +1449,8 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         aid = str(body.get("account") or "")
         if aid not in cfg.accounts:
             raise HTTPException(404, f"unknown account {aid!r}")
+        if cfg.accounts[aid].paper:
+            raise HTTPException(409, "a paper account is managed on the Charts page — remove it there")
         from_mcp = str(body.get("source") or "") == "mcp"
         if from_mcp and _in_gone_quiet(engine.now_et(), GONE_CHECK_QUIET):
             raise HTTPException(409, "refused: not 09:10-09:35 ET on weekdays "

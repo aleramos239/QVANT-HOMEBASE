@@ -51,6 +51,7 @@ class AccountCfg:
     account_name: str = ""       # pin one account under the login
     live: bool = False           # False = demo environment
     label: str = ""              # display name (defaults to account_name)
+    paper: bool = False          # a chart-service paper account (homebase.broker.paper): no login, no broker
 
 
 HARD_MAX_ORDER_QTY = 50        # the desk page cannot set chart-trading limits above these
