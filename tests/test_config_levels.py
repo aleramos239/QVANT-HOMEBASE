@@ -73,3 +73,22 @@ def test_a_config_written_before_these_fields_still_loads(cfg_path):
     assert c.armed and c.accounts["main"].prop == {} and c.strategies["nq930"].day_take == 0.0
     assert set(NAMES) <= set(c.strategies)                       # the new strategies appear, off
     assert isinstance(c.strategies["nq_pm_flex"], StrategyCfg)
+
+
+def test_load_drops_removed_strategies_and_their_book_rows(cfg_path, caplog):
+    """A strategy with no shipped default (ym930, nq10am, nq_open_*) leaves config.json on load: its entry
+    and its book rows vanish, a booking on a kept strategy stays, and the drop is logged."""
+    cfg_path.write_text(json.dumps({
+        "accounts": {"a1": {"keyring_key": "k", "account_name": "A1"}},
+        "strategies": {"nq930": {"qty": 3}, "ym930": {"qty": 1}, "nq_open_long": {"qty": 1}},
+        "book": {"nq930": [{"account": "a1", "qty": 2}], "ym930": [],
+                 "nq_open_long": [{"account": "a1", "qty": 35}], "nq10am": [{"account": "a1", "qty": 1}]}}))
+    with caplog.at_level("WARNING", logger="homebase.config"):
+        cfg = desk_config.load()
+    assert not {"ym930", "nq10am", "nq_open_long", "nq_open_short"} & set(cfg.strategies)
+    assert cfg.book == {"nq930": [{"account": "a1", "qty": 2}]}
+    said = " ".join(r.getMessage() for r in caplog.records)
+    assert "ym930" in said and "nq_open_long" in said and "nq10am" in said and "35" not in said
+    desk_config.save(cfg)                                    # the next save writes the clean file
+    saved = json.loads(cfg_path.read_text())
+    assert "ym930" not in saved["strategies"] and "nq_open_long" not in saved["book"]

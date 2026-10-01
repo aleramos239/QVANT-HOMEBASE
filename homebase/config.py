@@ -268,10 +268,18 @@ def load() -> AppCfg:
     for aid, a in (data.get("accounts") or {}).items():
         base = asdict(AccountCfg())
         cfg.accounts[aid] = AccountCfg(**{**base, **a})
+    gone = []
     for name, s in (data.get("strategies") or {}).items():
-        base = asdict(cfg.strategies[name]) if name in cfg.strategies else {}
-        cfg.strategies[name] = StrategyCfg(**{**base, **s})
-    cfg.book = {k: list(v) for k, v in (data.get("book") or {}).items()}
+        if name not in cfg.strategies:       # a removed strategy: nothing runs it, so it leaves the file
+            gone.append(name)
+            continue
+        cfg.strategies[name] = StrategyCfg(**{**asdict(cfg.strategies[name]), **s})
+    cfg.book = {k: list(v) for k, v in (data.get("book") or {}).items() if k in cfg.strategies}
+    gone += [k for k in (data.get("book") or {}) if k not in cfg.strategies and k not in gone]
+    for name in gone:
+        rows = (data.get("book") or {}).get(name) or []
+        log.warning("config.json: dropped strategy %s (no longer shipped) and its %d book row(s): %s",
+                    name, len(rows), ", ".join(str(a.get("account")) for a in rows) or "-")
     cfg.chart_trading = chart_trading_from(data.get("chart_trading"))
     if "allowed_hosts" in data:
         cfg.allowed_hosts = data["allowed_hosts"]
