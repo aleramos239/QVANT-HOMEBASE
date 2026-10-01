@@ -29,10 +29,13 @@ test('every piece of the script reaches the page escaped: the highlighter escape
   assert.equal((LAB.match(/hl\.innerHTML = C\.highlight\(/g) || []).length, 1, 'the one place the script becomes HTML');
 });
 
-test('backtest.html carries the Lab: page label, mode switch, three panes, and loads labcode before lab', () => {
+test('backtest.html carries the Lab: page label, the four panel toggles and panes, and loads labcode before lab', () => {
   assert.match(HTML, /data-page="backtest" aria-current="page">Lab</);
-  assert.match(HTML, /id="labMode"/);
-  for (const id of ['labLib', 'labEd', 'labRes']) assert.ok(HTML.includes(`id="${id}"`), id);
+  for (const k of ['lib', 'code', 'chart', 'res']) assert.match(HTML, new RegExp(`id="labPanels"[^]*data-panel="${k}"`), k);
+  for (const id of ['labLib', 'labEd', 'labChart', 'labRes', 'labSplit']) assert.ok(HTML.includes(`id="${id}"`), id);
+  // the chart shell lives inside the workspace, between the editor and the result
+  const at = (t) => HTML.indexOf(t);
+  assert.ok(at('id="labEd"') < at('id="labChart"') && at('id="labChart"') < at('class="toolbar"') && at('id="bpanel"') < at('id="labRes"'));
   assert.ok(HTML.indexOf('labcode.js') > 0 && HTML.indexOf('labcode.js') < HTML.indexOf('/lab.js'));
   assert.ok(HTML.indexOf('/tester.js') < HTML.indexOf('labcode.js'), 'the Lab reads HBTester');
 });

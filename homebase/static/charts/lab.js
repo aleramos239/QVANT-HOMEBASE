@@ -1,4 +1,5 @@
-/* Homebase Lab (Backtest page, "Code" mode): a library of strategies, a Python editor, a backtest result.
+/* Homebase Lab (the Backtest page): one workspace of four panels -- a library of strategies, a Python editor, the
+   chart, a backtest result -- each shown or hidden from the top bar.
    A strategy here is TEXT. Saving writes ~/.homebase/strategies/<name>.py through the chart service; Run sends the
    saved text to the tester, where it runs only inside the sandboxed backtest child. Nothing on this page
    executes a draft, and nothing here can put one on the desk: "Request review" writes a package for a person
@@ -14,7 +15,7 @@ const MINUS = '−';
 const SAVE_ICON_LOCK = '<svg class="lb-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
 
 /* ---- state ---- */
-const S = { builtins: [], drafts: [], bufs: new Map(), cur: null, forms: {}, run: null, log: [], seq: 0, mode: 'code', busy: false };
+const S = { builtins: [], drafts: [], bufs: new Map(), cur: null, forms: {}, run: null, log: [], seq: 0, busy: false };
 const buf = () => (S.cur ? S.bufs.get(S.cur) : null);
 const isDirty = (b) => b.kind !== 'builtin' && (b.kind === 'new' ? !!b.code.trim() : b.code !== b.saved);
 const takenNames = () => [...S.drafts.map((d) => d.name), ...[...S.bufs.values()].filter((b) => b.kind === 'new' && b.name).map((b) => b.name)];
@@ -73,7 +74,7 @@ async function restoreLastRun(b) {
   const bd = await send('GET', `/api/tester/run/${encodeURIComponent(hit.id)}/bundle`);
   if (!bd.ok || S.cur !== b.key || S.run) return;
   S.run = { key: b.key, rid: hit.id, st: { status: 'done' }, bundle: bd.json, strategy: id };
-  paintRes();
+  paintRes(); syncChart();
 }
 function ensureBuf(kind, key, init) {
   if (!S.bufs.has(key)) S.bufs.set(key, { key, kind, name: '', id: '', code: null, saved: null, valid: null, savedAt: 0, ...init });
@@ -175,7 +176,7 @@ async function poll(run) {
         const a = run.bundle.run.report.summary.all;
         log(`Ran in the sandbox · <b>${esc(String(a.trades ?? 0))} trades</b> · <a data-act="show">Show trades on the chart ›</a>`);
       } else log('<span class="err">The run finished but its report could not be loaded</span>');
-      paintRes(); paintHead();
+      paintRes(); paintHead(); syncChart();
       return;
     }
     if (s === 'error' || s === 'cancelled') {
@@ -190,23 +191,75 @@ async function poll(run) {
 }
 async function cancelRun() { if (S.run && S.run.rid && S.busy) await send('POST', `/api/tester/run/${encodeURIComponent(S.run.rid)}/cancel`); }
 
-/* ---- the chart ---- */
-function setMode(m) {
-  S.mode = m;
-  document.body.classList.toggle('lab-code', m === 'code');
-  for (const x of document.querySelectorAll('#labMode [data-mode]')) { const on = x.dataset.mode === m; x.classList.toggle('sel', on); x.setAttribute('aria-pressed', String(on)); }
-  try { sessionStorage.setItem('hb_lab_mode', m); } catch (_) { /* private mode */ }
-  if (m === 'chart') requestAnimationFrame(() => { window.dispatchEvent(new Event('resize')); requestAnimationFrame(() => window.dispatchEvent(new Event('resize'))); });
+/* ---- the workspace: four panels, shown or hidden; Code and Chart share the middle ---- */
+const PANELS = ['lib', 'code', 'chart', 'res'];
+const P = { lib: true, code: true, chart: false, res: true };
+let split = 45, panelsChosen = false;
+try {
+  const saved = JSON.parse(localStorage.getItem('hb_lab_panels') || 'null');
+  if (saved && typeof saved === 'object') { for (const k of PANELS) if (typeof saved[k] === 'boolean') P[k] = saved[k]; panelsChosen = true; }
+  const sp = Number(localStorage.getItem('hb_lab_split'));
+  if (sp >= 20 && sp <= 80) split = sp;
+} catch (_) { /* private mode: the defaults */ }
+try {      // ?panels=code,chart,res opens exactly those (a link to a layout)
+  const q = new URLSearchParams(location.search).get('panels');
+  if (q) { const want = q.split(','); for (const k of PANELS) P[k] = want.includes(k); panelsChosen = true; }
+} catch (_) { /* no URL API */ }
+if (!P.code && !P.chart) P.code = true;
+function refit() { requestAnimationFrame(() => { window.dispatchEvent(new Event('resize')); requestAnimationFrame(() => window.dispatchEvent(new Event('resize'))); }); }
+function applyPanels(save = true) {
+  for (const k of PANELS) root.dataset[k] = P[k] ? '1' : '0';
+  root.style.setProperty('--lab-code', String(split));
+  root.style.setProperty('--lab-chart', String(100 - split));
+  document.body.classList.toggle('lab-chart-on', P.chart);
+  for (const x of document.querySelectorAll('#labPanels [data-panel]')) x.setAttribute('aria-pressed', String(!!P[x.dataset.panel]));
+  if (save) { try { localStorage.setItem('hb_lab_panels', JSON.stringify(P)); localStorage.setItem('hb_lab_split', String(Math.round(split))); } catch (_) { /* private mode */ } }
+  refit();
 }
-async function showOnChart() {
+/* Show or hide one panel. The middle is never empty: hiding the last of Code / Chart brings the other back. */
+function setPanel(k, on) {
+  if (!PANELS.includes(k)) return;
+  P[k] = on == null ? !P[k] : !!on;
+  if (!P.code && !P.chart) P[k === 'code' ? 'chart' : 'code'] = true;
+  panelsChosen = true;
+  applyPanels();
+  if (k === 'chart' && P.chart) setTimeout(syncChart, 160);
+}
+/* Put the current run on the chart: its executions, its levels and the chart's own indicators. `report` also
+   opens the Strategy Tester's full report under the chart. The server refuses 09:20-09:35 ET (the desk's window). */
+let shownRid = null;
+function setReport(on) { root.dataset.report = on ? '1' : '0'; paintRes(); refit(); }
+async function showOnChart(report = false) {
   const r = S.run;
   if (!r || !r.bundle) return;
-  setMode('chart');
-  await new Promise((res) => setTimeout(res, 120));
+  if (!P.chart) {
+    P.chart = true;
+    if (innerWidth < 1500 && !panelsChosen) P.lib = false;     // a laptop-width window: the library steps aside (first time only)
+    applyPanels();
+    await new Promise((res) => setTimeout(res, 160));
+  }
+  if (report) setReport(true);
+  if (shownRid === r.rid) return;
+  shownRid = r.rid;
   const o = await send('POST', '/api/tester/show', { run_id: r.rid });
-  if (!o.ok) log(`<span class="err">Could not show it on the chart: ${esc(o.error)}</span>`);
-  else if (!o.json.pages) log('No chart page is open to show it on');
+  if (!o.ok) { shownRid = null; log(`<span class="err">Could not show it on the chart: ${esc(o.error)}</span>`); }
+  else if (!o.json.pages) { shownRid = null; log('No chart page is open to show it on'); }
 }
+/* The chart follows the strategy: whenever the Chart panel is showing and there is a finished run, it is on it. */
+function syncChart() { if (P.chart && S.run && S.run.bundle && shownRid !== S.run.rid) showOnChart(false); }
+/* the divider between Code and Chart */
+(function () {
+  const bar = document.getElementById('labSplit');
+  if (!bar) return;
+  const span = () => { const a = $('#labEd').getBoundingClientRect(), b = document.getElementById('labChart').getBoundingClientRect(); return { left: a.left, width: b.right - a.left }; };
+  const to = (x) => { const s = span(); if (s.width > 0) { split = Math.max(22, Math.min(78, ((x - s.left) / s.width) * 100)); applyPanels(false); } };
+  bar.addEventListener('pointerdown', (e) => { bar.setPointerCapture(e.pointerId); bar.classList.add('drag'); e.preventDefault(); });
+  bar.addEventListener('pointermove', (e) => { if (bar.classList.contains('drag')) to(e.clientX); });
+  const end = () => { if (bar.classList.contains('drag')) { bar.classList.remove('drag'); applyPanels(); } };
+  bar.addEventListener('pointerup', end); bar.addEventListener('pointercancel', end);
+  bar.addEventListener('dblclick', () => { split = 45; applyPanels(); });
+  bar.addEventListener('keydown', (e) => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); split = Math.max(22, Math.min(78, split + (e.key === 'ArrowLeft' ? -3 : 3))); applyPanels(); } });
+})();
 
 /* ---- dialogs and menus ---- */
 let overlay = null, menuEl = null;
@@ -456,7 +509,7 @@ function paintRes() {
       ${(a.trades || 0) === 0 ? '<div class="rs-sub" style="margin-top:10px">It took no trades in this range. Check the session window and the entry rules, then run it again.</div>' : ''}
       <div class="rs-top" style="gap:6px;flex-wrap:wrap;justify-content:flex-start;margin-top:12px">${badges.map((x) => `<span class="rs-chip ${x.tone === 'err' ? 'err' : x.tone === 'warn' ? 'warn' : ''}" title="${esc(x.title || '')}">${esc(x.text)}</span>`).join('')}</div>
       <div class="rs-rows"><button class="rs-row" data-act="show"><span>Show trades on the chart</span><span>›</span></button>
-        <button class="rs-row" data-act="report"><span>Open the full report</span><span>›</span></button>
+        <button class="rs-row" data-act="report"><span>${root.dataset.report === '1' && P.chart ? 'Hide the full report' : 'Open the full report'}</span><span>›</span></button>
         <button class="rs-row" data-act="review"${b.kind === 'builtin' ? ' disabled' : ''}><span>Request a review</span><span>›</span></button></div>`;
   } else if (r && r.st && (r.st.status === 'error' || r.st.status === 'cancelled')) {
     main = `<div class="rs-empty"><h3>${r.st.status === 'cancelled' ? 'Cancelled' : 'The run failed'}</h3><p>${esc(r.st.error || (r.st.status === 'cancelled' ? 'Run it again when you are ready.' : 'See the line under the editor.'))}</p></div>`;
@@ -466,8 +519,11 @@ function paintRes() {
   el.innerHTML = `<div class="rs-body">${main}${settings}</div>`;
 }
 
-/* ---- events ---- */
+/* ---- events ----
+   The chart shell sits inside the workspace now: nothing that happens in it is the Lab's to handle. */
+const inChart = (e) => !!(e.target && e.target.closest && e.target.closest('#labChart'));
 root.addEventListener('click', (e) => {
+  if (inChart(e)) return;
   const lib = e.target.closest('[data-key]');
   if (lib) { const k = lib.dataset.key; if (k.startsWith('d:')) selectDraft(k.slice(2)); else if (k.startsWith('b:')) selectBuiltin(k.slice(2)); else { S.cur = k; paintAll(); } return; }
   const a = e.target.closest('[data-act]');
@@ -477,12 +533,14 @@ root.addEventListener('click', (e) => {
   else if (act === 'paste') pasteScript();
   else if (act === 'run') run();
   else if (act === 'cancel') cancelRun();
-  else if (act === 'show' || act === 'report') showOnChart();
+  else if (act === 'show') showOnChart(false);
+  else if (act === 'report') { if (root.dataset.report === '1' && P.chart) setReport(false); else showOnChart(true); }
   else if (act === 'review') reviewDialog();
   else if (act === 'save') save(b);
   else if (act === 'validate') validateNow(b).then((v) => { if (v) log(v.ok ? `Validated in ${b.validMs} ms · ${esc(C.metaLine(v.meta))}` : `<span class="err">${esc(C.statusOf(v).text)}</span>`); });
 });
 root.addEventListener('input', (e) => {
+  if (inChart(e)) return;
   const b = buf(), t = e.target;
   if (t.id === 'edTa' && b && b.kind !== 'builtin') {
     const wasEmpty = !b.code.trim();
@@ -504,6 +562,7 @@ root.addEventListener('input', (e) => {
 });
 root.addEventListener('scroll', (e) => { if (e.target.id === 'edTa') syncScroll(); }, true);
 root.addEventListener('keydown', (e) => {
+  if (inChart(e)) return;
   const b = buf(), t = e.target, mod = e.metaKey || e.ctrlKey;
   if (mod && e.key === 's') { e.preventDefault(); if (b && b.kind !== 'builtin') save(b); return; }
   if (mod && e.key === 'Enter') { e.preventDefault(); if (!e.repeat) run(); return; }   // a held ⌘↵ starts one run, not many
@@ -518,19 +577,20 @@ root.addEventListener('keydown', (e) => {
   t.value = r.value; t.setSelectionRange(r.start, r.end);
   t.dispatchEvent(new Event('input', { bubbles: true }));
 });
-root.addEventListener('dragover', (e) => { if ([...(e.dataTransfer?.types || [])].includes('Files')) { e.preventDefault(); $('#edWrap')?.classList.add('ed-drop'); } });
+root.addEventListener('dragover', (e) => { if (!inChart(e) && [...(e.dataTransfer?.types || [])].includes('Files')) { e.preventDefault(); $('#edWrap')?.classList.add('ed-drop'); } });
 root.addEventListener('dragleave', (e) => { if (!root.contains(e.relatedTarget)) $('#edWrap')?.classList.remove('ed-drop'); });
-root.addEventListener('drop', (e) => { const f = e.dataTransfer?.files?.[0]; $('#edWrap')?.classList.remove('ed-drop'); if (f) { e.preventDefault(); readFile(f); } });
+root.addEventListener('drop', (e) => { if (inChart(e)) return; const f = e.dataTransfer?.files?.[0]; $('#edWrap')?.classList.remove('ed-drop'); if (f) { e.preventDefault(); readFile(f); } });
 $('#labFile').addEventListener('change', (e) => { readFile(e.target.files[0]); e.target.value = ''; });
 window.addEventListener('beforeunload', (e) => { if ([...S.bufs.values()].some(isDirty)) { e.preventDefault(); e.returnValue = ''; } });
-for (const x of document.querySelectorAll('#labMode [data-mode]')) x.addEventListener('click', () => setMode(x.dataset.mode));
+for (const x of document.querySelectorAll('#labPanels [data-panel]')) x.addEventListener('click', () => setPanel(x.dataset.panel));
 setInterval(() => { const b = buf(); if (b && b.savedAt && !isDirty(b)) paintHead(); }, 30000);
 
 /* ---- go ---- */
-let m0 = 'code';
-try { m0 = sessionStorage.getItem('hb_lab_mode') === 'chart' ? 'chart' : 'code'; } catch (_) { /* default */ }
-setMode(m0);
+root.dataset.report = '0';
+applyPanels(false);
 paintAll();
+// Bar Replay lives in the same bottom panel: asking for it brings the panel back
+document.getElementById('tbReplay')?.addEventListener('click', () => setReport(true));
 loadLists().then(() => {
   const m = /^#(strategy|builtin)=(.+)$/.exec(location.hash);
   if (!m) return;
@@ -538,5 +598,5 @@ loadLists().then(() => {
   if (m[1] === 'strategy' && S.drafts.some((d) => d.name === name)) selectDraft(name);
   else if (m[1] === 'builtin' && S.builtins.some((x) => x.id === name)) selectBuiltin(name);
 });
-window.HBLab = { openScript, setMode, state: S };
+window.HBLab = { openScript, setPanel, panels: P, state: S };
 })();

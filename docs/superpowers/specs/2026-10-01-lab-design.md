@@ -1,13 +1,16 @@
-# The Lab (the Backtest page, "Code" mode) — design
+# The Lab (the Backtest page) — design
 
 2026-10-01. The Backtest page becomes **Lab**: a TradingView-Pine-editor-like place to write or paste a Python
 strategy, validate it, backtest it, see its trades on a chart and save it. The URL stays `/backtest`; the native Mac
 toolbar still says "Backtest" until the app is rebuilt.
 
 ## What is on the page
-* **Code mode** (default): library (My strategies · Built-in, read-only) | editor | result. **Chart mode** is the
-  unchanged chart shell with the Strategy Tester underneath; "Show trades on the chart" switches to it and loads
-  the run through the existing `POST /api/tester/show` (refused 09:20–09:35 ET like every chart move).
+* **One workspace, four panels** shown or hidden from the top bar (and remembered): Strategies | Code | Chart |
+  Results. Code and Chart share the middle, resized by the divider between them; the middle is never empty.
+  The Chart panel is the unchanged chart shell, moved inside the workspace. Whenever it is showing and the
+  strategy has a finished run, that run is on it -- executions, levels, the chart's own indicators -- through the
+  existing `POST /api/tester/show` (refused 09:20–09:35 ET like every chart move). The Strategy Tester's full
+  report (and Bar Replay) sit under the chart only when asked for. `?panels=code,chart,res` links to a layout.
 * **Insert a script** (the Pine "open a new script" flow): *New strategy* ▸ Paste a script / Open a .py file /
   Stop straddle · Bar breakout · Blank. Pasting into an empty new strategy names it from its `name =` or class.
   A .py file can also be dropped on the editor. Saving writes `~/.homebase/strategies/<name>.py`.

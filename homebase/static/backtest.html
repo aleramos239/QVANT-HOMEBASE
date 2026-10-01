@@ -17,7 +17,7 @@
 <script>window.HB_PAGE = 'backtest';</script>
 <link rel="stylesheet" href="/static/charts/charts.css?v=33">
 <link rel="stylesheet" href="/static/charts/apple-charts.css?v=6">
-<link rel="stylesheet" href="/static/charts/lab.css?v=3">
+<link rel="stylesheet" href="/static/charts/lab.css?v=5">
 <link rel="stylesheet" href="/static/hb.css?v=3">
 </head>
 <body>
@@ -25,7 +25,7 @@
   <div class="hb-bar-l">
     <span class="hb-mark"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-8 9 8"/><path d="M5 9.5V21h14V9.5"/></svg></span><b class="hb-word">Homebase</b>
     <nav class="pgsw" id="pgSw" aria-label="Pages"><a href="#" data-page="desk">Desk</a><a href="#" data-page="charts">Charts</a><a href="#" data-page="backtest" aria-current="page">Lab</a></nav>
-    <div class="seg labmode" id="labMode" role="group" aria-label="Lab view"><button type="button" data-mode="code" class="sel" aria-pressed="true">Code</button><button type="button" data-mode="chart" aria-pressed="false">Chart</button></div>
+    <div class="seg labmode" id="labPanels" role="group" aria-label="Show or hide panels"><button type="button" data-panel="lib" aria-pressed="true" title="Show or hide your strategies">Strategies</button><button type="button" data-panel="code" aria-pressed="true" title="Show or hide the editor">Code</button><button type="button" data-panel="chart" aria-pressed="false" title="Show or hide the chart">Chart</button><button type="button" data-panel="res" aria-pressed="true" title="Show or hide the backtest result">Results</button></div>
     <div class="tabstrip" id="tabStrip" role="tablist" aria-label="Layout tabs"></div>
   </div>
   <div class="hb-bar-r">
@@ -33,6 +33,11 @@
     <button class="tb-btn tb-icon" id="tbTheme" type="button" title="Dark theme"><span class="icw" data-icon="moon"></span></button>
   </div>
 </header>
+<div id="lab" class="lab" aria-label="Strategy Lab">
+  <aside class="lab-pane lab-lib" id="labLib" aria-label="Strategies"></aside>
+  <section class="lab-pane" id="labEd" aria-label="Editor"></section>
+  <div class="lab-split" id="labSplit" role="separator" aria-orientation="vertical" aria-label="Resize the editor and the chart" tabindex="0"></div>
+  <div class="lab-chart" id="labChart" aria-label="Chart">
 <header class="toolbar" role="toolbar" aria-label="Chart toolbar">
   <button class="tb-pill" id="tbSymbol" type="button" aria-haspopup="menu" aria-expanded="false"><span class="icw" data-icon="search"></span><span id="tbSymbolText">NQ</span></button>
   <span class="tb-sep"></span>
@@ -46,12 +51,6 @@
   <button class="tb-btn" id="tbGrid" type="button" title="Chart layout" aria-haspopup="menu" aria-expanded="false"><span class="thumb" id="tbGridThumb"></span><span class="icw sm" data-icon="chevron"></span></button>
   <span class="tb-spacer"></span>
 </header>
-<div id="lab" class="lab" aria-label="Strategy Lab">
-  <aside class="lab-pane lab-lib" id="labLib" aria-label="Strategies"></aside>
-  <section class="lab-pane" id="labEd" aria-label="Editor"></section>
-  <aside class="lab-pane" id="labRes" aria-label="Backtest result"></aside>
-  <input type="file" id="labFile" accept=".py,text/x-python,text/plain" hidden>
-</div>
 <div class="main">
   <nav class="rail" id="rail" aria-label="Drawing tools">
     <button class="rail-btn" type="button" data-tool="cursor" title="Cursor" aria-pressed="true"><span class="icw" data-icon="cursor"></span></button>
@@ -71,13 +70,17 @@
   <div class="grid" id="grid"></div>
   <aside class="pdock" id="pdock" aria-label="Docked panels" hidden></aside>
 </div>
-<div id="floatLayer" aria-label="Floating panels"></div>
 <section class="bpanel" id="bpanel" aria-label="Strategy Tester and Bar Replay">
   <div class="bp-resize" id="bpResize" role="separator" aria-orientation="horizontal" aria-label="Resize the panel" tabindex="0"></div>
   <div class="bp-bar"><div class="bp-tabs" id="bpTabs" role="tablist"></div><span class="bp-spacer"></span>
     <button class="bp-toggle" id="bpToggle" type="button" aria-label="Open the panel" title="Open the panel"><span class="icw" data-icon="chevronUp"></span></button></div>
   <div class="bp-body" id="bpBody"></div>
 </section>
+  </div>
+  <aside class="lab-pane" id="labRes" aria-label="Backtest result"></aside>
+  <input type="file" id="labFile" accept=".py,text/x-python,text/plain" hidden>
+</div>
+<div id="floatLayer" aria-label="Floating panels"></div>
 <div class="toasts" id="toastRoot" aria-live="polite"></div>
 <footer class="statusbar" id="statusbar">
   <!-- W1: data-drop ranks the segments that step out WHOLE when the bar is too narrow (the lowest first, app.js
@@ -122,6 +125,6 @@
 <script src="/static/charts/presets.js?v=33"></script>
 <script src="/static/charts/app.js?v=33"></script>
 <script src="/static/charts/labcode.js?v=1"></script>
-<script src="/static/charts/lab.js?v=5"></script>
+<script src="/static/charts/lab.js?v=9"></script>
 </body>
 </html>
