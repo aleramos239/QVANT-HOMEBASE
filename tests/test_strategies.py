@@ -34,7 +34,8 @@ def desk_file(monkeypatch, tmp_path):
 
 
 def test_registry_has_the_v1_strategies_with_schemas():
-    assert set(REGISTRY) == {"nq930", "ym930", "nq10am", "gc_nfpcpi", "gc_nfp"}
+    assert set(REGISTRY) == {"nq930", "ym930", "nq10am", "gc_nfpcpi", "gc_nfp", "nq_nyam_flex", "nq_nyam_pro",
+                                         "nq_orb_pro", "nq_pm_flex"}
     cat = {c["id"]: c for c in catalog()}
     assert cat["nq930"]["root"] == "NQ" and cat["gc_nfpcpi"]["root"] == "GC"
     assert {i["key"] for i in cat["nq930"]["inputs"]} == {"offset_pts", "sl_pts", "tp_pts",

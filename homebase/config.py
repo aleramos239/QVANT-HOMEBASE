@@ -38,6 +38,8 @@ class StrategyCfg:
     metrics: dict = field(default_factory=dict)   # research record, display-only
     kind: str = "straddle"       # "straddle": two stop legs at the anchor (timer/Pine)
                                  # "bars": a price-action RULE on closed bars (feed)
+                                 # "levels": OCO stop entries from a NEW geometry each day (ATR / opening
+                                 #   range), fired at fire_et by leveltimer.LevelTimer; daily rules below
     shadow: bool = False         # True: signals are journaled, never placed —
                                  # even when the app is armed (forward paper)
     rule: str = ""               # bars: name in rules.RULES
@@ -52,6 +54,22 @@ class StrategyCfg:
         """Does this strategy trade on `date` (a date or an ISO string)? An empty `only_dates`
         means every weekday; otherwise only the listed days (an event-day strategy)."""
         return not self.only_dates or str(date) in {str(d) for d in self.only_dates}
+    # ---- kind "levels" (homebase/levels.py, homebase/leveltimer.py): spec 2026-10-01 ----
+    shape: str = ""              # levels: "atr_straddle" | "orb"
+    atr_tf: int = 30             # levels: ATR(14, Wilder) bar size, minutes, restarting at 00:00 ET
+    off_atr: float = 0.0         # atr_straddle: entry offset, x ATR
+    sl_atr: float = 3.0          # levels: stop distance from the trigger, x ATR
+    or_min: int = 5              # orb: opening-range minutes before the fire
+    tgt_r: float = 2.0           # levels: with no take rule the target is tgt_r x the stop distance
+    fee_rt: float = 4.0          # levels: $ commission per contract per round turn (NQ mini)
+    day_take: float = 0.0        # $ net: the day's open + closed P&L reaches it -> flatten, stop for the day
+    day_lock: float = 0.0        # $ closed: a trade closes with the day >= it -> no new entry today
+    target_take: bool = False    # eval accounts: take = the account's remaining distance to pass
+    size_tiers: list = field(default_factory=list)   # [[EOD profit >=, contracts], ...]; the book's qty caps it
+    skip_early_close: bool = False   # levels: no fire on a half day (13:15 close) when flat_et is after the close
+    ack_open_loss: bool = False  # levels: the account holder accepts that the 3 x ATR stop is several times a
+                                 # prop account's max loss (Lucid's open-loss rule unconfirmed): without it
+                                 # a REAL (non-paper) account sits out
 
 
 @dataclass
@@ -61,6 +79,12 @@ class AccountCfg:
     live: bool = False           # False = demo environment
     label: str = ""              # display name (defaults to account_name)
     paper: bool = False          # a chart-service paper account (homebase.broker.paper): no login, no broker
+    # prop-account standing for the daily rules (kind "levels"): {"rules": "<propsim rule id>",
+    # "start_balance": 50000, "largest_day": 0, "days": 0}.  `rules` supplies the eval target / minimum
+    # days / consistency (backtest/propsim/rules); largest_day / days seed what the desk's own daily
+    # balance record does not yet cover.  Empty = no standing: tiers use their smallest size, target_take
+    # has no level.
+    prop: dict = field(default_factory=dict)
 
 
 HARD_MAX_ORDER_QTY = 50        # the desk page cannot set chart-trading limits above these
@@ -210,6 +234,67 @@ def _defaults() -> AppCfg:
                              "SL": "45 ticks · 11.25 pts · $225/mini", "day": "2026-09-30"},
                     "caveat": "no backtest — a one-day directional trade",
                 }) for side in ("long", "short")},
+            # The 3 NQ prop strategies (research 2026-09-29/30, desk review 2026-10-01). Kind "levels":
+            # a NEW geometry every day from ATR(14) of bars built from the tape since 00:00 ET, OCO stop
+            # entries, NQ minis, one entry a day, stop 3 x ATR from the trigger, a take sized in dollars
+            # (day_take / target_take). They ship OFF and unbooked: build on paper first. Flex and Pro need
+            # separate names: one signal gives one geometry and the take differs per rule set.
+            "nq_nyam_flex": StrategyCfg(
+                symbol="NQ", qty=4, offset_pts=0.0, sl_pts=0.0, tp_pts=0.0,
+                cancel_et="10:55", flat_et="11:00", accept_from_et="09:29", accept_until_et="09:31",
+                enabled=False, self_fire=True, kind="levels", shape="atr_straddle",
+                fire_et="09:30:00", atr_tf=30, off_atr=0.25, sl_atr=3.0, fee_rt=4.0,
+                day_take=1500.0, target_take=True,
+                metrics={
+                    "source": "hm2-straddle-tf30#10 · NYAM · LucidFlex 50K eval · 2025-01→2026-09 holdout",
+                    "rows": {"entry": "09:30:00, anchor ± 0.25 ATR30", "stop": "3 ATR from the trigger",
+                             "take": "day_take $1,500 net (4 NQ: 19.0 pts) + target_take",
+                             "cancel / flat": "10:55 / 11:00"},
+                    "caveat": "entry edge is thin (lift +0.125); the 3 ATR stop is ~5x the $2,000 max loss: "
+                              "every Lucid number assumes only CLOSED balance counts",
+                }),
+            "nq_nyam_pro": StrategyCfg(
+                symbol="NQ", qty=4, offset_pts=0.0, sl_pts=0.0, tp_pts=0.0,
+                cancel_et="10:55", flat_et="11:00", accept_from_et="09:29", accept_until_et="09:31",
+                enabled=False, self_fire=True, kind="levels", shape="atr_straddle",
+                fire_et="09:30:00", atr_tf=30, off_atr=0.25, sl_atr=3.0, fee_rt=4.0,
+                day_take=0.0, target_take=True,
+                metrics={
+                    "source": "hm2-straddle-tf30#10 · NYAM · LucidPro 50K no-DLL eval · 2025-01→2026-09 holdout",
+                    "rows": {"entry": "09:30:00, anchor ± 0.25 ATR30", "stop": "3 ATR from the trigger",
+                             "take": "target_take only: day 1 = $3,000 net (4 NQ: 37.75 pts)",
+                             "cancel / flat": "10:55 / 11:00"},
+                    "caveat": "the account must be bought with the daily-loss limit OFF; same open-loss "
+                              "caveat as nq_nyam_flex",
+                }),
+            "nq_orb_pro": StrategyCfg(
+                symbol="NQ", qty=4, offset_pts=0.0, sl_pts=0.0, tp_pts=0.0,
+                cancel_et="13:25", flat_et="13:30", accept_from_et="11:04", accept_until_et="11:06",
+                enabled=False, self_fire=True, kind="levels", shape="orb",
+                fire_et="11:05:00", atr_tf=5, or_min=5, sl_atr=3.0, fee_rt=4.0, day_take=1000.0,
+                skip_early_close=True,
+                metrics={
+                    "source": "hm-orb-tf5#10 · MID · funded LucidPro no-DLL · 2025-01→2026-09 holdout",
+                    "rows": {"entry": "11:05:00, 11:00-11:05 high + 1 tick / low - 1 tick",
+                             "stop": "3 ATR5 from the trigger", "take": "day_take $1,000 net (4 NQ: 12.75 pts)",
+                             "cancel / flat": "13:25 / 13:30"},
+                    "caveat": "no entry edge over random entries (lift -0.044 eval): the take rule carries it; "
+                              "request the payout at $1,000",
+                }),
+            "nq_pm_flex": StrategyCfg(
+                symbol="NQ", qty=4, offset_pts=0.0, sl_pts=0.0, tp_pts=0.0,
+                cancel_et="15:53", flat_et="15:58", accept_from_et="13:29", accept_until_et="13:31",
+                enabled=False, self_fire=True, kind="levels", shape="atr_straddle",
+                fire_et="13:30:00", atr_tf=30, off_atr=1.0, sl_atr=3.0, fee_rt=4.0, day_take=600.0,
+                size_tiers=[[0, 2], [1000, 3], [2000, 4]], skip_early_close=True,
+                metrics={
+                    "source": "hm2-straddle-tf30#32 · PM · funded LucidFlex · 2025-01→2026-09 holdout",
+                    "rows": {"entry": "13:30:00, anchor ± 1.0 ATR30", "stop": "3 ATR from the trigger",
+                             "take": "day_take $600 net (2/3/4 NQ: 15.25 / 10.25 / 7.75 pts)",
+                             "size": "2 NQ under $1,000 profit, 3 under $2,000, 4 above",
+                             "cancel / flat": "15:53 / 15:58"},
+                    "caveat": "small edge (funded lift +$441); skipped on half days (11-27, 12-24)",
+                }),
         },
     )
 
