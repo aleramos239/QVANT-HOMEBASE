@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Backtest · Homebase</title>
+<title>Lab · Homebase</title>
 <script>
   try { var _t = new URLSearchParams(location.search).get('theme') || localStorage.getItem('hb_theme');
     document.documentElement.setAttribute('data-theme', (_t === 'light' || _t === 'dark') ? _t : 'light');
@@ -17,13 +17,15 @@
 <script>window.HB_PAGE = 'backtest';</script>
 <link rel="stylesheet" href="/static/charts/charts.css?v=33">
 <link rel="stylesheet" href="/static/charts/apple-charts.css?v=6">
+<link rel="stylesheet" href="/static/charts/lab.css?v=3">
 <link rel="stylesheet" href="/static/hb.css?v=3">
 </head>
 <body>
 <header class="hb-bar">
   <div class="hb-bar-l">
     <span class="hb-mark"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-8 9 8"/><path d="M5 9.5V21h14V9.5"/></svg></span><b class="hb-word">Homebase</b>
-    <nav class="pgsw" id="pgSw" aria-label="Pages"><a href="#" data-page="desk">Desk</a><a href="#" data-page="charts">Charts</a><a href="#" data-page="backtest" aria-current="page">Backtest</a></nav>
+    <nav class="pgsw" id="pgSw" aria-label="Pages"><a href="#" data-page="desk">Desk</a><a href="#" data-page="charts">Charts</a><a href="#" data-page="backtest" aria-current="page">Lab</a></nav>
+    <div class="seg labmode" id="labMode" role="group" aria-label="Lab view"><button type="button" data-mode="code" class="sel" aria-pressed="true">Code</button><button type="button" data-mode="chart" aria-pressed="false">Chart</button></div>
     <div class="tabstrip" id="tabStrip" role="tablist" aria-label="Layout tabs"></div>
   </div>
   <div class="hb-bar-r">
@@ -44,6 +46,12 @@
   <button class="tb-btn" id="tbGrid" type="button" title="Chart layout" aria-haspopup="menu" aria-expanded="false"><span class="thumb" id="tbGridThumb"></span><span class="icw sm" data-icon="chevron"></span></button>
   <span class="tb-spacer"></span>
 </header>
+<div id="lab" class="lab" aria-label="Strategy Lab">
+  <aside class="lab-pane lab-lib" id="labLib" aria-label="Strategies"></aside>
+  <section class="lab-pane" id="labEd" aria-label="Editor"></section>
+  <aside class="lab-pane" id="labRes" aria-label="Backtest result"></aside>
+  <input type="file" id="labFile" accept=".py,text/x-python,text/plain" hidden>
+</div>
 <div class="main">
   <nav class="rail" id="rail" aria-label="Drawing tools">
     <button class="rail-btn" type="button" data-tool="cursor" title="Cursor" aria-pressed="true"><span class="icw" data-icon="cursor"></span></button>
@@ -113,5 +121,7 @@
 <script src="/static/charts/layouts.js?v=33"></script>
 <script src="/static/charts/presets.js?v=33"></script>
 <script src="/static/charts/app.js?v=33"></script>
+<script src="/static/charts/labcode.js?v=1"></script>
+<script src="/static/charts/lab.js?v=5"></script>
 </body>
 </html>
