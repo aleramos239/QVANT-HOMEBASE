@@ -10,15 +10,8 @@ Registered by name in RULES; a strategy's config names its rule.
 """
 from __future__ import annotations
 
-import datetime as dt
 from dataclasses import dataclass, field
 from typing import Callable, Optional
-from zoneinfo import ZoneInfo
-
-from .contracts import tick_size
-from .feed import Bar
-
-ET = ZoneInfo("America/New_York")
 
 
 @dataclass
@@ -38,80 +31,4 @@ def _to_tick(px: float, tick: float) -> float:
     return round(round(px / tick) * tick, 6)
 
 
-def nq_10am_continuation(bars: list[Bar], now_et: dt.datetime, cfg) -> Optional[Signal]:
-    """The 10am candidate (spec 2026-09-06, UNVALIDATED — shadow only):
-    the 09:30-10:00 ET 30-minute candle; closed up -> long, down -> short,
-    doji -> none; only when the close sits in the candle's top (long) /
-    bottom (short) quarter; enter at the 10:00 open (market on the 09:59
-    bar's close); stop = the candle's opposite extreme; target = 0.75 x the
-    stop distance (RR 1:0.75), re-derived from the actual fill."""
-    if not bars:
-        return None
-    last = bars[-1]
-    t = last.ts.astimezone(ET)
-    if (t.hour, t.minute) != (9, 59) or last.minutes != 1:
-        return None                                  # fires once, on the 09:59 close
-    day = t.date()
-    candle = [b for b in bars
-              if (bt := b.ts.astimezone(ET)).date() == day
-              and dt.time(9, 30) <= bt.time() < dt.time(10, 0)]
-    if len(candle) < 25:                             # the candle must be nearly whole
-        return None
-    o, c = candle[0].o, candle[-1].c
-    h, l = max(b.h for b in candle), min(b.l for b in candle)
-    rng = h - l
-    if rng <= 0 or c == o:
-        return None                                  # doji / flat
-    tick = tick_size(cfg.symbol) or 0.25
-    stats = {"candle_o": o, "candle_h": h, "candle_l": l, "candle_c": c,
-             "range": round(rng, 4), "bars": len(candle),
-             "close_pos": round((c - l) / rng, 3)}
-    if c > o:
-        if c < l + 0.75 * rng:
-            return None                              # close not in the top quarter
-        sl, ref = l, c
-        tp = ref + 0.75 * (ref - sl)
-        return Signal("Buy", "Market", None, _to_tick(sl, tick), _to_tick(tp, tick),
-                      ref_px=ref, tp_rr=0.75, note=stats)
-    if c > h - 0.75 * rng:
-        return None                                  # close not in the bottom quarter
-    sl, ref = h, c
-    tp = ref - 0.75 * (sl - ref)
-    return Signal("Sell", "Market", None, _to_tick(sl, tick), _to_tick(tp, tick),
-                  ref_px=ref, tp_rr=0.75, note=stats)
-
-
-OPEN_930_DAY = "2026-09-30"   # the one ET day open_long/open_short trade (asked 2026-09-29)
-
-
-def _open_930(side: str, bars: list[Bar], cfg) -> Optional[Signal]:
-    """Market at the 09:30 open (on the 09:29 bar's close), SL cfg.sl_pts / TP
-    cfg.tp_pts from that close; the engine moves both to the fill. On
-    OPEN_930_DAY only."""
-    if not bars:
-        return None
-    last = bars[-1]
-    t = last.ts.astimezone(ET)
-    if (t.hour, t.minute) != (9, 29) or last.minutes != 1:
-        return None                                  # fires once, on the 09:29 close
-    if t.date().isoformat() != OPEN_930_DAY:
-        return None
-    tick = tick_size(cfg.symbol) or 0.25
-    ref, sign = last.c, (1 if side == "Buy" else -1)
-    return Signal(side, "Market", None, _to_tick(ref - sign * cfg.sl_pts, tick),
-                  _to_tick(ref + sign * cfg.tp_pts, tick), ref_px=ref)
-
-
-def open_long(bars: list[Bar], now_et: dt.datetime, cfg) -> Optional[Signal]:
-    return _open_930("Buy", bars, cfg)
-
-
-def open_short(bars: list[Bar], now_et: dt.datetime, cfg) -> Optional[Signal]:
-    return _open_930("Sell", bars, cfg)
-
-
-RULES: dict[str, Callable] = {
-    "nq_10am_continuation": nq_10am_continuation,
-    "open_long": open_long,
-    "open_short": open_short,
-}
+RULES: dict[str, Callable] = {}      # the desk ships no bar rule today; kind "bars" and the feed stay

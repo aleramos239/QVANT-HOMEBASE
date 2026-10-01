@@ -17,10 +17,8 @@ from homebase.engine import Engine
 from homebase.gate import trend_gate
 from homebase.strategies import REGISTRY, catalog, get
 from homebase.strategies.gc_nfpcpi import GCNfpCpi, calendar
-from homebase.strategies.nq10am import NQ10am
 from homebase.strategies.nq930 import NQ930
 from homebase.strategies.straddle import GATE_BARS, MIN_GATE_BARS
-from homebase.strategies.ym930 import YM930
 
 GATE_FIX = json.loads((Path(__file__).parent / "fixture_gate_nq2024.json").read_text())
 
@@ -34,18 +32,17 @@ def desk_file(monkeypatch, tmp_path):
 
 
 def test_registry_has_the_v1_strategies_with_schemas():
-    assert set(REGISTRY) == {"nq930", "ym930", "nq10am", "gc_nfpcpi", "gc_nfp", "nq_nyam_flex", "nq_nyam_pro",
+    assert set(REGISTRY) == {"nq930", "gc_nfpcpi", "gc_nfp", "nq_nyam_flex", "nq_nyam_pro",
                                          "nq_orb_pro", "nq_pm_flex"}
     cat = {c["id"]: c for c in catalog()}
     assert cat["nq930"]["root"] == "NQ" and cat["gc_nfpcpi"]["root"] == "GC"
     assert {i["key"] for i in cat["nq930"]["inputs"]} == {"offset_pts", "sl_pts", "tp_pts",
                                                          "adx_gate", "adx_min"}
-    assert cat["nq10am"]["inputs"] == []
     with pytest.raises(ValueError, match="unknown strategy"):
         get("nope")
 
 
-@pytest.mark.parametrize("cls", [NQ930, YM930])
+@pytest.mark.parametrize("cls", [NQ930])
 def test_straddle_defaults_equal_the_desk_geometry(cls):
     cfg = desk_config.load().strategies[cls.desk_key]
     s = cls()
@@ -65,7 +62,7 @@ def test_defaults_follow_the_desk_config_file(desk_file):
 # Item 4 (provenance): every strategy's runtime config -- as it actually resolved,
 # not just its `inputs` -- must be reproducible from what a run stores.
 
-@pytest.mark.parametrize("cls", [NQ930, YM930])
+@pytest.mark.parametrize("cls", [NQ930])
 def test_desk_straddle_provenance_carries_times_and_the_full_desk_cfg(cls, desk_file):
     desk_file.write_text(json.dumps({"strategies": {cls.desk_key: {"flat_et": "15:50"}}}))
     cfg = desk_config.load().strategies[cls.desk_key]
@@ -80,16 +77,7 @@ def test_gc_provenance_carries_its_own_times_with_no_desk_cfg():
     assert prov == {"fire": "08:30:00", "cancel_et": "08:45", "flat_et": "09:55"}
 
 
-def test_nq10am_provenance_carries_the_rule_and_the_full_desk_cfg(desk_file):
-    desk_file.write_text(json.dumps({"strategies": {"nq10am": {"flat_et": "15:50"}}}))
-    cfg = desk_config.load().strategies["nq10am"]
-    prov = NQ10am().provenance()
-    assert prov["flat_et"] == "15:50" == cfg.flat_et
-    assert prov["rule"] == "nq_10am_continuation" == cfg.rule
-    assert prov["desk_cfg"] == asdict(cfg)
-
-
-@pytest.mark.parametrize("cls", [NQ930, YM930])
+@pytest.mark.parametrize("cls", [NQ930])
 @pytest.mark.parametrize("anchor", [18250.0, 18250.25, 41000.0, 99.75])
 def test_legs_equal_the_desk_engine_legs(cls, anchor):
     cfg = desk_config.load().strategies[cls.desk_key]
@@ -148,22 +136,6 @@ def test_gc_trade_through_the_engine():
     assert t.exit_reason == "tp" and t.net == round(6.0 * 100 - 4.0, 2)
 
 
-def test_nq10am_uses_the_desk_rule_and_config():
-    cfg = desk_config.load().strategies["nq10am"]
-    s = NQ10am()
-    assert s.rule.__name__ == cfg.rule == "nq_10am_continuation"
-    assert s.bar_minutes == cfg.bar_minutes == 1 and s.times() == [cfg.flat_et]
-
-
-def test_nq10am_trades_the_rule_signal_at_the_10am_open():
-    d = dt.date(2024, 3, 5)
-    rows = [(f"09:{30 + i}:10", 100.0 + i) for i in range(30)]       # 30 rising 1-min bars
-    rows += [("10:00:00.090", 130.0), ("10:10", 200.0)]
-    t, = run_session(NQ10am(), _tape("NQ", d, rows), Costs()).trades
-    assert t.side == "long" and t.entry_price == 130.25              # market + 1 tick slip
-    assert t.sl == 100.0                                            # the candle's low, absolute
-    assert t.tp == to_tick(130.25 + 0.75 * (130.25 - 100.0), 0.25) == 153.0   # RR 1:0.75 from the FILL
-    assert t.exit_reason == "tp"
 
 
 def test_no_print_before_fire_skips_cleanly_not_a_strategy_error():
@@ -271,27 +243,6 @@ def test_gc_inherits_the_geometry_and_names_its_event_day_on_the_anchor():
         "Short SL (not filled)", "Short TP (not filled)", "Long SL", "Long TP"]
 
 
-def test_nq10am_records_signal_stop_target_and_plots_its_gate():
-    d = dt.date(2024, 3, 5)
-    rows = [(f"09:{30 + i}:10", 100.0 + i) for i in range(30)]
-    rows += [("10:00:00.090", 130.0), ("10:10", 200.0)]
-    res = run_session(NQ10am(), _tape("NQ", d, rows), Costs())
-    assert _geo(res) == [("signal", 129.0, "entry"), ("stop", 100.0, "sl"), ("target", 150.75, "tp")]
-    assert list(res.plots) == ["Close position", "Top quarter", "Bottom quarter"]
-    [[_, pos]] = res.plots["Close position"]
-    assert pos == 1.0                                                   # the 09:59 close IS the high
-    assert [v for _, v in res.plots["Top quarter"]] == [0.75]
-    assert [v for _, v in res.plots["Bottom quarter"]] == [0.25]
-
-
-def test_nq10am_plots_the_gate_even_on_a_day_the_gate_refuses():
-    d = dt.date(2024, 3, 5)
-    rows = [(f"09:{30 + i}:10", 100.0 + i) for i in range(29)] + [("09:59:10", 100.5)]
-    rows += [("10:00:00.090", 100.0), ("10:10", 100.0)]
-    res = run_session(NQ10am(), _tape("NQ", d, rows), Costs())
-    assert res.trades == [] and res.hlines == []
-    [[_, pos]] = res.plots["Close position"]
-    assert pos == round(0.5 / 28.0, 4)                                  # close near the LOW: no long
 
 
 # ---------------------------------------------------------------- display only: the gate on the chart (2026-09-29)

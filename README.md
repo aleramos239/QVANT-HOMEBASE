@@ -27,7 +27,7 @@ TradingView Pine (r5)          Mac mini                       Tradovate
 ## Layout
 
 - `homebase/engine.py` — alert → orders → clock-guarded flat (the core)
-- `homebase/config.py` — strategies (nq930, ym930), account, master arm switch
+- `homebase/config.py` — strategies (nq930, gc_nfp, the nq_* levels algos), account, master arm switch
 - `homebase/broker/` — Tradovate REST + websocket adapter (battle-tested,
   extracted from the TradeCopier lineage at snapshot `0a75af5`)
 - `homebase/risk.py` — trailing-drawdown meter (prop-account style)

@@ -13,7 +13,7 @@ function strat(overrides) {
 
 const strategiesFixture = {
   nq930: strat({ cfg: { symbol: "NQ", enabled: true }, day_status: "live" }),
-  ym930: strat({ cfg: { symbol: "YM", enabled: false }, day_status: "idle" }),
+  ym_test: strat({ cfg: { symbol: "YM", enabled: false }, day_status: "idle" }),
   gc_open: strat({ cfg: { symbol: "GC", enabled: true }, day_status: "idle" }),
 };
 
@@ -34,13 +34,13 @@ test("corrupt/garbage stored value shows all algos", () => {
 test("a tradable algo (enabled + booked) can never be hidden", () => {
   const book = { nq930: [{ account: "lucid-funded", qty: 3 }] };
   // user tried to hide it anyway
-  const out = AV.computeVisibility(strategiesFixture, book, ["nq930", "ym930"]);
+  const out = AV.computeVisibility(strategiesFixture, book, ["nq930", "ym_test"]);
   const nq = out.find((a) => a.name === "nq930");
   assert.equal(nq.visible, true);
   assert.equal(nq.locked, true);
   assert.equal(nq.lockReason, AV.LOCK_REASON.TRADABLE);
-  // ym930 is enabled=false, idle, no activity, no check -> not locked, hide sticks
-  const ym = out.find((a) => a.name === "ym930");
+  // ym_test is enabled=false, idle, no activity, no check -> not locked, hide sticks
+  const ym = out.find((a) => a.name === "ym_test");
   assert.equal(ym.locked, false);
   assert.equal(ym.visible, false);
 });
@@ -191,8 +191,8 @@ test("loadHidden round-trips a clean list through a working storage", () => {
     getItem(k) { return Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null; },
     setItem(k, v) { store[k] = v; },
   };
-  AV.saveHidden(["ym930", "gc_open"], storage);
-  assert.deepEqual(AV.loadHidden(storage).sort(), ["gc_open", "ym930"]);
+  AV.saveHidden(["ym_test", "gc_open"], storage);
+  assert.deepEqual(AV.loadHidden(storage).sort(), ["gc_open", "ym_test"]);
 });
 
 // An "error" day whose placement never reached the broker (the 2026-09-29 429 on

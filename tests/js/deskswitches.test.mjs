@@ -59,7 +59,7 @@ function load({ confirm = true, shadow = false, enabled = false, answer = { ok: 
   const clock = { now: 1_000_000 };
   const ctx = vm.createContext({
     console, Date: { now: () => clock.now }, DOUBLE_CLICK_MS: 400,
-    ST: { strategies: { nq930: { cfg: { enabled, shadow } }, ym930: { cfg: { enabled, shadow } } } },
+    ST: { strategies: { nq930: { cfg: { enabled, shadow } }, ym_test: { cfg: { enabled, shadow } } } },
     needsConfirm: (k, on, o) => AV.switchNeedsConfirm(k, on, o),
     confirmDlg: async (title, body, action, destructive) => { confirms.push({ title, body, action, destructive }); return confirm; },
     post: async (url, body) => {
@@ -141,7 +141,7 @@ test('the double-click guard is per switch: another strategy\'s switch is never 
   const s = load({ enabled: true });
   await s.api.toggleStrat('nq930', false);
   s.clock.now += 100;
-  await s.api.toggleStrat('ym930', false);
+  await s.api.toggleStrat('ym_test', false);
   assert.equal(s.posts.length, 2);
 });
 

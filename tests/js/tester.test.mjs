@@ -244,9 +244,9 @@ test('paramsDiff: only the inputs/costs/range that differ, unchanged ones droppe
 });
 
 test('paramsDiff: a strategy switch is its own row, ahead of the input diffs', () => {
-  const runC = { ...RUN_B, strategy: { id: 'ym930', name: 'YM 9:30 straddle' } };
+  const runC = { ...RUN_B, strategy: { id: 'ym_test', name: 'YM test straddle' } };
   const diff = X.paramsDiff(RUN_A, runC);
-  assert.deepEqual(diff[0], { label: 'Strategy', a: 'NQ 9:30 straddle', b: 'YM 9:30 straddle' });
+  assert.deepEqual(diff[0], { label: 'Strategy', a: 'NQ 9:30 straddle', b: 'YM test straddle' });
 });
 
 test('performance summary rows (All / Long / Short, dollars, RR 1:X, Sharpe)', () => {

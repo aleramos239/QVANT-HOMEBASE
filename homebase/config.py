@@ -165,35 +165,6 @@ def _defaults() -> AppCfg:
                     "caveat": "does not cover live fill quality — the edge is 2–4 ticks deep",
                     "equity_file": "nq930_equity.json",
                 }),
-            # YM 9:30 straddle (OOS-passed 2026-09-13), unfiltered, app-timed
-            # like NQ. Disabled until the user sizes and enables it.
-            "ym930": StrategyCfg(
-                symbol="YM", qty=1, offset_pts=20.0, sl_pts=5.0, tp_pts=15.0,
-                enabled=False, gated=False, self_fire=True, pine_file="ym930.pine",
-                metrics={
-                    "source": "one-shot OOS exam · 2025-01-07→2026-09-10 · TV 15s",
-                    "rows": {"trades": "434", "WR": "50.7%", "PF": "1.76",
-                             "t": "5.76", "avg/trade": "$14.51",
-                             "maxDD": "−$316", "green months": "19/21"},
-                    "caveat": "modeled friction is already 56% of the $25 risk — thin book",
-                    "equity_file": "ym930_equity.json",
-                }),
-            # 10am NQ continuation — a CANDIDATE (spec 2026-09-06, unvalidated).
-            # The first price-action strategy on the app's own feed: runs in
-            # SHADOW (journals what it would do, places nothing) so the path is
-            # proven and forward evidence accrues. Arming it is a user decision.
-            "nq10am": StrategyCfg(
-                symbol="NQ", qty=1, offset_pts=0.0, sl_pts=0.0, tp_pts=0.0,
-                accept_from_et="09:59", accept_until_et="10:05",
-                enabled=True, shadow=True, self_fire=True, kind="bars",
-                rule="nq_10am_continuation", bar_minutes=1, warmup_bars=60,
-                metrics={
-                    "source": "candidate · 2023-07-07→2025-07-07 · 1m · $300 risk · UNVALIDATED",
-                    "rows": {"trades": "264", "TP rate": "59.5%", "RR": "1:0.81",
-                             "t": "2.76 (uncorrected)", "net": "+$10,574",
-                             "maxDD": "−$1,447", "days green": "63.6%"},
-                    "caveat": "post-hoc filter, ~130 cells on one window — shadow only",
-                }),
             # GC 08:30 NFP straddle (verified 2026-10-01, research/nfp-2026-10-02/verify): 4 gold
             # contracts, OCO stops at anchor +/- 2.0, SL 5.0 (-$2,000 before slippage: the user's choice 2026-10-01, a stop-out ends the eval), TP 7.7
             # (+$3,080 gross, +$3,061.60 after $2.30 a side), unfilled cancelled 08:45, flat 09:55.
@@ -218,22 +189,6 @@ def _defaults() -> AppCfg:
                     "caveat": "evals bought together win or lose together; 24 of 35 sim wins were held "
                               "5 s or less (Lucid micro-scalping rule)",
                 }),
-            # 9:30 open, one direction each: market on the 09:29 close, TP 120 ticks /
-            # SL 45 ticks, both moved to the fill. Added 2026-09-29 at the account
-            # holder's request for 2026-09-30 only (rules.OPEN_930_DAY). Ships off and
-            # unbooked: the user books the accounts and enables it.
-            **{f"nq_open_{side}": StrategyCfg(
-                symbol="NQ", qty=1, offset_pts=0.0, sl_pts=11.25, tp_pts=30.0,
-                accept_from_et="09:29", accept_until_et="09:31",
-                enabled=False, self_fire=True, kind="bars", rule=f"open_{side}",
-                bar_minutes=1, warmup_bars=60,
-                metrics={
-                    "source": f"added 2026-09-29 at the account holder's request: {side} at the "
-                              "9:30 open, 2026-09-30 only",
-                    "rows": {"entry": "market, 09:30 ET", "TP": "120 ticks · 30 pts · $600/mini",
-                             "SL": "45 ticks · 11.25 pts · $225/mini", "day": "2026-09-30"},
-                    "caveat": "no backtest — a one-day directional trade",
-                }) for side in ("long", "short")},
             # The 3 NQ prop strategies (research 2026-09-29/30, desk review 2026-10-01). Kind "levels":
             # a NEW geometry every day from ATR(14) of bars built from the tape since 00:00 ET, OCO stop
             # entries, NQ minis, one entry a day, stop 3 x ATR from the trigger, a take sized in dollars

@@ -9,7 +9,7 @@ import json
 from homebase.config import AccountCfg, AppCfg, StrategyCfg
 from homebase.engine import Engine
 from homebase.feed import Bar, MarketFeed
-from homebase.rules import RULES, Signal, nq_10am_continuation
+from homebase.rules import RULES, Signal
 from tests.test_engine import Clock, FakeAdapter
 
 UTC = dt.timezone.utc
@@ -80,7 +80,7 @@ def test_quote_pushes_leave_the_feeds_bars_and_status_alone():
     assert f.last("NQZ6")[0] == 24500.25 and len(f._tape["NQZ6"]) == 2
 
 
-# --- the 10am rule --------------------------------------------------------------
+# --- a test-local bar rule (the desk ships none; the feed / one-leg path stays) ---------------
 def candle(o, h, l, c, day="2026-09-22", n=30):
     """30 one-minute bars 09:30..09:59 ET whose aggregate is (o, h, l, c)."""
     out = []
@@ -98,42 +98,25 @@ def candle(o, h, l, c, day="2026-09-22", n=30):
     return out
 
 
-CFG = StrategyCfg(symbol="NQ", qty=1, offset_pts=0, sl_pts=0, tp_pts=0, kind="bars")
-NOW = dt.datetime(2026, 9, 22, 10, 0, 0, tzinfo=ET)
-
-
-def test_10am_long_in_the_top_quarter():
-    bars = candle(30000, 30040, 29990, 30035)            # range 50, close 45/50 = 0.9 up
-    sig = nq_10am_continuation(bars, NOW, CFG)
-    assert sig.side == "Buy" and sig.entry == "Market"
-    assert sig.sl_px == 29990 and sig.ref_px == 30035
-    assert sig.tp_px == 30035 + 0.75 * 45                # 30068.75
-    assert sig.tp_rr == 0.75 and sig.note["close_pos"] == 0.9
-
-
-def test_10am_short_in_the_bottom_quarter():
-    bars = candle(30000, 30010, 29950, 29960)            # down, close 10/60 = 0.167
-    sig = nq_10am_continuation(bars, NOW, CFG)
-    assert sig.side == "Sell" and sig.sl_px == 30010 and sig.tp_px == 29960 - 0.75 * 50
-
-
-def test_10am_filter_doji_and_timing():
-    assert nq_10am_continuation(candle(30000, 30040, 29990, 30020), NOW, CFG) is None  # 0.6: not top quarter
-    assert nq_10am_continuation(candle(30000, 30040, 29990, 30000), NOW, CFG) is None  # doji
-    bars = candle(30000, 30040, 29990, 30035)[:-1]         # 09:58 just closed: not yet
-    assert nq_10am_continuation(bars, NOW, CFG) is None
-    assert nq_10am_continuation(candle(30000, 30040, 29990, 30035, n=20), NOW, CFG) is None  # too few bars
-    assert "nq_10am_continuation" in RULES
+def fake_rule(bars, now_et, cfg):
+    """Long on the 09:59 close of a full candle that closed up: stop at the candle low."""
+    last = bars[-1] if bars else None
+    if last is None or (last.ts.astimezone(ET).hour, last.ts.astimezone(ET).minute) != (9, 59):
+        return None
+    if last.c <= bars[0].o:
+        return None
+    return Signal("Buy", "Market", None, sl_px=min(b.l for b in bars), tp_px=last.c + 0.75 * (last.c - min(b.l for b in bars)),
+                  ref_px=last.c, tp_rr=0.75)
 
 
 # --- the engine's one-leg path ---------------------------------------------------
 def mkcfg(shadow=False, armed=True):
     return AppCfg(armed=armed, webhook_secret="s",
                   accounts={"main": AccountCfg(keyring_key="k", account_name="MAIN")},
-                  book={"nq10am": [{"account": "main", "qty": 2}]},
-                  strategies={"nq10am": StrategyCfg(
+                  book={"bar_test": [{"account": "main", "qty": 2}]},
+                  strategies={"bar_test": StrategyCfg(
                       symbol="NQ", qty=1, offset_pts=0, sl_pts=0, tp_pts=0, enabled=True,
-                      kind="bars", shadow=shadow, rule="nq_10am_continuation",
+                      kind="bars", shadow=shadow, rule="fake_rule",
                       accept_from_et="09:59", accept_until_et="10:05")})
 
 
@@ -153,33 +136,33 @@ def events(tmp_path):
 
 def test_shadow_journals_and_places_nothing(tmp_path):
     eng, ad, _ = mkengine(tmp_path, shadow=True)
-    out = run(eng.handle_signal("nq10am", SIG))
+    out = run(eng.handle_signal("bar_test", SIG))
     assert out["ok"] and out["armed"] is False and "shadow" in out["note"]
     assert ad.brackets == [] and ad.orders == []
     ev = [e for e in events(tmp_path) if e["event"] == "shadow_signal"][0]
     assert (ev["side"], ev["sl"], ev["tp"], ev["qty"]) == ("Buy", 29990.0, 30068.75, 2)
     assert ev["risk_usd"] == 45 * 20 * 2                 # 45 pts x $20 x 2
-    assert eng.day_status("nq10am") == "idle"            # nothing happened on the book
+    assert eng.day_status("bar_test") == "idle"            # nothing happened on the book
 
 
 def test_armed_places_one_bracket_per_account(tmp_path):
     eng, ad, _ = mkengine(tmp_path)
-    out = run(eng.handle_signal("nq10am", SIG))
+    out = run(eng.handle_signal("bar_test", SIG))
     assert out["ok"] and out["armed"]
     assert len(ad.brackets) == 1
     b = ad.brackets[0]
     assert (b.side, b.order_type, b.qty, b.stop_price, b.tp_price) == ("Buy", "Market", 2, 29990.0, 30068.75)
-    st = eng._state("nq10am", "main")
+    st = eng._state("bar_test", "main")
     assert st.status == "placed" and st.upper_id and st.lower_id is None
     assert (st.sl_px, st.tp_px, st.tp_rr) == (29990.0, 30068.75, 0.75)
-    assert run(eng.handle_signal("nq10am", SIG))["ok"] is False   # one per day
+    assert run(eng.handle_signal("bar_test", SIG))["ok"] is False   # one per day
 
 
 def test_fill_keeps_the_stop_and_moves_the_target_to_the_fill(tmp_path):
     from homebase.broker.base import FillEvent
     eng, ad, _ = mkengine(tmp_path)
-    run(eng.handle_signal("nq10am", SIG))
-    st = eng._state("nq10am", "main")
+    run(eng.handle_signal("bar_test", SIG))
+    st = eng._state("bar_test", "main")
     run(eng.on_fill(FillEvent(account_id="main", symbol="NQZ6", side="Buy", qty=2,
                               price=30036.0, raw={"orderId": st.upper_id})))
     assert st.status == "live" and ad.cancelled == []          # no sibling to cancel
@@ -195,16 +178,17 @@ def test_fill_keeps_the_stop_and_moves_the_target_to_the_fill(tmp_path):
 def test_signal_guards(tmp_path):
     eng, ad, clock = mkengine(tmp_path)
     clock.set_et(11, 0)
-    assert "window" in run(eng.handle_signal("nq10am", SIG))["reason"]
+    assert "window" in run(eng.handle_signal("bar_test", SIG))["reason"]
     clock.set_et(10, 0)
     bad = Signal("Buy", "Market", None, sl_px=30050.0, tp_px=30068.75, ref_px=30035.0)
-    assert "wrong side" in run(eng.handle_signal("nq10am", bad))["reason"]
-    assert run(eng.handle_alert({"strategy": "nq10am", "upper": 1, "lower": 0}))["ok"] is False
+    assert "wrong side" in run(eng.handle_signal("bar_test", bad))["reason"]
+    assert run(eng.handle_alert({"strategy": "bar_test", "upper": 1, "lower": 0}))["ok"] is False
     assert ad.brackets == []
 
 
 # --- the server's feed step -------------------------------------------------------
 def test_feed_step_runs_the_rule_on_a_closed_bar(tmp_path, monkeypatch):
+    monkeypatch.setitem(RULES, "fake_rule", fake_rule)
     from fastapi.testclient import TestClient
     import homebase.config as config_mod
     from homebase.server import create_app
@@ -271,55 +255,31 @@ def test_watch_bars_clears_a_penalty_with_its_ticket():
     assert f._watch[9] == ("NQ", 1)
 
 
-# --- the 9:30 open rules (open_long / open_short) ---------------------------------------
-OPEN_CFG = StrategyCfg(symbol="NQ", qty=1, offset_pts=0, sl_pts=11.25, tp_pts=30.0, kind="bars")
-
-
+# --- fixed-distance bracket: the engine moves both levels to the fill ---------------------------
 def minute_bars(*hhmm_close, day=30):
     return [Bar(dt.datetime(2026, 9, day, h, m, tzinfo=ET).astimezone(UTC), c, c, c, c, 5, "NQ", 1)
             for (h, m), c in hhmm_close]
 
 
-def test_open_rules_fire_on_the_0929_close_with_tick_levels():
-    from homebase.rules import open_long, open_short
-    bars = minute_bars(((9, 28), 30000.0), ((9, 29), 30010.25))
-    now = dt.datetime(2026, 9, 30, 9, 30, 0, tzinfo=ET)
-    lo = open_long(bars, now, OPEN_CFG)
-    assert (lo.side, lo.entry, lo.entry_price, lo.ref_px, lo.tp_rr) == ("Buy", "Market", None, 30010.25, None)
-    assert (lo.sl_px, lo.tp_px) == (30010.25 - 45 * 0.25, 30010.25 + 120 * 0.25)
-    sh = open_short(bars, now, OPEN_CFG)
-    assert (sh.side, sh.sl_px, sh.tp_px) == ("Sell", 30010.25 + 45 * 0.25, 30010.25 - 120 * 0.25)
-    assert RULES["open_long"] is open_long and RULES["open_short"] is open_short
-
-
-def test_open_rules_only_the_0929_close_and_only_their_day():
-    from homebase.rules import open_long
-    now = dt.datetime(2026, 9, 30, 9, 31, 0, tzinfo=ET)
-    assert open_long(minute_bars(((9, 28), 30000.0)), now, OPEN_CFG) is None      # too early
-    assert open_long(minute_bars(((9, 30), 30000.0)), now, OPEN_CFG) is None      # too late
-    assert open_long([], now, OPEN_CFG) is None
-    assert open_long(minute_bars(((9, 29), 30000.0)), now, OPEN_CFG).side == "Buy"
-    for day in (22, 29):                                                          # any other day
-        assert open_long(minute_bars(((9, 29), 30000.0), day=day), now, OPEN_CFG) is None
-    oct1 = Bar(dt.datetime(2026, 10, 1, 9, 29, tzinfo=ET).astimezone(UTC), 1, 1, 1, 1, 5, "NQ", 1)
-    assert open_long([oct1], now, OPEN_CFG) is None
+def fixed(side, ref):
+    sign = 1 if side == "Buy" else -1
+    return Signal(side, "Market", None, ref - sign * 11.25, ref + sign * 30.0, ref_px=ref)
 
 
 def test_fixed_distance_rule_moves_both_levels_to_the_fill(tmp_path):
     from homebase.broker.base import FillEvent
-    from homebase.rules import open_long
     cfg = AppCfg(armed=True, accounts={"main": AccountCfg(keyring_key="k", account_name="MAIN")},
-                 book={"nq_open_long": [{"account": "main", "qty": 2}]},
-                 strategies={"nq_open_long": StrategyCfg(
+                 book={"bar_fixed_l": [{"account": "main", "qty": 2}]},
+                 strategies={"bar_fixed_l": StrategyCfg(
                      symbol="NQ", qty=1, offset_pts=0, sl_pts=11.25, tp_pts=30.0, enabled=True,
-                     kind="bars", rule="open_long", accept_from_et="09:29", accept_until_et="09:31")})
+                     kind="bars", rule="fake_rule", accept_from_et="09:29", accept_until_et="09:31")})
     ad = FakeAdapter("main")
     eng = Engine(cfg, {"main": ad}, now_fn=Clock(13, 30), root=tmp_path)     # 09:30 ET
-    sig = open_long(minute_bars(((9, 29), 30000.0)), None, OPEN_CFG)
-    assert run(eng.handle_signal("nq_open_long", sig))["ok"]
+    sig = fixed("Buy", 30000.0)
+    assert run(eng.handle_signal("bar_fixed_l", sig))["ok"]
     b = ad.brackets[0]
     assert (b.side, b.order_type, b.qty, b.stop_price, b.tp_price) == ("Buy", "Market", 2, 29988.75, 30030.0)
-    st = eng._state("nq_open_long", "main")
+    st = eng._state("bar_fixed_l", "main")
     run(eng.on_fill(FillEvent(account_id="main", symbol="NQZ6", side="Buy", qty=2,
                               price=30000.75, raw={"orderId": st.upper_id})))   # 3 ticks of slippage
     # both brackets follow the fill: 45 ticks under, 120 ticks over
@@ -333,28 +293,15 @@ def test_fixed_distance_rule_moves_both_levels_to_the_fill(tmp_path):
 
 def test_fixed_distance_rule_filled_at_the_reference_moves_nothing(tmp_path):
     from homebase.broker.base import FillEvent
-    from homebase.rules import open_short
     cfg = AppCfg(armed=True, accounts={"main": AccountCfg(keyring_key="k", account_name="MAIN")},
-                 book={"nq_open_short": [{"account": "main", "qty": 1}]},
-                 strategies={"nq_open_short": StrategyCfg(
+                 book={"bar_fixed_s": [{"account": "main", "qty": 1}]},
+                 strategies={"bar_fixed_s": StrategyCfg(
                      symbol="NQ", qty=1, offset_pts=0, sl_pts=11.25, tp_pts=30.0, enabled=True,
-                     kind="bars", rule="open_short", accept_from_et="09:29", accept_until_et="09:31")})
+                     kind="bars", rule="fake_rule", accept_from_et="09:29", accept_until_et="09:31")})
     ad = FakeAdapter("main")
     eng = Engine(cfg, {"main": ad}, now_fn=Clock(13, 30), root=tmp_path)
-    run(eng.handle_signal("nq_open_short", open_short(minute_bars(((9, 29), 30000.0)), None, OPEN_CFG)))
-    st = eng._state("nq_open_short", "main")
+    run(eng.handle_signal("bar_fixed_s", fixed("Sell", 30000.0)))
+    st = eng._state("bar_fixed_s", "main")
     run(eng.on_fill(FillEvent(account_id="main", symbol="NQZ6", side="Sell", qty=1,
                               price=30000.0, raw={"orderId": st.lower_id})))
     assert ad.modified == [] and (st.sl_px, st.tp_px) == (30011.25, 29970.0)
-
-
-def test_open_strategies_ship_off_unbooked_and_for_one_day():
-    from homebase.config import _defaults
-    d = _defaults()
-    for name, side_rule in (("nq_open_long", "open_long"), ("nq_open_short", "open_short")):
-        s = d.strategies[name]
-        assert (s.symbol, s.kind, s.rule, s.bar_minutes) == ("NQ", "bars", side_rule, 1)
-        assert (s.sl_pts, s.tp_pts) == (45 * 0.25, 120 * 0.25)
-        assert s.enabled is False and s.shadow is False
-        assert (s.accept_from_et, s.accept_until_et) == ("09:29", "09:31")
-        assert name not in d.book

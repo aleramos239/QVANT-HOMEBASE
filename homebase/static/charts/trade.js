@@ -23,7 +23,7 @@ const Pos = need('HBPosition', './position.js');
 const TP = need('HBTradePure', './tradepure.js');
 const { PREFS_KEY, parsePrefs, prefsText, bracket, roundTick, money, usd, inferType, menuText, execArrow } = TP;
 
-const BOT_NAMES = { nq930: '9:30 bot', ym930: '9:30 bot', nq10am: '10am bot' };
+const BOT_NAMES = { nq930: '9:30 bot' };
 const ET = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hourCycle: 'h23', hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
 const int = (v, lo, hi, dflt) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : dflt; };
@@ -853,7 +853,7 @@ function fillMarkers(state, root, ids, P, tick = 0.01) {
    A chart's `algo` (a desk strategy key) draws that bot's run: a legend badge (name, state pill, today's P&L, Kill),
    its working orders as read-only BOT lines, its fills as markers, and its real past runs (GET bot-history) as
    markers with a tooltip. A chart without an algo draws none of it, even on the bot's root. */
-const ALGO_NAMES = { nq930: 'NQ 9:30 Straddle', ym930: 'YM 9:30 Straddle', nq10am: 'NQ 10:00 Continuation',
+const ALGO_NAMES = { nq930: 'NQ 9:30 Straddle',
   gc_nfpcpi: 'GC 8:30 NFP + CPI Straddle', 'paper:gc_nfpcpi': 'GC NFP/CPI (paper)' };
 const GREY = '#9598A1';   // a past day it did not trade: TradingView's neutral grey
 const CHECK_IT_TIP = 'Killed, but the desk could not account for its whole position: the stops were left working — '

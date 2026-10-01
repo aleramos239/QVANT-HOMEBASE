@@ -140,7 +140,7 @@ def test_the_catalog_never_runs_a_draft(tmp_path, sentinel):
     with client(tmp_path) as c:
         got = {s["id"]: s for s in c.get("/api/tester/strategies").json()}
         c.get("/api/tester/strategies/draft_my_orb/source")
-    assert {"nq930", "ym930", "nq10am", "gc_nfpcpi"} <= set(got)
+    assert {"nq930", "gc_nfpcpi"} <= set(got)
     d = got["draft_my_orb"]
     assert d["draft"] is True and d["root"] == "NQ" and not d.get("error") and d["session_independent"] is True
     assert [i["key"] for i in d["inputs"]] == ["offset_pts", "sl_pts", "tp_pts"]

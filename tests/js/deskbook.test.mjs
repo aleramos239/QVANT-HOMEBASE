@@ -24,7 +24,7 @@ const ACCOUNTS = {
 };
 const STRATS = {
   nq930_1030: { cfg: { symbol: 'NQ', qty: 3, enabled: true, self_fire: true, kind: 'straddle' } },
-  nq10am: { cfg: { symbol: 'NQ', qty: 1, enabled: true, self_fire: true, kind: 'bars' } },
+  nq_pm_flex: { cfg: { symbol: 'NQ', qty: 1, enabled: true, self_fire: true, kind: 'bars' } },
   gc_pine: { cfg: { symbol: 'GC', qty: 1, enabled: true, self_fire: false, kind: 'straddle' } },
   shadowy: { cfg: { symbol: 'NQ', qty: 1, enabled: true, shadow: true, kind: 'bars' } },
 };
@@ -111,7 +111,7 @@ test('the dialog says when nothing trades yet, and names the moment it will', ()
   assert.match(off.api.liveBookingNote('nq930_1030', '1234567885'),
     /Right now NQ930_1030 is off and the desk is disarmed, so nothing is placed until that changes\./);
   const s = load();
-  assert.match(s.api.liveBookingNote('nq10am', '1234567885'), /on its next signal/);
+  assert.match(s.api.liveBookingNote('nq_pm_flex', '1234567885'), /on its next signal/);
   assert.match(s.api.liveBookingNote('gc_pine', '1234567885'), /on its next alert/);
   assert.match(s.api.liveBookingNote('shadowy', '1234567885'), /SHADOW strategy/);
   assert.match(s.api.liveBookingNote('nq930_1030', 'apex2941870000048'), /Account APEX2941870000048\./,
