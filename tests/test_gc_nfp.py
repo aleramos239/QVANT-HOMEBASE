@@ -1,7 +1,7 @@
 """gc_nfp: the GC 08:30 NFP straddle on the desk (verified 2026-10-01, research/nfp-2026-10-02).
 
 Pins the spec the user will put real Lucid evals on: it fires ONLY on its event day, at 08:30:00.000 ET,
-OCO stops at anchor +/- 2.0, SL 3.7 / TP 7.7 from the fill, unfilled cancelled 08:45, flat 09:55 --
+OCO stops at anchor +/- 2.0, SL 5.0 / TP 7.7 from the fill, unfilled cancelled 08:45, flat 09:55 --
 and that the 09:30 strategies' schedule did not move when the timer learned per-strategy fire times.
 """
 from __future__ import annotations
@@ -72,7 +72,7 @@ def drive(timer, clock, date=NFP_DAY, through=(8, 30, 0)):
 # --------------------------------------------------------------------------- the spec, in the config
 def test_the_desk_config_is_the_verified_spec_and_ships_off_and_unbooked():
     c = desk_config._defaults().strategies["gc_nfp"]
-    assert (c.symbol, c.qty, c.offset_pts, c.sl_pts, c.tp_pts) == ("GC", 4, 2.0, 3.7, 7.7)
+    assert (c.symbol, c.qty, c.offset_pts, c.sl_pts, c.tp_pts) == ("GC", 4, 2.0, 5.0, 7.7)
     assert (c.fire_et, c.cancel_et, c.flat_et) == ("08:30:00", "08:45", "09:55")
     assert c.only_dates == ["2026-10-02"]
     assert c.kind == "straddle" and c.self_fire and not c.gated and not c.shadow
@@ -81,16 +81,16 @@ def test_the_desk_config_is_the_verified_spec_and_ships_off_and_unbooked():
     assert desk_config._defaults().book == {}
 
 
-def test_the_risk_is_inside_the_2000_dollar_limit_with_room_for_slippage_and_fees():
+def test_the_stop_is_the_full_2000_dollar_limit_and_the_target_clears_3000_after_fees():
     c = desk_config._defaults().strategies["gc_nfp"]
     pv = point_value("GC")
-    stop_loss = c.sl_pts * pv * c.qty               # $1,480 at 4 contracts, before slippage
+    stop_loss = c.sl_pts * pv * c.qty               # $2,000 at 4 contracts, before slippage
     target = c.tp_pts * pv * c.qty                  # $3,080 gross
     fees = 2 * 2.30 * c.qty                         # Lucid's listed GC fee, $18.40 round turn at 4 ct
-    assert round(stop_loss, 2) == 1480.0 and round(target, 2) == 3080.0
+    assert round(stop_loss, 2) == 2000.0 and round(target, 2) == 3080.0
     assert round(target - fees, 2) == 3061.60       # clears the $3,000 target after fees
-    # the stop may slip ~11 ticks a contract (4 ct x $10 x 11 = $440) before the $2,000 limit is touched
-    assert 2000 - (stop_loss + fees) > 400
+    # the user's choice: a stop-out (plus fees and any slippage) takes the eval past its $2,000 limit
+    assert stop_loss + fees > 2000
 
 
 # --------------------------------------------------------------------------- the schedule
@@ -162,8 +162,8 @@ def test_armed_it_places_the_oco_stops_and_brackets_as_specified_on_every_booked
         assert (buy.symbol, buy.side, buy.order_type, buy.qty) == ("GC", "Buy", "Stop", 4)
         assert (sell.symbol, sell.side, sell.order_type, sell.qty) == ("GC", "Sell", "Stop", 4)
         assert buy.price == pytest.approx(3952.0) and sell.price == pytest.approx(3948.0)
-        assert buy.stop_price == pytest.approx(3948.3) and buy.tp_price == pytest.approx(3959.7)
-        assert sell.stop_price == pytest.approx(3951.7) and sell.tp_price == pytest.approx(3940.3)
+        assert buy.stop_price == pytest.approx(3947.0) and buy.tp_price == pytest.approx(3959.7)
+        assert sell.stop_price == pytest.approx(3953.0) and sell.tp_price == pytest.approx(3940.3)
         assert engine._state("gc_nfp", a).status == "placed"
     # both evals get the IDENTICAL straddle in the same instant (no long-vs-short hedge across accounts)
     assert [(r.side, r.price, r.stop_price, r.tp_price, r.qty) for r in ads["evalA"].brackets] \
@@ -186,7 +186,7 @@ def test_the_fill_moves_both_brackets_to_the_fill_at_3_7_and_7_7(tmp_path):
     assert st.status == "live" and st.entry_side == "Buy" and st.lower_id in ad.cancelled
     moved = {oid: px for oid, _, px in ad.modified}
     assert set(moved) == {f"{st.upper_id}-sl", f"{st.upper_id}-tp"}
-    assert moved[f"{st.upper_id}-sl"] == pytest.approx(3948.6)      # 3952.3 - 3.7
+    assert moved[f"{st.upper_id}-sl"] == pytest.approx(3947.3)      # 3952.3 - 5.0
     assert moved[f"{st.upper_id}-tp"] == pytest.approx(3960.0)      # 3952.3 + 7.7
 
 
@@ -244,7 +244,7 @@ def _tape(d, rows):
 def test_the_twin_is_registered_and_reads_the_desk_config():
     s = GCNfp()
     assert REGISTRY["gc_nfp"] is GCNfp
-    assert (s.p["offset_pts"], s.p["sl_pts"], s.p["tp_pts"]) == (2.0, 3.7, 7.7)
+    assert (s.p["offset_pts"], s.p["sl_pts"], s.p["tp_pts"]) == (2.0, 5.0, 7.7)
     assert s.times() == ["08:30:00", "08:45", "09:55"]
     assert s.session_window == ("08:20", "09:56") and s.provenance()["fire"] == "08:30:00"
 
@@ -261,7 +261,7 @@ def test_the_twin_trades_exactly_the_desk_geometry():
     tp = _tape(d, [("08:29:59", 2650.0), ("08:30:00.100", 2652.3), ("08:31", 2661.0)])
     t, = run_session(GCNfp(), tp, Costs()).trades
     assert t.side == "long" and t.entry_price == pytest.approx(2652.4)   # first print through 2652.0, +1 tick
-    assert t.sl == pytest.approx(2648.7) and t.tp == pytest.approx(2660.1)   # 3.7 / 7.7 from the FILL
+    assert t.sl == pytest.approx(2647.4) and t.tp == pytest.approx(2660.1)   # 5.0 / 7.7 from the FILL
     assert t.exit_reason == "tp" and t.net == round(7.7 * 100 - 4.0, 2)
 
 

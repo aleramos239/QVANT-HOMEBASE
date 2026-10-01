@@ -171,13 +171,13 @@ def _defaults() -> AppCfg:
                     "caveat": "post-hoc filter, ~130 cells on one window — shadow only",
                 }),
             # GC 08:30 NFP straddle (verified 2026-10-01, research/nfp-2026-10-02/verify): 4 gold
-            # contracts, OCO stops at anchor +/- 2.0, SL 3.7 (-$1,480 before slippage), TP 7.7
+            # contracts, OCO stops at anchor +/- 2.0, SL 5.0 (-$2,000 before slippage: the user's choice 2026-10-01, a stop-out ends the eval), TP 7.7
             # (+$3,080 gross, +$3,061.60 after $2.30 a side), unfilled cancelled 08:45, flat 09:55.
             # Trades ONLY the days in only_dates (2026-10-02, the BLS NFP date; extend it by hand).
             # accept_until 08:31: a fire more than a minute late is refused, not re-anchored on a
             # post-release price. Ships off and unbooked: the user books the evals and enables it.
             "gc_nfp": StrategyCfg(
-                symbol="GC", qty=4, offset_pts=2.0, sl_pts=3.7, tp_pts=7.7,
+                symbol="GC", qty=4, offset_pts=2.0, sl_pts=5.0, tp_pts=7.7,
                 cancel_et="08:45", flat_et="09:55",
                 accept_from_et="08:29", accept_until_et="08:31",
                 enabled=False, gated=False, self_fire=True,
@@ -186,9 +186,9 @@ def _defaults() -> AppCfg:
                     "source": "NFP-only tick replay · 57 events 2021-10..2026-09 · the 2025-26 part was "
                               "already spent on this family: a consistency check, not a clean exam",
                     "rows": {"entry": "OCO stops anchor ±2.0 (anchor = last print before 08:30:00)",
-                             "SL": "3.7 pts · $370/ct · $1,480 at 4 ct",
+                             "SL": "5.0 pts · $500/ct · $2,000 at 4 ct (a stop-out ends the eval)",
                              "TP": "7.7 pts · $770/ct · $3,080 at 4 ct",
-                             "pass / bust": "~60% (CI 48-73) / 0-13%", "day": "2026-10-02 only"},
+                             "pass / bust": "61% (2021-24) · 74% (2025-26) / 26-36%", "day": "2026-10-02 only"},
                     "caveat": "evals bought together win or lose together; 24 of 35 sim wins were held "
                               "5 s or less (Lucid micro-scalping rule)",
                 }),
