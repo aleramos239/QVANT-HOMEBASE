@@ -49,7 +49,7 @@ from .tape import ARCHIVE, CACHE
 
 DEFAULT_MAX_CELLS = 60      # what the page's Max cells box starts at
 HARD_MAX_CELLS = 400        # ... and the most it, or any other client, may ask for
-WORKERS = 2
+WORKERS = 4                 # cell threads; each still needs a machine slot (slots.cap_at)
 FIELDS = {"strategy", "inputs", "axes", "range", "qty", "commission", "slippage_ticks", "capital",
           "max_cells", "prop_rules"}
 SUMMARY_KEYS = ("net_profit", "sharpe", "trades", "win_rate", "profit_factor", "max_drawdown", "t_stat",

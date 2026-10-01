@@ -324,3 +324,21 @@ def test_the_default_clock_is_the_module_clock_read_at_each_call(tmp_path, monke
     assert s.quiet()
     monkeypatch.setattr(slots, "et_now", lambda: et(MON, "09:36:00"))
     assert not s.quiet()
+
+
+def test_the_cap_is_two_in_desk_hours_and_four_off_hours(tmp_path):
+    from homebase.backtest.slots import cap_at
+    assert cap_at(et(MON, "08:00:00")) == 2 and cap_at(et(MON, "16:14:59")) == 2
+    assert cap_at(et(MON, "07:59:59")) == 4 and cap_at(et(MON, "16:15:00")) == 4
+    assert cap_at(et(MON + dt.timedelta(days=5), "12:00:00")) == 4        # Saturday
+    clock = Clock(et(MON, "20:00:00"))
+    s = Slots(tmp_path / "slots", clock=clock)
+    held = [s.try_acquire() for _ in range(4)]
+    assert all(h is not None for h in held) and s.try_acquire() is None
+    clock.t = et(MON + dt.timedelta(days=1), "10:00:00")                  # desk hours: only slots 0-1 are handed out
+    for h in held:
+        h.close()
+    a, b = s.try_acquire(), s.try_acquire()
+    assert a is not None and b is not None and s.try_acquire() is None
+    a.close(); b.close()
+    assert Slots(tmp_path / "slots", cap=1, clock=clock).cap == 1           # a pinned cap wins

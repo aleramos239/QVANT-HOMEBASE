@@ -1,4 +1,6 @@
-"""The machine-wide backtest budget: at most CAP backtest processes at once -- single tester runs,
+"""The machine-wide backtest budget: at most CAP backtest processes at once (CAP_OFF_HOURS outside
+desk hours, weekdays 08:00-16:15 ET -- a run holding a higher slot when desk hours begin finishes;
+no new one takes it) -- single tester runs,
 heat-map cells and script runs together, from EVERY checkout on this machine -- and none STARTS
 in the QUIET window (09:20-09:35 ET, weekdays), because the live desk's 9:30 bot shares the
 machine. A run already going keeps going; anything queued waits until 09:35.
@@ -28,7 +30,9 @@ from typing import Callable
 from zoneinfo import ZoneInfo
 
 ET = ZoneInfo("America/New_York")
-CAP = 2
+CAP = 2                                        # during desk hours (weekdays 08:00-16:15 ET)
+CAP_OFF_HOURS = 4                              # evenings, nights and weekends: the desk is idle
+DESK_HOURS = (dt.time(8, 0), dt.time(16, 15))  # [start, end) ET, Mon-Fri (covers the 08:30 GC event bot)
 QUIET = (dt.time(9, 20), dt.time(9, 35))      # [start, end) ET, Mon-Fri
 QUIET_MSG = "paused for the 9:30 window"
 QUIET_REFUSAL = f"{QUIET_MSG}: no backtest starts 09:20–09:35 ET on weekdays"
@@ -42,6 +46,13 @@ def shared_dir() -> Path:
 
 def et_now() -> dt.datetime:
     return dt.datetime.now(ET)
+
+
+def cap_at(now: dt.datetime) -> int:
+    """The machine-wide cap in force at `now`: CAP while the desk trades, CAP_OFF_HOURS otherwise."""
+    t = now.astimezone(ET) if now.tzinfo else now
+    desk = t.weekday() < 5 and DESK_HOURS[0] <= t.time() < DESK_HOURS[1]
+    return CAP if desk else CAP_OFF_HOURS
 
 
 def in_quiet(now: dt.datetime) -> bool:
@@ -73,17 +84,22 @@ def _alive(pid: int) -> bool:
 
 
 class Slots:
-    def __init__(self, d: Path | None = None, *, cap: int = CAP,
+    def __init__(self, d: Path | None = None, *, cap: int | None = None,
                  clock: Callable[[], dt.datetime] | None = None, poll: float = 0.5):
         # d None: the per-machine slots dir. clock None: the module's et_now, looked up at each call.
+        # cap None: the time-of-day cap (cap_at); a number pins it (tests).
         self.dir = Path(d) if d is not None else shared_dir() / "slots"
-        self.cap, self.poll = cap, poll
+        self.fixed_cap, self.poll = cap, poll
         self.clock = clock or (lambda: et_now())
         self.queue = self.dir / "queue"
         self.queue.mkdir(parents=True, exist_ok=True)
 
     def quiet(self) -> bool:
         return in_quiet(self.clock())
+
+    @property
+    def cap(self) -> int:
+        return self.fixed_cap if self.fixed_cap is not None else cap_at(self.clock())
 
     def try_acquire(self):
         """An open file holding a slot (close() it to release), or None: the cap is full or it's
