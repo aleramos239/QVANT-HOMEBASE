@@ -44,7 +44,8 @@ def poll(c, rid, s=30.0):
 def test_strategies_lists_the_schemas(tmp_path):
     with client(tmp_path) as c:
         got = {s["id"]: s for s in c.get("/api/tester/strategies").json()}
-        assert set(got) == {"nq930", "ym930", "nq10am", "gc_nfpcpi"}
+        assert set(got) == {"nq930", "ym930", "nq10am", "gc_nfpcpi",
+                            "nq_nyam_flex", "nq_nyam_pro", "nq_orb_pro", "nq_pm_flex"}
         assert got["nq930"]["inputs"][0]["key"] == "offset_pts"
 
 

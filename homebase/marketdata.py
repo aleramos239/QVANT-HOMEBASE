@@ -75,6 +75,9 @@ class TradovateMD:
         self._pushes: dict[str, int] = {}                   # contract -> quote pushes received
         self._cid_sym: dict[int, str] = {}                  # contractId -> contract
         self._clock = time.time                             # receive time (tests replace it)
+        # fn(contract, price, size, received unix s, the push's own stamp as unix s | None): every trade
+        # push, for a consumer that builds bars from the tape (leveltimer). Must not block or raise.
+        self.trade_hooks: list = []
 
     @property
     def connected(self) -> bool:
@@ -142,6 +145,11 @@ class TradovateMD:
                 if tape is None:
                     tape = self._tape[sym] = deque(maxlen=TRADE_HISTORY)
                 tape.append((seen, px, q.get("timestamp")))
+                for fn in getattr(self, "trade_hooks", None) or ():
+                    try:
+                        fn(sym, px, tr.get("size"), seen, _stamp(q.get("timestamp")))
+                    except Exception:  # noqa: BLE001 — a consumer's bug never stops the quote stream
+                        pass
 
     def last(self, sym: str, before: Optional[float] = None) -> tuple[Optional[float], float]:
         """(latest trade price, unix time received) for one subscribed
@@ -194,6 +202,52 @@ class TradovateMD:
             await self._ws.request("md/unsubscribeQuote", {"symbol": sym})
         except Exception:  # noqa: BLE001 — best-effort cleanup
             pass
+
+    async def minute_bars(self, canonical: str, n: int, timeout_s: float = 20.0) -> list[dict]:
+        """The last `n` 1-minute bars as [{start_ms, o, h, l, c, v}] ASC -- the newest may still be
+        forming (the caller keeps only bars whose end has passed).  Collects the chart push until its
+        end-of-history marker, like daily_bars."""
+        sym = self.resolve(canonical)
+        bars: dict[int, dict] = {}
+        done = asyncio.get_event_loop().create_future()
+
+        def on_chart(msg: dict) -> None:
+            if msg.get("e") != "chart":
+                return
+            for ch in (msg.get("d") or {}).get("charts", []) or []:
+                if ch.get("eoh") and not done.done():
+                    done.set_result(True)
+                for b in ch.get("bars", []) or []:
+                    try:
+                        t = dt.datetime.fromisoformat(str(b["timestamp"]).replace("Z", "+00:00"))
+                        start = int(t.timestamp() * 1000)
+                        bars[start] = {"start_ms": start, "o": float(b["open"]), "h": float(b["high"]),
+                                       "l": float(b["low"]), "c": float(b["close"]),
+                                       "v": int(b.get("upVolume", 0) or 0) + int(b.get("downVolume", 0) or 0)}
+                    except (KeyError, TypeError, ValueError):
+                        continue
+
+        self._ws.event_handlers.append(on_chart)
+        try:
+            d = await self._ws.request("md/getChart", {
+                "symbol": sym,
+                "chartDescription": {"underlyingType": "MinuteBar", "elementSize": 1,
+                                     "elementSizeUnit": "UnderlyingUnits", "withHistogram": False},
+                "timeRange": {"asMuchAsElements": n + 1}})
+            try:
+                await asyncio.wait_for(done, timeout_s)
+            except asyncio.TimeoutError:
+                if not bars:
+                    raise RuntimeError("minute bars: no data before timeout")
+            rt = (d or {}).get("realtimeId")
+            if rt is not None:
+                try:
+                    await self._ws.request("md/cancelChart", {"subscriptionId": rt})
+                except Exception:  # noqa: BLE001
+                    pass
+        finally:
+            self._ws.event_handlers.remove(on_chart)
+        return [bars[k] for k in sorted(bars)][-n:]
 
     async def daily_bars(self, canonical: str, n: int = 60,
                          timeout_s: float = 20.0) -> list[dict]:

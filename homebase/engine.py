@@ -43,7 +43,9 @@ from zoneinfo import ZoneInfo
 from .broker.base import BrokerAdapter, FillEvent, OrderRequest, OrderResult
 from .config import AppCfg, StrategyCfg, assignments
 from .contracts import point_value, tick_size
+from .levels import AccountLeg, Geometry, account_leg
 from .paths import state_dir
+from .dayrules import LOCK_TAKE, DayBook, DayRules, merge_rules, standing, take_level
 
 ET = ZoneInfo("America/New_York")
 SPREAD_TOL_PTS = 0.05
@@ -53,6 +55,7 @@ KILL_POLL_S, KILL_POLL_N = 0.25, 12     # the kill waits up to 3 s for its entry
 MARKET_OUT_FAILED = "check it — market-out reported failure; verify the position"
 PLACING_UNKNOWN = "placement outcome unknown after a restart — check the broker"
 SIBLING_RETRY_S = 2.0
+TAKE_GRACE_S = 2.0      # a day_take touch the resting limit has not filled for this long is market-flattened
 
 
 def _hhmm(s: str) -> dt.time:
@@ -97,6 +100,12 @@ class DayState:
     dn_sl_id: Optional[str] = None
     dn_tp_id: Optional[str] = None
     brackets_moved: bool = False
+    # kind "levels": this account's geometry today (points from the trigger / the fill), set at placement
+    sl_pts: Optional[float] = None
+    tp_pts: Optional[float] = None
+    take_usd: Optional[float] = None   # the net $ the take is sized for (None: the fallback target)
+    take_src: str = ""                 # day_take | target_take | fallback
+    take_px: Optional[float] = None    # the take price the broker-side limit rests at (from the fill)
 
 
 class Engine:
@@ -127,6 +136,12 @@ class Engine:
         self._perf = time.perf_counter             # the legs' round-trip clock (tests replace it)
         self._needs_check_said: set = set()        # (date, strategy, account, at) journaled
         self._check_it_cancelled: set = set()      # (date, strategy, account): 12:55 entry cancels sent
+        self.books: dict[str, DayBook] = {}        # account -> today's closed P&L / lock / eval standing
+        self._take_seen: dict[str, float] = {}     # account -> when a day_take touch was first seen
+        self._mono = time.monotonic                # the take backstop's clock (tests replace it)
+        # account -> {date: closing balance}: the desk's daily balance record (server.equity_by_day);
+        # target_take's largest day / day count come from it
+        self.balance_history: Optional[Callable[[str], dict]] = None
         self._load_today()
 
     # --- time & persistence -------------------------------------------------
@@ -158,6 +173,7 @@ class Engine:
             if unknown:
                 self._save()
         self._load_skips_from_journal()
+        self._load_books()
 
     def _load_skips_from_journal(self) -> None:
         """Restart safety: a desk restart after the 09:28:30 prestage must
@@ -207,6 +223,98 @@ class Engine:
     @property
     def journal_path(self):
         return self._root / "journal.jsonl"
+
+    # --- account day books (day_take / day_lock / target_take) ---------------------------
+    def _books_path(self):
+        return self._root / f"daybook-{self._today()}.json"
+
+    def _load_books(self) -> None:
+        """Restart safety: today's closed P&L, locks and morning standing come back from disk.  An
+        unreadable file means a fresh day, said on stderr -- never a crash."""
+        p = self._books_path()
+        if not p.exists():
+            return
+        try:
+            data = json.loads(p.read_text())
+            self.books = {a: DayBook.from_dict(d) for a, d in data.items()
+                          if isinstance(d, dict) and d.get("date") == self._today()}
+        except Exception as e:  # noqa: BLE001
+            print(f"homebase engine: reading {p.name} failed: {e!r}", file=sys.stderr)
+
+    def _save_books(self) -> None:
+        self._books_path().write_text(json.dumps({a: b.to_dict() for a, b in self.books.items()},
+                                                 indent=2) + "\n")
+
+    def book(self, account: str) -> DayBook:
+        today = self._today()
+        b = self.books.get(account)
+        if b is None or b.date != today:
+            b = self.books[account] = DayBook(account=account, date=today)
+        return b
+
+    def rules_for(self, account: str) -> DayRules:
+        """The daily rules in force on an account: the tightest of every ENABLED strategy booked on it."""
+        rs = [DayRules(s.day_take, s.day_lock, s.target_take)
+              for n, s in self.cfg.strategies.items()
+              if s.enabled and any(a.get("account") == account for a in assignments(self.cfg, n))]
+        return merge_rules(rs)
+
+    def account_locked(self, account: str) -> Optional[str]:
+        """"day_take" / "day_lock" when the account is stopped for the day, else None."""
+        b = self.books.get(account)
+        return b.locked if b is not None and b.date == self._today() else None
+
+    async def prepare_account(self, account: str) -> DayBook:
+        """Read the account's eval standing once a day, before its first fire: EOD profit (balance - start
+        balance), the largest winning day and trading days so far (the desk's daily balance record + the
+        account's seeds), and target_take's level for today.  Missing facts leave the level None (an
+        account that needs one sits out) and the profit None (tiers use their smallest size)."""
+        b = self.book(account)
+        if b.prepared:
+            return b
+        acct = self.cfg.accounts.get(account)
+        prop = dict(getattr(acct, "prop", None) or {})
+        today = self._today()
+        profit = None
+        if prop.get("start_balance") is not None:
+            start = float(prop["start_balance"])
+            hist: dict = {}
+            try:
+                hist = (self.balance_history(account) if self.balance_history else None) or {}
+            except Exception as e:  # noqa: BLE001
+                self.journal("prepare_account_warn", account=account, error=f"balance history: {e}"[:200])
+            prior = {d: v for d, v in hist.items() if d < today}
+            bal = None
+            ad = self.adapters.get(account)
+            if ad is not None and ad.connected and not any(
+                    s.status != "idle" for s in self.day_states_for_account(account)):
+                try:
+                    m = await ad.get_metrics()
+                    bal = None if m.get("balance") is None else float(m["balance"])
+                except Exception as e:  # noqa: BLE001
+                    self.journal("prepare_account_warn", account=account, error=f"balance: {e}"[:200])
+            if bal is not None:
+                profit = bal - start
+            elif prior:
+                profit = float(prior[max(prior)]) - start
+            largest, days = standing(prior, today, seed_largest=float(prop.get("largest_day") or 0),
+                                     seed_days=int(prop.get("days") or 0))
+            b.largest_day, b.days = largest, days
+            if self.rules_for(account).target_take and profit is not None and prop.get("rules") \
+                    and prop.get("mode", "eval") == "eval":
+                try:
+                    from .backtest.propsim import load_rules
+                    r = load_rules(str(prop["rules"]))
+                    b.target_level = take_level(r["eval_target"], profit, largest, days,
+                                                min_days=int(r.get("eval_min_days") or 1),
+                                                consistency=r.get("consistency"))
+                except Exception as e:  # noqa: BLE001
+                    self.journal("prepare_account_warn", account=account, error=f"rules: {e}"[:200])
+        b.morning_profit, b.prepared = profit, True
+        self._save_books()
+        self.journal("account_prepared", account=account, profit=profit, largest_day=b.largest_day,
+                     days=b.days, target_level=b.target_level, closed_net=b.closed_net)
+        return b
 
     def _save(self) -> None:
         p = self._day_path(self._today())
@@ -399,8 +507,94 @@ class Engine:
         return {"ok": any(r.get("ok") for r in results.values()), "armed": True,
                 "accounts": results}
 
+    async def handle_levels(self, name: str, geo: Geometry, *, source: str = "leveltimer",
+                            info: dict | None = None) -> dict:
+        """A "levels" strategy's day: one OCO pair of stop entries at geo.upper / geo.lower on every booked
+        account, each with ITS OWN size and take (levels.account_leg: qty by profit tier, take = the lower
+        of day_take and target_take net of the day's closed P&L), the stop geo.sl_pts from the trigger.
+        Same guards as an alert: enabled, not killed, one per day, the accept window, the book -- plus the
+        daily rules: an account stopped for the day (day_take / day_lock) sits out, one that needs a
+        target_take level and has none sits out, and a REAL account sits out until the strategy's
+        ack_open_loss says the 3 x ATR stop (several times a prop account's max loss) is accepted.
+        Disarmed / shadow -> journaled only."""
+        info = info or {}
+        cfg = self.cfg.strategies.get(name)
+        if cfg is None or not cfg.enabled or cfg.kind != "levels":
+            self.journal("levels_refused", strategy=name, reason="unknown_or_disabled")
+            return {"ok": False, "reason": f"unknown, disabled or not a levels strategy: {name!r}"}
+        if self.killed_today(name):
+            self.journal("levels_refused", strategy=name, reason="killed", source=source)
+            return {"ok": False, "reason": f"{name} was killed today — nothing is placed"}
+        if self.day_status(name) != "idle":
+            self.journal("levels_refused", strategy=name, reason="already_traded",
+                         status=self.day_status(name), source=source)
+            return {"ok": False, "reason": f"already acted today ({self.day_status(name)})"}
+        now = self.now_et().time()
+        if not (_hhmm(cfg.accept_from_et) <= now <= _hhmm(cfg.accept_until_et)):
+            self.journal("levels_refused", strategy=name, reason="outside_window",
+                         at=str(now), source=source)
+            return {"ok": False, "reason": f"outside accept window at {now}"}
+        if not (geo.upper > geo.lower and geo.sl_pts > 0):
+            self.journal("levels_refused", strategy=name, reason="bad_geometry", geometry=geo.to_dict())
+            return {"ok": False, "reason": "bad geometry"}
+        skipped = self.skipped_today(name)
+        asg = [a for a in assignments(self.cfg, name) if a["account"] not in skipped]
+        if not asg:
+            self.journal("levels_refused", strategy=name, reason="no_assignments",
+                         skipped=sorted(skipped), source=source)
+            return {"ok": False, "reason": "no accounts booked (or every one is skipped today)"}
+        legs: dict[str, AccountLeg] = {}
+        sat_out: dict[str, str] = {}
+        for a in asg:
+            aid = a["account"]
+            acct = self.cfg.accounts.get(aid)
+            if not cfg.ack_open_loss and not (acct is not None and acct.paper):
+                sat_out[aid] = "open-loss rule not acknowledged (ack_open_loss)"
+                continue
+            book = await self.prepare_account(aid)
+            leg, why = account_leg(cfg, aid, int(a["qty"]), self.rules_for(aid), book, geo,
+                                   book.morning_profit)
+            if leg is None:
+                sat_out[aid] = why
+            else:
+                legs[aid] = leg
+        base = {"upper": geo.upper, "lower": geo.lower, "sl_pts": geo.sl_pts, "atr": geo.atr,
+                "geometry": geo.to_dict(), **info}
+        if not legs:
+            self.journal("levels_refused", strategy=name, reason="every_account_sat_out",
+                         sat_out=sat_out, source=source, **base)
+            return {"ok": False, "reason": "every account sat out", "sat_out": sat_out}
+        if not self.cfg.armed or cfg.shadow:
+            ev = "shadow_signal" if (self.cfg.armed and cfg.shadow) else "dry_run"
+            for aid, leg in legs.items():
+                self.journal(ev, strategy=name, source=source, account=aid, qty=leg.qty,
+                             tp_pts=leg.tp_pts, take_usd=leg.take_usd, take_src=leg.take_src,
+                             stop_usd=leg.stop_usd, sat_out=sat_out, **base)
+            return {"ok": True, "armed": False, "accounts": len(legs), "sat_out": sat_out,
+                    "note": ("shadow — journaled only" if ev == "shadow_signal"
+                             else "disarmed — journaled only")}
+        t0 = time.time()
+        order = list(legs)
+        outs = await asyncio.gather(
+            *(self._place(name, cfg, aid, legs[aid].qty, geo.upper, geo.lower, source, t0,
+                          leg=legs[aid], sl_pts=geo.sl_pts) for aid in order),
+            return_exceptions=True)
+        results = {aid: (o if isinstance(o, dict) else {"ok": False, "reason": str(o)})
+                   for aid, o in zip(order, outs)}
+        self.journal("levels_placed", strategy=name, source=source, sat_out=sat_out,
+                     accounts={aid: {"qty": legs[aid].qty, "tp_pts": legs[aid].tp_pts,
+                                     "take_usd": legs[aid].take_usd, "take_src": legs[aid].take_src,
+                                     "stop_usd": legs[aid].stop_usd,
+                                     "ok": bool(results[aid].get("ok"))} for aid in order}, **base)
+        return {"ok": any(r.get("ok") for r in results.values()), "armed": True,
+                "accounts": results, "sat_out": sat_out}
+
     async def _place_one(self, name: str, cfg: StrategyCfg, account: str, qty: int,
                          sig, source: str, t0: float) -> dict:
+        locked = self.account_locked(account)
+        if locked:                       # day_take / day_lock: stopped for the day -- nothing new goes out
+            self.journal("place_skipped", strategy=name, account=account, reason=f"locked:{locked}")
+            return {"ok": False, "reason": f"account stopped for the day ({locked})"}
         st = self._state(name, account)
         ad = self.adapters.get(account)
         if ad is None or not ad.connected:
@@ -443,22 +637,29 @@ class Engine:
         return {"ok": True, "order_id": r.order_id}
 
     @staticmethod
-    def _legs(cfg: StrategyCfg, upper: float, lower: float,
-              qty: int) -> list[OrderRequest]:
+    def _legs(cfg: StrategyCfg, upper: float, lower: float, qty: int,
+              sl_pts: float | None = None, tp_pts: float | None = None) -> list[OrderRequest]:
+        sl = cfg.sl_pts if sl_pts is None else sl_pts      # "levels": this account's geometry today
+        tp = cfg.tp_pts if tp_pts is None else tp_pts
         return [
             OrderRequest(symbol=cfg.symbol, side="Buy", qty=qty,
                          order_type="Stop", price=upper,
-                         stop_price=upper - cfg.sl_pts, tp_price=upper + cfg.tp_pts,
+                         stop_price=upper - sl, tp_price=upper + tp,
                          text="homebase:entry"),
             OrderRequest(symbol=cfg.symbol, side="Sell", qty=qty,
                          order_type="Stop", price=lower,
-                         stop_price=lower + cfg.sl_pts, tp_price=lower - cfg.tp_pts,
+                         stop_price=lower + sl, tp_price=lower - tp,
                          text="homebase:entry"),
         ]
 
     async def _place(self, name: str, cfg: StrategyCfg, account: str, qty: int,
                      upper: float, lower: float, source: str,
-                     t0: float | None = None) -> dict:
+                     t0: float | None = None, leg: AccountLeg | None = None,
+                     sl_pts: float | None = None) -> dict:
+        locked = self.account_locked(account)
+        if locked:                       # day_take / day_lock: stopped for the day -- nothing new goes out
+            self.journal("place_skipped", strategy=name, account=account, reason=f"locked:{locked}")
+            return {"ok": False, "reason": f"account stopped for the day ({locked})"}
         st = self._state(name, account)
         ad = self.adapters.get(account)
         if ad is None or not ad.connected:
@@ -468,12 +669,15 @@ class Engine:
             self.journal("place_failed", strategy=name, account=account,
                          error="account not connected")
             return {"ok": False, "reason": "account not connected"}
+        if leg is not None:              # kind "levels": the account's own stop / take, kept for the fill
+            st.sl_pts, st.tp_pts = sl_pts, leg.tp_pts
+            st.take_usd, st.take_src = leg.take_usd, leg.take_src
         st.qty = qty
         # from here a second signal is refused, and an entry fill that beats
         # the acks is held instead of dropped (on_fill -> _replay_early)
         st.status = "placing"
         self._save()     # durable before the legs go out: a restart mid-flight sees a day that acted
-        buy, sell = self._legs(cfg, upper, lower, qty)
+        buy, sell = self._legs(cfg, upper, lower, qty, st.sl_pts, st.tp_pts)
         rtt: dict = {}
 
         async def timed_leg(name: str, req: OrderRequest) -> OrderResult:
@@ -514,6 +718,8 @@ class Engine:
         self._save()
         self.journal("placed", strategy=name, account=account, source=source,
                      upper=upper, lower=lower, qty=qty,
+                     **({"sl_pts": st.sl_pts, "tp_pts": st.tp_pts, "take_usd": st.take_usd,
+                         "take_src": st.take_src, "stop_usd": leg.stop_usd} if leg is not None else {}),
                      upper_id=st.upper_id, lower_id=st.lower_id,
                      # anchor -> both legs acknowledged by the broker; the
                      # only latency the strategy is actually exposed to
@@ -563,6 +769,7 @@ class Engine:
                 st.entry_side = "Buy" if oid == st.upper_id else "Sell"
                 st.entry_anchor = st.upper_px if oid == st.upper_id else st.lower_px
                 st.entry_fill, st.entry_qty = ev.price, ev.qty
+                self._set_take_px(st, cfg)
                 self._save()
                 jobs = [ad.cancel_order_by_id(sibling) if sibling
                         else asyncio.sleep(0, result=OrderResult(ok=True))]
@@ -592,6 +799,7 @@ class Engine:
                     st.entry_fill = (ev.price if st.entry_fill is None else
                                      (st.entry_fill * st.entry_qty + ev.price * ev.qty) / n)
                 st.entry_qty = n
+                self._set_take_px(st, cfg)
                 self._save()
                 self.journal("entry_fill", strategy=st.strategy, account=st.account,
                              side=st.entry_side, fill=st.entry_fill, anchor=st.entry_anchor,
@@ -622,6 +830,7 @@ class Engine:
                 self._save()
                 self.journal("exit_fill", strategy=st.strategy, account=st.account,
                              reason=st.exit_reason, fill=ev.price, pnl=st.pnl)
+                await self._book_close(st, cfg)
                 return
         # Nothing matched. An entry fill can beat the placement acks — the
         # order is live at the broker before we know its id — so while this
@@ -645,7 +854,9 @@ class Engine:
                         else (st.dn_sl_id, st.dn_tp_id))
         # a rule whose config gives SL/TP points (open_long/open_short) moves
         # both levels to the fill below, like a straddle
-        fixed = st.tp_rr is None and cfg.sl_pts > 0 and cfg.tp_pts > 0
+        sl_pts = cfg.sl_pts if st.sl_pts is None else st.sl_pts      # "levels": the account's own, today
+        tp_pts = cfg.tp_pts if st.tp_pts is None else st.tp_pts
+        fixed = st.tp_rr is None and sl_pts > 0 and tp_pts > 0
         if st.sl_px is not None and not fixed:
             # a rule's absolute stop stays; the target follows the fill at the
             # rule's RR (a rule without tp_rr keeps its absolute target too)
@@ -662,8 +873,8 @@ class Engine:
             self._save()
             r = await ad.modify_order(tp_id, "Limit", price=tp, qty=st.qty)
             return {**out, "moved": r.ok, **({"error": r.error} if not r.ok else {})}
-        sl = _to_tick(st.entry_fill - sign * cfg.sl_pts, tick)
-        tp = _to_tick(st.entry_fill + sign * cfg.tp_pts, tick)
+        sl = _to_tick(st.entry_fill - sign * sl_pts, tick)
+        tp = _to_tick(st.entry_fill + sign * tp_pts, tick)
         out = {"fill": round(st.entry_fill, 6), "sl": sl, "tp": tp}
         if st.entry_anchor is not None and abs(st.entry_fill - st.entry_anchor) < tick / 2:
             return {**out, "moved": "not needed — filled at the trigger"}
@@ -691,10 +902,25 @@ class Engine:
     def _entry_id(self, st: DayState) -> Optional[str]:
         return st.upper_id if st.entry_side == "Buy" else st.lower_id
 
+    def _set_take_px(self, st: DayState, cfg: StrategyCfg) -> None:
+        """A "levels" trade's take price, where its broker-side limit rests: the fill (the trigger when no
+        fill price is known) plus tp_pts on the entry's side.  The price watcher (check_takes) reads it."""
+        if st.tp_pts is None or st.entry_side is None:
+            return
+        base = st.entry_fill if st.entry_fill is not None else st.entry_anchor
+        if base is None:
+            return
+        sign = 1 if st.entry_side == "Buy" else -1
+        st.take_px = _to_tick(base + sign * st.tp_pts, tick_size(cfg.symbol) or 0.25)
+
     def _grade_exit(self, st: DayState, px: Optional[float]) -> str:
         cfg = self.cfg.strategies[st.strategy]
         if px is None:
             return "exit"
+        if st.tp_pts is not None and st.sl_pts is not None and st.entry_fill is not None:
+            sign = 1 if st.entry_side == "Buy" else -1           # "levels": this account's own geometry
+            return ("tp" if abs(px - (st.entry_fill + sign * st.tp_pts))
+                    <= abs(px - (st.entry_fill - sign * st.sl_pts)) else "sl")
         if st.sl_px is not None and st.tp_px is not None:
             return "tp" if abs(px - st.tp_px) <= abs(px - st.sl_px) else "sl"
         if st.entry_anchor is None:
@@ -710,6 +936,137 @@ class Engine:
         sign = 1 if st.entry_side == "Buy" else -1
         pv = point_value(cfg.symbol) or 0.0
         return round(sign * (st.exit_fill - st.entry_fill) * pv * st.qty, 2)
+
+    # --- daily rules: day_take / day_lock (risk.DayBook) ----------------------------------
+    def _fee(self, st: DayState, cfg: StrategyCfg) -> float:
+        return float(cfg.fee_rt) * int(st.entry_qty or st.qty or 0)
+
+    def _net_pnl(self, st: DayState, cfg: StrategyCfg, gross: Optional[float]) -> Optional[float]:
+        return None if gross is None else round(gross - self._fee(st, cfg), 2)
+
+    async def _book_close(self, st: DayState, cfg: StrategyCfg) -> None:
+        """A trade closed (an exit fill): its net P&L goes into the account's day.  The day_take / day_lock
+        thresholds may stop the account for the rest of the day (no new entry anywhere on it, resting
+        entries cancelled).  Never raises into on_fill."""
+        try:
+            net = self._net_pnl(st, cfg, st.pnl)
+            if net is None:
+                return
+            rules, book = self.rules_for(st.account), self.book(st.account)
+            lock = book.record_close(net, rules)
+            self._save_books()
+            self.journal("day_booked", strategy=st.strategy, account=st.account, net=net,
+                         closed_net=book.closed_net, locked=book.locked)
+            if lock:
+                await self._lock_account(st.account, lock, why="a trade closed")
+        except Exception as e:  # noqa: BLE001 — the fill is already in
+            print(f"homebase engine: day book for {st.strategy}@{st.account} failed: {e!r}", file=sys.stderr)
+
+    async def _lock_account(self, account: str, reason: str, *, why: str = "") -> None:
+        """The account is stopped for the day: cancel every entry still resting on it (a later fill would
+        be a new entry).  Open positions are left to their own stop / take (day_take's market-out is
+        check_takes), except none remain after a take."""
+        book = self.book(account)
+        book.locked = book.locked or reason
+        self._save_books()
+        ad = self.adapters.get(account)
+        cancelled = []
+        for st in self.day_states_for_account(account):
+            if st.status != "placed" or ad is None:
+                continue
+            for oid in (st.upper_id, st.lower_id, st.up_sl_id, st.up_tp_id, st.dn_sl_id, st.dn_tp_id):
+                if oid:
+                    r = await ad.cancel_order_by_id(oid)
+                    cancelled.append(f"{oid}: {'ok' if r.ok else r.error}")
+            st.status, st.exit_reason = "done", reason
+        self._save()
+        self.journal("day_rule_lock", account=account, reason=reason, why=why,
+                     closed_net=book.closed_net, cancelled=cancelled)
+
+    def _open_net(self, st: DayState, cfg: StrategyCfg, px: float) -> float:
+        sign = 1 if st.entry_side == "Buy" else -1
+        pv = point_value(cfg.symbol) or 0.0
+        qty = int(st.entry_qty or st.qty or 0)
+        return sign * (px - float(st.entry_fill)) * pv * qty - self._fee(st, cfg)
+
+    async def _cancel_state_orders(self, st: DayState, ad: BrokerAdapter) -> tuple[bool, list[str]]:
+        """Cancel every order one run placed (entries and brackets) -- no market order.  -> (all cancelled, acts)"""
+        ids = [i for i in (st.upper_id, st.lower_id, st.up_sl_id, st.up_tp_id, st.dn_sl_id, st.dn_tp_id) if i]
+        res = await asyncio.gather(*(ad.cancel_order_by_id(i) for i in ids), return_exceptions=True)
+        acts, ok = [], True
+        for i, r in zip(ids, res):
+            good = not isinstance(r, Exception) and r.ok
+            ok = ok and good
+            acts.append(f"cancel {i}: " + ("ok" if good else str(r if isinstance(r, Exception) else r.error)))
+        return ok, acts
+
+    async def check_takes(self, prices: dict) -> list[dict]:
+        """The day_take price watcher -- the backstop to the broker-side take limit.  `prices` maps a
+        strategy symbol (cfg.symbol, "NQ") to the latest print.  Per account with a take in force: the
+        day's closed P&L + the open P&L at that price, both net of fees, has TOUCHED the take (the tester's
+        limit needs a tick of penetration; day_take does not).  The resting limit gets TAKE_GRACE_S to fill
+        by itself; if the position is still open after that, the account's positions are market-flattened,
+        its resting entries cancelled and it is stopped for the day.  _flatten_state reads the position
+        first, so a limit that filled in the meantime is never sold twice.  Never polls equity.
+        -> what it did (for the log / tests)."""
+        out: list[dict] = []
+        now = self._mono()
+        for account in {s.account for s in self.states.values() if s.status == "live"
+                        and s.date == self._today()}:
+            rules = self.rules_for(account)
+            if not (rules.day_take or rules.target_take):
+                continue
+            book = self.book(account)
+            live = [s for s in self.day_states_for_account(account)
+                    if s.status == "live" and s.entry_side and s.entry_fill is not None]
+            total, known = 0.0, bool(live)
+            for s in live:
+                cfg = self.cfg.strategies.get(s.strategy)
+                px = prices.get(cfg.symbol) if cfg is not None else None
+                if px is None:
+                    known = False
+                    break
+                total += self._open_net(s, cfg, float(px))
+            if not (known and book.take_hit(total, rules)):
+                self._take_seen.pop(account, None)
+                continue
+            first = self._take_seen.setdefault(account, now)
+            if now - first < TAKE_GRACE_S:
+                continue
+            self._take_seen.pop(account, None)
+            ad = self.adapters.get(account)
+            if ad is None:
+                continue
+            acts: dict = {}
+            booked = 0.0
+            sold: set = set()           # _flatten_state sells the account's WHOLE net in the symbol: once per symbol
+            for s in sorted(self.day_states_for_account(account), key=lambda x: x.status != "live"):
+                cfg = self.cfg.strategies.get(s.strategy)
+                if cfg is None or s.status not in ("placed", "live"):
+                    continue
+                was_live = s.status == "live" and s.entry_fill is not None
+                if cfg.symbol in sold:  # the market-out is already sent: this run only has orders to cancel
+                    flat, acts[s.strategy] = await self._cancel_state_orders(s, ad)
+                else:
+                    flat, acts[s.strategy] = await self._flatten_state(s, cfg, ad)
+                    if flat:
+                        sold.add(cfg.symbol)
+                if flat:
+                    if was_live:               # the market-out's fill arrives after the state is done
+                        px = prices.get(cfg.symbol)
+                        s.exit_fill = px
+                        s.pnl = self._gross_pnl(s, cfg)
+                        booked += self._open_net(s, cfg, float(px))
+                        book.closes += 1
+                    s.exit_reason, s.status = "day_take", "done"
+            book.closed_net = round(book.closed_net + booked, 2)
+            book.locked = book.locked or LOCK_TAKE
+            self._save()
+            self._save_books()
+            self.journal("day_take_flatten", account=account, open_net=round(total, 2),
+                         closed_net=book.closed_net, take=book.take_net(rules), actions=acts)
+            out.append({"account": account, "open_net": total, "actions": acts})
+        return out
 
     async def flatten_strategy(self, name: str) -> dict:
         """Manual flatten for ONE strategy on every account it acted on today
@@ -1106,6 +1463,7 @@ class Engine:
         st.status, st.entry_side = "live", side
         st.entry_anchor = st.upper_px if side == "Buy" else st.lower_px
         st.note = note
+        self._set_take_px(st, cfg)          # no fill price is known: the take rests from the trigger
         self._save()
         r = await ad.cancel_order_by_id(sibling) if sibling else None
         self.journal(event, strategy=st.strategy, account=st.account, side=side,

@@ -44,6 +44,7 @@ from .marketdata import TradovateMD
 from .rules import RULES
 from .metrics import live_metrics, strategy_live_detail
 from .paths import state_dir
+from .leveltimer import LevelTimer
 from .timer import FIRE_T, SelfTimer, fire_clock, fire_said, miss_why, off_anchor
 from . import desk_api
 from .trading import ChartDesk
@@ -315,6 +316,10 @@ def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
             if status != "idle":
                 checks.append({"level": "ok", "label": name, "detail": status})
             continue                     # a rule with no setup today is normal
+        if getattr(s, "kind", "straddle") == "levels":
+            if status != "idle":
+                checks.append({"level": "ok", "label": name, "detail": status})
+            continue                     # leveltimer journals every fire / skip / miss with its why
         # from the open, a self-fire straddle's own timer says what its day was
         # (09:21-09:30 has its own check above)
         told = (_timer_day(tstrats.get(name), status, s, cfg.armed)
@@ -490,6 +495,10 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         return TradovateMD(key, env, token_provider=provider)
 
     timer = SelfTimer(cfg, engine, md_factory=_md_factory)
+    # the "levels" strategies (NQ prop algos): their own clock, their own market-data socket, and the
+    # day_take price watcher; target_take reads the desk's daily balance record
+    level_timer = LevelTimer(cfg, engine, md_factory=_md_factory)
+    engine.balance_history = lambda account: equity_by_day(account)
     # trading from the chart (spec 2026-09-26): views, guards, journaling
     desk = ChartDesk(cfg, engine, adapters, acct_status, timer_status=timer.status)
     feed_box: dict = {"feed": None, "retry_at": 0.0, "error": None}
@@ -981,6 +990,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                      asyncio.create_task(_broker_loop()),
                      asyncio.create_task(_equity_loop()),
                      asyncio.create_task(timer.loop()),
+                     asyncio.create_task(level_timer.loop()),
                      asyncio.create_task(_feed_loop()),
                      asyncio.create_task(desk.run())]
         try:
@@ -1060,6 +1070,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                                            acct_status, feed_status(),
                                            timer.status(), power_status()),
             "timer": timer.status(),
+            "levels": level_timer.status(),
             "feed": feed_status(),
             "accounts": accounts,
             "notices": notices[::-1],      # newest first, one line each, page wording
@@ -1075,7 +1086,10 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                             "kind": getattr(s, "kind", "straddle"),
                             "shadow": getattr(s, "shadow", False),
                             "rule": getattr(s, "rule", ""),
-                            "bar_minutes": getattr(s, "bar_minutes", 1)},
+                            "bar_minutes": getattr(s, "bar_minutes", 1),
+                            "shape": s.shape, "fire_et": s.fire_et, "day_take": s.day_take,
+                            "day_lock": s.day_lock, "target_take": s.target_take,
+                            "size_tiers": s.size_tiers, "ack_open_loss": s.ack_open_loss},
                     "research": s.metrics,
                     "live": live.get(name),
                     "day_status": engine.day_status(name),
