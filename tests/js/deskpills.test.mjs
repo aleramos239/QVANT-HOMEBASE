@@ -38,7 +38,7 @@ test('ARMED, LIVE, in position and ON each have their own, different look', () =
 });
 
 test('the day status: "live" reads "in position", "placed" reads "orders working"; the desk\'s word stays in the tooltip', () => {
-  const block = HTML.slice(HTML.indexOf("/* A strategy's day status as a pill"), HTML.indexOf('function stratCard('));
+  const block = HTML.slice(HTML.indexOf("/* A strategy's day status as a pill"), HTML.indexOf('/* ===== Desk views'));
   const ctx = vm.createContext({});
   vm.runInContext(block + '\nglobalThis.dayPill = dayPill;', ctx);
   assert.equal(ctx.dayPill('live'), '<span class="pill inpos" title="Today: live">in position</span>');

@@ -251,7 +251,7 @@ test('the bulb, the Not-ready strip and the checks list all read the shown readi
 
 // ---- labels ------------------------------------------------------------------------------------
 test('the card labels say what they mean', () => {
-  assert.match(HTML, /<div class="mcap">No live trades yet<\/div>/);
+  assert.match(HTML, /No live trades yet/);   // the strategy page says it plainly when there is nothing to show
   assert.doesNotMatch(HTML, /this strip earns itself/);
   assert.match(HTML, />Flatten &amp; turn off<\/button>/);
   assert.doesNotMatch(HTML, /Flatten · off/);
