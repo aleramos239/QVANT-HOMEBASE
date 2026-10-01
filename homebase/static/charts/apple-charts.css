@@ -8,28 +8,31 @@
    ============================================================================ */
 
 :root {
-  --frame: #f5f5f7;
-  --hover: #eeeef1;
-  --pill: #ececf0;
-  --frame-wash: radial-gradient(1400px 700px at 50% -10%, #ffffff 0%, var(--frame) 65%);
-  --hb-seg-bg: rgb(0 0 0 / .06);
+  --frame: #e9eaec;
+  --hover: #eceef0;
+  --pill: #e4e5e8;
+  --hb-accent: #3f2a20;
+  --frame-wash: radial-gradient(1400px 700px at 50% -10%, #f6f7f8 0%, var(--frame) 65%);
+  --hb-seg-bg: rgb(22 23 26 / .07);
   --hb-seg-on: #ffffff;
-  --hb-seg-shadow: 0 1px 3px rgb(0 0 0 / .14), 0 0 0 .5px rgb(0 0 0 / .04);
+  --hb-seg-shadow: 0 1px 3px rgb(22 23 26 / .16), 0 0 0 .5px rgb(22 23 26 / .05);
   --shadow-menu: 0 0 0 .5px rgb(0 0 0 / .06), 0 8px 28px rgb(0 0 0 / .14);
   --shadow-dialog: 0 0 0 .5px rgb(0 0 0 / .08), 0 30px 80px rgb(0 0 0 / .26);
 }
 :root[data-theme="dark"] {
-  --frame: #000000;
-  --hover: #262628;
-  --pill: #2c2c2e;
-  --frame-wash: radial-gradient(1400px 700px at 50% -10%, #141416 0%, var(--frame) 65%);
+  --frame: #0e0f11;
+  --hover: #26272b;
+  --pill: #2a2b30;
+  --hb-accent: #c8b6a6;
+  --frame-wash: radial-gradient(1400px 700px at 50% -10%, #17181b 0%, var(--frame) 65%);
   --hb-seg-bg: rgb(255 255 255 / .1);
-  --hb-seg-on: #636366;
+  --hb-seg-on: #4a4b50;
   --hb-seg-shadow: 0 1px 3px rgb(0 0 0 / .5);
   --shadow-menu: 0 0 0 .5px rgb(255 255 255 / .1), 0 10px 30px rgb(0 0 0 / .6);
   --shadow-dialog: 0 0 0 .5px rgb(255 255 255 / .12), 0 30px 80px rgb(0 0 0 / .7);
 }
 body { text-rendering: optimizeLegibility; font-feature-settings: "tnum" 1; }
+:focus-visible { outline-color: var(--hb-accent); }
 
 /* ---- page switcher + layout tabs --------------------------------------------- */
 .tabrow { height: 40px; border-bottom-color: color-mix(in srgb, var(--border) 70%, transparent); padding: 0 8px; }
