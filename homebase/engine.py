@@ -102,6 +102,7 @@ class DayState:
     brackets_moved: bool = False
     # kind "levels": this account's geometry today (points from the trigger / the fill), set at placement
     sl_pts: Optional[float] = None
+    sl_sell_pts: Optional[float] = None   # the sell leg's stop distance when it differs from sl_pts (levels.leg_stop)
     tp_pts: Optional[float] = None
     take_usd: Optional[float] = None   # the net $ the take is sized for (None: the fallback target)
     take_src: str = ""                 # day_take | target_take | fallback
@@ -577,7 +578,7 @@ class Engine:
         order = list(legs)
         outs = await asyncio.gather(
             *(self._place(name, cfg, aid, legs[aid].qty, geo.upper, geo.lower, source, t0,
-                          leg=legs[aid], sl_pts=geo.sl_pts) for aid in order),
+                          leg=legs[aid], sl_pts=geo.sl_pts, sl_sell_pts=geo.sl_sell_pts) for aid in order),
             return_exceptions=True)
         results = {aid: (o if isinstance(o, dict) else {"ok": False, "reason": str(o)})
                    for aid, o in zip(order, outs)}
@@ -638,8 +639,10 @@ class Engine:
 
     @staticmethod
     def _legs(cfg: StrategyCfg, upper: float, lower: float, qty: int,
-              sl_pts: float | None = None, tp_pts: float | None = None) -> list[OrderRequest]:
+              sl_pts: float | None = None, tp_pts: float | None = None,
+              sl_sell_pts: float | None = None) -> list[OrderRequest]:
         sl = cfg.sl_pts if sl_pts is None else sl_pts      # "levels": this account's geometry today
+        sl_sell = sl if sl_sell_pts is None else sl_sell_pts
         tp = cfg.tp_pts if tp_pts is None else tp_pts
         return [
             OrderRequest(symbol=cfg.symbol, side="Buy", qty=qty,
@@ -648,14 +651,14 @@ class Engine:
                          text="homebase:entry"),
             OrderRequest(symbol=cfg.symbol, side="Sell", qty=qty,
                          order_type="Stop", price=lower,
-                         stop_price=lower + sl, tp_price=lower - tp,
+                         stop_price=lower + sl_sell, tp_price=lower - tp,
                          text="homebase:entry"),
         ]
 
     async def _place(self, name: str, cfg: StrategyCfg, account: str, qty: int,
                      upper: float, lower: float, source: str,
                      t0: float | None = None, leg: AccountLeg | None = None,
-                     sl_pts: float | None = None) -> dict:
+                     sl_pts: float | None = None, sl_sell_pts: float | None = None) -> dict:
         locked = self.account_locked(account)
         if locked:                       # day_take / day_lock: stopped for the day -- nothing new goes out
             self.journal("place_skipped", strategy=name, account=account, reason=f"locked:{locked}")
@@ -670,14 +673,14 @@ class Engine:
                          error="account not connected")
             return {"ok": False, "reason": "account not connected"}
         if leg is not None:              # kind "levels": the account's own stop / take, kept for the fill
-            st.sl_pts, st.tp_pts = sl_pts, leg.tp_pts
+            st.sl_pts, st.sl_sell_pts, st.tp_pts = sl_pts, sl_sell_pts, leg.tp_pts
             st.take_usd, st.take_src = leg.take_usd, leg.take_src
         st.qty = qty
         # from here a second signal is refused, and an entry fill that beats
         # the acks is held instead of dropped (on_fill -> _replay_early)
         st.status = "placing"
         self._save()     # durable before the legs go out: a restart mid-flight sees a day that acted
-        buy, sell = self._legs(cfg, upper, lower, qty, st.sl_pts, st.tp_pts)
+        buy, sell = self._legs(cfg, upper, lower, qty, st.sl_pts, st.tp_pts, st.sl_sell_pts)
         rtt: dict = {}
 
         async def timed_leg(name: str, req: OrderRequest) -> OrderResult:
@@ -718,7 +721,7 @@ class Engine:
         self._save()
         self.journal("placed", strategy=name, account=account, source=source,
                      upper=upper, lower=lower, qty=qty,
-                     **({"sl_pts": st.sl_pts, "tp_pts": st.tp_pts, "take_usd": st.take_usd,
+                     **({"sl_pts": st.sl_pts, "sl_sell_pts": st.sl_sell_pts, "tp_pts": st.tp_pts, "take_usd": st.take_usd,
                          "take_src": st.take_src, "stop_usd": leg.stop_usd} if leg is not None else {}),
                      upper_id=st.upper_id, lower_id=st.lower_id,
                      # anchor -> both legs acknowledged by the broker; the
@@ -855,6 +858,8 @@ class Engine:
         # a rule whose config gives SL/TP points (open_long/open_short) moves
         # both levels to the fill below, like a straddle
         sl_pts = cfg.sl_pts if st.sl_pts is None else st.sl_pts      # "levels": the account's own, today
+        if sign < 0 and st.sl_sell_pts is not None:
+            sl_pts = st.sl_sell_pts                                   # the sell leg's own stop distance
         tp_pts = cfg.tp_pts if st.tp_pts is None else st.tp_pts
         fixed = st.tp_rr is None and sl_pts > 0 and tp_pts > 0
         if st.sl_px is not None and not fixed:
@@ -919,8 +924,9 @@ class Engine:
             return "exit"
         if st.tp_pts is not None and st.sl_pts is not None and st.entry_fill is not None:
             sign = 1 if st.entry_side == "Buy" else -1           # "levels": this account's own geometry
+            sl_pts = st.sl_sell_pts if (sign < 0 and st.sl_sell_pts is not None) else st.sl_pts
             return ("tp" if abs(px - (st.entry_fill + sign * st.tp_pts))
-                    <= abs(px - (st.entry_fill - sign * st.sl_pts)) else "sl")
+                    <= abs(px - (st.entry_fill - sign * sl_pts)) else "sl")
         if st.sl_px is not None and st.tp_px is not None:
             return "tp" if abs(px - st.tp_px) <= abs(px - st.sl_px) else "sl"
         if st.entry_anchor is None:

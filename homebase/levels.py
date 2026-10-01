@@ -10,7 +10,11 @@ One definition, used by the desk (homebase/leveltimer.py) and by the tester stra
 
 Both: stop = sl_atr x ATR from the TRIGGER (floored at 2 ticks), one OCO pair, prices on the tick grid.  The
 desk then re-prices stop and take to the actual fill (engine._move_brackets), like the tester's
-move_brackets_to_fill.  The take is a distance from the fill: take_points(day_take / target_take, qty).
+move_brackets_to_fill.  The stop distance is PER LEG (sl_pts = the buy leg's, sl_sell_pts = the sell leg's): the
+research placed the stop at tick(raw trigger -/+ 3 ATR) and then shifted it by (fill - raw trigger), and the
+straddle's raw trigger (anchor +/- off_atr x ATR) is not on the tick grid, so after rounding the two legs' stops
+can sit a tick apart in distance (leg_stop below).  Desk and tester use the same number, so they match the
+research's stop price to the tick.  The take is a distance from the fill: take_points(day_take / target_take, qty).
 
 Pure logic; no I/O.
 """
@@ -41,24 +45,47 @@ class Geometry:
     range_hi: Optional[float] = None     # orb: the opening range
     range_lo: Optional[float] = None
     last_px: Optional[float] = None      # the last print before the fire
+    sl_sell_pts: Optional[float] = None  # the sell leg's stop distance (None: the same as sl_pts, the buy leg's)
+
+    def sl_for(self, side: str) -> float:
+        """Stop distance from the trigger / fill of the leg that fills: side "Buy" | "Sell" (or long | short)."""
+        sell = str(side).lower() in ("sell", "short")
+        return self.sl_pts if (not sell or self.sl_sell_pts is None) else self.sl_sell_pts
+
+    @property
+    def sl_max(self) -> float:
+        return max(self.sl_pts, self.sl_sell_pts if self.sl_sell_pts is not None else self.sl_pts)
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+
+def leg_stop(raw_trigger: float, atr: float, sl_atr: float, tick: float, buy: bool) -> float:
+    """One leg's stop distance from its trigger/fill, exactly as the research's tester ran it: the stop order
+    is tick(raw trigger -/+ d) (d = sl_atr x ATR, floored at 2 ticks) and it moves by (fill - raw trigger) with the
+    fill on the tick grid, so the stop sits tick(raw trigger - tick(raw trigger - d)) from the fill (buy leg;
+    mirrored for the sell leg).  On a raw trigger that is already on the grid this is tick(d)."""
+    d = max(sl_atr * atr, 2 * tick)
+    if buy:
+        return _to_tick(raw_trigger - _to_tick(raw_trigger - d, tick), tick)
+    return _to_tick(_to_tick(raw_trigger + d, tick) - raw_trigger, tick)
 
 
 def straddle_geometry(anchor: float, atr: float, off_atr: float, sl_atr: float, tick: float,
                       atr_bars: int = 0) -> Geometry:
     off = off_atr * atr
     return Geometry("atr_straddle", _to_tick(anchor + off, tick), _to_tick(anchor - off, tick),
-                    _to_tick(max(sl_atr * atr, 2 * tick), tick), atr, atr_bars,
-                    anchor=anchor, last_px=anchor)
+                    leg_stop(anchor + off, atr, sl_atr, tick, True), atr, atr_bars,
+                    anchor=anchor, last_px=anchor,
+                    sl_sell_pts=leg_stop(anchor - off, atr, sl_atr, tick, False))
 
 
 def orb_geometry(hi: float, lo: float, atr: float, sl_atr: float, tick: float,
                  last_px: Optional[float] = None, atr_bars: int = 0) -> Geometry:
     return Geometry("orb", _to_tick(hi + tick, tick), _to_tick(lo - tick, tick),
-                    _to_tick(max(sl_atr * atr, 2 * tick), tick), atr, atr_bars,
-                    range_hi=hi, range_lo=lo, last_px=last_px)
+                    leg_stop(hi + tick, atr, sl_atr, tick, True), atr, atr_bars,
+                    range_hi=hi, range_lo=lo, last_px=last_px,
+                    sl_sell_pts=leg_stop(lo - tick, atr, sl_atr, tick, False))
 
 
 def compute_geometry(cfg, bars: TickBars, fire_ms: int, tick: float,
@@ -137,8 +164,8 @@ def account_leg(cfg, account: str, book_qty: int, rules: DayRules, book: DayBook
         pts = take_points(need, qty, pv, cfg.fee_rt, tick)
         src = ("target_take" if rules.target_take and book.target_level is not None
                and (not rules.day_take or book.target_level < rules.day_take) else "day_take")
-        return AccountLeg(account, qty, pts, round(need, 2), src, round(geo.sl_pts * pv * qty, 2)), "ok"
+        return AccountLeg(account, qty, pts, round(need, 2), src, round(geo.sl_max * pv * qty, 2)), "ok"
     if rules.target_take and not rules.day_take:
         return None, "target_take has no level today (standing unknown, min days, consistency or passed)"
     pts = ceil_to_tick(float(cfg.tgt_r) * geo.sl_pts, tick)
-    return AccountLeg(account, qty, pts, None, "fallback", round(geo.sl_pts * pv * qty, 2)), "ok"
+    return AccountLeg(account, qty, pts, None, "fallback", round(geo.sl_max * pv * qty, 2)), "ok"

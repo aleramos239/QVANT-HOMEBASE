@@ -109,13 +109,13 @@ class LevelsStrategy(Strategy):
         ctx.hline("Long entry", geo.upper, role="entry")
         ctx.hline("Short entry", geo.lower, role="entry")
         ctx.hline("Long SL (planned)", geo.upper - geo.sl_pts, role="sl")
-        ctx.hline("Short SL (planned)", geo.lower + geo.sl_pts, role="sl")
+        ctx.hline("Short SL (planned)", geo.lower + geo.sl_for("Sell"), role="sl")
         ctx.hline("Long take (planned)", geo.upper + tp, role="tp")
         ctx.hline("Short take (planned)", geo.lower - tp, role="tp")
         ctx.plot("ATR", ctx.now_ns, geo.atr)
         ctx.move_brackets_to_fill = True
         buy = ctx.stop_entry("long", geo.upper, sl=geo.upper - geo.sl_pts, tp=geo.upper + tp)
-        sell = ctx.stop_entry("short", geo.lower, sl=geo.lower + geo.sl_pts, tp=geo.lower - tp)
+        sell = ctx.stop_entry("short", geo.lower, sl=geo.lower + geo.sl_for("Sell"), tp=geo.lower - tp)
         ctx.oco(buy, sell)
         self.entries = (buy, sell)
 

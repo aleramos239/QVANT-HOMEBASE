@@ -39,6 +39,39 @@ def test_orb_geometry_is_one_tick_beyond_the_range():
     assert (g.upper, g.lower, g.sl_pts, g.range_hi, g.range_lo) == (20108.25, 20097.75, 123.0, 20108.0, 20098.0)
 
 
+def test_leg_stop_is_the_testers_stop_to_the_tick():
+    """The research placed the stop at tick(raw trigger -/+ d) and the tester moved it by (fill - raw trigger): with the
+    straddle's raw trigger off the tick grid the two legs' stops sit a tick apart in distance.  leg_stop must give,
+    for every anchor / ATR / slip, exactly the stop the tester ends up with (backtest.engine.to_tick, Ctx._entry,
+    _Sim._fill)."""
+    import random
+    from homebase.backtest.engine import to_tick
+    from homebase.levels import leg_stop
+    rnd, seen = random.Random(7), set()
+    for _ in range(20000):
+        anchor = round(rnd.uniform(10000, 30000) * 4) / 4 + rnd.choice([0, 0, 0.1])
+        atr = rnd.uniform(5, 150)
+        off = rnd.choice([0.25, 1.0]) * atr
+        d = max(3.0 * atr, 2 * TICK)
+        for buy in (True, False):
+            sd = 1 if buy else -1
+            raw = anchor + sd * off                                     # the raw trigger (research: px)
+            slip = rnd.choice([0, 0, 1, 3]) * TICK
+            fill = to_tick(to_tick(raw, TICK) + sd * slip, TICK)       # stop fill: the trigger (rounded) +/- slip
+            sl_order = to_tick(raw - sd * d, TICK)                      # Ctx._entry rounds the stop order
+            sl_final = to_tick(sl_order + (fill - raw), TICK)           # _Sim._fill: moved by fill - ref (ref = raw px)
+            got = leg_stop(raw, atr, 3.0, TICK, buy)
+            assert to_tick(fill - sd * got, TICK) == sl_final, (anchor, atr, buy, slip)
+            seen.add((buy, round(got - to_tick(d, TICK), 2)))
+    assert {x[1] for x in seen} >= {0.0, 0.25, -0.25}                   # the one-tick wobble really occurs
+
+
+def test_straddle_legs_may_have_different_stop_distances_and_geometry_serves_both():
+    g = Geometry("atr_straddle", 100.25, 99.75, 10.0, 4.0, 19, sl_sell_pts=10.25)
+    assert (g.sl_for("Buy"), g.sl_for("long"), g.sl_for("Sell"), g.sl_for("short"), g.sl_max) == (10.0, 10.0, 10.25, 10.25, 10.25)
+    assert Geometry("orb", 1.0, 0.5, 8.0, 4.0, 19).sl_for("Sell") == 8.0        # no sell distance: the buy leg's
+
+
 def test_geometry_serialises():
     assert straddle_geometry(1.0, 1.0, 1.0, 3.0, TICK).to_dict()["shape"] == "atr_straddle"
 

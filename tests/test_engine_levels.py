@@ -225,6 +225,20 @@ def test_a_short_fill_takes_below_the_fill(tmp_path):
     assert {m[1]: m[2] for m in ads["a"].modified} == {"Stop": 24489.75 + 130.0, "Limit": 24489.75 - 19.0}
 
 
+def test_the_sell_leg_has_its_own_stop_distance_when_the_geometry_says_so(tmp_path):
+    """levels.leg_stop: a straddle's two legs can sit a tick apart in stop distance (research parity)."""
+    geo = dataclasses.replace(GEO, sl_pts=130.0, sl_sell_pts=130.25)
+    eng, ads, _ = desk(tmp_path, {"nq_nyam_flex": strat()}, {"a": paper()}, {"nq_nyam_flex": [("a", 4)]})
+    run(eng.handle_levels("nq_nyam_flex", geo))
+    buy, sell = ads["a"].brackets
+    assert (buy.stop_price, sell.stop_price) == (24510.0 - 130.0, 24490.0 + 130.25)
+    st = eng._state("nq_nyam_flex", "a")
+    assert (st.sl_pts, st.sl_sell_pts) == (130.0, 130.25)
+    fill(eng, st, "Sell", 24489.75, oid=st.lower_id)
+    assert {m[1]: m[2] for m in ads["a"].modified} == {"Stop": 24489.75 + 130.25, "Limit": 24489.75 - 19.0}
+    assert eng._grade_exit(st, 24489.75 + 130.25) == "sl" and eng._grade_exit(st, 24489.75 - 19.0) == "tp"
+
+
 def test_an_exit_at_the_take_is_graded_and_books_the_day_and_locks_it(tmp_path):
     eng, ads, _ = desk(tmp_path, {"nq_nyam_flex": strat()}, {"a": paper()}, {"nq_nyam_flex": [("a", 4)]})
     run(eng.handle_levels("nq_nyam_flex", GEO))
