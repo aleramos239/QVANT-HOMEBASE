@@ -137,6 +137,9 @@ class Engine:
         self._perf = time.perf_counter             # the legs' round-trip clock (tests replace it)
         self._needs_check_said: set = set()        # (date, strategy, account, at) journaled
         self._check_it_cancelled: set = set()      # (date, strategy, account): 12:55 entry cancels sent
+        self._inactive: dict[str, dict[str, str]] = {}   # strategy -> {code: why}, today (inactive.py)
+        self._inactive_date: Optional[str] = None
+        self._signalled: set = set()               # (date, strategy): a bar rule produced a signal
         self.books: dict[str, DayBook] = {}        # account -> today's closed P&L / lock / eval standing
         self._take_seen: dict[str, float] = {}     # account -> when a day_take touch was first seen
         self._mono = time.monotonic                # the take backstop's clock (tests replace it)
@@ -209,6 +212,11 @@ class Engine:
                 if rec.get("event") in ("strategy_killed", "strategy_kill_requested") \
                         and str(rec.get("et", "")).startswith(today) and rec.get("strategy"):
                     self._killed.setdefault(today, set()).add(str(rec["strategy"]))
+                    continue
+                if rec.get("event") == "inactive_today" and str(rec.get("et", "")).startswith(today) \
+                        and rec.get("strategy") and rec.get("code"):
+                    self._inactive.setdefault(str(rec["strategy"]), {})[str(rec["code"])] = str(rec.get("reason", ""))
+                    self._inactive_date = today
                     continue
                 if rec.get("event") != "timer_skipped":
                     continue
@@ -327,6 +335,26 @@ class Engine:
                "event": event, **data}
         with open(self._root / "journal.jsonl", "a") as f:
             f.write(json.dumps(rec) + "\n")
+
+    def note_inactive(self, strategy: str, code: str, why: str, **kw) -> bool:
+        """A booked strategy will not trade today: say so ONCE per (day, strategy, code) -- the journal event
+        `inactive_today` and the readiness line.  True when this call journaled it."""
+        today = self._today()
+        if self._inactive_date != today:
+            self._inactive, self._inactive_date = {}, today
+        codes = self._inactive.setdefault(strategy, {})
+        if code in codes:
+            return False
+        codes[code] = why
+        self.journal("inactive_today", strategy=strategy, code=code, reason=why, **kw)
+        return True
+
+    def inactive_today(self, strategy: str) -> dict:
+        """{code: why} the strategy was said inactive today (empty: nothing said)."""
+        return dict(self._inactive.get(strategy, {})) if self._inactive_date == self._today() else {}
+
+    def signalled_today(self, strategy: str) -> bool:
+        return (self._today(), strategy) in self._signalled
 
     def _state(self, strategy: str, account: str) -> DayState:
         today = self._today()
@@ -457,6 +485,7 @@ class Engine:
         account (entry Market or Stop, absolute SL/TP). Same guards as an
         alert: enabled, one per day, the accept window, the book. Shadow or
         disarmed -> journaled only."""
+        self._signalled.add((self._today(), name))
         cfg = self.cfg.strategies.get(name)
         if cfg is None or not cfg.enabled:
             self.journal("signal_refused", strategy=name, reason="unknown_or_disabled")
@@ -537,15 +566,18 @@ class Engine:
         if not (_hhmm(cfg.accept_from_et) <= now <= _hhmm(cfg.accept_until_et)):
             self.journal("levels_refused", strategy=name, reason="outside_window",
                          at=str(now), source=source)
+            self.note_inactive(name, "outside_window", f"fired at {now}, outside its accept window")
             return {"ok": False, "reason": f"outside accept window at {now}"}
         if not (geo.upper > geo.lower and geo.sl_pts > 0):
             self.journal("levels_refused", strategy=name, reason="bad_geometry", geometry=geo.to_dict())
+            self.note_inactive(name, "bad_geometry", "the day's geometry was unusable")
             return {"ok": False, "reason": "bad geometry"}
         skipped = self.skipped_today(name)
         asg = [a for a in assignments(self.cfg, name) if a["account"] not in skipped]
         if not asg:
             self.journal("levels_refused", strategy=name, reason="no_assignments",
                          skipped=sorted(skipped), source=source)
+            self.note_inactive(name, "no_assignments", "no accounts booked (or every one skipped today)")
             return {"ok": False, "reason": "no accounts booked (or every one is skipped today)"}
         legs: dict[str, AccountLeg] = {}
         sat_out: dict[str, str] = {}
@@ -567,6 +599,8 @@ class Engine:
         if not legs:
             self.journal("levels_refused", strategy=name, reason="every_account_sat_out",
                          sat_out=sat_out, source=source, **base)
+            self.note_inactive(name, "every_account_sat_out",
+                               "; ".join(f"{k}: {v}" for k, v in sat_out.items()) or "every account sat out")
             return {"ok": False, "reason": "every account sat out", "sat_out": sat_out}
         if not self.cfg.armed or cfg.shadow:
             ev = "shadow_signal" if (self.cfg.armed and cfg.shadow) else "dry_run"

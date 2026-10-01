@@ -47,6 +47,7 @@ from .paths import state_dir
 from .leveltimer import LevelTimer
 from .timer import SelfTimer, fire_clock, fire_said, fire_time, miss_why, off_anchor, schedule
 from . import desk_api
+from . import inactive as inactive_mod
 from .trading import ChartDesk
 
 STATIC = Path(__file__).resolve().parent / "static"
@@ -242,6 +243,16 @@ def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
                            "label": name,
                            "detail": "enabled but no accounts assigned"})
     weekday = now_et.weekday() < 5
+    if weekday:                          # a booked strategy that will not trade today says why (inactive.py)
+        for name, s in cfg.strategies.items():
+            why = dict(engine.inactive_today(name))
+            got = inactive_mod.static_reason(cfg, engine, name, s, now_et.date())
+            if got is not None:
+                why.setdefault(*got)
+            why.pop("not_scheduled_today", None)    # an event-day strategy off its day: expected, journaled only
+            if why and s.enabled and config_mod.assignments(cfg, name):
+                checks.append({"level": "warn", "label": name,
+                               "detail": "inactive today — " + "; ".join(why.values())})
     live_strats = [n for n, s in enabled.items()
                    if not getattr(s, "shadow", False)
                    and config_mod.assignments(cfg, n)]
@@ -971,6 +982,14 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                 engine.journal("feed_loop_error", error=str(e)[:200])
             await asyncio.sleep(1.0)
 
+    async def _inactive_loop():
+        while True:
+            try:
+                inactive_mod.sweep(cfg, engine, engine.now_et())
+            except Exception as e:  # noqa: BLE001 — a journaling aid must never die or block
+                engine.journal("inactive_loop_error", error=str(e)[:200])
+            await asyncio.sleep(20.0)
+
     async def _clock_loop():
         while True:
             try:
@@ -1001,6 +1020,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                      asyncio.create_task(_equity_loop()),
                      asyncio.create_task(timer.loop()),
                      asyncio.create_task(level_timer.loop()),
+                     asyncio.create_task(_inactive_loop()),
                      asyncio.create_task(_feed_loop()),
                      asyncio.create_task(desk.run())]
         try:
@@ -1020,6 +1040,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
     app.state.cfg = cfg
     app.state.adapters = adapters
     app.state.feed_step = feed_step
+    app.state.inactive_sweep = lambda now_et=None: inactive_mod.sweep(cfg, engine, now_et or engine.now_et())
     app.state.sync_paper = _sync_paper
     # test-only hooks onto the broker reconnect loop (never called by the
     # app itself outside `background=True`'s lifespan task)

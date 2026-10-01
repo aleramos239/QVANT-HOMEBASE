@@ -118,6 +118,14 @@ class LevelTimer:
         except Exception as e:  # noqa: BLE001 — a failing journal never changes a decision
             print(f"homebase leveltimer: journal {event} failed: {e!r}", file=sys.stderr)
 
+    def _inactive(self, name: str, code: str, why: str) -> None:
+        """Say once that a booked strategy will not trade today (inactive.py); never changes a decision."""
+        try:
+            if assignments(self.cfg, name):
+                self.engine.note_inactive(name, code, why, source="leveltimer")
+        except Exception as e:  # noqa: BLE001
+            print(f"homebase leveltimer: inactive {name} failed: {e!r}", file=sys.stderr)
+
     def _on_trade(self, contract, px, size, seen, stamp) -> None:
         bars = self._by_contract.get(contract)
         if bars is None:
@@ -265,6 +273,7 @@ class LevelTimer:
         if s.skip_early_close and is_early_close_skip(s.symbol, d, s.flat_et):
             st.update(stage="skipped", reason="early_close")
             self._journal("level_skipped", strategy=name, reason="early_close", date=date)
+            self._inactive(name, "early_close", f"half day: the market closes before its {s.flat_et} flat")
             return
         if st["stage"] == "idle":                          # stage: subscribe, start the bars
             if await self._decided_earlier(name, date):    # a restart: once a day
@@ -341,12 +350,14 @@ class LevelTimer:
             st.update(stage="skipped", reason="contract_changed")
             self._journal("level_skipped", strategy=name, reason="contract_changed",
                           staged=contract, front=symbols.resolve_contract(s.symbol))
+            self._inactive(name, "contract_changed", "the front contract rolled between the stage and the fire")
             return
         tick = tick_size(s.symbol) or 0.25
         geo, why = compute_geometry(s, bars, fire_ms, tick, last_ms=now_ms + 1 if late else None)
         if geo is None:
             st.update(stage="skipped", reason=why)
             self._journal("level_skipped", strategy=name, reason=why)
+            self._inactive(name, "no_geometry", why)
             return
         self._manual_skips(name, s)
         info = {"late": late, "late_s": round(late_s, 3), "contract": contract,
@@ -406,6 +417,7 @@ class LevelTimer:
                                     else "the window closed before it could fire")
         st.update(stage="missed", reason=reason)
         self._journal("level_missed", strategy=name, reason=reason, window_end=s.accept_until_et)
+        self._inactive(name, "missed", reason)
 
     async def _decided_earlier(self, name: str, date: str) -> bool:
         """Once a day, restarts included: did an earlier run of this desk already fire / skip this strategy
