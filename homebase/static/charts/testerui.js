@@ -2118,7 +2118,7 @@ function render(el) {
   root = page.mk('div', 'tst');
   el.appendChild(root);
   if (strategiesList && strategiesList.length) { buildFull(); return; }
-  root.appendChild(page.mk('div', 'bp-empty', 'Loading strategies…'));
+  root.appendChild(page.mk('div', 'bp-empty bp-loading', 'Loading strategies…'));
   Promise.all([loadStrategies(), loadPropRules()]).then(() => {
     if (!root.isConnected) return;   // the tab was hidden (or shown again) while this was in flight
     if (!strategiesList.length) { root.replaceChildren(page.mk('div', 'bp-empty', 'Could not load the strategy list')); return; }
