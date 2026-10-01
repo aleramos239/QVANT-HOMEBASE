@@ -19,7 +19,7 @@
   --hb-mono: ui-monospace, "SF Mono", SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace;
 
   --hb-fs-cap: 11px; --hb-fs-sm: 12px; --hb-fs-ui: 13px; --hb-fs-body: 14px;
-  --hb-fs-lead: 15px; --hb-fs-title: 17px; --hb-fs-h2: 22px; --hb-fs-h1: 32px;
+  --hb-fs-lead: 15px; --hb-fs-title: 17px; --hb-fs-h2: 22px; --hb-fs-fig: 28px; --hb-fs-h1: 32px;
 
   --hb-h-sm: 28px; --hb-h-md: 32px; --hb-h-lg: 36px; --hb-bar-h: 44px;
   --hb-r-sm: 8px; --hb-r-md: 10px; --hb-r-lg: 14px; --hb-r-xl: 20px;
@@ -59,15 +59,15 @@
 
 /* ---- type ------------------------------------------------------------------------------- */
 html, body { font-family: var(--hb-font); font-size: var(--hb-fs-body); -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility; font-feature-settings: "tnum" 1, "cv11" 1; }
+  text-rendering: optimizeLegibility; font-feature-settings: "tnum" 1; }
 button, input, select, textarea { font-family: var(--hb-font); }
-.mono, code, kbd, pre, .kvi, .clock { font-family: var(--hb-mono); font-variant-numeric: tabular-nums; }
+.mono, code, kbd, pre, .kvi { font-family: var(--hb-mono); font-variant-numeric: tabular-nums; }
+.clock { font-variant-numeric: tabular-nums; }
 :focus-visible { outline: 2px solid var(--hb-focus); outline-offset: 2px; }
 
 /* ---- the top bar: the same on every page --------------------------------------------------- */
 .hb-bar { flex: none; display: flex; align-items: center; gap: 12px; height: var(--hb-bar-h); padding: 0 14px; position: relative; z-index: 48;
-  background: var(--hb-bar-bg); -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%);
-  border-bottom: .5px solid var(--hb-hair); border-top: 0; }
+  background: transparent; border: 0; }
 .hb-bar-l { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1 1 auto; }
 .hb-bar-r { display: flex; align-items: center; gap: 8px; margin-left: auto; flex: none; }
 .hb-mark { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; flex: none;
@@ -83,7 +83,7 @@ button, input, select, textarea { font-family: var(--hb-font); }
   font-size: var(--hb-fs-ui); font-weight: 500; line-height: 1; letter-spacing: -.005em; text-decoration: none;
   color: var(--hb-fg2); transition: color 150ms ease, background-color 150ms ease; }
 .pgsw a:hover { color: var(--hb-fg); }
-.pgsw a[aria-current="page"] { background: var(--hb-accent); color: var(--hb-accent-fg); box-shadow: none; }
+.pgsw a[aria-current="page"] { background: var(--hb-seg-on); color: var(--hb-accent); font-weight: 600; box-shadow: var(--hb-seg-shadow); }
 .pgsw a:focus-visible { outline: 2px solid var(--hb-focus); outline-offset: 2px; }
 
 /* ---- segmented control (intervals, switches of view): one component ----------------------------- */
@@ -126,4 +126,14 @@ select, input[type="text"], input[type="number"], input[type="search"], input[ty
 .modal h2, .dlg-head h2, .dlg-title { font-size: var(--hb-fs-title); font-weight: 600; letter-spacing: -.02em; }
 
 @media (prefers-reduced-motion: reduce) { .btn:active { transform: none; } }
-@media (prefers-reduced-transparency: reduce) { .hb-bar { -webkit-backdrop-filter: none; backdrop-filter: none; background: var(--card, var(--panel, #fff)); } }
+@media (prefers-reduced-transparency: reduce) { .hb-bar { -webkit-backdrop-filter: none; backdrop-filter: none; } }
+
+/* the Desk scrolls under a soft edge instead of a divider line */
+.app-main { -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 22px); mask-image: linear-gradient(to bottom, transparent 0, #000 22px); }
+
+/* Charts <-> Lab share an origin: the top bar stays put and the content cross-fades */
+@media (prefers-reduced-motion: no-preference) {
+  @view-transition { navigation: auto; }
+  .hb-bar { view-transition-name: hb-bar; }
+  ::view-transition-group(root) { animation-duration: 180ms; }
+}

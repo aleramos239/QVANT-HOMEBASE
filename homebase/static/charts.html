@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Charts · Homebase</title>
 <script>
-  try { var _t = localStorage.getItem('hb_theme');
+  try { var _t = new URLSearchParams(location.search).get('theme') || localStorage.getItem('hb_theme');
     document.documentElement.setAttribute('data-theme', (_t === 'light' || _t === 'dark') ? _t : 'light');
   } catch (_) { document.documentElement.setAttribute('data-theme', 'light'); }
 </script>
 <link rel="stylesheet" href="/static/charts/charts.css?v=33">
-<link rel="stylesheet" href="/static/charts/apple-charts.css?v=5">
-<link rel="stylesheet" href="/static/hb.css?v=1">
+<link rel="stylesheet" href="/static/charts/apple-charts.css?v=6">
+<link rel="stylesheet" href="/static/hb.css?v=3">
 </head>
 <body>
 <header class="hb-bar">

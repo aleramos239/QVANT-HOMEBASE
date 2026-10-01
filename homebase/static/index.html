@@ -527,8 +527,8 @@
     .master{ flex-wrap:wrap; justify-content:flex-end; row-gap:8px; max-width:100%; }
   }
 </style>
-<link rel="stylesheet" href="/static/apple.css?v=3">
-<link rel="stylesheet" href="/static/hb.css?v=1">
+<link rel="stylesheet" href="/static/apple.css?v=4">
+<link rel="stylesheet" href="/static/hb.css?v=3">
 </head>
 <body>
 
@@ -542,7 +542,7 @@
       </div>
       <div class="tb-r hb-bar-r">
       <span class="clock" id="clock">—</span>
-      <span class="bulb" id="bulb" onclick="openChecks()" title="connecting…"></span>
+      <span class="bulb" id="bulb" role="button" tabindex="0" aria-label="Readiness" onclick="openChecks()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openChecks()}" title="connecting…"></span>
       <div class="master" role="group" aria-label="Desk master controls">
         <span class="pill-slot"><span id="statusPill" class="pill idle" role="status" title="Desk status unknown — connecting…">connecting…</span></span>
         <button class="btn btn-outline btn-sm gone" type="button" id="armBtn" disabled aria-hidden="true">Arm</button>
@@ -1728,14 +1728,14 @@ function dayTimeline() {
   const lab = (m, t, cls) => `<span class="${cls}" style="left:${pct(m).toFixed(2)}%">${esc(t)}</span>`;
   return `<div class="tl-head"><span><b>Today</b>${esc(date)}</span><span class="mono">${esc(String(ST.et_now).slice(11, 16))} ET</span></div>
     <div class="tl" role="img" aria-label="The trading day: open at 9:30, unfilled entries cancelled at ${esc(ref.cancel_et || "12:55")}, flat at ${esc(ref.flat_et || "15:55")}">
-      <div class="tl-track"><i class="tl-done" style="width:${pct(now).toFixed(2)}%"></i><i class="tl-open" style="left:${pct(OPEN_MIN).toFixed(2)}%"></i><i class="tl-now" style="left:${pct(now).toFixed(2)}%"></i></div>
+      <div class="tl-track"><i class="tl-done" style="width:${pct(now).toFixed(2)}%"></i><i class="tl-tick" style="left:${pct(cancel).toFixed(2)}%"></i><i class="tl-tick" style="left:${pct(flat).toFixed(2)}%"></i><i class="tl-open" style="left:${pct(OPEN_MIN).toFixed(2)}%"></i><i class="tl-now" style="left:${pct(now).toFixed(2)}%"></i></div>
       <div class="tl-labels">${lab(OPEN_MIN, "9:30 Open", "tl-t strong at-start")}${lab(cancel, (ref.cancel_et || "12:55") + " Cancel unfilled", "tl-t")}${lab(flat, (ref.flat_et || "15:55") + " Flat", "tl-t at-end")}</div>
     </div>`;
 }
 
 function todayRow(name, s) {
   const c = s.cfg, state = stratState(name, s), p = todayPnl(s);
-  const sw = `<button class="switch" aria-checked="${c.enabled}"
+  const sw = `<button class="switch" role="switch" aria-label="${esc(name.toUpperCase())} on or off" aria-checked="${c.enabled}"
     title="${c.enabled ? "ON — this strategy runs and executes" : "OFF — ignores all signals"}"
     onclick="event.stopPropagation();toggleStrat('${name}', ${!c.enabled})"></button>`;
   const go = `setView('strat','${name}')`;
@@ -1747,11 +1747,12 @@ function todayRow(name, s) {
     <div class="rp mono${p < 0 ? " neg" : p > 0 ? " pos" : ""}">${usdS(p)}</div>${sw}</div>`;
 }
 
+let ISSUE_LVL = "warn";
 function todayFoot(issues) {
   const accts = Object.values(ST.accounts || {}), up = accts.filter(a => a.connected).length;
   const last = (ST.journal || [])[0], lt = last && last.et ? String(last.et).slice(11, 16) : null;
   const out = [];
-  if (issues) out.push(`<button class="foot-b warn" onclick="openChecks()"><i class="dot"></i>${issues === 1 ? "1 thing needs" : issues + " things need"} a look <u>›</u></button>`);
+  if (issues) out.push(`<button class="foot-b warn" onclick="openChecks()"><i class="dot${ISSUE_LVL === "bad" ? " bad" : ""}"></i>${issues === 1 ? "1 thing needs" : issues + " things need"} a look <u>›</u></button>`);
   out.push(`<button class="foot-b" onclick="openAccts()">${up} of ${accts.length} accounts connected <u>›</u></button>`);
   if (lt) out.push(`<button class="foot-b" onclick="setView('activity')">Last event ${esc(lt)} <u>›</u></button>`);
   return out.join("");
@@ -1762,18 +1763,19 @@ function renderSide(names, hiddenCount, issues) {
   const sel = (k, n) => VIEW.k === k && (k !== "strat" || VIEW.name === n) ? " sel" : "";
   const strat = names.map(n => {
     const s = ST.strategies[n], state = stratState(n, s), p = todayPnl(s);
-    return `<button class="item${sel("strat", n)}" onclick="setView('strat','${n}')" aria-current="${sel("strat", n) ? "page" : "false"}">
-      <i class="sd ${stratDotCls(s, state)}"></i><span class="it"><b>${esc(n.toUpperCase())}</b><small>${esc(state)}</small></span>
+    return `<button class="item one${sel("strat", n)}" onclick="setView('strat','${n}')" aria-current="${sel("strat", n) ? "page" : "false"}" title="${esc(state)}">
+      <i class="sd ${stratDotCls(s, state)}"></i><span class="it"><b>${esc(n.toUpperCase())}</b></span>
       <span class="ir mono${p == null ? " dim" : ""}">${p == null ? "" : usdS(p)}</span></button>`;
   }).join("");
   const rank = (a) => a.env === "live" ? 0 : a.env === "paper" ? 2 : 1;
   const accts = Object.entries(ST.accounts || {}).sort((a, b) => rank(a[1]) - rank(b[1]));
-  const shown = SIDE_ALL ? accts : accts.slice(0, 6);
-  const acctRows = shown.map(([id, a]) => `<button class="item" onclick="openAccts()" title="Connected accounts">
-      <i class="sd ${a.connected ? "ok" : "warn"}"></i><span class="it"><b>${esc(a.label || id)}</b><small>${a.env === "live" ? "Live" : a.env === "paper" ? "Paper" : "Demo"}${a.connected ? "" : " · offline"}</small></span>
+  const shown = SIDE_ALL ? accts : accts.slice(0, 12);
+  const shortId = (t) => { t = String(t); return /^[A-Za-z0-9]{12,}$/.test(t) ? t.slice(0, 4) + " ··" + t.slice(-4) : t; };
+  const acctRows = shown.map(([id, a]) => `<button class="item one" onclick="openAccts()" title="${esc((a.label || id) + " · " + (a.env === "live" ? "Live" : a.env === "paper" ? "Paper" : "Demo") + (a.connected ? "" : " · offline"))}">
+      <i class="sd ${a.connected ? "ok" : "warn"}"></i><span class="it"><b>${esc(shortId(a.label || id))}${a.env === "live" ? '<span class="tag-live">Live</span>' : ""}${a.connected ? "" : '<span class="tag">offline</span>'}</b></span>
       <span class="ir mono${a.connected ? "" : " dim"}">${a.connected && a.balance != null ? "$" + fmt(a.balance, 0) : ""}</span></button>`).join("");
-  const more = accts.length > 6
-    ? `<button class="side-more" onclick="SIDE_ALL=!SIDE_ALL;render()">${SIDE_ALL ? "Show fewer" : `Show ${accts.length - 6} more`}</button>` : "";
+  const more = accts.length > 12
+    ? `<button class="side-more" onclick="SIDE_ALL=!SIDE_ALL;render()">${SIDE_ALL ? "Show fewer" : `Show ${accts.length - 12} more`}</button>` : "";
   const last = (ST.journal || [])[0];
   $("#side").innerHTML = `
     <button class="nav${sel("today")}" onclick="setView('today')" aria-current="${sel("today") ? "page" : "false"}">
@@ -1786,7 +1788,7 @@ function renderSide(names, hiddenCount, issues) {
     ${acctRows}${more}
     <div class="sh"><span>Activity</span></div>
     <button class="item${sel("activity")}" onclick="setView('activity')" aria-current="${sel("activity") ? "page" : "false"}">
-      <i class="sd ${issues ? "warn" : "off"}"></i><span class="it"><b>${last && last.et ? "Last event " + esc(String(last.et).slice(11, 16)) : "Journal"}</b><small>${issues ? plural(issues, "thing needs", "things need") + " a look" : "Every alert, order and fill"}</small></span><span></span></button>`;
+      <i class="sd ${issues ? (ISSUE_LVL === "bad" ? "bad" : "warn") : "off"}"></i><span class="it"><b>${last && last.et ? "Last event " + esc(String(last.et).slice(11, 16)) : "Journal"}</b><small>${issues ? plural(issues, "thing needs", "things need") + " a look" : "Every alert, order and fill"}</small></span><span></span></button>`;
 }
 
 /* ---- strategy detail ---- */
@@ -1849,7 +1851,7 @@ function stratView(name) {
         free.map(id => `<button class="mi2" role="menuitem" onclick="pickAsg('${name}',${jsArg(id)},${c.qty})">${esc(accts[id].label || id)}</button>`).join("") + `</div></div>` : "")
     : `<div class="mcap">Add an account to run this strategy.</div>`;
   const test = (ST && !ST.armed && c.enabled) ? `<button class="btn btn-outline btn-sm" onclick="testFire('${name}')">Test fire · dry</button>` : "";
-  const sw = `<button class="switch" aria-checked="${c.enabled}"
+  const sw = `<button class="switch" role="switch" aria-label="${esc(name.toUpperCase())} on or off" aria-checked="${c.enabled}"
     title="${c.enabled ? "ON — this strategy runs and executes" : "OFF — ignores all signals"}"
     onclick="toggleStrat('${name}', ${!c.enabled})"></button>`;
   return `<button class="back" onclick="setView('today')">‹ Today</button>
@@ -1867,7 +1869,8 @@ function renderMain(names, issues) {
   $("#viewActivity").hidden = VIEW.k !== "activity";
   if (VIEW.k === "today") {
     const [l1, l2] = dayHeadline(names);
-    $("#dayTitle").innerHTML = `${esc(l1)}<br><span>${esc(l2)}</span>`;
+    const l2h = esc(l2).replace(/(Today )([−+]?\$[\d,]+)/, (m, a, b) => `${a}<span class="amt${b[0] === "+" ? " pos" : ""}">${b}</span>`);
+    $("#dayTitle").innerHTML = `${esc(l1)}<br><span>${l2h}</span>`;
     $("#dayTl").innerHTML = dayTimeline();
     $("#stratList").innerHTML = names.map(n => todayRow(n, ST.strategies[n])).join("")
       || `<div class="feed-empty" style="padding:28px 26px">No strategies are showing. Use Manage algos to bring one back.</div>`;
@@ -1877,7 +1880,7 @@ function renderMain(names, issues) {
 
 function render() {
   const s = ST;
-  $("#clock").textContent = s.et_now.replace("T", " · ").slice(0, 21) + " ET";
+  $("#clock").textContent = String(s.et_now).slice(11, 19) + " ET";
   renderMaster();
   renderChartTrading(s.chart_trading);
   if ($("#settingsOverlay").classList.contains("open")) renderSettings();
@@ -1913,6 +1916,7 @@ function render() {
   const names = Object.keys(s.strategies).filter(n => visibleNames.has(n))
     .sort((a, b) => (s.strategies[b].cfg.enabled ? 1 : 0) - (s.strategies[a].cfg.enabled ? 1 : 0));   // switched-on first
   if (VIEW.k === "strat" && !names.includes(VIEW.name)) VIEW = {k: "today"};
+  ISSUE_LVL = probs.some(c => c.level === "bad") ? "bad" : "warn";
   renderSide(names, algoVis.filter(a => !a.visible).length, probs.length);
   renderMain(names, probs.length);
   // the views were rebuilt: an + Assign menu that lived in them is gone -- so is its hold on updates
@@ -2560,7 +2564,7 @@ function buildTrading() {
     <div class="slabel">CHART TRADING</div>
     <p class="wnote" style="margin-top:0">Arm, Disarm and Kill everything are in the top bar.</p>
     <div class="acct" style="padding:4px 0;gap:12px;flex-wrap:wrap">
-      <button class="switch" id="ctSwitch" aria-checked="false"
+      <button class="switch" id="ctSwitch" role="switch" aria-label="Chart trading" aria-checked="false"
         title="OFF — the chart page cannot trade"></button>
       <span class="nm" id="ctState" style="font-size:13px">Off</span>
       <span class="spacer"></span>
@@ -3026,7 +3030,7 @@ function renderAlgoMgr() {
           <label class="hint" style="display:flex;align-items:center;gap:6px;cursor:${a.locked ? "default" : "pointer"};font-size:12px"
             title="${a.locked ? a.lockReason : "Show on home page"}">
             Show on home page
-            <button class="switch" aria-checked="${a.visible}" ${a.locked ? "disabled" : ""}
+            <button class="switch" role="switch" aria-label="Show ${esc(a.name)} on the home page" aria-checked="${a.visible}" ${a.locked ? "disabled" : ""}
               onclick="toggleAlgoHidden('${a.name}', ${a.visible})"></button>
           </label>
         </div>`;

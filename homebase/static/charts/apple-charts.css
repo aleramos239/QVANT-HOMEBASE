@@ -18,9 +18,13 @@
   --frame-wash: radial-gradient(1400px 700px at 50% -10%, #fafafb 0%, var(--frame) 65%);
   --shadow-menu: 0 0 0 .5px rgba(63, 42, 32, .08), 0 8px 28px rgba(22, 23, 26, .14);
   --shadow-dialog: 0 0 0 .5px rgba(63, 42, 32, .1), 0 30px 80px rgba(22, 23, 26, .26);
+  --text: #16171a;
+  --text-2: #6a6e75;
+  --border: rgb(22 23 26 / .1);
+  --warn-ink: #9a5b00;
 }
 :root[data-theme="dark"] {
-  --frame: #0e0f11;
+  --frame: #1b1c1f;
   --hover: #26272b;
   --pill: #2a2b30;
   --accent: #c8b6a6;
@@ -30,6 +34,10 @@
   --frame-wash: radial-gradient(1400px 700px at 50% -10%, #17181b 0%, var(--frame) 65%);
   --shadow-menu: 0 0 0 .5px rgba(255, 255, 255, .1), 0 10px 30px rgba(0, 0, 0, .6);
   --shadow-dialog: 0 0 0 .5px rgba(255, 255, 255, .12), 0 30px 80px rgba(0, 0, 0, .7);
+  --text: #f2f2f3;
+  --text-2: #9a9ea5;
+  --border: rgb(255 255 255 / .1);
+  --warn-ink: #e8a03a;
 }
 :focus-visible { outline-color: var(--hb-focus, var(--accent)); }
 
@@ -40,8 +48,10 @@
 .hb-bar .tb-btn { height: var(--hb-h-sm); margin: 0; padding: 0 8px; }
 
 /* ---- toolbar: calm pills on the frame, the same 40px band --------------------------------------------------- */
-.toolbar { height: 40px; padding: 0 8px; gap: 2px; background: transparent; }
-.toolbar .tb-sep { height: 16px; margin: 0 6px; opacity: .55; }
+.toolbar { height: 40px; padding: 0 8px; gap: 2px; background: transparent; border-top: 0; }
+.toolbar .tb-sep { height: 16px; margin: 0 6px; opacity: .35; }
+.rail-btn, .toolbar .tb-btn { color: var(--text-2); }
+.rail-btn:hover, .toolbar .tb-btn:hover { color: var(--text); }
 .tb-btn { margin: 0 1px; padding: 0 10px; transition: background-color 130ms ease, color 130ms ease, transform 120ms var(--ease-spring-out); }
 .tb-btn:active { transform: scale(.97); }
 .tb-btn.tb-icon { padding: 0 8px; }
@@ -63,6 +73,14 @@
 @keyframes hb-spin { to { transform: rotate(360deg); } }
 .statusbar { height: 28px; font-size: var(--hb-fs-sm); }
 .sb-dot { width: 7px; height: 7px; }
+
+/* ---- status bar: one voice, one colour; the numbers nobody acts on step back ------------------------------------- */
+.statusbar { color: var(--text-2); }
+.sb-event { font-weight: 500; color: var(--text-2); }
+.sb-event::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--ev, var(--text-2)); margin-right: 6px; vertical-align: 1px; }
+#sbBudget { display: none; }
+#sbRec:not(.warn) { display: none; }
+.sb-feed.warn, #sbRec.warn, .set-why, .cf-warn, .op-note.warn, .op-why { color: var(--warn-ink); }
 
 /* ---- legend: compact, so panes stop hiding their own candles ------------------------------------------------- */
 .lg-title { font-size: 14px; line-height: 20px; font-weight: 600; letter-spacing: -.01em; }

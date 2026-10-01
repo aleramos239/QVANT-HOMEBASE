@@ -1828,7 +1828,7 @@ function renderNextEvent() {
   const n = c ? E.nextText(E.shown(calendar, c.R), clockMs()) : null;
   el.hidden = !n;
   if (n && el.textContent !== n.text) { el.textContent = n.text; el.title = n.text; }   // W1: text (and a re-fit) only on change
-  if (n) el.style.color = n.color;
+  if (n) { el.style.color = ''; el.style.setProperty('--ev', n.color); }
 }
 
 /* ---- bottom bar ---- */
@@ -1840,13 +1840,14 @@ function showStatus(s) {
   $('#sbDot').className = 'sb-dot' + (f.dot ? ' ' + f.dot : '');
   $('#sbMode').textContent = s.mode === 'replay'
     ? `Replay ${s.date} ×${s.speed} · ${iso(s.clock_s || 0).slice(11, 19)} ET${s.done ? ' · done' : ''}`
-    : s.mode === 'live' ? `Live · md ${s.md || ''}` : 'Disconnected';
+    : s.mode === 'live' ? (s.md && s.md !== 'live' ? `Live · md ${s.md}` : 'Live') : 'Disconnected';
   const feed = $('#sbFeed');
   feed.textContent = f.text;
   feed.title = [f.text, f.title].filter(Boolean).join(' — ');   // W1: the whole text too, should a narrow bar cut it
   feed.className = 'sb-feed' + (f.textClass ? ' ' + f.textClass : '');
   const budget = $('#sbBudget');
   budget.textContent = s.mode === 'live' ? `md ${s.budget_hour ?? 0}/180` : '';
+  $('#sbMode').title = s.mode === 'live' ? `Market data ${s.md || ''} · ${s.budget_hour ?? 0}/180 chart requests this hour` : '';
   budget.title = s.mode === 'live' ? `Chart requests this hour on the md login (limit 180) · ${s.clients ?? 0} page(s)` : '';
   const recEl = $('#sbRec'), buffered = rec ? rec.buffered.toLocaleString('en-US') : '';
   recEl.textContent = s.mode === 'live' && rec ? `rec ${buffered}` : '';   // W1: shortened; the tooltip says it in full
@@ -1901,7 +1902,7 @@ function greyIfStale() {
   if (age < STATUS_STALE_S) return;
   const dot = $('#sbDot');
   if (!dot.classList.contains('bad')) dot.className = 'sb-dot warn';
-  $('#sbFeed').textContent = `no status for ${Math.round(age)}s` + (statusLine ? ` · ${statusLine}` : '');
+  $('#sbFeed').textContent = `Status ${Math.round(age)}s old` + (statusLine ? ` · ${statusLine}` : '');
 }
 
 /* Now as ET wall-clock ms: a replay's own clock (run on at its speed between its 2 s status messages), else
