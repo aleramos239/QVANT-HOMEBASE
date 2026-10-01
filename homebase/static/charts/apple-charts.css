@@ -9,11 +9,15 @@
    ============================================================================ */
 
 :root {
-  --frame: #e9eaec;
-  --hover: #eceef0;
+  --frame: #f0f0f2;
+  --hover: #efeff1;
+  --accent: #3f2a20;
+  --accent-hover: #2e1d15;
+  --accent-soft: rgba(63, 42, 32, .09);
+  --accent-fg: #ffffff;
   --pill: #e4e5e8;
   --hb-accent: #3f2a20;
-  --frame-wash: radial-gradient(1400px 700px at 50% -10%, #f6f7f8 0%, var(--frame) 65%);
+  --frame-wash: radial-gradient(1400px 700px at 50% -10%, #fafafb 0%, var(--frame) 65%);
   --hb-seg-bg: rgb(22 23 26 / .07);
   --hb-seg-on: #ffffff;
   --hb-seg-shadow: 0 1px 3px rgb(22 23 26 / .16), 0 0 0 .5px rgb(22 23 26 / .05);
@@ -24,6 +28,10 @@
 :root[data-theme="dark"] {
   --frame: #0e0f11;
   --hover: #26272b;
+  --accent: #c8b6a6;
+  --accent-hover: #d8c9bb;
+  --accent-soft: rgba(200, 182, 166, .16);
+  --accent-fg: #1a120e;
   --pill: #2a2b30;
   --hb-accent: #c8b6a6;
   --frame-wash: radial-gradient(1400px 700px at 50% -10%, #17181b 0%, var(--frame) 65%);
@@ -151,3 +159,25 @@ body { text-rendering: optimizeLegibility; font-feature-settings: "tnum" 1; }
 @media (prefers-contrast: more) {
   .pgsw a[aria-current="page"], .tab-btn.active, .bp-tab[aria-selected="true"], .tst-tab.active { outline: 1px solid var(--text); }
 }
+
+/* ---- 7. Espresso is the accent (latte on dark) ------------------------------------------------------ */
+.gb-mark { background: var(--accent); color: var(--accent-fg); }
+.gbar .pgsw a[aria-current="page"], .pgsw a[aria-current="page"] { background: var(--accent); color: var(--accent-fg); box-shadow: none; }
+.tab-btn.active { background: var(--accent-soft); color: var(--accent); }
+.tb-group .tb-btn.active { background: var(--accent); color: var(--accent-fg); box-shadow: none; }
+.tb-btn[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.bp-tab[aria-selected="true"], .tst-tab.active { background: var(--accent-soft); color: var(--accent); }
+.btn-primary { background: var(--accent); color: var(--accent-fg); }
+.btn-primary:hover { background: var(--accent-hover); }
+.rail-btn[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.tst-tile-v { color: var(--text); }
+
+/* the trading surfaces keep their market colours: buy is blue (TradingView convention), sell is red.
+   They read var(--accent), which is espresso now, so they are pinned here -- nothing about an order's look changed. */
+.tr-buy, .dom-chip-order.dom-chip-buy, .replay-bar .rb-side.rb-buy, .op-tile.buy.on, .op-send:not(.sell) { background: #2962ff; color: #ffffff; }
+.op-tile.buy { color: #2962ff; background: rgba(41, 98, 255, .10); }
+.op-tile.buy.on { color: #ffffff; background: #2962ff; }
+.dom-row.best-bid { background: rgba(41, 98, 255, .10); }
+.dom-bid { color: #2962ff; }
+:root[data-theme="dark"] .op-tile.buy { background: rgba(41, 98, 255, .2); }
+:root[data-theme="dark"] .dom-row.best-bid { background: rgba(41, 98, 255, .2); }

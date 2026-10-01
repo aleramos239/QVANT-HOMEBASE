@@ -9,15 +9,15 @@
 /* ---- 1. Tokens ---------------------------------------------------------------- */
 :root,
 :root[data-theme="light"] {
-  --background: #f4f5f6;
+  --background: #f7f7f8;
   --foreground: #16171a;
   --card: #ffffff;
   --card-foreground: #16171a;
   --popover: #ffffff;
   --popover-foreground: #16171a;
-  --primary: #16171a;
+  --primary: #3f2a20;
   --primary-foreground: #ffffff;
-  --secondary: #eceef0;
+  --secondary: #eeeff1;
   --secondary-foreground: #16171a;
   --muted: #eceef0;
   --muted-foreground: #6a6e75;
@@ -48,11 +48,17 @@
   --scrim: rgb(22 23 26 / .32);
   --page-wash: none;
 
-  --hb-side: #e9eaec;
+  --hb-side: #f0f0f2;
   --hb-fill: rgb(22 23 26 / .05);
   --hb-fill-hover: rgb(22 23 26 / .09);
-  --hb-hair: rgb(22 23 26 / .09);
-  --hb-sel: rgb(63 42 32 / .1);
+  --hb-hair: rgb(63 42 32 / .1);
+  --hb-sel: #3f2a20;
+  --hb-sel-fg: #ffffff;
+  --hb-sel-fg2: rgb(255 255 255 / .72);
+  --hb-accent-soft: rgb(63 42 32 / .08);
+  --hb-title: #3f2a20;
+  --hb-title-2: #9a8271;
+  --hb-label: #7a6252;
   --hb-seg-bg: rgb(22 23 26 / .07);
   --hb-seg-on: #ffffff;
   --hb-seg-shadow: 0 1px 3px rgb(22 23 26 / .16), 0 0 0 .5px rgb(22 23 26 / .05);
@@ -97,7 +103,13 @@
   --hb-fill: rgb(255 255 255 / .07);
   --hb-fill-hover: rgb(255 255 255 / .13);
   --hb-hair: rgb(255 255 255 / .09);
-  --hb-sel: rgb(200 182 166 / .15);
+  --hb-sel: #3f2a20;
+  --hb-sel-fg: #f4ede6;
+  --hb-sel-fg2: #c8b6a6;
+  --hb-accent-soft: rgb(200 182 166 / .14);
+  --hb-title: #f2f2f3;
+  --hb-title-2: #9a9ea5;
+  --hb-label: #a79a8e;
   --hb-seg-bg: rgb(255 255 255 / .1);
   --hb-seg-on: #4a4b50;
   --hb-seg-shadow: 0 1px 3px rgb(0 0 0 / .5);
@@ -328,3 +340,45 @@ h1, h2, h3, .card-title { letter-spacing: -0.02em; }
   .card, .ready, .notices, .slist, .agroup, .act-card { box-shadow: 0 0 0 1px var(--foreground); }
   .btn-outline, .pill { box-shadow: inset 0 0 0 1px var(--muted-foreground); }
 }
+
+/* ---- 9. Espresso is the accent (latte on dark) ------------------------------------------------ */
+.inset-topbar .tb-l > span:first-child { background: var(--hb-accent) !important; color: #fff !important; }
+:root[data-theme="dark"] .inset-topbar .tb-l > span:first-child { color: #1a120e !important; }
+.pgsw a[aria-current="page"] { background: var(--hb-accent); color: #fff; box-shadow: none; }
+:root[data-theme="dark"] .pgsw a[aria-current="page"] { color: #1a120e; }
+.pgsw a:hover { color: var(--foreground); }
+
+/* the selected sidebar item is a solid espresso pill */
+.nav.sel, .item.sel { background: var(--hb-sel); color: var(--hb-sel-fg); }
+.nav.sel svg { opacity: 1; }
+.item.sel .it small, .item.sel .ir.dim { color: var(--hb-sel-fg2); }
+.item.sel .ir { color: var(--hb-sel-fg); }
+.item.sel .sd { background: var(--hb-sel-fg); }
+.item.sel .sd.off { background: rgb(255 255 255 / .3); }
+.item.sel .sd.shadow { background: transparent; box-shadow: inset 0 0 0 1.5px var(--hb-sel-fg2); }
+.sh, .tl-head, .sec > h2 { color: var(--hb-label); }
+.sh-btn:hover { color: var(--hb-accent); }
+
+/* headline, timeline, switches, curve */
+.day-title { color: var(--hb-title); }
+.day-title span { color: var(--hb-title-2); opacity: 1; }
+.sd-title, .act-head h1 { color: var(--hb-title); }
+.tl-done { background: var(--hb-accent); }
+.tl-now { box-shadow: inset 0 0 0 3px var(--hb-accent); }
+.tl-open { background: var(--hb-accent); box-shadow: 0 0 0 4px var(--hb-accent-soft); }
+:root[data-theme="dark"] .tl-open { background: #c8b6a6; }
+.switch[aria-checked="true"] { background: var(--hb-accent); }
+:root[data-theme="dark"] .switch[aria-checked="true"]::after { background: #1a120e; }
+.eq svg { color: var(--hb-accent); }
+.eq-line { stroke: var(--hb-accent); }
+.eq-dot { background: var(--hb-accent); }
+.back:hover, .foot-b:hover, .btn-quiet:hover { color: var(--hb-accent); }
+.foot-b.warn { color: var(--foreground); }
+.opt.sel { background: var(--hb-accent); color: #fff; }
+:root[data-theme="dark"] .opt.sel { color: #1a120e; }
+.btn-default { background: var(--hb-accent); color: #fff; }
+:root[data-theme="dark"] .btn-default { color: #1a120e; }
+.btn-outline:hover, .row:hover { background: var(--hb-accent-soft); }
+.list, .agroup, .act-card, .ready, .notices, .card { box-shadow: 0 0 0 .5px rgb(63 42 32 / .07), 0 1px 2px rgb(63 42 32 / .03), 0 12px 36px rgb(63 42 32 / .06); }
+:root[data-theme="dark"] .list, :root[data-theme="dark"] .agroup, :root[data-theme="dark"] .act-card,
+:root[data-theme="dark"] .ready, :root[data-theme="dark"] .notices, :root[data-theme="dark"] .card { box-shadow: var(--glass-shadow); }

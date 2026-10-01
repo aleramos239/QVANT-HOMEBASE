@@ -527,7 +527,7 @@
     .master{ flex-wrap:wrap; justify-content:flex-end; row-gap:8px; max-width:100%; }
   }
 </style>
-<link rel="stylesheet" href="/static/apple.css?v=1">
+<link rel="stylesheet" href="/static/apple.css?v=2">
 </head>
 <body>
 
@@ -1819,7 +1819,7 @@ function eqChart(name) {
   const first = new Date(ks[0] + "T12:00:00Z").toLocaleDateString("en-US", {month: "short", day: "numeric", timeZone: "UTC"});
   const zero = lo < 0 && hi > 0 ? `<line class="eq-zero" x1="0" y1="${Y(0).toFixed(1)}" x2="1000" y2="${Y(0).toFixed(1)}"/>` : "";
   return `<div class="eq"><div class="lb"><span>After fees since ${esc(first)}</span><b class="mono">${usdS(cum)}</b></div>
-    <div class="eq-plot"><svg viewBox="0 0 1000 190" preserveAspectRatio="none" role="img" style="color:var(--foreground)" aria-label="Cumulative net P&amp;L after fees, by day">
+    <div class="eq-plot"><svg viewBox="0 0 1000 190" preserveAspectRatio="none" role="img" aria-label="Cumulative net P&amp;L after fees, by day">
       <defs><linearGradient id="hbEqFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="currentColor" stop-opacity=".12"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></linearGradient></defs>
       <line class="eq-grid" x1="0" y1="26" x2="1000" y2="26"/><line class="eq-grid" x1="0" y1="101" x2="1000" y2="101"/><line class="eq-grid" x1="0" y1="176" x2="1000" y2="176"/>${zero}
       <path class="eq-area" d="${d} L 1000 190 L 0 190 Z"/><path class="eq-line" d="${d}"/></svg>
