@@ -73,7 +73,7 @@ def drive(timer, clock, date=NFP_DAY, through=(8, 30, 0)):
 def test_the_desk_config_is_the_verified_spec_and_ships_off_and_unbooked():
     c = desk_config._defaults().strategies["gc_nfp"]
     assert (c.symbol, c.qty, c.offset_pts, c.sl_pts, c.tp_pts) == ("GC", 4, 2.0, 5.0, 7.7)
-    assert (c.fire_et, c.cancel_et, c.flat_et) == ("08:30:00", "08:45", "09:55")
+    assert (c.fire_et, c.cancel_et, c.flat_et) == ("08:29:59", "08:45", "09:55")   # rests before the release
     assert c.only_dates == ["2026-10-02"]
     assert c.kind == "straddle" and c.self_fire and not c.gated and not c.shadow
     assert c.enabled is False                       # the user books the evals and switches it on
@@ -101,19 +101,19 @@ def test_the_default_schedule_is_the_original_0930_one():
 
 
 def test_the_gc_schedule_hangs_off_0830():
-    assert schedule(gc_cfg()) == (dt.time(8, 20), dt.time(8, 28, 30), dt.time(8, 30), dt.time(8, 31))
+    assert schedule(gc_cfg()) == (dt.time(8, 19, 59), dt.time(8, 28, 29), dt.time(8, 29, 59), dt.time(8, 30, 59))
     assert fire_time(gc_cfg(fire_et="08:30")) == dt.time(8, 30)
     assert fire_clock(0, dt.time(8, 30)) == "8:30:00" and fire_clock(4.2, dt.time(8, 30)) == "8:30:04"
     assert fire_clock(4) == "9:30:04"               # unchanged for the 09:30 strategies
 
 
 # --------------------------------------------------------------------------- it fires only on NFP day
-def test_it_fires_at_0830_on_nfp_day_and_not_a_second_before(tmp_path):
+def test_it_fires_at_082959_on_nfp_day_and_not_a_second_before(tmp_path):
     timer, engine, md, clock, ads = mk(tmp_path, armed=False)
-    drive(timer, clock, through=(8, 29, 59))
+    drive(timer, clock, through=(8, 29, 58))
     assert timer.status()["strategies"]["gc_nfp"]["stage"] == "staged"
     assert md.subs == ["GC"] and not any(e["event"] == "timer_fired" for e in events(tmp_path))
-    at(clock, 8, 30, 0)
+    at(clock, 8, 29, 59)
     run(timer.tick())
     st = timer.status()["strategies"]["gc_nfp"]
     assert st["stage"] == "fired" and st["anchor"] == ANCHOR and st["gate"] is True
@@ -245,8 +245,8 @@ def test_the_twin_is_registered_and_reads_the_desk_config():
     s = GCNfp()
     assert REGISTRY["gc_nfp"] is GCNfp
     assert (s.p["offset_pts"], s.p["sl_pts"], s.p["tp_pts"]) == (2.0, 5.0, 7.7)
-    assert s.times() == ["08:30:00", "08:45", "09:55"]
-    assert s.session_window == ("08:20", "09:56") and s.provenance()["fire"] == "08:30:00"
+    assert s.times() == ["08:29:59", "08:45", "09:55"]
+    assert s.session_window == ("08:20", "09:56") and s.provenance()["fire"] == "08:29:59"
 
 
 def test_the_twin_trades_nfp_days_only_and_tomorrow():
@@ -258,7 +258,7 @@ def test_the_twin_trades_nfp_days_only_and_tomorrow():
 
 def test_the_twin_trades_exactly_the_desk_geometry():
     d = dt.date(2024, 12, 6)
-    tp = _tape(d, [("08:29:59", 2650.0), ("08:30:00.100", 2652.3), ("08:31", 2661.0)])
+    tp = _tape(d, [("08:29:58", 2650.0), ("08:29:59.500", 2650.0), ("08:30:00.100", 2652.3), ("08:31", 2661.0)])
     t, = run_session(GCNfp(), tp, Costs()).trades
     assert t.side == "long" and t.entry_price == pytest.approx(2652.4)   # first print through 2652.0, +1 tick
     assert t.sl == pytest.approx(2647.4) and t.tp == pytest.approx(2660.1)   # 5.0 / 7.7 from the FILL
@@ -298,6 +298,6 @@ def test_readiness_is_silent_on_other_days_and_flags_an_ungated_gc_nfp_on_nfp_da
     assert checks(THU, 9, 0) == [] and checks(NEXT_FRI, 12, 0) == []   # no "no signal arrived" alarm
     at(clock, 8, 25, date=NFP_DAY)
     assert [(c["level"], c["detail"]) for c in checks(NFP_DAY, 8, 25)] \
-        == [("bad", "timer has not gated — the 8:30 fire is not armed")]
+        == [("bad", "timer has not gated — the 8:29 fire is not armed")]
     run(timer.tick())                                                  # 08:25: past the gate time
     assert checks(NFP_DAY, 8, 25) == []

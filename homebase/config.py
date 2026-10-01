@@ -173,6 +173,8 @@ def _defaults() -> AppCfg:
             # GC 08:30 NFP straddle (verified 2026-10-01, research/nfp-2026-10-02/verify): 4 gold
             # contracts, OCO stops at anchor +/- 2.0, SL 5.0 (-$2,000 before slippage: the user's choice 2026-10-01, a stop-out ends the eval), TP 7.7
             # (+$3,080 gross, +$3,061.60 after $2.30 a side), unfilled cancelled 08:45, flat 09:55.
+            # Fires 08:29:59 (the user's choice 2026-10-01): the stops rest at the exchange before the release;
+            # tested on 57 NFPs, same pass rate as 08:30:00.
             # Trades ONLY the days in only_dates (2026-10-02, the BLS NFP date; extend it by hand).
             # accept_until 08:31: a fire more than a minute late is refused, not re-anchored on a
             # post-release price. Ships off and unbooked: the user books the evals and enables it.
@@ -181,11 +183,11 @@ def _defaults() -> AppCfg:
                 cancel_et="08:45", flat_et="09:55",
                 accept_from_et="08:29", accept_until_et="08:31",
                 enabled=False, gated=False, self_fire=True,
-                fire_et="08:30:00", only_dates=["2026-10-02"],
+                fire_et="08:29:59", only_dates=["2026-10-02"],
                 metrics={
                     "source": "NFP-only tick replay · 57 events 2021-10..2026-09 · the 2025-26 part was "
                               "already spent on this family: a consistency check, not a clean exam",
-                    "rows": {"entry": "OCO stops anchor ±2.0 (anchor = last print before 08:30:00)",
+                    "rows": {"entry": "OCO stops anchor ±2.0 (anchor = last print before 08:29:59; orders rest before the 08:30 release)",
                              "SL": "5.0 pts · $500/ct · $2,000 at 4 ct (a stop-out ends the eval)",
                              "TP": "7.7 pts · $770/ct · $3,080 at 4 ct",
                              "pass / bust": "61% (2021-24) · 74% (2025-26) / 26-36%", "day": "2026-10-02 only"},
