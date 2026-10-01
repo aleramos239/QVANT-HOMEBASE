@@ -527,21 +527,20 @@
     .master{ flex-wrap:wrap; justify-content:flex-end; row-gap:8px; max-width:100%; }
   }
 </style>
-<link rel="stylesheet" href="/static/apple.css?v=2">
+<link rel="stylesheet" href="/static/apple.css?v=3">
+<link rel="stylesheet" href="/static/hb.css?v=1">
 </head>
 <body>
 
 <div class="app-shell">
-    <header class="inset-topbar">
-      <div class="tb-l">
-      <span style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:var(--radius-md);background:var(--primary);color:var(--primary-foreground);flex-shrink:0">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 9.5V21h14V9.5"/></svg>
-      </span>
-      <span class="wordmark" style="font-weight:600;font-size:0.9375rem;letter-spacing:-.01em">Homebase</span>
+    <header class="inset-topbar hb-bar">
+      <div class="tb-l hb-bar-l">
+      <span class="hb-mark"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-8 9 8"/><path d="M5 9.5V21h14V9.5"/></svg></span>
+      <b class="hb-word wordmark">Homebase</b>
       <span class="pill idle brand-tag" style="margin-left:2px">Ramos Quant</span>
-      </div>
       <nav class="pgsw" id="pgSw" aria-label="Pages"><a href="http://localhost:8850/" data-page="desk" aria-current="page">Desk</a><a href="http://localhost:8852/?v=33" data-page="charts">Charts</a><a href="http://localhost:8852/backtest?v=33" data-page="backtest">Backtest</a></nav>
-      <div class="tb-r">
+      </div>
+      <div class="tb-r hb-bar-r">
       <span class="clock" id="clock">—</span>
       <span class="bulb" id="bulb" onclick="openChecks()" title="connecting…"></span>
       <div class="master" role="group" aria-label="Desk master controls">

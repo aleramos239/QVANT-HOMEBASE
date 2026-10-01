@@ -1,183 +1,120 @@
 /* ============================================================================
-   Homebase Charts + Backtest — design/apple-pass v2 (same language as the Desk).
-   CHROME ONLY. The chart canvases take their colours from cell.js palette() (hard-coded, not these
-   variables), and the price-reading surfaces stay solid: this file never touches a candle, an axis,
-   an order line or a fill number. It gives the two pages the Desk's frame: one shared top bar,
-   a calm toolbar of pills and segmented controls, a floating drawing rail, rounded panes, a compact
-   legend, and a Strategy Tester that reads like a report.
-   Palette: platinum frame · white surfaces · ink · espresso (latte on dark).
+   Homebase Charts + Lab -- page-specific styling (design/apple-pass v3).
+   The shared look (top bar, page switcher, segmented control, tabs, buttons, type scale, radii) lives in
+   /static/hb.css and is loaded AFTER this file. This file holds only what is specific to the chart pages:
+   the frame colours, the toolbar and rail, rounded panes, the compact legend, the tester's report.
+   CHROME ONLY: the chart canvases take their colours from cell.js palette() (hard-coded, not these
+   variables) and no price, axis, order line or fill number is touched here.
    ============================================================================ */
 
 :root {
-  --frame: #f0f0f2;
+  --frame: #e9eaec;
   --hover: #efeff1;
+  --pill: #e4e5e8;
   --accent: #3f2a20;
   --accent-hover: #2e1d15;
   --accent-soft: rgba(63, 42, 32, .09);
   --accent-fg: #ffffff;
-  --pill: #e4e5e8;
-  --hb-accent: #3f2a20;
   --frame-wash: radial-gradient(1400px 700px at 50% -10%, #fafafb 0%, var(--frame) 65%);
-  --hb-seg-bg: rgb(22 23 26 / .07);
-  --hb-seg-on: #ffffff;
-  --hb-seg-shadow: 0 1px 3px rgb(22 23 26 / .16), 0 0 0 .5px rgb(22 23 26 / .05);
-  --hb-card: 0 0 0 .5px rgb(22 23 26 / .07), 0 1px 2px rgb(22 23 26 / .03), 0 10px 30px rgb(22 23 26 / .05);
-  --shadow-menu: 0 0 0 .5px rgb(22 23 26 / .07), 0 8px 28px rgb(22 23 26 / .14);
-  --shadow-dialog: 0 0 0 .5px rgb(22 23 26 / .08), 0 30px 80px rgb(22 23 26 / .26);
+  --shadow-menu: 0 0 0 .5px rgba(63, 42, 32, .08), 0 8px 28px rgba(22, 23, 26, .14);
+  --shadow-dialog: 0 0 0 .5px rgba(63, 42, 32, .1), 0 30px 80px rgba(22, 23, 26, .26);
 }
 :root[data-theme="dark"] {
   --frame: #0e0f11;
   --hover: #26272b;
+  --pill: #2a2b30;
   --accent: #c8b6a6;
   --accent-hover: #d8c9bb;
   --accent-soft: rgba(200, 182, 166, .16);
   --accent-fg: #1a120e;
-  --pill: #2a2b30;
-  --hb-accent: #c8b6a6;
   --frame-wash: radial-gradient(1400px 700px at 50% -10%, #17181b 0%, var(--frame) 65%);
-  --hb-seg-bg: rgb(255 255 255 / .1);
-  --hb-seg-on: #4a4b50;
-  --hb-seg-shadow: 0 1px 3px rgb(0 0 0 / .5);
-  --hb-card: 0 0 0 .5px rgb(255 255 255 / .08), 0 10px 30px rgb(0 0 0 / .45);
-  --shadow-menu: 0 0 0 .5px rgb(255 255 255 / .1), 0 10px 30px rgb(0 0 0 / .6);
-  --shadow-dialog: 0 0 0 .5px rgb(255 255 255 / .12), 0 30px 80px rgb(0 0 0 / .7);
+  --shadow-menu: 0 0 0 .5px rgba(255, 255, 255, .1), 0 10px 30px rgba(0, 0, 0, .6);
+  --shadow-dialog: 0 0 0 .5px rgba(255, 255, 255, .12), 0 30px 80px rgba(0, 0, 0, .7);
 }
-body { text-rendering: optimizeLegibility; font-feature-settings: "tnum" 1; }
-:focus-visible { outline-color: var(--hb-accent); }
+:focus-visible { outline-color: var(--hb-focus, var(--accent)); }
 
-/* ---- 1. Shared top bar (identical in spirit to the Desk's) ----------------------------- */
-.gbar { flex: none; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; height: 56px; padding: 0 22px;
-  background: var(--glass-bg); -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
-  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)); border-bottom: .5px solid color-mix(in srgb, var(--border) 70%, transparent); }
-.gb-l { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.gb-mark { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; background: var(--text); color: var(--panel); flex: none; }
-.gb-word { font-size: 16px; font-weight: 600; letter-spacing: -.02em; }
-.gb-tag { font-size: 13px; color: var(--text-2); }
-.gb-r { display: flex; align-items: center; justify-content: flex-end; gap: 6px; min-width: 0; }
-.gbar .pgsw { margin: 0; justify-self: center; height: 30px; padding: 2px; gap: 0; border-radius: 9px; background: var(--hb-seg-bg); }
-.pgsw a { height: 26px; padding: 0 14px; border-radius: 7px; font-weight: 500; transition: color 150ms ease, background-color 150ms ease; }
-.pgsw a[aria-current="page"] { background: var(--hb-seg-on); box-shadow: var(--hb-seg-shadow); }
-.gb-r .tabstrip { flex: 0 1 auto; max-width: 44vw; height: auto; padding: 0; }
-.tab-btn { height: 28px; margin-right: 2px; padding: 0 12px; border-radius: 8px; border-bottom: none; font-weight: 500;
-  transition: color 150ms ease, background-color 150ms ease; }
-.tab-btn.active { background: var(--hover); border-bottom: none; }
-.tab-btn.drag-over { box-shadow: inset 2px 0 0 var(--accent); }
-.tab-add { border-radius: 8px; }
-.gb-r .tb-btn { height: 30px; margin: 0; padding: 0 8px; border-radius: 8px; }
-@media (max-width: 1120px) { .gb-tag { display: none; } .gbar { grid-template-columns: auto 1fr auto; } }
-@media (max-width: 800px) { .gb-word, .gb-tag { display: none; } .gb-r .tabstrip { max-width: 30vw; } }
+/* ---- top bar extras on the chart pages: the layout tabs live in the shared bar ---------------------------- */
+.hb-bar .tabstrip { flex: 0 1 auto; max-width: 52vw; height: auto; padding: 0; }
+.hb-bar .tab-btn { height: var(--hb-h-sm); margin-right: 2px; }
+.hb-bar .tab-add { width: var(--hb-h-sm); height: var(--hb-h-sm); border-radius: var(--hb-r-sm); }
+.hb-bar .tb-btn { height: var(--hb-h-sm); margin: 0; padding: 0 8px; }
 
-/* ---- 2. Toolbar: pills and a segmented interval control, no rules ----------------------- */
-.toolbar { height: auto; padding: 12px 14px 4px; gap: 4px; background: transparent; }
-.toolbar .tb-sep { display: none; }
-.tb-btn { height: 30px; margin: 0 1px; padding: 0 10px; border-radius: 8px; font-weight: 500;
-  transition: background-color 130ms ease, color 130ms ease, transform 120ms var(--ease-spring-out); }
+/* ---- toolbar: calm pills on the frame, the same 40px band --------------------------------------------------- */
+.toolbar { height: 40px; padding: 0 8px; gap: 2px; background: transparent; }
+.toolbar .tb-sep { height: 16px; margin: 0 6px; opacity: .55; }
+.tb-btn { margin: 0 1px; padding: 0 10px; transition: background-color 130ms ease, color 130ms ease, transform 120ms var(--ease-spring-out); }
 .tb-btn:active { transform: scale(.97); }
 .tb-btn.tb-icon { padding: 0 8px; }
-.tb-btn[aria-pressed="true"] { background: var(--hover); color: var(--text); }
-.tb-pill { height: 32px; margin: 0 8px 0 0; padding: 0 14px 0 10px; border-radius: 16px; background: var(--panel); box-shadow: var(--hb-card); }
-.tb-group { padding: 2px; border-radius: 9px; background: var(--hb-seg-bg); margin-right: 2px; }
-.tb-group .tb-btn { height: 26px; margin: 0; padding: 0 11px; border-radius: 7px; color: var(--text-2); }
-.tb-group .tb-btn:hover { color: var(--text); background: transparent; }
-.tb-group .tb-btn.active { background: var(--hb-seg-on); color: var(--text); box-shadow: var(--hb-seg-shadow); }
-.tb-label { font-weight: 500; }
+.tb-btn[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.tb-pill { height: var(--hb-h-md); margin: 0 6px 0 0; padding: 0 14px 0 10px; border-radius: 16px; background: var(--panel); box-shadow: 0 0 0 .5px var(--border); }
+.tb-group { margin: 0 2px; }
 
-/* ---- 3. Frame: floating rail, rounded panes ----------------------------------------------- */
-.main { gap: 8px; padding: 8px; }
-.rail { align-self: flex-start; background: var(--panel); border-radius: 16px; padding: 8px 0; box-shadow: var(--hb-card); }
-.rail-btn { border-radius: 10px; transition: background-color 130ms ease, color 130ms ease, transform 120ms var(--ease-spring-out); }
+/* ---- frame: rounded panes and rail, no extra gaps ------------------------------------------------------------ */
+.panel, .panel.selected::after { border-radius: 10px; }
+.bpanel { border-radius: 10px; }
+.rail { border-radius: 0 12px 12px 0; }
+.rail-btn { border-radius: var(--hb-r-md); transition: background-color 130ms ease, color 130ms ease, transform 120ms var(--ease-spring-out); }
 .rail-btn:active { transform: scale(.94); }
-.rail-sep { opacity: .6; }
-.grid { gap: 8px; }
-.panel, .panel.selected::after { border-radius: 14px; }
-.panel { box-shadow: 0 0 0 .5px color-mix(in srgb, var(--border) 80%, transparent); }
-.bpanel { margin: 0 8px 8px 68px; border-radius: 14px; box-shadow: var(--hb-card); }
-.bp-bar { padding: 0 8px; }
-.bp-tabs { align-items: center; gap: 2px; }
-.bp-tab { height: 26px; padding: 0 12px; border-radius: 8px; border-bottom: none; font-weight: 500; transition: color 150ms ease, background-color 150ms ease; }
-.bp-tab[aria-selected="true"] { background: var(--hover); border-bottom: none; }
-.bp-toggle { border-radius: 8px; }
-.bp-empty { padding: 36px 16px; text-align: center; font-size: 14px; }
+.rail-btn[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.bp-empty { padding: 36px 16px; text-align: center; font-size: var(--hb-fs-body); }
 .bp-loading { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 56px 16px; }
 .bp-loading::before { content: ""; width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--border);
   border-top-color: var(--text-2); animation: hb-spin .9s linear infinite; }
 @keyframes hb-spin { to { transform: rotate(360deg); } }
-.statusbar { font-size: 12px; background: transparent; padding: 0 16px; }
+.statusbar { height: 28px; font-size: var(--hb-fs-sm); }
 .sb-dot { width: 7px; height: 7px; }
 
-/* ---- 4. Legend: compact, so four panes stop hiding their own candles ------------------------ */
+/* ---- legend: compact, so panes stop hiding their own candles ------------------------------------------------- */
 .lg-title { font-size: 14px; line-height: 20px; font-weight: 600; letter-spacing: -.01em; }
 .grid[data-count="1"] .lg-title { font-size: 15px; line-height: 22px; }
 .grid[data-count="4"] .lg-title, .grid[data-count="6"] .lg-title { font-size: 13px; line-height: 18px; }
 .lg-ohlc { font-size: 12px; gap: 0 8px; }
 .lg-row { height: 19px; font-size: 12px; }
 .lg-msg { font-size: 12px; }
-/* three or more panes: the indicator rows wait until the pane is hovered or selected, so the candles are not read through a stack of labels */
+/* three or more panes: the indicator rows wait until the pane is hovered or selected */
 .grid:not([data-count="1"]):not([data-count="2"]) .panel:not(:hover):not(.selected) .lg-inds { display: none; }
 
-/* ---- 5. Menus, dialogs, toasts ----------------------------------------------------------------- */
-.btn-primary { background: var(--text); color: var(--panel); }
-.btn-primary:hover { background: color-mix(in srgb, var(--text) 88%, var(--panel)); }
-.menu { border-radius: 14px; padding: 6px; box-shadow: var(--shadow-menu); }
-.menu-i { height: 32px; padding: 0 12px; border-radius: 8px; }
+/* ---- menus, dialogs, toasts: shadows only (shapes come from hb.css) ---------------------------------------------- */
+.menu { padding: 6px; box-shadow: var(--shadow-menu); }
+.menu-i { height: var(--hb-h-md); padding: 0 12px; border-radius: var(--hb-r-sm); }
 .menu-h { padding: 10px 12px 4px; }
 .menu-sep { margin: 6px 4px; opacity: .6; }
-.menu-row { padding-right: 6px; border-radius: 8px; }
-.dialog { border-radius: 20px; box-shadow: var(--shadow-dialog); }
+.menu-row { padding-right: 6px; border-radius: var(--hb-r-sm); }
+.tst-run-row { height: auto; min-height: var(--hb-h-md); padding: 8px 12px; line-height: 1.35; }
+.dialog { box-shadow: var(--shadow-dialog); }
 .dlg-head { padding: 20px 16px 12px 24px; }
-.dlg-search { border-radius: 10px; }
-.dlg-group { border-radius: 8px; width: calc(100% - 16px); margin: 0 8px; padding: 0 12px; }
-.dlg-row { border-radius: 8px; width: calc(100% - 16px); margin: 0 8px; padding: 0 12px; }
-.toasts > * { border-radius: 14px; }
-.rail-tip { border-radius: 8px; }
-
-/* ---- 6. Strategy Tester: a run bar, then a report ------------------------------------------------ */
-.tst-head { padding: 0 14px; }
-.tst-head .set-select, .tst-num, .tst-date-in, .tst-range { border-radius: 9px; border-color: color-mix(in srgb, var(--border) 80%, transparent); }
-.tst-tabs { height: 44px; gap: 2px; padding: 0 14px; border-bottom-color: color-mix(in srgb, var(--border) 70%, transparent); }
-.tst-tab { height: 28px; padding: 0 12px; border-radius: 8px; border-bottom: none; font-size: 12.5px; font-weight: 500; transition: color 150ms ease, background-color 150ms ease; }
-.tst-tab.active { background: var(--hover); border-bottom: none; }
-.tst-content { padding: 20px 24px; }
-.tst-tiles { gap: 24px; margin-bottom: 24px; }
-.tst-tile { padding: 4px 0 4px 20px; border-left: .5px solid color-mix(in srgb, var(--border) 80%, transparent); }
-.tst-tile:first-child { padding-left: 0; border-left: none; }
-.tst-tile-v { font-size: 1.75rem; font-weight: 500; letter-spacing: -.03em; line-height: 1.1; }
-.tst-tile-l { font-size: 12.5px; margin-top: 6px; }
-.tst-badge { border-radius: 999px; height: 22px; padding: 0 10px; }
-.tst-fail-banner { border-radius: 10px; }
-.tst-btn, .tst-icon-btn, .tst-cal-d { border-radius: 8px; }
-.tst-prop, .tst-mc { border-top-color: color-mix(in srgb, var(--border) 70%, transparent); }
-.tst-hide { font-size: 12.5px; }
-.tst-run-row { height: auto; min-height: 32px; padding: 8px 12px; line-height: 1.35; }
-.tst-run { height: 30px; padding: 0 14px; border-radius: 9px; font-weight: 600; }
-
-@media (prefers-reduced-motion: reduce) {
-  .tb-btn:active, .rail-btn:active { transform: none; }
-  .bp-loading::before { animation: none; border-top-color: var(--border); }
-}
-@media (prefers-reduced-transparency: reduce) { .gbar { background: var(--panel); -webkit-backdrop-filter: none; backdrop-filter: none; } }
-@media (prefers-contrast: more) {
-  .pgsw a[aria-current="page"], .tab-btn.active, .bp-tab[aria-selected="true"], .tst-tab.active { outline: 1px solid var(--text); }
-}
-
-/* ---- 7. Espresso is the accent (latte on dark) ------------------------------------------------------ */
-.gb-mark { background: var(--accent); color: var(--accent-fg); }
-.gbar .pgsw a[aria-current="page"], .pgsw a[aria-current="page"] { background: var(--accent); color: var(--accent-fg); box-shadow: none; }
-.tab-btn.active { background: var(--accent-soft); color: var(--accent); }
-.tb-group .tb-btn.active { background: var(--accent); color: var(--accent-fg); box-shadow: none; }
-.tb-btn[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
-.bp-tab[aria-selected="true"], .tst-tab.active { background: var(--accent-soft); color: var(--accent); }
-.btn-primary { background: var(--accent); color: var(--accent-fg); }
-.btn-primary:hover { background: var(--accent-hover); }
-.rail-btn[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
-.tst-tile-v { color: var(--text); }
+.dlg-search { border-radius: var(--hb-r-md); }
+.dlg-group, .dlg-row { border-radius: var(--hb-r-sm); width: calc(100% - 16px); margin: 0 8px; padding: 0 12px; }
+.toasts > * { border-radius: var(--hb-r-lg); }
+.rail-tip { border-radius: var(--hb-r-sm); }
 
 /* the trading surfaces keep their market colours: buy is blue (TradingView convention), sell is red.
    They read var(--accent), which is espresso now, so they are pinned here -- nothing about an order's look changed. */
-.tr-buy, .dom-chip-order.dom-chip-buy, .replay-bar .rb-side.rb-buy, .op-tile.buy.on, .op-send:not(.sell) { background: #2962ff; color: #ffffff; }
+.tr-buy, .dom-chip-order.dom-chip-buy, .replay-bar .rb-side.rb-buy, .op-send:not(.sell) { background: #2962ff; color: #ffffff; }
 .op-tile.buy { color: #2962ff; background: rgba(41, 98, 255, .10); }
 .op-tile.buy.on { color: #ffffff; background: #2962ff; }
 .dom-row.best-bid { background: rgba(41, 98, 255, .10); }
 .dom-bid { color: #2962ff; }
 :root[data-theme="dark"] .op-tile.buy { background: rgba(41, 98, 255, .2); }
 :root[data-theme="dark"] .dom-row.best-bid { background: rgba(41, 98, 255, .2); }
+
+/* ---- Strategy Tester: a run bar, then a report -------------------------------------------------------------------- */
+.tst-head { padding: 0 14px; }
+.tst-head .set-select, .tst-num, .tst-date-in, .tst-range { border-color: color-mix(in srgb, var(--border) 80%, transparent); }
+.tst-tabs { height: 44px; gap: 2px; padding: 0 14px; border-bottom-color: color-mix(in srgb, var(--border) 70%, transparent); }
+.tst-content { padding: 20px 24px; }
+.tst-tiles { gap: 24px; margin-bottom: 24px; }
+.tst-tile { padding: 4px 0 4px 20px; border-left: .5px solid color-mix(in srgb, var(--border) 80%, transparent); }
+.tst-tile:first-child { padding-left: 0; border-left: none; }
+.tst-tile-v { font-size: 1.75rem; font-weight: 500; letter-spacing: -.03em; line-height: 1.1; color: var(--text); }
+.tst-tile-l { font-size: var(--hb-fs-ui); margin-top: 6px; }
+.tst-badge { border-radius: 999px; height: 22px; padding: 0 10px; }
+.tst-fail-banner { border-radius: var(--hb-r-md); }
+.tst-btn, .tst-icon-btn, .tst-cal-d { border-radius: var(--hb-r-sm); }
+.tst-prop, .tst-mc { border-top-color: color-mix(in srgb, var(--border) 70%, transparent); }
+.tst-run { height: var(--hb-h-sm); padding: 0 14px; font-weight: 600; }
+
+@media (prefers-reduced-motion: reduce) {
+  .tb-btn:active, .rail-btn:active { transform: none; }
+  .bp-loading::before { animation: none; border-top-color: var(--border); }
+}
