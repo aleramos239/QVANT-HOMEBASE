@@ -10,14 +10,18 @@
   } catch (_) { document.documentElement.setAttribute('data-theme', 'light'); }
 </script>
 <link rel="stylesheet" href="/static/charts/charts.css?v=33">
-<link rel="stylesheet" href="/static/charts/apple-charts.css?v=1">
+<link rel="stylesheet" href="/static/charts/apple-charts.css?v=3">
 </head>
 <body>
-<div class="tabrow">
+<header class="gbar">
+  <div class="gb-l"><span class="gb-mark"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-8 9 8"/><path d="M5 9.5V21h14V9.5"/></svg></span><b class="gb-word">Homebase</b><span class="gb-tag">Ramos Quant</span></div>
   <nav class="pgsw" id="pgSw" aria-label="Pages"><a href="#" data-page="desk">Desk</a><a href="#" data-page="charts" aria-current="page">Charts</a><a href="#" data-page="backtest">Backtest</a></nav>
-  <span class="tb-sep"></span>
-  <div class="tabstrip" id="tabStrip" role="tablist" aria-label="Layout tabs"></div>
-</div>
+  <div class="gb-r">
+    <div class="tabstrip" id="tabStrip" role="tablist" aria-label="Layout tabs"></div>
+    <button class="tb-btn tb-icon" id="tbSettings" type="button" title="Chart settings" aria-label="Chart settings" aria-haspopup="dialog"><span class="icw" data-icon="gear"></span></button>
+    <button class="tb-btn tb-icon" id="tbTheme" type="button" title="Dark theme"><span class="icw" data-icon="moon"></span></button>
+  </div>
+</header>
 <header class="toolbar" role="toolbar" aria-label="Chart toolbar">
   <button class="tb-pill" id="tbSymbol" type="button" aria-haspopup="menu" aria-expanded="false"><span class="icw" data-icon="search"></span><span id="tbSymbolText">NQ</span></button>
   <span class="tb-sep"></span>
@@ -31,9 +35,6 @@
   <span class="tb-spacer"></span>
   <button class="tb-btn" id="tbOrder" type="button" title="Order panel" aria-pressed="false" aria-controls="panel-order"><span class="icw" data-icon="panelRight"></span><span class="tb-label">Order</span></button>
   <button class="tb-btn" id="tbDom" type="button" title="DOM (Level 2 ladder)" aria-pressed="false" aria-controls="panel-dom"><span class="icw" data-icon="listOrdered"></span><span class="tb-label">DOM</span></button>
-  <span class="tb-sep"></span>
-  <button class="tb-btn tb-icon" id="tbSettings" type="button" title="Chart settings" aria-label="Chart settings" aria-haspopup="dialog"><span class="icw" data-icon="gear"></span></button>
-  <button class="tb-btn tb-icon" id="tbTheme" type="button" title="Dark theme"><span class="icw" data-icon="moon"></span></button>
 </header>
 <div class="main">
   <nav class="rail" id="rail" aria-label="Drawing tools">
