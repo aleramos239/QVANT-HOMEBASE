@@ -301,8 +301,19 @@ def test_open_rules_only_the_0929_close_and_only_their_day():
     assert open_long(minute_bars(((9, 29), 30000.0)), now, OPEN_CFG).side == "Buy"
     for day in (22, 29):                                                          # any other day
         assert open_long(minute_bars(((9, 29), 30000.0), day=day), now, OPEN_CFG) is None
-    oct1 = Bar(dt.datetime(2026, 10, 1, 9, 29, tzinfo=ET).astimezone(UTC), 1, 1, 1, 1, 5, "NQ", 1)
-    assert open_long([oct1], now, OPEN_CFG) is None
+    oct2 = Bar(dt.datetime(2026, 10, 2, 9, 29, tzinfo=ET).astimezone(UTC), 1, 1, 1, 1, 5, "NQ", 1)
+    assert open_long([oct2], now, OPEN_CFG) is None
+
+
+def test_open_rules_fire_on_2026_10_01():
+    # regression: the user enabled nq_open_long/short on Thu 10-01 and nothing happened -- the rule's
+    # one-day gate (09-30) returned None silently
+    from homebase.rules import open_long, open_short
+    now = dt.datetime(2026, 10, 1, 9, 30, 0, tzinfo=ET)
+    bars = minute_bars(((9, 29), 30000.0), day=1)
+    bars = [Bar(dt.datetime(2026, 10, 1, 9, 29, tzinfo=ET).astimezone(UTC), 3e4, 3e4, 3e4, 3e4, 5, "NQ", 1)]
+    assert open_long(bars, now, OPEN_CFG).side == "Buy"
+    assert open_short(bars, now, OPEN_CFG).side == "Sell"
 
 
 def test_fixed_distance_rule_moves_both_levels_to_the_fill(tmp_path):

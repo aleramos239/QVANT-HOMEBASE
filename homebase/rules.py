@@ -81,20 +81,20 @@ def nq_10am_continuation(bars: list[Bar], now_et: dt.datetime, cfg) -> Optional[
                   ref_px=ref, tp_rr=0.75, note=stats)
 
 
-OPEN_930_DAY = "2026-09-30"   # the one ET day open_long/open_short trade (asked 2026-09-29)
+OPEN_930_DAYS = ("2026-09-30", "2026-10-01")   # the ET days open_long/open_short trade (asked 2026-09-29; 10-01 added after a silent no-fire)
 
 
 def _open_930(side: str, bars: list[Bar], cfg) -> Optional[Signal]:
     """Market at the 09:30 open (on the 09:29 bar's close), SL cfg.sl_pts / TP
     cfg.tp_pts from that close; the engine moves both to the fill. On
-    OPEN_930_DAY only."""
+    OPEN_930_DAYS only."""
     if not bars:
         return None
     last = bars[-1]
     t = last.ts.astimezone(ET)
     if (t.hour, t.minute) != (9, 29) or last.minutes != 1:
         return None                                  # fires once, on the 09:29 close
-    if t.date().isoformat() != OPEN_930_DAY:
+    if t.date().isoformat() not in OPEN_930_DAYS:
         return None
     tick = tick_size(cfg.symbol) or 0.25
     ref, sign = last.c, (1 if side == "Buy" else -1)
