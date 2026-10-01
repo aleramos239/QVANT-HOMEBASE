@@ -44,7 +44,7 @@ from .marketdata import TradovateMD
 from .rules import RULES
 from .metrics import live_metrics, strategy_live_detail
 from .paths import state_dir
-from .timer import FIRE_T, SelfTimer, fire_clock, fire_said, miss_why, off_anchor
+from .timer import SelfTimer, fire_clock, fire_said, fire_time, miss_why, off_anchor, schedule
 from . import desk_api
 from .trading import ChartDesk
 
@@ -131,6 +131,12 @@ def power_status() -> dict | None:
     return out
 
 
+def _plus_min(t):
+    """`t` (a time of day) a minute later: the readiness check's gate + 1 min."""
+    import datetime as dt
+    return (dt.datetime.combine(dt.date(2000, 1, 3), t) + dt.timedelta(minutes=1)).time()
+
+
 def feed_window(now_et) -> bool:
     if now_et.weekday() >= 5:
         return False
@@ -174,11 +180,11 @@ def _timer_day(tst: dict | None, status: str, s, armed: bool) -> tuple[str, str]
     tst = tst or {}
     stage = tst.get("stage")
     if stage == "fired" and off_anchor(tst):
-        return "warn", f"{fire_said(tst)} · " + (status if status != "idle" else "nothing placed")
+        return "warn", f"{fire_said(tst, fire_time(s))} · " + (status if status != "idle" else "nothing placed")
     if status != "idle":
         return None
     if stage == "waiting":
-        return "bad", (f"waiting for a quote since {fire_clock(tst.get('wait_late_s'))} — "
+        return "bad", (f"waiting for a quote since {fire_clock(tst.get('wait_late_s'), fire_time(s))} — "
                        f"{tst.get('wait_text')}")
     if stage == "missed":
         return "bad", "missed today — " + miss_why(tst.get("reason"))
@@ -224,7 +230,9 @@ def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
                            "detail": f"on battery ({power.get('pct')}%) — plug in"})
         else:
             checks.append({"level": "ok", "label": "Power", "detail": "on power"})
-    enabled = {n: s for n, s in cfg.strategies.items() if s.enabled}
+    # an event-day strategy (only_dates) is not part of a day it does not trade
+    enabled = {n: s for n, s in cfg.strategies.items()
+               if s.enabled and s.trades_on(now_et.date())}
     for name, s in enabled.items():
         if not config_mod.assignments(cfg, name):
             # a SHADOW strategy with no account is a normal resting state —
@@ -236,20 +244,22 @@ def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
     live_strats = [n for n, s in enabled.items()
                    if not getattr(s, "shadow", False)
                    and config_mod.assignments(cfg, n)]
-    if timer_status is not None and weekday \
-            and dt.time(9, 21) <= now_et.time() < dt.time(9, 30):
-        # by 9:21 every enabled self-fire straddle must have gated (ungated
-        # ones gate instantly at 9:20) — idle here means the 9:30 fire is
+    if timer_status is not None and weekday:
+        # a minute after the gate (09:21 for the 9:30 fire) every enabled self-fire straddle must
+        # have gated (ungated ones gate instantly at the gate time) — idle here means its fire is
         # NOT coming; error carries the reason (e.g. no market data)
         tstat = timer_status.get("strategies") or {}
         for name, sc in enabled.items():
             if getattr(sc, "kind", "straddle") != "straddle" \
                     or not getattr(sc, "self_fire", False):
                 continue
+            gate_t, _, fire_t, _ = schedule(sc)
+            if not (_plus_min(gate_t) <= now_et.time() < fire_t):
+                continue
             stage = (tstat.get(name) or {}).get("stage")
             if stage in (None, "idle"):
                 checks.append({"level": "bad", "label": name,
-                               "detail": "timer has not gated — the 9:30 fire "
+                               "detail": f"timer has not gated — the {fire_t.hour}:{fire_t.minute:02d} fire "
                                          "is not armed"})
             elif stage == "error":
                 checks.append({"level": "bad", "label": name,
@@ -318,7 +328,7 @@ def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
         # from the open, a self-fire straddle's own timer says what its day was
         # (09:21-09:30 has its own check above)
         told = (_timer_day(tstrats.get(name), status, s, cfg.armed)
-                if weekday and getattr(s, "self_fire", False) and now_et.time() >= FIRE_T
+                if weekday and getattr(s, "self_fire", False) and now_et.time() >= fire_time(s)
                 else None)
         if told is not None:
             checks.append({"level": told[0], "label": name, "detail": told[1]})
@@ -1069,7 +1079,8 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                     "cfg": {"symbol": s.symbol, "qty": s.qty,
                             "offset_pts": s.offset_pts, "sl_pts": s.sl_pts,
                             "tp_pts": s.tp_pts, "cancel_et": s.cancel_et,
-                            "flat_et": s.flat_et, "enabled": s.enabled,
+                            "flat_et": s.flat_et, "fire_et": s.fire_et,
+                            "only_dates": list(s.only_dates), "enabled": s.enabled,
                             "gated": s.gated, "self_fire": s.self_fire,
                             "pine_file": getattr(s, "pine_file", ""),
                             "kind": getattr(s, "kind", "straddle"),

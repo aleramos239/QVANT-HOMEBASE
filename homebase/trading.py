@@ -623,7 +623,26 @@ class ChartDesk:
         now = self.engine.now_et()
         if now.weekday() < 5 and HISTORY_PAUSE_FROM <= now.time() < VIEW_PAUSE_UNTIL:
             return True
+        if self._other_fire_near(now, 60.0):
+            return True
         return self._views_paused()
+
+    def _other_fire_near(self, now: dt.datetime, lead_s: float) -> bool:
+        """The P2 protection for a straddle whose fire is not 09:30:00 (gc_nfp, 08:30:00): true from
+        `lead_s` before to 30 s after the fire of an enabled, self-firing straddle that trades today.
+        Only such a strategy asks for it -- a desk without one pauses exactly as before."""
+        if now.weekday() >= 5:
+            return False
+        from .timer import fire_time
+        secs = now.hour * 3600 + now.minute * 60 + now.second + now.microsecond / 1e6
+        for s in self.cfg.strategies.values():
+            if not (s.enabled and s.self_fire and s.kind == "straddle" and s.trades_on(now.date())):
+                continue
+            f = fire_time(s)
+            fs = f.hour * 3600 + f.minute * 60 + f.second
+            if fs != 9 * 3600 + 30 * 60 and fs - lead_s <= secs < fs + 30.0:
+                return True
+        return False
 
     def _views_paused(self) -> bool:
         """True while view refresh must yield the loop to the bot fire: the
@@ -633,6 +652,8 @@ class ChartDesk:
         scan of today's day states (bounded by the strategy/account count)."""
         now = self.engine.now_et()
         if now.weekday() < 5 and VIEW_PAUSE_FROM <= now.time() < VIEW_PAUSE_UNTIL:
+            return True
+        if self._other_fire_near(now, 10.0):
             return True
         return any(st.status == "placing"
                    for name in self.cfg.strategies

@@ -1017,6 +1017,7 @@
     "bar_minutes": 1,
     "cancel_et": "12:55",
     "enabled": true,
+    "fire_et": "09:30:00",
     "flat_et": "15:55",
     "gated": true,
     "kind": "straddle",
@@ -1035,6 +1036,7 @@
      "source": "one-shot sealed-year OOS exam \u00b7 2025-07-08\u21922026-07-07 \u00b7 TV 15s"
     },
     "offset_pts": 10.0,
+    "only_dates": [],
     "pine_file": "nq930.pine",
     "qty": 3,
     "rule": "",

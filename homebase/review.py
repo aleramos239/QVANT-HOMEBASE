@@ -18,7 +18,7 @@ from pathlib import Path
 from .config import load as load_cfg
 from .contracts import point_value, tick_size
 from .paths import state_dir
-from .timer import fire_clock, fire_said, late_why, miss_why, off_anchor
+from .timer import fire_clock, fire_said, fire_time, late_why, miss_why, off_anchor
 
 BAD = {"place_failed", "timer_error", "timer_missed", "clock_error", "both_filled_emergency",
        "hook_rejected", "alert_refused", "cancel_raced_fill"}
@@ -84,8 +84,9 @@ def review(date: str) -> str:
                 seen_missed = True
         elif ev == "timer_fired" and _loud(e):
             what = "FIRED LATE" if e.get("late") is True else "FIRED OFF THE PRE-OPEN ANCHOR"
-            add(f"  {t}  {what} at {fire_clock(e.get('late_s'))}, {e.get('late_s')} s past "
-                f"09:30:00 — {late_why(e.get('reason'), e.get('late_s'), e.get('waited_s'), e.get('wait_reason'))} · "
+            fire = fire_time(cfg.strategies.get(e.get("strategy")))
+            add(f"  {t}  {what} at {fire_clock(e.get('late_s'), fire)}, {e.get('late_s')} s past "
+                f"{fire:%H:%M:%S} — {late_why(e.get('reason'), e.get('late_s'), e.get('waited_s'), e.get('wait_reason'))} · "
                 f"anchor {e.get('anchor')}, the latest trade then (not the last before the "
                 f"open) · accepted={e.get('result')}" + (f" · {e.get('note')}" if e.get("note") else ""))
         elif ev == "timer_fired":

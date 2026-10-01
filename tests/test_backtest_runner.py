@@ -280,7 +280,7 @@ def test_every_strategy_declares_session_independence_explicitly():
     from homebase import strategies
     from homebase.strategies.base import Strategy
     assert Strategy.session_independent is False
-    assert set(strategies.REGISTRY) == {"nq930", "ym930", "nq10am", "gc_nfpcpi"}
+    assert set(strategies.REGISTRY) == {"nq930", "ym930", "nq10am", "gc_nfpcpi", "gc_nfp"}
     for cls in strategies.REGISTRY.values():
         assert "session_independent" in vars(cls), cls.id
         assert cls.session_independent is True, cls.id

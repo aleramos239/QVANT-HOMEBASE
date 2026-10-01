@@ -1481,8 +1481,8 @@ const ACTIVITY = {
     : r.gate === false ? [`${actStrat(r)} gate closed — chop day (ADX ${fmt(r.adx, 1)}), no trade today`]
     : [`${actStrat(r)} gate unknown — only ${r.bars} daily bars, it will not fire`, "warn"],
   timer_fired: (r) => r.result
-    ? [`${actStrat(r)} fired at 9:30 — anchor ${fmtPx(r.anchor)}${r.note ? " · " + actErr(r.note) : ""}`]
-    : [`${actStrat(r)} fired at 9:30 — anchor ${fmtPx(r.anchor)} — refused: ${actErr(r.note)}`, "warn"],
+    ? [`${actStrat(r)} fired at ${fireHM(r.strategy)} — anchor ${fmtPx(r.anchor)}${r.note ? " · " + actErr(r.note) : ""}`]
+    : [`${actStrat(r)} fired at ${fireHM(r.strategy)} — anchor ${fmtPx(r.anchor)} — refused: ${actErr(r.note)}`, "warn"],
   timer_skipped: (r) => r.reason === "gate_chop" ? [`${actStrat(r)} skipped today — chop (ADX ${fmt(r.adx, 1)})`]
     : r.reason === "killed" ? [`${actStrat(r)} skipped — killed today`]
     : r.reason === "manual_position" ? [`${actStrat(r)} skips ${acctShort(r.account)} today — it holds a manual position (${r.net > 0 ? "+" : ""}${r.net})`, "warn"]
@@ -1492,7 +1492,7 @@ const ACTIVITY = {
   timer_deferred: (r) => [`${actStrat(r)} timer stood down — it already acted today (${r.status})`],
   timer_error: (r) => [`${actStrat(r)} timer error — ${actErr(r.error)}`, "neg"],
   timer_loop_error: (r) => [`Timer error — ${actErr(r.error)}`, "neg"],
-  prestage_rtt: (r) => [`${actStrat(r)} staged for the 9:30 fire`],
+  prestage_rtt: (r) => [`${actStrat(r)} staged for the ${fireHM(r.strategy)} fire`],
   prestage_check_failed: (r) => [`${actStrat(r)} pre-open check failed${actOn(r)} — ${actErr(r.error)}`, "warn"],
   morning_readiness: (r) => r.ready ? ["Morning check: ready to trade"]
     : [`Morning check: NOT ready — ${(r.problems || []).map(actErr).join(" · ")}`, "neg"],
@@ -2019,6 +2019,11 @@ function acctShort(id) {
   const pre = (/^[A-Za-z]+/.exec(s) || [""])[0];
   return (pre.length <= 8 ? pre.toUpperCase() : "") + "…" + s.slice(-3);
 }
+/* a strategy's fire moment for display ("9:30", "8:30"): its cfg.fire_et, 9:30 when the desk does not say */
+function fireHM(strategy) {
+  const f = String(((((ST && ST.strategies) || {})[strategy]) || {}).cfg?.fire_et || "09:30:00");
+  return String(parseInt(f.slice(0, 2), 10)) + ":" + f.slice(3, 5);
+}
 function liveBookingNote(strategy, account) {
   const c = ((((ST && ST.strategies) || {})[strategy]) || {}).cfg || {};
   const a = ((ST && ST.accounts) || {})[account];
@@ -2027,7 +2032,7 @@ function liveBookingNote(strategy, account) {
   if (!a) return `This account is not in the desk's list right now, so it is treated as LIVE.${acct}`;
   if (c.shadow) return "It is a SHADOW strategy: its signals are journaled, never placed — the booking " +
     `stands if that changes.${acct}`;
-  const when = c.kind === "bars" ? "on its next signal" : c.self_fire ? "at the next 9:30 fire" : "on its next alert";
+  const when = c.kind === "bars" ? "on its next signal" : c.self_fire ? `at the next ${fireHM(strategy)} fire` : "on its next alert";
   const idle = [];
   if (!c.enabled) idle.push(strategy.toUpperCase() + " is off");
   if (ST && !ST.armed) idle.push("the desk is disarmed");

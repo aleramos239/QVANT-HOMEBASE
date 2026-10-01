@@ -268,6 +268,9 @@ class Engine:
         if self.killed_today(name):
             self.journal("alert_refused", strategy=name, reason="killed", source=source)
             return {"ok": False, "reason": f"{name} was killed today — nothing is placed"}
+        if not cfg.trades_on(self.now_et().date()):      # an event-day strategy on another day
+            self.journal("alert_refused", strategy=name, reason="not_a_trading_day", source=source)
+            return {"ok": False, "reason": f"{name} does not trade today"}
 
         if self.day_status(name) != "idle":
             self.journal("alert_refused", strategy=name, reason="already_traded",

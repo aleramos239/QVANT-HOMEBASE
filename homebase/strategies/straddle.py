@@ -134,6 +134,7 @@ class DeskStraddle(OpenStraddle):
     def __init__(self, params: dict | None = None):
         cfg = desk_cfg(self.desk_key)
         self.cancel_et, self.flat_et = cfg.cancel_et, cfg.flat_et
+        self.fire = cfg.fire_et
         self._desk_cfg = cfg
         super().__init__(params)
 

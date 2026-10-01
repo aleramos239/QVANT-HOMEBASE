@@ -44,6 +44,12 @@ RENEW_FIRE_GUARD = (dt.time(9, 28), dt.time(9, 31))   # [from, until): a socket 
 RENEW_REBUILD_BY = dt.time(9, 29, 45)                 # a drop before this is rebuilt before the fire (5 s + connect)
 RENEW_FIRE_ACKS = (dt.time(9, 30), dt.time(9, 30, 30))  # [from, until): the fire's orders may be in flight
 RENEW_ACKS_CARRY = dt.time(9, 30, 5)                  # a socket living past this carries the fire and its acks
+# The 08:30 fire (gc_nfp, 2026-10-02): the same idea in a smaller form -- no renewal drop while the
+# fire, its acks and the first fills are in the air. Weekday-wide and cheap: it only moves a renewal
+# that would have landed in 08:25-08:50 to before 08:25 (or lets a token dying inside it renew at once).
+RENEW_EARLY_0830 = dt.time(8, 10)                     # [08:10, 08:25): renew early if due before 08:50
+RENEW_QUIET_0830 = (dt.time(8, 25), dt.time(8, 50))   # [from, until): no renewal drop
+RENEW_CARRY_0830 = dt.time(8, 51)                     # a token must live past this: the first check after 08:50
 RECONNECT_RENEW_S = 5.0                               # a reconnect's best-effort renewal waits at most this
 GUARD_OUTLIVES = dt.time(9, 31, 30)                   # a rebuild inside the guard renews only a token dying before this
 GUARD_RENEW_S = 2.0                                   # ...renew only, never a login, waiting at most this
@@ -86,11 +92,20 @@ def renewal_due(now: dt.datetime, expires_at: float) -> tuple[bool, str]:
                    "fire_acks": never a drop 09:30:00-09:30:30, the fire's orders may be in
                    flight. A late renewal answer is judged again by this rule when it lands.
       An unknown expiry is never renewed inside the quiet window.
+      08:10-08:25 / 08:25-08:50  the same shape for the 08:30 fire (RENEW_*_0830): "early" renewal if
+                   due before 08:50, then "quiet" -- no drop unless the token dies before 08:51.
     Any other time, and weekends: the normal rule, < RENEW_BUFFER_S left ("normal")."""
     et = now.astimezone(ET)
     if et.weekday() < 5:
         t = et.time()
         carry = _et_at(et.date(), RENEW_CARRY_UNTIL)
+        if RENEW_QUIET_0830[0] <= t < RENEW_QUIET_0830[1]:
+            if not expires_at or expires_at >= _et_at(et.date(), RENEW_CARRY_0830):
+                return False, "quiet"
+            return True, "expires_in_window"
+        if RENEW_EARLY_0830 <= t < RENEW_QUIET_0830[0] and expires_at \
+                and expires_at - RENEW_BUFFER_S < _et_at(et.date(), RENEW_QUIET_0830[1]):
+            return True, "early"
         if RENEW_QUIET[0] <= t < RENEW_QUIET[1]:
             if not expires_at or expires_at >= carry:
                 return False, "quiet"

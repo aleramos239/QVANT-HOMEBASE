@@ -92,9 +92,28 @@ DECIDED = {"timer_fired": "fired", "timer_skipped": "skipped", "timer_error": "e
 FIRED_KEYS = ("anchor", "late", "late_s", "reason", "anchor_source", "waited_s")
 
 
-def fire_clock(late_s) -> str:
-    """09:30:00 + late_s as the fire's ET wall time to the second: "9:31:04"."""
-    s = FIRE_T.hour * 3600 + FIRE_T.minute * 60 + FIRE_T.second + int(float(late_s or 0))
+def fire_time(s) -> dt.time:
+    """A strategy's fire moment: its cfg.fire_et ("HH:MM" or "HH:MM:SS"; default 09:30:00)."""
+    parts = [int(x) for x in str(getattr(s, "fire_et", "") or "09:30:00").split(":")]
+    return dt.time(*(parts + [0, 0])[:3])
+
+
+def _before(t: dt.time, seconds: float) -> dt.time:
+    """`t` minus `seconds`, as a time of day (the schedule never crosses midnight)."""
+    return (dt.datetime.combine(dt.date(2000, 1, 3), t) - dt.timedelta(seconds=seconds)).time()
+
+
+def schedule(s) -> tuple:
+    """(gate, stage, fire, done) for a strategy: the fire moment, the gate 10 min before it, the
+    prestage 90 s before, done 1 min after. fire_et 09:30:00 gives GATE_T / STAGE_T / FIRE_T /
+    DONE_T, the original schedule."""
+    fire = fire_time(s)
+    return _before(fire, 600), _before(fire, 90), fire, _before(fire, -60)
+
+
+def fire_clock(late_s, fire: dt.time = FIRE_T) -> str:
+    """The fire moment + late_s as the fire's ET wall time to the second: "9:31:04"."""
+    s = fire.hour * 3600 + fire.minute * 60 + fire.second + int(float(late_s or 0))
     return f"{s // 3600}:{s % 3600 // 60:02d}:{s % 60:02d}"
 
 
@@ -119,12 +138,12 @@ def off_anchor(e: dict) -> bool:
     return e.get("late") is True or e.get("anchor_source") == "current"
 
 
-def fire_said(e: dict) -> str:
+def fire_said(e: dict, fire: dt.time = FIRE_T) -> str:
     """A loud fire (off_anchor) in plain words: "fired late at 9:31:04 · the desk
     started after the open"; "fired at 9:30:00, off the pre-open anchor · it had
     no fresh quote before the open"."""
-    lead = (f"fired late at {fire_clock(e.get('late_s'))}" if e.get("late") is True
-            else f"fired at {fire_clock(e.get('late_s'))}, off the pre-open anchor")
+    lead = (f"fired late at {fire_clock(e.get('late_s'), fire)}" if e.get("late") is True
+            else f"fired at {fire_clock(e.get('late_s'), fire)}, off the pre-open anchor")
     return f"{lead} · {late_why(e.get('reason'), e.get('late_s'), e.get('waited_s'), e.get('wait_reason'))}"
 
 
@@ -286,6 +305,8 @@ class SelfTimer:
         t = now.time()
         mine = []
         for name, s in self.cfg.strategies.items():
+            if not s.trades_on(date):        # an event-day strategy on another day: no state, no fire
+                continue
             if not (s.enabled and getattr(s, "self_fire", False)
                     and getattr(s, "kind", "straddle") == "straddle"):
                 off = day.get(name)          # switched off before it fired: remember it
@@ -349,6 +370,7 @@ class SelfTimer:
         # window catches it, but the timer must not try in the first place.)
         # Inside the window a fire past FIRE_LATE_MAX_S still goes out: late,
         # on the latest trade.
+        gate_t, stage_t, fire_t, done_t = schedule(s)
         end = _hhmm(s.accept_until_et)
         if t > end:
             if st["stage"] in ("idle", "gated", "staged", "waiting"):
@@ -364,23 +386,23 @@ class SelfTimer:
             self.engine.journal("timer_skipped", strategy=name, reason="killed")
         stage = st["stage"]
         if stage in ("fired", "skipped", "done", "error", "missed"):
-            if stage == "error" and t < STAGE_T:
+            if stage == "error" and t < stage_t:
                 st["stage"] = "idle"        # errors before staging retry
-            elif t >= DONE_T and s.symbol in self._subs \
+            elif t >= done_t and s.symbol in self._subs \
                     and not self._quote_needed(s.symbol, name):
                 await self._md.unsubscribe_quote(self._subs.pop(s.symbol))
             else:
                 return
 
-        opened = dt.datetime.combine(dt.date.fromisoformat(date), FIRE_T, tzinfo=ET)
-        if st["stage"] == "idle" and t >= FIRE_T and self._up_at is not None \
+        opened = dt.datetime.combine(dt.date.fromisoformat(date), fire_t, tzinfo=ET)
+        if st["stage"] == "idle" and t >= fire_t and self._up_at is not None \
                 and self._up_at > opened:   # the desk came up after the open: did its
             e = (await self._decided(date)).get(name)            # earlier run fire? then
             if e is not None and e["event"] == "timer_fired":    # no gate, no prestage and
                 st.update(stage="fired", **{k: e[k] for k in FIRED_KEYS if k in e})
                 return                      # no fire: once a day, restarts or not (dry runs too)
 
-        if st["stage"] == "idle" and t >= GATE_T:
+        if st["stage"] == "idle" and t >= gate_t:
             if not s.gated:
                 st.update(gate=True, stage="gated")
             else:
@@ -397,14 +419,14 @@ class SelfTimer:
                 self.engine.journal("timer_gate", strategy=name, gate=gate,
                                     adx=adx, bars=len(bars))
 
-        if st["stage"] == "gated" and t >= STAGE_T:
+        if st["stage"] == "gated" and t >= stage_t:
             md = await self._ensure_md()
             if s.symbol not in self._subs:
                 self._subs[s.symbol] = await md.subscribe_quote(s.symbol)
             await self._prestage_skip(name, s, st)
             st.update(stage="staged", staged_at=_et_ms(self._now().timestamp()))
 
-        if st["stage"] in ("staged", "waiting") and t >= FIRE_T:
+        if st["stage"] in ("staged", "waiting") and t >= fire_t:
             if st["gate"] is False:
                 st["stage"] = "skipped"
                 self.engine.journal("timer_skipped", strategy=name,
@@ -421,7 +443,7 @@ class SelfTimer:
                 self.engine.journal("timer_deferred", strategy=name,
                                     status=day)
                 return
-            fire_at = dt.datetime.combine(dt.date.fromisoformat(date), FIRE_T, tzinfo=ET)
+            fire_at = dt.datetime.combine(dt.date.fromisoformat(date), fire_t, tzinfo=ET)
             now = self._now()
             now_ts = now.timestamp()
             late_s = now_ts - fire_at.timestamp()
@@ -628,7 +650,7 @@ class SelfTimer:
             return
         now = self._now()
         day = dt.date.fromisoformat(date)
-        fire_at = dt.datetime.combine(day, FIRE_T, tzinfo=ET)
+        fire_at = dt.datetime.combine(day, fire_time(s), tzinfo=ET)
         end_at = dt.datetime.combine(day, _hhmm(s.accept_until_et), tzinfo=ET)
         seen = st.get("seen_at")
         reason = (("accounts_not_ready" if str(st.get("wait_reason")).startswith("account")
@@ -752,7 +774,7 @@ class SelfTimer:
         # A view not yet synced reads as empty: its manual orders, its MNQ or other-expiry
         # positions would pass as flat -- UNKNOWN, never flat: skip the account. (A stage
         # past the grace fires late, and the late fire waits for the sync itself.)
-        opened = dt.datetime.combine(self.now_et().date(), FIRE_T, tzinfo=ET)
+        opened = dt.datetime.combine(self.now_et().date(), fire_time(s), tzinfo=ET)
         on_time = (self.now_et() - opened).total_seconds() <= FIRE_LATE_MAX_S
         for aid, (view, verr) in views.items():
             view_errors[aid] = verr
@@ -799,7 +821,7 @@ class SelfTimer:
         now = self.now_et()
         st["prestage_checked_at"] = now.strftime("%H:%M:%S")   # the REAL check
                                                                 # time, for readiness text
-        left = (dt.datetime.combine(now.date(), FIRE_T, tzinfo=ET)
+        left = (dt.datetime.combine(now.date(), fire_time(s), tzinfo=ET)
                 - now).total_seconds() - PRESTAGE_MARGIN_S
         budget = min(PRESTAGE_READ_S, left)
         nets: dict = {}                   # account -> (net, error); absent = not read
@@ -871,11 +893,12 @@ class SelfTimer:
         last trade received before 09:30:00.000 as in the research (see
         FIRE_LATE_MAX_S)."""
         now = self.now_et()
-        staged = any(st.get("stage") == "staged"
-                     for st in self.days.get(now.date().isoformat(), {}).values())
-        left = (dt.datetime.combine(now.date(), FIRE_T, tzinfo=ET)
-                - now).total_seconds()
-        return left if staged and 0 < left < TICK_S else TICK_S
+        today = self.days.get(now.date().isoformat(), {})
+        lefts = [(dt.datetime.combine(now.date(), fire_time(self.cfg.strategies.get(n)), tzinfo=ET)
+                  - now).total_seconds()
+                 for n, st in today.items() if st.get("stage") == "staged"]
+        left = min((x for x in lefts if x > 0), default=None)    # the nearest fire still ahead
+        return left if left is not None and left < TICK_S else TICK_S
 
     async def loop(self) -> None:
         while True:
