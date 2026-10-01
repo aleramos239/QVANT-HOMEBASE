@@ -527,21 +527,22 @@
     .master{ flex-wrap:wrap; justify-content:flex-end; row-gap:8px; max-width:100%; }
   }
 </style>
+<link rel="stylesheet" href="/static/apple.css?v=4">
+<link rel="stylesheet" href="/static/hb.css?v=3">
 </head>
 <body>
 
 <div class="app-shell">
-  <main class="app-main">
-    <header class="inset-topbar">
-      <span style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:var(--radius-md);background:var(--primary);color:var(--primary-foreground);flex-shrink:0">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 9.5V21h14V9.5"/></svg>
-      </span>
-      <span class="wordmark" style="font-weight:600;font-size:0.9375rem;letter-spacing:-.01em">Homebase</span>
+    <header class="inset-topbar hb-bar">
+      <div class="tb-l hb-bar-l">
+      <span class="hb-mark"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-8 9 8"/><path d="M5 9.5V21h14V9.5"/></svg></span>
+      <b class="hb-word wordmark">Homebase</b>
       <span class="pill idle brand-tag" style="margin-left:2px">Ramos Quant</span>
       <nav class="pgsw" id="pgSw" aria-label="Pages"><a href="http://localhost:8850/" data-page="desk" aria-current="page">Desk</a><a href="http://localhost:8852/?v=33" data-page="charts">Charts</a><a href="http://localhost:8852/backtest?v=33" data-page="backtest">Backtest</a></nav>
-      <span class="spacer"></span>
+      </div>
+      <div class="tb-r hb-bar-r">
       <span class="clock" id="clock">—</span>
-      <span class="bulb" id="bulb" onclick="openChecks()" title="connecting…"></span>
+      <span class="bulb" id="bulb" role="button" tabindex="0" aria-label="Readiness" onclick="openChecks()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openChecks()}" title="connecting…"></span>
       <div class="master" role="group" aria-label="Desk master controls">
         <span class="pill-slot"><span id="statusPill" class="pill idle" role="status" title="Desk status unknown — connecting…">connecting…</span></span>
         <button class="btn btn-outline btn-sm gone" type="button" id="armBtn" disabled aria-hidden="true">Arm</button>
@@ -563,42 +564,40 @@
         <svg class="ic-sun" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/></svg>
         <svg class="ic-moon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A7.5 7.5 0 1 1 9.5 4a6 6 0 0 0 10.5 10.5z"/></svg>
       </button>
+      </div>
     </header>
 
+    <div class="frame">
+    <aside class="side" id="side" aria-label="Desk navigation"></aside>
+    <main class="app-main">
     <div class="scroll">
     <div class="view-wrap">
 
-      <div class="notices" id="noticeStrip" role="status" hidden></div>
-      <div class="ready notready" id="readyStrip" style="display:none"></div>
+      <section class="view" id="viewToday">
+        <h1 class="day-title" id="dayTitle" aria-live="polite"></h1>
+        <div class="daytl" id="dayTl"></div>
+        <div class="slist" id="stratList"></div>
+        <div class="foot" id="todayFoot"></div>
+        <div class="notices" id="noticeStrip" role="status" hidden></div>
+        <div class="ready notready" id="readyStrip" style="display:none"></div>
+      </section>
 
-      <div class="sec-head" style="margin-top:8px">
-        <span class="hint" id="algoHiddenHint" style="display:none"></span>
-        <span class="spacer"></span>
-        <button class="btn btn-outline btn-sm btn-icon" onclick="openAccts()"
-          title="Connected accounts">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
-            stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h4"/></svg>
-        </button>
-        <button class="btn btn-outline btn-sm" onclick="openAlgoMgr()">Manage algos</button>
-        <button class="btn btn-outline btn-sm" onclick="openConnect()">+ Add account</button>
-      </div>
-      <div id="strats"></div>
+      <section class="view" id="viewStrat" hidden></section>
 
-      <div class="sec-head" style="margin-top:26px">
-        <span class="h">Activity</span>
-        <span class="hint">every alert, order, fill and safety event as it happens — hover or click a row for its raw line</span>
-        <span class="spacer"></span>
-        <button class="btn btn-ghost btn-sm" type="button" id="feedRawBtn" aria-pressed="false"
-          title="Show every row's raw journal line">Raw</button>
-      </div>
-      <div class="card"><div class="card-content" style="padding-top:14px">
-        <div id="feed" class="feed"><div class="feed-empty">Waiting for events…</div></div>
-      </div></div>
+      <section class="view" id="viewActivity" hidden>
+        <div class="act-head">
+          <div><h1>Activity</h1>
+            <div class="hint">Every alert, order, fill and safety event as it happens. Hover or click a row for its raw line.</div></div>
+          <button class="btn btn-outline btn-sm" type="button" id="feedRawBtn" aria-pressed="false"
+            title="Show every row's raw journal line">Raw</button>
+        </div>
+        <div class="act-card"><div id="feed" class="feed"><div class="feed-empty">Waiting for events…</div></div></div>
+      </section>
 
     </div>
     </div>
-  </main>
+    </main>
+    </div>
 </div>
 
 <div class="overlay" id="connectOverlay">
@@ -1643,72 +1642,245 @@ const STATUS_PILL = {idle: "pill idle", placing: "pill", placed: "pill", live: "
 const STATUS_TEXT = {placed: "orders working", live: "in position"};
 const dayPill = (st) => `<span class="${STATUS_PILL[st] || "pill idle"}" title="Today: ${st}">${STATUS_TEXT[st] || st}</span>`;
 
-function stratCard(name, s) {
-  const c = s.cfg;
-  const pill = dayPill(s.day_status);
-  const onoff = `<button class="switch" aria-checked="${c.enabled}"
-    title="${c.enabled ? "ON — this strategy runs and executes" : "OFF — ignores all signals"}"
-    onclick="toggleStrat('${name}', ${!c.enabled})"></button>`;
-  const test = (ST && !ST.armed && c.enabled)
-    ? `<button class="btn btn-outline btn-sm" onclick="testFire('${name}')">Test fire · dry</button>`
-    : "";
+/* ===== Desk views (design/apple-pass): Today · Strategy · Activity =============================
+   Presentation of what the desk already reports. Every control below calls the handler the old
+   cards called (toggleStrat, flattenStrat, testFire, openRes / openLive / openPine, toggleAsgMenu,
+   acctRow ...) -- nothing about arming, killing or booking changed. The day, the states and the
+   numbers are all read from the status the desk sends. */
+let VIEW = {k: "today"};
+try {
+  const v = JSON.parse(localStorage.getItem("hb_view") || "null");
+  if (v && ["today", "strat", "activity"].includes(v.k)) VIEW = v;
+} catch (_) {}
+let SIDE_ALL = false;
+function setView(k, name) {
+  closeAsgMenus(false);
+  VIEW = k === "strat" ? {k, name} : {k};
+  try { localStorage.setItem("hb_view", JSON.stringify(VIEW)); } catch (_) {}
+  if (ST) render();
+  const m = document.querySelector(".app-main");
+  if (m) m.scrollTop = 0;
+}
 
-  // bubbles: backtest popup + pine source popup
-  let research = `<div style="margin:4px 0 2px;display:flex;gap:8px">`;
-  if (s.research && s.research.rows) {
-    research += `<button class="btn btn-outline btn-sm" onclick="openRes('${name}')">Backtest metrics</button>`;
+const hmin = (t) => { const m = /^(\d{1,2}):(\d\d)/.exec(String(t || "")); return m ? +m[1] * 60 + +m[2] : null; };
+const etMin = (iso) => { const m = /T(\d\d):(\d\d)/.exec(String(iso || "")); return m ? +m[1] * 60 + +m[2] : null; };
+const OPEN_MIN = 570;                                    // 09:30 ET, the cash open
+const lenTxt = (m) => m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? " " + (m % 60) + " min" : ""}` : `${m} min`;
+const usdS = (v) => v == null ? "—" : (v < 0 ? "−$" : v > 0 ? "+$" : "$") + fmt(Math.abs(v), 0);
+const plural = (n, a, b) => `${n} ${n === 1 ? a : b}`;
+const specOf = (c) => c.kind === "bars"
+  ? `${c.symbol} · ${c.bar_minutes}m bars · ${c.rule}`
+  : `${c.symbol} · ±${c.offset_pts} off · SL ${c.sl_pts} / TP ${c.tp_pts}`;
+
+function todayPnl(s) {
+  const d = String((ST && ST.et_now) || "").slice(0, 10);
+  const rows = (s.accounts || []).filter(r => r && r.date === d && r.pnl != null);
+  return rows.length ? rows.reduce((a, r) => a + r.pnl, 0) : null;
+}
+function stratState(name, s) {
+  const c = s.cfg, st = s.day_status;
+  if (!c.enabled) return "Off";
+  if (st === "live") return "In position";
+  if (st === "placed" || st === "placing") return "Orders working";
+  if (st === "error") return "Needs a look";
+  if (st === "done") return "Done today";
+  const t = ST.timer && ST.timer.strategies && ST.timer.strategies[name];
+  if (t && t.stage === "missed") return "Missed today";
+  const now = etMin(ST.et_now), flat = hmin(c.flat_et) ?? 955;
+  if (now != null && now >= flat) return "Idle";
+  return now != null && now < OPEN_MIN ? "Ready" : "Watching";
+}
+const stratDotCls = (s, state) => !s.cfg.enabled ? "off" : s.cfg.shadow ? "shadow"
+  : /Needs|Missed/.test(state) ? "warn" : (state === "In position" || state === "Orders working") ? "live" : "";
+
+/* the one sentence of the day -- two tones: what happens next, then what is armed */
+function dayHeadline(names) {
+  const strategies = Object.values(ST.strategies || {});
+  const live = strategies.filter(v => v.cfg.enabled && !v.cfg.shadow);
+  const n = live.length, now = etMin(ST.et_now);
+  const dow = new Date(String(ST.et_now).slice(0, 10) + "T12:00:00Z").getUTCDay();
+  const stale = DESK_STALE ? " Last known state." : "";
+  if (!ST.armed) return ["Disarmed.", "Signals are journaled only. Nothing is sent to a broker." + stale];
+  if (dow === 0 || dow === 6) return ["Markets are closed.", plural(n, "strategy", "strategies") + " armed." + stale];
+  const flat = hmin((live[0] || strategies[0] || {cfg: {}}).cfg.flat_et) ?? 955;
+  if (now == null) return ["Armed.", plural(n, "strategy", "strategies") + " armed." + stale];
+  if (now < OPEN_MIN) return [`Opens in ${lenTxt(OPEN_MIN - now)}.`, plural(n, "strategy", "strategies") + " armed." + stale];
+  if (now < flat) {
+    const inPos = live.filter(v => v.day_status === "live").length;
+    const working = live.filter(v => v.day_status === "placed" || v.day_status === "placing").length;
+    const done = live.filter(v => v.day_status === "done").length;
+    const l1 = inPos ? `${plural(inPos, "strategy", "strategies")} in a position.` : working ? "Orders are working." : "In session.";
+    return [l1, `${n} armed · ${done} done today.` + stale];
   }
-  research += `<button class="btn btn-outline btn-sm" onclick="openLive('${name}')">Live calendar</button>`;
-  if (c.pine_file) research += `<button class="btn btn-outline btn-sm" onclick="openPine('${name}')">Pine script</button>`;
-  research += `</div>`;
-  // live strip (earned from the journal, real fills only)
-  const lv = s.live;
-  const live = `<div class="slabel2">LIVE</div>` + (lv && lv.trades
-    ? mstrip({"trades": lv.trades, "WR": lv.win_rate + "%",
-              "net": usd(lv.net), "avg/trade": usd(lv.avg_trade),
-              "avg slip": (lv.avg_slip_pts ?? "—") + " pts",
-              "days": lv.days})
-    : `<div class="mcap">No live trades yet</div>`);
+  const rows = strategies.map(todayPnl).filter(p => p != null);
+  const tot = rows.reduce((a, p) => a + p, 0);
+  return ["Session closed.", (rows.length ? `Today ${usdS(tot)}.` : "No trades today.") + stale];
+}
 
-  // the accounts running this strategy — full rows, balance + P&L + Calendar
-  const accts = ST.accounts || {};
-  const asg = (ST.book && ST.book[name]) || [];
+function dayTimeline() {
+  const pct = (m) => Math.max(0, Math.min(100, (m - 540) / 420 * 100));
+  const strategies = Object.values(ST.strategies || {});
+  const ref = (strategies.find(v => v.cfg.enabled && !v.cfg.shadow) || strategies[0] || {cfg: {}}).cfg;
+  const cancel = hmin(ref.cancel_et) ?? 775, flat = hmin(ref.flat_et) ?? 955;
+  const now = etMin(ST.et_now) ?? 540;
+  const date = new Date(String(ST.et_now).slice(0, 10) + "T12:00:00Z")
+    .toLocaleDateString("en-US", {weekday: "long", month: "long", day: "numeric", timeZone: "UTC"});
+  const lab = (m, t, cls) => `<span class="${cls}" style="left:${pct(m).toFixed(2)}%">${esc(t)}</span>`;
+  return `<div class="tl-head"><span><b>Today</b>${esc(date)}</span><span class="mono">${esc(String(ST.et_now).slice(11, 16))} ET</span></div>
+    <div class="tl" role="img" aria-label="The trading day: open at 9:30, unfilled entries cancelled at ${esc(ref.cancel_et || "12:55")}, flat at ${esc(ref.flat_et || "15:55")}">
+      <div class="tl-track"><i class="tl-done" style="width:${pct(now).toFixed(2)}%"></i><i class="tl-tick" style="left:${pct(cancel).toFixed(2)}%"></i><i class="tl-tick" style="left:${pct(flat).toFixed(2)}%"></i><i class="tl-open" style="left:${pct(OPEN_MIN).toFixed(2)}%"></i><i class="tl-now" style="left:${pct(now).toFixed(2)}%"></i></div>
+      <div class="tl-labels">${lab(OPEN_MIN, "9:30 Open", "tl-t strong at-start")}${lab(cancel, (ref.cancel_et || "12:55") + " Cancel unfilled", "tl-t")}${lab(flat, (ref.flat_et || "15:55") + " Flat", "tl-t at-end")}</div>
+    </div>`;
+}
+
+function todayRow(name, s) {
+  const c = s.cfg, state = stratState(name, s), p = todayPnl(s);
+  const sw = `<button class="switch" role="switch" aria-label="${esc(name.toUpperCase())} on or off" aria-checked="${c.enabled}"
+    title="${c.enabled ? "ON — this strategy runs and executes" : "OFF — ignores all signals"}"
+    onclick="event.stopPropagation();toggleStrat('${name}', ${!c.enabled})"></button>`;
+  const go = `setView('strat','${name}')`;
+  return `<div class="srow" role="button" tabindex="0" onclick="${go}"
+      onkeydown="if(event.target===event.currentTarget&&(event.key==='Enter'||event.key===' ')){event.preventDefault();${go}}">
+    <div><div class="n">${esc(name.toUpperCase())}${c.shadow ? '<span class="tag" title="Signals are journaled only — nothing is placed, even when armed">Shadow</span>' : ""}</div>
+      <div class="sp mono">${esc(specOf(c))}</div></div>
+    <div class="rs">${esc(state)}</div>
+    <div class="rp mono${p < 0 ? " neg" : p > 0 ? " pos" : ""}">${usdS(p)}</div>${sw}</div>`;
+}
+
+let ISSUE_LVL = "warn";
+function todayFoot(issues) {
+  const accts = Object.values(ST.accounts || {}), up = accts.filter(a => a.connected).length;
+  const last = (ST.journal || [])[0], lt = last && last.et ? String(last.et).slice(11, 16) : null;
+  const out = [];
+  if (issues) out.push(`<button class="foot-b warn" onclick="openChecks()"><i class="dot${ISSUE_LVL === "bad" ? " bad" : ""}"></i>${issues === 1 ? "1 thing needs" : issues + " things need"} a look <u>›</u></button>`);
+  out.push(`<button class="foot-b" onclick="openAccts()">${up} of ${accts.length} accounts connected <u>›</u></button>`);
+  if (lt) out.push(`<button class="foot-b" onclick="setView('activity')">Last event ${esc(lt)} <u>›</u></button>`);
+  return out.join("");
+}
+
+/* ---- sidebar ---- */
+function renderSide(names, hiddenCount, issues) {
+  const sel = (k, n) => VIEW.k === k && (k !== "strat" || VIEW.name === n) ? " sel" : "";
+  const strat = names.map(n => {
+    const s = ST.strategies[n], state = stratState(n, s), p = todayPnl(s);
+    return `<button class="item one${sel("strat", n)}" onclick="setView('strat','${n}')" aria-current="${sel("strat", n) ? "page" : "false"}" title="${esc(state)}">
+      <i class="sd ${stratDotCls(s, state)}"></i><span class="it"><b>${esc(n.toUpperCase())}</b></span>
+      <span class="ir mono${p == null ? " dim" : ""}">${p == null ? "" : usdS(p)}</span></button>`;
+  }).join("");
+  const rank = (a) => a.env === "live" ? 0 : a.env === "paper" ? 2 : 1;
+  const accts = Object.entries(ST.accounts || {}).sort((a, b) => rank(a[1]) - rank(b[1]));
+  const shown = SIDE_ALL ? accts : accts.slice(0, 12);
+  const shortId = (t) => { t = String(t); return /^[A-Za-z0-9]{12,}$/.test(t) ? t.slice(0, 4) + " ··" + t.slice(-4) : t; };
+  const acctRows = shown.map(([id, a]) => `<button class="item one" onclick="openAccts()" title="${esc((a.label || id) + " · " + (a.env === "live" ? "Live" : a.env === "paper" ? "Paper" : "Demo") + (a.connected ? "" : " · offline"))}">
+      <i class="sd ${a.connected ? "ok" : "warn"}"></i><span class="it"><b>${esc(shortId(a.label || id))}${a.env === "live" ? '<span class="tag-live">Live</span>' : ""}${a.connected ? "" : '<span class="tag">offline</span>'}</b></span>
+      <span class="ir mono${a.connected ? "" : " dim"}">${a.connected && a.balance != null ? "$" + fmt(a.balance, 0) : ""}</span></button>`).join("");
+  const more = accts.length > 12
+    ? `<button class="side-more" onclick="SIDE_ALL=!SIDE_ALL;render()">${SIDE_ALL ? "Show fewer" : `Show ${accts.length - 12} more`}</button>` : "";
+  const last = (ST.journal || [])[0];
+  $("#side").innerHTML = `
+    <button class="nav${sel("today")}" onclick="setView('today')" aria-current="${sel("today") ? "page" : "false"}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+      <span>Today</span><span></span></button>
+    <div class="sh"><span>Strategies</span><button class="sh-btn" title="Manage algos" aria-label="Manage algos" onclick="openAlgoMgr()">⋯</button></div>
+    ${strat}
+    ${hiddenCount ? `<button class="side-more" onclick="openAlgoMgr()">${hiddenCount} hidden · Manage</button>` : ""}
+    <div class="sh"><span>Accounts</span><button class="sh-btn" title="Add account" aria-label="Add account" onclick="openConnect()">+</button></div>
+    ${acctRows}${more}
+    <div class="sh"><span>Activity</span></div>
+    <button class="item${sel("activity")}" onclick="setView('activity')" aria-current="${sel("activity") ? "page" : "false"}">
+      <i class="sd ${issues ? (ISSUE_LVL === "bad" ? "bad" : "warn") : "off"}"></i><span class="it"><b>${last && last.et ? "Last event " + esc(String(last.et).slice(11, 16)) : "Journal"}</b><small>${issues ? plural(issues, "thing needs", "things need") + " a look" : "Every alert, order and fill"}</small></span><span></span></button>`;
+}
+
+/* ---- strategy detail ---- */
+const EQ = {};
+function loadEq(name) {
+  const e = EQ[name];
+  if (e && (e.busy || Date.now() - e.t < 20000)) return;
+  EQ[name] = {days: e ? e.days : null, t: e ? e.t : 0, busy: true};
+  fetch(`/api/strategy-live?strategy=${encodeURIComponent(name)}`).then(r => r.ok ? r.json() : null).then(d => {
+    EQ[name] = {days: d && d.days ? d.days : {}, t: Date.now()};
+    if (VIEW.k === "strat" && VIEW.name === name && !FREEZE) render();
+  }).catch(() => { EQ[name] = {days: e && e.days || {}, t: Date.now()}; });
+}
+function eqChart(name) {
+  loadEq(name);
+  const days = EQ[name] && EQ[name].days;
+  if (!days) return `<div class="eq"><div class="eq-ph"></div></div>`;
+  const ks = Object.keys(days).sort();
+  if (ks.length < 2) return `<div class="eq-empty">Not enough live days yet for a curve.</div>`;
+  let cum = 0;
+  const vals = ks.map(k => (cum += (days[k].net || 0), cum));
+  const lo = Math.min(0, ...vals), hi = Math.max(0, ...vals), span = hi - lo || 1;
+  const X = (i) => i / (vals.length - 1) * 1000, Y = (v) => 176 - (v - lo) / span * 150;
+  let d = `M ${X(0).toFixed(1)} ${Y(vals[0]).toFixed(1)}`;
+  for (let i = 1; i < vals.length; i++) {
+    const mx = (X(i - 1) + X(i)) / 2;
+    d += ` C ${mx.toFixed(1)} ${Y(vals[i - 1]).toFixed(1)} ${mx.toFixed(1)} ${Y(vals[i]).toFixed(1)} ${X(i).toFixed(1)} ${Y(vals[i]).toFixed(1)}`;
+  }
+  const first = new Date(ks[0] + "T12:00:00Z").toLocaleDateString("en-US", {month: "short", day: "numeric", timeZone: "UTC"});
+  const zero = lo < 0 && hi > 0 ? `<line class="eq-zero" x1="0" y1="${Y(0).toFixed(1)}" x2="1000" y2="${Y(0).toFixed(1)}"/>` : "";
+  return `<div class="eq"><div class="lb"><span>After fees since ${esc(first)}</span><b class="mono">${usdS(cum)}</b></div>
+    <div class="eq-plot"><svg viewBox="0 0 1000 190" preserveAspectRatio="none" role="img" aria-label="Cumulative net P&amp;L after fees, by day">
+      <defs><linearGradient id="hbEqFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="currentColor" stop-opacity=".12"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></linearGradient></defs>
+      <line class="eq-grid" x1="0" y1="26" x2="1000" y2="26"/><line class="eq-grid" x1="0" y1="101" x2="1000" y2="101"/><line class="eq-grid" x1="0" y1="176" x2="1000" y2="176"/>${zero}
+      <path class="eq-area" d="${d} L 1000 190 L 0 190 Z"/><path class="eq-line" d="${d}"/></svg>
+    <i class="eq-dot" style="left:100%;top:${(Y(vals[vals.length - 1]) / 190 * 100).toFixed(1)}%"></i></div></div>`;
+}
+
+function stratView(name) {
+  const s = ST.strategies[name];
+  if (!s) return `<div class="feed-empty">That strategy is not on the desk any more.</div>`;
+  const c = s.cfg, state = stratState(name, s), lv = s.live, p = todayPnl(s);
+  const execTxt = (c.kind === "bars" ? "A price-action rule on the app's own live bars."
+    : c.self_fire ? "The app computes and fires this signal itself." : "A TradingView Pine alert feeds this strategy.")
+    + (c.shadow ? " Shadow: signals are journaled, nothing is placed — even when armed." : "");
+  const fig = (k, v, title) => `<div class="f"${title ? ` title="${esc(title)}"` : ""}><div class="k">${k}</div><div class="v mono">${v}</div></div>`;
+  const figs = lv && lv.trades
+    ? `<div class="figs">${fig("Gross", usdS(lv.net), "Before commissions (the desk's journal pnl is gross)")}${fig("Win rate", lv.win_rate + "%")}${fig("Trades", lv.trades)}${fig("Avg per trade", usd(lv.avg_trade), "Gross, per trade")}${fig("Avg slip", (lv.avg_slip_pts ?? "—") + " pts")}</div>`
+    : `<div class="eq-empty">No live trades yet.</div>`;
+  const links = `<div class="qlinks">${s.research && s.research.rows ? `<button class="btn btn-quiet btn-sm" onclick="openRes('${name}')">Backtest metrics</button>` : ""}
+    <button class="btn btn-quiet btn-sm" onclick="openLive('${name}')">Live calendar</button>
+    ${c.pine_file ? `<button class="btn btn-quiet btn-sm" onclick="openPine('${name}')">Pine script</button>` : ""}</div>`;
+  const accts = ST.accounts || {}, asg = (ST.book && ST.book[name]) || [];
   const rows = asg.map(a => acctRow(a.account, {qty: a.qty, strategy: name})).join("");
   const free = Object.keys(accts).filter(id => !asg.some(a => a.account === id));
   const addForm = Object.keys(accts).length
-    ? (free.length ? `<div style="position:relative;display:inline-block;margin-top:8px">
-        <button class="btn btn-outline btn-sm" onclick="toggleAsgMenu('${name}')" aria-haspopup="menu">+ Assign</button>
+    ? (free.length ? `<div style="position:relative;display:inline-block;margin-top:10px">
+        <button class="btn btn-quiet noarrow btn-sm" onclick="toggleAsgMenu('${name}')" aria-haspopup="menu">+ Assign an account</button>
         <div class="amenu" id="amenu-${name}" role="menu" hidden>` +
-        free.map(id => `<button class="mi2" role="menuitem" onclick="pickAsg('${name}',${jsArg(id)},${c.qty})">
-          ${esc(accts[id].label || id)}</button>`).join("") + `</div></div>` : "")
-    : `<div class="mcap">add an account to run this strategy</div>`;
-  const book = `<div class="slabel2">ACCOUNTS</div>${rows || ""}${addForm}`;
+        free.map(id => `<button class="mi2" role="menuitem" onclick="pickAsg('${name}',${jsArg(id)},${c.qty})">${esc(accts[id].label || id)}</button>`).join("") + `</div></div>` : "")
+    : `<div class="mcap">Add an account to run this strategy.</div>`;
+  const test = (ST && !ST.armed && c.enabled) ? `<button class="btn btn-outline btn-sm" onclick="testFire('${name}')">Test fire · dry</button>` : "";
+  const sw = `<button class="switch" role="switch" aria-label="${esc(name.toUpperCase())} on or off" aria-checked="${c.enabled}"
+    title="${c.enabled ? "ON — this strategy runs and executes" : "OFF — ignores all signals"}"
+    onclick="toggleStrat('${name}', ${!c.enabled})"></button>`;
+  return `<button class="back" onclick="setView('today')">‹ Today</button>
+    <div class="sd-top"><div><h1 class="sd-title">${esc(name.toUpperCase())}</h1><div class="sp mono">${esc(specOf(c))}</div></div>${sw}</div>
+    <div class="sd-state"><b>${esc(state)}</b>${p != null ? ` · today ${usdS(p)}` : ""}</div>
+    <div class="sd-note">${esc(execTxt)}</div>
+    ${eqChart(name)}${figs}${links}
+    <div class="sec"><h2>Accounts</h2>${rows ? `<div class="agroup">${rows}</div>` : ""}${addForm}</div>
+    <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="flattenStrat('${name}')" title="Flattens its positions and switches it off">Flatten &amp; turn off</button>${test}</div>`;
+}
 
-  const exec = (c.kind === "bars"
-    ? `<span class="pill" title="A price-action rule on the app's own live bars">APP · bars</span>`
-    : c.self_fire
-    ? `<span class="pill" title="The app computes and fires this signal itself">APP</span>`
-    : `<span class="pill idle" title="A TradingView Pine alert feeds this strategy">PINE</span>`)
-    + (c.shadow ? `<span class="pill idle" title="Signals are journaled only — nothing is placed, even when armed">SHADOW</span>` : "");
-  const spec = c.kind === "bars"
-    ? `${c.symbol} · ${c.bar_minutes}m bars · ${c.rule}`
-    : `${c.symbol} · ±${c.offset_pts} off · SL ${c.sl_pts} / TP ${c.tp_pts}`;
-  return `<div class="card strat">
-    <div class="card-header">
-      <span class="card-title">${name.toUpperCase()}</span>
-      <span class="spec">${spec}</span>
-      <span class="right">${exec}${pill}${onoff}</span>
-    </div>
-    <div class="card-content">${research}${live}${book}</div>
-    <div class="card-footer" style="justify-content:flex-end;gap:8px">
-      <button class="btn btn-outline btn-sm" onclick="flattenStrat('${name}')" title="Flattens its positions and switches it off">Flatten &amp; turn off</button>
-      ${test}</div>
-  </div>`;
+function renderMain(names, issues) {
+  $("#viewToday").hidden = VIEW.k !== "today";
+  $("#viewStrat").hidden = VIEW.k !== "strat";
+  $("#viewActivity").hidden = VIEW.k !== "activity";
+  if (VIEW.k === "today") {
+    const [l1, l2] = dayHeadline(names);
+    const l2h = esc(l2).replace(/(Today )([−+]?\$[\d,]+)/, (m, a, b) => `${a}<span class="amt${b[0] === "+" ? " pos" : ""}">${b}</span>`);
+    $("#dayTitle").innerHTML = `${esc(l1)}<br><span>${l2h}</span>`;
+    $("#dayTl").innerHTML = dayTimeline();
+    $("#stratList").innerHTML = names.map(n => todayRow(n, ST.strategies[n])).join("")
+      || `<div class="feed-empty" style="padding:28px 26px">No strategies are showing. Use Manage algos to bring one back.</div>`;
+    $("#todayFoot").innerHTML = todayFoot(issues);
+  } else if (VIEW.k === "strat") $("#viewStrat").innerHTML = stratView(VIEW.name);
 }
 
 function render() {
   const s = ST;
-  $("#clock").textContent = s.et_now.replace("T", " · ").slice(0, 21) + " ET";
+  $("#clock").textContent = String(s.et_now).slice(11, 19) + " ET";
   renderMaster();
   renderChartTrading(s.chart_trading);
   if ($("#settingsOverlay").classList.contains("open")) renderSettings();
@@ -1741,27 +1913,27 @@ function render() {
     ? window.AlgoVisibility.computeVisibility(s.strategies, s.book, HIDDEN_ALGOS, s.accounts)
     : Object.keys(s.strategies).map(n => ({name: n, visible: true}));
   const visibleNames = new Set(algoVis.filter(a => a.visible).map(a => a.name));
-  $("#strats").innerHTML = Object.entries(s.strategies)
-    .filter(([n]) => visibleNames.has(n))
-    .map(([n, v]) => stratCard(n, v)).join("");
-  // the cards were rebuilt: an + Assign menu that lived in them is gone -- so is its hold on updates
+  const names = Object.keys(s.strategies).filter(n => visibleNames.has(n))
+    .sort((a, b) => (s.strategies[b].cfg.enabled ? 1 : 0) - (s.strategies[a].cfg.enabled ? 1 : 0));   // switched-on first
+  if (VIEW.k === "strat" && !names.includes(VIEW.name)) VIEW = {k: "today"};
+  ISSUE_LVL = probs.some(c => c.level === "bad") ? "bad" : "warn";
+  renderSide(names, algoVis.filter(a => !a.visible).length, probs.length);
+  renderMain(names, probs.length);
+  // the views were rebuilt: an + Assign menu that lived in them is gone -- so is its hold on updates
   if (ASG_OPEN && !document.contains(ASG_OPEN.menu)) {
     ASG_OPEN = null;
     if (!document.getElementById("qedit")) FREEZE = false;
   }
-  const hiddenCount = algoVis.filter(a => !a.visible).length;
-  const hint = $("#algoHiddenHint");
-  if (hiddenCount) {
-    hint.style.display = "";
-    hint.innerHTML = `${hiddenCount} algo${hiddenCount > 1 ? "s" : ""} hidden — ` +
-      `<a href="#" onclick="openAlgoMgr();return false"
-         style="color:inherit;text-decoration:underline">manage</a>`;
-  } else hint.style.display = "none";
   if ($("#algoOverlay").classList.contains("open")) renderAlgoMgr();
 
   renderActivity(s.journal);
   renderNotices(s.notices);
 }
+
+$("#noticeStrip").addEventListener("click", (e) => {
+  if (e.target.closest(".x")) return;           // the × dismisses; everything else expands
+  e.currentTarget.classList.toggle("open");
+});
 
 /* An open + Assign menu or size edit holds updates (FREEZE) so a repaint never wipes it -- but the
    top bar must not keep asserting a state nothing is checking: after FREEZE_STALE_MS without a
@@ -1947,9 +2119,9 @@ function acctRow(id, extra) {
   const pnl = a.realized_pnl;
   const err = (!a.connected && a.error)
     ? `<span class="kvi neg" style="font-size:11px;text-align:left;min-width:0">${esc(String(a.error).slice(0, 46))}…</span>` : "";
-  return `<div class="acct" style="padding:7px 0">
-    <span class="dot ${a.connected ? "on" : "off"}" style="width:7px;height:7px"></span>
-    <span class="nm" style="font-size:13px">${esc(a.label)}</span>
+  return `<div class="acct">
+    <span class="dot ${a.connected ? "on" : "off"}"></span>
+    <span class="nm">${esc(a.label)}</span>
     ${a.env === "live" ? '<span class="tag-live" title="A live account — real money">LIVE</span>' : ""}
     ${a.env === "paper" ? '<span class="tag-paper" title="A paper account — simulated fills on the live prints, no money">PAPER</span>' : ""}
     ${extra.qty ? (extra.strategy
@@ -2397,7 +2569,7 @@ function buildTrading() {
     <div class="slabel">CHART TRADING</div>
     <p class="wnote" style="margin-top:0">Arm, Disarm and Kill everything are in the top bar.</p>
     <div class="acct" style="padding:4px 0;gap:12px;flex-wrap:wrap">
-      <button class="switch" id="ctSwitch" aria-checked="false"
+      <button class="switch" id="ctSwitch" role="switch" aria-label="Chart trading" aria-checked="false"
         title="OFF — the chart page cannot trade"></button>
       <span class="nm" id="ctState" style="font-size:13px">Off</span>
       <span class="spacer"></span>
@@ -2863,7 +3035,7 @@ function renderAlgoMgr() {
           <label class="hint" style="display:flex;align-items:center;gap:6px;cursor:${a.locked ? "default" : "pointer"};font-size:12px"
             title="${a.locked ? a.lockReason : "Show on home page"}">
             Show on home page
-            <button class="switch" aria-checked="${a.visible}" ${a.locked ? "disabled" : ""}
+            <button class="switch" role="switch" aria-label="Show ${esc(a.name)} on the home page" aria-checked="${a.visible}" ${a.locked ? "disabled" : ""}
               onclick="toggleAlgoHidden('${a.name}', ${a.visible})"></button>
           </label>
         </div>`;

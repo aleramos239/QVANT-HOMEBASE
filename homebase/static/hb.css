@@ -1,0 +1,139 @@
+/* ============================================================================
+   Homebase design system (hb.css) -- ONE source of truth for the whole app.
+   Loaded LAST on every page (Desk, Charts, Lab), after each page's own stylesheet, so a thing that is
+   the same thing looks the same everywhere: one font, one type scale, one set of control heights and
+   radii, one top bar, one page switcher, one segmented control, one tab, one button, one menu.
+   Page stylesheets (apple.css for the Desk, apple-charts.css for Charts/Lab) add only what is genuinely
+   page-specific (the Desk's sidebar and day timeline, the chart toolbar and rail).
+   Rules of the system:
+     type    11 caption · 12 small · 13 control · 14 body · 15 lead · 17 title · 22 h2 · 32 h1 · display
+     weight  400 · 500 · 600 only            numerals  tabular everywhere
+     size    controls 28 / 32 / 36 high      top bar 44 high
+     radius  8 small · 10 control · 14 card · 20 sheet · capsule for page-level pills
+     colour  ink + platinum + white, espresso (latte on dark) is THE accent; green = profit only;
+             red = armed / kill / real errors only; a loss is ink with a minus sign.
+   ============================================================================ */
+
+:root {
+  --hb-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", system-ui, Roboto, Helvetica, Arial, sans-serif;
+  --hb-mono: ui-monospace, "SF Mono", SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace;
+
+  --hb-fs-cap: 11px; --hb-fs-sm: 12px; --hb-fs-ui: 13px; --hb-fs-body: 14px;
+  --hb-fs-lead: 15px; --hb-fs-title: 17px; --hb-fs-h2: 22px; --hb-fs-fig: 28px; --hb-fs-h1: 32px;
+
+  --hb-h-sm: 28px; --hb-h-md: 32px; --hb-h-lg: 36px; --hb-bar-h: 44px;
+  --hb-r-sm: 8px; --hb-r-md: 10px; --hb-r-lg: 14px; --hb-r-xl: 20px;
+
+  /* both pages' own vocabularies point at the one font */
+  --font: var(--hb-font); --font-sans: var(--hb-font); --font-mono: var(--hb-mono);
+
+  --hb-fg: #16171a;
+  --hb-fg2: #6a6e75;
+  --hb-accent: #3f2a20;
+  --hb-accent-fg: #ffffff;
+  --hb-accent-soft: rgb(63 42 32 / .09);
+  --hb-hair: rgb(63 42 32 / .1);
+  --hb-fill: rgb(22 23 26 / .05);
+  --hb-fill-hover: rgb(22 23 26 / .09);
+  --hb-seg-bg: rgb(22 23 26 / .07);
+  --hb-seg-on: #ffffff;
+  --hb-seg-shadow: 0 1px 3px rgb(22 23 26 / .16), 0 0 0 .5px rgb(22 23 26 / .05);
+  --hb-bar-bg: rgb(255 255 255 / .82);
+  --hb-focus: #3f2a20;
+}
+:root[data-theme="dark"] {
+  --hb-fg: #f2f2f3;
+  --hb-fg2: #9a9ea5;
+  --hb-accent: #c8b6a6;
+  --hb-accent-fg: #1a120e;
+  --hb-accent-soft: rgb(200 182 166 / .16);
+  --hb-hair: rgb(255 255 255 / .1);
+  --hb-fill: rgb(255 255 255 / .07);
+  --hb-fill-hover: rgb(255 255 255 / .13);
+  --hb-seg-bg: rgb(255 255 255 / .1);
+  --hb-seg-on: #4a4b50;
+  --hb-seg-shadow: 0 1px 3px rgb(0 0 0 / .5);
+  --hb-bar-bg: rgb(15 15 16 / .84);
+  --hb-focus: #c8b6a6;
+}
+
+/* ---- type ------------------------------------------------------------------------------- */
+html, body { font-family: var(--hb-font); font-size: var(--hb-fs-body); -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility; font-feature-settings: "tnum" 1; }
+button, input, select, textarea { font-family: var(--hb-font); }
+.mono, code, kbd, pre, .kvi { font-family: var(--hb-mono); font-variant-numeric: tabular-nums; }
+.clock { font-variant-numeric: tabular-nums; }
+:focus-visible { outline: 2px solid var(--hb-focus); outline-offset: 2px; }
+
+/* ---- the top bar: the same on every page --------------------------------------------------- */
+.hb-bar { flex: none; display: flex; align-items: center; gap: 12px; height: var(--hb-bar-h); padding: 0 14px; position: relative; z-index: 48;
+  background: transparent; border: 0; }
+.hb-bar-l { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1 1 auto; }
+.hb-bar-r { display: flex; align-items: center; gap: 8px; margin-left: auto; flex: none; }
+.hb-mark { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; flex: none;
+  background: var(--hb-accent); color: var(--hb-accent-fg); }
+.hb-word { font-size: var(--hb-fs-lead); font-weight: 600; letter-spacing: -.02em; color: var(--hb-fg); white-space: nowrap; }
+.brand-tag, .hb-tag { display: none; }
+@media (max-width: 900px) { .hb-word { display: none; } }
+
+/* ---- the page switcher: one component ------------------------------------------------------- */
+.pgsw { display: inline-flex; align-items: center; gap: 0; height: var(--hb-h-sm); padding: 2px; margin: 0; flex: none; box-sizing: border-box;
+  border: 0; border-radius: var(--hb-r-md); background: var(--hb-seg-bg); }
+.pgsw a { display: inline-flex; align-items: center; height: 24px; padding: 0 14px; border-radius: var(--hb-r-sm);
+  font-size: var(--hb-fs-ui); font-weight: 500; line-height: 1; letter-spacing: -.005em; text-decoration: none;
+  color: var(--hb-fg2); transition: color 150ms ease, background-color 150ms ease; }
+.pgsw a:hover { color: var(--hb-fg); }
+.pgsw a[aria-current="page"] { background: var(--hb-seg-on); color: var(--hb-accent); font-weight: 600; box-shadow: var(--hb-seg-shadow); }
+.pgsw a:focus-visible { outline: 2px solid var(--hb-focus); outline-offset: 2px; }
+
+/* ---- segmented control (intervals, switches of view): one component ----------------------------- */
+.seg, .tb-group { display: inline-flex; align-items: center; gap: 0; padding: 2px; border-radius: var(--hb-r-md); background: var(--hb-seg-bg); border: 0; overflow: visible; margin: 0; }
+.tb-group .tb-btn, .seg button { height: 24px; margin: 0; padding: 0 12px; border-radius: var(--hb-r-sm); border: 0;
+  font-size: var(--hb-fs-ui); font-weight: 500; color: var(--hb-fg2); background: transparent; }
+.tb-group .tb-btn:hover, .seg button:hover { color: var(--hb-fg); background: transparent; }
+.tb-group .tb-btn.active, .seg button.sel { background: var(--hb-seg-on); color: var(--hb-fg); box-shadow: var(--hb-seg-shadow); }
+
+/* ---- tabs: one component --------------------------------------------------------------------- */
+.tab-btn, .bp-tab, .tst-tab, .set-tab { height: var(--hb-h-sm); padding: 0 12px; border-radius: var(--hb-r-sm); border-bottom: 0;
+  font-size: var(--hb-fs-ui); font-weight: 500; color: var(--hb-fg2); transition: color 150ms ease, background-color 150ms ease; }
+.tab-btn:hover, .bp-tab:hover, .tst-tab:hover { color: var(--hb-fg); }
+.tab-btn.active, .bp-tab[aria-selected="true"], .tst-tab.active, .set-tab.active { background: var(--hb-accent-soft); color: var(--hb-accent); border-bottom: 0; }
+
+/* ---- buttons: one component ------------------------------------------------------------------- */
+.btn { height: var(--hb-h-md); padding: 0 14px; border-radius: var(--hb-r-md); font-size: var(--hb-fs-ui); font-weight: 500; line-height: 1; letter-spacing: -.005em;
+  transition: transform 140ms cubic-bezier(.23, 1, .32, 1), background-color 150ms ease, color 150ms ease; }
+.btn:active { transform: scale(.97); transition-duration: 80ms; }
+.btn-sm { height: var(--hb-h-sm); padding: 0 12px; }
+.btn-lg { height: var(--hb-h-lg); padding: 0 18px; }
+.btn-default, .btn-primary { background: var(--hb-accent); color: var(--hb-accent-fg); border-color: transparent; }
+.btn-default:hover, .btn-primary:hover { background: color-mix(in srgb, var(--hb-accent) 88%, var(--hb-fg)); }
+.btn-outline, .btn-secondary { background: var(--hb-fill); color: var(--hb-fg); border-color: transparent; }
+.btn-outline:hover, .btn-secondary:hover { background: var(--hb-fill-hover); color: var(--hb-fg); }
+.btn-ghost { background: transparent; color: var(--hb-fg); }
+.btn-ghost:hover { background: var(--hb-fill); }
+.btn-icon, .tb-icon { width: var(--hb-h-sm); padding: 0; border-radius: var(--hb-r-md); }
+.tb-btn { height: var(--hb-h-sm); border-radius: var(--hb-r-sm); font-size: var(--hb-fs-ui); font-weight: 500; }
+
+/* ---- pills, tags, inputs -------------------------------------------------------------------------- */
+.pill, .tag, .tag-live, .tag-paper { font-size: var(--hb-fs-cap); font-weight: 500; }
+select, input[type="text"], input[type="number"], input[type="search"], input[type="password"], input[type="date"], textarea,
+.set-select, .tst-num, .tst-date-in { font-size: var(--hb-fs-ui); border-radius: var(--hb-r-md); }
+
+/* ---- menus and dialogs: one surface language ---------------------------------------------------------- */
+.menu, .amenu { border-radius: var(--hb-r-lg); font-size: var(--hb-fs-ui); }
+.menu-i, .mi2, .dlg-row { font-size: var(--hb-fs-ui); }
+.modal, .dialog { border-radius: var(--hb-r-xl); }
+.modal h2, .dlg-head h2, .dlg-title { font-size: var(--hb-fs-title); font-weight: 600; letter-spacing: -.02em; }
+
+@media (prefers-reduced-motion: reduce) { .btn:active { transform: none; } }
+@media (prefers-reduced-transparency: reduce) { .hb-bar { -webkit-backdrop-filter: none; backdrop-filter: none; } }
+
+/* the Desk scrolls under a soft edge instead of a divider line */
+.app-main { -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 22px); mask-image: linear-gradient(to bottom, transparent 0, #000 22px); }
+
+/* Charts <-> Lab share an origin: the top bar stays put and the content cross-fades */
+@media (prefers-reduced-motion: no-preference) {
+  @view-transition { navigation: auto; }
+  .hb-bar { view-transition-name: hb-bar; }
+  ::view-transition-group(root) { animation-duration: 180ms; }
+}

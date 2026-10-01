@@ -1,0 +1,138 @@
+/* ============================================================================
+   Homebase Charts + Lab -- page-specific styling (design/apple-pass v3).
+   The shared look (top bar, page switcher, segmented control, tabs, buttons, type scale, radii) lives in
+   /static/hb.css and is loaded AFTER this file. This file holds only what is specific to the chart pages:
+   the frame colours, the toolbar and rail, rounded panes, the compact legend, the tester's report.
+   CHROME ONLY: the chart canvases take their colours from cell.js palette() (hard-coded, not these
+   variables) and no price, axis, order line or fill number is touched here.
+   ============================================================================ */
+
+:root {
+  --frame: #e9eaec;
+  --hover: #efeff1;
+  --pill: #e4e5e8;
+  --accent: #3f2a20;
+  --accent-hover: #2e1d15;
+  --accent-soft: rgba(63, 42, 32, .09);
+  --accent-fg: #ffffff;
+  --frame-wash: radial-gradient(1400px 700px at 50% -10%, #fafafb 0%, var(--frame) 65%);
+  --shadow-menu: 0 0 0 .5px rgba(63, 42, 32, .08), 0 8px 28px rgba(22, 23, 26, .14);
+  --shadow-dialog: 0 0 0 .5px rgba(63, 42, 32, .1), 0 30px 80px rgba(22, 23, 26, .26);
+  --text: #16171a;
+  --text-2: #6a6e75;
+  --border: rgb(22 23 26 / .1);
+  --warn-ink: #9a5b00;
+}
+:root[data-theme="dark"] {
+  --frame: #1b1c1f;
+  --hover: #26272b;
+  --pill: #2a2b30;
+  --accent: #c8b6a6;
+  --accent-hover: #d8c9bb;
+  --accent-soft: rgba(200, 182, 166, .16);
+  --accent-fg: #1a120e;
+  --frame-wash: radial-gradient(1400px 700px at 50% -10%, #17181b 0%, var(--frame) 65%);
+  --shadow-menu: 0 0 0 .5px rgba(255, 255, 255, .1), 0 10px 30px rgba(0, 0, 0, .6);
+  --shadow-dialog: 0 0 0 .5px rgba(255, 255, 255, .12), 0 30px 80px rgba(0, 0, 0, .7);
+  --text: #f2f2f3;
+  --text-2: #9a9ea5;
+  --border: rgb(255 255 255 / .1);
+  --warn-ink: #e8a03a;
+}
+:focus-visible { outline-color: var(--hb-focus, var(--accent)); }
+
+/* ---- top bar extras on the chart pages: the layout tabs live in the shared bar ---------------------------- */
+.hb-bar .tabstrip { flex: 0 1 auto; max-width: 52vw; height: auto; padding: 0; }
+.hb-bar .tab-btn { height: var(--hb-h-sm); margin-right: 2px; }
+.hb-bar .tab-add { width: var(--hb-h-sm); height: var(--hb-h-sm); border-radius: var(--hb-r-sm); }
+.hb-bar .tb-btn { height: var(--hb-h-sm); margin: 0; padding: 0 8px; }
+
+/* ---- toolbar: calm pills on the frame, the same 40px band --------------------------------------------------- */
+.toolbar { height: 40px; padding: 0 8px; gap: 2px; background: transparent; border-top: 0; }
+.toolbar .tb-sep { height: 16px; margin: 0 6px; opacity: .35; }
+.rail-btn, .toolbar .tb-btn { color: var(--text-2); }
+.rail-btn:hover, .toolbar .tb-btn:hover { color: var(--text); }
+.tb-btn { margin: 0 1px; padding: 0 10px; transition: background-color 130ms ease, color 130ms ease, transform 120ms var(--ease-spring-out); }
+.tb-btn:active { transform: scale(.97); }
+.tb-btn.tb-icon { padding: 0 8px; }
+.tb-btn[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.tb-pill { height: var(--hb-h-md); margin: 0 6px 0 0; padding: 0 14px 0 10px; border-radius: 16px; background: var(--panel); box-shadow: 0 0 0 .5px var(--border); }
+.tb-group { margin: 0 2px; }
+
+/* ---- frame: rounded panes and rail, no extra gaps ------------------------------------------------------------ */
+.panel, .panel.selected::after { border-radius: 10px; }
+.bpanel { border-radius: 10px; }
+.rail { border-radius: 0 12px 12px 0; }
+.rail-btn { border-radius: var(--hb-r-md); transition: background-color 130ms ease, color 130ms ease, transform 120ms var(--ease-spring-out); }
+.rail-btn:active { transform: scale(.94); }
+.rail-btn[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.bp-empty { padding: 36px 16px; text-align: center; font-size: var(--hb-fs-body); }
+.bp-loading { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 56px 16px; }
+.bp-loading::before { content: ""; width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--border);
+  border-top-color: var(--text-2); animation: hb-spin .9s linear infinite; }
+@keyframes hb-spin { to { transform: rotate(360deg); } }
+.statusbar { height: 28px; font-size: var(--hb-fs-sm); }
+.sb-dot { width: 7px; height: 7px; }
+
+/* ---- status bar: one voice, one colour; the numbers nobody acts on step back ------------------------------------- */
+.statusbar { color: var(--text-2); }
+.sb-event { font-weight: 500; color: var(--text-2); }
+.sb-event::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--ev, var(--text-2)); margin-right: 6px; vertical-align: 1px; }
+#sbBudget { display: none; }
+#sbRec:not(.warn) { display: none; }
+.sb-feed.warn, #sbRec.warn, .set-why, .cf-warn, .op-note.warn, .op-why { color: var(--warn-ink); }
+
+/* ---- legend: compact, so panes stop hiding their own candles ------------------------------------------------- */
+.lg-title { font-size: 14px; line-height: 20px; font-weight: 600; letter-spacing: -.01em; }
+.grid[data-count="1"] .lg-title { font-size: 15px; line-height: 22px; }
+.grid[data-count="4"] .lg-title, .grid[data-count="6"] .lg-title { font-size: 13px; line-height: 18px; }
+.lg-ohlc { font-size: 12px; gap: 0 8px; }
+.lg-row { height: 19px; font-size: 12px; }
+.lg-msg { font-size: 12px; }
+/* three or more panes: the indicator rows wait until the pane is hovered or selected */
+.grid:not([data-count="1"]):not([data-count="2"]) .panel:not(:hover):not(.selected) .lg-inds { display: none; }
+
+/* ---- menus, dialogs, toasts: shadows only (shapes come from hb.css) ---------------------------------------------- */
+.menu { padding: 6px; box-shadow: var(--shadow-menu); }
+.menu-i { height: var(--hb-h-md); padding: 0 12px; border-radius: var(--hb-r-sm); }
+.menu-h { padding: 10px 12px 4px; }
+.menu-sep { margin: 6px 4px; opacity: .6; }
+.menu-row { padding-right: 6px; border-radius: var(--hb-r-sm); }
+.tst-run-row { height: auto; min-height: var(--hb-h-md); padding: 8px 12px; line-height: 1.35; }
+.dialog { box-shadow: var(--shadow-dialog); }
+.dlg-head { padding: 20px 16px 12px 24px; }
+.dlg-search { border-radius: var(--hb-r-md); }
+.dlg-group, .dlg-row { border-radius: var(--hb-r-sm); width: calc(100% - 16px); margin: 0 8px; padding: 0 12px; }
+.toasts > * { border-radius: var(--hb-r-lg); }
+.rail-tip { border-radius: var(--hb-r-sm); }
+
+/* the trading surfaces keep their market colours: buy is blue (TradingView convention), sell is red.
+   They read var(--accent), which is espresso now, so they are pinned here -- nothing about an order's look changed. */
+.tr-buy, .dom-chip-order.dom-chip-buy, .replay-bar .rb-side.rb-buy, .op-send:not(.sell) { background: #2962ff; color: #ffffff; }
+.op-tile.buy { color: #2962ff; background: rgba(41, 98, 255, .10); }
+.op-tile.buy.on { color: #ffffff; background: #2962ff; }
+.dom-row.best-bid { background: rgba(41, 98, 255, .10); }
+.dom-bid { color: #2962ff; }
+:root[data-theme="dark"] .op-tile.buy { background: rgba(41, 98, 255, .2); }
+:root[data-theme="dark"] .dom-row.best-bid { background: rgba(41, 98, 255, .2); }
+
+/* ---- Strategy Tester: a run bar, then a report -------------------------------------------------------------------- */
+.tst-head { padding: 0 14px; }
+.tst-head .set-select, .tst-num, .tst-date-in, .tst-range { border-color: color-mix(in srgb, var(--border) 80%, transparent); }
+.tst-tabs { height: 44px; gap: 2px; padding: 0 14px; border-bottom-color: color-mix(in srgb, var(--border) 70%, transparent); }
+.tst-content { padding: 20px 24px; }
+.tst-tiles { gap: 24px; margin-bottom: 24px; }
+.tst-tile { padding: 4px 0 4px 20px; border-left: .5px solid color-mix(in srgb, var(--border) 80%, transparent); }
+.tst-tile:first-child { padding-left: 0; border-left: none; }
+.tst-tile-v { font-size: 1.75rem; font-weight: 500; letter-spacing: -.03em; line-height: 1.1; color: var(--text); }
+.tst-tile-l { font-size: var(--hb-fs-ui); margin-top: 6px; }
+.tst-badge { border-radius: 999px; height: 22px; padding: 0 10px; }
+.tst-fail-banner { border-radius: var(--hb-r-md); }
+.tst-btn, .tst-icon-btn, .tst-cal-d { border-radius: var(--hb-r-sm); }
+.tst-prop, .tst-mc { border-top-color: color-mix(in srgb, var(--border) 70%, transparent); }
+.tst-run { height: var(--hb-h-sm); padding: 0 14px; font-weight: 600; }
+
+@media (prefers-reduced-motion: reduce) {
+  .tb-btn:active, .rail-btn:active { transform: none; }
+  .bp-loading::before { animation: none; border-top-color: var(--border); }
+}

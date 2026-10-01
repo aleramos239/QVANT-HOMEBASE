@@ -112,7 +112,7 @@ const plain = (v) => JSON.parse(JSON.stringify(v));
 
 // ---- where the controls live ------------------------------------------------------------------
 test('the top bar holds the master controls -- status, Arm/Disarm and a press-and-hold Kill with its ring', () => {
-  const header = HTML.slice(HTML.indexOf('<header class="inset-topbar">'), HTML.indexOf('</header>'));
+  const header = HTML.slice(HTML.indexOf('<header class="inset-topbar hb-bar">'), HTML.indexOf('</header>'));
   assert.match(header, /id="statusPill"/);
   assert.match(header, /id="armBtn"/);
   assert.match(header, /<button class="btn btn-sm btn-kill holdbtn" type="button" id="killBtn"/);
