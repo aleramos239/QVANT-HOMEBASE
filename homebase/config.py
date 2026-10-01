@@ -296,6 +296,11 @@ def load() -> AppCfg:
         if not cfg.book:
             cfg.book = {n: [{"account": "main", "qty": s.qty}]
                         for n, s in cfg.strategies.items() if s.enabled}
+    if gone:                                 # clean the file itself, once; a failed write only retries next start
+        try:
+            save(cfg)
+        except OSError as e:
+            log.warning("config.json: could not write the cleaned file: %s", e)
     return cfg
 
 

@@ -89,6 +89,5 @@ def test_load_drops_removed_strategies_and_their_book_rows(cfg_path, caplog):
     assert cfg.book == {"nq930": [{"account": "a1", "qty": 2}]}
     said = " ".join(r.getMessage() for r in caplog.records)
     assert "ym930" in said and "nq_open_long" in said and "nq10am" in said and "35" not in said
-    desk_config.save(cfg)                                    # the next save writes the clean file
     saved = json.loads(cfg_path.read_text())
     assert "ym930" not in saved["strategies"] and "nq_open_long" not in saved["book"]
