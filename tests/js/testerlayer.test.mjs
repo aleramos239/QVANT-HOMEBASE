@@ -315,3 +315,55 @@ test('runJump: never touches a replaying chart or one with accounts', async () =
   assert.equal(b.reached, 0);
   assert.match(env.notes.at(-1), /replaying/);
 });
+
+/* ---------------------------------------------------------------- a trade in its context (the Lab) */
+
+test('focusTradeView: no context is the tight zoom every caller always got', () => {
+  const calls = [], c = fakeCell({ focusRange(a, b) { calls.push([a, b]); return true; } });
+  X.focusTradeView(c, T0);
+  X.focusTradeView(c, T0, 0);
+  assert.deepEqual(calls, [[5000, 6000], [5000, 6000]]);
+});
+
+test('focusTradeView: with context the window widens both ways, never before the first bar held', () => {
+  const calls = [], c = fakeCell({ focusRange(a, b) { calls.push([a, b]); return true; } });
+  X.focusTradeView(c, T0, 2000);
+  X.focusTradeView(c, T0, 60000);                 // would start before bars[0].ms = 1000
+  assert.deepEqual(calls, [[3000, 8000], [1000, 66000]]);
+  const empty = fakeCell({ bars: [], focusRange(a, b) { calls.push([a, b]); return false; } });
+  assert.equal(X.focusTradeView(empty, T0, 2000), false);
+});
+
+test('settleFocus with context reaches back for the history before the entry and re-frames with it', async () => {
+  const reached = [], framed = [];
+  const c = fakeCell({ async reach(ms) { reached.push(ms); return true; }, focusRange(a, b) { framed.push([a, b]); c.view = { from: 0, to: 2 }; return true; } });
+  assert.equal(await X.settleFocus(c, T0, { wait: noWait, contextMs: 2000 }), true);
+  assert.deepEqual(reached, [3000]);
+  assert.deepEqual(framed, [[3000, 8000]]);
+});
+
+test('settleFocus with context still holds the trade when the history before it cannot load', async () => {
+  const reached = [];
+  const c = fakeCell({ async reach(ms) { reached.push(ms); return ms >= 5000; }, focusRange() { c.view = { from: 0, to: 2 }; return true; } });
+  assert.equal(await X.settleFocus(c, T0, { wait: noWait, contextMs: 2000 }), true);
+  assert.deepEqual(reached, [3000, 5000]);
+});
+
+test('focusTradeView: {before, after} frames a trade from the session\'s open to its close', () => {
+  const calls = [], c = fakeCell({ focusRange(a, b) { calls.push([a, b]); return true; } });
+  X.focusTradeView(c, T0, { before: 1500, after: 9000 });
+  X.focusTradeView(c, T0, { before: 0, after: 0 });
+  X.focusTradeView(c, T0, { before: -5, after: 'x' });
+  assert.deepEqual(calls, [[3500, 15000], [5000, 6000], [5000, 6000]]);
+  assert.deepEqual(X.contextOf(2000), { before: 2000, after: 2000 });
+  assert.deepEqual(X.contextOf(null), { before: 0, after: 0 });
+});
+
+test('focusTradeView: on a real chart the window asked for is the frame itself (no second helping of padding)', () => {
+  const set = [];
+  const c = fakeCell({ focusRange() { throw new Error('focusRange would pad the window again'); } });
+  c.bars = Array.from({ length: 100 }, (_, k) => ({ ms: 1000 * k }));
+  c.chart = { timeScale: () => ({ getVisibleLogicalRange: () => c.view, setVisibleLogicalRange: (r) => set.push(r) }) };
+  assert.equal(X.focusTradeView(c, { entry_ms: 50000, exit_ms: 52000 }, { before: 20000, after: 30000 }), true);
+  assert.deepEqual(set, [{ from: 28, to: 84 }]);
+});

@@ -528,7 +528,7 @@
   }
 </style>
 <link rel="stylesheet" href="/static/apple.css?v=4">
-<link rel="stylesheet" href="/static/hb.css?v=3">
+<link rel="stylesheet" href="/static/hb.css?v=6">
 </head>
 <body>
 
@@ -538,7 +538,7 @@
       <span class="hb-mark"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-8 9 8"/><path d="M5 9.5V21h14V9.5"/></svg></span>
       <b class="hb-word wordmark">Homebase</b>
       <span class="pill idle brand-tag" style="margin-left:2px">Ramos Quant</span>
-      <nav class="pgsw" id="pgSw" aria-label="Pages"><a href="http://localhost:8850/" data-page="desk" aria-current="page">Desk</a><a href="http://localhost:8852/?v=33" data-page="charts">Charts</a><a href="http://localhost:8852/backtest?v=33" data-page="backtest">Backtest</a></nav>
+      <nav class="pgsw" id="pgSw" aria-label="Pages"><a href="http://localhost:8850/" data-page="desk" aria-current="page">Desk</a><a href="http://localhost:8852/?v=33" data-page="charts">Charts</a><a href="http://localhost:8852/backtest?v=33" data-page="backtest">Lab</a></nav>
       </div>
       <div class="tb-r hb-bar-r">
       <span class="clock" id="clock">—</span>
@@ -3186,5 +3186,6 @@ async function loadCal() {
 
 refresh(); setInterval(refresh, 2500);
 </script>
+<script src="/static/hb-glass.js?v=1"></script>
 </body>
 </html>
