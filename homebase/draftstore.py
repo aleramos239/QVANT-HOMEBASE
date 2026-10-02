@@ -24,6 +24,7 @@ import ast
 import os
 import re
 import sys
+import time
 from pathlib import Path
 
 ENV = "HOMEBASE_DRAFTS_DIR"
@@ -60,9 +61,24 @@ def builtin_names() -> frozenset:
         return frozenset()
 
 
+_SHADOW: tuple[float, frozenset] | None = None
+_SHADOW_TTL = 60.0
+
+
 def shadow_names() -> frozenset:
     """Module names a draft file must never be called: the stdlib's and every homebase module/package, so a
-    stray PYTHONPATH (or a cwd of the drafts dir) could never make an import pick up a draft."""
+    stray PYTHONPATH (or a cwd of the drafts dir) could never make an import pick up a draft.
+    Walking the package is slow (it holds the service's state directory), and listing N drafts asked for it N
+    times: the answer is kept for a minute."""
+    global _SHADOW
+    now = time.monotonic()
+    if _SHADOW is not None and now - _SHADOW[0] < _SHADOW_TTL:
+        return _SHADOW[1]
+    _SHADOW = (now, _shadow_names())
+    return _SHADOW[1]
+
+
+def _shadow_names() -> frozenset:
     try:
         mine = {p.stem for p in _HOMEBASE_DIR.rglob("*.py")} | {p.name for p in _HOMEBASE_DIR.rglob("*")
                                                                 if p.is_dir()}

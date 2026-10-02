@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Backtest · Homebase</title>
+<title>Lab · Homebase</title>
 <script>
   try { var _t = new URLSearchParams(location.search).get('theme') || localStorage.getItem('hb_theme');
     document.documentElement.setAttribute('data-theme', (_t === 'light' || _t === 'dark') ? _t : 'light');
@@ -16,25 +16,44 @@
      panel's default) and /ws page kind to use. -->
 <script>window.HB_PAGE = 'backtest';</script>
 <link rel="stylesheet" href="/static/charts/charts.css?v=33">
-<link rel="stylesheet" href="/static/charts/apple-charts.css?v=6">
-<link rel="stylesheet" href="/static/hb.css?v=3">
+<link rel="stylesheet" href="/static/charts/apple-charts.css?v=7">
+<link rel="stylesheet" href="/static/charts/lab.css?v=30">
+<link rel="stylesheet" href="/static/hb.css?v=6">
 </head>
-<body>
-<header class="hb-bar">
+<body class="lab-page">
+<header class="hb-bar lab-bar">
   <div class="hb-bar-l">
     <span class="hb-mark"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-8 9 8"/><path d="M5 9.5V21h14V9.5"/></svg></span><b class="hb-word">Homebase</b>
-    <nav class="pgsw" id="pgSw" aria-label="Pages"><a href="#" data-page="desk">Desk</a><a href="#" data-page="charts">Charts</a><a href="#" data-page="backtest" aria-current="page">Backtest</a></nav>
+    <nav class="pgsw" id="pgSw" aria-label="Pages"><a href="#" data-page="desk">Desk</a><a href="#" data-page="charts">Charts</a><a href="#" data-page="backtest" aria-current="page">Lab</a></nav>
     <div class="tabstrip" id="tabStrip" role="tablist" aria-label="Layout tabs"></div>
   </div>
+  <div class="lab-doc" id="labDoc"></div>
   <div class="hb-bar-r">
+    <div class="lab-acts" id="labActs"></div>
+    <div class="lab-togs hb-lens" id="labPanels" role="group" aria-label="Show or hide panels">
+      <button type="button" class="hb-ib" data-panel="lib" aria-pressed="true" aria-label="Strategies" title="Strategies"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="15" rx="3.5"/><path d="M9 4.5v15"/></svg></button>
+      <button type="button" class="hb-ib" data-panel="code" aria-pressed="true" aria-label="Code" title="Code"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.5 7.5L4 12l4.5 4.5M15.5 7.5L20 12l-4.5 4.5"/></svg></button>
+      <button type="button" class="hb-ib" data-panel="chart" aria-pressed="false" aria-label="Chart" title="Chart"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3.5v3M7 15.5v5M17 3.5v6M17 16.5v4"/><rect x="5" y="6.5" width="4" height="9" rx="1.2"/><rect x="15" y="9.5" width="4" height="7" rx="1.2"/></svg></button>
+      <button type="button" class="hb-ib" data-panel="res" aria-pressed="true" aria-label="Results" title="Results"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="15" rx="3.5"/><path d="M15 4.5v15"/></svg></button>
+    </div>
     <button class="tb-btn tb-icon" id="tbSettings" type="button" title="Chart settings" aria-label="Chart settings" aria-haspopup="dialog"><span class="icw" data-icon="gear"></span></button>
-    <button class="tb-btn tb-icon" id="tbTheme" type="button" title="Dark theme"><span class="icw" data-icon="moon"></span></button>
+    <button class="hb-ib hb-lens lab-round" id="tbTheme" type="button" title="Dark theme" aria-label="Switch theme"><span class="icw" data-icon="moon"></span></button>
   </div>
 </header>
+<div id="lab" class="lab" aria-label="Strategy Lab">
+  <aside class="lab-side lab-lib" id="labLib" aria-label="Strategies"><div class="in"></div></aside>
+  <section id="labEd" aria-label="Editor"></section>
+  <div class="lab-split" id="labSplit" role="separator" aria-orientation="vertical" aria-label="Resize the editor and the chart" tabindex="0"></div>
+  <div class="lab-chart" id="labChart" aria-label="Chart">
 <header class="toolbar" role="toolbar" aria-label="Chart toolbar">
+  <div class="lab-nav hb-lens" id="labNav" role="group" aria-label="Step through the trades">
+    <button type="button" class="lab-nav-b" data-nav="-1" aria-label="Previous trade" title="Previous trade">‹</button>
+    <span class="lab-nav-t" id="labNavText" aria-live="polite"></span>
+    <button type="button" class="lab-nav-b" data-nav="1" aria-label="Next trade" title="Next trade">›</button>
+  </div>
   <button class="tb-pill" id="tbSymbol" type="button" aria-haspopup="menu" aria-expanded="false"><span class="icw" data-icon="search"></span><span id="tbSymbolText">NQ</span></button>
   <span class="tb-sep"></span>
-  <div class="tb-group" id="tbFavs" role="group" aria-label="Interval"></div>
+  <div class="tb-group hb-lens" id="tbFavs" role="group" aria-label="Interval"></div>
   <button class="tb-btn tb-icon" id="tbIntervals" type="button" title="More intervals" aria-haspopup="menu" aria-expanded="false"><span class="icw sm" data-icon="chevron"></span></button>
   <span class="tb-sep"></span>
   <button class="tb-btn" id="tbIndicators" type="button" title="Indicators"><span class="icw" data-icon="indicators"></span><span class="tb-label">Indicators</span></button>
@@ -63,13 +82,17 @@
   <div class="grid" id="grid"></div>
   <aside class="pdock" id="pdock" aria-label="Docked panels" hidden></aside>
 </div>
-<div id="floatLayer" aria-label="Floating panels"></div>
 <section class="bpanel" id="bpanel" aria-label="Strategy Tester and Bar Replay">
   <div class="bp-resize" id="bpResize" role="separator" aria-orientation="horizontal" aria-label="Resize the panel" tabindex="0"></div>
   <div class="bp-bar"><div class="bp-tabs" id="bpTabs" role="tablist"></div><span class="bp-spacer"></span>
     <button class="bp-toggle" id="bpToggle" type="button" aria-label="Open the panel" title="Open the panel"><span class="icw" data-icon="chevronUp"></span></button></div>
   <div class="bp-body" id="bpBody"></div>
 </section>
+  </div>
+  <aside class="lab-side" id="labRes" aria-label="Backtest result"><div class="in"></div></aside>
+  <input type="file" id="labFile" accept=".py,text/x-python,text/plain" hidden>
+</div>
+<div id="floatLayer" aria-label="Floating panels"></div>
 <div class="toasts" id="toastRoot" aria-live="polite"></div>
 <footer class="statusbar" id="statusbar">
   <!-- W1: data-drop ranks the segments that step out WHOLE when the bar is too narrow (the lowest first, app.js
@@ -106,12 +129,15 @@
 <script src="/static/charts/panel.js?v=33"></script>
 <script src="/static/charts/tester.js?v=33"></script>
 <script src="/static/charts/testerui.js?v=34"></script>
-<script src="/static/charts/testerlayer.js?v=33"></script>
+<script src="/static/charts/testerlayer.js?v=36"></script>
 <script src="/static/charts/replay.js?v=33"></script>
 <script src="/static/charts/replayui.js?v=33"></script>
 <script src="/static/charts/panellayout.js?v=33"></script>
 <script src="/static/charts/layouts.js?v=33"></script>
 <script src="/static/charts/presets.js?v=33"></script>
 <script src="/static/charts/app.js?v=33"></script>
+<script src="/static/charts/labcode.js?v=1"></script>
+<script src="/static/charts/lab.js?v=30"></script>
+<script src="/static/hb-glass.js?v=2"></script>
 </body>
 </html>

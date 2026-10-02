@@ -6,6 +6,15 @@
                                           read from the file's TEXT (backtest.drafthost, ast): no draft runs
     GET  /api/tester/strategies/{id}/source   the strategy's source text: a built-in's module (+ the
                                           homebase/strategies modules its classes inherit from), or a draft's file
+    GET  /api/tester/drafts              the Lab's library: every draft on disk {name, id, bytes, modified, ok,
+                                          error?, meta?} -- read from the TEXT only
+    GET  /api/tester/drafts/templates    the "New strategy" starters [{id, title, blurb, code}]
+    GET  /api/tester/drafts/reference    {text}: the scripting contract (events, orders, reads), for the Lab's reference sheet
+    POST /api/tester/drafts/validate     {code} -> {ok, meta} | {ok: false, error, line?} (parse + catalog read)
+    PUT  /api/tester/drafts/{name}       {code} -> save <name>.py (draftstore.write: name, size and syntax checked)
+    DELETE /api/tester/drafts/{name}     remove it
+    POST /api/tester/drafts/{name}/review-request   {run_id?, note?} -> writes a review package (text only) under
+                                          ~/.homebase/review-requests; never runs, imports or promotes anything
     POST /api/tester/show                {run_id | grid_id + cell, focus?: {trade_index | date | time_ms}}
                                           -> tells every open chart page (/ws `tester_show`) to load that run or
                                           heat-map cell into the Strategy Tester and show it on a chart
@@ -90,6 +99,7 @@ from ..backtest import walkforward
 from ..backtest.walkforward import WalkForwardManager
 from ..backtest.slots import Slots
 from ..backtest.tape import CACHE
+from . import lab_templates, reviewpack
 
 MC_CACHE = 64            # Monte Carlo results kept per service (review I3)
 PROP_CACHE = 64          # prop-eval re-scores kept per service
@@ -177,6 +187,117 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
             return {"id": sid, "draft": False, "files": builtin_source(sid)}
         except ValueError:
             raise HTTPException(404, f"no strategy {sid!r}") from None
+
+    # ---- the Lab: a library of drafts, kept as text ---------------------------------------------------------
+    def builtin_ids() -> set:
+        return {x["id"] for x in strategies.catalog()}
+
+    def json_body(request: Request):
+        if not netguard.is_json(request.headers.get("content-type")):
+            raise HTTPException(415, "send JSON (Content-Type: application/json)")
+
+    def code_of(body) -> str:
+        if not isinstance(body, dict) or not isinstance(body.get("code"), str):
+            raise HTTPException(400, "{code: the draft's Python source}")
+        return body["code"]
+
+    def meta_or_error(code: str) -> tuple[dict | None, str | None, int | None]:
+        try:
+            draftstore.check_source(code)
+            return draftstore.static_meta(code), None, None
+        except ValueError as e:
+            m = re.search(r"\(line (\d+)\)", str(e))
+            return None, str(e), int(m.group(1)) if m else None
+
+    def brief(meta: dict | None) -> dict | None:
+        if meta is None:
+            return None
+        keep = ("class", "name", "root", "session_window", "bar_minutes", "session_independent", "doc")
+        return {**{k: meta[k] for k in keep if k in meta}, "inputs": meta.get("inputs") or []}
+
+    @r.get("/drafts")
+    def list_drafts():
+        out = []
+        for name, path in draftstore.list_files():
+            try:
+                st = path.stat()
+                code = path.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            meta, err, line = meta_or_error(code)
+            out.append({"name": name, "id": draftstore.draft_id(name), "bytes": st.st_size,
+                        "modified": dt.datetime.fromtimestamp(st.st_mtime, dt.timezone.utc).isoformat(timespec="seconds"),
+                        "ok": meta is not None, "meta": brief(meta),
+                        **({"error": err, "line": line} if err else {})})
+        return out
+
+    @r.get("/drafts/templates")
+    def draft_templates():
+        return lab_templates.templates()
+
+    @r.get("/drafts/reference")
+    def draft_reference():
+        return {"text": lab_templates.reference()}
+
+    @r.post("/drafts/validate")
+    async def validate_draft(request: Request):
+        write_ok(request)
+        json_body(request)
+        try:
+            code = code_of(await request.json())
+        except ValueError:
+            raise HTTPException(400, "the body is JSON") from None
+        meta, err, line = meta_or_error(code)
+        return {"ok": True, "meta": brief(meta)} if meta is not None else {"ok": False, "error": err, "line": line}
+
+    @r.put("/drafts/{name}")
+    async def save_draft(name: str, request: Request):
+        write_ok(request)
+        json_body(request)
+        try:
+            code = code_of(await request.json())
+        except ValueError:
+            raise HTTPException(400, "the body is JSON") from None
+        try:
+            draftstore.write(name, code, builtin_ids=builtin_ids())
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+        return {"ok": True, "name": name, "id": draftstore.draft_id(name), "meta": brief(draftstore.static_meta(code))}
+
+    @r.delete("/drafts/{name}")
+    def delete_draft(name: str, request: Request):
+        write_ok(request)
+        try:
+            return {"deleted": draftstore.delete(name)}
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+
+    @r.post("/drafts/{name}/review-request")
+    async def request_review(name: str, request: Request):
+        write_ok(request)
+        json_body(request)
+        try:
+            body = await request.json()
+        except ValueError:
+            raise HTTPException(400, "the body is JSON") from None
+        if not isinstance(body, dict) or set(body) - {"run_id", "note"}:
+            raise HTTPException(400, "{run_id?, note?}")
+        try:
+            code = draftstore.read(name)
+        except (ValueError, FileNotFoundError):
+            raise HTTPException(404, f"no draft {name!r}") from None
+        bundle = None
+        if body.get("run_id") is not None:
+            rid = str(body["run_id"])
+            known(rid)
+            try:
+                bundle = await asyncio.to_thread(manager.bundle, rid)
+            except ValueError as e:
+                raise HTTPException(409, str(e)) from None
+            if (bundle.get("run") or {}).get("strategy", {}).get("id") != draftstore.draft_id(name):
+                raise HTTPException(409, f"run {rid} is not a run of draft_{name}")
+        meta, _, _ = meta_or_error(code)
+        return await asyncio.to_thread(reviewpack.create, name, code, meta, bundle, str(body.get("note") or ""))
 
     @r.post("/show")
     async def show(request: Request):

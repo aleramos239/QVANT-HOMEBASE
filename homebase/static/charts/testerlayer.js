@@ -259,10 +259,33 @@ function viewShows(cell, t) {
   return !!vr && i >= 0 && vr.from <= i && i <= vr.to;
 }
 
+/* Zoom to a trade. contextMs (the Lab passes it) widens the window by that much before the entry and after the
+   exit, so the trade is seen in the structure around it, not alone; 0 = the tight zoom every other caller gets.
+   The window never starts before the first bar the chart holds (focusRange refuses a time before it). */
+function focusTradeView(cell, t, contextMs = 0) {
+  const { before, after } = contextOf(contextMs);
+  if ((!before && !after) || !cell.bars || !cell.bars.length) return cell.focusRange(t.entry_ms, t.exit_ms);
+  const from = Math.max(t.entry_ms - before, cell.bars[0].ms), to = t.exit_ms + after;
+  // the window asked for IS the frame: focusRange would pad it by half its own width again on each side
+  const ts = cell.chart && cell.chart.timeScale ? cell.chart.timeScale() : null;
+  if (ts && ts.setVisibleLogicalRange) {
+    const i = D.barIndexAt(cell.bars, from), j = Math.max(i, D.barIndexAt(cell.bars, to));
+    if (i < 0) return false;
+    ts.setVisibleLogicalRange({ from: i - 2, to: j + 2 });
+    return true;
+  }
+  return cell.focusRange(from, to);
+}
+/* contextMs: one number (the same both ways) or {before, after} -- e.g. back to the session's open and on to its close. */
+function contextOf(c) {
+  const n = (v) => (typeof v === 'number' && v > 0 ? v : 0);
+  return c && typeof c === 'object' ? { before: n(c.before), after: n(c.after) } : { before: n(c), after: n(c) };
+}
+
 /* After the first focusRange: watch for the view to be pulled elsewhere and bring it back (reach again if the
    history it needs is gone, focus again) a few times, until it holds -- or the viewer touches the chart, a newer
    jump starts (isCurrent() false) or the chart is destroyed. Resolves true once the view holds the trade. */
-async function settleFocus(cell, t, { isCurrent = () => true, wait = sleep, tries = SETTLE_TRIES, gapMs = SETTLE_MS } = {}) {
+async function settleFocus(cell, t, { isCurrent = () => true, wait = sleep, tries = SETTLE_TRIES, gapMs = SETTLE_MS, contextMs = 0 } = {}) {
   let touched = false;
   const mark = () => { touched = true; };
   const box = cell.box || cell.el;
@@ -273,9 +296,10 @@ async function settleFocus(cell, t, { isCurrent = () => true, wait = sleep, trie
       await wait(gapMs);
       if (touched || !isCurrent() || !cell.chart) return false;
       if (viewShows(cell, t)) return true;
-      if (!(await cell.reach(t.entry_ms, () => {}))) return false;
+      const back = contextOf(contextMs).before;
+      if (!(await cell.reach(t.entry_ms - back, () => {})) && !(back && await cell.reach(t.entry_ms, () => {}))) return false;
       if (touched || !isCurrent() || !cell.chart) return false;
-      cell.focusRange(t.entry_ms, t.exit_ms);
+      focusTradeView(cell, t, contextMs);
     }
     return viewShows(cell, t);
   } finally {
@@ -288,7 +312,7 @@ async function settleFocus(cell, t, { isCurrent = () => true, wait = sleep, trie
    show, already planned); without it the chart comes from showPlan (`avoidSelected`: Claude's rule, else a
    click's). A chart that disappears mid-jump (a grid rebuild) is re-planned once. */
 let jumpToken = 0;
-async function runJump(env, i, target = null, { select = true, avoidSelected = false, replanned = false } = {}) {
+async function runJump(env, i, target = null, { select = true, avoidSelected = false, replanned = false, contextMs = 0 } = {}) {
   const { U, page, tester, cat } = env, wait = env.wait || sleep;
   const b = U.bundle, t = b && b.trades[i];
   if (!t) return;
@@ -305,7 +329,7 @@ async function runJump(env, i, target = null, { select = true, avoidSelected = f
   if (cell.replay || !cells.includes(cell)) { page.sbNote('That chart is replaying (or gone): left it alone'); return; }
   if (env.chartFacts(cell).tradeReady) { page.sbNote('That chart has accounts or an algo on it: left it alone'); return; }
   const gone = () => !page.cells().includes(cell);
-  const again = () => (!replanned && current() ? runJump(env, i, null, { select: false, avoidSelected, replanned: true }) : undefined);
+  const again = () => (!replanned && current() ? runJump(env, i, null, { select: false, avoidSelected, replanned: true, contextMs }) : undefined);
   if (select) page.select(cell);
   const spec = tester.reachSpec(cell.cfg.spec, t.entry_ms, page.clockMs());
   if (rootOf(cell) !== root || spec !== cell.cfg.spec) {
@@ -320,13 +344,16 @@ async function runJump(env, i, target = null, { select = true, avoidSelected = f
     if (specChanged) page.sbNote(`Switched to ${cat.specLabel(spec)} bars to reach ${t.date}`);
   }
   const day = t.date;
-  const ok = await cell.reach(t.entry_ms, (firstMs) => page.sbNote(`Loading history back to ${day}… (at ${new Date(firstMs).toISOString().slice(0, 10)})`));
+  const note = (firstMs) => page.sbNote(`Loading history back to ${day}… (at ${new Date(firstMs).toISOString().slice(0, 10)})`);
+  // with context, the history before the entry is wanted too; the trade itself is still what must be reachable
+  const back = contextOf(contextMs).before;
+  const ok = (await cell.reach(t.entry_ms - back, note)) || (back ? await cell.reach(t.entry_ms, note) : false);
   if (!current()) return;
   if (gone()) return again();
   if (!ok) { page.sbNote(`${day} is older than this chart's history can load`); return; }
   page.sbNote('');
-  cell.focusRange(t.entry_ms, t.exit_ms);
-  const held = await settleFocus(cell, t, { isCurrent: () => current() && !gone(), wait });
+  focusTradeView(cell, t, contextMs);
+  const held = await settleFocus(cell, t, { isCurrent: () => current() && !gone(), wait, contextMs });
   if (!held && current() && gone()) return again();
 }
 
@@ -873,7 +900,7 @@ function jump(i, target = null, opts = {}) {
   return runJump({ U: window.HBTesterUI, page: PAGE, tester: window.HBTester, cat: window.HBCatalog, chartFacts }, i, target, opts);
 }
 
-const api = { overlay, jump, runJump, settleFocus, viewShows, tradesInRange, sessionIndex, plotPoints, plotPane, isConstant, valueAt,
+const api = { overlay, jump, runJump, settleFocus, focusTradeView, contextOf, viewShows, tradesInRange, sessionIndex, plotPoints, plotPane, isConstant, valueAt,
   showPlan, claudeAvoidsSelected, focusTrade, chartFacts, hlineStyle, hlineLabel, hlineTip, levelText, stackLabels, placeLabels, dedupeLevels, labelsFit,
   boxGeometry, fillSides, thinLabels, tradeTip, LABEL_MIN_PX, MIN_BOX_W };
 if (typeof window !== 'undefined') window.HBTesterLayer = api;
