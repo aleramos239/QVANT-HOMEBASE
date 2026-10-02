@@ -336,6 +336,7 @@ class Depth:
         self.subscribed: dict[str, str] = {}        # root -> contract, on self._ws
         self._contract: dict[str, str] = {}         # root -> the contract its book is recorded under
         self._cid: dict[int, str] = {}              # contractId (the reply's subscriptionId) -> root
+        self.modes: dict[str, str] = {}             # root -> the subscribe reply's `mode` when it is not "RealTime"
         self._inflight: set[str] = set()
         self._resub: set[str] = set()               # subscribed on a socket since lost: re-asked even
                                                     # inside the 09:20-09:35 quiet window
@@ -439,7 +440,11 @@ class Depth:
             book = self.books.get(root)
             if book is None:
                 book = self.books[root] = Book(root)
+            was = book.skew_ms
             book.apply(dom, now, self._wall_ms(), DOM_MAX_SKEW_MS)
+            if bool(was) != bool(book.skew_ms):
+                self._log(f"depth {root}: the feed's stamp is {book.skew_ms / 1000:+.0f} s from the clock, using arrival time"
+                          if book.skew_ms else f"depth {root}: the feed's stamps are back in line with the clock")
             self._wire_due.add(root)
             if self.recorder is not None and root in self.record:
                 self._rec_due.add(root)
@@ -531,6 +536,13 @@ class Depth:
             self.subscribed[root] = contract
             self._contract[root] = contract
             self._cid[int(cid)] = root
+            mode = d.get("mode")
+            if isinstance(mode, str) and mode and mode != "RealTime":
+                if self.modes.get(root) != mode:
+                    self._log(f"depth {root}: subscribed in {mode!r} mode, not real time")
+                self.modes[root] = mode
+            else:
+                self.modes.pop(root, None)
             self._resub.discard(root)
             self.errors.pop(root, None)
             self._retry_at.pop(root, None)
@@ -648,4 +660,6 @@ class Depth:
                       "error": self.errors.get(r)}
             if b is not None and b.skew_ms:           # only while a feed stamp is being overruled
                 out[r]["stamp_skew_s"] = round(b.skew_ms / 1000)
+            if self.modes.get(r):                     # only when the vendor did not say RealTime
+                out[r]["mode"] = self.modes[r]
         return out

@@ -736,3 +736,30 @@ def test_the_hub_stamps_a_skewed_book_with_the_arrival_time_and_reports_it():
     d = run(go())
     assert d.message("NQ")["ts"] == T0 and d.message("ES")["ts"] == T0
     assert d.status()["NQ"]["stamp_skew_s"] == -600 and "stamp_skew_s" not in d.status()["ES"]
+
+
+def test_the_hub_says_once_when_the_stamps_leave_and_rejoin_the_clock():
+    async def go():
+        logs = []
+        feed = FakeFeed(FakeWS())
+        d = Depth(feed, ("NQ",), now=Clock(), wall_ms=lambda: T0, log=logs.append)
+        await connect(d)
+        for ts in ("2026-09-24T13:35:00.000Z", "2026-09-24T13:35:01.000Z", "2026-09-24T13:45:00.000Z", "2026-09-24T13:45:00.000Z"):
+            feed.ws.push(111, ladder(100.0, 3), ladder(100.25, 3, down=False), ts=ts)
+        return logs
+    logs = [m for m in run(go()) if "stamp" in m]
+    assert len(logs) == 2 and "-600 s" in logs[0] and "back in line" in logs[1]
+
+
+def test_a_subscription_that_is_not_real_time_is_logged_and_shown_in_the_status():
+    async def go():
+        logs = []
+        ws = FakeWS()
+        ws.refuse[NQ] = {"mode": "Delayed", "subscriptionId": 111}
+        feed = FakeFeed(ws)
+        d = Depth(feed, ("NQ", "ES"), now=Clock(), wall_ms=lambda: T0, log=logs.append)
+        await connect(d)
+        return d, logs
+    d, logs = run(go())
+    assert d.status()["NQ"]["mode"] == "Delayed" and "mode" not in d.status()["ES"]
+    assert any("'Delayed' mode" in m for m in logs)
