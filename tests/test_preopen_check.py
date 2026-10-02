@@ -1,8 +1,8 @@
 """The judgements behind tools/preopen_check.py (the collectors only read; these are the parts that decide)."""
 from __future__ import annotations
 
-from tools.preopen_check import (FAIL, OK, WARN, clock_level, depth_lag_level, fd_level, load_level, minutes_in_gaps,
-                                 power_level, thin_stretches)
+from tools.preopen_check import (FAIL, OK, WARN, clock_level, delayed_level, depth_lag_level, fd_level, load_level,
+                                 minutes_in_gaps, power_level, thin_stretches)
 
 BUSY = {m: 90 for m in range(1000, 1100)}          # 100 normal minutes, ~90 trades each
 
@@ -48,3 +48,10 @@ def test_one_quiet_minute_is_a_lull_but_one_empty_minute_is_a_gap():
     assert thin_stretches(lull, 1000, 1099) == []
     empty = dict(BUSY); del empty[1050]
     assert thin_stretches(empty, 1000, 1099) == [(1050, 1050)]
+
+
+def test_a_delayed_feed_is_a_failure_only_while_ticks_are_arriving():
+    assert delayed_level(600, 0.4) == FAIL          # ticks arrive now, but the newest is stamped 10 minutes ago
+    assert delayed_level(40, 0.4) == OK             # ordinary lag
+    assert delayed_level(600, 900) == OK            # nothing arriving (closed): not a delay, just quiet
+    assert delayed_level(600, None) == OK           # unknown

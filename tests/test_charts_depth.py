@@ -712,21 +712,19 @@ def test_the_recorder_never_writes_under_futures_ticks(tmp_path):
 
 
 # ------------------------------------------------------------------ a DOM stamp far from the local clock
-def test_a_dom_stamp_far_from_the_local_clock_is_replaced_by_the_arrival_time():
+def test_a_dom_stamp_far_from_the_local_clock_is_kept_and_reported():
     wall = int(dt.datetime(2026, 10, 2, 11, 30, 0, tzinfo=dt.timezone.utc).timestamp() * 1000)
     book = {"bids": [{"price": 100.0, "size": 3}], "offers": [{"price": 100.25, "size": 2}]}
     b = Book("NQ")
-    b.apply({"timestamp": "2026-10-02T11:20:00.000Z", **book}, now=1.0, wall_ms=wall, max_skew_ms=30_000)
-    assert b.ts == wall and b.skew_ms == -600_000            # 10 minutes behind (the 2026-10-02 case): arrival time
-    b.apply({"timestamp": "2026-10-02T11:29:59.800Z", **book}, now=2.0, wall_ms=wall, max_skew_ms=30_000)
-    assert b.ts == wall - 200 and b.skew_ms == 0             # normal latency: the feed's own stamp is kept
-    b.apply({"timestamp": "2026-10-02T11:31:00.000Z", **book}, now=3.0, wall_ms=wall, max_skew_ms=30_000)
-    assert b.ts == wall and b.skew_ms == 60_000              # ahead of the clock is just as untrustworthy
-    b.apply({"timestamp": "2026-10-02T11:20:00.000Z", **book}, now=4.0, wall_ms=wall)
-    assert b.ts == wall - 600_000 and b.skew_ms == 0         # no limit given: unchanged behaviour
+    b.apply({"timestamp": "2026-10-02T11:20:00.000Z", **book}, now=1.0, wall_ms=wall)
+    assert b.ts == wall - 600_000 and b.skew_ms == -600_000     # a delayed feed: its stamp is the content's true time
+    b.apply({"timestamp": "2026-10-02T11:29:59.800Z", **book}, now=2.0, wall_ms=wall)
+    assert b.ts == wall - 200 and b.skew_ms == 0                # normal latency: nothing to report
+    b.apply({"timestamp": "2026-10-02T11:31:00.000Z", **book}, now=3.0, wall_ms=wall)
+    assert b.ts == wall + 60_000 and b.skew_ms == 60_000        # ahead of the clock is reported too, never rewritten
 
 
-def test_the_hub_stamps_a_skewed_book_with_the_arrival_time_and_reports_it():
+def test_the_hub_keeps_a_skewed_books_stamp_and_reports_it():
     async def go():
         feed, d, _ = make()
         await connect(d)
@@ -734,7 +732,7 @@ def test_the_hub_stamps_a_skewed_book_with_the_arrival_time_and_reports_it():
         feed.ws.push(222, ladder(50.0, 2), ladder(50.25, 2, down=False))                                     # exactly T0
         return d
     d = run(go())
-    assert d.message("NQ")["ts"] == T0 and d.message("ES")["ts"] == T0
+    assert d.message("NQ")["ts"] == T0 - 600_000 and d.message("ES")["ts"] == T0
     assert d.status()["NQ"]["stamp_skew_s"] == -600 and "stamp_skew_s" not in d.status()["ES"]
 
 
@@ -748,7 +746,7 @@ def test_the_hub_says_once_when_the_stamps_leave_and_rejoin_the_clock():
             feed.ws.push(111, ladder(100.0, 3), ladder(100.25, 3, down=False), ts=ts)
         return logs
     logs = [m for m in run(go()) if "stamp" in m]
-    assert len(logs) == 2 and "-600 s" in logs[0] and "back in line" in logs[1]
+    assert len(logs) == 2 and "-600 s" in logs[0] and "stamps kept" in logs[0] and "back in line" in logs[1]
 
 
 def test_a_subscription_that_is_not_real_time_is_logged_and_shown_in_the_status():

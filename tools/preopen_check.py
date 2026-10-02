@@ -76,6 +76,15 @@ def depth_lag_level(lag_s: float) -> str:
     return OK if lag_s <= 60 else WARN
 
 
+def delayed_level(lag_s: float, live_age_s) -> str:
+    """Ticks are ARRIVING (the service saw one within 30 s) but the newest one is stamped more than 90 s ago: the
+    feed is delayed (2026-10-02 from 08:11 ET the live login got the exchange's 10-minute delayed data), so every
+    chart is that far behind real time. Not live (or unknown): nothing to judge."""
+    if live_age_s is None or live_age_s > 30:
+        return OK
+    return FAIL if lag_s > 90 else OK
+
+
 def fd_level(used: int, limit: int) -> str:
     r = used / limit if limit else 0
     return FAIL if r >= 0.8 else WARN if r >= 0.5 else OK
@@ -136,7 +145,7 @@ def check_services(now: dt.datetime) -> list:
                 if d.get("error") and root in DEPTH_ROOTS:
                     out.append((WARN, f"depth {root}", d["error"]))
                 if d.get("stamp_skew_s"):
-                    out.append((WARN, f"depth {root} stamps", f"the feed's stamps are {d['stamp_skew_s']:+d} s from the clock (corrected to arrival time)"))
+                    out.append((WARN, f"depth {root} stamps", f"the feed's stamps are {d['stamp_skew_s']:+d} s from the clock (a delayed feed: stamps kept as given)"))
                 if d.get("mode"):
                     out.append((WARN, f"depth {root} mode", f"subscribed in {d['mode']!r} mode, not real time"))
     return out
@@ -193,13 +202,21 @@ def check_ticks(now: dt.datetime) -> list:
     from homebase.charts.store import ARCHIVE, TickStore
     store, out = TickStore(ARCHIVE), []
     now_ms = int(now.timestamp() * 1000)
+    try:
+        live = (_get(CHARTS + "/api/status").get("roots") or {})
+    except Exception:  # noqa: BLE001 — the lag check is skipped, the rest still runs
+        live = {}
     for root in TRADED_ROOTS:
         sess = store.load(root, session_date(now_ms, root))
         if sess is None or not sess.ticks:
             out.append((WARN, f"ticks {root}", "no ticks recorded for this session"))
             continue
         counts = Counter(t.ts_ms // 60000 for t in sess.ticks)
-        first, last = max(min(counts), now_ms // 60000 - 600), now_ms // 60000 - 1
+        lag_s = (now_ms - sess.ticks[-1].ts_ms) / 1000
+        if delayed_level(lag_s, (live.get(root) or {}).get("last_tick_age_s")) == FAIL:
+            out.append((FAIL, f"{root} market data", f"the chart feed is {lag_s:.0f} s behind real time (ticks are arriving but "
+                        "their stamps are old): the live login's data is delayed, so every chart is that far behind"))
+        first, last = max(min(counts), now_ms // 60000 - 600), min(now_ms // 60000 - 1, sess.ticks[-1].ts_ms // 60000)
         marked = minutes_in_gaps(sess.gaps)
         thin = thin_stretches(counts, first, last, skip=marked)
         gap_text = f"{len(sess.gaps)} marked gap(s)" if sess.gaps else "no marked gaps"
