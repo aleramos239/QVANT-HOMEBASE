@@ -136,7 +136,10 @@ html.hb-apple, html.hb-apple body { height: 100%; margin: 0; background: var(--a
   -webkit-font-smoothing: antialiased; font-feature-settings: normal; font-variant-numeric: normal; text-rendering: auto; }
 html.hb-apple body { overflow: hidden; cursor: default; -webkit-user-select: none; user-select: none; }
 html.hb-apple input, html.hb-apple textarea, html.hb-apple [contenteditable], html.hb-apple pre, html.hb-apple .hb-selectable { -webkit-user-select: text; user-select: text; }
-html.hb-apple button, html.hb-apple input, html.hb-apple select, html.hb-apple textarea { font-family: var(--a-font); font-size: 13px; line-height: 16px; letter-spacing: normal; color: inherit; }
+html.hb-apple button, html.hb-apple input, html.hb-apple select, html.hb-apple textarea { font-family: var(--a-font); font-size: 13px; line-height: 16px; letter-spacing: normal; }
+/* text colour: a control inherits it UNLESS the page gives it its own. Zero specificity on purpose, so a page rule such as
+   `.tr-buy { color: #fff }` (white on the Buy blue / Sell red / Kill red) always wins and can never be turned to ink here. */
+:where(html.hb-apple) button, :where(html.hb-apple) input, :where(html.hb-apple) select, :where(html.hb-apple) textarea { color: inherit; }
 html.hb-apple button { cursor: default; }
 html.hb-apple h1, html.hb-apple h2, html.hb-apple h3 { letter-spacing: normal; }
 html.hb-apple .mono, html.hb-apple .num { font-family: var(--a-font); font-variant-numeric: tabular-nums; letter-spacing: normal; }

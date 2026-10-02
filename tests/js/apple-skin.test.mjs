@@ -48,7 +48,7 @@ test('apple skin: every rule is scoped under html.hb-apple', () => {
   for (const f of files('css')) {
     if (f.endsWith('/symbols.css')) continue;       // generated: only the .sf mask classes, which exist nowhere else
     for (const sel of selectors(read(f))) {
-      for (const one of sel.split(',')) if (!/^html\.hb-apple\b/.test(one.trim())) bad.push(`${f}: ${one.trim().slice(0, 90)}`);
+      for (const one of sel.split(',')) if (!/^(html\.hb-apple\b|:where\(html\.hb-apple\) )/.test(one.trim())) bad.push(`${f}: ${one.trim().slice(0, 90)}`);
     }
   }
   assert.deepEqual(bad, [], 'rules that could reach the classic page');

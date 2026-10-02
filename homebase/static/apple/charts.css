@@ -1,0 +1,485 @@
+/* =====================================================================================================
+   Homebase Next — Charts on the macOS 26 system layer (system.css).
+   toolbar (title · page switcher · Order / DOM · settings) · controls row · chart panes with a floating tool
+   rail · inspector (the page's panel dock: Order ticket, DOM) · bottom panel · status bar.
+   The page's own markup and scripts are untouched: these rules restyle what the page renders, and charts.js
+   only re-houses nodes. charts.css, apple-charts.css and hb.css stay loaded; everything here overrides them.
+   CHROME ONLY: the chart canvases take their colours from cell.js palette() and are not touched.
+   ===================================================================================================== */
+
+/* ---- the page's own vocabulary, pointed at the system values ------------------------------------------------ */
+html.hb-apple {
+  --c-canvas: #ffffff;                       /* what cell.js paints behind the candles (fixed per theme) */
+  --c-popover: color-mix(in srgb, var(--a-pane) 90%, transparent);   /* a menu over a busy chart: the pane glass, a little denser */
+  --frame: var(--a-window); --frame-wash: none; --panel: var(--a-window); --text: var(--a-label); --text-2: var(--a-label-2);
+  --border: var(--a-sep); --grid: var(--a-group); --hover: var(--a-hover); --pill: var(--a-fill);
+  --accent: var(--a-accent); --accent-hover: color-mix(in srgb, var(--a-accent) 86%, #000); --accent-fg: var(--a-on-accent);
+  --accent-soft: color-mix(in srgb, var(--a-accent) 10%, transparent);
+  --ctl-border: var(--a-sep); --ctl-border-hover: var(--a-label-3); --ctl-placeholder: var(--a-label-3);
+  --shadow-menu: var(--a-menu-shadow); --shadow-dialog: var(--a-sheet-shadow); --backdrop: var(--a-scrim);
+  --hb-focus: var(--a-focus); --warn-ink: var(--a-orange);
+}
+html.hb-apple[data-theme="dark"] {
+  --c-canvas: #0f0f0f;
+  --frame: var(--a-window); --frame-wash: none; --panel: var(--a-window); --text: var(--a-label); --text-2: var(--a-label-2);
+  --border: var(--a-sep); --grid: var(--a-group); --hover: var(--a-hover); --pill: var(--a-fill);
+  --accent: var(--a-accent); --accent-hover: color-mix(in srgb, var(--a-accent) 86%, #fff); --accent-fg: var(--a-on-accent);
+  --accent-soft: color-mix(in srgb, var(--a-accent) 16%, transparent);
+  --ctl-border: var(--a-sep); --ctl-border-hover: var(--a-label-3); --ctl-placeholder: var(--a-label-3);
+  --shadow-menu: var(--a-menu-shadow); --shadow-dialog: var(--a-sheet-shadow); --backdrop: var(--a-scrim);
+  --warn-ink: var(--a-orange);
+}
+
+/* ---- window layout: toolbar band, then the page's own column; the dock is the inspector -------------------------- */
+html.hb-apple body { display: flex; flex-direction: column; box-sizing: border-box; padding: var(--a-toolbar) 0 0; background: var(--a-window); background-image: none;
+  color: var(--a-label); font-size: 13px; line-height: 16px; }
+html.hb-apple:not(.hb-insp-off) body { padding-right: var(--a-insp-w); }
+html.hb-apple .hb-tb-scrim { display: none; }                         /* nothing scrolls under this toolbar */
+html.hb-apple .hb-tb-lead { width: var(--hb-native-tl, 12px); padding: 0; }   /* no sidebar: the title follows the window buttons */
+html.hb-apple .hb-tb-main { padding-left: 8px; }
+html.hb-apple .hb-tb-insp { transition: none; }
+html.hb-apple.hb-c-tight .hb-tb-c { position: static; transform: none; flex: none; }   /* no room to centre it on the window (charts.js) */
+html.hb-apple #tbTheme { display: none; }
+/* the earlier "lens" glass never applies here (charts.js also takes the class off) */
+html.hb-apple .hb-lens::before, html.hb-apple .hb-lens::after { content: none; display: none; }
+html.hb-apple #pgSw.hb-seg { isolation: auto; background: var(--a-platter); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur); box-shadow: var(--a-platter-shadow); }
+html.hb-apple #pgSw.hb-seg > a { height: 28px; padding: 0 12px; color: var(--a-label); font-size: 13px; line-height: 16px; font-weight: 400; letter-spacing: normal; box-shadow: none; background: transparent; }
+html.hb-apple #pgSw.hb-seg > a:hover { background: var(--a-hover); }
+html.hb-apple #pgSw.hb-seg > a[aria-current="page"] { background: var(--a-track); color: var(--a-label); font-weight: 510; box-shadow: none; }
+
+/* ---- toolbar: Order / DOM (text toggles on one platter), the settings gear ------------------------------------------ */
+html.hb-apple #tbOrder.hb-tbtn, html.hb-apple #tbDom.hb-tbtn { height: 36px; margin: 0; padding: 0 14px; border-radius: 18px; background: transparent; color: var(--a-label);
+  font-size: 13px; line-height: 16px; font-weight: 400; transform: none; transition: none; }
+html.hb-apple #tbOrder.hb-tbtn .icw, html.hb-apple #tbDom.hb-tbtn .icw { display: none; }
+html.hb-apple #tbOrder.hb-tbtn .tb-label, html.hb-apple #tbDom.hb-tbtn .tb-label { display: inline; }
+html.hb-apple #tbOrder.hb-tbtn[aria-pressed="true"], html.hb-apple #tbDom.hb-tbtn[aria-pressed="true"] { font-weight: 510; }
+html.hb-apple .hb-c-panels { gap: 0; }
+html.hb-apple .hb-c-panels > .hb-tbtn + .hb-tbtn { margin-left: -6px; }
+html.hb-apple #tbSettings.hb-tbtn { width: 40px; height: 36px; margin: 0; padding: 0; border: 0; border-radius: 18px; background: transparent; box-shadow: none; color: var(--a-label); transform: none; transition: none; }
+
+/* ---- the controls row: system controls on the window, large size (28, capsule), 8 apart, 20 from the edge -------------- */
+html.hb-apple body > .toolbar { flex: none; display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px 4px 20px; margin: 0; border: 0; background: transparent;
+  -webkit-backdrop-filter: none; backdrop-filter: none; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; white-space: nowrap; }
+html.hb-apple body > .toolbar .tb-sep { display: none; }
+html.hb-apple body > .toolbar .tb-spacer { flex: 1 1 8px; min-width: 0; }
+/* push / pull-down buttons */
+html.hb-apple #tbSymbol, html.hb-apple #tbIndicators, html.hb-apple #tbGrid, html.hb-apple #tbIntervals {
+  flex: none; display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 28px; margin: 0; padding: 0 14.5px; border: 0; border-radius: 14px;
+  background: var(--a-fill); color: var(--a-label); box-shadow: none; font-size: 13px; line-height: 16px; font-weight: 400; letter-spacing: normal; filter: none;
+  transform: none; transition: background-color 100ms ease; }
+html.hb-apple #tbSymbol:hover, html.hb-apple #tbIndicators:hover, html.hb-apple #tbGrid:hover, html.hb-apple #tbIntervals:hover { background: var(--a-fill); filter: none; color: var(--a-label); }
+html.hb-apple #tbSymbol:active, html.hb-apple #tbIndicators:active, html.hb-apple #tbGrid:active, html.hb-apple #tbIntervals:active,
+html.hb-apple #tbSymbol.open, html.hb-apple #tbGrid.open, html.hb-apple #tbIntervals.open { background: var(--a-fill-press); transform: none; }
+html.hb-apple #tbSymbol { padding: 0 14.5px 0 11px; font-weight: 590; }
+html.hb-apple #tbSymbol .icw { width: 15px; height: 14px; background: var(--a-label-2); -webkit-mask: var(--sf-search) center / 15px auto no-repeat; mask: var(--sf-search) center / 15px auto no-repeat; }
+html.hb-apple #tbSymbol .icw svg { display: none; }
+html.hb-apple #tbIndicators { padding: 0 14.5px 0 11px; }
+html.hb-apple #tbIndicators .ic { width: 15px; height: 15px; stroke-width: 1.7; color: var(--a-label-2); }
+html.hb-apple #tbIntervals { width: 28px; padding: 0; }
+html.hb-apple #tbGrid { padding: 0 10px 0 12px; gap: 7px; }
+html.hb-apple #tbIntervals .ic, html.hb-apple #tbGrid .icw.sm .ic { width: 12px; height: 12px; stroke-width: 2.2; color: var(--a-label); }
+html.hb-apple #tbGrid .thumb { width: 17px; height: 13px; gap: 1.5px; color: var(--a-label); }
+html.hb-apple #tbGrid .thumb i { border-width: 1.25px; border-radius: 1.5px; }
+/* the interval switch: a segmented control (grey capsule track; the chosen segment filled with the accent) */
+html.hb-apple body > .toolbar #tbFavs { flex: none; display: inline-flex; align-items: center; gap: 0; height: 28px; margin: 0; padding: 0; border: 0; border-radius: 14px; isolation: auto;
+  background: var(--a-fill); box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; overflow: visible; }
+html.hb-apple body > .toolbar #tbFavs .tb-btn { position: relative; height: 28px; min-width: 40px; margin: 0; padding: 0 11px; border: 0; border-radius: 14px; background: transparent; box-shadow: none;
+  color: var(--a-label); font-size: 13px; line-height: 16px; font-weight: 400; font-variant-numeric: normal; transform: none; transition: none; z-index: auto; }
+html.hb-apple body > .toolbar #tbFavs .tb-btn:hover { background: transparent; color: var(--a-label); }
+html.hb-apple body > .toolbar #tbFavs .tb-btn:active { background: var(--a-track); }
+html.hb-apple body > .toolbar #tbFavs .tb-btn + .tb-btn::before { content: ""; position: absolute; left: -.5px; top: 6px; width: 1px; height: 16px; background: var(--a-sep); }
+html.hb-apple[data-theme] body:not(.lab-page) > .toolbar #tbFavs .tb-btn.active { background: var(--a-accent-on); color: var(--a-on-accent); font-weight: 510; box-shadow: none; }
+html.hb-apple body > .toolbar #tbFavs .tb-btn.active::before, html.hb-apple body > .toolbar #tbFavs .tb-btn.active + .tb-btn::before { display: none; }
+html.hb-apple.hb-inactive[data-theme] body:not(.lab-page) > .toolbar #tbFavs .tb-btn.active { background: var(--a-track); color: var(--a-label); }
+/* the layout tabs: text tabs at the row's trailing end, the open one on the grey pill; "+" adds one */
+html.hb-apple body > .toolbar #tabStrip { flex: 0 1 auto; min-width: 0; height: 28px; display: flex; align-items: center; gap: 2px; margin: 0; padding: 0; max-width: 46%; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+html.hb-apple #tabStrip .tab-btn { flex: none; height: 24px; max-width: 160px; margin: 0; padding: 0 10px; gap: 6px; border: 0; border-radius: 6px; background: transparent; color: var(--a-label-2);
+  font-size: 13px; line-height: 16px; font-weight: 400; transition: none; }
+html.hb-apple #tabStrip .tab-btn:hover { background: var(--a-hover); color: var(--a-label); }
+html.hb-apple #tabStrip .tab-btn.active { background: var(--a-sel); color: var(--a-label); font-weight: 510; }
+html.hb-apple #tabStrip .tab-btn.drag-over { box-shadow: inset 2px 0 0 var(--a-accent); }
+html.hb-apple #tabStrip .tab-dot { width: 6px; height: 6px; background: var(--a-label-3); }
+html.hb-apple #tabStrip .tab-add { flex: none; width: 28px; height: 28px; margin: 0 0 0 2px; border-radius: 14px; background: transparent; color: var(--a-label-2); }
+html.hb-apple #tabStrip .tab-add:hover { background: var(--a-hover); color: var(--a-label); }
+html.hb-apple #tabStrip .tab-add:active { background: var(--a-fill-press); }
+html.hb-apple #tabStrip .tab-add .icw { width: 15px; height: 15px; background: currentColor; -webkit-mask: var(--sf-plus) center / 13px 13px no-repeat; mask: var(--sf-plus) center / 13px 13px no-repeat; }
+html.hb-apple #tabStrip .tab-add .icw svg { display: none; }
+
+/* ---- the chart area: flat panes on the window, hairlines between them, the tool rail floating over the left ------------- */
+html.hb-apple body > .main { position: relative; flex: 1 1 auto; min-height: 0; display: flex; gap: 0; padding: 0; border-top: 1px solid var(--a-sep); }
+html.hb-apple #grid { flex: 1 1 auto; min-width: 0; gap: 1px; background: var(--a-sep); }
+html.hb-apple #grid > .panel { border-radius: 0; box-shadow: none; background: var(--c-canvas); --panel: var(--c-canvas); }
+/* the selected pane: a 2 px accent line along its top, and its header at full strength */
+html.hb-apple #grid > .panel.selected::after { inset: 0 0 auto 0; height: 2px; border-radius: 0; box-shadow: none; background: var(--a-accent); }
+/* pane header: name 13 semibold, figures 11, tabular */
+html.hb-apple .legend { left: 12px; top: 8px; right: 84px; gap: 1px; font-size: 11px; line-height: 14px; color: var(--a-label); }
+html.hb-apple #grid > .panel.hb-under-rail .legend { left: 56px; }
+html.hb-apple #grid .lg-title, html.hb-apple #grid[data-count] .lg-title { gap: 6px; height: 20px; font-size: 13px; line-height: 16px; font-weight: 590; letter-spacing: normal; color: var(--a-label-2); }
+html.hb-apple #grid > .panel.selected .lg-title, html.hb-apple #grid[data-count="1"] .lg-title { color: var(--a-label); }
+/* the name, as symbol + detail (charts.js writes .hb-lg-name from the page's own .lg-name, which stays for assistive tech) */
+html.hb-apple .lg-title:has(> .hb-lg-name) > .lg-name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+html.hb-apple .hb-lg-name { display: inline-flex; align-items: baseline; gap: 6px; min-width: 0; overflow: hidden; white-space: nowrap; }
+html.hb-apple .hb-lg-name b { flex: none; font-size: 13px; line-height: 16px; font-weight: 590; }
+html.hb-apple .hb-lg-name span { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 11px; line-height: 14px; font-weight: 400; color: var(--a-label-2); }
+html.hb-apple .hb-lg-name span:empty { display: none; }
+html.hb-apple .lg-logo { transform: scale(.8); transform-origin: 0 50%; margin-right: -4px; }
+html.hb-apple .legend .badge { display: inline-flex; align-items: center; height: 16px; padding: 0 6px; border-radius: 8px; background: var(--a-fill); color: var(--a-label-2);
+  font-size: 10px; line-height: 13px; font-weight: 590; letter-spacing: normal; }
+html.hb-apple .lg-msg { font-size: 11px; line-height: 14px; font-weight: 400; color: var(--a-label-2); }
+html.hb-apple .lg-msg.err { color: var(--a-red-text); }
+html.hb-apple .lg-ohlc { gap: 0 8px; font-size: 11px; line-height: 16px; font-variant-numeric: tabular-nums; }
+html.hb-apple .kv .k { color: var(--a-label-2); }
+html.hb-apple .lg-row { height: 18px; gap: 6px; border-radius: 5px; font-size: 11px; line-height: 14px; }
+html.hb-apple .lg-row:hover { background: var(--a-hover); }
+html.hb-apple .lg-label { color: var(--a-label); }
+html.hb-apple .ib { width: 18px; height: 18px; border-radius: 5px; color: var(--a-label-2); }
+html.hb-apple .ib:hover { background: var(--a-fill); color: var(--a-label); }
+html.hb-apple .cell-gear { border-radius: 0; background: var(--c-canvas); -webkit-backdrop-filter: none; backdrop-filter: none; color: var(--a-label-2); }
+html.hb-apple .cell-gear:hover { background: var(--c-canvas); color: var(--a-label); }
+html.hb-apple .tr-sell, html.hb-apple .tr-buy { border-radius: 6px; }
+html.hb-apple .lg-trade.live::before { border-radius: 9px; }
+html.hb-apple .ev-tip, html.hb-apple .rail-tip { border-radius: 6px; font-size: 11px; line-height: 14px; }
+
+/* the drawing tools: one vertical capsule of glass, 36 wide; 28 buttons; the chosen tool on the grey pill */
+html.hb-apple #rail { position: absolute; left: 8px; top: 8px; z-index: 9; flex: none; align-self: auto; width: 36px; height: auto; display: flex; flex-direction: column; align-items: center;
+  gap: 4px; padding: 4px 0; margin: 0; border: 0; border-radius: 18px; background: var(--a-platter); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur);
+  box-shadow: var(--a-platter-shadow); max-height: calc(100% - 16px); overflow-x: hidden; overflow-y: auto; scrollbar-width: none; }
+html.hb-apple #rail::-webkit-scrollbar { display: none; }
+html.hb-apple #rail .rail-btn { flex: none; width: 28px; height: 28px; border-radius: 14px; background: transparent; color: var(--a-label); transform: none; transition: background-color 120ms ease; }
+html.hb-apple #rail .rail-btn .ic { width: 17px; height: 17px; stroke-width: 1.6; }
+html.hb-apple #rail .rail-btn:hover { background: var(--a-hover); color: var(--a-label); }
+html.hb-apple #rail .rail-btn:active { background: var(--a-track); transform: none; }
+html.hb-apple #rail .rail-btn[aria-pressed="true"] { background: var(--a-track); color: var(--a-label); }
+html.hb-apple #rail .rail-btn.arm { background: color-mix(in srgb, var(--a-red) 14%, transparent); color: var(--a-red-text); }
+html.hb-apple #rail .rail-sep { flex: none; width: 18px; height: 1px; margin: 1px 0; background: var(--a-sep); }
+html.hb-apple #rail .rail-split { flex: none; width: 28px; height: 28px; }
+html.hb-apple #rail .rail-corner { right: -1px; bottom: -1px; width: 11px; height: 11px; border-radius: 0 0 6px 0; background: transparent; color: var(--a-label-2); }
+html.hb-apple #rail .rail-corner::after { right: 2px; bottom: 2px; border-width: 0 0 5px 5px; }
+html.hb-apple #rail .rail-corner:hover, html.hb-apple #rail .rail-corner.open { background: transparent; color: var(--a-label); }
+
+/* ---- the inspector: the page's panel dock (Order ticket, DOM), glass, flush right, full height -------------------------- */
+html.hb-apple #pdock.hb-insp { position: fixed; z-index: 20; right: 0; top: 0; bottom: 0; min-width: 270px; max-width: none; margin: 0; padding: var(--a-toolbar) 0 0; gap: 0; border-radius: 0;
+  overflow: hidden; display: flex; outline-offset: -3px; }
+html.hb-apple #pdock.hb-insp[hidden] { display: none; }
+html.hb-apple #pdock .pdock-widthgrip { width: 6px; left: 0; top: var(--a-toolbar); background: transparent; }
+html.hb-apple #pdock .pdock-widthgrip:hover, html.hb-apple #pdock .pdock-widthgrip:focus-visible { background: linear-gradient(to right, var(--a-label-3) 0 2px, transparent 2px); outline: none; }
+html.hb-apple #pdock .pdock-split, html.hb-apple #pdock .pdock-split-v { background: transparent; }
+html.hb-apple #pdock .pdock-split::after { content: ""; position: absolute; left: 11px; right: 11px; top: 2.5px; height: 1px; background: var(--a-sep); }
+html.hb-apple #pdock .pdock-split-v::after { content: ""; position: absolute; top: 8px; bottom: 8px; left: 2.5px; width: 1px; background: var(--a-sep); }
+/* a panel: a section of the inspector (11 bold header, then its content) */
+html.hb-apple .hbpanel { border-radius: 0; background: transparent; font-size: 13px; line-height: 16px; color: var(--a-label); }
+html.hb-apple .hbpanel-head { height: 30px; padding: 0 9px 0 20px; gap: 2px; border: 0; background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; cursor: default; }
+html.hb-apple .hbpanel-title { font-size: 11px; line-height: 14px; font-weight: 700; letter-spacing: normal; text-transform: none; color: var(--a-label-pane-2); }
+html.hb-apple .hbpanel-btn { width: 22px; height: 22px; border-radius: 6px; color: var(--a-label-pane-2); }
+html.hb-apple .hbpanel-btn:hover { background: var(--a-fill); color: var(--a-label); }
+html.hb-apple .hbpanel-btn .ic { width: 13px; height: 13px; }
+html.hb-apple .hbpanel-body { background: transparent; }
+/* a panel floated off the dock: a small window of glass */
+html.hb-apple .hbpanel.floating { border: 0; border-radius: 13px; background: var(--c-popover); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur); box-shadow: var(--a-menu-shadow); }
+html.hb-apple .hbpanel.floating .hbpanel-head { cursor: grab; padding-left: 14px; }
+html.hb-apple .hbpanel.drop-top::after, html.hb-apple .hbpanel.drop-bottom::after, html.hb-apple .hbpanel.drop-left::after, html.hb-apple .hbpanel.drop-right::after {
+  background: color-mix(in srgb, var(--a-accent) 8%, transparent); outline: 2px dashed var(--a-focus); border-radius: 8px; }
+html.hb-apple #pdock.drop-target { outline: 2px dashed var(--a-focus); border-radius: 0; }
+
+/* the Order ticket: the side and the order type on the pane, then grouped boxes of rows (as the Desk's inspector) */
+html.hb-apple .op-head { height: 26px; gap: 7px; padding: 0 20px; }
+html.hb-apple .op-logo { transform: scale(.8); transform-origin: 0 50%; margin-right: -4px; }
+html.hb-apple .op-sym { font-size: 13px; line-height: 16px; font-weight: 700; letter-spacing: normal; }
+html.hb-apple .op-name { font-size: 11px; line-height: 14px; color: var(--a-label-2); }
+html.hb-apple .op-form { gap: 11px; padding: 8px 11px 11px; }
+html.hb-apple .opanel.off .op-form { opacity: .5; }
+/* Sell / Buy keep the page's own colours; only their shape is the system's (large, 28) */
+html.hb-apple .op-tiles { gap: 8px; }
+html.hb-apple .op-tile { height: 28px; border-radius: 14px; line-height: 16px; filter: none; }
+html.hb-apple .op-tile:hover { filter: none; }
+html.hb-apple .op-tlbl { font-size: 13px; line-height: 16px; font-weight: 590; letter-spacing: normal; text-transform: none; }
+/* order type: a regular segmented control (24, radius 6), accent on the chosen segment */
+html.hb-apple .op-types { padding: 0; border-radius: 6px; background: var(--a-fill); }
+html.hb-apple .op-type { position: relative; flex: 1 1 auto; min-width: 0; height: 24px; padding: 0 6px; border-radius: 6px; background: transparent; box-shadow: none; color: var(--a-label);
+  font-size: 13px; line-height: 16px; font-weight: 400; }
+html.hb-apple .op-type:hover { color: var(--a-label); }
+html.hb-apple .op-type + .op-type::before { content: ""; position: absolute; left: -.5px; top: 5px; width: 1px; height: 14px; background: var(--a-sep); }
+html.hb-apple .op-type.on { background: var(--a-accent-on); color: var(--a-on-accent); font-weight: 510; box-shadow: none; }
+html.hb-apple .op-type.on::before, html.hb-apple .op-type.on + .op-type::before { display: none; }
+html.hb-apple.hb-inactive .op-type.on { background: var(--a-track); color: var(--a-label); }
+/* grouped boxes: 3 % fill, radius 10, rows with hairlines inset 10 */
+html.hb-apple .op-fields, html.hb-apple .op-units, html.hb-apple .op-coll { gap: 0; padding: 0 10px; border: 0; border-radius: 10px; background: var(--a-group); }
+html.hb-apple .op-field { position: relative; grid-template-columns: minmax(0, 1fr) 104px; gap: 8px; min-height: 37px; }
+html.hb-apple .op-field:not([hidden]) ~ .op-field:not([hidden])::before, html.hb-apple .op-units .op-swrow::before, html.hb-apple .op-exit + .op-exit::before, html.hb-apple .op-chead + .op-cbody::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 0; height: 1px; background: var(--a-group-sep); }
+html.hb-apple .op-lab, html.hb-apple .op-exlab { font-size: 13px; line-height: 16px; color: var(--a-label); }
+/* fields: 24 high, the field colour with a hairline */
+html.hb-apple .op-in, html.hb-apple .tr-qty { height: 24px; padding: 0 7px; border: 0; border-radius: 6px; background: var(--a-field);
+  box-shadow: 0 0 0 1px var(--a-field-edge), 0 .5px 1.5px rgb(0 0 0 / .08); color: var(--a-label); font-size: 13px; line-height: 16px; font-variant-numeric: tabular-nums; }
+html.hb-apple .op-in:focus, html.hb-apple .op-sel:focus, html.hb-apple .tr-qty:focus { outline: 3.5px solid var(--a-focus); outline-offset: 0; }
+html.hb-apple .op-units .op-swrow { position: relative; min-height: 33px; }
+html.hb-apple .op-units .op-note { margin: -5px 0 0; padding: 0 0 8px; }
+html.hb-apple .op-sub { font-size: 13px; line-height: 16px; color: var(--a-label); }
+html.hb-apple .op-note, html.hb-apple .op-none { font-size: 11px; line-height: 14px; color: var(--a-label-2); }
+html.hb-apple .op-note.warn, html.hb-apple .op-why { font-size: 11px; line-height: 14px; color: var(--a-orange); }
+html.hb-apple .op-chead { height: 37px; font-size: 13px; line-height: 16px; font-weight: 400; color: var(--a-label); }
+html.hb-apple .op-chead .ic { width: 12px; height: 12px; stroke-width: 2.2; color: var(--a-label-3); }
+html.hb-apple .op-cbody { position: relative; gap: 0; padding: 0; }
+html.hb-apple .op-exit { position: relative; gap: 0; }
+html.hb-apple .op-exit .op-swrow { min-height: 37px; }
+html.hb-apple .op-exrow { grid-template-columns: minmax(0, 1fr) 76px; gap: 8px; padding: 0 0 9px; }
+html.hb-apple .op-cbody .op-note { padding: 0 0 9px; }
+html.hb-apple .op-cbody > .op-note { padding-top: 0; }
+html.hb-apple .op-accts { gap: 5px; margin: 0; padding: 9px 20px 10px; border-top: 1px solid var(--a-sep); }
+html.hb-apple .op-accts .op-lab { font-size: 11px; line-height: 14px; font-weight: 700; color: var(--a-label-pane-2); }
+html.hb-apple .op-link { font-size: 11px; line-height: 14px; color: var(--a-accent-text); }
+html.hb-apple .set-link { font-size: 13px; line-height: 16px; color: var(--a-accent-text); }
+html.hb-apple .op-chips.flash { background: color-mix(in srgb, var(--a-accent) 10%, transparent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--a-accent) 10%, transparent); }
+html.hb-apple .op-foot { padding: 2px 11px 14px; }
+/* Send: extra large (36, capsule); its colour is the page's own (the side it sends) */
+html.hb-apple .op-send { min-height: 36px; padding: 4px 16px; border-radius: 18px; font-size: 13px; line-height: 16px; font-weight: 590; color: #fff; }
+/* the page's own send buttons are white on the Sell red / Buy blue: the shared control reset (color: inherit) must not turn them ink */
+html.hb-apple .tr-sell, html.hb-apple .tr-buy { color: #fff; }
+html.hb-apple .op-sendwrap.live::before { border-radius: 21px; }
+html.hb-apple .op-reason { font-size: 11px; line-height: 14px; color: var(--a-label-2); }
+
+/* the mini switch (36 × 16), the size a form uses; the page marks it on with .on */
+html.hb-apple .switch { position: relative; flex: none; width: 36px; height: 16px; border: 0; border-radius: 8px; padding: 0; background: var(--a-track); box-shadow: none; transition: background-color 160ms ease; }
+html.hb-apple .switch::after { content: ""; position: absolute; left: 2px; top: 2px; width: 21px; height: 12px; border-radius: 6px; background: #fff; box-shadow: var(--a-knob-shadow); transform: none;
+  transition: transform 240ms var(--a-spring); }
+html.hb-apple .switch.on, html.hb-apple .switch[aria-checked="true"] { background: var(--a-accent-on); }
+html.hb-apple .switch.on::after, html.hb-apple .switch[aria-checked="true"]::after { transform: translateX(11px); }
+html.hb-apple[data-theme="dark"] .switch::after { background: #e2e2e2; }
+html.hb-apple[data-theme="dark"] .switch.on::after { background: #fff; }
+
+/* the DOM ladder */
+html.hb-apple .dom-head { padding: 2px 20px 8px; gap: 8px; border-bottom: 1px solid var(--a-sep); }
+html.hb-apple .dom-recentre { height: 24px; padding: 0 10px; gap: 5px; border-radius: 6px; background: var(--a-fill); color: var(--a-label); font-size: 13px; line-height: 16px; font-weight: 400; }
+html.hb-apple .dom-recentre:hover { background: var(--a-fill); color: var(--a-label); }
+html.hb-apple .dom-recentre:active { background: var(--a-fill-press); }
+html.hb-apple .dom-recentre .ic { width: 13px; height: 13px; color: var(--a-label-2); }
+html.hb-apple .dom-cols { padding: 5px 20px; border-bottom: 1px solid var(--a-sep); font-size: 11px; line-height: 14px; font-weight: 400; letter-spacing: normal; text-transform: none; color: var(--a-label-2); }
+html.hb-apple .dom-row { min-height: 20px; padding: 2px 20px; font-size: 11px; line-height: 16px; font-variant-numeric: tabular-nums; }
+html.hb-apple .dom-vol { color: var(--a-label-2); }
+html.hb-apple .dom-idle { padding: 24px 20px; font-size: 13px; line-height: 16px; color: var(--a-label-2); }
+
+/* ---- the bottom panel: a pane with a hairline on top; text tabs, the chosen one on the grey pill ---------------------------- */
+html.hb-apple #bpanel { flex: none; height: 36px; margin: 0; border: 0; border-top: 1px solid var(--a-sep); border-radius: 0; box-shadow: none; background: var(--a-window); }
+html.hb-apple #bpanel.open { height: var(--bp-h, 260px); }
+html.hb-apple #bpanel .bp-bar { flex: none; height: 35px; padding: 0 12px 0 14px; border: 0; border-bottom: 1px solid transparent; background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; }
+html.hb-apple #bpanel.open .bp-bar { border-bottom-color: var(--a-sep); }
+html.hb-apple #bpanel .bp-tabs { height: 24px; gap: 2px; align-items: center; }
+html.hb-apple #bpanel .bp-tab { height: 24px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: var(--a-label-2); font-size: 13px; line-height: 16px; font-weight: 400; transition: none; }
+html.hb-apple #bpanel .bp-tab:hover { color: var(--a-label); }
+html.hb-apple #bpanel .bp-tab[aria-selected="true"] { background: var(--a-sel); color: var(--a-label); font-weight: 510; }
+html.hb-apple #bpanel .bp-toggle { width: 24px; height: 24px; border-radius: 6px; color: var(--a-label-2); }
+html.hb-apple #bpanel .bp-toggle:hover { background: var(--a-fill); color: var(--a-label); }
+html.hb-apple #bpanel .bp-toggle .ic { width: 13px; height: 13px; stroke-width: 2.2; }
+html.hb-apple #bpanel .bp-body { background: var(--a-window); }
+html.hb-apple .bp-empty { padding: 28px 20px; font-size: 13px; line-height: 16px; color: var(--a-label-2); text-align: center; }
+/* tables: 24 rows, an 11 secondary header, tabular numbers */
+html.hb-apple .bp-table { width: 100%; border-collapse: collapse; font-size: 13px; line-height: 16px; font-variant-numeric: tabular-nums; color: var(--a-label); }
+html.hb-apple .bp-table th { height: 23px; padding: 0 10px; background: var(--a-window); border-bottom: 1px solid var(--a-sep); color: var(--a-label-2); font-size: 11px; line-height: 14px; font-weight: 400; letter-spacing: normal; text-transform: none; }
+html.hb-apple .bp-table td { height: 24px; padding: 0 10px; border: 0; }
+html.hb-apple .bp-table th:first-child, html.hb-apple .bp-table td:first-child { padding-left: 20px; }
+html.hb-apple .bp-table th:last-child, html.hb-apple .bp-table td:last-child { padding-right: 20px; }
+html.hb-apple .bp-table tbody tr:nth-child(even) td { background: var(--a-group); }
+html.hb-apple .bp-table tr:hover td { background: var(--a-hover); }
+html.hb-apple .bp-table tfoot td { background: transparent; border-top: 1px solid var(--a-sep); font-weight: 590; }
+/* a profit is green; a loss is ink with its minus sign (the side and status cells keep the page's own colours) */
+html.hb-apple .bp-table td.num.up, html.hb-apple .bb-pnl.up { color: var(--a-green); }
+html.hb-apple .bp-table td.num.down, html.hb-apple .bb-pnl.down { color: var(--a-label); }
+html.hb-apple .bp-table .dot { width: 7px; height: 7px; background: var(--a-label-3); }
+html.hb-apple .bp-table .dot.ok { background: var(--a-label-2); }
+html.hb-apple .bp-table .dot.warn { background: var(--a-orange); }
+html.hb-apple .bp-table .dot.bad { background: var(--a-red); }
+html.hb-apple .bp-act { height: 20px; padding: 0 9px; border: 0; border-radius: 5px; background: var(--a-fill); color: var(--a-label); font-size: 11px; line-height: 14px; }
+html.hb-apple .bp-act:hover { background: var(--a-fill); }
+html.hb-apple .bp-act:active { background: var(--a-fill-press); }
+html.hb-apple .bp-fq-bar { gap: 8px; padding: 8px 20px; font-size: 13px; line-height: 16px; color: var(--a-label-2); }
+html.hb-apple .bp-fq-compare { padding: 8px 20px; font-size: 11px; line-height: 14px; color: var(--a-label-2); }
+html.hb-apple .hb-news-bar { gap: 6px; padding: 8px 20px; border-bottom: 1px solid var(--a-sep); }
+html.hb-apple .hb-news-chip { height: 20px; padding: 0 9px; border: 0; border-radius: 10px; background: var(--a-fill); color: var(--a-label-2); font-size: 11px; line-height: 14px; }
+html.hb-apple .hb-news-chip:hover { color: var(--a-label); }
+html.hb-apple .hb-news-chip[aria-pressed="true"] { background: var(--a-accent-on); color: var(--a-on-accent); }
+html.hb-apple .hb-news-row { gap: 8px; min-height: 24px; padding: 4px 20px; border: 0; font-size: 13px; line-height: 16px; }
+html.hb-apple .hb-news-row:hover { background: var(--a-hover); }
+html.hb-apple .hb-news-time { font-size: 11px; line-height: 14px; color: var(--a-label-2); }
+html.hb-apple .hb-news-src, html.hb-apple .hb-news-tag { height: 16px; padding: 0 6px; border-radius: 8px; font-size: 10px; line-height: 16px; font-weight: 590; }
+html.hb-apple .hb-news-title { font-size: 13px; line-height: 16px; color: var(--a-label); }
+
+/* pop-up buttons (a native select, drawn as the system pop-up: 24, radius 6, the up-down chevron) */
+html.hb-apple .bp-fq-select, html.hb-apple .set-select, html.hb-apple .op-sel, html.hb-apple .dtb-select { -webkit-appearance: none; appearance: none; height: 24px; padding: 0 22px 0 8px; border: 0; border-radius: 6px;
+  background-color: var(--a-fill); background-image: none; box-shadow: none; color: var(--a-label); font-size: 13px; line-height: 16px; }
+html.hb-apple .bp-fq-select, html.hb-apple .set-select, html.hb-apple .op-sel, html.hb-apple .dtb-select { background-repeat: no-repeat; background-position: right 7px center; background-size: 8px 12px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='12' viewBox='0 0 8 12' fill='none' stroke='%23000' stroke-opacity='.55' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M1.3 4.3 4 1.6l2.7 2.7M1.3 7.7 4 10.4l2.7-2.7'/%3E%3C/svg%3E"); }
+html.hb-apple[data-theme="dark"] .bp-fq-select, html.hb-apple[data-theme="dark"] .set-select, html.hb-apple[data-theme="dark"] .op-sel, html.hb-apple[data-theme="dark"] .dtb-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='12' viewBox='0 0 8 12' fill='none' stroke='%23fff' stroke-opacity='.6' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M1.3 4.3 4 1.6l2.7 2.7M1.3 7.7 4 10.4l2.7-2.7'/%3E%3C/svg%3E"); }
+html.hb-apple .bp-fq-select:focus, html.hb-apple .set-select:focus, html.hb-apple .set-num:focus { outline: 3.5px solid var(--a-focus); outline-offset: 0; }
+
+/* ---- the status bar: 24 high, 11 secondary, a hairline on top ---------------------------------------------------------------- */
+html.hb-apple #statusbar { flex: none; height: 24px; gap: 12px; padding: 0 12px 0 20px; border: 0; border-top: 1px solid var(--a-sep); background: var(--a-window);
+  -webkit-backdrop-filter: none; backdrop-filter: none; color: var(--a-label-2); font-size: 11px; line-height: 14px; font-variant-numeric: tabular-nums; }
+html.hb-apple #statusbar .sb-mode { color: var(--a-label-2); }
+html.hb-apple #statusbar .sb-dot { width: 6px; height: 6px; background: var(--a-label-3); }
+html.hb-apple #statusbar .sb-dot.ok { background: var(--a-label-2); }
+html.hb-apple #statusbar .sb-dot.warn { background: var(--a-orange); }
+html.hb-apple #statusbar .sb-dot.bad { background: var(--a-red); }
+html.hb-apple #statusbar .sb-feed.warn, html.hb-apple #statusbar #sbRec.warn { color: var(--a-orange); }
+html.hb-apple #statusbar .sb-feed.bad, html.hb-apple #statusbar .sb-note { color: var(--a-red-text); }
+html.hb-apple #statusbar .sb-desk-link { color: var(--a-accent-text); }
+html.hb-apple #statusbar .sb-event { font-weight: 400; color: var(--a-label-2); }
+html.hb-apple #statusbar .sb-credit { color: var(--a-label-3); }
+html.hb-apple #statusbar .sb-credit svg { width: 12px; height: 12px; }
+
+/* ---- menus: the system menu (radius 13, 24 items with radius 8, the accent under the pointer, glass) ------------------------------ */
+html.hb-apple .menu, html.hb-apple .hotkey-box { padding: 5px; border: 0; border-radius: 13px; background: var(--c-popover); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur);
+  box-shadow: var(--a-menu-shadow); color: var(--a-label); font-size: 13px; line-height: 16px; min-width: 180px; filter: none; }
+html.hb-apple .dialog .menu { background: var(--a-pane); -webkit-backdrop-filter: none; backdrop-filter: none; }
+html.hb-apple .menu-i { height: 24px; gap: 8px; padding: 0 9px; border-radius: 8px; background: transparent; color: var(--a-label); font-size: 13px; line-height: 16px; }
+html.hb-apple .menu-i:hover, html.hb-apple .menu-i:focus-visible { background: var(--a-accent); color: var(--a-on-accent); outline: none; }
+html.hb-apple .menu-i:hover .menu-sub, html.hb-apple .menu-i:focus-visible .menu-sub, html.hb-apple .menu-i:hover .menu-ck, html.hb-apple .menu-i:focus-visible .menu-ck,
+html.hb-apple .menu-i:hover .menu-star, html.hb-apple .menu-i:focus-visible .menu-star { color: var(--a-on-accent); }
+html.hb-apple .menu-i.active { color: var(--a-label); font-weight: 590; }
+html.hb-apple .menu-i.active:hover, html.hb-apple .menu-i.active:focus-visible { color: var(--a-on-accent); }
+html.hb-apple .menu-i:disabled, html.hb-apple .menu-i:disabled:hover { background: transparent; color: var(--a-label-3); opacity: 1; }
+html.hb-apple .menu .menu-sub { color: var(--a-label-2); font-size: 13px; font-weight: 400; }
+html.hb-apple .menu .menu-h { padding: 5px 9px 2px; font-size: 11px; line-height: 14px; font-weight: 590; letter-spacing: normal; text-transform: none; color: var(--a-label-2); }
+html.hb-apple .menu-sep { height: 1px; margin: 5px 9px; background: var(--a-sep); opacity: 1; }
+html.hb-apple .menu-empty { padding: 4px 9px; color: var(--a-label-2); }
+html.hb-apple .menu-ck { width: 14px; color: var(--a-label); }
+html.hb-apple .menu-ck .ic { width: 13px; height: 13px; stroke-width: 2.4; }
+html.hb-apple .menu-star { padding: 2px; border-radius: 5px; color: var(--a-label-3); }
+html.hb-apple .menu-star:hover { background: transparent; }
+html.hb-apple .menu-star.on { color: var(--a-yellow-fill); }
+html.hb-apple .menu-i:hover .menu-star.on, html.hb-apple .menu-i:focus-visible .menu-star.on { color: var(--a-on-accent); }
+html.hb-apple .menu-star .icw svg { width: 14px; height: 14px; }
+html.hb-apple .menu-row { padding-right: 4px; border-radius: 8px; }
+html.hb-apple .menu-row:hover { background: var(--a-accent); color: var(--a-on-accent); }
+html.hb-apple .menu-row:hover .menu-i, html.hb-apple .menu-row:hover .menu-del { background: transparent; color: var(--a-on-accent); }
+html.hb-apple .menu-del { width: 20px; height: 20px; border-radius: 5px; color: var(--a-label-2); }
+html.hb-apple .menu-i-danger { color: var(--a-red-text); }
+html.hb-apple .menu-i-danger:hover, html.hb-apple .menu-i-danger:focus-visible { background: var(--a-red); color: var(--a-on-red); }
+html.hb-apple .menu-err, html.hb-apple .hotkey-err { padding: 2px 9px 6px; font-size: 11px; line-height: 14px; color: var(--a-red-text); }
+html.hb-apple .menu-confirm { min-height: 28px; padding: 2px 4px 2px 9px; gap: 8px; }
+html.hb-apple .menu-custom { gap: 8px; padding: 3px 4px 5px; }
+/* a field in a menu (symbol search, a custom interval, a name): 24, the search one a capsule */
+html.hb-apple .menu-input, html.hb-apple .hotkey-input { height: 24px; width: calc(100% - 8px); margin: 3px 4px 6px; padding: 0 8px; border: 0; border-radius: 6px; background: var(--a-field);
+  box-shadow: 0 0 0 1px var(--a-field-edge), 0 .5px 1.5px rgb(0 0 0 / .08); color: var(--a-label); font-size: 13px; line-height: 16px; }
+html.hb-apple .menu-input:focus, html.hb-apple .hotkey-input:focus { outline: 3.5px solid var(--a-focus); outline-offset: 0; border: 0; }
+html.hb-apple .menu-sym .menu-input, html.hb-apple .hotkey-sym .hotkey-input { border-radius: 12px; padding: 0 10px 0 27px; background-repeat: no-repeat; background-position: 8px center; background-size: 13px 13px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='13' height='13' viewBox='0 0 13 13' fill='none' stroke='%23000' stroke-opacity='.5' stroke-width='1.4' stroke-linecap='round'%3E%3Ccircle cx='5.4' cy='5.4' r='4.1'/%3E%3Cpath d='m8.5 8.5 3.4 3.4'/%3E%3C/svg%3E"); }
+html.hb-apple[data-theme="dark"] .menu-sym .menu-input, html.hb-apple[data-theme="dark"] .hotkey-sym .hotkey-input {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='13' height='13' viewBox='0 0 13 13' fill='none' stroke='%23fff' stroke-opacity='.55' stroke-width='1.4' stroke-linecap='round'%3E%3Ccircle cx='5.4' cy='5.4' r='4.1'/%3E%3Cpath d='m8.5 8.5 3.4 3.4'/%3E%3C/svg%3E"); }
+html.hb-apple .menu-custom .menu-input { width: auto; margin: 0; }
+html.hb-apple .menu-sym .menu-t { flex: 0 0 40px; font-weight: 590; }
+html.hb-apple .hotkey-sym .hotkey-input { width: calc(100% - 8px); margin: 3px 4px 6px; }
+html.hb-apple .menu.menu-swatch { padding: 12px; }
+html.hb-apple .sw-cell { border-radius: 4px; }
+html.hb-apple .sw-row { font-size: 13px; line-height: 16px; }
+/* the layout picker */
+html.hb-apple .grid-picks { gap: 4px; padding: 3px; }
+html.hb-apple .grid-pick { width: 48px; height: 40px; border-radius: 8px; color: var(--a-label-2); }
+html.hb-apple .grid-pick:hover { background: var(--a-hover); color: var(--a-label); }
+html.hb-apple .grid-pick.active { background: var(--a-sel); color: var(--a-label); }
+html.hb-apple .grid-pick .thumb i { border-width: 1.25px; border-radius: 2px; }
+/* the per-drawing toolbar: a small platter of glass */
+html.hb-apple .draw-toolbar { padding: 4px; gap: 2px; border: 0; border-radius: 17px; background: var(--a-platter); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur); box-shadow: var(--a-platter-shadow); }
+html.hb-apple .dtb-btn { width: 26px; height: 26px; border-radius: 13px; color: var(--a-label); }
+html.hb-apple .dtb-btn:hover, html.hb-apple .dtb-btn.open, html.hb-apple .dtb-btn[aria-pressed="true"] { background: var(--a-track); }
+html.hb-apple .dtb-btn.danger:hover { background: color-mix(in srgb, var(--a-red) 14%, transparent); color: var(--a-red-text); }
+html.hb-apple .dtb-sep { background: var(--a-sep); }
+html.hb-apple .dtb-swatch { border-radius: 11px; box-shadow: inset 0 0 0 1px var(--a-sep); }
+html.hb-apple .dtb-swatch i { border-radius: 8px; }
+html.hb-apple .dtb-num { height: 22px; border: 0; border-radius: 6px; background: var(--a-field); box-shadow: 0 0 0 1px var(--a-field-edge); font-size: 11px; }
+/* toasts */
+html.hb-apple .toasts { top: calc(var(--a-toolbar) + 8px); right: 16px; gap: 8px; }
+html.hb-apple .toast { padding: 9px 9px 9px 13px; border: 0; border-radius: 13px; background: var(--c-popover); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur);
+  box-shadow: var(--a-menu-shadow); color: var(--a-label); font-size: 13px; line-height: 16px; font-weight: 400; }
+html.hb-apple .toast.err { box-shadow: var(--a-menu-shadow), inset 3px 0 0 var(--a-red); }
+html.hb-apple .toast.warn { box-shadow: var(--a-menu-shadow), inset 3px 0 0 var(--a-orange); background: var(--c-popover); font-weight: 590; }
+html.hb-apple .toast-x { border-radius: 10px; color: var(--a-label-2); }
+
+/* ---- dialogs: the system sheet (radius 20, padding 20, a 15 semibold title, 28 capsule buttons, the accent for the default) -------- */
+html.hb-apple .backdrop { background: var(--a-scrim); }
+html.hb-apple .dialog { border: 0; border-radius: 20px; background: color-mix(in srgb, var(--a-pane) 95%, transparent); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur); box-shadow: var(--a-sheet-shadow);
+  color: var(--a-label); font-size: 13px; line-height: 16px; }
+html.hb-apple .dialog.confirm.live { box-shadow: 0 0 0 1.5px var(--a-red), var(--a-sheet-shadow); }
+html.hb-apple .dlg-head { padding: 18px 16px 12px 20px; font-size: 15px; line-height: 20px; font-weight: 590; letter-spacing: normal; color: var(--a-label); }
+html.hb-apple .dlg-x { width: 24px; height: 24px; border-radius: 12px; background: var(--a-fill); color: var(--a-label-2); }
+html.hb-apple .dlg-x:hover { background: var(--a-fill-hover); color: var(--a-label); }
+html.hb-apple .dlg-x .ic { width: 12px; height: 12px; stroke-width: 2.6; }
+html.hb-apple .dlg-search { height: 28px; gap: 6px; margin: 0 20px 12px; padding: 0 10px; border: 0; border-radius: 14px; background: var(--a-field); box-shadow: 0 0 0 1px var(--a-field-edge), 0 .5px 1.5px rgb(0 0 0 / .08); }
+html.hb-apple .dlg-search:focus-within { outline: 3.5px solid var(--a-focus); outline-offset: 0; border: 0; }
+html.hb-apple .dlg-search .icw { width: 15px; height: 14px; background: var(--a-label-2); -webkit-mask: var(--sf-search) center / 15px auto no-repeat; mask: var(--sf-search) center / 15px auto no-repeat; }
+html.hb-apple .dlg-search .icw svg { display: none; }
+html.hb-apple .dlg-search input { font-size: 13px; line-height: 16px; color: var(--a-label); }
+html.hb-apple .dlg-search input:focus-visible { outline: none; }
+html.hb-apple .dlg-body, html.hb-apple .set-body { border-top: 1px solid var(--a-sep); }
+/* the dialog's own sidebar: a source list (rows 28, selection radius 8) */
+html.hb-apple .dlg-groups, html.hb-apple .set-tabs { padding: 10px; gap: 1px; border-right: 1px solid var(--a-sep); background: var(--a-group); }
+html.hb-apple .dlg-groups { width: 170px; }
+html.hb-apple .set-tabs { width: 190px; }
+html.hb-apple .dlg-group, html.hb-apple .set-tab { width: 100%; height: 28px; margin: 0; padding: 0 9px; gap: 8px; border: 0; border-radius: 8px; background: transparent; color: var(--a-label);
+  font-size: 13px; line-height: 16px; font-weight: 400; text-align: left; transition: none; }
+html.hb-apple .dlg-group:hover, html.hb-apple .set-tab:hover { background: transparent; color: var(--a-label); }
+html.hb-apple .dlg-group.active, html.hb-apple .set-tab.active { background: var(--a-sel); color: var(--a-label); }
+html.hb-apple .set-tab .ic { width: 15px; height: 15px; stroke-width: 1.7; color: var(--a-accent-text); }
+html.hb-apple .dlg-list { padding: 8px 10px; }
+html.hb-apple .dlg-row { width: 100%; height: 28px; margin: 0; padding: 0 10px; gap: 8px; border-radius: 8px; font-size: 13px; line-height: 16px; color: var(--a-label); }
+html.hb-apple .dlg-row.has-desc { height: auto; min-height: 42px; padding-top: 5px; padding-bottom: 5px; }
+html.hb-apple .dlg-row:hover, html.hb-apple .dlg-row:focus-visible { background: var(--a-hover); }
+html.hb-apple .dlg-txt .dlg-name { line-height: 16px; }
+html.hb-apple .dlg-desc, html.hb-apple .dlg-grp { font-size: 11px; line-height: 14px; color: var(--a-label-2); }
+html.hb-apple .dlg-row .ic { width: 13px; height: 13px; stroke-width: 2.4; color: var(--a-accent-text); }
+html.hb-apple .dlg-empty { padding: 12px 10px; color: var(--a-label-2); }
+html.hb-apple .dlg-msg { padding: 0 20px 14px; font-size: 13px; line-height: 16px; color: var(--a-label); }
+html.hb-apple .dlg-err { padding: 0 20px 6px; font-size: 11px; line-height: 14px; color: var(--a-red-text); }
+html.hb-apple .dlg-foot, html.hb-apple .set-foot { gap: 8px; padding: 14px 20px 20px; border-top: 1px solid var(--a-sep); }
+html.hb-apple .dlg-foot { border-top: 0; padding-top: 6px; }
+/* settings panes: a form (rows 32; controls regular, 24) */
+html.hb-apple .set-pane { padding: 4px 20px 16px; }
+html.hb-apple .set-cap { margin: 14px 0 4px; font-size: 11px; line-height: 14px; font-weight: 590; letter-spacing: normal; text-transform: none; color: var(--a-label-2); }
+html.hb-apple .set-row { height: 32px; gap: 12px; font-size: 13px; line-height: 16px; }
+html.hb-apple .set-row.tall { height: auto; min-height: 32px; padding: 6px 0; }
+html.hb-apple .set-name { gap: 8px; }
+html.hb-apple .set-unit, html.hb-apple .set-note, html.hb-apple .set-acct-note, html.hb-apple .set-acct-err { font-size: 11px; line-height: 14px; color: var(--a-label-2); }
+html.hb-apple .set-why { font-size: 11px; line-height: 14px; color: var(--a-orange); }
+html.hb-apple .set-acct-arm { font-size: 11px; line-height: 14px; font-weight: 590; color: var(--a-red-text); }
+html.hb-apple .dialog input[type="checkbox"], html.hb-apple .menu input[type="checkbox"], html.hb-apple .dialog input[type="radio"], html.hb-apple .dialog input[type="range"], html.hb-apple .menu input[type="range"] { accent-color: var(--a-accent-on); }
+html.hb-apple .dialog input[type="checkbox"] { width: 14px; height: 14px; }
+html.hb-apple .set-num, html.hb-apple .sw-hex, html.hb-apple .field input[type="number"], html.hb-apple .dialog .menu-input { height: 24px; padding: 0 7px; border: 0; border-radius: 6px; background: var(--a-field);
+  box-shadow: 0 0 0 1px var(--a-field-edge), 0 .5px 1.5px rgb(0 0 0 / .08); color: var(--a-label); font-size: 13px; line-height: 16px; font-variant-numeric: tabular-nums; }
+html.hb-apple .field { gap: 12px; padding: 5px 20px; font-size: 13px; line-height: 16px; }
+html.hb-apple .field input[type="number"]:focus, html.hb-apple .sw-hex:focus { outline: 3.5px solid var(--a-focus); outline-offset: 0; }
+html.hb-apple .swatch { width: 24px; height: 24px; padding: 3px; border-radius: 6px; background: var(--a-fill); box-shadow: none; }
+html.hb-apple .swatch i { border-radius: 3.5px; }
+html.hb-apple .swatch:hover, html.hb-apple .swatch.open { box-shadow: none; background: var(--a-fill-press); }
+html.hb-apple .seg { max-width: 100%; padding: 0; border-radius: 6px; background: var(--a-fill); }
+html.hb-apple .seg button { position: relative; height: 24px; padding: 0 9px; border-radius: 6px; background: transparent; box-shadow: none; color: var(--a-label); font-size: 13px; line-height: 16px; font-weight: 400; white-space: nowrap; }
+html.hb-apple .seg button + button::before { content: ""; position: absolute; left: -.5px; top: 5px; width: 1px; height: 14px; background: var(--a-sep); }
+html.hb-apple .seg button.on, html.hb-apple .seg button.sel { background: var(--a-accent-on); color: var(--a-on-accent); font-weight: 510; box-shadow: none; }
+html.hb-apple .seg button.on::before, html.hb-apple .seg button.on + button::before, html.hb-apple .seg button.sel::before, html.hb-apple .seg button.sel + button::before { display: none; }
+html.hb-apple .field:has(> .seg) { flex-wrap: wrap; row-gap: 6px; justify-content: space-between; }
+/* buttons in dialogs and menus: large (28, capsule); the default one carries the accent */
+html.hb-apple .btn { flex: none; height: 28px; padding: 0 14.5px; border: 0; border-radius: 14px; gap: 5px; background: var(--a-fill); color: var(--a-label); box-shadow: none;
+  font-size: 13px; line-height: 16px; font-weight: 400; letter-spacing: normal; transform: none; transition: background-color 100ms ease; opacity: 1; }
+html.hb-apple .btn:hover { background: var(--a-fill); color: var(--a-label); opacity: 1; }
+html.hb-apple .btn:active { background: var(--a-fill-press); transform: none; }
+html.hb-apple .btn:disabled { background: var(--a-fill-off); color: var(--a-label-3); opacity: 1; }
+html.hb-apple .btn.btn-ghost, html.hb-apple .dialog.confirm .btn { background: var(--a-fill); box-shadow: none; }
+html.hb-apple .btn.btn-solid, html.hb-apple .btn.btn-primary, html.hb-apple .dialog.confirm .btn.primary.accent { background: var(--a-accent); color: var(--a-on-accent); }
+html.hb-apple .btn.btn-solid:hover, html.hb-apple .btn.btn-primary:hover, html.hb-apple .dialog.confirm .btn.primary.accent:hover { background: var(--a-accent); color: var(--a-on-accent); opacity: 1; }
+html.hb-apple .btn.btn-solid:active, html.hb-apple .btn.btn-primary:active { background: color-mix(in srgb, var(--a-accent) 86%, #000); }
+html.hb-apple .btn.btn-danger { background: var(--a-red); color: var(--a-on-red); font-weight: 590; }
+html.hb-apple .btn.btn-danger:hover { background: var(--a-red); color: var(--a-on-red); }
+html.hb-apple .dialog.confirm .btn:not(.primary) { color: var(--a-label); }
+html.hb-apple .dialog.confirm .btn.primary.down, html.hb-apple .dialog.confirm .btn.primary.down:hover { background: var(--down); color: #fff; opacity: 1; font-weight: 590; }
+html.hb-apple .dialog.confirm .btn:disabled { opacity: .5; }
+html.hb-apple .menu .btn { height: 24px; padding: 0 12.5px; border-radius: 6px; }
+html.hb-apple .set-data .quick-btn { height: 24px; padding: 0 10px; border-radius: 6px; font-size: 13px; }
+html.hb-apple .tpl-btn .ic { width: 11px; height: 11px; stroke-width: 2.4; }
+html.hb-apple.hb-inactive .btn.btn-solid, html.hb-apple.hb-inactive .btn.btn-primary { background: var(--a-fill); color: var(--a-label); }
+
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  html.hb-apple #rail, html.hb-apple .menu, html.hb-apple .hotkey-box, html.hb-apple .dialog, html.hb-apple .toast, html.hb-apple .draw-toolbar, html.hb-apple .hbpanel.floating, html.hb-apple #pgSw.hb-seg {
+    -webkit-backdrop-filter: none; backdrop-filter: none; background: var(--a-pane); }
+}
+@media (max-width: 1180px) {
+  html.hb-apple:not(.hb-insp-off) .hb-title span { display: none; }
+}
