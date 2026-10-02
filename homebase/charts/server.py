@@ -729,7 +729,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
     if not replay:
         rec_roots = [r for r in (DEPTH_RECORD_ROOTS if depth_roots is None else depth_roots)
                      if r.upper() in roots]
-        depth = Depth(feed, rec_roots, log=log,
+        depth = Depth(feed, rec_roots, log=log, wall_ms=lambda: int(clock()),    # the service's clock, like the tick hub
                       recorder=DepthRecorder(depth_base or DEPTH_ARCHIVE) if rec_roots else None)
     hub = Hub(history, clock)
     # per-chart Bar Replay: its own hubs over its own History memo; never the live hub, recorder, desk or quotes
