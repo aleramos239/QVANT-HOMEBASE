@@ -709,3 +709,30 @@ def test_the_recorder_never_writes_under_futures_ticks(tmp_path):
     rec.flush()
     assert [p.relative_to(tmp_path).as_posix() for p in tmp_path.rglob("*") if p.is_file()] == \
         [f"depth/NQ/2026/{D}_NQZ6.depth.jsonl.gz"]
+
+
+# ------------------------------------------------------------------ a DOM stamp far from the local clock
+def test_a_dom_stamp_far_from_the_local_clock_is_replaced_by_the_arrival_time():
+    wall = int(dt.datetime(2026, 10, 2, 11, 30, 0, tzinfo=dt.timezone.utc).timestamp() * 1000)
+    book = {"bids": [{"price": 100.0, "size": 3}], "offers": [{"price": 100.25, "size": 2}]}
+    b = Book("NQ")
+    b.apply({"timestamp": "2026-10-02T11:20:00.000Z", **book}, now=1.0, wall_ms=wall, max_skew_ms=30_000)
+    assert b.ts == wall and b.skew_ms == -600_000            # 10 minutes behind (the 2026-10-02 case): arrival time
+    b.apply({"timestamp": "2026-10-02T11:29:59.800Z", **book}, now=2.0, wall_ms=wall, max_skew_ms=30_000)
+    assert b.ts == wall - 200 and b.skew_ms == 0             # normal latency: the feed's own stamp is kept
+    b.apply({"timestamp": "2026-10-02T11:31:00.000Z", **book}, now=3.0, wall_ms=wall, max_skew_ms=30_000)
+    assert b.ts == wall and b.skew_ms == 60_000              # ahead of the clock is just as untrustworthy
+    b.apply({"timestamp": "2026-10-02T11:20:00.000Z", **book}, now=4.0, wall_ms=wall)
+    assert b.ts == wall - 600_000 and b.skew_ms == 0         # no limit given: unchanged behaviour
+
+
+def test_the_hub_stamps_a_skewed_book_with_the_arrival_time_and_reports_it():
+    async def go():
+        feed, d, _ = make()
+        await connect(d)
+        feed.ws.push(111, ladder(100.0, 3), ladder(100.25, 3, down=False), ts="2026-09-24T13:35:00.000Z")   # T0 - 10 min
+        feed.ws.push(222, ladder(50.0, 2), ladder(50.25, 2, down=False))                                     # exactly T0
+        return d
+    d = run(go())
+    assert d.message("NQ")["ts"] == T0 and d.message("ES")["ts"] == T0
+    assert d.status()["NQ"]["stamp_skew_s"] == -600 and "stamp_skew_s" not in d.status()["ES"]

@@ -70,6 +70,7 @@ WIRE_LEVELS = 20          # levels per side sent to a page
 WIRE_MIN_S = 0.1          # <= 10 depth messages a second per root
 REC_LEVELS = 10           # levels per side recorded
 REC_MIN_S = 0.25          # <= 4 recorded lines a second per root
+DOM_MAX_SKEW_MS = 30_000  # a DOM stamp further than this from the local clock is the feed's clock, not the book's age
 LINGER_S = 60.0           # a root nobody watches is unsubscribed this long after the last viewer left
 RETRY_S = 600.0           # a refused root is asked again this often (and on every reconnect)
 FLUSH_S = 30.0            # the recording is flushed this often (and on shutdown)
@@ -129,13 +130,24 @@ class Book:
         self.bids: list = []
         self.offers: list = []
         self.ts: Optional[int] = None          # the snapshot's timestamp, epoch ms
+        self.skew_ms: int = 0                  # the feed's stamp minus the local clock, when that stamp was overruled (else 0)
         self.updated: Optional[float] = None   # monotonic time it arrived
 
-    def apply(self, dom: dict, now: float, wall_ms: int) -> None:
-        """Replace the book with this snapshot (Tradovate sends full ones)."""
+    def apply(self, dom: dict, now: float, wall_ms: int, max_skew_ms: Optional[int] = None) -> None:
+        """Replace the book with this snapshot (Tradovate sends full ones).
+
+        `max_skew_ms` set: a feed stamp further than that from the local clock is not trusted. A full snapshot is
+        current when it arrives, so the arrival time stands in for it. (2026-10-02: from about 06:00 ET the live
+        DOM stamps ran exactly 10 minutes behind the clock while the book itself was current, so the liquidity
+        heatmap drew 10 minutes to the left of the candles and its newest cells stopped 10 minutes short of now.)"""
         self.bids = _levels(dom.get("bids"), True)
         self.offers = _levels(dom.get("offers"), False)
-        self.ts = _ts_ms(dom.get("timestamp"), wall_ms)
+        ts = _ts_ms(dom.get("timestamp"), wall_ms)
+        self.skew_ms = 0
+        if max_skew_ms is not None and abs(ts - wall_ms) > max_skew_ms:
+            self.skew_ms = ts - wall_ms
+            ts = wall_ms
+        self.ts = ts
         self.updated = now
 
     def top(self, n: int) -> tuple[list, list]:
@@ -427,7 +439,7 @@ class Depth:
             book = self.books.get(root)
             if book is None:
                 book = self.books[root] = Book(root)
-            book.apply(dom, now, self._wall_ms())
+            book.apply(dom, now, self._wall_ms(), DOM_MAX_SKEW_MS)
             self._wire_due.add(root)
             if self.recorder is not None and root in self.record:
                 self._rec_due.add(root)
@@ -634,4 +646,6 @@ class Depth:
                       "levels": [len(b.bids), len(b.offers)] if b is not None else [0, 0],
                       "age_s": round(now - b.updated, 1) if b is not None and b.updated is not None else None,
                       "error": self.errors.get(r)}
+            if b is not None and b.skew_ms:           # only while a feed stamp is being overruled
+                out[r]["stamp_skew_s"] = round(b.skew_ms / 1000)
         return out
