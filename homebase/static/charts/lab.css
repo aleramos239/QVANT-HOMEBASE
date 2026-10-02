@@ -28,6 +28,7 @@ body:not(.lab-chart-on) .hb-bar .tabstrip, body:not(.lab-chart-on) #tbSettings {
 .lab[data-code="0"] .lab-split, .lab[data-chart="0"] .lab-split { display: none; }
 .lab[data-code="0"] .lab-chart { margin-left: -10px; }
 @media (max-width: 1180px) { .lab-lib { width: 232px; } #labRes { width: 320px; } }
+@media (max-width: 1100px) { .lab-lib { width: 208px; } #labRes { width: 284px; } #labEd { min-width: 250px; } .lab-chart { min-width: 290px; } .rs-net { font-size: 34px; } }
 
 /* ---- library ---- */
 .lb-sh { display: flex; align-items: center; justify-content: space-between; padding: 14px 10px 6px; font-size: var(--hb-fs-sm); font-weight: 600; color: var(--hb-fg2); }
