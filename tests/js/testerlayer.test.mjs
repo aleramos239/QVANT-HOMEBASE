@@ -315,3 +315,36 @@ test('runJump: never touches a replaying chart or one with accounts', async () =
   assert.equal(b.reached, 0);
   assert.match(env.notes.at(-1), /replaying/);
 });
+
+/* ---------------------------------------------------------------- a trade in its context (the Lab) */
+
+test('focusTradeView: no context is the tight zoom every caller always got', () => {
+  const calls = [], c = fakeCell({ focusRange(a, b) { calls.push([a, b]); return true; } });
+  X.focusTradeView(c, T0);
+  X.focusTradeView(c, T0, 0);
+  assert.deepEqual(calls, [[5000, 6000], [5000, 6000]]);
+});
+
+test('focusTradeView: with context the window widens both ways, never before the first bar held', () => {
+  const calls = [], c = fakeCell({ focusRange(a, b) { calls.push([a, b]); return true; } });
+  X.focusTradeView(c, T0, 2000);
+  X.focusTradeView(c, T0, 60000);                 // would start before bars[0].ms = 1000
+  assert.deepEqual(calls, [[3000, 8000], [1000, 66000]]);
+  const empty = fakeCell({ bars: [], focusRange(a, b) { calls.push([a, b]); return false; } });
+  assert.equal(X.focusTradeView(empty, T0, 2000), false);
+});
+
+test('settleFocus with context reaches back for the history before the entry and re-frames with it', async () => {
+  const reached = [], framed = [];
+  const c = fakeCell({ async reach(ms) { reached.push(ms); return true; }, focusRange(a, b) { framed.push([a, b]); c.view = { from: 0, to: 2 }; return true; } });
+  assert.equal(await X.settleFocus(c, T0, { wait: noWait, contextMs: 2000 }), true);
+  assert.deepEqual(reached, [3000]);
+  assert.deepEqual(framed, [[3000, 8000]]);
+});
+
+test('settleFocus with context still holds the trade when the history before it cannot load', async () => {
+  const reached = [];
+  const c = fakeCell({ async reach(ms) { reached.push(ms); return ms >= 5000; }, focusRange() { c.view = { from: 0, to: 2 }; return true; } });
+  assert.equal(await X.settleFocus(c, T0, { wait: noWait, contextMs: 2000 }), true);
+  assert.deepEqual(reached, [3000, 5000]);
+});

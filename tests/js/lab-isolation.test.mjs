@@ -47,7 +47,7 @@ test('the Lab chart is one chart with no tools: the rail, the symbol/indicator/l
   assert.match(css, /\.hb-bar \.tabstrip, #tbSettings \{ display: none !important; \}/);
   assert.match(HTML, /id="labNav"[^]*data-nav="-1"[^]*id="labNavText"[^]*data-nav="1"/);
   assert.match(LAB, /function soloChart\(\)/);
-  assert.match(LAB, /HBTesterLayer\.jump\(ti\)/);
+  assert.match(LAB, /HBTesterLayer\.jump\(i, null, \{ contextMs: CONTEXT_MS \}\)/, 'a trade is framed with the session around it');
 });
 
 test('the other two pages call it Lab too, and the URL is still /backtest', () => {

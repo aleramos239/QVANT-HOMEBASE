@@ -246,7 +246,8 @@ async function showOnChart(report = false) {
   const n = (r.bundle.trades || []).length;
   ti = n ? n - 1 : null;                        // open on the most recent trade: its executions are what you came to see
   paintNav();
-  const o = await send('POST', '/api/tester/show', { run_id: r.rid, ...(n ? { focus: { trade_index: n - 1 } } : {}) });
+  const o = await send('POST', '/api/tester/show', { run_id: r.rid });
+  if (o.ok && o.json.pages && n) frameWhenLoaded(r.rid);
   if (!o.ok) { shownRid = null; log(`<span class="err">Could not show it on the chart: ${esc(o.error)}</span>`); }
   else if (!o.json.pages) { shownRid = null; log('No chart page is open to show it on'); }
   paintNav();
@@ -261,6 +262,18 @@ function soloChart() {
 }
 /* ---- stepping through the trades ---- */
 let ti = null;
+/* How much of the day to show around a trade: the structure before the entry and what price did after the exit. */
+const CONTEXT_MS = 150 * 60 * 1000;
+/* The show arrives over the page's socket: once the tester holds this run, frame its latest trade. */
+async function frameWhenLoaded(rid) {
+  for (let k = 0; k < 60; k++) {
+    const b = window.HBTesterUI && window.HBTesterUI.bundle;
+    if (shownRid !== rid) return;                       // a newer run took the chart
+    if (b && b.run && b.run.id === rid) { if (ti != null) jumpTo(ti); return; }
+    await new Promise((res) => setTimeout(res, 200));
+  }
+}
+const jumpTo = (i) => window.HBTesterLayer && window.HBTesterLayer.jump(i, null, { contextMs: CONTEXT_MS });
 const NAV_DATE = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
 const navTrades = () => (S.run && S.run.bundle && shownRid === S.run.rid ? S.run.bundle.trades || [] : []);
 function paintNav() {
@@ -281,11 +294,16 @@ function stepTrade(d) {
   if (!n || !window.HBTesterLayer) return;
   ti = Math.max(0, Math.min(n - 1, (ti == null ? (d > 0 ? -1 : n) : ti) + d));
   paintNav();
-  window.HBTesterLayer.jump(ti);
+  jumpTo(ti);
 }
 document.getElementById('labNav')?.addEventListener('click', (e) => { const b = e.target.closest('[data-nav]'); if (b) stepTrade(Number(b.dataset.nav)); });
 // a trade picked in the full report's list moves the stepper too
-if (window.HBTesterUI && window.HBTesterUI.on) window.HBTesterUI.on(() => { const i = window.HBTesterUI.selected; if (i != null && i !== ti && i < navTrades().length) { ti = i; paintNav(); } });
+if (window.HBTesterUI && window.HBTesterUI.on) window.HBTesterUI.on(() => {
+  const i = window.HBTesterUI.selected;
+  if (i != null && i !== ti && i < navTrades().length) { ti = i; paintNav(); }
+});
+// a new interval reloads the chart at the latest bars: bring the trade back into view
+document.getElementById('tbFavs')?.addEventListener('click', (e) => { if (e.target.closest('button') && ti != null && navTrades().length) setTimeout(() => jumpTo(ti), 400); });
 
 /* The chart follows the strategy: whenever the Chart panel is showing and there is a finished run, it is on it. */
 function syncChart() { if (P.chart && S.run && S.run.bundle && shownRid !== S.run.rid) showOnChart(false); }
