@@ -1,0 +1,336 @@
+/* =====================================================================================================
+   Homebase Next — the macOS 26 system layer (shared by Desk, Charts and Lab).
+
+   Every number here was MEASURED on macOS 26.6 (SDK 26.5), not chosen by eye: text styles, label and fill
+   colours and control anatomy from AppKit / SwiftUI probes, window and pane geometry from an offscreen
+   NSSplitViewController window with a unified NSToolbar, surface colours sampled from that window's
+   native render. Sources: /tmp/labdev/native/out/m1…m7 and the three-pane reference renders.
+
+     window     toolbar band 52 · traffic lights 19/42/65, 14 px, top 19 · corner radius 26
+     sidebar    glass pane inset 8 left/top/bottom, radius 18 (26 − 8, concentric) · rows 32, headers 19
+     inspector  270 wide, flush right, full height, glass, one hairline on its left
+     toolbar    items 36 high on glass platters (radius 18), 8 between platters, 16 between groups
+     controls   regular 24 (radius 6) · large 28 (capsule) · extra large 36 (capsule) · mini switch 36×16
+     type       body 13/16 · headline 13/16 bold · subheadline 11/14 · title3 15/20 · title2 17/22
+                title1 22/26 · large title 26/32 · weights 400 / 510 / 590 / 700 (SF's own stops)
+     colour     label .847 / .498 / .259 / .098 of black (white on dark) · window #FFF / #1E1E1E
+                pane #FAFAFA / #1B1B1B · group box 3 % · control fill 4.7 % + 3 %
+
+   The accent is the app's own (espresso, latte on dark), the way an Apple app carries its own accent.
+   Green is profit only. Red is the armed state, Kill and real errors only. A loss is ink with a minus.
+   Scoped to html.hb-apple: only "Homebase Next" adds that class, so the classic pages never see this.
+   ===================================================================================================== */
+
+html.hb-apple {
+  color-scheme: light;
+  --a-font: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  --a-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+
+  --a-label: rgb(0 0 0 / .847);
+  --a-label-2: rgb(0 0 0 / .498);
+  --a-label-3: rgb(0 0 0 / .259);
+  --a-label-4: rgb(0 0 0 / .098);
+  --a-label-vibrant: #000;                 /* text on a glass pane */
+  --a-label-pane-2: rgb(0 0 0 / .56);      /* trailing detail on a glass pane (sampled #6E6E6E on #FAFAFA) */
+  --a-label-pane-3: rgb(0 0 0 / .30);      /* section header on a glass pane (sampled #AEAEAE) */
+
+  --a-window: #ffffff;
+  --a-pane: #fafafa;
+  --a-pane-glass: rgb(250 250 250 / .80);
+  --a-platter: rgb(255 255 255 / .80);
+  --a-sep: rgb(0 0 0 / .098);
+  --a-fill: rgb(0 0 0 / .0756);            /* push button, pop-up, segmented track: 4.7 % + 3 % stacked */
+  --a-fill-hover: rgb(0 0 0 / .105);
+  --a-fill-press: rgb(0 0 0 / .166);       /* + 9.8 % while pressed */
+  --a-fill-off: rgb(0 0 0 / .039);         /* disabled */
+  --a-track: rgb(0 0 0 / .098);            /* switch off, checkbox off, slider track, selected segment on glass */
+  --a-group: rgb(0 0 0 / .03);             /* NSBox / grouped form */
+  --a-group-sep: rgb(0 0 0 / .049);
+  --a-sel: rgb(0 0 0 / .12);               /* unemphasized selection: #DCDCDC over the pane */
+  --a-hover: rgb(0 0 0 / .045);
+  --a-field: #ffffff;
+  --a-field-edge: rgb(0 0 0 / .047);
+  --a-scrim: rgb(0 0 0 / .20);
+
+  --a-accent: #3f2a20;
+  --a-accent-on: #38251c;                  /* accent + 9.8 % black: switch on, checkbox on, selected segment */
+  --a-on-accent: #ffffff;
+  --a-accent-text: #5a3b2c;                /* the accent as text / symbol on a light surface */
+  --a-focus: rgb(63 42 32 / .5);
+  --a-red: #ff383c;                        /* systemRed */
+  --a-red-text: #d70015;                   /* red as text on a light surface (increased-contrast systemRed) */
+  --a-on-red: #ffffff;
+  --a-green: #248a3d;                      /* profit, as text on a light surface (increased-contrast systemGreen) */
+  --a-orange: #c93400;
+  --a-yellow-fill: #ffcc00;
+
+  --a-pane-shadow: inset 0 0 0 1px #fff, 0 0 0 .5px rgb(0 0 0 / .05), 0 0 3px rgb(0 0 0 / .035), 0 4px 18px rgb(0 0 0 / .06);
+  --a-platter-shadow: 0 0 0 .5px rgb(0 0 0 / .045), 0 0 6px rgb(0 0 0 / .03), 0 3px 10px rgb(0 0 0 / .055);
+  --a-knob-shadow: 0 3px 12px rgb(0 0 0 / .1), 0 1px 2px rgb(0 0 0 / .1);
+  --a-menu-shadow: 0 0 0 .5px rgb(0 0 0 / .12), 0 10px 30px rgb(0 0 0 / .18), 0 2px 6px rgb(0 0 0 / .08);
+  --a-sheet-shadow: 0 0 0 .5px rgb(0 0 0 / .14), 0 24px 70px rgb(0 0 0 / .30);
+  --a-glass-blur: blur(30px) saturate(180%);
+
+  --a-toolbar: var(--hb-native-toolbar, 52px);
+  --a-win-radius: var(--hb-native-radius, 26px);
+  --a-side-w: 232px;
+  --a-insp-w: 270px;
+  --a-spring: cubic-bezier(.23, 1, .32, 1);
+
+  /* the pages' own vocabularies point at the system values, so anything not restyled still reads right */
+  --background: var(--a-window); --foreground: var(--a-label); --card: var(--a-window); --card-foreground: var(--a-label);
+  --popover: var(--a-window); --popover-foreground: var(--a-label); --muted-foreground: var(--a-label-2);
+  --secondary: var(--a-fill); --secondary-foreground: var(--a-label); --muted: var(--a-group); --accent: var(--a-fill);
+  --border: var(--a-sep); --input: var(--a-sep); --ring: var(--a-focus); --primary: var(--a-accent); --primary-foreground: var(--a-on-accent);
+  --destructive: var(--a-red-text); --pos: var(--a-green); --neg: var(--a-red-text); --warn: var(--a-orange);
+  --font-sans: var(--a-font); --font-mono: var(--a-mono); --font: var(--a-font);
+}
+html.hb-apple[data-theme="dark"] {
+  color-scheme: dark;
+  --a-label: rgb(255 255 255 / .847);
+  --a-label-2: rgb(255 255 255 / .549);
+  --a-label-3: rgb(255 255 255 / .247);
+  --a-label-4: rgb(255 255 255 / .098);
+  --a-label-vibrant: #f4f4f4;
+  --a-label-pane-2: rgb(255 255 255 / .60);
+  --a-label-pane-3: rgb(255 255 255 / .28);
+
+  --a-window: #1e1e1e;
+  --a-pane: #1b1b1b;
+  --a-pane-glass: rgb(27 27 27 / .80);
+  --a-platter: rgb(35 35 35 / .82);
+  --a-sep: rgb(255 255 255 / .098);
+  --a-fill: rgb(255 255 255 / .0756);
+  --a-fill-hover: rgb(255 255 255 / .11);
+  --a-fill-press: rgb(255 255 255 / .166);
+  --a-fill-off: rgb(255 255 255 / .039);
+  --a-track: rgb(255 255 255 / .098);
+  --a-group: rgb(255 255 255 / .03);
+  --a-group-sep: rgb(255 255 255 / .045);
+  --a-sel: rgb(255 255 255 / .19);         /* #464646 over the pane */
+  --a-hover: rgb(255 255 255 / .05);
+  --a-field: #1e1e1e;
+  --a-field-edge: rgb(255 255 255 / .042);
+  --a-scrim: rgb(0 0 0 / .45);
+
+  --a-accent: #c8b6a6;
+  --a-accent-on: #cdbcad;
+  --a-on-accent: #1e140e;
+  --a-accent-text: #d8c8ba;
+  --a-focus: rgb(200 182 166 / .55);
+  --a-red: #ff4245;
+  --a-red-text: #ff6165;
+  --a-green: #30d158;
+  --a-orange: #ff9230;
+
+  --a-pane-shadow: inset 0 0 0 1px rgb(255 255 255 / .09), inset 0 .5px 0 rgb(255 255 255 / .10), 0 4px 18px rgb(0 0 0 / .28);
+  --a-platter-shadow: inset 0 0 0 1px rgb(255 255 255 / .085), inset 0 .5px 0 rgb(255 255 255 / .10), 0 3px 10px rgb(0 0 0 / .22);
+  --a-knob-shadow: 0 3px 12px rgb(0 0 0 / .3), 0 1px 2px rgb(0 0 0 / .3);
+  --a-menu-shadow: inset 0 0 0 1px rgb(255 255 255 / .10), 0 0 0 .5px rgb(0 0 0 / .6), 0 10px 30px rgb(0 0 0 / .5);
+  --a-sheet-shadow: inset 0 0 0 1px rgb(255 255 255 / .10), 0 0 0 .5px rgb(0 0 0 / .7), 0 24px 70px rgb(0 0 0 / .6);
+}
+
+/* ---- base ------------------------------------------------------------------------------------------------ */
+html.hb-apple, html.hb-apple body { height: 100%; margin: 0; background: var(--a-window); color: var(--a-label);
+  font-family: var(--a-font); font-size: 13px; line-height: 16px; font-weight: 400; letter-spacing: normal;
+  -webkit-font-smoothing: antialiased; font-feature-settings: normal; font-variant-numeric: normal; text-rendering: auto; }
+html.hb-apple body { overflow: hidden; cursor: default; -webkit-user-select: none; user-select: none; }
+html.hb-apple input, html.hb-apple textarea, html.hb-apple [contenteditable], html.hb-apple pre, html.hb-apple .hb-selectable { -webkit-user-select: text; user-select: text; }
+html.hb-apple button, html.hb-apple input, html.hb-apple select, html.hb-apple textarea { font-family: var(--a-font); font-size: 13px; line-height: 16px; letter-spacing: normal; color: inherit; }
+html.hb-apple button { cursor: default; }
+html.hb-apple h1, html.hb-apple h2, html.hb-apple h3 { letter-spacing: normal; }
+html.hb-apple .mono, html.hb-apple .num { font-family: var(--a-font); font-variant-numeric: tabular-nums; letter-spacing: normal; }
+html.hb-apple ::selection { background: color-mix(in srgb, var(--a-accent) 26%, transparent); }
+/* the page shows only once the skin has taken its shape (shell.js adds hb-ready); never more than 2 s */
+html.hb-apple:not(.hb-ready) body { visibility: hidden; animation: hb-reveal 0s linear 2s forwards; }
+@keyframes hb-reveal { to { visibility: visible; } }
+html.hb-apple :focus { outline: none; }
+html.hb-apple :focus-visible { outline: 3.5px solid var(--a-focus); outline-offset: 0; }
+html.hb-apple [hidden] { display: none !important; }
+
+/* text styles */
+html.hb-apple .a-large-title { font-size: 26px; line-height: 32px; font-weight: 700; }
+html.hb-apple .a-title1 { font-size: 22px; line-height: 26px; font-weight: 700; }
+html.hb-apple .a-title2 { font-size: 17px; line-height: 22px; font-weight: 700; }
+html.hb-apple .a-title3 { font-size: 15px; line-height: 20px; font-weight: 590; }
+html.hb-apple .a-headline { font-size: 13px; line-height: 16px; font-weight: 700; }
+html.hb-apple .a-body { font-size: 13px; line-height: 16px; font-weight: 400; }
+html.hb-apple .a-callout { font-size: 12px; line-height: 15px; }
+html.hb-apple .a-sub { font-size: 11px; line-height: 14px; }
+html.hb-apple .a-foot { font-size: 10px; line-height: 13px; }
+
+/* ---- the toolbar: 52 high, no bar behind it, items on glass platters ------------------------------------------ */
+html.hb-apple .hb-tb { position: fixed; z-index: 47; left: 0; right: 0; top: 0; height: var(--a-toolbar); display: flex; align-items: stretch;
+  pointer-events: none; }
+html.hb-apple .hb-tb > * { pointer-events: auto; }
+/* the soft edge content scrolls under (the window background, fading out) — only over the content column */
+html.hb-apple .hb-tb-scrim { position: fixed; z-index: 9; top: 0; height: calc(var(--a-toolbar) + 14px); left: 0; right: 0; pointer-events: none;
+  background: linear-gradient(to bottom, var(--a-window) 0, var(--a-window) 54%, color-mix(in srgb, var(--a-window) 0%, transparent) 100%); }
+html.hb-apple .hb-tb-lead { flex: none; width: calc(var(--a-side-w) + 8px); display: flex; align-items: center; justify-content: flex-end;
+  padding: 0 10px 0 var(--hb-native-tl, 12px); box-sizing: border-box; transition: width 320ms var(--a-spring); }
+html.hb-apple .hb-tb-main { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 8px 0 20px; }
+html.hb-apple .hb-tb-insp { flex: none; width: var(--a-insp-w); display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 0 8px; box-sizing: border-box;
+  transition: width 320ms var(--a-spring); }
+html.hb-apple .hb-tb-l { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 0 1 auto; overflow: hidden; height: 100%; }
+/* the page switcher sits at the window's centre on every tab, so it never moves when the tab changes */
+html.hb-apple .hb-tb-c { position: absolute; left: 50%; top: 0; height: var(--a-toolbar); transform: translateX(-50%); display: flex; align-items: center; justify-content: center; gap: 8px; }
+html.hb-apple .hb-tb-r { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; flex: none; height: 100%; }
+@media (max-width: 1100px) { html.hb-apple .hb-tb-c { position: static; transform: none; flex: none; } }
+
+/* window title: 13 bold over an 11 subtitle (15 semibold when alone); never on glass */
+html.hb-apple .hb-title { display: flex; flex-direction: column; justify-content: center; min-width: 0; height: 36px; }
+html.hb-apple .hb-title b { font-size: 13px; line-height: 16px; font-weight: 700; color: var(--a-label); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html.hb-apple .hb-title span { font-size: 11px; line-height: 14px; color: var(--a-label-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html.hb-apple .hb-title span:empty { display: none; }
+html.hb-apple .hb-title:has(span:empty) b { font-size: 15px; line-height: 19px; font-weight: 590; }
+
+/* a platter: one piece of glass holding neighbouring toolbar items */
+html.hb-apple .hb-platter { display: inline-flex; align-items: center; height: 36px; border-radius: 18px; padding: 0; box-sizing: border-box; flex: none;
+  background: var(--a-platter); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur); box-shadow: var(--a-platter-shadow); }
+/* a symbol button inside a platter (or alone: it becomes its own platter) */
+html.hb-apple .hb-tbtn { -webkit-appearance: none; appearance: none; border: 0; margin: 0; padding: 0 10px; min-width: 36px; height: 36px; border-radius: 18px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; background: transparent; color: var(--a-label);
+  font-size: 13px; line-height: 16px; font-weight: 400; white-space: nowrap; position: relative; }
+html.hb-apple .hb-tbtn::before { content: ""; position: absolute; inset: 4px 3px; border-radius: 14px; background: transparent; transition: background-color 120ms ease; }
+html.hb-apple .hb-tbtn > * { position: relative; }
+html.hb-apple .hb-tbtn:hover::before { background: var(--a-hover); }
+html.hb-apple .hb-tbtn:active::before { background: var(--a-track); }
+html.hb-apple .hb-tbtn[aria-pressed="true"]::before { background: var(--a-track); }
+html.hb-apple .hb-tbtn.hb-solo { background: var(--a-platter); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur); box-shadow: var(--a-platter-shadow); }
+html.hb-apple .hb-tbtn.hb-text { padding: 0 14px; }
+html.hb-apple .hb-tbtn[disabled] { color: var(--a-label-3); pointer-events: none; }
+/* the sidebar toggle sits on the sidebar's own glass: no platter, 28 high */
+html.hb-apple .hb-tbtn.hb-bare { height: 28px; min-width: 34px; padding: 0 8px; border-radius: 14px; }
+html.hb-apple .hb-tbtn.hb-bare::before { inset: 0; border-radius: 14px; }
+/* the one primary action: tinted with the accent */
+html.hb-apple .hb-tbtn.hb-prominent { background: var(--a-accent); color: var(--a-on-accent); font-weight: 510; box-shadow: 0 3px 10px color-mix(in srgb, var(--a-accent) 22%, transparent); -webkit-backdrop-filter: none; backdrop-filter: none; }
+html.hb-apple .hb-tbtn.hb-prominent:hover::before { background: rgb(255 255 255 / .10); }
+html.hb-apple .hb-tbtn.hb-prominent:active::before { background: rgb(0 0 0 / .14); }
+html.hb-apple.hb-inactive .hb-tbtn.hb-prominent { background: var(--a-platter); color: var(--a-label); box-shadow: var(--a-platter-shadow); }
+
+/* a text segmented control in the toolbar: equal segments, the chosen one a 28-high pill, hairlines between the rest */
+html.hb-apple .hb-seg { display: inline-flex; align-items: center; height: 36px; padding: 4px; border-radius: 18px; box-sizing: border-box; gap: 2px; margin: 0; border: 0;
+  background: var(--a-platter); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur); box-shadow: var(--a-platter-shadow); }
+html.hb-apple .hb-seg > a, html.hb-apple .hb-seg > button { -webkit-appearance: none; appearance: none; border: 0; margin: 0; min-width: 60px; height: 28px; padding: 0 12px; border-radius: 14px;
+  display: inline-flex; align-items: center; justify-content: center; position: relative; box-sizing: border-box; background: transparent; box-shadow: none;
+  font-size: 13px; line-height: 16px; font-weight: 400; color: var(--a-label); text-decoration: none; letter-spacing: normal; transition: background-color 140ms ease; }
+html.hb-apple .hb-seg > a:hover, html.hb-apple .hb-seg > button:hover { background: var(--a-hover); color: var(--a-label); }
+html.hb-apple .hb-seg > [aria-current="page"], html.hb-apple .hb-seg > .active, html.hb-apple .hb-seg > .sel, html.hb-apple .hb-seg > [aria-selected="true"], html.hb-apple .hb-seg > [aria-pressed="true"] {
+  background: var(--a-track); color: var(--a-label); font-weight: 510; }
+html.hb-apple .hb-seg > * + *::before { content: ""; position: absolute; left: -1.5px; top: 4px; width: 1px; height: 20px; background: var(--a-sep); }
+html.hb-apple .hb-seg > [aria-current="page"]::before, html.hb-apple .hb-seg > [aria-current="page"] + *::before,
+html.hb-apple .hb-seg > .active::before, html.hb-apple .hb-seg > .active + *::before,
+html.hb-apple .hb-seg > .sel::before, html.hb-apple .hb-seg > .sel + *::before,
+html.hb-apple .hb-seg > [aria-selected="true"]::before, html.hb-apple .hb-seg > [aria-selected="true"] + *::before,
+html.hb-apple .hb-seg > *:hover::before, html.hb-apple .hb-seg > *:hover + *::before { display: none; }
+
+/* a status line in the toolbar: plain text, never on glass */
+html.hb-apple .hb-status { display: inline-flex; align-items: center; gap: 7px; font-size: 11px; line-height: 14px; color: var(--a-label-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* ---- the sidebar: a pane of glass floating over the window, inset 8, radius concentric with the window ------------ */
+html.hb-apple .hb-side { position: fixed; z-index: 30; left: 8px; top: 8px; bottom: 8px; width: var(--a-side-w); margin: 0; box-sizing: border-box;
+  border: 0; border-radius: calc(var(--a-win-radius) - 8px); background: var(--a-pane-glass); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur);
+  box-shadow: var(--a-pane-shadow); padding: 44px 0 10px; overflow: hidden auto; overscroll-behavior: contain; color: var(--a-label-vibrant);
+  transition: transform 320ms var(--a-spring), opacity 200ms ease; }
+html.hb-apple.hb-side-off .hb-side { transform: translateX(calc(-100% - 16px)); opacity: 0; pointer-events: none; }
+html.hb-apple.hb-side-off .hb-tb-lead { width: calc(var(--hb-native-tl, 12px) + 46px); }
+html.hb-apple.hb-fullscreen .hb-tb-lead { padding-left: 12px; }
+/* source-list rows: 32 high, selection inset 10 with radius 8, symbol column centred 19.5 in, text 36.5 in */
+html.hb-apple .hb-side-h { display: flex; align-items: center; justify-content: space-between; height: 19px; margin: 13px 10px 0; padding: 0 4px 0 4.5px;
+  font-size: 11px; line-height: 14px; font-weight: 590; color: var(--a-label-pane-3); }
+html.hb-apple .hb-side-h:first-child { margin-top: 0; }
+html.hb-apple .hb-side-row { -webkit-appearance: none; appearance: none; border: 0; background: transparent; display: flex; align-items: center; width: calc(100% - 20px); height: 32px; margin: 0 10px;
+  padding: 0 11px 0 0; box-sizing: border-box; border-radius: 8px; text-align: left; font-size: 13px; line-height: 16px; font-weight: 400; color: var(--a-label-vibrant); }
+html.hb-apple .hb-side-row:active { background: var(--a-hover); }
+html.hb-apple .hb-side-row.sel, html.hb-apple .hb-side-row[aria-current="page"] { background: var(--a-sel); }
+html.hb-apple .hb-side-ico { flex: none; width: 39px; display: flex; align-items: center; justify-content: center; color: var(--a-label-vibrant); }
+html.hb-apple .hb-side-txt { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html.hb-apple .hb-side-det { flex: none; margin-left: 8px; font-size: 11px; line-height: 14px; font-weight: 510; color: var(--a-label-pane-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* ---- the inspector: edge-to-edge glass beside the content, 270 wide, one hairline on its left ---------------------- */
+html.hb-apple .hb-insp { position: fixed; z-index: 20; right: 0; top: 0; bottom: 0; width: var(--a-insp-w); box-sizing: border-box; margin: 0;
+  background: var(--a-pane-glass); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur);
+  box-shadow: -1px 0 0 var(--a-sep), inset 1px 0 0 color-mix(in srgb, #fff 70%, transparent);
+  padding: calc(var(--a-toolbar) + 4px) 11px 20px; overflow: hidden auto; overscroll-behavior: contain;
+  transition: transform 320ms var(--a-spring), opacity 200ms ease; }
+html.hb-apple[data-theme="dark"] .hb-insp { box-shadow: -1px 0 0 rgb(0 0 0 / .35), inset 1px 0 0 rgb(255 255 255 / .10); }
+html.hb-apple.hb-insp-off .hb-insp { transform: translateX(100%); opacity: 0; pointer-events: none; }
+html.hb-apple.hb-insp-off .hb-tb-insp { width: auto; }
+/* an inspector section: a small header, then a card a touch darker than the pane */
+html.hb-apple .hb-isec { margin: 0 0 11px; }
+html.hb-apple .hb-isec-h { display: flex; align-items: center; justify-content: space-between; min-height: 19px; padding: 4px 9px 5px; font-size: 11px; line-height: 14px; font-weight: 700; color: var(--a-label-pane-2); }
+html.hb-apple .hb-box { border-radius: 10px; background: var(--a-group); overflow: hidden; }
+
+/* ---- grouped rows (a SwiftUI grouped Form): 37-pitch rows, hairlines that start at the label --------------------------- */
+html.hb-apple .hb-row { display: flex; align-items: center; gap: 10px; min-height: 37px; padding: 0 10px; box-sizing: border-box; position: relative; font-size: 13px; line-height: 16px; color: var(--a-label); }
+html.hb-apple .hb-row + .hb-row::before { content: ""; position: absolute; left: 10px; right: 10px; top: 0; height: 1px; background: var(--a-group-sep); }
+html.hb-apple .hb-row-k { flex: 1 1 auto; min-width: 0; }
+html.hb-apple .hb-row-v { flex: none; color: var(--a-label-2); font-variant-numeric: tabular-nums; text-align: right; max-width: 62%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html.hb-apple button.hb-row { -webkit-appearance: none; appearance: none; width: 100%; border: 0; background: transparent; text-align: left; }
+html.hb-apple button.hb-row:active { background: var(--a-hover); }
+html.hb-apple .hb-chev { flex: none; color: var(--a-label-3); }
+
+/* ---- controls ---------------------------------------------------------------------------------------------- */
+/* push button: regular 24 / radius 6, large 28 capsule, extra large 36 capsule; label 13, 12.5 side padding */
+html.hb-apple .hb-btn { -webkit-appearance: none; appearance: none; border: 0; margin: 0; height: 24px; padding: 0 12.5px; border-radius: 6px; box-sizing: border-box;
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px; background: var(--a-fill); color: var(--a-label); font-size: 13px; line-height: 16px; font-weight: 400;
+  white-space: nowrap; box-shadow: none; text-decoration: none; transition: background-color 100ms ease; transform: none; letter-spacing: normal; }
+html.hb-apple .hb-btn:hover { background: var(--a-fill); }
+html.hb-apple .hb-btn:active { background: var(--a-fill-press); transform: none; }
+html.hb-apple .hb-btn[disabled], html.hb-apple .hb-btn:disabled { background: var(--a-fill-off); color: var(--a-label-3); }
+html.hb-apple .hb-btn.hb-lg { height: 28px; padding: 0 14.5px; border-radius: 14px; }
+html.hb-apple .hb-btn.hb-xl { height: 36px; padding: 0 18.5px; border-radius: 18px; }
+html.hb-apple .hb-btn.hb-primary { background: var(--a-accent); color: var(--a-on-accent); }
+html.hb-apple .hb-btn.hb-primary:active { background: color-mix(in srgb, var(--a-accent) 86%, #000); }
+html.hb-apple .hb-btn.hb-danger { background: var(--a-red); color: var(--a-on-red); font-weight: 590; }
+html.hb-apple .hb-btn.hb-danger:active { background: color-mix(in srgb, var(--a-red) 86%, #000); }
+html.hb-apple.hb-inactive .hb-btn.hb-primary { background: var(--a-fill); color: var(--a-label); }
+html.hb-apple .hb-link { -webkit-appearance: none; appearance: none; border: 0; background: transparent; padding: 0; color: var(--a-accent-text); font-size: 13px; line-height: 16px; }
+html.hb-apple .hb-link:active { opacity: .6; }
+
+/* switch: regular 54×24 with a 32×20 knob; mini 36×16 with a 21×12 knob (the size a grouped form uses) */
+html.hb-apple .hb-switch { -webkit-appearance: none; appearance: none; position: relative; flex: none; border: 0; margin: 0; padding: 0; width: 36px; height: 16px; border-radius: 8px;
+  background: var(--a-track); box-shadow: none; transition: background-color 160ms ease; }
+html.hb-apple .hb-switch::after { content: ""; position: absolute; left: 2px; top: 2px; width: 21px; height: 12px; border-radius: 6px; background: #fff; box-shadow: var(--a-knob-shadow);
+  transform: none; transition: transform 240ms var(--a-spring); }
+html.hb-apple .hb-switch[aria-checked="true"] { background: var(--a-accent-on); }
+html.hb-apple .hb-switch[aria-checked="true"]::after { transform: translateX(11px); }
+html.hb-apple .hb-switch.hb-regular { width: 54px; height: 24px; border-radius: 12px; }
+html.hb-apple .hb-switch.hb-regular::after { width: 32px; height: 20px; border-radius: 10px; }
+html.hb-apple .hb-switch.hb-regular[aria-checked="true"]::after { transform: translateX(18px); }
+html.hb-apple[data-theme="dark"] .hb-switch::after { background: #e2e2e2; }
+html.hb-apple[data-theme="dark"] .hb-switch[aria-checked="true"]::after { background: #fff; }
+html.hb-apple.hb-inactive .hb-switch[aria-checked="true"] { background: color-mix(in srgb, var(--a-label) 17%, transparent); }
+
+/* text field: 24 high, radius 6, the field colour with a hairline; search fields are capsules */
+html.hb-apple .hb-field { -webkit-appearance: none; appearance: none; height: 24px; padding: 0 7px; box-sizing: border-box; border: 0; border-radius: 6px; background: var(--a-field);
+  box-shadow: 0 0 0 1px var(--a-field-edge), 0 .5px 1.5px rgb(0 0 0 / .08); color: var(--a-label); font-size: 13px; line-height: 16px; }
+html.hb-apple .hb-field::placeholder { color: var(--a-label-2); }
+html.hb-apple .hb-field:focus, html.hb-apple .hb-field:focus-visible { outline: 3.5px solid var(--a-focus); outline-offset: 0; }
+
+/* badge / tag: an 18-high capsule, quaternary fill, secondary text */
+html.hb-apple .hb-badge { display: inline-flex; align-items: center; height: 16px; padding: 0 6px; border-radius: 8px; border: 0; background: var(--a-fill); color: var(--a-label-2);
+  font-size: 10px; line-height: 13px; font-weight: 590; letter-spacing: normal; white-space: nowrap; vertical-align: 1px; }
+
+/* ---- menus, alerts and sheets ---------------------------------------------------------------------------------- */
+html.hb-apple .hb-menu { border: 0; border-radius: 13px; padding: 5px; background: var(--a-pane-glass); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur);
+  box-shadow: var(--a-menu-shadow); min-width: 180px; }
+html.hb-apple .hb-menu-i { -webkit-appearance: none; appearance: none; display: flex; align-items: center; width: 100%; height: 24px; padding: 0 9px; border: 0; border-radius: 8px; background: transparent;
+  color: var(--a-label); font-size: 13px; line-height: 16px; text-align: left; white-space: nowrap; box-sizing: border-box; }
+html.hb-apple .hb-menu-i:hover, html.hb-apple .hb-menu-i:focus-visible { background: var(--a-accent); color: var(--a-on-accent); outline: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  html.hb-apple .hb-side, html.hb-apple .hb-insp, html.hb-apple .hb-tb-lead, html.hb-apple .hb-tb-insp, html.hb-apple .hb-switch::after { transition: none; }
+}
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  html.hb-apple .hb-side, html.hb-apple .hb-insp, html.hb-apple .hb-platter, html.hb-apple .hb-seg, html.hb-apple .hb-tbtn.hb-solo, html.hb-apple .hb-menu {
+    -webkit-backdrop-filter: none; backdrop-filter: none; background: var(--a-pane); }
+}
+@media (prefers-contrast: more) {
+  html.hb-apple { --a-sep: var(--a-label-2); --a-group-sep: var(--a-label-3); }
+  html.hb-apple .hb-side, html.hb-apple .hb-insp, html.hb-apple .hb-platter, html.hb-apple .hb-seg, html.hb-apple .hb-box { box-shadow: 0 0 0 1px var(--a-label-2); }
+}
+
+/* with the sidebar closed its toggle joins the toolbar, on its own platter beside the traffic lights */
+html.hb-apple.hb-side-off .hb-tbtn.hb-bare { height: 36px; min-width: 40px; border-radius: 18px; background: var(--a-platter); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur); box-shadow: var(--a-platter-shadow); }
+html.hb-apple.hb-side-off .hb-tbtn.hb-bare::before { inset: 4px 3px; }
