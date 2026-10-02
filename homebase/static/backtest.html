@@ -17,7 +17,7 @@
 <script>window.HB_PAGE = 'backtest';</script>
 <link rel="stylesheet" href="/static/charts/charts.css?v=33">
 <link rel="stylesheet" href="/static/charts/apple-charts.css?v=6">
-<link rel="stylesheet" href="/static/charts/lab.css?v=6">
+<link rel="stylesheet" href="/static/charts/lab.css?v=7">
 <link rel="stylesheet" href="/static/hb.css?v=3">
 </head>
 <body>
@@ -39,6 +39,11 @@
   <div class="lab-split" id="labSplit" role="separator" aria-orientation="vertical" aria-label="Resize the editor and the chart" tabindex="0"></div>
   <div class="lab-chart" id="labChart" aria-label="Chart">
 <header class="toolbar" role="toolbar" aria-label="Chart toolbar">
+  <div class="lab-nav" id="labNav" role="group" aria-label="Step through the trades">
+    <button type="button" class="lab-nav-b" data-nav="-1" aria-label="Previous trade" title="Previous trade">‹</button>
+    <span class="lab-nav-t" id="labNavText" aria-live="polite"></span>
+    <button type="button" class="lab-nav-b" data-nav="1" aria-label="Next trade" title="Next trade">›</button>
+  </div>
   <button class="tb-pill" id="tbSymbol" type="button" aria-haspopup="menu" aria-expanded="false"><span class="icw" data-icon="search"></span><span id="tbSymbolText">NQ</span></button>
   <span class="tb-sep"></span>
   <div class="tb-group" id="tbFavs" role="group" aria-label="Interval"></div>
@@ -125,6 +130,6 @@
 <script src="/static/charts/presets.js?v=33"></script>
 <script src="/static/charts/app.js?v=33"></script>
 <script src="/static/charts/labcode.js?v=1"></script>
-<script src="/static/charts/lab.js?v=9"></script>
+<script src="/static/charts/lab.js?v=11"></script>
 </body>
 </html>

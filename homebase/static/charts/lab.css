@@ -5,7 +5,6 @@
    Code and Chart share the middle and are resized by the divider between them. */
 .hb-bar .labmode { margin-left: 4px; }
 .hb-bar .labmode button[aria-pressed="true"] { background: var(--hb-seg-on); color: var(--hb-fg); box-shadow: var(--hb-seg-shadow); }
-body:not(.lab-chart-on) .hb-bar .tabstrip, body:not(.lab-chart-on) #tbSettings { display: none; }
 
 .lab { flex: 1; min-height: 0; display: flex; gap: 10px; padding: 2px 10px 10px; font-size: var(--hb-fs-ui); color: var(--hb-fg); }
 .lab-pane { min-height: 0; min-width: 0; display: flex; flex-direction: column; background: var(--panel); border-radius: var(--hb-r-lg); box-shadow: 0 0 0 .5px var(--hb-hair); overflow: hidden; }
@@ -16,9 +15,29 @@ body:not(.lab-chart-on) .hb-bar .tabstrip, body:not(.lab-chart-on) #tbSettings {
 .lab-chart { flex: var(--lab-chart, 55) 1 0; min-width: 380px; min-height: 0; display: flex; flex-direction: column; margin: -2px -6px -6px -10px; }
 .lab-chart > .toolbar { flex: none; }
 .lab-chart > .bpanel { margin-bottom: 0; }
+/* The Lab's chart is ONE chart and no tools: you scroll and zoom it, step through the trades, change the
+   interval. The drawing rail, the symbol search, the indicator and layout buttons, the layout tabs and the chart
+   settings are the Charts page's business. */
+.hb-bar .tabstrip, #tbSettings { display: none !important; }
+.lab-chart .rail { display: none; }
+.lab-chart > .main { padding-left: 4px; }
+.lab-chart > .bpanel { margin-left: 4px; }
+.lab-chart .toolbar > :not(#tbFavs):not(.lab-nav) { display: none !important; }
+.lab-chart .toolbar { gap: 10px; padding: 0 6px 0 8px; }
+.lab-chart .toolbar #tbFavs { margin-left: auto; flex: none; }
+.lab-nav { display: flex; align-items: center; gap: 4px; min-width: 0; flex: 1 1 auto; }
+.lab-nav-b { flex: none; width: var(--hb-h-sm); height: var(--hb-h-sm); border: 0; border-radius: 999px; background: var(--hb-fill); color: var(--hb-fg); font-size: 17px; line-height: 1; cursor: pointer; display: grid; place-items: center; padding: 0 0 2px; transition: background-color 130ms ease, transform 120ms var(--ease-spring-out); }
+.lab-nav-b:hover { background: var(--hb-fill-hover); }
+.lab-nav-b:active { transform: scale(.94); }
+.lab-nav-b[disabled] { opacity: .35; pointer-events: none; }
+.lab-nav-t { min-width: 0; padding: 0 6px; font-size: var(--hb-fs-ui); color: var(--hb-fg2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.lab-nav-t b { color: var(--hb-fg); font-weight: 600; }
+.lab-nav-t .pos { color: var(--hb-gain, #2e6b4f); font-weight: 500; }
+.lab-nav-t .neg { color: var(--hb-fg); font-weight: 500; }
+@media (prefers-reduced-motion: reduce) { .lab-nav-b:active { transform: none; } }
+
 /* the chart gets the height: the full report (and Bar Replay) sit under it only when asked for */
 .lab:not([data-report="1"]) .lab-chart > .bpanel { display: none; }
-.lab[data-code="1"] .lab-chart .toolbar .tb-label, .lab[data-code="1"] .lab-chart .toolbar .tb-sep { display: none; }
 .lab-chart .toolbar { overflow: hidden; }
 .hb-bar .labmode { gap: 2px; }
 .lab-split { flex: none; width: 10px; margin: 0 -10px; border-radius: 5px; cursor: col-resize; position: relative; z-index: 3; touch-action: none; }

@@ -40,6 +40,16 @@ test('backtest.html carries the Lab: page label, the four panel toggles and pane
   assert.ok(HTML.indexOf('/tester.js') < HTML.indexOf('labcode.js'), 'the Lab reads HBTester');
 });
 
+test('the Lab chart is one chart with no tools: the rail, the symbol/indicator/layout buttons and the layout tabs are hidden', () => {
+  const css = rd('charts/lab.css');
+  assert.match(css, /\.lab-chart \.rail \{ display: none; \}/);
+  assert.match(css, /\.lab-chart \.toolbar > :not\(#tbFavs\):not\(\.lab-nav\) \{ display: none !important; \}/);
+  assert.match(css, /\.hb-bar \.tabstrip, #tbSettings \{ display: none !important; \}/);
+  assert.match(HTML, /id="labNav"[^]*data-nav="-1"[^]*id="labNavText"[^]*data-nav="1"/);
+  assert.match(LAB, /function soloChart\(\)/);
+  assert.match(LAB, /HBTesterLayer\.jump\(ti\)/);
+});
+
 test('the other two pages call it Lab too, and the URL is still /backtest', () => {
   for (const f of ['index.html', 'charts.html']) assert.match(rd(f), /data-page="backtest">Lab</, f);
   assert.match(rd('charts/app.js'), /:8852\/backtest\$\{q\}/);

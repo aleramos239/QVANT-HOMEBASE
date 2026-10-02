@@ -213,6 +213,7 @@ function applyPanels(save = true) {
   root.style.setProperty('--lab-chart', String(100 - split));
   document.body.classList.toggle('lab-chart-on', P.chart);
   for (const x of document.querySelectorAll('#labPanels [data-panel]')) x.setAttribute('aria-pressed', String(!!P[x.dataset.panel]));
+  paintRes();
   if (save) { try { localStorage.setItem('hb_lab_panels', JSON.stringify(P)); localStorage.setItem('hb_lab_split', String(Math.round(split))); } catch (_) { /* private mode */ } }
   refit();
 }
@@ -223,7 +224,7 @@ function setPanel(k, on) {
   if (!P.code && !P.chart) P[k === 'code' ? 'chart' : 'code'] = true;
   panelsChosen = true;
   applyPanels();
-  if (k === 'chart' && P.chart) setTimeout(syncChart, 160);
+  if (k === 'chart' && P.chart) setTimeout(() => { soloChart(); syncChart(); }, 160);
 }
 /* Put the current run on the chart: its executions, its levels and the chart's own indicators. `report` also
    opens the Strategy Tester's full report under the chart. The server refuses 09:20-09:35 ET (the desk's window). */
@@ -239,12 +240,53 @@ async function showOnChart(report = false) {
     await new Promise((res) => setTimeout(res, 160));
   }
   if (report) setReport(true);
+  soloChart();
   if (shownRid === r.rid) return;
   shownRid = r.rid;
-  const o = await send('POST', '/api/tester/show', { run_id: r.rid });
+  const n = (r.bundle.trades || []).length;
+  ti = n ? n - 1 : null;                        // open on the most recent trade: its executions are what you came to see
+  paintNav();
+  const o = await send('POST', '/api/tester/show', { run_id: r.rid, ...(n ? { focus: { trade_index: n - 1 } } : {}) });
   if (!o.ok) { shownRid = null; log(`<span class="err">Could not show it on the chart: ${esc(o.error)}</span>`); }
   else if (!o.json.pages) { shownRid = null; log('No chart page is open to show it on'); }
+  paintNav();
 }
+/* ONE chart: the Lab never shows a grid of them. (The grid menu is the chart shell's own; its button is hidden here.) */
+function soloChart() {
+  const g = document.getElementById('grid'), b = document.getElementById('tbGrid');
+  if (!g || !b || !g.children.length || g.children.length === 1) return;
+  b.click();
+  const one = document.querySelector('.menu-grid .grid-pick');
+  if (one) one.click(); else b.click();
+}
+/* ---- stepping through the trades ---- */
+let ti = null;
+const NAV_DATE = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+const navTrades = () => (S.run && S.run.bundle && shownRid === S.run.rid ? S.run.bundle.trades || [] : []);
+function paintNav() {
+  const el = document.getElementById('labNavText');
+  if (!el) return;
+  const ts = navTrades(), n = ts.length, t = ti != null ? ts[ti] : null;
+  const [prev, next] = document.querySelectorAll('#labNav [data-nav]');
+  if (prev) prev.disabled = !n || ti == null || ti <= 0;
+  if (next) next.disabled = !n || (ti != null && ti >= n - 1);
+  if (!n) { el.textContent = S.run && S.run.bundle && shownRid === S.run.rid ? 'No trades in this run' : 'Run a backtest to see its trades here'; return; }
+  if (!t) { el.innerHTML = `<b>${n}</b> trade${n === 1 ? '' : 's'}`; return; }
+  const net = Number(t.net) || 0, amt = `${net > 0 ? '+' : net < 0 ? MINUS : ''}$${Math.abs(Math.round(net)).toLocaleString('en-US')}`;
+  el.innerHTML = `<b>Trade ${ti + 1}</b> of ${n} · ${t.side === 'long' ? 'Long' : 'Short'} · <span class="${net > 0 ? 'pos' : 'neg'}">${amt}</span> · ${esc(NAV_DATE.format(new Date(t.entry_ms)))} ET`;
+  el.title = el.textContent;
+}
+function stepTrade(d) {
+  const n = navTrades().length;
+  if (!n || !window.HBTesterLayer) return;
+  ti = Math.max(0, Math.min(n - 1, (ti == null ? (d > 0 ? -1 : n) : ti) + d));
+  paintNav();
+  window.HBTesterLayer.jump(ti);
+}
+document.getElementById('labNav')?.addEventListener('click', (e) => { const b = e.target.closest('[data-nav]'); if (b) stepTrade(Number(b.dataset.nav)); });
+// a trade picked in the full report's list moves the stepper too
+if (window.HBTesterUI && window.HBTesterUI.on) window.HBTesterUI.on(() => { const i = window.HBTesterUI.selected; if (i != null && i !== ti && i < navTrades().length) { ti = i; paintNav(); } });
+
 /* The chart follows the strategy: whenever the Chart panel is showing and there is a finished run, it is on it. */
 function syncChart() { if (P.chart && S.run && S.run.bundle && shownRid !== S.run.rid) showOnChart(false); }
 /* the divider between Code and Chart */
@@ -508,7 +550,7 @@ function paintRes() {
         ['Trades', String(a.trades ?? 0)], ['Max drawdown', by('Max drawdown').value], ['Sharpe', by('Sharpe').value]].map(([k, v]) => `<div class="rs-tile"><div class="k">${k}</div><div class="v">${esc(v)}</div></div>`).join('')}</div>
       ${(a.trades || 0) === 0 ? '<div class="rs-sub" style="margin-top:10px">It took no trades in this range. Check the session window and the entry rules, then run it again.</div>' : ''}
       <div class="rs-top" style="gap:6px;flex-wrap:wrap;justify-content:flex-start;margin-top:12px">${badges.map((x) => `<span class="rs-chip ${x.tone === 'err' ? 'err' : x.tone === 'warn' ? 'warn' : ''}" title="${esc(x.title || '')}">${esc(x.text)}</span>`).join('')}</div>
-      <div class="rs-rows"><button class="rs-row" data-act="show"><span>Show trades on the chart</span><span>›</span></button>
+      <div class="rs-rows">${P.chart ? '' : '<button class="rs-row" data-act="show"><span>Show trades on the chart</span><span>›</span></button>'}
         <button class="rs-row" data-act="report"><span>${root.dataset.report === '1' && P.chart ? 'Hide the full report' : 'Open the full report'}</span><span>›</span></button>
         <button class="rs-row" data-act="review"${b.kind === 'builtin' ? ' disabled' : ''}><span>Request a review</span><span>›</span></button></div>`;
   } else if (r && r.st && (r.st.status === 'error' || r.st.status === 'cancelled')) {
@@ -589,6 +631,8 @@ setInterval(() => { const b = buf(); if (b && b.savedAt && !isDirty(b)) paintHea
 root.dataset.report = '0';
 applyPanels(false);
 paintAll();
+paintNav();
+setTimeout(() => { if (P.chart) soloChart(); }, 1800);
 // Bar Replay lives in the same bottom panel: asking for it brings the panel back
 document.getElementById('tbReplay')?.addEventListener('click', () => setReport(true));
 loadLists().then(() => {
