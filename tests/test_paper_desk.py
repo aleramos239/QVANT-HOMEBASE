@@ -144,6 +144,29 @@ def test_a_paper_account_cannot_be_removed_from_the_desk(desk):
     assert "paper" in desk.cfg.accounts
 
 
+def test_a_paper_account_gone_from_the_charts_page_can_be_removed_from_the_desk(desk):
+    run(desk.app.state.sync_paper())
+    desk.cfg.accounts["paper-4"] = AccountCfg(paper=True, label="3 (paper)", account_name="3")  # deleted on Charts
+    desk.cfg.book["nq930"] = [{"account": "paper-4", "qty": 1}]
+    r = desk.post("/api/accounts/remove", json={"account": "paper-4"})
+    assert r.status_code == 200, r.text
+    assert "paper-4" not in desk.cfg.accounts and desk.cfg.book["nq930"] == []
+    assert "paper-4" not in json.loads(config_mod.config_path().read_text())["accounts"]
+    run(desk.app.state.sync_paper())                                  # and it does not come back
+    assert "paper-4" not in desk.cfg.accounts
+
+
+def test_a_gone_paper_account_stays_when_the_charts_page_cannot_be_asked(desk, monkeypatch):
+    desk.cfg.accounts["paper-4"] = AccountCfg(paper=True, label="3 (paper)", account_name="3")
+
+    def down():
+        raise httpx.ConnectError("chart service down")
+    monkeypatch.setattr(desk.svc.books, "listing", down)
+    r = desk.post("/api/accounts/remove", json={"account": "paper-4"})
+    assert r.status_code == 409 and "reach" in r.json()["detail"]
+    assert "paper-4" in desk.cfg.accounts
+
+
 def test_the_chart_trading_path_never_lists_a_paper_account(tmp_path):
     from tests.trading_util import mkdesk
     chart_desk, _, adapters, _, _, _ = mkdesk(tmp_path)

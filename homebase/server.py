@@ -1490,13 +1490,26 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         refused 09:10-09:35 ET on weekdays, server-side (never only the
         tool's own client-side check). This is NOT the path the login-loop
         fix's automatic gone-account removal takes (_gone_step -> _drop_account
-        directly) -- that keeps removing a truly gone account on its own terms."""
+        directly) -- that keeps removing a truly gone account on its own terms.
+        A paper account is refused while it exists on the Charts page (remove it there);
+        one the chart service no longer lists is dropped here."""
         body = await request.json()
         aid = str(body.get("account") or "")
         if aid not in cfg.accounts:
             raise HTTPException(404, f"unknown account {aid!r}")
         if cfg.accounts[aid].paper:
-            raise HTTPException(409, "a paper account is managed on the Charts page — remove it there")
+            # A paper account lives on the Charts page: while it exists there the pool sync would
+            # add it straight back. One that is GONE there has no other way out of the pool, so
+            # the desk drops it -- but only once the chart service itself says it is gone.
+            try:
+                r = await paper_http.get("/api/paper/accounts")
+                r.raise_for_status()
+                listed = {str(row["id"]) for row in r.json()["accounts"]}
+            except Exception:  # noqa: BLE001 — not asked, not removed
+                raise HTTPException(409, "can't reach the Charts page to check this paper "
+                                    "account — try again in a moment") from None
+            if aid in listed:
+                raise HTTPException(409, "a paper account is managed on the Charts page — remove it there")
         from_mcp = str(body.get("source") or "") == "mcp"
         if from_mcp and _in_gone_quiet(engine.now_et(), GONE_CHECK_QUIET):
             raise HTTPException(409, "refused: not 09:10-09:35 ET on weekdays "
