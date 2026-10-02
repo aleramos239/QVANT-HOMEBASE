@@ -136,3 +136,53 @@
   .tb-btn:active, .rail-btn:active { transform: none; }
   .bp-loading::before { animation: none; border-top-color: var(--border); }
 }
+
+/* ====================================================================================================
+   v4 (2026-10-01): Charts on the same surfaces, type and objects as the Lab and the Desk.
+   A plain window; the chart panes are white sheets; the toolbar's controls are raised capsules; the drawing rail
+   is a floating solid panel. Chrome only: no canvas colour, price, axis, order line or trading control changes
+   what it shows or does. (The Lab page has its own layout: these rules stop at body.lab-page.)
+   ==================================================================================================== */
+:root { --frame: #f2f2f4; --frame-wash: none; --ch-raise: #ffffff;
+  --ch-sheet-sh: 0 0 0 .5px rgb(0 0 0 / .08), 0 1px 2px rgb(0 0 0 / .04), 0 14px 34px -14px rgb(0 0 0 / .16);
+  --ch-raise-sh: inset 0 .5px 0 rgb(255 255 255 / .9), 0 0 0 .5px rgb(0 0 0 / .07), 0 1px 2px rgb(0 0 0 / .08), 0 8px 18px -6px rgb(0 0 0 / .16); }
+:root[data-theme="dark"] { --frame: #0b0b0c; --frame-wash: none; --ch-raise: #2c2c2f;
+  --ch-sheet-sh: 0 0 0 .5px rgb(255 255 255 / .08), 0 14px 34px -14px rgb(0 0 0 / .6);
+  --ch-raise-sh: inset 0 .5px 0 rgb(255 255 255 / .14), 0 0 0 .5px rgb(0 0 0 / .5), 0 8px 18px -6px rgb(0 0 0 / .6); }
+body:not(.lab-page) { font-size: 13px; }
+body:not(.lab-page) .hb-bar { height: 52px; padding: 0 12px; }
+body:not(.lab-page) .hb-bar .tb-btn.tb-icon { width: 36px; height: 36px; border-radius: 50%; background: var(--ch-raise); box-shadow: var(--ch-raise-sh); color: var(--text); }
+body:not(.lab-page) .hb-bar .tab-btn { height: 30px; border-radius: 999px; padding: 0 14px; }
+body:not(.lab-page) .hb-bar .tab-add { width: 30px; height: 30px; border-radius: 50%; }
+
+/* toolbar: raised capsules on the window */
+body:not(.lab-page) > .toolbar { height: 48px; padding: 0 10px 6px; gap: 8px; background: transparent; border: 0; -webkit-backdrop-filter: none; backdrop-filter: none; overflow: visible; }
+body:not(.lab-page) > .toolbar .tb-sep { display: none; }
+body:not(.lab-page) > .toolbar .tb-pill { height: 36px; margin: 0; padding: 0 16px 0 12px; border-radius: 999px; background: var(--ch-raise); box-shadow: var(--ch-raise-sh); font-weight: 600; }
+body:not(.lab-page) > .toolbar > .tb-btn { height: 36px; margin: 0; padding: 0 14px; border-radius: 999px; background: var(--ch-raise); box-shadow: var(--ch-raise-sh); color: var(--text); }
+body:not(.lab-page) > .toolbar > .tb-btn.tb-icon { width: 36px; padding: 0; justify-content: center; }
+body:not(.lab-page) > .toolbar > .tb-btn:hover { filter: brightness(.97); background: var(--ch-raise); }
+body:not(.lab-page) > .toolbar > .tb-btn[aria-pressed="true"], body:not(.lab-page) > .toolbar > .tb-btn.active { color: var(--accent); }
+body:not(.lab-page) > .toolbar #tbFavs { height: 36px; padding: 3px; margin: 0; }
+body:not(.lab-page) > .toolbar #tbFavs .tb-btn { height: 30px; padding: 0 13px; border-radius: 999px; }
+body:not(.lab-page) > .toolbar #tbFavs .tb-btn.active { background: #fff; color: #16171a; font-weight: 600; box-shadow: inset 0 .5px 0 #fff, 0 0 0 .5px rgb(0 0 0 / .05), 0 1px 1.5px rgb(0 0 0 / .14), 0 5px 12px -3px rgb(0 0 0 / .26); }
+:root[data-theme="dark"] body:not(.lab-page) > .toolbar #tbFavs .tb-btn.active { background: #77777c; color: #fff; }
+
+/* the frame: white sheets, a floating rail */
+body:not(.lab-page) > .main { gap: 8px; padding: 0 10px 8px 10px; }
+body:not(.lab-page) .rail { width: 48px; padding: 8px 0; gap: 2px; border-radius: 18px; background: var(--ch-raise); box-shadow: var(--ch-sheet-sh); align-self: flex-start; -webkit-backdrop-filter: none; backdrop-filter: none; }
+body:not(.lab-page) .rail-btn { width: 36px; height: 36px; border-radius: 12px; }
+body:not(.lab-page) .grid { gap: 8px; }
+body:not(.lab-page) .panel { border-radius: 16px; box-shadow: var(--ch-sheet-sh); }
+body:not(.lab-page) .panel.selected::after { border-radius: 16px; }
+body:not(.lab-page) > .bpanel { margin: 0 10px 8px 66px; border-radius: 16px; box-shadow: var(--ch-sheet-sh); }
+body:not(.lab-page) .bp-bar { height: 40px; padding: 0 8px; }
+body:not(.lab-page) .bp-tab { height: 28px; border-radius: 999px; padding: 0 13px; }
+body:not(.lab-page) .bp-tab[aria-selected="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+body:not(.lab-page) .pdock { border-radius: 16px; box-shadow: var(--ch-sheet-sh); overflow: hidden; }
+body:not(.lab-page) > .statusbar { height: 26px; background: transparent; border: 0; font-size: 11px; -webkit-backdrop-filter: none; backdrop-filter: none; }
+.lg-title { font-size: 13px; line-height: 16px; font-weight: 600; letter-spacing: 0; }
+.grid[data-count="1"] .lg-title { font-size: 15px; line-height: 20px; }
+.grid[data-count="4"] .lg-title, .grid[data-count="6"] .lg-title { font-size: 13px; line-height: 16px; }
+.lg-ohlc, .lg-row, .lg-msg { font-size: 11px; }
+.menu { border-radius: 16px; } .dialog { border-radius: 26px; }

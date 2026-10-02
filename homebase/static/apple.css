@@ -377,3 +377,78 @@ h1, h2, h3, .card-title { letter-spacing: -0.02em; }
 .list, .agroup, .act-card, .ready, .notices, .card { box-shadow: 0 0 0 .5px rgb(63 42 32 / .07), 0 1px 2px rgb(63 42 32 / .03), 0 12px 36px rgb(63 42 32 / .06); }
 :root[data-theme="dark"] .list, :root[data-theme="dark"] .agroup, :root[data-theme="dark"] .act-card,
 :root[data-theme="dark"] .ready, :root[data-theme="dark"] .notices, :root[data-theme="dark"] .card { box-shadow: var(--glass-shadow); }
+
+/* ====================================================================================================
+   v4 (2026-10-01): the Desk on the same surfaces, type and objects as the Lab.
+   A plain window, a solid sidebar, white sheets with soft shadows, raised capsule controls. Text sizes are the
+   macOS text styles (Body 13, Subheadline 11, Headline 13 semibold, Title 3 15). The armed state and Kill keep
+   their solid red: nothing about them is glass or quiet. Presentation only.
+   ==================================================================================================== */
+:root, :root[data-theme="light"] { --background: #f2f2f4; --hb-side-float: #e8e8eb; --hb-raise: #ffffff;
+  --hb-sheet-sh: 0 0 0 .5px rgb(0 0 0 / .08), 0 1px 2px rgb(0 0 0 / .04), 0 14px 34px -14px rgb(0 0 0 / .16);
+  --hb-raise-sh: inset 0 .5px 0 rgb(255 255 255 / .9), 0 0 0 .5px rgb(0 0 0 / .07), 0 1px 2px rgb(0 0 0 / .08), 0 8px 18px -6px rgb(0 0 0 / .16); }
+:root[data-theme="dark"] { --background: #0b0b0c; --card: #161618; --hb-side-float: #18181a; --hb-raise: #2c2c2f;
+  --hb-sheet-sh: 0 0 0 .5px rgb(255 255 255 / .08), 0 14px 34px -14px rgb(0 0 0 / .6);
+  --hb-raise-sh: inset 0 .5px 0 rgb(255 255 255 / .14), 0 0 0 .5px rgb(0 0 0 / .5), 0 8px 18px -6px rgb(0 0 0 / .6); }
+body { font-size: 13px; line-height: 16px; }
+
+/* top bar: raised capsules, 36 high */
+.inset-topbar.hb-bar { height: 52px; padding: 0 12px; }
+.hb-bar .btn { height: 36px; padding: 0 16px; font-size: 13px; }
+.hb-bar .btn-outline, .hb-bar .btn-icon { background: var(--hb-raise); box-shadow: var(--hb-raise-sh); color: var(--foreground); }
+.hb-bar .btn-outline:hover, .hb-bar .btn-icon:hover { background: var(--hb-raise); filter: brightness(.97); }
+.hb-bar .btn-icon { width: 36px; padding: 0; border-radius: 50%; }
+.hb-bar .btn-kill { background: var(--hb-raise); box-shadow: var(--hb-raise-sh); color: var(--destructive); font-weight: 600; }
+.hb-bar .pill { height: 24px; padding: 0 10px; display: inline-flex; align-items: center; font-size: 11px; font-weight: 600; }
+.hb-bar .pill.armed { background: var(--destructive); color: #fff; box-shadow: inset 0 1px 0 rgb(255 255 255 / .25), 0 4px 10px -3px color-mix(in srgb, var(--destructive) 60%, transparent); }
+.hb-bar .pill.armed::before { background: #fff; box-shadow: none; }
+.clock { font-size: 11px; color: var(--muted-foreground); min-width: 0; }
+
+/* sidebar: solid, rows 32 high, a solid selection */
+.frame { grid-template-columns: 264px minmax(0, 1fr); gap: 0; }
+.side { background: var(--hb-side-float); margin: 0 0 10px 10px; border-radius: 24px; box-shadow: 0 0 0 .5px rgb(0 0 0 / .05); padding: 10px 8px 14px; }
+.nav, .item { min-height: 32px; padding: 0 10px; border-radius: 10px; font-size: 13px; gap: 9px; grid-template-columns: 12px minmax(0, 1fr) auto; }
+.item.one { padding-top: 0; padding-bottom: 0; }
+.nav { font-weight: 500; margin-bottom: 2px; }
+.nav svg { width: 14px; height: 14px; margin-left: -1px; }
+.item .it b { font-weight: 400; } .item .ir { font-size: 11px; color: var(--muted-foreground); }
+.sh { padding: 14px 10px 5px; font-size: 11px; line-height: 14px; font-weight: 600; color: var(--muted-foreground); }
+.sh-btn { width: 20px; height: 20px; font-size: 14px; }
+.side-more { font-size: 11px; }
+.sd { width: 7px; height: 7px; }
+.nav.sel, .item.sel { color: #fff; background: linear-gradient(180deg, #6a4a3a 0%, #432c21 100%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .28), inset 0 -1px 0 rgb(0 0 0 / .25), 0 1px 2px rgb(0 0 0 / .2), 0 6px 14px -4px rgb(63 42 32 / .55); }
+.nav.sel svg { color: #fff; } .item.sel .it b { font-weight: 500; }
+.item.sel .ir, .item.sel .ir.dim, .item.sel .it small { color: rgb(255 255 255 / .74); }
+.item.sel .sd { background: #fff; } .item.sel .sd.off { background: rgb(255 255 255 / .35); } .item.sel .sd.shadow { background: transparent; box-shadow: inset 0 0 0 1.5px rgb(255 255 255 / .7); }
+:root[data-theme="dark"] .nav.sel, :root[data-theme="dark"] .item.sel { color: #24160f; background: linear-gradient(180deg, #f1e6dc, #c8b6a6); box-shadow: inset 0 1px 0 rgb(255 255 255 / .8), 0 6px 14px -4px rgb(0 0 0 / .55); }
+:root[data-theme="dark"] .nav.sel svg { color: #24160f; } :root[data-theme="dark"] .item.sel .ir, :root[data-theme="dark"] .item.sel .it small { color: rgb(36 22 15 / .66); }
+:root[data-theme="dark"] .item.sel .sd { background: #24160f; }
+.tag-live { font-size: 10px; padding: 1px 6px; }
+
+/* content */
+.scroll { padding: 28px 40px 56px; }
+.day-title { font-size: clamp(2.25rem, 1.3rem + 3vw, 3.5rem); letter-spacing: -.028em; font-weight: 700; }
+.tl-head { font-size: 13px; } .tl-t { font-size: 11px; }
+.slist, .agroup, .act-card, .ready, .notices, .card { box-shadow: var(--hb-sheet-sh); }
+.slist { border-radius: 22px; margin-top: 28px; }
+.srow { padding: 12px 20px; }
+.srow .n { font-size: 15px; line-height: 20px; font-weight: 600; letter-spacing: -.01em; }
+.srow .sp, .sp { font-size: 11px; line-height: 14px; }
+.srow .rs { font-size: 13px; } .srow .rp { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.srow + .srow::before { left: 20px; }
+.foot-b { font-size: 13px; }
+.ready, .notices { border-radius: 16px; font-size: 13px; }
+.sd-title, .act-head h1 { font-size: 26px; line-height: 32px; font-weight: 700; letter-spacing: -.02em; }
+.sd-state { font-size: 15px; line-height: 20px; }
+.f .v { font-size: 22px; line-height: 26px; font-weight: 600; letter-spacing: -.015em; } .f .k { font-size: 11px; }
+.sec > h2 { font-size: 11px; line-height: 14px; }
+.agroup { border-radius: 16px; } .agroup .acct { padding: 0 14px !important; min-height: 40px; } .acct .nm { font-size: 13px !important; }
+.eq .lb { font-size: 13px; }
+/* the switch: a white knob with weight */
+.switch::after { box-shadow: 0 0 0 .5px rgb(0 0 0 / .06), 0 1px 1.5px rgb(0 0 0 / .2), 0 4px 9px -2px rgb(0 0 0 / .3); }
+.switch[aria-checked="true"] { background: linear-gradient(180deg, #5b3e30, #3f2a20); box-shadow: inset 0 1px 2px rgb(0 0 0 / .3); }
+:root[data-theme="dark"] .switch[aria-checked="true"] { background: linear-gradient(180deg, #d9c8b9, #b9a493); }
+.switch { box-shadow: inset 0 1px 2px rgb(0 0 0 / .1); }
+.modal { box-shadow: 0 0 0 .5px rgb(0 0 0 / .1), 0 30px 80px rgb(0 0 0 / .28); border-radius: 26px; }
+.hb-bar .pill.brand-tag, .brand-tag { display: none !important; }
