@@ -29,13 +29,19 @@ def pct(v):
     return f"{100 * v:.1f}%"
 
 
-def build(path: Path) -> None:
-    art = json.loads(path.read_text())
-    pts = art["points"]
-    dates = [p[0] for p in pts]
-    cum = [p[1] for p in pts]
-    pnl = [cum[0]] + [round(cum[i] - cum[i - 1], 2) for i in range(1, len(cum))]
+def ledger_table(dates, pnl, *, cum=None, period="month", sharpe=True) -> list:
+    """The descriptive table [[section, key, value], ...] of ONE trade ledger: `dates` (ISO, one per
+    trade) and `pnl` ($ per trade).  `cum` = the cumulative curve when the caller already has it (else
+    the running sum).  `period` = the stability bucket: "month" (the default) or "year" for a ledger with
+    about one trade a month.  `sharpe=False` leaves the annualised Sharpe row out (it assumes a trade most
+    days).  Shared by build() below and build_algo_metrics.py."""
+    if cum is None:
+        cum, c = [], 0.0
+        for p in pnl:
+            c = round(c + p, 2)
+            cum.append(c)
     n = len(pnl)
+    cut = {"month": 7, "year": 4}[period]
 
     wins = [p for p in pnl if p > 0]
     losses = [p for p in pnl if p < 0]
@@ -56,7 +62,7 @@ def build(path: Path) -> None:
     dn = len(dvals)
     davg = sum(dvals) / dn
     dstd = math.sqrt(sum((v - davg) ** 2 for v in dvals) / (dn - 1))
-    sharpe = davg / dstd * math.sqrt(252) if dstd else 0.0
+    sharpe_v = davg / dstd * math.sqrt(252) if dstd else 0.0
     green_days = sum(1 for v in dvals if v > 0)
 
     # drawdown / runup on the trade-by-trade curve
@@ -102,7 +108,7 @@ def build(path: Path) -> None:
     # monthly stability — the house wr_stability phi (chi2/df vs one coin)
     months: dict[str, list[float]] = {}
     for d, p in zip(dates, pnl):
-        months.setdefault(d[:7], []).append(p)
+        months.setdefault(d[:cut], []).append(p)
     mrows = {m: v for m, v in months.items() if len(v) >= 5}
     k = len(mrows)
     chi2 = 0.0
@@ -139,23 +145,39 @@ def build(path: Path) -> None:
     add("Risk", "max drawdown", money(-mdd) + f" ({mdd_date})")
     add("Risk", "longest drawdown", f"{dd_days} days")
     add("Risk", "max runup", money(runup))
-    add("Risk", "Sharpe (daily, ann.)", f"{sharpe:.2f}")
+    if sharpe:
+        add("Risk", "Sharpe (daily, ann.)", f"{sharpe_v:.2f}")
     add("Streaks", "max win streak", str(mx_w))
     add("Streaks", "max loss streak", str(mx_l))
     add("Streaks", "avg win streak", f"{avg_ws:.2f}")
     add("Streaks", "avg loss streak", f"{avg_ls:.2f}")
-    add("Stability", "WR stability φ", f"{phi:.2f} ({verdict})")
-    add("Stability", "green months",
+    if k > 1 or period == "month":      # phi needs >= 2 buckets of >= 5 trades (always printed for months, as before)
+        add("Stability", "WR stability φ", f"{phi:.2f} ({verdict})")
+    add("Stability", f"green {period}s",
         f"{green_m}/{len(msum)} ({pct(green_m / len(msum))})")
-    add("Stability", "best month", f"{best_m} {money(msum[best_m])}")
-    add("Stability", "worst month", f"{worst_m} {money(msum[worst_m])}")
+    add("Stability", f"best {period}", f"{best_m} {money(msum[best_m])}")
+    add("Stability", f"worst {period}", f"{worst_m} {money(msum[worst_m])}")
     mwr = {m: sum(1 for p in v if p > 0) / len(v) for m, v in mrows.items()}
     if mwr:
         bw, ww = max(mwr, key=mwr.get), min(mwr, key=mwr.get)
-        add("Stability", "best month WR",
+        add("Stability", f"best {period} WR",
             f"{bw} {pct(mwr[bw])} ({len(mrows[bw])} trades)")
-        add("Stability", "worst month WR",
+        add("Stability", f"worst {period} WR",
             f"{ww} {pct(mwr[ww])} ({len(mrows[ww])} trades)")
+    return T
+
+
+def build(path: Path) -> None:
+    art = json.loads(path.read_text())
+    pts = art["points"]
+    dates = [p[0] for p in pts]
+    cum = [p[1] for p in pts]
+    pnl = [cum[0]] + [round(cum[i] - cum[i - 1], 2) for i in range(1, len(cum))]
+    n = len(pnl)
+    T = ledger_table(dates, pnl, cum=cum)
+    by_day: dict[str, float] = {}
+    for d, p in zip(dates, pnl):
+        by_day[d] = by_day.get(d, 0.0) + p
 
     # ---- Monte Carlo: full parallel metric set, 3 columns per row
     # (metric, median, 5-95% of runs) across 10,000 bootstrap resamples.

@@ -188,6 +188,7 @@ def _defaults() -> AppCfg:
                              "pass / bust": "61% (2021-24) · 74% (2025-26) / 26-36%", "day": "2026-10-02 only"},
                     "caveat": "evals bought together win or lose together; 24 of 35 sim wins were held "
                               "5 s or less (Lucid micro-scalping rule)",
+                    "equity_file": "gc_nfp_equity.json",
                 }),
             # The 3 NQ prop strategies (research 2026-09-29/30, desk review 2026-10-01). Kind "levels":
             # a NEW geometry every day from ATR(14) of bars built from the tape since 00:00 ET, OCO stop
@@ -207,6 +208,7 @@ def _defaults() -> AppCfg:
                              "cancel / flat": "10:55 / 11:00"},
                     "caveat": "entry edge is thin (lift +0.125); the 3 ATR stop is ~5x the $2,000 max loss: "
                               "every Lucid number assumes only CLOSED balance counts",
+                    "equity_file": "nq_nyam_flex_equity.json",
                 }),
             "nq_nyam_pro": StrategyCfg(
                 symbol="NQ", qty=4, offset_pts=0.0, sl_pts=0.0, tp_pts=0.0,
@@ -221,6 +223,7 @@ def _defaults() -> AppCfg:
                              "cancel / flat": "10:55 / 11:00"},
                     "caveat": "the account must be bought with the daily-loss limit OFF; same open-loss "
                               "caveat as nq_nyam_flex",
+                    "equity_file": "nq_nyam_pro_equity.json",
                 }),
             "nq_orb_pro": StrategyCfg(
                 symbol="NQ", qty=4, offset_pts=0.0, sl_pts=0.0, tp_pts=0.0,
@@ -235,6 +238,7 @@ def _defaults() -> AppCfg:
                              "cancel / flat": "13:25 / 13:30"},
                     "caveat": "no entry edge over random entries (lift -0.044 eval): the take rule carries it; "
                               "request the payout at $1,000",
+                    "equity_file": "nq_orb_pro_equity.json",
                 }),
             "nq_pm_flex": StrategyCfg(
                 symbol="NQ", qty=4, offset_pts=0.0, sl_pts=0.0, tp_pts=0.0,
@@ -249,6 +253,7 @@ def _defaults() -> AppCfg:
                              "size": "2 NQ under $1,000 profit, 3 under $2,000, 4 above",
                              "cancel / flat": "15:53 / 15:58"},
                     "caveat": "small edge (funded lift +$441); skipped on half days (11-27, 12-24)",
+                    "equity_file": "nq_pm_flex_equity.json",
                 }),
         },
     )
@@ -273,7 +278,13 @@ def load() -> AppCfg:
         if name not in cfg.strategies:       # a removed strategy: nothing runs it, so it leaves the file
             gone.append(name)
             continue
-        cfg.strategies[name] = StrategyCfg(**{**asdict(cfg.strategies[name]), **s})
+        base = asdict(cfg.strategies[name])
+        if isinstance(s.get("metrics"), dict):
+            # metrics is the shipped research record (display-only).  The saved copy wins key by key, but a key
+            # the defaults gained after the file was written (equity_file) must still reach the running config:
+            # the whole-dict overlay below would hide it behind the stale copy.
+            s = {**s, "metrics": {**base["metrics"], **s["metrics"]}}
+        cfg.strategies[name] = StrategyCfg(**{**base, **s})
     cfg.book = {k: list(v) for k, v in (data.get("book") or {}).items() if k in cfg.strategies}
     gone += [k for k in (data.get("book") or {}) if k not in cfg.strategies and k not in gone]
     for name in gone:
