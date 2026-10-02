@@ -1,4 +1,5 @@
-// Homebase Next.app — the same VIEWER as Homebase.app (the trading process is the launchd service; closing this
+// Homebase.app (built by build_app_apple.sh --as-homebase; "Homebase Next.app" when built beside it) — the same VIEWER
+// as the classic one (the trading process is the launchd service; closing this
 // window changes nothing about execution), with an Apple-style window and the new design delivered as a SKIN.
 //
 // What differs from main.swift (the classic viewer, which is left exactly as it is):
@@ -112,6 +113,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
     var systemToolbar = false
 
     private let lastTabKey = "HomebaseLastTab"
+    private let appName = (Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String) ?? "Homebase"
     private let debugDir = env("HB_DEBUG_DIR")
     private var debugQueue: [Tab] = []
     private var debugDragRequests = 0
@@ -492,7 +494,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
             // the window's own style depends on whether there is a skin: say so instead of half-switching
             let a = NSAlert()
             a.messageText = skinned ? "The new design is available again" : "The new design could not be loaded"
-            a.informativeText = "Quit and reopen Homebase Next to switch."
+            a.informativeText = "Quit and reopen \(appName) to switch."
             a.runModal()
             skin = was ? skin : nil
         }
@@ -505,7 +507,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
     }
 
     @objc private func openClassic() {
-        NSWorkspace.shared.open(URL(fileURLWithPath: NSHomeDirectory() + "/Applications/Homebase.app"))
+        // installed as "Homebase", the old viewer is kept as "Homebase Classic"; beside "Homebase Next" it is "Homebase"
+        let apps = NSHomeDirectory() + "/Applications/"
+        for name in ["Homebase Classic.app", "Homebase.app"] where apps + name != Bundle.main.bundlePath && FileManager.default.fileExists(atPath: apps + name) {
+            NSWorkspace.shared.open(URL(fileURLWithPath: apps + name))
+            return
+        }
     }
 
     // ---------------------------------------------------------------- design samples: their own window, never a tab
@@ -538,8 +545,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
         classic.target = self
         appMenu.addItem(classic)
         appMenu.addItem(NSMenuItem.separator())
-        appMenu.addItem(withTitle: "Hide Homebase Next", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
-        appMenu.addItem(withTitle: "Quit Homebase Next", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: "Hide \(appName)", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        appMenu.addItem(withTitle: "Quit \(appName)", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
 
         let editItem = NSMenuItem()
