@@ -162,10 +162,10 @@ def test_a_config_saved_before_the_pointer_still_gets_it(cfg_path):
 def test_a_saved_pointer_wins_over_the_default(cfg_path):
     cfg_path.write_text(json.dumps({"strategies": {
         "nq930": {"metrics": {"equity_file": "ym930_equity.json"}},
-        "gc_nfp": {"metrics": {"equity_file": ""}}}}))
+        "nq_pm_flex": {"metrics": {"equity_file": ""}}}}))
     cfg = config_mod.load()
     assert cfg.strategies["nq930"].metrics["equity_file"] == "ym930_equity.json"
-    assert cfg.strategies["gc_nfp"].metrics["equity_file"] == ""           # switched off by hand: stays off
+    assert cfg.strategies["nq_pm_flex"].metrics["equity_file"] == ""       # switched off by hand: stays off
     assert cfg.strategies["nq930"].metrics["caveat"]                       # the rest comes from the defaults
 
 
@@ -174,3 +174,20 @@ def test_a_saved_strategy_without_metrics_keeps_the_defaults(cfg_path):
     cfg = config_mod.load()
     assert cfg.strategies["nq_pm_flex"].qty == 2
     assert cfg.strategies["nq_pm_flex"].metrics == config_mod._defaults().strategies["nq_pm_flex"].metrics
+
+
+def test_a_corrected_record_replaces_the_copy_saved_before_the_correction(cfg_path):
+    """gc_nfp's pass/bust row was wrong (the 08:30:00 numbers on an 08:29:59 fire).  The shipped record carries
+    "rev"; a saved copy with a lower rev is the stale text and must not shadow the correction."""
+    d = config_mod._defaults().strategies["gc_nfp"].metrics
+    assert d["rev"] == 2 and d["rows"]["pass / bust"].startswith("58% (2021-24) · 68% (2025-26)")
+    stale = {**d, "rows": {**d["rows"], "pass / bust": "61% (2021-24) · 74% (2025-26) / 26-36%"}, "caveat": "old"}
+    stale.pop("rev")
+    cfg_path.write_text(json.dumps({"strategies": {"gc_nfp": {"qty": 4, "enabled": True, "metrics": stale}}}))
+    cfg = config_mod.load()
+    assert cfg.strategies["gc_nfp"].metrics == d
+    assert cfg.strategies["gc_nfp"].enabled is True and cfg.strategies["gc_nfp"].qty == 4   # only the record changes
+    config_mod.save(cfg)
+    cfg.strategies["gc_nfp"].metrics["source"] = "edited by hand"          # a later hand edit (same rev) still wins
+    config_mod.save(cfg)
+    assert config_mod.load().strategies["gc_nfp"].metrics["source"] == "edited by hand"

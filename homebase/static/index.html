@@ -365,6 +365,9 @@
   .seg button.sel{ background:var(--secondary); color:var(--foreground);
     outline:1px solid var(--foreground); outline-offset:-1px; border-radius:var(--radius-lg); }
   .seg button:disabled{ opacity:.5; cursor:not-allowed; }
+  /* the shared segmented control is 24px high: a label must stay on one line, each button as wide as its text */
+  .seg button{ white-space:nowrap; }
+  #connectOverlay .seg button{ flex:1 0 auto; }
   .wnote{ font-size:12.5px; color:var(--muted-foreground); margin:8px 0 0; }
   .slabel{ font-size:11px; letter-spacing:.08em; font-weight:600;
     color:var(--muted-foreground); margin:14px 0 8px; }
@@ -2851,6 +2854,7 @@ async function openRes(name) {
   $("#resChart").innerHTML = `<div class="mcap">loading curve…</div>`;
   $("#resChartCap").textContent = "";
   showOverlay("resOverlay");
+  { const m = document.querySelector("#resOverlay .modal"); if (m) m.scrollTop = 0; }   // each profile opens at its curve
   try {
     const d = await (await fetch("/api/research-equity?strategy=" +
                                  encodeURIComponent(name))).json();
