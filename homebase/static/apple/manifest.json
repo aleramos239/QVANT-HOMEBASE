@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "about": "Homebase Next: the macOS 26 skin. The Mac app injects these per tab; the classic pages are served unchanged.",
+  "shared": { "css": ["/static/apple/symbols.css", "/static/apple/system.css"], "js": ["/static/apple/shell.js"] },
+  "tabs": {
+    "desk": { "css": ["/static/apple/desk.css"], "js": ["/static/apple/desk.js"] },
+    "charts": { "css": ["/static/apple/charts.css"], "js": ["/static/apple/charts.js"] },
+    "lab": { "css": ["/static/apple/lab.css"], "js": ["/static/apple/lab.js"] }
+  },
+  "samples": []
+}

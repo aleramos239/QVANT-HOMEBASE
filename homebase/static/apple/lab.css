@@ -1,0 +1,406 @@
+/* =====================================================================================================
+   Homebase Next — the Lab on the macOS 26 system layer (system.css).
+   sidebar (glass, the strategies as a source list) · content (code and chart, flat, on the window) ·
+   inspector (glass, the backtest as grouped rows) · one toolbar.
+   The page's own markup and script are untouched: these rules restyle what the page renders, and lab.js only
+   re-houses nodes. hb.css and the chart sheets stay ON (the page's layout reads their variables), so every rule
+   here outranks them by its selector, never by its place in the document.
+   ===================================================================================================== */
+
+/* ---- the pages' own vocabularies, pointed at the system values --------------------------------------------- */
+html.hb-apple:root { --a-insp-w: 320px;
+  --hb-font: var(--a-font); --hb-mono: var(--a-mono); --hb-fg: var(--a-label); --hb-fg2: var(--a-label-2); --hb-accent: var(--a-accent); --hb-accent-fg: var(--a-on-accent);
+  --hb-accent-soft: color-mix(in srgb, var(--a-accent) 12%, transparent); --hb-hair: var(--a-sep); --hb-fill: var(--a-fill); --hb-fill-hover: var(--a-fill-hover);
+  --hb-focus: var(--a-focus); --hb-gain: var(--a-green); --hb-glass: var(--a-pane-glass); --hb-glass-strong: var(--a-pane-glass); --hb-glass-blur: var(--a-glass-blur);
+  --panel: var(--a-window); --frame: var(--a-window); --frame-wash: none; --text: var(--a-label); --text-2: var(--a-label-2); --hover: var(--a-hover); --pill: var(--a-fill);
+  --accent: var(--a-accent); --accent-hover: var(--a-accent); --accent-soft: color-mix(in srgb, var(--a-accent) 12%, transparent); --accent-fg: var(--a-on-accent);
+  --warn-ink: var(--a-orange); --backdrop: var(--a-scrim); --shadow-menu: var(--a-menu-shadow); --shadow-dialog: var(--a-sheet-shadow);
+  --lab-win: var(--a-window); --lab-sheet: var(--a-window); --lab-side: var(--a-pane); --lab-grp: var(--a-group); --lab-sh: none; }
+
+/* the earlier layer's lens material (hb-glass.js) is not used here: glass is the system's, on the system's parts */
+html.hb-apple .hb-lens, html.hb-apple .hb-lens.hb-lens-on { background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: none; isolation: auto; }
+html.hb-apple .hb-lens::before, html.hb-apple .hb-lens::after { content: none; }
+
+/* ---- window layout ---------------------------------------------------------------------------------------- */
+html.hb-apple body.lab-page { display: block; background: var(--a-window) !important; background-image: none !important; color: var(--a-label); font-size: 13px; line-height: 16px; }
+html.hb-apple #lab { position: absolute; z-index: auto; top: var(--a-toolbar); bottom: 0; left: calc(var(--a-side-w) + 8px); right: var(--a-insp-w); display: flex; gap: 0; padding: 0; margin: 0;
+  overflow: hidden; background: var(--a-window); color: var(--a-label); font-size: 13px; line-height: 16px; transition: left 320ms var(--a-spring), right 320ms var(--a-spring); }
+html.hb-apple.hb-side-off #lab { left: 0; }
+html.hb-apple.hb-insp-off #lab { right: 0; }
+html.hb-apple .hb-tb-scrim { right: var(--a-insp-w); height: var(--a-toolbar); background: var(--a-window); transition: right 320ms var(--a-spring); }
+html.hb-apple.hb-insp-off .hb-tb-scrim { right: 0; }
+html.hb-apple .lab-page .statusbar { display: none; }
+html.hb-apple .toasts { top: calc(var(--a-toolbar) + 8px); right: calc(var(--a-insp-w) + 12px); }
+html.hb-apple.hb-insp-off .toasts { right: 12px; }
+
+/* ---- toolbar ------------------------------------------------------------------------------------------------ */
+/* the page's bar wraps the toolbar's main zone and takes no box of its own */
+html.hb-apple .hb-tb > .hb-bar.lab-bar { display: contents; view-transition-name: none; }
+html.hb-apple #pgSw.hb-seg { height: 36px; padding: 4px; gap: 2px; border-radius: 18px; background: var(--a-platter); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur); box-shadow: var(--a-platter-shadow); }
+html.hb-apple #pgSw.hb-seg > a { height: 28px; padding: 0 12px; border-radius: 14px; font-size: 13px; line-height: 16px; font-weight: 400; letter-spacing: normal; color: var(--a-label); background: transparent; box-shadow: none; z-index: auto; }
+html.hb-apple #pgSw.hb-seg > a:hover { background: var(--a-hover); color: var(--a-label); }
+html.hb-apple #pgSw.hb-seg > a[aria-current="page"] { background: var(--a-track); color: var(--a-label); font-weight: 510; box-shadow: none; }
+/* the title: the shell's (name over state). An unsaved script shows the page's own name field there instead */
+html.hb-apple .hb-tb-l[data-tone="err"] .hb-title span { color: var(--a-red-text); }
+html.hb-apple #labDoc { display: none; }
+html.hb-apple[data-hb-doc="new"] .hb-tb-l { overflow: visible; }
+html.hb-apple[data-hb-doc="new"] .hb-tb-l .hb-title { display: none; }
+html.hb-apple[data-hb-doc="new"] #labDoc { display: grid; grid-template-columns: auto auto; grid-template-rows: 20px 14px; justify-content: start; align-content: center; align-items: center; column-gap: 3px; row-gap: 1px;
+  height: 36px; min-width: 0; white-space: nowrap; }
+html.hb-apple #labDoc .doc-input { grid-column: 1; grid-row: 1; width: 17ch; height: 20px; margin: 0 0 0 -6px; padding: 0 6px; border: 0; border-radius: 5px; background: var(--a-fill); box-shadow: none;
+  font-family: var(--a-font); font-size: 13px; line-height: 16px; font-weight: 700; letter-spacing: normal; color: var(--a-label); text-align: left; }
+html.hb-apple #labDoc .doc-input::placeholder { color: var(--a-label-3); font-weight: 400; }
+html.hb-apple #labDoc .doc-input:focus, html.hb-apple #labDoc .doc-input:focus-visible { outline: 3.5px solid var(--a-focus); outline-offset: 0; box-shadow: none; background: var(--a-field); }
+html.hb-apple #labDoc .doc-input.bad { box-shadow: 0 0 0 1.5px var(--a-red); }
+html.hb-apple #labDoc .doc-name { grid-column: 2; grid-row: 1; font-size: 13px; line-height: 16px; font-weight: 700; letter-spacing: normal; color: var(--a-label); }
+html.hb-apple #labDoc .doc-name i { font-weight: 400; color: var(--a-label-2); }
+html.hb-apple #labDoc .doc-state { grid-column: 1 / -1; grid-row: 2; min-width: 0; font-size: 11px; line-height: 14px; color: var(--a-label-2); overflow: hidden; text-overflow: ellipsis; }
+html.hb-apple #labDoc .doc-state.err { color: var(--a-red-text); }
+html.hb-apple #labDoc .doc-state.edited::before { content: none; }
+/* Code / Chart: two toggles on one platter (the grey pill is the pressed state); the other two toggles are stand-ins */
+html.hb-apple #labPanels.hb-platter { display: inline-flex; align-items: center; gap: 0; height: 36px; padding: 0; border-radius: 18px; background: var(--a-platter); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur);
+  box-shadow: var(--a-platter-shadow); }
+html.hb-apple #labPanels .hb-proxy { display: none; }
+html.hb-apple .hb-tb .hb-ib.hb-tbtn { display: inline-flex; width: auto; min-width: 36px; height: 36px; padding: 0 10px; border-radius: 18px; background: transparent !important; box-shadow: none !important; color: var(--a-label);
+  transform: none; transition: none; cursor: default; z-index: auto; }
+html.hb-apple .hb-tb .hb-ib.hb-tbtn:hover, html.hb-apple .hb-tb .hb-ib.hb-tbtn[aria-pressed="true"] { color: var(--a-label); }
+html.hb-apple .hb-tb .hb-ib.hb-tbtn.hb-solo { background: var(--a-platter) !important; box-shadow: var(--a-platter-shadow) !important; -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur); }
+html.hb-apple #labActs { display: flex; align-items: center; gap: 8px; flex: none; }
+html.hb-apple #labActs:empty { display: none; }
+html.hb-apple #labActs [data-act="more"] { order: -1; }          /* More, then Run: the primary action ends the group */
+/* Run: the one primary action */
+html.hb-apple .hb-tb .lab-run.hb-tbtn { height: 36px; min-width: 0; padding: 0 15px 0 12px; gap: 6px; border: 0; border-radius: 18px; background: var(--a-accent) !important; color: var(--a-on-accent) !important;
+  font-size: 13px; line-height: 16px; font-weight: 510; letter-spacing: normal; transform: none; transition: none; cursor: default;
+  box-shadow: 0 3px 10px color-mix(in srgb, var(--a-accent) 22%, transparent); -webkit-backdrop-filter: none; backdrop-filter: none; }
+html.hb-apple .hb-tb .lab-run.hb-tbtn:active { transform: none; }
+html.hb-apple .hb-tb .lab-run.hb-tbtn[disabled] { opacity: .45; color: var(--a-on-accent) !important; pointer-events: none; }
+html.hb-apple .hb-tb .lab-run.hb-tbtn.busy { opacity: 1; }
+html.hb-apple .hb-tb .lab-run.hb-tbtn.busy::before { width: auto; height: auto; border: 0; border-radius: 14px; animation: none; }
+html.hb-apple .hb-tb .lab-run.busy .sf { width: 12px; height: 12px; box-sizing: border-box; border: 1.5px solid currentColor; border-top-color: transparent; border-radius: 50%; background: transparent;
+  -webkit-mask: none; mask: none; animation: hb-lab-spin .8s linear infinite; }
+@keyframes hb-lab-spin { to { transform: rotate(360deg); } }
+html.hb-apple.hb-inactive .hb-tb .lab-run.hb-tbtn { background: var(--a-platter) !important; color: var(--a-label) !important; box-shadow: var(--a-platter-shadow); }
+/* small windows: with the inspector open the trailing group would reach the centred switcher, so it joins the flow */
+@media (max-width: 1300px) { html.hb-apple:not(.hb-insp-off) .hb-tb-c { position: static; transform: none; flex: none; } }
+@media (max-width: 1180px) { html.hb-apple:not(.hb-insp-off) .hb-title span { display: none; } }
+
+/* ---- sidebar: the page's library as a source list ------------------------------------------------------------- */
+html.hb-apple #labLib.hb-side { width: var(--a-side-w); margin: 0 !important; overflow: hidden; border-radius: calc(var(--a-win-radius) - 8px); background: var(--a-pane-glass);
+  -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur); box-shadow: var(--a-pane-shadow); transition: transform 320ms var(--a-spring), opacity 200ms ease; }
+html.hb-apple #labLib.hb-side > .in { width: auto; height: 100%; padding: 0 0 6px; overflow: hidden auto; overscroll-behavior: contain; }
+html.hb-apple #labLib .lb-top { display: flex; align-items: center; justify-content: space-between; height: 19px; margin: 0 10px; padding: 0 2px 0 4.5px; }
+html.hb-apple #labLib .lb-top b { font-size: 11px; line-height: 14px; font-weight: 590; letter-spacing: normal; color: var(--a-label-pane-3); }
+html.hb-apple #labLib .lb-top .hb-ib { display: block; width: 22px; height: 19px; padding: 0; border: 0; border-radius: 5px; background: var(--a-label-pane-2); box-shadow: none; transform: none; transition: none; cursor: default;
+  -webkit-mask: var(--sf-plus) center / 11px 11px no-repeat; mask: var(--sf-plus) center / 11px 11px no-repeat; }
+html.hb-apple #labLib .lb-top .hb-ib svg { display: none; }
+html.hb-apple #labLib .lb-top .hb-ib:hover { background: var(--a-label-vibrant); }
+html.hb-apple #labLib .lb-sh { display: flex; align-items: center; height: 19px; margin: 13px 10px 0; padding: 0 4px 0 4.5px; font-size: 11px; line-height: 14px; font-weight: 590; letter-spacing: normal; color: var(--a-label-pane-3); }
+html.hb-apple #labLib .lb-item { -webkit-appearance: none; appearance: none; display: flex; align-items: center; gap: 0; width: calc(100% - 20px); height: 32px; min-height: 0; margin: 0 10px; padding: 0 11px 0 0;
+  border: 0; border-radius: 8px; background: transparent; box-shadow: none; color: var(--a-label-vibrant); font-size: 13px; line-height: 16px; font-weight: 400; text-align: left; cursor: default; transition: none; }
+html.hb-apple #labLib .lb-item:hover { background: transparent; }
+html.hb-apple #labLib .lb-item:active { background: var(--a-hover); }
+html.hb-apple #labLib .lb-item.sel { background: var(--a-sel); color: var(--a-label-vibrant); box-shadow: none; }
+html.hb-apple #labLib .lb-item svg.lb-ico { display: none; }
+/* the row's symbol: a document for your own scripts, a lock for the read-only built-ins */
+html.hb-apple #labLib .lb-item::before { content: ""; flex: none; width: 39px; height: 18px; background: currentColor;
+  -webkit-mask: var(--sf-doc) center / var(--sf-doc-w) var(--sf-doc-h) no-repeat; mask: var(--sf-doc) center / var(--sf-doc-w) var(--sf-doc-h) no-repeat; }
+html.hb-apple #labLib .lb-item[data-key^="b:"]::before { -webkit-mask: var(--sf-lock) center / var(--sf-lock-w) var(--sf-lock-h) no-repeat; mask: var(--sf-lock) center / var(--sf-lock-w) var(--sf-lock-h) no-repeat; }
+html.hb-apple #labLib .lb-item .it { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: row; align-items: center; gap: 8px; line-height: 16px; }
+html.hb-apple #labLib .lb-item .it b { flex: 1 1 auto; min-width: 0; font-weight: 400; color: inherit; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html.hb-apple #labLib .lb-item .it small { flex: none; margin: 0; font-size: 11px; line-height: 14px; font-weight: 510; color: var(--a-label-pane-2); white-space: nowrap; }
+html.hb-apple #labLib .lb-item .it small:empty { display: none; }
+html.hb-apple #labLib .lb-item > span:last-child { display: none; }
+html.hb-apple #labLib .lb-item:has(.lb-flag:not(:empty)) .it small { color: var(--a-red-text); }
+html.hb-apple #labLib .lb-empty { margin: 2px 10px 0; padding: 0 4.5px; font-size: 11px; line-height: 14px; color: var(--a-label-pane-2); }
+
+/* ---- content: code | chart, flat on the window, a hairline between ---------------------------------------------- */
+html.hb-apple #lab #labEd { min-width: 220px; margin: 0; border-radius: 0; background: transparent; box-shadow: none; overflow: hidden; animation: none; }
+html.hb-apple #lab .lab-chart { min-width: 260px; margin: 0; border-radius: 0; background: var(--a-window); box-shadow: none; overflow: hidden; animation: none; }
+html.hb-apple #lab .lab-split { flex: none; width: 9px; margin: 0 -4px; z-index: 6; }
+html.hb-apple #lab .lab-split::before { left: 4px; top: 0; bottom: 0; width: 1px; background: var(--a-sep); }
+html.hb-apple #lab .lab-split::after { left: 2.5px; width: 4px; height: 36px; top: calc(50% - 18px); border-radius: 2px; background: var(--a-label-3); }
+html.hb-apple #lab .lab-split:hover::after, html.hb-apple #lab .lab-split.drag::after, html.hb-apple #lab .lab-split:focus-visible::after { background: var(--a-label-2); }
+html.hb-apple #lab .lab-split:focus-visible { outline: none; }
+/* code scrolls out under the toolbar through a short fade (the top padding of the editor), not a hard cut */
+html.hb-apple #lab #labEd { position: relative; }
+html.hb-apple #lab #labEd:has(.ed-wrap)::before { content: ""; position: absolute; z-index: 3; left: 0; right: 0; top: 0; height: 8px; pointer-events: none;
+  background: linear-gradient(to bottom, var(--a-window), color-mix(in srgb, var(--a-window) 0%, transparent)); }
+/* the editor: code in the system's monospaced face, 12 / 18, line numbers tertiary */
+html.hb-apple #labEd .ed-gut, html.hb-apple #labEd .ed-hl, html.hb-apple #labEd .ed-ta { font-family: var(--a-mono); font-size: 12px; line-height: 18px; font-weight: 400; letter-spacing: normal; tab-size: 4; }
+html.hb-apple #labEd .ed-gut { min-width: 44px; padding: 8px 10px 14px 12px; color: var(--a-label-3); opacity: 1; -webkit-user-select: none; user-select: none; }
+/* the page clips the gutter to one screen, so the numbers ran out once the code scrolled: the editor clips it instead */
+html.hb-apple #labEd .ed-wrap { overflow: hidden; }
+html.hb-apple #labEd .ed-gut { overflow: visible; min-height: 0; }
+html.hb-apple #labEd .ed-gut .err { color: var(--a-red-text); font-weight: 600; }
+html.hb-apple #labEd .ed-hl, html.hb-apple #labEd .ed-ta { padding: 8px 18px 14px 6px; }
+html.hb-apple #labEd .ed-hl { color: var(--a-label); }
+html.hb-apple #labEd .ed-ta { caret-color: var(--a-accent-text); cursor: text; }
+html.hb-apple #labEd .ed-ta[readonly] { cursor: default; }
+html.hb-apple #labEd .ed-ta::selection { background: color-mix(in srgb, var(--a-accent) 22%, transparent); }
+html.hb-apple #labEd .ed-ta:focus, html.hb-apple #labEd .ed-ta:focus-visible { outline: none; }
+html.hb-apple #labEd .ed-hl .c { color: var(--a-label-2); font-style: normal; }
+html.hb-apple #labEd .ed-hl .k { font-weight: 600; }
+html.hb-apple #labEd .ed-hl .f { color: var(--a-accent-text); }
+html.hb-apple #labEd .ed-hl .b, html.hb-apple #labEd .ed-hl .d { color: var(--a-label-2); }
+html.hb-apple #labEd .ed-hint { left: 6px; top: 8px; right: 18px; font-size: 13px; line-height: 18px; color: var(--a-label-2); }
+html.hb-apple #labEd .ed-hint kbd, html.hb-apple .rs-empty kbd { font-family: var(--a-font); font-size: 11px; line-height: 14px; padding: 1px 5px; border-radius: 4px; background: var(--a-fill); color: var(--a-label-2); }
+html.hb-apple #labEd .ed-drop::after { inset: 10px; border-radius: 12px; background: color-mix(in srgb, var(--a-accent) 8%, var(--a-window)); color: var(--a-accent-text); font-size: 15px; line-height: 20px; font-weight: 590;
+  box-shadow: inset 0 0 0 2px var(--a-focus); }
+/* the page's log line: a quiet status area under the code */
+html.hb-apple #labEd .ed-log { flex: none; max-height: 90px; padding: 7px 18px 9px 12px; border-top: 1px solid var(--a-sep); font-size: 11px; line-height: 16px; color: var(--a-label-2); -webkit-user-select: text; user-select: text; }
+html.hb-apple #labEd .ed-log b { color: var(--a-label); font-weight: 590; }
+html.hb-apple #labEd .ed-log .err { color: var(--a-red-text); }
+html.hb-apple #labEd .ed-log a { color: var(--a-accent-text); font-weight: 400; cursor: default; }
+/* nothing open: the empty state */
+html.hb-apple #labEd .lab-welcome { flex: 1; display: grid; place-content: center; justify-items: center; text-align: center; gap: 0; padding: 32px; }
+html.hb-apple #labEd .lab-welcome h2 { margin: 0; font-size: 22px; line-height: 26px; font-weight: 700; letter-spacing: normal; color: var(--a-label); }
+html.hb-apple #labEd .lab-welcome p { margin: 6px 0 18px; max-width: 420px; font-size: 13px; line-height: 16px; color: var(--a-label-2); text-wrap: balance; }
+html.hb-apple #labEd .lab-welcome .acts { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+
+/* ---- the chart: one chart, edge to edge; the interval switch floats over it on a platter -------------------------- */
+html.hb-apple #lab .lab-chart > .main { padding: 0; gap: 0; }
+html.hb-apple #lab .lab-chart .panel, html.hb-apple #lab .lab-chart .panel.selected::after { border-radius: 0; box-shadow: none; }
+html.hb-apple #lab .lab-chart > .toolbar { position: absolute; z-index: 8; left: 50%; bottom: 40px; top: auto; transform: translateX(-50%); width: max-content; max-width: calc(100% - 24px); height: auto; padding: 0; margin: 0; gap: 8px;
+  background: transparent; border: 0; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+/* with the full report open the chart is short: the switch moves up, clear of the legend and the price scale */
+html.hb-apple #lab[data-report="1"] .lab-chart > .toolbar { bottom: auto; top: 8px; left: auto; right: 76px; transform: none; }
+html.hb-apple #lab .lab-chart .toolbar #tbFavs { display: inline-flex; align-items: center; height: 36px; margin: 0; padding: 4px; gap: 2px; border-radius: 18px; background: var(--a-platter);
+  -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur); box-shadow: var(--a-platter-shadow); pointer-events: auto; }
+html.hb-apple #lab .lab-chart .toolbar #tbFavs .tb-btn { position: relative; height: 28px; min-width: 36px; margin: 0; padding: 0 10px; border: 0; border-radius: 14px; background: transparent; box-shadow: none; color: var(--a-label);
+  font-size: 13px; line-height: 16px; font-weight: 400; letter-spacing: normal; font-variant-numeric: tabular-nums; transform: none; transition: none; cursor: default; justify-content: center; }
+html.hb-apple #lab .lab-chart .toolbar #tbFavs .tb-btn:hover { background: var(--a-hover); color: var(--a-label); }
+html.hb-apple #lab .lab-chart .toolbar #tbFavs .tb-btn.active { background: var(--a-track); color: var(--a-label); font-weight: 510; box-shadow: none; }
+html.hb-apple #lab .lab-chart .lg-title { font-size: 13px; line-height: 16px; font-weight: 700; letter-spacing: normal; }
+html.hb-apple #lab .lab-chart .lg-ohlc, html.hb-apple #lab .lab-chart .lg-row, html.hb-apple #lab .lab-chart .lg-msg { font-size: 11px; font-variant-numeric: tabular-nums; }
+
+/* ---- inspector: the backtest ------------------------------------------------------------------------------------ */
+html.hb-apple #labRes.hb-insp, html.hb-apple .lab[data-res="0"] #labRes.hb-insp { display: flex; flex-direction: column; width: var(--a-insp-w); margin: 0 !important; padding: calc(var(--a-toolbar) + 4px) 0 0; overflow: hidden;
+  border-radius: 0; background: var(--a-pane-glass); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur);
+  box-shadow: -1px 0 0 var(--a-sep), inset 1px 0 0 color-mix(in srgb, #fff 70%, transparent); transition: transform 320ms var(--a-spring), opacity 200ms ease; transform: none; opacity: 1; pointer-events: auto; }
+html.hb-apple[data-theme="dark"] #labRes.hb-insp { box-shadow: -1px 0 0 rgb(0 0 0 / .35), inset 1px 0 0 rgb(255 255 255 / .10); }
+html.hb-apple.hb-insp-off #labRes.hb-insp, html.hb-apple.hb-insp-off .lab[data-res="0"] #labRes.hb-insp { transform: translateX(100%); opacity: 0; pointer-events: none; }
+html.hb-apple #labRes.hb-insp > .in { flex: 1 1 auto; min-height: 0; width: auto; height: auto; padding: 0 11px 20px; overflow: hidden auto; overscroll-behavior: contain; font-size: 13px; line-height: 16px; color: var(--a-label); }
+/* the script's problem, in the page's own words (lab.js copies the text of the page's state line) */
+html.hb-apple #hbLabCheck { flex: none; margin: 0 11px 11px; }
+html.hb-apple #hbLabCheck .hb-row { align-items: flex-start; padding: 10px; }
+html.hb-apple #hbLabCheck .sf { margin-top: 1px; color: var(--a-red-text); }
+html.hb-apple #hbLabCheck .hb-row-k { white-space: normal; overflow-wrap: anywhere; color: var(--a-label); }
+/* header: what this is, and the range it ran over */
+html.hb-apple #labRes .rs-h { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 19px; padding: 4px 9px 5px; }
+html.hb-apple #labRes .rs-h b { font-size: 11px; line-height: 14px; font-weight: 700; color: var(--a-label-pane-2); }
+html.hb-apple #labRes .rs-h span { font-size: 11px; line-height: 14px; color: var(--a-label-pane-2); font-variant-numeric: tabular-nums; }
+/* the net result: a large title; the return beside it (green only when it is a profit) */
+html.hb-apple #labRes .rs-hero { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin: 2px 9px 0; }
+html.hb-apple #labRes .rs-net { margin: 0; font-size: 26px; line-height: 32px; font-weight: 700; letter-spacing: normal; color: var(--a-label) !important; font-variant-numeric: tabular-nums; }
+html.hb-apple #labRes .rs-net i { position: static; top: auto; margin: 0; font-style: normal; font-size: inherit; font-weight: inherit; letter-spacing: normal; opacity: 1; }
+html.hb-apple #labRes .rs-delta { display: inline-flex; align-items: baseline; gap: 3px; height: auto; margin: 0; padding: 0; border-radius: 0; background: transparent; box-shadow: none; color: var(--a-green);
+  font-size: 13px; line-height: 16px; font-weight: 590; font-variant-numeric: tabular-nums; }
+html.hb-apple #labRes .rs-delta.neg { background: transparent; color: var(--a-label); }
+html.hb-apple #labRes .rs-take { margin: 3px 9px 0; font-size: 11px; line-height: 14px; color: var(--a-label-2); }
+html.hb-apple #labRes .rs-take b { color: var(--a-label); font-weight: 590; font-variant-numeric: tabular-nums; }
+/* the equity curve, on a grouped card */
+html.hb-apple #labRes .eqw { position: relative; height: 150px; margin: 12px 0 0; border-radius: 10px; background: var(--a-group); }
+html.hb-apple #labRes .eqw svg { color: var(--a-accent-text); }
+html.hb-apple #labRes .eq-line { stroke: currentColor; stroke-width: 2; filter: none; }
+html.hb-apple #labRes .eq-base { stroke: var(--a-label-3); opacity: 1; stroke-dasharray: 3 4; stroke-linecap: butt; }
+html.hb-apple #labRes .eq-ax { left: 10px; right: 10px; bottom: 5px; font-size: 10px; line-height: 13px; color: var(--a-label-2); }
+html.hb-apple #labRes .eq-tag { font-size: 10px; line-height: 13px; font-weight: 590; color: var(--a-label-2); }
+html.hb-apple #labRes .eq-dot { width: 8px; height: 8px; margin: -4px 0 0 -4px; background: var(--a-accent-text); box-shadow: 0 0 0 2.5px var(--a-pane); }
+html.hb-apple #labRes .eq-rule { background: var(--a-label-3); }
+html.hb-apple #labRes .eq-tip { top: -6px; padding: 4px 8px; border-radius: 8px; background: var(--a-window); box-shadow: var(--a-menu-shadow); font-size: 11px; line-height: 14px; color: var(--a-label-2); }
+html.hb-apple #labRes .eq-tip b { font-size: 13px; line-height: 16px; font-weight: 590; color: var(--a-label); }
+/* figures: grouped rows, label left, value right */
+html.hb-apple #labRes .rs-trio { display: block; margin: 11px 0 0; border-radius: 10px; background: var(--a-group); overflow: hidden; }
+html.hb-apple #labRes .rs-trio div, html.hb-apple #labRes .rs-kv { display: flex; align-items: center; justify-content: space-between; gap: 10px; height: auto; min-height: 37px; padding: 0 10px; border: 0; position: relative; }
+html.hb-apple #labRes .rs-trio div { flex-direction: row-reverse; }
+html.hb-apple #labRes .rs-trio div + div::before, html.hb-apple #labRes .rs-kv + .rs-kv::before, html.hb-apple #labRes .rs-row + .rs-row::before { content: ""; position: absolute; left: 10px; right: 10px; top: 0; height: 1px;
+  background: var(--a-group-sep); }
+html.hb-apple #labRes .rs-trio span, html.hb-apple #labRes .rs-kv span { font-size: 13px; line-height: 16px; color: var(--a-label); }
+html.hb-apple #labRes .rs-trio b, html.hb-apple #labRes .rs-kv b { display: inline; font-size: 13px; line-height: 16px; font-weight: 400; letter-spacing: normal; color: var(--a-label-2); font-variant-numeric: tabular-nums; }
+html.hb-apple #labRes .rs-trio b small { font-size: inherit; }
+html.hb-apple #labRes .rs-gh { margin: 11px 0 0; padding: 4px 9px 5px; font-size: 11px; line-height: 14px; font-weight: 700; color: var(--a-label-pane-2); }
+html.hb-apple #labRes .rs-group { margin: 0; border-radius: 10px; background: var(--a-group); overflow: hidden; }
+html.hb-apple #labRes .rs-group + .rs-group { margin-top: 11px; }
+html.hb-apple #labRes .rs-chips { display: flex; flex-wrap: wrap; gap: 5px; margin: 10px 9px 0; }
+html.hb-apple #labRes .rs-chip { display: inline-flex; align-items: center; height: 16px; padding: 0 6px; border-radius: 8px; background: var(--a-fill); color: var(--a-label-2); font-size: 10px; line-height: 13px; font-weight: 590; white-space: nowrap; }
+html.hb-apple #labRes .rs-chip.warn { color: var(--a-orange); }
+html.hb-apple #labRes .rs-chip.err { color: var(--a-red-text); }
+/* rows that do something: a chevron at the trailing edge */
+html.hb-apple #labRes .rs-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; min-height: 37px; padding: 0 10px; border: 0; background: transparent; position: relative;
+  font-size: 13px; line-height: 16px; font-weight: 400; color: var(--a-label); text-align: left; cursor: default; transition: none; }
+html.hb-apple #labRes .rs-row:hover { background: transparent; }
+html.hb-apple #labRes .rs-row:active { background: var(--a-hover); }
+html.hb-apple #labRes .rs-row[disabled] { opacity: 1; color: var(--a-label-3); pointer-events: none; }
+html.hb-apple #labRes .rs-row span:last-child { flex: none; width: 9px; height: 12px; font-size: 0; background: var(--a-label-3);
+  -webkit-mask: var(--sf-chevron-right) center / var(--sf-chevron-right-w) var(--sf-chevron-right-h) no-repeat; mask: var(--sf-chevron-right) center / var(--sf-chevron-right-w) var(--sf-chevron-right-h) no-repeat; }
+/* run settings: a disclosure row, then a form of labelled fields on the 37 pitch */
+html.hb-apple #labRes .rs-set > summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 37px; padding: 0 10px; font-size: 13px; line-height: 16px; color: var(--a-label); cursor: default; }
+html.hb-apple #labRes .rs-set > summary span:last-child { flex: 1 1 auto; min-width: 0; text-align: right; font-size: 13px; color: var(--a-label-2); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html.hb-apple #labRes .rs-set > summary::after { content: ""; flex: none; width: 11px; height: 12px; background: var(--a-label-3); transition: transform 200ms var(--a-spring);
+  -webkit-mask: var(--sf-chevron-right) center / var(--sf-chevron-right-w) var(--sf-chevron-right-h) no-repeat; mask: var(--sf-chevron-right) center / var(--sf-chevron-right-w) var(--sf-chevron-right-h) no-repeat; }
+html.hb-apple #labRes .rs-set[open] > summary::after { transform: rotate(90deg); }
+html.hb-apple #labRes .rs-set .grid { display: grid; grid-template-columns: minmax(0, 1fr) 104px; gap: 13px 10px; align-items: center; padding: 7px 10px 7px; border-top: 1px solid var(--a-group-sep); margin: 0; }
+html.hb-apple #labRes .rs-set label { font-size: 13px; line-height: 16px; color: var(--a-label); }
+html.hb-apple #labRes .rs-set input, html.hb-apple #labRes .rs-set select { -webkit-appearance: none; appearance: none; justify-self: end; width: 100%; height: 24px; padding: 0 7px; border: 0; border-radius: 6px; background: var(--a-field); color: var(--a-label);
+  box-shadow: 0 0 0 1px var(--a-field-edge), 0 .5px 1.5px rgb(0 0 0 / .08); font-family: var(--a-font); font-size: 13px; line-height: 16px; font-variant-numeric: tabular-nums; text-align: right; outline: none; }
+html.hb-apple #labRes .rs-set input[type="number"]::-webkit-inner-spin-button, html.hb-apple #labRes .rs-set input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+/* a pop-up button: the system's filled control with the up/down chevrons (WebKit sets a select's text by its direction, so the text stays leading) */
+html.hb-apple #labRes .rs-set select { width: max-content; max-width: 200px; padding: 0 22px 0 8px; box-shadow: none; text-align: left; color: var(--a-label);
+  background: var(--a-fill) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 13' fill='none' stroke='%23000' stroke-opacity='.85' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 4.6 5 1.8 8 4.6M2 8.4 5 11.2 8 8.4'/%3E%3C/svg%3E") right 7px center / 8px 11px no-repeat; }
+html.hb-apple[data-theme="dark"] #labRes .rs-set select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 13' fill='none' stroke='%23fff' stroke-opacity='.85' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 4.6 5 1.8 8 4.6M2 8.4 5 11.2 8 8.4'/%3E%3C/svg%3E"); }
+html.hb-apple #labRes .rs-set input:focus, html.hb-apple #labRes .rs-set select:focus { outline: 3.5px solid var(--a-focus); outline-offset: 0; }
+html.hb-apple #labRes .rs-set input.bad { box-shadow: 0 0 0 1.5px var(--a-red); }
+html.hb-apple #labRes .rs-set input[type="checkbox"] { -webkit-appearance: auto; appearance: auto; width: 14px; height: 14px; padding: 0; justify-self: end; accent-color: var(--a-accent); box-shadow: none; background: transparent; }
+html.hb-apple #labRes .rs-set .sep { grid-column: 1 / -1; height: 1px; margin: -3px 0; background: var(--a-group-sep); }
+html.hb-apple #labRes .rs-set .warn { grid-column: 1 / -1; font-size: 11px; line-height: 14px; color: var(--a-orange); }
+/* nothing yet, a run in progress */
+html.hb-apple #labRes .rs-empty { padding: 4px 9px 2px; }
+html.hb-apple #labRes .rs-empty h3 { margin: 0 0 3px; font-size: 13px; line-height: 16px; font-weight: 700; letter-spacing: normal; color: var(--a-label); }
+html.hb-apple #labRes .rs-empty p { margin: 0; font-size: 11px; line-height: 14px; color: var(--a-label-2); }
+html.hb-apple #labRes .rs-prog { padding: 6px 9px 2px; }
+html.hb-apple #labRes .rs-prog .t { font-size: 13px; line-height: 16px; font-weight: 400; color: var(--a-label); font-variant-numeric: tabular-nums; }
+html.hb-apple #labRes .rs-bar { height: 6px; margin: 9px 0 12px; border-radius: 3px; background: var(--a-track); overflow: hidden; }
+html.hb-apple #labRes .rs-bar i { border-radius: 3px; background: var(--a-accent-on); }
+/* the trade stepper, at the foot of the inspector while the chart is showing */
+html.hb-apple #hbLabTrades { flex: none; margin: 0; padding: 6px 11px 11px; box-shadow: 0 -1px 0 var(--a-sep); }
+html.hb-apple body:not(.lab-chart-on) #hbLabTrades { display: none; }
+html.hb-apple #labNav.lab-nav { display: flex; align-items: center; gap: 6px; height: 37px; min-width: 0; padding: 0 7px; border-radius: 0; background: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; pointer-events: auto; }
+html.hb-apple #labNav .lab-nav-b { -webkit-appearance: none; appearance: none; flex: none; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px; background: var(--a-fill); color: var(--a-label); font-size: 0; line-height: 0;
+  display: grid; place-items: center; text-shadow: none; transform: none; transition: background-color 100ms ease; cursor: default; }
+html.hb-apple #labNav .lab-nav-b::before { content: ""; width: 9px; height: 12px; background: currentColor;
+  -webkit-mask: var(--sf-chevron-left) center / var(--sf-chevron-left-w) var(--sf-chevron-left-h) no-repeat; mask: var(--sf-chevron-left) center / var(--sf-chevron-left-w) var(--sf-chevron-left-h) no-repeat; }
+html.hb-apple #labNav .lab-nav-b[data-nav="1"]::before { -webkit-mask-image: var(--sf-chevron-right); mask-image: var(--sf-chevron-right); }
+html.hb-apple #labNav .lab-nav-b:hover { background: var(--a-fill); }
+html.hb-apple #labNav .lab-nav-b:active { background: var(--a-fill-press); transform: none; }
+html.hb-apple #labNav .lab-nav-b[disabled] { opacity: 1; background: var(--a-fill-off); color: var(--a-label-3); pointer-events: none; }
+html.hb-apple #labNav .lab-nav-t { flex: 1 1 auto; min-width: 0; padding: 0; text-align: center; font-size: 11px; line-height: 14px; color: var(--a-label-2); text-shadow: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums; }
+html.hb-apple #labNav .lab-nav-t b { color: var(--a-label); font-weight: 590; }
+html.hb-apple #labNav .lab-nav-t .pos { color: var(--a-green); font-weight: 590; }
+html.hb-apple #labNav .lab-nav-t .neg { color: var(--a-label); font-weight: 590; }
+
+/* ---- buttons, the page's own classes on the system sizes ----------------------------------------------------------- */
+html.hb-apple .lab-page .btn { -webkit-appearance: none; appearance: none; display: inline-flex; align-items: center; justify-content: center; flex: none; height: 28px; padding: 0 14.5px; border: 0; border-radius: 14px; gap: 5px;
+  background: var(--a-fill); color: var(--a-label); box-shadow: none; font-size: 13px; line-height: 16px; font-weight: 400; letter-spacing: normal; transform: none; cursor: default; transition: background-color 100ms ease; }
+html.hb-apple .lab-page .btn:hover { background: var(--a-fill); color: var(--a-label); }
+html.hb-apple .lab-page .btn:active { background: var(--a-fill-press); transform: none; }
+html.hb-apple .lab-page .btn:focus-visible { outline: 3.5px solid var(--a-focus); outline-offset: 0; }
+html.hb-apple .lab-page .btn:disabled { opacity: 1; background: var(--a-fill-off); color: var(--a-label-3); }
+html.hb-apple .lab-page .btn.btn-sm { height: 24px; padding: 0 12.5px; border-radius: 6px; }
+html.hb-apple .lab-page .btn.btn-lg { height: 28px; padding: 0 14.5px; border-radius: 14px; }
+html.hb-apple .lab-page .btn.btn-default, html.hb-apple .lab-page .btn.btn-primary { background: var(--a-accent); color: var(--a-on-accent); }
+html.hb-apple .lab-page .btn.btn-default:hover, html.hb-apple .lab-page .btn.btn-primary:hover { background: var(--a-accent); color: var(--a-on-accent); }
+html.hb-apple .lab-page .btn.btn-default:active, html.hb-apple .lab-page .btn.btn-primary:active { background: color-mix(in srgb, var(--a-accent) 86%, #000); }
+html.hb-apple.hb-inactive .lab-page .btn.btn-default { background: var(--a-fill); color: var(--a-label); }
+
+/* ---- menus: the system menu ------------------------------------------------------------------------------------------ */
+html.hb-apple .lab-menu { z-index: 90; min-width: 200px; max-width: 340px; padding: 5px; border: 0; border-radius: 13px; background: var(--a-pane-glass); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur);
+  box-shadow: var(--a-menu-shadow); animation: none; font-size: 13px; line-height: 16px; color: var(--a-label); }
+html.hb-apple .lab-menu button { -webkit-appearance: none; appearance: none; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 0; width: 100%; min-height: 24px; padding: 4px 9px; border: 0; border-radius: 8px;
+  background: transparent; color: var(--a-label); font-size: 13px; line-height: 16px; font-weight: 400; text-align: left; cursor: default; }
+html.hb-apple .lab-menu button.row { flex-direction: row; align-items: center; justify-content: space-between; gap: 24px; height: 24px; padding: 0 9px; }
+html.hb-apple .lab-menu button b { font-weight: 400; }
+html.hb-apple .lab-menu small { font-family: var(--a-font); font-size: 11px; line-height: 14px; color: var(--a-label-2); white-space: normal; }
+html.hb-apple .lab-menu kbd { font-family: var(--a-font); font-size: 13px; line-height: 16px; color: var(--a-label-3); }
+html.hb-apple .lab-menu button:hover, html.hb-apple .lab-menu button:focus-visible { background: var(--a-accent); color: var(--a-on-accent); outline: none; }
+html.hb-apple .lab-menu button:hover small, html.hb-apple .lab-menu button:hover kbd, html.hb-apple .lab-menu button:focus-visible small, html.hb-apple .lab-menu button:focus-visible kbd { color: inherit; opacity: .8; }
+html.hb-apple .lab-menu button[disabled] { opacity: 1; color: var(--a-label-3); pointer-events: none; }
+html.hb-apple .lab-menu hr { height: 1px; margin: 5px 9px; border: 0; background: var(--a-sep); }
+html.hb-apple .lab-menu h6 { margin: 0; padding: 4px 9px 3px; font-size: 11px; line-height: 14px; font-weight: 590; letter-spacing: normal; color: var(--a-label-2); }
+
+/* ---- sheets: the review request, the reference, delete ------------------------------------------------------------------ */
+html.hb-apple .lab-ov { z-index: 95; background: var(--a-scrim); animation: none; }
+html.hb-apple .lab-dlg { width: min(420px, calc(100vw - 32px)); max-height: calc(100vh - 64px); padding: 20px; border: 0; border-radius: 26px; background: var(--a-window); color: var(--a-label); box-shadow: var(--a-sheet-shadow);
+  -webkit-backdrop-filter: none; backdrop-filter: none; font-size: 13px; line-height: 16px; animation: none; }
+html.hb-apple .lab-dlg.wide { width: min(680px, calc(100vw - 32px)); }
+html.hb-apple .lab-dlg h2 { margin: 0 0 6px; font-size: 13px; line-height: 16px; font-weight: 700; letter-spacing: normal; color: var(--a-label); }
+html.hb-apple .lab-dlg p { margin: 0 0 12px; font-size: 13px; line-height: 16px; color: var(--a-label); }
+html.hb-apple .lab-dlg p b { font-weight: 590; }
+html.hb-apple .lab-dlg textarea { display: block; width: 100%; min-height: 84px; padding: 5px 7px; border: 0; border-radius: 6px; background: var(--a-field); color: var(--a-label); box-shadow: 0 0 0 1px var(--a-field-edge), 0 .5px 1.5px rgb(0 0 0 / .1);
+  font-family: var(--a-font); font-size: 13px; line-height: 16px; resize: vertical; outline: none; }
+html.hb-apple .lab-dlg textarea::placeholder { color: var(--a-label-2); }
+html.hb-apple .lab-dlg textarea:focus, html.hb-apple .lab-dlg textarea:focus-visible { outline: 3.5px solid var(--a-focus); outline-offset: 0; box-shadow: 0 0 0 1px var(--a-field-edge); }
+html.hb-apple .lab-dlg ul { list-style: none; margin: 0 0 12px; padding: 0; border-radius: 10px; background: var(--a-group); font-size: 13px; line-height: 16px; }
+html.hb-apple .lab-dlg li { display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 0 10px; position: relative; color: var(--a-label); }
+html.hb-apple .lab-dlg li + li::before { content: ""; position: absolute; left: 10px; right: 10px; top: 0; height: 1px; background: var(--a-group-sep); }
+html.hb-apple .lab-dlg li.no { color: var(--a-label-2); }
+html.hb-apple .lab-dlg li i { flex: none; width: 13px; height: 12px; font-size: 0; background: var(--a-label-2); -webkit-mask: var(--sf-check) center / var(--sf-check-w) var(--sf-check-h) no-repeat; mask: var(--sf-check) center / var(--sf-check-w) var(--sf-check-h) no-repeat; }
+html.hb-apple .lab-dlg li.no i { background: var(--a-label-3); -webkit-mask: var(--sf-minus) center / 9px 3px no-repeat; mask: var(--sf-minus) center / 9px 3px no-repeat; }
+html.hb-apple .lab-dlg code { font-family: var(--a-mono); font-size: 11px; line-height: 14px; padding: 1px 5px; border-radius: 4px; background: var(--a-fill); word-break: break-all; -webkit-user-select: text; user-select: text; }
+html.hb-apple .lab-dlg pre { margin: 0 0 4px; padding: 10px 12px; border-radius: 10px; background: var(--a-group); color: var(--a-label); font-family: var(--a-mono); font-size: 11px; line-height: 15px; white-space: pre-wrap; }
+html.hb-apple .lab-dlg .acts { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+html.hb-apple .lab-dlg .acts .btn { min-width: 76px; }
+
+/* ---- the full report under the chart (the chart shell's Strategy Tester): flat, on the window ------------------------------ */
+html.hb-apple #lab .lab-chart > .bpanel { margin: 0; border-radius: 0; background: var(--a-window); box-shadow: 0 -1px 0 var(--a-sep); }
+html.hb-apple #lab .bp-bar { height: 36px; padding: 0 8px; border-top: 0; background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; }
+html.hb-apple #lab .bpanel.open .bp-bar { border-bottom-color: var(--a-sep); }
+html.hb-apple #lab .bp-tabs, html.hb-apple #lab .tst-tabs { align-items: center; gap: 2px; overflow: auto hidden; scrollbar-width: none; }
+html.hb-apple #lab .bp-tab, html.hb-apple #lab .tst-tab, html.hb-apple #lab .tst-hide { flex: none; white-space: nowrap; }
+html.hb-apple #lab .bp-tab, html.hb-apple #lab .tst-tab { height: 24px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: var(--a-label-2); font-size: 13px; line-height: 16px; font-weight: 400; letter-spacing: normal; transition: none; }
+html.hb-apple #lab .bp-tab:hover, html.hb-apple #lab .tst-tab:hover { color: var(--a-label); }
+html.hb-apple #lab .bp-tab[aria-selected="true"], html.hb-apple #lab .tst-tab.active { background: var(--a-fill); color: var(--a-label); font-weight: 510; }
+html.hb-apple #lab .bp-toggle, html.hb-apple #lab .tst-icon-btn { width: 24px; height: 24px; border-radius: 6px; color: var(--a-label-2); }
+html.hb-apple #lab .bp-toggle:hover, html.hb-apple #lab .tst-icon-btn:hover { background: var(--a-fill); color: var(--a-label); }
+html.hb-apple #lab .tst-sticky { background: var(--a-window); border-top: 0; -webkit-backdrop-filter: none; backdrop-filter: none; }
+html.hb-apple #lab .tst-tabs { height: 36px; padding: 0 8px; border-bottom-color: var(--a-sep); }
+html.hb-apple #lab .tst-content { padding: 14px 16px; font-size: 13px; line-height: 16px; color: var(--a-label); }
+html.hb-apple #lab .tst-tile { border-left-color: var(--a-sep); }
+html.hb-apple #lab .tst-tile-v { font-size: 17px; line-height: 22px; font-weight: 700; letter-spacing: normal; color: var(--a-label); }
+html.hb-apple #lab .tst-tile-l, html.hb-apple #lab .tst-tile-s, html.hb-apple #lab .tst-caveat, html.hb-apple #lab .tst-kv-line { margin-top: 2px; font-size: 11px; line-height: 14px; color: var(--a-label-2); }
+html.hb-apple #lab .tst-prop-title { font-size: 13px; line-height: 16px; font-weight: 700; }
+html.hb-apple #lab .tst-badge { height: 16px; padding: 0 6px; border-radius: 8px; background: var(--a-fill); color: var(--a-label-2); font-size: 10px; line-height: 13px; font-weight: 590; }
+html.hb-apple #lab .tst-badge.warn { color: var(--a-orange); }
+html.hb-apple #lab .tst-badge.err { background: var(--a-fill); color: var(--a-red-text); }
+html.hb-apple #lab .tst-head .set-select, html.hb-apple #lab .tst-num, html.hb-apple #lab .tst-date-in, html.hb-apple #lab .tst-range, html.hb-apple #lab .bp-fq-select { height: 24px; border: 0; border-radius: 6px; background: var(--a-fill); color: var(--a-label); font-size: 13px; }
+html.hb-apple #lab .tst-btn { height: 24px; padding: 0 10px; border-radius: 6px; color: var(--a-label); font-size: 13px; }
+html.hb-apple #lab .tst-btn:hover { background: var(--a-fill); }
+/* the trades list: a compact table, 24 rows under an 11 secondary header */
+html.hb-apple #lab .bp-table { font-size: 12px; line-height: 15px; font-variant-numeric: tabular-nums; color: var(--a-label); }
+html.hb-apple #lab .bp-table th { height: 24px; padding: 0 10px; background: var(--a-window); color: var(--a-label-2); font-size: 11px; line-height: 14px; font-weight: 590; border-bottom: 1px solid var(--a-sep); }
+html.hb-apple #lab .bp-table th button { font: inherit; color: inherit; letter-spacing: normal; cursor: default; }
+html.hb-apple #lab .bp-table td { height: 24px; padding: 0 10px; border-bottom: 1px solid var(--a-group-sep); }
+/* a result in the report: green only for a profit, a loss is ink with its minus sign */
+html.hb-apple #lab .bpanel .up { color: var(--a-green); }
+html.hb-apple #lab .bpanel .down { color: var(--a-label); }
+html.hb-apple #lab .bp-table tr:hover td { background: transparent; }
+html.hb-apple #lab .bp-table tr.sel td { background: var(--a-sel); }
+html.hb-apple #lab .bp-table tfoot td { background: var(--a-group); border-top: 1px solid var(--a-sep); font-weight: 590; }
+html.hb-apple #lab .bp-empty { padding: 20px 16px; font-size: 13px; line-height: 16px; color: var(--a-label-2); }
+
+/* ---- the chart shell's own menus, dialogs and toasts ------------------------------------------------------------------------ */
+html.hb-apple .lab-page .menu { padding: 5px; border: 0; border-radius: 13px; background: var(--a-pane-glass); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur); box-shadow: var(--a-menu-shadow);
+  font-size: 13px; line-height: 16px; color: var(--a-label); }
+html.hb-apple .lab-page .menu-i { height: 24px; gap: 8px; padding: 0 9px; border-radius: 8px; font-size: 13px; line-height: 16px; color: var(--a-label); }
+html.hb-apple .lab-page .menu-i:hover, html.hb-apple .lab-page .menu-i:focus-visible { background: var(--a-accent); color: var(--a-on-accent); outline: none; }
+html.hb-apple .lab-page .menu-i.active { color: var(--a-accent-text); font-weight: 510; }
+html.hb-apple .lab-page .menu-i.active:hover, html.hb-apple .lab-page .menu-i.active:focus-visible { color: var(--a-on-accent); }
+html.hb-apple .lab-page .menu-i:disabled, html.hb-apple .lab-page .menu-i:disabled:hover { opacity: 1; background: none; color: var(--a-label-3); }
+html.hb-apple .lab-page .menu-i:hover .menu-sub, html.hb-apple .lab-page .menu-i:focus-visible .menu-sub { color: inherit; opacity: .8; }
+html.hb-apple .lab-page .menu-h { padding: 4px 9px 3px; font-size: 11px; line-height: 14px; font-weight: 590; letter-spacing: normal; text-transform: none; color: var(--a-label-2); }
+html.hb-apple .lab-page .menu-sep { height: 1px; margin: 5px 9px; background: var(--a-sep); opacity: 1; }
+html.hb-apple .lab-page .menu-row { padding-right: 4px; border-radius: 8px; }
+html.hb-apple .lab-page .menu-row:hover { background: var(--a-accent); color: var(--a-on-accent); }
+html.hb-apple .lab-page .menu-row:hover .menu-i { background: none; color: var(--a-on-accent); }
+html.hb-apple .lab-page .menu-row:hover .menu-del, html.hb-apple .lab-page .menu-row:hover .menu-star { color: inherit; }
+html.hb-apple .lab-page .menu-empty { padding: 4px 9px; color: var(--a-label-2); }
+html.hb-apple .lab-page .backdrop { background: var(--a-scrim); }
+html.hb-apple .lab-page .dialog { border: 0; border-radius: 26px; background: var(--a-window); -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: var(--a-sheet-shadow); color: var(--a-label); font-size: 13px; line-height: 16px; }
+html.hb-apple .lab-page .dialog .menu { background: var(--a-window); }
+html.hb-apple .lab-page .dlg-head { padding: 20px 14px 10px 20px; font-size: 13px; line-height: 16px; font-weight: 700; letter-spacing: normal; color: var(--a-label); }
+html.hb-apple .lab-page .dlg-x { width: 24px; height: 24px; border-radius: 12px; background: var(--a-fill); color: var(--a-label-2); }
+html.hb-apple .lab-page .dlg-x .ic { width: 12px; height: 12px; }
+html.hb-apple .lab-page .dialog .set-cap { margin: 14px 0 4px; font-size: 11px; line-height: 14px; font-weight: 590; letter-spacing: normal; text-transform: none; color: var(--a-label-2); }
+html.hb-apple .lab-page .toast { padding: 9px 9px 9px 14px; border: 0; border-radius: 18px; background: var(--a-pane-glass); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur); box-shadow: var(--a-menu-shadow);
+  font-size: 13px; line-height: 16px; font-weight: 400; color: var(--a-label); }
+html.hb-apple .lab-page .toast.err { color: var(--a-red-text); }
+html.hb-apple .lab-page .toast-x { border-radius: 10px; color: var(--a-label-2); }
+
+@media (prefers-reduced-motion: reduce) {
+  html.hb-apple #lab, html.hb-apple .hb-tb-scrim, html.hb-apple #labLib.hb-side, html.hb-apple #labRes.hb-insp { transition: none; }
+  html.hb-apple .hb-tb .lab-run.busy .sf { animation: none; }
+}
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  html.hb-apple #labLib.hb-side, html.hb-apple #labRes.hb-insp, html.hb-apple #pgSw.hb-seg, html.hb-apple #labPanels.hb-platter, html.hb-apple .lab-menu, html.hb-apple #lab .lab-chart .toolbar #tbFavs {
+    -webkit-backdrop-filter: none; backdrop-filter: none; background: var(--a-pane); }
+}
