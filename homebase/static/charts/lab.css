@@ -23,9 +23,9 @@
 .lab-chart > .main { padding-left: 4px; }
 .lab-chart > .bpanel { margin-left: 4px; }
 .lab-chart .toolbar > :not(#tbFavs):not(.lab-nav) { display: none !important; }
-.lab-chart .toolbar { gap: 10px; padding: 0 6px 0 8px; }
+.lab-chart .toolbar { gap: 4px 10px; padding: 4px 6px 4px 8px; height: auto; min-height: 40px; flex-wrap: wrap; }
 .lab-chart .toolbar #tbFavs { margin-left: auto; flex: none; }
-.lab-nav { display: flex; align-items: center; gap: 4px; min-width: 0; flex: 1 1 auto; }
+.lab-nav { display: flex; align-items: center; gap: 4px; min-width: 0; flex: 1 1 300px; }
 .lab-nav-b { flex: none; width: var(--hb-h-sm); height: var(--hb-h-sm); border: 0; border-radius: 999px; background: var(--hb-fill); color: var(--hb-fg); font-size: 17px; line-height: 1; cursor: pointer; display: grid; place-items: center; padding: 0 0 2px; transition: background-color 130ms ease, transform 120ms var(--ease-spring-out); }
 .lab-nav-b:hover { background: var(--hb-fill-hover); }
 .lab-nav-b:active { transform: scale(.94); }
