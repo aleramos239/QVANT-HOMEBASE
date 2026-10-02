@@ -228,7 +228,7 @@ function setPanel(k, on) {
 }
 /* Put the current run on the chart: its executions, its levels and the chart's own indicators. `report` also
    opens the Strategy Tester's full report under the chart. The server refuses 09:20-09:35 ET (the desk's window). */
-let shownRid = null;
+let shownRid = null, showTries = 0;
 function setReport(on) { root.dataset.report = on ? '1' : '0'; paintRes(); refit(); }
 async function showOnChart(report = false) {
   const r = S.run;
@@ -249,31 +249,58 @@ async function showOnChart(report = false) {
   const o = await send('POST', '/api/tester/show', { run_id: r.rid });
   if (o.ok && o.json.pages && n) frameWhenLoaded(r.rid);
   if (!o.ok) { shownRid = null; log(`<span class="err">Could not show it on the chart: ${esc(o.error)}</span>`); }
-  else if (!o.json.pages) { shownRid = null; log('No chart page is open to show it on'); }
+  else if (!o.json.pages) {       // this page's own socket is not up yet (just loaded): try again shortly, a few times
+    shownRid = null;
+    if ((showTries = (showTries || 0) + 1) <= 5) setTimeout(syncChart, 1200); else log('The chart is not connected yet: toggle Chart off and on to try again');
+  } else showTries = 0;
   paintNav();
 }
 /* ONE chart: the Lab never shows a grid of them. (The grid menu is the chart shell's own; its button is hidden here.) */
 function soloChart() {
-  const g = document.getElementById('grid'), b = document.getElementById('tbGrid');
-  if (!g || !b || !g.children.length || g.children.length === 1) return;
-  b.click();
-  const one = document.querySelector('.menu-grid .grid-pick');
-  if (one) one.click(); else b.click();
+  const H = window.HBCharts;
+  if (!H || !H.cells || !H.cells.length) return;
+  if (H.layout && H.layout.grid !== 1) { H.layout.grid = 1; H.buildGrid(); }
+  bareChart();
+}
+/* ...and it shows the STRATEGY: price, its executions, the levels and plots the script itself draws. The chart's
+   own saved indicators (volume, VWAP, session levels, footprint, ...) are not part of the strategy, so they go. */
+function bareChart() {
+  const c = window.HBCharts && window.HBCharts.cells && window.HBCharts.cells[0];
+  if (c && c.cfg && Array.isArray(c.cfg.indicators) && c.cfg.indicators.length) c.update({ indicators: [] });
 }
 /* ---- stepping through the trades ---- */
 let ti = null;
-/* How much of the day to show around a trade: the structure before the entry and what price did after the exit. */
-const CONTEXT_MS = 150 * 60 * 1000;
+/* A trade is shown inside its whole trading day: from half an hour before the strategy's session opens to its
+   close (the window the script declares; 09:30-16:00 ET when it declares none). */
+const ET_HMS = new Intl.DateTimeFormat('en-GB', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });
+const etMsOfDay = (ms) => { const [h, m, s] = ET_HMS.format(new Date(ms)).split(':').map(Number); return ((h * 60 + m) * 60 + s) * 1000; };
+const hm = (t, d) => { const m = /^(\d{1,2}):(\d{2})/.exec(String(t || '')); return m ? (Number(m[1]) * 60 + Number(m[2])) * 60000 : d; };
+function sessionWindow() {
+  const b = buf(), meta = b && (b.kind === 'builtin' ? b.meta : b.valid && b.valid.meta), w = meta && meta.session_window;
+  return { open: hm(w && w[0], 570 * 60000), close: hm(w && w[1], 960 * 60000) };
+}
+const LEAD_MS = 30 * 60000;
+function dayContext(t) {
+  const w = sessionWindow();
+  return { before: Math.max(LEAD_MS, etMsOfDay(t.entry_ms) - (w.open - LEAD_MS)), after: Math.max(LEAD_MS, w.close - etMsOfDay(t.exit_ms)) };
+}
 /* The show arrives over the page's socket: once the tester holds this run, frame its latest trade. */
 async function frameWhenLoaded(rid) {
+  const pause = (ms) => new Promise((res) => setTimeout(res, ms));
   for (let k = 0; k < 60; k++) {
     const b = window.HBTesterUI && window.HBTesterUI.bundle;
     if (shownRid !== rid) return;                       // a newer run took the chart
-    if (b && b.run && b.run.id === rid) { if (ti != null) jumpTo(ti); return; }
-    await new Promise((res) => setTimeout(res, 200));
+    if (b && b.run && b.run.id === rid) break;
+    await pause(200);
+  }
+  // the tester is still settling the run it was just handed: a jump can lose that race, so make sure it took
+  for (let k = 0; k < 4 && shownRid === rid && ti != null; k++) {
+    await pause(k ? 1500 : 300);
+    if (window.HBTesterUI && window.HBTesterUI.selected === ti) return;
+    jumpTo(ti);
   }
 }
-const jumpTo = (i) => window.HBTesterLayer && window.HBTesterLayer.jump(i, null, { contextMs: CONTEXT_MS });
+const jumpTo = (i) => { const t = navTrades()[i]; return t && window.HBTesterLayer && window.HBTesterLayer.jump(i, null, { contextMs: dayContext(t) }); };
 const NAV_DATE = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
 const navTrades = () => (S.run && S.run.bundle && shownRid === S.run.rid ? S.run.bundle.trades || [] : []);
 function paintNav() {

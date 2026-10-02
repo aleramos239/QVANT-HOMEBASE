@@ -263,8 +263,23 @@ function viewShows(cell, t) {
    exit, so the trade is seen in the structure around it, not alone; 0 = the tight zoom every other caller gets.
    The window never starts before the first bar the chart holds (focusRange refuses a time before it). */
 function focusTradeView(cell, t, contextMs = 0) {
-  if (!contextMs || !cell.bars || !cell.bars.length) return cell.focusRange(t.entry_ms, t.exit_ms);
-  return cell.focusRange(Math.max(t.entry_ms - contextMs, cell.bars[0].ms), t.exit_ms + contextMs);
+  const { before, after } = contextOf(contextMs);
+  if ((!before && !after) || !cell.bars || !cell.bars.length) return cell.focusRange(t.entry_ms, t.exit_ms);
+  const from = Math.max(t.entry_ms - before, cell.bars[0].ms), to = t.exit_ms + after;
+  // the window asked for IS the frame: focusRange would pad it by half its own width again on each side
+  const ts = cell.chart && cell.chart.timeScale ? cell.chart.timeScale() : null;
+  if (ts && ts.setVisibleLogicalRange) {
+    const i = D.barIndexAt(cell.bars, from), j = Math.max(i, D.barIndexAt(cell.bars, to));
+    if (i < 0) return false;
+    ts.setVisibleLogicalRange({ from: i - 2, to: j + 2 });
+    return true;
+  }
+  return cell.focusRange(from, to);
+}
+/* contextMs: one number (the same both ways) or {before, after} -- e.g. back to the session's open and on to its close. */
+function contextOf(c) {
+  const n = (v) => (typeof v === 'number' && v > 0 ? v : 0);
+  return c && typeof c === 'object' ? { before: n(c.before), after: n(c.after) } : { before: n(c), after: n(c) };
 }
 
 /* After the first focusRange: watch for the view to be pulled elsewhere and bring it back (reach again if the
@@ -281,7 +296,8 @@ async function settleFocus(cell, t, { isCurrent = () => true, wait = sleep, trie
       await wait(gapMs);
       if (touched || !isCurrent() || !cell.chart) return false;
       if (viewShows(cell, t)) return true;
-      if (!(await cell.reach(t.entry_ms - contextMs, () => {})) && !(contextMs && await cell.reach(t.entry_ms, () => {}))) return false;
+      const back = contextOf(contextMs).before;
+      if (!(await cell.reach(t.entry_ms - back, () => {})) && !(back && await cell.reach(t.entry_ms, () => {}))) return false;
       if (touched || !isCurrent() || !cell.chart) return false;
       focusTradeView(cell, t, contextMs);
     }
@@ -330,7 +346,8 @@ async function runJump(env, i, target = null, { select = true, avoidSelected = f
   const day = t.date;
   const note = (firstMs) => page.sbNote(`Loading history back to ${day}… (at ${new Date(firstMs).toISOString().slice(0, 10)})`);
   // with context, the history before the entry is wanted too; the trade itself is still what must be reachable
-  const ok = (await cell.reach(t.entry_ms - contextMs, note)) || (contextMs ? await cell.reach(t.entry_ms, note) : false);
+  const back = contextOf(contextMs).before;
+  const ok = (await cell.reach(t.entry_ms - back, note)) || (back ? await cell.reach(t.entry_ms, note) : false);
   if (!current()) return;
   if (gone()) return again();
   if (!ok) { page.sbNote(`${day} is older than this chart's history can load`); return; }
@@ -883,7 +900,7 @@ function jump(i, target = null, opts = {}) {
   return runJump({ U: window.HBTesterUI, page: PAGE, tester: window.HBTester, cat: window.HBCatalog, chartFacts }, i, target, opts);
 }
 
-const api = { overlay, jump, runJump, settleFocus, focusTradeView, viewShows, tradesInRange, sessionIndex, plotPoints, plotPane, isConstant, valueAt,
+const api = { overlay, jump, runJump, settleFocus, focusTradeView, contextOf, viewShows, tradesInRange, sessionIndex, plotPoints, plotPane, isConstant, valueAt,
   showPlan, claudeAvoidsSelected, focusTrade, chartFacts, hlineStyle, hlineLabel, hlineTip, levelText, stackLabels, placeLabels, dedupeLevels, labelsFit,
   boxGeometry, fillSides, thinLabels, tradeTip, LABEL_MIN_PX, MIN_BOX_W };
 if (typeof window !== 'undefined') window.HBTesterLayer = api;
