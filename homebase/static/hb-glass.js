@@ -108,7 +108,7 @@ function refresh() { if (!queued) { queued = true; requestAnimationFrame(scan); 
 const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(refresh) : null;
 function watch() { if (ro) for (const el of document.querySelectorAll('.hb-lens')) ro.observe(el); refresh(); }
 function start() {
-  for (const el of document.querySelectorAll('.pgsw')) el.classList.add('hb-lens');   // the page switcher is glass on every page
+  for (const el of document.querySelectorAll('.pgsw, #tbFavs')) el.classList.add('hb-lens');   // the page switcher and the interval switch are glass on every page
   watch();
   new MutationObserver((ms) => { for (const m of ms) if (m.type === 'attributes' || m.addedNodes.length) { watch(); return; } })
     .observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-theme'] });
