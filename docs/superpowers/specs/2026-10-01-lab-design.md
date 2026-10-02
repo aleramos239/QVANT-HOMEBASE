@@ -41,3 +41,12 @@ A faster path can be added later; it is a product decision, not a code shortcut.
 ## Not in this pass
 Walk-forward / heat-map / Monte Carlo launch from the Lab (they stay in the Strategy Tester under Chart mode);
 renaming the native toolbar item; multi-file strategies; an in-editor autocomplete.
+
+## Look (2026-10-01, after Apple's "Adopting Liquid Glass")
+Two layers. **Content** -- the code and the chart -- is one continuous surface, window edge to window edge: no
+cards, no frames, a hairline between the two. The **functional layer** floats above it as glass and is used for
+nothing else: the Strategies sidebar, the Results inspector, and two capsules over the chart (the trade stepper and
+the intervals). The top bar carries the document (name and state, centred), the one tinted action (Run) and a More
+menu (Save, Request a review, Scripting reference, Delete); the four panels are icon toggles. Controls are capsules
+everywhere (hb.css). The glass material, its light edge and shadow, and the reduced-transparency / contrast /
+motion fallbacks are defined once in hb.css (`--hb-glass*`, `.hb-glass`, `.hb-ib`).

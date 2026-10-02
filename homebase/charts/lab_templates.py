@@ -4,6 +4,8 @@ any other draft. Every template must pass draftstore.check_source (tests/test_la
 the bar template end to end in the sandbox)."""
 from __future__ import annotations
 
+import ast
+
 from .. import draftstore
 
 BLANK = '''"""<One line: what this strategy does.>"""
@@ -81,11 +83,28 @@ class BarBreakout(Strategy):
 '''
 
 
+def _split_template() -> tuple[str, str]:
+    """(the rules a draft follows, the template's code without them): DRAFT_TEMPLATE opens with one long docstring
+    that documents the whole contract -- right for a file Claude writes, too much to open an editor on."""
+    doc = ast.get_docstring(ast.parse(draftstore.DRAFT_TEMPLATE)) or ""
+    body = draftstore.DRAFT_TEMPLATE.split('"""', 2)[2].lstrip("\n")
+    return doc, body
+
+
+def reference() -> str:
+    """The scripting reference the Lab shows on request: the contract, as DRAFT_TEMPLATE documents it."""
+    doc = _split_template()[0]
+    return doc.split("\n", 2)[2].strip() if doc.count("\n") >= 2 else doc
+
+
+STRADDLE = '"""Stop entries either side of the 9:30 open, one cancels the other; flat at 15:55."""\n' + _split_template()[1]
+
+
 def templates() -> list[dict]:
     """[{id, title, blurb, code}] -- the first is the one a new strategy opens with."""
     return [
         {"id": "straddle", "title": "Stop straddle", "blurb": "Stop entries either side of the open, OCO",
-         "code": draftstore.DRAFT_TEMPLATE},
+         "code": STRADDLE},
         {"id": "bar_breakout", "title": "Bar breakout", "blurb": "Price action on 5-minute bar closes",
          "code": BAR_BREAKOUT},
         {"id": "blank", "title": "Blank", "blurb": "The contract, nothing else", "code": BLANK},

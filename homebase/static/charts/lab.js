@@ -111,7 +111,7 @@ async function validateNow(b) {
 async function save(b) {
   if (!b || b.kind === 'builtin') return false;
   const nerr = C.nameError(b.name);
-  if (nerr) { log(`<span class="err">${esc(nerr)}</span>`); const n = $('#edName'); if (n) { n.classList.add('bad'); n.focus(); } return false; }
+  if (nerr) { log(`<span class="err">${esc(nerr)}</span>`); const n = document.getElementById('edName'); if (n) { n.classList.add('bad'); n.focus(); } return false; }
   const r = await send('PUT', `/api/tester/drafts/${encodeURIComponent(b.name)}`, { code: b.code });
   if (!r.ok) { log(`<span class="err">Not saved: ${esc(r.error)}</span>`); return false; }
   const wasNew = b.kind === 'new';
@@ -216,6 +216,7 @@ function applyPanels(save = true) {
   paintRes();
   if (save) { try { localStorage.setItem('hb_lab_panels', JSON.stringify(P)); localStorage.setItem('hb_lab_split', String(Math.round(split))); } catch (_) { /* private mode */ } }
   refit();
+  setTimeout(refit, 340);
 }
 /* Show or hide one panel. The middle is never empty: hiding the last of Code / Chart brings the other back. */
 function setPanel(k, on) {
@@ -301,6 +302,7 @@ async function frameWhenLoaded(rid) {
   }
 }
 const jumpTo = (i) => { const t = navTrades()[i]; return t && window.HBTesterLayer && window.HBTesterLayer.jump(i, null, { contextMs: dayContext(t) }); };
+const NAV_DAY = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', year: 'numeric' });
 const NAV_DATE = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
 const navTrades = () => (S.run && S.run.bundle && shownRid === S.run.rid ? S.run.bundle.trades || [] : []);
 function paintNav() {
@@ -310,11 +312,11 @@ function paintNav() {
   const [prev, next] = document.querySelectorAll('#labNav [data-nav]');
   if (prev) prev.disabled = !n || ti == null || ti <= 0;
   if (next) next.disabled = !n || (ti != null && ti >= n - 1);
-  if (!n) { el.textContent = S.run && S.run.bundle && shownRid === S.run.rid ? 'No trades in this run' : 'Run a backtest to see its trades here'; return; }
+  if (!n) { el.textContent = S.run && S.run.bundle && shownRid === S.run.rid ? 'No trades in this run' : 'Run a backtest to see its trades'; return; }
   if (!t) { el.innerHTML = `<b>${n}</b> trade${n === 1 ? '' : 's'}`; return; }
   const net = Number(t.net) || 0, amt = `${net > 0 ? '+' : net < 0 ? MINUS : ''}$${Math.abs(Math.round(net)).toLocaleString('en-US')}`;
-  el.innerHTML = `<b>Trade ${ti + 1}</b> of ${n} · ${t.side === 'long' ? 'Long' : 'Short'} · <span class="${net > 0 ? 'pos' : 'neg'}">${amt}</span> · ${esc(NAV_DATE.format(new Date(t.entry_ms)))} ET`;
-  el.title = el.textContent;
+  el.innerHTML = `<b>${ti + 1}</b> of ${n} · ${t.side === 'long' ? 'Long' : 'Short'} <span class="${net > 0 ? 'pos' : 'neg'}">${amt}</span> · ${esc(NAV_DAY.format(new Date(t.entry_ms)))}`;
+  el.title = `Trade ${ti + 1} of ${n} · ${NAV_DATE.format(new Date(t.entry_ms))} ET`;
 }
 function stepTrade(d) {
   const n = navTrades().length;
@@ -368,11 +370,13 @@ function menu(anchor, html, onPick) {
   menuEl.innerHTML = html;
   document.body.appendChild(menuEl);
   const a = anchor.getBoundingClientRect(), m = menuEl.getBoundingClientRect();
-  menuEl.style.left = `${Math.max(8, Math.min(a.left, innerWidth - m.width - 8))}px`;
-  menuEl.style.top = `${Math.max(8, Math.min(a.bottom + 6, innerHeight - m.height - 8))}px`;
+  const right = a.left + m.width > innerWidth - 8;            // opens toward the side it has room on, from its button
+  menuEl.style.left = `${Math.max(8, right ? a.right - m.width : a.left)}px`;
+  menuEl.style.top = `${Math.max(8, Math.min(a.bottom + 8, innerHeight - m.height - 8))}px`;
+  menuEl.style.setProperty('--o', right ? 'top right' : 'top left');
   menuEl.addEventListener('click', (e) => { const t = e.target.closest('[data-pick]'); if (t) { closeMenu(); onPick(t.dataset.pick); } });
 }
-document.addEventListener('pointerdown', (e) => { if (menuEl && !menuEl.contains(e.target) && !e.target.closest('[data-act="new"]')) closeMenu(); });
+document.addEventListener('pointerdown', (e) => { if (menuEl && !menuEl.contains(e.target) && !e.target.closest('[data-act="new"], [data-act="more"]')) closeMenu(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeMenu(); closeDialog(); } });
 
 async function newMenu(anchor) {
@@ -387,6 +391,29 @@ async function newMenu(anchor) {
     const t = ts.find((x) => `t:${x.id}` === pick);
     if (t) openScript(t.code, C.suggestName(t.code, takenNames()));
   });
+}
+function moreMenu(anchor) {
+  const b = buf();
+  if (!b) return;
+  const draft = b.kind !== 'builtin', saved = b.kind === 'draft';
+  menu(anchor, `${draft ? `<button class="row" data-pick="save"${isDirty(b) || b.kind === 'new' ? '' : ' disabled'}><span>Save</span><kbd>⌘S</kbd></button>
+      <button class="row" data-pick="review"${saved ? '' : ' disabled'}><span>Request a review…</span></button><hr>` : ''}
+    <button class="row" data-pick="ref"><span>Scripting reference</span></button>
+    ${saved ? '<hr><button class="row" data-pick="delete"><span>Delete…</span></button>' : ''}`,
+  (pick) => {
+    if (pick === 'save') save(b);
+    else if (pick === 'review') reviewDialog();
+    else if (pick === 'ref') referenceDialog();
+    else if (pick === 'delete') deleteDialog(b.name);
+  });
+}
+async function referenceDialog() {
+  const r = await send('GET', '/api/tester/drafts/reference');
+  const d = dialog(`<h2>Scripting reference</h2><p>What a strategy script may use. It only ever runs inside the sandboxed backtest.</p><pre></pre>
+    <div class="acts"><button class="btn btn-default" data-x="cancel">Done</button></div>`);
+  d.classList.add('wide');
+  d.querySelector('pre').textContent = r.ok ? r.json.text : `Could not load it: ${r.error}`;
+  d.addEventListener('click', (e) => { if (e.target.closest('[data-x]')) closeDialog(); });
 }
 async function pasteScript() {
   const b = openScript('', '');
@@ -454,44 +481,43 @@ function deleteDialog(name) {
 /* ---- painting ---- */
 function paintAll() { paintLib(); paintEditor(); paintRes(); }
 
+const ICON_PLUS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5.5v13M5.5 12h13"/></svg>';
+const ICON_PLAY = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 4.8v14.4a.9.9 0 0 0 1.36.77l11.7-7.2a.9.9 0 0 0 0-1.54L8.86 4.03a.9.9 0 0 0-1.36.77z" fill="currentColor"/></svg>';
+const ICON_MORE = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5.5" cy="12" r="1.7" fill="currentColor"/><circle cx="12" cy="12" r="1.7" fill="currentColor"/><circle cx="18.5" cy="12" r="1.7" fill="currentColor"/></svg>';
 function paintLib() {
-  const el = $('#labLib');
+  const el = $('#labLib .in');
   if (!el) return;
   const unsaved = [...S.bufs.values()].filter((b) => b.kind === 'new');
   const rows = [
-    ...unsaved.map((b) => ({ key: b.key, name: b.name || 'untitled', sub: 'Unsaved', dot: 'off', flag: '' })),
+    ...unsaved.map((b) => ({ key: b.key, name: b.name || 'Untitled', sub: 'Not saved yet', dot: 'off', flag: '' })),
     ...S.drafts.map((d) => {
       const b = S.bufs.get(`d:${d.name}`), dirty = b && isDirty(b);
       const bad = b && b.valid ? !b.valid.ok : !d.ok;
-      return { key: `d:${d.name}`, name: d.name, sub: bad ? 'Draft · needs a fix' : dirty ? 'Draft · unsaved changes' : 'Draft · valid', dot: bad ? 'err' : dirty ? 'off' : '', flag: bad ? '!' : '', del: d.name };
+      return { key: `d:${d.name}`, name: d.name, sub: bad ? 'Needs a fix' : dirty ? 'Edited' : 'Draft', dot: bad ? 'err' : dirty ? 'off' : '', flag: bad ? '!' : '' };
     })];
-  el.innerHTML = `<div class="lb-sh"><span>My strategies</span><span>${rows.length || ''}</span></div>
+  const top = el.scrollTop;
+  el.innerHTML = `<div class="lb-top"><b>Strategies</b><button class="hb-ib" data-act="new" aria-label="New strategy" title="New strategy">${ICON_PLUS}</button></div>
     ${rows.length ? rows.map((r) => `<button class="lb-item${S.cur === r.key ? ' sel' : ''}" data-key="${esc(r.key)}" aria-current="${S.cur === r.key}">
         <i class="lb-dot ${r.dot}"></i><span class="it"><b>${esc(r.name)}</b><small>${esc(r.sub)}</small></span><span class="lb-flag">${r.flag}</span></button>`).join('')
-      : '<div class="lb-empty">Nothing here yet. Paste a script or start from a template.</div>'}
-    <button class="btn btn-default lb-new" data-act="new">+ New strategy</button>
-    <div class="lb-sh"><span>Built-in · read-only</span><span>${S.builtins.length || ''}</span></div>
-    ${S.builtins.map((s) => `<button class="lb-item${S.cur === `b:${s.id}` ? ' sel' : ''}" data-key="b:${esc(s.id)}" aria-current="${S.cur === `b:${s.id}`}">
+      : '<div class="lb-empty">Nothing here yet. Press + to paste a script or start from a template.</div>'}
+    <div class="lb-sh">Built-in</div>
+    ${S.builtins.map((s) => `<button class="lb-item${S.cur === `b:${s.id}` ? ' sel' : ''}" data-key="b:${esc(s.id)}" aria-current="${S.cur === `b:${s.id}`}" title="Read-only">
         <i class="lb-dot lock"></i><span class="it"><b>${esc(s.name || s.id)}</b><small>${esc(s.root || '')}${s.bar_minutes ? ` · ${s.bar_minutes}-min bars` : ''}</small></span>${SAVE_ICON_LOCK}</button>`).join('')}`;
+  el.scrollTop = top;
 }
 
 function paintEditor() {
   const el = $('#labEd');
   const b = buf();
   if (!b) {
-    el.innerHTML = `<div class="lab-welcome"><h2>Write or paste a Python strategy</h2>
-      <p>Test it on years of real tick data in a sandbox, see the trades on a chart, and request a review when you like what you see. Your script is only ever read and backtested here, never run on the desk.</p>
+    el.innerHTML = `<div class="lab-welcome"><h2>Write or paste a strategy</h2>
+      <p>Backtest it on real tick data in a sandbox, see every trade on the chart, and request a review when you like what you see. Nothing here ever runs on the desk.</p>
       <div class="acts"><button class="btn btn-default btn-lg" data-act="paste">Paste a script</button><button class="btn btn-outline btn-lg" data-act="new">Start from a template</button></div></div>`;
+    paintHead();
     return;
   }
   const ro = b.kind === 'builtin';
-  el.innerHTML = `<div class="ed-head">
-      <div class="ed-title">${b.kind === 'new'
-        ? `<input class="ed-name" id="edName" value="${esc(b.name)}" placeholder="name" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="Strategy name"><span class="ed-ext">.py</span>`
-        : `<span class="ed-file">${esc(b.kind === 'builtin' ? b.id : b.name)}.py</span>`}
-        <span class="ed-state" id="edState"></span></div>
-      <div class="ed-actions" id="edActs"></div></div>
-    <div class="ed-wrap" id="edWrap"><pre class="ed-gut" id="edGut" aria-hidden="true"></pre>
+  el.innerHTML = `<div class="ed-wrap" id="edWrap"><pre class="ed-gut" id="edGut" aria-hidden="true"></pre>
       <div class="ed-main"><pre class="ed-hl" aria-hidden="true"><code id="edHl"></code></pre>
         <textarea class="ed-ta" id="edTa" spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off" wrap="off" aria-label="Python source" ${ro ? 'readonly' : ''}></textarea>
         <div class="ed-hint" id="edHint" hidden>Press <kbd>⌘V</kbd> to paste your script, or drop a .py file here.</div></div></div>
@@ -499,22 +525,28 @@ function paintEditor() {
   $('#edTa').value = b.code || '';
   paintHead(); paintCode(); paintLog();
 }
+/* The document's name and state live in the top bar, with the one primary action (Run) and a More menu. */
 function paintHead() {
-  const b = buf(), acts = $('#edActs'), st = $('#edState');
-  if (!b || !acts) return;
-  const ro = b.kind === 'builtin', busy = S.busy;
-  let tone = '', text = '';
+  const b = buf(), doc = document.getElementById('labDoc'), acts = document.getElementById('labActs');
+  if (!doc || !acts) return;
+  if (!b) { doc.innerHTML = ''; acts.innerHTML = ''; return; }
+  const ro = b.kind === 'builtin', busy = S.busy, dirty = isDirty(b);
+  let cls = '', text = '', tip = '';
   if (ro) text = 'Built-in · read-only';
-  else if (b.valid) { const s = C.statusOf(b.valid); tone = s.tone; text = s.text + (b.valid.ok && b.savedAt && !isDirty(b) ? ` · saved ${C.ago(b.savedAt, Date.now())}` : isDirty(b) && b.kind !== 'new' ? ' · unsaved' : ''); }
+  else if (b.valid && !b.valid.ok) { const st = C.statusOf(b.valid); cls = 'err'; text = st.text; }
+  else if (b.kind === 'new') text = (b.code || '').trim() ? 'Not saved yet' : '';
+  else if (dirty) { cls = 'edited'; text = 'Edited'; }
+  else if (b.valid && b.valid.ok) { text = C.metaLine(b.valid.meta); tip = b.savedAt ? `Saved ${C.ago(b.savedAt, Date.now())}` : ''; }
   else if (b.code && b.code.trim()) text = 'Checking…';
-  st.className = `ed-state ${tone}`;
-  st.innerHTML = text ? `<i></i>${esc(text)}` : '';
-  acts.innerHTML = ro
-    ? `<button class="btn btn-default" data-act="run"${busy ? ' disabled' : ''}>${busy ? 'Running…' : 'Run backtest'}</button>`
-    : `<button class="btn btn-outline" data-act="validate">Validate</button>
-       <button class="btn btn-default" data-act="run"${busy || !(b.code || '').trim() ? ' disabled' : ''}>${busy ? 'Running…' : 'Run backtest'}</button>
-       <button class="btn btn-outline" data-act="save"${isDirty(b) || b.kind === 'new' ? '' : ' disabled'}>Save</button>
-       <button class="btn btn-outline" data-act="review"${b.kind === 'new' ? ' disabled' : ''} title="Package it for a person to read before it can reach the desk">Request review…</button>`;
+  const name = b.kind === 'new'
+    ? `<input class="doc-input" id="edName" value="${esc(b.name)}" placeholder="name" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="Strategy name"><span class="doc-name"><i>.py</i></span>`
+    : `<span class="doc-name">${esc(ro ? b.id : b.name)}<i>.py</i></span>`;
+  const had = document.activeElement && document.activeElement.id === 'edName';   // typing a name must survive a repaint
+  if (!had) doc.innerHTML = `${name}<span class="doc-state ${cls}" id="edState" title="${esc(tip || text)}">${esc(text)}</span>`;
+  else { const st = document.getElementById('edState'); if (st) { st.className = `doc-state ${cls}`; st.textContent = text; st.title = tip || text; } }
+  const canRun = !busy && (ro || (b.code || '').trim());
+  acts.innerHTML = `<button class="btn btn-default lab-run${busy ? ' busy' : ''}" data-act="run"${canRun ? '' : ' disabled'} title="Run the backtest (⌘↵)">${ICON_PLAY}<span>${busy ? 'Running' : 'Run'}</span></button>
+    <button class="hb-ib" data-act="more" aria-label="More" title="More" aria-haspopup="menu">${ICON_MORE}</button>`;
   const hint = $('#edHint'); if (hint) hint.hidden = !!(b.code && b.code.length) || ro;
 }
 function paintGutter() {
@@ -543,12 +575,12 @@ function syncScroll() {
 function equitySvg(eq) {
   const s = X.equitySeries(eq).equity;
   if (s.length < 2) return '';
-  const W = 340, H = 120, pad = 6, lo = Math.min(0, ...s.map((p) => p.value)), hi = Math.max(0, ...s.map((p) => p.value));
+  const W = 320, H = 112, pad = 5, lo = Math.min(0, ...s.map((p) => p.value)), hi = Math.max(0, ...s.map((p) => p.value));
   const sx = (i) => (i / (s.length - 1)) * W, sy = (v) => pad + (1 - (v - lo) / ((hi - lo) || 1)) * (H - 2 * pad);
-  const pts = s.map((p, i) => `${sx(i).toFixed(1)},${sy(p.value).toFixed(1)}`);
-  return `<svg class="rs-eq" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Equity curve">
-    <line class="z" x1="0" x2="${W}" y1="${sy(0).toFixed(1)}" y2="${sy(0).toFixed(1)}"/>
-    <polygon class="a" points="0,${sy(0).toFixed(1)} ${pts.join(' ')} ${W},${sy(0).toFixed(1)}"/><polyline class="l" points="${pts.join(' ')}"/></svg>`;
+  const pts = s.map((p, i) => `${sx(i).toFixed(1)},${sy(p.value).toFixed(1)}`), z = sy(0).toFixed(1);
+  return `<svg class="rs-eq" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Equity curve, after fees">
+    <defs><linearGradient id="labEqFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="currentColor" stop-opacity=".16"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></linearGradient></defs>
+    <polygon class="a" points="0,${H} ${pts.join(' ')} ${W},${H}"/><line class="z" x1="0" x2="${W}" y1="${z}" y2="${z}"/><polyline class="l" points="${pts.join(' ')}"/></svg>`;
 }
 function settingsHtml(b) {
   const f = b && formOf(b), meta = b && metaOf(b);
@@ -563,79 +595,99 @@ function settingsHtml(b) {
   };
   const { start, end } = X.rangeDates(f.range);
   const spent = end && end >= '2025-01-01';
-  return `<details class="rs-set"><summary><span>Settings</span><span>${esc(X.pillLabel ? X.pillLabel(f.range) : f.range.id)} · ${f.qty} contract${f.qty === 1 ? '' : 's'}</span></summary>
+  return `<details class="rs-group rs-set"${S.setOpen ? ' open' : ''}><summary><span>Settings</span><span>${esc(X.pillLabel ? X.pillLabel(f.range) : f.range.id)} · ${f.qty} contract${f.qty === 1 ? '' : 's'}</span></summary>
     <div class="grid"><label>Range</label><select data-f="range">${rangeOpts}</select>
       ${f.range.id === 'custom' ? `<label>From</label><input type="text" data-f="start" value="${esc(f.range.start)}" placeholder="YYYY-MM-DD"><label>To</label><input type="text" data-f="end" value="${esc(f.range.end)}" placeholder="YYYY-MM-DD">` : ''}
       ${spent ? '<div class="warn">This reaches 2025 or later, the data kept back for a final check. Each look is recorded.</div>' : ''}
       <label>Contracts</label><input type="number" data-f="qty" value="${esc(f.qty)}" min="1" step="1">
-      <label>Fees ($ / contract, round trip)</label><input type="number" data-f="commission" value="${esc(f.commission)}" min="0" step="0.25">
+      <label title="Dollars per contract, round trip">Fees ($ per contract)</label><input type="number" data-f="commission" value="${esc(f.commission)}" min="0" step="0.25">
       <label>Slippage (ticks)</label><input type="number" data-f="slippage_ticks" value="${esc(f.slippage_ticks)}" min="0" step="1">
       ${ins.length ? `<div class="sep"></div>${ins.map(inputRow).join('')}` : ''}</div></details>`;
 }
+/* "Oct 1 – Dec 13, 2024" / "2021 – 2024": a run's range the way a person writes it. */
+const RS_DAY = new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric' });
+function rangeText(rg) {
+  if (!rg) return '';
+  const a = rg.start, b = rg.end;
+  if (!a || !b) return rg.label || '';
+  if (a.slice(5) === '01-01' && b.slice(5) === '12-31') return a.slice(0, 4) === b.slice(0, 4) ? a.slice(0, 4) : `${a.slice(0, 4)} – ${b.slice(0, 4)}`;
+  const d = (x) => RS_DAY.format(new Date(`${x}T12:00:00Z`));
+  return a.slice(0, 4) === b.slice(0, 4) ? `${d(a)} – ${d(b)}, ${b.slice(0, 4)}` : `${d(a)}, ${a.slice(0, 4)} – ${d(b)}, ${b.slice(0, 4)}`;
+}
 function paintRes() {
-  const el = $('#labRes');
+  const el = $('#labRes .in');
   if (!el) return;
-  const b = buf();
-  if (!b) { el.innerHTML = '<div class="rs-body"><div class="rs-empty"><h3>Backtest</h3><p>Pick a strategy, or paste one, to see how it would have done.</p></div></div>'; return; }
+  const b = buf(), top = el.scrollTop;
+  if (!b) { el.innerHTML = '<div class="rs-empty"><h3>Backtest</h3><p>Pick a strategy, or paste one, to see how it would have done.</p></div>'; return; }
   const r = S.run && S.run.key === b.key ? S.run : null, settings = settingsHtml(b);
   let main = '';
   if (r && !r.bundle && (S.busy || (r.st && r.st.status === 'queued'))) {
     const p = X.progress(r.st || { status: 'queued' }), ind = p.frac == null;
-    main = `<div class="rs-prog"><div class="t">${esc(p.text || 'Starting…')}</div><div class="rs-bar${ind ? ' ind' : ''}"><i style="width:${ind ? 38 : Math.round(p.frac * 100)}%"></i></div>
+    main = `<div class="rs-h"><b>Backtest</b></div><div class="rs-prog"><div class="t">${esc(p.text || 'Starting…')}</div><div class="rs-bar${ind ? ' ind' : ''}"><i style="width:${ind ? 38 : Math.round(p.frac * 100)}%"></i></div>
       <button class="btn btn-outline btn-sm" data-act="cancel">Cancel</button></div>`;
   } else if (r && r.bundle) {
     const run = r.bundle.run, a = run.report.summary.all, tl = X.tiles(run), by = (l) => tl.find((t) => t.label === l) || { value: '—' };
-    const net = tl[0], pos = (a.net_profit || 0) > 0;
-    const badges = X.badges(run).filter((x) => x.tone !== 'info' || /sessions/.test(x.text));
-    main = `<div class="rs-top"><span><b>Backtest</b> · ${esc(run.range && run.range.label ? run.range.label : '')}</span><span class="rs-chip">${esc(run.strategy.root || '')} · ${esc(run.qty)} contract${run.qty === 1 ? '' : 's'}</span></div>
+    const net = tl[0], pos = (a.net_profit || 0) > 0, n = a.trades ?? 0;
+    const badges = X.badges(run).filter((x) => x.tone !== 'info');
+    const used = run.coverage ? `${run.coverage.used ?? '—'} of ${run.coverage.sessions ?? '—'} sessions` : '';
+    main = `<div class="rs-h"><b>Backtest</b><span>${esc(rangeText(run.range))}</span></div>
       <div class="rs-net${pos ? ' pos' : ''}">${esc(net.value)}</div>
-      <div class="rs-sub">After fees · ${esc(String(a.trades ?? 0))} trade${a.trades === 1 ? '' : 's'} · max drawdown ${esc(by('Max drawdown').value)}</div>
+      <div class="rs-sub">After fees · ${esc(String(n))} trade${n === 1 ? '' : 's'} · ${esc(run.strategy.root || '')} × ${esc(run.qty)}${used ? ` · ${esc(used)}` : ''}</div>
       ${equitySvg(r.bundle.equity)}
-      <div class="rs-tiles">${[['Profit factor', by('Profit factor').value], ['Win rate', by('Win rate').value], ['Avg trade', by('Avg trade').value],
-        ['Trades', String(a.trades ?? 0)], ['Max drawdown', by('Max drawdown').value], ['Sharpe', by('Sharpe').value]].map(([k, v]) => `<div class="rs-tile"><div class="k">${k}</div><div class="v">${esc(v)}</div></div>`).join('')}</div>
-      ${(a.trades || 0) === 0 ? '<div class="rs-sub" style="margin-top:10px">It took no trades in this range. Check the session window and the entry rules, then run it again.</div>' : ''}
-      <div class="rs-top" style="gap:6px;flex-wrap:wrap;justify-content:flex-start;margin-top:12px">${badges.map((x) => `<span class="rs-chip ${x.tone === 'err' ? 'err' : x.tone === 'warn' ? 'warn' : ''}" title="${esc(x.title || '')}">${esc(x.text)}</span>`).join('')}</div>
-      <div class="rs-rows">${P.chart ? '' : '<button class="rs-row" data-act="show"><span>Show trades on the chart</span><span>›</span></button>'}
-        <button class="rs-row" data-act="report"><span>${root.dataset.report === '1' && P.chart ? 'Hide the full report' : 'Open the full report'}</span><span>›</span></button>
+      ${n === 0 ? '<div class="rs-sub">It took no trades in this range. Check the session window and the entry rules, then run it again.</div>' : ''}
+      <div class="rs-group rs-tiles">${[['Profit factor', by('Profit factor').value], ['Win rate', by('Win rate').value], ['Avg trade', by('Avg trade').value],
+        ['Max drawdown', by('Max drawdown').value], ['Sharpe', by('Sharpe').value], ['Avg win : loss', by('Avg win : loss').value.replace(/^RR /, '')]].map(([k, v]) => `<div class="rs-tile"><div class="k">${k}</div><div class="v">${esc(v)}</div></div>`).join('')}</div>
+      ${badges.length ? `<div class="rs-chips">${badges.map((x) => `<span class="rs-chip ${x.tone === 'err' ? 'err' : x.tone === 'warn' ? 'warn' : ''}" title="${esc(x.title || '')}">${esc(x.text)}</span>`).join('')}</div>` : ''}
+      <div class="rs-group">${P.chart ? '' : '<button class="rs-row" data-act="show"><span>Show trades on the chart</span><span>›</span></button>'}
+        <button class="rs-row" data-act="report"><span>${root.dataset.report === '1' && P.chart ? 'Hide the full report' : 'Full report'}</span><span>›</span></button>
         <button class="rs-row" data-act="review"${b.kind === 'builtin' ? ' disabled' : ''}><span>Request a review</span><span>›</span></button></div>`;
   } else if (r && r.st && (r.st.status === 'error' || r.st.status === 'cancelled')) {
     main = `<div class="rs-empty"><h3>${r.st.status === 'cancelled' ? 'Cancelled' : 'The run failed'}</h3><p>${esc(r.st.error || (r.st.status === 'cancelled' ? 'Run it again when you are ready.' : 'See the line under the editor.'))}</p></div>`;
   } else {
-    main = `<div class="rs-empty"><h3>No backtest yet</h3><p>Run it to see the P&amp;L, the trades and the equity curve. <b>⌘↵</b> runs it from the editor.</p></div>`;
+    main = `<div class="rs-empty"><h3>No backtest yet</h3><p>Run it to see the P&amp;L, the equity curve and every trade. <kbd>⌘↵</kbd> runs it from the editor.</p></div>`;
   }
-  el.innerHTML = `<div class="rs-body">${main}${settings}</div>`;
+  el.innerHTML = `${main}${settings}`;
+  el.scrollTop = top;
 }
 
 /* ---- events ----
    The chart shell sits inside the workspace now: nothing that happens in it is the Lab's to handle. */
 const inChart = (e) => !!(e.target && e.target.closest && e.target.closest('#labChart'));
+function act(name, el) {
+  const b = buf();
+  if (name === 'new') newMenu(el);
+  else if (name === 'more') moreMenu(el);
+  else if (name === 'paste') pasteScript();
+  else if (name === 'run') run();
+  else if (name === 'cancel') cancelRun();
+  else if (name === 'show') showOnChart(false);
+  else if (name === 'report') { if (root.dataset.report === '1' && P.chart) setReport(false); else showOnChart(true); }
+  else if (name === 'review') reviewDialog();
+  else if (name === 'save') save(b);
+}
 root.addEventListener('click', (e) => {
   if (inChart(e)) return;
   const lib = e.target.closest('[data-key]');
-  if (lib) { const k = lib.dataset.key; if (k.startsWith('d:')) selectDraft(k.slice(2)); else if (k.startsWith('b:')) selectBuiltin(k.slice(2)); else { S.cur = k; paintAll(); } return; }
+  if (lib) { const k = lib.dataset.key; if (k.startsWith('d:')) selectDraft(k.slice(2)); else if (k.startsWith('b:')) selectBuiltin(k.slice(2)); else { S.cur = k; S.run = null; paintAll(); } return; }
   const a = e.target.closest('[data-act]');
-  if (!a) return;
-  const b = buf(), act = a.dataset.act;
-  if (act === 'new') newMenu(a);
-  else if (act === 'paste') pasteScript();
-  else if (act === 'run') run();
-  else if (act === 'cancel') cancelRun();
-  else if (act === 'show') showOnChart(false);
-  else if (act === 'report') { if (root.dataset.report === '1' && P.chart) setReport(false); else showOnChart(true); }
-  else if (act === 'review') reviewDialog();
-  else if (act === 'save') save(b);
-  else if (act === 'validate') validateNow(b).then((v) => { if (v) log(v.ok ? `Validated in ${b.validMs} ms · ${esc(C.metaLine(v.meta))}` : `<span class="err">${esc(C.statusOf(v).text)}</span>`); });
+  if (a) act(a.dataset.act, a);
 });
+const bar = document.querySelector('.lab-bar');
+if (bar) {
+  bar.addEventListener('click', (e) => { const a = e.target.closest('[data-act]'); if (a) act(a.dataset.act, a); });
+  bar.addEventListener('input', (e) => { const b = buf(); if (e.target.id === 'edName' && b) { b.name = e.target.value.trim(); e.target.classList.remove('bad'); paintLib(); } });
+  bar.addEventListener('keydown', (e) => { if (e.target.id === 'edName' && e.key === 'Enter' && !e.repeat) { e.preventDefault(); save(buf()); } });
+}
+root.addEventListener('toggle', (e) => { if (e.target.classList && e.target.classList.contains('rs-set')) S.setOpen = e.target.open; }, true);
 root.addEventListener('input', (e) => {
   if (inChart(e)) return;
   const b = buf(), t = e.target;
   if (t.id === 'edTa' && b && b.kind !== 'builtin') {
     const wasEmpty = !b.code.trim();
     b.code = t.value; b.valid = b.valid && b.valid.ok ? { ...b.valid, stale: true } : null;
-    if (b.kind === 'new' && wasEmpty && b.code.trim() && !b.name) { b.name = C.suggestName(b.code, takenNames()); const n = $('#edName'); if (n) n.value = b.name; }
+    if (b.kind === 'new' && wasEmpty && b.code.trim() && !b.name) { b.name = C.suggestName(b.code, takenNames()); const n = document.getElementById('edName'); if (n) n.value = b.name; }
     paintCode(); paintHead(); queueValidate(b); paintLib();
-  } else if (t.id === 'edName' && b) { b.name = t.value.trim(); t.classList.remove('bad'); paintLib(); }
-  else if (t.dataset.f || t.dataset.in) {
+  } else if (t.dataset.f || t.dataset.in) {
     const f = formOf(b), meta = metaOf(b);
     if (!f) return;
     if (t.dataset.in) {

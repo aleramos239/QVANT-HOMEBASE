@@ -44,7 +44,7 @@ test('the Lab chart is one chart with no tools: the rail, the symbol/indicator/l
   const css = rd('charts/lab.css');
   assert.match(css, /\.lab-chart \.rail \{ display: none; \}/);
   assert.match(css, /\.lab-chart \.toolbar > :not\(#tbFavs\):not\(\.lab-nav\) \{ display: none !important; \}/);
-  assert.match(css, /\.hb-bar \.tabstrip, #tbSettings \{ display: none !important; \}/);
+  assert.match(css, /\.lab-page \.tabstrip, \.lab-page #tbSettings \{ display: none !important; \}/);
   assert.match(HTML, /id="labNav"[^]*data-nav="-1"[^]*id="labNavText"[^]*data-nav="1"/);
   assert.match(LAB, /function soloChart\(\)/);
   assert.match(LAB, /HBTesterLayer\.jump\(i, null, \{ contextMs: dayContext\(t\) \}\)/, 'a trade is framed inside its whole trading day');

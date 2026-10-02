@@ -43,6 +43,14 @@ def test_every_template_is_a_valid_draft():
         assert draftstore.static_meta(t["code"])["root"] == "NQ"
 
 
+def test_the_straddle_starter_is_short_and_the_reference_carries_the_contract(tmp_path):
+    assert lab_templates.STRADDLE.count("\n") < 50 and "class MyDraft(Strategy)" in lab_templates.STRADDLE
+    ref = lab_templates.reference()
+    assert "ctx.stop_entry" in ref and "on_bar" in ref and "MyDraft" not in ref
+    with client(tmp_path) as c:
+        assert c.get("/api/tester/drafts/reference").json()["text"] == ref
+
+
 def test_the_template_route_serves_them(tmp_path):
     with client(tmp_path) as c:
         got = c.get("/api/tester/drafts/templates").json()

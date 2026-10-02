@@ -9,6 +9,7 @@
     GET  /api/tester/drafts              the Lab's library: every draft on disk {name, id, bytes, modified, ok,
                                           error?, meta?} -- read from the TEXT only
     GET  /api/tester/drafts/templates    the "New strategy" starters [{id, title, blurb, code}]
+    GET  /api/tester/drafts/reference    {text}: the scripting contract (events, orders, reads), for the Lab's reference sheet
     POST /api/tester/drafts/validate     {code} -> {ok, meta} | {ok: false, error, line?} (parse + catalog read)
     PUT  /api/tester/drafts/{name}       {code} -> save <name>.py (draftstore.write: name, size and syntax checked)
     DELETE /api/tester/drafts/{name}     remove it
@@ -233,6 +234,10 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
     @r.get("/drafts/templates")
     def draft_templates():
         return lab_templates.templates()
+
+    @r.get("/drafts/reference")
+    def draft_reference():
+        return {"text": lab_templates.reference()}
 
     @r.post("/drafts/validate")
     async def validate_draft(request: Request):
