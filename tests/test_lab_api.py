@@ -150,3 +150,14 @@ def test_request_review_writes_text_only_and_judges_the_run(tmp_path, monkeypatc
         assert c.post("/api/tester/drafts/nq_bars/review-request", json={"run_id": "nope"}, headers=OK).status_code == 404
     # nothing ran, nothing was promoted: the desk's strategy config is untouched by a review request
     assert not any("review" in m and m.startswith("homebase.server") for m in sys.modules)
+
+
+def test_listing_many_drafts_walks_the_package_once(drafts_dir, monkeypatch):
+    calls = []
+    real = draftstore._shadow_names
+    monkeypatch.setattr(draftstore, "_SHADOW", None)
+    monkeypatch.setattr(draftstore, "_shadow_names", lambda: (calls.append(1), real())[1])
+    for i in range(12):
+        (drafts_dir / f"d_{i}.py").write_text(lab_templates.BLANK)
+    assert len(draftstore.list_files()) == 12 and len(calls) == 1
+    assert "json" in draftstore.shadow_names() and "engine" in draftstore.shadow_names()
