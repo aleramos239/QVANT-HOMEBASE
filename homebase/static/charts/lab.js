@@ -481,6 +481,8 @@ function deleteDialog(name) {
 /* ---- painting ---- */
 function paintAll() { paintLib(); paintEditor(); paintRes(); }
 
+const ICON_DOC = '<svg class="lb-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3.5H8A2.5 2.5 0 0 0 5.5 6v12A2.5 2.5 0 0 0 8 20.5h8a2.5 2.5 0 0 0 2.5-2.5V8z"/><path d="M14 3.5V8h4.5"/></svg>';
+const ICON_LOCK = '<svg class="lb-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5.5" y="11" width="13" height="9" rx="2.5"/><path d="M8.5 11V8.2a3.5 3.5 0 0 1 7 0V11"/></svg>';
 const ICON_PLUS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5.5v13M5.5 12h13"/></svg>';
 const ICON_PLAY = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 4.8v14.4a.9.9 0 0 0 1.36.77l11.7-7.2a.9.9 0 0 0 0-1.54L8.86 4.03a.9.9 0 0 0-1.36.77z" fill="currentColor"/></svg>';
 const ICON_MORE = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5.5" cy="12" r="1.7" fill="currentColor"/><circle cx="12" cy="12" r="1.7" fill="currentColor"/><circle cx="18.5" cy="12" r="1.7" fill="currentColor"/></svg>';
@@ -498,11 +500,11 @@ function paintLib() {
   const top = el.scrollTop;
   el.innerHTML = `<div class="lb-top"><b>Strategies</b><button class="hb-ib" data-act="new" aria-label="New strategy" title="New strategy">${ICON_PLUS}</button></div>
     ${rows.length ? rows.map((r) => `<button class="lb-item${S.cur === r.key ? ' sel' : ''}" data-key="${esc(r.key)}" aria-current="${S.cur === r.key}">
-        <i class="lb-dot ${r.dot}"></i><span class="it"><b>${esc(r.name)}</b><small>${esc(r.sub)}</small></span><span class="lb-flag">${r.flag}</span></button>`).join('')
+        ${ICON_DOC}<span class="it"><b>${esc(r.name)}</b><small>${esc(r.sub)}</small></span><span class="lb-flag">${r.flag}</span></button>`).join('')
       : '<div class="lb-empty">Nothing here yet. Press + to paste a script or start from a template.</div>'}
     <div class="lb-sh">Built-in</div>
     ${S.builtins.map((s) => `<button class="lb-item${S.cur === `b:${s.id}` ? ' sel' : ''}" data-key="b:${esc(s.id)}" aria-current="${S.cur === `b:${s.id}`}" title="Read-only">
-        <i class="lb-dot lock"></i><span class="it"><b>${esc(s.name || s.id)}</b><small>${esc(s.root || '')}${s.bar_minutes ? ` · ${s.bar_minutes}-min bars` : ''}</small></span>${SAVE_ICON_LOCK}</button>`).join('')}`;
+        ${ICON_LOCK}<span class="it"><b>${esc(s.name || s.id)}</b><small>${esc(s.root || '')}</small></span><span></span></button>`).join('')}`;
   el.scrollTop = top;
 }
 
@@ -572,16 +574,63 @@ function syncScroll() {
 }
 
 /* ---- the result ---- */
-function equitySvg(eq) {
-  const s = X.equitySeries(eq).equity;
-  if (s.length < 2) return '';
-  const W = 320, H = 112, pad = 5, lo = Math.min(0, ...s.map((p) => p.value)), hi = Math.max(0, ...s.map((p) => p.value));
-  const sx = (i) => (i / (s.length - 1)) * W, sy = (v) => pad + (1 - (v - lo) / ((hi - lo) || 1)) * (H - 2 * pad);
-  const pts = s.map((p, i) => `${sx(i).toFixed(1)},${sy(p.value).toFixed(1)}`), z = sy(0).toFixed(1);
-  return `<svg class="rs-eq" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Equity curve, after fees">
-    <defs><linearGradient id="labEqFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="currentColor" stop-opacity=".16"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></linearGradient></defs>
-    <polygon class="a" points="0,${H} ${pts.join(' ')} ${W},${H}"/><line class="z" x1="0" x2="${W}" y1="${z}" y2="${z}"/><polyline class="l" points="${pts.join(' ')}"/></svg>`;
+/* The equity chart: a smooth line, a soft fill, the break-even line, the high and the low labelled, and a scrubber. */
+const money0 = (v) => `${v > 0 ? '+' : v < 0 ? MINUS : ''}$${Math.abs(Math.round(v)).toLocaleString('en-US')}`;
+const EQ_DAY = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', year: 'numeric' });
+const EQ_MON = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'short' }), EQ_MONL = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'long' });
+function eqPoints(eq) { const t = eq.t_ms || [], v = eq.equity || []; return t.map((ms, i) => ({ ms, v: Number(v[i]) || 0 })); }
+/* at most ~140 points, always keeping the first, the last, the high and the low */
+function eqThin(pts) {
+  if (pts.length <= 140) return pts;
+  const step = pts.length / 140, keep = new Set([0, pts.length - 1]); let hi = 0, lo = 0;
+  pts.forEach((p, i) => { if (p.v > pts[hi].v) hi = i; if (p.v < pts[lo].v) lo = i; });
+  keep.add(hi); keep.add(lo);
+  for (let i = 0; i < 140; i++) keep.add(Math.round(i * step));
+  return [...keep].filter((i) => i < pts.length).sort((a, b) => a - b).map((i) => pts[i]);
 }
+function takeaway(pts, net, trades) {
+  if (!pts.length) return '';
+  let lo = pts[0]; for (const p of pts) if (p.v < lo.v) lo = p;
+  const day = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', day: 'numeric' }).format(new Date(lo.ms))), part = day < 11 ? 'early' : day < 21 ? 'mid' : 'late';
+  const head = `${net > 0 ? 'Up' : net < 0 ? 'Down' : 'Flat at'} <b>$${Math.abs(Math.round(net)).toLocaleString('en-US')}</b> after fees over <b>${trades} trade${trades === 1 ? '' : 's'}</b>.`;
+  return lo.v < 0 ? `${head} The lowest point was <b>${money0(lo.v)}</b>, in ${part} ${EQ_MONL.format(new Date(lo.ms))}.` : `${head} It never dipped below where it started.`;
+}
+let EQD = null;
+function drawEq() {
+  const box = $('#eqw'); EQD = null;
+  if (!box || !S.run || !S.run.bundle) return;
+  const pts = eqThin(eqPoints(S.run.bundle.equity || {}));
+  if (pts.length < 2) { box.hidden = true; return; }
+  const W = box.clientWidth, H = box.clientHeight, top = 20, bot = H - 22, padX = 6;
+  const lo = Math.min(0, ...pts.map((p) => p.v)), hi = Math.max(0, ...pts.map((p) => p.v)), t0 = pts[0].ms, t1 = pts[pts.length - 1].ms;
+  const X = (p) => padX + (t1 > t0 ? (p.ms - t0) / (t1 - t0) : 0) * (W - 2 * padX), Y = (v) => top + (1 - (v - lo) / ((hi - lo) || 1)) * (bot - top);
+  const P = pts.map((p) => [X(p), Y(p.v)]);
+  let d = `M${P[0][0].toFixed(1)},${P[0][1].toFixed(1)}`;
+  for (let i = 0; i < P.length - 1; i++) { const p0 = P[i - 1] || P[i], p1 = P[i], p2 = P[i + 1], p3 = P[i + 2] || p2, t = 0.16;
+    d += `C${(p1[0] + (p2[0] - p0[0]) * t).toFixed(1)},${(p1[1] + (p2[1] - p0[1]) * t).toFixed(1)} ${(p2[0] - (p3[0] - p1[0]) * t).toFixed(1)},${(p2[1] - (p3[1] - p1[1]) * t).toFixed(1)} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`; }
+  const z = Y(0).toFixed(1), svg = box.querySelector('svg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.innerHTML = `<defs><linearGradient id="labEqFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="currentColor" stop-opacity=".28"/><stop offset=".7" stop-color="currentColor" stop-opacity=".05"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></linearGradient></defs>
+    <path d="${d}L${P[P.length - 1][0].toFixed(1)},${bot + 14}L${P[0][0].toFixed(1)},${bot + 14}Z" fill="url(#labEqFill)"/><line class="eq-base" x1="${padX}" x2="${W - padX}" y1="${z}" y2="${z}"/><path class="eq-line" d="${d}"/>`;
+  let iHi = 0, iLo = 0; pts.forEach((p, i) => { if (p.v > pts[iHi].v) iHi = i; if (p.v < pts[iLo].v) iLo = i; });
+  const tag = (id, i, above) => { const e = $(id); if (!e) return; e.textContent = money0(pts[i].v); e.style.left = `${Math.max(28, Math.min(W - 28, P[i][0]))}px`; e.style.top = `${P[i][1] + (above ? -17 : 5)}px`; e.hidden = pts[i].v === 0; };
+  tag('#eqHi', iHi, true); tag('#eqLo', iLo, false);
+  const ax = $('#eqAx'); if (ax) { const m = (ms) => EQ_MON.format(new Date(ms)), a = m(t0), c = m(t1), b = m((t0 + t1) / 2); ax.innerHTML = `<span>${a}</span>${b !== a && b !== c ? `<span>${b}</span>` : '<span></span>'}<span>${c}</span>`; }
+  EQD = { pts, P, W, padX };
+  eqPlace(pts.length - 1);
+}
+function eqPlace(i) { const dot = $('#eqDot'); if (dot && EQD) { dot.style.left = `${EQD.P[i][0]}px`; dot.style.top = `${EQD.P[i][1]}px`; } }
+root.addEventListener('pointermove', (e) => {
+  const box = e.target.closest && e.target.closest('#eqw');
+  if (!box || !EQD) return;
+  const x = e.clientX - box.getBoundingClientRect().left; let i = 0, best = Infinity;
+  EQD.P.forEach((p, k) => { const dx = Math.abs(p[0] - x); if (dx < best) { best = dx; i = k; } });
+  box.classList.add('scrub'); eqPlace(i);
+  const rule = $('#eqRule'), tip = $('#eqTip'); rule.style.left = `${EQD.P[i][0]}px`; tip.style.left = `${Math.max(48, Math.min(EQD.W - 48, EQD.P[i][0]))}px`;
+  tip.innerHTML = `<b>${money0(EQD.pts[i].v)}</b>${esc(EQ_DAY.format(new Date(EQD.pts[i].ms)))}`;
+});
+root.addEventListener('pointerleave', (e) => { const box = e.target.closest && e.target.closest('#eqw'); if (box && EQD) { box.classList.remove('scrub'); eqPlace(EQD.pts.length - 1); } }, true);
+window.addEventListener('resize', () => { if (EQD) drawEq(); });
 function settingsHtml(b) {
   const f = b && formOf(b), meta = b && metaOf(b);
   if (!f || !meta) return '';
@@ -620,34 +669,40 @@ function paintRes() {
   const b = buf(), top = el.scrollTop;
   if (!b) { el.innerHTML = '<div class="rs-empty"><h3>Backtest</h3><p>Pick a strategy, or paste one, to see how it would have done.</p></div>'; return; }
   const r = S.run && S.run.key === b.key ? S.run : null, settings = settingsHtml(b);
-  let main = '';
+  let main = '', settingsDone = false;
   if (r && !r.bundle && (S.busy || (r.st && r.st.status === 'queued'))) {
     const p = X.progress(r.st || { status: 'queued' }), ind = p.frac == null;
     main = `<div class="rs-h"><b>Backtest</b></div><div class="rs-prog"><div class="t">${esc(p.text || 'Starting…')}</div><div class="rs-bar${ind ? ' ind' : ''}"><i style="width:${ind ? 38 : Math.round(p.frac * 100)}%"></i></div>
       <button class="btn btn-outline btn-sm" data-act="cancel">Cancel</button></div>`;
   } else if (r && r.bundle) {
     const run = r.bundle.run, a = run.report.summary.all, tl = X.tiles(run), by = (l) => tl.find((t) => t.label === l) || { value: '—' };
-    const net = tl[0], pos = (a.net_profit || 0) > 0, n = a.trades ?? 0;
+    const netv = a.net_profit || 0, pos = netv > 0, n = a.trades ?? 0, cap = run.capital || 0, pctv = cap ? netv / cap * 100 : null;
     const badges = X.badges(run).filter((x) => x.tone !== 'info');
-    const used = run.coverage ? `${run.coverage.used ?? '—'} of ${run.coverage.sessions ?? '—'} sessions` : '';
+    const used = run.coverage && run.coverage.used !== run.coverage.sessions ? ` · ${run.coverage.used} of ${run.coverage.sessions} sessions` : '';
+    const split = (v) => { const m = /^([+−-]?\$?)(.*?)(%?)$/.exec(String(v)); return m ? `${esc(m[2])}${m[3] ? '<small>%</small>' : ''}` : esc(v); };
     main = `<div class="rs-h"><b>Backtest</b><span>${esc(rangeText(run.range))}</span></div>
-      <div class="rs-net${pos ? ' pos' : ''}">${esc(net.value)}</div>
-      <div class="rs-sub">After fees · ${esc(String(n))} trade${n === 1 ? '' : 's'} · ${esc(run.strategy.root || '')} × ${esc(run.qty)}${used ? ` · ${esc(used)}` : ''}</div>
-      ${equitySvg(r.bundle.equity)}
-      ${n === 0 ? '<div class="rs-sub">It took no trades in this range. Check the session window and the entry rules, then run it again.</div>' : ''}
-      <div class="rs-group rs-tiles">${[['Profit factor', by('Profit factor').value], ['Win rate', by('Win rate').value], ['Avg trade', by('Avg trade').value],
-        ['Max drawdown', by('Max drawdown').value], ['Sharpe', by('Sharpe').value], ['Avg win : loss', by('Avg win : loss').value.replace(/^RR /, '')]].map(([k, v]) => `<div class="rs-tile"><div class="k">${k}</div><div class="v">${esc(v)}</div></div>`).join('')}</div>
+      <div class="rs-hero"><div class="rs-net"><i>${netv > 0 ? '+' : netv < 0 ? MINUS : ''}$</i>${esc(Math.abs(Math.round(netv)).toLocaleString('en-US'))}</div>
+        ${pctv == null ? '' : `<span class="rs-delta${pos ? '' : ' neg'}" title="Of the $${esc(Math.round(cap).toLocaleString('en-US'))} starting balance">${pos ? '▲' : netv < 0 ? '▼' : ''} ${Math.abs(pctv).toFixed(1)}%</span>`}</div>
+      <div class="rs-take">${n === 0 ? 'It took no trades in this range. Check the session window and the entry rules, then run it again.' : takeaway(eqPoints(r.bundle.equity || {}), netv, n)}<span>${esc(used)}</span></div>
+      <div class="eqw" id="eqw"><svg preserveAspectRatio="none" role="img" aria-label="Equity curve, after fees"></svg><div class="eq-rule" id="eqRule"></div><span class="eq-dot" id="eqDot"></span>
+        <span class="eq-tag" id="eqHi"></span><span class="eq-tag" id="eqLo"></span><div class="eq-tip" id="eqTip"></div><div class="eq-ax" id="eqAx"></div></div>
+      <div class="rs-trio"><div><b>${split(by('Profit factor').value)}</b><span>Profit factor</span></div><div><b>${split(by('Win rate').value)}</b><span>Win rate</span></div><div><b>${split(by('Sharpe').value)}</b><span>Sharpe</span></div></div>
       ${badges.length ? `<div class="rs-chips">${badges.map((x) => `<span class="rs-chip ${x.tone === 'err' ? 'err' : x.tone === 'warn' ? 'warn' : ''}" title="${esc(x.title || '')}">${esc(x.text)}</span>`).join('')}</div>` : ''}
+      <div class="rs-gh">Per trade</div>
+      <div class="rs-group"><div class="rs-kv"><span>Average trade</span><b>${esc(by('Avg trade').value)}</b></div><div class="rs-kv"><span>Average win : loss</span><b>${esc(by('Avg win : loss').value.replace(/^RR /, '').replace(':', ' : '))}</b></div><div class="rs-kv"><span>Max drawdown</span><b>${esc(by('Max drawdown').value)}</b></div></div>
+      <div class="rs-gh">Run settings</div>${settings}
       <div class="rs-group">${P.chart ? '' : '<button class="rs-row" data-act="show"><span>Show trades on the chart</span><span>›</span></button>'}
         <button class="rs-row" data-act="report"><span>${root.dataset.report === '1' && P.chart ? 'Hide the full report' : 'Full report'}</span><span>›</span></button>
         <button class="rs-row" data-act="review"${b.kind === 'builtin' ? ' disabled' : ''}><span>Request a review</span><span>›</span></button></div>`;
+    settingsDone = true;
   } else if (r && r.st && (r.st.status === 'error' || r.st.status === 'cancelled')) {
     main = `<div class="rs-empty"><h3>${r.st.status === 'cancelled' ? 'Cancelled' : 'The run failed'}</h3><p>${esc(r.st.error || (r.st.status === 'cancelled' ? 'Run it again when you are ready.' : 'See the line under the editor.'))}</p></div>`;
   } else {
     main = `<div class="rs-empty"><h3>No backtest yet</h3><p>Run it to see the P&amp;L, the equity curve and every trade. <kbd>⌘↵</kbd> runs it from the editor.</p></div>`;
   }
-  el.innerHTML = `${main}${settings}`;
+  el.innerHTML = settingsDone ? main : `${main}${settings ? `<div class="rs-gh">Run settings</div>${settings}` : ''}`;
   el.scrollTop = top;
+  drawEq();
 }
 
 /* ---- events ----

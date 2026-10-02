@@ -166,3 +166,24 @@ select, input[type="text"], input[type="number"], input[type="search"], input[ty
 @media (prefers-reduced-motion: reduce) { .hb-ib:active { transform: none; } }
 @media (prefers-reduced-transparency: reduce) { .hb-glass { -webkit-backdrop-filter: none; backdrop-filter: none; background: var(--panel, var(--card, #fff)); } }
 @media (prefers-contrast: more) { .hb-glass { background: var(--panel, var(--card, #fff)); box-shadow: 0 0 0 1px var(--hb-fg); } }
+
+/* ---- clear glass, as a real lens (hb-glass.js computes the bend and the highlights for each element) ------------- */
+.hb-lens { position: relative; isolation: isolate; background: rgb(255 255 255 / var(--hb-lens-body, .10));
+  -webkit-backdrop-filter: blur(8px) saturate(170%); backdrop-filter: blur(8px) saturate(170%);
+  box-shadow: 0 1px 1px rgb(0 0 0 / var(--hb-k1)), 0 3px 6px -1px rgb(0 0 0 / var(--hb-k2)), 0 14px 26px -8px rgb(0 0 0 / var(--hb-k3)), 0 30px 50px -22px rgb(0 0 0 / var(--hb-k4)); }
+.hb-lens.hb-lens-on { --hb-lens-body: .02; -webkit-backdrop-filter: var(--hb-lens); backdrop-filter: var(--hb-lens); }
+.hb-lens::before { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: 2; background: var(--hb-spec) center / 100% 100% no-repeat; }
+.hb-lens::after { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: 1; mix-blend-mode: soft-light; opacity: var(--hb-sheen);
+  background: radial-gradient(260px 170px at var(--hb-mx, 22%) var(--hb-my, -12%), rgb(255 255 255 / .9), rgb(255 255 255 / .2) 38%, rgb(255 255 255 / 0) 70%); }
+.hb-lens > * { position: relative; z-index: 3; }
+:root { --hb-k1: .14; --hb-k2: .10; --hb-k3: .18; --hb-k4: .20; --hb-sheen: .8; }
+:root[data-theme="dark"] { --hb-k1: .5; --hb-k2: .4; --hb-k3: .5; --hb-k4: .6; --hb-sheen: .5; --hb-lens-body: .08; }
+/* a raised, solid thumb: the selected segment */
+.hb-thumb { background: #fff; color: #16171a; box-shadow: inset 0 .5px 0 #fff, 0 0 0 .5px rgb(0 0 0 / .05), 0 1px 1.5px rgb(0 0 0 / .14), 0 5px 12px -3px rgb(0 0 0 / .26); }
+:root[data-theme="dark"] .hb-thumb { background: #77777c; color: #fff; box-shadow: inset 0 .5px 0 rgb(255 255 255 / .3), 0 0 0 .5px rgb(0 0 0 / .4), 0 5px 12px -3px rgb(0 0 0 / .6); }
+/* the page switcher is glass on every page; its current page is the raised thumb */
+.pgsw.hb-lens { height: 36px; padding: 3px; background: rgb(255 255 255 / var(--hb-lens-body, .10)); }
+.pgsw.hb-lens a { height: 30px; padding: 0 15px; }
+.pgsw.hb-lens a[aria-current="page"] { background: #fff; color: #16171a; font-weight: 600; box-shadow: inset 0 .5px 0 #fff, 0 0 0 .5px rgb(0 0 0 / .05), 0 1px 1.5px rgb(0 0 0 / .14), 0 5px 12px -3px rgb(0 0 0 / .26); }
+:root[data-theme="dark"] .pgsw.hb-lens a[aria-current="page"] { background: #77777c; color: #fff; box-shadow: inset 0 .5px 0 rgb(255 255 255 / .3), 0 5px 12px -3px rgb(0 0 0 / .6); }
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) { .hb-lens { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; background: var(--panel, var(--card, #fff)); } }
