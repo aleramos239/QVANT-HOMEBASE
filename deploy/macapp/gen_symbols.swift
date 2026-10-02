@@ -92,6 +92,7 @@ play                  play.fill                          11 regular
 copy                  doc.on.doc                         13 regular
 trash                 trash                              13 regular
 pencil                pencil                             13 regular
+lock                  lock                               13 medium
 """
 
 func weight(_ s: String) -> NSFont.Weight {
