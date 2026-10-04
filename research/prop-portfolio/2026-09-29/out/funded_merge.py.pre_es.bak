@@ -1,0 +1,248 @@
+#!/usr/bin/python3
+"""Merge funded_search stages -> out/funded_candidates.csv, out/funded_wf.csv, out/funded_summary.md (<= 70 lines).
+Run: PYTHONPATH=~/ramos-quant-homebase /usr/bin/python3 funded_merge.py"""
+from __future__ import annotations
+
+import csv
+import json
+import sys
+from pathlib import Path
+
+import numpy as np
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import funded_search as FS    # noqa: E402
+
+OUT = FS.OUT
+V = list(FS.VARIANTS)
+EVAL_OF = {"flex": "lucid", "flex_dll": "lucid", "pro_dll": "lucidpro", "pro_nodll": "lucidpro_nodll", "apex": "apex"}
+FEE = {"flex": (100.0, 0.0), "flex_dll": (100.0, 0.0), "pro_dll": (115.0, 0.0), "pro_nodll": (140.0, 0.0), "apex": (35.0, 85.0)}
+LABEL = {"flex": "Flex", "flex_dll": "Flex+DLL1200*", "pro_dll": "Pro DLL", "pro_nodll": "Pro noDLL", "apex": "Apex PA (UNCONF.)"}
+CAP_PER = 2      # diversity cap per (family, session) in the top lists
+
+
+def jl(p):
+    return [r for x in FS.rd(p) for r in x["rows"]] if Path(p).exists() else []
+
+
+def layered(base, pattern):
+    """Rows of the base file, then of every `pattern` file in name order; a later file REPLACES all earlier rows of the variants it contains
+    (re-runs of single variants after a rule fix, e.g. funded_s2_dllfix.jsonl for pro_dll)."""
+    rows = jl(base)
+    for p in sorted(OUT.glob(pattern)):
+        new = jl(p)
+        vs = {r["variant"] for r in new}
+        rows = [r for r in rows if r["variant"] not in vs] + new
+    return rows
+
+
+def f(x, n=0):
+    return "-" if x is None or x != x else f"{x:.{n}f}"
+
+
+def pct(x):
+    return "-" if x is None or x != x else f"{100 * x:.0f}%"
+
+
+def top_list(rows, v, k, key="score_e_net_40"):
+    rs = sorted((r for r in rows if r["variant"] == v and r.get("status") == "ok"), key=lambda r: -r[key])
+    out, cnt, seen = [], {}, set()
+    for r in rs:
+        g = (r["fam"], r["sess"])
+        sig = (g, r["tf"], round(r["e_net_40"], 1), round(r["p_pay_20"], 4), round(r["e_net_60"], 1))
+        if sig in seen:       # identical metrics = duplicate trade set from a neighbouring heat-map cell
+            continue
+        seen.add(sig)
+        if cnt.get(g, 0) >= CAP_PER:
+            continue
+        cnt[g] = cnt.get(g, 0) + 1
+        out.append(r)
+        if len(out) >= k:
+            break
+    return out
+
+
+def main():
+    cs = {c["cid"]: c for c in FS.load_cands()}
+    s1 = {(r["cid"], r["variant"]): r for r in layered(OUT / "funded_s1.jsonl", "funded_s1_*.jsonl")}
+    s2 = {(r["cid"], r["variant"]): r for r in layered(OUT / "funded_s2.jsonl", "funded_s2_*.jsonl")}
+    nul = layered(OUT / "funded_null.jsonl", "funded_null_*.jsonl")
+    full = list(s2.values())
+
+    # ---- null reference per variant
+    nref = {}
+    for v in V:
+        ns = [r for r in nul if r["variant"] == v and r.get("status") == "ok"]
+        if v == "apex":
+            ns = [r for r in ns if r.get("tgt_r", 1) >= 0.2]
+        e = np.array([r["score_e_net_40"] for r in ns]) if ns else np.array([np.nan])
+        wfo = np.array([r["wf_oos_e_net_40"] for r in ns if r.get("wf_oos_e_net_40") is not None]) if ns else np.array([np.nan])
+        p20 = np.array([r["p_pay_20"] for r in ns]) if ns else np.array([np.nan])
+        nref[v] = dict(n=len(ns), mean=float(np.nanmean(e)), p95=float(np.nanpercentile(e, 95)), max=float(np.nanmax(e)), p20_mean=float(np.nanmean(p20)),
+                       p20_p95=float(np.nanpercentile(p20, 95)), p20_max=float(np.nanmax(p20)), wf_n=len(wfo), wf_mean=float(np.nanmean(wfo)) if len(wfo) else np.nan,
+                       wf_p95=float(np.nanpercentile(wfo, 95)) if len(wfo) else np.nan, wf_max=float(np.nanmax(wfo)) if len(wfo) else np.nan)
+
+    # ---- funded_candidates.csv (every config x variant)
+    rows = []
+    for cid, c in cs.items():
+        for v in V:
+            base = dict(cid=cid, key=c["key"], sess=c["sess"], fam=c["fam"], tf=c["tf"], params=json.dumps(c["params"], sort_keys=True), trades=c["trades"],
+                        net_1nq=c["net_1nq"], fastpass=c["fastpass"], pool_group=c["pool_group"], variant=v,
+                        model=FS.spec(v).primary, apex_cfg_flags=";".join(c["apex_cfg_flags"]) if v == "apex" else "")
+            ev = c["eval"].get(EVAL_OF[v], {})
+            base.update(eval_firm=EVAL_OF[v], eval_p5=ev.get("p5"), eval_rules=ev.get("rules"), eval_primary_model=ev.get("primary_model"),
+                        eval_wf_oos_p5=ev.get("wf_oos_p5"))
+            r2 = s2.get((cid, v))
+            if v == "apex" and c["apex_cfg_flags"]:
+                base["stage"] = "excluded_noncompliant"
+            elif r2:
+                base.update({k: x for k, x in r2.items() if k not in base and k not in ("wf_picks",)})
+                base["stage"] = "full"
+                nr_ = nref[v]
+                base["null_p95_score"] = nr_["p95"]
+                base["above_null_p95"] = int(r2.get("score_e_net_40", -1e9) > nr_["p95"]) if r2.get("status") == "ok" else None
+                base["wf_picks"] = r2.get("wf_picks")
+            elif (cid, v) in s1:
+                r1 = s1[(cid, v)]
+                base["stage"] = "coarse"
+                base.update({k: r1.get(k) for k in FS.MET + ("cell", "cut_share")})
+                base["status"] = "ok" if r1.get("cell") else "no_compliant_cell"
+            else:
+                base["stage"] = "not_run"
+            rows.append(base)
+    cols = []
+    for r in rows:
+        for k in r:
+            if k not in cols:
+                cols.append(k)
+    with open(OUT / "funded_candidates.csv", "w", newline="") as fh:
+        w = csv.DictWriter(fh, cols)
+        w.writeheader()
+        w.writerows(rows)
+
+    # ---- top lists + walk-forward file
+    tops = {v: top_list(full, v, 10) for v in V}
+    wfcols = ["variant", "rank", "top10", "kind", "cid", "fam", "tf", "sess", "trades", "is_cell", "is_score_e40", "is_e_net_40", "is_e_net_60", "is_p_pay_40",
+              "wf_quarters", "wf_n_test_starts", "wf_n_distinct_cells", "wf_train_e40_mean", "is_e40_on_test_starts", "oos_p_pay_20", "oos_p_pay_40",
+              "oos_p_pay_60", "oos_med_days", "oos_e_first_gross", "oos_e_net_40", "oos_e_net_60", "oos_p_bust_pre_first", "oos_e_npay_60", "oos_cut_share",
+              "oos_over_is_e40", "wf_picks"]
+    wrows = []
+
+    def wrow(r, v, rank, top10, kind):
+        w = r.get("wf_oos_e_net_40")
+        return dict(variant=v, rank=rank, top10=top10, kind=kind, cid=r["cid"], fam=r.get("fam"), tf=r.get("tf"), sess=r.get("sess"), trades=r.get("trades"),
+                    is_cell=r.get("e40_stable_cell"), is_score_e40=r.get("score_e_net_40"), is_e_net_40=r.get("e_net_40"), is_e_net_60=r.get("e_net_60"),
+                    is_p_pay_40=r.get("p_pay_40"), wf_quarters=r.get("wf_quarters"), wf_n_test_starts=r.get("wf_n_test_starts"),
+                    wf_n_distinct_cells=r.get("wf_n_distinct_cells"), wf_train_e40_mean=r.get("wf_train_e40_mean"),
+                    is_e40_on_test_starts=r.get("is_e40_on_test_starts"), oos_p_pay_20=r.get("wf_oos_p_pay_20"), oos_p_pay_40=r.get("wf_oos_p_pay_40"),
+                    oos_p_pay_60=r.get("wf_oos_p_pay_60"), oos_med_days=r.get("wf_oos_med_days_first"), oos_e_first_gross=r.get("wf_oos_e_first_gross"),
+                    oos_e_net_40=w, oos_e_net_60=r.get("wf_oos_e_net_60"), oos_p_bust_pre_first=r.get("wf_oos_p_bust_pre_first"),
+                    oos_e_npay_60=r.get("wf_oos_e_npay_60"), oos_cut_share=r.get("wf_oos_cut_share"),
+                    oos_over_is_e40=(w / r["is_e40_on_test_starts"]) if w is not None and r.get("is_e40_on_test_starts") else None, wf_picks=r.get("wf_picks"))
+
+    for v in V:
+        t10 = {r["cid"] for r in tops[v]}
+        for i, r in enumerate(tops[v], 1):
+            wrows.append(wrow(r, v, i, 1, "real_top10"))
+        rest = sorted((r for r in full if r["variant"] == v and r.get("status") == "ok" and r["cid"] not in t10), key=lambda r: -r["score_e_net_40"])
+        for i, r in enumerate(rest, 11):
+            wrows.append(wrow(r, v, i, 0, "real_other"))
+        for r in nul:
+            if r["variant"] == v and r.get("status") == "ok" and r.get("wf_oos_e_net_40") is not None:
+                wrows.append(wrow(r, v, None, 0, "null"))
+    with open(OUT / "funded_wf.csv", "w", newline="") as fh:
+        w = csv.DictWriter(fh, wfcols, extrasaction="ignore")
+        w.writeheader()
+        w.writerows(wrows)
+
+    # ---- economics
+    econ = {}
+    for v in V:
+        fee, act = FEE[v]
+        top = tops[v]
+        el = [c for c in cs.values() if c["eval"].get(EVAL_OF[v]) and (v != "apex" or not c["apex_cfg_flags"])]
+        best_eval = max(el, key=lambda c: c["eval"][EVAL_OF[v]]["p5"])
+        p5 = best_eval["eval"][EVAL_OF[v]]["p5"]
+        e60 = top[0]["e_net_60"] if top else 0.0
+        # coupled: same config on both sides
+        cp = None
+        for r in full:
+            if r["variant"] != v or r.get("status") != "ok":
+                continue
+            ev = cs[r["cid"]]["eval"].get(EVAL_OF[v])
+            if not ev:
+                continue
+            val = ev["p5"] * r["e_net_60"] - fee - ev["p5"] * act
+            if cp is None or val > cp[0]:
+                cp = (val, r["cid"], ev["p5"], r["e_net_60"])
+        # walk-forward version
+        wfv = [c["eval"][EVAL_OF[v]]["wf_oos_p5"] for c in el if c["eval"][EVAL_OF[v]].get("wf_oos_p5") == c["eval"][EVAL_OF[v]].get("wf_oos_p5")]
+        wf_p5 = max(wfv) if wfv else None
+        wf60 = [r["wf_oos_e_net_60"] for r in top if r.get("wf_oos_e_net_60") is not None]
+        econ[v] = dict(p5=p5, p5_cid=best_eval["cid"], e60=e60, net=p5 * e60 - fee - p5 * act, fee=fee, act=act, cp=cp, wf_p5=wf_p5,
+                       wf_e60_top=(wf60[0] if wf60 else None), wf_e60_med=(float(np.median(wf60)) if wf60 else None),
+                       wf_net=(wf_p5 * float(np.median(wf60)) - fee - wf_p5 * act) if wf60 and wf_p5 is not None else None)
+    (OUT / "funded_econ.json").write_text(json.dumps(econ, indent=1, default=str))
+
+    # ---- summary md
+    L = []
+    nfull = len(full)
+    L.append(f"# NQ funded search ({nfull} config x firm pairs full-grid of {len(rows)}; 2021-09-22..2024-12-31; 60-session lives, rolling starts)")
+    L.append("Metrics: P(>=1 payout by 20/40/60d) | med days to 1st payout | E[1st cheque] gross | E$ to trader by 40d / 60d | P(bust before 1st payout). "
+             "Primary = E$40d, stable cell (min of own, median of neighbours). Top lists: <=2 per (family, session).")
+    L.append("Breach: Lucid realized (bounds eod/intraday); Apex pess primary (MFE-before-MAE, extreme), nat/opt bounds shown. APEX UNCONFIRMED; Flex+DLL $1,200 assumed.")
+    for v in V:
+        L.append(f"## {LABEL[v]}  (model {FS.spec(v).primary}; screened {sum(1 for (c, vv) in s1 if vv == v)} cfgs coarse, {sum(1 for r in full if r['variant'] == v)} full)")
+        for i, r in enumerate(top_list(full, v, 5), 1):
+            alt = f" alt:{f(r.get('alt1_e40'))}/{f(r.get('alt2_e40'))}"
+            fl = ""
+            if v == "apex":
+                fl = f" cut{100 * r.get('cut_share', 0):.1f}% mae{100 * (r.get('mae_over_limit_share') or 0):.0f}%" + (" FLAGS:" + r["apex_flags"] if r.get("apex_flags") else " clean")
+            L.append(f"{i}. {r['fam']}/tf{r['tf']}/{r['sess']} [{r['key'].split('#')[0]}#{r['key'].split('#')[1]}] {r['e40_stable_cell'].replace(' ', '')}"
+                     f" | P20/40/60 {pct(r['p_pay_20'])}/{pct(r['p_pay_40'])}/{pct(r['p_pay_60'])} med {f(r['med_days_first'])}d chq ${f(r['e_first_gross'])}"
+                     f" | E$40 {f(r['e_net_40'])} [{f(r['e40_ci_lo'])},{f(r['e40_ci_hi'])}] E$60 {f(r['e_net_60'])} | bust-pre {pct(r['p_bust_pre_first'])}"
+                     f" | lift{f(r.get('lift_e40'))}{alt}{fl}")
+    L.append("## Frontier (best cell per objective, any config; E$40 / P20 / med days)")
+    for v in V:
+        rs = [r for r in full if r["variant"] == v and r.get("status") == "ok"]
+        if not rs:
+            continue
+        a = max(rs, key=lambda r: r["score_e_net_40"])
+        b = max(rs, key=lambda r: r.get("p20_stable_p20") or 0)
+        sp = [r for r in rs if r.get("speed_cell")]
+        c = min(sp, key=lambda r: (r["speed_med"], -r["speed_e40"])) if sp else None
+        L.append(f"{LABEL[v]}: E$40 max {f(a['score_e_net_40'])} (P20 {pct(a['p_pay_20'])}) | P20 max {pct(b.get('p20_stable_p20'))} ({b['fam']}/{b['sess']}, E$40 {f(b.get('p20_stable_e40'))}) | "
+                 f"fastest med {f(c['speed_med']) + 'd' if c else 'n/a'} at P60 {pct(c['speed_p60']) if c else '-'} (E$40 {f(c['speed_e40']) if c else '-'})")
+    L.append("## Null reference (random-control pseudo-configs thinned to candidate strata, same full search; score_E$40 | P20)")
+    for v in V:
+        n = nref[v]
+        real = [r["score_e_net_40"] for r in full if r["variant"] == v and r.get("status") == "ok"]
+        top1 = max(real) if real else float("nan")
+        ab = sum(1 for x in real if x > n["p95"])
+        L.append(f"{LABEL[v]}: null n={n['n']} E$40 mean {f(n['mean'])} p95 {f(n['p95'])} max {f(n['max'])} | P20 mean {pct(n['p20_mean'])} p95 {pct(n['p20_p95'])} max {pct(n['p20_max'])}"
+                 f" | real best {f(top1)}; {ab}/{len(real)} full-grid cfgs above null p95 | WF OOS null (n={n['wf_n']}) mean {f(n['wf_mean'])} max {f(n['wf_max'])}")
+    L.append("## Walk-forward (top 10 per firm, 2022Q4-2024Q3 test quarters, trailing-12m selection, stitched OOS)")
+    for v in V:
+        t = tops[v]
+        oo = [r for r in t if r.get("wf_oos_e_net_40") is not None]
+        if not oo:
+            continue
+        L.append(f"{LABEL[v]}: OOS E$40 median {f(np.median([r['wf_oos_e_net_40'] for r in oo]))} (IS on same starts {f(np.median([r['is_e40_on_test_starts'] for r in oo]))}), "
+                 f"best {f(max(r['wf_oos_e_net_40'] for r in oo))}; OOS P40 median {pct(np.median([r['wf_oos_p_pay_40'] for r in oo]))}, med days {f(np.median([r['wf_oos_med_days_first'] or np.nan for r in oo]))}, "
+                 f"bust-pre {pct(np.median([r['wf_oos_p_bust_pre_first'] for r in oo]))}; {sum(1 for r in oo if r['wf_oos_e_net_40'] > nref[v]['wf_max'])}/{len(oo)} above null OOS max")
+    L.append("## Eval + funded economics: E[net $ per eval purchase] = P(pass<=5d, primary model) x E$60d funded - fee - P(pass) x activation")
+    for v in V:
+        e = econ[v]
+        cp = e["cp"]
+        L.append(f"{LABEL[v]} (fee ${e['fee']:.0f}+act ${e['act']:.0f}): best eval P5 {pct(e['p5'])} x E$60 {f(e['e60'])} = {f(e['net'], 1)}"
+                 + (f" | same-config best {f(cp[0], 1)} (P5 {pct(cp[2])}, E$60 {f(cp[3])})" if cp else "")
+                 + (f" | WF: P5 {pct(e['wf_p5'])} x OOS E$60 med {f(e['wf_e60_med'])} = {f(e['wf_net'], 1)}" if e["wf_net"] is not None else " | WF n/a"))
+    L.append("Caveats: Apex pess ordering extreme; Apex rules/fees UNCONFIRMED; Flex DLL $1,200 + activation $0 assumed; payout EOD-only, 2-day disbursement ignored; "
+             "eval->funded uses eval P5 (primary model) at the eval-side best cell; WF/stability computed on overlapping rolling starts (CIs are block bootstraps).")
+    (OUT / "funded_summary.md").write_text("\n".join(L) + "\n")
+    print("\n".join(L))
+    print(len(L), "lines")
+
+
+if __name__ == "__main__":
+    main()

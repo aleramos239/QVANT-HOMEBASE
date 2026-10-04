@@ -1,0 +1,1 @@
+{"key": "delta_follow-tf5", "fam_tf": "delta_follow-tf5", "family": "delta_follow", "tf": "5", "variant": "real", "sess": "nyam", "firm": "apex50_pa", "n_trades": 2158, "status": "noncompliant_static", "metric": null, "compliance": {"one_direction": "ok", "stop_5x_target": "FAIL", "mae_rule": "FAIL"}, "elapsed_s": 0.1}

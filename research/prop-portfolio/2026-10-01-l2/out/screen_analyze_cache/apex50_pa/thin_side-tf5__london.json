@@ -1,0 +1,1 @@
+{"key": "thin_side-tf5", "fam_tf": "thin_side-tf5", "family": "thin_side", "tf": "5", "variant": "real", "sess": "london", "firm": "apex50_pa", "n_trades": 364, "status": "noncompliant_static", "metric": null, "compliance": {"one_direction": "ok", "stop_5x_target": "FAIL", "mae_rule": "ok"}, "elapsed_s": 0.25}

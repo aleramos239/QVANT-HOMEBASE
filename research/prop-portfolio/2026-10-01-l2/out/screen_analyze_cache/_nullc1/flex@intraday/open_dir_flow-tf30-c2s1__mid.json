@@ -1,0 +1,1 @@
+{"key": "open_dir_flow-tf30-c2s1", "fam_tf": "open_dir_flow-tf30", "family": "open_dir_flow", "tf": "30", "variant": "c2s1", "sess": "mid", "firm": "flex", "status": "ok", "lift": 2.721251631853761, "ctrl": 388.2532588120104, "real": 390.9745104438642, "skipped": null, "elapsed_s": 0.64}

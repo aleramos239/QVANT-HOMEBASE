@@ -1,0 +1,30 @@
+[lucid] ge3 start hm2-straddle-tf30#10|nyam@20 -> 3 members adj 0.285
+[lucidpro_nodll] ge3 start hm2-straddle-tf30#10|nyam@20 -> 3 members adj 0.533
+[lucid] ge3 start hm2-straddle-tf30#10|nyam@30 -> 3 members adj 0.325
+[lucidpro_nodll] ge3 start hm2-straddle-tf30#10|nyam@30 -> 3 members adj 0.690
+[lucid] ge3 start hm2-straddle-tf30#10|nyam@10 -> 3 members adj 0.308
+[lucid] ge3 start hm2-straddle-tf30#10|nyam@40 -> 2 members adj 0.342
+[apex] ge3 start fp-tod_drift-tf5#7|mid@20 -> 2 members adj 0.403
+[lucid] ge3 start hm2-straddle-tf30#11|nyam@20 -> 3 members adj 0.285
+[lucid] ge3 start hm2-straddle-tf30#11|nyam@30 -> 3 members adj 0.326
+[lucidpro_nodll] ge3 start hm2-straddle-tf30#10|nyam@10 -> 3 members adj 0.521
+[lucid] ge3 start hm2-straddle-tf30#11|nyam@10 -> 3 members adj 0.308
+[apex] ge3 start fp-tod_drift-tf5#7|mid@30 -> 2 members adj 0.403
+[lucidpro_nodll] ge3 start hm2-straddle-tf30#10|nyam@40 -> 2 members adj 0.696
+[lucid] ge3 start hm2-straddle-tf30#11|nyam@40 -> 2 members adj 0.342
+== lucid (lucid-flex-50k@2026-09-27) primary=realized (2211 evals, 0s)
+  portfolio P1/2/3/5=0.00/0.00/0.65/0.663 [0.62,0.71] bust5=0.34 med=3.0 | eod 0.79 real 0.66 intra 0.02 | lift +0.026 | L750 K1500 S0 T0 TT1 | hm-first_bar_mom-tf15#22|nyam@40 + hm2-tod_drift-tf30#19|mid@40 + hm2-straddle-tf30#10|pm@40 | FLAGS ['MEMBER_SHARE_UNDER_RULES 54% of positive standalone net', 'WARN_NO_EDGE: lift +0.026 vs day-matched random, 95% CI [-0.015,+0.073] includes 0', 'GE3_SEARCH: best >=3-member set from greedy restarts (plain greedy ended with 2 members)']
+[lucidpro_nodll] ge3 start hm2-straddle-tf30#11|nyam@20 -> 3 members adj 0.534
+[apex] ge3 start fp-tod_drift-tf5#7|mid@10 -> 2 members adj 0.403
+[lucidpro_nodll] ge3 start hm2-straddle-tf30#11|nyam@30 -> 3 members adj 0.690
+[lucidpro_nodll] ge3 start hm2-straddle-tf30#11|nyam@10 -> 3 members adj 0.690
+[lucidpro_nodll] ge3 start hm2-straddle-tf30#11|nyam@40 -> 2 members adj 0.696
+== lucidpro_nodll (lucid-pro-50k-no-dll@2026-09-27b) primary=realized (2672 evals, 0s)
+  portfolio P1/2/3/5=0.68/0.69/0.69/0.694 [0.66,0.73] bust5=0.31 med=1.0 | eod 0.74 real 0.69 intra 0.26 | lift +0.087 | L1000 K0 S0 T0 TT1 | hm2-straddle-tf30#9|nyam@40 + hm-orb-tf5#10|mid@30 + hm2-straddle-tf30#10|pm@20 | FLAGS ['ONE_YEAR_CONCENTRATION 2022: 63% of net', 'GE3_SEARCH: best >=3-member set from greedy restarts (plain greedy ended with 2 members)']
+[apex] ge3 start fp-tod_drift-tf5#7|mid@80 -> 2 members adj 0.411
+[apex] ge3 start fp-orb-tf5#7|nyam@20 -> 3 members adj 0.402
+[apex] ge3 start fp-orb-tf5#7|nyam@30 -> 3 members adj 0.400
+[apex] ge3 start fp-orb-tf5#7|nyam@10 -> 3 members adj 0.402
+[apex] ge3 start fp-orb-tf5#7|nyam@80 -> 3 members adj 0.406
+== apex (apex-legacy-50k@2026-09-27b UNCONFIRMED) primary=intraday (4455 evals, 0s)
+  portfolio P1/2/3/5=0.40/0.41/0.41/0.407 [0.37,0.43] bust5=0.59 med=1.0 | eod 0.41 real 0.41 intra 0.41 | lift +0.023 | L0 K0 S2000 T0 TT0 | fp-orb-tf5#7|nyam@80 + hm-vwap_z-tf5#1|mid@100 + hm2-ema_pullback-tf1#22|pm@100 | FLAGS ['MEMBER_SHARE_UNDER_RULES 82% of positive standalone net', 'ONE_YEAR_CONCENTRATION 2022: 71% of net', 'WARN_NO_EDGE: lift +0.023 vs day-matched random, 95% CI [-0.018,+0.054] includes 0', 'GE3_SEARCH: best >=3-member set from greedy restarts (plain greedy ended with 2 members)']

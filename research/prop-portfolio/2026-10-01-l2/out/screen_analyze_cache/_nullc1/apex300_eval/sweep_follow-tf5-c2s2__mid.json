@@ -1,0 +1,1 @@
+{"key": "sweep_follow-tf5-c2s2", "fam_tf": "sweep_follow-tf5", "family": "sweep_follow", "tf": "5", "variant": "c2s2", "sess": "mid", "firm": "apex300_eval", "status": "ok", "lift": 0.003970223325062035, "ctrl": 0.004714640198511167, "real": 0.008684863523573201, "skipped": null, "elapsed_s": 0.55}

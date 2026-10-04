@@ -1,0 +1,1 @@
+{"key": "delta_follow-tf5-c2s1", "fam_tf": "delta_follow-tf5", "family": "delta_follow", "tf": "5", "variant": "c2s1", "sess": "london", "firm": "flex", "status": "ok", "lift": 216.7025008159269, "ctrl": 271.04257098563966, "real": 487.74507180156655, "skipped": null, "elapsed_s": 1.13}

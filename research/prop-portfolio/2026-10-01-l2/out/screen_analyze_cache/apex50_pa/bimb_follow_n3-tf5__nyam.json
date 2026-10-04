@@ -1,0 +1,1 @@
+{"key": "bimb_follow_n3-tf5", "fam_tf": "bimb_follow_n3-tf5", "family": "bimb_follow_n3", "tf": "5", "variant": "real", "sess": "nyam", "firm": "apex50_pa", "n_trades": 512, "status": "noncompliant_static", "metric": null, "compliance": {"one_direction": "ok", "stop_5x_target": "FAIL", "mae_rule": "FAIL"}, "elapsed_s": 0.16}

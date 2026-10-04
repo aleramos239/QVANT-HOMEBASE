@@ -1,0 +1,1 @@
+{"key": "open_dir_flow-tf30-c2s1", "fam_tf": "open_dir_flow-tf30", "family": "open_dir_flow", "tf": "30", "variant": "c2s1", "sess": "nyam", "firm": "pro_dll", "status": "ok", "lift": 301.05187989556134, "ctrl": 321.3086945169713, "real": 622.3605744125326, "skipped": null, "elapsed_s": 0.6}

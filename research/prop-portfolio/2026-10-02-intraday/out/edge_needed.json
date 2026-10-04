@@ -1,0 +1,21 @@
+{
+ "what": "win rate needed for P(+$3,000 before -$2,000) >= 60% at 1:1, by $ per trade and trades per day over 5 days; no costs",
+ "table": {
+  "500": {
+   "no_edge": 0.4,
+   "unlimited": 0.5415952294816523,
+   "1_per_day": 0.9999,
+   "2_per_day": 0.7678500550008651,
+   "3_per_day": 0.6923674496871507,
+   "5_per_day": 0.6092653403399614
+  },
+  "1000": {
+   "no_edge": 0.4,
+   "unlimited": 0.5826186837660485,
+   "1_per_day": 0.7205049856032787,
+   "2_per_day": 0.6299528674598874,
+   "3_per_day": 0.5941628198534064,
+   "5_per_day": 0.583824543454951
+  }
+ }
+}

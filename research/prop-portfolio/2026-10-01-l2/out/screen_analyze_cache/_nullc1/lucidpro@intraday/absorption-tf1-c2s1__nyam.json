@@ -1,0 +1,1 @@
+{"key": "absorption-tf1-c2s1", "fam_tf": "absorption-tf1", "family": "absorption", "tf": "1", "variant": "c2s1", "sess": "nyam", "firm": "lucidpro", "status": "ok", "lift": 0.05785627283800244, "ctrl": 0.3038976857490865, "real": 0.3617539585870889, "skipped": null, "elapsed_s": 0.94}

@@ -1,0 +1,1 @@
+{"key": "absorption-tf5", "fam_tf": "absorption-tf5", "family": "absorption", "tf": "5", "variant": "real", "sess": "pm", "firm": "apex50_pa", "n_trades": 29, "status": "noncompliant_static", "metric": null, "compliance": {"one_direction": "ok", "stop_5x_target": "FAIL", "mae_rule": "FAIL"}, "elapsed_s": 0.29}

@@ -1,0 +1,8 @@
+wf run (pass 3): 60 tasks (firm top-12 family-grid x session), models eod+primary, kc=5, workers=2
+[wf3] 0 tasks already done, 60 to run
+[wf3] 10/60 tasks 361s
+[wf3] 20/60 tasks 634s
+[wf3] 30/60 tasks 1033s
+[wf3] 40/60 tasks 1922s
+/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/multiprocessing/resource_tracker.py:216: UserWarning: resource_tracker: There appear to be 6 leaked semaphore objects to clean up at shutdown
+  warnings.warn('resource_tracker: There appear to be %d '

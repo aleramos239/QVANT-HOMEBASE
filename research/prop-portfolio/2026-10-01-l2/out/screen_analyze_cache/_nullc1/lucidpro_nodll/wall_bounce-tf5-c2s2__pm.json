@@ -1,0 +1,1 @@
+{"key": "wall_bounce-tf5-c2s2", "fam_tf": "wall_bounce-tf5", "family": "wall_bounce", "tf": "5", "variant": "c2s2", "sess": "pm", "firm": "lucidpro_nodll", "status": "ok", "lift": -0.004019488428745432, "ctrl": 0.004019488428745432, "real": 0.0, "skipped": null, "elapsed_s": 0.25}

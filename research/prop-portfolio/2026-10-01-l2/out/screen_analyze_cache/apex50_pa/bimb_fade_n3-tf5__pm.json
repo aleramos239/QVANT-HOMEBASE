@@ -1,0 +1,1 @@
+{"key": "bimb_fade_n3-tf5", "fam_tf": "bimb_fade_n3-tf5", "family": "bimb_fade_n3", "tf": "5", "variant": "real", "sess": "pm", "firm": "apex50_pa", "n_trades": 842, "status": "noncompliant_static", "metric": null, "compliance": {"one_direction": "ok", "stop_5x_target": "FAIL", "mae_rule": "FAIL"}, "elapsed_s": 0.16}

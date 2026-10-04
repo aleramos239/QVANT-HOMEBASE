@@ -1,0 +1,91 @@
+{
+ "engine": "l2sim-1 (port of tester tick-2)",
+ "fill_law": "tick replay (ofb_tick tape)",
+ "strategy": "families.flow.DeltaFollow",
+ "inputs": {
+  "tf": "1",
+  "sess": "all",
+  "dir": "both",
+  "stop_mode": "atr",
+  "stop_val": 1.5,
+  "tgt_r": 2.0,
+  "trail_atr": 0.0,
+  "exit_bars": 0,
+  "max_tr": 3,
+  "f_trend": "off",
+  "f_vwap": "off",
+  "f_depth": "off",
+  "q": 90.0
+ },
+ "root": "NQ",
+ "range": {
+  "start": "2021-09-22",
+  "end": "2024-12-31",
+  "holdout": false
+ },
+ "qty": 1,
+ "commission": 4.0,
+ "slippage_ticks": 1.0,
+ "placement_ms": 85,
+ "strict_limit": false,
+ "stress": null,
+ "workers": 8,
+ "cells_in_pass": 1,
+ "days_subset": false,
+ "exec_guard": null,
+ "features": [
+  "f_delta",
+  "t_utc",
+  "book_ok"
+ ],
+ "features_loader": "C2Features",
+ "screen": {
+  "stage": "screen",
+  "family": "delta_follow",
+  "tf": "1",
+  "control": "c2",
+  "seed": 1,
+  "both_sides_declared": false,
+  "notes": "F1: tf-bar |delta| >= P90 of the trailing 60 tf bars and the bar closes with the delta -> follow",
+  "features": [
+   "f_delta",
+   "t_utc",
+   "book_ok"
+  ],
+  "run_kw": {}
+ },
+ "id": "delta_follow-tf1-c2s1",
+ "coverage": {
+  "sessions": 825,
+  "used": 820,
+  "skipped": [
+   {
+    "date": "2021-12-01",
+    "reason": "missing 08:00\u201309:00 ET"
+   },
+   {
+    "date": "2022-06-21",
+    "reason": "missing 00:00\u201314:00 ET"
+   },
+   {
+    "date": "2022-08-05",
+    "reason": "missing 07:00\u201308:00 ET"
+   },
+   {
+    "date": "2022-09-06",
+    "reason": "missing 05:00\u201306:00 ET"
+   },
+   {
+    "date": "2023-04-07",
+    "reason": "missing 10:00\u201316:10 ET"
+   }
+  ],
+  "no_trade": [],
+  "skipped_by_error": 0
+ },
+ "unrealistic_winners": 0,
+ "both_sides_sessions": 0,
+ "elapsed_s": 3.91,
+ "trades": 11460,
+ "net": -254205.0
+}

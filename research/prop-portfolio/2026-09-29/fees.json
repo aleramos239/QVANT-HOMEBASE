@@ -1,0 +1,37 @@
+{
+ "_note": "ASSUMPTIONS, change freely. Keyed by propsim rule id. eval_fee is paid once per eval attempt; activation is paid once per funded account.",
+ "lucid-flex-50k@2026-09-27": {
+  "eval_fee": 100.0,
+  "activation": 0.0,
+  "assumption": true,
+  "note": "Lucid Flex 50K eval $100, no activation fee (assumed)."
+ },
+ "apex-legacy-50k@2026-09-27b": {
+  "eval_fee": 35.0,
+  "list_price": 167.0,
+  "activation": 85.0,
+  "assumption": true,
+  "unconfirmed": true,
+  "note": "Apex Legacy 50K eval $35 promo (list $167), PA activation $85 (assumed). Apex rules are UNCONFIRMED."
+ },
+ "lucid-pro-50k@2026-09-27b": {
+  "eval_fee": 115.0,
+  "activation": 0.0,
+  "assumption": false,
+  "note": "LucidPro 50K WITH $1,200 daily loss limit: $115 eval (user, 2026-09-30). Activation assumed $0."
+ },
+ "lucid-pro-50k-no-dll@2026-09-27b": {
+  "eval_fee": 140.0,
+  "activation": 0.0,
+  "assumption": false,
+  "note": "LucidPro 50K WITHOUT daily loss limit: $140 eval (user, 2026-09-30). Activation assumed $0."
+ },
+ "apex-eod-50k@2026-09-27b": {
+  "eval_fee": 35.0,
+  "list_price": 167.0,
+  "activation": 85.0,
+  "assumption": true,
+  "unconfirmed": true,
+  "note": "apex_eod: fee copied from the Apex Legacy assumption ($35 promo, list $167, activation $85); not sourced for the EOD product. Rules UNCONFIRMED."
+ }
+}

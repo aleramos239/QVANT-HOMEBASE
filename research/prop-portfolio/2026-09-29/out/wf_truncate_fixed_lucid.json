@@ -1,0 +1,47 @@
+[
+ {
+  "firm": "lucid",
+  "quarter": "2022Q3",
+  "mode": "fixed",
+  "cal_days": 195,
+  "last_day": "2022-06-30",
+  "train_starts": 191,
+  "pick": {
+   "micros": [
+    40,
+    10,
+    10
+   ],
+   "cell": {
+    "day_lock": 750,
+    "day_take": 1500,
+    "day_stop": 0,
+    "max_day_tr": 1,
+    "target_take": 1
+   },
+   "train_stable": 0.7486910994764379,
+   "train_p5": 0.7539267015706786
+  },
+  "stored": {
+   "micros": [
+    40,
+    10,
+    10
+   ],
+   "cell": {
+    "day_lock": 750,
+    "day_take": 1500,
+    "day_stop": 0,
+    "max_day_tr": 1,
+    "target_take": 1
+   },
+   "train_stable": 0.7486910994764379,
+   "train_p5": 0.7539267015706786
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 8.915560960769653
+ }
+]

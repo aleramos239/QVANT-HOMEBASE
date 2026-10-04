@@ -1,0 +1,1 @@
+{"key": "delta_follow-tf5-c2s1", "fam_tf": "delta_follow-tf5", "family": "delta_follow", "tf": "5", "variant": "c2s1", "sess": "nyam", "firm": "apex", "status": "ok", "lift": 0.03081607795371498, "ctrl": 0.3151035322777101, "real": 0.3459196102314251, "skipped": null, "elapsed_s": 0.49}

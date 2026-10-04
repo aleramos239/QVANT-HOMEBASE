@@ -1,0 +1,24 @@
+null3: 204 pseudo-configs (strata = control pool x session)
+[null3] 0 tasks already done, 204 to run
+[null3] 10/204 tasks 141s
+[null3] 20/204 tasks 263s
+[null3] 30/204 tasks 419s
+[null3] 40/204 tasks 538s
+[null3] 50/204 tasks 661s
+[null3] 60/204 tasks 794s
+[null3] 70/204 tasks 922s
+[null3] 80/204 tasks 2473s
+[null3] 90/204 tasks 2598s
+[null3] 100/204 tasks 2722s
+[null3] 110/204 tasks 2870s
+[null3] 120/204 tasks 2993s
+[null3] 130/204 tasks 3139s
+[null3] 140/204 tasks 3285s
+[null3] 150/204 tasks 3396s
+[null3] 160/204 tasks 3550s
+[null3] 170/204 tasks 3685s
+[null3] 180/204 tasks 3803s
+[null3] 190/204 tasks 3978s
+[null3] 200/204 tasks 4030s
+[null3] 204/204 tasks 4049s
+wrote 5100 null rows

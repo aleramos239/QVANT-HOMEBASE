@@ -1,0 +1,326 @@
+[
+ {
+  "firm": "lucidpro",
+  "quarter": "2022Q4",
+  "mode": "reselect",
+  "cal_days": 259,
+  "last_day": "2022-09-30",
+  "train_starts": 248,
+  "pick": {
+   "members": [
+    [
+     "hm-tod_drift-tf5#19|mid",
+     40
+    ],
+    [
+     "hm2-squeeze-tf1#22|pm",
+     10
+    ],
+    [
+     "hm2-donchian-tf5#18|pm",
+     30
+    ]
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 1,
+    "target_take": 1
+   },
+   "train_stable": 0.5080645084381104,
+   "train_p5": 0.5403226017951965
+  },
+  "stored": {
+   "members": [
+    [
+     "hm-tod_drift-tf5#19|mid",
+     40
+    ],
+    [
+     "hm-donchian-tf15#2|pm",
+     10
+    ],
+    [
+     "hm2-squeeze-tf1#22|pm",
+     10
+    ]
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 1,
+    "target_take": 1
+   },
+   "train_stable": 0.5282257795333862,
+   "train_p5": 0.5403226017951965
+  },
+  "evals": 504,
+  "same_set": false,
+  "same_cell": true,
+  "same_score": false,
+  "identical": false,
+  "secs": 237.20802521705627
+ },
+ {
+  "firm": "lucidpro",
+  "quarter": "2023Q2",
+  "mode": "reselect",
+  "cal_days": 384,
+  "last_day": "2023-03-31",
+  "train_starts": 247,
+  "pick": {
+   "members": [
+    [
+     "hm-tod_drift-tf5#19|mid",
+     40
+    ],
+    [
+     "hm2-donchian-tf5#5|pm",
+     10
+    ],
+    [
+     "hm2-squeeze-tf1#22|pm",
+     30
+    ]
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.5060728788375854,
+   "train_p5": 0.5060728788375854
+  },
+  "stored": {
+   "members": [
+    [
+     "hm-tod_drift-tf5#19|mid",
+     40
+    ],
+    [
+     "hm2-donchian-tf5#5|pm",
+     10
+    ],
+    [
+     "hm2-squeeze-tf1#22|pm",
+     20
+    ],
+    [
+     "hm2-straddle-tf30#18|pm",
+     10
+    ]
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 1,
+    "target_take": 1
+   },
+   "train_stable": 0.5060728788375854,
+   "train_p5": 0.5101214647293091
+  },
+  "evals": 526,
+  "same_set": false,
+  "same_cell": false,
+  "same_score": false,
+  "identical": false,
+  "secs": 336.1207597255707
+ },
+ {
+  "firm": "lucidpro",
+  "quarter": "2023Q4",
+  "mode": "reselect",
+  "cal_days": 510,
+  "last_day": "2023-09-29",
+  "train_starts": 247,
+  "pick": {
+   "members": [
+    [
+     "hm2-donchian-tf5#11|pm",
+     20
+    ],
+    [
+     "hm-donchian-tf15#11|nyam",
+     20
+    ],
+    [
+     "hm2-donchian-tf5#18|pm",
+     20
+    ]
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.4858299493789673,
+   "train_p5": 0.4898785352706909
+  },
+  "stored": {
+   "members": [
+    [
+     "hm2-donchian-tf5#11|pm",
+     20
+    ],
+    [
+     "hm-donchian-tf15#11|nyam",
+     20
+    ],
+    [
+     "hm2-donchian-tf5#15|pm",
+     20
+    ]
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.4858299493789673,
+   "train_p5": 0.4979757070541382
+  },
+  "evals": 566,
+  "same_set": false,
+  "same_cell": true,
+  "same_score": false,
+  "identical": false,
+  "secs": 547.1661529541016
+ },
+ {
+  "firm": "lucidpro",
+  "quarter": "2024Q2",
+  "mode": "reselect",
+  "cal_days": 634,
+  "last_day": "2024-03-28",
+  "train_starts": 246,
+  "pick": {
+   "members": [
+    [
+     "hm2-ema_pullback-tf1#23|pm",
+     30
+    ],
+    [
+     "hm2-tod_drift-tf15#6|london",
+     40
+    ],
+    [
+     "hm-tod_drift-tf5#19|mid",
+     40
+    ]
+   ],
+   "cell": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.48577237129211426,
+   "train_p5": 0.5203251838684082
+  },
+  "stored": {
+   "members": [
+    [
+     "hm2-ema_pullback-tf1#22|pm",
+     40
+    ],
+    [
+     "hm2-tod_drift-tf15#6|london",
+     40
+    ],
+    [
+     "hm-tod_drift-tf5#19|mid",
+     10
+    ]
+   ],
+   "cell": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.48373985290527344,
+   "train_p5": 0.5162601470947266
+  },
+  "evals": 625,
+  "same_set": false,
+  "same_cell": true,
+  "same_score": false,
+  "identical": false,
+  "secs": 576.5818490982056
+ },
+ {
+  "firm": "lucidpro",
+  "quarter": "2024Q4",
+  "mode": "reselect",
+  "cal_days": 761,
+  "last_day": "2024-09-30",
+  "train_starts": 247,
+  "pick": {
+   "members": [
+    [
+     "hm2-straddle-tf30#18|pm",
+     20
+    ],
+    [
+     "hm2-tod_drift-tf15#19|mid",
+     30
+    ],
+    [
+     "hm2-donchian-tf5#8|pm",
+     10
+    ]
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.4736842215061188,
+   "train_p5": 0.4736842215061188
+  },
+  "stored": {
+   "members": [
+    [
+     "hm2-straddle-tf30#18|pm",
+     20
+    ],
+    [
+     "hm2-rsi2-tf1#9|mid",
+     20
+    ],
+    [
+     "hm2-donchian-tf5#15|nyam",
+     40
+    ]
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.4048582911491394,
+   "train_p5": 0.4048582911491394
+  },
+  "evals": 563,
+  "same_set": false,
+  "same_cell": true,
+  "same_score": false,
+  "identical": false,
+  "secs": 434.1123230457306
+ }
+]

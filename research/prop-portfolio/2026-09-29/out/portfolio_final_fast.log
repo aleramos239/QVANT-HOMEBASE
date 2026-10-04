@@ -1,0 +1,32 @@
+[lucid] single hm2-straddle-tf30#10|nyam@40 stable=0.339 (63s, 180 evals)
+[lucid] +hm2-tod_drift-tf30#19|mid@40 -> 2 members stable=0.342 gain=+0.004 FORCED (127s, 268 evals)
+[lucidpro] single hm2-tod_drift-tf15#19|mid@30 stable=0.372 (190s, 200 evals)
+== lucid (lucid-flex-50k@2026-09-27) primary=realized (399 evals, 248s)
+  single    P1/2/3/5=0.00/0.00/0.66/0.692 [0.64,0.74] bust5=0.31 med=3.0 | eod 0.69 real 0.69 intra 0.01 | lift +0.093 | L750 K1500 S0 T0 TT1 | hm2-straddle-tf30#10|nyam@40 | FLAGS ['ONE_YEAR_CONCENTRATION 2022: 97% of net']
+  best2     P1/2/3/5=0.00/0.00/0.68/0.695 [0.65,0.74] bust5=0.30 med=3.0 | eod 0.73 real 0.70 intra 0.01 | lift +0.096 | L750 K1500 S0 T0 TT1 | hm2-straddle-tf30#10|nyam@40 + hm2-tod_drift-tf30#19|mid@40 | FLAGS ['ONE_YEAR_CONCENTRATION 2022: 115% of net']
+  portfolio P1/2/3/5=0.00/0.00/0.68/0.695 [0.65,0.74] bust5=0.30 med=3.0 | eod 0.73 real 0.70 intra 0.01 | lift +0.096 | L750 K1500 S0 T0 TT1 | hm2-straddle-tf30#10|nyam@40 + hm2-tod_drift-tf30#19|mid@40 | FLAGS ['ONE_YEAR_CONCENTRATION 2022: 115% of net', 'FEWER_THAN_3_MEMBERS: no feasible 3rd member under the guards (cap / net-share); this is the best 2-member', 'FORCED_TO_3: 3rd member added with gain <= 0.005 (stop rule overridden for the >=3 guard)']
+[lucidpro_nodll] single hm2-straddle-tf30#10|nyam@40 stable=0.696 (96s, 208 evals)
+[lucidpro] +hm2-donchian-tf1#11|pm@30 -> 2 members stable=0.373 gain=+0.002 FORCED (385s, 366 evals)
+[lucidpro] +hm2-ema_pullback-tf1#22|pm@10 -> 3 members stable=0.372 gain=-0.001 FORCED (407s, 379 evals)
+[lucidpro_nodll] +hm2-squeeze-tf5#21|mid@40 -> 2 members stable=0.696 gain=+0.000 FORCED (177s, 300 evals)
+== lucidpro (lucid-pro-50k@2026-09-27b) primary=realized (474 evals, 597s)
+  single    P1/2/3/5=0.24/0.38/0.42/0.447 [0.40,0.50] bust5=0.54 med=1.0 | eod 0.45 real 0.45 intra 0.40 | lift +0.092 | L1000 K0 S0 T0 TT1 | hm2-tod_drift-tf15#19|mid@30 | FLAGS ['ONE_YEAR_CONCENTRATION 2022: 100% of net']
+  best2     P1/2/3/5=0.28/0.45/0.46/0.465 [0.42,0.51] bust5=0.53 med=1.0 | eod 0.47 real 0.47 intra 0.43 | lift +0.105 | L0 K0 S0 T0 TT1 | hm2-tod_drift-tf15#19|mid@30 + hm2-donchian-tf1#11|pm@30 | FLAGS ['ONE_YEAR_CONCENTRATION 2022: 103% of net']
+  portfolio P1/2/3/5=0.28/0.45/0.46/0.460 [0.41,0.50] bust5=0.54 med=1.0 | eod 0.46 real 0.46 intra 0.42 | lift +0.108 | L0 K0 S0 T0 TT1 | hm2-tod_drift-tf15#19|mid@30 + hm2-donchian-tf1#11|pm@30 + hm2-ema_pullback-tf1#22|pm@10 | FLAGS ['ONE_YEAR_CONCENTRATION 2022: 104% of net', 'FORCED_TO_3: 3rd member added with gain <= 0.005 (stop rule overridden for the >=3 guard)']
+== lucidpro_nodll (lucid-pro-50k-no-dll@2026-09-27b) primary=realized (459 evals, 356s)
+  single    P1/2/3/5=0.67/0.70/0.71/0.706 [0.67,0.74] bust5=0.29 med=1.0 | eod 0.71 real 0.71 intra 0.23 | lift +0.072 | L1000 K0 S0 T0 TT1 | hm2-straddle-tf30#10|nyam@40
+  best2     P1/2/3/5=0.68/0.70/0.70/0.702 [0.67,0.73] bust5=0.30 med=1.0 | eod 0.74 real 0.70 intra 0.23 | lift +0.074 | L1000 K0 S0 T0 TT1 | hm2-straddle-tf30#10|nyam@40 + hm2-squeeze-tf5#21|mid@40
+  portfolio P1/2/3/5=0.68/0.70/0.70/0.702 [0.67,0.73] bust5=0.30 med=1.0 | eod 0.74 real 0.70 intra 0.23 | lift +0.074 | L1000 K0 S0 T0 TT1 | hm2-straddle-tf30#10|nyam@40 + hm2-squeeze-tf5#21|mid@40 | FLAGS ['FEWER_THAN_3_MEMBERS: no feasible 3rd member under the guards (cap / net-share); this is the best 2-member', 'FORCED_TO_3: 3rd member added with gain <= 0.005 (stop rule overridden for the >=3 guard)']
+[apex_eod] single hm2-tod_drift-tf15#19|mid@30 stable=0.335 (288s, 245 evals)
+[apex] single fp-tod_drift-tf5#7|mid@80 stable=0.411 (314s, 395 evals)
+[apex_eod] +hm2-donchian-tf5#5|pm@40 -> 2 members stable=0.335 gain=+0.000 FORCED (597s, 449 evals)
+[apex_eod] +hm2-tod_drift-tf15#0|pm@20 -> 3 members stable=0.335 gain=+0.000 FORCED (608s, 456 evals)
+[apex] +hm2-ema_pullback-tf1#22|pm@20 -> 2 members stable=0.411 gain=+0.000 FORCED (670s, 697 evals)
+== apex_eod (apex-eod-50k@2026-09-27b UNCONFIRMED) primary=intraday (698 evals, 1177s)
+  single    P1/2/3/5=0.21/0.35/0.38/0.397 [0.35,0.45] bust5=0.60 med=1.0 | eod 0.40 real 0.40 intra 0.40 | lift +0.097 | L1000 K0 S0 T0 TT1 | hm2-tod_drift-tf15#19|mid@30 | FLAGS ['ONE_YEAR_CONCENTRATION 2022: 102% of net']
+  best2     P1/2/3/5=0.22/0.36/0.38/0.396 [0.35,0.44] bust5=0.60 med=1.0 | eod 0.40 real 0.40 intra 0.40 | lift +0.097 | L1000 K0 S0 T0 TT1 | hm2-tod_drift-tf15#19|mid@30 + hm2-donchian-tf5#5|pm@40 | FLAGS ['ONE_YEAR_CONCENTRATION 2022: 94% of net']
+  portfolio P1/2/3/5=0.22/0.36/0.38/0.392 [0.35,0.44] bust5=0.61 med=1.0 | eod 0.40 real 0.40 intra 0.39 | lift +0.093 | L1000 K0 S0 T0 TT1 | hm2-tod_drift-tf15#19|mid@30 + hm2-donchian-tf5#5|pm@40 + hm2-tod_drift-tf15#0|pm@20 | FLAGS ['MEMBER_SHARE_UNDER_RULES 52% of positive standalone net', 'ONE_YEAR_CONCENTRATION 2022: 119% of net', 'FORCED_TO_3: 3rd member added with gain <= 0.005 (stop rule overridden for the >=3 guard)']
+== apex (apex-legacy-50k@2026-09-27b UNCONFIRMED) primary=intraday (1069 evals, 1364s)
+  single    P1/2/3/5=0.41/0.41/0.41/0.412 [0.37,0.44] bust5=0.59 med=1.0 | eod 0.51 real 0.51 intra 0.41 | lift +0.026 | L0 K0 S0 T0 TT0 | fp-tod_drift-tf5#7|mid@80 | FLAGS ['NET_NOT_POSITIVE under the rules', 'WARN_NO_EDGE: lift +0.026 vs day-matched random, 95% CI [-0.012,+0.059] includes 0']
+  best2     P1/2/3/5=0.41/0.41/0.41/0.412 [0.37,0.44] bust5=0.59 med=1.0 | eod 0.57 real 0.51 intra 0.41 | lift +0.026 | L0 K0 S0 T0 TT0 | fp-tod_drift-tf5#7|mid@80 + hm2-ema_pullback-tf1#22|pm@20 | FLAGS ['NET_NOT_POSITIVE under the rules', 'WARN_NO_EDGE: lift +0.026 vs day-matched random, 95% CI [-0.012,+0.058] includes 0']
+  portfolio P1/2/3/5=0.41/0.41/0.41/0.412 [0.37,0.44] bust5=0.59 med=1.0 | eod 0.57 real 0.51 intra 0.41 | lift +0.026 | L0 K0 S0 T0 TT0 | fp-tod_drift-tf5#7|mid@80 + hm2-ema_pullback-tf1#22|pm@20 | FLAGS ['NET_NOT_POSITIVE under the rules', 'WARN_NO_EDGE: lift +0.026 vs day-matched random, 95% CI [-0.012,+0.058] includes 0', 'FEWER_THAN_3_MEMBERS: no feasible 3rd member under the guards (cap / net-share); this is the best 2-member', 'FORCED_TO_3: 3rd member added with gain <= 0.005 (stop rule overridden for the >=3 guard)']

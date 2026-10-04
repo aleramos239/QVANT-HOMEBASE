@@ -1,0 +1,24 @@
+day done 2021-11-10 15 s
+day done 2022-03-14 17 s
+day done 2022-03-22 29 s
+day done 2022-08-17 40 s
+day done 2023-05-18 50 s
+day done 2023-07-03 58 s
+day done 2023-11-06 65 s
+day done 2024-09-18 71 s
+day done 2024-11-04 79 s
+day done 2024-12-05 85 s
+
+per config (counts only):
+  ('Bounce', '1', 'default') {'days': 10, 'decisions': 8457, 'calls': 18, 'placed': 14, 'trades': 13, 'reads': 86139, 'cuts': 189, 'viol': 0, 'oracle_checked': 8457, 'fills_checked': 13, 'late_closes': 0, 'leak_changes_output_days': 9, 'early_clock_calls': 0, 'late_clock_calls': 0, 'stale_values_same_days': 0}
+  ('Bounce', '1', 'busy') {'days': 10, 'decisions': 8445, 'calls': 77, 'placed': 47, 'trades': 42, 'reads': 86007, 'cuts': 288, 'viol': 0, 'oracle_checked': 8445, 'fills_checked': 42, 'late_closes': 0, 'leak_changes_output_days': 9, 'early_clock_calls': 0, 'late_clock_calls': 0, 'stale_values_same_days': 0}
+  ('Bounce', '5', 'default') {'days': 10, 'decisions': 1640, 'calls': 2, 'placed': 2, 'trades': 2, 'reads': 16704, 'cuts': 78, 'viol': 0, 'oracle_checked': 1640, 'fills_checked': 2, 'late_closes': 0, 'leak_changes_output_days': 5, 'early_clock_calls': 0, 'late_clock_calls': 0, 'stale_values_same_days': 0}
+  ('Bounce', '5', 'busy') {'days': 10, 'decisions': 1640, 'calls': 17, 'placed': 12, 'trades': 12, 'reads': 16704, 'cuts': 188, 'viol': 0, 'oracle_checked': 1640, 'fills_checked': 12, 'late_closes': 0, 'leak_changes_output_days': 8, 'early_clock_calls': 0, 'late_clock_calls': 0, 'stale_values_same_days': 0}
+  ('Break', '1', 'default') {'days': 10, 'decisions': 8433, 'calls': 7, 'placed': 7, 'trades': 7, 'reads': 104791, 'cuts': 123, 'viol': 0, 'oracle_checked': 8433, 'fills_checked': 7, 'late_closes': 0, 'leak_changes_output_days': 6, 'early_clock_calls': 0, 'late_clock_calls': 0, 'stale_values_same_days': 0}
+  ('Break', '1', 'busy') {'days': 10, 'decisions': 8387, 'calls': 34, 'placed': 34, 'trades': 29, 'reads': 110783, 'cuts': 265, 'viol': 0, 'oracle_checked': 8387, 'fills_checked': 29, 'late_closes': 0, 'leak_changes_output_days': 7, 'early_clock_calls': 0, 'late_clock_calls': 0, 'stale_values_same_days': 0}
+  ('Break', '5', 'default') {'days': 10, 'decisions': 1640, 'calls': 0, 'placed': 0, 'trades': 0, 'reads': 20334, 'cuts': 60, 'viol': 0, 'oracle_checked': 1640, 'fills_checked': 0, 'late_closes': 0, 'leak_changes_output_days': 0, 'early_clock_calls': 0, 'late_clock_calls': 0, 'stale_values_same_days': 0}
+  ('Break', '5', 'busy') {'days': 10, 'decisions': 1639, 'calls': 5, 'placed': 5, 'trades': 5, 'reads': 21596, 'cuts': 105, 'viol': 0, 'oracle_checked': 1639, 'fills_checked': 5, 'late_closes': 0, 'leak_changes_output_days': 3, 'early_clock_calls': 0, 'late_clock_calls': 0, 'stale_values_same_days': 0}
+
+calls per day (all 8 configs): {'2021-11-10': 28, '2022-03-14': 0, '2022-03-22': 34, '2022-08-17': 25, '2023-05-18': 13, '2023-07-03': 30, '2023-11-06': 13, '2024-09-18': 4, '2024-11-04': 10, '2024-12-05': 3}
+
+TOTAL {'runs': 80, 'cuts': 1296, 'T1_viol': 0, 'post_cut_differs': 1003, 'leak_cuts': 656, 'leak_eligible': 300, 'leak_eligible_detected': 300, 'peek_eligible_bounce': 277, 'peek_eligible_bounce_detected': 164, 'leak_detected': 300, 'leak_out_detected': 164, 'peek_cuts': 656, 'peek_detected': 164, 'peek_out_detected': 164}

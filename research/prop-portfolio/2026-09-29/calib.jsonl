@@ -1,0 +1,2 @@
+{"key":"calib-full-ema_pullback-tf5","kind":"run","stage":"calib","strategy":"draft_pp_ema_pullback","inputs":{"tf":"5","sess":"all"},"range":{"preset":"2021-2024"},"costs":{"qty":1},"prop_rules":"lucid-flex-50k@2026-09-27"}
+{"key":"calib-grid20-orb","kind":"grid","stage":"calib","strategy":"draft_pp_orb","inputs":{"sess":"all"},"axes":[{"key":"tf","values":["1","5","15","30"]},{"key":"stop_val","values":[0.5,1.0,1.5,2.0,3.0]}],"max_cells":20,"range":{"preset":"2021-2024"},"costs":{"qty":1},"prop_rules":"lucid-flex-50k@2026-09-27"}

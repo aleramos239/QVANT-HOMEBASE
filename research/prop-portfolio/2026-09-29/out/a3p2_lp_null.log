@@ -1,0 +1,52 @@
+null(lucidpro): 398 pseudo-configs
+[lp-null chunk0] 0 tasks already done, 40 to run
+[lp-null chunk0] 10/40 tasks 6s
+[lp-null chunk0] 20/40 tasks 10s
+[lp-null chunk0] 30/40 tasks 14s
+[lp-null chunk0] 40/40 tasks 18s
+[lp-null chunk1] 40 tasks already done, 40 to run
+[lp-null chunk1] 10/40 tasks 6s
+[lp-null chunk1] 20/40 tasks 9s
+[lp-null chunk1] 30/40 tasks 12s
+[lp-null chunk1] 40/40 tasks 18s
+[lp-null chunk2] 80 tasks already done, 40 to run
+[lp-null chunk2] 10/40 tasks 11s
+[lp-null chunk2] 20/40 tasks 17s
+[lp-null chunk2] 30/40 tasks 23s
+[lp-null chunk2] 40/40 tasks 30s
+[lp-null chunk3] 120 tasks already done, 40 to run
+[lp-null chunk3] 10/40 tasks 6s
+[lp-null chunk3] 20/40 tasks 10s
+[lp-null chunk3] 30/40 tasks 18s
+[lp-null chunk3] 40/40 tasks 21s
+[lp-null chunk4] 160 tasks already done, 40 to run
+[lp-null chunk4] 10/40 tasks 6s
+[lp-null chunk4] 20/40 tasks 10s
+[lp-null chunk4] 30/40 tasks 15s
+[lp-null chunk4] 40/40 tasks 19s
+[lp-null chunk5] 200 tasks already done, 40 to run
+[lp-null chunk5] 10/40 tasks 5s
+[lp-null chunk5] 20/40 tasks 8s
+[lp-null chunk5] 30/40 tasks 14s
+[lp-null chunk5] 40/40 tasks 21s
+[lp-null chunk6] 240 tasks already done, 40 to run
+[lp-null chunk6] 10/40 tasks 9s
+[lp-null chunk6] 20/40 tasks 15s
+[lp-null chunk6] 30/40 tasks 19s
+[lp-null chunk6] 40/40 tasks 24s
+[lp-null chunk7] 280 tasks already done, 40 to run
+[lp-null chunk7] 10/40 tasks 6s
+[lp-null chunk7] 20/40 tasks 11s
+[lp-null chunk7] 30/40 tasks 15s
+[lp-null chunk7] 40/40 tasks 18s
+[lp-null chunk8] 320 tasks already done, 40 to run
+[lp-null chunk8] 10/40 tasks 5s
+[lp-null chunk8] 20/40 tasks 11s
+[lp-null chunk8] 30/40 tasks 17s
+[lp-null chunk8] 40/40 tasks 22s
+[lp-null chunk9] 360 tasks already done, 38 to run
+[lp-null chunk9] 10/38 tasks 8s
+[lp-null chunk9] 20/38 tasks 11s
+[lp-null chunk9] 30/38 tasks 13s
+[lp-null chunk9] 38/38 tasks 14s
+a3p2_null.csv: kept 1592 rows, added 1592 lucidpro rows

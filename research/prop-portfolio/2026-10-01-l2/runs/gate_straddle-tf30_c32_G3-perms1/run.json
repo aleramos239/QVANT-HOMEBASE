@@ -1,0 +1,227 @@
+{
+ "id": "gate_straddle-tf30_c32_G3-perms1",
+ "engine": "gates-1 (list gate on an in-sample tester bundle)",
+ "range": {
+  "start": "2021-09-22",
+  "end": "2024-12-31",
+  "holdout": false
+ },
+ "holdout": false,
+ "qty": 1,
+ "trades": 6333,
+ "net": 52998.0,
+ "strategy": "gates.G3",
+ "inputs": {
+  "pick": "straddle-tf30_c32",
+  "source": "R__hm2-straddle-tf30_c32",
+  "gate": "G3",
+  "name": "gate_size",
+  "guard_ms": 0,
+  "z_win": 60,
+  "z_min": 30,
+  "g3_sessions": 250,
+  "g3_min_pop": 60,
+  "rows": "half_units (scored as a tier portfolio: gates.cell)"
+ },
+ "elapsed_s": 0.13,
+ "gate": {
+  "gate": "G3",
+  "name": "gate_size",
+  "pick": "straddle-tf30_c32",
+  "pick_key": "hm2-straddle-tf30#32",
+  "tf": "30",
+  "pick_sess": "pm",
+  "source": "R__hm2-straddle-tf30_c32",
+  "source_sha256": "60a422e830c5f49e7e4fff18bbf8356f5b1677210d24b0fe908279f90b3b1d03",
+  "stage": "gate",
+  "control": "perm",
+  "seed": 1,
+  "features": [
+   "imb10",
+   "t_utc"
+  ],
+  "counts": {
+   "source_trades": 3137,
+   "rows": 6333,
+   "no_signal": 155,
+   "basis": 2742,
+   "cats": {
+    "0.5": 890,
+    "1.0": 1298,
+    "1.5": 949
+   },
+   "rows_by_session": {
+    "london": 1658,
+    "mid": 1589,
+    "nyam": 1655,
+    "pm": 1431
+   },
+   "cats_by_session": {
+    "london": {
+     "0.5": 228,
+     "1.0": 346,
+     "1.5": 246
+    },
+    "mid": {
+     "0.5": 228,
+     "1.0": 328,
+     "1.5": 235
+    },
+    "nyam": {
+     "0.5": 239,
+     "1.0": 327,
+     "1.5": 254
+    },
+    "pm": {
+     "0.5": 195,
+     "1.0": 297,
+     "1.5": 214
+    }
+   },
+   "exec_guard": null,
+   "moved_to_match": 42,
+   "moved_without_basis": 0,
+   "same_verdict_as_real": 1342
+  },
+  "control_only": true,
+  "half_unit_rows": true,
+  "note": "a permutation null: matched to the real gate's full-sample counts, donors may be later sessions -- a CONTROL, never a tradable rule",
+  "cells": {
+   "flex_funded": {
+    "slot": "flex_funded",
+    "kind": "funded",
+    "base": "file:R__hm2-straddle-tf30_c32",
+    "base_kw": {
+     "firm": "flex",
+     "rules": {
+      "day_take": 600,
+      "day_lock": 300,
+      "day_stop": 0,
+      "max_day_tr": 0
+     },
+     "sess": "pm",
+     "policy": 1500,
+     "strategy": "straddle",
+     "inputs": {
+      "tf": "30",
+      "stop_val": 3.0,
+      "tgt_r": 0.5,
+      "off_atr": 1.0
+     },
+     "both_sides": true,
+     "micros": 40
+    },
+    "pick_meta": {
+     "strategy": "straddle",
+     "inputs": {
+      "tf": "30",
+      "stop_val": 3.0,
+      "tgt_r": 0.5,
+      "off_atr": 1.0
+     },
+     "both_sides": true
+    },
+    "warnings": [
+     "the x1.5 tier is 60 micros, over the flex limit of 40: the scorer would clip it (x1.5 = x1); the cap-compliant cell is unit=13",
+     "G3 is a tier portfolio: the lift over its permutation nulls is gates.lift_cell (score.lift_vs_control takes one source); a C1 control would need the same three tiers"
+    ],
+    "real": [
+     {
+      "src": "/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-10-01-l2/runs/gate_straddle-tf30_c32_G3/x0.5",
+      "sess": "pm",
+      "micros": 20,
+      "label": "gate_straddle-tf30_c32_G3|x0.5"
+     },
+     {
+      "src": "/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-10-01-l2/runs/gate_straddle-tf30_c32_G3/x1",
+      "sess": "pm",
+      "micros": 40,
+      "label": "gate_straddle-tf30_c32_G3|x1"
+     },
+     {
+      "src": "/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-10-01-l2/runs/gate_straddle-tf30_c32_G3/x1.5",
+      "sess": "pm",
+      "micros": 60,
+      "label": "gate_straddle-tf30_c32_G3|x1.5"
+     }
+    ],
+    "nulls": [
+     [
+      {
+       "src": "/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-10-01-l2/runs/gate_straddle-tf30_c32_G3-perms1/x0.5",
+       "sess": "pm",
+       "micros": 20,
+       "label": "gate_straddle-tf30_c32_G3-perms1|x0.5"
+      },
+      {
+       "src": "/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-10-01-l2/runs/gate_straddle-tf30_c32_G3-perms1/x1",
+       "sess": "pm",
+       "micros": 40,
+       "label": "gate_straddle-tf30_c32_G3-perms1|x1"
+      },
+      {
+       "src": "/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-10-01-l2/runs/gate_straddle-tf30_c32_G3-perms1/x1.5",
+       "sess": "pm",
+       "micros": 60,
+       "label": "gate_straddle-tf30_c32_G3-perms1|x1.5"
+      }
+     ],
+     [
+      {
+       "src": "/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-10-01-l2/runs/gate_straddle-tf30_c32_G3-perms2/x0.5",
+       "sess": "pm",
+       "micros": 20,
+       "label": "gate_straddle-tf30_c32_G3-perms2|x0.5"
+      },
+      {
+       "src": "/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-10-01-l2/runs/gate_straddle-tf30_c32_G3-perms2/x1",
+       "sess": "pm",
+       "micros": 40,
+       "label": "gate_straddle-tf30_c32_G3-perms2|x1"
+      },
+      {
+       "src": "/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-10-01-l2/runs/gate_straddle-tf30_c32_G3-perms2/x1.5",
+       "sess": "pm",
+       "micros": 60,
+       "label": "gate_straddle-tf30_c32_G3-perms2|x1.5"
+      }
+     ]
+    ],
+    "gate_kw": {
+     "firm": "flex",
+     "rules": {
+      "day_take": 600,
+      "day_lock": 300,
+      "day_stop": 0,
+      "max_day_tr": 0
+     },
+     "sess": "pm",
+     "policy": 1500,
+     "strategy": "straddle",
+     "inputs": {
+      "tf": "30",
+      "stop_val": 3.0,
+      "tgt_r": 0.5,
+      "off_atr": 1.0
+     },
+     "both_sides": true
+    },
+    "unit": 20,
+    "tier_micros": {
+     "x0.5": 20,
+     "x1": 40,
+     "x1.5": 60
+    },
+    "cap": 40,
+    "cap_ok": false,
+    "unit_cap": 13
+   }
+  }
+ },
+ "tiers": {
+  "x0.5": 890,
+  "x1": 1298,
+  "x1.5": 949
+ },
+ "score_with": "gates.cell / gates.score_cell / gates.lift_cell (a portfolio of the tier bundles); never half_units.json"
+}

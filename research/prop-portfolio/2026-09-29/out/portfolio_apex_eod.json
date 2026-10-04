@@ -1,0 +1,1281 @@
+{
+ "firm": "apex_eod",
+ "rules_id": "apex-eod-50k@2026-09-27b",
+ "primary": "intraday",
+ "unconfirmed": true,
+ "preliminary": true,
+ "objective": "p5",
+ "preliminary_note": "pool = pass-2 shortlist top-N + wf_offline survivors only; pass-3 candidates (hm2-*, fp-*) not included yet",
+ "pool": [
+  {
+   "cid": "hm-first_bar_mom-tf15#34|nyam",
+   "src": "20260929-231149-draft_pp_first_bar_mom-f556#34",
+   "fam": "first_bar_mom",
+   "tf": 15,
+   "sess": "nyam",
+   "how": "shortlist"
+  },
+  {
+   "cid": "hm-first_bar_mom-tf15#35|nyam",
+   "src": "20260929-231149-draft_pp_first_bar_mom-f556#35",
+   "fam": "first_bar_mom",
+   "tf": 15,
+   "sess": "nyam",
+   "how": "shortlist"
+  },
+  {
+   "cid": "hm-donchian-tf15#11|nyam",
+   "src": "20260929-221600-draft_pp_donchian-d8e4#11",
+   "fam": "donchian",
+   "tf": 15,
+   "sess": "nyam",
+   "how": "shortlist"
+  },
+  {
+   "cid": "hm-donchian-tf15#10|nyam",
+   "src": "20260929-221600-draft_pp_donchian-d8e4#10",
+   "fam": "donchian",
+   "tf": 15,
+   "sess": "nyam",
+   "how": "shortlist"
+  },
+  {
+   "cid": "hm-first_bar_mom-tf15#22|nyam",
+   "src": "20260929-231149-draft_pp_first_bar_mom-f556#22",
+   "fam": "first_bar_mom",
+   "tf": 15,
+   "sess": "nyam",
+   "how": "shortlist"
+  },
+  {
+   "cid": "hm-first_bar_mom-tf15#10|nyam",
+   "src": "20260929-231149-draft_pp_first_bar_mom-f556#10",
+   "fam": "first_bar_mom",
+   "tf": 15,
+   "sess": "nyam",
+   "how": "shortlist"
+  },
+  {
+   "cid": "hm-first_bar_mom-tf15#23|nyam",
+   "src": "20260929-231149-draft_pp_first_bar_mom-f556#23",
+   "fam": "first_bar_mom",
+   "tf": 15,
+   "sess": "nyam",
+   "how": "shortlist"
+  },
+  {
+   "cid": "hm-first_bar_mom-tf15#11|nyam",
+   "src": "20260929-231149-draft_pp_first_bar_mom-f556#11",
+   "fam": "first_bar_mom",
+   "tf": 15,
+   "sess": "nyam",
+   "how": "shortlist"
+  },
+  {
+   "cid": "hm-donchian-tf15#9|nyam",
+   "src": "20260929-221600-draft_pp_donchian-d8e4#9",
+   "fam": "donchian",
+   "tf": 15,
+   "sess": "nyam",
+   "how": "shortlist"
+  },
+  {
+   "cid": "hm-donchian-tf15#8|nyam",
+   "src": "20260929-221600-draft_pp_donchian-d8e4#8",
+   "fam": "donchian",
+   "tf": 15,
+   "sess": "nyam",
+   "how": "shortlist"
+  },
+  {
+   "cid": "hm-vwap_band-tf5#7|mid",
+   "src": "20260929-230108-draft_pp_vwap_band-0ec3#7",
+   "fam": "vwap_band",
+   "tf": 5,
+   "sess": "mid",
+   "how": "shortlist"
+  },
+  {
+   "cid": "hm-vwap_z-tf5#11|mid",
+   "src": "20260929-225546-draft_pp_vwap_z-d86a#11",
+   "fam": "vwap_z",
+   "tf": 5,
+   "sess": "mid",
+   "how": "shortlist"
+  },
+  {
+   "cid": "hm-vwap_z-tf5#10|mid",
+   "src": "20260929-225546-draft_pp_vwap_z-d86a#10",
+   "fam": "vwap_z",
+   "tf": 5,
+   "sess": "mid",
+   "how": "shortlist"
+  },
+  {
+   "cid": "hm-vwap_band-tf5#6|mid",
+   "src": "20260929-230108-draft_pp_vwap_band-0ec3#6",
+   "fam": "vwap_band",
+   "tf": 5,
+   "sess": "mid",
+   "how": "shortlist"
+  },
+  {
+   "cid": "hm-vwap_z-tf5#9|mid",
+   "src": "20260929-225546-draft_pp_vwap_z-d86a#9",
+   "fam": "vwap_z",
+   "tf": 5,
+   "sess": "mid",
+   "how": "shortlist"
+  },
+  {
+   "cid": "hm-vwap_band-tf5#10|mid",
+   "src": "20260929-230108-draft_pp_vwap_band-0ec3#10",
+   "fam": "vwap_band",
+   "tf": 5,
+   "sess": "mid",
+   "how": "shortlist"
+  },
+  {
+   "cid": "hm-vwap_band-tf5#11|mid",
+   "src": "20260929-230108-draft_pp_vwap_band-0ec3#11",
+   "fam": "vwap_band",
+   "tf": 5,
+   "sess": "mid",
+   "how": "shortlist"
+  },
+  {
+   "cid": "hm-vwap_z-tf5#8|mid",
+   "src": "20260929-225546-draft_pp_vwap_z-d86a#8",
+   "fam": "vwap_z",
+   "tf": 5,
+   "sess": "mid",
+   "how": "shortlist"
+  },
+  {
+   "cid": "hm-first_bar_mom-tf15#33|nyam",
+   "src": "20260929-231149-draft_pp_first_bar_mom-f556#33",
+   "fam": "first_bar_mom",
+   "tf": 15,
+   "sess": "nyam",
+   "how": "shortlist"
+  },
+  {
+   "cid": "hm-first_bar_mom-tf15#9|nyam",
+   "src": "20260929-231149-draft_pp_first_bar_mom-f556#9",
+   "fam": "first_bar_mom",
+   "tf": 15,
+   "sess": "nyam",
+   "how": "shortlist"
+  },
+  {
+   "cid": "screen-straddle-tf30|pm",
+   "src": "20260929-214113-draft_pp_straddle-5d7d",
+   "fam": "straddle",
+   "tf": 30,
+   "sess": "pm",
+   "how": "wf_intraday"
+  },
+  {
+   "cid": "screen-tod_drift-tf30|mid",
+   "src": "20260929-220047-draft_pp_tod_drift-1bb0",
+   "fam": "tod_drift",
+   "tf": 30,
+   "sess": "mid",
+   "how": "wf_intraday"
+  },
+  {
+   "cid": "screen-tod_drift-tf5|mid",
+   "src": "20260929-220026-draft_pp_tod_drift-ae47",
+   "fam": "tod_drift",
+   "tf": 5,
+   "sess": "mid",
+   "how": "wf_intraday"
+  },
+  {
+   "cid": "hm-tod_drift-tf5#19|mid",
+   "src": "20260929-224544-draft_pp_tod_drift-63f8#19",
+   "fam": "tod_drift",
+   "tf": 5,
+   "sess": "mid",
+   "how": "wf_intraday"
+  },
+  {
+   "cid": "hm-donchian-tf15#26|pm",
+   "src": "20260929-221600-draft_pp_donchian-d8e4#26",
+   "fam": "donchian",
+   "tf": 15,
+   "sess": "pm",
+   "how": "wf_intraday"
+  },
+  {
+   "cid": "screen-tod_drift-tf30|pm",
+   "src": "20260929-220047-draft_pp_tod_drift-1bb0",
+   "fam": "tod_drift",
+   "tf": 30,
+   "sess": "pm",
+   "how": "wf_intraday"
+  },
+  {
+   "cid": "screen-tod_drift-tf5|nyam",
+   "src": "20260929-220026-draft_pp_tod_drift-ae47",
+   "fam": "tod_drift",
+   "tf": 5,
+   "sess": "nyam",
+   "how": "wf_intraday"
+  },
+  {
+   "cid": "hm-tod_drift-tf5#4|nyam",
+   "src": "20260929-224544-draft_pp_tod_drift-63f8#4",
+   "fam": "tod_drift",
+   "tf": 5,
+   "sess": "nyam",
+   "how": "wf_intraday"
+  },
+  {
+   "cid": "hm-vwap_band-tf5#3|london",
+   "src": "20260929-230108-draft_pp_vwap_band-0ec3#3",
+   "fam": "vwap_band",
+   "tf": 5,
+   "sess": "london",
+   "how": "wf_intraday"
+  },
+  {
+   "cid": "screen-rsi2-tf1|mid",
+   "src": "20260929-214939-draft_pp_rsi2-d2a1",
+   "fam": "rsi2",
+   "tf": 1,
+   "sess": "mid",
+   "how": "wf_intraday"
+  },
+  {
+   "cid": "screen-donchian-tf15|nyam",
+   "src": "20260929-214214-draft_pp_donchian-6a13",
+   "fam": "donchian",
+   "tf": 15,
+   "sess": "nyam",
+   "how": "wf_intraday"
+  },
+  {
+   "cid": "screen-tema_slope-tf5|london",
+   "src": "20260929-214556-draft_pp_tema_slope-8a71",
+   "fam": "tema_slope",
+   "tf": 5,
+   "sess": "london",
+   "how": "wf_intraday"
+  },
+  {
+   "cid": "hm-ema_pullback-tf5#10|mid",
+   "src": "20260929-234435-draft_pp_ema_pullback-a3a3#10",
+   "fam": "ema_pullback",
+   "tf": 5,
+   "sess": "mid",
+   "how": "wf_intraday"
+  },
+  {
+   "cid": "hm-orb-tf5#3|mid",
+   "src": "20260929-231930-draft_pp_orb-5276#3",
+   "fam": "orb",
+   "tf": 5,
+   "sess": "mid",
+   "how": "wf_intraday"
+  },
+  {
+   "cid": "hm-donchian-tf30#2|nyam",
+   "src": "20260929-221600-draft_pp_donchian-f109#2",
+   "fam": "donchian",
+   "tf": 30,
+   "sess": "nyam",
+   "how": "wf_intraday"
+  },
+  {
+   "cid": "hm-tema_slope-tf5#27|london",
+   "src": "20260929-233713-draft_pp_tema_slope-3261#27",
+   "fam": "tema_slope",
+   "tf": 5,
+   "sess": "london",
+   "how": "wf_intraday"
+  },
+  {
+   "cid": "hm-orb-tf5#10|mid",
+   "src": "20260929-231930-draft_pp_orb-5276#10",
+   "fam": "orb",
+   "tf": 5,
+   "sess": "mid",
+   "how": "wf_eod"
+  },
+  {
+   "cid": "hm-tema_slope-tf5#10|mid",
+   "src": "20260929-233713-draft_pp_tema_slope-3261#10",
+   "fam": "tema_slope",
+   "tf": 5,
+   "sess": "mid",
+   "how": "wf_eod"
+  },
+  {
+   "cid": "hm-first_bar_mom-tf15#20|nyam",
+   "src": "20260929-231149-draft_pp_first_bar_mom-f556#20",
+   "fam": "first_bar_mom",
+   "tf": 15,
+   "sess": "nyam",
+   "how": "wf_eod"
+  },
+  {
+   "cid": "hm-donchian-tf30#10|nyam",
+   "src": "20260929-221600-draft_pp_donchian-f109#10",
+   "fam": "donchian",
+   "tf": 30,
+   "sess": "nyam",
+   "how": "wf_eod"
+  },
+  {
+   "cid": "hm-donchian-tf15#21|pm",
+   "src": "20260929-221600-draft_pp_donchian-d8e4#21",
+   "fam": "donchian",
+   "tf": 15,
+   "sess": "pm",
+   "how": "wf_eod"
+  },
+  {
+   "cid": "hm-vwap_band-tf5#10|london",
+   "src": "20260929-230108-draft_pp_vwap_band-0ec3#10",
+   "fam": "vwap_band",
+   "tf": 5,
+   "sess": "london",
+   "how": "wf_eod"
+  },
+  {
+   "cid": "hm-first_bar_mom-tf15#10|mid",
+   "src": "20260929-231149-draft_pp_first_bar_mom-f556#10",
+   "fam": "first_bar_mom",
+   "tf": 15,
+   "sess": "mid",
+   "how": "wf_eod"
+  },
+  {
+   "cid": "hm-orb-tf5#20|nyam",
+   "src": "20260929-231930-draft_pp_orb-5276#20",
+   "fam": "orb",
+   "tf": 5,
+   "sess": "nyam",
+   "how": "wf_eod"
+  },
+  {
+   "cid": "hm-ema_pullback-tf5#17|mid",
+   "src": "20260929-234435-draft_pp_ema_pullback-a3a3#17",
+   "fam": "ema_pullback",
+   "tf": 5,
+   "sess": "mid",
+   "how": "wf_eod"
+  },
+  {
+   "cid": "hm-tema_slope-tf5#22|london",
+   "src": "20260929-233713-draft_pp_tema_slope-3261#22",
+   "fam": "tema_slope",
+   "tf": 5,
+   "sess": "london",
+   "how": "wf_eod"
+  },
+  {
+   "cid": "hm-tod_drift-tf5#13|nyam",
+   "src": "20260929-224544-draft_pp_tod_drift-63f8#13",
+   "fam": "tod_drift",
+   "tf": 5,
+   "sess": "nyam",
+   "how": "wf_eod"
+  }
+ ],
+ "history": [
+  {
+   "members": [
+    [
+     "hm-donchian-tf15#11|nyam",
+     20
+    ]
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "ci": 63,
+   "stable": 0.3982947766780853,
+   "p5": 0.3982947766780853,
+   "adj": 0.3982947766780853,
+   "gain": null,
+   "forced": false
+  },
+  {
+   "members": [
+    [
+     "hm-donchian-tf15#11|nyam",
+     20
+    ],
+    [
+     "screen-straddle-tf30|pm",
+     20
+    ]
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "ci": 63,
+   "stable": 0.4141291081905365,
+   "p5": 0.4177832007408142,
+   "adj": 0.4141291081905365,
+   "gain": 0.015834331512451172,
+   "forced": false
+  },
+  {
+   "members": [
+    [
+     "hm-donchian-tf15#11|nyam",
+     20
+    ],
+    [
+     "screen-straddle-tf30|pm",
+     20
+    ],
+    [
+     "hm-donchian-tf15#26|pm",
+     20
+    ]
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "ci": 63,
+   "stable": 0.4129110872745514,
+   "p5": 0.4153471291065216,
+   "adj": 0.4129110872745514,
+   "gain": -0.0012180209159851074,
+   "forced": true
+  }
+ ],
+ "singles_top": [
+  [
+   0.3982947766780853,
+   "hm-donchian-tf15#11|nyam",
+   20,
+   0.3982947766780853,
+   0.3982947766780853
+  ],
+  [
+   0.3934226632118225,
+   "hm-donchian-tf15#10|nyam",
+   20,
+   0.3934226632118225,
+   0.3934226632118225
+  ],
+  [
+   0.384896457195282,
+   "hm-tod_drift-tf5#19|mid",
+   40,
+   0.384896457195282,
+   0.384896457195282
+  ],
+  [
+   0.37637028098106384,
+   "hm-first_bar_mom-tf15#35|nyam",
+   20,
+   0.37637028098106384,
+   0.37637028098106384
+  ],
+  [
+   0.37515226006507874,
+   "hm-first_bar_mom-tf15#34|nyam",
+   20,
+   0.37515226006507874,
+   0.37515226006507874
+  ],
+  [
+   0.371498167514801,
+   "hm-tod_drift-tf5#19|mid",
+   30,
+   0.371498167514801,
+   0.371498167514801
+  ],
+  [
+   0.371498167514801,
+   "hm-tod_drift-tf5#19|mid",
+   50,
+   0.371498167514801,
+   0.371498167514801
+  ],
+  [
+   0.371498167514801,
+   "hm-tod_drift-tf5#4|nyam",
+   20,
+   0.371498167514801,
+   0.371498167514801
+  ],
+  [
+   0.3690621256828308,
+   "hm-first_bar_mom-tf15#11|nyam",
+   20,
+   0.3690621256828308,
+   0.3690621256828308
+  ],
+  [
+   0.3678441047668457,
+   "hm-first_bar_mom-tf15#23|nyam",
+   20,
+   0.3678441047668457,
+   0.3678441047668457
+  ]
+ ],
+ "reports": {
+  "single": {
+   "firm": "apex_eod",
+   "rules_id": "apex-eod-50k@2026-09-27b",
+   "unconfirmed": true,
+   "primary": "intraday",
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "members": [
+    {
+     "name": "hm-donchian-tf15#11|nyam",
+     "micros": 20,
+     "fam": "donchian",
+     "sess": "nyam",
+     "trades": 743,
+     "raw_net": 107336.0,
+     "net_share": 1.0
+    }
+   ],
+   "guards": {
+    "n_members": 1,
+    "ge3": false,
+    "max_net_share": 1.0,
+    "share_ok": true,
+    "dup_pairs": 0,
+    "static_cap_ok": true
+   },
+   "eod": {
+    "p1": 0.1559074299634592,
+    "p2": 0.269183922046285,
+    "p3": 0.3313032886723508,
+    "p5": 0.40316686967113274,
+    "bust5": 0.5200974421437271,
+    "med_days": 2.0,
+    "ci_p1": [
+     0.12911084043848964,
+     0.18026796589524968
+    ],
+    "ci_p2": [
+     0.22533495736906212,
+     0.3081607795371498
+    ],
+    "ci_p3": [
+     0.2777101096224117,
+     0.3800243605359318
+    ],
+    "ci_p5": [
+     0.341047503045067,
+     0.46041412911084045
+    ]
+   },
+   "realized": {
+    "p1": 0.1559074299634592,
+    "p2": 0.269183922046285,
+    "p3": 0.3313032886723508,
+    "p5": 0.40316686967113274,
+    "bust5": 0.5200974421437271,
+    "med_days": 2.0
+   },
+   "intraday": {
+    "p1": 0.1559074299634592,
+    "p2": 0.269183922046285,
+    "p3": 0.3313032886723508,
+    "p5": 0.3982947624847747,
+    "bust5": 0.535931790499391,
+    "med_days": 2.0,
+    "ci_p1": [
+     0.12911084043848964,
+     0.18026796589524968
+    ],
+    "ci_p2": [
+     0.22533495736906212,
+     0.3081607795371498
+    ],
+    "ci_p3": [
+     0.2777101096224117,
+     0.3800243605359318
+    ],
+    "ci_p5": [
+     0.33617539585870887,
+     0.45554202192448234
+    ]
+   },
+   "headline": {
+    "p1": 0.1559074299634592,
+    "p2": 0.269183922046285,
+    "p3": 0.3313032886723508,
+    "p5": 0.3982947624847747,
+    "bust5": 0.535931790499391,
+    "med_days": 2.0,
+    "ci_p5": [
+     0.33617539585870887,
+     0.45554202192448234
+    ],
+    "model": "intraday"
+   },
+   "consistency": {
+    "enforced": false
+   },
+   "walk": {
+    "executed": 675,
+    "skipped": 68,
+    "clipped": 0,
+    "opposite_conflicts_executed": 0,
+    "overlap_entries_executed": 0,
+    "max_concurrent_micros": 20,
+    "cap_violations": 0
+   },
+   "raw_overlap": {
+    "overlap_entries": 0,
+    "opposite_conflicts": 0,
+    "max_concurrent_micros": 20,
+    "cap_violations": 0,
+    "cap": 60,
+    "cap_ok": true
+   },
+   "series": {
+    "n_sessions": 825,
+    "trade_days": 675,
+    "net": 142242.0,
+    "mean_day": 210.7288888888889,
+    "median_day": -1010.0,
+    "worst_day": -1010.0,
+    "best_day": 12472.0
+   },
+   "year_net": {
+    "2021": 10224.0,
+    "2022": 54536.0,
+    "2023": -2002.0,
+    "2024": 79484.0
+   },
+   "flags": [],
+   "econ": {
+    "model": "intraday",
+    "eval_fee": 35.0,
+    "activation": 85.0,
+    "fees_are_assumptions": true,
+    "cost_per_funded_5d": 172.87461773700306
+   },
+   "lift": {
+    "K": 10,
+    "pool_flag": [
+     "exact"
+    ],
+    "eod": {
+     "real_p5": 0.40316686967113274,
+     "ctrl_p5": 0.32070645554202193,
+     "ctrl_p5_sd": 0.02025773012874584,
+     "lift": 0.08246041412911084,
+     "ci": [
+      0.0188733252131547,
+      0.14068209500609014
+     ]
+    },
+    "realized": {
+     "real_p5": 0.40316686967113274,
+     "ctrl_p5": 0.32070645554202193,
+     "ctrl_p5_sd": 0.02025773012874584,
+     "lift": 0.08246041412911084,
+     "ci": [
+      0.0188733252131547,
+      0.14068209500609014
+     ]
+    },
+    "intraday": {
+     "real_p5": 0.3982947624847747,
+     "ctrl_p5": 0.31717417783191226,
+     "ctrl_p5_sd": 0.019573504922387987,
+     "lift": 0.08112058465286236,
+     "ci": [
+      0.018870280146163217,
+      0.1400761266747868
+     ]
+    }
+   },
+   "search": {
+    "stable_p5": 0.3982947766780853,
+    "adj_score": 0.3982947766780853,
+    "forced_to_3": false
+   }
+  },
+  "best2": {
+   "firm": "apex_eod",
+   "rules_id": "apex-eod-50k@2026-09-27b",
+   "unconfirmed": true,
+   "primary": "intraday",
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "members": [
+    {
+     "name": "hm-donchian-tf15#11|nyam",
+     "micros": 20,
+     "fam": "donchian",
+     "sess": "nyam",
+     "trades": 743,
+     "raw_net": 107336.0,
+     "net_share": 0.7680132800984559,
+     "net_standalone_rules": 142242.0,
+     "net_marginal_rules": 163630.0
+    },
+    {
+     "name": "screen-straddle-tf30|pm",
+     "micros": 20,
+     "fam": "straddle",
+     "sess": "pm",
+     "trades": 811,
+     "raw_net": 32422.0,
+     "net_share": 0.2319867199015441,
+     "net_standalone_rules": 39614.0,
+     "net_marginal_rules": 61002.0
+    }
+   ],
+   "guards": {
+    "n_members": 2,
+    "ge3": false,
+    "max_net_share": 0.7680132800984559,
+    "share_ok": true,
+    "dup_pairs": 0,
+    "static_cap_ok": true
+   },
+   "eod": {
+    "p1": 0.20097442143727162,
+    "p2": 0.32886723507917176,
+    "p3": 0.3848964677222899,
+    "p5": 0.42630937880633374,
+    "bust5": 0.5602923264311814,
+    "med_days": 2.0,
+    "ci_p1": [
+     0.17174177831912302,
+     0.2253654080389767
+    ],
+    "ci_p2": [
+     0.2874543239951279,
+     0.36422046285018256
+    ],
+    "ci_p3": [
+     0.3337393422655298,
+     0.4275578562728378
+    ],
+    "ci_p5": [
+     0.37149817295980514,
+     0.47503045066991473
+    ]
+   },
+   "realized": {
+    "p1": 0.20097442143727162,
+    "p2": 0.32886723507917176,
+    "p3": 0.3848964677222899,
+    "p5": 0.42509135200974424,
+    "bust5": 0.561510353227771,
+    "med_days": 2.0
+   },
+   "intraday": {
+    "p1": 0.20097442143727162,
+    "p2": 0.32886723507917176,
+    "p3": 0.3848964677222899,
+    "p5": 0.4177831912302071,
+    "bust5": 0.5712545676004872,
+    "med_days": 2.0,
+    "ci_p1": [
+     0.17174177831912302,
+     0.2253654080389767
+    ],
+    "ci_p2": [
+     0.2874543239951279,
+     0.36422046285018256
+    ],
+    "ci_p3": [
+     0.3337393422655298,
+     0.4275578562728378
+    ],
+    "ci_p5": [
+     0.3629719853836784,
+     0.46650426309378806
+    ]
+   },
+   "headline": {
+    "p1": 0.20097442143727162,
+    "p2": 0.32886723507917176,
+    "p3": 0.3848964677222899,
+    "p5": 0.4177831912302071,
+    "bust5": 0.5712545676004872,
+    "med_days": 2.0,
+    "ci_p5": [
+     0.3629719853836784,
+     0.46650426309378806
+    ],
+    "model": "intraday"
+   },
+   "consistency": {
+    "enforced": false
+   },
+   "walk": {
+    "executed": 885,
+    "skipped": 669,
+    "clipped": 0,
+    "opposite_conflicts_executed": 0,
+    "overlap_entries_executed": 0,
+    "max_concurrent_micros": 20,
+    "cap_violations": 0
+   },
+   "raw_overlap": {
+    "overlap_entries": 0,
+    "opposite_conflicts": 0,
+    "max_concurrent_micros": 20,
+    "cap_violations": 0,
+    "cap": 60,
+    "cap_ok": true
+   },
+   "series": {
+    "n_sessions": 825,
+    "trade_days": 820,
+    "net": 203244.0,
+    "mean_day": 247.85853658536584,
+    "median_day": -1010.0,
+    "worst_day": -1010.0,
+    "best_day": 12472.0
+   },
+   "year_net": {
+    "2021": 6828.0,
+    "2022": 61958.0,
+    "2023": 33826.0,
+    "2024": 100632.0
+   },
+   "flags": [],
+   "econ": {
+    "model": "intraday",
+    "eval_fee": 35.0,
+    "activation": 85.0,
+    "fees_are_assumptions": true,
+    "cost_per_funded_5d": 168.77551020408163
+   },
+   "lift": {
+    "K": 10,
+    "pool_flag": [
+     "exact",
+     "exact"
+    ],
+    "eod": {
+     "real_p5": 0.42630937880633374,
+     "ctrl_p5": 0.33812423873325215,
+     "ctrl_p5_sd": 0.019105556934169245,
+     "lift": 0.08818514007308159,
+     "ci": [
+      0.03190316686967114,
+      0.13885505481120586
+     ]
+    },
+    "realized": {
+     "real_p5": 0.42509135200974424,
+     "ctrl_p5": 0.3378806333739342,
+     "ctrl_p5_sd": 0.018926114104316712,
+     "lift": 0.08721071863580998,
+     "ci": [
+      0.030691230207064553,
+      0.13739951278928134
+     ]
+    },
+    "intraday": {
+     "real_p5": 0.4177831912302071,
+     "ctrl_p5": 0.33325213154689404,
+     "ctrl_p5_sd": 0.01876868237199341,
+     "lift": 0.08453105968331304,
+     "ci": [
+      0.029719853836784407,
+      0.13387332521315462
+     ]
+    }
+   },
+   "vs_single": {
+    "single": "hm-donchian-tf15#11|nyam@20",
+    "single_stable_p5": 0.3982947766780853,
+    "single_cell_p5": 0.3982947766780853,
+    "delta_cell_p5": 0.019488414552121747,
+    "delta_stable": 0.015834331512451172
+   },
+   "search": {
+    "stable_p5": 0.4141291081905365,
+    "adj_score": 0.4141291081905365,
+    "forced_to_3": false
+   }
+  },
+  "portfolio": {
+   "firm": "apex_eod",
+   "rules_id": "apex-eod-50k@2026-09-27b",
+   "unconfirmed": true,
+   "primary": "intraday",
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "members": [
+    {
+     "name": "hm-donchian-tf15#11|nyam",
+     "micros": 20,
+     "fam": "donchian",
+     "sess": "nyam",
+     "trades": 743,
+     "raw_net": 107336.0,
+     "net_share": 0.4560154304990271,
+     "net_standalone_rules": 142242.0,
+     "net_marginal_rules": 236260.0
+    },
+    {
+     "name": "screen-straddle-tf30|pm",
+     "micros": 20,
+     "fam": "straddle",
+     "sess": "pm",
+     "trades": 811,
+     "raw_net": 32422.0,
+     "net_share": 0.13774439412349498,
+     "net_standalone_rules": 39614.0,
+     "net_marginal_rules": -4626.0
+    },
+    {
+     "name": "hm-donchian-tf15#26|pm",
+     "micros": 20,
+     "fam": "donchian",
+     "sess": "pm",
+     "trades": 445,
+     "raw_net": 95620.0,
+     "net_share": 0.4062401753774779,
+     "net_standalone_rules": 69740.0,
+     "net_marginal_rules": -46958.0
+    }
+   ],
+   "guards": {
+    "n_members": 3,
+    "ge3": true,
+    "max_net_share": 0.4560154304990271,
+    "share_ok": true,
+    "dup_pairs": 0,
+    "static_cap_ok": true
+   },
+   "eod": {
+    "p1": 0.20341047503045068,
+    "p2": 0.33617539585870887,
+    "p3": 0.3861144945188794,
+    "p5": 0.4238733252131547,
+    "bust5": 0.5639464068209501,
+    "med_days": 2.0,
+    "ci_p1": [
+     0.17417783191230207,
+     0.2289890377588307
+    ],
+    "ci_p2": [
+     0.2935444579780755,
+     0.3715286236297197
+    ],
+    "ci_p3": [
+     0.33495736906211937,
+     0.4275578562728378
+    ],
+    "ci_p5": [
+     0.3690621193666261,
+     0.4713763702801462
+    ]
+   },
+   "realized": {
+    "p1": 0.20341047503045068,
+    "p2": 0.33617539585870887,
+    "p3": 0.3861144945188794,
+    "p5": 0.4226552984165652,
+    "bust5": 0.5651644336175395,
+    "med_days": 2.0
+   },
+   "intraday": {
+    "p1": 0.20341047503045068,
+    "p2": 0.33617539585870887,
+    "p3": 0.3861144945188794,
+    "p5": 0.415347137637028,
+    "bust5": 0.5749086479902558,
+    "med_days": 2.0,
+    "ci_p1": [
+     0.17417783191230207,
+     0.2289890377588307
+    ],
+    "ci_p2": [
+     0.2935444579780755,
+     0.3715286236297197
+    ],
+    "ci_p3": [
+     0.33495736906211937,
+     0.4275578562728378
+    ],
+    "ci_p5": [
+     0.36053593179049936,
+     0.4628501827040195
+    ]
+   },
+   "headline": {
+    "p1": 0.20341047503045068,
+    "p2": 0.33617539585870887,
+    "p3": 0.3861144945188794,
+    "p5": 0.415347137637028,
+    "bust5": 0.5749086479902558,
+    "med_days": 2.0,
+    "ci_p5": [
+     0.36053593179049936,
+     0.4628501827040195
+    ],
+    "model": "intraday"
+   },
+   "consistency": {
+    "enforced": false
+   },
+   "walk": {
+    "executed": 927,
+    "skipped": 1072,
+    "clipped": 0,
+    "opposite_conflicts_executed": 0,
+    "overlap_entries_executed": 42,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0
+   },
+   "raw_overlap": {
+    "overlap_entries": 330,
+    "opposite_conflicts": 38,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0,
+    "cap": 60,
+    "cap_ok": true
+   },
+   "series": {
+    "n_sessions": 825,
+    "trade_days": 820,
+    "net": 156286.0,
+    "mean_day": 190.59268292682927,
+    "median_day": -1010.0,
+    "worst_day": -1010.0,
+    "best_day": 12472.0
+   },
+   "flags": [
+    "MEMBER_SHARE_UNDER_RULES 57% of positive standalone net",
+    "ONE_YEAR_CONCENTRATION 2024: 60% of net",
+    "FORCED_TO_3: the 3rd member added with gain <= 0.005 (stop rule overridden for the >=3 guard)"
+   ],
+   "year_net": {
+    "2021": 4734.0,
+    "2022": 36170.0,
+    "2023": 21554.0,
+    "2024": 93828.0
+   },
+   "econ": {
+    "model": "intraday",
+    "eval_fee": 35.0,
+    "activation": 85.0,
+    "fees_are_assumptions": true,
+    "cost_per_funded_5d": 169.26686217008796
+   },
+   "lift": {
+    "K": 10,
+    "pool_flag": [
+     "exact",
+     "exact",
+     "exact"
+    ],
+    "eod": {
+     "real_p5": 0.4238733252131547,
+     "ctrl_p5": 0.33544457978075515,
+     "ctrl_p5_sd": 0.021398481126428986,
+     "lift": 0.08842874543239951,
+     "ci": [
+      0.03385505481120585,
+      0.13509744214372707
+     ]
+    },
+    "realized": {
+     "real_p5": 0.4226552984165652,
+     "ctrl_p5": 0.33532277710109626,
+     "ctrl_p5_sd": 0.02131407686423498,
+     "lift": 0.08733252131546894,
+     "ci": [
+      0.03264311814859927,
+      0.1345919610231425
+     ]
+    },
+    "intraday": {
+     "real_p5": 0.415347137637028,
+     "ctrl_p5": 0.33045066991473815,
+     "ctrl_p5_sd": 0.020670959042320518,
+     "lift": 0.08489646772228991,
+     "ci": [
+      0.029835566382460415,
+      0.1314281364190012
+     ]
+    }
+   },
+   "vs_single": {
+    "single": "hm-donchian-tf15#11|nyam@20",
+    "single_stable_p5": 0.3982947766780853,
+    "single_cell_p5": 0.3982947766780853,
+    "delta_cell_p5": 0.01705236095894269,
+    "delta_stable": 0.014616310596466064
+   },
+   "search": {
+    "stable_p5": 0.4129110872745514,
+    "adj_score": 0.4129110872745514,
+    "forced_to_3": true
+   }
+  },
+  "single:hm-donchian-tf15#10|nyam@20": {
+   "members": [
+    {
+     "name": "hm-donchian-tf15#10|nyam",
+     "micros": 20
+    }
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "search": {
+    "stable_p5": 0.3934226632118225,
+    "p5": 0.3934226632118225
+   }
+  },
+  "single:hm-tod_drift-tf5#19|mid@40": {
+   "members": [
+    {
+     "name": "hm-tod_drift-tf5#19|mid",
+     "micros": 40
+    }
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "search": {
+    "stable_p5": 0.384896457195282,
+    "p5": 0.384896457195282
+   }
+  },
+  "single:hm-first_bar_mom-tf15#35|nyam@20": {
+   "members": [
+    {
+     "name": "hm-first_bar_mom-tf15#35|nyam",
+     "micros": 20
+    }
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "search": {
+    "stable_p5": 0.37637028098106384,
+    "p5": 0.37637028098106384
+   }
+  }
+ },
+ "diag": {
+  "names": [
+   "hm-donchian-tf15#11|nyam",
+   "screen-straddle-tf30|pm",
+   "hm-donchian-tf15#26|pm"
+  ],
+  "corr": [
+   [
+    1.0,
+    -0.04359317087387299,
+    0.030198264152612304
+   ],
+   [
+    -0.043593170873872995,
+    0.9999999999999998,
+    0.30053211483588693
+   ],
+   [
+    0.0301982641526123,
+    0.30053211483588693,
+    1.0
+   ]
+  ],
+  "dd_overlap": [
+   [
+    1.0,
+    0.18518518518518517,
+    0.08148148148148149
+   ],
+   [
+    0.1524390243902439,
+    1.0,
+    0.1951219512195122
+   ],
+   [
+    0.1506849315068493,
+    0.4383561643835616,
+    1.0
+   ]
+  ],
+  "lose_overlap": [
+   [
+    1.0,
+    0.43703703703703706,
+    0.14814814814814814
+   ],
+   [
+    0.4024390243902439,
+    1.0,
+    0.2804878048780488
+   ],
+   [
+    0.3835616438356164,
+    0.7397260273972602,
+    1.0
+   ]
+  ],
+  "dd_days": [
+   135,
+   164,
+   73
+  ],
+  "multi_dd_share": 0.18064516129032257
+ },
+ "evals": 764,
+ "secs": 609.6149108409882,
+ "calendar_sessions": 825,
+ "starts": 821,
+ "fee": {
+  "eval_fee": 35.0,
+  "activation": 85.0,
+  "assumption": true
+ }
+}

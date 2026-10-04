@@ -1,0 +1,26 @@
+[apex] wf portfolio fixed-set: OOS P5 0.422 ctrl 0.314 lift +0.108 (train 0.429; 104s)
+[apex] wf single fixed-set: OOS P5 0.406 ctrl 0.296 lift +0.110 (train 0.407; 112s)
+[apex_eod] wf portfolio fixed-set: OOS P5 0.446 ctrl 0.366 lift +0.079 (train 0.400; 163s)
+[apex_eod] wf single fixed-set: OOS P5 0.379 ctrl 0.321 lift +0.058 (train 0.373; 183s)
+[apex] wf-reselect 2022Q3: [('hm-orb-tf5#10|mid', 20), ('hm-donchian-tf15#21|pm', 40), ('hm-donchian-tf15#26|pm', 60), ('hm-tod_drift-tf5#4|nyam', 20), ('hm-donchian-tf30#10|nyam', 20)] train 0.482 test 0.375
+[apex_eod] wf-reselect 2022Q3: [('hm-donchian-tf30#10|nyam', 20), ('hm-donchian-tf15#21|pm', 20), ('hm-vwap_z-tf5#8|mid', 20), ('screen-tod_drift-tf30|pm', 30)] train 0.448 test 0.46875
+[apex] wf-reselect 2022Q4: [('hm-tod_drift-tf5#19|mid', 40), ('hm-donchian-tf15#26|pm', 20), ('screen-tod_drift-tf30|pm', 20)] train 0.478 test 0.3968253968253968
+[apex] wf-reselect 2023Q1: [('hm-tod_drift-tf5#19|mid', 40), ('hm-donchian-tf15#26|pm', 20), ('screen-straddle-tf30|pm', 20)] train 0.478 test 0.24193548387096775
+[apex_eod] wf-reselect 2022Q4: [('hm-tod_drift-tf5#19|mid', 30), ('hm-donchian-tf30#10|nyam', 20), ('hm-donchian-tf15#26|pm', 20)] train 0.480 test 0.3968253968253968
+[apex_eod] wf-reselect 2023Q1: [('hm-tod_drift-tf5#19|mid', 30), ('hm-donchian-tf30#10|nyam', 20), ('hm-donchian-tf15#26|pm', 20)] train 0.506 test 0.24193548387096775
+[apex_eod] wf-reselect 2023Q2: [('hm-tod_drift-tf5#19|mid', 40), ('hm-donchian-tf30#10|nyam', 20), ('screen-tod_drift-tf30|pm', 30)] train 0.486 test 0.25396825396825395
+[apex] wf-reselect 2023Q2: [('hm-donchian-tf15#11|nyam', 20), ('hm-tod_drift-tf5#19|mid', 20), ('hm-donchian-tf15#21|pm', 20)] train 0.441 test 0.5238095238095238
+[apex] wf-reselect 2023Q3: [('screen-straddle-tf30|pm', 20), ('hm-tod_drift-tf5#19|mid', 20), ('screen-tema_slope-tf5|london', 20)] train 0.423 test 0.30158730158730157
+[apex_eod] wf-reselect 2023Q3: [('screen-tod_drift-tf30|mid', 20), ('hm-donchian-tf15#26|pm', 20), ('screen-straddle-tf30|pm', 40)] train 0.435 test 0.4444444444444444
+[apex_eod] wf-reselect 2023Q4: [('screen-tod_drift-tf5|nyam', 30), ('screen-tod_drift-tf30|mid', 20), ('screen-straddle-tf30|pm', 30)] train 0.478 test 0.4603174603174603
+[apex] wf-reselect 2023Q4: [('screen-tod_drift-tf5|nyam', 20), ('hm-first_bar_mom-tf15#34|nyam', 20), ('hm-vwap_z-tf5#9|mid', 20)] train 0.482 test 0.38095238095238093
+[apex_eod] wf-reselect 2024Q1: [('screen-tod_drift-tf5|nyam', 30), ('hm-vwap_band-tf5#7|mid', 30), ('screen-straddle-tf30|pm', 60)] train 0.514 test 0.19672131147540983
+[apex] wf-reselect 2024Q1: [('hm-tod_drift-tf5#4|nyam', 20), ('screen-straddle-tf30|pm', 20)] train 0.506 test 0.22950819672131148
+[apex] wf-reselect 2024Q2: [('screen-tod_drift-tf5|mid', 40), ('hm-tod_drift-tf5#4|nyam', 20)] train 0.467 test 0.4444444444444444
+[apex_eod] wf-reselect 2024Q2: [('screen-tod_drift-tf30|mid', 30), ('screen-tod_drift-tf30|pm', 20), ('screen-straddle-tf30|pm', 20)] train 0.455 test 0.3333333333333333
+[apex] wf-reselect 2024Q3: [('hm-first_bar_mom-tf15#34|nyam', 20), ('hm-first_bar_mom-tf15#10|mid', 20), ('hm-donchian-tf15#21|pm', 20)] train 0.447 test 0.390625
+[apex_eod] wf-reselect 2024Q3: [('screen-tod_drift-tf5|mid', 40), ('screen-tod_drift-tf30|pm', 20), ('hm-donchian-tf15#26|pm', 20)] train 0.449 test 0.21875
+[apex] wf-reselect 2024Q4: [('screen-straddle-tf30|pm', 20), ('hm-tema_slope-tf5#27|london', 20)] train 0.441 test 0.26666666666666666
+[apex] wf portfolio reselect: OOS P5 0.356 ctrl 0.335 lift +0.022 (6930s)
+[apex_eod] wf-reselect 2024Q4: [('screen-tod_drift-tf30|pm', 20), ('hm-donchian-tf15#8|nyam', 60), ('hm-donchian-tf15#26|pm', 40)] train 0.415 test 0.43333333333333335
+[apex_eod] wf portfolio reselect: OOS P5 0.345 ctrl 0.369 lift -0.024 (7292s)

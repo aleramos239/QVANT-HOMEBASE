@@ -1,0 +1,5 @@
+N=2 {'lucid': 1, 'apex': 1}: P(>=1 pass<=5d)=0.677 eod 0.786 intra 0.426 by-day [0.29, 0.33, 0.61, 0.67, 0.68] E[funded]=0.83 cost=135 $/funded=197.53313696612665
+N=3 {'lucid': 1, 'lucidpro': 1, 'apex': 1}: P(>=1 pass<=5d)=0.799 eod 0.873 intra 0.643 by-day [0.45, 0.58, 0.77, 0.79, 0.8] E[funded]=1.26 cost=250 $/funded=220.17341040462426
+N=4 {'lucid': 2, 'lucidpro': 1, 'apex': 1}: P(>=1 pass<=5d)=0.877 eod 0.926 intra 0.728 by-day [0.45, 0.7, 0.84, 0.87, 0.88] E[funded]=1.64 cost=350 $/funded=231.30305286671629
+N=5 {'lucid': 2, 'lucidpro': 2, 'apex': 1}: P(>=1 pass<=5d)=0.886 eod 0.931 intra 0.744 by-day [0.45, 0.7, 0.84, 0.88, 0.89] E[funded]=2.03 cost=465 $/funded=243.42247596153848
+N=6 {'lucid': 2, 'lucidpro': 1, 'lucidpro_nodll': 1, 'apex': 1, 'apex_eod': 1}: P(>=1 pass<=5d)=0.955 eod 0.971 intra 0.878 by-day [0.69, 0.89, 0.93, 0.95, 0.95] E[funded]=2.54 cost=525 $/funded=229.76464937560038

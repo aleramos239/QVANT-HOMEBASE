@@ -1,0 +1,1 @@
+{"key": "wall_bounce-tf1-c2s1", "fam_tf": "wall_bounce-tf1", "family": "wall_bounce", "tf": "1", "variant": "c2s1", "sess": "nyam", "firm": "apex", "status": "ok", "lift": -0.10012180267965895, "ctrl": 0.13788063337393422, "real": 0.037758830694275276, "skipped": null, "elapsed_s": 0.32}

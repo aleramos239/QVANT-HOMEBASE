@@ -1,0 +1,90 @@
+{
+ "engine": "l2sim-1 (port of tester tick-2)",
+ "fill_law": "tick replay (ofb_tick tape)",
+ "strategy": "families.opendir.OpenDirFlow",
+ "inputs": {
+  "tf": "30",
+  "sess": "all",
+  "dir": "both",
+  "stop_mode": "atr",
+  "stop_val": 3.0,
+  "tgt_r": 0.0,
+  "trail_atr": 0.0,
+  "exit_bars": 0,
+  "max_tr": 1,
+  "f_trend": "off",
+  "f_vwap": "off",
+  "f_depth": "off",
+  "src": "flow",
+  "off_atr": 0.25
+ },
+ "root": "NQ",
+ "range": {
+  "start": "2021-09-22",
+  "end": "2024-12-31",
+  "holdout": false
+ },
+ "qty": 1,
+ "commission": 4.0,
+ "slippage_ticks": 1.0,
+ "placement_ms": 85,
+ "strict_limit": false,
+ "stress": null,
+ "workers": 8,
+ "cells_in_pass": 1,
+ "days_subset": false,
+ "exec_guard": null,
+ "features": [
+  "f_delta",
+  "t_utc"
+ ],
+ "features_loader": "C2Features",
+ "screen": {
+  "stage": "screen",
+  "family": "open_dir_flow",
+  "tf": "30",
+  "control": "c2",
+  "seed": 2,
+  "both_sides_declared": false,
+  "notes": "O1 REVISIT of the REFUTED 9:30 delta-direction family (ledger NQ|1m|930_delta_direction, 2026-09-23): side = sign of the summed f_delta of the last 15 minutes before the open, same single stop entry",
+  "features": [
+   "f_delta",
+   "t_utc"
+  ],
+  "run_kw": {}
+ },
+ "id": "open_dir_flow-tf30-c2s2",
+ "coverage": {
+  "sessions": 825,
+  "used": 820,
+  "skipped": [
+   {
+    "date": "2021-12-01",
+    "reason": "missing 08:00\u201309:00 ET"
+   },
+   {
+    "date": "2022-06-21",
+    "reason": "missing 00:00\u201314:00 ET"
+   },
+   {
+    "date": "2022-08-05",
+    "reason": "missing 07:00\u201308:00 ET"
+   },
+   {
+    "date": "2022-09-06",
+    "reason": "missing 05:00\u201306:00 ET"
+   },
+   {
+    "date": "2023-04-07",
+    "reason": "missing 10:00\u201316:10 ET"
+   }
+  ],
+  "no_trade": [],
+  "skipped_by_error": 0
+ },
+ "unrealistic_winners": 0,
+ "both_sides_sessions": 0,
+ "elapsed_s": 2.68,
+ "trades": 2768,
+ "net": -9182.0
+}

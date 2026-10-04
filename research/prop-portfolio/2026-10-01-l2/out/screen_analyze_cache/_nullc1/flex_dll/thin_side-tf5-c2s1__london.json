@@ -1,0 +1,1 @@
+{"key": "thin_side-tf5-c2s1", "fam_tf": "thin_side-tf5", "family": "thin_side", "tf": "5", "variant": "c2s1", "sess": "london", "firm": "flex_dll", "status": "ok", "lift": 150.85827023498695, "ctrl": 327.29786553524804, "real": 478.156135770235, "skipped": null, "elapsed_s": 0.64}

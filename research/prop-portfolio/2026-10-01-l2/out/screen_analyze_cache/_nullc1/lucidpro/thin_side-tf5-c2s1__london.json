@@ -1,0 +1,1 @@
+{"key": "thin_side-tf5-c2s1", "fam_tf": "thin_side-tf5", "family": "thin_side", "tf": "5", "variant": "c2s1", "sess": "london", "firm": "lucidpro", "status": "ok", "lift": -0.018270401948842878, "ctrl": 0.1668696711327649, "real": 0.14859926918392205, "skipped": null, "elapsed_s": 0.3}

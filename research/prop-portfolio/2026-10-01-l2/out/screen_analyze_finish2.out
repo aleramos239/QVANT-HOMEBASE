@@ -1,0 +1,49 @@
+Fri Oct  2 11:39:36 EDT 2026 score pools gone
+2026-10-02T15:39:38+00:00 score: 0 tasks to run, workers 8
+{"ran": 0}
+Fri Oct  2 11:39:38 EDT 2026 score complete
+2026-10-02T15:39:40+00:00 null C1 lifts: 1750 tasks to run, workers 8
+2026-10-02T15:40:05+00:00 null C1 lifts: 200/1750 done (0 errors), 25 s
+2026-10-02T15:40:29+00:00 null C1 lifts: 400/1750 done (0 errors), 49 s
+2026-10-02T15:40:45+00:00 null C1 lifts: 600/1750 done (0 errors), 65 s
+2026-10-02T15:41:00+00:00 null C1 lifts: 800/1750 done (0 errors), 80 s
+2026-10-02T15:41:25+00:00 null C1 lifts: 1000/1750 done (0 errors), 105 s
+2026-10-02T15:41:50+00:00 null C1 lifts: 1200/1750 done (0 errors), 130 s
+2026-10-02T15:42:10+00:00 null C1 lifts: 1400/1750 done (0 errors), 150 s
+2026-10-02T15:42:36+00:00 null C1 lifts: 1600/1750 done (0 errors), 176 s
+2026-10-02T15:43:02+00:00 null C1 lifts: finished 1750 tasks, 0 errors, 202 s
+{"ran": 1750, "errors": 0}
+Fri Oct  2 11:43:02 EDT 2026 nullc1 complete
+2026-10-02T15:43:03+00:00 gate straddle-tf30_c10 G1 flex_eval: ok
+2026-10-02T15:43:03+00:00 gate straddle-tf30_c10 G1 pro_nodll_eval: ok
+2026-10-02T15:43:03+00:00 gate straddle-tf30_c10 G2 flex_eval: ok
+2026-10-02T15:43:03+00:00 gate straddle-tf30_c10 G2 pro_nodll_eval: ok
+2026-10-02T15:43:03+00:00 gate straddle-tf30_c10 G3 flex_eval: ok
+2026-10-02T15:43:03+00:00 gate straddle-tf30_c10 G3 pro_nodll_eval: ok
+2026-10-02T15:43:03+00:00 gate straddle-tf30_c9 G1 pro_nodll_eval_s9: ok
+2026-10-02T15:43:03+00:00 gate straddle-tf30_c9 G2 pro_nodll_eval_s9: ok
+2026-10-02T15:43:04+00:00 gate straddle-tf30_c9 G3 pro_nodll_eval_s9: ok
+2026-10-02T15:43:04+00:00 gate straddle-tf30_c32 G1 flex_funded: ok
+2026-10-02T15:43:05+00:00 gate straddle-tf30_c32 G2 flex_funded: ok
+2026-10-02T15:43:05+00:00 gate straddle-tf30_c32 G3 flex_funded: ok
+2026-10-02T15:43:05+00:00 gate orb-tf5_c10 G1 pro_nodll_funded: ok
+2026-10-02T15:43:06+00:00 gate orb-tf5_c10 G2 pro_nodll_funded: ok
+2026-10-02T15:43:06+00:00 gate orb-tf5_c10 G3 pro_nodll_funded: ok
+2026-10-02T15:43:06+00:00 gate donchian-tf15_c10 G1 pro_dll_funded: ok
+2026-10-02T15:43:07+00:00 gate donchian-tf15_c10 G2 pro_dll_funded: ok
+2026-10-02T15:43:07+00:00 gate donchian-tf15_c10 G3 pro_dll_funded: ok
+2026-10-02T15:43:09+00:00 gate donchian-tf15_c1 G1 apex_pa_funded: ok
+2026-10-02T15:43:11+00:00 gate donchian-tf15_c1 G1 apex300_pa: ok
+2026-10-02T15:43:12+00:00 gate donchian-tf15_c1 G2 apex_pa_funded: ok
+2026-10-02T15:43:15+00:00 gate donchian-tf15_c1 G2 apex300_pa: ok
+2026-10-02T15:43:16+00:00 gate donchian-tf15_c1 G3 apex_pa_funded: ok
+2026-10-02T15:43:18+00:00 gate donchian-tf15_c1 G3 apex300_pa: ok
+{"rows": 24}
+Fri Oct  2 11:43:18 EDT 2026 gates complete
+2026-10-02T15:43:31+00:00 stress run absorption-tf1-stress: stress 4464 trades
+2026-10-02T15:43:49+00:00 stress: top 15 configs, 11 family x tf, 1 new runs, 315 cells re-scored
+{"top": [["bimb_follow-tf5", "mid"], ["open_dir_flow-tf30", "london"], ["bimb_fade-tf1", "mid"], ["sweep_follow-tf1", "pm"], ["delta_follow-tf5", "london"], ["delta_follow-tf5", "asia"], ["bimb_fade_n3-tf1", "pm"], ["open_dir_book-tf30", "pm"], ["absorption-tf1", "asia"], ["sweep_follow-tf1", "london"], ["bimb_follow_n3-tf1", "mid"], ["bimb_fade_n3-tf1", "london"], ["open_dir_both-tf30", "mid"], ["bimb_follow_n3-tf5", "mid"], ["bimb_follow-tf5", "nyam"]], "ran": ["absorption-tf1-stress"], "cells": 315}
+Fri Oct  2 11:43:49 EDT 2026 stress complete
+2026-10-02T15:43:55+00:00 report: 1500 table rows, 120 summary lines
+{"rows": 1500, "lines": 120}
+Fri Oct  2 11:43:55 EDT 2026 CHAIN DONE

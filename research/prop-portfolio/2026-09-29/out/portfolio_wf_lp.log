@@ -1,0 +1,26 @@
+[lucidpro] wf portfolio fixed-set: OOS P5 0.444 ctrl 0.283 lift +0.161 (train 0.455; 116s)
+[lucidpro] wf single fixed-set: OOS P5 0.427 ctrl 0.349 lift +0.077 (train 0.445; 123s)
+[lucidpro_nodll] wf portfolio fixed-set: OOS P5 0.669 ctrl 0.601 lift +0.068 (train 0.692; 263s)
+[lucidpro_nodll] wf single fixed-set: OOS P5 0.660 ctrl 0.638 lift +0.021 (train 0.710; 269s)
+[lucidpro] wf-reselect 2022Q3: [('hm-donchian-tf15#4|nyam', 30), ('hm-donchian-tf15#10|pm', 20), ('hm-vwap_z-tf5#11|mid', 20), ('hm-tema_slope-tf5#35|london', 20)] train 0.484 test 0.421875
+[lucidpro_nodll] wf-reselect 2022Q3: [('hm-orb-tf5#9|mid', 40), ('hm-donchian-tf15#10|pm', 10), ('hm-donchian-tf15#27|pm', 30)] train 0.783 test 0.65625
+[lucidpro_nodll] wf-reselect 2022Q4: [('hm-orb-tf5#9|mid', 40), ('hm-donchian-tf15#10|pm', 10), ('hm-donchian-tf15#27|pm', 30)] train 0.762 test 0.6190476190476191
+[lucidpro] wf-reselect 2022Q4: [('hm-tod_drift-tf5#19|mid', 40), ('hm-donchian-tf15#2|pm', 10), ('screen-tod_drift-tf30|pm', 20)] train 0.528 test 0.49206349206349204
+[lucidpro] wf-reselect 2023Q1: [('hm-tod_drift-tf5#19|mid', 40), ('hm-donchian-tf15#2|pm', 10), ('screen-tod_drift-tf30|pm', 20)] train 0.547 test 0.3387096774193548
+[lucidpro_nodll] wf-reselect 2023Q1: [('hm-donchian-tf15#10|pm', 40), ('hm-first_bar_mom-tf15#8|mid', 40), ('hm-first_bar_mom-tf15#21|nyam', 40)] train 0.753 test 0.6612903225806451
+[lucidpro] wf-reselect 2023Q2: [('hm-tod_drift-tf5#19|mid', 40), ('hm-donchian-tf30#10|nyam', 20), ('hm-donchian-tf15#10|pm', 10)] train 0.526 test 0.25396825396825395
+[lucidpro_nodll] wf-reselect 2023Q2: [('hm-first_bar_mom-tf15#10|mid', 40), ('screen-straddle-tf30|pm', 40), ('hm-tod_drift-tf5#15|nyam', 10)] train 0.733 test 0.5396825396825397
+[lucidpro] wf-reselect 2023Q3: [('hm-tod_drift-tf5#4|mid', 30), ('screen-straddle-tf30|pm', 10), ('hm-donchian-tf15#2|pm', 10)] train 0.492 test 0.5079365079365079
+[lucidpro_nodll] wf-reselect 2023Q3: [('hm-vwap_band-tf5#9|mid', 40), ('hm-donchian-tf15#10|pm', 40), ('hm-donchian-tf15#8|nyam', 40)] train 0.710 test 0.6190476190476191
+[lucidpro] wf-reselect 2023Q4: [('screen-tod_drift-tf5|nyam', 30), ('hm-tod_drift-tf5#19|mid', 10), ('hm-donchian-tf15#5|nyam', 10)] train 0.510 test 0.5396825396825397
+[lucidpro_nodll] wf-reselect 2023Q4: [('hm-orb-tf5#8|mid', 40), ('hm-tod_drift-tf5#10|london', 30)] train 0.735 test 0.5555555555555556
+[lucidpro_nodll] wf-reselect 2024Q1: [('hm-orb-tf5#9|mid', 40), ('hm-tod_drift-tf5#10|london', 30)] train 0.721 test 0.6721311475409836
+[lucidpro_nodll] wf-reselect 2024Q2: [('hm-orb-tf5#9|mid', 40), ('hm-tod_drift-tf5#10|london', 30)] train 0.691 test 0.5079365079365079
+[lucidpro] wf-reselect 2024Q1: [('screen-tod_drift-tf5|nyam', 30), ('hm-donchian-tf15#2|pm', 20), ('hm-vwap_z-tf5#11|mid', 20)] train 0.547 test 0.18032786885245902
+[lucidpro_nodll] wf-reselect 2024Q3: [('hm-first_bar_mom-tf15#9|nyam', 40), ('hm-ema_pullback-tf5#22|mid', 30), ('hm-donchian-tf15#10|pm', 40)] train 0.654 test 0.75
+[lucidpro] wf-reselect 2024Q2: [('hm-tod_drift-tf5#4|mid', 30), ('screen-tod_drift-tf30|pm', 40), ('hm-orb-tf5#35|nyam', 30), ('hm-tod_drift-tf5#10|london', 40)] train 0.478 test 0.2698412698412698
+[lucidpro] wf-reselect 2024Q3: [('screen-straddle-tf30|pm', 20), ('hm-tod_drift-tf5#23|mid', 10), ('hm-donchian-tf30#10|nyam', 20)] train 0.467 test 0.390625
+[lucidpro_nodll] wf-reselect 2024Q4: [('screen-straddle-tf30|pm', 40), ('hm-vwap_band-tf5#10|london', 10), ('screen-tod_drift-tf5|mid', 10)] train 0.688 test 0.65
+[lucidpro_nodll] wf portfolio reselect: OOS P5 0.623 ctrl 0.602 lift +0.021 (2823s)
+[lucidpro] wf-reselect 2024Q4: [('screen-straddle-tf30|pm', 20), ('hm-tod_drift-tf5#23|mid', 30), ('screen-tod_drift-tf30|pm', 10)] train 0.486 test 0.4166666666666667
+[lucidpro] wf portfolio reselect: OOS P5 0.382 ctrl 0.349 lift +0.033 (3027s)

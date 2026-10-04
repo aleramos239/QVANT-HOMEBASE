@@ -1,0 +1,173 @@
+{
+ "id": "gate_straddle-tf30_c10_G1-perms2",
+ "engine": "gates-1 (list gate on an in-sample tester bundle)",
+ "range": {
+  "start": "2021-09-22",
+  "end": "2024-12-31",
+  "holdout": false
+ },
+ "holdout": false,
+ "qty": 1,
+ "trades": 1624,
+ "net": 78214.0,
+ "strategy": "gates.G1",
+ "inputs": {
+  "pick": "straddle-tf30_c10",
+  "source": "R__hm2-straddle-tf30_c10",
+  "gate": "G1",
+  "name": "gate_imb_side",
+  "guard_ms": 0,
+  "g1_rows": 5
+ },
+ "elapsed_s": 0.92,
+ "gate": {
+  "gate": "G1",
+  "name": "gate_imb_side",
+  "pick": "straddle-tf30_c10",
+  "pick_key": "hm2-straddle-tf30#10",
+  "tf": "30",
+  "pick_sess": "nyam",
+  "source": "R__hm2-straddle-tf30_c10",
+  "source_sha256": "7c65e1d1e8e72cc37f6d3a752aa127c35db11c77eb1ea2ceadf50e2ee7b56990",
+  "stage": "gate",
+  "control": "perm",
+  "seed": 2,
+  "features": [
+   "imb10",
+   "t_utc"
+  ],
+  "counts": {
+   "source_trades": 3273,
+   "rows": 1624,
+   "no_signal": 170,
+   "basis": 3103,
+   "cats": {
+    "keep": 1624,
+    "skip": 1649
+   },
+   "rows_by_session": {
+    "london": 444,
+    "mid": 403,
+    "nyam": 434,
+    "pm": 343
+   },
+   "cats_by_session": {
+    "london": {
+     "keep": 444,
+     "skip": 376
+    },
+    "mid": {
+     "keep": 403,
+     "skip": 417
+    },
+    "nyam": {
+     "keep": 434,
+     "skip": 386
+    },
+    "pm": {
+     "keep": 343,
+     "skip": 470
+    }
+   },
+   "exec_guard": null,
+   "moved_to_match": 165,
+   "moved_without_basis": 0,
+   "same_verdict_as_real": 1815
+  },
+  "control_only": true,
+  "half_unit_rows": false,
+  "note": "a permutation null: matched to the real gate's full-sample counts, donors may be later sessions -- a CONTROL, never a tradable rule",
+  "cells": {
+   "flex_eval": {
+    "slot": "flex_eval",
+    "kind": "eval",
+    "base": "file:R__hm2-straddle-tf30_c10",
+    "base_kw": {
+     "firm": "lucid",
+     "rules": {
+      "day_lock": 750,
+      "day_take": 1500,
+      "day_stop": 0,
+      "max_day_tr": 0,
+      "target_take": 1
+     },
+     "sess": "nyam",
+     "micros": 40
+    },
+    "pick_meta": {
+     "strategy": "straddle",
+     "inputs": {
+      "tf": "30",
+      "stop_val": 3.0,
+      "tgt_r": 2.0,
+      "off_atr": 0.25
+     },
+     "both_sides": true
+    },
+    "warnings": [],
+    "real": "/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-10-01-l2/runs/gate_straddle-tf30_c10_G1",
+    "nulls": [
+     "/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-10-01-l2/runs/gate_straddle-tf30_c10_G1-perms1",
+     "/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-10-01-l2/runs/gate_straddle-tf30_c10_G1-perms2"
+    ],
+    "gate_kw": {
+     "firm": "lucid",
+     "rules": {
+      "day_lock": 750,
+      "day_take": 1500,
+      "day_stop": 0,
+      "max_day_tr": 0,
+      "target_take": 1
+     },
+     "sess": "nyam",
+     "micros": 40
+    }
+   },
+   "pro_nodll_eval": {
+    "slot": "pro_nodll_eval",
+    "kind": "eval",
+    "base": "file:R__hm2-straddle-tf30_c10",
+    "base_kw": {
+     "firm": "lucidpro_nodll",
+     "rules": {
+      "day_lock": 1000,
+      "day_take": 0,
+      "day_stop": 0,
+      "max_day_tr": 0,
+      "target_take": 1
+     },
+     "sess": "nyam",
+     "micros": 40
+    },
+    "pick_meta": {
+     "strategy": "straddle",
+     "inputs": {
+      "tf": "30",
+      "stop_val": 3.0,
+      "tgt_r": 2.0,
+      "off_atr": 0.25
+     },
+     "both_sides": true
+    },
+    "warnings": [],
+    "real": "/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-10-01-l2/runs/gate_straddle-tf30_c10_G1",
+    "nulls": [
+     "/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-10-01-l2/runs/gate_straddle-tf30_c10_G1-perms1",
+     "/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-10-01-l2/runs/gate_straddle-tf30_c10_G1-perms2"
+    ],
+    "gate_kw": {
+     "firm": "lucidpro_nodll",
+     "rules": {
+      "day_lock": 1000,
+      "day_take": 0,
+      "day_stop": 0,
+      "max_day_tr": 0,
+      "target_take": 1
+     },
+     "sess": "nyam",
+     "micros": 40
+    }
+   }
+  }
+ }
+}

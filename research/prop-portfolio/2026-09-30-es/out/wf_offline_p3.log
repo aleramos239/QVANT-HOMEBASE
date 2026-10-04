@@ -1,0 +1,8 @@
+wf run (pass 3): 60 tasks (firm top-12 family-grid x session), models eod+primary, kc=5, workers=3
+[wf3] 0 tasks already done, 60 to run
+[wf3] 10/60 tasks 549s
+[wf3] 20/60 tasks 1466s
+[wf3] 30/60 tasks 1912s
+[wf3] 40/60 tasks 2317s
+[wf3] 50/60 tasks 3032s
+[wf3] 60/60 tasks 3069s

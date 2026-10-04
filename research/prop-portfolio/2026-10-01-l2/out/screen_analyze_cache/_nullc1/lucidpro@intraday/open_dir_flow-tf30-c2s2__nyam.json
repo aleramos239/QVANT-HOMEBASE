@@ -1,0 +1,1 @@
+{"key": "open_dir_flow-tf30-c2s2", "fam_tf": "open_dir_flow-tf30", "family": "open_dir_flow", "tf": "30", "variant": "c2s2", "sess": "nyam", "firm": "lucidpro", "status": "ok", "lift": 0.11656516443361754, "ctrl": 0.20012180267965896, "real": 0.3166869671132765, "skipped": null, "elapsed_s": 0.5}

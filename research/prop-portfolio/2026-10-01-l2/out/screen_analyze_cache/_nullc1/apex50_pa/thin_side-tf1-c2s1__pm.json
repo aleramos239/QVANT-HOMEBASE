@@ -1,0 +1,1 @@
+{"key": "thin_side-tf1-c2s1", "fam_tf": "thin_side-tf1", "family": "thin_side", "tf": "1", "variant": "c2s1", "sess": "pm", "firm": "apex50_pa", "status": "ok", "lift": 12.960415143603129, "ctrl": 18.02765274151436, "real": 30.988067885117488, "skipped": null, "elapsed_s": 3.81}

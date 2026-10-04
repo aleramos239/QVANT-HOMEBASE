@@ -1,0 +1,128 @@
+{
+ "id": "gate_straddle-tf30_c9_G1-perms2",
+ "engine": "gates-1 (list gate on an in-sample tester bundle)",
+ "range": {
+  "start": "2021-09-22",
+  "end": "2024-12-31",
+  "holdout": false
+ },
+ "holdout": false,
+ "qty": 1,
+ "trades": 1624,
+ "net": 78564.0,
+ "strategy": "gates.G1",
+ "inputs": {
+  "pick": "straddle-tf30_c9",
+  "source": "R__hm2-straddle-tf30_c9",
+  "gate": "G1",
+  "name": "gate_imb_side",
+  "guard_ms": 0,
+  "g1_rows": 5
+ },
+ "elapsed_s": 0.04,
+ "gate": {
+  "gate": "G1",
+  "name": "gate_imb_side",
+  "pick": "straddle-tf30_c9",
+  "pick_key": "hm2-straddle-tf30#9",
+  "tf": "30",
+  "pick_sess": "nyam",
+  "source": "R__hm2-straddle-tf30_c9",
+  "source_sha256": "c3bea9ef742b14823a039582881e8674f4fd4b6689380826e3f7d96b7ad33cea",
+  "stage": "gate",
+  "control": "perm",
+  "seed": 2,
+  "features": [
+   "imb10",
+   "t_utc"
+  ],
+  "counts": {
+   "source_trades": 3273,
+   "rows": 1624,
+   "no_signal": 170,
+   "basis": 3103,
+   "cats": {
+    "keep": 1624,
+    "skip": 1649
+   },
+   "rows_by_session": {
+    "london": 444,
+    "mid": 403,
+    "nyam": 434,
+    "pm": 343
+   },
+   "cats_by_session": {
+    "london": {
+     "keep": 444,
+     "skip": 376
+    },
+    "mid": {
+     "keep": 403,
+     "skip": 417
+    },
+    "nyam": {
+     "keep": 434,
+     "skip": 386
+    },
+    "pm": {
+     "keep": 343,
+     "skip": 470
+    }
+   },
+   "exec_guard": null,
+   "moved_to_match": 165,
+   "moved_without_basis": 0,
+   "same_verdict_as_real": 1801
+  },
+  "control_only": true,
+  "half_unit_rows": false,
+  "note": "a permutation null: matched to the real gate's full-sample counts, donors may be later sessions -- a CONTROL, never a tradable rule",
+  "cells": {
+   "pro_nodll_eval_s9": {
+    "slot": "pro_nodll_eval_s9",
+    "kind": "eval",
+    "base": "file:R__hm2-straddle-tf30_c9",
+    "base_kw": {
+     "firm": "lucidpro_nodll",
+     "rules": {
+      "day_lock": 1000,
+      "day_take": 0,
+      "day_stop": 0,
+      "max_day_tr": 1,
+      "target_take": 1
+     },
+     "sess": "nyam",
+     "micros": 40
+    },
+    "pick_meta": {
+     "strategy": "straddle",
+     "inputs": {
+      "tf": "30",
+      "stop_val": 3.0,
+      "tgt_r": 1.0,
+      "off_atr": 0.25
+     },
+     "both_sides": true
+    },
+    "warnings": [],
+    "real": "/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-10-01-l2/runs/gate_straddle-tf30_c9_G1",
+    "nulls": [
+     "/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-10-01-l2/runs/gate_straddle-tf30_c9_G1-perms1",
+     "/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-10-01-l2/runs/gate_straddle-tf30_c9_G1-perms2"
+    ],
+    "gate_kw": {
+     "firm": "lucidpro_nodll",
+     "rules": {
+      "day_lock": 1000,
+      "day_take": 0,
+      "day_stop": 0,
+      "max_day_tr": 1,
+      "target_take": 1
+     },
+     "sess": "nyam",
+     "micros": 40
+    }
+   }
+  }
+ }
+}

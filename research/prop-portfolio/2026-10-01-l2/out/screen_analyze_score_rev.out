@@ -1,0 +1,42 @@
+2026-10-02T06:36:10+00:00 score: 1983 tasks to run, workers 1
+2026-10-02T11:27:24+00:00 score: 50/1983 done (0 errors), 17474 s; last apex300_pa wall_bounce-tf1-c2s2 nyam ok
+2026-10-02T13:06:29+00:00 score: 100/1983 done (0 errors), 23419 s; last apex300_pa sweep_follow-tf5 london None
+2026-10-02T13:06:29+00:00 score: 150/1983 done (0 errors), 23419 s; last apex300_pa open_dir_both-tf30-c2s1 asia None
+2026-10-02T13:06:29+00:00 score: 200/1983 done (0 errors), 23419 s; last apex300_pa cvd_div-tf5-c2s2 nyam None
+2026-10-02T13:06:29+00:00 score: 250/1983 done (0 errors), 23419 s; last apex300_pa bimb_follow_n3-tf1 london None
+2026-10-02T13:06:29+00:00 score: 300/1983 done (0 errors), 23419 s; last apex300_pa bimb_fade_n3-tf5-c2s1 asia None
+2026-10-02T13:06:29+00:00 score: 350/1983 done (0 errors), 23419 s; last apex300_pa absorption-tf5-c2s2 nyam None
+2026-10-02T13:06:29+00:00 score: 400/1983 done (0 errors), 23419 s; last apex50_pa wall_break-tf1 london None
+2026-10-02T13:06:29+00:00 score: 450/1983 done (0 errors), 23419 s; last apex50_pa thin_side-tf5-c2s1 asia None
+2026-10-02T13:06:29+00:00 score: 500/1983 done (0 errors), 23419 s; last apex50_pa open_dir_flow-tf30-c2s2 nyam None
+2026-10-02T13:06:29+00:00 score: 550/1983 done (0 errors), 23419 s; last apex50_pa delta_follow-tf5 london None
+2026-10-02T13:06:29+00:00 score: 600/1983 done (0 errors), 23419 s; last apex50_pa cvd_div-tf1-c2s1 asia None
+2026-10-02T13:06:29+00:00 score: 650/1983 done (0 errors), 23419 s; last apex50_pa bimb_follow-tf1-c2s2 nyam None
+2026-10-02T13:06:29+00:00 score: 700/1983 done (0 errors), 23419 s; last apex50_pa bimb_fade-tf5 london None
+2026-10-02T13:06:29+00:00 score: 750/1983 done (0 errors), 23419 s; last apex50_pa absorption-tf1-c2s1 asia None
+2026-10-02T13:06:29+00:00 score: 800/1983 done (0 errors), 23419 s; last pro_dll wall_break-tf5 asia None
+2026-10-02T13:06:29+00:00 score: 850/1983 done (0 errors), 23419 s; last flex wall_break-tf1 london None
+2026-10-02T13:06:29+00:00 score: 900/1983 done (0 errors), 23419 s; last pro_dll wall_bounce-tf5-c2s2 mid None
+2026-10-02T13:06:29+00:00 score: 950/1983 done (0 errors), 23419 s; last flex wall_bounce-tf1-c2s2 nyam None
+2026-10-02T13:06:29+00:00 score: 1000/1983 done (0 errors), 23419 s; last pro_dll thin_side-tf5-c2s1 pm None
+2026-10-02T13:06:29+00:00 score: 1050/1983 done (0 errors), 23419 s; last flex thin_side-tf5-c2s1 asia None
+2026-10-02T13:06:29+00:00 score: 1100/1983 done (0 errors), 23419 s; last pro_dll thin_side-tf1 asia None
+2026-10-02T13:06:29+00:00 score: 1150/1983 done (0 errors), 23419 s; last flex sweep_follow-tf5 london None
+2026-10-02T13:06:29+00:00 score: 1200/1983 done (0 errors), 23419 s; last pro_dll sweep_follow-tf1-c2s2 mid None
+2026-10-02T13:06:29+00:00 score: 1250/1983 done (0 errors), 23419 s; last flex open_dir_flow-tf30-c2s2 nyam None
+2026-10-02T13:06:29+00:00 score: 1300/1983 done (0 errors), 23419 s; last pro_dll open_dir_both-tf30-c2s1 pm None
+2026-10-02T13:06:29+00:00 score: 1350/1983 done (0 errors), 23419 s; last flex open_dir_both-tf30-c2s1 asia None
+2026-10-02T13:06:29+00:00 score: 1400/1983 done (0 errors), 23419 s; last pro_dll open_dir_book-tf30 asia None
+2026-10-02T13:06:29+00:00 score: 1450/1983 done (0 errors), 23419 s; last flex delta_follow-tf5 london None
+2026-10-02T13:06:29+00:00 score: 1500/1983 done (0 errors), 23419 s; last pro_dll delta_follow-tf1-c2s2 mid None
+2026-10-02T13:06:29+00:00 score: 1550/1983 done (0 errors), 23419 s; last flex cvd_div-tf5-c2s2 nyam None
+2026-10-02T13:06:29+00:00 score: 1600/1983 done (0 errors), 23419 s; last pro_dll cvd_div-tf1-c2s1 pm None
+2026-10-02T13:06:29+00:00 score: 1650/1983 done (0 errors), 23419 s; last flex cvd_div-tf1-c2s1 asia None
+2026-10-02T13:06:29+00:00 score: 1700/1983 done (0 errors), 23419 s; last pro_dll bimb_follow_n3-tf5 asia None
+2026-10-02T13:06:29+00:00 score: 1750/1983 done (0 errors), 23419 s; last flex bimb_follow_n3-tf1 london None
+2026-10-02T13:06:29+00:00 score: 1800/1983 done (0 errors), 23419 s; last pro_dll bimb_follow-tf5-c2s2 mid None
+2026-10-02T13:06:29+00:00 score: 1850/1983 done (0 errors), 23419 s; last flex bimb_follow-tf1-c2s2 nyam None
+2026-10-02T13:06:29+00:00 score: 1900/1983 done (0 errors), 23419 s; last pro_dll bimb_fade_n3-tf5-c2s1 pm None
+2026-10-02T13:06:29+00:00 score: 1950/1983 done (0 errors), 23419 s; last flex bimb_fade_n3-tf5-c2s1 asia None
+2026-10-02T13:06:30+00:00 score: finished 1983 tasks, 0 errors, 23419 s
+{"ran": 1983, "errors": 0}

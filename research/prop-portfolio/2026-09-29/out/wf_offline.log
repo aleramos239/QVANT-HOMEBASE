@@ -1,0 +1,12 @@
+wf run: 96 tasks (family-grid x session x firm), kc=10, workers=8
+[wf] 0 tasks already done, 96 to run
+[wf] 10/96 tasks 1616s
+[wf] 20/96 tasks 2237s
+[wf] 30/96 tasks 3258s
+[wf] 40/96 tasks 4136s
+[wf] 50/96 tasks 4417s
+[wf] 60/96 tasks 4594s
+[wf] 70/96 tasks 4646s
+[wf] 80/96 tasks 4689s
+[wf] 90/96 tasks 4706s
+[wf] 96/96 tasks 4758s

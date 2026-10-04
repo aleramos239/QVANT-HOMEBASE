@@ -1,0 +1,15 @@
+{
+ "id": "gate_straddle-tf30_c9_G3-perms1/x1.5",
+ "engine": "gates-1 (list gate on an in-sample tester bundle)",
+ "range": {
+  "start": "2021-09-22",
+  "end": "2024-12-31",
+  "holdout": false
+ },
+ "holdout": false,
+ "qty": 1,
+ "trades": 970,
+ "tier": "x1.5",
+ "gate_mult": 1.5,
+ "parent": "gate_straddle-tf30_c9_G3-perms1"
+}

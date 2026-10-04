@@ -1,0 +1,1 @@
+{"key": "thin_side-tf5-c2s1", "fam_tf": "thin_side-tf5", "family": "thin_side", "tf": "5", "variant": "c2s1", "sess": "nyam", "firm": "lucid", "status": "ok", "lift": 0.003532277710109623, "ctrl": 0.008647990255785627, "real": 0.012180267965895249, "skipped": null, "elapsed_s": 0.24}

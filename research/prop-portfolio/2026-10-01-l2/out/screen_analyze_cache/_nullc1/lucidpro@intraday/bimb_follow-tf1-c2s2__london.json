@@ -1,0 +1,1 @@
+{"key": "bimb_follow-tf1-c2s2", "fam_tf": "bimb_follow-tf1", "family": "bimb_follow", "tf": "1", "variant": "c2s2", "sess": "london", "firm": "lucidpro", "status": "ok", "lift": 0.09622411693057245, "ctrl": 0.18635809987819732, "real": 0.28258221680876977, "skipped": null, "elapsed_s": 1.07}

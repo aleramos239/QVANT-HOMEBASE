@@ -1,0 +1,60 @@
+real(lucidpro): 1719 configs (1719 in rules.csv) in 454 sources
+[lp-real chunk0] 0 tasks already done, 40 to run
+[lp-real chunk0] 10/40 tasks 60s
+[lp-real chunk0] 20/40 tasks 96s
+[lp-real chunk0] 30/40 tasks 130s
+[lp-real chunk0] 40/40 tasks 162s
+[lp-real chunk1] 40 tasks already done, 40 to run
+[lp-real chunk1] 10/40 tasks 63s
+[lp-real chunk1] 20/40 tasks 96s
+[lp-real chunk1] 30/40 tasks 129s
+[lp-real chunk1] 40/40 tasks 160s
+[lp-real chunk2] 80 tasks already done, 40 to run
+[lp-real chunk2] 10/40 tasks 59s
+[lp-real chunk2] 20/40 tasks 90s
+[lp-real chunk2] 30/40 tasks 118s
+[lp-real chunk2] 40/40 tasks 146s
+[lp-real chunk3] 120 tasks already done, 40 to run
+[lp-real chunk3] 10/40 tasks 45s
+[lp-real chunk3] 20/40 tasks 62s
+[lp-real chunk3] 30/40 tasks 84s
+[lp-real chunk3] 40/40 tasks 96s
+[lp-real chunk4] 160 tasks already done, 40 to run
+[lp-real chunk4] 10/40 tasks 15s
+[lp-real chunk4] 20/40 tasks 24s
+[lp-real chunk4] 30/40 tasks 34s
+[lp-real chunk4] 40/40 tasks 55s
+[lp-real chunk5] 200 tasks already done, 40 to run
+[lp-real chunk5] 10/40 tasks 15s
+[lp-real chunk5] 20/40 tasks 39s
+[lp-real chunk5] 30/40 tasks 50s
+[lp-real chunk5] 40/40 tasks 59s
+[lp-real chunk6] 240 tasks already done, 40 to run
+[lp-real chunk6] 10/40 tasks 20s
+[lp-real chunk6] 20/40 tasks 38s
+[lp-real chunk6] 30/40 tasks 55s
+[lp-real chunk6] 40/40 tasks 67s
+[lp-real chunk7] 280 tasks already done, 40 to run
+[lp-real chunk7] 10/40 tasks 11s
+[lp-real chunk7] 20/40 tasks 25s
+[lp-real chunk7] 30/40 tasks 37s
+[lp-real chunk7] 40/40 tasks 47s
+[lp-real chunk8] 320 tasks already done, 40 to run
+[lp-real chunk8] 10/40 tasks 13s
+[lp-real chunk8] 20/40 tasks 19s
+[lp-real chunk8] 30/40 tasks 23s
+[lp-real chunk8] 40/40 tasks 29s
+[lp-real chunk9] 360 tasks already done, 40 to run
+[lp-real chunk9] 10/40 tasks 6s
+[lp-real chunk9] 20/40 tasks 14s
+[lp-real chunk9] 30/40 tasks 19s
+[lp-real chunk9] 40/40 tasks 22s
+[lp-real chunk10] 400 tasks already done, 40 to run
+[lp-real chunk10] 10/40 tasks 9s
+[lp-real chunk10] 20/40 tasks 15s
+[lp-real chunk10] 30/40 tasks 18s
+[lp-real chunk10] 40/40 tasks 21s
+[lp-real chunk11] 440 tasks already done, 14 to run
+[lp-real chunk11] 10/14 tasks 5s
+[lp-real chunk11] 14/14 tasks 5s
+wrote 6876 rows

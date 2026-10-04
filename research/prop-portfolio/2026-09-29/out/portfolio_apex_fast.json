@@ -1,0 +1,1217 @@
+{
+ "firm": "apex",
+ "rules_id": "apex-legacy-50k@2026-09-27b",
+ "primary": "intraday",
+ "unconfirmed": true,
+ "preliminary": true,
+ "objective": "fast",
+ "preliminary_note": "pool = pass-2 shortlist top-N + wf_offline survivors only; pass-3 candidates (hm2-*, fp-*) not included yet",
+ "pool": [
+  {
+   "cid": "hm-first_bar_mom-tf15#34|nyam",
+   "src": "20260929-231149-draft_pp_first_bar_mom-f556#34",
+   "fam": "first_bar_mom",
+   "tf": 15,
+   "sess": "nyam",
+   "how": "shortlist"
+  },
+  {
+   "cid": "hm-first_bar_mom-tf15#35|nyam",
+   "src": "20260929-231149-draft_pp_first_bar_mom-f556#35",
+   "fam": "first_bar_mom",
+   "tf": 15,
+   "sess": "nyam",
+   "how": "shortlist"
+  },
+  {
+   "cid": "hm-donchian-tf15#11|nyam",
+   "src": "20260929-221600-draft_pp_donchian-d8e4#11",
+   "fam": "donchian",
+   "tf": 15,
+   "sess": "nyam",
+   "how": "shortlist"
+  },
+  {
+   "cid": "hm-donchian-tf15#10|nyam",
+   "src": "20260929-221600-draft_pp_donchian-d8e4#10",
+   "fam": "donchian",
+   "tf": 15,
+   "sess": "nyam",
+   "how": "shortlist"
+  },
+  {
+   "cid": "hm-first_bar_mom-tf15#22|nyam",
+   "src": "20260929-231149-draft_pp_first_bar_mom-f556#22",
+   "fam": "first_bar_mom",
+   "tf": 15,
+   "sess": "nyam",
+   "how": "shortlist"
+  },
+  {
+   "cid": "hm-first_bar_mom-tf15#10|nyam",
+   "src": "20260929-231149-draft_pp_first_bar_mom-f556#10",
+   "fam": "first_bar_mom",
+   "tf": 15,
+   "sess": "nyam",
+   "how": "shortlist"
+  },
+  {
+   "cid": "hm-first_bar_mom-tf15#23|nyam",
+   "src": "20260929-231149-draft_pp_first_bar_mom-f556#23",
+   "fam": "first_bar_mom",
+   "tf": 15,
+   "sess": "nyam",
+   "how": "shortlist"
+  },
+  {
+   "cid": "hm-first_bar_mom-tf15#11|nyam",
+   "src": "20260929-231149-draft_pp_first_bar_mom-f556#11",
+   "fam": "first_bar_mom",
+   "tf": 15,
+   "sess": "nyam",
+   "how": "shortlist"
+  },
+  {
+   "cid": "hm-donchian-tf15#9|nyam",
+   "src": "20260929-221600-draft_pp_donchian-d8e4#9",
+   "fam": "donchian",
+   "tf": 15,
+   "sess": "nyam",
+   "how": "shortlist"
+  },
+  {
+   "cid": "hm-donchian-tf15#8|nyam",
+   "src": "20260929-221600-draft_pp_donchian-d8e4#8",
+   "fam": "donchian",
+   "tf": 15,
+   "sess": "nyam",
+   "how": "shortlist"
+  },
+  {
+   "cid": "hm-vwap_band-tf5#7|mid",
+   "src": "20260929-230108-draft_pp_vwap_band-0ec3#7",
+   "fam": "vwap_band",
+   "tf": 5,
+   "sess": "mid",
+   "how": "shortlist"
+  },
+  {
+   "cid": "hm-vwap_z-tf5#11|mid",
+   "src": "20260929-225546-draft_pp_vwap_z-d86a#11",
+   "fam": "vwap_z",
+   "tf": 5,
+   "sess": "mid",
+   "how": "shortlist"
+  },
+  {
+   "cid": "hm-vwap_z-tf5#10|mid",
+   "src": "20260929-225546-draft_pp_vwap_z-d86a#10",
+   "fam": "vwap_z",
+   "tf": 5,
+   "sess": "mid",
+   "how": "shortlist"
+  },
+  {
+   "cid": "hm-vwap_band-tf5#6|mid",
+   "src": "20260929-230108-draft_pp_vwap_band-0ec3#6",
+   "fam": "vwap_band",
+   "tf": 5,
+   "sess": "mid",
+   "how": "shortlist"
+  },
+  {
+   "cid": "hm-vwap_z-tf5#9|mid",
+   "src": "20260929-225546-draft_pp_vwap_z-d86a#9",
+   "fam": "vwap_z",
+   "tf": 5,
+   "sess": "mid",
+   "how": "shortlist"
+  },
+  {
+   "cid": "hm-vwap_band-tf5#10|mid",
+   "src": "20260929-230108-draft_pp_vwap_band-0ec3#10",
+   "fam": "vwap_band",
+   "tf": 5,
+   "sess": "mid",
+   "how": "shortlist"
+  },
+  {
+   "cid": "hm-vwap_band-tf5#11|mid",
+   "src": "20260929-230108-draft_pp_vwap_band-0ec3#11",
+   "fam": "vwap_band",
+   "tf": 5,
+   "sess": "mid",
+   "how": "shortlist"
+  },
+  {
+   "cid": "hm-vwap_z-tf5#8|mid",
+   "src": "20260929-225546-draft_pp_vwap_z-d86a#8",
+   "fam": "vwap_z",
+   "tf": 5,
+   "sess": "mid",
+   "how": "shortlist"
+  },
+  {
+   "cid": "hm-first_bar_mom-tf15#33|nyam",
+   "src": "20260929-231149-draft_pp_first_bar_mom-f556#33",
+   "fam": "first_bar_mom",
+   "tf": 15,
+   "sess": "nyam",
+   "how": "shortlist"
+  },
+  {
+   "cid": "hm-first_bar_mom-tf15#9|nyam",
+   "src": "20260929-231149-draft_pp_first_bar_mom-f556#9",
+   "fam": "first_bar_mom",
+   "tf": 15,
+   "sess": "nyam",
+   "how": "shortlist"
+  },
+  {
+   "cid": "screen-straddle-tf30|pm",
+   "src": "20260929-214113-draft_pp_straddle-5d7d",
+   "fam": "straddle",
+   "tf": 30,
+   "sess": "pm",
+   "how": "wf_intraday"
+  },
+  {
+   "cid": "screen-tod_drift-tf30|mid",
+   "src": "20260929-220047-draft_pp_tod_drift-1bb0",
+   "fam": "tod_drift",
+   "tf": 30,
+   "sess": "mid",
+   "how": "wf_intraday"
+  },
+  {
+   "cid": "screen-tod_drift-tf5|mid",
+   "src": "20260929-220026-draft_pp_tod_drift-ae47",
+   "fam": "tod_drift",
+   "tf": 5,
+   "sess": "mid",
+   "how": "wf_intraday"
+  },
+  {
+   "cid": "hm-tod_drift-tf5#19|mid",
+   "src": "20260929-224544-draft_pp_tod_drift-63f8#19",
+   "fam": "tod_drift",
+   "tf": 5,
+   "sess": "mid",
+   "how": "wf_intraday"
+  },
+  {
+   "cid": "hm-donchian-tf15#26|pm",
+   "src": "20260929-221600-draft_pp_donchian-d8e4#26",
+   "fam": "donchian",
+   "tf": 15,
+   "sess": "pm",
+   "how": "wf_intraday"
+  },
+  {
+   "cid": "screen-tod_drift-tf30|pm",
+   "src": "20260929-220047-draft_pp_tod_drift-1bb0",
+   "fam": "tod_drift",
+   "tf": 30,
+   "sess": "pm",
+   "how": "wf_intraday"
+  },
+  {
+   "cid": "screen-tod_drift-tf5|nyam",
+   "src": "20260929-220026-draft_pp_tod_drift-ae47",
+   "fam": "tod_drift",
+   "tf": 5,
+   "sess": "nyam",
+   "how": "wf_intraday"
+  },
+  {
+   "cid": "hm-tod_drift-tf5#4|nyam",
+   "src": "20260929-224544-draft_pp_tod_drift-63f8#4",
+   "fam": "tod_drift",
+   "tf": 5,
+   "sess": "nyam",
+   "how": "wf_intraday"
+  },
+  {
+   "cid": "hm-vwap_band-tf5#3|london",
+   "src": "20260929-230108-draft_pp_vwap_band-0ec3#3",
+   "fam": "vwap_band",
+   "tf": 5,
+   "sess": "london",
+   "how": "wf_intraday"
+  },
+  {
+   "cid": "screen-rsi2-tf1|mid",
+   "src": "20260929-214939-draft_pp_rsi2-d2a1",
+   "fam": "rsi2",
+   "tf": 1,
+   "sess": "mid",
+   "how": "wf_intraday"
+  },
+  {
+   "cid": "screen-donchian-tf15|nyam",
+   "src": "20260929-214214-draft_pp_donchian-6a13",
+   "fam": "donchian",
+   "tf": 15,
+   "sess": "nyam",
+   "how": "wf_intraday"
+  },
+  {
+   "cid": "screen-tema_slope-tf5|london",
+   "src": "20260929-214556-draft_pp_tema_slope-8a71",
+   "fam": "tema_slope",
+   "tf": 5,
+   "sess": "london",
+   "how": "wf_intraday"
+  },
+  {
+   "cid": "hm-ema_pullback-tf5#10|mid",
+   "src": "20260929-234435-draft_pp_ema_pullback-a3a3#10",
+   "fam": "ema_pullback",
+   "tf": 5,
+   "sess": "mid",
+   "how": "wf_intraday"
+  },
+  {
+   "cid": "hm-orb-tf5#3|mid",
+   "src": "20260929-231930-draft_pp_orb-5276#3",
+   "fam": "orb",
+   "tf": 5,
+   "sess": "mid",
+   "how": "wf_intraday"
+  },
+  {
+   "cid": "hm-donchian-tf30#2|nyam",
+   "src": "20260929-221600-draft_pp_donchian-f109#2",
+   "fam": "donchian",
+   "tf": 30,
+   "sess": "nyam",
+   "how": "wf_intraday"
+  },
+  {
+   "cid": "hm-tema_slope-tf5#27|london",
+   "src": "20260929-233713-draft_pp_tema_slope-3261#27",
+   "fam": "tema_slope",
+   "tf": 5,
+   "sess": "london",
+   "how": "wf_intraday"
+  },
+  {
+   "cid": "hm-orb-tf5#10|mid",
+   "src": "20260929-231930-draft_pp_orb-5276#10",
+   "fam": "orb",
+   "tf": 5,
+   "sess": "mid",
+   "how": "wf_eod"
+  },
+  {
+   "cid": "hm-tema_slope-tf5#10|mid",
+   "src": "20260929-233713-draft_pp_tema_slope-3261#10",
+   "fam": "tema_slope",
+   "tf": 5,
+   "sess": "mid",
+   "how": "wf_eod"
+  },
+  {
+   "cid": "hm-first_bar_mom-tf15#20|nyam",
+   "src": "20260929-231149-draft_pp_first_bar_mom-f556#20",
+   "fam": "first_bar_mom",
+   "tf": 15,
+   "sess": "nyam",
+   "how": "wf_eod"
+  },
+  {
+   "cid": "hm-donchian-tf30#10|nyam",
+   "src": "20260929-221600-draft_pp_donchian-f109#10",
+   "fam": "donchian",
+   "tf": 30,
+   "sess": "nyam",
+   "how": "wf_eod"
+  },
+  {
+   "cid": "hm-donchian-tf15#21|pm",
+   "src": "20260929-221600-draft_pp_donchian-d8e4#21",
+   "fam": "donchian",
+   "tf": 15,
+   "sess": "pm",
+   "how": "wf_eod"
+  },
+  {
+   "cid": "hm-vwap_band-tf5#10|london",
+   "src": "20260929-230108-draft_pp_vwap_band-0ec3#10",
+   "fam": "vwap_band",
+   "tf": 5,
+   "sess": "london",
+   "how": "wf_eod"
+  },
+  {
+   "cid": "hm-first_bar_mom-tf15#10|mid",
+   "src": "20260929-231149-draft_pp_first_bar_mom-f556#10",
+   "fam": "first_bar_mom",
+   "tf": 15,
+   "sess": "mid",
+   "how": "wf_eod"
+  },
+  {
+   "cid": "hm-orb-tf5#20|nyam",
+   "src": "20260929-231930-draft_pp_orb-5276#20",
+   "fam": "orb",
+   "tf": 5,
+   "sess": "nyam",
+   "how": "wf_eod"
+  },
+  {
+   "cid": "hm-ema_pullback-tf5#17|mid",
+   "src": "20260929-234435-draft_pp_ema_pullback-a3a3#17",
+   "fam": "ema_pullback",
+   "tf": 5,
+   "sess": "mid",
+   "how": "wf_eod"
+  },
+  {
+   "cid": "hm-tema_slope-tf5#22|london",
+   "src": "20260929-233713-draft_pp_tema_slope-3261#22",
+   "fam": "tema_slope",
+   "tf": 5,
+   "sess": "london",
+   "how": "wf_eod"
+  },
+  {
+   "cid": "hm-tod_drift-tf5#13|nyam",
+   "src": "20260929-224544-draft_pp_tod_drift-63f8#13",
+   "fam": "tod_drift",
+   "tf": 5,
+   "sess": "nyam",
+   "how": "wf_eod"
+  }
+ ],
+ "history": [
+  {
+   "members": [
+    [
+     "hm-tod_drift-tf5#19|mid",
+     60
+    ]
+   ],
+   "cell": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 2000,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "ci": 11,
+   "stable": 0.3602314293384552,
+   "p5": 0.3602314293384552,
+   "adj": 0.3602314293384552,
+   "gain": null,
+   "forced": false
+  },
+  {
+   "members": [
+    [
+     "hm-tod_drift-tf5#19|mid",
+     60
+    ],
+    [
+     "hm-tod_drift-tf5#4|nyam",
+     20
+    ]
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 3000,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "ci": 79,
+   "stable": 0.39037758111953735,
+   "p5": 0.39037758111953735,
+   "adj": 0.39037758111953735,
+   "gain": 0.030146151781082153,
+   "forced": false
+  }
+ ],
+ "singles_top": [
+  [
+   0.3602314293384552,
+   "hm-tod_drift-tf5#19|mid",
+   60,
+   0.3602314293384552,
+   0.3602314293384552
+  ],
+  [
+   0.35277101397514343,
+   "hm-first_bar_mom-tf15#10|nyam",
+   20,
+   0.35277101397514343,
+   0.35292327404022217
+  ],
+  [
+   0.3518574833869934,
+   "hm-first_bar_mom-tf15#11|nyam",
+   20,
+   0.3518574833869934,
+   0.35200974345207214
+  ],
+  [
+   0.35155296325683594,
+   "hm-first_bar_mom-tf15#22|nyam",
+   20,
+   0.35155296325683594,
+   0.3517052233219147
+  ],
+  [
+   0.3510962128639221,
+   "hm-first_bar_mom-tf15#34|nyam",
+   20,
+   0.3510962128639221,
+   0.3510962128639221
+  ],
+  [
+   0.3506394624710083,
+   "hm-first_bar_mom-tf15#23|nyam",
+   20,
+   0.3506394624710083,
+   0.35079172253608704
+  ],
+  [
+   0.3501827120780945,
+   "hm-first_bar_mom-tf15#35|nyam",
+   20,
+   0.3501827120780945,
+   0.3501827120780945
+  ],
+  [
+   0.34409257769584656,
+   "hm-tod_drift-tf5#4|nyam",
+   20,
+   0.34409257769584656,
+   0.34409257769584656
+  ],
+  [
+   0.33647990226745605,
+   "screen-tod_drift-tf5|mid",
+   40,
+   0.33647990226745605,
+   0.33647990226745605
+  ],
+  [
+   0.33404386043548584,
+   "hm-tod_drift-tf5#19|mid",
+   40,
+   0.33404386043548584,
+   0.33404386043548584
+  ]
+ ],
+ "reports": {
+  "single": {
+   "firm": "apex",
+   "rules_id": "apex-legacy-50k@2026-09-27b",
+   "unconfirmed": true,
+   "primary": "intraday",
+   "cell": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 2000,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "members": [
+    {
+     "name": "hm-tod_drift-tf5#19|mid",
+     "micros": 60,
+     "fam": "tod_drift",
+     "sess": "mid",
+     "trades": 820,
+     "raw_net": 138540.0,
+     "net_share": 1.0
+    }
+   ],
+   "guards": {
+    "n_members": 1,
+    "ge3": false,
+    "max_net_share": 1.0,
+    "share_ok": true,
+    "dup_pairs": 0,
+    "static_cap_ok": true
+   },
+   "eod": {
+    "p1": 0.31912302070645554,
+    "p2": 0.3690621193666261,
+    "p3": 0.3800243605359318,
+    "p5": 0.3848964677222899,
+    "bust5": 0.6151035322777101,
+    "med_days": 1.0,
+    "ci_p1": [
+     0.2838002436053593,
+     0.35444579780755175
+    ],
+    "ci_p2": [
+     0.33008526187576126,
+     0.40682095006090135
+    ],
+    "ci_p3": [
+     0.341047503045067,
+     0.4190012180267966
+    ],
+    "ci_p5": [
+     0.34467113276492084,
+     0.42509135200974424
+    ]
+   },
+   "realized": {
+    "p1": 0.31912302070645554,
+    "p2": 0.3690621193666261,
+    "p3": 0.3800243605359318,
+    "p5": 0.3848964677222899,
+    "bust5": 0.6151035322777101,
+    "med_days": 1.0
+   },
+   "intraday": {
+    "p1": 0.31912302070645554,
+    "p2": 0.3690621193666261,
+    "p3": 0.3751522533495737,
+    "p5": 0.37758830694275275,
+    "bust5": 0.6224116930572473,
+    "med_days": 1.0,
+    "ci_p1": [
+     0.2838002436053593,
+     0.35444579780755175
+    ],
+    "ci_p2": [
+     0.33008526187576126,
+     0.40682095006090135
+    ],
+    "ci_p3": [
+     0.33617539585870887,
+     0.41412911084043846
+    ],
+    "ci_p5": [
+     0.3386114494518879,
+     0.4165651644336175
+    ]
+   },
+   "headline": {
+    "p1": 0.31912302070645554,
+    "p2": 0.3690621193666261,
+    "p3": 0.3751522533495737,
+    "p5": 0.37758830694275275,
+    "bust5": 0.6224116930572473,
+    "med_days": 1.0,
+    "ci_p5": [
+     0.3386114494518879,
+     0.4165651644336175
+    ],
+    "model": "intraday"
+   },
+   "consistency": {
+    "enforced": false
+   },
+   "walk": {
+    "executed": 820,
+    "skipped": 0,
+    "clipped": 0,
+    "opposite_conflicts_executed": 0,
+    "overlap_entries_executed": 0,
+    "max_concurrent_micros": 60,
+    "cap_violations": 0
+   },
+   "raw_overlap": {
+    "overlap_entries": 0,
+    "opposite_conflicts": 0,
+    "max_concurrent_micros": 60,
+    "cap_violations": 0,
+    "cap": 100,
+    "cap_ok": true
+   },
+   "series": {
+    "n_sessions": 825,
+    "trade_days": 820,
+    "net": 224694.0,
+    "mean_day": 274.0170731707317,
+    "median_day": -2030.0,
+    "worst_day": -2030.0,
+    "best_day": 19986.0
+   },
+   "year_net": {
+    "2021": 13774.0,
+    "2022": 204590.0,
+    "2023": -45362.0,
+    "2024": 51692.0
+   },
+   "flags": [
+    "ONE_YEAR_CONCENTRATION 2022: 91% of net"
+   ],
+   "econ": {
+    "model": "intraday",
+    "eval_fee": 35.0,
+    "activation": 85.0,
+    "fees_are_assumptions": true,
+    "cost_per_funded_5d": 177.69354838709677
+   },
+   "lift": {
+    "K": 10,
+    "pool_flag": [
+     "exact"
+    ],
+    "eod": {
+     "real_p5": 0.3848964677222899,
+     "ctrl_p5": 0.302557856272838,
+     "ctrl_p5_sd": 0.010732468098373058,
+     "lift": 0.08233861144945188,
+     "ci": [
+      0.03654080389768575,
+      0.12436358099878198
+     ]
+    },
+    "realized": {
+     "real_p5": 0.3848964677222899,
+     "ctrl_p5": 0.302557856272838,
+     "ctrl_p5_sd": 0.010732468098373058,
+     "lift": 0.08233861144945188,
+     "ci": [
+      0.03654080389768575,
+      0.12436358099878198
+     ]
+    },
+    "intraday": {
+     "real_p5": 0.37758830694275275,
+     "ctrl_p5": 0.2990255785627284,
+     "ctrl_p5_sd": 0.009884045422006509,
+     "lift": 0.07856272838002436,
+     "ci": [
+      0.0338611449451888,
+      0.11997563946406821
+     ]
+    }
+   },
+   "search": {
+    "stable_p5": 0.3602314293384552,
+    "adj_score": 0.3602314293384552,
+    "forced_to_3": false
+   }
+  },
+  "best2": {
+   "firm": "apex",
+   "rules_id": "apex-legacy-50k@2026-09-27b",
+   "unconfirmed": true,
+   "primary": "intraday",
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 3000,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "members": [
+    {
+     "name": "hm-tod_drift-tf5#19|mid",
+     "micros": 60,
+     "fam": "tod_drift",
+     "sess": "mid",
+     "trades": 820,
+     "raw_net": 138540.0,
+     "net_share": 1.0,
+     "net_standalone_rules": 214578.0,
+     "net_marginal_rules": 291420.0
+    },
+    {
+     "name": "hm-tod_drift-tf5#4|nyam",
+     "micros": 20,
+     "fam": "tod_drift",
+     "sess": "nyam",
+     "trades": 820,
+     "raw_net": -17870.0,
+     "net_share": 0.0,
+     "net_standalone_rules": -17870.0,
+     "net_marginal_rules": 58972.0
+    }
+   ],
+   "guards": {
+    "n_members": 2,
+    "ge3": false,
+    "max_net_share": 1.0,
+    "share_ok": true,
+    "dup_pairs": 0,
+    "static_cap_ok": true
+   },
+   "eod": {
+    "p1": 0.4457978075517661,
+    "p2": 0.5213154689403167,
+    "p3": 0.535931790499391,
+    "p5": 0.5395858708891595,
+    "bust5": 0.4591961023142509,
+    "med_days": 1.0,
+    "ci_p1": [
+     0.4104750304506699,
+     0.47990255785627284
+    ],
+    "ci_p2": [
+     0.48112058465286234,
+     0.5566382460414129
+    ],
+    "ci_p3": [
+     0.49573690621193667,
+     0.5712545676004872
+    ],
+    "ci_p5": [
+     0.4993909866017052,
+     0.5749086479902558
+    ]
+   },
+   "realized": {
+    "p1": 0.4445797807551766,
+    "p2": 0.5164433617539586,
+    "p3": 0.5298416565164433,
+    "p5": 0.5310596833130329,
+    "bust5": 0.4689403166869671,
+    "med_days": 1.0
+   },
+   "intraday": {
+    "p1": 0.35931790499390986,
+    "p2": 0.3982947624847747,
+    "p3": 0.40194884287454324,
+    "p5": 0.40194884287454324,
+    "bust5": 0.5980511571254568,
+    "med_days": 1.0,
+    "ci_p1": [
+     0.3276492082825822,
+     0.38855054811205847
+    ],
+    "ci_p2": [
+     0.3654080389768575,
+     0.4287454323995128
+    ],
+    "ci_p3": [
+     0.36903166869671133,
+     0.4336175395858709
+    ],
+    "ci_p5": [
+     0.36903166869671133,
+     0.4336175395858709
+    ]
+   },
+   "headline": {
+    "p1": 0.35931790499390986,
+    "p2": 0.3982947624847747,
+    "p3": 0.40194884287454324,
+    "p5": 0.40194884287454324,
+    "bust5": 0.5980511571254568,
+    "med_days": 1.0,
+    "ci_p5": [
+     0.36903166869671133,
+     0.4336175395858709
+    ],
+    "model": "intraday"
+   },
+   "consistency": {
+    "enforced": false
+   },
+   "walk": {
+    "executed": 1503,
+    "skipped": 137,
+    "clipped": 0,
+    "opposite_conflicts_executed": 0,
+    "overlap_entries_executed": 0,
+    "max_concurrent_micros": 60,
+    "cap_violations": 0
+   },
+   "raw_overlap": {
+    "overlap_entries": 0,
+    "opposite_conflicts": 0,
+    "max_concurrent_micros": 60,
+    "cap_violations": 0,
+    "cap": 100,
+    "cap_ok": true
+   },
+   "series": {
+    "n_sessions": 825,
+    "trade_days": 820,
+    "net": 273550.0,
+    "mean_day": 333.5975609756098,
+    "median_day": -607.0,
+    "worst_day": -3030.0,
+    "best_day": 19148.0
+   },
+   "year_net": {
+    "2021": 14364.0,
+    "2022": 137434.0,
+    "2023": 12810.0,
+    "2024": 108942.0
+   },
+   "flags": [],
+   "econ": {
+    "model": "intraday",
+    "eval_fee": 35.0,
+    "activation": 85.0,
+    "fees_are_assumptions": true,
+    "cost_per_funded_5d": 172.07575757575756
+   },
+   "lift": {
+    "K": 10,
+    "pool_flag": [
+     "exact",
+     "NEAREST profile (dist 3.00): {'tf': 5, 'stop_mode': 'atr', 'stop_val': 1.5, 'tgt_r': 0.0, 'exit_bars': 6, 'trail_atr': 0.0, 'max_tr': 1}"
+    ],
+    "eod": {
+     "real_p5": 0.5395858708891595,
+     "ctrl_p5": 0.4403166869671133,
+     "ctrl_p5_sd": 0.010897766818971293,
+     "lift": 0.09926918392204628,
+     "ci": [
+      0.05042326431181487,
+      0.1375213154689403
+     ]
+    },
+    "realized": {
+     "real_p5": 0.5310596833130329,
+     "ctrl_p5": 0.43556638246041407,
+     "ctrl_p5_sd": 0.010061815555694702,
+     "lift": 0.09549330085261874,
+     "ci": [
+      0.04700974421437271,
+      0.13520401948842872
+     ]
+    },
+    "intraday": {
+     "real_p5": 0.40194884287454324,
+     "ctrl_p5": 0.3360535931790499,
+     "ctrl_p5_sd": 0.00834059357650182,
+     "lift": 0.0658952496954933,
+     "ci": [
+      0.022633982947624844,
+      0.10414433617539584
+     ]
+    }
+   },
+   "vs_single": {
+    "single": "hm-tod_drift-tf5#19|mid@60",
+    "single_stable_p5": 0.3602314293384552,
+    "single_cell_p5": 0.3602314293384552,
+    "delta_cell_p5": 0.041717413536088044,
+    "delta_stable": 0.030146151781082153
+   },
+   "search": {
+    "stable_p5": 0.39037758111953735,
+    "adj_score": 0.39037758111953735,
+    "forced_to_3": false
+   }
+  },
+  "portfolio": {
+   "firm": "apex",
+   "rules_id": "apex-legacy-50k@2026-09-27b",
+   "unconfirmed": true,
+   "primary": "intraday",
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 3000,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "members": [
+    {
+     "name": "hm-tod_drift-tf5#19|mid",
+     "micros": 60,
+     "fam": "tod_drift",
+     "sess": "mid",
+     "trades": 820,
+     "raw_net": 138540.0,
+     "net_share": 1.0,
+     "net_standalone_rules": 214578.0,
+     "net_marginal_rules": 291420.0
+    },
+    {
+     "name": "hm-tod_drift-tf5#4|nyam",
+     "micros": 20,
+     "fam": "tod_drift",
+     "sess": "nyam",
+     "trades": 820,
+     "raw_net": -17870.0,
+     "net_share": 0.0,
+     "net_standalone_rules": -17870.0,
+     "net_marginal_rules": 58972.0
+    }
+   ],
+   "guards": {
+    "n_members": 2,
+    "ge3": false,
+    "max_net_share": 1.0,
+    "share_ok": true,
+    "dup_pairs": 0,
+    "static_cap_ok": true
+   },
+   "eod": {
+    "p1": 0.4457978075517661,
+    "p2": 0.5213154689403167,
+    "p3": 0.535931790499391,
+    "p5": 0.5395858708891595,
+    "bust5": 0.4591961023142509,
+    "med_days": 1.0,
+    "ci_p1": [
+     0.4104750304506699,
+     0.47990255785627284
+    ],
+    "ci_p2": [
+     0.48112058465286234,
+     0.5566382460414129
+    ],
+    "ci_p3": [
+     0.49573690621193667,
+     0.5712545676004872
+    ],
+    "ci_p5": [
+     0.4993909866017052,
+     0.5749086479902558
+    ]
+   },
+   "realized": {
+    "p1": 0.4445797807551766,
+    "p2": 0.5164433617539586,
+    "p3": 0.5298416565164433,
+    "p5": 0.5310596833130329,
+    "bust5": 0.4689403166869671,
+    "med_days": 1.0
+   },
+   "intraday": {
+    "p1": 0.35931790499390986,
+    "p2": 0.3982947624847747,
+    "p3": 0.40194884287454324,
+    "p5": 0.40194884287454324,
+    "bust5": 0.5980511571254568,
+    "med_days": 1.0,
+    "ci_p1": [
+     0.3276492082825822,
+     0.38855054811205847
+    ],
+    "ci_p2": [
+     0.3654080389768575,
+     0.4287454323995128
+    ],
+    "ci_p3": [
+     0.36903166869671133,
+     0.4336175395858709
+    ],
+    "ci_p5": [
+     0.36903166869671133,
+     0.4336175395858709
+    ]
+   },
+   "headline": {
+    "p1": 0.35931790499390986,
+    "p2": 0.3982947624847747,
+    "p3": 0.40194884287454324,
+    "p5": 0.40194884287454324,
+    "bust5": 0.5980511571254568,
+    "med_days": 1.0,
+    "ci_p5": [
+     0.36903166869671133,
+     0.4336175395858709
+    ],
+    "model": "intraday"
+   },
+   "consistency": {
+    "enforced": false
+   },
+   "walk": {
+    "executed": 1503,
+    "skipped": 137,
+    "clipped": 0,
+    "opposite_conflicts_executed": 0,
+    "overlap_entries_executed": 0,
+    "max_concurrent_micros": 60,
+    "cap_violations": 0
+   },
+   "raw_overlap": {
+    "overlap_entries": 0,
+    "opposite_conflicts": 0,
+    "max_concurrent_micros": 60,
+    "cap_violations": 0,
+    "cap": 100,
+    "cap_ok": true
+   },
+   "series": {
+    "n_sessions": 825,
+    "trade_days": 820,
+    "net": 273550.0,
+    "mean_day": 333.5975609756098,
+    "median_day": -607.0,
+    "worst_day": -3030.0,
+    "best_day": 19148.0
+   },
+   "year_net": {
+    "2021": 14364.0,
+    "2022": 137434.0,
+    "2023": 12810.0,
+    "2024": 108942.0
+   },
+   "flags": [
+    "FEWER_THAN_3_MEMBERS: no feasible 3rd member under the guards (cap / net-share); this is the best 2-member"
+   ],
+   "econ": {
+    "model": "intraday",
+    "eval_fee": 35.0,
+    "activation": 85.0,
+    "fees_are_assumptions": true,
+    "cost_per_funded_5d": 172.07575757575756
+   },
+   "lift": {
+    "K": 10,
+    "pool_flag": [
+     "exact",
+     "NEAREST profile (dist 3.00): {'tf': 5, 'stop_mode': 'atr', 'stop_val': 1.5, 'tgt_r': 0.0, 'exit_bars': 6, 'trail_atr': 0.0, 'max_tr': 1}"
+    ],
+    "eod": {
+     "real_p5": 0.5395858708891595,
+     "ctrl_p5": 0.4403166869671133,
+     "ctrl_p5_sd": 0.010897766818971293,
+     "lift": 0.09926918392204628,
+     "ci": [
+      0.05042326431181487,
+      0.1375213154689403
+     ]
+    },
+    "realized": {
+     "real_p5": 0.5310596833130329,
+     "ctrl_p5": 0.43556638246041407,
+     "ctrl_p5_sd": 0.010061815555694702,
+     "lift": 0.09549330085261874,
+     "ci": [
+      0.04700974421437271,
+      0.13520401948842872
+     ]
+    },
+    "intraday": {
+     "real_p5": 0.40194884287454324,
+     "ctrl_p5": 0.3360535931790499,
+     "ctrl_p5_sd": 0.00834059357650182,
+     "lift": 0.0658952496954933,
+     "ci": [
+      0.022633982947624844,
+      0.10414433617539584
+     ]
+    }
+   },
+   "vs_single": {
+    "single": "hm-tod_drift-tf5#19|mid@60",
+    "single_stable_p5": 0.3602314293384552,
+    "single_cell_p5": 0.3602314293384552,
+    "delta_cell_p5": 0.041717413536088044,
+    "delta_stable": 0.030146151781082153
+   },
+   "search": {
+    "stable_p5": 0.39037758111953735,
+    "adj_score": 0.39037758111953735,
+    "forced_to_3": false
+   }
+  },
+  "single:hm-first_bar_mom-tf15#10|nyam@20": {
+   "members": [
+    {
+     "name": "hm-first_bar_mom-tf15#10|nyam",
+     "micros": 20
+    }
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 2000,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "search": {
+    "stable_p5": 0.35277101397514343,
+    "p5": 0.35292327404022217
+   }
+  },
+  "single:hm-first_bar_mom-tf15#11|nyam@20": {
+   "members": [
+    {
+     "name": "hm-first_bar_mom-tf15#11|nyam",
+     "micros": 20
+    }
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 2000,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "search": {
+    "stable_p5": 0.3518574833869934,
+    "p5": 0.35200974345207214
+   }
+  },
+  "single:hm-first_bar_mom-tf15#22|nyam@20": {
+   "members": [
+    {
+     "name": "hm-first_bar_mom-tf15#22|nyam",
+     "micros": 20
+    }
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 2000,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "search": {
+    "stable_p5": 0.35155296325683594,
+    "p5": 0.3517052233219147
+   }
+  }
+ },
+ "diag": {
+  "names": [
+   "hm-tod_drift-tf5#19|mid",
+   "hm-tod_drift-tf5#4|nyam"
+  ],
+  "corr": [
+   [
+    1.0,
+    -0.06018792871520547
+   ],
+   [
+    -0.060187928715205466,
+    1.0
+   ]
+  ],
+  "dd_overlap": [
+   [
+    1.0,
+    0.2606060606060606
+   ],
+   [
+    0.2606060606060606,
+    1.0
+   ]
+  ],
+  "lose_overlap": [
+   [
+    1.0,
+    0.8666666666666667
+   ],
+   [
+    0.47878787878787876,
+    1.0
+   ]
+  ],
+  "dd_days": [
+   165,
+   165
+  ],
+  "multi_dd_share": 0.14982578397212543
+ },
+ "evals": 624,
+ "secs": 430.43390107154846,
+ "calendar_sessions": 825,
+ "starts": 821,
+ "fee": {
+  "eval_fee": 35.0,
+  "activation": 85.0,
+  "assumption": true
+ }
+}

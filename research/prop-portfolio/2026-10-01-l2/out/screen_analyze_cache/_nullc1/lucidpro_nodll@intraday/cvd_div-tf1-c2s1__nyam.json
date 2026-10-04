@@ -1,0 +1,1 @@
+{"key": "cvd_div-tf1-c2s1", "fam_tf": "cvd_div-tf1", "family": "cvd_div", "tf": "1", "variant": "c2s1", "sess": "nyam", "firm": "lucidpro_nodll", "status": "ok", "lift": 0.02557856272838002, "ctrl": 0.3166869671132765, "real": 0.34226552984165654, "skipped": null, "elapsed_s": 0.93}

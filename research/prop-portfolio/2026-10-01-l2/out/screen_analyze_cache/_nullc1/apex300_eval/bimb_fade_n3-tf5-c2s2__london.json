@@ -1,0 +1,1 @@
+{"key": "bimb_fade_n3-tf5-c2s2", "fam_tf": "bimb_fade_n3-tf5", "family": "bimb_fade_n3", "tf": "5", "variant": "c2s2", "sess": "london", "firm": "apex300_eval", "status": "ok", "lift": 0.012655086848635234, "ctrl": 0.027047146401985113, "real": 0.03970223325062035, "skipped": null, "elapsed_s": 1.0}

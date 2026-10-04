@@ -1,0 +1,278 @@
+[
+ {
+  "label": "nyam Flex  4NQ day_take 1500",
+  "frozen": 1253,
+  "desk": 1253,
+  "counts": {
+   "days compared": 1253,
+   "entry identical (side,time,fill,trigger,stop)": 1253,
+   "take: both take, desk exit = fill +/- take pts": 1054,
+   "no take: exit time/price/reason + $ identical": 195,
+   "rule take, tester no fill (MFE exactly at limit, no penetration)": 4,
+   "   ...of which MFE exactly = the limit price": 4,
+   "tape first-trigger = desk exit (reason+time)": 1230,
+   "time exit (flat time)": 23
+  },
+  "research_sum": 272100,
+  "desk_sum": 254432,
+  "take_day_net_diff": [
+   24.0,
+   24.0
+  ],
+  "touch_only": [
+   [
+    "2021-11-04",
+    1504.0,
+    "sl",
+    -3536.0,
+    true
+   ],
+   [
+    "2022-05-06",
+    1504.0,
+    "sl",
+    -13696.0,
+    true
+   ],
+   [
+    "2022-11-04",
+    1504.0,
+    "sl",
+    -11616.0,
+    true
+   ],
+   [
+    "2024-03-12",
+    1504.0,
+    "sl",
+    -8196.0,
+    true
+   ]
+  ],
+  "missing": [],
+  "other": {},
+  "tp_pts": 19.0
+ },
+ {
+  "label": "nyam Pro   4NQ target 3000",
+  "frozen": 1253,
+  "desk": 1253,
+  "counts": {
+   "days compared": 1253,
+   "entry identical (side,time,fill,trigger,stop)": 1253,
+   "take: both take, desk exit = fill +/- take pts": 898,
+   "no take: exit time/price/reason + $ identical": 355,
+   "tape first-trigger = desk exit (reason+time)": 1175,
+   "time exit (flat time)": 78
+  },
+  "research_sum": 425100,
+  "desk_sum": 428692,
+  "take_day_net_diff": [
+   4.0,
+   4.0
+  ],
+  "touch_only": [],
+  "missing": [],
+  "other": {},
+  "tp_pts": 37.75
+ },
+ {
+  "label": "ORB  Pro   4NQ day_take 1000",
+  "frozen": 1253,
+  "desk": 1244,
+  "counts": {
+   "days compared": 1244,
+   "entry identical (side,time,fill,trigger,stop)": 1244,
+   "take: both take, desk exit = fill +/- take pts": 1080,
+   "no take: exit time/price/reason + $ identical": 161,
+   "missing_desk": 9,
+   "rule take, tester no fill (MFE exactly at limit, no penetration)": 3,
+   "   ...of which MFE exactly = the limit price": 3,
+   "tape first-trigger = desk exit (reason+time)": 1197,
+   "time exit (flat time)": 47
+  },
+  "research_sum": 69984,
+  "desk_sum": 70976,
+  "take_day_net_diff": [
+   24.0,
+   24.0
+  ],
+  "touch_only": [
+   [
+    "2022-05-25",
+    1004.0,
+    "time",
+    -4836.0,
+    true
+   ],
+   [
+    "2025-09-09",
+    1004.0,
+    "sl",
+    -6796.0,
+    true
+   ],
+   [
+    "2025-09-26",
+    1004.0,
+    "sl",
+    -10356.0,
+    true
+   ]
+  ],
+  "missing": [
+   "2021-11-26",
+   "2022-11-25",
+   "2023-07-03",
+   "2023-11-24",
+   "2024-07-03",
+   "2024-11-29",
+   "2024-12-24",
+   "2025-07-03",
+   "2025-12-24"
+  ],
+  "other": {},
+  "tp_pts": 12.75
+ },
+ {
+  "label": "pm   Flex  4NQ day_take 600",
+  "frozen": 1044,
+  "desk": 1044,
+  "counts": {
+   "days compared": 1044,
+   "entry identical (side,time,fill,trigger,stop)": 1044,
+   "take: both take, desk exit = fill +/- take pts": 927,
+   "no take: exit time/price/reason + $ identical": 113,
+   "rule take, tester no fill (MFE exactly at limit, no penetration)": 4,
+   "   ...of which MFE exactly = the limit price": 4,
+   "tape first-trigger = desk exit (reason+time)": 941,
+   "time exit (flat time)": 103
+  },
+  "research_sum": -5668,
+  "desk_sum": -5604,
+  "take_day_net_diff": [
+   24.0,
+   24.0
+  ],
+  "touch_only": [
+   [
+    "2022-01-05",
+    604.0,
+    "sl",
+    -11136.0,
+    true
+   ],
+   [
+    "2023-05-11",
+    604.0,
+    "time",
+    -3856.0,
+    true
+   ],
+   [
+    "2023-06-02",
+    604.0,
+    "time",
+    -1716.0,
+    true
+   ],
+   [
+    "2025-12-02",
+    604.0,
+    "time",
+    -3156.0,
+    true
+   ]
+  ],
+  "missing": [],
+  "other": {},
+  "tp_pts": 7.75
+ },
+ {
+  "label": "pm   Flex  3NQ day_take 600",
+  "frozen": 1044,
+  "desk": 1044,
+  "counts": {
+   "days compared": 1044,
+   "entry identical (side,time,fill,trigger,stop)": 1044,
+   "take: both take, desk exit = fill +/- take pts": 891,
+   "no take: exit time/price/reason + $ identical": 151,
+   "rule take, tester no fill (MFE exactly at limit, no penetration)": 2,
+   "   ...of which MFE exactly = the limit price": 2,
+   "tape first-trigger = desk exit (reason+time)": 908,
+   "time exit (flat time)": 136
+  },
+  "research_sum": 14988,
+  "desk_sum": 28812,
+  "take_day_net_diff": [
+   18.0,
+   18.0
+  ],
+  "touch_only": [
+   [
+    "2024-10-11",
+    603.0,
+    "time",
+    -1587.0,
+    true
+   ],
+   [
+    "2026-06-02",
+    603.0,
+    "time",
+    543.0,
+    true
+   ]
+  ],
+  "missing": [],
+  "other": {},
+  "tp_pts": 10.25
+ },
+ {
+  "label": "pm   Flex  2NQ day_take 600",
+  "frozen": 1044,
+  "desk": 1044,
+  "counts": {
+   "days compared": 1044,
+   "entry identical (side,time,fill,trigger,stop)": 1044,
+   "take: both take, desk exit = fill +/- take pts": 819,
+   "no take: exit time/price/reason + $ identical": 222,
+   "rule take, tester no fill (MFE exactly at limit, no penetration)": 3,
+   "   ...of which MFE exactly = the limit price": 3,
+   "tape first-trigger = desk exit (reason+time)": 842,
+   "time exit (flat time)": 202
+  },
+  "research_sum": 28614,
+  "desk_sum": 31308,
+  "take_day_net_diff": [
+   12.0,
+   12.0
+  ],
+  "touch_only": [
+   [
+    "2022-09-26",
+    602.0,
+    "time",
+    -2298.0,
+    true
+   ],
+   [
+    "2023-10-06",
+    602.0,
+    "time",
+    -1268.0,
+    true
+   ],
+   [
+    "2024-09-27",
+    602.0,
+    "time",
+    -1798.0,
+    true
+   ]
+  ],
+  "missing": [],
+  "other": {},
+  "tp_pts": 15.25
+ }
+]

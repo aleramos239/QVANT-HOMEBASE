@@ -1,0 +1,1 @@
+{"key": "cvd_div-tf1-c2s2", "fam_tf": "cvd_div-tf1", "family": "cvd_div", "tf": "1", "variant": "c2s2", "sess": "mid", "firm": "apex300_eval", "status": "ok", "lift": 0.05111662531017369, "ctrl": 0.01588089330024814, "real": 0.06699751861042183, "skipped": null, "elapsed_s": 0.91}

@@ -1,0 +1,580 @@
+"""Funded / PA lifecycle simulators on top of evalcore's day walk (rules: FUNDED_RULES.md, user 2026-09-30).
+
+Run with /usr/bin/python3 (numpy) and PYTHONPATH=~/ramos-quant-homebase. Research window only (evalcore drops 2025+).
+
+FIRMS (make_spec): 'flex' (LucidFlex funded, dll 0 | 1200), 'pro' (LucidPro funded, dll 1200 | 0), 'apex' (Apex Legacy PA, UNCONFIRMED).
+One attempt = a fresh funded account on a rolling start session, run up to H = 60 sessions (no-trade weekdays are sessions).
+Sizing: the day walk (`walk_day`, evalcore._walk_day semantics incl. overlaps, day_stop / day_lock / day_take / max_day_tr and
+the soft DLL) is re-run per (session, size cap, DLL on/off, Apex MAE limit) and memoised in `DaySrc`; with the extras off it is
+bit-identical to evalcore._walk_day (test_funded.py checks this, plus bust-day parity with evalcore.race_funded).
+
+ACCOUNT MECHANICS (per firm)
+Flex   MLL $2,000 EOD trail, locks at +$100 once EOD peak >= +$2,100 AND at the first payout. Scaling (EOD update, on profit =
+       balance - 50k, AFTER the payout): <1000 -> 20 micros, <2000 -> 30, else 40. Payout eligible per cycle: >= 5 days with day P&L
+       >= $150 and cycle net P&L > 0; cheque = min(50% x profit, $2,000) >= $500 (profit >= $1,000); 5 payouts then the sim stops.
+       Split 90/10. Optional soft DLL (assumed $1,200): the day is stopped / capped at -DLL.
+Pro    same MLL; NO scaling (cap 40); soft DLL $1,200 (on/off) that applies WHILE the EOD balance is below $52,100 (literal FUNDED_RULES reading,
+       re-evaluated at every session start: it switches back on if the balance falls below $52,100 again; `dll_off_above` = 2100,
+       `dll_sticky=True` restores the old, optimistic 'off for good once EOD profit > $2,100' behaviour).
+       Payout eligible per cycle: cycle profit >= $500, largest single day in the cycle <= 40% of cycle profit; buffer: the balance
+       after the payout >= $52,100 -> cheque = min(cap, balance - 52,100) >= $500, cap $2,000 (1st) / $2,500 (2nd+). Split 90/10.
+Apex   Trailing DD $2,500 INTRADAY on equity incl. open P&L, floor locks at +$100 once the intraday peak >= +$2,600.
+       Half size (50 micros) until the EOD profit exceeds $2,600 (sticky unless sticky_full=False), then 100. MAE rule: a trade whose
+       open loss reaches max(30% x start-of-day profit, $750) [50% once start-of-day profit >= $5,200] is cut at that loss (-1 tick
+       slippage, commission) and counted (`cuts`); a cut trade skips the day_take check (pessimistic).
+       Payout per cycle (since start / last payout): >= 8 traded sessions, >= 5 of them with P&L >= $50, largest day <= 30% of the
+       profit balance at request (payouts 1-5), safety net for payouts 1-3: balance after payout >= $52,100 (cheque = min($2,000,
+       balance - 52,100) >= $500, i.e. balance >= $52,600), payouts 4+: balance after >= $50,200 (ASSUMED). Cap $2,000 for payouts 1-5,
+       none from the 6th. Split: 100% of the first $25k paid, 90% after. No stop at N payouts.
+       Intraday peak approximation: per trade (entry order) equity = realised + open trades' worst points (lows) / best points (MFE,
+       net of costs; highs). Order 'pess' (primary): MFE before MAE, every trade (extreme: a winner is assumed to round-trip from
+       its MFE down to its MAE); 'opt' (bound): MAE first, and the MFE of a trade cut or stopped out is never credited; 'nat'
+       (extra, in between): winners MAE-then-MFE, losers / cut / stopped trades MFE-then-MAE. A trade flattened by day_take is
+       physically low-then-high in every order.
+BREACH (Lucid, same meaning as evalcore): 'realized' (primary) = EOD profit or the lowest realised balance after a trade close <=
+       floor; 'eod' = EOD profit <= floor (optimistic bound); 'intraday' = the day's worst point (open MAE) <= floor (conservative).
+POLICY T in (500, 1000, 1500, 'max', None): request on the first EOD the firm's eligibility holds AND cheque >= T ('max' = the
+       firm's per-payout cap); None = never request.
+COMPLIANCE (Apex): `apex_flags` (OCO families, tgt_r < 0.2 / no target, day_stop that acts as the trailing threshold, MAE cuts).
+"""
+from __future__ import annotations
+
+import csv
+import datetime as dt
+import itertools
+import json
+import math
+import multiprocessing as mp
+import sys
+import time
+from pathlib import Path
+
+import numpy as np
+
+R = Path(__file__).resolve().parent
+if str(R) not in sys.path:
+    sys.path.insert(0, str(R))
+import evalcore as E                                   # noqa: E402
+from evalcore import PS, cost, TICK_USD                # noqa: E402
+
+H_LIFE = 60
+POLICIES = (500, 1000, 1500, "max")
+ORDERS = ("pess", "opt", "nat")
+LIFE_MODELS = E.MODELS + ORDERS
+
+
+# ------------------------------------------------------------------ firm specs
+
+class Spec:
+    """Immutable-ish firm parameter bag; build with make_spec()."""
+
+    def __init__(self, **kw):
+        self.__dict__.update(kw)
+
+    def __repr__(self):
+        return f"Spec({self.name})"
+
+
+def make_spec(firm: str, dll: float | None = None, **over) -> Spec:
+    """firm: 'flex' | 'pro' | 'apex'. dll: soft daily limit $ (flex default 0, pro default 1200, apex none).
+    Options (all overridable): pro dll_off_above / dll_sticky, apex sticky_full, apex_cons_base, apex_days_count."""
+    if firm == "flex":
+        r = E.firm_rules("lucid")[1]
+        d = dict(name="flex" + (f"_dll{int(dll)}" if dll else ""), kind="flex", dll=float(dll or 0.0), mll=r["trailing_mll"],
+                 lock_at=r["lock_at"], lock_floor=r["lock_floor"], win_day=150.0, win_days=5, share=0.5, pay_cap=2000.0,
+                 min_pay=500.0, caps=[min(r["scaling_micros"][k], r["cap_micros"]) for k in ("start", "at_1000", "at_2000")],
+                 cap=r["cap_micros"], split=0.9, max_pays=5, primary="realized")
+    elif firm == "pro":
+        r = E.firm_rules("lucidpro_nodll")[1]
+        dll = 1200.0 if dll is None else float(dll)
+        d = dict(name="pro" + ("_dll%d" % dll if dll else "_nodll"), kind="pro", dll=dll, mll=r["trailing_mll"],
+                 lock_at=r["lock_at"], lock_floor=r["lock_floor"], cap=r["cap_micros"], min_pay=500.0, min_cycle=500.0,
+                 cons=0.40, buffer=2100.0, pay_caps=(2000.0, 2500.0), split=0.9, dll_off_above=2100.0, dll_sticky=False, primary="realized")
+    elif firm == "apex":
+        r = E.firm_rules("apex")[1]
+        d = dict(name="apex", kind="apex", dll=0.0, mll=2500.0, lock_at=2600.0, lock_floor=100.0, cap=r["cap_micros"],
+                 half=r["cap_micros"] // 2, unlock=2600.0, sticky_full=True, mae_pct=0.30, mae_pct_hi=0.50, mae_hi_at=5200.0,
+                 mae_min=750.0, min_days=8, win_days=5, win_day=50.0, cons=0.30, cons_until=5, cons_base="balance",
+                 days_count="traded", net_pay=2100.0, net_pays=3, post_net_min=200.0, min_pay=500.0, pay_cap=2000.0,
+                 cap_pays=5, split_full=1.0, split_after=0.9, split_until=25000.0, primary="pess")
+    else:
+        raise ValueError(f"unknown firm {firm!r}")
+    d.update(over)
+    return Spec(**d)
+
+
+# ------------------------------------------------------------------ day walk (evalcore._walk_day + MAE cut + events)
+
+def walk_day(trs, mfes, cap, rl, micros, dll=0.0, tk=0.0, lim=0.0, ev=False):
+    """One session. rl = evalcore norm_rules tuple. tk = day_take X. lim = Apex MAE limit ($ open loss, 0 = off).
+    -> (tot, worst, wreal, n_executed, events_pess, events_opt, n_cut, events_nat). Events (only if ev) = tuples of (kind, $ relative
+    to the day start): kind 1 = equity high (peak candidate), 0 = equity low (breach test), in time order (module docstring)."""
+    mt, ds, dl, al, aw, _ = rl
+    if dll and (not ds or dll < ds):
+        ds = dll
+    realised, mult, nent, stop, rmin, ncut = 0.0, 1.0, 0, False, 0.0, 0
+    opens, ep, ee, evp, evo, evn = [], [], [], [], [], []
+
+    def flush(upto):
+        nonlocal realised, mult, stop, rmin
+        opens.sort()
+        while opens and opens[0][0] <= upto:
+            _, p, _, _, _, _ = opens.pop(0)
+            realised += p
+            mult = al if p < 0 else (aw if p > 0 else 1.0)
+            if dl and realised >= dl:
+                stop = True
+            rmin = min(rmin, realised)
+
+    for k, (te, tx, sd, g, mae, m, rk, _) in enumerate(trs):
+        if opens:
+            flush(te)
+        if stop or (mt and nent >= mt):
+            continue
+        n = micros or m
+        if mult != 1.0:
+            n = max(1, int(n * mult + 1e-9))
+        if n > cap:
+            n = cap
+        c = cost(n)
+        p0 = n * g / 10.0 - c
+        p = p0
+        w = min(p, -mae * n / 10.0 - c)
+        cutf = took = trunc = False
+        if lim and n * mae / 10.0 >= lim:                     # MAE rule: forced cut at the limit (+1 tick slippage, commission)
+            p = -lim - TICK_USD * n - c
+            w, cutf, trunc, ncut = p, True, True, ncut + 1
+        ow = op = ob = 0.0
+        for o in opens:
+            ow, op, ob = ow + o[2], op + o[1], ob + o[5]
+        e = realised + ow + w
+        if ds and e <= -ds:                                   # day_stop / DLL: closed at -Y (+1 tick/contract)
+            p = -ds - (realised + op) - TICK_USD * n
+            w, stop, trunc = p, True, True
+            flat = True
+            e = realised + ow + w
+        else:
+            flat = False
+            if tk and not cutf:
+                best = max(n * mfes[k] / 10.0 - c, p) if mfes is not None else p
+                if realised + op + best >= tk:
+                    p = tk - TICK_USD * n - (realised + op)
+                    w, stop, flat, took = min(w, p), True, True, True
+                    e = realised + ow + w
+        if ev:
+            braw = max(n * mfes[k] / 10.0 - c, p0) if mfes is not None else p0
+            if took:
+                evp += [(0, e), (1, realised + op + p)]
+                evo += [(0, e), (1, realised + op + p)]
+                evn += [(0, e), (1, realised + op + p)]
+            else:
+                evp += [(1, realised + ob + braw), (0, e)]
+                evo += [(0, e)] if trunc else [(0, e), (1, realised + op + braw)]
+                evn += [(1, realised + op + braw), (0, e)] if (trunc or p0 < 0) else [(0, e), (1, realised + op + braw)]
+        nent += 1
+        ep.append(p)
+        ee.append(e)
+        if flat:
+            realised += op + p
+            rmin = min(rmin, realised)
+            opens.clear()
+        else:
+            opens.append((tx, p, w, sd, n, max(p, n * mfes[k] / 10.0 - c) if mfes is not None else p))
+    flush(float("inf"))
+    if not ep:
+        return 0.0, 0.0, 0.0, 0, (), (), 0, ()
+    tot = sum(ep)
+    wr = min(rmin, tot)
+    worst = min(min(ee), tot)
+    if ev:
+        evp += [(1, tot), (0, tot)]
+        evo += [(1, tot), (0, tot)]
+        evn += [(1, tot), (0, tot)]
+    return tot, worst, wr, nent, tuple(evp), tuple(evo), ncut, tuple(evn)
+
+
+class DaySrc:
+    """Memoised day walks of one portfolio under fixed sizing (micros) and day rules."""
+
+    def __init__(self, P, rules: dict | None = None, micros: int | None = None, events: bool = False):
+        self.P, self.micros, self.ev = P, micros, events
+        self.rl = E.norm_rules(rules)
+        self.tk = E.take_rules(rules)[0]
+        self.memo, self._bound = {}, {}
+        self.n_days = len(P.days)
+
+    def _bd(self, i, cap):
+        k = (i, cap)
+        if k not in self._bound:
+            scaled = self.rl[3] != 1.0 or self.rl[4] != 1.0            # after_loss / after_win may change the size
+            self._bound[k] = max([(cap if scaled else min(self.micros or t[5], cap)) * t[4] / 10.0
+                                  for t in self.P.days[i]] or [0.0])
+        return self._bound[k]
+
+    def get(self, i, cap, dll=0.0, lim=0.0):
+        if lim and self._bd(i, cap) < lim:                    # no trade can reach the limit: same walk as without it
+            lim = 0.0
+        key = (i, cap, dll, lim)
+        o = self.memo.get(key)
+        if o is None:
+            trs = self.P.days[i]
+            if not trs:
+                o = (0.0, 0.0, 0.0, 0, (), (), 0, ())
+            else:
+                mf = getattr(self.P, "mfe", None)
+                o = walk_day(trs, mf[i] if mf else None, cap, self.rl, self.micros, dll, self.tk, lim, self.ev)
+            self.memo[key] = o
+        return o
+
+
+# ------------------------------------------------------------------ lifecycle
+
+def _need(T, cap_pay):
+    return cap_pay if T == "max" else float(T)
+
+
+def _sim_lucid(S, src, s, H, T, model):
+    """Flex / Pro funded attempt from session index s. -> (bust_day, [(day, gross, net)], cuts, executed)."""
+    flex = S.kind == "flex"
+    profit = peak = 0.0
+    floor, locked = -float(S.mll), False
+    dll_on = S.dll > 0
+    bust, pays, ex = 0, [], 0
+    cw = 0                                                      # flex: days >= win_day this cycle
+    cs = cmax = cstart = 0.0                                    # flex: cycle net; pro: cycle max day / cycle start profit
+    caps = S.caps if flex else None
+    for k in range(H):
+        cap = (caps[0] if profit < 1000 else (caps[1] if profit < 2000 else caps[2])) if flex else S.cap
+        if not flex and S.dll > 0 and S.dll_off_above is not None and not S.dll_sticky:
+            dll_on = profit < S.dll_off_above                   # LucidPro: the DLL applies while balance < 52,100 (profit < 2,100)
+        dl = S.dll if dll_on else 0.0
+        o = src.get(s + k, cap, dl, 0.0)
+        pnl = o[0]
+        if dl and pnl < -dl:
+            pnl = -dl
+        new = profit + pnl
+        b = new <= floor
+        if not b:
+            if model == "intraday":
+                b = profit + o[1] <= floor
+            elif model == "realized":
+                b = profit + o[2] <= floor
+        if b:
+            bust = k + 1
+            break
+        ex += o[3]
+        profit = new
+        if profit > peak:
+            peak = profit
+        floor = S.lock_floor if (locked or peak >= S.lock_at) else peak - S.mll
+        if not flex and dll_on and S.dll_sticky and S.dll_off_above is not None and profit > S.dll_off_above:
+            dll_on = False                                      # legacy (optimistic): off for good once EOD profit > $2,100
+        if T is None:
+            continue
+        if flex:
+            if pnl >= S.win_day:
+                cw += 1
+            cs += pnl
+            if cw >= S.win_days and cs > 0:
+                ch = min(S.share * profit, S.pay_cap)
+                if ch >= S.min_pay and ch >= _need(T, S.pay_cap) - 1e-9:
+                    pays.append((k + 1, ch, ch * S.split))
+                    profit -= ch
+                    locked, floor, cw, cs = True, S.lock_floor, 0, 0.0
+                    if len(pays) >= S.max_pays:
+                        break
+        else:
+            cmax = max(cmax, pnl)
+            cp = profit - cstart
+            if cp >= S.min_cycle and cmax <= S.cons * cp + 1e-9:
+                capn = S.pay_caps[0] if not pays else S.pay_caps[1]
+                ch = min(capn, profit - S.buffer)
+                if ch >= S.min_pay and ch >= _need(T, capn) - 1e-9:
+                    pays.append((k + 1, ch, ch * S.split))
+                    profit -= ch
+                    cstart, cmax = profit, 0.0
+    return bust, pays, 0, ex
+
+
+def _sim_apex(S, src, s, H, T, order):
+    """Apex PA attempt. order 'pess' | 'opt' picks the intraday event order. -> (bust_day, pays, cuts, executed)."""
+    profit = peak = 0.0
+    full = False
+    bust, pays, cuts, ex, paid_gross = 0, [], 0, 0, 0.0
+    cd = cw = 0
+    cmax = cstart = 0.0
+    sel = {"pess": 4, "opt": 5, "nat": 7}[order]
+    for k in range(H):
+        cap = S.cap if full else S.half
+        pct = S.mae_pct_hi if profit >= S.mae_hi_at else S.mae_pct
+        lim = max(pct * profit, S.mae_min)
+        o = src.get(s + k, cap, 0.0, lim)
+        pk, dead = peak, False
+        for kind, v in o[sel]:
+            x = profit + v
+            if kind:
+                if x > pk:
+                    pk = x
+            elif x <= (S.lock_floor if pk >= S.lock_at else pk - S.mll):
+                dead = True
+                break
+        if dead:
+            bust = k + 1
+            break
+        peak = pk
+        pnl = o[0]
+        profit += pnl
+        cuts += o[6]
+        ex += o[3]
+        if profit > S.unlock:
+            full = True
+        elif not S.sticky_full and profit <= S.unlock:
+            full = False
+        if S.days_count == "all" or o[3] > 0:
+            cd += 1
+        if pnl >= S.win_day:
+            cw += 1
+        cmax = max(cmax, pnl)
+        if T is None or cd < S.min_days or cw < S.win_days:
+            continue
+        idx = len(pays) + 1
+        base = profit if S.cons_base == "balance" else profit - cstart
+        if idx <= S.cons_until and cmax > S.cons * base + 1e-9:
+            continue
+        avail = profit - (S.net_pay if idx <= S.net_pays else S.post_net_min)
+        ch = min(S.pay_cap if idx <= S.cap_pays else math.inf, avail)
+        if ch >= S.min_pay and ch >= _need(T, S.pay_cap) - 1e-9:
+            full_part = min(ch, max(0.0, S.split_until - paid_gross))
+            pays.append((k + 1, ch, full_part * S.split_full + (ch - full_part) * S.split_after))
+            paid_gross += ch
+            profit -= ch
+            cd = cw = 0
+            cmax, cstart = 0.0, profit
+    return bust, pays, cuts, ex
+
+
+def simulate(S: Spec, src, s: int, H: int = H_LIFE, T=500, model: str | None = None):
+    """One attempt from session s. model: Lucid 'eod'|'realized'|'intraday', Apex 'pess'|'opt' (default: the firm's primary)."""
+    model = model or S.primary
+    if S.kind == "apex":
+        if model not in ORDERS:
+            raise ValueError(f"apex model {model!r} not in {ORDERS}")
+        return _sim_apex(S, src, s, H, T, model)
+    if model not in E.MODELS:
+        raise ValueError(f"model {model!r} not in {E.MODELS}")
+    return _sim_lucid(S, src, s, H, T, model)
+
+
+def lifecycle(S: Spec, src, T=500, H: int = H_LIFE, model: str | None = None, starts=None) -> list:
+    """All rolling starts (sessions with a full H-session horizon, like evalcore's funded race) -> list of attempt tuples."""
+    starts = range(src.n_days - H + 1) if starts is None else starts
+    return [simulate(S, src, s, H, T, model) for s in starts]
+
+
+def metrics(res: list, H: int = H_LIFE) -> dict:
+    """Aggregate attempts. $ values: 'gross' = cheques requested, 'net' = to the trader after the split."""
+    N = len(res)
+    if not N:
+        return {"n": 0}
+    first = np.array([r[1][0][0] if r[1] else 0 for r in res])
+    bust = np.array([r[0] for r in res])
+    g1 = np.array([r[1][0][1] if r[1] else 0.0 for r in res])
+    n1 = np.array([r[1][0][2] if r[1] else 0.0 for r in res])
+    npay = np.array([len(r[1]) for r in res])
+    paid = first > 0
+
+    def net_by(k):
+        return float(np.mean([sum(p[2] for p in r[1] if p[0] <= k) for r in res]))
+
+    def npay_by(k):
+        return float(np.mean([sum(1 for p in r[1] if p[0] <= k) for r in res]))
+
+    ex = sum(r[3] for r in res)
+    return {"n": N, "p_pay_20": float(((first > 0) & (first <= 20)).mean()), "p_pay_40": float(((first > 0) & (first <= 40)).mean()),
+            "p_pay_60": float(paid.mean()), "med_days_first": float(np.median(first[paid])) if paid.any() else None,
+            "e_first_gross": float(g1.mean()), "e_first_net": float(n1.mean()),
+            "e_cheque_if_paid": float(g1[paid].mean()) if paid.any() else None,
+            "e_net_40": net_by(40), "e_net_60": net_by(H), "p_bust_pre_first": float(((bust > 0) & ~paid).mean()),
+            "p_bust_any": float((bust > 0).mean()), "e_npay_60": float(npay.mean()), "e_npay_40": npay_by(40),
+            "cut_share": (sum(r[2] for r in res) / ex) if ex else 0.0, "cuts": int(sum(r[2] for r in res))}
+
+
+def evaluate_funded(P, firm: str, *, micros: int | None = None, rules: dict | None = None, policy=500, dll=None,
+                    models=None, H: int = H_LIFE, strategy: str | None = None, inputs: dict | None = None, **spec_over) -> dict:
+    """One config -> {model: metrics} for a firm ('flex' | 'pro' | 'apex'), all breach models of that firm."""
+    S = make_spec(firm, dll, **spec_over)
+    src = DaySrc(P, rules, micros, events=S.kind == "apex")
+    out = {}
+    for m in models or (ORDERS if S.kind == "apex" else E.MODELS):
+        out[m] = metrics(lifecycle(S, src, policy, H, m), H)
+    out["primary"] = S.primary
+    if S.kind == "apex":
+        out["flags"] = apex_flags(strategy, inputs, rules, out[S.primary]["cut_share"])
+        out["mae_over_limit_share"] = mae_over_limit_share(P, micros, S.half, S.mae_min)
+    return out
+
+
+# ------------------------------------------------------------------ Apex compliance
+
+OCO_FAMS = {"straddle", "orb", "lon_break"}
+
+
+def apex_flags(strategy: str | None = None, inputs: dict | None = None, rules: dict | None = None,
+               cut_share: float | None = None) -> list[str]:
+    """Apex PA compliance flags (empty list = none found). strategy = family name or tester id ('draft_pp_orb' ...)."""
+    f, inp = [], inputs or {}
+    fam = (strategy or "").replace("draft_", "").replace("pp_", "")
+    if fam in OCO_FAMS or (fam == "squeeze" and inp.get("sq_type", "bbkc") in ("nr7", "inside")) \
+            or (fam == "ib" and inp.get("mode", "break") == "break"):
+        f.append("OCO_both_side_orders")
+    if inputs is not None:
+        t = inp.get("tgt_r", 2.0)
+        if not t or float(t) < 0.2:
+            f.append("no_target_or_stop_gt_5x_target")
+    ds = float((rules or {}).get("day_stop") or 0.0)
+    if ds >= 2000.0:
+        f.append("day_stop_acts_as_trailing_threshold")
+    if cut_share:
+        f.append(f"mae30_cuts_{cut_share:.3f}" + ("_NONCOMPLIANT" if cut_share > 0.02 else ""))
+    return f
+
+
+def mae_over_limit_share(P, micros: int | None = None, cap: int = 50, lim: float = 750.0) -> float:
+    """Static Apex MAE-rule screen: share of trades whose open loss (MAE scaled to `micros`, capped at `cap`) reaches the zero-profit
+    limit ($750): they would be cut in a fresh PA whatever the account state. Independent of the lifecycle."""
+    n = t = 0
+    for trs in P.days:
+        for x in trs:
+            t += 1
+            n += min(micros or x[5], cap) * x[4] / 10.0 >= lim
+    return n / t if t else 0.0
+
+
+# ------------------------------------------------------------------ search helper
+
+GRID = {"micros": None, "day_take": [0, 150, 250, 400, 600, 1000], "day_lock": [0, 300, 600, 1000],
+        "day_stop": [0, 300, 600, 1000], "max_day_tr": [1, 0], "policy": list(POLICIES)}
+AXES = ("micros", "day_take", "day_lock", "day_stop", "max_day_tr", "policy")
+
+
+def default_micros(S: Spec) -> list[int]:
+    return [10, 20, 30, 40] if S.kind != "apex" else [10, 20, 30, 50, 75, 100]
+
+
+def desk_window_wait(now: dt.datetime | None = None, sleep=time.sleep) -> float:
+    """Sleep out the 09:18-09:36 ET weekday window (live desk trades at 09:30). Returns seconds slept."""
+    t = now or dt.datetime.now(E.ET)
+    if t.weekday() < 5 and dt.time(9, 18) <= t.time() < dt.time(9, 36):
+        end = t.replace(hour=9, minute=36, second=5, microsecond=0)
+        sec = (end - t).total_seconds()
+        sleep(sec)
+        return sec
+    return 0.0
+
+
+_G: dict = {}
+
+
+def _cell(combo):
+    """One (micros, day_take, day_lock, day_stop, max_day_tr) cell -> rows, one per policy (fork worker / inline)."""
+    desk_window_wait()
+    P, S, g, model, H = _G["P"], _G["S"], _G["grid"], _G["model"], _G["H"]
+    mi, tk, dl, ds, mt = (g[a][i] for a, i in zip(AXES[:5], combo))
+    rules = {"day_take": tk, "day_lock": dl, "day_stop": ds, "max_day_tr": mt}
+    src = DaySrc(P, rules, mi, events=S.kind == "apex")
+    rows = []
+    for pi, T in enumerate(g["policy"]):
+        m = metrics(lifecycle(S, src, T, H, model), H)
+        rows.append({"firm": S.name, "model": model or S.primary, "micros": mi, "day_take": tk, "day_lock": dl, "day_stop": ds,
+                     "max_day_tr": mt, "policy": T, "n_rules": sum(bool(x) for x in (tk, dl, ds, mt)),
+                     "_ix": combo + (pi,), **m})
+        if S.kind == "apex":
+            rows[-1]["apex_noncompliant"] = m.get("cut_share", 0.0) > 0.02
+    return rows
+
+
+def search(P, S: Spec, grid: dict | None = None, model: str | None = None, H: int = H_LIFE, workers: int = 1) -> list[dict]:
+    """Grid over micros x day_take x day_lock x day_stop x max_day_tr x policy. Adds stab_<key> = median of the cell's grid
+    neighbours (+-1 step on one axis) for e_net_40 / p_pay_20 and score_<key> = min(own, stab)."""
+    g = {**GRID, **(grid or {})}
+    g["micros"] = g["micros"] or default_micros(S)
+    cap = S.cap
+    g["micros"] = [m for m in g["micros"] if m <= cap]
+    _G.update(P=P, S=S, grid=g, model=model, H=H)
+    combos = list(itertools.product(*[range(len(g[a])) for a in AXES[:5]]))
+    if workers > 1:
+        with mp.get_context("fork").Pool(workers) as pool:
+            parts = pool.map(_cell, combos, chunksize=max(1, len(combos) // (workers * 8)))
+    else:
+        parts = [_cell(c) for c in combos]
+    rows = [r for part in parts for r in part]
+    add_stability(rows, ("e_net_40", "p_pay_20"))
+    return rows
+
+
+def add_stability(rows: list[dict], keys=("e_net_40",)) -> None:
+    by = {r["_ix"]: r for r in rows}
+    for r in rows:
+        for key in keys:
+            nb = []
+            for ax in range(len(AXES)):
+                for d in (-1, 1):
+                    c = list(r["_ix"])
+                    c[ax] += d
+                    o = by.get(tuple(c))
+                    if o is not None:
+                        nb.append(o[key])
+            r["stab_" + key] = float(np.median(nb)) if nb else r[key]
+            r["score_" + key] = min(r[key], r["stab_" + key])
+
+
+def pick_cells(rows: list[dict], min_p60: float = 0.5) -> dict:
+    """Best cells: e40_stable (max score_e_net_40; ties fewer rules), p20_stable / p20_raw (P(payout by 20 d)),
+    e40_raw, speed (lowest median days to first payout among cells with p_pay_60 >= min_p60, ties higher e_net_40)."""
+    def best(key, rs, sign=1):
+        return max(rs, key=lambda r: (sign * r[key], -r["n_rules"])) if rs else None
+
+    ok = [r for r in rows if r.get("n")]
+    sp = [r for r in ok if r["p_pay_60"] >= min_p60 and r["med_days_first"] is not None]
+    return {"e40_stable": best("score_e_net_40", ok), "e40_raw": best("e_net_40", ok),
+            "p20_stable": best("score_p_pay_20", ok), "p20_raw": best("p_pay_20", ok),
+            "speed": min(sp, key=lambda r: (r["med_days_first"], -r["e_net_40"])) if sp else None}
+
+
+def write_csv(rows: list[dict], path) -> None:
+    cols = [k for k in rows[0] if not k.startswith("_")] if rows else []
+    with open(path, "w", newline="") as f:
+        w = csv.DictWriter(f, cols, extrasaction="ignore")
+        w.writeheader()
+        w.writerows(rows)
+
+
+def _fmt(r: dict | None) -> str:
+    if not r:
+        return "none"
+    return (f"{r['firm']} m{r['micros']} tk{r['day_take']} lk{r['day_lock']} st{r['day_stop']} mt{r['max_day_tr']} T{r['policy']}: "
+            f"E$40={r['e_net_40']:.0f} (stab {r['stab_e_net_40']:.0f}) P20={r['p_pay_20']:.2f} P60={r['p_pay_60']:.2f} "
+            f"med={r['med_days_first']} chq={r['e_first_gross']:.0f} bustPre={r['p_bust_pre_first']:.2f}")
+
+
+def main(argv=None):
+    import argparse
+    ap = argparse.ArgumentParser(description="funded lifecycle search on an evalcore cfg json {members:[...], rules?}")
+    ap.add_argument("cfg")
+    ap.add_argument("--firms", default="flex,flex_dll,pro,pro_nodll,apex")
+    ap.add_argument("--workers", type=int, default=2)
+    ap.add_argument("--tag", default="funded")
+    a = ap.parse_args(argv)
+    cfg = json.loads(Path(a.cfg).read_text())
+    P = E.build(cfg)
+    specs = {"flex": lambda: make_spec("flex"), "flex_dll": lambda: make_spec("flex", 1200), "pro": lambda: make_spec("pro"),
+             "pro_nodll": lambda: make_spec("pro", 0), "apex": lambda: make_spec("apex")}
+    for name in a.firms.split(","):
+        rows = search(P, specs[name](), workers=min(4, a.workers))
+        write_csv(rows, R / "out" / f"funded_search_{a.tag}_{name}.csv")
+        for k, r in pick_cells(rows).items():
+            print(f"[{name}] {k}: {_fmt(r)}")
+
+
+if __name__ == "__main__":
+    main()

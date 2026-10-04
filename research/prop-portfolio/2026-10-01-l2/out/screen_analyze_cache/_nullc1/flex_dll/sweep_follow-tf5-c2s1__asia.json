@@ -1,0 +1,1 @@
+{"key": "sweep_follow-tf5-c2s1", "fam_tf": "sweep_follow-tf5", "family": "sweep_follow", "tf": "5", "variant": "c2s1", "sess": "asia", "firm": "flex_dll", "status": "ok", "lift": 18.110884464751905, "ctrl": 348.8832082245431, "real": 366.99409268929503, "skipped": null, "elapsed_s": 0.61}

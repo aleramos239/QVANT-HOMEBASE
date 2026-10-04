@@ -1,0 +1,1 @@
+{"key": "bimb_follow_n3-tf1-c2s2", "fam_tf": "bimb_follow_n3-tf1", "family": "bimb_follow_n3", "tf": "1", "variant": "c2s2", "sess": "pm", "firm": "apex300_eval", "status": "ok", "lift": 0.07531017369727047, "ctrl": 0.01650124069478908, "real": 0.09181141439205956, "skipped": null, "elapsed_s": 1.19}

@@ -1,0 +1,1 @@
+{"key": "open_dir_both-tf30-c2s2", "fam_tf": "open_dir_both-tf30", "family": "open_dir_both", "tf": "30", "variant": "c2s2", "sess": "london", "firm": "lucid", "status": "ok", "lift": 0.013641900121802681, "ctrl": 0.12886723507917175, "real": 0.1425091352009744, "skipped": null, "elapsed_s": 0.15}

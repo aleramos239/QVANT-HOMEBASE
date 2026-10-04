@@ -1,0 +1,234 @@
+[
+ {
+  "firm": "lucid",
+  "quarter": "2023Q1",
+  "mode": "reselect",
+  "cal_days": 322,
+  "last_day": "2022-12-30",
+  "train_starts": 247,
+  "pick": {
+   "members": [
+    [
+     "hm-straddle-tf15#20|pm",
+     40
+    ],
+    [
+     "hm-ema_pullback-tf5#10|mid",
+     10
+    ]
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 1500,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.6437246799468994,
+   "train_p5": 0.647773265838623
+  },
+  "stored": {
+   "members": [
+    [
+     "hm-straddle-tf15#20|pm",
+     40
+    ],
+    [
+     "hm-ema_pullback-tf5#10|mid",
+     10
+    ]
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 1500,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.6437246799468994,
+   "train_p5": 0.647773265838623
+  },
+  "evals": 417,
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 51.48742198944092
+ },
+ {
+  "firm": "lucidpro_nodll",
+  "quarter": "2023Q1",
+  "mode": "reselect",
+  "cal_days": 322,
+  "last_day": "2022-12-30",
+  "train_starts": 247,
+  "pick": {
+   "members": [
+    [
+     "hm-straddle-tf15#35|pm",
+     40
+    ],
+    [
+     "hm-first_bar_mom-tf30#9|mid",
+     30
+    ],
+    [
+     "hm-vwap_z-tf5#10|mid",
+     10
+    ]
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 1500,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.6740890741348267,
+   "train_p5": 0.7408906817436218
+  },
+  "stored": {
+   "members": [
+    [
+     "hm-straddle-tf15#35|pm",
+     40
+    ],
+    [
+     "hm-first_bar_mom-tf30#9|mid",
+     30
+    ],
+    [
+     "hm-vwap_z-tf5#10|mid",
+     10
+    ]
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 1500,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.6740890741348267,
+   "train_p5": 0.7408906817436218
+  },
+  "evals": 356,
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 57.633267879486084
+ },
+ {
+  "firm": "lucid",
+  "quarter": "2024Q2",
+  "mode": "reselect",
+  "cal_days": 634,
+  "last_day": "2024-03-28",
+  "train_starts": 246,
+  "pick": {
+   "members": [
+    [
+     "hm-straddle-tf15#20|mid",
+     40
+    ],
+    [
+     "hm-straddle-tf15#33|pm",
+     40
+    ]
+   ],
+   "cell": {
+    "day_lock": 750,
+    "day_take": 1500,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.4796747863292694,
+   "train_p5": 0.48373982310295105
+  },
+  "stored": {
+   "members": [
+    [
+     "hm-straddle-tf15#20|mid",
+     40
+    ],
+    [
+     "hm-straddle-tf15#33|pm",
+     40
+    ]
+   ],
+   "cell": {
+    "day_lock": 750,
+    "day_take": 1500,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.4796747863292694,
+   "train_p5": 0.48373982310295105
+  },
+  "evals": 387,
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 83.35422492027283
+ },
+ {
+  "firm": "lucidpro_nodll",
+  "quarter": "2024Q2",
+  "mode": "reselect",
+  "cal_days": 634,
+  "last_day": "2024-03-28",
+  "train_starts": 246,
+  "pick": {
+   "members": [
+    [
+     "hm-vwap_flip-tf5#23|pm",
+     40
+    ],
+    [
+     "hm-first_bar_mom-tf30#10|mid",
+     40
+    ]
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.4878048896789551,
+   "train_p5": 0.49593496322631836
+  },
+  "stored": {
+   "members": [
+    [
+     "hm-vwap_flip-tf5#23|pm",
+     40
+    ],
+    [
+     "hm-first_bar_mom-tf30#10|mid",
+     40
+    ]
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.4878048896789551,
+   "train_p5": 0.49593496322631836
+  },
+  "evals": 403,
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 107.87990307807922
+ }
+]

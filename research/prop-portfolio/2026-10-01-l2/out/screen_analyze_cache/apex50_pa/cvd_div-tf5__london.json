@@ -1,0 +1,1 @@
+{"key": "cvd_div-tf5", "fam_tf": "cvd_div-tf5", "family": "cvd_div", "tf": "5", "variant": "real", "sess": "london", "firm": "apex50_pa", "n_trades": 1640, "status": "noncompliant_static", "metric": null, "compliance": {"one_direction": "ok", "stop_5x_target": "FAIL", "mae_rule": "ok"}, "elapsed_s": 0.19}

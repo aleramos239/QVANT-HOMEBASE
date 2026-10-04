@@ -1,0 +1,1 @@
+{"key": "wall_bounce-tf1-c2s1", "fam_tf": "wall_bounce-tf1", "family": "wall_bounce", "tf": "1", "variant": "c2s1", "sess": "mid", "firm": "flex_dll", "status": "ok", "lift": -157.2572584856397, "ctrl": 157.2572584856397, "real": 0.0, "skipped": null, "elapsed_s": 1.55}

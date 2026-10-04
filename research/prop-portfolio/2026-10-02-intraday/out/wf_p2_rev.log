@@ -1,0 +1,4 @@
+wf_p2: 48 tasks to run, 0 done (Lucid firm x pass-2 multi-pool grid x session), kc=5, rev=True
+[wfp2] 0 tasks already done, 48 to run
+/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/multiprocessing/resource_tracker.py:216: UserWarning: resource_tracker: There appear to be 6 leaked semaphore objects to clean up at shutdown
+  warnings.warn('resource_tracker: There appear to be %d '

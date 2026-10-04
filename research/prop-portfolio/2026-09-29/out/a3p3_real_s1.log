@@ -1,0 +1,27 @@
+real3: 579 configs in 235 sources; skipped {'lt300': 535, 'hm2_net_le0': 1906}
+[real3] 0 tasks already done, 235 to run
+[real3] 10/235 tasks 527s
+[real3] 20/235 tasks 1038s
+[real3] 30/235 tasks 1559s
+[real3] 40/235 tasks 2049s
+[real3] 50/235 tasks 2224s
+[real3] 60/235 tasks 2523s
+[real3] 70/235 tasks 2713s
+[real3] 80/235 tasks 3003s
+[real3] 90/235 tasks 3278s
+[real3] 100/235 tasks 3504s
+[real3] 110/235 tasks 3720s
+[real3] 120/235 tasks 3907s
+[real3] 130/235 tasks 4012s
+[real3] 140/235 tasks 4117s
+[real3] 150/235 tasks 4292s
+[real3] 160/235 tasks 4462s
+[real3] 170/235 tasks 4599s
+[real3] 180/235 tasks 4673s
+[real3] 190/235 tasks 4718s
+[real3] 200/235 tasks 4787s
+[real3] 210/235 tasks 4863s
+[real3] 220/235 tasks 4915s
+[real3] 230/235 tasks 4978s
+[real3] 235/235 tasks 5005s
+wrote 14475 rows -> a3p3_rules_s1.csv

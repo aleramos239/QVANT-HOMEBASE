@@ -1,0 +1,1 @@
+{"key": "delta_follow-tf1-c2s2", "fam_tf": "delta_follow-tf1", "family": "delta_follow", "tf": "1", "variant": "c2s2", "sess": "london", "firm": "apex_eod", "status": "ok", "lift": 0.05517661388550549, "ctrl": 0.25176613885505483, "real": 0.30694275274056027, "skipped": null, "elapsed_s": 0.56}

@@ -1,0 +1,1 @@
+{"key": "open_dir_both-tf30-c2s2", "fam_tf": "open_dir_both-tf30", "family": "open_dir_both", "tf": "30", "variant": "c2s2", "sess": "mid", "firm": "apex_eod", "status": "ok", "lift": 0.09427527405602924, "ctrl": 0.0933008526187576, "real": 0.18757612667478685, "skipped": null, "elapsed_s": 0.19}

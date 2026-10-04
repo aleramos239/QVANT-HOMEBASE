@@ -1,0 +1,1 @@
+{"key": "wall_bounce-tf5-c2s2", "fam_tf": "wall_bounce-tf5", "family": "wall_bounce", "tf": "5", "variant": "c2s2", "sess": "pm", "firm": "apex", "status": "ok", "lift": -0.025456760048721074, "ctrl": 0.03763702801461632, "real": 0.012180267965895249, "skipped": null, "elapsed_s": 0.24}

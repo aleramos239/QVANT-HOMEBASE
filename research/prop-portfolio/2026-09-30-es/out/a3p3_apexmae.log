@@ -1,0 +1,29 @@
+apexmae: 24 configs
+[apexmae] 0 tasks already done, 24 to run
+[apexmae] 10/24 tasks 14s
+[apexmae] 20/24 tasks 26s
+[apexmae] 24/24 tasks 33s
+apex hm-donchian-tf15#7 pm free P5 0.37028 -> compliant P5 0.00243605359317905 m 1 2 3 4
+apex fp-donchian-tf15#15 pm free P5 0.377588 -> compliant P5 0.0060901339829476245 m 1 2 3 4 5 6 8
+apex hm-donchian-tf30#3 pm free P5 0.359318 -> compliant P5 0.0 m 1 2 3 4 5 6
+apex hm-vwap_flip-tf5#22 pm free P5 0.366626 -> compliant P5 0.0060901339829476245 m 1 2 3 4 5
+apex fp-rsi2-tf5#9 mid free P5 0.366626 -> compliant P5 0.0060901339829476245 m 1 2 3 4 5 6 8 10 12
+apex hm-first_bar_mom-tf30#3 pm free P5 0.354446 -> compliant P5 0.0 m 1 2 3 4 5 6
+apex fp-vwap_z-tf5#15 mid free P5 0.354446 -> compliant P5 0.0036540803897685747 m 1 2 3 4 5 6 8
+apex fp-tod_drift-tf5#14 nyam free P5 0.350792 -> compliant P5 0.0 m 1 2 3 4 5 6 8
+apex fp-rsi2-tf5#11 nyam free P5 0.355664 -> compliant P5 0.045676004872107184 m 1 2 3 4 5 6 8 10 12
+apex fp-tema_slope-tf30#14 london free P5 0.353228 -> compliant P5 0.0 m 1 2 3 4 5 6 8
+apex screen-donchian-tf15 pm free P5 0.349574 -> compliant P5 0.0048721071863581 m 1 2 3 4 5 6
+apex fp-donchian-tf15#14 mid free P5 0.349574 -> compliant P5 0.0 m 1 2 3 4 5 6 8
+apex_eod screen-donchian-tf5 pm free P5 0.366626 -> compliant P5 0.013398294762484775 m 1 2 3 4 5 6 8
+apex_eod hm-donchian-tf15#5 pm free P5 0.36419 -> compliant P5 0.0 m 1 2 3 4
+apex_eod fp-vwap_flip-tf5#15 pm free P5 0.356882 -> compliant P5 0.004263093788063338 m 1 2 3 4 5 6 8
+apex_eod fp-donchian-tf15#15 pm free P5 0.356882 -> compliant P5 0.0048721071863581 m 1 2 3 4 5 6 8
+apex_eod fp-tod_drift-tf5#15 pm free P5 0.341048 -> compliant P5 0.0 m 1 2 3 4 5 6 8
+apex_eod fp-ema_pullback-tf5#15 mid free P5 0.347138 -> compliant P5 0.0060901339829476245 m 1 2 3 4 5 6 8
+apex_eod fp-tod_drift-tf5#15 london free P5 0.334957 -> compliant P5 0.0 m 1 2 3 4 5 6 8
+apex_eod fp-tema_slope-tf30#15 pm free P5 0.334957 -> compliant P5 0.0 m 1 2 3 4 5 6 8
+apex_eod screen-rsi2-tf5 nyam free P5 0.334957 -> compliant P5 0.02253349573690621 m 1 2 3 4 5 6 8
+apex_eod fp-rsi2-tf5#11 nyam free P5 0.34592 -> compliant P5 0.04141291108404385 m 1 2 3 4 5 6 8 10 12
+apex_eod fp-ema_pullback-tf5#15 london free P5 0.333739 -> compliant P5 0.013398294762484775 m 1 2 3 4 5 6 8
+apex_eod fp-tema_slope-tf5#11 london free P5 0.332521 -> compliant P5 0.040194884287454324 m 1 2 3 4 5 6 8 10 12

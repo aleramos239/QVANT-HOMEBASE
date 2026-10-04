@@ -1,0 +1,1 @@
+{"key": "delta_follow-tf1-c2s2", "fam_tf": "delta_follow-tf1", "family": "delta_follow", "tf": "1", "variant": "c2s2", "sess": "asia", "firm": "lucidpro", "status": "ok", "lift": 0.012302070645554204, "ctrl": 0.04981729598051157, "real": 0.06211936662606577, "skipped": null, "elapsed_s": 1.23}

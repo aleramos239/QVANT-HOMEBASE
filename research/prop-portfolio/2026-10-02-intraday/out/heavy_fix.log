@@ -1,0 +1,283 @@
+=== eval_p2x 10:55:59 ET
+eval_p2x: 498 pass-2 configs in 296 sources x 5 firms (R's pass-3 analysis)
+[p2x] 0 tasks already done, 296 to run
+/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/multiprocessing/resource_tracker.py:216: UserWarning: resource_tracker: There appear to be 6 leaked semaphore objects to clean up at shutdown
+  warnings.warn('resource_tracker: There appear to be %d '
+--- restarted with 3 workers (1 process kept for the light stages) 10:56:56 ET
+=== eval_p2x 10:56:56 ET
+eval_p2x: 498 pass-2 configs in 296 sources x 5 firms (R's pass-3 analysis)
+[p2x] 7 tasks already done, 289 to run
+[p2x] 10/289 tasks 90s
+[p2x] 20/289 tasks 155s
+[p2x] 30/289 tasks 203s
+[p2x] 40/289 tasks 263s
+[p2x] 50/289 tasks 324s
+[p2x] 60/289 tasks 423s
+[p2x] 70/289 tasks 470s
+[p2x] 80/289 tasks 495s
+[p2x] 90/289 tasks 528s
+[p2x] 100/289 tasks 571s
+[p2x] 110/289 tasks 614s
+[p2x] 120/289 tasks 651s
+[p2x] 130/289 tasks 680s
+[p2x] 140/289 tasks 729s
+[p2x] 150/289 tasks 795s
+[p2x] 160/289 tasks 827s
+[p2x] 170/289 tasks 960s
+[p2x] 180/289 tasks 1082s
+[p2x] 190/289 tasks 1185s
+[p2x] 200/289 tasks 1269s
+[p2x] 210/289 tasks 1361s
+[p2x] 220/289 tasks 1453s
+[p2x] 230/289 tasks 1576s
+[p2x] 240/289 tasks 1670s
+[p2x] 250/289 tasks 1713s
+[p2x] 260/289 tasks 1752s
+[p2x] 270/289 tasks 1794s
+[p2x] 280/289 tasks 1849s
+[p2x] 289/289 tasks 1949s
+=== funded_nwf 11:29:25 ET
+funded_nwf: 1781 configs x 4 variants, model intraday, coarse grid, per-quarter train pick + test outcome
+[nwf] 0 tasks already done, 1781 to run
+/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/multiprocessing/resource_tracker.py:216: UserWarning: resource_tracker: There appear to be 6 leaked semaphore objects to clean up at shutdown
+  warnings.warn('resource_tracker: There appear to be %d '
+--- chain part 2: 4 workers 11:29:32 ET
+=== funded_nwf 11:29:32 ET
+funded_nwf: 1781 configs x 4 variants, model intraday, coarse grid, per-quarter train pick + test outcome
+[nwf] 0 tasks already done, 1781 to run
+[nwf] 10/1781 tasks 36s
+[nwf] 20/1781 tasks 62s
+[nwf] 30/1781 tasks 92s
+[nwf] 40/1781 tasks 127s
+[nwf] 50/1781 tasks 162s
+[nwf] 60/1781 tasks 193s
+[nwf] 70/1781 tasks 222s
+[nwf] 80/1781 tasks 254s
+[nwf] 90/1781 tasks 282s
+[nwf] 100/1781 tasks 317s
+[nwf] 110/1781 tasks 355s
+[nwf] 120/1781 tasks 384s
+[nwf] 130/1781 tasks 415s
+[nwf] 140/1781 tasks 451s
+[nwf] 150/1781 tasks 483s
+[nwf] 160/1781 tasks 511s
+[nwf] 170/1781 tasks 535s
+[nwf] 180/1781 tasks 561s
+[nwf] 190/1781 tasks 586s
+[nwf] 200/1781 tasks 607s
+[nwf] 210/1781 tasks 638s
+[nwf] 220/1781 tasks 670s
+[nwf] 230/1781 tasks 707s
+[nwf] 240/1781 tasks 739s
+[nwf] 250/1781 tasks 780s
+[nwf] 260/1781 tasks 814s
+[nwf] 270/1781 tasks 842s
+[nwf] 280/1781 tasks 865s
+[nwf] 290/1781 tasks 881s
+[nwf] 300/1781 tasks 900s
+[nwf] 310/1781 tasks 919s
+[nwf] 320/1781 tasks 933s
+[nwf] 330/1781 tasks 951s
+[nwf] 340/1781 tasks 976s
+[nwf] 350/1781 tasks 998s
+[nwf] 360/1781 tasks 1019s
+[nwf] 370/1781 tasks 1037s
+[nwf] 380/1781 tasks 1058s
+[nwf] 390/1781 tasks 1079s
+[nwf] 400/1781 tasks 1101s
+[nwf] 410/1781 tasks 1120s
+[nwf] 420/1781 tasks 1139s
+[nwf] 430/1781 tasks 1154s
+[nwf] 440/1781 tasks 1169s
+[nwf] 450/1781 tasks 1185s
+[nwf] 460/1781 tasks 1203s
+[nwf] 470/1781 tasks 1214s
+[nwf] 480/1781 tasks 1236s
+[nwf] 490/1781 tasks 1254s
+[nwf] 500/1781 tasks 1272s
+[nwf] 510/1781 tasks 1289s
+[nwf] 520/1781 tasks 1303s
+[nwf] 530/1781 tasks 1319s
+[nwf] 540/1781 tasks 1354s
+[nwf] 550/1781 tasks 1371s
+[nwf] 560/1781 tasks 1387s
+[nwf] 570/1781 tasks 1419s
+[nwf] 580/1781 tasks 1438s
+[nwf] 590/1781 tasks 1451s
+[nwf] 600/1781 tasks 1466s
+[nwf] 610/1781 tasks 1483s
+[nwf] 620/1781 tasks 1504s
+[nwf] 630/1781 tasks 1525s
+[nwf] 640/1781 tasks 1543s
+[nwf] 650/1781 tasks 1566s
+[nwf] 660/1781 tasks 1581s
+[nwf] 670/1781 tasks 1602s
+[nwf] 680/1781 tasks 1618s
+[nwf] 690/1781 tasks 1629s
+[nwf] 700/1781 tasks 1642s
+[nwf] 710/1781 tasks 1658s
+[nwf] 720/1781 tasks 1693s
+[nwf] 730/1781 tasks 1713s
+[nwf] 740/1781 tasks 1727s
+[nwf] 750/1781 tasks 1737s
+[nwf] 760/1781 tasks 1747s
+[nwf] 770/1781 tasks 1758s
+[nwf] 780/1781 tasks 1769s
+[nwf] 790/1781 tasks 1779s
+[nwf] 800/1781 tasks 1793s
+[nwf] 810/1781 tasks 1804s
+[nwf] 820/1781 tasks 1816s
+[nwf] 830/1781 tasks 1829s
+[nwf] 840/1781 tasks 1843s
+[nwf] 850/1781 tasks 1855s
+[nwf] 860/1781 tasks 1867s
+[nwf] 870/1781 tasks 1880s
+[nwf] 880/1781 tasks 1895s
+[nwf] 890/1781 tasks 1912s
+[nwf] 900/1781 tasks 1927s
+[nwf] 910/1781 tasks 1945s
+[nwf] 920/1781 tasks 1961s
+[nwf] 930/1781 tasks 1986s
+[nwf] 940/1781 tasks 2012s
+[nwf] 950/1781 tasks 2049s
+[nwf] 960/1781 tasks 2074s
+[nwf] 970/1781 tasks 2115s
+[nwf] 980/1781 tasks 2136s
+[nwf] 990/1781 tasks 2152s
+[nwf] 1000/1781 tasks 2164s
+[nwf] 1010/1781 tasks 2178s
+[nwf] 1020/1781 tasks 2210s
+[nwf] 1030/1781 tasks 2234s
+[nwf] 1040/1781 tasks 2253s
+[nwf] 1050/1781 tasks 2269s
+[nwf] 1060/1781 tasks 2298s
+[nwf] 1070/1781 tasks 2317s
+[nwf] 1080/1781 tasks 2342s
+[nwf] 1090/1781 tasks 2357s
+[nwf] 1100/1781 tasks 2372s
+[nwf] 1110/1781 tasks 2400s
+[nwf] 1120/1781 tasks 2422s
+[nwf] 1130/1781 tasks 2433s
+[nwf] 1140/1781 tasks 2442s
+[nwf] 1150/1781 tasks 2453s
+[nwf] 1160/1781 tasks 2467s
+[nwf] 1170/1781 tasks 2483s
+[nwf] 1180/1781 tasks 2517s
+[nwf] 1190/1781 tasks 2528s
+[nwf] 1200/1781 tasks 2544s
+[nwf] 1210/1781 tasks 2567s
+[nwf] 1220/1781 tasks 2577s
+[nwf] 1230/1781 tasks 2586s
+[nwf] 1240/1781 tasks 2604s
+[nwf] 1250/1781 tasks 2631s
+[nwf] 1260/1781 tasks 2645s
+[nwf] 1270/1781 tasks 2666s
+[nwf] 1280/1781 tasks 2685s
+[nwf] 1290/1781 tasks 2704s
+[nwf] 1300/1781 tasks 2715s
+[nwf] 1310/1781 tasks 2733s
+[nwf] 1320/1781 tasks 2749s
+[nwf] 1330/1781 tasks 2766s
+[nwf] 1340/1781 tasks 2780s
+[nwf] 1350/1781 tasks 2789s
+[nwf] 1360/1781 tasks 2805s
+[nwf] 1370/1781 tasks 2833s
+[nwf] 1380/1781 tasks 2852s
+[nwf] 1390/1781 tasks 2864s
+[nwf] 1400/1781 tasks 2881s
+[nwf] 1410/1781 tasks 2895s
+[nwf] 1420/1781 tasks 2912s
+[nwf] 1430/1781 tasks 2926s
+[nwf] 1440/1781 tasks 2948s
+[nwf] 1450/1781 tasks 2967s
+[nwf] 1460/1781 tasks 2981s
+[nwf] 1470/1781 tasks 2998s
+[nwf] 1480/1781 tasks 3016s
+[nwf] 1490/1781 tasks 3030s
+[nwf] 1500/1781 tasks 3045s
+[nwf] 1510/1781 tasks 3059s
+[nwf] 1520/1781 tasks 3076s
+[nwf] 1530/1781 tasks 3089s
+[nwf] 1540/1781 tasks 3107s
+[nwf] 1550/1781 tasks 3125s
+[nwf] 1560/1781 tasks 3141s
+[nwf] 1570/1781 tasks 3161s
+[nwf] 1580/1781 tasks 3175s
+[nwf] 1590/1781 tasks 3191s
+[nwf] 1600/1781 tasks 3210s
+[nwf] 1610/1781 tasks 3225s
+[nwf] 1620/1781 tasks 3241s
+[nwf] 1630/1781 tasks 3257s
+[nwf] 1640/1781 tasks 3274s
+[nwf] 1650/1781 tasks 3293s
+[nwf] 1660/1781 tasks 3315s
+[nwf] 1670/1781 tasks 3332s
+[nwf] 1680/1781 tasks 3352s
+[nwf] 1690/1781 tasks 3384s
+[nwf] 1700/1781 tasks 3404s
+[nwf] 1710/1781 tasks 3442s
+[nwf] 1720/1781 tasks 3471s
+[nwf] 1730/1781 tasks 3495s
+[nwf] 1740/1781 tasks 3523s
+[nwf] 1750/1781 tasks 3546s
+[nwf] 1760/1781 tasks 3562s
+[nwf] 1770/1781 tasks 3581s
+[nwf] 1780/1781 tasks 3600s
+[nwf] 1781/1781 tasks 3604s
+=== funded_pick2 12:29:37 ET
+flex screened 1781 top-K coarse E$40 >= 1108.2 max 1496.9
+flex_dll screened 1781 top-K coarse E$40 >= 1076.2 max 1283.0
+pro_dll screened 1781 top-K coarse E$40 >= 1139.1 max 1532.9
+pro_nodll screened 1781 top-K coarse E$40 >= 1195.5 max 1613.9
+=== funded_s2b 12:29:38 ET
+funded_s2b: 7 configs, 13 new pairs
+[s2b] 0 tasks already done, 7 to run
+[s2b] 7/7 tasks 94s
+=== fix chain done 12:31:13 ET
+=== wf_p2 (lightest 18 of the 47 left, 3 workers) 12:31:42 ET
+wf_p2: 18 tasks to run, 1 done (Lucid firm x pass-2 multi-pool grid x session), kc=5, rev=False
+[wfp2] 0 tasks already done, 18 to run
+[wfp2] 10/18 tasks 317s
+[wfp2] 18/18 tasks 490s
+=== wf_p2 (the rest, 4 workers) 12:42:50 ET
+wf_p2: 29 tasks to run, 19 done (Lucid firm x pass-2 multi-pool grid x session), kc=5, rev=False
+[wfp2] 18 tasks already done, 29 to run
+/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/multiprocessing/resource_tracker.py:216: UserWarning: resource_tracker: There appear to be 6 leaked semaphore objects to clean up at shutdown
+  warnings.warn('resource_tracker: There appear to be %d '
+--- wf_p2 stopped by hand 13:04:29 ET: the remaining 36-member grids need about 20 worker-minutes each
+=== lift (unbiased control) 13:11:59 ET
+lift_u: 70 picks
+[lift] 0 tasks already done, 70 to run
+[lift] 10/70 tasks 2s
+[lift] 20/70 tasks 3s
+[lift] 30/70 tasks 5s
+[lift] 40/70 tasks 6s
+[lift] 50/70 tasks 8s
+[lift] 60/70 tasks 10s
+[lift] 70/70 tasks 12s
+=== lift (R's control) 13:12:12 ET
+lift: 70 picks
+[lift] 0 tasks already done, 70 to run
+[lift] 10/70 tasks 2s
+[lift] 20/70 tasks 4s
+[lift] 30/70 tasks 5s
+[lift] 40/70 tasks 6s
+[lift] 50/70 tasks 8s
+[lift] 60/70 tasks 11s
+[lift] 70/70 tasks 13s
+=== nwf_ctl (unbiased control) 13:12:25 ET
+nwf_ctl: 49 configs, 160 (variant, quarter) picks, K=8 controls
+[nwfc] 0 tasks already done, 49 to run
+[nwfc] 10/49 tasks 2s
+[nwfc] 20/49 tasks 3s
+[nwfc] 30/49 tasks 4s
+[nwfc] 40/49 tasks 5s
+[nwfc] 49/49 tasks 7s
+=== wf_u (unbiased control, multi-trade own-pool grids) 13:12:33 ET
+wf_u: 32 tasks (own-pool multi-trade grids), kc=5, unbiased control
+[wfu] 0 tasks already done, 32 to run
+[wfu] 10/32 tasks 69s
+[wfu] 20/32 tasks 299s
+[wfu] 30/32 tasks 1166s
+[wfu] 32/32 tasks 1467s
+=== fix chain 3 done 13:37:13 ET

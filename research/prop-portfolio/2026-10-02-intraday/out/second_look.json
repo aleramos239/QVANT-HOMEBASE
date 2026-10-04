@@ -1,0 +1,1302 @@
+{
+ "label": "SECOND LOOK (the 2025+ holdout was already spent on R's finalists; never a clean exam, never selected on)",
+ "control": "unbiased day-matched draw (overlap allowed)",
+ "window": [
+  "2025-01-01",
+  "2026-09-30"
+ ],
+ "eval": [
+  {
+   "firm": "lucid",
+   "rank": 1,
+   "key": "fp-tod_drift-tf5#15",
+   "via_twin": null,
+   "sess": "mid",
+   "micros": 20,
+   "rules": {
+    "day_lock": 750,
+    "day_take": 1500,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "is_intraday_p5": 0.359318,
+   "is_realized_p5": 0.442144,
+   "is_lift": 0.076736,
+   "ho_trades": 433,
+   "ho_n_starts": 436,
+   "ho_intraday": {
+    "p1": 0.0,
+    "p2": 0.0,
+    "p3": 0.3119266055045872,
+    "p5": 0.34174311926605505,
+    "bust5": 0.6513761467889908,
+    "med_days": 3.0
+   },
+   "ho_intraday_ci": [
+    0.27517201834862387,
+    0.4059633027522936
+   ],
+   "ho_realized_p5": 0.4380733944954128,
+   "ho_eod_p5": 0.4380733944954128,
+   "ho_lift_intraday": {
+    "K": 10,
+    "ctrl_p5": 0.28440366972477066,
+    "lift": 0.05733944954128441,
+    "ci": [
+     -0.01309059633027523,
+     0.12134747706422017
+    ]
+   }
+  },
+  {
+   "firm": "lucid",
+   "rank": 7,
+   "key": "fp-tod_drift-tf5#14",
+   "via_twin": null,
+   "sess": "pm",
+   "micros": 30,
+   "rules": {
+    "day_lock": 750,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 0
+   },
+   "is_intraday_p5": 0.322777,
+   "is_realized_p5": 0.406821,
+   "is_lift": 0.053593,
+   "ho_trades": 431,
+   "ho_n_starts": 436,
+   "ho_intraday": {
+    "p1": 0.0,
+    "p2": 0.30963302752293576,
+    "p3": 0.32339449541284404,
+    "p5": 0.3348623853211009,
+    "bust5": 0.6651376146788991,
+    "med_days": 2.0
+   },
+   "ho_intraday_ci": [
+    0.28663990825688074,
+    0.39225917431192653
+   ],
+   "ho_realized_p5": 0.4197247706422018,
+   "ho_eod_p5": 0.4197247706422018,
+   "ho_lift_intraday": {
+    "K": 10,
+    "ctrl_p5": 0.2736238532110092,
+    "lift": 0.061238532110091747,
+    "ci": [
+     0.002924311926605509,
+     0.13005160550458716
+    ]
+   }
+  },
+  {
+   "firm": "lucid",
+   "rank": 19,
+   "key": "fp-orb-tf5#7",
+   "via_twin": null,
+   "sess": "mid",
+   "micros": 40,
+   "rules": {
+    "day_lock": 750,
+    "day_take": 1500,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "is_intraday_p5": 0.323995,
+   "is_realized_p5": 0.397077,
+   "is_lift": 0.036419,
+   "ho_trades": 433,
+   "ho_n_starts": 436,
+   "ho_intraday": {
+    "p1": 0.0,
+    "p2": 0.0,
+    "p3": 0.24770642201834864,
+    "p5": 0.286697247706422,
+    "bust5": 0.6972477064220184,
+    "med_days": 3.0
+   },
+   "ho_intraday_ci": [
+    0.24311926605504589,
+    0.3394495412844037
+   ],
+   "ho_realized_p5": 0.36009174311926606,
+   "ho_eod_p5": 0.36009174311926606,
+   "ho_lift_intraday": {
+    "K": 10,
+    "ctrl_p5": 0.2651376146788991,
+    "lift": 0.021559633027522923,
+    "ci": [
+     -0.023170871559633033,
+     0.06674311926605504
+    ]
+   }
+  },
+  {
+   "firm": "lucidpro",
+   "rank": 1,
+   "key": "hm-tod_drift-tf5#23",
+   "via_twin": "hm2-tod_drift-tf15#19",
+   "sess": "mid",
+   "micros": 30,
+   "rules": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 1000,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "is_intraday_p5": 0.395859,
+   "is_realized_p5": 0.403167,
+   "is_lift": 0.102923,
+   "ho_trades": 433,
+   "ho_n_starts": 436,
+   "ho_intraday": {
+    "p1": 0.13302752293577982,
+    "p2": 0.231651376146789,
+    "p3": 0.24541284403669725,
+    "p5": 0.25,
+    "bust5": 0.7477064220183486,
+    "med_days": 1.0
+   },
+   "ho_intraday_ci": [
+    0.19036697247706422,
+    0.30045871559633025
+   ],
+   "ho_realized_p5": 0.25229357798165136,
+   "ho_eod_p5": 0.25229357798165136,
+   "ho_lift_intraday": {
+    "K": 10,
+    "ctrl_p5": 0.24059633027522934,
+    "lift": 0.009403669724770638,
+    "ci": [
+     -0.058750000000000004,
+     0.07180045871559632
+    ]
+   }
+  },
+  {
+   "firm": "lucidpro",
+   "rank": 8,
+   "key": "hm2-donchian-tf5#5",
+   "via_twin": null,
+   "sess": "pm",
+   "micros": 30,
+   "rules": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 1000,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "is_intraday_p5": 0.414129,
+   "is_realized_p5": 0.419001,
+   "is_lift": 0.073447,
+   "ho_trades": 825,
+   "ho_n_starts": 436,
+   "ho_intraday": {
+    "p1": 0.1444954128440367,
+    "p2": 0.22935779816513763,
+    "p3": 0.25,
+    "p5": 0.26376146788990823,
+    "bust5": 0.731651376146789,
+    "med_days": 1.0
+   },
+   "ho_intraday_ci": [
+    0.2018348623853211,
+    0.32798165137614677
+   ],
+   "ho_realized_p5": 0.26605504587155965,
+   "ho_eod_p5": 0.26605504587155965,
+   "ho_lift_intraday": {
+    "K": 10,
+    "ctrl_p5": 0.25619266055045875,
+    "lift": 0.007568807339449541,
+    "ci": [
+     -0.05301032110091742,
+     0.06423738532110089
+    ]
+   }
+  },
+  {
+   "firm": "lucidpro",
+   "rank": 9,
+   "key": "hm-donchian-tf15#11",
+   "via_twin": null,
+   "sess": "nyam",
+   "micros": 20,
+   "rules": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 1000,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "is_intraday_p5": 0.394641,
+   "is_realized_p5": 0.403167,
+   "is_lift": 0.070524,
+   "ho_trades": 399,
+   "ho_n_starts": 436,
+   "ho_intraday": {
+    "p1": 0.15825688073394495,
+    "p2": 0.268348623853211,
+    "p3": 0.32339449541284404,
+    "p5": 0.3463302752293578,
+    "bust5": 0.6146788990825688,
+    "med_days": 2.0
+   },
+   "ho_intraday_ci": [
+    0.28211009174311924,
+    0.3944954128440367
+   ],
+   "ho_realized_p5": 0.3486238532110092,
+   "ho_eod_p5": 0.3486238532110092,
+   "ho_lift_intraday": {
+    "K": 10,
+    "ctrl_p5": 0.3084862385321101,
+    "lift": 0.03784403669724771,
+    "ci": [
+     -0.032614678899082566,
+     0.08716169724770642
+    ]
+   }
+  },
+  {
+   "firm": "lucidpro",
+   "rank": 15,
+   "key": "hm2-rsi2-tf1#9",
+   "via_twin": null,
+   "sess": "mid",
+   "micros": 40,
+   "rules": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 1000,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "is_intraday_p5": 0.412911,
+   "is_realized_p5": 0.415347,
+   "is_lift": 0.053715,
+   "ho_trades": 1247,
+   "ho_n_starts": 436,
+   "ho_intraday": {
+    "p1": 0.19954128440366972,
+    "p2": 0.3256880733944954,
+    "p3": 0.33256880733944955,
+    "p5": 0.33256880733944955,
+    "bust5": 0.6674311926605505,
+    "med_days": 1.0
+   },
+   "ho_intraday_ci": [
+    0.26605504587155965,
+    0.3876146788990826
+   ],
+   "ho_realized_p5": 0.3394495412844037,
+   "ho_eod_p5": 0.3394495412844037,
+   "ho_lift_intraday": {
+    "K": 10,
+    "ctrl_p5": 0.256651376146789,
+    "lift": 0.07591743119266053,
+    "ci": [
+     -0.004134174311926607,
+     0.1353211009174312
+    ]
+   }
+  },
+  {
+   "firm": "lucidpro",
+   "rank": 16,
+   "key": "hm2-tod_drift-tf15#6",
+   "via_twin": null,
+   "sess": "london",
+   "micros": 40,
+   "rules": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "is_intraday_p5": 0.384896,
+   "is_realized_p5": 0.419001,
+   "is_lift": 0.056273,
+   "ho_trades": 433,
+   "ho_n_starts": 436,
+   "ho_intraday": {
+    "p1": 0.1811926605504587,
+    "p2": 0.2775229357798165,
+    "p3": 0.28440366972477066,
+    "p5": 0.29357798165137616,
+    "bust5": 0.7041284403669725,
+    "med_days": 1.0
+   },
+   "ho_intraday_ci": [
+    0.24311926605504589,
+    0.3532110091743119
+   ],
+   "ho_realized_p5": 0.3440366972477064,
+   "ho_eod_p5": 0.3440366972477064,
+   "ho_lift_intraday": {
+    "K": 10,
+    "ctrl_p5": 0.3110091743119266,
+    "lift": -0.017431192660550456,
+    "ci": [
+     -0.06880733944954129,
+     0.047024082568807336
+    ]
+   }
+  },
+  {
+   "firm": "lucidpro_nodll",
+   "rank": 1,
+   "key": "fp-donchian-tf15#15",
+   "via_twin": null,
+   "sess": "pm",
+   "micros": 40,
+   "rules": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "is_intraday_p5": 0.415347,
+   "is_realized_p5": 0.545676,
+   "is_lift": 0.053715,
+   "ho_trades": 270,
+   "ho_n_starts": 436,
+   "ho_intraday": {
+    "p1": 0.12155963302752294,
+    "p2": 0.19724770642201836,
+    "p3": 0.25,
+    "p5": 0.2958715596330275,
+    "bust5": 0.6123853211009175,
+    "med_days": 2.0
+   },
+   "ho_intraday_ci": [
+    0.22018348623853212,
+    0.38079128440366966
+   ],
+   "ho_realized_p5": 0.4426605504587156,
+   "ho_eod_p5": 0.46559633027522934,
+   "ho_lift_intraday": {
+    "K": 10,
+    "ctrl_p5": 0.34036697247706416,
+    "lift": -0.044495412844036714,
+    "ci": [
+     -0.12684633027522935,
+     0.046576834862385307
+    ]
+   }
+  },
+  {
+   "firm": "lucidpro_nodll",
+   "rank": 6,
+   "key": "hm2-tod_drift-tf15#6",
+   "via_twin": null,
+   "sess": "london",
+   "micros": 40,
+   "rules": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "is_intraday_p5": 0.401949,
+   "is_realized_p5": 0.500609,
+   "is_lift": 0.060292,
+   "ho_trades": 433,
+   "ho_n_starts": 436,
+   "ho_intraday": {
+    "p1": 0.25688073394495414,
+    "p2": 0.30045871559633025,
+    "p3": 0.30504587155963303,
+    "p5": 0.3073394495412844,
+    "bust5": 0.6926605504587156,
+    "med_days": 1.0
+   },
+   "ho_intraday_ci": [
+    0.268348623853211,
+    0.36009174311926606
+   ],
+   "ho_realized_p5": 0.555045871559633,
+   "ho_eod_p5": 0.555045871559633,
+   "ho_lift_intraday": {
+    "K": 10,
+    "ctrl_p5": 0.3238532110091743,
+    "lift": -0.016513761467889906,
+    "ci": [
+     -0.05827408256880733,
+     0.04751146788990823
+    ]
+   }
+  },
+  {
+   "firm": "lucidpro_nodll",
+   "rank": 8,
+   "key": "hm-tod_drift-tf5#19",
+   "via_twin": null,
+   "sess": "mid",
+   "micros": 40,
+   "rules": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "is_intraday_p5": 0.388551,
+   "is_realized_p5": 0.510353,
+   "is_lift": 0.059318,
+   "ho_trades": 433,
+   "ho_n_starts": 436,
+   "ho_intraday": {
+    "p1": 0.19724770642201836,
+    "p2": 0.23853211009174313,
+    "p3": 0.25229357798165136,
+    "p5": 0.2591743119266055,
+    "bust5": 0.7408256880733946,
+    "med_days": 1.0
+   },
+   "ho_intraday_ci": [
+    0.20642201834862386,
+    0.30275229357798167
+   ],
+   "ho_realized_p5": 0.5298165137614679,
+   "ho_eod_p5": 0.5298165137614679,
+   "ho_lift_intraday": {
+    "K": 10,
+    "ctrl_p5": 0.30504587155963303,
+    "lift": -0.045871559633027525,
+    "ci": [
+     -0.10528096330275229,
+     0.003904816513761462
+    ]
+   }
+  },
+  {
+   "firm": "apex",
+   "rank": 1,
+   "key": "fp-donchian-tf15#15",
+   "via_twin": null,
+   "sess": "pm",
+   "micros": 40,
+   "rules": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 3000,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "is_intraday_p5": 0.415347,
+   "is_realized_p5": 0.489647,
+   "is_lift": 0.053715,
+   "ho_trades": 270,
+   "ho_n_starts": 436,
+   "ho_intraday": {
+    "p1": 0.12155963302752294,
+    "p2": 0.19724770642201836,
+    "p3": 0.25,
+    "p5": 0.2958715596330275,
+    "bust5": 0.6123853211009175,
+    "med_days": 2.0
+   },
+   "ho_intraday_ci": [
+    0.22018348623853212,
+    0.38079128440366966
+   ],
+   "ho_realized_p5": 0.3761467889908257,
+   "ho_eod_p5": 0.3761467889908257,
+   "ho_lift_intraday": {
+    "K": 10,
+    "ctrl_p5": 0.34036697247706416,
+    "lift": -0.044495412844036714,
+    "ci": [
+     -0.12684633027522935,
+     0.046576834862385307
+    ]
+   }
+  },
+  {
+   "firm": "apex",
+   "rank": 2,
+   "key": "fp-tod_drift-tf5#7",
+   "via_twin": null,
+   "sess": "mid",
+   "micros": 80,
+   "rules": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 2000,
+    "max_day_tr": 0,
+    "target_take": 0
+   },
+   "is_intraday_p5": 0.411693,
+   "is_realized_p5": 0.411693,
+   "is_lift": 0.028258,
+   "ho_trades": 433,
+   "ho_n_starts": 436,
+   "ho_intraday": {
+    "p1": 0.4243119266055046,
+    "p2": 0.43119266055045874,
+    "p3": 0.43119266055045874,
+    "p5": 0.43119266055045874,
+    "bust5": 0.5688073394495413,
+    "med_days": 1.0
+   },
+   "ho_intraday_ci": [
+    0.3922018348623853,
+    0.48394495412844035
+   ],
+   "ho_realized_p5": 0.43119266055045874,
+   "ho_eod_p5": 0.43119266055045874,
+   "ho_lift_intraday": {
+    "K": 10,
+    "ctrl_p5": 0.37454128440366974,
+    "lift": 0.056651376146788994,
+    "ci": [
+     0.006874999999999993,
+     0.11974197247706421
+    ]
+   }
+  },
+  {
+   "firm": "apex",
+   "rank": 7,
+   "key": "fp-orb-tf5#7",
+   "via_twin": null,
+   "sess": "nyam",
+   "micros": 80,
+   "rules": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 2000,
+    "max_day_tr": 0,
+    "target_take": 0
+   },
+   "is_intraday_p5": 0.405603,
+   "is_realized_p5": 0.405603,
+   "is_lift": 0.02838,
+   "ho_trades": 432,
+   "ho_n_starts": 436,
+   "ho_intraday": {
+    "p1": 0.3967889908256881,
+    "p2": 0.4059633027522936,
+    "p3": 0.4059633027522936,
+    "p5": 0.4059633027522936,
+    "bust5": 0.5940366972477065,
+    "med_days": 1.0
+   },
+   "ho_intraday_ci": [
+    0.3508600917431193,
+    0.44724770642201833
+   ],
+   "ho_realized_p5": 0.4059633027522936,
+   "ho_eod_p5": 0.4059633027522936,
+   "ho_lift_intraday": {
+    "K": 10,
+    "ctrl_p5": 0.37729357798165136,
+    "lift": 0.02866972477064221,
+    "ci": [
+     -0.03005160550458716,
+     0.07799311926605504
+    ]
+   }
+  },
+  {
+   "firm": "apex",
+   "rank": 9,
+   "key": "hm2-tod_drift-tf15#6",
+   "via_twin": null,
+   "sess": "london",
+   "micros": 40,
+   "rules": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 3000,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "is_intraday_p5": 0.401949,
+   "is_realized_p5": 0.488429,
+   "is_lift": 0.060292,
+   "ho_trades": 433,
+   "ho_n_starts": 436,
+   "ho_intraday": {
+    "p1": 0.25688073394495414,
+    "p2": 0.30045871559633025,
+    "p3": 0.30504587155963303,
+    "p5": 0.3073394495412844,
+    "bust5": 0.6926605504587156,
+    "med_days": 1.0
+   },
+   "ho_intraday_ci": [
+    0.268348623853211,
+    0.36009174311926606
+   ],
+   "ho_realized_p5": 0.4541284403669725,
+   "ho_eod_p5": 0.4541284403669725,
+   "ho_lift_intraday": {
+    "K": 10,
+    "ctrl_p5": 0.3238532110091743,
+    "lift": -0.016513761467889906,
+    "ci": [
+     -0.05827408256880733,
+     0.04751146788990823
+    ]
+   }
+  },
+  {
+   "firm": "apex",
+   "rank": 10,
+   "key": "fp-orb-tf5#7",
+   "via_twin": null,
+   "sess": "london",
+   "micros": 80,
+   "rules": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 2000,
+    "max_day_tr": 0,
+    "target_take": 0
+   },
+   "is_intraday_p5": 0.400731,
+   "is_realized_p5": 0.400731,
+   "is_lift": 0.030451,
+   "ho_trades": 433,
+   "ho_n_starts": 436,
+   "ho_intraday": {
+    "p1": 0.3555045871559633,
+    "p2": 0.3623853211009174,
+    "p3": 0.3623853211009174,
+    "p5": 0.3623853211009174,
+    "bust5": 0.6376146788990825,
+    "med_days": 1.0
+   },
+   "ho_intraday_ci": [
+    0.3210435779816514,
+    0.41290137614678896
+   ],
+   "ho_realized_p5": 0.3623853211009174,
+   "ho_eod_p5": 0.3623853211009174,
+   "ho_lift_intraday": {
+    "K": 10,
+    "ctrl_p5": 0.3841743119266055,
+    "lift": -0.021788990825688068,
+    "ci": [
+     -0.06353784403669724,
+     0.02409403669724769
+    ]
+   }
+  },
+  {
+   "firm": "apex",
+   "rank": 11,
+   "key": "hm-tod_drift-tf5#15",
+   "via_twin": null,
+   "sess": "nyam",
+   "micros": 20,
+   "rules": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 3000,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "is_intraday_p5": 0.400731,
+   "is_realized_p5": 0.489647,
+   "is_lift": 0.05335,
+   "ho_trades": 433,
+   "ho_n_starts": 436,
+   "ho_intraday": {
+    "p1": 0.26146788990825687,
+    "p2": 0.286697247706422,
+    "p3": 0.30275229357798167,
+    "p5": 0.3119266055045872,
+    "bust5": 0.6834862385321101,
+    "med_days": 1.0
+   },
+   "ho_intraday_ci": [
+    0.2682912844036697,
+    0.36009174311926606
+   ],
+   "ho_realized_p5": 0.4197247706422018,
+   "ho_eod_p5": 0.4197247706422018,
+   "ho_lift_intraday": {
+    "K": 10,
+    "ctrl_p5": 0.338302752293578,
+    "lift": -0.026376146788990827,
+    "ci": [
+     -0.0851032110091743,
+     0.03831422018348622
+    ]
+   }
+  },
+  {
+   "firm": "apex_eod",
+   "rank": 1,
+   "key": "hm-donchian-tf15#11",
+   "via_twin": null,
+   "sess": "nyam",
+   "micros": 20,
+   "rules": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "is_intraday_p5": 0.398295,
+   "is_realized_p5": 0.403167,
+   "is_lift": 0.070889,
+   "ho_trades": 399,
+   "ho_n_starts": 436,
+   "ho_intraday": {
+    "p1": 0.15825688073394495,
+    "p2": 0.2706422018348624,
+    "p3": 0.32798165137614677,
+    "p5": 0.3532110091743119,
+    "bust5": 0.6123853211009175,
+    "med_days": 2.0
+   },
+   "ho_intraday_ci": [
+    0.2889908256880734,
+    0.4036697247706422
+   ],
+   "ho_realized_p5": 0.3532110091743119,
+   "ho_eod_p5": 0.3532110091743119,
+   "ho_lift_intraday": {
+    "K": 10,
+    "ctrl_p5": 0.31215596330275236,
+    "lift": 0.04105504587155963,
+    "ci": [
+     -0.027758027522935793,
+     0.09106077981651377
+    ]
+   }
+  },
+  {
+   "firm": "apex_eod",
+   "rank": 10,
+   "key": "hm-tod_drift-tf5#19",
+   "via_twin": null,
+   "sess": "mid",
+   "micros": 40,
+   "rules": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "is_intraday_p5": 0.384896,
+   "is_realized_p5": 0.388551,
+   "is_lift": 0.073447,
+   "ho_trades": 433,
+   "ho_n_starts": 436,
+   "ho_intraday": {
+    "p1": 0.11697247706422019,
+    "p2": 0.19954128440366972,
+    "p3": 0.21788990825688073,
+    "p5": 0.22706422018348624,
+    "bust5": 0.7660550458715596,
+    "med_days": 1.0
+   },
+   "ho_intraday_ci": [
+    0.1743119266055046,
+    0.2775229357798165
+   ],
+   "ho_realized_p5": 0.231651376146789,
+   "ho_eod_p5": 0.231651376146789,
+   "ho_lift_intraday": {
+    "K": 10,
+    "ctrl_p5": 0.2837155963302752,
+    "lift": -0.05665137614678898,
+    "ci": [
+     -0.12293577981651375,
+     0.002293577981651372
+    ]
+   }
+  },
+  {
+   "firm": "apex_eod",
+   "rank": 12,
+   "key": "fp-tod_drift-tf5#15",
+   "via_twin": null,
+   "sess": "mid",
+   "micros": 50,
+   "rules": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 0
+   },
+   "is_intraday_p5": 0.37028,
+   "is_realized_p5": 0.37028,
+   "is_lift": 0.078319,
+   "ho_trades": 433,
+   "ho_n_starts": 436,
+   "ho_intraday": {
+    "p1": 0.19724770642201836,
+    "p2": 0.3532110091743119,
+    "p3": 0.3555045871559633,
+    "p5": 0.3555045871559633,
+    "bust5": 0.6444954128440367,
+    "med_days": 1.0
+   },
+   "ho_intraday_ci": [
+    0.30045871559633025,
+    0.4059633027522936
+   ],
+   "ho_realized_p5": 0.3555045871559633,
+   "ho_eod_p5": 0.3555045871559633,
+   "ho_lift_intraday": {
+    "K": 10,
+    "ctrl_p5": 0.2903669724770643,
+    "lift": 0.0651376146788991,
+    "ci": [
+     0.008486238532110094,
+     0.12548165137614675
+    ]
+   }
+  },
+  {
+   "firm": "apex_eod",
+   "rank": 19,
+   "key": "hm2-tod_drift-tf15#19",
+   "via_twin": null,
+   "sess": "mid",
+   "micros": 30,
+   "rules": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "is_intraday_p5": 0.397077,
+   "is_realized_p5": 0.404385,
+   "is_lift": 0.091596,
+   "ho_trades": 433,
+   "ho_n_starts": 436,
+   "ho_intraday": {
+    "p1": 0.13302752293577982,
+    "p2": 0.231651376146789,
+    "p3": 0.24541284403669725,
+    "p5": 0.25,
+    "bust5": 0.7454128440366973,
+    "med_days": 1.0
+   },
+   "ho_intraday_ci": [
+    0.19036697247706422,
+    0.30045871559633025
+   ],
+   "ho_realized_p5": 0.25229357798165136,
+   "ho_eod_p5": 0.25229357798165136,
+   "ho_lift_intraday": {
+    "K": 10,
+    "ctrl_p5": 0.24128440366972478,
+    "lift": 0.008715596330275223,
+    "ci": [
+     -0.059655963302752295,
+     0.07087729357798166
+    ]
+   }
+  }
+ ],
+ "funded": [
+  {
+   "variant": "flex",
+   "rank": 4,
+   "key": "fp-donchian-tf15#10",
+   "sess": "pm",
+   "cell": "m20 K0 L300 S0 T1 P1000",
+   "is_e40": 1267.8873368146237,
+   "is_wf_oos_e40": 1026.7247509960162,
+   "ho_trades": 312,
+   "ho_n_starts": 381,
+   "ho_intraday": {
+    "e_net_40": 676.8484251968504,
+    "p_pay_20": 0.2992125984251969,
+    "p_pay_40": 0.3228346456692913,
+    "med_days_first": 14.0,
+    "p_bust_pre_first": 0.6771653543307087
+   },
+   "ho_realized_e40": 747.282283464567,
+   "ho_lift_intraday": {
+    "K": 10,
+    "ctrl_e40": 337.6311023622047,
+    "lift_e40": 339.2173228346457
+   }
+  },
+  {
+   "variant": "flex_dll",
+   "rank": 1,
+   "key": "hm2-squeeze-tf5#28",
+   "sess": "pm",
+   "cell": "m20 K0 L300 S1000 T1 P1500",
+   "is_e40": 1414.7808338772845,
+   "is_wf_oos_e40": 1099.5951693227091,
+   "ho_trades": 825,
+   "ho_n_starts": 381,
+   "ho_intraday": {
+    "e_net_40": 554.6090551181102,
+    "p_pay_20": 0.1784776902887139,
+    "p_pay_40": 0.1784776902887139,
+    "med_days_first": 8.0,
+    "p_bust_pre_first": 0.821522309711286
+   },
+   "ho_realized_e40": 595.4173228346457,
+   "ho_lift_intraday": {
+    "K": 10,
+    "ctrl_e40": 350.08417322834646,
+    "lift_e40": 204.52488188976372
+   }
+  },
+  {
+   "variant": "flex_dll",
+   "rank": 4,
+   "key": "fp-donchian-tf15#13",
+   "sess": "pm",
+   "cell": "m20 K0 L300 S0 T1 P1000",
+   "is_e40": 1273.2697127937345,
+   "is_wf_oos_e40": 1235.937549800797,
+   "ho_trades": 310,
+   "ho_n_starts": 381,
+   "ho_intraday": {
+    "e_net_40": 680.2429133858268,
+    "p_pay_20": 0.2992125984251969,
+    "p_pay_40": 0.3228346456692913,
+    "med_days_first": 14.0,
+    "p_bust_pre_first": 0.6771653543307087
+   },
+   "ho_realized_e40": 751.4350393700787,
+   "ho_lift_intraday": {
+    "K": 10,
+    "ctrl_e40": 410.00527559055115,
+    "lift_e40": 270.23763779527565
+   }
+  },
+  {
+   "variant": "pro_dll",
+   "rank": 1,
+   "key": "fp-donchian-tf15#10",
+   "sess": "pm",
+   "cell": "m20 K1000 L300 S0 T1 P1000",
+   "is_e40": 1525.3590078329003,
+   "is_wf_oos_e40": 1737.6884462151397,
+   "ho_trades": 312,
+   "ho_n_starts": 381,
+   "ho_intraday": {
+    "e_net_40": 614.8724409448819,
+    "p_pay_20": 0.1889763779527559,
+    "p_pay_40": 0.27034120734908135,
+    "med_days_first": 17.0,
+    "p_bust_pre_first": 0.7296587926509186
+   },
+   "ho_realized_e40": 644.6834645669292,
+   "ho_lift_intraday": {
+    "K": 10,
+    "ctrl_e40": 286.68425196850393,
+    "lift_e40": 328.18818897637794
+   }
+  },
+  {
+   "variant": "pro_dll",
+   "rank": 2,
+   "key": "hm2-squeeze-tf5#28",
+   "sess": "pm",
+   "cell": "m20 K0 L300 S1000 T1 P1000",
+   "is_e40": 1465.6206266318532,
+   "is_wf_oos_e40": 1704.8187250996016,
+   "ho_trades": 825,
+   "ho_n_starts": 381,
+   "ho_intraday": {
+    "e_net_40": 383.2724409448819,
+    "p_pay_20": 0.12335958005249344,
+    "p_pay_40": 0.12335958005249344,
+    "med_days_first": 7.0,
+    "p_bust_pre_first": 0.8766404199475065
+   },
+   "ho_realized_e40": 392.72125984251966,
+   "ho_lift_intraday": {
+    "K": 10,
+    "ctrl_e40": 269.44818897637793,
+    "lift_e40": 113.82425196850397
+   }
+  },
+  {
+   "variant": "pro_nodll",
+   "rank": 1,
+   "key": "fp-donchian-tf15#10",
+   "sess": "pm",
+   "cell": "m30 K1000 L300 S0 T0 P1000",
+   "is_e40": 1716.288250652741,
+   "is_wf_oos_e40": 1576.613545816733,
+   "ho_trades": 312,
+   "ho_n_starts": 381,
+   "ho_intraday": {
+    "e_net_40": 898.9748031496063,
+    "p_pay_20": 0.27034120734908135,
+    "p_pay_40": 0.27296587926509186,
+    "med_days_first": 10.0,
+    "p_bust_pre_first": 0.7270341207349081
+   },
+   "ho_realized_e40": 1113.5362204724408,
+   "ho_lift_intraday": {
+    "K": 10,
+    "ctrl_e40": 349.0152755905512,
+    "lift_e40": 549.959527559055
+   }
+  },
+  {
+   "variant": "pro_nodll",
+   "rank": 4,
+   "key": "fp-donchian-tf15#13",
+   "sess": "pm",
+   "cell": "m30 K0 L300 S0 T1 P1500",
+   "is_e40": 1461.7586161879897,
+   "is_wf_oos_e40": 1233.7996015936255,
+   "ho_trades": 310,
+   "ho_n_starts": 381,
+   "ho_intraday": {
+    "e_net_40": 867.5763779527558,
+    "p_pay_20": 0.2335958005249344,
+    "p_pay_40": 0.2335958005249344,
+    "med_days_first": 9.0,
+    "p_bust_pre_first": 0.7664041994750657
+   },
+   "ho_realized_e40": 1447.6346456692916,
+   "ho_lift_intraday": {
+    "K": 10,
+    "ctrl_e40": 453.9805511811023,
+    "lift_e40": 413.5958267716535
+   }
+  }
+ ],
+ "no_bundle": {
+  "eval": [
+   "lucid: fp-orb-tf5#9 nyam",
+   "lucid: fp-straddle-tf30#9 london",
+   "lucid: fp-orb-tf5#9 london",
+   "lucid: fp-rsi2-tf5#9 mid",
+   "lucid: fp-tema_slope-tf5#10 nyam",
+   "lucid: fp-tema_slope-tf5#9 london",
+   "lucid: fp-ema_pullback-tf5#14 pm",
+   "lucidpro: hm2-straddle-tf30#11 nyam",
+   "lucidpro: hm2-donchian-tf1#35 pm",
+   "lucidpro: hm-orb-tf5#31 nyam",
+   "lucidpro: hm-tod_drift-tf5#22 london",
+   "lucidpro: hm-first_bar_mom-tf15#11 nyam",
+   "lucidpro_nodll: hm2-ema_pullback-tf1#23 pm",
+   "lucidpro_nodll: hm2-donchian-tf5#15 pm",
+   "lucidpro_nodll: hm2-straddle-tf30#11 nyam",
+   "lucidpro_nodll: hm-donchian-tf15#10 nyam",
+   "lucidpro_nodll: hm-tod_drift-tf5#0 nyam",
+   "lucidpro_nodll: hm-orb-tf5#27 pm",
+   "lucidpro_nodll: fp-orb-tf5#15 nyam",
+   "apex: hm2-tod_drift-tf15#13 nyam",
+   "apex: fp-vwap_flip-tf1#14 mid",
+   "apex: fp-rsi2-tf5#5 mid",
+   "apex: hm2-donchian-tf5#7 pm",
+   "apex_eod: hm-tod_drift-tf5#18 london",
+   "apex_eod: hm-tod_drift-tf5#0 pm",
+   "apex_eod: hm2-donchian-tf1#35 pm",
+   "apex_eod: hm2-donchian-tf5#8 pm",
+   "apex_eod: fp-straddle-tf30#15 pm",
+   "apex_eod: fp-orb-tf5#15 nyam"
+  ],
+  "funded": [
+   "flex: hm2-donchian-tf1#35 pm",
+   "flex: hm2-squeeze-tf5#32 pm",
+   "flex: hm2-squeeze-tf5#20 pm",
+   "flex: hm-vwap_z-tf5#17 pm",
+   "flex_dll: hm2-donchian-tf1#35 pm",
+   "flex_dll: hm2-squeeze-tf5#32 pm",
+   "flex_dll: hm-vwap_z-tf5#16 pm",
+   "pro_dll: fp-orb-tf5#3 nyam",
+   "pro_dll: fp-orb-tf5#2 nyam",
+   "pro_dll: fp-donchian-tf15#9 pm",
+   "pro_nodll: fp-orb-tf5#3 nyam",
+   "pro_nodll: fp-orb-tf5#2 nyam",
+   "pro_nodll: hm2-squeeze-tf5#20 pm"
+  ]
+ },
+ "insample_path_check": [
+  {
+   "pick": "lucid: fp-tod_drift-tf5#15 mid",
+   "stored": 0.359318,
+   "recomputed": 0.35931790499390986,
+   "diff": 9.50060901616645e-08
+  },
+  {
+   "pick": "lucid: fp-tod_drift-tf5#14 pm",
+   "stored": 0.322777,
+   "recomputed": 0.3227771010962241,
+   "diff": 1.0109622411436092e-07
+  },
+  {
+   "pick": "lucid: fp-orb-tf5#7 mid",
+   "stored": 0.323995,
+   "recomputed": 0.32399512789281365,
+   "diff": 1.2789281367275862e-07
+  },
+  {
+   "pick": "lucidpro: hm-tod_drift-tf5#23 mid",
+   "stored": 0.395859,
+   "recomputed": 0.39585870889159563,
+   "diff": 2.911084043821788e-07
+  },
+  {
+   "pick": "lucidpro: hm2-donchian-tf5#5 pm",
+   "stored": 0.414129,
+   "recomputed": 0.41412911084043846,
+   "diff": 1.1084043843867519e-07
+  },
+  {
+   "pick": "lucidpro: hm-donchian-tf15#11 nyam",
+   "stored": 0.394641,
+   "recomputed": 0.3946406820950061,
+   "diff": 3.179049939405765e-07
+  },
+  {
+   "pick": "lucidpro: hm2-rsi2-tf1#9 mid",
+   "stored": 0.412911,
+   "recomputed": 0.41291108404384896,
+   "diff": 8.40438489912998e-08
+  },
+  {
+   "pick": "lucidpro: hm2-tod_drift-tf15#6 london",
+   "stored": 0.384896,
+   "recomputed": 0.3848964677222899,
+   "diff": 4.6772228989855336e-07
+  },
+  {
+   "pick": "lucidpro_nodll: fp-donchian-tf15#15 pm",
+   "stored": 0.415347,
+   "recomputed": 0.415347137637028,
+   "diff": 1.376370279970729e-07
+  },
+  {
+   "pick": "lucidpro_nodll: hm2-tod_drift-tf15#6 london",
+   "stored": 0.401949,
+   "recomputed": 0.40194884287454324,
+   "diff": 1.5712545675672374e-07
+  },
+  {
+   "pick": "lucidpro_nodll: hm-tod_drift-tf5#19 mid",
+   "stored": 0.388551,
+   "recomputed": 0.38855054811205847,
+   "diff": 4.5188794151052036e-07
+  },
+  {
+   "pick": "apex: fp-donchian-tf15#15 pm",
+   "stored": 0.415347,
+   "recomputed": 0.415347137637028,
+   "diff": 1.376370279970729e-07
+  },
+  {
+   "pick": "apex: fp-tod_drift-tf5#7 mid",
+   "stored": 0.411693,
+   "recomputed": 0.41169305724725946,
+   "diff": 5.724725948841325e-08
+  },
+  {
+   "pick": "apex: fp-orb-tf5#7 nyam",
+   "stored": 0.405603,
+   "recomputed": 0.4056029232643118,
+   "diff": 7.673568819255294e-08
+  },
+  {
+   "pick": "apex: hm2-tod_drift-tf15#6 london",
+   "stored": 0.401949,
+   "recomputed": 0.40194884287454324,
+   "diff": 1.5712545675672374e-07
+  },
+  {
+   "pick": "apex: fp-orb-tf5#7 london",
+   "stored": 0.400731,
+   "recomputed": 0.4007308160779537,
+   "diff": 1.8392204631512143e-07
+  },
+  {
+   "pick": "apex: hm-tod_drift-tf5#15 nyam",
+   "stored": 0.400731,
+   "recomputed": 0.4007308160779537,
+   "diff": 1.8392204631512143e-07
+  },
+  {
+   "pick": "apex_eod: hm-donchian-tf15#11 nyam",
+   "stored": 0.398295,
+   "recomputed": 0.3982947624847747,
+   "diff": 2.3751522532089453e-07
+  },
+  {
+   "pick": "apex_eod: hm-tod_drift-tf5#19 mid",
+   "stored": 0.384896,
+   "recomputed": 0.3848964677222899,
+   "diff": 4.6772228989855336e-07
+  },
+  {
+   "pick": "apex_eod: fp-tod_drift-tf5#15 mid",
+   "stored": 0.37028,
+   "recomputed": 0.3702801461632156,
+   "diff": 1.4616321558635903e-07
+  },
+  {
+   "pick": "apex_eod: hm2-tod_drift-tf15#19 mid",
+   "stored": 0.397077,
+   "recomputed": 0.39707673568818513,
+   "diff": 2.6431181487929223e-07
+  },
+  {
+   "pick": "flex: fp-donchian-tf15#10 pm",
+   "stored": 1267.8873368146237,
+   "recomputed": 1267.8873368146214,
+   "diff": 2.2737367544323206e-12
+  },
+  {
+   "pick": "flex_dll: hm2-squeeze-tf5#28 pm",
+   "stored": 1414.7808338772845,
+   "recomputed": 1414.7808338772847,
+   "diff": 2.2737367544323206e-13
+  },
+  {
+   "pick": "flex_dll: fp-donchian-tf15#13 pm",
+   "stored": 1273.2697127937345,
+   "recomputed": 1273.2697127937336,
+   "diff": 9.094947017729282e-13
+  },
+  {
+   "pick": "pro_dll: fp-donchian-tf15#10 pm",
+   "stored": 1525.3590078329003,
+   "recomputed": 1525.3590078328982,
+   "diff": 2.0463630789890885e-12
+  },
+  {
+   "pick": "pro_dll: hm2-squeeze-tf5#28 pm",
+   "stored": 1465.6206266318532,
+   "recomputed": 1465.620626631854,
+   "diff": 9.094947017729282e-13
+  },
+  {
+   "pick": "pro_nodll: fp-donchian-tf15#10 pm",
+   "stored": 1716.288250652741,
+   "recomputed": 1716.2882506527417,
+   "diff": 6.821210263296962e-13
+  },
+  {
+   "pick": "pro_nodll: fp-donchian-tf15#13 pm",
+   "stored": 1461.7586161879897,
+   "recomputed": 1461.7586161879897,
+   "diff": 0.0
+  }
+ ],
+ "max_path_diff": 4.6772228989855336e-07
+}

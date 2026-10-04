@@ -1,0 +1,1 @@
+{"key": "delta_follow-tf1-c2s1", "fam_tf": "delta_follow-tf1", "family": "delta_follow", "tf": "1", "variant": "c2s1", "sess": "london", "firm": "flex_dll", "status": "ok", "lift": 287.96216710182773, "ctrl": 378.3259856396867, "real": 666.2881527415144, "skipped": null, "elapsed_s": 0.64}

@@ -1,0 +1,84 @@
+
+[garbage delta_follow tf1] days 10 decisions 8454 signals 933 trades 132 garbage runs compared 1506: 0 differences before the cut
+.
+[garbage delta_follow tf5] days 10 decisions 1640 signals 236 trades 93 garbage runs compared 1506: 0 differences before the cut
+.
+[garbage absorption tf1] days 10 decisions 8454 signals 69 trades 62 garbage runs compared 1290: 0 differences before the cut
+.
+[garbage absorption tf5] days 10 decisions 1640 signals 14 trades 13 garbage runs compared 876: 0 differences before the cut
+.
+[garbage cvd_div tf1] days 10 decisions 8454 signals 110 trades 66 garbage runs compared 1404: 0 differences before the cut
+.
+[garbage cvd_div tf5] days 10 decisions 1640 signals 123 trades 75 garbage runs compared 1482: 0 differences before the cut
+.
+[garbage sweep_follow tf1] days 10 decisions 8454 signals 575 trades 130 garbage runs compared 1530: 0 differences before the cut
+.
+[garbage sweep_follow tf5] days 10 decisions 1640 signals 129 trades 69 garbage runs compared 1494: 0 differences before the cut
+.
+[power/leak delta_follow tf1] one-minute leak flagged at 86 of 100 cuts
+.
+[power/leak delta_follow tf5] one-minute leak flagged at 89 of 100 cuts
+.
+[power/leak absorption tf1] one-minute leak flagged at 25 of 100 cuts
+.
+[power/leak absorption tf5] one-minute leak flagged at 29 of 100 cuts
+.
+[power/leak cvd_div tf1] one-minute leak flagged at 64 of 100 cuts
+.
+[power/leak cvd_div tf5] one-minute leak flagged at 84 of 100 cuts
+.
+[power/leak sweep_follow tf1] one-minute leak flagged at 89 of 100 cuts
+.
+[power/leak sweep_follow tf5] one-minute leak flagged at 89 of 100 cuts
+.
+[power/shift delta_follow tf1] signals clean 933, with flow values one minute early 603, symmetric difference 1264, days changed 9 of 10
+.
+[power/shift delta_follow tf5] signals clean 236, with flow values one minute early 215, symmetric difference 135, days changed 9 of 10
+.
+[power/shift absorption tf1] signals clean 69, with flow values one minute early 278, symmetric difference 331, days changed 9 of 10
+.
+[power/shift absorption tf5] signals clean 14, with flow values one minute early 17, symmetric difference 19, days changed 8 of 10
+.
+[power/shift cvd_div tf1] signals clean 110, with flow values one minute early 211, symmetric difference 143, days changed 9 of 10
+.
+[power/shift cvd_div tf5] signals clean 123, with flow values one minute early 131, symmetric difference 74, days changed 9 of 10
+.
+[power/shift sweep_follow tf1] signals clean 575, with flow values one minute early 567, symmetric difference 966, days changed 9 of 10
+.
+[power/shift sweep_follow tf5] signals clean 129, with flow values one minute early 136, symmetric difference 67, days changed 9 of 10
+.
+[power/newest delta_follow tf1] decision at the cut changed at 95 of 100 cuts
+.
+[power/newest delta_follow tf5] decision at the cut changed at 98 of 100 cuts
+.
+[power/newest absorption tf1] decision at the cut changed at 28 of 100 cuts
+.
+[power/newest absorption tf5] decision at the cut changed at 31 of 100 cuts
+.
+[power/newest cvd_div tf1] decision at the cut changed at 72 of 100 cuts
+.
+[power/newest cvd_div tf5] decision at the cut changed at 93 of 100 cuts
+.
+[power/newest sweep_follow tf1] decision at the cut changed at 99 of 100 cuts
+.
+[power/newest sweep_follow tf5] decision at the cut changed at 99 of 100 cuts
+..
+[oracle delta_follow tf1] 933 signals on 10 real days: identical to the causal oracle
+.
+[oracle delta_follow tf5] 236 signals on 10 real days: identical to the causal oracle
+.
+[oracle absorption tf1] 69 signals on 10 real days: identical to the causal oracle
+.
+[oracle absorption tf5] 14 signals on 10 real days: identical to the causal oracle
+.
+[oracle cvd_div tf1] 110 signals on 10 real days: identical to the causal oracle
+.
+[oracle cvd_div tf5] 123 signals on 10 real days: identical to the causal oracle
+.
+[oracle sweep_follow tf1] 575 signals on 10 real days: identical to the causal oracle
+.
+[oracle sweep_follow tf5] 129 signals on 10 real days: identical to the causal oracle
+.
+[flow columns] 13569 minute rows equal to the tape's own minute; 47045 minute values identical from a tape truncated at the decision time
+.
+42 passed in 220.14s (0:03:40)

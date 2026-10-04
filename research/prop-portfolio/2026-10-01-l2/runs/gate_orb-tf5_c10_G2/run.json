@@ -1,0 +1,150 @@
+{
+ "id": "gate_orb-tf5_c10_G2",
+ "engine": "gates-1 (list gate on an in-sample tester bundle)",
+ "range": {
+  "start": "2021-09-22",
+  "end": "2024-12-31",
+  "holdout": false
+ },
+ "holdout": false,
+ "qty": 1,
+ "trades": 526,
+ "net": -18709.0,
+ "strategy": "gates.G2",
+ "inputs": {
+  "pick": "orb-tf5_c10",
+  "source": "R__hm-orb-tf5_c10",
+  "gate": "G2",
+  "name": "gate_thin",
+  "guard_ms": 0
+ },
+ "elapsed_s": 0.02,
+ "gate": {
+  "gate": "G2",
+  "name": "gate_thin",
+  "pick": "orb-tf5_c10",
+  "pick_key": "hm-orb-tf5#10",
+  "tf": "5",
+  "pick_sess": "mid",
+  "source": "R__hm-orb-tf5_c10",
+  "source_sha256": "0425685315bf9856d37e1b6bf0601810b7c720301a7a7f133a730a1f4479fef2",
+  "stage": "gate",
+  "control": "",
+  "seed": "",
+  "features": [
+   "depth10_rel20d",
+   "t_utc"
+  ],
+  "counts": {
+   "source_trades": 3272,
+   "rows": 526,
+   "no_signal": 196,
+   "basis": 3076,
+   "cats": {
+    "keep": 526,
+    "skip": 2746
+   },
+   "rows_by_session": {
+    "london": 110,
+    "mid": 143,
+    "nyam": 136,
+    "pm": 137
+   },
+   "cats_by_session": {
+    "london": {
+     "keep": 110,
+     "skip": 710
+    },
+    "mid": {
+     "keep": 143,
+     "skip": 677
+    },
+    "nyam": {
+     "keep": 136,
+     "skip": 684
+    },
+    "pm": {
+     "keep": 137,
+     "skip": 675
+    }
+   },
+   "exec_guard": null,
+   "entry_timing": {
+    "under_1s_after_minute": 337,
+    "market_entries": 0,
+    "market_over_60s_after_bar": 0
+   },
+   "guard_check": {
+    "guard_ms": 1000,
+    "verdicts_changed": 43,
+    "no_signal": 196
+   }
+  },
+  "control_only": false,
+  "half_unit_rows": false,
+  "note": "list gate: a survivor must be replayed through l2sim as a Template filter",
+  "cells": {
+   "pro_nodll_funded": {
+    "slot": "pro_nodll_funded",
+    "kind": "funded",
+    "base": "file:R__hm-orb-tf5_c10",
+    "base_kw": {
+     "firm": "pro_nodll",
+     "rules": {
+      "day_take": 1000,
+      "day_lock": 300,
+      "day_stop": 0,
+      "max_day_tr": 0
+     },
+     "sess": "mid",
+     "policy": 1000,
+     "strategy": "orb",
+     "inputs": {
+      "tf": "5",
+      "or_min": "5",
+      "stop_val": 3.0,
+      "tgt_r": 2.0
+     },
+     "both_sides": true,
+     "micros": 40
+    },
+    "pick_meta": {
+     "strategy": "orb",
+     "inputs": {
+      "tf": "5",
+      "or_min": "5",
+      "stop_val": 3.0,
+      "tgt_r": 2.0
+     },
+     "both_sides": true
+    },
+    "warnings": [],
+    "real": "/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-10-01-l2/runs/gate_orb-tf5_c10_G2",
+    "nulls": [
+     "/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-10-01-l2/runs/gate_orb-tf5_c10_G2-perms1",
+     "/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-10-01-l2/runs/gate_orb-tf5_c10_G2-perms2"
+    ],
+    "gate_kw": {
+     "firm": "pro_nodll",
+     "rules": {
+      "day_take": 1000,
+      "day_lock": 300,
+      "day_stop": 0,
+      "max_day_tr": 0
+     },
+     "sess": "mid",
+     "policy": 1000,
+     "strategy": "orb",
+     "inputs": {
+      "tf": "5",
+      "or_min": "5",
+      "stop_val": 3.0,
+      "tgt_r": 2.0
+     },
+     "both_sides": true,
+     "micros": 40
+    }
+   }
+  }
+ }
+}

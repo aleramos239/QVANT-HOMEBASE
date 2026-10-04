@@ -1,0 +1,1 @@
+{"key": "thin_side-tf1-c2s2", "fam_tf": "thin_side-tf1", "family": "thin_side", "tf": "1", "variant": "c2s2", "sess": "nyam", "firm": "apex50_pa", "n_trades": 388, "status": "no_compliant_cell", "metric": null, "cells": 4608, "eligible": 0, "gate": {"apex_one_direction": ["ok"], "apex_stop_5x_target": ["FAIL", "ok"], "apex_mae_rule": ["FAIL"]}, "elapsed_s": 67.05}

@@ -1,0 +1,606 @@
+{
+ "lucid:single": {
+  "struct": {
+   "K": 10,
+   "same_micros": true,
+   "per_day_session_counts_equal": true,
+   "ctrl_trades": [],
+   "real_trades": [
+    820
+   ],
+   "pool_flags": [
+    "exact"
+   ]
+  },
+  "eod": {
+   "real_p5": 0.6918392204628502,
+   "ctrl_p5": 0.5985383678440925,
+   "lift": 0.0933008526187576,
+   "reported_real": 0.6918392204628502,
+   "reported_ctrl": 0.5985383678440925,
+   "reported_lift": 0.0933008526187576
+  },
+  "realized": {
+   "real_p5": 0.6918392204628502,
+   "ctrl_p5": 0.5985383678440925,
+   "lift": 0.0933008526187576,
+   "reported_real": 0.6918392204628502,
+   "reported_ctrl": 0.5985383678440925,
+   "reported_lift": 0.0933008526187576
+  },
+  "intraday": {
+   "real_p5": 0.0097442143727162,
+   "ctrl_p5": 0.05420219244823386,
+   "lift": -0.044457978075517664,
+   "reported_real": 0.0097442143727162,
+   "reported_ctrl": 0.05420219244823386,
+   "reported_lift": -0.044457978075517664
+  }
+ },
+ "lucid:best2": {
+  "struct": {
+   "K": 10,
+   "same_micros": true,
+   "per_day_session_counts_equal": true,
+   "ctrl_trades": [],
+   "real_trades": [
+    820,
+    820
+   ],
+   "pool_flags": [
+    "exact",
+    "exact"
+   ]
+  },
+  "eod": {
+   "real_p5": 0.6918392204628502,
+   "ctrl_p5": 0.6008526187576128,
+   "lift": 0.09098660170523752,
+   "reported_real": 0.6918392204628502,
+   "reported_ctrl": 0.6008526187576128,
+   "reported_lift": 0.09098660170523752
+  },
+  "realized": {
+   "real_p5": 0.6918392204628502,
+   "ctrl_p5": 0.5903775883069428,
+   "lift": 0.10146163215590742,
+   "reported_real": 0.6918392204628502,
+   "reported_ctrl": 0.5903775883069428,
+   "reported_lift": 0.10146163215590742
+  },
+  "intraday": {
+   "real_p5": 0.0097442143727162,
+   "ctrl_p5": 0.053471376370280155,
+   "lift": -0.043727161997563956,
+   "reported_real": 0.0097442143727162,
+   "reported_ctrl": 0.053471376370280155,
+   "reported_lift": -0.043727161997563956
+  }
+ },
+ "lucid:portfolio": {
+  "struct": {
+   "K": 10,
+   "same_micros": true,
+   "per_day_session_counts_equal": true,
+   "ctrl_trades": [],
+   "real_trades": [
+    820,
+    820,
+    1112
+   ],
+   "pool_flags": [
+    "exact",
+    "exact",
+    "exact"
+   ]
+  },
+  "eod": {
+   "real_p5": 0.728380024360536,
+   "ctrl_p5": 0.6266747868453106,
+   "lift": 0.10170523751522534,
+   "reported_real": 0.728380024360536,
+   "reported_ctrl": 0.6266747868453106,
+   "reported_lift": 0.10170523751522534
+  },
+  "realized": {
+   "real_p5": 0.6881851400730816,
+   "ctrl_p5": 0.5565164433617539,
+   "lift": 0.13166869671132764,
+   "reported_real": 0.6881851400730816,
+   "reported_ctrl": 0.5565164433617539,
+   "reported_lift": 0.13166869671132764
+  },
+  "intraday": {
+   "real_p5": 0.07064555420219244,
+   "ctrl_p5": 0.06565164433617539,
+   "lift": 0.004993909866017051,
+   "reported_real": 0.07064555420219244,
+   "reported_ctrl": 0.06565164433617539,
+   "reported_lift": 0.004993909866017051
+  }
+ },
+ "lucidpro:single": {
+  "struct": {
+   "K": 10,
+   "same_micros": true,
+   "per_day_session_counts_equal": true,
+   "ctrl_trades": [],
+   "real_trades": [
+    820
+   ],
+   "pool_flags": [
+    "exact"
+   ]
+  },
+  "eod": {
+   "real_p5": 0.4470158343483557,
+   "ctrl_p5": 0.35505481120584653,
+   "lift": 0.09196102314250913,
+   "reported_real": 0.4470158343483557,
+   "reported_ctrl": 0.35505481120584653,
+   "reported_lift": 0.09196102314250913
+  },
+  "realized": {
+   "real_p5": 0.4470158343483557,
+   "ctrl_p5": 0.3545676004872107,
+   "lift": 0.09244823386114495,
+   "reported_real": 0.4470158343483557,
+   "reported_ctrl": 0.3545676004872107,
+   "reported_lift": 0.09244823386114495
+  },
+  "intraday": {
+   "real_p5": 0.40194884287454324,
+   "ctrl_p5": 0.3032886723507917,
+   "lift": 0.09866017052375152,
+   "reported_real": 0.40194884287454324,
+   "reported_ctrl": 0.3032886723507917,
+   "reported_lift": 0.09866017052375152
+  }
+ },
+ "lucidpro:best2": {
+  "struct": {
+   "K": 10,
+   "same_micros": true,
+   "per_day_session_counts_equal": true,
+   "ctrl_trades": [],
+   "real_trades": [
+    820,
+    1309
+   ],
+   "pool_flags": [
+    "exact",
+    "exact"
+   ]
+  },
+  "eod": {
+   "real_p5": 0.4470158343483557,
+   "ctrl_p5": 0.3527405602923265,
+   "lift": 0.09427527405602924,
+   "reported_real": 0.4470158343483557,
+   "reported_ctrl": 0.3527405602923265,
+   "reported_lift": 0.09427527405602924
+  },
+  "realized": {
+   "real_p5": 0.4470158343483557,
+   "ctrl_p5": 0.3523751522533496,
+   "lift": 0.09464068209500609,
+   "reported_real": 0.4470158343483557,
+   "reported_ctrl": 0.3523751522533496,
+   "reported_lift": 0.09464068209500609
+  },
+  "intraday": {
+   "real_p5": 0.40316686967113274,
+   "ctrl_p5": 0.30316686967113277,
+   "lift": 0.09999999999999999,
+   "reported_real": 0.40316686967113274,
+   "reported_ctrl": 0.30316686967113277,
+   "reported_lift": 0.09999999999999999
+  }
+ },
+ "lucidpro:portfolio": {
+  "struct": {
+   "K": 10,
+   "same_micros": true,
+   "per_day_session_counts_equal": true,
+   "ctrl_trades": [],
+   "real_trades": [
+    820,
+    1309,
+    820,
+    820
+   ],
+   "pool_flags": [
+    "exact",
+    "exact",
+    "given",
+    "exact"
+   ]
+  },
+  "eod": {
+   "real_p5": 0.4226552984165652,
+   "ctrl_p5": 0.38684531059683314,
+   "lift": 0.03580998781973204,
+   "reported_real": 0.4226552984165652,
+   "reported_ctrl": 0.38684531059683314,
+   "reported_lift": 0.03580998781973204
+  },
+  "realized": {
+   "real_p5": 0.4226552984165652,
+   "ctrl_p5": 0.38538367844092575,
+   "lift": 0.03727161997563947,
+   "reported_real": 0.4226552984165652,
+   "reported_ctrl": 0.38538367844092575,
+   "reported_lift": 0.03727161997563947
+  },
+  "intraday": {
+   "real_p5": 0.37393422655298414,
+   "ctrl_p5": 0.34165651644336176,
+   "lift": 0.0322777101096224,
+   "reported_real": 0.37393422655298414,
+   "reported_ctrl": 0.34165651644336176,
+   "reported_lift": 0.0322777101096224
+  }
+ },
+ "lucidpro_nodll:single": {
+  "struct": {
+   "K": 10,
+   "same_micros": true,
+   "per_day_session_counts_equal": true,
+   "ctrl_trades": [],
+   "real_trades": [
+    820
+   ],
+   "pool_flags": [
+    "exact"
+   ]
+  },
+  "eod": {
+   "real_p5": 0.7064555420219245,
+   "ctrl_p5": 0.6341047503045067,
+   "lift": 0.07235079171741778,
+   "reported_real": 0.7064555420219245,
+   "reported_ctrl": 0.6341047503045067,
+   "reported_lift": 0.07235079171741778
+  },
+  "realized": {
+   "real_p5": 0.7064555420219245,
+   "ctrl_p5": 0.6341047503045067,
+   "lift": 0.07235079171741778,
+   "reported_real": 0.7064555420219245,
+   "reported_ctrl": 0.6341047503045067,
+   "reported_lift": 0.07235079171741778
+  },
+  "intraday": {
+   "real_p5": 0.22777101096224117,
+   "ctrl_p5": 0.2862362971985384,
+   "lift": -0.058465286236297195,
+   "reported_real": 0.22777101096224117,
+   "reported_ctrl": 0.2862362971985384,
+   "reported_lift": -0.058465286236297195
+  }
+ },
+ "lucidpro_nodll:best2": {
+  "struct": {
+   "K": 10,
+   "same_micros": true,
+   "per_day_session_counts_equal": true,
+   "ctrl_trades": [],
+   "real_trades": [
+    820,
+    613
+   ],
+   "pool_flags": [
+    "exact",
+    "given"
+   ]
+  },
+  "eod": {
+   "real_p5": 0.7064555420219245,
+   "ctrl_p5": 0.6345919610231425,
+   "lift": 0.07186358099878197,
+   "reported_real": 0.7064555420219245,
+   "reported_ctrl": 0.6345919610231425,
+   "reported_lift": 0.07186358099878197
+  },
+  "realized": {
+   "real_p5": 0.705237515225335,
+   "ctrl_p5": 0.6260657734470159,
+   "lift": 0.07917174177831912,
+   "reported_real": 0.705237515225335,
+   "reported_ctrl": 0.6260657734470159,
+   "reported_lift": 0.07917174177831912
+  },
+  "intraday": {
+   "real_p5": 0.22777101096224117,
+   "ctrl_p5": 0.2866017052375152,
+   "lift": -0.05883069427527406,
+   "reported_real": 0.22777101096224117,
+   "reported_ctrl": 0.2866017052375152,
+   "reported_lift": -0.05883069427527406
+  }
+ },
+ "lucidpro_nodll:portfolio": {
+  "struct": {
+   "K": 10,
+   "same_micros": true,
+   "per_day_session_counts_equal": true,
+   "ctrl_trades": [],
+   "real_trades": [
+    820,
+    613,
+    813
+   ],
+   "pool_flags": [
+    "exact",
+    "given",
+    "exact"
+   ]
+  },
+  "eod": {
+   "real_p5": 0.7064555420219245,
+   "ctrl_p5": 0.618148599269184,
+   "lift": 0.08830694275274056,
+   "reported_real": 0.7064555420219245,
+   "reported_ctrl": 0.618148599269184,
+   "reported_lift": 0.08830694275274056
+  },
+  "realized": {
+   "real_p5": 0.7064555420219245,
+   "ctrl_p5": 0.618148599269184,
+   "lift": 0.08830694275274056,
+   "reported_real": 0.7064555420219245,
+   "reported_ctrl": 0.618148599269184,
+   "reported_lift": 0.08830694275274056
+  },
+  "intraday": {
+   "real_p5": 0.26065773447015833,
+   "ctrl_p5": 0.27807551766138855,
+   "lift": -0.017417783191230204,
+   "reported_real": 0.26065773447015833,
+   "reported_ctrl": 0.27807551766138855,
+   "reported_lift": -0.017417783191230204
+  }
+ },
+ "apex:single": {
+  "struct": {
+   "K": 10,
+   "same_micros": true,
+   "per_day_session_counts_equal": true,
+   "ctrl_trades": [],
+   "real_trades": [
+    586
+   ],
+   "pool_flags": [
+    "NEAREST profile (dist 10.00): {'tf': 1, 'stop_mode': 'pts', 'stop_val': 45.0, 'tgt_r': 1.0, 'exit_bars': 0, 'trail_atr': 0.0, 'max_tr': 3}"
+   ]
+  },
+  "eod": {
+   "real_p5": 0.4287454323995128,
+   "ctrl_p5": 0.3582216808769793,
+   "lift": 0.07052375152253348,
+   "reported_real": 0.4287454323995128,
+   "reported_ctrl": 0.3582216808769793,
+   "reported_lift": 0.07052375152253348
+  },
+  "realized": {
+   "real_p5": 0.4287454323995128,
+   "ctrl_p5": 0.3582216808769793,
+   "lift": 0.07052375152253348,
+   "reported_real": 0.4287454323995128,
+   "reported_ctrl": 0.3582216808769793,
+   "reported_lift": 0.07052375152253348
+  },
+  "intraday": {
+   "real_p5": 0.4165651644336175,
+   "ctrl_p5": 0.35639464068209503,
+   "lift": 0.06017052375152253,
+   "reported_real": 0.4165651644336175,
+   "reported_ctrl": 0.35639464068209503,
+   "reported_lift": 0.06017052375152253
+  }
+ },
+ "apex:best2": {
+  "struct": {
+   "K": 10,
+   "same_micros": true,
+   "per_day_session_counts_equal": true,
+   "ctrl_trades": [],
+   "real_trades": [
+    586,
+    785
+   ],
+   "pool_flags": [
+    "NEAREST profile (dist 10.00): {'tf': 1, 'stop_mode': 'pts', 'stop_val': 45.0, 'tgt_r': 1.0, 'exit_bars': 0, 'trail_atr': 0.0, 'max_tr': 3}",
+    "given"
+   ]
+  },
+  "eod": {
+   "real_p5": 0.4543239951278928,
+   "ctrl_p5": 0.35809987819732036,
+   "lift": 0.09622411693057248,
+   "reported_real": 0.4543239951278928,
+   "reported_ctrl": 0.35809987819732036,
+   "reported_lift": 0.09622411693057248
+  },
+  "realized": {
+   "real_p5": 0.4543239951278928,
+   "ctrl_p5": 0.35809987819732036,
+   "lift": 0.09622411693057248,
+   "reported_real": 0.4543239951278928,
+   "reported_ctrl": 0.35809987819732036,
+   "reported_lift": 0.09622411693057248
+  },
+  "intraday": {
+   "real_p5": 0.4470158343483557,
+   "ctrl_p5": 0.35481120584652864,
+   "lift": 0.09220462850182705,
+   "reported_real": 0.4470158343483557,
+   "reported_ctrl": 0.35481120584652864,
+   "reported_lift": 0.09220462850182705
+  }
+ },
+ "apex:portfolio": {
+  "struct": {
+   "K": 10,
+   "same_micros": true,
+   "per_day_session_counts_equal": true,
+   "ctrl_trades": [],
+   "real_trades": [
+    586,
+    785,
+    769,
+    820
+   ],
+   "pool_flags": [
+    "NEAREST profile (dist 10.00): {'tf': 1, 'stop_mode': 'pts', 'stop_val': 45.0, 'tgt_r': 1.0, 'exit_bars': 0, 'trail_atr': 0.0, 'max_tr': 3}",
+    "given",
+    "given",
+    "exact"
+   ]
+  },
+  "eod": {
+   "real_p5": 0.4884287454323995,
+   "ctrl_p5": 0.4352009744214373,
+   "lift": 0.053227771010962224,
+   "reported_real": 0.4884287454323995,
+   "reported_ctrl": 0.4352009744214373,
+   "reported_lift": 0.053227771010962224
+  },
+  "realized": {
+   "real_p5": 0.4884287454323995,
+   "ctrl_p5": 0.4352009744214373,
+   "lift": 0.053227771010962224,
+   "reported_real": 0.4884287454323995,
+   "reported_ctrl": 0.4352009744214373,
+   "reported_lift": 0.053227771010962224
+  },
+  "intraday": {
+   "real_p5": 0.40194884287454324,
+   "ctrl_p5": 0.34920828258221687,
+   "lift": 0.05274056029232644,
+   "reported_real": 0.40194884287454324,
+   "reported_ctrl": 0.34920828258221687,
+   "reported_lift": 0.05274056029232644
+  }
+ },
+ "apex_eod:single": {
+  "struct": {
+   "K": 10,
+   "same_micros": true,
+   "per_day_session_counts_equal": true,
+   "ctrl_trades": [],
+   "real_trades": [
+    743
+   ],
+   "pool_flags": [
+    "given"
+   ]
+  },
+  "eod": {
+   "real_p5": 0.40316686967113274,
+   "ctrl_p5": 0.32070645554202193,
+   "lift": 0.08246041412911084,
+   "reported_real": 0.40316686967113274,
+   "reported_ctrl": 0.32070645554202193,
+   "reported_lift": 0.08246041412911084
+  },
+  "realized": {
+   "real_p5": 0.40316686967113274,
+   "ctrl_p5": 0.32070645554202193,
+   "lift": 0.08246041412911084,
+   "reported_real": 0.40316686967113274,
+   "reported_ctrl": 0.32070645554202193,
+   "reported_lift": 0.08246041412911084
+  },
+  "intraday": {
+   "real_p5": 0.3982947624847747,
+   "ctrl_p5": 0.31717417783191226,
+   "lift": 0.08112058465286236,
+   "reported_real": 0.3982947624847747,
+   "reported_ctrl": 0.31717417783191226,
+   "reported_lift": 0.08112058465286236
+  }
+ },
+ "apex_eod:best2": {
+  "struct": {
+   "K": 10,
+   "same_micros": true,
+   "per_day_session_counts_equal": true,
+   "ctrl_trades": [],
+   "real_trades": [
+    743,
+    1145
+   ],
+   "pool_flags": [
+    "given",
+    "exact"
+   ]
+  },
+  "eod": {
+   "real_p5": 0.44336175395858707,
+   "ctrl_p5": 0.35931790499390986,
+   "lift": 0.08404384896467722,
+   "reported_real": 0.44336175395858707,
+   "reported_ctrl": 0.35931790499390986,
+   "reported_lift": 0.08404384896467722
+  },
+  "realized": {
+   "real_p5": 0.44336175395858707,
+   "ctrl_p5": 0.359074299634592,
+   "lift": 0.08428745432399513,
+   "reported_real": 0.44336175395858707,
+   "reported_ctrl": 0.359074299634592,
+   "reported_lift": 0.08428745432399513
+  },
+  "intraday": {
+   "real_p5": 0.440925700365408,
+   "ctrl_p5": 0.35834348355663825,
+   "lift": 0.0825822168087698,
+   "reported_real": 0.440925700365408,
+   "reported_ctrl": 0.35834348355663825,
+   "reported_lift": 0.0825822168087698
+  }
+ },
+ "apex_eod:portfolio": {
+  "struct": {
+   "K": 10,
+   "same_micros": true,
+   "per_day_session_counts_equal": true,
+   "ctrl_trades": [],
+   "real_trades": [
+    743,
+    1145,
+    820
+   ],
+   "pool_flags": [
+    "given",
+    "exact",
+    "given"
+   ]
+  },
+  "eod": {
+   "real_p5": 0.4238733252131547,
+   "ctrl_p5": 0.35602923264311814,
+   "lift": 0.06784409257003654,
+   "reported_real": 0.4238733252131547,
+   "reported_ctrl": 0.35602923264311814,
+   "reported_lift": 0.06784409257003654
+  },
+  "realized": {
+   "real_p5": 0.4238733252131547,
+   "ctrl_p5": 0.35602923264311814,
+   "lift": 0.06784409257003654,
+   "reported_real": 0.4238733252131547,
+   "reported_ctrl": 0.35602923264311814,
+   "reported_lift": 0.06784409257003654
+  },
+  "intraday": {
+   "real_p5": 0.4238733252131547,
+   "ctrl_p5": 0.35578562728380025,
+   "lift": 0.06808769792935446,
+   "reported_real": 0.4238733252131547,
+   "reported_ctrl": 0.35578562728380025,
+   "reported_lift": 0.06808769792935446
+  }
+ }
+}

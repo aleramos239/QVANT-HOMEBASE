@@ -1,0 +1,1 @@
+{"key": "absorption-tf5-c2s1", "fam_tf": "absorption-tf5", "family": "absorption", "tf": "5", "variant": "c2s1", "sess": "london", "firm": "flex_dll", "status": "ok", "lift": -23.29791285900785, "ctrl": 386.2088136422977, "real": 362.91090078328983, "skipped": null, "elapsed_s": 1.04}

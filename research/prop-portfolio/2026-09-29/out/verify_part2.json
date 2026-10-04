@@ -1,0 +1,2427 @@
+{
+ "loader": {
+  "sources": 151,
+  "trades_checked": 871157,
+  "bad_sources": [],
+  "exit_after_session_end_or_next_day": 81
+ },
+ "specs": {
+  "main:lucid:single": {
+   "members": [
+    [
+     "hm2-straddle-tf30#10|nyam",
+     40
+    ]
+   ],
+   "rules": {
+    "day_lock": 750,
+    "day_take": 1500,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "raw_overlap": {
+    "max_concurrent_micros": 40,
+    "opposite_overlaps": 0,
+    "cap_violations": 0,
+    "overlap_entries": 0,
+    "cap": 40
+   },
+   "reported_raw_overlap": {
+    "overlap_entries": 0,
+    "opposite_conflicts": 0,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0,
+    "cap": 40,
+    "cap_ok": true
+   },
+   "executed": {
+    "overlap": 0,
+    "conflicts": 0,
+    "max_conc": 40,
+    "cap_viol": 0,
+    "executed": 820,
+    "skipped": 0
+   },
+   "reported_walk": {
+    "executed": 820,
+    "skipped": 0,
+    "clipped": 0,
+    "opposite_conflicts_executed": 0,
+    "overlap_entries_executed": 0,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0
+   },
+   "raw_net": [
+    381260.0
+   ],
+   "raw_shares": [
+    1.0
+   ],
+   "reported_max_net_share": 1.0,
+   "rules_standalone_net": [
+    119344.0
+   ],
+   "rules_shares": [
+    1.0
+   ],
+   "static_session_micros": {
+    "nyam": 40
+   },
+   "cap": 40,
+   "audit": {
+    "n_pass": 568,
+    "n_cons_viol": 0,
+    "n_mindays_viol": 0,
+    "eod_oracle_mismatch": 0,
+    "eod_checked": 821
+   }
+  },
+  "main:lucid:best2": {
+   "members": [
+    [
+     "hm2-straddle-tf30#10|nyam",
+     40
+    ],
+    [
+     "hm2-tod_drift-tf30#19|mid",
+     10
+    ]
+   ],
+   "rules": {
+    "day_lock": 750,
+    "day_take": 1500,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "raw_overlap": {
+    "max_concurrent_micros": 40,
+    "opposite_overlaps": 0,
+    "cap_violations": 0,
+    "overlap_entries": 0,
+    "cap": 40
+   },
+   "reported_raw_overlap": {
+    "overlap_entries": 0,
+    "opposite_conflicts": 0,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0,
+    "cap": 40,
+    "cap_ok": true
+   },
+   "executed": {
+    "overlap": 0,
+    "conflicts": 0,
+    "max_conc": 40,
+    "cap_viol": 0,
+    "executed": 964,
+    "skipped": 676
+   },
+   "reported_walk": {
+    "executed": 964,
+    "skipped": 676,
+    "clipped": 0,
+    "opposite_conflicts_executed": 0,
+    "overlap_entries_executed": 0,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0
+   },
+   "raw_net": [
+    381260.0,
+    3585.0
+   ],
+   "raw_shares": [
+    0.9906845613168939,
+    0.009315438683106185
+   ],
+   "reported_max_net_share": 0.9906845613168939,
+   "rules_standalone_net": [
+    119344.0,
+    2424.0
+   ],
+   "rules_shares": [
+    0.9800932921621444,
+    0.019906707837855593
+   ],
+   "static_session_micros": {
+    "nyam": 40,
+    "mid": 10
+   },
+   "cap": 40,
+   "audit": {
+    "n_pass": 568,
+    "n_cons_viol": 0,
+    "n_mindays_viol": 0,
+    "eod_oracle_mismatch": 0,
+    "eod_checked": 821
+   }
+  },
+  "main:lucid:portfolio": {
+   "members": [
+    [
+     "hm2-straddle-tf30#8|nyam",
+     40
+    ],
+    [
+     "hm2-tod_drift-tf30#19|mid",
+     10
+    ],
+    [
+     "hm2-squeeze-tf5#21|pm",
+     30
+    ]
+   ],
+   "rules": {
+    "day_lock": 750,
+    "day_take": 1500,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "raw_overlap": {
+    "max_concurrent_micros": 40,
+    "opposite_overlaps": 0,
+    "cap_violations": 0,
+    "overlap_entries": 0,
+    "cap": 40
+   },
+   "reported_raw_overlap": {
+    "overlap_entries": 0,
+    "opposite_conflicts": 0,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0,
+    "cap": 40,
+    "cap_ok": true
+   },
+   "executed": {
+    "overlap": 0,
+    "conflicts": 0,
+    "max_conc": 40,
+    "cap_viol": 0,
+    "executed": 1151,
+    "skipped": 1601
+   },
+   "reported_walk": {
+    "executed": 1151,
+    "skipped": 1601,
+    "clipped": 0,
+    "opposite_conflicts_executed": 0,
+    "overlap_entries_executed": 0,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0
+   },
+   "raw_net": [
+    149300.0,
+    3585.0,
+    151056.0
+   ],
+   "raw_shares": [
+    0.4912137553011933,
+    0.01179505232923495,
+    0.49699119236957173
+   ],
+   "reported_max_net_share": 0.49699119236957173,
+   "rules_standalone_net": [
+    118676.0,
+    2424.0,
+    50439.0
+   ],
+   "rules_shares": [
+    0.6918310121896478,
+    0.014130897346959001,
+    0.2940380904633932
+   ],
+   "static_session_micros": {
+    "nyam": 40,
+    "mid": 10,
+    "pm": 30
+   },
+   "cap": 40,
+   "audit": {
+    "n_pass": 565,
+    "n_cons_viol": 0,
+    "n_mindays_viol": 0,
+    "eod_oracle_mismatch": 0,
+    "eod_checked": 821
+   }
+  },
+  "main:lucidpro:single": {
+   "members": [
+    [
+     "hm2-tod_drift-tf15#19|mid",
+     30
+    ]
+   ],
+   "rules": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "raw_overlap": {
+    "max_concurrent_micros": 30,
+    "opposite_overlaps": 0,
+    "cap_violations": 0,
+    "overlap_entries": 0,
+    "cap": 40
+   },
+   "reported_raw_overlap": {
+    "overlap_entries": 0,
+    "opposite_conflicts": 0,
+    "max_concurrent_micros": 30,
+    "cap_violations": 0,
+    "cap": 40,
+    "cap_ok": true
+   },
+   "executed": {
+    "overlap": 0,
+    "conflicts": 0,
+    "max_conc": 30,
+    "cap_viol": 0,
+    "executed": 820,
+    "skipped": 0
+   },
+   "reported_walk": {
+    "executed": 820,
+    "skipped": 0,
+    "clipped": 0,
+    "opposite_conflicts_executed": 0,
+    "overlap_entries_executed": 0,
+    "max_concurrent_micros": 30,
+    "cap_violations": 0
+   },
+   "raw_net": [
+    4665.0
+   ],
+   "raw_shares": [
+    1.0
+   ],
+   "reported_max_net_share": 1.0,
+   "rules_standalone_net": [
+    121410.0
+   ],
+   "rules_shares": [
+    1.0
+   ],
+   "static_session_micros": {
+    "mid": 30
+   },
+   "cap": 40,
+   "audit": {
+    "n_pass": 367,
+    "n_cons_viol": 0,
+    "n_mindays_viol": 0,
+    "eod_oracle_mismatch": 0,
+    "eod_checked": 821
+   }
+  },
+  "main:lucidpro:best2": {
+   "members": [
+    [
+     "hm2-tod_drift-tf15#19|mid",
+     30
+    ],
+    [
+     "hm2-donchian-tf5#9|pm",
+     30
+    ]
+   ],
+   "rules": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "raw_overlap": {
+    "max_concurrent_micros": 30,
+    "opposite_overlaps": 0,
+    "cap_violations": 0,
+    "overlap_entries": 0,
+    "cap": 40
+   },
+   "reported_raw_overlap": {
+    "overlap_entries": 0,
+    "opposite_conflicts": 0,
+    "max_concurrent_micros": 30,
+    "cap_violations": 0,
+    "cap": 40,
+    "cap_ok": true
+   },
+   "executed": {
+    "overlap": 0,
+    "conflicts": 0,
+    "max_conc": 30,
+    "cap_viol": 0,
+    "executed": 894,
+    "skipped": 1235
+   },
+   "reported_walk": {
+    "executed": 894,
+    "skipped": 1235,
+    "clipped": 0,
+    "opposite_conflicts_executed": 0,
+    "overlap_entries_executed": 0,
+    "max_concurrent_micros": 30,
+    "cap_violations": 0
+   },
+   "raw_net": [
+    4665.0,
+    138252.0
+   ],
+   "raw_shares": [
+    0.03264132328554336,
+    0.9673586767144566
+   ],
+   "reported_max_net_share": 0.9673586767144566,
+   "rules_standalone_net": [
+    121410.0,
+    124770.0
+   ],
+   "rules_shares": [
+    0.4931757250792103,
+    0.5068242749207896
+   ],
+   "static_session_micros": {
+    "mid": 30,
+    "pm": 30
+   },
+   "cap": 40,
+   "audit": {
+    "n_pass": 367,
+    "n_cons_viol": 0,
+    "n_mindays_viol": 0,
+    "eod_oracle_mismatch": 0,
+    "eod_checked": 821
+   }
+  },
+  "main:lucidpro:portfolio": {
+   "members": [
+    [
+     "hm2-tod_drift-tf15#19|mid",
+     30
+    ],
+    [
+     "hm2-donchian-tf5#9|pm",
+     30
+    ],
+    [
+     "hm-tod_drift-tf5#15|nyam",
+     30
+    ],
+    [
+     "hm2-tod_drift-tf15#6|london",
+     40
+    ]
+   ],
+   "rules": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "raw_overlap": {
+    "max_concurrent_micros": 40,
+    "opposite_overlaps": 0,
+    "cap_violations": 0,
+    "overlap_entries": 0,
+    "cap": 40
+   },
+   "reported_raw_overlap": {
+    "overlap_entries": 0,
+    "opposite_conflicts": 0,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0,
+    "cap": 40,
+    "cap_ok": true
+   },
+   "executed": {
+    "overlap": 0,
+    "conflicts": 0,
+    "max_conc": 40,
+    "cap_viol": 0,
+    "executed": 1012,
+    "skipped": 2757
+   },
+   "reported_walk": {
+    "executed": 1012,
+    "skipped": 2757,
+    "clipped": 0,
+    "opposite_conflicts_executed": 0,
+    "overlap_entries_executed": 0,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0
+   },
+   "raw_net": [
+    4665.0,
+    138252.0,
+    138090.0,
+    48740.0
+   ],
+   "raw_shares": [
+    0.01414720983056707,
+    0.41926689249636845,
+    0.41877560675305614,
+    0.14781029092000836
+   ],
+   "reported_max_net_share": 0.41926689249636845,
+   "rules_standalone_net": [
+    121410.0,
+    124770.0,
+    121239.0,
+    59560.0
+   ],
+   "rules_shares": [
+    0.284346536949124,
+    0.2922157764199176,
+    0.28394604886891395,
+    0.1394916377620445
+   ],
+   "static_session_micros": {
+    "mid": 30,
+    "pm": 30,
+    "nyam": 30,
+    "london": 40
+   },
+   "cap": 40,
+   "audit": {
+    "n_pass": 347,
+    "n_cons_viol": 0,
+    "n_mindays_viol": 0,
+    "eod_oracle_mismatch": 0,
+    "eod_checked": 821
+   }
+  },
+  "main:lucidpro_nodll:single": {
+   "members": [
+    [
+     "hm2-straddle-tf30#10|nyam",
+     40
+    ]
+   ],
+   "rules": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "raw_overlap": {
+    "max_concurrent_micros": 40,
+    "opposite_overlaps": 0,
+    "cap_violations": 0,
+    "overlap_entries": 0,
+    "cap": 40
+   },
+   "reported_raw_overlap": {
+    "overlap_entries": 0,
+    "opposite_conflicts": 0,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0,
+    "cap": 40,
+    "cap_ok": true
+   },
+   "executed": {
+    "overlap": 0,
+    "conflicts": 0,
+    "max_conc": 40,
+    "cap_viol": 0,
+    "executed": 820,
+    "skipped": 0
+   },
+   "reported_walk": {
+    "executed": 820,
+    "skipped": 0,
+    "clipped": 0,
+    "opposite_conflicts_executed": 0,
+    "overlap_entries_executed": 0,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0
+   },
+   "raw_net": [
+    381260.0
+   ],
+   "raw_shares": [
+    1.0
+   ],
+   "reported_max_net_share": 1.0,
+   "rules_standalone_net": [
+    381260.0
+   ],
+   "rules_shares": [
+    1.0
+   ],
+   "static_session_micros": {
+    "nyam": 40
+   },
+   "cap": 40,
+   "audit": {
+    "n_pass": 580,
+    "n_cons_viol": 0,
+    "n_mindays_viol": 0,
+    "eod_oracle_mismatch": 0,
+    "eod_checked": 821
+   }
+  },
+  "main:lucidpro_nodll:best2": {
+   "members": [
+    [
+     "hm2-straddle-tf30#10|nyam",
+     40
+    ],
+    [
+     "hm-first_bar_mom-tf15#8|mid",
+     10
+    ]
+   ],
+   "rules": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "raw_overlap": {
+    "max_concurrent_micros": 40,
+    "opposite_overlaps": 0,
+    "cap_violations": 0,
+    "overlap_entries": 0,
+    "cap": 40
+   },
+   "reported_raw_overlap": {
+    "overlap_entries": 0,
+    "opposite_conflicts": 0,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0,
+    "cap": 40,
+    "cap_ok": true
+   },
+   "executed": {
+    "overlap": 0,
+    "conflicts": 0,
+    "max_conc": 40,
+    "cap_viol": 0,
+    "executed": 1155,
+    "skipped": 278
+   },
+   "reported_walk": {
+    "executed": 1155,
+    "skipped": 278,
+    "clipped": 0,
+    "opposite_conflicts_executed": 0,
+    "overlap_entries_executed": 0,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0
+   },
+   "raw_net": [
+    381260.0,
+    23238.0
+   ],
+   "raw_shares": [
+    0.942551013849265,
+    0.05744898615073499
+   ],
+   "reported_max_net_share": 0.942551013849265,
+   "rules_standalone_net": [
+    381260.0,
+    23238.0
+   ],
+   "rules_shares": [
+    0.942551013849265,
+    0.05744898615073499
+   ],
+   "static_session_micros": {
+    "nyam": 40,
+    "mid": 10
+   },
+   "cap": 40,
+   "audit": {
+    "n_pass": 579,
+    "n_cons_viol": 0,
+    "n_mindays_viol": 0,
+    "eod_oracle_mismatch": 0,
+    "eod_checked": 821
+   }
+  },
+  "main:lucidpro_nodll:portfolio": {
+   "members": [
+    [
+     "hm2-straddle-tf30#9|nyam",
+     40
+    ],
+    [
+     "hm-first_bar_mom-tf15#8|mid",
+     40
+    ],
+    [
+     "hm2-straddle-tf30#10|pm",
+     40
+    ]
+   ],
+   "rules": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 1,
+    "target_take": 1
+   },
+   "raw_overlap": {
+    "max_concurrent_micros": 40,
+    "opposite_overlaps": 0,
+    "cap_violations": 0,
+    "overlap_entries": 0,
+    "cap": 40
+   },
+   "reported_raw_overlap": {
+    "overlap_entries": 0,
+    "opposite_conflicts": 0,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0,
+    "cap": 40,
+    "cap_ok": true
+   },
+   "executed": {
+    "overlap": 0,
+    "conflicts": 0,
+    "max_conc": 40,
+    "cap_viol": 0,
+    "executed": 820,
+    "skipped": 1426
+   },
+   "reported_walk": {
+    "executed": 820,
+    "skipped": 1426,
+    "clipped": 0,
+    "opposite_conflicts_executed": 0,
+    "overlap_entries_executed": 0,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0
+   },
+   "raw_net": [
+    262440.0,
+    92952.0,
+    315612.0
+   ],
+   "raw_shares": [
+    0.3911154031868663,
+    0.1385267449970492,
+    0.4703578518160845
+   ],
+   "reported_max_net_share": 0.4703578518160845,
+   "rules_standalone_net": [
+    262440.0,
+    92952.0,
+    315612.0
+   ],
+   "rules_shares": [
+    0.3911154031868663,
+    0.1385267449970492,
+    0.4703578518160845
+   ],
+   "static_session_micros": {
+    "nyam": 40,
+    "mid": 40,
+    "pm": 40
+   },
+   "cap": 40,
+   "audit": {
+    "n_pass": 580,
+    "n_cons_viol": 0,
+    "n_mindays_viol": 0,
+    "eod_oracle_mismatch": 0,
+    "eod_checked": 821
+   }
+  },
+  "main:apex:single": {
+   "members": [
+    [
+     "fp-donchian-tf15#15|pm",
+     40
+    ]
+   ],
+   "rules": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 2000,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "raw_overlap": {
+    "max_concurrent_micros": 40,
+    "opposite_overlaps": 0,
+    "cap_violations": 0,
+    "overlap_entries": 0,
+    "cap": 100
+   },
+   "reported_raw_overlap": {
+    "overlap_entries": 0,
+    "opposite_conflicts": 0,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0,
+    "cap": 100,
+    "cap_ok": true
+   },
+   "executed": {
+    "overlap": 0,
+    "conflicts": 0,
+    "max_conc": 40,
+    "cap_viol": 0,
+    "executed": 541,
+    "skipped": 45
+   },
+   "reported_walk": {
+    "executed": 541,
+    "skipped": 45,
+    "clipped": 0,
+    "opposite_conflicts_executed": 0,
+    "overlap_entries_executed": 0,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0
+   },
+   "raw_net": [
+    174384.0
+   ],
+   "raw_shares": [
+    1.0
+   ],
+   "reported_max_net_share": 1.0,
+   "rules_standalone_net": [
+    189444.0
+   ],
+   "rules_shares": [
+    1.0
+   ],
+   "static_session_micros": {
+    "pm": 40
+   },
+   "cap": 100,
+   "audit": {
+    "n_pass": 342,
+    "n_cons_viol": 0,
+    "n_mindays_viol": 0,
+    "eod_oracle_mismatch": 0,
+    "eod_checked": 821
+   }
+  },
+  "main:apex:best2": {
+   "members": [
+    [
+     "fp-donchian-tf15#15|pm",
+     40
+    ],
+    [
+     "hm-donchian-tf15#7|nyam",
+     20
+    ]
+   ],
+   "rules": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 1000,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "raw_overlap": {
+    "max_concurrent_micros": 40,
+    "opposite_overlaps": 0,
+    "cap_violations": 0,
+    "overlap_entries": 0,
+    "cap": 100
+   },
+   "reported_raw_overlap": {
+    "overlap_entries": 0,
+    "opposite_conflicts": 0,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0,
+    "cap": 100,
+    "cap_ok": true
+   },
+   "executed": {
+    "overlap": 0,
+    "conflicts": 0,
+    "max_conc": 40,
+    "cap_viol": 0,
+    "executed": 957,
+    "skipped": 414
+   },
+   "reported_walk": {
+    "executed": 957,
+    "skipped": 414,
+    "clipped": 0,
+    "opposite_conflicts_executed": 0,
+    "overlap_entries_executed": 0,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0
+   },
+   "raw_net": [
+    174384.0,
+    31750.0
+   ],
+   "raw_shares": [
+    0.8459739780919208,
+    0.1540260219080792
+   ],
+   "reported_max_net_share": 0.8459739780919208,
+   "rules_standalone_net": [
+    113776.0,
+    133100.0
+   ],
+   "rules_shares": [
+    0.46086294333997635,
+    0.5391370566600237
+   ],
+   "static_session_micros": {
+    "pm": 40,
+    "nyam": 20
+   },
+   "cap": 100,
+   "audit": {
+    "n_pass": 367,
+    "n_cons_viol": 0,
+    "n_mindays_viol": 0,
+    "eod_oracle_mismatch": 0,
+    "eod_checked": 821
+   }
+  },
+  "main:apex:portfolio": {
+   "members": [
+    [
+     "fp-donchian-tf15#15|pm",
+     40
+    ],
+    [
+     "hm-donchian-tf15#7|nyam",
+     20
+    ],
+    [
+     "hm-first_bar_mom-tf15#34|nyam",
+     20
+    ],
+    [
+     "hm2-tod_drift-tf15#6|london",
+     40
+    ]
+   ],
+   "rules": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 3000,
+    "max_day_tr": 1,
+    "target_take": 1
+   },
+   "raw_overlap": {
+    "max_concurrent_micros": 40,
+    "opposite_overlaps": 33,
+    "cap_violations": 0,
+    "overlap_entries": 592,
+    "cap": 100
+   },
+   "reported_raw_overlap": {
+    "overlap_entries": 592,
+    "opposite_conflicts": 33,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0,
+    "cap": 100,
+    "cap_ok": true
+   },
+   "executed": {
+    "overlap": 0,
+    "conflicts": 0,
+    "max_conc": 40,
+    "cap_viol": 0,
+    "executed": 820,
+    "skipped": 2140
+   },
+   "reported_walk": {
+    "executed": 820,
+    "skipped": 2140,
+    "clipped": 0,
+    "opposite_conflicts_executed": 0,
+    "overlap_entries_executed": 0,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0
+   },
+   "raw_net": [
+    174384.0,
+    31750.0,
+    148188.0,
+    48740.0
+   ],
+   "raw_shares": [
+    0.43264807895559493,
+    0.07877200033741708,
+    0.36765559640948536,
+    0.12092432429750262
+   ],
+   "reported_max_net_share": 0.43264807895559493,
+   "rules_standalone_net": [
+    163868.0,
+    59614.0,
+    130706.0,
+    34364.0
+   ],
+   "rules_shares": [
+    0.4217402046572917,
+    0.15342605365562395,
+    0.33639255492186376,
+    0.08844118676522061
+   ],
+   "static_session_micros": {
+    "pm": 40,
+    "nyam": 40,
+    "london": 40
+   },
+   "cap": 100,
+   "audit": {
+    "n_pass": 330,
+    "n_cons_viol": 0,
+    "n_mindays_viol": 0,
+    "eod_oracle_mismatch": 0,
+    "eod_checked": 821
+   }
+  },
+  "main:apex_eod:single": {
+   "members": [
+    [
+     "hm-donchian-tf15#11|nyam",
+     20
+    ]
+   ],
+   "rules": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "raw_overlap": {
+    "max_concurrent_micros": 20,
+    "opposite_overlaps": 0,
+    "cap_violations": 0,
+    "overlap_entries": 0,
+    "cap": 60
+   },
+   "reported_raw_overlap": {
+    "overlap_entries": 0,
+    "opposite_conflicts": 0,
+    "max_concurrent_micros": 20,
+    "cap_violations": 0,
+    "cap": 60,
+    "cap_ok": true
+   },
+   "executed": {
+    "overlap": 0,
+    "conflicts": 0,
+    "max_conc": 20,
+    "cap_viol": 0,
+    "executed": 675,
+    "skipped": 68
+   },
+   "reported_walk": {
+    "executed": 675,
+    "skipped": 68,
+    "clipped": 0,
+    "opposite_conflicts_executed": 0,
+    "overlap_entries_executed": 0,
+    "max_concurrent_micros": 20,
+    "cap_violations": 0
+   },
+   "raw_net": [
+    107336.0
+   ],
+   "raw_shares": [
+    1.0
+   ],
+   "reported_max_net_share": 1.0,
+   "rules_standalone_net": [
+    142242.0
+   ],
+   "rules_shares": [
+    1.0
+   ],
+   "static_session_micros": {
+    "nyam": 20
+   },
+   "cap": 60,
+   "audit": {
+    "n_pass": 327,
+    "n_cons_viol": 0,
+    "n_mindays_viol": 0,
+    "eod_oracle_mismatch": 0,
+    "eod_checked": 821
+   }
+  },
+  "main:apex_eod:best2": {
+   "members": [
+    [
+     "hm-donchian-tf15#11|nyam",
+     20
+    ],
+    [
+     "hm2-donchian-tf5#21|pm",
+     40
+    ]
+   ],
+   "rules": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "raw_overlap": {
+    "max_concurrent_micros": 40,
+    "opposite_overlaps": 0,
+    "cap_violations": 0,
+    "overlap_entries": 0,
+    "cap": 60
+   },
+   "reported_raw_overlap": {
+    "overlap_entries": 0,
+    "opposite_conflicts": 0,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0,
+    "cap": 60,
+    "cap_ok": true
+   },
+   "executed": {
+    "overlap": 0,
+    "conflicts": 0,
+    "max_conc": 40,
+    "cap_viol": 0,
+    "executed": 1140,
+    "skipped": 748
+   },
+   "reported_walk": {
+    "executed": 1140,
+    "skipped": 748,
+    "clipped": 0,
+    "opposite_conflicts_executed": 0,
+    "overlap_entries_executed": 0,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0
+   },
+   "raw_net": [
+    107336.0,
+    220400.0
+   ],
+   "raw_shares": [
+    0.327507506041448,
+    0.672492493958552
+   ],
+   "reported_max_net_share": 0.672492493958552,
+   "rules_standalone_net": [
+    144160.0,
+    92860.0
+   ],
+   "rules_shares": [
+    0.6082187157201924,
+    0.39178128427980763
+   ],
+   "static_session_micros": {
+    "nyam": 20,
+    "pm": 40
+   },
+   "cap": 60,
+   "audit": {
+    "n_pass": 362,
+    "n_cons_viol": 0,
+    "n_mindays_viol": 0,
+    "eod_oracle_mismatch": 0,
+    "eod_checked": 821
+   }
+  },
+  "main:apex_eod:portfolio": {
+   "members": [
+    [
+     "hm-donchian-tf15#11|nyam",
+     20
+    ],
+    [
+     "hm2-donchian-tf5#21|pm",
+     40
+    ],
+    [
+     "hm-tod_drift-tf5#19|mid",
+     50
+    ]
+   ],
+   "rules": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "raw_overlap": {
+    "max_concurrent_micros": 50,
+    "opposite_overlaps": 0,
+    "cap_violations": 0,
+    "overlap_entries": 0,
+    "cap": 60
+   },
+   "reported_raw_overlap": {
+    "overlap_entries": 0,
+    "opposite_conflicts": 0,
+    "max_concurrent_micros": 50,
+    "cap_violations": 0,
+    "cap": 60,
+    "cap_ok": true
+   },
+   "executed": {
+    "overlap": 0,
+    "conflicts": 0,
+    "max_conc": 50,
+    "cap_viol": 0,
+    "executed": 1330,
+    "skipped": 1378
+   },
+   "reported_walk": {
+    "executed": 1330,
+    "skipped": 1378,
+    "clipped": 0,
+    "opposite_conflicts_executed": 0,
+    "overlap_entries_executed": 0,
+    "max_concurrent_micros": 50,
+    "cap_violations": 0
+   },
+   "raw_net": [
+    107336.0,
+    220400.0,
+    115450.0
+   ],
+   "raw_shares": [
+    0.24219176598538764,
+    0.497308127964331,
+    0.2605001060502814
+   ],
+   "reported_max_net_share": 0.497308127964331,
+   "rules_standalone_net": [
+    144160.0,
+    92860.0,
+    113155.0
+   ],
+   "rules_shares": [
+    0.41167987434854003,
+    0.2651816948668523,
+    0.3231384307846077
+   ],
+   "static_session_micros": {
+    "nyam": 20,
+    "pm": 40,
+    "mid": 50
+   },
+   "cap": 60,
+   "audit": {
+    "n_pass": 348,
+    "n_cons_viol": 0,
+    "n_mindays_viol": 0,
+    "eod_oracle_mismatch": 0,
+    "eod_checked": 821
+   }
+  },
+  "fast:lucid:single": {
+   "members": [
+    [
+     "hm2-straddle-tf30#10|nyam",
+     40
+    ]
+   ],
+   "rules": {
+    "day_lock": 750,
+    "day_take": 1500,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "raw_overlap": {
+    "max_concurrent_micros": 40,
+    "opposite_overlaps": 0,
+    "cap_violations": 0,
+    "overlap_entries": 0,
+    "cap": 40
+   },
+   "reported_raw_overlap": {
+    "overlap_entries": 0,
+    "opposite_conflicts": 0,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0,
+    "cap": 40,
+    "cap_ok": true
+   },
+   "executed": {
+    "overlap": 0,
+    "conflicts": 0,
+    "max_conc": 40,
+    "cap_viol": 0,
+    "executed": 820,
+    "skipped": 0
+   },
+   "reported_walk": {
+    "executed": 820,
+    "skipped": 0,
+    "clipped": 0,
+    "opposite_conflicts_executed": 0,
+    "overlap_entries_executed": 0,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0
+   },
+   "raw_net": [
+    381260.0
+   ],
+   "raw_shares": [
+    1.0
+   ],
+   "reported_max_net_share": 1.0,
+   "rules_standalone_net": [
+    119344.0
+   ],
+   "rules_shares": [
+    1.0
+   ],
+   "static_session_micros": {
+    "nyam": 40
+   },
+   "cap": 40,
+   "audit": {
+    "n_pass": 568,
+    "n_cons_viol": 0,
+    "n_mindays_viol": 0,
+    "eod_oracle_mismatch": 0,
+    "eod_checked": 821
+   }
+  },
+  "fast:lucid:best2": {
+   "members": [
+    [
+     "hm2-straddle-tf30#10|nyam",
+     40
+    ],
+    [
+     "hm2-tod_drift-tf30#19|mid",
+     40
+    ]
+   ],
+   "rules": {
+    "day_lock": 750,
+    "day_take": 1500,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "raw_overlap": {
+    "max_concurrent_micros": 40,
+    "opposite_overlaps": 0,
+    "cap_violations": 0,
+    "overlap_entries": 0,
+    "cap": 40
+   },
+   "reported_raw_overlap": {
+    "overlap_entries": 0,
+    "opposite_conflicts": 0,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0,
+    "cap": 40,
+    "cap_ok": true
+   },
+   "executed": {
+    "overlap": 0,
+    "conflicts": 0,
+    "max_conc": 40,
+    "cap_viol": 0,
+    "executed": 964,
+    "skipped": 676
+   },
+   "reported_walk": {
+    "executed": 964,
+    "skipped": 676,
+    "clipped": 0,
+    "opposite_conflicts_executed": 0,
+    "overlap_entries_executed": 0,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0
+   },
+   "raw_net": [
+    381260.0,
+    14340.0
+   ],
+   "raw_shares": [
+    0.9637512639029323,
+    0.036248736097067746
+   ],
+   "reported_max_net_share": 0.9637512639029323,
+   "rules_standalone_net": [
+    119344.0,
+    104000.0
+   ],
+   "rules_shares": [
+    0.5343505981803854,
+    0.46564940181961456
+   ],
+   "static_session_micros": {
+    "nyam": 40,
+    "mid": 40
+   },
+   "cap": 40,
+   "audit": {
+    "n_pass": 571,
+    "n_cons_viol": 0,
+    "n_mindays_viol": 0,
+    "eod_oracle_mismatch": 0,
+    "eod_checked": 821
+   }
+  },
+  "fast:lucid:portfolio": {
+   "members": [
+    [
+     "hm-first_bar_mom-tf15#22|nyam",
+     40
+    ],
+    [
+     "hm2-tod_drift-tf30#19|mid",
+     40
+    ],
+    [
+     "hm2-straddle-tf30#10|pm",
+     40
+    ]
+   ],
+   "rules": {
+    "day_lock": 750,
+    "day_take": 1500,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "raw_overlap": {
+    "max_concurrent_micros": 40,
+    "opposite_overlaps": 0,
+    "cap_violations": 0,
+    "overlap_entries": 0,
+    "cap": 40
+   },
+   "reported_raw_overlap": {
+    "overlap_entries": 0,
+    "opposite_conflicts": 0,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0,
+    "cap": 40,
+    "cap_ok": true
+   },
+   "executed": {
+    "overlap": 0,
+    "conflicts": 0,
+    "max_conc": 40,
+    "cap_viol": 0,
+    "executed": 1106,
+    "skipped": 1343
+   },
+   "reported_walk": {
+    "executed": 1106,
+    "skipped": 1343,
+    "clipped": 0,
+    "opposite_conflicts_executed": 0,
+    "overlap_entries_executed": 0,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0
+   },
+   "raw_net": [
+    306624.0,
+    14340.0,
+    315612.0
+   ],
+   "raw_shares": [
+    0.48167697179912533,
+    0.02252676820992309,
+    0.4957962599909516
+   ],
+   "reported_max_net_share": 0.4957962599909516,
+   "rules_standalone_net": [
+    88176.0,
+    104000.0,
+    -56264.0
+   ],
+   "rules_shares": [
+    0.4588294063774873,
+    0.5411705936225127,
+    0.0
+   ],
+   "static_session_micros": {
+    "nyam": 40,
+    "mid": 40,
+    "pm": 40
+   },
+   "cap": 40,
+   "audit": {
+    "n_pass": 544,
+    "n_cons_viol": 0,
+    "n_mindays_viol": 0,
+    "eod_oracle_mismatch": 0,
+    "eod_checked": 821
+   }
+  },
+  "fast:lucidpro:single": {
+   "members": [
+    [
+     "hm2-tod_drift-tf15#19|mid",
+     30
+    ]
+   ],
+   "rules": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "raw_overlap": {
+    "max_concurrent_micros": 30,
+    "opposite_overlaps": 0,
+    "cap_violations": 0,
+    "overlap_entries": 0,
+    "cap": 40
+   },
+   "reported_raw_overlap": {
+    "overlap_entries": 0,
+    "opposite_conflicts": 0,
+    "max_concurrent_micros": 30,
+    "cap_violations": 0,
+    "cap": 40,
+    "cap_ok": true
+   },
+   "executed": {
+    "overlap": 0,
+    "conflicts": 0,
+    "max_conc": 30,
+    "cap_viol": 0,
+    "executed": 820,
+    "skipped": 0
+   },
+   "reported_walk": {
+    "executed": 820,
+    "skipped": 0,
+    "clipped": 0,
+    "opposite_conflicts_executed": 0,
+    "overlap_entries_executed": 0,
+    "max_concurrent_micros": 30,
+    "cap_violations": 0
+   },
+   "raw_net": [
+    4665.0
+   ],
+   "raw_shares": [
+    1.0
+   ],
+   "reported_max_net_share": 1.0,
+   "rules_standalone_net": [
+    121410.0
+   ],
+   "rules_shares": [
+    1.0
+   ],
+   "static_session_micros": {
+    "mid": 30
+   },
+   "cap": 40,
+   "audit": {
+    "n_pass": 367,
+    "n_cons_viol": 0,
+    "n_mindays_viol": 0,
+    "eod_oracle_mismatch": 0,
+    "eod_checked": 821
+   }
+  },
+  "fast:lucidpro:best2": {
+   "members": [
+    [
+     "hm2-tod_drift-tf15#19|mid",
+     30
+    ],
+    [
+     "hm2-donchian-tf1#11|pm",
+     30
+    ]
+   ],
+   "rules": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "raw_overlap": {
+    "max_concurrent_micros": 30,
+    "opposite_overlaps": 0,
+    "cap_violations": 0,
+    "overlap_entries": 0,
+    "cap": 40
+   },
+   "reported_raw_overlap": {
+    "overlap_entries": 0,
+    "opposite_conflicts": 0,
+    "max_concurrent_micros": 30,
+    "cap_violations": 0,
+    "cap": 40,
+    "cap_ok": true
+   },
+   "executed": {
+    "overlap": 0,
+    "conflicts": 0,
+    "max_conc": 30,
+    "cap_viol": 0,
+    "executed": 1393,
+    "skipped": 1412
+   },
+   "reported_walk": {
+    "executed": 1393,
+    "skipped": 1412,
+    "clipped": 0,
+    "opposite_conflicts_executed": 0,
+    "overlap_entries_executed": 0,
+    "max_concurrent_micros": 30,
+    "cap_violations": 0
+   },
+   "raw_net": [
+    4665.0,
+    10110.0
+   ],
+   "raw_shares": [
+    0.31573604060913707,
+    0.6842639593908629
+   ],
+   "reported_max_net_share": 0.6842639593908629,
+   "rules_standalone_net": [
+    121410.0,
+    111342.0
+   ],
+   "rules_shares": [
+    0.5216281707568571,
+    0.4783718292431429
+   ],
+   "static_session_micros": {
+    "mid": 30,
+    "pm": 30
+   },
+   "cap": 40,
+   "audit": {
+    "n_pass": 382,
+    "n_cons_viol": 0,
+    "n_mindays_viol": 0,
+    "eod_oracle_mismatch": 0,
+    "eod_checked": 821
+   }
+  },
+  "fast:lucidpro:portfolio": {
+   "members": [
+    [
+     "hm2-tod_drift-tf15#19|mid",
+     30
+    ],
+    [
+     "hm2-donchian-tf1#11|pm",
+     30
+    ],
+    [
+     "hm2-ema_pullback-tf1#22|pm",
+     10
+    ]
+   ],
+   "rules": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "raw_overlap": {
+    "max_concurrent_micros": 40,
+    "opposite_overlaps": 831,
+    "cap_violations": 0,
+    "overlap_entries": 2579,
+    "cap": 40
+   },
+   "reported_raw_overlap": {
+    "overlap_entries": 2579,
+    "opposite_conflicts": 831,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0,
+    "cap": 40,
+    "cap_ok": true
+   },
+   "executed": {
+    "overlap": 645,
+    "conflicts": 208,
+    "max_conc": 40,
+    "cap_viol": 0,
+    "executed": 1880,
+    "skipped": 3022
+   },
+   "reported_walk": {
+    "executed": 1883,
+    "skipped": 3019,
+    "clipped": 0,
+    "opposite_conflicts_executed": 208,
+    "overlap_entries_executed": 648,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0
+   },
+   "raw_net": [
+    4665.0,
+    10110.0,
+    8167.0
+   ],
+   "raw_shares": [
+    0.20333885450265887,
+    0.440676488536309,
+    0.35598465696103215
+   ],
+   "reported_max_net_share": 0.440676488536309,
+   "rules_standalone_net": [
+    121410.0,
+    111342.0,
+    29858.0
+   ],
+   "rules_shares": [
+    0.4623205513879898,
+    0.4239823312135867,
+    0.11369711739842352
+   ],
+   "static_session_micros": {
+    "mid": 30,
+    "pm": 40
+   },
+   "cap": 40,
+   "audit": {
+    "n_pass": 378,
+    "n_cons_viol": 0,
+    "n_mindays_viol": 0,
+    "eod_oracle_mismatch": 0,
+    "eod_checked": 821
+   }
+  },
+  "fast:lucidpro_nodll:single": {
+   "members": [
+    [
+     "hm2-straddle-tf30#10|nyam",
+     40
+    ]
+   ],
+   "rules": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "raw_overlap": {
+    "max_concurrent_micros": 40,
+    "opposite_overlaps": 0,
+    "cap_violations": 0,
+    "overlap_entries": 0,
+    "cap": 40
+   },
+   "reported_raw_overlap": {
+    "overlap_entries": 0,
+    "opposite_conflicts": 0,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0,
+    "cap": 40,
+    "cap_ok": true
+   },
+   "executed": {
+    "overlap": 0,
+    "conflicts": 0,
+    "max_conc": 40,
+    "cap_viol": 0,
+    "executed": 820,
+    "skipped": 0
+   },
+   "reported_walk": {
+    "executed": 820,
+    "skipped": 0,
+    "clipped": 0,
+    "opposite_conflicts_executed": 0,
+    "overlap_entries_executed": 0,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0
+   },
+   "raw_net": [
+    381260.0
+   ],
+   "raw_shares": [
+    1.0
+   ],
+   "reported_max_net_share": 1.0,
+   "rules_standalone_net": [
+    381260.0
+   ],
+   "rules_shares": [
+    1.0
+   ],
+   "static_session_micros": {
+    "nyam": 40
+   },
+   "cap": 40,
+   "audit": {
+    "n_pass": 580,
+    "n_cons_viol": 0,
+    "n_mindays_viol": 0,
+    "eod_oracle_mismatch": 0,
+    "eod_checked": 821
+   }
+  },
+  "fast:lucidpro_nodll:best2": {
+   "members": [
+    [
+     "hm2-straddle-tf30#10|nyam",
+     40
+    ],
+    [
+     "hm2-squeeze-tf5#21|mid",
+     40
+    ]
+   ],
+   "rules": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "raw_overlap": {
+    "max_concurrent_micros": 40,
+    "opposite_overlaps": 0,
+    "cap_violations": 0,
+    "overlap_entries": 0,
+    "cap": 40
+   },
+   "reported_raw_overlap": {
+    "overlap_entries": 0,
+    "opposite_conflicts": 0,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0,
+    "cap": 40,
+    "cap_ok": true
+   },
+   "executed": {
+    "overlap": 0,
+    "conflicts": 0,
+    "max_conc": 40,
+    "cap_viol": 0,
+    "executed": 1380,
+    "skipped": 503
+   },
+   "reported_walk": {
+    "executed": 1380,
+    "skipped": 503,
+    "clipped": 0,
+    "opposite_conflicts_executed": 0,
+    "overlap_entries_executed": 0,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0
+   },
+   "raw_net": [
+    381260.0,
+    20072.0
+   ],
+   "raw_shares": [
+    0.9499865448057967,
+    0.050013455194203305
+   ],
+   "reported_max_net_share": 0.9499865448057967,
+   "rules_standalone_net": [
+    381260.0,
+    32280.0
+   ],
+   "rules_shares": [
+    0.9219422546791121,
+    0.07805774532088794
+   ],
+   "static_session_micros": {
+    "nyam": 40,
+    "mid": 40
+   },
+   "cap": 40,
+   "audit": {
+    "n_pass": 576,
+    "n_cons_viol": 0,
+    "n_mindays_viol": 0,
+    "eod_oracle_mismatch": 0,
+    "eod_checked": 821
+   }
+  },
+  "fast:lucidpro_nodll:portfolio": {
+   "members": [
+    [
+     "hm2-straddle-tf30#9|nyam",
+     40
+    ],
+    [
+     "hm-orb-tf5#10|mid",
+     30
+    ],
+    [
+     "hm2-straddle-tf30#10|pm",
+     20
+    ]
+   ],
+   "rules": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "raw_overlap": {
+    "max_concurrent_micros": 40,
+    "opposite_overlaps": 0,
+    "cap_violations": 0,
+    "overlap_entries": 0,
+    "cap": 40
+   },
+   "reported_raw_overlap": {
+    "overlap_entries": 0,
+    "opposite_conflicts": 0,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0,
+    "cap": 40,
+    "cap_ok": true
+   },
+   "executed": {
+    "overlap": 0,
+    "conflicts": 0,
+    "max_conc": 40,
+    "cap_viol": 0,
+    "executed": 1579,
+    "skipped": 874
+   },
+   "reported_walk": {
+    "executed": 1579,
+    "skipped": 874,
+    "clipped": 0,
+    "opposite_conflicts_executed": 0,
+    "overlap_entries_executed": 0,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0
+   },
+   "raw_net": [
+    262440.0,
+    187830.0,
+    157806.0
+   ],
+   "raw_shares": [
+    0.43159078799360606,
+    0.3088923095139423,
+    0.25951690249245163
+   ],
+   "reported_max_net_share": 0.43159078799360606,
+   "rules_standalone_net": [
+    262440.0,
+    187830.0,
+    157806.0
+   ],
+   "rules_shares": [
+    0.43159078799360606,
+    0.3088923095139423,
+    0.25951690249245163
+   ],
+   "static_session_micros": {
+    "nyam": 40,
+    "mid": 30,
+    "pm": 20
+   },
+   "cap": 40,
+   "audit": {
+    "n_pass": 570,
+    "n_cons_viol": 0,
+    "n_mindays_viol": 0,
+    "eod_oracle_mismatch": 0,
+    "eod_checked": 821
+   }
+  },
+  "fast:apex:single": {
+   "members": [
+    [
+     "fp-tod_drift-tf5#7|mid",
+     80
+    ]
+   ],
+   "rules": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 0
+   },
+   "raw_overlap": {
+    "max_concurrent_micros": 80,
+    "opposite_overlaps": 0,
+    "cap_violations": 0,
+    "overlap_entries": 0,
+    "cap": 100
+   },
+   "reported_raw_overlap": {
+    "overlap_entries": 0,
+    "opposite_conflicts": 0,
+    "max_concurrent_micros": 80,
+    "cap_violations": 0,
+    "cap": 100,
+    "cap_ok": true
+   },
+   "executed": {
+    "overlap": 0,
+    "conflicts": 0,
+    "max_conc": 80,
+    "cap_viol": 0,
+    "executed": 820,
+    "skipped": 0
+   },
+   "reported_walk": {
+    "executed": 820,
+    "skipped": 0,
+    "clipped": 0,
+    "opposite_conflicts_executed": 0,
+    "overlap_entries_executed": 0,
+    "max_concurrent_micros": 80,
+    "cap_violations": 0
+   },
+   "raw_net": [
+    -17720.0
+   ],
+   "raw_shares": [
+    NaN
+   ],
+   "reported_max_net_share": null,
+   "rules_standalone_net": [
+    -17720.0
+   ],
+   "rules_shares": [
+    NaN
+   ],
+   "static_session_micros": {
+    "mid": 80
+   },
+   "cap": 100,
+   "audit": {
+    "n_pass": 338,
+    "n_cons_viol": 0,
+    "n_mindays_viol": 0,
+    "eod_oracle_mismatch": 0,
+    "eod_checked": 821
+   }
+  },
+  "fast:apex:best2": {
+   "members": [
+    [
+     "fp-tod_drift-tf5#7|mid",
+     80
+    ],
+    [
+     "hm2-ema_pullback-tf1#22|pm",
+     20
+    ]
+   ],
+   "rules": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 0
+   },
+   "raw_overlap": {
+    "max_concurrent_micros": 80,
+    "opposite_overlaps": 0,
+    "cap_violations": 0,
+    "overlap_entries": 0,
+    "cap": 100
+   },
+   "reported_raw_overlap": {
+    "overlap_entries": 0,
+    "opposite_conflicts": 0,
+    "max_concurrent_micros": 80,
+    "cap_violations": 0,
+    "cap": 100,
+    "cap_ok": true
+   },
+   "executed": {
+    "overlap": 0,
+    "conflicts": 0,
+    "max_conc": 80,
+    "cap_viol": 0,
+    "executed": 2917,
+    "skipped": 0
+   },
+   "reported_walk": {
+    "executed": 2917,
+    "skipped": 0,
+    "clipped": 0,
+    "opposite_conflicts_executed": 0,
+    "overlap_entries_executed": 0,
+    "max_concurrent_micros": 80,
+    "cap_violations": 0
+   },
+   "raw_net": [
+    -17720.0,
+    16334.0
+   ],
+   "raw_shares": [
+    0.0,
+    1.0
+   ],
+   "reported_max_net_share": 1.0,
+   "rules_standalone_net": [
+    -17720.0,
+    16334.0
+   ],
+   "rules_shares": [
+    0.0,
+    1.0
+   ],
+   "static_session_micros": {
+    "mid": 80,
+    "pm": 20
+   },
+   "cap": 100,
+   "audit": {
+    "n_pass": 338,
+    "n_cons_viol": 0,
+    "n_mindays_viol": 0,
+    "eod_oracle_mismatch": 0,
+    "eod_checked": 821
+   }
+  },
+  "fast:apex:portfolio": {
+   "members": [
+    [
+     "fp-orb-tf5#7|nyam",
+     80
+    ],
+    [
+     "hm-vwap_z-tf5#1|mid",
+     100
+    ],
+    [
+     "hm2-ema_pullback-tf1#22|pm",
+     100
+    ]
+   ],
+   "rules": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 2000,
+    "max_day_tr": 0,
+    "target_take": 0
+   },
+   "raw_overlap": {
+    "max_concurrent_micros": 100,
+    "opposite_overlaps": 0,
+    "cap_violations": 0,
+    "overlap_entries": 0,
+    "cap": 100
+   },
+   "reported_raw_overlap": {
+    "overlap_entries": 0,
+    "opposite_conflicts": 0,
+    "max_concurrent_micros": 100,
+    "cap_violations": 0,
+    "cap": 100,
+    "cap_ok": true
+   },
+   "executed": {
+    "overlap": 0,
+    "conflicts": 0,
+    "max_conc": 100,
+    "cap_viol": 0,
+    "executed": 1791,
+    "skipped": 3316
+   },
+   "reported_walk": {
+    "executed": 1791,
+    "skipped": 3316,
+    "clipped": 0,
+    "opposite_conflicts_executed": 0,
+    "overlap_entries_executed": 0,
+    "max_concurrent_micros": 100,
+    "cap_violations": 0
+   },
+   "raw_net": [
+    96552.0,
+    27310.0,
+    81670.0
+   ],
+   "raw_shares": [
+    0.4697662651071366,
+    0.13287468618025416,
+    0.39735904871260924
+   ],
+   "reported_max_net_share": 0.4697662651071366,
+   "rules_standalone_net": [
+    55760.0,
+    -111010.0,
+    252560.0
+   ],
+   "rules_shares": [
+    0.18085106382978725,
+    0.0,
+    0.8191489361702128
+   ],
+   "static_session_micros": {
+    "nyam": 80,
+    "mid": 100,
+    "pm": 100
+   },
+   "cap": 100,
+   "audit": {
+    "n_pass": 334,
+    "n_cons_viol": 0,
+    "n_mindays_viol": 0,
+    "eod_oracle_mismatch": 0,
+    "eod_checked": 821
+   }
+  },
+  "fast:apex_eod:single": {
+   "members": [
+    [
+     "hm2-tod_drift-tf15#19|mid",
+     30
+    ]
+   ],
+   "rules": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "raw_overlap": {
+    "max_concurrent_micros": 30,
+    "opposite_overlaps": 0,
+    "cap_violations": 0,
+    "overlap_entries": 0,
+    "cap": 60
+   },
+   "reported_raw_overlap": {
+    "overlap_entries": 0,
+    "opposite_conflicts": 0,
+    "max_concurrent_micros": 30,
+    "cap_violations": 0,
+    "cap": 60,
+    "cap_ok": true
+   },
+   "executed": {
+    "overlap": 0,
+    "conflicts": 0,
+    "max_conc": 30,
+    "cap_viol": 0,
+    "executed": 820,
+    "skipped": 0
+   },
+   "reported_walk": {
+    "executed": 820,
+    "skipped": 0,
+    "clipped": 0,
+    "opposite_conflicts_executed": 0,
+    "overlap_entries_executed": 0,
+    "max_concurrent_micros": 30,
+    "cap_violations": 0
+   },
+   "raw_net": [
+    4665.0
+   ],
+   "raw_shares": [
+    1.0
+   ],
+   "reported_max_net_share": 1.0,
+   "rules_standalone_net": [
+    110187.0
+   ],
+   "rules_shares": [
+    1.0
+   ],
+   "static_session_micros": {
+    "mid": 30
+   },
+   "cap": 60,
+   "audit": {
+    "n_pass": 326,
+    "n_cons_viol": 0,
+    "n_mindays_viol": 0,
+    "eod_oracle_mismatch": 0,
+    "eod_checked": 821
+   }
+  },
+  "fast:apex_eod:best2": {
+   "members": [
+    [
+     "hm2-tod_drift-tf15#19|mid",
+     30
+    ],
+    [
+     "hm2-donchian-tf5#5|pm",
+     40
+    ]
+   ],
+   "rules": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "raw_overlap": {
+    "max_concurrent_micros": 40,
+    "opposite_overlaps": 0,
+    "cap_violations": 0,
+    "overlap_entries": 0,
+    "cap": 60
+   },
+   "reported_raw_overlap": {
+    "overlap_entries": 0,
+    "opposite_conflicts": 0,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0,
+    "cap": 60,
+    "cap_ok": true
+   },
+   "executed": {
+    "overlap": 0,
+    "conflicts": 0,
+    "max_conc": 40,
+    "cap_viol": 0,
+    "executed": 872,
+    "skipped": 1673
+   },
+   "reported_walk": {
+    "executed": 872,
+    "skipped": 1673,
+    "clipped": 0,
+    "opposite_conflicts_executed": 0,
+    "overlap_entries_executed": 0,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0
+   },
+   "raw_net": [
+    4665.0,
+    72980.0
+   ],
+   "raw_shares": [
+    0.06008113851503638,
+    0.9399188614849636
+   ],
+   "reported_max_net_share": 0.9399188614849636,
+   "rules_standalone_net": [
+    110187.0,
+    52440.0
+   ],
+   "rules_shares": [
+    0.6775443192089874,
+    0.32245568079101256
+   ],
+   "static_session_micros": {
+    "mid": 30,
+    "pm": 40
+   },
+   "cap": 60,
+   "audit": {
+    "n_pass": 325,
+    "n_cons_viol": 0,
+    "n_mindays_viol": 0,
+    "eod_oracle_mismatch": 0,
+    "eod_checked": 821
+   }
+  },
+  "fast:apex_eod:portfolio": {
+   "members": [
+    [
+     "hm2-tod_drift-tf15#19|mid",
+     30
+    ],
+    [
+     "hm2-donchian-tf5#5|pm",
+     40
+    ],
+    [
+     "hm2-tod_drift-tf15#0|pm",
+     20
+    ]
+   ],
+   "rules": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "raw_overlap": {
+    "max_concurrent_micros": 60,
+    "opposite_overlaps": 348,
+    "cap_violations": 0,
+    "overlap_entries": 951,
+    "cap": 60
+   },
+   "reported_raw_overlap": {
+    "overlap_entries": 951,
+    "opposite_conflicts": 348,
+    "max_concurrent_micros": 60,
+    "cap_violations": 0,
+    "cap": 60,
+    "cap_ok": true
+   },
+   "executed": {
+    "overlap": 23,
+    "conflicts": 5,
+    "max_conc": 60,
+    "cap_viol": 0,
+    "executed": 896,
+    "skipped": 2462
+   },
+   "reported_walk": {
+    "executed": 896,
+    "skipped": 2462,
+    "clipped": 0,
+    "opposite_conflicts_executed": 5,
+    "overlap_entries_executed": 23,
+    "max_concurrent_micros": 60,
+    "cap_violations": 0
+   },
+   "raw_net": [
+    4665.0,
+    72980.0,
+    76756.0
+   ],
+   "raw_shares": [
+    0.030213534886432084,
+    0.4726653324784166,
+    0.49712113263515134
+   ],
+   "reported_max_net_share": 0.49712113263515134,
+   "rules_standalone_net": [
+    110187.0,
+    52440.0,
+    47268.0
+   ],
+   "rules_shares": [
+    0.5249624812406203,
+    0.24983920531694417,
+    0.22519831344243552
+   ],
+   "static_session_micros": {
+    "mid": 30,
+    "pm": 60
+   },
+   "cap": 60,
+   "audit": {
+    "n_pass": 322,
+    "n_cons_viol": 0,
+    "n_mindays_viol": 0,
+    "eod_oracle_mismatch": 0,
+    "eod_checked": 821
+   }
+  }
+ },
+ "mae_lt_loss": 383152,
+ "mfe_lt_pnl": 0
+}

@@ -1,0 +1,196 @@
+=== funded_s1 07:42:32 ET
+funded_s1: 1283 configs x 4 variants, model intraday, coarse micros [10, 20, 40]
+[s1i] 0 tasks already done, 1283 to run
+[s1i] 10/1283 tasks 54s
+[s1i] 20/1283 tasks 90s
+[s1i] 30/1283 tasks 128s
+[s1i] 40/1283 tasks 178s
+[s1i] 50/1283 tasks 218s
+[s1i] 60/1283 tasks 259s
+[s1i] 70/1283 tasks 297s
+[s1i] 80/1283 tasks 339s
+[s1i] 90/1283 tasks 375s
+[s1i] 100/1283 tasks 422s
+[s1i] 110/1283 tasks 463s
+[s1i] 120/1283 tasks 495s
+[s1i] 130/1283 tasks 536s
+[s1i] 140/1283 tasks 572s
+[s1i] 150/1283 tasks 604s
+[s1i] 160/1283 tasks 637s
+[s1i] 170/1283 tasks 671s
+[s1i] 180/1283 tasks 714s
+[s1i] 190/1283 tasks 751s
+[s1i] 200/1283 tasks 785s
+/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/multiprocessing/resource_tracker.py:216: UserWarning: resource_tracker: There appear to be 6 leaked semaphore objects to clean up at shutdown
+  warnings.warn('resource_tracker: There appear to be %d '
+=== funded_s1 07:56:16 ET
+funded_s1: 1283 configs x 4 variants, model intraday, coarse micros [10, 20, 40]
+[s1i] 204 tasks already done, 1079 to run
+[s1i] 10/1079 tasks 39s
+[s1i] 20/1079 tasks 77s
+[s1i] 30/1079 tasks 123s
+[s1i] 40/1079 tasks 158s
+[s1i] 50/1079 tasks 200s
+[s1i] 60/1079 tasks 241s
+[s1i] 70/1079 tasks 279s
+[s1i] 80/1079 tasks 311s
+[s1i] 90/1079 tasks 342s
+[s1i] 100/1079 tasks 370s
+[s1i] 110/1079 tasks 400s
+[s1i] 120/1079 tasks 430s
+[s1i] 130/1079 tasks 472s
+[s1i] 140/1079 tasks 514s
+=== funded_s1 08:04:54 ET
+funded_s1: 1283 configs x 4 variants, model intraday, coarse micros [10, 20, 40]
+[s1i] 345 tasks already done, 938 to run
+/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/multiprocessing/resource_tracker.py:216: UserWarning: resource_tracker: There appear to be 6 leaked semaphore objects to clean up at shutdown
+  warnings.warn('resource_tracker: There appear to be %d '
+/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/multiprocessing/resource_tracker.py:216: UserWarning: resource_tracker: There appear to be 6 leaked semaphore objects to clean up at shutdown
+  warnings.warn('resource_tracker: There appear to be %d '
+=== funded_s1 08:05:37 ET
+funded_s1: 1283 configs x 4 variants, model intraday, coarse micros [10, 20, 40]
+[s1i] 352 tasks already done, 931 to run
+[s1i] 10/931 tasks 31s
+[s1i] 20/931 tasks 67s
+[s1i] 30/931 tasks 94s
+[s1i] 40/931 tasks 123s
+[s1i] 50/931 tasks 148s
+[s1i] 60/931 tasks 172s
+[s1i] 70/931 tasks 197s
+[s1i] 80/931 tasks 237s
+[s1i] 90/931 tasks 283s
+[s1i] 100/931 tasks 324s
+[s1i] 110/931 tasks 358s
+[s1i] 120/931 tasks 387s
+[s1i] 130/931 tasks 409s
+[s1i] 140/931 tasks 452s
+[s1i] 150/931 tasks 494s
+[score] offline compute window: sleeping 2165s
+[score] offline compute window: sleeping 2165s
+[score] offline compute window: sleeping 2165s
+[score] offline compute window: sleeping 2165s
+[s1i] 160/931 tasks 2676s
+[s1i] 170/931 tasks 2703s
+[s1i] 180/931 tasks 2719s
+[s1i] 190/931 tasks 2733s
+[s1i] 200/931 tasks 2747s
+[s1i] 210/931 tasks 2768s
+[s1i] 220/931 tasks 2789s
+[s1i] 230/931 tasks 2806s
+[s1i] 240/931 tasks 2822s
+[s1i] 250/931 tasks 2841s
+[s1i] 260/931 tasks 2852s
+[s1i] 270/931 tasks 2865s
+[s1i] 280/931 tasks 2896s
+[s1i] 290/931 tasks 2920s
+[s1i] 300/931 tasks 2935s
+[s1i] 310/931 tasks 2946s
+[s1i] 320/931 tasks 2958s
+[s1i] 330/931 tasks 2968s
+[s1i] 340/931 tasks 2980s
+[s1i] 350/931 tasks 2992s
+[s1i] 360/931 tasks 3005s
+[s1i] 370/931 tasks 3018s
+[s1i] 380/931 tasks 3031s
+[s1i] 390/931 tasks 3044s
+[s1i] 400/931 tasks 3057s
+[s1i] 410/931 tasks 3070s
+[s1i] 420/931 tasks 3083s
+[s1i] 430/931 tasks 3096s
+[s1i] 440/931 tasks 3112s
+[s1i] 450/931 tasks 3129s
+[s1i] 460/931 tasks 3145s
+[s1i] 470/931 tasks 3163s
+[s1i] 480/931 tasks 3184s
+[s1i] 490/931 tasks 3209s
+[s1i] 500/931 tasks 3236s
+[s1i] 510/931 tasks 3276s
+[s1i] 520/931 tasks 3304s
+[s1i] 530/931 tasks 3336s
+[s1i] 540/931 tasks 3351s
+[s1i] 550/931 tasks 3381s
+[s1i] 560/931 tasks 3401s
+[s1i] 570/931 tasks 3423s
+[s1i] 580/931 tasks 3443s
+[s1i] 590/931 tasks 3468s
+[s1i] 600/931 tasks 3480s
+[s1i] 610/931 tasks 3497s
+[s1i] 620/931 tasks 3523s
+[s1i] 630/931 tasks 3531s
+[s1i] 640/931 tasks 3539s
+[s1i] 650/931 tasks 3550s
+[s1i] 660/931 tasks 3562s
+[s1i] 670/931 tasks 3583s
+[s1i] 680/931 tasks 3602s
+[s1i] 690/931 tasks 3623s
+[s1i] 700/931 tasks 3635s
+[s1i] 710/931 tasks 3644s
+[s1i] 720/931 tasks 3667s
+[s1i] 730/931 tasks 3688s
+[s1i] 740/931 tasks 3707s
+[s1i] 750/931 tasks 3722s
+[s1i] 760/931 tasks 3736s
+[s1i] 770/931 tasks 3756s
+[s1i] 780/931 tasks 3780s
+[s1i] 790/931 tasks 3792s
+[s1i] 800/931 tasks 3808s
+[s1i] 810/931 tasks 3827s
+[s1i] 820/931 tasks 3849s
+[s1i] 830/931 tasks 3861s
+[s1i] 840/931 tasks 3878s
+[s1i] 850/931 tasks 3893s
+[s1i] 860/931 tasks 3909s
+[s1i] 870/931 tasks 3920s
+[s1i] 880/931 tasks 3932s
+[s1i] 890/931 tasks 3946s
+[s1i] 900/931 tasks 3964s
+[s1i] 910/931 tasks 3981s
+[s1i] 920/931 tasks 4005s
+[s1i] 930/931 tasks 4021s
+[s1i] 931/931 tasks 4025s
+=== funded_pick 09:12:43 ET
+flex screened 1283 top-K coarse E$40 >= 1094.6 max 1496.9
+flex_dll screened 1283 top-K coarse E$40 >= 1066.5 max 1283.0
+pro_dll screened 1283 top-K coarse E$40 >= 1125.9 max 1532.9
+pro_nodll screened 1283 top-K coarse E$40 >= 1191.0 max 1613.9
+60 configs, 120 pairs selected
+=== funded_s2 09:12:43 ET
+funded_s2: 60 configs, 120 pairs
+[s2i] 0 tasks already done, 60 to run
+[s2i] 10/60 tasks 146s
+[score] offline compute window: sleeping 1145s
+[score] offline compute window: sleeping 1145s
+[score] offline compute window: sleeping 1145s
+[score] offline compute window: sleeping 1145s
+[s2i] 20/60 tasks 1504s
+[s2i] 30/60 tasks 1624s
+[s2i] 40/60 tasks 1769s
+[s2i] 50/60 tasks 1835s
+[s2i] 60/60 tasks 1933s
+=== funded_null 09:44:57 ET
+funded_null: 30 pseudo-configs
+[nulli] 0 tasks already done, 30 to run
+[nulli] 10/30 tasks 242s
+[nulli] 20/30 tasks 577s
+[nulli] 30/30 tasks 932s
+=== verify 10:00:30 ET
+verify: 50 (config, session, firm) re-computed from the bundles
+[verify] 0 tasks already done, 50 to run
+[verify] 10/50 tasks 7s
+[verify] 20/50 tasks 15s
+[verify] 30/50 tasks 22s
+[verify] 40/50 tasks 32s
+[verify] 50/50 tasks 38s
+=== wf 10:01:08 ET
+wf: 30 tasks (Lucid firm x top-10 pass-3 family grid x session by intraday P5), kc=3
+[wfi] 0 tasks already done, 30 to run
+/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/multiprocessing/resource_tracker.py:216: UserWarning: resource_tracker: There appear to be 6 leaked semaphore objects to clean up at shutdown
+  warnings.warn('resource_tracker: There appear to be %d '
+=== wf (R settings: top 12, kc 5) 10:01:12 ET
+wf: 36 tasks (Lucid firm x top-12 pass-3 family grid x session by intraday P5), kc=5
+[wfi] 0 tasks already done, 36 to run
+[wfi] 10/36 tasks 167s
+[wfi] 20/36 tasks 396s
+[wfi] 30/36 tasks 762s
+[wfi] 36/36 tasks 1220s
+=== heavy chain done 10:21:32 ET

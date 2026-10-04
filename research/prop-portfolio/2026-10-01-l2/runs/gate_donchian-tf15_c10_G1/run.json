@@ -1,0 +1,151 @@
+{
+ "id": "gate_donchian-tf15_c10_G1",
+ "engine": "gates-1 (list gate on an in-sample tester bundle)",
+ "range": {
+  "start": "2021-09-22",
+  "end": "2024-12-31",
+  "holdout": false
+ },
+ "holdout": false,
+ "qty": 1,
+ "trades": 1526,
+ "net": -219.0,
+ "strategy": "gates.G1",
+ "inputs": {
+  "pick": "donchian-tf15_c10",
+  "source": "R__fp-donchian-tf15_c10",
+  "gate": "G1",
+  "name": "gate_imb_side",
+  "guard_ms": 0,
+  "g1_rows": 5
+ },
+ "elapsed_s": 0.04,
+ "gate": {
+  "gate": "G1",
+  "name": "gate_imb_side",
+  "pick": "donchian-tf15_c10",
+  "pick_key": "fp-donchian-tf15#10",
+  "tf": "15",
+  "pick_sess": "pm",
+  "source": "R__fp-donchian-tf15_c10",
+  "source_sha256": "2931c2f96facd9b064f2975e7d526f1f585e34ca5296aa852ad588a0553bdcbf",
+  "stage": "gate",
+  "control": "",
+  "seed": "",
+  "features": [
+   "imb10",
+   "t_utc"
+  ],
+  "counts": {
+   "source_trades": 3571,
+   "rows": 1526,
+   "no_signal": 178,
+   "basis": 3393,
+   "cats": {
+    "keep": 1526,
+    "skip": 2045
+   },
+   "rows_by_session": {
+    "london": 415,
+    "mid": 335,
+    "nyam": 458,
+    "pm": 318
+   },
+   "cats_by_session": {
+    "london": {
+     "keep": 415,
+     "skip": 454
+    },
+    "mid": {
+     "keep": 335,
+     "skip": 483
+    },
+    "nyam": {
+     "keep": 458,
+     "skip": 666
+    },
+    "pm": {
+     "keep": 318,
+     "skip": 442
+    }
+   },
+   "exec_guard": null,
+   "entry_timing": {
+    "under_1s_after_minute": 3461,
+    "market_entries": 3571,
+    "market_over_60s_after_bar": 2
+   },
+   "guard_check": {
+    "guard_ms": 1000,
+    "verdicts_changed": 581,
+    "no_signal": 178
+   }
+  },
+  "control_only": false,
+  "half_unit_rows": false,
+  "note": "list gate: a survivor must be replayed through l2sim as a Template filter",
+  "cells": {
+   "pro_dll_funded": {
+    "slot": "pro_dll_funded",
+    "kind": "funded",
+    "base": "file:R__fp-donchian-tf15_c10",
+    "base_kw": {
+     "firm": "pro_dll",
+     "rules": {
+      "day_take": 0,
+      "day_lock": 600,
+      "day_stop": 0,
+      "max_day_tr": 0
+     },
+     "sess": "pm",
+     "policy": 1500,
+     "strategy": "donchian",
+     "inputs": {
+      "tf": "15",
+      "stop_mode": "pts",
+      "stop_val": 30.0,
+      "tgt_r": 0.6
+     },
+     "both_sides": false,
+     "micros": 30
+    },
+    "pick_meta": {
+     "strategy": "donchian",
+     "inputs": {
+      "tf": "15",
+      "stop_mode": "pts",
+      "stop_val": 30.0,
+      "tgt_r": 0.6
+     },
+     "both_sides": false
+    },
+    "warnings": [],
+    "real": "/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-10-01-l2/runs/gate_donchian-tf15_c10_G1",
+    "nulls": [
+     "/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-10-01-l2/runs/gate_donchian-tf15_c10_G1-perms1",
+     "/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-10-01-l2/runs/gate_donchian-tf15_c10_G1-perms2"
+    ],
+    "gate_kw": {
+     "firm": "pro_dll",
+     "rules": {
+      "day_take": 0,
+      "day_lock": 600,
+      "day_stop": 0,
+      "max_day_tr": 0
+     },
+     "sess": "pm",
+     "policy": 1500,
+     "strategy": "donchian",
+     "inputs": {
+      "tf": "15",
+      "stop_mode": "pts",
+      "stop_val": 30.0,
+      "tgt_r": 0.6
+     },
+     "both_sides": false,
+     "micros": 30
+    }
+   }
+  }
+ }
+}

@@ -1,0 +1,1 @@
+{"key": "sweep_follow-tf5-c2s1", "fam_tf": "sweep_follow-tf5", "family": "sweep_follow", "tf": "5", "variant": "c2s1", "sess": "london", "firm": "apex", "status": "ok", "lift": 0.014250913520097438, "ctrl": 0.28538367844092566, "real": 0.29963459196102316, "skipped": null, "elapsed_s": 0.46}

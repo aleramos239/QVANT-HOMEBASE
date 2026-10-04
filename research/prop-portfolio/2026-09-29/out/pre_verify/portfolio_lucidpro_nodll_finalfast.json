@@ -1,0 +1,4691 @@
+{
+ "firm": "lucidpro_nodll",
+ "rules_id": "lucid-pro-50k-no-dll@2026-09-27b",
+ "primary": "realized",
+ "unconfirmed": false,
+ "objective": "fast",
+ "pool": [
+  {
+   "cid": "hm2-straddle-tf30#10|nyam",
+   "src": "20260930-001526-draft_pp_straddle-67c2#10",
+   "fam": "straddle",
+   "tf": 30,
+   "sess": "nyam",
+   "how": "top+wf",
+   "cand_p5": 0.706456,
+   "cand_pass": "3"
+  },
+  {
+   "cid": "hm2-straddle-tf30#11|nyam",
+   "src": "20260930-001526-draft_pp_straddle-67c2#11",
+   "fam": "straddle",
+   "tf": 30,
+   "sess": "nyam",
+   "how": "top+wf",
+   "cand_p5": 0.706456,
+   "cand_pass": "3"
+  },
+  {
+   "cid": "hm2-straddle-tf30#9|nyam",
+   "src": "20260930-001526-draft_pp_straddle-67c2#9",
+   "fam": "straddle",
+   "tf": 30,
+   "sess": "nyam",
+   "how": "top",
+   "cand_p5": 0.706456,
+   "cand_pass": "3"
+  },
+  {
+   "cid": "hm-first_bar_mom-tf15#21|nyam",
+   "src": "20260929-231149-draft_pp_first_bar_mom-f556#21",
+   "fam": "first_bar_mom",
+   "tf": 15,
+   "sess": "nyam",
+   "how": "top",
+   "cand_p5": 0.690621,
+   "cand_pass": "2"
+  },
+  {
+   "cid": "hm-first_bar_mom-tf15#9|nyam",
+   "src": "20260929-231149-draft_pp_first_bar_mom-f556#9",
+   "fam": "first_bar_mom",
+   "tf": 15,
+   "sess": "nyam",
+   "how": "top",
+   "cand_p5": 0.690621,
+   "cand_pass": "2"
+  },
+  {
+   "cid": "hm2-straddle-tf30#8|nyam",
+   "src": "20260930-001526-draft_pp_straddle-67c2#8",
+   "fam": "straddle",
+   "tf": 30,
+   "sess": "nyam",
+   "how": "top",
+   "cand_p5": 0.690621,
+   "cand_pass": "3"
+  },
+  {
+   "cid": "hm-first_bar_mom-tf15#10|nyam",
+   "src": "20260929-231149-draft_pp_first_bar_mom-f556#10",
+   "fam": "first_bar_mom",
+   "tf": 15,
+   "sess": "nyam",
+   "how": "top",
+   "cand_p5": 0.689403,
+   "cand_pass": "2"
+  },
+  {
+   "cid": "hm-first_bar_mom-tf15#11|nyam",
+   "src": "20260929-231149-draft_pp_first_bar_mom-f556#11",
+   "fam": "first_bar_mom",
+   "tf": 15,
+   "sess": "nyam",
+   "how": "top",
+   "cand_p5": 0.689403,
+   "cand_pass": "2"
+  },
+  {
+   "cid": "hm-first_bar_mom-tf15#22|nyam",
+   "src": "20260929-231149-draft_pp_first_bar_mom-f556#22",
+   "fam": "first_bar_mom",
+   "tf": 15,
+   "sess": "nyam",
+   "how": "top",
+   "cand_p5": 0.689403,
+   "cand_pass": "2"
+  },
+  {
+   "cid": "hm-first_bar_mom-tf15#23|nyam",
+   "src": "20260929-231149-draft_pp_first_bar_mom-f556#23",
+   "fam": "first_bar_mom",
+   "tf": 15,
+   "sess": "nyam",
+   "how": "top",
+   "cand_p5": 0.689403,
+   "cand_pass": "2"
+  },
+  {
+   "cid": "hm2-straddle-tf30#21|nyam",
+   "src": "20260930-001526-draft_pp_straddle-67c2#21",
+   "fam": "straddle",
+   "tf": 30,
+   "sess": "nyam",
+   "how": "top",
+   "cand_p5": 0.688185,
+   "cand_pass": "3"
+  },
+  {
+   "cid": "hm2-straddle-tf30#22|nyam",
+   "src": "20260930-001526-draft_pp_straddle-67c2#22",
+   "fam": "straddle",
+   "tf": 30,
+   "sess": "nyam",
+   "how": "top",
+   "cand_p5": 0.688185,
+   "cand_pass": "3"
+  },
+  {
+   "cid": "hm2-straddle-tf30#23|nyam",
+   "src": "20260930-001526-draft_pp_straddle-67c2#23",
+   "fam": "straddle",
+   "tf": 30,
+   "sess": "nyam",
+   "how": "top",
+   "cand_p5": 0.688185,
+   "cand_pass": "3"
+  },
+  {
+   "cid": "hm-first_bar_mom-tf15#33|nyam",
+   "src": "20260929-231149-draft_pp_first_bar_mom-f556#33",
+   "fam": "first_bar_mom",
+   "tf": 15,
+   "sess": "nyam",
+   "how": "top",
+   "cand_p5": 0.688185,
+   "cand_pass": "2"
+  },
+  {
+   "cid": "hm-first_bar_mom-tf15#34|nyam",
+   "src": "20260929-231149-draft_pp_first_bar_mom-f556#34",
+   "fam": "first_bar_mom",
+   "tf": 15,
+   "sess": "nyam",
+   "how": "top",
+   "cand_p5": 0.686967,
+   "cand_pass": "2"
+  },
+  {
+   "cid": "hm-first_bar_mom-tf15#35|nyam",
+   "src": "20260929-231149-draft_pp_first_bar_mom-f556#35",
+   "fam": "first_bar_mom",
+   "tf": 15,
+   "sess": "nyam",
+   "how": "top",
+   "cand_p5": 0.686967,
+   "cand_pass": "2"
+  },
+  {
+   "cid": "hm-orb-tf5#10|mid",
+   "src": "20260929-231930-draft_pp_orb-5276#10",
+   "fam": "orb",
+   "tf": 5,
+   "sess": "mid",
+   "how": "top",
+   "cand_p5": 0.686967,
+   "cand_pass": "2"
+  },
+  {
+   "cid": "hm-orb-tf5#11|mid",
+   "src": "20260929-231930-draft_pp_orb-5276#11",
+   "fam": "orb",
+   "tf": 5,
+   "sess": "mid",
+   "how": "top",
+   "cand_p5": 0.686967,
+   "cand_pass": "2"
+  },
+  {
+   "cid": "hm-orb-tf5#9|mid",
+   "src": "20260929-231930-draft_pp_orb-5276#9",
+   "fam": "orb",
+   "tf": 5,
+   "sess": "mid",
+   "how": "top",
+   "cand_p5": 0.686967,
+   "cand_pass": "2"
+  },
+  {
+   "cid": "hm-orb-tf5#8|mid",
+   "src": "20260929-231930-draft_pp_orb-5276#8",
+   "fam": "orb",
+   "tf": 5,
+   "sess": "mid",
+   "how": "top",
+   "cand_p5": 0.684531,
+   "cand_pass": "2"
+  },
+  {
+   "cid": "hm2-straddle-tf30#20|mid",
+   "src": "20260930-001526-draft_pp_straddle-67c2#20",
+   "fam": "straddle",
+   "tf": 30,
+   "sess": "mid",
+   "how": "top+wf",
+   "cand_p5": 0.684531,
+   "cand_pass": "3"
+  },
+  {
+   "cid": "hm2-straddle-tf30#33|nyam",
+   "src": "20260930-001526-draft_pp_straddle-67c2#33",
+   "fam": "straddle",
+   "tf": 30,
+   "sess": "nyam",
+   "how": "top",
+   "cand_p5": 0.683313,
+   "cand_pass": "3"
+  },
+  {
+   "cid": "hm2-straddle-tf30#34|nyam",
+   "src": "20260930-001526-draft_pp_straddle-67c2#34",
+   "fam": "straddle",
+   "tf": 30,
+   "sess": "nyam",
+   "how": "top",
+   "cand_p5": 0.683313,
+   "cand_pass": "3"
+  },
+  {
+   "cid": "hm2-straddle-tf30#35|nyam",
+   "src": "20260930-001526-draft_pp_straddle-67c2#35",
+   "fam": "straddle",
+   "tf": 30,
+   "sess": "nyam",
+   "how": "top",
+   "cand_p5": 0.683313,
+   "cand_pass": "3"
+  },
+  {
+   "cid": "hm2-straddle-tf30#20|nyam",
+   "src": "20260930-001526-draft_pp_straddle-67c2#20",
+   "fam": "straddle",
+   "tf": 30,
+   "sess": "nyam",
+   "how": "top",
+   "cand_p5": 0.680877,
+   "cand_pass": "3"
+  },
+  {
+   "cid": "hm2-straddle-tf30#8|mid",
+   "src": "20260930-001526-draft_pp_straddle-67c2#8",
+   "fam": "straddle",
+   "tf": 30,
+   "sess": "mid",
+   "how": "wf",
+   "cand_p5": 0.673569,
+   "cand_pass": "3"
+  },
+  {
+   "cid": "hm2-straddle-tf30#10|pm",
+   "src": "20260930-001526-draft_pp_straddle-67c2#10",
+   "fam": "straddle",
+   "tf": 30,
+   "sess": "pm",
+   "how": "wf",
+   "cand_p5": 0.679659,
+   "cand_pass": "3"
+  },
+  {
+   "cid": "hm2-straddle-tf30#11|pm",
+   "src": "20260930-001526-draft_pp_straddle-67c2#11",
+   "fam": "straddle",
+   "tf": 30,
+   "sess": "pm",
+   "how": "wf",
+   "cand_p5": 0.679659,
+   "cand_pass": "3"
+  },
+  {
+   "cid": "hm2-gap-tf15#22|nyam",
+   "src": "20260930-094241-draft_pp_gap-8337#22",
+   "fam": "gap",
+   "tf": 15,
+   "sess": "nyam",
+   "how": "wf",
+   "cand_p5": 0.651644,
+   "cand_pass": "3"
+  },
+  {
+   "cid": "hm2-gap-tf15#23|nyam",
+   "src": "20260930-094241-draft_pp_gap-8337#23",
+   "fam": "gap",
+   "tf": 15,
+   "sess": "nyam",
+   "how": "wf",
+   "cand_p5": 0.651644,
+   "cand_pass": "3"
+  },
+  {
+   "cid": "hm2-squeeze-tf5#21|mid",
+   "src": "20260930-002323-draft_pp_squeeze-b809#21",
+   "fam": "squeeze",
+   "tf": 5,
+   "sess": "mid",
+   "how": "wf",
+   "cand_p5": 0.646772,
+   "cand_pass": "3"
+  },
+  {
+   "cid": "hm2-squeeze-tf5#22|mid",
+   "src": "20260930-002323-draft_pp_squeeze-b809#22",
+   "fam": "squeeze",
+   "tf": 5,
+   "sess": "mid",
+   "how": "wf",
+   "cand_p5": 0.646772,
+   "cand_pass": "3"
+  },
+  {
+   "cid": "hm2-donchian-tf5#10|pm",
+   "src": "20260930-102812-draft_pp_donchian-d3c5#10",
+   "fam": "donchian",
+   "tf": 5,
+   "sess": "pm",
+   "how": "wf",
+   "cand_p5": 0.644336,
+   "cand_pass": "3"
+  },
+  {
+   "cid": "hm2-donchian-tf5#11|pm",
+   "src": "20260930-102812-draft_pp_donchian-d3c5#11",
+   "fam": "donchian",
+   "tf": 5,
+   "sess": "pm",
+   "how": "wf",
+   "cand_p5": 0.644336,
+   "cand_pass": "3"
+  },
+  {
+   "cid": "hm2-tod_drift-tf30#0|pm",
+   "src": "20260930-104356-draft_pp_tod_drift-63a7#0",
+   "fam": "tod_drift",
+   "tf": 30,
+   "sess": "pm",
+   "how": "wf",
+   "cand_p5": 0.6419,
+   "cand_pass": "3"
+  },
+  {
+   "cid": "hm2-tod_drift-tf30#2|pm",
+   "src": "20260930-104356-draft_pp_tod_drift-63a7#2",
+   "fam": "tod_drift",
+   "tf": 30,
+   "sess": "pm",
+   "how": "wf",
+   "cand_p5": 0.6419,
+   "cand_pass": "3"
+  },
+  {
+   "cid": "hm2-squeeze-tf5#22|pm",
+   "src": "20260930-002323-draft_pp_squeeze-b809#22",
+   "fam": "squeeze",
+   "tf": 5,
+   "sess": "pm",
+   "how": "wf",
+   "cand_p5": 0.639464,
+   "cand_pass": "3"
+  },
+  {
+   "cid": "hm2-squeeze-tf5#23|pm",
+   "src": "20260930-002323-draft_pp_squeeze-b809#23",
+   "fam": "squeeze",
+   "tf": 5,
+   "sess": "pm",
+   "how": "wf",
+   "cand_p5": 0.639464,
+   "cand_pass": "3"
+  },
+  {
+   "cid": "hm2-tod_drift-tf30#0|mid",
+   "src": "20260930-104356-draft_pp_tod_drift-63a7#0",
+   "fam": "tod_drift",
+   "tf": 30,
+   "sess": "mid",
+   "how": "wf",
+   "cand_p5": 0.624848,
+   "cand_pass": "3"
+  },
+  {
+   "cid": "hm2-tod_drift-tf30#2|mid",
+   "src": "20260930-104356-draft_pp_tod_drift-63a7#2",
+   "fam": "tod_drift",
+   "tf": 30,
+   "sess": "mid",
+   "how": "wf",
+   "cand_p5": 0.624848,
+   "cand_pass": "3"
+  },
+  {
+   "cid": "hm2-squeeze-tf5#32|nyam",
+   "src": "20260930-002323-draft_pp_squeeze-b809#32",
+   "fam": "squeeze",
+   "tf": 5,
+   "sess": "nyam",
+   "how": "wf",
+   "cand_p5": 0.622412,
+   "cand_pass": "3"
+  },
+  {
+   "cid": "hm2-squeeze-tf5#34|nyam",
+   "src": "20260930-002323-draft_pp_squeeze-b809#34",
+   "fam": "squeeze",
+   "tf": 5,
+   "sess": "nyam",
+   "how": "wf",
+   "cand_p5": 0.610231,
+   "cand_pass": "3"
+  },
+  {
+   "cid": "hm2-vwap_flip-tf5#34|pm",
+   "src": "20260930-101228-draft_pp_vwap_flip-333d#34",
+   "fam": "vwap_flip",
+   "tf": 5,
+   "sess": "pm",
+   "how": "wf",
+   "cand_p5": 0.616322,
+   "cand_pass": "3"
+  },
+  {
+   "cid": "hm2-vwap_flip-tf5#35|pm",
+   "src": "20260930-101228-draft_pp_vwap_flip-333d#35",
+   "fam": "vwap_flip",
+   "tf": 5,
+   "sess": "pm",
+   "how": "wf",
+   "cand_p5": 0.616322,
+   "cand_pass": "3"
+  },
+  {
+   "cid": "hm2-straddle-tf30#9|pm",
+   "src": "20260930-001526-draft_pp_straddle-67c2#9",
+   "fam": "straddle",
+   "tf": 30,
+   "sess": "pm",
+   "how": "near",
+   "cand_p5": 0.679659,
+   "cand_pass": "3"
+  },
+  {
+   "cid": "hm2-straddle-tf30#32|nyam",
+   "src": "20260930-001526-draft_pp_straddle-67c2#32",
+   "fam": "straddle",
+   "tf": 30,
+   "sess": "nyam",
+   "how": "near",
+   "cand_p5": 0.674787,
+   "cand_pass": "3"
+  },
+  {
+   "cid": "hm-donchian-tf15#10|nyam",
+   "src": "20260929-221600-draft_pp_donchian-d8e4#10",
+   "fam": "donchian",
+   "tf": 15,
+   "sess": "nyam",
+   "how": "near",
+   "cand_p5": 0.674787,
+   "cand_pass": "2"
+  },
+  {
+   "cid": "hm-first_bar_mom-tf15#20|nyam",
+   "src": "20260929-231149-draft_pp_first_bar_mom-f556#20",
+   "fam": "first_bar_mom",
+   "tf": 15,
+   "sess": "nyam",
+   "how": "near",
+   "cand_p5": 0.668697,
+   "cand_pass": "2"
+  },
+  {
+   "cid": "hm-donchian-tf30#10|nyam",
+   "src": "20260929-221600-draft_pp_donchian-f109#10",
+   "fam": "donchian",
+   "tf": 30,
+   "sess": "nyam",
+   "how": "near",
+   "cand_p5": 0.658952,
+   "cand_pass": "2"
+  },
+  {
+   "cid": "hm-first_bar_mom-tf15#8|mid",
+   "src": "20260929-231149-draft_pp_first_bar_mom-f556#8",
+   "fam": "first_bar_mom",
+   "tf": 15,
+   "sess": "mid",
+   "how": "near",
+   "cand_p5": 0.658952,
+   "cand_pass": "2"
+  },
+  {
+   "cid": "hm2-sweep_rev-tf5#10|mid",
+   "src": "20260930-093609-draft_pp_sweep_rev-64e2#10",
+   "fam": "sweep_rev",
+   "tf": 5,
+   "sess": "mid",
+   "how": "near",
+   "cand_p5": 0.656516,
+   "cand_pass": "3"
+  },
+  {
+   "cid": "hm-orb-tf5#33|nyam",
+   "src": "20260929-231930-draft_pp_orb-5276#33",
+   "fam": "orb",
+   "tf": 5,
+   "sess": "nyam",
+   "how": "near",
+   "cand_p5": 0.655298,
+   "cand_pass": "2"
+  }
+ ],
+ "pool_size": 52,
+ "history": [
+  {
+   "members": [
+    [
+     "hm2-straddle-tf30#10|nyam",
+     40
+    ]
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "ci": 51,
+   "stable": 0.6961023211479187,
+   "p5": 0.6961023211479187,
+   "adj": 0.6961023211479187,
+   "gain": null,
+   "forced": false
+  },
+  {
+   "members": [
+    [
+     "hm2-straddle-tf30#10|nyam",
+     40
+    ],
+    [
+     "hm2-squeeze-tf5#21|mid",
+     40
+    ]
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "ci": 51,
+   "stable": 0.6961023211479187,
+   "p5": 0.6970158219337463,
+   "adj": 0.6961023211479187,
+   "gain": 0.0,
+   "forced": true
+  }
+ ],
+ "singles_top": [
+  [
+   0.6961023211479187,
+   "hm2-straddle-tf30#10|nyam",
+   40,
+   0.6961023211479187,
+   0.6961023211479187
+  ],
+  [
+   0.6961023211479187,
+   "hm2-straddle-tf30#11|nyam",
+   40,
+   0.6961023211479187,
+   0.6961023211479187
+  ],
+  [
+   0.6942752599716187,
+   "hm2-straddle-tf30#9|nyam",
+   40,
+   0.6942752599716187,
+   0.6942752599716187
+  ],
+  [
+   0.6808769702911377,
+   "hm2-straddle-tf30#22|nyam",
+   40,
+   0.6808769702911377,
+   0.6808769702911377
+  ],
+  [
+   0.6808769702911377,
+   "hm2-straddle-tf30#23|nyam",
+   40,
+   0.6808769702911377,
+   0.6808769702911377
+  ],
+  [
+   0.6796589493751526,
+   "hm2-straddle-tf30#21|nyam",
+   40,
+   0.6796589493751526,
+   0.6796589493751526
+  ],
+  [
+   0.6775274276733398,
+   "hm2-straddle-tf30#34|nyam",
+   40,
+   0.6775274276733398,
+   0.6775274276733398
+  ],
+  [
+   0.6775274276733398,
+   "hm2-straddle-tf30#35|nyam",
+   40,
+   0.6775274276733398,
+   0.6775274276733398
+  ],
+  [
+   0.6769183874130249,
+   "hm2-straddle-tf30#33|nyam",
+   40,
+   0.6769183874130249,
+   0.6769183874130249
+  ],
+  [
+   0.6753958463668823,
+   "hm-first_bar_mom-tf15#10|nyam",
+   40,
+   0.6753958463668823,
+   0.6753958463668823
+  ]
+ ],
+ "reports": {
+  "single": {
+   "firm": "lucidpro_nodll",
+   "rules_id": "lucid-pro-50k-no-dll@2026-09-27b",
+   "unconfirmed": false,
+   "primary": "realized",
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "members": [
+    {
+     "name": "hm2-straddle-tf30#10|nyam",
+     "micros": 40,
+     "fam": "straddle",
+     "sess": "nyam",
+     "trades": 820,
+     "raw_net": 381260.0,
+     "net_share": 1.0
+    }
+   ],
+   "guards": {
+    "n_members": 1,
+    "ge3": false,
+    "max_net_share": 1.0,
+    "share_ok": true,
+    "dup_pairs": 0,
+    "static_cap_ok": true
+   },
+   "eod": {
+    "p1": 0.6686967113276492,
+    "p2": 0.7040194884287454,
+    "p3": 0.705237515225335,
+    "p5": 0.7064555420219245,
+    "bust5": 0.2935444579780755,
+    "med_days": 1.0,
+    "ci_p1": [
+     0.630937880633374,
+     0.705237515225335
+    ],
+    "ci_p2": [
+     0.6699147381242387,
+     0.7356881851400731
+    ],
+    "ci_p3": [
+     0.6711327649208283,
+     0.7369062119366626
+    ],
+    "ci_p5": [
+     0.672320341047503,
+     0.7393422655298416
+    ]
+   },
+   "realized": {
+    "p1": 0.6686967113276492,
+    "p2": 0.7040194884287454,
+    "p3": 0.705237515225335,
+    "p5": 0.7064555420219245,
+    "bust5": 0.2935444579780755,
+    "med_days": 1.0,
+    "ci_p1": [
+     0.630937880633374,
+     0.705237515225335
+    ],
+    "ci_p2": [
+     0.6699147381242387,
+     0.7356881851400731
+    ],
+    "ci_p3": [
+     0.6711327649208283,
+     0.7369062119366626
+    ],
+    "ci_p5": [
+     0.672320341047503,
+     0.7393422655298416
+    ]
+   },
+   "intraday": {
+    "p1": 0.2241169305724726,
+    "p2": 0.22777101096224117,
+    "p3": 0.22777101096224117,
+    "p5": 0.22777101096224117,
+    "bust5": 0.7722289890377588,
+    "med_days": 1.0,
+    "ci_p1": [
+     0.20341047503045068,
+     0.25213154689403167
+    ],
+    "ci_p2": [
+     0.20706455542021923,
+     0.2570036540803898
+    ],
+    "ci_p3": [
+     0.20706455542021923,
+     0.2570036540803898
+    ],
+    "ci_p5": [
+     0.20706455542021923,
+     0.2570036540803898
+    ]
+   },
+   "headline": {
+    "p1": 0.6686967113276492,
+    "p2": 0.7040194884287454,
+    "p3": 0.705237515225335,
+    "p5": 0.7064555420219245,
+    "bust5": 0.2935444579780755,
+    "med_days": 1.0,
+    "ci_p5": [
+     0.672320341047503,
+     0.7393422655298416
+    ],
+    "model": "realized"
+   },
+   "consistency": {
+    "enforced": false
+   },
+   "walk": {
+    "executed": 820,
+    "skipped": 0,
+    "clipped": 0,
+    "opposite_conflicts_executed": 0,
+    "overlap_entries_executed": 0,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0
+   },
+   "raw_overlap": {
+    "overlap_entries": 0,
+    "opposite_conflicts": 0,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0,
+    "cap": 40,
+    "cap_ok": true
+   },
+   "year_net": {
+    "2021": -7780.0,
+    "2022": 186752.0,
+    "2023": 73920.0,
+    "2024": 128368.0
+   },
+   "flags": [],
+   "econ": {
+    "model": "realized",
+    "eval_fee": 140.0,
+    "activation": 0.0,
+    "fees_are_assumptions": true,
+    "cost_per_funded_5d": 198.17241379310343
+   },
+   "lift": {
+    "K": 10,
+    "pool_flag": [
+     "exact"
+    ],
+    "eod": {
+     "real_p5": 0.7064555420219245,
+     "ctrl_p5": 0.6341047503045067,
+     "ctrl_p5_sd": 0.01063526428888823,
+     "lift": 0.07235079171741778,
+     "ci": [
+      0.031668696711327646,
+      0.1120584652862363
+     ]
+    },
+    "realized": {
+     "real_p5": 0.7064555420219245,
+     "ctrl_p5": 0.6341047503045067,
+     "ctrl_p5_sd": 0.01063526428888823,
+     "lift": 0.07235079171741778,
+     "ci": [
+      0.031668696711327646,
+      0.1120584652862363
+     ]
+    },
+    "intraday": {
+     "real_p5": 0.22777101096224117,
+     "ctrl_p5": 0.2862362971985384,
+     "ctrl_p5_sd": 0.007428965009489357,
+     "lift": -0.058465286236297195,
+     "ci": [
+      -0.08355663824604141,
+      -0.018392204628501826
+     ]
+    }
+   },
+   "search": {
+    "stable_score": 0.6961023211479187,
+    "adj_score": 0.6961023211479187,
+    "objective": "fast",
+    "forced_to_3": false
+   },
+   "extras": {
+    "by_day": {
+     "eod": {
+      "pass_on_day": [
+       0.6686967113276492,
+       0.03532277710109622,
+       0.001218026796589525,
+       0.001218026796589525,
+       0.0
+      ],
+      "pass_by_day": [
+       0.6686967113276492,
+       0.7040194884287454,
+       0.705237515225335,
+       0.7064555420219245,
+       0.7064555420219245
+      ],
+      "bust_on_day": [
+       0.2801461632155907,
+       0.013398294762484775,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "bust_by_day": [
+       0.2801461632155907,
+       0.2935444579780755,
+       0.2935444579780755,
+       0.2935444579780755,
+       0.2935444579780755
+      ],
+      "neither_5d": 0.0
+     },
+     "realized": {
+      "pass_on_day": [
+       0.6686967113276492,
+       0.03532277710109622,
+       0.001218026796589525,
+       0.001218026796589525,
+       0.0
+      ],
+      "pass_by_day": [
+       0.6686967113276492,
+       0.7040194884287454,
+       0.705237515225335,
+       0.7064555420219245,
+       0.7064555420219245
+      ],
+      "bust_on_day": [
+       0.2801461632155907,
+       0.013398294762484775,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "bust_by_day": [
+       0.2801461632155907,
+       0.2935444579780755,
+       0.2935444579780755,
+       0.2935444579780755,
+       0.2935444579780755
+      ],
+      "neither_5d": 0.0
+     },
+     "intraday": {
+      "pass_on_day": [
+       0.2241169305724726,
+       0.0036540803897685747,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "pass_by_day": [
+       0.2241169305724726,
+       0.22777101096224117,
+       0.22777101096224117,
+       0.22777101096224117,
+       0.22777101096224117
+      ],
+      "bust_on_day": [
+       0.7661388550548112,
+       0.0060901339829476245,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "bust_by_day": [
+       0.7661388550548112,
+       0.7722289890377588,
+       0.7722289890377588,
+       0.7722289890377588,
+       0.7722289890377588
+      ],
+      "neither_5d": 0.0
+     }
+    },
+    "news": {
+     "n_starts_with_news_in_window": 425,
+     "n_starts_without": 396,
+     "eod": {
+      "p5_news": 0.6941176470588235,
+      "p5_nonnews": 0.7196969696969697,
+      "bust5_news": 0.3058823529411765,
+      "bust5_nonnews": 0.2803030303030303
+     },
+     "realized": {
+      "p5_news": 0.6941176470588235,
+      "p5_nonnews": 0.7196969696969697,
+      "bust5_news": 0.3058823529411765,
+      "bust5_nonnews": 0.2803030303030303
+     },
+     "intraday": {
+      "p5_news": 0.2211764705882353,
+      "p5_nonnews": 0.23484848484848486,
+      "bust5_news": 0.7788235294117647,
+      "bust5_nonnews": 0.7651515151515151
+     }
+    },
+    "risk_curve": [
+     {
+      "scale": 0.25,
+      "micros": [
+       10
+      ],
+      "total_micros": 10,
+      "cap_clipped": false,
+      "static_cap_ok": true,
+      "trades": 820,
+      "fixed": {
+       "cell": {
+        "day_lock": 1000,
+        "day_take": 0,
+        "day_stop": 0,
+        "max_day_tr": 0,
+        "target_take": 1
+       },
+       "eod": {
+        "p1": 0.10840438489646773,
+        "p2": 0.2679658952496955,
+        "p3": 0.35444579780755175,
+        "p5": 0.4518879415347138,
+        "bust5": 0.4518879415347138,
+        "med_days": 2.0
+       },
+       "realized": {
+        "p1": 0.10840438489646773,
+        "p2": 0.2679658952496955,
+        "p3": 0.35444579780755175,
+        "p5": 0.4518879415347138,
+        "bust5": 0.4518879415347138,
+        "med_days": 2.0
+       },
+       "intraday": {
+        "p1": 0.10109622411693057,
+        "p2": 0.2496954933008526,
+        "p3": 0.31790499390986604,
+        "p5": 0.3800243605359318,
+        "bust5": 0.5712545676004872,
+        "med_days": 2.0
+       },
+       "headline": {
+        "p1": 0.10840438489646773,
+        "p2": 0.2679658952496955,
+        "p3": 0.35444579780755175,
+        "p5": 0.4518879415347138,
+        "bust5": 0.4518879415347138,
+        "med_days": 2.0
+       }
+      },
+      "reopt": {
+       "cell": {
+        "day_lock": 1000,
+        "day_take": 0,
+        "day_stop": 0,
+        "max_day_tr": 0,
+        "target_take": 1
+       },
+       "eod": {
+        "p1": 0.10840438489646773,
+        "p2": 0.2679658952496955,
+        "p3": 0.35444579780755175,
+        "p5": 0.4518879415347138,
+        "bust5": 0.4518879415347138,
+        "med_days": 2.0
+       },
+       "realized": {
+        "p1": 0.10840438489646773,
+        "p2": 0.2679658952496955,
+        "p3": 0.35444579780755175,
+        "p5": 0.4518879415347138,
+        "bust5": 0.4518879415347138,
+        "med_days": 2.0
+       },
+       "intraday": {
+        "p1": 0.10109622411693057,
+        "p2": 0.2496954933008526,
+        "p3": 0.31790499390986604,
+        "p5": 0.3800243605359318,
+        "bust5": 0.5712545676004872,
+        "med_days": 2.0
+       },
+       "headline": {
+        "p1": 0.10840438489646773,
+        "p2": 0.2679658952496955,
+        "p3": 0.35444579780755175,
+        "p5": 0.4518879415347138,
+        "bust5": 0.4518879415347138,
+        "med_days": 2.0
+       }
+      }
+     },
+     {
+      "scale": 0.5,
+      "micros": [
+       20
+      ],
+      "total_micros": 20,
+      "cap_clipped": false,
+      "static_cap_ok": true,
+      "trades": 820,
+      "fixed": {
+       "cell": {
+        "day_lock": 1000,
+        "day_take": 0,
+        "day_stop": 0,
+        "max_day_tr": 0,
+        "target_take": 1
+       },
+       "eod": {
+        "p1": 0.4518879415347138,
+        "p2": 0.5371498172959805,
+        "p3": 0.5639464068209501,
+        "p5": 0.5773447015834349,
+        "bust5": 0.42021924482338613,
+        "med_days": 1.0
+       },
+       "realized": {
+        "p1": 0.4518879415347138,
+        "p2": 0.5371498172959805,
+        "p3": 0.5639464068209501,
+        "p5": 0.5773447015834349,
+        "bust5": 0.42021924482338613,
+        "med_days": 1.0
+       },
+       "intraday": {
+        "p1": 0.32034104750304504,
+        "p2": 0.3568818514007308,
+        "p3": 0.364190012180268,
+        "p5": 0.3690621193666261,
+        "bust5": 0.630937880633374,
+        "med_days": 1.0
+       },
+       "headline": {
+        "p1": 0.4518879415347138,
+        "p2": 0.5371498172959805,
+        "p3": 0.5639464068209501,
+        "p5": 0.5773447015834349,
+        "bust5": 0.42021924482338613,
+        "med_days": 1.0
+       }
+      },
+      "reopt": {
+       "cell": {
+        "day_lock": 1000,
+        "day_take": 0,
+        "day_stop": 0,
+        "max_day_tr": 0,
+        "target_take": 1
+       },
+       "eod": {
+        "p1": 0.4518879415347138,
+        "p2": 0.5371498172959805,
+        "p3": 0.5639464068209501,
+        "p5": 0.5773447015834349,
+        "bust5": 0.42021924482338613,
+        "med_days": 1.0
+       },
+       "realized": {
+        "p1": 0.4518879415347138,
+        "p2": 0.5371498172959805,
+        "p3": 0.5639464068209501,
+        "p5": 0.5773447015834349,
+        "bust5": 0.42021924482338613,
+        "med_days": 1.0
+       },
+       "intraday": {
+        "p1": 0.32034104750304504,
+        "p2": 0.3568818514007308,
+        "p3": 0.364190012180268,
+        "p5": 0.3690621193666261,
+        "bust5": 0.630937880633374,
+        "med_days": 1.0
+       },
+       "headline": {
+        "p1": 0.4518879415347138,
+        "p2": 0.5371498172959805,
+        "p3": 0.5639464068209501,
+        "p5": 0.5773447015834349,
+        "bust5": 0.42021924482338613,
+        "med_days": 1.0
+       }
+      }
+     },
+     {
+      "scale": 0.75,
+      "micros": [
+       30
+      ],
+      "total_micros": 30,
+      "cap_clipped": false,
+      "static_cap_ok": true,
+      "trades": 820,
+      "fixed": {
+       "cell": {
+        "day_lock": 1000,
+        "day_take": 0,
+        "day_stop": 0,
+        "max_day_tr": 0,
+        "target_take": 1
+       },
+       "eod": {
+        "p1": 0.5761266747868453,
+        "p2": 0.6345919610231425,
+        "p3": 0.6394640682095006,
+        "p5": 0.6406820950060901,
+        "bust5": 0.35931790499390986,
+        "med_days": 1.0
+       },
+       "realized": {
+        "p1": 0.5761266747868453,
+        "p2": 0.6345919610231425,
+        "p3": 0.6394640682095006,
+        "p5": 0.6406820950060901,
+        "bust5": 0.35931790499390986,
+        "med_days": 1.0
+       },
+       "intraday": {
+        "p1": 0.2789281364190012,
+        "p2": 0.28867235079171744,
+        "p3": 0.28867235079171744,
+        "p5": 0.28867235079171744,
+        "bust5": 0.7113276492082826,
+        "med_days": 1.0
+       },
+       "headline": {
+        "p1": 0.5761266747868453,
+        "p2": 0.6345919610231425,
+        "p3": 0.6394640682095006,
+        "p5": 0.6406820950060901,
+        "bust5": 0.35931790499390986,
+        "med_days": 1.0
+       }
+      },
+      "reopt": {
+       "cell": {
+        "day_lock": 1000,
+        "day_take": 0,
+        "day_stop": 0,
+        "max_day_tr": 0,
+        "target_take": 1
+       },
+       "eod": {
+        "p1": 0.5761266747868453,
+        "p2": 0.6345919610231425,
+        "p3": 0.6394640682095006,
+        "p5": 0.6406820950060901,
+        "bust5": 0.35931790499390986,
+        "med_days": 1.0
+       },
+       "realized": {
+        "p1": 0.5761266747868453,
+        "p2": 0.6345919610231425,
+        "p3": 0.6394640682095006,
+        "p5": 0.6406820950060901,
+        "bust5": 0.35931790499390986,
+        "med_days": 1.0
+       },
+       "intraday": {
+        "p1": 0.2789281364190012,
+        "p2": 0.28867235079171744,
+        "p3": 0.28867235079171744,
+        "p5": 0.28867235079171744,
+        "bust5": 0.7113276492082826,
+        "med_days": 1.0
+       },
+       "headline": {
+        "p1": 0.5761266747868453,
+        "p2": 0.6345919610231425,
+        "p3": 0.6394640682095006,
+        "p5": 0.6406820950060901,
+        "bust5": 0.35931790499390986,
+        "med_days": 1.0
+       }
+      }
+     },
+     {
+      "scale": 1.0,
+      "micros": [
+       40
+      ],
+      "total_micros": 40,
+      "cap_clipped": false,
+      "static_cap_ok": true,
+      "trades": 820,
+      "fixed": {
+       "cell": {
+        "day_lock": 1000,
+        "day_take": 0,
+        "day_stop": 0,
+        "max_day_tr": 0,
+        "target_take": 1
+       },
+       "eod": {
+        "p1": 0.6686967113276492,
+        "p2": 0.7040194884287454,
+        "p3": 0.705237515225335,
+        "p5": 0.7064555420219245,
+        "bust5": 0.2935444579780755,
+        "med_days": 1.0
+       },
+       "realized": {
+        "p1": 0.6686967113276492,
+        "p2": 0.7040194884287454,
+        "p3": 0.705237515225335,
+        "p5": 0.7064555420219245,
+        "bust5": 0.2935444579780755,
+        "med_days": 1.0
+       },
+       "intraday": {
+        "p1": 0.2241169305724726,
+        "p2": 0.22777101096224117,
+        "p3": 0.22777101096224117,
+        "p5": 0.22777101096224117,
+        "bust5": 0.7722289890377588,
+        "med_days": 1.0
+       },
+       "headline": {
+        "p1": 0.6686967113276492,
+        "p2": 0.7040194884287454,
+        "p3": 0.705237515225335,
+        "p5": 0.7064555420219245,
+        "bust5": 0.2935444579780755,
+        "med_days": 1.0
+       }
+      },
+      "reopt": {
+       "cell": {
+        "day_lock": 1000,
+        "day_take": 0,
+        "day_stop": 0,
+        "max_day_tr": 0,
+        "target_take": 1
+       },
+       "eod": {
+        "p1": 0.6686967113276492,
+        "p2": 0.7040194884287454,
+        "p3": 0.705237515225335,
+        "p5": 0.7064555420219245,
+        "bust5": 0.2935444579780755,
+        "med_days": 1.0
+       },
+       "realized": {
+        "p1": 0.6686967113276492,
+        "p2": 0.7040194884287454,
+        "p3": 0.705237515225335,
+        "p5": 0.7064555420219245,
+        "bust5": 0.2935444579780755,
+        "med_days": 1.0
+       },
+       "intraday": {
+        "p1": 0.2241169305724726,
+        "p2": 0.22777101096224117,
+        "p3": 0.22777101096224117,
+        "p5": 0.22777101096224117,
+        "bust5": 0.7722289890377588,
+        "med_days": 1.0
+       },
+       "headline": {
+        "p1": 0.6686967113276492,
+        "p2": 0.7040194884287454,
+        "p3": 0.705237515225335,
+        "p5": 0.7064555420219245,
+        "bust5": 0.2935444579780755,
+        "med_days": 1.0
+       }
+      }
+     },
+     {
+      "scale": 1.25,
+      "micros": [
+       40
+      ],
+      "total_micros": 40,
+      "cap_clipped": true,
+      "static_cap_ok": true,
+      "trades": 820,
+      "fixed": {
+       "cell": {
+        "day_lock": 1000,
+        "day_take": 0,
+        "day_stop": 0,
+        "max_day_tr": 0,
+        "target_take": 1
+       },
+       "eod": {
+        "p1": 0.6686967113276492,
+        "p2": 0.7040194884287454,
+        "p3": 0.705237515225335,
+        "p5": 0.7064555420219245,
+        "bust5": 0.2935444579780755,
+        "med_days": 1.0
+       },
+       "realized": {
+        "p1": 0.6686967113276492,
+        "p2": 0.7040194884287454,
+        "p3": 0.705237515225335,
+        "p5": 0.7064555420219245,
+        "bust5": 0.2935444579780755,
+        "med_days": 1.0
+       },
+       "intraday": {
+        "p1": 0.2241169305724726,
+        "p2": 0.22777101096224117,
+        "p3": 0.22777101096224117,
+        "p5": 0.22777101096224117,
+        "bust5": 0.7722289890377588,
+        "med_days": 1.0
+       },
+       "headline": {
+        "p1": 0.6686967113276492,
+        "p2": 0.7040194884287454,
+        "p3": 0.705237515225335,
+        "p5": 0.7064555420219245,
+        "bust5": 0.2935444579780755,
+        "med_days": 1.0
+       }
+      },
+      "reopt": {
+       "cell": {
+        "day_lock": 1000,
+        "day_take": 0,
+        "day_stop": 0,
+        "max_day_tr": 0,
+        "target_take": 1
+       },
+       "eod": {
+        "p1": 0.6686967113276492,
+        "p2": 0.7040194884287454,
+        "p3": 0.705237515225335,
+        "p5": 0.7064555420219245,
+        "bust5": 0.2935444579780755,
+        "med_days": 1.0
+       },
+       "realized": {
+        "p1": 0.6686967113276492,
+        "p2": 0.7040194884287454,
+        "p3": 0.705237515225335,
+        "p5": 0.7064555420219245,
+        "bust5": 0.2935444579780755,
+        "med_days": 1.0
+       },
+       "intraday": {
+        "p1": 0.2241169305724726,
+        "p2": 0.22777101096224117,
+        "p3": 0.22777101096224117,
+        "p5": 0.22777101096224117,
+        "bust5": 0.7722289890377588,
+        "med_days": 1.0
+       },
+       "headline": {
+        "p1": 0.6686967113276492,
+        "p2": 0.7040194884287454,
+        "p3": 0.705237515225335,
+        "p5": 0.7064555420219245,
+        "bust5": 0.2935444579780755,
+        "med_days": 1.0
+       }
+      }
+     }
+    ],
+    "specs": [
+     {
+      "strategy_id": "hm2-straddle-tf30#10",
+      "config": "hm2-straddle-tf30#10|nyam",
+      "tester_strategy": "draft_pp_straddle",
+      "family": "straddle",
+      "tf": 30,
+      "sess": "nyam",
+      "micros": 40,
+      "stop_mode": "atr",
+      "stop_val": 3.0,
+      "tgt_r": 2.0,
+      "exit_bars": 0,
+      "trail_atr": 0.0,
+      "max_tr": 3,
+      "family_params": {
+       "off_atr": 0.25
+      },
+      "tester_inputs": {
+       "tf": "30",
+       "sess": "all",
+       "off_atr": 0.25,
+       "stop_val": 3.0,
+       "tgt_r": 2.0
+      },
+      "session_filter_offline": "nyam",
+      "trade_source": "20260930-001526-draft_pp_straddle-67c2#10",
+      "pool": "top+wf",
+      "candidate_pass": "3",
+      "note": "trades come from a tester run at sess=all and are split by entry session offline (strategy is session-independent); micros = MNQ contracts per signal; size cost = floor(n/10)*$4 + (n mod 10)*$1 round trip"
+     }
+    ],
+    "rules_spec": {
+     "rule_file": "lucid-pro-50k-no-dll@2026-09-27b",
+     "unconfirmed": false,
+     "primary_breach_model": "realized",
+     "models_reported": [
+      "eod",
+      "realized",
+      "intraday"
+     ],
+     "daily_rules": {
+      "day_lock_usd": 1000,
+      "day_take_usd": null,
+      "day_stop_usd": null,
+      "max_day_tr": null,
+      "target_take": true,
+      "meaning": {
+       "day_lock": "stop for the day once a trade CLOSES with day P&L >= X",
+       "day_take": "flatten all and stop at day P&L >= X (MFE-based, pessimistic order)",
+       "day_stop": "trade closes at -Y and stop for the day when day P&L + worst point <= -Y",
+       "max_day_tr": "max entries per day across the portfolio",
+       "target_take": "stop for the day once the eval pass condition is reached"
+      }
+     },
+     "firm_rules": {
+      "name": "LucidPro 50K \u00b7 no daily loss limit",
+      "eval_target": 3000,
+      "trailing_mll_eod": 2000,
+      "lock_at_profit": 2100,
+      "lock_floor_profit": 100,
+      "consistency": null,
+      "eval_min_days": 1,
+      "soft_daily_loss_limit": null,
+      "cap_micros": 40,
+      "flat_by_et": "16:10"
+     },
+     "eval_fee_assumed": 140.0,
+     "activation_assumed": 0.0
+    }
+   }
+  },
+  "best2": {
+   "firm": "lucidpro_nodll",
+   "rules_id": "lucid-pro-50k-no-dll@2026-09-27b",
+   "unconfirmed": false,
+   "primary": "realized",
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "members": [
+    {
+     "name": "hm2-straddle-tf30#10|nyam",
+     "micros": 40,
+     "fam": "straddle",
+     "sess": "nyam",
+     "trades": 820,
+     "raw_net": 381260.0,
+     "net_share": 0.9499865448057967,
+     "net_standalone_rules": 381260.0,
+     "net_marginal_rules": 261880.0
+    },
+    {
+     "name": "hm2-squeeze-tf5#21|mid",
+     "micros": 40,
+     "fam": "squeeze",
+     "sess": "mid",
+     "trades": 1063,
+     "raw_net": 20072.0,
+     "net_share": 0.050013455194203305,
+     "net_standalone_rules": 32280.0,
+     "net_marginal_rules": -87100.0
+    }
+   ],
+   "guards": {
+    "n_members": 2,
+    "ge3": false,
+    "max_net_share": 0.9499865448057967,
+    "share_ok": true,
+    "dup_pairs": 0,
+    "static_cap_ok": true
+   },
+   "eod": {
+    "p1": 0.6979293544457978,
+    "p2": 0.7381242387332522,
+    "p3": 0.7417783191230207,
+    "p5": 0.7417783191230207,
+    "bust5": 0.2582216808769793,
+    "med_days": 1.0,
+    "ci_p1": [
+     0.6638246041412911,
+     0.7320341047503045
+    ],
+    "ci_p2": [
+     0.707673568818514,
+     0.7685749086479903
+    ],
+    "ci_p3": [
+     0.7113276492082826,
+     0.7722289890377588
+    ],
+    "ci_p5": [
+     0.7113276492082826,
+     0.7722289890377588
+    ]
+   },
+   "realized": {
+    "p1": 0.6833130328867235,
+    "p2": 0.7015834348355664,
+    "p3": 0.7015834348355664,
+    "p5": 0.7015834348355664,
+    "bust5": 0.2984165651644336,
+    "med_days": 1.0,
+    "ci_p1": [
+     0.6492082825822169,
+     0.7174177831912302
+    ],
+    "ci_p2": [
+     0.6711327649208283,
+     0.7332521315468941
+    ],
+    "ci_p3": [
+     0.6711327649208283,
+     0.7332521315468941
+    ],
+    "ci_p5": [
+     0.6711327649208283,
+     0.7332521315468941
+    ]
+   },
+   "intraday": {
+    "p1": 0.22533495736906212,
+    "p2": 0.22655298416565164,
+    "p3": 0.22655298416565164,
+    "p5": 0.22655298416565164,
+    "bust5": 0.7734470158343484,
+    "med_days": 1.0,
+    "ci_p1": [
+     0.2046285018270402,
+     0.25338002436053575
+    ],
+    "ci_p2": [
+     0.20584652862362973,
+     0.2557856272838002
+    ],
+    "ci_p3": [
+     0.20584652862362973,
+     0.2557856272838002
+    ],
+    "ci_p5": [
+     0.20584652862362973,
+     0.2557856272838002
+    ]
+   },
+   "headline": {
+    "p1": 0.6833130328867235,
+    "p2": 0.7015834348355664,
+    "p3": 0.7015834348355664,
+    "p5": 0.7015834348355664,
+    "bust5": 0.2984165651644336,
+    "med_days": 1.0,
+    "ci_p5": [
+     0.6711327649208283,
+     0.7332521315468941
+    ],
+    "model": "realized"
+   },
+   "consistency": {
+    "enforced": false
+   },
+   "walk": {
+    "executed": 1380,
+    "skipped": 503,
+    "clipped": 0,
+    "opposite_conflicts_executed": 0,
+    "overlap_entries_executed": 0,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0
+   },
+   "raw_overlap": {
+    "overlap_entries": 0,
+    "opposite_conflicts": 0,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0,
+    "cap": 40,
+    "cap_ok": true
+   },
+   "year_net": {
+    "2021": 22848.0,
+    "2022": 102660.0,
+    "2023": 109924.0,
+    "2024": 58728.0
+   },
+   "flags": [],
+   "econ": {
+    "model": "realized",
+    "eval_fee": 140.0,
+    "activation": 0.0,
+    "fees_are_assumptions": true,
+    "cost_per_funded_5d": 199.54861111111111
+   },
+   "lift": {
+    "K": 10,
+    "pool_flag": [
+     "exact",
+     "exact"
+    ],
+    "eod": {
+     "real_p5": 0.7417783191230207,
+     "ctrl_p5": 0.6904993909866016,
+     "ctrl_p5_sd": 0.011288289641020872,
+     "lift": 0.051278928136418996,
+     "ci": [
+      0.0123020706455542,
+      0.08563337393422653
+     ]
+    },
+    "realized": {
+     "real_p5": 0.7015834348355664,
+     "ctrl_p5": 0.6272838002436053,
+     "ctrl_p5_sd": 0.008681378651013621,
+     "lift": 0.07429963459196103,
+     "ci": [
+      0.036903166869671135,
+      0.10901644336175395
+     ]
+    },
+    "intraday": {
+     "real_p5": 0.22655298416565164,
+     "ctrl_p5": 0.28428745432399516,
+     "ctrl_p5_sd": 0.007043523651547364,
+     "lift": -0.05773447015834349,
+     "ci": [
+      -0.08221985383678442,
+      -0.020091352009744236
+     ]
+    }
+   },
+   "vs_single": {
+    "single": "hm2-straddle-tf30#10|nyam@40",
+    "single_stable_p5": 0.6961023211479187,
+    "single_cell_p5": 0.6961023211479187,
+    "delta_cell_p5": 0.0054811136876476985,
+    "delta_stable": 0.0
+   },
+   "search": {
+    "stable_score": 0.6961023211479187,
+    "adj_score": 0.6961023211479187,
+    "objective": "fast",
+    "forced_to_3": false
+   },
+   "extras": {
+    "by_day": {
+     "eod": {
+      "pass_on_day": [
+       0.6979293544457978,
+       0.040194884287454324,
+       0.0036540803897685747,
+       0.0,
+       0.0
+      ],
+      "pass_by_day": [
+       0.6979293544457978,
+       0.7381242387332522,
+       0.7417783191230207,
+       0.7417783191230207,
+       0.7417783191230207
+      ],
+      "bust_on_day": [
+       0.2241169305724726,
+       0.031668696711327646,
+       0.00243605359317905,
+       0.0,
+       0.0
+      ],
+      "bust_by_day": [
+       0.2241169305724726,
+       0.2557856272838002,
+       0.2582216808769793,
+       0.2582216808769793,
+       0.2582216808769793
+      ],
+      "neither_5d": 0.0
+     },
+     "realized": {
+      "pass_on_day": [
+       0.6833130328867235,
+       0.018270401948842874,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "pass_by_day": [
+       0.6833130328867235,
+       0.7015834348355664,
+       0.7015834348355664,
+       0.7015834348355664,
+       0.7015834348355664
+      ],
+      "bust_on_day": [
+       0.28989037758830694,
+       0.008526187576126675,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "bust_by_day": [
+       0.28989037758830694,
+       0.2984165651644336,
+       0.2984165651644336,
+       0.2984165651644336,
+       0.2984165651644336
+      ],
+      "neither_5d": 0.0
+     },
+     "intraday": {
+      "pass_on_day": [
+       0.22533495736906212,
+       0.001218026796589525,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "pass_by_day": [
+       0.22533495736906212,
+       0.22655298416565164,
+       0.22655298416565164,
+       0.22655298416565164,
+       0.22655298416565164
+      ],
+      "bust_on_day": [
+       0.7673568818514007,
+       0.0060901339829476245,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "bust_by_day": [
+       0.7673568818514007,
+       0.7734470158343484,
+       0.7734470158343484,
+       0.7734470158343484,
+       0.7734470158343484
+      ],
+      "neither_5d": 0.0
+     }
+    },
+    "news": {
+     "n_starts_with_news_in_window": 425,
+     "n_starts_without": 396,
+     "eod": {
+      "p5_news": 0.7247058823529412,
+      "p5_nonnews": 0.76010101010101,
+      "bust5_news": 0.2752941176470588,
+      "bust5_nonnews": 0.2398989898989899
+     },
+     "realized": {
+      "p5_news": 0.691764705882353,
+      "p5_nonnews": 0.7121212121212122,
+      "bust5_news": 0.30823529411764705,
+      "bust5_nonnews": 0.2878787878787879
+     },
+     "intraday": {
+      "p5_news": 0.2211764705882353,
+      "p5_nonnews": 0.23232323232323232,
+      "bust5_news": 0.7788235294117647,
+      "bust5_nonnews": 0.7676767676767676
+     }
+    },
+    "risk_curve": [
+     {
+      "scale": 0.25,
+      "micros": [
+       10,
+       10
+      ],
+      "total_micros": 20,
+      "cap_clipped": false,
+      "static_cap_ok": true,
+      "trades": 1883,
+      "fixed": {
+       "cell": {
+        "day_lock": 1000,
+        "day_take": 0,
+        "day_stop": 0,
+        "max_day_tr": 0,
+        "target_take": 1
+       },
+       "eod": {
+        "p1": 0.11084043848964677,
+        "p2": 0.30694275274056027,
+        "p3": 0.4043848964677223,
+        "p5": 0.4835566382460414,
+        "bust5": 0.4689403166869671,
+        "med_days": 2.0
+       },
+       "realized": {
+        "p1": 0.11084043848964677,
+        "p2": 0.2971985383678441,
+        "p3": 0.3812423873325213,
+        "p5": 0.4482338611449452,
+        "bust5": 0.5261875761266748,
+        "med_days": 2.0
+       },
+       "intraday": {
+        "p1": 0.10353227771010962,
+        "p2": 0.27527405602923266,
+        "p3": 0.3398294762484775,
+        "p5": 0.37393422655298414,
+        "bust5": 0.6199756394640682,
+        "med_days": 2.0
+       },
+       "headline": {
+        "p1": 0.11084043848964677,
+        "p2": 0.2971985383678441,
+        "p3": 0.3812423873325213,
+        "p5": 0.4482338611449452,
+        "bust5": 0.5261875761266748,
+        "med_days": 2.0
+       }
+      },
+      "reopt": {
+       "cell": {
+        "day_lock": 1000,
+        "day_take": 0,
+        "day_stop": 0,
+        "max_day_tr": 0,
+        "target_take": 1
+       },
+       "eod": {
+        "p1": 0.11084043848964677,
+        "p2": 0.30694275274056027,
+        "p3": 0.4043848964677223,
+        "p5": 0.4835566382460414,
+        "bust5": 0.4689403166869671,
+        "med_days": 2.0
+       },
+       "realized": {
+        "p1": 0.11084043848964677,
+        "p2": 0.2971985383678441,
+        "p3": 0.3812423873325213,
+        "p5": 0.4482338611449452,
+        "bust5": 0.5261875761266748,
+        "med_days": 2.0
+       },
+       "intraday": {
+        "p1": 0.10353227771010962,
+        "p2": 0.27527405602923266,
+        "p3": 0.3398294762484775,
+        "p5": 0.37393422655298414,
+        "bust5": 0.6199756394640682,
+        "med_days": 2.0
+       },
+       "headline": {
+        "p1": 0.11084043848964677,
+        "p2": 0.2971985383678441,
+        "p3": 0.3812423873325213,
+        "p5": 0.4482338611449452,
+        "bust5": 0.5261875761266748,
+        "med_days": 2.0
+       }
+      }
+     },
+     {
+      "scale": 0.5,
+      "micros": [
+       20,
+       20
+      ],
+      "total_micros": 40,
+      "cap_clipped": false,
+      "static_cap_ok": true,
+      "trades": 1883,
+      "fixed": {
+       "cell": {
+        "day_lock": 1000,
+        "day_take": 0,
+        "day_stop": 0,
+        "max_day_tr": 0,
+        "target_take": 1
+       },
+       "eod": {
+        "p1": 0.4713763702801462,
+        "p2": 0.5992691839220463,
+        "p3": 0.6224116930572473,
+        "p5": 0.6272838002436053,
+        "bust5": 0.37149817295980514,
+        "med_days": 1.0
+       },
+       "realized": {
+        "p1": 0.46650426309378806,
+        "p2": 0.5554202192448234,
+        "p3": 0.5688185140073082,
+        "p5": 0.5724725943970768,
+        "bust5": 0.42752740560292324,
+        "med_days": 1.0
+       },
+       "intraday": {
+        "p1": 0.32521315468940315,
+        "p2": 0.364190012180268,
+        "p3": 0.37149817295980514,
+        "p5": 0.37271619975639464,
+        "bust5": 0.6272838002436053,
+        "med_days": 1.0
+       },
+       "headline": {
+        "p1": 0.46650426309378806,
+        "p2": 0.5554202192448234,
+        "p3": 0.5688185140073082,
+        "p5": 0.5724725943970768,
+        "bust5": 0.42752740560292324,
+        "med_days": 1.0
+       }
+      },
+      "reopt": {
+       "cell": {
+        "day_lock": 1000,
+        "day_take": 0,
+        "day_stop": 0,
+        "max_day_tr": 0,
+        "target_take": 1
+       },
+       "eod": {
+        "p1": 0.4713763702801462,
+        "p2": 0.5992691839220463,
+        "p3": 0.6224116930572473,
+        "p5": 0.6272838002436053,
+        "bust5": 0.37149817295980514,
+        "med_days": 1.0
+       },
+       "realized": {
+        "p1": 0.46650426309378806,
+        "p2": 0.5554202192448234,
+        "p3": 0.5688185140073082,
+        "p5": 0.5724725943970768,
+        "bust5": 0.42752740560292324,
+        "med_days": 1.0
+       },
+       "intraday": {
+        "p1": 0.32521315468940315,
+        "p2": 0.364190012180268,
+        "p3": 0.37149817295980514,
+        "p5": 0.37271619975639464,
+        "bust5": 0.6272838002436053,
+        "med_days": 1.0
+       },
+       "headline": {
+        "p1": 0.46650426309378806,
+        "p2": 0.5554202192448234,
+        "p3": 0.5688185140073082,
+        "p5": 0.5724725943970768,
+        "bust5": 0.42752740560292324,
+        "med_days": 1.0
+       }
+      }
+     },
+     {
+      "scale": 0.75,
+      "micros": [
+       30,
+       30
+      ],
+      "total_micros": 60,
+      "cap_clipped": false,
+      "static_cap_ok": true,
+      "trades": 1883,
+      "fixed": {
+       "cell": {
+        "day_lock": 1000,
+        "day_take": 0,
+        "day_stop": 0,
+        "max_day_tr": 0,
+        "target_take": 1
+       },
+       "eod": {
+        "p1": 0.6017052375152253,
+        "p2": 0.6784409257003654,
+        "p3": 0.682095006090134,
+        "p5": 0.682095006090134,
+        "bust5": 0.31790499390986604,
+        "med_days": 1.0
+       },
+       "realized": {
+        "p1": 0.5919610231425091,
+        "p2": 0.6358099878197321,
+        "p3": 0.6358099878197321,
+        "p5": 0.6358099878197321,
+        "bust5": 0.364190012180268,
+        "med_days": 1.0
+       },
+       "intraday": {
+        "p1": 0.2801461632155907,
+        "p2": 0.28867235079171744,
+        "p3": 0.28867235079171744,
+        "p5": 0.28867235079171744,
+        "bust5": 0.7113276492082826,
+        "med_days": 1.0
+       },
+       "headline": {
+        "p1": 0.5919610231425091,
+        "p2": 0.6358099878197321,
+        "p3": 0.6358099878197321,
+        "p5": 0.6358099878197321,
+        "bust5": 0.364190012180268,
+        "med_days": 1.0
+       }
+      },
+      "reopt": {
+       "cell": {
+        "day_lock": 1000,
+        "day_take": 0,
+        "day_stop": 0,
+        "max_day_tr": 1,
+        "target_take": 1
+       },
+       "eod": {
+        "p1": 0.5761266747868453,
+        "p2": 0.6345919610231425,
+        "p3": 0.6394640682095006,
+        "p5": 0.6406820950060901,
+        "bust5": 0.35931790499390986,
+        "med_days": 1.0
+       },
+       "realized": {
+        "p1": 0.5761266747868453,
+        "p2": 0.6345919610231425,
+        "p3": 0.6394640682095006,
+        "p5": 0.6406820950060901,
+        "bust5": 0.35931790499390986,
+        "med_days": 1.0
+       },
+       "intraday": {
+        "p1": 0.2789281364190012,
+        "p2": 0.28867235079171744,
+        "p3": 0.28867235079171744,
+        "p5": 0.28867235079171744,
+        "bust5": 0.7113276492082826,
+        "med_days": 1.0
+       },
+       "headline": {
+        "p1": 0.5761266747868453,
+        "p2": 0.6345919610231425,
+        "p3": 0.6394640682095006,
+        "p5": 0.6406820950060901,
+        "bust5": 0.35931790499390986,
+        "med_days": 1.0
+       }
+      }
+     },
+     {
+      "scale": 1.0,
+      "micros": [
+       40,
+       40
+      ],
+      "total_micros": 80,
+      "cap_clipped": false,
+      "static_cap_ok": true,
+      "trades": 1883,
+      "fixed": {
+       "cell": {
+        "day_lock": 1000,
+        "day_take": 0,
+        "day_stop": 0,
+        "max_day_tr": 0,
+        "target_take": 1
+       },
+       "eod": {
+        "p1": 0.6979293544457978,
+        "p2": 0.7381242387332522,
+        "p3": 0.7417783191230207,
+        "p5": 0.7417783191230207,
+        "bust5": 0.2582216808769793,
+        "med_days": 1.0
+       },
+       "realized": {
+        "p1": 0.6833130328867235,
+        "p2": 0.7015834348355664,
+        "p3": 0.7015834348355664,
+        "p5": 0.7015834348355664,
+        "bust5": 0.2984165651644336,
+        "med_days": 1.0
+       },
+       "intraday": {
+        "p1": 0.22533495736906212,
+        "p2": 0.22655298416565164,
+        "p3": 0.22655298416565164,
+        "p5": 0.22655298416565164,
+        "bust5": 0.7734470158343484,
+        "med_days": 1.0
+       },
+       "headline": {
+        "p1": 0.6833130328867235,
+        "p2": 0.7015834348355664,
+        "p3": 0.7015834348355664,
+        "p5": 0.7015834348355664,
+        "bust5": 0.2984165651644336,
+        "med_days": 1.0
+       }
+      },
+      "reopt": {
+       "cell": {
+        "day_lock": 1000,
+        "day_take": 0,
+        "day_stop": 0,
+        "max_day_tr": 1,
+        "target_take": 1
+       },
+       "eod": {
+        "p1": 0.6686967113276492,
+        "p2": 0.7040194884287454,
+        "p3": 0.705237515225335,
+        "p5": 0.7064555420219245,
+        "bust5": 0.2935444579780755,
+        "med_days": 1.0
+       },
+       "realized": {
+        "p1": 0.6686967113276492,
+        "p2": 0.7040194884287454,
+        "p3": 0.705237515225335,
+        "p5": 0.7064555420219245,
+        "bust5": 0.2935444579780755,
+        "med_days": 1.0
+       },
+       "intraday": {
+        "p1": 0.2241169305724726,
+        "p2": 0.22777101096224117,
+        "p3": 0.22777101096224117,
+        "p5": 0.22777101096224117,
+        "bust5": 0.7722289890377588,
+        "med_days": 1.0
+       },
+       "headline": {
+        "p1": 0.6686967113276492,
+        "p2": 0.7040194884287454,
+        "p3": 0.705237515225335,
+        "p5": 0.7064555420219245,
+        "bust5": 0.2935444579780755,
+        "med_days": 1.0
+       }
+      }
+     },
+     {
+      "scale": 1.25,
+      "micros": [
+       40,
+       40
+      ],
+      "total_micros": 80,
+      "cap_clipped": true,
+      "static_cap_ok": true,
+      "trades": 1883,
+      "fixed": {
+       "cell": {
+        "day_lock": 1000,
+        "day_take": 0,
+        "day_stop": 0,
+        "max_day_tr": 0,
+        "target_take": 1
+       },
+       "eod": {
+        "p1": 0.6979293544457978,
+        "p2": 0.7381242387332522,
+        "p3": 0.7417783191230207,
+        "p5": 0.7417783191230207,
+        "bust5": 0.2582216808769793,
+        "med_days": 1.0
+       },
+       "realized": {
+        "p1": 0.6833130328867235,
+        "p2": 0.7015834348355664,
+        "p3": 0.7015834348355664,
+        "p5": 0.7015834348355664,
+        "bust5": 0.2984165651644336,
+        "med_days": 1.0
+       },
+       "intraday": {
+        "p1": 0.22533495736906212,
+        "p2": 0.22655298416565164,
+        "p3": 0.22655298416565164,
+        "p5": 0.22655298416565164,
+        "bust5": 0.7734470158343484,
+        "med_days": 1.0
+       },
+       "headline": {
+        "p1": 0.6833130328867235,
+        "p2": 0.7015834348355664,
+        "p3": 0.7015834348355664,
+        "p5": 0.7015834348355664,
+        "bust5": 0.2984165651644336,
+        "med_days": 1.0
+       }
+      },
+      "reopt": {
+       "cell": {
+        "day_lock": 1000,
+        "day_take": 0,
+        "day_stop": 0,
+        "max_day_tr": 1,
+        "target_take": 1
+       },
+       "eod": {
+        "p1": 0.6686967113276492,
+        "p2": 0.7040194884287454,
+        "p3": 0.705237515225335,
+        "p5": 0.7064555420219245,
+        "bust5": 0.2935444579780755,
+        "med_days": 1.0
+       },
+       "realized": {
+        "p1": 0.6686967113276492,
+        "p2": 0.7040194884287454,
+        "p3": 0.705237515225335,
+        "p5": 0.7064555420219245,
+        "bust5": 0.2935444579780755,
+        "med_days": 1.0
+       },
+       "intraday": {
+        "p1": 0.2241169305724726,
+        "p2": 0.22777101096224117,
+        "p3": 0.22777101096224117,
+        "p5": 0.22777101096224117,
+        "bust5": 0.7722289890377588,
+        "med_days": 1.0
+       },
+       "headline": {
+        "p1": 0.6686967113276492,
+        "p2": 0.7040194884287454,
+        "p3": 0.705237515225335,
+        "p5": 0.7064555420219245,
+        "bust5": 0.2935444579780755,
+        "med_days": 1.0
+       }
+      }
+     }
+    ],
+    "specs": [
+     {
+      "strategy_id": "hm2-straddle-tf30#10",
+      "config": "hm2-straddle-tf30#10|nyam",
+      "tester_strategy": "draft_pp_straddle",
+      "family": "straddle",
+      "tf": 30,
+      "sess": "nyam",
+      "micros": 40,
+      "stop_mode": "atr",
+      "stop_val": 3.0,
+      "tgt_r": 2.0,
+      "exit_bars": 0,
+      "trail_atr": 0.0,
+      "max_tr": 3,
+      "family_params": {
+       "off_atr": 0.25
+      },
+      "tester_inputs": {
+       "tf": "30",
+       "sess": "all",
+       "off_atr": 0.25,
+       "stop_val": 3.0,
+       "tgt_r": 2.0
+      },
+      "session_filter_offline": "nyam",
+      "trade_source": "20260930-001526-draft_pp_straddle-67c2#10",
+      "pool": "top+wf",
+      "candidate_pass": "3",
+      "note": "trades come from a tester run at sess=all and are split by entry session offline (strategy is session-independent); micros = MNQ contracts per signal; size cost = floor(n/10)*$4 + (n mod 10)*$1 round trip"
+     },
+     {
+      "strategy_id": "hm2-squeeze-tf5#21",
+      "config": "hm2-squeeze-tf5#21|mid",
+      "tester_strategy": "draft_pp_squeeze",
+      "family": "squeeze",
+      "tf": 5,
+      "sess": "mid",
+      "micros": 40,
+      "stop_mode": "atr",
+      "stop_val": 3.0,
+      "tgt_r": 1.0,
+      "exit_bars": 0,
+      "trail_atr": 0.0,
+      "max_tr": 3,
+      "family_params": {
+       "sq_type": "nr7"
+      },
+      "tester_inputs": {
+       "tf": "5",
+       "sess": "all",
+       "sq_type": "nr7",
+       "stop_val": 3.0,
+       "tgt_r": 1.0
+      },
+      "session_filter_offline": "mid",
+      "trade_source": "20260930-002323-draft_pp_squeeze-b809#21",
+      "pool": "wf",
+      "candidate_pass": "3",
+      "note": "trades come from a tester run at sess=all and are split by entry session offline (strategy is session-independent); micros = MNQ contracts per signal; size cost = floor(n/10)*$4 + (n mod 10)*$1 round trip"
+     }
+    ],
+    "rules_spec": {
+     "rule_file": "lucid-pro-50k-no-dll@2026-09-27b",
+     "unconfirmed": false,
+     "primary_breach_model": "realized",
+     "models_reported": [
+      "eod",
+      "realized",
+      "intraday"
+     ],
+     "daily_rules": {
+      "day_lock_usd": 1000,
+      "day_take_usd": null,
+      "day_stop_usd": null,
+      "max_day_tr": null,
+      "target_take": true,
+      "meaning": {
+       "day_lock": "stop for the day once a trade CLOSES with day P&L >= X",
+       "day_take": "flatten all and stop at day P&L >= X (MFE-based, pessimistic order)",
+       "day_stop": "trade closes at -Y and stop for the day when day P&L + worst point <= -Y",
+       "max_day_tr": "max entries per day across the portfolio",
+       "target_take": "stop for the day once the eval pass condition is reached"
+      }
+     },
+     "firm_rules": {
+      "name": "LucidPro 50K \u00b7 no daily loss limit",
+      "eval_target": 3000,
+      "trailing_mll_eod": 2000,
+      "lock_at_profit": 2100,
+      "lock_floor_profit": 100,
+      "consistency": null,
+      "eval_min_days": 1,
+      "soft_daily_loss_limit": null,
+      "cap_micros": 40,
+      "flat_by_et": "16:10"
+     },
+     "eval_fee_assumed": 140.0,
+     "activation_assumed": 0.0
+    },
+    "member_corr": {
+     "names": [
+      "hm2-straddle-tf30#10|nyam",
+      "hm2-squeeze-tf5#21|mid"
+     ],
+     "daily_pnl_corr": [
+      [
+       1.0,
+       0.042
+      ],
+      [
+       0.042,
+       1.0
+      ]
+     ],
+     "pair_mean": 0.04224723836413692,
+     "pair_max": 0.04224723836413692,
+     "dd_day_overlap": [
+      [
+       1.0,
+       0.244
+      ],
+      [
+       0.244,
+       1.0
+      ]
+     ],
+     "lose_day_overlap": [
+      [
+       1.0,
+       0.488
+      ],
+      [
+       0.537,
+       1.0
+      ]
+     ],
+     "multi_dd_share": 0.1388888888888889
+    }
+   }
+  },
+  "portfolio": {
+   "firm": "lucidpro_nodll",
+   "rules_id": "lucid-pro-50k-no-dll@2026-09-27b",
+   "unconfirmed": false,
+   "primary": "realized",
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "members": [
+    {
+     "name": "hm2-straddle-tf30#9|nyam",
+     "micros": 40,
+     "fam": "straddle",
+     "sess": "nyam",
+     "trades": 820,
+     "raw_net": 262440.0,
+     "net_share": 0.43159078799360606,
+     "net_standalone_rules": 262440.0,
+     "net_marginal_rules": -36001.0
+    },
+    {
+     "name": "hm-orb-tf5#10|mid",
+     "micros": 30,
+     "fam": "orb",
+     "sess": "mid",
+     "trades": 820,
+     "raw_net": 187830.0,
+     "net_share": 0.3088923095139423,
+     "net_standalone_rules": 187830.0,
+     "net_marginal_rules": -37851.0
+    },
+    {
+     "name": "hm2-straddle-tf30#10|pm",
+     "micros": 20,
+     "fam": "straddle",
+     "sess": "pm",
+     "trades": 813,
+     "raw_net": 157806.0,
+     "net_share": 0.25951690249245163,
+     "net_standalone_rules": 157806.0,
+     "net_marginal_rules": 26508.0
+    }
+   ],
+   "guards": {
+    "n_members": 3,
+    "ge3": true,
+    "max_net_share": 0.43159078799360606,
+    "share_ok": true,
+    "dup_pairs": 0,
+    "static_cap_ok": true
+   },
+   "eod": {
+    "p1": 0.6894031668696712,
+    "p2": 0.7320341047503045,
+    "p3": 0.7381242387332522,
+    "p5": 0.7393422655298416,
+    "bust5": 0.26065773447015833,
+    "med_days": 1.0,
+    "ci_p1": [
+     0.6540499390986602,
+     0.7247259439707674
+    ],
+    "ci_p2": [
+     0.6979293544457978,
+     0.7624847746650426
+    ],
+    "ci_p3": [
+     0.705237515225335,
+     0.7685749086479903
+    ],
+    "ci_p5": [
+     0.707673568818514,
+     0.7685749086479903
+    ]
+   },
+   "realized": {
+    "p1": 0.6760048721071864,
+    "p2": 0.6942752740560292,
+    "p3": 0.6942752740560292,
+    "p5": 0.6942752740560292,
+    "bust5": 0.30572472594397077,
+    "med_days": 1.0,
+    "ci_p1": [
+     0.6406820950060901,
+     0.7113276492082826
+    ],
+    "ci_p2": [
+     0.6601705237515225,
+     0.7271619975639464
+    ],
+    "ci_p3": [
+     0.6601705237515225,
+     0.7271619975639464
+    ],
+    "ci_p5": [
+     0.6601705237515225,
+     0.7271619975639464
+    ]
+   },
+   "intraday": {
+    "p1": 0.2570036540803898,
+    "p2": 0.25943970767356883,
+    "p3": 0.25943970767356883,
+    "p5": 0.25943970767356883,
+    "bust5": 0.7405602923264312,
+    "med_days": 1.0,
+    "ci_p1": [
+     0.23386114494518878,
+     0.28748477466504246
+    ],
+    "ci_p2": [
+     0.23629719853836784,
+     0.2911084043848965
+    ],
+    "ci_p3": [
+     0.23629719853836784,
+     0.2911084043848965
+    ],
+    "ci_p5": [
+     0.23629719853836784,
+     0.2911084043848965
+    ]
+   },
+   "headline": {
+    "p1": 0.6760048721071864,
+    "p2": 0.6942752740560292,
+    "p3": 0.6942752740560292,
+    "p5": 0.6942752740560292,
+    "bust5": 0.30572472594397077,
+    "med_days": 1.0,
+    "ci_p5": [
+     0.6601705237515225,
+     0.7271619975639464
+    ],
+    "model": "realized"
+   },
+   "consistency": {
+    "enforced": false
+   },
+   "walk": {
+    "executed": 1579,
+    "skipped": 874,
+    "clipped": 0,
+    "opposite_conflicts_executed": 0,
+    "overlap_entries_executed": 0,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0
+   },
+   "raw_overlap": {
+    "overlap_entries": 0,
+    "opposite_conflicts": 0,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0,
+    "cap": 40,
+    "cap_ok": true
+   },
+   "year_net": {
+    "2021": -50814.0,
+    "2022": 166763.0,
+    "2023": 100368.0,
+    "2024": 49576.0
+   },
+   "flags": [
+    "ONE_YEAR_CONCENTRATION 2022: 63% of net",
+    "GE3_SEARCH: best >=3-member set from greedy restarts (plain greedy ended with 2 members)"
+   ],
+   "econ": {
+    "model": "realized",
+    "eval_fee": 140.0,
+    "activation": 0.0,
+    "fees_are_assumptions": true,
+    "cost_per_funded_5d": 201.64912280701756
+   },
+   "lift": {
+    "K": 10,
+    "pool_flag": [
+     "exact",
+     "given",
+     "exact"
+    ],
+    "eod": {
+     "real_p5": 0.7393422655298416,
+     "ctrl_p5": 0.6729598051157125,
+     "ctrl_p5_sd": 0.016791549724006625,
+     "lift": 0.06638246041412911,
+     "ci": [
+      0.031543848964677226,
+      0.10037149817295976
+     ]
+    },
+    "realized": {
+     "real_p5": 0.6942752740560292,
+     "ctrl_p5": 0.6068209500609013,
+     "ctrl_p5_sd": 0.015634454557583475,
+     "lift": 0.08745432399512791,
+     "ci": [
+      0.05103227771010961,
+      0.120225334957369
+     ]
+    },
+    "intraday": {
+     "real_p5": 0.25943970767356883,
+     "ctrl_p5": 0.27880633373934227,
+     "ctrl_p5_sd": 0.010652687163988407,
+     "lift": -0.019366626065773444,
+     "ci": [
+      -0.04360535931790499,
+      0.01596224116930569
+     ]
+    }
+   },
+   "vs_single": {
+    "single": "single",
+    "single_stable_p5": 0.6961023211479187,
+    "single_cell_p5": 0.7064555420219245,
+    "delta_cell_p5": -0.01218026796589533
+   },
+   "search": {
+    "stable_score": 0.6897076964378357,
+    "adj_score": 0.6897076964378357,
+    "objective": "fast",
+    "forced_to_3": true,
+    "via": "search_ge3"
+   },
+   "extras": {
+    "by_day": {
+     "eod": {
+      "pass_on_day": [
+       0.6894031668696712,
+       0.04263093788063337,
+       0.0060901339829476245,
+       0.001218026796589525,
+       0.0
+      ],
+      "pass_by_day": [
+       0.6894031668696712,
+       0.7320341047503045,
+       0.7381242387332522,
+       0.7393422655298416,
+       0.7393422655298416
+      ],
+      "bust_on_day": [
+       0.23142509135200975,
+       0.028014616321559074,
+       0.001218026796589525,
+       0.0,
+       0.0
+      ],
+      "bust_by_day": [
+       0.23142509135200975,
+       0.25943970767356883,
+       0.26065773447015833,
+       0.26065773447015833,
+       0.26065773447015833
+      ],
+      "neither_5d": 0.0
+     },
+     "realized": {
+      "pass_on_day": [
+       0.6760048721071864,
+       0.018270401948842874,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "pass_by_day": [
+       0.6760048721071864,
+       0.6942752740560292,
+       0.6942752740560292,
+       0.6942752740560292,
+       0.6942752740560292
+      ],
+      "bust_on_day": [
+       0.29598051157125455,
+       0.008526187576126675,
+       0.001218026796589525,
+       0.0,
+       0.0
+      ],
+      "bust_by_day": [
+       0.29598051157125455,
+       0.30450669914738127,
+       0.30572472594397077,
+       0.30572472594397077,
+       0.30572472594397077
+      ],
+      "neither_5d": 0.0
+     },
+     "intraday": {
+      "pass_on_day": [
+       0.2570036540803898,
+       0.00243605359317905,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "pass_by_day": [
+       0.2570036540803898,
+       0.25943970767356883,
+       0.25943970767356883,
+       0.25943970767356883,
+       0.25943970767356883
+      ],
+      "bust_on_day": [
+       0.7332521315468941,
+       0.007308160779537149,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "bust_by_day": [
+       0.7332521315468941,
+       0.7405602923264312,
+       0.7405602923264312,
+       0.7405602923264312,
+       0.7405602923264312
+      ],
+      "neither_5d": 0.0
+     }
+    },
+    "news": {
+     "n_starts_with_news_in_window": 425,
+     "n_starts_without": 396,
+     "eod": {
+      "p5_news": 0.7411764705882353,
+      "p5_nonnews": 0.7373737373737373,
+      "bust5_news": 0.25882352941176473,
+      "bust5_nonnews": 0.26262626262626265
+     },
+     "realized": {
+      "p5_news": 0.6894117647058824,
+      "p5_nonnews": 0.6994949494949495,
+      "bust5_news": 0.31058823529411766,
+      "bust5_nonnews": 0.3005050505050505
+     },
+     "intraday": {
+      "p5_news": 0.24941176470588236,
+      "p5_nonnews": 0.2702020202020202,
+      "bust5_news": 0.7505882352941177,
+      "bust5_nonnews": 0.7297979797979798
+     }
+    },
+    "risk_curve": [
+     {
+      "scale": 0.25,
+      "micros": [
+       10,
+       8,
+       5
+      ],
+      "total_micros": 23,
+      "cap_clipped": false,
+      "static_cap_ok": true,
+      "trades": 2453,
+      "fixed": {
+       "cell": {
+        "day_lock": 1000,
+        "day_take": 0,
+        "day_stop": 0,
+        "max_day_tr": 0,
+        "target_take": 1
+       },
+       "eod": {
+        "p1": 0.031668696711327646,
+        "p2": 0.21680876979293545,
+        "p3": 0.3373934226552984,
+        "p5": 0.4445797807551766,
+        "bust5": 0.4713763702801462,
+        "med_days": 3.0
+       },
+       "realized": {
+        "p1": 0.031668696711327646,
+        "p2": 0.21193666260657734,
+        "p3": 0.32399512789281365,
+        "p5": 0.41412911084043846,
+        "bust5": 0.5420219244823387,
+        "med_days": 2.0
+       },
+       "intraday": {
+        "p1": 0.025578562728380026,
+        "p2": 0.18392204628501826,
+        "p3": 0.2838002436053593,
+        "p5": 0.3264311814859927,
+        "bust5": 0.6552984165651644,
+        "med_days": 2.0
+       },
+       "headline": {
+        "p1": 0.031668696711327646,
+        "p2": 0.21193666260657734,
+        "p3": 0.32399512789281365,
+        "p5": 0.41412911084043846,
+        "bust5": 0.5420219244823387,
+        "med_days": 2.0
+       }
+      },
+      "reopt": {
+       "cell": {
+        "day_lock": 1000,
+        "day_take": 3000,
+        "day_stop": 0,
+        "max_day_tr": 0,
+        "target_take": 1
+       },
+       "eod": {
+        "p1": 0.0,
+        "p2": 0.21559074299634592,
+        "p3": 0.33617539585870887,
+        "p5": 0.44336175395858707,
+        "bust5": 0.4725943970767357,
+        "med_days": 3.0
+       },
+       "realized": {
+        "p1": 0.0,
+        "p2": 0.21193666260657734,
+        "p3": 0.32399512789281365,
+        "p5": 0.41412911084043846,
+        "bust5": 0.5420219244823387,
+        "med_days": 2.0
+       },
+       "intraday": {
+        "p1": 0.0,
+        "p2": 0.1814859926918392,
+        "p3": 0.28136419001218027,
+        "p5": 0.32399512789281365,
+        "bust5": 0.6577344701583435,
+        "med_days": 2.0
+       },
+       "headline": {
+        "p1": 0.0,
+        "p2": 0.21193666260657734,
+        "p3": 0.32399512789281365,
+        "p5": 0.41412911084043846,
+        "bust5": 0.5420219244823387,
+        "med_days": 2.0
+       }
+      }
+     },
+     {
+      "scale": 0.5,
+      "micros": [
+       20,
+       15,
+       10
+      ],
+      "total_micros": 45,
+      "cap_clipped": false,
+      "static_cap_ok": true,
+      "trades": 2453,
+      "fixed": {
+       "cell": {
+        "day_lock": 1000,
+        "day_take": 0,
+        "day_stop": 0,
+        "max_day_tr": 0,
+        "target_take": 1
+       },
+       "eod": {
+        "p1": 0.3337393422655298,
+        "p2": 0.559074299634592,
+        "p3": 0.6017052375152253,
+        "p5": 0.6211936662606578,
+        "bust5": 0.3763702801461632,
+        "med_days": 1.0
+       },
+       "realized": {
+        "p1": 0.33008526187576126,
+        "p2": 0.5322777101096224,
+        "p3": 0.5468940316686967,
+        "p5": 0.5493300852618758,
+        "bust5": 0.45066991473812423,
+        "med_days": 1.0
+       },
+       "intraday": {
+        "p1": 0.21680876979293545,
+        "p2": 0.33495736906211937,
+        "p3": 0.3373934226552984,
+        "p5": 0.3373934226552984,
+        "bust5": 0.6626065773447016,
+        "med_days": 1.0
+       },
+       "headline": {
+        "p1": 0.33008526187576126,
+        "p2": 0.5322777101096224,
+        "p3": 0.5468940316686967,
+        "p5": 0.5493300852618758,
+        "bust5": 0.45066991473812423,
+        "med_days": 1.0
+       }
+      },
+      "reopt": {
+       "cell": {
+        "day_lock": 1000,
+        "day_take": 0,
+        "day_stop": 0,
+        "max_day_tr": 0,
+        "target_take": 1
+       },
+       "eod": {
+        "p1": 0.3337393422655298,
+        "p2": 0.559074299634592,
+        "p3": 0.6017052375152253,
+        "p5": 0.6211936662606578,
+        "bust5": 0.3763702801461632,
+        "med_days": 1.0
+       },
+       "realized": {
+        "p1": 0.33008526187576126,
+        "p2": 0.5322777101096224,
+        "p3": 0.5468940316686967,
+        "p5": 0.5493300852618758,
+        "bust5": 0.45066991473812423,
+        "med_days": 1.0
+       },
+       "intraday": {
+        "p1": 0.21680876979293545,
+        "p2": 0.33495736906211937,
+        "p3": 0.3373934226552984,
+        "p5": 0.3373934226552984,
+        "bust5": 0.6626065773447016,
+        "med_days": 1.0
+       },
+       "headline": {
+        "p1": 0.33008526187576126,
+        "p2": 0.5322777101096224,
+        "p3": 0.5468940316686967,
+        "p5": 0.5493300852618758,
+        "bust5": 0.45066991473812423,
+        "med_days": 1.0
+       }
+      }
+     },
+     {
+      "scale": 0.75,
+      "micros": [
+       30,
+       22,
+       15
+      ],
+      "total_micros": 67,
+      "cap_clipped": false,
+      "static_cap_ok": true,
+      "trades": 2453,
+      "fixed": {
+       "cell": {
+        "day_lock": 1000,
+        "day_take": 0,
+        "day_stop": 0,
+        "max_day_tr": 0,
+        "target_take": 1
+       },
+       "eod": {
+        "p1": 0.582216808769793,
+        "p2": 0.6699147381242387,
+        "p3": 0.6833130328867235,
+        "p5": 0.6869671132764921,
+        "bust5": 0.31303288672350793,
+        "med_days": 1.0
+       },
+       "realized": {
+        "p1": 0.5761266747868453,
+        "p2": 0.6285018270401949,
+        "p3": 0.6285018270401949,
+        "p5": 0.6285018270401949,
+        "bust5": 0.37149817295980514,
+        "med_days": 1.0
+       },
+       "intraday": {
+        "p1": 0.2911084043848965,
+        "p2": 0.3081607795371498,
+        "p3": 0.3081607795371498,
+        "p5": 0.3081607795371498,
+        "bust5": 0.6918392204628502,
+        "med_days": 1.0
+       },
+       "headline": {
+        "p1": 0.5761266747868453,
+        "p2": 0.6285018270401949,
+        "p3": 0.6285018270401949,
+        "p5": 0.6285018270401949,
+        "bust5": 0.37149817295980514,
+        "med_days": 1.0
+       }
+      },
+      "reopt": {
+       "cell": {
+        "day_lock": 1000,
+        "day_take": 0,
+        "day_stop": 0,
+        "max_day_tr": 0,
+        "target_take": 1
+       },
+       "eod": {
+        "p1": 0.582216808769793,
+        "p2": 0.6699147381242387,
+        "p3": 0.6833130328867235,
+        "p5": 0.6869671132764921,
+        "bust5": 0.31303288672350793,
+        "med_days": 1.0
+       },
+       "realized": {
+        "p1": 0.5761266747868453,
+        "p2": 0.6285018270401949,
+        "p3": 0.6285018270401949,
+        "p5": 0.6285018270401949,
+        "bust5": 0.37149817295980514,
+        "med_days": 1.0
+       },
+       "intraday": {
+        "p1": 0.2911084043848965,
+        "p2": 0.3081607795371498,
+        "p3": 0.3081607795371498,
+        "p5": 0.3081607795371498,
+        "bust5": 0.6918392204628502,
+        "med_days": 1.0
+       },
+       "headline": {
+        "p1": 0.5761266747868453,
+        "p2": 0.6285018270401949,
+        "p3": 0.6285018270401949,
+        "p5": 0.6285018270401949,
+        "bust5": 0.37149817295980514,
+        "med_days": 1.0
+       }
+      }
+     },
+     {
+      "scale": 1.0,
+      "micros": [
+       40,
+       30,
+       20
+      ],
+      "total_micros": 90,
+      "cap_clipped": false,
+      "static_cap_ok": true,
+      "trades": 2453,
+      "fixed": {
+       "cell": {
+        "day_lock": 1000,
+        "day_take": 0,
+        "day_stop": 0,
+        "max_day_tr": 0,
+        "target_take": 1
+       },
+       "eod": {
+        "p1": 0.6894031668696712,
+        "p2": 0.7320341047503045,
+        "p3": 0.7381242387332522,
+        "p5": 0.7393422655298416,
+        "bust5": 0.26065773447015833,
+        "med_days": 1.0
+       },
+       "realized": {
+        "p1": 0.6760048721071864,
+        "p2": 0.6942752740560292,
+        "p3": 0.6942752740560292,
+        "p5": 0.6942752740560292,
+        "bust5": 0.30572472594397077,
+        "med_days": 1.0
+       },
+       "intraday": {
+        "p1": 0.2570036540803898,
+        "p2": 0.25943970767356883,
+        "p3": 0.25943970767356883,
+        "p5": 0.25943970767356883,
+        "bust5": 0.7405602923264312,
+        "med_days": 1.0
+       },
+       "headline": {
+        "p1": 0.6760048721071864,
+        "p2": 0.6942752740560292,
+        "p3": 0.6942752740560292,
+        "p5": 0.6942752740560292,
+        "bust5": 0.30572472594397077,
+        "med_days": 1.0
+       }
+      },
+      "reopt": {
+       "cell": {
+        "day_lock": 1000,
+        "day_take": 0,
+        "day_stop": 0,
+        "max_day_tr": 0,
+        "target_take": 1
+       },
+       "eod": {
+        "p1": 0.6894031668696712,
+        "p2": 0.7320341047503045,
+        "p3": 0.7381242387332522,
+        "p5": 0.7393422655298416,
+        "bust5": 0.26065773447015833,
+        "med_days": 1.0
+       },
+       "realized": {
+        "p1": 0.6760048721071864,
+        "p2": 0.6942752740560292,
+        "p3": 0.6942752740560292,
+        "p5": 0.6942752740560292,
+        "bust5": 0.30572472594397077,
+        "med_days": 1.0
+       },
+       "intraday": {
+        "p1": 0.2570036540803898,
+        "p2": 0.25943970767356883,
+        "p3": 0.25943970767356883,
+        "p5": 0.25943970767356883,
+        "bust5": 0.7405602923264312,
+        "med_days": 1.0
+       },
+       "headline": {
+        "p1": 0.6760048721071864,
+        "p2": 0.6942752740560292,
+        "p3": 0.6942752740560292,
+        "p5": 0.6942752740560292,
+        "bust5": 0.30572472594397077,
+        "med_days": 1.0
+       }
+      }
+     },
+     {
+      "scale": 1.25,
+      "micros": [
+       40,
+       38,
+       25
+      ],
+      "total_micros": 103,
+      "cap_clipped": true,
+      "static_cap_ok": true,
+      "trades": 2453,
+      "fixed": {
+       "cell": {
+        "day_lock": 1000,
+        "day_take": 0,
+        "day_stop": 0,
+        "max_day_tr": 0,
+        "target_take": 1
+       },
+       "eod": {
+        "p1": 0.7198538367844093,
+        "p2": 0.7551766138855055,
+        "p3": 0.7576126674786845,
+        "p5": 0.7576126674786845,
+        "bust5": 0.24238733252131547,
+        "med_days": 1.0
+       },
+       "realized": {
+        "p1": 0.682095006090134,
+        "p2": 0.6979293544457978,
+        "p3": 0.6979293544457978,
+        "p5": 0.6979293544457978,
+        "bust5": 0.3020706455542022,
+        "med_days": 1.0
+       },
+       "intraday": {
+        "p1": 0.2570036540803898,
+        "p2": 0.25943970767356883,
+        "p3": 0.25943970767356883,
+        "p5": 0.25943970767356883,
+        "bust5": 0.7405602923264312,
+        "med_days": 1.0
+       },
+       "headline": {
+        "p1": 0.682095006090134,
+        "p2": 0.6979293544457978,
+        "p3": 0.6979293544457978,
+        "p5": 0.6979293544457978,
+        "bust5": 0.3020706455542022,
+        "med_days": 1.0
+       }
+      },
+      "reopt": {
+       "cell": {
+        "day_lock": 1000,
+        "day_take": 0,
+        "day_stop": 0,
+        "max_day_tr": 1,
+        "target_take": 1
+       },
+       "eod": {
+        "p1": 0.6662606577344702,
+        "p2": 0.7003654080389768,
+        "p3": 0.7040194884287454,
+        "p5": 0.7064555420219245,
+        "bust5": 0.2935444579780755,
+        "med_days": 1.0
+       },
+       "realized": {
+        "p1": 0.6662606577344702,
+        "p2": 0.7003654080389768,
+        "p3": 0.7040194884287454,
+        "p5": 0.7064555420219245,
+        "bust5": 0.2935444579780755,
+        "med_days": 1.0
+       },
+       "intraday": {
+        "p1": 0.2557856272838002,
+        "p2": 0.26065773447015833,
+        "p3": 0.26065773447015833,
+        "p5": 0.26065773447015833,
+        "bust5": 0.7393422655298416,
+        "med_days": 1.0
+       },
+       "headline": {
+        "p1": 0.6662606577344702,
+        "p2": 0.7003654080389768,
+        "p3": 0.7040194884287454,
+        "p5": 0.7064555420219245,
+        "bust5": 0.2935444579780755,
+        "med_days": 1.0
+       }
+      }
+     }
+    ],
+    "specs": [
+     {
+      "strategy_id": "hm2-straddle-tf30#9",
+      "config": "hm2-straddle-tf30#9|nyam",
+      "tester_strategy": "draft_pp_straddle",
+      "family": "straddle",
+      "tf": 30,
+      "sess": "nyam",
+      "micros": 40,
+      "stop_mode": "atr",
+      "stop_val": 3.0,
+      "tgt_r": 1.0,
+      "exit_bars": 0,
+      "trail_atr": 0.0,
+      "max_tr": 3,
+      "family_params": {
+       "off_atr": 0.25
+      },
+      "tester_inputs": {
+       "tf": "30",
+       "sess": "all",
+       "off_atr": 0.25,
+       "stop_val": 3.0,
+       "tgt_r": 1.0
+      },
+      "session_filter_offline": "nyam",
+      "trade_source": "20260930-001526-draft_pp_straddle-67c2#9",
+      "pool": "top",
+      "candidate_pass": "3",
+      "note": "trades come from a tester run at sess=all and are split by entry session offline (strategy is session-independent); micros = MNQ contracts per signal; size cost = floor(n/10)*$4 + (n mod 10)*$1 round trip"
+     },
+     {
+      "strategy_id": "hm-orb-tf5#10",
+      "config": "hm-orb-tf5#10|mid",
+      "tester_strategy": "draft_pp_orb",
+      "family": "orb",
+      "tf": 5,
+      "sess": "mid",
+      "micros": 30,
+      "stop_mode": "atr",
+      "stop_val": 3.0,
+      "tgt_r": 2.0,
+      "exit_bars": 0,
+      "trail_atr": 0.0,
+      "max_tr": 3,
+      "family_params": {
+       "or_min": "5"
+      },
+      "tester_inputs": {
+       "tf": "5",
+       "sess": "all",
+       "or_min": "5",
+       "stop_val": 3.0,
+       "tgt_r": 2.0
+      },
+      "session_filter_offline": "mid",
+      "trade_source": "20260929-231930-draft_pp_orb-5276#10",
+      "pool": "top",
+      "candidate_pass": "2",
+      "note": "trades come from a tester run at sess=all and are split by entry session offline (strategy is session-independent); micros = MNQ contracts per signal; size cost = floor(n/10)*$4 + (n mod 10)*$1 round trip"
+     },
+     {
+      "strategy_id": "hm2-straddle-tf30#10",
+      "config": "hm2-straddle-tf30#10|pm",
+      "tester_strategy": "draft_pp_straddle",
+      "family": "straddle",
+      "tf": 30,
+      "sess": "pm",
+      "micros": 20,
+      "stop_mode": "atr",
+      "stop_val": 3.0,
+      "tgt_r": 2.0,
+      "exit_bars": 0,
+      "trail_atr": 0.0,
+      "max_tr": 3,
+      "family_params": {
+       "off_atr": 0.25
+      },
+      "tester_inputs": {
+       "tf": "30",
+       "sess": "all",
+       "off_atr": 0.25,
+       "stop_val": 3.0,
+       "tgt_r": 2.0
+      },
+      "session_filter_offline": "pm",
+      "trade_source": "20260930-001526-draft_pp_straddle-67c2#10",
+      "pool": "wf",
+      "candidate_pass": "3",
+      "note": "trades come from a tester run at sess=all and are split by entry session offline (strategy is session-independent); micros = MNQ contracts per signal; size cost = floor(n/10)*$4 + (n mod 10)*$1 round trip"
+     }
+    ],
+    "rules_spec": {
+     "rule_file": "lucid-pro-50k-no-dll@2026-09-27b",
+     "unconfirmed": false,
+     "primary_breach_model": "realized",
+     "models_reported": [
+      "eod",
+      "realized",
+      "intraday"
+     ],
+     "daily_rules": {
+      "day_lock_usd": 1000,
+      "day_take_usd": null,
+      "day_stop_usd": null,
+      "max_day_tr": null,
+      "target_take": true,
+      "meaning": {
+       "day_lock": "stop for the day once a trade CLOSES with day P&L >= X",
+       "day_take": "flatten all and stop at day P&L >= X (MFE-based, pessimistic order)",
+       "day_stop": "trade closes at -Y and stop for the day when day P&L + worst point <= -Y",
+       "max_day_tr": "max entries per day across the portfolio",
+       "target_take": "stop for the day once the eval pass condition is reached"
+      }
+     },
+     "firm_rules": {
+      "name": "LucidPro 50K \u00b7 no daily loss limit",
+      "eval_target": 3000,
+      "trailing_mll_eod": 2000,
+      "lock_at_profit": 2100,
+      "lock_floor_profit": 100,
+      "consistency": null,
+      "eval_min_days": 1,
+      "soft_daily_loss_limit": null,
+      "cap_micros": 40,
+      "flat_by_et": "16:10"
+     },
+     "eval_fee_assumed": 140.0,
+     "activation_assumed": 0.0
+    },
+    "member_corr": {
+     "names": [
+      "hm2-straddle-tf30#9|nyam",
+      "hm-orb-tf5#10|mid",
+      "hm2-straddle-tf30#10|pm"
+     ],
+     "daily_pnl_corr": [
+      [
+       1.0,
+       0.048,
+       0.062
+      ],
+      [
+       0.048,
+       1.0,
+       0.032
+      ],
+      [
+       0.062,
+       0.032,
+       1.0
+      ]
+     ],
+     "pair_mean": 0.04764550162906939,
+     "pair_max": 0.062414333295808914,
+     "dd_day_overlap": [
+      [
+       1.0,
+       0.305,
+       0.268
+      ],
+      [
+       0.305,
+       1.0,
+       0.25
+      ],
+      [
+       0.27,
+       0.252,
+       1.0
+      ]
+     ],
+     "lose_day_overlap": [
+      [
+       1.0,
+       0.488,
+       0.537
+      ],
+      [
+       0.524,
+       1.0,
+       0.537
+      ],
+      [
+       0.448,
+       0.466,
+       1.0
+      ]
+     ],
+     "multi_dd_share": 0.2830188679245283
+    }
+   }
+  },
+  "single:hm2-straddle-tf30#11|nyam@40": {
+   "members": [
+    {
+     "name": "hm2-straddle-tf30#11|nyam",
+     "micros": 40
+    }
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "search": {
+    "stable_score": 0.6961023211479187,
+    "p5": 0.6961023211479187
+   },
+   "specs": [
+    {
+     "strategy_id": "hm2-straddle-tf30#11",
+     "config": "hm2-straddle-tf30#11|nyam",
+     "tester_strategy": "draft_pp_straddle",
+     "family": "straddle",
+     "tf": 30,
+     "sess": "nyam",
+     "micros": 40,
+     "stop_mode": "atr",
+     "stop_val": 3.0,
+     "tgt_r": 3.0,
+     "exit_bars": 0,
+     "trail_atr": 0.0,
+     "max_tr": 3,
+     "family_params": {
+      "off_atr": 0.25
+     },
+     "tester_inputs": {
+      "tf": "30",
+      "sess": "all",
+      "off_atr": 0.25,
+      "stop_val": 3.0,
+      "tgt_r": 3.0
+     },
+     "session_filter_offline": "nyam",
+     "trade_source": "20260930-001526-draft_pp_straddle-67c2#11",
+     "pool": "top+wf",
+     "candidate_pass": "3",
+     "note": "trades come from a tester run at sess=all and are split by entry session offline (strategy is session-independent); micros = MNQ contracts per signal; size cost = floor(n/10)*$4 + (n mod 10)*$1 round trip"
+    }
+   ]
+  },
+  "single:hm2-straddle-tf30#9|nyam@40": {
+   "members": [
+    {
+     "name": "hm2-straddle-tf30#9|nyam",
+     "micros": 40
+    }
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "search": {
+    "stable_score": 0.6942752599716187,
+    "p5": 0.6942752599716187
+   },
+   "specs": [
+    {
+     "strategy_id": "hm2-straddle-tf30#9",
+     "config": "hm2-straddle-tf30#9|nyam",
+     "tester_strategy": "draft_pp_straddle",
+     "family": "straddle",
+     "tf": 30,
+     "sess": "nyam",
+     "micros": 40,
+     "stop_mode": "atr",
+     "stop_val": 3.0,
+     "tgt_r": 1.0,
+     "exit_bars": 0,
+     "trail_atr": 0.0,
+     "max_tr": 3,
+     "family_params": {
+      "off_atr": 0.25
+     },
+     "tester_inputs": {
+      "tf": "30",
+      "sess": "all",
+      "off_atr": 0.25,
+      "stop_val": 3.0,
+      "tgt_r": 1.0
+     },
+     "session_filter_offline": "nyam",
+     "trade_source": "20260930-001526-draft_pp_straddle-67c2#9",
+     "pool": "top",
+     "candidate_pass": "3",
+     "note": "trades come from a tester run at sess=all and are split by entry session offline (strategy is session-independent); micros = MNQ contracts per signal; size cost = floor(n/10)*$4 + (n mod 10)*$1 round trip"
+    }
+   ]
+  },
+  "single:hm2-straddle-tf30#22|nyam@40": {
+   "members": [
+    {
+     "name": "hm2-straddle-tf30#22|nyam",
+     "micros": 40
+    }
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "search": {
+    "stable_score": 0.6808769702911377,
+    "p5": 0.6808769702911377
+   },
+   "specs": [
+    {
+     "strategy_id": "hm2-straddle-tf30#22",
+     "config": "hm2-straddle-tf30#22|nyam",
+     "tester_strategy": "draft_pp_straddle",
+     "family": "straddle",
+     "tf": 30,
+     "sess": "nyam",
+     "micros": 40,
+     "stop_mode": "atr",
+     "stop_val": 3.0,
+     "tgt_r": 2.0,
+     "exit_bars": 0,
+     "trail_atr": 0.0,
+     "max_tr": 3,
+     "family_params": {
+      "off_atr": 0.5
+     },
+     "tester_inputs": {
+      "tf": "30",
+      "sess": "all",
+      "off_atr": 0.5,
+      "stop_val": 3.0,
+      "tgt_r": 2.0
+     },
+     "session_filter_offline": "nyam",
+     "trade_source": "20260930-001526-draft_pp_straddle-67c2#22",
+     "pool": "top",
+     "candidate_pass": "3",
+     "note": "trades come from a tester run at sess=all and are split by entry session offline (strategy is session-independent); micros = MNQ contracts per signal; size cost = floor(n/10)*$4 + (n mod 10)*$1 round trip"
+    }
+   ]
+  },
+  "portfolio_2member_greedy": {
+   "firm": "lucidpro_nodll",
+   "rules_id": "lucid-pro-50k-no-dll@2026-09-27b",
+   "unconfirmed": false,
+   "primary": "realized",
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "members": [
+    {
+     "name": "hm2-straddle-tf30#10|nyam",
+     "micros": 40,
+     "fam": "straddle",
+     "sess": "nyam",
+     "trades": 820,
+     "raw_net": 381260.0,
+     "net_share": 0.9499865448057967,
+     "net_standalone_rules": 381260.0,
+     "net_marginal_rules": 261880.0
+    },
+    {
+     "name": "hm2-squeeze-tf5#21|mid",
+     "micros": 40,
+     "fam": "squeeze",
+     "sess": "mid",
+     "trades": 1063,
+     "raw_net": 20072.0,
+     "net_share": 0.050013455194203305,
+     "net_standalone_rules": 32280.0,
+     "net_marginal_rules": -87100.0
+    }
+   ],
+   "guards": {
+    "n_members": 2,
+    "ge3": false,
+    "max_net_share": 0.9499865448057967,
+    "share_ok": true,
+    "dup_pairs": 0,
+    "static_cap_ok": true
+   },
+   "eod": {
+    "p1": 0.6979293544457978,
+    "p2": 0.7381242387332522,
+    "p3": 0.7417783191230207,
+    "p5": 0.7417783191230207,
+    "bust5": 0.2582216808769793,
+    "med_days": 1.0,
+    "ci_p1": [
+     0.6638246041412911,
+     0.7320341047503045
+    ],
+    "ci_p2": [
+     0.707673568818514,
+     0.7685749086479903
+    ],
+    "ci_p3": [
+     0.7113276492082826,
+     0.7722289890377588
+    ],
+    "ci_p5": [
+     0.7113276492082826,
+     0.7722289890377588
+    ]
+   },
+   "realized": {
+    "p1": 0.6833130328867235,
+    "p2": 0.7015834348355664,
+    "p3": 0.7015834348355664,
+    "p5": 0.7015834348355664,
+    "bust5": 0.2984165651644336,
+    "med_days": 1.0,
+    "ci_p1": [
+     0.6492082825822169,
+     0.7174177831912302
+    ],
+    "ci_p2": [
+     0.6711327649208283,
+     0.7332521315468941
+    ],
+    "ci_p3": [
+     0.6711327649208283,
+     0.7332521315468941
+    ],
+    "ci_p5": [
+     0.6711327649208283,
+     0.7332521315468941
+    ]
+   },
+   "intraday": {
+    "p1": 0.22533495736906212,
+    "p2": 0.22655298416565164,
+    "p3": 0.22655298416565164,
+    "p5": 0.22655298416565164,
+    "bust5": 0.7734470158343484,
+    "med_days": 1.0,
+    "ci_p1": [
+     0.2046285018270402,
+     0.25338002436053575
+    ],
+    "ci_p2": [
+     0.20584652862362973,
+     0.2557856272838002
+    ],
+    "ci_p3": [
+     0.20584652862362973,
+     0.2557856272838002
+    ],
+    "ci_p5": [
+     0.20584652862362973,
+     0.2557856272838002
+    ]
+   },
+   "headline": {
+    "p1": 0.6833130328867235,
+    "p2": 0.7015834348355664,
+    "p3": 0.7015834348355664,
+    "p5": 0.7015834348355664,
+    "bust5": 0.2984165651644336,
+    "med_days": 1.0,
+    "ci_p5": [
+     0.6711327649208283,
+     0.7332521315468941
+    ],
+    "model": "realized"
+   },
+   "consistency": {
+    "enforced": false
+   },
+   "walk": {
+    "executed": 1380,
+    "skipped": 503,
+    "clipped": 0,
+    "opposite_conflicts_executed": 0,
+    "overlap_entries_executed": 0,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0
+   },
+   "raw_overlap": {
+    "overlap_entries": 0,
+    "opposite_conflicts": 0,
+    "max_concurrent_micros": 40,
+    "cap_violations": 0,
+    "cap": 40,
+    "cap_ok": true
+   },
+   "year_net": {
+    "2021": 22848.0,
+    "2022": 102660.0,
+    "2023": 109924.0,
+    "2024": 58728.0
+   },
+   "flags": [
+    "FEWER_THAN_3_MEMBERS: no feasible 3rd member under the guards (cap / net-share); this is the best 2-member",
+    "FORCED_TO_3: 3rd member added with gain <= 0.005 (stop rule overridden for the >=3 guard)"
+   ],
+   "econ": {
+    "model": "realized",
+    "eval_fee": 140.0,
+    "activation": 0.0,
+    "fees_are_assumptions": true,
+    "cost_per_funded_5d": 199.54861111111111
+   },
+   "lift": {
+    "K": 10,
+    "pool_flag": [
+     "exact",
+     "exact"
+    ],
+    "eod": {
+     "real_p5": 0.7417783191230207,
+     "ctrl_p5": 0.6904993909866016,
+     "ctrl_p5_sd": 0.011288289641020872,
+     "lift": 0.051278928136418996,
+     "ci": [
+      0.0123020706455542,
+      0.08563337393422653
+     ]
+    },
+    "realized": {
+     "real_p5": 0.7015834348355664,
+     "ctrl_p5": 0.6272838002436053,
+     "ctrl_p5_sd": 0.008681378651013621,
+     "lift": 0.07429963459196103,
+     "ci": [
+      0.036903166869671135,
+      0.10901644336175395
+     ]
+    },
+    "intraday": {
+     "real_p5": 0.22655298416565164,
+     "ctrl_p5": 0.28428745432399516,
+     "ctrl_p5_sd": 0.007043523651547364,
+     "lift": -0.05773447015834349,
+     "ci": [
+      -0.08221985383678442,
+      -0.020091352009744236
+     ]
+    }
+   },
+   "vs_single": {
+    "single": "hm2-straddle-tf30#10|nyam@40",
+    "single_stable_p5": 0.6961023211479187,
+    "single_cell_p5": 0.6961023211479187,
+    "delta_cell_p5": 0.0054811136876476985,
+    "delta_stable": 0.0
+   },
+   "search": {
+    "stable_score": 0.6961023211479187,
+    "adj_score": 0.6961023211479187,
+    "objective": "fast",
+    "forced_to_3": false
+   },
+   "extras": {
+    "by_day": {
+     "eod": {
+      "pass_on_day": [
+       0.6979293544457978,
+       0.040194884287454324,
+       0.0036540803897685747,
+       0.0,
+       0.0
+      ],
+      "pass_by_day": [
+       0.6979293544457978,
+       0.7381242387332522,
+       0.7417783191230207,
+       0.7417783191230207,
+       0.7417783191230207
+      ],
+      "bust_on_day": [
+       0.2241169305724726,
+       0.031668696711327646,
+       0.00243605359317905,
+       0.0,
+       0.0
+      ],
+      "bust_by_day": [
+       0.2241169305724726,
+       0.2557856272838002,
+       0.2582216808769793,
+       0.2582216808769793,
+       0.2582216808769793
+      ],
+      "neither_5d": 0.0
+     },
+     "realized": {
+      "pass_on_day": [
+       0.6833130328867235,
+       0.018270401948842874,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "pass_by_day": [
+       0.6833130328867235,
+       0.7015834348355664,
+       0.7015834348355664,
+       0.7015834348355664,
+       0.7015834348355664
+      ],
+      "bust_on_day": [
+       0.28989037758830694,
+       0.008526187576126675,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "bust_by_day": [
+       0.28989037758830694,
+       0.2984165651644336,
+       0.2984165651644336,
+       0.2984165651644336,
+       0.2984165651644336
+      ],
+      "neither_5d": 0.0
+     },
+     "intraday": {
+      "pass_on_day": [
+       0.22533495736906212,
+       0.001218026796589525,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "pass_by_day": [
+       0.22533495736906212,
+       0.22655298416565164,
+       0.22655298416565164,
+       0.22655298416565164,
+       0.22655298416565164
+      ],
+      "bust_on_day": [
+       0.7673568818514007,
+       0.0060901339829476245,
+       0.0,
+       0.0,
+       0.0
+      ],
+      "bust_by_day": [
+       0.7673568818514007,
+       0.7734470158343484,
+       0.7734470158343484,
+       0.7734470158343484,
+       0.7734470158343484
+      ],
+      "neither_5d": 0.0
+     }
+    },
+    "news": {
+     "n_starts_with_news_in_window": 425,
+     "n_starts_without": 396,
+     "eod": {
+      "p5_news": 0.7247058823529412,
+      "p5_nonnews": 0.76010101010101,
+      "bust5_news": 0.2752941176470588,
+      "bust5_nonnews": 0.2398989898989899
+     },
+     "realized": {
+      "p5_news": 0.691764705882353,
+      "p5_nonnews": 0.7121212121212122,
+      "bust5_news": 0.30823529411764705,
+      "bust5_nonnews": 0.2878787878787879
+     },
+     "intraday": {
+      "p5_news": 0.2211764705882353,
+      "p5_nonnews": 0.23232323232323232,
+      "bust5_news": 0.7788235294117647,
+      "bust5_nonnews": 0.7676767676767676
+     }
+    },
+    "risk_curve": [
+     {
+      "scale": 0.25,
+      "micros": [
+       10,
+       10
+      ],
+      "total_micros": 20,
+      "cap_clipped": false,
+      "static_cap_ok": true,
+      "trades": 1883,
+      "fixed": {
+       "cell": {
+        "day_lock": 1000,
+        "day_take": 0,
+        "day_stop": 0,
+        "max_day_tr": 0,
+        "target_take": 1
+       },
+       "eod": {
+        "p1": 0.11084043848964677,
+        "p2": 0.30694275274056027,
+        "p3": 0.4043848964677223,
+        "p5": 0.4835566382460414,
+        "bust5": 0.4689403166869671,
+        "med_days": 2.0
+       },
+       "realized": {
+        "p1": 0.11084043848964677,
+        "p2": 0.2971985383678441,
+        "p3": 0.3812423873325213,
+        "p5": 0.4482338611449452,
+        "bust5": 0.5261875761266748,
+        "med_days": 2.0
+       },
+       "intraday": {
+        "p1": 0.10353227771010962,
+        "p2": 0.27527405602923266,
+        "p3": 0.3398294762484775,
+        "p5": 0.37393422655298414,
+        "bust5": 0.6199756394640682,
+        "med_days": 2.0
+       },
+       "headline": {
+        "p1": 0.11084043848964677,
+        "p2": 0.2971985383678441,
+        "p3": 0.3812423873325213,
+        "p5": 0.4482338611449452,
+        "bust5": 0.5261875761266748,
+        "med_days": 2.0
+       }
+      },
+      "reopt": {
+       "cell": {
+        "day_lock": 1000,
+        "day_take": 0,
+        "day_stop": 0,
+        "max_day_tr": 0,
+        "target_take": 1
+       },
+       "eod": {
+        "p1": 0.11084043848964677,
+        "p2": 0.30694275274056027,
+        "p3": 0.4043848964677223,
+        "p5": 0.4835566382460414,
+        "bust5": 0.4689403166869671,
+        "med_days": 2.0
+       },
+       "realized": {
+        "p1": 0.11084043848964677,
+        "p2": 0.2971985383678441,
+        "p3": 0.3812423873325213,
+        "p5": 0.4482338611449452,
+        "bust5": 0.5261875761266748,
+        "med_days": 2.0
+       },
+       "intraday": {
+        "p1": 0.10353227771010962,
+        "p2": 0.27527405602923266,
+        "p3": 0.3398294762484775,
+        "p5": 0.37393422655298414,
+        "bust5": 0.6199756394640682,
+        "med_days": 2.0
+       },
+       "headline": {
+        "p1": 0.11084043848964677,
+        "p2": 0.2971985383678441,
+        "p3": 0.3812423873325213,
+        "p5": 0.4482338611449452,
+        "bust5": 0.5261875761266748,
+        "med_days": 2.0
+       }
+      }
+     },
+     {
+      "scale": 0.5,
+      "micros": [
+       20,
+       20
+      ],
+      "total_micros": 40,
+      "cap_clipped": false,
+      "static_cap_ok": true,
+      "trades": 1883,
+      "fixed": {
+       "cell": {
+        "day_lock": 1000,
+        "day_take": 0,
+        "day_stop": 0,
+        "max_day_tr": 0,
+        "target_take": 1
+       },
+       "eod": {
+        "p1": 0.4713763702801462,
+        "p2": 0.5992691839220463,
+        "p3": 0.6224116930572473,
+        "p5": 0.6272838002436053,
+        "bust5": 0.37149817295980514,
+        "med_days": 1.0
+       },
+       "realized": {
+        "p1": 0.46650426309378806,
+        "p2": 0.5554202192448234,
+        "p3": 0.5688185140073082,
+        "p5": 0.5724725943970768,
+        "bust5": 0.42752740560292324,
+        "med_days": 1.0
+       },
+       "intraday": {
+        "p1": 0.32521315468940315,
+        "p2": 0.364190012180268,
+        "p3": 0.37149817295980514,
+        "p5": 0.37271619975639464,
+        "bust5": 0.6272838002436053,
+        "med_days": 1.0
+       },
+       "headline": {
+        "p1": 0.46650426309378806,
+        "p2": 0.5554202192448234,
+        "p3": 0.5688185140073082,
+        "p5": 0.5724725943970768,
+        "bust5": 0.42752740560292324,
+        "med_days": 1.0
+       }
+      },
+      "reopt": {
+       "cell": {
+        "day_lock": 1000,
+        "day_take": 0,
+        "day_stop": 0,
+        "max_day_tr": 0,
+        "target_take": 1
+       },
+       "eod": {
+        "p1": 0.4713763702801462,
+        "p2": 0.5992691839220463,
+        "p3": 0.6224116930572473,
+        "p5": 0.6272838002436053,
+        "bust5": 0.37149817295980514,
+        "med_days": 1.0
+       },
+       "realized": {
+        "p1": 0.46650426309378806,
+        "p2": 0.5554202192448234,
+        "p3": 0.5688185140073082,
+        "p5": 0.5724725943970768,
+        "bust5": 0.42752740560292324,
+        "med_days": 1.0
+       },
+       "intraday": {
+        "p1": 0.32521315468940315,
+        "p2": 0.364190012180268,
+        "p3": 0.37149817295980514,
+        "p5": 0.37271619975639464,
+        "bust5": 0.6272838002436053,
+        "med_days": 1.0
+       },
+       "headline": {
+        "p1": 0.46650426309378806,
+        "p2": 0.5554202192448234,
+        "p3": 0.5688185140073082,
+        "p5": 0.5724725943970768,
+        "bust5": 0.42752740560292324,
+        "med_days": 1.0
+       }
+      }
+     },
+     {
+      "scale": 0.75,
+      "micros": [
+       30,
+       30
+      ],
+      "total_micros": 60,
+      "cap_clipped": false,
+      "static_cap_ok": true,
+      "trades": 1883,
+      "fixed": {
+       "cell": {
+        "day_lock": 1000,
+        "day_take": 0,
+        "day_stop": 0,
+        "max_day_tr": 0,
+        "target_take": 1
+       },
+       "eod": {
+        "p1": 0.6017052375152253,
+        "p2": 0.6784409257003654,
+        "p3": 0.682095006090134,
+        "p5": 0.682095006090134,
+        "bust5": 0.31790499390986604,
+        "med_days": 1.0
+       },
+       "realized": {
+        "p1": 0.5919610231425091,
+        "p2": 0.6358099878197321,
+        "p3": 0.6358099878197321,
+        "p5": 0.6358099878197321,
+        "bust5": 0.364190012180268,
+        "med_days": 1.0
+       },
+       "intraday": {
+        "p1": 0.2801461632155907,
+        "p2": 0.28867235079171744,
+        "p3": 0.28867235079171744,
+        "p5": 0.28867235079171744,
+        "bust5": 0.7113276492082826,
+        "med_days": 1.0
+       },
+       "headline": {
+        "p1": 0.5919610231425091,
+        "p2": 0.6358099878197321,
+        "p3": 0.6358099878197321,
+        "p5": 0.6358099878197321,
+        "bust5": 0.364190012180268,
+        "med_days": 1.0
+       }
+      },
+      "reopt": {
+       "cell": {
+        "day_lock": 1000,
+        "day_take": 0,
+        "day_stop": 0,
+        "max_day_tr": 1,
+        "target_take": 1
+       },
+       "eod": {
+        "p1": 0.5761266747868453,
+        "p2": 0.6345919610231425,
+        "p3": 0.6394640682095006,
+        "p5": 0.6406820950060901,
+        "bust5": 0.35931790499390986,
+        "med_days": 1.0
+       },
+       "realized": {
+        "p1": 0.5761266747868453,
+        "p2": 0.6345919610231425,
+        "p3": 0.6394640682095006,
+        "p5": 0.6406820950060901,
+        "bust5": 0.35931790499390986,
+        "med_days": 1.0
+       },
+       "intraday": {
+        "p1": 0.2789281364190012,
+        "p2": 0.28867235079171744,
+        "p3": 0.28867235079171744,
+        "p5": 0.28867235079171744,
+        "bust5": 0.7113276492082826,
+        "med_days": 1.0
+       },
+       "headline": {
+        "p1": 0.5761266747868453,
+        "p2": 0.6345919610231425,
+        "p3": 0.6394640682095006,
+        "p5": 0.6406820950060901,
+        "bust5": 0.35931790499390986,
+        "med_days": 1.0
+       }
+      }
+     },
+     {
+      "scale": 1.0,
+      "micros": [
+       40,
+       40
+      ],
+      "total_micros": 80,
+      "cap_clipped": false,
+      "static_cap_ok": true,
+      "trades": 1883,
+      "fixed": {
+       "cell": {
+        "day_lock": 1000,
+        "day_take": 0,
+        "day_stop": 0,
+        "max_day_tr": 0,
+        "target_take": 1
+       },
+       "eod": {
+        "p1": 0.6979293544457978,
+        "p2": 0.7381242387332522,
+        "p3": 0.7417783191230207,
+        "p5": 0.7417783191230207,
+        "bust5": 0.2582216808769793,
+        "med_days": 1.0
+       },
+       "realized": {
+        "p1": 0.6833130328867235,
+        "p2": 0.7015834348355664,
+        "p3": 0.7015834348355664,
+        "p5": 0.7015834348355664,
+        "bust5": 0.2984165651644336,
+        "med_days": 1.0
+       },
+       "intraday": {
+        "p1": 0.22533495736906212,
+        "p2": 0.22655298416565164,
+        "p3": 0.22655298416565164,
+        "p5": 0.22655298416565164,
+        "bust5": 0.7734470158343484,
+        "med_days": 1.0
+       },
+       "headline": {
+        "p1": 0.6833130328867235,
+        "p2": 0.7015834348355664,
+        "p3": 0.7015834348355664,
+        "p5": 0.7015834348355664,
+        "bust5": 0.2984165651644336,
+        "med_days": 1.0
+       }
+      },
+      "reopt": {
+       "cell": {
+        "day_lock": 1000,
+        "day_take": 0,
+        "day_stop": 0,
+        "max_day_tr": 1,
+        "target_take": 1
+       },
+       "eod": {
+        "p1": 0.6686967113276492,
+        "p2": 0.7040194884287454,
+        "p3": 0.705237515225335,
+        "p5": 0.7064555420219245,
+        "bust5": 0.2935444579780755,
+        "med_days": 1.0
+       },
+       "realized": {
+        "p1": 0.6686967113276492,
+        "p2": 0.7040194884287454,
+        "p3": 0.705237515225335,
+        "p5": 0.7064555420219245,
+        "bust5": 0.2935444579780755,
+        "med_days": 1.0
+       },
+       "intraday": {
+        "p1": 0.2241169305724726,
+        "p2": 0.22777101096224117,
+        "p3": 0.22777101096224117,
+        "p5": 0.22777101096224117,
+        "bust5": 0.7722289890377588,
+        "med_days": 1.0
+       },
+       "headline": {
+        "p1": 0.6686967113276492,
+        "p2": 0.7040194884287454,
+        "p3": 0.705237515225335,
+        "p5": 0.7064555420219245,
+        "bust5": 0.2935444579780755,
+        "med_days": 1.0
+       }
+      }
+     },
+     {
+      "scale": 1.25,
+      "micros": [
+       40,
+       40
+      ],
+      "total_micros": 80,
+      "cap_clipped": true,
+      "static_cap_ok": true,
+      "trades": 1883,
+      "fixed": {
+       "cell": {
+        "day_lock": 1000,
+        "day_take": 0,
+        "day_stop": 0,
+        "max_day_tr": 0,
+        "target_take": 1
+       },
+       "eod": {
+        "p1": 0.6979293544457978,
+        "p2": 0.7381242387332522,
+        "p3": 0.7417783191230207,
+        "p5": 0.7417783191230207,
+        "bust5": 0.2582216808769793,
+        "med_days": 1.0
+       },
+       "realized": {
+        "p1": 0.6833130328867235,
+        "p2": 0.7015834348355664,
+        "p3": 0.7015834348355664,
+        "p5": 0.7015834348355664,
+        "bust5": 0.2984165651644336,
+        "med_days": 1.0
+       },
+       "intraday": {
+        "p1": 0.22533495736906212,
+        "p2": 0.22655298416565164,
+        "p3": 0.22655298416565164,
+        "p5": 0.22655298416565164,
+        "bust5": 0.7734470158343484,
+        "med_days": 1.0
+       },
+       "headline": {
+        "p1": 0.6833130328867235,
+        "p2": 0.7015834348355664,
+        "p3": 0.7015834348355664,
+        "p5": 0.7015834348355664,
+        "bust5": 0.2984165651644336,
+        "med_days": 1.0
+       }
+      },
+      "reopt": {
+       "cell": {
+        "day_lock": 1000,
+        "day_take": 0,
+        "day_stop": 0,
+        "max_day_tr": 1,
+        "target_take": 1
+       },
+       "eod": {
+        "p1": 0.6686967113276492,
+        "p2": 0.7040194884287454,
+        "p3": 0.705237515225335,
+        "p5": 0.7064555420219245,
+        "bust5": 0.2935444579780755,
+        "med_days": 1.0
+       },
+       "realized": {
+        "p1": 0.6686967113276492,
+        "p2": 0.7040194884287454,
+        "p3": 0.705237515225335,
+        "p5": 0.7064555420219245,
+        "bust5": 0.2935444579780755,
+        "med_days": 1.0
+       },
+       "intraday": {
+        "p1": 0.2241169305724726,
+        "p2": 0.22777101096224117,
+        "p3": 0.22777101096224117,
+        "p5": 0.22777101096224117,
+        "bust5": 0.7722289890377588,
+        "med_days": 1.0
+       },
+       "headline": {
+        "p1": 0.6686967113276492,
+        "p2": 0.7040194884287454,
+        "p3": 0.705237515225335,
+        "p5": 0.7064555420219245,
+        "bust5": 0.2935444579780755,
+        "med_days": 1.0
+       }
+      }
+     }
+    ],
+    "specs": [
+     {
+      "strategy_id": "hm2-straddle-tf30#10",
+      "config": "hm2-straddle-tf30#10|nyam",
+      "tester_strategy": "draft_pp_straddle",
+      "family": "straddle",
+      "tf": 30,
+      "sess": "nyam",
+      "micros": 40,
+      "stop_mode": "atr",
+      "stop_val": 3.0,
+      "tgt_r": 2.0,
+      "exit_bars": 0,
+      "trail_atr": 0.0,
+      "max_tr": 3,
+      "family_params": {
+       "off_atr": 0.25
+      },
+      "tester_inputs": {
+       "tf": "30",
+       "sess": "all",
+       "off_atr": 0.25,
+       "stop_val": 3.0,
+       "tgt_r": 2.0
+      },
+      "session_filter_offline": "nyam",
+      "trade_source": "20260930-001526-draft_pp_straddle-67c2#10",
+      "pool": "top+wf",
+      "candidate_pass": "3",
+      "note": "trades come from a tester run at sess=all and are split by entry session offline (strategy is session-independent); micros = MNQ contracts per signal; size cost = floor(n/10)*$4 + (n mod 10)*$1 round trip"
+     },
+     {
+      "strategy_id": "hm2-squeeze-tf5#21",
+      "config": "hm2-squeeze-tf5#21|mid",
+      "tester_strategy": "draft_pp_squeeze",
+      "family": "squeeze",
+      "tf": 5,
+      "sess": "mid",
+      "micros": 40,
+      "stop_mode": "atr",
+      "stop_val": 3.0,
+      "tgt_r": 1.0,
+      "exit_bars": 0,
+      "trail_atr": 0.0,
+      "max_tr": 3,
+      "family_params": {
+       "sq_type": "nr7"
+      },
+      "tester_inputs": {
+       "tf": "5",
+       "sess": "all",
+       "sq_type": "nr7",
+       "stop_val": 3.0,
+       "tgt_r": 1.0
+      },
+      "session_filter_offline": "mid",
+      "trade_source": "20260930-002323-draft_pp_squeeze-b809#21",
+      "pool": "wf",
+      "candidate_pass": "3",
+      "note": "trades come from a tester run at sess=all and are split by entry session offline (strategy is session-independent); micros = MNQ contracts per signal; size cost = floor(n/10)*$4 + (n mod 10)*$1 round trip"
+     }
+    ],
+    "rules_spec": {
+     "rule_file": "lucid-pro-50k-no-dll@2026-09-27b",
+     "unconfirmed": false,
+     "primary_breach_model": "realized",
+     "models_reported": [
+      "eod",
+      "realized",
+      "intraday"
+     ],
+     "daily_rules": {
+      "day_lock_usd": 1000,
+      "day_take_usd": null,
+      "day_stop_usd": null,
+      "max_day_tr": null,
+      "target_take": true,
+      "meaning": {
+       "day_lock": "stop for the day once a trade CLOSES with day P&L >= X",
+       "day_take": "flatten all and stop at day P&L >= X (MFE-based, pessimistic order)",
+       "day_stop": "trade closes at -Y and stop for the day when day P&L + worst point <= -Y",
+       "max_day_tr": "max entries per day across the portfolio",
+       "target_take": "stop for the day once the eval pass condition is reached"
+      }
+     },
+     "firm_rules": {
+      "name": "LucidPro 50K \u00b7 no daily loss limit",
+      "eval_target": 3000,
+      "trailing_mll_eod": 2000,
+      "lock_at_profit": 2100,
+      "lock_floor_profit": 100,
+      "consistency": null,
+      "eval_min_days": 1,
+      "soft_daily_loss_limit": null,
+      "cap_micros": 40,
+      "flat_by_et": "16:10"
+     },
+     "eval_fee_assumed": 140.0,
+     "activation_assumed": 0.0
+    },
+    "member_corr": {
+     "names": [
+      "hm2-straddle-tf30#10|nyam",
+      "hm2-squeeze-tf5#21|mid"
+     ],
+     "daily_pnl_corr": [
+      [
+       1.0,
+       0.042
+      ],
+      [
+       0.042,
+       1.0
+      ]
+     ],
+     "pair_mean": 0.04224723836413692,
+     "pair_max": 0.04224723836413692,
+     "dd_day_overlap": [
+      [
+       1.0,
+       0.244
+      ],
+      [
+       0.244,
+       1.0
+      ]
+     ],
+     "lose_day_overlap": [
+      [
+       1.0,
+       0.488
+      ],
+      [
+       0.537,
+       1.0
+      ]
+     ],
+     "multi_dd_share": 0.1388888888888889
+    }
+   }
+  }
+ },
+ "evals": 459,
+ "secs": 356.28151512145996,
+ "calendar_sessions": 825,
+ "starts": 821,
+ "fee": {
+  "eval_fee": 140.0,
+  "activation": 0.0,
+  "assumption": true
+ },
+ "ge3_search": {
+  "attempts": [
+   {
+    "start": "hm2-straddle-tf30#10|nyam@20",
+    "members": [
+     [
+      "hm2-straddle-tf30#10|nyam",
+      20
+     ],
+     [
+      "hm-first_bar_mom-tf15#11|nyam",
+      20
+     ],
+     [
+      "hm-orb-tf5#10|mid",
+      10
+     ]
+    ],
+    "adj": 0.5325822234153748
+   },
+   {
+    "start": "hm2-straddle-tf30#10|nyam@30",
+    "members": [
+     [
+      "hm2-straddle-tf30#9|nyam",
+      40
+     ],
+     [
+      "hm-orb-tf5#10|mid",
+      30
+     ],
+     [
+      "hm2-straddle-tf30#10|pm",
+      20
+     ]
+    ],
+    "adj": 0.6897076964378357
+   },
+   {
+    "start": "hm2-straddle-tf30#10|nyam@10",
+    "members": [
+     [
+      "hm2-straddle-tf30#9|nyam",
+      10
+     ],
+     [
+      "hm2-straddle-tf30#8|nyam",
+      30
+     ],
+     [
+      "hm2-sweep_rev-tf5#10|mid",
+      40
+     ]
+    ],
+    "adj": 0.5208039093017578
+   },
+   {
+    "start": "hm2-straddle-tf30#10|nyam@40",
+    "members": [
+     [
+      "hm2-straddle-tf30#10|nyam",
+      40
+     ],
+     [
+      "hm2-squeeze-tf5#21|mid",
+      40
+     ]
+    ],
+    "adj": 0.6961023211479187
+   },
+   {
+    "start": "hm2-straddle-tf30#11|nyam@20",
+    "members": [
+     [
+      "hm2-straddle-tf30#11|nyam",
+      20
+     ],
+     [
+      "hm-first_bar_mom-tf15#11|nyam",
+      20
+     ],
+     [
+      "hm-orb-tf5#10|mid",
+      10
+     ]
+    ],
+    "adj": 0.5341047644615173
+   },
+   {
+    "start": "hm2-straddle-tf30#11|nyam@30",
+    "members": [
+     [
+      "hm2-straddle-tf30#9|nyam",
+      40
+     ],
+     [
+      "hm-orb-tf5#10|mid",
+      30
+     ],
+     [
+      "hm2-straddle-tf30#10|pm",
+      20
+     ]
+    ],
+    "adj": 0.6897076964378357
+   },
+   {
+    "start": "hm2-straddle-tf30#11|nyam@10",
+    "members": [
+     [
+      "hm2-straddle-tf30#10|pm",
+      20
+     ],
+     [
+      "hm2-straddle-tf30#9|nyam",
+      40
+     ],
+     [
+      "hm-orb-tf5#10|mid",
+      30
+     ]
+    ],
+    "adj": 0.6897076964378357
+   },
+   {
+    "start": "hm2-straddle-tf30#11|nyam@40",
+    "members": [
+     [
+      "hm2-straddle-tf30#11|nyam",
+      40
+     ],
+     [
+      "hm2-squeeze-tf5#21|mid",
+      40
+     ]
+    ],
+    "adj": 0.6961023211479187
+   }
+  ],
+  "share_guard_relaxed": false
+ }
+}

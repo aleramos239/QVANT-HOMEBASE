@@ -1,0 +1,6 @@
+cell,arm,b,comm,is_cell,is_smooth,name,off,offmode,pv,root,sl_usd,tp_usd,unit
+0,const,,16.0,10,0.5768645357686454,A_IS_pick_4GC_off2pt_SL1500,2.0,pts,400.0,GC,1500,3000,4xGC
+1,const,,16.0,19,0.5966514459665145,B_plain_4GC_off2pt_SL2000,2.0,pts,400.0,GC,2000,3000,4xGC
+2,const,,16.0,1,0.563165905631659,C_4GC_off2pt_SL1200,2.0,pts,400.0,GC,1200,3000,4xGC
+3,const,,16.0,15,0.5692541856925418,D_4GC_off0.1V_SL1500,0.1,vol,400.0,GC,1500,3000,4xGC
+4,volsize,0.3,,274,0.5646879756468798,E_volsize_b0.3_off0.1V_SL1500,0.1,vol,,GC,1500,3000,b0.3

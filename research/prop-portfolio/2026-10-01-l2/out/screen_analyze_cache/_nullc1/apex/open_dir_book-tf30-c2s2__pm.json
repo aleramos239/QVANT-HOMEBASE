@@ -1,0 +1,1 @@
+{"key": "open_dir_book-tf30-c2s2", "fam_tf": "open_dir_book-tf30", "family": "open_dir_book", "tf": "30", "variant": "c2s2", "sess": "pm", "firm": "apex", "status": "ok", "lift": 0.061510353227771014, "ctrl": 0.2612667478684531, "real": 0.3227771010962241, "skipped": null, "elapsed_s": 0.23}

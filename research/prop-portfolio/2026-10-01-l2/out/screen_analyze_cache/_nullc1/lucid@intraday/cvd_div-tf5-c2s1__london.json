@@ -1,0 +1,1 @@
+{"key": "cvd_div-tf5-c2s1", "fam_tf": "cvd_div-tf5", "family": "cvd_div", "tf": "5", "variant": "c2s1", "sess": "london", "firm": "lucid", "status": "ok", "lift": 0.06187576126674787, "ctrl": 0.19878197320341048, "real": 0.26065773447015833, "skipped": null, "elapsed_s": 0.89}

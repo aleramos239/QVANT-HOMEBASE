@@ -1,0 +1,32 @@
+Fri Oct  2 09:06:47 EDT 2026 score pools gone
+2026-10-02T13:06:48+00:00 score: 0 tasks to run, workers 8
+{"ran": 0}
+Fri Oct  2 09:06:48 EDT 2026 score complete
+2026-10-02T13:06:49+00:00 null C1 lifts: 1499 tasks to run, workers 8
+2026-10-02T13:07:06+00:00 null C1 lifts: 200/1499 done (0 errors), 16 s
+2026-10-02T13:07:21+00:00 null C1 lifts: 400/1499 done (0 errors), 31 s
+2026-10-02T13:07:34+00:00 null C1 lifts: 600/1499 done (0 errors), 44 s
+2026-10-02T13:07:48+00:00 null C1 lifts: 800/1499 done (0 errors), 58 s
+2026-10-02T13:08:09+00:00 null C1 lifts: 1000/1499 done (0 errors), 80 s
+2026-10-02T13:08:39+00:00 null C1 lifts: 1200/1499 done (0 errors), 110 s
+2026-10-02T13:09:42+00:00 null C1 lifts: 1400/1499 done (0 errors), 172 s
+2026-10-02T13:10:16+00:00 null C1 lifts: finished 1499 tasks, 0 errors, 207 s
+{"ran": 1499, "errors": 0}
+Fri Oct  2 09:10:16 EDT 2026 nullc1 complete
+2026-10-02T13:10:22+00:00 stress run bimb_fade-tf1-stress: stress 11102 trades
+2026-10-02T13:10:25+00:00 stress run bimb_fade_n3-tf1-stress: stress 11130 trades
+2026-10-02T13:10:27+00:00 stress run bimb_follow-tf5-stress: stress 5015 trades
+2026-10-02T13:10:30+00:00 stress run bimb_follow_n3-tf1-stress: stress 11158 trades
+2026-10-02T13:10:33+00:00 stress run bimb_follow_n3-tf5-stress: stress 4928 trades
+2026-10-02T13:10:35+00:00 stress run delta_follow-tf5-stress: stress 8388 trades
+2026-10-02T13:10:37+00:00 stress run open_dir_book-tf30-stress: stress 2674 trades
+2026-10-02T13:10:39+00:00 stress run open_dir_both-tf30-stress: stress 1273 trades
+2026-10-02T13:10:40+00:00 stress run open_dir_flow-tf30-stress: stress 2800 trades
+2026-10-02T13:10:44+00:00 stress run sweep_follow-tf1-stress: stress 11579 trades
+2026-10-02T13:10:46+00:00 stress run sweep_follow-tf5-stress: stress 6169 trades
+2026-10-02T13:11:00+00:00 stress: top 15 configs, 11 family x tf, 11 new runs, 316 cells re-scored
+{"top": [["bimb_follow-tf5", "mid"], ["open_dir_flow-tf30", "mid"], ["open_dir_flow-tf30", "london"], ["bimb_fade-tf1", "mid"], ["sweep_follow-tf1", "pm"], ["delta_follow-tf5", "asia"], ["open_dir_both-tf30", "mid"], ["delta_follow-tf5", "london"], ["bimb_fade_n3-tf1", "pm"], ["bimb_follow-tf5", "nyam"], ["bimb_follow_n3-tf1", "mid"], ["bimb_fade_n3-tf1", "london"], ["bimb_follow_n3-tf5", "mid"], ["sweep_follow-tf5", "london"], ["open_dir_book-tf30", "nyam"]], "ran": ["bimb_fade-tf1-stress", "bimb_fade_n3-tf1-stress", "bimb_follow-tf5-stress", "bimb_follow_n3-tf1-stress", "bimb_follow_n3-tf5-stress", "delta_follow-tf5-stress", "open_dir_book-tf30-stress", "open_dir_both-tf30-stress", "open_dir_flow-tf30-stress", "sweep_follow-tf1-stress", "sweep_follow-tf5-stress"], "cells": 316}
+Fri Oct  2 09:11:00 EDT 2026 stress complete
+2026-10-02T13:11:03+00:00 report: 1500 table rows, 115 summary lines
+{"rows": 1500, "lines": 115}
+Fri Oct  2 09:11:03 EDT 2026 report complete

@@ -1,0 +1,2292 @@
+[
+ {
+  "firm": "lucid",
+  "quarter": "2022Q3",
+  "mode": "fixed",
+  "cal_days": 195,
+  "last_day": "2022-06-30",
+  "train_starts": 191,
+  "pick": {
+   "micros": [
+    40,
+    10,
+    10
+   ],
+   "cell": {
+    "day_lock": 750,
+    "day_take": 1500,
+    "day_stop": 0,
+    "max_day_tr": 1,
+    "target_take": 1
+   },
+   "train_stable": 0.7486910994764379,
+   "train_p5": 0.7539267015706786
+  },
+  "stored": {
+   "micros": [
+    40,
+    10,
+    10
+   ],
+   "cell": {
+    "day_lock": 750,
+    "day_take": 1500,
+    "day_stop": 0,
+    "max_day_tr": 1,
+    "target_take": 1
+   },
+   "train_stable": 0.7486910994764379,
+   "train_p5": 0.7539267015706786
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 9.933640956878662
+ },
+ {
+  "firm": "lucid",
+  "quarter": "2022Q4",
+  "mode": "fixed",
+  "cal_days": 259,
+  "last_day": "2022-09-30",
+  "train_starts": 248,
+  "pick": {
+   "micros": [
+    40,
+    30,
+    10
+   ],
+   "cell": {
+    "day_lock": 750,
+    "day_take": 1500,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.7580645161290317,
+   "train_p5": 0.7580645161290317
+  },
+  "stored": {
+   "micros": [
+    40,
+    30,
+    10
+   ],
+   "cell": {
+    "day_lock": 750,
+    "day_take": 1500,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.7580645161290317,
+   "train_p5": 0.7580645161290317
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 12.489204168319702
+ },
+ {
+  "firm": "lucid",
+  "quarter": "2023Q1",
+  "mode": "fixed",
+  "cal_days": 322,
+  "last_day": "2022-12-30",
+  "train_starts": 247,
+  "pick": {
+   "micros": [
+    40,
+    30,
+    10
+   ],
+   "cell": {
+    "day_lock": 750,
+    "day_take": 1500,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.805668016194334,
+   "train_p5": 0.805668016194334
+  },
+  "stored": {
+   "micros": [
+    40,
+    30,
+    10
+   ],
+   "cell": {
+    "day_lock": 750,
+    "day_take": 1500,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.805668016194334,
+   "train_p5": 0.805668016194334
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 14.952063083648682
+ },
+ {
+  "firm": "lucid",
+  "quarter": "2023Q2",
+  "mode": "fixed",
+  "cal_days": 384,
+  "last_day": "2023-03-31",
+  "train_starts": 247,
+  "pick": {
+   "micros": [
+    40,
+    30,
+    10
+   ],
+   "cell": {
+    "day_lock": 750,
+    "day_take": 1500,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.7813765182186253,
+   "train_p5": 0.7813765182186253
+  },
+  "stored": {
+   "micros": [
+    40,
+    30,
+    10
+   ],
+   "cell": {
+    "day_lock": 750,
+    "day_take": 1500,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.7813765182186253,
+   "train_p5": 0.7813765182186253
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 18.09507393836975
+ },
+ {
+  "firm": "lucid",
+  "quarter": "2023Q3",
+  "mode": "fixed",
+  "cal_days": 447,
+  "last_day": "2023-06-30",
+  "train_starts": 248,
+  "pick": {
+   "micros": [
+    40,
+    30,
+    10
+   ],
+   "cell": {
+    "day_lock": 750,
+    "day_take": 1500,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.6814516129032253,
+   "train_p5": 0.6854838709677414
+  },
+  "stored": {
+   "micros": [
+    40,
+    30,
+    10
+   ],
+   "cell": {
+    "day_lock": 750,
+    "day_take": 1500,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.6814516129032253,
+   "train_p5": 0.6854838709677414
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 20.217575788497925
+ },
+ {
+  "firm": "lucid",
+  "quarter": "2023Q4",
+  "mode": "fixed",
+  "cal_days": 510,
+  "last_day": "2023-09-29",
+  "train_starts": 247,
+  "pick": {
+   "micros": [
+    40,
+    10,
+    10
+   ],
+   "cell": {
+    "day_lock": 750,
+    "day_take": 1500,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.6518218623481787,
+   "train_p5": 0.6518218623481787
+  },
+  "stored": {
+   "micros": [
+    40,
+    10,
+    10
+   ],
+   "cell": {
+    "day_lock": 750,
+    "day_take": 1500,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.6518218623481787,
+   "train_p5": 0.6518218623481787
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 22.861796140670776
+ },
+ {
+  "firm": "lucid",
+  "quarter": "2024Q1",
+  "mode": "fixed",
+  "cal_days": 573,
+  "last_day": "2023-12-29",
+  "train_starts": 247,
+  "pick": {
+   "micros": [
+    40,
+    40,
+    10
+   ],
+   "cell": {
+    "day_lock": 0,
+    "day_take": 1250,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.62753036437247,
+   "train_p5": 0.62753036437247
+  },
+  "stored": {
+   "micros": [
+    40,
+    40,
+    10
+   ],
+   "cell": {
+    "day_lock": 0,
+    "day_take": 1250,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.62753036437247,
+   "train_p5": 0.62753036437247
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 25.02131986618042
+ },
+ {
+  "firm": "lucid",
+  "quarter": "2024Q2",
+  "mode": "fixed",
+  "cal_days": 634,
+  "last_day": "2024-03-28",
+  "train_starts": 246,
+  "pick": {
+   "micros": [
+    40,
+    40,
+    10
+   ],
+   "cell": {
+    "day_lock": 750,
+    "day_take": 1000,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.6422764227642276,
+   "train_p5": 0.6504065040650405
+  },
+  "stored": {
+   "micros": [
+    40,
+    40,
+    10
+   ],
+   "cell": {
+    "day_lock": 750,
+    "day_take": 1000,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.6422764227642276,
+   "train_p5": 0.6504065040650405
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 27.17818021774292
+ },
+ {
+  "firm": "lucid",
+  "quarter": "2024Q3",
+  "mode": "fixed",
+  "cal_days": 697,
+  "last_day": "2024-06-28",
+  "train_starts": 246,
+  "pick": {
+   "micros": [
+    40,
+    10,
+    10
+   ],
+   "cell": {
+    "day_lock": 750,
+    "day_take": 1000,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.6951219512195117,
+   "train_p5": 0.7073170731707311
+  },
+  "stored": {
+   "micros": [
+    40,
+    10,
+    10
+   ],
+   "cell": {
+    "day_lock": 750,
+    "day_take": 1000,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.6951219512195117,
+   "train_p5": 0.7073170731707311
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 29.84833002090454
+ },
+ {
+  "firm": "lucidpro",
+  "quarter": "2022Q3",
+  "mode": "fixed",
+  "cal_days": 195,
+  "last_day": "2022-06-30",
+  "train_starts": 191,
+  "pick": {
+   "micros": [
+    20,
+    20,
+    20,
+    40
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 1,
+    "target_take": 1
+   },
+   "train_stable": 0.4240837696335082,
+   "train_p5": 0.42931937172774903
+  },
+  "stored": {
+   "micros": [
+    20,
+    20,
+    20,
+    40
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 1,
+    "target_take": 1
+   },
+   "train_stable": 0.4240837696335082,
+   "train_p5": 0.42931937172774903
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 11.947613954544067
+ },
+ {
+  "firm": "lucidpro",
+  "quarter": "2022Q4",
+  "mode": "fixed",
+  "cal_days": 259,
+  "last_day": "2022-09-30",
+  "train_starts": 248,
+  "pick": {
+   "micros": [
+    20,
+    20,
+    20,
+    40
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 1,
+    "target_take": 1
+   },
+   "train_stable": 0.44758064516129,
+   "train_p5": 0.44758064516129
+  },
+  "stored": {
+   "micros": [
+    20,
+    20,
+    20,
+    40
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 1,
+    "target_take": 1
+   },
+   "train_stable": 0.44758064516129,
+   "train_p5": 0.44758064516129
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 13.215394973754883
+ },
+ {
+  "firm": "lucid",
+  "quarter": "2024Q4",
+  "mode": "fixed",
+  "cal_days": 761,
+  "last_day": "2024-09-30",
+  "train_starts": 247,
+  "pick": {
+   "micros": [
+    40,
+    10,
+    10
+   ],
+   "cell": {
+    "day_lock": 0,
+    "day_take": 1000,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.7044534412955477,
+   "train_p5": 0.7044534412955477
+  },
+  "stored": {
+   "micros": [
+    40,
+    10,
+    10
+   ],
+   "cell": {
+    "day_lock": 0,
+    "day_take": 1000,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.7044534412955477,
+   "train_p5": 0.7044534412955477
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 30.382790088653564
+ },
+ {
+  "firm": "lucidpro",
+  "quarter": "2023Q1",
+  "mode": "fixed",
+  "cal_days": 322,
+  "last_day": "2022-12-30",
+  "train_starts": 247,
+  "pick": {
+   "micros": [
+    20,
+    20,
+    20,
+    30
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.3886639676113357,
+   "train_p5": 0.4089068825910927
+  },
+  "stored": {
+   "micros": [
+    20,
+    20,
+    20,
+    30
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.3886639676113357,
+   "train_p5": 0.4089068825910927
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 14.488850831985474
+ },
+ {
+  "firm": "lucidpro",
+  "quarter": "2023Q2",
+  "mode": "fixed",
+  "cal_days": 384,
+  "last_day": "2023-03-31",
+  "train_starts": 247,
+  "pick": {
+   "micros": [
+    20,
+    20,
+    20,
+    30
+   ],
+   "cell": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.4089068825910927,
+   "train_p5": 0.4412955465587039
+  },
+  "stored": {
+   "micros": [
+    20,
+    20,
+    20,
+    30
+   ],
+   "cell": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.4089068825910927,
+   "train_p5": 0.4412955465587039
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 18.603336811065674
+ },
+ {
+  "firm": "lucidpro",
+  "quarter": "2023Q3",
+  "mode": "fixed",
+  "cal_days": 447,
+  "last_day": "2023-06-30",
+  "train_starts": 248,
+  "pick": {
+   "micros": [
+    20,
+    20,
+    20,
+    40
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.4032258064516126,
+   "train_p5": 0.42741935483870935
+  },
+  "stored": {
+   "micros": [
+    20,
+    20,
+    20,
+    40
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.4032258064516126,
+   "train_p5": 0.42741935483870935
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 24.023803234100342
+ },
+ {
+  "firm": "lucidpro",
+  "quarter": "2023Q4",
+  "mode": "fixed",
+  "cal_days": 510,
+  "last_day": "2023-09-29",
+  "train_starts": 247,
+  "pick": {
+   "micros": [
+    20,
+    30,
+    20,
+    30
+   ],
+   "cell": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.39473684210526283,
+   "train_p5": 0.4493927125506067
+  },
+  "stored": {
+   "micros": [
+    20,
+    30,
+    20,
+    30
+   ],
+   "cell": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.39473684210526283,
+   "train_p5": 0.4493927125506067
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 25.38991403579712
+ },
+ {
+  "firm": "lucidpro",
+  "quarter": "2024Q1",
+  "mode": "fixed",
+  "cal_days": 573,
+  "last_day": "2023-12-29",
+  "train_starts": 247,
+  "pick": {
+   "micros": [
+    20,
+    20,
+    30,
+    40
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.4574898785425095,
+   "train_p5": 0.4574898785425095
+  },
+  "stored": {
+   "micros": [
+    20,
+    20,
+    30,
+    40
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.4574898785425095,
+   "train_p5": 0.4574898785425095
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 27.56050992012024
+ },
+ {
+  "firm": "lucidpro",
+  "quarter": "2024Q2",
+  "mode": "fixed",
+  "cal_days": 634,
+  "last_day": "2024-03-28",
+  "train_starts": 246,
+  "pick": {
+   "micros": [
+    40,
+    30,
+    20,
+    40
+   ],
+   "cell": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.47560975609756195,
+   "train_p5": 0.5000000000000011
+  },
+  "stored": {
+   "micros": [
+    40,
+    30,
+    20,
+    40
+   ],
+   "cell": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.47560975609756195,
+   "train_p5": 0.5000000000000011
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 29.972229957580566
+ },
+ {
+  "firm": "lucidpro",
+  "quarter": "2024Q3",
+  "mode": "fixed",
+  "cal_days": 697,
+  "last_day": "2024-06-28",
+  "train_starts": 246,
+  "pick": {
+   "micros": [
+    30,
+    20,
+    40,
+    40
+   ],
+   "cell": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.4349593495934967,
+   "train_p5": 0.4796747967479685
+  },
+  "stored": {
+   "micros": [
+    30,
+    20,
+    40,
+    40
+   ],
+   "cell": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.4349593495934967,
+   "train_p5": 0.4796747967479685
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 32.362897872924805
+ },
+ {
+  "firm": "lucidpro_nodll",
+  "quarter": "2022Q3",
+  "mode": "fixed",
+  "cal_days": 195,
+  "last_day": "2022-06-30",
+  "train_starts": 191,
+  "pick": {
+   "micros": [
+    40,
+    10,
+    10
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.7591623036649194,
+   "train_p5": 0.7591623036649194
+  },
+  "stored": {
+   "micros": [
+    40,
+    10,
+    10
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.7591623036649194,
+   "train_p5": 0.7591623036649194
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 9.22704792022705
+ },
+ {
+  "firm": "lucidpro_nodll",
+  "quarter": "2022Q4",
+  "mode": "fixed",
+  "cal_days": 259,
+  "last_day": "2022-09-30",
+  "train_starts": 248,
+  "pick": {
+   "micros": [
+    40,
+    20,
+    30
+   ],
+   "cell": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 1,
+    "target_take": 1
+   },
+   "train_stable": 0.7540322580645156,
+   "train_p5": 0.7540322580645156
+  },
+  "stored": {
+   "micros": [
+    40,
+    20,
+    30
+   ],
+   "cell": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 1,
+    "target_take": 1
+   },
+   "train_stable": 0.7540322580645156,
+   "train_p5": 0.7540322580645156
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 13.694080829620361
+ },
+ {
+  "firm": "lucidpro_nodll",
+  "quarter": "2023Q1",
+  "mode": "fixed",
+  "cal_days": 322,
+  "last_day": "2022-12-30",
+  "train_starts": 247,
+  "pick": {
+   "micros": [
+    40,
+    20,
+    10
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 1500,
+    "day_stop": 0,
+    "max_day_tr": 1,
+    "target_take": 1
+   },
+   "train_stable": 0.7935222672064797,
+   "train_p5": 0.805668016194334
+  },
+  "stored": {
+   "micros": [
+    40,
+    20,
+    10
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 1500,
+    "day_stop": 0,
+    "max_day_tr": 1,
+    "target_take": 1
+   },
+   "train_stable": 0.7935222672064797,
+   "train_p5": 0.805668016194334
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 16.57541823387146
+ },
+ {
+  "firm": "lucidpro",
+  "quarter": "2024Q4",
+  "mode": "fixed",
+  "cal_days": 761,
+  "last_day": "2024-09-30",
+  "train_starts": 247,
+  "pick": {
+   "micros": [
+    40,
+    20,
+    30,
+    40
+   ],
+   "cell": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.3825910931174086,
+   "train_p5": 0.4291497975708497
+  },
+  "stored": {
+   "micros": [
+    40,
+    20,
+    30,
+    40
+   ],
+   "cell": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.3825910931174086,
+   "train_p5": 0.4291497975708497
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 37.45628023147583
+ },
+ {
+  "firm": "lucidpro_nodll",
+  "quarter": "2023Q2",
+  "mode": "fixed",
+  "cal_days": 384,
+  "last_day": "2023-03-31",
+  "train_starts": 247,
+  "pick": {
+   "micros": [
+    40,
+    20,
+    10
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 1500,
+    "day_stop": 0,
+    "max_day_tr": 1,
+    "target_take": 1
+   },
+   "train_stable": 0.7712550607287467,
+   "train_p5": 0.7813765182186253
+  },
+  "stored": {
+   "micros": [
+    40,
+    20,
+    10
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 1500,
+    "day_stop": 0,
+    "max_day_tr": 1,
+    "target_take": 1
+   },
+   "train_stable": 0.7712550607287467,
+   "train_p5": 0.7813765182186253
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 19.747878074645996
+ },
+ {
+  "firm": "lucidpro_nodll",
+  "quarter": "2023Q3",
+  "mode": "fixed",
+  "cal_days": 447,
+  "last_day": "2023-06-30",
+  "train_starts": 248,
+  "pick": {
+   "micros": [
+    40,
+    20,
+    40
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.7217741935483866,
+   "train_p5": 0.7217741935483866
+  },
+  "stored": {
+   "micros": [
+    40,
+    20,
+    40
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.7217741935483866,
+   "train_p5": 0.7217741935483866
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 23.42887568473816
+ },
+ {
+  "firm": "lucidpro_nodll",
+  "quarter": "2023Q4",
+  "mode": "fixed",
+  "cal_days": 510,
+  "last_day": "2023-09-29",
+  "train_starts": 247,
+  "pick": {
+   "micros": [
+    40,
+    20,
+    10
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.6963562753036447,
+   "train_p5": 0.6963562753036447
+  },
+  "stored": {
+   "micros": [
+    40,
+    20,
+    10
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.6963562753036447,
+   "train_p5": 0.6963562753036447
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 26.9175808429718
+ },
+ {
+  "firm": "lucidpro_nodll",
+  "quarter": "2024Q1",
+  "mode": "fixed",
+  "cal_days": 573,
+  "last_day": "2023-12-29",
+  "train_starts": 247,
+  "pick": {
+   "micros": [
+    40,
+    20,
+    40
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.6963562753036447,
+   "train_p5": 0.6963562753036447
+  },
+  "stored": {
+   "micros": [
+    40,
+    20,
+    40
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.6963562753036447,
+   "train_p5": 0.6963562753036447
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 30.572595834732056
+ },
+ {
+  "firm": "lucidpro_nodll",
+  "quarter": "2024Q2",
+  "mode": "fixed",
+  "cal_days": 634,
+  "last_day": "2024-03-28",
+  "train_starts": 246,
+  "pick": {
+   "micros": [
+    40,
+    40,
+    40
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 1,
+    "target_take": 1
+   },
+   "train_stable": 0.6869918699186988,
+   "train_p5": 0.6869918699186988
+  },
+  "stored": {
+   "micros": [
+    40,
+    40,
+    40
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 1,
+    "target_take": 1
+   },
+   "train_stable": 0.6869918699186988,
+   "train_p5": 0.6869918699186988
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 34.310580015182495
+ },
+ {
+  "firm": "lucidpro_nodll",
+  "quarter": "2024Q3",
+  "mode": "fixed",
+  "cal_days": 697,
+  "last_day": "2024-06-28",
+  "train_starts": 246,
+  "pick": {
+   "micros": [
+    40,
+    10,
+    10
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 1,
+    "target_take": 1
+   },
+   "train_stable": 0.6747967479674793,
+   "train_p5": 0.6788617886178858
+  },
+  "stored": {
+   "micros": [
+    40,
+    10,
+    10
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 1,
+    "target_take": 1
+   },
+   "train_stable": 0.6747967479674793,
+   "train_p5": 0.6788617886178858
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 37.54089617729187
+ },
+ {
+  "firm": "apex",
+  "quarter": "2022Q3",
+  "mode": "fixed",
+  "cal_days": 195,
+  "last_day": "2022-06-30",
+  "train_starts": 191,
+  "pick": {
+   "micros": [
+    20,
+    20,
+    20,
+    20
+   ],
+   "cell": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 1000,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.3874345549738223,
+   "train_p5": 0.40837696335078566
+  },
+  "stored": {
+   "micros": [
+    20,
+    20,
+    20,
+    20
+   ],
+   "cell": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 1000,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.3874345549738223,
+   "train_p5": 0.40837696335078566
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 10.27505612373352
+ },
+ {
+  "firm": "apex",
+  "quarter": "2022Q4",
+  "mode": "fixed",
+  "cal_days": 259,
+  "last_day": "2022-09-30",
+  "train_starts": 248,
+  "pick": {
+   "micros": [
+    20,
+    20,
+    20,
+    40
+   ],
+   "cell": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 1000,
+    "max_day_tr": 1,
+    "target_take": 1
+   },
+   "train_stable": 0.3991935483870965,
+   "train_p5": 0.3991935483870965
+  },
+  "stored": {
+   "micros": [
+    20,
+    20,
+    20,
+    40
+   ],
+   "cell": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 1000,
+    "max_day_tr": 1,
+    "target_take": 1
+   },
+   "train_stable": 0.3991935483870965,
+   "train_p5": 0.3991935483870965
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 12.889359712600708
+ },
+ {
+  "firm": "apex",
+  "quarter": "2023Q1",
+  "mode": "fixed",
+  "cal_days": 322,
+  "last_day": "2022-12-30",
+  "train_starts": 247,
+  "pick": {
+   "micros": [
+    40,
+    20,
+    20,
+    20
+   ],
+   "cell": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 1000,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.4048582995951413,
+   "train_p5": 0.4331983805668011
+  },
+  "stored": {
+   "micros": [
+    40,
+    20,
+    20,
+    20
+   ],
+   "cell": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 1000,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.4048582995951413,
+   "train_p5": 0.4331983805668011
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 14.809448957443237
+ },
+ {
+  "firm": "lucidpro_nodll",
+  "quarter": "2024Q4",
+  "mode": "fixed",
+  "cal_days": 761,
+  "last_day": "2024-09-30",
+  "train_starts": 247,
+  "pick": {
+   "micros": [
+    40,
+    20,
+    10
+   ],
+   "cell": {
+    "day_lock": 0,
+    "day_take": 1500,
+    "day_stop": 0,
+    "max_day_tr": 1,
+    "target_take": 1
+   },
+   "train_stable": 0.6923076923076933,
+   "train_p5": 0.6923076923076933
+  },
+  "stored": {
+   "micros": [
+    40,
+    20,
+    10
+   ],
+   "cell": {
+    "day_lock": 0,
+    "day_take": 1500,
+    "day_stop": 0,
+    "max_day_tr": 1,
+    "target_take": 1
+   },
+   "train_stable": 0.6923076923076933,
+   "train_p5": 0.6923076923076933
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 40.66796898841858
+ },
+ {
+  "firm": "apex",
+  "quarter": "2023Q2",
+  "mode": "fixed",
+  "cal_days": 384,
+  "last_day": "2023-03-31",
+  "train_starts": 247,
+  "pick": {
+   "micros": [
+    20,
+    20,
+    20,
+    40
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 3000,
+    "max_day_tr": 1,
+    "target_take": 1
+   },
+   "train_stable": 0.4008097165991899,
+   "train_p5": 0.4008097165991899
+  },
+  "stored": {
+   "micros": [
+    20,
+    20,
+    20,
+    40
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 3000,
+    "max_day_tr": 1,
+    "target_take": 1
+   },
+   "train_stable": 0.4008097165991899,
+   "train_p5": 0.4008097165991899
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 17.24429178237915
+ },
+ {
+  "firm": "apex",
+  "quarter": "2023Q3",
+  "mode": "fixed",
+  "cal_days": 447,
+  "last_day": "2023-06-30",
+  "train_starts": 248,
+  "pick": {
+   "micros": [
+    20,
+    20,
+    20,
+    40
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 3000,
+    "max_day_tr": 1,
+    "target_take": 1
+   },
+   "train_stable": 0.4072580645161287,
+   "train_p5": 0.4072580645161287
+  },
+  "stored": {
+   "micros": [
+    20,
+    20,
+    20,
+    40
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 3000,
+    "max_day_tr": 1,
+    "target_take": 1
+   },
+   "train_stable": 0.4072580645161287,
+   "train_p5": 0.4072580645161287
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 20.166773319244385
+ },
+ {
+  "firm": "apex",
+  "quarter": "2023Q4",
+  "mode": "fixed",
+  "cal_days": 510,
+  "last_day": "2023-09-29",
+  "train_starts": 247,
+  "pick": {
+   "micros": [
+    20,
+    20,
+    20,
+    40
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 3000,
+    "max_day_tr": 1,
+    "target_take": 1
+   },
+   "train_stable": 0.3967611336032385,
+   "train_p5": 0.3967611336032385
+  },
+  "stored": {
+   "micros": [
+    20,
+    20,
+    20,
+    40
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 3000,
+    "max_day_tr": 1,
+    "target_take": 1
+   },
+   "train_stable": 0.3967611336032385,
+   "train_p5": 0.3967611336032385
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 24.65325689315796
+ },
+ {
+  "firm": "apex",
+  "quarter": "2024Q1",
+  "mode": "fixed",
+  "cal_days": 573,
+  "last_day": "2023-12-29",
+  "train_starts": 247,
+  "pick": {
+   "micros": [
+    20,
+    20,
+    20,
+    40
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 3000,
+    "max_day_tr": 1,
+    "target_take": 1
+   },
+   "train_stable": 0.4372469635627525,
+   "train_p5": 0.4372469635627525
+  },
+  "stored": {
+   "micros": [
+    20,
+    20,
+    20,
+    40
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 3000,
+    "max_day_tr": 1,
+    "target_take": 1
+   },
+   "train_stable": 0.4372469635627525,
+   "train_p5": 0.4372469635627525
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 26.983054161071777
+ },
+ {
+  "firm": "apex",
+  "quarter": "2024Q2",
+  "mode": "fixed",
+  "cal_days": 634,
+  "last_day": "2024-03-28",
+  "train_starts": 246,
+  "pick": {
+   "micros": [
+    20,
+    20,
+    20,
+    40
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 3000,
+    "max_day_tr": 1,
+    "target_take": 1
+   },
+   "train_stable": 0.44308943089430974,
+   "train_p5": 0.44308943089430974
+  },
+  "stored": {
+   "micros": [
+    20,
+    20,
+    20,
+    40
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 3000,
+    "max_day_tr": 1,
+    "target_take": 1
+   },
+   "train_stable": 0.44308943089430974,
+   "train_p5": 0.44308943089430974
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 30.650128841400146
+ },
+ {
+  "firm": "apex",
+  "quarter": "2024Q3",
+  "mode": "fixed",
+  "cal_days": 697,
+  "last_day": "2024-06-28",
+  "train_starts": 246,
+  "pick": {
+   "micros": [
+    40,
+    20,
+    20,
+    40
+   ],
+   "cell": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 2000,
+    "max_day_tr": 1,
+    "target_take": 1
+   },
+   "train_stable": 0.4186991869918706,
+   "train_p5": 0.4186991869918706
+  },
+  "stored": {
+   "micros": [
+    40,
+    20,
+    20,
+    40
+   ],
+   "cell": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 2000,
+    "max_day_tr": 1,
+    "target_take": 1
+   },
+   "train_stable": 0.4186991869918706,
+   "train_p5": 0.4186991869918706
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 33.55635714530945
+ },
+ {
+  "firm": "apex",
+  "quarter": "2024Q4",
+  "mode": "fixed",
+  "cal_days": 761,
+  "last_day": "2024-09-30",
+  "train_starts": 247,
+  "pick": {
+   "micros": [
+    20,
+    20,
+    20,
+    40
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 3000,
+    "max_day_tr": 1,
+    "target_take": 1
+   },
+   "train_stable": 0.3805668016194329,
+   "train_p5": 0.3805668016194329
+  },
+  "stored": {
+   "micros": [
+    20,
+    20,
+    20,
+    40
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 3000,
+    "max_day_tr": 1,
+    "target_take": 1
+   },
+   "train_stable": 0.3805668016194329,
+   "train_p5": 0.3805668016194329
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 35.71223974227905
+ },
+ {
+  "firm": "apex_eod",
+  "quarter": "2022Q3",
+  "mode": "fixed",
+  "cal_days": 195,
+  "last_day": "2022-06-30",
+  "train_starts": 191,
+  "pick": {
+   "micros": [
+    20,
+    30,
+    30
+   ],
+   "cell": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.3743455497382202,
+   "train_p5": 0.4240837696335082
+  },
+  "stored": {
+   "micros": [
+    20,
+    30,
+    30
+   ],
+   "cell": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.3743455497382202,
+   "train_p5": 0.4240837696335082
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 33.45117688179016
+ },
+ {
+  "firm": "apex_eod",
+  "quarter": "2022Q4",
+  "mode": "fixed",
+  "cal_days": 259,
+  "last_day": "2022-09-30",
+  "train_starts": 248,
+  "pick": {
+   "micros": [
+    20,
+    30,
+    20
+   ],
+   "cell": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 750,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.38508064516129004,
+   "train_p5": 0.4314516129032255
+  },
+  "stored": {
+   "micros": [
+    20,
+    30,
+    20
+   ],
+   "cell": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 750,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.38508064516129004,
+   "train_p5": 0.4314516129032255
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 42.28332018852234
+ },
+ {
+  "firm": "apex_eod",
+  "quarter": "2023Q1",
+  "mode": "fixed",
+  "cal_days": 322,
+  "last_day": "2022-12-30",
+  "train_starts": 247,
+  "pick": {
+   "micros": [
+    20,
+    20,
+    20
+   ],
+   "cell": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.4230769230769226,
+   "train_p5": 0.4655870445344123
+  },
+  "stored": {
+   "micros": [
+    20,
+    20,
+    20
+   ],
+   "cell": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.4230769230769226,
+   "train_p5": 0.4655870445344123
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 52.039159059524536
+ },
+ {
+  "firm": "apex_eod",
+  "quarter": "2023Q2",
+  "mode": "fixed",
+  "cal_days": 384,
+  "last_day": "2023-03-31",
+  "train_starts": 247,
+  "pick": {
+   "micros": [
+    20,
+    40,
+    20
+   ],
+   "cell": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.43927125506072817,
+   "train_p5": 0.4615384615384609
+  },
+  "stored": {
+   "micros": [
+    20,
+    40,
+    20
+   ],
+   "cell": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.43927125506072817,
+   "train_p5": 0.4615384615384609
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 61.62654113769531
+ },
+ {
+  "firm": "apex_eod",
+  "quarter": "2023Q3",
+  "mode": "fixed",
+  "cal_days": 447,
+  "last_day": "2023-06-30",
+  "train_starts": 248,
+  "pick": {
+   "micros": [
+    20,
+    40,
+    20
+   ],
+   "cell": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.44758064516129,
+   "train_p5": 0.479838709677419
+  },
+  "stored": {
+   "micros": [
+    20,
+    40,
+    20
+   ],
+   "cell": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.44758064516129,
+   "train_p5": 0.479838709677419
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 71.24977803230286
+ },
+ {
+  "firm": "apex_eod",
+  "quarter": "2023Q4",
+  "mode": "fixed",
+  "cal_days": 510,
+  "last_day": "2023-09-29",
+  "train_starts": 247,
+  "pick": {
+   "micros": [
+    20,
+    40,
+    20
+   ],
+   "cell": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.4170040485829955,
+   "train_p5": 0.4615384615384609
+  },
+  "stored": {
+   "micros": [
+    20,
+    40,
+    20
+   ],
+   "cell": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.4170040485829955,
+   "train_p5": 0.4615384615384609
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 82.12038207054138
+ },
+ {
+  "firm": "apex_eod",
+  "quarter": "2024Q1",
+  "mode": "fixed",
+  "cal_days": 573,
+  "last_day": "2023-12-29",
+  "train_starts": 247,
+  "pick": {
+   "micros": [
+    20,
+    40,
+    20
+   ],
+   "cell": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.33805668016194323,
+   "train_p5": 0.3886639676113357
+  },
+  "stored": {
+   "micros": [
+    20,
+    40,
+    20
+   ],
+   "cell": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.33805668016194323,
+   "train_p5": 0.3886639676113357
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 93.2066912651062
+ },
+ {
+  "firm": "apex_eod",
+  "quarter": "2024Q2",
+  "mode": "fixed",
+  "cal_days": 634,
+  "last_day": "2024-03-28",
+  "train_starts": 246,
+  "pick": {
+   "micros": [
+    20,
+    20,
+    20
+   ],
+   "cell": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.3434959349593498,
+   "train_p5": 0.4024390243902445
+  },
+  "stored": {
+   "micros": [
+    20,
+    20,
+    20
+   ],
+   "cell": {
+    "day_lock": 0,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.3434959349593498,
+   "train_p5": 0.4024390243902445
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 101.6938111782074
+ },
+ {
+  "firm": "apex_eod",
+  "quarter": "2024Q3",
+  "mode": "fixed",
+  "cal_days": 697,
+  "last_day": "2024-06-28",
+  "train_starts": 246,
+  "pick": {
+   "micros": [
+    30,
+    20,
+    50
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.3414634146341466,
+   "train_p5": 0.3414634146341466
+  },
+  "stored": {
+   "micros": [
+    30,
+    20,
+    50
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.3414634146341466,
+   "train_p5": 0.3414634146341466
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 110.81027936935425
+ },
+ {
+  "firm": "apex_eod",
+  "quarter": "2024Q4",
+  "mode": "fixed",
+  "cal_days": 761,
+  "last_day": "2024-09-30",
+  "train_starts": 247,
+  "pick": {
+   "micros": [
+    20,
+    60,
+    50
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.3967611336032385,
+   "train_p5": 0.3967611336032385
+  },
+  "stored": {
+   "micros": [
+    20,
+    60,
+    50
+   ],
+   "cell": {
+    "day_lock": 1000,
+    "day_take": 0,
+    "day_stop": 0,
+    "max_day_tr": 0,
+    "target_take": 1
+   },
+   "train_stable": 0.3967611336032385,
+   "train_p5": 0.3967611336032385
+  },
+  "same_set": true,
+  "same_cell": true,
+  "same_score": true,
+  "identical": true,
+  "secs": 122.15442419052124
+ }
+]

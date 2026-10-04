@@ -1,0 +1,114 @@
+{
+ "apex:single": [
+  {
+   "member": "fp-ema_pullback-tf5#15|mid@60",
+   "trades": 994,
+   "mae750_share": 0.817907444668008,
+   "median_mae_usd": 2325.0
+  }
+ ],
+ "apex:best2": [
+  {
+   "member": "fp-ema_pullback-tf5#15|mid@60",
+   "trades": 994,
+   "mae750_share": 0.817907444668008,
+   "median_mae_usd": 2325.0
+  },
+  {
+   "member": "hm-first_bar_mom-tf30#0|pm@40",
+   "trades": 416,
+   "mae750_share": 0.5793269230769231,
+   "median_mae_usd": 1050.0
+  }
+ ],
+ "apex:portfolio": [
+  {
+   "member": "hm-first_bar_mom-tf30#2|pm@40",
+   "trades": 416,
+   "mae750_share": 0.7788461538461539,
+   "median_mae_usd": 1450.0
+  },
+  {
+   "member": "hm-vwap_z-tf5#27|mid@60",
+   "trades": 384,
+   "mae750_share": 0.7682291666666666,
+   "median_mae_usd": 1200.0
+  },
+  {
+   "member": "hm-first_bar_mom-tf30#17|mid@40",
+   "trades": 354,
+   "mae750_share": 0.788135593220339,
+   "median_mae_usd": 1700.0
+  }
+ ],
+ "apex:portfolio_2member_greedy": [
+  {
+   "member": "fp-ema_pullback-tf5#15|mid@60",
+   "trades": 994,
+   "mae750_share": 0.817907444668008,
+   "median_mae_usd": 2325.0
+  },
+  {
+   "member": "hm-first_bar_mom-tf30#0|pm@40",
+   "trades": 416,
+   "mae750_share": 0.5793269230769231,
+   "median_mae_usd": 1050.0
+  }
+ ],
+ "apex_eod:single": [
+  {
+   "member": "fp-vwap_flip-tf5#15|pm@60",
+   "trades": 1022,
+   "mae750_share": 0.8385518590998043,
+   "median_mae_usd": 2550.0
+  }
+ ],
+ "apex_eod:best2": [
+  {
+   "member": "fp-tod_drift-tf5#15|pm@60",
+   "trades": 816,
+   "mae750_share": 0.8345588235294118,
+   "median_mae_usd": 2775.0
+  },
+  {
+   "member": "fp-ema_pullback-tf5#15|mid@60",
+   "trades": 994,
+   "mae750_share": 0.817907444668008,
+   "median_mae_usd": 2325.0
+  }
+ ],
+ "apex_eod:portfolio": [
+  {
+   "member": "hm-donchian-tf15#6|pm@60",
+   "trades": 688,
+   "mae750_share": 0.8386627906976745,
+   "median_mae_usd": 2400.0
+  },
+  {
+   "member": "hm-donchian-tf15#19|nyam@40",
+   "trades": 638,
+   "mae750_share": 0.7507836990595611,
+   "median_mae_usd": 1500.0
+  },
+  {
+   "member": "fp-tod_drift-tf5#15|mid@60",
+   "trades": 823,
+   "mae750_share": 0.8614823815309842,
+   "median_mae_usd": 3000.0
+  }
+ ],
+ "apex_eod:portfolio_2member_greedy": [
+  {
+   "member": "fp-tod_drift-tf5#15|pm@60",
+   "trades": 816,
+   "mae750_share": 0.8345588235294118,
+   "median_mae_usd": 2775.0
+  },
+  {
+   "member": "fp-ema_pullback-tf5#15|mid@60",
+   "trades": 994,
+   "mae750_share": 0.817907444668008,
+   "median_mae_usd": 2325.0
+  }
+ ]
+}

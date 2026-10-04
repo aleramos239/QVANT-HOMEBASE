@@ -1,0 +1,4 @@
+lucid: n=252 old lift mean +0.015 med +0.010 | new mean +0.007 med +0.004 | lift>0 old 192 new 151 | lift>2sd new 57 | fallback mean 0.011 max 0.103
+apex: n=252 old lift mean +0.017 med +0.018 | new mean +0.016 med +0.014 | lift>0 old 168 new 161 | lift>2sd new 77 | fallback mean 0.011 max 0.103
+cfg p5 vs screen p5 max abs diff: 4.993909866052304e-07
+rows 628 -> /Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-09-30-es/out/screen_lift_daymatched.csv

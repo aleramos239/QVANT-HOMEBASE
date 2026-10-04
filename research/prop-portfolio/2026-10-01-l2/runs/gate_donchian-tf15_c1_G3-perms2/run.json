@@ -1,0 +1,354 @@
+{
+ "id": "gate_donchian-tf15_c1_G3-perms2",
+ "engine": "gates-1 (list gate on an in-sample tester bundle)",
+ "range": {
+  "start": "2021-09-22",
+  "end": "2024-12-31",
+  "holdout": false
+ },
+ "holdout": false,
+ "qty": 1,
+ "trades": 7769,
+ "net": -24786.0,
+ "strategy": "gates.G3",
+ "inputs": {
+  "pick": "donchian-tf15_c1",
+  "source": "R__fp-donchian-tf15_c1",
+  "gate": "G3",
+  "name": "gate_size",
+  "guard_ms": 0,
+  "z_win": 60,
+  "z_min": 30,
+  "g3_sessions": 250,
+  "g3_min_pop": 60,
+  "rows": "half_units (scored as a tier portfolio: gates.cell)"
+ },
+ "elapsed_s": 0.15,
+ "gate": {
+  "gate": "G3",
+  "name": "gate_size",
+  "pick": "donchian-tf15_c1",
+  "pick_key": "fp-donchian-tf15#1",
+  "tf": "15",
+  "pick_sess": "nyam",
+  "source": "R__fp-donchian-tf15_c1",
+  "source_sha256": "7443959cd570ab19b337ce36d5a7546e9d879e091d93f9a158f2b97defc619d8",
+  "stage": "gate",
+  "control": "perm",
+  "seed": 2,
+  "features": [
+   "imb10",
+   "t_utc"
+  ],
+  "counts": {
+   "source_trades": 3852,
+   "rows": 7769,
+   "no_signal": 209,
+   "basis": 3401,
+   "cats": {
+    "0.5": 1093,
+    "1.0": 1601,
+    "1.5": 1158
+   },
+   "rows_by_session": {
+    "london": 2059,
+    "mid": 1731,
+    "nyam": 2316,
+    "pm": 1663
+   },
+   "cats_by_session": {
+    "london": {
+     "0.5": 292,
+     "1.0": 429,
+     "1.5": 303
+    },
+    "mid": {
+     "0.5": 252,
+     "1.0": 366,
+     "1.5": 249
+    },
+    "nyam": {
+     "0.5": 323,
+     "1.0": 461,
+     "1.5": 357
+    },
+    "pm": {
+     "0.5": 226,
+     "1.0": 345,
+     "1.5": 249
+    }
+   },
+   "exec_guard": null,
+   "moved_to_match": 55,
+   "moved_without_basis": 0,
+   "same_verdict_as_real": 1568
+  },
+  "control_only": true,
+  "half_unit_rows": true,
+  "note": "a permutation null: matched to the real gate's full-sample counts, donors may be later sessions -- a CONTROL, never a tradable rule",
+  "cells": {
+   "apex_pa_funded": {
+    "slot": "apex_pa_funded",
+    "kind": "funded",
+    "base": "file:R__fp-donchian-tf15_c1",
+    "base_kw": {
+     "firm": "apex",
+     "rules": {
+      "day_take": 1000,
+      "day_lock": 1000,
+      "day_stop": 0,
+      "max_day_tr": 0
+     },
+     "sess": "nyam",
+     "policy": 1000,
+     "strategy": "donchian",
+     "inputs": {
+      "tf": "15",
+      "stop_mode": "pts",
+      "stop_val": 10.0,
+      "tgt_r": 0.4
+     },
+     "both_sides": false,
+     "micros": 30
+    },
+    "pick_meta": {
+     "strategy": "donchian",
+     "inputs": {
+      "tf": "15",
+      "stop_mode": "pts",
+      "stop_val": 10.0,
+      "tgt_r": 0.4
+     },
+     "both_sides": false
+    },
+    "warnings": [
+     "G3 is a tier portfolio: the lift over its permutation nulls is gates.lift_cell (score.lift_vs_control takes one source); a C1 control would need the same three tiers"
+    ],
+    "real": [
+     {
+      "src": "/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-10-01-l2/runs/gate_donchian-tf15_c1_G3/x0.5",
+      "sess": "nyam",
+      "micros": 15,
+      "label": "gate_donchian-tf15_c1_G3|x0.5"
+     },
+     {
+      "src": "/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-10-01-l2/runs/gate_donchian-tf15_c1_G3/x1",
+      "sess": "nyam",
+      "micros": 30,
+      "label": "gate_donchian-tf15_c1_G3|x1"
+     },
+     {
+      "src": "/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-10-01-l2/runs/gate_donchian-tf15_c1_G3/x1.5",
+      "sess": "nyam",
+      "micros": 45,
+      "label": "gate_donchian-tf15_c1_G3|x1.5"
+     }
+    ],
+    "nulls": [
+     [
+      {
+       "src": "/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-10-01-l2/runs/gate_donchian-tf15_c1_G3-perms1/x0.5",
+       "sess": "nyam",
+       "micros": 15,
+       "label": "gate_donchian-tf15_c1_G3-perms1|x0.5"
+      },
+      {
+       "src": "/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-10-01-l2/runs/gate_donchian-tf15_c1_G3-perms1/x1",
+       "sess": "nyam",
+       "micros": 30,
+       "label": "gate_donchian-tf15_c1_G3-perms1|x1"
+      },
+      {
+       "src": "/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-10-01-l2/runs/gate_donchian-tf15_c1_G3-perms1/x1.5",
+       "sess": "nyam",
+       "micros": 45,
+       "label": "gate_donchian-tf15_c1_G3-perms1|x1.5"
+      }
+     ],
+     [
+      {
+       "src": "/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-10-01-l2/runs/gate_donchian-tf15_c1_G3-perms2/x0.5",
+       "sess": "nyam",
+       "micros": 15,
+       "label": "gate_donchian-tf15_c1_G3-perms2|x0.5"
+      },
+      {
+       "src": "/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-10-01-l2/runs/gate_donchian-tf15_c1_G3-perms2/x1",
+       "sess": "nyam",
+       "micros": 30,
+       "label": "gate_donchian-tf15_c1_G3-perms2|x1"
+      },
+      {
+       "src": "/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-10-01-l2/runs/gate_donchian-tf15_c1_G3-perms2/x1.5",
+       "sess": "nyam",
+       "micros": 45,
+       "label": "gate_donchian-tf15_c1_G3-perms2|x1.5"
+      }
+     ]
+    ],
+    "gate_kw": {
+     "firm": "apex",
+     "rules": {
+      "day_take": 1000,
+      "day_lock": 1000,
+      "day_stop": 0,
+      "max_day_tr": 0
+     },
+     "sess": "nyam",
+     "policy": 1000,
+     "strategy": "donchian",
+     "inputs": {
+      "tf": "15",
+      "stop_mode": "pts",
+      "stop_val": 10.0,
+      "tgt_r": 0.4
+     },
+     "both_sides": false
+    },
+    "unit": 15,
+    "tier_micros": {
+     "x0.5": 15,
+     "x1": 30,
+     "x1.5": 45
+    },
+    "cap": 50,
+    "cap_ok": true,
+    "unit_cap": 16
+   },
+   "apex300_pa": {
+    "slot": "apex300_pa",
+    "kind": "funded",
+    "base": "file:R__fp-donchian-tf15_c1",
+    "base_kw": {
+     "firm": "apex300_pa",
+     "rules": {
+      "day_take": 3000,
+      "day_lock": 3000,
+      "day_stop": 0,
+      "max_day_tr": 0
+     },
+     "sess": "nyam",
+     "policy": "max",
+     "strategy": "donchian",
+     "inputs": {
+      "tf": "15",
+      "stop_mode": "pts",
+      "stop_val": 10.0,
+      "tgt_r": 0.4
+     },
+     "both_sides": false,
+     "micros": 100
+    },
+    "pick_meta": {
+     "strategy": "donchian",
+     "inputs": {
+      "tf": "15",
+      "stop_mode": "pts",
+      "stop_val": 10.0,
+      "tgt_r": 0.4
+     },
+     "both_sides": false
+    },
+    "warnings": [
+     "G3 is a tier portfolio: the lift over its permutation nulls is gates.lift_cell (score.lift_vs_control takes one source); a C1 control would need the same three tiers"
+    ],
+    "real": [
+     {
+      "src": "/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-10-01-l2/runs/gate_donchian-tf15_c1_G3/x0.5",
+      "sess": "nyam",
+      "micros": 50,
+      "label": "gate_donchian-tf15_c1_G3|x0.5"
+     },
+     {
+      "src": "/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-10-01-l2/runs/gate_donchian-tf15_c1_G3/x1",
+      "sess": "nyam",
+      "micros": 100,
+      "label": "gate_donchian-tf15_c1_G3|x1"
+     },
+     {
+      "src": "/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-10-01-l2/runs/gate_donchian-tf15_c1_G3/x1.5",
+      "sess": "nyam",
+      "micros": 150,
+      "label": "gate_donchian-tf15_c1_G3|x1.5"
+     }
+    ],
+    "nulls": [
+     [
+      {
+       "src": "/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-10-01-l2/runs/gate_donchian-tf15_c1_G3-perms1/x0.5",
+       "sess": "nyam",
+       "micros": 50,
+       "label": "gate_donchian-tf15_c1_G3-perms1|x0.5"
+      },
+      {
+       "src": "/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-10-01-l2/runs/gate_donchian-tf15_c1_G3-perms1/x1",
+       "sess": "nyam",
+       "micros": 100,
+       "label": "gate_donchian-tf15_c1_G3-perms1|x1"
+      },
+      {
+       "src": "/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-10-01-l2/runs/gate_donchian-tf15_c1_G3-perms1/x1.5",
+       "sess": "nyam",
+       "micros": 150,
+       "label": "gate_donchian-tf15_c1_G3-perms1|x1.5"
+      }
+     ],
+     [
+      {
+       "src": "/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-10-01-l2/runs/gate_donchian-tf15_c1_G3-perms2/x0.5",
+       "sess": "nyam",
+       "micros": 50,
+       "label": "gate_donchian-tf15_c1_G3-perms2|x0.5"
+      },
+      {
+       "src": "/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-10-01-l2/runs/gate_donchian-tf15_c1_G3-perms2/x1",
+       "sess": "nyam",
+       "micros": 100,
+       "label": "gate_donchian-tf15_c1_G3-perms2|x1"
+      },
+      {
+       "src": "/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-10-01-l2/runs/gate_donchian-tf15_c1_G3-perms2/x1.5",
+       "sess": "nyam",
+       "micros": 150,
+       "label": "gate_donchian-tf15_c1_G3-perms2|x1.5"
+      }
+     ]
+    ],
+    "gate_kw": {
+     "firm": "apex300_pa",
+     "rules": {
+      "day_take": 3000,
+      "day_lock": 3000,
+      "day_stop": 0,
+      "max_day_tr": 0
+     },
+     "sess": "nyam",
+     "policy": "max",
+     "strategy": "donchian",
+     "inputs": {
+      "tf": "15",
+      "stop_mode": "pts",
+      "stop_val": 10.0,
+      "tgt_r": 0.4
+     },
+     "both_sides": false
+    },
+    "unit": 50,
+    "tier_micros": {
+     "x0.5": 50,
+     "x1": 100,
+     "x1.5": 150
+    },
+    "cap": 170,
+    "cap_ok": true,
+    "unit_cap": 56
+   }
+  }
+ },
+ "tiers": {
+  "x0.5": 1093,
+  "x1": 1601,
+  "x1.5": 1158
+ },
+ "score_with": "gates.cell / gates.score_cell / gates.lift_cell (a portfolio of the tier bundles); never half_units.json"
+}

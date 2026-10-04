@@ -1,0 +1,1 @@
+{"key": "bimb_follow_n3-tf1-c2s2", "fam_tf": "bimb_follow_n3-tf1", "family": "bimb_follow_n3", "tf": "1", "variant": "c2s2", "sess": "london", "firm": "apex_eod", "status": "ok", "lift": 0.10267965895249694, "ctrl": 0.24933008526187578, "real": 0.3520097442143727, "skipped": null, "elapsed_s": 0.57}

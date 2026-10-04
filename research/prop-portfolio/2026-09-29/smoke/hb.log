@@ -1,0 +1,60 @@
+2026-09-29 21:13:00 hb driver up
+2026-09-29 21:13:00 submitted smoke-donchian -> 20260929-211300-draft_pp_donchian-7638
+2026-09-29 21:13:00 submitted smoke-ema_pullback -> 20260929-211300-draft_pp_ema_pullback-b3d9
+2026-09-29 21:13:20 smoke-donchian done (1 ledger rows, 20s)
+2026-09-29 21:13:20 smoke-ema_pullback done (1 ledger rows, 20s)
+2026-09-29 21:13:20 submitted smoke-ema_ribbon -> 20260929-211320-draft_pp_ema_ribbon-5898
+2026-09-29 21:13:21 submitted smoke-first_bar_mom -> 20260929-211321-draft_pp_first_bar_mom-1673
+2026-09-29 21:13:41 smoke-ema_ribbon done (1 ledger rows, 20s)
+2026-09-29 21:13:41 smoke-first_bar_mom done (1 ledger rows, 20s)
+2026-09-29 21:13:41 submitted smoke-gap -> 20260929-211341-draft_pp_gap-00c3
+2026-09-29 21:13:41 submitted smoke-ib -> 20260929-211341-draft_pp_ib-d725
+2026-09-29 21:14:01 smoke-gap done (1 ledger rows, 20s)
+2026-09-29 21:14:01 smoke-ib done (1 ledger rows, 20s)
+2026-09-29 21:14:01 submitted smoke-lon_break -> 20260929-211401-draft_pp_lon_break-f227
+2026-09-29 21:14:02 submitted smoke-mid_fade -> 20260929-211402-draft_pp_mid_fade-2095
+2026-09-29 21:14:22 smoke-lon_break done (1 ledger rows, 20s)
+2026-09-29 21:14:22 smoke-mid_fade done (1 ledger rows, 20s)
+2026-09-29 21:14:22 submitted smoke-orb -> 20260929-211422-draft_pp_orb-eb95
+2026-09-29 21:14:22 submitted smoke-pinbar -> 20260929-211422-draft_pp_pinbar-9199
+2026-09-29 21:14:42 smoke-orb done (1 ledger rows, 20s)
+2026-09-29 21:14:42 smoke-pinbar done (1 ledger rows, 20s)
+2026-09-29 21:14:42 submitted smoke-random -> 20260929-211442-draft_pp_random-d540
+2026-09-29 21:14:42 submitted smoke-rsi2 -> 20260929-211442-draft_pp_rsi2-b36b
+2026-09-29 21:15:02 smoke-random done (1 ledger rows, 20s)
+2026-09-29 21:15:02 smoke-rsi2 done (1 ledger rows, 20s)
+2026-09-29 21:15:03 submitted smoke-squeeze -> 20260929-211503-draft_pp_squeeze-ab6d
+2026-09-29 21:15:03 submitted smoke-straddle -> 20260929-211503-draft_pp_straddle-c133
+2026-09-29 21:15:23 smoke-squeeze done (1 ledger rows, 20s)
+2026-09-29 21:15:23 smoke-straddle done (1 ledger rows, 20s)
+2026-09-29 21:15:23 submitted smoke-supertrend -> 20260929-211523-draft_pp_supertrend-c1a5
+2026-09-29 21:15:23 submitted smoke-sweep_rev -> 20260929-211523-draft_pp_sweep_rev-cf02
+2026-09-29 21:15:43 smoke-supertrend done (1 ledger rows, 20s)
+2026-09-29 21:15:43 smoke-sweep_rev done (1 ledger rows, 20s)
+2026-09-29 21:15:44 submitted smoke-tema_slope -> 20260929-211544-draft_pp_tema_slope-9146
+2026-09-29 21:15:44 submitted smoke-tod_drift -> 20260929-211544-draft_pp_tod_drift-ef80
+2026-09-29 21:16:04 smoke-tema_slope done (1 ledger rows, 20s)
+2026-09-29 21:16:04 smoke-tod_drift done (1 ledger rows, 20s)
+2026-09-29 21:16:04 submitted smoke-vwap_band -> 20260929-211604-draft_pp_vwap_band-6c5c
+2026-09-29 21:16:04 submitted smoke-vwap_flip -> 20260929-211604-draft_pp_vwap_flip-8193
+2026-09-29 21:16:24 smoke-vwap_band done (1 ledger rows, 20s)
+2026-09-29 21:16:24 smoke-vwap_flip done (1 ledger rows, 20s)
+2026-09-29 21:16:24 submitted smoke-vwap_z -> 20260929-211624-draft_pp_vwap_z-6bca
+2026-09-29 21:16:44 smoke-vwap_z done (1 ledger rows, 20s)
+2026-09-29 21:17:14 hb driver down
+2026-09-29 21:31:07 hb driver up
+2026-09-29 21:31:07 submitted smoke-tod_drift-rv -> 20260929-213107-draft_pp_tod_drift-2902
+2026-09-29 21:31:07 submitted smoke-gap-rv -> 20260929-213107-draft_pp_gap-bd0d
+2026-09-29 21:31:27 smoke-tod_drift-rv done (1 ledger rows, 20s)
+2026-09-29 21:31:27 smoke-gap-rv done (1 ledger rows, 20s)
+2026-09-29 21:31:27 submitted smoke-ib-rv -> 20260929-213127-draft_pp_ib-cd6c
+2026-09-29 21:31:28 submitted smoke-straddle-rv -> 20260929-213128-draft_pp_straddle-701a
+2026-09-29 21:31:48 smoke-ib-rv done (1 ledger rows, 20s)
+2026-09-29 21:31:48 smoke-straddle-rv done (1 ledger rows, 20s)
+2026-09-29 21:31:48 submitted smoke-pinbar-rv -> 20260929-213148-draft_pp_pinbar-fddb
+2026-09-29 21:31:48 submitted smoke-sweep_rev-rv -> 20260929-213148-draft_pp_sweep_rev-00e3
+2026-09-29 21:32:08 smoke-pinbar-rv done (1 ledger rows, 20s)
+2026-09-29 21:32:08 smoke-sweep_rev-rv done (1 ledger rows, 20s)
+2026-09-29 21:32:08 submitted smoke-orb-rv -> 20260929-213208-draft_pp_orb-6c0c
+2026-09-29 21:32:28 smoke-orb-rv done (1 ledger rows, 20s)
+2026-09-29 21:32:53 hb driver down

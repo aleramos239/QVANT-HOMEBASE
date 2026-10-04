@@ -1,0 +1,1 @@
+{"key": "open_dir_both-tf30-c2s2", "fam_tf": "open_dir_both-tf30", "family": "open_dir_both", "tf": "30", "variant": "c2s2", "sess": "pm", "firm": "pro_dll", "status": "ok", "lift": 71.39761096605741, "ctrl": 287.51439947780676, "real": 358.9120104438642, "skipped": null, "elapsed_s": 0.51}

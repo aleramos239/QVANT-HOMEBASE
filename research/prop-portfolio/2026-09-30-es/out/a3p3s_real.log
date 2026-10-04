@@ -1,0 +1,10 @@
+real: 252 configs in 70 sources
+[real] 4 tasks already done, 66 to run
+[real] 10/66 tasks 630s
+[real] 20/66 tasks 938s
+[real] 30/66 tasks 1143s
+[real] 40/66 tasks 1324s
+[real] 50/66 tasks 1420s
+[real] 60/66 tasks 1472s
+[real] 66/66 tasks 1493s
+wrote 6300 rows -> a3p3s_rules.csv

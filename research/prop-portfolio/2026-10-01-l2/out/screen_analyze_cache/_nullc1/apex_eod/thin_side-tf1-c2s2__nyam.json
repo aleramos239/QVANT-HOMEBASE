@@ -1,0 +1,1 @@
+{"key": "thin_side-tf1-c2s2", "fam_tf": "thin_side-tf1", "family": "thin_side", "tf": "1", "variant": "c2s2", "sess": "nyam", "firm": "apex_eod", "status": "ok", "lift": 0.06285018270401949, "ctrl": 0.15274056029232644, "real": 0.21559074299634592, "skipped": null, "elapsed_s": 0.35}

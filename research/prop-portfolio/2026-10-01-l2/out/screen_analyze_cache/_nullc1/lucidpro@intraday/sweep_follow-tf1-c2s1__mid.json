@@ -1,0 +1,1 @@
+{"key": "sweep_follow-tf1-c2s1", "fam_tf": "sweep_follow-tf1", "family": "sweep_follow", "tf": "1", "variant": "c2s1", "sess": "mid", "firm": "lucidpro", "status": "ok", "lift": 0.04056029232643118, "ctrl": 0.28343483556638244, "real": 0.32399512789281365, "skipped": null, "elapsed_s": 1.19}

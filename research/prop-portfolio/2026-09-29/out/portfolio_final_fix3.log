@@ -1,0 +1,36 @@
+[lucid] ge3 start hm2-straddle-tf30#10|nyam@20 -> 3 members adj 0.576
+[lucid] ge3 start hm2-straddle-tf30#10|nyam@30 -> 3 members adj 0.667
+[lucidpro_nodll] ge3 start hm2-straddle-tf30#10|nyam@20 -> 3 members adj 0.697
+[lucidpro_nodll] ge3 start hm2-straddle-tf30#10|nyam@30 -> 3 members adj 0.697
+[lucid] ge3 start hm2-straddle-tf30#10|nyam@10 -> 3 members adj 0.635
+[lucid] ge3 start hm2-straddle-tf30#10|nyam@40 -> 2 members adj 0.692
+[lucid] ge3 start hm2-straddle-tf30#11|nyam@20 -> 3 members adj 0.576
+[lucidpro_nodll] ge3 start hm2-straddle-tf30#10|nyam@10 -> 4 members adj 0.638
+[lucid] ge3 start hm2-straddle-tf30#11|nyam@30 -> 3 members adj 0.661
+[lucidpro_nodll] ge3 start hm2-straddle-tf30#10|nyam@40 -> 2 members adj 0.705
+[lucid] ge3 start hm2-straddle-tf30#11|nyam@10 -> 3 members adj 0.635
+[lucid] ge3 start hm2-straddle-tf30#11|nyam@40 -> 2 members adj 0.692
+[lucidpro_nodll] ge3 start hm2-straddle-tf30#11|nyam@20 -> 3 members adj 0.697
+[lucid] ge3 start hm2-straddle-tf30#8|nyam@20 -> 3 members adj 0.577
+[lucidpro_nodll] ge3 start hm2-straddle-tf30#11|nyam@30 -> 3 members adj 0.697
+[lucid] ge3 start hm2-straddle-tf30#8|nyam@30 -> 3 members adj 0.614
+[lucidpro_nodll] ge3 start hm2-straddle-tf30#11|nyam@10 -> 3 members adj 0.697
+[lucidpro_nodll] ge3 start hm2-straddle-tf30#11|nyam@40 -> 2 members adj 0.705
+[lucid] ge3 start hm2-straddle-tf30#8|nyam@10 -> 3 members adj 0.633
+[lucid] ge3 start hm2-straddle-tf30#8|nyam@40 -> 3 members adj 0.688
+[lucidpro_nodll] ge3 start hm2-straddle-tf30#9|nyam@20 -> 3 members adj 0.565
+[lucid] ge3 start hm2-straddle-tf30#9|nyam@20 -> 3 members adj 0.576
+[lucid] ge3 start hm2-straddle-tf30#9|nyam@30 -> 3 members adj 0.672
+[lucidpro_nodll] ge3 start hm2-straddle-tf30#9|nyam@30 -> 3 members adj 0.698
+[lucid] ge3 start hm2-straddle-tf30#9|nyam@10 -> 3 members adj 0.632
+[lucid] ge3 start hm2-straddle-tf30#9|nyam@40 -> 2 members adj 0.692
+== lucid (lucid-flex-50k@2026-09-27) primary=realized (4246 evals, 0s)
+  portfolio P1/2/3/5=0.00/0.00/0.67/0.688 [0.64,0.74] bust5=0.31 med=3.0 | eod 0.73 real 0.69 intra 0.07 | lift +0.132 | L750 K1500 S0 T0 TT1 | hm2-straddle-tf30#8|nyam@40 + hm2-tod_drift-tf30#19|mid@10 + hm2-squeeze-tf5#21|pm@30 | FLAGS ['MEMBER_SHARE_UNDER_RULES 69% of positive standalone net', 'ONE_YEAR_CONCENTRATION 2022: 72% of net', 'GE3_SEARCH: best >=3-member set from greedy restarts (plain greedy ended with 2 members)']
+[lucidpro_nodll] ge3 start hm2-straddle-tf30#9|nyam@10 -> 3 members adj 0.697
+[lucidpro_nodll] ge3 start hm2-straddle-tf30#9|nyam@40 -> 3 members adj 0.704
+[lucidpro_nodll] ge3 start hm-orb-tf5#10|mid@20 -> 3 members adj 0.704
+[lucidpro_nodll] ge3 start hm-orb-tf5#10|mid@30 -> 3 members adj 0.695
+[lucidpro_nodll] ge3 start hm-orb-tf5#10|mid@10 -> 2 members adj 0.705
+[lucidpro_nodll] ge3 start hm-orb-tf5#10|mid@40 -> 3 members adj 0.698
+== lucidpro_nodll (lucid-pro-50k-no-dll@2026-09-27b) primary=realized (4558 evals, 0s)
+  portfolio P1/2/3/5=0.67/0.70/0.70/0.706 [0.67,0.74] bust5=0.29 med=1.0 | eod 0.71 real 0.71 intra 0.26 | lift +0.088 | L1000 K0 S0 T1 TT1 | hm2-straddle-tf30#9|nyam@40 + hm-first_bar_mom-tf15#8|mid@40 + hm2-straddle-tf30#10|pm@40 | FLAGS ['ONE_YEAR_CONCENTRATION 2022: 61% of net', 'GE3_SEARCH: best >=3-member set from greedy restarts (plain greedy ended with 2 members)']

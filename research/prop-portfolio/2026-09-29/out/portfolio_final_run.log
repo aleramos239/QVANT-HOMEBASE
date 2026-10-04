@@ -1,0 +1,105 @@
+[lucid] single hm2-straddle-tf30#10|nyam@40 stable=0.692 (31s, 180 evals)
+[lucidpro_nodll] single hm2-straddle-tf30#10|nyam@40 stable=0.706 (49s, 208 evals)
+[lucid] +hm2-tod_drift-tf30#19|mid@10 -> 2 members stable=0.692 gain=+0.000 FORCED (64s, 268 evals)
+[lucidpro_nodll] +hm-first_bar_mom-tf15#8|mid@10 -> 2 members stable=0.705 gain=-0.001 FORCED (91s, 300 evals)
+[lucidpro] single hm2-tod_drift-tf15#19|mid@30 stable=0.447 (95s, 200 evals)
+== lucid (lucid-flex-50k@2026-09-27) primary=realized (432 evals, 141s)
+  single    P1/2/3/5=0.00/0.00/0.66/0.692 [0.64,0.74] bust5=0.31 med=3.0 | eod 0.69 real 0.69 intra 0.01 | lift +0.093 | L750 K1500 S0 T0 TT1 | hm2-straddle-tf30#10|nyam@40 | FLAGS ['ONE_YEAR_CONCENTRATION 2022: 97% of net']
+  best2     P1/2/3/5=0.00/0.00/0.67/0.692 [0.65,0.74] bust5=0.31 med=3.0 | eod 0.69 real 0.69 intra 0.01 | lift +0.101 | L750 K1500 S0 T0 TT1 | hm2-straddle-tf30#10|nyam@40 + hm2-tod_drift-tf30#19|mid@10 | FLAGS ['ONE_YEAR_CONCENTRATION 2022: 102% of net']
+  portfolio P1/2/3/5=0.00/0.00/0.67/0.692 [0.65,0.74] bust5=0.31 med=3.0 | eod 0.69 real 0.69 intra 0.01 | lift +0.101 | L750 K1500 S0 T0 TT1 | hm2-straddle-tf30#10|nyam@40 + hm2-tod_drift-tf30#19|mid@10 | FLAGS ['ONE_YEAR_CONCENTRATION 2022: 102% of net', 'FEWER_THAN_3_MEMBERS: no feasible 3rd member under the guards (cap / net-share); this is the best 2-member', 'FORCED_TO_3: 3rd member added with gain <= 0.005 (stop rule overridden for the >=3 guard)']
+[apex] single fp-donchian-tf15#15|pm@40 stable=0.415 (162s, 395 evals)
+== lucidpro_nodll (lucid-pro-50k-no-dll@2026-09-27b) primary=realized (492 evals, 193s)
+  single    P1/2/3/5=0.67/0.70/0.71/0.706 [0.67,0.74] bust5=0.29 med=1.0 | eod 0.71 real 0.71 intra 0.23 | lift +0.072 | L1000 K0 S0 T0 TT1 | hm2-straddle-tf30#10|nyam@40
+  best2     P1/2/3/5=0.67/0.70/0.71/0.705 [0.67,0.74] bust5=0.29 med=1.0 | eod 0.71 real 0.71 intra 0.23 | lift +0.079 | L1000 K0 S0 T0 TT1 | hm2-straddle-tf30#10|nyam@40 + hm-first_bar_mom-tf15#8|mid@10
+  portfolio P1/2/3/5=0.67/0.70/0.71/0.705 [0.67,0.74] bust5=0.29 med=1.0 | eod 0.71 real 0.71 intra 0.23 | lift +0.079 | L1000 K0 S0 T0 TT1 | hm2-straddle-tf30#10|nyam@40 + hm-first_bar_mom-tf15#8|mid@10 | FLAGS ['FEWER_THAN_3_MEMBERS: no feasible 3rd member under the guards (cap / net-share); this is the best 2-member', 'FORCED_TO_3: 3rd member added with gain <= 0.005 (stop rule overridden for the >=3 guard)']
+[lucidpro] +hm2-donchian-tf5#9|pm@30 -> 2 members stable=0.447 gain=+0.000 FORCED (197s, 366 evals)
+[lucidpro] +hm-tod_drift-tf5#15|nyam@30 -> 3 members stable=0.378 gain=-0.069 FORCED (198s, 367 evals)
+[lucidpro] +hm2-tod_drift-tf15#6|london@40 -> 4 members stable=0.419 gain=+0.041 (240s, 426 evals)
+[apex_eod] single hm-donchian-tf15#11|nyam@20 stable=0.398 (156s, 245 evals)
+== lucidpro (lucid-pro-50k@2026-09-27b) primary=realized (575 evals, 357s)
+  single    P1/2/3/5=0.24/0.38/0.42/0.447 [0.40,0.50] bust5=0.54 med=1.0 | eod 0.45 real 0.45 intra 0.40 | lift +0.092 | L1000 K0 S0 T0 TT1 | hm2-tod_drift-tf15#19|mid@30 | FLAGS ['ONE_YEAR_CONCENTRATION 2022: 100% of net']
+  best2     P1/2/3/5=0.25/0.39/0.43/0.447 [0.40,0.50] bust5=0.55 med=1.0 | eod 0.45 real 0.45 intra 0.40 | lift +0.095 | L1000 K0 S0 T0 TT1 | hm2-tod_drift-tf15#19|mid@30 + hm2-donchian-tf5#9|pm@30 | FLAGS ['ONE_YEAR_CONCENTRATION 2022: 93% of net']
+  portfolio P1/2/3/5=0.21/0.34/0.39/0.423 [0.38,0.46] bust5=0.56 med=1.0 | eod 0.42 real 0.42 intra 0.37 | lift +0.037 | L1000 K0 S0 T0 TT1 | hm2-tod_drift-tf15#19|mid@30 + hm2-donchian-tf5#9|pm@30 + hm-tod_drift-tf5#15|nyam@30 + hm2-tod_drift-tf15#6|london@40 | FLAGS ['WARN_NO_EDGE: lift +0.037 vs day-matched random, 95% CI [-0.014,+0.083] includes 0', 'FORCED_TO_3: 3rd member added with gain <= 0.005 (stop rule overridden for the >=3 guard)']
+[apex] +hm-donchian-tf15#7|nyam@20 -> 2 members stable=0.417 gain=+0.001 FORCED (385s, 751 evals)
+[lucid] wf-reselect 2022Q3: [('hm-orb-tf5#10|mid', 40), ('hm2-tod_drift-tf30#0|pm', 10), ('hm2-straddle-tf30#10|pm', 30)] train 0.780 test 0.671875
+[apex] +hm-first_bar_mom-tf15#34|nyam@20 -> 3 members stable=0.396 gain=-0.021 FORCED (405s, 780 evals)
+[lucid] wf-reselect 2022Q4: [('hm-vwap_z-tf5#10|mid', 30), ('hm2-donchian-tf5#10|pm', 40), ('hm2-straddle-tf30#10|nyam', 40)] train 0.758 test 0.7936507936507936
+[apex_eod] +hm2-donchian-tf5#21|pm@40 -> 2 members stable=0.415 gain=+0.016 (331s, 459 evals)
+[apex_eod] +hm-tod_drift-tf5#19|mid@50 -> 3 members stable=0.388 gain=-0.027 FORCED (343s, 474 evals)
+[lucid] wf-reselect 2023Q1: [('hm2-straddle-tf30#10|nyam', 40), ('hm2-straddle-tf30#8|mid', 10)] train 0.806 test 0.7258064516129032
+[lucid] wf-reselect 2023Q2: [('hm2-straddle-tf30#10|nyam', 40), ('hm2-straddle-tf30#8|mid', 10)] train 0.781 test 0.3968253968253968
+[apex] +hm2-tod_drift-tf15#6|london@40 -> 4 members stable=0.402 gain=+0.006 (608s, 1055 evals)
+[lucid] wf-reselect 2023Q3: [('hm2-straddle-tf30#20|nyam', 40), ('hm-orb-tf5#10|mid', 10), ('hm2-squeeze-tf5#20|mid', 30)] train 0.770 test 0.5714285714285714
+[lucid] wf-reselect 2023Q4: [('hm2-straddle-tf30#20|nyam', 40), ('hm-orb-tf5#10|mid', 10), ('hm2-squeeze-tf5#20|mid', 30)] train 0.725 test 0.7142857142857143
+[lucidpro] wf-reselect 2022Q3: [('hm2-tema_slope-tf1#16|nyam', 40), ('hm2-rsi2-tf1#5|mid', 30), ('hm-tod_drift-tf5#19|mid', 10)] train 0.503 test 0.40625
+== apex_eod (apex-eod-50k@2026-09-27b UNCONFIRMED) primary=intraday (706 evals, 568s)
+  single    P1/2/3/5=0.16/0.27/0.33/0.398 [0.34,0.46] bust5=0.54 med=2.0 | eod 0.40 real 0.40 intra 0.40 | lift +0.081 | L1000 K0 S0 T0 TT1 | hm-donchian-tf15#11|nyam@20
+  best2     P1/2/3/5=0.25/0.42/0.43/0.441 [0.39,0.48] bust5=0.56 med=1.0 | eod 0.44 real 0.44 intra 0.44 | lift +0.083 | L0 K0 S0 T0 TT1 | hm-donchian-tf15#11|nyam@20 + hm2-donchian-tf5#21|pm@40
+  portfolio P1/2/3/5=0.25/0.41/0.42/0.424 [0.37,0.47] bust5=0.58 med=1.0 | eod 0.42 real 0.42 intra 0.42 | lift +0.068 | L0 K0 S0 T0 TT1 | hm-donchian-tf15#11|nyam@20 + hm2-donchian-tf5#21|pm@40 + hm-tod_drift-tf5#19|mid@50 | FLAGS ['ONE_YEAR_CONCENTRATION 2022: 76% of net', 'FORCED_TO_3: 3rd member added with gain <= 0.005 (stop rule overridden for the >=3 guard)']
+[lucid] wf-reselect 2024Q1: [('hm2-straddle-tf30#20|mid', 40), ('hm2-squeeze-tf5#21|pm', 10), ('hm2-straddle-tf30#20|nyam', 10), ('hm2-straddle-tf30#10|pm', 10)] train 0.713 test 0.7213114754098361
+[lucid] wf-reselect 2024Q2: [('hm2-straddle-tf30#20|mid', 40), ('hm2-straddle-tf30#10|pm', 40), ('hm2-straddle-tf30#23|nyam', 30)] train 0.606 test 0.4603174603174603
+[lucid] wf-reselect 2024Q3: [('hm2-straddle-tf30#10|nyam', 40), ('hm2-squeeze-tf5#20|mid', 20), ('hm2-straddle-tf30#10|pm', 40), ('hm2-tod_drift-tf30#19|mid', 20)] train 0.695 test 0.71875
+[lucidpro] wf-reselect 2022Q4: [('hm-tod_drift-tf5#19|mid', 40), ('hm-donchian-tf15#2|pm', 10), ('hm2-squeeze-tf1#22|pm', 10)] train 0.528 test 0.4444444444444444
+[lucid] wf-reselect 2024Q4: [('hm2-straddle-tf30#10|nyam', 40), ('hm2-straddle-tf30#20|mid', 10)] train 0.704 test 0.5666666666666667
+[lucid] wf reselect: OOS P5 0.634 ctrl 0.575 lift +0.059 (829s)
+[lucidpro_nodll] wf-reselect 2022Q3: [('hm-orb-tf5#10|mid', 40), ('hm2-donchian-tf5#10|pm', 20), ('hm2-straddle-tf30#10|pm', 20)] train 0.780 test 0.703125
+[lucidpro_nodll] wf-reselect 2022Q4: [('hm-orb-tf5#10|mid', 40), ('hm2-donchian-tf5#10|pm', 40), ('hm2-straddle-tf30#10|nyam', 40)] train 0.754 test 0.7142857142857143
+== apex (apex-legacy-50k@2026-09-27b UNCONFIRMED) primary=intraday (1765 evals, 1185s)
+  single    P1/2/3/5=0.19/0.30/0.36/0.417 [0.36,0.48] bust5=0.52 med=2.0 | eod 0.43 real 0.43 intra 0.42 | lift +0.060 | L0 K0 S2000 T0 TT1 | fp-donchian-tf15#15|pm@40 | FLAGS ['ONE_YEAR_CONCENTRATION 2022: 68% of net', 'WARN_NO_EDGE: lift +0.060 vs day-matched random, 95% CI [-0.005,+0.126] includes 0']
+  best2     P1/2/3/5=0.21/0.36/0.41/0.447 [0.38,0.50] bust5=0.54 med=2.0 | eod 0.45 real 0.45 intra 0.45 | lift +0.092 | L0 K0 S1000 T0 TT1 | fp-donchian-tf15#15|pm@40 + hm-donchian-tf15#7|nyam@20
+  portfolio P1/2/3/5=0.23/0.32/0.37/0.402 [0.36,0.44] bust5=0.58 med=1.0 | eod 0.49 real 0.49 intra 0.40 | lift +0.053 | L1000 K0 S3000 T1 TT1 | fp-donchian-tf15#15|pm@40 + hm-donchian-tf15#7|nyam@20 + hm-first_bar_mom-tf15#34|nyam@20 + hm2-tod_drift-tf15#6|london@40 | FLAGS ['ONE_YEAR_CONCENTRATION 2023: 97% of net', 'FORCED_TO_3: 3rd member added with gain <= 0.005 (stop rule overridden for the >=3 guard)']
+[lucidpro] wf-reselect 2023Q1: [('hm-tod_drift-tf5#19|mid', 40), ('hm2-donchian-tf1#35|pm', 10), ('hm2-straddle-tf30#11|nyam', 10), ('hm2-tod_drift-tf15#6|london', 10)] train 0.514 test 0.5161290322580645
+[lucidpro_nodll] wf-reselect 2023Q1: [('hm2-straddle-tf30#10|nyam', 40), ('hm2-straddle-tf30#20|mid', 10)] train 0.798 test 0.7258064516129032
+[lucidpro_nodll] wf-reselect 2023Q2: [('hm2-straddle-tf30#10|nyam', 40), ('hm2-straddle-tf30#20|mid', 10)] train 0.775 test 0.3968253968253968
+[lucidpro_nodll] wf-reselect 2023Q3: [('hm2-straddle-tf30#21|nyam', 40), ('hm2-straddle-tf30#10|pm', 40), ('hm-orb-tf5#10|mid', 20)] train 0.762 test 0.5714285714285714
+[lucidpro_nodll] wf-reselect 2023Q4: [('hm2-straddle-tf30#21|nyam', 40), ('hm2-squeeze-tf5#22|mid', 10)] train 0.723 test 0.7142857142857143
+[lucidpro] wf-reselect 2023Q2: [('hm-tod_drift-tf5#19|mid', 40), ('hm2-donchian-tf5#5|pm', 10), ('hm2-squeeze-tf1#22|pm', 20), ('hm2-straddle-tf30#18|pm', 10)] train 0.506 test 0.30158730158730157
+[lucidpro_nodll] wf-reselect 2024Q1: [('hm2-straddle-tf30#21|nyam', 40), ('hm-orb-tf5#10|mid', 10), ('hm2-donchian-tf5#10|pm', 30)] train 0.725 test 0.6065573770491803
+[apex] wf-reselect 2022Q3: [('fp-ema_pullback-tf5#5|nyam', 100), ('fp-donchian-tf15#15|pm', 40)] train 0.471 test 0.390625
+[lucidpro] wf-reselect 2023Q3: [('hm2-donchian-tf5#11|pm', 20), ('hm2-tema_slope-tf1#16|nyam', 10)] train 0.526 test 0.2222222222222222
+[lucidpro_nodll] wf-reselect 2024Q2: [('hm2-straddle-tf30#20|mid', 40), ('hm2-donchian-tf5#10|pm', 10), ('hm2-vwap_flip-tf5#34|pm', 20)] train 0.699 test 0.6349206349206349
+[apex_eod] wf-reselect 2022Q3: [('hm-tod_drift-tf5#22|london', 30), ('hm2-ema_pullback-tf1#19|nyam', 60), ('hm2-donchian-tf5#8|pm', 20)] train 0.487 test 0.296875
+[lucidpro] wf-reselect 2023Q4: [('hm2-donchian-tf5#11|pm', 20), ('hm-donchian-tf15#11|nyam', 20), ('hm2-donchian-tf5#15|pm', 20)] train 0.486 test 0.4603174603174603
+[lucidpro_nodll] wf-reselect 2024Q3: [('hm2-straddle-tf30#8|mid', 40), ('hm2-vwap_flip-tf5#34|pm', 30), ('hm2-straddle-tf30#10|nyam', 10)] train 0.693 test 0.671875
+[lucidpro_nodll] wf-reselect 2024Q4: [('hm2-straddle-tf30#8|mid', 40), ('hm2-straddle-tf30#10|pm', 30), ('hm2-straddle-tf30#9|nyam', 40)] train 0.692 test 0.65
+[lucidpro_nodll] wf reselect: OOS P5 0.639 ctrl 0.573 lift +0.066 (1310s)
+[lucid] wf single fixed: OOS P5 0.668 ctrl 0.595 lift +0.073 (3s)
+[lucid] wf best2 fixed: OOS P5 0.669 ctrl 0.601 lift +0.068 (46s)
+[lucid] wf portfolio fixed: OOS P5 0.669 ctrl 0.601 lift +0.068 (89s)
+[lucidpro] wf single fixed: OOS P5 0.428 ctrl 0.328 lift +0.100 (6s)
+[lucidpro] wf-reselect 2024Q1: [('hm2-straddle-tf30#18|pm', 20), ('hm-donchian-tf15#2|pm', 10), ('hm2-donchian-tf5#11|pm', 10)] train 0.474 test 0.3442622950819672
+[apex_eod] wf-reselect 2022Q4: [('hm2-tod_drift-tf15#19|mid', 20), ('hm2-donchian-tf1#23|pm', 20), ('hm2-ema_pullback-tf1#22|pm', 30)] train 0.486 test 0.47619047619047616
+[lucidpro] wf best2 fixed: OOS P5 0.428 ctrl 0.358 lift +0.071 (65s)
+[apex_eod] wf-reselect 2023Q1: [('hm2-tod_drift-tf15#19|mid', 20), ('hm2-donchian-tf1#11|pm', 20), ('hm2-tod_drift-tf30#19|mid', 20)] train 0.490 test 0.27419354838709675
+[apex] wf-reselect 2022Q4: [('hm-tod_drift-tf5#19|mid', 40), ('hm2-squeeze-tf5#19|pm', 20), ('fp-donchian-tf15#15|pm', 20)] train 0.482 test 0.36507936507936506
+[lucidpro] wf-reselect 2024Q2: [('hm2-ema_pullback-tf1#22|pm', 40), ('hm2-tod_drift-tf15#6|london', 40), ('hm-tod_drift-tf5#19|mid', 10)] train 0.484 test 0.4444444444444444
+[lucidpro] wf portfolio fixed: OOS P5 0.417 ctrl 0.392 lift +0.025 (308s)
+[lucidpro_nodll] wf single fixed: OOS P5 0.674 ctrl 0.620 lift +0.054 (6s)
+[lucidpro_nodll] wf best2 fixed: OOS P5 0.673 ctrl 0.613 lift +0.059 (65s)
+[lucidpro_nodll] wf portfolio fixed: OOS P5 0.673 ctrl 0.613 lift +0.059 (122s)
+[apex] wf single fixed: OOS P5 0.403 ctrl 0.338 lift +0.065 (13s)
+[lucidpro] wf-reselect 2024Q3: [('hm2-straddle-tf30#18|pm', 20), ('hm-donchian-tf15#2|pm', 10), ('hm2-donchian-tf5#15|nyam', 30), ('hm-tod_drift-tf5#23|mid', 10)] train 0.455 test 0.3125
+[apex] wf best2 fixed: OOS P5 0.454 ctrl 0.362 lift +0.091 (110s)
+[lucidpro] wf-reselect 2024Q4: [('hm2-straddle-tf30#18|pm', 20), ('hm2-rsi2-tf1#9|mid', 20), ('hm2-donchian-tf5#15|nyam', 40)] train 0.405 test 0.45
+[lucidpro] wf reselect: OOS P5 0.390 ctrl 0.322 lift +0.067 (2322s)
+[apex_eod] wf single fixed: OOS P5 0.379 ctrl 0.321 lift +0.058 (19s)
+[apex_eod] wf-reselect 2023Q2: [('hm-tod_drift-tf5#19|mid', 30), ('hm2-tema_slope-tf1#11|london', 20), ('hm2-squeeze-tf1#22|pm', 20)] train 0.453 test 0.38095238095238093
+[apex] wf-reselect 2023Q1: [('fp-donchian-tf15#15|pm', 40), ('hm-tod_drift-tf5#19|mid', 20), ('hm2-donchian-tf5#11|pm', 20)] train 0.486 test 0.3064516129032258
+[apex_eod] wf best2 fixed: OOS P5 0.458 ctrl 0.349 lift +0.110 (145s)
+[apex] wf portfolio fixed: OOS P5 0.403 ctrl 0.336 lift +0.066 (298s)
+[apex_eod] wf-reselect 2023Q3: [('hm2-donchian-tf1#35|pm', 40), ('hm-tod_drift-tf5#19|mid', 20), ('hm-donchian-tf15#6|nyam', 20)] train 0.440 test 0.4126984126984127
+[apex] wf-reselect 2023Q2: [('hm2-ema_pullback-tf1#23|pm', 80), ('fp-donchian-tf15#7|pm', 20), ('fp-tod_drift-tf5#14|mid', 60), ('fp-tod_drift-tf5#14|nyam', 60)] train 0.437 test 0.42857142857142855
+[apex_eod] wf portfolio fixed: OOS P5 0.441 ctrl 0.345 lift +0.096 (874s)
+[apex_eod] wf-reselect 2023Q4: [('hm-first_bar_mom-tf15#35|nyam', 20), ('hm-donchian-tf15#6|nyam', 20), ('hm2-donchian-tf5#21|pm', 30), ('hm-tod_drift-tf5#22|london', 50), ('hm2-rsi2-tf1#5|mid', 50)] train 0.425 test 0.2857142857142857
+[apex] wf-reselect 2023Q3: [('hm2-donchian-tf5#7|pm', 20), ('fp-donchian-tf15#5|nyam', 20), ('hm-orb-tf5#10|mid', 20), ('fp-tod_drift-tf5#14|nyam', 60)] train 0.435 test 0.42857142857142855
+[apex_eod] wf-reselect 2024Q1: [('hm-tod_drift-tf5#22|london', 50), ('hm2-ema_pullback-tf1#22|pm', 50), ('hm2-rsi2-tf1#5|mid', 30)] train 0.431 test 0.4918032786885246
+[apex] wf-reselect 2023Q4: [('hm2-donchian-tf5#7|pm', 20), ('fp-tod_drift-tf5#7|mid', 20)] train 0.500 test 0.2857142857142857
+[apex] wf-reselect 2024Q1: [('hm2-donchian-tf5#7|pm', 20), ('fp-tod_drift-tf5#7|mid', 20)] train 0.510 test 0.36065573770491804
+[apex_eod] wf-reselect 2024Q2: [('hm2-tod_drift-tf15#6|london', 40), ('hm2-ema_pullback-tf1#23|pm', 30), ('hm-tod_drift-tf5#19|mid', 20)] train 0.453 test 0.38095238095238093
+[apex] wf-reselect 2024Q2: [('fp-tod_drift-tf5#7|mid', 80), ('hm2-ema_pullback-tf1#22|pm', 20)] train 0.459 test 0.3968253968253968
+[apex_eod] wf-reselect 2024Q3: [('hm2-donchian-tf5#5|pm', 40), ('hm-donchian-tf15#5|nyam', 20), ('hm-tod_drift-tf5#22|london', 50), ('hm2-rsi2-tf1#5|mid', 40)] train 0.402 test 0.34375
+[apex] wf-reselect 2024Q3: [('hm2-squeeze-tf5#19|pm', 20), ('hm2-donchian-tf5#7|pm', 20), ('fp-donchian-tf15#15|pm', 20)] train 0.504 test 0.359375
+[apex_eod] wf-reselect 2024Q4: [('hm2-tod_drift-tf15#19|mid', 30), ('hm2-squeeze-tf1#29|pm', 20), ('hm2-ema_pullback-tf1#22|pm', 20)] train 0.482 test 0.36666666666666664
+[apex_eod] wf reselect: OOS P5 0.371 ctrl 0.291 lift +0.080 (5593s)
+[apex] wf-reselect 2024Q4: [('hm2-ema_pullback-tf1#22|pm', 60), ('hm-donchian-tf15#13|pm', 20), ('hm-donchian-tf15#11|nyam', 20), ('hm-orb-tf5#15|nyam', 40)] train 0.449 test 0.43333333333333335
+[apex] wf reselect: OOS P5 0.375 ctrl 0.339 lift +0.036 (7572s)

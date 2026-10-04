@@ -1,0 +1,11 @@
+{
+ "note": "copies of the tick-replayed desk-version tester runs made 2026-10-01 17:30-17:38 ET by the desk-match workflow (branch feat/nq-prop-algos-daily-rules, own scratch base dir; R/desk_match.md). Take = a real limit exit, so mae_usd is the open loss BEFORE the exit. Range 2021-09-22..2026-09-30: rows dated 2025+ are HOLDOUT (second look only).",
+ "source_runs": {
+  "nq_nyam_flex_4nq": "20261001-173041-nq_nyam_flex-8318",
+  "nq_nyam_pro_4nq": "20261001-173822-nq_nyam_pro-4ea8",
+  "nq_orb_pro_4nq": "20261001-173041-nq_orb_pro-0c66",
+  "nq_pm_flex_4nq": "20261001-173041-nq_pm_flex-5c5b",
+  "nq_pm_flex_3nq": "20261001-173822-nq_pm_flex-5787",
+  "nq_pm_flex_2nq": "20261001-173822-nq_pm_flex-e4b9"
+ }
+}

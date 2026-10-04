@@ -1,0 +1,6 @@
+flex screened 2787 top-K e40 >= 1175.4 max 1630.5
+flex_dll screened 2787 top-K e40 >= 879.2 max 1400.5
+pro_dll screened 2787 top-K e40 >= 885.4 max 1671.7
+pro_nodll screened 2787 top-K e40 >= 1703.2 max 2712.0
+apex screened 290 top-K e40 >= 36.9 max 382.3
+316 configs, 500 pairs selected

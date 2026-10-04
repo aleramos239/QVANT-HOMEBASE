@@ -1,0 +1,1 @@
+{"key": "absorption-tf1-c2s2", "fam_tf": "absorption-tf1", "family": "absorption", "tf": "1", "variant": "c2s2", "sess": "mid", "firm": "apex_eod", "status": "ok", "lift": -0.04177831912302071, "ctrl": 0.28294762484774666, "real": 0.24116930572472595, "skipped": null, "elapsed_s": 0.51}

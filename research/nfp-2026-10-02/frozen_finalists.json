@@ -1,0 +1,82 @@
+{
+ "finalists": [
+  {
+   "arm": "const",
+   "b": null,
+   "comm": 16.0,
+   "is_cell": 10,
+   "is_smooth": 0.5768645357686454,
+   "name": "A_IS_pick_4GC_off2pt_SL1500",
+   "off": 2.0,
+   "offmode": "pts",
+   "pv": 400.0,
+   "root": "GC",
+   "sl_usd": 1500,
+   "tp_usd": 3000,
+   "unit": "4xGC"
+  },
+  {
+   "arm": "const",
+   "b": null,
+   "comm": 16.0,
+   "is_cell": 19,
+   "is_smooth": 0.5966514459665145,
+   "name": "B_plain_4GC_off2pt_SL2000",
+   "off": 2.0,
+   "offmode": "pts",
+   "pv": 400.0,
+   "root": "GC",
+   "sl_usd": 2000,
+   "tp_usd": 3000,
+   "unit": "4xGC"
+  },
+  {
+   "arm": "const",
+   "b": null,
+   "comm": 16.0,
+   "is_cell": 1,
+   "is_smooth": 0.563165905631659,
+   "name": "C_4GC_off2pt_SL1200",
+   "off": 2.0,
+   "offmode": "pts",
+   "pv": 400.0,
+   "root": "GC",
+   "sl_usd": 1200,
+   "tp_usd": 3000,
+   "unit": "4xGC"
+  },
+  {
+   "arm": "const",
+   "b": null,
+   "comm": 16.0,
+   "is_cell": 15,
+   "is_smooth": 0.5692541856925418,
+   "name": "D_4GC_off0.1V_SL1500",
+   "off": 0.1,
+   "offmode": "vol",
+   "pv": 400.0,
+   "root": "GC",
+   "sl_usd": 1500,
+   "tp_usd": 3000,
+   "unit": "4xGC"
+  },
+  {
+   "arm": "volsize",
+   "b": 0.3,
+   "comm": null,
+   "is_cell": 274,
+   "is_smooth": 0.5646879756468798,
+   "name": "E_volsize_b0.3_off0.1V_SL1500",
+   "off": 0.1,
+   "offmode": "vol",
+   "pv": null,
+   "root": "GC",
+   "sl_usd": 1500,
+   "tp_usd": 3000,
+   "unit": "b0.3"
+  }
+ ],
+ "frozen_at_et": "2026-10-01T16:34:28-04:00",
+ "holdout_decision_rule": "Recommend A unless another finalist has holdout P(win) under model P2 (NFP+CPI pooled) higher by >= 0.15, in which case report it as a post-holdout choice. Holdout = 2025-01..2026-09, ONE scoring run of these 5 cells, no re-tune.",
+ "selection_rule": "IS 2021-10..2024-12 only; score = mean P(win) over slip models M1,P2,P4 pooled NFP+CPI, smoothed over offset neighbours (interior offsets only); cells within 1 SE (0.055) of the top: lowest P2 bust, then highest smoothed score. A = winner of that rule."
+}

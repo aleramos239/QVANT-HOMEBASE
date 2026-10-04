@@ -1,0 +1,876 @@
+{
+ "generated_et": "2026-10-01T23:47:57-04:00",
+ "window": [
+  "2021-09-22",
+  "2024-12-31"
+ ],
+ "gate_pass": true,
+ "gate": [
+  {
+   "id": "hm2-straddle-tf30#10",
+   "family": "straddle",
+   "tester_src": "20260930-001526-draft_pp_straddle-67c2#10",
+   "tester_engine": "tick-2",
+   "role": "Flex eval pick",
+   "pick_session": "nyam",
+   "inputs": {
+    "tf": "30",
+    "sess": "all",
+    "dir": "both",
+    "stop_mode": "atr",
+    "stop_val": 3.0,
+    "tgt_r": 2.0,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "delay_min": 0,
+    "off_atr": 0.25,
+    "news_only": false
+   },
+   "elapsed_s": 1.44,
+   "workers": 8,
+   "sessions_sim": 825,
+   "used_sim": 820,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0,
+   "stress": null,
+   "skipped_sim": [
+    "2021-12-01",
+    "2022-06-21",
+    "2022-08-05",
+    "2022-09-06",
+    "2023-04-07"
+   ],
+   "skipped_ref": [
+    "2021-12-01",
+    "2022-06-21",
+    "2022-08-05",
+    "2022-09-06",
+    "2023-04-07"
+   ],
+   "all": {
+    "n_sim": 3273,
+    "n_ref": 3273,
+    "matched": 3273,
+    "exact_all_fields": 3273,
+    "match_rate": 1.0,
+    "exact_rate": 1.0,
+    "net_sim": 141158.0,
+    "net_ref": 141158.0,
+    "net_diff": 0.0,
+    "net_diff_pct": 0.0,
+    "abs_net_ref": 4082068.0,
+    "unmatched_ref": [],
+    "unmatched_sim": []
+   },
+   "pick": {
+    "n_sim": 820,
+    "n_ref": 820,
+    "matched": 820,
+    "exact_all_fields": 820,
+    "match_rate": 1.0,
+    "exact_rate": 1.0,
+    "net_sim": 95315.0,
+    "net_ref": 95315.0,
+    "net_diff": 0.0,
+    "net_diff_pct": 0.0,
+    "abs_net_ref": 1282803.0,
+    "unmatched_ref": [],
+    "unmatched_sim": []
+   },
+   "by_reason_sim": {
+    "time": 2383,
+    "sl": 729,
+    "tp": 155,
+    "eod": 6
+   },
+   "by_reason_ref": {
+    "time": 2383,
+    "sl": 729,
+    "tp": 155,
+    "eod": 6
+   },
+   "gate_pass": true
+  },
+  {
+   "id": "hm-orb-tf5#10",
+   "family": "orb",
+   "tester_src": "20260929-231930-draft_pp_orb-5276#10",
+   "tester_engine": "tick-2",
+   "role": "Pro noDLL funded pick",
+   "pick_session": "mid",
+   "inputs": {
+    "tf": "5",
+    "sess": "all",
+    "dir": "both",
+    "stop_mode": "atr",
+    "stop_val": 3.0,
+    "tgt_r": 2.0,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "or_min": "5"
+   },
+   "elapsed_s": 1.43,
+   "workers": 8,
+   "sessions_sim": 825,
+   "used_sim": 820,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0,
+   "stress": null,
+   "skipped_sim": [
+    "2021-12-01",
+    "2022-06-21",
+    "2022-08-05",
+    "2022-09-06",
+    "2023-04-07"
+   ],
+   "skipped_ref": [
+    "2021-12-01",
+    "2022-06-21",
+    "2022-08-05",
+    "2022-09-06",
+    "2023-04-07"
+   ],
+   "all": {
+    "n_sim": 3272,
+    "n_ref": 3272,
+    "matched": 3272,
+    "exact_all_fields": 3272,
+    "match_rate": 1.0,
+    "exact_rate": 1.0,
+    "net_sim": 16152.0,
+    "net_ref": 16152.0,
+    "net_diff": 0.0,
+    "net_diff_pct": 0.0,
+    "abs_net_ref": 3459944.0,
+    "unmatched_ref": [],
+    "unmatched_sim": []
+   },
+   "pick": {
+    "n_sim": 820,
+    "n_ref": 820,
+    "matched": 820,
+    "exact_all_fields": 820,
+    "match_rate": 1.0,
+    "exact_rate": 1.0,
+    "net_sim": 62610.0,
+    "net_ref": 62610.0,
+    "net_diff": 0.0,
+    "net_diff_pct": 0.0,
+    "abs_net_ref": 940198.0,
+    "unmatched_ref": [],
+    "unmatched_sim": []
+   },
+   "by_reason_sim": {
+    "sl": 1425,
+    "time": 1352,
+    "tp": 489,
+    "eod": 6
+   },
+   "by_reason_ref": {
+    "sl": 1425,
+    "time": 1352,
+    "tp": 489,
+    "eod": 6
+   },
+   "gate_pass": true
+  },
+  {
+   "id": "fp-donchian-tf15#10",
+   "family": "donchian",
+   "tester_src": "20260930-111627-draft_pp_donchian-cd3c#10",
+   "tester_engine": "tick-2",
+   "role": "Pro DLL funded pick",
+   "pick_session": "pm",
+   "inputs": {
+    "tf": "15",
+    "sess": "all",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 30.0,
+    "tgt_r": 0.6,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "n": 20
+   },
+   "elapsed_s": 1.31,
+   "workers": 8,
+   "sessions_sim": 825,
+   "used_sim": 820,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0,
+   "stress": null,
+   "skipped_sim": [
+    "2021-12-01",
+    "2022-06-21",
+    "2022-08-05",
+    "2022-09-06",
+    "2023-04-07"
+   ],
+   "skipped_ref": [
+    "2021-12-01",
+    "2022-06-21",
+    "2022-08-05",
+    "2022-09-06",
+    "2023-04-07"
+   ],
+   "all": {
+    "n_sim": 3571,
+    "n_ref": 3571,
+    "matched": 3571,
+    "exact_all_fields": 3571,
+    "match_rate": 1.0,
+    "exact_rate": 1.0,
+    "net_sim": -8064.0,
+    "net_ref": -8064.0,
+    "net_diff": 0.0,
+    "net_diff_pct": 0.0,
+    "abs_net_ref": 1495114.0,
+    "unmatched_ref": [],
+    "unmatched_sim": []
+   },
+   "pick": {
+    "n_sim": 760,
+    "n_ref": 760,
+    "matched": 760,
+    "exact_all_fields": 760,
+    "match_rate": 1.0,
+    "exact_rate": 1.0,
+    "net_sim": 26940.0,
+    "net_ref": 26940.0,
+    "net_diff": 0.0,
+    "net_diff_pct": 0.0,
+    "abs_net_ref": 320980.0,
+    "unmatched_ref": [],
+    "unmatched_sim": []
+   },
+   "by_reason_sim": {
+    "sl": 1144,
+    "time": 386,
+    "tp": 2041
+   },
+   "by_reason_ref": {
+    "sl": 1144,
+    "time": 386,
+    "tp": 2041
+   },
+   "gate_pass": true
+  }
+ ],
+ "extra": [
+  {
+   "id": "hm2-straddle-tf30#9",
+   "family": "straddle",
+   "tester_src": "20260930-001526-draft_pp_straddle-67c2#9",
+   "tester_engine": "tick-2",
+   "role": "Pro noDLL eval pick",
+   "pick_session": "nyam",
+   "inputs": {
+    "tf": "30",
+    "sess": "all",
+    "dir": "both",
+    "stop_mode": "atr",
+    "stop_val": 3.0,
+    "tgt_r": 1.0,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "delay_min": 0,
+    "off_atr": 0.25,
+    "news_only": false
+   },
+   "elapsed_s": 1.46,
+   "workers": 8,
+   "sessions_sim": 825,
+   "used_sim": 820,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0,
+   "stress": null,
+   "skipped_sim": [
+    "2021-12-01",
+    "2022-06-21",
+    "2022-08-05",
+    "2022-09-06",
+    "2023-04-07"
+   ],
+   "skipped_ref": [
+    "2021-12-01",
+    "2022-06-21",
+    "2022-08-05",
+    "2022-09-06",
+    "2023-04-07"
+   ],
+   "all": {
+    "n_sim": 3273,
+    "n_ref": 3273,
+    "matched": 3273,
+    "exact_all_fields": 3273,
+    "match_rate": 1.0,
+    "exact_rate": 1.0,
+    "net_sim": 132603.0,
+    "net_ref": 132603.0,
+    "net_diff": 0.0,
+    "net_diff_pct": 0.0,
+    "abs_net_ref": 3950505.0,
+    "unmatched_ref": [],
+    "unmatched_sim": []
+   },
+   "pick": {
+    "n_sim": 820,
+    "n_ref": 820,
+    "matched": 820,
+    "exact_all_fields": 820,
+    "match_rate": 1.0,
+    "exact_rate": 1.0,
+    "net_sim": 65610.0,
+    "net_ref": 65610.0,
+    "net_diff": 0.0,
+    "net_diff_pct": 0.0,
+    "abs_net_ref": 1197534.0,
+    "unmatched_ref": [],
+    "unmatched_sim": []
+   },
+   "by_reason_sim": {
+    "time": 1836,
+    "tp": 740,
+    "sl": 691,
+    "eod": 6
+   },
+   "by_reason_ref": {
+    "time": 1836,
+    "tp": 740,
+    "sl": 691,
+    "eod": 6
+   },
+   "gate_pass": true
+  },
+  {
+   "id": "hm2-straddle-tf30#32",
+   "family": "straddle",
+   "tester_src": "20260930-001526-draft_pp_straddle-67c2#32",
+   "tester_engine": "tick-2",
+   "role": "Flex funded pick",
+   "pick_session": "pm",
+   "inputs": {
+    "tf": "30",
+    "sess": "all",
+    "dir": "both",
+    "stop_mode": "atr",
+    "stop_val": 3.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "delay_min": 0,
+    "off_atr": 1.0,
+    "news_only": false
+   },
+   "elapsed_s": 1.46,
+   "workers": 8,
+   "sessions_sim": 825,
+   "used_sim": 820,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0,
+   "stress": null,
+   "skipped_sim": [
+    "2021-12-01",
+    "2022-06-21",
+    "2022-08-05",
+    "2022-09-06",
+    "2023-04-07"
+   ],
+   "skipped_ref": [
+    "2021-12-01",
+    "2022-06-21",
+    "2022-08-05",
+    "2022-09-06",
+    "2023-04-07"
+   ],
+   "all": {
+    "n_sim": 3137,
+    "n_ref": 3137,
+    "matched": 3137,
+    "exact_all_fields": 3137,
+    "match_rate": 1.0,
+    "exact_rate": 1.0,
+    "net_sim": 14202.0,
+    "net_ref": 14202.0,
+    "net_diff": 0.0,
+    "net_diff_pct": 0.0,
+    "abs_net_ref": 2999378.0,
+    "unmatched_ref": [],
+    "unmatched_sim": []
+   },
+   "pick": {
+    "n_sim": 706,
+    "n_ref": 706,
+    "matched": 706,
+    "exact_all_fields": 706,
+    "match_rate": 1.0,
+    "exact_rate": 1.0,
+    "net_sim": 14621.0,
+    "net_ref": 14621.0,
+    "net_diff": 0.0,
+    "net_diff_pct": 0.0,
+    "abs_net_ref": 689527.0,
+    "unmatched_ref": [],
+    "unmatched_sim": []
+   },
+   "by_reason_sim": {
+    "time": 1157,
+    "sl": 524,
+    "tp": 1451,
+    "eod": 5
+   },
+   "by_reason_ref": {
+    "time": 1157,
+    "sl": 524,
+    "tp": 1451,
+    "eod": 5
+   },
+   "gate_pass": true
+  },
+  {
+   "id": "fp-donchian-tf15#1",
+   "family": "donchian",
+   "tester_src": "20260930-111627-draft_pp_donchian-cd3c#1",
+   "tester_engine": "tick-2",
+   "role": "Apex PA pick",
+   "pick_session": "nyam",
+   "inputs": {
+    "tf": "15",
+    "sess": "all",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 10.0,
+    "tgt_r": 0.4,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "n": 20
+   },
+   "elapsed_s": 1.4,
+   "workers": 8,
+   "sessions_sim": 825,
+   "used_sim": 820,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0,
+   "stress": null,
+   "skipped_sim": [
+    "2021-12-01",
+    "2022-06-21",
+    "2022-08-05",
+    "2022-09-06",
+    "2023-04-07"
+   ],
+   "skipped_ref": [
+    "2021-12-01",
+    "2022-06-21",
+    "2022-08-05",
+    "2022-09-06",
+    "2023-04-07"
+   ],
+   "all": {
+    "n_sim": 3852,
+    "n_ref": 3852,
+    "matched": 3852,
+    "exact_all_fields": 3852,
+    "match_rate": 1.0,
+    "exact_rate": 1.0,
+    "net_sim": -14013.0,
+    "net_ref": -14013.0,
+    "net_diff": 0.0,
+    "net_diff_pct": 0.0,
+    "abs_net_ref": 435509.0,
+    "unmatched_ref": [],
+    "unmatched_sim": []
+   },
+   "pick": {
+    "n_sim": 1141,
+    "n_ref": 1141,
+    "matched": 1141,
+    "exact_all_fields": 1141,
+    "match_rate": 1.0,
+    "exact_rate": 1.0,
+    "net_sim": 11911.0,
+    "net_ref": 11911.0,
+    "net_diff": 0.0,
+    "net_diff_pct": 0.0,
+    "abs_net_ref": 121697.0,
+    "unmatched_ref": [],
+    "unmatched_sim": []
+   },
+   "by_reason_sim": {
+    "sl": 1069,
+    "tp": 2773,
+    "time": 10
+   },
+   "by_reason_ref": {
+    "sl": 1069,
+    "tp": 2773,
+    "time": 10
+   },
+   "gate_pass": true
+  },
+  {
+   "id": "fp-donchian-tf15#15",
+   "family": "donchian",
+   "tester_src": "20260930-111627-draft_pp_donchian-cd3c#15",
+   "tester_engine": "tick-2",
+   "role": "Lucid Pro DLL eval single",
+   "pick_session": "pm",
+   "inputs": {
+    "tf": "15",
+    "sess": "all",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 45.0,
+    "tgt_r": 1.0,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "n": 20
+   },
+   "elapsed_s": 1.45,
+   "workers": 8,
+   "sessions_sim": 825,
+   "used_sim": 820,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0,
+   "stress": null,
+   "skipped_sim": [
+    "2021-12-01",
+    "2022-06-21",
+    "2022-08-05",
+    "2022-09-06",
+    "2023-04-07"
+   ],
+   "skipped_ref": [
+    "2021-12-01",
+    "2022-06-21",
+    "2022-08-05",
+    "2022-09-06",
+    "2023-04-07"
+   ],
+   "all": {
+    "n_sim": 2874,
+    "n_ref": 2874,
+    "matched": 2874,
+    "exact_all_fields": 2874,
+    "match_rate": 1.0,
+    "exact_rate": 1.0,
+    "net_sim": -4086.0,
+    "net_ref": -4086.0,
+    "net_diff": 0.0,
+    "net_diff_pct": 0.0,
+    "abs_net_ref": 1988136.0,
+    "unmatched_ref": [],
+    "unmatched_sim": []
+   },
+   "pick": {
+    "n_sim": 586,
+    "n_ref": 586,
+    "matched": 586,
+    "exact_all_fields": 586,
+    "match_rate": 1.0,
+    "exact_rate": 1.0,
+    "net_sim": 43596.0,
+    "net_ref": 43596.0,
+    "net_diff": 0.0,
+    "net_diff_pct": 0.0,
+    "abs_net_ref": 425228.0,
+    "unmatched_ref": [],
+    "unmatched_sim": []
+   },
+   "by_reason_sim": {
+    "sl": 917,
+    "time": 1023,
+    "tp": 931,
+    "eod": 3
+   },
+   "by_reason_ref": {
+    "sl": 917,
+    "time": 1023,
+    "tp": 931,
+    "eod": 3
+   },
+   "gate_pass": true
+  }
+ ],
+ "tape_identity": {
+  "sessions": 825,
+  "same": 825,
+  "other": []
+ },
+ "ablations": [
+  {
+   "id": "hm2-straddle-tf30#10",
+   "change": "slippage 0 ticks (instead of 1)",
+   "n_ref": 3273,
+   "n_sim": 3273,
+   "matched": 0,
+   "match_rate": 0.0,
+   "exact_rate": 0.0,
+   "net_ref": 141158.0,
+   "net_sim": 174453.0,
+   "net_diff": 33295.0,
+   "net_diff_pct": 23.587044304963236
+  },
+  {
+   "id": "fp-donchian-tf15#10",
+   "change": "slippage 0 ticks (instead of 1)",
+   "n_ref": 3571,
+   "n_sim": 3575,
+   "matched": 0,
+   "match_rate": 0.0,
+   "exact_rate": 0.0,
+   "net_ref": -8064.0,
+   "net_sim": 20405.0,
+   "net_diff": 28469.0,
+   "net_diff_pct": 353.03819444444446
+  },
+  {
+   "id": "fp-donchian-tf15#10",
+   "change": "placement latency 0 ms (instead of 85)",
+   "n_ref": 3571,
+   "n_sim": 3573,
+   "matched": 1152,
+   "match_rate": 0.3224181360201511,
+   "exact_rate": 0.20990764063811923,
+   "net_ref": -8064.0,
+   "net_sim": 11198.0,
+   "net_diff": 19262.0,
+   "net_diff_pct": 238.8640873015873
+  },
+  {
+   "id": "hm2-straddle-tf30#10",
+   "change": "placement latency 0 ms (instead of 85)",
+   "n_ref": 3273,
+   "n_sim": 3273,
+   "matched": 3261,
+   "match_rate": 0.9963336388634281,
+   "exact_rate": 0.9960281087687137,
+   "net_ref": 141158.0,
+   "net_sim": 138278.0,
+   "net_diff": -2880.0,
+   "net_diff_pct": 2.0402669349239857
+  }
+ ],
+ "stress": [
+  {
+   "id": "hm2-straddle-tf30#10",
+   "pick_session": "nyam",
+   "change": "tester law (1 tick, 85 ms)",
+   "stress": null,
+   "trades": 3273,
+   "net": 141158.0,
+   "pick_trades": 820,
+   "pick_net": 95315.0,
+   "skipped_by_error": 0
+  },
+  {
+   "id": "hm2-straddle-tf30#10",
+   "pick_session": "nyam",
+   "change": "slip 2 ticks",
+   "stress": {
+    "slip_ticks": 2.0
+   },
+   "trades": 3273,
+   "net": 111638.0,
+   "pick_trades": 820,
+   "pick_net": 87750.0,
+   "skipped_by_error": 0
+  },
+  {
+   "id": "hm2-straddle-tf30#10",
+   "pick_session": "nyam",
+   "change": "latency 250 ms",
+   "stress": {
+    "latency_ms": 250
+   },
+   "trades": 3273,
+   "net": 145228.0,
+   "pick_trades": 820,
+   "pick_net": 95045.0,
+   "skipped_by_error": 0
+  },
+  {
+   "id": "hm2-straddle-tf30#10",
+   "pick_session": "nyam",
+   "change": "2 ticks + 250 ms",
+   "stress": {
+    "slip_ticks": 2.0,
+    "latency_ms": 250
+   },
+   "trades": 3273,
+   "net": 115698.0,
+   "pick_trades": 820,
+   "pick_net": 87475.0,
+   "skipped_by_error": 0
+  },
+  {
+   "id": "hm-orb-tf5#10",
+   "pick_session": "mid",
+   "change": "tester law (1 tick, 85 ms)",
+   "stress": null,
+   "trades": 3272,
+   "net": 16152.0,
+   "pick_trades": 820,
+   "pick_net": 62610.0,
+   "skipped_by_error": 0
+  },
+  {
+   "id": "hm-orb-tf5#10",
+   "pick_session": "mid",
+   "change": "slip 2 ticks",
+   "stress": {
+    "slip_ticks": 2.0
+   },
+   "trades": 3272,
+   "net": -13953.0,
+   "pick_trades": 820,
+   "pick_net": 52590.0,
+   "skipped_by_error": 0
+  },
+  {
+   "id": "hm-orb-tf5#10",
+   "pick_session": "mid",
+   "change": "latency 250 ms",
+   "stress": {
+    "latency_ms": 250
+   },
+   "trades": 3272,
+   "net": 13087.0,
+   "pick_trades": 820,
+   "pick_net": 62235.0,
+   "skipped_by_error": 0
+  },
+  {
+   "id": "hm-orb-tf5#10",
+   "pick_session": "mid",
+   "change": "2 ticks + 250 ms",
+   "stress": {
+    "slip_ticks": 2.0,
+    "latency_ms": 250
+   },
+   "trades": 3272,
+   "net": -17043.0,
+   "pick_trades": 820,
+   "pick_net": 52215.0,
+   "skipped_by_error": 0
+  },
+  {
+   "id": "fp-donchian-tf15#10",
+   "pick_session": "pm",
+   "change": "tester law (1 tick, 85 ms)",
+   "stress": null,
+   "trades": 3571,
+   "net": -8064.0,
+   "pick_trades": 760,
+   "pick_net": 26940.0,
+   "skipped_by_error": 0
+  },
+  {
+   "id": "fp-donchian-tf15#10",
+   "pick_session": "pm",
+   "change": "slip 2 ticks",
+   "stress": {
+    "slip_ticks": 2.0
+   },
+   "trades": 3563,
+   "net": -37017.0,
+   "pick_trades": 759,
+   "pick_net": 20609.0,
+   "skipped_by_error": 0
+  },
+  {
+   "id": "fp-donchian-tf15#10",
+   "pick_session": "pm",
+   "change": "latency 250 ms",
+   "stress": {
+    "latency_ms": 250
+   },
+   "trades": 3560,
+   "net": -37195.0,
+   "pick_trades": 757,
+   "pick_net": 20872.0,
+   "skipped_by_error": 0
+  },
+  {
+   "id": "fp-donchian-tf15#10",
+   "pick_session": "pm",
+   "change": "2 ticks + 250 ms",
+   "stress": {
+    "slip_ticks": 2.0,
+    "latency_ms": 250
+   },
+   "trades": 3555,
+   "net": -62920.0,
+   "pick_trades": 757,
+   "pick_net": 14792.0,
+   "skipped_by_error": 0
+  }
+ ],
+ "grid_sweep": [
+  {
+   "family": "straddle",
+   "grid": "20260930-001526-draft_pp_straddle-67c2",
+   "cells": 36,
+   "elapsed_s": 22.4,
+   "trades_ref": 116172,
+   "trades_sim": 116172,
+   "matched": 116172,
+   "exact": 116172,
+   "min_match_rate": 1.0,
+   "max_abs_net_diff": 0.0,
+   "cells_identical": 36
+  },
+  {
+   "family": "orb",
+   "grid": "20260929-231930-draft_pp_orb-5276",
+   "cells": 36,
+   "elapsed_s": 22.98,
+   "trades_ref": 136392,
+   "trades_sim": 136392,
+   "matched": 136392,
+   "exact": 136392,
+   "min_match_rate": 1.0,
+   "max_abs_net_diff": 0.0,
+   "cells_identical": 36
+  },
+  {
+   "family": "donchian",
+   "grid": "20260930-111627-draft_pp_donchian-cd3c",
+   "cells": 16,
+   "elapsed_s": 8.71,
+   "trades_ref": 58142,
+   "trades_sim": 58142,
+   "matched": 58142,
+   "exact": 58142,
+   "min_match_rate": 1.0,
+   "max_abs_net_diff": 0.0,
+   "cells_identical": 16
+  }
+ ],
+ "code_sha256_16": {
+  "l2sim.py": "147dd16bfca56b36",
+  "l2ref.py": "3616529ba81acf99",
+  "sim_validate.py": "f19dd72c99835e24"
+ }
+}

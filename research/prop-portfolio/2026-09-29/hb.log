@@ -1,0 +1,1452 @@
+2026-09-29 21:33:30 hb driver up
+2026-09-29 21:33:30 submitted calib-full-ema_pullback-tf5 -> 20260929-213330-draft_pp_ema_pullback-8a3a
+2026-09-29 21:33:30 submitted calib-grid20-orb -> 20260929-213330-draft_pp_orb-a0d3
+2026-09-29 21:34:10 calib-full-ema_pullback-tf5 done (1 ledger rows, 40s)
+2026-09-29 21:37:50 calib-grid20-orb done (20 ledger rows, 260s)
+2026-09-29 21:38:51 submitted screen-orb-tf1 -> 20260929-213851-draft_pp_orb-783d
+2026-09-29 21:38:51 submitted screen-orb-tf5 -> 20260929-213851-draft_pp_orb-80f8
+2026-09-29 21:39:11 screen-orb-tf1 done (1 ledger rows, 20s)
+2026-09-29 21:39:11 submitted screen-orb-tf15 -> 20260929-213911-draft_pp_orb-c4b7
+2026-09-29 21:39:51 screen-orb-tf5 done (1 ledger rows, 60s)
+2026-09-29 21:39:52 submitted screen-orb-tf30 -> 20260929-213952-draft_pp_orb-44e4
+2026-09-29 21:40:12 screen-orb-tf15 done (1 ledger rows, 61s)
+2026-09-29 21:40:12 submitted screen-straddle-tf1 -> 20260929-214012-draft_pp_straddle-bcaf
+2026-09-29 21:40:32 screen-orb-tf30 done (1 ledger rows, 40s)
+2026-09-29 21:40:32 submitted screen-straddle-tf5 -> 20260929-214032-draft_pp_straddle-8463
+2026-09-29 21:40:52 screen-straddle-tf1 done (1 ledger rows, 40s)
+2026-09-29 21:40:53 submitted screen-straddle-tf15 -> 20260929-214053-draft_pp_straddle-f941
+2026-09-29 21:41:13 screen-straddle-tf5 done (1 ledger rows, 40s)
+2026-09-29 21:41:13 submitted screen-straddle-tf30 -> 20260929-214113-draft_pp_straddle-5d7d
+2026-09-29 21:41:33 screen-straddle-tf15 done (1 ledger rows, 40s)
+2026-09-29 21:41:33 submitted screen-donchian-tf1 -> 20260929-214133-draft_pp_donchian-ef00
+2026-09-29 21:41:53 screen-straddle-tf30 done (1 ledger rows, 40s)
+2026-09-29 21:41:53 submitted screen-donchian-tf5 -> 20260929-214153-draft_pp_donchian-05b6
+2026-09-29 21:42:13 screen-donchian-tf1 done (1 ledger rows, 40s)
+2026-09-29 21:42:14 submitted screen-donchian-tf15 -> 20260929-214214-draft_pp_donchian-6a13
+2026-09-29 21:42:34 screen-donchian-tf5 done (1 ledger rows, 40s)
+2026-09-29 21:42:34 submitted screen-donchian-tf30 -> 20260929-214234-draft_pp_donchian-a623
+2026-09-29 21:42:54 screen-donchian-tf15 done (1 ledger rows, 40s)
+2026-09-29 21:42:54 submitted screen-squeeze-tf1 -> 20260929-214254-draft_pp_squeeze-91a6
+2026-09-29 21:43:14 screen-donchian-tf30 done (1 ledger rows, 40s)
+2026-09-29 21:43:14 submitted screen-squeeze-tf5 -> 20260929-214314-draft_pp_squeeze-ecb2
+2026-09-29 21:43:34 screen-squeeze-tf1 done (1 ledger rows, 40s)
+2026-09-29 21:43:35 submitted screen-squeeze-tf15 -> 20260929-214335-draft_pp_squeeze-02b3
+2026-09-29 21:43:55 screen-squeeze-tf5 done (1 ledger rows, 40s)
+2026-09-29 21:43:55 submitted screen-squeeze-tf30 -> 20260929-214355-draft_pp_squeeze-d7f2
+2026-09-29 21:44:15 screen-squeeze-tf15 done (1 ledger rows, 40s)
+2026-09-29 21:44:15 submitted screen-ema_ribbon-tf1 -> 20260929-214415-draft_pp_ema_ribbon-005b
+2026-09-29 21:44:35 screen-squeeze-tf30 done (1 ledger rows, 40s)
+2026-09-29 21:44:35 submitted screen-ema_ribbon-tf5 -> 20260929-214435-draft_pp_ema_ribbon-e55e
+2026-09-29 21:44:55 screen-ema_ribbon-tf1 done (1 ledger rows, 40s)
+2026-09-29 21:44:55 submitted screen-ema_ribbon-tf15 -> 20260929-214455-draft_pp_ema_ribbon-bc85
+2026-09-29 21:45:15 screen-ema_ribbon-tf5 done (1 ledger rows, 40s)
+2026-09-29 21:45:16 submitted screen-ema_ribbon-tf30 -> 20260929-214516-draft_pp_ema_ribbon-ae27
+2026-09-29 21:45:36 screen-ema_ribbon-tf15 done (1 ledger rows, 40s)
+2026-09-29 21:45:36 submitted screen-tema_slope-tf1 -> 20260929-214536-draft_pp_tema_slope-c44d
+2026-09-29 21:45:56 screen-ema_ribbon-tf30 done (1 ledger rows, 40s)
+2026-09-29 21:45:56 submitted screen-tema_slope-tf5 -> 20260929-214556-draft_pp_tema_slope-8a71
+2026-09-29 21:46:16 screen-tema_slope-tf1 done (1 ledger rows, 40s)
+2026-09-29 21:46:16 submitted screen-tema_slope-tf15 -> 20260929-214616-draft_pp_tema_slope-20d5
+2026-09-29 21:46:36 screen-tema_slope-tf5 done (1 ledger rows, 40s)
+2026-09-29 21:46:37 submitted screen-tema_slope-tf30 -> 20260929-214637-draft_pp_tema_slope-a2f8
+2026-09-29 21:46:57 screen-tema_slope-tf15 done (1 ledger rows, 40s)
+2026-09-29 21:46:57 submitted screen-ema_pullback-tf1 -> 20260929-214657-draft_pp_ema_pullback-fef9
+2026-09-29 21:47:17 screen-tema_slope-tf30 done (1 ledger rows, 40s)
+2026-09-29 21:47:17 submitted screen-ema_pullback-tf5 -> 20260929-214717-draft_pp_ema_pullback-4603
+2026-09-29 21:47:37 screen-ema_pullback-tf1 done (1 ledger rows, 40s)
+2026-09-29 21:47:37 submitted screen-ema_pullback-tf15 -> 20260929-214737-draft_pp_ema_pullback-b2f0
+2026-09-29 21:47:57 screen-ema_pullback-tf5 done (1 ledger rows, 40s)
+2026-09-29 21:47:57 submitted screen-ema_pullback-tf30 -> 20260929-214757-draft_pp_ema_pullback-4599
+2026-09-29 21:48:17 screen-ema_pullback-tf15 done (1 ledger rows, 40s)
+2026-09-29 21:48:18 submitted screen-supertrend-tf1 -> 20260929-214818-draft_pp_supertrend-33f6
+2026-09-29 21:48:38 screen-ema_pullback-tf30 done (1 ledger rows, 40s)
+2026-09-29 21:48:38 submitted screen-supertrend-tf5 -> 20260929-214838-draft_pp_supertrend-3660
+2026-09-29 21:48:58 screen-supertrend-tf1 done (1 ledger rows, 40s)
+2026-09-29 21:48:58 submitted screen-supertrend-tf15 -> 20260929-214858-draft_pp_supertrend-28a2
+2026-09-29 21:49:18 screen-supertrend-tf5 done (1 ledger rows, 40s)
+2026-09-29 21:49:18 submitted screen-supertrend-tf30 -> 20260929-214918-draft_pp_supertrend-1337
+2026-09-29 21:49:38 screen-supertrend-tf15 done (1 ledger rows, 40s)
+2026-09-29 21:49:38 screen-supertrend-tf30 done (1 ledger rows, 20s)
+2026-09-29 21:49:39 submitted screen-rsi2-tf1 -> 20260929-214939-draft_pp_rsi2-d2a1
+2026-09-29 21:49:39 submitted screen-rsi2-tf5 -> 20260929-214939-draft_pp_rsi2-627a
+2026-09-29 21:50:19 screen-rsi2-tf1 done (1 ledger rows, 40s)
+2026-09-29 21:50:19 submitted screen-rsi2-tf15 -> 20260929-215019-draft_pp_rsi2-17d2
+2026-09-29 21:50:39 screen-rsi2-tf5 done (1 ledger rows, 60s)
+2026-09-29 21:50:39 submitted screen-rsi2-tf30 -> 20260929-215039-draft_pp_rsi2-ffa8
+2026-09-29 21:50:59 screen-rsi2-tf15 done (1 ledger rows, 40s)
+2026-09-29 21:51:00 submitted screen-vwap_band-tf1 -> 20260929-215100-draft_pp_vwap_band-0f9a
+2026-09-29 21:51:20 screen-rsi2-tf30 done (1 ledger rows, 40s)
+2026-09-29 21:51:20 submitted screen-vwap_band-tf5 -> 20260929-215120-draft_pp_vwap_band-7f4a
+2026-09-29 21:51:40 screen-vwap_band-tf1 done (1 ledger rows, 40s)
+2026-09-29 21:51:40 submitted screen-vwap_band-tf15 -> 20260929-215140-draft_pp_vwap_band-0c53
+2026-09-29 21:52:00 screen-vwap_band-tf5 done (1 ledger rows, 40s)
+2026-09-29 21:52:00 submitted screen-vwap_band-tf30 -> 20260929-215200-draft_pp_vwap_band-ed56
+2026-09-29 21:52:20 screen-vwap_band-tf15 done (1 ledger rows, 40s)
+2026-09-29 21:52:21 submitted screen-vwap_z-tf1 -> 20260929-215221-draft_pp_vwap_z-50a1
+2026-09-29 21:52:41 screen-vwap_band-tf30 done (1 ledger rows, 40s)
+2026-09-29 21:52:41 submitted screen-vwap_z-tf5 -> 20260929-215241-draft_pp_vwap_z-b7b9
+2026-09-29 21:53:01 screen-vwap_z-tf1 done (1 ledger rows, 40s)
+2026-09-29 21:53:01 submitted screen-vwap_z-tf15 -> 20260929-215301-draft_pp_vwap_z-be79
+2026-09-29 21:53:21 screen-vwap_z-tf5 done (1 ledger rows, 40s)
+2026-09-29 21:53:21 submitted screen-vwap_z-tf30 -> 20260929-215321-draft_pp_vwap_z-3952
+2026-09-29 21:53:41 screen-vwap_z-tf15 done (1 ledger rows, 40s)
+2026-09-29 21:53:41 submitted screen-vwap_flip-tf1 -> 20260929-215341-draft_pp_vwap_flip-135f
+2026-09-29 21:54:01 screen-vwap_z-tf30 done (1 ledger rows, 40s)
+2026-09-29 21:54:02 submitted screen-vwap_flip-tf5 -> 20260929-215402-draft_pp_vwap_flip-576d
+2026-09-29 21:54:22 screen-vwap_flip-tf1 done (1 ledger rows, 40s)
+2026-09-29 21:54:22 submitted screen-vwap_flip-tf15 -> 20260929-215422-draft_pp_vwap_flip-5f25
+2026-09-29 21:54:42 screen-vwap_flip-tf5 done (1 ledger rows, 40s)
+2026-09-29 21:54:42 submitted screen-vwap_flip-tf30 -> 20260929-215442-draft_pp_vwap_flip-2271
+2026-09-29 21:55:02 screen-vwap_flip-tf15 done (1 ledger rows, 40s)
+2026-09-29 21:55:02 submitted screen-pinbar-tf1 -> 20260929-215502-draft_pp_pinbar-8982
+2026-09-29 21:55:22 screen-vwap_flip-tf30 done (1 ledger rows, 40s)
+2026-09-29 21:55:23 submitted screen-pinbar-tf5 -> 20260929-215523-draft_pp_pinbar-1940
+2026-09-29 21:55:43 screen-pinbar-tf1 done (1 ledger rows, 40s)
+2026-09-29 21:55:43 submitted screen-pinbar-tf15 -> 20260929-215543-draft_pp_pinbar-b58f
+2026-09-29 21:56:03 screen-pinbar-tf5 done (1 ledger rows, 40s)
+2026-09-29 21:56:03 screen-pinbar-tf15 done (1 ledger rows, 20s)
+2026-09-29 21:56:03 submitted screen-pinbar-tf30 -> 20260929-215603-draft_pp_pinbar-cfe2
+2026-09-29 21:56:03 submitted screen-sweep_rev-tf1 -> 20260929-215603-draft_pp_sweep_rev-7983
+2026-09-29 21:56:23 screen-pinbar-tf30 done (1 ledger rows, 20s)
+2026-09-29 21:56:24 submitted screen-sweep_rev-tf5 -> 20260929-215624-draft_pp_sweep_rev-952c
+2026-09-29 21:56:44 screen-sweep_rev-tf1 done (1 ledger rows, 40s)
+2026-09-29 21:56:44 submitted screen-sweep_rev-tf15 -> 20260929-215644-draft_pp_sweep_rev-414f
+2026-09-29 21:57:04 screen-sweep_rev-tf5 done (1 ledger rows, 40s)
+2026-09-29 21:57:04 submitted screen-sweep_rev-tf30 -> 20260929-215704-draft_pp_sweep_rev-4b3a
+2026-09-29 21:57:24 screen-sweep_rev-tf15 done (1 ledger rows, 40s)
+2026-09-29 21:57:24 submitted screen-ib-tf1 -> 20260929-215724-draft_pp_ib-e2cb
+2026-09-29 21:57:44 screen-sweep_rev-tf30 done (1 ledger rows, 40s)
+2026-09-29 21:57:45 submitted screen-ib-tf5 -> 20260929-215745-draft_pp_ib-238a
+2026-09-29 21:58:05 screen-ib-tf1 done (1 ledger rows, 40s)
+2026-09-29 21:58:05 submitted screen-ib-tf15 -> 20260929-215805-draft_pp_ib-fced
+2026-09-29 21:58:25 screen-ib-tf5 done (1 ledger rows, 40s)
+2026-09-29 21:58:25 submitted screen-ib-tf30 -> 20260929-215825-draft_pp_ib-76ec
+2026-09-29 21:58:45 screen-ib-tf15 done (1 ledger rows, 40s)
+2026-09-29 21:58:45 submitted screen-gap-tf1 -> 20260929-215845-draft_pp_gap-f593
+2026-09-29 21:59:05 screen-ib-tf30 done (1 ledger rows, 40s)
+2026-09-29 21:59:05 submitted screen-gap-tf5 -> 20260929-215905-draft_pp_gap-8936
+2026-09-29 21:59:26 screen-gap-tf1 done (1 ledger rows, 40s)
+2026-09-29 21:59:26 submitted screen-gap-tf15 -> 20260929-215926-draft_pp_gap-c8f8
+2026-09-29 21:59:46 screen-gap-tf5 done (1 ledger rows, 40s)
+2026-09-29 21:59:46 submitted screen-gap-tf30 -> 20260929-215946-draft_pp_gap-3fe5
+2026-09-29 22:00:06 screen-gap-tf15 done (1 ledger rows, 40s)
+2026-09-29 22:00:06 submitted screen-tod_drift-tf1 -> 20260929-220006-draft_pp_tod_drift-92a4
+2026-09-29 22:00:26 screen-gap-tf30 done (1 ledger rows, 40s)
+2026-09-29 22:00:26 submitted screen-tod_drift-tf5 -> 20260929-220026-draft_pp_tod_drift-ae47
+2026-09-29 22:00:46 screen-tod_drift-tf1 done (1 ledger rows, 40s)
+2026-09-29 22:00:46 screen-tod_drift-tf5 done (1 ledger rows, 20s)
+2026-09-29 22:00:47 submitted screen-tod_drift-tf15 -> 20260929-220047-draft_pp_tod_drift-c8a0
+2026-09-29 22:00:47 submitted screen-tod_drift-tf30 -> 20260929-220047-draft_pp_tod_drift-1bb0
+2026-09-29 22:01:27 screen-tod_drift-tf15 done (1 ledger rows, 40s)
+2026-09-29 22:01:27 submitted screen-lon_break-tf1 -> 20260929-220127-draft_pp_lon_break-762e
+2026-09-29 22:01:47 screen-tod_drift-tf30 done (1 ledger rows, 60s)
+2026-09-29 22:01:47 submitted screen-lon_break-tf5 -> 20260929-220147-draft_pp_lon_break-8a1a
+2026-09-29 22:02:07 screen-lon_break-tf1 done (1 ledger rows, 40s)
+2026-09-29 22:02:07 screen-lon_break-tf5 done (1 ledger rows, 20s)
+2026-09-29 22:02:08 submitted screen-lon_break-tf15 -> 20260929-220208-draft_pp_lon_break-f7e2
+2026-09-29 22:02:08 submitted screen-lon_break-tf30 -> 20260929-220208-draft_pp_lon_break-1df7
+2026-09-29 22:02:28 screen-lon_break-tf15 done (1 ledger rows, 20s)
+2026-09-29 22:02:28 submitted screen-first_bar_mom-tf1 -> 20260929-220228-draft_pp_first_bar_mom-edce
+2026-09-29 22:02:48 screen-lon_break-tf30 done (1 ledger rows, 40s)
+2026-09-29 22:02:48 submitted screen-first_bar_mom-tf5 -> 20260929-220248-draft_pp_first_bar_mom-3b0b
+2026-09-29 22:03:08 screen-first_bar_mom-tf1 done (1 ledger rows, 40s)
+2026-09-29 22:03:09 submitted screen-first_bar_mom-tf15 -> 20260929-220309-draft_pp_first_bar_mom-9010
+2026-09-29 22:03:29 screen-first_bar_mom-tf5 done (1 ledger rows, 40s)
+2026-09-29 22:03:29 submitted screen-first_bar_mom-tf30 -> 20260929-220329-draft_pp_first_bar_mom-8604
+2026-09-29 22:03:49 screen-first_bar_mom-tf15 done (1 ledger rows, 40s)
+2026-09-29 22:03:49 submitted screen-mid_fade-tf1 -> 20260929-220349-draft_pp_mid_fade-84ef
+2026-09-29 22:04:09 screen-first_bar_mom-tf30 done (1 ledger rows, 40s)
+2026-09-29 22:04:09 submitted screen-mid_fade-tf5 -> 20260929-220409-draft_pp_mid_fade-e40d
+2026-09-29 22:04:29 screen-mid_fade-tf1 done (1 ledger rows, 40s)
+2026-09-29 22:04:30 submitted screen-mid_fade-tf15 -> 20260929-220430-draft_pp_mid_fade-1d47
+2026-09-29 22:04:50 screen-mid_fade-tf5 done (1 ledger rows, 40s)
+2026-09-29 22:04:50 submitted screen-mid_fade-tf30 -> 20260929-220450-draft_pp_mid_fade-3d90
+2026-09-29 22:05:10 screen-mid_fade-tf15 done (1 ledger rows, 40s)
+2026-09-29 22:05:10 screen-mid_fade-tf30 done (1 ledger rows, 20s)
+2026-09-29 22:05:10 submitted ctrl-random-tf1-s1 -> 20260929-220510-draft_pp_random-f849
+2026-09-29 22:05:10 submitted ctrl-random-tf1-s2 -> 20260929-220510-draft_pp_random-2804
+2026-09-29 22:05:50 ctrl-random-tf1-s1 done (1 ledger rows, 40s)
+2026-09-29 22:05:51 submitted ctrl-random-tf1-s3 -> 20260929-220551-draft_pp_random-2682
+2026-09-29 22:06:11 ctrl-random-tf1-s2 done (1 ledger rows, 60s)
+2026-09-29 22:06:11 submitted ctrl-randomtod-tf1-s1 -> 20260929-220611-draft_pp_random-03b7
+2026-09-29 22:06:31 ctrl-random-tf1-s3 done (1 ledger rows, 40s)
+2026-09-29 22:06:31 ctrl-randomtod-tf1-s1 done (1 ledger rows, 20s)
+2026-09-29 22:06:31 submitted ctrl-random-tf5-s1 -> 20260929-220631-draft_pp_random-bb39
+2026-09-29 22:06:31 submitted ctrl-random-tf5-s2 -> 20260929-220631-draft_pp_random-68f9
+2026-09-29 22:07:11 ctrl-random-tf5-s1 done (1 ledger rows, 40s)
+2026-09-29 22:07:12 submitted ctrl-random-tf5-s3 -> 20260929-220712-draft_pp_random-3ebb
+2026-09-29 22:07:32 ctrl-random-tf5-s2 done (1 ledger rows, 60s)
+2026-09-29 22:07:32 submitted ctrl-randomtod-tf5-s1 -> 20260929-220732-draft_pp_random-d2de
+2026-09-29 22:07:52 ctrl-random-tf5-s3 done (1 ledger rows, 40s)
+2026-09-29 22:07:52 submitted ctrl-random-tf15-s1 -> 20260929-220752-draft_pp_random-cb47
+2026-09-29 22:08:12 ctrl-randomtod-tf5-s1 done (1 ledger rows, 40s)
+2026-09-29 22:08:13 submitted ctrl-random-tf15-s2 -> 20260929-220813-draft_pp_random-9eff
+2026-09-29 22:08:33 ctrl-random-tf15-s1 done (1 ledger rows, 40s)
+2026-09-29 22:08:33 submitted ctrl-random-tf15-s3 -> 20260929-220833-draft_pp_random-b507
+2026-09-29 22:08:53 ctrl-random-tf15-s2 done (1 ledger rows, 40s)
+2026-09-29 22:08:53 submitted ctrl-randomtod-tf15-s1 -> 20260929-220853-draft_pp_random-b565
+2026-09-29 22:09:13 ctrl-random-tf15-s3 done (1 ledger rows, 40s)
+2026-09-29 22:09:13 submitted ctrl-random-tf30-s1 -> 20260929-220913-draft_pp_random-a6b8
+2026-09-29 22:09:33 ctrl-randomtod-tf15-s1 done (1 ledger rows, 40s)
+2026-09-29 22:09:33 ctrl-random-tf30-s1 done (1 ledger rows, 20s)
+2026-09-29 22:09:34 submitted ctrl-random-tf30-s2 -> 20260929-220934-draft_pp_random-44ad
+2026-09-29 22:09:34 submitted ctrl-random-tf30-s3 -> 20260929-220934-draft_pp_random-8700
+2026-09-29 22:09:54 ctrl-random-tf30-s2 done (1 ledger rows, 20s)
+2026-09-29 22:09:54 submitted ctrl-randomtod-tf30-s1 -> 20260929-220954-draft_pp_random-58ec
+2026-09-29 22:10:14 ctrl-random-tf30-s3 done (1 ledger rows, 40s)
+2026-09-29 22:10:34 ctrl-randomtod-tf30-s1 done (1 ledger rows, 40s)
+2026-09-29 22:16:00 submitted hm-donchian-tf15 -> 20260929-221600-draft_pp_donchian-d8e4
+2026-09-29 22:16:00 submitted hm-donchian-tf30 -> 20260929-221600-draft_pp_donchian-f109
+another hb.py run is already active (see hb.pid)
+2026-09-29 22:16:15 hb driver down
+2026-09-29 22:16:35 hb driver up
+2026-09-29 22:24:35 hm-donchian-tf15 done (48 ledger rows, 516s)
+2026-09-29 22:24:36 submitted hmctrl-random-tf1-s11 -> 20260929-222436-draft_pp_random-1c4b
+2026-09-29 22:29:56 hm-donchian-tf30 done (36 ledger rows, 836s)
+2026-09-29 22:29:57 submitted hmctrl-random-tf5-s11 -> 20260929-222957-draft_pp_random-73ab
+2026-09-29 22:32:17 hmctrl-random-tf1-s11 done (12 ledger rows, 461s)
+2026-09-29 22:32:17 submitted hmctrl-random-tf15-s11 -> 20260929-223217-draft_pp_random-d619
+2026-09-29 22:34:57 hmctrl-random-tf5-s11 done (12 ledger rows, 301s)
+2026-09-29 22:34:58 submitted hmctrl-random-tf30-s11 -> 20260929-223458-draft_pp_random-f298
+2026-09-29 22:37:18 hmctrl-random-tf15-s11 done (12 ledger rows, 301s)
+2026-09-29 22:37:18 submitted ctrl2-random-tf1-s11 -> 20260929-223718-draft_pp_random-8875
+2026-09-29 22:37:58 ctrl2-random-tf1-s11 done (1 ledger rows, 40s)
+2026-09-29 22:37:58 submitted ctrl2-random-tf1-s12 -> 20260929-223758-draft_pp_random-d9bf
+2026-09-29 22:38:38 ctrl2-random-tf1-s12 done (1 ledger rows, 40s)
+2026-09-29 22:38:39 submitted ctrl2-random-tf1-s13 -> 20260929-223839-draft_pp_random-1943
+2026-09-29 22:39:19 ctrl2-random-tf1-s13 done (1 ledger rows, 40s)
+2026-09-29 22:39:19 submitted ctrl2-randomtod-tf1-s11 -> 20260929-223919-draft_pp_random-9426
+2026-09-29 22:39:39 ctrl2-randomtod-tf1-s11 done (1 ledger rows, 20s)
+2026-09-29 22:39:39 submitted ctrl2-randomtod-tf1-s12 -> 20260929-223939-draft_pp_random-674e
+2026-09-29 22:40:19 hmctrl-random-tf30-s11 done (12 ledger rows, 322s)
+2026-09-29 22:40:19 ctrl2-randomtod-tf1-s12 done (1 ledger rows, 40s)
+2026-09-29 22:40:19 submitted ctrl2-random-tf5-s11 -> 20260929-224019-draft_pp_random-996f
+2026-09-29 22:40:20 submitted ctrl2-random-tf5-s12 -> 20260929-224020-draft_pp_random-3526
+2026-09-29 22:41:00 ctrl2-random-tf5-s11 done (1 ledger rows, 40s)
+2026-09-29 22:41:00 submitted ctrl2-random-tf5-s13 -> 20260929-224100-draft_pp_random-aa99
+2026-09-29 22:41:20 ctrl2-random-tf5-s12 done (1 ledger rows, 60s)
+2026-09-29 22:41:20 submitted ctrl2-randomtod-tf5-s11 -> 20260929-224120-draft_pp_random-994a
+2026-09-29 22:41:40 ctrl2-random-tf5-s13 done (1 ledger rows, 40s)
+2026-09-29 22:41:41 submitted ctrl2-randomtod-tf5-s12 -> 20260929-224141-draft_pp_random-5943
+2026-09-29 22:42:01 ctrl2-randomtod-tf5-s11 done (1 ledger rows, 40s)
+2026-09-29 22:42:01 submitted ctrl2-random-tf15-s11 -> 20260929-224201-draft_pp_random-c636
+2026-09-29 22:42:21 ctrl2-randomtod-tf5-s12 done (1 ledger rows, 40s)
+2026-09-29 22:42:21 submitted ctrl2-random-tf15-s12 -> 20260929-224221-draft_pp_random-2c81
+2026-09-29 22:42:41 ctrl2-random-tf15-s11 done (1 ledger rows, 40s)
+2026-09-29 22:42:41 submitted ctrl2-random-tf15-s13 -> 20260929-224241-draft_pp_random-1947
+2026-09-29 22:43:02 ctrl2-random-tf15-s12 done (1 ledger rows, 40s)
+2026-09-29 22:43:02 submitted ctrl2-randomtod-tf15-s11 -> 20260929-224302-draft_pp_random-4ad4
+2026-09-29 22:43:42 ctrl2-random-tf15-s13 done (1 ledger rows, 60s)
+2026-09-29 22:43:42 submitted ctrl2-randomtod-tf15-s12 -> 20260929-224342-draft_pp_random-5526
+2026-09-29 22:44:02 ctrl2-randomtod-tf15-s11 done (1 ledger rows, 60s)
+2026-09-29 22:44:02 submitted ctrl2-random-tf30-s11 -> 20260929-224402-draft_pp_random-f444
+2026-09-29 22:44:22 ctrl2-randomtod-tf15-s12 done (1 ledger rows, 40s)
+2026-09-29 22:44:23 submitted ctrl2-random-tf30-s12 -> 20260929-224423-draft_pp_random-9c04
+2026-09-29 22:44:43 ctrl2-random-tf30-s11 done (1 ledger rows, 40s)
+2026-09-29 22:44:43 submitted ctrl2-random-tf30-s13 -> 20260929-224443-draft_pp_random-fc37
+2026-09-29 22:45:03 ctrl2-random-tf30-s12 done (1 ledger rows, 40s)
+2026-09-29 22:45:03 submitted ctrl2-randomtod-tf30-s11 -> 20260929-224503-draft_pp_random-9844
+2026-09-29 22:45:23 ctrl2-random-tf30-s13 done (1 ledger rows, 40s)
+2026-09-29 22:45:24 submitted ctrl2-randomtod-tf30-s12 -> 20260929-224524-draft_pp_random-4401
+2026-09-29 22:45:44 ctrl2-randomtod-tf30-s11 done (1 ledger rows, 40s)
+2026-09-29 22:45:44 submitted hm-tod_drift-tf5 -> 20260929-224544-draft_pp_tod_drift-63f8
+2026-09-29 22:46:04 ctrl2-randomtod-tf30-s12 done (1 ledger rows, 40s)
+2026-09-29 22:46:04 submitted hm-ib-tf30 -> 20260929-224604-draft_pp_ib-cc23
+2026-09-29 22:50:05 hm-tod_drift-tf5 done (24 ledger rows, 261s)
+2026-09-29 22:50:05 submitted hm-ib-tf15 -> 20260929-225005-draft_pp_ib-a70e
+2026-09-29 22:55:46 hm-ib-tf30 done (24 ledger rows, 582s)
+2026-09-29 22:55:46 submitted hm-vwap_z-tf5 -> 20260929-225546-draft_pp_vwap_z-d86a
+2026-09-29 23:01:07 hm-ib-tf15 done (24 ledger rows, 662s)
+2026-09-29 23:01:08 submitted hm-vwap_band-tf5 -> 20260929-230108-draft_pp_vwap_band-0ec3
+2026-09-29 23:11:49 hm-vwap_z-tf5 done (48 ledger rows, 963s)
+2026-09-29 23:11:49 submitted hm-first_bar_mom-tf15 -> 20260929-231149-draft_pp_first_bar_mom-f556
+2026-09-29 23:19:30 hm-vwap_band-tf5 done (48 ledger rows, 1103s)
+2026-09-29 23:19:30 submitted hm-orb-tf5 -> 20260929-231930-draft_pp_orb-5276
+2026-09-29 23:25:11 hm-first_bar_mom-tf15 done (36 ledger rows, 802s)
+2026-09-29 23:25:11 submitted hm-vwap_flip-tf15 -> 20260929-232511-draft_pp_vwap_flip-5b6a
+2026-09-29 23:31:32 hm-orb-tf5 done (36 ledger rows, 722s)
+2026-09-29 23:31:32 submitted hm-rsi2-tf5 -> 20260929-233132-draft_pp_rsi2-65d8
+2026-09-29 23:37:13 hm-vwap_flip-tf15 done (36 ledger rows, 722s)
+2026-09-29 23:37:14 submitted hm-tema_slope-tf5 -> 20260929-233713-draft_pp_tema_slope-3261
+2026-09-29 23:44:34 hm-rsi2-tf5 done (36 ledger rows, 782s)
+2026-09-29 23:44:35 submitted hm-ema_pullback-tf5 -> 20260929-234435-draft_pp_ema_pullback-a3a3
+2026-09-29 23:50:55 hm-tema_slope-tf5 done (36 ledger rows, 822s)
+2026-09-29 23:50:56 submitted hmctrl-random-tf1-s12 -> 20260929-235056-draft_pp_random-972e
+2026-09-29 23:55:16 hm-ema_pullback-tf5 done (24 ledger rows, 642s)
+2026-09-29 23:55:17 submitted hmctrl-random-tf5-s12 -> 20260929-235517-draft_pp_random-5d13
+2026-09-29 23:57:17 hmctrl-random-tf1-s12 done (12 ledger rows, 381s)
+2026-09-29 23:57:17 submitted hmctrl-random-tf15-s12 -> 20260929-235717-draft_pp_random-23a8
+2026-09-29 23:59:57 hmctrl-random-tf5-s12 done (12 ledger rows, 281s)
+2026-09-29 23:59:58 submitted hmctrl-random-tf30-s12 -> 20260929-235958-draft_pp_random-3a0d
+2026-09-30 00:02:18 hmctrl-random-tf15-s12 done (12 ledger rows, 301s)
+2026-09-30 00:02:18 submitted hmctrl-random-tf1-s13 -> 20260930-000218-draft_pp_random-7b47
+2026-09-30 00:04:39 hmctrl-random-tf30-s12 done (12 ledger rows, 281s)
+2026-09-30 00:04:39 submitted hmctrl-random-tf5-s13 -> 20260930-000439-draft_pp_random-8171
+2026-09-30 00:06:39 hmctrl-random-tf1-s13 done (12 ledger rows, 261s)
+2026-09-30 00:06:40 submitted hmctrl-random-tf15-s13 -> 20260930-000640-draft_pp_random-d847
+2026-09-30 00:09:00 hmctrl-random-tf5-s13 done (12 ledger rows, 261s)
+2026-09-30 00:09:00 submitted hmctrl-random-tf30-s13 -> 20260930-000900-draft_pp_random-56f3
+2026-09-30 00:11:41 hmctrl-random-tf15-s13 done (12 ledger rows, 301s)
+2026-09-30 00:13:41 hmctrl-random-tf30-s13 done (12 ledger rows, 280s)
+2026-09-30 00:15:26 submitted hm2-straddle-tf30 -> 20260930-001526-draft_pp_straddle-67c2
+2026-09-30 00:15:27 submitted hm2-squeeze-tf1 -> 20260930-001527-draft_pp_squeeze-efd0
+2026-09-30 00:23:23 hm2-straddle-tf30 done (36 ledger rows, 476s)
+2026-09-30 00:23:23 submitted hm2-squeeze-tf5 -> 20260930-002323-draft_pp_squeeze-b809
+2026-09-30 00:39:48 hm2-squeeze-tf1 done (36 ledger rows, 1461s)
+2026-09-30 00:39:51 submitted hm2-ema_ribbon-tf1 -> 20260930-003950-draft_pp_ema_ribbon-0037
+2026-09-30 09:11:39 hm2-squeeze-tf5 done (36 ledger rows, 1960s)
+2026-09-30 09:11:40 submitted hm2-supertrend-tf5 -> 20260930-091140-draft_pp_supertrend-d06f
+2026-09-30 09:17:00 hm2-ema_ribbon-tf1 done (24 ledger rows, 1294s)
+2026-09-30 09:17:01 submitted hm2-pinbar-tf5 -> 20260930-091701-draft_pp_pinbar-a475
+2026-09-30 09:22:56 hb driver up
+2026-09-30 09:22:56 hb driver down
+2026-09-30 09:35:37 hm2-supertrend-tf5 done (24 ledger rows, 1437s)
+2026-09-30 09:36:03 BAD JOB hmctrl-randomtod-tf5-s11: 400: axes: 2 or 3 parameters, each {key, values}
+2026-09-30 09:36:04 BAD JOB hmctrl-randomtod-tf15-s11: 400: axes: 2 or 3 parameters, each {key, values}
+2026-09-30 09:36:04 BAD JOB hmctrl-randomtod-tf30-s11: 400: axes: 2 or 3 parameters, each {key, values}
+2026-09-30 09:36:05 BAD JOB hmctrl-randomtod-tf5-s12: 400: axes: 2 or 3 parameters, each {key, values}
+2026-09-30 09:36:06 BAD JOB hmctrl-randomtod-tf15-s12: 400: axes: 2 or 3 parameters, each {key, values}
+2026-09-30 09:36:06 BAD JOB hmctrl-randomtod-tf30-s12: 400: axes: 2 or 3 parameters, each {key, values}
+2026-09-30 09:36:07 BAD JOB hmctrl-randomtod-tf5-s13: 400: axes: 2 or 3 parameters, each {key, values}
+2026-09-30 09:36:08 BAD JOB hmctrl-randomtod-tf15-s13: 400: axes: 2 or 3 parameters, each {key, values}
+2026-09-30 09:36:09 BAD JOB hmctrl-randomtod-tf30-s13: 400: axes: 2 or 3 parameters, each {key, values}
+2026-09-30 09:36:09 submitted hm2-sweep_rev-tf5 -> 20260930-093609-draft_pp_sweep_rev-64e2
+2026-09-30 09:42:40 hm2-pinbar-tf5 done (36 ledger rows, 1540s)
+2026-09-30 09:42:41 submitted hm2-gap-tf15 -> 20260930-094241-draft_pp_gap-8337
+2026-09-30 09:48:42 hm2-sweep_rev-tf5 done (36 ledger rows, 753s)
+2026-09-30 09:48:42 submitted hm2-lon_break-tf5 -> 20260930-094842-draft_pp_lon_break-ee12
+2026-09-30 09:51:23 hm2-gap-tf15 done (24 ledger rows, 522s)
+2026-09-30 09:51:23 submitted hm2-tema_slope-tf1 -> 20260930-095123-draft_pp_tema_slope-f143
+2026-09-30 09:55:43 hm2-lon_break-tf5 done (36 ledger rows, 421s)
+2026-09-30 09:55:44 submitted hm2-rsi2-tf1 -> 20260930-095544-draft_pp_rsi2-2f5b
+2026-09-30 10:04:25 hm2-tema_slope-tf1 done (36 ledger rows, 782s)
+2026-09-30 10:04:27 submitted hm2-vwap_flip-tf1 -> 20260930-100427-draft_pp_vwap_flip-d5c5
+2026-09-30 10:12:28 hm2-rsi2-tf1 done (36 ledger rows, 1004s)
+2026-09-30 10:12:28 submitted hm2-vwap_flip-tf5 -> 20260930-101228-draft_pp_vwap_flip-333d
+2026-09-30 10:19:49 hm2-vwap_flip-tf1 done (36 ledger rows, 922s)
+2026-09-30 10:19:50 submitted hm2-ema_pullback-tf1 -> 20260930-101950-draft_pp_ema_pullback-5fd3
+2026-09-30 10:24:50 hm2-vwap_flip-tf5 done (36 ledger rows, 742s)
+2026-09-30 10:24:51 submitted hm2-donchian-tf1 -> 20260930-102451-draft_pp_donchian-310b
+2026-09-30 10:28:11 hm2-ema_pullback-tf1 done (24 ledger rows, 502s)
+2026-09-30 10:28:12 submitted hm2-donchian-tf5 -> 20260930-102812-draft_pp_donchian-d3c5
+2026-09-30 10:35:53 hm2-donchian-tf1 done (36 ledger rows, 662s)
+2026-09-30 10:35:54 submitted hm2-tod_drift-tf15 -> 20260930-103554-draft_pp_tod_drift-e815
+2026-09-30 10:43:55 hm2-donchian-tf5 done (36 ledger rows, 943s)
+2026-09-30 10:43:56 submitted hm2-tod_drift-tf30 -> 20260930-104356-draft_pp_tod_drift-63a7
+2026-09-30 10:49:16 hm2-tod_drift-tf15 done (24 ledger rows, 802s)
+2026-09-30 10:49:17 submitted fp-rsi2-tf5 -> 20260930-104917-draft_pp_rsi2-aba6
+2026-09-30 10:54:38 hm2-tod_drift-tf30 done (24 ledger rows, 642s)
+2026-09-30 10:54:39 submitted fp-ema_pullback-tf5 -> 20260930-105439-draft_pp_ema_pullback-991e
+2026-09-30 10:57:59 fp-rsi2-tf5 done (16 ledger rows, 522s)
+2026-09-30 10:58:00 submitted fp-tema_slope-tf5 -> 20260930-105800-draft_pp_tema_slope-0358
+2026-09-30 11:01:00 fp-ema_pullback-tf5 done (16 ledger rows, 382s)
+2026-09-30 11:01:01 submitted fp-vwap_flip-tf1 -> 20260930-110101-draft_pp_vwap_flip-f257
+2026-09-30 11:04:21 fp-tema_slope-tf5 done (16 ledger rows, 382s)
+2026-09-30 11:04:22 submitted fp-vwap_flip-tf5 -> 20260930-110422-draft_pp_vwap_flip-1c40
+2026-09-30 11:07:43 fp-vwap_flip-tf1 done (16 ledger rows, 402s)
+2026-09-30 11:07:43 submitted fp-tod_drift-tf5 -> 20260930-110743-draft_pp_tod_drift-f3e5
+2026-09-30 11:10:24 fp-vwap_flip-tf5 done (16 ledger rows, 362s)
+2026-09-30 11:10:25 submitted fp-orb-tf5 -> 20260930-111025-draft_pp_orb-0226
+2026-09-30 11:13:25 fp-tod_drift-tf5 done (16 ledger rows, 342s)
+2026-09-30 11:13:26 submitted fp-straddle-tf30 -> 20260930-111326-draft_pp_straddle-8a10
+2026-09-30 11:16:26 fp-orb-tf5 done (16 ledger rows, 361s)
+2026-09-30 11:16:27 submitted fp-donchian-tf15 -> 20260930-111627-draft_pp_donchian-cd3c
+2026-09-30 11:19:27 fp-straddle-tf30 done (16 ledger rows, 362s)
+2026-09-30 11:19:28 submitted fpctrl-random-tf1-s21 -> 20260930-111928-draft_pp_random-9790
+2026-09-30 11:22:29 fp-donchian-tf15 done (16 ledger rows, 362s)
+2026-09-30 11:22:30 submitted fpctrl-random-tf1-s22 -> 20260930-112230-draft_pp_random-9411
+2026-09-30 11:25:50 fpctrl-random-tf1-s21 done (16 ledger rows, 382s)
+2026-09-30 11:25:51 submitted fpctrl-random-tf1-s23 -> 20260930-112551-draft_pp_random-72f3
+2026-09-30 11:29:12 fpctrl-random-tf1-s22 done (16 ledger rows, 402s)
+2026-09-30 11:29:13 submitted fpctrl-random-tf5-s21 -> 20260930-112913-draft_pp_random-2ef5
+2026-09-30 11:32:53 fpctrl-random-tf1-s23 done (16 ledger rows, 422s)
+2026-09-30 11:32:54 submitted fpctrl-random-tf5-s22 -> 20260930-113254-draft_pp_random-6e2b
+2026-09-30 11:35:54 fpctrl-random-tf5-s21 done (16 ledger rows, 402s)
+2026-09-30 11:35:55 submitted fpctrl-random-tf5-s23 -> 20260930-113555-draft_pp_random-d1da
+2026-09-30 11:39:16 fpctrl-random-tf5-s22 done (16 ledger rows, 382s)
+2026-09-30 11:39:16 submitted fpctrl-random-tf30-s21 -> 20260930-113916-draft_pp_random-b6f5
+2026-09-30 11:42:37 fpctrl-random-tf5-s23 done (16 ledger rows, 402s)
+2026-09-30 11:42:38 submitted fpctrl-random-tf30-s22 -> 20260930-114238-draft_pp_random-c4cf
+2026-09-30 11:45:38 fpctrl-random-tf30-s21 done (16 ledger rows, 382s)
+2026-09-30 11:45:39 submitted fpctrl-random-tf30-s23 -> 20260930-114539-draft_pp_random-b549
+2026-09-30 11:48:39 fpctrl-random-tf30-s22 done (16 ledger rows, 362s)
+2026-09-30 11:48:40 submitted rtod-tf5-x6-s11 -> 20260930-114840-draft_pp_random-6fb8
+2026-09-30 11:49:20 rtod-tf5-x6-s11 done (1 ledger rows, 40s)
+2026-09-30 11:49:21 submitted rtod-tf5-x12-s11 -> 20260930-114921-draft_pp_random-dc10
+2026-09-30 11:50:01 rtod-tf5-x12-s11 done (1 ledger rows, 40s)
+2026-09-30 11:50:02 submitted rtod-tf5-x24-s11 -> 20260930-115002-draft_pp_random-4e83
+2026-09-30 11:50:42 rtod-tf5-x24-s11 done (1 ledger rows, 40s)
+2026-09-30 11:50:42 submitted rtod-tf15-x6-s11 -> 20260930-115042-draft_pp_random-9427
+2026-09-30 11:51:02 fpctrl-random-tf30-s23 done (16 ledger rows, 323s)
+2026-09-30 11:51:03 submitted rtod-tf15-x12-s11 -> 20260930-115103-draft_pp_random-ab5d
+2026-09-30 11:51:23 rtod-tf15-x6-s11 done (1 ledger rows, 40s)
+2026-09-30 11:51:23 rtod-tf15-x12-s11 done (1 ledger rows, 20s)
+2026-09-30 11:51:23 submitted rtod-tf15-x24-s11 -> 20260930-115123-draft_pp_random-acd6
+2026-09-30 11:51:24 submitted rtod-tf30-x6-s11 -> 20260930-115124-draft_pp_random-4a95
+2026-09-30 11:51:44 rtod-tf15-x24-s11 done (1 ledger rows, 20s)
+2026-09-30 11:51:44 submitted rtod-tf30-x12-s11 -> 20260930-115144-draft_pp_random-594a
+2026-09-30 11:52:04 rtod-tf30-x6-s11 done (1 ledger rows, 40s)
+2026-09-30 11:52:04 rtod-tf30-x12-s11 done (1 ledger rows, 20s)
+2026-09-30 11:52:05 submitted rtod-tf30-x24-s11 -> 20260930-115205-draft_pp_random-abe7
+2026-09-30 11:52:05 submitted rtod-tf5-x6-s12 -> 20260930-115205-draft_pp_random-623b
+2026-09-30 11:52:25 rtod-tf30-x24-s11 done (1 ledger rows, 20s)
+2026-09-30 11:52:25 submitted rtod-tf5-x12-s12 -> 20260930-115225-draft_pp_random-424f
+2026-09-30 11:52:45 rtod-tf5-x6-s12 done (1 ledger rows, 40s)
+2026-09-30 11:52:45 rtod-tf5-x12-s12 done (1 ledger rows, 20s)
+2026-09-30 11:52:46 submitted rtod-tf5-x24-s12 -> 20260930-115246-draft_pp_random-d78f
+2026-09-30 11:52:46 submitted rtod-tf15-x6-s12 -> 20260930-115246-draft_pp_random-1f35
+2026-09-30 11:53:06 rtod-tf5-x24-s12 done (1 ledger rows, 20s)
+2026-09-30 11:53:07 submitted rtod-tf15-x12-s12 -> 20260930-115307-draft_pp_random-27aa
+2026-09-30 11:53:27 rtod-tf15-x6-s12 done (1 ledger rows, 40s)
+2026-09-30 11:53:27 rtod-tf15-x12-s12 done (1 ledger rows, 20s)
+2026-09-30 11:53:27 submitted rtod-tf15-x24-s12 -> 20260930-115327-draft_pp_random-10d1
+2026-09-30 11:53:28 submitted rtod-tf30-x6-s12 -> 20260930-115328-draft_pp_random-051a
+2026-09-30 11:53:48 rtod-tf15-x24-s12 done (1 ledger rows, 20s)
+2026-09-30 11:53:48 submitted rtod-tf30-x12-s12 -> 20260930-115348-draft_pp_random-fd9d
+2026-09-30 11:54:08 rtod-tf30-x6-s12 done (1 ledger rows, 40s)
+2026-09-30 11:54:08 submitted rtod-tf30-x24-s12 -> 20260930-115408-draft_pp_random-ad04
+2026-09-30 11:54:29 rtod-tf30-x12-s12 done (1 ledger rows, 40s)
+2026-09-30 11:54:29 rtod-tf30-x24-s12 done (1 ledger rows, 20s)
+2026-09-30 11:54:29 submitted rtod-tf5-x6-s13 -> 20260930-115429-draft_pp_random-e25e
+2026-09-30 11:54:29 submitted rtod-tf5-x12-s13 -> 20260930-115429-draft_pp_random-0162
+2026-09-30 11:54:49 rtod-tf5-x6-s13 done (1 ledger rows, 20s)
+2026-09-30 11:54:50 submitted rtod-tf5-x24-s13 -> 20260930-115450-draft_pp_random-55f9
+2026-09-30 11:55:10 rtod-tf5-x12-s13 done (1 ledger rows, 40s)
+2026-09-30 11:55:10 rtod-tf5-x24-s13 done (1 ledger rows, 20s)
+2026-09-30 11:55:10 submitted rtod-tf15-x6-s13 -> 20260930-115510-draft_pp_random-8fa0
+2026-09-30 11:55:11 submitted rtod-tf15-x12-s13 -> 20260930-115511-draft_pp_random-10fa
+2026-09-30 11:55:31 rtod-tf15-x6-s13 done (1 ledger rows, 20s)
+2026-09-30 11:55:31 submitted rtod-tf15-x24-s13 -> 20260930-115531-draft_pp_random-1030
+2026-09-30 11:55:51 rtod-tf15-x12-s13 done (1 ledger rows, 40s)
+2026-09-30 11:55:52 submitted rtod-tf30-x6-s13 -> 20260930-115552-draft_pp_random-cc39
+2026-09-30 11:56:12 rtod-tf15-x24-s13 done (1 ledger rows, 40s)
+2026-09-30 11:56:12 rtod-tf30-x6-s13 done (1 ledger rows, 20s)
+2026-09-30 11:56:12 submitted rtod-tf30-x12-s13 -> 20260930-115612-draft_pp_random-6979
+2026-09-30 11:56:13 submitted rtod-tf30-x24-s13 -> 20260930-115613-draft_pp_random-0c1b
+2026-09-30 11:56:33 rtod-tf30-x12-s13 done (1 ledger rows, 20s)
+2026-09-30 11:56:53 rtod-tf30-x24-s13 done (1 ledger rows, 40s)
+2026-09-30 12:51:14 submitted wf-orb-tf5-nyam -> 20260930-125114-draft_pp_orb-2b6c
+2026-09-30 12:51:15 submitted wf-tema_slope-tf5-london -> 20260930-125115-draft_pp_tema_slope-31de
+2026-09-30 12:55:01 wf-orb-tf5-nyam done (1 ledger rows, 226s)
+2026-09-30 12:55:02 submitted wf-vwap_band-tf5-london -> 20260930-125502-draft_pp_vwap_band-55c5
+2026-09-30 12:59:42 wf-tema_slope-tf5-london done (1 ledger rows, 507s)
+2026-09-30 12:59:44 submitted wf-donchian-tf15-pm -> 20260930-125944-draft_pp_donchian-eae1
+2026-09-30 13:07:45 wf-vwap_band-tf5-london done (1 ledger rows, 763s)
+2026-09-30 13:07:47 submitted wf-donchian-tf30-nyam -> 20260930-130747-draft_pp_donchian-a3a8
+2026-09-30 13:15:48 wf-donchian-tf15-pm done (1 ledger rows, 964s)
+2026-09-30 13:15:50 submitted wf-first_bar_mom-tf15-nyam -> 20260930-131550-draft_pp_first_bar_mom-51f0
+2026-09-30 13:22:11 wf-donchian-tf30-nyam done (1 ledger rows, 864s)
+2026-09-30 13:22:13 submitted wf-orb-tf5-mid -> 20260930-132213-draft_pp_orb-1e2f
+2026-09-30 13:28:34 wf-first_bar_mom-tf15-nyam done (1 ledger rows, 764s)
+2026-09-30 13:28:35 submitted wf-rsi2-tf1-mid -> 20260930-132835-draft_pp_rsi2-d2b8
+2026-09-30 13:35:16 wf-orb-tf5-mid done (1 ledger rows, 784s)
+2026-09-30 13:41:57 wf-rsi2-tf1-mid done (1 ledger rows, 802s)
+2026-09-30 16:39:50 submitted wf-straddle-tf30-nyam -> 20260930-163950-draft_pp_straddle-69eb
+2026-09-30 16:39:52 submitted wf-straddle-tf30-pm -> 20260930-163952-draft_pp_straddle-e1d5
+2026-09-30 16:46:53 wf-straddle-tf30-nyam done (1 ledger rows, 422s)
+2026-09-30 16:46:54 submitted wf-donchian-tf5-pm -> 20260930-164654-draft_pp_donchian-d1ed
+2026-09-30 16:53:55 wf-straddle-tf30-pm done (1 ledger rows, 843s)
+2026-09-30 16:53:57 submitted wf-tod_drift-tf5-mid -> 20260930-165357-draft_pp_tod_drift-6c6f
+2026-09-30 17:00:38 wf-donchian-tf5-pm done (1 ledger rows, 824s)
+2026-09-30 17:00:40 submitted wf-squeeze-tf5-mid -> 20260930-170040-draft_pp_squeeze-95b9
+2026-09-30 17:05:21 wf-tod_drift-tf5-mid done (1 ledger rows, 683s)
+2026-09-30 17:05:23 submitted wf-orb-tf5-nyam-fp -> 20260930-170523-draft_pp_orb-ecbd
+2026-09-30 17:05:58 hb driver down
+2026-09-30 17:05:58 pilots: nq=/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-09-29, es=/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-09-30-es
+2026-09-30 17:05:58 hb driver up
+2026-09-30 17:11:38 wf-squeeze-tf5-mid done (1 ledger rows, 658s)
+2026-09-30 17:11:40 submitted wf-tod_drift-tf5-mid-fp -> 20260930-171140-draft_pp_tod_drift-07c4
+2026-09-30 17:12:00 hb driver down
+(eval):1: command not found: setsid
+2026-09-30 17:17:12 pilots: nq=/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-09-29, es=/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-09-30-es
+2026-09-30 17:17:12 hb driver up
+2026-09-30 17:17:12 wf-orb-tf5-nyam-fp done (1 ledger rows, 709s)
+2026-09-30 17:17:12 wf-tod_drift-tf5-mid-fp done (1 ledger rows, 332s)
+2026-09-30 17:17:13 submitted es:smoke-orb -> 20260930-171713-draft_pp_es_orb-4e43
+2026-09-30 17:17:13 submitted es:smoke-straddle -> 20260930-171713-draft_pp_es_straddle-2fe7
+2026-09-30 17:17:14 submitted es:smoke-donchian -> 20260930-171714-draft_pp_es_donchian-b5cc
+2026-09-30 17:17:15 submitted es:smoke-squeeze -> 20260930-171715-draft_pp_es_squeeze-050a
+2026-09-30 17:17:35 es:smoke-orb done (1 ledger rows, 22s)
+2026-09-30 17:17:35 es:smoke-straddle done (1 ledger rows, 21s)
+2026-09-30 17:17:35 es:smoke-donchian done (1 ledger rows, 21s)
+2026-09-30 17:17:35 es:smoke-squeeze done (1 ledger rows, 20s)
+2026-09-30 17:17:35 submitted es:smoke-ema_ribbon -> 20260930-171735-draft_pp_es_ema_ribbon-8063
+2026-09-30 17:17:36 submitted es:smoke-tema_slope -> 20260930-171736-draft_pp_es_tema_slope-1fc1
+2026-09-30 17:17:37 submitted es:smoke-ema_pullback -> 20260930-171737-draft_pp_es_ema_pullback-74af
+2026-09-30 17:17:37 submitted es:smoke-supertrend -> 20260930-171737-draft_pp_es_supertrend-baac
+2026-09-30 17:17:57 es:smoke-ema_ribbon done (1 ledger rows, 22s)
+2026-09-30 17:17:57 es:smoke-tema_slope done (1 ledger rows, 21s)
+2026-09-30 17:17:57 es:smoke-ema_pullback done (1 ledger rows, 21s)
+2026-09-30 17:17:57 es:smoke-supertrend done (1 ledger rows, 20s)
+2026-09-30 17:17:58 submitted es:smoke-rsi2 -> 20260930-171758-draft_pp_es_rsi2-8af1
+2026-09-30 17:17:59 submitted es:smoke-vwap_band -> 20260930-171759-draft_pp_es_vwap_band-b45b
+2026-09-30 17:17:59 submitted es:smoke-vwap_z -> 20260930-171759-draft_pp_es_vwap_z-c4ce
+2026-09-30 17:18:00 submitted es:smoke-vwap_flip -> 20260930-171800-draft_pp_es_vwap_flip-5ead
+2026-09-30 17:18:20 es:smoke-rsi2 done (1 ledger rows, 22s)
+2026-09-30 17:18:20 es:smoke-vwap_band done (1 ledger rows, 21s)
+2026-09-30 17:18:20 es:smoke-vwap_z done (1 ledger rows, 21s)
+2026-09-30 17:18:20 es:smoke-vwap_flip done (1 ledger rows, 20s)
+2026-09-30 17:18:21 submitted es:smoke-pinbar -> 20260930-171821-draft_pp_es_pinbar-9585
+2026-09-30 17:18:21 submitted es:smoke-sweep_rev -> 20260930-171821-draft_pp_es_sweep_rev-24cb
+2026-09-30 17:18:22 submitted es:smoke-ib -> 20260930-171822-draft_pp_es_ib-4155
+2026-09-30 17:18:23 submitted es:smoke-gap -> 20260930-171823-draft_pp_es_gap-e7e7
+2026-09-30 17:18:43 es:smoke-pinbar done (1 ledger rows, 22s)
+2026-09-30 17:18:43 es:smoke-sweep_rev done (1 ledger rows, 21s)
+2026-09-30 17:18:43 es:smoke-ib done (1 ledger rows, 21s)
+2026-09-30 17:18:43 es:smoke-gap done (1 ledger rows, 20s)
+2026-09-30 17:18:43 submitted es:smoke-tod_drift -> 20260930-171843-draft_pp_es_tod_drift-eb7e
+2026-09-30 17:18:45 submitted es:smoke-lon_break -> 20260930-171845-draft_pp_es_lon_break-aedf
+2026-09-30 17:18:45 submitted es:smoke-first_bar_mom -> 20260930-171845-draft_pp_es_first_bar_mom-7a7c
+2026-09-30 17:18:46 submitted es:smoke-mid_fade -> 20260930-171846-draft_pp_es_mid_fade-9986
+2026-09-30 17:19:06 es:smoke-tod_drift done (1 ledger rows, 22s)
+2026-09-30 17:19:06 es:smoke-lon_break done (1 ledger rows, 21s)
+2026-09-30 17:19:06 es:smoke-first_bar_mom done (1 ledger rows, 21s)
+2026-09-30 17:19:06 es:smoke-mid_fade done (1 ledger rows, 20s)
+2026-09-30 17:19:06 submitted es:smoke-random -> 20260930-171906-draft_pp_es_random-b5be
+2026-09-30 17:19:26 es:smoke-random done (1 ledger rows, 20s)
+2026-09-30 17:19:47 submitted es:calib-full-ema_pullback-tf5 -> 20260930-171947-draft_pp_es_ema_pullback-f52d
+2026-09-30 17:19:48 submitted es:calib-grid20-orb -> 20260930-171948-draft_pp_es_orb-24b8
+2026-09-30 17:20:28 es:calib-full-ema_pullback-tf5 done (1 ledger rows, 41s)
+2026-09-30 17:25:08 es:calib-grid20-orb done (20 ledger rows, 320s)
+2026-09-30 17:25:24 submitted es:screen-orb-tf1 -> 20260930-172524-draft_pp_es_orb-f5f9
+2026-09-30 17:25:25 submitted es:screen-orb-tf5 -> 20260930-172525-draft_pp_es_orb-fe82
+2026-09-30 17:25:26 submitted es:screen-orb-tf15 -> 20260930-172526-draft_pp_es_orb-3514
+2026-09-30 17:25:26 submitted es:screen-orb-tf30 -> 20260930-172526-draft_pp_es_orb-7f1b
+2026-09-30 17:25:51 es:screen-orb-tf1 done (1 ledger rows, 27s)
+2026-09-30 17:25:52 submitted es:screen-straddle-tf1 -> 20260930-172552-draft_pp_es_straddle-02bd
+2026-09-30 17:26:12 es:screen-orb-tf5 done (1 ledger rows, 47s)
+2026-09-30 17:26:13 submitted es:screen-straddle-tf5 -> 20260930-172613-draft_pp_es_straddle-61ee
+2026-09-30 17:26:33 es:screen-orb-tf15 done (1 ledger rows, 67s)
+2026-09-30 17:26:34 submitted es:screen-straddle-tf15 -> 20260930-172634-draft_pp_es_straddle-bdb7
+2026-09-30 17:26:54 es:screen-orb-tf30 done (1 ledger rows, 88s)
+2026-09-30 17:26:55 submitted es:screen-straddle-tf30 -> 20260930-172655-draft_pp_es_straddle-3074
+2026-09-30 17:27:15 es:screen-straddle-tf1 done (1 ledger rows, 82s)
+2026-09-30 17:27:15 submitted es:screen-donchian-tf1 -> 20260930-172715-draft_pp_es_donchian-e092
+2026-09-30 17:27:35 es:screen-straddle-tf5 done (1 ledger rows, 82s)
+2026-09-30 17:27:36 submitted es:screen-donchian-tf5 -> 20260930-172736-draft_pp_es_donchian-fb9b
+2026-09-30 17:28:16 es:screen-straddle-tf15 done (1 ledger rows, 102s)
+2026-09-30 17:28:17 submitted es:screen-donchian-tf15 -> 20260930-172817-draft_pp_es_donchian-a235
+2026-09-30 17:28:37 es:screen-straddle-tf30 done (1 ledger rows, 103s)
+2026-09-30 17:28:38 submitted es:screen-donchian-tf30 -> 20260930-172838-draft_pp_es_donchian-8c78
+2026-09-30 17:28:58 es:screen-donchian-tf1 done (1 ledger rows, 103s)
+2026-09-30 17:28:59 submitted es:screen-squeeze-tf1 -> 20260930-172859-draft_pp_es_squeeze-2d71
+2026-09-30 17:29:19 es:screen-donchian-tf5 done (1 ledger rows, 103s)
+2026-09-30 17:29:20 submitted es:screen-squeeze-tf5 -> 20260930-172920-draft_pp_es_squeeze-fe8c
+2026-09-30 17:29:40 es:screen-donchian-tf15 done (1 ledger rows, 83s)
+2026-09-30 17:29:41 submitted es:screen-squeeze-tf15 -> 20260930-172941-draft_pp_es_squeeze-76e5
+2026-09-30 17:30:01 es:screen-donchian-tf30 done (1 ledger rows, 82s)
+2026-09-30 17:30:01 submitted es:screen-squeeze-tf30 -> 20260930-173001-draft_pp_es_squeeze-a102
+2026-09-30 17:30:22 es:screen-squeeze-tf1 done (1 ledger rows, 82s)
+2026-09-30 17:30:22 submitted es:screen-ema_ribbon-tf1 -> 20260930-173022-draft_pp_es_ema_ribbon-bb43
+2026-09-30 17:30:42 es:screen-squeeze-tf5 done (1 ledger rows, 82s)
+2026-09-30 17:30:43 submitted es:screen-ema_ribbon-tf5 -> 20260930-173043-draft_pp_es_ema_ribbon-5725
+2026-09-30 17:31:03 es:screen-squeeze-tf15 done (1 ledger rows, 83s)
+2026-09-30 17:31:04 submitted es:screen-ema_ribbon-tf15 -> 20260930-173104-draft_pp_es_ema_ribbon-ace8
+2026-09-30 17:31:24 es:screen-squeeze-tf30 done (1 ledger rows, 83s)
+2026-09-30 17:31:25 submitted es:screen-ema_ribbon-tf30 -> 20260930-173125-draft_pp_es_ema_ribbon-48c5
+2026-09-30 17:31:45 es:screen-ema_ribbon-tf1 done (1 ledger rows, 83s)
+2026-09-30 17:31:46 submitted es:screen-tema_slope-tf1 -> 20260930-173146-draft_pp_es_tema_slope-934e
+2026-09-30 17:32:06 es:screen-ema_ribbon-tf5 done (1 ledger rows, 83s)
+2026-09-30 17:32:06 es:screen-ema_ribbon-tf15 done (1 ledger rows, 62s)
+2026-09-30 17:32:07 submitted es:screen-tema_slope-tf5 -> 20260930-173207-draft_pp_es_tema_slope-f743
+2026-09-30 17:32:08 submitted es:screen-tema_slope-tf15 -> 20260930-173208-draft_pp_es_tema_slope-4106
+2026-09-30 17:32:28 es:screen-ema_ribbon-tf30 done (1 ledger rows, 63s)
+2026-09-30 17:32:29 submitted es:screen-tema_slope-tf30 -> 20260930-173229-draft_pp_es_tema_slope-9fa0
+2026-09-30 17:34:46 es:screen-tema_slope-tf1 done (1 ledger rows, 180s)
+2026-09-30 17:34:46 es:screen-tema_slope-tf5 done (1 ledger rows, 159s)
+2026-09-30 17:34:46 es:screen-tema_slope-tf15 done (1 ledger rows, 158s)
+2026-09-30 17:34:46 es:screen-tema_slope-tf30 done (1 ledger rows, 137s)
+2026-09-30 17:34:47 submitted es:screen-ema_pullback-tf1 -> 20260930-173447-draft_pp_es_ema_pullback-5aa5
+2026-09-30 17:34:48 submitted es:screen-ema_pullback-tf5 -> 20260930-173448-draft_pp_es_ema_pullback-6abe
+2026-09-30 17:34:49 submitted es:screen-ema_pullback-tf15 -> 20260930-173449-draft_pp_es_ema_pullback-ca9c
+2026-09-30 17:34:50 submitted es:screen-ema_pullback-tf30 -> 20260930-173450-draft_pp_es_ema_pullback-4e46
+2026-09-30 17:35:30 es:screen-ema_pullback-tf1 done (1 ledger rows, 43s)
+2026-09-30 17:35:30 submitted es:screen-supertrend-tf1 -> 20260930-173530-draft_pp_es_supertrend-c88e
+2026-09-30 17:35:51 es:screen-ema_pullback-tf5 done (1 ledger rows, 63s)
+2026-09-30 17:35:51 submitted es:screen-supertrend-tf5 -> 20260930-173551-draft_pp_es_supertrend-8416
+2026-09-30 17:36:11 es:screen-ema_pullback-tf15 done (1 ledger rows, 83s)
+2026-09-30 17:36:12 submitted es:screen-supertrend-tf15 -> 20260930-173612-draft_pp_es_supertrend-37ca
+2026-09-30 17:36:52 es:screen-ema_pullback-tf30 done (1 ledger rows, 123s)
+2026-09-30 17:36:53 submitted es:screen-supertrend-tf30 -> 20260930-173653-draft_pp_es_supertrend-6fb2
+2026-09-30 17:37:13 es:screen-supertrend-tf1 done (1 ledger rows, 103s)
+2026-09-30 17:37:14 submitted es:screen-rsi2-tf1 -> 20260930-173714-draft_pp_es_rsi2-4c8b
+2026-09-30 17:37:34 es:screen-supertrend-tf5 done (1 ledger rows, 103s)
+2026-09-30 17:37:35 submitted es:screen-rsi2-tf5 -> 20260930-173735-draft_pp_es_rsi2-840a
+2026-09-30 17:37:55 es:screen-supertrend-tf15 done (1 ledger rows, 103s)
+2026-09-30 17:37:56 submitted es:screen-rsi2-tf15 -> 20260930-173756-draft_pp_es_rsi2-debf
+2026-09-30 17:38:36 es:screen-supertrend-tf30 done (1 ledger rows, 103s)
+2026-09-30 17:38:38 submitted es:screen-rsi2-tf30 -> 20260930-173838-draft_pp_es_rsi2-2718
+2026-09-30 17:38:58 es:screen-rsi2-tf1 done (1 ledger rows, 104s)
+2026-09-30 17:38:59 submitted es:screen-vwap_band-tf1 -> 20260930-173859-draft_pp_es_vwap_band-02aa
+2026-09-30 17:39:39 es:screen-rsi2-tf5 done (1 ledger rows, 124s)
+2026-09-30 17:39:41 submitted es:screen-vwap_band-tf5 -> 20260930-173941-draft_pp_es_vwap_band-c64a
+2026-09-30 17:40:21 es:screen-rsi2-tf15 done (1 ledger rows, 144s)
+2026-09-30 17:40:22 submitted es:screen-vwap_band-tf15 -> 20260930-174022-draft_pp_es_vwap_band-b8a9
+2026-09-30 17:41:02 es:screen-rsi2-tf30 done (1 ledger rows, 144s)
+2026-09-30 17:41:03 submitted es:screen-vwap_band-tf30 -> 20260930-174103-draft_pp_es_vwap_band-84cb
+2026-09-30 17:41:23 es:screen-vwap_band-tf1 done (1 ledger rows, 144s)
+2026-09-30 17:41:24 submitted es:screen-vwap_z-tf1 -> 20260930-174124-draft_pp_es_vwap_z-2423
+2026-09-30 17:42:04 es:screen-vwap_band-tf5 done (1 ledger rows, 144s)
+2026-09-30 17:42:05 submitted es:screen-vwap_z-tf5 -> 20260930-174205-draft_pp_es_vwap_z-2a56
+2026-09-30 17:42:25 es:screen-vwap_band-tf15 done (1 ledger rows, 123s)
+2026-09-30 17:42:26 submitted es:screen-vwap_z-tf15 -> 20260930-174226-draft_pp_es_vwap_z-469e
+2026-09-30 17:43:06 es:screen-vwap_band-tf30 done (1 ledger rows, 123s)
+2026-09-30 17:43:07 submitted es:screen-vwap_z-tf30 -> 20260930-174307-draft_pp_es_vwap_z-61bb
+2026-09-30 17:43:27 es:screen-vwap_z-tf1 done (1 ledger rows, 123s)
+2026-09-30 17:43:28 submitted es:screen-vwap_flip-tf1 -> 20260930-174328-draft_pp_es_vwap_flip-f01b
+2026-09-30 17:44:09 es:screen-vwap_z-tf5 done (1 ledger rows, 123s)
+2026-09-30 17:44:10 submitted es:screen-vwap_flip-tf5 -> 20260930-174410-draft_pp_es_vwap_flip-1e53
+2026-09-30 17:44:30 es:screen-vwap_z-tf15 done (1 ledger rows, 124s)
+2026-09-30 17:44:31 submitted es:screen-vwap_flip-tf15 -> 20260930-174431-draft_pp_es_vwap_flip-99ac
+2026-09-30 17:45:11 es:screen-vwap_z-tf30 done (1 ledger rows, 124s)
+2026-09-30 17:45:12 submitted es:screen-vwap_flip-tf30 -> 20260930-174512-draft_pp_es_vwap_flip-490d
+2026-09-30 17:45:32 es:screen-vwap_flip-tf1 done (1 ledger rows, 124s)
+2026-09-30 17:45:33 submitted es:screen-pinbar-tf1 -> 20260930-174533-draft_pp_es_pinbar-9cbe
+2026-09-30 17:46:13 es:screen-vwap_flip-tf5 done (1 ledger rows, 124s)
+2026-09-30 17:46:15 submitted es:screen-pinbar-tf5 -> 20260930-174615-draft_pp_es_pinbar-c017
+2026-09-30 17:46:55 es:screen-vwap_flip-tf15 done (1 ledger rows, 144s)
+2026-09-30 17:46:56 submitted es:screen-pinbar-tf15 -> 20260930-174656-draft_pp_es_pinbar-b46f
+2026-09-30 17:47:16 es:screen-vwap_flip-tf30 done (1 ledger rows, 124s)
+2026-09-30 17:47:17 submitted es:screen-pinbar-tf30 -> 20260930-174717-draft_pp_es_pinbar-2234
+2026-09-30 17:47:57 es:screen-pinbar-tf1 done (1 ledger rows, 144s)
+2026-09-30 17:47:59 submitted es:screen-sweep_rev-tf1 -> 20260930-174759-draft_pp_es_sweep_rev-859a
+2026-09-30 17:48:19 es:screen-pinbar-tf5 done (1 ledger rows, 124s)
+2026-09-30 17:48:21 submitted es:screen-sweep_rev-tf5 -> 20260930-174821-draft_pp_es_sweep_rev-9299
+2026-09-30 17:49:01 es:screen-pinbar-tf15 done (1 ledger rows, 125s)
+2026-09-30 17:49:02 submitted es:screen-sweep_rev-tf15 -> 20260930-174902-draft_pp_es_sweep_rev-7c74
+2026-09-30 17:49:22 es:screen-pinbar-tf30 done (1 ledger rows, 125s)
+2026-09-30 17:49:23 submitted es:screen-sweep_rev-tf30 -> 20260930-174923-draft_pp_es_sweep_rev-d113
+2026-09-30 17:50:03 es:screen-sweep_rev-tf1 done (1 ledger rows, 124s)
+2026-09-30 17:50:04 submitted es:screen-ib-tf1 -> 20260930-175004-draft_pp_es_ib-e705
+2026-09-30 17:50:24 es:screen-sweep_rev-tf5 done (1 ledger rows, 123s)
+2026-09-30 17:50:26 submitted es:screen-ib-tf5 -> 20260930-175026-draft_pp_es_ib-c190
+2026-09-30 17:51:06 es:screen-sweep_rev-tf15 done (1 ledger rows, 124s)
+2026-09-30 17:51:07 submitted es:screen-ib-tf15 -> 20260930-175107-draft_pp_es_ib-1bd5
+2026-09-30 17:51:27 es:screen-sweep_rev-tf30 done (1 ledger rows, 124s)
+2026-09-30 17:51:29 submitted es:screen-ib-tf30 -> 20260930-175129-draft_pp_es_ib-78f9
+2026-09-30 17:52:09 es:screen-ib-tf1 done (1 ledger rows, 124s)
+2026-09-30 17:52:10 submitted es:screen-gap-tf1 -> 20260930-175210-draft_pp_es_gap-c61e
+2026-09-30 17:52:30 es:screen-ib-tf5 done (1 ledger rows, 124s)
+2026-09-30 17:52:32 submitted es:screen-gap-tf5 -> 20260930-175232-draft_pp_es_gap-5c1d
+2026-09-30 17:53:12 es:screen-ib-tf15 done (1 ledger rows, 124s)
+2026-09-30 17:53:13 submitted es:screen-gap-tf15 -> 20260930-175313-draft_pp_es_gap-23ea
+2026-09-30 17:53:53 es:screen-ib-tf30 done (1 ledger rows, 144s)
+2026-09-30 17:53:54 submitted es:screen-gap-tf30 -> 20260930-175354-draft_pp_es_gap-902e
+2026-09-30 17:54:14 es:screen-gap-tf1 done (1 ledger rows, 124s)
+2026-09-30 17:54:15 submitted es:screen-tod_drift-tf1 -> 20260930-175415-draft_pp_es_tod_drift-d531
+2026-09-30 17:54:35 es:screen-gap-tf5 done (1 ledger rows, 123s)
+2026-09-30 17:54:36 submitted es:screen-tod_drift-tf5 -> 20260930-175436-draft_pp_es_tod_drift-8507
+2026-09-30 17:55:16 es:screen-gap-tf15 done (1 ledger rows, 124s)
+2026-09-30 17:55:17 submitted es:screen-tod_drift-tf15 -> 20260930-175517-draft_pp_es_tod_drift-0c07
+2026-09-30 17:55:38 es:screen-gap-tf30 done (1 ledger rows, 103s)
+2026-09-30 17:55:39 submitted es:screen-tod_drift-tf30 -> 20260930-175539-draft_pp_es_tod_drift-e3d8
+2026-09-30 17:55:59 es:screen-tod_drift-tf1 done (1 ledger rows, 104s)
+2026-09-30 17:56:00 submitted es:screen-lon_break-tf1 -> 20260930-175600-draft_pp_es_lon_break-b0a9
+2026-09-30 17:56:40 es:screen-tod_drift-tf5 done (1 ledger rows, 124s)
+2026-09-30 17:56:41 submitted es:screen-lon_break-tf5 -> 20260930-175641-draft_pp_es_lon_break-6b7e
+2026-09-30 17:57:01 es:screen-tod_drift-tf15 done (1 ledger rows, 103s)
+2026-09-30 17:57:02 submitted es:screen-lon_break-tf15 -> 20260930-175702-draft_pp_es_lon_break-9826
+2026-09-30 17:57:42 es:screen-tod_drift-tf30 done (1 ledger rows, 123s)
+2026-09-30 17:57:43 submitted es:screen-lon_break-tf30 -> 20260930-175743-draft_pp_es_lon_break-3fce
+2026-09-30 17:58:03 es:screen-lon_break-tf1 done (1 ledger rows, 123s)
+2026-09-30 17:58:04 submitted es:screen-first_bar_mom-tf1 -> 20260930-175804-draft_pp_es_first_bar_mom-7834
+2026-09-30 17:58:24 es:screen-lon_break-tf5 done (1 ledger rows, 103s)
+2026-09-30 17:58:25 submitted es:screen-first_bar_mom-tf5 -> 20260930-175825-draft_pp_es_first_bar_mom-95d6
+2026-09-30 17:59:05 es:screen-lon_break-tf15 done (1 ledger rows, 123s)
+2026-09-30 17:59:07 submitted es:screen-first_bar_mom-tf15 -> 20260930-175907-draft_pp_es_first_bar_mom-9630
+2026-09-30 17:59:27 es:screen-lon_break-tf30 done (1 ledger rows, 104s)
+2026-09-30 17:59:28 submitted es:screen-first_bar_mom-tf30 -> 20260930-175928-draft_pp_es_first_bar_mom-17bd
+2026-09-30 18:00:08 es:screen-first_bar_mom-tf1 done (1 ledger rows, 124s)
+2026-09-30 18:00:09 submitted es:screen-mid_fade-tf1 -> 20260930-180009-draft_pp_es_mid_fade-42d0
+2026-09-30 18:00:29 es:screen-first_bar_mom-tf5 done (1 ledger rows, 124s)
+2026-09-30 18:00:30 submitted es:screen-mid_fade-tf5 -> 20260930-180030-draft_pp_es_mid_fade-6c45
+2026-09-30 18:01:10 es:screen-first_bar_mom-tf15 done (1 ledger rows, 123s)
+2026-09-30 18:01:12 submitted es:screen-mid_fade-tf15 -> 20260930-180112-draft_pp_es_mid_fade-8d88
+2026-09-30 18:01:32 es:screen-first_bar_mom-tf30 done (1 ledger rows, 124s)
+2026-09-30 18:01:34 submitted es:screen-mid_fade-tf30 -> 20260930-180134-draft_pp_es_mid_fade-bcc5
+2026-09-30 18:02:14 es:screen-mid_fade-tf1 done (1 ledger rows, 125s)
+2026-09-30 18:02:15 submitted es:ctrl-random-tf1-s1 -> 20260930-180215-draft_pp_es_random-28a3
+2026-09-30 18:02:55 es:screen-mid_fade-tf5 done (1 ledger rows, 145s)
+2026-09-30 18:02:57 submitted es:ctrl-random-tf1-s2 -> 20260930-180257-draft_pp_es_random-3f9c
+2026-09-30 18:03:17 es:screen-mid_fade-tf15 done (1 ledger rows, 125s)
+2026-09-30 18:03:18 submitted es:ctrl-random-tf1-s3 -> 20260930-180318-draft_pp_es_random-2667
+2026-09-30 18:03:38 es:screen-mid_fade-tf30 done (1 ledger rows, 124s)
+2026-09-30 18:03:40 submitted es:ctrl-randomtod-tf1-s1 -> 20260930-180340-draft_pp_es_random-670d
+2026-09-30 18:04:20 es:ctrl-random-tf1-s1 done (1 ledger rows, 125s)
+2026-09-30 18:04:21 submitted es:ctrl-random-tf5-s1 -> 20260930-180421-draft_pp_es_random-27c3
+2026-09-30 18:05:01 es:ctrl-random-tf1-s2 done (1 ledger rows, 124s)
+2026-09-30 18:05:03 submitted es:ctrl-random-tf5-s2 -> 20260930-180503-draft_pp_es_random-f60a
+2026-09-30 18:05:43 es:ctrl-random-tf1-s3 done (1 ledger rows, 144s)
+2026-09-30 18:05:44 submitted es:ctrl-random-tf5-s3 -> 20260930-180544-draft_pp_es_random-3127
+2026-09-30 18:06:04 es:ctrl-randomtod-tf1-s1 done (1 ledger rows, 145s)
+2026-09-30 18:06:06 submitted es:ctrl-randomtod-tf5-s1 -> 20260930-180606-draft_pp_es_random-584b
+2026-09-30 18:06:46 es:ctrl-random-tf5-s1 done (1 ledger rows, 144s)
+2026-09-30 18:06:47 submitted es:ctrl-random-tf15-s1 -> 20260930-180647-draft_pp_es_random-ae33
+2026-09-30 18:07:07 es:ctrl-random-tf5-s2 done (1 ledger rows, 124s)
+2026-09-30 18:07:08 submitted es:ctrl-random-tf15-s2 -> 20260930-180708-draft_pp_es_random-d2d0
+2026-09-30 18:07:48 es:ctrl-random-tf5-s3 done (1 ledger rows, 124s)
+2026-09-30 18:07:49 submitted es:ctrl-random-tf15-s3 -> 20260930-180749-draft_pp_es_random-255b
+2026-09-30 18:08:09 es:ctrl-randomtod-tf5-s1 done (1 ledger rows, 123s)
+2026-09-30 18:08:11 submitted es:ctrl-randomtod-tf15-s1 -> 20260930-180811-draft_pp_es_random-170e
+2026-09-30 18:08:51 es:ctrl-random-tf15-s1 done (1 ledger rows, 124s)
+2026-09-30 18:08:52 submitted es:ctrl-random-tf30-s1 -> 20260930-180852-draft_pp_es_random-3d31
+2026-09-30 18:09:12 es:ctrl-random-tf15-s2 done (1 ledger rows, 124s)
+2026-09-30 18:09:13 submitted es:ctrl-random-tf30-s2 -> 20260930-180913-draft_pp_es_random-fcd2
+2026-09-30 18:09:53 es:ctrl-random-tf15-s3 done (1 ledger rows, 124s)
+2026-09-30 18:09:54 submitted es:ctrl-random-tf30-s3 -> 20260930-180954-draft_pp_es_random-0e98
+2026-09-30 18:10:14 es:ctrl-randomtod-tf15-s1 done (1 ledger rows, 124s)
+2026-09-30 18:10:15 submitted es:ctrl-randomtod-tf30-s1 -> 20260930-181015-draft_pp_es_random-005e
+2026-09-30 18:10:56 es:ctrl-random-tf30-s1 done (1 ledger rows, 124s)
+2026-09-30 18:10:57 submitted es:ctrl2-random-tf1-s11 -> 20260930-181057-draft_pp_es_random-8efc
+2026-09-30 18:11:17 es:ctrl-random-tf30-s2 done (1 ledger rows, 124s)
+2026-09-30 18:11:18 submitted es:ctrl2-random-tf1-s12 -> 20260930-181118-draft_pp_es_random-83f4
+2026-09-30 18:11:58 es:ctrl-random-tf30-s3 done (1 ledger rows, 124s)
+2026-09-30 18:11:59 submitted es:ctrl2-random-tf1-s13 -> 20260930-181159-draft_pp_es_random-f0a9
+2026-09-30 18:12:19 es:ctrl-randomtod-tf30-s1 done (1 ledger rows, 124s)
+2026-09-30 18:12:21 submitted es:ctrl2-randomtod-tf1-s11 -> 20260930-181221-draft_pp_es_random-5c1d
+2026-09-30 18:13:01 es:ctrl2-random-tf1-s11 done (1 ledger rows, 124s)
+2026-09-30 18:13:02 submitted es:ctrl2-randomtod-tf1-s12 -> 20260930-181302-draft_pp_es_random-3d0d
+2026-09-30 18:13:42 es:ctrl2-random-tf1-s12 done (1 ledger rows, 144s)
+2026-09-30 18:13:43 submitted es:ctrl2-random-tf5-s11 -> 20260930-181343-draft_pp_es_random-649d
+2026-09-30 18:14:03 es:ctrl2-random-tf1-s13 done (1 ledger rows, 124s)
+2026-09-30 18:14:04 submitted es:ctrl2-random-tf5-s12 -> 20260930-181404-draft_pp_es_random-fcbf
+2026-09-30 18:14:24 es:ctrl2-randomtod-tf1-s11 done (1 ledger rows, 124s)
+2026-09-30 18:14:25 submitted es:ctrl2-random-tf5-s13 -> 20260930-181425-draft_pp_es_random-99a6
+2026-09-30 18:15:06 es:ctrl2-randomtod-tf1-s12 done (1 ledger rows, 124s)
+2026-09-30 18:15:07 submitted es:ctrl2-randomtod-tf5-s11 -> 20260930-181507-draft_pp_es_random-3f12
+2026-09-30 18:15:47 es:ctrl2-random-tf5-s11 done (1 ledger rows, 124s)
+2026-09-30 18:15:49 submitted es:ctrl2-randomtod-tf5-s12 -> 20260930-181549-draft_pp_es_random-30ef
+2026-09-30 18:16:29 es:ctrl2-random-tf5-s12 done (1 ledger rows, 145s)
+2026-09-30 18:16:30 submitted es:ctrl2-random-tf15-s11 -> 20260930-181630-draft_pp_es_random-50e6
+2026-09-30 18:17:10 es:ctrl2-random-tf5-s13 done (1 ledger rows, 165s)
+2026-09-30 18:17:12 submitted es:ctrl2-random-tf15-s12 -> 20260930-181712-draft_pp_es_random-d0a9
+2026-09-30 18:17:52 es:ctrl2-randomtod-tf5-s11 done (1 ledger rows, 164s)
+2026-09-30 18:17:53 submitted es:ctrl2-random-tf15-s13 -> 20260930-181753-draft_pp_es_random-3942
+2026-09-30 18:18:13 es:ctrl2-randomtod-tf5-s12 done (1 ledger rows, 144s)
+2026-09-30 18:18:14 submitted es:ctrl2-randomtod-tf15-s11 -> 20260930-181814-draft_pp_es_random-b1de
+2026-09-30 18:18:54 es:ctrl2-random-tf15-s11 done (1 ledger rows, 144s)
+2026-09-30 18:18:56 submitted es:ctrl2-randomtod-tf15-s12 -> 20260930-181856-draft_pp_es_random-ccb6
+2026-09-30 18:19:36 es:ctrl2-random-tf15-s12 done (1 ledger rows, 144s)
+2026-09-30 18:19:37 submitted es:ctrl2-random-tf30-s11 -> 20260930-181937-draft_pp_es_random-2aef
+2026-09-30 18:20:17 es:ctrl2-random-tf15-s13 done (1 ledger rows, 144s)
+2026-09-30 18:20:18 submitted es:ctrl2-random-tf30-s12 -> 20260930-182018-draft_pp_es_random-7031
+2026-09-30 18:20:58 es:ctrl2-randomtod-tf15-s11 done (1 ledger rows, 164s)
+2026-09-30 18:20:59 submitted es:ctrl2-random-tf30-s13 -> 20260930-182059-draft_pp_es_random-5497
+2026-09-30 18:21:19 es:ctrl2-randomtod-tf15-s12 done (1 ledger rows, 144s)
+2026-09-30 18:21:20 submitted es:ctrl2-randomtod-tf30-s11 -> 20260930-182120-draft_pp_es_random-8daa
+2026-09-30 18:22:00 es:ctrl2-random-tf30-s11 done (1 ledger rows, 144s)
+2026-09-30 18:22:02 submitted es:ctrl2-randomtod-tf30-s12 -> 20260930-182202-draft_pp_es_random-953d
+2026-09-30 18:22:42 es:ctrl2-random-tf30-s12 done (1 ledger rows, 144s)
+2026-09-30 18:23:22 es:ctrl2-random-tf30-s13 done (1 ledger rows, 143s)
+2026-09-30 18:23:42 es:ctrl2-randomtod-tf30-s11 done (1 ledger rows, 142s)
+2026-09-30 18:24:22 es:ctrl2-randomtod-tf30-s12 done (1 ledger rows, 140s)
+2026-09-30 18:30:50 submitted es:hmctrl-random-tf5-s11 -> 20260930-183049-draft_pp_es_random-adc4
+2026-09-30 18:31:25 submitted es:hmctrl-random-tf5-s12 -> 20260930-183124-draft_pp_es_random-c015
+2026-09-30 18:31:37 submitted es:hmctrl-random-tf5-s13 -> 20260930-183137-draft_pp_es_random-8a92
+2026-09-30 18:32:03 submitted es:hmctrl-random-tf15-s11 -> 20260930-183203-draft_pp_es_random-729d
+2026-09-30 18:42:52 es:hmctrl-random-tf5-s11 done (12 ledger rows, 722s)
+2026-09-30 18:42:59 submitted es:hmctrl-random-tf15-s12 -> 20260930-184259-draft_pp_es_random-9f92
+2026-09-30 18:47:15 es:hmctrl-random-tf5-s12 done (12 ledger rows, 950s)
+2026-09-30 18:47:20 submitted es:hmctrl-random-tf15-s13 -> 20260930-184720-draft_pp_es_random-6f2e
+2026-09-30 19:00:22 es:hmctrl-random-tf5-s13 done (12 ledger rows, 1725s)
+2026-09-30 19:00:28 submitted es:hmctrl-random-tf30-s11 -> 20260930-190028-draft_pp_es_random-b18c
+2026-09-30 19:03:23 es:hmctrl-random-tf15-s11 done (12 ledger rows, 1880s)
+2026-09-30 19:03:26 submitted es:hmctrl-random-tf30-s12 -> 20260930-190326-draft_pp_es_random-736f
+2026-09-30 19:06:26 es:hmctrl-random-tf15-s12 done (12 ledger rows, 1407s)
+2026-09-30 19:06:29 submitted es:hmctrl-random-tf30-s13 -> 20260930-190629-draft_pp_es_random-907f
+2026-09-30 19:09:29 es:hmctrl-random-tf15-s13 done (12 ledger rows, 1329s)
+2026-09-30 19:09:32 BAD JOB es:hmctrl-randomtod-tf5-s11: 400: axes: 2 or 3 parameters, each {key, values}
+2026-09-30 19:09:34 BAD JOB es:hmctrl-randomtod-tf5-s12: 400: axes: 2 or 3 parameters, each {key, values}
+2026-09-30 19:09:36 BAD JOB es:hmctrl-randomtod-tf5-s13: 400: axes: 2 or 3 parameters, each {key, values}
+2026-09-30 19:09:38 BAD JOB es:hmctrl-randomtod-tf15-s11: 400: axes: 2 or 3 parameters, each {key, values}
+2026-09-30 19:09:40 BAD JOB es:hmctrl-randomtod-tf15-s12: 400: axes: 2 or 3 parameters, each {key, values}
+2026-09-30 19:09:42 BAD JOB es:hmctrl-randomtod-tf15-s13: 400: axes: 2 or 3 parameters, each {key, values}
+2026-09-30 19:09:44 submitted es:fpctrl-random-tf5-s21 -> 20260930-190944-draft_pp_es_random-6188
+2026-09-30 19:12:35 es:hmctrl-random-tf30-s11 done (12 ledger rows, 727s)
+2026-09-30 19:12:36 submitted es:fpctrl-random-tf5-s22 -> 20260930-191236-draft_pp_es_random-3fd4
+2026-09-30 19:14:56 es:hmctrl-random-tf30-s12 done (12 ledger rows, 691s)
+2026-09-30 19:14:59 submitted es:fpctrl-random-tf5-s23 -> 20260930-191459-draft_pp_es_random-ae84
+2026-09-30 19:17:19 es:hmctrl-random-tf30-s13 done (12 ledger rows, 650s)
+2026-09-30 19:17:22 submitted es:fpctrl-random-tf15-s21 -> 20260930-191722-draft_pp_es_random-b386
+2026-09-30 19:21:02 es:fpctrl-random-tf5-s21 done (16 ledger rows, 678s)
+2026-09-30 19:21:05 submitted es:fpctrl-random-tf15-s22 -> 20260930-192105-draft_pp_es_random-cb0e
+2026-09-30 19:24:06 es:fpctrl-random-tf5-s22 done (16 ledger rows, 689s)
+2026-09-30 19:24:07 submitted es:fpctrl-random-tf15-s23 -> 20260930-192407-draft_pp_es_random-12ed
+2026-09-30 19:26:28 es:fpctrl-random-tf5-s23 done (16 ledger rows, 689s)
+2026-09-30 19:26:29 submitted es:fpctrl-random-tf30-s21 -> 20260930-192629-draft_pp_es_random-d961
+2026-09-30 19:28:50 es:fpctrl-random-tf15-s21 done (16 ledger rows, 688s)
+2026-09-30 19:28:51 submitted es:fpctrl-random-tf30-s22 -> 20260930-192851-draft_pp_es_random-b1b5
+2026-09-30 19:30:52 es:fpctrl-random-tf15-s22 done (16 ledger rows, 586s)
+2026-09-30 19:30:54 submitted es:fpctrl-random-tf30-s23 -> 20260930-193053-draft_pp_es_random-852e
+2026-09-30 19:33:34 es:fpctrl-random-tf15-s23 done (16 ledger rows, 567s)
+2026-09-30 19:33:36 submitted es:hm-vwap_flip-tf15 -> 20260930-193336-draft_pp_es_vwap_flip-04ed
+2026-09-30 19:35:56 es:fpctrl-random-tf30-s21 done (16 ledger rows, 567s)
+2026-09-30 19:35:58 submitted es:hm-tema_slope-tf30 -> 20260930-193558-draft_pp_es_tema_slope-e266
+2026-09-30 19:38:39 es:fpctrl-random-tf30-s22 done (16 ledger rows, 587s)
+2026-09-30 19:38:41 submitted es:hm-donchian-tf15 -> 20260930-193841-draft_pp_es_donchian-c0eb
+2026-09-30 19:42:22 es:fpctrl-random-tf30-s23 done (16 ledger rows, 688s)
+2026-09-30 19:42:25 submitted es:hm-first_bar_mom-tf30 -> 20260930-194225-draft_pp_es_first_bar_mom-7b25
+2026-09-30 19:53:08 es:hm-vwap_flip-tf15 done (36 ledger rows, 1173s)
+2026-09-30 19:53:10 submitted es:hm-tod_drift-tf5 -> 20260930-195310-draft_pp_es_tod_drift-2e5b
+2026-09-30 19:58:51 es:hm-tema_slope-tf30 done (36 ledger rows, 1373s)
+2026-09-30 19:58:53 submitted es:hm-vwap_z-tf5 -> 20260930-195853-draft_pp_es_vwap_z-d338
+2026-09-30 20:03:53 es:hm-donchian-tf15 done (36 ledger rows, 1512s)
+2026-09-30 20:03:55 submitted es:hm-donchian-tf30 -> 20260930-200355-draft_pp_es_donchian-d7f0
+2026-09-30 20:09:36 es:hm-first_bar_mom-tf30 done (36 ledger rows, 1631s)
+2026-09-30 20:09:38 submitted es:hm-vwap_flip-tf5 -> 20260930-200938-draft_pp_es_vwap_flip-35a3
+2026-09-30 20:13:19 es:hm-tod_drift-tf5 done (24 ledger rows, 1208s)
+2026-09-30 20:13:21 submitted es:hm-tema_slope-tf15 -> 20260930-201321-draft_pp_es_tema_slope-8a75
+2026-09-30 20:21:01 es:hm-vwap_z-tf5 done (48 ledger rows, 1329s)
+2026-09-30 20:21:04 submitted es:hm-tod_drift-tf15 -> 20260930-202104-draft_pp_es_tod_drift-0c6f
+2026-09-30 20:27:05 es:hm-donchian-tf30 done (36 ledger rows, 1389s)
+2026-09-30 20:27:07 submitted es:hm-ema_pullback-tf30 -> 20260930-202707-draft_pp_es_ema_pullback-440f
+2026-09-30 20:35:28 es:hm-vwap_flip-tf5 done (36 ledger rows, 1550s)
+2026-09-30 20:35:31 submitted es:hm-straddle-tf15 -> 20260930-203531-draft_pp_es_straddle-e3cd
+2026-09-30 20:43:32 es:hm-tema_slope-tf15 done (36 ledger rows, 1811s)
+2026-09-30 20:43:36 submitted es:hm-ema_pullback-tf5 -> 20260930-204336-draft_pp_es_ema_pullback-5797
+2026-09-30 20:48:57 es:hm-tod_drift-tf15 done (24 ledger rows, 1673s)
+2026-09-30 20:49:00 submitted es:fp-vwap_flip-tf15 -> 20260930-204900-draft_pp_es_vwap_flip-cd40
+2026-09-30 20:53:41 es:hm-ema_pullback-tf30 done (24 ledger rows, 1594s)
+2026-09-30 20:53:44 submitted es:fp-tema_slope-tf30 -> 20260930-205344-draft_pp_es_tema_slope-d063
+2026-09-30 21:03:47 es:hm-straddle-tf15 done (36 ledger rows, 1696s)
+2026-09-30 21:03:49 submitted es:fp-donchian-tf15 -> 20260930-210349-draft_pp_es_donchian-29f1
+2026-09-30 21:08:10 es:hm-ema_pullback-tf5 done (24 ledger rows, 1474s)
+2026-09-30 21:08:12 submitted es:fp-first_bar_mom-tf30 -> 20260930-210812-draft_pp_es_first_bar_mom-0ad9
+2026-09-30 21:10:33 es:fp-vwap_flip-tf15 done (16 ledger rows, 1293s)
+2026-09-30 21:10:35 submitted es:fp-tod_drift-tf5 -> 20260930-211035-draft_pp_es_tod_drift-4eb0
+2026-09-30 21:12:56 es:fp-tema_slope-tf30 done (16 ledger rows, 1152s)
+2026-09-30 21:12:58 submitted es:fp-vwap_z-tf5 -> 20260930-211258-draft_pp_es_vwap_z-487d
+2026-09-30 21:15:39 es:fp-donchian-tf15 done (16 ledger rows, 709s)
+2026-09-30 21:15:41 submitted es:hmctrl2-randomtod-tf5-s11 -> 20260930-211541-draft_pp_es_random-05bd
+2026-09-30 21:18:01 es:fp-first_bar_mom-tf30 done (16 ledger rows, 589s)
+2026-09-30 21:18:04 submitted es:hmctrl2-randomtod-tf5-s12 -> 20260930-211804-draft_pp_es_random-42ed
+2026-09-30 21:20:45 es:fp-tod_drift-tf5 done (16 ledger rows, 609s)
+2026-09-30 21:20:48 submitted es:hmctrl2-randomtod-tf5-s13 -> 20260930-212048-draft_pp_es_random-143f
+2026-09-30 21:27:50 es:fp-vwap_z-tf5 done (16 ledger rows, 891s)
+2026-09-30 21:27:55 submitted es:hmctrl2-randomtod-tf15-s11 -> 20260930-212755-draft_pp_es_random-3523
+2026-09-30 21:28:50 es:hmctrl2-randomtod-tf5-s11 done (6 ledger rows, 789s)
+2026-09-30 21:28:59 submitted es:hmctrl2-randomtod-tf15-s12 -> 20260930-212859-draft_pp_es_random-3d2e
+2026-09-30 21:31:14 es:hmctrl2-randomtod-tf5-s12 done (6 ledger rows, 790s)
+2026-09-30 21:31:23 submitted es:hmctrl2-randomtod-tf15-s13 -> 20260930-213122-draft_pp_es_random-57cb
+2026-09-30 21:32:38 es:hmctrl2-randomtod-tf5-s13 done (6 ledger rows, 710s)
+2026-09-30 21:37:21 es:hmctrl2-randomtod-tf15-s11 done (6 ledger rows, 566s)
+2026-09-30 21:39:22 es:hmctrl2-randomtod-tf15-s12 done (6 ledger rows, 623s)
+2026-09-30 21:42:02 es:hmctrl2-randomtod-tf15-s13 done (6 ledger rows, 640s)
+2026-09-30 22:22:42 submitted es:fp-rsi2-tf5 -> 20260930-222242-draft_pp_es_rsi2-32cb
+2026-09-30 22:22:42 submitted es:fp-ema_pullback-tf5 -> 20260930-222242-draft_pp_es_ema_pullback-6b12
+2026-09-30 22:22:43 submitted es:fp-tema_slope-tf5 -> 20260930-222243-draft_pp_es_tema_slope-40b6
+2026-09-30 22:22:44 submitted es:fp-vwap_flip-tf5 -> 20260930-222244-draft_pp_es_vwap_flip-603a
+2026-09-30 22:24:29 es:fp-rsi2-tf5 done (16 ledger rows, 108s)
+2026-09-30 22:24:31 submitted es:fp-orb-tf5 -> 20260930-222431-draft_pp_es_orb-4755
+2026-09-30 22:26:11 es:fp-ema_pullback-tf5 done (16 ledger rows, 209s)
+2026-09-30 22:26:14 submitted es:fp-straddle-tf30 -> 20260930-222614-draft_pp_es_straddle-63a3
+2026-09-30 22:28:14 es:fp-tema_slope-tf5 done (16 ledger rows, 331s)
+2026-09-30 22:29:35 es:fp-vwap_flip-tf5 done (16 ledger rows, 410s)
+2026-09-30 22:31:15 es:fp-orb-tf5 done (16 ledger rows, 404s)
+2026-09-30 22:32:25 hb driver down
+2026-09-30 22:32:26 pilots: nq=/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-09-29, es=/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-09-30-es
+2026-09-30 22:32:26 hb driver up
+2026-09-30 22:32:26 es:fp-straddle-tf30 done (16 ledger rows, 372s)
+2026-09-30 22:32:42 submitted rollcheck-hm2-straddle-tf30-c10 -> 20260930-223242-draft_pp_straddle-675a
+2026-09-30 22:32:43 submitted rollcheck-screen-sweep_rev-tf5 -> 20260930-223243-draft_pp_sweep_rev-0a62
+2026-09-30 22:32:44 submitted rollcheck-screen-gap-tf5 -> 20260930-223244-draft_pp_gap-d9cd
+2026-09-30 22:32:44 submitted rollcheck-screen-pinbar-tf5 -> 20260930-223244-draft_pp_pinbar-1a26
+2026-09-30 22:33:09 rollcheck-hm2-straddle-tf30-c10 done (1 ledger rows, 27s)
+2026-09-30 22:33:30 rollcheck-screen-sweep_rev-tf5 done (1 ledger rows, 46s)
+2026-09-30 22:33:50 rollcheck-screen-gap-tf5 done (1 ledger rows, 66s)
+2026-09-30 22:33:50 rollcheck-screen-pinbar-tf5 done (1 ledger rows, 65s)
+2026-09-30 22:40:06 submitted ho-straddle-tf30-df10dfab -> 20260930-224006-draft_pp_straddle-4166
+2026-09-30 22:40:07 submitted ho-tod_drift-tf30-817912ee -> 20260930-224007-draft_pp_tod_drift-e6bd
+2026-09-30 22:40:08 submitted ho-straddle-tf30-cc084904 -> 20260930-224008-draft_pp_straddle-22bd
+2026-09-30 22:40:09 submitted ho-squeeze-tf5-bdc2506c -> 20260930-224009-draft_pp_squeeze-9b10
+2026-09-30 22:40:34 ho-straddle-tf30-df10dfab done (1 ledger rows, 28s)
+2026-09-30 22:40:34 ho-tod_drift-tf30-817912ee done (1 ledger rows, 27s)
+2026-09-30 22:40:35 submitted ho-first_bar_mom-tf15-d5bb54ef -> 20260930-224035-draft_pp_first_bar_mom-a7e9
+2026-09-30 22:40:36 submitted ho-tod_drift-tf15-e1c4a8af -> 20260930-224036-draft_pp_tod_drift-a76c
+2026-09-30 22:40:57 ho-straddle-tf30-cc084904 done (1 ledger rows, 48s)
+2026-09-30 22:40:58 submitted ho-donchian-tf5-c5f7787a -> 20260930-224058-draft_pp_donchian-c832
+2026-09-30 22:41:18 ho-squeeze-tf5-bdc2506c done (1 ledger rows, 69s)
+2026-09-30 22:41:18 ho-first_bar_mom-tf15-d5bb54ef done (1 ledger rows, 43s)
+2026-09-30 22:41:19 submitted ho-tod_drift-tf5-465e6598 -> 20260930-224119-draft_pp_tod_drift-f237
+2026-09-30 22:41:20 submitted ho-tod_drift-tf15-56d9484a -> 20260930-224120-draft_pp_tod_drift-3414
+2026-09-30 22:41:40 ho-tod_drift-tf15-e1c4a8af done (1 ledger rows, 64s)
+2026-09-30 22:41:40 ho-donchian-tf5-c5f7787a done (1 ledger rows, 42s)
+2026-09-30 22:41:41 submitted ho-donchian-tf1-9251786b -> 20260930-224141-draft_pp_donchian-01fb
+2026-09-30 22:41:42 submitted ho-ema_pullback-tf1-db751ea0 -> 20260930-224142-draft_pp_ema_pullback-978f
+2026-09-30 22:42:02 ho-tod_drift-tf5-465e6598 done (1 ledger rows, 43s)
+2026-09-30 22:42:02 ho-tod_drift-tf15-56d9484a done (1 ledger rows, 42s)
+2026-09-30 22:42:03 submitted ho-first_bar_mom-tf15-63a3baa5 -> 20260930-224203-draft_pp_first_bar_mom-e856
+2026-09-30 22:42:05 submitted ho-straddle-tf30-4b5dcab7 -> 20260930-224205-draft_pp_straddle-6d4c
+2026-09-30 22:42:25 ho-donchian-tf1-9251786b done (1 ledger rows, 43s)
+2026-09-30 22:42:26 submitted ho-orb-tf5-02efa786 -> 20260930-224226-draft_pp_orb-e64e
+2026-09-30 22:42:46 ho-ema_pullback-tf1-db751ea0 done (1 ledger rows, 64s)
+2026-09-30 22:42:46 ho-first_bar_mom-tf15-63a3baa5 done (1 ledger rows, 42s)
+2026-09-30 22:42:47 submitted ho-donchian-tf15-24a64b3e -> 20260930-224247-draft_pp_donchian-0155
+2026-09-30 22:42:48 submitted ho-donchian-tf15-10560b67 -> 20260930-224248-draft_pp_donchian-3cc1
+2026-09-30 22:43:08 ho-straddle-tf30-4b5dcab7 done (1 ledger rows, 64s)
+2026-09-30 22:43:09 submitted ho-first_bar_mom-tf15-d0bd10e8 -> 20260930-224309-draft_pp_first_bar_mom-c186
+2026-09-30 22:43:29 ho-orb-tf5-02efa786 done (1 ledger rows, 64s)
+2026-09-30 22:43:29 ho-donchian-tf15-24a64b3e done (1 ledger rows, 42s)
+2026-09-30 22:43:30 submitted ho-tod_drift-tf5-6bf99d29 -> 20260930-224330-draft_pp_tod_drift-2478
+2026-09-30 22:43:31 submitted ho-orb-tf5-fb13e4bb -> 20260930-224331-draft_pp_orb-f44c
+2026-09-30 22:43:51 ho-donchian-tf15-10560b67 done (1 ledger rows, 63s)
+2026-09-30 22:43:51 ho-first_bar_mom-tf15-d0bd10e8 done (1 ledger rows, 42s)
+2026-09-30 22:43:53 submitted ho-vwap_z-tf5-87d9c8be -> 20260930-224353-draft_pp_vwap_z-6b5a
+2026-09-30 22:43:54 submitted ho-donchian-tf15-b702e5c6 -> 20260930-224354-draft_pp_donchian-4530
+2026-09-30 22:44:14 ho-tod_drift-tf5-6bf99d29 done (1 ledger rows, 44s)
+2026-09-30 22:44:14 ho-orb-tf5-fb13e4bb done (1 ledger rows, 42s)
+2026-09-30 22:44:15 submitted ho-donchian-tf5-ffb8aff8 -> 20260930-224415-draft_pp_donchian-4d6a
+2026-09-30 22:44:16 submitted ho-tod_drift-tf5-1df0621b -> 20260930-224416-draft_pp_tod_drift-b01e
+2026-09-30 22:44:36 ho-vwap_z-tf5-87d9c8be done (1 ledger rows, 44s)
+2026-09-30 22:44:36 ho-donchian-tf15-b702e5c6 done (1 ledger rows, 42s)
+2026-09-30 22:44:37 submitted ho-donchian-tf5-1ef8048d -> 20260930-224437-draft_pp_donchian-98b5
+2026-09-30 22:44:39 submitted ho-tod_drift-tf15-6944fd8a -> 20260930-224439-draft_pp_tod_drift-5087
+2026-09-30 22:44:59 ho-donchian-tf5-ffb8aff8 done (1 ledger rows, 44s)
+2026-09-30 22:44:59 ho-tod_drift-tf5-1df0621b done (1 ledger rows, 42s)
+2026-09-30 22:45:00 submitted ho-tod_drift-tf5-8dabf8e9 -> 20260930-224500-draft_pp_tod_drift-648c
+2026-09-30 22:45:01 submitted ho-tod_drift-tf5-57c214c5 -> 20260930-224501-draft_pp_tod_drift-5380
+2026-09-30 22:45:21 ho-donchian-tf5-1ef8048d done (1 ledger rows, 44s)
+2026-09-30 22:45:21 ho-tod_drift-tf15-6944fd8a done (1 ledger rows, 42s)
+2026-09-30 22:45:22 submitted ho-rsi2-tf1-aa1467b9 -> 20260930-224522-draft_pp_rsi2-21d9
+2026-09-30 22:45:23 submitted ho-rsi2-tf5-dee4f496 -> 20260930-224523-draft_pp_rsi2-4749
+2026-09-30 22:45:43 ho-tod_drift-tf5-8dabf8e9 done (1 ledger rows, 43s)
+2026-09-30 22:45:43 ho-tod_drift-tf5-57c214c5 done (1 ledger rows, 42s)
+2026-09-30 22:45:44 submitted ho-tod_drift-tf5-e89ff4c8 -> 20260930-224544-draft_pp_tod_drift-4062
+2026-09-30 22:45:46 submitted ho-rsi2-tf1-f6d06931 -> 20260930-224546-draft_pp_rsi2-28d4
+2026-09-30 22:46:06 ho-rsi2-tf1-aa1467b9 done (1 ledger rows, 43s)
+2026-09-30 22:46:07 submitted ho-ema_pullback-tf5-590c1ef4 -> 20260930-224607-draft_pp_ema_pullback-2b78
+2026-09-30 22:46:27 ho-rsi2-tf5-dee4f496 done (1 ledger rows, 64s)
+2026-09-30 22:46:27 ho-tod_drift-tf5-e89ff4c8 done (1 ledger rows, 42s)
+2026-09-30 22:46:28 submitted ho-tod_drift-tf5-91f6327a -> 20260930-224628-draft_pp_tod_drift-10d2
+2026-09-30 22:46:29 submitted ho-rsi2-tf5-44c0c3ea -> 20260930-224629-draft_pp_rsi2-b4e4
+2026-09-30 22:46:49 ho-rsi2-tf1-f6d06931 done (1 ledger rows, 64s)
+2026-09-30 22:46:49 ho-ema_pullback-tf5-590c1ef4 done (1 ledger rows, 42s)
+2026-09-30 22:46:50 submitted ho-straddle-tf30-8b232f31 -> 20260930-224650-draft_pp_straddle-50cf
+2026-09-30 22:46:51 submitted ho-straddle-tf30-7f2dbc6a -> 20260930-224651-draft_pp_straddle-a8d1
+2026-09-30 22:47:11 ho-tod_drift-tf5-91f6327a done (1 ledger rows, 44s)
+2026-09-30 22:47:11 ho-rsi2-tf5-44c0c3ea done (1 ledger rows, 42s)
+2026-09-30 22:47:13 submitted ho-squeeze-tf5-a0c50de1 -> 20260930-224713-draft_pp_squeeze-403f
+2026-09-30 22:47:14 submitted ho-donchian-tf15-bfb5c94c -> 20260930-224714-draft_pp_donchian-5e54
+2026-09-30 22:47:34 ho-straddle-tf30-8b232f31 done (1 ledger rows, 44s)
+2026-09-30 22:47:35 submitted ho-donchian-tf15-d79cf51b -> 20260930-224735-draft_pp_donchian-696d
+2026-09-30 22:47:55 ho-straddle-tf30-7f2dbc6a done (1 ledger rows, 64s)
+2026-09-30 22:47:55 ho-squeeze-tf5-a0c50de1 done (1 ledger rows, 42s)
+2026-09-30 22:47:56 submitted ho-donchian-tf15-50801de2 -> 20260930-224756-draft_pp_donchian-082d
+2026-09-30 22:47:57 submitted ho-tod_drift-tf5-b55548f3 -> 20260930-224757-draft_pp_tod_drift-fa27
+2026-09-30 22:48:17 ho-donchian-tf15-bfb5c94c done (1 ledger rows, 64s)
+2026-09-30 22:48:17 ho-donchian-tf15-d79cf51b done (1 ledger rows, 42s)
+2026-09-30 22:48:19 submitted hoc-hmctrl-random-tf30-s11-c10 -> 20260930-224819-draft_pp_random-74fd
+2026-09-30 22:48:20 submitted hoc-hmctrl-random-tf30-s12-c10 -> 20260930-224820-draft_pp_random-6597
+2026-09-30 22:48:40 ho-donchian-tf15-50801de2 done (1 ledger rows, 44s)
+2026-09-30 22:48:40 ho-tod_drift-tf5-b55548f3 done (1 ledger rows, 43s)
+2026-09-30 22:48:42 submitted hoc-hmctrl-random-tf30-s13-c10 -> 20260930-224842-draft_pp_random-8b96
+2026-09-30 22:48:43 submitted hoc-ctrl-randomtod-tf30-s1 -> 20260930-224843-draft_pp_random-dd75
+2026-09-30 22:49:03 hoc-hmctrl-random-tf30-s11-c10 done (1 ledger rows, 44s)
+2026-09-30 22:49:03 hoc-hmctrl-random-tf30-s12-c10 done (1 ledger rows, 42s)
+2026-09-30 22:49:04 submitted hoc-ctrl2-randomtod-tf30-s11 -> 20260930-224904-draft_pp_random-40f9
+2026-09-30 22:49:05 submitted hoc-ctrl2-randomtod-tf30-s12 -> 20260930-224905-draft_pp_random-7143
+2026-09-30 22:49:25 hoc-hmctrl-random-tf30-s13-c10 done (1 ledger rows, 44s)
+2026-09-30 22:49:25 hoc-ctrl-randomtod-tf30-s1 done (1 ledger rows, 42s)
+2026-09-30 22:49:26 submitted hoc-rtod-tf30-x6-s11 -> 20260930-224926-draft_pp_random-7d25
+2026-09-30 22:49:27 submitted hoc-rtod-tf30-x6-s12 -> 20260930-224927-draft_pp_random-24d1
+2026-09-30 22:49:48 hoc-ctrl2-randomtod-tf30-s11 done (1 ledger rows, 44s)
+2026-09-30 22:49:49 submitted hoc-rtod-tf30-x6-s13 -> 20260930-224949-draft_pp_random-b8c6
+2026-09-30 22:50:09 hoc-ctrl2-randomtod-tf30-s12 done (1 ledger rows, 64s)
+2026-09-30 22:50:09 hoc-rtod-tf30-x6-s11 done (1 ledger rows, 42s)
+2026-09-30 22:50:10 submitted hoc-hmctrl-random-tf30-s11-c8 -> 20260930-225010-draft_pp_random-d629
+2026-09-30 22:50:11 submitted hoc-hmctrl-random-tf30-s12-c8 -> 20260930-225011-draft_pp_random-46e1
+2026-09-30 22:50:31 hoc-rtod-tf30-x6-s12 done (1 ledger rows, 64s)
+2026-09-30 22:50:31 hoc-rtod-tf30-x6-s13 done (1 ledger rows, 42s)
+2026-09-30 22:50:32 submitted hoc-hmctrl-random-tf30-s13-c8 -> 20260930-225032-draft_pp_random-f4a5
+2026-09-30 22:50:34 submitted hoc-hmctrl-random-tf5-s11-c9 -> 20260930-225034-draft_pp_random-5b52
+2026-09-30 22:50:54 hoc-hmctrl-random-tf30-s11-c8 done (1 ledger rows, 44s)
+2026-09-30 22:50:54 hoc-hmctrl-random-tf30-s12-c8 done (1 ledger rows, 42s)
+2026-09-30 22:50:55 submitted hoc-hmctrl-random-tf5-s12-c9 -> 20260930-225055-draft_pp_random-5c0e
+2026-09-30 22:50:56 submitted hoc-hmctrl-random-tf5-s13-c9 -> 20260930-225056-draft_pp_random-6802
+2026-09-30 22:51:16 hoc-hmctrl-random-tf30-s13-c8 done (1 ledger rows, 44s)
+2026-09-30 22:51:17 submitted hoc-hmctrl-random-tf15-s11-c10 -> 20260930-225117-draft_pp_random-796c
+2026-09-30 22:51:37 hoc-hmctrl-random-tf5-s11-c9 done (1 ledger rows, 64s)
+2026-09-30 22:51:37 hoc-hmctrl-random-tf5-s12-c9 done (1 ledger rows, 42s)
+2026-09-30 22:51:38 submitted hoc-hmctrl-random-tf15-s12-c10 -> 20260930-225138-draft_pp_random-97cf
+2026-09-30 22:51:40 submitted hoc-hmctrl-random-tf15-s13-c10 -> 20260930-225140-draft_pp_random-d3fb
+2026-09-30 22:52:00 hoc-hmctrl-random-tf5-s13-c9 done (1 ledger rows, 64s)
+2026-09-30 22:52:01 submitted hoc-ctrl-randomtod-tf15-s1 -> 20260930-225201-draft_pp_random-cba2
+2026-09-30 22:52:21 hoc-hmctrl-random-tf15-s11-c10 done (1 ledger rows, 64s)
+2026-09-30 22:52:22 submitted hoc-ctrl2-randomtod-tf15-s11 -> 20260930-225222-draft_pp_random-e974
+2026-09-30 22:52:42 hoc-hmctrl-random-tf15-s12-c10 done (1 ledger rows, 64s)
+2026-09-30 22:52:42 hoc-hmctrl-random-tf15-s13-c10 done (1 ledger rows, 62s)
+2026-09-30 22:52:43 submitted hoc-ctrl2-randomtod-tf15-s12 -> 20260930-225243-draft_pp_random-a3bd
+2026-09-30 22:52:44 submitted hoc-rtod-tf15-x6-s11 -> 20260930-225244-draft_pp_random-427c
+2026-09-30 22:53:04 hoc-ctrl-randomtod-tf15-s1 done (1 ledger rows, 64s)
+2026-09-30 22:53:04 hoc-ctrl2-randomtod-tf15-s11 done (1 ledger rows, 43s)
+2026-09-30 22:53:06 submitted hoc-rtod-tf15-x6-s12 -> 20260930-225306-draft_pp_random-2640
+2026-09-30 22:53:07 submitted hoc-rtod-tf15-x6-s13 -> 20260930-225307-draft_pp_random-314d
+2026-09-30 22:53:27 hoc-ctrl2-randomtod-tf15-s12 done (1 ledger rows, 44s)
+2026-09-30 22:53:27 hoc-rtod-tf15-x6-s11 done (1 ledger rows, 42s)
+2026-09-30 22:53:28 submitted hoc-ctrl-randomtod-tf5-s1 -> 20260930-225328-draft_pp_random-e233
+2026-09-30 22:53:29 submitted hoc-ctrl2-randomtod-tf5-s11 -> 20260930-225329-draft_pp_random-78e5
+2026-09-30 22:53:49 hoc-rtod-tf15-x6-s12 done (1 ledger rows, 44s)
+2026-09-30 22:53:52 submitted hoc-ctrl2-randomtod-tf5-s12 -> 20260930-225352-draft_pp_random-e25f
+2026-09-30 22:54:12 hoc-rtod-tf15-x6-s13 done (1 ledger rows, 66s)
+2026-09-30 22:54:12 hoc-ctrl-randomtod-tf5-s1 done (1 ledger rows, 44s)
+2026-09-30 22:54:14 submitted hoc-rtod-tf5-x12-s11 -> 20260930-225414-draft_pp_random-90f1
+2026-09-30 22:54:15 submitted hoc-rtod-tf5-x12-s12 -> 20260930-225415-draft_pp_random-c7f9
+2026-09-30 22:54:35 hoc-ctrl2-randomtod-tf5-s11 done (1 ledger rows, 66s)
+2026-09-30 22:54:35 hoc-ctrl2-randomtod-tf5-s12 done (1 ledger rows, 43s)
+2026-09-30 22:54:36 submitted hoc-rtod-tf5-x12-s13 -> 20260930-225436-draft_pp_random-91ac
+2026-09-30 22:54:37 submitted hoc-hmctrl-random-tf1-s11-c11 -> 20260930-225437-draft_pp_random-2349
+2026-09-30 22:54:57 hoc-rtod-tf5-x12-s11 done (1 ledger rows, 44s)
+2026-09-30 22:54:57 hoc-rtod-tf5-x12-s12 done (1 ledger rows, 43s)
+2026-09-30 22:54:59 submitted hoc-hmctrl-random-tf1-s12-c11 -> 20260930-225459-draft_pp_random-0389
+2026-09-30 22:55:00 submitted hoc-hmctrl-random-tf1-s13-c11 -> 20260930-225500-draft_pp_random-f77b
+2026-09-30 22:55:20 hoc-rtod-tf5-x12-s13 done (1 ledger rows, 44s)
+2026-09-30 22:55:21 submitted hoc-hmctrl-random-tf1-s11-c10 -> 20260930-225521-draft_pp_random-5066
+2026-09-30 22:55:41 hoc-hmctrl-random-tf1-s11-c11 done (1 ledger rows, 64s)
+2026-09-30 22:55:41 hoc-hmctrl-random-tf1-s12-c11 done (1 ledger rows, 42s)
+2026-09-30 22:55:42 submitted hoc-hmctrl-random-tf1-s12-c10 -> 20260930-225542-draft_pp_random-f3d5
+2026-09-30 22:55:43 submitted hoc-hmctrl-random-tf1-s13-c10 -> 20260930-225543-draft_pp_random-f5fc
+2026-09-30 22:56:03 hoc-hmctrl-random-tf1-s13-c11 done (1 ledger rows, 64s)
+2026-09-30 22:56:05 submitted hoc-hmctrl-random-tf15-s11-c8 -> 20260930-225605-draft_pp_random-c4d5
+2026-09-30 22:56:25 hoc-hmctrl-random-tf1-s11-c10 done (1 ledger rows, 64s)
+2026-09-30 22:56:26 submitted hoc-hmctrl-random-tf15-s12-c8 -> 20260930-225626-draft_pp_random-e2ef
+2026-09-30 22:56:46 hoc-hmctrl-random-tf1-s12-c10 done (1 ledger rows, 64s)
+2026-09-30 22:56:46 hoc-hmctrl-random-tf1-s13-c10 done (1 ledger rows, 62s)
+2026-09-30 22:56:47 submitted hoc-hmctrl-random-tf15-s13-c8 -> 20260930-225647-draft_pp_random-abdc
+2026-09-30 22:56:48 submitted hoc-hmctrl-random-tf30-s11-c9 -> 20260930-225648-draft_pp_random-c418
+2026-09-30 22:57:08 hoc-hmctrl-random-tf15-s11-c8 done (1 ledger rows, 64s)
+2026-09-30 22:57:10 submitted hoc-hmctrl-random-tf30-s12-c9 -> 20260930-225710-draft_pp_random-21a5
+2026-09-30 22:57:30 hoc-hmctrl-random-tf15-s12-c8 done (1 ledger rows, 64s)
+2026-09-30 22:57:30 hoc-hmctrl-random-tf15-s13-c8 done (1 ledger rows, 42s)
+2026-09-30 22:57:31 submitted hoc-hmctrl-random-tf30-s13-c9 -> 20260930-225731-draft_pp_random-7451
+2026-09-30 22:57:32 submitted hoc-hmctrl-random-tf5-s11-c10 -> 20260930-225732-draft_pp_random-b947
+2026-09-30 22:57:52 hoc-hmctrl-random-tf30-s11-c9 done (1 ledger rows, 64s)
+2026-09-30 22:57:53 submitted hoc-hmctrl-random-tf5-s12-c10 -> 20260930-225753-draft_pp_random-6ccd
+2026-09-30 22:58:13 hoc-hmctrl-random-tf30-s12-c9 done (1 ledger rows, 64s)
+2026-09-30 22:58:13 hoc-hmctrl-random-tf30-s13-c9 done (1 ledger rows, 42s)
+2026-09-30 22:58:14 submitted hoc-hmctrl-random-tf5-s13-c10 -> 20260930-225814-draft_pp_random-ad6d
+2026-09-30 22:58:16 submitted hoc-fpctrl-random-tf1-s21-c15 -> 20260930-225816-draft_pp_random-64a2
+2026-09-30 22:58:36 hoc-hmctrl-random-tf5-s11-c10 done (1 ledger rows, 64s)
+2026-09-30 22:58:37 submitted hoc-fpctrl-random-tf1-s22-c15 -> 20260930-225837-draft_pp_random-b7c2
+2026-09-30 22:58:57 hoc-hmctrl-random-tf5-s12-c10 done (1 ledger rows, 64s)
+2026-09-30 22:58:57 hoc-hmctrl-random-tf5-s13-c10 done (1 ledger rows, 43s)
+2026-09-30 22:58:58 submitted hoc-fpctrl-random-tf1-s23-c15 -> 20260930-225858-draft_pp_random-7c05
+2026-09-30 22:58:59 submitted hoc-hmctrl-random-tf15-s11-c7 -> 20260930-225859-draft_pp_random-ec72
+2026-09-30 22:59:19 hoc-fpctrl-random-tf1-s21-c15 done (1 ledger rows, 64s)
+2026-09-30 22:59:20 submitted hoc-hmctrl-random-tf15-s12-c7 -> 20260930-225920-draft_pp_random-ca55
+2026-09-30 22:59:41 hoc-fpctrl-random-tf1-s22-c15 done (1 ledger rows, 64s)
+2026-09-30 22:59:41 hoc-fpctrl-random-tf1-s23-c15 done (1 ledger rows, 42s)
+2026-09-30 22:59:42 submitted hoc-hmctrl-random-tf15-s13-c7 -> 20260930-225942-draft_pp_random-ef37
+2026-09-30 22:59:43 submitted hoc-fpctrl-random-tf5-s21-c7 -> 20260930-225943-draft_pp_random-1987
+2026-09-30 23:00:03 hoc-hmctrl-random-tf15-s11-c7 done (1 ledger rows, 64s)
+2026-09-30 23:00:04 submitted hoc-fpctrl-random-tf5-s22-c7 -> 20260930-230004-draft_pp_random-cc99
+2026-09-30 23:00:24 hoc-hmctrl-random-tf15-s12-c7 done (1 ledger rows, 64s)
+2026-09-30 23:00:24 hoc-hmctrl-random-tf15-s13-c7 done (1 ledger rows, 42s)
+2026-09-30 23:00:25 submitted hoc-fpctrl-random-tf5-s23-c7 -> 20260930-230025-draft_pp_random-27a1
+2026-09-30 23:00:27 submitted hoc-hmctrl-random-tf5-s11-c1 -> 20260930-230027-draft_pp_random-2c54
+2026-09-30 23:00:47 hoc-fpctrl-random-tf5-s21-c7 done (1 ledger rows, 64s)
+2026-09-30 23:00:47 hoc-fpctrl-random-tf5-s22-c7 done (1 ledger rows, 43s)
+2026-09-30 23:00:48 submitted hoc-hmctrl-random-tf5-s12-c1 -> 20260930-230048-draft_pp_random-9ef3
+2026-09-30 23:00:49 submitted hoc-hmctrl-random-tf5-s13-c1 -> 20260930-230049-draft_pp_random-5485
+2026-09-30 23:01:09 hoc-fpctrl-random-tf5-s23-c7 done (1 ledger rows, 44s)
+2026-09-30 23:01:10 submitted hoc-hmctrl-random-tf15-s11-c11 -> 20260930-230110-draft_pp_random-06bf
+2026-09-30 23:01:30 hoc-hmctrl-random-tf5-s11-c1 done (1 ledger rows, 64s)
+2026-09-30 23:01:30 hoc-hmctrl-random-tf5-s12-c1 done (1 ledger rows, 42s)
+2026-09-30 23:01:32 submitted hoc-hmctrl-random-tf15-s12-c11 -> 20260930-230132-draft_pp_random-57ae
+2026-09-30 23:01:33 submitted hoc-hmctrl-random-tf15-s13-c11 -> 20260930-230133-draft_pp_random-cad8
+2026-09-30 23:01:53 hoc-hmctrl-random-tf5-s13-c1 done (1 ledger rows, 64s)
+2026-09-30 23:01:53 hoc-hmctrl-random-tf15-s11-c11 done (1 ledger rows, 42s)
+2026-09-30 23:01:54 submitted hoc-rtod-tf5-x6-s11 -> 20260930-230154-draft_pp_random-0c60
+2026-09-30 23:01:55 submitted hoc-rtod-tf5-x6-s12 -> 20260930-230155-draft_pp_random-93ed
+2026-09-30 23:02:15 hoc-hmctrl-random-tf15-s12-c11 done (1 ledger rows, 44s)
+2026-09-30 23:02:16 submitted hoc-rtod-tf5-x6-s13 -> 20260930-230216-draft_pp_random-e7b5
+2026-09-30 23:02:36 hoc-hmctrl-random-tf15-s13-c11 done (1 ledger rows, 64s)
+2026-09-30 23:02:36 hoc-rtod-tf5-x6-s11 done (1 ledger rows, 42s)
+2026-09-30 23:02:38 submitted hoc-hmctrl-random-tf5-s11-c5 -> 20260930-230238-draft_pp_random-fdf0
+2026-09-30 23:02:39 submitted hoc-hmctrl-random-tf5-s12-c5 -> 20260930-230239-draft_pp_random-e5d3
+2026-09-30 23:02:59 hoc-rtod-tf5-x6-s12 done (1 ledger rows, 64s)
+2026-09-30 23:02:59 hoc-rtod-tf5-x6-s13 done (1 ledger rows, 43s)
+2026-09-30 23:03:00 submitted hoc-hmctrl-random-tf5-s13-c5 -> 20260930-230300-draft_pp_random-598c
+2026-09-30 23:03:01 submitted hoc-fpctrl-random-tf5-s21-c13 -> 20260930-230301-draft_pp_random-beab
+2026-09-30 23:03:21 hoc-hmctrl-random-tf5-s11-c5 done (1 ledger rows, 44s)
+2026-09-30 23:03:23 submitted hoc-fpctrl-random-tf5-s22-c13 -> 20260930-230323-draft_pp_random-72b8
+2026-09-30 23:03:43 hoc-hmctrl-random-tf5-s12-c5 done (1 ledger rows, 64s)
+2026-09-30 23:03:43 hoc-hmctrl-random-tf5-s13-c5 done (1 ledger rows, 42s)
+2026-09-30 23:03:44 submitted hoc-fpctrl-random-tf5-s23-c13 -> 20260930-230344-draft_pp_random-36ee
+2026-09-30 23:03:45 submitted hoc-fpctrl-random-tf5-s21-c15 -> 20260930-230345-draft_pp_random-1b60
+2026-09-30 23:04:05 hoc-fpctrl-random-tf5-s21-c13 done (1 ledger rows, 64s)
+2026-09-30 23:04:05 hoc-fpctrl-random-tf5-s22-c13 done (1 ledger rows, 43s)
+2026-09-30 23:04:06 submitted hoc-fpctrl-random-tf5-s22-c15 -> 20260930-230406-draft_pp_random-c7db
+2026-09-30 23:04:08 submitted hoc-fpctrl-random-tf5-s23-c15 -> 20260930-230408-draft_pp_random-3a6c
+2026-09-30 23:04:28 hoc-fpctrl-random-tf5-s23-c13 done (1 ledger rows, 44s)
+2026-09-30 23:04:29 submitted hoc-hmctrl-random-tf1-s11-c9 -> 20260930-230429-draft_pp_random-2606
+2026-09-30 23:04:49 hoc-fpctrl-random-tf5-s21-c15 done (1 ledger rows, 64s)
+2026-09-30 23:04:49 hoc-fpctrl-random-tf5-s22-c15 done (1 ledger rows, 43s)
+2026-09-30 23:04:50 submitted hoc-hmctrl-random-tf1-s12-c9 -> 20260930-230450-draft_pp_random-ba9b
+2026-09-30 23:04:51 submitted hoc-hmctrl-random-tf1-s13-c9 -> 20260930-230451-draft_pp_random-751a
+2026-09-30 23:05:11 hoc-fpctrl-random-tf5-s23-c15 done (1 ledger rows, 64s)
+2026-09-30 23:05:11 hoc-hmctrl-random-tf1-s11-c9 done (1 ledger rows, 42s)
+2026-09-30 23:05:12 submitted hoc-fpctrl-random-tf5-s21-c11 -> 20260930-230512-draft_pp_random-2c23
+2026-09-30 23:05:14 submitted hoc-fpctrl-random-tf5-s22-c11 -> 20260930-230514-draft_pp_random-99d1
+2026-09-30 23:05:34 hoc-hmctrl-random-tf1-s12-c9 done (1 ledger rows, 44s)
+2026-09-30 23:05:35 submitted hoc-fpctrl-random-tf5-s23-c11 -> 20260930-230535-draft_pp_random-d79a
+2026-09-30 23:05:55 hoc-hmctrl-random-tf1-s13-c9 done (1 ledger rows, 64s)
+2026-09-30 23:05:55 hoc-fpctrl-random-tf5-s21-c11 done (1 ledger rows, 42s)
+2026-09-30 23:05:56 submitted hoc-fpctrl-random-tf5-s21-c10 -> 20260930-230556-draft_pp_random-f965
+2026-09-30 23:05:57 submitted hoc-fpctrl-random-tf5-s22-c10 -> 20260930-230557-draft_pp_random-1769
+2026-09-30 23:06:17 hoc-fpctrl-random-tf5-s22-c11 done (1 ledger rows, 64s)
+2026-09-30 23:06:17 hoc-fpctrl-random-tf5-s23-c11 done (1 ledger rows, 42s)
+2026-09-30 23:06:19 submitted hoc-fpctrl-random-tf5-s23-c10 -> 20260930-230619-draft_pp_random-4fa2
+2026-09-30 23:06:20 submitted hoc-fpctrl-random-tf5-s21-c9 -> 20260930-230620-draft_pp_random-9038
+2026-09-30 23:06:40 hoc-fpctrl-random-tf5-s21-c10 done (1 ledger rows, 44s)
+2026-09-30 23:06:40 hoc-fpctrl-random-tf5-s22-c10 done (1 ledger rows, 42s)
+2026-09-30 23:06:41 submitted hoc-fpctrl-random-tf5-s22-c9 -> 20260930-230641-draft_pp_random-2bb4
+2026-09-30 23:06:42 submitted hoc-fpctrl-random-tf5-s23-c9 -> 20260930-230642-draft_pp_random-12a2
+2026-09-30 23:07:02 hoc-fpctrl-random-tf5-s23-c10 done (1 ledger rows, 44s)
+2026-09-30 23:07:02 hoc-fpctrl-random-tf5-s21-c9 done (1 ledger rows, 42s)
+2026-09-30 23:07:03 submitted hoc-fpctrl-random-tf5-s21-c14 -> 20260930-230703-draft_pp_random-f265
+2026-09-30 23:07:05 submitted hoc-fpctrl-random-tf5-s22-c14 -> 20260930-230705-draft_pp_random-8611
+2026-09-30 23:07:25 hoc-fpctrl-random-tf5-s22-c9 done (1 ledger rows, 44s)
+2026-09-30 23:07:25 hoc-fpctrl-random-tf5-s23-c9 done (1 ledger rows, 42s)
+2026-09-30 23:07:26 submitted hoc-fpctrl-random-tf5-s23-c14 -> 20260930-230726-draft_pp_random-c033
+2026-09-30 23:07:27 submitted hoc-hmctrl-random-tf30-s11-c4 -> 20260930-230727-draft_pp_random-6f9d
+2026-09-30 23:07:47 hoc-fpctrl-random-tf5-s21-c14 done (1 ledger rows, 44s)
+2026-09-30 23:07:48 submitted hoc-hmctrl-random-tf30-s12-c4 -> 20260930-230748-draft_pp_random-99e5
+2026-09-30 23:08:08 hoc-fpctrl-random-tf5-s22-c14 done (1 ledger rows, 64s)
+2026-09-30 23:08:08 hoc-fpctrl-random-tf5-s23-c14 done (1 ledger rows, 42s)
+2026-09-30 23:08:09 submitted hoc-hmctrl-random-tf30-s13-c4 -> 20260930-230809-draft_pp_random-96cd
+2026-09-30 23:08:11 submitted hoc-hmctrl-random-tf5-s11-c4 -> 20260930-230811-draft_pp_random-b9af
+2026-09-30 23:08:31 hoc-hmctrl-random-tf30-s11-c4 done (1 ledger rows, 64s)
+2026-09-30 23:08:31 hoc-hmctrl-random-tf30-s12-c4 done (1 ledger rows, 42s)
+2026-09-30 23:08:32 submitted hoc-hmctrl-random-tf5-s12-c4 -> 20260930-230832-draft_pp_random-24e8
+2026-09-30 23:08:33 submitted hoc-hmctrl-random-tf5-s13-c4 -> 20260930-230833-draft_pp_random-2881
+2026-09-30 23:08:53 hoc-hmctrl-random-tf30-s13-c4 done (1 ledger rows, 44s)
+2026-09-30 23:08:55 submitted hoc-fpctrl-random-tf1-s21-c10 -> 20260930-230855-draft_pp_random-3b48
+2026-09-30 23:09:15 hoc-hmctrl-random-tf5-s11-c4 done (1 ledger rows, 64s)
+2026-09-30 23:09:15 hoc-hmctrl-random-tf5-s12-c4 done (1 ledger rows, 43s)
+2026-09-30 23:09:16 submitted hoc-fpctrl-random-tf1-s22-c10 -> 20260930-230916-draft_pp_random-6d98
+2026-09-30 23:09:17 submitted hoc-fpctrl-random-tf1-s23-c10 -> 20260930-230917-draft_pp_random-d787
+2026-09-30 23:09:37 hoc-hmctrl-random-tf5-s13-c4 done (1 ledger rows, 64s)
+2026-09-30 23:09:37 hoc-fpctrl-random-tf1-s21-c10 done (1 ledger rows, 42s)
+2026-09-30 23:09:38 submitted hoc-fpctrl-random-tf1-s21-c13 -> 20260930-230938-draft_pp_random-d4f4
+2026-09-30 23:09:39 submitted hoc-fpctrl-random-tf1-s22-c13 -> 20260930-230939-draft_pp_random-c3d1
+2026-09-30 23:09:59 hoc-fpctrl-random-tf1-s22-c10 done (1 ledger rows, 44s)
+2026-09-30 23:09:59 hoc-fpctrl-random-tf1-s23-c10 done (1 ledger rows, 42s)
+2026-09-30 23:10:01 submitted hoc-fpctrl-random-tf1-s23-c13 -> 20260930-231001-draft_pp_random-4cb0
+2026-09-30 23:10:02 submitted hoc-fpctrl-random-tf1-s21-c1 -> 20260930-231002-draft_pp_random-d498
+2026-09-30 23:10:22 hoc-fpctrl-random-tf1-s21-c13 done (1 ledger rows, 44s)
+2026-09-30 23:10:22 hoc-fpctrl-random-tf1-s22-c13 done (1 ledger rows, 42s)
+2026-09-30 23:10:23 submitted hoc-fpctrl-random-tf1-s22-c1 -> 20260930-231023-draft_pp_random-1a0a
+2026-09-30 23:10:24 submitted hoc-fpctrl-random-tf1-s23-c1 -> 20260930-231024-draft_pp_random-bb69
+2026-09-30 23:10:44 hoc-fpctrl-random-tf1-s23-c13 done (1 ledger rows, 44s)
+2026-09-30 23:10:46 submitted hoc-fpctrl-random-tf5-s21-c3 -> 20260930-231046-draft_pp_random-c761
+2026-09-30 23:11:06 hoc-fpctrl-random-tf1-s21-c1 done (1 ledger rows, 64s)
+2026-09-30 23:11:06 hoc-fpctrl-random-tf1-s22-c1 done (1 ledger rows, 43s)
+2026-09-30 23:11:07 submitted hoc-fpctrl-random-tf5-s22-c3 -> 20260930-231107-draft_pp_random-2ad6
+2026-09-30 23:11:08 submitted hoc-fpctrl-random-tf5-s23-c3 -> 20260930-231108-draft_pp_random-390d
+2026-09-30 23:11:28 hoc-fpctrl-random-tf1-s23-c1 done (1 ledger rows, 64s)
+2026-09-30 23:11:28 hoc-fpctrl-random-tf5-s21-c3 done (1 ledger rows, 42s)
+2026-09-30 23:11:48 hoc-fpctrl-random-tf5-s22-c3 done (1 ledger rows, 41s)
+2026-09-30 23:11:48 hoc-fpctrl-random-tf5-s23-c3 done (1 ledger rows, 40s)
+2026-10-01 01:24:06 submitted es:wf-straddle-tf15-pm -> 20261001-012405-draft_pp_es_straddle-90a5
+2026-10-01 01:24:08 submitted es:wf-straddle-tf15-nyam -> 20261001-012408-draft_pp_es_straddle-7a0f
+2026-10-01 01:24:12 submitted es:wf-donchian-tf15-pm -> 20261001-012412-draft_pp_es_donchian-131c
+2026-10-01 01:24:15 submitted es:wf-rsi2-tf5-nyam-fp -> 20261001-012415-draft_pp_es_rsi2-7753
+2026-10-01 01:29:06 es:wf-straddle-tf15-pm done (1 ledger rows, 300s)
+2026-10-01 01:29:09 submitted es:wf-straddle-tf30-pm -> 20261001-012909-draft_pp_es_straddle-c8e7
+2026-10-01 01:33:30 es:wf-straddle-tf15-nyam done (1 ledger rows, 562s)
+2026-10-01 01:33:34 submitted es:wf-tod_drift-tf5-nyam-fp -> 20261001-013334-draft_pp_es_tod_drift-d7fc
+2026-10-01 01:37:54 es:wf-donchian-tf15-pm done (1 ledger rows, 823s)
+2026-10-01 01:37:58 submitted es:wf-tod_drift-tf5-pm-fp -> 20261001-013758-draft_pp_es_tod_drift-d21f
+2026-10-01 01:39:58 es:wf-rsi2-tf5-nyam-fp done (1 ledger rows, 943s)
+2026-10-01 01:40:02 submitted es:wf-vwap_flip-tf5-pm -> 20261001-014002-draft_pp_es_vwap_flip-5a99
+2026-10-01 01:44:43 es:wf-straddle-tf30-pm done (1 ledger rows, 933s)
+2026-10-01 01:44:47 submitted es:wf-rsi2-tf5-nyam -> 20261001-014447-draft_pp_es_rsi2-0889
+2026-10-01 01:46:47 es:wf-tod_drift-tf5-nyam-fp done (1 ledger rows, 793s)
+2026-10-01 01:46:51 submitted es:wf-tod_drift-tf15-nyam -> 20261001-014651-draft_pp_es_tod_drift-2c7a
+2026-10-01 01:48:31 es:wf-tod_drift-tf5-pm-fp done (1 ledger rows, 633s)
+2026-10-01 01:48:35 submitted es:wf-first_bar_mom-tf30-pm -> 20261001-014835-draft_pp_es_first_bar_mom-335d
+2026-10-01 01:53:16 es:wf-vwap_flip-tf5-pm done (1 ledger rows, 794s)
+2026-10-01 01:53:20 submitted es:wf-tod_drift-tf5-nyam -> 20261001-015320-draft_pp_es_tod_drift-f649
+2026-10-01 01:58:00 es:wf-rsi2-tf5-nyam done (1 ledger rows, 794s)
+2026-10-01 01:58:04 submitted es:wf-donchian-tf30-pm -> 20261001-015804-draft_pp_es_donchian-a155
+2026-10-01 02:01:05 es:wf-tod_drift-tf15-nyam done (1 ledger rows, 854s)
+2026-10-01 02:01:09 submitted es:wf-ib-tf30-pm -> 20261001-020109-draft_pp_es_ib-1408
+2026-10-01 02:05:29 es:wf-first_bar_mom-tf30-pm done (1 ledger rows, 1015s)
+2026-10-01 02:05:33 submitted es:wf-vwap_z-tf5-mid -> 20261001-020533-draft_pp_es_vwap_z-a43c
+2026-10-01 02:08:14 es:wf-tod_drift-tf5-nyam done (1 ledger rows, 894s)
+2026-10-01 02:12:35 es:wf-donchian-tf30-pm done (1 ledger rows, 870s)
+2026-10-01 02:14:15 es:wf-ib-tf30-pm done (1 ledger rows, 786s)
+2026-10-01 02:19:16 es:wf-vwap_z-tf5-mid done (1 ledger rows, 822s)
+2026-10-01 11:11:11 submitted es:rollcheck-es-hm-donchian-tf15-c10 -> 20261001-111111-draft_pp_es_donchian-bf94
+2026-10-01 11:11:12 submitted es:rollcheck-es-screen-sweep_rev-tf5 -> 20261001-111112-draft_pp_es_sweep_rev-0854
+2026-10-01 11:11:37 es:rollcheck-es-hm-donchian-tf15-c10 done (1 ledger rows, 26s)
+2026-10-01 11:11:38 submitted es:rollcheck-es-screen-pinbar-tf5 -> 20261001-111138-draft_pp_es_pinbar-e049
+2026-10-01 11:11:58 es:rollcheck-es-screen-sweep_rev-tf5 done (1 ledger rows, 46s)
+2026-10-01 11:11:58 es:rollcheck-es-screen-pinbar-tf5 done (1 ledger rows, 20s)
+2026-10-01 11:15:34 submitted es:ho-straddle-tf15-ffb10a7c -> 20261001-111534-draft_pp_es_straddle-4c25
+2026-10-01 11:15:35 submitted es:ho-straddle-tf15-305de48e -> 20261001-111535-draft_pp_es_straddle-881a
+2026-10-01 11:18:01 es:ho-straddle-tf15-ffb10a7c done (1 ledger rows, 146s)
+2026-10-01 11:18:02 submitted es:ho-straddle-tf30-7a208d6b -> 20261001-111802-draft_pp_es_straddle-df4d
+2026-10-01 11:20:02 es:ho-straddle-tf15-305de48e done (1 ledger rows, 267s)
+2026-10-01 11:20:03 submitted es:ho-straddle-tf15-e2373807 -> 20261001-112003-draft_pp_es_straddle-6869
+2026-10-01 11:22:03 es:ho-straddle-tf30-7a208d6b done (1 ledger rows, 242s)
+2026-10-01 11:22:04 submitted es:ho-straddle-tf15-e1d66774 -> 20261001-112204-draft_pp_es_straddle-c21f
+2026-10-01 11:24:24 es:ho-straddle-tf15-e2373807 done (1 ledger rows, 262s)
+2026-10-01 11:24:25 submitted es:ho-straddle-tf30-c994109d -> 20261001-112425-draft_pp_es_straddle-109b
+2026-10-01 11:26:26 es:ho-straddle-tf15-e1d66774 done (1 ledger rows, 262s)
+2026-10-01 11:26:27 submitted es:ho-tod_drift-tf15-9f8b09ce -> 20261001-112627-draft_pp_es_tod_drift-242d
+2026-10-01 11:28:27 es:ho-straddle-tf30-c994109d done (1 ledger rows, 242s)
+2026-10-01 11:28:28 submitted es:ho-donchian-tf15-e1bb8067 -> 20261001-112828-draft_pp_es_donchian-76b0
+2026-10-01 11:30:48 es:ho-tod_drift-tf15-9f8b09ce done (1 ledger rows, 262s)
+2026-10-01 11:30:49 submitted es:ho-tod_drift-tf5-4fb72b7b -> 20261001-113049-draft_pp_es_tod_drift-e089
+2026-10-01 11:32:50 es:ho-donchian-tf15-e1bb8067 done (1 ledger rows, 262s)
+2026-10-01 11:32:51 submitted es:ho-straddle-tf15-6079c273 -> 20261001-113251-draft_pp_es_straddle-2f90
+2026-10-01 11:35:11 es:ho-tod_drift-tf5-4fb72b7b done (1 ledger rows, 262s)
+2026-10-01 11:35:12 submitted es:ho-first_bar_mom-tf30-b2b57638 -> 20261001-113512-draft_pp_es_first_bar_mom-03a3
+2026-10-01 11:37:12 es:ho-straddle-tf15-6079c273 done (1 ledger rows, 262s)
+2026-10-01 11:37:13 submitted es:ho-straddle-tf15-61200e61 -> 20261001-113713-draft_pp_es_straddle-0bb9
+2026-10-01 11:39:14 es:ho-first_bar_mom-tf30-b2b57638 done (1 ledger rows, 242s)
+2026-10-01 11:39:15 submitted es:ho-ema_pullback-tf5-e6aad393 -> 20261001-113915-draft_pp_es_ema_pullback-3460
+2026-10-01 11:41:35 es:ho-straddle-tf15-61200e61 done (1 ledger rows, 262s)
+2026-10-01 11:41:36 submitted es:ho-first_bar_mom-tf30-c0349e76 -> 20261001-114136-draft_pp_es_first_bar_mom-5922
+2026-10-01 11:43:36 es:ho-ema_pullback-tf5-e6aad393 done (1 ledger rows, 262s)
+2026-10-01 11:43:37 submitted es:ho-first_bar_mom-tf30-44dfc0a6 -> 20261001-114337-draft_pp_es_first_bar_mom-bc31
+2026-10-01 11:45:58 es:ho-first_bar_mom-tf30-c0349e76 done (1 ledger rows, 262s)
+2026-10-01 11:45:59 submitted es:ho-vwap_z-tf5-866214ee -> 20261001-114559-draft_pp_es_vwap_z-a2bf
+2026-10-01 11:47:59 es:ho-first_bar_mom-tf30-44dfc0a6 done (1 ledger rows, 262s)
+2026-10-01 11:48:00 submitted es:ho-first_bar_mom-tf30-23a65954 -> 20261001-114800-draft_pp_es_first_bar_mom-bc01
+2026-10-01 11:50:00 es:ho-vwap_z-tf5-866214ee done (1 ledger rows, 242s)
+2026-10-01 11:50:01 submitted es:ho-vwap_flip-tf15-ea3993e5 -> 20261001-115001-draft_pp_es_vwap_flip-90df
+2026-10-01 11:52:02 es:ho-first_bar_mom-tf30-23a65954 done (1 ledger rows, 242s)
+2026-10-01 11:52:03 submitted es:ho-vwap_flip-tf5-bcb40c50 -> 20261001-115203-draft_pp_es_vwap_flip-99b3
+2026-10-01 11:54:23 es:ho-vwap_flip-tf15-ea3993e5 done (1 ledger rows, 262s)
+2026-10-01 11:54:24 submitted es:ho-tod_drift-tf5-14b295d8 -> 20261001-115424-draft_pp_es_tod_drift-ee97
+2026-10-01 11:56:24 es:ho-vwap_flip-tf5-bcb40c50 done (1 ledger rows, 262s)
+2026-10-01 11:56:25 submitted es:ho-donchian-tf15-63b3172d -> 20261001-115625-draft_pp_es_donchian-3bce
+2026-10-01 11:58:46 es:ho-tod_drift-tf5-14b295d8 done (1 ledger rows, 262s)
+2026-10-01 11:58:47 submitted es:ho-donchian-tf15-08f9af1a -> 20261001-115847-draft_pp_es_donchian-4c3c
+2026-10-01 12:00:47 es:ho-donchian-tf15-63b3172d done (1 ledger rows, 262s)
+2026-10-01 12:00:48 submitted es:ho-ema_pullback-tf5-649fce5a -> 20261001-120048-draft_pp_es_ema_pullback-7160
+2026-10-01 12:02:48 es:ho-donchian-tf15-08f9af1a done (1 ledger rows, 242s)
+2026-10-01 12:02:49 submitted es:ho-ema_pullback-tf5-c3b8ba03 -> 20261001-120249-draft_pp_es_ema_pullback-132a
+2026-10-01 12:05:10 es:ho-ema_pullback-tf5-649fce5a done (1 ledger rows, 262s)
+2026-10-01 12:05:11 submitted es:ho-straddle-tf15-de616307 -> 20261001-120511-draft_pp_es_straddle-cf67
+2026-10-01 12:07:11 es:ho-ema_pullback-tf5-c3b8ba03 done (1 ledger rows, 262s)
+2026-10-01 12:07:12 submitted es:ho-rsi2-tf5-5b4ff05b -> 20261001-120712-draft_pp_es_rsi2-fb87
+2026-10-01 12:09:12 es:ho-straddle-tf15-de616307 done (1 ledger rows, 242s)
+2026-10-01 12:09:13 submitted es:ho-straddle-tf15-b6efbab4 -> 20261001-120913-draft_pp_es_straddle-7455
+2026-10-01 12:11:34 es:ho-rsi2-tf5-5b4ff05b done (1 ledger rows, 262s)
+2026-10-01 12:11:35 submitted es:ho-rsi2-tf5-c589d94c -> 20261001-121135-draft_pp_es_rsi2-024e
+2026-10-01 12:13:35 es:ho-straddle-tf15-b6efbab4 done (1 ledger rows, 262s)
+2026-10-01 12:13:36 submitted es:ho-vwap_flip-tf5-5ba75a70 -> 20261001-121336-draft_pp_es_vwap_flip-ab8b
+2026-10-01 12:15:56 es:ho-rsi2-tf5-c589d94c done (1 ledger rows, 262s)
+2026-10-01 12:15:57 submitted es:ho-donchian-tf15-5f659063 -> 20261001-121557-draft_pp_es_donchian-b87f
+2026-10-01 12:17:57 es:ho-vwap_flip-tf5-5ba75a70 done (1 ledger rows, 262s)
+2026-10-01 12:17:58 submitted es:ho-tema_slope-tf5-0c2abc02 -> 20261001-121758-draft_pp_es_tema_slope-0986
+2026-10-01 12:19:59 es:ho-donchian-tf15-5f659063 done (1 ledger rows, 242s)
+2026-10-01 12:20:00 submitted es:ho-donchian-tf5-d209781d -> 20261001-122000-draft_pp_es_donchian-c5f9
+2026-10-01 12:22:00 es:ho-tema_slope-tf5-0c2abc02 done (1 ledger rows, 242s)
+2026-10-01 12:22:01 submitted es:ho-donchian-tf15-acced2d8 -> 20261001-122201-draft_pp_es_donchian-e2b1
+2026-10-01 12:24:21 es:ho-donchian-tf5-d209781d done (1 ledger rows, 262s)
+2026-10-01 12:24:22 submitted es:ho-donchian-tf15-a3916b1d -> 20261001-122422-draft_pp_es_donchian-c39d
+2026-10-01 12:26:23 es:ho-donchian-tf15-acced2d8 done (1 ledger rows, 262s)
+2026-10-01 12:26:24 submitted es:ho-tod_drift-tf5-1328757c -> 20261001-122624-draft_pp_es_tod_drift-77f1
+2026-10-01 12:28:24 es:ho-donchian-tf15-a3916b1d done (1 ledger rows, 242s)
+2026-10-01 12:28:25 submitted es:ho-tod_drift-tf5-6fcd9b18 -> 20261001-122825-draft_pp_es_tod_drift-4d7f
+2026-10-01 12:30:45 es:ho-tod_drift-tf5-1328757c done (1 ledger rows, 262s)
+2026-10-01 12:30:46 submitted es:ho-ema_pullback-tf5-78a65e7f -> 20261001-123046-draft_pp_es_ema_pullback-9c49
+2026-10-01 12:32:47 es:ho-tod_drift-tf5-6fcd9b18 done (1 ledger rows, 262s)
+2026-10-01 12:32:48 submitted es:ho-ema_pullback-tf5-386cded8 -> 20261001-123248-draft_pp_es_ema_pullback-ced8
+2026-10-01 12:34:48 es:ho-ema_pullback-tf5-78a65e7f done (1 ledger rows, 242s)
+2026-10-01 12:34:49 submitted es:ho-ema_pullback-tf5-86fb76d6 -> 20261001-123449-draft_pp_es_ema_pullback-35c8
+2026-10-01 12:37:09 es:ho-ema_pullback-tf5-386cded8 done (1 ledger rows, 262s)
+2026-10-01 12:37:10 submitted es:ho-straddle-tf15-fe854b54 -> 20261001-123710-draft_pp_es_straddle-d98a
+2026-10-01 12:39:11 es:ho-ema_pullback-tf5-86fb76d6 done (1 ledger rows, 262s)
+2026-10-01 12:39:12 submitted es:ho-straddle-tf15-62ec15db -> 20261001-123912-draft_pp_es_straddle-fc67
+2026-10-01 12:41:12 es:ho-straddle-tf15-fe854b54 done (1 ledger rows, 242s)
+2026-10-01 12:41:13 submitted es:ho-vwap_flip-tf5-adeaf3d1 -> 20261001-124113-draft_pp_es_vwap_flip-9834
+2026-10-01 12:43:33 es:ho-straddle-tf15-62ec15db done (1 ledger rows, 262s)
+2026-10-01 12:43:34 submitted es:ho-vwap_flip-tf5-8fff04bb -> 20261001-124334-draft_pp_es_vwap_flip-a8ed
+2026-10-01 12:45:35 es:ho-vwap_flip-tf5-adeaf3d1 done (1 ledger rows, 262s)
+2026-10-01 12:45:36 submitted es:ho-donchian-tf15-84353488 -> 20261001-124536-draft_pp_es_donchian-971b
+2026-10-01 12:47:36 es:ho-vwap_flip-tf5-8fff04bb done (1 ledger rows, 242s)
+2026-10-01 12:47:37 submitted es:ho-vwap_z-tf5-08ea1a31 -> 20261001-124737-draft_pp_es_vwap_z-77c0
+2026-10-01 12:49:57 es:ho-donchian-tf15-84353488 done (1 ledger rows, 262s)
+2026-10-01 12:49:58 submitted es:hoc-hmctrl-random-tf15-s11-c9 -> 20261001-124958-draft_pp_es_random-0266
+2026-10-01 12:51:59 es:ho-vwap_z-tf5-08ea1a31 done (1 ledger rows, 262s)
+2026-10-01 12:52:00 submitted es:hoc-hmctrl-random-tf15-s12-c9 -> 20261001-125200-draft_pp_es_random-323c
+2026-10-01 12:54:20 es:hoc-hmctrl-random-tf15-s11-c9 done (1 ledger rows, 262s)
+2026-10-01 12:54:21 submitted es:hoc-hmctrl-random-tf15-s13-c9 -> 20261001-125421-draft_pp_es_random-7679
+2026-10-01 12:56:21 es:hoc-hmctrl-random-tf15-s12-c9 done (1 ledger rows, 262s)
+2026-10-01 12:56:22 submitted es:hoc-hmctrl-random-tf15-s11-c8 -> 20261001-125622-draft_pp_es_random-d305
+2026-10-01 12:58:23 es:hoc-hmctrl-random-tf15-s13-c9 done (1 ledger rows, 242s)
+2026-10-01 12:58:24 submitted es:hoc-hmctrl-random-tf15-s12-c8 -> 20261001-125824-draft_pp_es_random-574c
+2026-10-01 13:00:44 es:hoc-hmctrl-random-tf15-s11-c8 done (1 ledger rows, 262s)
+2026-10-01 13:00:45 submitted es:hoc-hmctrl-random-tf15-s13-c8 -> 20261001-130045-draft_pp_es_random-b4bc
+2026-10-01 13:02:45 es:hoc-hmctrl-random-tf15-s12-c8 done (1 ledger rows, 262s)
+2026-10-01 13:02:46 submitted es:hoc-fpctrl-random-tf30-s21-c15 -> 20261001-130246-draft_pp_es_random-e56c
+2026-10-01 13:05:07 es:hoc-hmctrl-random-tf15-s13-c8 done (1 ledger rows, 262s)
+2026-10-01 13:05:08 submitted es:hoc-fpctrl-random-tf30-s22-c15 -> 20261001-130508-draft_pp_es_random-6170
+2026-10-01 13:07:08 es:hoc-fpctrl-random-tf30-s21-c15 done (1 ledger rows, 262s)
+2026-10-01 13:07:09 submitted es:hoc-fpctrl-random-tf30-s23-c15 -> 20261001-130709-draft_pp_es_random-cd19
+2026-10-01 13:09:09 es:hoc-fpctrl-random-tf30-s22-c15 done (1 ledger rows, 242s)
+2026-10-01 13:09:10 submitted es:hoc-hmctrl-random-tf15-s11-c10 -> 20261001-130910-draft_pp_es_random-b254
+2026-10-01 13:11:31 es:hoc-fpctrl-random-tf30-s23-c15 done (1 ledger rows, 262s)
+2026-10-01 13:11:32 submitted es:hoc-hmctrl-random-tf15-s12-c10 -> 20261001-131132-draft_pp_es_random-8f5d
+2026-10-01 13:13:32 es:hoc-hmctrl-random-tf15-s11-c10 done (1 ledger rows, 262s)
+2026-10-01 13:13:33 submitted es:hoc-hmctrl-random-tf15-s13-c10 -> 20261001-131333-draft_pp_es_random-ce53
+2026-10-01 13:15:53 es:hoc-hmctrl-random-tf15-s12-c10 done (1 ledger rows, 262s)
+2026-10-01 13:15:54 submitted es:hoc-fpctrl-random-tf30-s21-c14 -> 20261001-131554-draft_pp_es_random-bade
+2026-10-01 13:17:55 es:hoc-hmctrl-random-tf15-s13-c10 done (1 ledger rows, 262s)
+2026-10-01 13:17:56 submitted es:hoc-fpctrl-random-tf30-s22-c14 -> 20261001-131756-draft_pp_es_random-6b0f
+2026-10-01 13:19:56 es:hoc-fpctrl-random-tf30-s21-c14 done (1 ledger rows, 242s)
+2026-10-01 13:19:57 submitted es:hoc-fpctrl-random-tf30-s23-c14 -> 20261001-131957-draft_pp_es_random-1a4f
+2026-10-01 13:22:17 es:hoc-fpctrl-random-tf30-s22-c14 done (1 ledger rows, 262s)
+2026-10-01 13:22:18 submitted es:hoc-ctrl-randomtod-tf15-s1 -> 20261001-132218-draft_pp_es_random-fc39
+2026-10-01 13:24:19 es:hoc-fpctrl-random-tf30-s23-c14 done (1 ledger rows, 262s)
+2026-10-01 13:24:20 submitted es:hoc-ctrl2-randomtod-tf15-s11 -> 20261001-132420-draft_pp_es_random-0525
+2026-10-01 13:26:20 es:hoc-ctrl-randomtod-tf15-s1 done (1 ledger rows, 242s)
+2026-10-01 13:26:21 submitted es:hoc-ctrl2-randomtod-tf15-s12 -> 20261001-132621-draft_pp_es_random-950b
+2026-10-01 13:28:41 es:hoc-ctrl2-randomtod-tf15-s11 done (1 ledger rows, 262s)
+2026-10-01 13:28:42 submitted es:hoc-hmctrl2-randomtod-tf15-s11-c0 -> 20261001-132842-draft_pp_es_random-b2a3
+2026-10-01 13:30:43 es:hoc-ctrl2-randomtod-tf15-s12 done (1 ledger rows, 262s)
+2026-10-01 13:30:44 submitted es:hoc-hmctrl2-randomtod-tf15-s11-c1 -> 20261001-133044-draft_pp_es_random-8661
+2026-10-01 13:32:44 es:hoc-hmctrl2-randomtod-tf15-s11-c0 done (1 ledger rows, 242s)
+2026-10-01 13:32:45 submitted es:hoc-hmctrl2-randomtod-tf15-s12-c0 -> 20261001-133245-draft_pp_es_random-a6e8
+2026-10-01 13:34:45 es:hoc-hmctrl2-randomtod-tf15-s11-c1 done (1 ledger rows, 242s)
+2026-10-01 13:34:46 submitted es:hoc-hmctrl2-randomtod-tf15-s12-c1 -> 20261001-133446-draft_pp_es_random-19a2
+2026-10-01 13:37:07 es:hoc-hmctrl2-randomtod-tf15-s12-c0 done (1 ledger rows, 262s)
+2026-10-01 13:37:08 submitted es:hoc-hmctrl2-randomtod-tf15-s13-c0 -> 20261001-133708-draft_pp_es_random-ac33
+2026-10-01 13:39:08 es:hoc-hmctrl2-randomtod-tf15-s12-c1 done (1 ledger rows, 262s)
+2026-10-01 13:39:09 submitted es:hoc-hmctrl2-randomtod-tf15-s13-c1 -> 20261001-133909-draft_pp_es_random-fd03
+2026-10-01 13:41:09 es:hoc-hmctrl2-randomtod-tf15-s13-c0 done (1 ledger rows, 242s)
+2026-10-01 13:41:10 submitted es:hoc-hmctrl2-randomtod-tf5-s11-c4 -> 20261001-134110-draft_pp_es_random-0539
+2026-10-01 13:43:31 es:hoc-hmctrl2-randomtod-tf15-s13-c1 done (1 ledger rows, 262s)
+2026-10-01 13:43:32 submitted es:hoc-hmctrl2-randomtod-tf5-s11-c5 -> 20261001-134332-draft_pp_es_random-2a98
+2026-10-01 13:45:32 es:hoc-hmctrl2-randomtod-tf5-s11-c4 done (1 ledger rows, 262s)
+2026-10-01 13:45:33 submitted es:hoc-hmctrl2-randomtod-tf5-s12-c4 -> 20261001-134533-draft_pp_es_random-774d
+2026-10-01 13:47:53 es:hoc-hmctrl2-randomtod-tf5-s11-c5 done (1 ledger rows, 262s)
+2026-10-01 13:47:54 submitted es:hoc-hmctrl2-randomtod-tf5-s12-c5 -> 20261001-134754-draft_pp_es_random-f64b
+2026-10-01 13:49:55 es:hoc-hmctrl2-randomtod-tf5-s12-c4 done (1 ledger rows, 262s)
+2026-10-01 13:49:56 submitted es:hoc-hmctrl2-randomtod-tf5-s13-c4 -> 20261001-134956-draft_pp_es_random-cefe
+2026-10-01 13:51:56 es:hoc-hmctrl2-randomtod-tf5-s12-c5 done (1 ledger rows, 242s)
+2026-10-01 13:51:57 submitted es:hoc-hmctrl2-randomtod-tf5-s13-c5 -> 20261001-135157-draft_pp_es_random-7efa
+2026-10-01 13:53:57 es:hoc-hmctrl2-randomtod-tf5-s13-c4 done (1 ledger rows, 242s)
+2026-10-01 13:53:58 submitted es:hoc-hmctrl-random-tf15-s11-c11 -> 20261001-135358-draft_pp_es_random-69f0
+2026-10-01 13:56:19 es:hoc-hmctrl2-randomtod-tf5-s13-c5 done (1 ledger rows, 262s)
+2026-10-01 13:56:20 submitted es:hoc-hmctrl-random-tf15-s12-c11 -> 20261001-135620-draft_pp_es_random-da19
+2026-10-01 13:58:20 es:hoc-hmctrl-random-tf15-s11-c11 done (1 ledger rows, 262s)
+2026-10-01 13:58:21 submitted es:hoc-hmctrl-random-tf15-s13-c11 -> 20261001-135821-draft_pp_es_random-143c
+2026-10-01 14:00:21 es:hoc-hmctrl-random-tf15-s12-c11 done (1 ledger rows, 242s)
+2026-10-01 14:00:22 submitted es:hoc-hmctrl-random-tf30-s11-c10 -> 20261001-140022-draft_pp_es_random-f431
+2026-10-01 14:02:43 es:hoc-hmctrl-random-tf15-s13-c11 done (1 ledger rows, 262s)
+2026-10-01 14:02:44 submitted es:hoc-hmctrl-random-tf30-s12-c10 -> 20261001-140244-draft_pp_es_random-2b55
+2026-10-01 14:04:44 es:hoc-hmctrl-random-tf30-s11-c10 done (1 ledger rows, 262s)
+2026-10-01 14:04:45 submitted es:hoc-hmctrl-random-tf30-s13-c10 -> 20261001-140445-draft_pp_es_random-a664
+2026-10-01 14:07:05 es:hoc-hmctrl-random-tf30-s12-c10 done (1 ledger rows, 262s)
+2026-10-01 14:07:07 submitted es:hoc-fpctrl-random-tf5-s21-c15 -> 20261001-140707-draft_pp_es_random-395d
+2026-10-01 14:09:07 es:hoc-hmctrl-random-tf30-s13-c10 done (1 ledger rows, 262s)
+2026-10-01 14:09:08 submitted es:hoc-fpctrl-random-tf5-s22-c15 -> 20261001-140908-draft_pp_es_random-f5db
+2026-10-01 14:11:08 es:hoc-fpctrl-random-tf5-s21-c15 done (1 ledger rows, 242s)
+2026-10-01 14:11:09 submitted es:hoc-fpctrl-random-tf5-s23-c15 -> 20261001-141109-draft_pp_es_random-397b
+2026-10-01 14:13:30 es:hoc-fpctrl-random-tf5-s22-c15 done (1 ledger rows, 262s)
+2026-10-01 14:13:30 submitted es:hoc-hmctrl-random-tf30-s11-c0 -> 20261001-141330-draft_pp_es_random-50fa
+2026-10-01 14:15:31 es:hoc-fpctrl-random-tf5-s23-c15 done (1 ledger rows, 262s)
+2026-10-01 14:15:32 submitted es:hoc-hmctrl-random-tf30-s12-c0 -> 20261001-141532-draft_pp_es_random-3296
+2026-10-01 14:17:52 es:hoc-hmctrl-random-tf30-s11-c0 done (1 ledger rows, 262s)
+2026-10-01 14:17:53 submitted es:hoc-hmctrl-random-tf30-s13-c0 -> 20261001-141753-draft_pp_es_random-f6bb
+2026-10-01 14:19:54 es:hoc-hmctrl-random-tf30-s12-c0 done (1 ledger rows, 262s)
+2026-10-01 14:19:55 submitted es:hoc-hmctrl-random-tf30-s11-c2 -> 20261001-141955-draft_pp_es_random-2a37
+2026-10-01 14:21:55 es:hoc-hmctrl-random-tf30-s13-c0 done (1 ledger rows, 242s)
+2026-10-01 14:21:56 submitted es:hoc-hmctrl-random-tf30-s12-c2 -> 20261001-142156-draft_pp_es_random-c055
+2026-10-01 14:23:56 es:hoc-hmctrl-random-tf30-s11-c2 done (1 ledger rows, 242s)
+2026-10-01 14:23:57 submitted es:hoc-hmctrl-random-tf30-s13-c2 -> 20261001-142357-draft_pp_es_random-f0f0
+2026-10-01 14:26:18 es:hoc-hmctrl-random-tf30-s12-c2 done (1 ledger rows, 262s)
+2026-10-01 14:26:19 submitted es:hoc-hmctrl-random-tf5-s11-c3 -> 20261001-142619-draft_pp_es_random-d5a2
+2026-10-01 14:28:19 es:hoc-hmctrl-random-tf30-s13-c2 done (1 ledger rows, 262s)
+2026-10-01 14:28:20 submitted es:hoc-hmctrl-random-tf5-s12-c3 -> 20261001-142820-draft_pp_es_random-afb4
+2026-10-01 14:30:20 es:hoc-hmctrl-random-tf5-s11-c3 done (1 ledger rows, 242s)
+2026-10-01 14:30:21 submitted es:hoc-hmctrl-random-tf5-s13-c3 -> 20261001-143021-draft_pp_es_random-b982
+2026-10-01 14:32:42 es:hoc-hmctrl-random-tf5-s12-c3 done (1 ledger rows, 262s)
+2026-10-01 14:32:43 submitted es:hoc-hmctrl-random-tf30-s11-c5 -> 20261001-143243-draft_pp_es_random-fdca
+2026-10-01 14:35:23 es:hoc-hmctrl-random-tf5-s13-c3 done (1 ledger rows, 302s)
+2026-10-01 14:35:24 submitted es:hoc-hmctrl-random-tf30-s12-c5 -> 20261001-143524-draft_pp_es_random-fa08
+2026-10-01 14:38:45 es:hoc-hmctrl-random-tf30-s11-c5 done (1 ledger rows, 362s)
+2026-10-01 14:38:46 submitted es:hoc-hmctrl-random-tf30-s13-c5 -> 20261001-143846-draft_pp_es_random-340b
+2026-10-01 14:42:07 es:hoc-hmctrl-random-tf30-s12-c5 done (1 ledger rows, 402s)
+2026-10-01 14:42:08 submitted es:hoc-hmctrl-random-tf15-s11-c2 -> 20261001-144208-draft_pp_es_random-844d
+2026-10-01 14:45:29 es:hoc-hmctrl-random-tf30-s13-c5 done (1 ledger rows, 402s)
+2026-10-01 14:45:30 submitted es:hoc-hmctrl-random-tf15-s12-c2 -> 20261001-144530-draft_pp_es_random-51b6
+2026-10-01 14:48:50 es:hoc-hmctrl-random-tf15-s11-c2 done (1 ledger rows, 402s)
+2026-10-01 14:48:52 submitted es:hoc-hmctrl-random-tf15-s13-c2 -> 20261001-144852-draft_pp_es_random-607e
+2026-10-01 14:52:12 es:hoc-hmctrl-random-tf15-s12-c2 done (1 ledger rows, 402s)
+2026-10-01 14:52:13 submitted es:hoc-hmctrl-random-tf15-s11-c6 -> 20261001-145213-draft_pp_es_random-1a5b
+2026-10-01 14:55:34 es:hoc-hmctrl-random-tf15-s13-c2 done (1 ledger rows, 402s)
+2026-10-01 14:55:35 submitted es:hoc-hmctrl-random-tf15-s12-c6 -> 20261001-145535-draft_pp_es_random-a8b5
+2026-10-01 14:58:55 es:hoc-hmctrl-random-tf15-s11-c6 done (1 ledger rows, 402s)
+2026-10-01 14:58:57 submitted es:hoc-hmctrl-random-tf15-s13-c6 -> 20261001-145857-draft_pp_es_random-0a99
+2026-10-01 15:02:17 es:hoc-hmctrl-random-tf15-s12-c6 done (1 ledger rows, 402s)
+2026-10-01 15:02:19 submitted es:hoc-hmctrl-random-tf15-s11-c7 -> 20261001-150219-draft_pp_es_random-7187
+2026-10-01 15:05:39 es:hoc-hmctrl-random-tf15-s13-c6 done (1 ledger rows, 402s)
+2026-10-01 15:05:41 submitted es:hoc-hmctrl-random-tf15-s12-c7 -> 20261001-150541-draft_pp_es_random-afea
+2026-10-01 15:09:02 es:hoc-hmctrl-random-tf15-s11-c7 done (1 ledger rows, 403s)
+2026-10-01 15:09:03 submitted es:hoc-hmctrl-random-tf15-s13-c7 -> 20261001-150903-draft_pp_es_random-db46
+2026-10-01 15:12:24 es:hoc-hmctrl-random-tf15-s12-c7 done (1 ledger rows, 403s)
+2026-10-01 15:12:25 submitted es:hoc-hmctrl-random-tf5-s11-c11 -> 20261001-151225-draft_pp_es_random-2981
+2026-10-01 15:15:46 es:hoc-hmctrl-random-tf15-s13-c7 done (1 ledger rows, 402s)
+2026-10-01 15:15:47 submitted es:hoc-hmctrl-random-tf5-s12-c11 -> 20261001-151547-draft_pp_es_random-19dd
+2026-10-01 15:18:48 es:hoc-hmctrl-random-tf5-s11-c11 done (1 ledger rows, 382s)
+2026-10-01 15:18:49 submitted es:hoc-hmctrl-random-tf5-s13-c11 -> 20261001-151849-draft_pp_es_random-2a08
+2026-10-01 15:22:09 es:hoc-hmctrl-random-tf5-s12-c11 done (1 ledger rows, 382s)
+2026-10-01 15:22:11 submitted es:hoc-hmctrl-random-tf5-s11-c10 -> 20261001-152211-draft_pp_es_random-7ebc
+2026-10-01 15:25:31 es:hoc-hmctrl-random-tf5-s13-c11 done (1 ledger rows, 402s)
+2026-10-01 15:25:33 submitted es:hoc-hmctrl-random-tf5-s12-c10 -> 20261001-152533-draft_pp_es_random-dfb7
+2026-10-01 15:28:53 es:hoc-hmctrl-random-tf5-s11-c10 done (1 ledger rows, 402s)
+2026-10-01 15:28:55 submitted es:hoc-hmctrl-random-tf5-s13-c10 -> 20261001-152855-draft_pp_es_random-b2ac
+2026-10-01 15:32:15 es:hoc-hmctrl-random-tf5-s12-c10 done (1 ledger rows, 402s)
+2026-10-01 15:32:17 submitted es:hoc-fpctrl-random-tf5-s21-c12 -> 20261001-153217-draft_pp_es_random-ce95
+2026-10-01 15:35:37 es:hoc-hmctrl-random-tf5-s13-c10 done (1 ledger rows, 402s)
+2026-10-01 15:35:38 submitted es:hoc-fpctrl-random-tf5-s22-c12 -> 20261001-153538-draft_pp_es_random-fc38
+2026-10-01 15:38:59 es:hoc-fpctrl-random-tf5-s21-c12 done (1 ledger rows, 402s)
+2026-10-01 15:39:00 submitted es:hoc-fpctrl-random-tf5-s23-c12 -> 20261001-153900-draft_pp_es_random-2a8b
+2026-10-01 15:42:01 es:hoc-fpctrl-random-tf5-s22-c12 done (1 ledger rows, 382s)
+2026-10-01 15:42:02 submitted es:hoc-fpctrl-random-tf5-s21-c10 -> 20261001-154202-draft_pp_es_random-0000
+2026-10-01 15:45:23 es:hoc-fpctrl-random-tf5-s23-c12 done (1 ledger rows, 382s)
+2026-10-01 15:45:24 submitted es:hoc-fpctrl-random-tf5-s22-c10 -> 20261001-154524-draft_pp_es_random-4faa
+2026-10-01 15:48:45 es:hoc-fpctrl-random-tf5-s21-c10 done (1 ledger rows, 402s)
+2026-10-01 15:48:46 submitted es:hoc-fpctrl-random-tf5-s23-c10 -> 20261001-154846-draft_pp_es_random-2588
+2026-10-01 15:51:49 es:hoc-fpctrl-random-tf5-s22-c10 done (1 ledger rows, 385s)
+2026-10-01 15:51:50 submitted es:hoc-fpctrl-random-tf5-s21-c11 -> 20261001-155150-draft_pp_es_random-3629
+2026-10-01 15:55:10 es:hoc-fpctrl-random-tf5-s23-c10 done (1 ledger rows, 384s)
+2026-10-01 15:55:12 submitted es:hoc-fpctrl-random-tf5-s22-c11 -> 20261001-155512-draft_pp_es_random-27ca
+2026-10-01 15:58:32 es:hoc-fpctrl-random-tf5-s21-c11 done (1 ledger rows, 402s)
+2026-10-01 15:58:33 submitted es:hoc-fpctrl-random-tf5-s23-c11 -> 20261001-155833-draft_pp_es_random-32b3
+2026-10-01 16:01:54 es:hoc-fpctrl-random-tf5-s22-c11 done (1 ledger rows, 402s)
+2026-10-01 16:01:55 submitted es:hoc-ctrl-random-tf5-s1 -> 20261001-160155-draft_pp_es_random-c77a
+2026-10-01 16:05:16 es:hoc-fpctrl-random-tf5-s23-c11 done (1 ledger rows, 402s)
+2026-10-01 16:05:17 submitted es:hoc-ctrl-random-tf5-s2 -> 20261001-160517-draft_pp_es_random-0622
+2026-10-01 16:08:17 es:hoc-ctrl-random-tf5-s1 done (1 ledger rows, 382s)
+2026-10-01 16:08:19 submitted es:hoc-ctrl-random-tf5-s3 -> 20261001-160819-draft_pp_es_random-21a9
+2026-10-01 16:11:39 es:hoc-ctrl-random-tf5-s2 done (1 ledger rows, 382s)
+2026-10-01 16:11:41 submitted es:hoc-ctrl2-random-tf5-s11 -> 20261001-161141-draft_pp_es_random-290e
+2026-10-01 16:15:01 es:hoc-ctrl-random-tf5-s3 done (1 ledger rows, 402s)
+2026-10-01 16:15:02 submitted es:hoc-ctrl2-random-tf5-s12 -> 20261001-161502-draft_pp_es_random-b4d8
+2026-10-01 16:15:03 submitted es:hoc-ctrl2-random-tf5-s13 -> 20261001-161503-draft_pp_es_random-d8fb
+2026-10-01 16:15:05 submitted es:hoc-fpctrl-random-tf5-s21-c13 -> 20261001-161505-draft_pp_es_random-27a1
+2026-10-01 16:18:25 es:hoc-ctrl2-random-tf5-s11 done (1 ledger rows, 404s)
+2026-10-01 16:18:26 submitted es:hoc-fpctrl-random-tf5-s22-c13 -> 20261001-161826-draft_pp_es_random-8ca9
+2026-10-01 16:21:47 es:hoc-ctrl2-random-tf5-s12 done (1 ledger rows, 404s)
+2026-10-01 16:21:48 submitted es:hoc-fpctrl-random-tf5-s23-c13 -> 20261001-162148-draft_pp_es_random-75ff
+2026-10-01 16:25:09 es:hoc-ctrl2-random-tf5-s13 done (1 ledger rows, 605s)
+2026-10-01 16:25:10 submitted es:hoc-fpctrl-random-tf5-s21-c3 -> 20261001-162510-draft_pp_es_random-e9c4
+2026-10-01 16:28:10 es:hoc-fpctrl-random-tf5-s21-c13 done (1 ledger rows, 786s)
+2026-10-01 16:28:12 submitted es:hoc-fpctrl-random-tf5-s22-c3 -> 20261001-162812-draft_pp_es_random-2b25
+2026-10-01 16:31:55 es:hoc-fpctrl-random-tf5-s22-c13 done (1 ledger rows, 809s)
+2026-10-01 16:31:57 submitted es:hoc-fpctrl-random-tf5-s23-c3 -> 20261001-163157-draft_pp_es_random-5ea3
+2026-10-01 16:35:17 es:hoc-fpctrl-random-tf5-s23-c13 done (1 ledger rows, 809s)
+2026-10-01 16:38:38 es:hoc-fpctrl-random-tf5-s21-c3 done (1 ledger rows, 808s)
+2026-10-01 16:41:58 es:hoc-fpctrl-random-tf5-s22-c3 done (1 ledger rows, 827s)
+2026-10-01 16:45:19 es:hoc-fpctrl-random-tf5-s23-c3 done (1 ledger rows, 802s)
+2026-10-01 17:00:31 hb driver down
+2026-10-01 17:00:31 pilots: nq=/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-09-29, es=/Users/ramoscapital/ramos-quant-homebase/research/prop-portfolio/2026-09-30-es
+2026-10-01 17:00:31 hb driver up

@@ -1,0 +1,60 @@
+fast: 1719 configs in 454 sources
+[fast chunk0] 0 tasks already done, 40 to run
+[fast chunk0] 10/40 tasks 1s
+[fast chunk0] 20/40 tasks 2s
+[fast chunk0] 30/40 tasks 2s
+[fast chunk0] 40/40 tasks 3s
+[fast chunk1] 40 tasks already done, 40 to run
+[fast chunk1] 10/40 tasks 1s
+[fast chunk1] 20/40 tasks 2s
+[fast chunk1] 30/40 tasks 3s
+[fast chunk1] 40/40 tasks 4s
+[fast chunk2] 80 tasks already done, 40 to run
+[fast chunk2] 10/40 tasks 1s
+[fast chunk2] 20/40 tasks 2s
+[fast chunk2] 30/40 tasks 3s
+[fast chunk2] 40/40 tasks 4s
+[fast chunk3] 120 tasks already done, 40 to run
+[fast chunk3] 10/40 tasks 1s
+[fast chunk3] 20/40 tasks 1s
+[fast chunk3] 30/40 tasks 2s
+[fast chunk3] 40/40 tasks 3s
+[fast chunk4] 160 tasks already done, 40 to run
+[fast chunk4] 10/40 tasks 1s
+[fast chunk4] 20/40 tasks 2s
+[fast chunk4] 30/40 tasks 3s
+[fast chunk4] 40/40 tasks 4s
+[fast chunk5] 200 tasks already done, 40 to run
+[fast chunk5] 10/40 tasks 1s
+[fast chunk5] 20/40 tasks 1s
+[fast chunk5] 30/40 tasks 2s
+[fast chunk5] 40/40 tasks 2s
+[fast chunk6] 240 tasks already done, 40 to run
+[fast chunk6] 10/40 tasks 1s
+[fast chunk6] 20/40 tasks 1s
+[fast chunk6] 30/40 tasks 2s
+[fast chunk6] 40/40 tasks 2s
+[fast chunk7] 280 tasks already done, 40 to run
+[fast chunk7] 10/40 tasks 1s
+[fast chunk7] 20/40 tasks 1s
+[fast chunk7] 30/40 tasks 2s
+[fast chunk7] 40/40 tasks 2s
+[fast chunk8] 320 tasks already done, 40 to run
+[fast chunk8] 10/40 tasks 1s
+[fast chunk8] 20/40 tasks 1s
+[fast chunk8] 30/40 tasks 1s
+[fast chunk8] 40/40 tasks 2s
+[fast chunk9] 360 tasks already done, 40 to run
+[fast chunk9] 10/40 tasks 0s
+[fast chunk9] 20/40 tasks 1s
+[fast chunk9] 30/40 tasks 1s
+[fast chunk9] 40/40 tasks 2s
+[fast chunk10] 400 tasks already done, 40 to run
+[fast chunk10] 10/40 tasks 1s
+[fast chunk10] 20/40 tasks 1s
+[fast chunk10] 30/40 tasks 2s
+[fast chunk10] 40/40 tasks 2s
+[fast chunk11] 440 tasks already done, 14 to run
+[fast chunk11] 10/14 tasks 1s
+[fast chunk11] 14/14 tasks 1s
+wrote 13752 rows; max |P5 - search P5| = 4.99e-07

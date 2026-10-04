@@ -1,0 +1,5 @@
+{"firm": "lucid", "quarter": "2023Q1", "mode": "reselect", "cal_days": 322, "last_day": "2022-12-30", "train_starts": 247, "evals": 417, "same_set": true, "same_cell": true, "same_score": true, "identical": true, "secs": 51.48742198944092}
+{"firm": "lucidpro_nodll", "quarter": "2023Q1", "mode": "reselect", "cal_days": 322, "last_day": "2022-12-30", "train_starts": 247, "evals": 356, "same_set": true, "same_cell": true, "same_score": true, "identical": true, "secs": 57.633267879486084}
+{"firm": "lucid", "quarter": "2024Q2", "mode": "reselect", "cal_days": 634, "last_day": "2024-03-28", "train_starts": 246, "evals": 387, "same_set": true, "same_cell": true, "same_score": true, "identical": true, "secs": 83.35422492027283}
+{"firm": "lucidpro_nodll", "quarter": "2024Q2", "mode": "reselect", "cal_days": 634, "last_day": "2024-03-28", "train_starts": 246, "evals": 403, "same_set": true, "same_cell": true, "same_score": true, "identical": true, "secs": 107.87990307807922}
+IDENTICAL 4 / 4

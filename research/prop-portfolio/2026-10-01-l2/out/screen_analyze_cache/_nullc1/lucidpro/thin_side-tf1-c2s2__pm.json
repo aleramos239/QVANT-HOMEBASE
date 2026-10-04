@@ -1,0 +1,1 @@
+{"key": "thin_side-tf1-c2s2", "fam_tf": "thin_side-tf1", "family": "thin_side", "tf": "1", "variant": "c2s2", "sess": "pm", "firm": "lucidpro", "status": "ok", "lift": 0.016808769792935444, "ctrl": 0.09403166869671133, "real": 0.11084043848964677, "skipped": null, "elapsed_s": 0.35}

@@ -1,0 +1,133 @@
+2026-10-02T05:27:55+00:00 screen: 75 jobs planned, 0 done, 75 to run, workers 8
+2026-10-02T05:27:59+00:00 screen absorption-tf1: 4463 trades, 4.41 s (wall 4 s)
+2026-10-02T05:28:04+00:00 screen absorption-tf1-c2s1: 10656 trades, 4.22 s (wall 4 s)
+2026-10-02T05:28:08+00:00 screen absorption-tf1-c2s2: 10648 trades, 4.23 s (wall 4 s)
+2026-10-02T05:28:10+00:00 screen absorption-tf5: 1220 trades, 2.1 s (wall 2 s)
+2026-10-02T05:28:13+00:00 screen absorption-tf5-c2s1: 4304 trades, 3.18 s (wall 3 s)
+2026-10-02T05:28:16+00:00 screen absorption-tf5-c2s2: 4299 trades, 3.23 s (wall 3 s)
+2026-10-02T05:28:19+00:00 screen bimb_fade-tf1: 11095 trades, 2.19 s (wall 2 s)
+2026-10-02T05:28:22+00:00 screen bimb_fade-tf1-c2s1: 11085 trades, 3.5 s (wall 4 s)
+2026-10-02T05:28:26+00:00 screen bimb_fade-tf1-c2s2: 11081 trades, 3.46 s (wall 3 s)
+2026-10-02T05:28:28+00:00 screen bimb_fade-tf5: 5120 trades, 1.75 s (wall 2 s)
+2026-10-02T05:28:31+00:00 screen bimb_fade-tf5-c2s1: 5023 trades, 3.03 s (wall 3 s)
+2026-10-02T05:28:34+00:00 screen bimb_fade-tf5-c2s2: 5056 trades, 3.03 s (wall 3 s)
+2026-10-02T05:28:36+00:00 screen bimb_fade_n3-tf1: 11131 trades, 2.21 s (wall 2 s)
+2026-10-02T05:28:39+00:00 screen bimb_fade_n3-tf1-c2s1: 11063 trades, 3.5 s (wall 4 s)
+2026-10-02T05:28:43+00:00 screen bimb_fade_n3-tf1-c2s2: 11078 trades, 3.51 s (wall 4 s)
+2026-10-02T05:28:45+00:00 screen bimb_fade_n3-tf5: 4910 trades, 1.76 s (wall 2 s)
+2026-10-02T05:28:48+00:00 screen bimb_fade_n3-tf5-c2s1: 4897 trades, 3.09 s (wall 3 s)
+2026-10-02T05:28:51+00:00 screen bimb_fade_n3-tf5-c2s2: 4899 trades, 3.04 s (wall 3 s)
+2026-10-02T05:28:53+00:00 screen bimb_follow-tf1: 11125 trades, 2.26 s (wall 2 s)
+2026-10-02T05:28:57+00:00 screen bimb_follow-tf1-c2s1: 11074 trades, 3.53 s (wall 4 s)
+2026-10-02T05:29:00+00:00 screen bimb_follow-tf1-c2s2: 11073 trades, 3.53 s (wall 4 s)
+2026-10-02T05:29:02+00:00 screen bimb_follow-tf5: 5016 trades, 1.78 s (wall 2 s)
+2026-10-02T05:29:05+00:00 screen bimb_follow-tf5-c2s1: 5061 trades, 3.07 s (wall 3 s)
+2026-10-02T05:29:08+00:00 screen bimb_follow-tf5-c2s2: 5049 trades, 3.06 s (wall 3 s)
+2026-10-02T05:29:11+00:00 screen bimb_follow_n3-tf1: 11150 trades, 2.2 s (wall 2 s)
+2026-10-02T05:29:14+00:00 screen bimb_follow_n3-tf1-c2s1: 11097 trades, 3.49 s (wall 4 s)
+2026-10-02T05:29:18+00:00 screen bimb_follow_n3-tf1-c2s2: 11087 trades, 3.48 s (wall 4 s)
+2026-10-02T05:29:19+00:00 screen bimb_follow_n3-tf5: 4924 trades, 1.75 s (wall 2 s)
+2026-10-02T05:29:22+00:00 screen bimb_follow_n3-tf5-c2s1: 4919 trades, 3.05 s (wall 3 s)
+2026-10-02T05:29:25+00:00 screen bimb_follow_n3-tf5-c2s2: 4904 trades, 3.03 s (wall 3 s)
+2026-10-02T05:29:28+00:00 screen cvd_div-tf1: 5587 trades, 2.8 s (wall 3 s)
+2026-10-02T05:29:32+00:00 screen cvd_div-tf1-c2s1: 10514 trades, 3.34 s (wall 3 s)
+2026-10-02T05:29:35+00:00 screen cvd_div-tf1-c2s2: 10514 trades, 3.41 s (wall 3 s)
+2026-10-02T05:29:37+00:00 screen cvd_div-tf5: 6347 trades, 1.71 s (wall 2 s)
+2026-10-02T05:29:40+00:00 screen cvd_div-tf5-c2s1: 8215 trades, 2.95 s (wall 3 s)
+2026-10-02T05:29:43+00:00 screen cvd_div-tf5-c2s2: 8222 trades, 2.9 s (wall 3 s)
+2026-10-02T05:29:45+00:00 screen delta_follow-tf1: 11686 trades, 2.15 s (wall 2 s)
+2026-10-02T05:29:49+00:00 screen delta_follow-tf1-c2s1: 11460 trades, 3.91 s (wall 4 s)
+2026-10-02T05:29:53+00:00 screen delta_follow-tf1-c2s2: 11447 trades, 3.94 s (wall 4 s)
+2026-10-02T05:29:55+00:00 screen delta_follow-tf5: 8371 trades, 1.91 s (wall 2 s)
+2026-10-02T05:29:58+00:00 screen delta_follow-tf5-c2s1: 6220 trades, 3.28 s (wall 3 s)
+2026-10-02T05:30:01+00:00 screen delta_follow-tf5-c2s2: 6224 trades, 3.27 s (wall 3 s)
+2026-10-02T05:30:03+00:00 screen open_dir_book-tf30: 2674 trades, 1.53 s (wall 2 s)
+2026-10-02T05:30:06+00:00 screen open_dir_book-tf30-c2s1: 2662 trades, 2.73 s (wall 3 s)
+2026-10-02T05:30:08+00:00 screen open_dir_book-tf30-c2s2: 2640 trades, 2.73 s (wall 3 s)
+2026-10-02T05:30:10+00:00 screen open_dir_both-tf30: 1273 trades, 1.47 s (wall 1 s)
+2026-10-02T05:30:13+00:00 screen open_dir_both-tf30-c2s1: 1248 trades, 2.9 s (wall 3 s)
+2026-10-02T05:30:16+00:00 screen open_dir_both-tf30-c2s2: 1260 trades, 2.73 s (wall 3 s)
+2026-10-02T05:30:17+00:00 screen open_dir_flow-tf30: 2800 trades, 1.49 s (wall 2 s)
+2026-10-02T05:30:20+00:00 screen open_dir_flow-tf30-c2s1: 2737 trades, 2.67 s (wall 3 s)
+2026-10-02T05:30:22+00:00 screen open_dir_flow-tf30-c2s2: 2768 trades, 2.68 s (wall 3 s)
+2026-10-02T05:30:25+00:00 screen sweep_follow-tf1: 11573 trades, 2.59 s (wall 3 s)
+2026-10-02T05:30:29+00:00 screen sweep_follow-tf1-c2s1: 11453 trades, 3.94 s (wall 4 s)
+2026-10-02T05:30:33+00:00 screen sweep_follow-tf1-c2s2: 11479 trades, 4.05 s (wall 4 s)
+2026-10-02T05:30:35+00:00 screen sweep_follow-tf5: 6157 trades, 2.05 s (wall 2 s)
+2026-10-02T05:30:39+00:00 screen sweep_follow-tf5-c2s1: 5893 trades, 3.35 s (wall 3 s)
+2026-10-02T05:30:42+00:00 screen sweep_follow-tf5-c2s2: 5818 trades, 3.31 s (wall 3 s)
+2026-10-02T05:30:44+00:00 screen thin_side-tf1: 3393 trades, 2.16 s (wall 2 s)
+2026-10-02T05:30:48+00:00 screen thin_side-tf1-c2s1: 3374 trades, 3.47 s (wall 3 s)
+2026-10-02T05:30:51+00:00 screen thin_side-tf1-c2s2: 3362 trades, 3.42 s (wall 3 s)
+2026-10-02T05:30:53+00:00 screen thin_side-tf5: 876 trades, 1.56 s (wall 2 s)
+2026-10-02T05:30:55+00:00 screen thin_side-tf5-c2s1: 867 trades, 2.89 s (wall 3 s)
+2026-10-02T05:30:58+00:00 screen thin_side-tf5-c2s2: 864 trades, 2.83 s (wall 3 s)
+2026-10-02T05:31:02+00:00 screen wall_bounce-tf1: 1803 trades, 3.62 s (wall 4 s)
+2026-10-02T05:31:07+00:00 screen wall_bounce-tf1-c2s1: 1831 trades, 4.96 s (wall 5 s)
+2026-10-02T05:31:12+00:00 screen wall_bounce-tf1-c2s2: 1832 trades, 4.77 s (wall 5 s)
+2026-10-02T05:31:14+00:00 screen wall_bounce-tf5: 421 trades, 1.84 s (wall 2 s)
+2026-10-02T05:31:17+00:00 screen wall_bounce-tf5-c2s1: 443 trades, 3.49 s (wall 3 s)
+2026-10-02T05:31:20+00:00 screen wall_bounce-tf5-c2s2: 452 trades, 3.41 s (wall 3 s)
+2026-10-02T05:31:24+00:00 screen wall_break-tf1: 545 trades, 3.67 s (wall 4 s)
+2026-10-02T05:31:29+00:00 screen wall_break-tf1-c2s1: 36 trades, 5.29 s (wall 5 s)
+2026-10-02T05:31:35+00:00 screen wall_break-tf1-c2s2: 32 trades, 5.28 s (wall 5 s)
+2026-10-02T05:31:37+00:00 screen wall_break-tf5: 104 trades, 1.89 s (wall 2 s)
+2026-10-02T05:31:40+00:00 screen wall_break-tf5-c2s1: 12 trades, 3.47 s (wall 3 s)
+2026-10-02T05:31:44+00:00 screen wall_break-tf5-c2s2: 11 trades, 3.5 s (wall 4 s)
+2026-10-02T05:31:55+00:00 gate: 54 jobs planned, 0 done, 54 to run
+2026-10-02T05:31:57+00:00 gate gate_straddle-tf30_c10_G1: 1624 rows of 3273 source trades, 0.3 s
+2026-10-02T05:31:57+00:00 gate gate_straddle-tf30_c10_G1-perms1: 1624 rows of 3273 source trades, 1.0 s
+2026-10-02T05:31:57+00:00 gate gate_straddle-tf30_c10_G1-perms2: 1624 rows of 3273 source trades, 0.9 s
+2026-10-02T05:31:59+00:00 gate gate_straddle-tf30_c10_G2: 537 rows of 3273 source trades, 0.1 s
+2026-10-02T05:31:59+00:00 gate gate_straddle-tf30_c10_G2-perms1: 537 rows of 3273 source trades, 0.9 s
+2026-10-02T05:31:59+00:00 gate gate_straddle-tf30_c10_G2-perms2: 537 rows of 3273 source trades, 0.9 s
+2026-10-02T05:32:00+00:00 gate gate_straddle-tf30_c10_G3: 6538 rows of 3273 source trades, 0.1 s
+2026-10-02T05:32:00+00:00 gate gate_straddle-tf30_c10_G3-perms1: 6538 rows of 3273 source trades, 0.1 s
+2026-10-02T05:32:00+00:00 gate gate_straddle-tf30_c10_G3-perms2: 6538 rows of 3273 source trades, 0.1 s
+2026-10-02T05:32:00+00:00 gate gate_straddle-tf30_c9_G1: 1624 rows of 3273 source trades, 0.0 s
+2026-10-02T05:32:00+00:00 gate gate_straddle-tf30_c9_G1-perms1: 1624 rows of 3273 source trades, 0.0 s
+2026-10-02T05:32:00+00:00 gate gate_straddle-tf30_c9_G1-perms2: 1624 rows of 3273 source trades, 0.0 s
+2026-10-02T05:32:00+00:00 gate gate_straddle-tf30_c9_G2: 537 rows of 3273 source trades, 0.0 s
+2026-10-02T05:32:00+00:00 gate gate_straddle-tf30_c9_G2-perms1: 537 rows of 3273 source trades, 0.0 s
+2026-10-02T05:32:00+00:00 gate gate_straddle-tf30_c9_G2-perms2: 537 rows of 3273 source trades, 0.0 s
+2026-10-02T05:32:01+00:00 gate gate_straddle-tf30_c9_G3: 6538 rows of 3273 source trades, 0.1 s
+2026-10-02T05:32:01+00:00 gate gate_straddle-tf30_c9_G3-perms1: 6538 rows of 3273 source trades, 0.1 s
+2026-10-02T05:32:01+00:00 gate gate_straddle-tf30_c9_G3-perms2: 6538 rows of 3273 source trades, 0.1 s
+2026-10-02T05:32:01+00:00 gate gate_straddle-tf30_c32_G1: 1311 rows of 3137 source trades, 0.0 s
+2026-10-02T05:32:01+00:00 gate gate_straddle-tf30_c32_G1-perms1: 1311 rows of 3137 source trades, 0.0 s
+2026-10-02T05:32:01+00:00 gate gate_straddle-tf30_c32_G1-perms2: 1311 rows of 3137 source trades, 0.0 s
+2026-10-02T05:32:01+00:00 gate gate_straddle-tf30_c32_G2: 462 rows of 3137 source trades, 0.0 s
+2026-10-02T05:32:01+00:00 gate gate_straddle-tf30_c32_G2-perms1: 462 rows of 3137 source trades, 0.0 s
+2026-10-02T05:32:01+00:00 gate gate_straddle-tf30_c32_G2-perms2: 462 rows of 3137 source trades, 0.0 s
+2026-10-02T05:32:02+00:00 gate gate_straddle-tf30_c32_G3: 6333 rows of 3137 source trades, 0.1 s
+2026-10-02T05:32:02+00:00 gate gate_straddle-tf30_c32_G3-perms1: 6333 rows of 3137 source trades, 0.1 s
+2026-10-02T05:32:02+00:00 gate gate_straddle-tf30_c32_G3-perms2: 6333 rows of 3137 source trades, 0.1 s
+2026-10-02T05:32:02+00:00 gate gate_orb-tf5_c10_G1: 1382 rows of 3272 source trades, 0.0 s
+2026-10-02T05:32:02+00:00 gate gate_orb-tf5_c10_G1-perms1: 1382 rows of 3272 source trades, 0.0 s
+2026-10-02T05:32:02+00:00 gate gate_orb-tf5_c10_G1-perms2: 1382 rows of 3272 source trades, 0.0 s
+2026-10-02T05:32:02+00:00 gate gate_orb-tf5_c10_G2: 526 rows of 3272 source trades, 0.0 s
+2026-10-02T05:32:02+00:00 gate gate_orb-tf5_c10_G2-perms1: 526 rows of 3272 source trades, 0.0 s
+2026-10-02T05:32:02+00:00 gate gate_orb-tf5_c10_G2-perms2: 526 rows of 3272 source trades, 0.0 s
+2026-10-02T05:32:02+00:00 gate gate_orb-tf5_c10_G3: 6590 rows of 3272 source trades, 0.1 s
+2026-10-02T05:32:03+00:00 gate gate_orb-tf5_c10_G3-perms1: 6590 rows of 3272 source trades, 0.1 s
+2026-10-02T05:32:03+00:00 gate gate_orb-tf5_c10_G3-perms2: 6590 rows of 3272 source trades, 0.1 s
+2026-10-02T05:32:03+00:00 gate gate_donchian-tf15_c10_G1: 1526 rows of 3571 source trades, 0.0 s
+2026-10-02T05:32:03+00:00 gate gate_donchian-tf15_c10_G1-perms1: 1526 rows of 3571 source trades, 0.0 s
+2026-10-02T05:32:03+00:00 gate gate_donchian-tf15_c10_G1-perms2: 1526 rows of 3571 source trades, 0.0 s
+2026-10-02T05:32:03+00:00 gate gate_donchian-tf15_c10_G2: 606 rows of 3571 source trades, 0.0 s
+2026-10-02T05:32:03+00:00 gate gate_donchian-tf15_c10_G2-perms1: 606 rows of 3571 source trades, 0.0 s
+2026-10-02T05:32:03+00:00 gate gate_donchian-tf15_c10_G2-perms2: 606 rows of 3571 source trades, 0.0 s
+2026-10-02T05:32:03+00:00 gate gate_donchian-tf15_c10_G3: 7231 rows of 3571 source trades, 0.1 s
+2026-10-02T05:32:03+00:00 gate gate_donchian-tf15_c10_G3-perms1: 7231 rows of 3571 source trades, 0.1 s
+2026-10-02T05:32:04+00:00 gate gate_donchian-tf15_c10_G3-perms2: 7231 rows of 3571 source trades, 0.1 s
+2026-10-02T05:32:04+00:00 gate gate_donchian-tf15_c1_G1: 1629 rows of 3852 source trades, 0.0 s
+2026-10-02T05:32:04+00:00 gate gate_donchian-tf15_c1_G1-perms1: 1629 rows of 3852 source trades, 0.0 s
+2026-10-02T05:32:04+00:00 gate gate_donchian-tf15_c1_G1-perms2: 1629 rows of 3852 source trades, 0.0 s
+2026-10-02T05:32:04+00:00 gate gate_donchian-tf15_c1_G2: 623 rows of 3852 source trades, 0.0 s
+2026-10-02T05:32:04+00:00 gate gate_donchian-tf15_c1_G2-perms1: 623 rows of 3852 source trades, 0.0 s
+2026-10-02T05:32:04+00:00 gate gate_donchian-tf15_c1_G2-perms2: 623 rows of 3852 source trades, 0.0 s
+2026-10-02T05:32:04+00:00 gate gate_donchian-tf15_c1_G3: 7769 rows of 3852 source trades, 0.1 s
+2026-10-02T05:32:05+00:00 gate gate_donchian-tf15_c1_G3-perms1: 7769 rows of 3852 source trades, 0.2 s
+2026-10-02T05:32:05+00:00 gate gate_donchian-tf15_c1_G3-perms2: 7769 rows of 3852 source trades, 0.2 s
+2026-10-02T05:34:08+00:00 screen: 75 jobs planned, 75 done, 0 to run, workers 8
+2026-10-02T05:34:08+00:00 gate: 54 jobs planned, 54 done, 0 to run

@@ -1,0 +1,1 @@
+{"key": "delta_follow-tf5-c2s2", "fam_tf": "delta_follow-tf5", "family": "delta_follow", "tf": "5", "variant": "c2s2", "sess": "pm", "firm": "apex50_pa", "n_trades": 515, "status": "no_compliant_cell", "metric": null, "cells": 4608, "eligible": 0, "gate": {"apex_one_direction": ["ok"], "apex_stop_5x_target": ["FAIL", "ok"], "apex_mae_rule": ["FAIL"]}, "elapsed_s": 47.87}

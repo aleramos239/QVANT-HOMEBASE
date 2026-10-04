@@ -1,0 +1,1 @@
+{"key": "bimb_follow_n3-tf1-c2s1", "fam_tf": "bimb_follow_n3-tf1", "family": "bimb_follow_n3", "tf": "1", "variant": "c2s1", "sess": "london", "firm": "pro_nodll", "status": "ok", "lift": 280.5057963446475, "ctrl": 246.51822454308095, "real": 527.0240208877284, "skipped": null, "elapsed_s": 0.65}
