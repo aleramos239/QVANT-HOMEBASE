@@ -24,7 +24,7 @@ STRAT = StrategyCfg(symbol="NQ", qty=3, offset_pts=10.0, sl_pts=5.0, tp_pts=15.0
 
 
 def paper_cfg(**kw) -> AppCfg:
-    return AppCfg(armed=True, webhook_secret="s", accounts={"paper": AccountCfg(paper=True, label="PAPER")},
+    return AppCfg(armed=True, accounts={"paper": AccountCfg(paper=True, label="PAPER")},
                   book={"nq930": [{"account": "paper", "qty": 3}]}, strategies={"nq930": STRAT}, **kw)
 
 
@@ -102,7 +102,7 @@ def desk(tmp_path, monkeypatch):
         return httpx.Response(200, json={"accounts": svc.books.listing(), "broken": None})
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(listing), base_url="http://paper.test")
-    cfg = AppCfg(armed=False, webhook_secret="s", accounts={"main": AccountCfg(keyring_key="k", account_name="MAIN")},
+    cfg = AppCfg(armed=False, accounts={"main": AccountCfg(keyring_key="k", account_name="MAIN")},
                  book={"nq930": []}, strategies={"nq930": STRAT})
     adapters = {"main": FakeAdapter("main")}
 

@@ -136,7 +136,7 @@ These ship in `config.py` defaults. All times are ET. Each trades at most once a
 | MCP server | `homebase/claude_mcp/` | Gives Claude the tester and a read of the desk. No trading tool. See `deploy/claude-mcp.md`. |
 | Mac apps | `deploy/macapp/` | Viewer windows onto the pages. |
 | Tools | `tools/` | `preopen_check.py` (read-only health check), `fake_desk.py` (a fake desk for browser checks). |
-| Research records | `homebase/research/` | Equity curves and the old Pine sources shown on the desk page. |
+| Research records | `homebase/research/` | Equity curves shown on the desk page, and the scripts that build them. |
 | Research | `research/` | Strategy research. See "Research" below. |
 | Design history | `docs/superpowers/` | Old specs, plans and findings. `GOTCHAS.md` lists standing pitfalls. |
 
@@ -295,16 +295,17 @@ Derived price tapes (`research/**/*.tape`) and voided runs are not in git.
 ## What is left of the old webhook design
 
 The first version took a 9:30 alert from a TradingView Pine script through a webhook. That path was removed on
-2026-09-27. The routes `/hook`, `/api/tv-setup` and `/api/hook-url` no longer exist, nothing listens on port 8851,
-and a test pins this (`tests/test_server.py`).
+2026-09-27. The routes `/hook`, `/api/tv-setup`, `/api/hook-url` and `/api/pine` no longer exist, nothing listens on
+port 8851, and a test pins this (`tests/test_server.py`). The Pine sources and the desk page's "Pine script" button
+are gone too: the strategies are the Python ones.
 
 Leftovers you may still meet:
 
 - `Engine.handle_alert` is still the entry point for straddles. The desk's own timer calls it. `POST /api/test-alert`
   calls it too, for a dry run only.
-- `webhook_secret`, `hook_port` and `public_hook_url` are still fields in `config.py`. They are ignored on load and
-  written blank on save.
+- `webhook_secret`, `hook_port` and `public_hook_url` are no longer fields in `config.py`. A `config.json` that still
+  holds them loads the same, and the next save drops them.
+- `pine_file` is still a field of a strategy in `config.py` (nq930's says `nq930.pine`, a file that no longer
+  exists). Nothing reads it. It stays because a saved `config.json` carries it and the tester records it.
 - The tunnel service is gone from the repo. `install.sh` unloads and deletes an old
   `com.ramosquant.homebase-tunnel` service if it finds one.
-- `homebase/research/nq930.pine` is kept as a research record. The desk page can show it (`GET /api/pine`). Nothing
-  reads alerts from it.

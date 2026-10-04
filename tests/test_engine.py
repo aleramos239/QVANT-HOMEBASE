@@ -111,7 +111,7 @@ class Clock:
 
 def mkcfg(armed=True, book=None) -> AppCfg:
     return AppCfg(
-        armed=armed, webhook_secret="s",
+        armed=armed,
         accounts={"main": AccountCfg(keyring_key="k", account_name="MAIN")},
         book=book if book is not None else {"nq930": [{"account": "main", "qty": 3}]},
         strategies={"nq930": StrategyCfg(

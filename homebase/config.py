@@ -34,7 +34,7 @@ class StrategyCfg:
     gated: bool = False          # True = a no-alert day can be the regime gate
     self_fire: bool = False      # True: the APP computes and fires the signal;
                                  # False: nothing fires it (see inactive.py)
-    pine_file: str = ""          # committed Pine source (homebase/research/), display-only
+    pine_file: str = ""          # unused: the Pine sources are gone; kept so a saved config still loads
     metrics: dict = field(default_factory=dict)   # research record, display-only
     kind: str = "straddle"       # "straddle": two stop legs at the anchor (timer)
                                  # "bars": a price-action RULE on closed bars (feed)
@@ -135,9 +135,6 @@ def warn_bad_allowed_hosts(v) -> None:
 @dataclass
 class AppCfg:
     armed: bool = False          # master switch: disarmed = journal-only dry run
-    webhook_secret: str = ""     # unused since the webhook was removed (2026-09-27); save() blanks it
-    hook_port: int = 8851        # unused: nothing listens on it any more
-    public_hook_url: str = ""    # unused; save() blanks it
     accounts: dict[str, AccountCfg] = field(default_factory=dict)
     book: dict[str, list] = field(default_factory=dict)   # strategy -> [{account, qty}]
     strategies: dict[str, StrategyCfg] = field(default_factory=dict)
@@ -152,8 +149,9 @@ def _defaults() -> AppCfg:
     return AppCfg(
         strategies={
             # NQ 9:30 straddle — the approved champion (spec 2026-09-09,
-            # OOS-passed 2026-09-10). The TREND gate runs in-app (self_fire);
-            # the Pine file is the research copy, shown on the desk page only.
+            # OOS-passed 2026-09-10). The TREND gate runs in-app (self_fire).
+            # pine_file names a deleted file; the value stays so the tester's
+            # recorded desk_cfg is unchanged.
             "nq930": StrategyCfg(
                 symbol="NQ", qty=3, offset_pts=10.0, sl_pts=5.0, tp_pts=15.0,
                 enabled=True, gated=True, self_fire=True, pine_file="nq930.pine",
@@ -270,8 +268,8 @@ def load() -> AppCfg:
         return cfg
     data = json.loads(p.read_text())
     cfg.armed = bool(data.get("armed", cfg.armed))
-    # the TradingView webhook was removed 2026-09-27: a stored secret / tunnel URL is ignored,
-    # and save() writes them blank, so the old secret leaves the config file on the next save
+    # the old webhook keys (webhook_secret, hook_port, public_hook_url) are not read: a file that
+    # still holds them loads the same, and save() no longer writes them
     for aid, a in (data.get("accounts") or {}).items():
         base = asdict(AccountCfg())
         cfg.accounts[aid] = AccountCfg(**{**base, **a})
@@ -323,8 +321,6 @@ def load() -> AppCfg:
 
 def save(cfg: AppCfg) -> None:
     d = asdict(cfg)
-    d["webhook_secret"] = ""      # the webhook is gone (2026-09-27): never persist a secret
-    d["public_hook_url"] = ""
     # atomic: a crash mid-write must never leave a truncated config (the desk now
     # rewrites it on its own, e.g. removing a closed account)
     path = config_path()

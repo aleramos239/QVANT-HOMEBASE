@@ -55,7 +55,7 @@ def _position(cid, symbol, net):
 def mk2(tmp_path, nets, adapter_cls=FakeAdapter):
     """Two-or-more booked accounts; nets: {account: net | "error"}."""
     clock = Clock()
-    cfg = AppCfg(armed=False, webhook_secret="s",
+    cfg = AppCfg(armed=False,
                  accounts={a: AccountCfg(keyring_key="k", account_name=a.upper(), label=a.upper())
                            for a in nets},
                  book={"nq930": [{"account": a, "qty": 1} for a in nets]},

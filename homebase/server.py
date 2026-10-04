@@ -1114,7 +1114,6 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                             "flat_et": s.flat_et, "fire_et": s.fire_et,
                             "only_dates": list(s.only_dates), "enabled": s.enabled,
                             "gated": s.gated, "self_fire": s.self_fire,
-                            "pine_file": getattr(s, "pine_file", ""),
                             "kind": getattr(s, "kind", "straddle"),
                             "shadow": getattr(s, "shadow", False),
                             "rule": getattr(s, "rule", ""),
@@ -1694,16 +1693,6 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         if not p or not p.exists():
             return {"points": None}
         return json.loads(p.read_text())
-
-    @app.get("/api/pine")
-    async def pine_source(strategy: str):
-        """The strategy's committed Pine source (research artifact)."""
-        s = cfg.strategies.get(strategy)
-        fname = getattr(s, "pine_file", "") if s else ""
-        p = STATIC.parent / "research" / fname if fname else None
-        if not p or not p.exists():
-            return {"source": None}
-        return {"name": fname, "source": p.read_text()}
 
     @app.get("/api/strategy-live")
     async def strategy_live(strategy: str):

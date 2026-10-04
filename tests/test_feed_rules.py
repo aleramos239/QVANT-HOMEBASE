@@ -111,7 +111,7 @@ def fake_rule(bars, now_et, cfg):
 
 # --- the engine's one-leg path ---------------------------------------------------
 def mkcfg(shadow=False, armed=True):
-    return AppCfg(armed=armed, webhook_secret="s",
+    return AppCfg(armed=armed,
                   accounts={"main": AccountCfg(keyring_key="k", account_name="MAIN")},
                   book={"bar_test": [{"account": "main", "qty": 2}]},
                   strategies={"bar_test": StrategyCfg(

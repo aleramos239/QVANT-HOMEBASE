@@ -53,7 +53,7 @@ def gc_cfg(**over):
 def mk(tmp_path, *, armed=True, qty=4, date=NFP_DAY, cfg=None, accounts=("evalA", "evalB")):
     clock = Clock()
     at(clock, 8, 0, date=date)
-    cfgs = AppCfg(armed=armed, webhook_secret="s",
+    cfgs = AppCfg(armed=armed,
                   accounts={a: AccountCfg(keyring_key=a, account_name=a.upper()) for a in accounts},
                   book={"gc_nfp": [{"account": a, "qty": qty} for a in accounts]},
                   strategies={"gc_nfp": cfg or gc_cfg()})

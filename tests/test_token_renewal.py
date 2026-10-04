@@ -677,7 +677,7 @@ def test_a_refused_rebuild_gets_the_supervisors_cooldown_not_a_login_a_minute(
     monkeypatch.setattr(config_mod, "config_path", lambda: tmp_path / "config.json")
     monkeypatch.setattr(tradovate, "get_credentials", lambda k: {"username": "u", "password": "p"})
     monkeypatch.setattr(tradovate, "TradovateWS", RefusedWS)
-    cfg = AppCfg(armed=True, webhook_secret="s",
+    cfg = AppCfg(armed=True,
                  accounts={"main": AccountCfg(keyring_key="k", account_name="APEX")},
                  book={}, strategies={})
     ad = TradovateAdapter("main", env="demo", keyring_key="k", state_dir=tmp_path,

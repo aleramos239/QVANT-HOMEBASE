@@ -33,7 +33,7 @@ def desk_client(tmp_path, monkeypatch):
     monkeypatch.setattr(config_mod, "config_path", lambda: tmp_path / "config.json")
     # the real clock would pause the views at 09:29:50-09:30:30 ET: never flake then
     monkeypatch.setattr("homebase.trading.ChartDesk._views_paused", lambda self: False)
-    cfg = AppCfg(armed=False, webhook_secret="s",
+    cfg = AppCfg(armed=False,
                  accounts={"a1": AccountCfg(keyring_key="k", account_name="A1", label="A1")},
                  book={},                                  # nothing booked: never bot-locked
                  strategies={"nq930": StrategyCfg(symbol="NQ", qty=3, offset_pts=10.0,

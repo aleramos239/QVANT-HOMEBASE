@@ -61,7 +61,7 @@ def desk(tmp_path, monkeypatch):
     monkeypatch.setattr("homebase.server.state_dir", lambda: tmp_path)
     monkeypatch.setattr("homebase.secrets_store.state_dir", lambda: tmp_path)
     monkeypatch.setattr(config_mod, "config_path", lambda: tmp_path / "config.json")
-    cfg = AppCfg(armed=True, webhook_secret="s",
+    cfg = AppCfg(armed=True,
                  accounts={"apex049": AccountCfg(keyring_key=KEY,
                                                  account_name="APEX3265980000049"),
                            "apex053": AccountCfg(keyring_key=KEY,
