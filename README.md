@@ -198,7 +198,7 @@ while a trade is open.
 
 ```bash
 .venv/bin/python -m pytest -q tests
-node --test tests/js/*.test.mjs homebase/static/*.test.js
+node --test tests/js/*.test.mjs
 ```
 
 - `tests/test_*.py`: Python tests for the engine, timers, broker layer, chart

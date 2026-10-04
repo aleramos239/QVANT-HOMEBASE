@@ -342,27 +342,6 @@ class TradovateAuth:
             except OSError:
                 pass
 
-    def load_tokens(self) -> Optional[TradovateTokens]:
-        if not self.token_persist_path.exists():
-            return None
-        try:
-            data = json.loads(self.token_persist_path.read_text())
-        except Exception:
-            return None
-        if data.get("env") != self.env:
-            return None
-        self.tokens = TradovateTokens(
-            access_token=data.get("access_token", ""),
-            md_access_token=data.get("md_access_token", ""),
-            expiration_time=data.get("expiration_time", ""),
-            user_id=data.get("user_id", 0),
-            name=data.get("name", ""),
-            user_status=data.get("user_status", ""),
-            has_live=data.get("has_live", False),
-            has_funded=data.get("has_funded", False),
-        )
-        return self.tokens
-
 
 def _selftest():
     out = encrypt_password("alice", "secret123")

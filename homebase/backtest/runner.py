@@ -1,8 +1,8 @@
-"""Tester runs: validated, one at a time, each in its OWN process, into a run bundle.
+"""Tester runs: validated, each in its OWN process, into a run bundle.
 
     <base> = homebase/.state/tester
       spends.jsonl              the record of runs that read 2025+ data (discipline.py; never a gate)
-      runs/.lock                held (flock) by whichever run is executing
+      runs/.lock                held (flock) only by a `runner exec` started by hand without --no-lock
       runs/<id>/request.json    the validated request
       runs/<id>/status.json     {status, phase, done, total, error?, pid?, updated}
       runs/<id>/log.txt         the child's stdout/stderr
@@ -12,14 +12,15 @@
 
 status: queued -> running -> done | error | cancelled. The chart service owns a
 RunManager (submit / status / cancel / runs / bundle) that launches
-`python -m homebase.backtest.runner exec <run_dir>` with its own interpreter,
-FIFO, one child at a time — never in the service's event loop — and only once it
-holds one of the machine-wide backtest slots (slots.py: 2 at once with the heat-map's
-cells, none starting 09:20-09:35 ET on weekdays; a request in that window is refused,
-a run already queued waits and its status reads `paused`). A script run
+`python -m homebase.backtest.runner exec <run_dir> --no-lock` with its own interpreter,
+FIFO — never in the service's event loop — and only once it holds one of the
+machine-wide backtest slots (slots.py: 2 at once in desk hours, 4 outside them, shared
+with the heat-map's cells; none starting 09:20-09:35 ET on weekdays; a request in that
+window is refused, a run already queued waits and its status reads `paused`). Runs
+that each hold a slot run side by side. A script run
 (`python -m homebase.backtest.runner run --strategy nq930 ...`) executes in the
-script's process and writes into the same runs dir, so the page lists it; the
-flock keeps it from overlapping a page run.
+script's process, holding a slot of its own, and writes into the same runs dir, so the
+page lists it.
 """
 from __future__ import annotations
 
@@ -304,12 +305,13 @@ def execute(run_dir: Path, store: TapeStore) -> dict:
 def _locked(runs: Path):
     runs.mkdir(parents=True, exist_ok=True)
     fh = open(runs / ".lock", "a")
-    fcntl.flock(fh, fcntl.LOCK_EX)          # one run at a time, page or script
+    fcntl.flock(fh, fcntl.LOCK_EX)          # a `runner exec` started by hand without --no-lock
     return fh
 
 
 def exec_run(run_dir: Path, store: TapeStore, lock: bool = True) -> int:
-    """lock=False: a heat-map cell (grid.py) -- its own 2-worker pool bounds it, not the one-run flock."""
+    """lock=False: a run that holds a machine-wide slot (a page run, a script run, a heat-map cell) --
+    the slots bound it, not the runs dir's flock."""
     fh = _locked(run_dir.parent) if lock else None
     try:
         execute(run_dir, store)
@@ -344,7 +346,7 @@ class RunManager:
         self.slots = slots or Slots()          # the per-machine slots (slots.shared_dir())
         self.runs.mkdir(parents=True, exist_ok=True)
         self._q: deque[str] = deque()
-        self._proc: tuple[str, subprocess.Popen] | None = None
+        self._procs: dict[str, subprocess.Popen] = {}     # run id -> its child, while it runs
         self._cancelled: set[str] = set()
         self._lock = threading.Lock()
         self._wake = threading.Event()
@@ -395,8 +397,8 @@ class RunManager:
             if rid in self._q:
                 self._q.remove(rid)
                 proc = None
-            elif self._proc and self._proc[0] == rid:
-                proc = self._proc[1]
+            elif rid in self._procs:
+                proc = self._procs[rid]
                 self._cancelled.add(rid)        # the worker must not report its exit as an error
             else:
                 raise ValueError("this run was not started by the chart service (stop it where it runs)")
@@ -414,9 +416,8 @@ class RunManager:
         left orphaned. Terminates whatever is currently in flight via the
         same terminate/kill path as cancel(); a no-op if nothing is running."""
         with self._lock:
-            proc = self._proc
-        if proc is not None:
-            rid, _ = proc
+            rids = list(self._procs)
+        for rid in rids:
             try:
                 self.cancel(rid)
             except ValueError:
@@ -461,32 +462,38 @@ class RunManager:
                     continue
                 self._q.popleft()
                 d = self.runs / rid
-                try:
-                    proc = launch(d, self.python, self.archive, self.cache, slot)
+                try:              # --no-lock: the slot it holds bounds it, as a heat-map cell's does
+                    proc = launch(d, self.python, self.archive, self.cache, slot, ("--no-lock",))
                 except (OSError, ValueError) as e:
                     slot.close()
                     st = read_json(d / "status.json", {}) or {}
                     st.update(status="error", error=f"could not start the runner: {e}", updated=_now())
                     write_json(d / "status.json", st)
                     continue
-                self._proc = (rid, proc)
-            try:
-                code, timed_out = wait_proc(proc)
-            finally:
-                slot.close()                    # always: a killed draft's whole group is gone by now
-                finish_proc(proc)
-            with self._lock:
-                self._proc = None
-                if rid in self._cancelled:
-                    continue                    # cancel() writes the final status
-            st = read_json(d / "status.json", {}) or {}
-            if timed_out:
-                st.update(status="error", error=timed_out, updated=_now())
-                write_json(d / "status.json", st)
-            elif st.get("status") not in FINAL:
-                tail = (d / "log.txt").read_text(errors="replace")[-600:]
-                st.update(status="error", error=f"runner exited {code}: {tail}", updated=_now())
-                write_json(d / "status.json", st)
+                self._procs[rid] = proc
+            # its own thread waits for it: this loop goes on to the next run, which takes the next free slot
+            threading.Thread(target=self._finish, args=(rid, d, proc, slot), name=f"tester-run-{rid}",
+                             daemon=True).start()
+
+    def _finish(self, rid: str, d: Path, proc: subprocess.Popen, slot) -> None:
+        """Wait for one launched run; write its final status when the child did not."""
+        try:
+            code, timed_out = wait_proc(proc)
+        finally:
+            slot.close()                    # always: a killed draft's whole group is gone by now
+            finish_proc(proc)
+        with self._lock:
+            self._procs.pop(rid, None)
+            if rid in self._cancelled:
+                return                      # cancel() writes the final status
+        st = read_json(d / "status.json", {}) or {}
+        if timed_out:
+            st.update(status="error", error=timed_out, updated=_now())
+            write_json(d / "status.json", st)
+        elif st.get("status") not in FINAL:
+            tail = (d / "log.txt").read_text(errors="replace")[-600:]
+            st.update(status="error", error=f"runner exited {code}: {tail}", updated=_now())
+            write_json(d / "status.json", st)
 
 
 # ---------------------------------------------------------------- launching a backtest child
@@ -605,7 +612,8 @@ def main(argv: list[str] | None = None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     ex = sub.add_parser("exec", help="run a prepared run dir (the chart service uses this)")
     ex.add_argument("run_dir", type=Path)
-    ex.add_argument("--no-lock", action="store_true", help="a heat-map cell: the grid pool bounds it")
+    ex.add_argument("--no-lock", action="store_true",
+                    help="a run that holds a backtest slot (a page run, a heat-map cell): the slots bound it")
     ex.add_argument("--private-cache", type=Path, default=None,
                     help="a DRAFT run (sandboxed): read the shared --cache, build any missing tape here")
     ex.add_argument("--slot-fd", type=int, default=None,
@@ -667,7 +675,7 @@ def main(argv: list[str] | None = None) -> int:
     t0 = time.monotonic()
     slot = slots.acquire()
     try:
-        exec_run(base / "runs" / rid, store)
+        exec_run(base / "runs" / rid, store, lock=False)
     finally:
         slot.close()
     meta = read_json(base / "runs" / rid / "run.json")

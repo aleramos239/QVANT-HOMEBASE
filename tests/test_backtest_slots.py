@@ -284,6 +284,80 @@ def test_single_runs_and_grid_cells_share_one_cap_of_two(tmp_path, live):
     assert live.peak == 2 and len(live.started) == 5
 
 
+RUN = {"strategy": "nq930", "inputs": {"adx_gate": False}, "range": {"kind": "research"}}
+
+
+def _ids(live):
+    return [Path(d).name for d in live.started]
+
+
+def test_single_runs_take_free_slots_side_by_side_and_the_next_waits_its_turn(tmp_path, live):
+    clock = Clock(et(MON, "12:00:00"))                                  # desk hours: the cap is 2
+    runs = RunManager(tmp_path, slots=Slots(tmp_path / "slots", clock=clock, poll=0.01))
+    a, b, c = runs.submit(RUN), runs.submit(RUN), runs.submit(RUN)
+    assert until(lambda: live.now == 2)
+    time.sleep(0.2)
+    assert live.now == 2 and _ids(live) == [a, b]                       # two at once, first come first served
+    assert runs.status(c)["status"] == "queued" and runs.status(c)["queue_position"] == 1
+    assert "queue_position" not in runs.status(a) and "queue_position" not in runs.status(b)
+    live.release.set()
+    assert until(lambda: all(runs.status(r)["status"] == "done" for r in (a, b, c)), 10)
+    assert live.peak == 2 and _ids(live) == [a, b, c]
+
+
+def test_off_hours_four_single_runs_run_at_once_and_never_more(tmp_path, live):
+    clock = Clock(et(MON, "20:00:00"))
+    runs = RunManager(tmp_path, slots=Slots(tmp_path / "slots", clock=clock, poll=0.01))
+    rids = [runs.submit(RUN) for _ in range(6)]
+    assert until(lambda: live.now == 4)
+    time.sleep(0.2)
+    assert live.now == 4 and _ids(live) == rids[:4]
+    live.release.set()
+    assert until(lambda: all(runs.status(r)["status"] == "done" for r in rids), 10)
+    assert live.peak == 4
+
+
+def test_a_single_run_never_starts_beside_another_inside_the_quiet_window(tmp_path, live):
+    clock = Clock(et(MON, "09:19:00"))
+    runs = RunManager(tmp_path, slots=Slots(tmp_path / "slots", clock=clock, poll=0.01))
+    a = runs.submit(RUN)
+    assert until(lambda: live.now == 1)                                 # started before the window
+    hog = Slots(tmp_path / "slots", clock=clock).try_acquire()          # the other slot is busy for now
+    b = runs.submit(RUN)
+    clock.t = et(MON, "09:21:00")
+    hog.close()                                                         # a slot is free, but it's 09:21
+    time.sleep(0.3)
+    assert _ids(live) == [a] and runs.status(b)["status"] == "queued" and runs.status(b)["paused"] == QUIET_MSG
+    with pytest.raises(ValueError, match=QUIET_MSG):
+        runs.submit(RUN)                                                # and a new request is refused, as before
+    clock.t = et(MON, "09:35:00")
+    assert until(lambda: live.now == 2)                                 # beside the one still running
+    live.release.set()
+    assert until(lambda: runs.status(a)["status"] == runs.status(b)["status"] == "done", 10)
+
+
+def test_cancelling_one_of_two_running_runs_stops_only_that_one(tmp_path, live):
+    clock = Clock(et(MON, "12:00:00"))
+    runs = RunManager(tmp_path, slots=Slots(tmp_path / "slots", clock=clock, poll=0.01))
+    a, b = runs.submit(RUN), runs.submit(RUN)
+    assert until(lambda: live.now == 2)
+    assert runs.cancel(a)["status"] == "cancelled" and live.now == 1
+    live.release.set()
+    assert until(lambda: runs.status(b)["status"] == "done", 10)
+    assert until(lambda: not runs._procs)
+    assert runs.status(a)["status"] == "cancelled"                      # its worker did not overwrite it
+
+
+def test_shutdown_stops_every_running_single_run(tmp_path, live):
+    clock = Clock(et(MON, "12:00:00"))
+    runs = RunManager(tmp_path, slots=Slots(tmp_path / "slots", clock=clock, poll=0.01))
+    a, b = runs.submit(RUN), runs.submit(RUN)
+    assert until(lambda: live.now == 2)
+    runs.shutdown()
+    assert live.now == 0 and runs.status(a)["status"] == runs.status(b)["status"] == "cancelled"
+    live.release.set()
+
+
 def test_a_grid_queued_in_the_quiet_window_waits_and_resumes_at_0935(tmp_path, live):
     clock = Clock(et(MON, "09:19:00"))
     grids = GridManager(tmp_path, slots=Slots(tmp_path / "slots", clock=clock, poll=0.01))

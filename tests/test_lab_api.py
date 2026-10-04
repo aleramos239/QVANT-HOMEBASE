@@ -95,6 +95,82 @@ def test_a_draft_that_does_not_read_is_listed_with_its_error(tmp_path, drafts_di
         assert row["name"] == "broken" and row["ok"] is False and row["error"]
 
 
+def _listing_the_old_way(check=draftstore.check_source):
+    """What GET /drafts answered before 2026-10-04: every draft read and parsed on every call."""
+    import re
+    keep = ("class", "name", "root", "session_window", "bar_minutes", "session_independent", "doc")
+    out = []
+    for name, path in draftstore.list_files():
+        st, code = path.stat(), path.read_text(encoding="utf-8")
+        try:
+            check(code)
+            meta, err, line = draftstore.static_meta(code), None, None
+        except ValueError as e:
+            m = re.search(r"\(line (\d+)\)", str(e))
+            meta, err, line = None, str(e), int(m.group(1)) if m else None
+        out.append({"name": name, "id": draftstore.draft_id(name), "bytes": st.st_size,
+                    "modified": dt.datetime.fromtimestamp(st.st_mtime, dt.timezone.utc).isoformat(timespec="seconds"),
+                    "ok": meta is not None,
+                    "meta": None if meta is None else {**{k: meta[k] for k in keep if k in meta},
+                                                       "inputs": meta.get("inputs") or []},
+                    **({"error": err, "line": line} if err else {})})
+    return out
+
+
+def test_the_drafts_listing_parses_a_draft_only_when_its_file_changed(tmp_path, drafts_dir, monkeypatch):
+    """47 drafts of ~16 KB, the real folder's shape (2026-10-04), plus two that do not read: the first
+    listing parses them all, the ones after it only what changed -- and the answer is the same."""
+    import os
+    helper = ('\n\ndef _helper_{i}(bars, n={i}):\n    """A rolling range over the last n bars."""\n'
+              '    hi = max((b["high"] for b in bars[-n:]), default=None)\n'
+              '    lo = min((b["low"] for b in bars[-n:]), default=None)\n'
+              '    return None if hi is None or lo is None else {{"hi": hi, "lo": lo, "width": hi - lo}}\n')
+    src = lab_templates.BAR_BREAKOUT + "".join(helper.format(i=i) for i in range(50))
+    assert 14_000 < len(src) < 20_000
+    for k in range(47):
+        (drafts_dir / f"idea_{k:02d}.py").write_text(src)
+    (drafts_dir / "broken.py").write_text("class A(Strategy):\n    root = 3 + 4\n")
+    (drafts_dir / "syntax.py").write_text("class X(Strategy:\n  pass\n")
+    parsed, real = [], draftstore.check_source
+
+    def counting(code):
+        parsed.append(len(code))
+        return real(code)
+
+    monkeypatch.setattr(draftstore, "check_source", counting)
+
+    def get(c):
+        t = time.perf_counter()
+        r = c.get("/api/tester/drafts")
+        return r, (time.perf_counter() - t) * 1000
+
+    with client(tmp_path) as c:
+        first, cold = get(c)
+        assert first.json() == _listing_the_old_way(real) and len(first.json()) == len(parsed) == 49
+        assert [d["name"] for d in first.json() if not d["ok"]] == ["broken", "syntax"]   # failures are kept too
+        again = [get(c) for _ in range(5)]
+        assert all(r.content == first.content for r, _ in again) and len(parsed) == 49   # byte for byte, no parse
+        warm = min(ms for _, ms in again)
+        print(f"/api/tester/drafts: first {cold:.1f} ms, then {warm:.2f} ms")
+        assert warm * 5 < cold
+        # an edit (another size), a rewrite of the same size (another mtime), a delete, a new file
+        (drafts_dir / "idea_07.py").write_text(src + "\n# edited\n")
+        assert get(c)[0].json() == _listing_the_old_way(real) and len(parsed) == 50
+        p = drafts_dir / "idea_08.py"
+        st = p.stat()
+        p.write_text(src.replace("rolling", "ROLLING"))
+        os.utime(p, ns=(st.st_atime_ns, st.st_mtime_ns + 2_000_000_000))
+        rows = get(c)[0].json()
+        assert rows == _listing_the_old_way(real) and len(parsed) == 51
+        was, now = ({d["name"]: d for d in x}["idea_08"] for x in (first.json(), rows))
+        assert now["bytes"] == was["bytes"] == st.st_size and now["modified"] != was["modified"]
+        (drafts_dir / "idea_09.py").unlink()
+        (drafts_dir / "fresh.py").write_text(lab_templates.BLANK)
+        rows = get(c)[0].json()
+        assert rows == _listing_the_old_way(real) and len(parsed) == 52 and len(rows) == 49
+        assert "idea_09" not in {d["name"] for d in rows} and "fresh" in {d["name"] for d in rows}
+
+
 def test_saving_refuses_bad_names_builtins_and_bad_code(tmp_path):
     with client(tmp_path) as c:
         for name in ("Bad-Name", "nq930", "draft_x", "json"):

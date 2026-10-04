@@ -353,3 +353,27 @@ def test_the_base_adapter_has_no_oco():
     from homebase.broker.base import BrokerAdapter
     r = run(BrokerAdapter.place_oco(None, "NQ", "Sell", 1, 1.0, 2.0))
     assert not r.ok and r.error == "this broker has no OCO"
+
+
+def test_the_dead_helpers_removed_2026_10_04_are_named_nowhere_in_the_code():
+    """Deleted as unreferenced: risk.AccountRisk, six symbols helpers (other platforms' symbol
+    spellings, the mini/micro families) and four broker helpers. Nothing may still name them."""
+    import os
+    import re
+    from pathlib import Path
+    gone = ("AccountRisk", "DEFAULT_WARN_RATIO", "to_canonical", "from_ninjatrader", "to_projectx",
+            "from_projectx", "family_root", "swap_root", "MINI_MICRO", "MICRO_MINI", "PROJECTX_ROOT",
+            "get_protective_orders", "set_protection", "load_tokens")
+    word = re.compile(r"\b(" + "|".join(gone) + r")\b")
+    root = Path(__file__).resolve().parent.parent
+    hits = []
+    for folder in ("homebase", "tools", "tests", "deploy"):
+        for d, dirs, files in os.walk(root / folder):
+            dirs[:] = [x for x in dirs if not x.startswith(".") and x != "__pycache__"]   # never the state dir
+            for p in (Path(d) / f for f in files):
+                if p.suffix in (".py", ".js", ".mjs", ".html") and p != Path(__file__).resolve():
+                    hits += [f"{p.relative_to(root)}: {m}" for m in word.findall(p.read_text(errors="replace"))]
+    assert hits == []
+    from homebase import risk, symbols
+    assert risk.take_points and risk.DayBook                    # the daily rules are still re-exported
+    assert symbols.resolve_contract("NQZ6") == "NQZ6" and symbols.front_month("NQ").startswith("NQ")

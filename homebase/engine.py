@@ -782,6 +782,7 @@ class Engine:
 
     # --- broker fills ---------------------------------------------------------
     async def on_fill(self, ev: FillEvent) -> None:
+        got = self._perf()                   # timing only (_fill_timing)
         oid = str((ev.raw or {}).get("orderId") or "")
         for st in self.states.values():
             if ev.account_id and st.account != ev.account_id:
@@ -811,7 +812,18 @@ class Engine:
                 st.entry_fill, st.entry_qty = ev.price, ev.qty
                 self._set_take_px(st, cfg)
                 self._save()
-                jobs = [ad.cancel_order_by_id(sibling) if sibling
+                tm: dict = {}
+
+                async def timed_cancel(coro) -> OrderResult:
+                    # timing only: when the sibling cancel went out and when the broker
+                    # answered it, journaled in entry_fill's fill_ms
+                    tm["cancel_sent"] = self._perf()
+                    try:
+                        return await coro
+                    finally:
+                        tm["cancel_ack"] = self._perf()
+
+                jobs = [timed_cancel(ad.cancel_order_by_id(sibling)) if sibling
                         else asyncio.sleep(0, result=OrderResult(ok=True))]
                 if st.entry_qty >= st.qty:          # whole entry in: SL/TP to the fill
                     jobs.append(self._move_brackets(st, cfg, ad))
@@ -825,7 +837,8 @@ class Engine:
                              fill_vs_anchor=(None if ev.price is None or st.entry_anchor is None
                                              else round(ev.price - st.entry_anchor, 4)),
                              qty_filled=st.entry_qty,
-                             sibling_cancelled=r.ok, sibling_error=r.error)
+                             sibling_cancelled=r.ok, sibling_error=r.error,
+                             **self._fill_timing(ev, got, tm))
                 if moved:
                     self._journal_moved(st, moved[0])
                 return
@@ -845,7 +858,7 @@ class Engine:
                              side=st.entry_side, fill=st.entry_fill, anchor=st.entry_anchor,
                              fill_vs_anchor=(None if st.entry_fill is None or st.entry_anchor is None
                                              else round(st.entry_fill - st.entry_anchor, 4)),
-                             qty_filled=n)
+                             qty_filled=n, **self._fill_timing(ev, got, {}))
                 if n >= st.qty and not st.brackets_moved:
                     try:
                         moved = await self._move_brackets(st, cfg, ad)
@@ -878,6 +891,20 @@ class Engine:
         if any(s.status == "placing" and s.account == ev.account_id
                for s in self.states.values()):
             self._early.append(ev)
+
+    def _fill_timing(self, ev: FillEvent, got: float, tm: dict) -> dict:
+        """Timing only, journaled on entry_fill.  fill_seen_ts: when the fill was first seen (epoch
+        seconds) -- its push on the socket, or on_fill for an adapter that stamps none.  fill_ms: ms
+        after that until a broker read had filled the push in (None: none was needed) and until the
+        sibling cancel went out and was answered (None: no sibling to cancel)."""
+        seen = got if ev.seen is None else ev.seen
+
+        def ms(t):
+            return None if t is None else round((t - seen) * 1000, 1)
+
+        return {"fill_seen_ts": round(time.time() - (self._perf() - seen), 3),
+                "fill_ms": {"enriched": ms(ev.enriched), "cancel_sent": ms(tm.get("cancel_sent")),
+                            "cancel_ack": ms(tm.get("cancel_ack"))}}
 
     async def _move_brackets(self, st: DayState, cfg: StrategyCfg,
                              ad: BrokerAdapter) -> dict:

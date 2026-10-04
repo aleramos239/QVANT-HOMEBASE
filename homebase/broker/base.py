@@ -29,6 +29,11 @@ class FillEvent:
     position_after: Optional[int] = None   # net position after this fill, if known
     ts: float = 0.0
     raw: dict = field(default_factory=dict)
+    # Timing only, journaled on entry_fill (time.perf_counter readings): when the fill's push
+    # was first seen on the socket, and when a broker read had filled in what the push left
+    # out (None: no read was needed).
+    seen: Optional[float] = None
+    enriched: Optional[float] = None
 
 
 @dataclass
@@ -139,7 +144,7 @@ class BrokerAdapter(abc.ABC):
                               *, text: str = "protect") -> tuple[list[str], list[str]]:
         """Rest an opposite-side Stop and/or Limit target as separate resting
         orders, recording their ids under `symbol`. Returns (placed_ids, errors).
-        Shared by `place_bracket` and `set_protection`."""
+        Used by `place_bracket`."""
         placed: list[str] = []
         errors: list[str] = []
         if stop_price is not None:
@@ -186,21 +191,6 @@ class BrokerAdapter(abc.ABC):
         return OrderResult(ok=entry.ok, order_id=entry.order_id,
                            error=entry.error, raw=raw)
 
-    async def set_protection(self, symbol: str, exit_side: str, qty: int, *,
-                             stop_price: Optional[float] = None,
-                             target_price: Optional[float] = None) -> OrderResult:
-        """Re-rest protection for an EXISTING position: cancel any protective
-        orders we already have for `symbol`, then (if qty>0 and a level is given)
-        rest fresh ones sized to `qty`. The engine calls this after an add /
-        reduce / flip so the protective size always tracks the live net."""
-        await self.cancel_protective_orders(symbol)
-        if qty <= 0 or (stop_price is None and target_price is None):
-            return OrderResult(ok=True, raw={"protective_ids": []})
-        placed, errors = await self._leg_protection(
-            symbol, exit_side, qty, stop_price, target_price)
-        return OrderResult(ok=not errors, error="; ".join(errors) or None,
-                           raw={"protective_ids": placed})
-
     async def place_oco(self, symbol: str, exit_side: str, qty: int, stop_price: float,
                         limit_price: float, *, text: str = "homebase:chart-exit",
                         time_in_force: str = "GTC") -> OrderResult:
@@ -212,13 +202,6 @@ class BrokerAdapter(abc.ABC):
         separate resting orders are NOT an OCO (both could fill and open a
         position the other way), so an adapter without a native OCO says no."""
         return OrderResult(ok=False, error="this broker has no OCO")
-
-    async def get_protective_orders(self, symbol: str) -> list[dict]:
-        """Resting protective orders on this account for `symbol`, as
-        ``[{"order_id", "kind", "side", "price", "qty"}]`` where kind is
-        "stop" | "target". Used to MIRROR a leader's stop/target onto followers.
-        Default: empty (adapter can't read resting orders)."""
-        return []
 
     async def cancel_order_by_id(self, order_id: str) -> OrderResult:
         """Cancel a single resting order by its broker id. Default: unsupported."""

@@ -763,3 +763,181 @@ def test_the_webhook_and_its_secret_are_gone(client, tmp_path, monkeypatch, capl
     d = _json.loads(p.read_text())
     assert not set(gone) & set(d) and "old-secret" not in p.read_text()
     assert d["armed"] is True and d["book"] == old["book"] and d["strategies"]["nq930"]["qty"] == 5
+
+
+# --- /api/status and /api/calendar read their files once, not on every call (2026-10-04) -----------
+def _write_journal(tmp_path, n):
+    """A journal like a desk's: mostly ordinary lines, some trades of nq930."""
+    import json
+    base = dt.datetime(2026, 7, 1, 9, 30, tzinfo=ZoneInfo("America/New_York"))
+    with open(tmp_path / "journal.jsonl", "a") as f:
+        for i in range(n):
+            t = base + dt.timedelta(minutes=7 * i)
+            rec = {"ts": t.timestamp(), "et": t.isoformat(timespec="seconds")}
+            if i % 10 == 1:
+                rec.update(event="entry_fill", strategy="nq930", account="main", side="Buy",
+                           fill=24510.25, anchor=24510.0, fill_vs_anchor=0.25, qty_filled=3)
+            elif i % 10 == 2:
+                rec.update(event="exit_fill", strategy="nq930", account="main", reason="tp",
+                           fill=24525.0, pnl=885.0 if i % 3 else -300.0)
+            else:
+                rec.update(event="timer_stage", strategy="nq930", stage="gated", adx=23.4,
+                           note="a line of ordinary desk activity " * 3)
+            f.write(json.dumps(rec) + "\n")
+
+
+def _status_the_old_way(tmp_path):
+    """What /api/status answered before the cache: the whole file read and parsed on every call."""
+    import json
+    from homebase.metrics import live_metrics
+    from homebase.server import JOURNAL_TAIL
+    lines = (tmp_path / "journal.jsonl").read_text().splitlines()
+    return live_metrics([json.loads(l) for l in lines]), [json.loads(l) for l in lines[-JOURNAL_TAIL:]][::-1]
+
+
+def test_status_answers_the_same_from_the_cached_journal(client, tmp_path):
+    _write_journal(tmp_path, 500)
+    live, tail = _status_the_old_way(tmp_path)
+    first = client.get("/api/status")
+    d = first.json()
+    assert d["journal"] == tail and len(tail) == 60 and d["strategies"]["nq930"]["live"] == live["nq930"]
+    assert live["nq930"] == {"trades": 50, "win_rate": 66.0, "net": 24105.0, "avg_trade": 482.1,
+                             "avg_slip_pts": 0.25, "days": 3}
+    assert client.get("/api/status").content == first.content          # byte for byte, now from the cache
+    # a trade lands: the next poll shows it, exactly as a full re-read would
+    client.app.state.engine.journal("exit_fill", strategy="nq930", account="main", reason="sl", pnl=-100.0)
+    live, tail = _status_the_old_way(tmp_path)
+    d = client.get("/api/status").json()
+    assert d["journal"] == tail and tail[0]["pnl"] == -100.0
+    assert d["strategies"]["nq930"]["live"] == live["nq930"] and live["nq930"]["trades"] == 51
+
+
+def test_status_reads_an_unchanged_journal_not_at_all_and_a_grown_one_from_where_it_stopped(
+        client, tmp_path, monkeypatch):
+    from homebase import bothistory
+    _write_journal(tmp_path, 200)
+    reads, orig = [], bothistory.JournalCache._read_from
+
+    def spy(path, offset, size):
+        reads.append((path.name, offset, size))
+        return orig(path, offset, size)
+
+    monkeypatch.setattr(bothistory.JournalCache, "_read_from", staticmethod(spy))
+    size = (tmp_path / "journal.jsonl").stat().st_size
+    client.get("/api/status")
+    assert reads == [("journal.jsonl", 0, size)]
+    for _ in range(3):
+        client.get("/api/status")
+    assert len(reads) == 1                                              # unchanged: no read at all
+    client.app.state.engine.journal("armed_toggled", armed=False)
+    grown = (tmp_path / "journal.jsonl").stat().st_size
+    assert client.get("/api/status").json()["journal"][0]["event"] == "armed_toggled"
+    assert reads[1:] == [("journal.jsonl", size, grown)]                # only the appended bytes
+
+
+def test_status_without_a_journal_is_empty_as_before(client, tmp_path):
+    (tmp_path / "journal.jsonl").unlink(missing_ok=True)
+    d = client.get("/api/status").json()
+    assert d["journal"] == [] and d["strategies"]["nq930"]["live"] is None
+
+
+def _equity_the_old_way(tmp_path, account):
+    """equity_by_day before the cache: every line of the file, on every call."""
+    import json
+    out = {}
+    for line in (tmp_path / "equity.jsonl").read_text().splitlines():
+        r = json.loads(line)
+        if r.get("account") == account and r.get("equity") is not None:
+            out[r["date"]] = float(r["equity"])
+    return dict(sorted(out.items()))
+
+
+def _write_equity(tmp_path, n, accounts):
+    """equity.jsonl as the desk wrote it until 2026-10-04: a line per account per minute."""
+    import json
+    day0 = dt.date(2026, 8, 20)
+    with open(tmp_path / "equity.jsonl", "a") as f:
+        for i in range(n):
+            f.write(json.dumps({"date": (day0 + dt.timedelta(days=i * 40 // n)).isoformat(),
+                                "account": accounts[i % len(accounts)],
+                                "equity": 50000.0 + (i * 97 % 41) * 12.5}) + "\n")
+
+
+def test_calendar_answers_the_same_from_the_cached_file_and_reads_it_once(client, tmp_path, monkeypatch):
+    from pathlib import Path
+    from homebase import server as S
+    accounts = ["ACC1", "ACC2", "ACC3"]
+    _write_equity(tmp_path, 3000, accounts)
+    reads, orig = [], Path.read_text
+
+    def spy(self, *a, **k):
+        if self.name == "equity.jsonl":
+            reads.append(self.name)
+        return orig(self, *a, **k)
+
+    def old_calendar(account, month):
+        mine = len(reads)                                               # this reference's own read is not the desk's
+        eq, days, prev, total = _equity_the_old_way(tmp_path, account), {}, None, 0.0
+        del reads[mine:]
+        for date, e in eq.items():
+            if prev is not None and date.startswith(month):
+                days[date] = round(e - prev, 2)
+                total += days[date]
+            prev = e
+        return {"account": account, "month": month, "days": days, "total": round(total, 2),
+                "history_since": next(iter(eq), None)}
+
+    want = {(a, m): old_calendar(a, m) for a in accounts + ["NOPE"] for m in ("2026-08", "2026-09")}
+    monkeypatch.setattr(Path, "read_text", spy)
+    for (a, m), w in want.items():
+        got = client.get("/api/calendar", params={"month": m, "account": a})
+        assert got.json() == w and list(got.json()["days"]) == list(w["days"])
+    assert len(reads) == 1                         # eight calls, two reads each before: one parse
+    assert want[("ACC1", "2026-09")]["days"] and want[("NOPE", "2026-09")]["history_since"] is None
+    S.record_equity("ACC1", 61000.0, "2026-09-30")                      # the file changed: read again, once
+    w = old_calendar("ACC1", "2026-09")
+    assert client.get("/api/calendar", params={"month": "2026-09", "account": "ACC1"}).json() == w
+    assert len(reads) == 2 and w["days"]["2026-09-30"] != want[("ACC1", "2026-09")]["days"].get("2026-09-30")
+
+
+def test_record_equity_writes_a_line_only_when_the_balance_or_the_day_changed(client, tmp_path):
+    """The readers keep a day's LAST value, so what they answer is what a line per minute gave."""
+    import json
+    from homebase import server as S
+    samples = ([("ACC1", 50000.0, "2026-09-09")] * 3 + [("ACC2", 50000.0, "2026-09-09")] * 2
+               + [("ACC1", 50000.0, "2026-09-10")] * 2          # a new day, the same balance: its 0.0 day
+               + [("ACC1", 50010.0, "2026-09-10")] * 3 + [("ACC1", 50000.0, "2026-09-10")]
+               + [("ACC2", 50000.0, "2026-09-10"), ("ACC1", 50000.0, "2026-09-11")])
+    for account, eq, date in samples:
+        S.record_equity(account, eq, date)
+    lines = [json.loads(l) for l in (tmp_path / "equity.jsonl").read_text().splitlines()]
+    assert [(r["account"], r["equity"], r["date"]) for r in lines] == [
+        ("ACC1", 50000.0, "2026-09-09"), ("ACC2", 50000.0, "2026-09-09"), ("ACC1", 50000.0, "2026-09-10"),
+        ("ACC1", 50010.0, "2026-09-10"), ("ACC1", 50000.0, "2026-09-10"), ("ACC2", 50000.0, "2026-09-10"),
+        ("ACC1", 50000.0, "2026-09-11")]
+    per_minute: dict = {}                                               # what a line for every sample gave
+    for account, eq, date in samples:
+        per_minute.setdefault(account, {})[date] = eq
+    assert {a: S.equity_by_day(a) for a in per_minute} == per_minute
+    assert client.get("/api/calendar", params={"month": "2026-09", "account": "ACC1"}).json() == {
+        "account": "ACC1", "month": "2026-09", "days": {"2026-09-10": 0.0, "2026-09-11": 0.0},
+        "total": 0.0, "history_since": "2026-09-09"}
+
+
+def test_status_and_calendar_stop_costing_a_file_parse_per_call(client, tmp_path):
+    """Timed on files of a real desk's size (a 20,000-line journal, 40,000 equity lines): the first
+    call parses, the calls after it do not.  The bound is loose (5x); the measured gap is ~40x."""
+    import time
+    _write_journal(tmp_path, 20000)
+    _write_equity(tmp_path, 40000, [f"ACC{i}" for i in range(10)])
+
+    def ms(url, params=None):
+        t = time.perf_counter()
+        assert client.get(url, params=params).status_code == 200
+        return (time.perf_counter() - t) * 1000
+
+    for url, params in (("/api/status", None), ("/api/calendar", {"month": "2026-09", "account": "ACC3"})):
+        first = ms(url, params)
+        warm = min(ms(url, params) for _ in range(5))
+        print(f"{url}: first {first:.1f} ms, then {warm:.2f} ms")
+        assert warm * 5 < first
