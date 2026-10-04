@@ -9,16 +9,21 @@ Threading: prepare() does the heavy part (history + today's bars from a
 snapshot of the tape) in a worker thread; attach() runs on the event loop,
 catches up the ticks that arrived meanwhile, and registers the stream.
 Everything else runs on the event loop only.
+
+Today's bars of a whole-minute chart are not a replay of the whole tape:
+the hub keeps today's 1-minute bars per root (Minutes) and resamples them,
+so a timeframe change costs only the ticks that arrived since the last one.
 """
 from __future__ import annotations
 
 import datetime as dt
+import threading
 import time
 from dataclasses import dataclass, field
 
 from ..contracts import point_value, tick_size
-from .bars import Bar, BarBuilder, BarSpec
-from .history import History
+from .bars import Bar, BarBuilder, BarSpec, resample
+from .history import M1, History
 from .session import session_date
 from .studies import Profile, make
 from .tick import BUY, SideClassifier, Tick, from_row
@@ -124,6 +129,19 @@ class Stream:
 
 
 @dataclass
+class Minutes:
+    """Today's 1-minute bars of one root, kept so a whole-minute chart is resampled from them instead of
+    replaying the day's tape. Built from the tape alone, by a builder no clock ever touches -- what a replay
+    of the same ticks gives -- and caught up, under Hub's lock, with the ticks that arrived since."""
+    tape: list              # the today-list object they were built from
+    builder: BarBuilder
+    closed: list = field(default_factory=list)
+    upto: int = 0           # how many of the tape's ticks are in
+    whole: bool = True      # False once a print fell at or past the session close: no 1-minute bar holds it,
+                            # but a replay files it in a longer bar whose last bucket runs over the close
+
+
+@dataclass
 class Prepared:
     root: str
     spec: BarSpec
@@ -143,12 +161,15 @@ class Hub:
         self.today_info: dict[str, dict] = {}
         self.clf: dict[str, SideClassifier] = {}
         self.streams: dict[tuple[str, str], Stream] = {}
+        self.minutes: dict[str, Minutes] = {}
+        self._minutes_lock = threading.Lock()
 
     # ------------------------------------------------------------ today's tape
     def start_today(self, root: str, d: dt.date, ticks: list[Tick], info: dict | None = None) -> None:
         """(Re)seed today's session for root: at startup, after a refill.
         Streams of root are reset (the page resubscribes and rebuilds)."""
         self.today[root] = list(ticks)
+        self.minutes.pop(root, None)        # they were the old tape's
         self.today_date[root] = d
         self.today_info[root] = info or {"date": d.isoformat(), "contract": None,
                                          "source": "live", "approx": False, "gaps": []}
@@ -171,6 +192,7 @@ class Hub:
             if d > self.today_date[root]:               # 18:00 roll: the old session is on disk
                 info = dict(self.today_info[root], date=d.isoformat(), gaps=[])
                 self.today[root] = []
+                self.minutes.pop(root, None)
                 self.today_date[root] = d
                 self.today_info[root] = info
                 self.clf[root] = SideClassifier()        # a reload starts each session fresh too
@@ -219,7 +241,15 @@ class Hub:
         s.partial = len(chunks) < len(newest_first)
         tape = self.today.get(root)              # None: root has no tape yet (not [] — see attach)
         upto = len(tape) if tape else 0
-        if tape is not None:
+        kept = self._minutes(root, tape, ts) if upto and spec.from_minutes else None
+        if kept is not None:                     # today from the kept 1-minute bars: no replay of the tape
+            upto, minutes = kept
+            bars = resample(minutes, spec)
+            live = bars.pop()                    # the bar the tape's last tick is in: still developing
+            live.closed = False
+            s.bars.extend(bars)
+            s.builder.resume(live, tape[upto - 1].ts_ms)
+        elif tape is not None:
             for tk in tape[:upto]:
                 s.bars.extend(s.builder.add(tk))
         info = self.today_info.get(root)
@@ -228,6 +258,23 @@ class Hub:
         for k in study_keys:
             s.add_study(k)
         return Prepared(root, spec, s, tape, upto, today_date)
+
+    def _minutes(self, root: str, tape: list, ts: float) -> tuple[int, list[Bar]] | None:
+        """Worker thread: (ticks covered, today's 1-minute bars over them, the last one a copy of the
+        developing bar) -- root's kept bars, first caught up with the ticks that arrived since the last
+        call. The list is the caller's own. None: the tape holds a print at or past the session close
+        (Minutes.whole), so the caller replays it."""
+        with self._minutes_lock:
+            m = self.minutes.get(root)
+            if m is None or m.tape is not tape:
+                m = self.minutes[root] = Minutes(tape, BarBuilder(M1, ts, root))
+            upto = len(tape)
+            for tk in tape[m.upto:upto]:
+                m.closed.extend(m.builder.add(tk))
+                if m.builder.cur is None:
+                    m.whole = False
+            m.upto = upto
+            return (upto, m.closed + [m.builder.cur.copy()]) if m.whole else None
 
     def attach(self, p: Prepared) -> Stream:
         """Event loop: register (or reuse) the stream, catching up the ticks

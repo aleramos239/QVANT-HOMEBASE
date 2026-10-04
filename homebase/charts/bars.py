@@ -202,6 +202,12 @@ class BarBuilder:
         self._floor = end
         return [self._close()]
 
+    def resume(self, cur: Bar, ts_ms: int) -> None:
+        """Carry on from a developing bar built elsewhere (resampled from 1-minute bars), as if add() had
+        just taken that bar's last tick, stamped ts_ms, here."""
+        self._enter_session(ts_ms)
+        self.cur = cur
+
     def _close(self) -> Bar:
         b, self.cur = self.cur, None
         b.closed = True
