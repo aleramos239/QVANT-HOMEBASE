@@ -332,7 +332,7 @@ def test_export_status_quotes_the_id_like_the_tester_tools(desk, charts):
 
 def test_export_start_guards_a_service_that_does_not_have_it_yet(desk, charts):
     # no ("POST", "/api/export/start") route registered -> the fake answers 404
-    with pytest.raises(ToolError, match="feat/data-export"):
+    with pytest.raises(ToolError, match="needs a restart"):
         box(desk, charts).call("export_start", {"root": "NQ", "type": "candles", "start": "2026-01-01",
                                                 "end": "2026-01-02", "timeframe": "1m"})
 

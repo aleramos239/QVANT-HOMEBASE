@@ -27,7 +27,7 @@ def mk(tmp_path, et=(10, 0), armed=True):
     clock = Clock()
     clock.set_et(*et)
     cfg = AppCfg(
-        armed=armed, webhook_secret="s",
+        armed=armed,
         accounts={a: AccountCfg(keyring_key="k", account_name=a.upper(), label=a.upper())
                   for a in ("a1", "a2")},
         book={"nq930": [{"account": "a1", "qty": 2}], "es930": [{"account": "a1", "qty": 1}]},

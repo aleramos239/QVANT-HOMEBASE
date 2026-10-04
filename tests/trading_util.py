@@ -77,7 +77,7 @@ def mkdesk(tmp_path, *, enabled=True, et=(11, 0), book=None):
     clock = Clock()
     clock.set_et(*et)
     cfg = AppCfg(
-        armed=True, webhook_secret="s",
+        armed=True,
         accounts={a: AccountCfg(keyring_key="k", account_name=a.upper(), label=a.upper())
                   for a in ("a1", "a2")},
         book=book if book is not None else {"nq930": [{"account": "a1", "qty": 3}]},

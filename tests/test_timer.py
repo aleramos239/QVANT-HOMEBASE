@@ -116,7 +116,7 @@ def at(clock, h, m, s=0, us=0, date=(2026, 9, 14)):
 
 def mk(tmp_path, *, last_trade=24500.0, clock=None, armed=False, md=None):
     clock = clock or Clock()
-    cfg = AppCfg(armed=armed, webhook_secret="s",
+    cfg = AppCfg(armed=armed,
                  accounts={"main": AccountCfg(keyring_key="k",
                                               account_name="MAIN")},
                  book={"nq930": [{"account": "main", "qty": 3}]},

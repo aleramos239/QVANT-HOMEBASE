@@ -112,7 +112,7 @@ test('the dialog says when nothing trades yet, and names the moment it will', ()
     /Right now NQ930_1030 is off and the desk is disarmed, so nothing is placed until that changes\./);
   const s = load();
   assert.match(s.api.liveBookingNote('nq_pm_flex', '1234567885'), /on its next signal/);
-  assert.match(s.api.liveBookingNote('gc_pine', '1234567885'), /on its next alert/);
+  assert.match(s.api.liveBookingNote('gc_pine', '1234567885'), /on its next signal/);
   assert.match(s.api.liveBookingNote('shadowy', '1234567885'), /SHADOW strategy/);
   assert.match(s.api.liveBookingNote('nq930_1030', 'apex2941870000048'), /Account APEX2941870000048\./,
     'a shortened name is spelled out in full in the body');

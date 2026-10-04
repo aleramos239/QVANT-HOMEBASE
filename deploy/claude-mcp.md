@@ -52,8 +52,7 @@ version: restart that service (never 09:20–09:35 ET on weekdays).
   answers 404 / shows no cooldown.
 - **`export_start` / `export_status`** use the chart service's `POST /api/export/start` and
   `GET /api/export/{id}` (`com.ramosquant.homebase-charts`, :8852). When those routes are missing the tools
-  refuse with a message that still names the old branch ("needs feat/data-export merged and the service
-  restarted"): it means the chart service must be restarted.
+  refuse and say the chart service needs a restart.
 - **`data_coverage`** reads `homebase/.state/tick_coverage.json`, which the tick job writes
   (`python -m homebase.ticks --coverage` rewrites it). With no file it says so and returns cleanly (no error).
 - **Claude Code itself**: a running session keeps the tool list it started with: after a service restart or

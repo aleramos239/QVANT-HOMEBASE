@@ -98,7 +98,7 @@ def desk(tmp_path, monkeypatch):
     monkeypatch.setattr("homebase.secrets_store.state_dir", lambda: tmp_path)
     monkeypatch.setattr(config_mod, "config_path", lambda: tmp_path / "config.json")
     monkeypatch.setattr("homebase.trading.ChartDesk._views_paused", lambda self: False)
-    cfg = AppCfg(armed=False, webhook_secret="tv-secret",
+    cfg = AppCfg(armed=False,
                  accounts={"main": AccountCfg(keyring_key="k", account_name="MAIN")},
                  book={"nq930": [{"account": "main", "qty": 3}]},
                  strategies={"nq930": StrategyCfg(symbol="NQ", qty=3, offset_pts=10.0,

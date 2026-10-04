@@ -18,12 +18,11 @@ Per enabled strategy with self_fire (all times ET, weekdays only):
     9:31        unsubscribe, done
 
 Fail-safe by construction: no gate reading → no fire; no fresh quote → no
-fire (yet); accept window over → no fire; day already acted (e.g. the TV
-alert beat us) → no fire; fired once → never again that day, restarts
-included. Every decision is journaled. The TV alert stays
-a cross-check — when disarmed both paths journal dry runs (free anchor
-A/B); when armed the second arrival is refused by the one-trade-per-day
-rule.
+fire (yet); accept window over → no fire; day already acted → no fire;
+fired once → never again that day, restarts included. Every decision is
+journaled. This timer is the only live source of a straddle signal; a
+second signal on a day that already acted is refused by the
+one-trade-per-day rule.
 """
 from __future__ import annotations
 
@@ -439,7 +438,7 @@ class SelfTimer:
                 return
             day = self.engine.day_status(name)
             if day != "idle":
-                st["stage"] = "done"        # something (TV?) already acted
+                st["stage"] = "done"        # something already acted
                 self.engine.journal("timer_deferred", strategy=name,
                                     status=day)
                 return

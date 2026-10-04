@@ -803,21 +803,6 @@
   </div>
 </div>
 
-<div class="overlay" id="pineOverlay">
-  <div class="modal" style="width:680px" role="dialog" aria-modal="true" tabindex="-1" inert aria-labelledby="pineName">
-    <div class="cal-head">
-      <span style="font-weight:600" id="pineName">—</span>
-      <span style="font-size:12px;color:var(--muted-foreground);font-family:var(--font-mono)" id="pineFile"></span>
-      <span class="spacer" style="flex:1"></span>
-      <button class="btn btn-outline btn-sm" onclick="copyPine()">Copy</button>
-      <button class="cal-nav" onclick="closePine()" title="Close" aria-label="Close">&times;</button>
-    </div>
-    <pre id="pineSrc" style="font-family:var(--font-mono);font-size:11.5px;line-height:1.5;
-      background:var(--secondary);border:1px solid var(--border);border-radius:var(--radius-md);
-      padding:12px;overflow:auto;max-height:62vh;white-space:pre;margin:0"></pre>
-  </div>
-</div>
-
 <div class="overlay" id="calOverlay">
   <div class="modal" style="width:460px" role="dialog" aria-modal="true" tabindex="-1" inert aria-labelledby="calAcct">
     <div class="cal-head">
@@ -910,7 +895,7 @@ const OVERLAYS = [];   // the open dialogs, topmost last: {el, trigger}
 const OVERLAY_CLOSE = {confirmOverlay: () => cfDone(false), settingsOverlay: () => closeSettings(),
   connectOverlay: () => closeConnect(), resOverlay: () => closeRes(), acctOverlay: () => closeAccts(),
   algoOverlay: () => closeAlgoMgr(), liveOverlay: () => closeLive(), checksOverlay: () => closeChecks(),
-  pineOverlay: () => closePine(), calOverlay: () => closeCal()};
+  calOverlay: () => closeCal()};
 const FOCUSABLE = "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), " +
   "textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
 /* Glass pass: a dialog is live the moment it opens (never inert, visible at once -- the motion never
@@ -1647,7 +1632,7 @@ const dayPill = (st) => `<span class="${STATUS_PILL[st] || "pill idle"}" title="
 
 /* ===== Desk views (design/apple-pass): Today · Strategy · Activity =============================
    Presentation of what the desk already reports. Every control below calls the handler the old
-   cards called (toggleStrat, flattenStrat, testFire, openRes / openLive / openPine, toggleAsgMenu,
+   cards called (toggleStrat, flattenStrat, testFire, openRes / openLive, toggleAsgMenu,
    acctRow ...) -- nothing about arming, killing or booking changed. The day, the states and the
    numbers are all read from the status the desk sends. */
 let VIEW = {k: "today"};
@@ -1835,15 +1820,14 @@ function stratView(name) {
   if (!s) return `<div class="feed-empty">That strategy is not on the desk any more.</div>`;
   const c = s.cfg, state = stratState(name, s), lv = s.live, p = todayPnl(s);
   const execTxt = (c.kind === "bars" ? "A price-action rule on the app's own live bars."
-    : c.self_fire ? "The app computes and fires this signal itself." : "A TradingView Pine alert feeds this strategy.")
+    : c.self_fire ? "The app computes and fires this signal itself." : "Self-fire is off: nothing fires this strategy.")
     + (c.shadow ? " Shadow: signals are journaled, nothing is placed — even when armed." : "");
   const fig = (k, v, title) => `<div class="f"${title ? ` title="${esc(title)}"` : ""}><div class="k">${k}</div><div class="v mono">${v}</div></div>`;
   const figs = lv && lv.trades
     ? `<div class="figs">${fig("Gross", usdS(lv.net), "Before commissions (the desk's journal pnl is gross)")}${fig("Win rate", lv.win_rate + "%")}${fig("Trades", lv.trades)}${fig("Avg per trade", usd(lv.avg_trade), "Gross, per trade")}${fig("Avg slip", (lv.avg_slip_pts ?? "—") + " pts")}</div>`
     : `<div class="eq-empty">No live trades yet.</div>`;
   const links = `<div class="qlinks">${s.research && s.research.rows ? `<button class="btn btn-quiet btn-sm" onclick="openRes('${name}')">Backtest metrics</button>` : ""}
-    <button class="btn btn-quiet btn-sm" onclick="openLive('${name}')">Live calendar</button>
-    ${c.pine_file ? `<button class="btn btn-quiet btn-sm" onclick="openPine('${name}')">Pine script</button>` : ""}</div>`;
+    <button class="btn btn-quiet btn-sm" onclick="openLive('${name}')">Live calendar</button></div>`;
   const accts = ST.accounts || {}, asg = (ST.book && ST.book[name]) || [];
   const rows = asg.map(a => acctRow(a.account, {qty: a.qty, strategy: name})).join("");
   const free = Object.keys(accts).filter(id => !asg.some(a => a.account === id));
@@ -2207,7 +2191,7 @@ function liveBookingNote(strategy, account) {
   if (!a) return `This account is not in the desk's list right now, so it is treated as LIVE.${acct}`;
   if (c.shadow) return "It is a SHADOW strategy: its signals are journaled, never placed — the booking " +
     `stands if that changes.${acct}`;
-  const when = c.kind === "bars" ? "on its next signal" : c.self_fire ? `at the next ${fireHM(strategy)} fire` : "on its next alert";
+  const when = c.kind === "bars" ? "on its next signal" : c.self_fire ? `at the next ${fireHM(strategy)} fire` : "on its next signal";
   const idle = [];
   if (!c.enabled) idle.push(strategy.toUpperCase() + " is off");
   if (ST && !ST.armed) idle.push("the desk is disarmed");
@@ -3130,29 +3114,6 @@ function renderLive() {
       ).join("")
     : "";
 }
-
-/* ---- pine source popup ---- */
-async function openPine(name) {
-  $("#pineName").textContent = name.toUpperCase();
-  $("#pineFile").textContent = "";
-  $("#pineSrc").textContent = "loading…";
-  showOverlay("pineOverlay");
-  try {
-    const d = await (await fetch("/api/pine?strategy=" +
-                                 encodeURIComponent(name))).json();
-    $("#pineFile").textContent = d.name || "";
-    $("#pineSrc").textContent = d.source ||
-      "no Pine source on file for this strategy";
-  } catch (_) { $("#pineSrc").textContent = "source unavailable"; }
-}
-function closePine() { hideOverlay("pineOverlay"); }
-function copyPine() {
-  navigator.clipboard.writeText($("#pineSrc").textContent)
-    .then(() => toast("Pine source copied — paste into the TradingView editor."));
-}
-$("#pineOverlay").addEventListener("click", (e) => {
-  if (e.target === e.currentTarget) closePine();
-});
 
 /* ---- P&L calendar ---- */
 let CAL = {account: "", d: new Date()};

@@ -165,7 +165,7 @@ def feed_app(tmp_path, monkeypatch, strategies):
     monkeypatch.setattr("homebase.engine.state_dir", lambda: tmp_path)
     monkeypatch.setattr("homebase.server.state_dir", lambda: tmp_path)
     monkeypatch.setattr(config_mod, "config_path", lambda: tmp_path / "config.json")
-    cfg = AppCfg(armed=True, webhook_secret="s",
+    cfg = AppCfg(armed=True,
                  accounts={"main": AccountCfg(keyring_key="k", account_name="MAIN")},
                  book={}, strategies=strategies)
     log, current, made = [], {"md": "md-1"}, []
@@ -268,7 +268,7 @@ def test_readiness_says_a_deferred_feed_is_waiting_not_broken():
     from zoneinfo import ZoneInfo
     from homebase.engine import Engine
     from homebase.server import compute_readiness
-    cfg = AppCfg(armed=True, webhook_secret="s",
+    cfg = AppCfg(armed=True,
                  accounts={"main": AccountCfg(keyring_key="k", account_name="MAIN")},
                  book={"nq10am": [{"account": "main", "qty": 1}]},
                  strategies={"nq10am": bars_strategy()})

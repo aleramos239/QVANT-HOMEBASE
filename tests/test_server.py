@@ -41,7 +41,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr("homebase.server.state_dir", lambda: tmp_path)
     monkeypatch.setattr("homebase.secrets_store.state_dir", lambda: tmp_path)
     monkeypatch.setattr(config_mod, "config_path", lambda: tmp_path / "config.json")
-    cfg = AppCfg(armed=False, webhook_secret="tv-secret",
+    cfg = AppCfg(armed=False,
                  accounts={"main": AccountCfg(keyring_key="k",
                                               account_name="MAIN")},
                  book={"nq930": [{"account": "main", "qty": 3}]},
@@ -557,7 +557,7 @@ def _readiness(now_et_hhmm, *, armed=True, timer_stage=None, feed=None, power=No
     from homebase.server import compute_readiness
     h, m = now_et_hhmm
     now = dt.datetime(2026, 9, 23, h, m, tzinfo=ZoneInfo("America/New_York"))  # Wed
-    cfg = AppCfg(armed=armed, webhook_secret="s",
+    cfg = AppCfg(armed=armed,
                  accounts={"main": AccountCfg(keyring_key="k", account_name="MAIN")},
                  book={"nq930": [{"account": "main", "qty": 3}]},
                  strategies={"nq930": StrategyCfg(
@@ -602,7 +602,7 @@ def _readiness_day(tmp_path, hms, tst, *, armed=True, status=None, gated=False):
     from homebase.engine import Engine
     from homebase.server import compute_readiness
     now = dt.datetime(2026, 9, 23, *hms, tzinfo=ZoneInfo("America/New_York"))
-    cfg = AppCfg(armed=armed, webhook_secret="s",
+    cfg = AppCfg(armed=armed,
                  accounts={"main": AccountCfg(keyring_key="k", account_name="MAIN")},
                  book={"nq930": [{"account": "main", "qty": 3}]},
                  strategies={"nq930": StrategyCfg(
@@ -690,7 +690,7 @@ def test_readiness_feed_freshness():
     from homebase.engine import Engine
     from homebase.server import compute_readiness
     now = dt.datetime(2026, 9, 23, 11, 0, tzinfo=ZoneInfo("America/New_York"))
-    cfg = AppCfg(armed=True, webhook_secret="s",
+    cfg = AppCfg(armed=True,
                  accounts={"main": AccountCfg(keyring_key="k", account_name="MAIN")},
                  book={"pa": [{"account": "main", "qty": 1}]},
                  strategies={"pa": SC(symbol="NQ", qty=1, offset_pts=0, sl_pts=0,
@@ -726,19 +726,40 @@ def test_a_missing_pin_shows_its_reason_on_the_account(client):
     assert {"level": "bad", "label": "MAIN", "detail": reason} in st["readiness"]["checks"]
 
 
-def test_the_webhook_and_its_secret_are_gone(client, tmp_path, monkeypatch):
-    """Removed 2026-09-27: /hook, /api/tv-setup and /api/hook-url answer 404/405; the health list
-    has no webhook line; a saved config never carries the old secret."""
+def test_the_webhook_and_its_secret_are_gone(client, tmp_path, monkeypatch, caplog):
+    """Removed 2026-09-27: /hook, /api/tv-setup, /api/hook-url and /api/pine answer 404/405; the health
+    list has no webhook line; a config file that still holds the three old webhook keys loads the same
+    as one without them, and a save no longer writes them."""
     assert client.post("/hook", json={"secret": "tv-secret", "strategy": "nq930",
                                       "upper": 1, "lower": 0}).status_code in (404, 405)
     assert client.get("/api/tv-setup").status_code == 404
     assert client.post("/api/hook-url", json={"url": "https://x"}).status_code in (404, 405)
+    assert client.get("/api/pine", params={"strategy": "nq930"}).status_code == 404
     assert "Webhook" not in client.get("/api/status").text
     from homebase import config as config_mod
-    from homebase.config import AppCfg
+    import json as _json
+    import logging
     p = tmp_path / "cfg.json"
     monkeypatch.setattr(config_mod, "config_path", lambda: p)
-    config_mod.save(AppCfg(webhook_secret="old-secret", public_hook_url="https://x"))
-    import json as _json
+    gone = ("webhook_secret", "hook_port", "public_hook_url")
+    old = {"armed": True, "webhook_secret": "old-secret", "hook_port": 8851, "public_hook_url": "https://x",
+           "accounts": {"a1": {"keyring_key": "k", "account_name": "ACC1", "live": True}},
+           "book": {"nq930": [{"account": "a1", "qty": 2}]},
+           "strategies": {"nq930": {"qty": 5, "pine_file": "nq930.pine"}},
+           "chart_trading": {"enabled": True, "max_order_qty": 3, "max_position_qty": 6},
+           "allowed_hosts": ["desk.tailnet.ts.net"]}
+    with caplog.at_level(logging.WARNING):
+        p.write_text(_json.dumps(old))
+        with_old = config_mod.load()
+        assert _json.loads(p.read_text()) == old                 # load alone does not rewrite the file
+        p.write_text(_json.dumps({k: v for k, v in old.items() if k not in gone}))
+        assert with_old == config_mod.load()                     # every field, old keys or not
+    assert not caplog.records                                    # and no warning either way
+    assert with_old.armed is True and with_old.book == old["book"]
+    assert with_old.strategies["nq930"].qty == 5 and with_old.accounts["a1"].account_name == "ACC1"
+    assert with_old.chart_trading.max_order_qty == 3 and with_old.allowed_hosts == ["desk.tailnet.ts.net"]
+    assert not any(hasattr(with_old, k) for k in gone)
+    config_mod.save(with_old)
     d = _json.loads(p.read_text())
-    assert d["webhook_secret"] == "" and d["public_hook_url"] == ""
+    assert not set(gone) & set(d) and "old-secret" not in p.read_text()
+    assert d["armed"] is True and d["book"] == old["book"] and d["strategies"]["nq930"]["qty"] == 5

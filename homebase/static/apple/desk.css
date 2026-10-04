@@ -399,7 +399,6 @@ html.hb-apple .rrow .k, html.hb-apple .r3 .k { color: var(--a-label-2); }
 html.hb-apple .rrow .v, html.hb-apple .r3 .v, html.hb-apple .mstrip .mi { font-family: var(--a-font); font-variant-numeric: tabular-nums; }
 html.hb-apple .r3.r3h { font-size: 11px; font-weight: 700; letter-spacing: normal; color: var(--a-label-2); }
 html.hb-apple .mstrip .mi b { font-size: 11px; letter-spacing: normal; color: var(--a-label-2); }
-html.hb-apple #pineSrc { font-family: var(--a-mono) !important; font-size: 11px !important; line-height: 15px !important; border: 0 !important; border-radius: 8px !important; background: var(--a-group) !important; -webkit-user-select: text; user-select: text; }
 html.hb-apple .kvi.pos, html.hb-apple .v.pos { color: var(--a-green); }
 html.hb-apple .kvi.neg, html.hb-apple .v.neg { color: var(--a-label); }
 
