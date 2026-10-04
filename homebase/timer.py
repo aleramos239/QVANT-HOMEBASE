@@ -438,7 +438,7 @@ class SelfTimer:
                 return
             day = self.engine.day_status(name)
             if day != "idle":
-                st["stage"] = "done"        # something (TV?) already acted
+                st["stage"] = "done"        # something already acted
                 self.engine.journal("timer_deferred", strategy=name,
                                     status=day)
                 return

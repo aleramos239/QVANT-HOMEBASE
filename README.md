@@ -182,7 +182,6 @@ while a trade is open.
 | `com.ramosquant.homebase-charts` | `python -m homebase.charts` | 8852 | `charts.log` |
 | `com.ramosquant.homebase-ticks` | `python -m homebase.ticks` (hourly, at load, 17:20 and 05:30 local time) | – | `ticks.log` |
 | `com.ramosquant.homebase-awake` | `caffeinate` (keeps the Mac awake on AC power) | – | – |
-| `com.ramosquant.homebase-tunnel` | `deploy/tunnel-run.sh` (leftover, see below) | – | `tunnel-service.log` |
 
 - Desk dashboard: `http://localhost:8850`. Charts: `http://localhost:8852`.
   Lab / Strategy Tester: `http://localhost:8852/backtest`.
@@ -305,9 +304,7 @@ Leftovers you may still meet:
   calls it too, for a dry run only.
 - `webhook_secret`, `hook_port` and `public_hook_url` are still fields in `config.py`. They are ignored on load and
   written blank on save.
-- `deploy/com.ramosquant.homebase-tunnel.plist.template` and `deploy/tunnel-run.sh` are still here, and `install.sh`
-  still installs them. The script opens a Cloudflare quick tunnel to port 8851 and posts to `/api/hook-url`. Both are
-  gone, so it serves nothing.
+- The tunnel service is gone from the repo. `install.sh` unloads and deletes an old
+  `com.ramosquant.homebase-tunnel` service if it finds one.
 - `homebase/research/nq930.pine` is kept as a research record. The desk page can show it (`GET /api/pine`). Nothing
   reads alerts from it.
-- A few code comments and desk-page labels still mention the Pine alert.

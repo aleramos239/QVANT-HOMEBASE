@@ -117,7 +117,7 @@ def refusal(method: str, headers, allowed: frozenset, *,
     """(status, error) when a request must be refused, else None.
     `headers` are raw ASGI (name, value) byte pairs. In this order:
       * EVERY method: exactly one Host, on the allowlist       -> 403
-        (a DNS-rebound page must not even READ, e.g. the webhook secret);
+        (a DNS-rebound page must not even READ, e.g. the book or the journal);
       * GET/HEAD/OPTIONS stop here;
       * an Origin, when sent: exactly one, on the allowlist     -> 403
       * require_json: exactly one Content-Type, application/json -> 415
