@@ -1471,6 +1471,10 @@ class ChartDesk:
         if abs(net) > lim.max_order_qty or abs(net) > lim.max_position_qty:
             raise Refused(f"reversing {abs(net)} is over the per-order limit ({lim.max_order_qty})")
         self._still_allowed(aid, contract, label, "nothing done")
+        # flatten_symbol reads the position again itself, and that read is KEPT: the position's own
+        # stop/target are still working at the broker and the desk's Kill does not take this
+        # account's lock, so the net can change after the read above -- the close sells what the
+        # broker reports then, never `net` (tests/test_exit_reads.py)
         f = await _call(ad.flatten_symbol(contract))
         jerr = self._jsafe("manual_reverse", source="chart", step="flatten", client_id=cid,
                            account=aid, contract=contract, net_before=net, ok=f.ok, error=f.error)

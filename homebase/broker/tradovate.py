@@ -1269,13 +1269,12 @@ class TradovateAdapter(BrokerAdapter):
     async def get_net_position(self, symbol: str) -> int:
         """Net position in `symbol`. RAISES when it can't be read: an
         unreadable position is not flat (a swallowed 404 once read as 0 for a
-        week, and would let a flatten cancel a live position's stop)."""
+        week, and would let a flatten cancel a live position's stop). The
+        position is read from the broker on EVERY call; only the contract's id
+        comes from the cache (contract_id: one contract/find the first time)."""
         if self._ws is None or self._acct_num is None:
             raise RuntimeError("adapter not connected")
-        c = await self._ws.contract_find(symbols.resolve_contract(symbol))
-        cid = (c or {}).get("id")
-        if cid is None:
-            raise RuntimeError(f"no contract found for {symbol}")
+        cid = await self.contract_id(symbol)
         for p in await self._ws.position_list():
             if p.get("accountId") == self._acct_num and p.get("contractId") == cid:
                 return int(p.get("netPos") or 0)

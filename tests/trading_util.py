@@ -94,6 +94,16 @@ def mkdesk(tmp_path, *, enabled=True, et=(11, 0), book=None):
     return desk, engine, adapters, clock, mono, saved
 
 
+def wire_adapter(tmp_path, answer):
+    """A REAL TradovateAdapter on the fake wire (tests/test_tradovate.py: `answer` replies to every
+    frame), ready for chart trading: on its pinned account, its caches seeded. Put it in mkdesk's
+    `adapters` in place of a TradeAdapter to see what an action sends."""
+    from tests.test_tradovate import mkadapter
+    ad = mkadapter(tmp_path, answer)
+    ad.pinned_ok = ad.caches_seeded = True
+    return ad
+
+
 def quote(clock, root="NQ", last=100.0, age_s=0.0):
     """The `quotes` block the chart service attaches to a proxied body."""
     ms = int((clock().timestamp() - age_s) * 1000)
