@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import datetime as dt
 import fcntl
+import json
 import os
 import threading
 import time
@@ -37,6 +38,7 @@ QUIET = (dt.time(9, 20), dt.time(9, 35))      # [start, end) ET, Mon-Fri
 QUIET_MSG = "paused for the 9:30 window"
 QUIET_REFUSAL = f"{QUIET_MSG}: no backtest starts 09:20–09:35 ET on weekdays"
 ENV = "HOMEBASE_TESTER_SHARED"
+OVERRIDE_ENV = "HOMEBASE_TESTER_SLOTS_FILE"
 
 
 def shared_dir() -> Path:
@@ -48,16 +50,75 @@ def et_now() -> dt.datetime:
     return dt.datetime.now(ET)
 
 
+def override_path() -> Path:
+    v = os.environ.get(OVERRIDE_ENV)
+    return Path(v) if v else Path.home() / ".homebase" / "tester_slots.json"
+
+
+_ov_cache: list = [None, None, {}]      # [path, (mtime_ns, size), parsed]
+
+
+def _et(v) -> dt.datetime:
+    d = dt.datetime.fromisoformat(str(v))
+    return d if d.tzinfo else d.replace(tzinfo=ET)
+
+
+def override() -> dict:
+    """The runtime override file (no restart needed; re-read only when it changes on disk):
+      {"cap": 4, "until": "2026-10-05T08:00",                       # cap for ALL hours until then
+       "quiet": [{"from": "2026-10-02T08:15", "to": "2026-10-02T08:45"}]}   # extra no-start windows
+    Times without an offset are ET. Missing or broken file = no override."""
+    p = override_path()
+    try:
+        st = p.stat()
+        key = (st.st_mtime_ns, st.st_size)
+    except OSError:
+        _ov_cache[:] = [str(p), None, {}]
+        return {}
+    if _ov_cache[0] == str(p) and _ov_cache[1] == key:
+        return _ov_cache[2]
+    try:
+        raw = json.loads(p.read_text())
+        out: dict = {}
+        if raw.get("cap") is not None and raw.get("until"):
+            out["cap"], out["until"] = max(1, int(raw["cap"])), _et(raw["until"])
+        out["quiet"] = [(_et(w["from"]), _et(w["to"])) for w in raw.get("quiet", [])]
+    except Exception:
+        out = {}
+    _ov_cache[:] = [str(p), key, out]
+    return out
+
+
 def cap_at(now: dt.datetime) -> int:
-    """The machine-wide cap in force at `now`: CAP while the desk trades, CAP_OFF_HOURS otherwise."""
-    t = now.astimezone(ET) if now.tzinfo else now
+    """The machine-wide cap in force at `now`: the override's cap until its `until`; else CAP while
+    the desk trades, CAP_OFF_HOURS otherwise."""
+    t = now.astimezone(ET) if now.tzinfo else now.replace(tzinfo=ET)
+    ov = override()
+    if "cap" in ov and t < ov["until"]:
+        return ov["cap"]
     desk = t.weekday() < 5 and DESK_HOURS[0] <= t.time() < DESK_HOURS[1]
     return CAP if desk else CAP_OFF_HOURS
 
 
+def quiet_end(now: dt.datetime) -> dt.datetime | None:
+    """When the no-start window containing `now` ends (default 09:20-09:35 weekdays plus the
+    override's windows, chained), or None if `now` is not quiet."""
+    t = now.astimezone(ET) if now.tzinfo else now.replace(tzinfo=ET)
+    wins = [(a, b) for a, b in override().get("quiet", [])]
+    if t.weekday() < 5:
+        wins.append((dt.datetime.combine(t.date(), QUIET[0], ET), dt.datetime.combine(t.date(), QUIET[1], ET)))
+    end = None
+    moved = True
+    while moved:
+        moved = False
+        for a, b in wins:
+            if a <= t < b and (end is None or b > end):
+                end, t, moved = b, b, True
+    return end
+
+
 def in_quiet(now: dt.datetime) -> bool:
-    t = now.astimezone(ET) if now.tzinfo else now
-    return t.weekday() < 5 and QUIET[0] <= t.time() < QUIET[1]
+    return quiet_end(now) is not None
 
 
 _seq_lock = threading.Lock()

@@ -765,3 +765,13 @@ def test_the_recorder_files_a_bare_root_under_the_sessions_front_month(monkeypat
     assert session_contract("NQ", eve) == front_month("NQ", dt.date(2026, 12, 11)) == "NQH7"
     assert session_contract("NQ", eve - 3600) == "NQZ6"             # 17:30: still the 10th's session
     assert session_contract("NQZ6", eve) == "NQZ6"
+
+
+def test_the_fx_roots_are_roots_not_contracts():
+    """6E / 6J / 6B hold a digit, so "a digit means it already names a contract" sent the bare
+    root to the broker ("Symbol is inaccessible"): the chart service never recorded them live."""
+    from homebase.charts.tickfeed import session_contract
+    t = dt.datetime(2026, 10, 2, 10, 0, tzinfo=ET).timestamp()
+    for root in ("6E", "6J", "6B"):
+        assert session_contract(root, t) == front_month(root, dt.date(2026, 10, 2)) != root
+    assert session_contract("6EZ6", t) == "6EZ6"

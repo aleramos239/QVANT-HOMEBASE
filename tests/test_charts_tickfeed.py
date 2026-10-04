@@ -3,13 +3,14 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import time
 
 import pytest
 
 from homebase import symbols
 from homebase.charts import DEFAULT_ROOTS
 from homebase.charts.session import ET
-from homebase.charts.tickfeed import RETRY_REFUSED_S, Refused, SwitchInProgress, TickFeed
+from homebase.charts.tickfeed import RETRY_REFUSED_S, Refused, SwitchInProgress, TickFeed, session_contract
 
 
 def run(coro):
@@ -370,7 +371,7 @@ def test_every_root_refused_on_a_fresh_socket_reconnects_within_the_md_budget():
     socks, slept = [], []
 
     async def connect():
-        socks.append(RaisingWS({symbols.resolve_contract(r): RuntimeError("md/getChart failed: status=500 data=None")
+        socks.append(RaisingWS({session_contract(r, time.time()): RuntimeError("md/getChart failed: status=500 data=None")
                                 for r in DEFAULT_ROOTS}))
         return socks[-1]
 

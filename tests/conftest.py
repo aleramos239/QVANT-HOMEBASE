@@ -19,6 +19,7 @@ from homebase.backtest import slots
 def tester_shared(tmp_path_factory, monkeypatch):
     d = tmp_path_factory.mktemp("tester-shared")
     monkeypatch.setenv("HOMEBASE_TESTER_SHARED", str(d))
+    monkeypatch.setenv("HOMEBASE_TESTER_SLOTS_FILE", str(d / "no_override.json"))   # never the real ~/.homebase file
     return d
 
 

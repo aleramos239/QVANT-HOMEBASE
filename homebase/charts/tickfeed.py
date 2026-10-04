@@ -75,8 +75,8 @@ def session_contract(root: str, ts_s: float) -> str:
     """The contract a bare root is recorded under: the front month of the SESSION
     under way at ts_s (after 18:00 ET that is tomorrow's) -- exactly what the tick
     archive job fetches and files that session under (homebase.ticks). A root
-    already naming a contract passes through."""
-    if any(ch.isdigit() for ch in root):
+    already naming a contract passes through (6E / 6J / 6B hold a digit and are roots)."""
+    if any(ch.isdigit() for ch in root) and root.upper() not in T.ROOTS:
         return symbols.resolve_contract(root)
     return symbols.front_month(root.upper(), session_date(int(ts_s * 1000), root))
 

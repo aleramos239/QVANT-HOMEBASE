@@ -70,7 +70,9 @@ SIZE_DISAGREE_MIN = 20                  # a same-id, same-time, same-price tick 
 SIZE_DISAGREE_SHARE = 0.25              # trade counted differently (GC 2026-09-29: live 2 vs history 1 on ~5% of
                                         # ticks): kept as on disk and counted; refused only past this many AND
                                         # this share of the id overlap (a wrong unit, not a stray fill)
-MERGE_RULES = 2                         # bump when a merge rule loosens: sessions refused under an older rule retry
+HISTORY_COMMIT_MIN = 45                 # the broker publishes tick history a whole hour at a time, some minutes after
+                                        # the hour ends: before that the hour is thin (see verified_spans)
+MERGE_RULES = 2                        # bump when a merge rule loosens: sessions refused under an older rule retry
 ID_SPACE_REFUSED = 5                    # more same trades under different ids than this: refuse too
 SOURCES_KEPT = 40                       # the manifest's merge log keeps this many entries
 
@@ -542,12 +544,21 @@ def verified_spans(sources: list[dict]) -> list[tuple[int, int]]:
     to its earliest tick -- or to the start of the stretch it was asked for
     when it went past it ("reached") or found nothing older ("exhausted": the
     stretch lies inside the broker's window, so there is nothing older in it).
-    A fetch cut short vouches only for what it paged through."""
+    A fetch cut short vouches only for what it paged through.
+
+    The broker's history is complete only for whole hours it has published: asked at 00:02, NQ's 22:xx
+    hour held 99% of TradingView's volume and 23:xx (ended 2 minutes before) 3%, and the same cut fell at
+    the top of the hour in every earlier pass (2026-10-01). So a fetch vouches no further than the end of
+    the last whole hour published HISTORY_COMMIT_MIN before it was merged (`at_utc`); what lies beyond
+    is asked again by a later run, once the hour is in."""
     spans = []
     for s in sources:
         if s.get("kind") != "history" or not s.get("to_utc"):
             continue
         hi = s.get("resumed_from_ms") or ms_of(s["to_utc"])
+        at = ms_of(s.get("at_utc"))
+        if at is not None:
+            hi = min(hi, (at - HISTORY_COMMIT_MIN * 60_000) // 3_600_000 * 3_600_000)
         if s.get("stop") == "exhausted" and s.get("earliest_ms") is None and not s.get("confirmed"):
             continue                    # one empty reply vouches for nothing: asked again next run
         if s.get("stop") in ("reached", "exhausted") and s.get("from_utc"):
@@ -556,7 +567,8 @@ def verified_spans(sources: list[dict]) -> list[tuple[int, int]]:
             lo = s["earliest_ms"]
         else:
             continue
-        spans.append((lo, hi))
+        if hi >= lo:                    # a fetch wholly past the published hours vouches for nothing
+            spans.append((lo, hi))
     return merge_spans(spans)
 
 

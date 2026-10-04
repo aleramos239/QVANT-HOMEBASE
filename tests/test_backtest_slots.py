@@ -342,3 +342,47 @@ def test_the_cap_is_two_in_desk_hours_and_four_off_hours(tmp_path):
     assert a is not None and b is not None and s.try_acquire() is None
     a.close(); b.close()
     assert Slots(tmp_path / "slots", cap=1, clock=clock).cap == 1           # a pinned cap wins
+
+
+# ---- runtime override (~/.homebase/tester_slots.json) ----
+import json   # noqa: E402
+
+FRI = dt.date(2026, 10, 2)
+
+
+def _ov(tmp_path, monkeypatch, body):
+    f = tmp_path / "ov.json"
+    f.write_text(json.dumps(body))
+    monkeypatch.setenv("HOMEBASE_TESTER_SLOTS_FILE", str(f))
+    return f
+
+
+def test_override_raises_the_cap_in_desk_hours_until_its_end(tmp_path, monkeypatch):
+    assert slots.cap_at(et(MON, "11:00")) == 2
+    _ov(tmp_path, monkeypatch, {"cap": 4, "until": "2026-10-05T08:00"})
+    assert slots.cap_at(et(FRI, "11:00")) == 4
+    assert slots.cap_at(et(dt.date(2026, 10, 5), "07:59:59")) == 4
+    assert slots.cap_at(et(dt.date(2026, 10, 5), "08:00")) == 2          # expired: back to the default
+    assert slots.cap_at(et(dt.date(2026, 10, 5), "20:00")) == 4
+
+
+def test_override_quiet_window_blocks_starts_and_keeps_the_default_one(tmp_path, monkeypatch):
+    _ov(tmp_path, monkeypatch, {"quiet": [{"from": "2026-10-02T08:15", "to": "2026-10-02T08:45"}]})
+    assert not in_quiet(et(FRI, "08:14:59"))
+    assert in_quiet(et(FRI, "08:15"))
+    assert in_quiet(et(FRI, "08:44:59"))
+    assert not in_quiet(et(FRI, "08:45"))
+    assert in_quiet(et(FRI, "09:25"))                                    # the 09:20-09:35 rule stays
+    assert not in_quiet(et(MON + dt.timedelta(days=7 + 4), "08:30"))     # other days unaffected
+    assert Slots(tmp_path / "s", clock=Clock(et(FRI, "08:30"))).try_acquire() is None
+
+
+def test_override_is_reread_when_the_file_changes_and_ignored_when_broken(tmp_path, monkeypatch):
+    f = _ov(tmp_path, monkeypatch, {"cap": 4, "until": "2026-10-05T08:00"})
+    assert slots.cap_at(et(FRI, "11:00")) == 4
+    f.write_text(json.dumps({"cap": 3, "until": "2026-10-05T08:00", "x": "pad"}))
+    assert slots.cap_at(et(FRI, "11:00")) == 3
+    f.write_text("{not json")
+    assert slots.cap_at(et(FRI, "11:00")) == 2
+    f.unlink()
+    assert slots.cap_at(et(FRI, "11:00")) == 2

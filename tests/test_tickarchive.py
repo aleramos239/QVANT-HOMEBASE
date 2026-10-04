@@ -207,14 +207,29 @@ def test_a_legacy_manifest_becomes_the_first_entry_of_the_merge_log(tmp_path):
     merge_session(path, fetched=[tick(i) for i in range(3)])
     A.manifest_path(path).write_text(json.dumps({
         "ticks": 3, "complete": False, "pages": 7, "session_end_utc": END.astimezone(A.UTC).isoformat(),
-        "first_tick_utc": A.iso_ms(S), "recorded_at_utc": "2026-09-26T10:12:12+00:00"}))
+        "first_tick_utc": A.iso_ms(S), "recorded_at_utc": "2026-09-29T10:12:12+00:00"}))
     man = merge_session(path, fetched=[tick(3)], fetched_source={"kind": "history", "pages": 1})
     assert man["sources"][0] == {"kind": "history", "stop": "legacy", "to_utc": END.astimezone(A.UTC).isoformat(),
                                  "earliest_ms": S, "ticks": 3, "pages": 7,
-                                 "at_utc": "2026-09-26T10:12:12+00:00"}
+                                 "at_utc": "2026-09-29T10:12:12+00:00"}
     assert man["pages"] == 8 and man["ticks"] == 4
     assert A.verified_spans(man["sources"]) == [(S, int(END.timestamp() * 1000))]
     assert A.covers(A.verified_spans(man["sources"]), S + 60_000, int(END.timestamp() * 1000))
+
+
+def test_a_fetch_does_not_vouch_for_hours_the_broker_had_not_published_yet():
+    """The broker's tick history is thin (NQ 2026-10-01 23:xx: 3% of TradingView's volume) until a whole
+    hour has been published, some minutes after it ends. A fetch made at 22:41 that "reached" its start
+    still vouched for 22:00-22:21 (4% of the volume there), so nothing ever fetched it again."""
+    ms = lambda h, m=0, s=0: int(dt.datetime(2026, 10, 1, h, m, s, tzinfo=ET).timestamp() * 1000)
+    src = {"kind": "history", "stop": "reached", "from_utc": A.iso_ms(ms(20, 28)),
+           "to_utc": A.iso_ms(ms(22, 21, 50)), "at_utc": A.iso_ms(ms(22, 41, 50))}
+    (lo, hi), = A.verified_spans([src])
+    assert lo == ms(20, 28)
+    assert ms(21) <= hi <= ms(22) and hi % 3_600_000 == 0       # whole hours only, none of the last one
+    late = {**src, "at_utc": A.iso_ms(ms(22, 41, 50) + 10 * 3_600_000)}
+    assert A.verified_spans([late]) == [(ms(20, 28), ms(22, 21, 50))]    # asked long after: all of it
+    assert A.verified_spans([{**src, "at_utc": None}]) == [(ms(20, 28), ms(22, 21, 50))]   # an old entry: as before
 
 
 # ------------------------------------------------------------------ hour-by-hour coverage (item C)
