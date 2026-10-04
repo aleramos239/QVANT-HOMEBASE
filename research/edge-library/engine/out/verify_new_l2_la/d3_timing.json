@@ -1,0 +1,73 @@
+{
+ "by": {
+  "Donchian": {
+   "trades": 271,
+   "book_exits": 177,
+   "trigger_within_2_closes_of_fill": 121,
+   "opposed_at_fill": 182,
+   "median_min_fill_to_trigger": 2.0
+  },
+  "Orb": {
+   "trades": 136,
+   "book_exits": 86,
+   "trigger_within_2_closes_of_fill": 50,
+   "opposed_at_fill": 78,
+   "median_min_fill_to_trigger": 1.8
+  },
+  "Straddle": {
+   "trades": 96,
+   "book_exits": 52,
+   "trigger_within_2_closes_of_fill": 34,
+   "opposed_at_fill": 46,
+   "median_min_fill_to_trigger": 1.8
+  },
+  "StraddleT:09:30": {
+   "trades": 20,
+   "book_exits": 9,
+   "trigger_within_2_closes_of_fill": 5,
+   "opposed_at_fill": 14,
+   "median_min_fill_to_trigger": 1.6
+  },
+  "StraddleT:20:00": {
+   "trades": 20,
+   "book_exits": 16,
+   "trigger_within_2_closes_of_fill": 13,
+   "opposed_at_fill": 12,
+   "median_min_fill_to_trigger": 1.6
+  },
+  "StraddleT:00:00": {
+   "trades": 16,
+   "book_exits": 12,
+   "trigger_within_2_closes_of_fill": 8,
+   "opposed_at_fill": 10,
+   "median_min_fill_to_trigger": 1.7
+  },
+  "StraddleT:03:00": {
+   "trades": 20,
+   "book_exits": 12,
+   "trigger_within_2_closes_of_fill": 5,
+   "opposed_at_fill": 4,
+   "median_min_fill_to_trigger": 2.6
+  },
+  "StraddleT:08:30": {
+   "trades": 14,
+   "book_exits": 8,
+   "trigger_within_2_closes_of_fill": 3,
+   "opposed_at_fill": 6,
+   "median_min_fill_to_trigger": 5.7
+  },
+  "StraddleT:18:00": {
+   "trades": 16,
+   "book_exits": 7,
+   "trigger_within_2_closes_of_fill": 0,
+   "opposed_at_fill": 0,
+   "median_min_fill_to_trigger": 6.0
+  }
+ },
+ "all": {
+  "trades": 609,
+  "book_exits": 379,
+  "trigger_within_2_closes_of_fill": 239,
+  "opposed_at_fill": 352
+ }
+}

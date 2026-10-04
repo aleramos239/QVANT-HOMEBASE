@@ -1,0 +1,60 @@
+{
+ "va_cache_last_date": {
+  "NQ": [
+   "2021-09-22",
+   "2023-12-29",
+   573
+  ],
+  "ES": [
+   "2021-09-22",
+   "2023-12-29",
+   573
+  ],
+  "GC": [
+   "2021-09-22",
+   "2023-12-29",
+   572
+  ]
+ },
+ "n2": [
+  {
+   "root": "NQ",
+   "days": 30,
+   "equal_prev_day_va": 30,
+   "mismatch": 0,
+   "no_va(roll or first)": 0,
+   "equal_today_va": 0
+  },
+  {
+   "root": "GC",
+   "days": 16,
+   "equal_prev_day_va": 15,
+   "mismatch": 0,
+   "no_va(roll or first)": 1,
+   "equal_today_va": 0
+  }
+ ],
+ "n4": [
+  {
+   "root": "NQ",
+   "15:30": {
+    "cell": "sig1530_thr0_pts10-r0",
+    "trades": 553,
+    "side_mismatch": 0,
+    "entry_before_15:30:00.085": 0
+   },
+   "12:00": {
+    "cell": "sig1200_thr0_pts10-r0",
+    "trades": 554,
+    "side_mismatch": 0,
+    "entry_before_15:30:00.085": 0
+   },
+   "10:00": {
+    "cell": "sig1000_thr0_pts10-r0",
+    "trades": 554,
+    "side_mismatch": 0,
+    "entry_before_15:30:00.085": 0
+   }
+  }
+ ]
+}

@@ -1,0 +1,6 @@
+done straddle_tight_0830-GC-tf30-pre-build-stress: 19 cells, 9907 trades, wall 3 s
+done straddle_tight_0830-GC-tf30-pre-pick-stress: 19 cells, 4562 trades, wall 1 s
+done straddle_tight_0830-NQ-tf30-pre-build-stress: 22 cells, 11604 trades, wall 4 s
+done straddle_tight_0830-NQ-tf30-pre-pick-stress: 22 cells, 5144 trades, wall 2 s
+done vwap_trend_pull-NQ-tf5-pm-build-stress: 56 cells, 44493 trades, wall 16 s
+done vwap_trend_pull-NQ-tf5-pm-pick-stress: 56 cells, 16354 trades, wall 7 s

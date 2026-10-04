@@ -1,0 +1,302 @@
+{
+ "name": "straddle_tight_0830_GC_tf30_pre_evA",
+ "family": "straddle_tight_0830",
+ "root": "GC",
+ "tf": "30",
+ "sess": "pre",
+ "cell": "offA_pts1p6-r1",
+ "inputs": {
+  "tf": "30",
+  "sess": "all",
+  "dir": "both",
+  "stop_mode": "pts",
+  "stop_val": 1.6,
+  "tgt_r": 1.0,
+  "trail_atr": 0.0,
+  "exit_bars": 0,
+  "max_tr": 1,
+  "f_trend": "off",
+  "f_vwap": "off",
+  "f_depth": "off",
+  "f_book": "off",
+  "x_book": "off",
+  "f_thin": "off",
+  "hold_to": "day",
+  "at": "08:29:59",
+  "flat": "09:30:00",
+  "cancel_min": 5,
+  "off_mode": "menu",
+  "off_val": 0.5,
+  "shift_seed": 0,
+  "shift_max": 90,
+  "off": "A"
+ },
+ "rationale": "The first seconds after a scheduled time are one-way; a tight bracket catches the burst with a small stop (08:30 ET).",
+ "complexity": 6,
+ "weak": false,
+ "l2": false,
+ "penalty": null,
+ "second_look": "SECOND LOOK ON 2024: 2024 was already read for straddle_tight_0830 GC on all days (stage 2b) (and 2025+ was never read)",
+ "mirror": null,
+ "notes": "N7 straddle_tight 08:30 ET: OCO stop entries at last price +/- off points (A / B / C: NQ 3 / 5 / 8, ES 0.75 / 1.25 / 2, GC 0.6 / 1 / 1.6), placed at 08:29:59, unfilled legs cancelled 5 min later, entries until 09:30; own exits: stop NQ 5 / 8 / 10 pts (ES 1.25 / 2 / 2.5, GC 1 / 1.6 / 2) x target 1:1 / 1:2 / 1:3; null = the same bracket at random minutes (shift_seed). Second chance of the old NQ 09:30 straddle. CARD: the bracket is live within a second of the event -> the 2 ticks + 250 ms stress is the real gate; STAGE 3 EVENT FILTER `A`: trades only on days with an 08:30 ET US data release (jobs report, CPI, PPI, retail sales, GDP, PCE or weekly jobless claims) (226 such sessions on BUILD, 96 in 2024; calendar = engine/cache/events.csv, official release dates, never checked against prices). STAGE 3 reason (written before any event-split number): a scheduled US data release reprices the market in one burst in the first seconds; a bracket placed just before catches it whichever way. The control in both periods is the same bracket fired at a random minute (2 seeds) on the same days. This is the BUILD central variant (library.plateau on the filtered table); no other variant may replace it.",
+ "hold_to": "day",
+ "admit": true,
+ "failed": [],
+ "tests": {
+  "net_build": {
+   "pass": true,
+   "net": 10598.0
+  },
+  "net_pick": {
+   "pass": true,
+   "net": 5496.0
+  },
+  "plateau_build": {
+   "pass": true,
+   "cells": 27,
+   "median_net": 10598.0,
+   "share_pos": 0.963,
+   "member": "offA_pts1p6-r1"
+  },
+  "beats_c1_build": {
+   "pass": true,
+   "lift": 16295.0,
+   "mean": -5697.0,
+   "p95": -1922.0,
+   "p_beat": 1.0,
+   "fallback_share": 0.0,
+   "short": 0,
+   "pool_trades": 416
+  },
+  "stress_build": {
+   "pass": true,
+   "base": 10598.0,
+   "stressed": 6358.0,
+   "stress": "2 ticks + 250 ms"
+  },
+  "beats_c1_pick": {
+   "pass": true,
+   "lift": 9988.0,
+   "mean": -4492.0,
+   "p95": -2690.0,
+   "p_beat": 1.0,
+   "fallback_share": 0.0,
+   "short": 0,
+   "pool_trades": 186
+  },
+  "stress_pick": {
+   "pass": true,
+   "base": 5496.0,
+   "stressed": 4126.0,
+   "stress": "2 ticks + 250 ms"
+  },
+  "above_best_of_nulls_build": {
+   "pass": true,
+   "t_build": 4.553164798530045,
+   "bar": 1.627917623785153,
+   "nulls": 26,
+   "thin": false
+  },
+  "min_trades": {
+   "pass": true,
+   "build": 223,
+   "pick": 96,
+   "need": 100
+  },
+  "open_loss_fits": {
+   "pass": true,
+   "worst_open_loss_per_micro": 24.0,
+   "micros_fit_worst": 83,
+   "micros_fit_p99": 100,
+   "limit": 2000.0
+  },
+  "rationale": {
+   "pass": true,
+   "complexity": 6
+  }
+ },
+ "plateau": {
+  "build": {
+   "pass": true,
+   "cells": 27,
+   "cells_all": 27,
+   "info": 0,
+   "dead": 0,
+   "duplicates": 0,
+   "median_net": 10598.0,
+   "share_pos": 0.963,
+   "positive": 26,
+   "member": "offA_pts1p6-r1",
+   "member_net": 10598.0,
+   "best": "offC_pts2-r3",
+   "best_net": 16974.0,
+   "worst_net": -216.0,
+   "verdicts": {
+    "60": true,
+    "70": true,
+    "80": true
+   },
+   "shares": {
+    "overall": {
+     "cells": 27,
+     "positive": 26,
+     "share_pos": 0.963,
+     "median_net": 10598.0,
+     "verdicts": {
+      "60": true,
+      "70": true,
+      "80": true
+     }
+    },
+    "by_stop": {
+     "fixed": {
+      "cells": 27,
+      "positive": 26,
+      "share_pos": 0.963,
+      "median_net": 10598.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     }
+    },
+    "by_target": {
+     "r1": {
+      "cells": 9,
+      "positive": 8,
+      "share_pos": 0.8889,
+      "median_net": 7638.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     },
+     "r2": {
+      "cells": 9,
+      "positive": 9,
+      "share_pos": 1.0,
+      "median_net": 11308.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     },
+     "r3": {
+      "cells": 9,
+      "positive": 9,
+      "share_pos": 1.0,
+      "median_net": 13348.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     }
+    }
+   }
+  },
+  "pick": {
+   "pass": true,
+   "cells": 27,
+   "cells_all": 27,
+   "info": 0,
+   "dead": 0,
+   "duplicates": 0,
+   "median_net": 5756.0,
+   "share_pos": 1.0,
+   "positive": 27,
+   "member": "offC_pts2-r2",
+   "member_net": 5756.0,
+   "best": "offA_pts1p6-r3",
+   "best_net": 10986.0,
+   "worst_net": 226.0,
+   "verdicts": {
+    "60": true,
+    "70": true,
+    "80": true
+   },
+   "shares": {
+    "overall": {
+     "cells": 27,
+     "positive": 27,
+     "share_pos": 1.0,
+     "median_net": 5756.0,
+     "verdicts": {
+      "60": true,
+      "70": true,
+      "80": true
+     }
+    },
+    "by_stop": {
+     "fixed": {
+      "cells": 27,
+      "positive": 27,
+      "share_pos": 1.0,
+      "median_net": 5756.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     }
+    },
+    "by_target": {
+     "r1": {
+      "cells": 9,
+      "positive": 9,
+      "share_pos": 1.0,
+      "median_net": 3966.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     },
+     "r2": {
+      "cells": 9,
+      "positive": 9,
+      "share_pos": 1.0,
+      "median_net": 5756.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     },
+     "r3": {
+      "cells": 9,
+      "positive": 9,
+      "share_pos": 1.0,
+      "median_net": 7706.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     }
+    }
+   }
+  }
+ },
+ "nulls_bar": {
+  "bar": 1.627917623785153,
+  "nulls": 26,
+  "thin": false,
+  "stat": "t"
+ },
+ "contracts": 1,
+ "periods": {
+  "build": [
+   "2021-09-22",
+   "2023-12-31"
+  ],
+  "pick": [
+   "2024-01-01",
+   "2024-12-31"
+  ]
+ },
+ "written_utc": "2026-10-04T13:16:13+00:00"
+}

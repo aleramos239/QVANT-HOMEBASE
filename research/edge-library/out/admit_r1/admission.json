@@ -1,0 +1,146 @@
+{
+ "straddle_tight_0830-GC-tf30|pre|": {
+  "name": "straddle_tight_0830_GC_tf30_pre",
+  "admit": false,
+  "failed": [
+   "net_pick",
+   "no_moved_default"
+  ],
+  "default": "offC_pts2-r1",
+  "surviving": 2,
+  "judged": 27,
+  "central": {
+   "id": "offC_pts2-r1",
+   "build": 5004.0,
+   "pick": -1180.0,
+   "build_stress": 1384.0,
+   "pick_stress": -3510.0
+  },
+  "dir": "/Users/ramoscapital/ramos-quant-homebase/research/edge-library/members/_rejected/straddle_tight_0830_GC_tf30_pre"
+ },
+ "straddle_tight_0830-NQ-tf30|pre|": {
+  "name": "straddle_tight_0830_NQ_tf30_pre",
+  "admit": true,
+  "failed": [],
+  "tests": {
+   "net_build": {
+    "pass": true,
+    "net": 8954.0
+   },
+   "net_pick": {
+    "pass": true,
+    "net": 4869.0
+   },
+   "plateau_build": {
+    "pass": true,
+    "cells": 27,
+    "median_net": 8954.0,
+    "share_pos": 1.0,
+    "member": "offB_pts5-r3"
+   },
+   "beats_c1_build": {
+    "pass": true,
+    "lift": 14732.5,
+    "mean": -5778.5,
+    "p95": -2140.0,
+    "p_beat": 1.0,
+    "fallback_share": 0.0,
+    "short": 0,
+    "pool_trades": 1003
+   },
+   "stress_build": {
+    "pass": true,
+    "base": 8954.0,
+    "stressed": 6619.0,
+    "stress": "2 ticks + 250 ms"
+   },
+   "beats_c1_pick": {
+    "pass": true,
+    "lift": 10577.5,
+    "mean": -5708.5,
+    "p95": -5525.0,
+    "p_beat": 1.0,
+    "fallback_share": 0.0,
+    "short": 0,
+    "pool_trades": 443
+   },
+   "stress_pick": {
+    "pass": true,
+    "base": 4869.0,
+    "stressed": 769.0,
+    "stress": "2 ticks + 250 ms"
+   },
+   "above_best_of_nulls_build": {
+    "pass": true,
+    "t_build": 1.9826019912929203,
+    "bar": 0.8406995352466691,
+    "nulls": 8,
+    "thin": true
+   },
+   "min_trades": {
+    "pass": true,
+    "build": 549,
+    "pick": 244,
+    "need": 100
+   },
+   "open_loss_fits": {
+    "pass": true,
+    "worst_open_loss_per_micro": 51.0,
+    "micros_fit_worst": 39,
+    "micros_fit_p99": 95,
+    "limit": 2000.0
+   },
+   "rationale": {
+    "pass": true,
+    "complexity": 6
+   }
+  },
+  "summary": {
+   "build": {
+    "trades": 549,
+    "net": 8954.0,
+    "t": 1.9826019912929203,
+    "pf": 1.2089810017271156,
+    "win": 0.31876138433515483
+   },
+   "pick": {
+    "trades": 244,
+    "net": 4869.0,
+    "t": 1.5662414668046183,
+    "pf": 1.2509405761995567,
+    "win": 0.3360655737704918
+   },
+   "cell": "offB_pts5-r3",
+   "root": "NQ",
+   "tf": "30",
+   "sess": "pre",
+   "family": "straddle_tight_0830"
+  },
+  "dir": "/Users/ramoscapital/ramos-quant-homebase/research/edge-library/members/straddle_tight_0830_NQ_tf30_pre",
+  "default": "offB_pts5-r3",
+  "default_moved": false,
+  "surviving": 19,
+  "judged": 27,
+  "trades_per_day": 0.961,
+  "flag": "FLAGGED ADMISSION: the best-of-random bar of this unit is THIN (8 random replicates: the round-1 random-minute / random-direction stores of NQ; bar 0.84). Its BUILD t is 1.98: above that bar, but BELOW the same bar with stage 1's random-minute straddles pooled in (2.56, 26 replicates) and below the random-entry bar of NQ bar families (2.02). Admitted by the rule written before any number was opened (out/admit_r1/judge_build.py); checker / orchestrator: confirm or demote to near miss."
+ },
+ "vwap_trend_pull-NQ-tf5|pm|": {
+  "name": "vwap_trend_pull_NQ_tf5_pm",
+  "admit": false,
+  "failed": [
+   "net_pick",
+   "no_moved_default"
+  ],
+  "default": "x0p1_pts30-r2",
+  "surviving": 42,
+  "judged": 96,
+  "central": {
+   "id": "x0p1_pts30-r2",
+   "build": 64434.0,
+   "pick": -14421.0,
+   "build_stress": 49271.0,
+   "pick_stress": -18627.0
+  },
+  "dir": "/Users/ramoscapital/ramos-quant-homebase/research/edge-library/members/_rejected/vwap_trend_pull_NQ_tf5_pm"
+ }
+}

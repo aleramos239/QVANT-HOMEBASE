@@ -1,0 +1,9 @@
+member,family,root,cell,group,period,what,trades,net
+straddle_tight_0830_GC_tf30_pre_evA,straddle_tight_0830,GC,offA_pts1p6-r1,A,2024,"central variant: engine re-run base + stress, own replay, fill probe 1/5/25 ms",96,5496.0
+straddle_tight_0830_GC_tf30_pre_evA,straddle_tight_0830,GC,offA_pts1p6-r1,B,2024,"central variant: engine re-run base + stress, own replay, fill probe 1/5/25 ms",68,2448.0
+straddle_tight_0830_NQ_tf30_pre_evB,straddle_tight_0830,NQ,offB_pts5-r3,B,2024,"central variant: engine re-run base + stress, own replay, fill probe 1/5/25 ms",68,2383.0
+straddle_tight_1000_GC_tf30_nyam_evC,straddle_tight_1000,GC,offA_pts1p6-r1,C,2024,"central variant: engine re-run base + stress, own replay, fill probe 1/5/25 ms",46,4166.0
+E1-A-GC,straddle_tight_0830,GC,offA_pts1p6-r1,A,2024,"whole menu (27 cells) + random-minute control, day filter A (store runs_admit_r1/straddle_tight_0830-GC-tf30-pre-pick)",96,5496.0
+E1-B-NQ,straddle_tight_0830,NQ,offB_pts5-r3,B,2024,"whole menu (27 cells) + random-minute control, day filter B (store runs_admit_r1/straddle_tight_0830-NQ-tf30-pre-pick)",68,2383.0
+E1-B-GC,straddle_tight_0830,GC,offA_pts1p6-r1,B,2024,"whole menu (27 cells) + random-minute control, day filter B (store runs_admit_r1/straddle_tight_0830-GC-tf30-pre-pick)",68,2448.0
+E3-C-GC,straddle_tight_1000,GC,offA_pts1p6-r1,C,2024,"whole menu (27 cells) + random-minute control, day filter C (store runs_events/straddle_tight_1000-GC-tf30-nyam-pick)",46,4166.0

@@ -1,0 +1,14 @@
+straddle_tight_0830_GC_tf30_pre REJECT ['net_pick', 'no_moved_default']
+straddle_tight_0830_NQ_tf30_pre ADMIT [] | FLAG
+    net_build {'pass': True, 'net': 8954.0}
+    net_pick {'pass': True, 'net': 4869.0}
+    plateau_build {'pass': True, 'cells': 27, 'median_net': 8954.0, 'share_pos': 1.0, 'member': 'offB_pts5-r3'}
+    beats_c1_build {'pass': True, 'lift': 14732.5, 'mean': -5778.5, 'p95': -2140.0, 'p_beat': 1.0, 'fallback_share': 0.0, 'short': 0, 'pool_trades': 1003}
+    stress_build {'pass': True, 'base': 8954.0, 'stressed': 6619.0, 'stress': '2 ticks + 250 ms'}
+    beats_c1_pick {'pass': True, 'lift': 10577.5, 'mean': -5708.5, 'p95': -5525.0, 'p_beat': 1.0, 'fallback_share': 0.0, 'short': 0, 'pool_trades': 443}
+    stress_pick {'pass': True, 'base': 4869.0, 'stressed': 769.0, 'stress': '2 ticks + 250 ms'}
+    above_best_of_nulls_build {'pass': True, 't_build': 1.983, 'bar': 0.841, 'nulls': 8, 'thin': True}
+    min_trades {'pass': True, 'build': 549, 'pick': 244, 'need': 100}
+    open_loss_fits {'pass': True, 'worst_open_loss_per_micro': 51.0, 'micros_fit_worst': 39, 'micros_fit_p99': 95, 'limit': 2000.0}
+    rationale {'pass': True, 'complexity': 6}
+vwap_trend_pull_NQ_tf5_pm REJECT ['net_pick', 'no_moved_default']

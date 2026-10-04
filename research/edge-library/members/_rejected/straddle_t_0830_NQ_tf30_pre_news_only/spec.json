@@ -1,0 +1,363 @@
+{
+ "name": "straddle_t_0830_NQ_tf30_pre_news_only",
+ "family": "straddle_t_0830",
+ "root": "NQ",
+ "tf": "30",
+ "sess": "pre",
+ "cell": "offatr0p25_pct0p1-r2",
+ "inputs": {
+  "tf": "30",
+  "sess": "all",
+  "dir": "both",
+  "stop_mode": "pct",
+  "stop_val": 0.1,
+  "tgt_r": 2.0,
+  "trail_atr": 0.0,
+  "exit_bars": 0,
+  "max_tr": 1,
+  "f_trend": "off",
+  "f_vwap": "off",
+  "f_depth": "off",
+  "f_book": "off",
+  "x_book": "off",
+  "f_thin": "off",
+  "hold_to": "day",
+  "at": "08:30",
+  "flat": "",
+  "cancel_min": 60,
+  "off_mode": "menu",
+  "off_val": 0.5,
+  "shift_seed": 0,
+  "shift_max": 90,
+  "off": "atr0p25"
+ },
+ "rationale": "At scheduled liquidity events new orders arrive and price leaves its pre-event balance; a straddle rides whichever side breaks (08:30 ET: US data).",
+ "complexity": 6,
+ "weak": false,
+ "l2": false,
+ "penalty": null,
+ "second_look": null,
+ "mirror": null,
+ "notes": "A straddle_t 08:30 ET (US data): OCO stop entries at last price +/- offset, cancel unfilled after 60 min (entries live 55 min here: the Template cancels them 5 min before the flat time), flat 09:30, 1 trade per day; CARD: the bracket goes live 85 ms after a data release -> the 2 ticks + 250 ms stress is the gate; STAGE 2a FILTERED SIDE `news_only`: trades only days with an 08:30 ET CPI or jobs (NFP) release or a Fed (FOMC) decision (72 such days on BUILD, 32 in 2024). Why it should matter: the straddle is a bet on a burst at 08:30 ET; a CPI or jobs report is the scheduled burst (a Fed day has no 08:30 release and is in the split only because the pre-registered tool says so). SAME IDEA as the member orb_NQ_tf1_pre (a straddle of the 08:30 ET data burst): the two never count as two members of a stack. This is the BUILD central variant; by the orchestrator's ruling no other variant may replace it. beats_c1_pick: the random-minute control was NOT RUN on 2024 (the ruling asked for the menu only); it is listed as failed only because library.admission fails closed. The control on BUILD is the same straddle fired at a random minute (2 seeds), news days only.",
+ "hold_to": "day",
+ "admit": false,
+ "failed": [
+  "net_pick",
+  "beats_c1_pick",
+  "stress_pick"
+ ],
+ "tests": {
+  "net_build": {
+   "pass": true,
+   "net": 12951.0
+  },
+  "net_pick": {
+   "pass": false,
+   "net": -1129.0
+  },
+  "plateau_build": {
+   "pass": true,
+   "cells": 160,
+   "median_net": 13006.5,
+   "share_pos": 0.9125,
+   "member": "offatr0p25_pct0p1-r2"
+  },
+  "beats_c1_build": {
+   "pass": true,
+   "lift": 16332.5,
+   "mean": -3381.5,
+   "p95": -3224.0,
+   "p_beat": 1.0,
+   "fallback_share": 0.0,
+   "short": 0,
+   "pool_trades": 142
+  },
+  "stress_build": {
+   "pass": true,
+   "base": 12951.0,
+   "stressed": 11476.0,
+   "stress": "2 ticks + 250 ms"
+  },
+  "beats_c1_pick": {
+   "pass": false
+  },
+  "stress_pick": {
+   "pass": false,
+   "base": -1129.0,
+   "stressed": -2349.0,
+   "stress": "2 ticks + 250 ms"
+  },
+  "above_best_of_nulls_build": {
+   "pass": true,
+   "t_build": 3.585447923841172,
+   "bar": 2.6163642064795405,
+   "nulls": 18,
+   "thin": true
+  },
+  "min_trades": {
+   "pass": true,
+   "build": 71,
+   "pick": 31,
+   "need": 100
+  },
+  "open_loss_fits": {
+   "pass": true,
+   "worst_open_loss_per_micro": 58.0,
+   "micros_fit_worst": 34,
+   "micros_fit_p99": 45,
+   "limit": 2000.0
+  },
+  "rationale": {
+   "pass": true,
+   "complexity": 6
+  }
+ },
+ "plateau": {
+  "build": {
+   "pass": true,
+   "cells": 160,
+   "cells_all": 160,
+   "dead": 0,
+   "duplicates": 0,
+   "median_net": 13006.5,
+   "share_pos": 0.9125,
+   "positive": 146,
+   "member": "offatr0p25_pct0p1-r2",
+   "member_net": 12951.0,
+   "best": "offatr0p25_pts30-r2",
+   "best_net": 30521.0,
+   "worst_net": -13705.0,
+   "verdicts": {
+    "60": true,
+    "70": true,
+    "80": true
+   },
+   "shares": {
+    "overall": {
+     "cells": 160,
+     "positive": 146,
+     "share_pos": 0.9125,
+     "median_net": 13006.5,
+     "verdicts": {
+      "60": true,
+      "70": true,
+      "80": true
+     }
+    },
+    "by_stop": {
+     "ATR": {
+      "cells": 40,
+      "positive": 26,
+      "share_pos": 0.65,
+      "median_net": 6523.0,
+      "verdicts": {
+       "60": true,
+       "70": false,
+       "80": false
+      }
+     },
+     "fixed": {
+      "cells": 80,
+      "positive": 80,
+      "share_pos": 1.0,
+      "median_net": 15899.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     },
+     "percent": {
+      "cells": 40,
+      "positive": 40,
+      "share_pos": 1.0,
+      "median_net": 12469.5,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     }
+    },
+    "by_target": {
+     "r0": {
+      "cells": 40,
+      "positive": 35,
+      "share_pos": 0.875,
+      "median_net": 16841.5,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     },
+     "r1": {
+      "cells": 40,
+      "positive": 37,
+      "share_pos": 0.925,
+      "median_net": 7369.5,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     },
+     "r2": {
+      "cells": 40,
+      "positive": 35,
+      "share_pos": 0.875,
+      "median_net": 11816.5,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     },
+     "r3": {
+      "cells": 40,
+      "positive": 39,
+      "share_pos": 0.975,
+      "median_net": 14541.5,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     }
+    }
+   }
+  },
+  "pick": {
+   "pass": true,
+   "cells": 160,
+   "cells_all": 160,
+   "dead": 0,
+   "duplicates": 0,
+   "median_net": 1448.5,
+   "share_pos": 0.6375,
+   "positive": 102,
+   "member": "offatr0p25_atr1p5-r2",
+   "member_net": 1466.0,
+   "best": "offatr1_pts30-r0",
+   "best_net": 31701.0,
+   "worst_net": -9954.0,
+   "verdicts": {
+    "60": true,
+    "70": false,
+    "80": false
+   },
+   "shares": {
+    "overall": {
+     "cells": 160,
+     "positive": 102,
+     "share_pos": 0.6375,
+     "median_net": 1448.5,
+     "verdicts": {
+      "60": true,
+      "70": false,
+      "80": false
+     }
+    },
+    "by_stop": {
+     "ATR": {
+      "cells": 40,
+      "positive": 19,
+      "share_pos": 0.475,
+      "median_net": -314.0,
+      "verdicts": {
+       "60": false,
+       "70": false,
+       "80": false
+      }
+     },
+     "fixed": {
+      "cells": 80,
+      "positive": 54,
+      "share_pos": 0.675,
+      "median_net": 1448.5,
+      "verdicts": {
+       "60": true,
+       "70": false,
+       "80": false
+      }
+     },
+     "percent": {
+      "cells": 40,
+      "positive": 29,
+      "share_pos": 0.725,
+      "median_net": 2073.5,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": false
+      }
+     }
+    },
+    "by_target": {
+     "r0": {
+      "cells": 40,
+      "positive": 40,
+      "share_pos": 1.0,
+      "median_net": 21898.5,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     },
+     "r1": {
+      "cells": 40,
+      "positive": 18,
+      "share_pos": 0.45,
+      "median_net": -364.0,
+      "verdicts": {
+       "60": false,
+       "70": false,
+       "80": false
+      }
+     },
+     "r2": {
+      "cells": 40,
+      "positive": 20,
+      "share_pos": 0.5,
+      "median_net": -24.0,
+      "verdicts": {
+       "60": false,
+       "70": false,
+       "80": false
+      }
+     },
+     "r3": {
+      "cells": 40,
+      "positive": 24,
+      "share_pos": 0.6,
+      "median_net": 863.5,
+      "verdicts": {
+       "60": true,
+       "70": false,
+       "80": false
+      }
+     }
+    }
+   }
+  }
+ },
+ "nulls_bar": {
+  "bar": 2.6163642064795405,
+  "nulls": 18,
+  "thin": true,
+  "stat": "t"
+ },
+ "contracts": 1,
+ "periods": {
+  "build": [
+   "2021-09-22",
+   "2023-12-31"
+  ],
+  "pick": [
+   "2024-01-01",
+   "2024-12-31"
+  ]
+ },
+ "written_utc": "2026-10-04T09:23:33+00:00"
+}

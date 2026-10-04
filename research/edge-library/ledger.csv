@@ -1,0 +1,641 @@
+stage,key,kind,family,root,tf,period,control,seed,runs,cells,null_cells,wfs,trades,elapsed_s,note,finished_utc
+null,c1-NQ-tf1,null,random,NQ,1,build,c1,,0,0,64,0,621655,117.24,,2026-10-03T14:30:24+00:00
+null,c1-NQ-tf5,null,random,NQ,5,build,c1,,0,0,64,0,565853,92.46,,2026-10-03T14:31:59+00:00
+null,c1-NQ-tf15,null,random,NQ,15,build,c1,,0,0,64,0,472198,87.44,,2026-10-03T14:33:28+00:00
+null,c1-NQ-tf30,null,random,NQ,30,build,c1,,0,0,64,0,342626,83.23,,2026-10-03T14:34:53+00:00
+build,straddle_t_1800-NQ-tf30,grid,straddle_t_1800,NQ,30,build,,,0,160,0,0,70112,61.63,,2026-10-03T14:35:55+00:00
+null,straddle_t_1800-NQ-tf30-shift,null,straddle_t_1800,NQ,30,build,shift,,0,0,320,0,131104,61.63,,2026-10-03T14:35:55+00:00
+build,straddle_t_2000-NQ-tf30,grid,straddle_t_2000,NQ,30,build,,,0,160,0,0,73632,74.09,,2026-10-03T14:37:10+00:00
+null,straddle_t_2000-NQ-tf30-shift,null,straddle_t_2000,NQ,30,build,shift,,0,0,320,0,136160,74.09,,2026-10-03T14:37:10+00:00
+build,straddle_t_0000-NQ-tf30,grid,straddle_t_0000,NQ,30,build,,,0,160,0,0,56736,47.13,,2026-10-03T14:37:58+00:00
+null,straddle_t_0000-NQ-tf30-shift,null,straddle_t_0000,NQ,30,build,shift,,0,0,320,0,130208,47.13,,2026-10-03T14:37:58+00:00
+build,straddle_t_0200-NQ-tf30,grid,straddle_t_0200,NQ,30,build,,,0,160,0,0,78816,52.33,,2026-10-03T14:38:51+00:00
+null,straddle_t_0200-NQ-tf30-shift,null,straddle_t_0200,NQ,30,build,shift,,0,0,320,0,152480,52.33,,2026-10-03T14:38:51+00:00
+build,straddle_t_0300-NQ-tf30,grid,straddle_t_0300,NQ,30,build,,,0,160,0,0,86976,74.88,,2026-10-03T14:40:07+00:00
+null,straddle_t_0300-NQ-tf30-shift,null,straddle_t_0300,NQ,30,build,shift,,0,0,320,0,166112,74.88,,2026-10-03T14:40:07+00:00
+build,straddle_t_0830-NQ-tf30,grid,straddle_t_0830,NQ,30,build,,,0,160,0,0,84096,77.37,,2026-10-03T14:41:25+00:00
+null,straddle_t_0830-NQ-tf30-shift,null,straddle_t_0830,NQ,30,build,shift,,0,0,320,0,172960,77.37,,2026-10-03T14:41:25+00:00
+build,straddle_t_0930-NQ-tf30,grid,straddle_t_0930,NQ,30,build,,,0,160,0,0,90816,84.87,,2026-10-03T14:42:51+00:00
+null,straddle_t_0930-NQ-tf30-shift,null,straddle_t_0930,NQ,30,build,shift,,0,0,320,0,178304,84.87,,2026-10-03T14:42:51+00:00
+build,straddle_t_1105-NQ-tf30,grid,straddle_t_1105,NQ,30,build,,,0,160,0,0,87200,101.6,,2026-10-03T14:44:33+00:00
+null,straddle_t_1105-NQ-tf30-shift,null,straddle_t_1105,NQ,30,build,shift,,0,0,320,0,173600,101.6,,2026-10-03T14:44:34+00:00
+build,straddle_t_1330-NQ-tf30,grid,straddle_t_1330,NQ,30,build,,,0,160,0,0,81152,110.87,,2026-10-03T14:46:25+00:00
+null,straddle_t_1330-NQ-tf30-shift,null,straddle_t_1330,NQ,30,build,shift,,0,0,320,0,163776,110.87,,2026-10-03T14:46:25+00:00
+build,orb-NQ-tf1,grid,orb,NQ,1,build,,,0,96,0,0,372256,169.48,,2026-10-03T14:49:16+00:00
+build,orb-NQ-tf5,grid,orb,NQ,5,build,,,0,96,0,0,336000,123.36,,2026-10-03T14:51:21+00:00
+build,orb-NQ-tf15,grid,orb,NQ,15,build,,,0,96,0,0,264032,108.04,,2026-10-03T14:53:10+00:00
+build,orb-NQ-tf30,grid,orb,NQ,30,build,,,0,96,0,0,264032,106.79,,2026-10-03T14:54:58+00:00
+build,straddle-NQ-tf1,grid,straddle,NQ,1,build,,,0,96,0,0,272256,154.96,,2026-10-03T14:57:34+00:00
+build,straddle-NQ-tf5,grid,straddle,NQ,5,build,,,0,96,0,0,272192,112.87,,2026-10-03T14:59:28+00:00
+build,straddle-NQ-tf15,grid,straddle,NQ,15,build,,,0,96,0,0,270048,106.39,,2026-10-03T15:01:16+00:00
+build,straddle-NQ-tf30,grid,straddle,NQ,30,build,,,0,96,0,0,265472,106.03,,2026-10-03T15:03:03+00:00
+build,donchian-NQ-tf1,grid,donchian,NQ,1,build,,,0,128,0,0,1181267,243.68,,2026-10-03T15:07:11+00:00
+build,donchian-NQ-tf5,grid,donchian,NQ,5,build,,,0,128,0,0,665203,168.04,,2026-10-03T15:10:02+00:00
+build,donchian-NQ-tf15,grid,donchian,NQ,15,build,,,0,128,0,0,241389,136.7,,2026-10-03T15:12:20+00:00
+build,donchian-NQ-tf30,grid,donchian,NQ,30,build,,,0,128,0,0,82328,127.85,,2026-10-03T15:14:28+00:00
+build,squeeze-NQ-tf1,grid,squeeze,NQ,1,build,,,0,96,0,0,793033,209.08,,2026-10-03T15:18:00+00:00
+build,squeeze-NQ-tf5,grid,squeeze,NQ,5,build,,,0,96,0,0,490330,136.05,,2026-10-03T15:20:18+00:00
+build,squeeze-NQ-tf15,grid,squeeze,NQ,15,build,,,0,96,0,0,233402,112.75,,2026-10-03T15:22:12+00:00
+build,squeeze-NQ-tf30,grid,squeeze,NQ,30,build,,,0,96,0,0,116598,103.29,,2026-10-03T15:23:56+00:00
+build,ib-NQ-tf1,grid,ib,NQ,1,build,,,0,64,0,0,72204,59.67,,2026-10-03T15:24:56+00:00
+build,ib-NQ-tf5,grid,ib,NQ,5,build,,,0,64,0,0,55148,43.66,,2026-10-03T15:25:41+00:00
+build,ib-NQ-tf15,grid,ib,NQ,15,build,,,0,64,0,0,43448,40.41,,2026-10-03T15:26:21+00:00
+build,ib-NQ-tf30,grid,ib,NQ,30,build,,,0,64,0,0,37016,39.38,,2026-10-03T15:27:01+00:00
+build,lon_break-NQ-tf1,grid,lon_break,NQ,1,build,,,0,96,0,0,52608,24.72,,2026-10-03T15:27:26+00:00
+build,lon_break-NQ-tf5,grid,lon_break,NQ,5,build,,,0,96,0,0,52384,18.6,,2026-10-03T15:27:45+00:00
+build,lon_break-NQ-tf15,grid,lon_break,NQ,15,build,,,0,96,0,0,52160,17.77,,2026-10-03T15:28:03+00:00
+build,lon_break-NQ-tf30,grid,lon_break,NQ,30,build,,,0,96,0,0,51648,17.69,,2026-10-03T15:28:22+00:00
+build,gap-NQ-tf1,grid,gap,NQ,1,build,,,0,64,0,0,25280,20.17,,2026-10-03T15:28:42+00:00
+build,gap-NQ-tf5,grid,gap,NQ,5,build,,,0,64,0,0,24768,12.99,,2026-10-03T15:28:55+00:00
+build,gap-NQ-tf15,grid,gap,NQ,15,build,,,0,64,0,0,24000,11.93,,2026-10-03T15:29:08+00:00
+build,gap-NQ-tf30,grid,gap,NQ,30,build,,,0,64,0,0,23552,11.83,,2026-10-03T15:29:20+00:00
+build,ema_ribbon-NQ-tf1,grid,ema_ribbon,NQ,1,build,,,0,32,0,0,265381,67.09,,2026-10-03T15:30:28+00:00
+build,ema_ribbon-NQ-tf5,grid,ema_ribbon,NQ,5,build,,,0,32,0,0,120371,43.11,,2026-10-03T15:31:12+00:00
+build,ema_ribbon-NQ-tf15,grid,ema_ribbon,NQ,15,build,,,0,32,0,0,43807,35.09,,2026-10-03T15:31:47+00:00
+build,ema_ribbon-NQ-tf30,grid,ema_ribbon,NQ,30,build,,,0,32,0,0,17524,32.51,,2026-10-03T15:32:20+00:00
+build,tema_slope-NQ-tf1,grid,tema_slope,NQ,1,build,,,0,96,0,0,912670,204.43,,2026-10-03T15:35:48+00:00
+build,tema_slope-NQ-tf5,grid,tema_slope,NQ,5,build,,,0,96,0,0,704224,145.66,,2026-10-03T15:38:17+00:00
+build,tema_slope-NQ-tf15,grid,tema_slope,NQ,15,build,,,0,96,0,0,432387,127.29,,2026-10-03T15:40:26+00:00
+build,tema_slope-NQ-tf30,grid,tema_slope,NQ,30,build,,,0,96,0,0,223189,112.15,,2026-10-03T15:42:19+00:00
+build,ema_pullback-NQ-tf1,grid,ema_pullback,NQ,1,build,,,0,32,0,0,299094,64.76,,2026-10-03T15:43:25+00:00
+build,ema_pullback-NQ-tf5,grid,ema_pullback,NQ,5,build,,,0,32,0,0,216172,46.57,,2026-10-03T15:44:13+00:00
+build,ema_pullback-NQ-tf15,grid,ema_pullback,NQ,15,build,,,0,32,0,0,109650,38.06,,2026-10-03T15:44:52+00:00
+build,ema_pullback-NQ-tf30,grid,ema_pullback,NQ,30,build,,,0,32,0,0,41415,33.14,,2026-10-03T15:45:25+00:00
+build,supertrend-NQ-tf1,grid,supertrend,NQ,1,build,,,0,32,0,0,254186,69.5,,2026-10-03T15:46:36+00:00
+build,supertrend-NQ-tf5,grid,supertrend,NQ,5,build,,,0,32,0,0,101629,42.69,,2026-10-03T15:47:19+00:00
+build,supertrend-NQ-tf15,grid,supertrend,NQ,15,build,,,0,32,0,0,40608,35.4,,2026-10-03T15:47:55+00:00
+build,supertrend-NQ-tf30,grid,supertrend,NQ,30,build,,,0,32,0,0,15552,33.23,,2026-10-03T15:48:29+00:00
+build,rsi2-NQ-tf1,grid,rsi2,NQ,1,build,,,0,96,0,0,923221,206.75,,2026-10-03T15:51:59+00:00
+build,rsi2-NQ-tf5,grid,rsi2,NQ,5,build,,,0,96,0,0,767690,146.77,,2026-10-03T15:54:29+00:00
+build,rsi2-NQ-tf15,grid,rsi2,NQ,15,build,,,0,96,0,0,544931,129.23,,2026-10-03T15:56:40+00:00
+build,rsi2-NQ-tf30,grid,rsi2,NQ,30,build,,,0,96,0,0,344987,118.65,,2026-10-03T15:58:40+00:00
+build,first_bar_mom-NQ-tf1,grid,first_bar_mom,NQ,1,build,,,0,96,0,0,139584,149.38,,2026-10-03T16:01:10+00:00
+build,first_bar_mom-NQ-tf5,grid,first_bar_mom,NQ,5,build,,,0,96,0,0,125056,108.08,,2026-10-03T16:02:59+00:00
+build,first_bar_mom-NQ-tf15,grid,first_bar_mom,NQ,15,build,,,0,96,0,0,139104,102.17,,2026-10-03T16:04:42+00:00
+build,first_bar_mom-NQ-tf30,grid,first_bar_mom,NQ,30,build,,,0,96,0,0,150688,101.36,,2026-10-03T16:06:24+00:00
+build,tod_drift-NQ-tf1,grid,tod_drift,NQ,1,build,,,0,256,0,0,907584,387.11,,2026-10-03T16:12:54+00:00
+build,tod_drift-NQ-tf5,grid,tod_drift,NQ,5,build,,,0,256,0,0,907584,286.42,,2026-10-03T16:17:43+00:00
+build,tod_drift-NQ-tf15,grid,tod_drift,NQ,15,build,,,0,256,0,0,762304,272.69,,2026-10-03T16:22:19+00:00
+build,tod_drift-NQ-tf30,grid,tod_drift,NQ,30,build,,,0,256,0,0,689664,272.72,,2026-10-03T16:26:54+00:00
+build,mid_fade-NQ-tf1,grid,mid_fade,NQ,1,build,,,0,32,0,0,6112,18.77,,2026-10-03T16:27:13+00:00
+build,mid_fade-NQ-tf5,grid,mid_fade,NQ,5,build,,,0,32,0,0,6112,9.31,,2026-10-03T16:27:23+00:00
+build,mid_fade-NQ-tf15,grid,mid_fade,NQ,15,build,,,0,32,0,0,6112,7.87,,2026-10-03T16:27:31+00:00
+build,mid_fade-NQ-tf30,grid,mid_fade,NQ,30,build,,,0,32,0,0,6112,7.4,,2026-10-03T16:27:38+00:00
+build,vwap_band-NQ-tf1,grid,vwap_band,NQ,1,build,,,0,128,0,0,777786,242.93,,2026-10-03T16:31:44+00:00
+build,vwap_band-NQ-tf5,grid,vwap_band,NQ,5,build,,,0,128,0,0,433262,166.02,,2026-10-03T16:34:32+00:00
+build,vwap_band-NQ-tf15,grid,vwap_band,NQ,15,build,,,0,128,0,0,199211,143.35,,2026-10-03T16:36:57+00:00
+build,vwap_band-NQ-tf30,grid,vwap_band,NQ,30,build,,,0,128,0,0,73560,132.82,,2026-10-03T16:39:10+00:00
+build,vwap_z-NQ-tf1,grid,vwap_z,NQ,1,build,,,0,128,0,0,792908,234.94,,2026-10-03T16:43:08+00:00
+build,vwap_z-NQ-tf5,grid,vwap_z,NQ,5,build,,,0,128,0,0,478841,165.5,,2026-10-03T16:45:55+00:00
+build,vwap_z-NQ-tf15,grid,vwap_z,NQ,15,build,,,0,128,0,0,253777,145.06,,2026-10-03T16:48:22+00:00
+build,vwap_z-NQ-tf30,grid,vwap_z,NQ,30,build,,,0,128,0,0,108480,134.96,,2026-10-03T16:50:37+00:00
+build,vwap_flip-NQ-tf1,grid,vwap_flip,NQ,1,build,,,0,96,0,0,775544,188.72,,2026-10-03T16:53:49+00:00
+build,vwap_flip-NQ-tf5,grid,vwap_flip,NQ,5,build,,,0,96,0,0,584557,135.47,,2026-10-03T16:56:07+00:00
+build,vwap_flip-NQ-tf15,grid,vwap_flip,NQ,15,build,,,0,96,0,0,333955,120.21,,2026-10-03T16:58:09+00:00
+build,vwap_flip-NQ-tf30,grid,vwap_flip,NQ,30,build,,,0,96,0,0,144793,107.29,,2026-10-03T16:59:57+00:00
+build,pinbar-NQ-tf1,grid,pinbar,NQ,1,build,,,0,96,0,0,434398,173.46,,2026-10-03T17:02:52+00:00
+build,pinbar-NQ-tf5,grid,pinbar,NQ,5,build,,,0,96,0,0,199107,115.89,,2026-10-03T17:04:49+00:00
+build,pinbar-NQ-tf15,grid,pinbar,NQ,15,build,,,0,96,0,0,89407,101.48,,2026-10-03T17:06:31+00:00
+build,pinbar-NQ-tf30,grid,pinbar,NQ,30,build,,,0,96,0,0,43600,96.61,,2026-10-03T17:08:08+00:00
+build,sweep_rev-NQ-tf1,grid,sweep_rev,NQ,1,build,,,0,96,0,0,203812,156.96,,2026-10-03T17:10:46+00:00
+build,sweep_rev-NQ-tf5,grid,sweep_rev,NQ,5,build,,,0,96,0,0,184619,111.63,,2026-10-03T17:12:38+00:00
+build,sweep_rev-NQ-tf15,grid,sweep_rev,NQ,15,build,,,0,96,0,0,160302,103.27,,2026-10-03T17:14:22+00:00
+build,sweep_rev-NQ-tf30,grid,sweep_rev,NQ,30,build,,,0,96,0,0,131824,100.85,,2026-10-03T17:16:04+00:00
+build,vwap_ema_x-NQ-tf1,grid,vwap_ema_x,NQ,1,build,,,0,192,0,0,1107240,382.11,,2026-10-03T17:22:30+00:00
+build,vwap_ema_x-NQ-tf5,grid,vwap_ema_x,NQ,5,build,,,0,192,0,0,639422,259.97,,2026-10-03T17:26:52+00:00
+build,vwap_ema_x-NQ-tf15,grid,vwap_ema_x,NQ,15,build,,,0,192,0,0,358017,227.5,,2026-10-03T17:30:41+00:00
+build,bimb_follow_d1-NQ-tf5,grid,bimb_follow_d1,NQ,5,build,,,0,96,0,0,440917,151.14,,2026-10-03T17:33:14+00:00
+null,bimb_follow_d1-NQ-tf5-c2s1,null,bimb_follow_d1,NQ,5,build,c2,1,0,0,96,0,428002,152.73,,2026-10-03T17:35:49+00:00
+null,bimb_follow_d1-NQ-tf5-c2s2,null,bimb_follow_d1,NQ,5,build,c2,2,0,0,96,0,429178,153.23,,2026-10-03T17:38:23+00:00
+build,flow_exhaust-NQ-tf1,grid,flow_exhaust,NQ,1,build,,,0,96,0,0,249445,431.11,,2026-10-03T17:45:36+00:00
+null,flow_exhaust-NQ-tf1-c2s1,null,flow_exhaust,NQ,1,build,c2,1,0,0,96,0,152116,460.09,,2026-10-03T17:53:17+00:00
+null,flow_exhaust-NQ-tf1-c2s2,null,flow_exhaust,NQ,1,build,c2,2,0,0,96,0,160064,456.25,,2026-10-03T18:00:53+00:00
+build,flow_exhaust-NQ-tf5,grid,flow_exhaust,NQ,5,build,,,0,96,0,0,82768,174.05,,2026-10-03T18:03:48+00:00
+null,flow_exhaust-NQ-tf5-c2s1,null,flow_exhaust,NQ,5,build,c2,1,0,0,96,0,95743,175.78,,2026-10-03T18:06:44+00:00
+null,flow_exhaust-NQ-tf5-c2s2,null,flow_exhaust,NQ,5,build,c2,2,0,0,96,0,93780,176.44,,2026-10-03T18:09:41+00:00
+build,straddle_t_1800_fbook-NQ-tf30,grid,straddle_t_1800_fbook,NQ,30,build,,,0,160,0,0,5440,25.11,,2026-10-03T18:10:09+00:00
+build,straddle_t_1800_xbook-NQ-tf30,grid,straddle_t_1800_xbook,NQ,30,build,,,0,160,0,0,70112,23.33,,2026-10-03T18:10:32+00:00
+build,straddle_t_1800_thin-NQ-tf30,grid,straddle_t_1800_thin,NQ,30,build,,,0,160,0,0,1088,24.16,,2026-10-03T18:10:56+00:00
+build,straddle_t_0300_fbook-NQ-tf30,grid,straddle_t_0300_fbook,NQ,30,build,,,0,160,0,0,32896,30.43,,2026-10-03T18:11:27+00:00
+build,straddle_t_0300_xbook-NQ-tf30,grid,straddle_t_0300_xbook,NQ,30,build,,,0,160,0,0,86976,78.61,,2026-10-03T18:12:46+00:00
+build,straddle_t_0300_thin-NQ-tf30,grid,straddle_t_0300_thin,NQ,30,build,,,0,160,0,0,9216,28.77,,2026-10-03T18:13:15+00:00
+build,straddle_t_0830_fbook-NQ-tf30,grid,straddle_t_0830_fbook,NQ,30,build,,,0,160,0,0,33984,30.7,,2026-10-03T18:13:46+00:00
+build,straddle_t_0830_xbook-NQ-tf30,grid,straddle_t_0830_xbook,NQ,30,build,,,0,160,0,0,84096,86.75,,2026-10-03T18:15:13+00:00
+build,straddle_t_0830_thin-NQ-tf30,grid,straddle_t_0830_thin,NQ,30,build,,,0,160,0,0,29120,28.92,,2026-10-03T18:15:42+00:00
+build,straddle_t_1105_fbook-NQ-tf30,grid,straddle_t_1105_fbook,NQ,30,build,,,0,160,0,0,36128,40.05,,2026-10-03T18:16:22+00:00
+build,straddle_t_1105_xbook-NQ-tf30,grid,straddle_t_1105_xbook,NQ,30,build,,,0,160,0,0,87200,123.43,,2026-10-03T18:18:26+00:00
+build,straddle_t_1105_thin-NQ-tf30,grid,straddle_t_1105_thin,NQ,30,build,,,0,160,0,0,6176,38.34,,2026-10-03T18:19:04+00:00
+build,orb_fbook-NQ-tf1,grid,orb_fbook,NQ,1,build,,,0,96,0,0,127616,193.18,,2026-10-03T18:22:19+00:00
+build,orb_xbook-NQ-tf1,grid,orb_xbook,NQ,1,build,,,0,96,0,0,372256,432.4,,2026-10-03T18:29:32+00:00
+build,orb_thin-NQ-tf1,grid,orb_thin,NQ,1,build,,,0,96,0,0,33696,185.65,,2026-10-03T18:32:39+00:00
+build,orb_fbook-NQ-tf5,grid,orb_fbook,NQ,5,build,,,0,96,0,0,114848,145.39,,2026-10-03T18:35:05+00:00
+build,orb_xbook-NQ-tf5,grid,orb_xbook,NQ,5,build,,,0,96,0,0,336000,389.43,,2026-10-03T18:41:35+00:00
+build,orb_thin-NQ-tf5,grid,orb_thin,NQ,5,build,,,0,96,0,0,31968,137.16,,2026-10-03T18:43:53+00:00
+build,orb_fbook-NQ-tf15,grid,orb_fbook,NQ,15,build,,,0,96,0,0,93376,124.23,,2026-10-03T18:45:58+00:00
+build,orb_xbook-NQ-tf15,grid,orb_xbook,NQ,15,build,,,0,96,0,0,264032,375.36,,2026-10-03T18:52:14+00:00
+build,orb_thin-NQ-tf15,grid,orb_thin,NQ,15,build,,,0,96,0,0,27712,119.63,,2026-10-03T18:54:14+00:00
+build,orb_fbook-NQ-tf30,grid,orb_fbook,NQ,30,build,,,0,96,0,0,93376,122.28,,2026-10-03T18:56:17+00:00
+build,orb_xbook-NQ-tf30,grid,orb_xbook,NQ,30,build,,,0,96,0,0,264032,372.94,,2026-10-03T19:02:31+00:00
+build,orb_thin-NQ-tf30,grid,orb_thin,NQ,30,build,,,0,96,0,0,27712,124.77,,2026-10-03T19:04:36+00:00
+build,straddle_fbook-NQ-tf1,grid,straddle_fbook,NQ,1,build,,,0,96,0,0,126208,171.46,,2026-10-03T19:07:29+00:00
+build,straddle_xbook-NQ-tf1,grid,straddle_xbook,NQ,1,build,,,0,96,0,0,272256,433.45,,2026-10-03T19:14:43+00:00
+build,straddle_thin-NQ-tf1,grid,straddle_thin,NQ,1,build,,,0,96,0,0,46688,164.91,,2026-10-03T19:17:29+00:00
+build,straddle_fbook-NQ-tf5,grid,straddle_fbook,NQ,5,build,,,0,96,0,0,119776,126.8,,2026-10-03T19:19:37+00:00
+build,straddle_xbook-NQ-tf5,grid,straddle_xbook,NQ,5,build,,,0,96,0,0,272192,383.53,,2026-10-03T19:26:01+00:00
+build,straddle_thin-NQ-tf5,grid,straddle_thin,NQ,5,build,,,0,96,0,0,46336,123.94,,2026-10-03T19:28:05+00:00
+build,straddle_fbook-NQ-tf15,grid,straddle_fbook,NQ,15,build,,,0,96,0,0,114784,123.47,,2026-10-03T19:30:10+00:00
+build,straddle_xbook-NQ-tf15,grid,straddle_xbook,NQ,15,build,,,0,96,0,0,270048,371.81,,2026-10-03T19:36:22+00:00
+build,straddle_thin-NQ-tf15,grid,straddle_thin,NQ,15,build,,,0,96,0,0,44384,118.68,,2026-10-03T19:38:22+00:00
+build,straddle_fbook-NQ-tf30,grid,straddle_fbook,NQ,30,build,,,0,96,0,0,107552,125.91,,2026-10-03T19:40:28+00:00
+build,straddle_xbook-NQ-tf30,grid,straddle_xbook,NQ,30,build,,,0,96,0,0,265472,372.69,,2026-10-03T19:46:42+00:00
+build,straddle_thin-NQ-tf30,grid,straddle_thin,NQ,30,build,,,0,96,0,0,41184,119.16,,2026-10-03T19:48:41+00:00
+build,donchian_fbook-NQ-tf5,grid,donchian_fbook,NQ,5,build,,,0,128,0,0,338526,168.47,,2026-10-03T19:51:31+00:00
+build,donchian_xbook-NQ-tf5,grid,donchian_xbook,NQ,5,build,,,0,128,0,0,855162,517.18,,2026-10-03T20:00:11+00:00
+build,donchian_thin-NQ-tf5,grid,donchian_thin,NQ,5,build,,,0,128,0,0,148043,156.96,,2026-10-03T20:02:49+00:00
+build,donchian_fbook-NQ-tf15,grid,donchian_fbook,NQ,15,build,,,0,128,0,0,114232,143.68,,2026-10-03T20:05:13+00:00
+build,donchian_xbook-NQ-tf15,grid,donchian_xbook,NQ,15,build,,,0,128,0,0,310010,499.3,,2026-10-03T20:13:34+00:00
+build,donchian_thin-NQ-tf15,grid,donchian_thin,NQ,15,build,,,0,128,0,0,47554,139.77,,2026-10-03T20:15:54+00:00
+build,donchian_fbook-NQ-tf30,grid,donchian_fbook,NQ,30,build,,,0,128,0,0,36402,134.83,,2026-10-03T20:18:09+00:00
+build,donchian_xbook-NQ-tf30,grid,donchian_xbook,NQ,30,build,,,0,128,0,0,98380,491.09,,2026-10-03T20:26:20+00:00
+build,donchian_thin-NQ-tf30,grid,donchian_thin,NQ,30,build,,,0,128,0,0,14975,133.31,,2026-10-03T20:28:34+00:00
+null,straddle_t_1800_xbook-NQ-tf30-c2s1,null,straddle_t_1800_xbook,NQ,30,build,c2,1,0,0,160,0,70112,23.97,,2026-10-03T20:28:58+00:00
+null,straddle_t_1800_xbook-NQ-tf30-c2s2,null,straddle_t_1800_xbook,NQ,30,build,c2,2,0,0,160,0,70112,24.89,,2026-10-03T20:29:23+00:00
+null,straddle_t_0300_xbook-NQ-tf30-c2s1,null,straddle_t_0300_xbook,NQ,30,build,c2,1,0,0,160,0,86976,79.97,,2026-10-03T20:30:43+00:00
+null,straddle_t_0300_xbook-NQ-tf30-c2s2,null,straddle_t_0300_xbook,NQ,30,build,c2,2,0,0,160,0,86976,79.81,,2026-10-03T20:32:03+00:00
+null,straddle_t_0830_fbook-NQ-tf30-c2s1,null,straddle_t_0830_fbook,NQ,30,build,c2,1,0,0,160,0,38688,32.07,,2026-10-03T20:32:36+00:00
+null,straddle_t_0830_fbook-NQ-tf30-c2s2,null,straddle_t_0830_fbook,NQ,30,build,c2,2,0,0,160,0,39808,32.49,,2026-10-03T20:33:09+00:00
+null,straddle_t_0830_xbook-NQ-tf30-c2s1,null,straddle_t_0830_xbook,NQ,30,build,c2,1,0,0,160,0,84096,89.8,,2026-10-03T20:34:39+00:00
+null,straddle_t_0830_xbook-NQ-tf30-c2s2,null,straddle_t_0830_xbook,NQ,30,build,c2,2,0,0,160,0,84096,88.75,,2026-10-03T20:36:08+00:00
+null,straddle_t_0830_thin-NQ-tf30-c2s1,null,straddle_t_0830_thin,NQ,30,build,c2,1,0,0,160,0,24160,30.53,,2026-10-03T20:36:38+00:00
+null,straddle_t_0830_thin-NQ-tf30-c2s2,null,straddle_t_0830_thin,NQ,30,build,c2,2,0,0,160,0,26016,30.69,,2026-10-03T20:37:09+00:00
+null,straddle_t_1105_fbook-NQ-tf30-c2s1,null,straddle_t_1105_fbook,NQ,30,build,c2,1,0,0,160,0,39456,42.3,,2026-10-03T20:37:52+00:00
+null,straddle_t_1105_fbook-NQ-tf30-c2s2,null,straddle_t_1105_fbook,NQ,30,build,c2,2,0,0,160,0,40960,41.53,,2026-10-03T20:38:33+00:00
+null,straddle_t_1105_xbook-NQ-tf30-c2s1,null,straddle_t_1105_xbook,NQ,30,build,c2,1,0,0,160,0,87200,128.18,,2026-10-03T20:40:42+00:00
+null,straddle_t_1105_xbook-NQ-tf30-c2s2,null,straddle_t_1105_xbook,NQ,30,build,c2,2,0,0,160,0,87200,128.16,,2026-10-03T20:42:50+00:00
+null,orb_xbook-NQ-tf1-c2s1,null,orb_xbook,NQ,1,build,c2,1,0,0,96,0,372256,436.78,,2026-10-03T20:50:08+00:00
+null,orb_xbook-NQ-tf1-c2s2,null,orb_xbook,NQ,1,build,c2,2,0,0,96,0,372256,443.78,,2026-10-03T20:57:33+00:00
+null,orb_thin-NQ-tf1-c2s1,null,orb_thin,NQ,1,build,c2,1,0,0,96,0,45280,186.31,,2026-10-03T21:00:40+00:00
+null,orb_thin-NQ-tf1-c2s2,null,orb_thin,NQ,1,build,c2,2,0,0,96,0,45920,188.13,,2026-10-03T21:03:49+00:00
+null,orb_fbook-NQ-tf5-c2s1,null,orb_fbook,NQ,5,build,c2,1,0,0,96,0,157824,145.26,,2026-10-03T21:06:15+00:00
+null,orb_fbook-NQ-tf5-c2s2,null,orb_fbook,NQ,5,build,c2,2,0,0,96,0,160864,146.86,,2026-10-03T21:08:43+00:00
+null,orb_xbook-NQ-tf5-c2s1,null,orb_xbook,NQ,5,build,c2,1,0,0,96,0,336000,395.94,,2026-10-03T21:15:20+00:00
+null,orb_xbook-NQ-tf5-c2s2,null,orb_xbook,NQ,5,build,c2,2,0,0,96,0,336000,395.85,,2026-10-03T21:21:57+00:00
+null,orb_thin-NQ-tf5-c2s1,null,orb_thin,NQ,5,build,c2,1,0,0,96,0,42016,141.98,,2026-10-03T21:24:20+00:00
+null,orb_thin-NQ-tf5-c2s2,null,orb_thin,NQ,5,build,c2,2,0,0,96,0,43264,140.42,,2026-10-03T21:26:41+00:00
+null,orb_fbook-NQ-tf15-c2s1,null,orb_fbook,NQ,15,build,c2,1,0,0,96,0,124608,122.62,,2026-10-03T21:28:44+00:00
+null,orb_fbook-NQ-tf15-c2s2,null,orb_fbook,NQ,15,build,c2,2,0,0,96,0,126816,122.58,,2026-10-03T21:30:47+00:00
+null,orb_xbook-NQ-tf15-c2s1,null,orb_xbook,NQ,15,build,c2,1,0,0,96,0,264032,378.11,,2026-10-03T21:37:06+00:00
+null,orb_xbook-NQ-tf15-c2s2,null,orb_xbook,NQ,15,build,c2,2,0,0,96,0,264032,379.63,,2026-10-03T21:43:27+00:00
+null,orb_thin-NQ-tf15-c2s1,null,orb_thin,NQ,15,build,c2,1,0,0,96,0,33792,120.1,,2026-10-03T21:45:28+00:00
+null,orb_thin-NQ-tf15-c2s2,null,orb_thin,NQ,15,build,c2,2,0,0,96,0,35520,122.7,,2026-10-03T21:47:31+00:00
+null,orb_fbook-NQ-tf30-c2s1,null,orb_fbook,NQ,30,build,c2,1,0,0,96,0,124608,125.65,,2026-10-03T21:49:37+00:00
+null,orb_fbook-NQ-tf30-c2s2,null,orb_fbook,NQ,30,build,c2,2,0,0,96,0,126816,125.87,,2026-10-03T21:51:44+00:00
+null,orb_xbook-NQ-tf30-c2s1,null,orb_xbook,NQ,30,build,c2,1,0,0,96,0,264032,376.76,,2026-10-03T21:58:01+00:00
+null,orb_xbook-NQ-tf30-c2s2,null,orb_xbook,NQ,30,build,c2,2,0,0,96,0,264032,373.43,,2026-10-03T22:04:16+00:00
+null,orb_thin-NQ-tf30-c2s1,null,orb_thin,NQ,30,build,c2,1,0,0,96,0,33792,120.59,,2026-10-03T22:06:17+00:00
+null,orb_thin-NQ-tf30-c2s2,null,orb_thin,NQ,30,build,c2,2,0,0,96,0,35520,121.26,,2026-10-03T22:08:18+00:00
+null,straddle_fbook-NQ-tf1-c2s1,null,straddle_fbook,NQ,1,build,c2,1,0,0,96,0,125472,167.4,,2026-10-03T22:11:07+00:00
+null,straddle_fbook-NQ-tf1-c2s2,null,straddle_fbook,NQ,1,build,c2,2,0,0,96,0,128320,166.59,,2026-10-03T22:13:54+00:00
+null,straddle_xbook-NQ-tf1-c2s1,null,straddle_xbook,NQ,1,build,c2,1,0,0,96,0,272256,429.02,,2026-10-03T22:21:04+00:00
+null,straddle_xbook-NQ-tf1-c2s2,null,straddle_xbook,NQ,1,build,c2,2,0,0,96,0,272256,429.07,,2026-10-03T22:28:14+00:00
+null,straddle_thin-NQ-tf1-c2s1,null,straddle_thin,NQ,1,build,c2,1,0,0,96,0,40224,166.26,,2026-10-03T22:31:01+00:00
+null,straddle_thin-NQ-tf1-c2s2,null,straddle_thin,NQ,1,build,c2,2,0,0,96,0,42528,165.59,,2026-10-03T22:33:47+00:00
+null,straddle_xbook-NQ-tf5-c2s1,null,straddle_xbook,NQ,5,build,c2,1,0,0,96,0,272192,382.62,,2026-10-03T22:40:11+00:00
+null,straddle_xbook-NQ-tf5-c2s2,null,straddle_xbook,NQ,5,build,c2,2,0,0,96,0,272192,385.24,,2026-10-03T22:46:37+00:00
+null,straddle_thin-NQ-tf5-c2s1,null,straddle_thin,NQ,5,build,c2,1,0,0,96,0,43168,125.73,,2026-10-03T22:48:43+00:00
+null,straddle_thin-NQ-tf5-c2s2,null,straddle_thin,NQ,5,build,c2,2,0,0,96,0,45280,126.27,,2026-10-03T22:50:50+00:00
+null,straddle_xbook-NQ-tf15-c2s1,null,straddle_xbook,NQ,15,build,c2,1,0,0,96,0,270048,375.08,,2026-10-03T22:57:06+00:00
+null,straddle_xbook-NQ-tf15-c2s2,null,straddle_xbook,NQ,15,build,c2,2,0,0,96,0,270048,376.89,,2026-10-03T23:03:23+00:00
+null,straddle_thin-NQ-tf15-c2s1,null,straddle_thin,NQ,15,build,c2,1,0,0,96,0,43232,120.97,,2026-10-03T23:05:25+00:00
+null,straddle_thin-NQ-tf15-c2s2,null,straddle_thin,NQ,15,build,c2,2,0,0,96,0,44608,121.68,,2026-10-03T23:07:27+00:00
+null,straddle_xbook-NQ-tf30-c2s1,null,straddle_xbook,NQ,30,build,c2,1,0,0,96,0,265472,377.4,,2026-10-03T23:13:46+00:00
+null,straddle_xbook-NQ-tf30-c2s2,null,straddle_xbook,NQ,30,build,c2,2,0,0,96,0,265472,375.48,,2026-10-03T23:20:02+00:00
+null,straddle_thin-NQ-tf30-c2s1,null,straddle_thin,NQ,30,build,c2,1,0,0,96,0,43040,122.25,,2026-10-03T23:22:05+00:00
+null,straddle_thin-NQ-tf30-c2s2,null,straddle_thin,NQ,30,build,c2,2,0,0,96,0,42496,122.64,,2026-10-03T23:24:08+00:00
+null,donchian_fbook-NQ-tf5-c2s1,null,donchian_fbook,NQ,5,build,c2,1,0,0,128,0,446798,220.29,,2026-10-03T23:27:51+00:00
+null,donchian_fbook-NQ-tf5-c2s2,null,donchian_fbook,NQ,5,build,c2,2,0,0,128,0,444221,295.45,,2026-10-03T23:32:48+00:00
+null,donchian_thin-NQ-tf5-c2s1,null,donchian_thin,NQ,5,build,c2,1,0,0,128,0,149080,268.23,,2026-10-03T23:37:18+00:00
+null,donchian_thin-NQ-tf5-c2s2,null,donchian_thin,NQ,5,build,c2,2,0,0,128,0,151155,269.37,,2026-10-03T23:41:48+00:00
+null,donchian_fbook-NQ-tf15-c2s1,null,donchian_fbook,NQ,15,build,c2,1,0,0,128,0,139472,240.81,,2026-10-03T23:45:49+00:00
+null,donchian_fbook-NQ-tf15-c2s2,null,donchian_fbook,NQ,15,build,c2,2,0,0,128,0,137593,252.81,,2026-10-03T23:50:03+00:00
+null,donchian_xbook-NQ-tf15-c2s1,null,donchian_xbook,NQ,15,build,c2,1,0,0,128,0,309930,988.12,,2026-10-04T00:06:33+00:00
+null,donchian_xbook-NQ-tf15-c2s2,null,donchian_xbook,NQ,15,build,c2,2,0,0,128,0,308266,938.14,,2026-10-04T00:22:13+00:00
+null,donchian_thin-NQ-tf15-c2s1,null,donchian_thin,NQ,15,build,c2,1,0,0,128,0,41978,222.12,,2026-10-04T00:25:55+00:00
+null,donchian_thin-NQ-tf15-c2s2,null,donchian_thin,NQ,15,build,c2,2,0,0,128,0,43028,222.68,,2026-10-04T00:29:38+00:00
+null,donchian_fbook-NQ-tf30-c2s1,null,donchian_fbook,NQ,30,build,c2,1,0,0,128,0,44140,215.98,,2026-10-04T00:33:14+00:00
+null,donchian_fbook-NQ-tf30-c2s2,null,donchian_fbook,NQ,30,build,c2,2,0,0,128,0,41892,214.88,,2026-10-04T00:36:49+00:00
+null,donchian_xbook-NQ-tf30-c2s1,null,donchian_xbook,NQ,30,build,c2,1,0,0,128,0,98298,767.71,,2026-10-04T00:49:38+00:00
+null,donchian_xbook-NQ-tf30-c2s2,null,donchian_xbook,NQ,30,build,c2,2,0,0,128,0,98269,759.56,,2026-10-04T01:02:18+00:00
+null,donchian_thin-NQ-tf30-c2s1,null,donchian_thin,NQ,30,build,c2,1,0,0,128,0,14115,206.72,,2026-10-04T01:05:45+00:00
+null,donchian_thin-NQ-tf30-c2s2,null,donchian_thin,NQ,30,build,c2,2,0,0,128,0,14190,206.2,,2026-10-04T01:09:11+00:00
+null,c1-ES-tf1,null,random,ES,1,build,c1,,0,0,64,0,606100,202.25,,2026-10-04T01:12:37+00:00
+null,c1-ES-tf5,null,random,ES,5,build,c1,,0,0,64,0,549733,155.55,,2026-10-04T01:15:15+00:00
+null,c1-ES-tf15,null,random,ES,15,build,c1,,0,0,64,0,459273,144.71,,2026-10-04T01:17:42+00:00
+null,c1-ES-tf30,null,random,ES,30,build,c1,,0,0,64,0,335982,137.01,,2026-10-04T01:20:01+00:00
+build,straddle_t_1800-ES-tf30,grid,straddle_t_1800,ES,30,build,,,0,160,0,0,72288,107.08,,2026-10-04T01:21:49+00:00
+null,straddle_t_1800-ES-tf30-shift,null,straddle_t_1800,ES,30,build,shift,,0,0,320,0,133792,107.08,,2026-10-04T01:21:50+00:00
+build,straddle_t_2000-ES-tf30,grid,straddle_t_2000,ES,30,build,,,0,160,0,0,74560,125.83,,2026-10-04T01:23:56+00:00
+null,straddle_t_2000-ES-tf30-shift,null,straddle_t_2000,ES,30,build,shift,,0,0,320,0,139072,125.83,,2026-10-04T01:23:57+00:00
+build,straddle_t_0000-ES-tf30,grid,straddle_t_0000,ES,30,build,,,0,160,0,0,56672,79.87,,2026-10-04T01:25:17+00:00
+null,straddle_t_0000-ES-tf30-shift,null,straddle_t_0000,ES,30,build,shift,,0,0,320,0,130976,79.87,,2026-10-04T01:25:18+00:00
+build,straddle_t_0200-ES-tf30,grid,straddle_t_0200,ES,30,build,,,0,160,0,0,78208,87.73,,2026-10-04T01:26:46+00:00
+null,straddle_t_0200-ES-tf30-shift,null,straddle_t_0200,ES,30,build,shift,,0,0,320,0,153504,87.73,,2026-10-04T01:26:47+00:00
+build,straddle_t_0300-ES-tf30,grid,straddle_t_0300,ES,30,build,,,0,160,0,0,87072,125.03,,2026-10-04T01:28:52+00:00
+null,straddle_t_0300-ES-tf30-shift,null,straddle_t_0300,ES,30,build,shift,,0,0,320,0,166688,125.03,,2026-10-04T01:28:53+00:00
+build,straddle_t_0830-ES-tf30,grid,straddle_t_0830,ES,30,build,,,0,160,0,0,84320,127.09,,2026-10-04T01:31:01+00:00
+null,straddle_t_0830-ES-tf30-shift,null,straddle_t_0830,ES,30,build,shift,,0,0,320,0,172864,127.09,,2026-10-04T01:31:01+00:00
+build,straddle_t_0930-ES-tf30,grid,straddle_t_0930,ES,30,build,,,0,160,0,0,91264,140.67,,2026-10-04T01:33:23+00:00
+null,straddle_t_0930-ES-tf30-shift,null,straddle_t_0930,ES,30,build,shift,,0,0,320,0,178016,140.67,,2026-10-04T01:33:23+00:00
+build,straddle_t_1105-ES-tf30,grid,straddle_t_1105,ES,30,build,,,0,160,0,0,86336,164.02,,2026-10-04T01:36:08+00:00
+null,straddle_t_1105-ES-tf30-shift,null,straddle_t_1105,ES,30,build,shift,,0,0,320,0,174304,164.02,,2026-10-04T01:36:09+00:00
+build,straddle_t_1330-ES-tf30,grid,straddle_t_1330,ES,30,build,,,0,160,0,0,81760,175.83,,2026-10-04T01:39:06+00:00
+null,straddle_t_1330-ES-tf30-shift,null,straddle_t_1330,ES,30,build,shift,,0,0,320,0,165344,175.83,,2026-10-04T01:39:06+00:00
+build,orb-ES-tf1,grid,orb,ES,1,build,,,0,96,0,0,375072,272.5,,2026-10-04T01:43:41+00:00
+build,orb-ES-tf5,grid,orb,ES,5,build,,,0,96,0,0,338528,201.02,,2026-10-04T01:47:04+00:00
+build,orb-ES-tf15,grid,orb,ES,15,build,,,0,96,0,0,266080,172.99,,2026-10-04T01:49:58+00:00
+build,orb-ES-tf30,grid,orb,ES,30,build,,,0,96,0,0,266080,173.02,,2026-10-04T01:52:53+00:00
+build,straddle-ES-tf1,grid,straddle,ES,1,build,,,0,96,0,0,273696,243.73,,2026-10-04T01:56:58+00:00
+build,straddle-ES-tf5,grid,straddle,ES,5,build,,,0,96,0,0,273664,182.06,,2026-10-04T02:00:02+00:00
+build,straddle-ES-tf15,grid,straddle,ES,15,build,,,0,96,0,0,271968,171.98,,2026-10-04T02:02:56+00:00
+build,straddle-ES-tf30,grid,straddle,ES,30,build,,,0,96,0,0,267712,171.68,,2026-10-04T02:05:49+00:00
+build,donchian-ES-tf1,grid,donchian,ES,1,build,,,0,128,0,0,1145371,396.91,,2026-10-04T02:12:32+00:00
+build,donchian-ES-tf5,grid,donchian,ES,5,build,,,0,128,0,0,636226,271.64,,2026-10-04T02:17:08+00:00
+build,donchian-ES-tf15,grid,donchian,ES,15,build,,,0,128,0,0,233563,217.87,,2026-10-04T02:20:47+00:00
+build,donchian-ES-tf30,grid,donchian,ES,30,build,,,0,128,0,0,80372,200.96,,2026-10-04T02:24:09+00:00
+build,squeeze-ES-tf1,grid,squeeze,ES,1,build,,,0,96,0,0,757593,459.39,,2026-10-04T02:31:53+00:00
+build,squeeze-ES-tf5,grid,squeeze,ES,5,build,,,0,96,0,0,450652,405.83,,2026-10-04T02:38:42+00:00
+build,squeeze-ES-tf15,grid,squeeze,ES,15,build,,,0,96,0,0,209550,330.44,,2026-10-04T02:44:14+00:00
+build,squeeze-ES-tf30,grid,squeeze,ES,30,build,,,0,96,0,0,105737,301.73,,2026-10-04T02:49:17+00:00
+build,ib-ES-tf1,grid,ib,ES,1,build,,,0,64,0,0,77368,177.38,,2026-10-04T02:52:16+00:00
+build,ib-ES-tf5,grid,ib,ES,5,build,,,0,64,0,0,58312,127.97,,2026-10-04T02:54:25+00:00
+build,ib-ES-tf15,grid,ib,ES,15,build,,,0,64,0,0,45816,117.84,,2026-10-04T02:56:24+00:00
+build,ib-ES-tf30,grid,ib,ES,30,build,,,0,64,0,0,39392,114.51,,2026-10-04T02:58:19+00:00
+build,lon_break-ES-tf1,grid,lon_break,ES,1,build,,,0,96,0,0,52032,73.69,,2026-10-04T02:59:34+00:00
+build,lon_break-ES-tf5,grid,lon_break,ES,5,build,,,0,96,0,0,51968,55.9,,2026-10-04T03:00:30+00:00
+build,lon_break-ES-tf15,grid,lon_break,ES,15,build,,,0,96,0,0,51584,53.15,,2026-10-04T03:01:25+00:00
+build,lon_break-ES-tf30,grid,lon_break,ES,30,build,,,0,96,0,0,51360,53.52,,2026-10-04T03:02:19+00:00
+build,ema_pullback-ES-tf1,grid,ema_pullback,ES,1,build,,,0,32,0,0,291219,190.36,,2026-10-04T03:05:32+00:00
+build,ema_pullback-ES-tf5,grid,ema_pullback,ES,5,build,,,0,32,0,0,211230,136.69,,2026-10-04T03:07:50+00:00
+build,ema_pullback-ES-tf15,grid,ema_pullback,ES,15,build,,,0,32,0,0,106591,111.23,,2026-10-04T03:09:43+00:00
+build,ema_pullback-ES-tf30,grid,ema_pullback,ES,30,build,,,0,32,0,0,41563,95.58,,2026-10-04T03:11:19+00:00
+build,first_bar_mom-ES-tf1,grid,first_bar_mom,ES,1,build,,,0,96,0,0,137024,369.95,,2026-10-04T03:17:30+00:00
+build,first_bar_mom-ES-tf5,grid,first_bar_mom,ES,5,build,,,0,96,0,0,125056,201.69,,2026-10-04T03:20:53+00:00
+build,first_bar_mom-ES-tf15,grid,first_bar_mom,ES,15,build,,,0,96,0,0,137376,142.04,,2026-10-04T03:23:15+00:00
+build,first_bar_mom-ES-tf30,grid,first_bar_mom,ES,30,build,,,0,96,0,0,147552,100.3,,2026-10-04T03:24:57+00:00
+build,tod_drift-ES-tf1,grid,tod_drift,ES,1,build,,,0,256,0,0,912576,398.79,,2026-10-04T03:31:38+00:00
+build,tod_drift-ES-tf5,grid,tod_drift,ES,5,build,,,0,256,0,0,912512,296.91,,2026-10-04T03:36:38+00:00
+build,tod_drift-ES-tf15,grid,tod_drift,ES,15,build,,,0,256,0,0,766400,284.32,,2026-10-04T03:41:25+00:00
+build,tod_drift-ES-tf30,grid,tod_drift,ES,30,build,,,0,256,0,0,693312,297.41,,2026-10-04T03:46:25+00:00
+build,vwap_band-ES-tf1,grid,vwap_band,ES,1,build,,,0,128,0,0,784562,261.8,,2026-10-04T03:50:50+00:00
+build,vwap_band-ES-tf5,grid,vwap_band,ES,5,build,,,0,128,0,0,439343,176.19,,2026-10-04T03:53:48+00:00
+build,vwap_band-ES-tf15,grid,vwap_band,ES,15,build,,,0,128,0,0,203628,148.73,,2026-10-04T03:56:18+00:00
+build,vwap_band-ES-tf30,grid,vwap_band,ES,30,build,,,0,128,0,0,75823,136.15,,2026-10-04T03:58:35+00:00
+build,vwap_z-ES-tf1,grid,vwap_z,ES,1,build,,,0,128,0,0,798213,248.23,,2026-10-04T04:02:46+00:00
+build,vwap_z-ES-tf5,grid,vwap_z,ES,5,build,,,0,128,0,0,480578,173.71,,2026-10-04T04:05:42+00:00
+build,vwap_z-ES-tf15,grid,vwap_z,ES,15,build,,,0,128,0,0,255676,152.29,,2026-10-04T04:08:16+00:00
+build,vwap_z-ES-tf30,grid,vwap_z,ES,30,build,,,0,128,0,0,111257,140.44,,2026-10-04T04:10:37+00:00
+build,vwap_flip-ES-tf1,grid,vwap_flip,ES,1,build,,,0,96,0,0,760974,199.68,,2026-10-04T04:14:00+00:00
+build,vwap_flip-ES-tf5,grid,vwap_flip,ES,5,build,,,0,96,0,0,579367,144.06,,2026-10-04T04:16:26+00:00
+build,vwap_flip-ES-tf15,grid,vwap_flip,ES,15,build,,,0,96,0,0,328314,127.13,,2026-10-04T04:18:35+00:00
+build,vwap_flip-ES-tf30,grid,vwap_flip,ES,30,build,,,0,96,0,0,144598,113.79,,2026-10-04T04:20:29+00:00
+build,sweep_rev-ES-tf1,grid,sweep_rev,ES,1,build,,,0,96,0,0,206111,167.65,,2026-10-04T04:23:18+00:00
+build,sweep_rev-ES-tf5,grid,sweep_rev,ES,5,build,,,0,96,0,0,186307,118.93,,2026-10-04T04:25:18+00:00
+build,sweep_rev-ES-tf15,grid,sweep_rev,ES,15,build,,,0,96,0,0,162969,109.13,,2026-10-04T04:27:08+00:00
+build,sweep_rev-ES-tf30,grid,sweep_rev,ES,30,build,,,0,96,0,0,133057,105.59,,2026-10-04T04:28:54+00:00
+build,vwap_ema_x-ES-tf1,grid,vwap_ema_x,ES,1,build,,,0,192,0,0,1095955,405.57,,2026-10-04T04:35:44+00:00
+build,vwap_ema_x-ES-tf5,grid,vwap_ema_x,ES,5,build,,,0,192,0,0,639898,270.6,,2026-10-04T04:40:17+00:00
+build,vwap_ema_x-ES-tf15,grid,vwap_ema_x,ES,15,build,,,0,192,0,0,364586,236.23,,2026-10-04T04:44:15+00:00
+build,gap-ES-tf1,grid,gap,ES,1,build,,,0,64,0,0,26304,19.95,,2026-10-04T04:44:36+00:00
+build,gap-ES-tf5,grid,gap,ES,5,build,,,0,64,0,0,25920,13.57,,2026-10-04T04:44:49+00:00
+build,gap-ES-tf15,grid,gap,ES,15,build,,,0,64,0,0,25536,12.41,,2026-10-04T04:45:02+00:00
+build,gap-ES-tf30,grid,gap,ES,30,build,,,0,64,0,0,25024,12.43,,2026-10-04T04:45:15+00:00
+build,pinbar-ES-tf1,grid,pinbar,ES,1,build,,,0,96,0,0,466337,185.46,,2026-10-04T04:48:22+00:00
+build,pinbar-ES-tf5,grid,pinbar,ES,5,build,,,0,96,0,0,209614,124.35,,2026-10-04T04:50:28+00:00
+build,pinbar-ES-tf15,grid,pinbar,ES,15,build,,,0,96,0,0,96601,108.07,,2026-10-04T04:52:17+00:00
+build,pinbar-ES-tf30,grid,pinbar,ES,30,build,,,0,96,0,0,45874,101.3,,2026-10-04T04:53:58+00:00
+build,supertrend-ES-tf1,grid,supertrend,ES,1,build,,,0,32,0,0,249802,71.6,,2026-10-04T04:55:11+00:00
+build,supertrend-ES-tf5,grid,supertrend,ES,5,build,,,0,32,0,0,102115,44.17,,2026-10-04T04:55:56+00:00
+build,supertrend-ES-tf15,grid,supertrend,ES,15,build,,,0,32,0,0,39002,36.17,,2026-10-04T04:56:33+00:00
+build,supertrend-ES-tf30,grid,supertrend,ES,30,build,,,0,32,0,0,14784,33.46,,2026-10-04T04:57:06+00:00
+build,ema_ribbon-ES-tf1,grid,ema_ribbon,ES,1,build,,,0,32,0,0,259722,71.08,,2026-10-04T04:58:19+00:00
+build,ema_ribbon-ES-tf5,grid,ema_ribbon,ES,5,build,,,0,32,0,0,119334,45.64,,2026-10-04T04:59:05+00:00
+build,ema_ribbon-ES-tf15,grid,ema_ribbon,ES,15,build,,,0,32,0,0,44437,36.92,,2026-10-04T04:59:43+00:00
+build,ema_ribbon-ES-tf30,grid,ema_ribbon,ES,30,build,,,0,32,0,0,17520,33.78,,2026-10-04T05:00:17+00:00
+build,tema_slope-ES-tf1,grid,tema_slope,ES,1,build,,,0,96,0,0,892290,219.06,,2026-10-04T05:03:59+00:00
+build,tema_slope-ES-tf5,grid,tema_slope,ES,5,build,,,0,96,0,0,690721,152.62,,2026-10-04T05:06:35+00:00
+build,tema_slope-ES-tf15,grid,tema_slope,ES,15,build,,,0,96,0,0,427695,130.55,,2026-10-04T05:08:47+00:00
+build,tema_slope-ES-tf30,grid,tema_slope,ES,30,build,,,0,96,0,0,222066,114.74,,2026-10-04T05:10:43+00:00
+build,rsi2-ES-tf1,grid,rsi2,ES,1,build,,,0,96,0,0,900293,216.8,,2026-10-04T05:14:23+00:00
+build,rsi2-ES-tf5,grid,rsi2,ES,5,build,,,0,96,0,0,746288,154.78,,2026-10-04T05:17:01+00:00
+build,rsi2-ES-tf15,grid,rsi2,ES,15,build,,,0,96,0,0,533068,136.86,,2026-10-04T05:19:20+00:00
+build,rsi2-ES-tf30,grid,rsi2,ES,30,build,,,0,96,0,0,338441,126.39,,2026-10-04T05:21:28+00:00
+build,mid_fade-ES-tf1,grid,mid_fade,ES,1,build,,,0,32,0,0,5248,19.37,,2026-10-04T05:21:48+00:00
+build,mid_fade-ES-tf5,grid,mid_fade,ES,5,build,,,0,32,0,0,5248,9.63,,2026-10-04T05:21:58+00:00
+build,mid_fade-ES-tf15,grid,mid_fade,ES,15,build,,,0,32,0,0,5248,7.69,,2026-10-04T05:22:06+00:00
+build,mid_fade-ES-tf30,grid,mid_fade,ES,30,build,,,0,32,0,0,5248,7.42,,2026-10-04T05:22:14+00:00
+null,c1-GC-tf1,null,random,GC,1,build,c1,,0,0,64,0,545612,135.84,,2026-10-04T05:24:32+00:00
+null,c1-GC-tf5,null,random,GC,5,build,c1,,0,0,64,0,485104,102.06,,2026-10-04T05:26:16+00:00
+null,c1-GC-tf15,null,random,GC,15,build,c1,,0,0,64,0,400970,94.29,,2026-10-04T05:27:52+00:00
+null,c1-GC-tf30,null,random,GC,30,build,c1,,0,0,64,0,304800,89.54,,2026-10-04T05:29:22+00:00
+build,straddle_t_1800-GC-tf30,grid,straddle_t_1800,GC,30,build,,,0,160,0,0,45504,57.7,,2026-10-04T05:30:21+00:00
+null,straddle_t_1800-GC-tf30-shift,null,straddle_t_1800,GC,30,build,shift,,0,0,320,0,96352,57.7,,2026-10-04T05:30:21+00:00
+build,straddle_t_2000-GC-tf30,grid,straddle_t_2000,GC,30,build,,,0,160,0,0,66720,73.32,,2026-10-04T05:31:35+00:00
+null,straddle_t_2000-GC-tf30-shift,null,straddle_t_2000,GC,30,build,shift,,0,0,320,0,108736,73.32,,2026-10-04T05:31:35+00:00
+build,straddle_t_0000-GC-tf30,grid,straddle_t_0000,GC,30,build,,,0,160,0,0,52384,51.23,,2026-10-04T05:32:27+00:00
+null,straddle_t_0000-GC-tf30-shift,null,straddle_t_0000,GC,30,build,shift,,0,0,320,0,119232,51.23,,2026-10-04T05:32:27+00:00
+build,straddle_t_0200-GC-tf30,grid,straddle_t_0200,GC,30,build,,,0,160,0,0,70048,58.08,,2026-10-04T05:33:26+00:00
+null,straddle_t_0200-GC-tf30-shift,null,straddle_t_0200,GC,30,build,shift,,0,0,320,0,132096,58.08,,2026-10-04T05:33:26+00:00
+build,straddle_t_0300-GC-tf30,grid,straddle_t_0300,GC,30,build,,,0,160,0,0,75392,80.44,,2026-10-04T05:34:47+00:00
+null,straddle_t_0300-GC-tf30-shift,null,straddle_t_0300,GC,30,build,shift,,0,0,320,0,144288,80.44,,2026-10-04T05:34:47+00:00
+build,straddle_t_0830-GC-tf30,grid,straddle_t_0830,GC,30,build,,,0,160,0,0,83872,83.36,,2026-10-04T05:36:11+00:00
+null,straddle_t_0830-GC-tf30-shift,null,straddle_t_0830,GC,30,build,shift,,0,0,320,0,165088,83.36,,2026-10-04T05:36:11+00:00
+build,straddle_t_0930-GC-tf30,grid,straddle_t_0930,GC,30,build,,,0,160,0,0,87168,92.76,,2026-10-04T05:37:45+00:00
+null,straddle_t_0930-GC-tf30-shift,null,straddle_t_0930,GC,30,build,shift,,0,0,320,0,166592,92.76,,2026-10-04T05:37:45+00:00
+build,straddle_t_1105-GC-tf30,grid,straddle_t_1105,GC,30,build,,,0,160,0,0,70368,104.9,,2026-10-04T05:39:31+00:00
+null,straddle_t_1105-GC-tf30-shift,null,straddle_t_1105,GC,30,build,shift,,0,0,320,0,142176,104.9,,2026-10-04T05:39:31+00:00
+build,straddle_t_1330-GC-tf30,grid,straddle_t_1330,GC,30,build,,,0,160,0,0,53088,110.24,,2026-10-04T05:41:22+00:00
+null,straddle_t_1330-GC-tf30-shift,null,straddle_t_1330,GC,30,build,shift,,0,0,320,0,117056,110.24,,2026-10-04T05:41:22+00:00
+build,orb-GC-tf1,grid,orb,GC,1,build,,,0,96,0,0,368352,179.49,,2026-10-04T05:44:23+00:00
+build,orb-GC-tf5,grid,orb,GC,5,build,,,0,96,0,0,331840,131.01,,2026-10-04T05:46:35+00:00
+build,orb-GC-tf15,grid,orb,GC,15,build,,,0,96,0,0,260128,113.9,,2026-10-04T05:48:30+00:00
+build,orb-GC-tf30,grid,orb,GC,30,build,,,0,96,0,0,260128,112.44,,2026-10-04T05:50:24+00:00
+build,straddle-GC-tf1,grid,straddle,GC,1,build,,,0,96,0,0,271200,160.89,,2026-10-04T05:53:06+00:00
+build,straddle-GC-tf5,grid,straddle,GC,5,build,,,0,96,0,0,270816,118.14,,2026-10-04T05:55:05+00:00
+build,straddle-GC-tf15,grid,straddle,GC,15,build,,,0,96,0,0,263744,112.08,,2026-10-04T05:56:58+00:00
+build,straddle-GC-tf30,grid,straddle,GC,30,build,,,0,96,0,0,253728,110.54,,2026-10-04T05:58:50+00:00
+build,donchian-GC-tf1,grid,donchian,GC,1,build,,,0,128,0,0,1010285,262.75,,2026-10-04T06:03:17+00:00
+build,donchian-GC-tf5,grid,donchian,GC,5,build,,,0,128,0,0,520820,174.94,,2026-10-04T06:06:14+00:00
+build,donchian-GC-tf15,grid,donchian,GC,15,build,,,0,128,0,0,172846,136.85,,2026-10-04T06:08:32+00:00
+build,donchian-GC-tf30,grid,donchian,GC,30,build,,,0,128,0,0,52472,126.82,,2026-10-04T06:10:39+00:00
+build,squeeze-GC-tf1,grid,squeeze,GC,1,build,,,0,96,0,0,657821,220.18,,2026-10-04T06:14:22+00:00
+build,squeeze-GC-tf5,grid,squeeze,GC,5,build,,,0,96,0,0,423215,141.41,,2026-10-04T06:16:45+00:00
+build,squeeze-GC-tf15,grid,squeeze,GC,15,build,,,0,96,0,0,217245,113.74,,2026-10-04T06:18:40+00:00
+build,squeeze-GC-tf30,grid,squeeze,GC,30,build,,,0,96,0,0,118055,102.5,,2026-10-04T06:20:23+00:00
+build,ib-GC-tf1,grid,ib,GC,1,build,,,0,64,0,0,55348,60.22,,2026-10-04T06:21:24+00:00
+build,ib-GC-tf5,grid,ib,GC,5,build,,,0,64,0,0,44516,43.38,,2026-10-04T06:22:07+00:00
+build,ib-GC-tf15,grid,ib,GC,15,build,,,0,64,0,0,36276,39.96,,2026-10-04T06:22:48+00:00
+build,ib-GC-tf30,grid,ib,GC,30,build,,,0,64,0,0,32008,38.75,,2026-10-04T06:23:27+00:00
+build,lon_break-GC-tf1,grid,lon_break,GC,1,build,,,0,96,0,0,46848,25.99,,2026-10-04T06:23:53+00:00
+build,lon_break-GC-tf5,grid,lon_break,GC,5,build,,,0,96,0,0,46528,19.68,,2026-10-04T06:24:13+00:00
+build,lon_break-GC-tf15,grid,lon_break,GC,15,build,,,0,96,0,0,45792,18.82,,2026-10-04T06:24:33+00:00
+build,lon_break-GC-tf30,grid,lon_break,GC,30,build,,,0,96,0,0,44736,18.66,,2026-10-04T06:24:52+00:00
+build,ema_pullback-GC-tf1,grid,ema_pullback,GC,1,build,,,0,32,0,0,258814,67.13,,2026-10-04T06:26:00+00:00
+build,ema_pullback-GC-tf5,grid,ema_pullback,GC,5,build,,,0,32,0,0,179062,47.56,,2026-10-04T06:26:49+00:00
+build,ema_pullback-GC-tf15,grid,ema_pullback,GC,15,build,,,0,32,0,0,87974,37.93,,2026-10-04T06:27:27+00:00
+build,ema_pullback-GC-tf30,grid,ema_pullback,GC,30,build,,,0,32,0,0,26719,31.65,,2026-10-04T06:27:59+00:00
+build,first_bar_mom-GC-tf1,grid,first_bar_mom,GC,1,build,,,0,96,0,0,112128,149.39,,2026-10-04T06:30:29+00:00
+build,first_bar_mom-GC-tf5,grid,first_bar_mom,GC,5,build,,,0,96,0,0,94400,106.56,,2026-10-04T06:32:16+00:00
+build,first_bar_mom-GC-tf15,grid,first_bar_mom,GC,15,build,,,0,96,0,0,111808,101.13,,2026-10-04T06:33:58+00:00
+build,first_bar_mom-GC-tf30,grid,first_bar_mom,GC,30,build,,,0,96,0,0,113344,99.3,,2026-10-04T06:35:38+00:00
+build,tod_drift-GC-tf1,grid,tod_drift,GC,1,build,,,0,256,0,0,904000,381.69,,2026-10-04T06:42:02+00:00
+build,tod_drift-GC-tf5,grid,tod_drift,GC,5,build,,,0,256,0,0,903232,278.23,,2026-10-04T06:46:43+00:00
+build,tod_drift-GC-tf15,grid,tod_drift,GC,15,build,,,0,256,0,0,759360,265.51,,2026-10-04T06:51:11+00:00
+build,tod_drift-GC-tf30,grid,tod_drift,GC,30,build,,,0,256,0,0,687040,270.07,,2026-10-04T06:55:43+00:00
+build,vwap_band-GC-tf1,grid,vwap_band,GC,1,build,,,0,128,0,0,680338,249.97,,2026-10-04T06:59:56+00:00
+build,vwap_band-GC-tf5,grid,vwap_band,GC,5,build,,,0,128,0,0,383081,165.27,,2026-10-04T07:02:43+00:00
+build,vwap_band-GC-tf15,grid,vwap_band,GC,15,build,,,0,128,0,0,187686,142.05,,2026-10-04T07:05:06+00:00
+build,vwap_band-GC-tf30,grid,vwap_band,GC,30,build,,,0,128,0,0,76396,128.45,,2026-10-04T07:07:15+00:00
+build,vwap_z-GC-tf1,grid,vwap_z,GC,1,build,,,0,128,0,0,689112,242.21,,2026-10-04T07:11:20+00:00
+build,vwap_z-GC-tf5,grid,vwap_z,GC,5,build,,,0,128,0,0,406632,163.58,,2026-10-04T07:14:05+00:00
+build,vwap_z-GC-tf15,grid,vwap_z,GC,15,build,,,0,128,0,0,222195,143.36,,2026-10-04T07:16:30+00:00
+build,vwap_z-GC-tf30,grid,vwap_z,GC,30,build,,,0,128,0,0,104894,130.2,,2026-10-04T07:18:41+00:00
+build,vwap_flip-GC-tf1,grid,vwap_flip,GC,1,build,,,0,96,0,0,671979,195.47,,2026-10-04T07:21:59+00:00
+build,vwap_flip-GC-tf5,grid,vwap_flip,GC,5,build,,,0,96,0,0,517164,140.59,,2026-10-04T07:24:21+00:00
+build,vwap_flip-GC-tf15,grid,vwap_flip,GC,15,build,,,0,96,0,0,321181,123.68,,2026-10-04T07:26:26+00:00
+build,vwap_flip-GC-tf30,grid,vwap_flip,GC,30,build,,,0,96,0,0,145901,106.41,,2026-10-04T07:28:14+00:00
+build,sweep_rev-GC-tf1,grid,sweep_rev,GC,1,build,,,0,96,0,0,174010,157.54,,2026-10-04T07:30:52+00:00
+build,sweep_rev-GC-tf5,grid,sweep_rev,GC,5,build,,,0,96,0,0,158980,112.48,,2026-10-04T07:32:45+00:00
+build,sweep_rev-GC-tf15,grid,sweep_rev,GC,15,build,,,0,96,0,0,141065,102.49,,2026-10-04T07:34:29+00:00
+build,sweep_rev-GC-tf30,grid,sweep_rev,GC,30,build,,,0,96,0,0,115555,99.04,,2026-10-04T07:36:08+00:00
+build,vwap_ema_x-GC-tf1,grid,vwap_ema_x,GC,1,build,,,0,192,0,0,987493,395.44,,2026-10-04T07:42:47+00:00
+build,vwap_ema_x-GC-tf5,grid,vwap_ema_x,GC,5,build,,,0,192,0,0,595867,259.39,,2026-10-04T07:47:09+00:00
+build,vwap_ema_x-GC-tf15,grid,vwap_ema_x,GC,15,build,,,0,192,0,0,348054,223.02,,2026-10-04T07:50:53+00:00
+build,gap-GC-tf1,grid,gap,GC,1,build,,,0,64,0,0,26560,19.01,,2026-10-04T07:51:13+00:00
+build,gap-GC-tf5,grid,gap,GC,5,build,,,0,64,0,0,26528,12.78,,2026-10-04T07:51:26+00:00
+build,gap-GC-tf15,grid,gap,GC,15,build,,,0,64,0,0,26272,12.36,,2026-10-04T07:51:39+00:00
+build,gap-GC-tf30,grid,gap,GC,30,build,,,0,64,0,0,25952,12.37,,2026-10-04T07:51:51+00:00
+build,pinbar-GC-tf1,grid,pinbar,GC,1,build,,,0,96,0,0,408463,176.56,,2026-10-04T07:54:50+00:00
+build,pinbar-GC-tf5,grid,pinbar,GC,5,build,,,0,96,0,0,204706,116.22,,2026-10-04T07:56:47+00:00
+build,pinbar-GC-tf15,grid,pinbar,GC,15,build,,,0,96,0,0,98573,100.99,,2026-10-04T07:58:28+00:00
+build,pinbar-GC-tf30,grid,pinbar,GC,30,build,,,0,96,0,0,51217,94.93,,2026-10-04T08:00:04+00:00
+build,supertrend-GC-tf1,grid,supertrend,GC,1,build,,,0,32,0,0,224228,70.32,,2026-10-04T08:01:15+00:00
+build,supertrend-GC-tf5,grid,supertrend,GC,5,build,,,0,32,0,0,93843,42.74,,2026-10-04T08:01:59+00:00
+build,supertrend-GC-tf15,grid,supertrend,GC,15,build,,,0,32,0,0,35887,33.7,,2026-10-04T08:02:33+00:00
+build,supertrend-GC-tf30,grid,supertrend,GC,30,build,,,0,32,0,0,11776,30.76,,2026-10-04T08:03:04+00:00
+build,ema_ribbon-GC-tf1,grid,ema_ribbon,GC,1,build,,,0,32,0,0,227770,69.5,,2026-10-04T08:04:14+00:00
+build,ema_ribbon-GC-tf5,grid,ema_ribbon,GC,5,build,,,0,32,0,0,109381,43.42,,2026-10-04T08:04:58+00:00
+build,ema_ribbon-GC-tf15,grid,ema_ribbon,GC,15,build,,,0,32,0,0,40514,34.27,,2026-10-04T08:05:33+00:00
+build,ema_ribbon-GC-tf30,grid,ema_ribbon,GC,30,build,,,0,32,0,0,14760,30.61,,2026-10-04T08:06:04+00:00
+build,tema_slope-GC-tf1,grid,tema_slope,GC,1,build,,,0,96,0,0,794701,215.67,,2026-10-04T08:09:43+00:00
+build,tema_slope-GC-tf5,grid,tema_slope,GC,5,build,,,0,96,0,0,595707,144.89,,2026-10-04T08:12:10+00:00
+build,tema_slope-GC-tf15,grid,tema_slope,GC,15,build,,,0,96,0,0,382428,124.76,,2026-10-04T08:14:17+00:00
+build,tema_slope-GC-tf30,grid,tema_slope,GC,30,build,,,0,96,0,0,195787,105.9,,2026-10-04T08:16:03+00:00
+build,rsi2-GC-tf1,grid,rsi2,GC,1,build,,,0,96,0,0,809326,211.47,,2026-10-04T08:19:38+00:00
+build,rsi2-GC-tf5,grid,rsi2,GC,5,build,,,0,96,0,0,659836,148.16,,2026-10-04T08:22:09+00:00
+build,rsi2-GC-tf15,grid,rsi2,GC,15,build,,,0,96,0,0,468520,129.27,,2026-10-04T08:24:20+00:00
+build,rsi2-GC-tf30,grid,rsi2,GC,30,build,,,0,96,0,0,301311,117.78,,2026-10-04T08:26:19+00:00
+build,mid_fade-GC-tf1,grid,mid_fade,GC,1,build,,,0,32,0,0,4704,17.83,,2026-10-04T08:26:38+00:00
+build,mid_fade-GC-tf5,grid,mid_fade,GC,5,build,,,0,32,0,0,4704,8.48,,2026-10-04T08:26:46+00:00
+build,mid_fade-GC-tf15,grid,mid_fade,GC,15,build,,,0,32,0,0,4704,7.06,,2026-10-04T08:26:54+00:00
+build,mid_fade-GC-tf30,grid,mid_fade,GC,30,build,,,0,32,0,0,4704,6.81,,2026-10-04T08:27:01+00:00
+null_pick,orb-NQ-tf1-pre-pick,null,orb,NQ,1,pick,pick,,0,0,96,0,21248,9.38,admit: session pre only,2026-10-04T08:35:31+00:00
+null_pick,donchian-NQ-tf30-nyam-pick,null,donchian,NQ,30,pick,pick,,0,0,128,0,8306,8.67,admit: session nyam only,2026-10-04T08:35:39+00:00
+null_pick,donchian-NQ-tf30-pm-pick,null,donchian,NQ,30,pick,pick,,0,0,128,0,7281,12.17,admit: session pm only,2026-10-04T08:35:52+00:00
+null_pick,donchian-ES-tf30-pm-pick,null,donchian,ES,30,pick,pick,,0,0,128,0,8305,12.35,admit: session pm only,2026-10-04T08:36:04+00:00
+null_pick,first_bar_mom-GC-tf5-pm-pick,null,first_bar_mom,GC,5,pick,pick,,0,0,96,0,2944,9.77,admit: session pm only,2026-10-04T08:36:14+00:00
+null_pick,c1-NQ-tf1-pre-pick,null,random,NQ,1,pick,c1,,0,0,64,0,34748,7.04,admit: session pre only,2026-10-04T08:36:21+00:00
+null_pick,c1-NQ-tf30-nyam-pick,null,random,NQ,30,pick,c1,,0,0,64,0,15072,5.41,admit: session nyam only,2026-10-04T08:36:27+00:00
+null_pick,c1-NQ-tf30-pm-pick,null,random,NQ,30,pick,c1,,0,0,64,0,22197,6.89,admit: session pm only,2026-10-04T08:36:34+00:00
+null_pick,c1-ES-tf30-pm-pick,null,random,ES,30,pick,c1,,0,0,64,0,21427,6.9,admit: session pm only,2026-10-04T08:36:41+00:00
+null_pick,c1-GC-tf5-pm-pick,null,random,GC,5,pick,c1,,0,0,64,0,26743,7.31,admit: session pm only,2026-10-04T08:36:48+00:00
+null_stress,donchian-NQ-tf30-nyam-build-stress,null,donchian,NQ,30,build,stress,,0,0,54,0,17543,9.25,admit: session nyam only,2026-10-04T08:37:26+00:00
+null_stress,donchian-NQ-tf30-nyam-pick-stress,null,donchian,NQ,30,pick,stress,,0,0,54,0,7038,4.23,admit: session nyam only,2026-10-04T08:37:31+00:00
+null_stress,first_bar_mom-GC-tf5-pm-build-stress,null,first_bar_mom,GC,5,build,stress,,0,0,17,0,812,4.06,admit: session pm only,2026-10-04T08:37:35+00:00
+null_stress,first_bar_mom-GC-tf5-pm-pick-stress,null,first_bar_mom,GC,5,pick,stress,,0,0,17,0,179,1.93,admit: session pm only,2026-10-04T08:37:37+00:00
+null_stress,orb-NQ-tf1-pre-build-stress,null,orb,NQ,1,build,stress,,0,0,53,0,27972,12.54,admit: session pre only,2026-10-04T08:37:49+00:00
+null_stress,orb-NQ-tf1-pre-pick-stress,null,orb,NQ,1,pick,stress,,0,0,53,0,12344,5.75,admit: session pre only,2026-10-04T08:37:55+00:00
+member,donchian_NQ_tf30_nyam-n10_pct0p2-r2-build,run,donchian,NQ,30,build,,,1,0,0,0,473,0.88,,2026-10-04T08:39:14+00:00
+member,donchian_NQ_tf30_nyam-n10_pct0p2-r2-build-stress,run,donchian,NQ,30,build,stress,,1,0,0,0,475,0.84,,2026-10-04T08:39:15+00:00
+member,donchian_NQ_tf30_nyam-n10_pct0p2-r2-pick,run,donchian,NQ,30,pick,,,1,0,0,0,174,0.55,,2026-10-04T08:39:15+00:00
+member,donchian_NQ_tf30_nyam-n10_pct0p2-r2-pick-stress,run,donchian,NQ,30,pick,stress,,1,0,0,0,174,0.55,,2026-10-04T08:39:16+00:00
+member,first_bar_mom_GC_tf5_pm-k2_pts3-r1-build,run,first_bar_mom,GC,5,build,,,1,0,0,0,12,0.65,,2026-10-04T08:39:17+00:00
+member,first_bar_mom_GC_tf5_pm-k2_pts3-r1-build-stress,run,first_bar_mom,GC,5,build,stress,,1,0,0,0,12,0.58,,2026-10-04T08:39:18+00:00
+member,first_bar_mom_GC_tf5_pm-k2_pts3-r1-pick,run,first_bar_mom,GC,5,pick,,,1,0,0,0,3,0.43,,2026-10-04T08:39:18+00:00
+member,first_bar_mom_GC_tf5_pm-k2_pts3-r1-pick-stress,run,first_bar_mom,GC,5,pick,stress,,1,0,0,0,3,0.43,,2026-10-04T08:39:19+00:00
+member,orb_NQ_tf1_pre-or_min5_atr1p5-r2-build,run,orb,NQ,1,build,,,1,0,0,0,567,0.89,,2026-10-04T08:39:20+00:00
+member,orb_NQ_tf1_pre-or_min5_atr1p5-r2-build-stress,run,orb,NQ,1,build,stress,,1,0,0,0,567,0.89,,2026-10-04T08:39:20+00:00
+member,orb_NQ_tf1_pre-or_min5_atr1p5-r2-pick,run,orb,NQ,1,pick,,,1,0,0,0,252,0.57,,2026-10-04T08:39:21+00:00
+member,orb_NQ_tf1_pre-or_min5_atr1p5-r2-pick-stress,run,orb,NQ,1,pick,stress,,1,0,0,0,252,0.57,,2026-10-04T08:39:22+00:00
+deepen_build,rsi2-NQ-tf30-eve-build-dirlong,grid,rsi2,NQ,30,build,,,0,96,0,0,35276,13.76,"stage 2a: session eve only, dir long",2026-10-04T09:11:11+00:00
+deepen_build,squeeze-NQ-tf30-pm-build-dirlong,grid,squeeze,NQ,30,build,,,0,96,0,0,12715,20.6,"stage 2a: session pm only, dir long",2026-10-04T09:11:32+00:00
+null_deepen,c1-NQ-tf30-eve-build-dirlong-poolpts20-r2,null,random,NQ,30,build,c1,,0,0,30,0,31351,5.7,"stage 2a: session eve only, dir long",2026-10-04T09:12:10+00:00
+deepen_pick,donchian-NQ-tf5-nyam-pick,grid,donchian,NQ,5,pick,,,0,128,0,0,54770,11.13,stage 2a: session nyam only,2026-10-04T09:12:40+00:00
+null_deepen,c1-NQ-tf5-nyam-pick,null,random,NQ,5,pick,c1,,0,0,64,0,39751,6.2,stage 2a: session nyam only,2026-10-04T09:12:46+00:00
+deepen_pick,rsi2-NQ-tf30-eve-pick-dirlong,grid,rsi2,NQ,30,pick,,,0,96,0,0,13991,6.29,"stage 2a: session eve only, dir long",2026-10-04T09:12:53+00:00
+null_deepen,c1-NQ-tf30-eve-pick,null,random,NQ,30,pick,c1,,0,0,64,0,25162,6.71,stage 2a: session eve only,2026-10-04T09:13:00+00:00
+null_deepen,c1-NQ-tf30-eve-pick-dirlong-poolpts20-r2,null,random,NQ,30,pick,c1,,0,0,30,0,13691,2.79,"stage 2a: session eve only, dir long",2026-10-04T09:13:02+00:00
+deepen_stress,donchian-NQ-tf5-nyam-build-stress,grid,donchian,NQ,5,build,stress,,0,96,0,0,88843,19.54,stage 2a: session nyam only,2026-10-04T09:14:14+00:00
+deepen_stress,donchian-NQ-tf5-nyam-pick-stress,grid,donchian,NQ,5,pick,stress,,0,96,0,0,38119,8.96,stage 2a: session nyam only,2026-10-04T09:14:23+00:00
+member,donchian_NQ_tf5_nyam_vol_lo-n20_atr1p5-r1-build,run,donchian,NQ,5,build,,,1,0,0,0,1181,0.9,,2026-10-04T09:15:28+00:00
+member,donchian_NQ_tf5_nyam_vol_lo-n20_atr1p5-r1-build-stress,run,donchian,NQ,5,build,stress,,1,0,0,0,1176,0.86,,2026-10-04T09:15:29+00:00
+member,donchian_NQ_tf5_nyam_vol_lo-n20_atr1p5-r1-pick,run,donchian,NQ,5,pick,,,1,0,0,0,519,0.57,,2026-10-04T09:15:30+00:00
+member,donchian_NQ_tf5_nyam_vol_lo-n20_atr1p5-r1-pick-stress,run,donchian,NQ,5,pick,stress,,1,0,0,0,517,0.56,,2026-10-04T09:15:30+00:00
+member,donchian_NQ_tf5_nyam_vol_lo-n60_pts10-r0-build,run,donchian,NQ,5,build,,,1,0,0,0,894,0.89,,2026-10-04T09:15:31+00:00
+member,donchian_NQ_tf5_nyam_vol_lo-n60_pts10-r0-build-stress,run,donchian,NQ,5,build,stress,,1,0,0,0,922,0.88,,2026-10-04T09:15:32+00:00
+member,donchian_NQ_tf5_nyam_vol_lo-n60_pts10-r0-pick,run,donchian,NQ,5,pick,,,1,0,0,0,385,0.56,,2026-10-04T09:15:33+00:00
+member,donchian_NQ_tf5_nyam_vol_lo-n60_pts10-r0-pick-stress,run,donchian,NQ,5,pick,stress,,1,0,0,0,391,0.56,,2026-10-04T09:15:34+00:00
+deepen_pick,straddle_t_0830-NQ-tf30-pre-pick,grid,straddle_t_0830,NQ,30,pick,,,0,160,0,0,37920,10.67,stage 2a: session pre only,2026-10-04T09:21:58+00:00
+deepen_stress,straddle_t_0830-NQ-tf30-pre-build-stress,grid,straddle_t_0830,NQ,30,build,stress,,0,97,0,0,50035,14.3,stage 2a: session pre only,2026-10-04T09:23:23+00:00
+deepen_stress,straddle_t_0830-NQ-tf30-pre-pick-stress,grid,straddle_t_0830,NQ,30,pick,stress,,0,97,0,0,22624,6.5,stage 2a: session pre only,2026-10-04T09:23:30+00:00
+member,straddle_t_0830_NQ_tf30_pre_news_only-offatr0p25_pct0p1-r2-build,run,straddle_t_0830,NQ,30,build,,,1,0,0,0,568,0.84,,2026-10-04T09:23:31+00:00
+member,straddle_t_0830_NQ_tf30_pre_news_only-offatr0p25_pct0p1-r2-build-stress,run,straddle_t_0830,NQ,30,build,stress,,1,0,0,0,568,0.84,,2026-10-04T09:23:32+00:00
+member,straddle_t_0830_NQ_tf30_pre_news_only-offatr0p25_pct0p1-r2-pick,run,straddle_t_0830,NQ,30,pick,,,1,0,0,0,252,0.55,,2026-10-04T09:23:32+00:00
+member,straddle_t_0830_NQ_tf30_pre_news_only-offatr0p25_pct0p1-r2-pick-stress,run,straddle_t_0830,NQ,30,pick,stress,,1,0,0,0,252,0.54,,2026-10-04T09:23:33+00:00
+build,late_mom-NQ-tf30,grid,late_mom,NQ,30,build,,,0,288,0,0,127808,188.61,,2026-10-04T10:39:14+00:00
+null,late_mom-NQ-tf30-shift,null,late_mom,NQ,30,build,shift,,0,0,576,0,255616,188.61,,2026-10-04T10:39:15+00:00
+build,open_fade-NQ-tf1,grid,open_fade,NQ,1,build,,,0,120,0,0,175406,38.61,,2026-10-04T10:39:54+00:00
+build,open_fade-NQ-tf5,grid,open_fade,NQ,5,build,,,0,120,0,0,81430,27.15,,2026-10-04T10:40:21+00:00
+build,orb_confirm-NQ-tf1,grid,orb_confirm,NQ,1,build,,,0,198,0,0,163520,177.77,,2026-10-04T10:43:19+00:00
+build,orb_confirm-NQ-tf5,grid,orb_confirm,NQ,5,build,,,0,198,0,0,152044,129.98,,2026-10-04T10:45:30+00:00
+build,orb_confirm-NQ-tf15,grid,orb_confirm,NQ,15,build,,,0,198,0,0,137354,120.38,,2026-10-04T10:47:31+00:00
+build,straddle_tight_0830-NQ-tf30,grid,straddle_tight_0830,NQ,30,build,,,0,27,0,0,14328,11.42,,2026-10-04T10:47:42+00:00
+null,straddle_tight_0830-NQ-tf30-shift,null,straddle_tight_0830,NQ,30,build,shift,,0,0,54,0,26316,11.42,,2026-10-04T10:47:42+00:00
+build,straddle_tight_0930-NQ-tf30,grid,straddle_tight_0930,NQ,30,build,,,0,27,0,0,15336,13.02,,2026-10-04T10:47:56+00:00
+null,straddle_tight_0930-NQ-tf30-shift,null,straddle_tight_0930,NQ,30,build,shift,,0,0,54,0,28737,13.02,,2026-10-04T10:47:56+00:00
+build,straddle_tight_1000-NQ-tf30,grid,straddle_tight_1000,NQ,30,build,,,0,27,0,0,15309,13.08,,2026-10-04T10:48:09+00:00
+null,straddle_tight_1000-NQ-tf30-shift,null,straddle_tight_1000,NQ,30,build,shift,,0,0,54,0,29322,13.08,,2026-10-04T10:48:09+00:00
+build,va_reclaim-NQ-tf1,grid,va_reclaim,NQ,1,build,,,0,96,0,0,169351,163.37,,2026-10-04T10:50:53+00:00
+build,va_reclaim-NQ-tf5,grid,va_reclaim,NQ,5,build,,,0,96,0,0,146379,113.94,,2026-10-04T10:52:47+00:00
+build,va_reclaim-NQ-tf15,grid,va_reclaim,NQ,15,build,,,0,96,0,0,122745,104.33,,2026-10-04T10:54:32+00:00
+build,va_reclaim-NQ-tf30,grid,va_reclaim,NQ,30,build,,,0,96,0,0,96979,100.48,,2026-10-04T10:56:13+00:00
+build,vol_spike_break-NQ-tf1,grid,vol_spike_break,NQ,1,build,,,0,96,0,0,520799,174.85,,2026-10-04T10:59:09+00:00
+build,vol_spike_break-NQ-tf5,grid,vol_spike_break,NQ,5,build,,,0,96,0,0,246588,118.33,,2026-10-04T11:01:09+00:00
+build,vol_spike_break-NQ-tf15,grid,vol_spike_break,NQ,15,build,,,0,96,0,0,108269,99.9,,2026-10-04T11:02:49+00:00
+build,vol_spike_break-NQ-tf30,grid,vol_spike_break,NQ,30,build,,,0,96,0,0,55607,95.47,,2026-10-04T11:04:25+00:00
+build,vwap_trend_pull-NQ-tf1,grid,vwap_trend_pull,NQ,1,build,,,0,96,0,0,331023,106.14,,2026-10-04T11:06:12+00:00
+build,vwap_trend_pull-NQ-tf5,grid,vwap_trend_pull,NQ,5,build,,,0,96,0,0,229171,72.56,,2026-10-04T11:07:25+00:00
+build,vwap_trend_pull-NQ-tf15,grid,vwap_trend_pull,NQ,15,build,,,0,99,0,0,125051,64.91,,2026-10-04T11:08:31+00:00
+build,vwap_trend_pull-NQ-tf30,grid,vwap_trend_pull,NQ,30,build,,,0,96,0,0,38047,57.77,,2026-10-04T11:09:28+00:00
+build,late_mom-ES-tf30,grid,late_mom,ES,30,build,,,0,288,0,0,117376,195.76,,2026-10-04T11:12:45+00:00
+null,late_mom-ES-tf30-shift,null,late_mom,ES,30,build,shift,,0,0,576,0,234752,195.76,,2026-10-04T11:12:45+00:00
+build,open_fade-ES-tf1,grid,open_fade,ES,1,build,,,0,120,0,0,163500,39.87,,2026-10-04T11:13:25+00:00
+build,open_fade-ES-tf5,grid,open_fade,ES,5,build,,,0,120,0,0,72780,27.51,,2026-10-04T11:13:53+00:00
+build,orb_confirm-ES-tf1,grid,orb_confirm,ES,1,build,,,0,198,0,0,170106,178.72,,2026-10-04T11:16:53+00:00
+build,orb_confirm-ES-tf5,grid,orb_confirm,ES,5,build,,,0,198,0,0,157140,132.66,,2026-10-04T11:19:06+00:00
+build,orb_confirm-ES-tf15,grid,orb_confirm,ES,15,build,,,0,198,0,0,142003,122.97,,2026-10-04T11:21:09+00:00
+build,straddle_tight_0830-ES-tf30,grid,straddle_tight_0830,ES,30,build,,,0,27,0,0,14346,11.08,,2026-10-04T11:21:20+00:00
+null,straddle_tight_0830-ES-tf30-shift,null,straddle_tight_0830,ES,30,build,shift,,0,0,54,0,26316,11.08,,2026-10-04T11:21:20+00:00
+build,straddle_tight_0930-ES-tf30,grid,straddle_tight_0930,ES,30,build,,,0,27,0,0,15408,13.12,,2026-10-04T11:21:34+00:00
+null,straddle_tight_0930-ES-tf30-shift,null,straddle_tight_0930,ES,30,build,shift,,0,0,54,0,28611,13.12,,2026-10-04T11:21:34+00:00
+build,straddle_tight_1000-ES-tf30,grid,straddle_tight_1000,ES,30,build,,,0,27,0,0,15309,12.87,,2026-10-04T11:21:47+00:00
+null,straddle_tight_1000-ES-tf30-shift,null,straddle_tight_1000,ES,30,build,shift,,0,0,54,0,29196,12.87,,2026-10-04T11:21:47+00:00
+build,va_reclaim-ES-tf1,grid,va_reclaim,ES,1,build,,,0,96,0,0,168655,168.15,,2026-10-04T11:24:35+00:00
+build,va_reclaim-ES-tf5,grid,va_reclaim,ES,5,build,,,0,96,0,0,143639,116.73,,2026-10-04T11:26:33+00:00
+build,va_reclaim-ES-tf15,grid,va_reclaim,ES,15,build,,,0,96,0,0,119866,106.03,,2026-10-04T11:28:19+00:00
+build,va_reclaim-ES-tf30,grid,va_reclaim,ES,30,build,,,0,96,0,0,95439,102.12,,2026-10-04T11:30:01+00:00
+build,vol_spike_break-ES-tf1,grid,vol_spike_break,ES,1,build,,,0,96,0,0,502147,180.43,,2026-10-04T11:33:04+00:00
+build,vol_spike_break-ES-tf5,grid,vol_spike_break,ES,5,build,,,0,96,0,0,241081,121.83,,2026-10-04T11:35:06+00:00
+build,vol_spike_break-ES-tf15,grid,vol_spike_break,ES,15,build,,,0,96,0,0,107870,102.61,,2026-10-04T11:36:49+00:00
+build,vol_spike_break-ES-tf30,grid,vol_spike_break,ES,30,build,,,0,96,0,0,56394,96.68,,2026-10-04T11:38:26+00:00
+build,vwap_trend_pull-ES-tf1,grid,vwap_trend_pull,ES,1,build,,,0,96,0,0,302847,107.72,,2026-10-04T11:40:15+00:00
+build,vwap_trend_pull-ES-tf5,grid,vwap_trend_pull,ES,5,build,,,0,96,0,0,209129,72.89,,2026-10-04T11:41:28+00:00
+build,vwap_trend_pull-ES-tf15,grid,vwap_trend_pull,ES,15,build,,,0,96,0,0,107120,63.3,,2026-10-04T11:42:32+00:00
+build,vwap_trend_pull-ES-tf30,grid,vwap_trend_pull,ES,30,build,,,0,96,0,0,31375,57.97,,2026-10-04T11:43:30+00:00
+build,late_mom-GC-tf30,grid,late_mom,GC,30,build,,,0,288,0,0,113792,182.33,,2026-10-04T11:46:33+00:00
+null,late_mom-GC-tf30-shift,null,late_mom,GC,30,build,shift,,0,0,576,0,227584,182.33,,2026-10-04T11:46:33+00:00
+build,open_fade-GC-tf1,grid,open_fade,GC,1,build,,,0,120,0,0,126167,40.59,,2026-10-04T11:47:14+00:00
+build,open_fade-GC-tf5,grid,open_fade,GC,5,build,,,0,120,0,0,59539,27.66,,2026-10-04T11:47:42+00:00
+build,orb_confirm-GC-tf1,grid,orb_confirm,GC,1,build,,,0,198,0,0,148801,175.2,,2026-10-04T11:50:38+00:00
+build,orb_confirm-GC-tf5,grid,orb_confirm,GC,5,build,,,0,198,0,0,138239,126.41,,2026-10-04T11:52:45+00:00
+build,orb_confirm-GC-tf15,grid,orb_confirm,GC,15,build,,,0,198,0,0,122595,118.31,,2026-10-04T11:54:44+00:00
+build,straddle_tight_0830-GC-tf30,grid,straddle_tight_0830,GC,30,build,,,0,27,0,0,13689,10.54,,2026-10-04T11:54:54+00:00
+null,straddle_tight_0830-GC-tf30-shift,null,straddle_tight_0830,GC,30,build,shift,,0,0,54,0,20943,10.54,,2026-10-04T11:54:54+00:00
+build,straddle_tight_0930-GC-tf30,grid,straddle_tight_0930,GC,30,build,,,0,27,0,0,13932,11.96,,2026-10-04T11:55:06+00:00
+null,straddle_tight_0930-GC-tf30-shift,null,straddle_tight_0930,GC,30,build,shift,,0,0,54,0,24066,11.96,,2026-10-04T11:55:06+00:00
+build,straddle_tight_1000-GC-tf30,grid,straddle_tight_1000,GC,30,build,,,0,27,0,0,14031,12.5,,2026-10-04T11:55:19+00:00
+null,straddle_tight_1000-GC-tf30-shift,null,straddle_tight_1000,GC,30,build,shift,,0,0,54,0,24093,12.5,,2026-10-04T11:55:19+00:00
+build,va_reclaim-GC-tf1,grid,va_reclaim,GC,1,build,,,0,96,0,0,188751,169.71,,2026-10-04T11:58:09+00:00
+build,va_reclaim-GC-tf5,grid,va_reclaim,GC,5,build,,,0,96,0,0,163388,116.02,,2026-10-04T12:00:06+00:00
+build,va_reclaim-GC-tf15,grid,va_reclaim,GC,15,build,,,0,96,0,0,137332,104.56,,2026-10-04T12:01:51+00:00
+build,va_reclaim-GC-tf30,grid,va_reclaim,GC,30,build,,,0,96,0,0,106676,101.31,,2026-10-04T12:03:33+00:00
+build,vol_spike_break-GC-tf1,grid,vol_spike_break,GC,1,build,,,0,96,0,0,520042,180.46,,2026-10-04T12:06:35+00:00
+build,vol_spike_break-GC-tf5,grid,vol_spike_break,GC,5,build,,,0,96,0,0,229727,118.7,,2026-10-04T12:08:34+00:00
+build,vol_spike_break-GC-tf15,grid,vol_spike_break,GC,15,build,,,0,96,0,0,78855,96.8,,2026-10-04T12:10:12+00:00
+build,vol_spike_break-GC-tf30,grid,vol_spike_break,GC,30,build,,,0,96,0,0,18142,89.28,,2026-10-04T12:11:41+00:00
+build,vwap_trend_pull-GC-tf1,grid,vwap_trend_pull,GC,1,build,,,0,96,0,0,224275,105.91,,2026-10-04T12:13:28+00:00
+build,vwap_trend_pull-GC-tf5,grid,vwap_trend_pull,GC,5,build,,,0,96,0,0,147852,70.65,,2026-10-04T12:14:39+00:00
+build,vwap_trend_pull-GC-tf15,grid,vwap_trend_pull,GC,15,build,,,0,96,0,0,78462,60.09,,2026-10-04T12:15:39+00:00
+build,vwap_trend_pull-GC-tf30,grid,vwap_trend_pull,GC,30,build,,,0,96,0,0,21999,54.36,,2026-10-04T12:16:34+00:00
+r1_pick,vwap_trend_pull-NQ-tf5-pm-pick,grid,vwap_trend_pull,NQ,5,pick,pick,,0,96,0,0,31946,11.48,stage 2b admit: session pm only,2026-10-04T12:22:01+00:00
+null_r1_pick,c1-NQ-tf5-pm-pick,null,random,NQ,5,pick,c1,,0,0,64,0,35769,7.7,stage 2b admit: session pm only,2026-10-04T12:22:09+00:00
+r1_pick,vol_spike_break-NQ-tf30-pm-pick,grid,vol_spike_break,NQ,30,pick,pick,,0,96,0,0,4287,9.2,stage 2b admit: session pm only,2026-10-04T12:22:18+00:00
+null_r1_pick,c1-NQ-tf30-pm-pick,null,random,NQ,30,pick,c1,,0,0,64,0,22197,6.8,stage 2b admit: session pm only,2026-10-04T12:22:25+00:00
+r1_pick,straddle_tight_0830-NQ-tf30-pre-pick,grid,straddle_tight_0830,NQ,30,pick,pick,,0,27,0,0,6354,1.99,stage 2b admit: session pre only,2026-10-04T12:22:27+00:00
+null_r1_pick,straddle_tight_0830-NQ-tf30-pre-pick-shift,null,straddle_tight_0830,NQ,30,pick,shift,,0,0,54,0,11520,3.59,stage 2b admit: session pre only,2026-10-04T12:22:31+00:00
+r1_pick,straddle_tight_0830-GC-tf30-pre-pick,grid,straddle_tight_0830,GC,30,pick,pick,,0,27,0,0,6354,1.88,stage 2b admit: session pre only,2026-10-04T12:22:33+00:00
+null_r1_pick,straddle_tight_0830-GC-tf30-pre-pick-shift,null,straddle_tight_0830,GC,30,pick,shift,,0,0,54,0,10575,3.34,stage 2b admit: session pre only,2026-10-04T12:22:36+00:00
+r1_stress,straddle_tight_0830-GC-tf30-pre-build-stress,grid,straddle_tight_0830,GC,30,build,stress,,0,19,0,0,9907,2.56,stage 2b admit: session pre only,2026-10-04T12:23:18+00:00
+r1_stress,straddle_tight_0830-GC-tf30-pre-pick-stress,grid,straddle_tight_0830,GC,30,pick,stress,,0,19,0,0,4562,1.31,stage 2b admit: session pre only,2026-10-04T12:23:19+00:00
+r1_stress,straddle_tight_0830-NQ-tf30-pre-build-stress,grid,straddle_tight_0830,NQ,30,build,stress,,0,22,0,0,11604,3.49,stage 2b admit: session pre only,2026-10-04T12:23:23+00:00
+r1_stress,straddle_tight_0830-NQ-tf30-pre-pick-stress,grid,straddle_tight_0830,NQ,30,pick,stress,,0,22,0,0,5144,1.68,stage 2b admit: session pre only,2026-10-04T12:23:24+00:00
+r1_stress,vwap_trend_pull-NQ-tf5-pm-build-stress,grid,vwap_trend_pull,NQ,5,build,stress,,0,56,0,0,44493,15.53,stage 2b admit: session pm only,2026-10-04T12:23:40+00:00
+r1_stress,vwap_trend_pull-NQ-tf5-pm-pick-stress,grid,vwap_trend_pull,NQ,5,pick,stress,,0,56,0,0,16354,7.1,stage 2b admit: session pm only,2026-10-04T12:23:47+00:00
+member,straddle_tight_0830_NQ_tf30_pre-offB_pts5-r3-build,run,straddle_tight_0830,NQ,30,build,,,1,0,0,0,549,0.84,,2026-10-04T12:25:33+00:00
+member,straddle_tight_0830_NQ_tf30_pre-offB_pts5-r3-build-stress,run,straddle_tight_0830,NQ,30,build,stress,,1,0,0,0,549,0.83,,2026-10-04T12:25:34+00:00
+member,straddle_tight_0830_NQ_tf30_pre-offB_pts5-r3-pick,run,straddle_tight_0830,NQ,30,pick,,,1,0,0,0,244,0.55,,2026-10-04T12:25:34+00:00
+member,straddle_tight_0830_NQ_tf30_pre-offB_pts5-r3-pick-stress,run,straddle_tight_0830,NQ,30,pick,stress,,1,0,0,0,244,0.55,,2026-10-04T12:25:35+00:00
+ev_pick,straddle_tight_1000-GC-tf30-nyam-pick,grid,straddle_tight_1000,GC,30,pick,pick,,0,27,0,0,6525,1.92,stage 3 events: session nyam only,2026-10-04T13:14:06+00:00
+null_ev_pick,straddle_tight_1000-GC-tf30-nyam-pick-shift,null,straddle_tight_1000,GC,30,pick,shift,,0,0,54,0,11916,3.59,stage 3 events: session nyam only,2026-10-04T13:14:10+00:00
+ev_stress,straddle_tight_1000-GC-tf30-nyam-build-stress,grid,straddle_tight_1000,GC,30,build,stress,,0,1,0,0,565,0.56,stage 3 events: session nyam only,2026-10-04T13:14:51+00:00
+ev_stress,straddle_tight_1000-GC-tf30-nyam-pick-stress,grid,straddle_tight_1000,GC,30,pick,stress,,0,1,0,0,250,0.41,stage 3 events: session nyam only,2026-10-04T13:14:52+00:00
+member,straddle_tight_0830_GC_tf30_pre_ev-offA_pts1p6-r1-build,run,straddle_tight_0830,GC,30,build,,,1,0,0,0,562,0.53,,2026-10-04T13:16:09+00:00
+member,straddle_tight_0830_GC_tf30_pre_ev-offA_pts1p6-r1-build-stress,run,straddle_tight_0830,GC,30,build,stress,,1,0,0,0,562,0.5,,2026-10-04T13:16:10+00:00
+member,straddle_tight_0830_GC_tf30_pre_ev-offA_pts1p6-r1-pick,run,straddle_tight_0830,GC,30,pick,,,1,0,0,0,250,0.4,,2026-10-04T13:16:10+00:00
+member,straddle_tight_0830_GC_tf30_pre_ev-offA_pts1p6-r1-pick-stress,run,straddle_tight_0830,GC,30,pick,stress,,1,0,0,0,250,0.4,,2026-10-04T13:16:11+00:00
+member,straddle_tight_1000_GC_tf30_nyam_ev-offA_pts1p6-r1-build,run,straddle_tight_1000,GC,30,build,,,1,0,0,0,565,0.52,,2026-10-04T13:16:11+00:00
+member,straddle_tight_1000_GC_tf30_nyam_ev-offA_pts1p6-r1-build-stress,run,straddle_tight_1000,GC,30,build,stress,,1,0,0,0,565,0.52,,2026-10-04T13:16:12+00:00
+member,straddle_tight_1000_GC_tf30_nyam_ev-offA_pts1p6-r1-pick,run,straddle_tight_1000,GC,30,pick,,,1,0,0,0,250,0.41,,2026-10-04T13:16:12+00:00
+member,straddle_tight_1000_GC_tf30_nyam_ev-offA_pts1p6-r1-pick-stress,run,straddle_tight_1000,GC,30,pick,stress,,1,0,0,0,250,0.41,,2026-10-04T13:16:13+00:00
+ev_info,straddle_tight_1400-NQ-tf30-fomc-build,grid,straddle_tight_1400,NQ,30,build,,,0,27,0,0,486,0.61,stage 3 information: FOMC 14:00 on the 19 BUILD FOMC days only,2026-10-04T13:20:02+00:00
+ev_info,straddle_tight_1400-ES-tf30-fomc-build,grid,straddle_tight_1400,ES,30,build,,,0,27,0,0,486,0.64,stage 3 information: FOMC 14:00 on the 19 BUILD FOMC days only,2026-10-04T13:20:03+00:00
+ev_info,straddle_tight_1400-GC-tf30-fomc-build,grid,straddle_tight_1400,GC,30,build,,,0,27,0,0,486,0.6,stage 3 information: FOMC 14:00 on the 19 BUILD FOMC days only,2026-10-04T13:20:03+00:00
+member,orb_NQ_tf1_pre-or_min5_atr1p5-r2-build-oco0,run,orb,NQ,1,build,oco0ms,,1,0,0,0,567,0.92,OCO cancel-delay robustness probe (information only; a re-run of a member cell),2026-10-04T13:53:03+00:00
+member,orb_NQ_tf1_pre-or_min5_atr1p5-r2-build-oco25,run,orb,NQ,1,build,oco25ms,,1,0,0,0,568,0.91,OCO cancel-delay robustness probe (information only; a re-run of a member cell),2026-10-04T13:53:04+00:00
+member,orb_NQ_tf1_pre-or_min5_atr1p5-r2-build-oco50,run,orb,NQ,1,build,oco50ms,,1,0,0,0,568,0.91,OCO cancel-delay robustness probe (information only; a re-run of a member cell),2026-10-04T13:53:05+00:00
+member,orb_NQ_tf1_pre-or_min5_atr1p5-r2-build-oco100,run,orb,NQ,1,build,oco100ms,,1,0,0,0,570,0.91,OCO cancel-delay robustness probe (information only; a re-run of a member cell),2026-10-04T13:53:06+00:00
+member,orb_NQ_tf1_pre-or_min5_atr1p5-r2-build-oco250,run,orb,NQ,1,build,oco250ms,,1,0,0,0,570,0.92,OCO cancel-delay robustness probe (information only; a re-run of a member cell),2026-10-04T13:53:07+00:00
+member,orb_NQ_tf1_pre-or_min5_atr1p5-r2-pick-oco0,run,orb,NQ,1,pick,oco0ms,,1,0,0,0,252,0.59,OCO cancel-delay robustness probe (information only; a re-run of a member cell),2026-10-04T13:53:07+00:00
+member,orb_NQ_tf1_pre-or_min5_atr1p5-r2-pick-oco25,run,orb,NQ,1,pick,oco25ms,,1,0,0,0,253,0.59,OCO cancel-delay robustness probe (information only; a re-run of a member cell),2026-10-04T13:53:08+00:00
+member,orb_NQ_tf1_pre-or_min5_atr1p5-r2-pick-oco50,run,orb,NQ,1,pick,oco50ms,,1,0,0,0,253,0.59,OCO cancel-delay robustness probe (information only; a re-run of a member cell),2026-10-04T13:53:09+00:00
+member,orb_NQ_tf1_pre-or_min5_atr1p5-r2-pick-oco100,run,orb,NQ,1,pick,oco100ms,,1,0,0,0,255,0.59,OCO cancel-delay robustness probe (information only; a re-run of a member cell),2026-10-04T13:53:09+00:00
+member,orb_NQ_tf1_pre-or_min5_atr1p5-r2-pick-oco250,run,orb,NQ,1,pick,oco250ms,,1,0,0,0,257,0.59,OCO cancel-delay robustness probe (information only; a re-run of a member cell),2026-10-04T13:53:10+00:00
+member,straddle_tight_0830_GC_tf30_pre_evA-offA_pts1p6-r1-build-oco0,run,straddle_tight_0830,GC,30,build,oco0ms,,1,0,0,0,223,0.45,OCO cancel-delay robustness probe (information only; a re-run of a member cell),2026-10-04T13:53:10+00:00
+member,straddle_tight_0830_GC_tf30_pre_evA-offA_pts1p6-r1-build-oco25,run,straddle_tight_0830,GC,30,build,oco25ms,,1,0,0,0,223,0.4,OCO cancel-delay robustness probe (information only; a re-run of a member cell),2026-10-04T13:53:11+00:00
+member,straddle_tight_0830_GC_tf30_pre_evA-offA_pts1p6-r1-build-oco50,run,straddle_tight_0830,GC,30,build,oco50ms,,1,0,0,0,224,0.4,OCO cancel-delay robustness probe (information only; a re-run of a member cell),2026-10-04T13:53:11+00:00
+member,straddle_tight_0830_GC_tf30_pre_evA-offA_pts1p6-r1-build-oco100,run,straddle_tight_0830,GC,30,build,oco100ms,,1,0,0,0,225,0.4,OCO cancel-delay robustness probe (information only; a re-run of a member cell),2026-10-04T13:53:12+00:00
+member,straddle_tight_0830_GC_tf30_pre_evA-offA_pts1p6-r1-build-oco250,run,straddle_tight_0830,GC,30,build,oco250ms,,1,0,0,0,226,0.41,OCO cancel-delay robustness probe (information only; a re-run of a member cell),2026-10-04T13:53:12+00:00
+member,straddle_tight_0830_GC_tf30_pre_evA-offA_pts1p6-r1-pick-oco0,run,straddle_tight_0830,GC,30,pick,oco0ms,,1,0,0,0,96,0.37,OCO cancel-delay robustness probe (information only; a re-run of a member cell),2026-10-04T13:53:13+00:00
+member,straddle_tight_0830_GC_tf30_pre_evA-offA_pts1p6-r1-pick-oco25,run,straddle_tight_0830,GC,30,pick,oco25ms,,1,0,0,0,96,0.36,OCO cancel-delay robustness probe (information only; a re-run of a member cell),2026-10-04T13:53:13+00:00
+member,straddle_tight_0830_GC_tf30_pre_evA-offA_pts1p6-r1-pick-oco50,run,straddle_tight_0830,GC,30,pick,oco50ms,,1,0,0,0,97,0.36,OCO cancel-delay robustness probe (information only; a re-run of a member cell),2026-10-04T13:53:13+00:00
+member,straddle_tight_0830_GC_tf30_pre_evA-offA_pts1p6-r1-pick-oco100,run,straddle_tight_0830,GC,30,pick,oco100ms,,1,0,0,0,98,0.36,OCO cancel-delay robustness probe (information only; a re-run of a member cell),2026-10-04T13:53:14+00:00
+member,straddle_tight_0830_GC_tf30_pre_evA-offA_pts1p6-r1-pick-oco250,run,straddle_tight_0830,GC,30,pick,oco250ms,,1,0,0,0,99,0.36,OCO cancel-delay robustness probe (information only; a re-run of a member cell),2026-10-04T13:53:14+00:00
+member,straddle_tight_0830_NQ_tf30_pre_evB-offB_pts5-r3-build-oco0,run,straddle_tight_0830,NQ,30,build,oco0ms,,1,0,0,0,157,0.48,OCO cancel-delay robustness probe (information only; a re-run of a member cell),2026-10-04T13:53:15+00:00
+member,straddle_tight_0830_NQ_tf30_pre_evB-offB_pts5-r3-build-oco25,run,straddle_tight_0830,NQ,30,build,oco25ms,,1,0,0,0,159,0.49,OCO cancel-delay robustness probe (information only; a re-run of a member cell),2026-10-04T13:53:15+00:00
+member,straddle_tight_0830_NQ_tf30_pre_evB-offB_pts5-r3-build-oco50,run,straddle_tight_0830,NQ,30,build,oco50ms,,1,0,0,0,160,0.48,OCO cancel-delay robustness probe (information only; a re-run of a member cell),2026-10-04T13:53:16+00:00
+member,straddle_tight_0830_NQ_tf30_pre_evB-offB_pts5-r3-build-oco100,run,straddle_tight_0830,NQ,30,build,oco100ms,,1,0,0,0,163,0.48,OCO cancel-delay robustness probe (information only; a re-run of a member cell),2026-10-04T13:53:16+00:00
+member,straddle_tight_0830_NQ_tf30_pre_evB-offB_pts5-r3-build-oco250,run,straddle_tight_0830,NQ,30,build,oco250ms,,1,0,0,0,164,0.5,OCO cancel-delay robustness probe (information only; a re-run of a member cell),2026-10-04T13:53:17+00:00
+member,straddle_tight_0830_NQ_tf30_pre_evB-offB_pts5-r3-pick-oco0,run,straddle_tight_0830,NQ,30,pick,oco0ms,,1,0,0,0,68,0.41,OCO cancel-delay robustness probe (information only; a re-run of a member cell),2026-10-04T13:53:17+00:00
+member,straddle_tight_0830_NQ_tf30_pre_evB-offB_pts5-r3-pick-oco25,run,straddle_tight_0830,NQ,30,pick,oco25ms,,1,0,0,0,69,0.4,OCO cancel-delay robustness probe (information only; a re-run of a member cell),2026-10-04T13:53:18+00:00
+member,straddle_tight_0830_NQ_tf30_pre_evB-offB_pts5-r3-pick-oco50,run,straddle_tight_0830,NQ,30,pick,oco50ms,,1,0,0,0,69,0.4,OCO cancel-delay robustness probe (information only; a re-run of a member cell),2026-10-04T13:53:18+00:00
+member,straddle_tight_0830_NQ_tf30_pre_evB-offB_pts5-r3-pick-oco100,run,straddle_tight_0830,NQ,30,pick,oco100ms,,1,0,0,0,70,0.4,OCO cancel-delay robustness probe (information only; a re-run of a member cell),2026-10-04T13:53:18+00:00
+member,straddle_tight_0830_NQ_tf30_pre_evB-offB_pts5-r3-pick-oco250,run,straddle_tight_0830,NQ,30,pick,oco250ms,,1,0,0,0,73,0.4,OCO cancel-delay robustness probe (information only; a re-run of a member cell),2026-10-04T13:53:19+00:00
+member,straddle_tight_1000_GC_tf30_nyam_evC-offA_pts1p6-r1-build-oco0,run,straddle_tight_1000,GC,30,build,oco0ms,,1,0,0,0,97,0.36,OCO cancel-delay robustness probe (information only; a re-run of a member cell),2026-10-04T13:53:19+00:00
+member,straddle_tight_1000_GC_tf30_nyam_evC-offA_pts1p6-r1-build-oco25,run,straddle_tight_1000,GC,30,build,oco25ms,,1,0,0,0,97,0.36,OCO cancel-delay robustness probe (information only; a re-run of a member cell),2026-10-04T13:53:20+00:00
+member,straddle_tight_1000_GC_tf30_nyam_evC-offA_pts1p6-r1-build-oco50,run,straddle_tight_1000,GC,30,build,oco50ms,,1,0,0,0,98,0.35,OCO cancel-delay robustness probe (information only; a re-run of a member cell),2026-10-04T13:53:20+00:00
+member,straddle_tight_1000_GC_tf30_nyam_evC-offA_pts1p6-r1-build-oco100,run,straddle_tight_1000,GC,30,build,oco100ms,,1,0,0,0,98,0.36,OCO cancel-delay robustness probe (information only; a re-run of a member cell),2026-10-04T13:53:20+00:00
+member,straddle_tight_1000_GC_tf30_nyam_evC-offA_pts1p6-r1-build-oco250,run,straddle_tight_1000,GC,30,build,oco250ms,,1,0,0,0,98,0.36,OCO cancel-delay robustness probe (information only; a re-run of a member cell),2026-10-04T13:53:21+00:00
+member,straddle_tight_1000_GC_tf30_nyam_evC-offA_pts1p6-r1-pick-oco0,run,straddle_tight_1000,GC,30,pick,oco0ms,,1,0,0,0,46,0.34,OCO cancel-delay robustness probe (information only; a re-run of a member cell),2026-10-04T13:53:21+00:00
+member,straddle_tight_1000_GC_tf30_nyam_evC-offA_pts1p6-r1-pick-oco25,run,straddle_tight_1000,GC,30,pick,oco25ms,,1,0,0,0,46,0.34,OCO cancel-delay robustness probe (information only; a re-run of a member cell),2026-10-04T13:53:21+00:00
+member,straddle_tight_1000_GC_tf30_nyam_evC-offA_pts1p6-r1-pick-oco50,run,straddle_tight_1000,GC,30,pick,oco50ms,,1,0,0,0,46,0.34,OCO cancel-delay robustness probe (information only; a re-run of a member cell),2026-10-04T13:53:22+00:00
+member,straddle_tight_1000_GC_tf30_nyam_evC-offA_pts1p6-r1-pick-oco100,run,straddle_tight_1000,GC,30,pick,oco100ms,,1,0,0,0,47,0.34,OCO cancel-delay robustness probe (information only; a re-run of a member cell),2026-10-04T13:53:22+00:00
+member,straddle_tight_1000_GC_tf30_nyam_evC-offA_pts1p6-r1-pick-oco250,run,straddle_tight_1000,GC,30,pick,oco250ms,,1,0,0,0,49,0.34,OCO cancel-delay robustness probe (information only; a re-run of a member cell),2026-10-04T13:53:23+00:00

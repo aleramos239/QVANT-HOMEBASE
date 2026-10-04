@@ -1,0 +1,306 @@
+[
+ {
+  "name": "vwap_trend_pull",
+  "root": "NQ",
+  "tf": "5",
+  "sess": "pm",
+  "variant": {
+   "x": 0.1
+  },
+  "exit": {
+   "stop_mode": "pts",
+   "stop_val": 30.0,
+   "tgt_r": 2.0
+  },
+  "days": 24,
+  "runs": 72,
+  "moved": 0,
+  "moved_detail": [],
+  "power_runs": 72,
+  "power_changed": 44
+ },
+ {
+  "name": "vwap_trend_pull",
+  "root": "NQ",
+  "tf": "15",
+  "sess": "mid",
+  "variant": {
+   "x": 0.05
+  },
+  "exit": {
+   "stop_mode": "atr",
+   "stop_val": 1.5,
+   "tgt_r": 1.0
+  },
+  "days": 24,
+  "runs": 72,
+  "moved": 0,
+  "moved_detail": [],
+  "power_runs": 72,
+  "power_changed": 43
+ },
+ {
+  "name": "va_reclaim",
+  "root": "NQ",
+  "tf": "5",
+  "sess": "nyam",
+  "variant": {
+   "d_atr": 0.25
+  },
+  "exit": {
+   "stop_mode": "pts",
+   "stop_val": 20.0,
+   "tgt_r": 2.0
+  },
+  "days": 24,
+  "runs": 72,
+  "moved": 0,
+  "moved_detail": [],
+  "power_runs": 72,
+  "power_changed": 52
+ },
+ {
+  "name": "va_reclaim",
+  "root": "GC",
+  "tf": "15",
+  "sess": "london",
+  "variant": {
+   "d_atr": 0.0
+  },
+  "exit": {
+   "stop_mode": "atr",
+   "stop_val": 1.5,
+   "tgt_r": 1.0
+  },
+  "days": 24,
+  "runs": 72,
+  "moved": 0,
+  "moved_detail": [],
+  "power_runs": 72,
+  "power_changed": 53
+ },
+ {
+  "name": "orb_confirm",
+  "root": "NQ",
+  "tf": "5",
+  "sess": "nyam",
+  "variant": {
+   "or_min": "15",
+   "dir": "long"
+  },
+  "exit": {
+   "stop_mode": "pts",
+   "stop_val": 20.0,
+   "tgt_r": 2.0
+  },
+  "days": 24,
+  "runs": 72,
+  "moved": 0,
+  "moved_detail": [],
+  "power_runs": 72,
+  "power_changed": 48
+ },
+ {
+  "name": "orb_confirm",
+  "root": "NQ",
+  "tf": "15",
+  "sess": "mid",
+  "variant": {
+   "or_min": "60",
+   "dir": "short"
+  },
+  "exit": {
+   "stop_mode": "pct",
+   "stop_val": 0.2,
+   "tgt_r": 0.0
+  },
+  "days": 24,
+  "runs": 72,
+  "moved": 0,
+  "moved_detail": [],
+  "power_runs": 72,
+  "power_changed": 38
+ },
+ {
+  "name": "late_mom",
+  "root": "NQ",
+  "tf": "30",
+  "sess": "all",
+  "variant": {
+   "sig": "15:30",
+   "thr": 0.0
+  },
+  "exit": {
+   "stop_mode": "pts",
+   "stop_val": 20.0,
+   "tgt_r": 0.0
+  },
+  "days": 24,
+  "runs": 72,
+  "moved": 0,
+  "moved_detail": [],
+  "power_runs": 72,
+  "power_changed": 8
+ },
+ {
+  "name": "late_mom",
+  "root": "ES",
+  "tf": "30",
+  "sess": "all",
+  "variant": {
+   "sig": "12:00",
+   "thr": 0.25
+  },
+  "exit": {
+   "stop_mode": "atr",
+   "stop_val": 1.5,
+   "tgt_r": 1.0
+  },
+  "days": 24,
+  "runs": 72,
+  "moved": 0,
+  "moved_detail": [],
+  "power_runs": 72,
+  "power_changed": 0
+ },
+ {
+  "name": "open_fade",
+  "root": "NQ",
+  "tf": "1",
+  "sess": "nyam",
+  "variant": {
+   "k": 1.0
+  },
+  "exit": {
+   "stop_mode": "pts",
+   "stop_val": 20.0,
+   "tgt_r": 1.0
+  },
+  "days": 24,
+  "runs": 72,
+  "moved": 0,
+  "moved_detail": [],
+  "power_runs": 72,
+  "power_changed": 69
+ },
+ {
+  "name": "open_fade",
+  "root": "NQ",
+  "tf": "5",
+  "sess": "nyam",
+  "variant": {
+   "k": 0.5
+  },
+  "exit": {
+   "stop_mode": "atr",
+   "stop_val": 1.5,
+   "tgt_r": 2.0
+  },
+  "days": 24,
+  "runs": 72,
+  "moved": 0,
+  "moved_detail": [],
+  "power_runs": 72,
+  "power_changed": 65
+ },
+ {
+  "name": "vol_spike_break",
+  "root": "NQ",
+  "tf": "30",
+  "sess": "pm",
+  "variant": {
+   "m": 4.0
+  },
+  "exit": {
+   "stop_mode": "pct",
+   "stop_val": 0.2,
+   "tgt_r": 2.0
+  },
+  "days": 24,
+  "runs": 72,
+  "moved": 0,
+  "moved_detail": [],
+  "power_runs": 72,
+  "power_changed": 45
+ },
+ {
+  "name": "vol_spike_break",
+  "root": "NQ",
+  "tf": "5",
+  "sess": "nyam",
+  "variant": {
+   "m": 2.0
+  },
+  "exit": {
+   "stop_mode": "pts",
+   "stop_val": 20.0,
+   "tgt_r": 2.0
+  },
+  "days": 24,
+  "runs": 72,
+  "moved": 0,
+  "moved_detail": [],
+  "power_runs": 72,
+  "power_changed": 48
+ },
+ {
+  "name": "straddle_tight_0830",
+  "root": "NQ",
+  "tf": "30",
+  "sess": "all",
+  "variant": {
+   "off": "B"
+  },
+  "exit": {
+   "stop_mode": "pts",
+   "stop_val": 5.0,
+   "tgt_r": 3.0
+  },
+  "days": 24,
+  "runs": 72,
+  "moved": 0,
+  "moved_detail": [],
+  "power_runs": 72,
+  "power_changed": 72
+ },
+ {
+  "name": "straddle_tight_0930",
+  "root": "NQ",
+  "tf": "30",
+  "sess": "all",
+  "variant": {
+   "off": "A"
+  },
+  "exit": {
+   "stop_mode": "pts",
+   "stop_val": 8.0,
+   "tgt_r": 1.0
+  },
+  "days": 24,
+  "runs": 72,
+  "moved": 0,
+  "moved_detail": [],
+  "power_runs": 72,
+  "power_changed": 72
+ },
+ {
+  "name": "straddle_tight_1000",
+  "root": "GC",
+  "tf": "30",
+  "sess": "all",
+  "variant": {
+   "off": "C"
+  },
+  "exit": {
+   "stop_mode": "pts",
+   "stop_val": 1.6,
+   "tgt_r": 2.0
+  },
+  "days": 24,
+  "runs": 72,
+  "moved": 0,
+  "moved_detail": [],
+  "power_runs": 72,
+  "power_changed": 70
+ }
+]

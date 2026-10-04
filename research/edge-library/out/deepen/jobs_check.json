@@ -1,0 +1,3 @@
+[{"family": "donchian", "root": "NQ", "tf": "5", "sess": "nyam", "period": "build"},
+ {"family": "rsi2", "root": "NQ", "tf": "30", "sess": "eve", "period": "build"},
+ {"family": "squeeze", "root": "NQ", "tf": "30", "sess": "pm", "period": "build"}]

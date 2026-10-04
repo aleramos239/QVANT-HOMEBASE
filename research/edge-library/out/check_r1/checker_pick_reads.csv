@@ -1,0 +1,9 @@
+utc,cell,period,what,why
+2026-10-04T12:49:55+00:00,straddle_tight_0830-NQ-tf30 pre offB_pts5-r3,pick,engine re-run base + 2 ticks/250 ms (l2sim.run; no ledger row),checker: from-scratch identity with members/straddle_tight_0830_NQ_tf30_pre/trades_pick.json
+2026-10-04T12:49:55+00:00,straddle_tight_0830-NQ-tf30 pre offB_pts5-r3,pick,own tick replay of the same cell (base; stress; stress split into slip and latency; fill L ms after the trigger print),checker: independent recomputation + fill-timing information (no new cell; no rule added)
+2026-10-04T12:49:55+00:00,runs_admit_r1/straddle_tight_0830-NQ-tf30-pre-pick (+ -pick-shift; + -pick-stress),pick,store read (27 + 54 + 22 cells),checker: 2024 heat map; random-minute lift; surviving set
+2026-10-04T12:49:55+00:00,runs_admit_r1/straddle_tight_0830-GC-tf30-pre-pick (+ -pick-shift; + -pick-stress),pick,store read (27 + 54 + 19 cells),checker: 2024 heat map; central variant; lift; surviving set
+2026-10-04T12:49:55+00:00,runs_admit_r1/vwap_trend_pull-NQ-tf5-pm-pick (+ -pick-stress) and c1-NQ-tf5-pm-pick,pick,store read (96 + 56 + 64 cells),checker: 2024 heat map; central variant; random-entry lift
+2026-10-04T12:49:55+00:00,runs_admit_r1/vol_spike_break-NQ-tf30-pm-pick and c1-NQ-tf30-pm-pick,pick,store read (96 + 64 cells),checker: 2024 heat map; central variant; random-entry lift
+2026-10-04T12:49:55+00:00,members/straddle_tight_0830_NQ_tf30_pre/trades_pick.json and members/orb_NQ_tf1_pre/trades_pick.json,pick,trade files read,checker: member odds (own day walk + engine/score.py); overlap of the two members
+2026-10-04T12:49:55+00:00,runs_admit/* and runs_deepen/* pick stores,pick,date column only (last trade date),checker: seal scan for 2025+ dates (no P&L read)

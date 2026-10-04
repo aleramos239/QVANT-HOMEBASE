@@ -1,0 +1,15 @@
+vwap_trend_pull        NQ tf 5 pm     days  24 rewrites  72 MOVED  0 | power: changed 44/72
+vwap_trend_pull        NQ tf15 mid    days  24 rewrites  72 MOVED  0 | power: changed 43/72
+va_reclaim             NQ tf 5 nyam   days  24 rewrites  72 MOVED  0 | power: changed 52/72
+va_reclaim             GC tf15 london days  24 rewrites  72 MOVED  0 | power: changed 53/72
+orb_confirm            NQ tf 5 nyam   days  24 rewrites  72 MOVED  0 | power: changed 48/72
+orb_confirm            NQ tf15 mid    days  24 rewrites  72 MOVED  0 | power: changed 38/72
+late_mom               NQ tf30 all    days  24 rewrites  72 MOVED  0 | power: changed 8/72
+late_mom               ES tf30 all    days  24 rewrites  72 MOVED  0 | power: changed 0/72
+open_fade              NQ tf 1 nyam   days  24 rewrites  72 MOVED  0 | power: changed 69/72
+open_fade              NQ tf 5 nyam   days  24 rewrites  72 MOVED  0 | power: changed 65/72
+vol_spike_break        NQ tf30 pm     days  24 rewrites  72 MOVED  0 | power: changed 45/72
+vol_spike_break        NQ tf 5 nyam   days  24 rewrites  72 MOVED  0 | power: changed 48/72
+straddle_tight_0830    NQ tf30 all    days  24 rewrites  72 MOVED  0 | power: changed 72/72
+straddle_tight_0930    NQ tf30 all    days  24 rewrites  72 MOVED  0 | power: changed 72/72
+straddle_tight_1000    GC tf30 all    days  24 rewrites  72 MOVED  0 | power: changed 70/72

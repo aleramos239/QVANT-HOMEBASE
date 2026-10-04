@@ -1,0 +1,4 @@
+unit,central,t,bar_best_of_random,control,lift_vs_control,beats_share_of_200_draws,control_nets,bar_with_stage1_random_minutes,failed
+vol_spike_break-ES-tf15|pm|,m4_pts12-r0,0.9266351899443399,1.2986,c1,-4765.12,0.17,,,"c1,bar"
+vol_spike_break-ES-tf30|pm|,m3_atr3-r1,0.7765027744976847,1.2986,c1,10373.69,0.92,,,bar
+vol_spike_break-ES-tf5|mid|,m3_atr1p5-r0,0.713280319460537,1.2986,c1,3794.69,0.9,,,bar

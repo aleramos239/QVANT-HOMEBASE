@@ -1,0 +1,41 @@
+{
+ "NQ": {
+  "days": 19,
+  "cells": 27,
+  "share_pos": 1.0,
+  "median_net": 2248.0,
+  "central": "offC_pts8-r2",
+  "best_net": 4263.0,
+  "worst_net": 593.0,
+  "trades": 18,
+  "net": 2248.0,
+  "t": 2.1489357864092278,
+  "win": 0.6111111111111112
+ },
+ "ES": {
+  "days": 19,
+  "cells": 27,
+  "share_pos": 0.8889,
+  "median_net": 703.0,
+  "central": "offA_pts2-r2",
+  "best_net": 2578.0,
+  "worst_net": -359.5,
+  "trades": 18,
+  "net": 703.0,
+  "t": 1.0258723414293471,
+  "win": 0.5
+ },
+ "GC": {
+  "days": 19,
+  "cells": 27,
+  "share_pos": 1.0,
+  "median_net": 2038.0,
+  "central": "offA_pts1p6-r3",
+  "best_net": 3248.0,
+  "worst_net": 798.0,
+  "trades": 18,
+  "net": 2038.0,
+  "t": 1.4386210314252237,
+  "win": 0.4444444444444444
+ }
+}

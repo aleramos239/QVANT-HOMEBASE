@@ -1,0 +1,8 @@
+unit,central,t,bar_best_of_random,control,lift_vs_control,beats_share_of_200_draws,control_nets,bar_with_stage1_random_minutes,failed
+vol_spike_break-NQ-tf15|nyam|,m2_pts20-r3,1.2521289603235244,2.0155,c1,3684.2,0.64,,,bar
+vol_spike_break-NQ-tf15|pm|,m2_pct0p2-r1,0.7616909001178107,2.0155,c1,7028.55,0.975,,,bar
+vol_spike_break-NQ-tf1|mid|,m3_pts10-r3,0.556748273286101,2.0155,c1,14533.1,0.995,,,bar
+vol_spike_break-NQ-tf30|nyam|,m2_pts30-r2,1.896101978086421,2.0155,c1,4654.7,0.74,,,bar
+vol_spike_break-NQ-tf30|pm|,m4_pct0p2-r2,3.175326194252532,2.0155,c1,19037.85,1.0,,,
+vol_spike_break-NQ-tf5|mid|,m3_pts30-r3,1.077866104053697,2.0155,c1,2524.28,0.8,,,bar
+vol_spike_break-NQ-tf5|pm|,m3_pct0p2-r3,0.9850206873504543,2.0155,c1,11453.4,0.945,,,bar

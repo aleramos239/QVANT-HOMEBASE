@@ -1,0 +1,4 @@
+[{"family": "rsi2", "root": "NQ", "tf": "30", "sess": "eve", "period": "build", "extra": {"dir": "long"},
+  "why": "exact long-only re-run of rsi2-NQ-tf30|eve| (its stored-trade long split passed (a)-(e); a stored split is approximate)"},
+ {"family": "squeeze", "root": "NQ", "tf": "30", "sess": "pm", "period": "build", "extra": {"dir": "long"},
+  "why": "exact long-only re-run of squeeze-NQ-tf30|pm| (its stored-trade long split passed (a)-(e); a stored split is approximate)"}]

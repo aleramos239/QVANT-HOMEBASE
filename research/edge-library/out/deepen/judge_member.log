@@ -1,0 +1,9 @@
+all or_min5_atr1p5-r2 567 16362.0 2.32 0.7188 {'a': True, 'b': True, 'c': True, 'd': True, 'e': None, 'pass': None}
+adx_hi or_min5_pct0p1-r3 253 7568.0 0.94 0.6979 {'a': True, 'b': True, 'c': True, 'd': False, 'e': False, 'pass': False}
+adx_lo or_min5_atr3-r3 286 7441.0 0.65 0.6771 {'a': True, 'b': True, 'c': True, 'd': False, 'e': False, 'pass': False}
+vol_hi or_min5_pts10-r0 270 635.0 0.04 0.3958 {'a': True, 'b': False, 'c': False, 'd': False, 'e': False, 'pass': False}
+vol_lo or_min5_atr3-r2 277 20047.0 2.13 0.8542 {'a': True, 'b': True, 'c': True, 'd': True, 'e': False, 'pass': False}
+news_only or_min15_pct0p2-r3 58 58.0 0.01 0.5208 {'a': False, 'b': False, 'c': False, 'd': False, 'e': False, 'pass': False}
+news_never or_min5_atr1p5-r1 496 8396.0 1.97 0.7083 {'a': True, 'b': True, 'c': True, 'd': False, 'e': False, 'pass': False}
+long or_min5_pts10-r1 268 2823.0 0.84 0.6458 {'a': True, 'b': True, 'c': False, 'd': False, 'e': False, 'pass': False}
+short or_min5_pct0p1-r1 299 10864.0 2.27 0.7188 {'a': True, 'b': True, 'c': False, 'd': True, 'e': False, 'pass': False}

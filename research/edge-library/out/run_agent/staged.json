@@ -1,0 +1,844 @@
+{
+ "rows": [
+  {
+   "name": "straddle_t_1800_fbook",
+   "tf": "30",
+   "base_pass_sessions": [
+    "eve"
+   ],
+   "cells": 160,
+   "sealed": null,
+   "grid": "done",
+   "own_pass_sessions": [],
+   "c2": "not run: the variant's own plateau passed in no base-pass session"
+  },
+  {
+   "name": "straddle_t_1800_xbook",
+   "tf": "30",
+   "base_pass_sessions": [
+    "eve"
+   ],
+   "cells": 160,
+   "sealed": null,
+   "grid": "done",
+   "own_pass_sessions": [
+    "eve"
+   ],
+   "c2": "done"
+  },
+  {
+   "name": "straddle_t_1800_thin",
+   "tf": "30",
+   "base_pass_sessions": [
+    "eve"
+   ],
+   "cells": 160,
+   "sealed": null,
+   "grid": "done",
+   "own_pass_sessions": [],
+   "c2": "not run: the variant's own plateau passed in no base-pass session"
+  },
+  {
+   "name": "straddle_t_2000_fbook",
+   "tf": "30",
+   "base_pass_sessions": [],
+   "cells": 160,
+   "sealed": null,
+   "grid": "not run: base passed no session",
+   "own_pass_sessions": [],
+   "c2": null
+  },
+  {
+   "name": "straddle_t_2000_xbook",
+   "tf": "30",
+   "base_pass_sessions": [],
+   "cells": 160,
+   "sealed": null,
+   "grid": "not run: base passed no session",
+   "own_pass_sessions": [],
+   "c2": null
+  },
+  {
+   "name": "straddle_t_2000_thin",
+   "tf": "30",
+   "base_pass_sessions": [],
+   "cells": 160,
+   "sealed": null,
+   "grid": "not run: base passed no session",
+   "own_pass_sessions": [],
+   "c2": null
+  },
+  {
+   "name": "straddle_t_0000_fbook",
+   "tf": "30",
+   "base_pass_sessions": [],
+   "cells": 160,
+   "sealed": null,
+   "grid": "not run: base passed no session",
+   "own_pass_sessions": [],
+   "c2": null
+  },
+  {
+   "name": "straddle_t_0000_xbook",
+   "tf": "30",
+   "base_pass_sessions": [],
+   "cells": 160,
+   "sealed": null,
+   "grid": "not run: base passed no session",
+   "own_pass_sessions": [],
+   "c2": null
+  },
+  {
+   "name": "straddle_t_0000_thin",
+   "tf": "30",
+   "base_pass_sessions": [],
+   "cells": 160,
+   "sealed": null,
+   "grid": "not run: base passed no session",
+   "own_pass_sessions": [],
+   "c2": null
+  },
+  {
+   "name": "straddle_t_0200_fbook",
+   "tf": "30",
+   "base_pass_sessions": [],
+   "cells": 160,
+   "sealed": null,
+   "grid": "not run: base passed no session",
+   "own_pass_sessions": [],
+   "c2": null
+  },
+  {
+   "name": "straddle_t_0200_xbook",
+   "tf": "30",
+   "base_pass_sessions": [],
+   "cells": 160,
+   "sealed": null,
+   "grid": "not run: base passed no session",
+   "own_pass_sessions": [],
+   "c2": null
+  },
+  {
+   "name": "straddle_t_0200_thin",
+   "tf": "30",
+   "base_pass_sessions": [],
+   "cells": 160,
+   "sealed": null,
+   "grid": "not run: base passed no session",
+   "own_pass_sessions": [],
+   "c2": null
+  },
+  {
+   "name": "straddle_t_0300_fbook",
+   "tf": "30",
+   "base_pass_sessions": [
+    "london"
+   ],
+   "cells": 160,
+   "sealed": null,
+   "grid": "done",
+   "own_pass_sessions": [],
+   "c2": "not run: the variant's own plateau passed in no base-pass session"
+  },
+  {
+   "name": "straddle_t_0300_xbook",
+   "tf": "30",
+   "base_pass_sessions": [
+    "london"
+   ],
+   "cells": 160,
+   "sealed": null,
+   "grid": "done",
+   "own_pass_sessions": [
+    "london"
+   ],
+   "c2": "done"
+  },
+  {
+   "name": "straddle_t_0300_thin",
+   "tf": "30",
+   "base_pass_sessions": [
+    "london"
+   ],
+   "cells": 160,
+   "sealed": null,
+   "grid": "done",
+   "own_pass_sessions": [],
+   "c2": "not run: the variant's own plateau passed in no base-pass session"
+  },
+  {
+   "name": "straddle_t_0830_fbook",
+   "tf": "30",
+   "base_pass_sessions": [
+    "pre"
+   ],
+   "cells": 160,
+   "sealed": null,
+   "grid": "done",
+   "own_pass_sessions": [
+    "pre"
+   ],
+   "c2": "done"
+  },
+  {
+   "name": "straddle_t_0830_xbook",
+   "tf": "30",
+   "base_pass_sessions": [
+    "pre"
+   ],
+   "cells": 160,
+   "sealed": null,
+   "grid": "done",
+   "own_pass_sessions": [
+    "pre"
+   ],
+   "c2": "done"
+  },
+  {
+   "name": "straddle_t_0830_thin",
+   "tf": "30",
+   "base_pass_sessions": [
+    "pre"
+   ],
+   "cells": 160,
+   "sealed": null,
+   "grid": "done",
+   "own_pass_sessions": [
+    "pre"
+   ],
+   "c2": "done"
+  },
+  {
+   "name": "straddle_t_0930_fbook",
+   "tf": "30",
+   "base_pass_sessions": [],
+   "cells": 160,
+   "sealed": null,
+   "grid": "not run: base passed no session",
+   "own_pass_sessions": [],
+   "c2": null
+  },
+  {
+   "name": "straddle_t_0930_xbook",
+   "tf": "30",
+   "base_pass_sessions": [],
+   "cells": 160,
+   "sealed": null,
+   "grid": "not run: base passed no session",
+   "own_pass_sessions": [],
+   "c2": null
+  },
+  {
+   "name": "straddle_t_0930_thin",
+   "tf": "30",
+   "base_pass_sessions": [],
+   "cells": 160,
+   "sealed": null,
+   "grid": "not run: base passed no session",
+   "own_pass_sessions": [],
+   "c2": null
+  },
+  {
+   "name": "straddle_t_1105_fbook",
+   "tf": "30",
+   "base_pass_sessions": [
+    "mid"
+   ],
+   "cells": 160,
+   "sealed": null,
+   "grid": "done",
+   "own_pass_sessions": [
+    "mid"
+   ],
+   "c2": "done"
+  },
+  {
+   "name": "straddle_t_1105_xbook",
+   "tf": "30",
+   "base_pass_sessions": [
+    "mid"
+   ],
+   "cells": 160,
+   "sealed": null,
+   "grid": "done",
+   "own_pass_sessions": [
+    "mid"
+   ],
+   "c2": "done"
+  },
+  {
+   "name": "straddle_t_1105_thin",
+   "tf": "30",
+   "base_pass_sessions": [
+    "mid"
+   ],
+   "cells": 160,
+   "sealed": null,
+   "grid": "done",
+   "own_pass_sessions": [],
+   "c2": "not run: the variant's own plateau passed in no base-pass session"
+  },
+  {
+   "name": "straddle_t_1330_fbook",
+   "tf": "30",
+   "base_pass_sessions": [],
+   "cells": 160,
+   "sealed": null,
+   "grid": "not run: base passed no session",
+   "own_pass_sessions": [],
+   "c2": null
+  },
+  {
+   "name": "straddle_t_1330_xbook",
+   "tf": "30",
+   "base_pass_sessions": [],
+   "cells": 160,
+   "sealed": null,
+   "grid": "not run: base passed no session",
+   "own_pass_sessions": [],
+   "c2": null
+  },
+  {
+   "name": "straddle_t_1330_thin",
+   "tf": "30",
+   "base_pass_sessions": [],
+   "cells": 160,
+   "sealed": null,
+   "grid": "not run: base passed no session",
+   "own_pass_sessions": [],
+   "c2": null
+  },
+  {
+   "name": "orb_fbook",
+   "tf": "1",
+   "base_pass_sessions": [
+    "pre",
+    "nyam"
+   ],
+   "cells": 96,
+   "sealed": null,
+   "grid": "done",
+   "own_pass_sessions": [],
+   "c2": "not run: the variant's own plateau passed in no base-pass session"
+  },
+  {
+   "name": "orb_xbook",
+   "tf": "1",
+   "base_pass_sessions": [
+    "pre",
+    "nyam"
+   ],
+   "cells": 96,
+   "sealed": null,
+   "grid": "done",
+   "own_pass_sessions": [
+    "nyam"
+   ],
+   "c2": "done"
+  },
+  {
+   "name": "orb_thin",
+   "tf": "1",
+   "base_pass_sessions": [
+    "pre",
+    "nyam"
+   ],
+   "cells": 96,
+   "sealed": null,
+   "grid": "done",
+   "own_pass_sessions": [
+    "pre"
+   ],
+   "c2": "done"
+  },
+  {
+   "name": "orb_fbook",
+   "tf": "5",
+   "base_pass_sessions": [
+    "pre",
+    "nyam"
+   ],
+   "cells": 96,
+   "sealed": null,
+   "grid": "done",
+   "own_pass_sessions": [
+    "pre"
+   ],
+   "c2": "done"
+  },
+  {
+   "name": "orb_xbook",
+   "tf": "5",
+   "base_pass_sessions": [
+    "pre",
+    "nyam"
+   ],
+   "cells": 96,
+   "sealed": null,
+   "grid": "done",
+   "own_pass_sessions": [
+    "nyam"
+   ],
+   "c2": "done"
+  },
+  {
+   "name": "orb_thin",
+   "tf": "5",
+   "base_pass_sessions": [
+    "pre",
+    "nyam"
+   ],
+   "cells": 96,
+   "sealed": null,
+   "grid": "done",
+   "own_pass_sessions": [
+    "pre"
+   ],
+   "c2": "done"
+  },
+  {
+   "name": "orb_fbook",
+   "tf": "15",
+   "base_pass_sessions": [
+    "pre",
+    "nyam"
+   ],
+   "cells": 96,
+   "sealed": null,
+   "grid": "done",
+   "own_pass_sessions": [
+    "pre"
+   ],
+   "c2": "done"
+  },
+  {
+   "name": "orb_xbook",
+   "tf": "15",
+   "base_pass_sessions": [
+    "pre",
+    "nyam"
+   ],
+   "cells": 96,
+   "sealed": null,
+   "grid": "done",
+   "own_pass_sessions": [
+    "nyam"
+   ],
+   "c2": "done"
+  },
+  {
+   "name": "orb_thin",
+   "tf": "15",
+   "base_pass_sessions": [
+    "pre",
+    "nyam"
+   ],
+   "cells": 96,
+   "sealed": null,
+   "grid": "done",
+   "own_pass_sessions": [
+    "pre"
+   ],
+   "c2": "done"
+  },
+  {
+   "name": "orb_fbook",
+   "tf": "30",
+   "base_pass_sessions": [
+    "pre",
+    "nyam"
+   ],
+   "cells": 96,
+   "sealed": null,
+   "grid": "done",
+   "own_pass_sessions": [
+    "pre"
+   ],
+   "c2": "done"
+  },
+  {
+   "name": "orb_xbook",
+   "tf": "30",
+   "base_pass_sessions": [
+    "pre",
+    "nyam"
+   ],
+   "cells": 96,
+   "sealed": null,
+   "grid": "done",
+   "own_pass_sessions": [
+    "nyam"
+   ],
+   "c2": "done"
+  },
+  {
+   "name": "orb_thin",
+   "tf": "30",
+   "base_pass_sessions": [
+    "pre",
+    "nyam"
+   ],
+   "cells": 96,
+   "sealed": null,
+   "grid": "done",
+   "own_pass_sessions": [
+    "pre"
+   ],
+   "c2": "done"
+  },
+  {
+   "name": "straddle_fbook",
+   "tf": "1",
+   "base_pass_sessions": [
+    "london",
+    "pm"
+   ],
+   "cells": 96,
+   "sealed": null,
+   "grid": "done",
+   "own_pass_sessions": [
+    "pm"
+   ],
+   "c2": "done"
+  },
+  {
+   "name": "straddle_xbook",
+   "tf": "1",
+   "base_pass_sessions": [
+    "london",
+    "pm"
+   ],
+   "cells": 96,
+   "sealed": null,
+   "grid": "done",
+   "own_pass_sessions": [
+    "london"
+   ],
+   "c2": "done"
+  },
+  {
+   "name": "straddle_thin",
+   "tf": "1",
+   "base_pass_sessions": [
+    "london",
+    "pm"
+   ],
+   "cells": 96,
+   "sealed": null,
+   "grid": "done",
+   "own_pass_sessions": [
+    "london"
+   ],
+   "c2": "done"
+  },
+  {
+   "name": "straddle_fbook",
+   "tf": "5",
+   "base_pass_sessions": [
+    "london",
+    "pm"
+   ],
+   "cells": 96,
+   "sealed": null,
+   "grid": "done",
+   "own_pass_sessions": [],
+   "c2": "not run: the variant's own plateau passed in no base-pass session"
+  },
+  {
+   "name": "straddle_xbook",
+   "tf": "5",
+   "base_pass_sessions": [
+    "london",
+    "pm"
+   ],
+   "cells": 96,
+   "sealed": null,
+   "grid": "done",
+   "own_pass_sessions": [
+    "london"
+   ],
+   "c2": "done"
+  },
+  {
+   "name": "straddle_thin",
+   "tf": "5",
+   "base_pass_sessions": [
+    "london",
+    "pm"
+   ],
+   "cells": 96,
+   "sealed": null,
+   "grid": "done",
+   "own_pass_sessions": [
+    "london"
+   ],
+   "c2": "done"
+  },
+  {
+   "name": "straddle_fbook",
+   "tf": "15",
+   "base_pass_sessions": [
+    "london",
+    "pm"
+   ],
+   "cells": 96,
+   "sealed": null,
+   "grid": "done",
+   "own_pass_sessions": [],
+   "c2": "not run: the variant's own plateau passed in no base-pass session"
+  },
+  {
+   "name": "straddle_xbook",
+   "tf": "15",
+   "base_pass_sessions": [
+    "london",
+    "pm"
+   ],
+   "cells": 96,
+   "sealed": null,
+   "grid": "done",
+   "own_pass_sessions": [
+    "london"
+   ],
+   "c2": "done"
+  },
+  {
+   "name": "straddle_thin",
+   "tf": "15",
+   "base_pass_sessions": [
+    "london",
+    "pm"
+   ],
+   "cells": 96,
+   "sealed": null,
+   "grid": "done",
+   "own_pass_sessions": [
+    "london"
+   ],
+   "c2": "done"
+  },
+  {
+   "name": "straddle_fbook",
+   "tf": "30",
+   "base_pass_sessions": [
+    "london",
+    "nyam",
+    "pm"
+   ],
+   "cells": 96,
+   "sealed": null,
+   "grid": "done",
+   "own_pass_sessions": [],
+   "c2": "not run: the variant's own plateau passed in no base-pass session"
+  },
+  {
+   "name": "straddle_xbook",
+   "tf": "30",
+   "base_pass_sessions": [
+    "london",
+    "nyam",
+    "pm"
+   ],
+   "cells": 96,
+   "sealed": null,
+   "grid": "done",
+   "own_pass_sessions": [
+    "london"
+   ],
+   "c2": "done"
+  },
+  {
+   "name": "straddle_thin",
+   "tf": "30",
+   "base_pass_sessions": [
+    "london",
+    "nyam",
+    "pm"
+   ],
+   "cells": 96,
+   "sealed": null,
+   "grid": "done",
+   "own_pass_sessions": [
+    "london"
+   ],
+   "c2": "done"
+  },
+  {
+   "name": "donchian_fbook",
+   "tf": "1",
+   "base_pass_sessions": [],
+   "cells": 128,
+   "sealed": null,
+   "grid": "not run: base passed no session",
+   "own_pass_sessions": [],
+   "c2": null
+  },
+  {
+   "name": "donchian_xbook",
+   "tf": "1",
+   "base_pass_sessions": [],
+   "cells": 128,
+   "sealed": null,
+   "grid": "not run: base passed no session",
+   "own_pass_sessions": [],
+   "c2": null
+  },
+  {
+   "name": "donchian_thin",
+   "tf": "1",
+   "base_pass_sessions": [],
+   "cells": 128,
+   "sealed": null,
+   "grid": "not run: base passed no session",
+   "own_pass_sessions": [],
+   "c2": null
+  },
+  {
+   "name": "donchian_fbook",
+   "tf": "5",
+   "base_pass_sessions": [
+    "nyam",
+    "pm"
+   ],
+   "cells": 128,
+   "sealed": null,
+   "grid": "done",
+   "own_pass_sessions": [
+    "pm"
+   ],
+   "c2": "done"
+  },
+  {
+   "name": "donchian_xbook",
+   "tf": "5",
+   "base_pass_sessions": [
+    "nyam",
+    "pm"
+   ],
+   "cells": 128,
+   "sealed": null,
+   "grid": "done",
+   "own_pass_sessions": [],
+   "c2": "not run: the variant's own plateau passed in no base-pass session"
+  },
+  {
+   "name": "donchian_thin",
+   "tf": "5",
+   "base_pass_sessions": [
+    "nyam",
+    "pm"
+   ],
+   "cells": 128,
+   "sealed": null,
+   "grid": "done",
+   "own_pass_sessions": [
+    "nyam"
+   ],
+   "c2": "done"
+  },
+  {
+   "name": "donchian_fbook",
+   "tf": "15",
+   "base_pass_sessions": [
+    "nyam",
+    "pm"
+   ],
+   "cells": 128,
+   "sealed": null,
+   "grid": "done",
+   "own_pass_sessions": [
+    "pm"
+   ],
+   "c2": "done"
+  },
+  {
+   "name": "donchian_xbook",
+   "tf": "15",
+   "base_pass_sessions": [
+    "nyam",
+    "pm"
+   ],
+   "cells": 128,
+   "sealed": null,
+   "grid": "done",
+   "own_pass_sessions": [
+    "nyam",
+    "pm"
+   ],
+   "c2": "done"
+  },
+  {
+   "name": "donchian_thin",
+   "tf": "15",
+   "base_pass_sessions": [
+    "nyam",
+    "pm"
+   ],
+   "cells": 128,
+   "sealed": null,
+   "grid": "done",
+   "own_pass_sessions": [
+    "nyam",
+    "pm"
+   ],
+   "c2": "done"
+  },
+  {
+   "name": "donchian_fbook",
+   "tf": "30",
+   "base_pass_sessions": [
+    "nyam",
+    "pm"
+   ],
+   "cells": 128,
+   "sealed": null,
+   "grid": "done",
+   "own_pass_sessions": [
+    "nyam",
+    "pm"
+   ],
+   "c2": "done"
+  },
+  {
+   "name": "donchian_xbook",
+   "tf": "30",
+   "base_pass_sessions": [
+    "nyam",
+    "pm"
+   ],
+   "cells": 128,
+   "sealed": null,
+   "grid": "done",
+   "own_pass_sessions": [
+    "nyam",
+    "pm"
+   ],
+   "c2": "done"
+  },
+  {
+   "name": "donchian_thin",
+   "tf": "30",
+   "base_pass_sessions": [
+    "nyam",
+    "pm"
+   ],
+   "cells": 128,
+   "sealed": null,
+   "grid": "done",
+   "own_pass_sessions": [
+    "nyam"
+   ],
+   "c2": "done"
+  }
+ ],
+ "grid_cells_used": 5376,
+ "cells_used": 5376,
+ "cuts": {
+  "stage_d_cells": 5376,
+  "left_before_cuts": 11392,
+  "needed": 0,
+  "freed": 0,
+  "cut": [],
+  "rule": "GC before ES; mid_fade, rsi2, tema_slope, ema_ribbon, supertrend, pinbar, gap; only as many as needed"
+ }
+}

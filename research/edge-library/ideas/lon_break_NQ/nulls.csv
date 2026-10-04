@@ -1,0 +1,55 @@
+unit,side,central,t,bar_best_of_random,control_mean,lift_vs_control,beats_share_of_200_draws,e_test,e_beats_share_of_4000,e_null_mean,e_null_99p4,days_side,days_universe
+lon_break-NQ-tf1|nyam|,all,min_rng_atr0_pts20-r3,0.6057634430068427,2.0155,-7051.98,17124.97,0.885,,,,,,
+lon_break-NQ-tf1|nyam|,adx_hi,min_rng_atr0_pts20-r3,0.542790044174942,2.0155,-2481.9,8540.9,0.82,random same-size day subsets,0.48075,5859.52,26934.0,244,522
+lon_break-NQ-tf1|nyam|,adx_lo,min_rng_atr0_pts10-r2,0.8440804617763092,2.0155,-4322.95,8445.95,0.985,random same-size day subsets,0.14575,7517.91,15653.0,278,522
+lon_break-NQ-tf1|nyam|,vol_hi,min_rng_atr0_pts30-r1,0.009330458552907686,2.0155,-1314.65,1405.65,0.565,random same-size day subsets,0.12925,8460.81,26586.03,261,530
+lon_break-NQ-tf1|nyam|,vol_lo,min_rng_atr0_pts20-r3,1.1347813553232053,2.0155,-1191.53,14720.52,0.935,random same-size day subsets,0.83075,6199.05,26314.06,269,530
+lon_break-NQ-tf1|nyam|,news_only,min_rng_atr0_pts10-r1,0.5496280078336124,2.0155,-1236.3,2177.3,0.9,random same-size day subsets,0.52175,782.42,4596.0,71,548
+lon_break-NQ-tf1|nyam|,news_never,min_rng_atr0_atr3-r1,1.307144409350517,2.0155,-22054.83,34771.82,0.985,random same-size day subsets,0.99525,3156.55,12517.19,477,548
+lon_break-NQ-tf1|nyam|,long,min_rng_atr0_pts10-r2,1.8632264512319043,2.0155,11456.7,-1983.7,0.26,same-side random-entry draws,0.29475,,,,
+lon_break-NQ-tf1|nyam|,short,min_rng_atr0_atr1p5-r3,0.034661589569244665,2.0155,8026.57,-7786.57,0.135,same-side random-entry draws,0.152,,,,
+placebo-c1-NQ-tf1|nyam|seed1,all,s1_pts45-r0,0.03613088778599809,2.0155,,-202053.62,0.0,placebo: ,,,,,
+placebo-c1-NQ-tf1|nyam|seed1,adx_hi,s1_pct0p2-r2,0.03320202837815488,2.0155,,-35939.03,0.0,placebo: random same-size day subsets,0.80825,,,254,540
+placebo-c1-NQ-tf1|nyam|seed1,adx_lo,s1_pts45-r0,0.07082046456173392,2.0155,,-53849.5,0.0,placebo: random same-size day subsets,0.59825,,,286,540
+placebo-c1-NQ-tf1|nyam|seed1,vol_hi,,,2.0155,,,,placebo: ,,,,,
+placebo-c1-NQ-tf1|nyam|seed1,vol_lo,s1_pts20-r3,0.031127320098181505,2.0155,,21580.3,1.0,placebo: random same-size day subsets,0.84375,,,277,548
+placebo-c1-NQ-tf1|nyam|seed1,news_only,s1_pct0p2-r3,0.20857014916834293,2.0155,,11389.17,1.0,placebo: random same-size day subsets,0.70675,,,71,568
+placebo-c1-NQ-tf1|nyam|seed1,news_never,s1_pts10-r0,0.4268823828422433,2.0155,,-21567.78,0.01,placebo: random same-size day subsets,0.62325,,,497,568
+placebo-c1-NQ-tf1|nyam|seed1,long,s1_pts20-r0,0.652267591478457,2.0155,,-80621.5,0.0,placebo: same-side random-entry draws,0.0,,,,
+placebo-c1-NQ-tf1|nyam|seed1,short,s1_pts30-r3,0.03504979207279827,2.0155,,-6748.95,0.32,placebo: same-side random-entry draws,0.312,,,,
+placebo-c1-NQ-tf1|nyam|seed2,all,s2_pct0p2-r2,0.174008379394706,2.0155,,29845.58,1.0,placebo: ,,,,,
+placebo-c1-NQ-tf1|nyam|seed2,adx_hi,s2_atr3-r3,0.014986930413355774,2.0155,,39381.47,1.0,placebo: random same-size day subsets,0.77025,,,254,540
+placebo-c1-NQ-tf1|nyam|seed2,adx_lo,s2_pts10-r0,0.1121720118874135,2.0155,,-11863.35,0.09,placebo: random same-size day subsets,0.356,,,286,540
+placebo-c1-NQ-tf1|nyam|seed2,vol_hi,s2_pct0p2-r2,0.11594250146049719,2.0155,,11312.38,1.0,placebo: random same-size day subsets,0.4815,,,271,548
+placebo-c1-NQ-tf1|nyam|seed2,vol_lo,s2_pct0p2-r2,0.14727046166920107,2.0155,,16509.9,1.0,placebo: random same-size day subsets,0.50775,,,277,548
+placebo-c1-NQ-tf1|nyam|seed2,news_only,s2_atr3-r1,0.07819768999131117,2.0155,,45739.62,1.0,placebo: random same-size day subsets,0.7585,,,71,568
+placebo-c1-NQ-tf1|nyam|seed2,news_never,s2_pts30-r3,0.08887216793466429,2.0155,,-23717.17,0.01,placebo: random same-size day subsets,0.8475,,,497,568
+placebo-c1-NQ-tf1|nyam|seed2,long,s2_pts20-r2,0.26335164203979056,2.0155,,45105.62,1.0,placebo: same-side random-entry draws,1.0,,,,
+placebo-c1-NQ-tf1|nyam|seed2,short,s2_pts45-r2,0.01429232699900066,2.0155,,-57207.32,0.0,placebo: same-side random-entry draws,0.0,,,,
+lon_break-NQ-tf5|nyam|,all,min_rng_atr0_pts20-r3,0.6057634430068427,2.0155,637.05,9435.95,0.765,,,,,,
+lon_break-NQ-tf5|nyam|,adx_hi,min_rng_atr2_atr3-r3,0.2550205186302601,2.0155,70538.02,-63391.02,0.0,random same-size day subsets,0.69375,-2256.71,44943.12,242,515
+lon_break-NQ-tf5|nyam|,adx_lo,min_rng_atr0_pts20-r2,0.45101626140779816,2.0155,-12084.48,16422.47,0.97,random same-size day subsets,0.23575,9464.59,27213.0,278,522
+lon_break-NQ-tf5|nyam|,vol_hi,min_rng_atr0_pts30-r1,0.009330458552907686,2.0155,-7167.5,7258.5,0.805,random same-size day subsets,0.12725,8475.64,26566.06,261,530
+lon_break-NQ-tf5|nyam|,vol_lo,min_rng_atr0_pts30-r1,1.7163258125081604,2.0155,4028.6,12855.4,0.925,random same-size day subsets,0.86625,8610.32,25334.0,269,530
+lon_break-NQ-tf5|nyam|,news_only,min_rng_atr2_pct0p1-r1,0.0585614594495942,2.0155,28.75,105.25,0.495,random same-size day subsets,0.3165,1174.55,6159.59,64,541
+lon_break-NQ-tf5|nyam|,news_never,min_rng_atr0_pts30-r1,0.996395179409815,2.0155,-697.7,13804.7,0.88,random same-size day subsets,0.69375,10377.73,22752.0,477,548
+lon_break-NQ-tf5|nyam|,long,min_rng_atr0_pts10-r2,1.8632264512319043,2.0155,-5100.25,14573.25,1.0,same-side random-entry draws,1.0,,,,
+lon_break-NQ-tf5|nyam|,short,min_rng_atr0_pts45-r1,0.08435383684303253,2.0155,7169.02,-5959.02,0.27,same-side random-entry draws,0.27075,,,,
+placebo-c1-NQ-tf5|nyam|seed1,all,s1_pct0p2-r2,0.057148748797717155,2.0155,,-6759.7,0.205,placebo: ,,,,,
+placebo-c1-NQ-tf5|nyam|seed1,adx_hi,s1_atr1p5-r3,0.05313270118470546,2.0155,,-19048.25,0.06,placebo: random same-size day subsets,0.60625,,,254,540
+placebo-c1-NQ-tf5|nyam|seed1,adx_lo,s1_pct0p2-r2,0.02310001255239215,2.0155,,-11997.4,0.015,placebo: random same-size day subsets,0.6135,,,286,540
+placebo-c1-NQ-tf5|nyam|seed1,vol_hi,,,2.0155,,,,placebo: ,,,,,
+placebo-c1-NQ-tf5|nyam|seed1,vol_lo,s1_atr1p5-r1,0.6445886070225986,2.0155,,11616.67,1.0,placebo: random same-size day subsets,0.96875,,,277,548
+placebo-c1-NQ-tf5|nyam|seed1,news_only,s1_pts30-r3,0.0736539628268431,2.0155,,-9504.35,0.005,placebo: random same-size day subsets,0.5895,,,71,568
+placebo-c1-NQ-tf5|nyam|seed1,news_never,s1_pts30-r1,0.02850234455745668,2.0155,,17118.08,1.0,placebo: random same-size day subsets,0.66925,,,497,568
+placebo-c1-NQ-tf5|nyam|seed1,long,s1_pts45-r1,0.1216958942734543,2.0155,,23020.05,0.99,placebo: same-side random-entry draws,0.98975,,,,
+placebo-c1-NQ-tf5|nyam|seed1,short,s1_pts30-r1,0.04401907989696057,2.0155,,14434.92,0.945,placebo: same-side random-entry draws,0.97525,,,,
+placebo-c1-NQ-tf5|nyam|seed2,all,s2_pct0p2-r2,0.0673529710975288,2.0155,,-6241.85,0.2,placebo: ,,,,,
+placebo-c1-NQ-tf5|nyam|seed2,adx_hi,s2_pts45-r1,0.21667127511758003,2.0155,,23572.7,1.0,placebo: random same-size day subsets,0.732,,,254,540
+placebo-c1-NQ-tf5|nyam|seed2,adx_lo,s2_pct0p2-r1,0.14279063250588553,2.0155,,14500.45,1.0,placebo: random same-size day subsets,0.68125,,,286,540
+placebo-c1-NQ-tf5|nyam|seed2,vol_hi,s2_pts45-r3,0.11371356543942039,2.0155,,2087.22,0.59,placebo: random same-size day subsets,0.04125,,,271,548
+placebo-c1-NQ-tf5|nyam|seed2,vol_lo,s2_pts30-r2,0.4470423454857287,2.0155,,-23623.12,0.0,placebo: random same-size day subsets,0.81575,,,277,548
+placebo-c1-NQ-tf5|nyam|seed2,news_only,s2_pts20-r3,0.8080086723333701,2.0155,,5989.93,0.995,placebo: random same-size day subsets,0.919,,,71,568
+placebo-c1-NQ-tf5|nyam|seed2,news_never,s2_pts45-r1,0.032210373221876115,2.0155,,-3182.43,0.305,placebo: random same-size day subsets,0.558,,,497,568
+placebo-c1-NQ-tf5|nyam|seed2,long,s2_pts20-r0,0.2913156763245239,2.0155,,10140.25,0.825,placebo: same-side random-entry draws,0.853,,,,
+placebo-c1-NQ-tf5|nyam|seed2,short,s2_pct0p1-r0,0.12721707865136178,2.0155,,-28821.6,0.005,placebo: same-side random-entry draws,0.008,,,,

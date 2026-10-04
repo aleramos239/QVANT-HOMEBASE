@@ -1,0 +1,231 @@
+{
+ "specs": 117,
+ "days": [
+  "2021-11-08",
+  "2021-11-26",
+  "2022-03-14",
+  "2022-03-16",
+  "2022-08-17",
+  "2022-11-07",
+  "2023-01-03",
+  "2023-03-15",
+  "2023-06-20",
+  "2023-11-24"
+ ],
+ "records": {
+  "allow": 3151,
+  "xb": 222650,
+  "sig": 197
+ },
+ "trades": 1338,
+ "exit_reasons_counted": null,
+ "C": {
+  "allow_checked": 3151,
+  "allow_true": 1489,
+  "allow_mismatch": {
+   "n": 0,
+   "first": []
+  },
+  "xb_checked": 222650,
+  "xb_inpos": 5310,
+  "xb_mismatch": {
+   "n": 0,
+   "first": []
+  },
+  "fired": 379,
+  "book_exits": 379,
+  "book_exit_mismatch": {
+   "n": 0,
+   "first": []
+  },
+  "allow_by_variant": {
+   "OptDonchian::fbook": [
+    373,
+    90
+   ],
+   "OptDonchian::xbook": [
+    271,
+    271
+   ],
+   "OptDonchian::thin": [
+    407,
+    60
+   ],
+   "OptOrb::fbook": [
+    272,
+    118
+   ],
+   "OptOrb::xbook": [
+    272,
+    272
+   ],
+   "OptOrb::thin": [
+    272,
+    26
+   ],
+   "OptStraddle::fbook": [
+    192,
+    86
+   ],
+   "OptStraddle::xbook": [
+    192,
+    192
+   ],
+   "OptStraddle::thin": [
+    192,
+    12
+   ],
+   "OptStraddleT:09:30:fbook": [
+    40,
+    18
+   ],
+   "OptStraddleT:09:30:xbook": [
+    40,
+    40
+   ],
+   "OptStraddleT:09:30:thin": [
+    40,
+    10
+   ],
+   "OptStraddleT:20:00:fbook": [
+    40,
+    14
+   ],
+   "OptStraddleT:20:00:xbook": [
+    40,
+    40
+   ],
+   "OptStraddleT:20:00:thin": [
+    40,
+    8
+   ],
+   "OptStraddleT:00:00:fbook": [
+    40,
+    18
+   ],
+   "OptStraddleT:00:00:xbook": [
+    40,
+    40
+   ],
+   "OptStraddleT:00:00:thin": [
+    40,
+    4
+   ],
+   "OptStraddleT:03:00:fbook": [
+    40,
+    18
+   ],
+   "OptStraddleT:03:00:xbook": [
+    40,
+    40
+   ],
+   "OptStraddleT:03:00:thin": [
+    40,
+    0
+   ],
+   "OptStraddleT:08:30:fbook": [
+    40,
+    18
+   ],
+   "OptStraddleT:08:30:xbook": [
+    40,
+    40
+   ],
+   "OptStraddleT:08:30:thin": [
+    40,
+    18
+   ],
+   "OptStraddleT:18:00:fbook": [
+    36,
+    0
+   ],
+   "OptStraddleT:18:00:xbook": [
+    36,
+    36
+   ],
+   "OptStraddleT:18:00:thin": [
+    36,
+    0
+   ]
+  }
+ },
+ "B": {
+  "10:15:00": {
+   "records_before_or_at_cut": 161430,
+   "records_exactly_at_cut": 217,
+   "records_equal": true,
+   "closed_trades": 955,
+   "closed_equal": true,
+   "entries_before_cut": 993,
+   "entries_equal": true,
+   "specs_with_identical_full_day (garbage was not vacuous if < specs)": 89
+  },
+  "leak control: the row usable AT the cut garbled": {
+   "records_equal (must be False)": false
+  },
+  "leak control: the last minute of prints before the cut garbled": {
+   "records_equal (must be False)": false,
+   "entries_equal": false
+  },
+  "09:30:00": {
+   "records_before_or_at_cut": 152201,
+   "records_exactly_at_cut": 440,
+   "records_equal": true,
+   "closed_trades": 775,
+   "closed_equal": true,
+   "entries_before_cut": 811,
+   "entries_equal": true,
+   "specs_with_identical_full_day (garbage was not vacuous if < specs)": 75
+  },
+  "03:00:00": {
+   "records_before_or_at_cut": 73050,
+   "records_exactly_at_cut": 440,
+   "records_equal": true,
+   "closed_trades": 342,
+   "closed_equal": false,
+   "entries_before_cut": 364,
+   "entries_equal": true,
+   "specs_with_identical_full_day (garbage was not vacuous if < specs)": 53
+  },
+  "00:00:00": {
+   "records_before_or_at_cut": 36580,
+   "records_exactly_at_cut": 120,
+   "records_equal": true,
+   "closed_trades": 211,
+   "closed_equal": true,
+   "entries_before_cut": 211,
+   "entries_equal": true,
+   "specs_with_identical_full_day (garbage was not vacuous if < specs)": 45
+  },
+  "eve 20:00:00": {
+   "records_before_or_at_cut": 12382,
+   "records_exactly_at_cut": 226,
+   "records_equal": true,
+   "closed_trades": 51,
+   "closed_equal": true,
+   "entries_before_cut": 72,
+   "entries_equal": true,
+   "specs_with_identical_full_day (garbage was not vacuous if < specs)": 21
+  },
+  "eve 18:00:00": {
+   "records_before_or_at_cut": 108,
+   "records_exactly_at_cut": 108,
+   "records_equal": true,
+   "closed_trades": 0,
+   "closed_equal": true,
+   "entries_before_cut": 0,
+   "entries_equal": true,
+   "specs_with_identical_full_day (garbage was not vacuous if < specs)": 19
+  },
+  "08:30:00": {
+   "records_before_or_at_cut": 139767,
+   "records_exactly_at_cut": 320,
+   "records_equal": true,
+   "closed_trades": 666,
+   "closed_equal": true,
+   "entries_before_cut": 676,
+   "entries_equal": true,
+   "specs_with_identical_full_day (garbage was not vacuous if < specs)": 59
+  }
+ }
+}

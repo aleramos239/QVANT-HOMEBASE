@@ -1,0 +1,49 @@
+{
+ "family": "ib",
+ "root": "GC",
+ "tf": "5",
+ "days": 10,
+ "cells": 64,
+ "variants": 2,
+ "sessions": 10,
+ "used": 9,
+ "eve_skipped": 0,
+ "skipped_by_error": 0,
+ "errors": [],
+ "trades_total": 776,
+ "trades_per_cell": {
+  "min": 10,
+  "max": 14
+ },
+ "cells_without_trades": 0,
+ "long": 384,
+ "short": 392,
+ "by_session": {
+  "mid": 212,
+  "nyam": 192,
+  "pm": 372
+ },
+ "by_stop_mode": {
+  "atr": 188,
+  "pts": 388,
+  "pct": 200
+ },
+ "entry_kind": {
+  "market": 360,
+  "resting": 416
+ },
+ "both_sides_declared": true,
+ "both_sides_sessions": 9,
+ "segments": [
+  "day"
+ ],
+ "hold_to": "day",
+ "instances_per_cell": 3,
+ "exit_after_day_flat": 0,
+ "overlap_in_session": 0,
+ "entry_in_no_session": 0,
+ "both_sides_ok": true,
+ "worker_parity": true,
+ "nulls": {},
+ "ok": true
+}

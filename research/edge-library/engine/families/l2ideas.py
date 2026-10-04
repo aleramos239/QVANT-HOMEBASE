@@ -1,0 +1,675 @@
+"""NEW LEVEL-2 IDEAS of the edge library (EDGE_SPEC "Families and their rationale", D; NQ only -- Level 2 exists for NQ only).
+
+Written 2026-10-02 11:33 ET, BEFORE anything in this module was run on any data (smoke included). PRE-REGISTRATION: the
+definitions, constants, variants, tfs and rationales below do not change after a performance number has been seen; a bug
+fix is reported as a bug fix. Features are read through the engine's guarded accessors only. Tests: tests/test_new_l2.py.
+
+AMENDED 2026-10-02 ~14:00 ET, in the verify round, BEFORE any menu run (no ledger row, no runs/ store, no P&L seen by anyone;
+the verifiers' evidence was trade COUNTS and TIMINGS on the 10 smoke days). Nothing of the D1 / D5 trading rules changed.
+  1. BUG FIX (stage D, D2 / D4 on a RESTING entry): the filter is now judged AT THE TRADE, as EDGE_SPEC says ("skip a trade
+     when ... opposes its side", "only when depth on the break side is thin"), not once when the bracket is placed. It was
+     read at placement only: 40 % of the f_book fills went into an opposing book, verdicts were up to 178 minutes old,
+     and on a straddle the filter merely picked one leg. Now: the base's bracket, each fill kept or skipped (below).
+  2. BUG FIX (stage D, D3): the book exit needs a FLIP, as EDGE_SPEC says ("flips against the open trade"; "the inventory
+     that supported the trade is gone"). It fired on any 2 opposed minutes, also when the book had opposed the trade from
+     the entry on (58 % of the x_book trades; most exits came 2 minutes after the fill).
+  3. LABELS: D1 is a SECOND LOOK on BUILD and PICK and carries WEAK PRIOR; D5 is ADJACENT TO A REFUTED PROGRAM and carries
+     WEAK PRIOR; D2 on orb / donchian / straddle is a SECOND LOOK (the L2 screen's gate G1). `weak` raises the admission
+     bar (t >= 3 on BUILD) and never lowers one: the orchestrator may take it back (one line each) before admission.
+     The labels stand in the notes AND, in brackets, after the EDGE_SPEC rationale sentence (a card prints the rationale).
+  4. THE SEAL of a stage D run is read from the base unit's own BUILD store (per session), a variant always runs the
+     base's whole grid (no subset), its store says in which sessions it may be read, and a member cell has its own runner.
+  5. The DEAD list is gone: under 1. the two entry filters on the 18:00 straddle can trade (a fill from the first usable
+     book reading after the reopen on: 18:05 for f_book, 18:09 for f_thin), so nothing is dead by construction any more.
+
+REGISTRY ENTRIES (FAMILIES: base units of the BUILD menu, run by run_menus like every other library family)
+  bimb_follow_d1   D1 `bimb_follow` tf 5. The L2 screen's B1 (families/book.py BimbFollow, unchanged: FAMILIES.md "Book
+                   families"): z = the newest usable imb10 against the rows stamped in the 60 minutes before it (book_ok,
+                   finite, >= 30 of them, std > 0); |z| >= k at a 5-minute close -> market WITH the sign of z (z > 0: the
+                   bid side is heavier than its own trailing hour -> long). Top-10 imbalance only (n_lv pinned to "10":
+                   imb3 is not loaded), tf 5 only (EDGE_SPEC D1: "bimb_follow tf5"). The registry name carries `_d1`
+                   because `bimb_follow` is the L2 pilot's own screen entry (families/book.py, a 4-tuple, not a library
+                   family); the class and the trigger are the same.
+                   WEAK PRIOR + SECOND LOOK (SECOND_LOOK below): the L2 screen already ran this family and cell over BUILD
+                   and 2024 and named it its one lead after seeing both.
+  flow_exhaust     D5 `flow_exhaust`, tf 1 and 5. At an ON-TIME tf-bar close T inside a session (the flow families'
+                   decision instant, families/flow.py `_Flow._on_time`: T on the tf clock grid, the bar's last minute
+                   printed, the newest usable row is the minute that just ended and its book_ok is True, T more than 5
+                   minutes before the session / half-day end):
+                     1. FLOW     D = sum of f_delta over the signal bar's clock bucket [T - tf, T); |D| > 0 and |D| >= the
+                                 q-th percentile of |D_j| over the 60 clock buckets before it (>= 30 valid) -- exactly F1's
+                                 trigger (`_Flow._delta`, numpy linear percentile, inclusive).
+                     2. EXTREME  in the delta's direction the bar makes a new SESSION extreme: D > 0 and the bar's HIGH is
+                                 above the highest high of the session's earlier tf bars; D < 0 and its LOW is below their
+                                 lowest low (strict; (decided) a WICK counts -- the absorbed push is the wick; "session" =
+                                 the Template session of the decision; "earlier bars" = the Template bars whose nominal
+                                 close is inside the session before this one, at least one: F3's convention).
+                     3. REJECT   the bar CLOSES in the opposite half of its own range: D > 0 and close < (high + low) / 2;
+                                 D < 0 and close > (high + low) / 2 (strict; a close exactly at the midpoint or a zero-range
+                                 bar is no signal).
+                     -> FADE at market: D > 0 -> SHORT, D < 0 -> LONG. One market order (both_sides False), no state of its
+                     own; stops / targets = the menu's; max_tr 3 per session, flat at the session end (Template defaults).
+                   (decided) no extra warm-up: the only requirement beyond the Template's is one earlier session bar.
+                   Evening segment: no half-day cut there (the Template's own last-5-minutes rule ends entries at 23:54).
+                   WEAK PRIOR, ADJACENT TO A REFUTED PROGRAM (ADJACENT below).
+  Variants (EDGE_SPEC "PROPER RE-RUN" 4, quoted above the entries) x the 32 exit cells; C2 feature-shuffle nulls (2 seeds)
+  are run by run_menus for both (FEATURES is not empty). Roots: NQ.
+
+KNOW BEFORE READING A D1 / D5 PLATEAU (choices fixed before any run; none was changed in the verify round)
+  a. D1 has no half-day cut (the screen's class, unchanged): on a CME half day it can enter 13:10-13:15 and is flattened at
+     13:15. D5 has the flow families' cut (no signal from 13:10 on).
+  b. D5 inherits the flow families' `book_ok` guard although it reads only flow: it does not trade on roll day -1 / 0 / +1
+     (27 of the 594 BUILD sessions; f_delta is valid there). `book_ok` also carries the data layer's contract-mismatch
+     mask, a HINDSIGHT data-quality flag (it looks up to 32 minutes ahead): 855 BUILD rows (0.10 %) on 8 sessions outside
+     the roll blocks. Live the book and the tape are one feed, so there is nothing to reproduce.
+  c. D5's "session" is the Template session with no warm-up: early in a session a "new session extreme" is the extreme of a
+     few bars (at tf 1 about a quarter of the entries on the smoke days fall in the first 15 minutes of a session). F3
+     `cvd_div`, the cited convention, has a 15-minute warm-up; D5 does not.
+  d. tf 1 and 5 = the cadence of the L2 pilot's flow families. The trailing 60 clock buckets (>= 30 valid) reach back to
+     the 18:00 reopen at most (the feature slice is one Globex day), so the first possible signal is 18:00 + 31 x tf:
+     18:31 at tf 1, 20:35 at tf 5 (D1: 18:35) -- the 20:00 Tokyo hour is outside D5 at tf 5. At tf 15 it would be 01:45
+     and at tf 30 09:30 (no evening / Asia, at tf 30 no London / pre-open either): those two tfs are not registered.
+
+STAGE D -- Level-2 filters / exit as VARIANTS of a base family (EDGE_SPEC D2 / D3 / D4)
+  A variant = the SAME base family (its registered class body, defaults, family-parameter variants and tfs) + ONE option:
+      <base>_fbook   D2  f_book   skip a trade when the 5-minute mean imb10 opposes its side
+      <base>_xbook   D3  x_book   leave when the 5-minute mean imb10 flips against the open trade for 2 consecutive minutes
+      <base>_thin    D4  f_thin   `thin_ahead_break`: an entry only when the break-side top-10 depth is thin (ratio <= 0.8)
+  for the breakout families orb, donchian, straddle and the nine straddle_t_<HHMM> (STAGE_D); `variant(base + "_" + suffix)`
+  also accepts any other registered library family (D2 / D3 are "on any member").
+  The signals are the engine's (l2sim.book_mean5: 5 consecutive finite rows, the newest one the minute that just ended;
+  l2sim.thin_ahead: ask10_rel15 for a long, bid10_rel15 for a short, ratio <= 0.8) and its constants (5 rows, 2 minutes,
+  0.8). WHEN they are judged is this module's `StageD` mixin, put in front of the base's registered class (`stage_class`):
+    MARKET entry (donchian)   the engine's rule, unchanged: the filter is read at the entry decision (l2sim.Template.allowed).
+    RESTING entry (orb, straddle, straddle_t: OCO stop entries placed at a clock time)
+        A resting order cannot be stopped at the instant it fills, so the filter is applied to the base's TRADE, as the L2
+        pilot's gate G1 was ("feature = last usable row before entry_ms"). The bracket in the simulator is the base's own,
+        untouched (same legs, OCO, prices, brackets, cancel time). A fill is KEPT only when the filter allowed its side
+        at the 1-minute decision that began the fill's own minute (every 1-minute close while the bracket rests, and the
+        placement instant; the rows usable at that instant, never a later one). A fill the filter refuses is a SKIPPED
+        trade: `kept` removes it from the variant's trade list before anything is stored, counted or scored. So a
+        variant's trades are a subset of its base's, row for row, and the verdict behind every kept fill is less than
+        one minute old.
+        LIVE this is: at every minute start pull the leg the filter refuses and watch its level instead; a resting leg
+        that fills is the trade; a watched level that trades cancels the bracket (the base's breakout happened without
+        us: nothing else is traded in its place, the second break of a level never).
+        Limits, all stated: (i) no decision began the fill's minute (the minute before it had no print, or the session
+        window ended before the next 1-minute close) = no signal = skipped; (ii) the minute's verdict holds for the whole
+        minute: the latency of pulling / re-placing a leg whose verdict changed at that minute start is not modelled,
+        also not by the 250 ms stress; (iii) the one-direction evidence on a kept row (`oco`, `both_sides`) is the base
+        bracket's -- conservative for the Apex screen (live only the allowed legs rest); (iv) while a skipped trade
+        would have been open the strategy takes no other entry (the breakout bases place one bracket per session or
+        clock time, so nothing is lost there).
+    BOOK EXIT (D3, any entry type), at every 1-minute close with a position open: the exit is ARMED once the 5-minute
+        mean has NOT opposed the trade -- at its entry (the reading of the last 1-minute close at or before the fill:
+        the very verdict D2 would use) or at a usable minute since. Armed, 2 consecutive usable opposed minutes -> a
+        market exit (placement latency applies). A trade the book opposed from its entry on is left to its stop / target
+        / time exit until the book has been on its side (or neutral) once. No signal: nothing happens, it neither counts
+        nor resets.
+    No book signal (NaN / book_ok False / stale) = no entry for the filters. A resting LIMIT entry under an entry filter is
+    refused (no registered library family uses one).
+  THEY ARE NOT ENTRIES OF `FAMILIES`, on purpose: the registry contract refuses a Level-2 option in a registry entry and in a
+  registered variant (families.check_entry / check_library: "L2 filter / exit variants only on base units that pass the BUILD
+  plateau"), and run_menus plans every registered library family as a base unit of the 40,000-cell menu. A stage D variant
+  is run only for a base unit that has a BUILD store with at least one session whose plateau passed:
+      l2ideas.base_sessions("orb_fbook", "5")       # the sessions in which runs/orb-NQ-tf5/ passed the BUILD plateau
+      l2ideas.run_variant("orb_fbook", "5")         # StageDSealed unless that list is not empty
+          -> runs/orb_fbook-NQ-tf5/ (+ -c2s1, -c2s2): the base's WHOLE grid with the option on (same cell ids), over the same
+             BUILD sessions and tape; run.json carries `base_pass_sessions`. The stores hold the KEPT trades.
+             nulls=False runs the grid alone (N cells); the two C2 nulls (2 N) can follow later, the call is idempotent.
+      l2ideas.variant_table("orb_fbook", "5", "nyam")   # the plateau table of ONE session; refused outside base_pass_sessions
+      l2ideas.run_member("orb_fbook", "5", variant, exit_cell, "build" | "pick", sess=..., stress=..., c2_seed=...)
+          -> ONE member cell (the Admit stage's PICK / stress / C2 runs). PICK only when the variant's own BUILD plateau of
+             that session passed. NEVER `library.run_member(base, ..., extra={"f_book": "on"})` for a stage D member: that is
+             the base's class with the engine option, i.e. the placement-time filter and the exit without a flip.
+      l2ideas.kept(result["trades"])                # for any raw l2sim result of a stage D class run by hand
+  JUDGING a variant (nothing new is registered here; it follows from EDGE_SPEC): it is a candidate like any other -- its
+  own BUILD plateau over the same cells as its base, every admission test, C2 with both seeds (`l2` is True in its meta) --
+  and it is one rule more complex than its base, so "ties go to the simpler variant" keeps the base unless the variant is
+  better. How much better is not pre-registered: the Admit stage states both side by side.
+  Nulls of a variant: the C2 feature shuffle (2 seeds) -- does the real book do better than another session's book at the
+  same time of day? The time-shuffle null of a straddle_t belongs to its base unit (the clock time), not to the option.
+"""
+from __future__ import annotations
+
+import sys
+import time
+
+import l2sim as S
+
+from . import book as B
+from . import flow as F
+
+
+# ---- D1 bimb_follow (tf 5) ---------------------------------------------------------------------------------------------------
+class BimbFollowD1(B.BimbFollow):
+    """D1 (module docstring): families/book.py BimbFollow at tf 5 on the top-10 imbalance; nothing else is changed."""
+    SCHEMA = {"n_lv": ("choice", ("10",))}             # top-10 only: imb3 is not in FEATURES (not loaded)
+    SCREEN_TFS = ("5",)
+    FEATURES = ("imb10", "book_ok", "t_utc")
+
+
+# ---- D5 flow_exhaust ---------------------------------------------------------------------------------------------------------
+class FlowExhaust(F._Flow):
+    """D5 (module docstring): a top-percentile |delta| tf bar that makes a new session extreme in the delta's direction but
+    closes in the opposite half of its range -> fade the aggressor. The decision instant, the tf-bucket aggregation and
+    the percentile trigger are the flow families' (families/flow.py: _on_time, _delta)."""
+    DEFAULTS = {"q": 90.0}
+    SCHEMA = {"q": ("float", 50.0, 99.9)}
+    FEATURES = ("f_delta", "t_utc", "book_ok")
+
+    def fam_day(self, ctx):
+        if getattr(ctx, "segment", "day") == "eve":
+            self._day_cut = self.t0                    # the evening ends at 00:00 ET of the trade date: no half-day cut
+        else:
+            super().fam_day(ctx)
+
+    def fam_signal(self, ctx):
+        sn = self.sn
+        if sn < 2:                                     # a session extreme needs an earlier bar of this session
+            return
+        T = self._on_time(ctx)
+        if T is None:
+            return
+        d = self._delta(ctx, T)
+        if d is None:
+            return
+        h, l, c = self.H[-1], self.L[-1], self.C[-1]
+        mid = (h + l) / 2.0
+        if d > 0:
+            if h > max(self.H[-sn:-1]) and c < mid:
+                self._mkt(ctx, "short")
+        elif l < min(self.L[-sn:-1]) and c > mid:
+            self._mkt(ctx, "long")
+
+
+# EDGE_SPEC user rule 3: a second look "must be labelled". L = research/prop-portfolio/2026-10-01-l2 (the L2 pilot, READ-ONLY).
+# D1: L/runs/bimb_follow-tf5/run.json (range 2021-09-22..2024-12-31, inputs k 2.0, atr 1.5, tgt_r 2.0) is this class and
+# cell; L/progress.md names it the screen's one lead with its BUILD / 2024 split in view, "picked post hoc among 122", while
+# the screen's own verdict was "0 of 14 L2 families beat their shuffled book under the pre-declared rule".
+# D2: L/SPEC.md "G1 skip if sign(imb10 5-min mean) opposes the trade side" was run on the old picks' in-sample trade lists
+# (L/runs/gate_{orb-tf5, donchian-tf15, straddle-tf30}_*_G1, 2024 included); L/progress.md: "Gates G1-G3: none improves an
+# approved pick beyond its permutation null". straddle_t 03:00 / 09:30 / 13:30 with an ATR offset = straddle tf 30 london /
+# nyam / pm under a new name (families/timed.py SECOND_LOOK).
+SEEN_D1 = ("SECOND LOOK (BUILD + PICK): the L2 screen (prop-portfolio/2026-10-01-l2, run bimb_follow-tf5, 2021-09-22..2024-12-31) "
+           "already ran this family and its cell k 2.0 / atr 1.5 / 1:2 and named it its one lead with the BUILD and the 2024 "
+           "result in view (picked post hoc among 122 configurations; the screen's pre-declared verdict was 0 of 14 L2 families): "
+           "a positive PICK is not fresh confirmation, the proof is EXAM or forward trading")
+SEEN_G1 = ("SECOND LOOK (BUILD + PICK): the L2 screen's gate G1 (skip if the 5-minute mean imb10 opposes the side) was already "
+           "judged on the old pick {0} over 2021-09-22..2024-12-31 and did not improve it beyond its permutation null: a positive "
+           "PICK is not fresh confirmation")
+SECOND_LOOK = {"bimb_follow_d1": SEEN_D1,
+               "orb_fbook": SEEN_G1.format("orb-tf5"), "donchian_fbook": SEEN_G1.format("donchian-tf15"),
+               "straddle_fbook": SEEN_G1.format("straddle-tf30"),
+               **{f"straddle_t_{t}_fbook": SEEN_G1.format(f"straddle-tf30 (straddle_t {t[:2]}:{t[2:]} with an ATR offset is its {s} session)")
+                  for t, s in (("0300", "london"), ("0930", "nyam"), ("1330", "pm"))}}
+# D5 is inferred absorption from trade prints at a price extreme. Vault finding 2026-09-24-nq-absorption-intraday-refuted:
+# "inferred absorption from trade prints (no order book) does not predict the next 5-25 NQ points"; its relatives in the L2
+# screen, F2 absorption and F3 cvd_div, did not beat their shuffled nulls (L/FAMILIES.md F2: "to be labelled 'adjacent to a
+# refuted program' wherever it is shown"). EDGE_SPEC B gives vwap_ema_x WEAK PRIOR for the same reason (a relative that did
+# not survive): the same standard is applied here.
+ADJACENT = {"flow_exhaust": "ADJACENT TO A REFUTED PROGRAM: inferred absorption from trade prints at a price extreme; the "
+                            "2026-09-24 NQ absorption program was refuted and its relatives in the L2 screen (F2 absorption, F3 "
+                            "cvd_div) did not beat their shuffled nulls -- state this next to any result"}
+
+
+def second_look(name: str) -> str | None:
+    """The label EDGE_SPEC user rule 3 demands for a registered family or a stage D variant of this module, or None."""
+    return SECOND_LOOK.get(name)
+
+
+def labelled(rationale: str, *labels: str) -> str:
+    """The EDGE_SPEC rationale sentence, word for word, with the labels a card must show after it in brackets (library.card
+    prints the rationale, `weak` and `penalty` -- not the notes)."""
+    return f"{rationale} [{'; '.join(labels)}]" if labels else rationale
+
+
+# COMPLEXITY = rules + free parameters, counted as the ported families count it (families/port1.py, ENGINE.md's donchian = 3):
+# one per level / state DEFINITION, one per entry TRIGGER, one per extra condition, one per free family parameter; the
+# Template's common inputs and fixed constants (the 60-bar / 60-minute windows, 30 valid) are not counted.
+# `weak` (admission: t >= 3 on BUILD) was set for both in the verify round, before any menu run: D1 because BUILD and PICK were
+# already seen for it (SEEN_D1), D5 because its prior is a refuted one (ADJACENT). EDGE_SPEC marks neither: the orchestrator
+# may take `"weak": True` back before admission (it changes no trade, only the admission bar).
+FAMILIES = {
+    # EDGE_SPEC D1: "`bimb_follow` tf5 (survived the L2 screen vs shuffled book) -- rationale: resting size leaning one way is
+    #   inventory that must be worked through; price drifts toward the heavy side over minutes."
+    # EDGE_SPEC "PROPER RE-RUN" 4: "New families: bimb_follow z {1.5, 2.0, 2.5}; flow_exhaust percentile {85, 90, 95}; ..."
+    # complexity 3 = z definition (imb10 against its own trailing hour) + trigger (|z| >= k at a tf close -> market with z) + k
+    "bimb_follow_d1": (BimbFollowD1, {}, False,
+                       "D1 bimb_follow tf5: |z(imb10, trailing 60 min)| >= k at a 5-minute close -> market WITH the sign of z "
+                       "(the L2 screen's B1, families/book.py, unchanged); WEAK PRIOR; " + SEEN_D1,
+                       {"rationale": labelled("resting size leaning one way is inventory that must be worked through; price drifts "
+                                              "toward the heavy side over minutes.", "WEAK PRIOR", SEEN_D1),
+                        "complexity": 3,
+                        "weak": True,
+                        "variants": [{"k": 1.5}, {"k": 2.0}, {"k": 2.5}]}),
+    # EDGE_SPEC D5: "`flow_exhaust`: tf-bar makes a new session high (low) on top-decile |delta| in the move's direction but
+    #   closes in the lower (upper) half of its range -> fade -- rationale: aggressive buyers were absorbed at the extreme."
+    # EDGE_SPEC "PROPER RE-RUN" 4: "New families: bimb_follow z {1.5, 2.0, 2.5}; flow_exhaust percentile {85, 90, 95}; ..."
+    # complexity 5 = bar-delta percentile definition (vs the trailing 60 tf bars) + session-extreme definition + trigger (new
+    #                extreme on a top-percentile delta bar in the delta's direction -> fade) + the close-in-the-opposite-half
+    #                condition + q
+    "flow_exhaust": (FlowExhaust, {}, False,
+                     "D5 flow_exhaust: tf bar with |delta| >= the q-th percentile of the trailing 60 tf bars makes a new session "
+                     "high (low) in the delta's direction but closes in the lower (upper) half of its range -> fade at market; "
+                     "WEAK PRIOR; " + ADJACENT["flow_exhaust"],
+                     {"rationale": labelled("aggressive buyers were absorbed at the extreme.", "WEAK PRIOR", ADJACENT["flow_exhaust"]),
+                      "complexity": 5,
+                      "weak": True,
+                      "variants": [{"q": 85.0}, {"q": 90.0}, {"q": 95.0}]}),
+}
+
+
+# ---- STAGE D: Level-2 filters / exit as variants of a base family (EDGE_SPEC D2 / D3 / D4) -----------------------------------
+class StageD:
+    """Mixin in front of a base family's registered class (stage_class): WHEN the engine's Level-2 signals are judged
+    (module docstring, STAGE D). With f_book, x_book and f_thin off it changes nothing: the class trades as its base."""
+
+    def on_session(self, ctx):
+        self._watch = []                               # resting entries under an entry filter that are not judged yet
+        self._ok = {}                                  # side (+1 / -1) -> the filter's verdict at the newest decision
+        self._ok_at = 0                                # ... and the instant of that decision (ns)
+        self._bk = None                                # x_book: the 5-minute mean at the newest 1-minute close (None = no signal)
+        self._xfor = None                              # x_book: the fill (ns) that `_armed` belongs to
+        self._armed = False                            # x_book: the book has not opposed this trade at its entry or since
+        self._gate = self.p["f_book"] != "off" or self.p["f_thin"] != "off"
+        super().on_session(ctx)
+
+    # ---- D2 / D4 on a resting entry: the base's bracket, each fill judged by the decision that began its minute
+    def _verdict(self, ctx, sd: int) -> bool:
+        """The two Level-2 entry filters for side sd at this instant (the engine's signals; no signal -> False)."""
+        if self.p["f_book"] != "off":
+            m = S.book_mean5(ctx)
+            if m is None or m * sd < 0:
+                return False
+        return self.p["f_thin"] == "off" or S.thin_ahead(ctx, sd) is True
+
+    def _arm(self, ctx, legs, ttl=None, imm=False, tag=None, lp=None):
+        if not self._gate:
+            return super()._arm(ctx, legs, ttl=ttl, imm=imm, tag=tag, lp=lp)
+        p = self.p
+        keep = p["f_book"], p["f_thin"]
+        p["f_book"] = p["f_thin"] = "off"              # the base's own bracket: the filter judges its FILL, not its placement
+        try:
+            orders = super()._arm(ctx, legs, ttl=ttl, imm=imm, tag=tag, lp=lp)
+        finally:
+            p["f_book"], p["f_thin"] = keep
+        for o in orders:
+            o.tag = {TAG: None, "tag": o.tag}          # the verdict travels on the trade row (kept reads and removes it)
+        self._watch += orders
+        self._judge(ctx)
+        return orders
+
+    def _judge(self, ctx):
+        """A 1-minute decision (also the placement instant). A watched order that FILLED since the last decision is kept
+        only if that decision allowed its side and is less than a minute older than the fill; then the verdicts of the
+        orders still resting are taken anew, on the rows usable now."""
+        rest = []
+        for o in self._watch:
+            if o.status == "filled":
+                o.tag[TAG] = bool(self._ok.get(o.side)) and 0 <= o.fill_ms * 1_000_000 - self._ok_at < S.MIN_NS
+            elif o.status == "working":
+                rest.append(o)
+        self._watch = rest
+        if rest:
+            self._ok = {sd: self._verdict(ctx, sd) for sd in sorted({o.side for o in rest})}
+            self._ok_at = ctx.now_ns
+
+    def on_bar(self, ctx, bar):
+        if self._watch:
+            self._judge(ctx)
+        super().on_bar(ctx, bar)
+
+    def _lim(self, ctx, side, px, struct=None, tp_px=None, ttl=None, tag=None):
+        if self._gate:
+            raise NotImplementedError("stage D entry filters are defined for market and stop entries, not for a resting limit")
+        return super()._lim(ctx, side, px, struct=struct, tp_px=tp_px, ttl=ttl, tag=tag)
+
+    # ---- D3: the book exit needs a flip
+    def _xbook(self, ctx):
+        self._sync(ctx)
+        m, was = S.book_mean5(ctx), self._bk
+        self._bk = m
+        if ctx.flat or self.fill_ns is None or ctx.now_ns <= self.fill_ns:
+            self.xb = 0
+            return
+        if self._xfor != self.fill_ns:                 # the first 1-minute close after this fill: the reading at the entry
+            self._xfor = self.fill_ns
+            self._armed = was is not None and was * self.side >= 0
+        if m is None:
+            return
+        if m * self.side >= 0:
+            self._armed, self.xb = True, 0
+        elif self._armed:
+            self.xb += 1
+            if self.xb >= S.BOOK_EXIT_N:
+                ctx.exit_market("book")
+                self.xb = 0
+
+
+TAG = "stage_d"                                        # key of the verdict a filtered resting fill carries in its trade tag
+
+
+def kept(trades: list) -> list:
+    """THE ENTRY FILTER ON A RESTING ENTRY (module docstring): the trades of a stage D run that the filter let through,
+    as the base's own rows (the judging tag is taken off again; a family's own tag is put back). A fill that was refused,
+    or never judged (no 1-minute close followed it inside the session window: no signal), is a skipped trade and is not
+    returned. Rows without the tag (market entries, x_book runs, base runs) pass unchanged. EVERY reader of a raw l2sim
+    result of a stage D class with f_book / f_thin on must go through here: run_variant and run_member do."""
+    out = []
+    for t in trades:
+        tag = t.get("tag")
+        if isinstance(tag, dict) and TAG in tag:
+            if tag[TAG] is not True:
+                continue
+            t = {k: v for k, v in t.items() if k != "tag"}
+            if tag["tag"] is not None:
+                t["tag"] = tag["tag"]
+        out.append(t)
+    return out
+
+
+
+for _k in [k for k in globals() if k.startswith("D_")]:      # a reload of the module rebuilds the stage classes
+    del globals()[_k]
+
+
+def stage_class(base: str):
+    """The stage D class of a registered library family: StageD in front of its registered class, named D_<base> in this
+    module (worker processes import it by that name; see __getattr__)."""
+    name = "D_" + base
+    cls = globals().get(name)
+    if cls is None:
+        fam = _registry()
+        fam.library(base)                              # KeyError (with the reason) unless a registered library family
+        cls = type(name, (StageD, fam.REGISTRY[base][0]),
+                   {"__module__": __name__, "__qualname__": name, "__doc__": f"Stage D class of `{base}` (StageD + its registered class)."})
+        globals()[name] = cls
+    return cls
+
+
+def __getattr__(name: str):
+    if name.startswith("D_"):
+        try:
+            return stage_class(name[2:])
+        except KeyError:
+            pass
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+# suffix -> (EDGE_SPEC id, the Template input of l2sim, the EDGE_SPEC rule, the EDGE_SPEC rationale (verbatim))
+L2_OPTIONS = {
+    # EDGE_SPEC D2: "book FILTER on any member: skip a trade when the 5-min mean imb10 opposes its side (rationale: do not
+    #   trade into the heavier book)."
+    "fbook": ("D2", {"f_book": "on"}, "skip a trade when the 5-min mean imb10 opposes its side",
+              "do not trade into the heavier book"),
+    # EDGE_SPEC D3: "book EXIT: leave when the 5-min mean imb10 flips against the open trade for 2 consecutive minutes
+    #   (rationale: the inventory that supported the trade is gone)."
+    "xbook": ("D3", {"x_book": "on"}, "leave when the 5-min mean imb10 flips against the open trade for 2 consecutive minutes",
+              "the inventory that supported the trade is gone"),
+    # EDGE_SPEC D4: "`thin_ahead_break`: breakout families (orb / donchian / straddle) only when depth on the break side is
+    #   thin (a10_rel15 or b10_rel15 <= 0.8) -- rationale: little resting size ahead = less resistance to the move."
+    "thin": ("D4", {"f_thin": "on"}, "only when depth on the break side is thin (a10_rel15 or b10_rel15 ≤ 0.8)",
+             "little resting size ahead = less resistance to the move"),
+}
+# The breakout bases, by their registry names (families/port1.py: orb, donchian, straddle; families/timed.py: one entry per
+# clock time of l2sim.LISTED_TIMES). Their family-parameter variants are the base entry's own, i.e. EDGE_SPEC "PROPER RE-RUN" 4:
+#   orb       R/tune1.jsonl line 9 (hm-orb-tf5):       "axes": [{"key": "or_min", "values": ["5", "15", "30"]}, {"key": "stop_val", ...
+#   donchian  R/tune1.jsonl line 1 (hm-donchian-tf15): "axes": [{"key": "n", "values": [10, 20, 40, 60]}, {"key": "stop_val", ...
+#   straddle  R/tune2.jsonl line 1 (hm2-straddle-tf30): "axes": [{"key": "off_atr", "values": [0.25, 0.5, 1.0]}, {"key": "stop_val", ...
+#   straddle_t_<HHMM>  EDGE_SPEC "Variant menu": "Straddle entry offsets (5): ATR30 x {0.25, 0.5, 1.0} . fixed points NQ {10, 20}"
+BREAKOUT_BASES = ("orb", "donchian", "straddle") + tuple("straddle_t_" + t.replace(":", "") for t in S.LISTED_TIMES)
+STAGE_D = {f"{b}_{sfx}": {"base": b, "suffix": sfx, "spec": sid, "option": dict(opt), "rule": rule, "rationale": why}
+           for b in BREAKOUT_BASES for sfx, (sid, opt, rule, why) in L2_OPTIONS.items()}
+C2_SEEDS = (1, 2)                                     # the feature-shuffle nulls of a variant (EDGE_SPEC E: C2, 2 seeds)
+assert set(SECOND_LOOK) - set(FAMILIES) <= set(STAGE_D)
+# What the Apex "one direction, no straddles" screen must know about a two-leg base under an entry filter.
+BOTH_SIDES = ("declared, and stamped on every kept trade row (`oco`, `both_sides`), as the base's bracket: the simulator rests the "
+              "base's own two legs and judges the fill. Conservative: live only the legs the filter allows rest (under f_book both "
+              "only when the 5-minute mean is exactly 0, under f_thin whenever both sides are thin)")
+
+
+class StageDSealed(RuntimeError):
+    """A stage D variant is run, and read, only where its base unit passed the BUILD plateau (EDGE_SPEC "PROPER RE-RUN")."""
+
+
+def _registry():
+    import families
+    return families
+
+
+def _library():
+    if str(S.W) not in sys.path:
+        sys.path.insert(0, str(S.W))
+    import library
+    return library
+
+
+def variant(name: str) -> dict:
+    """The stage D variant `<base>_<suffix>` -> {'name', 'base', 'suffix', 'spec', 'option', 'rule', 'rationale', 'breakout'}.
+    The 36 breakout variants are listed in STAGE_D; any other `<registered library family>_<fbook | xbook>` resolves too
+    (D2 / D3 are "on any member"); D4 `thin` is defined for the breakout families only."""
+    v = STAGE_D.get(name)
+    if v is not None:
+        return {"name": name, **v, "option": dict(v["option"]), "breakout": True}
+    base, _, sfx = str(name).rpartition("_")
+    if sfx in L2_OPTIONS and base and base in _registry().LIBRARY:
+        sid, opt, rule, why = L2_OPTIONS[sfx]
+        if sfx == "thin":
+            raise KeyError(f"{name!r}: D4 thin_ahead_break is defined for the breakout families only {BREAKOUT_BASES}")
+        return {"name": name, "base": base, "suffix": sfx, "spec": sid, "option": dict(opt), "rule": rule, "rationale": why,
+                "breakout": False}
+    raise KeyError(f"{name!r} is not a stage D variant: '<base>_<suffix>' with suffix one of {tuple(L2_OPTIONS)} and base a "
+                   f"registered library family (the breakout variants: {sorted(STAGE_D)})")
+
+
+def option(name: str) -> dict:
+    """The Template input of a variant, e.g. {'f_book': 'on'}. It selects the signal; the stage D timing is stage_class's:
+    never hand this to library.run_member as `extra=` for a stage D member (use l2ideas.run_member)."""
+    return variant(name)["option"]
+
+
+def _base(name: str, root: str, tf) -> tuple:
+    v = variant(name)
+    fam = _registry()
+    if name in fam.REGISTRY:
+        raise ValueError(f"{name!r} is also a registered family name: the stage D key would clash with its unit key")
+    lib = fam.library(v["base"])                      # KeyError (with the reason) when the base is not a library family
+    cls = stage_class(v["base"])
+    if root not in S.L2_ROOTS:
+        raise ValueError(f"Level-2 options exist for {sorted(S.L2_ROOTS)} only (EDGE_SPEC user rule 4): no {name} on {root}")
+    if root not in lib["roots"]:
+        raise ValueError(f"{v['base']} is not registered for root {root} (roots {lib['roots']})")
+    if str(tf) not in cls.SCREEN_TFS:
+        raise ValueError(f"{v['base']}: tf {tf} is not one of its SCREEN_TFS {cls.SCREEN_TFS}")
+    return v, fam, lib, cls
+
+
+def variant_grid(name: str, root: str = "NQ", tf: str = "5") -> list:
+    """THE MENU GRID of a stage D variant = the base unit's WHOLE grid (every registered family-parameter variant x the 32
+    exit cells) on the base's stage class with the option switched on. Ids, order, 'variant', 'exit', 'vi', 'xi' are those
+    of families.unit_grid(base, root, tf): the two stores compare cell for cell and the plateau is judged over the same
+    cells. There is no subset: a variant judged on fewer cells than its base would not be the same test."""
+    v, fam, lib, cls = _base(name, root, tf)
+    return S.menu_grid(cls, {**fam.unit_inputs(v["base"], tf, "all"), **v["option"]}, root, lib["variants"])
+
+
+def variant_features(name: str, c2_seed: int | None = None):
+    """The `features=` loader of a variant's run: l2sim.L2Features(the base's FEATURES + the option's columns), or with
+    c2_seed its C2 feature-shuffle null (score.C2Features)."""
+    v = variant(name)
+    return _registry().features_for(v["base"], S.template_feature_needs(v["option"]), c2_seed)
+
+
+def variant_meta(name: str, root: str = "NQ", tf: str = "5") -> dict:
+    """What a variant's store carries: the base's registration + the option, its EDGE_SPEC id / rule / rationale, `l2` True
+    (it depends on Level 2: admission needs C2), the second-look label (also inside `rationale`, which is what a card
+    prints) and the complexity (the base's + 1: one extra condition, no free parameter -- 5 minutes, 2 minutes and 0.8
+    are fixed)."""
+    v, fam, lib, cls = _base(name, root, tf)
+    both, notes = fam.REGISTRY[v["base"]][2:4]
+    seen = second_look(name)
+    return {"family": name, "base": v["base"], "stage_d": v["spec"], "option": v["option"], "tf": str(tf), "l2": True,
+            "both_sides_declared": both, "both_sides_note": BOTH_SIDES if both and v["suffix"] != "xbook" else None,
+            "notes": f"{v['spec']} {next(iter(v['option']))} on {v['base']}: {v['rule']}" + (f"; {seen}" if seen else "")
+                     + f" | base: {notes}",
+            "rationale": labelled(f"{lib['rationale']} + {v['spec']}: {v['rationale']}", *([seen] if seen else [])),
+            "base_rationale": lib["rationale"],
+            "l2_rationale": v["rationale"], "second_look": seen, "complexity": lib["complexity"] + 1, "weak": lib["weak"],
+            "penalty": lib["penalty"], "variants": lib["variants"]}
+
+
+def variant_key(name: str, root: str = "NQ", tf: str = "5") -> str:
+    return f"{name}-{root}-tf{tf}"
+
+
+def variant_plan(name: str, tf: str, root: str = "NQ", nulls: bool = True) -> list:
+    """The passes of ONE stage D unit: [{'key', 'stage', 'grid', 'features', 'meta'}] = the variant grid on the real book
+    ('build') and, with nulls, the same grid on the C2 feature shuffle, seeds 1 and 2 ('null'). The variant grid of N cells
+    counts N cells against the cap; its two C2 nulls (2 N cells) are tracked apart and not capped (EDGE_SPEC ORCHESTRATOR
+    DECISIONS 2026-10-03, 6). Nothing is run here."""
+    grid = variant_grid(name, root, tf)
+    meta = variant_meta(name, root, tf)
+    key = variant_key(name, root, tf)
+    out = [{"key": key, "stage": "build", "grid": grid, "features": variant_features(name), "meta": dict(meta)}]
+    if nulls:
+        for sd in C2_SEEDS:
+            out.append({"key": f"{key}-c2s{sd}", "stage": "null", "grid": grid, "features": variant_features(name, c2_seed=sd),
+                        "meta": {**meta, "control": "c2", "seed": sd}})
+    return out
+
+
+def base_sessions(name: str, tf: str, root: str = "NQ", runs_dir=None) -> list:
+    """THE SEAL: the sessions in which the variant's BASE unit passed the BUILD plateau, read from the base's own store
+    runs/<base>-<root>-tf<tf>/ (library.plateau of library.session_table, session by session). StageDSealed when the base
+    has no BUILD store of its registered grid. An empty list = the base passed nowhere: no stage D run."""
+    v, fam, lib, cls = _base(name, root, tf)
+    library = _library()
+    key = variant_key(v["base"], root, tf)
+    try:
+        u = library.load_unit(key, runs_dir)
+    except FileNotFoundError:
+        raise StageDSealed(f"{name}: its base unit {key} has no BUILD store yet (run_menus.py run --family {v['base']})") from None
+    m = u["meta"]
+    grid = [c["id"] for c in fam.unit_grid(v["base"], root, tf)]
+    if (m.get("stage"), m.get("period"), m.get("family")) != ("build", "build", v["base"]) or [c["id"] for c in m["cells"]] != grid:
+        raise StageDSealed(f"{name}: runs/{key} is not the BUILD store of {v['base']}'s registered grid")
+    return [s for s in library.SESS7 if library.plateau(library.session_table(u, s))["pass"]]
+
+
+def run_variant(name: str, tf: str, *, root: str = "NQ", nulls: bool = True, workers: int | None = None, runs_dir=None,
+                ledger=None, log=None, days=None) -> list:
+    """Run ONE stage D unit over BUILD: the base's whole menu grid with the option on (+ its two C2 nulls), one tape pass
+    each, through run_menus (its grid runner and its store / ledger writer: same stores, same ledger rows, same caps,
+    idempotent) with `kept` in between -> [{key, ok, cells} | {key, skipped: True}].
+    REFUSED (StageDSealed) unless the base unit passed the BUILD plateau in at least one session (base_sessions): EDGE_SPEC
+    runs L2 filter / exit variants only on base units that pass the BUILD plateau. Every store's run.json carries
+    `base_pass_sessions`: the variant is read in those sessions only (variant_table). The whole unit fits under the cell cap
+    or nothing runs. `days` / runs_dir / ledger / log: tests only. BUILD only: nothing here reads PICK or EXAM."""
+    passed = base_sessions(name, tf, root, runs_dir)
+    if not passed:
+        raise StageDSealed(f"{name} tf {tf}: its base unit passed the BUILD plateau in no session -- a stage D variant runs only "
+                           "on a base unit that passed")
+    plan = variant_plan(name, tf, root, nulls)
+    library = _library()
+    import run_menus as RM
+    RM.registry()                                     # refuses while the registry has errors
+    todo = [p for p in plan if not RM.done(p["key"], runs_dir, ledger, p["stage"])]
+    out = [{"key": p["key"], "skipped": True} for p in plan if p not in todo]
+    if not todo:
+        return out
+    # the candidate grid must fit under the 40,000 cap; the C2 nulls are tracked apart (ORCHESTRATOR DECISIONS 2026-10-03, 6)
+    library.ledger_check(cells=sum(len(p["grid"]) for p in todo if p["stage"] == "build"), path=ledger)
+    workers = RM.auto_workers(workers)
+    kw = dict(getattr(stage_class(variant(name)["base"]), "SCREEN_RUN", {}))
+    for p in todo:
+        S.wait_compute_window()
+        t0 = time.monotonic()
+        res = RM.run_grid(p["grid"], root, features=p["features"], workers=workers, days=days, kw=kw)
+        for r in res:
+            r["trades"] = kept(r["trades"])           # a skipped trade never reaches a store
+        out.append(RM._record(p["key"], p["grid"], res, root, {**p["meta"], "base_pass_sessions": passed}, p["stage"], kw, runs_dir,
+                              ledger, log, workers, time.monotonic() - t0))
+    return out
+
+
+def _unit(name: str, tf: str, sess: str, root: str, runs_dir, c2_seed=None) -> dict:
+    """A variant's stored unit, for a session in which its base passed the BUILD plateau (StageDSealed otherwise)."""
+    key = variant_key(name, root, tf) + ("" if c2_seed is None else f"-c2s{int(c2_seed)}")
+    try:
+        u = _library().load_unit(key, runs_dir)
+    except FileNotFoundError:
+        raise StageDSealed(f"{key} has no store yet (l2ideas.run_variant)") from None
+    if u["meta"].get("family") != name or sess not in (u["meta"].get("base_pass_sessions") or []):
+        raise StageDSealed(f"{key} may be read only in the sessions where its base passed the BUILD plateau "
+                           f"{u['meta'].get('base_pass_sessions')}, not in {sess!r}")
+    return u
+
+
+def variant_table(name: str, tf: str, sess: str, root: str = "NQ", runs_dir=None, c2_seed: int | None = None) -> list:
+    """The plateau table (library.session_table) of ONE session of a variant's BUILD store, or of its C2 null with c2_seed.
+    Refused (StageDSealed) for a session in which the base did not pass the BUILD plateau."""
+    return _library().session_table(_unit(name, tf, sess, root, runs_dir, c2_seed), sess)
+
+
+def run_member(name: str, tf: str, variant_: dict, exit_cell: dict, period: str, *, sess: str | None = None, stress: bool = False,
+               c2_seed: int | None = None, root: str = "NQ", workers: int | None = None, key: str | None = None, ledger=None,
+               runs_dir=None, days=None) -> dict:
+    """ONE full run of a stage D member cell over a period (library.run_member for a stage D class: 1 strategy run in the
+    ledger, refused past the cap). period 'build' | 'pick'. sess: the member's session (omit it for a time-fired base: its
+    clock time decides) -- it must be one in which the BASE passed the BUILD plateau, and a PICK run also needs the
+    variant's OWN BUILD plateau of that session to pass (library.PickSealed otherwise): PICK is read only for BUILD
+    survivors. variant_ / exit_cell: a registered variant of the base and a cell of the menu. stress: l2sim.STRESS (2 ticks
+    + 250 ms). c2_seed: the feature-shuffle null. -> the l2sim result. days: tests only (inside the period; not recorded)."""
+    v, fam, lib, cls = _base(name, root, tf)
+    library = _library()
+    if period not in ("build", "pick"):
+        raise ValueError("period: 'build' or 'pick' (EXAM is sealed)")
+    if dict(variant_) not in lib["variants"] or dict(exit_cell) not in S.menu(root):
+        raise ValueError(f"{name}: a member cell is a registered variant of {v['base']} {lib['variants']} x a cell of the menu")
+    timed = "shift_seed" in cls.defaults()
+    run_sess = "all" if timed else sess                # hold_to='day' (EDGE_SPEC ORCHESTRATOR DECISIONS 2026-10-03, 1): ONE
+    params = {**fam.unit_inputs(v["base"], tf, run_sess), **variant_, **exit_cell, **v["option"],      # session per instance,
+              "hold_to": S.LIBRARY_HOLD}                                                              # as run_menus.cell_specs
+    if timed:
+        sess = S.clock_session(cls(params).p["at"])
+    elif sess not in library.SESS7:
+        raise ValueError(f"sess: the member's session, one of {library.SESS7}")
+    u = _unit(name, tf, sess, root, runs_dir)
+    if period == "pick" and not library.plateau(library.session_table(u, sess))["pass"]:
+        raise library.PickSealed(f"{name} tf {tf} {sess}: a PICK (2024) run is allowed only for a BUILD survivor (its own BUILD plateau)")
+    a, b = S.period(period)
+    if days is not None and not all(a <= S._date(d) <= b for d in days):
+        raise ValueError(f"days must lie inside the {period} period {a} .. {b}")
+    key = key or "-".join(x for x in (name, root, f"tf{tf}", "" if timed else sess, S.cell_id({**variant_, **exit_cell}), period,
+                                      "stress" if stress else "", f"c2s{c2_seed}" if c2_seed is not None else "") if x)
+    kw = dict(S.STRESS) if stress else {}
+    kw.update(getattr(cls, "SCREEN_RUN", {}))
+    feats = variant_features(name, c2_seed)
+    if days is None:
+        library.ledger_check(runs=1, path=ledger)
+        res = S.run(cls, params, period=period, root=root, features=feats, workers=workers or S.MAX_WORKERS, **kw)
+        library.ledger_add("member", key, "run", family=name, root=root, tf=str(tf), period=period, path=ledger,
+                           control="c2" if c2_seed is not None else ("stress" if stress else ""),
+                           seed="" if c2_seed is None else c2_seed, trades=len(kept(res["trades"])), elapsed_s=res["elapsed_s"])
+    else:
+        res = S.run(cls, params, days=list(days), root=root, features=feats, workers=workers or 1, **kw)
+    res["trades"] = [t for t in kept(res["trades"]) if timed or S.session_of(t["entry_ms"]) == sess]
+    res["key"], res["session"] = key, sess
+    return res
+
+
+def main() -> int:
+    """The stage D variants and their cell counts (nothing runs):  python -c "import families.l2ideas as m; m.main()"  in engine/."""
+    fam = _registry()
+    for name in sorted(STAGE_D):
+        v = STAGE_D[name]
+        if v["base"] not in fam.LIBRARY:
+            print(f"{name:26s} {v['spec']}  base {v['base']!r} is not registered")
+            continue
+        cls = fam.REGISTRY[v["base"]][0]
+        n = len(fam.LIBRARY[v["base"]]["variants"]) * len(S.menu("NQ"))
+        print(f"{name:26s} {v['spec']} {next(iter(v['option'])):7s} on {v['base']:16s} tfs {','.join(cls.SCREEN_TFS):10s} "
+              f"cells / tf {n:4d} (+ {2 * n} C2 null cells)  | {v['rule']}{'  | SECOND LOOK' if second_look(name) else ''}")
+    print(f"{len(STAGE_D)} stage D variants: run ONLY on base units that passed the BUILD plateau (l2ideas.run_variant)")
+    return 0

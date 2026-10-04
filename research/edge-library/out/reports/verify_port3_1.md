@@ -1,0 +1,42 @@
+{
+ "ok": true,
+ "issues": [
+  {
+   "severity": "minor",
+   "desc": "PORT3_NOTES.md's list of unit-sessions that are empty by construction is incomplete. vwap_flip hold=3 can never trade at tf 15 in `pre`, nor at tf 30 in `mid` or `pm`. That is a third of the cells of those unit-sessions on every root (9 unit-sessions), so at most 66.7 % of their cells can be > 0, the same handicap the notes disclose for sweep_rev levels=on. The Run / Admit agents are told to read this file before judging a plateau.",
+   "evidence": "The earliest entry is session close number 2 + hold (close 1 sets the side, close 2 is the cross, then `hold` more). Entry-eligible closes (before session end minus 5 min, l2sim.py line 1824) number 4 in each case: tf 15 pre 08:30-09:15, tf 30 mid 11:30-13:00, tf 30 pm 14:00-15:30. hold=3 needs close 5, which is the session end. Counts-only run on the 10 BUILD smoke days (scratchpad verif_port3_spec_counts.py): vwap_flip tf 15 pre = 5 / 3 / 0 trades for hold 1 / 2 / 3; tf 30 mid = 5 / 1 / 0; tf 30 pm = 6 / 2 / 0. The author's tf 30 nyam / pre claim is confirmed (0 for all holds).",
+   "file": "/Users/ramoscapital/ramos-quant-homebase/research/edge-library/engine/PORT3_NOTES.md"
+  },
+  {
+   "severity": "minor",
+   "desc": "The SECOND LOOK label for vwap_z tf 5 and vwap_flip (ES) exists only in the registry `notes` string. The member card and spec.json carry rationale, weak and penalty but not notes, so the label EDGE_SPEC user rule 3 requires will not reach a member card unless the Admit stage adds it. The same holds for port1 / port2. Related: `penalty` is None for both families, and nobody has checked whether those old holdout runs failed on 2025-26, which would trigger the EDGE_SPEC C penalty. The author correctly did not open them; the orchestrator must decide.",
+   "evidence": "library.py card() lines 566-578 and spec keys at line 612 hold no notes; run_menus only puts notes into run.json meta (line 244). Holdout-stage job keys (keys only read): R has ho-vwap_z-tf5-87d9c8be; RE has ho-vwap_z-tf5-* (2) and ho-vwap_flip-tf5-* (4), ho-vwap_flip-tf15-ea3993e5. The author's claim is accurate.",
+   "file": "/Users/ramoscapital/ramos-quant-homebase/research/edge-library/library.py"
+  },
+  {
+   "severity": "minor",
+   "desc": "vwap_flip is registered weak=False. This matches the literal spec (only straddle_t 00:00 and vwap_ema_x are marked WEAK), so it is not a violation, but EDGE_SPEC B says the family did not survive the old pilot. If the orchestrator flips it, the change is more than the one line the author states: tests/test_port3.py pins `weak is False` and `penalty is None` for all five families, so the test must be edited too, and the gate re-run because the report is tied to the file hash.",
+   "evidence": "tests/test_port3.py, test_the_five_are_registered_as_edge_library_families: `assert lib[\"weak\"] is False and lib[\"penalty\"] is None`. EDGE_SPEC B: \"the old pilot's close-crosses-VWAP family (vwap_flip) did not survive\".",
+   "file": "/Users/ramoscapital/ramos-quant-homebase/research/edge-library/engine/tests/test_port3.py"
+  },
+  {
+   "severity": "minor",
+   "desc": "Complexity counts are not counted the same way inside the group. This only affects tie-breaks (\"ties go to the simpler\").",
+   "evidence": "pinbar (5) counts its hard-coded 0.25 x ATR tolerance and its key-level set as parameters. vwap_z (2) and vwap_band (3) do not count their hard-coded `sn >= 3` session warm-up. vwap_flip (4) counts `anchor`, which is never varied in the menu.",
+   "file": "/Users/ramoscapital/ramos-quant-homebase/research/edge-library/engine/families/port3.py"
+  },
+  {
+   "severity": "minor",
+   "desc": "Two rationale strings cite R/SPEC.md for words that are not there, and the pinbar rationale omits a restriction. Cosmetic: the rationales are present, one sentence each, and written before any run.",
+   "evidence": "\"(R/SPEC 12: a trend change)\" and \"(R/SPEC 13: rejection)\": R/SPEC.md items 12 and 13 describe only the trigger; \"trend change\" and \"rejection\" come from the R/families/vwap_flip.py and pinbar.py docstrings. The pinbar rationale lists \"the overnight H / L\" without \"NY sessions only\".",
+   "file": "/Users/ramoscapital/ramos-quant-homebase/research/edge-library/engine/families/port3.py"
+  },
+  {
+   "severity": "minor",
+   "desc": "Coverage limits that remain after this verification. Worker parity was exercised at 2 workers only, by the author and by me, because the machine was at load 11-17. The independent first-signal oracle for `pre` / `eve` runs on NQ only; ES and GC `pre` / `eve` rest on the same code plus the counts-only smokes. GC has no tester bundle.",
+   "evidence": "l2sim.run_many: n_chunks = min(len(days), workers * 6), so the 10-day parity test splits into the same one-day chunks at 2 and at 8 workers; the author's claim is correct. tests/test_port3.py `_world` / `_prior` call S.load_tape(d) with the default root NQ.",
+   "file": "/Users/ramoscapital/ramos-quant-homebase/research/edge-library/engine/tests/test_port3.py"
+  }
+ ],
+ "summary": "port3 (vwap_band, vwap_z, vwap_flip, pinbar, sweep_rev) conforms to EDGE_SPEC: no blocker or major issue, six minor ones. I changed nothing; my runs were counts and levels only, on 10 BUILD days at 1-2 workers.\n\n**Checked against the spec**\n- **Port:** the five class bodies are identical to `R/families/<fam>.py`, and DEFAULTS / SCHEMA equal `R/family_inputs.json`. The test compares syntax trees and refuses any extra attribute.\n- **Variants:** exactly the first axis of each family's heat-map in `R/tune1.jsonl` / `tune2.jsonl` (all 7 lines read): band and zth {1.5, 2, 2.5, 3}, hold {1, 2, 3}, wick {0.6, 0.667, 0.75}, levels {both, pd, on}. Nothing was added, dropped or picked on P&L.\n- **Tfs and roots:** 1 / 5 / 15 / 30 as the old screen; NQ, ES, GC.\n- **Menu:** `unit_grid` gives variants x the 32 pre-registered exit cells for each root (ATR 1.5 / 3; points NQ 10 / 20 / 30 / 45, ES 2.5 / 5 / 8 / 12, GC 2 / 3 / 5 / 7; percent 0.10 / 0.20; targets none / 1 / 2 / 3). `run_menus.py plan` shows 60 units and 6,528 cells for the group.\n- **Rationale and complexity:** present for all five, one sentence each.\n- **Weak labels:** none set, which matches the literal spec (see the vwap_flip issue).\n- **Both sides:** declared False; the smokes and tests show market entries only and no both-side evidence.\n- **Nothing run:** no `ledger.csv`, no `runs/`, and `members/` is empty.\n- **Tester-match gate:** `out/port3_validation.json` is a PASS and its hashes equal the files on disk now. NQ 20 runs + 9 heat-maps, ES 20 + 6, all 100 % identical, net diff 0, in-sample `screen` / `sizing` stages only. The outputs hold counts and differences, no P&L.\n- **Second-look claim:** accurate; I read job keys only.\n\n**Do the unit tests pin the triggers? Yes.**\n- I ran 17 mutants against the scripted trigger tests (boundary operators, the 3-bar warm-up, fade vs follow, hold count, re-cross reset, anchor, pinbar tolerance and level sets including overnight levels in `pre`, sweep once-per-level and struct). All 17 were killed.\n- I checked the levels the Template hands sweep_rev at 68 session starts against the raw prints: 0 mismatches. `pre` uses the 00:00\u201308:25 range (no look-ahead), and `eve` uses the tape that ended before 18:00.\n\n**Suite**\n- `tests/test_port3.py` + `tests/test_families.py`: 178 passed (test_port3 is 50 tests), none skipped.\n- Full engine suite at 2 workers: 1257 passed, 2 skipped by design, 0 failed, 12 min 27 s. The author's one failure in `test_new_l2.py` did not recur.\n\n**Main point for the orchestrator**\n- `PORT3_NOTES.md` misses three structurally empty cases: vwap_flip hold=3 cannot trade at tf 15 `pre`, tf 30 `mid` or tf 30 `pm`. Decide how empty-by-construction cells count before judging those plateaus.\n- The author's warning on high thresholds holds: zth / band 3.0 had zero trades at tf 15 and tf 30 in every session on the 10 smoke days, so those units start with at least a quarter of their cells empty.\n\nFiles: `engine/families/port3.py`, `engine/tests/test_port3.py`, `engine/port3_validate.py`, `engine/PORT3_VALIDATION.md`, `engine/PORT3_NOTES.md`, `engine/out/port3_validation.json`, all under `/Users/ramoscapital/ramos-quant-homebase/research/edge-library/`. My check scripts are in the session scratchpad as `verif_port3_spec_*.py`."
+}

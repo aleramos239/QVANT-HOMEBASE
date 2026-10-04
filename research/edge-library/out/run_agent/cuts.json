@@ -1,0 +1,8 @@
+{
+ "stage_d_cells": 5376,
+ "left_before_cuts": 11392,
+ "needed": 0,
+ "freed": 0,
+ "cut": [],
+ "rule": "GC before ES; mid_fade, rsi2, tema_slope, ema_ribbon, supertrend, pinbar, gap; only as many as needed"
+}

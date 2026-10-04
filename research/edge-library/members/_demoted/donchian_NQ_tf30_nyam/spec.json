@@ -1,0 +1,365 @@
+{
+ "name": "donchian_NQ_tf30_nyam",
+ "family": "donchian",
+ "root": "NQ",
+ "tf": "30",
+ "sess": "nyam",
+ "cell": "n10_pct0p2-r2",
+ "inputs": {
+  "tf": "30",
+  "sess": "nyam",
+  "dir": "both",
+  "stop_mode": "pct",
+  "stop_val": 0.2,
+  "tgt_r": 2.0,
+  "trail_atr": 0.0,
+  "exit_bars": 0,
+  "max_tr": 3,
+  "f_trend": "off",
+  "f_vwap": "off",
+  "f_depth": "off",
+  "f_book": "off",
+  "x_book": "off",
+  "f_thin": "off",
+  "hold_to": "day",
+  "n": 10
+ },
+ "rationale": "Trend continuation: a close beyond the prior n-bar channel traps the other side, whose stops feed a continuation move.",
+ "complexity": 3,
+ "weak": false,
+ "l2": false,
+ "penalty": null,
+ "second_look": "2025-26 was already seen once for this family's old finalist (donchian-tf15): the EXAM is a SECOND look",
+ "mirror": null,
+ "notes": "C donchian: close beyond the prior n-bar channel -> market with it. 2025-26 was already seen once for this family's old finalist (donchian-tf15): the EXAM is a SECOND look; DEFAULT MOVED: the BUILD central cell `n10_pts20-r2` is not in the surviving set; default = the surviving cell closest to the BUILD median (`n10_pct0p2-r2`); FLAGGED ADMISSION: the unit passed BUILD on its central cell `n10_pts20-r2` (t 2.19 > bar 2.02), but that cell's 2024 net under 2 ticks + 250 ms is negative, so the default moved to `n10_pct0p2-r2`, whose own BUILD t (1.65) is BELOW the best-of-nulls bar. Admitted by the Admit stage's pre-registered rule (progress.md 2026-10-04 04:33 ET, D / E); library.admission run on the moved default alone says REJECT. Checker / orchestrator: confirm or demote to near-miss.",
+ "hold_to": "day",
+ "admit": true,
+ "failed": [],
+ "tests": {
+  "net_build": {
+   "pass": true,
+   "net": 28988.0
+  },
+  "net_pick": {
+   "pass": true,
+   "net": 16974.0
+  },
+  "plateau_build": {
+   "pass": true,
+   "cells": 64,
+   "median_net": 28874.5,
+   "share_pos": 0.9531,
+   "member": "n10_pts20-r2"
+  },
+  "beats_c1_build": {
+   "pass": true,
+   "lift": 8784.28,
+   "mean": 20203.72,
+   "p95": 33146.0,
+   "p_beat": 0.855,
+   "fallback_share": 0.12684989429175475,
+   "short": 0,
+   "pool_trades": 10791
+  },
+  "stress_build": {
+   "pass": true,
+   "base": 28988.0,
+   "stressed": 15855.0,
+   "stress": "2 ticks + 250 ms"
+  },
+  "beats_c1_pick": {
+   "pass": true,
+   "lift": 5975.55,
+   "mean": 10998.45,
+   "p95": 25355.0,
+   "p_beat": 0.755,
+   "fallback_share": 0.08045977011494253,
+   "short": 0,
+   "pool_trades": 475
+  },
+  "stress_pick": {
+   "pass": true,
+   "base": 16974.0,
+   "stressed": 9364.0,
+   "stress": "2 ticks + 250 ms"
+  },
+  "above_best_of_nulls_build": {
+   "pass": false,
+   "t_build": 1.6512256970896937,
+   "bar": 2.01546588148303,
+   "nulls": 56,
+   "thin": false
+  },
+  "min_trades": {
+   "pass": true,
+   "build": 473,
+   "pick": 174,
+   "need": 100
+  },
+  "open_loss_fits": {
+   "pass": true,
+   "worst_open_loss_per_micro": 90.0,
+   "micros_fit_worst": 22,
+   "micros_fit_p99": 23,
+   "limit": 2000.0
+  },
+  "rationale": {
+   "pass": true,
+   "complexity": 3
+  },
+  "bar_on_build_central_cell": {
+   "pass": true,
+   "cell": "n10_pts20-r2",
+   "t_build": 2.1863203117833447,
+   "bar": 2.0155
+  }
+ },
+ "plateau": {
+  "build": {
+   "pass": true,
+   "cells": 64,
+   "cells_all": 128,
+   "dead": 64,
+   "duplicates": 0,
+   "median_net": 28874.5,
+   "share_pos": 0.9531,
+   "positive": 61,
+   "member": "n10_pts20-r2",
+   "member_net": 28761.0,
+   "best": "n10_atr3-r3",
+   "best_net": 107619.0,
+   "worst_net": -6375.0,
+   "verdicts": {
+    "60": true,
+    "70": true,
+    "80": true
+   },
+   "shares": {
+    "overall": {
+     "cells": 64,
+     "positive": 61,
+     "share_pos": 0.9531,
+     "median_net": 28874.5,
+     "verdicts": {
+      "60": true,
+      "70": true,
+      "80": true
+     }
+    },
+    "by_stop": {
+     "ATR": {
+      "cells": 16,
+      "positive": 16,
+      "share_pos": 1.0,
+      "median_net": 65519.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     },
+     "fixed": {
+      "cells": 32,
+      "positive": 30,
+      "share_pos": 0.9375,
+      "median_net": 23538.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     },
+     "percent": {
+      "cells": 16,
+      "positive": 15,
+      "share_pos": 0.9375,
+      "median_net": 9593.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     }
+    },
+    "by_target": {
+     "r0": {
+      "cells": 16,
+      "positive": 16,
+      "share_pos": 1.0,
+      "median_net": 49300.5,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     },
+     "r1": {
+      "cells": 16,
+      "positive": 16,
+      "share_pos": 1.0,
+      "median_net": 6170.5,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     },
+     "r2": {
+      "cells": 16,
+      "positive": 14,
+      "share_pos": 0.875,
+      "median_net": 26244.5,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     },
+     "r3": {
+      "cells": 16,
+      "positive": 15,
+      "share_pos": 0.9375,
+      "median_net": 37813.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     }
+    }
+   }
+  },
+  "pick": {
+   "pass": true,
+   "cells": 63,
+   "cells_all": 128,
+   "dead": 64,
+   "duplicates": 1,
+   "median_net": 11147.0,
+   "share_pos": 0.9048,
+   "positive": 57,
+   "member": "n10_pts30-r2",
+   "member_net": 11147.0,
+   "best": "n10_pts45-r0",
+   "best_net": 35916.0,
+   "worst_net": -4087.0,
+   "verdicts": {
+    "60": true,
+    "70": true,
+    "80": true
+   },
+   "shares": {
+    "overall": {
+     "cells": 63,
+     "positive": 57,
+     "share_pos": 0.9048,
+     "median_net": 11147.0,
+     "verdicts": {
+      "60": true,
+      "70": true,
+      "80": true
+     }
+    },
+    "by_stop": {
+     "ATR": {
+      "cells": 15,
+      "positive": 13,
+      "share_pos": 0.8667,
+      "median_net": 15576.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     },
+     "fixed": {
+      "cells": 32,
+      "positive": 30,
+      "share_pos": 0.9375,
+      "median_net": 10815.5,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     },
+     "percent": {
+      "cells": 16,
+      "positive": 14,
+      "share_pos": 0.875,
+      "median_net": 12265.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     }
+    },
+    "by_target": {
+     "r0": {
+      "cells": 16,
+      "positive": 15,
+      "share_pos": 0.9375,
+      "median_net": 15817.5,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     },
+     "r1": {
+      "cells": 16,
+      "positive": 13,
+      "share_pos": 0.8125,
+      "median_net": 6693.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     },
+     "r2": {
+      "cells": 16,
+      "positive": 15,
+      "share_pos": 0.9375,
+      "median_net": 13347.5,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     },
+     "r3": {
+      "cells": 15,
+      "positive": 14,
+      "share_pos": 0.9333,
+      "median_net": 19501.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     }
+    }
+   }
+  }
+ },
+ "nulls_bar": {
+  "bar": 2.01546588148303,
+  "nulls": 56,
+  "thin": false,
+  "stat": "t"
+ },
+ "contracts": 1,
+ "periods": {
+  "build": [
+   "2021-09-22",
+   "2023-12-31"
+  ],
+  "pick": [
+   "2024-01-01",
+   "2024-12-31"
+  ]
+ },
+ "written_utc": "2026-10-04T08:41:44+00:00"
+}

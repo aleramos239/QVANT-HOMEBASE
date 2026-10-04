@@ -1,0 +1,42 @@
+{
+ "c1-ES": {
+  "null_units": 56,
+  "plateau_pass": 0,
+  "rate": 0.0
+ },
+ "c1-GC": {
+  "null_units": 56,
+  "plateau_pass": 0,
+  "rate": 0.0
+ },
+ "c1-NQ": {
+  "null_units": 56,
+  "plateau_pass": 6,
+  "rate": 0.1071
+ },
+ "c2-l2": {
+  "null_units": 42,
+  "plateau_pass": 7,
+  "rate": 0.1667
+ },
+ "c2-stage_d": {
+  "null_units": 130,
+  "plateau_pass": 79,
+  "rate": 0.6077
+ },
+ "shift-ES": {
+  "null_units": 18,
+  "plateau_pass": 0,
+  "rate": 0.0
+ },
+ "shift-GC": {
+  "null_units": 18,
+  "plateau_pass": 0,
+  "rate": 0.0
+ },
+ "shift-NQ": {
+  "null_units": 18,
+  "plateau_pass": 5,
+  "rate": 0.2778
+ }
+}

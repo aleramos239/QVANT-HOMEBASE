@@ -1,0 +1,706 @@
+{
+ "E1-A-GC": {
+  "name": "straddle_tight_0830_GC_tf30_pre_evA",
+  "admit": true,
+  "failed": [],
+  "tests": {
+   "net_build": {
+    "pass": true,
+    "net": 10598.0
+   },
+   "net_pick": {
+    "pass": true,
+    "net": 5496.0
+   },
+   "plateau_build": {
+    "pass": true,
+    "cells": 27,
+    "median_net": 10598.0,
+    "share_pos": 0.963,
+    "member": "offA_pts1p6-r1"
+   },
+   "beats_c1_build": {
+    "pass": true,
+    "lift": 16295.0,
+    "mean": -5697.0,
+    "p95": -1922.0,
+    "p_beat": 1.0,
+    "fallback_share": 0.0,
+    "short": 0,
+    "pool_trades": 416
+   },
+   "stress_build": {
+    "pass": true,
+    "base": 10598.0,
+    "stressed": 6358.0,
+    "stress": "2 ticks + 250 ms"
+   },
+   "beats_c1_pick": {
+    "pass": true,
+    "lift": 9988.0,
+    "mean": -4492.0,
+    "p95": -2690.0,
+    "p_beat": 1.0,
+    "fallback_share": 0.0,
+    "short": 0,
+    "pool_trades": 186
+   },
+   "stress_pick": {
+    "pass": true,
+    "base": 5496.0,
+    "stressed": 4126.0,
+    "stress": "2 ticks + 250 ms"
+   },
+   "above_best_of_nulls_build": {
+    "pass": true,
+    "t_build": 4.553164798530045,
+    "bar": 1.627917623785153,
+    "nulls": 26,
+    "thin": false
+   },
+   "min_trades": {
+    "pass": true,
+    "build": 223,
+    "pick": 96,
+    "need": 100
+   },
+   "open_loss_fits": {
+    "pass": true,
+    "worst_open_loss_per_micro": 24.0,
+    "micros_fit_worst": 83,
+    "micros_fit_p99": 100,
+    "limit": 2000.0
+   },
+   "rationale": {
+    "pass": true,
+    "complexity": 6
+   }
+  },
+  "central": "offA_pts1p6-r1",
+  "member": null,
+  "dir": "/Users/ramoscapital/ramos-quant-homebase/research/edge-library/members/straddle_tight_0830_GC_tf30_pre_evA",
+  "per_year": [
+   {
+    "period": "2021*",
+    "trades": 27,
+    "net": 902.0,
+    "win": 0.6296296296296297,
+    "pf": 1.5154285714285713,
+    "max_dd": 622.0,
+    "sharpe": 2.004467943112344,
+    "worst_open_loss": 174.0
+   },
+   {
+    "period": "2022",
+    "trades": 100,
+    "net": 4660.0,
+    "win": 0.67,
+    "pf": 1.8045580110497237,
+    "max_dd": 796.0,
+    "sharpe": 2.9115650795321097,
+    "worst_open_loss": 194.0
+   },
+   {
+    "period": "2023",
+    "trades": 96,
+    "net": 5036.0,
+    "win": 0.6875,
+    "pf": 1.9574144486692016,
+    "max_dd": 696.0,
+    "sharpe": 3.2386445143073304,
+    "worst_open_loss": 184.0
+   },
+   {
+    "period": "2024",
+    "trades": 96,
+    "net": 5496.0,
+    "win": 0.7083333333333334,
+    "pf": 2.075117370892019,
+    "max_dd": 684.0,
+    "sharpe": 3.4841344892603594,
+    "worst_open_loss": 234.0
+   },
+   {
+    "period": "combined",
+    "trades": 319,
+    "net": 16094.0,
+    "win": 0.6833855799373041,
+    "pf": 1.8984034833091437,
+    "max_dd": 796.0,
+    "sharpe": 3.1097898253413017,
+    "worst_open_loss": 234.0
+   }
+  ],
+  "per_year_r1000": [
+   {
+    "period": "2021*",
+    "trades": 27,
+    "net": 4588.0,
+    "max_dd": 4340.0,
+    "sharpe": 1.6515944522816612,
+    "worst_open_loss": 1116.0
+   },
+   {
+    "period": "2022",
+    "trades": 100,
+    "net": 25172.0,
+    "max_dd": 5456.0,
+    "sharpe": 2.5524151620584834,
+    "worst_open_loss": 1240.0
+   },
+   {
+    "period": "2023",
+    "trades": 96,
+    "net": 27652.0,
+    "max_dd": 4464.0,
+    "sharpe": 2.8891816469391967,
+    "worst_open_loss": 1178.0
+   },
+   {
+    "period": "2024",
+    "trades": 96,
+    "net": 30504.0,
+    "max_dd": 4650.0,
+    "sharpe": 3.143617266701594,
+    "worst_open_loss": 1488.0
+   },
+   {
+    "period": "combined",
+    "trades": 319,
+    "net": 87916.0,
+    "max_dd": 5456.0,
+    "sharpe": 2.758788182634445,
+    "worst_open_loss": 1488.0
+   }
+  ],
+  "micros_median": 62
+ },
+ "E1-B-NQ": {
+  "name": "straddle_tight_0830_NQ_tf30_pre_evB",
+  "admit": true,
+  "failed": [],
+  "tests": {
+   "net_build": {
+    "pass": true,
+    "net": 9047.0
+   },
+   "net_pick": {
+    "pass": true,
+    "net": 2383.0
+   },
+   "plateau_build": {
+    "pass": true,
+    "cells": 27,
+    "median_net": 9047.0,
+    "share_pos": 1.0,
+    "member": "offB_pts5-r3"
+   },
+   "beats_c1_build": {
+    "pass": true,
+    "lift": 11664.5,
+    "mean": -2617.5,
+    "p95": -1200.0,
+    "p_beat": 1.0,
+    "fallback_share": 0.0,
+    "short": 0,
+    "pool_trades": 280
+   },
+   "stress_build": {
+    "pass": true,
+    "base": 9047.0,
+    "stressed": 8637.0,
+    "stress": "2 ticks + 250 ms"
+   },
+   "beats_c1_pick": {
+    "pass": true,
+    "lift": 4041.5,
+    "mean": -1658.5,
+    "p95": -1330.0,
+    "p_beat": 1.0,
+    "fallback_share": 0.0,
+    "short": 0,
+    "pool_trades": 118
+   },
+   "stress_pick": {
+    "pass": true,
+    "base": 2383.0,
+    "stressed": 173.0,
+    "stress": "2 ticks + 250 ms"
+   },
+   "above_best_of_nulls_build": {
+    "pass": true,
+    "t_build": 3.353300834627131,
+    "bar": 2.5607770536606678,
+    "nulls": 26,
+    "thin": false
+   },
+   "min_trades": {
+    "pass": true,
+    "build": 157,
+    "pick": 68,
+    "need": 100
+   },
+   "open_loss_fits": {
+    "pass": true,
+    "worst_open_loss_per_micro": 51.0,
+    "micros_fit_worst": 39,
+    "micros_fit_p99": 55,
+    "limit": 2000.0
+   },
+   "rationale": {
+    "pass": true,
+    "complexity": 6
+   }
+  },
+  "central": "offB_pts5-r3",
+  "member": null,
+  "dir": "/Users/ramoscapital/ramos-quant-homebase/research/edge-library/members/straddle_tight_0830_NQ_tf30_pre_evB",
+  "per_year": [
+   {
+    "period": "2021*",
+    "trades": 19,
+    "net": 1124.0,
+    "win": 0.42105263157894735,
+    "pf": 1.9035369774919615,
+    "max_dd": 436.0,
+    "sharpe": 2.315366767076974,
+    "worst_open_loss": 129.0
+   },
+   {
+    "period": "2022",
+    "trades": 71,
+    "net": 5961.0,
+    "win": 0.5070422535211268,
+    "pf": 2.2696485623003193,
+    "max_dd": 694.0,
+    "sharpe": 3.0943207546798126,
+    "worst_open_loss": 299.0
+   },
+   {
+    "period": "2023",
+    "trades": 67,
+    "net": 1962.0,
+    "win": 0.373134328358209,
+    "pf": 1.360794409709452,
+    "max_dd": 978.0,
+    "sharpe": 1.1246473240749546,
+    "worst_open_loss": 504.0
+   },
+   {
+    "period": "2024",
+    "trades": 68,
+    "net": 2383.0,
+    "win": 0.4117647058823529,
+    "pf": 1.4035563082133784,
+    "max_dd": 645.0,
+    "sharpe": 1.2764101705637025,
+    "worst_open_loss": 414.0
+   },
+   {
+    "period": "combined",
+    "trades": 225,
+    "net": 11430.0,
+    "win": 0.4311111111111111,
+    "pf": 1.661381784515681,
+    "max_dd": 978.0,
+    "sharpe": 1.8958161097800856,
+    "worst_open_loss": 504.0
+   }
+  ],
+  "per_year_r1000": [
+   {
+    "period": "2021*",
+    "trades": 19,
+    "net": 10100.0,
+    "max_dd": 4600.0,
+    "sharpe": 2.0924653903611885,
+    "worst_open_loss": 1350.0
+   },
+   {
+    "period": "2022",
+    "trades": 71,
+    "net": 55350.0,
+    "max_dd": 7300.0,
+    "sharpe": 2.892528467850209,
+    "worst_open_loss": 3050.0
+   },
+   {
+    "period": "2023",
+    "trades": 67,
+    "net": 15600.0,
+    "max_dd": 10500.0,
+    "sharpe": 0.8964995446741555,
+    "worst_open_loss": 5100.0
+   },
+   {
+    "period": "2024",
+    "trades": 68,
+    "net": 19750.0,
+    "max_dd": 6750.0,
+    "sharpe": 1.0607933488996857,
+    "worst_open_loss": 4200.0
+   },
+   {
+    "period": "combined",
+    "trades": 225,
+    "net": 100800.0,
+    "max_dd": 10500.0,
+    "sharpe": 1.6790214311068863,
+    "worst_open_loss": 5100.0
+   }
+  ],
+  "micros_median": 100
+ },
+ "E1-B-GC": {
+  "name": "straddle_tight_0830_GC_tf30_pre_evB",
+  "admit": true,
+  "failed": [],
+  "tests": {
+   "net_build": {
+    "pass": true,
+    "net": 8066.0
+   },
+   "net_pick": {
+    "pass": true,
+    "net": 2448.0
+   },
+   "plateau_build": {
+    "pass": true,
+    "cells": 27,
+    "median_net": 8066.0,
+    "share_pos": 1.0,
+    "member": "offA_pts1p6-r1"
+   },
+   "beats_c1_build": {
+    "pass": true,
+    "lift": 12948.0,
+    "mean": -4882.0,
+    "p95": -520.0,
+    "p_beat": 1.0,
+    "fallback_share": 0.0,
+    "short": 0,
+    "pool_trades": 291
+   },
+   "stress_build": {
+    "pass": true,
+    "base": 8066.0,
+    "stressed": 4746.0,
+    "stress": "2 ticks + 250 ms"
+   },
+   "beats_c1_pick": {
+    "pass": true,
+    "lift": 5693.0,
+    "mean": -3245.0,
+    "p95": -2108.0,
+    "p_beat": 1.0,
+    "fallback_share": 0.0,
+    "short": 0,
+    "pool_trades": 130
+   },
+   "stress_pick": {
+    "pass": true,
+    "base": 2448.0,
+    "stressed": 1128.0,
+    "stress": "2 ticks + 250 ms"
+   },
+   "above_best_of_nulls_build": {
+    "pass": true,
+    "t_build": 4.1758910599277685,
+    "bar": 1.627917623785153,
+    "nulls": 26,
+    "thin": false
+   },
+   "min_trades": {
+    "pass": true,
+    "build": 156,
+    "pick": 68,
+    "need": 100
+   },
+   "open_loss_fits": {
+    "pass": true,
+    "worst_open_loss_per_micro": 24.0,
+    "micros_fit_worst": 83,
+    "micros_fit_p99": 100,
+    "limit": 2000.0
+   },
+   "rationale": {
+    "pass": true,
+    "complexity": 6
+   }
+  },
+  "central": "offA_pts1p6-r1",
+  "member": null,
+  "folder_note": "same variant, days are a subset of E1-A-GC: recorded on that member's card, no folder of its own",
+  "per_year": [
+   {
+    "period": "2021*",
+    "trades": 19,
+    "net": 644.0,
+    "win": 0.631578947368421,
+    "pf": 1.52442996742671,
+    "max_dd": 376.0,
+    "sharpe": 1.7008014305327015,
+    "worst_open_loss": 174.0
+   },
+   {
+    "period": "2022",
+    "trades": 71,
+    "net": 3106.0,
+    "win": 0.6619718309859155,
+    "pf": 1.7349739706578324,
+    "max_dd": 760.0,
+    "sharpe": 2.2832618134405998,
+    "worst_open_loss": 194.0
+   },
+   {
+    "period": "2023",
+    "trades": 66,
+    "net": 4316.0,
+    "win": 0.7272727272727273,
+    "pf": 2.360655737704918,
+    "max_dd": 542.0,
+    "sharpe": 3.363498259171868,
+    "worst_open_loss": 184.0
+   },
+   {
+    "period": "2024",
+    "trades": 68,
+    "net": 2448.0,
+    "win": 0.6470588235294118,
+    "pf": 1.5543478260869565,
+    "max_dd": 738.0,
+    "sharpe": 1.7869112841583028,
+    "worst_open_loss": 234.0
+   },
+   {
+    "period": "combined",
+    "trades": 224,
+    "net": 10514.0,
+    "win": 0.6741071428571429,
+    "pf": 1.8061646986658488,
+    "max_dd": 760.0,
+    "sharpe": 2.395740294766248,
+    "worst_open_loss": 234.0
+   }
+  ],
+  "per_year_r1000": [
+   {
+    "period": "2021*",
+    "trades": 19,
+    "net": 3286.0,
+    "max_dd": 2480.0,
+    "sharpe": 1.406980537233597,
+    "worst_open_loss": 1116.0
+   },
+   {
+    "period": "2022",
+    "trades": 71,
+    "net": 16616.0,
+    "max_dd": 5084.0,
+    "sharpe": 1.9834914580540368,
+    "worst_open_loss": 1240.0
+   },
+   {
+    "period": "2023",
+    "trades": 66,
+    "net": 24304.0,
+    "max_dd": 3472.0,
+    "sharpe": 3.0890622681839917,
+    "worst_open_loss": 1178.0
+   },
+   {
+    "period": "2024",
+    "trades": 68,
+    "net": 12648.0,
+    "max_dd": 5270.0,
+    "sharpe": 1.4969861647669005,
+    "worst_open_loss": 1488.0
+   },
+   {
+    "period": "combined",
+    "trades": 224,
+    "net": 56854.0,
+    "max_dd": 5394.0,
+    "sharpe": 2.104935415762122,
+    "worst_open_loss": 1488.0
+   }
+  ],
+  "micros_median": 62
+ },
+ "E3-C-GC": {
+  "name": "straddle_tight_1000_GC_tf30_nyam_evC",
+  "admit": true,
+  "failed": [],
+  "tests": {
+   "net_build": {
+    "pass": true,
+    "net": 8202.0
+   },
+   "net_pick": {
+    "pass": true,
+    "net": 4166.0
+   },
+   "plateau_build": {
+    "pass": true,
+    "cells": 27,
+    "median_net": 8202.0,
+    "share_pos": 1.0,
+    "member": "offA_pts1p6-r1"
+   },
+   "beats_c1_build": {
+    "pass": true,
+    "lift": 11056.0,
+    "mean": -2854.0,
+    "p95": -1194.0,
+    "p_beat": 1.0,
+    "fallback_share": 0.0,
+    "short": 0,
+    "pool_trades": 192
+   },
+   "stress_build": {
+    "pass": true,
+    "base": 8202.0,
+    "stressed": 6972.0,
+    "stress": "2 ticks + 250 ms"
+   },
+   "beats_c1_pick": {
+    "pass": true,
+    "lift": 5318.0,
+    "mean": -1152.0,
+    "p95": -900.0,
+    "p_beat": 1.0,
+    "fallback_share": 0.0,
+    "short": 0,
+    "pool_trades": 91
+   },
+   "stress_pick": {
+    "pass": true,
+    "base": 4166.0,
+    "stressed": 3396.0,
+    "stress": "2 ticks + 250 ms"
+   },
+   "above_best_of_nulls_build": {
+    "pass": true,
+    "t_build": 6.095719833279624,
+    "bar": 1.627917623785153,
+    "nulls": 26,
+    "thin": false
+   },
+   "min_trades": {
+    "pass": true,
+    "build": 97,
+    "pick": 46,
+    "need": 100
+   },
+   "open_loss_fits": {
+    "pass": true,
+    "worst_open_loss_per_micro": 19.0,
+    "micros_fit_worst": 105,
+    "micros_fit_p99": 110,
+    "limit": 2000.0
+   },
+   "rationale": {
+    "pass": true,
+    "complexity": 6
+   }
+  },
+  "central": "offA_pts1p6-r1",
+  "member": null,
+  "dir": "/Users/ramoscapital/ramos-quant-homebase/research/edge-library/members/straddle_tight_1000_GC_tf30_nyam_evC",
+  "per_year": [
+   {
+    "period": "2021*",
+    "trades": 12,
+    "net": 552.0,
+    "win": 0.6666666666666666,
+    "pf": 1.793103448275862,
+    "max_dd": 540.0,
+    "sharpe": 1.850123497745328,
+    "worst_open_loss": 164.0
+   },
+   {
+    "period": "2022",
+    "trades": 43,
+    "net": 2418.0,
+    "win": 0.6976744186046512,
+    "pf": 2.0689655172413794,
+    "max_dd": 1116.0,
+    "sharpe": 2.3050621242008686,
+    "worst_open_loss": 164.0
+   },
+   {
+    "period": "2023",
+    "trades": 42,
+    "net": 5232.0,
+    "win": 0.9047619047619048,
+    "pf": 8.517241379310345,
+    "max_dd": 348.0,
+    "sharpe": 5.417543041224347,
+    "worst_open_loss": 164.0
+   },
+   {
+    "period": "2024",
+    "trades": 46,
+    "net": 4166.0,
+    "win": 0.8043478260869565,
+    "pf": 3.5940224159402243,
+    "max_dd": 386.0,
+    "sharpe": 3.930849982316908,
+    "worst_open_loss": 184.0
+   },
+   {
+    "period": "combined",
+    "trades": 143,
+    "net": 12368.0,
+    "win": 0.7902097902097902,
+    "pf": 3.3513307984790877,
+    "max_dd": 1656.0,
+    "sharpe": 3.660379035629116,
+    "worst_open_loss": 184.0
+   }
+  ],
+  "per_year_r1000": [
+   {
+    "period": "2021*",
+    "trades": 12,
+    "net": 2976.0,
+    "max_dd": 3534.0,
+    "sharpe": 1.6222573203338566,
+    "worst_open_loss": 1054.0
+   },
+   {
+    "period": "2022",
+    "trades": 43,
+    "net": 13392.0,
+    "max_dd": 7440.0,
+    "sharpe": 2.0807461731610624,
+    "worst_open_loss": 1054.0
+   },
+   {
+    "period": "2023",
+    "trades": 42,
+    "net": 30876.0,
+    "max_dd": 2232.0,
+    "sharpe": 5.3029790526434235,
+    "worst_open_loss": 1054.0
+   },
+   {
+    "period": "2024",
+    "trades": 46,
+    "net": 24118.0,
+    "max_dd": 2542.0,
+    "sharpe": 3.7370143351432636,
+    "worst_open_loss": 1178.0
+   },
+   {
+    "period": "combined",
+    "trades": 143,
+    "net": 71362.0,
+    "max_dd": 10974.0,
+    "sharpe": 3.4657940030592695,
+    "worst_open_loss": 1178.0
+   }
+  ],
+  "micros_median": 62
+ }
+}

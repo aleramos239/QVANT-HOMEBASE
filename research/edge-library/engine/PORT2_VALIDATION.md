@@ -1,0 +1,159 @@
+# PORT2_VALIDATION — port group 2 (families/port2.py) vs the Homebase Strategy Tester
+
+Generated 2026-10-04 10:31 ET by `port2_validate.py`, 2 worker processes. Raw: `out/port2_validation.json`.
+File sha256/16, read before every family x root pass and checked after it (the SAME for every row below): `l2sim.py` bc7394332573ff85, `families/port2.py` e78c6a29f998a9e5, `port2_validate.py` 4b705c99cb14c128, `sim_validate.py` f19dd72c99835e24, `edge_validate.py` 8c5e39a19def9a7f. Trading-code hash of `families/port2.py` (classes + registered default inputs; metadata and docstrings excluded): **59b4af4d1e512352**.
+In-sample bundles of the old pilots only (2021-09-22 → 2024-12-31; stages `screen` and `sizing` of R / RE `jobs.jsonl`), trade IDENTITY only: no P&L is shown; nothing dated ≥ 2025-01-01 was read (no `holdout` stage bundle, no walk-forward).
+
+## Verdict: ALL GATES PASS
+Gate per bundle / heat-map cell: ≥ 99 % identical trades (date, side, entry time ±1 s, entry price, exit price, exit reason), net within 0.5 %, the same skipped days, no session dropped by a strategy error, no both-side session.
+
+| family | root | bundles | runs + cells | 100 % identical (all 20 fields) | tester trades | sim trades | all-fields identical | worst match | max net diff % | pass |
+|---|---|---|---|---|---|---|---|---|---|---|
+| ema_ribbon | NQ | 5 | 28 | 28 | 196100 | 196100 | 196100 | 100.00% | 0.000 | True |
+| tema_slope | NQ | 7 | 92 | 92 | 912687 | 912687 | 912687 | 100.00% | 0.000 | True |
+| ema_pullback | NQ | 7 | 68 | 68 | 493626 | 493626 | 493626 | 100.00% | 0.000 | True |
+| supertrend | NQ | 5 | 28 | 28 | 89210 | 89210 | 89210 | 100.00% | 0.000 | True |
+| rsi2 | NQ | 7 | 92 | 92 | 966729 | 966729 | 966729 | 100.00% | 0.000 | True |
+| first_bar_mom | NQ | 5 | 40 | 40 | 72476 | 72476 | 72476 | 100.00% | 0.000 | True |
+| tod_drift | NQ | 8 | 92 | 92 | 320778 | 320778 | 320778 | 100.00% | 0.000 | True |
+| mid_fade | NQ | 4 | 4 | 4 | 1156 | 1156 | 1156 | 100.00% | 0.000 | True |
+| ema_ribbon | ES | 4 | 4 | 4 | 17805 | 17805 | 17805 | 100.00% | 0.000 | True |
+| tema_slope | ES | 8 | 108 | 108 | 450784 | 450784 | 450784 | 100.00% | 0.000 | True |
+| ema_pullback | ES | 7 | 68 | 68 | 326545 | 326545 | 326545 | 100.00% | 0.000 | True |
+| supertrend | ES | 4 | 4 | 4 | 16584 | 16584 | 16584 | 100.00% | 0.000 | True |
+| rsi2 | ES | 5 | 20 | 20 | 192436 | 192436 | 192436 | 100.00% | 0.000 | True |
+| first_bar_mom | ES | 6 | 56 | 56 | 107320 | 107320 | 107320 | 100.00% | 0.000 | True |
+| tod_drift | ES | 7 | 68 | 68 | 243120 | 243120 | 243120 | 100.00% | 0.000 | True |
+| mid_fade | ES | 4 | 4 | 4 | 952 | 952 | 952 | 100.00% | 0.000 | True |
+
+## Every bundle
+| bundle | root | family | kind | cells | cells 100 % identical | tester trades | sim trades | all-fields identical | worst match | max net diff % | skipped days equal | pass |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| screen-ema_ribbon-tf1 | NQ | ema_ribbon | run | 1 | 1 | 11362 | 11362 | 11362 | 100.00% | 0.000 | True | True |
+| screen-ema_ribbon-tf5 | NQ | ema_ribbon | run | 1 | 1 | 4189 | 4189 | 4189 | 100.00% | 0.000 | True | True |
+| screen-ema_ribbon-tf15 | NQ | ema_ribbon | run | 1 | 1 | 1455 | 1455 | 1455 | 100.00% | 0.000 | True | True |
+| screen-ema_ribbon-tf30 | NQ | ema_ribbon | run | 1 | 1 | 625 | 625 | 625 | 100.00% | 0.000 | True | True |
+| hm2-ema_ribbon-tf1 | NQ | ema_ribbon | grid | 24 | 24 | 178469 | 178469 | 178469 | 100.00% | 0.000 | True | True |
+| screen-tema_slope-tf1 | NQ | tema_slope | run | 1 | 1 | 12268 | 12268 | 12268 | 100.00% | 0.000 | True | True |
+| screen-tema_slope-tf5 | NQ | tema_slope | run | 1 | 1 | 8646 | 8646 | 8646 | 100.00% | 0.000 | True | True |
+| screen-tema_slope-tf15 | NQ | tema_slope | run | 1 | 1 | 4346 | 4346 | 4346 | 100.00% | 0.000 | True | True |
+| screen-tema_slope-tf30 | NQ | tema_slope | run | 1 | 1 | 2107 | 2107 | 2107 | 100.00% | 0.000 | True | True |
+| hm-tema_slope-tf5 | NQ | tema_slope | grid | 36 | 36 | 298745 | 298745 | 298745 | 100.00% | 0.000 | True | True |
+| hm2-tema_slope-tf1 | NQ | tema_slope | grid | 36 | 36 | 428434 | 428434 | 428434 | 100.00% | 0.000 | True | True |
+| fp-tema_slope-tf5 | NQ | tema_slope | grid | 16 | 16 | 158141 | 158141 | 158141 | 100.00% | 0.000 | True | True |
+| screen-ema_pullback-tf1 | NQ | ema_pullback | run | 1 | 1 | 12223 | 12223 | 12223 | 100.00% | 0.000 | True | True |
+| screen-ema_pullback-tf5 | NQ | ema_pullback | run | 1 | 1 | 7599 | 7599 | 7599 | 100.00% | 0.000 | True | True |
+| screen-ema_pullback-tf15 | NQ | ema_pullback | run | 1 | 1 | 3274 | 3274 | 3274 | 100.00% | 0.000 | True | True |
+| screen-ema_pullback-tf30 | NQ | ema_pullback | run | 1 | 1 | 1622 | 1622 | 1622 | 100.00% | 0.000 | True | True |
+| hm-ema_pullback-tf5 | NQ | ema_pullback | grid | 24 | 24 | 135307 | 135307 | 135307 | 100.00% | 0.000 | True | True |
+| hm2-ema_pullback-tf1 | NQ | ema_pullback | grid | 24 | 24 | 191446 | 191446 | 191446 | 100.00% | 0.000 | True | True |
+| fp-ema_pullback-tf5 | NQ | ema_pullback | grid | 16 | 16 | 142155 | 142155 | 142155 | 100.00% | 0.000 | True | True |
+| screen-supertrend-tf1 | NQ | supertrend | run | 1 | 1 | 10884 | 10884 | 10884 | 100.00% | 0.000 | True | True |
+| screen-supertrend-tf5 | NQ | supertrend | run | 1 | 1 | 3643 | 3643 | 3643 | 100.00% | 0.000 | True | True |
+| screen-supertrend-tf15 | NQ | supertrend | run | 1 | 1 | 1420 | 1420 | 1420 | 100.00% | 0.000 | True | True |
+| screen-supertrend-tf30 | NQ | supertrend | run | 1 | 1 | 591 | 591 | 591 | 100.00% | 0.000 | True | True |
+| hm2-supertrend-tf5 | NQ | supertrend | grid | 24 | 24 | 72672 | 72672 | 72672 | 100.00% | 0.000 | True | True |
+| screen-rsi2-tf1 | NQ | rsi2 | run | 1 | 1 | 12273 | 12273 | 12273 | 100.00% | 0.000 | True | True |
+| screen-rsi2-tf5 | NQ | rsi2 | run | 1 | 1 | 10033 | 10033 | 10033 | 100.00% | 0.000 | True | True |
+| screen-rsi2-tf15 | NQ | rsi2 | run | 1 | 1 | 6094 | 6094 | 6094 | 100.00% | 0.000 | True | True |
+| screen-rsi2-tf30 | NQ | rsi2 | run | 1 | 1 | 3450 | 3450 | 3450 | 100.00% | 0.000 | True | True |
+| hm-rsi2-tf5 | NQ | rsi2 | grid | 36 | 36 | 329627 | 329627 | 329627 | 100.00% | 0.000 | True | True |
+| hm2-rsi2-tf1 | NQ | rsi2 | grid | 36 | 36 | 430713 | 430713 | 430713 | 100.00% | 0.000 | True | True |
+| fp-rsi2-tf5 | NQ | rsi2 | grid | 16 | 16 | 174539 | 174539 | 174539 | 100.00% | 0.000 | True | True |
+| screen-first_bar_mom-tf1 | NQ | first_bar_mom | run | 1 | 1 | 1785 | 1785 | 1785 | 100.00% | 0.000 | True | True |
+| screen-first_bar_mom-tf5 | NQ | first_bar_mom | run | 1 | 1 | 1573 | 1573 | 1573 | 100.00% | 0.000 | True | True |
+| screen-first_bar_mom-tf15 | NQ | first_bar_mom | run | 1 | 1 | 1740 | 1740 | 1740 | 100.00% | 0.000 | True | True |
+| screen-first_bar_mom-tf30 | NQ | first_bar_mom | run | 1 | 1 | 1894 | 1894 | 1894 | 100.00% | 0.000 | True | True |
+| hm-first_bar_mom-tf15 | NQ | first_bar_mom | grid | 36 | 36 | 65484 | 65484 | 65484 | 100.00% | 0.000 | True | True |
+| screen-tod_drift-tf1 | NQ | tod_drift | run | 1 | 1 | 3273 | 3273 | 3273 | 100.00% | 0.000 | True | True |
+| screen-tod_drift-tf5 | NQ | tod_drift | run | 1 | 1 | 3273 | 3273 | 3273 | 100.00% | 0.000 | True | True |
+| screen-tod_drift-tf15 | NQ | tod_drift | run | 1 | 1 | 3273 | 3273 | 3273 | 100.00% | 0.000 | True | True |
+| screen-tod_drift-tf30 | NQ | tod_drift | run | 1 | 1 | 3273 | 3273 | 3273 | 100.00% | 0.000 | True | True |
+| hm-tod_drift-tf5 | NQ | tod_drift | grid | 24 | 24 | 93294 | 93294 | 93294 | 100.00% | 0.000 | True | True |
+| hm2-tod_drift-tf15 | NQ | tod_drift | grid | 24 | 24 | 83472 | 83472 | 83472 | 100.00% | 0.000 | True | True |
+| hm2-tod_drift-tf30 | NQ | tod_drift | grid | 24 | 24 | 78552 | 78552 | 78552 | 100.00% | 0.000 | True | True |
+| fp-tod_drift-tf5 | NQ | tod_drift | grid | 16 | 16 | 52368 | 52368 | 52368 | 100.00% | 0.000 | True | True |
+| screen-mid_fade-tf1 | NQ | mid_fade | run | 1 | 1 | 289 | 289 | 289 | 100.00% | 0.000 | True | True |
+| screen-mid_fade-tf5 | NQ | mid_fade | run | 1 | 1 | 289 | 289 | 289 | 100.00% | 0.000 | True | True |
+| screen-mid_fade-tf15 | NQ | mid_fade | run | 1 | 1 | 289 | 289 | 289 | 100.00% | 0.000 | True | True |
+| screen-mid_fade-tf30 | NQ | mid_fade | run | 1 | 1 | 289 | 289 | 289 | 100.00% | 0.000 | True | True |
+| screen-ema_ribbon-tf1 | ES | ema_ribbon | run | 1 | 1 | 11445 | 11445 | 11445 | 100.00% | 0.000 | True | True |
+| screen-ema_ribbon-tf5 | ES | ema_ribbon | run | 1 | 1 | 4242 | 4242 | 4242 | 100.00% | 0.000 | True | True |
+| screen-ema_ribbon-tf15 | ES | ema_ribbon | run | 1 | 1 | 1493 | 1493 | 1493 | 100.00% | 0.000 | True | True |
+| screen-ema_ribbon-tf30 | ES | ema_ribbon | run | 1 | 1 | 625 | 625 | 625 | 100.00% | 0.000 | True | True |
+| screen-tema_slope-tf1 | ES | tema_slope | run | 1 | 1 | 12305 | 12305 | 12305 | 100.00% | 0.000 | True | True |
+| screen-tema_slope-tf5 | ES | tema_slope | run | 1 | 1 | 8939 | 8939 | 8939 | 100.00% | 0.000 | True | True |
+| screen-tema_slope-tf15 | ES | tema_slope | run | 1 | 1 | 4425 | 4425 | 4425 | 100.00% | 0.000 | True | True |
+| screen-tema_slope-tf30 | ES | tema_slope | run | 1 | 1 | 2119 | 2119 | 2119 | 100.00% | 0.000 | True | True |
+| hm-tema_slope-tf30 | ES | tema_slope | grid | 36 | 36 | 79437 | 79437 | 79437 | 100.00% | 0.000 | True | True |
+| hm-tema_slope-tf15 | ES | tema_slope | grid | 36 | 36 | 159523 | 159523 | 159523 | 100.00% | 0.000 | True | True |
+| fp-tema_slope-tf30 | ES | tema_slope | grid | 16 | 16 | 40287 | 40287 | 40287 | 100.00% | 0.000 | True | True |
+| fp-tema_slope-tf5 | ES | tema_slope | grid | 16 | 16 | 143749 | 143749 | 143749 | 100.00% | 0.000 | True | True |
+| screen-ema_pullback-tf1 | ES | ema_pullback | run | 1 | 1 | 12259 | 12259 | 12259 | 100.00% | 0.000 | True | True |
+| screen-ema_pullback-tf5 | ES | ema_pullback | run | 1 | 1 | 7873 | 7873 | 7873 | 100.00% | 0.000 | True | True |
+| screen-ema_pullback-tf15 | ES | ema_pullback | run | 1 | 1 | 3345 | 3345 | 3345 | 100.00% | 0.000 | True | True |
+| screen-ema_pullback-tf30 | ES | ema_pullback | run | 1 | 1 | 1653 | 1653 | 1653 | 100.00% | 0.000 | True | True |
+| hm-ema_pullback-tf30 | ES | ema_pullback | grid | 24 | 24 | 36356 | 36356 | 36356 | 100.00% | 0.000 | True | True |
+| hm-ema_pullback-tf5 | ES | ema_pullback | grid | 24 | 24 | 136604 | 136604 | 136604 | 100.00% | 0.000 | True | True |
+| fp-ema_pullback-tf5 | ES | ema_pullback | grid | 16 | 16 | 128455 | 128455 | 128455 | 100.00% | 0.000 | True | True |
+| screen-supertrend-tf1 | ES | supertrend | run | 1 | 1 | 10938 | 10938 | 10938 | 100.00% | 0.000 | True | True |
+| screen-supertrend-tf5 | ES | supertrend | run | 1 | 1 | 3710 | 3710 | 3710 | 100.00% | 0.000 | True | True |
+| screen-supertrend-tf15 | ES | supertrend | run | 1 | 1 | 1357 | 1357 | 1357 | 100.00% | 0.000 | True | True |
+| screen-supertrend-tf30 | ES | supertrend | run | 1 | 1 | 579 | 579 | 579 | 100.00% | 0.000 | True | True |
+| screen-rsi2-tf1 | ES | rsi2 | run | 1 | 1 | 12318 | 12318 | 12318 | 100.00% | 0.000 | True | True |
+| screen-rsi2-tf5 | ES | rsi2 | run | 1 | 1 | 10186 | 10186 | 10186 | 100.00% | 0.000 | True | True |
+| screen-rsi2-tf15 | ES | rsi2 | run | 1 | 1 | 6256 | 6256 | 6256 | 100.00% | 0.000 | True | True |
+| screen-rsi2-tf30 | ES | rsi2 | run | 1 | 1 | 3524 | 3524 | 3524 | 100.00% | 0.000 | True | True |
+| fp-rsi2-tf5 | ES | rsi2 | grid | 16 | 16 | 160152 | 160152 | 160152 | 100.00% | 0.000 | True | True |
+| screen-first_bar_mom-tf1 | ES | first_bar_mom | run | 1 | 1 | 1761 | 1761 | 1761 | 100.00% | 0.000 | True | True |
+| screen-first_bar_mom-tf5 | ES | first_bar_mom | run | 1 | 1 | 1579 | 1579 | 1579 | 100.00% | 0.000 | True | True |
+| screen-first_bar_mom-tf15 | ES | first_bar_mom | run | 1 | 1 | 1720 | 1720 | 1720 | 100.00% | 0.000 | True | True |
+| screen-first_bar_mom-tf30 | ES | first_bar_mom | run | 1 | 1 | 1888 | 1888 | 1888 | 100.00% | 0.000 | True | True |
+| hm-first_bar_mom-tf30 | ES | first_bar_mom | grid | 36 | 36 | 70164 | 70164 | 70164 | 100.00% | 0.000 | True | True |
+| fp-first_bar_mom-tf30 | ES | first_bar_mom | grid | 16 | 16 | 30208 | 30208 | 30208 | 100.00% | 0.000 | True | True |
+| screen-tod_drift-tf1 | ES | tod_drift | run | 1 | 1 | 3285 | 3285 | 3285 | 100.00% | 0.000 | True | True |
+| screen-tod_drift-tf5 | ES | tod_drift | run | 1 | 1 | 3285 | 3285 | 3285 | 100.00% | 0.000 | True | True |
+| screen-tod_drift-tf15 | ES | tod_drift | run | 1 | 1 | 3285 | 3285 | 3285 | 100.00% | 0.000 | True | True |
+| screen-tod_drift-tf30 | ES | tod_drift | run | 1 | 1 | 3285 | 3285 | 3285 | 100.00% | 0.000 | True | True |
+| hm-tod_drift-tf5 | ES | tod_drift | grid | 24 | 24 | 93642 | 93642 | 93642 | 100.00% | 0.000 | True | True |
+| hm-tod_drift-tf15 | ES | tod_drift | grid | 24 | 24 | 83778 | 83778 | 83778 | 100.00% | 0.000 | True | True |
+| fp-tod_drift-tf5 | ES | tod_drift | grid | 16 | 16 | 52560 | 52560 | 52560 | 100.00% | 0.000 | True | True |
+| screen-mid_fade-tf1 | ES | mid_fade | run | 1 | 1 | 238 | 238 | 238 | 100.00% | 0.000 | True | True |
+| screen-mid_fade-tf5 | ES | mid_fade | run | 1 | 1 | 238 | 238 | 238 | 100.00% | 0.000 | True | True |
+| screen-mid_fade-tf15 | ES | mid_fade | run | 1 | 1 | 238 | 238 | 238 | 100.00% | 0.000 | True | True |
+| screen-mid_fade-tf30 | ES | mid_fade | run | 1 | 1 | 238 | 238 | 238 | 100.00% | 0.000 | True | True |
+
+## Every registered family-parameter variant was matched
+Tester runs / heat-map cells whose family inputs ARE a registered variant (the old sizing axes stop / target / max_tr aside), NQ + ES. A variant without a tester cell would rest on code identity alone.
+
+| family | variant | tester runs + cells | 100 % identical | tester trades |
+|---|---|---|---|---|
+| ema_ribbon | default | 32 | 32 | 213905 |
+| tema_slope | n10 | 48 | 48 | 353125 |
+| tema_slope | n20 | 104 | 104 | 720786 |
+| tema_slope | n40 | 48 | 48 | 289560 |
+| ema_pullback | default | 136 | 136 | 820171 |
+| supertrend | default | 32 | 32 | 105794 |
+| rsi2 | th5 | 24 | 24 | 235568 |
+| rsi2 | th10 | 64 | 64 | 658201 |
+| rsi2 | th15 | 24 | 24 | 265396 |
+| first_bar_mom | k1 | 24 | 24 | 62184 |
+| first_bar_mom | k1p5 | 48 | 48 | 87684 |
+| first_bar_mom | k2 | 24 | 24 | 29928 |
+| tod_drift | dirlong_off_min0 | 13 | 13 | 42621 |
+| tod_drift | dirshort_off_min0 | 5 | 5 | 16389 |
+| tod_drift | dirlong_off_min15 | 5 | 5 | 18027 |
+| tod_drift | dirshort_off_min15 | 5 | 5 | 18027 |
+| tod_drift | dirlong_off_min30 | 5 | 5 | 18032 |
+| tod_drift | dirshort_off_min30 | 5 | 5 | 18032 |
+| tod_drift | dirlong_off_min60 | 5 | 5 | 19675 |
+| tod_drift | dirshort_off_min60 | 5 | 5 | 19675 |
+| mid_fade | default | 8 | 8 | 2108 |
+
+## Coverage of this gate
+* Inputs exercised by a tester bundle: tf 1 / 5 / 15 / 30, `stop_mode` atr and pts, `stop_val`, `tgt_r`, `max_tr` 1 / 3, tema_slope `n`, rsi2 `th`, first_bar_mom `k`, tod_drift `off_min` / `exit_bars` / `dir`. NOT exercised by any bundle: `stop_mode` struct and pct, `trail_atr`, rsi2 `trend_f`, mid_fade `k` other than 0.3, the sessions `pre` / `eve` (the tester cannot run them), root GC (no GC tester run exists).
+* Those paths are covered by `tests/test_port2.py` instead: an INDEPENDENT oracle (numpy, straight from the prints, no Template) of every family's first signal in all seven sessions on NQ, ES and GC, with the entry print, the stop and the target checked for the atr, pts and pct stop modes; plus the no-look-ahead and worker-identity tests. GC members stay flagged (ENGINE.md 11.1): no GC tester bundle exists.
+* `mid_fade` reads the daily ATR (`datr()`): the bundles cover it for the full-window run; a run that starts later has a longer daily history than a tester run of the same sub-range would (SIM_VALIDATION.md, coverage).
+
+## Reproduce
+`"~/ONYX TRADING/.venv/bin/python" port2_validate.py --fresh --workers 2` in `engine/` (one tape pass per family and root; without `--fresh` a finished family x root with unchanged hashes is not replayed).

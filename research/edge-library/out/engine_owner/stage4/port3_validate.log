@@ -1,0 +1,18 @@
+NQ runs 20 / 20 pass
+NQ hm-vwap_band-tf5 PASS 48/48 cells identical
+NQ hm-vwap_z-tf5 PASS 48/48 cells identical
+NQ fp-vwap_flip-tf1 PASS 16/16 cells identical
+NQ fp-vwap_flip-tf5 PASS 16/16 cells identical
+NQ hm-vwap_flip-tf15 PASS 36/36 cells identical
+NQ hm2-vwap_flip-tf1 PASS 36/36 cells identical
+NQ hm2-vwap_flip-tf5 PASS 36/36 cells identical
+NQ hm2-pinbar-tf5 PASS 36/36 cells identical
+NQ hm2-sweep_rev-tf5 PASS 36/36 cells identical
+ES runs 20 / 20 pass
+ES fp-vwap_z-tf5 PASS 16/16 cells identical
+ES hm-vwap_z-tf5 PASS 48/48 cells identical
+ES fp-vwap_flip-tf15 PASS 16/16 cells identical
+ES fp-vwap_flip-tf5 PASS 16/16 cells identical
+ES hm-vwap_flip-tf15 PASS 36/36 cells identical
+ES hm-vwap_flip-tf5 PASS 36/36 cells identical
+ALL GATES PASS

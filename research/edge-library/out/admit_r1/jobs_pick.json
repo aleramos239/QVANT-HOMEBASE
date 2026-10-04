@@ -1,0 +1,68 @@
+[
+ {
+  "family": "vwap_trend_pull",
+  "root": "NQ",
+  "tf": "5",
+  "sess": "pm",
+  "period": "pick",
+  "why": "BUILD passer vwap_trend_pull-NQ-tf5|pm|: whole menu"
+ },
+ {
+  "c1": true,
+  "root": "NQ",
+  "tf": "5",
+  "sess": "pm",
+  "period": "pick",
+  "why": "C1 control of vwap_trend_pull-NQ-tf5|pm|"
+ },
+ {
+  "family": "vol_spike_break",
+  "root": "NQ",
+  "tf": "30",
+  "sess": "pm",
+  "period": "pick",
+  "why": "BUILD passer vol_spike_break-NQ-tf30|pm|: whole menu"
+ },
+ {
+  "c1": true,
+  "root": "NQ",
+  "tf": "30",
+  "sess": "pm",
+  "period": "pick",
+  "why": "C1 control of vol_spike_break-NQ-tf30|pm|"
+ },
+ {
+  "family": "straddle_tight_0830",
+  "root": "NQ",
+  "tf": "30",
+  "sess": "pre",
+  "period": "pick",
+  "why": "BUILD passer straddle_tight_0830-NQ-tf30|pre| (FLAGGED: passes the thin round-1 random-minute bar only): whole menu"
+ },
+ {
+  "family": "straddle_tight_0830",
+  "root": "NQ",
+  "tf": "30",
+  "sess": "pre",
+  "period": "pick",
+  "shift": true,
+  "why": "random-minute control of straddle_tight_0830-NQ-tf30|pre|"
+ },
+ {
+  "family": "straddle_tight_0830",
+  "root": "GC",
+  "tf": "30",
+  "sess": "pre",
+  "period": "pick",
+  "why": "BUILD passer straddle_tight_0830-GC-tf30|pre| (FLAGGED: passes the thin round-1 random-minute bar only): whole menu"
+ },
+ {
+  "family": "straddle_tight_0830",
+  "root": "GC",
+  "tf": "30",
+  "sess": "pre",
+  "period": "pick",
+  "shift": true,
+  "why": "random-minute control of straddle_tight_0830-GC-tf30|pre|"
+ }
+]

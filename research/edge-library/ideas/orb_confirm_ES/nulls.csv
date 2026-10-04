@@ -1,0 +1,5 @@
+unit,central,t,bar_best_of_random,control,lift_vs_control,beats_share_of_200_draws,control_nets,bar_with_stage1_random_minutes,failed
+orb_confirm-ES-tf15|mid|dir=long,dirlong_or_min30_pts8-r2,0.9914974291201407,1.2986,c1,2940.56,0.65,,,bar
+orb_confirm-ES-tf15|pm|dir=long,dirlong_or_min15_pts2p5-r0,0.6435822004616154,1.2986,c1,1260.56,0.585,,,bar
+orb_confirm-ES-tf1|pm|dir=long,dirlong_or_min30_pct0p1-r3,0.43209238679980544,1.2986,c1,10326.44,0.99,,,bar
+orb_confirm-ES-tf5|pm|dir=long,dirlong_or_min30_atr1p5-r0,0.7835652194641992,1.2986,c1,614.06,0.495,,,bar

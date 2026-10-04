@@ -1,0 +1,120 @@
+# PORT1_VALIDATION — families/port1.py vs the Homebase Strategy Tester (the old NQ pilot's screen bundles)
+
+Generated 2026-10-03 09:54 ET by `port1_gate.py` (code sha256/16: port1.py 574e9c7b176970b9, l2sim.py 461192700c259bfd, l2ref.py 51f18fb1b8c84bc1, port1_gate.py 4a8be4db210b2abe). Raw: `out/port1_gate.json`.
+In-sample screen bundles of the old pilot (2021-09-22 → 2024-12-31), trade IDENTITY only: no P&L level is printed or stored (only the net difference); nothing dated ≥ 2025-01-01 was read.
+
+## Verdict: ALL 7 FAMILIES PASS (NQ and ES)
+
+Gate per bundle: ≥ 99 % of the trades identical on (date, side, entry time ±1 s, entry price, exit price, exit_reason), net within 0.5 %, the same skipped days, no session dropped by a strategy error. 'all-20-fields identical' also needs qty, order price, sl, tp, gross, commission, net, MAE / MFE, bars, seconds and both timestamps to be equal.
+
+## NQ — the screen bundles of the old NQ pilot (R): PASS
+
+| family | tf | tester run | tester trades | sim trades | matched | all-20-fields identical | match rate | net diff $ | net within 0.5 % | skipped days equal | error sessions | pass |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| orb | 1 | 20260929-213851-draft_pp_orb-783d | 4083 | 4083 | 4083 | 4083 | 100.00% | +0.00 | True | True | 0 | True |
+| orb | 5 | 20260929-213851-draft_pp_orb-80f8 | 4080 | 4080 | 4080 | 4080 | 100.00% | +0.00 | True | True | 0 | True |
+| orb | 15 | 20260929-213911-draft_pp_orb-c4b7 | 3263 | 3263 | 3263 | 3263 | 100.00% | +0.00 | True | True | 0 | True |
+| orb | 30 | 20260929-213952-draft_pp_orb-44e4 | 3263 | 3263 | 3263 | 3263 | 100.00% | +0.00 | True | True | 0 | True |
+| straddle | 1 | 20260929-214012-draft_pp_straddle-bcaf | 3273 | 3273 | 3273 | 3273 | 100.00% | +0.00 | True | True | 0 | True |
+| straddle | 5 | 20260929-214032-draft_pp_straddle-8463 | 3273 | 3273 | 3273 | 3273 | 100.00% | +0.00 | True | True | 0 | True |
+| straddle | 15 | 20260929-214053-draft_pp_straddle-f941 | 3273 | 3273 | 3273 | 3273 | 100.00% | +0.00 | True | True | 0 | True |
+| straddle | 30 | 20260929-214113-draft_pp_straddle-5d7d | 3271 | 3271 | 3271 | 3271 | 100.00% | +0.00 | True | True | 0 | True |
+| donchian | 1 | 20260929-214133-draft_pp_donchian-ef00 | 12259 | 12259 | 12259 | 12259 | 100.00% | +0.00 | True | True | 0 | True |
+| donchian | 5 | 20260929-214153-draft_pp_donchian-05b6 | 6938 | 6938 | 6938 | 6938 | 100.00% | +0.00 | True | True | 0 | True |
+| donchian | 15 | 20260929-214214-draft_pp_donchian-6a13 | 2431 | 2431 | 2431 | 2431 | 100.00% | +0.00 | True | True | 0 | True |
+| donchian | 30 | 20260929-214234-draft_pp_donchian-a623 | 973 | 973 | 973 | 973 | 100.00% | +0.00 | True | True | 0 | True |
+| squeeze | 1 | 20260929-214254-draft_pp_squeeze-91a6 | 8019 | 8019 | 8019 | 8019 | 100.00% | +0.00 | True | True | 0 | True |
+| squeeze | 5 | 20260929-214314-draft_pp_squeeze-ecb2 | 1826 | 1826 | 1826 | 1826 | 100.00% | +0.00 | True | True | 0 | True |
+| squeeze | 15 | 20260929-214335-draft_pp_squeeze-02b3 | 431 | 431 | 431 | 431 | 100.00% | +0.00 | True | True | 0 | True |
+| squeeze | 30 | 20260929-214355-draft_pp_squeeze-d7f2 | 104 | 104 | 104 | 104 | 100.00% | +0.00 | True | True | 0 | True |
+| ib | 1 | 20260929-215724-draft_pp_ib-e2cb | 1248 | 1248 | 1248 | 1248 | 100.00% | +0.00 | True | True | 0 | True |
+| ib | 5 | 20260929-215745-draft_pp_ib-238a | 1248 | 1248 | 1248 | 1248 | 100.00% | +0.00 | True | True | 0 | True |
+| ib | 15 | 20260929-215805-draft_pp_ib-fced | 1248 | 1248 | 1248 | 1248 | 100.00% | +0.00 | True | True | 0 | True |
+| ib | 30 | 20260929-215825-draft_pp_ib-76ec | 1248 | 1248 | 1248 | 1248 | 100.00% | +0.00 | True | True | 0 | True |
+| gap | 1 | 20260929-215845-draft_pp_gap-f593 | 578 | 578 | 578 | 578 | 100.00% | +0.00 | True | True | 0 | True |
+| gap | 5 | 20260929-215905-draft_pp_gap-8936 | 559 | 559 | 559 | 559 | 100.00% | +0.00 | True | True | 0 | True |
+| gap | 15 | 20260929-215926-draft_pp_gap-c8f8 | 531 | 531 | 531 | 531 | 100.00% | +0.00 | True | True | 0 | True |
+| gap | 30 | 20260929-215946-draft_pp_gap-3fe5 | 509 | 509 | 509 | 509 | 100.00% | +0.00 | True | True | 0 | True |
+| lon_break | 1 | 20260929-220127-draft_pp_lon_break-762e | 794 | 794 | 794 | 794 | 100.00% | +0.00 | True | True | 0 | True |
+| lon_break | 5 | 20260929-220147-draft_pp_lon_break-8a1a | 794 | 794 | 794 | 794 | 100.00% | +0.00 | True | True | 0 | True |
+| lon_break | 15 | 20260929-220208-draft_pp_lon_break-f7e2 | 794 | 794 | 794 | 794 | 100.00% | +0.00 | True | True | 0 | True |
+| lon_break | 30 | 20260929-220208-draft_pp_lon_break-1df7 | 794 | 794 | 794 | 794 | 100.00% | +0.00 | True | True | 0 | True |
+
+| family | bundles | tester trades | sim trades | all-20-fields identical | pass |
+|---|---|---|---|---|---|
+| orb | 4 | 14689 | 14689 | 14689 | True |
+| straddle | 4 | 13090 | 13090 | 13090 | True |
+| donchian | 4 | 22601 | 22601 | 22601 | True |
+| squeeze | 4 | 10380 | 10380 | 10380 | True |
+| ib | 4 | 4992 | 4992 | 4992 | True |
+| gap | 4 | 2177 | 2177 | 2177 | True |
+| lon_break | 4 | 3176 | 3176 | 3176 | True |
+
+Sessions per bundle: 825 in the range, 820 used. One tape pass, 2 worker process(es), 49.3 s.
+
+## ES — the screen bundles of the ES pilot (RE): PASS
+
+| family | tf | tester run | tester trades | sim trades | matched | all-20-fields identical | match rate | net diff $ | net within 0.5 % | skipped days equal | error sessions | pass |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| orb | 1 | 20260930-172524-draft_pp_es_orb-f5f9 | 4097 | 4097 | 4097 | 4097 | 100.00% | +0.00 | True | True | 0 | True |
+| orb | 5 | 20260930-172525-draft_pp_es_orb-fe82 | 4095 | 4095 | 4095 | 4095 | 100.00% | +0.00 | True | True | 0 | True |
+| orb | 15 | 20260930-172526-draft_pp_es_orb-3514 | 3274 | 3274 | 3274 | 3274 | 100.00% | +0.00 | True | True | 0 | True |
+| orb | 30 | 20260930-172526-draft_pp_es_orb-7f1b | 3274 | 3274 | 3274 | 3274 | 100.00% | +0.00 | True | True | 0 | True |
+| straddle | 1 | 20260930-172552-draft_pp_es_straddle-02bd | 3285 | 3285 | 3285 | 3285 | 100.00% | +0.00 | True | True | 0 | True |
+| straddle | 5 | 20260930-172613-draft_pp_es_straddle-61ee | 3285 | 3285 | 3285 | 3285 | 100.00% | +0.00 | True | True | 0 | True |
+| straddle | 15 | 20260930-172634-draft_pp_es_straddle-bdb7 | 3285 | 3285 | 3285 | 3285 | 100.00% | +0.00 | True | True | 0 | True |
+| straddle | 30 | 20260930-172655-draft_pp_es_straddle-3074 | 3285 | 3285 | 3285 | 3285 | 100.00% | +0.00 | True | True | 0 | True |
+| donchian | 1 | 20260930-172715-draft_pp_es_donchian-e092 | 12279 | 12279 | 12279 | 12279 | 100.00% | +0.00 | True | True | 0 | True |
+| donchian | 5 | 20260930-172736-draft_pp_es_donchian-fb9b | 6879 | 6879 | 6879 | 6879 | 100.00% | +0.00 | True | True | 0 | True |
+| donchian | 15 | 20260930-172817-draft_pp_es_donchian-a235 | 2397 | 2397 | 2397 | 2397 | 100.00% | +0.00 | True | True | 0 | True |
+| donchian | 30 | 20260930-172838-draft_pp_es_donchian-8c78 | 984 | 984 | 984 | 984 | 100.00% | +0.00 | True | True | 0 | True |
+| squeeze | 1 | 20260930-172859-draft_pp_es_squeeze-2d71 | 7674 | 7674 | 7674 | 7674 | 100.00% | +0.00 | True | True | 0 | True |
+| squeeze | 5 | 20260930-172920-draft_pp_es_squeeze-fe8c | 1875 | 1875 | 1875 | 1875 | 100.00% | +0.00 | True | True | 0 | True |
+| squeeze | 15 | 20260930-172941-draft_pp_es_squeeze-76e5 | 444 | 444 | 444 | 444 | 100.00% | +0.00 | True | True | 0 | True |
+| squeeze | 30 | 20260930-173001-draft_pp_es_squeeze-a102 | 108 | 108 | 108 | 108 | 100.00% | +0.00 | True | True | 0 | True |
+| ib | 1 | 20260930-175004-draft_pp_es_ib-e705 | 1324 | 1324 | 1324 | 1324 | 100.00% | +0.00 | True | True | 0 | True |
+| ib | 5 | 20260930-175026-draft_pp_es_ib-c190 | 1324 | 1324 | 1324 | 1324 | 100.00% | +0.00 | True | True | 0 | True |
+| ib | 15 | 20260930-175107-draft_pp_es_ib-1bd5 | 1324 | 1324 | 1324 | 1324 | 100.00% | +0.00 | True | True | 0 | True |
+| ib | 30 | 20260930-175129-draft_pp_es_ib-78f9 | 1324 | 1324 | 1324 | 1324 | 100.00% | +0.00 | True | True | 0 | True |
+| gap | 1 | 20260930-175210-draft_pp_es_gap-c61e | 594 | 594 | 594 | 594 | 100.00% | +0.00 | True | True | 0 | True |
+| gap | 5 | 20260930-175232-draft_pp_es_gap-5c1d | 578 | 578 | 578 | 578 | 100.00% | +0.00 | True | True | 0 | True |
+| gap | 15 | 20260930-175313-draft_pp_es_gap-23ea | 563 | 563 | 563 | 563 | 100.00% | +0.00 | True | True | 0 | True |
+| gap | 30 | 20260930-175354-draft_pp_es_gap-902e | 541 | 541 | 541 | 541 | 100.00% | +0.00 | True | True | 0 | True |
+| lon_break | 1 | 20260930-175600-draft_pp_es_lon_break-b0a9 | 783 | 783 | 783 | 783 | 100.00% | +0.00 | True | True | 0 | True |
+| lon_break | 5 | 20260930-175641-draft_pp_es_lon_break-6b7e | 783 | 783 | 783 | 783 | 100.00% | +0.00 | True | True | 0 | True |
+| lon_break | 15 | 20260930-175702-draft_pp_es_lon_break-9826 | 783 | 783 | 783 | 783 | 100.00% | +0.00 | True | True | 0 | True |
+| lon_break | 30 | 20260930-175743-draft_pp_es_lon_break-3fce | 783 | 783 | 783 | 783 | 100.00% | +0.00 | True | True | 0 | True |
+
+| family | bundles | tester trades | sim trades | all-20-fields identical | pass |
+|---|---|---|---|---|---|
+| orb | 4 | 14740 | 14740 | 14740 | True |
+| straddle | 4 | 13140 | 13140 | 13140 | True |
+| donchian | 4 | 22539 | 22539 | 22539 | True |
+| squeeze | 4 | 10101 | 10101 | 10101 | True |
+| ib | 4 | 5296 | 5296 | 5296 | True |
+| gap | 4 | 2276 | 2276 | 2276 | True |
+| lon_break | 4 | 3132 | 3132 | 3132 | True |
+
+Sessions per bundle: 825 in the range, 823 used. One tape pass, 2 worker process(es), 50.43 s.
+
+## The registered variants (NQ) — every cell of the heat-maps they come from
+The screen bundles ran each family at its DEFAULT inputs (or_min 15, off_atr 0.5, n 20, sq_type bbkc, ib break, gap fill, min_rng_atr 0; ATR 1.5 stop, 2R). The registered family-parameter variants are the first axis of these heat-maps (R/tune1.jsonl = hm-*, R/tune2.jsonl = hm2-*); each cell = one variant x stop_val {1, 2, 3} ATR x tgt_r {0.5, 1, 2, 3}, replayed with the ported class and compared with the same gate.
+
+| heat-map | family | tf | first axis = the variants | cells | cells 100 % identical | cells pass | tester trades | sim trades | all-20-fields identical | worst cell match | max abs net diff $ | cells without a trade | pass |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| hm-orb-tf5 | orb | 5 | or_min ['5', '15', '30'] | 36 | 36 | 36 | 136392 | 136392 | 136392 | 100.00% | 0.00 | 0 | True |
+| hm2-straddle-tf30 | straddle | 30 | off_atr [0.25, 0.5, 1.0] | 36 | 36 | 36 | 116172 | 116172 | 116172 | 100.00% | 0.00 | 0 | True |
+| hm-donchian-tf15 | donchian | 15 | n [10, 20, 40, 60] | 48 | 48 | 48 | 102134 | 102134 | 102134 | 100.00% | 0.00 | 0 | True |
+| hm2-squeeze-tf1 | squeeze | 1 | sq_type ['bbkc', 'nr7', 'inside'] | 36 | 36 | 36 | 376042 | 376042 | 376042 | 100.00% | 0.00 | 0 | True |
+| hm2-squeeze-tf5 | squeeze | 5 | sq_type ['bbkc', 'nr7', 'inside'] | 36 | 36 | 36 | 205656 | 205656 | 205656 | 100.00% | 0.00 | 0 | True |
+| hm-ib-tf30 | ib | 30 | mode ['break', 'fade'] | 24 | 24 | 24 | 19816 | 19816 | 19816 | 100.00% | 0.00 | 0 | True |
+| hm-ib-tf15 | ib | 15 | mode ['break', 'fade'] | 24 | 24 | 24 | 22792 | 22792 | 22792 | 100.00% | 0.00 | 0 | True |
+| hm2-gap-tf15 | gap | 15 | mode ['fill', 'go'] | 24 | 24 | 24 | 13332 | 13332 | 13332 | 100.00% | 0.00 | 0 | True |
+| hm2-lon_break-tf5 | lon_break | 5 | min_rng_atr [0.0, 1.0, 2.0] | 36 | 36 | 36 | 28440 | 28440 | 28440 | 100.00% | 0.00 | 0 | True |
+
+## What the gate cannot cover
+* Sessions `pre` and `eve`, the `pct` stop and the menu's fixed-point stops on these seven families were never run in the tester (the fixed-point path itself is tester-matched for orb, straddle, donchian and the random control: EDGE_VALIDATION.md). GC runs the same class bodies and has no tester bundle: validated by construction only (ENGINE.md § 11). On ES the non-default variants of squeeze, ib, gap and lon_break have no tester heat-map.
+* The heat-maps cover each variant at ONE or TWO tfs (the tf of the old tuning run), the screen bundles every tf at the default variant: a (non-default variant, tf) pair outside these is the same code, not a separate tester run.
+
+## Reproduce
+`"~/ONYX TRADING/.venv/bin/python" port1_gate.py --workers 2`

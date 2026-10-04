@@ -1,0 +1,12 @@
+utc,key,family,root,tf,sess,what,cells,why
+2026-10-04T12:21:49+00:00,vwap_trend_pull-NQ-tf5-pm-pick,vwap_trend_pull,NQ,5,pm,whole menu,96,BUILD passer vwap_trend_pull-NQ-tf5|pm|: whole menu
+2026-10-04T12:22:01+00:00,c1-NQ-tf5-pm-pick,random,NQ,5,pm,c1 control,64,C1 control of vwap_trend_pull-NQ-tf5|pm|
+2026-10-04T12:22:09+00:00,vol_spike_break-NQ-tf30-pm-pick,vol_spike_break,NQ,30,pm,whole menu,96,BUILD passer vol_spike_break-NQ-tf30|pm|: whole menu
+2026-10-04T12:22:18+00:00,c1-NQ-tf30-pm-pick,random,NQ,30,pm,c1 control,64,C1 control of vol_spike_break-NQ-tf30|pm|
+2026-10-04T12:22:25+00:00,straddle_tight_0830-NQ-tf30-pre-pick,straddle_tight_0830,NQ,30,pre,whole menu,27,BUILD passer straddle_tight_0830-NQ-tf30|pre| (FLAGGED: passes the thin round-1 random-minute bar only): whole menu
+2026-10-04T12:22:27+00:00,straddle_tight_0830-NQ-tf30-pre-pick-shift,straddle_tight_0830,NQ,30,pre,random-minute control,54,random-minute control of straddle_tight_0830-NQ-tf30|pre|
+2026-10-04T12:22:31+00:00,straddle_tight_0830-GC-tf30-pre-pick,straddle_tight_0830,GC,30,pre,whole menu,27,BUILD passer straddle_tight_0830-GC-tf30|pre| (FLAGGED: passes the thin round-1 random-minute bar only): whole menu
+2026-10-04T12:22:33+00:00,straddle_tight_0830-GC-tf30-pre-pick-shift,straddle_tight_0830,GC,30,pre,random-minute control,54,random-minute control of straddle_tight_0830-GC-tf30|pre|
+2026-10-04T12:23:18+00:00,straddle_tight_0830-GC-tf30-pre-pick-stress,straddle_tight_0830,GC,30,pre,stress,19,stress of the both-positive cells (+ the BUILD central cell) of straddle_tight_0830-GC-tf30|pre|
+2026-10-04T12:23:23+00:00,straddle_tight_0830-NQ-tf30-pre-pick-stress,straddle_tight_0830,NQ,30,pre,stress,22,stress of the both-positive cells (+ the BUILD central cell) of straddle_tight_0830-NQ-tf30|pre|
+2026-10-04T12:23:40+00:00,vwap_trend_pull-NQ-tf5-pm-pick-stress,vwap_trend_pull,NQ,5,pm,stress,56,stress of the both-positive cells (+ the BUILD central cell) of vwap_trend_pull-NQ-tf5|pm|

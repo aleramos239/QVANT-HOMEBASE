@@ -1,0 +1,10 @@
+unit,central,t,bar_best_of_random,control,lift_vs_control,beats_share_of_200_draws,control_nets,bar_with_stage1_random_minutes,failed
+orb_confirm-NQ-tf15|mid|dir=long,dirlong_or_min30_pts30-r1,1.811117514271386,2.0155,c1,25625.22,0.995,,,bar
+orb_confirm-NQ-tf15|nyam|dir=long,dirlong_or_min60_pts30-r1,0.4907937878021593,2.0155,c1,8457.38,0.985,,,bar
+orb_confirm-NQ-tf15|nyam|dir=short,dirshort_or_min30_pts10-r0,0.5650824000610334,2.0155,c1,-20079.62,0.02,,,"c1,bar"
+orb_confirm-NQ-tf15|pm|dir=long,dirlong_or_min15_pct0p2-r0,1.569309397374889,2.0155,c1,-2874.42,0.42,,,"c1,bar"
+orb_confirm-NQ-tf1|mid|dir=long,dirlong_or_min15_pts20-r3,1.4185955221046989,2.0155,c1,14982.88,0.915,,,bar
+orb_confirm-NQ-tf1|pm|dir=long,dirlong_or_min15_pts30-r1,0.8304751466347218,2.0155,c1,14187.0,0.915,,,bar
+orb_confirm-NQ-tf5|mid|dir=long,dirlong_or_min15_pct0p2-r2,1.5115201362496824,2.0155,c1,18235.28,0.945,,,bar
+orb_confirm-NQ-tf5|nyam|dir=long,dirlong_or_min30_pct0p1-r3,0.8271566239951991,2.0155,c1,10642.38,0.925,,,bar
+orb_confirm-NQ-tf5|pm|dir=long,dirlong_or_min15_pct0p1-r0,1.1209512042332608,2.0155,c1,-970.15,0.465,,,"c1,bar"

@@ -1,0 +1,1135 @@
+{
+ "E1-A-GC": {
+  "uid": "E1-A-GC",
+  "family": "straddle_tight_0830",
+  "root": "GC",
+  "sess": "pre",
+  "group": "A",
+  "central": "offA_pts1p6-r1",
+  "second_look": "2024 was already read for straddle_tight_0830 GC on all days (stage 2b)",
+  "build": {
+   "pass": true,
+   "cells": 27,
+   "cells_all": 27,
+   "info": 0,
+   "dead": 0,
+   "duplicates": 0,
+   "median_net": 10598.0,
+   "share_pos": 0.963,
+   "positive": 26,
+   "member": "offA_pts1p6-r1",
+   "member_net": 10598.0,
+   "best": "offC_pts2-r3",
+   "best_net": 16974.0,
+   "worst_net": -216.0,
+   "verdicts": {
+    "60": true,
+    "70": true,
+    "80": true
+   },
+   "shares": {
+    "overall": {
+     "cells": 27,
+     "positive": 26,
+     "share_pos": 0.963,
+     "median_net": 10598.0,
+     "verdicts": {
+      "60": true,
+      "70": true,
+      "80": true
+     }
+    },
+    "by_stop": {
+     "fixed": {
+      "cells": 27,
+      "positive": 26,
+      "share_pos": 0.963,
+      "median_net": 10598.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     }
+    },
+    "by_target": {
+     "r1": {
+      "cells": 9,
+      "positive": 8,
+      "share_pos": 0.8889,
+      "median_net": 7638.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     },
+     "r2": {
+      "cells": 9,
+      "positive": 9,
+      "share_pos": 1.0,
+      "median_net": 11308.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     },
+     "r3": {
+      "cells": 9,
+      "positive": 9,
+      "share_pos": 1.0,
+      "median_net": 13348.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     }
+    }
+   }
+  },
+  "pick": {
+   "pass": true,
+   "cells": 27,
+   "cells_all": 27,
+   "info": 0,
+   "dead": 0,
+   "duplicates": 0,
+   "median_net": 5756.0,
+   "share_pos": 1.0,
+   "positive": 27,
+   "member": "offC_pts2-r2",
+   "member_net": 5756.0,
+   "best": "offA_pts1p6-r3",
+   "best_net": 10986.0,
+   "worst_net": 226.0,
+   "verdicts": {
+    "60": true,
+    "70": true,
+    "80": true
+   },
+   "shares": {
+    "overall": {
+     "cells": 27,
+     "positive": 27,
+     "share_pos": 1.0,
+     "median_net": 5756.0,
+     "verdicts": {
+      "60": true,
+      "70": true,
+      "80": true
+     }
+    },
+    "by_stop": {
+     "fixed": {
+      "cells": 27,
+      "positive": 27,
+      "share_pos": 1.0,
+      "median_net": 5756.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     }
+    },
+    "by_target": {
+     "r1": {
+      "cells": 9,
+      "positive": 9,
+      "share_pos": 1.0,
+      "median_net": 3966.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     },
+     "r2": {
+      "cells": 9,
+      "positive": 9,
+      "share_pos": 1.0,
+      "median_net": 5756.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     },
+     "r3": {
+      "cells": 9,
+      "positive": 9,
+      "share_pos": 1.0,
+      "median_net": 7706.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     }
+    }
+   }
+  },
+  "both_positive": [
+   "offA_pts1-r1",
+   "offA_pts1-r2",
+   "offA_pts1-r3",
+   "offA_pts1p6-r1",
+   "offA_pts1p6-r2",
+   "offA_pts1p6-r3",
+   "offA_pts2-r1",
+   "offA_pts2-r2",
+   "offA_pts2-r3",
+   "offB_pts1-r1",
+   "offB_pts1-r2",
+   "offB_pts1-r3",
+   "offB_pts1p6-r1",
+   "offB_pts1p6-r2",
+   "offB_pts1p6-r3",
+   "offB_pts2-r1",
+   "offB_pts2-r2",
+   "offB_pts2-r3",
+   "offC_pts1-r2",
+   "offC_pts1-r3",
+   "offC_pts1p6-r1",
+   "offC_pts1p6-r2",
+   "offC_pts1p6-r3",
+   "offC_pts2-r1",
+   "offC_pts2-r2",
+   "offC_pts2-r3"
+  ],
+  "central_pick": {
+   "trades": 96,
+   "net": 5496.0,
+   "t": 3.617913161634688,
+   "pf": 2.075117370892019,
+   "win": 0.7083333333333334
+  },
+  "pick_table_pass": true,
+  "central_pick_positive": true,
+  "trades_build_plus_pick": 319,
+  "a": true,
+  "nonevent_pick": {
+   "trades": 154,
+   "net": -1146.0,
+   "mean": -7.44,
+   "lift_mean": 64.69
+  },
+  "shift_pick": {
+   "nets": [
+    -6294.0,
+    -2690.0
+   ],
+   "mean": -4492.0,
+   "lift": 9988.0,
+   "trades": 186
+  },
+  "central_pick_rank": 15,
+  "years_pick": {
+   "c1": [
+    {
+     "period": "2024",
+     "trades": 96,
+     "net": 5496.0,
+     "win": 0.7083333333333334,
+     "pf": 2.075117370892019,
+     "max_dd": 684.0,
+     "sharpe": 3.4841344892603594,
+     "avg_trade": 57.25,
+     "worst_open_loss": 234.0,
+     "t": 3.617913161634688
+    },
+    {
+     "period": "combined",
+     "trades": 96,
+     "net": 5496.0,
+     "win": 0.7083333333333334,
+     "pf": 2.075117370892019,
+     "max_dd": 684.0,
+     "sharpe": 3.4841344892603594,
+     "avg_trade": 57.25,
+     "worst_open_loss": 234.0,
+     "t": 3.617913161634688
+    }
+   ],
+   "r1000": [
+    {
+     "period": "2024",
+     "trades": 96,
+     "net": 30504.0,
+     "win": 0.7083333333333334,
+     "pf": 1.9318181818181819,
+     "max_dd": 4650.0,
+     "sharpe": 3.143617266701594,
+     "avg_trade": 317.75,
+     "worst_open_loss": 1488.0,
+     "t": 3.238743223297428
+    },
+    {
+     "period": "combined",
+     "trades": 96,
+     "net": 30504.0,
+     "win": 0.7083333333333334,
+     "pf": 1.9318181818181819,
+     "max_dd": 4650.0,
+     "sharpe": 3.143617266701594,
+     "avg_trade": 317.75,
+     "worst_open_loss": 1488.0,
+     "t": 3.238743223297428
+    }
+   ],
+   "micros_median": 62
+  },
+  "go_stress": true
+ },
+ "E1-B-NQ": {
+  "uid": "E1-B-NQ",
+  "family": "straddle_tight_0830",
+  "root": "NQ",
+  "sess": "pre",
+  "group": "B",
+  "central": "offB_pts5-r3",
+  "second_look": "2024 was already read for straddle_tight_0830 NQ on all days (stage 2b)",
+  "build": {
+   "pass": true,
+   "cells": 27,
+   "cells_all": 27,
+   "info": 0,
+   "dead": 0,
+   "duplicates": 0,
+   "median_net": 9047.0,
+   "share_pos": 1.0,
+   "positive": 27,
+   "member": "offB_pts5-r3",
+   "member_net": 9047.0,
+   "best": "offC_pts10-r3",
+   "best_net": 16282.0,
+   "worst_net": 3217.0,
+   "verdicts": {
+    "60": true,
+    "70": true,
+    "80": true
+   },
+   "shares": {
+    "overall": {
+     "cells": 27,
+     "positive": 27,
+     "share_pos": 1.0,
+     "median_net": 9047.0,
+     "verdicts": {
+      "60": true,
+      "70": true,
+      "80": true
+     }
+    },
+    "by_stop": {
+     "fixed": {
+      "cells": 27,
+      "positive": 27,
+      "share_pos": 1.0,
+      "median_net": 9047.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     }
+    },
+    "by_target": {
+     "r1": {
+      "cells": 9,
+      "positive": 9,
+      "share_pos": 1.0,
+      "median_net": 5662.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     },
+     "r2": {
+      "cells": 9,
+      "positive": 9,
+      "share_pos": 1.0,
+      "median_net": 9712.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     },
+     "r3": {
+      "cells": 9,
+      "positive": 9,
+      "share_pos": 1.0,
+      "median_net": 12247.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     }
+    }
+   }
+  },
+  "pick": {
+   "pass": true,
+   "cells": 27,
+   "cells_all": 27,
+   "info": 0,
+   "dead": 0,
+   "duplicates": 0,
+   "median_net": 2838.0,
+   "share_pos": 0.8148,
+   "positive": 22,
+   "member": "offA_pts10-r3",
+   "member_net": 2838.0,
+   "best": "offC_pts10-r2",
+   "best_net": 9263.0,
+   "worst_net": -1417.0,
+   "verdicts": {
+    "60": true,
+    "70": true,
+    "80": true
+   },
+   "shares": {
+    "overall": {
+     "cells": 27,
+     "positive": 22,
+     "share_pos": 0.8148,
+     "median_net": 2838.0,
+     "verdicts": {
+      "60": true,
+      "70": true,
+      "80": true
+     }
+    },
+    "by_stop": {
+     "fixed": {
+      "cells": 27,
+      "positive": 22,
+      "share_pos": 0.8148,
+      "median_net": 2838.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     }
+    },
+    "by_target": {
+     "r1": {
+      "cells": 9,
+      "positive": 5,
+      "share_pos": 0.5556,
+      "median_net": 573.0,
+      "verdicts": {
+       "60": false,
+       "70": false,
+       "80": false
+      }
+     },
+     "r2": {
+      "cells": 9,
+      "positive": 8,
+      "share_pos": 0.8889,
+      "median_net": 4513.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     },
+     "r3": {
+      "cells": 9,
+      "positive": 9,
+      "share_pos": 1.0,
+      "median_net": 5623.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     }
+    }
+   }
+  },
+  "both_positive": [
+   "offA_pts5-r3",
+   "offA_pts8-r2",
+   "offA_pts8-r3",
+   "offA_pts10-r2",
+   "offA_pts10-r3",
+   "offB_pts5-r2",
+   "offB_pts5-r3",
+   "offB_pts8-r1",
+   "offB_pts8-r2",
+   "offB_pts8-r3",
+   "offB_pts10-r1",
+   "offB_pts10-r2",
+   "offB_pts10-r3",
+   "offC_pts5-r1",
+   "offC_pts5-r2",
+   "offC_pts5-r3",
+   "offC_pts8-r1",
+   "offC_pts8-r2",
+   "offC_pts8-r3",
+   "offC_pts10-r1",
+   "offC_pts10-r2",
+   "offC_pts10-r3"
+  ],
+  "central_pick": {
+   "trades": 68,
+   "net": 2383.0,
+   "t": 1.2808091087645697,
+   "pf": 1.4035563082133784,
+   "win": 0.4117647058823529
+  },
+  "pick_table_pass": true,
+  "central_pick_positive": true,
+  "trades_build_plus_pick": 225,
+  "a": true,
+  "nonevent_pick": {
+   "trades": 148,
+   "net": 363.0,
+   "mean": 2.45,
+   "lift_mean": 32.59
+  },
+  "shift_pick": {
+   "nets": [
+    -1330.0,
+    -1987.0
+   ],
+   "mean": -1658.5,
+   "lift": 4041.5,
+   "trades": 118
+  },
+  "central_pick_rank": 18,
+  "years_pick": {
+   "c1": [
+    {
+     "period": "2024",
+     "trades": 68,
+     "net": 2383.0,
+     "win": 0.4117647058823529,
+     "pf": 1.4035563082133784,
+     "max_dd": 645.0,
+     "sharpe": 1.2764101705637025,
+     "avg_trade": 35.04,
+     "worst_open_loss": 414.0,
+     "t": 1.2808091087645697
+    },
+    {
+     "period": "combined",
+     "trades": 68,
+     "net": 2383.0,
+     "win": 0.4117647058823529,
+     "pf": 1.4035563082133784,
+     "max_dd": 645.0,
+     "sharpe": 1.2764101705637025,
+     "avg_trade": 35.04,
+     "worst_open_loss": 414.0,
+     "t": 1.2808091087645697
+    }
+   ],
+   "r1000": [
+    {
+     "period": "2024",
+     "trades": 68,
+     "net": 19750.0,
+     "win": 0.4117647058823529,
+     "pf": 1.32139951179821,
+     "max_dd": 6750.0,
+     "sharpe": 1.0607933488996857,
+     "avg_trade": 290.44,
+     "worst_open_loss": 4200.0,
+     "t": 1.0615182500251887
+    },
+    {
+     "period": "combined",
+     "trades": 68,
+     "net": 19750.0,
+     "win": 0.4117647058823529,
+     "pf": 1.32139951179821,
+     "max_dd": 6750.0,
+     "sharpe": 1.0607933488996857,
+     "avg_trade": 290.44,
+     "worst_open_loss": 4200.0,
+     "t": 1.0615182500251887
+    }
+   ],
+   "micros_median": 100
+  },
+  "go_stress": true
+ },
+ "E1-B-GC": {
+  "uid": "E1-B-GC",
+  "family": "straddle_tight_0830",
+  "root": "GC",
+  "sess": "pre",
+  "group": "B",
+  "central": "offA_pts1p6-r1",
+  "second_look": "2024 was already read for straddle_tight_0830 GC on all days (stage 2b)",
+  "build": {
+   "pass": true,
+   "cells": 27,
+   "cells_all": 27,
+   "info": 0,
+   "dead": 0,
+   "duplicates": 0,
+   "median_net": 8066.0,
+   "share_pos": 1.0,
+   "positive": 27,
+   "member": "offA_pts1p6-r1",
+   "member_net": 8066.0,
+   "best": "offB_pts1p6-r3",
+   "best_net": 14510.0,
+   "worst_net": 820.0,
+   "verdicts": {
+    "60": true,
+    "70": true,
+    "80": true
+   },
+   "shares": {
+    "overall": {
+     "cells": 27,
+     "positive": 27,
+     "share_pos": 1.0,
+     "median_net": 8066.0,
+     "verdicts": {
+      "60": true,
+      "70": true,
+      "80": true
+     }
+    },
+    "by_stop": {
+     "fixed": {
+      "cells": 27,
+      "positive": 27,
+      "share_pos": 1.0,
+      "median_net": 8066.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     }
+    },
+    "by_target": {
+     "r1": {
+      "cells": 9,
+      "positive": 9,
+      "share_pos": 1.0,
+      "median_net": 6666.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     },
+     "r2": {
+      "cells": 9,
+      "positive": 9,
+      "share_pos": 1.0,
+      "median_net": 10000.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     },
+     "r3": {
+      "cells": 9,
+      "positive": 9,
+      "share_pos": 1.0,
+      "median_net": 12526.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     }
+    }
+   }
+  },
+  "pick": {
+   "pass": true,
+   "cells": 27,
+   "cells_all": 27,
+   "info": 0,
+   "dead": 0,
+   "duplicates": 0,
+   "median_net": 4088.0,
+   "share_pos": 0.963,
+   "positive": 26,
+   "member": "offB_pts1-r3",
+   "member_net": 4088.0,
+   "best": "offB_pts2-r3",
+   "best_net": 11228.0,
+   "worst_net": -502.0,
+   "verdicts": {
+    "60": true,
+    "70": true,
+    "80": true
+   },
+   "shares": {
+    "overall": {
+     "cells": 27,
+     "positive": 26,
+     "share_pos": 0.963,
+     "median_net": 4088.0,
+     "verdicts": {
+      "60": true,
+      "70": true,
+      "80": true
+     }
+    },
+    "by_stop": {
+     "fixed": {
+      "cells": 27,
+      "positive": 26,
+      "share_pos": 0.963,
+      "median_net": 4088.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     }
+    },
+    "by_target": {
+     "r1": {
+      "cells": 9,
+      "positive": 8,
+      "share_pos": 0.8889,
+      "median_net": 1798.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     },
+     "r2": {
+      "cells": 9,
+      "positive": 9,
+      "share_pos": 1.0,
+      "median_net": 5698.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     },
+     "r3": {
+      "cells": 9,
+      "positive": 9,
+      "share_pos": 1.0,
+      "median_net": 7128.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     }
+    }
+   }
+  },
+  "both_positive": [
+   "offA_pts1-r1",
+   "offA_pts1-r2",
+   "offA_pts1-r3",
+   "offA_pts1p6-r1",
+   "offA_pts1p6-r2",
+   "offA_pts1p6-r3",
+   "offA_pts2-r1",
+   "offA_pts2-r2",
+   "offA_pts2-r3",
+   "offB_pts1-r1",
+   "offB_pts1-r2",
+   "offB_pts1-r3",
+   "offB_pts1p6-r1",
+   "offB_pts1p6-r2",
+   "offB_pts1p6-r3",
+   "offB_pts2-r1",
+   "offB_pts2-r2",
+   "offB_pts2-r3",
+   "offC_pts1-r2",
+   "offC_pts1-r3",
+   "offC_pts1p6-r1",
+   "offC_pts1p6-r2",
+   "offC_pts1p6-r3",
+   "offC_pts2-r1",
+   "offC_pts2-r2",
+   "offC_pts2-r3"
+  ],
+  "central_pick": {
+   "trades": 68,
+   "net": 2448.0,
+   "t": 1.8086550917732298,
+   "pf": 1.5543478260869565,
+   "win": 0.6470588235294118
+  },
+  "pick_table_pass": true,
+  "central_pick_positive": true,
+  "trades_build_plus_pick": 224,
+  "a": true,
+  "nonevent_pick": {
+   "trades": 154,
+   "net": -1146.0,
+   "mean": -7.44,
+   "lift_mean": 43.44
+  },
+  "shift_pick": {
+   "nets": [
+    -4382.0,
+    -2108.0
+   ],
+   "mean": -3245.0,
+   "lift": 5693.0,
+   "trades": 130
+  },
+  "central_pick_rank": 19,
+  "years_pick": {
+   "c1": [
+    {
+     "period": "2024",
+     "trades": 68,
+     "net": 2448.0,
+     "win": 0.6470588235294118,
+     "pf": 1.5543478260869565,
+     "max_dd": 738.0,
+     "sharpe": 1.7869112841583028,
+     "avg_trade": 36.0,
+     "worst_open_loss": 234.0,
+     "t": 1.8086550917732298
+    },
+    {
+     "period": "combined",
+     "trades": 68,
+     "net": 2448.0,
+     "win": 0.6470588235294118,
+     "pf": 1.5543478260869565,
+     "max_dd": 738.0,
+     "sharpe": 1.7869112841583028,
+     "avg_trade": 36.0,
+     "worst_open_loss": 234.0,
+     "t": 1.8086550917732298
+    }
+   ],
+   "r1000": [
+    {
+     "period": "2024",
+     "trades": 68,
+     "net": 12648.0,
+     "win": 0.6470588235294118,
+     "pf": 1.4473684210526316,
+     "max_dd": 5270.0,
+     "sharpe": 1.4969861647669005,
+     "avg_trade": 186.0,
+     "worst_open_loss": 1488.0,
+     "t": 1.5072125764776914
+    },
+    {
+     "period": "combined",
+     "trades": 68,
+     "net": 12648.0,
+     "win": 0.6470588235294118,
+     "pf": 1.4473684210526316,
+     "max_dd": 5270.0,
+     "sharpe": 1.4969861647669005,
+     "avg_trade": 186.0,
+     "worst_open_loss": 1488.0,
+     "t": 1.5072125764776914
+    }
+   ],
+   "micros_median": 62
+  },
+  "go_stress": true
+ },
+ "E3-C-GC": {
+  "uid": "E3-C-GC",
+  "family": "straddle_tight_1000",
+  "root": "GC",
+  "sess": "nyam",
+  "group": "C",
+  "central": "offA_pts1p6-r1",
+  "second_look": "",
+  "build": {
+   "pass": true,
+   "cells": 27,
+   "cells_all": 27,
+   "info": 0,
+   "dead": 0,
+   "duplicates": 0,
+   "median_net": 8202.0,
+   "share_pos": 1.0,
+   "positive": 27,
+   "member": "offA_pts1p6-r1",
+   "member_net": 8202.0,
+   "best": "offA_pts1p6-r3",
+   "best_net": 15622.0,
+   "worst_net": 450.0,
+   "verdicts": {
+    "60": true,
+    "70": true,
+    "80": true
+   },
+   "shares": {
+    "overall": {
+     "cells": 27,
+     "positive": 27,
+     "share_pos": 1.0,
+     "median_net": 8202.0,
+     "verdicts": {
+      "60": true,
+      "70": true,
+      "80": true
+     }
+    },
+    "by_stop": {
+     "fixed": {
+      "cells": 27,
+      "positive": 27,
+      "share_pos": 1.0,
+      "median_net": 8202.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     }
+    },
+    "by_target": {
+     "r1": {
+      "cells": 9,
+      "positive": 9,
+      "share_pos": 1.0,
+      "median_net": 5112.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     },
+     "r2": {
+      "cells": 9,
+      "positive": 9,
+      "share_pos": 1.0,
+      "median_net": 8462.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     },
+     "r3": {
+      "cells": 9,
+      "positive": 9,
+      "share_pos": 1.0,
+      "median_net": 9916.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     }
+    }
+   }
+  },
+  "pick": {
+   "pass": true,
+   "cells": 27,
+   "cells_all": 27,
+   "info": 0,
+   "dead": 0,
+   "duplicates": 0,
+   "median_net": 3396.0,
+   "share_pos": 1.0,
+   "positive": 27,
+   "member": "offA_pts1-r2",
+   "member_net": 3396.0,
+   "best": "offA_pts2-r3",
+   "best_net": 10356.0,
+   "worst_net": 1336.0,
+   "verdicts": {
+    "60": true,
+    "70": true,
+    "80": true
+   },
+   "shares": {
+    "overall": {
+     "cells": 27,
+     "positive": 27,
+     "share_pos": 1.0,
+     "median_net": 3396.0,
+     "verdicts": {
+      "60": true,
+      "70": true,
+      "80": true
+     }
+    },
+    "by_stop": {
+     "fixed": {
+      "cells": 27,
+      "positive": 27,
+      "share_pos": 1.0,
+      "median_net": 3396.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     }
+    },
+    "by_target": {
+     "r1": {
+      "cells": 9,
+      "positive": 9,
+      "share_pos": 1.0,
+      "median_net": 2796.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     },
+     "r2": {
+      "cells": 9,
+      "positive": 9,
+      "share_pos": 1.0,
+      "median_net": 3396.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     },
+     "r3": {
+      "cells": 9,
+      "positive": 9,
+      "share_pos": 1.0,
+      "median_net": 5586.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     }
+    }
+   }
+  },
+  "both_positive": [
+   "offA_pts1-r1",
+   "offA_pts1-r2",
+   "offA_pts1-r3",
+   "offA_pts1p6-r1",
+   "offA_pts1p6-r2",
+   "offA_pts1p6-r3",
+   "offA_pts2-r1",
+   "offA_pts2-r2",
+   "offA_pts2-r3",
+   "offB_pts1-r1",
+   "offB_pts1-r2",
+   "offB_pts1-r3",
+   "offB_pts1p6-r1",
+   "offB_pts1p6-r2",
+   "offB_pts1p6-r3",
+   "offB_pts2-r1",
+   "offB_pts2-r2",
+   "offB_pts2-r3",
+   "offC_pts1-r1",
+   "offC_pts1-r2",
+   "offC_pts1-r3",
+   "offC_pts1p6-r1",
+   "offC_pts1p6-r2",
+   "offC_pts1p6-r3",
+   "offC_pts2-r1",
+   "offC_pts2-r2",
+   "offC_pts2-r3"
+  ],
+  "central_pick": {
+   "trades": 46,
+   "net": 4166.0,
+   "t": 4.577334161318109,
+   "pf": 3.5940224159402243,
+   "win": 0.8043478260869565
+  },
+  "pick_table_pass": true,
+  "central_pick_positive": true,
+  "trades_build_plus_pick": 143,
+  "a": true,
+  "nonevent_pick": {
+   "trades": 204,
+   "net": -6496.0,
+   "mean": -31.84,
+   "lift_mean": 122.41
+  },
+  "shift_pick": {
+   "nets": [
+    -1404.0,
+    -900.0
+   ],
+   "mean": -1152.0,
+   "lift": 5318.0,
+   "trades": 91
+  },
+  "central_pick_rank": 12,
+  "years_pick": {
+   "c1": [
+    {
+     "period": "2024",
+     "trades": 46,
+     "net": 4166.0,
+     "win": 0.8043478260869565,
+     "pf": 3.5940224159402243,
+     "max_dd": 386.0,
+     "sharpe": 3.930849982316908,
+     "avg_trade": 90.57,
+     "worst_open_loss": 184.0,
+     "t": 4.577334161318109
+    },
+    {
+     "period": "combined",
+     "trades": 46,
+     "net": 4166.0,
+     "win": 0.8043478260869565,
+     "pf": 3.5940224159402243,
+     "max_dd": 386.0,
+     "sharpe": 3.930849982316908,
+     "avg_trade": 90.57,
+     "worst_open_loss": 184.0,
+     "t": 4.577334161318109
+    }
+   ],
+   "r1000": [
+    {
+     "period": "2024",
+     "trades": 46,
+     "net": 24118.0,
+     "win": 0.8043478260869565,
+     "pf": 3.3433734939759034,
+     "max_dd": 2542.0,
+     "sharpe": 3.7370143351432636,
+     "avg_trade": 524.3,
+     "worst_open_loss": 1178.0,
+     "t": 4.2740830262907945
+    },
+    {
+     "period": "combined",
+     "trades": 46,
+     "net": 24118.0,
+     "win": 0.8043478260869565,
+     "pf": 3.3433734939759034,
+     "max_dd": 2542.0,
+     "sharpe": 3.7370143351432636,
+     "avg_trade": 524.3,
+     "worst_open_loss": 1178.0,
+     "t": 4.2740830262907945
+    }
+   ],
+   "micros_median": 62
+  },
+  "go_stress": true
+ }
+}

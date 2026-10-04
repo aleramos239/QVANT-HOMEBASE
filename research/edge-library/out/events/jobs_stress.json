@@ -1,0 +1,26 @@
+[
+ {
+  "family": "straddle_tight_1000",
+  "root": "GC",
+  "tf": "30",
+  "sess": "nyam",
+  "period": "build",
+  "stress": true,
+  "cells": [
+   "offA_pts1p6-r1"
+  ],
+  "why": "stress (2 ticks + 250 ms) of the BUILD central variant of E3-C-GC"
+ },
+ {
+  "family": "straddle_tight_1000",
+  "root": "GC",
+  "tf": "30",
+  "sess": "nyam",
+  "period": "pick",
+  "stress": true,
+  "cells": [
+   "offA_pts1p6-r1"
+  ],
+  "why": "stress (2 ticks + 250 ms) of the BUILD central variant of E3-C-GC"
+ }
+]

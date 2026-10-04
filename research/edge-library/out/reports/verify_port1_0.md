@@ -1,0 +1,45 @@
+{
+ "ok": true,
+ "summary": "PORT1 (orb, straddle, donchian, squeeze, ib, lon_break, gap) passes the look-ahead + fidelity lens: no blocker, no major. I changed nothing under edge-library; no commit, no tester job, no menu run, nothing dated >= 2025 read, counts and identity only.\n\n**Limits of my own checks:** every run was <= 10 days on 1 process (the author's test file on 2), so the unused bundles were replayed on 10-day subsets, not the whole window. I did not run the 8-worker identity either.\n\n**Author's claims re-checked**\n- The hashes in `PORT1_VALIDATION.md` match the files on disk, so the gate ran on the final code.\n- `python -m families` shows 0 errors; `ledger.csv` and `runs/` do not exist.\n- `tests/test_port1.py`: 48 passed at 2 workers.\n- orb, squeeze, ib, lon_break and gap bodies are AST-identical to `R/families`; donchian's `l2ref` class is identical to R's, and straddle's differs only in how the news table is read.\n- The registered variants are the first axis of the tune1 / tune2 heat-maps.\n- Counts-only smokes for orb NQ tf5 and ib GC tf15 came back ok.\n\n**Fidelity**\n- **Bundles the author did not use** (10 days each, chosen to include DST Mondays, roll days and half days) \u2014 all identical on all 20 fields, net diff $0, same skipped days:\n  - ES smoke runs of all seven families (2024-03-04 to 03-15);\n  - NQ rollcheck runs for straddle tf30 and gap tf5, and the ES rollcheck donchian tf15;\n  - orb calibration grids, NQ and ES (20 cells each);\n  - NQ donchian heat-maps tf30, tf5 and tf1 (36 cells each);\n  - ES donchian tf30 heat-map (36 cells) and fixed-point grid (16 cells).\n- **Real tester draft on the tester's own engine, in process.** I spliced `R/template.py` + `R/families` the way `gen_drafts` does and ran it against port1 for every registered variant \u00d7 tf 1/5/15/30 \u00d7 4 exits (including the menu's fixed-point stops) on 9 BUILD days. NQ, ES and GC each gave 2,880 of 2,880 session-runs identical. This is the first engine-level check of these families on GC.\n- **Sessions the tester never ran.** Same draft with one extra session window added:\n  - `pre`: 2,160 of 2,160 identical on each of NQ, ES, GC.\n  - `eve` (evening prints shifted +6 h onto the tester's day): 2,160 of 2,160 identical on each root.\n- **Menu exits.** All 7,680 instance-cells per root-day (variant \u00d7 tf \u00d7 all/pre/eve \u00d7 32 exits) on 6 root-days: every sent order's stop distance (ATR with my own Wilder ATR, points, percent of the reference price) and target matched, 0 bad.\n\n**Look-ahead**\n- **Garbage after a cut, logged at the order level.** Cuts sat exactly on the fire times and at odd seconds, across all variants, tf 1/5/15/30, all/pre/eve and atr/pts/pct stops. Over 11 root-days (NQ 6, ES 3, GC 3) and about 26,000 cut comparisons there were 0 failures; a planted leak was caught.\n- **Independent oracle from raw prints** (own ET clock, bars, ATR and session table) on 22 root-days covering DST Mondays, half days, roll days and post-holiday evenings:\n  - expected orders equalled sent orders exactly for orb, ib break, lon_break, straddle and gap;\n  - every donchian, squeeze and ib-fade order was justified by bars completed at its decision time;\n  - the prior daily bar equals the previous tape and ends before 18:00;\n  - 0 failures.\n- **Session attribution.** No trade of the all / pre / eve instances lands in another instance's session, spans 00:00, or touches the 17:00-18:00 break.\n\n**Open risks (all minor, details in the issues list)**\n- Decisions for the orchestrator before any plateau is judged: dead cells, the duplicated own-target cells, and break/fade and fill/go sharing one unit.\n- The ported straddle carries 3 of the menu's 5 offsets and overlaps `straddle_t` at tf 30.\n- A roll-list trap in `l2sim.Template` for direct `run_session` callers on ES / GC.\n- GC half days are skipped rather than clamped.\n- The author's disclosed P&L glimpse of two old-pilot calibration rows.\n\nMy scripts are in `/private/tmp/claude-501/-Users-ramoscapital-Library-Application-Support-Claude-scratch-workspaces-bede25d7-4e1b-4b3e-b8ef-70c7ef831e62-9ebb0405-7969-47e0-923d-777091be95f0-scratch-2026-09-30-896b12/db1f7d1a-1c40-4988-9502-1482f7a31fc2/scratchpad/vp1/`: `fid1.py`, `rdraft.py`, `diff1.py`, `diff23.py`, `la1.py`, `la2.py`, `stopchk.py`, `tagchk.py`.",
+ "issues": [
+  {
+   "severity": "minor",
+   "desc": "Roll-list trap for direct callers of l2sim.run_session on ES / GC. Template.ROLLS falls back to default_rolls(self.root), and the class root is 'NQ', so a direct call on another root uses NQ's roll dates and voids prior-day levels on the wrong days. The real runner (run_many / _run_days) sets st.root and st.ROLLS, so menu and member runs are not affected. The author's look-ahead test calls run_session directly but on NQ only, so it is unaffected too. Engine owner's file, not port1's.",
+   "evidence": "In my differential, GC 2022-03-14 gap fill gave 1 trade on the tester engine and 0 on a direct S.run_session call (pdc None: 2022-03-14 is an NQ roll date, not a GC one). After setting b.root and b.ROLLS as _run_days does, GC was 2,880 of 2,880 identical.",
+   "file": "/Users/ramoscapital/ramos-quant-homebase/research/edge-library/engine/l2sim.py"
+  },
+  {
+   "severity": "minor",
+   "desc": "ib fade and gap fill ignore the menu's target, so each stop has 4 identical cells that the plateau counts 4 times (confirms the author's risk 3). Together with the warm-up dead cells (e.g. donchian tf30 n 40 / 60 never trade) and break/fade and fill/go sharing one unit, the plateau for these units is biased toward failing and spends cap on cells that carry no information. This needs a P&L-blind decision by the orchestrator before any BUILD plateau is judged; it is conservative (it cannot cause a false admission).",
+   "evidence": "stopchk.py: 4,608 own-target instance-cells, identical trades for every tgt_r at the same stop, 0 exceptions. The 10-day replay of the NQ hm-donchian-tf30 heat-map gave 336 trades over 36 cells; the author documents that n 40 never trades at tf 30.",
+   "file": "/Users/ramoscapital/ramos-quant-homebase/research/edge-library/engine/families/port1.py"
+  },
+  {
+   "severity": "minor",
+   "desc": "The ported straddle registers 3 offsets (off_atr 0.25 / 0.5 / 1.0 x ATR of the family's tf), while EDGE_SPEC's menu lists 5 straddle offsets (ATR30 x 3 plus two fixed-point sizes). This follows 'PROPER RE-RUN' item 4 (variants = first heat-map axis), and the 5-offset menu lives in straddle_t. At tf 30 london / nyam / pm it produces the same trades as straddle_t 03:00 / 09:30 / 13:30, so the two must not be admitted as separate members. Needs the orchestrator's explicit sign-off.",
+   "evidence": "port1.py FAMILIES['straddle'] variants = [{'off_atr': 0.25}, {'off_atr': 0.5}, {'off_atr': 1.0}]; EDGE_SPEC variant menu line 'Straddle entry offsets (5)'; author's risk 4.",
+   "file": "/Users/ramoscapital/ramos-quant-homebase/research/edge-library/engine/families/port1.py"
+  },
+  {
+   "severity": "minor",
+   "desc": "Wording of the gap note: it says 'first tf close >= 09:30', but the entry is at the first tf close AFTER 09:30 (09:30 + tf). At tf 30 that is 10:00, half an hour into the session. Behaviour is the tester's; only the registry note and docstring are loose.",
+   "evidence": "Template._close requires S[s][0] < end for a close to count as in-session. My oracle expected the gap order at the close of the first bucket ending after 09:30 and matched every sent gap order on 22 root-days.",
+   "file": "/Users/ramoscapital/ramos-quant-homebase/research/edge-library/engine/families/port1.py"
+  },
+  {
+   "severity": "minor",
+   "desc": "GC half days are skipped, not clamped. Only equity-index roots clamp to the 13:15 early close, so on GC the day after Thanksgiving is dropped by the missing-hours rule and contributes no day-session trades. This is the tester's rule; flag it on GC members.",
+   "evidence": "tagchk.py, GC: skipped ['2021-11-26', '2022-11-25'], eve_skipped []."
+  },
+  {
+   "severity": "minor",
+   "desc": "Process slip the author disclosed: the first look at the old pilot's ledger printed the in-sample net (2021-2024, which includes PICK) of two calibration rows, ema_pullback and one orb cell. The rule is identity only. No registered variant or threshold could depend on it, since the variants are the tune-file axes, which I verified independently.",
+   "evidence": "Author's report item 8. My check of tune1.jsonl / tune2.jsonl: the first axes equal the registered variants for all seven families."
+  },
+  {
+   "severity": "minor",
+   "desc": "Limits of this verification: the unused bundles were replayed on 10-day subsets, not the whole window; the 8-worker identity was not run (the author ran it at 2, as I ran the test file); the percent stop cannot be compared with the tester (the R template has no pct mode) and rests on my arithmetic check plus the garbage test.",
+   "evidence": "fid1.py runs use days=<=10 and workers=1; tests/test_port1.py run with EDGE_MAX_WORKERS=2 L2_TEST_WORKERS=2: 48 passed."
+  }
+ ]
+}

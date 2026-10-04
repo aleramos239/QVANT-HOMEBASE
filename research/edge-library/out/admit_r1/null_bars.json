@@ -1,0 +1,62 @@
+{
+ "c1-ES": {
+  "bar": 1.2985685967681793,
+  "nulls": 56,
+  "thin": false
+ },
+ "c1-GC": {
+  "bar": 1.240684428052099,
+  "nulls": 56,
+  "thin": false
+ },
+ "c1-NQ": {
+  "bar": 2.01546588148303,
+  "nulls": 56,
+  "thin": false
+ },
+ "shift-ES": {
+  "bar": 0.9521651583211139,
+  "nulls": 8,
+  "thin": true
+ },
+ "shift-GC": {
+  "bar": 0.6270764419047441,
+  "nulls": 8,
+  "thin": true
+ },
+ "shift-NQ": {
+  "bar": 0.8406995352466691,
+  "nulls": 8,
+  "thin": true
+ },
+ "shift_s1-ES": {
+  "bar": 2.0010262339325084,
+  "nulls": 18,
+  "thin": true
+ },
+ "shift_s1-GC": {
+  "bar": 1.639124794489482,
+  "nulls": 18,
+  "thin": true
+ },
+ "shift_s1-NQ": {
+  "bar": 2.6163642064795405,
+  "nulls": 18,
+  "thin": true
+ },
+ "shift_all-NQ": {
+  "bar": 2.5607770536606678,
+  "nulls": 26,
+  "thin": false
+ },
+ "shift_all-ES": {
+  "bar": 1.8799032269221259,
+  "nulls": 26,
+  "thin": false
+ },
+ "shift_all-GC": {
+  "bar": 1.627917623785153,
+  "nulls": 26,
+  "thin": false
+ }
+}

@@ -1,0 +1,10 @@
+utc,key,family,root,tf,sess,what,cells,why
+2026-10-04T13:14:05+00:00,straddle_tight_1000-GC-tf30-nyam-pick,straddle_tight_1000,GC,30,nyam,whole menu,27,"BUILD passer E3-C-GC (straddle_tight_1000 GC, 10:00 release days): whole menu on 2024, FIRST look"
+2026-10-04T13:14:06+00:00,straddle_tight_1000-GC-tf30-nyam-pick-shift,straddle_tight_1000,GC,30,nyam,random-minute control,54,random-minute control of E3-C-GC on 2024
+2026-10-04T13:14:42+00:00,straddle_tight_0830-GC-tf30-pre-pick,straddle_tight_0830,GC,30,pre,whole menu (stored; re-read with a day filter),27,BUILD passer E1-A-GC: 2024 on the group's days. SECOND LOOK: 2024 was already read for straddle_tight_0830 GC on all days (stage 2b)
+2026-10-04T13:14:42+00:00,straddle_tight_0830-GC-tf30-pre-pick-shift,straddle_tight_0830,GC,30,pre,random-minute control (stored; re-read with a day filter),54,random-minute control of E1-A-GC on 2024 (SECOND LOOK)
+2026-10-04T13:14:42+00:00,straddle_tight_0830-NQ-tf30-pre-pick,straddle_tight_0830,NQ,30,pre,whole menu (stored; re-read with a day filter),27,BUILD passer E1-B-NQ: 2024 on the group's days. SECOND LOOK: 2024 was already read for straddle_tight_0830 NQ on all days (stage 2b)
+2026-10-04T13:14:42+00:00,straddle_tight_0830-NQ-tf30-pre-pick-shift,straddle_tight_0830,NQ,30,pre,random-minute control (stored; re-read with a day filter),54,random-minute control of E1-B-NQ on 2024 (SECOND LOOK)
+2026-10-04T13:14:42+00:00,straddle_tight_0830-GC-tf30-pre-pick,straddle_tight_0830,GC,30,pre,whole menu (stored; re-read with a day filter),27,BUILD passer E1-B-GC: 2024 on the group's days. SECOND LOOK: 2024 was already read for straddle_tight_0830 GC on all days (stage 2b)
+2026-10-04T13:14:42+00:00,straddle_tight_0830-GC-tf30-pre-pick-shift,straddle_tight_0830,GC,30,pre,random-minute control (stored; re-read with a day filter),54,random-minute control of E1-B-GC on 2024 (SECOND LOOK)
+2026-10-04T13:14:51+00:00,straddle_tight_1000-GC-tf30-nyam-pick-stress,straddle_tight_1000,GC,30,nyam,stress,1,stress (2 ticks + 250 ms) of the BUILD central variant of E3-C-GC

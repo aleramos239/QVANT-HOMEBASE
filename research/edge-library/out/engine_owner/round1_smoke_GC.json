@@ -1,0 +1,1148 @@
+[
+ {
+  "family": "late_mom",
+  "root": "GC",
+  "tf": "30",
+  "days": 10,
+  "cells": 288,
+  "variants": 9,
+  "sessions": 10,
+  "used": 9,
+  "eve_skipped": 0,
+  "skipped_by_error": 0,
+  "errors": [],
+  "trades_total": 1920,
+  "trades_per_cell": {
+   "min": 3,
+   "max": 9
+  },
+  "cells_without_trades": 0,
+  "long": 864,
+  "short": 1056,
+  "by_session": {
+   "pm": 1920
+  },
+  "by_stop_mode": {
+   "atr": 480,
+   "pts": 960,
+   "pct": 480
+  },
+  "entry_kind": {
+   "market": 1920,
+   "resting": 0
+  },
+  "both_sides_declared": false,
+  "both_sides_sessions": 0,
+  "segments": [
+   "day"
+  ],
+  "hold_to": "day",
+  "instances_per_cell": 1,
+  "exit_after_day_flat": 0,
+  "overlap_in_session": 0,
+  "entry_in_no_session": 0,
+  "entry_hours": [
+   "15:30:00",
+   "15:30:59"
+  ],
+  "entry_outside_hours": 0,
+  "both_sides_ok": true,
+  "worker_parity": true,
+  "nulls": {
+   "shift": {
+    "trades": 144,
+    "skipped_by_error": 0
+   }
+  },
+  "ok": true
+ },
+ {
+  "family": "open_fade",
+  "root": "GC",
+  "tf": "1",
+  "days": 10,
+  "cells": 120,
+  "variants": 3,
+  "sessions": 10,
+  "used": 9,
+  "eve_skipped": 0,
+  "skipped_by_error": 0,
+  "errors": [],
+  "trades_total": 1960,
+  "trades_per_cell": {
+   "min": 8,
+   "max": 27
+  },
+  "cells_without_trades": 0,
+  "long": 1292,
+  "short": 668,
+  "by_session": {
+   "nyam": 1960
+  },
+  "by_stop_mode": {
+   "atr": 538,
+   "pts": 903,
+   "pct": 519
+  },
+  "entry_kind": {
+   "market": 1960,
+   "resting": 0
+  },
+  "both_sides_declared": false,
+  "both_sides_sessions": 0,
+  "segments": [
+   "day"
+  ],
+  "hold_to": "day",
+  "instances_per_cell": 1,
+  "exit_after_day_flat": 0,
+  "overlap_in_session": 0,
+  "entry_in_no_session": 0,
+  "entry_hours": [
+   "09:30:00",
+   "10:59:59"
+  ],
+  "entry_outside_hours": 0,
+  "both_sides_ok": true,
+  "worker_parity": true,
+  "nulls": {},
+  "ok": true
+ },
+ {
+  "family": "open_fade",
+  "root": "GC",
+  "tf": "5",
+  "days": 10,
+  "cells": 120,
+  "variants": 3,
+  "sessions": 10,
+  "used": 9,
+  "eve_skipped": 0,
+  "skipped_by_error": 0,
+  "errors": [],
+  "trades_total": 1078,
+  "trades_per_cell": {
+   "min": 6,
+   "max": 12
+  },
+  "cells_without_trades": 0,
+  "long": 718,
+  "short": 360,
+  "by_session": {
+   "nyam": 1078
+  },
+  "by_stop_mode": {
+   "atr": 255,
+   "pts": 542,
+   "pct": 281
+  },
+  "entry_kind": {
+   "market": 1078,
+   "resting": 0
+  },
+  "both_sides_declared": false,
+  "both_sides_sessions": 0,
+  "segments": [
+   "day"
+  ],
+  "hold_to": "day",
+  "instances_per_cell": 1,
+  "exit_after_day_flat": 0,
+  "overlap_in_session": 0,
+  "entry_in_no_session": 0,
+  "entry_hours": [
+   "09:30:00",
+   "10:59:59"
+  ],
+  "entry_outside_hours": 0,
+  "both_sides_ok": true,
+  "worker_parity": true,
+  "nulls": {},
+  "ok": true
+ },
+ {
+  "family": "orb_confirm",
+  "root": "GC",
+  "tf": "1",
+  "days": 10,
+  "cells": 198,
+  "variants": 6,
+  "sessions": 10,
+  "used": 9,
+  "eve_skipped": 0,
+  "skipped_by_error": 0,
+  "errors": [],
+  "trades_total": 2869,
+  "trades_per_cell": {
+   "min": 9,
+   "max": 20
+  },
+  "cells_without_trades": 0,
+  "long": 1155,
+  "short": 1714,
+  "by_session": {
+   "pm": 1120,
+   "mid": 957,
+   "nyam": 792
+  },
+  "by_stop_mode": {
+   "atr": 696,
+   "pts": 1392,
+   "pct": 696,
+   "struct": 85
+  },
+  "entry_kind": {
+   "market": 2869,
+   "resting": 0
+  },
+  "both_sides_declared": false,
+  "both_sides_sessions": 0,
+  "segments": [
+   "day"
+  ],
+  "hold_to": "day",
+  "instances_per_cell": 3,
+  "exit_after_day_flat": 0,
+  "overlap_in_session": 0,
+  "entry_in_no_session": 0,
+  "entry_hours": [
+   "09:45:00",
+   "15:57:59"
+  ],
+  "entry_outside_hours": 0,
+  "both_sides_ok": true,
+  "worker_parity": true,
+  "nulls": {},
+  "ok": true
+ },
+ {
+  "family": "orb_confirm",
+  "root": "GC",
+  "tf": "5",
+  "days": 10,
+  "cells": 198,
+  "variants": 6,
+  "sessions": 10,
+  "used": 9,
+  "eve_skipped": 0,
+  "skipped_by_error": 0,
+  "errors": [],
+  "trades_total": 2803,
+  "trades_per_cell": {
+   "min": 9,
+   "max": 19
+  },
+  "cells_without_trades": 0,
+  "long": 1155,
+  "short": 1648,
+  "by_session": {
+   "mid": 924,
+   "pm": 1120,
+   "nyam": 759
+  },
+  "by_stop_mode": {
+   "atr": 680,
+   "pts": 1360,
+   "pct": 680,
+   "struct": 83
+  },
+  "entry_kind": {
+   "market": 2803,
+   "resting": 0
+  },
+  "both_sides_declared": false,
+  "both_sides_sessions": 0,
+  "segments": [
+   "day"
+  ],
+  "hold_to": "day",
+  "instances_per_cell": 3,
+  "exit_after_day_flat": 0,
+  "overlap_in_session": 0,
+  "entry_in_no_session": 0,
+  "entry_hours": [
+   "09:45:00",
+   "15:57:59"
+  ],
+  "entry_outside_hours": 0,
+  "both_sides_ok": true,
+  "worker_parity": true,
+  "nulls": {},
+  "ok": true
+ },
+ {
+  "family": "orb_confirm",
+  "root": "GC",
+  "tf": "15",
+  "days": 10,
+  "cells": 198,
+  "variants": 6,
+  "sessions": 10,
+  "used": 9,
+  "eve_skipped": 0,
+  "skipped_by_error": 0,
+  "errors": [],
+  "trades_total": 2343,
+  "trades_per_cell": {
+   "min": 7,
+   "max": 17
+  },
+  "cells_without_trades": 0,
+  "long": 957,
+  "short": 1386,
+  "by_session": {
+   "mid": 825,
+   "pm": 957,
+   "nyam": 561
+  },
+  "by_stop_mode": {
+   "atr": 568,
+   "pts": 1136,
+   "pct": 568,
+   "struct": 71
+  },
+  "entry_kind": {
+   "market": 2343,
+   "resting": 0
+  },
+  "both_sides_declared": false,
+  "both_sides_sessions": 0,
+  "segments": [
+   "day"
+  ],
+  "hold_to": "day",
+  "instances_per_cell": 3,
+  "exit_after_day_flat": 0,
+  "overlap_in_session": 0,
+  "entry_in_no_session": 0,
+  "entry_hours": [
+   "09:45:00",
+   "15:57:59"
+  ],
+  "entry_outside_hours": 0,
+  "both_sides_ok": true,
+  "worker_parity": true,
+  "nulls": {},
+  "ok": true
+ },
+ {
+  "family": "straddle_tight_0830",
+  "root": "GC",
+  "tf": "30",
+  "days": 10,
+  "cells": 27,
+  "variants": 3,
+  "sessions": 10,
+  "used": 9,
+  "eve_skipped": 0,
+  "skipped_by_error": 0,
+  "errors": [],
+  "trades_total": 225,
+  "trades_per_cell": {
+   "min": 8,
+   "max": 9
+  },
+  "cells_without_trades": 0,
+  "long": 90,
+  "short": 135,
+  "by_session": {
+   "pre": 225
+  },
+  "by_stop_mode": {
+   "pts": 225
+  },
+  "entry_kind": {
+   "market": 0,
+   "resting": 225
+  },
+  "both_sides_declared": true,
+  "both_sides_sessions": 9,
+  "segments": [
+   "day"
+  ],
+  "hold_to": "day",
+  "instances_per_cell": 1,
+  "exit_after_day_flat": 0,
+  "overlap_in_session": 0,
+  "entry_in_no_session": 0,
+  "entry_hours": [
+   "08:29:59",
+   "08:34:59"
+  ],
+  "entry_outside_hours": 0,
+  "both_sides_ok": true,
+  "worker_parity": true,
+  "nulls": {
+   "shift": {
+    "trades": 136,
+    "skipped_by_error": 0
+   }
+  },
+  "ok": true
+ },
+ {
+  "family": "straddle_tight_0930",
+  "root": "GC",
+  "tf": "30",
+  "days": 10,
+  "cells": 27,
+  "variants": 3,
+  "sessions": 10,
+  "used": 9,
+  "eve_skipped": 0,
+  "skipped_by_error": 0,
+  "errors": [],
+  "trades_total": 225,
+  "trades_per_cell": {
+   "min": 7,
+   "max": 9
+  },
+  "cells_without_trades": 0,
+  "long": 63,
+  "short": 162,
+  "by_session": {
+   "nyam": 225
+  },
+  "by_stop_mode": {
+   "pts": 225
+  },
+  "entry_kind": {
+   "market": 0,
+   "resting": 225
+  },
+  "both_sides_declared": true,
+  "both_sides_sessions": 9,
+  "segments": [
+   "day"
+  ],
+  "hold_to": "day",
+  "instances_per_cell": 1,
+  "exit_after_day_flat": 0,
+  "overlap_in_session": 0,
+  "entry_in_no_session": 0,
+  "entry_hours": [
+   "09:29:59",
+   "09:34:59"
+  ],
+  "entry_outside_hours": 0,
+  "both_sides_ok": true,
+  "worker_parity": true,
+  "nulls": {
+   "shift": {
+    "trades": 144,
+    "skipped_by_error": 0
+   }
+  },
+  "ok": true
+ },
+ {
+  "family": "straddle_tight_1000",
+  "root": "GC",
+  "tf": "30",
+  "days": 10,
+  "cells": 27,
+  "variants": 3,
+  "sessions": 10,
+  "used": 9,
+  "eve_skipped": 0,
+  "skipped_by_error": 0,
+  "errors": [],
+  "trades_total": 207,
+  "trades_per_cell": {
+   "min": 6,
+   "max": 9
+  },
+  "cells_without_trades": 0,
+  "long": 126,
+  "short": 81,
+  "by_session": {
+   "nyam": 207
+  },
+  "by_stop_mode": {
+   "pts": 207
+  },
+  "entry_kind": {
+   "market": 0,
+   "resting": 207
+  },
+  "both_sides_declared": true,
+  "both_sides_sessions": 9,
+  "segments": [
+   "day"
+  ],
+  "hold_to": "day",
+  "instances_per_cell": 1,
+  "exit_after_day_flat": 0,
+  "overlap_in_session": 0,
+  "entry_in_no_session": 0,
+  "entry_hours": [
+   "09:59:59",
+   "10:04:59"
+  ],
+  "entry_outside_hours": 0,
+  "both_sides_ok": true,
+  "worker_parity": true,
+  "nulls": {
+   "shift": {
+    "trades": 128,
+    "skipped_by_error": 0
+   }
+  },
+  "ok": true
+ },
+ {
+  "family": "va_reclaim",
+  "root": "GC",
+  "tf": "1",
+  "days": 10,
+  "cells": 96,
+  "variants": 3,
+  "sessions": 10,
+  "used": 9,
+  "eve_skipped": 1,
+  "skipped_by_error": 0,
+  "errors": [],
+  "trades_total": 3709,
+  "trades_per_cell": {
+   "min": 34,
+   "max": 45
+  },
+  "cells_without_trades": 0,
+  "long": 2194,
+  "short": 1515,
+  "by_session": {
+   "eve": 907,
+   "pm": 640,
+   "pre": 534,
+   "mid": 288,
+   "asia": 408,
+   "london": 518,
+   "nyam": 414
+  },
+  "by_stop_mode": {
+   "atr": 1021,
+   "pts": 1778,
+   "pct": 910
+  },
+  "entry_kind": {
+   "market": 3709,
+   "resting": 0
+  },
+  "both_sides_declared": false,
+  "both_sides_sessions": 0,
+  "segments": [
+   "eve",
+   "day"
+  ],
+  "hold_to": "day",
+  "instances_per_cell": 7,
+  "exit_after_day_flat": 0,
+  "overlap_in_session": 0,
+  "entry_in_no_session": 0,
+  "entry_hours": null,
+  "entry_outside_hours": 0,
+  "both_sides_ok": true,
+  "worker_parity": true,
+  "nulls": {},
+  "ok": true
+ },
+ {
+  "family": "va_reclaim",
+  "root": "GC",
+  "tf": "5",
+  "days": 10,
+  "cells": 96,
+  "variants": 3,
+  "sessions": 10,
+  "used": 9,
+  "eve_skipped": 1,
+  "skipped_by_error": 0,
+  "errors": [],
+  "trades_total": 3133,
+  "trades_per_cell": {
+   "min": 28,
+   "max": 42
+  },
+  "cells_without_trades": 0,
+  "long": 1879,
+  "short": 1254,
+  "by_session": {
+   "eve": 738,
+   "pm": 544,
+   "mid": 256,
+   "asia": 389,
+   "london": 485,
+   "nyam": 309,
+   "pre": 412
+  },
+  "by_stop_mode": {
+   "atr": 834,
+   "pts": 1525,
+   "pct": 774
+  },
+  "entry_kind": {
+   "market": 3133,
+   "resting": 0
+  },
+  "both_sides_declared": false,
+  "both_sides_sessions": 0,
+  "segments": [
+   "eve",
+   "day"
+  ],
+  "hold_to": "day",
+  "instances_per_cell": 7,
+  "exit_after_day_flat": 0,
+  "overlap_in_session": 0,
+  "entry_in_no_session": 0,
+  "entry_hours": null,
+  "entry_outside_hours": 0,
+  "both_sides_ok": true,
+  "worker_parity": true,
+  "nulls": {},
+  "ok": true
+ },
+ {
+  "family": "va_reclaim",
+  "root": "GC",
+  "tf": "15",
+  "days": 10,
+  "cells": 96,
+  "variants": 3,
+  "sessions": 10,
+  "used": 9,
+  "eve_skipped": 1,
+  "skipped_by_error": 0,
+  "errors": [],
+  "trades_total": 2590,
+  "trades_per_cell": {
+   "min": 23,
+   "max": 37
+  },
+  "cells_without_trades": 0,
+  "long": 1665,
+  "short": 925,
+  "by_session": {
+   "eve": 654,
+   "pm": 544,
+   "pre": 224,
+   "mid": 128,
+   "asia": 387,
+   "london": 447,
+   "nyam": 206
+  },
+  "by_stop_mode": {
+   "atr": 662,
+   "pts": 1272,
+   "pct": 656
+  },
+  "entry_kind": {
+   "market": 2590,
+   "resting": 0
+  },
+  "both_sides_declared": false,
+  "both_sides_sessions": 0,
+  "segments": [
+   "eve",
+   "day"
+  ],
+  "hold_to": "day",
+  "instances_per_cell": 7,
+  "exit_after_day_flat": 0,
+  "overlap_in_session": 0,
+  "entry_in_no_session": 0,
+  "entry_hours": null,
+  "entry_outside_hours": 0,
+  "both_sides_ok": true,
+  "worker_parity": true,
+  "nulls": {},
+  "ok": true
+ },
+ {
+  "family": "va_reclaim",
+  "root": "GC",
+  "tf": "30",
+  "days": 10,
+  "cells": 96,
+  "variants": 3,
+  "sessions": 10,
+  "used": 9,
+  "eve_skipped": 1,
+  "skipped_by_error": 0,
+  "errors": [],
+  "trades_total": 1845,
+  "trades_per_cell": {
+   "min": 14,
+   "max": 29
+  },
+  "cells_without_trades": 0,
+  "long": 1216,
+  "short": 629,
+  "by_session": {
+   "eve": 560,
+   "pm": 288,
+   "pre": 128,
+   "mid": 128,
+   "asia": 162,
+   "london": 419,
+   "nyam": 160
+  },
+  "by_stop_mode": {
+   "atr": 466,
+   "pts": 919,
+   "pct": 460
+  },
+  "entry_kind": {
+   "market": 1845,
+   "resting": 0
+  },
+  "both_sides_declared": false,
+  "both_sides_sessions": 0,
+  "segments": [
+   "eve",
+   "day"
+  ],
+  "hold_to": "day",
+  "instances_per_cell": 7,
+  "exit_after_day_flat": 0,
+  "overlap_in_session": 0,
+  "entry_in_no_session": 0,
+  "entry_hours": null,
+  "entry_outside_hours": 0,
+  "both_sides_ok": true,
+  "worker_parity": true,
+  "nulls": {},
+  "ok": true
+ },
+ {
+  "family": "vol_spike_break",
+  "root": "GC",
+  "tf": "1",
+  "days": 10,
+  "cells": 96,
+  "variants": 3,
+  "sessions": 10,
+  "used": 9,
+  "eve_skipped": 1,
+  "skipped_by_error": 0,
+  "errors": [],
+  "trades_total": 8615,
+  "trades_per_cell": {
+   "min": 62,
+   "max": 122
+  },
+  "cells_without_trades": 0,
+  "long": 3932,
+  "short": 4683,
+  "by_session": {
+   "eve": 1506,
+   "asia": 1376,
+   "london": 1430,
+   "nyam": 1149,
+   "pre": 844,
+   "pm": 1371,
+   "mid": 939
+  },
+  "by_stop_mode": {
+   "atr": 2451,
+   "pts": 3990,
+   "pct": 2174
+  },
+  "entry_kind": {
+   "market": 8615,
+   "resting": 0
+  },
+  "both_sides_declared": false,
+  "both_sides_sessions": 0,
+  "segments": [
+   "eve",
+   "day"
+  ],
+  "hold_to": "day",
+  "instances_per_cell": 7,
+  "exit_after_day_flat": 0,
+  "overlap_in_session": 0,
+  "entry_in_no_session": 0,
+  "entry_hours": null,
+  "entry_outside_hours": 0,
+  "both_sides_ok": true,
+  "worker_parity": true,
+  "nulls": {},
+  "ok": true
+ },
+ {
+  "family": "vol_spike_break",
+  "root": "GC",
+  "tf": "5",
+  "days": 10,
+  "cells": 96,
+  "variants": 3,
+  "sessions": 10,
+  "used": 9,
+  "eve_skipped": 1,
+  "skipped_by_error": 0,
+  "errors": [],
+  "trades_total": 4169,
+  "trades_per_cell": {
+   "min": 27,
+   "max": 66
+  },
+  "cells_without_trades": 0,
+  "long": 1869,
+  "short": 2300,
+  "by_session": {
+   "asia": 616,
+   "london": 713,
+   "pre": 598,
+   "nyam": 352,
+   "pm": 776,
+   "eve": 1018,
+   "mid": 96
+  },
+  "by_stop_mode": {
+   "atr": 1081,
+   "pts": 2022,
+   "pct": 1066
+  },
+  "entry_kind": {
+   "market": 4169,
+   "resting": 0
+  },
+  "both_sides_declared": false,
+  "both_sides_sessions": 0,
+  "segments": [
+   "eve",
+   "day"
+  ],
+  "hold_to": "day",
+  "instances_per_cell": 7,
+  "exit_after_day_flat": 0,
+  "overlap_in_session": 0,
+  "entry_in_no_session": 0,
+  "entry_hours": null,
+  "entry_outside_hours": 0,
+  "both_sides_ok": true,
+  "worker_parity": true,
+  "nulls": {},
+  "ok": true
+ },
+ {
+  "family": "vol_spike_break",
+  "root": "GC",
+  "tf": "15",
+  "days": 10,
+  "cells": 96,
+  "variants": 3,
+  "sessions": 10,
+  "used": 9,
+  "eve_skipped": 1,
+  "skipped_by_error": 0,
+  "errors": [],
+  "trades_total": 1651,
+  "trades_per_cell": {
+   "min": 11,
+   "max": 24
+  },
+  "cells_without_trades": 0,
+  "long": 882,
+  "short": 769,
+  "by_session": {
+   "nyam": 510,
+   "pre": 457,
+   "london": 160,
+   "pm": 524
+  },
+  "by_stop_mode": {
+   "atr": 380,
+   "pts": 835,
+   "pct": 436
+  },
+  "entry_kind": {
+   "market": 1651,
+   "resting": 0
+  },
+  "both_sides_declared": false,
+  "both_sides_sessions": 0,
+  "segments": [
+   "eve",
+   "day"
+  ],
+  "hold_to": "day",
+  "instances_per_cell": 7,
+  "exit_after_day_flat": 0,
+  "overlap_in_session": 0,
+  "entry_in_no_session": 0,
+  "entry_hours": null,
+  "entry_outside_hours": 0,
+  "both_sides_ok": true,
+  "worker_parity": true,
+  "nulls": {},
+  "ok": true
+ },
+ {
+  "family": "vol_spike_break",
+  "root": "GC",
+  "tf": "30",
+  "days": 10,
+  "cells": 96,
+  "variants": 3,
+  "sessions": 10,
+  "used": 9,
+  "eve_skipped": 1,
+  "skipped_by_error": 0,
+  "errors": [],
+  "trades_total": 577,
+  "trades_per_cell": {
+   "min": 4,
+   "max": 7
+  },
+  "cells_without_trades": 0,
+  "long": 417,
+  "short": 160,
+  "by_session": {
+   "nyam": 160,
+   "pm": 417
+  },
+  "by_stop_mode": {
+   "atr": 124,
+   "pts": 299,
+   "pct": 154
+  },
+  "entry_kind": {
+   "market": 577,
+   "resting": 0
+  },
+  "both_sides_declared": false,
+  "both_sides_sessions": 0,
+  "segments": [
+   "eve",
+   "day"
+  ],
+  "hold_to": "day",
+  "instances_per_cell": 7,
+  "exit_after_day_flat": 0,
+  "overlap_in_session": 0,
+  "entry_in_no_session": 0,
+  "entry_hours": null,
+  "entry_outside_hours": 0,
+  "both_sides_ok": true,
+  "worker_parity": true,
+  "nulls": {},
+  "ok": true
+ },
+ {
+  "family": "vwap_trend_pull",
+  "root": "GC",
+  "tf": "1",
+  "days": 10,
+  "cells": 96,
+  "variants": 3,
+  "sessions": 10,
+  "used": 9,
+  "eve_skipped": 0,
+  "skipped_by_error": 0,
+  "errors": [],
+  "trades_total": 4120,
+  "trades_per_cell": {
+   "min": 26,
+   "max": 77
+  },
+  "cells_without_trades": 0,
+  "long": 1680,
+  "short": 2440,
+  "by_session": {
+   "nyam": 1128,
+   "pm": 1508,
+   "mid": 1484
+  },
+  "by_stop_mode": {
+   "atr": 1200,
+   "pts": 1878,
+   "pct": 1042
+  },
+  "entry_kind": {
+   "market": 4120,
+   "resting": 0
+  },
+  "both_sides_declared": false,
+  "both_sides_sessions": 0,
+  "segments": [
+   "day"
+  ],
+  "hold_to": "day",
+  "instances_per_cell": 3,
+  "exit_after_day_flat": 0,
+  "overlap_in_session": 0,
+  "entry_in_no_session": 0,
+  "entry_hours": [
+   "10:30:00",
+   "15:30:59"
+  ],
+  "entry_outside_hours": 0,
+  "both_sides_ok": true,
+  "worker_parity": true,
+  "nulls": {},
+  "ok": true
+ },
+ {
+  "family": "vwap_trend_pull",
+  "root": "GC",
+  "tf": "5",
+  "days": 10,
+  "cells": 96,
+  "variants": 3,
+  "sessions": 10,
+  "used": 9,
+  "eve_skipped": 0,
+  "skipped_by_error": 0,
+  "errors": [],
+  "trades_total": 2717,
+  "trades_per_cell": {
+   "min": 18,
+   "max": 45
+  },
+  "cells_without_trades": 0,
+  "long": 1429,
+  "short": 1288,
+  "by_session": {
+   "pm": 1019,
+   "mid": 1178,
+   "nyam": 520
+  },
+  "by_stop_mode": {
+   "atr": 627,
+   "pts": 1354,
+   "pct": 736
+  },
+  "entry_kind": {
+   "market": 2717,
+   "resting": 0
+  },
+  "both_sides_declared": false,
+  "both_sides_sessions": 0,
+  "segments": [
+   "day"
+  ],
+  "hold_to": "day",
+  "instances_per_cell": 3,
+  "exit_after_day_flat": 0,
+  "overlap_in_session": 0,
+  "entry_in_no_session": 0,
+  "entry_hours": [
+   "10:30:00",
+   "15:30:59"
+  ],
+  "entry_outside_hours": 0,
+  "both_sides_ok": true,
+  "worker_parity": true,
+  "nulls": {},
+  "ok": true
+ },
+ {
+  "family": "vwap_trend_pull",
+  "root": "GC",
+  "tf": "15",
+  "days": 10,
+  "cells": 96,
+  "variants": 3,
+  "sessions": 10,
+  "used": 9,
+  "eve_skipped": 0,
+  "skipped_by_error": 0,
+  "errors": [],
+  "trades_total": 1528,
+  "trades_per_cell": {
+   "min": 11,
+   "max": 21
+  },
+  "cells_without_trades": 0,
+  "long": 788,
+  "short": 740,
+  "by_session": {
+   "mid": 600,
+   "pm": 576,
+   "nyam": 352
+  },
+  "by_stop_mode": {
+   "atr": 376,
+   "pts": 766,
+   "pct": 386
+  },
+  "entry_kind": {
+   "market": 1528,
+   "resting": 0
+  },
+  "both_sides_declared": false,
+  "both_sides_sessions": 0,
+  "segments": [
+   "day"
+  ],
+  "hold_to": "day",
+  "instances_per_cell": 3,
+  "exit_after_day_flat": 0,
+  "overlap_in_session": 0,
+  "entry_in_no_session": 0,
+  "entry_hours": [
+   "10:30:00",
+   "15:30:59"
+  ],
+  "entry_outside_hours": 0,
+  "both_sides_ok": true,
+  "worker_parity": true,
+  "nulls": {},
+  "ok": true
+ },
+ {
+  "family": "vwap_trend_pull",
+  "root": "GC",
+  "tf": "30",
+  "days": 10,
+  "cells": 96,
+  "variants": 3,
+  "sessions": 10,
+  "used": 9,
+  "eve_skipped": 0,
+  "skipped_by_error": 0,
+  "errors": [],
+  "trades_total": 576,
+  "trades_per_cell": {
+   "min": 4,
+   "max": 7
+  },
+  "cells_without_trades": 0,
+  "long": 448,
+  "short": 128,
+  "by_session": {
+   "mid": 320,
+   "pm": 256
+  },
+  "by_stop_mode": {
+   "atr": 144,
+   "pts": 288,
+   "pct": 144
+  },
+  "entry_kind": {
+   "market": 576,
+   "resting": 0
+  },
+  "both_sides_declared": false,
+  "both_sides_sessions": 0,
+  "segments": [
+   "day"
+  ],
+  "hold_to": "day",
+  "instances_per_cell": 3,
+  "exit_after_day_flat": 0,
+  "overlap_in_session": 0,
+  "entry_in_no_session": 0,
+  "entry_hours": [
+   "10:30:00",
+   "15:30:59"
+  ],
+  "entry_outside_hours": 0,
+  "both_sides_ok": true,
+  "worker_parity": true,
+  "nulls": {},
+  "ok": true
+ }
+]

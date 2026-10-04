@@ -1,0 +1,8 @@
+[{"family": "donchian", "root": "NQ", "tf": "5", "sess": "nyam", "period": "pick",
+  "why": "BUILD passer (a)-(e): donchian-NQ-tf5|nyam| side vol_lo (T2, quiet-market days); whole menu, the split is applied to the stored trades"},
+ {"c1": true, "root": "NQ", "tf": "5", "sess": "nyam", "period": "pick", "why": "C1 control of donchian-NQ-tf5|nyam| vol_lo"},
+ {"family": "rsi2", "root": "NQ", "tf": "30", "sess": "eve", "period": "pick", "extra": {"dir": "long"},
+  "why": "BUILD passer (a)-(e) on the exact long-only re-run: rsi2-NQ-tf30|eve| side long (T4); whole menu with dir = long"},
+ {"c1": true, "root": "NQ", "tf": "30", "sess": "eve", "period": "pick", "why": "C1 control (2 seeds, both sides) of rsi2-NQ-tf30|eve| long"},
+ {"c1": true, "root": "NQ", "tf": "30", "sess": "eve", "period": "pick", "extra": {"dir": "long"}, "seeds": [101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127,128,129,130],
+  "exits": ["pts20-r2"], "tag": "poolpts20-r2", "why": "30-seed long-only random-entry pool (central variant's exit) of rsi2-NQ-tf30|eve| long"}]

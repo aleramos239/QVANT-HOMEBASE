@@ -1,0 +1,302 @@
+{
+ "name": "straddle_tight_0830_NQ_tf30_pre",
+ "family": "straddle_tight_0830",
+ "root": "NQ",
+ "tf": "30",
+ "sess": "pre",
+ "cell": "offB_pts5-r3",
+ "inputs": {
+  "tf": "30",
+  "sess": "all",
+  "dir": "both",
+  "stop_mode": "pts",
+  "stop_val": 5.0,
+  "tgt_r": 3.0,
+  "trail_atr": 0.0,
+  "exit_bars": 0,
+  "max_tr": 1,
+  "f_trend": "off",
+  "f_vwap": "off",
+  "f_depth": "off",
+  "f_book": "off",
+  "x_book": "off",
+  "f_thin": "off",
+  "hold_to": "day",
+  "at": "08:29:59",
+  "flat": "09:30:00",
+  "cancel_min": 5,
+  "off_mode": "menu",
+  "off_val": 0.5,
+  "shift_seed": 0,
+  "shift_max": 90,
+  "off": "B"
+ },
+ "rationale": "The first seconds after a scheduled time are one-way; a tight bracket catches the burst with a small stop (08:30 ET).",
+ "complexity": 6,
+ "weak": false,
+ "l2": false,
+ "penalty": null,
+ "second_look": null,
+ "mirror": null,
+ "notes": "N7 straddle_tight 08:30 ET: OCO stop entries at last price +/- off points (A / B / C: NQ 3 / 5 / 8, ES 0.75 / 1.25 / 2, GC 0.6 / 1 / 1.6), placed at 08:29:59, unfilled legs cancelled 5 min later, entries until 09:30; own exits: stop NQ 5 / 8 / 10 pts (ES 1.25 / 2 / 2.5, GC 1 / 1.6 / 2) x target 1:1 / 1:2 / 1:3; null = the same bracket at random minutes (shift_seed). Second chance of the old NQ 09:30 straddle. CARD: the bracket is live within a second of the event -> the 2 ticks + 250 ms stress is the real gate; FLAGGED ADMISSION: the best-of-random bar of this unit is THIN (8 random replicates: the round-1 random-minute / random-direction stores of NQ; bar 0.84). Its BUILD t is 1.98: above that bar, but BELOW the same bar with stage 1's random-minute straddles pooled in (2.56, 26 replicates) and below the random-entry bar of NQ bar families (2.02). Admitted by the rule written before any number was opened (out/admit_r1/judge_build.py); checker / orchestrator: confirm or demote to near miss.",
+ "hold_to": "day",
+ "admit": true,
+ "failed": [],
+ "tests": {
+  "net_build": {
+   "pass": true,
+   "net": 8954.0
+  },
+  "net_pick": {
+   "pass": true,
+   "net": 4869.0
+  },
+  "plateau_build": {
+   "pass": true,
+   "cells": 27,
+   "median_net": 8954.0,
+   "share_pos": 1.0,
+   "member": "offB_pts5-r3"
+  },
+  "beats_c1_build": {
+   "pass": true,
+   "lift": 14732.5,
+   "mean": -5778.5,
+   "p95": -2140.0,
+   "p_beat": 1.0,
+   "fallback_share": 0.0,
+   "short": 0,
+   "pool_trades": 1003
+  },
+  "stress_build": {
+   "pass": true,
+   "base": 8954.0,
+   "stressed": 6619.0,
+   "stress": "2 ticks + 250 ms"
+  },
+  "beats_c1_pick": {
+   "pass": true,
+   "lift": 10577.5,
+   "mean": -5708.5,
+   "p95": -5525.0,
+   "p_beat": 1.0,
+   "fallback_share": 0.0,
+   "short": 0,
+   "pool_trades": 443
+  },
+  "stress_pick": {
+   "pass": true,
+   "base": 4869.0,
+   "stressed": 769.0,
+   "stress": "2 ticks + 250 ms"
+  },
+  "above_best_of_nulls_build": {
+   "pass": true,
+   "t_build": 1.9826019912929203,
+   "bar": 0.8406995352466691,
+   "nulls": 8,
+   "thin": true
+  },
+  "min_trades": {
+   "pass": true,
+   "build": 549,
+   "pick": 244,
+   "need": 100
+  },
+  "open_loss_fits": {
+   "pass": true,
+   "worst_open_loss_per_micro": 51.0,
+   "micros_fit_worst": 39,
+   "micros_fit_p99": 95,
+   "limit": 2000.0
+  },
+  "rationale": {
+   "pass": true,
+   "complexity": 6
+  }
+ },
+ "plateau": {
+  "build": {
+   "pass": true,
+   "cells": 27,
+   "cells_all": 27,
+   "info": 0,
+   "dead": 0,
+   "duplicates": 0,
+   "median_net": 8954.0,
+   "share_pos": 1.0,
+   "positive": 27,
+   "member": "offB_pts5-r3",
+   "member_net": 8954.0,
+   "best": "offC_pts10-r3",
+   "best_net": 20862.0,
+   "worst_net": 1774.0,
+   "verdicts": {
+    "60": true,
+    "70": true,
+    "80": true
+   },
+   "shares": {
+    "overall": {
+     "cells": 27,
+     "positive": 27,
+     "share_pos": 1.0,
+     "median_net": 8954.0,
+     "verdicts": {
+      "60": true,
+      "70": true,
+      "80": true
+     }
+    },
+    "by_stop": {
+     "fixed": {
+      "cells": 27,
+      "positive": 27,
+      "share_pos": 1.0,
+      "median_net": 8954.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     }
+    },
+    "by_target": {
+     "r1": {
+      "cells": 9,
+      "positive": 9,
+      "share_pos": 1.0,
+      "median_net": 4831.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     },
+     "r2": {
+      "cells": 9,
+      "positive": 9,
+      "share_pos": 1.0,
+      "median_net": 10506.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     },
+     "r3": {
+      "cells": 9,
+      "positive": 9,
+      "share_pos": 1.0,
+      "median_net": 13739.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     }
+    }
+   }
+  },
+  "pick": {
+   "pass": true,
+   "cells": 27,
+   "cells_all": 27,
+   "info": 0,
+   "dead": 0,
+   "duplicates": 0,
+   "median_net": 6005.0,
+   "share_pos": 0.8148,
+   "positive": 22,
+   "member": "offC_pts5-r2",
+   "member_net": 6005.0,
+   "best": "offC_pts10-r2",
+   "best_net": 16415.0,
+   "worst_net": -2718.0,
+   "verdicts": {
+    "60": true,
+    "70": true,
+    "80": true
+   },
+   "shares": {
+    "overall": {
+     "cells": 27,
+     "positive": 22,
+     "share_pos": 0.8148,
+     "median_net": 6005.0,
+     "verdicts": {
+      "60": true,
+      "70": true,
+      "80": true
+     }
+    },
+    "by_stop": {
+     "fixed": {
+      "cells": 27,
+      "positive": 22,
+      "share_pos": 0.8148,
+      "median_net": 6005.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     }
+    },
+    "by_target": {
+     "r1": {
+      "cells": 9,
+      "positive": 4,
+      "share_pos": 0.4444,
+      "median_net": -365.0,
+      "verdicts": {
+       "60": false,
+       "70": false,
+       "80": false
+      }
+     },
+     "r2": {
+      "cells": 9,
+      "positive": 9,
+      "share_pos": 1.0,
+      "median_net": 6005.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     },
+     "r3": {
+      "cells": 9,
+      "positive": 9,
+      "share_pos": 1.0,
+      "median_net": 8644.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     }
+    }
+   }
+  }
+ },
+ "nulls_bar": {
+  "bar": 0.8406995352466691,
+  "nulls": 8,
+  "thin": true,
+  "stat": "t"
+ },
+ "contracts": 1,
+ "periods": {
+  "build": [
+   "2021-09-22",
+   "2023-12-31"
+  ],
+  "pick": [
+   "2024-01-01",
+   "2024-12-31"
+  ]
+ },
+ "written_utc": "2026-10-04T12:25:35+00:00"
+}

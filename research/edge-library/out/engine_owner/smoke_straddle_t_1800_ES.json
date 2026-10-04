@@ -1,0 +1,52 @@
+{
+ "family": "straddle_t_1800",
+ "root": "ES",
+ "tf": "30",
+ "days": 10,
+ "cells": 160,
+ "variants": 5,
+ "sessions": 10,
+ "used": 10,
+ "eve_skipped": 0,
+ "skipped_by_error": 0,
+ "errors": [],
+ "trades_total": 1248,
+ "trades_per_cell": {
+  "min": 5,
+  "max": 10
+ },
+ "cells_without_trades": 0,
+ "long": 544,
+ "short": 704,
+ "by_session": {
+  "eve": 1248
+ },
+ "by_stop_mode": {
+  "atr": 312,
+  "pts": 624,
+  "pct": 312
+ },
+ "entry_kind": {
+  "market": 0,
+  "resting": 1248
+ },
+ "both_sides_declared": true,
+ "both_sides_sessions": 10,
+ "segments": [
+  "eve"
+ ],
+ "hold_to": "day",
+ "instances_per_cell": 1,
+ "exit_after_day_flat": 0,
+ "overlap_in_session": 0,
+ "entry_in_no_session": 0,
+ "both_sides_ok": true,
+ "worker_parity": true,
+ "nulls": {
+  "shift": {
+   "trades": 160,
+   "skipped_by_error": 0
+  }
+ },
+ "ok": true
+}

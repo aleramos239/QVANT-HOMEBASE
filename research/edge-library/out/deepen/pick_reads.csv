@@ -1,0 +1,9 @@
+utc,key,family,root,tf,sess,what,cells,why
+2026-10-04T09:12:29+00:00,donchian-NQ-tf5-nyam-pick,donchian,NQ,5,nyam,whole menu,128,"BUILD passer (a)-(e): donchian-NQ-tf5|nyam| side vol_lo (T2, quiet-market days); whole menu, the split is applied to the stored trades"
+2026-10-04T09:12:40+00:00,c1-NQ-tf5-nyam-pick,random,NQ,5,nyam,c1 control,64,C1 control of donchian-NQ-tf5|nyam| vol_lo
+2026-10-04T09:12:46+00:00,rsi2-NQ-tf30-eve-pick-dirlong,rsi2,NQ,30,eve,whole menu,96,BUILD passer (a)-(e) on the exact long-only re-run: rsi2-NQ-tf30|eve| side long (T4); whole menu with dir = long
+2026-10-04T09:12:53+00:00,c1-NQ-tf30-eve-pick,random,NQ,30,eve,c1 control,64,"C1 control (2 seeds, both sides) of rsi2-NQ-tf30|eve| long"
+2026-10-04T09:13:00+00:00,c1-NQ-tf30-eve-pick-dirlong-poolpts20-r2,random,NQ,30,eve,c1 control,30,30-seed long-only random-entry pool (central variant's exit) of rsi2-NQ-tf30|eve| long
+2026-10-04T09:14:14+00:00,donchian-NQ-tf5-nyam-pick-stress,donchian,NQ,5,nyam,stress,96,stress (2 ticks + 250 ms) of the both-positive cells of donchian-NQ-tf5|nyam| vol_lo
+2026-10-04T09:21:47+00:00,straddle_t_0830-NQ-tf30-pre-pick,straddle_t_0830,NQ,30,pre,whole menu,160,"ORCHESTRATOR RULING 2026-10-04: straddle_t_0830-NQ-tf30|pre| side news_only passes (b)-(e) on BUILD; test (a) counts BUILD + 2024; whole menu, the news-days split is applied to the stored trades"
+2026-10-04T09:23:23+00:00,straddle_t_0830-NQ-tf30-pre-pick-stress,straddle_t_0830,NQ,30,pre,stress,97,stress (2 ticks + 250 ms) of the both-positive cells of straddle_t_0830-NQ-tf30|pre| news_only (orchestrator ruling)

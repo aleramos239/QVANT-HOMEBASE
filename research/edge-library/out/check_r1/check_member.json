@@ -1,0 +1,234 @@
+{
+ "build": {
+  "sessions": 573,
+  "engine_skipped": [
+   "2021-12-01",
+   "2022-06-21",
+   "2022-08-05",
+   "2022-09-06",
+   "2023-04-07"
+  ],
+  "own_trades_on_skipped_days": [
+   "2022-08-05",
+   "2022-09-06",
+   "2023-04-07"
+  ],
+  "engine_vs_member_file": {
+   "mine": 549,
+   "other": 549,
+   "only_mine": [],
+   "only_other": [],
+   "differing": 0
+  },
+  "own_vs_engine_base": {
+   "mine": 549,
+   "other": 549,
+   "only_mine": [],
+   "only_other": [],
+   "differing": 0
+  },
+  "own_vs_engine_stress": {
+   "mine": 549,
+   "other": 549,
+   "only_mine": [],
+   "only_other": [],
+   "differing": 0
+  },
+  "anchor_bad": [],
+  "fill_early": [],
+  "fill_late": [],
+  "own_per_year": {
+   "2021": {
+    "trades": 62,
+    "net": 862.0
+   },
+   "2022": {
+    "trades": 247,
+    "net": 4412.0
+   },
+   "2023": {
+    "trades": 240,
+    "net": 3680.0
+   }
+  },
+  "own_base": {
+   "trades": 549,
+   "net": 8954.0,
+   "t": 1.9826019912929203,
+   "pf": 1.2089810017271156,
+   "win": 0.31876138433515483,
+   "worst_open_loss": 500.0
+  },
+  "own_fast_le_2s": {
+   "trades": 111,
+   "net": 9026.0,
+   "rest_trades": 438,
+   "rest_net": -72.0
+  },
+  "engine_stress_net": 6619.0,
+  "engine_base_net": 8954.0,
+  "sens": {
+   "slip1t_place85ms_trig0ms": {
+    "trades": 549,
+    "net": 8954.0
+   },
+   "slip2t_place250ms_trig0ms": {
+    "trades": 549,
+    "net": 6619.0
+   },
+   "slip1t_place85ms_trig25ms": {
+    "trades": 549,
+    "net": -9176.0
+   },
+   "slip1t_place85ms_trig50ms": {
+    "trades": 549,
+    "net": -11916.0
+   },
+   "slip1t_place85ms_trig100ms": {
+    "trades": 549,
+    "net": -18356.0
+   },
+   "slip1t_place85ms_trig250ms": {
+    "trades": 549,
+    "net": -29051.0
+   },
+   "slip1t_place85ms_trig500ms": {
+    "trades": 549,
+    "net": -33816.0
+   },
+   "slip2t_place85ms_trig100ms": {
+    "trades": 549,
+    "net": -20156.0
+   }
+  },
+  "by_entry_time": {
+   "-1..0s": {
+    "trades": 24,
+    "net": 319.0
+   },
+   "0..1s": {
+    "trades": 89,
+    "net": 2874.0
+   },
+   "1..5s": {
+    "trades": 100,
+    "net": 6975.0
+   },
+   "5..60s": {
+    "trades": 217,
+    "net": -338.0
+   },
+   "60..301s": {
+    "trades": 119,
+    "net": -876.0
+   }
+  }
+ },
+ "pick": {
+  "sessions": 252,
+  "engine_skipped": [],
+  "own_trades_on_skipped_days": [],
+  "engine_vs_member_file": {
+   "mine": 244,
+   "other": 244,
+   "only_mine": [],
+   "only_other": [],
+   "differing": 0
+  },
+  "own_vs_engine_base": {
+   "mine": 244,
+   "other": 244,
+   "only_mine": [],
+   "only_other": [],
+   "differing": 0
+  },
+  "own_vs_engine_stress": {
+   "mine": 244,
+   "other": 244,
+   "only_mine": [],
+   "only_other": [],
+   "differing": 0
+  },
+  "anchor_bad": [],
+  "fill_early": [],
+  "fill_late": [],
+  "own_per_year": {
+   "2024": {
+    "trades": 244,
+    "net": 4869.0
+   }
+  },
+  "own_base": {
+   "trades": 244,
+   "net": 4869.0,
+   "t": 1.5662414668046183,
+   "pf": 1.2509405761995567,
+   "win": 0.3360655737704918,
+   "worst_open_loss": 410.0
+  },
+  "own_fast_le_2s": {
+   "trades": 76,
+   "net": 4326.0,
+   "rest_trades": 168,
+   "rest_net": 543.0
+  },
+  "engine_stress_net": 769.0,
+  "engine_base_net": 4869.0,
+  "sens": {
+   "slip1t_place85ms_trig0ms": {
+    "trades": 244,
+    "net": 4869.0
+   },
+   "slip2t_place250ms_trig0ms": {
+    "trades": 244,
+    "net": 769.0
+   },
+   "slip1t_place85ms_trig25ms": {
+    "trades": 244,
+    "net": -7106.0
+   },
+   "slip1t_place85ms_trig50ms": {
+    "trades": 244,
+    "net": -12446.0
+   },
+   "slip1t_place85ms_trig100ms": {
+    "trades": 244,
+    "net": -16971.0
+   },
+   "slip1t_place85ms_trig250ms": {
+    "trades": 244,
+    "net": -17616.0
+   },
+   "slip1t_place85ms_trig500ms": {
+    "trades": 244,
+    "net": -23181.0
+   },
+   "slip2t_place85ms_trig100ms": {
+    "trades": 244,
+    "net": -18701.0
+   }
+  },
+  "by_entry_time": {
+   "-1..0s": {
+    "trades": 16,
+    "net": -1414.0
+   },
+   "0..1s": {
+    "trades": 67,
+    "net": 4177.0
+   },
+   "1..5s": {
+    "trades": 35,
+    "net": 2160.0
+   },
+   "5..60s": {
+    "trades": 71,
+    "net": -504.0
+   },
+   "60..301s": {
+    "trades": 55,
+    "net": 450.0
+   }
+  }
+ }
+}

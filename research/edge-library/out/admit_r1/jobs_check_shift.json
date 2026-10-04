@@ -1,0 +1,1 @@
+[{"family": "straddle_tight_0830", "root": "NQ", "tf": "30", "sess": "pre", "period": "pick", "shift": true, "why": "random-minute control of straddle_tight_0830-NQ-tf30|pre|"}, {"family": "straddle_tight_0830", "root": "GC", "tf": "30", "sess": "pre", "period": "pick", "shift": true, "why": "random-minute control of straddle_tight_0830-GC-tf30|pre|"}]

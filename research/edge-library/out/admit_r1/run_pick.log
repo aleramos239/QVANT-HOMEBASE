@@ -1,0 +1,8 @@
+done vwap_trend_pull-NQ-tf5-pm-pick: 96 cells, 31946 trades, wall 12 s
+done c1-NQ-tf5-pm-pick: 64 cells, 35769 trades, wall 8 s
+done vol_spike_break-NQ-tf30-pm-pick: 96 cells, 4287 trades, wall 9 s
+done c1-NQ-tf30-pm-pick: 64 cells, 22197 trades, wall 7 s
+done straddle_tight_0830-NQ-tf30-pre-pick: 27 cells, 6354 trades, wall 2 s
+done straddle_tight_0830-NQ-tf30-pre-pick-shift: 54 cells, 11520 trades, wall 4 s
+done straddle_tight_0830-GC-tf30-pre-pick: 27 cells, 6354 trades, wall 2 s
+done straddle_tight_0830-GC-tf30-pre-pick-shift: 54 cells, 10575 trades, wall 3 s

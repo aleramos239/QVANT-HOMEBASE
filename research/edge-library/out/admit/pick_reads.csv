@@ -1,0 +1,20 @@
+utc,key,family,root,tf,sess,what,why
+2026-10-04T08:35:21+00:00,orb-NQ-tf1-pre-pick,orb,NQ,1,pre,whole menu,BUILD passer orb-NQ-tf1|pre
+2026-10-04T08:35:31+00:00,donchian-NQ-tf30-nyam-pick,donchian,NQ,30,nyam,whole menu,BUILD passer donchian-NQ-tf30|nyam
+2026-10-04T08:35:39+00:00,donchian-NQ-tf30-pm-pick,donchian,NQ,30,pm,whole menu,BUILD passer donchian-NQ-tf30|pm (penalty)
+2026-10-04T08:35:52+00:00,donchian-ES-tf30-pm-pick,donchian,ES,30,pm,whole menu,BUILD passer donchian-ES-tf30|pm (penalty)
+2026-10-04T08:36:04+00:00,first_bar_mom-GC-tf5-pm-pick,first_bar_mom,GC,5,pm,whole menu,BUILD passer first_bar_mom-GC-tf5|pm (penalty)
+2026-10-04T08:36:14+00:00,c1-NQ-tf1-pre-pick,random,NQ,1,pre,c1 control,C1 control of orb-NQ-tf1|pre
+2026-10-04T08:36:21+00:00,c1-NQ-tf30-nyam-pick,random,NQ,30,nyam,c1 control,C1 control of donchian-NQ-tf30|nyam
+2026-10-04T08:36:27+00:00,c1-NQ-tf30-pm-pick,random,NQ,30,pm,c1 control,C1 control of donchian-NQ-tf30|pm
+2026-10-04T08:36:34+00:00,c1-ES-tf30-pm-pick,random,ES,30,pm,c1 control,C1 control of donchian-ES-tf30|pm
+2026-10-04T08:36:41+00:00,c1-GC-tf5-pm-pick,random,GC,5,pm,c1 control,C1 control of first_bar_mom-GC-tf5|pm
+2026-10-04T08:37:26+00:00,donchian-NQ-tf30-nyam-pick-stress,donchian,NQ,30,nyam,stress,stress of the both-positive cells of donchian-NQ-tf30|nyam|
+2026-10-04T08:37:35+00:00,first_bar_mom-GC-tf5-pm-pick-stress,first_bar_mom,GC,5,pm,stress,stress of the both-positive cells of first_bar_mom-GC-tf5|pm|
+2026-10-04T08:37:49+00:00,orb-NQ-tf1-pre-pick-stress,orb,NQ,1,pre,stress,stress of the both-positive cells of orb-NQ-tf1|pre|
+2026-10-04T08:39:15+00:00,donchian_NQ_tf30_nyam-n10_pct0p2-r2-pick,donchian,NQ,30,nyam,member run (default variant),full trade rows for the card; same cell as the whole-menu pass
+2026-10-04T08:39:16+00:00,donchian_NQ_tf30_nyam-n10_pct0p2-r2-pick-stress,donchian,NQ,30,nyam,member run (default variant) under stress,full trade rows for the card; same cell as the whole-menu pass
+2026-10-04T08:39:18+00:00,first_bar_mom_GC_tf5_pm-k2_pts3-r1-pick,first_bar_mom,GC,5,pm,member run (default variant),full trade rows for the card; same cell as the whole-menu pass
+2026-10-04T08:39:19+00:00,first_bar_mom_GC_tf5_pm-k2_pts3-r1-pick-stress,first_bar_mom,GC,5,pm,member run (default variant) under stress,full trade rows for the card; same cell as the whole-menu pass
+2026-10-04T08:39:21+00:00,orb_NQ_tf1_pre-or_min5_atr1p5-r2-pick,orb,NQ,1,pre,member run (default variant),full trade rows for the card; same cell as the whole-menu pass
+2026-10-04T08:39:22+00:00,orb_NQ_tf1_pre-or_min5_atr1p5-r2-pick-stress,orb,NQ,1,pre,member run (default variant) under stress,full trade rows for the card; same cell as the whole-menu pass

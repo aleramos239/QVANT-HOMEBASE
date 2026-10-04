@@ -1,0 +1,704 @@
+#!/usr/bin/env python3
+"""Edge-library tooling (EDGE_SPEC.md): the capped ledger, unit stores, plateau judging, the nulls, admission, member folders.
+
+W = this directory (~/ramos-quant-homebase/research/edge-library). Engine: W/engine (l2sim.py = the offline tick sim).
+numpy only: nothing here imports the old pilots (score.py does that, NQ only); every root (NQ / ES / GC) goes through here.
+
+    ledger.csv           ONE file, HARD caps (EDGE_SPEC user rule 5): full strategy runs <= 2,000 . grid cells <= 40,000 .
+                         walk-forwards <= 40. A menu grid of N cells counts N cells (nulls and failed batches included).
+    runs/<key>/          a unit's store, written by run_menus.py: run.json (range, period, cells, coverage), cells.npz (every
+                         trade of every cell, compact), table.csv (cell x session: trades, net, t, ...)
+    members/<name>/      an ADMITTED member: spec.json, trades_build.json, trades_pick.json (1 contract, tester schema),
+                         daily.csv (date, period, net, worst_open_loss, minutes_in_market), card.md
+    members/_rejected/<name>/   spec.json + card.md of a candidate that failed admission (the evidence is kept)
+
+JUDGING (EDGE_SPEC "Variant menu" / "PROPER RE-RUN" 4 + 7; never the single best cell)
+    plateau(table)       a unit (family x tf x session x root) PASSES when, over ALL its (parameter x exit) cells, the median
+                         net is > 0 after costs AND >= 60 % of the cells are > 0. The member is the plateau's most central /
+                         simplest cell = the positive cell whose net is closest to the unit's MEDIAN net (central in
+                         outcome: by construction never the best cell; several families' parameter axes are categorical, so
+                         a position in the grid has no centre); ties -> the simplest = the lowest (variant index, exit index)
+                         in registered / menu order (default variant first, ATR stops before points before percent).
+                         This reading was fixed by the engine owner on 2026-10-02 BEFORE any run.
+    best_of_nulls(batch) the 95th percentile, over the batch's null replicates, of each replicate's BEST cell.
+    admission(member)    every admission test of EDGE_SPEC "Library admission", fail closed (a missing input fails).
+
+PERIODS: BUILD 2021-09-22..2023-12-31 . PICK 2024 . EXAM >= 2025-01-01 (sealed). run_member refuses a PICK run of a
+candidate whose BUILD plateau did not pass (PICK is read only by the Admit stage, only for BUILD survivors).
+"""
+from __future__ import annotations
+
+import contextlib
+import csv
+import datetime as dt
+import fcntl
+import json
+import math
+import sys
+import zlib
+from pathlib import Path
+
+import numpy as np
+
+W = Path(__file__).resolve().parent
+ENGINE = W / "engine"
+RUNS = W / "runs"
+MEMBERS = W / "members"
+LEDGER = W / "ledger.csv"
+if str(ENGINE) not in sys.path:
+    sys.path.insert(0, str(ENGINE))
+
+CAPS = {"runs": 2000, "cells": 40000, "wfs": 40}          # EDGE_SPEC user rule 5 (raised with the menu, user-approved): HARD
+COLS = ("stage", "key", "kind", "family", "root", "tf", "period", "control", "seed", "runs", "cells", "wfs", "trades",
+        "elapsed_s", "note", "finished_utc")
+KINDS = {"run": "runs", "grid": "cells", "wf": "wfs", "smoke": None}       # what a row of each kind counts against
+SESS7 = ("eve", "asia", "london", "pre", "nyam", "mid", "pm")
+SESS_CODE = {s: i for i, s in enumerate(SESS7)}
+REASONS = ("sl", "tp", "time", "eod", "trail", "bars", "book", "other")
+PLATEAU_SHARE = 0.60
+MIN_TRADES = 100
+LOSS_LIMIT_USD = 2000.0                                    # the open loss a member must be sizeable inside (>= 1 micro)
+MICRO_DIV = 10.0                                           # MNQ / MES / MGC = 1/10 of the full contract
+MICRO_RT_USD = 1.00                                        # micro commission per round turn (the pilots' cost model)
+WEAK_T = 3.0                                               # WEAK-rationale members: t >= 3 on BUILD
+FIELDS = ("date", "entry_ms", "dur_s", "net", "mae", "side", "sess", "reason", "risk")
+DTYPES = {"date": np.int32, "entry_ms": np.int64, "dur_s": np.int32, "net": np.float64, "mae": np.float32, "side": np.int8,
+          "sess": np.int8, "reason": np.int8, "risk": np.float32}
+
+
+class CapExceeded(RuntimeError):
+    """The row / batch would take a ledger count past its HARD cap: nothing was appended, nothing may run."""
+
+
+class PickSealed(RuntimeError):
+    """A PICK (2024) run was asked for a candidate that is not a BUILD survivor."""
+
+
+# ------------------------------------------------------------------ the ledger (hard caps)
+
+@contextlib.contextmanager
+def _locked(path: Path):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path.with_name(path.name + ".lock"), "w") as lk:
+        fcntl.flock(lk, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lk, fcntl.LOCK_UN)
+
+
+def read_ledger(path=None) -> list:
+    p = Path(path) if path is not None else LEDGER
+    if not p.exists() or p.stat().st_size == 0:
+        return []
+    with p.open(newline="") as fh:
+        return list(csv.DictReader(fh))
+
+
+def ledger_used(rows: list | None = None, path=None) -> dict:
+    """{'runs': n, 'cells': n, 'wfs': n} counted so far (every row counts, also nulls and failed batches)."""
+    rows = read_ledger(path) if rows is None else rows
+    return {k: sum(int(r.get(k) or 0) for r in rows) for k in CAPS}
+
+
+def ledger_left(path=None, caps: dict | None = None) -> dict:
+    used, caps = ledger_used(path=path), caps or CAPS
+    return {k: caps[k] - used[k] for k in caps}
+
+
+def ledger_check(runs: int = 0, cells: int = 0, wfs: int = 0, path=None, caps: dict | None = None) -> dict:
+    """Would a batch fit under the caps? Raises CapExceeded (naming the count) if not; -> what is left afterwards.
+    Call it BEFORE a batch starts: a batch that would pass a cap is refused as a whole."""
+    used, caps = ledger_used(path=path), caps or CAPS
+    want = {"runs": int(runs), "cells": int(cells), "wfs": int(wfs)}
+    over = [f"{k}: {used[k]} used + {want[k]} asked > cap {caps[k]}" for k in caps if want[k] and used[k] + want[k] > caps[k]]
+    if over:
+        raise CapExceeded("; ".join(over))
+    return {k: caps[k] - used[k] - want[k] for k in caps}
+
+
+def ledger_has(key: str, stage: str | None = None, path=None) -> bool:
+    return any(r["key"] == key and (stage is None or r["stage"] == stage) for r in read_ledger(path))
+
+
+def ledger_add(stage: str, key: str, kind: str, *, cells: int = 0, path=None, caps: dict | None = None, **info) -> dict:
+    """Append ONE row under a lock. kind: 'run' (counts 1 run) | 'grid' (counts `cells` cells: a menu grid of N cells counts N)
+    | 'wf' (counts 1 walk-forward) | 'smoke' (counts nothing). Raises CapExceeded -- and appends NOTHING -- when the row
+    would pass a cap; ValueError for a second row of the same (stage, key) unless the stage ends with '_error'."""
+    if kind not in KINDS:
+        raise ValueError(f"kind {kind!r}: one of {sorted(KINDS)}")
+    if not stage or not key:
+        raise ValueError("a ledger row needs a stage and a key")
+    caps = caps or CAPS
+    p = Path(path) if path is not None else LEDGER
+    row = {c: "" for c in COLS}
+    row.update(stage=stage, key=key, kind=kind, runs=0, cells=0, wfs=0)
+    if kind == "run":
+        row["runs"] = 1
+    elif kind == "wf":
+        row["wfs"] = 1
+    elif kind == "grid":
+        if int(cells) < 1:
+            raise ValueError("a grid row needs cells >= 1 (a menu grid of N cells counts N cells)")
+        row["cells"] = int(cells)
+    unknown = sorted(set(info) - set(COLS))
+    if unknown:
+        raise ValueError(f"unknown ledger columns {unknown}; the columns are {COLS}")
+    row.update({k: v for k, v in info.items() if k not in ("runs", "cells", "wfs")})
+    row["finished_utc"] = row["finished_utc"] or dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
+    with _locked(p):
+        rows = read_ledger(p)
+        used = ledger_used(rows)
+        over = [f"{k}: {used[k]} used + {row[k]} > cap {caps[k]}" for k in caps if row[k] and used[k] + row[k] > caps[k]]
+        if over:
+            raise CapExceeded(f"{key} refused -- " + "; ".join(over))
+        if not stage.endswith("_error") and any(r["stage"] == stage and r["key"] == key for r in rows):
+            raise ValueError(f"the ledger already holds a '{stage}' row for {key}")
+        new = not p.exists() or p.stat().st_size == 0
+        with p.open("a", newline="") as fh:
+            w = csv.DictWriter(fh, COLS)
+            if new:
+                w.writeheader()
+            w.writerow(row)
+    return row
+
+
+# ------------------------------------------------------------------ trades -> arrays, statistics
+
+def session_code(entry_ms) -> np.ndarray:
+    """Session code (index into SESS7; -1 = none) of each entry time, by its ET minute: l2sim.session_of, vectorised."""
+    import l2sim
+    return np.array([SESS_CODE.get(l2sim.session_of(int(m)), -1) for m in np.asarray(entry_ms).ravel()], np.int8)
+
+
+def pack(trades: list) -> dict:
+    """A trade list (l2sim / tester schema, 1 contract) -> compact arrays: date (ordinal of the TRADE date), entry_ms, dur_s,
+    net, mae (USD), side (+1 / -1), sess (SESS7 code), reason (REASONS code), risk (|entry - sl| in points, NaN without a stop)."""
+    n = len(trades)
+    out = {k: np.zeros(n, DTYPES[k]) for k in FIELDS}
+    if not n:
+        return out
+    out["date"][:] = [dt.date.fromisoformat(t["date"]).toordinal() for t in trades]
+    out["entry_ms"][:] = [t["entry_ms"] for t in trades]
+    out["dur_s"][:] = [max(0, (t["exit_ms"] - t["entry_ms"]) // 1000) for t in trades]
+    out["net"][:] = [t["net"] for t in trades]
+    out["mae"][:] = [abs(t.get("mae_usd") or 0.0) for t in trades]
+    out["side"][:] = [1 if t["side"] == "long" else -1 for t in trades]
+    out["sess"][:] = session_code(out["entry_ms"])
+    rc = {r: i for i, r in enumerate(REASONS)}
+    out["reason"][:] = [rc.get(t.get("exit_reason"), rc["other"]) for t in trades]
+    out["risk"][:] = [abs(t["entry_price"] - t["sl"]) if t.get("sl") is not None else np.nan for t in trades]
+    return out
+
+
+def stats(net) -> dict:
+    """trades, net, t (t-statistic of the per-trade net: mean / (sd / sqrt(n)); None with < 2 trades or sd 0), profit factor,
+    win rate. The same definitions as the L2 pilot's screen analysis."""
+    x = np.asarray(net, np.float64)
+    n = int(len(x))
+    if not n:
+        return {"trades": 0, "net": 0.0, "t": None, "pf": None, "win": None}
+    sd = float(x.std(ddof=1)) if n > 1 else 0.0
+    gw, gl = float(x[x > 0].sum()), float(-x[x < 0].sum())
+    return {"trades": n, "net": round(float(x.sum()), 2), "t": float(x.mean() / (sd / math.sqrt(n))) if sd > 0 else None,
+            "pf": (gw / gl) if gl > 0 else None, "win": float((x > 0).mean())}
+
+
+def cell_stat(net, stat: str = "t") -> float:
+    """One cell's statistic for the nulls bar: 't' (default; unit-free: comparable across roots, stops and trade counts;
+    no trades / undefined -> 0.0) | 'net' | 'pf'."""
+    s = stats(net)
+    if stat == "net":
+        return float(s["net"])
+    if stat == "pf":
+        return float(s["pf"]) if s["pf"] is not None else 0.0
+    if stat == "t":
+        return float(s["t"]) if s["t"] is not None else 0.0
+    raise ValueError(f"stat {stat!r}: 't' | 'net' | 'pf'")
+
+
+# ------------------------------------------------------------------ unit stores (runs/<key>/)
+
+def write_unit(key: str, meta: dict, cells: list, results: list, runs_dir=None) -> Path:
+    """Write one unit's store: run.json (meta + the cells + coverage), cells.npz (all trades, compact), table.csv.
+    cells: l2sim.menu_grid rows (id, variant, exit, vi, xi); results: the matching l2sim.run_many results."""
+    if len(cells) != len(results):
+        raise ValueError("cells and results differ in length")
+    out = (Path(runs_dir) if runs_dir is not None else RUNS) / key           # runs_dir: tests (tmp_path) only
+    tmp = out.with_name(out.name + ".tmp")
+    tmp.mkdir(parents=True, exist_ok=True)
+    packs = [pack(r["trades"]) for r in results]
+    off = np.zeros(len(packs) + 1, np.int64)
+    off[1:] = np.cumsum([len(p["net"]) for p in packs])
+    arrays = {k: (np.concatenate([p[k] for p in packs]) if packs else np.zeros(0, DTYPES[k])) for k in FIELDS}
+    np.savez_compressed(tmp / "cells.npz", off=off, **arrays)
+    r0 = results[0] if results else {"meta": {}, "sessions": 0, "used": 0, "skipped": [], "no_trade": [], "elapsed_s": 0.0}
+    doc = dict(meta)
+    doc.update(key=key, engine=r0["meta"].get("engine"), root=r0["meta"].get("root"), range=r0["meta"].get("range"),
+               segments=r0["meta"].get("segments"), passes=r0["meta"].get("passes"), features=r0["meta"].get("features"),
+               features_loader=r0["meta"].get("features_loader"), exec_guard=r0["meta"].get("exec_guard"),
+               coverage={"sessions": r0["sessions"], "used": r0["used"], "skipped": r0["skipped"],
+                         "eve_skipped": r0.get("eve_skipped", [])},
+               elapsed_s=r0["elapsed_s"],
+               cells=[{"id": c["id"], "vi": c["vi"], "xi": c["xi"], "variant": c["variant"], "exit": c["exit"],
+                       "inputs": results[i]["meta"]["inputs"], "trades": len(results[i]["trades"]),
+                       "both_sides_sessions": results[i].get("both_sides_sessions"),
+                       "skipped_by_error": results[i].get("skipped_by_error", 0),
+                       "unrealistic_winners": results[i].get("unrealistic_winners", 0)} for i, c in enumerate(cells)])
+    (tmp / "run.json").write_text(json.dumps(doc, indent=1, default=str))
+    rows = unit_table({"meta": doc, "off": off, **arrays})
+    with (tmp / "table.csv").open("w", newline="") as fh:
+        w = csv.DictWriter(fh, list(rows[0]) if rows else ["cell"])
+        w.writeheader()
+        w.writerows(rows)
+    if out.exists():
+        import shutil
+        shutil.rmtree(out)
+    tmp.rename(out)
+    return out
+
+
+def load_unit(key: str, runs_dir=None) -> dict:
+    """runs/<key>/ -> {'meta': run.json, 'off': cell offsets, <field>: flat arrays}. unit_cell(u, id) slices one cell."""
+    d = (Path(runs_dir) if runs_dir is not None else RUNS) / key
+    meta = json.loads((d / "run.json").read_text())
+    z = np.load(d / "cells.npz")
+    return {"meta": meta, **{k: z[k] for k in z.files}}
+
+
+def unit_cell(u: dict, cell) -> dict:
+    """The arrays of ONE cell (by id or index) of a loaded unit."""
+    i = cell if isinstance(cell, int) else next(k for k, c in enumerate(u["meta"]["cells"]) if c["id"] == cell)
+    a, b = int(u["off"][i]), int(u["off"][i + 1])
+    return {k: u[k][a:b] for k in FIELDS}
+
+
+def unit_table(u: dict) -> list:
+    """One row per (cell, session) with >= 0 trades for every session that trades anywhere in the unit, + session 'all'."""
+    cells = u["meta"]["cells"]
+    seen = sorted({int(s) for s in np.unique(u["sess"]) if s >= 0}) if len(u["sess"]) else []
+    rows = []
+    for i, c in enumerate(cells):
+        x = unit_cell(u, i)
+        for name, m in [("all", np.ones(len(x["net"]), bool))] + [(SESS7[s], x["sess"] == s) for s in seen]:
+            st = stats(x["net"][m])
+            rows.append({"cell": c["id"], "vi": c["vi"], "xi": c["xi"], "sess": name, "trades": st["trades"], "net": st["net"],
+                         "t": "" if st["t"] is None else round(st["t"], 4), "pf": "" if st["pf"] is None else round(st["pf"], 4),
+                         "win": "" if st["win"] is None else round(st["win"], 4),
+                         "max_mae_usd": round(float(x["mae"][m].max()), 2) if m.any() else 0.0})
+    return rows
+
+
+def session_table(u: dict, sess: str) -> list:
+    """The plateau table of ONE unit-session: [{'id', 'vi', 'xi', 'net', 'trades', 't'}] over every cell of the unit."""
+    out = []
+    for i, c in enumerate(u["meta"]["cells"]):
+        x = unit_cell(u, i)
+        m = np.ones(len(x["net"]), bool) if sess == "all" else x["sess"] == SESS_CODE[sess]
+        st = stats(x["net"][m])
+        out.append({"id": c["id"], "vi": c["vi"], "xi": c["xi"], "net": st["net"], "trades": st["trades"], "t": st["t"]})
+    return out
+
+
+# ------------------------------------------------------------------ judging: plateau
+
+def plateau(table: list, share: float = PLATEAU_SHARE) -> dict:
+    """EDGE_SPEC 'Judging' on ONE unit (family x tf x session x root): `table` = one row per (parameter x exit) cell with
+    'id', 'net' (after costs, 1 contract) and optionally 'vi' / 'xi' (variant / exit index: the simplicity order; default
+    = the row order) and 'trades'. A cell without a trade has net 0 and is NOT > 0.
+      pass        median net over ALL cells > 0  AND  share of cells with net > 0 >= 60 %
+      member      the plateau's most central / simplest cell: the positive cell whose net is closest to the median net;
+                  ties -> the lowest (vi, xi). None when no cell is positive. Never chosen by being the best.
+    -> {'pass', 'cells', 'median_net', 'share_pos', 'positive', 'member', 'member_net', 'best', 'best_net', 'worst_net'}"""
+    rows = [dict(r) for r in table]
+    if not rows:
+        return {"pass": False, "cells": 0, "median_net": None, "share_pos": None, "positive": 0, "member": None,
+                "member_net": None, "best": None, "best_net": None, "worst_net": None}
+    ids = [r["id"] for r in rows]
+    if len(set(ids)) != len(ids):
+        raise ValueError("plateau: duplicate cell ids in the table")
+    net = np.array([float(r["net"]) for r in rows], np.float64)
+    med = float(np.median(net))
+    pos = net > 0
+    sp = float(pos.mean())
+    member = None
+    if pos.any():
+        order = sorted((k for k in range(len(rows)) if pos[k]),
+                       key=lambda k: (round(abs(net[k] - med), 6), rows[k].get("vi", k), rows[k].get("xi", k), k))
+        member = order[0]
+    best = int(net.argmax())
+    return {"pass": bool(med > 0 and sp >= share - 1e-12), "cells": len(rows), "median_net": round(med, 2),
+            "share_pos": round(sp, 4), "positive": int(pos.sum()), "member": None if member is None else ids[member],
+            "member_net": None if member is None else round(float(net[member]), 2), "best": ids[best],
+            "best_net": round(float(net[best]), 2), "worst_net": round(float(net.min()), 2)}
+
+
+# ------------------------------------------------------------------ nulls
+
+def best_of_nulls(batch, q: float = 95.0, stat: str = "t") -> dict:
+    """THE BEST-OF-NULLS BAR of a batch (EDGE_SPEC E): the q-th (95th) percentile, over the batch's null replicates, of each
+    replicate's BEST cell. A replicate = ONE null run of ONE unit-session over the menu (one seed of the random control, the
+    time-shuffle null or the feature-shuffle null) given as {cell id: statistic} or a sequence of cell statistics -- or of
+    per-cell net ARRAYS, which are reduced with cell_stat(..., stat) ('t' by default: unit-free).
+    A claim must beat this bar: it is what the best cell of a menu reaches with no edge at all.
+    -> {'bar', 'q', 'stat', 'nulls', 'best': sorted best-cell values, 'thin': fewer than 20 replicates}"""
+    best = []
+    for rep in batch:
+        vals = list(rep.values()) if isinstance(rep, dict) else list(rep)
+        if not vals:
+            continue
+        vals = [cell_stat(v, stat) if isinstance(v, (np.ndarray, list, tuple)) else float(v) for v in vals]
+        best.append(max(vals))
+    if not best:
+        raise ValueError("best_of_nulls: the batch holds no null replicate")
+    best.sort()
+    return {"bar": float(np.percentile(best, q)), "q": q, "stat": stat, "nulls": len(best), "best": [round(b, 4) for b in best],
+            "thin": len(best) < 20}
+
+
+def unit_null_replicates(u: dict, stat: str = "t", sessions=None, by: str = "seed") -> list:
+    """The null replicates of a NULL unit store (run_menus: c1 / shift / c2 stores, whose cells carry `variant[by]` = the
+    seed): one replicate per (seed, session) = {cell id without the seed: statistic}."""
+    cells = u["meta"]["cells"]
+    key = "shift_seed" if any("shift_seed" in c["variant"] for c in cells) else by
+    seeds = sorted({c["variant"].get(key) for c in cells})
+    sess = sessions or [SESS7[s] for s in sorted({int(s) for s in np.unique(u["sess"]) if s >= 0})]
+    out = []
+    for sd in seeds:
+        idx = [i for i, c in enumerate(cells) if c["variant"].get(key) == sd]
+        for s in sess:
+            rep = {}
+            for i in idx:
+                x = unit_cell(u, i)
+                rep[cells[i]["id"]] = cell_stat(x["net"][x["sess"] == SESS_CODE[s]], stat)
+            out.append(rep)
+    return out
+
+
+def c1_draws(member: dict, pool: dict, K: int = 200, seed: int = 1) -> dict:
+    """C1: K day- and session-matched random ledgers for a member, from a random-entry pool with the SAME exit profile.
+    member / pool: packed arrays (pack(trades) or unit_cell(...)); only date, sess, net are read. For every (date, session)
+    with k member trades a draw takes k pool trades of that date + session (uniform, without replacement); a shortfall is
+    filled from the same session on the nearest dates (all pool trades within the smallest date distance that holds enough
+    of them) and counted in `fallback_share`.
+    -> {'nets': K control nets, 'mean', 'p95', 'lift' = member net - mean, 'p_beat' = share of draws the member beats,
+        'fallback_share', 'short' (member trades that could not be matched at all), 'pool_trades'}"""
+    rng = np.random.default_rng(int(seed))
+    md, ms, mnet = np.asarray(member["date"]), np.asarray(member["sess"]), float(np.asarray(member["net"], np.float64).sum())
+    pd_, ps, pn = np.asarray(pool["date"]), np.asarray(pool["sess"]), np.asarray(pool["net"], np.float64)
+    by: dict = {}
+    for i, (d, s) in enumerate(zip(pd_.tolist(), ps.tolist())):
+        by.setdefault((d, s), []).append(i)
+    by_sess = {s: np.flatnonzero(ps == s) for s in set(ps.tolist())}
+    groups: dict = {}
+    for d, s in zip(md.tolist(), ms.tolist()):
+        groups[(d, s)] = groups.get((d, s), 0) + 1
+    plan, fb, short = [], 0, 0
+    for (d, s), k in sorted(groups.items()):
+        own = np.array(by.get((d, s), []), np.int64)
+        need = k - len(own)
+        extra = np.zeros(0, np.int64)
+        if need > 0:
+            cand = by_sess.get(s, np.zeros(0, np.int64))
+            cand = cand[pd_[cand] != d]
+            if len(cand):                             # the nearest dates: every pool trade of the session within the smallest
+                dist = np.abs(pd_[cand] - d)          # date distance that holds at least `need` of them
+                cut = np.sort(dist)[min(need, len(dist)) - 1]
+                extra = cand[dist <= cut]
+            got = min(need, len(extra))
+            fb += got
+            short += need - got
+        plan.append((own, min(k, len(own)), extra, max(0, min(need, len(extra)))))
+    nets = np.zeros(K)
+    for j in range(K):
+        tot = 0.0
+        for own, k_own, extra, k_ex in plan:
+            if k_own:
+                tot += pn[rng.choice(own, k_own, replace=False)].sum() if k_own < len(own) else pn[own].sum()
+            if k_ex:
+                tot += pn[rng.choice(extra, k_ex, replace=False)].sum() if k_ex < len(extra) else pn[extra].sum()
+        nets[j] = tot
+    n = int(len(md))
+    return {"nets": nets, "mean": round(float(nets.mean()), 2), "p95": round(float(np.percentile(nets, 95)), 2),
+            "lift": round(mnet - float(nets.mean()), 2), "p_beat": float((mnet > nets).mean()), "member_net": round(mnet, 2),
+            "fallback_share": (fb / n) if n else 0.0, "short": int(short), "pool_trades": int(len(pn)), "K": K}
+
+
+def default_seed(name: str, period: str) -> int:
+    return zlib.crc32(f"{name}|{period}".encode()) % 100000
+
+
+# ------------------------------------------------------------------ daily series
+
+def daily_rows(trades: list, calendar: list, period: str = "") -> list:
+    """One row per session of `calendar` (ISO trade dates; a day without a trade is a 0 row): date, period, net (sum of the
+    day's trade nets, 1 contract), worst_open_loss (USD >= 0: how far the day's P&L was below its start at the worst point,
+    open losses included = max over the day's trades, in entry order, of [each trade's MAE + its commission - the P&L realised
+    before it], floored at 0; overlapping trades add their MAEs: conservative), minutes_in_market (sum of exit - entry)."""
+    by: dict = {}
+    for t in trades:
+        by.setdefault(t["date"], []).append(t)
+    off = sorted(set(by) - set(calendar))
+    if off:
+        raise ValueError(f"{len(off)} trade dates are off the calendar ({off[:5]}...)")
+    out = []
+    for d in calendar:
+        ts = sorted(by.get(d, []), key=lambda t: (t["entry_ms"], t["exit_ms"]))
+        worst, real, open_ = 0.0, 0.0, []
+        for t in ts:
+            for o in [o for o in open_ if o["exit_ms"] <= t["entry_ms"]]:
+                real += o["net"]
+                open_.remove(o)
+            open_.append(t)
+            point = real - sum(abs(o.get("mae_usd") or 0.0) + abs(o.get("commission") or 0.0) for o in open_)
+            worst = min(worst, point)
+        out.append({"date": d, "period": period, "net": round(sum(t["net"] for t in ts), 2), "worst_open_loss": round(-worst, 2),
+                    "minutes_in_market": round(sum((t["exit_ms"] - t["entry_ms"]) / 60000.0 for t in ts), 2)})
+    return out
+
+
+def calendar(period: str, root: str = "NQ") -> list:
+    """The session calendar (ISO trade dates) of 'build' | 'pick' | 'insample' for a root (l2sim.sessions; EXAM raises)."""
+    import l2sim
+    a, b = l2sim.period(period)
+    return [d.isoformat() for d in l2sim.sessions(a, b, root)]
+
+
+# ------------------------------------------------------------------ admission
+
+def _net(trades) -> float:
+    return round(float(sum(t["net"] for t in trades)), 2)
+
+
+def _test(ok, **detail) -> dict:
+    return {"pass": bool(ok), **detail}
+
+
+def admission(member: dict, write: bool = False, members_dir=None) -> dict:
+    """EVERY library-admission test of EDGE_SPEC "Library admission" (BUILD + PICK only), fail closed: a missing input fails
+    its test. `member`:
+      name, family, root, tf, sess, inputs (the member cell's inputs), cell (its id)
+      rationale (one sentence, written before testing), complexity (int), weak (bool), l2 (bool), penalty (str | None)
+      plateau = {'build': plateau(...) of its unit on BUILD [, 'pick': ... on PICK]}
+      nulls_bar = best_of_nulls(...) of its batch on BUILD (stat 't')
+      build / pick = {'trades': [...1 contract...], 'stress': [...the same cell under l2sim.STRESS...],
+                      'c1_pool': [random-entry trades, same tf + exit cell] (or 'c1': a ready c1_draws result),
+                      'c2': [[trades of feature-shuffle seed 1], [seed 2]]   (L2 members only),
+                      'calendar': [ISO trade dates of the period for the root]}
+    Tests (all must pass): net_build > 0 . net_pick > 0 . plateau on BUILD (and on PICK for a penalised family) . beats C1 in
+    both periods (lift > 0) . beats C2 in both (L2) . t on BUILD >= the batch's best-of-nulls bar . stressed net > 0 in both
+    periods (2 ticks + 250 ms; base and stressed are reported side by side) . >= 100 trades (BUILD + PICK) . the worst
+    per-trade open loss fits $2,000 at >= 1 micro . rationale + complexity present . a WEAK rationale needs t >= 3 on BUILD.
+    -> {'admit': bool, 'tests': {...}, 'summary': {...}}; write=True also writes the member folder (write_member)."""
+    name = member["name"]
+    b, p = member.get("build") or {}, member.get("pick") or {}
+    tb, tp = b.get("trades"), p.get("trades")
+    tests: dict = {}
+    sb = stats([t["net"] for t in tb]) if tb is not None else None
+    sp = stats([t["net"] for t in tp]) if tp is not None else None
+    tests["net_build"] = _test(sb is not None and sb["net"] > 0, net=None if sb is None else sb["net"])
+    tests["net_pick"] = _test(sp is not None and sp["net"] > 0, net=None if sp is None else sp["net"])
+    pl = member.get("plateau") or {}
+    tests["plateau_build"] = _test(bool((pl.get("build") or {}).get("pass")), **{k: (pl.get("build") or {}).get(k) for k in
+                                                                                 ("cells", "median_net", "share_pos", "member")})
+    if member.get("penalty"):
+        tests["plateau_pick"] = _test(bool((pl.get("pick") or {}).get("pass")), penalty=member["penalty"],
+                                      **{k: (pl.get("pick") or {}).get(k) for k in ("cells", "median_net", "share_pos")})
+    for per, blk, tr in (("build", b, tb), ("pick", p, tp)):
+        c1 = blk.get("c1")
+        if c1 is None and tr is not None and blk.get("c1_pool") is not None:
+            c1 = c1_draws(pack(tr), pack(blk["c1_pool"]), K=int(member.get("K", 200)), seed=default_seed(name, per))
+        tests[f"beats_c1_{per}"] = _test(c1 is not None and c1["lift"] > 0 and c1["short"] == 0,
+                                         **({} if c1 is None else {k: c1[k] for k in ("lift", "mean", "p95", "p_beat", "fallback_share",
+                                                                                      "short", "pool_trades")}))
+        if member.get("l2"):
+            c2 = blk.get("c2")
+            ok = tr is not None and c2 is not None and len(c2) >= 2
+            nets = [_net(x) for x in c2] if c2 is not None else []
+            tests[f"beats_c2_{per}"] = _test(ok and _net(tr) - float(np.mean(nets)) > 0, c2_nets=nets,
+                                             lift=None if not ok else round(_net(tr) - float(np.mean(nets)), 2))
+        st = blk.get("stress")
+        tests[f"stress_{per}"] = _test(st is not None and _net(st) > 0, base=None if tr is None else _net(tr),
+                                       stressed=None if st is None else _net(st), stress="2 ticks + 250 ms")
+    bar = member.get("nulls_bar")
+    tb_t = None if sb is None else (sb["t"] if sb["t"] is not None else 0.0)
+    tests["above_best_of_nulls_build"] = _test(bar is not None and bar.get("stat", "t") == "t" and tb_t is not None
+                                               and tb_t > float(bar["bar"]), t_build=tb_t,
+                                               bar=None if bar is None else bar.get("bar"), nulls=None if bar is None else bar.get("nulls"),
+                                               thin=None if bar is None else bar.get("thin"))
+    n_all = (sb["trades"] if sb else 0) + (sp["trades"] if sp else 0)
+    tests["min_trades"] = _test(n_all >= MIN_TRADES, build=sb["trades"] if sb else None, pick=sp["trades"] if sp else None,
+                                need=MIN_TRADES)
+    both = (tb or []) + (tp or [])
+    if both:
+        loss = np.array([abs(t.get("mae_usd") or 0.0) / MICRO_DIV + MICRO_RT_USD for t in both])
+        worst, p99 = float(loss.max()), float(np.percentile(loss, 99))
+        tests["open_loss_fits"] = _test(math.floor(LOSS_LIMIT_USD / worst) >= 1, worst_open_loss_per_micro=round(worst, 2),
+                                        micros_fit_worst=int(math.floor(LOSS_LIMIT_USD / worst)),
+                                        micros_fit_p99=int(math.floor(LOSS_LIMIT_USD / p99)), limit=LOSS_LIMIT_USD)
+    else:
+        tests["open_loss_fits"] = _test(False, worst_open_loss_per_micro=None)
+    rat, cx = member.get("rationale"), member.get("complexity")
+    tests["rationale"] = _test(isinstance(rat, str) and len(rat.strip()) >= 20 and isinstance(cx, int) and not isinstance(cx, bool)
+                               and cx >= 1, complexity=cx)
+    if member.get("weak"):
+        tests["weak_margin"] = _test(tb_t is not None and tb_t >= WEAK_T, t_build=tb_t, need=WEAK_T,
+                                     note="WEAK rationale / prior: every test with margin (t >= 3 on BUILD)")
+    out = {"name": name, "admit": all(t["pass"] for t in tests.values()), "tests": tests,
+           "failed": [k for k, t in tests.items() if not t["pass"]],
+           "summary": {"build": sb, "pick": sp, "cell": member.get("cell"), "root": member.get("root"), "tf": member.get("tf"),
+                       "sess": member.get("sess"), "family": member.get("family")}}
+    if write:
+        out["dir"] = str(write_member(member, out, members_dir))
+    return out
+
+
+def _fmt(v) -> str:
+    if v is None:
+        return "n/a"
+    if isinstance(v, bool):
+        return "yes" if v else "NO"
+    if isinstance(v, float):
+        return f"{v:,.2f}"
+    return str(v)
+
+
+def card(member: dict, result: dict) -> str:
+    """card.md: rationale, plateau table, period table, nulls, stress, complexity count."""
+    t, s = result["tests"], result["summary"]
+    pl = member.get("plateau") or {}
+    L = [f"# {member['name']} — {'ADMITTED' if result['admit'] else 'REJECTED'}", "",
+         f"* family `{member.get('family')}` · root {member.get('root')} · tf {member.get('tf')} · session {member.get('sess')} · "
+         f"cell `{member.get('cell')}` · 1 contract, costs included",
+         f"* inputs: `{json.dumps(member.get('inputs') or {}, sort_keys=True)}`",
+         f"* **Rationale (written before testing):** {member.get('rationale') or 'MISSING'}"
+         + ("  — **WEAK RATIONALE / WEAK PRIOR**" if member.get("weak") else ""),
+         f"* Complexity count (rules + free parameters): {member.get('complexity')}"]
+    if member.get("penalty"):
+        L.append(f"* Penalty (EDGE_SPEC C): {member['penalty']}")
+    if not result["admit"]:
+        L.append(f"* **Failed:** {', '.join(result['failed'])}")
+    L += ["", "## Plateau (judged over ALL parameter x exit cells of the unit; never the best cell)",
+          "| period | cells | median net | share > 0 | pass | member cell | member net | best cell net |", "|---|---|---|---|---|---|---|---|"]
+    for per in ("build", "pick"):
+        q = pl.get(per)
+        if q:
+            L.append(f"| {per} | {q.get('cells')} | {_fmt(q.get('median_net'))} | {_fmt(q.get('share_pos'))} | {_fmt(q.get('pass'))} | "
+                     f"{q.get('member')} | {_fmt(q.get('member_net'))} | {_fmt(q.get('best_net'))} |")
+    L += ["", "## Periods (the member cell)", "| period | trades | net | t | PF | win | stressed net (2 ticks + 250 ms) |",
+          "|---|---|---|---|---|---|---|"]
+    for per in ("build", "pick"):
+        x = s.get(per)
+        if x:
+            L.append(f"| {per} | {x['trades']} | {_fmt(x['net'])} | {_fmt(x['t'])} | {_fmt(x['pf'])} | {_fmt(x['win'])} | "
+                     f"{_fmt(t.get('stress_' + per, {}).get('stressed'))} |")
+    L += ["", "## Nulls", "| test | pass | detail |", "|---|---|---|"]
+    for k in ("beats_c1_build", "beats_c1_pick", "beats_c2_build", "beats_c2_pick", "above_best_of_nulls_build"):
+        if k in t:
+            L.append(f"| {k} | {_fmt(t[k]['pass'])} | " + ", ".join(f"{a} {_fmt(v)}" for a, v in t[k].items() if a != "pass") + " |")
+    L += ["", "## Every admission test", "| test | pass | detail |", "|---|---|---|"]
+    for k, v in t.items():
+        L.append(f"| {k} | {_fmt(v['pass'])} | " + ", ".join(f"{a} {_fmt(x)}" for a, x in v.items() if a != "pass") + " |")
+    L += ["", "EXAM (>= 2025-01-01) was not read. Sizing (micros) is chosen later by the account-rules layer.", ""]
+    return "\n".join(L)
+
+
+def write_member(member: dict, result: dict, members_dir=None) -> Path:
+    """members/<name>/{spec.json, trades_build.json, trades_pick.json, daily.csv, card.md} for an ADMITTED member;
+    members/_rejected/<name>/{spec.json, card.md} for a rejected candidate."""
+    base = Path(members_dir) if members_dir is not None else MEMBERS          # members_dir: tests (tmp_path) only
+    d = (base if result["admit"] else base / "_rejected") / member["name"]
+    d.mkdir(parents=True, exist_ok=True)
+    spec = {k: member.get(k) for k in ("name", "family", "root", "tf", "sess", "cell", "inputs", "rationale", "complexity", "weak",
+                                        "l2", "penalty")}
+    spec.update(admit=result["admit"], failed=result["failed"], tests=result["tests"], plateau=member.get("plateau"),
+                nulls_bar=member.get("nulls_bar"), contracts=1, periods={"build": ["2021-09-22", "2023-12-31"],
+                                                                         "pick": ["2024-01-01", "2024-12-31"]},
+                written_utc=dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"))
+    (d / "spec.json").write_text(json.dumps(spec, indent=1, default=lambda o: o.tolist() if hasattr(o, "tolist") else str(o)))
+    (d / "card.md").write_text(card(member, result))
+    if result["admit"]:
+        rows = []
+        for per in ("build", "pick"):
+            blk = member[per]
+            (d / f"trades_{per}.json").write_text(json.dumps(blk["trades"], separators=(",", ":")))
+            cal = blk.get("calendar") or sorted({t["date"] for t in blk["trades"]})
+            rows += daily_rows(blk["trades"], cal, per)
+        with (d / "daily.csv").open("w", newline="") as fh:
+            w = csv.DictWriter(fh, ["date", "period", "net", "worst_open_loss", "minutes_in_market"])
+            w.writeheader()
+            w.writerows(rows)
+    return d
+
+
+# ------------------------------------------------------------------ member runs (the Admit stage)
+
+def run_member(family: str, root: str, tf: str, variant: dict, exit_cell: dict, period: str, *, sess: str | None = None,
+               stress: bool = False, build_plateau: dict | None = None, c2_seed: int | None = None, extra: dict | None = None,
+               workers: int | None = None, key: str | None = None, ledger=None, days=None) -> dict:
+    """ONE full run of a member cell over a period (counts 1 strategy run in the ledger; refused past the cap).
+    period 'build' | 'pick'. A PICK run needs build_plateau = the candidate's BUILD plateau with pass True (PickSealed
+    otherwise): PICK is read only for BUILD survivors. sess: the member's session (one of the seven) -- the run is the
+    same instance run_menus used for it (sess 'all' for the tester's five, 'pre', 'eve') and the result keeps only that
+    session's trades; omit it for a time-fired family (its clock time is in `variant`). stress=True runs l2sim.STRESS
+    (2 ticks + 250 ms). c2_seed: the feature-shuffle null of an L2 member. extra: Template L2 options (f_book / x_book /
+    f_thin) laid over the cell. -> the l2sim result. days: tests only (nothing is recorded)."""
+    import families
+    import l2sim
+    if period not in ("build", "pick"):
+        raise ValueError("period: 'build' or 'pick' (EXAM is sealed)")
+    if period == "pick" and not (isinstance(build_plateau, dict) and build_plateau.get("pass") is True):
+        raise PickSealed("a PICK (2024) run is allowed only for a BUILD survivor: pass build_plateau=<its BUILD plateau, pass True>")
+    cls = families.REGISTRY[family][0]
+    lib = families.library(family)
+    if root not in lib["roots"]:
+        raise ValueError(f"{family} is not registered for root {root}")
+    timed = "shift_seed" in cls.defaults()
+    if not timed and sess not in SESS7:
+        raise ValueError(f"sess: the member's session, one of {SESS7}")
+    run_sess = "all" if timed or sess not in ("pre", "eve") else sess
+    params = {**families.unit_inputs(family, tf, run_sess), **variant, **exit_cell, **(extra or {})}
+    feats = families.features_for(family, l2sim.template_feature_needs(params), c2_seed)
+    key = key or "-".join(x for x in (family, root, f"tf{tf}", "" if timed else sess, l2sim.cell_id({**variant, **exit_cell}),
+                                      l2sim.cell_id(extra) if extra else "", period, "stress" if stress else "",
+                                      f"c2s{c2_seed}" if c2_seed is not None else "") if x)
+    kw = dict(l2sim.STRESS) if stress else {}
+    kw.update(getattr(cls, "SCREEN_RUN", {}))
+    if days is None:
+        ledger_check(runs=1, path=ledger)
+        res = l2sim.run(cls, params, period=period, root=root, features=feats, workers=workers or l2sim.MAX_WORKERS, **kw)
+        ledger_add("member", key, "run", family=family, root=root, tf=str(tf), period=period, path=ledger,
+                   control="c2" if c2_seed is not None else ("stress" if stress else ""), seed="" if c2_seed is None else c2_seed,
+                   trades=len(res["trades"]), elapsed_s=res["elapsed_s"])
+    else:
+        res = l2sim.run(cls, params, days=list(days), root=root, features=feats, workers=workers or 1, **kw)
+    if not timed:
+        res["trades"] = [t for t in res["trades"] if l2sim.session_of(t["entry_ms"]) == sess]
+    res["key"], res["session"] = key, (None if timed else sess)
+    return res
+
+
+def main(argv=None) -> int:
+    """python library.py ledger            counts against the caps
+       python library.py plateau <unit key> [--sess pm]     the plateau of a unit store, per session"""
+    import argparse
+    ap = argparse.ArgumentParser(prog="library.py")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("ledger")
+    pl = sub.add_parser("plateau")
+    pl.add_argument("key")
+    pl.add_argument("--sess", default="")
+    a = ap.parse_args(argv)
+    if a.cmd == "ledger":
+        used = ledger_used()
+        print(json.dumps({"used": used, "caps": CAPS, "left": {k: CAPS[k] - used[k] for k in CAPS}, "rows": len(read_ledger())}))
+        return 0
+    u = load_unit(a.key)
+    sess = [a.sess] if a.sess else ["all"] + [SESS7[s] for s in sorted({int(s) for s in np.unique(u["sess"]) if s >= 0})]
+    for s in sess:
+        print(s, json.dumps(plateau(session_table(u, s))))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

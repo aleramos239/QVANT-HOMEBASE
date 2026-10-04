@@ -1,0 +1,2 @@
+[{"family": "straddle_t_0830", "root": "NQ", "tf": "30", "sess": "pre", "period": "pick",
+  "why": "ORCHESTRATOR RULING 2026-10-04: straddle_t_0830-NQ-tf30|pre| side news_only passes (b)-(e) on BUILD; test (a) counts BUILD + 2024; whole menu, the news-days split is applied to the stored trades"}]

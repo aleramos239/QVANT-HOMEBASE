@@ -1,0 +1,347 @@
+{
+ "E1-A-GC": {
+  "name": "straddle_tight_0830_GC_tf30_pre_evA",
+  "root": "GC",
+  "build": {
+   "trades": 223,
+   "replayed": 223,
+   "stored_net": 10598.0,
+   "ident": 1.0,
+   "exact_trigger": 1.0,
+   "floor": {
+    "0ms": 10598.0,
+    "1ms": -1382.0,
+    "5ms": 1278.0,
+    "25ms": 1758.0
+   },
+   "neutral": {
+    "0ms": 10598.0,
+    "1ms": -712.0,
+    "5ms": 1618.0,
+    "25ms": 2758.0
+   },
+   "mean_slip_pts": {
+    "0ms": 0.122,
+    "1ms": 0.757,
+    "5ms": 0.753,
+    "25ms": 0.812
+   },
+   "median_slip_pts": {
+    "0ms": 0.1,
+    "1ms": 0.2,
+    "5ms": 0.2,
+    "25ms": 0.3
+   },
+   "median_prints_sharing_trigger_ts": 5.0
+  },
+  "pick": {
+   "trades": 96,
+   "replayed": 96,
+   "stored_net": 5496.0,
+   "ident": 1.0,
+   "exact_trigger": 1.0,
+   "floor": {
+    "0ms": 5496.0,
+    "1ms": 426.0,
+    "5ms": 596.0,
+    "25ms": -1524.0
+   },
+   "neutral": {
+    "0ms": 5496.0,
+    "1ms": 1846.0,
+    "5ms": 2026.0,
+    "25ms": -104.0
+   },
+   "mean_slip_pts": {
+    "0ms": 0.21,
+    "1ms": 0.785,
+    "5ms": 0.9,
+    "25ms": 1.215
+   },
+   "median_slip_pts": {
+    "0ms": 0.1,
+    "1ms": 0.3,
+    "5ms": 0.4,
+    "25ms": 0.5
+   },
+   "median_prints_sharing_trigger_ts": 4.0
+  },
+  "fill_fragile": false
+ },
+ "E1-B-NQ": {
+  "name": "straddle_tight_0830_NQ_tf30_pre_evB",
+  "root": "NQ",
+  "build": {
+   "trades": 157,
+   "replayed": 157,
+   "stored_net": 9047.0,
+   "ident": 1.0,
+   "exact_trigger": 1.0,
+   "floor": {
+    "0ms": 9047.0,
+    "1ms": 4977.0,
+    "5ms": 5122.0,
+    "25ms": 3237.0
+   },
+   "neutral": {
+    "0ms": 9047.0,
+    "1ms": 7962.0,
+    "5ms": 7017.0,
+    "25ms": 5092.0
+   },
+   "mean_slip_pts": {
+    "0ms": 0.849,
+    "1ms": 3.041,
+    "5ms": 3.494,
+    "25ms": 5.033
+   },
+   "median_slip_pts": {
+    "0ms": 0.25,
+    "1ms": 0.75,
+    "5ms": 1.25,
+    "25ms": 1.75
+   },
+   "median_prints_sharing_trigger_ts": 3.0
+  },
+  "pick": {
+   "trades": 68,
+   "replayed": 68,
+   "stored_net": 2383.0,
+   "ident": 1.0,
+   "exact_trigger": 1.0,
+   "floor": {
+    "0ms": 2383.0,
+    "1ms": 1173.0,
+    "5ms": 473.0,
+    "25ms": -1157.0
+   },
+   "neutral": {
+    "0ms": 2383.0,
+    "1ms": 2608.0,
+    "5ms": 1478.0,
+    "25ms": 1298.0
+   },
+   "mean_slip_pts": {
+    "0ms": 1.305,
+    "1ms": 3.375,
+    "5ms": 4.566,
+    "25ms": 5.607
+   },
+   "median_slip_pts": {
+    "0ms": 0.5,
+    "1ms": 0.875,
+    "5ms": 1.75,
+    "25ms": 2.75
+   },
+   "median_prints_sharing_trigger_ts": 3.0
+  },
+  "fill_fragile": false
+ },
+ "E1-B-GC": {
+  "name": "straddle_tight_0830_GC_tf30_pre_evB",
+  "root": "GC",
+  "build": {
+   "trades": 156,
+   "replayed": 156,
+   "stored_net": 8066.0,
+   "ident": 1.0,
+   "exact_trigger": 1.0,
+   "floor": {
+    "0ms": 8066.0,
+    "1ms": -1284.0,
+    "5ms": 966.0,
+    "25ms": 1786.0
+   },
+   "neutral": {
+    "0ms": 8066.0,
+    "1ms": -944.0,
+    "5ms": 976.0,
+    "25ms": 2456.0
+   },
+   "mean_slip_pts": {
+    "0ms": 0.129,
+    "1ms": 0.868,
+    "5ms": 0.86,
+    "25ms": 0.928
+   },
+   "median_slip_pts": {
+    "0ms": 0.1,
+    "1ms": 0.2,
+    "5ms": 0.3,
+    "25ms": 0.3
+   },
+   "median_prints_sharing_trigger_ts": 6.0
+  },
+  "pick": {
+   "trades": 68,
+   "replayed": 68,
+   "stored_net": 2448.0,
+   "ident": 1.0,
+   "exact_trigger": 1.0,
+   "floor": {
+    "0ms": 2448.0,
+    "1ms": 348.0,
+    "5ms": 88.0,
+    "25ms": -1182.0
+   },
+   "neutral": {
+    "0ms": 2448.0,
+    "1ms": 1768.0,
+    "5ms": 1518.0,
+    "25ms": 238.0
+   },
+   "mean_slip_pts": {
+    "0ms": 0.226,
+    "1ms": 0.759,
+    "5ms": 0.868,
+    "25ms": 1.271
+   },
+   "median_slip_pts": {
+    "0ms": 0.1,
+    "1ms": 0.2,
+    "5ms": 0.3,
+    "25ms": 0.45
+   },
+   "median_prints_sharing_trigger_ts": 3.0
+  },
+  "fill_fragile": false
+ },
+ "E3-C-GC": {
+  "name": "straddle_tight_1000_GC_tf30_nyam_evC",
+  "root": "GC",
+  "build": {
+   "trades": 97,
+   "replayed": 97,
+   "stored_net": 8202.0,
+   "ident": 1.0,
+   "exact_trigger": 1.0,
+   "floor": {
+    "0ms": 8202.0,
+    "1ms": 1652.0,
+    "5ms": 1852.0,
+    "25ms": -88.0
+   },
+   "neutral": {
+    "0ms": 8202.0,
+    "1ms": 1652.0,
+    "5ms": 1852.0,
+    "25ms": -88.0
+   },
+   "mean_slip_pts": {
+    "0ms": 0.109,
+    "1ms": 0.926,
+    "5ms": 1.015,
+    "25ms": 1.225
+   },
+   "median_slip_pts": {
+    "0ms": 0.1,
+    "1ms": 0.4,
+    "5ms": 0.6,
+    "25ms": 1.0
+   },
+   "median_prints_sharing_trigger_ts": 17.0
+  },
+  "pick": {
+   "trades": 46,
+   "replayed": 46,
+   "stored_net": 4166.0,
+   "ident": 1.0,
+   "exact_trigger": 1.0,
+   "floor": {
+    "0ms": 4166.0,
+    "1ms": -1004.0,
+    "5ms": -184.0,
+    "25ms": -1424.0
+   },
+   "neutral": {
+    "0ms": 4166.0,
+    "1ms": -1004.0,
+    "5ms": -184.0,
+    "25ms": -1414.0
+   },
+   "mean_slip_pts": {
+    "0ms": 0.163,
+    "1ms": 1.265,
+    "5ms": 1.343,
+    "25ms": 1.641
+   },
+   "median_slip_pts": {
+    "0ms": 0.1,
+    "1ms": 0.5,
+    "5ms": 0.75,
+    "25ms": 0.8
+   },
+   "median_prints_sharing_trigger_ts": 12.5
+  },
+  "fill_fragile": true
+ },
+ "orb_NQ_tf1_pre": {
+  "name": "orb_NQ_tf1_pre",
+  "root": "NQ",
+  "build": {
+   "trades": 567,
+   "replayed": 567,
+   "stored_net": 16362.0,
+   "ident": 1.0,
+   "exact_trigger": 1.0,
+   "floor": {
+    "0ms": 16362.0,
+    "1ms": 7947.0,
+    "5ms": 7842.0,
+    "25ms": 5387.0
+   },
+   "neutral": {
+    "0ms": 16362.0,
+    "1ms": 9777.0,
+    "5ms": 10312.0,
+    "25ms": 11987.0
+   },
+   "mean_slip_pts": {
+    "0ms": 0.563,
+    "1ms": 1.897,
+    "5ms": 1.957,
+    "25ms": 2.379
+   },
+   "median_slip_pts": {
+    "0ms": 0.25,
+    "1ms": 0.25,
+    "5ms": 0.25,
+    "25ms": 0.5
+   },
+   "median_prints_sharing_trigger_ts": 2.0
+  },
+  "pick": {
+   "trades": 252,
+   "replayed": 252,
+   "stored_net": 12437.0,
+   "ident": 1.0,
+   "exact_trigger": 1.0,
+   "floor": {
+    "0ms": 12437.0,
+    "1ms": 8417.0,
+    "5ms": 6117.0,
+    "25ms": 2862.0
+   },
+   "neutral": {
+    "0ms": 12437.0,
+    "1ms": 12017.0,
+    "5ms": 8287.0,
+    "25ms": 6092.0
+   },
+   "mean_slip_pts": {
+    "0ms": 1.023,
+    "1ms": 1.743,
+    "5ms": 2.195,
+    "25ms": 2.992
+   },
+   "median_slip_pts": {
+    "0ms": 0.25,
+    "1ms": 0.25,
+    "5ms": 0.5,
+    "25ms": 0.5
+   },
+   "median_prints_sharing_trigger_ts": 2.0
+  },
+  "fill_fragile": false
+ }
+}

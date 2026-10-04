@@ -1,0 +1,12 @@
+[
+ {"family":"orb","root":"NQ","tf":"1","sess":"pre","period":"pick","why":"BUILD passer orb-NQ-tf1|pre"},
+ {"family":"donchian","root":"NQ","tf":"30","sess":"nyam","period":"pick","why":"BUILD passer donchian-NQ-tf30|nyam"},
+ {"family":"donchian","root":"NQ","tf":"30","sess":"pm","period":"pick","why":"BUILD passer donchian-NQ-tf30|pm (penalty)"},
+ {"family":"donchian","root":"ES","tf":"30","sess":"pm","period":"pick","why":"BUILD passer donchian-ES-tf30|pm (penalty)"},
+ {"family":"first_bar_mom","root":"GC","tf":"5","sess":"pm","period":"pick","why":"BUILD passer first_bar_mom-GC-tf5|pm (penalty)"},
+ {"c1":true,"root":"NQ","tf":"1","sess":"pre","period":"pick","why":"C1 control of orb-NQ-tf1|pre"},
+ {"c1":true,"root":"NQ","tf":"30","sess":"nyam","period":"pick","why":"C1 control of donchian-NQ-tf30|nyam"},
+ {"c1":true,"root":"NQ","tf":"30","sess":"pm","period":"pick","why":"C1 control of donchian-NQ-tf30|pm"},
+ {"c1":true,"root":"ES","tf":"30","sess":"pm","period":"pick","why":"C1 control of donchian-ES-tf30|pm"},
+ {"c1":true,"root":"GC","tf":"5","sess":"pm","period":"pick","why":"C1 control of first_bar_mom-GC-tf5|pm"}
+]

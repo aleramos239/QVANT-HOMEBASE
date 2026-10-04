@@ -1,0 +1,3 @@
+cell,vi,xi,sess,trades,net,t,pf,win,max_mae_usd
+offA_pts1p6-r1,0,3,all,250,-5590.0,-2.0754,0.7686,0.476,190.0
+offA_pts1p6-r1,0,3,nyam,250,-5590.0,-2.0754,0.7686,0.476,190.0

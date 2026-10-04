@@ -1,0 +1,226 @@
+{
+ "donchian-NQ-tf5|nyam|vol_lo": {
+  "name": "donchian_NQ_tf5_nyam_vol_lo",
+  "admit": false,
+  "default": "n60_pts10-r0",
+  "default_moved": true,
+  "central": "n20_atr1p5-r1",
+  "surviving": 84,
+  "judged": 128,
+  "surviving_t_above_bar": 46,
+  "by_cell": {
+   "n20_atr1p5-r1": {
+    "admit": false,
+    "failed": [
+     "net_pick",
+     "beats_c1_pick",
+     "stress_pick"
+    ],
+    "tests": {
+     "net_build": {
+      "pass": true,
+      "net": 34460.0
+     },
+     "net_pick": {
+      "pass": false,
+      "net": -4715.0
+     },
+     "plateau_build": {
+      "pass": true,
+      "cells": 128,
+      "median_net": 35030.0,
+      "share_pos": 0.8125,
+      "member": "n20_atr1p5-r1"
+     },
+     "beats_c1_build": {
+      "pass": true,
+      "lift": 24983.95,
+      "mean": 9476.05,
+      "p95": 27048.0,
+      "p_beat": 0.99,
+      "fallback_share": 0.0,
+      "short": 0,
+      "pool_trades": 10882
+     },
+     "stress_build": {
+      "pass": true,
+      "base": 34460.0,
+      "stressed": 25021.0,
+      "stress": "2 ticks + 250 ms"
+     },
+     "beats_c1_pick": {
+      "pass": false,
+      "lift": -14587.25,
+      "mean": 9872.25,
+      "p95": 22284.5,
+      "p_beat": 0.03,
+      "fallback_share": 0.0,
+      "short": 0,
+      "pool_trades": 700
+     },
+     "stress_pick": {
+      "pass": false,
+      "base": -4715.0,
+      "stressed": -5102.0,
+      "stress": "2 ticks + 250 ms"
+     },
+     "above_best_of_nulls_build": {
+      "pass": true,
+      "t_build": 2.0687373017881905,
+      "bar": 2.01546588148303,
+      "nulls": 56,
+      "thin": false
+     },
+     "min_trades": {
+      "pass": true,
+      "build": 580,
+      "pick": 260,
+      "need": 100
+     },
+     "open_loss_fits": {
+      "pass": true,
+      "worst_open_loss_per_micro": 183.5,
+      "micros_fit_worst": 10,
+      "micros_fit_p99": 15,
+      "limit": 2000.0
+     },
+     "rationale": {
+      "pass": true,
+      "complexity": 3
+     }
+    },
+    "summary": {
+     "build": {
+      "trades": 580,
+      "net": 34460.0,
+      "t": 2.0687373017881905,
+      "pf": 1.2029016227419393,
+      "win": 0.5362068965517242
+     },
+     "pick": {
+      "trades": 260,
+      "net": -4715.0,
+      "t": -0.4185632501643555,
+      "pf": 0.9466109563602599,
+      "win": 0.49615384615384617
+     },
+     "cell": "n20_atr1p5-r1",
+     "root": "NQ",
+     "tf": "5",
+     "sess": "nyam",
+     "family": "donchian"
+    }
+   },
+   "n60_pts10-r0": {
+    "admit": false,
+    "failed": [
+     "beats_c1_build",
+     "beats_c1_pick",
+     "above_best_of_nulls_build"
+    ],
+    "tests": {
+     "net_build": {
+      "pass": true,
+      "net": 35600.0
+     },
+     "net_pick": {
+      "pass": true,
+      "net": 6431.0
+     },
+     "plateau_build": {
+      "pass": true,
+      "cells": 128,
+      "median_net": 35030.0,
+      "share_pos": 0.8125,
+      "member": "n20_atr1p5-r1"
+     },
+     "beats_c1_build": {
+      "pass": false,
+      "lift": -4979.18,
+      "mean": 40579.18,
+      "p95": 64134.0,
+      "p_beat": 0.36,
+      "fallback_share": 0.002380952380952381,
+      "short": 0,
+      "pool_trades": 9313
+     },
+     "stress_build": {
+      "pass": true,
+      "base": 35600.0,
+      "stressed": 13184.0,
+      "stress": "2 ticks + 250 ms"
+     },
+     "beats_c1_pick": {
+      "pass": false,
+      "lift": -37883.55,
+      "mean": 44314.55,
+      "p95": 62756.25,
+      "p_beat": 0.0,
+      "fallback_share": 0.0,
+      "short": 0,
+      "pool_trades": 621
+     },
+     "stress_pick": {
+      "pass": true,
+      "base": 6431.0,
+      "stressed": 3059.0,
+      "stress": "2 ticks + 250 ms"
+     },
+     "above_best_of_nulls_build": {
+      "pass": false,
+      "t_build": 1.6487061127951321,
+      "bar": 2.01546588148303,
+      "nulls": 56,
+      "thin": false
+     },
+     "min_trades": {
+      "pass": true,
+      "build": 420,
+      "pick": 186,
+      "need": 100
+     },
+     "open_loss_fits": {
+      "pass": true,
+      "worst_open_loss_per_micro": 22.5,
+      "micros_fit_worst": 88,
+      "micros_fit_p99": 93,
+      "limit": 2000.0
+     },
+     "rationale": {
+      "pass": true,
+      "complexity": 3
+     }
+    },
+    "summary": {
+     "build": {
+      "trades": 420,
+      "net": 35600.0,
+      "t": 1.6487061127951321,
+      "pf": 1.4464845611658765,
+      "win": 0.09285714285714286
+     },
+     "pick": {
+      "trades": 186,
+      "net": 6431.0,
+      "t": 0.4183640303199423,
+      "pf": 1.175614418350628,
+      "win": 0.05913978494623656
+     },
+     "cell": "n60_pts10-r0",
+     "root": "NQ",
+     "tf": "5",
+     "sess": "nyam",
+     "family": "donchian"
+    }
+   }
+  },
+  "dir": "/Users/ramoscapital/ramos-quant-homebase/research/edge-library/members/_rejected/donchian_NQ_tf5_nyam_vol_lo"
+ },
+ "rsi2-NQ-tf30|eve|long": {
+  "admit": false,
+  "failed": [
+   "plateau_pick"
+  ],
+  "note": "2024 heat map fails: no admission test is run"
+ }
+}

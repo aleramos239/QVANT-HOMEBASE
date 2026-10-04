@@ -1,0 +1,576 @@
+F.F...................F.FFFFFF.......................................... [ 15%]
+........................................................................ [ 30%]
+........................................................................ [ 45%]
+..............................................F......................... [ 60%]
+................F.........FFFFFFFF...................................... [ 75%]
+........................................................................ [ 90%]
+.....F........................FF...........                              [100%]
+=================================== FAILURES ===================================
+_______ test_caps_are_the_spec_and_a_menu_grid_of_n_cells_counts_n_cells _______
+
+tmp_path = PosixPath('/private/var/folders/s9/_m6jy4zj3y3b2wjw0_8091700000gn/T/pytest-of-ramoscapital/pytest-0/test_caps_are_the_spec_and_a_m0')
+
+    def test_caps_are_the_spec_and_a_menu_grid_of_n_cells_counts_n_cells(tmp_path):
+        assert LB.CAPS == {"runs": 2000, "cells": 40000, "wfs": 40} and LB.LEDGER == LB.W / "ledger.csv"
+        led = tmp_path / "ledger.csv"
+        assert LB.ledger_used(path=led) == {"runs": 0, "cells": 0, "wfs": 0}
+        LB.ledger_add("build", "donchian-NQ-tf15", "grid", cells=128, family="donchian", root="NQ", tf="15", period="build", path=led)
+>       LB.ledger_add("null", "c1-NQ-tf15", "grid", cells=64, control="c1", path=led)
+
+tests/test_edge_library.py:21: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+stage = 'null', key = 'c1-NQ-tf15', kind = 'grid', cells = 64
+path = PosixPath('/private/var/folders/s9/_m6jy4zj3y3b2wjw0_8091700000gn/T/pytest-of-ramoscapital/pytest-0/test_caps_are_the_spec_and_a_m0/ledger.csv')
+caps = {'cells': 40000, 'runs': 2000, 'wfs': 40}, info = {'control': 'c1'}
+p = PosixPath('/private/var/folders/s9/_m6jy4zj3y3b2wjw0_8091700000gn/T/pytest-of-ramoscapital/pytest-0/test_caps_are_the_spec_and_a_m0/ledger.csv')
+
+    def ledger_add(stage: str, key: str, kind: str, *, cells: int = 0, path=None, caps: dict | None = None, **info) -> dict:
+        """Append ONE row under a lock. kind: 'run' (counts 1 run) | 'grid' (a CANDIDATE menu grid: counts `cells` cells against
+        the 40,000 cap) | 'null' (a null / control grid: `cells` goes to the column null_cells, tracked and NOT capped) | 'wf'
+        (counts 1 walk-forward) | 'smoke' (counts nothing). A row of stage 'null' / 'null_error' must be kind 'null' and no
+        other stage may be. Raises CapExceeded -- and appends NOTHING -- when the row would pass a cap; ValueError for a second
+        row of the same (stage, key) unless the stage ends with '_error'."""
+        if kind not in KINDS:
+            raise ValueError(f"kind {kind!r}: one of {sorted(KINDS)}")
+        if not stage or not key:
+            raise ValueError("a ledger row needs a stage and a key")
+        caps = caps or CAPS
+        p = Path(path) if path is not None else LEDGER
+        if (stage.split("_")[0] == "null") != (kind == "null") and kind in ("grid", "null"):
+>           raise ValueError(f"stage {stage!r} with kind {kind!r}: a null / control grid is stage 'null' + kind 'null' (not capped), "
+                             "a candidate grid is kind 'grid' (capped)")
+E           ValueError: stage 'null' with kind 'grid': a null / control grid is stage 'null' + kind 'null' (not capped), a candidate grid is kind 'grid' (capped)
+
+../library.py:158: ValueError
+_ test_plateau_needs_a_positive_median_and_sixty_percent_of_the_cells_positive _
+
+    def test_plateau_needs_a_positive_median_and_sixty_percent_of_the_cells_positive():
+        ok = LB.plateau(table([100, 200, 300, 400, 500, 600, -50, -60, 0, 10]))
+        assert ok["pass"] and ok["cells"] == 10 and ok["share_pos"] == 0.7 and ok["median_net"] == 150.0 and ok["positive"] == 7
+        assert LB.plateau(table([100, 200, 300, 400, 500, 600, -50, -60, -70, -80]))["pass"]           # exactly 60 % and median > 0
+        thin = LB.plateau(table([5000, 4000, 3000, 2000, 1, -1, -1, -1, -1, -1]))                    # one great corner is not a plateau
+        assert not thin["pass"] and thin["share_pos"] == 0.5 and thin["median_net"] == 0.0
+        neg = LB.plateau(table([1, 1, 1, 1, 1, 1, 1, -5000, -5000, -5000, -5000, -5000]))
+        assert not neg["pass"] and neg["share_pos"] == round(7 / 12, 4)
+        zero = LB.plateau(table([0, 0, 0, 0, 0]))                    # cells without a trade are not > 0
+        assert not zero["pass"] and zero["member"] is None and zero["share_pos"] == 0.0
+>       assert LB.plateau([]) == {"pass": False, "cells": 0, "median_net": None, "share_pos": None, "positive": 0, "member": None,
+                                  "member_net": None, "best": None, "best_net": None, "worst_net": None}
+E       AssertionError: assert {'best': None..._all': 0, ...} == {'best': None...t': None, ...}
+E         
+E         Omitting 10 identical items, use -vv to show
+E         Left contains 5 more items:
+E         {'cells_all': 0,
+E          'dead': 0,
+E          'duplicates': 0,
+E          'shares': {'by_stop': {},...
+E         
+E         ...Full output truncated (8 lines hidden), use '-vv' to show
+
+tests/test_edge_library.py:83: AssertionError
+________ test_pick_is_sealed_for_a_candidate_that_did_not_survive_build ________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10d523910>
+
+    def test_pick_is_sealed_for_a_candidate_that_did_not_survive_build(monkeypatch):
+        import fam_fixtures as FX
+        import families
+        monkeypatch.setitem(families.REGISTRY, "edge_donch", (FX.EdgeDonch, {}, False, "test"))
+        monkeypatch.setitem(families.LIBRARY, "edge_donch", families.check_library("edge_donch", FX.EdgeDonch, {}, FX.EDGE_LIB)[1])
+        x = S.menu("NQ")[0]
+        for bad in (None, {}, {"pass": False}, {"pass": 1}):
+            with pytest.raises(LB.PickSealed):
+                LB.run_member("edge_donch", "NQ", "15", {"n": 20}, x, "pick", sess="pm", build_plateau=bad, days=["2024-03-05"])
+        with pytest.raises(ValueError, match="EXAM"):
+            LB.run_member("edge_donch", "NQ", "15", {"n": 20}, x, "exam", sess="pm", days=["2025-03-05"])
+        with pytest.raises(ValueError, match="member's session"):
+            LB.run_member("edge_donch", "NQ", "15", {"n": 20}, x, "build", days=["2023-03-14"])
+        days = ["2023-03-14", "2023-03-15", "2023-03-16"]
+        r = LB.run_member("edge_donch", "NQ", "15", {"n": 20}, x, "build", sess="pm", days=days)
+>       assert r["meta"]["inputs"]["n"] == 20 and r["meta"]["inputs"]["sess"] == "all" and r["key"] == "edge_donch-NQ-tf15-pm-n20_atr1p5-r0-build"
+E       AssertionError: assert (20 == 20 and 'pm' == 'all'
+E         
+E         - all
+E         + pm)
+
+tests/test_edge_library.py:250: AssertionError
+______________ test_unit_grid_is_variants_times_the_32_exit_cells ______________
+
+reg = <module 'families' from '/Users/ramoscapital/ramos-quant-homebase/research/edge-library/engine/families/__init__.py'>
+
+    def test_unit_grid_is_variants_times_the_32_exit_cells(reg):
+        g = reg.unit_grid("edge_donch", "ES", "15")
+        assert len(g) == 64 and [c["exit"] for c in g[:32]] == S.menu("ES") and g[0]["spec"][1]["sess"] == "all"
+        assert g[0]["spec"][0] is FX.EdgeDonch and g[33]["variant"] == {"n": 20} and g[33]["spec"][1]["n"] == 20
+        assert reg.unit_inputs("edge_donch", "15") == {"tf": "15", "sess": "all"} and reg.features_for("edge_donch") is None
+        # a Template cell = three independent instances (the tester's five / pre / eve); a time-fired cell = one
+>       assert [p["sess"] for _, p in RM.cell_specs(g[0])] == ["all", "pre", "eve"] and RM.SESS_PASSES == ("all", "pre", "eve")
+E       AssertionError: assert (['asia', 'lon...d', 'pm', ...] == ['all', 'pre', 'eve']
+E         
+E         At index 0 diff: 'asia' != 'all'
+E         Left contains 4 more items, first extra item: 'nyam'
+E         Use -v to get more diff)
+
+tests/test_edge_run_menus.py:68: AssertionError
+_____ test_run_unit_writes_the_store_and_the_ledger_and_is_idempotent[NQ] ______
+
+reg = <module 'families' from '/Users/ramoscapital/ramos-quant-homebase/research/edge-library/engine/families/__init__.py'>
+tmp_path = PosixPath('/private/var/folders/s9/_m6jy4zj3y3b2wjw0_8091700000gn/T/pytest-of-ramoscapital/pytest-0/test_run_unit_writes_the_store0')
+root = 'NQ'
+
+    @pytest.mark.parametrize("root", ["NQ", "ES", "GC"])
+    def test_run_unit_writes_the_store_and_the_ledger_and_is_idempotent(reg, tmp_path, root):
+        led, runs, log = tmp_path / "ledger.csv", tmp_path / "runs", tmp_path / "log.txt"
+        days = [d for d in DAYS if S.hb_tape_path(d, root) is not None] if root != "NQ" else DAYS
+        out = RM.run_unit("edge_donch", root, "15", workers=2, runs_dir=runs, ledger=led, log=log, days=days)
+        key = f"edge_donch-{root}-tf15"
+        assert out == [{"key": key, "ok": True, "cells": 64}]
+        assert sorted(p.name for p in (runs / key).iterdir()) == ["cells.npz", "run.json", "table.csv"]
+        u = LB.load_unit(key, runs)
+        meta = u["meta"]
+        assert meta["root"] == root and meta["stage"] == "build" and meta["period"] == "build" and meta["range"]["period"] == "insample"
+        assert meta["rationale"] == FX.EDGE_LIB["rationale"] and meta["complexity"] == 3 and len(meta["cells"]) == 64
+        assert meta["coverage"]["sessions"] == len(days) and meta["segments"] == ["eve", "day"]
+        assert int(u["off"][-1]) == sum(c["trades"] for c in meta["cells"]) == len(u["net"]) > 100
+        assert all(c["skipped_by_error"] == 0 for c in meta["cells"]) and set(np.unique(u["sess"])) <= set(range(7))
+        cell = LB.unit_cell(u, "n20_pts%s-r1" % S._num(S.MENU_STOP_PTS[root][1]))
+        assert len(cell["net"]) == next(c["trades"] for c in meta["cells"] if c["id"].startswith("n20_pts") and c["xi"] == 13)
+        # the store holds exactly what direct runs of that cell give: the tester's five (sess all) + pre + eve, each on its own
+>       assert meta["cells"][45]["inputs"]["sess"] == "all+pre+eve" and meta["passes"] == ["all", "pre", "eve"]
+E       AssertionError: assert ('asia+london+...am+mid+pm+eve' == 'all+pre+eve'
+E         
+E         - all+pre+eve
+E         + asia+london+pre+nyam+mid+pm+eve)
+
+tests/test_edge_run_menus.py:99: AssertionError
+----------------------------- Captured stdout call -----------------------------
+2026-10-03T13:09:56+00:00 build edge_donch-NQ-tf15: 64 cells, 3319 trades, 4.19 s (wall 4 s, 2 workers)
+_____ test_run_unit_writes_the_store_and_the_ledger_and_is_idempotent[ES] ______
+
+reg = <module 'families' from '/Users/ramoscapital/ramos-quant-homebase/research/edge-library/engine/families/__init__.py'>
+tmp_path = PosixPath('/private/var/folders/s9/_m6jy4zj3y3b2wjw0_8091700000gn/T/pytest-of-ramoscapital/pytest-0/test_run_unit_writes_the_store1')
+root = 'ES'
+
+    @pytest.mark.parametrize("root", ["NQ", "ES", "GC"])
+    def test_run_unit_writes_the_store_and_the_ledger_and_is_idempotent(reg, tmp_path, root):
+        led, runs, log = tmp_path / "ledger.csv", tmp_path / "runs", tmp_path / "log.txt"
+        days = [d for d in DAYS if S.hb_tape_path(d, root) is not None] if root != "NQ" else DAYS
+        out = RM.run_unit("edge_donch", root, "15", workers=2, runs_dir=runs, ledger=led, log=log, days=days)
+        key = f"edge_donch-{root}-tf15"
+        assert out == [{"key": key, "ok": True, "cells": 64}]
+        assert sorted(p.name for p in (runs / key).iterdir()) == ["cells.npz", "run.json", "table.csv"]
+        u = LB.load_unit(key, runs)
+        meta = u["meta"]
+        assert meta["root"] == root and meta["stage"] == "build" and meta["period"] == "build" and meta["range"]["period"] == "insample"
+        assert meta["rationale"] == FX.EDGE_LIB["rationale"] and meta["complexity"] == 3 and len(meta["cells"]) == 64
+        assert meta["coverage"]["sessions"] == len(days) and meta["segments"] == ["eve", "day"]
+        assert int(u["off"][-1]) == sum(c["trades"] for c in meta["cells"]) == len(u["net"]) > 100
+        assert all(c["skipped_by_error"] == 0 for c in meta["cells"]) and set(np.unique(u["sess"])) <= set(range(7))
+        cell = LB.unit_cell(u, "n20_pts%s-r1" % S._num(S.MENU_STOP_PTS[root][1]))
+        assert len(cell["net"]) == next(c["trades"] for c in meta["cells"] if c["id"].startswith("n20_pts") and c["xi"] == 13)
+        # the store holds exactly what direct runs of that cell give: the tester's five (sess all) + pre + eve, each on its own
+>       assert meta["cells"][45]["inputs"]["sess"] == "all+pre+eve" and meta["passes"] == ["all", "pre", "eve"]
+E       AssertionError: assert ('asia+london+...am+mid+pm+eve' == 'all+pre+eve'
+E         
+E         - all+pre+eve
+E         + asia+london+pre+nyam+mid+pm+eve)
+
+tests/test_edge_run_menus.py:99: AssertionError
+----------------------------- Captured stdout call -----------------------------
+2026-10-03T13:10:00+00:00 build edge_donch-ES-tf15: 64 cells, 3214 trades, 4.05 s (wall 4 s, 2 workers)
+_____ test_run_unit_writes_the_store_and_the_ledger_and_is_idempotent[GC] ______
+
+reg = <module 'families' from '/Users/ramoscapital/ramos-quant-homebase/research/edge-library/engine/families/__init__.py'>
+tmp_path = PosixPath('/private/var/folders/s9/_m6jy4zj3y3b2wjw0_8091700000gn/T/pytest-of-ramoscapital/pytest-0/test_run_unit_writes_the_store2')
+root = 'GC'
+
+    @pytest.mark.parametrize("root", ["NQ", "ES", "GC"])
+    def test_run_unit_writes_the_store_and_the_ledger_and_is_idempotent(reg, tmp_path, root):
+        led, runs, log = tmp_path / "ledger.csv", tmp_path / "runs", tmp_path / "log.txt"
+        days = [d for d in DAYS if S.hb_tape_path(d, root) is not None] if root != "NQ" else DAYS
+        out = RM.run_unit("edge_donch", root, "15", workers=2, runs_dir=runs, ledger=led, log=log, days=days)
+        key = f"edge_donch-{root}-tf15"
+        assert out == [{"key": key, "ok": True, "cells": 64}]
+        assert sorted(p.name for p in (runs / key).iterdir()) == ["cells.npz", "run.json", "table.csv"]
+        u = LB.load_unit(key, runs)
+        meta = u["meta"]
+        assert meta["root"] == root and meta["stage"] == "build" and meta["period"] == "build" and meta["range"]["period"] == "insample"
+        assert meta["rationale"] == FX.EDGE_LIB["rationale"] and meta["complexity"] == 3 and len(meta["cells"]) == 64
+        assert meta["coverage"]["sessions"] == len(days) and meta["segments"] == ["eve", "day"]
+        assert int(u["off"][-1]) == sum(c["trades"] for c in meta["cells"]) == len(u["net"]) > 100
+        assert all(c["skipped_by_error"] == 0 for c in meta["cells"]) and set(np.unique(u["sess"])) <= set(range(7))
+        cell = LB.unit_cell(u, "n20_pts%s-r1" % S._num(S.MENU_STOP_PTS[root][1]))
+        assert len(cell["net"]) == next(c["trades"] for c in meta["cells"] if c["id"].startswith("n20_pts") and c["xi"] == 13)
+        # the store holds exactly what direct runs of that cell give: the tester's five (sess all) + pre + eve, each on its own
+>       assert meta["cells"][45]["inputs"]["sess"] == "all+pre+eve" and meta["passes"] == ["all", "pre", "eve"]
+E       AssertionError: assert ('asia+london+...am+mid+pm+eve' == 'all+pre+eve'
+E         
+E         - all+pre+eve
+E         + asia+london+pre+nyam+mid+pm+eve)
+
+tests/test_edge_run_menus.py:99: AssertionError
+----------------------------- Captured stdout call -----------------------------
+2026-10-03T13:10:04+00:00 build edge_donch-GC-tf15: 64 cells, 2865 trades, 4.29 s (wall 4 s, 2 workers)
+_ test_time_fired_unit_runs_its_time_shuffle_null_in_the_same_pass_and_c1_pool _
+
+reg = <module 'families' from '/Users/ramoscapital/ramos-quant-homebase/research/edge-library/engine/families/__init__.py'>
+tmp_path = PosixPath('/private/var/folders/s9/_m6jy4zj3y3b2wjw0_8091700000gn/T/pytest-of-ramoscapital/pytest-0/test_time_fired_unit_runs_its_0')
+
+    def test_time_fired_unit_runs_its_time_shuffle_null_in_the_same_pass_and_c1_pool(reg, tmp_path):
+        led, runs, log = tmp_path / "ledger.csv", tmp_path / "runs", tmp_path / "log.txt"
+        out = RM.run_unit("edge_straddle_t", "NQ", "30", workers=2, runs_dir=runs, ledger=led, log=log, days=DAYS)
+        assert out == [{"key": "edge_straddle_t-NQ-tf30", "ok": True, "cells": 32}, {"key": "edge_straddle_t-NQ-tf30-shift", "ok": True, "cells": 64}]
+        real, null = LB.load_unit("edge_straddle_t-NQ-tf30", runs), LB.load_unit("edge_straddle_t-NQ-tf30-shift", runs)
+        assert null["meta"]["control"] == "shift" and null["meta"]["stage"] == "null" and len(null["meta"]["cells"]) == 64
+        assert {c["variant"]["shift_seed"] for c in null["meta"]["cells"]} == {1, 2} and null["meta"]["cells"][0]["id"].startswith("s1_")
+        assert all(c["trades"] <= len(DAYS) for c in real["meta"]["cells"] + null["meta"]["cells"])       # one trade per time per day
+        reps = LB.unit_null_replicates(null)
+        assert len(reps) >= 2 and all(len(r) == 32 for r in reps) and LB.best_of_nulls(reps)["nulls"] == len(reps)
+        c1 = RM.run_c1("NQ", "30", workers=2, runs_dir=runs, ledger=led, log=log, days=DAYS)
+        assert c1 == {"key": "c1-NQ-tf30", "ok": True, "cells": 64}
+        pool = LB.load_unit("c1-NQ-tf30", runs)
+        assert pool["meta"]["control"] == "c1" and {c["variant"]["seed"] for c in pool["meta"]["cells"]} == {1, 2}
+        assert set(np.unique(pool["sess"])) == set(range(7))             # the pool trades all seven sessions
+        assert RM.run_c1("NQ", "30", runs_dir=runs, ledger=led, log=log, days=DAYS) == {"key": "c1-NQ-tf30", "skipped": True}
+>       assert LB.ledger_used(path=led) == {"runs": 0, "cells": 160, "wfs": 0}
+E       AssertionError: assert {'cells': 32,...: 0, 'wfs': 0} == {'cells': 160...: 0, 'wfs': 0}
+E         
+E         Omitting 2 identical items, use -vv to show
+E         Differing items:
+E         {'cells': 32} != {'cells': 160}
+E         Use -v to get more diff
+
+tests/test_edge_run_menus.py:135: AssertionError
+----------------------------- Captured stdout call -----------------------------
+2026-10-03T13:10:06+00:00 build edge_straddle_t-NQ-tf30: 32 cells, 320 trades, 1.21 s (wall 1 s, 2 workers)
+2026-10-03T13:10:06+00:00 null edge_straddle_t-NQ-tf30-shift: 64 cells, 640 trades, 1.21 s (wall 1 s, 2 workers)
+2026-10-03T13:10:11+00:00 null c1-NQ-tf30: 64 cells, 5599 trades, 5.04 s (wall 5 s, 2 workers)
+________ test_a_batch_past_the_cell_cap_is_refused_before_anything_runs ________
+
+reg = <module 'families' from '/Users/ramoscapital/ramos-quant-homebase/research/edge-library/engine/families/__init__.py'>
+tmp_path = PosixPath('/private/var/folders/s9/_m6jy4zj3y3b2wjw0_8091700000gn/T/pytest-of-ramoscapital/pytest-0/test_a_batch_past_the_cell_cap0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10d637e80>
+
+    def test_a_batch_past_the_cell_cap_is_refused_before_anything_runs(reg, tmp_path, monkeypatch):
+        led, runs = tmp_path / "ledger.csv", tmp_path / "runs"
+        LB.ledger_add("build", "filler", "grid", cells=LB.CAPS["cells"] - 63, path=led)
+        ran = []
+        monkeypatch.setattr(S, "run_many", lambda *a, **k: ran.append(1))
+        with pytest.raises(LB.CapExceeded):
+            RM.run_unit("edge_donch", "NQ", "15", runs_dir=runs, ledger=led, log=tmp_path / "log", days=DAYS)
+        with pytest.raises(LB.CapExceeded):
+>           RM.run_c1("NQ", "15", runs_dir=runs, ledger=led, log=tmp_path / "log", days=DAYS)
+
+tests/test_edge_run_menus.py:152: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../run_menus.py:322: in run_c1
+    return _pass(key, grid, root, features=None, workers=auto_workers(workers), meta={"family": "random", "tf": str(tf), "control": "c1",
+../run_menus.py:248: in _pass
+    res = run_grid(grid, root, features=features, workers=workers, days=days, kw=kw)
+../run_menus.py:186: in run_grid
+    return [merge(res[a:b]) for a, b in zip(cut, cut[1:])]
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+.0 = <zip object at 0x10dbb9100>
+
+>   return [merge(res[a:b]) for a, b in zip(cut, cut[1:])]
+E   TypeError: 'NoneType' object is not subscriptable
+
+../run_menus.py:186: TypeError
+_ test_vwap_ema_x_entry_is_the_pre_registered_grid_and_carries_the_weak_prior __
+
+    def test_vwap_ema_x_entry_is_the_pre_registered_grid_and_carries_the_weak_prior():
+        cls, inputs, both, notes = families.REGISTRY["vwap_ema_x"]
+        lib = families.library("vwap_ema_x")
+        assert cls is T.VwapEmaX and inputs == {} and both is False and "WEAK PRIOR" in notes and "vwap_flip" in notes
+        assert cls.SCREEN_TFS == ("1", "5", "15") and cls.FEATURES == () and cls.session_independent is True
+        assert lib["variants"] == [{"n": n, "anchor": a} for n in (9, 21, 50) for a in ("session", "rth")]
+        assert lib["weak"] is True and lib["complexity"] == 3 and lib["roots"] == ("NQ", "ES", "GC") and lib["l2"] is False
+        assert lib["rationale"] == ("When the fast average crosses the day's fair price, control of the day has changed sides and the "
+                                    "wrong side must exit.")
+        assert cls({"tf": "5"}).p["max_tr"] == 3 and not RM.is_time_fired(cls)
+        for must in ("SAME strategy in eve / asia / london / pre / nyam", "restarted at 11:00 / 13:30", "no EMA warm-up", "thin in pre / nyam / mid"):
+            assert must in notes                                    # what any card of this family must state
+        for bad in ({"n": 20}, {"n": "9"}, {"anchor": "0930"}, {"tf": "5", "max_tr": 0}):
+            with pytest.raises(ValueError):
+                cls(bad)
+        for tf in ("1", "5", "15"):
+            g = families.unit_grid("vwap_ema_x", "GC", tf)
+            assert len(g) == 192 and len({c["id"] for c in g}) == 192 and g[0]["id"] == "anchorsession_n9_atr1p5-r0"
+>           assert [p["sess"] for _, p in RM.cell_specs(g[0])] == ["all", "pre", "eve"]                  # the tester's five + pre + eve
+E           AssertionError: assert ['asia', 'lon...d', 'pm', ...] == ['all', 'pre', 'eve']
+E             
+E             At index 0 diff: 'asia' != 'all'
+E             Left contains 4 more items, first extra item: 'nyam'
+E             Use -v to get more diff
+
+tests/test_new_time.py:146: AssertionError
+_______ test_the_eight_families_are_registered_as_edge_library_families ________
+
+    def test_the_eight_families_are_registered_as_edge_library_families():
+        assert tuple(port2.FAMILIES) == NAMES
+        assert not {k: v for k, v in families.ERRORS.items() if k == "port2" or k in NAMES or "port2.py" in v}
+        for name in NAMES:
+            entry = port2.FAMILIES[name]
+            assert families.check_entry(name, entry) == [] and families.MODULE_OF[name] == "port2"
+            cls, inputs, both, notes = families.REGISTRY[name]
+            lib = families.library(name)
+            assert inputs == {} and both is False and cls.FEATURES == () and cls.session_independent is True
+            assert lib["roots"] == ("NQ", "ES", "GC") and lib["l2"] is False and lib["ported"] == name
+            # WEAK RATIONALE: tod_drift only ("control for pure clock effects": no counterparty, no flow) -> t >= 3 on BUILD
+>           assert lib["weak"] is (name == "tod_drift"), name
+E           AssertionError: ema_ribbon
+E           assert True is ('ema_ribbon' == 'tod_drift'
+E             
+E             - tod_drift
+E             + ema_ribbon)
+
+tests/test_port2.py:89: AssertionError
+_______ test_port_gives_identical_trades_at_1_and_8_workers[ema_ribbon] ________
+
+name = 'ema_ribbon'
+
+    @pytest.mark.parametrize("name", NAMES)
+    def test_port_gives_identical_trades_at_1_and_8_workers(name):
+        guard()
+        specs = menu_specs(name)
+>       assert len(specs) == 4 * len(families.library(name)["variants"]) * len(EXITS) * 3
+E       AssertionError: assert 84 == (((4 * 1) * 3) * 3)
+E        +  where 84 = len([(<class 'families.port2.EmaRibbon'>, {'hold_to': 'day', 'sess': 'asia', 'stop_mode': 'atr', 'stop_val': 1.5, ...}), (... (<class 'families.port2.EmaRibbon'>, {'hold_to': 'day', 'sess': 'pm', 'stop_mode': 'atr', 'stop_val': 1.5, ...}), ...])
+E        +  and   1 = len([{}])
+E        +  and   3 = len([{'stop_mode': 'atr', 'stop_val': 1.5, 'tgt_r': 2.0}, {'stop_mode': 'pts', 'stop_val': 20.0, 'tgt_r': 0.0}, {'stop_mode': 'pct', 'stop_val': 0.1, 'tgt_r': 1.0}])
+
+tests/test_port2.py:290: AssertionError
+_______ test_port_gives_identical_trades_at_1_and_8_workers[tema_slope] ________
+
+name = 'tema_slope'
+
+    @pytest.mark.parametrize("name", NAMES)
+    def test_port_gives_identical_trades_at_1_and_8_workers(name):
+        guard()
+        specs = menu_specs(name)
+>       assert len(specs) == 4 * len(families.library(name)["variants"]) * len(EXITS) * 3
+E       AssertionError: assert 252 == (((4 * 3) * 3) * 3)
+E        +  where 252 = len([(<class 'families.port2.TemaSlope'>, {'hold_to': 'day', 'n': 10, 'sess': 'asia', 'stop_mode': 'atr', ...}), (<class '..., ...}), (<class 'families.port2.TemaSlope'>, {'hold_to': 'day', 'n': 10, 'sess': 'pm', 'stop_mode': 'atr', ...}), ...])
+E        +  and   3 = len([{'n': 10}, {'n': 20}, {'n': 40}])
+E        +  and   3 = len([{'stop_mode': 'atr', 'stop_val': 1.5, 'tgt_r': 2.0}, {'stop_mode': 'pts', 'stop_val': 20.0, 'tgt_r': 0.0}, {'stop_mode': 'pct', 'stop_val': 0.1, 'tgt_r': 1.0}])
+
+tests/test_port2.py:290: AssertionError
+______ test_port_gives_identical_trades_at_1_and_8_workers[ema_pullback] _______
+
+name = 'ema_pullback'
+
+    @pytest.mark.parametrize("name", NAMES)
+    def test_port_gives_identical_trades_at_1_and_8_workers(name):
+        guard()
+        specs = menu_specs(name)
+>       assert len(specs) == 4 * len(families.library(name)["variants"]) * len(EXITS) * 3
+E       AssertionError: assert 84 == (((4 * 1) * 3) * 3)
+E        +  where 84 = len([(<class 'families.port2.EmaPullback'>, {'hold_to': 'day', 'sess': 'asia', 'stop_mode': 'atr', 'stop_val': 1.5, ...}),...<class 'families.port2.EmaPullback'>, {'hold_to': 'day', 'sess': 'pm', 'stop_mode': 'atr', 'stop_val': 1.5, ...}), ...])
+E        +  and   1 = len([{}])
+E        +  and   3 = len([{'stop_mode': 'atr', 'stop_val': 1.5, 'tgt_r': 2.0}, {'stop_mode': 'pts', 'stop_val': 20.0, 'tgt_r': 0.0}, {'stop_mode': 'pct', 'stop_val': 0.1, 'tgt_r': 1.0}])
+
+tests/test_port2.py:290: AssertionError
+_______ test_port_gives_identical_trades_at_1_and_8_workers[supertrend] ________
+
+name = 'supertrend'
+
+    @pytest.mark.parametrize("name", NAMES)
+    def test_port_gives_identical_trades_at_1_and_8_workers(name):
+        guard()
+        specs = menu_specs(name)
+>       assert len(specs) == 4 * len(families.library(name)["variants"]) * len(EXITS) * 3
+E       AssertionError: assert 84 == (((4 * 1) * 3) * 3)
+E        +  where 84 = len([(<class 'families.port2.Supertrend'>, {'hold_to': 'day', 'sess': 'asia', 'stop_mode': 'atr', 'stop_val': 1.5, ...}), ...(<class 'families.port2.Supertrend'>, {'hold_to': 'day', 'sess': 'pm', 'stop_mode': 'atr', 'stop_val': 1.5, ...}), ...])
+E        +  and   1 = len([{}])
+E        +  and   3 = len([{'stop_mode': 'atr', 'stop_val': 1.5, 'tgt_r': 2.0}, {'stop_mode': 'pts', 'stop_val': 20.0, 'tgt_r': 0.0}, {'stop_mode': 'pct', 'stop_val': 0.1, 'tgt_r': 1.0}])
+
+tests/test_port2.py:290: AssertionError
+__________ test_port_gives_identical_trades_at_1_and_8_workers[rsi2] ___________
+
+name = 'rsi2'
+
+    @pytest.mark.parametrize("name", NAMES)
+    def test_port_gives_identical_trades_at_1_and_8_workers(name):
+        guard()
+        specs = menu_specs(name)
+>       assert len(specs) == 4 * len(families.library(name)["variants"]) * len(EXITS) * 3
+E       AssertionError: assert 252 == (((4 * 3) * 3) * 3)
+E        +  where 252 = len([(<class 'families.port2.Rsi2'>, {'hold_to': 'day', 'sess': 'asia', 'stop_mode': 'atr', 'stop_val': 1.5, ...}), (<clas.....}), (<class 'families.port2.Rsi2'>, {'hold_to': 'day', 'sess': 'pm', 'stop_mode': 'atr', 'stop_val': 1.5, ...}), ...])
+E        +  and   3 = len([{'th': 5.0}, {'th': 10.0}, {'th': 15.0}])
+E        +  and   3 = len([{'stop_mode': 'atr', 'stop_val': 1.5, 'tgt_r': 2.0}, {'stop_mode': 'pts', 'stop_val': 20.0, 'tgt_r': 0.0}, {'stop_mode': 'pct', 'stop_val': 0.1, 'tgt_r': 1.0}])
+
+tests/test_port2.py:290: AssertionError
+______ test_port_gives_identical_trades_at_1_and_8_workers[first_bar_mom] ______
+
+name = 'first_bar_mom'
+
+    @pytest.mark.parametrize("name", NAMES)
+    def test_port_gives_identical_trades_at_1_and_8_workers(name):
+        guard()
+        specs = menu_specs(name)
+>       assert len(specs) == 4 * len(families.library(name)["variants"]) * len(EXITS) * 3
+E       AssertionError: assert 252 == (((4 * 3) * 3) * 3)
+E        +  where 252 = len([(<class 'families.port2.FirstBarMom'>, {'hold_to': 'day', 'k': 1.0, 'sess': 'asia', 'stop_mode': 'atr', ...}), (<clas.....}), (<class 'families.port2.FirstBarMom'>, {'hold_to': 'day', 'k': 1.0, 'sess': 'pm', 'stop_mode': 'atr', ...}), ...])
+E        +  and   3 = len([{'k': 1.0}, {'k': 1.5}, {'k': 2.0}])
+E        +  and   3 = len([{'stop_mode': 'atr', 'stop_val': 1.5, 'tgt_r': 2.0}, {'stop_mode': 'pts', 'stop_val': 20.0, 'tgt_r': 0.0}, {'stop_mode': 'pct', 'stop_val': 0.1, 'tgt_r': 1.0}])
+
+tests/test_port2.py:290: AssertionError
+________ test_port_gives_identical_trades_at_1_and_8_workers[tod_drift] ________
+
+name = 'tod_drift'
+
+    @pytest.mark.parametrize("name", NAMES)
+    def test_port_gives_identical_trades_at_1_and_8_workers(name):
+        guard()
+        specs = menu_specs(name)
+>       assert len(specs) == 4 * len(families.library(name)["variants"]) * len(EXITS) * 3
+E       AssertionError: assert 672 == (((4 * 8) * 3) * 3)
+E        +  where 672 = len([(<class 'families.port2.TodDrift'>, {'dir': 'long', 'hold_to': 'day', 'off_min': 0, 'sess': 'asia', ...}), (<class 'f...', ...}), (<class 'families.port2.TodDrift'>, {'dir': 'long', 'hold_to': 'day', 'off_min': 0, 'sess': 'pm', ...}), ...])
+E        +  and   8 = len([{'dir': 'long', 'off_min': 0}, {'dir': 'short', 'off_min': 0}, {'dir': 'long', 'off_min': 15}, {'dir': 'short', 'off_min': 15}, {'dir': 'long', 'off_min': 30}, {'dir': 'short', 'off_min': 30}, ...])
+E        +  and   3 = len([{'stop_mode': 'atr', 'stop_val': 1.5, 'tgt_r': 2.0}, {'stop_mode': 'pts', 'stop_val': 20.0, 'tgt_r': 0.0}, {'stop_mode': 'pct', 'stop_val': 0.1, 'tgt_r': 1.0}])
+
+tests/test_port2.py:290: AssertionError
+________ test_port_gives_identical_trades_at_1_and_8_workers[mid_fade] _________
+
+name = 'mid_fade'
+
+    @pytest.mark.parametrize("name", NAMES)
+    def test_port_gives_identical_trades_at_1_and_8_workers(name):
+        guard()
+        specs = menu_specs(name)
+>       assert len(specs) == 4 * len(families.library(name)["variants"]) * len(EXITS) * 3
+E       AssertionError: assert 12 == (((4 * 1) * 3) * 3)
+E        +  where 12 = len([(<class 'families.port2.MidFade'>, {'hold_to': 'day', 'sess': 'mid', 'stop_mode': 'atr', 'stop_val': 1.5, ...}), (<cl..., (<class 'families.port2.MidFade'>, {'hold_to': 'day', 'sess': 'mid', 'stop_mode': 'pct', 'stop_val': 0.1, ...}), ...])
+E        +  and   1 = len([{}])
+E        +  and   3 = len([{'stop_mode': 'atr', 'stop_val': 1.5, 'tgt_r': 2.0}, {'stop_mode': 'pts', 'stop_val': 20.0, 'tgt_r': 0.0}, {'stop_mode': 'pct', 'stop_val': 0.1, 'tgt_r': 1.0}])
+
+tests/test_port2.py:290: AssertionError
+_ test_run_variant_is_sealed_until_the_base_passed_the_build_plateau_and_writes_the_base_grid_with_the_option _
+
+tmp_path = PosixPath('/private/var/folders/s9/_m6jy4zj3y3b2wjw0_8091700000gn/T/pytest-of-ramoscapital/pytest-0/test_run_variant_is_sealed_unt0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10d8913d0>
+
+    def test_run_variant_is_sealed_until_the_base_passed_the_build_plateau_and_writes_the_base_grid_with_the_option(tmp_path, monkeypatch):
+        """3 BUILD days, tmp_path stores and ledger. The base store is INVENTED (fake_store); the variant runs for real: counts
+        and identity only."""
+        if S.compute_window_end() is not None:
+            pytest.skip("inside an offline compute window")
+        runs, led = tmp_path / "runs", tmp_path / "ledger.csv"
+        kw = dict(root="NQ", workers=1, runs_dir=runs, ledger=led, log=tmp_path / "log.txt", days=DAYS[5:8])
+        with pytest.raises(L2.StageDSealed, match="no BUILD store"):
+            L2.run_variant("orb_fbook", "5", **kw)
+        base_store(runs, "orb", "5", {"nyam": -5.0, "pm": -5.0})
+        with pytest.raises(L2.StageDSealed, match="in no session"):
+            L2.run_variant("orb_fbook", "5", **kw)
+        assert sorted(p.name for p in runs.iterdir()) == ["orb-NQ-tf5"] and LB.read_ledger(led) == []      # nothing ran, nothing counted
+        base_store(runs, "orb", "5", {"nyam": 5.0, "pm": -5.0})
+        try:
+            out = L2.run_variant("orb_fbook", "5", **kw)
+        except FileNotFoundError as e:
+            pytest.skip(f"tape / feature cache not available: {e}")
+        keys = ["orb_fbook-NQ-tf5", "orb_fbook-NQ-tf5-c2s1", "orb_fbook-NQ-tf5-c2s2"]
+        assert out == [{"key": k, "ok": True, "cells": 96} for k in keys]             # the base's WHOLE grid: 3 variants x 32
+        rows = LB.read_ledger(led)
+>       assert [(r["stage"], r["key"], r["kind"], r["cells"], r["family"], r["control"], r["seed"]) for r in rows] == [
+            ("build", keys[0], "grid", "96", "orb_fbook", "", ""), ("null", keys[1], "grid", "96", "orb_fbook", "c2", "1"),
+            ("null", keys[2], "grid", "96", "orb_fbook", "c2", "2")]
+E       AssertionError: assert [('build', 'o...', 'c2', ...)] == [('build', 'o...', 'c2', ...)]
+E         
+E         At index 1 diff: ('null', 'orb_fbook-NQ-tf5-c2s1', 'null', '0', 'orb_fbook', 'c2', '1') != ('null', 'orb_fbook-NQ-tf5-c2s1', 'grid', '96', 'orb_fbook', 'c2', '1')
+E         Use -v to get more diff
+
+tests/test_new_l2.py:671: AssertionError
+----------------------------- Captured stdout call -----------------------------
+2026-10-03T13:14:07+00:00 build orb_fbook-NQ-tf5: 96 cells, 352 trades, 5.51 s (wall 6 s, 1 workers)
+2026-10-03T13:14:13+00:00 null orb_fbook-NQ-tf5-c2s1: 96 cells, 928 trades, 6.28 s (wall 6 s, 1 workers)
+2026-10-03T13:14:20+00:00 null orb_fbook-NQ-tf5-c2s2: 96 cells, 704 trades, 6.39 s (wall 6 s, 1 workers)
+_ test_real_days_d5_and_d1_trade_the_evening_and_the_pre_open_session_and_respect_the_half_day _
+
+real = {'loader': <l2sim.L2Features object at 0x10db9e580>, 'log': [('signal', 'bimb_follow_d1|tf5|k1p5_atr3-r0|asia', '2021-...pass': 370, 'commission': 4.0, 'days_subset': True, 'engine': 'l2sim-1 (port of tester tick-2)', ...}, ...}, ...}, ...}
+
+    def test_real_days_d5_and_d1_trade_the_evening_and_the_pre_open_session_and_respect_the_half_day(real):
+        for name in ("bimb_follow_d1", "flow_exhaust"):
+            by = {}
+            for label, n, _, _ in real["plan"]:
+                if n != name:
+                    continue
+                r = real["res"][label]
+                sess = label.rsplit("|", 1)[1]
+                assert not [x for x in r["no_trade"] if x["reason"].startswith(S.ERROR_PREFIX)], label
+                got = {S.session_of(t["entry_ms"]) for t in r["trades"]}
+                assert got <= ({"eve"} if sess == "eve" else {"pre"} if sess == "pre" else set(S.ORDER)), (label, got)
+                by[sess] = by.get(sess, 0) + len(r["trades"])
+                for t in r["trades"]:
+                    assert t["order_price"] is None and t["oco"] is False and t["both_sides"] is False
+                    e = dt.datetime.fromtimestamp(t["entry_ns"] / 1e9, S.ET)
+                    if sess == "eve":                                                 # the evening BEFORE the trade date
+                        assert e.date() < dt.date.fromisoformat(t["date"]) and e.hour >= 18
+>                       assert dt.datetime.fromtimestamp(t["exit_ns"] / 1e9, S.ET).date() == e.date()      # never across midnight
+E                       AssertionError: assert datetime.date(2021, 10, 5) == datetime.date(2021, 10, 4)
+E                        +  where datetime.date(2021, 10, 5) = <built-in method date of datetime.datetime object at 0x119bf7c90>()
+E                        +    where <built-in method date of datetime.datetime object at 0x119bf7c90> = datetime.datetime(2021, 10, 5, 2, 16, 13, 635969, tzinfo=zoneinfo.ZoneInfo(key='America/New_York')).date
+E                        +      where datetime.datetime(2021, 10, 5, 2, 16, 13, 635969, tzinfo=zoneinfo.ZoneInfo(key='America/New_York')) = <built-in method fromtimestamp of type object at 0x107755d30>((1633414573635969073 / 1000000000.0), zoneinfo.ZoneInfo(key='America/New_York'))
+E                        +        where <built-in method fromtimestamp of type object at 0x107755d30> = <class 'datetime.datetime'>.fromtimestamp
+E                        +          where <class 'datetime.datetime'> = dt.datetime
+E                        +        and   zoneinfo.ZoneInfo(key='America/New_York') = S.ET
+E                        +  and   datetime.date(2021, 10, 4) = <built-in method date of datetime.datetime object at 0x119bf7c60>()
+E                        +    where <built-in method date of datetime.datetime object at 0x119bf7c60> = datetime.datetime(2021, 10, 4, 23, 0, 0, 347324, tzinfo=zoneinfo.ZoneInfo(key='America/New_York')).date
+
+tests/test_new_l2.py:1442: AssertionError
+_ test_real_days_d5_signals_at_every_decision_equal_the_definition_recomputed_from_the_raw_tape_and_table _
+
+real = {'loader': <l2sim.L2Features object at 0x10db9e580>, 'log': [('signal', 'bimb_follow_d1|tf5|k1p5_atr3-r0|asia', '2021-...pass': 370, 'commission': 4.0, 'days_subset': True, 'engine': 'l2sim-1 (port of tester tick-2)', ...}, ...}, ...}, ...}
+
+    def test_real_days_d5_signals_at_every_decision_equal_the_definition_recomputed_from_the_raw_tape_and_table(real):
+        """Every instant the Template let flow_exhaust decide on the 10 BUILD days (sessions all / pre / eve, tf 1 and 5): it
+        asked for an entry exactly when, and on the side that, the oracle derives from the raw prints and the raw rows."""
+        n_dec = n_sig = 0
+        sides = set()
+        for label, name, _, (cls, params) in real["plan"]:
+            if name != "flow_exhaust" or not label.split("|")[2].endswith("pts20-r1"):
+                continue
+            tf, q, inst = int(params["tf"]), float(params["q"]), params["sess"]
+            memo = {iso: {} for iso in DAYS}
+            calls = [(e[2], e[3]) for e in real["log"] if e[0] == "signal" and e[1] == label]
+            asked = [(e[2], e[3], e[4]) for e in real["log"] if e[0] == "allowed" and e[1] == label]
+            want = []
+            for iso, T in calls:
+>               side = d5_real(real["tabs"][iso], real["tapes"][iso], iso, T, tf, q, INSTANCE[inst], memo[iso])
+E               KeyError: 'asia'
+
+tests/test_new_l2.py:1520: KeyError
+=============================== warnings summary ===============================
+tests/test_port3.py::test_the_full_window_gate_report_is_a_pass_for_the_module_on_disk
+  /Users/ramoscapital/ramos-quant-homebase/research/edge-library/engine/tests/test_port3.py:332: UserWarning: l2sim.py changed since the port3 gate ran: re-run port3_validate.py (and edge_validate.py)
+    warnings.warn(f"{f} changed since the port3 gate ran: re-run port3_validate.py (and edge_validate.py)")
+
+tests/test_port2.py::test_the_full_window_gate_report_is_a_pass_for_the_trading_code_on_disk
+  /Users/ramoscapital/ramos-quant-homebase/research/edge-library/engine/tests/test_port2.py:481: UserWarning: l2sim.py changed since the port2 gate ran (the trading code of port2.py did not): re-run port2_validate.py and edge_validate.py
+    warnings.warn(f"{f} changed since the port2 gate ran (the trading code of port2.py did not): re-run port2_validate.py"
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_edge_library.py::test_caps_are_the_spec_and_a_menu_grid_of_n_cells_counts_n_cells
+FAILED tests/test_edge_library.py::test_plateau_needs_a_positive_median_and_sixty_percent_of_the_cells_positive
+FAILED tests/test_edge_library.py::test_pick_is_sealed_for_a_candidate_that_did_not_survive_build
+FAILED tests/test_edge_run_menus.py::test_unit_grid_is_variants_times_the_32_exit_cells
+FAILED tests/test_edge_run_menus.py::test_run_unit_writes_the_store_and_the_ledger_and_is_idempotent[NQ]
+FAILED tests/test_edge_run_menus.py::test_run_unit_writes_the_store_and_the_ledger_and_is_idempotent[ES]
+FAILED tests/test_edge_run_menus.py::test_run_unit_writes_the_store_and_the_ledger_and_is_idempotent[GC]
+FAILED tests/test_edge_run_menus.py::test_time_fired_unit_runs_its_time_shuffle_null_in_the_same_pass_and_c1_pool
+FAILED tests/test_edge_run_menus.py::test_a_batch_past_the_cell_cap_is_refused_before_anything_runs
+FAILED tests/test_new_time.py::test_vwap_ema_x_entry_is_the_pre_registered_grid_and_carries_the_weak_prior
+FAILED tests/test_port2.py::test_the_eight_families_are_registered_as_edge_library_families
+FAILED tests/test_port2.py::test_port_gives_identical_trades_at_1_and_8_workers[ema_ribbon]
+FAILED tests/test_port2.py::test_port_gives_identical_trades_at_1_and_8_workers[tema_slope]
+FAILED tests/test_port2.py::test_port_gives_identical_trades_at_1_and_8_workers[ema_pullback]
+FAILED tests/test_port2.py::test_port_gives_identical_trades_at_1_and_8_workers[supertrend]
+FAILED tests/test_port2.py::test_port_gives_identical_trades_at_1_and_8_workers[rsi2]
+FAILED tests/test_port2.py::test_port_gives_identical_trades_at_1_and_8_workers[first_bar_mom]
+FAILED tests/test_port2.py::test_port_gives_identical_trades_at_1_and_8_workers[tod_drift]
+FAILED tests/test_port2.py::test_port_gives_identical_trades_at_1_and_8_workers[mid_fade]
+FAILED tests/test_new_l2.py::test_run_variant_is_sealed_until_the_base_passed_the_build_plateau_and_writes_the_base_grid_with_the_option
+FAILED tests/test_new_l2.py::test_real_days_d5_and_d1_trade_the_evening_and_the_pre_open_session_and_respect_the_half_day
+FAILED tests/test_new_l2.py::test_real_days_d5_signals_at_every_decision_equal_the_definition_recomputed_from_the_raw_tape_and_table

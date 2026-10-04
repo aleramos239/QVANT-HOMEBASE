@@ -1,0 +1,223 @@
+{
+ "orb_NQ_tf1_pre": {
+  "tag": "clean member",
+  "trades": 819,
+  "median_stop_pts": 8.0,
+  "micros_1000": 62,
+  "worst_open_loss_per_micro": 112.0,
+  "rows": [
+   {
+    "account": "Lucid Flex 50K",
+    "micros": 40,
+    "capped": true,
+    "risk_usd": 640,
+    "worst_open_loss": 4480,
+    "eval_p10": 0.25612745098039214,
+    "eval_bust10": 0.5894607843137255,
+    "eval_p5": 0.13112745098039216,
+    "eval_med_days": 5.0,
+    "eval_p10_eod": 0.2659313725490196,
+    "funded_p20": 0.2297650130548303,
+    "funded_p40": 0.32114882506527415,
+    "funded_bust_pre_first": 0.6736292428198434,
+    "funded_model": "intraday",
+    "apex_flags": null,
+    "noncompliant": null
+   },
+   {
+    "account": "Lucid Pro 50K (daily loss limit)",
+    "micros": 40,
+    "capped": true,
+    "risk_usd": 640,
+    "worst_open_loss": 4480,
+    "eval_p10": 0.3247549019607843,
+    "eval_bust10": 0.5588235294117647,
+    "eval_p5": 0.2107843137254902,
+    "eval_med_days": 4.0,
+    "eval_p10_eod": 0.3431372549019608,
+    "funded_p20": 0.24804177545691905,
+    "funded_p40": 0.27023498694516973,
+    "funded_bust_pre_first": 0.7284595300261096,
+    "funded_model": "intraday",
+    "apex_flags": null,
+    "noncompliant": null
+   },
+   {
+    "account": "Lucid Pro 50K, no daily loss limit",
+    "micros": 40,
+    "capped": true,
+    "risk_usd": 640,
+    "worst_open_loss": 4480,
+    "eval_p10": 0.31004901960784315,
+    "eval_bust10": 0.5747549019607843,
+    "eval_p5": 0.19975490196078433,
+    "eval_med_days": 4.0,
+    "eval_p10_eod": 0.3284313725490196,
+    "funded_p20": 0.24281984334203655,
+    "funded_p40": 0.26370757180156656,
+    "funded_bust_pre_first": 0.7362924281984334,
+    "funded_model": "intraday",
+    "apex_flags": null,
+    "noncompliant": null
+   },
+   {
+    "account": "Apex 50K",
+    "micros": 62,
+    "capped": false,
+    "risk_usd": 992,
+    "worst_open_loss": 6944,
+    "eval_p10": 0.3431372549019608,
+    "eval_bust10": 0.6409313725490197,
+    "eval_p5": 0.3161764705882353,
+    "eval_med_days": 2.0,
+    "eval_p10_eod": 0.3946078431372549,
+    "funded_p20": 0.10966057441253264,
+    "funded_p40": 0.1227154046997389,
+    "funded_bust_pre_first": 0.8668407310704961,
+    "funded_model": "pess",
+    "apex_flags": [
+     "OCO_both_side_orders",
+     "mae30_cuts_0.156_NONCOMPLIANT"
+    ],
+    "noncompliant": true
+   },
+   {
+    "account": "Apex 300K PA",
+    "micros": 62,
+    "capped": false,
+    "risk_usd": 992,
+    "worst_open_loss": 6944,
+    "eval_p10": 0.0024813895781637717,
+    "eval_bust10": 0.19851116625310175,
+    "eval_p5": null,
+    "eval_med_days": 17.0,
+    "eval_p10_eod": null,
+    "funded_p20": 0.17362924281984335,
+    "funded_p40": 0.3433420365535248,
+    "funded_bust_pre_first": 0.566579634464752,
+    "funded_model": "pess",
+    "apex_flags": [
+     "OCO_both_side_orders",
+     "mae30_cuts_0.010",
+     "stop_ge_80pct_threshold_0.001"
+    ],
+    "noncompliant": true,
+    "compliance": {
+     "one_direction": "FAIL",
+     "stop_5x_target": "FAIL",
+     "mae_rule": "ok"
+    }
+   }
+  ]
+ },
+ "straddle_tight_0830_NQ_tf30_pre": {
+  "tag": "FLAGGED member (stage 2b; thin random bar; same idea as orb_NQ_tf1_pre)",
+  "trades": 793,
+  "median_stop_pts": 5.0,
+  "micros_1000": 100,
+  "worst_open_loss_per_micro": 51.0,
+  "rows": [
+   {
+    "account": "Lucid Flex 50K",
+    "micros": 40,
+    "capped": true,
+    "risk_usd": 400,
+    "worst_open_loss": 2040,
+    "eval_p10": 0.2107843137254902,
+    "eval_bust10": 0.39950980392156865,
+    "eval_p5": 0.08946078431372549,
+    "eval_med_days": 6.0,
+    "eval_p10_eod": 0.21446078431372548,
+    "funded_p20": 0.08485639686684072,
+    "funded_p40": 0.24673629242819844,
+    "funded_bust_pre_first": 0.5992167101827677,
+    "funded_model": "intraday",
+    "apex_flags": null,
+    "noncompliant": null
+   },
+   {
+    "account": "Lucid Pro 50K (daily loss limit)",
+    "micros": 40,
+    "capped": true,
+    "risk_usd": 400,
+    "worst_open_loss": 2040,
+    "eval_p10": 0.2107843137254902,
+    "eval_bust10": 0.39828431372549017,
+    "eval_p5": 0.08946078431372549,
+    "eval_med_days": 6.0,
+    "eval_p10_eod": 0.21446078431372548,
+    "funded_p20": 0.23759791122715404,
+    "funded_p40": 0.31462140992167104,
+    "funded_bust_pre_first": 0.6840731070496083,
+    "funded_model": "intraday",
+    "apex_flags": null,
+    "noncompliant": null
+   },
+   {
+    "account": "Lucid Pro 50K, no daily loss limit",
+    "micros": 40,
+    "capped": true,
+    "risk_usd": 400,
+    "worst_open_loss": 2040,
+    "eval_p10": 0.2107843137254902,
+    "eval_bust10": 0.39950980392156865,
+    "eval_p5": 0.08946078431372549,
+    "eval_med_days": 6.0,
+    "eval_p10_eod": 0.21446078431372548,
+    "funded_p20": 0.2349869451697128,
+    "funded_p40": 0.31201044386422977,
+    "funded_bust_pre_first": 0.6866840731070496,
+    "funded_model": "intraday",
+    "apex_flags": null,
+    "noncompliant": null
+   },
+   {
+    "account": "Apex 50K",
+    "micros": 100,
+    "capped": false,
+    "risk_usd": 1000,
+    "worst_open_loss": 5100,
+    "eval_p10": 0.31985294117647056,
+    "eval_bust10": 0.6801470588235294,
+    "eval_p5": 0.3161764705882353,
+    "eval_med_days": 3.0,
+    "eval_p10_eod": 0.3333333333333333,
+    "funded_p20": 0.11357702349869452,
+    "funded_p40": 0.19451697127937337,
+    "funded_bust_pre_first": 0.804177545691906,
+    "funded_model": "pess",
+    "apex_flags": [
+     "OCO_both_side_orders",
+     "mae30_cuts_0.102_NONCOMPLIANT"
+    ],
+    "noncompliant": true
+   },
+   {
+    "account": "Apex 300K PA",
+    "micros": 100,
+    "capped": false,
+    "risk_usd": 1000,
+    "worst_open_loss": 5100,
+    "eval_p10": 0.0,
+    "eval_bust10": 0.24317617866004962,
+    "eval_p5": null,
+    "eval_med_days": 16.0,
+    "eval_p10_eod": null,
+    "funded_p20": 0.24281984334203655,
+    "funded_p40": 0.39425587467362927,
+    "funded_bust_pre_first": 0.5783289817232375,
+    "funded_model": "pess",
+    "apex_flags": [
+     "OCO_both_side_orders",
+     "mae30_cuts_0.004"
+    ],
+    "noncompliant": true,
+    "compliance": {
+     "one_direction": "FAIL",
+     "stop_5x_target": "ok",
+     "mae_rule": "ok"
+    }
+   }
+  ]
+ }
+}

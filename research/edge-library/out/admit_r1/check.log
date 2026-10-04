@@ -1,0 +1,10 @@
+check vwap_trend_pull-NQ-tf5 pm: 10 days, 96 cells, 1386 stored trades, cells that differ: 0
+check c1-NQ-tf5 pm: 10 days, 64 cells, 1350 stored trades, cells that differ: 0
+check vol_spike_break-NQ-tf30 pm: 10 days, 96 cells, 512 stored trades, cells that differ: 0
+check c1-NQ-tf30 pm: 10 days, 64 cells, 842 stored trades, cells that differ: 0
+check straddle_tight_0830-NQ-tf30 pre: 10 days, 27 cells, 252 stored trades, cells that differ: 0
+check straddle_tight_0830-NQ-tf30-shift pre: 10 days, 54 cells, 153 stored trades, cells that differ: 54
+check straddle_tight_0830-GC-tf30 pre: 10 days, 27 cells, 225 stored trades, cells that differ: 0
+check straddle_tight_0830-GC-tf30-shift pre: 10 days, 54 cells, 117 stored trades, cells that differ: 54
+check straddle_tight_0830-NQ-tf30-shift pre: 10 days, 54 cells, 459 stored trades, cells that differ: 0
+check straddle_tight_0830-GC-tf30-shift pre: 10 days, 54 cells, 333 stored trades, cells that differ: 0

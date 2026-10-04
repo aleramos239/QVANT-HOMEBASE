@@ -1,0 +1,3 @@
+unit,central,t,bar_best_of_random,control,lift_vs_control,beats_share_of_200_draws,control_nets,bar_with_stage1_random_minutes,failed
+orb_confirm-GC-tf15|mid|dir=short,dirshort_or_min15_pct0p2-r3,0.47203477767257146,1.2407,c1,1030.55,0.565,,,bar
+orb_confirm-GC-tf5|mid|dir=short,dirshort_or_min15_atr1p5-r3,0.3291908552931784,1.2407,c1,1720.75,0.605,,,bar

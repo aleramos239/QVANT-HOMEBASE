@@ -1,0 +1,335 @@
+{
+ "donchian-NQ-tf30|nyam|": {
+  "name": "donchian_NQ_tf30_nyam",
+  "admit": true,
+  "failed": [],
+  "tests": {
+   "net_build": {
+    "pass": true,
+    "net": 28988.0
+   },
+   "net_pick": {
+    "pass": true,
+    "net": 16974.0
+   },
+   "plateau_build": {
+    "pass": true,
+    "cells": 64,
+    "median_net": 28874.5,
+    "share_pos": 0.9531,
+    "member": "n10_pts20-r2"
+   },
+   "beats_c1_build": {
+    "pass": true,
+    "lift": 8784.28,
+    "mean": 20203.72,
+    "p95": 33146.0,
+    "p_beat": 0.855,
+    "fallback_share": 0.12684989429175475,
+    "short": 0,
+    "pool_trades": 10791
+   },
+   "stress_build": {
+    "pass": true,
+    "base": 28988.0,
+    "stressed": 15855.0,
+    "stress": "2 ticks + 250 ms"
+   },
+   "beats_c1_pick": {
+    "pass": true,
+    "lift": 5975.55,
+    "mean": 10998.45,
+    "p95": 25355.0,
+    "p_beat": 0.755,
+    "fallback_share": 0.08045977011494253,
+    "short": 0,
+    "pool_trades": 475
+   },
+   "stress_pick": {
+    "pass": true,
+    "base": 16974.0,
+    "stressed": 9364.0,
+    "stress": "2 ticks + 250 ms"
+   },
+   "above_best_of_nulls_build": {
+    "pass": false,
+    "t_build": 1.6512256970896937,
+    "bar": 2.01546588148303,
+    "nulls": 56,
+    "thin": false
+   },
+   "min_trades": {
+    "pass": true,
+    "build": 473,
+    "pick": 174,
+    "need": 100
+   },
+   "open_loss_fits": {
+    "pass": true,
+    "worst_open_loss_per_micro": 90.0,
+    "micros_fit_worst": 22,
+    "micros_fit_p99": 23,
+    "limit": 2000.0
+   },
+   "rationale": {
+    "pass": true,
+    "complexity": 3
+   },
+   "bar_on_build_central_cell": {
+    "pass": true,
+    "cell": "n10_pts20-r2",
+    "t_build": 2.1863203117833447,
+    "bar": 2.0155
+   }
+  },
+  "summary": {
+   "build": {
+    "trades": 473,
+    "net": 28988.0,
+    "t": 1.6512256970896937,
+    "pf": 1.1753713058471218,
+    "win": 0.3763213530655391
+   },
+   "pick": {
+    "trades": 174,
+    "net": 16974.0,
+    "t": 1.134470695236909,
+    "pf": 1.201049427315906,
+    "win": 0.3793103448275862
+   },
+   "cell": "n10_pct0p2-r2",
+   "root": "NQ",
+   "tf": "30",
+   "sess": "nyam",
+   "family": "donchian"
+  },
+  "dir": "/Users/ramoscapital/ramos-quant-homebase/research/edge-library/members/donchian_NQ_tf30_nyam",
+  "default": "n10_pct0p2-r2",
+  "default_moved": true,
+  "surviving": 43,
+  "judged": 64,
+  "trades_per_day": 0.784,
+  "flag": "FLAGGED ADMISSION: the unit passed BUILD on its central cell `n10_pts20-r2` (t 2.19 > bar 2.02), but that cell's 2024 net under 2 ticks + 250 ms is negative, so the default moved to `n10_pct0p2-r2`, whose own BUILD t (1.65) is BELOW the best-of-nulls bar. Admitted by the Admit stage's pre-registered rule (progress.md 2026-10-04 04:33 ET, D / E); library.admission run on the moved default alone says REJECT. Checker / orchestrator: confirm or demote to near-miss."
+ },
+ "first_bar_mom-GC-tf5|pm|": {
+  "name": "first_bar_mom_GC_tf5_pm",
+  "admit": false,
+  "failed": [
+   "min_trades"
+  ],
+  "tests": {
+   "net_build": {
+    "pass": true,
+    "net": 1412.0
+   },
+   "net_pick": {
+    "pass": true,
+    "net": 108.0
+   },
+   "plateau_build": {
+    "pass": true,
+    "cells": 95,
+    "median_net": 1362.0,
+    "share_pos": 0.6105,
+    "member": "k2_pct0p1-r1"
+   },
+   "plateau_pick": {
+    "pass": true,
+    "penalty": "in-sample favourite (first_bar_mom tf15 nyam) FAILED on 2025-26: needs the plateau on BUILD and PICK and a reason why the failure was noise",
+    "cells": 72,
+    "median_net": 461.0,
+    "share_pos": 0.6389
+   },
+   "beats_c1_build": {
+    "pass": true,
+    "lift": 1728.25,
+    "mean": -316.25,
+    "p95": 1062.0,
+    "p_beat": 0.99,
+    "fallback_share": 0.0,
+    "short": 0,
+    "pool_trades": 18894
+   },
+   "stress_build": {
+    "pass": true,
+    "base": 1412.0,
+    "stressed": 1382.0,
+    "stress": "2 ticks + 250 ms"
+   },
+   "beats_c1_pick": {
+    "pass": true,
+    "lift": 393.0,
+    "mean": -285.0,
+    "p95": 458.0,
+    "p_beat": 0.72,
+    "fallback_share": 0.0,
+    "short": 0,
+    "pool_trades": 1137
+   },
+   "stress_pick": {
+    "pass": true,
+    "base": 108.0,
+    "stressed": 78.0,
+    "stress": "2 ticks + 250 ms"
+   },
+   "above_best_of_nulls_build": {
+    "pass": true,
+    "t_build": 1.4777002108340138,
+    "bar": 1.240684428052099,
+    "nulls": 56,
+    "thin": false
+   },
+   "min_trades": {
+    "pass": false,
+    "build": 12,
+    "pick": 3,
+    "need": 100
+   },
+   "open_loss_fits": {
+    "pass": true,
+    "worst_open_loss_per_micro": 32.0,
+    "micros_fit_worst": 62,
+    "micros_fit_p99": 62,
+    "limit": 2000.0
+   },
+   "rationale": {
+    "pass": true,
+    "complexity": 3
+   }
+  },
+  "summary": {
+   "build": {
+    "trades": 12,
+    "net": 1412.0,
+    "t": 1.4777002108340138,
+    "pf": 2.4769874476987446,
+    "win": 0.6666666666666666
+   },
+   "pick": {
+    "trades": 3,
+    "net": 108.0,
+    "t": 0.19807346586791566,
+    "pf": 1.3439490445859872,
+    "win": 0.6666666666666666
+   },
+   "cell": "k2_pts3-r1",
+   "root": "GC",
+   "tf": "5",
+   "sess": "pm",
+   "family": "first_bar_mom"
+  },
+  "dir": "/Users/ramoscapital/ramos-quant-homebase/research/edge-library/members/_rejected/first_bar_mom_GC_tf5_pm",
+  "default": "k2_pts3-r1",
+  "default_moved": true,
+  "surviving": 12,
+  "judged": 95,
+  "trades_per_day": 0.018,
+  "flag": null
+ },
+ "orb-NQ-tf1|pre|": {
+  "name": "orb_NQ_tf1_pre",
+  "admit": true,
+  "failed": [],
+  "tests": {
+   "net_build": {
+    "pass": true,
+    "net": 16362.0
+   },
+   "net_pick": {
+    "pass": true,
+    "net": 12437.0
+   },
+   "plateau_build": {
+    "pass": true,
+    "cells": 96,
+    "median_net": 16117.5,
+    "share_pos": 0.7188,
+    "member": "or_min5_atr1p5-r2"
+   },
+   "beats_c1_build": {
+    "pass": true,
+    "lift": 26478.55,
+    "mean": -10116.55,
+    "p95": 3173.75,
+    "p_beat": 1.0,
+    "fallback_share": 0.0,
+    "short": 0,
+    "pool_trades": 23681
+   },
+   "stress_build": {
+    "pass": true,
+    "base": 16362.0,
+    "stressed": 8462.0,
+    "stress": "2 ticks + 250 ms"
+   },
+   "beats_c1_pick": {
+    "pass": true,
+    "lift": 17611.67,
+    "mean": -5174.68,
+    "p95": 2648.0,
+    "p_beat": 1.0,
+    "fallback_share": 0.0,
+    "short": 0,
+    "pool_trades": 1499
+   },
+   "stress_pick": {
+    "pass": true,
+    "base": 12437.0,
+    "stressed": 6572.0,
+    "stress": "2 ticks + 250 ms"
+   },
+   "above_best_of_nulls_build": {
+    "pass": true,
+    "t_build": 2.3238534334967658,
+    "bar": 2.01546588148303,
+    "nulls": 56,
+    "thin": false
+   },
+   "min_trades": {
+    "pass": true,
+    "build": 567,
+    "pick": 252,
+    "need": 100
+   },
+   "open_loss_fits": {
+    "pass": true,
+    "worst_open_loss_per_micro": 112.0,
+    "micros_fit_worst": 17,
+    "micros_fit_p99": 43,
+    "limit": 2000.0
+   },
+   "rationale": {
+    "pass": true,
+    "complexity": 3
+   }
+  },
+  "summary": {
+   "build": {
+    "trades": 567,
+    "net": 16362.0,
+    "t": 2.3238534334967658,
+    "pf": 1.2504170556635394,
+    "win": 0.3985890652557319
+   },
+   "pick": {
+    "trades": 252,
+    "net": 12437.0,
+    "t": 2.706074600102215,
+    "pf": 1.4780519680196802,
+    "win": 0.44841269841269843
+   },
+   "cell": "or_min5_atr1p5-r2",
+   "root": "NQ",
+   "tf": "1",
+   "sess": "pre",
+   "family": "orb"
+  },
+  "dir": "/Users/ramoscapital/ramos-quant-homebase/research/edge-library/members/orb_NQ_tf1_pre",
+  "default": "or_min5_atr1p5-r2",
+  "default_moved": false,
+  "surviving": 49,
+  "judged": 96,
+  "trades_per_day": 0.993,
+  "flag": null
+ }
+}

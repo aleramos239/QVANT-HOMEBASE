@@ -1,0 +1,363 @@
+{
+ "name": "donchian_NQ_tf5_nyam_vol_lo",
+ "family": "donchian",
+ "root": "NQ",
+ "tf": "5",
+ "sess": "nyam",
+ "cell": "n60_pts10-r0",
+ "inputs": {
+  "tf": "5",
+  "sess": "nyam",
+  "dir": "both",
+  "stop_mode": "pts",
+  "stop_val": 10.0,
+  "tgt_r": 0.0,
+  "trail_atr": 0.0,
+  "exit_bars": 0,
+  "max_tr": 3,
+  "f_trend": "off",
+  "f_vwap": "off",
+  "f_depth": "off",
+  "f_book": "off",
+  "x_book": "off",
+  "f_thin": "off",
+  "hold_to": "day",
+  "n": 60
+ },
+ "rationale": "Trend continuation: a close beyond the prior n-bar channel traps the other side, whose stops feed a continuation move.",
+ "complexity": 3,
+ "weak": false,
+ "l2": false,
+ "penalty": null,
+ "second_look": "2025-26 was already seen once for this family's old finalist (donchian-tf15): the EXAM is a SECOND look",
+ "mirror": null,
+ "notes": "C donchian: close beyond the prior n-bar channel -> market with it. 2025-26 was already seen once for this family's old finalist (donchian-tf15): the EXAM is a SECOND look; STAGE 2a FILTERED SIDE `vol_lo`: trades only days after a daily range at or below its own 20-day median (a quiet market). Why it should matter: After a quiet day (range at or below its 20-day median) the market is coiled: stops sit close to the range and a morning break of the channel has room to run; after a wide day much of the move is already done and breaks get faded. (This reason was written AFTER the BUILD split was seen; the tool itself was fixed before any number.) Labels use daily bars through the PRIOR day only (out/deepen/test_labels.py). DEFAULT MOVED: the BUILD central variant `n20_atr1p5-r1` is not in the surviving set (2024 net -4,715); `n60_pts10-r0` is the surviving variant closest to the BUILD median.",
+ "hold_to": "day",
+ "admit": false,
+ "failed": [
+  "beats_c1_build",
+  "beats_c1_pick",
+  "above_best_of_nulls_build"
+ ],
+ "tests": {
+  "net_build": {
+   "pass": true,
+   "net": 35600.0
+  },
+  "net_pick": {
+   "pass": true,
+   "net": 6431.0
+  },
+  "plateau_build": {
+   "pass": true,
+   "cells": 128,
+   "median_net": 35030.0,
+   "share_pos": 0.8125,
+   "member": "n20_atr1p5-r1"
+  },
+  "beats_c1_build": {
+   "pass": false,
+   "lift": -4979.18,
+   "mean": 40579.18,
+   "p95": 64134.0,
+   "p_beat": 0.36,
+   "fallback_share": 0.002380952380952381,
+   "short": 0,
+   "pool_trades": 9313
+  },
+  "stress_build": {
+   "pass": true,
+   "base": 35600.0,
+   "stressed": 13184.0,
+   "stress": "2 ticks + 250 ms"
+  },
+  "beats_c1_pick": {
+   "pass": false,
+   "lift": -37883.55,
+   "mean": 44314.55,
+   "p95": 62756.25,
+   "p_beat": 0.0,
+   "fallback_share": 0.0,
+   "short": 0,
+   "pool_trades": 621
+  },
+  "stress_pick": {
+   "pass": true,
+   "base": 6431.0,
+   "stressed": 3059.0,
+   "stress": "2 ticks + 250 ms"
+  },
+  "above_best_of_nulls_build": {
+   "pass": false,
+   "t_build": 1.6487061127951321,
+   "bar": 2.01546588148303,
+   "nulls": 56,
+   "thin": false
+  },
+  "min_trades": {
+   "pass": true,
+   "build": 420,
+   "pick": 186,
+   "need": 100
+  },
+  "open_loss_fits": {
+   "pass": true,
+   "worst_open_loss_per_micro": 22.5,
+   "micros_fit_worst": 88,
+   "micros_fit_p99": 93,
+   "limit": 2000.0
+  },
+  "rationale": {
+   "pass": true,
+   "complexity": 3
+  }
+ },
+ "plateau": {
+  "build": {
+   "pass": true,
+   "cells": 128,
+   "cells_all": 128,
+   "dead": 0,
+   "duplicates": 0,
+   "median_net": 35030.0,
+   "share_pos": 0.8125,
+   "positive": 104,
+   "member": "n20_atr1p5-r1",
+   "member_net": 34460.0,
+   "best": "n10_atr3-r0",
+   "best_net": 112565.0,
+   "worst_net": -12414.0,
+   "verdicts": {
+    "60": true,
+    "70": true,
+    "80": true
+   },
+   "shares": {
+    "overall": {
+     "cells": 128,
+     "positive": 104,
+     "share_pos": 0.8125,
+     "median_net": 35030.0,
+     "verdicts": {
+      "60": true,
+      "70": true,
+      "80": true
+     }
+    },
+    "by_stop": {
+     "ATR": {
+      "cells": 32,
+      "positive": 32,
+      "share_pos": 1.0,
+      "median_net": 66890.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     },
+     "fixed": {
+      "cells": 64,
+      "positive": 50,
+      "share_pos": 0.7812,
+      "median_net": 28558.5,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": false
+      }
+     },
+     "percent": {
+      "cells": 32,
+      "positive": 22,
+      "share_pos": 0.6875,
+      "median_net": 17757.0,
+      "verdicts": {
+       "60": true,
+       "70": false,
+       "80": false
+      }
+     }
+    },
+    "by_target": {
+     "r0": {
+      "cells": 32,
+      "positive": 32,
+      "share_pos": 1.0,
+      "median_net": 76052.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     },
+     "r1": {
+      "cells": 32,
+      "positive": 22,
+      "share_pos": 0.6875,
+      "median_net": 14039.0,
+      "verdicts": {
+       "60": true,
+       "70": false,
+       "80": false
+      }
+     },
+     "r2": {
+      "cells": 32,
+      "positive": 24,
+      "share_pos": 0.75,
+      "median_net": 23362.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": false
+      }
+     },
+     "r3": {
+      "cells": 32,
+      "positive": 26,
+      "share_pos": 0.8125,
+      "median_net": 32655.5,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     }
+    }
+   }
+  },
+  "pick": {
+   "pass": true,
+   "cells": 128,
+   "cells_all": 128,
+   "dead": 0,
+   "duplicates": 0,
+   "median_net": 18323.5,
+   "share_pos": 0.8203,
+   "positive": 105,
+   "member": "n10_pct0p2-r1",
+   "member_net": 18451.0,
+   "best": "n10_pts45-r3",
+   "best_net": 53546.0,
+   "worst_net": -8043.0,
+   "verdicts": {
+    "60": true,
+    "70": true,
+    "80": true
+   },
+   "shares": {
+    "overall": {
+     "cells": 128,
+     "positive": 105,
+     "share_pos": 0.8203,
+     "median_net": 18323.5,
+     "verdicts": {
+      "60": true,
+      "70": true,
+      "80": true
+     }
+    },
+    "by_stop": {
+     "ATR": {
+      "cells": 32,
+      "positive": 29,
+      "share_pos": 0.9062,
+      "median_net": 29825.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     },
+     "fixed": {
+      "cells": 64,
+      "positive": 46,
+      "share_pos": 0.7188,
+      "median_net": 10645.5,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": false
+      }
+     },
+     "percent": {
+      "cells": 32,
+      "positive": 30,
+      "share_pos": 0.9375,
+      "median_net": 18194.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     }
+    },
+    "by_target": {
+     "r0": {
+      "cells": 32,
+      "positive": 32,
+      "share_pos": 1.0,
+      "median_net": 28281.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     },
+     "r1": {
+      "cells": 32,
+      "positive": 20,
+      "share_pos": 0.625,
+      "median_net": 4439.5,
+      "verdicts": {
+       "60": true,
+       "70": false,
+       "80": false
+      }
+     },
+     "r2": {
+      "cells": 32,
+      "positive": 25,
+      "share_pos": 0.7812,
+      "median_net": 19414.5,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": false
+      }
+     },
+     "r3": {
+      "cells": 32,
+      "positive": 28,
+      "share_pos": 0.875,
+      "median_net": 23793.5,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     }
+    }
+   }
+  }
+ },
+ "nulls_bar": {
+  "bar": 2.01546588148303,
+  "nulls": 56,
+  "thin": false,
+  "stat": "t"
+ },
+ "contracts": 1,
+ "periods": {
+  "build": [
+   "2021-09-22",
+   "2023-12-31"
+  ],
+  "pick": [
+   "2024-01-01",
+   "2024-12-31"
+  ]
+ },
+ "written_utc": "2026-10-04T09:15:34+00:00"
+}

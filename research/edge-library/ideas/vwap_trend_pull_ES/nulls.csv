@@ -1,0 +1,4 @@
+unit,central,t,bar_best_of_random,control,lift_vs_control,beats_share_of_200_draws,control_nets,bar_with_stage1_random_minutes,failed
+vwap_trend_pull-ES-tf15|nyam|,x0p1_pts5-r1,1.0605366311778175,1.2986,c1,8502.38,0.995,,,bar
+vwap_trend_pull-ES-tf30|pm|,x0p05_pts12-r0,0.17892120809044423,1.2986,c1,9118.0,0.925,,,bar
+vwap_trend_pull-ES-tf5|pm|,x0p1_pts8-r0,0.5163283426072373,1.2986,c1,-27639.69,0.015,,,"c1,bar"

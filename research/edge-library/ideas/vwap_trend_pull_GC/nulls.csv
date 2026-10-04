@@ -1,0 +1,3 @@
+unit,central,t,bar_best_of_random,control,lift_vs_control,beats_share_of_200_draws,control_nets,bar_with_stage1_random_minutes,failed
+vwap_trend_pull-GC-tf15|nyam|,x0p1_atr3-r1,0.5281057374920815,1.2407,c1,20262.55,1.0,,,bar
+vwap_trend_pull-GC-tf5|nyam|,x0p05_pts3-r3,0.39718711108761945,1.2407,c1,-6200.4,0.23,,,"c1,bar"

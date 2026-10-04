@@ -1,0 +1,2 @@
+{"worker_parity_1_vs_2": true, "specs": 600, "parity_specs": 200, "ok": true}
+EDGE_MAX_WORKERS=2 "$HOME/ONYX TRADING/.venv/bin/python"   119.86s user 1.31s system 124% cpu 1:37.15 total

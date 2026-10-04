@@ -1,0 +1,42 @@
+{
+ "c1-ES": {
+  "bar": 1.2985685967681793,
+  "nulls": 56,
+  "thin": false
+ },
+ "c1-GC": {
+  "bar": 1.240684428052099,
+  "nulls": 56,
+  "thin": false
+ },
+ "c1-NQ": {
+  "bar": 2.01546588148303,
+  "nulls": 56,
+  "thin": false
+ },
+ "c2-l2": {
+  "bar": 2.650019189913989,
+  "nulls": 42,
+  "thin": false
+ },
+ "c2-stage_d": {
+  "bar": 3.607372904383653,
+  "nulls": 130,
+  "thin": false
+ },
+ "shift-ES": {
+  "bar": 2.0010262339325084,
+  "nulls": 18,
+  "thin": true
+ },
+ "shift-GC": {
+  "bar": 1.639124794489482,
+  "nulls": 18,
+  "thin": true
+ },
+ "shift-NQ": {
+  "bar": 2.6163642064795405,
+  "nulls": 18,
+  "thin": true
+ }
+}

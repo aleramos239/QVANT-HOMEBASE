@@ -1,0 +1,108 @@
+{
+ "name": "straddle_t_0830_NQ_tf30_pre_news_only",
+ "admit": false,
+ "failed": [
+  "net_pick",
+  "beats_c1_pick",
+  "stress_pick"
+ ],
+ "tests": {
+  "net_build": {
+   "pass": true,
+   "net": 12951.0
+  },
+  "net_pick": {
+   "pass": false,
+   "net": -1129.0
+  },
+  "plateau_build": {
+   "pass": true,
+   "cells": 160,
+   "median_net": 13006.5,
+   "share_pos": 0.9125,
+   "member": "offatr0p25_pct0p1-r2"
+  },
+  "beats_c1_build": {
+   "pass": true,
+   "lift": 16332.5,
+   "mean": -3381.5,
+   "p95": -3224.0,
+   "p_beat": 1.0,
+   "fallback_share": 0.0,
+   "short": 0,
+   "pool_trades": 142
+  },
+  "stress_build": {
+   "pass": true,
+   "base": 12951.0,
+   "stressed": 11476.0,
+   "stress": "2 ticks + 250 ms"
+  },
+  "beats_c1_pick": {
+   "pass": false
+  },
+  "stress_pick": {
+   "pass": false,
+   "base": -1129.0,
+   "stressed": -2349.0,
+   "stress": "2 ticks + 250 ms"
+  },
+  "above_best_of_nulls_build": {
+   "pass": true,
+   "t_build": 3.585447923841172,
+   "bar": 2.6163642064795405,
+   "nulls": 18,
+   "thin": true
+  },
+  "min_trades": {
+   "pass": true,
+   "build": 71,
+   "pick": 31,
+   "need": 100
+  },
+  "open_loss_fits": {
+   "pass": true,
+   "worst_open_loss_per_micro": 58.0,
+   "micros_fit_worst": 34,
+   "micros_fit_p99": 45,
+   "limit": 2000.0
+  },
+  "rationale": {
+   "pass": true,
+   "complexity": 6
+  }
+ },
+ "central": "offatr0p25_pct0p1-r2",
+ "surviving": 86,
+ "judged": 160,
+ "both_positive": 97,
+ "dir": "/Users/ramoscapital/ramos-quant-homebase/research/edge-library/members/_rejected/straddle_t_0830_NQ_tf30_pre_news_only",
+ "per_year": [
+  {
+   "period": "2021*",
+   "trades": 9,
+   "net": -46.0
+  },
+  {
+   "period": "2022",
+   "trades": 31,
+   "net": 7896.0
+  },
+  {
+   "period": "2023",
+   "trades": 31,
+   "net": 5101.0
+  },
+  {
+   "period": "2024",
+   "trades": 31,
+   "net": -1129.0
+  },
+  {
+   "period": "combined",
+   "trades": 102,
+   "net": 11822.0
+  }
+ ],
+ "control_pick": "not run (ruling: the 2024 menu only)"
+}

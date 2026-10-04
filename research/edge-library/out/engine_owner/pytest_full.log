@@ -1,0 +1,129 @@
+........................................................................ [  5%]
+........................................................................ [ 10%]
+........................................................................ [ 16%]
+......F......F...................................................s...... [ 21%]
+........................................................................ [ 26%]
+.............................................F.......................... [ 32%]
+........................................................................ [ 37%]
+........................................................................ [ 43%]
+........................................................................ [ 48%]
+........................................................................ [ 53%]
+........................F............................................... [ 59%]
+........................................................................ [ 64%]
+........................................................................ [ 70%]
+........................................................................ [ 75%]
+........................................................................ [ 80%]
+........................................................................ [ 86%]
+........................................................................ [ 91%]
+........................................................................ [ 97%]
+.....................................s.                                  [100%]
+=================================== FAILURES ===================================
+_____________ test_registered_defaults_are_the_pre_registered_ones _____________
+
+    def test_registered_defaults_are_the_pre_registered_ones():
+        assert not any(k == "book" or "book.py" in v for k, v in families.ERRORS.items()), families.ERRORS
+        assert {n for n, m in families.MODULE_OF.items() if m == "book"} == set(NAMES)
+        common = {"sess": "all", "dir": "both", "stop_mode": "atr", "stop_val": 1.5, "tgt_r": 2.0, "trail_atr": 0.0, "exit_bars": 0,
+                  "max_tr": 3, "f_trend": "off", "f_vwap": "off", "f_depth": "off", "f_book": "off", "x_book": "off", "f_thin": "off"}
+        want = {"bimb_follow": (B.BimbFollow, {"k": 2.0, "n_lv": "10"}), "bimb_follow_n3": (B.BimbFollow, {"k": 2.0, "n_lv": "3"}),
+                "bimb_fade": (B.BimbFade, {"k": 2.0, "n_lv": "10"}), "bimb_fade_n3": (B.BimbFade, {"k": 2.0, "n_lv": "3"}),
+                "thin_side": (B.ThinSide, {"thin": 0.60, "hold": 0.90})}
+        for name, (cls, own) in want.items():
+            got_cls, inputs, both, notes = families.REGISTRY[name]
+            assert got_cls is cls and both is False and families.check_entry(name, families.REGISTRY[name]) == []
+            assert cls.SCREEN_TFS == ("1", "5") and getattr(cls, "SCREEN_RUN", {}) == {}
+            for tf in cls.SCREEN_TFS:
+>               assert cls(families.screen_inputs(name, tf)).p == {**common, **own, "tf": tf}
+E               AssertionError: assert {'dir': 'both...': 'off', ...} == {'dir': 'both...': 'off', ...}
+E                 
+E                 Omitting 17 identical items, use -vv to show
+E                 Left contains 1 more item:
+E                 {'hold_to': 'session'}
+E                 Use -v to get more diff
+
+tests/test_fam_book.py:490: AssertionError
+___________ test_registry_entries_carry_the_pre_registered_defaults ____________
+
+    def test_registry_entries_carry_the_pre_registered_defaults():
+        assert families.ERRORS == {}, families.ERRORS
+        common = {"sess": "all", "dir": "both", "stop_mode": "atr", "stop_val": 1.5, "tgt_r": 2.0, "trail_atr": 0.0,
+                  "exit_bars": 0, "max_tr": 3, "f_trend": "off", "f_vwap": "off", "f_depth": "off", "f_book": "off", "x_book": "off",
+                  "f_thin": "off"}
+        own = {"delta_follow": {"q": 90.0}, "absorption": {"q": 90.0, "move_atr": 0.25}, "cvd_div": {"warm_min": 15},
+               "sweep_follow": {"q": 95.0}}
+        for name, cls in FAMS.items():
+            e = families.REGISTRY[name]
+            assert e[0] is cls and e[1] == {} and e[2] is False and families.MODULE_OF[name] == "flow"
+            assert families.check_entry(name, e) == []
+            assert cls.SCREEN_TFS == ("1", "5") and cls.session_independent is True and not hasattr(cls, "SCREEN_RUN")
+            p = cls(families.screen_inputs(name, "5")).p
+            assert {k: p[k] for k in common} == common and {k: p[k] for k in own[name]} == own[name]
+>           assert set(p) == set(common) | set(own[name]) | {"tf"}                 # <= 2 family parameters, nothing hidden
+E           AssertionError: assert {'dir', 'exit...f_trend', ...} == {'dir', 'exit...f_trend', ...}
+E             
+E             Extra items in the left set:
+E             'hold_to'
+E             Use -v to get more diff
+
+tests/test_fam_flow.py:245: AssertionError
+___________ test_registry_entries_are_the_pre_registered_o1_variants ___________
+
+    def test_registry_entries_are_the_pre_registered_o1_variants():
+        assert families.ERRORS == {} or not any("open" in k for k in families.ERRORS), families.ERRORS
+        for src, cls in VARIANTS.items():
+            name = f"open_dir_{src}"
+            c, inputs, both, notes = families.REGISTRY[name]
+            assert c is cls and inputs == {"src": src} and both is False and notes.startswith("O1")
+            assert families.check_entry(name, families.REGISTRY[name]) == [] and families.MODULE_OF[name] == "opendir"
+            assert cls.SCREEN_TFS == ("30",) and cls.session_independent is True and not hasattr(cls, "SCREEN_RUN")
+            p = cls(families.screen_inputs(name, "30")).p
+>           assert p == {"tf": "30", "sess": "all", "dir": "both", "stop_mode": "atr", "stop_val": 3.0, "tgt_r": 0.0,
+                         "trail_atr": 0.0, "exit_bars": 0, "max_tr": 1, "f_trend": "off", "f_vwap": "off", "f_depth": "off", "f_book": "off", "x_book": "off", "f_thin": "off",
+                         "src": src, "off_atr": 0.25}
+E           AssertionError: assert {'dir': 'both...': 'off', ...} == {'dir': 'both...': 'off', ...}
+E             
+E             Omitting 17 identical items, use -vv to show
+E             Left contains 1 more item:
+E             {'hold_to': 'session'}
+E             Use -v to get more diff
+
+tests/test_fam_open.py:81: AssertionError
+_ test_inputs_are_coerced_like_the_tester_and_defaults_equal_the_tester_resolved_inputs _
+
+    def test_inputs_are_coerced_like_the_tester_and_defaults_equal_the_tester_resolved_inputs():
+        p = l2ref.Donchian({"n": 20.0, "stop_val": 30, "exit_bars": 6.0, "tgt_r": 1}).p
+        assert p["n"] == 20 and type(p["n"]) is int and type(p["exit_bars"]) is int
+        assert p["stop_val"] == 30.0 and type(p["stop_val"]) is float and type(p["tgt_r"]) is float
+        assert type(l2ref.Donchian({"n": np.int64(12)}).p["n"]) is int
+        for cid, fam, src, sess, role in V.GATE + V.EXTRA:                # run.json inputs = the tester's resolved inputs
+            inputs = V.load_bundle(src)[0]
+            cls = l2ref.FAMILIES[fam]
+            got = cls(inputs).p
+            for k in NEW:                                                 # the inputs l2sim adds to the tester's (SPEC B6, EDGE_SPEC D2-D4)
+                assert got.pop(k) == "off"                                # ... all default off
+>           assert got == inputs and {k: type(v) for k, v in got.items()} == {k: type(v) for k, v in inputs.items()}
+E           AssertionError: assert ({'delay_min':...': 'off', ...} == {'delay_min':...': 'off', ...}
+E             
+E             Omitting 14 identical items, use -vv to show
+E             Left contains 1 more item:
+E             {'hold_to': 'session'}
+E             Use -v to get more diff)
+
+tests/test_l2sim_contract.py:88: AssertionError
+=============================== warnings summary ===============================
+tests/test_port2.py::test_the_full_window_gate_report_is_a_pass_for_the_trading_code_on_disk
+  /Users/ramoscapital/ramos-quant-homebase/research/edge-library/engine/tests/test_port2.py:485: UserWarning: l2sim.py changed since the port2 gate ran (the trading code of port2.py did not): re-run port2_validate.py and edge_validate.py
+    warnings.warn(f"{f} changed since the port2 gate ran (the trading code of port2.py did not): re-run port2_validate.py"
+
+tests/test_port3.py::test_the_full_window_gate_report_is_a_pass_for_the_module_on_disk
+  /Users/ramoscapital/ramos-quant-homebase/research/edge-library/engine/tests/test_port3.py:332: UserWarning: l2sim.py changed since the port3 gate ran: re-run port3_validate.py (and edge_validate.py)
+    warnings.warn(f"{f} changed since the port3 gate ran: re-run port3_validate.py (and edge_validate.py)")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_fam_book.py::test_registered_defaults_are_the_pre_registered_ones
+FAILED tests/test_fam_flow.py::test_registry_entries_carry_the_pre_registered_defaults
+FAILED tests/test_fam_open.py::test_registry_entries_are_the_pre_registered_o1_variants
+FAILED tests/test_l2sim_contract.py::test_inputs_are_coerced_like_the_tester_and_defaults_equal_the_tester_resolved_inputs
+4 failed, 1329 passed, 2 skipped, 2 warnings in 581.63s (0:09:41)
+rc=1

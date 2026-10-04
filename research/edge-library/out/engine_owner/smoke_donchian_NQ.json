@@ -1,0 +1,54 @@
+{
+ "family": "donchian",
+ "root": "NQ",
+ "tf": "5",
+ "days": 10,
+ "cells": 128,
+ "variants": 4,
+ "sessions": 10,
+ "used": 10,
+ "eve_skipped": 0,
+ "skipped_by_error": 0,
+ "errors": [],
+ "trades_total": 11646,
+ "trades_per_cell": {
+  "min": 41,
+  "max": 176
+ },
+ "cells_without_trades": 0,
+ "long": 5803,
+ "short": 5843,
+ "by_session": {
+  "eve": 1476,
+  "asia": 889,
+  "london": 2229,
+  "pre": 1090,
+  "nyam": 2202,
+  "pm": 2146,
+  "mid": 1614
+ },
+ "by_stop_mode": {
+  "atr": 2793,
+  "pts": 5838,
+  "pct": 3015
+ },
+ "entry_kind": {
+  "market": 11646,
+  "resting": 0
+ },
+ "both_sides_declared": false,
+ "both_sides_sessions": 0,
+ "segments": [
+  "eve",
+  "day"
+ ],
+ "hold_to": "day",
+ "instances_per_cell": 7,
+ "exit_after_day_flat": 0,
+ "overlap_in_session": 0,
+ "entry_in_no_session": 0,
+ "both_sides_ok": true,
+ "worker_parity": true,
+ "nulls": {},
+ "ok": true
+}

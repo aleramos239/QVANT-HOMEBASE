@@ -1,0 +1,8 @@
+unit,central,t,bar_best_of_random,control,lift_vs_control,beats_share_of_200_draws,control_nets,bar_with_stage1_random_minutes,failed
+vwap_trend_pull-NQ-tf15|nyam|,x0p05_pct0p1-r0,0.5006213637448493,2.0155,c1,-29718.22,0.005,,,"c1,bar"
+vwap_trend_pull-NQ-tf15|pm|,x0p05_atr1p5-r2,0.932407944631183,2.0155,c1,-12068.5,0.29,,,"c1,bar"
+vwap_trend_pull-NQ-tf1|mid|,x0p05_pts20-r2,0.9210042261707646,2.0155,c1,38359.0,1.0,,,bar
+vwap_trend_pull-NQ-tf1|pm|,x0p05_atr3-r1,1.1838865078238474,2.0155,c1,88850.5,1.0,,,bar
+vwap_trend_pull-NQ-tf5|mid|,x0p05_atr1p5-r1,0.28672840689521656,2.0155,c1,4667.48,0.585,,,bar
+vwap_trend_pull-NQ-tf5|nyam|,x0p1_atr1p5-r1,0.3617945946592383,2.0155,c1,9023.35,0.73,,,bar
+vwap_trend_pull-NQ-tf5|pm|,x0p1_pts30-r2,2.701243281015546,2.0155,c1,51072.3,0.99,,,

@@ -1,0 +1,47 @@
+{
+ "c1-ES": {
+  "null_units": 56,
+  "plateau_pass": 0,
+  "both_gates": 0
+ },
+ "c1-GC": {
+  "null_units": 56,
+  "plateau_pass": 0,
+  "both_gates": 0
+ },
+ "c1-NQ": {
+  "null_units": 56,
+  "plateau_pass": 6,
+  "both_gates": 0
+ },
+ "shift-ES": {
+  "null_units": 8,
+  "plateau_pass": 0,
+  "both_gates": 0
+ },
+ "shift-GC": {
+  "null_units": 8,
+  "plateau_pass": 0,
+  "both_gates": 0
+ },
+ "shift-NQ": {
+  "null_units": 8,
+  "plateau_pass": 0,
+  "both_gates": 0
+ },
+ "shift_s1-ES": {
+  "null_units": 18,
+  "plateau_pass": 0,
+  "both_gates": 0
+ },
+ "shift_s1-GC": {
+  "null_units": 18,
+  "plateau_pass": 0,
+  "both_gates": 0
+ },
+ "shift_s1-NQ": {
+  "null_units": 18,
+  "plateau_pass": 5,
+  "both_gates": 0
+ }
+}

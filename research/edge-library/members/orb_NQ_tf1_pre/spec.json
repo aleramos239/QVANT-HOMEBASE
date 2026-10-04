@@ -1,0 +1,359 @@
+{
+ "name": "orb_NQ_tf1_pre",
+ "family": "orb",
+ "root": "NQ",
+ "tf": "1",
+ "sess": "pre",
+ "cell": "or_min5_atr1p5-r2",
+ "inputs": {
+  "tf": "1",
+  "sess": "pre",
+  "dir": "both",
+  "stop_mode": "atr",
+  "stop_val": 1.5,
+  "tgt_r": 2.0,
+  "trail_atr": 0.0,
+  "exit_bars": 0,
+  "max_tr": 3,
+  "f_trend": "off",
+  "f_vwap": "off",
+  "f_depth": "off",
+  "f_book": "off",
+  "x_book": "off",
+  "f_thin": "off",
+  "hold_to": "day",
+  "or_min": "5"
+ },
+ "rationale": "Opening range = the first balance of the session: the first or_min minutes set the range the rest of the session resolves, so a break of either side traps the other side and carries.",
+ "complexity": 3,
+ "weak": false,
+ "l2": false,
+ "penalty": null,
+ "second_look": "2025-26 was already seen once for this family's old finalist (orb-tf5): the EXAM is a SECOND look",
+ "mirror": null,
+ "notes": "C orb: at session start + or_min, OCO stop entries one tick beyond the opening range. 2025-26 was already seen once for this family's old finalist (orb-tf5): the EXAM is a SECOND look",
+ "hold_to": "day",
+ "admit": true,
+ "failed": [],
+ "tests": {
+  "net_build": {
+   "pass": true,
+   "net": 16362.0
+  },
+  "net_pick": {
+   "pass": true,
+   "net": 12437.0
+  },
+  "plateau_build": {
+   "pass": true,
+   "cells": 96,
+   "median_net": 16117.5,
+   "share_pos": 0.7188,
+   "member": "or_min5_atr1p5-r2"
+  },
+  "beats_c1_build": {
+   "pass": true,
+   "lift": 26478.55,
+   "mean": -10116.55,
+   "p95": 3173.75,
+   "p_beat": 1.0,
+   "fallback_share": 0.0,
+   "short": 0,
+   "pool_trades": 23681
+  },
+  "stress_build": {
+   "pass": true,
+   "base": 16362.0,
+   "stressed": 8462.0,
+   "stress": "2 ticks + 250 ms"
+  },
+  "beats_c1_pick": {
+   "pass": true,
+   "lift": 17611.67,
+   "mean": -5174.68,
+   "p95": 2648.0,
+   "p_beat": 1.0,
+   "fallback_share": 0.0,
+   "short": 0,
+   "pool_trades": 1499
+  },
+  "stress_pick": {
+   "pass": true,
+   "base": 12437.0,
+   "stressed": 6572.0,
+   "stress": "2 ticks + 250 ms"
+  },
+  "above_best_of_nulls_build": {
+   "pass": true,
+   "t_build": 2.3238534334967658,
+   "bar": 2.01546588148303,
+   "nulls": 56,
+   "thin": false
+  },
+  "min_trades": {
+   "pass": true,
+   "build": 567,
+   "pick": 252,
+   "need": 100
+  },
+  "open_loss_fits": {
+   "pass": true,
+   "worst_open_loss_per_micro": 112.0,
+   "micros_fit_worst": 17,
+   "micros_fit_p99": 43,
+   "limit": 2000.0
+  },
+  "rationale": {
+   "pass": true,
+   "complexity": 3
+  }
+ },
+ "plateau": {
+  "build": {
+   "pass": true,
+   "cells": 96,
+   "cells_all": 96,
+   "dead": 0,
+   "duplicates": 0,
+   "median_net": 16117.5,
+   "share_pos": 0.7188,
+   "positive": 69,
+   "member": "or_min5_atr1p5-r2",
+   "member_net": 16362.0,
+   "best": "or_min5_atr3-r0",
+   "best_net": 89112.0,
+   "worst_net": -25333.0,
+   "verdicts": {
+    "60": true,
+    "70": true,
+    "80": false
+   },
+   "shares": {
+    "overall": {
+     "cells": 96,
+     "positive": 69,
+     "share_pos": 0.7188,
+     "median_net": 16117.5,
+     "verdicts": {
+      "60": true,
+      "70": true,
+      "80": false
+     }
+    },
+    "by_stop": {
+     "ATR": {
+      "cells": 24,
+      "positive": 12,
+      "share_pos": 0.5,
+      "median_net": 6785.0,
+      "verdicts": {
+       "60": false,
+       "70": false,
+       "80": false
+      }
+     },
+     "fixed": {
+      "cells": 48,
+      "positive": 39,
+      "share_pos": 0.8125,
+      "median_net": 19487.5,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     },
+     "percent": {
+      "cells": 24,
+      "positive": 18,
+      "share_pos": 0.75,
+      "median_net": 13765.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": false
+      }
+     }
+    },
+    "by_target": {
+     "r0": {
+      "cells": 24,
+      "positive": 24,
+      "share_pos": 1.0,
+      "median_net": 47102.5,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     },
+     "r1": {
+      "cells": 24,
+      "positive": 14,
+      "share_pos": 0.5833,
+      "median_net": 1975.0,
+      "verdicts": {
+       "60": false,
+       "70": false,
+       "80": false
+      }
+     },
+     "r2": {
+      "cells": 24,
+      "positive": 14,
+      "share_pos": 0.5833,
+      "median_net": 8762.5,
+      "verdicts": {
+       "60": false,
+       "70": false,
+       "80": false
+      }
+     },
+     "r3": {
+      "cells": 24,
+      "positive": 17,
+      "share_pos": 0.7083,
+      "median_net": 18148.0,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": false
+      }
+     }
+    }
+   }
+  },
+  "pick": {
+   "pass": true,
+   "cells": 96,
+   "cells_all": 96,
+   "dead": 0,
+   "duplicates": 0,
+   "median_net": 5254.5,
+   "share_pos": 0.6354,
+   "positive": 61,
+   "member": "or_min5_atr1p5-r1",
+   "member_net": 5177.0,
+   "best": "or_min5_pts30-r0",
+   "best_net": 75237.0,
+   "worst_net": -16851.0,
+   "verdicts": {
+    "60": true,
+    "70": false,
+    "80": false
+   },
+   "shares": {
+    "overall": {
+     "cells": 96,
+     "positive": 61,
+     "share_pos": 0.6354,
+     "median_net": 5254.5,
+     "verdicts": {
+      "60": true,
+      "70": false,
+      "80": false
+     }
+    },
+    "by_stop": {
+     "ATR": {
+      "cells": 24,
+      "positive": 16,
+      "share_pos": 0.6667,
+      "median_net": 6300.0,
+      "verdicts": {
+       "60": true,
+       "70": false,
+       "80": false
+      }
+     },
+     "fixed": {
+      "cells": 48,
+      "positive": 30,
+      "share_pos": 0.625,
+      "median_net": 4648.0,
+      "verdicts": {
+       "60": true,
+       "70": false,
+       "80": false
+      }
+     },
+     "percent": {
+      "cells": 24,
+      "positive": 15,
+      "share_pos": 0.625,
+      "median_net": 4262.5,
+      "verdicts": {
+       "60": true,
+       "70": false,
+       "80": false
+      }
+     }
+    },
+    "by_target": {
+     "r0": {
+      "cells": 24,
+      "positive": 24,
+      "share_pos": 1.0,
+      "median_net": 32021.5,
+      "verdicts": {
+       "60": true,
+       "70": true,
+       "80": true
+      }
+     },
+     "r1": {
+      "cells": 24,
+      "positive": 15,
+      "share_pos": 0.625,
+      "median_net": 2061.5,
+      "verdicts": {
+       "60": true,
+       "70": false,
+       "80": false
+      }
+     },
+     "r2": {
+      "cells": 24,
+      "positive": 8,
+      "share_pos": 0.3333,
+      "median_net": -4401.5,
+      "verdicts": {
+       "60": false,
+       "70": false,
+       "80": false
+      }
+     },
+     "r3": {
+      "cells": 24,
+      "positive": 14,
+      "share_pos": 0.5833,
+      "median_net": 1148.5,
+      "verdicts": {
+       "60": false,
+       "70": false,
+       "80": false
+      }
+     }
+    }
+   }
+  }
+ },
+ "nulls_bar": {
+  "bar": 2.01546588148303,
+  "nulls": 56,
+  "thin": false,
+  "stat": "t"
+ },
+ "contracts": 1,
+ "periods": {
+  "build": [
+   "2021-09-22",
+   "2023-12-31"
+  ],
+  "pick": [
+   "2024-01-01",
+   "2024-12-31"
+  ]
+ },
+ "written_utc": "2026-10-04T08:41:45+00:00"
+}

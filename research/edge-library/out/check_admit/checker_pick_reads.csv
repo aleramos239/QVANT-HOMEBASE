@@ -1,0 +1,4 @@
+utc,cell,period,what,why
+2026-10-04T08:55:00+00:00,orb-NQ-tf1 pre or_min5_atr1p5-r2,pick,base + stress re-run (l2sim.run),checker: from-scratch identity with members/orb_NQ_tf1_pre
+2026-10-04T08:55:00+00:00,donchian-NQ-tf30 nyam n10_pct0p2-r2,pick,base + stress re-run (l2sim.run),checker: identity with members/donchian_NQ_tf30_nyam
+2026-10-04T08:55:00+00:00,donchian-NQ-tf30 nyam n10_pts20-r2,pick,base + stress re-run (l2sim.run),checker: BUILD central cell stressed 2024 net

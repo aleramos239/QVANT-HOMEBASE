@@ -1,0 +1,2 @@
+NQ ema_ribbon: 5 bundles, 28 runs + cells, 28 identical, trades tester 196100 sim 196100 exact 196100, PASS (80.06 s)
+NQ tema_slope: 7 bundles, 92 runs + cells, 92 identical, trades tester 912687 sim 912687 exact 912687, PASS (239.95 s)

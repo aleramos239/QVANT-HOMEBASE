@@ -1,0 +1,282 @@
+[
+{
+"date": "2021-11-04",
+"time_et": "08:30",
+"type": "CLAIMS",
+"subtype": "",
+"source": "oui.doleta.gov/press/2021/110421.pdf"
+},
+{
+"date": "2022-01-27",
+"time_et": "08:30",
+"type": "CLAIMS",
+"subtype": "",
+"source": "oui.doleta.gov/press/2022/012722.pdf"
+},
+{
+"date": "2022-02-17",
+"time_et": "08:30",
+"type": "CLAIMS",
+"subtype": "",
+"source": "oui.doleta.gov/press/2022/021722.pdf"
+},
+{
+"date": "2022-06-09",
+"time_et": "08:30",
+"type": "CLAIMS",
+"subtype": "",
+"source": "oui.doleta.gov/press/2022/060922.pdf"
+},
+{
+"date": "2022-08-04",
+"time_et": "08:30",
+"type": "CLAIMS",
+"subtype": "",
+"source": "oui.doleta.gov/press/2022/080422.pdf"
+},
+{
+"date": "2022-10-13",
+"time_et": "08:30",
+"type": "CLAIMS",
+"subtype": "",
+"source": "oui.doleta.gov/press/2022/101322.pdf"
+},
+{
+"date": "2022-10-20",
+"time_et": "08:30",
+"type": "CLAIMS",
+"subtype": "",
+"source": "oui.doleta.gov/press/2022/102022.pdf"
+},
+{
+"date": "2022-12-08",
+"time_et": "08:30",
+"type": "CLAIMS",
+"subtype": "",
+"source": "oui.doleta.gov/press/2022/120822.pdf"
+},
+{
+"date": "2023-02-16",
+"time_et": "08:30",
+"type": "CLAIMS",
+"subtype": "",
+"source": "oui.doleta.gov/press/2023/021623.pdf"
+},
+{
+"date": "2023-03-02",
+"time_et": "08:30",
+"type": "CLAIMS",
+"subtype": "",
+"source": "oui.doleta.gov/press/2023/030223.pdf"
+},
+{
+"date": "2023-04-13",
+"time_et": "08:30",
+"type": "CLAIMS",
+"subtype": "",
+"source": "oui.doleta.gov/press/2023/041323.pdf"
+},
+{
+"date": "2023-04-20",
+"time_et": "08:30",
+"type": "CLAIMS",
+"subtype": "",
+"source": "oui.doleta.gov/press/2023/042023.pdf"
+},
+{
+"date": "2023-10-05",
+"time_et": "08:30",
+"type": "CLAIMS",
+"subtype": "",
+"source": "oui.doleta.gov/press/2023/100523.pdf"
+},
+{
+"date": "2024-02-08",
+"time_et": "08:30",
+"type": "CLAIMS",
+"subtype": "",
+"source": "oui.doleta.gov/press/2024/020824.pdf"
+},
+{
+"date": "2022-01-12",
+"time_et": "08:30",
+"type": "CPI",
+"subtype": "",
+"source": "bls.gov/schedule/2022/home.htm + bls.gov/bls/news-release/cpi.htm"
+},
+{
+"date": "2023-06-13",
+"time_et": "08:30",
+"type": "CPI",
+"subtype": "",
+"source": "bls.gov/schedule/2023/home.htm + bls.gov/bls/news-release/cpi.htm"
+},
+{
+"date": "2023-08-10",
+"time_et": "08:30",
+"type": "CPI",
+"subtype": "",
+"source": "bls.gov/schedule/2023/home.htm + bls.gov/bls/news-release/cpi.htm"
+},
+{
+"date": "2024-09-11",
+"time_et": "08:30",
+"type": "CPI",
+"subtype": "",
+"source": "bls.gov/schedule/2024/home.htm + bls.gov/bls/news-release/cpi.htm"
+},
+{
+"date": "2022-07-27",
+"time_et": "14:00",
+"type": "FOMC",
+"subtype": "",
+"source": "federalreserve.gov/monetarypolicy/fomccalendars.htm"
+},
+{
+"date": "2022-09-29",
+"time_et": "08:30",
+"type": "GDP",
+"subtype": "third",
+"source": "bea.gov/news/2022/gross-domestic-product-third-estimate-gdp-industry-and-corporate-profits-revised-2nd"
+},
+{
+"date": "2023-03-30",
+"time_et": "08:30",
+"type": "GDP",
+"subtype": "third",
+"source": "bea.gov/news/2023/gross-domestic-product-fourth-quarter-and-year-2022-third-estimate-gdp-industry-and"
+},
+{
+"date": "2023-04-27",
+"time_et": "08:30",
+"type": "GDP",
+"subtype": "advance",
+"source": "bea.gov/news/2023/gross-domestic-product-first-quarter-2023-advance-estimate"
+},
+{
+"date": "2023-10-26",
+"time_et": "08:30",
+"type": "GDP",
+"subtype": "advance",
+"source": "bea.gov/news/2023/gross-domestic-product-third-quarter-2023-advance-estimate"
+},
+{
+"date": "2023-12-21",
+"time_et": "08:30",
+"type": "GDP",
+"subtype": "third",
+"source": "bea.gov/news/2023/gross-domestic-product-third-estimate-corporate-profits-revised-estimate-and-gdp"
+},
+{
+"date": "2024-02-28",
+"time_et": "08:30",
+"type": "GDP",
+"subtype": "second",
+"source": "bea.gov/news/2024/gross-domestic-product-fourth-quarter-and-year-2023-second-estimate"
+},
+{
+"date": "2023-08-01",
+"time_et": "10:00",
+"type": "ISM_MFG",
+"subtype": "",
+"source": "prnewswire.com/news/institute-for-supply-management/ (ISM release stamp)"
+},
+{
+"date": "2023-01-06",
+"time_et": "10:00",
+"type": "ISM_SVC",
+"subtype": "",
+"source": "prnewswire.com/news/institute-for-supply-management/ (ISM release stamp)"
+},
+{
+"date": "2023-12-05",
+"time_et": "10:00",
+"type": "ISM_SVC",
+"subtype": "",
+"source": "prnewswire.com/news/institute-for-supply-management/ (ISM release stamp)"
+},
+{
+"date": "2024-06-05",
+"time_et": "10:00",
+"type": "ISM_SVC",
+"subtype": "",
+"source": "prnewswire.com/news/institute-for-supply-management/ (ISM release stamp)"
+},
+{
+"date": "2022-11-30",
+"time_et": "10:00",
+"type": "JOLTS",
+"subtype": "",
+"source": "bls.gov/schedule/2022/home.htm + bls.gov/bls/news-release/jolts.htm"
+},
+{
+"date": "2022-04-01",
+"time_et": "08:30",
+"type": "NFP",
+"subtype": "",
+"source": "bls.gov/schedule/2022/home.htm + bls.gov/bls/news-release/empsit.htm"
+},
+{
+"date": "2021-10-29",
+"time_et": "08:30",
+"type": "PCE",
+"subtype": "",
+"source": "bea.gov/news/2021/personal-income-and-outlays-september-2021"
+},
+{
+"date": "2023-10-27",
+"time_et": "08:30",
+"type": "PCE",
+"subtype": "",
+"source": "bea.gov/news/2023/personal-income-and-outlays-september-2023"
+},
+{
+"date": "2023-12-13",
+"time_et": "08:30",
+"type": "PPI",
+"subtype": "",
+"source": "bls.gov/schedule/2023/home.htm + bls.gov/bls/news-release/ppi.htm"
+},
+{
+"date": "2022-07-15",
+"time_et": "08:30",
+"type": "RETAIL",
+"subtype": "",
+"source": "census.gov/retail/marts/www/MARTSreleasedates.xls"
+},
+{
+"date": "2022-09-15",
+"time_et": "08:30",
+"type": "RETAIL",
+"subtype": "",
+"source": "census.gov/retail/marts/www/MARTSreleasedates.xls"
+},
+{
+"date": "2022-12-15",
+"time_et": "08:30",
+"type": "RETAIL",
+"subtype": "",
+"source": "census.gov/retail/marts/www/MARTSreleasedates.xls"
+},
+{
+"date": "2023-02-15",
+"time_et": "08:30",
+"type": "RETAIL",
+"subtype": "",
+"source": "census.gov/retail/marts/www/MARTSreleasedates.xls"
+},
+{
+"date": "2023-03-15",
+"time_et": "08:30",
+"type": "RETAIL",
+"subtype": "",
+"source": "census.gov/retail/marts/www/MARTSreleasedates.xls"
+},
+{
+"date": "2022-10-14",
+"time_et": "10:00",
+"type": "UMICH",
+"subtype": "",
+"source": "data.sca.isr.umich.edu/fetchdoc.php?docid=75443"
+}
+]
