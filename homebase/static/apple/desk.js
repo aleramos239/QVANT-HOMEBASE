@@ -101,7 +101,7 @@
       if (hm(c.cancel_et)) rows.push(row('Cancel unfilled', hm(c.cancel_et) + ' ET'));
       if (hm(c.flat_et)) rows.push(row('Flat', hm(c.flat_et) + ' ET'));
       if (Array.isArray(c.only_dates) && c.only_dates.length) rows.push(row('Only on', c.only_dates.slice(0, 2).join(', ') + (c.only_dates.length > 2 ? ' +' + (c.only_dates.length - 2) : '')));
-      rows.push(row('Signal', c.kind === 'bars' ? 'Price-action rule' : c.self_fire ? 'Fires itself' : 'TradingView alert'));
+      rows.push(row('Signal', c.kind === 'bars' ? 'Price-action rule' : c.self_fire ? 'Fires itself' : 'Nothing fires it'));
       if (c.shadow) rows.push(row('Mode', 'Shadow (journal only)'));
       const sig = JSON.stringify(rows.map((r) => r.textContent));
       if (setupBox._sig !== sig) { setupBox._sig = sig; setupBox.replaceChildren(...rows); }

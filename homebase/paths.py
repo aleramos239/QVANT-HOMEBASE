@@ -24,5 +24,5 @@ def state_dir() -> Path:
 
 
 def config_path() -> Path:
-    """The app's config file (accounts, sizes, webhook secret name)."""
+    """The app's config file (accounts, sizes)."""
     return _PKG_DIR / "config.json"

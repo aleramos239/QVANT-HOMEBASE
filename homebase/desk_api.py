@@ -14,8 +14,8 @@ Host, JSON only, and an Origin (when present) on the same allowlist
 (netguard: loopback + cfg.allowed_hosts).
 
 WriteGuard (Task 5b) is the desk-wide version of that check, on the main
-app only (never the tunneled hook app): EVERY request needs an allowed Host
-(403) — a rebound page cannot even read /api/tv-setup — and every request
+app: EVERY request needs an allowed Host
+(403) — a rebound page cannot even read /api/status — and every request
 that is not GET/HEAD/OPTIONS also needs an allowed Origin when one is sent
 (403) and Content-Type: application/json (415): a web page cannot arm, kill
 or place a self-test order with a CORS "simple request". It skips
@@ -306,7 +306,7 @@ class WriteGuard:
     """Pure-ASGI guard for the desk's MAIN app (Task 5b + fix round 1):
     netguard.refusal() on every HTTP request — the Host on EVERY method
     (GETs and the /static mount included: a rebound page must not read the
-    webhook secret from /api/tv-setup), the Origin and a JSON Content-Type on
+    desk's state from /api/status), the Origin and a JSON Content-Type on
     writes. Refusals are {"error": ...} with 403 / 415. It skips
     /api/trade/*, whose own gate is stricter (loopback Host only on every
     method, ANY Origin refused, the desk key). `hosts()` returns the

@@ -128,8 +128,8 @@ SPECS = [
           "weekdays (both here and, again, on the desk itself).",
           {"account": {"type": "string"}}, ["account"]),
     _spec("export_start", "Start a data export job on the charts service (candles, ticks, level 1 "
-          "quotes or level 2 depth, to a CSV file) -- needs feat/data-export merged and the charts "
-          "service restarted; refused 09:10-09:35 ET on weekdays and while another export runs.",
+          "quotes or level 2 depth, to a CSV file); refused 09:10-09:35 ET on weekdays and while "
+          "another export runs.",
           {"root": {"type": "string", "description": "e.g. NQ."},
            "type": {"type": "string", "enum": ["candles", "ticks", "level1", "level2"]},
            "start": {"type": "string", "description": "YYYY-MM-DD"},
@@ -223,8 +223,7 @@ class DeskMixin:
         p = paths.state_dir() / "tick_coverage.json"
         if not p.exists():
             return ("No coverage report yet (homebase/.state/tick_coverage.json is missing) -- "
-                    "needs fix/tick-archive-gaps merged and a coverage run "
-                    "(python -m homebase.ticks --coverage).")
+                    "needs a coverage run (python -m homebase.ticks --coverage).")
         try:
             rep = json.loads(p.read_text())
         except ValueError as e:
@@ -362,7 +361,7 @@ class DeskMixin:
         except ToolError as e:
             if "404" in str(e):
                 raise ToolError("the charts service does not support data export yet "
-                                "(needs feat/data-export merged and the service restarted)") from None
+                                "(the service needs a restart)") from None
             raise
 
     def t_export_start(self, root: str, type: str, start: str, end: str, contract=None,  # noqa: A002

@@ -1835,7 +1835,7 @@ function stratView(name) {
   if (!s) return `<div class="feed-empty">That strategy is not on the desk any more.</div>`;
   const c = s.cfg, state = stratState(name, s), lv = s.live, p = todayPnl(s);
   const execTxt = (c.kind === "bars" ? "A price-action rule on the app's own live bars."
-    : c.self_fire ? "The app computes and fires this signal itself." : "A TradingView Pine alert feeds this strategy.")
+    : c.self_fire ? "The app computes and fires this signal itself." : "Self-fire is off: nothing fires this strategy.")
     + (c.shadow ? " Shadow: signals are journaled, nothing is placed — even when armed." : "");
   const fig = (k, v, title) => `<div class="f"${title ? ` title="${esc(title)}"` : ""}><div class="k">${k}</div><div class="v mono">${v}</div></div>`;
   const figs = lv && lv.trades

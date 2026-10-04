@@ -33,10 +33,10 @@ class StrategyCfg:
     enabled: bool = False
     gated: bool = False          # True = a no-alert day can be the regime gate
     self_fire: bool = False      # True: the APP computes and fires the signal;
-                                 # False: a Pine alert feeds /hook
-    pine_file: str = ""          # committed Pine source (homebase/research/)
+                                 # False: nothing fires it (see inactive.py)
+    pine_file: str = ""          # committed Pine source (homebase/research/), display-only
     metrics: dict = field(default_factory=dict)   # research record, display-only
-    kind: str = "straddle"       # "straddle": two stop legs at the anchor (timer/Pine)
+    kind: str = "straddle"       # "straddle": two stop legs at the anchor (timer)
                                  # "bars": a price-action RULE on closed bars (feed)
                                  # "levels": OCO stop entries from a NEW geometry each day (ATR / opening
                                  #   range), fired at fire_et by leveltimer.LevelTimer; daily rules below
@@ -135,9 +135,9 @@ def warn_bad_allowed_hosts(v) -> None:
 @dataclass
 class AppCfg:
     armed: bool = False          # master switch: disarmed = journal-only dry run
-    webhook_secret: str = ""     # shared secret the TV alert must carry
-    hook_port: int = 8851        # hook-ONLY listener — the only tunneled port
-    public_hook_url: str = ""    # the tunnel's public origin, once one is up
+    webhook_secret: str = ""     # unused since the webhook was removed (2026-09-27); save() blanks it
+    hook_port: int = 8851        # unused: nothing listens on it any more
+    public_hook_url: str = ""    # unused; save() blanks it
     accounts: dict[str, AccountCfg] = field(default_factory=dict)
     book: dict[str, list] = field(default_factory=dict)   # strategy -> [{account, qty}]
     strategies: dict[str, StrategyCfg] = field(default_factory=dict)
@@ -152,8 +152,8 @@ def _defaults() -> AppCfg:
     return AppCfg(
         strategies={
             # NQ 9:30 straddle — the approved champion (spec 2026-09-09,
-            # OOS-passed 2026-09-10). The TREND gate runs in-app (self_fire)
-            # and in the Pine script alike.
+            # OOS-passed 2026-09-10). The TREND gate runs in-app (self_fire);
+            # the Pine file is the research copy, shown on the desk page only.
             "nq930": StrategyCfg(
                 symbol="NQ", qty=3, offset_pts=10.0, sl_pts=5.0, tp_pts=15.0,
                 enabled=True, gated=True, self_fire=True, pine_file="nq930.pine",
