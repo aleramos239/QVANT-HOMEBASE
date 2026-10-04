@@ -746,11 +746,11 @@ def test_a_failed_subscribe_leaves_no_orphaned_stream_or_pending_update(tmp_path
     orig_payload = Stream.payload
     calls = [0]
 
-    def payload(self, fp=True):
+    def payload(self, fp=True, big=True):
         calls[0] += 1
         if calls[0] == 1:
             raise RuntimeError("payload boom")
-        return orig_payload(self, fp)
+        return orig_payload(self, fp, big)
 
     monkeypatch.setattr(Stream, "payload", payload)
 
@@ -1687,6 +1687,45 @@ def test_a_chart_scrolls_back_over_the_socket(tmp_path):
         assert bad["before"] == "yesterday" and "epoch ms" in bad["error"]
 
 
+def test_footprint_and_big_prints_come_only_when_the_chart_asks_for_them(tmp_path):
+    """A `sub` (and the chart's `older` after it) with "fp" / "big" false gets the same bars without those two
+    keys -- most of a history message, drawn only by the Footprint and Big prints indicators. A request that
+    says nothing gets both, as every request did before."""
+    base, days = tmp_path / "ticks", weekdays_before(D, 7)
+    for k, d in enumerate(days):
+        write_archive(base, "NQ", d, "NQZ6", rows(session_ms(d, 9, 30), [100.0 + k + 0.25 * (i % 4) for i in range(9)],
+                                                  step_ms=20_000, size=[12, 1, 1] * 3, first_id=1000 * (k + 1)))
+    write_archive(base, "NQ", D, "NQZ6", rows(session_ms(D, 9, 29), [200.0] * 120, first_id=90_000))
+    app = create_app(roots=["NQ"], base=base, replay=D, speed=1, start_et=dt.time(9, 30), state=tmp_path / "state")
+
+    def past(m):                                    # the completed sessions' bars: today's go on ticking
+        return [b for b in m["bars"] if b["s"] != D.isoformat()]
+
+    def lean(bars):
+        return [{k: v for k, v in b.items() if k not in ("fp", "big")} for b in bars]
+
+    with TestClient(app, base_url="http://127.0.0.1:8852") as client, client.websocket_connect("/ws", headers={"host": "localhost:8852"}) as ws:
+        ws.send_json({"op": "sub", "id": "c1", "root": "NQ", "spec": "time:60"})
+        full = next_of(ws, "history")
+        assert past(full) and all("fp" in b and "big" in b for b in full["bars"])
+        assert any(b["big"] for b in past(full))
+        ws.send_json({"op": "older", "id": "c1", "before": full["bars"][0]["ms"]})
+        full_older = next_of(ws, "older")
+        assert full_older["bars"] and all("fp" in b and "big" in b for b in full_older["bars"])
+
+        ws.send_json({"op": "sub", "id": "c1", "root": "NQ", "spec": "time:60", "fp": False, "big": False})
+        bare = next_of(ws, "history")
+        assert all("fp" not in b and "big" not in b for b in bare["bars"])
+        assert past(bare) == lean(past(full))
+        ws.send_json({"op": "older", "id": "c1", "before": bare["bars"][0]["ms"], "fp": False, "big": False})
+        bare_older = next_of(ws, "older")
+        assert bare_older == {**full_older, "bars": lean(full_older["bars"])}
+
+        ws.send_json({"op": "sub", "id": "c1", "root": "NQ", "spec": "time:60", "fp": True, "big": False})
+        only_fp = next_of(ws, "history")
+        assert all("fp" in b and "big" not in b for b in only_fp["bars"])
+
+
 def test_a_second_older_request_while_one_builds_gets_busy_not_silence(tmp_path, monkeypatch):
     """A scroll-back chunk while the same chart's previous one is still being built used to be
     dropped silently, so the page's pending request never resolved and the chart could never
@@ -1696,9 +1735,9 @@ def test_a_second_older_request_while_one_builds_gets_busy_not_silence(tmp_path,
     gate = threading.Event()
     orig_older = Hub.older
 
-    def slow_older(self, s, before):
+    def slow_older(self, s, before, *flags):
         gate.wait(2)
-        return orig_older(self, s, before)
+        return orig_older(self, s, before, *flags)
 
     monkeypatch.setattr(Hub, "older", slow_older)
 

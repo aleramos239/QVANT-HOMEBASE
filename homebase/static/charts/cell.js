@@ -124,6 +124,8 @@ class Cell {
     this.ov = [];          // this chart's overlays (page.overlays), rebuilt with the chart
     this.replay = null;    // Bar Replay (2026-09-27 plan): null live, else {date, cursorMs, speed, playing, done}
                             // -- set by replayui.js, read by HBTradeUI.effectiveMode (a replaying chart never trades)
+    this.has = { fp: false, big: false };   // what the bars on screen carry beyond OHLCV: need() as their history was asked
+    this.wantFp = false;   // the Level 2 ladder reads this chart's footprint (needFootprint)
     slot.className = 'panel';
     this.folded = false;   // the legend's collapse chevron: app.js syncs this to the persisted preference
                             // right after construction (it needs this cell's grid index, unknown in here)
@@ -338,7 +340,7 @@ class Cell {
   askOlder(r) {
     if (!this.chart || this.inflight.length || !this.bars.length || this.capped) return;
     const req = this.back.want(r, this.bars[0].ms);
-    if (req && this.host.send({ op: 'older', id: this.id, before: req.before })) this.back.sent(req);
+    if (req && this.host.send({ op: 'older', id: this.id, before: req.before, fp: this.has.fp, big: this.has.big })) this.back.sent(req);
   }
 
   /* Older sessions in front of the chart: the bars, their studies (and the repaired first bars) and session
@@ -410,13 +412,34 @@ class Cell {
     return true;
   }
 
+  /* What the bars must carry beyond OHLCV: the footprint (volume per price) for a Footprint indicator or the
+     Level 2 ladder's Vol column, the big prints for a Big prints indicator. A hidden instance counts: showing
+     it again stays instant (setVisible). Everything else is drawn from OHLCV and the studies alone, so a
+     chart without them asks for its history without -- it is most of the message. */
+  need() {
+    const on = (id) => this.cfg.indicators.some((x) => x.id === id);
+    return { fp: this.wantFp || on('footprint'), big: on('bigprints') };
+  }
+
+  /* The Level 2 ladder shows this chart (domui.js calls this at every paint): its Vol column sums the bars'
+     footprint, so the chart carries it from now on -- loaded now, once, if its history came without (a sub the
+     server refuses is not sent again at the next paint). Not in a replay: its history carries everything, and
+     a `sub` would end it. */
+  needFootprint() {
+    if (this.wantFp || this.replay) return;
+    this.wantFp = true;
+    const last = this.inflight[this.inflight.length - 1];
+    if (!(last ? last.has : this.has).fp) this.subscribe(true);
+  }
+
   /* Send the chart's config; keepView: restore the view on screen when the
      answer is for the same root + interval. "Loading…" while it asks for
      another root or interval than the bars on screen. */
   subscribe(keepView = false) {
-    const cfg = this.cfgNow(), view = keepView && this.chart ? this.viewNow() : null;
-    if (!this.host.send({ op: 'sub', id: this.id, root: cfg.root, spec: cfg.spec, studies: C.serverKeys(cfg.indicators), fp: true })) return;
-    this.inflight.push({ cfg, view });
+    const cfg = this.cfgNow(), view = keepView && this.chart ? this.viewNow() : null, has = this.need();
+    if (!this.host.send({ op: 'sub', id: this.id, root: cfg.root, spec: cfg.spec, studies: C.serverKeys(cfg.indicators),
+      fp: has.fp, big: has.big })) return;
+    this.inflight.push({ cfg, view, has });
     const s = this.shown;
     if (!s || s.root !== cfg.root || s.spec !== cfg.spec) this.message('Loading…');
   }
@@ -427,8 +450,9 @@ class Cell {
   /* A change from the toolbar or a dialog. A new symbol or interval reloads
      the chart at the latest bar; indicator changes rebuild it in place and
      resubscribe (keeping the view) only when they need a study the stream
-     does not carry yet, or when a sub is still in flight (its answer would
-     otherwise land on top of this change). */
+     does not carry yet or bar data the history came without (need()), or
+     when a sub is still in flight (its answer would otherwise land on top
+     of this change). */
   update(patch) {
     // a symbol or interval change ends this chart's replay (barreplay.py: a plain `sub` on a replaying chart
     // auto-stops it server-side) -- the host asks "Leave replay?" once and, on Yes, re-runs this same patch
@@ -447,8 +471,9 @@ class Cell {
     Object.assign(this.cfg, patch);
     this.title();
     this.host.changed();
-    const same = !!was && was.root === this.cfg.root && was.spec === this.cfg.spec;
-    if (same && this.chart && !this.inflight.length && C.serverKeys(this.cfg.indicators).every((k) => this.keys.has(k))) {
+    const same = !!was && was.root === this.cfg.root && was.spec === this.cfg.spec, need = this.need();
+    const loaded = (this.has.fp || !need.fp) && (this.has.big || !need.big);
+    if (same && this.chart && !this.inflight.length && loaded && C.serverKeys(this.cfg.indicators).every((k) => this.keys.has(k))) {
       this.lastGood = this.cfgNow();
       this.restyle();
       return;
@@ -462,6 +487,7 @@ class Cell {
     const entry = this.inflight.shift();
     if (entry) this.lastGood = entry.cfg;
     if (this.inflight.length) return;
+    this.has = entry ? entry.has : { fp: true, big: true };   // no sub of ours: a replay's history, which carries both
     this.back.reset();
     this.capped = false;
     const s = this.shown, view = entry && entry.view && s && s.root === m.root && s.spec === m.spec ? entry.view : null;

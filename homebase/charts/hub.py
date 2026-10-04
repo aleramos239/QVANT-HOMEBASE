@@ -100,15 +100,16 @@ class Stream:
         self.studies[key] = st
         self.values[key] = [st.push(b) for b in self.bars]
 
-    def payload(self, fp: bool = True) -> dict:
+    def payload(self, fp: bool = True, big: bool = True) -> dict:
         """The history message: the most recent HISTORY_MAX bars, every
         study's values sliced to match. A subscriber's cursor is still
-        len(self.bars), so its updates continue where this ends."""
+        len(self.bars), so its updates continue where this ends. fp / big:
+        whether the bars carry their footprint / big prints (Bar.wire)."""
         ts, live = self.tick_size, self.builder.cur
         first = max(0, len(self.bars) + (live is not None) - HISTORY_MAX)
-        bars = [b.wire(ts, fp) for b in self.bars[first:]]
+        bars = [b.wire(ts, fp, big) for b in self.bars[first:]]
         if live is not None:
-            bars.append(live.wire(ts, fp))
+            bars.append(live.wire(ts, fp, big))
         studies = {k: self.values[k][first:] + ([st.preview(live)] if live is not None else [])
                    for k, st in self.studies.items()}
         return {"root": self.root, "spec": self.spec.key, "tick_size": ts, "point_value": point_value(self.root),
@@ -305,7 +306,7 @@ class Hub:
         """The stream a chart (conn, chart id) is subscribed to."""
         return next((s for s in self.streams.values() if sub in s.subs), None)
 
-    def older(self, s: Stream, before_ms: int) -> dict:
+    def older(self, s: Stream, before_ms: int, fp: bool = True, big: bool = True) -> dict:
         """Worker thread: scroll-back. The next chunk of COMPLETED sessions strictly before before_ms (the
         page's first bar), newest first, until sessions_back(spec) sessions or HISTORY_MAX bars (a session
         that does not fit gives its newest bars; the next request continues before them), or BUILD_BUDGET_S
@@ -314,7 +315,8 @@ class Hub:
         blocking the connection on a cold chunk). Built as a history message's bars are, but never
         memoized. Its studies run over it from a fresh start, as a history message's do, then on across the
         join through the page's first bars for as long as a study remembers what came before ("repair": the
-        page overwrites those values). done: nothing older is left. Never today's session."""
+        page overwrites those values). done: nothing older is left. Never today's session. fp / big: as
+        the chart's history message (Stream.payload)."""
         root, spec = s.root, s.spec
         keys = list(s.studies)
         today = self.today_date.get(root) or session_date(self.now_ms(), root)
@@ -355,7 +357,7 @@ class Hub:
             st = make(k)
             studies[k] = [st.push(b) for b in chunk]
             repair[k] = [st.push(b) for b in ahead]
-        return {"bars": [b.wire(s.tick_size) for b in chunk], "studies": studies, "repair": repair,
+        return {"bars": [b.wire(s.tick_size, fp, big) for b in chunk], "studies": studies, "repair": repair,
                 "sessions": infos, "done": i == 0 and not trimmed}
 
     def drop_conn(self, conn) -> None:

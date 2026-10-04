@@ -76,7 +76,7 @@ function nextCenter(prevIdx, lastPrice, tick, levels = LEVELS) {
 function centerOn(lastPrice, tick) { return tickIndex(lastPrice, tick); }
 
 /* Volume at price from the cell's own bars[from..to): each bar's footprint (bar.fp, [[price, sellAtBid,
-   buyAtAsk], ...], sent whenever the server's `fp` flag is on -- the default) summed per tick index. null (not a
+   buyAtAsk], ...], sent when the chart's `sub` asks for it: cell.js need()) summed per tick index. null (not a
    Map) when no bar in the range carries footprint data at all -- the whole column is blank, never zeroed; a Map
    with no entry for a price means that price saw no prints, also left blank on the row. */
 function addFp(m, bar, tick) {

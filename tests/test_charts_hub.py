@@ -648,3 +648,29 @@ def test_a_reseed_and_the_roll_drop_the_kept_minutes(tmp_path):
     assert hub.minutes["ES"] is not stale and hub.minutes["ES"].upto == 400
     hub.on_ticks("ES", rows(session_ms(D + dt.timedelta(days=1), 18, 1), [300.0], first_id=99_999))
     assert "ES" not in hub.minutes                   # the 18:00 roll starts a new tape
+
+
+# ---- the footprint and the big prints ride in a history / scroll-back message only when the chart asks ----
+def lean(bars):
+    return [{k: v for k, v in b.items() if k not in ("fp", "big")} for b in bars]
+
+
+def test_a_history_without_footprint_and_big_prints_is_the_same_message_minus_those_two(tmp_path):
+    hub, today, _ = setup(tmp_path)
+    big = [dict(r, size=12) if i % 7 == 0 else r for i, r in enumerate(today)]
+    hub.start_today("NQ", D, ticks_of(big))
+    s = open_stream(hub, keys=("vwap", "cumdelta", "profile"))
+    full = s.payload()
+    assert full == s.payload(True, True)
+    assert all("fp" in b and "big" in b for b in full["bars"]) and any(b["big"] for b in full["bars"])
+    assert s.payload(fp=False, big=False) == {**full, "bars": lean(full["bars"])}
+    assert all("fp" not in b and "big" in b for b in s.payload(fp=False)["bars"])
+    assert all("fp" in b and "big" not in b for b in s.payload(big=False)["bars"])
+
+
+def test_older_without_footprint_and_big_prints_is_the_same_chunk_minus_those_two(tmp_path):
+    hub, days = deep(tmp_path)
+    s = open_stream(hub, keys=("ema:3",))
+    full = hub.older(s, s.bars[0].t)
+    assert full["bars"] and all("fp" in b and "big" in b for b in full["bars"])
+    assert hub.older(s, s.bars[0].t, fp=False, big=False) == {**full, "bars": lean(full["bars"])}
