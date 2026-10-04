@@ -1031,39 +1031,6 @@ class TradovateAdapter(BrokerAdapter):
         return OrderResult(ok=True, order_id=str(oid),
                            raw={**raw, "sl_order_id": str(oid), "tp_order_id": str(other)})
 
-    async def get_protective_orders(self, symbol: str) -> list[dict]:
-        """Resting Stop/Limit orders on this account for `symbol`, read from the
-        WS entity cache (order + latest orderVersion). Lets the engine mirror a
-        Tradovate leader's stop/target onto the followers."""
-        if self._ws is None or self._acct_num is None:
-            return []
-        try:
-            c = await self._ws.contract_find(symbols.resolve_contract(symbol))
-        except Exception:
-            c = None
-        cid = (c or {}).get("id")
-        out: list[dict] = []
-        for oid, o in list(self._orders.items()):
-            if o.get("accountId") != self._acct_num:
-                continue
-            if o.get("ordStatus") not in self._WORKING_STATUSES:
-                continue
-            ov = self._order_versions.get(oid, {})
-            o_cid = o.get("contractId") or ov.get("contractId")
-            if cid is not None and o_cid is not None and o_cid != cid:
-                continue
-            otype = ov.get("orderType") or o.get("orderType")
-            side = o.get("action") or ov.get("action")
-            qty = ov.get("orderQty") or o.get("orderQty")
-            if otype == "Stop":
-                out.append({"order_id": str(oid), "kind": "stop", "side": side,
-                            "price": ov.get("stopPrice") or o.get("stopPrice"),
-                            "qty": qty})
-            elif otype == "Limit":
-                out.append({"order_id": str(oid), "kind": "target", "side": side,
-                            "price": ov.get("price") or o.get("price"), "qty": qty})
-        return out
-
     # ------------------------------------------------------------ chart trading
     def contract_name(self, contract_id) -> Optional[str]:
         return self._contracts.get(contract_id)
