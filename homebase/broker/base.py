@@ -29,6 +29,11 @@ class FillEvent:
     position_after: Optional[int] = None   # net position after this fill, if known
     ts: float = 0.0
     raw: dict = field(default_factory=dict)
+    # Timing only, journaled on entry_fill (time.perf_counter readings): when the fill's push
+    # was first seen on the socket, and when a broker read had filled in what the push left
+    # out (None: no read was needed).
+    seen: Optional[float] = None
+    enriched: Optional[float] = None
 
 
 @dataclass

@@ -239,6 +239,7 @@ class TradovateAdapter(BrokerAdapter):
         self._seen_order: deque = deque(maxlen=_SEEN_FILL_CAP)
         self._on_fill: Optional[FillCallback] = None
         self._fill_q: asyncio.Queue = asyncio.Queue(maxsize=1000)
+        self._fill_seen: dict[int, float] = {}    # queued fill id -> perf_counter at its push (timing only)
         self._consumer: Optional[asyncio.Task] = None
         self._keepalive: Optional[asyncio.Task] = None
         self._positions: dict[int, dict] = {}     # contractId -> position, THIS account only
@@ -578,6 +579,7 @@ class TradovateAdapter(BrokerAdapter):
             if fid is None or not self._mark_seen(fid):
                 return
             if self._on_fill is not None:     # this account is being observed as master
+                self._fill_seen[fid] = time.perf_counter()    # timing only (FillEvent.seen)
                 self._enqueue_fill(ent)
             self._notify_mine(et, ent)
             self._count_fill(ent)             # after the dispatch, and it never raises
@@ -797,6 +799,7 @@ class TradovateAdapter(BrokerAdapter):
             self._fill_q.put_nowait(ent)
         except asyncio.QueueFull:
             fid = ent.get("id")
+            self._fill_seen.pop(fid, None)
             _log(f"{self.account_id}: fill queue full, dropping fill {fid}")
             self.audit({"event": "fill_dropped", "account": self.account_id,
                         "fill_id": fid})
@@ -823,6 +826,8 @@ class TradovateAdapter(BrokerAdapter):
     async def _build_fill_event(self, ent: dict) -> Optional[FillEvent]:
         fid = ent.get("id")
         order_id = ent.get("orderId")
+        seen = self._fill_seen.pop(fid, None)          # timing only, as is `read` below
+        read = order_id is not None and self._orders.get(order_id) is None   # the lookup asks the broker
         order = await self._lookup_order(order_id)
         contract_id = ent.get("contractId") or (order or {}).get("contractId")
 
@@ -830,6 +835,7 @@ class TradovateAdapter(BrokerAdapter):
         # (and sometimes orderId/qty/action). Re-fetch the full fill entity to
         # recover the missing fields before giving up.
         if (contract_id is None or ent.get("qty") is None) and fid is not None:
+            read = True
             try:
                 full = await self._ws.fill_item(fid)
             except Exception as e:
@@ -854,6 +860,7 @@ class TradovateAdapter(BrokerAdapter):
             if symbol and contract_id is not None:
                 self._contracts[contract_id] = symbol
         if not symbol and contract_id is not None:
+            read = True
             try:
                 c = await self._ws.contract_item(contract_id)
                 symbol = (c or {}).get("name", "")
@@ -882,6 +889,8 @@ class TradovateAdapter(BrokerAdapter):
             # partial and may omit it, and the engine matches the straddle's
             # entry legs on raw["orderId"] to cancel the sibling.
             raw={**ent, "orderId": order_id} if order_id is not None else ent,
+            seen=seen,
+            enriched=time.perf_counter() if read else None,
         )
 
     async def _lookup_order(self, order_id) -> Optional[dict]:
