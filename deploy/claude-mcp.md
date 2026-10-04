@@ -10,7 +10,7 @@ trading tool of any kind** — nothing here can place or cancel an order, flatte
 book/unbook an account, or touch a strategy or chart-trading switch (`homebase/claude_mcp/desk_client.py`'s
 `ALLOWED_GET`/`ALLOWED_POST` is the whole allowlist; `tests/test_claude_mcp.py` pins it structurally).
 
-## Register (once, after this branch is merged; see restarts below)
+## Register (once)
 
 ```sh
 claude mcp add --scope user \
@@ -18,10 +18,10 @@ claude mcp add --scope user \
   homebase -- /Users/ramoscapital/ramos-quant-homebase/.venv/bin/python -m homebase.claude_mcp
 ```
 
-- **If `homebase` is already registered from an earlier branch, no re-registration is needed** — the
+- **If `homebase` is already registered, no re-registration is needed after a code change** — the
   same command starts the same module, and the MCP server subprocess is spawned fresh each Claude Code
-  session, so it picks up this branch's new tools the next time a session starts. Just restart the
-  session (or run `/mcp` again) once this branch is merged.
+  session, so it picks up new tools the next time a session starts. Just restart the
+  session (or run `/mcp` again).
 - `PYTHONPATH` makes `homebase` importable whatever directory Claude Code starts in. The server imports
   nothing outside the stdlib, so any `python3` (3.9+) works in place of the venv's.
 - Check it: `claude mcp list` should show `homebase ... ✓ Connected`. In a session, `/mcp` lists its 24 tools.
@@ -42,20 +42,22 @@ claude mcp add --scope user \
 - DRAFT strategy files: `~/.homebase/strategies/<name>.py` (`HOMEBASE_DRAFTS_DIR` overrides).
 - `homebase/.state/tick_coverage.json`, read directly off disk (never over HTTP) for `data_coverage`.
 
-## Needs a restart to actually work
+## What the tools need from the running services
 
-- **The desk** (`com.ramosquant.homebase`, :8850) must be restarted once this branch is merged: it adds
-  `GET /api/journal` and a `cooldown_s` field on `/api/status`'s accounts, which `desk_status` and
-  `desk_journal` depend on. Until then those two tools 404 / show no cooldown.
-- **`export_start` / `export_status`** additionally need `feat/data-export` merged into the chart service
-  (`POST /api/export/start`, `GET /api/export/{id}`) and the chart service (`com.ramosquant.homebase-charts`,
-  :8852) restarted. Until then they refuse with "needs feat/data-export merged and the service restarted".
-- **`data_coverage`** needs `fix/tick-archive-gaps` merged and at least one
-  `python -m homebase.ticks --coverage` run to have written `homebase/.state/tick_coverage.json`. Until
-  then it says so and returns cleanly (no error).
-- **Claude Code itself**: a running session keeps the tool list it started with: after any of the above
-  restarts, or after this branch first merges, start a new session (or `/mcp` reconnect) to pick up the new
-  tools and the updated ones' new fields.
+All of the code below is in `main`. A tool only fails this way when a service is still running an older
+version: restart that service (never 09:20–09:35 ET on weekdays).
+
+- **The desk** (`com.ramosquant.homebase`, :8850) serves `GET /api/journal` and a `cooldown_s` field on
+  `/api/status`'s accounts, which `desk_journal` and `desk_status` depend on. A desk older than that
+  answers 404 / shows no cooldown.
+- **`export_start` / `export_status`** use the chart service's `POST /api/export/start` and
+  `GET /api/export/{id}` (`com.ramosquant.homebase-charts`, :8852). When those routes are missing the tools
+  refuse with a message that still names the old branch ("needs feat/data-export merged and the service
+  restarted"): it means the chart service must be restarted.
+- **`data_coverage`** reads `homebase/.state/tick_coverage.json`, which the tick job writes
+  (`python -m homebase.ticks --coverage` rewrites it). With no file it says so and returns cleanly (no error).
+- **Claude Code itself**: a running session keeps the tool list it started with: after a service restart or
+  a code change, start a new session (or `/mcp` reconnect) to pick up new tools and new fields.
 
 ## Draft strategies: where their code runs
 
@@ -75,10 +77,10 @@ claude mcp add --scope user \
 
 ## Needs the chart service to run this version
 
-`POST /api/tester/show`, `GET /api/tester/strategies/{id}/source` and DRAFT strategies in the catalog are
-new chart-service code: until `com.ramosquant.homebase-charts` is restarted on it, `show_on_chart`,
-`read_strategy` and `write_strategy` answer 404 / "not listed yet" (the other tools work against the old
-service). The chart page also needs a reload to pick up the new `tester_show` handler.
+`show_on_chart`, `read_strategy` and `write_strategy` use `POST /api/tester/show`,
+`GET /api/tester/strategies/{id}/source` and the DRAFT strategies in the catalog. A chart service started
+before that code answers 404 / "not listed yet": restart `com.ramosquant.homebase-charts`. A chart page
+opened before the restart needs a reload to pick up the `tester_show` handler.
 
 ## show_on_chart, on the page
 
@@ -91,7 +93,9 @@ allowed): a chart with accounts is never switched.
 
 ## Limits it inherits
 
-- At most 2 backtests at once on this machine (runs, heat-map cells and walk-forward cells together).
+- At most 2 backtests at once on this machine during desk hours (weekdays 08:00–16:15 ET) and 4 outside
+  them (runs, heat-map cells and walk-forward cells together; `homebase/backtest/slots.py`). An override
+  file, `~/.homebase/tester_slots.json`, can change the cap for a while and add no-start windows.
 - Nothing starts 09:20–09:35 ET on weekdays: a single backtest asked for then is refused and the tool
   returns the refusal; a heat-map / walk-forward is accepted but its cells wait,
   and the tool reports them `paused for the 9:30 window`.
@@ -102,9 +106,10 @@ allowed): a chart with accounts is never switched.
   the desk's own `/api/status` / `/api/journal` (or read a local file for `data_coverage`) and are never
   refused; they format a compact summary, never a raw dump.
 - **Operations** — `account_reconnect`, `account_remove`, `export_start`, `export_status` — are each
-  refused 09:20–09:35 ET on weekdays, before any request goes out. `account_reconnect` and
+  refused 09:10–09:35 ET on weekdays, before any request goes out (`desk_tools.QUIET`; wider than the
+  tester tools' 09:20–09:35). The desk also refuses an MCP `account_remove` in that window itself. `account_reconnect` and
   `account_remove` send `source: "mcp"` on the desk's existing `/api/accounts/reconnect` and
-  `/api/accounts/remove` routes, which (this branch) journals an extra `mcp_action` event alongside the
+  `/api/accounts/remove` routes, which journal an extra `mcp_action` event alongside the
   usual `manual_reconnect` / `account_removed` one — so the journal always shows whether a reconnect or a
   removal came from the dashboard or from Claude.
 - **`account_remove`** is refused by the desk itself (409) while the account holds an open position or a
