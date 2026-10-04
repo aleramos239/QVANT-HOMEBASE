@@ -1,7 +1,7 @@
 """Daily rules: day_take / day_lock / target_take, the sizing tiers and the eval standing (spec 2026-10-01).
 
 Pure logic, no I/O -- the engine feeds it the closed P&L of the day and the open P&L at the latest price.  It
-lives in its own module (re-exported by homebase.risk, next to the per-account drawdown tracker) because the
+lives in its own module (re-exported by homebase.risk) because the
 tester's strategies need the same numbers and must not import the desk's risk module (the chart service lists
 strategies in-process; tests/test_charts_paper.py keeps the order path out of it).  From the research
 (evalcore._walk_day, take_level):

@@ -2,10 +2,13 @@
 from __future__ import annotations
 
 import datetime as dt
+import random
 import time
 
+import pytest
+
 import homebase.charts.hub as hub_mod
-from homebase.charts.bars import Bar, BarBuilder, BarSpec
+from homebase.charts.bars import Bar, BarBuilder, BarSpec, build
 from homebase.charts.history import History
 from homebase.charts.hub import Hub, Stream, sessions_back, warm_bars
 from homebase.charts.store import TickStore
@@ -489,3 +492,185 @@ def test_older_walks_newest_first_and_stays_contiguous_across_two_calls(tmp_path
     assert b_dates
     cut = len(expected_tail) - len(a_dates)
     assert b_dates == expected_tail[max(0, cut - len(b_dates)):cut]         # continues with no gap
+
+
+# ---- today's bars of a whole-minute chart: resampled from the kept 1-minute bars, never a replay of the tape ----
+WHOLE_MINUTES = (60, 120, 300, 900, 1800, 3600, 14400, 86400)
+
+
+def rough_rows(step: float, base: int) -> list[dict]:
+    """Two sessions of irregular trades (D, then the next one from 18:00): quiet stretches of 47 minutes and
+    three hours inside D, the 17:00-18:00 break between the two, minutes with no trade at all, prints that
+    arrive late for an earlier minute or an earlier 5-minute bar, big prints, both sides."""
+    rnd = random.Random(11)
+    nxt = D + dt.timedelta(days=1)
+    spans = [(session_ms(D, 18, 0), session_ms(D, 21, 13)), (session_ms(D, 22, 0), session_ms(D, 23, 30)),
+             (session_ms(D, 2, 30), session_ms(D, 16, 59, 59)), (session_ms(nxt, 18, 0), session_ms(nxt, 20, 7))]
+    out, n = [], base
+    for a, b in spans:
+        t = a
+        while t < b:
+            n += rnd.choice((-2, -1, 0, 0, 1, 2))
+            p, buy = round(n * step, 6), rnd.random() < 0.5
+            late = rnd.choice((61_000, 400_000)) if rnd.random() < 0.03 and t - a > 400_000 else 0
+            out.append({"ts_ms": t - late, "price": p, "size": rnd.choice((1, 1, 2, 3, 7, 10, 25)),
+                        "bid": p - step if buy else p, "ask": p if buy else p + step, "id": len(out) + 1})
+            t += rnd.choice((40, 900, 7_000, 31_000, 95_000))
+    return out
+
+
+def every_field(b):
+    return (b.t, b.session, b.o, b.h, b.l, b.c, b.v, b.buy, b.sell, b.n, b.pv, b.p2v,
+            list(b.fp.items()), b.big, b.closed)
+
+
+def replaying(hub):
+    """A second hub on the same store that never uses the kept minutes: every chart replays the tape."""
+    ref = Hub(hub.history, hub.now_ms)
+    ref._minutes = lambda *a: None
+    return ref
+
+
+def test_a_whole_minute_chart_from_the_kept_minutes_is_the_tape_s_replay_field_for_field(tmp_path):
+    hub, _, _ = setup(tmp_path)
+    tape = ticks_of(rough_rows(0.25, 20_000))
+    hub.start_today("ES", D, tape)
+    for size in WHOLE_MINUTES:
+        spec = BarSpec("time", size)
+        s = hub.prepare("ES", spec, []).stream
+        closed, cur = build(tape, spec, 0.25, "ES")
+        assert len(closed) > 1 or size >= 86400
+        assert [every_field(b) for b in s.bars] == [every_field(b) for b in closed]
+        assert every_field(s.builder.cur) == every_field(cur)
+    assert len({b.session for b in s.bars + [s.builder.cur]}) == 2          # the tape did cross a session
+    assert hub.minutes["ES"].whole and hub.minutes["ES"].upto == len(tape)
+
+
+def test_the_history_message_and_all_that_follows_it_match_a_replaying_hub(tmp_path):
+    """The stream goes on from the resampled developing bar exactly as from a replayed one: the same history
+    message, then the same updates tick for tick and clock for clock, through the 18:00 roll."""
+    hub, _, _ = setup(tmp_path)
+    ref = replaying(hub)
+    rs = rough_rows(0.25, 20_000)
+    cut = next(i for i, r in enumerate(rs) if r["ts_ms"] >= session_ms(D, 11, 3))
+    keys = ["vwap", "vwap:rth", "cumdelta", "ema:5", "levels", "profile"]
+    for size in WHOLE_MINUTES:
+        spec = BarSpec("time", size)
+        both = []
+        for h in (hub, ref):
+            h.start_today("ES", D, ticks_of(rs[:cut]))
+            both.append(h.attach(h.prepare("ES", spec, keys)))
+            h.subscribe(both[-1], ("conn", "c1"))
+        assert both[0].payload() == both[1].payload() and both[0].payload()["live"] is True
+        for i in range(cut, len(rs), 37):
+            for h in (hub, ref):
+                h.on_clock(rs[i]["ts_ms"] - 1500)        # the pump's clock comes before the next ticks
+                h.on_ticks("ES", rs[i:i + 37])
+            assert hub.drain() == ref.drain()
+        assert both[0].payload() == both[1].payload()
+        assert hub.today_date["ES"] == D + dt.timedelta(days=1)             # it did roll
+        for h in (hub, ref):
+            h.unsubscribe(("conn", "c1"))
+
+
+def test_a_timeframe_change_replays_only_the_ticks_since_the_last_one(tmp_path, monkeypatch):
+    hub, _, _ = setup(tmp_path)
+    rs = rough_rows(0.25, 20_000)
+    cut = len(rs) // 2
+    hub.start_today("ES", D, ticks_of(rs[:cut]))
+    hub.prepare("ES", M1, [])                        # the day's first chart goes through the tape once
+    seen, real = [], BarBuilder.add
+    monkeypatch.setattr(BarBuilder, "add", lambda self, tk: (seen.append(tk.id), real(self, tk))[1])
+    hub.prepare("ES", BarSpec("time", 300), [])
+    assert seen == []
+    hub.on_ticks("ES", rs[cut:cut + 7])              # no stream yet: only the tape grows
+    hub.prepare("ES", BarSpec("time", 900), [])
+    assert seen == [r["id"] for r in rs[cut:cut + 7]]
+    del seen[:]
+    hub.prepare("ES", BarSpec("time", 30), [])       # 1-minute bars cannot give it: the tape, as before
+    hub.prepare("ES", BarSpec("tick", 50), [])
+    assert len(seen) == 2 * (cut + 7)
+
+
+def test_a_print_at_the_session_close_sends_whole_minute_charts_back_to_the_replay(tmp_path):
+    """A classic root's close is inclusive: a 17:00:00.000 print is in no 1-minute bar (its bucket starts at
+    the close), but the tape's replay files it in a 4-hour or daily bar, whose last bucket runs over the
+    close. The kept minutes cannot give that bar, so they step aside -- and stay aside when a late print
+    for 16:59 follows it."""
+    hub, _, _ = setup(tmp_path)
+    rs = [r for r in rough_rows(0.25, 20_000) if r["ts_ms"] < session_ms(D, 17, 0)]
+    rs += rows(session_ms(D, 17, 0), [4321.0], size=3, first_id=90_000)
+    rs += rows(session_ms(D, 16, 59, 59), [4321.25], size=3, first_id=90_001)
+    tape = ticks_of(rs)
+    hub.start_today("ES", D, tape)
+    for size in WHOLE_MINUTES:
+        spec = BarSpec("time", size)
+        s = hub.prepare("ES", spec, []).stream
+        closed, cur = build(tape, spec, 0.25, "ES")
+        assert [every_field(b) for b in s.bars] == [every_field(b) for b in closed]
+        assert every_field(s.builder.cur) == every_field(cur)
+    assert cur.l == 4321.0 and hub.minutes["ES"].whole is False             # the daily bar holds the print
+
+
+def test_on_a_decimal_tick_every_bar_sent_is_still_the_replay_s(tmp_path):
+    """0.1 is no binary fraction, so price * size sums round: a resampled bar adds them minute by minute, the
+    replay tick by tick. Every field the page gets is exact either way; pv and p2v (VWAP's inputs, never
+    sent) agree to float rounding -- what a completed session's resampled bars have always had."""
+    hub, _, _ = setup(tmp_path)
+    tape = ticks_of(rough_rows(0.1, 26_500))
+    hub.start_today("GC", D, tape)
+    for size in WHOLE_MINUTES:
+        spec = BarSpec("time", size)
+        s = hub.prepare("GC", spec, []).stream
+        closed, cur = build(tape, spec, 0.1, "GC")
+        got, want = s.bars + [s.builder.cur], closed + [cur]
+        assert [b.wire(0.1) for b in got] == [b.wire(0.1) for b in want]
+        assert [b.closed for b in got] == [b.closed for b in want]
+        assert [b.pv for b in got] == pytest.approx([b.pv for b in want], rel=1e-12)
+        assert [b.p2v for b in got] == pytest.approx([b.p2v for b in want], rel=1e-12)
+
+
+def test_a_reseed_and_the_roll_drop_the_kept_minutes(tmp_path):
+    hub, _, _ = setup(tmp_path)
+    rs = rough_rows(0.25, 20_000)
+    tape = ticks_of([r for r in rs if r["ts_ms"] < session_ms(D, 17, 0)])
+    spec = BarSpec("time", 300)
+    hub.start_today("ES", D, tape[:100])
+    hub.prepare("ES", spec, [])
+    stale = hub.minutes["ES"]
+    assert stale.upto == 100
+    hub.start_today("ES", D, tape[:400])             # a refill reseeds the tape
+    assert "ES" not in hub.minutes
+    hub.minutes["ES"] = stale                        # a prepare() that overlapped the reseed put the old ones back
+    s = hub.prepare("ES", spec, []).stream
+    closed, cur = build(tape[:400], spec, 0.25, "ES")
+    assert [every_field(b) for b in s.bars + [s.builder.cur]] == [every_field(b) for b in closed + [cur]]
+    assert hub.minutes["ES"] is not stale and hub.minutes["ES"].upto == 400
+    hub.on_ticks("ES", rows(session_ms(D + dt.timedelta(days=1), 18, 1), [300.0], first_id=99_999))
+    assert "ES" not in hub.minutes                   # the 18:00 roll starts a new tape
+
+
+# ---- the footprint and the big prints ride in a history / scroll-back message only when the chart asks ----
+def lean(bars):
+    return [{k: v for k, v in b.items() if k not in ("fp", "big")} for b in bars]
+
+
+def test_a_history_without_footprint_and_big_prints_is_the_same_message_minus_those_two(tmp_path):
+    hub, today, _ = setup(tmp_path)
+    big = [dict(r, size=12) if i % 7 == 0 else r for i, r in enumerate(today)]
+    hub.start_today("NQ", D, ticks_of(big))
+    s = open_stream(hub, keys=("vwap", "cumdelta", "profile"))
+    full = s.payload()
+    assert full == s.payload(True, True)
+    assert all("fp" in b and "big" in b for b in full["bars"]) and any(b["big"] for b in full["bars"])
+    assert s.payload(fp=False, big=False) == {**full, "bars": lean(full["bars"])}
+    assert all("fp" not in b and "big" in b for b in s.payload(fp=False)["bars"])
+    assert all("fp" in b and "big" not in b for b in s.payload(big=False)["bars"])
+
+
+def test_older_without_footprint_and_big_prints_is_the_same_chunk_minus_those_two(tmp_path):
+    hub, days = deep(tmp_path)
+    s = open_stream(hub, keys=("ema:3",))
+    full = hub.older(s, s.bars[0].t)
+    assert full["bars"] and all("fp" in b and "big" in b for b in full["bars"])
+    assert hub.older(s, s.bars[0].t, fp=False, big=False) == {**full, "bars": lean(full["bars"])}

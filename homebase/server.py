@@ -32,6 +32,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from . import bothistory
 from . import config as config_mod
 from . import secrets_store
 from .broker.base import AccountNotOnLogin, BrokerAdapter, OrderRequest
@@ -75,25 +76,46 @@ def _equity_path() -> Path:
     return state_dir() / "equity.jsonl"
 
 
+_EQUITY_LAST: dict[tuple, tuple] = {}     # (file, account) -> the (date, equity) of its last line
+_EQUITY_DAYS: dict = {"stamp": None, "days": {}}   # the file parsed, and the stamp it was parsed at
+
+
 def record_equity(account: str, equity: float, date: str) -> None:
-    with open(_equity_path(), "a") as f:
+    """One line when the account's balance or the date differs from its last line. Every
+    reader keeps a day's LAST value (equity_by_day), so a repeated line added nothing."""
+    p = _equity_path()
+    if _EQUITY_LAST.get((str(p), account)) == (date, equity):
+        return
+    with open(p, "a") as f:
         f.write(json.dumps({"date": date, "account": account,
                             "equity": equity}) + "\n")
+    _EQUITY_LAST[(str(p), account)] = (date, equity)
+
+
+def _equity_days() -> dict[str, dict[str, float]]:
+    """equity.jsonl as {account: {date: that day's last equity}}: parsed once, and again only
+    when the file's stamp (inode, size, mtime) has changed."""
+    p = _equity_path()
+    try:
+        st = p.stat()
+    except OSError:
+        return {}
+    stamp = (str(p), st.st_ino, st.st_size, st.st_mtime_ns)
+    if stamp != _EQUITY_DAYS["stamp"]:
+        days: dict[str, dict[str, float]] = {}
+        for line in p.read_text().splitlines():
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            if r.get("equity") is not None:
+                days.setdefault(r.get("account"), {})[r["date"]] = float(r["equity"])
+        _EQUITY_DAYS.update(stamp=stamp, days=days)
+    return _EQUITY_DAYS["days"]
 
 
 def equity_by_day(account: str) -> dict[str, float]:
-    out: dict[str, float] = {}
-    p = _equity_path()
-    if not p.exists():
-        return out
-    for line in p.read_text().splitlines():
-        try:
-            r = json.loads(line)
-        except ValueError:
-            continue
-        if r.get("account") == account and r.get("equity") is not None:
-            out[r["date"]] = float(r["equity"])
-    return dict(sorted(out.items()))
+    return dict(sorted(_equity_days().get(account, {}).items()))
 
 
 def daily_pnl(account: str, month: str) -> dict:
@@ -1070,6 +1092,9 @@ def create_app(cfg: config_mod.AppCfg | None = None,
     async def index():
         return FileResponse(STATIC / "index.html")
 
+    journal_cache = bothistory.JournalCache()          # /api/status's read of the journal
+    live_box: dict = {"recs": None, "live": {}}        # live_metrics of the records it last saw
+
     @app.get("/api/status")
     async def status():
         import time as _t
@@ -1087,12 +1112,12 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             accounts[aid] = {"label": a.label or a.account_name or aid,
                              "env": "paper" if a.paper else "live" if a.live else "demo",
                              "cooldown_s": round(cooldown_s, 1) if cooldown_s else 0, **m}
-        live = live_metrics(state_dir() / "journal.jsonl")
-        journal = []
-        jp = state_dir() / "journal.jsonl"
-        if jp.exists():
-            journal = [json.loads(l) for l in
-                       jp.read_text().splitlines()[-JOURNAL_TAIL:]][::-1]
+        # the journal is parsed once, then only the lines appended since the last poll
+        recs = journal_cache.records(state_dir() / "journal.jsonl")
+        if recs is not live_box["recs"]:      # a new list: the journal changed
+            live_box.update(recs=recs, live=live_metrics(recs))
+        live = live_box["live"]
+        journal = recs[-JOURNAL_TAIL:][::-1]
         return {
             "armed": cfg.armed,
             "chart_trading": asdict(cfg.chart_trading),

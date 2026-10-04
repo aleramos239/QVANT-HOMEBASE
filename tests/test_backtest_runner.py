@@ -1,15 +1,17 @@
-"""Runner: validation + the spend record, the bundle, one-at-a-time child processes, cancel, recovery."""
+"""Runner: validation + the spend record, the bundle, child processes (each holding a slot), cancel, recovery."""
 from __future__ import annotations
 
 import datetime as dt
 import fcntl
 import json
+import threading
 import time
 
 import pytest
 
 from homebase.backtest import runner
 from homebase.backtest.runner import RunManager, execute, prepare, read_json, validate
+from homebase.backtest.slots import Slots
 from homebase.backtest.tape import TapeStore
 from tests.backtest_util import D1, D2, ms, nq_archive
 from tests.charts_util import rows, write_archive
@@ -188,21 +190,18 @@ def test_manager_runs_a_child_process_to_done(tmp_path):
     assert m.runs_list()[0]["id"] == rid and m.runs_list()[0]["trades"] == 1
 
 
-def test_runs_queue_one_at_a_time_and_cancel(tmp_path):
-    m = RunManager(tmp_path / "t", archive=nq_archive(tmp_path / "ticks"), cache=tmp_path / "cache")
-    (tmp_path / "t" / "runs").mkdir(parents=True, exist_ok=True)
-    with open(tmp_path / "t" / "runs" / ".lock", "a") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)                         # a "script run" holds the desk
-        a, b = m.submit(body()), m.submit(body())
-        log = tmp_path / "t" / "runs" / a / "log.txt"
-        t = time.monotonic() + 10
-        while not log.exists() and time.monotonic() < t:         # the manager launched a's child
-            time.sleep(0.02)
-        time.sleep(0.2)
-        assert m.status(a)["status"] == "queued"                 # ...which waits on the lock
-        assert m.status(b)["queue_position"] == 1
-        assert m.cancel(b)["status"] == "cancelled"
-        assert m.cancel(a)["status"] == "cancelled"
+def test_runs_wait_in_line_for_a_slot_and_cancel(tmp_path):
+    s = Slots(tmp_path / "slots", cap=1, poll=0.01)
+    m = RunManager(tmp_path / "t", archive=nq_archive(tmp_path / "ticks"), cache=tmp_path / "cache", slots=s)
+    busy = s.try_acquire()                                       # another backtest holds the only slot
+    a, b = m.submit(body()), m.submit(body())
+    time.sleep(0.2)
+    assert m.status(a)["status"] == "queued"                     # no child yet: it waits for the slot
+    assert not (tmp_path / "t" / "runs" / a / "log.txt").exists()
+    assert (m.status(a)["queue_position"], m.status(b)["queue_position"]) == (1, 2)
+    assert m.cancel(b)["status"] == "cancelled"
+    assert m.cancel(a)["status"] == "cancelled"
+    busy.close()
     c = m.submit(body())
     assert wait(m, c)["status"] == "done"
     assert m.status(a)["status"] == m.status(b)["status"] == "cancelled"
@@ -210,6 +209,48 @@ def test_runs_queue_one_at_a_time_and_cancel(tmp_path):
         m.bundle(a)
     with pytest.raises(KeyError):
         m.dir("../../etc")
+
+
+def test_a_page_run_and_a_script_run_do_not_wait_on_the_runs_dir_flock(tmp_path):
+    """Until 2026-10-04 every single run held runs/.lock while it ran, so a second one waited for the
+    first whatever the slots said. A run that holds a slot no longer takes that lock."""
+    arch = nq_archive(tmp_path / "ticks")
+    m = RunManager(tmp_path / "t", archive=arch, cache=tmp_path / "cache")
+    (tmp_path / "t" / "runs").mkdir(parents=True, exist_ok=True)
+    with open(tmp_path / "t" / "runs" / ".lock", "a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)                         # as a run in flight held it
+        rid = m.submit(body())
+        assert wait(m, rid)["status"] == "done", (tmp_path / "t" / "runs" / rid / "log.txt").read_text()
+        out = []
+        t = threading.Thread(daemon=True, target=lambda: out.append(runner.main(
+            ["run", "--strategy", "nq930", "--input", "adx_gate=false", "--range", "2024-03-01:2024-03-31",
+             "--base", str(tmp_path / "t"), "--archive", str(arch), "--cache", str(tmp_path / "cache")])))
+        t.start()
+        t.join(30)
+        assert out == [0]
+    assert [r["status"] for r in m.runs_list()] == ["done", "done"]
+
+
+def test_runs_side_by_side_write_the_records_a_run_alone_writes(tmp_path):
+    arch = nq_archive(tmp_path / "ticks")
+    ref = prepare(body(), tmp_path / "ref")
+    execute(tmp_path / "ref" / "runs" / ref, TapeStore(arch, tmp_path / "cache"))
+
+    def records(d):
+        b = runner.read_bundle(d)
+        return {**b, "run": {k: v for k, v in b["run"].items() if k not in ("id", "created", "finished")}}
+
+    m = RunManager(tmp_path / "t", archive=arch, cache=tmp_path / "cache")      # Monday noon: two slots
+    a, b = m.submit(body()), m.submit(body())
+    assert wait(m, a)["status"] == wait(m, b)["status"] == "done"
+    alone = records(tmp_path / "ref" / "runs" / ref)
+    assert alone["run"]["report"]["summary"]["all"]["trades"] == 1
+    assert records(m.dir(a)) == alone and records(m.dir(b)) == alone
+    one = read_json(tmp_path / "ref" / "runs" / ref / "status.json")
+    for rid in (a, b):                                           # and the run's own status record
+        st = m.status(rid)
+        assert set(st) == set(one) == {"id", "status", "phase", "done", "total", "pid", "started", "updated"}
+        assert st["id"] == rid and all(st[k] == one[k] for k in ("status", "phase", "done", "total"))
 
 
 def test_a_restart_marks_orphaned_runs_as_interrupted(tmp_path):

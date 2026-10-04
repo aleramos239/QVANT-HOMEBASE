@@ -82,6 +82,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import contextvars
 import copy
 import datetime as dt
 import math
@@ -128,6 +129,10 @@ VIEW_PAUSE_FROM, VIEW_PAUSE_UNTIL = dt.time(9, 29, 50), dt.time(9, 30, 30)
 HISTORY_PAUSE_FROM = dt.time(9, 29)
 SETTINGS_PAUSED = ("settings can't change 09:29:50–09:30:30 or while the bot is placing "
                    "— try again in a moment")
+
+
+# Timing only: when the manual action being run came in (ChartDesk._mono), read by _ack_ms.
+_T0: contextvars.ContextVar = contextvars.ContextVar("chart_action_t0", default=None)
 
 
 def _log(msg: str) -> None:
@@ -975,6 +980,7 @@ class ChartDesk:
         key = (action, cid)
         task = self._inflight.get(key)
         if task is None:
+            _T0.set(self._mono())            # timing only: the task below starts with it (_ack_ms)
             task = asyncio.ensure_future(work())
             self._inflight[key] = task
             task.add_done_callback(lambda _t, key=key: self._inflight.pop(key, None))
@@ -986,6 +992,12 @@ class ChartDesk:
         self.publish("result", {"client_id": cid, "action": action, **out})
         self._request_flush()           # the accounts' views follow at once, not at the next watch
         return out
+
+    def _ack_ms(self) -> Optional[float]:
+        """Timing only, journaled on an action's manual_* event: ms from its request coming in
+        (_once) to now -- the broker's answer the event records.  None outside an action."""
+        t0 = _T0.get()
+        return None if t0 is None else round((self._mono() - t0) * 1000, 1)
 
     def _jsafe(self, event: str, **data) -> Optional[str]:
         """Journal; a failed write is returned (and logged), never raised —
@@ -1069,7 +1081,7 @@ class ChartDesk:
                            root=it.root, contract=contract, side=it.side, qty=it.qty,
                            type=it.type, price=price, trigger=trigger, tif=it.tif,
                            sl=sl, tp=tp, ok=r.ok,
-                           order_id=r.order_id, error=r.error)
+                           order_id=r.order_id, error=r.error, ack_ms=self._ack_ms())
         return self._result(r.ok, r.order_id, r.error, jerr)
 
     # --- modify / cancel (one account, one order) ---------------------------------------
@@ -1139,7 +1151,8 @@ class ChartDesk:
                 self._not_the_bots(aid, oid, label, busy[0].strategy, busy[0].status, None)
         r = await _call(ad.cancel_order_by_id(oid))
         jerr = self._jsafe("manual_cancel", source="chart", scope="order", client_id=cid,
-                           account=aid, order_id=oid, contract=contract, ok=r.ok, error=r.error)
+                           account=aid, order_id=oid, contract=contract, ok=r.ok, error=r.error,
+                           ack_ms=self._ack_ms())
         return self._result(r.ok, oid, r.error, jerr)
 
     # --- exits: add an SL and/or TP to an open position (the chart's drag handles) ---------------
@@ -1342,7 +1355,8 @@ class ChartDesk:
             _log(f"{aid}: exits in {contract}: {error}")
         jerr = self._jsafe("manual_exits", source="chart", client_id=it.client_id, account=aid,
                            root=it.root, contract=contract, side=exit_side, qty=qty, sl=sl, tp=tp,
-                           tif=EXIT_TIF, ok=ok, order_id=order_id, error=error, steps=steps)
+                           tif=EXIT_TIF, ok=ok, order_id=order_id, error=error, steps=steps,
+                           ack_ms=self._ack_ms())
         return self._result(ok, order_id, error, jerr)
 
     # --- the bots: history and the per-strategy Kill -------------------------------------------
@@ -1423,7 +1437,7 @@ class ChartDesk:
         r = await _call(ad.cancel_symbol(contract))
         jerr = self._jsafe("manual_cancel", source="chart", scope="symbol", client_id=cid,
                            account=aid, contract=contract, ok=r.ok, error=r.error,
-                           cancelled=(r.raw or {}).get("cancelled"))
+                           cancelled=(r.raw or {}).get("cancelled"), ack_ms=self._ack_ms())
         return self._result(r.ok, None, r.error, jerr)
 
     async def _do_flatten(self, cid, aid, ad, view, contract, label) -> dict:
@@ -1444,7 +1458,8 @@ class ChartDesk:
         r = await _call(ad.flatten_symbol(contract))
         extra = {"reserved_cancels": cancels} if cancels else {}
         jerr = self._jsafe("manual_flatten", source="chart", client_id=cid, account=aid,
-                           contract=contract, ok=r.ok, error=r.error, detail=r.raw, **extra)
+                           contract=contract, ok=r.ok, error=r.error, detail=r.raw, **extra,
+                           ack_ms=self._ack_ms())
         return self._result(r.ok, None, r.error, jerr)
 
     def _still_allowed(self, aid: str, contract: str, label: str, done: str) -> None:
@@ -1477,7 +1492,8 @@ class ChartDesk:
         # broker reports then, never `net` (tests/test_exit_reads.py)
         f = await _call(ad.flatten_symbol(contract))
         jerr = self._jsafe("manual_reverse", source="chart", step="flatten", client_id=cid,
-                           account=aid, contract=contract, net_before=net, ok=f.ok, error=f.error)
+                           account=aid, contract=contract, net_before=net, ok=f.ok, error=f.error,
+                           ack_ms=self._ack_ms())
         if not f.ok:
             return self._result(False, None, f"flatten failed: {f.error} — not reversed", jerr)
         self._still_allowed(aid, contract, label, "flattened only")
@@ -1489,5 +1505,5 @@ class ChartDesk:
             self._placed(aid, contract, side, abs(net), r)
         jerr = self._jsafe("manual_reverse", source="chart", step="open", client_id=cid,
                            account=aid, contract=contract, side=side, qty=abs(net), ok=r.ok,
-                           order_id=r.order_id, error=r.error) or jerr
+                           order_id=r.order_id, error=r.error, ack_ms=self._ack_ms()) or jerr
         return self._result(r.ok, r.order_id, r.error, jerr)

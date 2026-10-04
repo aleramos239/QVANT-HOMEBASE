@@ -215,20 +215,30 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         keep = ("class", "name", "root", "session_window", "bar_minutes", "session_independent", "doc")
         return {**{k: meta[k] for k in keep if k in meta}, "inputs": meta.get("inputs") or []}
 
+    draft_rows: list[dict] = [{}]      # [{(file, mtime_ns, size): its row}] as of the last listing
+
     @r.get("/drafts")
     def list_drafts():
-        out = []
+        """A draft is read and parsed again only when its file's (mtime, size) changed."""
+        out, rows = [], {}
         for name, path in draftstore.list_files():
             try:
                 st = path.stat()
-                code = path.read_text(encoding="utf-8")
+                key = (str(path), st.st_mtime_ns, st.st_size)
+                row = draft_rows[0].get(key)
+                if row is None:
+                    code = path.read_text(encoding="utf-8")
             except OSError:
                 continue
-            meta, err, line = meta_or_error(code)
-            out.append({"name": name, "id": draftstore.draft_id(name), "bytes": st.st_size,
-                        "modified": dt.datetime.fromtimestamp(st.st_mtime, dt.timezone.utc).isoformat(timespec="seconds"),
-                        "ok": meta is not None, "meta": brief(meta),
-                        **({"error": err, "line": line} if err else {})})
+            if row is None:
+                meta, err, line = meta_or_error(code)
+                row = {"name": name, "id": draftstore.draft_id(name), "bytes": st.st_size,
+                       "modified": dt.datetime.fromtimestamp(st.st_mtime, dt.timezone.utc).isoformat(timespec="seconds"),
+                       "ok": meta is not None, "meta": brief(meta),
+                       **({"error": err, "line": line} if err else {})}
+            rows[key] = row
+            out.append(row)
+        draft_rows[0] = rows               # one swap (the route runs in worker threads); gone files drop out
         return out
 
     @r.get("/drafts/templates")

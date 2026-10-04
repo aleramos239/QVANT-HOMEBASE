@@ -776,10 +776,11 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                                 # interval switch is never blocked by the old stream's still-running chunk
     older_tasks: set = set()    # the answering tasks, referenced until they finish
 
-    def ask_older(conn: Conn, cid: str, before) -> None:
+    def ask_older(conn: Conn, cid: str, before, fp: bool = True, big: bool = True) -> None:
         """A chart scrolled back to its first bar ({"op": "older", "id", "before": that bar's ms}): build the
         next chunk of older sessions off the loop and answer {"type": "older", "id", "before", "bars",
         "studies", "repair", "sessions", "done"}, or with an "error" (the page waits, then may ask again).
+        fp / big ("fp"?, "big"? on the request, as on the chart's `sub`): whether the bars carry them.
         One at a time per chart+stream; it never touches the broker. A request that lands while the
         previous one for the same chart+stream is still building answers {"error": "busy"} rather than
         being silently dropped, so the page can retry instead of the chart losing scroll-back forever."""
@@ -793,13 +794,13 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             conn.send({"type": "older", "id": cid, "before": before, "error": "busy"})
             return
         older_busy.add(key)
-        task = asyncio.create_task(answer_older(conn, cid, key, s, before))
+        task = asyncio.create_task(answer_older(conn, cid, key, s, before, fp, big))
         older_tasks.add(task)
         task.add_done_callback(older_tasks.discard)
 
-    async def answer_older(conn: Conn, cid: str, key: tuple, s: Stream, before: int) -> None:
+    async def answer_older(conn: Conn, cid: str, key: tuple, s: Stream, before: int, fp: bool, big: bool) -> None:
         try:
-            ans = await asyncio.to_thread(hub.older, s, before)
+            ans = await asyncio.to_thread(hub.older, s, before, fp, big)
         except Exception as e:  # noqa: BLE001 — a failed chunk is the page's to retry, never the socket's end
             log(f"older {cid} ({s.root} {s.spec.key}): {type(e).__name__}: {e}")
             ans = {"error": str(e) or type(e).__name__}
@@ -1511,7 +1512,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                     continue
                 if op == "older":
                     if not replays.ask_older(conn, cid, msg.get("before")):
-                        ask_older(conn, cid, msg.get("before"))
+                        ask_older(conn, cid, msg.get("before"), bool(msg.get("fp", True)), bool(msg.get("big", True)))
                     continue
                 if op == "replay_start":
                     if await replays.start(conn, cid, msg, live=hub.stream_of((conn, cid))):
@@ -1554,7 +1555,10 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                     for k in keys:
                         s.add_study(k)
                     hub.subscribe(s, (conn, cid))
-                    conn.send({"type": "history", "id": cid, **s.payload(bool(msg.get("fp", True)))})
+                    # fp / big: a chart that draws no footprint / no big prints asks for its bars without
+                    # them (cell.js need()); a sub that says nothing gets both, as before
+                    conn.send({"type": "history", "id": cid,
+                               **s.payload(bool(msg.get("fp", True)), bool(msg.get("big", True)))})
                     if depth is not None:
                         depth.view((conn, cid), root, conn.send, room)   # after `history`: depth follows it
                 except Exception as e:  # noqa: BLE001 — an unexpected failure building the

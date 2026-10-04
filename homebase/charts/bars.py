@@ -117,12 +117,15 @@ class Bar:
             cell[1] += b
         self.big.extend(list(x) for x in other.big)
 
-    def wire(self, tick_size: float, fp: bool = True) -> dict:
+    def wire(self, tick_size: float, fp: bool = True, big: bool = True) -> dict:
         """JSON for the page: t = ET wall-clock seconds (the axis shows ET),
-        ms = the real start in epoch ms."""
+        ms = the real start in epoch ms. fp / big False: without the footprint /
+        the big prints (a chart that draws neither does not ask for them)."""
         d = {"t": et_wall_s(self.t), "ms": self.t, "s": self.session,
              "o": self.o, "h": self.h, "l": self.l, "c": self.c,
-             "v": self.v, "d": self.delta, "n": self.n, "big": self.big}
+             "v": self.v, "d": self.delta, "n": self.n}
+        if big:
+            d["big"] = self.big
         if fp:
             d["fp"] = [[round(k * tick_size, 6), s, b] for k, (s, b) in sorted(self.fp.items())]
         return d
@@ -201,6 +204,12 @@ class BarBuilder:
             return []
         self._floor = end
         return [self._close()]
+
+    def resume(self, cur: Bar, ts_ms: int) -> None:
+        """Carry on from a developing bar built elsewhere (resampled from 1-minute bars), as if add() had
+        just taken that bar's last tick, stamped ts_ms, here."""
+        self._enter_session(ts_ms)
+        self.cur = cur
 
     def _close(self) -> Bar:
         b, self.cur = self.cur, None

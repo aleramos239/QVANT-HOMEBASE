@@ -10,15 +10,10 @@ import json
 from pathlib import Path
 
 
-def live_metrics(journal_path: Path) -> dict[str, dict]:
+def live_metrics(records: list[dict]) -> dict[str, dict]:
+    """`records`: the journal's lines, already parsed (bothistory.JournalCache.records)."""
     out: dict[str, dict] = {}
-    if not journal_path.exists():
-        return out
-    for line in journal_path.read_text().splitlines():
-        try:
-            r = json.loads(line)
-        except ValueError:
-            continue
+    for r in records:
         name = r.get("strategy")
         if not name:
             continue
