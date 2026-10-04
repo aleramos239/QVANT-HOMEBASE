@@ -87,6 +87,51 @@ def test_the_kill_path_flattens_a_paper_account(tmp_path):
     assert not run(ad._read())["orders"]
 
 
+def test_the_kill_path_flattens_several_paper_accounts_side_by_side(tmp_path):
+    """Three paper accounts live long 3 on the real book: the Kill's flatten has all three at the chart
+    service at once (each account's own steps still in order), and every book ends flat, nothing working."""
+    svc = Service(accounts=3)
+    ids = [v["id"] for v in svc.books.views()]
+    busy, peak = {}, {"accounts": 0}
+
+    def slow_adapter(aid):
+        async def slow(request):                                      # one short round trip per request
+            busy[aid] = busy.get(aid, 0) + 1
+            peak["accounts"] = max(peak["accounts"], sum(1 for n in busy.values() if n))
+            try:
+                await asyncio.sleep(0.01)
+            finally:
+                busy[aid] -= 1
+            return svc.handler(request)
+        return PaperAdapter(aid, client=httpx.AsyncClient(transport=httpx.MockTransport(slow),
+                                                          base_url="http://paper.test"))
+
+    ads = {aid: slow_adapter(aid) for aid in ids}
+    cfg = AppCfg(armed=True, accounts={aid: AccountCfg(paper=True, label=aid) for aid in ids},
+                 book={"nq930": [{"account": aid, "qty": 3} for aid in ids]}, strategies={"nq930": STRAT})
+    eng = Engine(cfg, ads, now_fn=Clock(), root=tmp_path)
+    for aid, ad in ads.items():
+        run(ad.connect())
+        run(ad.observe_fills(eng.on_fill))
+        ad._task.cancel()
+        svc.feed([("09:29:59", 100.0)], aid=aid)
+    assert run(eng.handle_alert({"strategy": "nq930", "upper": 110.0, "lower": 90.0}))["ok"]
+    for aid, ad in ads.items():
+        svc.feed([("09:30:02", 110.0)], aid=aid)
+        run(ad._deliver(run(ad._read())))
+        assert run(ad.get_net_position("NQ")) == 3
+    peak["accounts"] = 0
+    out = run(eng.flatten_today())
+    assert peak["accounts"] == 3
+    assert list(out) == [f"nq930@{aid}" for aid in ids]
+    assert all(acts[0] == "market Sell 3: ok" for acts in out.values())
+    for aid, ad in ads.items():
+        svc.feed([("09:30:03", 109.75), ("09:30:04", 109.75)], aid=aid)
+        assert run(ad.get_net_position("NQ")) == 0
+        assert not run(ad._read())["orders"]
+        assert eng._state("nq930", aid).status == "done"
+
+
 # ---- the desk server ----------------------------------------------------------------------------------------
 @pytest.fixture()
 def desk(tmp_path, monkeypatch):

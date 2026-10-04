@@ -52,6 +52,11 @@ SPREAD_TOL_PTS = 0.05
 WORKING = {"Working", "PendingNew", "Pending", "Suspended", "PendingReplace"}
 TERMINAL = {"Filled", "Canceled", "Rejected", "Expired"}    # an order that can never fill (more)
 KILL_POLL_S, KILL_POLL_N = 0.25, 12     # the kill waits up to 3 s for its entry cancels to settle
+# Accounts whose exits run side by side (each_account). A bound, not "all at once": the broker caps a
+# login's requests per second / minute / hour (values unpublished), a 429 is never retried on the order
+# path, and several desk entries ride one login. 4 accounts x (6 cancels at once) = 24 requests out
+# together at most.
+EXIT_CONCURRENCY = 4
 MARKET_OUT_FAILED = "check it — market-out reported failure; verify the position"
 PLACING_UNKNOWN = "placement outcome unknown after a restart — check the broker"
 SIBLING_RETRY_S = 2.0
@@ -1111,35 +1116,94 @@ class Engine:
             out.append({"account": account, "open_net": total, "actions": acts})
         return out
 
+    async def each_account(self, accounts, fn) -> tuple[dict, dict]:
+        """fn(account) for every account, the accounts side by side (asyncio.gather) instead of one
+        after another: the Kill, the clock and the strategy flatten. At most EXIT_CONCURRENCY at
+        once. Desk entries that trade ONE broker account (adapter.broker_key) share a turn, in the
+        order given: each reads that account's net and sells all of it, so they must never read it
+        together. One account's raise never stops or cancels another's.
+        -> ({account: fn's result, or the exception it raised}, {account: ms it took -- timing only})"""
+        turns: dict = {}
+        for a in accounts:
+            turns.setdefault(getattr(self.adapters.get(a), "broker_key", a), []).append(a)
+        gate = asyncio.Semaphore(EXIT_CONCURRENCY)
+        out: dict = {}
+        took: dict = {}
+
+        async def turn(group: list) -> None:
+            async with gate:
+                for a in group:
+                    t = self._perf()
+                    try:
+                        out[a] = await fn(a)
+                    except Exception as e:  # noqa: BLE001 — this account failed; the others still run
+                        out[a] = e
+                    took[a] = round((self._perf() - t) * 1000, 1)
+
+        ends = await asyncio.gather(*(turn(g) for g in turns.values()), return_exceptions=True)
+        lost = {a: e for g, e in zip(turns.values(), ends) if isinstance(e, BaseException) for a in g}
+        return {a: out.get(a, lost.get(a)) for a in accounts}, {a: took.get(a) for a in accounts}
+
     async def flatten_strategy(self, name: str) -> dict:
         """Manual flatten for ONE strategy on every account it acted on today
-        (see _flatten_state). Symbol-scoped per account: another strategy
-        holding the same symbol on the same account would be flattened too."""
+        (see _flatten_state), the accounts side by side (each_account).
+        Symbol-scoped per account: another strategy holding the same symbol
+        on the same account would be flattened too."""
         cfg = self.cfg.strategies.get(name)
-        results: dict = {}
-        for st in self.day_states(name):
+        states = {st.account: st for st in self.day_states(name)}
+
+        async def account(a: str) -> Optional[list]:
+            st = states[a]
             ad = self.adapters.get(st.account)
             if ad is None or cfg is None or st.status == "idle":
-                continue
-            flat, results[st.account] = await self._flatten_state(st, cfg, ad)
+                return None
+            flat, acts = await self._flatten_state(st, cfg, ad)
             if flat and st.status in ("placing", "placed", "live"):
                 st.status, st.exit_reason = "done", "manual_flat"
+            return acts
+
+        t0 = self._perf()
+        got, took = await self.each_account(states, account)
+        results = {a: (g if isinstance(g, list) else [f"internal error: {type(g).__name__}: {g}"])
+                   for a, g in got.items() if g is not None}
         self._save()
-        self.journal("manual_flatten", strategy=name, results=results)
+        self.journal("manual_flatten", strategy=name, results=results,
+                     # timing only: the whole flatten, and each account's own part of it
+                     flatten_ms={"total": round((self._perf() - t0) * 1000, 1),
+                                 "accounts": {a: took[a] for a in results}})
         return results
 
     async def flatten_today(self) -> dict:
-        """Kill switch: every strategy's footprint today, proven calls only."""
-        out: dict = {}
-        for st in list(self.states.values()):
-            cfg = self.cfg.strategies.get(st.strategy)
-            ad = self.adapters.get(st.account)
-            if cfg is None or ad is None or st.date != self._today() \
-                    or st.status == "idle":
-                continue
-            flat, out[f"{st.strategy}@{st.account}"] = await self._flatten_state(st, cfg, ad)
-            if flat and st.status in ("placing", "placed", "live"):
-                st.status, st.exit_reason = "done", "killed"
+        """Kill switch: every strategy's footprint today, proven calls only. The
+        accounts go side by side (each_account); one account's runs go one after
+        another, in today's order -- _flatten_state sells the account's WHOLE net
+        in a symbol. A run that raises is reported in its own actions; every
+        other run still goes."""
+        states = list(self.states.values())
+        by_account: dict[str, list[DayState]] = {}
+        for st in states:
+            by_account.setdefault(st.account, []).append(st)
+
+        async def account(a: str) -> dict:
+            acts: dict = {}
+            for st in by_account[a]:
+                key = f"{st.strategy}@{st.account}"
+                try:
+                    cfg = self.cfg.strategies.get(st.strategy)
+                    ad = self.adapters.get(st.account)
+                    if cfg is None or ad is None or st.date != self._today() \
+                            or st.status == "idle":
+                        continue
+                    flat, acts[key] = await self._flatten_state(st, cfg, ad)
+                    if flat and st.status in ("placing", "placed", "live"):
+                        st.status, st.exit_reason = "done", "killed"
+                except Exception as e:  # noqa: BLE001 — the Kill always finishes
+                    acts[key] = [f"internal error: {type(e).__name__}: {e}"]
+            return acts
+
+        got, _ = await self.each_account(by_account, account)
+        done = {k: v for g in got.values() if isinstance(g, dict) for k, v in g.items()}
+        out = {k: done[k] for k in (f"{st.strategy}@{st.account}" for st in states) if k in done}
         self._save()
         return out
 
@@ -1573,12 +1637,17 @@ class Engine:
                              status=st.status, at=at)
 
     async def clock_tick(self) -> None:
+        """One tick of the clock for every run of today. The accounts go side by
+        side (each_account); one account's runs go one after another, each with
+        its steps in the order below. A run whose tick raises is journaled
+        (`clock_error`) and never holds back another run's cancel or flatten."""
         now = self.now_et().time()
-        for st in list(self.states.values()):
+
+        async def tick(st: DayState) -> None:
             cfg = self.cfg.strategies.get(st.strategy)
             ad = self.adapters.get(st.account)
             if cfg is None or ad is None or st.date != self._today():
-                continue
+                return
             # A run of a strategy KILLED today that is still placed/live is a
             # "check it" run (the kill could not attribute its position): a
             # human's job. Its stop/target stay working; it is never promoted
@@ -1623,13 +1692,31 @@ class Engine:
             elif st.status == "live" and now >= _hhmm(cfg.flat_et) and not check_it:
                 key = f"flat:{st.strategy}@{st.account}"
                 if time.time() - self._retry_at.get(key, 0.0) < 5.0:
-                    continue                          # a failed flat retries every 5 s
+                    return                            # a failed flat retries every 5 s
                 self._retry_at[key] = time.time()
+                t = self._perf()
                 flat, acts = await self._flatten_state(st, cfg, ad)
                 if flat:
                     st.status, st.exit_reason = "done", st.exit_reason or "flat"
                     self._save()
                 self.journal("clock_flat" if flat else "clock_flat_failed",
-                             strategy=st.strategy, account=st.account, actions=acts)
+                             strategy=st.strategy, account=st.account, actions=acts,
+                             flat_ms=round((self._perf() - t) * 1000, 1))      # timing only
             if st.status in ("live", "done") and st.entry_side and ad.connected:
                 await self._guard_sibling(st, cfg, ad)
+
+        by_account: dict[str, list[DayState]] = {}
+        for st in list(self.states.values()):
+            by_account.setdefault(st.account, []).append(st)
+
+        async def account(a: str) -> None:
+            for st in by_account[a]:
+                try:
+                    await tick(st)
+                except Exception as e:  # noqa: BLE001 — the other runs still get their tick
+                    self.journal("clock_error", strategy=st.strategy, account=a, error=str(e))
+
+        got, _ = await self.each_account(by_account, account)
+        for g in got.values():
+            if isinstance(g, BaseException):         # the journal itself failed: the clock loop says so
+                raise g

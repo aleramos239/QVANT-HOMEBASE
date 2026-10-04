@@ -100,6 +100,13 @@ class BrokerAdapter(abc.ABC):
     def connected(self) -> bool:
         return self._connected
 
+    @property
+    def broker_key(self):
+        """The broker-side account this adapter trades. Two adapters with the same
+        key act on ONE account (two desk entries pinned, or defaulted, to it): the
+        engine never runs their exits side by side. Default: the adapter's own id."""
+        return self.account_id
+
     @abc.abstractmethod
     async def connect(self) -> None: ...
 

@@ -1205,11 +1205,15 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         # ... and never alongside a per-strategy Kill from the chart (engine.kill_strategy):
         # the broker work also holds every strategy's own kill lock
         async with _kill_lock(), engine.all_kill_locks():
+            import time as _t
+            t0 = _t.perf_counter()
             # every strategy's own orders first, with the proven per-order calls;
-            # then the account-wide calls sweep up anything else
+            # then the account-wide calls sweep up anything else. Both go account
+            # beside account (engine.each_account), each account's own steps in order
             strategies = await engine.flatten_today()
-            results = {}
-            for aid, ad in list(adapters.items()):
+            t1 = _t.perf_counter()
+
+            async def sweep(ad) -> dict:
                 r = {}
                 for call in ("cancel_all", "flatten_all"):
                     try:
@@ -1217,8 +1221,20 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                         r[call] = {"ok": x.ok, "error": x.error}
                     except Exception as e:  # noqa: BLE001 — kill always finishes
                         r[call] = {"ok": False, "error": str(e)}
-                results[aid] = r
-            engine.journal("kill_switch", results=results, strategies=strategies)
+                return r
+
+            pool = dict(adapters)
+            got, took = await engine.each_account(pool, lambda aid: sweep(pool[aid]))
+            results = {aid: (g if isinstance(g, dict) else
+                             {call: {"ok": False, "error": str(g)}
+                              for call in ("cancel_all", "flatten_all")})
+                       for aid, g in got.items()}
+            t2 = _t.perf_counter()
+            engine.journal("kill_switch", results=results, strategies=strategies,
+                           # timing only: the strategies' own flatten, the sweep, each account's sweep
+                           kill_ms={"strategies": round((t1 - t0) * 1000, 1),
+                                    "sweep": round((t2 - t1) * 1000, 1),
+                                    "total": round((t2 - t0) * 1000, 1), "accounts": took})
         return {"ok": True, "armed": False, "results": results,
                 "strategies": strategies}
 

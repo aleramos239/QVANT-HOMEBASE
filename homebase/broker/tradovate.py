@@ -299,6 +299,12 @@ class TradovateAdapter(BrokerAdapter):
             return False
         return bool(ws.connected) and not _ws_is_closed(ws)
 
+    @property
+    def broker_key(self):
+        """(env, Tradovate account number) once the login's account is resolved: an
+        unpinned entry can land on the account another entry is pinned to."""
+        return (self.env, self._acct_num) if self._acct_num is not None else self.account_id
+
     # ------------------------------------------------------------ lifecycle
     async def connect(self) -> None:
         self._stop_seed()
