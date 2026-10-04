@@ -1,4 +1,4 @@
-# Ramos Quant Homebase
+# QVANT HOMEBASE
 
 The live desk: runs the approved 9:30 straddle strategies against the broker.
 Headless service on the Mac mini; controlled from any browser (laptop/phone)

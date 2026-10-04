@@ -12,3 +12,14 @@ __pycache__/
 # editor / agent
 .DS_Store
 .claude/settings.local.json
+
+# copies of the secret config — never commit
+homebase/config.json.*
+
+# agent worktrees
+.claude/worktrees/
+
+# research: derived price tapes (rebuilt from the raw tick data), voided runs, files over GitHub's 100 MB limit
+research/**/*.tape
+research/edge-library/runs_void/
+research/prop-portfolio/2026-09-30-es/out/a3p3_real_part.jsonl
