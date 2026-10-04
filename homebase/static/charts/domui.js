@@ -44,8 +44,11 @@ function currentLast() {
 }
 /* The current session's volume at price (review 11), the forming bar included (review I5): the closed bars of
    the session are memoised on the bars array + its length + the session start; the forming bar -- replaced in
-   place on every update -- is added onto a copy at each paint. */
+   place on every update -- is added onto a copy at each paint. The chart loads its bars' footprint for this
+   (cell.needFootprint); until that history is in the column is blank, never a sum of the few bars that have it. */
 function volumeFor(cell, tick) {
+  cell.needFootprint();
+  if (!cell.has.fp) return null;
   const bars = cell.bars, n = bars.length;
   if (!n) return null;
   const start = Dom.sessionStart(bars);

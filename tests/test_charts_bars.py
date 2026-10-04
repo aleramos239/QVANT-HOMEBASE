@@ -120,3 +120,12 @@ def test_wire_is_et_wall_clock_with_priced_footprint():
     assert w["ms"] == M and w["s"] == D.isoformat()
     assert w["fp"] == [[100.0, 2, 0], [100.25, 0, 3]] and w["d"] == 1
     assert "fp" not in closed[0].wire(TS, fp=False)
+
+
+def test_wire_leaves_out_the_footprint_and_the_big_prints_only_when_asked_to():
+    closed, _ = build([T(M, 100.0, 12, SELL), T(M + 1, 100.25, 3)], BarSpec("tick", 2), TS)
+    full = closed[0].wire(TS)
+    assert list(full)[-2:] == ["big", "fp"] and full["big"] == [[M, 100.0, 12, SELL]]     # as it always was
+    assert closed[0].wire(TS, fp=False, big=False) == {k: v for k, v in full.items() if k not in ("fp", "big")}
+    assert closed[0].wire(TS, fp=False) == {k: v for k, v in full.items() if k != "fp"}
+    assert closed[0].wire(TS, big=False) == {k: v for k, v in full.items() if k != "big"}
