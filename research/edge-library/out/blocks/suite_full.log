@@ -1,0 +1,58 @@
+l2sim sha256/16 at start: 50f67baa4337a160  09:55:30
+........................................................................ [  4%]
+........................................................................ [  9%]
+...........................F.................F.......................... [ 14%]
+........................................................................ [ 19%]
+......................................s................................. [ 24%]
+........................................................................ [ 29%]
+........................................................................ [ 34%]
+........................................................................ [ 39%]
+........................................................................ [ 44%]
+........................................................................ [ 49%]
+........................................................................ [ 53%]
+........................................................................ [ 58%]
+........................................................................ [ 63%]
+........................................................................ [ 68%]
+........................................................................ [ 73%]
+........................................................................ [ 78%]
+........................................................................ [ 83%]
+...................................................F.................... [ 88%]
+...........F............................................................ [ 93%]
+........................................................................ [ 98%]
+...........................s.                                            [100%]
+=================================== FAILURES ===================================
+__________ test_the_three_periods_are_defined_once_and_do_not_overlap __________
+>       assert [S.period_of(*x) for x in (S.BUILD, S.PICK, S.IN_SAMPLE, ("2025-01-02", "2025-03-01"), ("2024-12-01", "2025-01-10"),
+E       AssertionError: assert ['build', 'pi...xed', 'build'] == ['build', 'pi...xed', 'build']
+E         
+E         At index 3 diff: 'check' != 'exam'
+E         Use -v to get more diff
+tests/test_edge_periods.py:22: AssertionError
+_______________________ test_gc_tape_is_the_testers_tape _______________________
+tmp_path = PosixPath('/private/var/folders/s9/_m6jy4zj3y3b2wjw0_8091700000gn/T/pytest-of-ramoscapital/pytest-106/test_gc_tape_is_the_testers_ta0')
+>       assert all(x[:10] < "2025-01-01" for x in own)              # build_tapes never builds an EXAM session
+E       assert False
+E        +  where False = all(<generator object test_gc_tape_is_the_testers_tape.<locals>.<genexpr> at 0x1100e7740>)
+tests/test_edge_roots.py:155: AssertionError
+___________________ test_the_round1_plan_and_the_raised_cap ____________________
+tmp_path = PosixPath('/private/var/folders/s9/_m6jy4zj3y3b2wjw0_8091700000gn/T/pytest-of-ramoscapital/pytest-106/test_the_round1_plan_and_the_r0')
+>       assert real["cells_after"] == real["ledger_cells_used"] + real["pending_cells"] <= LB.CAPS["cells"] and real["fits"]
+E       assert ((50110 + 0) <= 50000)
+tests/test_round1.py:229: AssertionError
+_______________________ test_the_round2_plan_and_the_cap _______________________
+tmp_path = PosixPath('/private/var/folders/s9/_m6jy4zj3y3b2wjw0_8091700000gn/T/pytest-of-ramoscapital/pytest-106/test_the_round2_plan_and_the_c0')
+>       assert real["cells_after"] == real["ledger_cells_used"] + real["pending_cells"] <= LB.CAPS["cells"] and real["fits"]
+E       assert ((50110 + 0) <= 50000)
+tests/test_round2.py:209: AssertionError
+=============================== warnings summary ===============================
+tests/test_port2.py::test_the_full_window_gate_report_is_a_pass_for_the_trading_code_on_disk
+  /Users/ramoscapital/ramos-quant-homebase/research/edge-library/engine/tests/test_port2.py:485: UserWarning: l2sim.py changed since the port2 gate ran (the trading code of port2.py did not): re-run port2_validate.py and edge_validate.py
+tests/test_port3.py::test_the_full_window_gate_report_is_a_pass_for_the_module_on_disk
+  /Users/ramoscapital/ramos-quant-homebase/research/edge-library/engine/tests/test_port3.py:332: UserWarning: l2sim.py changed since the port3 gate ran: re-run port3_validate.py (and edge_validate.py)
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_edge_periods.py::test_the_three_periods_are_defined_once_and_do_not_overlap
+FAILED tests/test_edge_roots.py::test_gc_tape_is_the_testers_tape - assert False
+FAILED tests/test_round1.py::test_the_round1_plan_and_the_raised_cap - assert...
+FAILED tests/test_round2.py::test_the_round2_plan_and_the_cap - assert ((5011...
+l2sim sha256/16 at end: 50f67baa4337a160  10:10:59

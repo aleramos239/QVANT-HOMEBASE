@@ -1,6 +1,6 @@
 # PORT3_VALIDATION — families/port3.py (vwap_band, vwap_z, vwap_flip, pinbar, sweep_rev) vs the Homebase Strategy Tester
 
-Generated 2026-10-04 10:07 ET by `port3_validate.py` (sha256/16: families/port3.py 9b5667ebeaf01926, l2sim.py bc7394332573ff85, l2ref.py 51f18fb1b8c84bc1, port3_validate.py c03706d80bf29378).
+Generated 2026-10-05 10:32 ET by `port3_validate.py` (sha256/16: families/port3.py 9b5667ebeaf01926, l2sim.py 50f67baa4337a160, l2ref.py 51f18fb1b8c84bc1, port3_validate.py c03706d80bf29378).
 Raw: `out/port3_validation.json`. In-sample bundles of the old pilots only (2021-09-22 → 2024-12-31; stages `screen` and `sizing`), trade IDENTITY only; nothing dated ≥ 2025-01-01 and no `holdout` bundle was read; no bundle P&L is shown.
 
 ## Verdict: ALL GATES PASS

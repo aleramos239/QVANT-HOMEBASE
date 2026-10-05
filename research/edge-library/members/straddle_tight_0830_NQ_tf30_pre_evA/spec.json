@@ -1,0 +1,139 @@
+{
+ "name": "straddle_tight_0830_NQ_tf30_pre_evA",
+ "uid": "E1-A-NQ",
+ "idea": "tight bracket at 08:30 ET, 08:30 release days",
+ "family": "straddle_tight_0830",
+ "root": "NQ",
+ "tf": "30",
+ "sess": "pre",
+ "label": "",
+ "group": "A",
+ "side": null,
+ "inputs": {
+  "tf": "30",
+  "sess": "all",
+  "dir": "both",
+  "stop_mode": "pts",
+  "stop_val": 5.0,
+  "tgt_r": 3.0,
+  "trail_atr": 0.0,
+  "exit_bars": 0,
+  "max_tr": 1,
+  "f_trend": "off",
+  "f_vwap": "off",
+  "f_depth": "off",
+  "f_book": "off",
+  "x_book": "off",
+  "f_thin": "off",
+  "hold_to": "day",
+  "at": "08:29:59",
+  "flat": "09:30:00",
+  "cancel_min": 5,
+  "off_mode": "menu",
+  "off_val": 0.5,
+  "shift_seed": 0,
+  "shift_max": 90,
+  "off": "B"
+ },
+ "rule": "One second before 08:30 ET: a buy stop 5 points above the price and a sell stop 5 points below (one cancels the other; unfilled orders are cancelled after 5 minutes). One trade a day. Stop 5 points; target 3 x the stop. Session: pre-market (08:25-09:30 ET); flat by 15:58 ET. Traded ONLY on days with an 08:30 ET US data release (jobs report, CPI, PPI, retail sales, GDP, PCE or weekly jobless claims).",
+ "rationale": "The first seconds after a scheduled time are one-way; a tight bracket catches the burst with a small stop (08:30 ET).",
+ "complexity": 6,
+ "flags": [
+  "SECOND LOOK on 2024 (this 2024 table was already opened in an earlier stage)",
+  "BURST FILL RISK: a two-sided bracket over a data release; the simulator fills the stop on the trigger print (out/events_summary.md section 5: with a fill 1-25 ms later most of the profit of the v1 defaults went)",
+  "thin control (random-minute store: 2 seeds on disk)",
+  "FAST: more than 50 % of the average variant's profit is from trades held under 5 s (Lucid account-level limit)"
+ ],
+ "cell": "offB_pts5-r3",
+ "default_rule": "survivors sorted by (BUILD net, variant order); the middle one; an even count takes the lower of the two middle ones",
+ "admission": "v2 (EDGE_SPEC ADMISSION v2: the average of all variants)",
+ "admit": true,
+ "variants_judged": 27,
+ "survivors": 24,
+ "contracts": 1,
+ "hold_to": "day",
+ "day_filter": "event group A",
+ "periods": {
+  "build": [
+   "2021-09-22",
+   "2023-12-31"
+  ],
+  "pick": [
+   "2024-01-01",
+   "2024-12-31"
+  ]
+ },
+ "tests": {
+  "1_build_share_and_average": true,
+  "2_build_real_edge": {
+   "days": {
+    "per_trade": 44.95,
+    "unfiltered_per_trade": 18.35,
+    "lift_per_trade": 26.6,
+    "days_in": 225,
+    "days_all": 566,
+    "replicates": 4000,
+    "real_replicates": 4000,
+    "thin": false,
+    "p_beat": 0.9968,
+    "subset_p95": 33.78,
+    "pass": true
+   },
+   "shift": {
+    "pass": true,
+    "lift": 13240.46,
+    "p_beat": 1.0,
+    "ctl_mean": -3156.5,
+    "ctl_p95": -890.69,
+    "ctl_sd": 1432.49,
+    "replicates": 200,
+    "real_replicates": 2,
+    "thin": true,
+    "raw": [
+     -3177.5185185185182,
+     -3135.4814814814813
+    ]
+   }
+  },
+  "3_trades": {
+   "build_avg": 224.33333333333334,
+   "build_plus_2024_avg": 320.3
+  },
+  "4_2024_average_and_median": {
+   "avg": 3936.740740740741,
+   "median": 4506.0
+  },
+  "5_2024_lift": {
+   "days": {
+    "per_trade": 41.01,
+    "unfiltered_per_trade": 23.57,
+    "lift_per_trade": 17.43,
+    "days_in": 96,
+    "days_all": 252,
+    "replicates": 4000,
+    "real_replicates": 4000,
+    "thin": false,
+    "p_beat": 0.8862,
+    "subset_p95": 47.8,
+    "pass": true
+   },
+   "shift": {
+    "pass": true,
+    "lift": 5414.41,
+    "p_beat": 1.0,
+    "ctl_mean": -1477.67,
+    "ctl_p95": -94.72,
+    "ctl_sd": 818.64,
+    "replicates": 200,
+    "real_replicates": 2,
+    "thin": true,
+    "raw": [
+     464.2222222222224,
+     -3419.5555555555557
+    ]
+   }
+  },
+  "6_2024_stress_average": 3000.8518518518517
+ },
+ "written_utc": "2026-10-04T16:27:04+00:00"
+}

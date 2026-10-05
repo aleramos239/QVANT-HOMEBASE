@@ -1,0 +1,99 @@
+{
+ "name": "first_bar_mom_NQ_tf15_mid",
+ "uid": "first_bar_mom-NQ-tf15|mid|",
+ "idea": "first-bar momentum",
+ "family": "first_bar_mom",
+ "root": "NQ",
+ "tf": "15",
+ "sess": "mid",
+ "label": "",
+ "group": null,
+ "side": null,
+ "inputs": {
+  "tf": "15",
+  "sess": "mid",
+  "dir": "both",
+  "stop_mode": "atr",
+  "stop_val": 3.0,
+  "tgt_r": 2.0,
+  "trail_atr": 0.0,
+  "exit_bars": 0,
+  "max_tr": 3,
+  "f_trend": "off",
+  "f_vwap": "off",
+  "f_depth": "off",
+  "f_book": "off",
+  "x_book": "off",
+  "f_thin": "off",
+  "hold_to": "day",
+  "k": 1.5
+ },
+ "rule": "If the session's first 15-minute bar is at least 1.5 x the average bar range, enter in its direction at its close. Stop 3 x the average bar range (ATR); target 2 x the stop. Session: midday (11:00-13:30 ET); flat by 15:58 ET.",
+ "rationale": "A session's first tf bar with range >= k x ATR (ATR before that bar) is momentum ignition; follow its direction at its close.",
+ "complexity": 3,
+ "flags": [
+  "2025-26 penalty (the family's old favourite failed on 2025-26)"
+ ],
+ "cell": "k1p5_atr3-r2",
+ "default_rule": "survivors sorted by (BUILD net, variant order); the middle one; an even count takes the lower of the two middle ones",
+ "admission": "v2 (EDGE_SPEC ADMISSION v2: the average of all variants)",
+ "admit": true,
+ "variants_judged": 96,
+ "survivors": 39,
+ "contracts": 1,
+ "hold_to": "day",
+ "day_filter": null,
+ "periods": {
+  "build": [
+   "2021-09-22",
+   "2023-12-31"
+  ],
+  "pick": [
+   "2024-01-01",
+   "2024-12-31"
+  ]
+ },
+ "tests": {
+  "1_build_share_and_average": true,
+  "2_build_real_edge": {
+   "c1": {
+    "pass": true,
+    "lift": 16765.68,
+    "p_beat": 1.0,
+    "ctl_mean": 155.96,
+    "ctl_p95": 10226.16,
+    "ctl_sd": 5711.64,
+    "replicates": 200,
+    "real_replicates": 2,
+    "thin": true,
+    "fallback_share": 0.0,
+    "short": 0
+   }
+  },
+  "3_trades": {
+   "build_avg": 209.66666666666666,
+   "build_plus_2024_avg": 305.3
+  },
+  "4_2024_average_and_median": {
+   "avg": 3984.6770833333335,
+   "median": 169.5
+  },
+  "5_2024_lift": {
+   "c1": {
+    "pass": true,
+    "lift": 3087.41,
+    "p_beat": 0.745,
+    "ctl_mean": 897.27,
+    "ctl_p95": 9796.5,
+    "ctl_sd": 5035.48,
+    "replicates": 200,
+    "real_replicates": 2,
+    "thin": true,
+    "fallback_share": 0.0,
+    "short": 0
+   }
+  },
+  "6_2024_stress_average": 3250.9270833333335
+ },
+ "written_utc": "2026-10-04T16:27:03+00:00"
+}

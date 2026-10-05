@@ -1,0 +1,132 @@
+utc,key,family,root,tf,sess,what,cells,why
+2026-10-04T15:55:53+00:00,donchian-ES-tf5-pm-pick,donchian,ES,5,pm,whole menu,128,v2 BUILD passer(s) donchian-ES-tf5|pm|: whole menu on 2024
+2026-10-04T15:56:17+00:00,c1-ES-tf5-pm-pick,random,ES,5,pm,c1 control,64,C1 control of donchian-ES-tf5|pm|
+2026-10-04T15:56:30+00:00,donchian-NQ-tf15-pm-pick,donchian,NQ,15,pm,whole menu,128,v2 BUILD passer(s) donchian-NQ-tf15|pm|: whole menu on 2024
+2026-10-04T15:56:51+00:00,c1-NQ-tf15-pm-pick,random,NQ,15,pm,c1 control,64,C1 control of donchian-NQ-tf15|pm|
+2026-10-04T15:57:04+00:00,donchian_thin-NQ-tf30-nyam-pick,donchian_thin,NQ,30,nyam,whole menu,64,v2 BUILD passer(s) donchian_thin-NQ-tf30|nyam|: whole menu on 2024
+2026-10-04T15:57:12+00:00,donchian_thin-NQ-tf30-nyam-pick-c2s1,donchian_thin,NQ,30,nyam,shuffled-book control,64,shuffled-book control (seed 1) of donchian_thin-NQ-tf30|nyam|
+2026-10-04T15:57:23+00:00,donchian_thin-NQ-tf30-nyam-pick-c2s2,donchian_thin,NQ,30,nyam,shuffled-book control,64,shuffled-book control (seed 2) of donchian_thin-NQ-tf30|nyam|
+2026-10-04T15:57:33+00:00,ema_pullback-NQ-tf1-nyam-pick,ema_pullback,NQ,1,nyam,whole menu,32,v2 BUILD passer(s) ema_pullback-NQ-tf1|nyam|: whole menu on 2024
+2026-10-04T15:57:41+00:00,c1-NQ-tf1-nyam-pick,random,NQ,1,nyam,c1 control,64,C1 control of ema_pullback-NQ-tf1|nyam|
+2026-10-04T15:57:55+00:00,ema_pullback-NQ-tf1-pm-pick,ema_pullback,NQ,1,pm,whole menu,32,v2 BUILD passer(s) ema_pullback-NQ-tf1|pm|: whole menu on 2024
+2026-10-04T15:58:05+00:00,c1-NQ-tf1-pm-pick,random,NQ,1,pm,c1 control,64,C1 control of ema_pullback-NQ-tf1|pm|
+2026-10-04T15:58:23+00:00,ema_pullback-NQ-tf15-eve-pick,ema_pullback,NQ,15,eve,whole menu,32,v2 BUILD passer(s) ema_pullback-NQ-tf15|eve|: whole menu on 2024
+2026-10-04T15:58:27+00:00,c1-NQ-tf15-eve-pick,random,NQ,15,eve,c1 control,64,C1 control of ema_pullback-NQ-tf15|eve|
+2026-10-04T15:58:40+00:00,ema_pullback-NQ-tf15-mid-pick,ema_pullback,NQ,15,mid,whole menu,32,v2 BUILD passer(s) ema_pullback-NQ-tf15|mid|: whole menu on 2024
+2026-10-04T15:58:46+00:00,c1-NQ-tf15-mid-pick,random,NQ,15,mid,c1 control,64,C1 control of ema_pullback-NQ-tf15|mid|
+2026-10-04T15:58:57+00:00,ema_pullback-NQ-tf15-pre-pick,ema_pullback,NQ,15,pre,whole menu,32,v2 BUILD passer(s) ema_pullback-NQ-tf15|pre|: whole menu on 2024
+2026-10-04T15:59:02+00:00,c1-NQ-tf15-pre-pick,random,NQ,15,pre,c1 control,64,C1 control of ema_pullback-NQ-tf15|pre|
+2026-10-04T15:59:10+00:00,ema_pullback-NQ-tf5-pm-pick,ema_pullback,NQ,5,pm,whole menu,32,v2 BUILD passer(s) ema_pullback-NQ-tf5|pm|: whole menu on 2024
+2026-10-04T15:59:17+00:00,first_bar_mom-ES-tf15-mid-pick,first_bar_mom,ES,15,mid,whole menu,96,v2 BUILD passer(s) first_bar_mom-ES-tf15|mid|: whole menu on 2024
+2026-10-04T15:59:32+00:00,c1-ES-tf15-mid-pick,random,ES,15,mid,c1 control,64,C1 control of first_bar_mom-ES-tf15|mid|
+2026-10-04T15:59:43+00:00,first_bar_mom-ES-tf15-pm-pick,first_bar_mom,ES,15,pm,whole menu,96,v2 BUILD passer(s) first_bar_mom-ES-tf15|pm|: whole menu on 2024
+2026-10-04T15:59:59+00:00,c1-ES-tf15-pm-pick,random,ES,15,pm,c1 control,64,C1 control of first_bar_mom-ES-tf15|pm|
+2026-10-04T16:00:11+00:00,first_bar_mom-GC-tf30-mid-pick,first_bar_mom,GC,30,mid,whole menu,96,v2 BUILD passer(s) first_bar_mom-GC-tf30|mid|: whole menu on 2024
+2026-10-04T16:00:25+00:00,c1-GC-tf30-mid-pick,random,GC,30,mid,c1 control,64,C1 control of first_bar_mom-GC-tf30|mid|
+2026-10-04T16:00:35+00:00,first_bar_mom-NQ-tf15-mid-pick,first_bar_mom,NQ,15,mid,whole menu,96,v2 BUILD passer(s) first_bar_mom-NQ-tf15|mid|: whole menu on 2024
+2026-10-04T16:00:49+00:00,first_bar_mom-NQ-tf30-mid-pick,first_bar_mom,NQ,30,mid,whole menu,96,v2 BUILD passer(s) first_bar_mom-NQ-tf30|mid|: whole menu on 2024
+2026-10-04T16:01:05+00:00,c1-NQ-tf30-mid-pick,random,NQ,30,mid,c1 control,64,C1 control of first_bar_mom-NQ-tf30|mid|
+2026-10-04T16:01:17+00:00,first_bar_mom-NQ-tf5-mid-pick,first_bar_mom,NQ,5,mid,whole menu,96,v2 BUILD passer(s) first_bar_mom-NQ-tf5|mid|: whole menu on 2024
+2026-10-04T16:01:32+00:00,c1-NQ-tf5-mid-pick,random,NQ,5,mid,c1 control,64,C1 control of first_bar_mom-NQ-tf5|mid|
+2026-10-04T16:01:45+00:00,flow_exhaust-NQ-tf1-eve-pick,flow_exhaust,NQ,1,eve,whole menu,96,v2 BUILD passer(s) flow_exhaust-NQ-tf1|eve|: whole menu on 2024
+2026-10-04T16:02:46+00:00,c1-NQ-tf1-eve-pick,random,NQ,1,eve,c1 control,64,C1 control of flow_exhaust-NQ-tf1|eve|
+2026-10-04T16:03:01+00:00,flow_exhaust-NQ-tf1-eve-pick-c2s1,flow_exhaust,NQ,1,eve,shuffled-book control,96,shuffled-book control (seed 1) of flow_exhaust-NQ-tf1|eve|
+2026-10-04T16:04:11+00:00,flow_exhaust-NQ-tf1-eve-pick-c2s2,flow_exhaust,NQ,1,eve,shuffled-book control,96,shuffled-book control (seed 2) of flow_exhaust-NQ-tf1|eve|
+2026-10-04T16:05:27+00:00,ib-ES-tf30-mid-pick,ib,ES,30,mid,whole menu,32,v2 BUILD passer(s) ib-ES-tf30|mid|mode=break: whole menu on 2024
+2026-10-04T16:05:32+00:00,c1-ES-tf30-mid-pick,random,ES,30,mid,c1 control,64,C1 control of ib-ES-tf30|mid|mode=break
+2026-10-04T16:05:44+00:00,ib-NQ-tf15-mid-pick,ib,NQ,15,mid,whole menu,32,v2 BUILD passer(s) ib-NQ-tf15|mid|mode=break: whole menu on 2024
+2026-10-04T16:05:50+00:00,ib-NQ-tf30-mid-pick,ib,NQ,30,mid,whole menu,32,v2 BUILD passer(s) ib-NQ-tf30|mid|mode=break: whole menu on 2024
+2026-10-04T16:05:55+00:00,ib-NQ-tf5-mid-pick,ib,NQ,5,mid,whole menu,32,v2 BUILD passer(s) ib-NQ-tf5|mid|mode=break: whole menu on 2024
+2026-10-04T16:06:02+00:00,orb-NQ-tf15-pre-pick,orb,NQ,15,pre,whole menu,96,v2 BUILD passer(s) orb-NQ-tf15|pre|: whole menu on 2024
+2026-10-04T16:06:15+00:00,orb_confirm-ES-tf1-pm-pick,orb_confirm,ES,1,pm,whole menu,96,v2 BUILD passer(s) orb_confirm-ES-tf1|pm|dir=long: whole menu on 2024
+2026-10-04T16:06:40+00:00,c1-ES-tf1-pm-pick,random,ES,1,pm,c1 control,64,C1 control of orb_confirm-ES-tf1|pm|dir=long
+2026-10-04T16:06:59+00:00,orb_confirm-ES-tf5-pm-pick,orb_confirm,ES,5,pm,whole menu,96,v2 BUILD passer(s) orb_confirm-ES-tf5|pm|dir=long: whole menu on 2024
+2026-10-04T16:07:19+00:00,orb_confirm-NQ-tf15-pm-pick,orb_confirm,NQ,15,pm,whole menu,96,v2 BUILD passer(s) orb_confirm-NQ-tf15|pm|dir=long: whole menu on 2024
+2026-10-04T16:07:39+00:00,orb_confirm-NQ-tf5-pm-pick,orb_confirm,NQ,5,pm,whole menu,96,v2 BUILD passer(s) orb_confirm-NQ-tf5|pm|dir=long: whole menu on 2024
+2026-10-04T16:08:02+00:00,rsi2-ES-tf30-eve-pick,rsi2,ES,30,eve,whole menu,96,v2 BUILD passer(s) rsi2-ES-tf30|eve|: whole menu on 2024
+2026-10-04T16:08:21+00:00,c1-ES-tf30-eve-pick,random,ES,30,eve,c1 control,64,C1 control of rsi2-ES-tf30|eve|
+2026-10-04T16:08:38+00:00,squeeze-NQ-tf30-pm-pick,squeeze,NQ,30,pm,whole menu,96,v2 BUILD passer(s) squeeze-NQ-tf30|pm|: whole menu on 2024
+2026-10-04T16:08:59+00:00,straddle_t_0830-NQ-tf30-pre-pick-shift,straddle_t_0830,NQ,30,pre,random-minute / random-direction control,320,random-minute control of straddle_t_0830-NQ-tf30|pre|
+2026-10-04T16:09:49+00:00,straddle_t_1105-NQ-tf30-mid-pick,straddle_t_1105,NQ,30,mid,whole menu,160,v2 BUILD passer(s) straddle_t_1105-NQ-tf30|mid|: whole menu on 2024
+2026-10-04T16:10:23+00:00,straddle_t_1105-NQ-tf30-mid-pick-shift,straddle_t_1105,NQ,30,mid,random-minute / random-direction control,320,random-minute control of straddle_t_1105-NQ-tf30|mid|
+2026-10-04T16:11:29+00:00,straddle_t_1800-NQ-tf30-eve-pick,straddle_t_1800,NQ,30,eve,whole menu,160,v2 BUILD passer(s) straddle_t_1800-NQ-tf30|eve|: whole menu on 2024
+2026-10-04T16:11:48+00:00,straddle_t_1800-NQ-tf30-eve-pick-shift,straddle_t_1800,NQ,30,eve,random-minute / random-direction control,320,random-minute control of straddle_t_1800-NQ-tf30|eve|
+2026-10-04T16:12:25+00:00,straddle_tight_0830-ES-tf30-pre-pick,straddle_tight_0830,ES,30,pre,whole menu,27,v2 BUILD passer(s) E1-B-ES: whole menu on 2024
+2026-10-04T16:12:28+00:00,straddle_tight_0830-ES-tf30-pre-pick-shift,straddle_tight_0830,ES,30,pre,random-minute / random-direction control,54,random-minute control of E1-B-ES
+2026-10-04T16:12:34+00:00,straddle_tight_1000-ES-tf30-nyam-pick,straddle_tight_1000,ES,30,nyam,whole menu,27,v2 BUILD passer(s) E3-C-ES: whole menu on 2024
+2026-10-04T16:12:38+00:00,straddle_tight_1000-ES-tf30-nyam-pick-shift,straddle_tight_1000,ES,30,nyam,random-minute / random-direction control,54,random-minute control of E3-C-ES
+2026-10-04T16:12:46+00:00,straddle_tight_1000-NQ-tf30-nyam-pick,straddle_tight_1000,NQ,30,nyam,whole menu,27,v2 BUILD passer(s) E3-C-NQ: whole menu on 2024
+2026-10-04T16:12:50+00:00,straddle_tight_1000-NQ-tf30-nyam-pick-shift,straddle_tight_1000,NQ,30,nyam,random-minute / random-direction control,54,random-minute control of E3-C-NQ
+2026-10-04T16:12:57+00:00,supertrend-GC-tf30-nyam-pick,supertrend,GC,30,nyam,whole menu,32,v2 BUILD passer(s) supertrend-GC-tf30|nyam|: whole menu on 2024
+2026-10-04T16:13:01+00:00,c1-GC-tf30-nyam-pick,random,GC,30,nyam,c1 control,64,C1 control of supertrend-GC-tf30|nyam|
+2026-10-04T16:13:11+00:00,tema_slope-NQ-tf15-pre-pick,tema_slope,NQ,15,pre,whole menu,96,v2 BUILD passer(s) tema_slope-NQ-tf15|pre|: whole menu on 2024
+2026-10-04T16:13:25+00:00,tema_slope-NQ-tf30-eve-pick,tema_slope,NQ,30,eve,whole menu,96,v2 BUILD passer(s) tema_slope-NQ-tf30|eve|: whole menu on 2024
+2026-10-04T16:13:39+00:00,tema_slope-NQ-tf30-mid-pick,tema_slope,NQ,30,mid,whole menu,96,v2 BUILD passer(s) tema_slope-NQ-tf30|mid|: whole menu on 2024
+2026-10-04T16:13:58+00:00,tema_slope-NQ-tf30-pre-pick,tema_slope,NQ,30,pre,whole menu,96,v2 BUILD passer(s) tema_slope-NQ-tf30|pre|: whole menu on 2024
+2026-10-04T16:14:11+00:00,c1-NQ-tf30-pre-pick,random,NQ,30,pre,c1 control,64,C1 control of tema_slope-NQ-tf30|pre|
+2026-10-04T16:14:21+00:00,tod_drift-NQ-tf30-pm-pick,tod_drift,NQ,30,pm,whole menu,128,v2 BUILD passer(s) tod_drift-NQ-tf30|pm|dir=long: whole menu on 2024
+2026-10-04T16:14:46+00:00,vol_spike_break-ES-tf30-pm-pick,vol_spike_break,ES,30,pm,whole menu,96,v2 BUILD passer(s) vol_spike_break-ES-tf30|pm|: whole menu on 2024
+2026-10-04T16:15:03+00:00,vwap_band-NQ-tf30-eve-pick,vwap_band,NQ,30,eve,whole menu,128,v2 BUILD passer(s) vwap_band-NQ-tf30|eve|: whole menu on 2024
+2026-10-04T16:15:18+00:00,vwap_flip-NQ-tf15-pm-pick,vwap_flip,NQ,15,pm,whole menu,96,v2 BUILD passer(s) vwap_flip-NQ-tf15|pm|: whole menu on 2024
+2026-10-04T16:15:38+00:00,vwap_flip-NQ-tf15-pre-pick,vwap_flip,NQ,15,pre,whole menu,64,v2 BUILD passer(s) vwap_flip-NQ-tf15|pre|: whole menu on 2024
+2026-10-04T16:15:47+00:00,vwap_flip-NQ-tf5-pre-pick,vwap_flip,NQ,5,pre,whole menu,96,v2 BUILD passer(s) vwap_flip-NQ-tf5|pre|: whole menu on 2024
+2026-10-04T16:16:03+00:00,c1-NQ-tf5-pre-pick,random,NQ,5,pre,c1 control,64,C1 control of vwap_flip-NQ-tf5|pre|
+2026-10-04T16:16:15+00:00,vwap_trend_pull-ES-tf30-pm-pick,vwap_trend_pull,ES,30,pm,whole menu,96,v2 BUILD passer(s) vwap_trend_pull-ES-tf30|pm|: whole menu on 2024
+2026-10-04T16:16:34+00:00,vwap_trend_pull-NQ-tf1-pm-pick,vwap_trend_pull,NQ,1,pm,whole menu,96,v2 BUILD passer(s) vwap_trend_pull-NQ-tf1|pm|: whole menu on 2024
+2026-10-04T16:17:37+00:00,ema_pullback-NQ-tf15-mid-pick-stress,ema_pullback,NQ,15,mid,stress whole menu,32,"v2 test (6): 2 ticks + 250 ms, whole menu of ema_pullback-NQ-tf15|mid|"
+2026-10-04T16:17:43+00:00,first_bar_mom-ES-tf15-mid-pick-stress,first_bar_mom,ES,15,mid,stress whole menu,96,"v2 test (6): 2 ticks + 250 ms, whole menu of first_bar_mom-ES-tf15|mid|"
+2026-10-04T16:18:00+00:00,first_bar_mom-NQ-tf15-mid-pick-stress,first_bar_mom,NQ,15,mid,stress whole menu,96,"v2 test (6): 2 ticks + 250 ms, whole menu of first_bar_mom-NQ-tf15|mid|"
+2026-10-04T16:18:16+00:00,first_bar_mom-NQ-tf30-mid-pick-stress,first_bar_mom,NQ,30,mid,stress whole menu,96,"v2 test (6): 2 ticks + 250 ms, whole menu of first_bar_mom-NQ-tf30|mid|"
+2026-10-04T16:18:32+00:00,orb-NQ-tf15-pre-pick-stress,orb,NQ,15,pre,stress whole menu,96,"v2 test (6): 2 ticks + 250 ms + 100 ms late sibling cancel, whole menu of orb-NQ-tf15|pre|"
+2026-10-04T16:18:46+00:00,straddle_t_0830-NQ-tf30-pre-pick-stress,straddle_t_0830,NQ,30,pre,stress whole menu,160,"v2 test (6): 2 ticks + 250 ms + 100 ms late sibling cancel, whole menu of straddle_t_0830-NQ-tf30|pre|"
+2026-10-04T16:19:07+00:00,straddle_t_1800-NQ-tf30-eve-pick-stress,straddle_t_1800,NQ,30,eve,stress whole menu,160,"v2 test (6): 2 ticks + 250 ms + 100 ms late sibling cancel, whole menu of straddle_t_1800-NQ-tf30|eve|"
+2026-10-04T16:19:26+00:00,straddle_tight_0830-ES-tf30-pre-pick-stress,straddle_tight_0830,ES,30,pre,stress whole menu,27,"v2 test (6): 2 ticks + 250 ms + 100 ms late sibling cancel, whole menu of E1-B-ES"
+2026-10-04T16:19:29+00:00,straddle_tight_0830-GC-tf30-pre-pick-stress,straddle_tight_0830,GC,30,pre,stress whole menu,27,"v2 test (6): 2 ticks + 250 ms + 100 ms late sibling cancel, whole menu of straddle_tight_0830-GC-tf30|pre|, E1-A-GC, E1-B-GC"
+2026-10-04T16:19:33+00:00,straddle_tight_0830-NQ-tf30-pre-pick-stress,straddle_tight_0830,NQ,30,pre,stress whole menu,27,"v2 test (6): 2 ticks + 250 ms + 100 ms late sibling cancel, whole menu of straddle_tight_0830-NQ-tf30|pre|, E1-A-NQ, E1-B-NQ"
+2026-10-04T16:19:37+00:00,straddle_tight_1000-ES-tf30-nyam-pick-stress,straddle_tight_1000,ES,30,nyam,stress whole menu,27,"v2 test (6): 2 ticks + 250 ms + 100 ms late sibling cancel, whole menu of E3-C-ES"
+2026-10-04T16:19:41+00:00,straddle_tight_1000-GC-tf30-nyam-pick-stress,straddle_tight_1000,GC,30,nyam,stress whole menu,27,"v2 test (6): 2 ticks + 250 ms + 100 ms late sibling cancel, whole menu of E3-C-GC"
+2026-10-04T16:19:45+00:00,straddle_tight_1000-NQ-tf30-nyam-pick-stress,straddle_tight_1000,NQ,30,nyam,stress whole menu,27,"v2 test (6): 2 ticks + 250 ms + 100 ms late sibling cancel, whole menu of E3-C-NQ"
+2026-10-04T16:19:50+00:00,tema_slope-NQ-tf30-eve-pick-stress,tema_slope,NQ,30,eve,stress whole menu,96,"v2 test (6): 2 ticks + 250 ms, whole menu of tema_slope-NQ-tf30|eve|"
+2026-10-04T16:20:04+00:00,vol_spike_break-NQ-tf30-pm-pick-stress,vol_spike_break,NQ,30,pm,stress whole menu,96,"v2 test (6): 2 ticks + 250 ms, whole menu of vol_spike_break-NQ-tf30|pm|"
+2026-10-04T16:23:10+00:00,c1-NQ-tf1-eve-pick-stress,random,NQ,1,eve,stress c1 control,64,"v2 PLACEBO: stress of a random-entry store (a control, no candidate)"
+2026-10-04T16:24:27+00:00,first_bar_mom_ES_tf15_mid-k1p5_atr1p5-r2-pick,first_bar_mom,ES,15,mid,member run (default variant),1,full trade rows for the card; same cell as the whole-menu pass
+2026-10-04T16:24:28+00:00,first_bar_mom_ES_tf15_mid-k1p5_atr1p5-r2-pick-stress,first_bar_mom,ES,15,mid,member run (default variant) under stress,1,full trade rows for the card; same cell as the whole-menu pass
+2026-10-04T16:24:33+00:00,straddle_tight_0830_GC_tf30_pre_evA-offC_pts2-r2-pick,straddle_tight_0830,GC,30,pre,member run (default variant),1,full trade rows for the card; same cell as the whole-menu pass
+2026-10-04T16:24:33+00:00,straddle_tight_0830_GC_tf30_pre_evB-offC_pts2-r2-pick,straddle_tight_0830,GC,30,pre,member run (default variant),1,full trade rows for the card; same cell as the whole-menu pass
+2026-10-04T16:24:33+00:00,straddle_tight_1000_GC_tf30_nyam_evC-offA_pts1-r2-pick,straddle_tight_1000,GC,30,nyam,member run (default variant),1,full trade rows for the card; same cell as the whole-menu pass
+2026-10-04T16:24:34+00:00,straddle_tight_0830_GC_tf30_pre_evA-offC_pts2-r2-pick-stress,straddle_tight_0830,GC,30,pre,member run (default variant) under stress,1,full trade rows for the card; same cell as the whole-menu pass
+2026-10-04T16:24:34+00:00,straddle_tight_0830_GC_tf30_pre_evB-offC_pts2-r2-pick-stress,straddle_tight_0830,GC,30,pre,member run (default variant) under stress,1,full trade rows for the card; same cell as the whole-menu pass
+2026-10-04T16:24:34+00:00,straddle_tight_1000_GC_tf30_nyam_evC-offA_pts1-r2-pick-stress,straddle_tight_1000,GC,30,nyam,member run (default variant) under stress,1,full trade rows for the card; same cell as the whole-menu pass
+2026-10-04T16:24:47+00:00,first_bar_mom_NQ_tf15_mid-k1p5_atr3-r2-pick,first_bar_mom,NQ,15,mid,member run (default variant),1,full trade rows for the card; same cell as the whole-menu pass
+2026-10-04T16:24:47+00:00,first_bar_mom_NQ_tf30_mid-k1p5_pts45-r3-pick,first_bar_mom,NQ,30,mid,member run (default variant),1,full trade rows for the card; same cell as the whole-menu pass
+2026-10-04T16:24:47+00:00,orb_NQ_tf15_pre-or_min15_pct0p1-r0-pick,orb,NQ,15,pre,member run (default variant),1,full trade rows for the card; same cell as the whole-menu pass
+2026-10-04T16:24:47+00:00,straddle_t_0830_NQ_tf30_pre-offatr0p25_pct0p1-r0-pick,straddle_t_0830,NQ,30,pre,member run (default variant),1,full trade rows for the card; same cell as the whole-menu pass
+2026-10-04T16:24:47+00:00,straddle_t_1800_NQ_tf30_eve-offatr0p25_pts45-r2-pick,straddle_t_1800,NQ,30,eve,member run (default variant),1,full trade rows for the card; same cell as the whole-menu pass
+2026-10-04T16:24:47+00:00,tema_slope_NQ_tf30_eve-n40_pct0p1-r0-pick,tema_slope,NQ,30,eve,member run (default variant),1,full trade rows for the card; same cell as the whole-menu pass
+2026-10-04T16:24:47+00:00,straddle_tight_0830_NQ_tf30_pre-offA_pts8-r3-pick,straddle_tight_0830,NQ,30,pre,member run (default variant),1,full trade rows for the card; same cell as the whole-menu pass
+2026-10-04T16:24:47+00:00,straddle_tight_0830_NQ_tf30_pre_evA-offB_pts5-r3-pick,straddle_tight_0830,NQ,30,pre,member run (default variant),1,full trade rows for the card; same cell as the whole-menu pass
+2026-10-04T16:24:47+00:00,straddle_tight_0830_NQ_tf30_pre_evB-offA_pts5-r3-pick,straddle_tight_0830,NQ,30,pre,member run (default variant),1,full trade rows for the card; same cell as the whole-menu pass
+2026-10-04T16:24:47+00:00,straddle_tight_1000_NQ_tf30_nyam_evC-offA_pts5-r3-pick,straddle_tight_1000,NQ,30,nyam,member run (default variant),1,full trade rows for the card; same cell as the whole-menu pass
+2026-10-04T16:24:50+00:00,first_bar_mom_NQ_tf15_mid-k1p5_atr3-r2-pick-stress,first_bar_mom,NQ,15,mid,member run (default variant) under stress,1,full trade rows for the card; same cell as the whole-menu pass
+2026-10-04T16:24:50+00:00,first_bar_mom_NQ_tf30_mid-k1p5_pts45-r3-pick-stress,first_bar_mom,NQ,30,mid,member run (default variant) under stress,1,full trade rows for the card; same cell as the whole-menu pass
+2026-10-04T16:24:50+00:00,tema_slope_NQ_tf30_eve-n40_pct0p1-r0-pick-stress,tema_slope,NQ,30,eve,member run (default variant) under stress,1,full trade rows for the card; same cell as the whole-menu pass
+2026-10-04T16:24:51+00:00,orb_NQ_tf15_pre-or_min15_pct0p1-r0-pick-stress,orb,NQ,15,pre,member run (default variant) under stress,1,full trade rows for the card; same cell as the whole-menu pass
+2026-10-04T16:24:51+00:00,straddle_t_0830_NQ_tf30_pre-offatr0p25_pct0p1-r0-pick-stress,straddle_t_0830,NQ,30,pre,member run (default variant) under stress,1,full trade rows for the card; same cell as the whole-menu pass
+2026-10-04T16:24:51+00:00,straddle_t_1800_NQ_tf30_eve-offatr0p25_pts45-r2-pick-stress,straddle_t_1800,NQ,30,eve,member run (default variant) under stress,1,full trade rows for the card; same cell as the whole-menu pass
+2026-10-04T16:24:51+00:00,straddle_tight_0830_NQ_tf30_pre-offA_pts8-r3-pick-stress,straddle_tight_0830,NQ,30,pre,member run (default variant) under stress,1,full trade rows for the card; same cell as the whole-menu pass
+2026-10-04T16:24:51+00:00,straddle_tight_0830_NQ_tf30_pre_evA-offB_pts5-r3-pick-stress,straddle_tight_0830,NQ,30,pre,member run (default variant) under stress,1,full trade rows for the card; same cell as the whole-menu pass
+2026-10-04T16:24:51+00:00,straddle_tight_0830_NQ_tf30_pre_evB-offA_pts5-r3-pick-stress,straddle_tight_0830,NQ,30,pre,member run (default variant) under stress,1,full trade rows for the card; same cell as the whole-menu pass
+2026-10-04T16:24:51+00:00,straddle_tight_1000_NQ_tf30_nyam_evC-offA_pts5-r3-pick-stress,straddle_tight_1000,NQ,30,nyam,member run (default variant) under stress,1,full trade rows for the card; same cell as the whole-menu pass
+2026-10-05T14:13:37+00:00,donchian-NQ-tf30-nyam-pick-stress,donchian,NQ,30,nyam,stress whole menu,64,"F1 pending: the whole-menu 2024 stress of donchian NQ 30-min morning (54 of its 64 variants were on disk in runs_admit; all 64 in one pass, the 54 compared trade for trade)"
+2026-10-05T14:19:13+00:00,runs_seeds/straddle_tight_0830-GC-tf30-pre-pick-shift-s3to10,straddle_tight_0830,GC,30,pre,"random-minute / random-direction control, seeds 3-10",216,"F2: random-minute control, seeds 3-10, pick: members straddle_tight_0830_GC_tf30_pre_evA + _evB (all-days store)"
+2026-10-05T14:20:24+00:00,runs_seeds/straddle_tight_1000-GC-tf30-nyam-pick-shift-s3to10,straddle_tight_1000,GC,30,nyam,"random-minute / random-direction control, seeds 3-10",216,"F2: random-minute control, seeds 3-10, pick: member straddle_tight_1000_GC_tf30_nyam_evC (all-days store)"
+2026-10-05T14:21:16+00:00,runs_seeds/c1-ES-tf15-mid-pick-s3to10,random,ES,15,mid,"c1 control, seeds 3-10",256,"F2: random-entry pool, seeds 3-10, pick: member first_bar_mom_ES_tf15_mid"
+2026-10-05T14:38:12+00:00,runs_seeds/straddle_t_0830-NQ-tf30-pre-pick-shift-s3to10,straddle_t_0830,NQ,30,pre,"random-minute / random-direction control, seeds 3-10",1280,"F2: random-minute control, seeds 3-10, pick: member straddle_t_0830_NQ_tf30_pre"
+2026-10-05T14:41:42+00:00,runs_seeds/straddle_tight_0830-NQ-tf30-pre-pick-shift-s3to10,straddle_tight_0830,NQ,30,pre,"random-minute / random-direction control, seeds 3-10",216,"F2: random-minute control, seeds 3-10, pick: members straddle_tight_0830_NQ_tf30_pre + _evA + _evB (all-days store)"
+2026-10-05T14:44:40+00:00,runs_seeds/straddle_tight_1000-NQ-tf30-nyam-pick-shift-s3to10,straddle_tight_1000,NQ,30,nyam,"random-minute / random-direction control, seeds 3-10",216,"F2: random-minute control, seeds 3-10, pick: member straddle_tight_1000_NQ_tf30_nyam_evC (all-days store)"
+2026-10-05T14:45:06+00:00,runs_seeds/straddle_t_1800-NQ-tf30-eve-pick-shift-s3to10,straddle_t_1800,NQ,30,eve,"random-minute / random-direction control, seeds 3-10",1280,"F2: random-minute control, seeds 3-10, pick: member straddle_t_1800_NQ_tf30_eve"
+2026-10-05T14:47:30+00:00,runs_seeds/c1-NQ-tf30-mid-pick-s3to10,random,NQ,30,mid,"c1 control, seeds 3-10",256,"F2: random-entry pool, seeds 3-10, pick: member first_bar_mom_NQ_tf30_mid + pending vwap_z-NQ-tf30-mid (BUILD re-judge only)"
+2026-10-05T14:48:16+00:00,runs_seeds/c1-NQ-tf15-mid-pick-s3to10,random,NQ,15,mid,"c1 control, seeds 3-10",256,"F2: random-entry pool, seeds 3-10, pick: member first_bar_mom_NQ_tf15_mid"
+2026-10-05T14:48:59+00:00,runs_seeds/c1-NQ-tf15-pre-pick-s3to10,random,NQ,15,pre,"c1 control, seeds 3-10",256,"F2: random-entry pool, seeds 3-10, pick: member orb_NQ_tf15_pre"
+2026-10-05T14:49:32+00:00,runs_seeds/c1-NQ-tf30-eve-pick-s3to10,random,NQ,30,eve,"c1 control, seeds 3-10",256,"F2: random-entry pool, seeds 3-10, pick: member tema_slope_NQ_tf30_eve"
+2026-10-05T14:50:16+00:00,runs_seeds/c1-NQ-tf30-nyam-pick-s3to10,random,NQ,30,nyam,"c1 control, seeds 3-10",256,"F2: random-entry pool, seeds 3-10, pick: pending 15th member donchian_NQ_tf30_nyam"

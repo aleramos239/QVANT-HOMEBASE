@@ -7,4 +7,28 @@
 ........................................................................ [ 35%]
 ........................................................................ [ 40%]
 ........................................................................ [ 45%]
-.................................
+........................................................................ [ 50%]
+........................................................................ [ 55%]
+........................................................................ [ 60%]
+........................................................................ [ 65%]
+........................................................................ [ 70%]
+........................................................................ [ 75%]
+........................................................................ [ 81%]
+........................................................................ [ 86%]
+........................................................................ [ 91%]
+........................................................................ [ 96%]
+....................................................s.                   [100%]
+=============================== warnings summary ===============================
+tests/test_port2.py::test_the_full_window_gate_report_is_a_pass_for_the_trading_code_on_disk
+  /Users/ramoscapital/ramos-quant-homebase/research/edge-library/engine/tests/test_port2.py:485: UserWarning: l2sim.py changed since the port2 gate ran (the trading code of port2.py did not): re-run port2_validate.py and edge_validate.py
+    warnings.warn(f"{f} changed since the port2 gate ran (the trading code of port2.py did not): re-run port2_validate.py"
+
+tests/test_port3.py::test_the_full_window_gate_report_is_a_pass_for_the_module_on_disk
+  /Users/ramoscapital/ramos-quant-homebase/research/edge-library/engine/tests/test_port3.py:332: UserWarning: l2sim.py changed since the port3 gate ran: re-run port3_validate.py (and edge_validate.py)
+    warnings.warn(f"{f} changed since the port3 gate ran: re-run port3_validate.py (and edge_validate.py)")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_fam_flow.py:446: F3 has no trailing percentile
+SKIPPED [1] tests/test_screen_analyze.py:145: the screen bundles are not on disk
+1420 passed, 2 skipped, 2 warnings in 734.98s (0:12:14)

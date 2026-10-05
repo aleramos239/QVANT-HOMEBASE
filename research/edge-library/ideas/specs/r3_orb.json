@@ -1,0 +1,75 @@
+{
+ "name": "r3_orb",
+ "reason": "The first minutes of a session set a range that the rest of the session has to resolve. A break of either side traps the traders on the other side, and their exits carry the move.",
+ "family": "orb",
+ "markets": [
+  "NQ",
+  "ES",
+  "GC"
+ ],
+ "bar_sizes": [
+  "5",
+  "15",
+  "30"
+ ],
+ "sessions": [
+  "asia",
+  "london",
+  "pre",
+  "nyam",
+  "mid",
+  "pm",
+  "eve"
+ ],
+ "params": {
+  "or_min": [
+   "5",
+   "15",
+   "30"
+  ]
+ },
+ "filters": [
+  {
+   "block": "volatility",
+   "side": "high"
+  },
+  {
+   "block": "volatility",
+   "side": "low"
+  },
+  {
+   "block": "momentum",
+   "side": "with"
+  },
+  {
+   "block": "momentum",
+   "side": "against"
+  },
+  {
+   "block": "volume",
+   "side": "high"
+  },
+  {
+   "block": "volume",
+   "side": "low"
+  },
+  {
+   "block": "news",
+   "side": "yes"
+  },
+  {
+   "block": "news",
+   "side": "no"
+  },
+  {
+   "block": "book",
+   "side": "agree"
+  },
+  {
+   "block": "book",
+   "side": "disagree"
+  }
+ ],
+ "exits": "extended",
+ "limits": {}
+}

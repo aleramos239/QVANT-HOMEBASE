@@ -1,0 +1,13 @@
+W-B-NQ (e) over 50 seeds x 4,000 draws: min 0.9918 med 0.9944 max 0.9968, runs >= 0.99722: 0 of 50
+NQ straddle_wide_0830 offB_offx0p5-r2 trades 55 stop/target distance wrong 0
+NQ straddle_wide_0830 offD_offx0p5-r3 trades 40 stop/target distance wrong 0
+GC straddle_wide_1000 offC_offx1-r2 trades 31 stop/target distance wrong 0
+Traceback (most recent call last):
+  File "<stdin>", line 34, in <module>
+  File "<stdin>", line 28, in chk
+TypeError: unsupported operand type(s) for -: 'float' and 'NoneType'
+NQ event_dir_0830 x5_pts10-r1 trades 57 stop/target distance wrong 0 rows without sl/tp 0 [] pts 10.0 1.0
+GC event_dir_1000 x2_pts7-r2 trades 60 stop/target distance wrong 0 rows without sl/tp 0 [] pts 7.0 2.0
+INFO ONLY (not a written unit): event_dir_1000 NQ on ALL BUILD days, 224 cells: share positive 0.321, median net -6684, mean net -3087 | random-direction (2 seeds) median 10785 mean 18206, real > null in 0.201 of cells
+  x60_atr1p5-r0 trades 565 net 74015.0 t 1.43 long share 0.464 long net 24142.0 short net 49873.0
+  x0p25_atr1p5-r0 trades 544 net 45509.0 t 0.95 long share 0.588 long net 20705.0 short net 24804.0

@@ -1,0 +1,75 @@
+{
+ "name": "r3_ib_n",
+ "reason": "The first minutes after the 09:30 open set a range. When price breaks out of that range, the traders who leaned on it are trapped and have to get out, which pushes the move on. We do not know how long the first range should be, so we test 5, 15, 30 and 60 minutes.",
+ "family": "ib_n",
+ "markets": [
+  "NQ",
+  "ES",
+  "GC"
+ ],
+ "bar_sizes": [
+  "5",
+  "15",
+  "30"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "params": {
+  "ib_min": [
+   "5",
+   "15",
+   "30",
+   "60"
+  ]
+ },
+ "fixed": {
+  "mode": "break"
+ },
+ "filters": [
+  {
+   "block": "volatility",
+   "side": "high"
+  },
+  {
+   "block": "volatility",
+   "side": "low"
+  },
+  {
+   "block": "momentum",
+   "side": "with"
+  },
+  {
+   "block": "momentum",
+   "side": "against"
+  },
+  {
+   "block": "volume",
+   "side": "high"
+  },
+  {
+   "block": "volume",
+   "side": "low"
+  },
+  {
+   "block": "news",
+   "side": "yes"
+  },
+  {
+   "block": "news",
+   "side": "no"
+  },
+  {
+   "block": "book",
+   "side": "agree"
+  },
+  {
+   "block": "book",
+   "side": "disagree"
+  }
+ ],
+ "exits": "extended",
+ "limits": {}
+}

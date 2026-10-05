@@ -1,0 +1,112 @@
+{
+ "name": "straddle_t_0830_NQ_tf30_pre",
+ "uid": "straddle_t_0830-NQ-tf30|pre|",
+ "idea": "bracket at 08:30 ET",
+ "family": "straddle_t_0830",
+ "root": "NQ",
+ "tf": "30",
+ "sess": "pre",
+ "label": "",
+ "group": null,
+ "side": null,
+ "inputs": {
+  "tf": "30",
+  "sess": "all",
+  "dir": "both",
+  "stop_mode": "pct",
+  "stop_val": 0.1,
+  "tgt_r": 0.0,
+  "trail_atr": 0.0,
+  "exit_bars": 0,
+  "max_tr": 1,
+  "f_trend": "off",
+  "f_vwap": "off",
+  "f_depth": "off",
+  "f_book": "off",
+  "x_book": "off",
+  "f_thin": "off",
+  "hold_to": "day",
+  "at": "08:30",
+  "flat": "",
+  "cancel_min": 60,
+  "off_mode": "menu",
+  "off_val": 0.5,
+  "shift_seed": 0,
+  "shift_max": 90,
+  "off": "atr0p25"
+ },
+ "rule": "At 08:30 ET: a buy stop above and a sell stop below the last price (distance `atr0p25`: a fraction of the 30-minute average range, or fixed points); one cancels the other; unfilled orders are cancelled after 60 minutes. One trade a day. Stop 0.1 % of price; no target (out at the stop or at the flat time). Session: pre-market (08:25-09:30 ET); flat by 15:58 ET.",
+ "rationale": "At scheduled liquidity events new orders arrive and price leaves its pre-event balance; a straddle rides whichever side breaks (08:30 ET: US data).",
+ "complexity": 6,
+ "flags": [
+  "SECOND LOOK on 2024 (this 2024 table was already opened in an earlier stage)",
+  "BURST FILL RISK: a two-sided bracket over a data release; the simulator fills the stop on the trigger print (out/events_summary.md section 5: with a fill 1-25 ms later most of the profit of the v1 defaults went)",
+  "thin control (random-minute store: 2 seeds on disk)"
+ ],
+ "cell": "offatr0p25_pct0p1-r0",
+ "default_rule": "survivors sorted by (BUILD net, variant order); the middle one; an even count takes the lower of the two middle ones",
+ "admission": "v2 (EDGE_SPEC ADMISSION v2: the average of all variants)",
+ "admit": true,
+ "variants_judged": 160,
+ "survivors": 67,
+ "contracts": 1,
+ "hold_to": "day",
+ "day_filter": null,
+ "periods": {
+  "build": [
+   "2021-09-22",
+   "2023-12-31"
+  ],
+  "pick": [
+   "2024-01-01",
+   "2024-12-31"
+  ]
+ },
+ "tests": {
+  "1_build_share_and_average": true,
+  "2_build_real_edge": {
+   "shift": {
+    "pass": true,
+    "lift": 29478.66,
+    "p_beat": 1.0,
+    "ctl_mean": 14186.69,
+    "ctl_p95": 30380.72,
+    "ctl_sd": 10188.31,
+    "replicates": 200,
+    "real_replicates": 2,
+    "thin": true,
+    "raw": [
+     1914.40625,
+     26458.96875
+    ]
+   }
+  },
+  "3_trades": {
+   "build_avg": 525.6,
+   "build_plus_2024_avg": 762.6
+  },
+  "4_2024_average_and_median": {
+   "avg": 7327.8125,
+   "median": 2228.0
+  },
+  "5_2024_lift": {
+   "shift": {
+    "pass": true,
+    "lift": 11284.16,
+    "p_beat": 0.94,
+    "ctl_mean": -3956.35,
+    "ctl_p95": 8270.61,
+    "ctl_sd": 6996.08,
+    "replicates": 200,
+    "real_replicates": 2,
+    "thin": true,
+    "raw": [
+     -2433.8312499999975,
+     -5478.862499999999
+    ]
+   }
+  },
+  "6_2024_stress_average": 5599.23125
+ },
+ "written_utc": "2026-10-04T16:27:03+00:00"
+}

@@ -1,0 +1,12 @@
+{
+ "units": 168,
+ "t1": 6,
+ "build_pass": 3,
+ "t4": 1,
+ "t4_t5": 1,
+ "t6": 1,
+ "all_six": 1,
+ "passers": [
+  "placebo-c1-NQ-tf1|eve|seed2"
+ ]
+}

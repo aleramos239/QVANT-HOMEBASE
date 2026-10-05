@@ -1,0 +1,58 @@
+donchian-ES-tf30|pm|                       2024: share>0 0.266 avg     -2001 median     -2224 trades  129.8 | (4) fail (5) fail {'c1': -2837.8} | BUILD+2024 trades 453
+donchian-ES-tf5|pm|                        2024: share>0 0.234 avg     -6346 median     -5566 trades  322.4 | (4) fail (5) fail {'c1': -8874.54} | BUILD+2024 trades 1160
+donchian-NQ-tf15|pm|                       2024: share>0 0.685 avg      4382 median      4349 trades  138.0 | (4) PASS (5) fail {'c1': -9113.55} | BUILD+2024 trades 545
+donchian-NQ-tf30|pm|                       2024: share>0 0.438 avg      -973 median      -564 trades  113.8 | (4) fail (5) fail {'c1': -6018.34} | BUILD+2024 trades 424
+donchian_thin-NQ-tf30|nyam|                2024: share>0 0.644 avg      1524 median       865 trades   28.9 | (4) PASS (5) fail {'c1': 2476.73, 'c2': -2954.97, 'base': -52.81} | BUILD+2024 trades 123
+ema_pullback-NQ-tf15|eve|                  2024: share>0 0.500 avg       -80 median     -1300 trades  116.7 | (4) fail (5) PASS {'c1': 547.0} | BUILD+2024 trades 412
+ema_pullback-NQ-tf15|mid|                  2024: share>0 0.562 avg       815 median      2728 trades  248.6 | (4) PASS (5) PASS {'c1': 2625.42} | BUILD+2024 trades 794
+ema_pullback-NQ-tf15|pre|                  2024: share>0 0.594 avg      2884 median      2900 trades  214.4 | (4) PASS (5) fail {'c1': -15993.24} | BUILD+2024 trades 671
+ema_pullback-NQ-tf1|nyam|                  2024: share>0 0.750 avg     20655 median     19746 trades  650.5 | (4) PASS (5) fail {'c1': -453.55} | BUILD+2024 trades 2152
+ema_pullback-NQ-tf1|pm|                    2024: share>0 0.250 avg     -7214 median     -9140 trades  605.4 | (4) fail (5) fail {'c1': -20645.23} | BUILD+2024 trades 2018
+ema_pullback-NQ-tf5|pm|                    2024: share>0 0.000 avg    -13374 median    -12374 trades  435.9 | (4) fail (5) fail {'c1': -17914.82} | BUILD+2024 trades 1433
+first_bar_mom-ES-tf15|mid|                 2024: share>0 0.558 avg      2681 median      1133 trades   97.4 | (4) PASS (5) PASS {'c1': 3249.59} | BUILD+2024 trades 306
+first_bar_mom-ES-tf15|pm|                  2024: share>0 0.543 avg      -335 median       264 trades   50.7 | (4) fail (5) fail {'c1': -1479.84} | BUILD+2024 trades 137
+first_bar_mom-GC-tf30|mid|                 2024: share>0 0.065 avg     -5302 median     -2656 trades   80.3 | (4) fail (5) fail {'c1': -3894.65} | BUILD+2024 trades 225
+first_bar_mom-NQ-tf15|mid|                 2024: share>0 0.500 avg      3985 median       170 trades   95.7 | (4) PASS (5) PASS {'c1': 3087.41} | BUILD+2024 trades 305
+first_bar_mom-NQ-tf30|mid|                 2024: share>0 0.865 avg     11239 median      6914 trades  130.7 | (4) PASS (5) PASS {'c1': 8313.59} | BUILD+2024 trades 413
+first_bar_mom-NQ-tf5|mid|                  2024: share>0 0.543 avg       195 median       392 trades   51.3 | (4) PASS (5) fail {'c1': -974.52} | BUILD+2024 trades 152
+flow_exhaust-NQ-tf1|eve|                   2024: share>0 0.052 avg    -11638 median    -11714 trades  235.9 | (4) fail (5) fail {'c1': -24639.77, 'c2': -5562.99} | BUILD+2024 trades 688
+ib-ES-tf30|mid|mode=break                  2024: share>0 0.219 avg     -2830 median     -3562 trades  150.0 | (4) fail (5) fail {'c1': -2896.22} | BUILD+2024 trades 473
+ib-NQ-tf15|mid|mode=break                  2024: share>0 0.312 avg     -4614 median     -3114 trades  139.0 | (4) fail (5) fail {'c1': -14564.0} | BUILD+2024 trades 449
+ib-NQ-tf30|mid|mode=break                  2024: share>0 0.312 avg     -5321 median     -3266 trades  139.0 | (4) fail (5) fail {'c1': -18215.72} | BUILD+2024 trades 449
+ib-NQ-tf5|mid|mode=break                   2024: share>0 0.344 avg     -4164 median     -3114 trades  139.0 | (4) fail (5) fail {'c1': -20187.07} | BUILD+2024 trades 449
+orb-NQ-tf15|pre|                           2024: share>0 0.677 avg     10886 median      5616 trades  221.3 | (4) PASS (5) PASS {'c1': 4382.25} | BUILD+2024 trades 725
+rsi2-ES-tf30|eve|                          2024: share>0 0.052 avg    -11976 median    -11463 trades  258.0 | (4) fail (5) fail {'c1': -20758.95} | BUILD+2024 trades 903
+squeeze-NQ-tf30|pm|                        2024: share>0 0.195 avg     -3925 median     -2761 trades  107.6 | (4) fail (5) fail {'c1': -3882.91} | BUILD+2024 trades 311
+straddle_t_0830-NQ-tf30|pre|               2024: share>0 0.588 avg      7328 median      2228 trades  237.0 | (4) PASS (5) PASS {'shift': 11284.16} | BUILD+2024 trades 763
+straddle_t_1105-NQ-tf30|mid|               2024: share>0 0.569 avg      5842 median      1780 trades  242.2 | (4) PASS (5) fail {'shift': -4774.21} | BUILD+2024 trades 787
+straddle_t_1800-NQ-tf30|eve|               2024: share>0 0.650 avg     12460 median      6343 trades  209.0 | (4) PASS (5) PASS {'shift': 141.67} | BUILD+2024 trades 647
+supertrend-GC-tf30|nyam|                   2024: share>0 0.188 avg     -1676 median     -1745 trades   35.0 | (4) fail (5) fail {'c1': -4963.71} | BUILD+2024 trades 113
+tema_slope-NQ-tf15|pre|                    2024: share>0 0.188 avg     -9612 median     -8592 trades  182.1 | (4) fail (5) fail {'c1': -23504.82} | BUILD+2024 trades 582
+tema_slope-NQ-tf30|eve|                    2024: share>0 0.729 avg     11967 median      5879 trades  139.8 | (4) PASS (5) PASS {'c1': 1988.13} | BUILD+2024 trades 480
+tema_slope-NQ-tf30|mid|                    2024: share>0 0.489 avg      -873 median      -752 trades  161.2 | (4) fail (5) PASS {'c1': 598.72} | BUILD+2024 trades 503
+tema_slope-NQ-tf30|pre|                    2024: share>0 0.542 avg     -1652 median       468 trades  116.9 | (4) fail (5) fail {'c1': -16514.52} | BUILD+2024 trades 392
+tod_drift-NQ-tf30|pm|dir=long              2024: share>0 0.260 avg     -8750 median     -7346 trades  249.0 | (4) fail (5) fail {'c1': -10709.07} | BUILD+2024 trades 813
+vwap_band-NQ-tf30|eve|                     2024: share>0 0.496 avg     -2350 median      -209 trades   92.5 | (4) fail (5) fail {'c1': -14808.6} | BUILD+2024 trades 311
+vwap_flip-NQ-tf15|pm|                      2024: share>0 0.089 avg     -8216 median     -7690 trades  196.7 | (4) fail (5) fail {'c1': -20497.85} | BUILD+2024 trades 675
+vwap_flip-NQ-tf15|pre|                     2024: share>0 0.125 avg     -9669 median     -8060 trades  108.0 | (4) fail (5) fail {'c1': -5960.86} | BUILD+2024 trades 340
+vwap_flip-NQ-tf5|pre|                      2024: share>0 0.333 avg     -3599 median     -4692 trades  228.8 | (4) fail (5) fail {'c1': -1540.24} | BUILD+2024 trades 773
+orb_confirm-ES-tf1|pm|dir=long             2024: share>0 0.573 avg      -120 median       850 trades  142.3 | (4) fail (5) fail {'c1': -4312.12} | BUILD+2024 trades 460
+orb_confirm-ES-tf5|pm|dir=long             2024: share>0 0.167 avg     -1774 median     -1672 trades  134.3 | (4) fail (5) fail {'c1': -5318.49} | BUILD+2024 trades 436
+orb_confirm-NQ-tf15|pm|dir=long            2024: share>0 0.533 avg     -1776 median      1036 trades  115.3 | (4) fail (5) fail {'c1': -7550.8} | BUILD+2024 trades 396
+orb_confirm-NQ-tf5|pm|dir=long             2024: share>0 0.583 avg      2007 median      3197 trades  124.0 | (4) PASS (5) fail {'c1': -4368.48} | BUILD+2024 trades 415
+straddle_tight_0830-GC-tf30|pre|           2024: share>0 0.704 avg      2727 median      1970 trades  235.3 | (4) PASS (5) PASS {'shift': 8650.52} | BUILD+2024 trades 742
+straddle_tight_0830-NQ-tf30|pre|           2024: share>0 0.815 avg      5548 median      6005 trades  235.3 | (4) PASS (5) PASS {'shift': 9354.13} | BUILD+2024 trades 766
+vol_spike_break-ES-tf30|pm|                2024: share>0 0.500 avg       158 median        19 trades   59.3 | (4) PASS (5) fail {'c1': -1385.74} | BUILD+2024 trades 183
+vol_spike_break-NQ-tf30|pm|                2024: share>0 0.531 avg       333 median       799 trades   44.7 | (4) PASS (5) PASS {'c1': 633.78} | BUILD+2024 trades 141
+vwap_trend_pull-ES-tf30|pm|                2024: share>0 0.025 avg     -2222 median     -2196 trades   51.8 | (4) fail (5) fail {'c1': -2030.64} | BUILD+2024 trades 199
+vwap_trend_pull-NQ-tf1|pm|                 2024: share>0 0.625 avg      2020 median      2154 trades  483.6 | (4) PASS (5) fail {'c1': -21118.67} | BUILD+2024 trades 1676
+vwap_trend_pull-NQ-tf5|pm|                 2024: share>0 0.615 avg      3203 median      2406 trades  332.8 | (4) PASS (5) fail {'c1': -10605.15} | BUILD+2024 trades 1222
+E1-A-NQ                                    2024: share>0 0.963 avg      3937 median      4506 trades   96.0 | (4) PASS (5) PASS {'days': 17.43, 'shift': 5414.41} | BUILD+2024 trades 320
+E1-A-GC                                    2024: share>0 1.000 avg      5910 median      5756 trades   96.0 | (4) PASS (5) PASS {'days': 49.97, 'shift': 9590.26} | BUILD+2024 trades 317
+E1-B-NQ                                    2024: share>0 0.815 avg      3272 median      2838 trades   68.0 | (4) PASS (5) PASS {'days': 24.55, 'shift': 4452.96} | BUILD+2024 trades 225
+E1-B-ES                                    2024: share>0 1.000 avg      1197 median      1028 trades   68.0 | (4) PASS (5) PASS {'days': 21.56, 'shift': 3308.69} | BUILD+2024 trades 226
+E1-B-GC                                    2024: share>0 0.963 avg      4414 median      4088 trades   68.0 | (4) PASS (5) PASS {'days': 53.33, 'shift': 6607.07} | BUILD+2024 trades 223
+E3-C-NQ                                    2024: share>0 1.000 avg      3242 median      2591 trades   46.0 | (4) PASS (5) PASS {'days': 74.92, 'shift': 3494.5} | BUILD+2024 trades 141
+E3-C-ES                                    2024: share>0 0.630 avg       178 median       116 trades   46.0 | (4) PASS (5) PASS {'days': 35.16, 'shift': 1728.33} | BUILD+2024 trades 143
+E3-C-GC                                    2024: share>0 1.000 avg      4309 median      3396 trades   46.0 | (4) PASS (5) PASS {'days': 97.27, 'shift': 4710.7} | BUILD+2024 trades 142
+opened on 2024: 57 | (4) 29 | (5) 21 | (4)+(5) 19 | stress jobs 15, cells 1090

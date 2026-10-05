@@ -1,6 +1,6 @@
 # PORT1_VALIDATION — families/port1.py vs the Homebase Strategy Tester (the old NQ pilot's screen bundles)
 
-Generated 2026-10-03 09:54 ET by `port1_gate.py` (code sha256/16: port1.py 574e9c7b176970b9, l2sim.py 461192700c259bfd, l2ref.py 51f18fb1b8c84bc1, port1_gate.py 4a8be4db210b2abe). Raw: `out/port1_gate.json`.
+Generated 2026-10-05 11:14 ET by `port1_gate.py` (code sha256/16: port1.py 574e9c7b176970b9, l2sim.py 50f67baa4337a160, l2ref.py 51f18fb1b8c84bc1, port1_gate.py 4a8be4db210b2abe). Raw: `out/port1_gate.json`.
 In-sample screen bundles of the old pilot (2021-09-22 → 2024-12-31), trade IDENTITY only: no P&L level is printed or stored (only the net difference); nothing dated ≥ 2025-01-01 was read.
 
 ## Verdict: ALL 7 FAMILIES PASS (NQ and ES)
@@ -50,7 +50,7 @@ Gate per bundle: ≥ 99 % of the trades identical on (date, side, entry time ±1
 | gap | 4 | 2177 | 2177 | 2177 | True |
 | lon_break | 4 | 3176 | 3176 | 3176 | True |
 
-Sessions per bundle: 825 in the range, 820 used. One tape pass, 2 worker process(es), 49.3 s.
+Sessions per bundle: 825 in the range, 820 used. One tape pass, 2 worker process(es), 65.85 s.
 
 ## ES — the screen bundles of the ES pilot (RE): PASS
 
@@ -95,7 +95,7 @@ Sessions per bundle: 825 in the range, 820 used. One tape pass, 2 worker process
 | gap | 4 | 2276 | 2276 | 2276 | True |
 | lon_break | 4 | 3132 | 3132 | 3132 | True |
 
-Sessions per bundle: 825 in the range, 823 used. One tape pass, 2 worker process(es), 50.43 s.
+Sessions per bundle: 825 in the range, 823 used. One tape pass, 2 worker process(es), 65.7 s.
 
 ## The registered variants (NQ) — every cell of the heat-maps they come from
 The screen bundles ran each family at its DEFAULT inputs (or_min 15, off_atr 0.5, n 20, sq_type bbkc, ib break, gap fill, min_rng_atr 0; ATR 1.5 stop, 2R). The registered family-parameter variants are the first axis of these heat-maps (R/tune1.jsonl = hm-*, R/tune2.jsonl = hm2-*); each cell = one variant x stop_val {1, 2, 3} ATR x tgt_r {0.5, 1, 2, 3}, replayed with the ported class and compared with the same gate.

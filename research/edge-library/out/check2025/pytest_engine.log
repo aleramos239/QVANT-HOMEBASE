@@ -1,0 +1,105 @@
+........................................................................ [  4%]
+........................................................................ [  9%]
+.............................................................F.......... [ 14%]
+........................................................................ [ 19%]
+......................................................s................. [ 24%]
+........................................................................ [ 29%]
+........................................................................ [ 33%]
+........................................................................ [ 38%]
+........................................................................ [ 43%]
+........................................................................ [ 48%]
+........................................................................ [ 53%]
+........................................................................ [ 58%]
+........................................................................ [ 63%]
+........................................................................ [ 67%]
+........................................................................ [ 72%]
+........................................................................ [ 77%]
+........................................................................ [ 82%]
+...................................................................F.... [ 87%]
+...........................F............................................ [ 92%]
+........................................................................ [ 96%]
+...........................................s.                            [100%]
+=================================== FAILURES ===================================
+_______________________ test_gc_tape_is_the_testers_tape _______________________
+
+tmp_path = PosixPath('/private/var/folders/s9/_m6jy4zj3y3b2wjw0_8091700000gn/T/pytest-of-ramoscapital/pytest-107/test_gc_tape_is_the_testers_ta0')
+
+    def test_gc_tape_is_the_testers_tape(tmp_path):
+        sys.path.append(str(S.REPO))
+        from homebase.backtest.tape import TapeStore
+        d = dt.date(2021, 10, 8)                                    # an NFP day the tester itself cached
+        shared = S.HB_TAPE / "GC" / f"{d}.tape"
+        if not shared.exists():
+            pytest.skip("the tester's GC cache does not hold this session")
+        mine = TapeStore(S.ARCHIVE, tmp_path).build("GC", d)        # the code build_tapes uses, into a scratch cache
+        assert mine.read_bytes() == shared.read_bytes()
+        t = S.load_tape(d, "GC")
+        h = S.read_hb_header(shared)
+        assert t.root == "GC" and t.contract == h["contract"] and len(t.ts) == h["n"] and t.daily == h["daily"]
+        assert bool((np.diff(t.ts) >= 0).all()) and t.daily == {"h": float(t.px.max()), "l": float(t.px.min()), "c": float(t.px[-1])}
+        own = sorted(p.name for p in (S.OWN_TAPE / "GC").glob("*.tape")) if (S.OWN_TAPE / "GC").exists() else []
+>       assert all(x[:10] < "2025-01-01" for x in own)              # build_tapes never builds an EXAM session
+E       assert False
+E        +  where False = all(<generator object test_gc_tape_is_the_testers_tape.<locals>.<genexpr> at 0x10e103f20>)
+
+tests/test_edge_roots.py:155: AssertionError
+___________________ test_the_round1_plan_and_the_raised_cap ____________________
+
+tmp_path = PosixPath('/private/var/folders/s9/_m6jy4zj3y3b2wjw0_8091700000gn/T/pytest-of-ramoscapital/pytest-107/test_the_round1_plan_and_the_r0')
+
+    def test_the_round1_plan_and_the_raised_cap(tmp_path):
+        assert LB.CAPS["cells"] == 50000
+        g = RM.group_plan("round1", ledger=tmp_path / "none.csv", runs_dir=tmp_path)
+        by = {(r["family"], r["root"]): r for r in g["rows"]}
+        assert len(by) == 27 and g["run_units"] == 63
+        want = {"vwap_trend_pull": (4, 384), "va_reclaim": (4, 384), "orb_confirm": (3, 594), "late_mom": (1, 288), "open_fade": (2, 240),
+                "vol_spike_break": (4, 384), "straddle_tight_0830": (1, 27), "straddle_tight_0930": (1, 27), "straddle_tight_1000": (1, 27)}
+        for (name, root), r in by.items():
+            extra = 3 if (name, root) == ("vwap_trend_pull", "NQ") else 0
+            assert (r["units"], r["cells"]) == (want[name][0], want[name][1] + extra), (name, root)
+            timed = name in ("late_mom",) or name.startswith("straddle_tight")
+            assert r["null_cells"] == (2 * r["cells"] if timed else 0) and ("shift" in r["control"]) == timed
+        assert g["candidate_cells"] == 7068 and g["info_cells"] == 201 and g["unit_null_cells"] == 2214
+        assert g["c1_pools_needed"] == 12 and len(g["c1_pools_missing"]) == 12          # an empty ledger: every pool is still to run
+        assert g["ledger_cells_used"] == RM.PAPER_CELLS == 824 and g["pending_cells"] == 7068 and g["fits"]
+        real = RM.group_plan("round1")
+        assert real["ledger_cells_used"] == LB.ledger_used()["cells"] + 824
+>       assert real["cells_after"] == real["ledger_cells_used"] + real["pending_cells"] <= LB.CAPS["cells"] and real["fits"]
+E       assert ((50110 + 0) <= 50000)
+
+tests/test_round1.py:229: AssertionError
+_______________________ test_the_round2_plan_and_the_cap _______________________
+
+tmp_path = PosixPath('/private/var/folders/s9/_m6jy4zj3y3b2wjw0_8091700000gn/T/pytest-of-ramoscapital/pytest-107/test_the_round2_plan_and_the_c0')
+
+    def test_the_round2_plan_and_the_cap(tmp_path):
+        assert LB.CAPS["cells"] == 50000
+        g = RM.group_plan("round2", ledger=tmp_path / "none.csv", runs_dir=tmp_path)
+        by = {(r["family"], r["root"]): r for r in g["rows"]}
+        assert len(by) == 12 and g["run_units"] == 12
+        for (name, root), r in by.items():
+            n = 224 if name.startswith("event_dir") else 36
+            assert (r["units"], r["cells"], r["info_cells"], r["null_cells"], r["instances_per_cell"]) == (1, n, 0, 2 * n, 1)
+            assert "shift" in r["control"]
+        assert g["candidate_cells"] == 1560 and g["info_cells"] == 0 and g["unit_null_cells"] == 3120
+        assert g["c1_pools_needed"] == 0 and g["c1_pools_missing"] == []
+        assert g["ledger_cells_used"] == RM.PAPER_CELLS and g["pending_cells"] == 1560 and g["fits"]
+        real = RM.group_plan("round2")
+>       assert real["cells_after"] == real["ledger_cells_used"] + real["pending_cells"] <= LB.CAPS["cells"] and real["fits"]
+E       assert ((50110 + 0) <= 50000)
+
+tests/test_round2.py:209: AssertionError
+=============================== warnings summary ===============================
+tests/test_port2.py::test_the_full_window_gate_report_is_a_pass_for_the_trading_code_on_disk
+  /Users/ramoscapital/ramos-quant-homebase/research/edge-library/engine/tests/test_port2.py:485: UserWarning: l2sim.py changed since the port2 gate ran (the trading code of port2.py did not): re-run port2_validate.py and edge_validate.py
+    warnings.warn(f"{f} changed since the port2 gate ran (the trading code of port2.py did not): re-run port2_validate.py"
+
+tests/test_port3.py::test_the_full_window_gate_report_is_a_pass_for_the_module_on_disk
+  /Users/ramoscapital/ramos-quant-homebase/research/edge-library/engine/tests/test_port3.py:332: UserWarning: l2sim.py changed since the port3 gate ran: re-run port3_validate.py (and edge_validate.py)
+    warnings.warn(f"{f} changed since the port3 gate ran: re-run port3_validate.py (and edge_validate.py)")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_edge_roots.py::test_gc_tape_is_the_testers_tape - assert False
+FAILED tests/test_round1.py::test_the_round1_plan_and_the_raised_cap - assert...
+FAILED tests/test_round2.py::test_the_round2_plan_and_the_cap - assert ((5011...

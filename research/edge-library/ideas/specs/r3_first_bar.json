@@ -1,0 +1,75 @@
+{
+ "name": "r3_first_bar",
+ "reason": "An unusually large first bar of a session shows that one side came in with size. That side tends to keep pushing, so we follow the direction of the bar at its close.",
+ "family": "first_bar_mom",
+ "markets": [
+  "NQ",
+  "ES",
+  "GC"
+ ],
+ "bar_sizes": [
+  "5",
+  "15",
+  "30"
+ ],
+ "sessions": [
+  "asia",
+  "london",
+  "pre",
+  "nyam",
+  "mid",
+  "pm",
+  "eve"
+ ],
+ "params": {
+  "k": [
+   1.0,
+   1.5,
+   2.0
+  ]
+ },
+ "filters": [
+  {
+   "block": "volatility",
+   "side": "high"
+  },
+  {
+   "block": "volatility",
+   "side": "low"
+  },
+  {
+   "block": "momentum",
+   "side": "with"
+  },
+  {
+   "block": "momentum",
+   "side": "against"
+  },
+  {
+   "block": "volume",
+   "side": "high"
+  },
+  {
+   "block": "volume",
+   "side": "low"
+  },
+  {
+   "block": "news",
+   "side": "yes"
+  },
+  {
+   "block": "news",
+   "side": "no"
+  },
+  {
+   "block": "book",
+   "side": "agree"
+  },
+  {
+   "block": "book",
+   "side": "disagree"
+  }
+ ],
+ "exits": "extended",
+ "limits": {}
+}

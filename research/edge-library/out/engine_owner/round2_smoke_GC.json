@@ -1,0 +1,260 @@
+[
+ {
+  "family": "event_dir_0830",
+  "root": "GC",
+  "tf": "30",
+  "days": 10,
+  "cells": 224,
+  "variants": 7,
+  "sessions": 10,
+  "used": 9,
+  "eve_skipped": 0,
+  "skipped_by_error": 0,
+  "errors": [],
+  "trades_total": 1504,
+  "trades_per_cell": {
+   "min": 5,
+   "max": 8
+  },
+  "cells_without_trades": 0,
+  "long": 672,
+  "short": 832,
+  "by_session": {
+   "pre": 1504
+  },
+  "by_stop_mode": {
+   "atr": 376,
+   "pts": 752,
+   "pct": 376
+  },
+  "entry_kind": {
+   "market": 1504,
+   "resting": 0
+  },
+  "both_sides_declared": false,
+  "both_sides_sessions": 0,
+  "segments": [
+   "day"
+  ],
+  "hold_to": "day",
+  "instances_per_cell": 1,
+  "exit_after_day_flat": 0,
+  "overlap_in_session": 0,
+  "entry_in_no_session": 0,
+  "entry_hours": [
+   "08:30:00",
+   "08:31:59"
+  ],
+  "entry_outside_hours": 0,
+  "both_sides_ok": true,
+  "worker_parity": true,
+  "nulls": {
+   "shift": {
+    "trades": 112,
+    "skipped_by_error": 0
+   }
+  },
+  "ok": true,
+  "days_with_a_trade_per_variant": {
+   "x0p25": 7,
+   "x0p5": 6,
+   "x1": 5,
+   "x2": 7,
+   "x5": 6,
+   "x15": 8,
+   "x60": 8
+  },
+  "max_trades_per_day": 1
+ },
+ {
+  "family": "event_dir_1000",
+  "root": "GC",
+  "tf": "30",
+  "days": 10,
+  "cells": 224,
+  "variants": 7,
+  "sessions": 10,
+  "used": 9,
+  "eve_skipped": 0,
+  "skipped_by_error": 0,
+  "errors": [],
+  "trades_total": 1728,
+  "trades_per_cell": {
+   "min": 5,
+   "max": 9
+  },
+  "cells_without_trades": 0,
+  "long": 576,
+  "short": 1152,
+  "by_session": {
+   "nyam": 1728
+  },
+  "by_stop_mode": {
+   "atr": 432,
+   "pts": 864,
+   "pct": 432
+  },
+  "entry_kind": {
+   "market": 1728,
+   "resting": 0
+  },
+  "both_sides_declared": false,
+  "both_sides_sessions": 0,
+  "segments": [
+   "day"
+  ],
+  "hold_to": "day",
+  "instances_per_cell": 1,
+  "exit_after_day_flat": 0,
+  "overlap_in_session": 0,
+  "entry_in_no_session": 0,
+  "entry_hours": [
+   "10:00:00",
+   "10:01:59"
+  ],
+  "entry_outside_hours": 0,
+  "both_sides_ok": true,
+  "worker_parity": true,
+  "nulls": {
+   "shift": {
+    "trades": 96,
+    "skipped_by_error": 0
+   }
+  },
+  "ok": true,
+  "days_with_a_trade_per_variant": {
+   "x0p25": 6,
+   "x0p5": 5,
+   "x1": 9,
+   "x2": 9,
+   "x5": 8,
+   "x15": 9,
+   "x60": 8
+  },
+  "max_trades_per_day": 1
+ },
+ {
+  "family": "straddle_wide_0830",
+  "root": "GC",
+  "tf": "30",
+  "days": 10,
+  "cells": 36,
+  "variants": 4,
+  "sessions": 10,
+  "used": 9,
+  "eve_skipped": 0,
+  "skipped_by_error": 0,
+  "errors": [],
+  "trades_total": 126,
+  "trades_per_cell": {
+   "min": 1,
+   "max": 6
+  },
+  "cells_without_trades": 0,
+  "long": 27,
+  "short": 99,
+  "by_session": {
+   "pre": 126
+  },
+  "by_stop_mode": {
+   "offx": 126
+  },
+  "entry_kind": {
+   "market": 0,
+   "resting": 126
+  },
+  "both_sides_declared": true,
+  "both_sides_sessions": 9,
+  "segments": [
+   "day"
+  ],
+  "hold_to": "day",
+  "instances_per_cell": 1,
+  "exit_after_day_flat": 0,
+  "overlap_in_session": 0,
+  "entry_in_no_session": 0,
+  "entry_hours": [
+   "08:29:59",
+   "08:34:59"
+  ],
+  "entry_outside_hours": 0,
+  "both_sides_ok": true,
+  "worker_parity": true,
+  "nulls": {
+   "shift": {
+    "trades": 40,
+    "skipped_by_error": 0
+   }
+  },
+  "ok": true,
+  "days_with_a_trade_per_variant": {
+   "offA": 6,
+   "offB": 4,
+   "offC": 3,
+   "offD": 1
+  },
+  "max_trades_per_day": 1
+ },
+ {
+  "family": "straddle_wide_1000",
+  "root": "GC",
+  "tf": "30",
+  "days": 10,
+  "cells": 36,
+  "variants": 4,
+  "sessions": 10,
+  "used": 9,
+  "eve_skipped": 0,
+  "skipped_by_error": 0,
+  "errors": [],
+  "trades_total": 117,
+  "trades_per_cell": {
+   "min": 0,
+   "max": 5
+  },
+  "cells_without_trades": 9,
+  "long": 54,
+  "short": 63,
+  "by_session": {
+   "nyam": 117
+  },
+  "by_stop_mode": {
+   "offx": 117
+  },
+  "entry_kind": {
+   "market": 0,
+   "resting": 117
+  },
+  "both_sides_declared": true,
+  "both_sides_sessions": 9,
+  "segments": [
+   "day"
+  ],
+  "hold_to": "day",
+  "instances_per_cell": 1,
+  "exit_after_day_flat": 0,
+  "overlap_in_session": 0,
+  "entry_in_no_session": 0,
+  "entry_hours": [
+   "09:59:59",
+   "10:04:59"
+  ],
+  "entry_outside_hours": 0,
+  "both_sides_ok": true,
+  "worker_parity": true,
+  "nulls": {
+   "shift": {
+    "trades": 40,
+    "skipped_by_error": 0
+   }
+  },
+  "ok": true,
+  "days_with_a_trade_per_variant": {
+   "offA": 5,
+   "offB": 5,
+   "offC": 3,
+   "offD": 0
+  },
+  "max_trades_per_day": 1
+ }
+]

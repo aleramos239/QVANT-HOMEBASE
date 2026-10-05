@@ -1,0 +1,11 @@
+done first_bar_mom-ES-tf15-mid-build-stress: 33 cells, 6558 trades, wall 13 s
+done first_bar_mom-NQ-tf15-mid-build-stress: 40 cells, 10832 trades, wall 18 s
+done first_bar_mom-NQ-tf30-mid-build-stress: 51 cells, 14416 trades, wall 21 s
+done orb-NQ-tf15-pre-build-stress: 51 cells, 26755 trades, wall 18 s
+done straddle_t_0830-NQ-tf30-pre-build-stress: 68 cells, 35700 trades, wall 23 s
+done straddle_t_1800-NQ-tf30-eve-build-stress: 70 cells, 30612 trades, wall 23 s
+done straddle_tight_0830-GC-tf30-pre-build-stress: 26 cells, 13350 trades, wall 7 s
+done straddle_tight_0830-NQ-tf30-pre-build-stress: 25 cells, 13327 trades, wall 9 s
+done straddle_tight_1000-GC-tf30-nyam-build-stress: 27 cells, 14058 trades, wall 8 s
+done straddle_tight_1000-NQ-tf30-nyam-build-stress: 26 cells, 14770 trades, wall 9 s
+done tema_slope-NQ-tf30-eve-build-stress: 54 cells, 16944 trades, wall 17 s

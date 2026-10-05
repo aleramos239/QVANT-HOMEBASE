@@ -1,0 +1,62 @@
+check BUILD runs/straddle_t_0830-NQ-tf30 pre: 10 days, 160 cells, 1440 stored trades, cells that differ: 0
+check 2024 runs_deepen/straddle_t_0830-NQ-tf30-pre-pick: 6 days, 160 cells, 960 stored trades, cells that differ: 0
+check 2024 runs_v2/straddle_t_0830-NQ-tf30-pre-pick-stress: 6 days, 160 cells, 960 stored trades, cells that differ: 0
+check BUILD runs/straddle_t_0830-NQ-tf30-shift pre: 10 days, 320 cells, 3040 stored trades, cells that differ: 0
+check 2024 runs_v2/straddle_t_0830-NQ-tf30-pre-pick-shift: 6 days, 320 cells, 1888 stored trades, cells that differ: 0
+check BUILD runs/straddle_tight_0830-NQ-tf30 pre: 10 days, 27 cells, 252 stored trades, cells that differ: 0
+check 2024 runs_admit_r1/straddle_tight_0830-NQ-tf30-pre-pick: 6 days, 27 cells, 162 stored trades, cells that differ: 0
+check 2024 runs_v2/straddle_tight_0830-NQ-tf30-pre-pick-stress: 6 days, 27 cells, 180 stored trades, cells that differ: 0
+check BUILD runs/straddle_tight_0830-NQ-tf30-shift pre: 10 days, 54 cells, 459 stored trades, cells that differ: 0
+check 2024 runs_admit_r1/straddle_tight_0830-NQ-tf30-pre-pick-shift: 6 days, 54 cells, 234 stored trades, cells that differ: 0
+check BUILD runs/straddle_tight_0830-GC-tf30 pre: 10 days, 27 cells, 225 stored trades, cells that differ: 0
+check 2024 runs_admit_r1/straddle_tight_0830-GC-tf30-pre-pick: 6 days, 27 cells, 135 stored trades, cells that differ: 0
+check 2024 runs_v2/straddle_tight_0830-GC-tf30-pre-pick-stress: 6 days, 27 cells, 135 stored trades, cells that differ: 0
+check BUILD runs/straddle_tight_0830-GC-tf30-shift pre: 10 days, 54 cells, 333 stored trades, cells that differ: 0
+check 2024 runs_admit_r1/straddle_tight_0830-GC-tf30-pre-pick-shift: 6 days, 54 cells, 225 stored trades, cells that differ: 0
+check BUILD runs/straddle_tight_1000-NQ-tf30 nyam: 10 days, 27 cells, 270 stored trades, cells that differ: 0
+check 2024 runs_v2/straddle_tight_1000-NQ-tf30-nyam-pick: 6 days, 27 cells, 162 stored trades, cells that differ: 0
+check 2024 runs_v2/straddle_tight_1000-NQ-tf30-nyam-pick-stress: 6 days, 27 cells, 162 stored trades, cells that differ: 0
+check BUILD runs/straddle_tight_1000-NQ-tf30-shift nyam: 10 days, 54 cells, 513 stored trades, cells that differ: 0
+check 2024 runs_v2/straddle_tight_1000-NQ-tf30-nyam-pick-shift: 6 days, 54 cells, 315 stored trades, cells that differ: 0
+check BUILD runs/straddle_tight_1000-GC-tf30 nyam: 10 days, 27 cells, 207 stored trades, cells that differ: 0
+check 2024 runs_events/straddle_tight_1000-GC-tf30-nyam-pick: 6 days, 27 cells, 117 stored trades, cells that differ: 0
+check 2024 runs_v2/straddle_tight_1000-GC-tf30-nyam-pick-stress: 6 days, 27 cells, 117 stored trades, cells that differ: 0
+check BUILD runs/straddle_tight_1000-GC-tf30-shift nyam: 10 days, 54 cells, 342 stored trades, cells that differ: 0
+check 2024 runs_events/straddle_tight_1000-GC-tf30-nyam-pick-shift: 6 days, 54 cells, 216 stored trades, cells that differ: 0
+check BUILD runs/first_bar_mom-NQ-tf30 mid: 10 days, 96 cells, 544 stored trades, cells that differ: 0
+check 2024 runs_v2/first_bar_mom-NQ-tf30-mid-pick: 6 days, 96 cells, 384 stored trades, cells that differ: 0
+check 2024 runs_v2/first_bar_mom-NQ-tf30-mid-pick-stress: 6 days, 96 cells, 384 stored trades, cells that differ: 0
+check BUILD runs/first_bar_mom-NQ-tf15 mid: 10 days, 96 cells, 288 stored trades, cells that differ: 0
+check 2024 runs_v2/first_bar_mom-NQ-tf15-mid-pick: 6 days, 96 cells, 192 stored trades, cells that differ: 0
+check 2024 runs_v2/first_bar_mom-NQ-tf15-mid-pick-stress: 6 days, 96 cells, 192 stored trades, cells that differ: 0
+check BUILD runs/first_bar_mom-ES-tf15 mid: 10 days, 96 cells, 352 stored trades, cells that differ: 0
+check 2024 runs_v2/first_bar_mom-ES-tf15-mid-pick: 6 days, 96 cells, 128 stored trades, cells that differ: 0
+check 2024 runs_v2/first_bar_mom-ES-tf15-mid-pick-stress: 6 days, 96 cells, 128 stored trades, cells that differ: 0
+check BUILD runs/orb-NQ-tf15 pre: 10 days, 96 cells, 832 stored trades, cells that differ: 0
+check 2024 runs_v2/orb-NQ-tf15-pre-pick: 6 days, 96 cells, 480 stored trades, cells that differ: 0
+check 2024 runs_v2/orb-NQ-tf15-pre-pick-stress: 6 days, 96 cells, 480 stored trades, cells that differ: 0
+check BUILD runs/straddle_t_1800-NQ-tf30 eve: 10 days, 160 cells, 1088 stored trades, cells that differ: 0
+check 2024 runs_v2/straddle_t_1800-NQ-tf30-eve-pick: 6 days, 160 cells, 704 stored trades, cells that differ: 0
+check 2024 runs_v2/straddle_t_1800-NQ-tf30-eve-pick-stress: 6 days, 160 cells, 704 stored trades, cells that differ: 0
+check BUILD runs/straddle_t_1800-NQ-tf30-shift eve: 10 days, 320 cells, 2080 stored trades, cells that differ: 0
+check 2024 runs_v2/straddle_t_1800-NQ-tf30-eve-pick-shift: 6 days, 320 cells, 1568 stored trades, cells that differ: 0
+check BUILD runs/tema_slope-NQ-tf30 eve: 10 days, 96 cells, 661 stored trades, cells that differ: 0
+check 2024 runs_v2/tema_slope-NQ-tf30-eve-pick: 6 days, 96 cells, 268 stored trades, cells that differ: 0
+check 2024 runs_v2/tema_slope-NQ-tf30-eve-pick-stress: 6 days, 96 cells, 268 stored trades, cells that differ: 0
+check BUILD runs/donchian-NQ-tf30 nyam: 10 days, 64 cells, 347 stored trades, cells that differ: 0
+check 2024 runs_admit/donchian-NQ-tf30-nyam-pick: 6 days, 64 cells, 183 stored trades, cells that differ: 0
+check 2024 donchian-NQ-tf30-nyam-pick-stress: no 2024 store on disk (nothing to compare)
+check BUILD runs/c1-NQ-tf30 mid: 10 days, 64 cells, 912 stored trades, cells that differ: 0
+check 2024 runs_v2/c1-NQ-tf30-mid-pick: 6 days, 64 cells, 465 stored trades, cells that differ: 0
+check BUILD runs/c1-NQ-tf15 mid: 10 days, 64 cells, 1223 stored trades, cells that differ: 0
+check 2024 runs_v2/c1-NQ-tf15-mid-pick: 6 days, 64 cells, 665 stored trades, cells that differ: 0
+check BUILD runs/c1-ES-tf15 mid: 10 days, 64 cells, 1217 stored trades, cells that differ: 0
+check 2024 runs_v2/c1-ES-tf15-mid-pick: 6 days, 64 cells, 623 stored trades, cells that differ: 0
+check BUILD runs/c1-NQ-tf15 pre: 10 days, 64 cells, 754 stored trades, cells that differ: 0
+check 2024 runs_v2/c1-NQ-tf15-pre-pick: 6 days, 64 cells, 515 stored trades, cells that differ: 0
+check BUILD runs/c1-NQ-tf30 eve: 10 days, 64 cells, 1043 stored trades, cells that differ: 0
+check 2024 runs_deepen/c1-NQ-tf30-eve-pick: 6 days, 64 cells, 589 stored trades, cells that differ: 0
+check BUILD runs/c1-NQ-tf30 nyam: 10 days, 64 cells, 539 stored trades, cells that differ: 0
+check 2024 runs_admit/c1-NQ-tf30-nyam-pick: 6 days, 64 cells, 334 stored trades, cells that differ: 0
+check BUILD runs/c1-NQ-tf5 pm: 10 days, 64 cells, 1350 stored trades, cells that differ: 0
+IDENTITY OK

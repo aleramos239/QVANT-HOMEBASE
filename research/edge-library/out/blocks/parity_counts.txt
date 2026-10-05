@@ -1,0 +1,5 @@
+NQ days 10 pairs 372 pairs that differ 0 | per family (pairs, trades compared): {'orb': [72, 924], 'donchian': [96, 2105], 'first_bar_mom': [72, 408], 'vwap_trend_pull': [36, 608], 'vol_spike_break': [72, 825], 'ib': [24, 194]}
+ES days 10 pairs 372 pairs that differ 0 | per family (pairs, trades compared): {'orb': [72, 945], 'donchian': [96, 1972], 'first_bar_mom': [72, 381], 'vwap_trend_pull': [36, 555], 'vol_spike_break': [72, 690], 'ib': [24, 207]}
+GC days 10 pairs 372 pairs that differ 0 | per family (pairs, trades compared): {'orb': [72, 852], 'donchian': [96, 1596], 'first_bar_mom': [72, 249], 'vwap_trend_pull': [36, 477], 'vol_spike_break': [72, 655], 'ib': [24, 148]}
+NQ blocks ON, 1 vs 8 workers: 14 specs, 121 trades, specs that differ 0 | trades per spec [10, 3, 6, 1, 9, 0, 7, 10, 7, 24, 19, 7, 12, 6]
+GC blocks ON, 1 vs 8 workers: 11 specs, 90 trades, specs that differ 0 | trades per spec [9, 3, 8, 4, 4, 1, 6, 5, 3, 26, 21]

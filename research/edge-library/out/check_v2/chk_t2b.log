@@ -1,0 +1,145 @@
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:42: RuntimeWarning: divide by zero encountered in matmul
+  Sx = z @ v.T                             # sum of z_x over slots x' also has
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:42: RuntimeWarning: divide by zero encountered in matmul
+  Sx = z @ v.T                             # sum of z_x over slots x' also has
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:42: RuntimeWarning: overflow encountered in matmul
+  Sx = z @ v.T                             # sum of z_x over slots x' also has
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:42: RuntimeWarning: invalid value encountered in matmul
+  Sx = z @ v.T                             # sum of z_x over slots x' also has
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:42: RuntimeWarning: overflow encountered in matmul
+  Sx = z @ v.T                             # sum of z_x over slots x' also has
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:42: RuntimeWarning: invalid value encountered in matmul
+  Sx = z @ v.T                             # sum of z_x over slots x' also has
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:59: RuntimeWarning: divide by zero encountered in matmul
+  vr += float(w @ cov @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:59: RuntimeWarning: overflow encountered in matmul
+  vr += float(w @ cov @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:59: RuntimeWarning: invalid value encountered in matmul
+  vr += float(w @ cov @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:60: RuntimeWarning: divide by zero encountered in matmul
+  vc += float(w @ (cov * share) @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:60: RuntimeWarning: overflow encountered in matmul
+  vc += float(w @ (cov * share) @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:60: RuntimeWarning: invalid value encountered in matmul
+  vc += float(w @ (cov * share) @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:59: RuntimeWarning: divide by zero encountered in matmul
+  vr += float(w @ cov @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:59: RuntimeWarning: overflow encountered in matmul
+  vr += float(w @ cov @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:59: RuntimeWarning: invalid value encountered in matmul
+  vr += float(w @ cov @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:60: RuntimeWarning: divide by zero encountered in matmul
+  vc += float(w @ (cov * share) @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:60: RuntimeWarning: overflow encountered in matmul
+  vc += float(w @ (cov * share) @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:60: RuntimeWarning: invalid value encountered in matmul
+  vc += float(w @ (cov * share) @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:42: RuntimeWarning: divide by zero encountered in matmul
+  Sx = z @ v.T                             # sum of z_x over slots x' also has
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:42: RuntimeWarning: overflow encountered in matmul
+  Sx = z @ v.T                             # sum of z_x over slots x' also has
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:42: RuntimeWarning: invalid value encountered in matmul
+  Sx = z @ v.T                             # sum of z_x over slots x' also has
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:59: RuntimeWarning: divide by zero encountered in matmul
+  vr += float(w @ cov @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:59: RuntimeWarning: overflow encountered in matmul
+  vr += float(w @ cov @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:59: RuntimeWarning: invalid value encountered in matmul
+  vr += float(w @ cov @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:60: RuntimeWarning: divide by zero encountered in matmul
+  vc += float(w @ (cov * share) @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:60: RuntimeWarning: overflow encountered in matmul
+  vc += float(w @ (cov * share) @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:60: RuntimeWarning: invalid value encountered in matmul
+  vc += float(w @ (cov * share) @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:42: RuntimeWarning: divide by zero encountered in matmul
+  Sx = z @ v.T                             # sum of z_x over slots x' also has
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:42: RuntimeWarning: overflow encountered in matmul
+  Sx = z @ v.T                             # sum of z_x over slots x' also has
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:42: RuntimeWarning: invalid value encountered in matmul
+  Sx = z @ v.T                             # sum of z_x over slots x' also has
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:59: RuntimeWarning: divide by zero encountered in matmul
+  vr += float(w @ cov @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:59: RuntimeWarning: overflow encountered in matmul
+  vr += float(w @ cov @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:59: RuntimeWarning: invalid value encountered in matmul
+  vr += float(w @ cov @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:60: RuntimeWarning: divide by zero encountered in matmul
+  vc += float(w @ (cov * share) @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:60: RuntimeWarning: overflow encountered in matmul
+  vc += float(w @ (cov * share) @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:60: RuntimeWarning: invalid value encountered in matmul
+  vc += float(w @ (cov * share) @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:42: RuntimeWarning: divide by zero encountered in matmul
+  Sx = z @ v.T                             # sum of z_x over slots x' also has
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:42: RuntimeWarning: overflow encountered in matmul
+  Sx = z @ v.T                             # sum of z_x over slots x' also has
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:42: RuntimeWarning: invalid value encountered in matmul
+  Sx = z @ v.T                             # sum of z_x over slots x' also has
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:59: RuntimeWarning: divide by zero encountered in matmul
+  vr += float(w @ cov @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:59: RuntimeWarning: overflow encountered in matmul
+  vr += float(w @ cov @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:59: RuntimeWarning: invalid value encountered in matmul
+  vr += float(w @ cov @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:60: RuntimeWarning: divide by zero encountered in matmul
+  vc += float(w @ (cov * share) @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:60: RuntimeWarning: overflow encountered in matmul
+  vc += float(w @ (cov * share) @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:60: RuntimeWarning: invalid value encountered in matmul
+  vc += float(w @ (cov * share) @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:42: RuntimeWarning: divide by zero encountered in matmul
+  Sx = z @ v.T                             # sum of z_x over slots x' also has
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:42: RuntimeWarning: overflow encountered in matmul
+  Sx = z @ v.T                             # sum of z_x over slots x' also has
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:42: RuntimeWarning: invalid value encountered in matmul
+  Sx = z @ v.T                             # sum of z_x over slots x' also has
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:59: RuntimeWarning: divide by zero encountered in matmul
+  vr += float(w @ cov @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:59: RuntimeWarning: overflow encountered in matmul
+  vr += float(w @ cov @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:59: RuntimeWarning: invalid value encountered in matmul
+  vr += float(w @ cov @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:60: RuntimeWarning: divide by zero encountered in matmul
+  vc += float(w @ (cov * share) @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:60: RuntimeWarning: overflow encountered in matmul
+  vc += float(w @ (cov * share) @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:60: RuntimeWarning: invalid value encountered in matmul
+  vc += float(w @ (cov * share) @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:42: RuntimeWarning: divide by zero encountered in matmul
+  Sx = z @ v.T                             # sum of z_x over slots x' also has
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:42: RuntimeWarning: overflow encountered in matmul
+  Sx = z @ v.T                             # sum of z_x over slots x' also has
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:42: RuntimeWarning: invalid value encountered in matmul
+  Sx = z @ v.T                             # sum of z_x over slots x' also has
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:59: RuntimeWarning: divide by zero encountered in matmul
+  vr += float(w @ cov @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:59: RuntimeWarning: overflow encountered in matmul
+  vr += float(w @ cov @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:59: RuntimeWarning: invalid value encountered in matmul
+  vr += float(w @ cov @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:60: RuntimeWarning: divide by zero encountered in matmul
+  vc += float(w @ (cov * share) @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:60: RuntimeWarning: overflow encountered in matmul
+  vc += float(w @ (cov * share) @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:60: RuntimeWarning: invalid value encountered in matmul
+  vc += float(w @ (cov * share) @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:42: RuntimeWarning: divide by zero encountered in matmul
+  Sx = z @ v.T                             # sum of z_x over slots x' also has
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:42: RuntimeWarning: overflow encountered in matmul
+  Sx = z @ v.T                             # sum of z_x over slots x' also has
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:42: RuntimeWarning: invalid value encountered in matmul
+  Sx = z @ v.T                             # sum of z_x over slots x' also has
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:59: RuntimeWarning: divide by zero encountered in matmul
+  vr += float(w @ cov @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:59: RuntimeWarning: overflow encountered in matmul
+  vr += float(w @ cov @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:59: RuntimeWarning: invalid value encountered in matmul
+  vr += float(w @ cov @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:60: RuntimeWarning: divide by zero encountered in matmul
+  vc += float(w @ (cov * share) @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:60: RuntimeWarning: overflow encountered in matmul
+  vc += float(w @ (cov * share) @ w)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2b.py:60: RuntimeWarning: invalid value encountered in matmul
+  vc += float(w @ (cov * share) @ w)
+units 355

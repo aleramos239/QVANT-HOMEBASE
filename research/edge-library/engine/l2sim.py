@@ -45,6 +45,8 @@ on_session), a raw Strategy subclass must opt in to run on several workers.
 
 HOLDOUT: any session dated >= 2025-01-01 raises HoldoutSealed unless allow_holdout=True is passed
 explicitly (the orchestrator's "holdout" stage only).
+CHECK (EDGE_SPEC "PERIODS AMENDED", 2026-10-04): allow_check=True opens 2025-01-01..2025-12-31 ONLY -- a date
+from 2026-01-01 on still raises under it; without a flag 2025 raises as before.
 
 COMPUTE WINDOWS: every worker checks the ET clock before each session-day and sleeps through
 09:18-09:36 ET on weekdays and Fri 2026-10-02 08:15-08:50 ET. <= 8 worker processes.
@@ -103,9 +105,12 @@ ENGINE_VERSION = "l2sim-1 (port of tester tick-2)"
 # ---- THE THREE PERIODS (EDGE_SPEC "User rules" 3) -- the one place they are defined ------------------------
 BUILD = (dt.date(2021, 9, 22), dt.date(2023, 12, 31))            # family authors + the Run agent work here only
 PICK = (dt.date(2024, 1, 1), dt.date(2024, 12, 31))              # read ONLY by the Admit stage, for BUILD survivors
-EXAM_START = dt.date(2025, 1, 1)                                 # EXAM = 2025-01-01 -> latest: SEALED (loaders raise)
+EXAM_START = dt.date(2025, 1, 1)                                 # the SEAL starts here (loaders raise without a flag)
 EXAM_END = {"NQ_L2": dt.date(2026, 7, 8)}                        # NQ Level-2 members: the OFB history ends here
 HOLDOUT_START = EXAM_START                                       # the L2 pilot's name of the same seal
+CHECK = (dt.date(2025, 1, 1), dt.date(2025, 12, 31))             # opened 2026-10-04 ("PERIODS AMENDED"): allow_check=True only;
+#                                                                  2026-01-01 -> latest stays the sealed EXAM under that flag
+ALLOW_CHECK = "check"                                            # the value allow_holdout carries inside the engine on a CHECK run
 IN_SAMPLE = (BUILD[0], PICK[1])                                  # the old pilots' in-sample window: tester-match gates only
 PERIODS = {"build": BUILD, "pick": PICK, "insample": IN_SAMPLE}
 
@@ -116,6 +121,8 @@ def period(name) -> tuple:
     if isinstance(name, (tuple, list)) and len(name) == 2:
         return _date(name[0]), _date(name[1])
     key = str(name).lower()
+    if key == "check":                                # the RANGE only: the run still needs allow_check=True
+        return CHECK
     if key == "exam":
         raise HoldoutSealed("the EXAM period (>= 2025-01-01) is sealed: name its dates and pass allow_exam=True explicitly")
     if key not in PERIODS:
@@ -127,6 +134,8 @@ def period_of(start, end) -> str:
     """The name of the period a run range lies in: 'build' | 'pick' | 'exam' | 'insample' (build + pick: gates only) |
     'mixed' (reaches the exam and something before it). Recorded in every run's meta / bundle."""
     a, b = _date(start), _date(end)
+    if a >= CHECK[0] and b <= CHECK[1]:
+        return "check"                                # 2025 only (EDGE_SPEC "PERIODS AMENDED")
     if a >= EXAM_START:
         return "exam"
     if b >= EXAM_START:
@@ -217,8 +226,29 @@ def _date(d) -> dt.date:
     return d if isinstance(d, dt.date) else dt.date.fromisoformat(str(d))
 
 
+def allow_level(allow_holdout=False, allow_exam=False, allow_check=False):
+    """The seal switch of a call -> True (the EXAM key, literal True only) | ALLOW_CHECK (allow_check=True: the CHECK
+    year 2025 and nothing later) | False. The one place the three keywords are folded into the value the guards read."""
+    if allow_holdout is True or allow_exam is True:
+        return True
+    return ALLOW_CHECK if allow_check is True or (isinstance(allow_holdout, str) and allow_holdout == ALLOW_CHECK) else False
+
+
+def _seal_end(allow_holdout) -> dt.date:
+    """The last date a loader may reach under a seal switch: in-sample | the CHECK year | the archive's end (EXAM key)."""
+    if isinstance(allow_holdout, str):
+        return CHECK[1] if allow_holdout == ALLOW_CHECK else IN_SAMPLE[1]
+    return dt.date(2026, 12, 31) if allow_holdout else IN_SAMPLE[1]
+
+
 def check_holdout(d, allow_holdout: bool = False) -> None:
-    """The EXAM seal: a date >= 2025-01-01 raises unless allow_holdout (= allow_exam) is exactly True."""
+    """The EXAM seal: a date >= 2025-01-01 raises unless allow_holdout (= allow_exam) is exactly True. The CHECK switch
+    (allow_holdout == ALLOW_CHECK: what allow_check=True becomes) opens 2025-01-01..2025-12-31 ONLY -- 2026+ still raises."""
+    if isinstance(allow_holdout, str) and allow_holdout == ALLOW_CHECK and _date(d) >= HOLDOUT_START:
+        if _date(d) > CHECK[1]:
+            raise HoldoutSealed(f"{d} is after the CHECK period (ends {CHECK[1]}): 2026+ is the sealed EXAM, the check "
+                                "flag never opens it")
+        return
     if _date(d) >= HOLDOUT_START and allow_holdout is not True:
         raise HoldoutSealed(f"{d} is in the sealed EXAM period / holdout (>= {HOLDOUT_START}); pass allow_exam=True "
                             "(allow_holdout=True) only when the orchestrator says 'exam'")
@@ -398,13 +428,14 @@ def read_hb_tape(p: Path, root: str, d: dt.date) -> "Tape | None":
     return Tape(root, d, head["contract"], ts, px, sz, dict(head["daily"]))
 
 
-def load_tape(d, root: str = "NQ", allow_holdout: bool = False, allow_exam: bool = False) -> Tape | None:
+def load_tape(d, root: str = "NQ", allow_holdout: bool = False, allow_exam: bool = False,
+              allow_check: bool = False) -> Tape | None:
     """One session's execution tape (every print of the archive file, tape order). None = not cached.
     NQ: the ofb_tick parquet (print-identical to the tester's tape, SIM_VALIDATION.md). ES / GC / any other root: the
     tester's own tape cache (or this project's own build of a session the tester never cached: build_tapes).
-    Raises HoldoutSealed for a 2025+ date unless allow_exam=True (= allow_holdout=True)."""
+    Raises HoldoutSealed for a 2025+ date unless allow_exam=True (= allow_holdout=True); allow_check=True opens 2025 only."""
     d = _date(d)
-    check_holdout(d, allow_holdout is True or allow_exam is True)
+    check_holdout(d, allow_level(allow_holdout, allow_exam, allow_check))
     if root != "NQ":
         p = hb_tape_path(d, root)
         return None if p is None else read_hb_tape(p, root, d)
@@ -427,12 +458,14 @@ def load_tape(d, root: str = "NQ", allow_holdout: bool = False, allow_exam: bool
     return Tape(root, d, contract, t["ts_ns"].to_numpy(), t["price"].to_numpy(), t["size"].to_numpy())
 
 
-def sessions(start, end, root: str = "NQ", allow_holdout: bool = False, allow_exam: bool = False) -> list:
+def sessions(start, end, root: str = "NQ", allow_holdout: bool = False, allow_exam: bool = False,
+             allow_check: bool = False) -> list:
     """Weekday session dates in [start, end]. NQ: the dates that have an ofb_tick tape. Other roots: the dates that
     have an archive manifest (file NAMES only), exactly the tester's TapeStore.sessions -- a manifest day without a
-    tape is then a 'no tape' skip, as in the tester. A range reaching 2025+ raises unless allow_exam=True."""
+    tape is then a 'no tape' skip, as in the tester. A range reaching 2025+ raises unless allow_exam=True; with
+    allow_check=True it may end no later than 2025-12-31."""
     start, end = _date(start), _date(end)
-    check_holdout(end, allow_holdout is True or allow_exam is True)
+    check_holdout(end, allow_level(allow_holdout, allow_exam, allow_check))
     out = set()
     for y in range(start.year, end.year + 1):
         files = (TAPE_DIR / root / str(y)).glob("*/*.parquet") if root == "NQ" else (ARCHIVE / root / str(y)).glob("*.json")
@@ -448,10 +481,10 @@ def sessions(start, end, root: str = "NQ", allow_holdout: bool = False, allow_ex
 
 def _tapes_one(args) -> tuple:
     """Worker of build_tapes: build ONE missing session tape with the tester's own TapeStore code into OWN_TAPE."""
-    iso, root = args
+    iso, root = args[:2]
     wait_compute_window()
     d = dt.date.fromisoformat(iso)
-    check_holdout(d, False)
+    check_holdout(d, ALLOW_CHECK if len(args) > 2 and args[2] == ALLOW_CHECK else False)     # never the EXAM key
     if hb_tape_path(d, root) is not None:
         return iso, "cached"
     sys.dont_write_bytecode = True                  # the repo's homebase/ package is read-only for this project
@@ -462,15 +495,17 @@ def _tapes_one(args) -> tuple:
     return iso, ("built" if store.build(root, d) is not None else "no tape")
 
 
-def build_tapes(root: str, start=BUILD[0], end=PICK[1], workers: int = 2) -> dict:
+def build_tapes(root: str, start=BUILD[0], end=PICK[1], workers: int = 2, allow_check: bool = False) -> dict:
     """Build the session tapes of `root` that neither the tester's cache nor OWN_TAPE holds, for [start, end] (never
-    2025+), with the tester's own code (homebase.backtest.tape: front contract = the manifest with the most ticks,
-    rows in tape order) -> the same bytes the tester would replay. Writes under OWN_TAPE only (the tester's cache
-    and the archive are never written). -> {"built": n, "cached": n, "no tape": n}."""
+    2025+; with allow_check=True through 2025-12-31, never 2026+), with the tester's own code (homebase.backtest.tape:
+    front contract = the manifest with the most ticks, rows in tape order) -> the same bytes the tester would replay.
+    Writes under OWN_TAPE only (the tester's cache and the archive are never written).
+    -> {"built": n, "cached": n, "no tape": n}."""
     if root == "NQ":
         raise ValueError("NQ replays the ofb_tick parquet tapes (already complete); build_tapes is for ES / GC")
-    days = [d.isoformat() for d in sessions(start, end, root)]
-    todo = [(iso, root) for iso in days]
+    allow = allow_level(allow_check=allow_check)
+    days = [d.isoformat() for d in sessions(start, end, root, allow)]
+    todo = [(iso, root, allow) for iso in days]
     workers = max(1, min(int(workers), MAX_WORKERS))
     wait_compute_window()
     if workers == 1 or not pool_usable():
@@ -517,6 +552,8 @@ def build_daily(root: str = "NQ", start=IN_SAMPLE[0], end=IN_SAMPLE[1], workers:
 
 
 def _daily_path(root: str, allow_holdout: bool) -> Path:
+    if isinstance(allow_holdout, str):               # CHECK: its own file (in-sample + 2025, never a 2026 row)
+        return CACHE / (f"daily_{root}_check.json" if allow_holdout == ALLOW_CHECK else f"daily_{root}.json")
     return CACHE / (f"daily_{root}_holdout.json" if allow_holdout else f"daily_{root}.json")
 
 
@@ -527,10 +564,12 @@ def load_daily(root: str = "NQ", allow_holdout: bool = False, build: bool = True
     """Daily bars [{date, h, l, c, contract}], ascending. The in-sample cache never holds a 2025+ row.
     NQ: the cached file (built from the tapes once). Other roots: read from the tape HEADERS on every call (one small
     read per session, memoised per process) -- never a stale file while build_tapes is still adding sessions."""
+    if isinstance(allow_holdout, str):               # a string is the CHECK switch or nothing
+        allow_holdout = allow_level(allow_holdout)
     if root != "NQ":
-        key = (root, bool(allow_holdout))
+        key = (root, allow_holdout if allow_holdout == ALLOW_CHECK else bool(allow_holdout))
         if key not in _DAILY_MEMO:
-            end = dt.date(2026, 12, 31) if allow_holdout else IN_SAMPLE[1]
+            end = _seal_end(allow_holdout)
             rows = [_daily_one((d.isoformat(), root, allow_holdout)) for d in sessions(IN_SAMPLE[0], end, root, allow_holdout)]
             _DAILY_MEMO[key] = [r for r in rows if r is not None]
         return list(_DAILY_MEMO[key])
@@ -538,11 +577,12 @@ def load_daily(root: str = "NQ", allow_holdout: bool = False, build: bool = True
     if not p.exists():
         if not build:
             return []
-        build_daily(root, IN_SAMPLE[0], (dt.date(2026, 12, 31) if allow_holdout else IN_SAMPLE[1]),
-                    allow_holdout=allow_holdout)
+        build_daily(root, IN_SAMPLE[0], _seal_end(allow_holdout), allow_holdout=allow_holdout)
     rows = json.loads(p.read_text())["rows"]
     if not allow_holdout:
         rows = [r for r in rows if r["date"] < HOLDOUT_START.isoformat()]
+    elif allow_holdout == ALLOW_CHECK:
+        rows = [r for r in rows if r["date"] <= CHECK[1].isoformat()]
     return rows
 
 
@@ -610,27 +650,38 @@ def eve_atr(tape: "Tape", tf: int = ATR_TF, n: int = 14) -> float | None:
     return atr
 
 
-def _atr_path(root: str) -> Path:
-    return CACHE / f"eve_atr{ATR_TF}_{root}.json"
+def _atr_path(root: str, check: bool = False) -> Path:
+    return CACHE / f"eve_atr{ATR_TF}_{root}{'_check' if check else ''}.json"
 
 
 def _atr_one(args):
-    iso, root = args
+    iso, root = args[:2]
     wait_compute_window()
-    t = load_tape(iso, root)
+    t = load_tape(iso, root, allow_holdout=ALLOW_CHECK if len(args) > 2 and args[2] == ALLOW_CHECK else False)
     return iso, (None if t is None or not len(t.ts) else eve_atr(t))
 
 
-def load_eve_atr(root: str = "NQ", build: bool = True, workers: int = 1) -> dict:
+def load_eve_atr(root: str = "NQ", build: bool = True, workers: int = 1, allow_holdout=False) -> dict:
     """{trade date ISO: the closing ATR30 of that date's evening segment (eve_atr) or None}, BUILD + PICK sessions only
     (never a 2025+ day). Cached in cache/eve_atr30_<root>.json; dates the file does not hold yet are computed (one
-    tape read each, ONE process unless workers > 1 is asked for) and added."""
-    p = _atr_path(root)
+    tape read each, ONE process unless workers > 1 is asked for) and added.
+    CHECK (allow_holdout == ALLOW_CHECK): the in-sample dict + the 2025 sessions, which live in their OWN file
+    cache/eve_atr30_<root>_check.json (the in-sample file never gets a 2025 row; nothing dated 2026+ is read)."""
+    chk = isinstance(allow_holdout, str) and allow_holdout == ALLOW_CHECK
+    if chk:
+        return {**load_eve_atr(root, build, workers), **_eve_atr_file(root, build, workers, CHECK, True)}
+    return _eve_atr_file(root, build, workers, IN_SAMPLE, False)
+
+
+def _eve_atr_file(root: str, build: bool, workers: int, span: tuple, chk: bool) -> dict:
+    """One eve-ATR cache file (in-sample, or the CHECK year's own), completed for the sessions of `span` when build."""
+    p = _atr_path(root, chk)
     have = json.loads(p.read_text()) if p.exists() else {}
     if not build:
         return have
-    days = [d.isoformat() for d in sessions(IN_SAMPLE[0], IN_SAMPLE[1], root)]
-    todo = [(iso, root) for iso in days if iso not in have and (root == "NQ" or hb_tape_path(iso, root) is not None)]
+    allow = ALLOW_CHECK if chk else False
+    days = [d.isoformat() for d in sessions(span[0], span[1], root, allow)]
+    todo = [(iso, root, allow) for iso in days if iso not in have and (root == "NQ" or hb_tape_path(iso, root) is not None)]
     if todo:
         workers = max(1, min(int(workers), MAX_WORKERS))
         wait_compute_window()
@@ -648,12 +699,12 @@ def load_eve_atr(root: str = "NQ", build: bool = True, workers: int = 1) -> dict
     return have
 
 
-def with_eve_atr(daily: list, root: str) -> list:
+def with_eve_atr(daily: list, root: str, allow_holdout=False) -> list:
     """The daily bars with each trade date's own evening-close ATR30 added as 'atr30e' (None when unknown). The runner
     hands a strategy ONE of them per segment as ctx.atr_carry: the previous trade date's value in the evening segment
     (decisions from 18:00), the trade date's own value in the day segment (decisions from 00:00) -- in both cases
     the most recent evening that has ended, i.e. prior data."""
-    a = load_eve_atr(root)
+    a = load_eve_atr(root, allow_holdout=allow_holdout)        # only the CHECK switch widens it (2025); else in-sample
     return [{**r, "atr30e": a.get(r["date"])} for r in daily]
 
 
@@ -827,6 +878,9 @@ class L2Features:
     the in-sample table per worker). The holdout seal is l2data's own plus check_holdout here."""
 
     def __init__(self, columns, lookback_min: int = 360, allow_holdout: bool = False, mask_bad_book: bool = True):
+        if isinstance(allow_holdout, str):          # the CHECK switch: l2data's seal has no 2025-only key (its table
+            raise HoldoutSealed("Level-2 features are not opened for the CHECK year: the feature table would reach "
+                                "2026 (sealed); a CHECK run takes no features")       # would be read through 2026)
         self.columns = tuple(columns)
         self.lookback_min, self.allow_holdout, self.mask = int(lookback_min), allow_holdout, mask_bad_book
 
@@ -2292,7 +2346,7 @@ def run_many(specs: list, start=None, end=None, *, root: str = "NQ", workers: in
              costs: Costs | None = None, qty: int = 1, allow_holdout: bool = False, features=None,
              days: list | None = None, keep_ns: bool = False, slip_ticks: float | None = None,
              latency_ms: int | None = None, strict_limit: bool | None = None, on_error: str = "skip",
-             period: str | None = None, allow_exam: bool = False) -> list:
+             period: str | None = None, allow_exam: bool = False, allow_check: bool = False) -> list:
     """Run several (strategy class, params) specs in ONE pass over the tapes (a grid: each session's tape,
     bars and features are loaded once and shared by every cell). Returns one result dict per spec, in order:
     {"trades": [...R trades.json schema...], "skipped": [...], "no_trade": [...], "sessions": n, "used": n,
@@ -2320,11 +2374,12 @@ def run_many(specs: list, start=None, end=None, *, root: str = "NQ", workers: in
     EDGE LIBRARY: `root` = NQ | ES | GC (ES / GC replay the tester's own tape cache; no Level-2 features, no Template
     L2 option there). `period` = 'build' | 'pick' | 'insample' sets the range (start / end must then be omitted; with
     neither, the range is the old in-sample window, as before). The EXAM period (>= 2025-01-01) raises HoldoutSealed
-    unless allow_exam=True (= allow_holdout=True). meta["range"] records start, end and the period's name; a bundle
+    unless allow_exam=True (= allow_holdout=True). CHECK (2025): period='check' (or 2025 dates) + allow_check=True; a run
+    with that flag may end no later than 2025-12-31. meta["range"] records start, end and the period's name; a bundle
     carries it. A strategy with an `eve_window` (Template: sess eve / globex, an evening family window) also replays
     the evening before each trade date; an evening segment with a coverage hole is listed in "eve_skipped"."""
     t_start = time.monotonic()
-    allow_holdout = allow_holdout is True or allow_exam is True
+    allow_holdout = allow_level(allow_holdout, allow_exam, allow_check)     # True | ALLOW_CHECK (2025 only) | False
     if period is not None:
         if start is not None or end is not None:
             raise ValueError("pass period= or start / end, not both")
@@ -2370,7 +2425,7 @@ def run_many(specs: list, start=None, end=None, *, root: str = "NQ", workers: in
     daily = load_daily(root, allow_holdout) if any(s.needs_daily() for s in probes) else None
     roll_set = rolls(daily) if daily else None
     if daily and any(getattr(st, "ATR_CARRY", False) for st in probes):
-        daily = with_eve_atr(daily, root)            # row['atr30e']: the runner hands out ctx.atr_carry from it
+        daily = with_eve_atr(daily, root, allow_holdout)   # row['atr30e']: the runner hands out ctx.atr_carry from it
     workers = max(1, min(int(workers), MAX_WORKERS, len(all_days) or 1))
     if not all(getattr(c, "session_independent", False) for c, _ in specs):
         workers = 1                                  # state carried across days: one instance, in order

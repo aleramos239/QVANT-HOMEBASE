@@ -1,0 +1,32 @@
+[
+ {
+  "uid": "placebo-c1-NQ-tf1|eve|seed2",
+  "t4": true,
+  "t5": true,
+  "avg_net_2024": 11397.25,
+  "median_net_2024": 1500.0,
+  "share_pos_2024": 0.5,
+  "lift_2024": 6540.0,
+  "avg_trades_2024": 546.15625
+ },
+ {
+  "uid": "placebo-c1-NQ-tf15|pre|seed1",
+  "t4": false,
+  "t5": false,
+  "avg_net_2024": 9087.59375,
+  "median_net_2024": -954.0,
+  "share_pos_2024": 0.4375,
+  "lift_2024": -1744.36,
+  "avg_trades_2024": 327.90625
+ },
+ {
+  "uid": "placebo-c1-NQ-tf30|pre|seed1",
+  "t4": false,
+  "t5": false,
+  "avg_net_2024": 5976.9375,
+  "median_net_2024": -5063.5,
+  "share_pos_2024": 0.40625,
+  "lift_2024": -7686.7,
+  "avg_trades_2024": 229.90625
+ }
+]

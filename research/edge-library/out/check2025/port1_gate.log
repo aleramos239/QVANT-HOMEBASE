@@ -1,0 +1,66 @@
+NQ orb        tf1   tester   4083 sim   4083 identical   4083 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+NQ orb        tf5   tester   4080 sim   4080 identical   4080 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+NQ orb        tf15  tester   3263 sim   3263 identical   3263 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+NQ orb        tf30  tester   3263 sim   3263 identical   3263 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+NQ straddle   tf1   tester   3273 sim   3273 identical   3273 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+NQ straddle   tf5   tester   3273 sim   3273 identical   3273 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+NQ straddle   tf15  tester   3273 sim   3273 identical   3273 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+NQ straddle   tf30  tester   3271 sim   3271 identical   3271 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+NQ donchian   tf1   tester  12259 sim  12259 identical  12259 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+NQ donchian   tf5   tester   6938 sim   6938 identical   6938 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+NQ donchian   tf15  tester   2431 sim   2431 identical   2431 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+NQ donchian   tf30  tester    973 sim    973 identical    973 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+NQ squeeze    tf1   tester   8019 sim   8019 identical   8019 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+NQ squeeze    tf5   tester   1826 sim   1826 identical   1826 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+NQ squeeze    tf15  tester    431 sim    431 identical    431 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+NQ squeeze    tf30  tester    104 sim    104 identical    104 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+NQ ib         tf1   tester   1248 sim   1248 identical   1248 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+NQ ib         tf5   tester   1248 sim   1248 identical   1248 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+NQ ib         tf15  tester   1248 sim   1248 identical   1248 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+NQ ib         tf30  tester   1248 sim   1248 identical   1248 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+NQ gap        tf1   tester    578 sim    578 identical    578 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+NQ gap        tf5   tester    559 sim    559 identical    559 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+NQ gap        tf15  tester    531 sim    531 identical    531 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+NQ gap        tf30  tester    509 sim    509 identical    509 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+NQ lon_break  tf1   tester    794 sim    794 identical    794 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+NQ lon_break  tf5   tester    794 sim    794 identical    794 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+NQ lon_break  tf15  tester    794 sim    794 identical    794 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+NQ lon_break  tf30  tester    794 sim    794 identical    794 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+ES orb        tf1   tester   4097 sim   4097 identical   4097 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+ES orb        tf5   tester   4095 sim   4095 identical   4095 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+ES orb        tf15  tester   3274 sim   3274 identical   3274 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+ES orb        tf30  tester   3274 sim   3274 identical   3274 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+ES straddle   tf1   tester   3285 sim   3285 identical   3285 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+ES straddle   tf5   tester   3285 sim   3285 identical   3285 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+ES straddle   tf15  tester   3285 sim   3285 identical   3285 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+ES straddle   tf30  tester   3285 sim   3285 identical   3285 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+ES donchian   tf1   tester  12279 sim  12279 identical  12279 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+ES donchian   tf5   tester   6879 sim   6879 identical   6879 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+ES donchian   tf15  tester   2397 sim   2397 identical   2397 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+ES donchian   tf30  tester    984 sim    984 identical    984 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+ES squeeze    tf1   tester   7674 sim   7674 identical   7674 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+ES squeeze    tf5   tester   1875 sim   1875 identical   1875 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+ES squeeze    tf15  tester    444 sim    444 identical    444 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+ES squeeze    tf30  tester    108 sim    108 identical    108 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+ES ib         tf1   tester   1324 sim   1324 identical   1324 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+ES ib         tf5   tester   1324 sim   1324 identical   1324 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+ES ib         tf15  tester   1324 sim   1324 identical   1324 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+ES ib         tf30  tester   1324 sim   1324 identical   1324 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+ES gap        tf1   tester    594 sim    594 identical    594 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+ES gap        tf5   tester    578 sim    578 identical    578 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+ES gap        tf15  tester    563 sim    563 identical    563 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+ES gap        tf30  tester    541 sim    541 identical    541 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+ES lon_break  tf1   tester    783 sim    783 identical    783 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+ES lon_break  tf5   tester    783 sim    783 identical    783 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+ES lon_break  tf15  tester    783 sim    783 identical    783 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+ES lon_break  tf30  tester    783 sim    783 identical    783 match 100.00% net diff +0.00 skips_equal True errors 0 PASS
+hm-orb-tf5         or_min ['5', '15', '30'] cells 36 identical 36 tester 136392 sim 136392 all-fields 136392 worst match 100.00% max |net diff| 0.00 errors 0 90.59 s PASS
+hm2-straddle-tf30  off_atr [0.25, 0.5, 1.0] cells 36 identical 36 tester 116172 sim 116172 all-fields 116172 worst match 100.00% max |net diff| 0.00 errors 0 81.23 s PASS
+hm-donchian-tf15   n [10, 20, 40, 60] cells 48 identical 48 tester 102134 sim 102134 all-fields 102134 worst match 100.00% max |net diff| 0.00 errors 0 83.83 s PASS
+hm2-squeeze-tf1    sq_type ['bbkc', 'nr7', 'inside'] cells 36 identical 36 tester 376042 sim 376042 all-fields 376042 worst match 100.00% max |net diff| 0.00 errors 0 114.39 s PASS
+hm2-squeeze-tf5    sq_type ['bbkc', 'nr7', 'inside'] cells 36 identical 36 tester 205656 sim 205656 all-fields 205656 worst match 100.00% max |net diff| 0.00 errors 0 61.62 s PASS
+hm-ib-tf30         mode ['break', 'fade'] cells 24 identical 24 tester 19816 sim 19816 all-fields 19816 worst match 100.00% max |net diff| 0.00 errors 0 29.83 s PASS
+hm-ib-tf15         mode ['break', 'fade'] cells 24 identical 24 tester 22792 sim 22792 all-fields 22792 worst match 100.00% max |net diff| 0.00 errors 0 30.51 s PASS
+hm2-gap-tf15       mode ['fill', 'go'] cells 24 identical 24 tester 13332 sim 13332 all-fields 13332 worst match 100.00% max |net diff| 0.00 errors 0 27.35 s PASS
+hm2-lon_break-tf5  min_rng_atr [0.0, 1.0, 2.0] cells 36 identical 36 tester 28440 sim 28440 all-fields 28440 worst match 100.00% max |net diff| 0.00 errors 0 41.65 s PASS
+PORT1 GATE PASS (56 screen bundles, 9 heat-maps)

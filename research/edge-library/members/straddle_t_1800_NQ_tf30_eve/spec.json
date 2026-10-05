@@ -1,0 +1,110 @@
+{
+ "name": "straddle_t_1800_NQ_tf30_eve",
+ "uid": "straddle_t_1800-NQ-tf30|eve|",
+ "idea": "bracket at 18:00 ET",
+ "family": "straddle_t_1800",
+ "root": "NQ",
+ "tf": "30",
+ "sess": "eve",
+ "label": "",
+ "group": null,
+ "side": null,
+ "inputs": {
+  "tf": "30",
+  "sess": "all",
+  "dir": "both",
+  "stop_mode": "pts",
+  "stop_val": 45.0,
+  "tgt_r": 2.0,
+  "trail_atr": 0.0,
+  "exit_bars": 0,
+  "max_tr": 1,
+  "f_trend": "off",
+  "f_vwap": "off",
+  "f_depth": "off",
+  "f_book": "off",
+  "x_book": "off",
+  "f_thin": "off",
+  "hold_to": "day",
+  "at": "18:00",
+  "flat": "",
+  "cancel_min": 60,
+  "off_mode": "menu",
+  "off_val": 0.5,
+  "shift_seed": 0,
+  "shift_max": 90,
+  "off": "atr0p25"
+ },
+ "rule": "At 18:00 ET: a buy stop above and a sell stop below the last price (distance `atr0p25`: a fraction of the 30-minute average range, or fixed points); one cancels the other; unfilled orders are cancelled after 60 minutes. One trade a day. Stop 45 points; target 2 x the stop. Session: evening (18:00-23:59 ET, the evening before the trade date); flat by 15:58 ET.",
+ "rationale": "At scheduled liquidity events new orders arrive and price leaves its pre-event balance; a straddle rides whichever side breaks (18:00 ET: Globex reopen).",
+ "complexity": 6,
+ "flags": [
+  "thin control (random-minute store: 2 seeds on disk)"
+ ],
+ "cell": "offatr0p25_pts45-r2",
+ "default_rule": "survivors sorted by (BUILD net, variant order); the middle one; an even count takes the lower of the two middle ones",
+ "admission": "v2 (EDGE_SPEC ADMISSION v2: the average of all variants)",
+ "admit": true,
+ "variants_judged": 160,
+ "survivors": 61,
+ "contracts": 1,
+ "hold_to": "day",
+ "day_filter": null,
+ "periods": {
+  "build": [
+   "2021-09-22",
+   "2023-12-31"
+  ],
+  "pick": [
+   "2024-01-01",
+   "2024-12-31"
+  ]
+ },
+ "tests": {
+  "1_build_share_and_average": true,
+  "2_build_real_edge": {
+   "shift": {
+    "pass": true,
+    "lift": 44920.72,
+    "p_beat": 1.0,
+    "ctl_mean": -29161.8,
+    "ctl_p95": -16810.62,
+    "ctl_sd": 6901.04,
+    "replicates": 200,
+    "real_replicates": 2,
+    "thin": true,
+    "raw": [
+     -29217.6875,
+     -29105.912500000002
+    ]
+   }
+  },
+  "3_trades": {
+   "build_avg": 438.2,
+   "build_plus_2024_avg": 647.2
+  },
+  "4_2024_average_and_median": {
+   "avg": 12460.25,
+   "median": 6343.0
+  },
+  "5_2024_lift": {
+   "shift": {
+    "pass": true,
+    "lift": 141.67,
+    "p_beat": 0.49,
+    "ctl_mean": 12318.58,
+    "ctl_p95": 19607.37,
+    "ctl_sd": 4813.24,
+    "replicates": 200,
+    "real_replicates": 2,
+    "thin": true,
+    "raw": [
+     -5391.399999999997,
+     30028.568750000002
+    ]
+   }
+  },
+  "6_2024_stress_average": 6810.0625
+ },
+ "written_utc": "2026-10-04T16:27:03+00:00"
+}

@@ -1,0 +1,17 @@
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2.py:59: RuntimeWarning: Degrees of freedom <= 0 for slice.
+  S2 = np.nanvar(Ym, axis=1, ddof=1)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2.py:59: RuntimeWarning: Degrees of freedom <= 0 for slice.
+  S2 = np.nanvar(Ym, axis=1, ddof=1)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2.py:59: RuntimeWarning: Degrees of freedom <= 0 for slice.
+  S2 = np.nanvar(Ym, axis=1, ddof=1)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2.py:59: RuntimeWarning: Degrees of freedom <= 0 for slice.
+  S2 = np.nanvar(Ym, axis=1, ddof=1)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2.py:59: RuntimeWarning: Degrees of freedom <= 0 for slice.
+  S2 = np.nanvar(Ym, axis=1, ddof=1)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2.py:59: RuntimeWarning: Degrees of freedom <= 0 for slice.
+  S2 = np.nanvar(Ym, axis=1, ddof=1)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2.py:59: RuntimeWarning: Degrees of freedom <= 0 for slice.
+  S2 = np.nanvar(Ym, axis=1, ddof=1)
+/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/check_v2/chk_t2.py:59: RuntimeWarning: Degrees of freedom <= 0 for slice.
+  S2 = np.nanvar(Ym, axis=1, ddof=1)
+units 398

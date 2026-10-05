@@ -1,0 +1,26 @@
+[
+ {
+  "c1": true,
+  "root": "NQ",
+  "tf": "1",
+  "sess": "eve",
+  "period": "pick",
+  "why": "v2 PLACEBO: random-entry store of a placebo unit that passed BUILD (a control, no candidate)"
+ },
+ {
+  "c1": true,
+  "root": "NQ",
+  "tf": "15",
+  "sess": "pre",
+  "period": "pick",
+  "why": "v2 PLACEBO: random-entry store of a placebo unit that passed BUILD (a control, no candidate)"
+ },
+ {
+  "c1": true,
+  "root": "NQ",
+  "tf": "30",
+  "sess": "pre",
+  "period": "pick",
+  "why": "v2 PLACEBO: random-entry store of a placebo unit that passed BUILD (a control, no candidate)"
+ }
+]

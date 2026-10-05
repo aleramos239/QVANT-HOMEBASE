@@ -1,0 +1,51 @@
+done first_bar_mom-ES-tf15-mid-build-normal.json {'k1p5_atr1p5-r2': 150} elapsed 1
+done first_bar_mom-ES-tf15-mid-build-stress.json {'k1p5_atr1p5-r2': 150} elapsed 1
+done first_bar_mom-ES-tf15-mid-pick-normal.json {'k1p5_atr1p5-r2': 73} elapsed 1
+done first_bar_mom-ES-tf15-mid-pick-stress.json {'k1p5_atr1p5-r2': 73} elapsed 1
+done first_bar_mom-NQ-tf15-mid-build-normal.json {'k1p5_atr3-r2': 154} elapsed 1
+done first_bar_mom-NQ-tf15-mid-build-stress.json {'k1p5_atr3-r2': 154} elapsed 1
+done first_bar_mom-NQ-tf15-mid-pick-normal.json {'k1p5_atr3-r2': 82} elapsed 1
+done first_bar_mom-NQ-tf15-mid-pick-stress.json {'k1p5_atr3-r2': 82} elapsed 1
+done first_bar_mom-NQ-tf30-mid-build-normal.json {'k1p5_pts45-r3': 254} elapsed 1
+done first_bar_mom-NQ-tf30-mid-build-stress.json {'k1p5_pts45-r3': 254} elapsed 1
+done first_bar_mom-NQ-tf30-mid-pick-normal.json {'k1p5_pts45-r3': 120} elapsed 1
+done first_bar_mom-NQ-tf30-mid-pick-stress.json {'k1p5_pts45-r3': 120} elapsed 1
+done orb-NQ-tf15-pre-build-normal.json {'or_min15_pct0p1-r0': 522} elapsed 1
+done orb-NQ-tf15-pre-build-stress.json {'or_min15_pct0p1-r0': 522} elapsed 1
+done orb-NQ-tf15-pre-pick-normal.json {'or_min15_pct0p1-r0': 229} elapsed 1
+done orb-NQ-tf15-pre-pick-stress.json {'or_min15_pct0p1-r0': 229} elapsed 1
+done orb-NQ-tf15-pre-pick-stress_no_oco.json {'or_min15_pct0p1-r0': 229} elapsed 1
+done straddle_t_0830-NQ-tf30-pre-build-normal.json {'offatr0p25_pct0p1-r0': 568} elapsed 1
+done straddle_t_0830-NQ-tf30-pre-build-stress.json {'offatr0p25_pct0p1-r0': 570} elapsed 1
+done straddle_t_0830-NQ-tf30-pre-pick-normal.json {'offatr0p25_pct0p1-r0': 252} elapsed 1
+done straddle_t_0830-NQ-tf30-pre-pick-stress.json {'offatr0p25_pct0p1-r0': 254} elapsed 1
+done straddle_t_0830-NQ-tf30-pre-pick-stress_no_oco.json {'offatr0p25_pct0p1-r0': 252} elapsed 1
+done straddle_t_1800-NQ-tf30-eve-build-normal.json {'offatr0p25_pts45-r2': 556} elapsed 1
+done straddle_t_1800-NQ-tf30-eve-build-stress.json {'offatr0p25_pts45-r2': 557} elapsed 1
+done straddle_t_1800-NQ-tf30-eve-pick-normal.json {'offatr0p25_pts45-r2': 248} elapsed 1
+done straddle_t_1800-NQ-tf30-eve-pick-stress.json {'offatr0p25_pts45-r2': 248} elapsed 1
+done straddle_t_1800-NQ-tf30-eve-pick-stress_no_oco.json {'offatr0p25_pts45-r2': 248} elapsed 1
+done straddle_tight_0830-GC-tf30-pre-build-normal.json {'offC_pts2-r2': 434} elapsed 1
+done straddle_tight_0830-GC-tf30-pre-build-stress.json {'offC_pts2-r2': 438} elapsed 1
+done straddle_tight_0830-GC-tf30-pre-pick-normal.json {'offC_pts2-r2': 210} elapsed 0
+done straddle_tight_0830-GC-tf30-pre-pick-stress.json {'offC_pts2-r2': 212} elapsed 0
+done straddle_tight_0830-GC-tf30-pre-pick-stress_no_oco.json {'offC_pts2-r2': 210} elapsed 0
+done straddle_tight_0830-NQ-tf30-pre-build-normal.json {'offA_pts5-r3': 566, 'offA_pts8-r3': 566, 'offB_pts5-r3': 549} elapsed 1
+done straddle_tight_0830-NQ-tf30-pre-build-stress.json {'offA_pts5-r3': 572, 'offA_pts8-r3': 572, 'offB_pts5-r3': 555} elapsed 1
+done straddle_tight_0830-NQ-tf30-pre-pick-normal.json {'offA_pts5-r3': 252, 'offA_pts8-r3': 252, 'offB_pts5-r3': 244} elapsed 1
+done straddle_tight_0830-NQ-tf30-pre-pick-stress.json {'offA_pts5-r3': 257, 'offA_pts8-r3': 257, 'offB_pts5-r3': 249} elapsed 1
+done straddle_tight_0830-NQ-tf30-pre-pick-stress_no_oco.json {'offA_pts5-r3': 252, 'offA_pts8-r3': 252, 'offB_pts5-r3': 244} elapsed 1
+done straddle_tight_1000-GC-tf30-nyam-build-normal.json {'offA_pts1-r2': 565} elapsed 1
+done straddle_tight_1000-GC-tf30-nyam-build-stress.json {'offA_pts1-r2': 566} elapsed 1
+done straddle_tight_1000-GC-tf30-nyam-pick-normal.json {'offA_pts1-r2': 250} elapsed 0
+done straddle_tight_1000-GC-tf30-nyam-pick-stress.json {'offA_pts1-r2': 251} elapsed 0
+done straddle_tight_1000-GC-tf30-nyam-pick-stress_no_oco.json {'offA_pts1-r2': 250} elapsed 0
+done straddle_tight_1000-NQ-tf30-nyam-build-normal.json {'offA_pts5-r3': 568} elapsed 1
+done straddle_tight_1000-NQ-tf30-nyam-build-stress.json {'offA_pts5-r3': 570} elapsed 1
+done straddle_tight_1000-NQ-tf30-nyam-pick-normal.json {'offA_pts5-r3': 252} elapsed 1
+done straddle_tight_1000-NQ-tf30-nyam-pick-stress.json {'offA_pts5-r3': 255} elapsed 1
+done straddle_tight_1000-NQ-tf30-nyam-pick-stress_no_oco.json {'offA_pts5-r3': 252} elapsed 1
+done tema_slope-NQ-tf30-eve-build-normal.json {'n40_pct0p1-r0': 281} elapsed 1
+done tema_slope-NQ-tf30-eve-build-stress.json {'n40_pct0p1-r0': 282} elapsed 1
+done tema_slope-NQ-tf30-eve-pick-normal.json {'n40_pct0p1-r0': 101} elapsed 1
+done tema_slope-NQ-tf30-eve-pick-stress.json {'n40_pct0p1-r0': 101} elapsed 1

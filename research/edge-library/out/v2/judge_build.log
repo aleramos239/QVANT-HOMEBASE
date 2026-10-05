@@ -1,0 +1,62 @@
+s1 units 1623 | (1) 209 | (1)+(3) 194 | (2) drawn 305 | (1)+(2) 42 | all three 38
+r1 units 258 | (1) 43 | (1)+(3) 37 | (2) drawn 69 | (1)+(2) 15 | all three 11
+ev units 15 | (1) 12 | (1)+(3) 12 | (2) drawn 12 | (1)+(2) 8 | all three 8
+en units 18 | (1) 7 | (1)+(3) 6 | (2) drawn 10 | (1)+(2) 0 | all three 0
+2a units 2 | (1) 2 | (1)+(3) 1 | (2) drawn 2 | (1)+(2) 0 | all three 0
+PASS donchian-ES-tf30|pm| cells 62 share 0.742 avg 10650 trades 323 {'c1_lift': 16995.68, 'c1_p_beat': 1.0}
+PASS donchian-ES-tf5|pm| cells 128 share 0.68 avg 7599 trades 837 {'c1_lift': 15115.85, 'c1_p_beat': 0.99}
+PASS donchian-NQ-tf15|pm| cells 125 share 0.856 avg 29165 trades 407 {'c1_lift': 15819.09, 'c1_p_beat': 0.99}
+PASS donchian-NQ-tf30|pm| cells 62 share 0.871 avg 27451 trades 310 {'c1_lift': 34582.88, 'c1_p_beat': 1.0}
+PASS donchian_thin-NQ-tf30|nyam| cells 63 share 0.746 avg 11677 trades 94 {'c1_lift': 10637.97, 'c1_p_beat': 1.0, 'c2_lift': 11005.98, 'c2_p_beat': 1.0, 'base_lift_per_trade': 19.31}
+PASS ema_pullback-NQ-tf15|eve| cells 32 share 0.812 avg 11236 trades 295 {'c1_lift': 12037.14, 'c1_p_beat': 0.975}
+PASS ema_pullback-NQ-tf15|mid| cells 32 share 0.906 avg 28735 trades 545 {'c1_lift': 33158.1, 'c1_p_beat': 1.0}
+PASS ema_pullback-NQ-tf15|pre| cells 32 share 0.75 avg 26230 trades 457 {'c1_lift': 19008.42, 'c1_p_beat': 0.98}
+PASS ema_pullback-NQ-tf1|nyam| cells 32 share 0.688 avg 25061 trades 1502 {'c1_lift': 17822.9, 'c1_p_beat': 0.95}
+PASS ema_pullback-NQ-tf1|pm| cells 32 share 0.688 avg 22529 trades 1413 {'c1_lift': 23241.78, 'c1_p_beat': 1.0}
+PASS ema_pullback-NQ-tf5|pm| cells 32 share 0.781 avg 23025 trades 997 {'c1_lift': 32157.87, 'c1_p_beat': 1.0}
+PASS first_bar_mom-ES-tf15|mid| cells 95 share 0.684 avg 4632 trades 209 {'c1_lift': 7252.32, 'c1_p_beat': 0.975}
+PASS first_bar_mom-ES-tf15|pm| cells 95 share 0.947 avg 7976 trades 87 {'c1_lift': 4029.1, 'c1_p_beat': 0.97}
+PASS first_bar_mom-GC-tf30|mid| cells 90 share 0.6 avg 2122 trades 144 {'c1_lift': 9503.9, 'c1_p_beat': 1.0}
+PASS first_bar_mom-NQ-tf15|mid| cells 96 share 0.927 avg 16922 trades 210 {'c1_lift': 16765.68, 'c1_p_beat': 1.0}
+PASS first_bar_mom-NQ-tf30|mid| cells 96 share 0.656 avg 14368 trades 283 {'c1_lift': 16247.89, 'c1_p_beat': 0.98}
+PASS first_bar_mom-NQ-tf5|mid| cells 96 share 0.917 avg 17389 trades 101 {'c1_lift': 13511.24, 'c1_p_beat': 1.0}
+PASS flow_exhaust-NQ-tf1|eve| cells 96 share 0.75 avg 26577 trades 452 {'c1_lift': 10161.2, 'c1_p_beat': 0.955, 'c2_lift': 30067.67, 'c2_p_beat': 1.0}
+PASS ib-ES-tf30|mid|mode=break cells 32 share 0.75 avg 14451 trades 323 {'c1_lift': 11904.83, 'c1_p_beat': 0.965}
+PASS ib-NQ-tf15|mid|mode=break cells 32 share 1.0 avg 48041 trades 310 {'c1_lift': 30249.53, 'c1_p_beat': 0.995}
+PASS ib-NQ-tf30|mid|mode=break cells 32 share 1.0 avg 51981 trades 310 {'c1_lift': 43057.87, 'c1_p_beat': 1.0}
+PASS ib-NQ-tf5|mid|mode=break cells 32 share 1.0 avg 43890 trades 310 {'c1_lift': 19969.41, 'c1_p_beat': 0.985}
+PASS orb-NQ-tf15|pre| cells 96 share 0.781 avg 22707 trades 504 {'c1_lift': 18981.27, 'c1_p_beat': 0.97}
+PASS rsi2-ES-tf30|eve| cells 96 share 0.844 avg 19001 trades 645 {'c1_lift': 19728.54, 'c1_p_beat': 0.995}
+PASS squeeze-NQ-tf30|pm| cells 90 share 0.878 avg 7721 trades 203 {'c1_lift': 11659.69, 'c1_p_beat': 1.0}
+PASS straddle_t_0830-NQ-tf30|pre| cells 160 share 0.919 avg 43665 trades 526 {'shift_lift': 29478.66, 'shift_p_beat': 1.0}
+PASS straddle_t_1105-NQ-tf30|mid| cells 160 share 0.6 avg 18202 trades 545 {'shift_lift': 21821.11, 'shift_p_beat': 0.98}
+PASS straddle_t_1800-NQ-tf30|eve| cells 160 share 0.838 avg 15759 trades 438 {'shift_lift': 44920.72, 'shift_p_beat': 1.0}
+PASS supertrend-GC-tf30|nyam| cells 31 share 0.613 avg 953 trades 78 {'c1_lift': 4997.13, 'c1_p_beat': 0.995}
+PASS tema_slope-NQ-tf15|pre| cells 96 share 0.844 avg 22371 trades 400 {'c1_lift': 13383.48, 'c1_p_beat': 0.955}
+PASS tema_slope-NQ-tf30|eve| cells 96 share 0.865 avg 19972 trades 340 {'c1_lift': 16122.67, 'c1_p_beat': 0.985}
+PASS tema_slope-NQ-tf30|mid| cells 96 share 0.625 avg 7346 trades 341 {'c1_lift': 12093.91, 'c1_p_beat': 0.95}
+PASS tema_slope-NQ-tf30|pre| cells 96 share 0.938 avg 23992 trades 275 {'c1_lift': 12112.52, 'c1_p_beat': 0.975}
+PASS tod_drift-NQ-tf30|pm|dir=long cells 128 share 0.75 avg 11784 trades 564 {'c1_lift': 20979.49, 'c1_p_beat': 0.97}
+PASS vwap_band-NQ-tf30|eve| cells 123 share 0.732 avg 11280 trades 218 {'c1_lift': 6689.9, 'c1_p_beat': 0.95}
+PASS vwap_flip-NQ-tf15|pm| cells 94 share 0.862 avg 20467 trades 478 {'c1_lift': 13181.44, 'c1_p_beat': 0.96}
+PASS vwap_flip-NQ-tf15|pre| cells 64 share 0.734 avg 22881 trades 232 {'c1_lift': 13613.32, 'c1_p_beat': 0.975}
+PASS vwap_flip-NQ-tf5|pre| cells 96 share 0.74 avg 24798 trades 544 {'c1_lift': 17956.07, 'c1_p_beat': 0.98}
+PASS orb_confirm-ES-tf1|pm|dir=long cells 96 share 0.604 avg 4275 trades 318 {'c1_lift': 5722.36, 'c1_p_beat': 0.95}
+PASS orb_confirm-ES-tf5|pm|dir=long cells 96 share 0.833 avg 9406 trades 301 {'c1_lift': 14606.74, 'c1_p_beat': 1.0}
+PASS orb_confirm-NQ-tf15|pm|dir=long cells 96 share 0.875 avg 25788 trades 281 {'c1_lift': 18826.47, 'c1_p_beat': 1.0}
+PASS orb_confirm-NQ-tf5|pm|dir=long cells 96 share 0.833 avg 21619 trades 291 {'c1_lift': 19141.06, 'c1_p_beat': 1.0}
+PASS straddle_tight_0830-GC-tf30|pre| cells 27 share 0.852 avg 4899 trades 507 {'shift_lift': 15864.07, 'shift_p_beat': 1.0}
+PASS straddle_tight_0830-NQ-tf30|pre| cells 27 share 1.0 avg 9736 trades 531 {'shift_lift': 16616.94, 'shift_p_beat': 1.0}
+PASS vol_spike_break-ES-tf30|pm| cells 93 share 0.796 avg 9127 trades 123 {'c1_lift': 8338.76, 'c1_p_beat': 0.99}
+PASS vol_spike_break-NQ-tf30|pm| cells 91 share 0.89 avg 15737 trades 97 {'c1_lift': 13798.73, 'c1_p_beat': 1.0}
+PASS vwap_trend_pull-ES-tf30|pm| cells 90 share 0.7 avg 2136 trades 147 {'c1_lift': 9114.25, 'c1_p_beat': 1.0}
+PASS vwap_trend_pull-NQ-tf1|pm| cells 96 share 0.812 avg 27924 trades 1193 {'c1_lift': 14380.6, 'c1_p_beat': 0.955}
+PASS vwap_trend_pull-NQ-tf5|pm| cells 96 share 0.917 avg 57133 trades 889 {'c1_lift': 36468.85, 'c1_p_beat': 1.0}
+PASS E1-A-NQ cells 27 share 1.0 avg 10084 trades 224 {'days_p_beat': 0.9968, 'days_lift_per_trade': 26.6, 'shift_lift': 13240.46, 'shift_p_beat': 1.0}
+PASS E1-A-GC cells 27 share 0.963 avg 10185 trades 221 {'days_p_beat': 1.0, 'days_lift_per_trade': 36.35, 'shift_lift': 15003.11, 'shift_p_beat': 1.0}
+PASS E1-B-NQ cells 27 share 1.0 avg 9146 trades 157 {'days_p_beat': 0.9998, 'days_lift_per_trade': 39.91, 'shift_lift': 11068.96, 'shift_p_beat': 1.0}
+PASS E1-B-ES cells 27 share 0.852 avg 2819 trades 158 {'days_p_beat': 1.0, 'days_lift_per_trade': 32.64, 'shift_lift': 8359.82, 'shift_p_beat': 1.0}
+PASS E1-B-GC cells 27 share 1.0 avg 8698 trades 155 {'days_p_beat': 1.0, 'days_lift_per_trade': 46.33, 'shift_lift': 12094.37, 'shift_p_beat': 1.0}
+PASS E3-C-NQ cells 27 share 0.963 avg 4100 trades 95 {'days_p_beat': 0.9955, 'days_lift_per_trade': 42.74, 'shift_lift': 6904.78, 'shift_p_beat': 1.0}
+PASS E3-C-ES cells 27 share 0.815 avg 1992 trades 97 {'days_p_beat': 1.0, 'days_lift_per_trade': 41.67, 'shift_lift': 6028.67, 'shift_p_beat': 1.0}
+PASS E3-C-GC cells 27 share 1.0 avg 8210 trades 96 {'days_p_beat': 1.0, 'days_lift_per_trade': 94.94, 'shift_lift': 9603.41, 'shift_p_beat': 1.0}

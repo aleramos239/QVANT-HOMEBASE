@@ -1,0 +1,24 @@
+member runs ES build: 1 cells
+member runs ES build stress: 1 cells
+member runs ES pick: 1 cells
+member runs ES pick stress: 1 cells
+member runs GC build: 3 cells
+member runs GC build stress oco: 3 cells
+member runs GC pick: 3 cells
+member runs GC pick stress oco: 3 cells
+member runs NQ build: 10 cells
+member runs NQ build stress: 3 cells
+member runs NQ build stress oco: 7 cells
+member runs NQ pick: 10 cells
+member runs NQ pick stress: 3 cells
+member runs NQ pick stress oco: 7 cells
+Traceback (most recent call last):
+  File "/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/v2/admit_v2.py", line 517, in <module>
+    main()
+  File "/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/v2/admit_v2.py", line 454, in main
+    M = [build_member(U[uid], B[uid], P[uid], FIN[uid]) for uid in adm]
+  File "/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/v2/admit_v2.py", line 454, in <listcomp>
+    M = [build_member(U[uid], B[uid], P[uid], FIN[uid]) for uid in adm]
+  File "/Users/ramoscapital/ramos-quant-homebase/research/edge-library/out/v2/admit_v2.py", line 214, in build_member
+    pst = JP.pick_store(f"{u['key']}-{sess}-pick")
+AttributeError: module 'judge_pick' has no attribute 'pick_store'

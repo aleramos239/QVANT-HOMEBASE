@@ -639,3 +639,259 @@ member,straddle_tight_1000_GC_tf30_nyam_evC-offA_pts1p6-r1-pick-oco25,run,stradd
 member,straddle_tight_1000_GC_tf30_nyam_evC-offA_pts1p6-r1-pick-oco50,run,straddle_tight_1000,GC,30,pick,oco50ms,,1,0,0,0,46,0.34,OCO cancel-delay robustness probe (information only; a re-run of a member cell),2026-10-04T13:53:22+00:00
 member,straddle_tight_1000_GC_tf30_nyam_evC-offA_pts1p6-r1-pick-oco100,run,straddle_tight_1000,GC,30,pick,oco100ms,,1,0,0,0,47,0.34,OCO cancel-delay robustness probe (information only; a re-run of a member cell),2026-10-04T13:53:22+00:00
 member,straddle_tight_1000_GC_tf30_nyam_evC-offA_pts1p6-r1-pick-oco250,run,straddle_tight_1000,GC,30,pick,oco250ms,,1,0,0,0,49,0.34,OCO cancel-delay robustness probe (information only; a re-run of a member cell),2026-10-04T13:53:23+00:00
+build,event_dir_0830-NQ-tf30,grid,event_dir_0830,NQ,30,build,,,0,224,0,0,112384,105.42,,2026-10-04T15:01:36+00:00
+null,event_dir_0830-NQ-tf30-shift,null,event_dir_0830,NQ,30,build,shift,,0,0,448,0,224768,105.42,,2026-10-04T15:01:36+00:00
+build,event_dir_1000-NQ-tf30,grid,event_dir_1000,NQ,30,build,,,0,224,0,0,123968,133.06,,2026-10-04T15:03:50+00:00
+null,event_dir_1000-NQ-tf30-shift,null,event_dir_1000,NQ,30,build,shift,,0,0,448,0,247936,133.06,,2026-10-04T15:03:50+00:00
+build,straddle_wide_0830-NQ-tf30,grid,straddle_wide_0830,NQ,30,build,,,0,36,0,0,10044,15.82,,2026-10-04T15:04:06+00:00
+null,straddle_wide_0830-NQ-tf30-shift,null,straddle_wide_0830,NQ,30,build,shift,,0,0,72,0,13599,15.82,,2026-10-04T15:04:06+00:00
+build,straddle_wide_1000-NQ-tf30,grid,straddle_wide_1000,NQ,30,build,,,0,36,0,0,15750,17.95,,2026-10-04T15:04:24+00:00
+null,straddle_wide_1000-NQ-tf30-shift,null,straddle_wide_1000,NQ,30,build,shift,,0,0,72,0,22374,17.95,,2026-10-04T15:04:24+00:00
+build,event_dir_0830-ES-tf30,grid,event_dir_0830,ES,30,build,,,0,224,0,0,94784,110.95,,2026-10-04T15:06:16+00:00
+null,event_dir_0830-ES-tf30-shift,null,event_dir_0830,ES,30,build,shift,,0,0,448,0,189568,110.95,,2026-10-04T15:06:16+00:00
+build,event_dir_1000-ES-tf30,grid,event_dir_1000,ES,30,build,,,0,224,0,0,114464,128.65,,2026-10-04T15:08:25+00:00
+null,event_dir_1000-ES-tf30-shift,null,event_dir_1000,ES,30,build,shift,,0,0,448,0,228928,128.65,,2026-10-04T15:08:26+00:00
+build,straddle_wide_0830-ES-tf30,grid,straddle_wide_0830,ES,30,build,,,0,36,0,0,9702,15.14,,2026-10-04T15:08:41+00:00
+null,straddle_wide_0830-ES-tf30-shift,null,straddle_wide_0830,ES,30,build,shift,,0,0,72,0,12294,15.14,,2026-10-04T15:08:41+00:00
+build,straddle_wide_1000-ES-tf30,grid,straddle_wide_1000,ES,30,build,,,0,36,0,0,14400,18.22,,2026-10-04T15:08:59+00:00
+null,straddle_wide_1000-ES-tf30-shift,null,straddle_wide_1000,ES,30,build,shift,,0,0,72,0,19593,18.22,,2026-10-04T15:08:59+00:00
+build,event_dir_0830-GC-tf30,grid,event_dir_0830,GC,30,build,,,0,224,0,0,100448,106.52,,2026-10-04T15:10:46+00:00
+null,event_dir_0830-GC-tf30-shift,null,event_dir_0830,GC,30,build,shift,,0,0,448,0,200896,106.52,,2026-10-04T15:10:47+00:00
+build,event_dir_1000-GC-tf30,grid,event_dir_1000,GC,30,build,,,0,224,0,0,108992,130.8,,2026-10-04T15:12:58+00:00
+null,event_dir_1000-GC-tf30-shift,null,event_dir_1000,GC,30,build,shift,,0,0,448,0,217984,130.8,,2026-10-04T15:12:58+00:00
+build,straddle_wide_0830-GC-tf30,grid,straddle_wide_0830,GC,30,build,,,0,36,0,0,7857,14.34,,2026-10-04T15:13:13+00:00
+null,straddle_wide_0830-GC-tf30-shift,null,straddle_wide_0830,GC,30,build,shift,,0,0,72,0,5076,14.34,,2026-10-04T15:13:13+00:00
+build,straddle_wide_1000-GC-tf30,grid,straddle_wide_1000,GC,30,build,,,0,36,0,0,6282,17.54,,2026-10-04T15:13:30+00:00
+null,straddle_wide_1000-GC-tf30-shift,null,straddle_wide_1000,GC,30,build,shift,,0,0,72,0,6273,17.54,,2026-10-04T15:13:30+00:00
+v2_pick,donchian-ES-tf5-pm-pick,grid,donchian,ES,5,pick,pick,,0,128,0,0,41266,23.42,admission v2: session pm only,2026-10-04T15:56:17+00:00
+null_v2_pick,c1-ES-tf5-pm-pick,null,random,ES,5,pick,c1,,0,0,64,0,34217,12.59,admission v2: session pm only,2026-10-04T15:56:30+00:00
+v2_pick,donchian-NQ-tf15-pm-pick,grid,donchian,NQ,15,pick,pick,,0,128,0,0,17559,21.33,admission v2: session pm only,2026-10-04T15:56:51+00:00
+null_v2_pick,c1-NQ-tf15-pm-pick,null,random,NQ,15,pick,c1,,0,0,64,0,30197,12.13,admission v2: session pm only,2026-10-04T15:57:04+00:00
+v2_pick,donchian_thin-NQ-tf30-nyam-pick,grid,donchian_thin,NQ,30,pick,pick,,0,64,0,0,1728,8.37,admission v2: session nyam only,2026-10-04T15:57:12+00:00
+null_v2_pick,donchian_thin-NQ-tf30-nyam-pick-c2s1,null,donchian_thin,NQ,30,pick,c2,,0,0,64,0,1888,10.82,admission v2: session nyam only,2026-10-04T15:57:23+00:00
+null_v2_pick,donchian_thin-NQ-tf30-nyam-pick-c2s2,null,donchian_thin,NQ,30,pick,c2,,0,0,64,0,1974,10.21,admission v2: session nyam only,2026-10-04T15:57:33+00:00
+v2_pick,ema_pullback-NQ-tf1-nyam-pick,grid,ema_pullback,NQ,1,pick,pick,,0,32,0,0,20816,7.71,admission v2: session nyam only,2026-10-04T15:57:41+00:00
+null_v2_pick,c1-NQ-tf1-nyam-pick,null,random,NQ,1,pick,c1,,0,0,64,0,43250,13.88,admission v2: session nyam only,2026-10-04T15:57:55+00:00
+v2_pick,ema_pullback-NQ-tf1-pm-pick,grid,ema_pullback,NQ,1,pick,pick,,0,32,0,0,19373,9.24,admission v2: session pm only,2026-10-04T15:58:05+00:00
+null_v2_pick,c1-NQ-tf1-pm-pick,null,random,NQ,1,pick,c1,,0,0,64,0,39796,18.56,admission v2: session pm only,2026-10-04T15:58:23+00:00
+v2_pick,ema_pullback-NQ-tf15-eve-pick,grid,ema_pullback,NQ,15,pick,pick,,0,32,0,0,3734,3.95,admission v2: session eve only,2026-10-04T15:58:27+00:00
+null_v2_pick,c1-NQ-tf15-eve-pick,null,random,NQ,15,pick,c1,,0,0,64,0,29620,12.1,admission v2: session eve only,2026-10-04T15:58:40+00:00
+v2_pick,ema_pullback-NQ-tf15-mid-pick,grid,ema_pullback,NQ,15,pick,pick,,0,32,0,0,7955,5.95,admission v2: session mid only,2026-10-04T15:58:46+00:00
+null_v2_pick,c1-NQ-tf15-mid-pick,null,random,NQ,15,pick,c1,,0,0,64,0,32471,11.48,admission v2: session mid only,2026-10-04T15:58:57+00:00
+v2_pick,ema_pullback-NQ-tf15-pre-pick,grid,ema_pullback,NQ,15,pick,pick,,0,32,0,0,6860,4.42,admission v2: session pre only,2026-10-04T15:59:02+00:00
+null_v2_pick,c1-NQ-tf15-pre-pick,null,random,NQ,15,pick,c1,,0,0,64,0,20604,8.43,admission v2: session pre only,2026-10-04T15:59:10+00:00
+v2_pick,ema_pullback-NQ-tf5-pm-pick,grid,ema_pullback,NQ,5,pick,pick,,0,32,0,0,13950,6.85,admission v2: session pm only,2026-10-04T15:59:17+00:00
+v2_pick,first_bar_mom-ES-tf15-mid-pick,grid,first_bar_mom,ES,15,pick,pick,,0,96,0,0,9280,14.23,admission v2: session mid only,2026-10-04T15:59:32+00:00
+null_v2_pick,c1-ES-tf15-mid-pick,null,random,ES,15,pick,c1,,0,0,64,0,29910,11.44,admission v2: session mid only,2026-10-04T15:59:43+00:00
+v2_pick,first_bar_mom-ES-tf15-pm-pick,grid,first_bar_mom,ES,15,pick,pick,,0,96,0,0,4704,15.72,admission v2: session pm only,2026-10-04T15:59:59+00:00
+null_v2_pick,c1-ES-tf15-pm-pick,null,random,ES,15,pick,c1,,0,0,64,0,28885,12.12,admission v2: session pm only,2026-10-04T16:00:11+00:00
+v2_pick,first_bar_mom-GC-tf30-mid-pick,grid,first_bar_mom,GC,30,pick,pick,,0,96,0,0,7712,13.2,admission v2: session mid only,2026-10-04T16:00:25+00:00
+null_v2_pick,c1-GC-tf30-mid-pick,null,random,GC,30,pick,c1,,0,0,64,0,20299,10.45,admission v2: session mid only,2026-10-04T16:00:35+00:00
+v2_pick,first_bar_mom-NQ-tf15-mid-pick,grid,first_bar_mom,NQ,15,pick,pick,,0,96,0,0,9184,14.03,admission v2: session mid only,2026-10-04T16:00:49+00:00
+v2_pick,first_bar_mom-NQ-tf30-mid-pick,grid,first_bar_mom,NQ,30,pick,pick,,0,96,0,0,12544,15.33,admission v2: session mid only,2026-10-04T16:01:05+00:00
+null_v2_pick,c1-NQ-tf30-mid-pick,null,random,NQ,30,pick,c1,,0,0,64,0,23259,11.54,admission v2: session mid only,2026-10-04T16:01:17+00:00
+v2_pick,first_bar_mom-NQ-tf5-mid-pick,grid,first_bar_mom,NQ,5,pick,pick,,0,96,0,0,4864,15.27,admission v2: session mid only,2026-10-04T16:01:32+00:00
+null_v2_pick,c1-NQ-tf5-mid-pick,null,random,NQ,5,pick,c1,,0,0,64,0,37122,12.61,admission v2: session mid only,2026-10-04T16:01:45+00:00
+v2_pick,flow_exhaust-NQ-tf1-eve-pick,grid,flow_exhaust,NQ,1,pick,pick,,0,96,0,0,22651,60.81,admission v2: session eve only,2026-10-04T16:02:46+00:00
+null_v2_pick,c1-NQ-tf1-eve-pick,null,random,NQ,1,pick,c1,,0,0,64,0,35146,14.9,admission v2: session eve only,2026-10-04T16:03:01+00:00
+null_v2_pick,flow_exhaust-NQ-tf1-eve-pick-c2s1,null,flow_exhaust,NQ,1,pick,c2,,0,0,96,0,7211,70.48,admission v2: session eve only,2026-10-04T16:04:11+00:00
+null_v2_pick,flow_exhaust-NQ-tf1-eve-pick-c2s2,null,flow_exhaust,NQ,1,pick,c2,,0,0,96,0,6720,75.06,admission v2: session eve only,2026-10-04T16:05:27+00:00
+v2_pick,ib-ES-tf30-mid-pick,grid,ib,ES,30,pick,pick,,0,32,0,0,4800,5.38,admission v2: session mid only,2026-10-04T16:05:32+00:00
+null_v2_pick,c1-ES-tf30-mid-pick,null,random,ES,30,pick,c1,,0,0,64,0,21809,11.71,admission v2: session mid only,2026-10-04T16:05:44+00:00
+v2_pick,ib-NQ-tf15-mid-pick,grid,ib,NQ,15,pick,pick,,0,32,0,0,4448,5.67,admission v2: session mid only,2026-10-04T16:05:50+00:00
+v2_pick,ib-NQ-tf30-mid-pick,grid,ib,NQ,30,pick,pick,,0,32,0,0,4448,5.64,admission v2: session mid only,2026-10-04T16:05:55+00:00
+v2_pick,ib-NQ-tf5-mid-pick,grid,ib,NQ,5,pick,pick,,0,32,0,0,4448,6.57,admission v2: session mid only,2026-10-04T16:06:02+00:00
+v2_pick,orb-NQ-tf15-pre-pick,grid,orb,NQ,15,pick,pick,,0,96,0,0,21248,12.56,admission v2: session pre only,2026-10-04T16:06:15+00:00
+v2_pick,orb_confirm-ES-tf1-pm-pick,grid,orb_confirm,ES,1,pick,pick,,0,96,0,0,13664,25.7,admission v2: session pm only,2026-10-04T16:06:40+00:00
+null_v2_pick,c1-ES-tf1-pm-pick,null,random,ES,1,pick,c1,,0,0,64,0,38210,17.95,admission v2: session pm only,2026-10-04T16:06:59+00:00
+v2_pick,orb_confirm-ES-tf5-pm-pick,grid,orb_confirm,ES,5,pick,pick,,0,96,0,0,12896,19.9,admission v2: session pm only,2026-10-04T16:07:19+00:00
+v2_pick,orb_confirm-NQ-tf15-pm-pick,grid,orb_confirm,NQ,15,pick,pick,,0,96,0,0,11072,20.04,admission v2: session pm only,2026-10-04T16:07:39+00:00
+v2_pick,orb_confirm-NQ-tf5-pm-pick,grid,orb_confirm,NQ,5,pick,pick,,0,96,0,0,11904,23.45,admission v2: session pm only,2026-10-04T16:08:02+00:00
+v2_pick,rsi2-ES-tf30-eve-pick,grid,rsi2,ES,30,pick,pick,,0,96,0,0,24766,18.83,admission v2: session eve only,2026-10-04T16:08:21+00:00
+null_v2_pick,c1-ES-tf30-eve-pick,null,random,ES,30,pick,c1,,0,0,64,0,22931,16.98,admission v2: session eve only,2026-10-04T16:08:38+00:00
+v2_pick,squeeze-NQ-tf30-pm-pick,grid,squeeze,NQ,30,pick,pick,,0,96,0,0,9913,20.35,admission v2: session pm only,2026-10-04T16:08:59+00:00
+null_v2_pick,straddle_t_0830-NQ-tf30-pre-pick-shift,null,straddle_t_0830,NQ,30,pick,shift,,0,0,320,0,76224,49.83,admission v2: session pre only,2026-10-04T16:09:49+00:00
+v2_pick,straddle_t_1105-NQ-tf30-mid-pick,grid,straddle_t_1105,NQ,30,pick,pick,,0,160,0,0,38752,33.47,admission v2: session mid only,2026-10-04T16:10:23+00:00
+null_v2_pick,straddle_t_1105-NQ-tf30-mid-pick-shift,null,straddle_t_1105,NQ,30,pick,shift,,0,0,320,0,77792,65.69,admission v2: session mid only,2026-10-04T16:11:29+00:00
+v2_pick,straddle_t_1800-NQ-tf30-eve-pick,grid,straddle_t_1800,NQ,30,pick,pick,,0,160,0,0,33440,18.83,admission v2: session eve only,2026-10-04T16:11:48+00:00
+null_v2_pick,straddle_t_1800-NQ-tf30-eve-pick-shift,null,straddle_t_1800,NQ,30,pick,shift,,0,0,320,0,62272,36.89,admission v2: session eve only,2026-10-04T16:12:25+00:00
+v2_pick,straddle_tight_0830-ES-tf30-pre-pick,grid,straddle_tight_0830,ES,30,pick,pick,,0,27,0,0,6084,3.11,admission v2: session pre only,2026-10-04T16:12:28+00:00
+null_v2_pick,straddle_tight_0830-ES-tf30-pre-pick-shift,null,straddle_tight_0830,ES,30,pick,shift,,0,0,54,0,10719,6.12,admission v2: session pre only,2026-10-04T16:12:34+00:00
+v2_pick,straddle_tight_1000-ES-tf30-nyam-pick,grid,straddle_tight_1000,ES,30,pick,pick,,0,27,0,0,6741,3.68,admission v2: session nyam only,2026-10-04T16:12:38+00:00
+null_v2_pick,straddle_tight_1000-ES-tf30-nyam-pick-shift,null,straddle_tight_1000,ES,30,pick,shift,,0,0,54,0,12600,7.37,admission v2: session nyam only,2026-10-04T16:12:46+00:00
+v2_pick,straddle_tight_1000-NQ-tf30-nyam-pick,grid,straddle_tight_1000,NQ,30,pick,pick,,0,27,0,0,6804,4.01,admission v2: session nyam only,2026-10-04T16:12:50+00:00
+null_v2_pick,straddle_tight_1000-NQ-tf30-nyam-pick-shift,null,straddle_tight_1000,NQ,30,pick,shift,,0,0,54,0,13140,7.28,admission v2: session nyam only,2026-10-04T16:12:57+00:00
+v2_pick,supertrend-GC-tf30-nyam-pick,grid,supertrend,GC,30,pick,pick,,0,32,0,0,1120,4.21,admission v2: session nyam only,2026-10-04T16:13:01+00:00
+null_v2_pick,c1-GC-tf30-nyam-pick,null,random,GC,30,pick,c1,,0,0,64,0,14195,9.86,admission v2: session nyam only,2026-10-04T16:13:11+00:00
+v2_pick,tema_slope-NQ-tf15-pre-pick,grid,tema_slope,NQ,15,pick,pick,,0,96,0,0,17483,13.77,admission v2: session pre only,2026-10-04T16:13:25+00:00
+v2_pick,tema_slope-NQ-tf30-eve-pick,grid,tema_slope,NQ,30,pick,pick,,0,96,0,0,13422,13.95,admission v2: session eve only,2026-10-04T16:13:39+00:00
+v2_pick,tema_slope-NQ-tf30-mid-pick,grid,tema_slope,NQ,30,pick,pick,,0,96,0,0,15357,18.82,admission v2: session mid only,2026-10-04T16:13:58+00:00
+v2_pick,tema_slope-NQ-tf30-pre-pick,grid,tema_slope,NQ,30,pick,pick,,0,96,0,0,11226,12.85,admission v2: session pre only,2026-10-04T16:14:11+00:00
+null_v2_pick,c1-NQ-tf30-pre-pick,null,random,NQ,30,pick,c1,,0,0,64,0,14150,9.52,admission v2: session pre only,2026-10-04T16:14:21+00:00
+v2_pick,tod_drift-NQ-tf30-pm-pick,grid,tod_drift,NQ,30,pick,pick,,0,128,0,0,31872,25.01,admission v2: session pm only,2026-10-04T16:14:46+00:00
+v2_pick,vol_spike_break-ES-tf30-pm-pick,grid,vol_spike_break,ES,30,pick,pick,,0,96,0,0,5693,17.31,admission v2: session pm only,2026-10-04T16:15:03+00:00
+v2_pick,vwap_band-NQ-tf30-eve-pick,grid,vwap_band,NQ,30,pick,pick,,0,128,0,0,10472,14.15,admission v2: session eve only,2026-10-04T16:15:18+00:00
+v2_pick,vwap_flip-NQ-tf15-pm-pick,grid,vwap_flip,NQ,15,pick,pick,,0,96,0,0,18676,19.95,admission v2: session pm only,2026-10-04T16:15:38+00:00
+v2_pick,vwap_flip-NQ-tf15-pre-pick,grid,vwap_flip,NQ,15,pick,pick,,0,64,0,0,6912,9.2,admission v2: session pre only,2026-10-04T16:15:47+00:00
+v2_pick,vwap_flip-NQ-tf5-pre-pick,grid,vwap_flip,NQ,5,pick,pick,,0,96,0,0,21968,15.99,admission v2: session pre only,2026-10-04T16:16:03+00:00
+null_v2_pick,c1-NQ-tf5-pre-pick,null,random,NQ,5,pick,c1,,0,0,64,0,27622,11.11,admission v2: session pre only,2026-10-04T16:16:15+00:00
+v2_pick,vwap_trend_pull-ES-tf30-pm-pick,grid,vwap_trend_pull,ES,30,pick,pick,,0,96,0,0,4852,19.64,admission v2: session pm only,2026-10-04T16:16:34+00:00
+v2_pick,vwap_trend_pull-NQ-tf1-pm-pick,grid,vwap_trend_pull,NQ,1,pick,pick,,0,96,0,0,46427,34.73,admission v2: session pm only,2026-10-04T16:17:09+00:00
+v2_stress,ema_pullback-NQ-tf15-mid-pick-stress,grid,ema_pullback,NQ,15,pick,stress,,0,32,0,0,7988,6.24,admission v2: session mid only,2026-10-04T16:17:43+00:00
+v2_stress,first_bar_mom-ES-tf15-mid-pick-stress,grid,first_bar_mom,ES,15,pick,stress,,0,96,0,0,9280,17.0,admission v2: session mid only,2026-10-04T16:18:00+00:00
+v2_stress,first_bar_mom-NQ-tf15-mid-pick-stress,grid,first_bar_mom,NQ,15,pick,stress,,0,96,0,0,9184,16.14,admission v2: session mid only,2026-10-04T16:18:16+00:00
+v2_stress,first_bar_mom-NQ-tf30-mid-pick-stress,grid,first_bar_mom,NQ,30,pick,stress,,0,96,0,0,12544,15.54,admission v2: session mid only,2026-10-04T16:18:32+00:00
+v2_stress,orb-NQ-tf15-pre-pick-stress,grid,orb,NQ,15,pick,stress,,0,96,0,0,21280,13.45,admission v2: session pre only; oco_cancel_ms 100,2026-10-04T16:18:46+00:00
+v2_stress,straddle_t_0830-NQ-tf30-pre-pick-stress,grid,straddle_t_0830,NQ,30,pick,stress,,0,160,0,0,38112,21.01,admission v2: session pre only; oco_cancel_ms 100,2026-10-04T16:19:07+00:00
+v2_stress,straddle_t_1800-NQ-tf30-eve-pick-stress,grid,straddle_t_1800,NQ,30,pick,stress,,0,160,0,0,33440,18.7,admission v2: session eve only; oco_cancel_ms 100,2026-10-04T16:19:26+00:00
+v2_stress,straddle_tight_0830-ES-tf30-pre-pick-stress,grid,straddle_tight_0830,ES,30,pick,stress,,0,27,0,0,6237,3.53,admission v2: session pre only; oco_cancel_ms 100,2026-10-04T16:19:29+00:00
+v2_stress,straddle_tight_0830-GC-tf30-pre-pick-stress,grid,straddle_tight_0830,GC,30,pick,stress,,0,27,0,0,6408,3.69,admission v2: session pre only; oco_cancel_ms 100,2026-10-04T16:19:33+00:00
+v2_stress,straddle_tight_0830-NQ-tf30-pre-pick-stress,grid,straddle_tight_0830,NQ,30,pick,stress,,0,27,0,0,6480,3.89,admission v2: session pre only; oco_cancel_ms 100,2026-10-04T16:19:37+00:00
+v2_stress,straddle_tight_1000-ES-tf30-nyam-pick-stress,grid,straddle_tight_1000,ES,30,pick,stress,,0,27,0,0,6786,3.95,admission v2: session nyam only; oco_cancel_ms 100,2026-10-04T16:19:41+00:00
+v2_stress,straddle_tight_1000-GC-tf30-nyam-pick-stress,grid,straddle_tight_1000,GC,30,pick,stress,,0,27,0,0,6543,4.02,admission v2: session nyam only; oco_cancel_ms 100,2026-10-04T16:19:45+00:00
+v2_stress,straddle_tight_1000-NQ-tf30-nyam-pick-stress,grid,straddle_tight_1000,NQ,30,pick,stress,,0,27,0,0,6858,4.36,admission v2: session nyam only; oco_cancel_ms 100,2026-10-04T16:19:50+00:00
+v2_stress,tema_slope-NQ-tf30-eve-pick-stress,grid,tema_slope,NQ,30,pick,stress,,0,96,0,0,13461,13.77,admission v2: session eve only,2026-10-04T16:20:04+00:00
+v2_stress,vol_spike_break-NQ-tf30-pm-pick-stress,grid,vol_spike_break,NQ,30,pick,stress,,0,96,0,0,4296,18.05,admission v2: session pm only,2026-10-04T16:20:22+00:00
+v2_stress,first_bar_mom-ES-tf15-mid-build-stress,grid,first_bar_mom,ES,15,build,stress,,0,33,0,0,6558,13.22,admission v2: session mid only,2026-10-04T16:20:36+00:00
+v2_stress,first_bar_mom-NQ-tf15-mid-build-stress,grid,first_bar_mom,NQ,15,build,stress,,0,40,0,0,10832,17.49,admission v2: session mid only,2026-10-04T16:20:54+00:00
+v2_stress,first_bar_mom-NQ-tf30-mid-build-stress,grid,first_bar_mom,NQ,30,build,stress,,0,51,0,0,14416,20.42,admission v2: session mid only,2026-10-04T16:21:14+00:00
+v2_stress,orb-NQ-tf15-pre-build-stress,grid,orb,NQ,15,build,stress,,0,51,0,0,26755,18.31,admission v2: session pre only; oco_cancel_ms 100,2026-10-04T16:21:33+00:00
+v2_stress,straddle_t_0830-NQ-tf30-pre-build-stress,grid,straddle_t_0830,NQ,30,build,stress,,0,68,0,0,35700,23.17,admission v2: session pre only; oco_cancel_ms 100,2026-10-04T16:21:56+00:00
+v2_stress,straddle_t_1800-NQ-tf30-eve-build-stress,grid,straddle_t_1800,NQ,30,build,stress,,0,70,0,0,30612,22.63,admission v2: session eve only; oco_cancel_ms 100,2026-10-04T16:22:19+00:00
+v2_stress,straddle_tight_0830-GC-tf30-pre-build-stress,grid,straddle_tight_0830,GC,30,build,stress,,0,26,0,0,13350,6.98,admission v2: session pre only; oco_cancel_ms 100,2026-10-04T16:22:26+00:00
+v2_stress,straddle_tight_0830-NQ-tf30-pre-build-stress,grid,straddle_tight_0830,NQ,30,build,stress,,0,25,0,0,13327,8.46,admission v2: session pre only; oco_cancel_ms 100,2026-10-04T16:22:35+00:00
+v2_stress,straddle_tight_1000-GC-tf30-nyam-build-stress,grid,straddle_tight_1000,GC,30,build,stress,,0,27,0,0,14058,8.03,admission v2: session nyam only; oco_cancel_ms 100,2026-10-04T16:22:43+00:00
+v2_stress,straddle_tight_1000-NQ-tf30-nyam-build-stress,grid,straddle_tight_1000,NQ,30,build,stress,,0,26,0,0,14770,8.88,admission v2: session nyam only; oco_cancel_ms 100,2026-10-04T16:22:52+00:00
+v2_stress,tema_slope-NQ-tf30-eve-build-stress,grid,tema_slope,NQ,30,build,stress,,0,54,0,0,16944,16.55,admission v2: session eve only,2026-10-04T16:23:08+00:00
+null_v2_stress,c1-NQ-tf1-eve-pick-stress,null,random,NQ,1,pick,c1,,0,0,64,0,35158,15.96,admission v2: session eve only,2026-10-04T16:23:26+00:00
+null_v2_stress,c1-NQ-tf1-eve-build-stress,null,random,NQ,1,build,c1,,0,0,64,0,82472,34.73,admission v2: session eve only,2026-10-04T16:24:02+00:00
+member,first_bar_mom_ES_tf15_mid-k1p5_atr1p5-r2-build,run,first_bar_mom,ES,15,build,,,1,0,0,0,150,1.61,"admission v2: default variant, full trade rows",2026-10-04T16:24:26+00:00
+member,first_bar_mom_ES_tf15_mid-k1p5_atr1p5-r2-build-stress,run,first_bar_mom,ES,15,build,stress,,1,0,0,0,150,1.35,"admission v2: default variant, full trade rows",2026-10-04T16:24:27+00:00
+member,first_bar_mom_ES_tf15_mid-k1p5_atr1p5-r2-pick,run,first_bar_mom,ES,15,pick,,,1,0,0,0,73,0.94,"admission v2: default variant, full trade rows",2026-10-04T16:24:28+00:00
+member,first_bar_mom_ES_tf15_mid-k1p5_atr1p5-r2-pick-stress,run,first_bar_mom,ES,15,pick,stress,,1,0,0,0,73,0.95,"admission v2: default variant, full trade rows",2026-10-04T16:24:29+00:00
+member,straddle_tight_0830_GC_tf30_pre_evA-offC_pts2-r2-build,run,straddle_tight_0830,GC,30,build,,,1,0,0,0,434,1.74,"admission v2: default variant, full trade rows",2026-10-04T16:24:31+00:00
+member,straddle_tight_0830_GC_tf30_pre_evB-offC_pts2-r2-build,run,straddle_tight_0830,GC,30,build,,,1,0,0,0,434,1.74,"admission v2: default variant, full trade rows",2026-10-04T16:24:31+00:00
+member,straddle_tight_1000_GC_tf30_nyam_evC-offA_pts1-r2-build,run,straddle_tight_1000,GC,30,build,,,1,0,0,0,565,1.74,"admission v2: default variant, full trade rows",2026-10-04T16:24:31+00:00
+member,straddle_tight_0830_GC_tf30_pre_evA-offC_pts2-r2-build-stress,run,straddle_tight_0830,GC,30,build,stress,,1,0,0,0,438,1.45,"admission v2: default variant, full trade rows",2026-10-04T16:24:33+00:00
+member,straddle_tight_0830_GC_tf30_pre_evB-offC_pts2-r2-build-stress,run,straddle_tight_0830,GC,30,build,stress,,1,0,0,0,438,1.45,"admission v2: default variant, full trade rows",2026-10-04T16:24:33+00:00
+member,straddle_tight_1000_GC_tf30_nyam_evC-offA_pts1-r2-build-stress,run,straddle_tight_1000,GC,30,build,stress,,1,0,0,0,566,1.45,"admission v2: default variant, full trade rows",2026-10-04T16:24:33+00:00
+member,straddle_tight_0830_GC_tf30_pre_evA-offC_pts2-r2-pick,run,straddle_tight_0830,GC,30,pick,,,1,0,0,0,210,1.0,"admission v2: default variant, full trade rows",2026-10-04T16:24:34+00:00
+member,straddle_tight_0830_GC_tf30_pre_evB-offC_pts2-r2-pick,run,straddle_tight_0830,GC,30,pick,,,1,0,0,0,210,1.0,"admission v2: default variant, full trade rows",2026-10-04T16:24:34+00:00
+member,straddle_tight_1000_GC_tf30_nyam_evC-offA_pts1-r2-pick,run,straddle_tight_1000,GC,30,pick,,,1,0,0,0,250,1.0,"admission v2: default variant, full trade rows",2026-10-04T16:24:34+00:00
+member,straddle_tight_0830_GC_tf30_pre_evA-offC_pts2-r2-pick-stress,run,straddle_tight_0830,GC,30,pick,stress,,1,0,0,0,212,1.04,"admission v2: default variant, full trade rows",2026-10-04T16:24:35+00:00
+member,straddle_tight_0830_GC_tf30_pre_evB-offC_pts2-r2-pick-stress,run,straddle_tight_0830,GC,30,pick,stress,,1,0,0,0,212,1.04,"admission v2: default variant, full trade rows",2026-10-04T16:24:35+00:00
+member,straddle_tight_1000_GC_tf30_nyam_evC-offA_pts1-r2-pick-stress,run,straddle_tight_1000,GC,30,pick,stress,,1,0,0,0,251,1.04,"admission v2: default variant, full trade rows",2026-10-04T16:24:35+00:00
+member,first_bar_mom_NQ_tf15_mid-k1p5_atr3-r2-build,run,first_bar_mom,NQ,15,build,,,1,0,0,0,154,5.12,"admission v2: default variant, full trade rows",2026-10-04T16:24:40+00:00
+member,first_bar_mom_NQ_tf30_mid-k1p5_pts45-r3-build,run,first_bar_mom,NQ,30,build,,,1,0,0,0,254,5.12,"admission v2: default variant, full trade rows",2026-10-04T16:24:40+00:00
+member,orb_NQ_tf15_pre-or_min15_pct0p1-r0-build,run,orb,NQ,15,build,,,1,0,0,0,522,5.12,"admission v2: default variant, full trade rows",2026-10-04T16:24:40+00:00
+member,straddle_t_0830_NQ_tf30_pre-offatr0p25_pct0p1-r0-build,run,straddle_t_0830,NQ,30,build,,,1,0,0,0,568,5.12,"admission v2: default variant, full trade rows",2026-10-04T16:24:40+00:00
+member,straddle_t_1800_NQ_tf30_eve-offatr0p25_pts45-r2-build,run,straddle_t_1800,NQ,30,build,,,1,0,0,0,556,5.12,"admission v2: default variant, full trade rows",2026-10-04T16:24:40+00:00
+member,tema_slope_NQ_tf30_eve-n40_pct0p1-r0-build,run,tema_slope,NQ,30,build,,,1,0,0,0,281,5.12,"admission v2: default variant, full trade rows",2026-10-04T16:24:40+00:00
+member,straddle_tight_0830_NQ_tf30_pre-offA_pts8-r3-build,run,straddle_tight_0830,NQ,30,build,,,1,0,0,0,566,5.12,"admission v2: default variant, full trade rows",2026-10-04T16:24:40+00:00
+member,straddle_tight_0830_NQ_tf30_pre_evA-offB_pts5-r3-build,run,straddle_tight_0830,NQ,30,build,,,1,0,0,0,549,5.12,"admission v2: default variant, full trade rows",2026-10-04T16:24:40+00:00
+member,straddle_tight_0830_NQ_tf30_pre_evB-offA_pts5-r3-build,run,straddle_tight_0830,NQ,30,build,,,1,0,0,0,566,5.12,"admission v2: default variant, full trade rows",2026-10-04T16:24:40+00:00
+member,straddle_tight_1000_NQ_tf30_nyam_evC-offA_pts5-r3-build,run,straddle_tight_1000,NQ,30,build,,,1,0,0,0,568,5.12,"admission v2: default variant, full trade rows",2026-10-04T16:24:40+00:00
+member,first_bar_mom_NQ_tf15_mid-k1p5_atr3-r2-build-stress,run,first_bar_mom,NQ,15,build,stress,,1,0,0,0,154,2.71,"admission v2: default variant, full trade rows",2026-10-04T16:24:43+00:00
+member,first_bar_mom_NQ_tf30_mid-k1p5_pts45-r3-build-stress,run,first_bar_mom,NQ,30,build,stress,,1,0,0,0,254,2.71,"admission v2: default variant, full trade rows",2026-10-04T16:24:43+00:00
+member,tema_slope_NQ_tf30_eve-n40_pct0p1-r0-build-stress,run,tema_slope,NQ,30,build,stress,,1,0,0,0,282,2.71,"admission v2: default variant, full trade rows",2026-10-04T16:24:43+00:00
+member,orb_NQ_tf15_pre-or_min15_pct0p1-r0-build-stress,run,orb,NQ,15,build,stress,,1,0,0,0,522,4.0,"admission v2: default variant, full trade rows",2026-10-04T16:24:47+00:00
+member,straddle_t_0830_NQ_tf30_pre-offatr0p25_pct0p1-r0-build-stress,run,straddle_t_0830,NQ,30,build,stress,,1,0,0,0,570,4.0,"admission v2: default variant, full trade rows",2026-10-04T16:24:47+00:00
+member,straddle_t_1800_NQ_tf30_eve-offatr0p25_pts45-r2-build-stress,run,straddle_t_1800,NQ,30,build,stress,,1,0,0,0,557,4.0,"admission v2: default variant, full trade rows",2026-10-04T16:24:47+00:00
+member,straddle_tight_0830_NQ_tf30_pre-offA_pts8-r3-build-stress,run,straddle_tight_0830,NQ,30,build,stress,,1,0,0,0,572,4.0,"admission v2: default variant, full trade rows",2026-10-04T16:24:47+00:00
+member,straddle_tight_0830_NQ_tf30_pre_evA-offB_pts5-r3-build-stress,run,straddle_tight_0830,NQ,30,build,stress,,1,0,0,0,555,4.0,"admission v2: default variant, full trade rows",2026-10-04T16:24:47+00:00
+member,straddle_tight_0830_NQ_tf30_pre_evB-offA_pts5-r3-build-stress,run,straddle_tight_0830,NQ,30,build,stress,,1,0,0,0,572,4.0,"admission v2: default variant, full trade rows",2026-10-04T16:24:47+00:00
+member,straddle_tight_1000_NQ_tf30_nyam_evC-offA_pts5-r3-build-stress,run,straddle_tight_1000,NQ,30,build,stress,,1,0,0,0,570,4.0,"admission v2: default variant, full trade rows",2026-10-04T16:24:47+00:00
+member,first_bar_mom_NQ_tf15_mid-k1p5_atr3-r2-pick,run,first_bar_mom,NQ,15,pick,,,1,0,0,0,82,2.5,"admission v2: default variant, full trade rows",2026-10-04T16:24:50+00:00
+member,first_bar_mom_NQ_tf30_mid-k1p5_pts45-r3-pick,run,first_bar_mom,NQ,30,pick,,,1,0,0,0,120,2.5,"admission v2: default variant, full trade rows",2026-10-04T16:24:50+00:00
+member,orb_NQ_tf15_pre-or_min15_pct0p1-r0-pick,run,orb,NQ,15,pick,,,1,0,0,0,229,2.5,"admission v2: default variant, full trade rows",2026-10-04T16:24:50+00:00
+member,straddle_t_0830_NQ_tf30_pre-offatr0p25_pct0p1-r0-pick,run,straddle_t_0830,NQ,30,pick,,,1,0,0,0,252,2.5,"admission v2: default variant, full trade rows",2026-10-04T16:24:50+00:00
+member,straddle_t_1800_NQ_tf30_eve-offatr0p25_pts45-r2-pick,run,straddle_t_1800,NQ,30,pick,,,1,0,0,0,248,2.5,"admission v2: default variant, full trade rows",2026-10-04T16:24:50+00:00
+member,tema_slope_NQ_tf30_eve-n40_pct0p1-r0-pick,run,tema_slope,NQ,30,pick,,,1,0,0,0,101,2.5,"admission v2: default variant, full trade rows",2026-10-04T16:24:50+00:00
+member,straddle_tight_0830_NQ_tf30_pre-offA_pts8-r3-pick,run,straddle_tight_0830,NQ,30,pick,,,1,0,0,0,252,2.5,"admission v2: default variant, full trade rows",2026-10-04T16:24:50+00:00
+member,straddle_tight_0830_NQ_tf30_pre_evA-offB_pts5-r3-pick,run,straddle_tight_0830,NQ,30,pick,,,1,0,0,0,244,2.5,"admission v2: default variant, full trade rows",2026-10-04T16:24:50+00:00
+member,straddle_tight_0830_NQ_tf30_pre_evB-offA_pts5-r3-pick,run,straddle_tight_0830,NQ,30,pick,,,1,0,0,0,252,2.5,"admission v2: default variant, full trade rows",2026-10-04T16:24:50+00:00
+member,straddle_tight_1000_NQ_tf30_nyam_evC-offA_pts5-r3-pick,run,straddle_tight_1000,NQ,30,pick,,,1,0,0,0,252,2.5,"admission v2: default variant, full trade rows",2026-10-04T16:24:50+00:00
+member,first_bar_mom_NQ_tf15_mid-k1p5_atr3-r2-pick-stress,run,first_bar_mom,NQ,15,pick,stress,,1,0,0,0,82,1.63,"admission v2: default variant, full trade rows",2026-10-04T16:24:51+00:00
+member,first_bar_mom_NQ_tf30_mid-k1p5_pts45-r3-pick-stress,run,first_bar_mom,NQ,30,pick,stress,,1,0,0,0,120,1.63,"admission v2: default variant, full trade rows",2026-10-04T16:24:51+00:00
+member,tema_slope_NQ_tf30_eve-n40_pct0p1-r0-pick-stress,run,tema_slope,NQ,30,pick,stress,,1,0,0,0,101,1.63,"admission v2: default variant, full trade rows",2026-10-04T16:24:51+00:00
+member,orb_NQ_tf15_pre-or_min15_pct0p1-r0-pick-stress,run,orb,NQ,15,pick,stress,,1,0,0,0,229,2.2,"admission v2: default variant, full trade rows",2026-10-04T16:24:53+00:00
+member,straddle_t_0830_NQ_tf30_pre-offatr0p25_pct0p1-r0-pick-stress,run,straddle_t_0830,NQ,30,pick,stress,,1,0,0,0,254,2.2,"admission v2: default variant, full trade rows",2026-10-04T16:24:53+00:00
+member,straddle_t_1800_NQ_tf30_eve-offatr0p25_pts45-r2-pick-stress,run,straddle_t_1800,NQ,30,pick,stress,,1,0,0,0,248,2.2,"admission v2: default variant, full trade rows",2026-10-04T16:24:53+00:00
+member,straddle_tight_0830_NQ_tf30_pre-offA_pts8-r3-pick-stress,run,straddle_tight_0830,NQ,30,pick,stress,,1,0,0,0,257,2.2,"admission v2: default variant, full trade rows",2026-10-04T16:24:53+00:00
+member,straddle_tight_0830_NQ_tf30_pre_evA-offB_pts5-r3-pick-stress,run,straddle_tight_0830,NQ,30,pick,stress,,1,0,0,0,249,2.2,"admission v2: default variant, full trade rows",2026-10-04T16:24:54+00:00
+member,straddle_tight_0830_NQ_tf30_pre_evB-offA_pts5-r3-pick-stress,run,straddle_tight_0830,NQ,30,pick,stress,,1,0,0,0,257,2.2,"admission v2: default variant, full trade rows",2026-10-04T16:24:54+00:00
+member,straddle_tight_1000_NQ_tf30_nyam_evC-offA_pts5-r3-pick-stress,run,straddle_tight_1000,NQ,30,pick,stress,,1,0,0,0,255,2.2,"admission v2: default variant, full trade rows",2026-10-04T16:24:54+00:00
+v2_check,straddle_tight_0830-GC-tf30-pre-check,grid,straddle_tight_0830,GC,30,check,check,,0,27,0,0,6606,3.78,runs_check2025/straddle_tight_0830-GC-tf30-pre-check: session pre only,2026-10-05T14:13:40+00:00
+v2_stress,donchian-NQ-tf30-nyam-pick-stress,grid,donchian,NQ,30,pick,stress,,0,64,0,0,8308,7.34,admission v2: session nyam only,2026-10-05T14:13:44+00:00
+v2_check_stress,straddle_tight_0830-GC-tf30-pre-check-stress,grid,straddle_tight_0830,GC,30,check,stress,,0,27,0,0,6633,3.67,runs_check2025/straddle_tight_0830-GC-tf30-pre-check-stress: session pre only; oco_cancel_ms 100,2026-10-05T14:13:44+00:00
+v2_check,straddle_tight_1000-GC-tf30-nyam-check,grid,straddle_tight_1000,GC,30,check,check,,0,27,0,0,6678,4.19,runs_check2025/straddle_tight_1000-GC-tf30-nyam-check: session nyam only,2026-10-05T14:13:48+00:00
+v2_check_stress,straddle_tight_1000-GC-tf30-nyam-check-stress,grid,straddle_tight_1000,GC,30,check,stress,,0,27,0,0,6687,4.54,runs_check2025/straddle_tight_1000-GC-tf30-nyam-check-stress: session nyam only; oco_cancel_ms 100,2026-10-05T14:13:53+00:00
+v2_check,straddle_t_0830-NQ-tf30-pre-check,grid,straddle_t_0830,NQ,30,check,check,,0,160,0,0,36576,21.72,runs_check2025/straddle_t_0830-NQ-tf30-pre-check: session pre only,2026-10-05T14:14:06+00:00
+v2_check,first_bar_mom-ES-tf15-mid-check,grid,first_bar_mom,ES,15,check,check,,0,96,0,0,7488,26.47,runs_check2025/first_bar_mom-ES-tf15-mid-check: session mid only,2026-10-05T14:14:20+00:00
+v2_check_stress,first_bar_mom-ES-tf15-mid-check-stress,grid,first_bar_mom,ES,15,check,stress,,0,96,0,0,7488,18.36,runs_check2025/first_bar_mom-ES-tf15-mid-check-stress: session mid only,2026-10-05T14:14:38+00:00
+null_v2_check,straddle_tight_0830-GC-tf30-pre-check-shift,null,straddle_tight_0830,GC,30,check,shift,1-2,0,0,54,0,12564,7.06,runs_check2025/straddle_tight_0830-GC-tf30-pre-check-shift: session pre only,2026-10-05T14:14:46+00:00
+null_v2_check,straddle_tight_1000-GC-tf30-nyam-check-shift,null,straddle_tight_1000,GC,30,check,shift,1-2,0,0,54,0,13023,7.65,runs_check2025/straddle_tight_1000-GC-tf30-nyam-check-shift: session nyam only,2026-10-05T14:14:53+00:00
+null_v2_check,c1-ES-tf15-mid-check,null,random,ES,15,check,c1,1-2,0,0,64,0,31285,14.4,runs_check2025/c1-ES-tf15-mid-check: session mid only,2026-10-05T14:15:08+00:00
+null_f2_check,straddle_tight_0830-GC-tf30-pre-check-shift-s3to10,null,straddle_tight_0830,GC,30,check,shift,3-10,0,0,216,0,49932,26.36,runs_seeds/straddle_tight_0830-GC-tf30-pre-check-shift-s3to10: session pre only; F2 extra seeds of runs_check2025/straddle_tight_0830-GC-tf30-pre-check-shift,2026-10-05T14:15:35+00:00
+v2_check_stress,straddle_t_0830-NQ-tf30-pre-check-stress,grid,straddle_t_0830,NQ,30,check,stress,,0,160,0,0,36992,107.94,runs_check2025/straddle_t_0830-NQ-tf30-pre-check-stress: session pre only; oco_cancel_ms 100,2026-10-05T14:15:55+00:00
+v2_check,straddle_tight_0830-NQ-tf30-pre-check,grid,straddle_tight_0830,NQ,30,check,check,,0,27,0,0,6417,22.23,runs_check2025/straddle_tight_0830-NQ-tf30-pre-check: session pre only,2026-10-05T14:16:17+00:00
+null_f2_check,straddle_tight_1000-GC-tf30-nyam-check-shift-s3to10,null,straddle_tight_1000,GC,30,check,shift,3-10,0,0,216,0,51822,44.63,runs_seeds/straddle_tight_1000-GC-tf30-nyam-check-shift-s3to10: session nyam only; F2 extra seeds of runs_check2025/straddle_tight_1000-GC-tf30-nyam-check-shift,2026-10-05T14:16:20+00:00
+v2_check_stress,straddle_tight_0830-NQ-tf30-pre-check-stress,grid,straddle_tight_0830,NQ,30,check,stress,,0,27,0,0,6507,21.99,runs_check2025/straddle_tight_0830-NQ-tf30-pre-check-stress: session pre only; oco_cancel_ms 100,2026-10-05T14:16:39+00:00
+v2_check,straddle_tight_1000-NQ-tf30-nyam-check,grid,straddle_tight_1000,NQ,30,check,check,,0,27,0,0,6687,23.78,runs_check2025/straddle_tight_1000-NQ-tf30-nyam-check: session nyam only,2026-10-05T14:17:03+00:00
+v2_check_stress,straddle_tight_1000-NQ-tf30-nyam-check-stress,grid,straddle_tight_1000,NQ,30,check,stress,,0,27,0,0,6903,25.23,runs_check2025/straddle_tight_1000-NQ-tf30-nyam-check-stress: session nyam only; oco_cancel_ms 100,2026-10-05T14:17:28+00:00
+null_f2_check,c1-ES-tf15-mid-check-s3to10,null,random,ES,15,check,c1,3-10,0,0,256,0,126303,172.07,runs_seeds/c1-ES-tf15-mid-check-s3to10: session mid only; F2 extra seeds of runs_check2025/c1-ES-tf15-mid-check,2026-10-05T14:19:13+00:00
+v2_check,first_bar_mom-NQ-tf30-mid-check,grid,first_bar_mom,NQ,30,check,check,,0,96,0,0,11392,114.05,runs_check2025/first_bar_mom-NQ-tf30-mid-check: session mid only,2026-10-05T14:19:23+00:00
+v2_check_stress,first_bar_mom-NQ-tf30-mid-check-stress,grid,first_bar_mom,NQ,30,check,stress,,0,96,0,0,11392,48.78,runs_check2025/first_bar_mom-NQ-tf30-mid-check-stress: session mid only,2026-10-05T14:20:11+00:00
+null_f2_pick,straddle_tight_0830-GC-tf30-pre-pick-shift-s3to10,null,straddle_tight_0830,GC,30,pick,shift,3-10,0,0,216,0,42606,70.25,runs_seeds/straddle_tight_0830-GC-tf30-pre-pick-shift-s3to10: session pre only; F2 extra seeds of runs_admit_r1/straddle_tight_0830-GC-tf30-pre-pick-shift,2026-10-05T14:20:24+00:00
+v2_check,first_bar_mom-NQ-tf15-mid-check,grid,first_bar_mom,NQ,15,check,check,,0,96,0,0,7200,14.47,runs_check2025/first_bar_mom-NQ-tf15-mid-check: session mid only,2026-10-05T14:20:26+00:00
+v2_check_stress,first_bar_mom-NQ-tf15-mid-check-stress,grid,first_bar_mom,NQ,15,check,stress,,0,96,0,0,7200,14.41,runs_check2025/first_bar_mom-NQ-tf15-mid-check-stress: session mid only,2026-10-05T14:20:41+00:00
+v2_check,orb-NQ-tf15-pre-check,grid,orb,NQ,15,check,check,,0,96,0,0,21216,11.39,runs_check2025/orb-NQ-tf15-pre-check: session pre only,2026-10-05T14:20:52+00:00
+v2_check_stress,orb-NQ-tf15-pre-check-stress,grid,orb,NQ,15,check,stress,,0,96,0,0,21248,13.93,runs_check2025/orb-NQ-tf15-pre-check-stress: session pre only; oco_cancel_ms 100,2026-10-05T14:21:06+00:00
+null_f2_pick,straddle_tight_1000-GC-tf30-nyam-pick-shift-s3to10,null,straddle_tight_1000,GC,30,pick,shift,3-10,0,0,216,0,47745,51.83,runs_seeds/straddle_tight_1000-GC-tf30-nyam-pick-shift-s3to10: session nyam only; F2 extra seeds of runs_events/straddle_tight_1000-GC-tf30-nyam-pick-shift,2026-10-05T14:21:16+00:00
+v2_check,straddle_t_1800-NQ-tf30-eve-check,grid,straddle_t_1800,NQ,30,check,check,,0,160,0,0,35616,26.61,runs_check2025/straddle_t_1800-NQ-tf30-eve-check: session eve only,2026-10-05T14:21:33+00:00
+v2_check_stress,straddle_t_1800-NQ-tf30-eve-check-stress,grid,straddle_t_1800,NQ,30,check,stress,,0,160,0,0,35616,28.71,runs_check2025/straddle_t_1800-NQ-tf30-eve-check-stress: session eve only; oco_cancel_ms 100,2026-10-05T14:22:02+00:00
+v2_check,tema_slope-NQ-tf30-eve-check,grid,tema_slope,NQ,30,check,check,,0,96,0,0,13314,19.24,runs_check2025/tema_slope-NQ-tf30-eve-check: session eve only,2026-10-05T14:22:21+00:00
+v2_check_stress,tema_slope-NQ-tf30-eve-check-stress,grid,tema_slope,NQ,30,check,stress,,0,96,0,0,13329,18.61,runs_check2025/tema_slope-NQ-tf30-eve-check-stress: session eve only,2026-10-05T14:22:40+00:00
+v2_check,donchian-NQ-tf30-nyam-check,grid,donchian,NQ,30,check,check,,0,64,0,0,8887,15.48,runs_check2025/donchian-NQ-tf30-nyam-check: session nyam only,2026-10-05T14:22:56+00:00
+v2_check_stress,donchian-NQ-tf30-nyam-check-stress,grid,donchian,NQ,30,check,stress,,0,64,0,0,8912,15.55,runs_check2025/donchian-NQ-tf30-nyam-check-stress: session nyam only,2026-10-05T14:23:11+00:00
+null_f2_pick,c1-ES-tf15-mid-pick-s3to10,null,random,ES,15,pick,c1,3-10,0,0,256,0,118948,126.32,runs_seeds/c1-ES-tf15-mid-pick-s3to10: session mid only; F2 extra seeds of runs_v2/c1-ES-tf15-mid-pick,2026-10-05T14:23:23+00:00
+null_v2_check,straddle_t_0830-NQ-tf30-pre-check-shift,null,straddle_t_0830,NQ,30,check,shift,1-2,0,0,320,0,75232,69.74,runs_check2025/straddle_t_0830-NQ-tf30-pre-check-shift: session pre only,2026-10-05T14:24:22+00:00
+null_v2_check,straddle_tight_0830-NQ-tf30-pre-check-shift,null,straddle_tight_0830,NQ,30,check,shift,1-2,0,0,54,0,12177,11.03,runs_check2025/straddle_tight_0830-NQ-tf30-pre-check-shift: session pre only,2026-10-05T14:24:33+00:00
+null_v2_check,straddle_tight_1000-NQ-tf30-nyam-check-shift,null,straddle_tight_1000,NQ,30,check,shift,1-2,0,0,54,0,13032,12.29,runs_check2025/straddle_tight_1000-NQ-tf30-nyam-check-shift: session nyam only,2026-10-05T14:24:46+00:00
+null_f2_build,straddle_tight_0830-GC-tf30-pre-build-shift-s3to10,null,straddle_tight_0830,GC,30,build,shift,3-10,0,0,216,0,84168,127.12,runs_seeds/straddle_tight_0830-GC-tf30-pre-build-shift-s3to10: session pre only; F2 extra seeds of runs/straddle_tight_0830-GC-tf30-shift,2026-10-05T14:25:31+00:00
+null_v2_check,straddle_t_1800-NQ-tf30-eve-check-shift,null,straddle_t_1800,NQ,30,check,shift,1-2,0,0,320,0,64704,58.81,runs_check2025/straddle_t_1800-NQ-tf30-eve-check-shift: session eve only,2026-10-05T14:25:45+00:00
+null_v2_check,c1-NQ-tf30-mid-check,null,random,NQ,30,check,c1,1-2,0,0,64,0,23425,20.15,runs_check2025/c1-NQ-tf30-mid-check: session mid only,2026-10-05T14:26:05+00:00
+null_v2_check,c1-NQ-tf15-mid-check,null,random,NQ,15,check,c1,1-2,0,0,64,0,32584,21.5,runs_check2025/c1-NQ-tf15-mid-check: session mid only,2026-10-05T14:26:27+00:00
+null_v2_check,c1-NQ-tf15-pre-check,null,random,NQ,15,check,c1,1-2,0,0,64,0,20121,15.11,runs_check2025/c1-NQ-tf15-pre-check: session pre only,2026-10-05T14:26:43+00:00
+null_v2_check,c1-NQ-tf30-eve-check,null,random,NQ,30,check,c1,1-2,0,0,64,0,28268,19.9,runs_check2025/c1-NQ-tf30-eve-check: session eve only,2026-10-05T14:27:03+00:00
+null_v2_check,c1-NQ-tf30-nyam-check,null,random,NQ,30,check,c1,1-2,0,0,64,0,14215,16.45,runs_check2025/c1-NQ-tf30-nyam-check: session nyam only,2026-10-05T14:27:19+00:00
+null_f2_build,straddle_tight_1000-GC-tf30-nyam-build-shift-s3to10,null,straddle_tight_1000,GC,30,build,shift,3-10,0,0,216,0,95382,143.54,runs_seeds/straddle_tight_1000-GC-tf30-nyam-build-shift-s3to10: session nyam only; F2 extra seeds of runs/straddle_tight_1000-GC-tf30-shift,2026-10-05T14:27:55+00:00
+null_f2_check,straddle_t_0830-NQ-tf30-pre-check-shift-s3to10,null,straddle_t_0830,NQ,30,check,shift,3-10,0,0,1280,0,302496,257.61,runs_seeds/straddle_t_0830-NQ-tf30-pre-check-shift-s3to10: session pre only; F2 extra seeds of runs_check2025/straddle_t_0830-NQ-tf30-pre-check-shift,2026-10-05T14:31:39+00:00
+null_f2_check,straddle_tight_0830-NQ-tf30-pre-check-shift-s3to10,null,straddle_tight_0830,NQ,30,check,shift,3-10,0,0,216,0,48744,22.16,runs_seeds/straddle_tight_0830-NQ-tf30-pre-check-shift-s3to10: session pre only; F2 extra seeds of runs_check2025/straddle_tight_0830-NQ-tf30-pre-check-shift,2026-10-05T14:32:01+00:00
+null_f2_build,c1-ES-tf15-mid-build-s3to10,null,random,ES,15,build,c1,3-10,0,0,256,0,284577,249.79,runs_seeds/c1-ES-tf15-mid-build-s3to10: session mid only; F2 extra seeds of runs/c1-ES-tf15,2026-10-05T14:32:06+00:00
+null_f2_check,straddle_tight_1000-NQ-tf30-nyam-check-shift-s3to10,null,straddle_tight_1000,NQ,30,check,shift,3-10,0,0,216,0,51813,21.47,runs_seeds/straddle_tight_1000-NQ-tf30-nyam-check-shift-s3to10: session nyam only; F2 extra seeds of runs_check2025/straddle_tight_1000-NQ-tf30-nyam-check-shift,2026-10-05T14:32:23+00:00
+null_f2_check,straddle_t_1800-NQ-tf30-eve-check-shift-s3to10,null,straddle_t_1800,NQ,30,check,shift,3-10,0,0,1280,0,263232,139.62,runs_seeds/straddle_t_1800-NQ-tf30-eve-check-shift-s3to10: session eve only; F2 extra seeds of runs_check2025/straddle_t_1800-NQ-tf30-eve-check-shift,2026-10-05T14:34:44+00:00
+null_f2_check,c1-NQ-tf30-mid-check-s3to10,null,random,NQ,30,check,c1,3-10,0,0,256,0,93446,42.69,runs_seeds/c1-NQ-tf30-mid-check-s3to10: session mid only; F2 extra seeds of runs_check2025/c1-NQ-tf30-mid-check,2026-10-05T14:35:27+00:00
+null_f2_check,c1-NQ-tf15-mid-check-s3to10,null,random,NQ,15,check,c1,3-10,0,0,256,0,131965,45.25,runs_seeds/c1-NQ-tf15-mid-check-s3to10: session mid only; F2 extra seeds of runs_check2025/c1-NQ-tf15-mid-check,2026-10-05T14:36:13+00:00
+null_f2_check,c1-NQ-tf15-pre-check-s3to10,null,random,NQ,15,check,c1,3-10,0,0,256,0,81597,31.41,runs_seeds/c1-NQ-tf15-pre-check-s3to10: session pre only; F2 extra seeds of runs_check2025/c1-NQ-tf15-pre-check,2026-10-05T14:36:45+00:00
+null_f2_check,c1-NQ-tf30-eve-check-s3to10,null,random,NQ,30,check,c1,3-10,0,0,256,0,114006,42.13,runs_seeds/c1-NQ-tf30-eve-check-s3to10: session eve only; F2 extra seeds of runs_check2025/c1-NQ-tf30-eve-check,2026-10-05T14:37:28+00:00
+null_f2_check,c1-NQ-tf30-nyam-check-s3to10,null,random,NQ,30,check,c1,3-10,0,0,256,0,58429,43.54,runs_seeds/c1-NQ-tf30-nyam-check-s3to10: session nyam only; F2 extra seeds of runs_check2025/c1-NQ-tf30-nyam-check,2026-10-05T14:38:12+00:00
+null_f2_pick,straddle_t_0830-NQ-tf30-pre-pick-shift-s3to10,null,straddle_t_0830,NQ,30,pick,shift,3-10,0,0,1280,0,307136,207.71,runs_seeds/straddle_t_0830-NQ-tf30-pre-pick-shift-s3to10: session pre only; F2 extra seeds of runs_v2/straddle_t_0830-NQ-tf30-pre-pick-shift,2026-10-05T14:41:42+00:00
+null_f2_pick,straddle_tight_0830-NQ-tf30-pre-pick-shift-s3to10,null,straddle_tight_0830,NQ,30,pick,shift,3-10,0,0,216,0,46791,177.4,runs_seeds/straddle_tight_0830-NQ-tf30-pre-pick-shift-s3to10: session pre only; F2 extra seeds of runs_admit_r1/straddle_tight_0830-NQ-tf30-pre-pick-shift,2026-10-05T14:44:40+00:00
+null_f2_pick,straddle_tight_1000-NQ-tf30-nyam-pick-shift-s3to10,null,straddle_tight_1000,NQ,30,pick,shift,3-10,0,0,216,0,51975,25.76,runs_seeds/straddle_tight_1000-NQ-tf30-nyam-pick-shift-s3to10: session nyam only; F2 extra seeds of runs_v2/straddle_tight_1000-NQ-tf30-nyam-pick-shift,2026-10-05T14:45:06+00:00
+null_f2_pick,straddle_t_1800-NQ-tf30-eve-pick-shift-s3to10,null,straddle_t_1800,NQ,30,pick,shift,3-10,0,0,1280,0,244672,142.68,runs_seeds/straddle_t_1800-NQ-tf30-eve-pick-shift-s3to10: session eve only; F2 extra seeds of runs_v2/straddle_t_1800-NQ-tf30-eve-pick-shift,2026-10-05T14:47:30+00:00
+null_f2_pick,c1-NQ-tf30-mid-pick-s3to10,null,random,NQ,30,pick,c1,3-10,0,0,256,0,93396,46.24,runs_seeds/c1-NQ-tf30-mid-pick-s3to10: session mid only; F2 extra seeds of runs_v2/c1-NQ-tf30-mid-pick,2026-10-05T14:48:16+00:00
+null_f2_pick,c1-NQ-tf15-mid-pick-s3to10,null,random,NQ,15,pick,c1,3-10,0,0,256,0,129161,42.11,runs_seeds/c1-NQ-tf15-mid-pick-s3to10: session mid only; F2 extra seeds of runs_v2/c1-NQ-tf15-mid-pick,2026-10-05T14:48:59+00:00
+null_f2_pick,c1-NQ-tf15-pre-pick-s3to10,null,random,NQ,15,pick,c1,3-10,0,0,256,0,81667,32.52,runs_seeds/c1-NQ-tf15-pre-pick-s3to10: session pre only; F2 extra seeds of runs_v2/c1-NQ-tf15-pre-pick,2026-10-05T14:49:32+00:00
+null_f2_pick,c1-NQ-tf30-eve-pick-s3to10,null,random,NQ,30,pick,c1,3-10,0,0,256,0,100699,43.39,runs_seeds/c1-NQ-tf30-eve-pick-s3to10: session eve only; F2 extra seeds of runs_deepen/c1-NQ-tf30-eve-pick,2026-10-05T14:50:16+00:00
+null_f2_pick,c1-NQ-tf30-nyam-pick-s3to10,null,random,NQ,30,pick,c1,3-10,0,0,256,0,59826,34.43,runs_seeds/c1-NQ-tf30-nyam-pick-s3to10: session nyam only; F2 extra seeds of runs_admit/c1-NQ-tf30-nyam-pick,2026-10-05T14:50:51+00:00
+null_f2_build,straddle_t_0830-NQ-tf30-pre-build-shift-s3to10,null,straddle_t_0830,NQ,30,build,shift,3-10,0,0,1280,0,686656,342.63,runs_seeds/straddle_t_0830-NQ-tf30-pre-build-shift-s3to10: session pre only; F2 extra seeds of runs/straddle_t_0830-NQ-tf30-shift,2026-10-05T14:56:37+00:00
+null_f2_build,straddle_tight_0830-NQ-tf30-pre-build-shift-s3to10,null,straddle_tight_0830,NQ,30,build,shift,3-10,0,0,216,0,103968,44.73,runs_seeds/straddle_tight_0830-NQ-tf30-pre-build-shift-s3to10: session pre only; F2 extra seeds of runs/straddle_tight_0830-NQ-tf30-shift,2026-10-05T14:57:22+00:00
+null_f2_build,straddle_tight_1000-NQ-tf30-nyam-build-shift-s3to10,null,straddle_tight_1000,NQ,30,build,shift,3-10,0,0,216,0,116973,48.17,runs_seeds/straddle_tight_1000-NQ-tf30-nyam-build-shift-s3to10: session nyam only; F2 extra seeds of runs/straddle_tight_1000-NQ-tf30-shift,2026-10-05T14:58:11+00:00
+null_f2_build,straddle_t_1800-NQ-tf30-eve-build-shift-s3to10,null,straddle_t_1800,NQ,30,build,shift,3-10,0,0,1280,0,524096,241.11,runs_seeds/straddle_t_1800-NQ-tf30-eve-build-shift-s3to10: session eve only; F2 extra seeds of runs/straddle_t_1800-NQ-tf30-shift,2026-10-05T15:02:14+00:00
+null_f2_build,c1-NQ-tf30-mid-build-s3to10,null,random,NQ,30,build,c1,3-10,0,0,256,0,211472,87.2,runs_seeds/c1-NQ-tf30-mid-build-s3to10: session mid only; F2 extra seeds of runs/c1-NQ-tf30,2026-10-05T15:03:43+00:00
+null_f2_build,c1-NQ-tf15-mid-build-s3to10,null,random,NQ,15,build,c1,3-10,0,0,256,0,296096,95.46,runs_seeds/c1-NQ-tf15-mid-build-s3to10: session mid only; F2 extra seeds of runs/c1-NQ-tf15,2026-10-05T15:05:20+00:00
+null_f2_build,c1-NQ-tf15-pre-build-s3to10,null,random,NQ,15,build,c1,3-10,0,0,256,0,187651,68.84,runs_seeds/c1-NQ-tf15-pre-build-s3to10: session pre only; F2 extra seeds of runs/c1-NQ-tf15,2026-10-05T15:06:29+00:00
+null_f2_build,c1-NQ-tf30-eve-build-s3to10,null,random,NQ,30,build,c1,3-10,0,0,256,0,243846,83.61,runs_seeds/c1-NQ-tf30-eve-build-s3to10: session eve only; F2 extra seeds of runs/c1-NQ-tf30,2026-10-05T15:07:54+00:00
+null_f2_build,c1-NQ-tf30-nyam-build-s3to10,null,random,NQ,30,build,c1,3-10,0,0,256,0,133824,65.8,runs_seeds/c1-NQ-tf30-nyam-build-s3to10: session nyam only; F2 extra seeds of runs/c1-NQ-tf30,2026-10-05T15:09:01+00:00
+null_f2_build,c1-NQ-tf5-pm-build-s3to10,null,random,NQ,5,build,c1,3-10,0,0,256,0,339738,97.49,runs_seeds/c1-NQ-tf5-pm-build-s3to10: session pm only; F2 extra seeds of runs/c1-NQ-tf5,2026-10-05T15:10:40+00:00

@@ -1,0 +1,23 @@
+spec                   family           mkt units base filter   cells  to run instances
+r3_channel             donchian         NQ     33    3     30   10296   10296     72072
+r3_channel             donchian         ES     27    3     24    8424    8424     58968
+r3_channel             donchian         GC     27    3     24    8424    8424     58968
+r3_first_bar           first_bar_mom    NQ     33    3     30    7722    7722     54054
+r3_first_bar           first_bar_mom    ES     27    3     24    6318    6318     44226
+r3_first_bar           first_bar_mom    GC     27    3     24    6318    6318     44226
+r3_ib_n                ib_n             NQ     33    3     30   10296   10296     30888
+r3_ib_n                ib_n             ES     27    3     24    8424    8424     25272
+r3_ib_n                ib_n             GC     27    3     24    8424    8424     25272
+r3_orb                 orb              NQ     33    3     30    7722    7722     54054
+r3_orb                 orb              ES     27    3     24    6318    6318     44226
+r3_orb                 orb              GC     27    3     24    6318    6318     44226
+r3_vol_spike           vol_spike_break  NQ     33    3     30    7722    7722     54054
+r3_vol_spike           vol_spike_break  ES     27    3     24    6318    6318     44226
+r3_vol_spike           vol_spike_break  GC     27    3     24    6318    6318     44226
+r3_vwap_pull           vwap_trend_pull  NQ     33    3     30    5940    5940     17820
+r3_vwap_pull           vwap_trend_pull  ES     27    3     24    4860    4860     14580
+r3_vwap_pull           vwap_trend_pull  GC     27    3     24    4860    4860     14580
+TOTAL 522 units (54 base + 468 filter): 131022 CANDIDATE cells (745938 session instances), 131022 still to run
+controls (NULL cells, not capped): c1 9 stores / 576 cells (0 to run); c1r 45 stores / 4212 cells (45 to run); c1x 9 stores / 504 cells (9 to run); c2 72 stores / 18072 cells (72 to run) -> 23364 null cells, 22788 to run
+cap: 52118 candidate cells used (ledger.csv 51294 + 824 booked on paper) + 131022 still to run = 183140 of 80000 -> DOES NOT FIT (-103140 left)
+plan exit 2 (2 = does not fit under the cap)

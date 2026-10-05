@@ -1,0 +1,39 @@
+{
+ "uid": "donchian-NQ-tf30|nyam|",
+ "build": {
+  "cells": 64,
+  "share": 0.953125,
+  "avg": 34773.4375,
+  "avg_trades": 323.984375
+ },
+ "y2024": {
+  "cells": 63,
+  "share": 0.9047619047619048,
+  "avg": 13724.412698412698,
+  "median": 11147.0,
+  "avg_trades": 130.52380952380952
+ },
+ "t4": true,
+ "lift_2024": 1670.353769841271,
+ "p_2024": 0.61875,
+ "t5": true,
+ "stress_meta": {
+  "stress": true,
+  "oco_cancel_ms": null,
+  "period": "pick"
+ },
+ "stress_cells": 54,
+ "stress_avg_2024": 13253.018518518518,
+ "t6": null,
+ "stress_note": "v1 stress store holds only part of the menu; test (6) needs a whole-menu 2024 stress run (not run by me)",
+ "both_sides_declared": false,
+ "cand": 51,
+ "cand_not_in_build_stress": 0,
+ "survivors": 43,
+ "build_stress_meta": {
+  "stress": true,
+  "oco_cancel_ms": null,
+  "period": "build"
+ },
+ "build_stress_cells": 54
+}

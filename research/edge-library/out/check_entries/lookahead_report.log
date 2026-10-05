@@ -1,0 +1,62 @@
+== NQ: sessions 573, used 568, skipped ['2021-12-01', '2022-06-21', '2022-08-05', '2022-09-06', '2023-04-07']
+  D event_dir_0830 x=0.25: days 1136 (release 450), trades 788, no-move days 348, no trade but a move 0, days with a print stamped exactly at the instant 0, rewrite days 225, fill delay after the decision ms min/med/max 85.624/208.062/4804.0 | BAD: none
+  D event_dir_0830 x=5.0: days 1136 (release 450), trades 1062, no-move days 74, no trade but a move 0, days with a print stamped exactly at the instant 0, rewrite days 225, fill delay after the decision ms min/med/max 85.068/250.614/11176.0 | BAD: none
+  D event_dir_0830 x=60.0: days 568 (release 225), trades 558, no-move days 10, no trade but a move 0, days with a print stamped exactly at the instant 0, rewrite days 225, fill delay after the decision ms min/med/max 85.294/170.579/66772.0 | BAD: none
+  D event_dir_1000 x=0.25: days 1136 (release 190), trades 1088, no-move days 48, no trade but a move 0, days with a print stamped exactly at the instant 0, rewrite days 95, fill delay after the decision ms min/med/max 85.07/96.838/4756.0 | BAD: none
+  D event_dir_1000 x=5.0: days 568 (release 95), trades 559, no-move days 9, no trade but a move 0, days with a print stamped exactly at the instant 1, rewrite days 95, fill delay after the decision ms min/med/max 85.007/120.598/1047.0 | BAD: none
+  D event_dir_1000 x=60.0: days 568 (release 95), trades 565, no-move days 3, no trade but a move 0, days with a print stamped exactly at the instant 0, rewrite days 95, fill delay after the decision ms min/med/max 85.165/107.986/691.841 | BAD: none
+  W straddle_wide_0830 offB_offx0p5-r2: days 568, armed 568, trades 307, rewrite days 225 | BAD: none
+  W straddle_wide_0830 offD_offx0p5-r3: days 568, armed 568, trades 151, rewrite days 225 | BAD: none
+  W straddle_wide_1000 offA_offx0p5-r2: days 568, armed 568, trades 556, rewrite days 95 | BAD: none
+  W anchor age (ms before the arming instant) med 263.5, p95 2616.2, max 9508.8
+  STORE event_dir_0830 x0p25_atr1p5-r0: store 394 trades $-44,981 | from scratch 394 trades $-44,981 | days that differ 0 [] | skipped days same True
+  STORE event_dir_0830 x5_atr1p5-r0: store 531 trades $-44,894 | from scratch 531 trades $-44,894 | days that differ 0 [] | skipped days same True
+  STORE event_dir_0830 x60_atr1p5-r0: store 558 trades $-16,352 | from scratch 558 trades $-16,352 | days that differ 0 [] | skipped days same True
+  STORE event_dir_0830 x5_pts10-r1: store 531 trades $-1,449 | from scratch 531 trades $-1,449 | days that differ 0 [] | skipped days same True
+  STORE event_dir_0830 x0p25_atr1p5-r2: store 394 trades $-29,146 | from scratch 394 trades $-29,146 | days that differ 0 [] | skipped days same True
+  STORE event_dir_1000 x0p25_atr1p5-r0: store 544 trades $45,509 | from scratch 544 trades $45,509 | days that differ 0 [] | skipped days same True
+  STORE event_dir_1000 x5_atr1p5-r0: store 559 trades $52,789 | from scratch 559 trades $52,789 | days that differ 0 [] | skipped days same True
+  STORE event_dir_1000 x60_atr1p5-r0: store 565 trades $74,015 | from scratch 565 trades $74,015 | days that differ 0 [] | skipped days same True
+  STORE event_dir_1000 x0p25_pts30-r0: store 544 trades $58,609 | from scratch 544 trades $58,609 | days that differ 0 [] | skipped days same True
+  STORE straddle_wide_0830 offB_offx0p5-r2: store 307 trades $8,977 | from scratch 307 trades $8,977 | days that differ 0 [] | skipped days same True
+  STORE straddle_wide_0830 offD_offx0p5-r3: store 151 trades $7,861 | from scratch 151 trades $7,861 | days that differ 0 [] | skipped days same True
+  STORE straddle_wide_1000 offA_offx0p5-r2: store 556 trades $-2,589 | from scratch 556 trades $-2,589 | days that differ 0 [] | skipped days same True
+== GC: sessions 572, used 565, skipped ['2021-11-23', '2021-11-26', '2021-12-30', '2022-11-16', '2022-11-25', '2023-11-14', '2023-11-24']
+  D event_dir_0830 x=0.25: days 565 (release 223), trades 310, no-move days 255, no trade but a move 0, days with a print stamped exactly at the instant 0, rewrite days 223, fill delay after the decision ms min/med/max 85.023/214.255/4930.0 | BAD: none
+  D event_dir_0830 x=2.0: days 565 (release 223), trades 481, no-move days 84, no trade but a move 0, days with a print stamped exactly at the instant 0, rewrite days 0, fill delay after the decision ms min/med/max 85.074/286.413/5228.828 | BAD: none
+  D event_dir_0830 x=5.0: days 565 (release 223), trades 503, no-move days 62, no trade but a move 0, days with a print stamped exactly at the instant 0, rewrite days 223, fill delay after the decision ms min/med/max 85.234/254.908/6641.566 | BAD: none
+  D event_dir_0830 x=60.0: days 1130 (release 446), trades 1090, no-move days 40, no trade but a move 0, days with a print stamped exactly at the instant 0, rewrite days 223, fill delay after the decision ms min/med/max 85.124/196.951/4290.373 | BAD: none
+  D event_dir_1000 x=0.25: days 565 (release 97), trades 418, no-move days 147, no trade but a move 0, days with a print stamped exactly at the instant 0, rewrite days 97, fill delay after the decision ms min/med/max 85.065/130.533/1388.232 | BAD: none
+  D event_dir_1000 x=2.0: days 565 (release 97), trades 493, no-move days 72, no trade but a move 0, days with a print stamped exactly at the instant 0, rewrite days 0, fill delay after the decision ms min/med/max 85.155/214.469/3010.395 | BAD: none
+  D event_dir_1000 x=5.0: days 565 (release 97), trades 516, no-move days 49, no trade but a move 0, days with a print stamped exactly at the instant 0, rewrite days 97, fill delay after the decision ms min/med/max 85.101/287.674/5180.241 | BAD: none
+  D event_dir_1000 x=60.0: days 565 (release 97), trades 549, no-move days 16, no trade but a move 0, days with a print stamped exactly at the instant 0, rewrite days 97, fill delay after the decision ms min/med/max 85.225/169.102/4861.103 | BAD: none
+  W straddle_wide_0830 offB_offx0p5-r1: days 565, armed 565, trades 241, rewrite days 223 | BAD: none
+  W straddle_wide_0830 offB_offx1p5-r3: days 565, armed 565, trades 241, rewrite days 223 | BAD: none
+  W straddle_wide_1000 offC_offx1-r2: days 565, armed 565, trades 106, rewrite days 97 | BAD: none
+  W anchor age (ms before the arming instant) med 752.5, p95 4025.5, max 15442.1
+  STORE event_dir_0830 x0p25_atr1p5-r0: store 310 trades $-10,280 | from scratch 310 trades $-10,280 | days that differ 0 [] | skipped days same True
+  STORE event_dir_0830 x5_atr1p5-r0: store 503 trades $-17,022 | from scratch 503 trades $-17,022 | days that differ 0 [] | skipped days same True
+  STORE event_dir_0830 x60_atr1p5-r0: store 545 trades $4,590 | from scratch 545 trades $4,590 | days that differ 0 [] | skipped days same True
+  STORE event_dir_0830 x2_pct0p1-r1: store 481 trades $-944 | from scratch 481 trades $-944 | days that differ 0 [] | skipped days same True
+  STORE event_dir_0830 x60_pct0p1-r0: store 545 trades $1,950 | from scratch 545 trades $1,950 | days that differ 0 [] | skipped days same True
+  STORE event_dir_1000 x0p25_atr1p5-r0: store 418 trades $32,628 | from scratch 418 trades $32,628 | days that differ 0 [] | skipped days same True
+  STORE event_dir_1000 x5_atr1p5-r0: store 516 trades $3,546 | from scratch 516 trades $3,546 | days that differ 0 [] | skipped days same True
+  STORE event_dir_1000 x60_atr1p5-r0: store 549 trades $6,784 | from scratch 549 trades $6,784 | days that differ 0 [] | skipped days same True
+  STORE event_dir_1000 x2_pts7-r2: store 493 trades $-9,662 | from scratch 493 trades $-9,662 | days that differ 0 [] | skipped days same True
+  STORE straddle_wide_0830 offB_offx1p5-r3: store 241 trades $-64 | from scratch 241 trades $-64 | days that differ 0 [] | skipped days same True
+  STORE straddle_wide_0830 offB_offx0p5-r1: store 241 trades $-1,634 | from scratch 241 trades $-1,634 | days that differ 0 [] | skipped days same True
+  STORE straddle_wide_1000 offC_offx1-r2: store 106 trades $1,176 | from scratch 106 trades $1,176 | days that differ 0 [] | skipped days same True
+== ES: sessions 573, used 571, skipped ['2022-06-24', '2023-04-07']
+  D event_dir_0830 x=0.25: days 571 (release 226), trades 292, no-move days 279, no trade but a move 0, days with a print stamped exactly at the instant 0, rewrite days 0, fill delay after the decision ms min/med/max 85.237/205.161/4992.0 | BAD: none
+  D event_dir_0830 x=5.0: days 571 (release 226), trades 454, no-move days 117, no trade but a move 0, days with a print stamped exactly at the instant 0, rewrite days 0, fill delay after the decision ms min/med/max 85.061/288.854/31176.0 | BAD: none
+  D event_dir_1000 x=5.0: days 571 (release 97), trades 516, no-move days 55, no trade but a move 0, days with a print stamped exactly at the instant 1, rewrite days 0, fill delay after the decision ms min/med/max 85.01/123.702/1047.0 | BAD: none
+  W straddle_wide_0830 offA_offx1p5-r1: days 571, armed 571, trades 428, rewrite days 226 | BAD: none
+  W straddle_wide_0830 offD_offx1-r1: days 571, armed 571, trades 129, rewrite days 226 | BAD: none
+  W straddle_wide_1000 offA_offx1-r1: days 571, armed 571, trades 543, rewrite days 97 | BAD: none
+  W anchor age (ms before the arming instant) med 340.5, p95 3282.1, max 14495.6
+  STORE event_dir_0830 x0p25_pts2p5-r0: store 292 trades $-1,618 | from scratch 292 trades $-1,618 | days that differ 0 [] | skipped days same True
+  STORE event_dir_0830 x5_atr1p5-r2: store 454 trades $-16,154 | from scratch 454 trades $-16,154 | days that differ 0 [] | skipped days same True
+  STORE event_dir_1000 x5_pct0p1-r0: store 516 trades $-5,876 | from scratch 516 trades $-5,876 | days that differ 0 [] | skipped days same True
+  STORE straddle_wide_0830 offA_offx1p5-r1: store 428 trades $-4,774 | from scratch 428 trades $-4,774 | days that differ 0 [] | skipped days same True
+  STORE straddle_wide_0830 offD_offx1-r1: store 129 trades $346 | from scratch 129 trades $346 | days that differ 0 [] | skipped days same True
+  STORE straddle_wide_1000 offA_offx1-r1: store 543 trades $-11,772 | from scratch 543 trades $-11,772 | days that differ 0 [] | skipped days same True

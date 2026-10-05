@@ -1,17 +1,21 @@
 {
  "name": "straddle_tight_1000_GC_tf30_nyam_evC",
+ "uid": "E3-C-GC",
+ "idea": "tight bracket at 10:00 ET, 10:00 release days",
  "family": "straddle_tight_1000",
  "root": "GC",
  "tf": "30",
  "sess": "nyam",
- "cell": "offA_pts1p6-r1",
+ "label": "",
+ "group": "C",
+ "side": null,
  "inputs": {
   "tf": "30",
   "sess": "all",
   "dir": "both",
   "stop_mode": "pts",
-  "stop_val": 1.6,
-  "tgt_r": 1.0,
+  "stop_val": 1.0,
+  "tgt_r": 2.0,
   "trail_atr": 0.0,
   "exit_bars": 0,
   "max_tr": 1,
@@ -31,263 +35,23 @@
   "shift_max": 90,
   "off": "A"
  },
+ "rule": "One second before 10:00 ET: a buy stop 0.6 points above the price and a sell stop 0.6 points below (one cancels the other; unfilled orders are cancelled after 5 minutes). One trade a day. Stop 1 points; target 2 x the stop. Session: New York morning (09:30-11:00 ET); flat by 15:58 ET. Traded ONLY on days with a 10:00 ET release (ISM manufacturing, ISM services, JOLTS, Michigan sentiment prelim).",
  "rationale": "The first seconds after a scheduled time are one-way; a tight bracket catches the burst with a small stop (10:00 ET).",
  "complexity": 6,
- "weak": false,
- "l2": false,
- "penalty": null,
- "second_look": null,
- "mirror": null,
- "notes": "N7 straddle_tight 10:00 ET: OCO stop entries at last price +/- off points (A / B / C: NQ 3 / 5 / 8, ES 0.75 / 1.25 / 2, GC 0.6 / 1 / 1.6), placed at 09:59:59, unfilled legs cancelled 5 min later, entries until 11:00; own exits: stop NQ 5 / 8 / 10 pts (ES 1.25 / 2 / 2.5, GC 1 / 1.6 / 2) x target 1:1 / 1:2 / 1:3; null = the same bracket at random minutes (shift_seed). Second chance of the old NQ 09:30 straddle. CARD: the bracket is live within a second of the event -> the 2 ticks + 250 ms stress is the real gate; STAGE 3 EVENT FILTER `C`: trades only on days with a 10:00 ET release (ISM manufacturing, ISM services, JOLTS, Michigan sentiment prelim) (97 such sessions on BUILD, 46 in 2024; calendar = engine/cache/events.csv, official release dates, never checked against prices). STAGE 3 reason (written before any event-split number): a scheduled US data release reprices the market in one burst in the first seconds; a bracket placed just before catches it whichever way. The control in both periods is the same bracket fired at a random minute (2 seeds) on the same days. This is the BUILD central variant (library.plateau on the filtered table); no other variant may replace it.",
- "hold_to": "day",
+ "flags": [
+  "SECOND LOOK on 2024 (this 2024 table was already opened in an earlier stage)",
+  "BURST FILL RISK: a two-sided bracket over a data release; the simulator fills the stop on the trigger print (out/events_summary.md section 5: with a fill 1-25 ms later most of the profit of the v1 defaults went)",
+  "thin control (random-minute store: 2 seeds on disk)"
+ ],
+ "cell": "offA_pts1-r2",
+ "default_rule": "survivors sorted by (BUILD net, variant order); the middle one; an even count takes the lower of the two middle ones",
+ "admission": "v2 (EDGE_SPEC ADMISSION v2: the average of all variants)",
  "admit": true,
- "failed": [],
- "tests": {
-  "net_build": {
-   "pass": true,
-   "net": 8202.0
-  },
-  "net_pick": {
-   "pass": true,
-   "net": 4166.0
-  },
-  "plateau_build": {
-   "pass": true,
-   "cells": 27,
-   "median_net": 8202.0,
-   "share_pos": 1.0,
-   "member": "offA_pts1p6-r1"
-  },
-  "beats_c1_build": {
-   "pass": true,
-   "lift": 11056.0,
-   "mean": -2854.0,
-   "p95": -1194.0,
-   "p_beat": 1.0,
-   "fallback_share": 0.0,
-   "short": 0,
-   "pool_trades": 192
-  },
-  "stress_build": {
-   "pass": true,
-   "base": 8202.0,
-   "stressed": 6972.0,
-   "stress": "2 ticks + 250 ms"
-  },
-  "beats_c1_pick": {
-   "pass": true,
-   "lift": 5318.0,
-   "mean": -1152.0,
-   "p95": -900.0,
-   "p_beat": 1.0,
-   "fallback_share": 0.0,
-   "short": 0,
-   "pool_trades": 91
-  },
-  "stress_pick": {
-   "pass": true,
-   "base": 4166.0,
-   "stressed": 3396.0,
-   "stress": "2 ticks + 250 ms"
-  },
-  "above_best_of_nulls_build": {
-   "pass": true,
-   "t_build": 6.095719833279624,
-   "bar": 1.627917623785153,
-   "nulls": 26,
-   "thin": false
-  },
-  "min_trades": {
-   "pass": true,
-   "build": 97,
-   "pick": 46,
-   "need": 100
-  },
-  "open_loss_fits": {
-   "pass": true,
-   "worst_open_loss_per_micro": 19.0,
-   "micros_fit_worst": 105,
-   "micros_fit_p99": 110,
-   "limit": 2000.0
-  },
-  "rationale": {
-   "pass": true,
-   "complexity": 6
-  }
- },
- "plateau": {
-  "build": {
-   "pass": true,
-   "cells": 27,
-   "cells_all": 27,
-   "info": 0,
-   "dead": 0,
-   "duplicates": 0,
-   "median_net": 8202.0,
-   "share_pos": 1.0,
-   "positive": 27,
-   "member": "offA_pts1p6-r1",
-   "member_net": 8202.0,
-   "best": "offA_pts1p6-r3",
-   "best_net": 15622.0,
-   "worst_net": 450.0,
-   "verdicts": {
-    "60": true,
-    "70": true,
-    "80": true
-   },
-   "shares": {
-    "overall": {
-     "cells": 27,
-     "positive": 27,
-     "share_pos": 1.0,
-     "median_net": 8202.0,
-     "verdicts": {
-      "60": true,
-      "70": true,
-      "80": true
-     }
-    },
-    "by_stop": {
-     "fixed": {
-      "cells": 27,
-      "positive": 27,
-      "share_pos": 1.0,
-      "median_net": 8202.0,
-      "verdicts": {
-       "60": true,
-       "70": true,
-       "80": true
-      }
-     }
-    },
-    "by_target": {
-     "r1": {
-      "cells": 9,
-      "positive": 9,
-      "share_pos": 1.0,
-      "median_net": 5112.0,
-      "verdicts": {
-       "60": true,
-       "70": true,
-       "80": true
-      }
-     },
-     "r2": {
-      "cells": 9,
-      "positive": 9,
-      "share_pos": 1.0,
-      "median_net": 8462.0,
-      "verdicts": {
-       "60": true,
-       "70": true,
-       "80": true
-      }
-     },
-     "r3": {
-      "cells": 9,
-      "positive": 9,
-      "share_pos": 1.0,
-      "median_net": 9916.0,
-      "verdicts": {
-       "60": true,
-       "70": true,
-       "80": true
-      }
-     }
-    }
-   }
-  },
-  "pick": {
-   "pass": true,
-   "cells": 27,
-   "cells_all": 27,
-   "info": 0,
-   "dead": 0,
-   "duplicates": 0,
-   "median_net": 3396.0,
-   "share_pos": 1.0,
-   "positive": 27,
-   "member": "offA_pts1-r2",
-   "member_net": 3396.0,
-   "best": "offA_pts2-r3",
-   "best_net": 10356.0,
-   "worst_net": 1336.0,
-   "verdicts": {
-    "60": true,
-    "70": true,
-    "80": true
-   },
-   "shares": {
-    "overall": {
-     "cells": 27,
-     "positive": 27,
-     "share_pos": 1.0,
-     "median_net": 3396.0,
-     "verdicts": {
-      "60": true,
-      "70": true,
-      "80": true
-     }
-    },
-    "by_stop": {
-     "fixed": {
-      "cells": 27,
-      "positive": 27,
-      "share_pos": 1.0,
-      "median_net": 3396.0,
-      "verdicts": {
-       "60": true,
-       "70": true,
-       "80": true
-      }
-     }
-    },
-    "by_target": {
-     "r1": {
-      "cells": 9,
-      "positive": 9,
-      "share_pos": 1.0,
-      "median_net": 2796.0,
-      "verdicts": {
-       "60": true,
-       "70": true,
-       "80": true
-      }
-     },
-     "r2": {
-      "cells": 9,
-      "positive": 9,
-      "share_pos": 1.0,
-      "median_net": 3396.0,
-      "verdicts": {
-       "60": true,
-       "70": true,
-       "80": true
-      }
-     },
-     "r3": {
-      "cells": 9,
-      "positive": 9,
-      "share_pos": 1.0,
-      "median_net": 5586.0,
-      "verdicts": {
-       "60": true,
-       "70": true,
-       "80": true
-      }
-     }
-    }
-   }
-  }
- },
- "nulls_bar": {
-  "bar": 1.627917623785153,
-  "nulls": 26,
-  "thin": false,
-  "stat": "t"
- },
+ "variants_judged": 27,
+ "survivors": 25,
  "contracts": 1,
+ "hold_to": "day",
+ "day_filter": "event group C",
  "periods": {
   "build": [
    "2021-09-22",
@@ -298,5 +62,77 @@
    "2024-12-31"
   ]
  },
- "written_utc": "2026-10-04T13:16:13+00:00"
+ "tests": {
+  "1_build_share_and_average": true,
+  "2_build_real_edge": {
+   "days": {
+    "per_trade": 85.52,
+    "unfiltered_per_trade": -9.42,
+    "lift_per_trade": 94.94,
+    "days_in": 97,
+    "days_all": 565,
+    "replicates": 4000,
+    "real_replicates": 4000,
+    "thin": false,
+    "p_beat": 1.0,
+    "subset_p95": 16.92,
+    "pass": true
+   },
+   "shift": {
+    "pass": true,
+    "lift": 9603.41,
+    "p_beat": 1.0,
+    "ctl_mean": -1393.33,
+    "ctl_p95": 263.18,
+    "ctl_sd": 866.75,
+    "replicates": 200,
+    "real_replicates": 2,
+    "thin": true,
+    "raw": [
+     -2544.5925925925926,
+     -242.0740740740738
+    ]
+   }
+  },
+  "3_trades": {
+   "build_avg": 96.0,
+   "build_plus_2024_avg": 142.0
+  },
+  "4_2024_average_and_median": {
+   "avg": 4308.592592592592,
+   "median": 3396.0
+  },
+  "5_2024_lift": {
+   "days": {
+    "per_trade": 93.67,
+    "unfiltered_per_trade": -3.6,
+    "lift_per_trade": 97.27,
+    "days_in": 46,
+    "days_all": 250,
+    "replicates": 4000,
+    "real_replicates": 4000,
+    "thin": false,
+    "p_beat": 1.0,
+    "subset_p95": 33.79,
+    "pass": true
+   },
+   "shift": {
+    "pass": true,
+    "lift": 4710.7,
+    "p_beat": 1.0,
+    "ctl_mean": -402.11,
+    "ctl_p95": 722.48,
+    "ctl_sd": 686.78,
+    "replicates": 200,
+    "real_replicates": 2,
+    "thin": true,
+    "raw": [
+     -506.6666666666667,
+     -297.5555555555553
+    ]
+   }
+  },
+  "6_2024_stress_average": 3301.1111111111113
+ },
+ "written_utc": "2026-10-04T16:27:04+00:00"
 }

@@ -1,0 +1,20 @@
+ema_pullback-NQ-tf15|mid|                  2024 stress: avg     -2636 (base       815) share>0 0.406 | (6) fail | variants positive in BUILD, 2024 and 2024 stress: 12 of 32
+first_bar_mom-ES-tf15|mid|                 2024 stress: avg       436 (base      2681) share>0 0.453 | (6) PASS | variants positive in BUILD, 2024 and 2024 stress: 33 of 95
+first_bar_mom-NQ-tf15|mid|                 2024 stress: avg      3251 (base      3985) share>0 0.427 | (6) PASS | variants positive in BUILD, 2024 and 2024 stress: 40 of 96
+first_bar_mom-NQ-tf30|mid|                 2024 stress: avg      9150 (base     11239) share>0 0.729 | (6) PASS | variants positive in BUILD, 2024 and 2024 stress: 51 of 96
+orb-NQ-tf15|pre|                           2024 stress: avg      8258 (base     10886) share>0 0.594 | (6) PASS | variants positive in BUILD, 2024 and 2024 stress: 51 of 96
+straddle_t_0830-NQ-tf30|pre|               2024 stress: avg      5599 (base      7328) share>0 0.469 | (6) PASS | variants positive in BUILD, 2024 and 2024 stress: 68 of 160
+straddle_t_1800-NQ-tf30|eve|               2024 stress: avg      6810 (base     12460) share>0 0.487 | (6) PASS | variants positive in BUILD, 2024 and 2024 stress: 70 of 160
+tema_slope-NQ-tf30|eve|                    2024 stress: avg      9763 (base     11967) share>0 0.646 | (6) PASS | variants positive in BUILD, 2024 and 2024 stress: 54 of 96
+straddle_tight_0830-GC-tf30|pre|           2024 stress: avg     -1785 (base      2727) share>0 0.333 | (6) fail | variants positive in BUILD, 2024 and 2024 stress: 9 of 27
+straddle_tight_0830-NQ-tf30|pre|           2024 stress: avg      3474 (base      5548) share>0 0.704 | (6) PASS | variants positive in BUILD, 2024 and 2024 stress: 19 of 27
+vol_spike_break-NQ-tf30|pm|                2024 stress: avg      -507 (base       333) share>0 0.479 | (6) fail | variants positive in BUILD, 2024 and 2024 stress: 35 of 91
+E1-A-NQ                                    2024 stress: avg      3001 (base      3937) share>0 0.889 | (6) PASS | variants positive in BUILD, 2024 and 2024 stress: 24 of 27
+E1-A-GC                                    2024 stress: avg      4105 (base      5910) share>0 0.963 | (6) PASS | variants positive in BUILD, 2024 and 2024 stress: 26 of 27
+E1-B-NQ                                    2024 stress: avg      2674 (base      3272) share>0 0.741 | (6) PASS | variants positive in BUILD, 2024 and 2024 stress: 20 of 27
+E1-B-ES                                    2024 stress: avg      -160 (base      1197) share>0 0.481 | (6) fail | variants positive in BUILD, 2024 and 2024 stress: 11 of 27
+E1-B-GC                                    2024 stress: avg      3011 (base      4414) share>0 0.815 | (6) PASS | variants positive in BUILD, 2024 and 2024 stress: 22 of 27
+E3-C-NQ                                    2024 stress: avg      2619 (base      3242) share>0 0.963 | (6) PASS | variants positive in BUILD, 2024 and 2024 stress: 26 of 27
+E3-C-ES                                    2024 stress: avg      -799 (base       178) share>0 0.111 | (6) fail | variants positive in BUILD, 2024 and 2024 stress: 3 of 27
+E3-C-GC                                    2024 stress: avg      3301 (base      4309) share>0 1.000 | (6) PASS | variants positive in BUILD, 2024 and 2024 stress: 27 of 27
+(6) passes 14 | BUILD stress jobs 11, cells 471

@@ -1,0 +1,20 @@
+[
+ {
+  "c1": true,
+  "root": "NQ",
+  "tf": "1",
+  "sess": "eve",
+  "period": "pick",
+  "stress": true,
+  "why": "v2 PLACEBO: stress of a random-entry store (a control, no candidate)"
+ },
+ {
+  "c1": true,
+  "root": "NQ",
+  "tf": "1",
+  "sess": "eve",
+  "period": "build",
+  "stress": true,
+  "why": "v2 PLACEBO: stress of a random-entry store (a control, no candidate)"
+ }
+]

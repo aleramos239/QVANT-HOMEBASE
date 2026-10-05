@@ -1,0 +1,71 @@
+{
+ "name": "r3_vwap_pull",
+ "reason": "On a day that trends away from its average price, dips get bought (and rallies sold) by traders who missed the move. We enter on the first bar against the trend while price is still on the trend side of the day's average price.",
+ "family": "vwap_trend_pull",
+ "markets": [
+  "NQ",
+  "ES",
+  "GC"
+ ],
+ "bar_sizes": [
+  "5",
+  "15",
+  "30"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "params": {
+  "x": [
+   0.05,
+   0.1,
+   0.2
+  ]
+ },
+ "filters": [
+  {
+   "block": "volatility",
+   "side": "high"
+  },
+  {
+   "block": "volatility",
+   "side": "low"
+  },
+  {
+   "block": "momentum",
+   "side": "with"
+  },
+  {
+   "block": "momentum",
+   "side": "against"
+  },
+  {
+   "block": "volume",
+   "side": "high"
+  },
+  {
+   "block": "volume",
+   "side": "low"
+  },
+  {
+   "block": "news",
+   "side": "yes"
+  },
+  {
+   "block": "news",
+   "side": "no"
+  },
+  {
+   "block": "book",
+   "side": "agree"
+  },
+  {
+   "block": "book",
+   "side": "disagree"
+  }
+ ],
+ "exits": "extended",
+ "limits": {}
+}

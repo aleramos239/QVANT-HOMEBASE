@@ -152,7 +152,8 @@ def test_gc_tape_is_the_testers_tape(tmp_path):
     assert t.root == "GC" and t.contract == h["contract"] and len(t.ts) == h["n"] and t.daily == h["daily"]
     assert bool((np.diff(t.ts) >= 0).all()) and t.daily == {"h": float(t.px.max()), "l": float(t.px.min()), "c": float(t.px[-1])}
     own = sorted(p.name for p in (S.OWN_TAPE / "GC").glob("*.tape")) if (S.OWN_TAPE / "GC").exists() else []
-    assert all(x[:10] < "2025-01-01" for x in own)              # build_tapes never builds an EXAM session
+    assert all(x[:10] < "2026-01-01" for x in own)              # build_tapes never builds an EXAM session (2026+; the CHECK
+    #                                                             year 2025 is built with allow_check=True: test_check_period.py)
 
 
 class NfpStraddle(S.Strategy):

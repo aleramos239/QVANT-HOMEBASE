@@ -20,7 +20,8 @@ def test_the_three_periods_are_defined_once_and_do_not_overlap():
     with pytest.raises(KeyError):
         S.period("holdout")
     assert [S.period_of(*x) for x in (S.BUILD, S.PICK, S.IN_SAMPLE, ("2025-01-02", "2025-03-01"), ("2024-12-01", "2025-01-10"),
-                                      ("2022-03-01", "2022-03-31"))] == ["build", "pick", "insample", "exam", "mixed", "build"]
+                                      ("2022-03-01", "2022-03-31"))] == ["build", "pick", "insample", "check", "mixed", "build"]
+    assert S.period_of("2026-01-02", "2026-03-01") == "exam"   # 2025 alone is the CHECK year since "PERIODS AMENDED" (test_check_period.py)
 
 
 @pytest.mark.parametrize("root", ["NQ", "ES", "GC"])

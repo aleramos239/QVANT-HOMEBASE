@@ -346,3 +346,88 @@ tf 30), `open_fade` (N5, tf 1/5, nyam), `vol_spike_break` (N6, tf 1/5/15/30, all
   all seven, next-bar entries, value area from yesterday's RTH prints only, limits, 1 vs 8 workers, stores with author
   cells). Smoke, counts only: `python out/engine_owner/round1_smoke.py NQ` → `out/engine_owner/round1_smoke_NQ.log`
   (`run_menus.smoke` now also counts `entry_outside_hours` from the module's `ENTRY_WINDOWS`).
+
+## 14. STAGE 4 — EVENT ENTRY VARIANTS (`engine/families/round2.py`): how it is declared and run
+Written from EDGE_SPEC "STAGE 4" before any result (engine coder, P&L-blind). Four registry entries, all time-fired (tf 30,
+ONE instance per cell, `hold_to = day`, NQ / ES / GC, 1 contract). They run on EVERY BUILD day; the release-day filter
+(groups A / B / C of the STAGE 3 calendar) is laid on the stored trades by the analyst.
+* **W `straddle_wide_0830` / `_1000`** = round1's `straddle_tight` with the wider written offsets: OCO stop entries at the last
+  print ± `off` (A / B / C / D: NQ 10 / 15 / 20 / 30, ES 2.5 / 4 / 5 / 8, GC 2 / 3 / 4 / 6 points), placed 1 s before the clock
+  time, unfilled legs cancelled 5 min after it was placed, entries until 09:30 / 11:00. Own exits (`unit_exits`): **new
+  `stop_mode = "offx"`** (this class only) = stop distance from the fill = `stop_val` {0.5, 1, 1.5} × the cell's offset;
+  target 1:1 / 1:2 / 1:3. 4 × 9 = 36 cells, ids like `offA_offx0p5-r1`. `library.plateau` shows them as stop group `offx`.
+* **D `event_dir_0830` / `_1000`**: anchor = the last print STRICTLY BEFORE the release time T (`ctx.last_price` at the T
+  event). Decision at T + `x` (`x` = 0.25 / 0.5 / 1 / 2 / 5 / 15 / 60 s): the last print stamped AT OR BEFORE T + x vs the
+  anchor → ONE market order that way (`_mkt`, live after the order delay: 85 ms, stress 250 ms; fills at the first print
+  from then on + slippage); no move (or no print since T) = no trade; one decision and one trade a day. Stop reference =
+  the decision print; ATR stops = ATR30. Exits = the 32 menu cells: 7 × 32 = 224 cells, ids like `x0p25_atr1p5-r2`.
+  `both_sides` False (one direction, no resting order).
+* **Engine change (one line): `l2sim.et_ns` keeps a fraction of a second** (`'HH:MM:SS.ffffff'`; it was cut off before).
+  A whole-second time gives the value it always gave. `EventDir` writes its decision time always with the fraction and
+  takes that event in its own `on_time`, so the Template's whole-second clock never sees it. Gates on the final file
+  (l2sim.py sha256/16 72369e8b94b85172): `edge_validate.py`, `port2_validate.py --fresh`, `port3_validate.py` ALL PASS
+  (logs `out/engine_owner/stage4/*_final.log`); the same three also passed on the file as it stood after the `oco_cancel_ms`
+  edit (bc7394332573ff85). Full suite 1,420 passed, 2 skipped by design.
+* **Nulls** (`shift_seed` 1, 2, the unit's `-shift` store, same tape pass): W = the same bracket at a seeded random minute
+  within ± 90 min (as `straddle_tight`); D = the SAME entry at the same instant on the same days with a seeded coin-flip
+  direction per (seed, date, clock time) — the same flip for every `x` and exit cell (as `late_mom`). No C1 pool is needed.
+* **Plan** (`python run_menus.py plan --group round2`, saved in `out/engine_owner/stage4/plan_round2.txt`): 12 run units,
+  1,560 candidate cells (D 6 × 224, W 6 × 36) + 3,120 own null cells; cap 43,388 used + 1,560 = 44,948 of 50,000 → fits,
+  5,052 left. The 18 JUDGED units = {W, D} × {A, B, C} × 3 markets are day filters on these 12 stores.
+* **Run** (restartable: a stored key is skipped; ≤ 8 workers; waits out 09:18–09:36 ET by itself):
+  `cd W && nohup "~/ONYX TRADING/.venv/bin/python" run_menus.py run --group round2 --roots NQ,ES,GC --workers 8 >> out/run_agent/round2.log 2>&1 &`
+  then `python run_menus.py status --group round2`.
+* **Tests / smoke.** `tests/test_round2.py` (23 tests: registry, grids and plan; `et_ns` fraction; D direction, anchor
+  strictly before T, prints at / 1 ns after T + x, order live only after T + x + delay, one trade a day, ES / GC ticks, the
+  null; garbage after the decision instant changes no decision — synthetic and 3 real days; W bracket, cancel, null,
+  no look-ahead; 1 vs 8 workers on NQ and GC). Smoke, counts only: `python out/engine_owner/round2_smoke.py NQ|GC` →
+  `out/engine_owner/round2_smoke_<ROOT>.log`: ALL OK on both (0 errors, 0 entries outside the window, max 1 trade a day,
+  worker parity; GC uses 9 of the 10 smoke days).
+* **Read before judging (print counts only, `out/engine_owner/stage4/burst_timing.json`).** On the 159 tier-1 08:30 days of
+  BUILD the tape's burst comes about 1.25 s AFTER 08:30:00 (median start of the busiest 250 ms; it lies in the first
+  0.5 s on only 13–17 % of days; median 2 prints in the first 0.25 s, none at all on 14–25 % of days). So at 08:30
+  `x` = 0.25 / 0.5 s mostly decide BEFORE the burst (or do not trade). At 10:00 the burst is in the first 0.25 s on 63–75 %
+  of days. Nothing was changed for it: the written X stay as written.
+
+## 15. BLOCKS AND IDEA SPECS (`engine/families/blocks.py`, `run_idea.py`): an idea = settings, not new code
+Written 2026-10-05 (engine coder, P&L-blind; EDGE_SPEC "WORKBENCH PLAN" 2). Nothing in `l2sim.py`, `library.py`, `run_menus.py`
+or another family module was changed. Full definitions: the docstring of `blocks.py`; tests: `tests/test_blocks.py` (44).
+* **How it works.** `blocks.Blocks` is a mixin put IN FRONT of a family class: `blocks.WRAPPED[name]` = `B_<name>(Blocks, <the
+  registered class>)` for every bar-based library family without Level-2 features (27; time-fired families are left out). It
+  overrides two Template methods only: `allowed(side)` (the filters) and `_dist` (the range stop). All blocks default off, and then
+  a wrapped family is trade for trade the original (proved on 10 BUILD days x 3 markets x 6 families). A block is read **when the
+  family places its order**: the signal bar's close for a market entry, the placement instant for a resting bracket (orb / ib_n:
+  the range end) — never at a later fill; a direction filter on a two-sided bracket keeps the leg it allows. A filter with no
+  signal blocks the entry on BOTH sides.
+* **Exit blocks.** `stop_mode = "rng"`: stop = `stop_val` x the height of the family's own structure (`blocks.HEIGHTS`: orb /
+  orb_confirm opening range, ib / ib_n range, lon_break London range, donchian n-bar channel, vol_spike_break 20-bar channel,
+  first_bar_mom signal bar); floor 2 ticks; no structure yet = no entry; a family without one refuses the mode. More ATR stops and
+  targets are menu cells only: `blocks.menu_extended(root)` = the 32 standard cells (same order and ids) + stops ATR x 1 / x 2 and
+  range x 0.25 / 0.5 / 1, targets + 1.5 and 4 → 78 cells (60 without a structure). `library.plateau` shows the stop group as `rng`.
+* **Filter blocks** (`blocks.FILTERS`: block → side → input). `volatility` high / low (`f_dvol`): the prior day's range above / not
+  above the median of the 20 daily ranges ending with it (= out/deepen/labels.py T2). `momentum` with / against (`f_rsi`): Wilder
+  RSI(14) of the closed tf bars since the restart, > 50 for a long with it. `volume` high / low (`f_cvol`): the volume from
+  the session's anchor (asia 00:00, london 03:00, pre 08:25, nyam / mid / pm 09:30, eve 18:00: `blocks.VOL_ANCHOR`) to the decision
+  vs the median of the same clock window over the 20 prior trade dates (`cache/minvol_<ROOT>.npz`, built by
+  `blocks.build_minvol(root, period)`; a worker that misses a date reads that date's tape). `news` yes / no (`f_news`): the trade
+  date has a row at 08:30 or 10:00 ET in `cache/events.csv`. `book` agree / disagree (NQ): agree = the Template's own `f_book="on"`,
+  disagree = `f_bookopp="on"` (the same `l2sim.book_mean5`, opposed). Dead by warm-up (entry counts): RSI needs 15 closes since
+  00:00 / 18:00 (tf 30: from 07:30, never in asia / eve; tf 15: from 03:45, eve from 21:45).
+* **`ib_n`** (registered by `blocks.py`; group `blocks`): `port1.Ib` with `ib_min` 5 / 15 / 30 / 60 minutes from 09:30 (60 = ib, trade
+  for trade), tf 5 / 15 / 30, NY sessions.
+* **An idea** = `ideas/specs/<name>.json`: name, reason (required, plain words), family, markets, bar_sizes, sessions, params (main
+  values; every combination = a variant), fixed, filters (each = one separate filter unit), exits `standard` | `extended`,
+  optional filter_exits, limits (max_tr, dir, exit_bars, trail_atr). `run_idea.py plan | build | status | catalog | smoke <spec>`
+  (its docstring has the format). Units: `<name>-<ROOT>-tf<tf>` and `<name>__<block>_<side>-<ROOT>-tf<tf>` in `runs/` (run.json
+  `family` = the entry family, `idea`, `filter`), stage `build`, hold_to = day, one instance per session of the spec. `judge.py`
+  addresses a unit as `<key>-<session>`; `run_idea.py catalog '<pattern>' --out f.csv` → `judge.py table --stage f.csv`.
+* **Controls** (stage `null`): the C1 pool `c1-<ROOT>-tf<tf>` (standard cells); `c1x-<ROOT>-tf<tf>` = the same random entries for the
+  extended cells without a structure (ids `s<seed>_<exit id>`); `<name>__c1r-<ROOT>-tf<tf>` = random entries carrying the idea's own
+  structure height (`blocks.CONTROLS`, ids `s<seed>_<structure inputs>_<exit id>`); a book unit also `<key>-c2s1 / -c2s2` (shuffled
+  book). **judge.py does not read `c1x` / `c1r` yet**: until it does, an extended table fails its control with "no pool cell".
+* **Cap**: `run_idea.CAPS` = 80,000 candidate cells, handed to the ledger calls (library.CAPS still says 50,000); a spec whose
+  pending cells do not fit is refused as a whole. ≤ 8 workers (`l2sim.MAX_WORKERS`); two builds of different specs can run side by side.
+* **Adding a block**: one input in `Blocks.DEFAULTS / SCHEMA`, one check in `Blocks.allowed`, one `FILTERS` entry, and its three
+  tests (does what it says; garbage after the decision changes nothing; 1 vs 8 workers). A new structure = one `HEIGHTS` entry.
+* **Open**: filters are not read at the FILL of a resting bracket; `f_bookopp` without a feature table trades nothing (silently,
+  as `f_book`); a period other than BUILD needs `build_minvol(root, period)` first or reads the tapes on the fly.

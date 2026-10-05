@@ -345,3 +345,73 @@ trade beats the unfiltered one on BUILD and again on 2024, and beats 95 % of ran
   below its 20-day median — already run, kept for the new cells), volume (the day's volume up to the signal vs the 20-day median
   for the same clock time: above / below), Level 2 on NQ (top-10 book imbalance agrees with the trade at the signal: yes / no).
 Bar sizes 5 and 15 (1 and 30 where already run). Judged by ADMISSION v2.
+
+## WORKBENCH PLAN (user-approved 2026-10-04 ~12:30 ET; vault `research-workbench-plan`)
+1 ONE FIXED JUDGE: ADMISSION v2 as one tested command (unit in -> verdict + card out); built from the v2 re-judge scripts; after
+  it is verified once, later rounds use it and get spot checks only.
+2 IDEAS AS SETTINGS: tested blocks (entry / filters / stop / target / time window); a new idea = a few lines of settings.
+3 SLOW WORK ONCE: store entries, apply the exit table to them; reuse bars, ranges, day labels, random controls; 12 workers off-hours.
+4 INSIDE HOMEBASE (after the weekly token reset): a "test an idea" tester job (whole table, random control, sealed years), results on
+  the heat-map page, callable through the MCP connector; EVERY idea and block saved as a preset in the Backtest tab (Lab drafts).
+The guards stay (random-entry test, unseen year, look-ahead tests): automated, not removed.
+- Screens for step 4: option A (user 2026-10-04) — engine, data and connector here; screens by the redesign chat.
+
+## PERIODS AMENDED — user decision 2026-10-04 ~13:30 ET ("A"): open 2025, keep 2026 sealed (written before any 2025 number exists)
+Why: about 50,000 cells have been run on 2021-2024 and 2024 has been opened for most near-misses; the v2 placebo says the non-event
+members are not shown to be more than luck. The only clean data left is 2025+.
+NEW PERIODS: BUILD 2021-09-22..2023-12-31 · PICK 2024 · CHECK 2025-01-01..2025-12-31 (opened now) · EXAM 2026-01-01..latest (SEALED:
+never read, the engine must refuse it; the final exam for groups, once).
+FIRST USE OF 2025 — the v2 members that the independent checker confirms (one read each, whole menu + its control, logged in
+out/check2025/reads.csv). Judged ON ITS OWN with the same three tests as 2024: (4) the AVERAGE of all variants profitable and the
+median variant profitable; (5) the average beats the random-entry average (lift > 0); (6) the average stays profitable under
+2 ticks + 250 ms (+ 100 ms late sibling cancel for two-sided brackets). Verdicts: CONFIRMED (passes all three) / WEAK (average
+profitable but fails (5) or (6)) / FAILED (average not profitable). Nothing is re-tuned after the read; the default variant and
+the surviving set stay as saved (report the default's 2025 result and how many saved variants are profitable in 2025).
+Families whose old finalist was already seen on 2025-26 in an earlier pilot keep the SECOND LOOK flag.
+FROM NOW ON 2025 is the check year for new ideas: BUILD -> PICK (2024) -> CHECK (2025), each judged on its own by ADMISSION v2.
+
+## ADMISSION v2 — CHECKER FIXES (orchestrator, 2026-10-05 ~09:50 ET; written before any 2025 number exists; all make the rule
+## steadier or stricter, none looser)
+The independent check (out/check_v2/) reproduced every number and confirmed the 14 members under the rule as coded, with these fixes:
+F1 Test (2) uses 4,000 random draws for every unit (200 was a coin flip within ~2 points of the 95 % line). Units that pass at
+   4,000 and were kept closed get their year opened; units opened on a lucky 200-draw seed all failed 2024 anyway.
+F2 THIN CONTROLS: every control had 2 random seeds. From now on the random-entry pools and the random-minute / random-direction
+   stores have 10 seeds for any unit that is a member or a BUILD passer, on every period that is judged; the judge uses every seed
+   on disk. A member that no longer beats 95 % of random tables on BUILD with the 10-seed control is DEMOTED to "luck not excluded"
+   (kept on file, not counted as edge). Cards show both percentiles (2-seed and 10-seed).
+F3 "More than 60 %" is strict (> 60 %).
+F4 The "<= 5 s" share is reported two ways: fast winners / all winners (gross) and net profit of trades held <= 5 s / total net
+   profit (Lucid's wording is about profits); the FAST flag uses the net version.
+F5 On a later year the judged variant list is the BUILD list (no second de-duplication on that year's trades).
+F6 pick / check read logs list every store used, new or re-used.
+F7 The 464 stage-2a side tables are NOT re-judged: filters are re-tested as blocks in round 3 under the filter rule.
+PENDING UNDER F1 (2024 already on disk or to be opened): donchian NQ 30-min morning (v1 member; passes (4),(5) on disk; finish the
+whole-menu stress) -> likely a 15th member; vol_spike_break NQ 5-min afternoon, donchian NQ 5-min afternoon, vwap_z NQ 30-min
+midday -> re-judge BUILD with the 10-seed control first, open 2024 only if they still pass.
+2025 (CHECK) is run for the 14 members + donchian NQ 30-min morning if admitted, as pre-registered; the F2 result is reported next to it.
+
+## FULL OUT-OF-SAMPLE FOR THE SAVED STRATEGIES — user decision 2026-10-05 ~10:00 ET (written before any 2025 or 2026 number exists)
+User: "Run 2026 for just these if they meet the requirement, fully finish the OOS so we know which are fully overfit or fully real."
+1. 2025 first, as pre-registered (PERIODS AMENDED): each saved strategy (the 14 v2 members + donchian NQ 30-min morning if admitted
+   under fix F1), whole menu + 10-seed control + stress, judged on its own by tests (4)-(6).
+2. 2026 ONLY for the strategies that pass all three tests on 2025 (CONFIRMED). Period = 2026-01-01 to the last complete session
+   on disk (state the date). Whole menu + 10-seed control + stress, with the explicit exam flag, ONE read per strategy, logged in
+   out/exam2026/reads.csv. Judged on its own by the same tests (4)-(6). Nothing is re-tuned between or after the reads.
+3. Verdict per strategy, in these words:
+   REAL        = passes 2025 AND 2026.
+   OVERFIT     = the average variant is not profitable on 2025 (2026 not run).
+   NOT PROVEN  = everything in between: profitable on 2025 but fails the random or slippage test (2026 not run), or passes 2025
+                 and fails 2026 (say which test).
+   Also reported for each: the 10-seed BUILD percentile (fix F2), profit per year 2021-2026 for the average and the default
+   variant, how many saved variants are profitable in each unseen year, trades, drawdown, share of profit from trades <= 5 s.
+4. 2026 stays SEALED for everything else: no other unit, no new idea, and no result from these reads may be used to design or
+   tune anything. After the report the orchestrator STOPS until the user says (directive of 09:55 ET).
+
+## RULING BEFORE THE 2025 SCORING (orchestrator, 2026-10-05 ~11:30 ET; no 2025 number has been printed or opened)
+The judge tool (judge.py, regression-locked to out/v2) with the 10-seed controls on BUILD and 2024 gives:
+- donchian NQ 30-min morning passes all six tests -> 15th saved strategy (fix F1).
+- straddle_t_0830 NQ (wide 08:30 bracket) and straddle_t_1800 NQ (18:00 bracket) FAIL test (5) on 2024 against the 10-seed control
+  (lift -$1,675 and -$360; they passed only with the first 2 seeds) -> DEMOTED, "luck not excluded" (cards kept on file).
+For the full out-of-sample: all 15 units are scored on 2025 (as pre-registered); the two DEMOTED units do not meet the requirement,
+so their 2025 result is reported as information and they do NOT go to 2026. 2026 is run only for units that are members under the
+rule in force (13) AND pass tests (4)-(6) on 2025.

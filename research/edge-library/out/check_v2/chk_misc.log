@@ -1,0 +1,31 @@
+B. (2) drawn 398 | pass (2): analyst 77 mine K=200 75 mine K=4000 72
+   BUILD (1)+(2)+(3): analyst 57 mine K=200 56 mine K=4000 54
+   opened by the analyst but failing (2) at 4000 draws: ['ema_pullback-NQ-tf1|nyam|', 'flow_exhaust-NQ-tf1|eve|', 'orb_confirm-ES-tf1|pm|dir=long', 'tema_slope-NQ-tf30|mid|', 'vwap_band-NQ-tf30|eve|', 'vwap_flip-NQ-tf15|pm|', 'vwap_trend_pull-NQ-tf1|pm|']
+   passing at 4000 draws but never opened: ['donchian-NQ-tf30|nyam|', 'donchian-NQ-tf5|pm|', 'vol_spike_break-NQ-tf5|pm|', 'vwap_z-NQ-tf30|mid|']
+   4000-draw passers by stage {'s1': 36, 'ev': 8, 'r1': 10} by market {'NQ': 37, 'ES': 11, 'GC': 6}
+   members failing at 4000 draws: []
+K. analyst: pass (1)+(2), fail only (3): 8 | any of them opened: []
+   exact-60 % share units that pass BUILD (analyst) and were opened: ['straddle_t_1105-NQ-tf30|mid|', 'first_bar_mom-GC-tf30|mid|']
+   members' BUILD share: {'first_bar_mom-ES-tf15|mid|': 0.684, 'first_bar_mom-NQ-tf15|mid|': 0.927, 'first_bar_mom-NQ-tf30|mid|': 0.656, 'orb-NQ-tf15|pre|': 0.781, 'straddle_t_0830-NQ-tf30|pre|': 0.919, 'straddle_t_1800-NQ-tf30|eve|': 0.838, 'tema_slope-NQ-tf30|eve|': 0.865, 'straddle_tight_0830-NQ-tf30|pre|': 1.0, 'E1-A-NQ': 1.0, 'E1-A-GC': 0.963, 'E1-B-NQ': 1.0, 'E1-B-GC': 1.0, 'E3-C-NQ': 0.963, 'E3-C-GC': 1.0}
+I. units with a control missing on disk (drawn): 9 | of them pass (1)+(3) and every control that exists: []
+C. first_bar_mom_ES_tf15_mid                surviving_set.csv  25 mine  25 default ['k1p5_atr1p5-r2'] OK non-positive rows 0
+C. first_bar_mom_NQ_tf15_mid                surviving_set.csv  39 mine  39 default ['k1p5_atr3-r2'] OK non-positive rows 0
+C. first_bar_mom_NQ_tf30_mid                surviving_set.csv  43 mine  43 default ['k1p5_pts45-r3'] OK non-positive rows 0
+C. orb_NQ_tf15_pre                          surviving_set.csv  50 mine  50 default ['or_min15_pct0p1-r0'] OK non-positive rows 0
+C. straddle_t_0830_NQ_tf30_pre              surviving_set.csv  67 mine  67 default ['offatr0p25_pct0p1-r0'] OK non-positive rows 0
+C. straddle_t_1800_NQ_tf30_eve              surviving_set.csv  61 mine  61 default ['offatr0p25_pts45-r2'] OK non-positive rows 0
+C. straddle_tight_0830_GC_tf30_pre_evA      surviving_set.csv  24 mine  24 default ['offC_pts2-r2'] OK non-positive rows 0
+C. straddle_tight_0830_GC_tf30_pre_evB      surviving_set.csv  22 mine  22 default ['offC_pts2-r2'] OK non-positive rows 0
+C. straddle_tight_0830_NQ_tf30_pre          surviving_set.csv  19 mine  19 default ['offA_pts8-r3'] OK non-positive rows 0
+C. straddle_tight_0830_NQ_tf30_pre_evA      surviving_set.csv  24 mine  24 default ['offB_pts5-r3'] OK non-positive rows 0
+C. straddle_tight_0830_NQ_tf30_pre_evB      surviving_set.csv  20 mine  20 default ['offA_pts5-r3'] OK non-positive rows 0
+C. straddle_tight_1000_GC_tf30_nyam_evC     surviving_set.csv  25 mine  25 default ['offA_pts1-r2'] OK non-positive rows 0
+C. straddle_tight_1000_NQ_tf30_nyam_evC     surviving_set.csv  26 mine  26 default ['offA_pts5-r3'] OK non-positive rows 0
+C. tema_slope_NQ_tf30_eve                   surviving_set.csv  51 mine  51 default ['n40_pct0p1-r0'] OK non-positive rows 0
+D. straddle_t_1800-NQ-tf30-eve offatr0p25_pts45-r2: normal 24501 (556 tr) stress 24557 (557 tr) | same-day pairs 556 mean diff 1.8 median -5.0 | days stress better by > $500: 5 sum 13525 | worse by > $500: 4 sum -10840 | side flips 5 | double fills in stress 557
+      entry second-of-day (UTC) most common: [(1320, 306), (1380, 185), (1321, 14)] | held < 5 s: 0
+D. straddle_t_0830-NQ-tf30-pre offatr0p25_pct0p1-r0: normal 69148 (568 tr) stress 63680 (570 tr) | same-day pairs 568 mean diff -8.6 median -5.0 | days stress better by > $500: 1 sum 5715 | worse by > $500: 2 sum -6580 | side flips 3 | double fills in stress 570
+      entry second-of-day (UTC) most common: [(750, 224), (810, 120), (751, 61)] | held < 5 s: 42
+D. orb-NQ-tf15-pre or_min15_pct0p1-r0: normal 38492 (522 tr) stress 35642 (522 tr) | same-day pairs 522 mean diff -5.5 median -5.0 | days stress better by > $500: 0 sum 0 | worse by > $500: 0 sum 0 | side flips 0 | double fills in stress 522
+      entry second-of-day (UTC) most common: [(760, 90), (820, 41), (761, 37)] | held < 5 s: 0
+J. v2 2024 menus: 3601 cells run | 0 cells belong to no opened unit

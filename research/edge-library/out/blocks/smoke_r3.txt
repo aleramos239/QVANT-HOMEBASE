@@ -1,0 +1,15 @@
+r3_channel    ES tf5  ok True  bad-counts 0 rows 11 trades   69116 no-trade cells   234 total s  176.8 | ms per instance-day: base 2.23 filter 2.07 volume 2.20 c1x 1.66 c1r 1.88
+r3_channel    NQ tf15 ok True  bad-counts 0 rows 17 trades   85310 no-trade cells   468 total s  189.8 | ms per instance-day: base 0.61 filter 0.50 book 0.59 volume 0.52 c1x 0.82 c1r 0.66 c2 0.60
+r3_first_bar  ES tf5  ok True  bad-counts 0 rows 11 trades   15593 no-trade cells     0 total s  162.8 | ms per instance-day: base 2.82 filter 2.60 volume 2.82 c1x 1.91 c1r 2.08
+r3_first_bar  GC tf15 ok True  bad-counts 0 rows 11 trades   12259 no-trade cells   390 total s  142.4 | ms per instance-day: base 2.34 filter 2.24 volume 2.35 c1x 3.06 c1r 3.37
+r3_first_bar  NQ tf30 ok True  bad-counts 0 rows 17 trades   54967 no-trade cells     0 total s  172.0 | ms per instance-day: base 0.54 filter 0.61 book 0.75 volume 0.59 c1x 1.10 c1r 1.11 c2 0.80
+r3_ib_n       ES tf15 ok True  bad-counts 0 rows 11 trades   15121 no-trade cells     0 total s   96.9 | ms per instance-day: base 2.88 filter 2.59 volume 2.59 c1x 2.23 c1r 2.95
+r3_ib_n       GC tf30 ok True  bad-counts 0 rows 11 trades   16548 no-trade cells     0 total s   66.1 | ms per instance-day: base 2.03 filter 1.75 volume 1.78 c1x 1.53 c1r 2.08
+r3_ib_n       NQ tf5  ok True  bad-counts 0 rows 17 trades   56274 no-trade cells     0 total s  125.7 | ms per instance-day: base 0.79 filter 0.77 book 0.79 volume 0.80 c1x 0.79 c1r 0.90 c2 1.02
+r3_orb        GC tf5  ok True  bad-counts 0 rows 11 trades   38556 no-trade cells     0 total s  136.1 | ms per instance-day: base 1.69 filter 1.92 volume 2.63 c1x 3.57 c1r 3.14
+r3_orb        NQ tf30 ok True  bad-counts 0 rows 17 trades   37973 no-trade cells     0 total s  137.3 | ms per instance-day: base 0.95 filter 1.14 book 1.30 volume 1.84 c1x 1.72 c1r 1.42 c2 1.45
+r3_orb        NQ tf5  ok True  bad-counts 0 rows 13 trades  110288 no-trade cells     0 total s  138.4 | ms per instance-day: base 0.67 filter 0.63 book 0.79 volume 0.80 c1x 1.12 c1r 1.11
+r3_vol_spike  ES tf30 ok True  bad-counts 0 rows 11 trades   10936 no-trade cells   234 total s  158.9 | ms per instance-day: base 2.63 filter 2.54 volume 2.55 c1x 3.25 c1r 3.37
+r3_vol_spike  NQ tf15 ok True  bad-counts 0 rows 17 trades   17391 no-trade cells   468 total s   97.1 | ms per instance-day: base 0.93 filter 0.92 book 0.92 volume 0.94 c1x 1.28 c1r 1.49 c2 1.02
+r3_vwap_pull  GC tf30 ok True  bad-counts 0 rows 10 trades    4165 no-trade cells   180 total s   66.0 | ms per instance-day: base 3.38 filter 3.14 volume 3.08 c1x 3.00
+r3_vwap_pull  NQ tf5  ok True  bad-counts 0 rows 16 trades   67484 no-trade cells     0 total s  134.6 | ms per instance-day: base 1.28 filter 1.23 book 1.25 volume 1.21 c1x 1.33 c2 2.59

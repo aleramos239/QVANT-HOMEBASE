@@ -1,0 +1,97 @@
+calendar days <2025: A 330 B 232 C 147 | alpha 0.99722
+W-A-NQ  offD_offx0p5-r3    cells 36 (dead 0 dup 0) pos 1.0 (111) med 8517.0 | tr 132 net 8937.0 t 1.3286/2.5608 | lift 124.34 | e 0.76325 / 0.77043 z 0.88 | wo-fw 1769.0 share 0.186 hold 19.0 | null -1071.0 | yrs 2966.0 4900.0 1071.0 | fail d, e | other sess -
+W-A-ES  offD_offx1-r1      cells 36 (dead 0 dup 0) pos 0.5278 (000) med 181.5 | tr 114 net 94.0 t 0.0214/2.001 | lift -16.01 | e 0.35425 / 0.34975 z -0.142 | wo-fw -7034.0 share 0.3051 hold 69.5 | null -4355.75 | yrs 355.0 2181.0 -2442.0 | fail b, c, d, e, 5s | other sess -
+W-A-GC  offB_offx1p5-r3    cells 36 (dead 0 dup 0) pos 0.6111 (100) med 715.0 | tr 175 net 790.0 t 0.0786/1.6279 | lift 17.45 | e 0.549 / 0.55883 z 0.161 | wo-fw -1902.0 share 0.0467 hold 1030.0 | null -379.0 | yrs 666.0 3414.0 -3290.0 | fail d, e, 5s | other sess -
+W-B-NQ  offB_offx0p5-r2    cells 36 (dead 0 dup 0) pos 1.0 (111) med 9548.0 | tr 150 net 9535.0 t 3.2271/2.5608 | lift 49.71 | e 0.99475 / 0.99453 z 2.539 | wo-fw -7041.0 share 0.7273 hold 1.0 | null -1195.5 | yrs -141.0 7541.0 2135.0 | fail e, 5s | other sess -
+W-B-ES  offA_offx1p5-r1    cells 36 (dead 0 dup 0) pos 0.8056 (111) med 2194.75 | tr 154 net 2296.5 t 0.9602/2.001 | lift 34.3 | e 0.9775 / 0.97688 z 2.084 | wo-fw -8713.5 share 0.6897 hold 3.0 | null -4706.25 | yrs -1510.0 4299.5 -493.0 | fail d, e, 5s | other sess -
+W-B-GC  offB_offx0p5-r1    cells 36 (dead 0 dup 0) pos 0.5278 (000) med 307.0 | tr 132 net 512.0 t 0.2732/1.6279 | lift 13.48 | e 0.8665 / 0.87172 z 1.137 | wo-fw -7664.0 share 0.7568 hold 1.0 | null -1679.0 | yrs 28.0 -872.0 1356.0 | fail b, d, e, 5s | other sess -
+W-C-NQ  offA_offx0p5-r2    cells 36 (dead 0 dup 0) pos 0.6667 (100) med 1338.5 | tr 95 net 1480.0 t 0.9546/2.5608 | lift 24.41 | e 0.928 / 0.93112 z 1.471 | wo-fw -4988.0 share 0.8049 hold 0.0 | null -1150.5 | yrs 626.0 607.0 247.0 | fail d, e, 5s | other sess -
+W-C-ES  offA_offx1-r1      cells 36 (dead 0 dup 0) pos 0.5 (000) med -282.0 | tr 96 net 816.0 t 0.6357/2.001 | lift 36.66 | e 0.99125 / 0.99185 z 2.489 | wo-fw -2814.0 share 0.5455 hold 3.5 | null -2545.75 | yrs 531.0 215.5 69.5 | fail b, d, e, 5s | other sess -
+W-C-GC  offC_offx1-r2      cells 36 (dead 0 dup 0) pos 0.6667 (100) med 1933.0 | tr 58 net 1978.0 t 0.4467/1.6279 | lift 50.81 | e 0.65825 / 0.67015 z 0.457 | wo-fw 1978.0 share 0.0 hold 1249.0 | null 987.0 | yrs -1242.0 2818.0 402.0 | fail d, e | other sess -
+D-A-NQ  x5_pts10-r1        cells 224 (dead 0 dup 0) pos 0.2188 (000) med -7454.5 | tr 220 net 60.0 t 0.0194/2.5608 | lift 5.12 | e 0.6225 / 0.62041 z 0.283 | wo-fw -15424.0 share 0.681 hold 3.0 | null -3272.5 | yrs -599.0 1452.0 -793.0 | fail b, d, e, 5s | other sess -
+D-A-ES  x0p25_pts2p5-r0    cells 224 (dead 0 dup 0) pos 0.2054 (000) med -6444.5 | tr 146 net 178.5 t 0.021/2.001 | lift 13.53 | e 0.56425 / 0.56467 z 0.173 | wo-fw 178.5 share 0.0 hold 11.0 | null 3434.75 | yrs -427.0 5352.5 -4747.0 | fail b, d, e | other sess -
+D-A-GC  x2_pct0p1-r1       cells 224 (dead 0 dup 0) pos 0.0848 (000) med -7667.0 | tr 207 net 102.0 t 0.0363/1.6279 | lift 4.31 | e 0.58675 / 0.59367 z 0.242 | wo-fw -7580.0 share 0.3822 hold 8.0 | null -5338.0 | yrs 726.0 -1402.0 778.0 | fail b, d, e, 5s | other sess -
+D-B-NQ  x0p25_atr1p5-r2    cells 224 (dead 0 dup 0) pos 0.1875 (000) med -6353.0 | tr 108 net 138.0 t 0.0095/2.5608 | lift 104.88 | e 0.76275 / 0.76004 z 0.7 | wo-fw -2930.0 share 0.047 hold 1352.5 | null 1553.0 | yrs -4822.0 7119.0 -2159.0 | fail b, d, e, 5s | other sess -
+D-B-ES  x5_atr1p5-r2       cells 224 (dead 0 dup 0) pos 0.1384 (000) med -7074.0 | tr 148 net 470.5 t 0.0462/2.001 | lift 80.39 | e 0.755 / 0.75929 z 0.696 | wo-fw -5105.5 share 0.1079 hold 712.0 | null -9567.0 | yrs 602.5 9094.5 -9226.5 | fail b, d, e, 5s | other sess -
+D-B-GC  x60_pct0p1-r0      cells 224 (dead 0 dup 0) pos 0.0536 (000) med -7046.0 | tr 155 net 20.0 t 0.0023/1.6279 | lift 20.63 | e 0.475 / 0.4792 z -0.075 | wo-fw 20.0 share 0.0 hold 211.0 | null -3545.0 | yrs 74.0 -8200.0 8146.0 | fail b, d, e | other sess -
+D-C-NQ  x0p25_pts30-r0     cells 224 (dead 0 dup 0) pos 0.4598 (000) med -365.5 | tr 90 net 90.0 t 0.0062/2.5608 | lift -127.9 | e 0.264 / 0.25356 z -0.681 | wo-fw 90.0 share 0.0 hold 547.0 | null 10277.5 | yrs -3765.0 2504.0 1351.0 | fail b, c, d, e | other sess -
+D-C-ES  x5_pct0p1-r0       cells 224 (dead 0 dup 0) pos 0.5402 (000) med 242.75 | tr 93 net 190.5 t 0.0264/2.001 | lift 16.39 | e 0.60375 / 0.59798 z 0.202 | wo-fw 190.5 share 0.0 hold 121.0 | null -1922.0 | yrs -2427.5 1107.0 1511.0 | fail b, d, e | other sess -
+D-C-GC  x2_pts7-r2         cells 224 (dead 0 dup 0) pos 0.7768 (110) med 3103.0 | tr 96 net 3096.0 t 0.3809/1.6279 | lift 64.39 | e 0.778 / 0.77648 z 0.76 | wo-fw 3096.0 share 0.0 hold 9057.0 | null 12376.0 | yrs -3928.0 2118.0 4906.0 | fail d, e | other sess -
+  X {'uid': 'D-A-NQ', 'x': 0.25, 'cells': 32, 'share_pos': 0.3125, 'median_net': -4456.0, 'median_net_wo_fast_winners': -9058.0, 'null_median_net': 6060.25, 'beats_null_share': 0.0312, 'trades': 154}
+  X {'uid': 'D-A-NQ', 'x': 0.5, 'cells': 32, 'share_pos': 0.1875, 'median_net': -16513.0, 'median_net_wo_fast_winners': -23195.5, 'null_median_net': 6215.75, 'beats_null_share': 0.0, 'trades': 187}
+  X {'uid': 'D-A-NQ', 'x': 1.0, 'cells': 32, 'share_pos': 0.0312, 'median_net': -19511.5, 'median_net_wo_fast_winners': -24741.5, 'null_median_net': 2352.25, 'beats_null_share': 0.0, 'trades': 206}
+  X {'uid': 'D-A-NQ', 'x': 2.0, 'cells': 32, 'share_pos': 0.0312, 'median_net': -13099.0, 'median_net_wo_fast_winners': -23187.5, 'null_median_net': -29.0, 'beats_null_share': 0.0625, 'trades': 216}
+  X {'uid': 'D-A-NQ', 'x': 5.0, 'cells': 32, 'share_pos': 0.5312, 'median_net': 502.5, 'median_net_wo_fast_winners': -10531.0, 'null_median_net': 1938.75, 'beats_null_share': 0.3438, 'trades': 220}
+  X {'uid': 'D-A-NQ', 'x': 15.0, 'cells': 32, 'share_pos': 0.25, 'median_net': -3367.0, 'median_net_wo_fast_winners': -7510.0, 'null_median_net': 1358.0, 'beats_null_share': 0.25, 'trades': 223}
+  X {'uid': 'D-A-NQ', 'x': 60.0, 'cells': 32, 'share_pos': 0.1875, 'median_net': -7690.0, 'median_net_wo_fast_winners': -8206.5, 'null_median_net': 5982.5, 'beats_null_share': 0.0312, 'trades': 225}
+  X {'uid': 'D-A-ES', 'x': 0.25, 'cells': 32, 'share_pos': 0.0938, 'median_net': -7009.0, 'median_net_wo_fast_winners': -9866.0, 'null_median_net': -4352.75, 'beats_null_share': 0.3125, 'trades': 146}
+  X {'uid': 'D-A-ES', 'x': 0.5, 'cells': 32, 'share_pos': 0.25, 'median_net': -5299.25, 'median_net_wo_fast_winners': -10200.5, 'null_median_net': -5133.62, 'beats_null_share': 0.5, 'trades': 167}
+  X {'uid': 'D-A-ES', 'x': 1.0, 'cells': 32, 'share_pos': 0.0938, 'median_net': -8801.5, 'median_net_wo_fast_winners': -12788.25, 'null_median_net': -4257.75, 'beats_null_share': 0.0938, 'trades': 191}
+  X {'uid': 'D-A-ES', 'x': 2.0, 'cells': 32, 'share_pos': 0.3438, 'median_net': -5622.25, 'median_net_wo_fast_winners': -10727.25, 'null_median_net': -4856.62, 'beats_null_share': 0.375, 'trades': 204}
+  X {'uid': 'D-A-ES', 'x': 5.0, 'cells': 32, 'share_pos': 0.4375, 'median_net': -404.75, 'median_net_wo_fast_winners': -7518.5, 'null_median_net': -5579.75, 'beats_null_share': 0.8438, 'trades': 209}
+  X {'uid': 'D-A-ES', 'x': 15.0, 'cells': 32, 'share_pos': 0.125, 'median_net': -6547.5, 'median_net_wo_fast_winners': -8258.5, 'null_median_net': -7956.88, 'beats_null_share': 0.6562, 'trades': 215}
+  X {'uid': 'D-A-ES', 'x': 60.0, 'cells': 32, 'share_pos': 0.0938, 'median_net': -7892.5, 'median_net_wo_fast_winners': -9222.25, 'null_median_net': -5767.5, 'beats_null_share': 0.2812, 'trades': 220}
+  X {'uid': 'D-A-GC', 'x': 0.25, 'cells': 32, 'share_pos': 0.0, 'median_net': -11812.0, 'median_net_wo_fast_winners': -15620.0, 'null_median_net': -3297.0, 'beats_null_share': 0.0, 'trades': 133}
+  X {'uid': 'D-A-GC', 'x': 0.5, 'cells': 32, 'share_pos': 0.0, 'median_net': -8374.0, 'median_net_wo_fast_winners': -13126.0, 'null_median_net': -5404.0, 'beats_null_share': 0.125, 'trades': 151}
+  X {'uid': 'D-A-GC', 'x': 1.0, 'cells': 32, 'share_pos': 0.0312, 'median_net': -16657.0, 'median_net_wo_fast_winners': -19238.0, 'null_median_net': -11134.5, 'beats_null_share': 0.3125, 'trades': 178}
+  X {'uid': 'D-A-GC', 'x': 2.0, 'cells': 32, 'share_pos': 0.125, 'median_net': -8198.0, 'median_net_wo_fast_winners': -9919.0, 'null_median_net': -10578.0, 'beats_null_share': 0.625, 'trades': 207}
+  X {'uid': 'D-A-GC', 'x': 5.0, 'cells': 32, 'share_pos': 0.0, 'median_net': -11007.0, 'median_net_wo_fast_winners': -11367.0, 'null_median_net': -8774.5, 'beats_null_share': 0.2812, 'trades': 218}
+  X {'uid': 'D-A-GC', 'x': 15.0, 'cells': 32, 'share_pos': 0.0625, 'median_net': -4753.0, 'median_net_wo_fast_winners': -4753.0, 'null_median_net': -5660.5, 'beats_null_share': 0.5312, 'trades': 222}
+  X {'uid': 'D-A-GC', 'x': 60.0, 'cells': 32, 'share_pos': 0.375, 'median_net': -1366.0, 'median_net_wo_fast_winners': -2198.0, 'null_median_net': -1481.0, 'beats_null_share': 0.5, 'trades': 219}
+  X {'uid': 'D-B-NQ', 'x': 0.25, 'cells': 32, 'share_pos': 0.3125, 'median_net': -2742.0, 'median_net_wo_fast_winners': -6062.0, 'null_median_net': 3729.25, 'beats_null_share': 0.125, 'trades': 108}
+  X {'uid': 'D-B-NQ', 'x': 0.5, 'cells': 32, 'share_pos': 0.0, 'median_net': -15741.5, 'median_net_wo_fast_winners': -20886.5, 'null_median_net': 3823.5, 'beats_null_share': 0.0, 'trades': 131}
+  X {'uid': 'D-B-NQ', 'x': 1.0, 'cells': 32, 'share_pos': 0.0312, 'median_net': -13901.0, 'median_net_wo_fast_winners': -22232.0, 'null_median_net': 4022.75, 'beats_null_share': 0.0, 'trades': 144}
+  X {'uid': 'D-B-NQ', 'x': 2.0, 'cells': 32, 'share_pos': 0.1562, 'median_net': -5582.0, 'median_net_wo_fast_winners': -16535.5, 'null_median_net': 1760.5, 'beats_null_share': 0.1875, 'trades': 153}
+  X {'uid': 'D-B-NQ', 'x': 5.0, 'cells': 32, 'share_pos': 0.4062, 'median_net': -628.5, 'median_net_wo_fast_winners': -12150.0, 'null_median_net': 1526.5, 'beats_null_share': 0.3125, 'trades': 154}
+  X {'uid': 'D-B-NQ', 'x': 15.0, 'cells': 32, 'share_pos': 0.25, 'median_net': -3874.0, 'median_net_wo_fast_winners': -8263.0, 'null_median_net': 2859.75, 'beats_null_share': 0.3125, 'trades': 156}
+  X {'uid': 'D-B-NQ', 'x': 60.0, 'cells': 32, 'share_pos': 0.1562, 'median_net': -7193.0, 'median_net_wo_fast_winners': -7861.0, 'null_median_net': 3905.75, 'beats_null_share': 0.0938, 'trades': 157}
+  X {'uid': 'D-B-ES', 'x': 0.25, 'cells': 32, 'share_pos': 0.0, 'median_net': -11212.0, 'median_net_wo_fast_winners': -13787.0, 'null_median_net': -2712.0, 'beats_null_share': 0.1562, 'trades': 103}
+  X {'uid': 'D-B-ES', 'x': 0.5, 'cells': 32, 'share_pos': 0.0, 'median_net': -11502.0, 'median_net_wo_fast_winners': -13275.25, 'null_median_net': -2683.25, 'beats_null_share': 0.0312, 'trades': 113}
+  X {'uid': 'D-B-ES', 'x': 1.0, 'cells': 32, 'share_pos': 0.0, 'median_net': -11799.0, 'median_net_wo_fast_winners': -15876.25, 'null_median_net': -2483.38, 'beats_null_share': 0.0312, 'trades': 131}
+  X {'uid': 'D-B-ES', 'x': 2.0, 'cells': 32, 'share_pos': 0.25, 'median_net': -6685.0, 'median_net_wo_fast_winners': -10777.75, 'null_median_net': -2150.62, 'beats_null_share': 0.3125, 'trades': 140}
+  X {'uid': 'D-B-ES', 'x': 5.0, 'cells': 32, 'share_pos': 0.625, 'median_net': 1370.5, 'median_net_wo_fast_winners': -4498.5, 'null_median_net': -3417.0, 'beats_null_share': 0.9062, 'trades': 148}
+  X {'uid': 'D-B-ES', 'x': 15.0, 'cells': 32, 'share_pos': 0.0, 'median_net': -6660.25, 'median_net_wo_fast_winners': -8266.75, 'null_median_net': -5588.38, 'beats_null_share': 0.5938, 'trades': 151}
+  X {'uid': 'D-B-ES', 'x': 60.0, 'cells': 32, 'share_pos': 0.0938, 'median_net': -5774.0, 'median_net_wo_fast_winners': -6688.75, 'null_median_net': -4352.12, 'beats_null_share': 0.3125, 'trades': 156}
+  X {'uid': 'D-B-GC', 'x': 0.25, 'cells': 32, 'share_pos': 0.0, 'median_net': -5265.0, 'median_net_wo_fast_winners': -9703.0, 'null_median_net': -4220.0, 'beats_null_share': 0.2812, 'trades': 90}
+  X {'uid': 'D-B-GC', 'x': 0.5, 'cells': 32, 'share_pos': 0.0312, 'median_net': -4227.0, 'median_net_wo_fast_winners': -9705.0, 'null_median_net': -5262.0, 'beats_null_share': 0.5625, 'trades': 108}
+  X {'uid': 'D-B-GC', 'x': 1.0, 'cells': 32, 'share_pos': 0.125, 'median_net': -5789.0, 'median_net_wo_fast_winners': -10811.0, 'null_median_net': -10989.0, 'beats_null_share': 0.8125, 'trades': 126}
+  X {'uid': 'D-B-GC', 'x': 2.0, 'cells': 32, 'share_pos': 0.1875, 'median_net': -5933.0, 'median_net_wo_fast_winners': -6741.0, 'null_median_net': -9153.0, 'beats_null_share': 0.8125, 'trades': 147}
+  X {'uid': 'D-B-GC', 'x': 5.0, 'cells': 32, 'share_pos': 0.0, 'median_net': -14322.0, 'median_net_wo_fast_winners': -14322.0, 'null_median_net': -9757.0, 'beats_null_share': 0.1875, 'trades': 153}
+  X {'uid': 'D-B-GC', 'x': 15.0, 'cells': 32, 'share_pos': 0.0, 'median_net': -7975.0, 'median_net_wo_fast_winners': -7975.0, 'null_median_net': -6982.5, 'beats_null_share': 0.4062, 'trades': 155}
+  X {'uid': 'D-B-GC', 'x': 60.0, 'cells': 32, 'share_pos': 0.0312, 'median_net': -6315.0, 'median_net_wo_fast_winners': -6315.0, 'null_median_net': -2670.0, 'beats_null_share': 0.1875, 'trades': 155}
+  X {'uid': 'D-C-NQ', 'x': 0.25, 'cells': 32, 'share_pos': 0.3125, 'median_net': -1660.0, 'median_net_wo_fast_winners': -4003.5, 'null_median_net': 3416.25, 'beats_null_share': 0.0938, 'trades': 90}
+  X {'uid': 'D-C-NQ', 'x': 0.5, 'cells': 32, 'share_pos': 0.3125, 'median_net': -1005.5, 'median_net_wo_fast_winners': -3889.5, 'null_median_net': 3237.0, 'beats_null_share': 0.1562, 'trades': 92}
+  X {'uid': 'D-C-NQ', 'x': 1.0, 'cells': 32, 'share_pos': 0.0938, 'median_net': -7342.5, 'median_net_wo_fast_winners': -7613.5, 'null_median_net': 362.5, 'beats_null_share': 0.0938, 'trades': 95}
+  X {'uid': 'D-C-NQ', 'x': 2.0, 'cells': 32, 'share_pos': 0.8125, 'median_net': 5941.5, 'median_net_wo_fast_winners': 5941.5, 'null_median_net': 299.0, 'beats_null_share': 0.8438, 'trades': 94}
+  X {'uid': 'D-C-NQ', 'x': 5.0, 'cells': 32, 'share_pos': 0.6562, 'median_net': 2096.5, 'median_net_wo_fast_winners': 1574.0, 'null_median_net': 144.0, 'beats_null_share': 0.6562, 'trades': 94}
+  X {'uid': 'D-C-NQ', 'x': 15.0, 'cells': 32, 'share_pos': 0.8438, 'median_net': 3830.0, 'median_net_wo_fast_winners': 3705.0, 'null_median_net': 111.25, 'beats_null_share': 0.8438, 'trades': 95}
+  X {'uid': 'D-C-NQ', 'x': 60.0, 'cells': 32, 'share_pos': 0.1875, 'median_net': -2373.5, 'median_net_wo_fast_winners': -3134.5, 'null_median_net': -1086.0, 'beats_null_share': 0.4375, 'trades': 94}
+  X {'uid': 'D-C-ES', 'x': 0.25, 'cells': 32, 'share_pos': 0.6562, 'median_net': 1333.25, 'median_net_wo_fast_winners': 452.0, 'null_median_net': 1627.0, 'beats_null_share': 0.6562, 'trades': 87}
+  X {'uid': 'D-C-ES', 'x': 0.5, 'cells': 32, 'share_pos': 0.4688, 'median_net': -89.0, 'median_net_wo_fast_winners': -1687.0, 'null_median_net': 1154.75, 'beats_null_share': 0.5, 'trades': 91}
+  X {'uid': 'D-C-ES', 'x': 1.0, 'cells': 32, 'share_pos': 0.4375, 'median_net': -165.75, 'median_net_wo_fast_winners': -315.75, 'null_median_net': 156.12, 'beats_null_share': 0.4688, 'trades': 93}
+  X {'uid': 'D-C-ES', 'x': 2.0, 'cells': 32, 'share_pos': 0.7812, 'median_net': 4629.75, 'median_net_wo_fast_winners': 4629.75, 'null_median_net': 2567.25, 'beats_null_share': 0.6562, 'trades': 91}
+  X {'uid': 'D-C-ES', 'x': 5.0, 'cells': 32, 'share_pos': 0.5312, 'median_net': 65.5, 'median_net_wo_fast_winners': -434.5, 'null_median_net': 796.75, 'beats_null_share': 0.5312, 'trades': 93}
+  X {'uid': 'D-C-ES', 'x': 15.0, 'cells': 32, 'share_pos': 0.5625, 'median_net': 338.75, 'median_net_wo_fast_winners': 338.75, 'null_median_net': -364.38, 'beats_null_share': 0.8438, 'trades': 95}
+  X {'uid': 'D-C-ES', 'x': 60.0, 'cells': 32, 'share_pos': 0.3438, 'median_net': -1842.5, 'median_net_wo_fast_winners': -1917.5, 'null_median_net': -1270.62, 'beats_null_share': 0.5312, 'trades': 95}
+  X {'uid': 'D-C-GC', 'x': 0.25, 'cells': 32, 'share_pos': 0.5938, 'median_net': 764.0, 'median_net_wo_fast_winners': 383.0, 'null_median_net': 3214.0, 'beats_null_share': 0.2188, 'trades': 89}
+  X {'uid': 'D-C-GC', 'x': 0.5, 'cells': 32, 'share_pos': 0.7812, 'median_net': 3541.0, 'median_net_wo_fast_winners': 3480.0, 'null_median_net': 7436.0, 'beats_null_share': 0.25, 'trades': 91}
+  X {'uid': 'D-C-GC', 'x': 1.0, 'cells': 32, 'share_pos': 0.8438, 'median_net': 3058.0, 'median_net_wo_fast_winners': 2620.0, 'null_median_net': 6003.0, 'beats_null_share': 0.4688, 'trades': 93}
+  X {'uid': 'D-C-GC', 'x': 2.0, 'cells': 32, 'share_pos': 0.7812, 'median_net': 1226.0, 'median_net_wo_fast_winners': 1226.0, 'null_median_net': 5611.0, 'beats_null_share': 0.1562, 'trades': 96}
+  X {'uid': 'D-C-GC', 'x': 5.0, 'cells': 32, 'share_pos': 0.5, 'median_net': 101.0, 'median_net_wo_fast_winners': -195.0, 'null_median_net': 5841.0, 'beats_null_share': 0.0625, 'trades': 96}
+  X {'uid': 'D-C-GC', 'x': 15.0, 'cells': 32, 'share_pos': 0.9375, 'median_net': 7241.0, 'median_net_wo_fast_winners': 7241.0, 'null_median_net': 9151.0, 'beats_null_share': 0.4688, 'trades': 96}
+  X {'uid': 'D-C-GC', 'x': 60.0, 'cells': 32, 'share_pos': 1.0, 'median_net': 9190.0, 'median_net_wo_fast_winners': 9190.0, 'null_median_net': 6370.0, 'beats_null_share': 0.6875, 'trades': 95}
+DIFFERENCES vs the analyst: 13
+   ('W-A-NQ', '2024 day count (info)', 97, '96')
+   ('W-A-ES', '2024 day count (info)', 97, '96')
+   ('W-A-GC', '2024 day count (info)', 97, '96')
+   ('W-B-NQ', '2024 day count (info)', 69, '68')
+   ('W-B-ES', '2024 day count (info)', 69, '68')
+   ('W-B-GC', '2024 day count (info)', 69, '68')
+   ('W-C-GC', 'e_p (>1 pt apart)', 0.67015, '0.65575')
+   ('D-A-NQ', '2024 day count (info)', 97, '96')
+   ('D-A-ES', '2024 day count (info)', 97, '96')
+   ('D-A-GC', '2024 day count (info)', 97, '96')
+   ('D-B-NQ', '2024 day count (info)', 69, '68')
+   ('D-B-ES', '2024 day count (info)', 69, '68')
+   ('D-B-GC', '2024 day count (info)', 69, '68')
+units passing BUILD (mine): [] | a-e only: []

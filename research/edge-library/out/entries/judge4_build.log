@@ -1,0 +1,82 @@
+alpha 0.99722 bars {'NQ': 2.5608, 'GC': 1.6279, 'ES': 2.001}
+W-A-NQ  offD_offx0p5-r3    cells  36 pos 1.0 (111) med 8517.0 | tr 132 net 8937.0 t 1.33/2.5608 | lift 124.34 | e_p 0.7675 | null lift 10008.0 | fast -2922.0 wo-fw 1769.0 share 0.186 hold 19.0 | a1 b1 c1 d0 e0 5s1 fail d, e | days B/24 227/96 | sess ['pre']
+W-A-ES  offD_offx1-r1      cells  36 pos 0.5278 (000) med 181.5 | tr 114 net 94.0 t 0.02/2.001 | lift -16.01 | e_p 0.343 | null lift 4449.75 | fast 2209.0 wo-fw -7034.0 share 0.3051 hold 69.5 | a1 b0 c0 d0 e0 5s0 fail b, c, d, e, 5s | days B/24 227/96 | sess ['pre']
+W-A-GC  offB_offx1p5-r3    cells  36 pos 0.6111 (100) med 715.0 | tr 175 net 790.0 t 0.08/1.6279 | lift 17.45 | e_p 0.557 | null lift 1169.0 | fast -1968.0 wo-fw -1902.0 share 0.0467 hold 1030.0 | a1 b1 c1 d0 e0 5s0 fail d, e, 5s | days B/24 226/96 | sess ['pre']
+W-B-NQ  offB_offx0p5-r2    cells  36 pos 1.0 (111) med 9548.0 | tr 150 net 9535.0 t 3.23/2.5608 | lift 49.71 | e_p 0.9935 | null lift 10730.5 | fast 7687.0 wo-fw -7041.0 share 0.7273 hold 1.0 | a1 b1 c1 d1 e0 5s0 fail e, 5s | days B/24 159/68 | sess ['pre']
+W-B-ES  offA_offx1p5-r1    cells  36 pos 0.8056 (111) med 2194.75 | tr 154 net 2296.5 t 0.96/2.001 | lift 34.3 | e_p 0.975 | null lift 7002.75 | fast 5910.0 wo-fw -8713.5 share 0.6897 hold 3.0 | a1 b1 c1 d0 e0 5s0 fail d, e, 5s | days B/24 159/68 | sess ['pre']
+W-B-GC  offB_offx0p5-r1    cells  36 pos 0.5278 (000) med 307.0 | tr 132 net 512.0 t 0.27/1.6279 | lift 13.48 | e_p 0.86275 | null lift 2191.0 | fast 2342.0 wo-fw -7664.0 share 0.7568 hold 1.0 | a1 b0 c1 d0 e0 5s0 fail b, d, e, 5s | days B/24 158/68 | sess ['pre']
+W-C-NQ  offA_offx0p5-r2    cells  36 pos 0.6667 (100) med 1338.5 | tr 95 net 1480.0 t 0.95/2.5608 | lift 24.41 | e_p 0.93175 | null lift 2630.5 | fast 804.0 wo-fw -4988.0 share 0.8049 hold 0.0 | a1 b1 c1 d0 e0 5s0 fail d, e, 5s | days B/24 97/46 | sess ['nyam']
+W-C-ES  offA_offx1-r1      cells  36 pos 0.5 (000) med -282.0 | tr 96 net 816.0 t 0.64/2.001 | lift 36.66 | e_p 0.99175 | null lift 3361.75 | fast 338.0 wo-fw -2814.0 share 0.5455 hold 3.5 | a1 b0 c1 d0 e0 5s0 fail b, d, e, 5s | days B/24 97/46 | sess ['nyam']
+W-C-GC  offC_offx1-r2      cells  36 pos 0.6667 (100) med 1933.0 | tr 58 net 1978.0 t 0.45/1.6279 | lift 50.81 | e_p 0.65575 | null lift 991.0 | fast 0.0 wo-fw 1978.0 share 0.0 hold 1249.0 | a1 b1 c1 d0 e0 5s1 fail d, e | days B/24 97/46 | sess ['nyam']
+D-A-NQ  x5_pts10-r1        cells 224 pos 0.2188 (000) med -7454.5 | tr 220 net 60.0 t 0.02/2.5608 | lift 5.12 | e_p 0.61375 | null lift 3332.5 | fast 4791.0 wo-fw -15424.0 share 0.681 hold 3.0 | a1 b0 c1 d0 e0 5s0 fail b, d, e, 5s | days B/24 227/96 | sess ['pre']
+D-A-ES  x0p25_pts2p5-r0    cells 224 pos 0.2054 (000) med -6444.5 | tr 146 net 178.5 t 0.02/2.001 | lift 13.53 | e_p 0.55675 | null lift -3256.25 | fast -8265.5 wo-fw 178.5 share 0.0 hold 11.0 | a1 b0 c1 d0 e0 5s1 fail b, d, e | days B/24 227/96 | sess ['pre']
+D-A-GC  x2_pct0p1-r1       cells 224 pos 0.0848 (000) med -7667.0 | tr 207 net 102.0 t 0.04/1.6279 | lift 4.31 | e_p 0.602 | null lift 5440.0 | fast -2.0 wo-fw -7580.0 share 0.3822 hold 8.0 | a1 b0 c1 d0 e0 5s0 fail b, d, e, 5s | days B/24 226/96 | sess ['pre']
+D-B-NQ  x0p25_atr1p5-r2    cells 224 pos 0.1875 (000) med -6353.0 | tr 108 net 138.0 t 0.01/2.5608 | lift 104.88 | e_p 0.75675 | null lift -1415.0 | fast -6145.0 wo-fw -2930.0 share 0.047 hold 1352.5 | a1 b0 c1 d0 e0 5s0 fail b, d, e, 5s | days B/24 159/68 | sess ['pre']
+D-B-ES  x5_atr1p5-r2       cells 224 pos 0.1384 (000) med -7074.0 | tr 148 net 470.5 t 0.05/2.001 | lift 80.39 | e_p 0.751 | null lift 10037.5 | fast -1371.5 wo-fw -5105.5 share 0.1079 hold 712.0 | a1 b0 c1 d0 e0 5s0 fail b, d, e, 5s | days B/24 159/68 | sess ['pre']
+D-B-GC  x60_pct0p1-r0      cells 224 pos 0.0536 (000) med -7046.0 | tr 155 net 20.0 t 0.00/1.6279 | lift 20.63 | e_p 0.48525 | null lift 3565.0 | fast -582.0 wo-fw 20.0 share 0.0 hold 211.0 | a1 b0 c1 d0 e0 5s1 fail b, d, e | days B/24 158/68 | sess ['pre']
+D-C-NQ  x0p25_pts30-r0     cells 224 pos 0.4598 (000) med -365.5 | tr 90 net 90.0 t 0.01/2.5608 | lift -127.9 | e_p 0.26325 | null lift -10187.5 | fast -2441.0 wo-fw 90.0 share 0.0 hold 547.0 | a1 b0 c0 d0 e0 5s1 fail b, c, d, e | days B/24 97/46 | sess ['nyam']
+D-C-ES  x5_pct0p1-r0       cells 224 pos 0.5402 (000) med 242.75 | tr 93 net 190.5 t 0.03/2.001 | lift 16.39 | e_p 0.60425 | null lift 2112.5 | fast -3680.5 wo-fw 190.5 share 0.0 hold 121.0 | a1 b0 c1 d0 e0 5s1 fail b, d, e | days B/24 97/46 | sess ['nyam']
+D-C-GC  x2_pts7-r2         cells 224 pos 0.7768 (110) med 3103.0 | tr 96 net 3096.0 t 0.38/1.6279 | lift 64.39 | e_p 0.77575 | null lift -9280.0 | fast 0.0 wo-fw 3096.0 share 0.0 hold 9057.0 | a1 b1 c1 d0 e0 5s1 fail d, e | days B/24 97/46 | sess ['nyam']
+  X D-A-NQ  x=0.25  cells 32 pos 0.3125 med -4456.0 med-wo-fw -9058.0 per-trade rel/non -28.94/-24.44 null-med 6060.25 beats-null 0.0312 hold 709.0 tr 154
+  X D-A-NQ  x=0.5   cells 32 pos 0.1875 med -16513.0 med-wo-fw -23195.5 per-trade rel/non -88.3/2.61 null-med 6215.75 beats-null 0.0 hold 410.0 tr 187
+  X D-A-NQ  x=1.0   cells 32 pos 0.0312 med -19511.5 med-wo-fw -24741.5 per-trade rel/non -94.72/31.38 null-med 2352.25 beats-null 0.0 hold 421.0 tr 206
+  X D-A-NQ  x=2.0   cells 32 pos 0.0312 med -13099.0 med-wo-fw -23187.5 per-trade rel/non -60.64/2.94 null-med -29.0 beats-null 0.0625 hold 516.0 tr 216
+  X D-A-NQ  x=5.0   cells 32 pos 0.5312 med 502.5 med-wo-fw -10531.0 per-trade rel/non 2.28/-5.11 null-med 1938.75 beats-null 0.3438 hold 588.0 tr 220
+  X D-A-NQ  x=15.0  cells 32 pos 0.25 med -3367.0 med-wo-fw -7510.0 per-trade rel/non -15.1/105.47 null-med 1358.0 beats-null 0.25 hold 842.5 tr 223
+  X D-A-NQ  x=60.0  cells 32 pos 0.1875 med -7690.0 med-wo-fw -8206.5 per-trade rel/non -34.18/-9.48 null-med 5982.5 beats-null 0.0312 hold 1020.5 tr 225
+  X D-A-ES  x=0.25  cells 32 pos 0.0938 med -7009.0 med-wo-fw -9866.0 per-trade rel/non -48.01/-74.63 null-med -4352.75 beats-null 0.3125 hold 718.25 tr 146
+  X D-A-ES  x=0.5   cells 32 pos 0.25 med -5299.25 med-wo-fw -10200.5 per-trade rel/non -31.73/-51.58 null-med -5133.62 beats-null 0.5 hold 766.5 tr 167
+  X D-A-ES  x=1.0   cells 32 pos 0.0938 med -8801.5 med-wo-fw -12788.25 per-trade rel/non -46.08/-15.93 null-med -4257.75 beats-null 0.0938 hold 632.0 tr 191
+  X D-A-ES  x=2.0   cells 32 pos 0.3438 med -5622.25 med-wo-fw -10727.25 per-trade rel/non -27.56/-33.42 null-med -4856.62 beats-null 0.375 hold 743.25 tr 204
+  X D-A-ES  x=5.0   cells 32 pos 0.4375 med -404.75 med-wo-fw -7518.5 per-trade rel/non -1.94/-11.98 null-med -5579.75 beats-null 0.8438 hold 823.5 tr 209
+  X D-A-ES  x=15.0  cells 32 pos 0.125 med -6547.5 med-wo-fw -8258.5 per-trade rel/non -30.45/7.07 null-med -7956.88 beats-null 0.6562 hold 1050.0 tr 215
+  X D-A-ES  x=60.0  cells 32 pos 0.0938 med -7892.5 med-wo-fw -9222.25 per-trade rel/non -35.88/-31.46 null-med -5767.5 beats-null 0.2812 hold 1401.25 tr 220
+  X D-A-GC  x=0.25  cells 32 pos 0.0 med -11812.0 med-wo-fw -15620.0 per-trade rel/non -88.81/7.98 null-med -3297.0 beats-null 0.0 hold 550.0 tr 133
+  X D-A-GC  x=0.5   cells 32 pos 0.0 med -8374.0 med-wo-fw -13126.0 per-trade rel/non -55.46/43.3 null-med -5404.0 beats-null 0.125 hold 512.5 tr 151
+  X D-A-GC  x=1.0   cells 32 pos 0.0312 med -16657.0 med-wo-fw -19238.0 per-trade rel/non -93.58/1.6 null-med -11134.5 beats-null 0.3125 hold 468.75 tr 178
+  X D-A-GC  x=2.0   cells 32 pos 0.125 med -8198.0 med-wo-fw -9919.0 per-trade rel/non -39.6/-9.69 null-med -10578.0 beats-null 0.625 hold 844.0 tr 207
+  X D-A-GC  x=5.0   cells 32 pos 0.0 med -11007.0 med-wo-fw -11367.0 per-trade rel/non -50.49/-34.6 null-med -8774.5 beats-null 0.2812 hold 871.25 tr 218
+  X D-A-GC  x=15.0  cells 32 pos 0.0625 med -4753.0 med-wo-fw -4753.0 per-trade rel/non -21.41/-36.3 null-med -5660.5 beats-null 0.5312 hold 1062.75 tr 222
+  X D-A-GC  x=60.0  cells 32 pos 0.375 med -1366.0 med-wo-fw -2198.0 per-trade rel/non -6.24/-32.99 null-med -1481.0 beats-null 0.5 hold 1326.5 tr 219
+  X D-B-NQ  x=0.25  cells 32 pos 0.3125 med -2742.0 med-wo-fw -6062.0 per-trade rel/non -25.39/-24.44 null-med 3729.25 beats-null 0.125 hold 210.75 tr 108
+  X D-B-NQ  x=0.5   cells 32 pos 0.0 med -15741.5 med-wo-fw -20886.5 per-trade rel/non -120.16/2.61 null-med 3823.5 beats-null 0.0 hold 85.5 tr 131
+  X D-B-NQ  x=1.0   cells 32 pos 0.0312 med -13901.0 med-wo-fw -22232.0 per-trade rel/non -96.53/31.38 null-med 4022.75 beats-null 0.0 hold 108.5 tr 144
+  X D-B-NQ  x=2.0   cells 32 pos 0.1562 med -5582.0 med-wo-fw -16535.5 per-trade rel/non -36.48/2.94 null-med 1760.5 beats-null 0.1875 hold 200.5 tr 153
+  X D-B-NQ  x=5.0   cells 32 pos 0.4062 med -628.5 med-wo-fw -12150.0 per-trade rel/non -4.08/-5.11 null-med 1526.5 beats-null 0.3125 hold 219.75 tr 154
+  X D-B-NQ  x=15.0  cells 32 pos 0.25 med -3874.0 med-wo-fw -8263.0 per-trade rel/non -24.83/105.47 null-med 2859.75 beats-null 0.3125 hold 303.75 tr 156
+  X D-B-NQ  x=60.0  cells 32 pos 0.1562 med -7193.0 med-wo-fw -7861.0 per-trade rel/non -45.82/-9.48 null-med 3905.75 beats-null 0.0938 hold 576.0 tr 157
+  X D-B-ES  x=0.25  cells 32 pos 0.0 med -11212.0 med-wo-fw -13787.0 per-trade rel/non -108.85/-74.63 null-med -2712.0 beats-null 0.1562 hold 270.5 tr 103
+  X D-B-ES  x=0.5   cells 32 pos 0.0 med -11502.0 med-wo-fw -13275.25 per-trade rel/non -101.79/-51.58 null-med -2683.25 beats-null 0.0312 hold 238.5 tr 113
+  X D-B-ES  x=1.0   cells 32 pos 0.0 med -11799.0 med-wo-fw -15876.25 per-trade rel/non -90.07/-15.93 null-med -2483.38 beats-null 0.0312 hold 141.0 tr 131
+  X D-B-ES  x=2.0   cells 32 pos 0.25 med -6685.0 med-wo-fw -10777.75 per-trade rel/non -47.75/-33.42 null-med -2150.62 beats-null 0.3125 hold 236.75 tr 140
+  X D-B-ES  x=5.0   cells 32 pos 0.625 med 1370.5 med-wo-fw -4498.5 per-trade rel/non 9.26/-11.98 null-med -3417.0 beats-null 0.9062 hold 347.0 tr 148
+  X D-B-ES  x=15.0  cells 32 pos 0.0 med -6660.25 med-wo-fw -8266.75 per-trade rel/non -44.11/7.07 null-med -5588.38 beats-null 0.5938 hold 378.0 tr 151
+  X D-B-ES  x=60.0  cells 32 pos 0.0938 med -5774.0 med-wo-fw -6688.75 per-trade rel/non -37.01/-31.46 null-med -4352.12 beats-null 0.3125 hold 840.75 tr 156
+  X D-B-GC  x=0.25  cells 32 pos 0.0 med -5265.0 med-wo-fw -9703.0 per-trade rel/non -58.5/7.98 null-med -4220.0 beats-null 0.2812 hold 179.5 tr 90
+  X D-B-GC  x=0.5   cells 32 pos 0.0312 med -4227.0 med-wo-fw -9705.0 per-trade rel/non -39.14/43.3 null-med -5262.0 beats-null 0.5625 hold 226.0 tr 108
+  X D-B-GC  x=1.0   cells 32 pos 0.125 med -5789.0 med-wo-fw -10811.0 per-trade rel/non -45.94/1.6 null-med -10989.0 beats-null 0.8125 hold 194.0 tr 126
+  X D-B-GC  x=2.0   cells 32 pos 0.1875 med -5933.0 med-wo-fw -6741.0 per-trade rel/non -40.36/-9.69 null-med -9153.0 beats-null 0.8125 hold 541.5 tr 147
+  X D-B-GC  x=5.0   cells 32 pos 0.0 med -14322.0 med-wo-fw -14322.0 per-trade rel/non -93.61/-34.6 null-med -9757.0 beats-null 0.1875 hold 401.0 tr 153
+  X D-B-GC  x=15.0  cells 32 pos 0.0 med -7975.0 med-wo-fw -7975.0 per-trade rel/non -51.45/-36.3 null-med -6982.5 beats-null 0.4062 hold 719.0 tr 155
+  X D-B-GC  x=60.0  cells 32 pos 0.0312 med -6315.0 med-wo-fw -6315.0 per-trade rel/non -40.74/-32.99 null-med -2670.0 beats-null 0.1875 hold 827.5 tr 155
+  X D-C-NQ  x=0.25  cells 32 pos 0.3125 med -1660.0 med-wo-fw -4003.5 per-trade rel/non -18.44/9.96 null-med 3416.25 beats-null 0.0938 hold 345.25 tr 90
+  X D-C-NQ  x=0.5   cells 32 pos 0.3125 med -1005.5 med-wo-fw -3889.5 per-trade rel/non -10.93/-3.08 null-med 3237.0 beats-null 0.1562 hold 345.75 tr 92
+  X D-C-NQ  x=1.0   cells 32 pos 0.0938 med -7342.5 med-wo-fw -7613.5 per-trade rel/non -77.29/-32.01 null-med 362.5 beats-null 0.0938 hold 382.5 tr 95
+  X D-C-NQ  x=2.0   cells 32 pos 0.8125 med 5941.5 med-wo-fw 5941.5 per-trade rel/non 63.21/-17.09 null-med 299.0 beats-null 0.8438 hold 419.75 tr 94
+  X D-C-NQ  x=5.0   cells 32 pos 0.6562 med 2096.5 med-wo-fw 1574.0 per-trade rel/non 22.3/-16.99 null-med 144.0 beats-null 0.6562 hold 398.25 tr 94
+  X D-C-NQ  x=15.0  cells 32 pos 0.8438 med 3830.0 med-wo-fw 3705.0 per-trade rel/non 40.32/-30.36 null-med 111.25 beats-null 0.8438 hold 458.5 tr 95
+  X D-C-NQ  x=60.0  cells 32 pos 0.1875 med -2373.5 med-wo-fw -3134.5 per-trade rel/non -25.25/-19.96 null-med -1086.0 beats-null 0.4375 hold 661.25 tr 94
+  X D-C-ES  x=0.25  cells 32 pos 0.6562 med 1333.25 med-wo-fw 452.0 per-trade rel/non 15.32/-27.13 null-med 1627.0 beats-null 0.6562 hold 653.5 tr 87
+  X D-C-ES  x=0.5   cells 32 pos 0.4688 med -89.0 med-wo-fw -1687.0 per-trade rel/non -0.98/-23.98 null-med 1154.75 beats-null 0.5 hold 587.0 tr 91
+  X D-C-ES  x=1.0   cells 32 pos 0.4375 med -165.75 med-wo-fw -315.75 per-trade rel/non -1.78/-37.34 null-med 156.12 beats-null 0.4688 hold 698.5 tr 93
+  X D-C-ES  x=2.0   cells 32 pos 0.7812 med 4629.75 med-wo-fw 4629.75 per-trade rel/non 50.88/-31.39 null-med 2567.25 beats-null 0.6562 hold 743.5 tr 91
+  X D-C-ES  x=5.0   cells 32 pos 0.5312 med 65.5 med-wo-fw -434.5 per-trade rel/non 0.7/-7.35 null-med 796.75 beats-null 0.5312 hold 669.0 tr 93
+  X D-C-ES  x=15.0  cells 32 pos 0.5625 med 338.75 med-wo-fw 338.75 per-trade rel/non 3.57/-29.73 null-med -364.38 beats-null 0.8438 hold 802.0 tr 95
+  X D-C-ES  x=60.0  cells 32 pos 0.3438 med -1842.5 med-wo-fw -1917.5 per-trade rel/non -19.39/-5.77 null-med -1270.62 beats-null 0.5312 hold 961.5 tr 95
+  X D-C-GC  x=0.25  cells 32 pos 0.5938 med 764.0 med-wo-fw 383.0 per-trade rel/non 8.58/36.81 null-med 3214.0 beats-null 0.2188 hold 1849.5 tr 89
+  X D-C-GC  x=0.5   cells 32 pos 0.7812 med 3541.0 med-wo-fw 3480.0 per-trade rel/non 38.91/-40.77 null-med 7436.0 beats-null 0.25 hold 1511.0 tr 91
+  X D-C-GC  x=1.0   cells 32 pos 0.8438 med 3058.0 med-wo-fw 2620.0 per-trade rel/non 32.88/-45.36 null-med 6003.0 beats-null 0.4688 hold 1407.0 tr 93
+  X D-C-GC  x=2.0   cells 32 pos 0.7812 med 1226.0 med-wo-fw 1226.0 per-trade rel/non 12.77/-35.9 null-med 5611.0 beats-null 0.1562 hold 1449.75 tr 96
+  X D-C-GC  x=5.0   cells 32 pos 0.5 med 101.0 med-wo-fw -195.0 per-trade rel/non 1.05/-19.57 null-med 5841.0 beats-null 0.0625 hold 1451.25 tr 96
+  X D-C-GC  x=15.0  cells 32 pos 0.9375 med 7241.0 med-wo-fw 7241.0 per-trade rel/non 75.43/-31.71 null-med 9151.0 beats-null 0.4688 hold 2153.25 tr 96
+  X D-C-GC  x=60.0  cells 32 pos 1.0 med 9190.0 med-wo-fw 9190.0 per-trade rel/non 96.74/-25.37 null-med 6370.0 beats-null 0.6875 hold 2447.5 tr 95

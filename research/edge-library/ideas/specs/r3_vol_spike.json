@@ -1,0 +1,75 @@
+{
+ "name": "r3_vol_spike",
+ "reason": "A break of the recent high or low on unusually heavy volume shows real participation behind the move, not a thin poke, so it is more likely to carry than to fail.",
+ "family": "vol_spike_break",
+ "markets": [
+  "NQ",
+  "ES",
+  "GC"
+ ],
+ "bar_sizes": [
+  "5",
+  "15",
+  "30"
+ ],
+ "sessions": [
+  "asia",
+  "london",
+  "pre",
+  "nyam",
+  "mid",
+  "pm",
+  "eve"
+ ],
+ "params": {
+  "m": [
+   2.0,
+   3.0,
+   4.0
+  ]
+ },
+ "filters": [
+  {
+   "block": "volatility",
+   "side": "high"
+  },
+  {
+   "block": "volatility",
+   "side": "low"
+  },
+  {
+   "block": "momentum",
+   "side": "with"
+  },
+  {
+   "block": "momentum",
+   "side": "against"
+  },
+  {
+   "block": "volume",
+   "side": "high"
+  },
+  {
+   "block": "volume",
+   "side": "low"
+  },
+  {
+   "block": "news",
+   "side": "yes"
+  },
+  {
+   "block": "news",
+   "side": "no"
+  },
+  {
+   "block": "book",
+   "side": "agree"
+  },
+  {
+   "block": "book",
+   "side": "disagree"
+  }
+ ],
+ "exits": "extended",
+ "limits": {}
+}

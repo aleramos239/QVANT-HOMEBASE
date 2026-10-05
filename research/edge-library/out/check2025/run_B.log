@@ -1,0 +1,20 @@
+CHAIN B START 2026-10-05T14:13:36Z
+done runs_check2025/straddle_tight_0830-GC-tf30-pre-check: 27 cells, 6606 trades, sessions 252, used 248-248, errors 0, outside session 0, cells without a trade 0, wall 4 s
+done runs_check2025/straddle_tight_0830-GC-tf30-pre-check-stress: 27 cells, 6633 trades, sessions 252, used 248-248, errors 0, outside session 0, cells without a trade 0, wall 4 s
+done runs_check2025/straddle_tight_1000-GC-tf30-nyam-check: 27 cells, 6678 trades, sessions 252, used 248-248, errors 0, outside session 0, cells without a trade 0, wall 4 s
+done runs_check2025/straddle_tight_1000-GC-tf30-nyam-check-stress: 27 cells, 6687 trades, sessions 252, used 248-248, errors 0, outside session 0, cells without a trade 0, wall 5 s
+done runs_check2025/first_bar_mom-ES-tf15-mid-check: 96 cells, 7488 trades, sessions 252, used 248-248, errors 0, outside session 0, cells without a trade 0, wall 27 s
+done runs_check2025/first_bar_mom-ES-tf15-mid-check-stress: 96 cells, 7488 trades, sessions 252, used 248-248, errors 0, outside session 0, cells without a trade 0, wall 18 s
+done runs_check2025/straddle_tight_0830-GC-tf30-pre-check-shift: 54 cells, 12564 trades, sessions 252, used 248-248, errors 0, outside session 0, cells without a trade 0, wall 7 s
+done runs_check2025/straddle_tight_1000-GC-tf30-nyam-check-shift: 54 cells, 13023 trades, sessions 252, used 248-248, errors 0, outside session 0, cells without a trade 0, wall 8 s
+done runs_check2025/c1-ES-tf15-mid-check: 64 cells, 31285 trades, sessions 252, used 248-248, errors 0, outside session 0, cells without a trade 0, wall 14 s
+done runs_seeds/straddle_tight_0830-GC-tf30-pre-check-shift-s3to10: 216 cells, 49932 trades, sessions 252, used 248-248, errors 0, outside session 0, cells without a trade 0, wall 26 s
+done runs_seeds/straddle_tight_1000-GC-tf30-nyam-check-shift-s3to10: 216 cells, 51822 trades, sessions 252, used 248-248, errors 0, outside session 0, cells without a trade 0, wall 45 s
+done runs_seeds/c1-ES-tf15-mid-check-s3to10: 256 cells, 126303 trades, sessions 252, used 248-248, errors 0, outside session 0, cells without a trade 0, wall 173 s
+done runs_seeds/straddle_tight_0830-GC-tf30-pre-pick-shift-s3to10: 216 cells, 42606 trades, sessions 252, used 250-250, errors 0, outside session 0, cells without a trade 0, wall 70 s
+done runs_seeds/straddle_tight_1000-GC-tf30-nyam-pick-shift-s3to10: 216 cells, 47745 trades, sessions 252, used 250-250, errors 0, outside session 0, cells without a trade 0, wall 52 s
+done runs_seeds/c1-ES-tf15-mid-pick-s3to10: 256 cells, 118948 trades, sessions 252, used 252-252, errors 0, outside session 0, cells without a trade 0, wall 127 s
+done runs_seeds/straddle_tight_0830-GC-tf30-pre-build-shift-s3to10: 216 cells, 84168 trades, sessions 572, used 565-565, errors 0, outside session 0, cells without a trade 0, wall 127 s
+done runs_seeds/straddle_tight_1000-GC-tf30-nyam-build-shift-s3to10: 216 cells, 95382 trades, sessions 572, used 565-565, errors 0, outside session 0, cells without a trade 0, wall 144 s
+done runs_seeds/c1-ES-tf15-mid-build-s3to10: 256 cells, 284577 trades, sessions 573, used 571-571, errors 0, outside session 0, cells without a trade 0, wall 251 s
+CHAIN B DONE 2026-10-05T14:32:07Z

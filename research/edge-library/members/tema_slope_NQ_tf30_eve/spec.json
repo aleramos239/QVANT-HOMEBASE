@@ -1,0 +1,100 @@
+{
+ "name": "tema_slope_NQ_tf30_eve",
+ "uid": "tema_slope-NQ-tf30|eve|",
+ "idea": "fast-average slope turn",
+ "family": "tema_slope",
+ "root": "NQ",
+ "tf": "30",
+ "sess": "eve",
+ "label": "",
+ "group": null,
+ "side": null,
+ "inputs": {
+  "tf": "30",
+  "sess": "eve",
+  "dir": "both",
+  "stop_mode": "pct",
+  "stop_val": 0.1,
+  "tgt_r": 0.0,
+  "trail_atr": 0.0,
+  "exit_bars": 0,
+  "max_tr": 3,
+  "f_trend": "off",
+  "f_vwap": "off",
+  "f_depth": "off",
+  "f_book": "off",
+  "x_book": "off",
+  "f_thin": "off",
+  "hold_to": "day",
+  "n": 40
+ },
+ "rule": "The slope of the triple-smoothed 40-bar average (30-minute bars) changes sign at a bar close: enter in the new direction. Stop 0.1 % of price; no target (out at the stop or at the flat time). Session: evening (18:00-23:59 ET, the evening before the trade date); flat by 15:58 ET.",
+ "rationale": "The low-lag TEMA(n) changing slope sign marks a turn early; enter in the new slope direction.",
+ "complexity": 2,
+ "flags": [
+  "WEAK reason (the idea's reason is weak or only restates the trigger)",
+  "2025-26 was already seen once for this family's old favourite (an EXAM would be a second look)"
+ ],
+ "cell": "n40_pct0p1-r0",
+ "default_rule": "survivors sorted by (BUILD net, variant order); the middle one; an even count takes the lower of the two middle ones",
+ "admission": "v2 (EDGE_SPEC ADMISSION v2: the average of all variants)",
+ "admit": true,
+ "variants_judged": 96,
+ "survivors": 51,
+ "contracts": 1,
+ "hold_to": "day",
+ "day_filter": null,
+ "periods": {
+  "build": [
+   "2021-09-22",
+   "2023-12-31"
+  ],
+  "pick": [
+   "2024-01-01",
+   "2024-12-31"
+  ]
+ },
+ "tests": {
+  "1_build_share_and_average": true,
+  "2_build_real_edge": {
+   "c1": {
+    "pass": true,
+    "lift": 16122.67,
+    "p_beat": 0.985,
+    "ctl_mean": 3849.38,
+    "ctl_p95": 15814.69,
+    "ctl_sd": 7049.94,
+    "replicates": 200,
+    "real_replicates": 2,
+    "thin": true,
+    "fallback_share": 0.0,
+    "short": 0
+   }
+  },
+  "3_trades": {
+   "build_avg": 340.0729166666667,
+   "build_plus_2024_avg": 479.9
+  },
+  "4_2024_average_and_median": {
+   "avg": 11966.947916666666,
+   "median": 5879.0
+  },
+  "5_2024_lift": {
+   "c1": {
+    "pass": true,
+    "lift": 1988.13,
+    "p_beat": 0.675,
+    "ctl_mean": 9978.82,
+    "ctl_p95": 17587.57,
+    "ctl_sd": 5177.93,
+    "replicates": 200,
+    "real_replicates": 2,
+    "thin": true,
+    "fallback_share": 0.0001,
+    "short": 0
+   }
+  },
+  "6_2024_stress_average": 9762.71875
+ },
+ "written_utc": "2026-10-04T16:27:03+00:00"
+}

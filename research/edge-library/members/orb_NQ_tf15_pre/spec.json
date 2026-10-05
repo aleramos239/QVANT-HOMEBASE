@@ -1,0 +1,101 @@
+{
+ "name": "orb_NQ_tf15_pre",
+ "uid": "orb-NQ-tf15|pre|",
+ "idea": "opening range break",
+ "family": "orb",
+ "root": "NQ",
+ "tf": "15",
+ "sess": "pre",
+ "label": "",
+ "group": null,
+ "side": null,
+ "inputs": {
+  "tf": "15",
+  "sess": "pre",
+  "dir": "both",
+  "stop_mode": "pct",
+  "stop_val": 0.1,
+  "tgt_r": 0.0,
+  "trail_atr": 0.0,
+  "exit_bars": 0,
+  "max_tr": 3,
+  "f_trend": "off",
+  "f_vwap": "off",
+  "f_depth": "off",
+  "f_book": "off",
+  "x_book": "off",
+  "f_thin": "off",
+  "hold_to": "day",
+  "or_min": "15"
+ },
+ "rule": "Range = the first 15 minutes of the session. A buy stop one tick above it and a sell stop one tick below (one cancels the other). Stop 0.1 % of price; no target (out at the stop or at the flat time). Session: pre-market (08:25-09:30 ET); flat by 15:58 ET.",
+ "rationale": "Opening range = the first balance of the session: the first or_min minutes set the range the rest of the session resolves, so a break of either side traps the other side and carries.",
+ "complexity": 3,
+ "flags": [
+  "2025-26 was already seen once for this family's old favourite (an EXAM would be a second look)",
+  "2024 was already read for this idea at another bar size (an earlier stage)",
+  "BURST FILL RISK: a two-sided bracket over a data release; the simulator fills the stop on the trigger print (out/events_summary.md section 5: with a fill 1-25 ms later most of the profit of the v1 defaults went)"
+ ],
+ "cell": "or_min15_pct0p1-r0",
+ "default_rule": "survivors sorted by (BUILD net, variant order); the middle one; an even count takes the lower of the two middle ones",
+ "admission": "v2 (EDGE_SPEC ADMISSION v2: the average of all variants)",
+ "admit": true,
+ "variants_judged": 96,
+ "survivors": 50,
+ "contracts": 1,
+ "hold_to": "day",
+ "day_filter": null,
+ "periods": {
+  "build": [
+   "2021-09-22",
+   "2023-12-31"
+  ],
+  "pick": [
+   "2024-01-01",
+   "2024-12-31"
+  ]
+ },
+ "tests": {
+  "1_build_share_and_average": true,
+  "2_build_real_edge": {
+   "c1": {
+    "pass": true,
+    "lift": 18981.27,
+    "p_beat": 0.97,
+    "ctl_mean": 3725.91,
+    "ctl_p95": 19288.56,
+    "ctl_sd": 9479.54,
+    "replicates": 200,
+    "real_replicates": 2,
+    "thin": true,
+    "fallback_share": 0.0,
+    "short": 0
+   }
+  },
+  "3_trades": {
+   "build_avg": 504.0,
+   "build_plus_2024_avg": 725.3
+  },
+  "4_2024_average_and_median": {
+   "avg": 10885.864583333334,
+   "median": 5615.5
+  },
+  "5_2024_lift": {
+   "c1": {
+    "pass": true,
+    "lift": 4382.25,
+    "p_beat": 0.675,
+    "ctl_mean": 6503.62,
+    "ctl_p95": 19781.71,
+    "ctl_sd": 8649.04,
+    "replicates": 200,
+    "real_replicates": 2,
+    "thin": true,
+    "fallback_share": 0.0,
+    "short": 0
+   }
+  },
+  "6_2024_stress_average": 8258.125
+ },
+ "written_utc": "2026-10-04T16:27:03+00:00"
+}
