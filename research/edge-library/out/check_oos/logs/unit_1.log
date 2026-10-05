@@ -1,0 +1,3 @@
+straddle_tight_0830-NQ-tf30-pre@A BUILD 27 1.0 10084 t1 True t2 True {'days': (27, 0.9968), 'shift': (13502, 1.0)}
+   2024 3937 4506 t4 True t5 True t6 True {'days': 17, 'shift': 5839} surv 24 default offB_pts5-r3 member True
+   check FAILED 0 / 27 -2806 -2887 stress -3872 {'days': (-28.0, 0.032), 'shift': (-941.0, 0.227)} default -3367 saved+ 0 / 24

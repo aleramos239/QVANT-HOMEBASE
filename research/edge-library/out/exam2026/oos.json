@@ -1,0 +1,3930 @@
+[
+ {
+  "unit": "straddle_tight_0830-NQ-tf30-pre",
+  "name": "straddle_tight_0830_NQ_tf30_pre",
+  "default": "offA_pts8-r3",
+  "variants": 27,
+  "saved": 19,
+  "demoted_2024": false,
+  "pick_verdict": "MEMBER",
+  "build": {
+   "share_pos": 1.0,
+   "avg_net": 9735.851851851852,
+   "controls": {
+    "shift": {
+     "pass": true,
+     "lift": 18672.67,
+     "p_beat": 1.0,
+     "seeds": 10,
+     "two_seed": {
+      "pass": true,
+      "lift": 16616.94,
+      "p_beat": 1.0
+     }
+    }
+   }
+  },
+  "avg_rows": {
+   "2021": {
+    "period": "2021",
+    "trades": 61.0,
+    "net": -230.11,
+    "win": 0.3758,
+    "pf": 0.963,
+    "max_dd": 1458.85,
+    "avg_trade": -3.77
+   },
+   "2022": {
+    "period": "2022",
+    "trades": 241.3,
+    "net": 4051.33,
+    "win": 0.4203,
+    "pf": 1.173,
+    "max_dd": 2754.63,
+    "avg_trade": 16.79
+   },
+   "2023": {
+    "period": "2023",
+    "trades": 228.3,
+    "net": 5914.63,
+    "win": 0.438,
+    "pf": 1.274,
+    "max_dd": 2070.81,
+    "avg_trade": 25.9
+   },
+   "2024": {
+    "period": "2024",
+    "trades": 235.3,
+    "net": 5547.56,
+    "win": 0.4333,
+    "pf": 1.245,
+    "max_dd": 3134.59,
+    "avg_trade": 23.57
+   },
+   "2025": {
+    "period": "2025",
+    "trades": 237.7,
+    "net": -1450.3,
+    "win": 0.3771,
+    "pf": 0.944,
+    "max_dd": 4286.67,
+    "avg_trade": -6.1
+   },
+   "combined": {
+    "period": "combined",
+    "trades": 1003.7,
+    "net": 13833.11,
+    "win": 0.4144,
+    "pf": 1.139,
+    "max_dd": 5854.89,
+    "avg_trade": 13.78
+   }
+  },
+  "default_rows": {
+   "2021": {
+    "period": "2021*",
+    "trades": 69,
+    "net": -1371.0,
+    "win": 0.2318840579710145,
+    "pf": 0.8474463113386002,
+    "max_dd": 2269.0,
+    "sharpe": -1.1331206961145042,
+    "avg_trade": -19.87,
+    "worst_open_loss": 169.0,
+    "days": 71,
+    "t": -0.6013781861874851
+   },
+   "2022": {
+    "period": "2022",
+    "trades": 248,
+    "net": 5343.0,
+    "win": 0.29838709677419356,
+    "pf": 1.1788092767979652,
+    "max_dd": 4108.0,
+    "sharpe": 1.1441107322424873,
+    "avg_trade": 21.54,
+    "worst_open_loss": 299.0,
+    "days": 251,
+    "t": 1.1418468076136432
+   },
+   "2023": {
+    "period": "2023",
+    "trades": 249,
+    "net": 7619.0,
+    "win": 0.3132530120481928,
+    "pf": 1.2581924158731235,
+    "max_dd": 3077.0,
+    "sharpe": 1.602823804476118,
+    "avg_trade": 30.6,
+    "worst_open_loss": 379.0,
+    "days": 251,
+    "t": 1.599680497876186
+   },
+   "2024": {
+    "period": "2024",
+    "trades": 252,
+    "net": 7982.0,
+    "win": 0.31746031746031744,
+    "pf": 1.2652003455379095,
+    "max_dd": 3903.0,
+    "sharpe": 1.6515910572536918,
+    "avg_trade": 31.67,
+    "worst_open_loss": 369.0,
+    "days": 252,
+    "t": 1.6515910572536918
+   },
+   "2025": {
+    "period": "2025",
+    "trades": 248,
+    "net": -3922.0,
+    "win": 0.24596774193548387,
+    "pf": 0.8810000606832938,
+    "max_dd": 6017.0,
+    "sharpe": -0.8680095387213665,
+    "avg_trade": -15.81,
+    "worst_open_loss": 309.0,
+    "days": 261,
+    "t": -0.8833541690331081
+   },
+   "combined": {
+    "period": "combined",
+    "trades": 1066,
+    "net": 15651.0,
+    "win": 0.2898686679174484,
+    "pf": 1.1190796831845884,
+    "max_dd": 7349.0,
+    "sharpe": 0.7819063103870945,
+    "avg_trade": 14.68,
+    "worst_open_loss": 379.0,
+    "days": 1086,
+    "t": 1.6232129500125045
+   }
+  },
+  "exam_refused": null,
+  "pick": {
+   "verdict": "MEMBER",
+   "t4": true,
+   "t5": true,
+   "t6": true,
+   "cells": 27,
+   "positive": 22,
+   "share_pos": 0.8148148148148148,
+   "avg_net": 5547.555555555556,
+   "median_net": 6005.0,
+   "avg_trades": 235.33333333333334,
+   "stress_avg_net": 3473.5185185185187,
+   "stress_share_pos": 0.7037037037037037,
+   "default_net": null,
+   "default_stress_net": null,
+   "saved_profitable": null,
+   "failed": [],
+   "controls": {
+    "shift": {
+     "pass": true,
+     "lift": 9785.53,
+     "p_beat": 1.0,
+     "seeds": 10,
+     "two_seed": {
+      "pass": true,
+      "lift": 9354.13,
+      "p_beat": 1.0
+     }
+    }
+   },
+   "fast_net_share": 0.6773,
+   "fast_profit_share": 0.3919
+  },
+  "check": {
+   "verdict": "FAILED",
+   "t4": false,
+   "t5": true,
+   "t6": false,
+   "cells": 27,
+   "positive": 8,
+   "share_pos": 0.2962962962962963,
+   "avg_net": -1450.2962962962963,
+   "median_net": -1538.0,
+   "avg_trades": 237.66666666666666,
+   "stress_avg_net": -3650.4814814814813,
+   "stress_share_pos": 0.07407407407407407,
+   "default_net": -3922.0,
+   "default_stress_net": -6465.0,
+   "saved_profitable": 8,
+   "failed": [
+    "4",
+    "6"
+   ],
+   "controls": {
+    "shift": {
+     "pass": true,
+     "lift": 2738.55,
+     "p_beat": 0.8958,
+     "seeds": 10,
+     "two_seed": {
+      "pass": true,
+      "lift": 3243.19,
+      "p_beat": 0.9792
+     }
+    }
+   },
+   "fast_net_share": null,
+   "fast_profit_share": 0.2738
+  },
+  "fast_net_share_all": 0.847
+ },
+ {
+  "unit": "straddle_tight_0830-NQ-tf30-pre@A",
+  "name": "straddle_tight_0830_NQ_tf30_pre_evA",
+  "default": "offB_pts5-r3",
+  "variants": 27,
+  "saved": 24,
+  "demoted_2024": false,
+  "pick_verdict": "MEMBER",
+  "build": {
+   "share_pos": 1.0,
+   "avg_net": 10083.962962962964,
+   "controls": {
+    "days": {
+     "pass": true,
+     "p_beat": 0.9968,
+     "lift_per_trade": 26.6,
+     "per_trade": 44.95,
+     "unfiltered_per_trade": 18.35
+    },
+    "shift": {
+     "pass": true,
+     "lift": 13501.73,
+     "p_beat": 1.0,
+     "seeds": 10,
+     "two_seed": {
+      "pass": true,
+      "lift": 13240.46,
+      "p_beat": 1.0
+     }
+    }
+   }
+  },
+  "avg_rows": {
+   "2021": {
+    "period": "2021",
+    "trades": 27.7,
+    "net": 379.7,
+    "win": 0.4284,
+    "pf": 1.144,
+    "max_dd": 764.37,
+    "avg_trade": 13.72
+   },
+   "2022": {
+    "period": "2022",
+    "trades": 100.0,
+    "net": 4410.56,
+    "win": 0.4856,
+    "pf": 1.494,
+    "max_dd": 1633.0,
+    "avg_trade": 44.11
+   },
+   "2023": {
+    "period": "2023",
+    "trades": 96.7,
+    "net": 5293.7,
+    "win": 0.5138,
+    "pf": 1.634,
+    "max_dd": 1429.11,
+    "avg_trade": 54.76
+   },
+   "2024": {
+    "period": "2024",
+    "trades": 96.0,
+    "net": 3936.74,
+    "win": 0.4915,
+    "pf": 1.439,
+    "max_dd": 1454.15,
+    "avg_trade": 41.01
+   },
+   "2025": {
+    "period": "2025",
+    "trades": 82.3,
+    "net": -2806.37,
+    "win": 0.3405,
+    "pf": 0.73,
+    "max_dd": 3353.0,
+    "avg_trade": -34.09
+   },
+   "combined": {
+    "period": "combined",
+    "trades": 402.7,
+    "net": 11214.33,
+    "win": 0.4602,
+    "pf": 1.286,
+    "max_dd": 4137.63,
+    "avg_trade": 27.85
+   }
+  },
+  "default_rows": {
+   "2021": {
+    "period": "2021*",
+    "trades": 28,
+    "net": 943.0,
+    "win": 0.35714285714285715,
+    "pf": 1.4675260287555776,
+    "max_dd": 550.0,
+    "sharpe": 1.689188738968752,
+    "avg_trade": 33.68,
+    "worst_open_loss": 129.0,
+    "days": 71,
+    "t": 0.8946519654080983
+   },
+   "2022": {
+    "period": "2022",
+    "trades": 100,
+    "net": 4775.0,
+    "win": 0.41,
+    "pf": 1.6486890368156502,
+    "max_dd": 1176.0,
+    "sharpe": 2.251805619972125,
+    "avg_trade": 47.75,
+    "worst_open_loss": 299.0,
+    "days": 251,
+    "t": 2.2755122084245856
+   },
+   "2023": {
+    "period": "2023",
+    "trades": 97,
+    "net": 4732.0,
+    "win": 0.41237113402061853,
+    "pf": 1.6657287563308947,
+    "max_dd": 1398.0,
+    "sharpe": 2.238171091686963,
+    "avg_trade": 48.78,
+    "worst_open_loss": 504.0,
+    "days": 251,
+    "t": 2.2627594851830155
+   },
+   "2024": {
+    "period": "2024",
+    "trades": 96,
+    "net": 4506.0,
+    "win": 0.4270833333333333,
+    "pf": 1.5905635648754914,
+    "max_dd": 826.0,
+    "sharpe": 2.062781665331052,
+    "avg_trade": 46.94,
+    "worst_open_loss": 414.0,
+    "days": 252,
+    "t": 2.0850127551660806
+   },
+   "2025": {
+    "period": "2025",
+    "trades": 83,
+    "net": -3367.0,
+    "win": 0.24096385542168675,
+    "pf": 0.6374501992031872,
+    "max_dd": 3367.0,
+    "sharpe": -1.8313917003197915,
+    "avg_trade": -40.57,
+    "worst_open_loss": 364.0,
+    "days": 261,
+    "t": -1.8832826112841161
+   },
+   "combined": {
+    "period": "combined",
+    "trades": 404,
+    "net": 11589.0,
+    "win": 0.37623762376237624,
+    "pf": 1.346944885189953,
+    "max_dd": 3716.0,
+    "sharpe": 1.3060387570913838,
+    "avg_trade": 28.69,
+    "worst_open_loss": 504.0,
+    "days": 1086,
+    "t": 2.7247736467020607
+   }
+  },
+  "exam_refused": null,
+  "pick": {
+   "verdict": "MEMBER",
+   "t4": true,
+   "t5": true,
+   "t6": true,
+   "cells": 27,
+   "positive": 26,
+   "share_pos": 0.9629629629629629,
+   "avg_net": 3936.740740740741,
+   "median_net": 4506.0,
+   "avg_trades": 96.0,
+   "stress_avg_net": 3000.8518518518517,
+   "stress_share_pos": 0.8888888888888888,
+   "default_net": null,
+   "default_stress_net": null,
+   "saved_profitable": null,
+   "failed": [],
+   "controls": {
+    "days": {
+     "pass": true,
+     "p_beat": 0.8862,
+     "lift_per_trade": 17.43,
+     "per_trade": 41.01,
+     "unfiltered_per_trade": 23.57
+    },
+    "shift": {
+     "pass": true,
+     "lift": 5838.63,
+     "p_beat": 1.0,
+     "seeds": 10,
+     "two_seed": {
+      "pass": true,
+      "lift": 5414.41,
+      "p_beat": 1.0
+     }
+    }
+   },
+   "fast_net_share": 0.8487,
+   "fast_profit_share": 0.774
+  },
+  "check": {
+   "verdict": "FAILED",
+   "t4": false,
+   "t5": false,
+   "t6": false,
+   "cells": 27,
+   "positive": 0,
+   "share_pos": 0.0,
+   "avg_net": -2806.3703703703704,
+   "median_net": -2887.0,
+   "avg_trades": 82.33333333333333,
+   "stress_avg_net": -3872.296296296296,
+   "stress_share_pos": 0.0,
+   "default_net": -3367.0,
+   "default_stress_net": -5034.0,
+   "saved_profitable": 0,
+   "failed": [
+    "4",
+    "5",
+    "6"
+   ],
+   "controls": {
+    "days": {
+     "pass": false,
+     "p_beat": 0.0352,
+     "lift_per_trade": -27.98,
+     "per_trade": -34.09,
+     "unfiltered_per_trade": -6.1
+    },
+    "shift": {
+     "pass": false,
+     "lift": -940.97,
+     "p_beat": 0.227,
+     "seeds": 10,
+     "two_seed": {
+      "pass": false,
+      "lift": -1978.59,
+      "p_beat": 0.023
+     }
+    }
+   },
+   "fast_net_share": null,
+   "fast_profit_share": 0.7667
+  },
+  "fast_net_share_all": 0.9792
+ },
+ {
+  "unit": "straddle_tight_0830-NQ-tf30-pre@B",
+  "name": "straddle_tight_0830_NQ_tf30_pre_evB",
+  "default": "offA_pts5-r3",
+  "variants": 27,
+  "saved": 20,
+  "demoted_2024": false,
+  "pick_verdict": "MEMBER",
+  "build": {
+   "share_pos": 1.0,
+   "avg_net": 9145.518518518518,
+   "controls": {
+    "days": {
+     "pass": true,
+     "p_beat": 0.9998,
+     "lift_per_trade": 39.91,
+     "per_trade": 58.25,
+     "unfiltered_per_trade": 18.35
+    },
+    "shift": {
+     "pass": true,
+     "lift": 11518.78,
+     "p_beat": 1.0,
+     "seeds": 10,
+     "two_seed": {
+      "pass": true,
+      "lift": 11068.96,
+      "p_beat": 1.0
+     }
+    }
+   }
+  },
+  "avg_rows": {
+   "2021": {
+    "period": "2021",
+    "trades": 19.0,
+    "net": 554.37,
+    "win": 0.4678,
+    "pf": 1.326,
+    "max_dd": 778.3,
+    "avg_trade": 29.18
+   },
+   "2022": {
+    "period": "2022",
+    "trades": 71.0,
+    "net": 5349.7,
+    "win": 0.555,
+    "pf": 1.948,
+    "max_dd": 985.56,
+    "avg_trade": 75.35
+   },
+   "2023": {
+    "period": "2023",
+    "trades": 67.0,
+    "net": 3241.44,
+    "win": 0.5069,
+    "pf": 1.536,
+    "max_dd": 1316.96,
+    "avg_trade": 48.38
+   },
+   "2024": {
+    "period": "2024",
+    "trades": 68.0,
+    "net": 3272.26,
+    "win": 0.5038,
+    "pf": 1.51,
+    "max_dd": 1342.11,
+    "avg_trade": 48.12
+   },
+   "2025": {
+    "period": "2025",
+    "trades": 57.0,
+    "net": -730.22,
+    "win": 0.3957,
+    "pf": 0.895,
+    "max_dd": 1944.07,
+    "avg_trade": -12.81
+   },
+   "combined": {
+    "period": "combined",
+    "trades": 282.0,
+    "net": 11687.56,
+    "win": 0.4932,
+    "pf": 1.437,
+    "max_dd": 2706.0,
+    "avg_trade": 41.45
+   }
+  },
+  "default_rows": {
+   "2021": {
+    "period": "2021*",
+    "trades": 19,
+    "net": 344.0,
+    "win": 0.3157894736842105,
+    "pf": 1.2402234636871508,
+    "max_dd": 436.0,
+    "sharpe": 0.7792849144842033,
+    "avg_trade": 18.11,
+    "worst_open_loss": 114.0,
+    "days": 71,
+    "t": 0.4068387344481659
+   },
+   "2022": {
+    "period": "2022",
+    "trades": 71,
+    "net": 5326.0,
+    "win": 0.4788732394366197,
+    "pf": 2.1241029970451666,
+    "max_dd": 679.0,
+    "sharpe": 2.8351457929608763,
+    "avg_trade": 75.01,
+    "worst_open_loss": 299.0,
+    "days": 251,
+    "t": 2.9368761825036556
+   },
+   "2023": {
+    "period": "2023",
+    "trades": 67,
+    "net": 4177.0,
+    "win": 0.44776119402985076,
+    "pf": 1.8881564958537105,
+    "max_dd": 805.0,
+    "sharpe": 2.3191862020698624,
+    "avg_trade": 62.34,
+    "worst_open_loss": 379.0,
+    "days": 251,
+    "t": 2.372707693730199
+   },
+   "2024": {
+    "period": "2024",
+    "trades": 68,
+    "net": 1133.0,
+    "win": 0.36764705882352944,
+    "pf": 1.1807882559438327,
+    "max_dd": 1840.0,
+    "sharpe": 0.6228793477844604,
+    "avg_trade": 16.66,
+    "worst_open_loss": 369.0,
+    "days": 252,
+    "t": 0.6208124590202039
+   },
+   "2025": {
+    "period": "2025",
+    "trades": 57,
+    "net": -1358.0,
+    "win": 0.2807017543859649,
+    "pf": 0.7771578601903512,
+    "max_dd": 1756.0,
+    "sharpe": -0.8651412883445326,
+    "avg_trade": -23.82,
+    "worst_open_loss": 274.0,
+    "days": 261,
+    "t": -0.8790766988303879
+   },
+   "combined": {
+    "period": "combined",
+    "trades": 282,
+    "net": 9622.0,
+    "win": 0.39361702127659576,
+    "pf": 1.4141344581217181,
+    "max_dd": 3198.0,
+    "sharpe": 1.2736594887882782,
+    "avg_trade": 34.12,
+    "worst_open_loss": 379.0,
+    "days": 1086,
+    "t": 2.6651567267852987
+   }
+  },
+  "exam_refused": null,
+  "pick": {
+   "verdict": "MEMBER",
+   "t4": true,
+   "t5": true,
+   "t6": true,
+   "cells": 27,
+   "positive": 22,
+   "share_pos": 0.8148148148148148,
+   "avg_net": 3272.259259259259,
+   "median_net": 2838.0,
+   "avg_trades": 68.0,
+   "stress_avg_net": 2673.814814814815,
+   "stress_share_pos": 0.7407407407407407,
+   "default_net": null,
+   "default_stress_net": null,
+   "saved_profitable": null,
+   "failed": [],
+   "controls": {
+    "days": {
+     "pass": true,
+     "p_beat": 0.9067,
+     "lift_per_trade": 24.55,
+     "per_trade": 48.12,
+     "unfiltered_per_trade": 23.57
+    },
+    "shift": {
+     "pass": true,
+     "lift": 4461.59,
+     "p_beat": 1.0,
+     "seeds": 10,
+     "two_seed": {
+      "pass": true,
+      "lift": 4452.96,
+      "p_beat": 1.0
+     }
+    }
+   },
+   "fast_net_share": 0.8544,
+   "fast_profit_share": 0.8492
+  },
+  "check": {
+   "verdict": "FAILED",
+   "t4": false,
+   "t5": false,
+   "t6": false,
+   "cells": 27,
+   "positive": 6,
+   "share_pos": 0.2222222222222222,
+   "avg_net": -730.2222222222222,
+   "median_net": -838.0,
+   "avg_trades": 57.0,
+   "stress_avg_net": -1638.0,
+   "stress_share_pos": 0.1111111111111111,
+   "default_net": -1358.0,
+   "default_stress_net": -2276.0,
+   "saved_profitable": 6,
+   "failed": [
+    "4",
+    "5",
+    "6"
+   ],
+   "controls": {
+    "days": {
+     "pass": false,
+     "p_beat": 0.3635,
+     "lift_per_trade": -6.71,
+     "per_trade": -12.81,
+     "unfiltered_per_trade": -6.1
+    },
+    "shift": {
+     "pass": true,
+     "lift": 1352.77,
+     "p_beat": 0.9167,
+     "seeds": 10,
+     "two_seed": {
+      "pass": true,
+      "lift": 1628.59,
+      "p_beat": 0.9875
+     }
+    }
+   },
+   "fast_net_share": null,
+   "fast_profit_share": 0.8234
+  },
+  "fast_net_share_all": 0.8594
+ },
+ {
+  "unit": "straddle_tight_0830-GC-tf30-pre@A",
+  "name": "straddle_tight_0830_GC_tf30_pre_evA",
+  "default": "offC_pts2-r2",
+  "variants": 27,
+  "saved": 24,
+  "demoted_2024": false,
+  "pick_verdict": "MEMBER",
+  "build": {
+   "share_pos": 0.9629629629629629,
+   "avg_net": 10184.666666666666,
+   "controls": {
+    "days": {
+     "pass": true,
+     "p_beat": 1.0,
+     "lift_per_trade": 36.35,
+     "per_trade": 46.02,
+     "unfiltered_per_trade": 9.66
+    },
+    "shift": {
+     "pass": true,
+     "lift": 14148.93,
+     "p_beat": 1.0,
+     "seeds": 10,
+     "two_seed": {
+      "pass": true,
+      "lift": 15003.11,
+      "p_beat": 1.0
+     }
+    }
+   }
+  },
+  "avg_rows": {
+   "2021": {
+    "period": "2021",
+    "trades": 26.7,
+    "net": 404.44,
+    "win": 0.4236,
+    "pf": 1.155,
+    "max_dd": 1229.33,
+    "avg_trade": 15.17
+   },
+   "2022": {
+    "period": "2022",
+    "trades": 98.7,
+    "net": 4645.33,
+    "win": 0.4891,
+    "pf": 1.544,
+    "max_dd": 1728.37,
+    "avg_trade": 47.08
+   },
+   "2023": {
+    "period": "2023",
+    "trades": 96.0,
+    "net": 5134.89,
+    "win": 0.5062,
+    "pf": 1.627,
+    "max_dd": 1421.78,
+    "avg_trade": 53.49
+   },
+   "2024": {
+    "period": "2024",
+    "trades": 96.0,
+    "net": 5910.07,
+    "win": 0.5305,
+    "pf": 1.724,
+    "max_dd": 1215.56,
+    "avg_trade": 61.56
+   },
+   "2025": {
+    "period": "2025",
+    "trades": 82.0,
+    "net": 2009.41,
+    "win": 0.4485,
+    "pf": 1.248,
+    "max_dd": 1963.63,
+    "avg_trade": 24.5
+   },
+   "2026": {
+    "period": "2026",
+    "trades": 69.0,
+    "net": -2028.59,
+    "win": 0.372,
+    "pf": 0.78,
+    "max_dd": 3406.15,
+    "avg_trade": -29.4
+   },
+   "combined": {
+    "period": "combined",
+    "trades": 468.3,
+    "net": 16075.56,
+    "win": 0.473,
+    "pf": 1.358,
+    "max_dd": 3833.41,
+    "avg_trade": 34.33
+   }
+  },
+  "default_rows": {
+   "2021": {
+    "period": "2021*",
+    "trades": 26,
+    "net": -714.0,
+    "win": 0.3076923076923077,
+    "pf": 0.8160741885625966,
+    "max_dd": 1776.0,
+    "sharpe": -0.9248958404403848,
+    "avg_trade": -27.46,
+    "worst_open_loss": 234.0,
+    "days": 71,
+    "t": -0.4862762957231534
+   },
+   "2022": {
+    "period": "2022",
+    "trades": 97,
+    "net": 5442.0,
+    "win": 0.44329896907216493,
+    "pf": 1.4697048161574313,
+    "max_dd": 2032.0,
+    "sharpe": 1.8028797652820645,
+    "avg_trade": 56.1,
+    "worst_open_loss": 214.0,
+    "days": 251,
+    "t": 1.8123036470575489
+   },
+   "2023": {
+    "period": "2023",
+    "trades": 96,
+    "net": 6206.0,
+    "win": 0.4583333333333333,
+    "pf": 1.553218042431806,
+    "max_dd": 2266.0,
+    "sharpe": 2.0536811854712416,
+    "avg_trade": 64.65,
+    "worst_open_loss": 244.0,
+    "days": 250,
+    "t": 2.0669645996058876
+   },
+   "2024": {
+    "period": "2024",
+    "trades": 96,
+    "net": 5756.0,
+    "win": 0.4583333333333333,
+    "pf": 1.4933150497086047,
+    "max_dd": 1786.0,
+    "sharpe": 1.8719057972880022,
+    "avg_trade": 59.96,
+    "worst_open_loss": 354.0,
+    "days": 252,
+    "t": 1.8873672092712324
+   },
+   "2025": {
+    "period": "2025",
+    "trades": 82,
+    "net": 342.0,
+    "win": 0.36585365853658536,
+    "pf": 1.029641185647426,
+    "max_dd": 3426.0,
+    "sharpe": 0.12424194626259621,
+    "avg_trade": 4.17,
+    "worst_open_loss": 334.0,
+    "days": 261,
+    "t": 0.12591763014927723
+   },
+   "2026": {
+    "period": "2026*",
+    "trades": 69,
+    "net": -1146.0,
+    "win": 0.36231884057971014,
+    "pf": 0.8962520369364476,
+    "max_dd": 2496.0,
+    "sharpe": -0.5048150161865285,
+    "avg_trade": -16.61,
+    "worst_open_loss": 524.0,
+    "days": 189,
+    "t": -0.43554101306523474
+   },
+   "combined": {
+    "period": "combined",
+    "trades": 466,
+    "net": 15886.0,
+    "win": 0.41630901287553645,
+    "pf": 1.2606911943286618,
+    "max_dd": 3660.0,
+    "sharpe": 1.0631999402950967,
+    "avg_trade": 34.09,
+    "worst_open_loss": 524.0,
+    "days": 1274,
+    "t": 2.398282160195132
+   }
+  },
+  "exam_refused": null,
+  "pick": {
+   "verdict": "MEMBER",
+   "t4": true,
+   "t5": true,
+   "t6": true,
+   "cells": 27,
+   "positive": 27,
+   "share_pos": 1.0,
+   "avg_net": 5910.074074074074,
+   "median_net": 5756.0,
+   "avg_trades": 96.0,
+   "stress_avg_net": 4104.666666666667,
+   "stress_share_pos": 0.9629629629629629,
+   "default_net": null,
+   "default_stress_net": null,
+   "saved_profitable": null,
+   "failed": [],
+   "controls": {
+    "days": {
+     "pass": true,
+     "p_beat": 0.9995,
+     "lift_per_trade": 49.97,
+     "per_trade": 61.56,
+     "unfiltered_per_trade": 11.59
+    },
+    "shift": {
+     "pass": true,
+     "lift": 8078.45,
+     "p_beat": 1.0,
+     "seeds": 10,
+     "two_seed": {
+      "pass": true,
+      "lift": 9590.26,
+      "p_beat": 1.0
+     }
+    }
+   },
+   "fast_net_share": 0.8101,
+   "fast_profit_share": 0.6744
+  },
+  "check": {
+   "verdict": "CONFIRMED",
+   "t4": true,
+   "t5": true,
+   "t6": true,
+   "cells": 27,
+   "positive": 23,
+   "share_pos": 0.8518518518518519,
+   "avg_net": 2009.4074074074074,
+   "median_net": 1782.0,
+   "avg_trades": 82.0,
+   "stress_avg_net": 634.6666666666666,
+   "stress_share_pos": 0.5925925925925926,
+   "default_net": 342.0,
+   "default_stress_net": -938.0,
+   "saved_profitable": 21,
+   "failed": [],
+   "controls": {
+    "days": {
+     "pass": true,
+     "p_beat": 0.9467,
+     "lift_per_trade": 25.32,
+     "per_trade": 24.5,
+     "unfiltered_per_trade": -0.82
+    },
+    "shift": {
+     "pass": true,
+     "lift": 3609.41,
+     "p_beat": 0.998,
+     "seeds": 10,
+     "two_seed": {
+      "pass": true,
+      "lift": 4390.96,
+      "p_beat": 1.0
+     }
+    }
+   },
+   "fast_net_share": 1.5018,
+   "fast_profit_share": 0.6743
+  },
+  "exam": {
+   "verdict": "FAILED",
+   "t4": false,
+   "t5": false,
+   "t6": false,
+   "cells": 27,
+   "positive": 4,
+   "share_pos": 0.14814814814814814,
+   "avg_net": -2028.5925925925926,
+   "median_net": -2106.0,
+   "avg_trades": 69.0,
+   "stress_avg_net": -2397.4074074074074,
+   "stress_share_pos": 0.1111111111111111,
+   "default_net": -1146.0,
+   "default_stress_net": -1816.0,
+   "saved_profitable": 4,
+   "failed": [
+    "4",
+    "5",
+    "6"
+   ],
+   "controls": {
+    "days": {
+     "pass": true,
+     "p_beat": 0.6315,
+     "lift_per_trade": 5.34,
+     "per_trade": -29.4,
+     "unfiltered_per_trade": -34.74
+    },
+    "shift": {
+     "pass": false,
+     "lift": -775.07,
+     "p_beat": 0.272,
+     "seeds": 10,
+     "two_seed": {
+      "pass": false,
+      "lift": -673.15,
+      "p_beat": 0.2577
+     }
+    }
+   },
+   "fast_net_share": null,
+   "fast_profit_share": 0.6743
+  },
+  "fast_net_share_all": 0.7199
+ },
+ {
+  "unit": "straddle_tight_0830-GC-tf30-pre@B",
+  "name": "straddle_tight_0830_GC_tf30_pre_evB",
+  "default": "offC_pts2-r2",
+  "variants": 27,
+  "saved": 22,
+  "demoted_2024": false,
+  "pick_verdict": "MEMBER",
+  "build": {
+   "share_pos": 1.0,
+   "avg_net": 8698.296296296296,
+   "controls": {
+    "days": {
+     "pass": true,
+     "p_beat": 1.0,
+     "lift_per_trade": 46.33,
+     "per_trade": 56.0,
+     "unfiltered_per_trade": 9.66
+    },
+    "shift": {
+     "pass": true,
+     "lift": 11096.93,
+     "p_beat": 1.0,
+     "seeds": 10,
+     "two_seed": {
+      "pass": true,
+      "lift": 12094.37,
+      "p_beat": 1.0
+     }
+    }
+   }
+  },
+  "avg_rows": {
+   "2021": {
+    "period": "2021",
+    "trades": 19.0,
+    "net": 383.63,
+    "win": 0.4366,
+    "pf": 1.21,
+    "max_dd": 865.63,
+    "avg_trade": 20.19
+   },
+   "2022": {
+    "period": "2022",
+    "trades": 70.3,
+    "net": 3692.74,
+    "win": 0.5066,
+    "pf": 1.62,
+    "max_dd": 1619.19,
+    "avg_trade": 52.5
+   },
+   "2023": {
+    "period": "2023",
+    "trades": 66.0,
+    "net": 4621.93,
+    "win": 0.537,
+    "pf": 1.873,
+    "max_dd": 1032.37,
+    "avg_trade": 70.03
+   },
+   "2024": {
+    "period": "2024",
+    "trades": 68.0,
+    "net": 4414.3,
+    "win": 0.5294,
+    "pf": 1.751,
+    "max_dd": 1008.0,
+    "avg_trade": 64.92
+   },
+   "2025": {
+    "period": "2025",
+    "trades": 57.0,
+    "net": 3600.89,
+    "win": 0.527,
+    "pf": 1.737,
+    "max_dd": 1071.11,
+    "avg_trade": 63.17
+   },
+   "2026": {
+    "period": "2026",
+    "trades": 44.0,
+    "net": -895.63,
+    "win": 0.3956,
+    "pf": 0.845,
+    "max_dd": 2703.85,
+    "avg_trade": -20.36
+   },
+   "combined": {
+    "period": "combined",
+    "trades": 324.3,
+    "net": 15817.85,
+    "win": 0.502,
+    "pf": 1.534,
+    "max_dd": 2944.81,
+    "avg_trade": 48.77
+   }
+  },
+  "default_rows": {
+   "2021": {
+    "period": "2021*",
+    "trades": 19,
+    "net": -436.0,
+    "win": 0.3157894736842105,
+    "pf": 0.844950213371266,
+    "max_dd": 1348.0,
+    "sharpe": -0.6556759333336524,
+    "avg_trade": -22.95,
+    "worst_open_loss": 234.0,
+    "days": 71,
+    "t": -0.3419704260610459
+   },
+   "2022": {
+    "period": "2022",
+    "trades": 70,
+    "net": 3900.0,
+    "win": 0.44285714285714284,
+    "pf": 1.4656160458452723,
+    "max_dd": 2128.0,
+    "sharpe": 1.5180744188833701,
+    "avg_trade": 55.71,
+    "worst_open_loss": 214.0,
+    "days": 251,
+    "t": 1.5254202903034555
+   },
+   "2023": {
+    "period": "2023",
+    "trades": 66,
+    "net": 6536.0,
+    "win": 0.5151515151515151,
+    "pf": 1.943418013856813,
+    "max_dd": 1378.0,
+    "sharpe": 2.537139113817058,
+    "avg_trade": 99.03,
+    "worst_open_loss": 244.0,
+    "days": 250,
+    "t": 2.6078221407384374
+   },
+   "2024": {
+    "period": "2024",
+    "trades": 68,
+    "net": 5698.0,
+    "win": 0.5,
+    "pf": 1.7337110481586402,
+    "max_dd": 920.0,
+    "sharpe": 2.148537210633492,
+    "avg_trade": 83.79,
+    "worst_open_loss": 354.0,
+    "days": 252,
+    "t": 2.192167035471099
+   },
+   "2025": {
+    "period": "2025",
+    "trades": 57,
+    "net": 3962.0,
+    "win": 0.47368421052631576,
+    "pf": 1.588707280832095,
+    "max_dd": 1232.0,
+    "sharpe": 1.6266892419082843,
+    "avg_trade": 69.51,
+    "worst_open_loss": 334.0,
+    "days": 261,
+    "t": 1.6759659011289403
+   },
+   "2026": {
+    "period": "2026*",
+    "trades": 44,
+    "net": -846.0,
+    "win": 0.36363636363636365,
+    "pf": 0.8822055137844611,
+    "max_dd": 2714.0,
+    "sharpe": -0.4610819634752022,
+    "avg_trade": -19.23,
+    "worst_open_loss": 524.0,
+    "days": 189,
+    "t": -0.3963477520436039
+   },
+   "combined": {
+    "period": "combined",
+    "trades": 324,
+    "net": 18814.0,
+    "win": 0.4567901234567901,
+    "pf": 1.4727848419359701,
+    "max_dd": 3080.0,
+    "sharpe": 1.4754887933400034,
+    "avg_trade": 58.07,
+    "worst_open_loss": 524.0,
+    "days": 1274,
+    "t": 3.356568015712043
+   }
+  },
+  "exam_refused": null,
+  "pick": {
+   "verdict": "MEMBER",
+   "t4": true,
+   "t5": true,
+   "t6": true,
+   "cells": 27,
+   "positive": 26,
+   "share_pos": 0.9629629629629629,
+   "avg_net": 4414.2962962962965,
+   "median_net": 4088.0,
+   "avg_trades": 68.0,
+   "stress_avg_net": 3011.3333333333335,
+   "stress_share_pos": 0.8148148148148148,
+   "default_net": null,
+   "default_stress_net": null,
+   "saved_profitable": null,
+   "failed": [],
+   "controls": {
+    "days": {
+     "pass": true,
+     "p_beat": 0.997,
+     "lift_per_trade": 53.33,
+     "per_trade": 64.92,
+     "unfiltered_per_trade": 11.59
+    },
+    "shift": {
+     "pass": true,
+     "lift": 5982.52,
+     "p_beat": 1.0,
+     "seeds": 10,
+     "two_seed": {
+      "pass": true,
+      "lift": 6607.07,
+      "p_beat": 1.0
+     }
+    }
+   },
+   "fast_net_share": 0.9175,
+   "fast_profit_share": 0.7944
+  },
+  "check": {
+   "verdict": "CONFIRMED",
+   "t4": true,
+   "t5": true,
+   "t6": true,
+   "cells": 27,
+   "positive": 25,
+   "share_pos": 0.9259259259259259,
+   "avg_net": 3600.8888888888887,
+   "median_net": 3292.0,
+   "avg_trades": 57.0,
+   "stress_avg_net": 2530.222222222222,
+   "stress_share_pos": 0.8888888888888888,
+   "default_net": 3962.0,
+   "default_stress_net": 2962.0,
+   "saved_profitable": 22,
+   "failed": [],
+   "controls": {
+    "days": {
+     "pass": true,
+     "p_beat": 0.9988,
+     "lift_per_trade": 63.99,
+     "per_trade": 63.17,
+     "unfiltered_per_trade": -0.82
+    },
+    "shift": {
+     "pass": true,
+     "lift": 4815.13,
+     "p_beat": 1.0,
+     "seeds": 10,
+     "two_seed": {
+      "pass": true,
+      "lift": 5660.15,
+      "p_beat": 1.0
+     }
+    }
+   },
+   "fast_net_share": 0.953,
+   "fast_profit_share": 0.7386
+  },
+  "exam": {
+   "verdict": "FAILED",
+   "t4": false,
+   "t5": false,
+   "t6": false,
+   "cells": 27,
+   "positive": 7,
+   "share_pos": 0.25925925925925924,
+   "avg_net": -895.6296296296297,
+   "median_net": -846.0,
+   "avg_trades": 44.0,
+   "stress_avg_net": -1429.037037037037,
+   "stress_share_pos": 0.14814814814814814,
+   "default_net": -846.0,
+   "default_stress_net": -1256.0,
+   "saved_profitable": 7,
+   "failed": [
+    "4",
+    "5",
+    "6"
+   ],
+   "controls": {
+    "days": {
+     "pass": true,
+     "p_beat": 0.7235,
+     "lift_per_trade": 14.39,
+     "per_trade": -20.36,
+     "unfiltered_per_trade": -34.74
+    },
+    "shift": {
+     "pass": false,
+     "lift": -468.9,
+     "p_beat": 0.3292,
+     "seeds": 10,
+     "two_seed": {
+      "pass": false,
+      "lift": -816.19,
+      "p_beat": 0.1603
+     }
+    }
+   },
+   "fast_net_share": null,
+   "fast_profit_share": 0.8227
+  },
+  "fast_net_share_all": 0.8327
+ },
+ {
+  "unit": "straddle_tight_1000-NQ-tf30-nyam@C",
+  "name": "straddle_tight_1000_NQ_tf30_nyam_evC",
+  "default": "offA_pts5-r3",
+  "variants": 27,
+  "saved": 26,
+  "demoted_2024": false,
+  "pick_verdict": "MEMBER",
+  "build": {
+   "share_pos": 0.9629629629629629,
+   "avg_net": 4100.37037037037,
+   "controls": {
+    "days": {
+     "pass": true,
+     "p_beat": 0.9955,
+     "lift_per_trade": 42.74,
+     "per_trade": 43.16,
+     "unfiltered_per_trade": 0.42
+    },
+    "shift": {
+     "pass": true,
+     "lift": 6423.64,
+     "p_beat": 1.0,
+     "seeds": 10,
+     "two_seed": {
+      "pass": true,
+      "lift": 6904.78,
+      "p_beat": 1.0
+     }
+    }
+   }
+  },
+  "avg_rows": {
+   "2021": {
+    "period": "2021",
+    "trades": 11.0,
+    "net": -279.19,
+    "win": 0.3131,
+    "pf": 0.771,
+    "max_dd": 758.89,
+    "avg_trade": -25.38
+   },
+   "2022": {
+    "period": "2022",
+    "trades": 42.0,
+    "net": 2075.33,
+    "win": 0.485,
+    "pf": 1.575,
+    "max_dd": 1270.22,
+    "avg_trade": 49.41
+   },
+   "2023": {
+    "period": "2023",
+    "trades": 42.0,
+    "net": 2304.22,
+    "win": 0.4982,
+    "pf": 1.66,
+    "max_dd": 979.78,
+    "avg_trade": 54.86
+   },
+   "2024": {
+    "period": "2024",
+    "trades": 46.0,
+    "net": 3241.93,
+    "win": 0.5322,
+    "pf": 1.888,
+    "max_dd": 759.48,
+    "avg_trade": 70.48
+   },
+   "2025": {
+    "period": "2025",
+    "trades": 45.0,
+    "net": 984.26,
+    "win": 0.4239,
+    "pf": 1.216,
+    "max_dd": 1921.96,
+    "avg_trade": 21.87
+   },
+   "2026": {
+    "period": "2026",
+    "trades": 32.0,
+    "net": -1105.22,
+    "win": 0.309,
+    "pf": 0.709,
+    "max_dd": 1751.52,
+    "avg_trade": -34.54
+   },
+   "combined": {
+    "period": "combined",
+    "trades": 218.0,
+    "net": 7221.33,
+    "win": 0.4504,
+    "pf": 1.355,
+    "max_dd": 3018.59,
+    "avg_trade": 33.13
+   }
+  },
+  "default_rows": {
+   "2021": {
+    "period": "2021*",
+    "trades": 11,
+    "net": -409.0,
+    "win": 0.18181818181818182,
+    "pf": 0.5914085914085914,
+    "max_dd": 596.0,
+    "sharpe": -1.4342457177544654,
+    "avg_trade": -37.18,
+    "worst_open_loss": 124.0,
+    "days": 71,
+    "t": -0.7481199705298849
+   },
+   "2022": {
+    "period": "2022",
+    "trades": 42,
+    "net": 1852.0,
+    "win": 0.38095238095238093,
+    "pf": 1.6421636615811372,
+    "max_dd": 1810.0,
+    "sharpe": 1.416829889854351,
+    "avg_trade": 44.1,
+    "worst_open_loss": 124.0,
+    "days": 251,
+    "t": 1.4285887541588256
+   },
+   "2023": {
+    "period": "2023",
+    "trades": 42,
+    "net": 1772.0,
+    "win": 0.38095238095238093,
+    "pf": 1.5978407557354926,
+    "max_dd": 705.0,
+    "sharpe": 1.346110695590533,
+    "avg_trade": 42.19,
+    "worst_open_loss": 179.0,
+    "days": 251,
+    "t": 1.3545529926044098
+   },
+   "2024": {
+    "period": "2024",
+    "trades": 46,
+    "net": 5016.0,
+    "win": 0.5434782608695652,
+    "pf": 3.1040268456375837,
+    "max_dd": 531.0,
+    "sharpe": 3.251912463740435,
+    "avg_trade": 109.04,
+    "worst_open_loss": 199.0,
+    "days": 252,
+    "t": 3.5779317494815785
+   },
+   "2025": {
+    "period": "2025",
+    "trades": 45,
+    "net": -1100.0,
+    "win": 0.24444444444444444,
+    "pf": 0.7474747474747475,
+    "max_dd": 2549.0,
+    "sharpe": -0.8669446533724643,
+    "avg_trade": -24.44,
+    "worst_open_loss": 214.0,
+    "days": 261,
+    "t": -0.8804573162386198
+   },
+   "2026": {
+    "period": "2026*",
+    "trades": 32,
+    "net": -1258.0,
+    "win": 0.1875,
+    "pf": 0.5853658536585366,
+    "max_dd": 1554.0,
+    "sharpe": -1.5488583952322768,
+    "avg_trade": -39.31,
+    "worst_open_loss": 154.0,
+    "days": 189,
+    "t": -1.3559489718349422
+   },
+   "combined": {
+    "period": "combined",
+    "trades": 218,
+    "net": 5873.0,
+    "win": 0.3486238532110092,
+    "pf": 1.3533056608313783,
+    "max_dd": 3620.0,
+    "sharpe": 0.8882625352118386,
+    "avg_trade": 26.94,
+    "worst_open_loss": 214.0,
+    "days": 1275,
+    "t": 2.009521168960153
+   }
+  },
+  "exam_refused": null,
+  "pick": {
+   "verdict": "MEMBER",
+   "t4": true,
+   "t5": true,
+   "t6": true,
+   "cells": 27,
+   "positive": 27,
+   "share_pos": 1.0,
+   "avg_net": 3241.925925925926,
+   "median_net": 2591.0,
+   "avg_trades": 46.0,
+   "stress_avg_net": 2619.185185185185,
+   "stress_share_pos": 0.9629629629629629,
+   "default_net": null,
+   "default_stress_net": null,
+   "saved_profitable": null,
+   "failed": [],
+   "controls": {
+    "days": {
+     "pass": true,
+     "p_beat": 1.0,
+     "lift_per_trade": 74.92,
+     "per_trade": 70.48,
+     "unfiltered_per_trade": -4.44
+    },
+    "shift": {
+     "pass": true,
+     "lift": 3077.15,
+     "p_beat": 0.998,
+     "seeds": 10,
+     "two_seed": {
+      "pass": true,
+      "lift": 3494.5,
+      "p_beat": 1.0
+     }
+    }
+   },
+   "fast_net_share": 0.5298,
+   "fast_profit_share": 0.6439
+  },
+  "check": {
+   "verdict": "CONFIRMED",
+   "t4": true,
+   "t5": true,
+   "t6": true,
+   "cells": 27,
+   "positive": 18,
+   "share_pos": 0.6666666666666666,
+   "avg_net": 984.2592592592592,
+   "median_net": 580.0,
+   "avg_trades": 45.0,
+   "stress_avg_net": 934.7037037037037,
+   "stress_share_pos": 0.5555555555555556,
+   "default_net": -1100.0,
+   "default_stress_net": -613.0,
+   "saved_profitable": 18,
+   "failed": [],
+   "controls": {
+    "days": {
+     "pass": true,
+     "p_beat": 0.8217,
+     "lift_per_trade": 19.24,
+     "per_trade": 21.87,
+     "unfiltered_per_trade": 2.63
+    },
+    "shift": {
+     "pass": true,
+     "lift": 1307.37,
+     "p_beat": 0.9038,
+     "seeds": 10,
+     "two_seed": {
+      "pass": true,
+      "lift": 1732.43,
+      "p_beat": 0.9815
+     }
+    }
+   },
+   "fast_net_share": 0.5744,
+   "fast_profit_share": 0.8369
+  },
+  "exam": {
+   "verdict": "FAILED",
+   "t4": false,
+   "t5": true,
+   "t6": false,
+   "cells": 27,
+   "positive": 1,
+   "share_pos": 0.037037037037037035,
+   "avg_net": -1105.2222222222222,
+   "median_net": -1068.0,
+   "avg_trades": 32.0,
+   "stress_avg_net": -1133.888888888889,
+   "stress_share_pos": 0.0,
+   "default_net": -1258.0,
+   "default_stress_net": -1226.0,
+   "saved_profitable": 1,
+   "failed": [
+    "4",
+    "6"
+   ],
+   "controls": {
+    "days": {
+     "pass": true,
+     "p_beat": 0.5995,
+     "lift_per_trade": 5.4,
+     "per_trade": -34.54,
+     "unfiltered_per_trade": -39.94
+    },
+    "shift": {
+     "pass": true,
+     "lift": 104.94,
+     "p_beat": 0.5505,
+     "seeds": 10,
+     "two_seed": {
+      "pass": false,
+      "lift": -980.56,
+      "p_beat": 0.1005
+     }
+    }
+   },
+   "fast_net_share": null,
+   "fast_profit_share": 0.6912
+  },
+  "fast_net_share_all": 0.2904
+ },
+ {
+  "unit": "straddle_tight_1000-GC-tf30-nyam@C",
+  "name": "straddle_tight_1000_GC_tf30_nyam_evC",
+  "default": "offA_pts1-r2",
+  "variants": 27,
+  "saved": 25,
+  "demoted_2024": false,
+  "pick_verdict": "MEMBER",
+  "build": {
+   "share_pos": 1.0,
+   "avg_net": 8210.074074074075,
+   "controls": {
+    "days": {
+     "pass": true,
+     "p_beat": 1.0,
+     "lift_per_trade": 94.94,
+     "per_trade": 85.52,
+     "unfiltered_per_trade": -9.42
+    },
+    "shift": {
+     "pass": true,
+     "lift": 9710.74,
+     "p_beat": 1.0,
+     "seeds": 10,
+     "two_seed": {
+      "pass": true,
+      "lift": 9603.41,
+      "p_beat": 1.0
+     }
+    }
+   }
+  },
+  "avg_rows": {
+   "2021": {
+    "period": "2021",
+    "trades": 11.0,
+    "net": 391.93,
+    "win": 0.4781,
+    "pf": 1.405,
+    "max_dd": 473.26,
+    "avg_trade": 35.63
+   },
+   "2022": {
+    "period": "2022",
+    "trades": 43.0,
+    "net": 3142.81,
+    "win": 0.5289,
+    "pf": 1.928,
+    "max_dd": 1081.56,
+    "avg_trade": 73.09
+   },
+   "2023": {
+    "period": "2023",
+    "trades": 42.0,
+    "net": 4675.33,
+    "win": 0.6437,
+    "pf": 2.802,
+    "max_dd": 572.3,
+    "avg_trade": 111.32
+   },
+   "2024": {
+    "period": "2024",
+    "trades": 46.0,
+    "net": 4308.59,
+    "win": 0.5837,
+    "pf": 2.32,
+    "max_dd": 549.7,
+    "avg_trade": 93.67
+   },
+   "2025": {
+    "period": "2025",
+    "trades": 45.0,
+    "net": 2226.3,
+    "win": 0.5053,
+    "pf": 1.576,
+    "max_dd": 984.22,
+    "avg_trade": 49.47
+   },
+   "2026": {
+    "period": "2026",
+    "trades": 33.0,
+    "net": 521.7,
+    "win": 0.4444,
+    "pf": 1.151,
+    "max_dd": 1171.26,
+    "avg_trade": 15.81
+   },
+   "combined": {
+    "period": "combined",
+    "trades": 220.0,
+    "net": 15266.67,
+    "win": 0.5423,
+    "pf": 1.871,
+    "max_dd": 1583.93,
+    "avg_trade": 69.39
+   }
+  },
+  "default_rows": {
+   "2021": {
+    "period": "2021*",
+    "trades": 12,
+    "net": 182.0,
+    "win": 0.4166666666666667,
+    "pf": 1.2280701754385965,
+    "max_dd": 260.0,
+    "sharpe": 0.640453229477438,
+    "avg_trade": 15.17,
+    "worst_open_loss": 104.0,
+    "days": 71,
+    "t": 0.32913344427681496
+   },
+   "2022": {
+    "period": "2022",
+    "trades": 43,
+    "net": 1908.0,
+    "win": 0.5116279069767442,
+    "pf": 1.7936772046589018,
+    "max_dd": 872.0,
+    "sharpe": 1.8142967554639753,
+    "avg_trade": 44.37,
+    "worst_open_loss": 114.0,
+    "days": 251,
+    "t": 1.8528222598125628
+   },
+   "2023": {
+    "period": "2023",
+    "trades": 42,
+    "net": 6372.0,
+    "win": 0.8571428571428571,
+    "pf": 10.31578947368421,
+    "max_dd": 228.0,
+    "sharpe": 5.602832308210494,
+    "avg_trade": 151.71,
+    "worst_open_loss": 104.0,
+    "days": 250,
+    "t": 8.955279109743186
+   },
+   "2024": {
+    "period": "2024",
+    "trades": 46,
+    "net": 3396.0,
+    "win": 0.6086956521739131,
+    "pf": 2.623326959847036,
+    "max_dd": 466.0,
+    "sharpe": 3.0028341295177627,
+    "avg_trade": 73.83,
+    "worst_open_loss": 134.0,
+    "days": 252,
+    "t": 3.2487007055984796
+   },
+   "2025": {
+    "period": "2025",
+    "trades": 45,
+    "net": 2250.0,
+    "win": 0.5333333333333333,
+    "pf": 1.9168704156479217,
+    "max_dd": 550.0,
+    "sharpe": 2.0226558830711574,
+    "avg_trade": 50.0,
+    "worst_open_loss": 124.0,
+    "days": 261,
+    "t": 2.1241415321716537
+   },
+   "2026": {
+    "period": "2026*",
+    "trades": 33,
+    "net": 868.0,
+    "win": 0.48484848484848486,
+    "pf": 1.382716049382716,
+    "max_dd": 422.0,
+    "sharpe": 1.03503833655502,
+    "avg_trade": 26.3,
+    "worst_open_loss": 214.0,
+    "days": 189,
+    "t": 0.8941062397997873
+   },
+   "combined": {
+    "period": "combined",
+    "trades": 221,
+    "net": 14976.0,
+    "win": 0.5927601809954751,
+    "pf": 2.399626168224299,
+    "max_dd": 1050.0,
+    "sharpe": 2.6837842934296923,
+    "avg_trade": 67.76,
+    "worst_open_loss": 214.0,
+    "days": 1274,
+    "t": 6.480886384852504
+   }
+  },
+  "exam_refused": null,
+  "pick": {
+   "verdict": "MEMBER",
+   "t4": true,
+   "t5": true,
+   "t6": true,
+   "cells": 27,
+   "positive": 27,
+   "share_pos": 1.0,
+   "avg_net": 4308.592592592592,
+   "median_net": 3396.0,
+   "avg_trades": 46.0,
+   "stress_avg_net": 3301.1111111111113,
+   "stress_share_pos": 1.0,
+   "default_net": null,
+   "default_stress_net": null,
+   "saved_profitable": null,
+   "failed": [],
+   "controls": {
+    "days": {
+     "pass": true,
+     "p_beat": 1.0,
+     "lift_per_trade": 97.27,
+     "per_trade": 93.67,
+     "unfiltered_per_trade": -3.6
+    },
+    "shift": {
+     "pass": true,
+     "lift": 4969.53,
+     "p_beat": 1.0,
+     "seeds": 10,
+     "two_seed": {
+      "pass": true,
+      "lift": 4710.7,
+      "p_beat": 1.0
+     }
+    }
+   },
+   "fast_net_share": 0.6779,
+   "fast_profit_share": 0.6362
+  },
+  "check": {
+   "verdict": "CONFIRMED",
+   "t4": true,
+   "t5": true,
+   "t6": true,
+   "cells": 27,
+   "positive": 26,
+   "share_pos": 0.9629629629629629,
+   "avg_net": 2226.296296296296,
+   "median_net": 1630.0,
+   "avg_trades": 45.0,
+   "stress_avg_net": 1660.5185185185185,
+   "stress_share_pos": 0.9259259259259259,
+   "default_net": 2250.0,
+   "default_stress_net": 1586.0,
+   "saved_profitable": 24,
+   "failed": [],
+   "controls": {
+    "days": {
+     "pass": true,
+     "p_beat": 0.9955,
+     "lift_per_trade": 58.21,
+     "per_trade": 49.47,
+     "unfiltered_per_trade": -8.73
+    },
+    "shift": {
+     "pass": true,
+     "lift": 3577.93,
+     "p_beat": 0.999,
+     "seeds": 10,
+     "two_seed": {
+      "pass": true,
+      "lift": 4280.0,
+      "p_beat": 1.0
+     }
+    }
+   },
+   "fast_net_share": 1.0361,
+   "fast_profit_share": 0.6155
+  },
+  "exam": {
+   "verdict": "WEAK",
+   "t4": true,
+   "t5": true,
+   "t6": false,
+   "cells": 27,
+   "positive": 18,
+   "share_pos": 0.6666666666666666,
+   "avg_net": 521.7037037037037,
+   "median_net": 708.0,
+   "avg_trades": 33.0,
+   "stress_avg_net": -660.7407407407408,
+   "stress_share_pos": 0.25925925925925924,
+   "default_net": 868.0,
+   "default_stress_net": 16.0,
+   "saved_profitable": 17,
+   "failed": [
+    "6"
+   ],
+   "controls": {
+    "days": {
+     "pass": true,
+     "p_beat": 0.9795,
+     "lift_per_trade": 52.41,
+     "per_trade": 15.81,
+     "unfiltered_per_trade": -36.6
+    },
+    "shift": {
+     "pass": true,
+     "lift": 1625.96,
+     "p_beat": 0.9645,
+     "seeds": 10,
+     "two_seed": {
+      "pass": true,
+      "lift": 1590.19,
+      "p_beat": 0.994
+     }
+    }
+   },
+   "fast_net_share": 0.24,
+   "fast_profit_share": 0.7057
+  },
+  "fast_net_share_all": 0.6333
+ },
+ {
+  "unit": "first_bar_mom-NQ-tf30-mid",
+  "name": "first_bar_mom_NQ_tf30_mid",
+  "default": "k1p5_pts45-r3",
+  "variants": 96,
+  "saved": 43,
+  "demoted_2024": false,
+  "pick_verdict": "MEMBER",
+  "build": {
+   "share_pos": 0.65625,
+   "avg_net": 14368.395833333334,
+   "controls": {
+    "c1": {
+     "pass": true,
+     "lift": 18992.47,
+     "p_beat": 0.984,
+     "seeds": 10,
+     "two_seed": {
+      "pass": true,
+      "lift": 17378.82,
+      "p_beat": 0.9902
+     }
+    }
+   }
+  },
+  "avg_rows": {
+   "2021": {
+    "period": "2021",
+    "trades": 34.0,
+    "net": 5290.93,
+    "win": 0.4222,
+    "pf": 1.443,
+    "max_dd": 3218.45,
+    "avg_trade": 155.62
+   },
+   "2022": {
+    "period": "2022",
+    "trades": 117.7,
+    "net": 8201.0,
+    "win": 0.3703,
+    "pf": 1.15,
+    "max_dd": 9818.65,
+    "avg_trade": 69.7
+   },
+   "2023": {
+    "period": "2023",
+    "trades": 131.0,
+    "net": 876.47,
+    "win": 0.3626,
+    "pf": 1.017,
+    "max_dd": 11162.58,
+    "avg_trade": 6.69
+   },
+   "2024": {
+    "period": "2024",
+    "trades": 130.7,
+    "net": 11239.1,
+    "win": 0.3909,
+    "pf": 1.196,
+    "max_dd": 9004.47,
+    "avg_trade": 86.01
+   },
+   "2025": {
+    "period": "2025",
+    "trades": 118.7,
+    "net": -6182.11,
+    "win": 0.3389,
+    "pf": 0.907,
+    "max_dd": 18901.31,
+    "avg_trade": -52.1
+   },
+   "combined": {
+    "period": "combined",
+    "trades": 532.0,
+    "net": 19425.39,
+    "win": 0.3698,
+    "pf": 1.08,
+    "max_dd": 23644.92,
+    "avg_trade": 36.51
+   }
+  },
+  "default_rows": {
+   "2021": {
+    "period": "2021*",
+    "trades": 34,
+    "net": 5804.0,
+    "win": 0.4117647058823529,
+    "pf": 1.3192519251925192,
+    "max_dd": 4545.0,
+    "sharpe": 1.2952848935947963,
+    "avg_trade": 170.71,
+    "worst_open_loss": 904.0,
+    "days": 71,
+    "t": 0.6846892705342722
+   },
+   "2022": {
+    "period": "2022",
+    "trades": 102,
+    "net": 18562.0,
+    "win": 0.35294117647058826,
+    "pf": 1.3133673228213527,
+    "max_dd": 12280.0,
+    "sharpe": 1.1928431069714334,
+    "avg_trade": 181.98,
+    "worst_open_loss": 909.0,
+    "days": 251,
+    "t": 1.1919363629866842
+   },
+   "2023": {
+    "period": "2023",
+    "trades": 118,
+    "net": 7223.0,
+    "win": 0.3644067796610169,
+    "pf": 1.1116728509585652,
+    "max_dd": 17997.0,
+    "sharpe": 0.49117552161800065,
+    "avg_trade": 61.21,
+    "worst_open_loss": 909.0,
+    "days": 251,
+    "t": 0.4893588726881097
+   },
+   "2024": {
+    "period": "2024",
+    "trades": 120,
+    "net": 11195.0,
+    "win": 0.35833333333333334,
+    "pf": 1.1640701713247257,
+    "max_dd": 13846.0,
+    "sharpe": 0.720240120499274,
+    "avg_trade": 93.29,
+    "worst_open_loss": 914.0,
+    "days": 252,
+    "t": 0.719478464405893
+   },
+   "2025": {
+    "period": "2025",
+    "trades": 111,
+    "net": 13896.0,
+    "win": 0.34234234234234234,
+    "pf": 1.2163407647278615,
+    "max_dd": 10727.0,
+    "sharpe": 0.8661270626238851,
+    "avg_trade": 125.19,
+    "worst_open_loss": 914.0,
+    "days": 261,
+    "t": 0.880944817264268
+   },
+   "combined": {
+    "period": "combined",
+    "trades": 485,
+    "net": 56680.0,
+    "win": 0.35876288659793815,
+    "pf": 1.2064401458338645,
+    "max_dd": 20580.0,
+    "sharpe": 0.8556794409689754,
+    "avg_trade": 116.87,
+    "worst_open_loss": 914.0,
+    "days": 1086,
+    "t": 1.7785314623524031
+   }
+  },
+  "exam_refused": null,
+  "pick": {
+   "verdict": "MEMBER",
+   "t4": true,
+   "t5": true,
+   "t6": true,
+   "cells": 96,
+   "positive": 83,
+   "share_pos": 0.8645833333333334,
+   "avg_net": 11239.104166666666,
+   "median_net": 6913.5,
+   "avg_trades": 130.66666666666666,
+   "stress_avg_net": 9150.40625,
+   "stress_share_pos": 0.7291666666666666,
+   "default_net": null,
+   "default_stress_net": null,
+   "saved_profitable": null,
+   "failed": [],
+   "controls": {
+    "c1": {
+     "pass": true,
+     "lift": 11867.47,
+     "p_beat": 0.9413,
+     "seeds": 10,
+     "two_seed": {
+      "pass": true,
+      "lift": 8214.85,
+      "p_beat": 0.9207
+     }
+    }
+   },
+   "fast_net_share": -0.0052,
+   "fast_profit_share": 0.0003
+  },
+  "check": {
+   "verdict": "FAILED",
+   "t4": false,
+   "t5": false,
+   "t6": false,
+   "cells": 96,
+   "positive": 29,
+   "share_pos": 0.3020833333333333,
+   "avg_net": -6182.114583333333,
+   "median_net": -3871.0,
+   "avg_trades": 118.66666666666667,
+   "stress_avg_net": -8075.8125,
+   "stress_share_pos": 0.15625,
+   "default_net": 13896.0,
+   "default_stress_net": 6136.0,
+   "saved_profitable": 12,
+   "failed": [
+    "4",
+    "5",
+    "6"
+   ],
+   "controls": {
+    "c1": {
+     "pass": false,
+     "lift": -4442.87,
+     "p_beat": 0.2855,
+     "seeds": 10,
+     "two_seed": {
+      "pass": true,
+      "lift": 2080.13,
+      "p_beat": 0.6328
+     }
+    }
+   },
+   "fast_net_share": null,
+   "fast_profit_share": 0.0031
+  },
+  "fast_net_share_all": -0.0209
+ },
+ {
+  "unit": "first_bar_mom-NQ-tf15-mid",
+  "name": "first_bar_mom_NQ_tf15_mid",
+  "default": "k1p5_atr3-r2",
+  "variants": 96,
+  "saved": 39,
+  "demoted_2024": false,
+  "pick_verdict": "MEMBER",
+  "build": {
+   "share_pos": 0.9270833333333334,
+   "avg_net": 16921.645833333332,
+   "controls": {
+    "c1": {
+     "pass": true,
+     "lift": 20771.64,
+     "p_beat": 0.9975,
+     "seeds": 10,
+     "two_seed": {
+      "pass": true,
+      "lift": 17289.81,
+      "p_beat": 0.9985
+     }
+    }
+   }
+  },
+  "avg_rows": {
+   "2021": {
+    "period": "2021",
+    "trades": 26.0,
+    "net": 8024.7,
+    "win": 0.4996,
+    "pf": 1.999,
+    "max_dd": 2246.62,
+    "avg_trade": 308.64
+   },
+   "2022": {
+    "period": "2022",
+    "trades": 91.7,
+    "net": 11082.4,
+    "win": 0.3823,
+    "pf": 1.27,
+    "max_dd": 7276.27,
+    "avg_trade": 120.9
+   },
+   "2023": {
+    "period": "2023",
+    "trades": 92.0,
+    "net": -2185.45,
+    "win": 0.3501,
+    "pf": 0.942,
+    "max_dd": 10013.25,
+    "avg_trade": -23.75
+   },
+   "2024": {
+    "period": "2024",
+    "trades": 95.7,
+    "net": 3984.68,
+    "win": 0.3627,
+    "pf": 1.092,
+    "max_dd": 8813.09,
+    "avg_trade": 41.65
+   },
+   "2025": {
+    "period": "2025",
+    "trades": 75.0,
+    "net": 2175.94,
+    "win": 0.3324,
+    "pf": 1.051,
+    "max_dd": 15117.27,
+    "avg_trade": 29.01
+   },
+   "2026": {
+    "period": "2026",
+    "trades": 50.3,
+    "net": 6269.19,
+    "win": 0.3736,
+    "pf": 1.225,
+    "max_dd": 8707.58,
+    "avg_trade": 124.55
+   },
+   "combined": {
+    "period": "combined",
+    "trades": 430.7,
+    "net": 29351.45,
+    "win": 0.3684,
+    "pf": 1.146,
+    "max_dd": 22970.88,
+    "avg_trade": 68.15
+   }
+  },
+  "default_rows": {
+   "2021": {
+    "period": "2021*",
+    "trades": 16,
+    "net": 18406.0,
+    "win": 0.75,
+    "pf": 4.330799855229823,
+    "max_dd": 3768.0,
+    "sharpe": 4.12223157121825,
+    "avg_trade": 1150.38,
+    "worst_open_loss": 2649.0,
+    "days": 71,
+    "t": 2.439647033324666
+   },
+   "2022": {
+    "period": "2022",
+    "trades": 68,
+    "net": 15993.0,
+    "win": 0.47058823529411764,
+    "pf": 1.2254631065497505,
+    "max_dd": 14080.0,
+    "sharpe": 0.7125019305742174,
+    "avg_trade": 235.19,
+    "worst_open_loss": 4289.0,
+    "days": 251,
+    "t": 0.7091818673996145
+   },
+   "2023": {
+    "period": "2023",
+    "trades": 70,
+    "net": -10780.0,
+    "win": 0.44285714285714284,
+    "pf": 0.805786761791518,
+    "max_dd": 23979.0,
+    "sharpe": -0.7593621081539305,
+    "avg_trade": -154.0,
+    "worst_open_loss": 2779.0,
+    "days": 251,
+    "t": -0.7561738771008
+   },
+   "2024": {
+    "period": "2024",
+    "trades": 82,
+    "net": 12292.0,
+    "win": 0.5,
+    "pf": 1.1859775471298453,
+    "max_dd": 11690.0,
+    "sharpe": 0.6095069328645301,
+    "avg_trade": 149.9,
+    "worst_open_loss": 5004.0,
+    "days": 252,
+    "t": 0.6079179569706545
+   },
+   "2025": {
+    "period": "2025",
+    "trades": 54,
+    "net": 11104.0,
+    "win": 0.46296296296296297,
+    "pf": 1.1768687978847103,
+    "max_dd": 20458.0,
+    "sharpe": 0.4130197381712956,
+    "avg_trade": 205.63,
+    "worst_open_loss": 10769.0,
+    "days": 261,
+    "t": 0.4177647588050167
+   },
+   "2026": {
+    "period": "2026*",
+    "trades": 36,
+    "net": 50281.0,
+    "win": 0.6388888888888888,
+    "pf": 2.523574328828556,
+    "max_dd": 6742.0,
+    "sharpe": 2.2221016169765964,
+    "avg_trade": 1396.69,
+    "worst_open_loss": 7129.0,
+    "days": 189,
+    "t": 1.9875349741413824
+   },
+   "combined": {
+    "period": "combined",
+    "trades": 326,
+    "net": 97296.0,
+    "win": 0.5030674846625767,
+    "pf": 1.3311155957433052,
+    "max_dd": 33755.0,
+    "sharpe": 0.8532811182010823,
+    "avg_trade": 298.45,
+    "worst_open_loss": 10769.0,
+    "days": 1275,
+    "t": 1.925243859975047
+   }
+  },
+  "exam_refused": null,
+  "pick": {
+   "verdict": "MEMBER",
+   "t4": true,
+   "t5": true,
+   "t6": true,
+   "cells": 96,
+   "positive": 48,
+   "share_pos": 0.5,
+   "avg_net": 3984.6770833333335,
+   "median_net": 169.5,
+   "avg_trades": 95.66666666666667,
+   "stress_avg_net": 3250.9270833333335,
+   "stress_share_pos": 0.4270833333333333,
+   "default_net": null,
+   "default_stress_net": null,
+   "saved_profitable": null,
+   "failed": [],
+   "controls": {
+    "c1": {
+     "pass": true,
+     "lift": 4190.4,
+     "p_beat": 0.791,
+     "seeds": 10,
+     "two_seed": {
+      "pass": true,
+      "lift": 3546.46,
+      "p_beat": 0.7738
+     }
+    }
+   },
+   "fast_net_share": -0.0066,
+   "fast_profit_share": 0.0
+  },
+  "check": {
+   "verdict": "CONFIRMED",
+   "t4": true,
+   "t5": true,
+   "t6": true,
+   "cells": 96,
+   "positive": 53,
+   "share_pos": 0.5520833333333334,
+   "avg_net": 2175.9375,
+   "median_net": 1324.0,
+   "avg_trades": 75.0,
+   "stress_avg_net": 961.9270833333334,
+   "stress_share_pos": 0.5208333333333334,
+   "default_net": 11104.0,
+   "default_stress_net": 9279.0,
+   "saved_profitable": 21,
+   "failed": [],
+   "controls": {
+    "c1": {
+     "pass": true,
+     "lift": 2029.45,
+     "p_beat": 0.6348,
+     "seeds": 10,
+     "two_seed": {
+      "pass": true,
+      "lift": 1700.7,
+      "p_beat": 0.6192
+     }
+    }
+   },
+   "fast_net_share": 0.0276,
+   "fast_profit_share": 0.0033
+  },
+  "exam": {
+   "verdict": "WEAK",
+   "t4": false,
+   "t5": true,
+   "t6": true,
+   "cells": 96,
+   "positive": 46,
+   "share_pos": 0.4791666666666667,
+   "avg_net": 6269.1875,
+   "median_net": -61.5,
+   "avg_trades": 50.333333333333336,
+   "stress_avg_net": 5736.895833333333,
+   "stress_share_pos": 0.4791666666666667,
+   "default_net": 50281.0,
+   "default_stress_net": 49686.0,
+   "saved_profitable": 21,
+   "failed": [
+    "4"
+   ],
+   "controls": {
+    "c1": {
+     "pass": true,
+     "lift": 5456.74,
+     "p_beat": 0.8675,
+     "seeds": 10,
+     "two_seed": {
+      "pass": true,
+      "lift": 5105.7,
+      "p_beat": 0.9005
+     }
+    }
+   },
+   "fast_net_share": -0.005,
+   "fast_profit_share": 0.0014
+  },
+  "fast_net_share_all": -0.0004
+ },
+ {
+  "unit": "first_bar_mom-ES-tf15-mid",
+  "name": "first_bar_mom_ES_tf15_mid",
+  "default": "k1p5_atr1p5-r2",
+  "variants": 95,
+  "saved": 25,
+  "demoted_2024": false,
+  "pick_verdict": "MEMBER",
+  "build": {
+   "share_pos": 0.6842105263157895,
+   "avg_net": 4632.015789473684,
+   "controls": {
+    "c1": {
+     "pass": true,
+     "lift": 11743.24,
+     "p_beat": 0.996,
+     "seeds": 10,
+     "two_seed": {
+      "pass": true,
+      "lift": 7816.58,
+      "p_beat": 0.9828
+     }
+    }
+   }
+  },
+  "avg_rows": {
+   "2021": {
+    "period": "2021",
+    "trades": 25.2,
+    "net": 920.56,
+    "win": 0.4145,
+    "pf": 1.152,
+    "max_dd": 2112.15,
+    "avg_trade": 36.55
+   },
+   "2022": {
+    "period": "2022",
+    "trades": 90.3,
+    "net": 5619.44,
+    "win": 0.3663,
+    "pf": 1.207,
+    "max_dd": 5071.67,
+    "avg_trade": 62.21
+   },
+   "2023": {
+    "period": "2023",
+    "trades": 93.1,
+    "net": -1907.98,
+    "win": 0.3553,
+    "pf": 0.92,
+    "max_dd": 5990.09,
+    "avg_trade": -20.48
+   },
+   "2024": {
+    "period": "2024",
+    "trades": 97.4,
+    "net": 2681.32,
+    "win": 0.3711,
+    "pf": 1.104,
+    "max_dd": 4238.44,
+    "avg_trade": 27.54
+   },
+   "2025": {
+    "period": "2025",
+    "trades": 78.6,
+    "net": 1372.71,
+    "win": 0.3684,
+    "pf": 1.053,
+    "max_dd": 8456.55,
+    "avg_trade": 17.46
+   },
+   "combined": {
+    "period": "combined",
+    "trades": 384.7,
+    "net": 8686.04,
+    "win": 0.3685,
+    "pf": 1.08,
+    "max_dd": 13053.94,
+    "avg_trade": 22.58
+   }
+  },
+  "default_rows": {
+   "2021": {
+    "period": "2021*",
+    "trades": 17,
+    "net": 2794.5,
+    "win": 0.5294117647058824,
+    "pf": 1.5120945574491478,
+    "max_dd": 1770.5,
+    "sharpe": 1.3905908362578687,
+    "avg_trade": 164.38,
+    "worst_open_loss": 1154.0,
+    "days": 71,
+    "t": 0.7302641625964782
+   },
+   "2022": {
+    "period": "2022",
+    "trades": 61,
+    "net": 13731.0,
+    "win": 0.45901639344262296,
+    "pf": 1.5315500154846702,
+    "max_dd": 5844.5,
+    "sharpe": 1.4848120757035346,
+    "avg_trade": 225.1,
+    "worst_open_loss": 1191.5,
+    "days": 251,
+    "t": 1.4931703409137738
+   },
+   "2023": {
+    "period": "2023",
+    "trades": 72,
+    "net": -1113.0,
+    "win": 0.3611111111111111,
+    "pf": 0.953326483970394,
+    "max_dd": 4908.5,
+    "sharpe": -0.18552106439408259,
+    "avg_trade": -15.46,
+    "worst_open_loss": 966.5,
+    "days": 251,
+    "t": -0.18426109198127325
+   },
+   "2024": {
+    "period": "2024",
+    "trades": 73,
+    "net": 2845.5,
+    "win": 0.3972602739726027,
+    "pf": 1.1120231486949332,
+    "max_dd": 5534.0,
+    "sharpe": 0.4002664817787126,
+    "avg_trade": 38.98,
+    "worst_open_loss": 2466.5,
+    "days": 252,
+    "t": 0.3986186235130717
+   },
+   "2025": {
+    "period": "2025",
+    "trades": 61,
+    "net": -4281.5,
+    "win": 0.3770491803278688,
+    "pf": 0.8797821112187452,
+    "max_dd": 17028.0,
+    "sharpe": -0.3556195055865116,
+    "avg_trade": -70.19,
+    "worst_open_loss": 6691.5,
+    "days": 261,
+    "t": -0.3599223441465314
+   },
+   "combined": {
+    "period": "combined",
+    "trades": 284,
+    "net": 13976.5,
+    "win": 0.40492957746478875,
+    "pf": 1.1203304319377363,
+    "max_dd": 17601.0,
+    "sharpe": 0.3726089624408108,
+    "avg_trade": 49.21,
+    "worst_open_loss": 6691.5,
+    "days": 1086,
+    "t": 0.7731085022852178
+   }
+  },
+  "exam_refused": null,
+  "pick": {
+   "verdict": "MEMBER",
+   "t4": true,
+   "t5": true,
+   "t6": true,
+   "cells": 95,
+   "positive": 53,
+   "share_pos": 0.5578947368421052,
+   "avg_net": 2681.315789473684,
+   "median_net": 1133.0,
+   "avg_trades": 97.36842105263158,
+   "stress_avg_net": 435.7894736842105,
+   "stress_share_pos": 0.45263157894736844,
+   "default_net": null,
+   "default_stress_net": null,
+   "saved_profitable": null,
+   "failed": [],
+   "controls": {
+    "c1": {
+     "pass": true,
+     "lift": 3819.72,
+     "p_beat": 0.8868,
+     "seeds": 10,
+     "two_seed": {
+      "pass": true,
+      "lift": 3410.0,
+      "p_beat": 0.8968
+     }
+    }
+   },
+   "fast_net_share": 0.0,
+   "fast_profit_share": 0.0
+  },
+  "check": {
+   "verdict": "WEAK",
+   "t4": true,
+   "t5": true,
+   "t6": false,
+   "cells": 95,
+   "positive": 49,
+   "share_pos": 0.5157894736842106,
+   "avg_net": 1372.7105263157894,
+   "median_net": 105.0,
+   "avg_trades": 78.63157894736842,
+   "stress_avg_net": -777.1578947368421,
+   "stress_share_pos": 0.42105263157894735,
+   "default_net": -4281.5,
+   "default_stress_net": -8569.0,
+   "saved_profitable": 20,
+   "failed": [
+    "6"
+   ],
+   "controls": {
+    "c1": {
+     "pass": true,
+     "lift": 4312.01,
+     "p_beat": 0.8925,
+     "seeds": 10,
+     "two_seed": {
+      "pass": true,
+      "lift": 4955.24,
+      "p_beat": 0.94
+     }
+    }
+   },
+   "fast_net_share": -0.0382,
+   "fast_profit_share": 0.002
+  },
+  "fast_net_share_all": -0.0065
+ },
+ {
+  "unit": "orb-NQ-tf15-pre",
+  "name": "orb_NQ_tf15_pre",
+  "default": "or_min15_pct0p1-r0",
+  "variants": 96,
+  "saved": 50,
+  "demoted_2024": true,
+  "pick_verdict": "DEMOTED: luck not excluded (BUILD test (2) fails with every control seed on disk; it passes with the first 2)",
+  "build": {
+   "share_pos": 0.78125,
+   "avg_net": 22707.177083333332,
+   "controls": {
+    "c1": {
+     "pass": false,
+     "lift": 11530.08,
+     "p_beat": 0.7937,
+     "seeds": 10,
+     "two_seed": {
+      "pass": true,
+      "lift": 20201.6,
+      "p_beat": 0.9677
+     }
+    }
+   }
+  },
+  "avg_rows": {
+   "2021": {
+    "period": "2021",
+    "trades": 64.3,
+    "net": -467.7,
+    "win": 0.3248,
+    "pf": 0.982,
+    "max_dd": 7630.19,
+    "avg_trade": -7.27
+   },
+   "2022": {
+    "period": "2022",
+    "trades": 221.3,
+    "net": 17004.72,
+    "win": 0.3324,
+    "pf": 1.176,
+    "max_dd": 13364.8,
+    "avg_trade": 76.83
+   },
+   "2023": {
+    "period": "2023",
+    "trades": 218.3,
+    "net": 6170.16,
+    "win": 0.3333,
+    "pf": 1.077,
+    "max_dd": 12819.92,
+    "avg_trade": 28.26
+   },
+   "2024": {
+    "period": "2024",
+    "trades": 221.3,
+    "net": 10885.86,
+    "win": 0.3232,
+    "pf": 1.115,
+    "max_dd": 15369.54,
+    "avg_trade": 49.18
+   },
+   "2025": {
+    "period": "2025",
+    "trades": 221.0,
+    "net": -9370.88,
+    "win": 0.2949,
+    "pf": 0.919,
+    "max_dd": 26334.55,
+    "avg_trade": -42.4
+   },
+   "combined": {
+    "period": "combined",
+    "trades": 946.3,
+    "net": 24222.17,
+    "win": 0.3212,
+    "pf": 1.059,
+    "max_dd": 32488.72,
+    "avg_trade": 25.6
+   }
+  },
+  "default_rows": {
+   "2021": {
+    "period": "2021*",
+    "trades": 68,
+    "net": -872.0,
+    "win": 0.07352941176470588,
+    "pf": 0.9571013922369263,
+    "max_dd": 7714.0,
+    "sharpe": -0.14540308039745348,
+    "avg_trade": -12.82,
+    "worst_open_loss": 339.0,
+    "days": 71,
+    "t": -0.07715541752611674
+   },
+   "2022": {
+    "period": "2022",
+    "trades": 228,
+    "net": 15793.0,
+    "win": 0.06578947368421052,
+    "pf": 1.2784526685120863,
+    "max_dd": 16912.0,
+    "sharpe": 0.704665907161225,
+    "avg_trade": 69.27,
+    "worst_open_loss": 334.0,
+    "days": 251,
+    "t": 0.7031946406822199
+   },
+   "2023": {
+    "period": "2023",
+    "trades": 226,
+    "net": 23571.0,
+    "win": 0.11504424778761062,
+    "pf": 1.4019953952417499,
+    "max_dd": 14806.0,
+    "sharpe": 1.2661462867398485,
+    "avg_trade": 104.3,
+    "worst_open_loss": 344.0,
+    "days": 251,
+    "t": 1.263798535704033
+   },
+   "2024": {
+    "period": "2024",
+    "trades": 229,
+    "net": 35934.0,
+    "win": 0.12663755458515283,
+    "pf": 1.4574957031001337,
+    "max_dd": 13981.0,
+    "sharpe": 1.3448399012186594,
+    "avg_trade": 156.92,
+    "worst_open_loss": 449.0,
+    "days": 252,
+    "t": 1.3450576066144668
+   },
+   "2025": {
+    "period": "2025",
+    "trades": 221,
+    "net": 24446.0,
+    "win": 0.08144796380090498,
+    "pf": 1.2595337183624937,
+    "max_dd": 28627.0,
+    "sharpe": 0.4717108549871459,
+    "avg_trade": 110.62,
+    "worst_open_loss": 529.0,
+    "days": 261,
+    "t": 0.4799317443447701
+   },
+   "combined": {
+    "period": "combined",
+    "trades": 972,
+    "net": 98872.0,
+    "win": 0.09567901234567901,
+    "pf": 1.3205799958497613,
+    "max_dd": 28627.0,
+    "sharpe": 0.728469877791343,
+    "avg_trade": 101.72,
+    "worst_open_loss": 529.0,
+    "days": 1086,
+    "t": 1.5123644274235746
+   }
+  },
+  "exam_refused": "the EXAM period (2026+) is sealed for orb-NQ-tf15-pre: it is not on the allowed list out/exam2026/allowed.json (members under the rule in force that pass tests (4)-(6) on 2025)",
+  "pick": {
+   "verdict": "DEMOTED: luck not excluded (BUILD test (2) fails with every control seed on disk; it passes with the first 2)",
+   "t4": true,
+   "t5": true,
+   "t6": true,
+   "cells": 96,
+   "positive": 65,
+   "share_pos": 0.6770833333333334,
+   "avg_net": 10885.864583333334,
+   "median_net": 5615.5,
+   "avg_trades": 221.33333333333334,
+   "stress_avg_net": 8258.125,
+   "stress_share_pos": 0.59375,
+   "default_net": null,
+   "default_stress_net": null,
+   "saved_profitable": null,
+   "failed": [],
+   "controls": {
+    "c1": {
+     "pass": true,
+     "lift": 8091.22,
+     "p_beat": 0.786,
+     "seeds": 10,
+     "two_seed": {
+      "pass": true,
+      "lift": 4028.22,
+      "p_beat": 0.6753
+     }
+    }
+   },
+   "fast_net_share": -0.1058,
+   "fast_profit_share": 0.0249
+  },
+  "check": {
+   "verdict": "FAILED",
+   "t4": false,
+   "t5": false,
+   "t6": false,
+   "cells": 96,
+   "positive": 25,
+   "share_pos": 0.2604166666666667,
+   "avg_net": -9370.875,
+   "median_net": -10121.5,
+   "avg_trades": 221.0,
+   "stress_avg_net": -11006.114583333334,
+   "stress_share_pos": 0.25,
+   "default_net": 24446.0,
+   "default_stress_net": 23316.0,
+   "saved_profitable": 22,
+   "failed": [
+    "4",
+    "5",
+    "6"
+   ],
+   "controls": {
+    "c1": {
+     "pass": false,
+     "lift": -12179.8,
+     "p_beat": 0.1497,
+     "seeds": 10,
+     "two_seed": {
+      "pass": false,
+      "lift": -23831.7,
+      "p_beat": 0.0015
+     }
+    }
+   },
+   "fast_net_share": null,
+   "fast_profit_share": 0.0226
+  },
+  "fast_net_share_all": -0.0018
+ },
+ {
+  "unit": "tema_slope-NQ-tf30-eve",
+  "name": "tema_slope_NQ_tf30_eve",
+  "default": "n40_pct0p1-r0",
+  "variants": 96,
+  "saved": 51,
+  "demoted_2024": false,
+  "pick_verdict": "MEMBER",
+  "build": {
+   "share_pos": 0.8645833333333334,
+   "avg_net": 19972.052083333332,
+   "controls": {
+    "c1": {
+     "pass": true,
+     "lift": 28523.13,
+     "p_beat": 0.9985,
+     "seeds": 10,
+     "two_seed": {
+      "pass": true,
+      "lift": 15492.65,
+      "p_beat": 0.9828
+     }
+    }
+   }
+  },
+  "avg_rows": {
+   "2021": {
+    "period": "2021",
+    "trades": 40.3,
+    "net": -3296.12,
+    "win": 0.2916,
+    "pf": 0.805,
+    "max_dd": 7843.11,
+    "avg_trade": -81.72
+   },
+   "2022": {
+    "period": "2022",
+    "trades": 166.0,
+    "net": 1542.35,
+    "win": 0.2994,
+    "pf": 1.021,
+    "max_dd": 16337.12,
+    "avg_trade": 9.29
+   },
+   "2023": {
+    "period": "2023",
+    "trades": 133.7,
+    "net": 21725.82,
+    "win": 0.39,
+    "pf": 1.5,
+    "max_dd": 8683.55,
+    "avg_trade": 162.45
+   },
+   "2024": {
+    "period": "2024",
+    "trades": 139.8,
+    "net": 11966.95,
+    "win": 0.3288,
+    "pf": 1.208,
+    "max_dd": 9080.98,
+    "avg_trade": 85.59
+   },
+   "2025": {
+    "period": "2025",
+    "trades": 138.7,
+    "net": -4117.93,
+    "win": 0.2971,
+    "pf": 0.945,
+    "max_dd": 19472.93,
+    "avg_trade": -29.69
+   },
+   "combined": {
+    "period": "combined",
+    "trades": 618.6,
+    "net": 27821.07,
+    "win": 0.3246,
+    "pf": 1.104,
+    "max_dd": 26473.81,
+    "avg_trade": 44.98
+   }
+  },
+  "default_rows": {
+   "2021": {
+    "period": "2021*",
+    "trades": 32,
+    "net": -10293.0,
+    "win": 0.0,
+    "pf": 0.0,
+    "max_dd": 10293.0,
+    "sharpe": -11.969822345399933,
+    "avg_trade": -321.66,
+    "worst_open_loss": 623.0,
+    "days": 71,
+    "t": -146.2387808091089
+   },
+   "2022": {
+    "period": "2022",
+    "trades": 148,
+    "net": 15648.0,
+    "win": 0.060810810810810814,
+    "pf": 1.425726412014365,
+    "max_dd": 13021.0,
+    "sharpe": 0.8332398541593733,
+    "avg_trade": 105.73,
+    "worst_open_loss": 732.0,
+    "days": 251,
+    "t": 0.8198157813359928
+   },
+   "2023": {
+    "period": "2023",
+    "trades": 101,
+    "net": 23176.0,
+    "win": 0.12871287128712872,
+    "pf": 1.8860343311541843,
+    "max_dd": 4436.0,
+    "sharpe": 1.577369436944918,
+    "avg_trade": 229.47,
+    "worst_open_loss": 633.0,
+    "days": 251,
+    "t": 1.5636596782062568
+   },
+   "2024": {
+    "period": "2024",
+    "trades": 101,
+    "net": 21171.0,
+    "win": 0.12871287128712872,
+    "pf": 1.6098165164040672,
+    "max_dd": 6139.0,
+    "sharpe": 1.1002323758443027,
+    "avg_trade": 209.61,
+    "worst_open_loss": 753.0,
+    "days": 252,
+    "t": 1.101758195469374
+   },
+   "2025": {
+    "period": "2025",
+    "trades": 99,
+    "net": 3659.0,
+    "win": 0.10101010101010101,
+    "pf": 1.0899105563200315,
+    "max_dd": 13050.0,
+    "sharpe": 0.2275829593290139,
+    "avg_trade": 36.96,
+    "worst_open_loss": 1302.0,
+    "days": 261,
+    "t": 0.22995054814805507
+   },
+   "combined": {
+    "period": "combined",
+    "trades": 481,
+    "net": 53361.0,
+    "win": 0.09355509355509356,
+    "pf": 1.359045613279594,
+    "max_dd": 13050.0,
+    "sharpe": 0.7440532841549947,
+    "avg_trade": 110.94,
+    "worst_open_loss": 1302.0,
+    "days": 1086,
+    "t": 1.5359005464727458
+   }
+  },
+  "exam_refused": null,
+  "pick": {
+   "verdict": "MEMBER",
+   "t4": true,
+   "t5": true,
+   "t6": true,
+   "cells": 96,
+   "positive": 70,
+   "share_pos": 0.7291666666666666,
+   "avg_net": 11966.947916666666,
+   "median_net": 5879.0,
+   "avg_trades": 139.8125,
+   "stress_avg_net": 9762.71875,
+   "stress_share_pos": 0.6458333333333334,
+   "default_net": null,
+   "default_stress_net": null,
+   "saved_profitable": null,
+   "failed": [],
+   "controls": {
+    "c1": {
+     "pass": true,
+     "lift": 12548.35,
+     "p_beat": 0.9583,
+     "seeds": 10,
+     "two_seed": {
+      "pass": true,
+      "lift": 1566.76,
+      "p_beat": 0.6152
+     }
+    }
+   },
+   "fast_net_share": 0.0,
+   "fast_profit_share": 0.0
+  },
+  "check": {
+   "verdict": "FAILED",
+   "t4": false,
+   "t5": true,
+   "t6": false,
+   "cells": 96,
+   "positive": 34,
+   "share_pos": 0.3541666666666667,
+   "avg_net": -4117.927083333333,
+   "median_net": -3398.0,
+   "avg_trades": 138.6875,
+   "stress_avg_net": -5494.59375,
+   "stress_share_pos": 0.2916666666666667,
+   "default_net": 3659.0,
+   "default_stress_net": -4951.0,
+   "saved_profitable": 21,
+   "failed": [
+    "4",
+    "6"
+   ],
+   "controls": {
+    "c1": {
+     "pass": true,
+     "lift": 2308.6,
+     "p_beat": 0.6035,
+     "seeds": 10,
+     "two_seed": {
+      "pass": false,
+      "lift": -1593.0,
+      "p_beat": 0.4133
+     }
+    }
+   },
+   "fast_net_share": null,
+   "fast_profit_share": 0.003
+  },
+  "fast_net_share_all": 0.0082
+ },
+ {
+  "unit": "donchian-NQ-tf30-nyam",
+  "name": "donchian_NQ_tf30_nyam",
+  "default": "n20_pts30-r3",
+  "variants": 64,
+  "saved": 43,
+  "demoted_2024": false,
+  "pick_verdict": "MEMBER",
+  "build": {
+   "share_pos": 0.953125,
+   "avg_net": 34773.4375,
+   "controls": {
+    "c1": {
+     "pass": true,
+     "lift": 27847.0,
+     "p_beat": 0.9908,
+     "seeds": 10,
+     "two_seed": {
+      "pass": true,
+      "lift": 12378.31,
+      "p_beat": 0.9553
+     }
+    }
+   }
+  },
+  "avg_rows": {
+   "2021": {
+    "period": "2021",
+    "trades": 44.2,
+    "net": 4147.72,
+    "win": 0.4058,
+    "pf": 1.24,
+    "max_dd": 5300.41,
+    "avg_trade": 93.83
+   },
+   "2022": {
+    "period": "2022",
+    "trades": 141.9,
+    "net": 26220.41,
+    "win": 0.4125,
+    "pf": 1.419,
+    "max_dd": 8664.78,
+    "avg_trade": 184.79
+   },
+   "2023": {
+    "period": "2023",
+    "trades": 137.9,
+    "net": 4405.31,
+    "win": 0.3512,
+    "pf": 1.083,
+    "max_dd": 9000.56,
+    "avg_trade": 31.95
+   },
+   "2024": {
+    "period": "2024",
+    "trades": 129.8,
+    "net": 13446.11,
+    "win": 0.3865,
+    "pf": 1.229,
+    "max_dd": 10100.27,
+    "avg_trade": 103.61
+   },
+   "2025": {
+    "period": "2025",
+    "trades": 138.9,
+    "net": 7955.34,
+    "win": 0.3582,
+    "pf": 1.111,
+    "max_dd": 11587.38,
+    "avg_trade": 57.29
+   },
+   "combined": {
+    "period": "combined",
+    "trades": 592.6,
+    "net": 56174.89,
+    "win": 0.3793,
+    "pf": 1.213,
+    "max_dd": 15999.11,
+    "avg_trade": 94.79
+   }
+  },
+  "default_rows": {
+   "2021": {
+    "period": "2021*",
+    "trades": 29,
+    "net": 9529.0,
+    "win": 0.41379310344827586,
+    "pf": 1.9612629879955614,
+    "max_dd": 3226.0,
+    "sharpe": 2.9180451520973314,
+    "avg_trade": 328.59,
+    "worst_open_loss": 604.0,
+    "days": 71,
+    "t": 1.5723023005796055
+   },
+   "2022": {
+    "period": "2022",
+    "trades": 85,
+    "net": 22810.0,
+    "win": 0.3764705882352941,
+    "pf": 1.7064762907671818,
+    "max_dd": 4263.0,
+    "sharpe": 2.132423187375769,
+    "avg_trade": 268.35,
+    "worst_open_loss": 609.0,
+    "days": 251,
+    "t": 2.1583859203376914
+   },
+   "2023": {
+    "period": "2023",
+    "trades": 79,
+    "net": 4264.0,
+    "win": 0.2911392405063291,
+    "pf": 1.125934020496766,
+    "max_dd": 6570.0,
+    "sharpe": 0.4553687917121249,
+    "avg_trade": 53.97,
+    "worst_open_loss": 604.0,
+    "days": 251,
+    "t": 0.4528886140067128
+   },
+   "2024": {
+    "period": "2024",
+    "trades": 83,
+    "net": 25358.0,
+    "win": 0.39759036144578314,
+    "pf": 1.8322284213980964,
+    "max_dd": 6787.0,
+    "sharpe": 2.3693743415701647,
+    "avg_trade": 305.52,
+    "worst_open_loss": 609.0,
+    "days": 252,
+    "t": 2.415384775843692
+   },
+   "2025": {
+    "period": "2025",
+    "trades": 81,
+    "net": -3914.0,
+    "win": 0.24691358024691357,
+    "pf": 0.8947679733290316,
+    "max_dd": 11881.0,
+    "sharpe": -0.42873749139587664,
+    "avg_trade": -48.32,
+    "worst_open_loss": 614.0,
+    "days": 261,
+    "t": -0.4348116143655851
+   },
+   "combined": {
+    "period": "combined",
+    "trades": 357,
+    "net": 58047.0,
+    "win": 0.33613445378151263,
+    "pf": 1.4038810767935543,
+    "max_dd": 12779.0,
+    "sharpe": 1.3376024427107496,
+    "avg_trade": 162.6,
+    "worst_open_loss": 614.0,
+    "days": 1086,
+    "t": 2.7945176336107322
+   }
+  },
+  "exam_refused": null,
+  "pick": {
+   "verdict": "MEMBER",
+   "t4": true,
+   "t5": true,
+   "t6": true,
+   "cells": 64,
+   "positive": 57,
+   "share_pos": 0.890625,
+   "avg_net": 13446.109375,
+   "median_net": 11115.0,
+   "avg_trades": 129.78125,
+   "stress_avg_net": 11266.0625,
+   "stress_share_pos": 0.875,
+   "default_net": null,
+   "default_stress_net": null,
+   "saved_profitable": null,
+   "failed": [],
+   "controls": {
+    "c1": {
+     "pass": true,
+     "lift": 7493.08,
+     "p_beat": 0.7973,
+     "seeds": 10,
+     "two_seed": {
+      "pass": true,
+      "lift": 1467.57,
+      "p_beat": 0.6075
+     }
+    }
+   },
+   "fast_net_share": -0.036,
+   "fast_profit_share": 0.0039
+  },
+  "check": {
+   "verdict": "WEAK",
+   "t4": true,
+   "t5": false,
+   "t6": true,
+   "cells": 64,
+   "positive": 47,
+   "share_pos": 0.734375,
+   "avg_net": 7955.34375,
+   "median_net": 2682.5,
+   "avg_trades": 138.859375,
+   "stress_avg_net": 2501.046875,
+   "stress_share_pos": 0.421875,
+   "default_net": -3914.0,
+   "default_stress_net": -4279.0,
+   "saved_profitable": 33,
+   "failed": [
+    "5"
+   ],
+   "controls": {
+    "c1": {
+     "pass": false,
+     "lift": -959.53,
+     "p_beat": 0.462,
+     "seeds": 10,
+     "two_seed": {
+      "pass": true,
+      "lift": 9729.7,
+      "p_beat": 0.953
+     }
+    }
+   },
+   "fast_net_share": -0.1066,
+   "fast_profit_share": 0.014
+  },
+  "fast_net_share_all": -0.0294
+ },
+ {
+  "unit": "straddle_t_0830-NQ-tf30-pre",
+  "name": "straddle_t_0830_NQ_tf30_pre",
+  "default": "offatr0p25_pct0p1-r0",
+  "variants": 160,
+  "saved": 67,
+  "demoted_2024": true,
+  "pick_verdict": "DEMOTED: luck not excluded (2024 test (5) fails with every control seed on disk; it passes with the first 2)",
+  "build": {
+   "share_pos": 0.91875,
+   "avg_net": 43665.35,
+   "controls": {
+    "shift": {
+     "pass": true,
+     "lift": 38698.92,
+     "p_beat": 0.9975,
+     "seeds": 10,
+     "two_seed": {
+      "pass": true,
+      "lift": 29478.66,
+      "p_beat": 0.9992
+     }
+    }
+   }
+  },
+  "avg_rows": {
+   "2021": {
+    "period": "2021",
+    "trades": 63.2,
+    "net": -2666.64,
+    "win": 0.3008,
+    "pf": 0.908,
+    "max_dd": 9978.6,
+    "avg_trade": -42.19
+   },
+   "2022": {
+    "period": "2022",
+    "trades": 231.8,
+    "net": 37862.99,
+    "win": 0.3667,
+    "pf": 1.349,
+    "max_dd": 12486.79,
+    "avg_trade": 163.34
+   },
+   "2023": {
+    "period": "2023",
+    "trades": 230.6,
+    "net": 8469.01,
+    "win": 0.3418,
+    "pf": 1.092,
+    "max_dd": 14883.63,
+    "avg_trade": 36.73
+   },
+   "2024": {
+    "period": "2024",
+    "trades": 237.0,
+    "net": 7327.81,
+    "win": 0.3269,
+    "pf": 1.065,
+    "max_dd": 19278.78,
+    "avg_trade": 30.92
+   },
+   "2025": {
+    "period": "2025",
+    "trades": 228.6,
+    "net": -309.71,
+    "win": 0.3223,
+    "pf": 0.998,
+    "max_dd": 20643.59,
+    "avg_trade": -1.35
+   },
+   "combined": {
+    "period": "combined",
+    "trades": 991.2,
+    "net": 50683.45,
+    "win": 0.3369,
+    "pf": 1.107,
+    "max_dd": 29435.66,
+    "avg_trade": 51.13
+   }
+  },
+  "default_rows": {
+   "2021": {
+    "period": "2021*",
+    "trades": 70,
+    "net": 6515.0,
+    "win": 0.12857142857142856,
+    "pf": 1.3319914390542194,
+    "max_dd": 5893.0,
+    "sharpe": 1.0032775402137362,
+    "avg_trade": 93.07,
+    "worst_open_loss": 339.0,
+    "days": 71,
+    "t": 0.532498319920858
+   },
+   "2022": {
+    "period": "2022",
+    "trades": 248,
+    "net": 61333.0,
+    "win": 0.08870967741935484,
+    "pf": 2.002763063239814,
+    "max_dd": 11451.0,
+    "sharpe": 1.9339480456291198,
+    "avg_trade": 247.31,
+    "worst_open_loss": 809.0,
+    "days": 251,
+    "t": 1.930234313155725
+   },
+   "2023": {
+    "period": "2023",
+    "trades": 250,
+    "net": 1300.0,
+    "win": 0.084,
+    "pf": 1.019227640472704,
+    "max_dd": 18197.0,
+    "sharpe": 0.07540453758897644,
+    "avg_trade": 5.2,
+    "worst_open_loss": 359.0,
+    "days": 251,
+    "t": 0.07525417806007806
+   },
+   "2024": {
+    "period": "2024",
+    "trades": 252,
+    "net": 39987.0,
+    "win": 0.11904761904761904,
+    "pf": 1.4567437291542924,
+    "max_dd": 17483.0,
+    "sharpe": 1.3610433434959008,
+    "avg_trade": 158.68,
+    "worst_open_loss": 464.0,
+    "days": 252,
+    "t": 1.3610433434959008
+   },
+   "2025": {
+    "period": "2025",
+    "trades": 248,
+    "net": -18292.0,
+    "win": 0.09274193548387097,
+    "pf": 0.8253997040996516,
+    "max_dd": 28517.0,
+    "sharpe": -0.8136799291495653,
+    "avg_trade": -73.76,
+    "worst_open_loss": 709.0,
+    "days": 261,
+    "t": -0.828056223095722
+   },
+   "combined": {
+    "period": "combined",
+    "trades": 1068,
+    "net": 90843.0,
+    "win": 0.09831460674157304,
+    "pf": 1.2666269459250041,
+    "max_dd": 28517.0,
+    "sharpe": 0.8248420259857989,
+    "avg_trade": 85.06,
+    "worst_open_loss": 809.0,
+    "days": 1086,
+    "t": 1.7123476404408136
+   }
+  },
+  "exam_refused": "the EXAM period (2026+) is sealed for straddle_t_0830-NQ-tf30-pre: it is not on the allowed list out/exam2026/allowed.json (members under the rule in force that pass tests (4)-(6) on 2025)",
+  "pick": {
+   "verdict": "DEMOTED: luck not excluded (2024 test (5) fails with every control seed on disk; it passes with the first 2)",
+   "t4": true,
+   "t5": false,
+   "t6": true,
+   "cells": 160,
+   "positive": 94,
+   "share_pos": 0.5875,
+   "avg_net": 7327.8125,
+   "median_net": 2228.0,
+   "avg_trades": 237.0,
+   "stress_avg_net": 5599.23125,
+   "stress_share_pos": 0.46875,
+   "default_net": null,
+   "default_stress_net": null,
+   "saved_profitable": null,
+   "failed": [
+    "5"
+   ],
+   "controls": {
+    "shift": {
+     "pass": false,
+     "lift": -1674.91,
+     "p_beat": 0.4228,
+     "seeds": 10,
+     "two_seed": {
+      "pass": true,
+      "lift": 11284.16,
+      "p_beat": 0.944
+     }
+    }
+   },
+   "fast_net_share": -0.6461,
+   "fast_profit_share": 0.0531
+  },
+  "check": {
+   "verdict": "FAILED",
+   "t4": false,
+   "t5": false,
+   "t6": false,
+   "cells": 160,
+   "positive": 69,
+   "share_pos": 0.43125,
+   "avg_net": -309.7125,
+   "median_net": -2202.5,
+   "avg_trades": 228.6,
+   "stress_avg_net": -1966.58125,
+   "stress_share_pos": 0.3625,
+   "default_net": -18292.0,
+   "default_stress_net": -16833.0,
+   "saved_profitable": 30,
+   "failed": [
+    "4",
+    "5",
+    "6"
+   ],
+   "controls": {
+    "shift": {
+     "pass": false,
+     "lift": -10175.33,
+     "p_beat": 0.192,
+     "seeds": 10,
+     "two_seed": {
+      "pass": true,
+      "lift": 1425.89,
+      "p_beat": 0.5733
+     }
+    }
+   },
+   "fast_net_share": null,
+   "fast_profit_share": 0.0309
+  },
+  "fast_net_share_all": -0.1759
+ },
+ {
+  "unit": "straddle_t_1800-NQ-tf30-eve",
+  "name": "straddle_t_1800_NQ_tf30_eve",
+  "default": "offatr0p25_pts45-r2",
+  "variants": 160,
+  "saved": 61,
+  "demoted_2024": true,
+  "pick_verdict": "DEMOTED: luck not excluded (2024 test (5) fails with every control seed on disk; it passes with the first 2)",
+  "build": {
+   "share_pos": 0.8375,
+   "avg_net": 15758.91875,
+   "controls": {
+    "shift": {
+     "pass": true,
+     "lift": 40659.28,
+     "p_beat": 1.0,
+     "seeds": 10,
+     "two_seed": {
+      "pass": true,
+      "lift": 44920.72,
+      "p_beat": 1.0
+     }
+    }
+   }
+  },
+  "avg_rows": {
+   "2021": {
+    "period": "2021",
+    "trades": 54.4,
+    "net": 3352.37,
+    "win": 0.3318,
+    "pf": 1.148,
+    "max_dd": 5733.35,
+    "avg_trade": 61.62
+   },
+   "2022": {
+    "period": "2022",
+    "trades": 199.8,
+    "net": 13856.21,
+    "win": 0.3286,
+    "pf": 1.155,
+    "max_dd": 13587.46,
+    "avg_trade": 69.35
+   },
+   "2023": {
+    "period": "2023",
+    "trades": 184.0,
+    "net": -1449.66,
+    "win": 0.3112,
+    "pf": 0.979,
+    "max_dd": 13298.45,
+    "avg_trade": -7.88
+   },
+   "2024": {
+    "period": "2024",
+    "trades": 209.0,
+    "net": 12460.25,
+    "win": 0.3109,
+    "pf": 1.137,
+    "max_dd": 14969.41,
+    "avg_trade": 59.62
+   },
+   "2025": {
+    "period": "2025",
+    "trades": 222.6,
+    "net": 8152.13,
+    "win": 0.3085,
+    "pf": 1.066,
+    "max_dd": 21129.39,
+    "avg_trade": 36.62
+   },
+   "combined": {
+    "period": "combined",
+    "trades": 869.8,
+    "net": 36371.3,
+    "win": 0.3157,
+    "pf": 1.092,
+    "max_dd": 28948.4,
+    "avg_trade": 41.82
+   }
+  },
+  "default_rows": {
+   "2021": {
+    "period": "2021*",
+    "trades": 68,
+    "net": 9703.0,
+    "win": 0.39705882352941174,
+    "pf": 1.2601758996085162,
+    "max_dd": 4669.0,
+    "sharpe": 1.6889384287608182,
+    "avg_trade": 142.69,
+    "worst_open_loss": 919.0,
+    "days": 71,
+    "t": 0.8964288782839045
+   },
+   "2022": {
+    "period": "2022",
+    "trades": 242,
+    "net": 28722.0,
+    "win": 0.38016528925619836,
+    "pf": 1.2104098750961503,
+    "max_dd": 12834.0,
+    "sharpe": 1.405369559071262,
+    "avg_trade": 118.69,
+    "worst_open_loss": 929.0,
+    "days": 251,
+    "t": 1.4026792864086504
+   },
+   "2023": {
+    "period": "2023",
+    "trades": 246,
+    "net": -13924.0,
+    "win": 0.3170731707317073,
+    "pf": 0.9079934186616624,
+    "max_dd": 27527.0,
+    "sharpe": -0.7130655916485207,
+    "avg_trade": -56.6,
+    "worst_open_loss": 924.0,
+    "days": 251,
+    "t": -0.7116350938829724
+   },
+   "2024": {
+    "period": "2024",
+    "trades": 248,
+    "net": 33733.0,
+    "win": 0.3911290322580645,
+    "pf": 1.245439795109103,
+    "max_dd": 13754.0,
+    "sharpe": 1.6288645797938681,
+    "avg_trade": 136.02,
+    "worst_open_loss": 924.0,
+    "days": 252,
+    "t": 1.6289511119323317
+   },
+   "2025": {
+    "period": "2025",
+    "trades": 244,
+    "net": 27309.0,
+    "win": 0.3770491803278688,
+    "pf": 1.198001783603895,
+    "max_dd": 14059.0,
+    "sharpe": 1.3072541778609372,
+    "avg_trade": 111.92,
+    "worst_open_loss": 1069.0,
+    "days": 261,
+    "t": 1.330530519219709
+   },
+   "combined": {
+    "period": "combined",
+    "trades": 1048,
+    "net": 85543.0,
+    "win": 0.3683206106870229,
+    "pf": 1.1424534303195015,
+    "max_dd": 31511.0,
+    "sharpe": 0.9797165641946752,
+    "avg_trade": 81.62,
+    "worst_open_loss": 1069.0,
+    "days": 1086,
+    "t": 2.033938681505183
+   }
+  },
+  "exam_refused": "the EXAM period (2026+) is sealed for straddle_t_1800-NQ-tf30-eve: it is not on the allowed list out/exam2026/allowed.json (members under the rule in force that pass tests (4)-(6) on 2025)",
+  "pick": {
+   "verdict": "DEMOTED: luck not excluded (2024 test (5) fails with every control seed on disk; it passes with the first 2)",
+   "t4": true,
+   "t5": false,
+   "t6": true,
+   "cells": 160,
+   "positive": 104,
+   "share_pos": 0.65,
+   "avg_net": 12460.25,
+   "median_net": 6343.0,
+   "avg_trades": 209.0,
+   "stress_avg_net": 6810.0625,
+   "stress_share_pos": 0.4875,
+   "default_net": null,
+   "default_stress_net": null,
+   "saved_profitable": null,
+   "failed": [
+    "5"
+   ],
+   "controls": {
+    "shift": {
+     "pass": false,
+     "lift": -360.36,
+     "p_beat": 0.4803,
+     "seeds": 10,
+     "two_seed": {
+      "pass": true,
+      "lift": 141.67,
+      "p_beat": 0.506
+     }
+    }
+   },
+   "fast_net_share": 0.0038,
+   "fast_profit_share": 0.0093
+  },
+  "check": {
+   "verdict": "CONFIRMED",
+   "t4": true,
+   "t5": true,
+   "t6": true,
+   "cells": 160,
+   "positive": 99,
+   "share_pos": 0.61875,
+   "avg_net": 8152.13125,
+   "median_net": 5360.0,
+   "avg_trades": 222.6,
+   "stress_avg_net": 2302.13125,
+   "stress_share_pos": 0.4875,
+   "default_net": 27309.0,
+   "default_stress_net": 13814.0,
+   "saved_profitable": 49,
+   "failed": [],
+   "controls": {
+    "shift": {
+     "pass": true,
+     "lift": 3512.68,
+     "p_beat": 0.6508,
+     "seeds": 10,
+     "two_seed": {
+      "pass": true,
+      "lift": 10344.37,
+      "p_beat": 0.9415
+     }
+    }
+   },
+   "fast_net_share": -0.1214,
+   "fast_profit_share": 0.0265
+  },
+  "fast_net_share_all": -0.0036
+ }
+]

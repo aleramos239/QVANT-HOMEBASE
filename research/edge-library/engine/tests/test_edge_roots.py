@@ -152,8 +152,17 @@ def test_gc_tape_is_the_testers_tape(tmp_path):
     assert t.root == "GC" and t.contract == h["contract"] and len(t.ts) == h["n"] and t.daily == h["daily"]
     assert bool((np.diff(t.ts) >= 0).all()) and t.daily == {"h": float(t.px.max()), "l": float(t.px.min()), "c": float(t.px[-1])}
     own = sorted(p.name for p in (S.OWN_TAPE / "GC").glob("*.tape")) if (S.OWN_TAPE / "GC").exists() else []
-    assert all(x[:10] < "2026-01-01" for x in own)              # build_tapes never builds an EXAM session (2026+; the CHECK
-    #                                                             year 2025 is built with allow_check=True: test_check_period.py)
+    # build_tapes never builds an EXAM session (2026+; the CHECK year 2025 is built with allow_check=True: test_check_period.py).
+    # The only 2026 tapes that may be on disk are the EXAM stage's own (EDGE_SPEC "FULL OUT-OF-SAMPLE FOR THE SAVED STRATEGIES",
+    # out/exam2026/build_data.py, 2026-10-05): a market an ALLOWED unit trades, no later than allowed.json's end date for it.
+    with pytest.raises(S.HoldoutSealed):
+        S.build_tapes("GC", "2026-01-02", "2026-01-05")
+    with pytest.raises(S.HoldoutSealed):
+        S.build_tapes("GC", "2026-01-02", "2026-01-05", allow_check=True)
+    allowed = S.L.parent / "out" / "exam2026" / "allowed.json"
+    a = json.loads(allowed.read_text()) if allowed.exists() else {}
+    end = a.get("period", {}).get("end", {}).get("GC") if any(u.split("-")[1] == "GC" for u in a.get("units", [])) else None
+    assert all(x[:10] < "2026-01-01" or (end is not None and x[:10] <= end) for x in own)
 
 
 class NfpStraddle(S.Strategy):

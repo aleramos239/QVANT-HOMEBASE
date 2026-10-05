@@ -1,0 +1,3 @@
+tema_slope-NQ-tf30-eve BUILD 96 0.865 19972 t1 True t2 True {'c1': (28498, 0.9985)}
+   2024 11967 5879 t4 True t5 True t6 True {'c1': 12323} surv 51 default n40_pct0p1-r0 member True
+   check FAILED 34 / 96 -4118 -3398 stress -5495 {'c1': (2112.4, 0.598)} default 3659 saved+ 21 / 51

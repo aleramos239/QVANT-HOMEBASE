@@ -194,7 +194,7 @@ def test_d_grid_is_7_delays_x_the_32_menu_cells():
 
 
 def test_the_round2_plan_and_the_cap(tmp_path):
-    assert LB.CAPS["cells"] == 50000
+    assert LB.CAPS["cells"] == 80000
     g = RM.group_plan("round2", ledger=tmp_path / "none.csv", runs_dir=tmp_path)
     by = {(r["family"], r["root"]): r for r in g["rows"]}
     assert len(by) == 12 and g["run_units"] == 12

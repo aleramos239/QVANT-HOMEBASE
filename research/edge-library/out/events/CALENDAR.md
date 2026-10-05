@@ -33,3 +33,8 @@ Known doubts:
 2. BEA/Census/DOL/ISM/UMich dates are actual release dates from archives, so a postponement would not show as a "move"; none found.
 3. CLAIMS 2025-10-02..2025-11-13 (7 weeks, shutdown): no DOL PDF found, rows left out. BEA 2026-07-30 GDP carried a 08:31 stamp, set to 08:30. PPI 2026-09-10 and JOLTS 2026-09-29 are on the BLS 2026 schedule but not yet in the archive copy.
 4. Same-day stacking is kept as separate rows (max 3 per day). Inputs and the builder script are in out/events/inputs/ (build_events.py).
+## 2025-26 rows checked 2026-10-05 (out/exam2026/calendar_check.md; no market data)
+NFP / CPI / FOMC 2025-26 = news_days.csv (0 mismatches). 238 of the 248 other 2025-26 rows re-read at the official sources: all right (claims: every weekday asked at DOL,
+84 release files = the 84 rows). Nothing changed or removed. 5 rows ADDED: 2026-09-30 GDP third + PCE (were missing), 2026-10-01 CLAIMS + ISM_MFG, 2026-10-02 NFP -> 908 rows,
+2021-09-01..2026-10-02. Correction to the note above: Sep 2025 JOLTS was published, together with Oct, on 2025-12-09 (the row is there). The PCE row 2025-12-23
+("data_update") is not a BEA income-and-outlays release; it sits on a GDP day at 08:30 and changes no filter day.

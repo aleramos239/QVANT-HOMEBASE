@@ -1,0 +1,96 @@
+utc,unit,period,role,store,seeds,origin,draws,verdict
+2026-10-05T15:48:45+00:00,straddle_tight_0830-NQ-tf30-pre,check,BUILD menu,runs/straddle_tight_0830-NQ-tf30,,new,4000,FAILED
+2026-10-05T15:48:45+00:00,straddle_tight_0830-NQ-tf30-pre,check,2025 menu,runs_check2025/straddle_tight_0830-NQ-tf30-pre-check,,new,4000,FAILED
+2026-10-05T15:48:45+00:00,straddle_tight_0830-NQ-tf30-pre,check,2025 control shift,runs_check2025/straddle_tight_0830-NQ-tf30-pre-check-shift,1 2,new,4000,FAILED
+2026-10-05T15:48:45+00:00,straddle_tight_0830-NQ-tf30-pre,check,2025 control shift,runs_seeds/straddle_tight_0830-NQ-tf30-pre-check-shift-s3to10,3 4 5 6 7 8 9 10,new,4000,FAILED
+2026-10-05T15:48:45+00:00,straddle_tight_0830-NQ-tf30-pre,check,2025 stress,runs_check2025/straddle_tight_0830-NQ-tf30-pre-check-stress,,new,4000,FAILED
+2026-10-05T15:48:45+00:00,straddle_tight_1000-NQ-tf30-nyam@C,check,BUILD menu,runs/straddle_tight_1000-NQ-tf30,,new,4000,CONFIRMED
+2026-10-05T15:48:45+00:00,straddle_tight_1000-NQ-tf30-nyam@C,check,2025 menu,runs_check2025/straddle_tight_1000-NQ-tf30-nyam-check,,new,4000,CONFIRMED
+2026-10-05T15:48:45+00:00,straddle_tight_1000-NQ-tf30-nyam@C,check,2025 control shift,runs_check2025/straddle_tight_1000-NQ-tf30-nyam-check-shift,1 2,new,4000,CONFIRMED
+2026-10-05T15:48:45+00:00,straddle_tight_1000-NQ-tf30-nyam@C,check,2025 control shift,runs_seeds/straddle_tight_1000-NQ-tf30-nyam-check-shift-s3to10,3 4 5 6 7 8 9 10,new,4000,CONFIRMED
+2026-10-05T15:48:45+00:00,straddle_tight_1000-NQ-tf30-nyam@C,check,2025 stress,runs_check2025/straddle_tight_1000-NQ-tf30-nyam-check-stress,,new,4000,CONFIRMED
+2026-10-05T15:48:45+00:00,straddle_tight_0830-NQ-tf30-pre@A,check,BUILD menu,runs/straddle_tight_0830-NQ-tf30,,new,4000,FAILED
+2026-10-05T15:48:45+00:00,straddle_tight_0830-NQ-tf30-pre@A,check,2025 menu,runs_check2025/straddle_tight_0830-NQ-tf30-pre-check,,new,4000,FAILED
+2026-10-05T15:48:45+00:00,straddle_tight_0830-NQ-tf30-pre@A,check,2025 control shift,runs_check2025/straddle_tight_0830-NQ-tf30-pre-check-shift,1 2,new,4000,FAILED
+2026-10-05T15:48:45+00:00,straddle_tight_0830-NQ-tf30-pre@A,check,2025 control shift,runs_seeds/straddle_tight_0830-NQ-tf30-pre-check-shift-s3to10,3 4 5 6 7 8 9 10,new,4000,FAILED
+2026-10-05T15:48:45+00:00,straddle_tight_0830-NQ-tf30-pre@A,check,2025 stress,runs_check2025/straddle_tight_0830-NQ-tf30-pre-check-stress,,new,4000,FAILED
+2026-10-05T15:48:45+00:00,straddle_tight_1000-GC-tf30-nyam@C,check,BUILD menu,runs/straddle_tight_1000-GC-tf30,,new,4000,CONFIRMED
+2026-10-05T15:48:45+00:00,straddle_tight_1000-GC-tf30-nyam@C,check,2025 menu,runs_check2025/straddle_tight_1000-GC-tf30-nyam-check,,new,4000,CONFIRMED
+2026-10-05T15:48:45+00:00,straddle_tight_1000-GC-tf30-nyam@C,check,2025 control shift,runs_check2025/straddle_tight_1000-GC-tf30-nyam-check-shift,1 2,new,4000,CONFIRMED
+2026-10-05T15:48:45+00:00,straddle_tight_1000-GC-tf30-nyam@C,check,2025 control shift,runs_seeds/straddle_tight_1000-GC-tf30-nyam-check-shift-s3to10,3 4 5 6 7 8 9 10,new,4000,CONFIRMED
+2026-10-05T15:48:45+00:00,straddle_tight_1000-GC-tf30-nyam@C,check,2025 stress,runs_check2025/straddle_tight_1000-GC-tf30-nyam-check-stress,,new,4000,CONFIRMED
+2026-10-05T15:48:45+00:00,straddle_tight_0830-NQ-tf30-pre@B,check,BUILD menu,runs/straddle_tight_0830-NQ-tf30,,new,4000,FAILED
+2026-10-05T15:48:45+00:00,straddle_tight_0830-NQ-tf30-pre@B,check,2025 menu,runs_check2025/straddle_tight_0830-NQ-tf30-pre-check,,new,4000,FAILED
+2026-10-05T15:48:45+00:00,straddle_tight_0830-NQ-tf30-pre@B,check,2025 control shift,runs_check2025/straddle_tight_0830-NQ-tf30-pre-check-shift,1 2,new,4000,FAILED
+2026-10-05T15:48:45+00:00,straddle_tight_0830-NQ-tf30-pre@B,check,2025 control shift,runs_seeds/straddle_tight_0830-NQ-tf30-pre-check-shift-s3to10,3 4 5 6 7 8 9 10,new,4000,FAILED
+2026-10-05T15:48:45+00:00,straddle_tight_0830-NQ-tf30-pre@B,check,2025 stress,runs_check2025/straddle_tight_0830-NQ-tf30-pre-check-stress,,new,4000,FAILED
+2026-10-05T15:48:46+00:00,straddle_tight_0830-GC-tf30-pre@A,check,BUILD menu,runs/straddle_tight_0830-GC-tf30,,new,4000,CONFIRMED
+2026-10-05T15:48:46+00:00,straddle_tight_0830-GC-tf30-pre@A,check,2025 menu,runs_check2025/straddle_tight_0830-GC-tf30-pre-check,,new,4000,CONFIRMED
+2026-10-05T15:48:46+00:00,straddle_tight_0830-GC-tf30-pre@A,check,2025 control shift,runs_check2025/straddle_tight_0830-GC-tf30-pre-check-shift,1 2,new,4000,CONFIRMED
+2026-10-05T15:48:46+00:00,straddle_tight_0830-GC-tf30-pre@A,check,2025 control shift,runs_seeds/straddle_tight_0830-GC-tf30-pre-check-shift-s3to10,3 4 5 6 7 8 9 10,new,4000,CONFIRMED
+2026-10-05T15:48:46+00:00,straddle_tight_0830-GC-tf30-pre@A,check,2025 stress,runs_check2025/straddle_tight_0830-GC-tf30-pre-check-stress,,new,4000,CONFIRMED
+2026-10-05T15:48:46+00:00,straddle_tight_0830-GC-tf30-pre@B,check,BUILD menu,runs/straddle_tight_0830-GC-tf30,,new,4000,CONFIRMED
+2026-10-05T15:48:46+00:00,straddle_tight_0830-GC-tf30-pre@B,check,2025 menu,runs_check2025/straddle_tight_0830-GC-tf30-pre-check,,new,4000,CONFIRMED
+2026-10-05T15:48:46+00:00,straddle_tight_0830-GC-tf30-pre@B,check,2025 control shift,runs_check2025/straddle_tight_0830-GC-tf30-pre-check-shift,1 2,new,4000,CONFIRMED
+2026-10-05T15:48:46+00:00,straddle_tight_0830-GC-tf30-pre@B,check,2025 control shift,runs_seeds/straddle_tight_0830-GC-tf30-pre-check-shift-s3to10,3 4 5 6 7 8 9 10,new,4000,CONFIRMED
+2026-10-05T15:48:46+00:00,straddle_tight_0830-GC-tf30-pre@B,check,2025 stress,runs_check2025/straddle_tight_0830-GC-tf30-pre-check-stress,,new,4000,CONFIRMED
+2026-10-05T15:49:00+00:00,first_bar_mom-NQ-tf30-mid,check,BUILD menu,runs/first_bar_mom-NQ-tf30,,new,4000,FAILED
+2026-10-05T15:49:00+00:00,first_bar_mom-NQ-tf30-mid,check,2025 menu,runs_check2025/first_bar_mom-NQ-tf30-mid-check,,new,4000,FAILED
+2026-10-05T15:49:00+00:00,first_bar_mom-NQ-tf30-mid,check,2025 control c1,runs_check2025/c1-NQ-tf30-mid-check,1 2,new,4000,FAILED
+2026-10-05T15:49:00+00:00,first_bar_mom-NQ-tf30-mid,check,2025 control c1,runs_seeds/c1-NQ-tf30-mid-check-s3to10,3 4 5 6 7 8 9 10,new,4000,FAILED
+2026-10-05T15:49:00+00:00,first_bar_mom-NQ-tf30-mid,check,2025 stress,runs_check2025/first_bar_mom-NQ-tf30-mid-check-stress,,new,4000,FAILED
+2026-10-05T15:49:10+00:00,orb-NQ-tf15-pre,check,BUILD menu,runs/orb-NQ-tf15,,new,4000,FAILED
+2026-10-05T15:49:10+00:00,orb-NQ-tf15-pre,check,2025 menu,runs_check2025/orb-NQ-tf15-pre-check,,new,4000,FAILED
+2026-10-05T15:49:10+00:00,orb-NQ-tf15-pre,check,2025 control c1,runs_check2025/c1-NQ-tf15-pre-check,1 2,new,4000,FAILED
+2026-10-05T15:49:10+00:00,orb-NQ-tf15-pre,check,2025 control c1,runs_seeds/c1-NQ-tf15-pre-check-s3to10,3 4 5 6 7 8 9 10,new,4000,FAILED
+2026-10-05T15:49:10+00:00,orb-NQ-tf15-pre,check,2025 stress,runs_check2025/orb-NQ-tf15-pre-check-stress,,new,4000,FAILED
+2026-10-05T15:49:11+00:00,first_bar_mom-NQ-tf15-mid,check,BUILD menu,runs/first_bar_mom-NQ-tf15,,new,4000,CONFIRMED
+2026-10-05T15:49:11+00:00,first_bar_mom-NQ-tf15-mid,check,2025 menu,runs_check2025/first_bar_mom-NQ-tf15-mid-check,,new,4000,CONFIRMED
+2026-10-05T15:49:11+00:00,first_bar_mom-NQ-tf15-mid,check,2025 control c1,runs_check2025/c1-NQ-tf15-mid-check,1 2,new,4000,CONFIRMED
+2026-10-05T15:49:11+00:00,first_bar_mom-NQ-tf15-mid,check,2025 control c1,runs_seeds/c1-NQ-tf15-mid-check-s3to10,3 4 5 6 7 8 9 10,new,4000,CONFIRMED
+2026-10-05T15:49:11+00:00,first_bar_mom-NQ-tf15-mid,check,2025 stress,runs_check2025/first_bar_mom-NQ-tf15-mid-check-stress,,new,4000,CONFIRMED
+2026-10-05T15:49:23+00:00,first_bar_mom-ES-tf15-mid,check,BUILD menu,runs/first_bar_mom-ES-tf15,,new,4000,WEAK
+2026-10-05T15:49:23+00:00,first_bar_mom-ES-tf15-mid,check,2025 menu,runs_check2025/first_bar_mom-ES-tf15-mid-check,,new,4000,WEAK
+2026-10-05T15:49:23+00:00,first_bar_mom-ES-tf15-mid,check,2025 control c1,runs_check2025/c1-ES-tf15-mid-check,1 2,new,4000,WEAK
+2026-10-05T15:49:23+00:00,first_bar_mom-ES-tf15-mid,check,2025 control c1,runs_seeds/c1-ES-tf15-mid-check-s3to10,3 4 5 6 7 8 9 10,new,4000,WEAK
+2026-10-05T15:49:23+00:00,first_bar_mom-ES-tf15-mid,check,2025 stress,runs_check2025/first_bar_mom-ES-tf15-mid-check-stress,,new,4000,WEAK
+2026-10-05T15:49:50+00:00,tema_slope-NQ-tf30-eve,check,BUILD menu,runs/tema_slope-NQ-tf30,,new,4000,FAILED
+2026-10-05T15:49:50+00:00,tema_slope-NQ-tf30-eve,check,2025 menu,runs_check2025/tema_slope-NQ-tf30-eve-check,,new,4000,FAILED
+2026-10-05T15:49:50+00:00,tema_slope-NQ-tf30-eve,check,2025 control c1,runs_check2025/c1-NQ-tf30-eve-check,1 2,new,4000,FAILED
+2026-10-05T15:49:50+00:00,tema_slope-NQ-tf30-eve,check,2025 control c1,runs_seeds/c1-NQ-tf30-eve-check-s3to10,3 4 5 6 7 8 9 10,new,4000,FAILED
+2026-10-05T15:49:50+00:00,tema_slope-NQ-tf30-eve,check,2025 stress,runs_check2025/tema_slope-NQ-tf30-eve-check-stress,,new,4000,FAILED
+2026-10-05T15:50:04+00:00,donchian-NQ-tf30-nyam,check,BUILD menu,runs/donchian-NQ-tf30,,new,4000,WEAK
+2026-10-05T15:50:04+00:00,donchian-NQ-tf30-nyam,check,2025 menu,runs_check2025/donchian-NQ-tf30-nyam-check,,new,4000,WEAK
+2026-10-05T15:50:04+00:00,donchian-NQ-tf30-nyam,check,2025 control c1,runs_check2025/c1-NQ-tf30-nyam-check,1 2,new,4000,WEAK
+2026-10-05T15:50:04+00:00,donchian-NQ-tf30-nyam,check,2025 control c1,runs_seeds/c1-NQ-tf30-nyam-check-s3to10,3 4 5 6 7 8 9 10,new,4000,WEAK
+2026-10-05T15:50:04+00:00,donchian-NQ-tf30-nyam,check,2025 stress,runs_check2025/donchian-NQ-tf30-nyam-check-stress,,new,4000,WEAK
+2026-10-05T15:50:04+00:00,straddle_t_0830-NQ-tf30-pre,check,BUILD menu,runs/straddle_t_0830-NQ-tf30,,new,4000,FAILED
+2026-10-05T15:50:04+00:00,straddle_t_0830-NQ-tf30-pre,check,2025 menu,runs_check2025/straddle_t_0830-NQ-tf30-pre-check,,new,4000,FAILED
+2026-10-05T15:50:04+00:00,straddle_t_0830-NQ-tf30-pre,check,2025 control shift,runs_check2025/straddle_t_0830-NQ-tf30-pre-check-shift,1 2,new,4000,FAILED
+2026-10-05T15:50:04+00:00,straddle_t_0830-NQ-tf30-pre,check,2025 control shift,runs_seeds/straddle_t_0830-NQ-tf30-pre-check-shift-s3to10,3 4 5 6 7 8 9 10,new,4000,FAILED
+2026-10-05T15:50:04+00:00,straddle_t_0830-NQ-tf30-pre,check,2025 stress,runs_check2025/straddle_t_0830-NQ-tf30-pre-check-stress,,new,4000,FAILED
+2026-10-05T15:50:04+00:00,straddle_t_1800-NQ-tf30-eve,check,BUILD menu,runs/straddle_t_1800-NQ-tf30,,new,4000,CONFIRMED
+2026-10-05T15:50:04+00:00,straddle_t_1800-NQ-tf30-eve,check,2025 menu,runs_check2025/straddle_t_1800-NQ-tf30-eve-check,,new,4000,CONFIRMED
+2026-10-05T15:50:04+00:00,straddle_t_1800-NQ-tf30-eve,check,2025 control shift,runs_check2025/straddle_t_1800-NQ-tf30-eve-check-shift,1 2,new,4000,CONFIRMED
+2026-10-05T15:50:04+00:00,straddle_t_1800-NQ-tf30-eve,check,2025 control shift,runs_seeds/straddle_t_1800-NQ-tf30-eve-check-shift-s3to10,3 4 5 6 7 8 9 10,new,4000,CONFIRMED
+2026-10-05T15:50:04+00:00,straddle_t_1800-NQ-tf30-eve,check,2025 stress,runs_check2025/straddle_t_1800-NQ-tf30-eve-check-stress,,new,4000,CONFIRMED
+2026-10-05T16:02:36+00:00,straddle_tight_1000-NQ-tf30-nyam@C,exam,BUILD menu,runs/straddle_tight_1000-NQ-tf30,,new,4000,FAILED
+2026-10-05T16:02:36+00:00,straddle_tight_1000-NQ-tf30-nyam@C,exam,2026 menu,runs_exam2026/straddle_tight_1000-NQ-tf30-nyam-exam,,new,4000,FAILED
+2026-10-05T16:02:36+00:00,straddle_tight_1000-NQ-tf30-nyam@C,exam,2026 control shift,runs_exam2026/straddle_tight_1000-NQ-tf30-nyam-exam-shift,1 2 3 4 5 6 7 8 9 10,new,4000,FAILED
+2026-10-05T16:02:36+00:00,straddle_tight_1000-NQ-tf30-nyam@C,exam,2026 stress,runs_exam2026/straddle_tight_1000-NQ-tf30-nyam-exam-stress,,new,4000,FAILED
+2026-10-05T16:02:36+00:00,straddle_tight_0830-GC-tf30-pre@A,exam,BUILD menu,runs/straddle_tight_0830-GC-tf30,,new,4000,FAILED
+2026-10-05T16:02:36+00:00,straddle_tight_0830-GC-tf30-pre@A,exam,2026 menu,runs_exam2026/straddle_tight_0830-GC-tf30-pre-exam,,new,4000,FAILED
+2026-10-05T16:02:36+00:00,straddle_tight_0830-GC-tf30-pre@A,exam,2026 control shift,runs_exam2026/straddle_tight_0830-GC-tf30-pre-exam-shift,1 2 3 4 5 6 7 8 9 10,new,4000,FAILED
+2026-10-05T16:02:36+00:00,straddle_tight_0830-GC-tf30-pre@A,exam,2026 stress,runs_exam2026/straddle_tight_0830-GC-tf30-pre-exam-stress,,new,4000,FAILED
+2026-10-05T16:02:37+00:00,straddle_tight_0830-GC-tf30-pre@B,exam,BUILD menu,runs/straddle_tight_0830-GC-tf30,,new,4000,FAILED
+2026-10-05T16:02:37+00:00,straddle_tight_0830-GC-tf30-pre@B,exam,2026 menu,runs_exam2026/straddle_tight_0830-GC-tf30-pre-exam,,new,4000,FAILED
+2026-10-05T16:02:37+00:00,straddle_tight_0830-GC-tf30-pre@B,exam,2026 control shift,runs_exam2026/straddle_tight_0830-GC-tf30-pre-exam-shift,1 2 3 4 5 6 7 8 9 10,new,4000,FAILED
+2026-10-05T16:02:37+00:00,straddle_tight_0830-GC-tf30-pre@B,exam,2026 stress,runs_exam2026/straddle_tight_0830-GC-tf30-pre-exam-stress,,new,4000,FAILED
+2026-10-05T16:02:37+00:00,straddle_tight_1000-GC-tf30-nyam@C,exam,BUILD menu,runs/straddle_tight_1000-GC-tf30,,new,4000,WEAK
+2026-10-05T16:02:37+00:00,straddle_tight_1000-GC-tf30-nyam@C,exam,2026 menu,runs_exam2026/straddle_tight_1000-GC-tf30-nyam-exam,,new,4000,WEAK
+2026-10-05T16:02:37+00:00,straddle_tight_1000-GC-tf30-nyam@C,exam,2026 control shift,runs_exam2026/straddle_tight_1000-GC-tf30-nyam-exam-shift,1 2 3 4 5 6 7 8 9 10,new,4000,WEAK
+2026-10-05T16:02:37+00:00,straddle_tight_1000-GC-tf30-nyam@C,exam,2026 stress,runs_exam2026/straddle_tight_1000-GC-tf30-nyam-exam-stress,,new,4000,WEAK
+2026-10-05T16:02:49+00:00,first_bar_mom-NQ-tf15-mid,exam,BUILD menu,runs/first_bar_mom-NQ-tf15,,new,4000,WEAK
+2026-10-05T16:02:49+00:00,first_bar_mom-NQ-tf15-mid,exam,2026 menu,runs_exam2026/first_bar_mom-NQ-tf15-mid-exam,,new,4000,WEAK
+2026-10-05T16:02:49+00:00,first_bar_mom-NQ-tf15-mid,exam,2026 control c1,runs_exam2026/c1-NQ-tf15-mid-exam,1 2 3 4 5 6 7 8 9 10,new,4000,WEAK
+2026-10-05T16:02:49+00:00,first_bar_mom-NQ-tf15-mid,exam,2026 stress,runs_exam2026/first_bar_mom-NQ-tf15-mid-exam-stress,,new,4000,WEAK

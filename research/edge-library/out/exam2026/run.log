@@ -1,0 +1,14 @@
+CHAIN START 2026-10-05T16:00:56Z
+done runs_exam2026/straddle_tight_0830-GC-tf30-pre-exam: 27 cells, 4860 trades, sessions 181, used 180-180, errors 0, outside session 0, cells without a trade 0, wall 1 s
+done runs_exam2026/straddle_tight_0830-GC-tf30-pre-exam-stress: 27 cells, 4905 trades, sessions 181, used 180-180, errors 0, outside session 0, cells without a trade 0, wall 1 s
+done runs_exam2026/straddle_tight_0830-GC-tf30-pre-exam-shift: 270 cells, 48186 trades, sessions 181, used 180-180, errors 0, outside session 0, cells without a trade 0, wall 11 s
+done runs_exam2026/straddle_tight_1000-NQ-tf30-nyam-exam: 27 cells, 4833 trades, sessions 182, used 179-179, errors 0, outside session 0, cells without a trade 0, wall 3 s
+done runs_exam2026/straddle_tight_1000-NQ-tf30-nyam-exam-stress: 27 cells, 4932 trades, sessions 182, used 179-179, errors 0, outside session 0, cells without a trade 0, wall 2 s
+done runs_exam2026/straddle_tight_1000-NQ-tf30-nyam-exam-shift: 270 cells, 47979 trades, sessions 182, used 179-179, errors 0, outside session 0, cells without a trade 0, wall 13 s
+done runs_exam2026/straddle_tight_1000-GC-tf30-nyam-exam: 27 cells, 4860 trades, sessions 181, used 180-180, errors 0, outside session 0, cells without a trade 0, wall 2 s
+done runs_exam2026/straddle_tight_1000-GC-tf30-nyam-exam-stress: 27 cells, 4941 trades, sessions 181, used 180-180, errors 0, outside session 0, cells without a trade 0, wall 2 s
+done runs_exam2026/straddle_tight_1000-GC-tf30-nyam-exam-shift: 270 cells, 48519 trades, sessions 181, used 180-180, errors 0, outside session 0, cells without a trade 0, wall 13 s
+done runs_exam2026/first_bar_mom-NQ-tf15-mid-exam: 96 cells, 4832 trades, sessions 182, used 179-179, errors 0, outside session 0, cells without a trade 0, wall 6 s
+done runs_exam2026/first_bar_mom-NQ-tf15-mid-exam-stress: 96 cells, 4832 trades, sessions 182, used 179-179, errors 0, outside session 0, cells without a trade 0, wall 6 s
+done runs_exam2026/c1-NQ-tf15-mid-exam: 320 cells, 122603 trades, sessions 182, used 179-179, errors 0, outside session 0, cells without a trade 0, wall 24 s
+CHAIN DONE 2026-10-05T16:02:22Z

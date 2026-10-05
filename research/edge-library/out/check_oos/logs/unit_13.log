@@ -1,0 +1,3 @@
+straddle_t_0830-NQ-tf30-pre BUILD 160 0.919 43665 t1 True t2 True {'shift': (38699, 0.9975)}
+   2024 7328 2228 t4 True t5 False t6 True {'shift': -1675} surv 67 default offatr0p25_pct0p1-r0 member False
+   check FAILED 69 / 160 -310 -2202 stress -1967 {'shift': (-10175.3, 0.192)} default -18292 saved+ 30 / 67

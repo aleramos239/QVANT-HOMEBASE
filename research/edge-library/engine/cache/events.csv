@@ -902,3 +902,8 @@ date,time_et,type,subtype,source
 2026-09-17,08:30,CLAIMS,,oui.doleta.gov/press/2026/091726.pdf
 2026-09-24,08:30,CLAIMS,,oui.doleta.gov/press/2026/092426.pdf
 2026-09-29,10:00,JOLTS,,bls.gov/schedule/2026/home.htm + bls.gov/bls/news-release/jolts.htm
+2026-09-30,08:30,GDP,third,"bea.gov/news/current-releases (GDP Third Estimate, 2nd Quarter 2026; published September 30, 2026; 8:30 AM on bea.gov/news/schedule/full) [added 2026-10-05, OOS calendar check]"
+2026-09-30,08:30,PCE,,"bea.gov/news/current-releases (Personal Income and Outlays, August 2026; published September 30, 2026; 8:30 AM on bea.gov/news/schedule/full) [added 2026-10-05, OOS calendar check]"
+2026-10-01,08:30,CLAIMS,,"oui.doleta.gov/press/2026/100126.pdf [added 2026-10-05, OOS calendar check]"
+2026-10-01,10:00,ISM_MFG,,"prnewswire.com/news/institute-for-supply-management/ (ISM release stamp Oct 01, 2026, 10:00 ET) [added 2026-10-05, OOS calendar check]"
+2026-10-02,08:30,NFP,,"bls.gov/news.release/empsit.nr0.htm (web.archive.org copy 2026-10-05: embargoed until 8:30 a.m. ET Friday, October 2, 2026) + bls.gov/schedule/2026/home.htm [added 2026-10-05, OOS calendar check]"

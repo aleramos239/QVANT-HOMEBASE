@@ -1,0 +1,49 @@
+{
+ "written_utc": "2026-10-05T15:52:26+00:00",
+ "rule": "EDGE_SPEC 'FULL OUT-OF-SAMPLE FOR THE SAVED STRATEGIES' + 'RULING BEFORE THE 2025 SCORING': 2026 is read ONLY for units that are members under the rule in force AND pass tests (4)-(6) on 2025 (CONFIRMED). Written before any 2026 run.",
+ "judge_sha256_16_at_2025_scoring": "e692efbc340dcba1",
+ "period": {
+  "start": "2026-01-01",
+  "end": {
+   "NQ": "2026-09-22",
+   "GC": "2026-09-22"
+  },
+  "why_end": "last session of the unbroken run of complete sessions on disk: the Massive backfill ends 2026-09-22 (NQ ofb_tick tape ends there; GC manifests complete to 09-22, the desk recording of 09-23 is not complete)"
+ },
+ "units": [
+  "straddle_tight_0830-GC-tf30-pre@A",
+  "straddle_tight_0830-GC-tf30-pre@B",
+  "straddle_tight_1000-NQ-tf30-nyam@C",
+  "straddle_tight_1000-GC-tf30-nyam@C",
+  "first_bar_mom-NQ-tf15-mid"
+ ],
+ "verdict_2025": {
+  "straddle_tight_0830-NQ-tf30-pre": "FAILED",
+  "straddle_tight_0830-NQ-tf30-pre@A": "FAILED",
+  "straddle_tight_0830-NQ-tf30-pre@B": "FAILED",
+  "straddle_tight_0830-GC-tf30-pre@A": "CONFIRMED",
+  "straddle_tight_0830-GC-tf30-pre@B": "CONFIRMED",
+  "straddle_tight_1000-NQ-tf30-nyam@C": "CONFIRMED",
+  "straddle_tight_1000-GC-tf30-nyam@C": "CONFIRMED",
+  "first_bar_mom-NQ-tf30-mid": "FAILED",
+  "first_bar_mom-NQ-tf15-mid": "CONFIRMED",
+  "first_bar_mom-ES-tf15-mid": "WEAK",
+  "orb-NQ-tf15-pre": "FAILED",
+  "tema_slope-NQ-tf30-eve": "FAILED",
+  "donchian-NQ-tf30-nyam": "WEAK",
+  "straddle_t_0830-NQ-tf30-pre": "FAILED",
+  "straddle_t_1800-NQ-tf30-eve": "CONFIRMED"
+ },
+ "not_allowed": {
+  "straddle_tight_0830-NQ-tf30-pre": "member, 2025 FAILED",
+  "straddle_tight_0830-NQ-tf30-pre@A": "member, 2025 FAILED",
+  "straddle_tight_0830-NQ-tf30-pre@B": "member, 2025 FAILED",
+  "first_bar_mom-NQ-tf30-mid": "member, 2025 FAILED",
+  "first_bar_mom-ES-tf15-mid": "member, 2025 WEAK",
+  "orb-NQ-tf15-pre": "member, 2025 FAILED",
+  "tema_slope-NQ-tf30-eve": "member, 2025 FAILED",
+  "donchian-NQ-tf30-nyam": "member, 2025 WEAK",
+  "straddle_t_0830-NQ-tf30-pre": "DEMOTED on 2024 by the 10-seed control (2025 FAILED: information only)",
+  "straddle_t_1800-NQ-tf30-eve": "DEMOTED on 2024 by the 10-seed control (2025 CONFIRMED: information only)"
+ }
+}

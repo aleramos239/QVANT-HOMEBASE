@@ -1,0 +1,13 @@
+store,unit,period,range,kind,seeds,cells,trades,sessions,used,skipped,cells_no_trade,skipped_by_error,outside_session,first_trade_date,last_trade_date,ledger_stage
+runs_exam2026/c1-NQ-tf15-mid-exam,c1-NQ-tf15-mid,exam,2026-01-01..2026-09-22,control,1-10,320,122603,182,179,2026-04-03 2026-09-11 2026-09-22,0,0,0,2026-01-02,2026-09-21,null_v2_exam
+runs_exam2026/first_bar_mom-NQ-tf15-mid-exam-stress,first_bar_mom-NQ-tf15-mid,exam,2026-01-01..2026-09-22,stress,,96,4832,182,179,2026-04-03 2026-09-11 2026-09-22,0,0,0,2026-01-02,2026-09-18,v2_exam_stress
+runs_exam2026/first_bar_mom-NQ-tf15-mid-exam,first_bar_mom-NQ-tf15-mid,exam,2026-01-01..2026-09-22,base,,96,4832,182,179,2026-04-03 2026-09-11 2026-09-22,0,0,0,2026-01-02,2026-09-18,v2_exam
+runs_exam2026/straddle_tight_0830-GC-tf30-pre-exam-shift,straddle_tight_0830-GC-tf30-pre,exam,2026-01-01..2026-09-22,control,1-10,270,48186,181,180,2026-09-22,0,0,0,2026-01-02,2026-09-21,null_v2_exam
+runs_exam2026/straddle_tight_0830-GC-tf30-pre-exam-stress,straddle_tight_0830-GC-tf30-pre,exam,2026-01-01..2026-09-22,stress,,27,4905,181,180,2026-09-22,0,0,0,2026-01-02,2026-09-21,v2_exam_stress
+runs_exam2026/straddle_tight_0830-GC-tf30-pre-exam,straddle_tight_0830-GC-tf30-pre,exam,2026-01-01..2026-09-22,base,,27,4860,181,180,2026-09-22,0,0,0,2026-01-02,2026-09-21,v2_exam
+runs_exam2026/straddle_tight_1000-GC-tf30-nyam-exam-shift,straddle_tight_1000-GC-tf30-nyam,exam,2026-01-01..2026-09-22,control,1-10,270,48519,181,180,2026-09-22,0,0,0,2026-01-02,2026-09-21,null_v2_exam
+runs_exam2026/straddle_tight_1000-GC-tf30-nyam-exam-stress,straddle_tight_1000-GC-tf30-nyam,exam,2026-01-01..2026-09-22,stress,,27,4941,181,180,2026-09-22,0,0,0,2026-01-02,2026-09-21,v2_exam_stress
+runs_exam2026/straddle_tight_1000-GC-tf30-nyam-exam,straddle_tight_1000-GC-tf30-nyam,exam,2026-01-01..2026-09-22,base,,27,4860,181,180,2026-09-22,0,0,0,2026-01-02,2026-09-21,v2_exam
+runs_exam2026/straddle_tight_1000-NQ-tf30-nyam-exam-shift,straddle_tight_1000-NQ-tf30-nyam,exam,2026-01-01..2026-09-22,control,1-10,270,47979,182,179,2026-04-03 2026-09-11 2026-09-22,0,0,0,2026-01-02,2026-09-21,null_v2_exam
+runs_exam2026/straddle_tight_1000-NQ-tf30-nyam-exam-stress,straddle_tight_1000-NQ-tf30-nyam,exam,2026-01-01..2026-09-22,stress,,27,4932,182,179,2026-04-03 2026-09-11 2026-09-22,0,0,0,2026-01-02,2026-09-21,v2_exam_stress
+runs_exam2026/straddle_tight_1000-NQ-tf30-nyam-exam,straddle_tight_1000-NQ-tf30-nyam,exam,2026-01-01..2026-09-22,base,,27,4833,182,179,2026-04-03 2026-09-11 2026-09-22,0,0,0,2026-01-02,2026-09-21,v2_exam

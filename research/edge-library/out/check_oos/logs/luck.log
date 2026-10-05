@@ -1,0 +1,38 @@
+straddle_tight_0830-NQ-tf30-pre        pick  seeds 10 pass (4): 0  (4)+(5): 0  (4)-(6): 0  stress cost/trade $ 8.8
+straddle_tight_0830-NQ-tf30-pre        check seeds 10 pass (4): 0  (4)+(5): 0  (4)-(6): 0  stress cost/trade $ 9.3
+straddle_tight_0830-NQ-tf30-pre@A      pick  seeds 10 pass (4): 0  (4)+(5): 0  (4)-(6): 0  stress cost/trade $ 9.7
+straddle_tight_0830-NQ-tf30-pre@A      check seeds 10 pass (4): 0  (4)+(5): 0  (4)-(6): 0  stress cost/trade $ 12.9
+straddle_tight_0830-NQ-tf30-pre@B      pick  seeds 10 pass (4): 0  (4)+(5): 0  (4)-(6): 0  stress cost/trade $ 8.8
+straddle_tight_0830-NQ-tf30-pre@B      check seeds 10 pass (4): 0  (4)+(5): 0  (4)-(6): 0  stress cost/trade $ 15.9
+straddle_tight_0830-GC-tf30-pre@A      pick  seeds 10 pass (4): 0  (4)+(5): 0  (4)-(6): 0  stress cost/trade $ 18.8
+straddle_tight_0830-GC-tf30-pre@A      check seeds 10 pass (4): 2  (4)+(5): 2  (4)-(6): 1  stress cost/trade $ 16.8
+straddle_tight_0830-GC-tf30-pre@A      exam  seeds 10 pass (4): 0  (4)+(5): 0  (4)-(6): 0  stress cost/trade $ 5.3
+straddle_tight_0830-GC-tf30-pre@B      pick  seeds 10 pass (4): 0  (4)+(5): 0  (4)-(6): 0  stress cost/trade $ 20.6
+straddle_tight_0830-GC-tf30-pre@B      check seeds 10 pass (4): 1  (4)+(5): 1  (4)-(6): 0  stress cost/trade $ 18.8
+straddle_tight_0830-GC-tf30-pre@B      exam  seeds 10 pass (4): 1  (4)+(5): 1  (4)-(6): 1  stress cost/trade $ 12.1
+straddle_tight_1000-NQ-tf30-nyam@C     pick  seeds 10 pass (4): 6  (4)+(5): 5  (4)-(6): 4  stress cost/trade $ 13.5
+straddle_tight_1000-NQ-tf30-nyam@C     check seeds 10 pass (4): 4  (4)+(5): 4  (4)-(6): 4  stress cost/trade $ 1.1
+straddle_tight_1000-NQ-tf30-nyam@C     exam  seeds 10 pass (4): 1  (4)+(5): 1  (4)-(6): 1  stress cost/trade $ 0.9
+straddle_tight_1000-GC-tf30-nyam@C     pick  seeds 10 pass (4): 2  (4)+(5): 2  (4)-(6): 1  stress cost/trade $ 21.9
+straddle_tight_1000-GC-tf30-nyam@C     check seeds 10 pass (4): 1  (4)+(5): 1  (4)-(6): 1  stress cost/trade $ 12.6
+straddle_tight_1000-GC-tf30-nyam@C     exam  seeds 10 pass (4): 1  (4)+(5): 1  (4)-(6): 0  stress cost/trade $ 35.8
+first_bar_mom-NQ-tf30-mid              pick  seeds 10 pass (4): 3  (4)+(5): 3  (4)-(6): 2  stress cost/trade $ 16.0
+first_bar_mom-NQ-tf30-mid              check seeds 10 pass (4): 2  (4)+(5): 2  (4)-(6): 1  stress cost/trade $ 16.0
+first_bar_mom-NQ-tf15-mid              pick  seeds 10 pass (4): 1  (4)+(5): 1  (4)-(6): 1  stress cost/trade $ 7.7
+first_bar_mom-NQ-tf15-mid              check seeds 10 pass (4): 2  (4)+(5): 2  (4)-(6): 1  stress cost/trade $ 16.2
+first_bar_mom-NQ-tf15-mid              exam  seeds 10 pass (4): 0  (4)+(5): 0  (4)-(6): 0  stress cost/trade $ 10.6
+first_bar_mom-ES-tf15-mid              pick  seeds 10 pass (4): 1  (4)+(5): 1  (4)-(6): 0  stress cost/trade $ 23.1
+first_bar_mom-ES-tf15-mid              check seeds 10 pass (4): 0  (4)+(5): 0  (4)-(6): 0  stress cost/trade $ 27.3
+orb-NQ-tf15-pre                        pick  seeds 10 pass (4): 5  (4)+(5): 2  (4)-(6): 2  stress cost/trade $ 11.9
+orb-NQ-tf15-pre                        check seeds 10 pass (4): 3  (4)+(5): 3  (4)-(6): 3  stress cost/trade $ 7.4
+tema_slope-NQ-tf30-eve                 pick  seeds 10 pass (4): 6  (4)+(5): 5  (4)-(6): 5  stress cost/trade $ 15.8
+tema_slope-NQ-tf30-eve                 check seeds 10 pass (4): 0  (4)+(5): 0  (4)-(6): 0  stress cost/trade $ 9.9
+donchian-NQ-tf30-nyam                  pick  seeds 10 pass (4): 7  (4)+(5): 5  (4)-(6): 5  stress cost/trade $ 16.8
+donchian-NQ-tf30-nyam                  check seeds 10 pass (4): 6  (4)+(5): 6  (4)-(6): 4  stress cost/trade $ 39.3
+straddle_t_0830-NQ-tf30-pre            pick  seeds 10 pass (4): 7  (4)+(5): 6  (4)-(6): 6  stress cost/trade $ 7.3
+straddle_t_0830-NQ-tf30-pre            check seeds 10 pass (4): 4  (4)+(5): 4  (4)-(6): 4  stress cost/trade $ 7.2
+straddle_t_1800-NQ-tf30-eve            pick  seeds 10 pass (4): 8  (4)+(5): 6  (4)-(6): 6  stress cost/trade $ 27.0
+straddle_t_1800-NQ-tf30-eve            check seeds 10 pass (4): 7  (4)+(5): 5  (4)-(6): 5  stress cost/trade $ 26.3
+check placebo tables passing (4)-(6): 24 of 150 = 0.16
+exam placebo tables passing (4)-(6): 2 of 50 = 0.04
+pick placebo tables passing (4)-(6): 32 of 150 = 0.213

@@ -7,11 +7,11 @@ the top of the file with the spec text it comes from. Locked by `tests/test_judg
 Day filters: `@A` every 08:30 ET release day, `@B` tier-1 08:30 releases only, `@C` every 10:00 ET release day (STAGE 3, `engine/cache/events.csv`); `@vol_lo`,
 `@news_only`, ... (STAGE 2a, `out/deepen/labels.py`, 2021-24 only). The v2 uid `orb-NQ-tf15|pre|` also works. `c1-NQ-tf1-eve:seed=2` = a placebo unit (random entries judged as a strategy).
 
-## Commands (all take `--draws N`, `--seeds N`, `--upto build|pick|check`, `--as-v2`)
+## Commands (all take `--draws N`, `--seeds N`, `--upto build|pick|check`, `--as-v2`; `--exam` = the explicit EXAM flag, see "The EXAM")
 | command | what it does |
 |---|---|
 | `judge.py build <unit> [...]` | tests (1)-(3) on BUILD, one line per unit: pass or the failed tests, the numbers, the seeds and draws behind (2). Exit 0 = pass. |
-| `judge.py year <unit> --period pick\|check` | tests (4)-(6) for that year ON ITS OWN. `pick` also gives the surviving set, the default and the final verdict; `check` re-tunes nothing: CONFIRMED / WEAK / FAILED. Prints every store used (new or re-used) and appends it to `out/judge/year_reads.csv`. Refuses, and prints the `jobs.json` to run, when a store is missing. |
+| `judge.py year <unit> --period pick\|check` (`exam` with `--exam`) | tests (4)-(6) for that year ON ITS OWN. `pick` also gives the surviving set, the default and the final verdict; `check` re-tunes nothing: CONFIRMED / WEAK / FAILED. Prints every store used (new or re-used) and appends it to `out/judge/year_reads.csv`. Refuses, and prints the `jobs.json` to run, when a store is missing. |
 | `judge.py card <unit> [--out DIR]` | writes `members/<name>/card.md` and `surviving_set.csv` (a row per period that exists). Members only. |
 | `judge.py table [units] [--stage s1,r1,ev,en,2a\|members\|placebo\|all\|<catalog.csv>] [--out PREFIX]` | one line per unit, CSV + markdown (default `out/judge/table.*`). All 1,916 units, 8 workers: about 6 min at 4,000 draws, 19 s with `--as-v2`. |
 
@@ -53,7 +53,15 @@ With more than 2 seeds the first-2-seeds result is shown beside the new one; a u
 3. `judge.py year <unit> --period pick` -> REFUSED + `jobs.json` (whole menu + control on 2024) -> `python out/v2/run_v2.py run jobs.json` -> again.
    If (4) and (5) pass it prints the stress jobs, then the BUILD-stress jobs for the surviving set: run each, call it again. Ends in MEMBER or the failed tests.
 4. `judge.py card <unit>`. The default's full trade rows (`spec.json`, `trades_*.json`, `daily.csv`) come from the member run, not from here.
-5. CHECK: `judge.py year <unit> --period check`, then `card`. A 2025 store = a store in any `runs*/` folder with a 2025 date range, named `<key>-<sess>-check[-stress|-shift|-c2sN]` / `c1-<ROOT>-tf<tf>-<sess>-check`. 2026+ is not in `PERIODS`: refused.
+5. CHECK: `judge.py year <unit> --period check`, then `card`. A 2025 store = a store in any `runs*/` folder with a 2025 date range, named `<key>-<sess>-check[-stress|-shift|-c2sN]` / `c1-<ROOT>-tf<tf>-<sess>-check`. 2026+ = the EXAM: refused (next section).
+
+## The EXAM (2026) — sealed; opened once, per unit, by EDGE_SPEC "FULL OUT-OF-SAMPLE FOR THE SAVED STRATEGIES" (2026-10-05)
+`judge.py year <unit> --period exam --exam` = the SAME tests (4)-(6) and the same code path as `check`, on the 2026 stores (`runs_exam2026/`, range 2026-01-01 .. the last
+complete session per market). Refused BEFORE any store is looked at unless BOTH hold: the `--exam` flag (`RULE["exam"] is True`) and the unit is listed in
+`out/exam2026/allowed.json` (members under the rule in force that pass (4)-(6) on 2025; written from the 2025 verdicts before the first 2026 run; it also holds the end
+date per market). A DEMOTED unit never reaches 2026. Without the flag nothing changes: no 2026 calendar row is returned, `judge` / `card` / `table` stop at 2025.
+`card --exam` adds the 2026 row for an allowed unit. Runner: `out/exam2026/run_exam.py` (allowed units only, `allow_exam=True`, reads in `out/exam2026/reads.csv`).
+Locked by `test_exam_is_sealed_without_the_flag_and_off_the_allowed_list` (flag, list, engine seal, runner seal).
 
 ## Differences from out/v2 at `--as-v2` (the only ones the lock lets through) and tests
 a. `final.json` lists test 6 as failed for the 38 units whose stress never ran; here `failed` = judged tests only (`not_judged` has the rest). b. "SAME IDEA" names in folder order. c. Card layout of the Real edge and Speed sections (checker fixes).

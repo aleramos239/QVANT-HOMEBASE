@@ -1,0 +1,32 @@
+done donchian-NQ-tf30-nyam-check.json {'n20_pts30-r3': 81} sessions 252 used 248 elapsed 1
+done donchian-NQ-tf30-nyam-check-stress.json {'n20_pts30-r3': 81} sessions 252 used 248 elapsed 1
+done first_bar_mom-ES-tf15-mid-check.json {'k1p5_atr1p5-r2': 61} sessions 252 used 248 elapsed 1
+done first_bar_mom-ES-tf15-mid-check-stress.json {'k1p5_atr1p5-r2': 61} sessions 252 used 248 elapsed 0
+done first_bar_mom-NQ-tf15-mid-check.json {'k1p5_atr3-r2': 54} sessions 252 used 248 elapsed 1
+done first_bar_mom-NQ-tf15-mid-check-stress.json {'k1p5_atr3-r2': 54} sessions 252 used 248 elapsed 1
+done first_bar_mom-NQ-tf15-mid-exam.json {'k1p5_atr3-r2': 36} sessions 182 used 179 elapsed 1
+done first_bar_mom-NQ-tf15-mid-exam-stress.json {'k1p5_atr3-r2': 36} sessions 182 used 179 elapsed 0
+done first_bar_mom-NQ-tf30-mid-check.json {'k1p5_pts45-r3': 111} sessions 252 used 248 elapsed 1
+done first_bar_mom-NQ-tf30-mid-check-stress.json {'k1p5_pts45-r3': 111} sessions 252 used 248 elapsed 1
+done orb-NQ-tf15-pre-check.json {'or_min15_pct0p1-r0': 221} sessions 252 used 248 elapsed 1
+done orb-NQ-tf15-pre-check-stress.json {'or_min15_pct0p1-r0': 221} sessions 252 used 248 elapsed 1
+done straddle_t_0830-NQ-tf30-pre-check.json {'offatr0p25_pct0p1-r0': 248} sessions 252 used 248 elapsed 1
+done straddle_t_0830-NQ-tf30-pre-check-stress.json {'offatr0p25_pct0p1-r0': 252} sessions 252 used 248 elapsed 1
+done straddle_t_1800-NQ-tf30-eve-check.json {'offatr0p25_pts45-r2': 244} sessions 252 used 248 elapsed 1
+done straddle_t_1800-NQ-tf30-eve-check-stress.json {'offatr0p25_pts45-r2': 244} sessions 252 used 248 elapsed 1
+done straddle_tight_0830-GC-tf30-pre-check.json {'offC_pts2-r2': 238} sessions 252 used 248 elapsed 1
+done straddle_tight_0830-GC-tf30-pre-check-stress.json {'offC_pts2-r2': 238} sessions 252 used 248 elapsed 0
+done straddle_tight_0830-GC-tf30-pre-exam.json {'offC_pts2-r2': 180} sessions 181 used 180 elapsed 0
+done straddle_tight_0830-GC-tf30-pre-exam-stress.json {'offC_pts2-r2': 180} sessions 181 used 180 elapsed 0
+done straddle_tight_0830-NQ-tf30-pre-check.json {'offA_pts5-r3': 248, 'offA_pts8-r3': 248, 'offB_pts5-r3': 243} sessions 252 used 248 elapsed 1
+done straddle_tight_0830-NQ-tf30-pre-check-stress.json {'offA_pts5-r3': 250, 'offA_pts8-r3': 250, 'offB_pts5-r3': 246} sessions 252 used 248 elapsed 1
+done straddle_tight_1000-GC-tf30-nyam-check.json {'offA_pts1-r2': 248} sessions 252 used 248 elapsed 0
+done straddle_tight_1000-GC-tf30-nyam-check-stress.json {'offA_pts1-r2': 249} sessions 252 used 248 elapsed 0
+done straddle_tight_1000-GC-tf30-nyam-exam.json {'offA_pts1-r2': 180} sessions 181 used 180 elapsed 0
+done straddle_tight_1000-GC-tf30-nyam-exam-stress.json {'offA_pts1-r2': 186} sessions 181 used 180 elapsed 0
+done straddle_tight_1000-NQ-tf30-nyam-check.json {'offA_pts5-r3': 248} sessions 252 used 248 elapsed 1
+done straddle_tight_1000-NQ-tf30-nyam-check-stress.json {'offA_pts5-r3': 261} sessions 252 used 248 elapsed 1
+done straddle_tight_1000-NQ-tf30-nyam-exam.json {'offA_pts5-r3': 179} sessions 182 used 179 elapsed 0
+done straddle_tight_1000-NQ-tf30-nyam-exam-stress.json {'offA_pts5-r3': 187} sessions 182 used 179 elapsed 0
+done tema_slope-NQ-tf30-eve-check.json {'n40_pct0p1-r0': 99} sessions 252 used 248 elapsed 1
+done tema_slope-NQ-tf30-eve-check-stress.json {'n40_pct0p1-r0': 99} sessions 252 used 248 elapsed 1

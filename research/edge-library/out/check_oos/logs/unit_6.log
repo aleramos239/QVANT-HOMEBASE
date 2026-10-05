@@ -1,0 +1,4 @@
+straddle_tight_1000-GC-tf30-nyam@C BUILD 27 1.0 8210 t1 True t2 True {'days': (95, 1.0), 'shift': (9711, 1.0)}
+   2024 4309 3396 t4 True t5 True t6 True {'days': 97, 'shift': 4970} surv 25 default offA_pts1-r2 member True
+   check CONFIRMED 26 / 27 2226 1630 stress 1661 {'days': (58.2, 0.994), 'shift': (3577.9, 1.0)} default 2250 saved+ 24 / 25
+   exam WEAK 18 / 27 522 708 stress -661 {'days': (52.4, 0.985), 'shift': (1626.0, 0.965)} default 868 saved+ 17 / 25

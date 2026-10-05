@@ -1,0 +1,4 @@
+straddle_tight_0830-GC-tf30-pre@A BUILD 27 0.963 10185 t1 True t2 True {'days': (36, 1.0), 'shift': (14149, 1.0)}
+   2024 5910 5756 t4 True t5 True t6 True {'days': 50, 'shift': 8078} surv 24 default offC_pts2-r2 member True
+   check CONFIRMED 23 / 27 2009 1782 stress 635 {'days': (25.3, 0.952), 'shift': (3609.4, 0.997)} default 342 saved+ 21 / 24
+   exam FAILED 4 / 27 -2029 -2106 stress -2397 {'days': (5.3, 0.631), 'shift': (-775.1, 0.276)} default -1146 saved+ 4 / 24

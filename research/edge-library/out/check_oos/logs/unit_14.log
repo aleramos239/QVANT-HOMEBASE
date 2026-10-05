@@ -1,0 +1,3 @@
+straddle_t_1800-NQ-tf30-eve BUILD 160 0.838 15759 t1 True t2 True {'shift': (40659, 1.0)}
+   2024 12460 6343 t4 True t5 False t6 True {'shift': -360} surv 61 default offatr0p25_pts45-r2 member False
+   check CONFIRMED 99 / 160 8152 5360 stress 2302 {'shift': (3512.7, 0.654)} default 27309 saved+ 49 / 61

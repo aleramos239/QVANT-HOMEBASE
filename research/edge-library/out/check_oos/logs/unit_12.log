@@ -1,0 +1,3 @@
+donchian-NQ-tf30-nyam BUILD 64 0.953 34773 t1 True t2 True {'c1': (27896, 0.9868)}
+   2024 13446 11115 t4 True t5 True t6 True {'c1': 7334} surv 43 default n20_pts30-r3 member True
+   check WEAK 47 / 64 7955 2682 stress 2501 {'c1': (-561.7, 0.472)} default -3914 saved+ 33 / 43

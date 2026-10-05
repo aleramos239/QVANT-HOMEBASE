@@ -210,7 +210,7 @@ def test_the_plateau_leaves_information_only_rows_out():
 # ---- the plan ---------------------------------------------------------------------------------------------------------------
 
 def test_the_round1_plan_and_the_raised_cap(tmp_path):
-    assert LB.CAPS["cells"] == 50000
+    assert LB.CAPS["cells"] == 80000
     g = RM.group_plan("round1", ledger=tmp_path / "none.csv", runs_dir=tmp_path)
     by = {(r["family"], r["root"]): r for r in g["rows"]}
     assert len(by) == 27 and g["run_units"] == 63

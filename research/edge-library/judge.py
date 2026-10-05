@@ -11,6 +11,7 @@ It only READS stores (runs*/<key>/): it never launches a simulation and never op
   judge.py card  <unit> [--out DIR]           member card + surviving_set.csv (a row per period that exists)
   judge.py table [unit ...] [--stage s1,r1,ev,en,2a|members|placebo|all|<catalog.csv>] [--out PREFIX]   CSV + markdown
   every command: [--draws N] [--seeds N] [--upto build|pick|check] [--as-v2]   (defaults: 4,000 draws, every seed and year on disk)
+  --exam = the explicit EXAM flag: `year --period exam` / `card` read 2026 for a unit on out/exam2026/allowed.json, and only for those
 
 A UNIT = <family>-<ROOT>-tf<tf>-<session>[:<axis>=<value>][@<day filter>], e.g. orb-NQ-tf15-pre, gap-ES-tf15-nyam:mode=fill,
 straddle_tight_0830-NQ-tf30-pre@A. The v2 uid `orb-NQ-tf15|pre|` is accepted too. `c1-NQ-tf1-eve:seed=2` = a PLACEBO unit
@@ -64,12 +65,16 @@ SAME_SIDE, SAME_DAYS = 0.70, 30   # two members are the SAME IDEA (one per stack
 # sorted by (BUILD net, vi, xi), index (n - 1) // 2 (never the best).
 # CHECK verdicts ("PERIODS AMENDED"): CONFIRMED (4)+(5)+(6) / WEAK (average profitable, a test fails) / FAILED (average not profitable).
 # RULE = the rule in force. seeds None = every control seed on disk; dirs None = every runs*/ folder; upto None = every year on disk
-RULE = {"draws": DRAWS, "seeds": None, "strict": True, "dedup_year": False, "dirs": None, "upto": None}
+# exam False = the EXAM period (2026+) stays sealed. `--exam` sets it True: `year --period exam` then judges ONE unit that is on
+# out/exam2026/allowed.json (EDGE_SPEC "FULL OUT-OF-SAMPLE FOR THE SAVED STRATEGIES": members that pass (4)-(6) on 2025), nothing else.
+RULE = {"draws": DRAWS, "seeds": None, "strict": True, "dedup_year": False, "dirs": None, "upto": None, "exam": False}
 
 PERIODS = {"build": {"name": "BUILD", "range": ("2021-09-22", "2023-12-31"), "tag": "build"},
            "pick": {"name": "2024", "range": ("2024-01-01", "2024-12-31"), "tag": "pick"},
-           "check": {"name": "2025", "range": ("2025-01-01", "2025-12-31"), "tag": "check"}}
-YEARS = ("pick", "check")                     # judged in this order; a year is read only after everything before it passed
+           "check": {"name": "2025", "range": ("2025-01-01", "2025-12-31"), "tag": "check"},
+           "exam": {"name": "2026", "range": ("2026-01-01", "2026-12-31"), "tag": "exam"}}   # SEALED: exam_gate() opens it per unit
+YEARS = ("pick", "check", "exam")             # judged in this order; a year is read only after everything before it passed
+ALLOWED = W / "out" / "exam2026" / "allowed.json"   # the units 2026 may be read for + the last complete session per market
 # A store belongs to the period its own date range lies in. Stores are looked for in every runs*/ folder: these first, in this
 # order (out/v2's order), then any other (runs_check2025/, a folder of extra control seeds, ...). runs_void/ is never read.
 PRIORITY = ("runs", "runs_v2", "runs_admit", "runs_admit_r1", "runs_deepen", "runs_events")
@@ -81,9 +86,11 @@ AS_V2 = {"draws": 200, "seeds": 2, "strict": False, "dedup_year": True, "dirs": 
 RUNNER = {"build": "python run_menus.py run --family <family> --roots <ROOT> --tf <tf>   (+ `run_menus.py nulls` for the c1 pool)",
           "pick": "python out/v2/run_v2.py run <jobs.json>   (stores -> runs_v2/, every 2024 read logged in out/v2/pick_reads.csv)",
           "check": "the 2025 runner of EDGE_SPEC \"PERIODS AMENDED\" (same job format with period \"check\"; stores as "
-                   "<key>-<sess>-check[-stress|-shift|-c2sN] and c1-<ROOT>-tf<tf>-<sess>-check in a runs*/ folder; reads logged in out/check2025/reads.csv)"}
+                   "<key>-<sess>-check[-stress|-shift|-c2sN] and c1-<ROOT>-tf<tf>-<sess>-check in a runs*/ folder; reads logged in out/check2025/reads.csv)",
+          "exam": "python out/exam2026/run_exam.py run <jobs.json>   (allowed units only, allow_exam=True; stores -> runs_exam2026/ as "
+                  "<key>-<sess>-exam[-stress|-shift] and c1-<ROOT>-tf<tf>-<sess>-exam; reads logged in out/exam2026/reads.csv)"}
 EVENTS_CSV = W / "engine" / "cache" / "events.csv"
-EXAM_START = "2026-01-01"                     # no calendar row on / after this is ever returned
+EXAM_START = "2026-01-01"                     # no calendar row on / after this is returned unless RULE["exam"] is True
 TIER1 = ("NFP", "CPI", "PPI", "RETAIL", "GDP", "PCE")
 EVENT_GROUPS = {   # EDGE_SPEC "STAGE 3": (clock time of the calendar row, types or None = every type, plain words)
     "A": ("08:30", None, "days with an 08:30 ET US data release (jobs report, CPI, PPI, retail sales, GDP, PCE or weekly jobless claims)"),
@@ -231,18 +238,40 @@ def calendar(period: str, root: str) -> list:
             _CAL[(period, root)] = LB.calendar(period, root)
         else:
             a, b = (dt.date.fromisoformat(x) for x in PERIODS[period]["range"])
+            if period == "exam":                            # to the last complete session on disk of that market (allowed.json)
+                b = dt.date.fromisoformat(exam_allowed()["period"]["end"][root])
             _CAL[(period, root)] = [(a + dt.timedelta(n)).isoformat() for n in range((b - a).days + 1) if (a + dt.timedelta(n)).weekday() < 5]
     return _CAL[(period, root)]
 
 
+def exam_allowed() -> dict:
+    """out/exam2026/allowed.json: {"units": [addresses 2026 may be read for], "period": {"end": {ROOT: last session}}}. Written
+    once from the 2025 verdicts, BEFORE the first 2026 run. Missing = nothing is allowed."""
+    if not ALLOWED.exists():
+        raise Refuse(f"the EXAM period (2026+) is sealed: {ALLOWED.relative_to(W)} does not exist, so no unit may be read on it")
+    return json.loads(ALLOWED.read_text())
+
+
+def exam_gate(u: dict) -> None:
+    """The EXAM seal of the judge. 2026 is read only with the explicit exam flag (RULE['exam'] is True, `--exam`) AND only for a
+    unit listed in allowed.json; anything else is refused before a single 2026 store is looked at."""
+    if RULE.get("exam") is not True:
+        raise Refuse("the EXAM period (2026+) is sealed: it is judged only with the explicit exam flag (--exam)")
+    if u["addr"] not in exam_allowed().get("units", []):
+        raise Refuse(f"the EXAM period (2026+) is sealed for {u['addr']}: it is not on the allowed list {ALLOWED.relative_to(W)} "
+                     "(members under the rule in force that pass tests (4)-(6) on 2025)")
+
+
 def event_ords(group: str) -> np.ndarray:
-    """Ordinals of the days of an event group (calendar rows only; nothing dated in the EXAM period is ever returned)."""
-    if group not in _EV:
+    """Ordinals of the days of an event group (calendar rows only; nothing dated in the EXAM period is returned unless the
+    exam flag is set)."""
+    k = (group, RULE.get("exam") is True)
+    if k not in _EV:
         at, types, _ = EVENT_GROUPS[group]
         with EVENTS_CSV.open() as fh:
-            days = {r["date"] for r in csv.DictReader(fh) if r["date"] < EXAM_START and r["time_et"] == at and (types is None or r["type"] in types)}
-        _EV[group] = np.array(sorted(dt.date.fromisoformat(d).toordinal() for d in days), np.int64)
-    return _EV[group]
+            days = {r["date"] for r in csv.DictReader(fh) if (k[1] or r["date"] < EXAM_START) and r["time_et"] == at and (types is None or r["type"] in types)}
+        _EV[k] = np.array(sorted(dt.date.fromisoformat(d).toordinal() for d in days), np.int64)
+    return _EV[k]
 
 
 def day_mask(u: dict, date, side=None) -> np.ndarray:
@@ -845,10 +874,12 @@ def year(u: dict, period: str, b: dict | None = None) -> dict:
     """Tests (4)-(6) of one year ON ITS OWN, from the stores on disk. PICK also gives the surviving set, the default and the
     final verdict (all six + the trade minimum on the real count + a surviving variant). CHECK re-tunes nothing: it reports the
     saved default and the saved variants on the new year -> CONFIRMED / WEAK / FAILED. `stores` = every store the verdict rests
-    on (F6). Refused: a unit that fails an earlier stage, a period that is not in PERIODS (EXAM), a missing store (the exception
+    on (F6). Refused: a unit that fails an earlier stage, the EXAM (2026) without the flag or off the allowed list, a missing store (the exception
     carries the runner jobs)."""
     if period not in YEARS:
-        raise Refuse(f"period {period!r}: one of {YEARS} (the EXAM period 2026+ is sealed and has no entry here)")
+        raise Refuse(f"period {period!r}: one of {YEARS}")
+    if period == "exam":
+        exam_gate(u)                                      # raises unless --exam AND the unit is on allowed.json
     nm = PERIODS[period]["name"]
     b = b or build(u)
     if not (b["build_pass"] or b.get("two_seed_pass")):
@@ -860,6 +891,8 @@ def year(u: dict, period: str, b: dict | None = None) -> dict:
         prev = year(u, YEARS[YEARS.index(period) - 1], b)
         if not (prev["admit"] or prev["demoted"]):
             raise Refuse(f"{u['addr']} is not a member ({prev['verdict']}): {nm} is not read for it")
+        if period == "exam" and not prev["admit"]:        # a DEMOTED unit is information on 2025 only: never 2026
+            raise Refuse(f"{u['addr']} is DEMOTED ({PERIODS['check']['name']} {prev['verdict']}): {nm} is not read for it")
     bst, brec = build_store(u)
     brows = table(bst, u)
     ids = table_stats(brows)["ids"]                                   # the BUILD-judged variants
@@ -1408,6 +1441,8 @@ def main(argv=None) -> int:
     rule.add_argument("--draws", type=int, default=None, help=f"random tables per control in test (2) (default {DRAWS:,}; 200 = out/v2's own draws)")
     rule.add_argument("--seeds", type=int, default=None, help="use only the first N control seeds on disk (default: all)")
     rule.add_argument("--upto", choices=("build",) + YEARS, default=None, help="judge no later than this period (default: every year on disk)")
+    rule.add_argument("--exam", action="store_true", help="the explicit EXAM flag: lets `year --period exam` / `card` read 2026 for a unit on "
+                      "out/exam2026/allowed.json (and only for those)")
     rule.add_argument("--as-v2", action="store_true", help="exactly as out/v2 coded and ran it (200 draws, 2 seeds, >= 60 %%, a year de-duplicated again, its six "
                       "folders, BUILD + 2024): the regression lock")
     ap = argparse.ArgumentParser(description="ADMISSION v2: judge a unit by the AVERAGE of all its variants (JUDGE.md).")
@@ -1428,6 +1463,7 @@ def main(argv=None) -> int:
     p.add_argument("--workers", type=int, default=8)
     a = ap.parse_args(argv)
     RULE.update(AS_V2 if a.as_v2 else {})
+    RULE["exam"] = bool(a.exam) and not a.as_v2
     RULE.update({k: v for k, v in (("draws", a.draws), ("seeds", a.seeds), ("upto", a.upto)) if v})
     rc = 0
     if a.cmd == "table":
@@ -1452,7 +1488,7 @@ def main(argv=None) -> int:
                 if a.log:
                     log_reads(r, a.log)
                 if r["todo"]:
-                    print(f"  not judged yet ({', '.join(r['not_judged'])}); run: {RUNNER['pick' if r['todo'][0]['period'] != 'check' else 'check']}\n  jobs.json = "
+                    print(f"  not judged yet ({', '.join(r['not_judged'])}); run: {RUNNER.get(r['todo'][0]['period'], RUNNER['pick'])}\n  jobs.json = "
                           + json.dumps(r["todo"]))
                 rc |= 0 if r["admit"] else 1
             else:

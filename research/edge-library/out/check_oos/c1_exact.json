@@ -1,0 +1,344 @@
+{
+ "first_bar_mom-NQ-tf30-mid|build": {
+  "avg": 14368.395833333334,
+  "ctl_mean_exact": -4575.3669970630635,
+  "lift_exact": 18943.762830396397,
+  "seeds": [
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10
+  ],
+  "fallback_share": 0.0
+ },
+ "first_bar_mom-NQ-tf30-mid|pick": {
+  "avg": 11239.104166666666,
+  "ctl_mean_exact": -680.6578084325333,
+  "lift_exact": 11919.7619750992,
+  "seeds": [
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10
+  ],
+  "fallback_share": 0.0
+ },
+ "first_bar_mom-NQ-tf30-mid|check": {
+  "avg": -6182.114583333333,
+  "ctl_mean_exact": -1665.174538679956,
+  "lift_exact": -4516.940044653377,
+  "seeds": [
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10
+  ],
+  "fallback_share": 0.0
+ },
+ "first_bar_mom-NQ-tf15-mid|build": {
+  "avg": 16921.645833333332,
+  "ctl_mean_exact": -4056.8743167638763,
+  "lift_exact": 20978.520150097207,
+  "seeds": [
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10
+  ],
+  "fallback_share": 0.0
+ },
+ "first_bar_mom-NQ-tf15-mid|pick": {
+  "avg": 3984.6770833333335,
+  "ctl_mean_exact": -101.41884014420503,
+  "lift_exact": 4086.0959234775387,
+  "seeds": [
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10
+  ],
+  "fallback_share": 0.0
+ },
+ "first_bar_mom-NQ-tf15-mid|check": {
+  "avg": 2175.9375,
+  "ctl_mean_exact": 125.78073928449949,
+  "lift_exact": 2050.1567607155007,
+  "seeds": [
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10
+  ],
+  "fallback_share": 0.0
+ },
+ "first_bar_mom-NQ-tf15-mid|exam": {
+  "avg": 6269.1875,
+  "ctl_mean_exact": 648.7960368791804,
+  "lift_exact": 5620.39146312082,
+  "seeds": [
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10
+  ],
+  "fallback_share": 0.0
+ },
+ "first_bar_mom-ES-tf15-mid|build": {
+  "avg": 4632.015789473684,
+  "ctl_mean_exact": -7048.68972119327,
+  "lift_exact": 11680.705510666954,
+  "seeds": [
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10
+  ],
+  "fallback_share": 0.0
+ },
+ "first_bar_mom-ES-tf15-mid|pick": {
+  "avg": 2681.315789473684,
+  "ctl_mean_exact": -1133.820756751745,
+  "lift_exact": 3815.136546225429,
+  "seeds": [
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10
+  ],
+  "fallback_share": 0.0
+ },
+ "first_bar_mom-ES-tf15-mid|check": {
+  "avg": 1372.7105263157894,
+  "ctl_mean_exact": -2940.2556474593835,
+  "lift_exact": 4312.966173775173,
+  "seeds": [
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10
+  ],
+  "fallback_share": 0.0
+ },
+ "orb-NQ-tf15-pre|build": {
+  "avg": 22707.177083333332,
+  "ctl_mean_exact": 11113.326330425722,
+  "lift_exact": 11593.85075290761,
+  "seeds": [
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10
+  ],
+  "fallback_share": 0.0
+ },
+ "orb-NQ-tf15-pre|pick": {
+  "avg": 10885.864583333334,
+  "ctl_mean_exact": 2833.6534012608136,
+  "lift_exact": 8052.21118207252,
+  "seeds": [
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10
+  ],
+  "fallback_share": 0.0
+ },
+ "orb-NQ-tf15-pre|check": {
+  "avg": -9370.875,
+  "ctl_mean_exact": 2409.653058767814,
+  "lift_exact": -11780.528058767813,
+  "seeds": [
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10
+  ],
+  "fallback_share": 0.0
+ },
+ "tema_slope-NQ-tf30-eve|build": {
+  "avg": 19972.052083333332,
+  "ctl_mean_exact": -8562.213721402737,
+  "lift_exact": 28534.265804736067,
+  "seeds": [
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10
+  ],
+  "fallback_share": 0.0
+ },
+ "tema_slope-NQ-tf30-eve|pick": {
+  "avg": 11966.947916666666,
+  "ctl_mean_exact": -410.0746351024604,
+  "lift_exact": 12377.022551769127,
+  "seeds": [
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10
+  ],
+  "fallback_share": 0.0
+ },
+ "tema_slope-NQ-tf30-eve|check": {
+  "avg": -4117.927083333333,
+  "ctl_mean_exact": -6331.238174367844,
+  "lift_exact": 2213.3110910345113,
+  "seeds": [
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10
+  ],
+  "fallback_share": 0.0
+ },
+ "donchian-NQ-tf30-nyam|build": {
+  "avg": 34773.4375,
+  "ctl_mean_exact": 6986.440142909589,
+  "lift_exact": 27786.99735709041,
+  "seeds": [
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10
+  ],
+  "fallback_share": 0.0
+ },
+ "donchian-NQ-tf30-nyam|pick": {
+  "avg": 13446.109375,
+  "ctl_mean_exact": 5941.937190847338,
+  "lift_exact": 7504.172184152662,
+  "seeds": [
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10
+  ],
+  "fallback_share": 0.0
+ },
+ "donchian-NQ-tf30-nyam|check": {
+  "avg": 7955.34375,
+  "ctl_mean_exact": 8631.881652960737,
+  "lift_exact": -676.5379029607375,
+  "seeds": [
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10
+  ],
+  "fallback_share": 0.0
+ }
+}

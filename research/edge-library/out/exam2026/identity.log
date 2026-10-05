@@ -1,0 +1,31 @@
+check BUILD runs/straddle_tight_0830-GC-tf30 pre: 10 days, 27 cells, 225 stored trades, cells that differ: 0
+check BUILD runs/straddle_tight_0830-GC-tf30 pre WITHOUT the carried evening ATR: 27 cells, 225 stored trades, cells that differ: 0
+check 2025 runs_check2025/straddle_tight_0830-GC-tf30-pre-check: 6 days, 27 cells, 162 stored trades, cells that differ: 0
+check 2025 runs_check2025/straddle_tight_0830-GC-tf30-pre-check-stress: 6 days, 27 cells, 171 stored trades, cells that differ: 0
+check BUILD runs/straddle_tight_0830-GC-tf30-shift pre: 10 days, 54 cells, 333 stored trades, cells that differ: 0
+check BUILD runs/straddle_tight_0830-GC-tf30-shift pre WITHOUT the carried evening ATR: 54 cells, 333 stored trades, cells that differ: 0
+check 2025 runs_check2025/straddle_tight_0830-GC-tf30-pre-check-shift: 6 days, 54 cells, 306 stored trades, cells that differ: 0
+check 2025 runs_seeds/straddle_tight_0830-GC-tf30-pre-check-shift-s3to10: 6 days, 216 cells, 1179 stored trades, cells that differ: 0
+check BUILD runs/straddle_tight_1000-NQ-tf30 nyam: 10 days, 27 cells, 270 stored trades, cells that differ: 0
+check BUILD runs/straddle_tight_1000-NQ-tf30 nyam WITHOUT the carried evening ATR: 27 cells, 270 stored trades, cells that differ: 0
+check 2025 runs_check2025/straddle_tight_1000-NQ-tf30-nyam-check: 6 days, 27 cells, 162 stored trades, cells that differ: 0
+check 2025 runs_check2025/straddle_tight_1000-NQ-tf30-nyam-check-stress: 6 days, 27 cells, 171 stored trades, cells that differ: 0
+check BUILD runs/straddle_tight_1000-NQ-tf30-shift nyam: 10 days, 54 cells, 513 stored trades, cells that differ: 0
+check BUILD runs/straddle_tight_1000-NQ-tf30-shift nyam WITHOUT the carried evening ATR: 54 cells, 513 stored trades, cells that differ: 0
+check 2025 runs_check2025/straddle_tight_1000-NQ-tf30-nyam-check-shift: 6 days, 54 cells, 315 stored trades, cells that differ: 0
+check 2025 runs_seeds/straddle_tight_1000-NQ-tf30-nyam-check-shift-s3to10: 6 days, 216 cells, 1287 stored trades, cells that differ: 0
+check BUILD runs/straddle_tight_1000-GC-tf30 nyam: 10 days, 27 cells, 207 stored trades, cells that differ: 0
+check BUILD runs/straddle_tight_1000-GC-tf30 nyam WITHOUT the carried evening ATR: 27 cells, 207 stored trades, cells that differ: 0
+check 2025 runs_check2025/straddle_tight_1000-GC-tf30-nyam-check: 6 days, 27 cells, 162 stored trades, cells that differ: 0
+check 2025 runs_check2025/straddle_tight_1000-GC-tf30-nyam-check-stress: 6 days, 27 cells, 162 stored trades, cells that differ: 0
+check BUILD runs/straddle_tight_1000-GC-tf30-shift nyam: 10 days, 54 cells, 342 stored trades, cells that differ: 0
+check BUILD runs/straddle_tight_1000-GC-tf30-shift nyam WITHOUT the carried evening ATR: 54 cells, 342 stored trades, cells that differ: 0
+check 2025 runs_check2025/straddle_tight_1000-GC-tf30-nyam-check-shift: 6 days, 54 cells, 306 stored trades, cells that differ: 0
+check 2025 runs_seeds/straddle_tight_1000-GC-tf30-nyam-check-shift-s3to10: 6 days, 216 cells, 1224 stored trades, cells that differ: 0
+check BUILD runs/first_bar_mom-NQ-tf15 mid: 10 days, 96 cells, 288 stored trades, cells that differ: 0
+check 2025 runs_check2025/first_bar_mom-NQ-tf15-mid-check: 6 days, 96 cells, 352 stored trades, cells that differ: 0
+check 2025 runs_check2025/first_bar_mom-NQ-tf15-mid-check-stress: 6 days, 96 cells, 352 stored trades, cells that differ: 0
+check BUILD runs/c1-NQ-tf15 mid: 10 days, 64 cells, 1223 stored trades, cells that differ: 0
+check 2025 runs_check2025/c1-NQ-tf15-mid-check: 6 days, 64 cells, 706 stored trades, cells that differ: 0
+check 2025 runs_seeds/c1-NQ-tf15-mid-check-s3to10: 6 days, 256 cells, 3217 stored trades, cells that differ: 0
+IDENTITY OK

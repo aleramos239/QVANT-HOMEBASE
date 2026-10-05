@@ -1,0 +1,247 @@
+{
+ "straddle_tight_0830-NQ-tf30-pre|pick": {
+  "seeds": 10,
+  "pass4": 0,
+  "pass45": 0,
+  "pass456": 0,
+  "stress_cost_per_trade": 8.813188542650298
+ },
+ "straddle_tight_0830-NQ-tf30-pre|check": {
+  "seeds": 10,
+  "pass4": 0,
+  "pass45": 0,
+  "pass456": 0,
+  "stress_cost_per_trade": 9.257441171887175
+ },
+ "straddle_tight_0830-NQ-tf30-pre@A|pick": {
+  "seeds": 10,
+  "pass4": 0,
+  "pass45": 0,
+  "pass456": 0,
+  "stress_cost_per_trade": 9.748842592592595
+ },
+ "straddle_tight_0830-NQ-tf30-pre@A|check": {
+  "seeds": 10,
+  "pass4": 0,
+  "pass45": 0,
+  "pass456": 0,
+  "stress_cost_per_trade": 12.946468735942418
+ },
+ "straddle_tight_0830-NQ-tf30-pre@B|pick": {
+  "seeds": 10,
+  "pass4": 0,
+  "pass45": 0,
+  "pass456": 0,
+  "stress_cost_per_trade": 8.80065359477124
+ },
+ "straddle_tight_0830-NQ-tf30-pre@B|check": {
+  "seeds": 10,
+  "pass4": 0,
+  "pass45": 0,
+  "pass456": 0,
+  "stress_cost_per_trade": 15.925925925925927
+ },
+ "straddle_tight_0830-GC-tf30-pre@A|pick": {
+  "seeds": 10,
+  "pass4": 0,
+  "pass45": 0,
+  "pass456": 0,
+  "stress_cost_per_trade": 18.806327160493822
+ },
+ "straddle_tight_0830-GC-tf30-pre@A|check": {
+  "seeds": 10,
+  "pass4": 2,
+  "pass45": 2.0,
+  "pass456": 1,
+  "stress_cost_per_trade": 16.765130984643182
+ },
+ "straddle_tight_0830-GC-tf30-pre@A|exam": {
+  "seeds": 10,
+  "pass4": 0,
+  "pass45": 0,
+  "pass456": 0,
+  "stress_cost_per_trade": 5.345142243692968
+ },
+ "straddle_tight_0830-GC-tf30-pre@B|pick": {
+  "seeds": 10,
+  "pass4": 0,
+  "pass45": 0,
+  "pass456": 0,
+  "stress_cost_per_trade": 20.631808278867105
+ },
+ "straddle_tight_0830-GC-tf30-pre@B|check": {
+  "seeds": 10,
+  "pass4": 1,
+  "pass45": 1.0,
+  "pass456": 0,
+  "stress_cost_per_trade": 18.78362573099415
+ },
+ "straddle_tight_0830-GC-tf30-pre@B|exam": {
+  "seeds": 10,
+  "pass4": 1,
+  "pass45": 1.0,
+  "pass456": 1,
+  "stress_cost_per_trade": 12.12289562289562
+ },
+ "straddle_tight_1000-NQ-tf30-nyam@C|pick": {
+  "seeds": 10,
+  "pass4": 6,
+  "pass45": 5.0,
+  "pass456": 4.0,
+  "stress_cost_per_trade": 13.537842190016105
+ },
+ "straddle_tight_1000-NQ-tf30-nyam@C|check": {
+  "seeds": 10,
+  "pass4": 4,
+  "pass45": 4.0,
+  "pass456": 4,
+  "stress_cost_per_trade": 1.1012345679012343
+ },
+ "straddle_tight_1000-NQ-tf30-nyam@C|exam": {
+  "seeds": 10,
+  "pass4": 1,
+  "pass45": 1.0,
+  "pass456": 1,
+  "stress_cost_per_trade": 0.8958333333333357
+ },
+ "straddle_tight_1000-GC-tf30-nyam@C|pick": {
+  "seeds": 10,
+  "pass4": 2,
+  "pass45": 2.0,
+  "pass456": 1,
+  "stress_cost_per_trade": 21.90177133655393
+ },
+ "straddle_tight_1000-GC-tf30-nyam@C|check": {
+  "seeds": 10,
+  "pass4": 1,
+  "pass45": 1.0,
+  "pass456": 1,
+  "stress_cost_per_trade": 12.572839506172835
+ },
+ "straddle_tight_1000-GC-tf30-nyam@C|exam": {
+  "seeds": 10,
+  "pass4": 1,
+  "pass45": 1.0,
+  "pass456": 0,
+  "stress_cost_per_trade": 35.83164983164983
+ },
+ "first_bar_mom-NQ-tf30-mid|pick": {
+  "seeds": 10,
+  "pass4": 3,
+  "pass45": 3.0,
+  "pass456": 2,
+  "stress_cost_per_trade": 15.984933035714283
+ },
+ "first_bar_mom-NQ-tf30-mid|check": {
+  "seeds": 10,
+  "pass4": 2,
+  "pass45": 2.0,
+  "pass456": 1,
+  "stress_cost_per_trade": 15.958128511235957
+ },
+ "first_bar_mom-NQ-tf15-mid|pick": {
+  "seeds": 10,
+  "pass4": 1,
+  "pass45": 1.0,
+  "pass456": 1,
+  "stress_cost_per_trade": 7.6698606271777
+ },
+ "first_bar_mom-NQ-tf15-mid|check": {
+  "seeds": 10,
+  "pass4": 2,
+  "pass45": 2.0,
+  "pass456": 1,
+  "stress_cost_per_trade": 16.186805555555555
+ },
+ "first_bar_mom-NQ-tf15-mid|exam": {
+  "seeds": 10,
+  "pass4": 0,
+  "pass45": 0,
+  "pass456": 0,
+  "stress_cost_per_trade": 10.57533112582782
+ },
+ "first_bar_mom-ES-tf15-mid|pick": {
+  "seeds": 10,
+  "pass4": 1,
+  "pass45": 1.0,
+  "pass456": 0,
+  "stress_cost_per_trade": 23.062162162162164
+ },
+ "first_bar_mom-ES-tf15-mid|check": {
+  "seeds": 10,
+  "pass4": 0,
+  "pass45": 0,
+  "pass456": 0,
+  "stress_cost_per_trade": 27.34103078982597
+ },
+ "orb-NQ-tf15-pre|pick": {
+  "seeds": 10,
+  "pass4": 5,
+  "pass45": 2.0,
+  "pass456": 2.0,
+  "stress_cost_per_trade": 11.872317394578316
+ },
+ "orb-NQ-tf15-pre|check": {
+  "seeds": 10,
+  "pass4": 3,
+  "pass45": 3.0,
+  "pass456": 3,
+  "stress_cost_per_trade": 7.399274132730018
+ },
+ "tema_slope-NQ-tf30-eve|pick": {
+  "seeds": 10,
+  "pass4": 6,
+  "pass45": 5.0,
+  "pass456": 5.0,
+  "stress_cost_per_trade": 15.765608702130825
+ },
+ "tema_slope-NQ-tf30-eve|check": {
+  "seeds": 10,
+  "pass4": 0,
+  "pass45": 0,
+  "pass456": 0,
+  "stress_cost_per_trade": 9.926393270241853
+ },
+ "donchian-NQ-tf30-nyam|pick": {
+  "seeds": 10,
+  "pass4": 7,
+  "pass45": 5.0,
+  "pass456": 5.0,
+  "stress_cost_per_trade": 16.797856970864434
+ },
+ "donchian-NQ-tf30-nyam|check": {
+  "seeds": 10,
+  "pass4": 6,
+  "pass45": 6.0,
+  "pass456": 4,
+  "stress_cost_per_trade": 39.279284347923934
+ },
+ "straddle_t_0830-NQ-tf30-pre|pick": {
+  "seeds": 10,
+  "pass4": 7,
+  "pass45": 6.0,
+  "pass456": 6.0,
+  "stress_cost_per_trade": 7.2935917721519
+ },
+ "straddle_t_0830-NQ-tf30-pre|check": {
+  "seeds": 10,
+  "pass4": 4,
+  "pass45": 4.0,
+  "pass456": 4,
+  "stress_cost_per_trade": 7.2478947944007
+ },
+ "straddle_t_1800-NQ-tf30-eve|pick": {
+  "seeds": 10,
+  "pass4": 8,
+  "pass45": 6.0,
+  "pass456": 6.0,
+  "stress_cost_per_trade": 27.03438995215311
+ },
+ "straddle_t_1800-NQ-tf30-eve|check": {
+  "seeds": 10,
+  "pass4": 7,
+  "pass45": 5.0,
+  "pass456": 5.0,
+  "stress_cost_per_trade": 26.280323450134773
+ }
+}

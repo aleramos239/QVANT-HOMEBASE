@@ -36,7 +36,7 @@ def test_null_cells_do_not_count_toward_the_candidate_cap_and_are_tracked_separa
     LB.ledger_add("null_error", "u9-c2s1", "null", cells=7, path=led, caps=caps)       # a failed null pass: tracked, not capped
     LB.ledger_add("build_error", "u9", "grid", cells=0 + 1, path=tmp_path / "l2.csv", caps=caps)      # a failed candidate batch counts
     assert LB.ledger_nulls(path=led) == 251 and LB.ledger_used(path=tmp_path / "l2.csv")["cells"] == 1
-    assert LB.CAPS == {"runs": 2000, "cells": 50000, "wfs": 40}        # 40,000 -> 50,000: EDGE_SPEC "STAGE 2b"
+    assert LB.CAPS == {"runs": 2000, "cells": 80000, "wfs": 40}        # 40,000 -> 50,000: EDGE_SPEC "STAGE 2b"; -> 80,000: "ADMISSION v2" part D
 
 
 def test_the_plan_counts_candidate_cells_and_null_cells_apart():

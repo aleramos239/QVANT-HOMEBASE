@@ -1,0 +1,4 @@
+straddle_tight_1000-NQ-tf30-nyam@C BUILD 27 0.963 4100 t1 True t2 True {'days': (43, 0.997), 'shift': (6424, 1.0)}
+   2024 3242 2591 t4 True t5 True t6 True {'days': 75, 'shift': 3077} surv 26 default offA_pts5-r3 member True
+   check CONFIRMED 18 / 27 984 580 stress 935 {'days': (19.2, 0.808), 'shift': (1307.4, 0.9)} default -1100 saved+ 18 / 26
+   exam FAILED 1 / 27 -1105 -1068 stress -1134 {'days': (5.4, 0.601), 'shift': (104.9, 0.565)} default -1258 saved+ 1 / 26

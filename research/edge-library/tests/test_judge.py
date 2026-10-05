@@ -575,11 +575,90 @@ def test_full_build_table_now():
     return _full(TO_PASS, TO_FAIL_F1 + TO_FAIL_F3)
 
 
+# ================================================================ the EXAM seal (2026): flag + allowed list, nothing else
+
+def test_exam_is_sealed_without_the_flag_and_off_the_allowed_list():
+    """EDGE_SPEC "FULL OUT-OF-SAMPLE FOR THE SAVED STRATEGIES": 2026 is judged only with the explicit exam flag AND only for a unit
+    on out/exam2026/allowed.json. Both refusals come BEFORE any store is looked at; the engine refuses a 2026 date without
+    allow_exam; the 2026 runner refuses a whole job list that holds one job of a unit off the list. No 2026 file is read here."""
+    import datetime as dt
+    on, off, demoted = "first_bar_mom-NQ-tf15-mid", "orb-NQ-tf15-pre", "straddle_t_1800-NQ-tf30-eve"
+    keep_allowed, keep_find, keep_build = J.ALLOWED, J.find, J.build
+    tmp = Path(tempfile.mkdtemp(dir=W / "tests"))
+
+    def no_store(*a, **k):
+        raise AssertionError("a store was looked at before the EXAM seal answered")
+
+    def refused(fn, word):
+        try:
+            fn()
+        except J.Refuse as e:
+            assert word in str(e), str(e)
+            return 1
+        raise AssertionError(f"not refused ({word})")
+
+    n = 0
+    try:
+        J.ALLOWED = tmp / "allowed.json"
+        J.ALLOWED.write_text(json.dumps({"units": [on], "period": {"start": "2026-01-01", "end": {"NQ": "2026-01-30"}}}))
+        J.find = J.build = no_store
+        assert J.RULE["exam"] is False                                         # the default rule: sealed
+        n += refused(lambda: J.year(J.unit(on), "exam"), "explicit exam flag")           # on the list, no flag
+        assert J.main(["year", on, "--period", "exam", "--log", ""]) == 2 and J.RULE["exam"] is False
+        with rule(exam=True):
+            for a in (off, demoted, on + "@A"):                                 # the flag alone opens nothing off the list
+                n += refused(lambda a=a: J.year(J.unit(a), "exam"), "not on the allowed list")
+            J.ALLOWED.unlink()                                                  # no list = nothing allowed
+            n += refused(lambda: J.year(J.unit(on), "exam"), "does not exist")
+        assert J.main(["year", off, "--period", "exam", "--exam", "--log", ""]) == 2      # the command line, same answer
+        J.RULE["exam"] = False
+        for g in "ABC":                                                         # no flag: no 2026 calendar row
+            assert J.event_ords(g).max() < dt.date.fromisoformat(J.EXAM_START).toordinal()
+        n += 1
+    finally:
+        J.ALLOWED, J.find, J.build = keep_allowed, keep_find, keep_build
+        J.RULE["exam"] = False
+        J._EV.clear()
+        J._CAL.clear()
+        for f in tmp.glob("*"):
+            f.unlink()
+        tmp.rmdir()
+    # the engine: a 2026 date raises without the exam key, and under the CHECK key (before any tape is opened)
+    sys.path.insert(0, str(W / "engine"))
+    sys.path.insert(0, str(W / "out" / "exam2026"))
+    import l2sim as S
+    import run_exam as RX
+    for kw in ({}, {"allow_check": True}):
+        for call in (lambda kw=kw: S.sessions("2026-01-02", "2026-01-30", "NQ", **kw), lambda kw=kw: S.load_tape("2026-01-05", "NQ", **kw),
+                     lambda kw=kw: S.run_many([], "2026-01-02", "2026-01-30", root="NQ", **kw)):
+            try:
+                call()
+                raise AssertionError("the engine read the EXAM period without allow_exam")
+            except S.HoldoutSealed:
+                n += 1
+    # the runner: the allowed list on disk decides; one job off it (or of another period) refuses the whole list before any run
+    a = RX.allowed()
+    assert a["units"] and all("@" not in k[0] for k in a["menus"])
+    good = {"family": "first_bar_mom", "root": "NQ", "tf": "15", "sess": "mid", "period": "exam"}
+    RX.guard(good, a)
+    RX.guard({"c1": True, "root": "NQ", "tf": "15", "sess": "mid", "period": "exam"}, a)
+    for j in ({**good, "family": "orb", "sess": "pre"}, {**good, "family": "straddle_t_1800", "tf": "30", "sess": "eve"}, {**good, "tf": "30"},
+              {**good, "root": "ES"}, {**good, "period": "check"}, {"c1": True, "root": "NQ", "tf": "30", "sess": "mid", "period": "exam"}):
+        for fn in (lambda j=j: RX.guard(j, a), lambda j=j: RX.run([good, j]), lambda j=j: RX.check([good, j])):
+            try:
+                fn()
+                raise AssertionError(f"the 2026 runner accepted {j}")
+            except RX.Sealed:
+                n += 1
+    RESULTS["test_exam_is_sealed_without_the_flag_and_off_the_allowed_list"] = (n, n, [])
+
+
 if __name__ == "__main__":
     import time
     tests = [test_catalog_and_unit_types, test_event_days_are_stage_3, test_members_all_six, test_other_build_passers_fail_2024_the_same_way,
              test_sampled_build_failures, test_placebo_one_of_168, test_cards_and_surviving_sets, test_refusals, test_check_path_dry_run_on_2024,
-             test_full_build_table_as_v2, test_f1_4000_draws_are_the_checkers, test_f2_every_seed_on_disk, test_f3_f4_f5_f6, test_full_build_table_now]
+             test_full_build_table_as_v2, test_f1_4000_draws_are_the_checkers, test_f2_every_seed_on_disk, test_f3_f4_f5_f6, test_full_build_table_now,
+             test_exam_is_sealed_without_the_flag_and_off_the_allowed_list]
     rc = 0
     for t in tests:
         if t.__name__.startswith("test_full") and not os.environ.get("JUDGE_FULL"):

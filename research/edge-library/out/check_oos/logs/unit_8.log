@@ -1,0 +1,4 @@
+first_bar_mom-NQ-tf15-mid BUILD 96 0.927 16922 t1 True t2 True {'c1': (20982, 0.998)}
+   2024 3985 170 t4 True t5 True t6 True {'c1': 4183} surv 39 default k1p5_atr3-r2 member True
+   check CONFIRMED 53 / 96 2176 1324 stress 962 {'c1': (1925.7, 0.642)} default 11104 saved+ 21 / 39
+   exam WEAK 46 / 96 6269 -62 stress 5737 {'c1': (5504.5, 0.875)} default 50281 saved+ 21 / 39

@@ -14,7 +14,7 @@ import library as LB
 # ---- the ledger: HARD caps --------------------------------------------------------------------------------------------------
 
 def test_caps_are_the_spec_and_a_menu_grid_of_n_cells_counts_n_cells(tmp_path):
-    assert LB.CAPS == {"runs": 2000, "cells": 50000, "wfs": 40} and LB.LEDGER == LB.W / "ledger.csv"
+    assert LB.CAPS == {"runs": 2000, "cells": 80000, "wfs": 40} and LB.LEDGER == LB.W / "ledger.csv"
     led = tmp_path / "ledger.csv"
     assert LB.ledger_used(path=led) == {"runs": 0, "cells": 0, "wfs": 0}
     LB.ledger_add("build", "donchian-NQ-tf15", "grid", cells=128, family="donchian", root="NQ", tf="15", period="build", path=led)
@@ -23,7 +23,7 @@ def test_caps_are_the_spec_and_a_menu_grid_of_n_cells_counts_n_cells(tmp_path):
     LB.ledger_add("member", "m1-wf", "wf", path=led)
     LB.ledger_add("smoke", "x", "smoke", path=led)                # a smoke row counts nothing
     assert LB.ledger_used(path=led) == {"runs": 1, "cells": 128, "wfs": 1} and LB.ledger_nulls(path=led) == 64
-    assert LB.ledger_left(path=led) == {"runs": 1999, "cells": 49872, "wfs": 39}
+    assert LB.ledger_left(path=led) == {"runs": 1999, "cells": 79872, "wfs": 39}
     rows = LB.read_ledger(led)
     assert [r["cells"] for r in rows] == ["128", "0", "0", "0", "0"] and tuple(rows[0]) == LB.COLS and rows[0]["finished_utc"]
     assert [r["null_cells"] for r in rows] == ["0", "64", "0", "0", "0"]
@@ -61,8 +61,8 @@ def test_a_row_or_batch_past_a_cap_is_refused_and_nothing_is_appended(tmp_path):
     LB.ledger_add("build_error", "e", "grid", cells=1, path=tmp_path / "l2.csv", caps=caps)      # failed batches: every attempt counts
     assert LB.ledger_used(path=tmp_path / "l2.csv")["cells"] == 2
     with pytest.raises(LB.CapExceeded):                            # the real caps hold for the real numbers
-        LB.ledger_check(cells=50001, path=tmp_path / "none.csv")
-    assert LB.ledger_check(cells=50000, runs=2000, wfs=40, path=tmp_path / "none.csv") == {"runs": 0, "cells": 0, "wfs": 0}
+        LB.ledger_check(cells=80001, path=tmp_path / "none.csv")
+    assert LB.ledger_check(cells=80000, runs=2000, wfs=40, path=tmp_path / "none.csv") == {"runs": 0, "cells": 0, "wfs": 0}
 
 
 # ---- plateau ----------------------------------------------------------------------------------------------------------------
