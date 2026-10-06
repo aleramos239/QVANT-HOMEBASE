@@ -3,6 +3,7 @@
 runs of broker tick ids -- and fetches only that. Fakes and tmp dirs only."""
 from __future__ import annotations
 
+import collections
 import datetime as dt
 import gzip
 import os
@@ -57,16 +58,30 @@ def test_a_daytime_run_spends_at_most_its_pages_and_the_next_one_goes_on(tmp_pat
                                           page=2)
     cache = {}
     run(T.record(roots=("NQ",), dates=[D], base=tmp_path, ws=object(), cache=cache, day=True))
-    assert len(broker.asked) == T.DAY_PAGES
+    assert len(broker.asked) == T.DAY_ROOT_PAGES              # one root: its share of the run's pages
     hole_start = T.session_bounds(D)[0].timestamp() * 1000 + 9 * 3_600_000
     with gzip.open(path, "rt") as f:                          # the earliest tick the capped run got
         reached = min(int(line.split(",")[0]) for line in list(f)[1:] if int(line.split(",")[0]) > hole_start)
     run(T.record(roots=("NQ",), dates=[D], base=tmp_path, ws=object(), cache=cache, day=True))
-    assert len(broker.asked) == 2 * T.DAY_PAGES
-    assert broker.asked[T.DAY_PAGES][1] == reached            # picked up where the last run stopped
-    for _ in range(10):
+    assert len(broker.asked) == 2 * T.DAY_ROOT_PAGES
+    assert broker.asked[T.DAY_ROOT_PAGES][1] == reached       # picked up where the last run stopped
+    for _ in range(30):
         run(T.record(roots=("NQ",), dates=[D], base=tmp_path, ws=object(), cache=cache, day=True))
     assert held(path, ticks[:16 * 60 + 1])
+
+
+def test_a_daytime_run_gives_each_root_its_share_of_the_pages(tmp_path, monkeypatch):
+    """2026-10-05 14:54, the live stream thinned and every root's tape to fetch: NQ took 38 of the
+    run's 45 pages, ES the other 7, thirteen roots none. Now DAY_ROOT_PAGES a root, in priority
+    order, DAY_PAGES in all -- and what a root's share paged is on disk."""
+    nw = NoWait(monkeypatch, now=dt.datetime(2026, 9, 29, 10, 10, tzinfo=ET))
+    roots = ("NQ", "ES", "YM", "RTY")
+    broker = HistoryWindow(nw, {T.symbols.front_month(r, D): _minute_ticks(D) for r in roots}, page=2)
+    monkeypatch.setattr(T, "fetch_page", broker.pager)
+    assert T.DAY_PAGES == 3 * T.DAY_ROOT_PAGES
+    out = run(T.record(roots=roots, dates=[D], base=tmp_path, ws=object(), day=True))
+    assert collections.Counter(c for c, _ in broker.asked) == {"NQZ6": 15, "ESZ6": 15, "YMZ6": 15}
+    assert sorted(m["root"] for m in out) == ["ES", "NQ", "YM"] and {m["ticks"] for m in out} == {16}
 
 
 def test_not_one_request_between_0920_and_0935(tmp_path, monkeypatch):
@@ -234,12 +249,12 @@ def test_an_evening_run_already_covers_the_session_that_began_at_18(tmp_path, mo
     assert nxt in T.candidate_dates(nw.now)
     run(T.record(roots=("NQ",), base=tmp_path, ws=object(), day=False))
     got = _ids(T.archive_path("NQ", nxt, "NQZ6", tmp_path))
-    assert len(got) == 176                                  # 18:00 -> 20:55 ET, the evening so far
+    assert len(got) == 121                                  # 18:00 -> 20:00 ET, the hours published so far
 
 
 def test_every_request_of_a_run_is_paced_even_a_jobs_first(tmp_path, monkeypatch):
     """Review 1: the 36 s pace held within a fetch but not between jobs (0 s at 17:20)."""
-    nw = NoWait(monkeypatch, now=dt.datetime(2026, 9, 29, 17, 20, tzinfo=ET))
+    nw = NoWait(monkeypatch, now=dt.datetime(2026, 9, 29, 17, 50, tzinfo=ET))
     books, stamps = {}, []
     for r in ("NQ", "ES", "YM"):
         c = T.symbols.front_month(r, D)
@@ -285,20 +300,44 @@ def test_a_night_run_waits_for_the_login_hour_to_free_up(tmp_path, monkeypatch, 
     assert nw.now.timestamp() >= now_s + 600                   # it waited until those aged out
 
 
-def test_a_refused_merge_is_not_fetched_again_until_its_files_change(tmp_path, monkeypatch, capsys):
-    """Review 7: a merge refused (here: an archive file that does not read) used
-    to be re-fetched, and refused, every hour."""
+def test_a_refused_merge_is_tried_again_while_the_broker_has_the_session_then_left_alone(
+        tmp_path, monkeypatch, capsys):
+    """Review 7: a merge refused (here: an archive file that does not read) used to be re-fetched,
+    and refused, every hour for ever -- so it was left alone at once, until its files changed. But
+    after the close they never change: 2026-10-05, 28 sessions were refused once and their ticks
+    left the broker un-merged. Now a run tries again while the broker still has the session, and
+    leaves it alone after."""
     nw, ticks, broker, path = battery_day(tmp_path, monkeypatch, dt.datetime(2026, 9, 29, 10, 10, tzinfo=ET))
     path.write_bytes(b"not a gzip file")
     cache = {}
     run(T.record(roots=("NQ",), dates=[D], base=tmp_path, ws=object(), cache=cache, day=True))
     asked = len(broker.asked)
     assert asked and capsys.readouterr().out.count("MERGE REFUSED") == 1
+    nw.now = dt.datetime(2026, 9, 29, 11, 10, tzinfo=ET)        # an hour on: the broker still has it
     run(T.record(roots=("NQ",), dates=[D], base=tmp_path, ws=object(), cache=cache, day=True))
-    assert len(broker.asked) == asked and capsys.readouterr().out == ""
+    assert len(broker.asked) == 2 * asked and capsys.readouterr().out.count("MERGE REFUSED") == 1
+    nw.now = dt.datetime(2026, 9, 30, 20, 30, tzinfo=ET)        # the session has left the broker
+    run(T.record(roots=("NQ",), dates=[D], base=tmp_path, ws=object(), cache=cache, day=False))
+    assert len(broker.asked) == 2 * asked and capsys.readouterr().out == ""
+    nw.now = dt.datetime(2026, 9, 29, 12, 10, tzinfo=ET)
     path.unlink()                                                # someone deals with it
     run(T.record(roots=("NQ",), dates=[D], base=tmp_path, ws=object(), cache=cache, day=True))
-    assert len(broker.asked) > asked and held(path, ticks[:16 * 60 + 1])
+    assert len(broker.asked) > 2 * asked and held(path, ticks[:16 * 60 + 1])
+
+
+def test_a_refusal_ends_that_sessions_pieces_for_the_run(tmp_path, monkeypatch, capsys):
+    """Tried again every run -- but one piece of it: a session that keeps being refused must not
+    spend the login's pages hour after hour while the other roots wait behind it."""
+    nw, ticks, broker, path = battery_day(tmp_path, monkeypatch, dt.datetime(2026, 9, 29, 21, 0, tzinfo=ET))
+    path.write_bytes(b"not a gzip file")
+    es = T.archive_path("ES", D, "ESZ6", tmp_path)
+    broker.ticks["ESZ6"] = ticks
+    _write_live(A.live_path(es), ticks[:-30])
+    run(T.record(roots=("NQ", "ES"), dates=[D], base=tmp_path, ws=object(), cache={}, day=False))
+    out = capsys.readouterr().out
+    assert out.count("NQ 2026-09-29 NQZ6: MERGE REFUSED") == 1
+    assert collections.Counter(c for c, _ in broker.asked) == {"NQZ6": 4, "ESZ6": 1}    # the hole; not NQ's close
+    assert _ids(es) == [r["id"] for r in ticks]                  # the root behind it had its turn
 
 
 def test_store_remembers_a_refusal_with_the_files_stamps(tmp_path, capsys):
@@ -309,10 +348,13 @@ def test_store_remembers_a_refusal_with_the_files_stamps(tmp_path, capsys):
     start, end = T.session_bounds(D)
     assert T.store("NQ", D, "NQZ6", path, start, end, [A.row_of(_minute_ticks(D)[0])], cache=cache) is None
     assert "MERGE REFUSED" in capsys.readouterr().out and T.refused_still(cache, "NQ", D, path)
-    nw = dt.datetime(2026, 9, 29, 10, 10, tzinfo=ET)
-    assert T.missing("NQ", D, tmp_path, nw, cache)[0] == []    # left alone ...
+    nw = dt.datetime(2026, 9, 29, 10, 10, tzinfo=ET)            # the broker still has the session:
+    assert not T.refused_still(cache, "NQ", D, path, nw) and T.missing("NQ", D, tmp_path, nw, cache)[0]   # tried again
+    gone = dt.datetime(2026, 9, 30, 20, 0, tzinfo=ET)           # 00:00 UTC two days on: it has left the broker
+    assert T.refused_still(cache, "NQ", D, path, gone)
+    assert T.missing("NQ", D, tmp_path, gone, cache)[0] == []   # left alone ...
     path.write_bytes(b"someone fixed it, or not")
-    assert not T.refused_still(cache, "NQ", D, path)            # ... until its file changes
+    assert not T.refused_still(cache, "NQ", D, path, gone)      # ... until its file changes
 
 
 def test_one_empty_reply_is_asked_again_once_before_it_is_believed(tmp_path, monkeypatch):
@@ -330,18 +372,27 @@ def test_one_empty_reply_is_asked_again_once_before_it_is_believed(tmp_path, mon
     assert cache[T.ASKED] and not cache.get(T.EMPTY_ONCE)
 
 
-def test_a_sessions_pieces_are_merged_once_a_run(tmp_path, monkeypatch):
-    """Review 10: each fetched piece used to rewrite the whole session file (ES:
-    1.3M rows read, written and verified again per restart gap)."""
+def test_each_piece_is_on_disk_before_the_next_is_asked_for(tmp_path, monkeypatch):
+    """Review 10 made it one merge a session a run: each piece used to rewrite the whole file (ES:
+    1.3M rows, per restart gap). Since then gaps a few ticks apart are one piece (BRIDGE_TICKS) --
+    and 2026-10-05 a run held 2 h 43 min of fetched pages in memory, to merge them at its end.
+    Now a piece is merged as it lands: whatever ends the run later, it is in the file."""
     nw, ticks, broker, path = battery_day(tmp_path, monkeypatch, dt.datetime(2026, 9, 29, 21, 0, tzinfo=ET))
     lp = path.with_name("2026-09-29_NQZ6.live.csv.gz")
     lp.unlink()
-    _write_live(lp, [r for i, r in enumerate(ticks) if i not in (200, 300, 500, 700)])   # four restarts after 20:00 ET
-    merges = []
+    lost = [ticks[i]["id"] for i in (200, 300, 500, 700)]                 # four restarts after 20:00 ET
+    _write_live(lp, [r for r in ticks if r["id"] not in lost])
+    merges, on_disk = [], []
     real = A.merge_session
     monkeypatch.setattr(A, "merge_session", lambda *a, **k: (merges.append(1), real(*a, **k))[1])
+
+    async def pager(ws, contract, before_ms, n=T.PAGE, timeout_s=0, ticket=None):
+        on_disk.append(set(_ids(path)) if path.exists() else set())      # the file as each request goes out
+        return await broker.pager(ws, contract, before_ms)
+    monkeypatch.setattr(T, "fetch_page", pager)
     out = run(T.record(roots=("NQ",), dates=[D], base=tmp_path, ws=object(), cache={}, day=False))
-    assert len(merges) == 1              # four gaps and the close, all leaving the broker together: one merge
+    assert len(merges) == 2              # the four gaps (one piece: a few ticks apart), then the close
+    assert on_disk[0] == set() and on_disk[-1] >= set(lost)               # the first piece, before the second
     assert out[0]["complete"] and _ids(path) == [r["id"] for r in ticks]
 
 
@@ -459,3 +510,210 @@ def test_a_recorder_that_kept_a_tick_a_minute_is_one_job_not_one_per_minute(tmp_
     inside = [g for g in gaps if g[2].endswith("gaps")]
     assert len(inside) == 1 and inside[0][2].startswith("30 ticks in 30 gaps")       # one job for the hour
     assert inside[0][0] < inside[0][1]
+
+
+# ---- 2026-10-05: the live stream thinned, 28 sessions refused, what was fetched thrown away
+@pytest.mark.parametrize("hhmm,upto", [((19, 44), None), ((19, 45), "19:00"), ((19, 58), "19:00"),
+                                       ((20, 44), "19:00"), ((20, 45), "20:00"), ((23, 0), "22:00")])
+def test_only_hours_that_ended_45_minutes_ago_are_asked_for(tmp_path, hhmm, upto):
+    """The broker's history of an hour it has not published yet is thinned like the live stream: NQ's
+    19:00 ET hour asked at 19:58 held 84 of 2,166 ids -- and the job wrote those rows into the archive."""
+    nxt = dt.date(2026, 9, 30)                                   # the session that opened at 18:00 tonight
+    gaps, _ = T.missing("NQ", nxt, tmp_path, dt.datetime(2026, 9, 29, *hhmm, tzinfo=ET), {})
+    assert [(_hm(a), _hm(b), why) for a, b, why in gaps] == ([("18:00", upto, "nothing recorded")] if upto else [])
+
+
+def _hm(ms):
+    return dt.datetime.fromtimestamp(ms / 1000, ET).strftime("%H:%M")
+
+
+def test_a_run_leaves_the_unpublished_hours_to_a_later_one(tmp_path, monkeypatch):
+    """19:58 ET, the recorder alive and thinned (one tick in four): the gaps between its ticks are
+    fetched up to 19:00, the hour in progress not at all; an hour later the next one is in."""
+    nxt = dt.date(2026, 9, 30)
+    nw = NoWait(monkeypatch, now=dt.datetime(2026, 9, 29, 19, 58, tzinfo=ET))
+    ticks = _minute_ticks(nxt)
+    broker = HistoryWindow(nw, {"NQZ6": ticks}, page=500)
+    monkeypatch.setattr(T, "fetch_page", broker.pager)
+    path = T.archive_path("NQ", nxt, "NQZ6", tmp_path)
+    _write_live(A.live_path(path), [r for r in ticks[:118] if r["id"] % 4 == 1])      # 18:00 ... 19:56
+    cache = {}
+    run(T.record(roots=("NQ",), dates=[nxt], base=tmp_path, ws=object(), cache=cache, day=False))
+    seven = _ms(dt.datetime(2026, 9, 29, 19, 0, tzinfo=ET))
+    assert broker.asked and all(b <= seven for _, b in broker.asked)
+    assert _ids(path) == [r["id"] for r in ticks[:61]]                              # 18:00 -> 19:00, whole
+    nw.now = dt.datetime(2026, 9, 29, 20, 58, tzinfo=ET)
+    _write_live(A.live_path(path), [r for r in ticks[118:178] if r["id"] % 4 == 1])
+    run(T.record(roots=("NQ",), dates=[nxt], base=tmp_path, ws=object(), cache=cache, day=False))
+    assert _ids(path) == [r["id"] for r in ticks[:121]]                             # ... -> 20:00
+
+
+def test_pages_already_fetched_survive_a_dropped_line(monkeypatch):
+    """2026-10-05 18:52: ES's 09:58-14:49 ET -- 55 minutes of pages, then a page that never answered
+    ("FAILED" and nothing after it: a timeout has no text), and every one of them was gone."""
+    NoWait(monkeypatch)
+    d = dt.date(2026, 9, 22)
+    start, end = T.session_bounds(d)
+    rows, calls = _minute_ticks(d), []
+
+    async def pager(ws, contract, before_ms, n=T.PAGE, timeout_s=0, ticket=None):
+        calls.append(before_ms)
+        if len(calls) == 4:
+            raise TimeoutError()
+        return [r for r in rows if r["ts_ms"] <= before_ms][-100:]
+    got, stats = run(T.fetch_session(None, "ESZ6", start, end, page_fn=pager))
+    assert stats["stop"] == "failed" and isinstance(stats["error"], TimeoutError) and stats["pages"] == 3
+    assert got == rows[-298:] and stats["earliest_ms"] == got[0]["ts_ms"]     # three pages, a tick shared each
+    calls[:] = [0, 0, 0]
+    with pytest.raises(TimeoutError):                         # nothing paged yet: nothing to keep, raised as before
+        run(T.fetch_session(None, "ESZ6", start, end, page_fn=pager))
+    ok, stats = run(T.fetch_session(None, "ESZ6", start, end, page_fn=pager))
+    assert stats["error"] is None and stats["stop"] == "exhausted" and ok == rows
+
+
+def test_a_run_cut_short_merges_what_it_had_paged_and_the_next_goes_on_from_there(tmp_path, monkeypatch, capsys):
+    nw, ticks, broker, path = battery_day(tmp_path, monkeypatch, dt.datetime(2026, 9, 29, 21, 0, tzinfo=ET),
+                                          page=50)
+    calls = []
+
+    async def pager(ws, contract, before_ms, n=T.PAGE, timeout_s=0, ticket=None):
+        calls.append(before_ms)
+        if len(calls) == 4:
+            raise OSError("[Errno 8] nodename nor servname provided, or not known")
+        return await broker.pager(ws, contract, before_ms)
+    monkeypatch.setattr(T, "fetch_page", pager)
+    cache = {}
+    out = run(T.record(roots=("NQ",), dates=[D], base=tmp_path, ws=object(), cache=cache, day=False))
+    said = capsys.readouterr().out
+    assert said.count("FAILED") == 1 and "148 ticks, 3 pages" in said and len(calls) == 4    # the run ended there
+    hole = [r["id"] for r in ticks[9 * 60:15 * 60]]                      # 03:00-09:00 ET, lost to the battery
+    assert [i for i in _ids(path) if i in hole] == hole[-147:]           # the three pages (148 less the 09:00 tick held)
+    cut = next(x for x in out[0]["sources"] if x["kind"] == "history")
+    assert cut["stop"] == "failed" and cut["pages"] == 3 and "error" not in cut
+    run(T.record(roots=("NQ",), dates=[D], base=tmp_path, ws=object(), cache=cache, day=False))
+    assert calls[4] == cut["earliest_ms"]                                # the next run: from where it was cut
+    assert _ids(path) == [r["id"] for r in ticks]
+
+
+def test_a_day_run_out_of_budget_keeps_its_pages(tmp_path, monkeypatch, capsys):
+    """The login's hour spent mid-fetch (the chart service shares it) used to throw the fetch away:
+    with ten pages left an hour, a stretch of more than ten was paged again every run, never merged."""
+    nw, ticks, broker, path = battery_day(tmp_path, monkeypatch, dt.datetime(2026, 9, 29, 10, 10, tzinfo=ET),
+                                          page=2)
+    usage = tmp_path / "md_usage.json"
+    usage.write_text(__import__("json").dumps({"requests": {
+        "live": [nw.now.timestamp() - 20 * i for i in range(T.SHARED_MD_CAP - 10)]}}))
+    run(_record_with_conn(tmp_path, usage))
+    assert len(broker.asked) == 10 and "the next run goes on" in capsys.readouterr().out
+    assert len(_ids(path)) == 11                                          # ten pages of two, a tick shared each
+
+
+class NoTokenYet:
+    """The job's own socket (ws=None) with the desk's token files read for real: connect_md says
+    NoMdToken until `after` polls of the wait have passed (the desk then writes its token)."""
+
+    def __init__(self, tmp_path, monkeypatch, nw, after):
+        from types import SimpleNamespace
+        self.state, self.nw, self.after, self.sleeps = tmp_path / "state", nw, after, []
+        self.state.mkdir()
+        monkeypatch.setattr(T, "state_dir", lambda: self.state)
+        monkeypatch.setattr(T.config_mod, "load", lambda: SimpleNamespace(
+            accounts={"acct": SimpleNamespace(live=True)}))
+        monkeypatch.setattr(T, "coverage_report", lambda *a, **k: None)
+
+        class Sock:
+            connected = True
+
+            async def close(self):
+                pass
+
+        async def connect(**kw):
+            T.md_token(**kw)                                   # NoMdToken while no token file is valid
+            return Sock()
+        monkeypatch.setattr(T, "connect_md", connect)
+
+    def sleep(self, s):
+        self.sleeps.append(s)
+        self.nw.now += dt.timedelta(seconds=s)
+        if self.after is not None and len(self.sleeps) >= self.after:
+            exp = (dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=1)).isoformat()
+            (self.state / "acct.tokens.json").write_text(
+                '{"md_access_token": "t", "expiration_time": "%s"}' % exp)
+
+
+def test_a_fetch_without_a_token_reaches_the_wait_for_the_desk(tmp_path, monkeypatch, capsys):
+    """The wait (2026-09-30) only ever met a faked record(): the real one caught NoMdToken itself --
+    16 "FAILED no valid md token" lines in the log, not one "waiting for the desk"."""
+    nw, ticks, broker, path = battery_day(tmp_path, monkeypatch, dt.datetime(2026, 9, 29, 10, 10, tzinfo=ET))
+    desk = NoTokenYet(tmp_path, monkeypatch, nw, after=2)
+    assert T.run(("NQ",), [D], tmp_path, sleep=desk.sleep) == 0
+    out = capsys.readouterr().out
+    assert "waiting for the desk" in out and "FAILED" not in out and "still no valid md token" not in out
+    assert desk.sleeps == [30, 30] and held(path, ticks[:16 * 60 + 1])   # waited a minute, then fetched
+
+
+def test_with_no_token_the_live_recordings_are_merged_all_the_same(tmp_path, monkeypatch, capsys):
+    """No token, no fetch -- but a finished session's live recording needs none (the weekend of
+    2026-10-03 the desk was off for hours and the recordings went in)."""
+    nw, ticks, broker, path = battery_day(tmp_path, monkeypatch, dt.datetime(2026, 9, 29, 21, 0, tzinfo=ET))
+    desk = NoTokenYet(tmp_path, monkeypatch, nw, after=None)
+    reported = []
+    monkeypatch.setattr(T, "report_due", lambda p: False)
+    monkeypatch.setattr(T, "coverage_report", lambda *a, **k: reported.append(1))
+    assert T.run(("NQ",), [D], tmp_path, sleep=desk.sleep) == 0
+    out = capsys.readouterr().out
+    assert "live recording merged" in out and "still no valid md token" in out and "FAILED" not in out
+    assert broker.asked == [] and len(_ids(path)) == 9 * 60 + 61 and desk.sleeps == [30] * 10
+    assert reported == [1]                                         # ... and the coverage report says so
+
+
+def test_a_token_lost_mid_fetch_keeps_the_pages_and_asks_for_the_desk(tmp_path, monkeypatch):
+    nw, ticks, broker, path = battery_day(tmp_path, monkeypatch, dt.datetime(2026, 9, 29, 21, 0, tzinfo=ET),
+                                          page=50)
+    calls = []
+
+    async def pager(ws, contract, before_ms, n=T.PAGE, timeout_s=0, ticket=None):
+        calls.append(before_ms)
+        if len(calls) == 3:
+            raise T.NoMdToken("no valid md token on disk — is the desk running and connected?")
+        return await broker.pager(ws, contract, before_ms)
+    monkeypatch.setattr(T, "fetch_page", pager)
+    with pytest.raises(T.NoMdToken):
+        run(T.record(roots=("NQ",), dates=[D], base=tmp_path, ws=object(), cache={}, day=False))
+    hole = [r["id"] for r in ticks[9 * 60:15 * 60]]
+    assert [i for i in _ids(path) if i in hole] == hole[-98:] and len(calls) == 3    # two pages: in the file
+
+
+def test_the_sessions_refused_under_the_size_rule_are_tried_again(tmp_path):
+    """The 28 sessions frozen 2026-10-02 / 10-05 were refused under merge rules 2 ('not one feed')."""
+    path = T.archive_path("NQ", D, "NQZ6", tmp_path)
+    path.parent.mkdir(parents=True)
+    path.write_bytes(b"x")
+    cache = {T.REFUSED: {f"NQ {D}": {"stamp": T.files_stamp(path), "rules": 2, "why": "sizes"}}}
+    assert A.MERGE_RULES == 3 and not T.refused_still(cache, "NQ", D, path)
+
+
+def test_ids_still_missing_after_a_thinned_fetch_are_asked_again_until_the_broker_has_them(tmp_path, monkeypatch):
+    """ES 2026-10-05 02:00-04:00 ET, asked at 13:27 -- nine hours on: 185 ticks where 28,000 ids are.
+    The broker serves thinned rows for hours long over, the fetch "reached" its start all the same,
+    and the stretch was logged as served in full: nothing ever asked again. Between two held
+    ticks the ids decide: asked again each run (a page, while it is thinned) until they are in."""
+    nw, ticks, broker, path = battery_day(tmp_path, monkeypatch, dt.datetime(2026, 9, 29, 10, 10, tzinfo=ET))
+    hole = ticks[9 * 60:15 * 60]                                 # 03:00-09:00 ET
+    thinned = [r for r in ticks if r not in hole or r["id"] % 20 == 0]
+    broker.ticks["NQZ6"] = thinned
+    cache = {}
+    run(T.record(roots=("NQ",), dates=[D], base=tmp_path, ws=object(), cache=cache, day=True))
+    assert len(broker.asked) == 1 and len(_ids(path)) == 20      # 18 of the hole's 360, and its two edges
+    assert A.load_manifest(path)["sources"][-1]["stop"] == "reached"
+    nw.now = dt.datetime(2026, 9, 29, 10, 25, tzinfo=ET)         # the next run: still thinned
+    run(T.record(roots=("NQ",), dates=[D], base=tmp_path, ws=object(), cache=cache, day=True))
+    assert len(broker.asked) == 2 and len(_ids(path)) == 20      # asked again: one page, nothing new
+    broker.ticks["NQZ6"] = ticks                                  # the broker has published the hours
+    nw.now = dt.datetime(2026, 9, 29, 10, 40, tzinfo=ET)
+    run(T.record(roots=("NQ",), dates=[D], base=tmp_path, ws=object(), cache=cache, day=True))
+    assert held(path, ticks[:16 * 60 + 1]) and len(broker.asked) == 6
+    asked = len(broker.asked)
+    nw.now = dt.datetime(2026, 9, 29, 10, 44, tzinfo=ET)
+    run(T.record(roots=("NQ",), dates=[D], base=tmp_path, ws=object(), cache=cache, day=True))
+    assert len(broker.asked) == asked                             # whole: nothing more to ask
