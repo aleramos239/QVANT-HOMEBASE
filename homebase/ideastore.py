@@ -6,7 +6,8 @@ own Python, 3.9), and it never runs anything: it reads and writes text.
                                          always does)
       test_reads.jsonl                  the one-read log: append only, under a file lock, synced to disk
       <name>/
-        idea.json                       status, phase, round, pass/fail lines, next step, run ids, Lab group
+        idea.json                       status, phase, round, pass/fail lines, next step, early look, run ids,
+                                        Lab group
         card.md  spec.json  check.json  phase 0 (the card, the settings) and phase 1 (the code check)
         rounds/<n>/reason.txt  spec.json  build.json      phase 2: n = 1..5, the reason saved BEFORE the run
         lock.json  test.json  sim/<account>.json  eval.json      phases 3 to 6
@@ -30,6 +31,11 @@ A phase is passed when every line the law has for it is in the result and none f
     shelved             not passed after round 5, or a finished test that did not pass (NOT PROVEN: it is not
                         re-tuned and re-tested)
 A result that was refused, is a dry run, or is still running never counts.
+Nor does an EARLY LOOK: a test.json that says "early_look": true (the test days read for an idea that is not
+locked, on the owner's yes: his decision of 2026-10-06). It proves nothing and it shelves nothing: the idea
+keeps the status, the phase and the verdict its build gives it. idea.json says that one is on file
+(`early_look`), and so does the first line of the Lab block. A later test.json that is not an early look
+counts as any test does.
 
 Who writes what: the toolkit (research/edge-library/bp.py) saves each phase with the write_* functions; the
 connector (homebase.claude_mcp.blueprint_tools) calls sync() after every command, which brings idea.json, the
@@ -238,7 +244,8 @@ def write_lock(name, lock, root=None) -> Path:
 
 
 def write_test(name, result, root=None) -> Path:
-    """test.json: the out-of-sample test's result (lines 4.1-4.7)."""
+    """test.json: the out-of-sample test's result (lines 4.1-4.7) -- or an early look's, which says
+    "early_look": true and never counts toward a status (the module docstring)."""
     return _put(name, "test.json", _object(result, "test"), root)
 
 
@@ -323,6 +330,11 @@ def _finished(r) -> bool:
     return not isinstance(job, dict) or job.get("state") == "done"
 
 
+def _early(r) -> bool:
+    """Is this saved result an EARLY LOOK at the test days? It says so itself: "early_look": true."""
+    return isinstance(r, dict) and bool(r.get("early_look"))
+
+
 def _passed(r: dict, phase: int) -> bool:
     """Every line the law has for this phase is in the result and none failed (null = it does not apply)."""
     marks: dict = {}
@@ -351,7 +363,7 @@ def _status(d: Path) -> str:
     if build is None or not _passed(build, 2):
         return "shelved" if build is not None and n >= MAX_ROUNDS else "idea"
     test = _json(d / "test.json")
-    if not _finished(test):
+    if not _finished(test) or _early(test):         # an early look proves nothing and shelves nothing
         return "lead"
     if not _passed(test, 4):
         return "shelved"
@@ -366,21 +378,22 @@ def status(name, root=None) -> str:
 
 
 def _phase(d: Path) -> int:
-    """The furthest phase with something saved (0 = the card)."""
+    """The furthest phase with something saved (0 = the card). An early look is not a phase."""
     if (d / "eval.json").is_file():
         return 6
     if any((d / "sim").glob("*.json")):
         return 5
-    for phase, rel in ((4, "test.json"), (3, "lock.json")):
-        if (d / rel).is_file():
-            return phase
+    if (d / "test.json").is_file() and not _early(_json(d / "test.json")):
+        return 4
+    if (d / "lock.json").is_file():
+        return 3
     if _rounds(d):
         return 2
     return 1 if (d / "check.json").is_file() else 0
 
 
 def _verdict(d: Path) -> dict:
-    """The latest saved result that has lines: the furthest phase first."""
+    """The latest saved result that has lines: the furthest phase first. An early look is not a verdict."""
     try:
         sims = sorted((d / "sim").glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
     except OSError:
@@ -388,20 +401,22 @@ def _verdict(d: Path) -> dict:
     builds = [d / "rounds" / str(n) / "build.json" for n in reversed(_rounds(d))]
     for p in [d / "eval.json", *sims, d / "test.json", *builds, d / "check.json"]:
         r = _json(p)
-        if r is not None and isinstance(r.get("lines"), list):
+        if r is not None and isinstance(r.get("lines"), list) and not _early(r):
             return r
     return {}
 
 
 def _summary(d: Path) -> dict:
-    """idea.json as the saved files have it: what is read off them (status, phase, round, lines, next), over
-    what is kept (created, runs, group -- and any field another writer keeps there, which is left alone)."""
+    """idea.json as the saved files have it: what is read off them (status, phase, round, lines, next,
+    early_look = an early look is on file), over what is kept (created, runs, group -- and any field another
+    writer keeps there, which is left alone)."""
     old = _json(d / "idea.json") or {}
     v, rs = _verdict(d), _rounds(d)
     lines = [{"line": ln.get("line"), "passed": ln.get("passed"), "text": ln.get("text")}
              for ln in v.get("lines", []) if isinstance(ln, dict)]
     return {**old, "name": d.name, "created": old.get("created") or _now(), "status": _status(d),
             "phase": _phase(d), "round": rs[-1] if rs else None, "lines": lines, "next": v.get("next") or None,
+            "early_look": _early(_json(d / "test.json")),
             "runs": old["runs"] if isinstance(old.get("runs"), list) else [], "group": old.get("group")}
 
 
@@ -418,8 +433,8 @@ def _refresh(d: Path, change=None) -> dict:
 
 
 def refresh(name, root=None) -> dict:
-    """Bring idea.json up to date with the saved results (status, phase, round, lines, next) and return it.
-    Every write_* does it; a change of status goes on the idea's log."""
+    """Bring idea.json up to date with the saved results (status, phase, round, lines, next, early_look) and
+    return it. Every write_* does it; a change of status goes on the idea's log."""
     return _refresh(_dir(name, root))
 
 
@@ -533,12 +548,12 @@ def _market(d: Path) -> str:
 
 
 def draft_block(name, root=None) -> str:
-    """The record block as it goes on top of the idea's Lab draft: the status line, the card (card.md) and
-    the latest verdict, every line a comment."""
+    """The record block as it goes on top of the idea's Lab draft: the status line (which says when an early
+    look is on file), the card (card.md) and the latest verdict, every line a comment."""
     d = _dir(name, root)
     s = _summary(d)
     out = [f"{s['name']} · {s['status'].replace('_', ' ').upper()} · phase {s['phase']}"
-           + (f" · round {s['round']}" if s["round"] else "")]
+           + (f" · round {s['round']}" if s["round"] else "") + (" · EARLY LOOK on file" if s["early_look"] else "")]
     try:
         card = (d / "card.md").read_text(encoding="utf-8")
     except OSError:

@@ -27,6 +27,7 @@ COUNT = {1: 6, 2: 9, 4: 7, 5: 4, 6: 8}       # the law's lines per phase: 1.1-1.
 ACCOUNT = "lucid-pro-50k@2026-09-27b"
 LOCK = "9f2c41aa"
 RANGE = {"start": "2025-07-01", "end": "2026-09-30"}
+EARLY = {"early_look": True, "label": "EARLY LOOK"}      # what the result of an early look says, beyond a test's
 
 
 @pytest.fixture(autouse=True)
@@ -91,7 +92,7 @@ def test_create_makes_the_folder_and_its_first_idea_json(ideas_root):
     assert not ideastore.exists(NAME)
     first = ideastore.create(NAME)
     assert first == {"name": NAME, "created": first["created"], "status": "idea", "phase": 0, "round": None,
-                     "lines": [], "next": None, "runs": [], "group": None}
+                     "lines": [], "next": None, "early_look": False, "runs": [], "group": None}
     assert ideastore.exists(NAME) and ideastore.idea_dir(NAME) == ideas_root / NAME
     assert ideastore.read_idea(NAME) == first == json.loads((ideas_root / NAME / "idea.json").read_text())
     with pytest.raises(FileExistsError):
@@ -267,6 +268,58 @@ def test_proven_live_needs_the_lines_that_are_read_on_live_trades():
     assert ideastore.status(NAME) == "proven_live"
 
 
+def test_an_early_look_never_proves_an_idea_and_never_shelves_it():
+    """The owner's decision of 2026-10-06: the test days may be looked at for an idea that is not locked. That
+    result says "early_look": true and never counts: the idea keeps the status its build gives it."""
+    ideastore.create(NAME)
+    ideastore.write_test(NAME, result("test", 4, **EARLY))        # every 4.x line passed
+    assert ideastore.status(NAME) == "idea"
+    build(1, fail=("2.2",))
+    assert ideastore.status(NAME) == "idea"
+    build(2)
+    assert ideastore.status(NAME) == "lead"                       # a lead, not proven on history
+    ideastore.write_eval(NAME, result("eval-card", 6, na=("6.6", "6.8")))
+    assert ideastore.status(NAME) == "lead"                       # ... and nothing later stands on it
+    ideastore.write_test(NAME, result("test", 4, fail=("4.5",), **EARLY))
+    assert ideastore.status(NAME) == "lead"                       # an early look that failed shelves nothing
+    for n in (3, 4, 5):
+        build(n, fail=("2.1",))
+    assert ideastore.status(NAME) == "shelved"                    # the build's own word, as without the early look
+
+
+def test_a_later_test_that_is_not_an_early_look_counts_as_any_test_does():
+    ideastore.create(NAME)
+    build(1)
+    ideastore.write_test(NAME, result("test", 4, **EARLY))
+    assert ideastore.status(NAME) == "lead" and ideastore.read_idea(NAME)["early_look"] is True
+    second = {"second_look": True, "label": "SECOND LOOK"}        # the toolkit's own: the days were read before
+    ideastore.write_test(NAME, result("test", 4, **second))
+    got = ideastore.read_idea(NAME)
+    assert (got["status"], got["phase"], got["early_look"]) == ("proven_on_history", 4, False)
+    ideastore.write_test(NAME, result("test", 4, fail=("4.5",), **second, early_look=False))
+    assert ideastore.status(NAME) == "shelved"                    # NOT PROVEN, as today
+
+
+def test_idea_json_says_an_early_look_is_on_file_and_goes_on_following_the_build(ideas_root):
+    compact = lambda phase, **kw: [{"line": x["line"], "passed": x["passed"], "text": x["text"]}   # noqa: E731
+                                   for x in lines(phase, **kw)]
+    ideastore.create(NAME)
+    build(1, fail=("2.2",))
+    assert ideastore.read_idea(NAME)["early_look"] is False
+    ideastore.write_test(NAME, result("test", 4, **EARLY, next="after the early look"))
+    got = ideastore.read_idea(NAME)
+    assert (got["status"], got["phase"], got["round"], got["early_look"]) == ("idea", 2, 1, True)
+    assert got["lines"] == compact(2, fail=("2.2",), na=("2.7",)) and got["next"] == "after build"
+    build(2)                                                      # the build goes on, and so does its record
+    got = ideastore.read_idea(NAME)
+    assert (got["status"], got["phase"], got["round"], got["early_look"]) == ("lead", 2, 2, True)
+    assert got["lines"] == compact(2, na=("2.7",)) and got == json.loads((ideas_root / NAME / "idea.json").read_text())
+    ideastore.write_lock(NAME, {"hash": LOCK})
+    assert ideastore.read_idea(NAME)["phase"] == 3
+    log = [json.loads(x) for x in (ideas_root / NAME / "log.jsonl").read_text().splitlines()]
+    assert [(x["was"], x["now"]) for x in log if x["event"] == "status"] == [("idea", "lead")]
+
+
 def test_the_status_written_in_idea_json_is_never_taken_on_trust(ideas_root):
     ideastore.create(NAME)
     p = ideas_root / NAME / "idea.json"
@@ -280,11 +333,13 @@ def test_a_field_another_hand_keeps_in_idea_json_survives_but_never_one_read_off
     ideastore.create(NAME)
     p = ideas_root / NAME / "idea.json"
     p.write_text(json.dumps({**json.loads(p.read_text()), "version": 2, "job": "job-7", "phase": 6, "round": 4,
-                             "lines": [{"line": "4.1", "passed": True, "text": "4.1 PASS"}], "next": "buy the eval"}))
+                             "lines": [{"line": "4.1", "passed": True, "text": "4.1 PASS"}], "next": "buy the eval",
+                             "early_look": True}))
     build(1)
     got = ideastore.read_idea(NAME)
     assert (got["version"], got["job"]) == (2, "job-7")
     assert (got["status"], got["phase"], got["round"], got["next"]) == ("lead", 2, 1, "after build")
+    assert got["early_look"] is False
     assert [x["line"] for x in got["lines"]] == [f"2.{i}" for i in range(1, 10)]
 
 
@@ -596,6 +651,23 @@ def test_sync_files_the_draft_under_its_status_and_moves_it_when_the_status_chan
     ideastore.write_test(NAME, result("test", 4, fail=("4.1",)))
     assert ideastore.sync(NAME)["filed"] == "Shelved" and on_disk(drafts_dir)["members"] == {SID: "Shelved"}
     assert sorted(x.name for x in drafts_dir.iterdir()) == ["groups.json", f"{NAME}.py"]
+
+
+def test_an_early_look_moves_no_group_and_the_block_says_it_is_on_file(drafts_dir):
+    carded()
+    build(1)
+    ideastore.sync(NAME)
+    ideastore.write_test(NAME, result("test", 4, **EARLY))
+    got = ideastore.sync(NAME)
+    assert got["filed"] is None and got["notes"] == [] and got["idea"]["status"] == "lead"
+    assert on_disk(drafts_dir) == {"groups": ["Leads"], "members": {SID: "Leads"}}
+    head = (drafts_dir / f"{NAME}.py").read_text(encoding="utf-8").splitlines()
+    assert head[1] == f"# {NAME} · LEAD · phase 2 · round 1 · EARLY LOOK on file"
+    assert "#   2.1 PASS words about 2.1" in head and "#   4.1 PASS words about 4.1" not in head   # the build's verdict
+    ideastore.write_test(NAME, result("test", 4))                          # a test that counts: as today
+    assert ideastore.sync(NAME)["filed"] == "Proven on history"
+    head = (drafts_dir / f"{NAME}.py").read_text(encoding="utf-8").splitlines()
+    assert head[1] == f"# {NAME} · PROVEN ON HISTORY · phase 4 · round 1" and "#   4.1 PASS words about 4.1" in head
 
 
 def test_sync_leaves_the_lab_alone_while_the_status_stays(drafts_dir):

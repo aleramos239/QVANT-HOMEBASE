@@ -5,9 +5,10 @@ the Strategy Tester: list/read/write strategies, backtest, heat-map, walk-forwar
 re-scores, runs and trades, and **show on chart** (the open chart page loads the run and scrolls to it).
 It also gives Claude a read of the live desk (`desk_status`, `desk_journal`, `desk_readiness`,
 `data_coverage`, `services_health`) and two safe, non-trading operations (`account_reconnect`,
-`account_remove`), plus a charts-service data export (`export_start`, `export_status`), and the nine
+`account_remove`), plus a charts-service data export (`export_start`, `export_status`), and the eleven
 `blueprint_*` tools that run a strategy idea through the house blueprint: one per phase, the list of
-blocks before them, the status at any time. **It has no
+blocks before them, and three that only read what is saved (the status, the heat map, the Monte Carlo
+tables). **It has no
 trading tool of any kind** — nothing here can place or cancel an order, flatten, kill, arm/disarm,
 book/unbook an account, or touch a strategy or chart-trading switch (`homebase/claude_mcp/desk_client.py`'s
 `ALLOWED_GET`/`ALLOWED_POST` is the whole allowlist; `tests/test_claude_mcp.py` pins it structurally).
@@ -26,7 +27,7 @@ claude mcp add --scope user \
   session (or run `/mcp` again).
 - `PYTHONPATH` makes `homebase` importable whatever directory Claude Code starts in. The server imports
   nothing outside the stdlib, so any `python3` (3.9+) works in place of the venv's.
-- Check it: `claude mcp list` should show `homebase ... ✓ Connected`. In a session, `/mcp` lists its 34 tools.
+- Check it: `claude mcp list` should show `homebase ... ✓ Connected`. In a session, `/mcp` lists its 36 tools.
 - Leave `write_strategy` on "ask" (do not allowlist it): it writes Python that a backtest will run. The
   sandbox below contains that code, but the user should still see what Claude writes before it runs.
   `account_remove` is worth leaving on "ask" too, even though it is refused while an account holds a
@@ -77,7 +78,8 @@ version: restart that service (never 09:20–09:35 ET on weekdays).
 `blueprint_blocks` (before the card), `blueprint_card` (phase 0), `blueprint_code_check` (1),
 `blueprint_build` (2), `blueprint_lock` (3), `blueprint_test` (4, once), `blueprint_sim` (5),
 `blueprint_eval_card` (6) and `blueprint_status` (any time) follow `research/edge-library/BLUEPRINT.md`,
-section 2, in that order. Each runs one command of the toolkit
+section 2, in that order. `blueprint_heatmap` and `blueprint_mc` are views of what is saved, at any time.
+Each runs one command of the toolkit
 (`<python> bp.py <command> ... --root=<ideas folder> --json`) and returns its text and its pass/fail lines.
 
 - **Nothing is judged in the connector.** The toolkit decides and refuses; exit code 2 comes back as
@@ -97,6 +99,17 @@ section 2, in that order. Each runs one command of the toolkit
   it is not judged yet (6.4 before 10 trades at size), in a build it does not apply (2.7 without a filter).
   The line's own text says which.
 - **`blueprint_test` reads the test days ONCE.** It needs `confirm: true`; leave it on "ask".
+- **An early look** (`blueprint_test` with `early_look: true`; the owner's decision of 2026-10-06: "warn, then
+  run if I say yes") reads the test days for an idea that is not locked. It uses them up for that idea, is
+  labelled EARLY LOOK and can never prove the idea. It needs the owner's clear yes in chat first, and
+  `confirm: true` as any test does (`bp.py test <name> --confirm --early-look`). The app does not count a
+  `test.json` that says `"early_look": true` (`homebase/ideastore.py`): the status, the phase, the verdict and
+  the Lab group stay where the build put them, `idea.json` says `"early_look": true` and the first line of the
+  Lab block says "EARLY LOOK on file". A later test that is not an early look counts as any test does.
+- **`blueprint_heatmap` and `blueprint_mc` only read saved results**: they run nothing and count no round.
+  The heat map is one table of a build round as a grid (`place`: `home`, a neighbor's number on the card, or
+  `not_here`; `round`: left out = the latest round). The Monte Carlo tables are those of the build or of the
+  test that is on file (`on`: `build` | `test`); `on: test` never reads the test days itself.
 - **Long commands** (`blueprint_build`, `blueprint_test`) return a job id after `wait_s` (default 120 s);
   the same tool called with that `job_id` keeps waiting.
 - **Everything is saved in the app.** After each command the idea's `idea.json`, the record block on top of
@@ -105,7 +118,8 @@ section 2, in that order. Each runs one command of the toolkit
   only when the status changes. A `groups.json` that does not read is reported in the tool's text and never
   fails the phase.
 - No chart-service route is involved, so nothing needs a restart: a new session has the tools
-  (`blueprint_blocks` and the eval card's `account` came with connector 1.4.0).
+  (`blueprint_blocks` and the eval card's `account` came with connector 1.4.0; `blueprint_heatmap`,
+  `blueprint_mc` and the early look with 1.5.0).
 
 ## Draft strategies: where their code runs
 
