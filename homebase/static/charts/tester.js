@@ -235,7 +235,10 @@ function tiles(run) {
     { label: 't-stat', value: num(a.t_stat), sub: '', tone: '' }];
 }
 function badges(run) {
-  const c = run.coverage || {}, out = [{ text: 'Tick replay', tone: 'info', title: 'Fills replay the tape: a stop entry pays the gap, a target needs 1-tick penetration' }];
+  // a run imported from the research engine (backtest/importrun.py: run.imported) was never replayed here
+  const c = run.coverage || {}, out = [run.imported
+    ? { text: 'Research engine', tone: 'warn', title: 'An imported trade list: these fills are the research engine\'s own, nothing was replayed here' }
+    : { text: 'Tick replay', tone: 'info', title: 'Fills replay the tape: a stop entry pays the gap, a target needs 1-tick penetration' }];
   const skipped = (c.skipped || []).length, why = Object.entries(c.skipped_by_reason || {}).map(([k, n]) => `${n} × ${k}`).join('\n');
   out.push({ text: `${int(c.used)} of ${int(c.sessions)} sessions`, tone: skipped ? 'warn' : 'info', title: why || 'Every session in the range was used' });
   const errs = run.report.skipped_by_error || 0;

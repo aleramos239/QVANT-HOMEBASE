@@ -171,7 +171,12 @@ test('Overview tiles, badges and the prop block', () => {
   assert.deepEqual(X.badges(RUN).map((b) => [b.text, b.tone]), [['Tick replay', 'info'], ['517 of 520 sessions', 'warn'],
     ['2 strategy errors', 'err'], ['Reads test days', 'err']]);   // the badge is a fact, not a permission
   assert.equal(X.badges({ ...RUN, holdout: false }).some((b) => b.text === 'Reads test days'), false);
-  const prop = { rules: { id: 'lucid-pro-50k@2026-09-27', name: 'LucidPro 50K', confirmed: false, label: 'LucidPro 50K · unconfirmed rules' }, caveat: 'c',
+  // a run imported from the research engine (backtest/importrun.py) never says the tester replayed it
+  const imported = X.badges({ ...RUN, imported: { source: 'research engine', note: '', trades: 24 } });
+  assert.deepEqual(imported.map((b) => [b.text, b.tone]), [['Research engine', 'warn'], ['517 of 520 sessions', 'warn'],
+    ['2 strategy errors', 'err'], ['Reads test days', 'err']]);
+  assert.match(imported[0].title, /nothing was replayed/);
+  const prop ={ rules: { id: 'lucid-pro-50k@2026-09-27', name: 'LucidPro 50K', confirmed: false, label: 'LucidPro 50K · unconfirmed rules' }, caveat: 'c',
     headline: { eval_pass_p: 0.4312, eval_pass_ci: [0.424, 0.438], bust_p: 0.31, median_days_to_pass: 17.5, funded_expected_cheque: 1648.2 } };
   assert.deepEqual(X.propView(prop).tiles.map((t) => [t.label, t.value, t.sub]), [['Eval pass', '43.1%', '95% CI 42.4–43.8%'],
     ['Bust', '31.0%', ''], ['Median days to pass', '18', ''], ['Funded: expected cheque', '$1,648.20', '']]);
