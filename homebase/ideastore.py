@@ -11,6 +11,8 @@ own Python, 3.9), and it never runs anything: it reads and writes text.
         card.md  spec.json  check.json  phase 0 (the card, the settings) and phase 1 (the code check)
         rounds/<n>/reason.txt  spec.json  build.json      phase 2: n = 1..5, the reason saved BEFORE the run
         lock.json  test.json  sim/<account>.json  eval.json      phases 3 to 6
+        early_look/lock.json  test.json an early look at the test days: the toolkit's own files, beside the
+                                        idea's and never among them (not its lock, not its test)
         log.jsonl                       one line per event
     <drafts dir>/<name>.py              the idea's Lab draft (homebase.draftstore): its card and latest verdict
                                         in a marked comment block on top. An idea folder that was moved never
@@ -31,11 +33,12 @@ A phase is passed when every line the law has for it is in the result and none f
     shelved             not passed after round 5, or a finished test that did not pass (NOT PROVEN: it is not
                         re-tuned and re-tested)
 A result that was refused, is a dry run, or is still running never counts.
-Nor does an EARLY LOOK: a test.json that says "early_look": true (the test days read for an idea that is not
-locked, on the owner's yes: his decision of 2026-10-06). It proves nothing and it shelves nothing: the idea
-keeps the status, the phase and the verdict its build gives it. idea.json says that one is on file
-(`early_look`), and so does the first line of the Lab block. A later test.json that is not an early look
-counts as any test does.
+Nor does an EARLY LOOK: the test days read for an idea that is not locked, on the owner's yes (his decision of
+2026-10-06). Its result says "early_look": true. The toolkit keeps it beside the idea's own files
+(early_look/test.json), where no status is read; and a test.json that says so is not counted either. It
+proves nothing and it shelves nothing: the idea keeps the status, the phase and the verdict its build gives it.
+idea.json says that one is on file (`early_look`), and so does the first line of the Lab block. A later
+test.json that is not an early look counts as any test does.
 
 Who writes what: the toolkit (research/edge-library/bp.py) saves each phase with the write_* functions; the
 connector (homebase.claude_mcp.blueprint_tools) calls sync() after every command, which brings idea.json, the
@@ -63,6 +66,7 @@ LINES = {2: tuple(f"2.{i}" for i in range(1, 10)), 4: tuple(f"4.{i}" for i in ra
          6: tuple(f"6.{i}" for i in range(1, 9))}                     # the law's lines of the phases a status hangs on
 LIVE_LINES = ("6.1", "6.2", "6.3", "6.4", "6.5")                      # read on live trades: each must be TRUE
 READ_STATES = ("claimed", "judged")
+EARLY_LOOK = "early_look"                                             # an early look's folder, and its result's mark
 BLOCK_START = "# >>> BLUEPRINT RECORD"
 BLOCK_END = "# <<< BLUEPRINT RECORD"
 _ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.@:-]{0,119}$")        # an account or a run id: one safe file-name part
@@ -244,8 +248,8 @@ def write_lock(name, lock, root=None) -> Path:
 
 
 def write_test(name, result, root=None) -> Path:
-    """test.json: the out-of-sample test's result (lines 4.1-4.7) -- or an early look's, which says
-    "early_look": true and never counts toward a status (the module docstring)."""
+    """test.json: the out-of-sample test's result (lines 4.1-4.7). An early look's is not the idea's test (the
+    toolkit keeps it in early_look/): a result that says "early_look": true never counts, here either."""
     return _put(name, "test.json", _object(result, "test"), root)
 
 
@@ -332,7 +336,13 @@ def _finished(r) -> bool:
 
 def _early(r) -> bool:
     """Is this saved result an EARLY LOOK at the test days? It says so itself: "early_look": true."""
-    return isinstance(r, dict) and bool(r.get("early_look"))
+    return isinstance(r, dict) and bool(r.get(EARLY_LOOK))
+
+
+def _early_on_file(d: Path) -> bool:
+    """Is an early look's result on file: where the toolkit keeps one (early_look/test.json), or as the
+    idea's test.json?"""
+    return _early(_json(d / EARLY_LOOK / "test.json")) or _early(_json(d / "test.json"))
 
 
 def _passed(r: dict, phase: int) -> bool:
@@ -416,7 +426,7 @@ def _summary(d: Path) -> dict:
              for ln in v.get("lines", []) if isinstance(ln, dict)]
     return {**old, "name": d.name, "created": old.get("created") or _now(), "status": _status(d),
             "phase": _phase(d), "round": rs[-1] if rs else None, "lines": lines, "next": v.get("next") or None,
-            "early_look": _early(_json(d / "test.json")),
+            "early_look": _early_on_file(d),
             "runs": old["runs"] if isinstance(old.get("runs"), list) else [], "group": old.get("group")}
 
 

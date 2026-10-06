@@ -1,8 +1,8 @@
 """The connector's blueprint tools (homebase.claude_mcp.blueprint_tools): the eleven tool definitions, the exact
 command line each one runs, and what comes back -- against a FAKE toolkit: a small script written here that
 answers each command with the JSON of the toolkit plan's section 8 (a refusal with exit code 2, a crash, a job
-that is still running), and saves a card, a build and an early look through homebase.ideastore as the real
-toolkit does.
+that is still running), and saves a card and a build through homebase.ideastore, and an early look beside the
+idea's own files, as the real toolkit does.
 Temp folders only: the suite's `ideas_root` and `drafts_dir`, and a temp HOME that must stay empty."""
 from __future__ import annotations
 
@@ -157,8 +157,11 @@ if cmd == "test":
                    label="EARLY LOOK", lines=[dict(x, text=x["text"] + " [EARLY LOOK]") for x in lines(4, 7)],
                    text="EARLY LOOK: every line 4.1-4.7 is true. It proves nothing.",
                    next="The test days are used up for this idea.")
-        if on_file:
-            ideastore.write_test(name, r, root)
+        if on_file:                                    # beside the idea's own files, never as its lock or its test
+            d = ideastore.idea_dir(name, root) / "early_look"
+            d.mkdir(exist_ok=True)
+            for rel, what in (("lock.json", {"early_look": True, "hash": "e4r1"}), ("test.json", r)):
+                (d / rel).write_text(json.dumps(what))
         out(r)
     out(result(cmd, status="proven_on_history", phase=4, lines=lines(4, 7), text="PROVEN ON HISTORY",
                next="Before the eval is bought: blueprint_sim."))
@@ -759,14 +762,15 @@ def test_an_early_look_needs_the_yes_is_labelled_and_never_proves_the_idea(fake,
         with pytest.raises(ToolError, match="read ONCE") as e:
             b.call("blueprint_test", {"name": "good_idea", "confirm": no, "early_look": True})
         assert "or as an early look, after his clear yes in chat" in str(e.value)
-    assert len(fake.calls()) == started and not (ideas_root / "good_idea" / "test.json").exists()
+    assert len(fake.calls()) == started and not (ideas_root / "good_idea" / "early_look").exists()
     out = b.call("blueprint_test", {"name": "good_idea", "confirm": True, "early_look": True}).splitlines()
     assert fake.argv() == ["test", "good_idea", "--confirm", "--early-look", "--wait=120", *tail(ideas_root)]
     assert out[0] == "Blueprint test · good_idea · LEAD · phase 4"
     assert "EARLY LOOK: every line 4.1-4.7 is true. It proves nothing." in out
     assert "4.1 PASS words about 4.1 [EARLY LOOK]" in out and "Lines: 7 passed · 0 FAILED" in out
     assert not any(ln.startswith("Lab:") for ln in out)                       # the status stayed: nothing is filed anew
-    assert json.loads((ideas_root / "good_idea" / "test.json").read_text())["early_look"] is True
+    assert json.loads((ideas_root / "good_idea" / "early_look" / "test.json").read_text())["early_look"] is True
+    assert not (ideas_root / "good_idea" / "test.json").exists() and not (ideas_root / "good_idea" / "lock.json").exists()
     idea = ideastore.read_idea("good_idea")
     assert (idea["status"], idea["phase"], idea["early_look"], idea["group"]) == ("lead", 2, True, "Leads")
     assert (drafts_dir / "good_idea.py").read_text().splitlines()[1] == (

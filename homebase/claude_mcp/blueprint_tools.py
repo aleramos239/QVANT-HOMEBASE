@@ -38,8 +38,8 @@ heatmap and mc are views: they read what a build or a test saved, run nothing an
 
 An early look (test --early-look) reads the test days for an idea that is NOT locked, on the owner's clear yes
 (his decision of 2026-10-06: "warn, then run if I say yes"). The toolkit labels its answer ("early_look": true,
-EARLY LOOK) and saves it as the idea's test.json. It can never prove the idea: homebase.ideastore.status does
-not count it.
+EARLY LOOK) and keeps it beside the idea's own files (early_look/test.json), never as its test.json. It can
+never prove the idea: homebase.ideastore reads no status there, and counts no result that says it is one.
 
 After a command the app's own copies of the idea are brought up to date (homebase.ideastore.sync): idea.json,
 the record block on its Lab draft, the Lab group of its status. That is a mirror, never a gate: a Lab file that

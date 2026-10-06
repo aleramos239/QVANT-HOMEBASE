@@ -102,10 +102,12 @@ Each runs one command of the toolkit
 - **An early look** (`blueprint_test` with `early_look: true`; the owner's decision of 2026-10-06: "warn, then
   run if I say yes") reads the test days for an idea that is not locked. It uses them up for that idea, is
   labelled EARLY LOOK and can never prove the idea. It needs the owner's clear yes in chat first, and
-  `confirm: true` as any test does (`bp.py test <name> --confirm --early-look`). The app does not count a
-  `test.json` that says `"early_look": true` (`homebase/ideastore.py`): the status, the phase, the verdict and
-  the Lab group stay where the build put them, `idea.json` says `"early_look": true` and the first line of the
-  Lab block says "EARLY LOOK on file". A later test that is not an early look counts as any test does.
+  `confirm: true` as any test does (`bp.py test <name> --confirm --early-look`). The toolkit keeps its result
+  beside the idea's own files (`early_look/test.json`, which says `"early_look": true`), where the app reads no
+  status; a `test.json` that says so is not counted either (`homebase/ideastore.py`). The status, the phase,
+  the verdict and the Lab group stay where the build put them, `idea.json` says `"early_look": true` and the
+  first line of the Lab block says "EARLY LOOK on file". A later test that is not an early look counts as any
+  test does.
 - **`blueprint_heatmap` and `blueprint_mc` only read saved results**: they run nothing and count no round.
   The heat map is one table of a build round as a grid (`place`: `home`, a neighbor's number on the card, or
   `not_here`; `round`: left out = the latest round). The Monte Carlo tables are those of the build or of the
