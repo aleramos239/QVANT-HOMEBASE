@@ -230,6 +230,16 @@ def card_lines(spec: dict) -> tuple:
     main_setting, values, variants (a table), stores [{market, bar, sessions}]}: module docstring."""
     card, run = spec["card"], spec["run"]
     known, rows = _family(run.get("family")), []
+    if known:                                       # a choice written as a number (ib_min: 5) is the same choice ("5"): the
+        d = known[0].defaults()                     # engine names its choices in text, a chat sends numbers
+
+        def text(k, x):
+            if isinstance(d.get(k), str) and isinstance(x, (int, float)) and not isinstance(x, bool):
+                return str(int(x)) if float(x).is_integer() else str(x)
+            return x
+        for part in ("params", "fixed"):
+            if isinstance(run.get(part), dict):
+                run[part] = {k: [text(k, x) for x in v] if isinstance(v, list) else text(k, v) for k, v in run[part].items()}
     # 0.1 the reason, in one sentence, and who loses
     why, loser, need = _text(card.get("why")), _text(card.get("loser")), R.need("0.1")
     n = len([s for s in re.split(r"(?<=[.!?])\s+", why) if s.strip()])

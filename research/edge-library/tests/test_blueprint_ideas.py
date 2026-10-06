@@ -917,3 +917,16 @@ if __name__ == "__main__":
     for tool, text in (_T.get("connector") or {}).items():
         print(f"\n--- {tool} ---\n{text}", flush=True)
     sys.exit(rc)
+
+
+def test_a_choice_setting_written_as_a_number_is_the_same_choice():
+    """A chat sends ib_min as 5, the engine names the choice "5": the card reads them as one (0.2 and 0.5 pass)."""
+    from blueprint import records as REC
+    spec = {"name": "bpi_numbers", "version": 1,
+            "card": {"why": "A break of the opening range shows which side holds the larger orders.", "loser": "Traders who fade the first break.",
+                     "home": {"market": "NQ", "session": "nyam", "bar": "15"}, "neighbors": ["5-minute bars"], "not_here": "the afternoon session (pm)",
+                     "main_setting": "ib_min", "sides": "both", "sides_why": "A range can break either way."},
+            "run": {"family": "ib_n", "params": {"ib_min": [5, 15, 30, 60]}, "fixed": {"mode": "break"}, "filters": [], "exits": "standard", "limits": {}}}
+    rows, plan = REC.card_lines(spec)
+    assert all(r["passed"] for r in rows), [r["text"] for r in rows if not r["passed"]]
+    assert plan and spec["run"]["params"]["ib_min"] == ["5", "15", "30", "60"]
