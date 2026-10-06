@@ -53,3 +53,12 @@ def drafts_dir(tmp_path_factory, monkeypatch):
     d = tmp_path_factory.mktemp("drafts")
     monkeypatch.setenv("HOMEBASE_DRAFTS_DIR", str(d))
     return d
+
+
+@pytest.fixture(autouse=True)
+def ideas_root(tmp_path_factory, monkeypatch):
+    """Blueprint ideas (homebase.ideastore): a fresh, empty tmp dir per test -- never ~/.homebase/ideas.
+    Child processes (the blueprint toolkit the connector starts) inherit it through the environment."""
+    d = tmp_path_factory.mktemp("ideas")
+    monkeypatch.setenv("HOMEBASE_IDEAS_ROOT", str(d))
+    return d
