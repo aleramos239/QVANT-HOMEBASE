@@ -406,30 +406,134 @@ def test_fewer_rows_than_the_manifest_counts_refuse_the_merge(tmp_path):
     assert sha(path) == kept
 
 
-def test_a_size_that_differs_at_the_same_id_time_and_price_is_counted_not_refused(tmp_path):
-    """GC 2026-09-29: the live stream said 2 lots where the history said 1, at the same
-    id, ms and price, on ~5% of ticks -- 50 of them refused a whole hour's repair."""
-    path = T.archive_path("NQ", DAY, "NQZ6", tmp_path)
-    write_live(A.live_path(path), [tick(i) for i in range(400)])
-    resized = [A.row_of({"ts_ms": int(r[A.TS]), "price": float(r[A.PX]), "size": int(r[A.SZ]) + 1,
-                         "bid": r[A.BID], "ask": r[A.ASK], "bid_size": r[A.BIDSZ], "ask_size": r[A.ASKSZ],
-                         "id": int(r[A.ID])}) if i % 20 == 0 else r
-               for i, r in enumerate(tick(i) for i in range(400))]       # 20 of 400: 5%
-    man = merge_session(path, fetched=resized + [tick(i) for i in range(400, 410)],
-                        fetched_source={"kind": "history"})
-    assert man["merge"]["size_disagreements"] == 20 and man["merge"]["id_conflicts"] == 0
-    assert man["ticks"] == 410                                        # the new ids landed
-    by_id = {int(r[A.ID]): r for r in A.read_rows(path)[1]}
-    assert by_id[1000][A.SZ] == tick(0)[A.SZ]                         # on disk wins, as for any disagreement
+# ------------------------------------------------------------------ merge by trade, not by size
+# Since 2026-10-01 the live stream -- and the broker's history for an hour it has not published in
+# full yet -- is thinned: some ticks only, a print sized as its own fill plus later fills at that
+# price. The published history sends every fill under its own id. Same id, time and price: the
+# smaller size is the trade's own (homebase.tickarchive's docstring).
+def resized(r, size):
+    """The same tick (id, time, price, quote) with another size."""
+    return r[:A.SZ] + (str(size),) + r[A.SZ + 1:]
 
 
-def test_sizes_that_disagree_wholesale_refuse_the_merge(tmp_path):
+def lots(rows):
+    return sum(int(r[A.SZ]) for r in rows)
+
+
+FILLS = [tick(i) for i in range(400)]                             # the published history: every fill
+PRINTS = [resized(r, lots(FILLS[i:i + 4]))                        # the thinned stream: every fourth id, sized
+          for i, r in enumerate(FILLS) if i % 4 == 0]             # as its own fill plus the next three
+
+
+def test_the_history_takes_a_thinned_recording_back_to_its_fills(tmp_path):
+    """2026-10-05: the live recording held prints, the history every fill, 28-68% of the ids both
+    held were sized differently -- 'not one feed', and 14 sessions' fetched ticks were thrown away.
+    The recording is the larger on every one of them: one direction. It merges -- the union of
+    the ids, each at the smaller size."""
     path = T.archive_path("NQ", DAY, "NQZ6", tmp_path)
-    merge_session(path, fetched=[tick(i) for i in range(300)], fetched_source={"kind": "history"})
+    write_live(A.live_path(path), PRINTS)
+    merge_session(path)                                           # the close: the recording alone
+    assert len(A.read_rows(path)[1]) == 100 and lots(A.read_rows(path)[1]) == lots(PRINTS)
+    man = merge_session(path, fetched=FILLS, fetched_source={"kind": "history"})
+    assert A.read_rows(path)[1] == FILLS                          # every fill, each at its own size
+    assert man["ticks"] == 400 and man["merge"]["id_conflicts"] == 0
+    assert man["merge"]["size_disagreements"] == 100 == man["merge"]["sizes_reduced"]
+    assert man["merge"]["size_smaller_in"] == {"history": 100} and man["merge"]["size_larger_in"] == {}
+
+
+def test_a_thinned_recording_never_inflates_the_fills_on_disk(tmp_path):
+    """The other order: the fills are on disk, the recording comes at the close. Nothing is added
+    and nothing lowered, so the file is not even rewritten."""
+    path = T.archive_path("NQ", DAY, "NQZ6", tmp_path)
+    merge_session(path, fetched=FILLS, fetched_source={"kind": "history"})
     kept = sha(path)
-    doubled = [A.row_of({"ts_ms": int(r[A.TS]), "price": float(r[A.PX]), "size": int(r[A.SZ]) * 2,
-                         "bid": r[A.BID], "ask": r[A.ASK], "bid_size": r[A.BIDSZ], "ask_size": r[A.ASKSZ],
-                         "id": int(r[A.ID])}) for r in (tick(i) for i in range(300))]
-    with pytest.raises(A.MergeRefused, match="different size"):
-        merge_session(path, fetched=doubled, fetched_source={"kind": "history"})
+    write_live(A.live_path(path), PRINTS)
+    man = merge_session(path)
+    assert sha(path) == kept and man["ticks"] == 400
+    assert man["merge"]["size_larger_in"] == {"live": 100} and man["merge"]["sizes_reduced"] == 0
+
+
+def test_a_size_lowered_with_no_new_tick_still_rewrites_the_file(tmp_path):
+    """An hour fetched before the broker had published it holds prints; the same ids fetched again
+    bring the fills. No tick is new -- but a lowered size is not 'nothing new'."""
+    path = T.archive_path("NQ", DAY, "NQZ6", tmp_path)
+    merge_session(path, fetched=PRINTS, fetched_source={"kind": "history"})
+    own = [FILLS[i] for i in range(0, 400, 4)]
+    man = merge_session(path, fetched=own, fetched_source={"kind": "history"})
+    assert A.read_rows(path)[1] == own
+    assert man["ticks"] == 100 and man["merge"]["sizes_reduced"] == 100
+
+
+def test_a_source_sized_both_ways_against_the_others_refuses_the_merge(tmp_path):
+    """Larger on some ids AND smaller on others is no thinned feed: refused past SIZE_BOTH_WAYS_MIN
+    ids and SIZE_BOTH_WAYS_SHARE of the ids shared, every file left as it was. A stray handful the
+    other way merges (6J 2026-10-02: 9 against 18 of 11,998)."""
+    path = T.archive_path("NQ", DAY, "NQZ6", tmp_path)
+    rows = [resized(tick(i), 5) for i in range(300)]
+    merge_session(path, fetched=rows, fetched_source={"kind": "history"})
+    kept = sha(path)
+    both = [resized(r, 9 if i < 21 else 2 if i < 42 else 5) for i, r in enumerate(rows)]
+    with pytest.raises(A.MergeRefused, match="21 are sized smaller and 21 larger"):
+        merge_session(path, fetched=both, fetched_source={"kind": "history"})
+    assert sha(path) == kept and not list(path.parent.glob("*.tmp"))
+    stray = [resized(r, 9 if i < 20 else 2 if i < 150 else 5) for i, r in enumerate(rows)]
+    man = merge_session(path, fetched=stray, fetched_source={"kind": "history"})
+    assert man["merge"]["sizes_reduced"] == 130 and man["merge"]["size_larger_in"] == {"history": 20}
+    assert [r[A.SZ] for r in A.read_rows(path)[1]] == ["5"] * 20 + ["2"] * 130 + ["5"] * 150
+    many = [resized(tick(i), 5) for i in range(5000)]             # a large overlap: 1% of it, not 20 ids
+    assert A.merge([("archive", many), ("history", [resized(r, 9 if i < 50 else 2) for i, r in enumerate(many)])]
+                   ).stats["size_larger_in"] == {"history": 50}
+    with pytest.raises(A.MergeRefused, match="not one feed"):
+        A.merge([("archive", many), ("history", [resized(r, 9 if i < 51 else 2) for i, r in enumerate(many)])])
+
+
+def test_a_time_or_price_conflict_still_refuses_whatever_the_sizes(tmp_path):
+    """The size rule loosens nothing else: an id both hold with another time or price is a conflict,
+    and more than CONFLICTS_REFUSED of them refuse the merge -- sized one way only or not."""
+    path = T.archive_path("NQ", DAY, "NQZ6", tmp_path)
+    write_live(A.live_path(path), PRINTS)
+    merge_session(path)
+    kept = sha(path)
+    six = [0, 4, 8, 12, 16, 20]                                   # ids the recording holds too
+    moved = [tick(i, ts=S + i * 1000 + 1) if i in six else r for i, r in enumerate(FILLS)]
+    with pytest.raises(A.MergeRefused, match=r"6 tick ids disagree between sources \(time/price\)"):
+        merge_session(path, fetched=moved, fetched_source={"kind": "history"})
+    repriced = [tick(i, price=1.0) if i in six else r for i, r in enumerate(FILLS)]
+    with pytest.raises(A.MergeRefused, match="6 tick ids disagree"):
+        merge_session(path, fetched=repriced, fetched_source={"kind": "history"})
     assert sha(path) == kept
+
+
+def test_a_merge_never_loses_a_tick_id_any_source_had():
+    """Whatever each source holds -- the archive file fills here and prints there, the recording its
+    prints, a fetch a stretch of fills -- the result holds every id any of them had, once, sized
+    no larger than any source says and exactly as the fills say; merged again, nothing changes."""
+    import random
+    rnd = random.Random(20261005)
+    for _ in range(40):
+        prints = [resized(r, int(r[A.SZ]) + rnd.randint(0, 4)) for r in FILLS]
+        archive = [rnd.choice(pair) for pair in zip(FILLS, prints) if rnd.random() < .4]
+        live = [p for p in prints if rnd.random() < .3]
+        a, b = sorted(rnd.sample(range(400), 2))
+        history = FILLS[a:b]
+        m = A.merge([("archive", archive), ("live", live), ("history", history)])
+        ids = {int(r[A.ID]) for src in (archive, live, history) for r in src}
+        assert m.ids == ids and sorted(int(r[A.ID]) for r in m.rows) == sorted(ids)
+        size = {int(r[A.ID]): int(r[A.SZ]) for r in m.rows}
+        assert all(size[int(r[A.ID])] <= int(r[A.SZ]) for src in (archive, live, history) for r in src)
+        assert all(size[int(r[A.ID])] == int(r[A.SZ]) for r in history)
+        again = A.merge([("archive", m.rows), ("live", live), ("history", history)])
+        assert again.rows == m.rows and again.stats["sizes_reduced"] == 0
+
+
+def test_merging_the_same_sources_twice_changes_nothing(tmp_path):
+    path = T.archive_path("NQ", DAY, "NQZ6", tmp_path)
+    write_live(A.live_path(path), PRINTS)
+    merge_session(path, fetched=FILLS[100:300], fetched_source={"kind": "history"})
+    once, rows = sha(path), A.read_rows(path)[1]
+    assert len(rows) == 250 and lots(rows) == lots(PRINTS[:25]) + lots(FILLS[100:300]) + lots(PRINTS[75:])
+    man = merge_session(path, fetched=FILLS[100:300], fetched_source={"kind": "history"})
+    assert sha(path) == once and man["merge"]["sizes_reduced"] == 0
+    write_live(A.live_path(path), PRINTS)                         # the same recording, written anew: read again
+    man = merge_session(path, fetched=FILLS[100:300], fetched_source={"kind": "history"})
+    assert sha(path) == once and A.read_rows(path)[1] == rows and man["merge"]["read"]["live"] == 100
