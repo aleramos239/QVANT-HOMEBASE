@@ -271,7 +271,9 @@ The tester replays archived ticks through a strategy, one session at a time. Its
   outside them. None starts 09:20–09:35 ET on weekdays.
 - Heat maps (2 or 3 inputs, 60 cells by default), walk-forward (1 month to select, the next N months to test),
   Monte Carlo, and prop-eval scoring against the rule sets in `homebase/backtest/propsim/rules/`.
-- The default range is 2021–2024. A run that reads 2025 or later is recorded in `homebase/.state/tester/spends.jsonl`.
+- The dates follow `research/edge-library/BLUEPRINT.md`, section 2. The default range is the build days,
+  2021-09-22 to 2025-06-30. The test days start 2025-07-01: nothing refuses them, and a run that reads them is
+  recorded in `homebase/.state/tester/spends.jsonl`.
 - Draft strategies live in `~/.homebase/strategies/`. Listing or reading a draft never runs it. Its backtest runs
   inside the macOS sandbox (`homebase/backtest/draft.sb`). The desk never reads the drafts folder.
 - Script run: `.venv/bin/python -m homebase.backtest.runner run --strategy nq930 ...`

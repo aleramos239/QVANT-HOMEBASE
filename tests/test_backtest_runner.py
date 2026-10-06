@@ -13,7 +13,7 @@ from homebase.backtest import runner
 from homebase.backtest.runner import RunManager, execute, prepare, read_json, validate
 from homebase.backtest.slots import Slots
 from homebase.backtest.tape import TapeStore
-from tests.backtest_util import D1, D2, ms, nq_archive
+from tests.backtest_util import D1, D2, ms, multiyear_archive, nq_archive
 from tests.charts_util import rows, write_archive
 
 RANGE = {"kind": "custom", "start": "2024-03-01", "end": "2024-03-31"}
@@ -36,7 +36,8 @@ def wait(m: RunManager, rid: str, want=("done", "error", "cancelled"), s=30.0) -
 
 def test_validate_fills_defaults_and_refuses_bad_requests():
     v = validate({"strategy": "nq930"})
-    assert v["range"]["kind"] == "research" and v["range"]["start"] == "2021-01-01"
+    assert v["range"]["kind"] == "research"                                    # the build days
+    assert (v["range"]["start"], v["range"]["end"]) == ("2021-09-22", "2025-06-30")
     assert (v["qty"], v["commission"], v["slippage_ticks"], v["capital"]) == (1, 4.0, 1.0, 50_000.0)
     assert "holdout" not in v and v["inputs"]["sl_pts"] == 5.0
     for bad, msg in (({"strategy": "zz"}, "unknown strategy"), (body(qty=0), "qty"),
@@ -50,26 +51,26 @@ def test_validate_fills_defaults_and_refuses_bad_requests():
             validate(bad)
 
 
-def test_no_range_is_refused_and_a_2025_run_is_recorded(tmp_path):
-    """2026-09-27: the holdout switch is gone. A range reaching 2025+ runs with nothing
-    asked for, and the spend log gains exactly one line naming the run."""
-    late = {"kind": "custom", "start": "2024-12-01", "end": "2025-02-01"}
+def test_no_range_is_refused_and_a_test_days_run_is_recorded(tmp_path):
+    """2026-09-27: the holdout switch is gone. A range reaching the test days (2025-07-01 on) runs
+    with nothing asked for, and the spend log gains exactly one line naming the run."""
+    late = {"kind": "custom", "start": "2024-12-01", "end": "2025-08-01"}
     rid = prepare(body(range=late), tmp_path)
     [spend] = [json.loads(x) for x in (tmp_path / "spends.jsonl").read_text().splitlines()]
     assert spend["strategy"] == "nq930" and spend["run_id"] == rid and "reason" not in spend
-    assert spend["range"]["end"] == "2025-02-01" and spend["inputs"]["adx_gate"] is False
+    assert spend["range"]["end"] == "2025-08-01" and spend["inputs"]["adx_gate"] is False
     req = read_json(tmp_path / "runs" / rid / "request.json")
     assert "holdout" not in req and req["range"]["holdout"] is True
 
 
 def test_a_spend_log_that_cannot_be_written_never_fails_the_run(tmp_path, capsys):
     """Review important 1: the spend log is a record, never a gate -- not even by accident. With
-    spends.jsonl unwritable (here: a directory in its place), a 2025+ run is still accepted, runs
+    spends.jsonl unwritable (here: a directory in its place), a test-days run is still accepted, runs
     to done, and the failure is logged once per write rather than raised."""
     (tmp_path / "t").mkdir()
     (tmp_path / "t" / "spends.jsonl").mkdir()                   # open(..., "a") -> IsADirectoryError
     store = TapeStore(nq_archive(tmp_path / "ticks"), tmp_path / "cache")
-    late = {"kind": "custom", "start": "2024-03-01", "end": "2025-02-01"}
+    late = {"kind": "custom", "start": "2024-03-01", "end": "2025-08-01"}
     rid = prepare(body(range=late), tmp_path / "t")
     assert "spend log" in capsys.readouterr().err
     meta = execute(tmp_path / "t" / "runs" / rid, store)        # execute() retries the record: also survives
@@ -94,16 +95,17 @@ def test_a_failed_prepare_leaves_no_orphan_run_folder(tmp_path, monkeypatch):
     assert list((tmp_path / "runs").iterdir()) == []
 
 
-def test_a_range_inside_2021_2024_records_nothing(tmp_path):
-    prepare(body(), tmp_path)                                    # 2024-03: inside the research data
+def test_a_range_inside_the_build_days_records_nothing(tmp_path):
+    prepare(body(), tmp_path)                                    # 2024-03: inside the build days
     prepare(body(range={"kind": "research"}), tmp_path)
+    prepare(body(range={"kind": "custom", "start": "2025-01-01", "end": "2025-06-30"}), tmp_path)   # their last day
     assert not (tmp_path / "spends.jsonl").exists()
 
 
-def test_is_months_reaching_2025_is_recorded_too(tmp_path):
+def test_is_months_reaching_the_test_days_is_recorded_too(tmp_path):
     """Carry (Task 6 review): the record keys off the range's END date, not its kind --
-    an IS-months range with an explicit 2025 end read holdout data too."""
-    late = {"kind": "is_months", "start": "2024-10-01", "end": "2025-04-30"}
+    an IS-months range with an explicit end in the test days read them too."""
+    late = {"kind": "is_months", "start": "2024-10-01", "end": "2025-10-31"}
     rid = prepare(body(range=late), tmp_path)
     [spend] = [json.loads(x) for x in (tmp_path / "spends.jsonl").read_text().splitlines()]
     assert spend["range"]["kind"] == "is_months" and spend["run_id"] == rid
@@ -159,8 +161,31 @@ def test_a_half_day_tape_ending_at_the_early_close_is_used_not_skipped(tmp_path)
     assert cov["sessions"] == 1 and cov["used"] == 1 and cov["skipped"] == []
 
 
-def test_execute_runs_a_request_widened_to_2025_and_records_it_exactly_once(tmp_path):
-    """Item 5 (the record's edge): a request.json hand-edited to reach 2025+ AFTER
+def test_the_default_run_reads_the_build_days_and_an_older_request_keeps_its_own(tmp_path):
+    """BLUEPRINT.md section 2, end to end: {kind: research} reads 2021-09-22 -> 2025-06-30 -- the first half of
+    2025 included, nothing earlier, nothing later. A request stored when the default was 2021-2024 (before
+    2026-10-06, or by a chart service still on that code) runs ITS dates: the label and the days agree."""
+    store = TapeStore(multiyear_archive(tmp_path / "ticks"), tmp_path / "cache")   # sessions 2020 .. 2026
+    rid = prepare(body(range={"kind": "research"}), tmp_path)
+    meta = execute(tmp_path / "runs" / rid, store)
+    days = [t["date"] for t in read_json(tmp_path / "runs" / rid / "trades.json")]
+    assert meta["range"]["label"] == "Build · Sep 2021 – Jun 2025" and meta["holdout"] is False
+    assert days == ["2022-06-15", "2022-11-09", "2023-02-08", "2023-09-20", "2024-03-05", "2024-08-21",
+                    "2025-02-12"]
+    assert meta["coverage"]["sessions"] == 10 and not (tmp_path / "spends.jsonl").exists()
+    old = prepare(body(range={"kind": "research"}), tmp_path)
+    p = tmp_path / "runs" / old / "request.json"
+    was = {"kind": "research", "start": "2021-01-01", "end": "2024-12-31",          # as stored before 2026-10-06
+           "label": "Research window 2021–2024", "holdout": False}
+    p.write_text(json.dumps({**read_json(p), "range": was}))
+    meta = execute(tmp_path / "runs" / old, store)
+    days = [t["date"] for t in read_json(tmp_path / "runs" / old / "trades.json")]
+    assert meta["range"]["label"] == "Research window 2021–2024" and meta["coverage"]["sessions"] == 12
+    assert days[:2] == ["2021-03-02", "2021-07-14"] and days[-1] == "2024-08-21" and len(days) == 8
+
+
+def test_execute_runs_a_request_widened_into_the_test_days_and_records_it_exactly_once(tmp_path):
+    """Item 5 (the record's edge): a request.json hand-edited to reach the test days AFTER
     prepare() ran (so prepare()'s own record never saw it) still RUNS -- nothing refuses
     it -- and is logged exactly once, even if execute() runs on the same bundle again."""
     store = TapeStore(nq_archive(tmp_path / "ticks"), tmp_path / "cache")
@@ -168,7 +193,7 @@ def test_execute_runs_a_request_widened_to_2025_and_records_it_exactly_once(tmp_
     assert not (tmp_path / "spends.jsonl").exists()
     p = tmp_path / "runs" / rid / "request.json"
     req = read_json(p)
-    req["range"] = {"kind": "custom", "start": "2024-03-01", "end": "2025-03-01",
+    req["range"] = {"kind": "custom", "start": "2024-03-01", "end": "2025-09-01",
                     "label": "x", "holdout": True}
     p.write_text(json.dumps(req))
     meta = execute(tmp_path / "runs" / rid, store)

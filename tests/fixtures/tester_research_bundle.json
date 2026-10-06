@@ -764,8 +764,8 @@
   "range": {
    "end": "2024-12-31",
    "holdout": false,
-   "kind": "research",
-   "label": "Research window 2021\u20132024",
+   "kind": "custom",
+   "label": "2021-01-01 \u2192 2024-12-31",
    "start": "2021-01-01"
   },
   "report": {

@@ -2,13 +2,17 @@
 
 Removing the 2025+ holdout guard, replacing the range control with presets and making the
 walk-forward ratio selectable all touch the path a run's range travels. None of it may change
-what a run produces. This rebuilds the DEFAULT research-window run over the synthetic
+what a run produces. This rebuilds the 2021-01-01 -> 2024-12-31 run over the synthetic
 multi-year archive and compares the whole bundle -- run.json (report, coverage, meta),
 trades.json, equity.json, plots.json -- byte for byte against the fixture captured from the
 code before the rework (tests/fixtures/make_tester_parity.py regenerates it).
 
 If this fails, a number moved. Regenerate the fixture only for a change that is meant to
 move numbers, never to make this pass.
+
+2026-10-06: the default range became the build days (2021-09-22 -> 2025-06-30), so this pin
+names its window by its dates. Two words of the fixture changed with that -- the range's
+kind ("research" -> "custom") and its label -- and no number.
 """
 from __future__ import annotations
 
@@ -34,12 +38,12 @@ def test_a_2021_2024_run_is_byte_identical_to_the_pinned_bundle():
     assert got == want
 
 
-def test_the_pinned_bundle_is_the_research_window_and_has_real_numbers():
+def test_the_pinned_bundle_is_the_2021_2024_window_and_has_real_numbers():
     """A parity pin over an empty run would pass forever: hold the fixture to a real
-    research-range run with winners, losers and a coverage hole."""
+    2021-2024 run with winners, losers and a coverage hole."""
     b = json.loads(FIX.read_text())
     rng, cov = b["run"]["range"], b["run"]["coverage"]
-    assert (rng["kind"], rng["start"], rng["end"]) == ("research", "2021-01-01", "2024-12-31")
+    assert (rng["kind"], rng["start"], rng["end"]) == ("custom", "2021-01-01", "2024-12-31")
     assert cov["sessions"] == 12 and cov["used"] == 10 and len(cov["skipped"]) == 2
     s = b["run"]["report"]["summary"]["all"]
     assert s["trades"] == 8 and s["wins"] == 4 and s["losses"] == 4

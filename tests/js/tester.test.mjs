@@ -16,7 +16,7 @@ const COL = { net_profit: 12345.5, net_profit_pct: 24.691, gross_profit: 30000, 
   largest_loss: -2500, avg_seconds_in_trade: 192, avg_bars_in_trade: 3.2, max_consec_losses: 4, sharpe: 1.234, sortino: 2.1,
   sharpe_traded_days: 3.3, t_stat: 2.346, expectancy: 514.4, days: 24 };
 const RUN = { strategy: { id: 'nq930', name: 'NQ 9:30 straddle', root: 'NQ' }, inputs: { offset_pts: 12, adx_gate: true, mode: 'b', n: 2 },
-  range: { kind: 'custom', start: '2023-01-01', end: '2025-02-01', label: '2023-01-01 → 2025-02-01', holdout: true },
+  range: { kind: 'custom', start: '2023-01-01', end: '2025-08-01', label: '2023-01-01 → 2025-08-01', holdout: true },
   qty: 2, commission: 4, slippage_ticks: 1, capital: 50000, holdout: true, holdout_reason: null, prop_rules: 'lucid-flex-50k@2026-09-27',
   engine: 'x', fill_law: 'tick replay',
   coverage: { sessions: 520, used: 517, skipped: [{ date: '2023-03-01', reason: 'missing 13:00–15:00 ET' }], skipped_by_reason: {},
@@ -36,22 +36,28 @@ test('form defaults from the schema; restore keeps only valid values', () => {
   assert.equal(X.restore({ ...f, max_cells: 240 }, STRAT).max_cells, 240);
 });
 
-test('restore drops a range preset it no longer knows (the old is_months / custom kinds)', () => {
+test('restore drops a range preset it no longer knows (the old is_months / custom kinds, the old year presets)', () => {
   const f = X.defaults(STRAT);
   assert.deepEqual(X.restore({ ...f, range: { kind: 'is_months', start: '', end: '' } }, STRAT).range, f.range);
   assert.deepEqual(X.restore({ ...f, range: { id: 'custom', start: '2023-01-01', end: '2023-06-30', wf: 9 } }, STRAT).range,
     { id: 'custom', start: '2023-01-01', end: '2023-06-30', wf: null });        // 9 is not a ratio
-  assert.equal(X.restore({ ...f, range: { id: '2025-2026', start: '', end: '', wf: 2 } }, STRAT).range.wf, 2);
+  assert.equal(X.restore({ ...f, range: { id: 'test', start: '', end: '', wf: 2 } }, STRAT).range.wf, 2);
+  // a form saved on a preset the pill no longer has comes back on the default: the build days
+  for (const id of ['2022-2024', '2025-2026']) {
+    assert.deepEqual(X.restore({ ...f, range: { id, start: '', end: '', wf: 2 } }, STRAT).range, f.range);
+  }
 });
 
-test('the presets map to (start, end); 2025-2026 and All end today (ET)', () => {
+test('the presets are the blueprint\'s: Build (the default), Test, All, Custom; Test and All end today (ET)', () => {
   assert.deepEqual(X.RANGES.map((r) => r.label),
-    ['2021-2024', '2022-2024', '2025-2026', 'All (2021-now)', 'Custom date range…']);
+    ['Build · Sep 2021 – Jun 2025', 'Test · Jul 2025 →', 'All (2021-now)', 'Custom date range…']);
+  assert.deepEqual(X.RANGES.map((r) => r.id), ['research', 'test', 'all', 'custom']);
   const now = X.today();
   assert.match(now, /^\d{4}-\d{2}-\d{2}$/);
-  assert.deepEqual(X.rangeSpec('research'), { start: '2021-01-01', end: '2024-12-31' });
-  assert.deepEqual(X.rangeSpec('2022-2024'), { start: '2022-01-01', end: '2024-12-31' });
-  assert.deepEqual(X.rangeSpec('2025-2026'), { start: '2025-01-01', end: now });
+  assert.deepEqual(X.rangeSpec('research'), { start: '2021-09-22', end: '2025-06-30' });   // the build days
+  assert.deepEqual(X.rangeSpec('test'), { start: '2025-07-01', end: now });                // the test days
+  assert.deepEqual(X.rangeSpec('2025-2026'), X.rangeSpec('research'));                     // an unknown id: the default
+  assert.deepEqual(X.rangeDates(X.defaults(STRAT).range), { start: '2021-09-22', end: '2025-06-30' });
   assert.deepEqual(X.rangeSpec('all'), { start: '2021-01-01', end: now });
   assert.deepEqual(X.rangeSpec('custom'), { start: null, end: null });
   assert.deepEqual(X.rangeDates({ id: 'custom', start: '2026-01-02', end: '2026-02-03' }), { start: '2026-01-02', end: '2026-02-03' });
@@ -60,7 +66,7 @@ test('the presets map to (start, end); 2025-2026 and All end today (ET)', () => 
 test('no range is refused for the dates it reads any more; only a malformed one is', () => {
   const f = X.defaults(STRAT);
   assert.equal(X.problems(f, STRAT), null);
-  for (const id of ['2022-2024', '2025-2026', 'all']) assert.equal(X.problems({ ...f, range: { id, start: '', end: '', wf: null } }, STRAT), null);
+  for (const id of ['test', 'all']) assert.equal(X.problems({ ...f, range: { id, start: '', end: '', wf: null } }, STRAT), null);
   assert.equal(X.problems({ ...f, range: { id: 'custom', start: '2025-01-01', end: '2026-09-27' } }, STRAT), null);
   assert.equal(X.problems({ ...f, range: { id: 'custom', start: '2023-01-01', end: '' } }, STRAT), 'End date: a date, YYYY-MM-DD');
   assert.equal(X.problems({ ...f, range: { id: 'custom', start: '2023-02-30', end: '2023-06-01' } }, STRAT),
@@ -85,10 +91,11 @@ test('typed dates: what parses, what does not, and how one reads back', () => {
 });
 
 test('the pill reads the preset, the custom dates, and the walk-forward scheme on top', () => {
-  assert.equal(X.pillLabel({ id: 'research', wf: null }), '2021-2024');
-  assert.equal(X.pillLabel({ id: '2025-2026', wf: null }), '2025-2026');
+  assert.equal(X.pillLabel({ id: 'research', wf: null }), 'Build · Sep 2021 – Jun 2025');
+  assert.equal(X.pillLabel(null), 'Build · Sep 2021 – Jun 2025');
+  assert.equal(X.pillLabel({ id: 'test', wf: null }), 'Test · Jul 2025 →');
   assert.equal(X.pillLabel({ id: 'all', wf: 1 }), 'All (2021-now) · WF 1:1');
-  assert.equal(X.pillLabel({ id: 'research', wf: 2 }), '2021-2024 · WF 1:2');
+  assert.equal(X.pillLabel({ id: 'research', wf: 2 }), 'Build · Sep 2021 – Jun 2025 · WF 1:2');
   assert.equal(X.pillLabel({ id: 'custom', start: '2026-09-21', end: '2026-09-25' }), 'Sep 21, 2026 — Sep 25, 2026');
   assert.equal(X.pillLabel({ id: 'custom', start: '2026-09-21', end: '', wf: 3 }), 'Custom date range · WF 1:3');
   assert.equal(X.isWalkforward({ range: { id: 'research', wf: 3 } }), true);
@@ -113,15 +120,15 @@ test("the Custom dialog's calendar: 6 rows of 7, Sunday first, neighbouring days
 
 test('the request body: the range picker\'s own window, and the default preset unchanged', () => {
   const f = X.defaults(STRAT);
-  // THE parity line: the default preset still sends {kind:'research'} verbatim, so a 2021-2024
-  // request is byte for byte the one this tester always sent.
+  // THE parity line: the default preset still sends {kind:'research'} verbatim -- the server owns the
+  // build days' dates -- so the request is byte for byte the one this tester always sent.
   assert.deepEqual(X.body(f), { strategy: 'nq930', inputs: f.inputs, range: { kind: 'research' },
     qty: 1, commission: 4, slippage_ticks: 1, prop_rules: 'lucid-flex-50k@2026-09-27' });
   assert.equal('holdout' in X.body(f), false);
-  assert.deepEqual(X.body({ ...f, range: { id: '2022-2024', start: '', end: '', wf: null } }).range,
-    { kind: 'custom', start: '2022-01-01', end: '2024-12-31' });
-  assert.deepEqual(X.body({ ...f, range: { id: '2025-2026', start: '', end: '', wf: null } }).range,
-    { kind: 'custom', start: '2025-01-01', end: X.today() });
+  assert.deepEqual(X.body({ ...f, range: { id: 'test', start: '', end: '', wf: null } }).range,
+    { kind: 'custom', start: '2025-07-01', end: X.today() });
+  assert.deepEqual(X.body({ ...f, range: { id: 'all', start: '', end: '', wf: null } }).range,
+    { kind: 'custom', start: '2021-01-01', end: X.today() });
   assert.deepEqual(X.body({ ...f, range: { id: 'custom', start: '2024-06-01', end: '2025-06-01' } }).range,
     { kind: 'custom', start: '2024-06-01', end: '2025-06-01' });
   // the walk-forward rides on the same window: the single-run body is unchanged by it
@@ -134,11 +141,16 @@ test('the request body: the range picker\'s own window, and the default preset u
 test('a loaded run fills the form back, its range matched to a preset when one fits', () => {
   const f = X.fromRun(RUN, STRAT);
   assert.deepEqual(f.inputs, { offset_pts: 12, adx_gate: true, mode: 'b', n: 2 });
-  assert.deepEqual(f.range, { id: 'custom', start: '2023-01-01', end: '2025-02-01', wf: null });
+  assert.deepEqual(f.range, { id: 'custom', start: '2023-01-01', end: '2025-08-01', wf: null });
   assert.equal(f.qty, 2);
-  assert.deepEqual(X.rangeFromRun({ kind: 'research', start: '2021-01-01', end: '2024-12-31' }), { id: 'research', start: '', end: '' });
-  assert.deepEqual(X.rangeFromRun({ kind: 'custom', start: '2022-01-01', end: '2024-12-31' }), { id: '2022-2024', start: '', end: '' });
-  assert.deepEqual(X.rangeFromRun({ kind: 'custom', start: '2025-01-01', end: X.today() }), { id: '2025-2026', start: '', end: '' });
+  assert.deepEqual(X.rangeFromRun({ kind: 'research', start: '2021-09-22', end: '2025-06-30' }), { id: 'research', start: '', end: '' });
+  assert.deepEqual(X.rangeFromRun(null), { id: 'research', start: '', end: '' });
+  assert.deepEqual(X.rangeFromRun({ kind: 'custom', start: '2025-07-01', end: X.today() }), { id: 'test', start: '', end: '' });
+  // a run made when {kind: 'research'} was 2021-2024 keeps its own dates: it is not today's default
+  assert.deepEqual(X.rangeFromRun({ kind: 'research', start: '2021-01-01', end: '2024-12-31' }),
+    { id: 'custom', start: '2021-01-01', end: '2024-12-31' });
+  assert.deepEqual(X.rangeFromRun({ kind: 'custom', start: '2022-01-01', end: '2024-12-31' }),
+    { id: 'custom', start: '2022-01-01', end: '2024-12-31' });
 });
 
 test('progress text and fraction', () => {
@@ -157,7 +169,8 @@ test('Overview tiles, badges and the prop block', () => {
     ['Profit factor', '1.88', ''], ['Sharpe', '1.23', 'weekday grid'], ['Avg trade', '+$514.40', ''], ['Avg win : loss', 'RR 1:1.44', ''],
     ['t-stat', '2.35', '']]);
   assert.deepEqual(X.badges(RUN).map((b) => [b.text, b.tone]), [['Tick replay', 'info'], ['517 of 520 sessions', 'warn'],
-    ['2 strategy errors', 'err'], ['Includes holdout', 'err']]);   // the badge is now a fact, not a permission
+    ['2 strategy errors', 'err'], ['Reads test days', 'err']]);   // the badge is a fact, not a permission
+  assert.equal(X.badges({ ...RUN, holdout: false }).some((b) => b.text === 'Reads test days'), false);
   const prop = { rules: { id: 'lucid-pro-50k@2026-09-27', name: 'LucidPro 50K', confirmed: false, label: 'LucidPro 50K · unconfirmed rules' }, caveat: 'c',
     headline: { eval_pass_p: 0.4312, eval_pass_ci: [0.424, 0.438], bust_p: 0.31, median_days_to_pass: 17.5, funded_expected_cheque: 1648.2 } };
   assert.deepEqual(X.propView(prop).tiles.map((t) => [t.label, t.value, t.sub]), [['Eval pass', '43.1%', '95% CI 42.4–43.8%'],

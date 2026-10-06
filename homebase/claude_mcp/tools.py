@@ -26,8 +26,10 @@ ET = ZoneInfo("America/New_York")
 FINAL = ("done", "error", "cancelled")
 DEFAULT_WAIT_S = 120           # short: the stdio loop is single-threaded, so a long wait blocks every call
 MAX_WAIT_S = 3600
-PRESETS = {"2021-2024": ("2021-01-01", "2024-12-31"), "2022-2024": ("2022-01-01", "2024-12-31"),
-           "2025-2026": ("2025-01-01", None), "all": ("2021-01-01", None)}
+PRESETS = {"build": ("2021-09-22", "2025-06-30"), "test": ("2025-07-01", None), "all": ("2021-01-01", None),
+           # the old names (before the blueprint's dates, 2026-10-06): kept so an older call still runs
+           "2021-2024": ("2021-01-01", "2024-12-31"), "2022-2024": ("2022-01-01", "2024-12-31"),
+           "2025-2026": ("2025-01-01", None)}
 TRADE_SORTS = ("entry", "net", "-net", "mae", "mfe", "duration")
 MAX_TRADE_ROWS = 500
 
@@ -43,9 +45,14 @@ def describe_target() -> str:
 
 _RANGE = {
     "type": "object",
-    "description": "The test window. Default: the research window 2021-2024. Presets mirror the page's range "
-                   "pill; 2025-2026 and all run to today (ET). custom needs start and end (YYYY-MM-DD).",
-    "properties": {"preset": {"type": "string", "enum": [*PRESETS, "custom"], "default": "2021-2024"},
+    "description": "The dates to run on. Strategy work follows research/edge-library/BLUEPRINT.md section 2. "
+                   "Presets (the page's range pill): build (the default) = the build days, 2021-09-22 -> "
+                   "2025-06-30, where all tuning happens; test = the test days, 2025-07-01 -> today (ET), read "
+                   "once and only for a locked strategy, never for a quick look or \"all data\"; all = 2021 -> "
+                   "today (ET), so it reads the test days too; custom needs start and end (YYYY-MM-DD). Old "
+                   "names, still accepted: 2021-2024, 2022-2024, and 2025-2026 (2025-01-01 -> today: it reads "
+                   "the test days).",
+    "properties": {"preset": {"type": "string", "enum": [*PRESETS, "custom"], "default": "build"},
                    "start": {"type": "string", "description": "YYYY-MM-DD (custom only)"},
                    "end": {"type": "string", "description": "YYYY-MM-DD (custom only)"}},
     "additionalProperties": False}
@@ -240,7 +247,7 @@ def bundle_summary(b: dict, ref: dict) -> str:
     cov = run.get("coverage") or {}
     lines = [f"{'Heat-map cell' if 'grid_id' in ref else 'Run'} {run.get('id')} · {st.get('name')} ({st.get('id')}) on "
              f"{st.get('root')} · {rng.get('label') or rng}"
-             + (" · reads 2025+ data" if run.get("holdout") else ""),
+             + (" · reads the test days" if run.get("holdout") else ""),
              f"Costs: qty {run.get('qty')}, ${_num(run.get('commission'))}/RT, {run.get('slippage_ticks')} tick slip, "
              f"capital {_usd(run.get('capital'))} · engine {run.get('engine')} ({run.get('fill_law')})",
              f"Inputs: {_kv(run.get('inputs'))}", "",
@@ -280,7 +287,7 @@ def _progress(st: dict) -> str:
 # ---------------------------------------------------------------- the toolbox
 
 def range_body(rng, today: str | None = None) -> dict:
-    """The page's range pill as the server's range: 2021-2024 is {kind: research} (byte for byte what the
+    """The page's range pill as the server's range: build is {kind: research} (byte for byte what the
     page sends); the other presets are custom windows, `end: today` (ET) for the open-ended ones."""
     rng = rng or {}
     if not isinstance(rng, dict):
@@ -288,7 +295,7 @@ def range_body(rng, today: str | None = None) -> dict:
     extra = set(rng) - {"preset", "start", "end"}
     if extra:
         raise ToolError(f"range: unknown key(s) {', '.join(sorted(extra))} (walk-forward: use the walkforward tool)")
-    preset = rng.get("preset", "2021-2024")
+    preset = rng.get("preset", "build")
     if preset == "custom":
         if not rng.get("start") or not rng.get("end"):
             raise ToolError("range: a custom range needs start and end (YYYY-MM-DD)")
@@ -297,7 +304,7 @@ def range_body(rng, today: str | None = None) -> dict:
         raise ToolError(f"range.preset: one of {', '.join([*PRESETS, 'custom'])}")
     if rng.get("start") or rng.get("end"):
         raise ToolError("range: start/end go with preset 'custom'")
-    if preset == "2021-2024":
+    if preset == "build":
         return {"kind": "research"}
     start, end = PRESETS[preset]
     return {"kind": "custom", "start": start, "end": end or today or dt.datetime.now(ET).date().isoformat()}

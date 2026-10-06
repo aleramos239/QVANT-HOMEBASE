@@ -1,9 +1,11 @@
 """Walk-forward, the user's scheme: 1 month to SELECT, the next N months to TEST, stepping monthly, over
-whatever window the request names (the range picker's preset; 2021-01-01 -> 2024-12-31 by default).
+whatever window the request names (the range picker's preset; the build days, 2021-09-22 -> 2025-06-30,
+by default).
 
 Steps. Over the window's whole calendar months m_0..m_k, step k selects on m_k and tests on
 m_{k+1}..m_{k+N}. A step whose test window would run past the window's last month is dropped (no partial
-test windows), so the research window at N = 3 has 45 steps: select 2021-01 .. 2024-09.
+test windows), so the build days (whole months 2021-10 .. 2025-06) at N = 3 have 42 steps: select
+2021-10 .. 2025-03.
 
 Selection. In each selection month every cell of the user's grid (<= 60 cells, the heat-map's own
 validation) is scored by the chosen metric (default net $); a cell needs >= min_trades (default 5) trades
@@ -25,7 +27,7 @@ phase is visible, never silently picked. The chain is fixed at phase 0 before an
 
 Both sides. The result carries the stitched OUT-of-sample chain and, beside it, the same chain's own
 SELECTION months (`stitched_is`) -- the user's "and then OOS for each". The two sides span DIFFERENT
-month counts (1 per leg in-sample, N per leg out-of-sample: 15 vs 45 on 2021-2024 at 1:3), so their raw
+month counts (1 per leg in-sample, N per leg out-of-sample: 14 vs 42 on the build days at 1:3), so their raw
 totals are not comparable: each side also reports `n_months` and `per_month` (net $ and trades per month,
 a flat no-pick month counted as a month), and the drop is taken on the per-month net (in $ and as a %
 of the in-sample month) and on Sharpe, which is already a rate. `stitched.uncovered` lists the tail months
@@ -39,10 +41,10 @@ the store, not the range -- so a cell's trades inside month m ARE a single run o
 (tests/test_backtest_walkforward.py pins that on real ticks, gate off and on). A cell skips the full-window
 prop sim (request "propsim": false): it would never be shown. When a cell finishes, its per-month stats
 are cached in cells/NN/months.json; selection reads only those, and a test leg re-uses the chosen cell's
-already-computed trades. 60 cells cost 60 backtests, not 60 x 45.
+already-computed trades. 60 cells cost 60 backtests, not 60 x 42.
 
 Looks. Every selection month's grid is a look at every cell: a finished walk-forward adds
-cells x steps (e.g. 60 x 45 = 2,700) to the machine-wide looks counter, once, as its result is written.
+cells x steps (e.g. 60 x 42 = 2,520) to the machine-wide looks counter, once, as its result is written.
 A cancelled walk-forward, one with a failed cell (no selection is made over a partial grid), or one whose
 looks counter is unreadable shows no result and counts nothing. The full-window per-cell results are
 never served (no cell bundles, no cell summaries): only selection-month stats of the PICKED cell and

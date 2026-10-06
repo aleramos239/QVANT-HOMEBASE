@@ -1,7 +1,7 @@
 """Regenerate the 2021-2024 parity fixture: `.venv/bin/python -m tests.fixtures.make_tester_parity`.
 
-The fixture is the bundle a DEFAULT research-window run produced BEFORE the tester's range
-rework (presets, no holdout guard, the walk-forward ratio). tests/test_tester_range_parity.py
+The fixture is the bundle a 2021-01-01 -> 2024-12-31 run (the default window then) produced BEFORE
+the tester's range rework (presets, no holdout guard, the walk-forward ratio). tests/test_tester_range_parity.py
 rebuilds it and compares byte for byte, so none of that work may move a number. Regenerate it
 only when a deliberate engine/report change is being pinned -- never to make the test pass.
 """

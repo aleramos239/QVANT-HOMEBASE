@@ -651,13 +651,15 @@ def compute_backtest(folder: Path, archive: Path = ARCHIVE, cache: Path = CACHE)
     from ..backtest.tape import TapeStore
 
     p = params()
-    body = {"strategy": STRATEGY_ID, "range": {"kind": "research"}, "qty": p["qty"],
+    # the window by its dates: {kind: research} is the tester's build days now (it ends 2025-06-30)
+    body = {"strategy": STRATEGY_ID, "range": {"kind": "custom", "start": "2021-01-01", "end": "2024-12-31"},
+            "qty": p["qty"],
             "inputs": {"offset_pts": p["offset_pts"], "sl_pts": p["sl_pts"], "tp_pts": p["tp_pts"],
                        "events": "NFP+CPI"},
             "commission": COSTS.commission_rt, "slippage_ticks": COSTS.slippage_ticks}
     req = runner.validate(body)
     if req["holdout"] is not None or req["range"]["holdout"] or req["range"]["end"] != "2024-12-31":
-        raise RuntimeError("the paper comparison may only read the research window")
+        raise RuntimeError("the paper comparison may only read 2021-2024")
     base = Path(folder) / "tester"
     rid = runner.prepare(body, base)
     runner.exec_run(base / "runs" / rid, TapeStore(archive, cache))

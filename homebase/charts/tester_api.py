@@ -24,7 +24,8 @@
     POST /api/tester/run                 {strategy, inputs, range, qty, commission,
                                           slippage_ticks, capital?, prop_rules?} -> {id}
                                           (any window: nothing is refused for the dates it reads;
-                                          a range reaching 2025+ is recorded in spends.jsonl)
+                                          a range reaching the test days, 2025-07-01 on, is recorded
+                                          in spends.jsonl)
     GET  /api/tester/run/{id}            status + progress
     POST /api/tester/run/{id}/cancel
     GET  /api/tester/run/{id}/bundle     run (meta + report + coverage), trades, equity, plots, propsim
@@ -37,8 +38,8 @@
     GET  /api/tester/runs                recent runs, newest first
     POST /api/tester/grid                {strategy, inputs, axes: [{key, values}] x2-3, qty, commission,
                                           slippage_ticks, capital?, prop_rules?} -> {id}
-                                          (<= 60 cells, over the body's own range -- 2021-2024
-                                          when it names none)
+                                          (<= 60 cells, over the body's own range -- the build days,
+                                          2021-09-22 -> 2025-06-30, when it names none)
     GET  /api/tester/grid/{id}           the grid, per-cell status + summary, and its strategy's looks
     POST /api/tester/grid/{id}/cancel
     GET  /api/tester/grid/{id}/cell/{i}/bundle   a cell's full run bundle (the same shape as a run's)

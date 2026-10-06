@@ -36,7 +36,7 @@ def main(argv=None) -> int:
                     help="replay only: the replayed date counts as a GC NFP/CPI event day for the "
                          "paper runner (browser checks; stores nothing) -- use with --start 08:25")
     ap.add_argument("--paper-allow-holdout", action="store_true",
-                    help="with --paper-day: allow a replayed date after 2024-12-31 (holdout data; "
+                    help=f"with --paper-day: allow a replayed date after {RESEARCH_END} (the test days; "
                          "each use needs the user's approval)")
     a = ap.parse_args(argv)
     if a.fake_desk is not None and not a.replay:
@@ -49,7 +49,7 @@ def main(argv=None) -> int:
     if a.paper_allow_holdout and not a.paper_day:
         ap.error("--paper-allow-holdout works only with --paper-day")
     if a.paper_day and dt.date.fromisoformat(a.replay) > RESEARCH_END and not a.paper_allow_holdout:
-        ap.error(f"--paper-day on {a.replay}: dates after {RESEARCH_END} are holdout data "
+        ap.error(f"--paper-day on {a.replay}: dates after {RESEARCH_END} are the test days "
                  "(add --paper-allow-holdout only with the user's approval)")
     app = create_app(roots=[r for r in a.roots.split(",") if r],
                      replay=dt.date.fromisoformat(a.replay) if a.replay else None,

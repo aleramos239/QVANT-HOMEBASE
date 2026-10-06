@@ -14,14 +14,17 @@ from . import tools
 from .client import ToolError
 
 SERVER_NAME = "homebase"
-SERVER_VERSION = "1.1.0"
+SERVER_VERSION = "1.2.0"
 PROTOCOLS = ("2025-06-18", "2025-03-26", "2024-11-05")
 INSTRUCTIONS = (
     "Homebase Strategy Tester: backtest strategies on real tick data (tick replay, pessimistic fills), "
     "run parameter heat-maps and walk-forwards, Monte Carlo and prop-eval re-scores, write DRAFT strategies, "
     "and show any finished run on the user's chart page (show_on_chart; never 09:20-09:35 ET). Long jobs "
-    "return their id after wait_s: call the same tool with that id to keep waiting, or cancel it. The research "
-    "window is 2021-2024 (the default range); name 2025+ ranges only when the user asks. At most 2 backtests "
+    "return their id after wait_s: call the same tool with that id to keep waiting, or cancel it. Strategy "
+    "work follows research/edge-library/BLUEPRINT.md section 2 (skill: strategy-blueprint): read it before "
+    "the first run. The default range is the build days (2021-09-22 to 2025-06-30), where all tuning happens. "
+    "The test days (2025-07-01 on) are read once and only for a locked strategy, never for a quick look or "
+    "\"all data\". At most 2 backtests "
     "run at once on this machine during desk hours (weekdays 08:00-16:15 ET) and 4 outside them, and none "
     "start 09:20-09:35 ET on weekdays: a refusal says so -- report it, do not retry in a loop.\n"
     "Desk bridge: desk_status / desk_journal / desk_readiness / data_coverage / services_health read the live "

@@ -1,5 +1,7 @@
-"""Build the 2021-2024 parity bundle: one default research-window run over the synthetic
-multi-year archive, with everything that changes between two identical runs stripped out."""
+"""Build the 2021-2024 parity bundle: one 2021-01-01 -> 2024-12-31 run over the synthetic
+multi-year archive, with everything that changes between two identical runs stripped out.
+(The window is named by its dates: it was the default {kind: research} until the default
+became the build days, 2026-10-06.)"""
 from __future__ import annotations
 
 import tempfile
@@ -14,7 +16,7 @@ VOLATILE = ("id", "created", "finished")          # a run id and its two clocks:
 
 
 def parity_bundle() -> dict:
-    """{run, trades, equity, plots} of a research-range nq930 run, run-id/clock free."""
+    """{run, trades, equity, plots} of a 2021-2024 nq930 run, run-id/clock free."""
     real = config.config_path
     with tempfile.TemporaryDirectory() as tmp:
         t = Path(tmp)
@@ -22,7 +24,7 @@ def parity_bundle() -> dict:
         try:
             store = TapeStore(multiyear_archive(t / "ticks"), t / "cache")
             rid = prepare({"strategy": "nq930", "inputs": {"adx_gate": False},
-                           "range": {"kind": "research"}}, t / "state")
+                           "range": {"kind": "custom", "start": "2021-01-01", "end": "2024-12-31"}}, t / "state")
             d = t / "state" / "runs" / rid
             req = read_json(d / "request.json")
             req["propsim"] = False                          # a Monte Carlo is not part of the report

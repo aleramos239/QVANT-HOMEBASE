@@ -726,15 +726,16 @@ def test_i3_replay_runs_are_tagged_and_kept_out_of_the_forward_stats(tmp_path):
     assert r.history()["stats"]["paper"]["n"] == 0
 
 
-# ---- M4: --paper-day refuses holdout dates
+# ---- M4: --paper-day refuses the test days (2025-07-01 on: the blueprint's dates, backtest/discipline.py)
 
-def test_m4_paper_day_refuses_holdout_dates_unless_allowed(monkeypatch, capsys):
+def test_m4_paper_day_refuses_the_test_days_unless_allowed(monkeypatch, capsys):
     captured: dict = {}
     _patch_run(monkeypatch, captured)
     with pytest.raises(SystemExit):
-        main_mod.main(["--replay", "2025-01-02", "--paper-day"])
-    assert "holdout" in capsys.readouterr().err and captured == {}
-    assert main_mod.main(["--replay", "2024-12-31", "--paper-day"]) == 0
+        main_mod.main(["--replay", "2025-07-01", "--paper-day"])                 # the first test day
+    assert "dates after 2025-06-30 are the test days" in capsys.readouterr().err and captured == {}
+    for build_day in ("2024-12-31", "2025-01-02", "2025-06-30"):                 # the first half of 2025 is build days
+        assert main_mod.main(["--replay", build_day, "--paper-day"]) == 0
     assert main_mod.main(["--replay", "2025-10-03", "--paper-day", "--paper-allow-holdout"]) == 0
     assert captured["replay"] == dt.date(2025, 10, 3) and captured["paper_day"] is True
     with pytest.raises(SystemExit):

@@ -81,6 +81,11 @@ version: restart that service (never 09:20–09:35 ET on weekdays).
 before that code answers 404 / "not listed yet": restart `com.ramosquant.homebase-charts`. A chart page
 opened before the restart needs a reload to pick up the `tester_show` handler.
 
+The default range (`range: build`, the build days 2021-09-22 → 2025-06-30) is sent by name, and the chart
+service owns its dates (`homebase/backtest/discipline.py`). A chart service started before the blueprint's
+dates (connector 1.2.0) still runs 2021-01-01 → 2024-12-31 for it, and its result says "Research window
+2021–2024": restart it. `test`, `all` and `custom` carry their own dates and are right either way.
+
 ## show_on_chart, on the page
 
 It takes over only a chart with NO accounts ticked and no algo, that is not replaying and is not the selected

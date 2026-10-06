@@ -89,7 +89,10 @@ def _research_bundle(tmp_path):
     from homebase.backtest import runner
     from homebase.backtest.tape import CACHE
     store = TapeStore(ARCHIVE, CACHE)
-    rid = runner.prepare({"strategy": "nq930", "range": {"kind": "research"}}, tmp_path)
+    # the pinned window by its DATES: {kind: research} is the build days since 2026-10-06 (it ends
+    # 2025-06-30), and this pin must go on reading exactly the sessions it was hashed on
+    rid = runner.prepare({"strategy": "nq930",
+                          "range": {"kind": "custom", "start": "2021-01-01", "end": "2024-12-31"}}, tmp_path)
     meta = runner.execute(tmp_path / "runs" / rid, store)
     d = tmp_path / "runs" / rid
     return meta, {k: runner.read_json(d / f"{k}.json") for k in ("trades", "equity", "propsim")}
