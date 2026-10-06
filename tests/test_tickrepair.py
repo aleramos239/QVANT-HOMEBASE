@@ -691,3 +691,29 @@ def test_the_sessions_refused_under_the_size_rule_are_tried_again(tmp_path):
     path.write_bytes(b"x")
     cache = {T.REFUSED: {f"NQ {D}": {"stamp": T.files_stamp(path), "rules": 2, "why": "sizes"}}}
     assert A.MERGE_RULES == 3 and not T.refused_still(cache, "NQ", D, path)
+
+
+def test_ids_still_missing_after_a_thinned_fetch_are_asked_again_until_the_broker_has_them(tmp_path, monkeypatch):
+    """ES 2026-10-05 02:00-04:00 ET, asked at 13:27 -- nine hours on: 185 ticks where 28,000 ids are.
+    The broker serves thinned rows for hours long over, the fetch "reached" its start all the same,
+    and the stretch was logged as served in full: nothing ever asked again. Between two held
+    ticks the ids decide: asked again each run (a page, while it is thinned) until they are in."""
+    nw, ticks, broker, path = battery_day(tmp_path, monkeypatch, dt.datetime(2026, 9, 29, 10, 10, tzinfo=ET))
+    hole = ticks[9 * 60:15 * 60]                                 # 03:00-09:00 ET
+    thinned = [r for r in ticks if r not in hole or r["id"] % 20 == 0]
+    broker.ticks["NQZ6"] = thinned
+    cache = {}
+    run(T.record(roots=("NQ",), dates=[D], base=tmp_path, ws=object(), cache=cache, day=True))
+    assert len(broker.asked) == 1 and len(_ids(path)) == 20      # 18 of the hole's 360, and its two edges
+    assert A.load_manifest(path)["sources"][-1]["stop"] == "reached"
+    nw.now = dt.datetime(2026, 9, 29, 10, 25, tzinfo=ET)         # the next run: still thinned
+    run(T.record(roots=("NQ",), dates=[D], base=tmp_path, ws=object(), cache=cache, day=True))
+    assert len(broker.asked) == 2 and len(_ids(path)) == 20      # asked again: one page, nothing new
+    broker.ticks["NQZ6"] = ticks                                  # the broker has published the hours
+    nw.now = dt.datetime(2026, 9, 29, 10, 40, tzinfo=ET)
+    run(T.record(roots=("NQ",), dates=[D], base=tmp_path, ws=object(), cache=cache, day=True))
+    assert held(path, ticks[:16 * 60 + 1]) and len(broker.asked) == 6
+    asked = len(broker.asked)
+    nw.now = dt.datetime(2026, 9, 29, 10, 44, tzinfo=ET)
+    run(T.record(roots=("NQ",), dates=[D], base=tmp_path, ws=object(), cache=cache, day=True))
+    assert len(broker.asked) == asked                             # whole: nothing more to ask

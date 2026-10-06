@@ -632,7 +632,14 @@ class MDConn(Pacer):
 # what lies outside them: the ticks between two runs (a restart, a dead
 # battery), an open or a close no history fetch has vouched for yet, a
 # recording that stopped, or the whole session when nothing was recorded.
-# A stretch the broker was already asked for in full is never asked again.
+# An open, a close or a silent stretch the broker was already asked for in full
+# is never asked again. Between two held ticks the ids decide, not the log of
+# what was asked: the broker's history is gap-free once an hour is published
+# (2026-09-25, 09-29, 10-01: not one id missing in any of the 15 roots' files,
+# ES's 1.67M ticks included), so ids that skip are ticks it will still serve --
+# and it serves thinned rows for hours long over, not only the one in progress
+# (ES 2026-10-05 02:00-04:00 ET asked at 13:27: 185 ticks where 28,000 ids are;
+# the fetch "reached", was logged as served in full, and nothing asked again).
 BRIDGE_TICKS = PAGE // 2        # gaps with at most this many held ticks between them are fetched as one
 STALE_MS = 15 * 60 * 1000       # a running session's recording this far behind the clock has stopped
 DAY_PAGES = 45                  # a daytime run's pages: the chart service keeps most of the login's 180/h
@@ -694,7 +701,7 @@ def missing(root: str, date: dt.date, base: Path, now: dt.datetime, cache: dict,
     spans = tickarchive.merge_spans(
         tickarchive.verified_spans(tickarchive.prior_sources(tickarchive.load_manifest(path)))
         + [tuple(x) for x in cache.get(ASKED, {}).get(f"{root} {date}", [])])
-    gaps = []
+    gaps, between = [], []              # `between` two held ticks: asked whatever a fetch vouched (above)
     if not runs:
         gaps.append((s_ms, horizon, "nothing recorded"))
     else:
@@ -715,13 +722,14 @@ def missing(root: str, date: dt.date, base: Path, now: dt.datetime, cache: dict,
             else:
                 inner.append(g)
         for a, b, n, _, k in inner:
-            gaps.append((a, b, f"{n:,} ticks" + (f" in {k} gaps" if k > 1 else "")))
+            between.append((a, b, f"{n:,} ticks" + (f" in {k} gaps" if k > 1 else "")))
         if over:
             gaps.append((runs[-1][3], e_ms, "the close"))
         elif horizon - runs[-1][3] > STALE_MS:
             gaps.append((runs[-1][3], horizon, "the recording stopped"))
     return [(x, y, why) for a, b, why in gaps if a < horizon
-            for x, y in tickarchive.uncovered(spans, a, min(b, horizon))], info
+            for x, y in tickarchive.uncovered(spans, a, min(b, horizon))] \
+        + [(a, min(b, horizon), why) for a, b, why in between if a < horizon], info
 
 
 def plan(roots, dates: list[dt.date], base: Path, now: dt.datetime,
