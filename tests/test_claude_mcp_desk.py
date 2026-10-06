@@ -165,6 +165,105 @@ def test_data_coverage_reads_the_local_report(desk, charts, monkeypatch, tmp_pat
         box(desk, charts).call("data_coverage", {})
 
 
+def test_data_coverage_sorts_the_sessions_by_class(desk, charts, monkeypatch, tmp_path):
+    """A report with classes (tickcoverage.CLASSES): what the broker still has and until when, what is lost,
+    the vendor's own gaps, and how many are not holes at all -- then what changed since the report before."""
+    monkeypatch.setattr("homebase.paths.state_dir", lambda: tmp_path)
+    nq = [{"session": "2026-09-28", "status": "complete", "class": "whole"},
+          {"session": "2026-09-25", "status": "partial", "class": "filling", "until_utc": "2026-09-27T00:00:00+00:00",
+           "hole_hours": 2.0, "missing_ids": 1_500_000, "hours": {"filling": 2.0},
+           "ids": {"filling": 1_499_500, "lost": 500},
+           "why": "500 tick ids have left the broker; the rest is at the broker until 09-26 20:00 ET"},
+          {"session": "2026-09-24", "status": "missing", "class": "lost", "hours": {"lost": 23.0},
+           "why": "nothing recorded, and it has left the broker"},
+          {"session": "2026-09-22", "status": "partial", "class": "vendor_gap", "hole_hours": 2.0, "missing_ids": 0,
+           "why": "the bought file itself has no ticks 13:00-15:00 ET"},
+          {"session": "2026-09-07", "status": "missing", "class": "not_a_hole", "why": "exchange holiday: its trades "
+                                                                                      "are filed under the next session"}]
+    report = {"generated_at_utc": "2026-09-25T21:30:00+00:00", "sessions_per_root": 5,
+              "summary": {"classes": {"whole": 1, "filling": 1, "lost": 1, "vendor_gap": 1, "not_a_hole": 1},
+                          "filling": {"hole_hours": 2.0, "missing_ids": 500, "until_utc": "2026-09-27T00:00:00+00:00"},
+                          "lost": {"hole_hours": 23.0, "missing_ids": 0}},
+              "changes": ["NQ 09-25 new: filling until 09-26 20:00 ET"],
+              "previous_generated_at_utc": "2026-09-25T20:30:00+00:00", "roots": {"NQ": nq}}
+    (tmp_path / "tick_coverage.json").write_text(json.dumps(report))
+    text = box(desk, charts).call("data_coverage", {})
+    assert "Coverage as of 09-25 17:30 ET · last 5 sessions/root: 1 whole, 1 filling, 1 lost, 1 vendor gap, " \
+           "1 not a hole" in text
+    assert "Still at the broker until 09-26 20:00 ET: 2 hole-hours, 500 tick ids" in text
+    assert "Left the broker: 23 hole-hours, 0 tick ids" in text
+    assert "| NQ | 2026-09-25 | 09-26 20:00 ET | 2 | 1,499,500 | 500 tick ids have left the broker; the rest" in text
+    assert "| NQ | 2026-09-24 | 23 | — | nothing recorded, and it has left the broker |" in text
+    assert "Vendor gap (the bought file itself is empty there): NQ 2026-09-22" in text
+    assert "Not a hole: 1 session (exchange holiday 1)" in text
+    assert "Changed since 16:30 ET: NQ 09-25 new: filling until 09-26 20:00 ET" in text
+    assert "Needs Massive" not in text
+    only = box(desk, charts).call("data_coverage", {"root": "es"})
+    assert "ES: no entries in the report." in only and "2026-09-25" not in only
+
+
+WATCH = {"at_utc": "2026-09-29T13:55:00+00:00", "level": "warn", "late_s": 600, "late": ["NQ", "ES"], "thin": ["NQ"],
+         "silent": [], "line": "data: the live feed is 10 min late (2 of 2 markets); thin: NQ got 16% of its ticks "
+                               "08:00-09:00 ET",
+         "markets": {"NQ": {"open": True, "late_s": 600, "share": 0.16, "received": 160, "published": 1000,
+                            "silent_s": None, "hour_utc": "2026-09-29T12:00:00+00:00"},
+                     "ES": {"open": True, "late_s": 600, "share": 1.0, "received": 900, "published": 900,
+                            "silent_s": None, "hour_utc": "2026-09-29T12:00:00+00:00"},
+                     "YM": {"open": False}},
+         "refused": [{"root": "ZN", "session": "2026-09-28", "why": "MergeRefused: ids disagree", "broker_has_it": True}],
+         "leaving": [{"root": "GC", "session": "2026-09-28", "from_utc": "2026-09-28T07:00:00+00:00",
+                      "to_utc": "2026-09-28T13:00:00+00:00", "why": "360 ticks",
+                      "leaves_utc": "2026-09-30T00:00:00+00:00"}]}
+
+
+def test_data_coverage_leads_with_the_data_watchdog(desk, charts, monkeypatch, tmp_path):
+    """The hourly job's watchdog (homebase/.state/data_watch.json) is read off disk like the report: late, thin,
+    silent, refused merges and what is about to leave the broker come first -- with or without a report."""
+    monkeypatch.setattr("homebase.paths.state_dir", lambda: tmp_path)
+    (tmp_path / "data_watch.json").write_text(json.dumps(WATCH))
+    text = box(desk, charts).call("data_coverage", {})                 # 10:00 ET: checked five minutes ago
+    assert text.startswith("Data watch (checked 09:55 ET): the live feed is 10 min late")
+    assert "| NQ | 10 min | 16% (160 of 1,000) | — |" in text and "| ES | 10 min |" in text and "| YM |" not in text
+    assert "ZN 2026-09-28" in text and "ids disagree" in text
+    assert "GC 2026-09-28 03:00-09:00 ET (360 ticks) leaves 09-29 20:00 ET" in text
+    assert "No coverage report" in text                                # still said, after the watchdog's part
+    (tmp_path / "data_watch.json").write_text(json.dumps({"at_utc": "2026-09-29T13:55:00+00:00", "level": "fine",
+                                                          "line": "data: fine", "markets": {}}))
+    assert box(desk, charts).call("data_coverage", {}).startswith("Data watch (checked 09:55 ET): fine")
+
+
+def test_data_coverage_falls_back_to_the_reading_inside_the_report(desk, charts, monkeypatch, tmp_path):
+    monkeypatch.setattr("homebase.paths.state_dir", lambda: tmp_path)
+    (tmp_path / "tick_coverage.json").write_text(json.dumps({"generated_at_utc": "x", "roots": {}, "watch": WATCH}))
+    assert box(desk, charts).call("data_coverage", {}).startswith("Data watch (checked 09:55 ET): the live feed is")
+
+
+def test_a_watchdog_that_stopped_is_said_not_shown_as_current(desk, charts, monkeypatch, tmp_path):
+    monkeypatch.setattr("homebase.paths.state_dir", lambda: tmp_path)
+    (tmp_path / "data_watch.json").write_text(json.dumps({**WATCH, "at_utc": "2026-09-29T09:00:00+00:00"}))
+    text = box(desk, charts).call("data_coverage", {})                 # 10:00 ET: the last check was at 05:00
+    assert text.startswith("Data watch: NOT CHECKED since 05:00 ET") and "10 min late" in text
+    (tmp_path / "data_watch.json").write_text("not json")
+    assert "Data watch" not in box(desk, charts).call("data_coverage", {})   # unreadable: left out, never an error
+
+
+def test_desk_readiness_adds_the_data_watchdogs_line(desk, charts, monkeypatch, tmp_path):
+    """The desk computes its own readiness (accounts, power, timers); whether the market data under it is late or
+    thin is the tick job's watchdog, read off disk here -- the desk's own verdict is passed on unchanged."""
+    monkeypatch.setattr("homebase.paths.state_dir", lambda: tmp_path)
+    assert "Market data" not in box(desk, charts).call("desk_readiness", {})          # no watchdog yet: nothing added
+    (tmp_path / "data_watch.json").write_text(json.dumps(WATCH))
+    text = box(desk, charts).call("desk_readiness", {})
+    assert "Readiness: NOT READY" in text and "sim042" in text                          # the desk's part, as it was
+    assert "| warn | Market data | the live feed is 10 min late (2 of 2 markets); thin: NQ got 16%" in text
+    assert "(checked 09:55 ET)" in text
+    (tmp_path / "data_watch.json").write_text(json.dumps({"at_utc": "2026-09-29T13:55:00+00:00", "level": "fine",
+                                                          "line": "data: fine", "markets": {}}))
+    assert "| ok | Market data | fine (checked 09:55 ET) |" in box(desk, charts).call("desk_readiness", {})
+    (tmp_path / "data_watch.json").write_text(json.dumps({**WATCH, "at_utc": "2026-09-29T09:00:00+00:00"}))
+    assert "| warn | Market data | not checked since 05:00 ET" in box(desk, charts).call("desk_readiness", {})
+
+
 def test_services_health_reachability_pids_log_and_recorders(desk, charts, monkeypatch, tmp_path):
     monkeypatch.setattr("homebase.paths.state_dir", lambda: tmp_path)
     (tmp_path / "ticks.log").write_text("line1\nline2\n")

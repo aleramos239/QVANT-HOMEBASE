@@ -521,9 +521,63 @@ def file_runs(path: Path, cache: dict) -> dict:
     return out
 
 
+HOUR_MS = 3_600_000
+THIN_SHARE = 0.8                        # an hour holding under this share of its tick ids is THIN: its candles and
+                                        # volume are built from a tape with pieces missing. The thinned live stream holds
+                                        # 16% (NQ 2026-10-05 09:00-11:00 ET); a restart that lost 11 ticks of 5,000, 99.8%
+THIN_MIN_IDS = 20                       # ... judged only on an hour with at least this many ids
+
+
+def hours_of(runs: list, start_ms: int, end_ms: int) -> list[list]:
+    """What `runs` (a file's, or several files' as one: union_runs) hold of [start_ms, end_ms), clock hour
+    by clock hour from start_ms: [[hour_start_ms, ids held, ids missing], ...] for each hour that holds or
+    misses any. A run's ids are spread over the hours it spans by time (exact when it lies in one hour); so
+    are the ids missing between two runs, over the time between their two edge ticks -- the only place
+    those trades can be."""
+    n = max(0, -(-(end_ms - start_ms) // HOUR_MS))
+    held, miss = [0.0] * n, [0.0] * n
+
+    def spread(acc: list, a: int, b: int, count: int) -> None:
+        if count <= 0 or b < start_ms or a >= end_ms:
+            return
+        if b <= a:
+            acc[(a - start_ms) // HOUR_MS] += count
+            return
+        for k in range(max(0, (a - start_ms) // HOUR_MS), min(n - 1, (b - start_ms) // HOUR_MS) + 1):
+            lo = start_ms + k * HOUR_MS
+            acc[k] += count * (min(b, lo + HOUR_MS, end_ms) - max(a, lo)) / (b - a)
+
+    prev = None
+    for r in sorted(runs):
+        spread(held, r[2], r[3], r[1] - r[0] + 1)
+        if prev is not None:
+            spread(miss, prev[3], r[2], r[0] - prev[1] - 1)
+        prev = r
+    return [[start_ms + k * HOUR_MS, round(held[k]), round(miss[k])] for k in range(n)
+            if round(held[k]) or round(miss[k])]
+
+
+def short_hours(hours: list) -> list[list]:
+    """hours_of's rows as the stretches to look at, adjacent hours of one kind joined: [[from_ms, to_ms, kind,
+    ids missing], ...]. "empty": ids are missing and not one tick is held; "thin": ticks are held, but under
+    THIN_SHARE of the hour's ids (judged from THIN_MIN_IDS ids up)."""
+    out: list[list] = []
+    for a, held, miss in hours:
+        if not held and miss:
+            kind = "empty"
+        elif miss and held + miss >= THIN_MIN_IDS and held < THIN_SHARE * (held + miss):
+            kind = "thin"
+        else:
+            continue
+        if out and out[-1][1] == a and out[-1][2] == kind:
+            out[-1][1], out[-1][3] = a + HOUR_MS, out[-1][3] + miss
+        else:
+            out.append([a, a + HOUR_MS, kind, miss])
+    return out
+
+
 # ------------------------------------------------------------------ coverage
 COVERAGE_VERSION = 1
-HOUR_MS = 3_600_000
 EDGE_MS = 5 * 60 * 1000             # ticks this close to the open / the close count as reaching it
 NOT_MODELLED = (
     "Known: the 17:00-18:00 ET break, weekends, CME crypto trading 24/7 (BTC, MBT), and the "

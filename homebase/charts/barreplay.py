@@ -102,10 +102,11 @@ def _studies_of(live) -> list:
 
 class BarReplay:
     def __init__(self, store: TickStore, cache_dir, roots, now_ms, *, min_bar: dict, max_studies: int,
-                 wall=None, log=None):
+                 wall=None, log=None, known=None):
         self.store = store
-        # its own memo (never evicts the live charts'), small, and emptied whenever no replay is left
-        self.history = History(store, cache_dir=cache_dir, memo_max=MEMO_MAX)
+        # its own memo (never evicts the live charts'), small, and emptied whenever no replay is left;
+        # known: each session's known holes, as the live charts label them (charts.known)
+        self.history = History(store, cache_dir=cache_dir, memo_max=MEMO_MAX, known=known)
         self.roots = [r.upper() for r in roots]
         self.now_ms = now_ms                                 # the LIVE clock: which sessions are completed
         self.min_bar, self.max_studies = min_bar, max_studies

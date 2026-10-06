@@ -1267,6 +1267,15 @@ def test_the_charts_job_yields_the_cpu_to_the_trading_app():
     assert job["Label"] == "com.ramosquant.homebase-charts" and job.get("Nice") == 5
 
 
+def test_the_charts_job_may_hold_4096_files_open():
+    """2026-10-02: the service ran out of file descriptors (EMFILE) at launchd's default of 256 while the
+    machine was loaded. The limit was raised in the installed plist by hand -- an install from the template
+    would have put 256 back."""
+    tpl = Path(__file__).resolve().parent.parent / "deploy" / "com.ramosquant.homebase-charts.plist.template"
+    job = plistlib.loads(tpl.read_bytes().replace(b"__REPO__", b"/repo"))
+    assert job["SoftResourceLimits"] == {"NumberOfFiles": 4096}
+
+
 TREND = {"id": "d1", "type": "trend", "color": "#2962FF",
          "points": [{"t": 1790000000000, "p": 30900.25}, {"t": 1790000600000, "p": 30950.0}]}
 HLINE = {"id": "d2", "type": "hline", "points": [{"p": 30925.5}]}
@@ -1908,3 +1917,168 @@ def test_a_repair_landing_in_the_archive_reaches_a_running_service_without_a_res
             time.sleep(0.4)                                      # unchanged archive: no re-merge on later polls
             assert len(loaded_in) == n
     assert loaded_in and loop_thread and not any(loaded_in)      # every repair load ran off the event loop's thread
+
+
+# ------------------------------------------------------------------ a past session repaired under an open chart
+class IdleFeed:
+    """A live feed that delivers nothing: the service runs, its loops poll."""
+
+    def __init__(self, roots, on_ticks, on_subscribed=None):
+        self.ws = None
+
+    async def run(self):
+        while True:
+            await asyncio.sleep(0.01)
+
+    def stop(self):
+        pass
+
+    def budget_used(self):
+        return 0
+
+    def count_request(self):
+        pass
+
+    def status(self):
+        return {"mode": "live", "connected": True, "error": None, "roots": {}, "budget_hour": 0, "reconnects": 0}
+
+
+def volume_of(history, d):
+    return sum(b["v"] for b in history["bars"] if b["s"] == d.isoformat())
+
+
+def test_a_fill_landing_in_yesterdays_archive_reloads_the_charts_that_show_it(tmp_path, monkeypatch):
+    """history.bars kept a past session's bars in memory until the 18:00 roll, and the open charts their copy:
+    a hole the hourly fill repaired in YESTERDAY's file stayed on the chart until the roll or a restart. The
+    service notices the file changed (History.changed, off the event loop) and reloads the root's charts."""
+    base = tmp_path / "ticks"
+    early = rows(session_ms(P, 9, 30), [100.0] * 5)
+    write_archive(base, "NQ", P, "NQZ6", early, complete=False)
+    write_gz(base / "NQ" / "2026" / f"{D}_NQZ6.live.csv.gz", rows(session_ms(D, 9, 40), [200.0, 200.25], first_id=100))
+    monkeypatch.setattr("homebase.charts.server.REPAIR_POLL_S", 0.05)
+    monkeypatch.setattr("homebase.charts.server.PAST_REDRAW_S", 2.0)
+    app = create_app(roots=["NQ", "ES"], base=base, feed_factory=IdleFeed, now_ms=lambda: session_ms(D, 9, 45),
+                     state=tmp_path / "state")
+    sub = {"op": "sub", "id": "a", "root": "nq", "spec": "time:60", "studies": []}
+    with TestClient(app, base_url="http://127.0.0.1:8852") as client:
+        with client.websocket_connect("/ws", headers={"host": "localhost:8852"}) as ws:
+            ws.send_json(sub)
+            assert volume_of(next_of(ws, "history"), P) == 5
+            ws.send_json({"op": "sub", "id": "b", "root": "es", "spec": "time:60", "studies": []})
+            next_of(ws, "history")
+            write_archive(base, "NQ", P, "NQZ6", early + rows(session_ms(P, 11, 0), [101.0] * 7, first_id=50),
+                          complete=False)                              # the fill fetched 11:00 ET
+            assert next_within(ws, "reset", within_s=10)["id"] == "a"   # NQ's chart -- not ES's
+            ws.send_json(sub)
+            assert volume_of(next_of(ws, "history"), P) == 12
+            # a fill lands piece by piece: the next piece, seconds later, waits for PAST_REDRAW_S -- no reload storm
+            write_archive(base, "NQ", P, "NQZ6", early + rows(session_ms(P, 11, 0), [101.0] * 9, first_id=50),
+                          complete=False)
+            with pytest.raises(TimeoutError):
+                next_within(ws, "reset", within_s=0.5)
+            assert next_within(ws, "reset", within_s=10)["id"] == "a"
+            ws.send_json(sub)
+            assert volume_of(next_of(ws, "history"), P) == 14
+
+
+# ------------------------------------------------------------------ what the tick job knows, on the chart
+def coverage_file(state, holes):
+    """homebase/.state/tick_coverage.json as the tick job writes it: NQ's session P with these classed holes."""
+    state.mkdir(parents=True, exist_ok=True)
+    iso = lambda ms: dt.datetime.fromtimestamp(ms / 1000, dt.timezone.utc).isoformat()   # noqa: E731
+    (state / "tick_coverage.json").write_text(json.dumps({"generated_at_utc": "2026-09-24T13:00:00+00:00", "roots": {
+        "NQ": [{"session": P.isoformat(), "status": "partial", "class": holes[0][2] if holes else "whole",
+                "holes": [{"start_utc": iso(a), "end_utc": iso(b), "class": c} for a, b, c in holes]}]}}))
+
+
+def test_a_sessions_known_holes_ride_with_its_history_and_a_new_report_reloads_the_chart(tmp_path, monkeypatch):
+    """The tick job's coverage report classes every hole of the last sessions. The chart service reads it off
+    disk (never on the event loop) and hands each session its holes; when a later report says otherwise -- the
+    fill landed, or what was filling is now lost -- the charts of that root reload."""
+    state = tmp_path / "state"
+    lost = [(session_ms(P, 11, 0), session_ms(P, 13, 0), "lost")]
+    coverage_file(state, lost)
+    monkeypatch.setattr("homebase.charts.server.REPAIR_POLL_S", 0.05)
+    monkeypatch.setattr("homebase.charts.server.PAST_REDRAW_S", 0.0)
+    app = create_app(roots=["NQ"], base=archive(tmp_path), feed_factory=IdleFeed, now_ms=lambda: session_ms(D, 9, 45),
+                     state=state)
+    sub = {"op": "sub", "id": "a", "root": "nq", "spec": "time:60", "studies": []}
+    with TestClient(app, base_url="http://127.0.0.1:8852") as client:
+        with client.websocket_connect("/ws", headers={"host": "localhost:8852"}) as ws:
+            ws.send_json(sub)
+            sessions = {s["date"]: s for s in next_of(ws, "history")["sessions"]}
+            assert sessions[P.isoformat()]["holes"] == [[lost[0][0], lost[0][1], "lost"]]
+            assert "holes" not in sessions[D.isoformat()]
+            coverage_file(state, [(session_ms(P, 11, 0), session_ms(P, 12, 0), "filling")])
+            assert next_within(ws, "reset", within_s=10)["id"] == "a"
+            ws.send_json(sub)
+            sessions = {s["date"]: s for s in next_of(ws, "history")["sessions"]}
+            assert sessions[P.isoformat()]["holes"] == [[session_ms(P, 11, 0), session_ms(P, 12, 0), "filling"]]
+
+
+def test_the_status_carries_the_watchdogs_reading_and_how_late_each_root_runs(tmp_path, monkeypatch):
+    """For the strip: the data watchdog's last reading (homebase/.state/data_watch.json, read off disk on the
+    repair poll) and, live from the hub, how far behind the wall each root's newest print was."""
+    state = tmp_path / "state"
+    state.mkdir()
+    monkeypatch.setattr("homebase.charts.server.REPAIR_POLL_S", 0.05)
+    now = session_ms(D, 9, 45)
+    feeds = []
+
+    class Feed(IdleFeed):
+        def __init__(self, roots, on_ticks, on_subscribed=None):
+            super().__init__(roots, on_ticks, on_subscribed)
+            self.on_ticks = on_ticks
+            feeds.append(self)
+
+        def status(self):
+            return {**super().status(), "roots": {"NQ": {"contract": "NQZ6", "last_tick_age_s": 1.0, "error": None},
+                                                  "ES": {"contract": "ESZ6", "last_tick_age_s": None, "error": None}}}
+
+    app = create_app(roots=["NQ", "ES"], base=tmp_path / "ticks", feed_factory=Feed, now_ms=lambda: now, state=state)
+    with TestClient(app, base_url="http://127.0.0.1:8852") as client:
+        st = client.get("/api/status").json()
+        assert st["data"] is None and st["roots"]["NQ"]["late_s"] is None       # no reading, no print yet
+        feeds[0].on_ticks("NQ", "NQZ6", rows(now - 600_000, [100.0], first_id=1))   # a print ten minutes old
+        (state / "data_watch.json").write_text(json.dumps({
+            "at_utc": "2026-09-24T13:40:00+00:00", "level": "warn", "late_s": 600, "late": ["NQ"], "thin": ["NQ"],
+            "silent": [], "line": "data: the live feed is 10 min late (1 of 1 markets)", "refused": [], "leaving": []}))
+        deadline = time.time() + 5
+        while client.get("/api/status").json()["data"] is None and time.time() < deadline:
+            time.sleep(0.05)
+        st = client.get("/api/status").json()
+        assert st["data"]["thin"] == ["NQ"] and st["data"]["age_s"] == 300 and st["data"]["stale"] is False
+        assert st["roots"]["NQ"]["late_s"] == 600.0 and st["roots"]["ES"]["late_s"] is None
+        assert st["data"]["today"] == {}                              # the reading says nothing of today's hours
+
+
+def test_todays_thin_hours_reach_the_page_only_from_a_reading_newer_than_the_tape(tmp_path, monkeypatch):
+    state = tmp_path / "state"
+    state.mkdir()
+    monkeypatch.setattr("homebase.charts.server.REPAIR_POLL_S", 0.05)
+    clock = [session_ms(D, 9, 45)]
+    spans = [[session_ms(D, 8, 0), session_ms(D, 9, 0), "thin"]]
+
+    def reading(at):
+        (state / "data_watch.json").write_text(json.dumps({
+            "at_utc": dt.datetime.fromtimestamp(at / 1000, dt.timezone.utc).isoformat(), "level": "warn", "thin": ["NQ"],
+            "line": "data: thin", "markets": {"NQ": {"open": True, "session": D.isoformat(), "holes": spans}}}))
+
+    def today():
+        deadline = time.time() + 5
+        while time.time() < deadline:
+            d = client.get("/api/status").json()["data"]
+            if d is not None and d["at_utc"] == want:
+                return d["today"]
+            time.sleep(0.05)
+        raise AssertionError("the reading never reached the status")
+
+    app = create_app(roots=["NQ"], base=tmp_path / "ticks", feed_factory=IdleFeed, now_ms=lambda: clock[0], state=state)
+    with TestClient(app, base_url="http://127.0.0.1:8852") as client:
+        reading(clock[0] - 60_000)                                    # read a minute BEFORE the tape was built (start-up)
+        want = "2026-09-24T13:44:00+00:00"
+        assert today() == {}
+        clock[0] += 120_000
+        reading(clock[0] - 30_000)                                    # the tick job's next run ended: read after it
+        want = "2026-09-24T13:46:30+00:00"
+        assert today() == {"NQ": spans}

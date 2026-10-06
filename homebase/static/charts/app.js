@@ -1854,6 +1854,7 @@ function showStatus(s) {
   recEl.title = s.mode === 'live' && rec ? `Recorder: ${buffered} ticks buffered, not written yet` : '';
   recEl.classList.toggle('warn', !!(rec && rec.buffered >= C.REC_BUSY));
   statusLine = feed.textContent;
+  for (const c of cells) c.setToday(s.data && s.data.today);   // today's hours still short of their ticks: a light band
 }
 
 /* W1 (2026-09-28): a status bar too narrow for everything never cuts the connection or the desk state. Its lower-

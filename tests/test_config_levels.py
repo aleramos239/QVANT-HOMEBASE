@@ -15,6 +15,7 @@ NAMES = ("nq_nyam_flex", "nq_nyam_pro", "nq_orb_pro", "nq_pm_flex")
 def cfg_path(tmp_path, monkeypatch):
     p = tmp_path / "config.json"
     monkeypatch.setattr(desk_config, "config_path", lambda: p)
+    monkeypatch.setattr(desk_config, "_said", set())           # what a reader already named in the log: per test
     return p
 
 
@@ -91,3 +92,73 @@ def test_load_drops_removed_strategies_and_their_book_rows(cfg_path, caplog):
     assert "ym930" in said and "nq_open_long" in said and "nq10am" in said and "35" not in said
     saved = json.loads(cfg_path.read_text())
     assert "ym930" not in saved["strategies"] and "nq_open_long" not in saved["book"]
+
+
+# ---- a key this code does not know (2026-10-01: the desk, restarted on new code, wrote accounts with a "prop"
+# key; the chart service, still on the older code, raised on every reconnect for two hours)
+NEWER = {"accounts": {"a1": {"keyring_key": "k", "account_name": "A1", "live": True, "margin_tier": {"secret": 7}}},
+         "strategies": {"nq930": {"qty": 3, "new_switch": True}},
+         "book": {"nq930": [{"account": "a1", "qty": 2}]}}
+
+
+def test_the_desk_still_refuses_a_file_it_only_half_understands(cfg_path):
+    """Unchanged, on purpose: the unknown key may be a safety switch (shadow, only_dates), and the desk
+    rewrites this file -- it would erase the key."""
+    cfg_path.write_text(json.dumps(NEWER))
+    before = cfg_path.read_bytes()
+    with pytest.raises(TypeError, match="margin_tier"):
+        desk_config.load()
+    assert cfg_path.read_bytes() == before
+
+
+def test_a_reader_leaves_out_the_key_it_does_not_know_and_names_it_once(cfg_path, caplog):
+    cfg_path.write_text(json.dumps(NEWER))
+    before = cfg_path.read_bytes()
+    with caplog.at_level("WARNING", logger="homebase.config"):
+        cfg = desk_config.load(unknown="ignore")
+        desk_config.load(unknown="ignore")
+    a = cfg.accounts["a1"]
+    assert (a.keyring_key, a.account_name, a.live, a.prop) == ("k", "A1", True, {})
+    assert cfg.strategies["nq930"].qty == 3 and cfg.book == {"nq930": [{"account": "a1", "qty": 2}]}
+    said = [r.getMessage() for r in caplog.records]
+    assert len(said) == 2 and "margin_tier" in said[0] and "new_switch" in said[1]      # each key once, not per load
+    assert "secret" not in " ".join(said) and "7" not in " ".join(said)                  # the key, never its value
+    assert cfg_path.read_bytes() == before
+
+
+def test_a_reader_that_left_a_key_out_never_rewrites_the_file(cfg_path, caplog):
+    """load() cleans a removed strategy out of the file. A reader that understood only part of the file must not:
+    its copy of the settings lacks the key it left out, and writing it back would erase that key."""
+    body = {**NEWER, "strategies": {**NEWER["strategies"], "ym930": {"qty": 1}}}
+    cfg_path.write_text(json.dumps(body))
+    before = cfg_path.read_bytes()
+    with caplog.at_level("WARNING", logger="homebase.config"):
+        cfg = desk_config.load(unknown="ignore")
+    assert "ym930" not in cfg.strategies and cfg_path.read_bytes() == before
+    assert any("not rewritten" in r.getMessage() for r in caplog.records)
+    del body["accounts"]["a1"]["margin_tier"], body["strategies"]["nq930"]["new_switch"]
+    cfg_path.write_text(json.dumps(body))                          # nothing unknown: the reader cleans it as ever
+    desk_config.load(unknown="ignore")
+    assert "ym930" not in json.loads(cfg_path.read_text())["strategies"]
+
+
+def test_with_nothing_unknown_both_ways_of_loading_give_the_same_settings(cfg_path):
+    from dataclasses import asdict
+    c = desk_config.load()
+    c.accounts["eval1"] = AccountCfg(keyring_key="k", account_name="E1", prop={"rules": "x", "start_balance": 50000})
+    c.strategies["nq_nyam_pro"].enabled = True
+    c.book["nq_nyam_pro"] = [{"account": "eval1", "qty": 4}]
+    desk_config.save(c)
+    assert asdict(desk_config.load()) == asdict(desk_config.load(unknown="ignore"))
+
+
+def test_the_chart_service_and_the_tick_job_find_their_login_in_a_file_with_a_key_they_do_not_know(
+        cfg_path, tmp_path, monkeypatch):
+    import datetime as dt
+
+    from homebase import ticks as T
+    cfg_path.write_text(json.dumps(NEWER))
+    monkeypatch.setattr(T, "state_dir", lambda: tmp_path)
+    exp = (dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=1)).isoformat()
+    (tmp_path / "a1.tokens.json").write_text(json.dumps({"md_access_token": "tok", "expiration_time": exp}))
+    assert T.md_token() == ("tok", "live") and T.accounts_by_env() == {"live": "A1", "demo": None}

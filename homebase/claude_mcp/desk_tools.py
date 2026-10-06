@@ -5,8 +5,9 @@ kept in its own module so the tester tools above stay exactly as they were.
 READ tools go through DeskClient (desk_client.py, an EXACT route allowlist) or the charts
 service's existing Client with a widened prefix (export routes only -- still never /api/tester/
 work done by anything but the tester tools already above). `data_coverage` is the one exception:
-it reads a local file (homebase/.state/tick_coverage.json) straight off disk, same as this
-package's own draftstore reads/writes -- no request goes out for it.
+it reads two local files (homebase/.state/tick_coverage.json and the data watchdog's
+data_watch.json) straight off disk, same as this package's own draftstore reads/writes -- no
+request goes out for it. `desk_readiness` adds the watchdog's one line to the desk's own checks.
 
 OPERATE tools (account_reconnect, account_remove, export_start, export_status) all:
   * refuse inside the 09:10-09:35 ET weekday window -- cheaply, before any request (2026-09-29
@@ -46,6 +47,8 @@ EXPORT_PREFIX = "/api/export/"
 LAUNCHD_LABELS = {"desk": "com.ramosquant.homebase", "charts": "com.ramosquant.homebase-charts",
                   "ticks": "com.ramosquant.homebase-ticks"}
 TICKS_LOG_TAIL = 20
+WATCH_STALE_S = 3 * 3600      # the hourly job's data watchdog this old has stopped: said, never shown as current
+WATCH_LISTED = 10             # stretches about to leave the broker that data_coverage lists, then counts
 JOURNAL_LIMIT_DEFAULT = 50
 JOURNAL_LIMIT_MAX = 500
 
@@ -85,6 +88,114 @@ def _kv(d) -> str:
     return ", ".join(f"{k}={v}" for k, v in (d or {}).items()) or "(none)"
 
 
+def _et(iso: str, fmt: str = "%H:%M") -> str:
+    return dt.datetime.fromisoformat(iso).astimezone(ET).strftime(fmt)
+
+
+def _data_watch(now: dt.datetime, st: dict | None = None) -> tuple[dict, str, bool] | None:
+    """The tick job's data watchdog as it last wrote it (homebase/.state/data_watch.json, read off disk; or
+    `st`, the copy a coverage report carries): (state, its line without the "data: " prefix, stale?), or None
+    when there is none to read. stale: the last check is over WATCH_STALE_S old -- the job has stopped
+    finishing runs, and its reading is not now."""
+    try:
+        if st is None:
+            st = json.loads((paths.state_dir() / "data_watch.json").read_text())
+        at = dt.datetime.fromisoformat(st["at_utc"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    line = str(st.get("line") or "").removeprefix("data: ")
+    return st, line, (now - at).total_seconds() > WATCH_STALE_S
+
+
+def _watch_lines(st: dict, line: str, stale: bool) -> list[str]:
+    """data_coverage's first part: the watchdog's line, the markets it flags, refused merges, what is leaving."""
+    at = _et(st["at_utc"])
+    out = [f"Data watch: NOT CHECKED since {at} ET (the tick job has not finished a run since) -- last reading: {line}"
+           if stale else f"Data watch (checked {at} ET): {line}"]
+    mk = st.get("markets") or {}
+    flagged = [r for r in mk if r in (st.get("late") or []) + (st.get("thin") or []) + (st.get("silent") or [])]
+    if flagged:
+        def mins(v):
+            return f"{round(v / 60)} min" if v else "—"
+        rows = [[r, mins(mk[r].get("late_s") if r in (st.get("late") or []) else None),
+                 f"{round(100 * mk[r]['share'])}% ({mk[r]['received']:,} of {mk[r]['published']:,})"
+                 if mk[r].get("published") else "—", mins(mk[r].get("silent_s"))] for r in flagged]
+        out += [_table(["market", "late", "got of its ticks (last full hour)", "silent"], rows)]
+    for x in st.get("refused") or []:
+        out.append(f"Merge refused, files still as they were: {x.get('root')} {x.get('session')} — {x.get('why')}"
+                   + (" (the broker still has it)" if x.get("broker_has_it") else " (gone from the broker)"))
+    gone = st.get("leaving") or []
+    for x in gone[:WATCH_LISTED]:
+        out.append(f"Leaving the broker: {x['root']} {x['session']} {_et(x['from_utc'])}-{_et(x['to_utc'])} ET "
+                   f"({x.get('why')}) leaves {_et(x['leaves_utc'], '%m-%d %H:%M')} ET")
+    if len(gone) > WATCH_LISTED:
+        out.append(f"... and {len(gone) - WATCH_LISTED} more stretches about to leave the broker.")
+    return out + [""]
+
+
+NOT_A_HOLE = (("exchange holiday", "exchange holiday"), ("the 17:00 hour", "the 17:00 hour"), ("weekend", "weekend"))
+ROWS_MAX = 100
+
+
+def _classed(rep: dict, roots: list[str]) -> list[str]:
+    """data_coverage for a report whose sessions carry a class (homebase.tickcoverage.CLASSES): the counts,
+    what the broker still has (until when) and what is lost as tables, the vendor's gaps as a list, the
+    not-a-hole sessions as a count by reason, and what changed since the report before."""
+    by_root, s = rep.get("roots") or {}, rep.get("summary") or {}
+    c, fill, lost = s.get("classes") or {}, s.get("filling") or {}, s.get("lost") or {}
+    lines = [f"Coverage as of {_et(rep['generated_at_utc'], '%m-%d %H:%M')} ET · last {rep.get('sessions_per_root')} "
+             f"sessions/root: {c.get('whole', 0)} whole, {c.get('filling', 0)} filling, {c.get('lost', 0)} lost, "
+             f"{c.get('vendor_gap', 0)} vendor gap, {c.get('not_a_hole', 0)} not a hole"]
+    if fill.get("until_utc"):
+        lines.append(f"Still at the broker until {_et(fill['until_utc'], '%m-%d %H:%M')} ET: "
+                     f"{fill.get('hole_hours', 0):g} hole-hours, {fill.get('missing_ids', 0):,} tick ids")
+    lines += [f"Left the broker: {lost.get('hole_hours', 0):g} hole-hours, {lost.get('missing_ids', 0):,} tick ids", ""]
+    rows = {k: [] for k in ("filling", "lost", "vendor_gap", "not_a_hole")}
+    for r in roots:
+        entries = by_root.get(r)
+        if entries is None:
+            lines.append(f"{r}: no entries in the report.")
+            continue
+        counts: dict = {}
+        for e in entries:
+            counts[e.get("class")] = counts.get(e.get("class"), 0) + 1
+            if e.get("class") in rows:
+                rows[e["class"]].append((r, e))
+        lines.append(f"{r}: " + _kv(counts))
+
+    def num(e, key, k):
+        """The session's hole-hours / missing ids of that fate ("hours" / "ids": {"filling": n, "lost": n})."""
+        n = (e.get(key) or {}).get(k)
+        return f"{int(n) if n == int(n) else n:,}" if n else "—"
+    if rows["filling"]:
+        lines += ["", "Filling (the broker still has it):",
+                  _table(["root", "session", "until", "hole hours", "missing ids", "what"],
+                         [[r, e["session"], f"{_et(e['until_utc'], '%m-%d %H:%M')} ET" if e.get("until_utc") else "—",
+                           num(e, "hours", "filling"), num(e, "ids", "filling"), e.get("why", "")]
+                          for r, e in rows["filling"][:ROWS_MAX]])]
+    if rows["lost"]:
+        lines += ["", "Lost (left the broker: only bought data can fill it):",
+                  _table(["root", "session", "hole hours", "missing ids", "what"],
+                         [[r, e["session"], num(e, "hours", "lost"), num(e, "ids", "lost"), e.get("why", "")]
+                          for r, e in rows["lost"][:ROWS_MAX]])]
+    more = sum(max(0, len(rows[k]) - ROWS_MAX) for k in ("filling", "lost"))
+    if more:
+        lines.append(f"... and {more} more.")
+    if rows["vendor_gap"]:
+        lines += ["", "Vendor gap (the bought file itself is empty there): "
+                  + ", ".join(f"{r} {e['session']}" for r, e in rows["vendor_gap"])]
+    if rows["not_a_hole"]:
+        n = len(rows["not_a_hole"])
+        why = [f"{label} {k}" for key, label in NOT_A_HOLE
+               if (k := sum(1 for _, e in rows["not_a_hole"] if key in (e.get("why") or "")))]
+        lines += ["", f"Not a hole: {n} session{'s' if n != 1 else ''} ({', '.join(why) or 'the exchange was closed'})"]
+    if rep.get("changes"):
+        since = f"{_et(rep['previous_generated_at_utc'])} ET" if rep.get("previous_generated_at_utc") \
+            else "the previous report"
+        lines += ["", f"Changed since {since}: " + "; ".join(rep["changes"][:ROWS_MAX])]
+    return lines
+
+
 # ---------------------------------------------------------------- schemas
 
 def _spec(name, description, props=None, required=()):
@@ -105,10 +216,13 @@ SPECS = [
            "limit": {"type": "integer", "minimum": 1, "maximum": JOURNAL_LIMIT_MAX,
                      "default": JOURNAL_LIMIT_DEFAULT}}),
     _spec("desk_readiness", "The desk's morning readiness checks (accounts connected, power, "
-          "strategies armed/assigned, the 9:30 timer gated): ready or not, and every check."),
-    _spec("data_coverage", "Tick/depth archive holes per root, session and hour, from the last "
-          "coverage report (homebase/.state/tick_coverage.json), and which sessions need a Massive "
-          "backfill. Empty if no report has been written yet.",
+          "strategies armed/assigned, the 9:30 timer gated): ready or not, and every check -- plus one "
+          "line from the tick job's data watchdog: is the market data late, thin or silent."),
+    _spec("data_coverage", "The data watchdog's last reading (live feed late / thin / silent, refused "
+          "merges, what is about to leave the broker), then the tick archive's last coverage report "
+          "(homebase/.state/tick_coverage.json): every session as whole, filling (the broker still has "
+          "it: until when), lost (only bought data can fill it), vendor gap or not a hole, and what "
+          "changed since the report before. Says so if no report has been written yet.",
           {"root": {"type": "string", "description": "Only this root, e.g. NQ (default: every root)."}}),
     _spec("services_health", "Whether the desk and charts service answer, their launchd PIDs, the "
           "nightly tick job's last log lines, and each recorder's most recent archive file time."),
@@ -215,22 +329,35 @@ class DeskMixin:
         r = (self.desk.get("/api/status") or {}).get("readiness") or {}
         rows = [[c.get("level"), c.get("label"), c.get("detail")] for c in r.get("checks") or []]
         head = f"Readiness: {'READY' if r.get('ready') else 'NOT READY'}"
+        watch = _data_watch(self._now_et())          # the tick job's, off disk: the desk's verdict stays its own
+        if watch is not None:
+            st, line, stale = watch
+            at = _et(st["at_utc"])
+            rows.append(["warn", "Market data", f"not checked since {at} ET — last reading: {line}"] if stale
+                        else ["ok" if st.get("level") == "fine" else "warn", "Market data", f"{line} (checked {at} ET)"])
         return head + "\n" + _table(["level", "check", "detail"], rows)
 
     # ---- data_coverage
 
     def t_data_coverage(self, root=None) -> str:
+        watch = _data_watch(self._now_et())
+        head = "\n".join(_watch_lines(*watch)) + "\n" if watch is not None else ""
         p = paths.state_dir() / "tick_coverage.json"
         if not p.exists():
-            return ("No coverage report yet (homebase/.state/tick_coverage.json is missing) -- "
-                    "needs a coverage run (python -m homebase.ticks --coverage).")
+            return head + ("No coverage report yet (homebase/.state/tick_coverage.json is missing) -- "
+                           "needs a coverage run (python -m homebase.ticks --coverage).")
         try:
             rep = json.loads(p.read_text())
         except ValueError as e:
             raise ToolError(f"tick_coverage.json is not valid JSON: {e}") from None
+        if watch is None:                             # no state file: the reading the report itself carries
+            watch = _data_watch(self._now_et(), rep.get("watch"))
+            head = "\n".join(_watch_lines(*watch)) + "\n" if watch is not None else ""
         by_root = rep.get("roots") or {}
         roots = [root.upper()] if root else sorted(by_root)
         s = rep.get("summary") or {}
+        if any("class" in e for es in by_root.values() for e in es):
+            return head + "\n".join(_classed(rep, roots))
         lines = [f"Coverage as of {rep.get('generated_at_utc')} · last {rep.get('sessions_per_root')} sessions/root · "
                  f"{s.get('complete', 0)} complete, {s.get('partial', 0)} partial "
                  f"({s.get('hole_hours', 0):g} hole-hours), {s.get('live_only', 0)} live-only, "
@@ -253,7 +380,7 @@ class DeskMixin:
                   _table(["root", "session", "status", "hole hours", "missing ids"], needs_massive[:100])]
         if len(needs_massive) > 100:
             lines.append(f"... and {len(needs_massive) - 100} more.")
-        return "\n".join(lines)
+        return head + "\n".join(lines)
 
     # ---- services_health
 

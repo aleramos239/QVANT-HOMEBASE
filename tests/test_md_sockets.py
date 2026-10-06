@@ -103,7 +103,7 @@ def test_md_token_on_disk_takes_the_freshest_token_of_the_preferred_login(tmp_pa
     acct = lambda live, label: NS(live=live, label=label, account_name=label)   # noqa: E731
     cfg = NS(accounts={"demo1": acct(False, "D1"), "demo2": acct(False, "D2"),
                        "live1": acct(True, "L1"), "live2": acct(True, "L2")})
-    monkeypatch.setattr(T.config_mod, "load", lambda: cfg)
+    monkeypatch.setattr(T.config_mod, "load", lambda **k: cfg)
     monkeypatch.setattr(T, "state_dir", lambda: tmp_path)
     now = dt.datetime.now(dt.timezone.utc)
     for aid, mins in (("demo1", 30), ("demo2", 75), ("live1", 79), ("live2", 1)):

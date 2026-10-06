@@ -421,7 +421,7 @@ class TokenDesk:
         self.state.mkdir()
         self.after, self.sleeps, self.calls, self.now = after, [], 0, now
         monkeypatch.setattr(T, "state_dir", lambda: self.state)
-        monkeypatch.setattr(T.config_mod, "load", lambda: SimpleNamespace(
+        monkeypatch.setattr(T.config_mod, "load", lambda **k: SimpleNamespace(
             accounts={"acct": SimpleNamespace(live=True)}))
         monkeypatch.setattr(T, "now_et", lambda: self.now)
         monkeypatch.setattr(T, "report_due", lambda p: False)
@@ -477,7 +477,7 @@ def test_only_a_missing_token_is_waited_out(tmp_path, monkeypatch, capsys):
 
 def test_md_token_says_NoMdToken_only_when_there_is_no_token_at_all(tmp_path, monkeypatch):
     from types import SimpleNamespace
-    monkeypatch.setattr(T.config_mod, "load", lambda: SimpleNamespace(
+    monkeypatch.setattr(T.config_mod, "load", lambda **k: SimpleNamespace(
         accounts={"demo1": SimpleNamespace(live=False)}))
     monkeypatch.setattr(T, "state_dir", lambda: tmp_path)
     with pytest.raises(T.NoMdToken, match="no valid md token on disk"):
@@ -617,7 +617,7 @@ class NoTokenYet:
         self.state, self.nw, self.after, self.sleeps = tmp_path / "state", nw, after, []
         self.state.mkdir()
         monkeypatch.setattr(T, "state_dir", lambda: self.state)
-        monkeypatch.setattr(T.config_mod, "load", lambda: SimpleNamespace(
+        monkeypatch.setattr(T.config_mod, "load", lambda **k: SimpleNamespace(
             accounts={"acct": SimpleNamespace(live=True)}))
         monkeypatch.setattr(T, "coverage_report", lambda *a, **k: None)
 

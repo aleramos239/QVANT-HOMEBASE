@@ -112,16 +112,28 @@ class Profile extends Layer {
   }
 }
 
-/* Shaded "no data" bands after the given bar indices (recording gaps). */
+/* Shaded "no data" bands after the given bar indices (recording gaps), and the known holes of the tick
+   archive as `bands` -- [fromIndex, toIndex, kind] over the chart's own bars: a run of empty slots, as wide as
+   the time it covers ('lost': grey, "no data"; 'filling': amber, the broker still has it), or the bars built
+   from a tape with pieces missing ('thin': a light tint). The words only where the band has room for them. */
+const BAND = { lost: ['gap', 'no data'], filling: ['gapFill', 'filling'], thin: ['gapThin', 'thin feed'] };
 class Gaps extends Layer {
-  constructor(P) { super(P); this.idx = []; }
+  constructor(P) { super(P); this.idx = []; this.bands = []; }
   z() { return 'bottom'; }
-  set(indices) { this.idx = indices; this.redraw(); }
+  set(indices, bands = []) { this.idx = indices; this.bands = bands; this.redraw(); }
   draw(target) {
-    if (!this.chart || !this.idx.length) return;
+    if (!this.chart || !(this.idx.length || this.bands.length)) return;
     const ts = this.chart.timeScale(), sp = Math.max(this.spacing(), 2);
     target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
       ctx.font = '11px -apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif'; ctx.textAlign = 'center';
+      for (const [from, to, kind] of this.bands) {
+        const x0 = ts.logicalToCoordinate(from), x1 = ts.logicalToCoordinate(to), look = BAND[kind];   // integer logicals (v5)
+        if (x0 == null || x1 == null || !look) continue;
+        const left = x0 - sp / 2, w = x1 - x0 + sp;
+        if (left > mediaSize.width || left + w < 0) continue;
+        ctx.fillStyle = this.P[look[0]]; ctx.fillRect(left, 0, w, mediaSize.height);
+        if (ctx.measureText(look[1]).width <= w - 8) { ctx.fillStyle = this.P.text2; ctx.fillText(look[1], left + w / 2, 30); }
+      }
       for (const i of this.idx) {
         // v5's logicalToCoordinate returns 0 (not null) for a fractional logical --
         // it only resolves real bar coordinates at integers -- so the band must be

@@ -710,7 +710,7 @@ def test_the_night_job_never_falls_back_to_the_login_the_930_bot_rides(tmp_path,
     import pytest
     cfg = SimpleNamespace(accounts={"demo1": SimpleNamespace(live=False),
                                     "live1": SimpleNamespace(live=True)})
-    monkeypatch.setattr(T.config_mod, "load", lambda: cfg)
+    monkeypatch.setattr(T.config_mod, "load", lambda **k: cfg)
     monkeypatch.setattr(T, "state_dir", lambda: tmp_path)
     exp = (dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=1)).isoformat()
     (tmp_path / "demo1.tokens.json").write_text(json.dumps({"md_access_token": "tok-demo", "expiration_time": exp}))

@@ -464,6 +464,49 @@ test('status: an open market that has not ticked yet is not "feeds ok" — neutr
   assert.deepEqual([mixed.dot, mixed.text, mixed.textClass], ['warn', 'NQ stale 3m · BTC no ticks yet', 'warn']);
 });
 
+/* The data's own state on the strip: how late the feed runs (the service measures it at every print) and whether
+   it is thin (the tick job's data watchdog, `data` in the status message). */
+const late = (age, late_s) => ({ ...tick(age), late_s });
+const watch = (more = {}) => ({ at_utc: '2026-10-06T13:55:00+00:00', age_s: 300, stale: false, level: 'warn',
+  line: 'data: thin: NQ got 16% of its ticks 08:00-09:00 ET (15 markets thin)', late: [], thin: ['NQ', 'ES'], silent: [],
+  refused: 0, leaving: 0, ...more });
+
+test('status: a feed ten minutes late says so in amber -- ticks flowing is not "feeds ok"', () => {
+  const f = C.feedSummary(live({ NQ: late(1, 600), ES: late(2, 601.2), YM: late(1, 600) }), ...WED_10);
+  assert.deepEqual([f.dot, f.text, f.textClass], ['warn', 'late 10 min', 'warn']);
+  assert.equal(f.title, 'NQ 1.0s, 10m late  ·  ES 2.0s, 10m late  ·  YM 1.0s, 10m late');
+  // on time (a fraction of a second behind): as it always read
+  assert.deepEqual(C.feedSummary(live({ NQ: late(1, 0.3), ES: late(2, 0) }), ...WED_10),
+    { dot: 'ok', text: 'feeds ok', textClass: '', title: 'NQ 1.0s  ·  ES 2.0s' });
+});
+
+test('status: lateness is the feed\'s -- the median of the open markets, a closed one\'s old print says nothing', () => {
+  const odd = C.feedSummary(live({ NQ: late(1, 0.2), ES: late(1, 0.4), HG: late(40, 95) }), ...WED_10);
+  assert.equal(odd.text, 'HG late 2 min');                       // one market behind: named, the feed is not late
+  const sat = C.feedSummary(live({ NQ: late(180000, 600), BTC: late(2, 0.5) }), ...SAT_NOON);   // Friday's last print
+  assert.deepEqual([sat.dot, sat.text], ['ok', 'feeds ok']);
+});
+
+test('status: a thin feed (the watchdog\'s reading) says so; late and thin together read as both', () => {
+  const thin = C.feedSummary(live({ NQ: late(1, 0.3) }, { data: watch() }), ...WED_10);
+  assert.deepEqual([thin.dot, thin.text, thin.textClass], ['warn', 'thin feed', 'warn']);
+  assert.equal(thin.title, 'NQ 1.0s  —  data watch, 5m ago: thin: NQ got 16% of its ticks 08:00-09:00 ET (15 markets thin)');
+  const both = C.feedSummary(live({ NQ: late(1, 600) }, { data: watch() }), ...WED_10);
+  assert.equal(both.text, 'late 10 min · thin feed');
+  const stale = C.feedSummary(live({ NQ: late(150, 600) }, { data: watch() }), ...WED_10);
+  assert.equal(stale.text, 'NQ stale 3m · late 10 min · thin feed');   // a stalled market still comes first
+});
+
+test('status: a watchdog reading that is fine adds only its tooltip; one too old is not used, and says so', () => {
+  const fine = C.feedSummary(live({ NQ: late(1, 0.3) }, { data: watch({ level: 'fine', line: 'data: fine', thin: [] }) }), ...WED_10);
+  assert.deepEqual([fine.dot, fine.text, fine.textClass], ['ok', 'feeds ok', '']);
+  assert.equal(fine.title, 'NQ 1.0s  —  data watch, 5m ago: fine');
+  const old = C.feedSummary(live({ NQ: late(1, 0.3) }, { data: watch({ age_s: 4 * 3600, stale: true }) }), ...WED_10);
+  assert.deepEqual([old.dot, old.text], ['ok', 'feeds ok']);
+  assert.equal(old.title, 'NQ 1.0s  —  data watch: not checked for 4h');
+  assert.equal(C.feedSummary(live({ NQ: late(1, 0.3) }, { data: null }), ...WED_10).title, 'NQ 1.0s');
+});
+
 test('status: not connected reads "connecting…", never "feeds ok"', () => {
   const f = C.feedSummary(live({ NQ: tick(1) }, { connected: false }), ...WED_10);
   assert.deepEqual([f.dot, f.text, f.textClass], ['bad', 'connecting…', '']);

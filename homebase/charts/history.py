@@ -5,6 +5,13 @@ Two caches over the TickStore: a per-session 1-minute bar pickle on disk
 60-session daily chart never re-reads ticks) and an in-memory memo per
 (root, bar type, date). Today's session is the hub's job, not this file's.
 Thread-safe: the hub calls it from worker threads.
+
+A completed session is not final: the hourly tick job fills its holes and
+merges its live recording into the archive for a day or two after its close.
+The memo -- and the charts already showing the session -- held the old bars
+until the 18:00 roll. Every session built here is WATCHED: changed() stats
+its tick files and forgets the ones that moved, so the service can reload
+the charts that show them.
 """
 from __future__ import annotations
 
@@ -23,16 +30,20 @@ from .store import TickStore
 
 M1 = BarSpec("time", 60)
 CACHE_VERSION = 1
+WATCH_DAYS = 35         # sessions this recent are watched for a fill landing in their files (the tick job merges
+                        # live recordings 30 days back, ticks.LIVE_LOOKBACK_DAYS); older ones only change by hand
 
 
 class History:
-    def __init__(self, store: TickStore, cache_dir: Path | None = None, memo_max: int = 256):
+    def __init__(self, store: TickStore, cache_dir: Path | None = None, memo_max: int = 256, known=None):
         self.store = store
+        self.known = known      # charts.known.Known: the tick job's coverage report, for each session's holes
         self.cache_dir = Path(cache_dir) if cache_dir else state_dir() / "charts" / "cache"
         self.memo: OrderedDict = OrderedDict()
         self.memo_max = memo_max
         self._lock = threading.Lock()
         self._gen = 0           # bumped by clear(): a build that overlapped a clear() is not memoized
+        self._built: dict = {}  # (root, date) -> its tick files' stamp when its bars were first built: changed()
 
     def _from_ticks(self, root: str, spec: BarSpec, d: dt.date) -> list[Bar]:
         s = self.store.load(root, d)
@@ -100,6 +111,7 @@ class History:
                 self.memo.move_to_end(key)
                 return hit
             gen = self._gen
+        self.watch(root, d)                                 # the files BEFORE their ticks are read
         out = resample(self.minutes(root, d), spec) if spec.from_minutes else self._from_ticks(root, spec, d)
         if memo:
             with self._lock:
@@ -110,15 +122,66 @@ class History:
         return out
 
     def info(self, root: str, d: dt.date) -> dict:
-        """What the page needs to label a session honestly. Cheap: no ticks read."""
+        """What the page needs to label a session honestly. Cheap: no ticks read. `holes` (only when it has
+        any): the session's known holes from the tick job's coverage report, [[start_ms, end_ms, kind], ...]
+        with kind lost | filling | thin (charts.known) -- the page draws them as wide as the time they cover."""
         f = self.store.pick(root, d)
         if f is None:
             return {"date": d.isoformat(), "contract": None, "source": None, "approx": False, "gaps": []}
-        return {"date": d.isoformat(), "contract": f.contract,
-                "source": "live" if f.live else "archive", "approx": not f.bid_ask,
-                "gaps": [[et_wall_s(a), et_wall_s(b)] for a, b in self.store.gaps(f)]}
+        out = {"date": d.isoformat(), "contract": f.contract,
+               "source": "live" if f.live else "archive", "approx": not f.bid_ask,
+               "gaps": [[et_wall_s(a), et_wall_s(b)] for a, b in self.store.gaps(f)]}
+        holes = self.known.holes(root, d) if self.known is not None else []
+        if holes:
+            out["holes"] = holes
+        return out
+
+    def watch(self, root: str, d: dt.date, later: bool = False) -> None:
+        """From now on changed() reports session d when its tick files are no longer as they are now. A
+        session already watched keeps its first stamp: what was built from the older files is still shown.
+        later (the event loop, at the 18:00 roll): no directory listing here -- the next changed() takes the
+        files as it finds them."""
+        if (root, d) not in self._built:
+            stamp = None if later else self.store.stamps(root, [d])[d]
+            with self._lock:
+                self._built.setdefault((root, d), stamp)
+
+    def changed(self) -> list[tuple[str, dt.date]]:
+        """Worker thread. The watched sessions whose tick files are not as they were when their bars were
+        built (a fill rewrote the archive file, a live recording was merged into a new one), oldest first.
+        Each is forgotten -- its memoized bars dropped, watched again from its next build -- so it is
+        reported once. One directory listing per root and year; sessions over WATCH_DAYS behind the newest
+        watched one are dropped unasked."""
+        with self._lock:
+            watched = dict(self._built)
+        if not watched:
+            return []
+        cut = max(d for _, d in watched) - dt.timedelta(days=WATCH_DAYS)
+        by_root: dict = {}
+        for (root, d) in watched:
+            if d >= cut:
+                by_root.setdefault(root, []).append(d)
+        now = {(root, d): stamp for root, dates in by_root.items()
+               for d, stamp in self.store.stamps(root, dates).items()}
+        moved = {k for k, stamp in now.items() if watched[k] is not None and stamp != watched[k]}
+        drop = moved | {k for k in watched if k[1] < cut}
+        fresh = {k: stamp for k, stamp in now.items() if watched[k] is None}     # watch(later=True): from here on
+        if drop or fresh:
+            with self._lock:
+                for k in drop:
+                    self._built.pop(k, None)
+                for k, stamp in fresh.items():
+                    if k in self._built and self._built[k] is None:
+                        self._built[k] = stamp
+                if moved:
+                    for k in [k for k in self.memo if (k[0], k[2]) in moved]:
+                        del self.memo[k]
+                    self._gen += 1
+        return sorted(moved)
 
     def clear(self) -> None:
+        """Drop the memoized bars (the 18:00 roll, a refill into an older session). What is watched stays:
+        the charts open now still show those sessions."""
         with self._lock:
             self.memo.clear()
             self._gen += 1

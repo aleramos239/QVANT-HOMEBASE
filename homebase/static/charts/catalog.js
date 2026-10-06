@@ -121,6 +121,8 @@ const RTH_STALE_S = 120;
 const ETH_STALE_S = 300;
 const CRYPTO_STALE_S = 900;
 const REC_BUSY = 5000;    // the recorder's buffer this full turns the status amber
+const LATE_S = 60;        // a market whose newest print came in this far behind the wall clock is LATE: the exchange's
+                          // delayed feed runs 600 s behind while the socket reads "connected, no error" (2026-10-02)
 
 let seq = 0;
 function uid() { return 'i' + Date.now().toString(36) + (seq++).toString(36) + Math.random().toString(36).slice(2, 6); }
@@ -532,7 +534,11 @@ function sinceOpen(minutes) { return ((minutes - 18 * 60 + 1440) % 1440) * 60; }
    = grey: an open market has not ticked yet), a one-phrase text with its
    class ('' | 'warn' | 'bad') and the per-root tooltip. A closed market is
    never stale; a refused root is unavailable whatever the hours. Staleness
-   itself is root- and session-aware — see staleAfter/sinceOpen. */
+   itself is root- and session-aware — see staleAfter/sinceOpen.
+   The data's own state rides along (amber): "late N min" when the open markets' newest prints came in LATE_S or
+   more behind the wall (each root's `late_s`, measured by the service; the median, so it is the feed's -- one
+   market behind is named instead), and "thin feed" when the tick job's data watchdog (`s.data`) found the live
+   recording short of the published tick ids. Its line is the tooltip's last part; a reading too old is not used. */
 function feedSummary(s, weekday, minutes) {
   const roots = Object.entries(s.roots || {}), rec = s.recorder, recErr = rec && rec.error;
   const open = (r) => marketOpen(r, weekday, minutes), age = (x) => x.last_tick_age_s;
@@ -541,13 +547,24 @@ function feedSummary(s, weekday, minutes) {
   const clamped = (x) => Math.min(age(x), sinceOpen(minutes));
   const stale = live.filter(([r, x]) => age(x) != null && clamped(x) > staleAfter(r, weekday, minutes))
     .sort((a, b) => age(b[1]) - age(a[1]));
-  const title = roots.map(([r, x]) => `${r} ${x.error ? `unavailable: ${x.error}`
-    : !open(r) ? 'closed' : age(x) == null ? 'no ticks yet' : fmtAge(age(x))}`).join('  ·  ');
+  const lag = live.filter(([, x]) => age(x) != null && x.late_s != null).map(([, x]) => x.late_s).sort((a, b) => a - b);
+  const feedLate = lag.length && lag[lag.length >> 1] >= LATE_S ? lag[lag.length >> 1] : 0;
+  const behind = (r, x) => open(r) && !x.error && age(x) != null && x.late_s >= LATE_S;
+  const lateMin = (v) => Math.round(v / 60);
+  const d = s.data, thin = !!(d && !d.stale && d.thin && d.thin.length);
+  const watch = !d ? '' : d.stale ? `data watch: not checked for ${fmtAge(d.age_s)}`
+    : `data watch, ${fmtAge(d.age_s)} ago: ${String(d.line || '').replace(/^data: /, '')}`;
+  const title = [roots.map(([r, x]) => `${r} ${x.error ? `unavailable: ${x.error}`
+    : !open(r) ? 'closed' : age(x) == null ? 'no ticks yet'
+    : fmtAge(age(x)) + (behind(r, x) ? `, ${lateMin(x.late_s)}m late` : '')}`).join('  ·  '), watch].filter(Boolean).join('  —  ');
   if (s.error || recErr) return { dot: 'bad', text: s.error || `recorder: ${recErr}`, textClass: 'bad', title };
   if (!s.connected) return { dot: 'bad', text: 'connecting…', textClass: '', title };
-  const warn = refused.length > 0 || stale.length > 0;
+  const late = feedLate ? [`late ${lateMin(feedLate)} min`]
+    : roots.filter(([r, x]) => behind(r, x)).slice(0, 2).map(([r, x]) => `${r} late ${lateMin(x.late_s)} min`);
+  const warn = refused.length > 0 || stale.length > 0 || late.length > 0 || thin;
   const text = [...refused.map(([r]) => `${r} unavailable`),
     ...stale.slice(0, 2).map(([r, x]) => `${r} stale ${fmtAge(age(x))}`),
+    ...late, ...(thin ? ['thin feed'] : []),
     ...silent.slice(0, 2).map(([r]) => `${r} no ticks yet`)].join(' · ') || (roots.length ? 'feeds ok' : '');
   const dot = warn || (rec && rec.buffered >= REC_BUSY) ? 'warn' : silent.length ? '' : 'ok';
   return { dot, text, textClass: warn ? 'warn' : '', title };

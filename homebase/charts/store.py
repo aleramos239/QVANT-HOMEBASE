@@ -20,6 +20,7 @@ import csv
 import datetime as dt
 import gzip
 import json
+import os
 import re
 import threading
 import zlib
@@ -256,6 +257,28 @@ class TickStore:
             if st is not None:
                 out.append((f.path.name, *st))
         return tuple(sorted(out)) or None
+
+    def stamps(self, root: str, dates) -> dict:
+        """{date: ((name, size, mtime_ns), ...)} of every tick file -- archive and live -- of each of root's
+        `dates` (() for a date with none), from ONE listing per year folder. History.changed() compares them
+        to learn that a fill rewrote (or created) a file under a past session a chart already holds."""
+        want = {d.isoformat(): d for d in dates}
+        out: dict = {d: [] for d in want.values()}
+        for year in {d.year for d in want.values()}:
+            try:
+                with os.scandir(self.base / root / str(year)) as it:
+                    for e in it:
+                        d = want.get(e.name[:10])
+                        if d is None or not e.name.endswith(".csv.gz"):
+                            continue
+                        try:
+                            st = e.stat()
+                        except OSError:
+                            continue                  # vanished between the listing and here
+                        out[d].append((e.name, st.st_size, st.st_mtime_ns))
+            except OSError:
+                continue
+        return {d: tuple(sorted(v)) for d, v in out.items()}
 
     def sessions(self, root: str) -> list[dt.date]:
         ds = set()
