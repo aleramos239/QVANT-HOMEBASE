@@ -778,7 +778,8 @@ def test_the_commands_in_this_process():
     for argv, stdin, word in ((["card", name, "--spec=-"], "", "stdin"), (["card", name, "--spec=-"], "{not json", "JSON"), (["card", name], "", "--spec"),
                               (["card", name, f"--spec={tmp() / 'no_card.json'}"], "", "no_card.json"), (["card", "--spec=-"], json.dumps(idea(name)), "name"),
                               (["card", "bpi_other", "--spec=-"], json.dumps(idea(name)), "bpi_other"), (["status", "bpi_nobody"], "", "no idea"),
-                              (["build", "bpi_nobody", "--reason=x"], "", "no card"), (["build", name], "", "--reason"), (["lock", name], "", "not built yet")):
+                              (["build", "bpi_nobody", "--reason=x"], "", "no card"), (["build", name], "", "--reason"), (["lock", name], "", "no build on file"),
+                              (["test", name, "--confirm"], "", "not frozen"), (["test", name], "", "not frozen")):
         rc, js = _run([*argv, *last], stdin)
         d = json.loads(js)
         assert rc == 2 and list(d) == list(CONTRACT) and d["ok"] is False and word in d["error"] and d["command"] == argv[0], (argv, d)

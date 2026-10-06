@@ -49,7 +49,24 @@ def _build(**kw) -> dict:
     return api.build(**kw)
 
 
-COMMANDS = {"build": _build}                          # the commands that run as jobs (plan section 8: build, test)
+def _lock(**kw) -> dict:
+    """The freeze as a job: its worse-fills table is a tape pass over the build days (freeze.run)."""
+    from . import freeze                            # (freeze starts jobs: it imports this module)
+    return freeze.run(**kw)
+
+
+def _test(**kw) -> dict:
+    """The one read of the test days as a job (oos.run: the read was claimed before the job was started)."""
+    from . import oos
+    return oos.run(**kw)
+
+
+COMMANDS = {"build": _build, "lock": _lock, "test": _test}      # the commands that run as jobs (plan section 8: build, test; the freeze's one pass)
+
+
+def command(job_id, root_) -> str:
+    """The command a job runs (`lock` picks its own job's wait back up; a job of another command is in its way)."""
+    return _load(find(job_id, root_)).get("command")
 
 
 def root(arg=None) -> Path:

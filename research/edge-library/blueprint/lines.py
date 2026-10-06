@@ -57,10 +57,11 @@ def _heat(v) -> tuple:
     return share, avg, R.OPS[R.rule("2.1")["op"]](share, R.need("2.1")) & _profitable(avg)
 
 
-def _floor(net, trades, root: str) -> tuple:
-    """Line 2.2 -> (average trade = net of all variants / their trades, met); no trade = not met. One value, or one per run."""
+def _floor(net, trades, root: str, line: str = "2.2") -> tuple:
+    """Line 2.2 (and 4.3, the same floor on the test days) -> (average trade = net of all variants / their trades, met);
+    no trade = not met. One value, or one per run."""
     at = np.divide(net, trades, out=np.full(np.shape(net), -np.inf), where=np.asarray(trades) > 0)
-    return at, R.OPS[R.rule("2.2")["op"]](at, R.need("2.2", root))
+    return at, R.OPS[R.rule(line)["op"]](at, R.need(line, root))
 
 
 # ================================================================ phase 2: build
@@ -75,34 +76,36 @@ def heat(t: dict) -> dict:
                 + ("" if _profitable(avg) else " (need it profitable)"), avg=float(avg), profitable=k, variants=len(v))
 
 
-def floor(t: dict) -> dict:
-    """2.2 The average trade is big enough: the net of all variants / their trades, at the market's cost floor or more."""
-    net, n, need = float(np.asarray(t["net"]).sum(1).sum()), float(np.asarray(t["n"]).sum()), R.need("2.2", t["root"])
+def floor(t: dict, line: str = "2.2") -> dict:
+    """2.2 The average trade is big enough: the net of all variants / their trades, at the market's cost floor or more.
+    (line "4.3": the same reading on the test days.)"""
+    net, n, need = float(np.asarray(t["net"]).sum(1).sum()), float(np.asarray(t["n"]).sum()), R.need(line, t["root"])
     if not n:
-        return _row("2.2", False, None, need, f"no trade (need an average trade of {_n(need, unit='$')})")
-    at, ok = _floor(net, n, t["root"])
-    return _row("2.2", bool(ok), float(at), need, f"average trade {_n(float(at), need, '$')} (need {_n(need, unit='$')})")
+        return _row(line, False, None, need, f"no trade (need an average trade of {_n(need, unit='$')})")
+    at, ok = _floor(net, n, t["root"], line)
+    return _row(line, bool(ok), float(at), need, f"average trade {_n(float(at), need, '$')} (need {_n(need, unit='$')})")
 
 
-def beats_random(t: dict) -> dict:
+def beats_random(t: dict, line: str = "2.3") -> dict:
     """2.3 It beats random entries with the same stops and targets: ABOVE the round's bar of the random tables (strict), with
     every trade matched. Every random control of the unit must hold; the number is the weakest of them. THIN = it rests on
-    fewer real random-entry seeds than the law asks (control.json): said, not failed."""
-    rd, want = t.get("round", 1), R.template("control")["seeds"]
-    bar = R.need("2.3", rd)
+    fewer real random-entry seeds than the law asks (control.json): said, not failed.
+    (line "4.4": the same reading on the test days, against the one bar of that line -- a test has no round.)"""
+    rd, want = (t.get("round", 1) if line == "2.3" else None), R.template("control")["seeds"]
+    bar, more = R.need(line, rd), ({} if rd is None else {"round": rd})
     C = {k: v for k, v in (t.get("controls") or {}).items() if k in RANDOM}
     gone = [f"{k}: {v.get('why') or 'not drawn'}" for k, v in C.items() if "p_beat" not in v]
     if not C or gone:
-        return _row("2.3", False, None, bar, f"no random tables to hold it against ({'; '.join(gone) or 'no control'}; need above {_pc(bar)})",
-                    round=rd, seeds=0, thin=True, controls=C)
+        return _row(line, False, None, bar, f"no random tables to hold it against ({'; '.join(gone) or 'no control'}; need above {_pc(bar)})",
+                    **more, seeds=0, thin=True, controls=C)
     v = min(C.values(), key=lambda x: x["p_beat"])
     short = sum(int(x.get("short") or 0) for x in C.values())
     seeds = min(x["real_replicates"] for x in C.values())
-    ok = all(R.meets("2.3", x["p_beat"], rd) for x in C.values()) and not short
-    return _row("2.3", bool(ok), v["p_beat"], bar,
+    ok = all(R.meets(line, x["p_beat"], rd) for x in C.values()) and not short
+    return _row(line, bool(ok), v["p_beat"], bar,
                 f"beats {_pc(v['p_beat'])} of {v['replicates']:,} random tables (need above {_pc(bar)}); {seeds} seed{'s' * (seeds != 1)}"
                 + (f": THIN (the law asks {want})" if seeds < want else "") + (f"; {short:,} trades had no random match" if short else ""),
-                round=rd, seeds=seeds, thin=seeds < want, controls=C)
+                **more, seeds=seeds, thin=seeds < want, controls=C)
 
 
 def trades(t: dict) -> dict:
@@ -196,7 +199,75 @@ def rounds(t: dict) -> dict:
                 reason=why or None)
 
 
-# ================================================================ phase 4: the out-of-sample test (its Monte Carlo line)
+# ================================================================ phase 4: the out-of-sample test
+# TABLE DATA of the test (tables.tested fills it from the stores of the ONE read; a test fills it by hand): root, net, n and
+# controls as on build -- the LOCKED variants on the session days of the test range -- and
+#   parts        [{"name", "days": a boolean mask over the day axis}]: the two parts of the test (ranges.json)            4.1
+#   worse        (variants,) the net of each locked variant on the test days with worse fills (not given = not run)      4.5
+#   worse_fills  those fills in words: "2 ticks + 250 ms + a 100 ms late cancel"                                         4.5
+# A variant is one of the lock's list (the variants judged on build: no second look at which ones count).
+
+def parts(t: dict) -> dict:
+    """4.1 Both parts make money on their own: the average variant is above $0 in Jul-Dec 2025 AND in Jan-Sep 2026. The
+    number is the weaker part. A part without a session day, or without a trade, made no money."""
+    net, n = np.asarray(t["net"], np.float64), np.asarray(t["n"], np.float64)
+    P = list(t.get("parts") or [])
+    if len(P) < 2:
+        return _row("4.1", False, None, R.need("4.1"), "the test range has no two parts to read (need the average variant above $0 in each)", parts=[])
+    got = []
+    for p in P:
+        m = np.asarray(p["days"], bool)
+        got.append({"name": p["name"], "avg": float(net[:, m].sum(1).mean()) if net.shape[0] else 0.0, "trades": float(n[:, m].sum()), "days": int(m.sum())})
+    ok = all(x["days"] and x["trades"] and R.meets("4.1", x["avg"]) for x in got)
+    said = " · ".join(f"{x['name']} " + ("no session day" if not x["days"] else "no trade" if not x["trades"] else _n(x["avg"], unit="$")) for x in got)
+    return _row("4.1", bool(ok), min(x["avg"] for x in got), R.need("4.1"), f"{said}, average variant (need each above {_n(R.need('4.1'), unit='$')})", parts=got)
+
+
+def whole(t: dict) -> dict:
+    """4.2 The whole test: the average variant AND the middle variant (the median) make money. The number is the weaker one."""
+    v, need = np.asarray(t["net"], np.float64).sum(1), R.need("4.2")
+    if not len(v):
+        return _row("4.2", False, None, need, "no variant (need the average and the middle variant above $0)")
+    avg, mid = float(v.mean()), float(np.median(v))
+    return _row("4.2", R.meets("4.2", avg) and R.meets("4.2", mid), min(avg, mid), need,
+                f"average variant {_n(avg, unit='$')}, middle variant {_n(mid, unit='$')} (need both above {_n(need, unit='$')})", avg=avg, median=mid, variants=len(v))
+
+
+def floor_test(t: dict) -> dict:
+    """4.3 The average trade is still big enough: line 2.2's reading on the test days, against the same floor."""
+    return floor(t, "4.3")
+
+
+def random_test(t: dict) -> dict:
+    """4.4 It still beats random entries: line 2.3's reading on the test days -- above 95 % of the random tables (strict),
+    every trade matched."""
+    return beats_random(t, "4.4")
+
+
+def worse_fills(t: dict) -> dict:
+    """4.5 It still makes money with worse fills: the average variant of the same table run with 2 ticks + 250 ms (+ the
+    100 ms late cancel of the other side for a two-sided bracket) is above $0. No worse-fills table = not met."""
+    rule, w = R.rule("4.5"), t.get("worse")
+    how, bar = t.get("worse_fills") or "2 ticks + 250 ms", rule["also"]["above"]
+    if w is None or not len(w):
+        return _row("4.5", False, None, bar, f"the table was not run with worse fills ({how}; need the average variant above {_n(bar, unit='$')})", fills=rule["need"])
+    avg = float(np.asarray(w, np.float64).mean())
+    return _row("4.5", bool(avg > bar), avg, bar, f"average variant {_n(avg, unit='$')} with worse fills ({how}; need above {_n(bar, unit='$')})",
+                fills=rule["need"], variants=len(w))
+
+
+def best_days(t: dict) -> dict:
+    """4.6 It still makes money without its 3 best days: the average variant's net per session day, the 3 best days taken
+    out, the rest above $0. Fewer days than that leave nothing."""
+    need = R.need("4.6")
+    net = np.asarray(t["net"], np.float64)
+    day = net.mean(0) if net.shape[0] else np.zeros(0)
+    best = np.sort(day)[::-1][:need["best_days"]]
+    total, rest = float(day.sum()), float(day.sum() - best.sum())
+    return _row("4.6", bool(rest > need["above"]), rest, need["above"],
+                f"{_n(rest, unit='$')} without its {need['best_days']} best days (they made {_n(float(best.sum()), unit='$')} of {_n(total, unit='$')}, average variant; "
+                f"need above {_n(need['above'], unit='$')})", best=[float(x) for x in best], total=total)
+
 
 def monte_test(t: dict, rng=None) -> dict:
     """4.7 Monte Carlo: the average variant makes money in 90 % of the reshuffled runs of the test period or more."""
@@ -205,3 +276,6 @@ def monte_test(t: dict, rng=None) -> dict:
     share, need = float(ok.mean()), R.need("4.7")
     return _row("4.7", R.meets("4.7", share), share, need,
                 f"the average variant makes money in {_pc(share)} of {len(ok):,} reshuffled runs (need {_pc(need)} or more)", runs=len(ok))
+
+
+TEST = (parts, whole, floor_test, random_test, worse_fills, best_days, monte_test)        # lines 4.1 .. 4.7, in the law's order

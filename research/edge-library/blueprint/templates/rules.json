@@ -258,7 +258,11 @@
  },
  "6.1": {
   "text": "Live equals the test, every day of the eval: each live trade matches the tester's replay of that day. A mismatch is a bug: it is fixed before the count goes on",
-  "number": "same entry time, same exit reason"
+  "number": "same entry time, same exit reason",
+  "also": {
+   "entry_within_s": 5
+  },
+  "note": "\"same entry time\" = the live entry fill within 5 seconds of the replay's entry: room for latency and for the clocks of two machines, and far inside the smallest bar (60 s), so an entry on another bar is a mismatch (blueprint/evalcard.py; a reading, easy to change). \"same exit reason\" = the same of target, stop and clock (the engine's time / eod and the desk's flat are one reason); any other reason is compared as it is written"
  },
  "6.2": {
   "text": "Stage A, the first days at 1 micro: fills are close to the test",

@@ -424,7 +424,7 @@ def test_build_stored_command():
                        (["build", "--stored", "no_such_family-NQ-tf5-pm"], "no BUILD store"),
                        (["build", "--stored", "ib-NQ-tf15-nyam:mode=fade"], "no judged variant"),
                        (["build", "--stored"], "expected one argument"), (["build", "--stored", "x", "--no-such-option"], "unrecognized"),
-                       (["lock", "x"], "invalid choice"), ([], "required")):       # (a command that is not built yet)
+                       (["lock", "x"], "name"), ([], "required")):                 # (the freeze of something that is no idea's name)
         rc, txt = _run(argv)
         assert rc == 2 and txt.startswith("REFUSED: ") and word in txt, (argv, txt)
         rc, js = _run(argv + ["--json"])

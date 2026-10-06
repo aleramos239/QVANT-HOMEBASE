@@ -1,5 +1,5 @@
 {
- "_about": "The Monte Carlo of lines 2.8 (build) and 4.7 (test): `runs` reshuffled histories of a table. Each run draws as many whole days as the range has, with replacement, and uses the same days for every variant (so the table keeps its own co-movement). `seed` is fixed: every table is reshuffled with the same draws, so a number can be reproduced and two rounds can be compared (it is the seed of out/blueprint/funnel.py and mc_gates.py). `build.need` and `test.need` repeat rules.json 2.8 and 4.7; rules.py refuses to load when they differ. `text` is quoted from BLUEPRINT.md.",
+ "_about": "The Monte Carlo of lines 2.8 (build) and 4.7 (test): `runs` reshuffled histories of a table. Each run draws as many whole days as the range has, with replacement, and uses the same days for every variant (so the table keeps its own co-movement). `seed` is fixed: every table is reshuffled with the same draws, so a number can be reproduced and two rounds can be compared (it is the seed of out/blueprint/funnel.py and mc_gates.py). `build.need` and `test.need` repeat rules.json 2.8 and 4.7; rules.py refuses to load when they differ. `text` is quoted from BLUEPRINT.md. `eval_card` = the Monte Carlo table of the eval card (line 6.4; blueprint/evalcard.py): the same `runs` and `seed`, whole days of ONE variant's test-period trades drawn with replacement until the last read (40 trades) is reached; `percentiles` = the columns of its drawdown and P&L tables (the cut and pause percentiles of rules.json 6.4 must be among them).",
  "text": "Reshuffled runs = 1,000 Monte Carlo histories: whole days drawn with replacement, the same days for every variant.",
  "runs": 1000,
  "draw": "whole days",
@@ -13,5 +13,15 @@
  "test": {
   "line": "4.7",
   "need": 0.9
+ },
+ "eval_card": {
+  "line": "6.4",
+  "percentiles": [
+   50,
+   75,
+   90,
+   95,
+   99
+  ]
  }
 }

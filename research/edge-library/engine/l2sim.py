@@ -50,6 +50,11 @@ from 2026-01-01 on still raises under it; without a flag 2025 raises as before.
 BLUEPRINT BUILD (BLUEPRINT.md phase 2, 2026-10-06): run(..., period="bp_build") = 2021-09-22..2025-06-30 in ONE
 pass (a loader takes allow_holdout=ALLOW_BP). A date from 2025-07-01 on raises under it whatever other flag is
 passed with it; the three periods and the two switches above are untouched.
+BLUEPRINT TEST (BLUEPRINT.md phase 4, 2026-10-06): allow_holdout=ALLOW_BT with NAMED DATES opens 2025-07-01 .. the
+archive's end and nothing before it: a build day raises under it whatever other flag is passed with it, and so does
+a named day outside the named range. It has no range by name (period("bp_test") raises: its end is the session a
+lock froze) and ONE caller, blueprint/runner.run_test, which uses it only for a read that is claimed in the app's
+one-read log. Everything above is untouched.
 
 COMPUTE WINDOWS: every worker checks the ET clock before each session-day and sleeps through
 09:18-09:36 ET on weekdays and Fri 2026-10-02 08:15-08:50 ET. <= 8 worker processes.
@@ -119,6 +124,9 @@ PERIODS = {"build": BUILD, "pick": PICK, "insample": IN_SAMPLE}
 BP_BUILD = (dt.date(2021, 9, 22), dt.date(2025, 6, 30))          # BLUEPRINT.md phase 2 (house law): the ONE build range of a
 ALLOW_BP = "bp_build"                                            # blueprint run; its period name = the value allow_holdout carries
 #                                                                  on such a run. 2025-07-01 -> latest is the TEST: never opened by it
+BP_TEST_START = BP_BUILD[1] + dt.timedelta(days=1)               # BLUEPRINT.md phase 4: the out-of-sample TEST starts the day after the
+ALLOW_BT = "bp_test"                                             # build ends. The value allow_holdout carries on a blueprint TEST run:
+#                                                                  named dates only, never a build day, ONE caller (blueprint/runner.run_test)
 
 
 def period(name) -> tuple:
@@ -131,6 +139,9 @@ def period(name) -> tuple:
         return CHECK
     if key == ALLOW_BP:                               # the blueprint BUILD range; run_many(period="bp_build") sets its seal too
         return BP_BUILD
+    if key == ALLOW_BT:                               # no range by name: a TEST run names its dates (the session its lock froze)
+        raise HoldoutSealed("the blueprint TEST (2025-07-01 on) has no range by name: name its dates and pass allow_holdout=ALLOW_BT "
+                            "(blueprint/runner.run_test only, for a read that is claimed in the one-read log)")
     if key == "exam":
         raise HoldoutSealed("the EXAM period (>= 2025-01-01) is sealed: name its dates and pass allow_exam=True explicitly")
     if key not in PERIODS:
@@ -237,18 +248,19 @@ def _date(d) -> dt.date:
 def allow_level(allow_holdout=False, allow_exam=False, allow_check=False):
     """The seal switch of a call -> True (the EXAM key, literal True only) | ALLOW_CHECK (allow_check=True: the CHECK
     year 2025 and nothing later) | False. The one place the three keywords are folded into the value the guards read.
-    ALLOW_BP (the blueprint BUILD, to 2025-06-30) passes through as itself and is never widened by another keyword."""
-    if isinstance(allow_holdout, str) and allow_holdout == ALLOW_BP:
-        return ALLOW_BP
+    ALLOW_BP (the blueprint BUILD, to 2025-06-30) passes through as itself and is never widened by another keyword.
+    ALLOW_BT (the blueprint TEST, from 2025-07-01) passes through as itself too: no other keyword opens a build day under it."""
+    if isinstance(allow_holdout, str) and allow_holdout in (ALLOW_BP, ALLOW_BT):
+        return allow_holdout
     if allow_holdout is True or allow_exam is True:
         return True
     return ALLOW_CHECK if allow_check is True or (isinstance(allow_holdout, str) and allow_holdout == ALLOW_CHECK) else False
 
 
 def _seal_end(allow_holdout) -> dt.date:
-    """The last date a loader may reach under a seal switch: in-sample | the CHECK year | the archive's end (EXAM key) |
-    2025-06-30 (the blueprint BUILD switch)."""
-    if isinstance(allow_holdout, str):
+    """The last date a loader may reach under a seal switch: in-sample | the CHECK year | the archive's end (EXAM key, and
+    the blueprint TEST switch: its FIRST date is what is sealed) | 2025-06-30 (the blueprint BUILD switch)."""
+    if isinstance(allow_holdout, str) and allow_holdout != ALLOW_BT:
         return CHECK[1] if allow_holdout == ALLOW_CHECK else BP_BUILD[1] if allow_holdout == ALLOW_BP else IN_SAMPLE[1]
     return dt.date(2026, 12, 31) if allow_holdout else IN_SAMPLE[1]
 
@@ -256,7 +268,13 @@ def _seal_end(allow_holdout) -> dt.date:
 def check_holdout(d, allow_holdout: bool = False) -> None:
     """The EXAM seal: a date >= 2025-01-01 raises unless allow_holdout (= allow_exam) is exactly True. The CHECK switch
     (allow_holdout == ALLOW_CHECK: what allow_check=True becomes) opens 2025-01-01..2025-12-31 ONLY -- 2026+ still raises.
-    The blueprint BUILD switch (allow_holdout == ALLOW_BP) opens up to 2025-06-30 ONLY -- 2025-07-01 on still raises."""
+    The blueprint BUILD switch (allow_holdout == ALLOW_BP) opens up to 2025-06-30 ONLY -- 2025-07-01 on still raises.
+    The blueprint TEST switch (allow_holdout == ALLOW_BT) opens 2025-07-01 on ONLY -- every day before it raises."""
+    if isinstance(allow_holdout, str) and allow_holdout == ALLOW_BT:
+        if _date(d) < BP_TEST_START:
+            raise HoldoutSealed(f"{d} is before the blueprint TEST range (starts {BP_TEST_START}): the build days are never "
+                                "opened by the test switch")
+        return
     if isinstance(allow_holdout, str) and allow_holdout == ALLOW_BP:
         if _date(d) > BP_BUILD[1]:
             raise HoldoutSealed(f"{d} is after the blueprint BUILD range (ends {BP_BUILD[1]}): 2025-07-01 on is the "
@@ -483,7 +501,10 @@ def sessions(start, end, root: str = "NQ", allow_holdout: bool = False, allow_ex
     tape is then a 'no tape' skip, as in the tester. A range reaching 2025+ raises unless allow_exam=True; with
     allow_check=True it may end no later than 2025-12-31."""
     start, end = _date(start), _date(end)
-    check_holdout(end, allow_level(allow_holdout, allow_exam, allow_check))
+    level = allow_level(allow_holdout, allow_exam, allow_check)
+    check_holdout(end, level)
+    if isinstance(level, str) and level == ALLOW_BT:  # the TEST switch seals what lies BEFORE it: a range that starts in the build days raises
+        check_holdout(start, level)
     out = set()
     for y in range(start.year, end.year + 1):
         files = (TAPE_DIR / root / str(y)).glob("*/*.parquet") if root == "NQ" else (ARCHIVE / root / str(y)).glob("*.json")
@@ -502,7 +523,7 @@ def _tapes_one(args) -> tuple:
     iso, root = args[:2]
     wait_compute_window()
     d = dt.date.fromisoformat(iso)
-    check_holdout(d, ALLOW_CHECK if len(args) > 2 and args[2] == ALLOW_CHECK else False)     # never the EXAM key
+    check_holdout(d, args[2] if len(args) > 2 and isinstance(args[2], str) and args[2] in (ALLOW_CHECK, ALLOW_BT) else False)     # never the EXAM key
     if hb_tape_path(d, root) is not None:
         return iso, "cached"
     sys.dont_write_bytecode = True                  # the repo's homebase/ package is read-only for this project
@@ -513,15 +534,16 @@ def _tapes_one(args) -> tuple:
     return iso, ("built" if store.build(root, d) is not None else "no tape")
 
 
-def build_tapes(root: str, start=BUILD[0], end=PICK[1], workers: int = 2, allow_check: bool = False) -> dict:
+def build_tapes(root: str, start=BUILD[0], end=PICK[1], workers: int = 2, allow_check: bool = False, allow_holdout=False) -> dict:
     """Build the session tapes of `root` that neither the tester's cache nor OWN_TAPE holds, for [start, end] (never
-    2025+; with allow_check=True through 2025-12-31, never 2026+), with the tester's own code (homebase.backtest.tape:
+    2025+; with allow_check=True through 2025-12-31, never 2026+; with allow_holdout=ALLOW_BT -- the blueprint TEST, and
+    nothing else is taken for that keyword -- 2025-07-01 on and no day before it), with the tester's own code (homebase.backtest.tape:
     front contract = the manifest with the most ticks, rows in tape order) -> the same bytes the tester would replay.
     Writes under OWN_TAPE only (the tester's cache and the archive are never written).
     -> {"built": n, "cached": n, "no tape": n}."""
     if root == "NQ":
         raise ValueError("NQ replays the ofb_tick parquet tapes (already complete); build_tapes is for ES / GC")
-    allow = allow_level(allow_check=allow_check)
+    allow = ALLOW_BT if isinstance(allow_holdout, str) and allow_holdout == ALLOW_BT else allow_level(allow_check=allow_check)
     days = [d.isoformat() for d in sessions(start, end, root, allow)]
     todo = [(iso, root, allow) for iso in days]
     workers = max(1, min(int(workers), MAX_WORKERS))
@@ -570,6 +592,8 @@ def build_daily(root: str = "NQ", start=IN_SAMPLE[0], end=IN_SAMPLE[1], workers:
 
 
 def _daily_path(root: str, allow_holdout: bool) -> Path:
+    if isinstance(allow_holdout, str) and allow_holdout == ALLOW_BT:
+        return CACHE / f"daily_{root}_bt.json"       # the blueprint TEST: its own file (never a row before 2025-07-01)
     if isinstance(allow_holdout, str) and allow_holdout == ALLOW_BP:
         return CACHE / f"daily_{root}_bp.json"       # the blueprint BUILD: its own file (never a row after 2025-06-30)
     if isinstance(allow_holdout, str):               # CHECK: its own file (in-sample + 2025, never a 2026 row)
@@ -584,8 +608,10 @@ def load_daily(root: str = "NQ", allow_holdout: bool = False, build: bool = True
     """Daily bars [{date, h, l, c, contract}], ascending. The in-sample cache never holds a 2025+ row.
     NQ: the cached file (built from the tapes once). Other roots: read from the tape HEADERS on every call (one small
     read per session, memoised per process) -- never a stale file while build_tapes is still adding sessions."""
-    if isinstance(allow_holdout, str):               # a string is the CHECK switch, the blueprint BUILD switch or nothing
+    if isinstance(allow_holdout, str):               # a string is the CHECK switch, a blueprint switch or nothing
         allow_holdout = allow_level(allow_holdout)
+    if isinstance(allow_holdout, str) and allow_holdout == ALLOW_BT:      # the blueprint TEST: the BUILD's bars (prior data, read under
+        return load_daily(root, ALLOW_BP, build) + _daily_test(root, build)   # the build switch) + the test days' own
     if root != "NQ":
         key = (root, allow_holdout if allow_holdout in (ALLOW_CHECK, ALLOW_BP) else bool(allow_holdout))
         if key not in _DAILY_MEMO:
@@ -605,6 +631,34 @@ def load_daily(root: str = "NQ", allow_holdout: bool = False, build: bool = True
         rows = [r for r in rows if r["date"] <= CHECK[1].isoformat()]
     elif allow_holdout == ALLOW_BP:
         rows = [r for r in rows if r["date"] <= BP_BUILD[1].isoformat()]
+    return rows
+
+
+def _daily_test(root: str, build: bool = True) -> list:
+    """The daily bars of the blueprint TEST days (2025-07-01 .. the archive's end), read under the test switch and no
+    other. NQ: its own file, cache/daily_NQ_bt.json -- built once, and a session that has a tape and no row yet (the
+    archive grows) is added. Other roots: the tape headers, memoised under their own key (never the EXAM key's)."""
+    end = _seal_end(ALLOW_BT)
+    if root != "NQ":
+        key = (root, ALLOW_BT)
+        if key not in _DAILY_MEMO:
+            rows = [_daily_one((d.isoformat(), root, ALLOW_BT)) for d in sessions(BP_TEST_START, end, root, ALLOW_BT)]
+            _DAILY_MEMO[key] = [r for r in rows if r is not None]
+        return list(_DAILY_MEMO[key])
+    p = _daily_path(root, ALLOW_BT)
+    if not p.exists():
+        if not build:
+            return []
+        build_daily(root, BP_TEST_START, end, allow_holdout=ALLOW_BT)
+    rows = [r for r in json.loads(p.read_text())["rows"] if r["date"] >= BP_TEST_START.isoformat()]
+    if build:
+        have = {r["date"] for r in rows}
+        more = [_daily_one((d.isoformat(), root, ALLOW_BT)) for d in sessions(BP_TEST_START, end, root, ALLOW_BT) if d.isoformat() not in have]
+        if [r for r in more if r is not None]:
+            rows = sorted(rows + [r for r in more if r is not None], key=lambda r: r["date"])
+            tmp = p.with_name(p.name + f".{os.getpid()}.tmp")
+            tmp.write_text(json.dumps({"root": root, "start": str(BP_TEST_START), "end": str(end), "rows": rows}))
+            os.replace(tmp, p)
     return rows
 
 
@@ -673,13 +727,14 @@ def eve_atr(tape: "Tape", tf: int = ATR_TF, n: int = 14) -> float | None:
 
 
 def _atr_path(root: str, check: bool = False) -> Path:
-    return CACHE / f"eve_atr{ATR_TF}_{root}{'_bp' if check == ALLOW_BP else '_check' if check else ''}.json"
+    own = isinstance(check, str) and check in (ALLOW_BP, ALLOW_BT)          # a blueprint switch: its own file
+    return CACHE / f"eve_atr{ATR_TF}_{root}{('_bp' if check == ALLOW_BP else '_bt') if own else '_check' if check else ''}.json"
 
 
 def _atr_one(args):
     iso, root = args[:2]
     wait_compute_window()
-    t = load_tape(iso, root, allow_holdout=args[2] if len(args) > 2 and args[2] in (ALLOW_CHECK, ALLOW_BP) else False)
+    t = load_tape(iso, root, allow_holdout=args[2] if len(args) > 2 and isinstance(args[2], str) and args[2] in (ALLOW_CHECK, ALLOW_BP, ALLOW_BT) else False)
     return iso, (None if t is None or not len(t.ts) else eve_atr(t))
 
 
@@ -689,10 +744,13 @@ def load_eve_atr(root: str = "NQ", build: bool = True, workers: int = 1, allow_h
     tape read each, ONE process unless workers > 1 is asked for) and added.
     CHECK (allow_holdout == ALLOW_CHECK): the in-sample dict + the 2025 sessions, which live in their OWN file
     cache/eve_atr30_<root>_check.json (the in-sample file never gets a 2025 row; nothing dated 2026+ is read).
-    Blueprint BUILD (allow_holdout == ALLOW_BP): the same with 2025-01-01..2025-06-30 only, in cache/eve_atr30_<root>_bp.json."""
+    Blueprint BUILD (allow_holdout == ALLOW_BP): the same with 2025-01-01..2025-06-30 only, in cache/eve_atr30_<root>_bp.json.
+    Blueprint TEST (allow_holdout == ALLOW_BT): the BUILD's dict + 2025-07-01 .. the archive's end, in cache/eve_atr30_<root>_bt.json."""
     chk = isinstance(allow_holdout, str) and allow_holdout == ALLOW_CHECK
     if chk:
         return {**load_eve_atr(root, build, workers), **_eve_atr_file(root, build, workers, CHECK, True)}
+    if isinstance(allow_holdout, str) and allow_holdout == ALLOW_BT:      # blueprint TEST: + its own days, its OWN file
+        return {**load_eve_atr(root, build, workers, ALLOW_BP), **_eve_atr_file(root, build, workers, (BP_TEST_START, _seal_end(ALLOW_BT)), ALLOW_BT)}
     if isinstance(allow_holdout, str) and allow_holdout == ALLOW_BP:      # blueprint BUILD: + 2025-01-01..2025-06-30, its OWN file
         return {**load_eve_atr(root, build, workers), **_eve_atr_file(root, build, workers, (CHECK[0], BP_BUILD[1]), ALLOW_BP)}
     return _eve_atr_file(root, build, workers, IN_SAMPLE, False)
@@ -704,7 +762,7 @@ def _eve_atr_file(root: str, build: bool, workers: int, span: tuple, chk: bool) 
     have = json.loads(p.read_text()) if p.exists() else {}
     if not build:
         return have
-    allow = ALLOW_BP if chk == ALLOW_BP else ALLOW_CHECK if chk else False
+    allow = chk if isinstance(chk, str) and chk in (ALLOW_BP, ALLOW_BT) else ALLOW_CHECK if chk else False
     days = [d.isoformat() for d in sessions(span[0], span[1], root, allow)]
     todo = [(iso, root, allow) for iso in days if iso not in have and (root == "NQ" or hb_tape_path(iso, root) is not None)]
     if todo:
@@ -2404,7 +2462,11 @@ def run_many(specs: list, start=None, end=None, *, root: str = "NQ", workers: in
     carries it. A strategy with an `eve_window` (Template: sess eve / globex, an evening family window) also replays
     the evening before each trade date; an evening segment with a coverage hole is listed in "eve_skipped".
     BLUEPRINT BUILD: period='bp_build' = 2021-09-22..2025-06-30 in one pass (with days=, any of its sessions); it needs no
-    flag and none widens it -- a date from 2025-07-01 on raises HoldoutSealed. meta["range"]["period"] is then 'bp_build'."""
+    flag and none widens it -- a date from 2025-07-01 on raises HoldoutSealed. meta["range"]["period"] is then 'bp_build'.
+    BLUEPRINT TEST: start and end NAMED (2025-07-01 .. the session a lock froze) + allow_holdout=ALLOW_BT, with or without
+    days= inside them. A date before 2025-07-01 raises HoldoutSealed whatever other flag is passed, and so does a named day
+    outside start .. end; without both dates the run raises. meta["range"]["period"] is then 'bp_test'. ONE caller:
+    blueprint/runner.run_test."""
     t_start = time.monotonic()
     allow_holdout = allow_level(allow_holdout, allow_exam, allow_check)     # True | ALLOW_CHECK (2025 only) | False
     if period is not None:
@@ -2413,8 +2475,13 @@ def run_many(specs: list, start=None, end=None, *, root: str = "NQ", workers: in
         start, end = _period_range(period)
         if str(period).lower() == ALLOW_BP:           # the blueprint BUILD: its own seal (to 2025-06-30), whatever flag came along
             allow_holdout = ALLOW_BP
+    test = isinstance(allow_holdout, str) and allow_holdout == ALLOW_BT
+    if test and (start is None or end is None):       # the blueprint TEST has no range of its own: the dates its lock froze are named
+        raise HoldoutSealed("a blueprint TEST run names its dates: start and end (2025-07-01 .. the session its lock froze)")
     start, end = _date(IN_SAMPLE[0] if start is None else start), _date(IN_SAMPLE[1] if end is None else end)
     check_holdout(end, allow_holdout)
+    if test:
+        check_holdout(start, allow_holdout)           # ... and it never starts in the build days
     if root not in SPECS:
         raise ValueError(f"root {root!r}: one of {sorted(SPECS)}")
     if on_error not in ("skip", "raise"):
@@ -2441,6 +2508,8 @@ def run_many(specs: list, start=None, end=None, *, root: str = "NQ", workers: in
     all_days = sessions(start, end, root, allow_holdout) if days is None else sorted(_date(d) for d in days)
     for d in all_days:
         check_holdout(d, allow_holdout)
+        if test and not start <= d <= end:            # the named range is the whole of a TEST run: a day outside it is not run
+            raise HoldoutSealed(f"{d} is outside the named range {start} .. {end} of this blueprint TEST run")
     guard_months: frozenset = frozenset()
     if needs_exec_guard(features):
         pg = phase_guard()
@@ -2510,7 +2579,8 @@ def run_many(specs: list, start=None, end=None, *, root: str = "NQ", workers: in
                      "strategy": f"{cls.__module__}.{cls.__name__}", "inputs": probes[k].p, "root": root,
                      "point_value": SPECS[root][0], "tick": SPECS[root][1],
                      "range": {"start": start.isoformat(), "end": end.isoformat(), "holdout": end >= HOLDOUT_START,
-                               "period": ALLOW_BP if allow_holdout == ALLOW_BP else period_of(start, end)},
+                               "period": allow_holdout if isinstance(allow_holdout, str) and allow_holdout in (ALLOW_BP, ALLOW_BT)
+                               else period_of(start, end)},
                      "segments": [x for x, w in (("eve", getattr(probes[k], "eve_window", None)),
                                                  ("day", probes[k].session_window)) if w],
                      "qty": qty, "commission": costs.commission_rt, "slippage_ticks": costs.slippage_ticks,

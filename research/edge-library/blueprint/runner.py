@@ -30,6 +30,12 @@ run at a time per store folder (a lock file).
 
     run_build(spec, workers, out_dir)       an idea: what is missing of its pools, units and filter units -> one row per store
     run_pools(roots, tfs, workers, out_dir) the control pools alone (bp.py pools)
+    run_worse(spec, key, sess, ...)         the freeze: the WORSE-FILLS TABLE of one unit and session on the build range
+                                            (<key>-<session>-worse; stage bp_build_worse: its cells count against the cap)
+
+THE TEST DAYS (2025-07-01 on) have their own section at the end of this file, and ONE function that opens them: run_test,
+for a frozen idea whose read is CLAIMED in the app's one-read log. Everything above it carries the build switch and the
+build's seal, as before; test_range() reads file names and manifests only.
 """
 from __future__ import annotations
 
@@ -57,6 +63,7 @@ from . import rules as R
 PERIOD = S.ALLOW_BP                                 # 'bp_build': the range's name AND the engine's switch for it
 RUNS = W / "runs_bp"                                # the stores of the blueprint ranges (the old stores stay where they are)
 STAGE = {"unit": "bp_build", "pool": "null_bp"}     # ledger stages: a unit's cells are candidate cells, a pool's are not
+WORSE = "bp_build_worse"                            # ... and so are the cells of a worse-fills table (the freeze runs it: run_worse)
 LOCK = "runner.lock"                                # held while a run writes to a store folder (beside its runner.log)
 
 
@@ -206,13 +213,64 @@ def parts(spec: dict, cells=None) -> list:
     return out
 
 
-def fingerprint(part: dict, days=None) -> str:
+def worse_kw(two_sided: bool) -> dict:
+    """THE WORSE FILLS of line 4.5 as the run options of a store (costs.json `worse`, held to the engine's own STRESS by the
+    rules test): 2 ticks of slippage and 250 ms of latency, + the 100 ms late cancel of the other side for a TWO-SIDED
+    bracket (a family that rests entry orders on both sides: its `both_sides` in the registry)."""
+    w = R.template("costs")["worse"]
+    return {"slip_ticks": w["slip_ticks"], "latency_ms": w["latency_ms"], **({"oco_cancel_ms": w["oco_cancel_ms"]} if two_sided else {})}
+
+
+def worse_words(kw: dict) -> str:
+    """Those fills in words: `2 ticks + 250 ms + a 100 ms late cancel`."""
+    return f"{kw['slip_ticks']:g} ticks + {kw['latency_ms']:g} ms" + (f" + a {kw['oco_cancel_ms']:g} ms late cancel" if kw.get("oco_cancel_ms") else "")
+
+
+def _engine(kw: dict) -> dict:
+    """A store's run options as the engine takes them: the late cancel is a field of its Costs, not a keyword of a run."""
+    kw = dict(kw)
+    oco = kw.pop("oco_cancel_ms", 0)
+    return {**kw, "costs": S.Costs(oco_cancel_ms=int(oco))} if oco else kw
+
+
+def _stage(p: dict) -> str:
+    """The ledger stage of a store to be: its own when it names one (a worse-fills table), else the pool's or the unit's."""
+    return p.get("stage") or STAGE["pool" if p["kind"] == "pool" else "unit"]
+
+
+def worse_key(key: str, sess: str) -> str:
+    return f"{key}-{sess}-worse"
+
+
+def worse_part(spec: dict, key: str, sess: str, cells=None) -> dict:
+    """THE WORSE-FILLS TABLE of ONE unit of an idea in ONE session, on the build range: the unit's own grid (`key`: the plain
+    unit, or the unit with its one filter on), the session's instance only, run with worse_kw -> the store
+    <key>-<session>-worse. Its cells are the unit's cells again: candidate cells of the ledger."""
+    u = next((u for u in RI.spec_units(spec) if u["key"] == key), None)
+    if u is None or sess not in spec["sessions"]:
+        raise J.Refuse(f"{key} in session {sess}: not a table of {spec['name']}")
+    blocks = _blocks()
+    two = bool(blocks.BASES[spec["family"]][2])
+    kw = {**dict(getattr(blocks.WRAPPED[spec["family"]], "SCREEN_RUN", {})), **worse_kw(two)}
+    meta = {**RI.unit_meta(spec, u), "sessions": [sess], "sess_instance": sess, "worse_of": key, "worse": worse_kw(two),
+            "note": f"idea {spec['name']}: {key} in session {sess} with worse fills ({worse_words(worse_kw(two))})"}
+    return {**_part(worse_key(key, sess), "worse", u["root"], u["tf"], u["grid"], [sess], cells, meta, spec["family"], kw, u["filter"]), "stage": WORSE}
+
+
+def run_worse(spec, key: str, sess: str, workers=None, out_dir=None, *, ledger=None, days=None, cells=None, progress=None, block=None, dry=False) -> list:
+    """Run the worse-fills table of one unit and session on the build range when it is not stored (run_build's arguments
+    and rows; kind 'worse'). The freeze picks the default variant among the variants that make money on build AND here."""
+    sp = checked(spec)
+    return _run([worse_part(sp, key, sess, cells)], workers, out_dir, ledger, days, cells, progress, block, dry, f"idea {sp['name']}, worse fills")
+
+
+def fingerprint(part: dict, days=None, period: str = PERIOD, span=None) -> str:
     """The INPUTS of a store as 16 hex digits: every cell with its class, its inputs and the sessions it is run in; the
     range (and the named days of a smoke run); the hold; the run options. Two stores with one fingerprint were asked for
-    the same trades."""
+    the same trades. (period, span: a store of the test days names its switch and the dates its lock froze.)"""
     cells = [[c["id"], f"{c['spec'][0].__module__}.{c['spec'][0].__qualname__}", c["spec"][1], [x[1]["sess"] for x in one]]
              for c, one in zip(part["grid"], part["runs"])]
-    doc = {"period": PERIOD, "days": days, "hold": RM.HOLD, "kw": part["kw"], "cells": cells}
+    doc = {"period": period, "days": days, "hold": RM.HOLD, "kw": part["kw"], "cells": cells, **({"span": list(span)} if span else {})}
     return hashlib.sha256(json.dumps(doc, sort_keys=True, default=str).encode()).hexdigest()[:16]
 
 
@@ -293,7 +351,7 @@ def _alone(out: Path):
 
 
 def _row(p: dict, out: Path, **more) -> dict:
-    return {"key": p["key"], "kind": p["kind"], "root": p["root"], "tf": p["tf"], "cells": p["cells"], "stage": STAGE["pool" if p["kind"] == "pool" else "unit"],
+    return {"key": p["key"], "kind": p["kind"], "root": p["root"], "tf": p["tf"], "cells": p["cells"], "stage": _stage(p),
             "path": str(out / p["key"]), "inputs_hash": p["hash"], **more}
 
 
@@ -323,7 +381,7 @@ def _run(todo, workers, out_dir, ledger, days, cells, progress, block, dry, who)
             raise J.Refuse(f"the candidate-cell cap of the ledger (the stores' cells count against it, the pools' do not): {e}") from None
     rows = {p["key"]: _row(p, out, skipped=True, ok=True, trades=_trades(p["stored"]), code_same=p["stored"].get("code") == code(p["family"]))
             for p in todo if p["have"]}
-    unbooked = [p for p in todo if p["have"] and not LB.ledger_has(p["key"], STAGE["pool" if p["kind"] == "pool" else "unit"], ledger)]
+    unbooked = [p for p in todo if p["have"] and not LB.ledger_has(p["key"], _stage(p), ledger)]
     if dry or not (pend or unbooked):               # nothing to write: no lock is taken (a reader never waits for a run)
         if dry and pend and out.exists():
             with _alone(out):                       # ... but a job is not started into a folder another run is writing to
@@ -384,9 +442,10 @@ class _Cell:
     SUMS = ("sessions", "used", "skipped_by_error", "unrealistic_winners", "both_sides_sessions", "elapsed_s")
     LISTS = ("skipped", "no_trade", "eve_skipped")
 
-    def __init__(self):
+    def __init__(self, first=None, last=None):
         self.packs, self.meta, self.last = [], None, -1
         self.n, self.rows = dict.fromkeys(self.SUMS, 0), {k: [] for k in self.LISTS}
+        self.span = (first, S.BP_BUILD[1].toordinal() if last is None else last)      # the trade dates (ordinals) the pass may hand back: to the build's end, unless told
 
     def add(self, r: dict) -> None:
         t = r["trades"]
@@ -402,9 +461,9 @@ class _Cell:
             self.rows[k] += r.get(k) or []
 
     def result(self) -> dict:
-        t = _Packed(self.packs)
-        if len(t) and int(t.x["date"].max()) > S.BP_BUILD[1].toordinal():
-            raise RuntimeError("the engine handed back a trade dated after the build range: nothing is stored")
+        t, (first, last) = _Packed(self.packs), self.span
+        if len(t) and (int(t.x["date"].max()) > last or (first is not None and int(t.x["date"].min()) < first)):
+            raise RuntimeError("the engine handed back a trade dated outside the range of the pass: nothing is stored")
         return {**self.n, **self.rows, "elapsed_s": round(self.n["elapsed_s"], 2), "meta": self.meta, "trades": t}
 
 
@@ -422,7 +481,7 @@ def _pass(parts_: list, root: str, days, workers: int, kw: dict, block, say) -> 
     acc = [_Cell() for _ in cut[1:]]
     for k in range(0, len(days), step):
         say(f"days {k + 1}-{min(k + step, len(days))} of {len(days)} ({len(specs)} instances)")
-        res = S.run_many(specs, period=PERIOD, days=days[k:k + step], root=root, workers=workers, **kw)
+        res = S.run_many(specs, period=PERIOD, days=days[k:k + step], root=root, workers=workers, **_engine(kw))
         for a, i, j in zip(acc, cut, cut[1:]):
             a.add(RM.merge(res[i:j]))
     out, k = [], 0
@@ -443,14 +502,14 @@ def _write(key: str, meta: dict, grid: list, res: list, out: Path) -> Path:
         LB.pack = keep
 
 
-def _book(p: dict, cells: int, trades: int, elapsed, ledger, out: Path, stage=None, note=None) -> None:
+def _book(p: dict, cells: int, trades: int, elapsed, ledger, out: Path, stage=None, note=None, period: str = PERIOD) -> None:
     """The store's ledger row, once (the way run_idea books a store: a pool is a null grid, a unit a candidate grid)."""
-    stage, m = stage or STAGE["pool" if p["kind"] == "pool" else "unit"], p["meta"]
+    stage, m = stage or _stage(p), p["meta"]
     if not stage.endswith("_error") and LB.ledger_has(p["key"], stage, ledger):
         return
     seeds = m.get("seeds")
     LB.ledger_add(stage, p["key"], "null" if p["kind"] == "pool" else "grid", cells=cells, trades=trades, family=m.get("family", ""), root=p["root"],
-                  tf=p["tf"], period=PERIOD, control=m.get("control", ""), seed=f"{seeds[0]}-{seeds[-1]}" if seeds else "", elapsed_s=elapsed,
+                  tf=p["tf"], period=period, control=m.get("control", ""), seed=f"{seeds[0]}-{seeds[-1]}" if seeds else "", elapsed_s=elapsed,
                   note=note or f"{_where(out, p['key'])}: {m.get('note') or ''}"[:200], path=ledger, caps=RI.CAPS)
 
 
@@ -461,11 +520,243 @@ def _record(p: dict, res: list, days, out: Path, ledger, say, workers: int, wall
     if sum(r["skipped_by_error"] for r in res):
         why = next(x["reason"] for r in res for x in r["no_trade"] if x["reason"].startswith(S.ERROR_PREFIX))
         say(f"ERROR {p['key']}: sessions dropped by a strategy error ({why}); no store written")
-        _book(p, p["cells"], n, res[0]["elapsed_s"], ledger, out, STAGE["pool" if p["kind"] == "pool" else "unit"] + "_error", why[:200])
+        _book(p, p["cells"], n, res[0]["elapsed_s"], ledger, out, _stage(p) + "_error", why[:200])
         return _row(p, out, skipped=False, ok=False, trades=n, error=why)
-    stage = STAGE["pool" if p["kind"] == "pool" else "unit"]
+    stage = _stage(p)
     _write(p["key"], {**p["meta"], "stage": stage, "period": PERIOD, "run_kw": p["kw"], "hold_to": RM.HOLD, "inputs_hash": p["hash"],
                       "code": code(p["family"]), **({"days": days} if days else {})}, p["grid"], res, out)
     _book(p, p["cells"], n, res[0]["elapsed_s"], ledger, out)
     say(f"{stage} {p['key']}: {p['cells']} cells, {n:,} trades, {res[0]['elapsed_s']} s of tape (wall {wall:.0f} s, {workers} workers)")
     return _row(p, out, skipped=False, ok=True, trades=n, code_same=True)
+
+
+# ================================================================ the test days (BLUEPRINT.md phase 4): what a lock freezes, and THE ONE READ
+#
+# The out-of-sample test reads 2025-07-01 .. a market's last complete session ONCE, for a frozen idea. What is run on those
+# days, for the idea's home table and nothing else (lines 4.1-4.7 read no other table):
+#     <unit key>-<session>-test          the LOCKED variants (the lock's variant list), the home session's instance
+#     <unit key>-<session>-test-worse    the same cells with worse fills (line 4.5)
+#     <store>__c1-<ROOT>-tf<tf>-<session>-test    the idea's own random-entry pool: 10 seeds x the 32 exit cells, that session
+# into runs_bp_test/ (TESTS). Each store covers the frozen range, names the read it belongs to (`read`: the idea, its
+# version, its lock) and the session days that were replayed (`calendar`): a reader needs no engine call to know them.
+# run_test is THE ONLY CALLER of the engine's switch for those days, and it runs nothing unless the read is in the app's
+# one-read log as CLAIMED (homebase/ideastore.py: the read is logged before the pass, as in out/exam2026/run_exam.py).
+
+TESTS = W / "runs_bp_test"
+
+
+def test_keys(key: str, store: str, root: str, tf, sess: str) -> dict:
+    """The store keys of an idea's test: its locked variants, the same with worse fills, its own random-entry pool."""
+    return {"table": f"{key}-{sess}-test", "worse": f"{key}-{sess}-test-worse", "pool": f"{store}__c1-{root}-tf{tf}-{sess}-test"}
+
+
+def _front(root: str, start: dt.date) -> dict:
+    """{session date: is it complete} for every archived weekday session of a market from `start` on, by the manifest of
+    its FRONT contract (the one that counts the most ticks: the tester's rule). Manifests only: no tick is read."""
+    best: dict = {}
+    for ydir in sorted(p for p in (S.ARCHIVE / root).glob("*") if p.is_dir() and p.name.isdigit() and int(p.name) >= start.year):
+        for f in ydir.glob("*.json"):
+            try:
+                d = dt.date.fromisoformat(f.name[:10])
+                m = json.loads(f.read_text())
+            except (OSError, ValueError):
+                continue
+            if d >= start and d.weekday() < 5 and isinstance(m, dict) and (d not in best or int(m.get("ticks") or 0) > best[d][0]):
+                best[d] = (int(m.get("ticks") or 0), m.get("complete") is True)
+    return {d: ok for d, (_, ok) in best.items()}
+
+
+def test_range(root: str) -> dict:
+    """THE TEST RANGE OF A MARKET as a lock freezes it: the first test day (ranges.json) .. the market's LAST COMPLETE
+    SESSION ON DISK = the last session of the unbroken run of complete sessions from that day on. A session is complete
+    when the archive says so (the `complete` flag of its front-contract manifest) and -- NQ, which the engine replays from
+    its ofb_tick tapes -- its tape is there. Read off file names and manifests: no tape and no price is opened, and the
+    engine's seal is not asked. -> {start, end, sessions, parts [{name, start, end, sessions}], no_tape (sessions of the
+    range that have no tape yet: ES and GC tapes are built from the archive, by the read itself), stops (the first session
+    that is not complete, or None)}. Refused: no complete session, or a part of the test without one (line 4.1 reads both)."""
+    rg = R.template("ranges")["test"]
+    start = S._date(rg["start"])
+    done = _front(root, start)
+    tapes = None
+    if root == "NQ":
+        tapes = set()
+        for f in (S.TAPE_DIR / root).glob("*/*/*.parquet"):
+            try:
+                tapes.add(dt.date.fromisoformat(f.name[:10]))
+            except ValueError:
+                continue
+    good, stops = [], None
+    for d in sorted(set(done) | {x for x in (tapes or ()) if x >= start and x.weekday() < 5}):
+        if not (done.get(d) and (tapes is None or d in tapes)):
+            stops = d
+            break
+        good.append(d)
+    if not good:
+        raise J.Refuse(f"{root} has no complete session on disk from {start} on" + (f" (the first one, {stops}, is not complete)" if stops else "")
+                       + ": there is no test range to freeze")
+    end, parts = good[-1], []
+    for p in rg["parts"]:
+        a, b = S._date(p["start"]), (end if p["end"] == "latest" else min(end, S._date(p["end"])))
+        parts.append({"name": p["name"], "start": a.isoformat(), "end": b.isoformat(), "sessions": sum(a <= d <= b for d in good)})
+    empty = [p["name"] for p in parts if not p["sessions"]]
+    if empty:
+        raise J.Refuse(f"the complete sessions of {root} on disk end {end}: {empty[0]} would have no session, and line 4.1 reads both parts of the test"
+                       + (f" (the first session that is not complete: {stops})" if stops else ""))
+    return {"start": start.isoformat(), "end": end.isoformat(), "sessions": len(good), "parts": parts,
+            "no_tape": 0 if root == "NQ" else sum(S.hb_tape_path(d, root) is None for d in good), "stops": None if stops is None else stops.isoformat()}
+
+
+def guard_test(meta: dict, where: str, start: str, end: str, lock=None) -> dict:
+    """THE SEAL on a store of the test days (its run.json): it was written by the engine's test switch (the period it says
+    is the one the engine put on its range, and not the build's), it covers exactly the frozen range, and -- when `lock` is
+    given -- it belongs to the read of that lock. Anything else is refused: not skipped, not read."""
+    r, read = meta.get("range") or {}, meta.get("read") or {}
+    if not (meta.get("period") and meta.get("period") == r.get("period") != PERIOD and (r.get("start"), r.get("end")) == (start, end)):
+        raise J.Refuse(f"store {where} covers {r.get('start') or '?'} .. {r.get('end') or '?'} (period {meta.get('period')!r}): not a store of the test days "
+                       f"{start} .. {end}")
+    if lock is not None and read.get("lock") != lock:
+        raise J.Refuse(f"store {where} belongs to the read of another lock ({read.get('lock') or 'none'}; this one: {lock}): it is not read")
+    return meta
+
+
+def run_test(name: str, read: dict, spec, key: str, sess: str, variants: list, store: str, end: str, workers=None, out_dir=None, *, ideas=None,
+             ledger=None, days=None, block=None, progress=None, dry: bool = False, keep=()) -> dict:
+    """THE ONE READ OF THE TEST DAYS for a frozen idea: its locked variants, the same with worse fills and its own 10-seed
+    random-entry pool, on the session days of the frozen range (the first test day .. `end`), home session only.
+      name, read      the idea and its read {version, lock}: the line the app's one-read log must hold as CLAIMED
+      spec, key, sess the engine's settings of the home's store (run_idea's format), the unit's store key (with its one
+                      filter on, when the rule has one) and the home session
+      variants, store the lock's variant list (cells of that unit) and the store name of the frozen round
+      end             the frozen last session of the market (lock.json test_range)
+      days            TEST OF THE PLUMBING ONLY: named days of the range, into an out_dir and a ledger of their own
+      keep            cells whose FULL trade rows are handed back (a store keeps no prices; the default variant is shown)
+      dry             every refusal that needs no read, and nothing else: no claim is asked for, nothing is opened
+    -> {"stores": [one row a store, as run_build's], "calendar": [the session days replayed], "trades": {cell: [rows]}}.
+    THE ORDER: every refusal first; then the claim is looked up (no claimed read = refused, nothing is opened); only then
+    the engine's switch is used -- for the session list, for a missing ES / GC tape (built from the archive, the tester's
+    own code), for the passes. A store that is on disk is never run again. A strategy error in a pass writes no store and
+    ends the read: it stays on file."""
+    sw = getattr(S, "ALLOW_BT", None)               # THE SWITCH OF THE TEST DAYS: named here and nowhere else in this project
+    if sw is None:
+        raise J.Refuse("the engine has no switch for the test days (engine/l2sim.py): the out-of-sample test cannot run on this checkout")
+    sp = checked(spec)
+    u = next((x for x in RI.spec_units(sp) if x["key"] == key), None)
+    if u is None or sess not in sp["sessions"]:
+        raise J.Refuse(f"{key} in session {sess}: not a table of {sp['name']}")
+    root, tf, first = u["root"], u["tf"], R.template("ranges")["test"]["start"]
+    try:
+        a, b = S._date(first), S._date(end)
+        named = None if days is None else sorted({S._date(d).isoformat() for d in days})
+    except (TypeError, ValueError):
+        raise J.Refuse(f"the test range {first} .. {end!r} (days {days!r}): ISO dates") from None
+    off = [end] if b < a else ["no day"] if named == [] else [d for d in named or [] if not a.isoformat() <= d <= b.isoformat()]
+    if off:
+        raise J.Refuse(f"{off[0]}: the test of {name} reads {a} .. {end} only (the range its lock froze)")
+    if named is not None and (out_dir is None or ledger is None):
+        raise J.Refuse("a read of named test days is a test of the plumbing: it takes its own store folder and its own ledger file, and never writes "
+                       f"into {TESTS.name}/ or ledger.csv")
+    if workers is not None and not 1 <= int(workers) <= S.MAX_WORKERS:
+        raise J.Refuse(f"workers {workers}: 1 .. {S.MAX_WORKERS}")
+    want = list(dict.fromkeys(variants))
+    grid = [c for c in u["grid"] if c["id"] in set(want)]
+    if not want or len(grid) != len(want):
+        raise J.Refuse(f"{key}: " + (f"{next(c for c in want if c not in {x['id'] for x in grid})} is not a cell of the unit" if want else "no variant to run")
+                       + ": the lock's variant list names the cells of the read")
+    blocks, K = _blocks(), test_keys(key, store, root, tf, sess)
+    base, worse = dict(getattr(blocks.WRAPPED[sp["family"]], "SCREEN_RUN", {})), worse_kw(bool(blocks.BASES[sp["family"]][2]))
+    seeds, um = list(range(1, R.template("control")["seeds"] + 1)), {**RI.unit_meta(sp, u), "sessions": [sess], "sess_instance": sess}
+    stage = {"table": sw, "worse": f"{sw}_worse", "pool": f"null_{sw}"}      # the ledger stages of the read
+    todo = [{**_part(K["pool"], "pool", root, tf, _seeded(RM.c1_grid, seeds, root, str(tf)), [sess], None,
+                     {"family": "random", "tf": str(tf), "control": "c1", "p_entry": RM.C1_P_ENTRY, "seeds": seeds, "sessions": [sess], "sess_instance": sess,
+                      "idea": name, "note": f"idea {name}: its {len(seeds)}-seed random-entry pool of the test days, session {sess}"}), "stage": stage["pool"]},
+            {**_part(K["table"], "filter" if u["filter"] else "unit", root, tf, grid, [sess], None,
+                     {**um, "note": f"idea {name}: the locked variants on the test days, session {sess}"}, sp["family"], base, u["filter"]), "stage": stage["table"]},
+            {**_part(K["worse"], "worse", root, tf, grid, [sess], None,
+                     {**um, "worse_of": K["table"], "worse": worse, "note": f"idea {name}: the locked variants on the test days with worse fills "
+                                                                            f"({worse_words(worse)}), session {sess}"},
+                     sp["family"], {**base, **worse}, u["filter"]), "stage": stage["worse"]}]
+    out, span = (TESTS if out_dir is None else Path(out_dir)), (a.isoformat(), b.isoformat())
+    for p in todo:
+        p["hash"], f = fingerprint(p, named, sw, span), out / p["key"] / "run.json"
+        p["have"] = f.exists() and (f.parent / "cells.npz").exists()
+        if p["have"]:
+            p["stored"] = guard_test(json.loads(f.read_text()), _where(out, p["key"]), *span, read.get("lock"))
+            if p["stored"].get("inputs_hash") != p["hash"]:
+                raise J.Refuse(f"store {_where(out, p['key'])} was written from other inputs ({p['stored'].get('inputs_hash') or 'no fingerprint'}; asked "
+                               f"now: {p['hash']}) and is never written over")
+    pend = [p for p in todo if not p["have"]]
+    if pend:
+        may_start()
+        try:
+            LB.ledger_check(cells=sum(p["cells"] for p in pend if p["kind"] != "pool") + RM.PAPER_CELLS, path=ledger, caps=RI.CAPS)
+        except LB.CapExceeded as e:
+            raise J.Refuse(f"the candidate-cell cap of the ledger (the cells of a test count against it, its pool's do not): {e}") from None
+    rows = {p["key"]: _row(p, out, skipped=True, ok=True, trades=_trades(p["stored"]), code_same=p["stored"].get("code") == code(p["family"]))
+            for p in todo if p["have"]}
+    if dry:
+        if pend and out.exists():
+            with _alone(out):                       # a read is not claimed into a folder another run is writing to
+                pass
+        return {"stores": [rows.get(p["key"]) or _row(p, out, skipped=False, ok=None, trades=None) for p in todo], "calendar": None, "trades": {}}
+    # ---- THE CLAIM: nothing of the test days is opened unless the read is in the one-read log, claimed and not yet judged
+    from . import api                               # (api imports this module: looked up when the read is run)
+    line = api.ideastore().read_on_file(name, root=ideas)
+    if not (line and line.get("state") == "claimed" and (line.get("version"), line.get("lock")) == (read.get("version"), read.get("lock"))):
+        raise J.Refuse(f"no claimed read of the test days is on file for {name} (lock {read.get('lock')}): the read is written to the log BEFORE the pass "
+                       f"(bp.py test {name} --confirm), and a read that was judged is over")
+    kept: dict = {c: [] for c in keep}
+    with _alone(out):
+        say = _talk(out, progress)
+        n = RM.auto_workers(default_workers() if workers is None else int(workers))
+        if root != "NQ" and pend:                   # a session the tester never cached: its tape, from the archive (file for file the tester's)
+            S.wait_compute_window()
+            for x, y in ([(a, b)] if named is None else [(d, d) for d in named]):
+                say(f"tapes of {root} {x} .. {y}: {S.build_tapes(root, x, y, workers=n, allow_holdout=sw)}")
+        cal = [d.isoformat() for d in S.sessions(a, b, root, allow_holdout=sw)]
+        run_days = cal if named is None else named
+        if [d for d in run_days if d not in cal]:
+            raise J.Refuse(f"{[d for d in run_days if d not in cal][0]} is no session of {root} in {span[0]} .. {span[1]}")
+        more = {"calendar": run_days, "read": {"name": name, "version": read.get("version"), "lock": read.get("lock"), "claimed_utc": line.get("utc")},
+                **({"days": named} if named else {})}
+        for p in todo:                              # a store without its ledger row (a run that died between the two): booked, not run again
+            if p["have"]:
+                _book(p, len(p["stored"]["cells"]), _trades(p["stored"]), p["stored"].get("elapsed_s"), ledger, out, period=sw)
+        if pend and u["filter"] and u["filter"][0] == "volume":
+            S.wait_compute_window()                 # the volume block's minute-volume cache, opened for the frozen range
+            say(f"volume block {root}: {blocks.build_minvol(root, (a, b), n, allow_holdout=sw)}")
+        groups: dict = {}
+        for p in pend:
+            groups.setdefault(json.dumps(p["kw"], sort_keys=True), []).append(p)
+        for i, group in enumerate(groups.values(), 1):
+            t0, specs, cut, who = time.monotonic(), [], [0], []
+            for p in group:
+                for c, one in zip(p["grid"], p["runs"]):
+                    specs += one
+                    cut.append(len(specs))
+                    who.append((p["key"], c["id"]))
+            step = max(1, int(block or R.template("compute")["block_days"])) if all(getattr(c, "session_independent", False) for c, _ in specs) else len(run_days)
+            acc = [_Cell(a.toordinal(), b.toordinal()) for _ in who]
+            head = f"test of {name}: pass {i} of {len(groups)}, {root} {tf}-minute bars ({' + '.join(p['key'] for p in group)}; {n} workers)"
+            say(head)
+            for k in range(0, len(run_days), step):
+                say(f"{head}: days {k + 1}-{min(k + step, len(run_days))} of {len(run_days)} ({len(specs)} instances)")
+                res = S.run_many(specs, a, b, days=run_days[k:k + step], root=root, workers=n, allow_holdout=sw, **_engine(group[0]["kw"]))
+                for cell, (pk, cid), x, y in zip(acc, who, cut, cut[1:]):
+                    r = RM.merge(res[x:y])
+                    if pk == K["table"] and cid in kept:
+                        kept[cid] += [t for t in r["trades"] if S.session_of(t["entry_ms"]) == sess]
+                    cell.add(r)
+            k = 0
+            for p in group:
+                res, k = [c.result() for c in acc[k:k + p["cells"]]], k + p["cells"]
+                cnt = sum(len(r["trades"]) for r in res)
+                if sum(r["skipped_by_error"] for r in res):
+                    why = next(x["reason"] for r in res for x in r["no_trade"] if x["reason"].startswith(S.ERROR_PREFIX))
+                    _book(p, p["cells"], cnt, res[0]["elapsed_s"], ledger, out, p["stage"] + "_error", why[:200], period=sw)
+                    raise J.Refuse(f"{p['key']}: sessions of the test days were dropped by a strategy error ({why}): no store was written")
+                _write(p["key"], {**p["meta"], "stage": p["stage"], "period": sw, "run_kw": p["kw"], "hold_to": RM.HOLD, "inputs_hash": p["hash"],
+                                  "code": code(p["family"]), **more}, p["grid"], res, out)
+                _book(p, p["cells"], cnt, res[0]["elapsed_s"], ledger, out, period=sw)
+                say(f"{p['stage']} {p['key']}: {p['cells']} cells, {cnt:,} trades, {res[0]['elapsed_s']} s of tape (wall {time.monotonic() - t0:.0f} s, {n} workers)")
+                rows[p["key"]] = _row(p, out, skipped=False, ok=True, trades=cnt, code_same=True)
+    return {"stores": [rows[p["key"]] for p in todo], "calendar": run_days, "trades": kept}

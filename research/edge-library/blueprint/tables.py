@@ -315,3 +315,63 @@ def built(spec: dict, home=None, filt=None, out_dir=None, days=None, round_: int
                             else {"name": name, "why": v.get("why")})
     t["round"], t["months"] = round_, (R.template("ranges")["build"]["months"] if named is None else None)
     return t
+
+
+# ================================================================ the test days: the stores of the ONE read (runner.run_test)
+
+def tested(spec: dict, lock: dict, out_dir=None) -> dict:
+    """THE TABLE DATA OF THE ONE READ of a frozen idea, from the three stores runner.run_test wrote for its lock:
+      net, n            the LOCKED variants (the lock's list: no second look at which ones count) on the session days the
+                        read replayed (the store's own `calendar`)                                    lines 4.1 4.2 4.3 4.6 4.7
+      parts             the two parts of the frozen range as masks over those days                                 line 4.1
+      controls {c1}     the judge's random tables (judge.c1_table, verdict) from the idea's own 10-seed pool of the test
+                        days, with the draws and the draw seed THE LOCK holds                                      line 4.4
+      worse, worse_fills    each locked variant's net with worse fills, and those fills in words                   line 4.5
+    READ-ONLY, and no engine call: the days are the stores'. runner.guard_test is the seal -- a store that is not of the
+    frozen range, or not of this lock's read, is refused; so is a trade dated outside the range, a locked variant a store
+    does not hold, a pool with fewer seeds than the lock froze. spec = the engine's settings of the home's store."""
+    out, h = (RUN.TESTS if out_dir is None else Path(out_dir)), lock["home"]
+    root, tf, sess = h["market"], str(h["bar"]), h["session"]
+    u = bp_unit(spec, root, tf, sess, "", filter_of(spec, h["filter"]))
+    if u["key"] != h["key"]:
+        raise J.Refuse(f"the settings name the unit {u['key']}, the lock froze {h['key']}")
+    rng, K = lock["test_range"][root], RUN.test_keys(u["key"], lock["store"], root, tf, sess)
+    lo, hi = S._date(rng["start"]).toordinal(), S._date(rng["end"]).toordinal()
+
+    def opened(key: str) -> tuple:
+        f, where = out / key / "run.json", f"{out.name}/{key}"
+        if not f.exists():
+            raise J.Refuse(f"no store {where}: the read of the test days has not written it")
+        RUN.guard_test(json.loads(f.read_text()), where, rng["start"], rng["end"], lock["hash"])
+        st = J.store({"dir": out, "key": key})
+        if len(st["date"]) and (int(st["date"].min()) < lo or int(st["date"].max()) > hi):
+            raise J.Refuse(f"store {where} holds a trade dated outside {rng['start']} .. {rng['end']}: it is not read")
+        return st, where
+
+    (st, where), (wst, _), (pst, pwhere) = opened(K["table"]), opened(K["worse"]), opened(K["pool"])
+    ids = list(lock["variants"])
+    for s, key in ((st, K["table"]), (wst, K["worse"])):
+        gone = [c for c in ids if c not in s["_idx"]]
+        if gone:
+            raise J.Refuse(f"store {out.name}/{key} lacks the locked variant {gone[0]}: it is not the read of this lock")
+    cal = st["meta"].get("calendar")
+    if not cal:
+        raise J.Refuse(f"store {where} does not say which session days were replayed: it is not read")
+    t = _data(st, u, {"ids": ids, "dead": 0, "dup": 0}, LB._ordinals(cal), where)
+    day = lambda iso: S._date(iso).toordinal()  # noqa: E731
+    t["calendar"], t["range"] = list(cal), {"start": rng["start"], "end": rng["end"]}
+    t["parts"] = [{"name": p["name"], "start": p["start"], "end": p["end"], "days": (t["days"] >= day(p["start"])) & (t["days"] <= day(p["end"]))} for p in rng["parts"]]
+    c, need = lock["control"], sorted({i.rsplit("_", 1)[-1] for i in ids})
+    seeds = {int(sd): ({"dir": out, "key": K["pool"]}, f"s{sd}_") for sd in c["seeds"] if all(f"s{sd}_{x}" in pst["_idx"] for x in need)}
+    if len(seeds) < len(c["seeds"]):
+        raise J.Refuse(f"control pool {pwhere} holds {len(seeds)} of the {len(c['seeds'])} seeds the lock froze (with every exit cell of the table)")
+    keep = J.RULE["draws"]
+    try:
+        J.RULE["draws"] = int(c["draws"])           # the draws the lock froze (the law's 4,000)
+        v = J.verdict(float(t["net"].sum(1).mean()), J.c1_table(st, u, ids, seeds, int(c["draw_seed"]["test"])), True)
+    finally:
+        J.RULE["draws"] = keep
+    t["controls"] = {"c1": {**v, "seeds": sorted(seeds), "stores": {pwhere: sorted(seeds)}}}
+    t["worse"] = np.array([float(J.cellx(wst, x, sess, u)["net"].sum()) for x in ids])
+    t["worse_fills"] = RUN.worse_words(wst["meta"]["worse"])
+    return t

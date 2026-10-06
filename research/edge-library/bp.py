@@ -20,8 +20,28 @@ Python: "$HOME/ONYX TRADING/.venv/bin/python". The command line is the connector
   bp.py status [<name>]                    every idea on file, one line each -- or the full record of one
   bp.py job <id> [--wait=S]                keep waiting on a build that answered "running"
   bp.py pools [--roots=NQ,ES,GC] [--tf=1,5,15,30] [--workers=8]      the random-entry control pools of the build range (once)
+  bp.py lock <name>                                                  PHASE 3, the freeze (blueprint/freeze.py): refused unless
+                                                                     the latest round passes 2.1-2.9 and the code check of its
+                                                                     home store is passed; the default variant = the middle of
+                                                                     the variants that make money on build and on build with
+                                                                     worse fills; lock.json under one hash, the test range frozen
+  bp.py test <name> --confirm [--wait=S] [--second-look]             PHASE 4, THE ONE READ of the test days, 2025-07-01 on
+                                                                     (blueprint/oos.py): the read is written to the one-read
+                                                                     log FIRST, then lines 4.1-4.7. Refused when a read is on
+                                                                     file for the idea or a same-idea relative; a fail is final
+  bp.py seed-reads [--dry-run]             the one-read log filled from the OLD read logs, once (blueprint/reads.py)
+  bp.py sim <name> --account=ID --attempts=N --fee-budget=USD        PHASE 5, before the eval is bought (blueprint/propodds.py):
+                                                                     the app's prop simulator on the test-period trades,
+                                                                     OPEN LOSSES COUNTED; per pre-set size the odds of the
+                                                                     eval within 10 trading days and of the maximum payout
+                                                                     within 20, plain and "live is worse"; lines 5.1-5.4
+  bp.py eval-card <name> [--fills=-|FILE]                            PHASE 6, the eval (blueprint/evalcard.py): lines 6.1-6.8
+                                                                     and the drawdown table of its own test history; with
+                                                                     the live fills, 6.1-6.5 are read (--help: the format)
+  bp.py blocks                             everything an idea can be built from without writing code, and what version 1 refuses
   Every option: blueprint/cli.py. --json prints ONE JSON object (plan section 8). Exit: 0 = done (lines may still fail) ·
-  2 = refused · 1 = crashed. Nothing here reads a day on or after 2025-07-01.
+  2 = refused · 1 = crashed. No command reads a day on or after 2025-07-01 -- but `test`, once, for a frozen idea whose
+  read is claimed in the one-read log (blueprint/runner.run_test: the one caller of the engine's switch for those days).
 """
 import sys
 from pathlib import Path

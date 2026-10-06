@@ -543,13 +543,15 @@ def start(name, reason, root=None, workers=None, out=None, ledger=None, days=Non
             "block": block, "tester": None if tester is None else str(tester), "draws": test.get("draws")}
 
 
-def middle(rows: list, ids: list) -> tuple:
+def middle(rows: list, ids: list, worse=None) -> tuple:
     """THE DEFAULT VARIANT: the middle of the survivors, never the best (line 3.1) -> (its cell | None, the survivors in
     order). rows = the table's rows (id, net, vi, xi), ids = its judged variants. At a build the survivors are the judged
     variants that made money on build, in the judge's own order and with its tie rule (judge.TIE_RULE: by net, then by
-    variant order; an even count takes the lower of the two middle ones)."""
+    variant order; an even count takes the lower of the two middle ones). At the freeze `worse` = {cell: its net on build
+    with worse fills}: a survivor makes money on build AND there (the order stays the build net's)."""
     by = {r["id"]: r for r in rows}
-    surv = sorted((c for c in ids if L._profitable(by[c]["net"])), key=lambda c: (round(by[c]["net"], 2), by[c]["vi"], by[c]["xi"]))
+    surv = sorted((c for c in ids if L._profitable(by[c]["net"]) and (worse is None or L._profitable(worse[c]))),
+                  key=lambda c: (round(by[c]["net"], 2), by[c]["vi"], by[c]["xi"]))
     return (surv[(len(surv) - 1) // 2] if surv else None), surv
 
 
@@ -570,24 +572,35 @@ def show(name: str, n: int, spec: dict, key: str, cell: str, sess: str, st: dict
                            "was written, and the earlier trade list is reproduced before a new run counts (line 1.6)")
         rg, market, bar = R.template("ranges")["build"], spec["markets"][0], spec["bar_sizes"][0]
         a, b = (days[0], days[-1]) if days else (rg["start"], rg["end"])
-        with tempfile.TemporaryDirectory(prefix="bp_show_") as tmp:
-            f = Path(tmp) / "trades.json"
-            f.write_text(json.dumps({"trades": trades}))
-            p = subprocess.run([str(S.REPO / ".venv" / "bin" / "python"), "-B", "-m", "homebase.backtest.importrun", str(f), "--strategy", f"draft_{name}",
-                                "--root", market, "--name", f"{name} round {n}: {cell} ({market} {sess} {bar}m)"[:80],      # (a name: 80 characters there)
-                                "--start", a, "--end", b,
-                                "--sessions", str(len(days) if days else len(S.sessions(*S.period(RUN.PERIOD), market, allow_holdout=RUN.PERIOD))),
-                                "--note", f"blueprint build of {name}, round {n}: the default variant {cell} = the middle of the variants that made money on "
-                                          f"build ({survivors} of them; home {market} {sess}, {bar}-minute bars; 1 contract after costs)",
-                                *(["--base", str(tester)] if tester else [])],
-                               cwd=str(S.REPO), capture_output=True, text=True, timeout=300, stdin=subprocess.DEVNULL)
-        if p.returncode != 0 or not p.stdout.strip():
-            raise J.Refuse(f"importrun answered {p.returncode}: {(p.stderr or p.stdout).strip()[-300:] or 'nothing'}")
-        out.update(trades=len(trades), run_id=p.stdout.strip().splitlines()[-1])
-        api.ideastore().add_run(name, out["run_id"], root)
+        out.update(trades=len(trades), run_id=imported(
+            name, trades, market, f"{name} round {n}: {cell} ({market} {sess} {bar}m)", a, b,
+            len(days) if days else len(S.sessions(*S.period(RUN.PERIOD), market, allow_holdout=RUN.PERIOD)),
+            f"blueprint build of {name}, round {n}: the default variant {cell} = the middle of the variants that made money on "
+            f"build ({survivors} of them; home {market} {sess}, {bar}-minute bars; 1 contract after costs)", root, tester))
     except (J.Refuse, ValueError, OSError, subprocess.SubprocessError) as e:
         out["note"] = f"not shown on the tester page: {e}"
     return out
+
+
+def imported(name: str, trades: list, market: str, title: str, start: str, end: str, sessions: int, note: str, root=None, tester=None) -> str:
+    """A TRADE LIST OF THE ENGINE AS A FINISHED RUN OF THE TESTER, listed under the idea's Lab draft: written by
+    homebase/backtest/importrun.py (the app's own Python), its run id kept with the idea (idea.json `runs`) -> the run id.
+    An idea folder that was moved (a test, a trial) never writes the app's own tester: without `tester` it is refused.
+    Raises J.Refuse / OSError / subprocess errors: the caller says what was not shown (a mirror, never a gate)."""
+    if not tester and not _own(root):
+        raise J.Refuse("the idea folder is not the app's own, and a moved idea folder never writes the app's tester: say where the runs go (--tester=DIR)")
+    with tempfile.TemporaryDirectory(prefix="bp_show_") as tmp:
+        f = Path(tmp) / "trades.json"
+        f.write_text(json.dumps({"trades": trades}))
+        p = subprocess.run([str(S.REPO / ".venv" / "bin" / "python"), "-B", "-m", "homebase.backtest.importrun", str(f), "--strategy", f"draft_{name}",
+                            "--root", market, "--name", title[:80], "--start", start, "--end", end, "--sessions", str(sessions),      # (a name: 80 characters there)
+                            "--note", note, *(["--base", str(tester)] if tester else [])],
+                           cwd=str(S.REPO), capture_output=True, text=True, timeout=300, stdin=subprocess.DEVNULL)
+    if p.returncode != 0 or not p.stdout.strip():
+        raise J.Refuse(f"importrun answered {p.returncode}: {(p.stderr or p.stdout).strip()[-300:] or 'nothing'}")
+    run_id = p.stdout.strip().splitlines()[-1]
+    api.ideastore().add_run(name, run_id, root)
+    return run_id
 
 
 def _last(name, root):
@@ -608,11 +621,21 @@ def _checked(name, root) -> bool:
 
 def _step(name: str, status: str, last, root, checked=None) -> str:
     """THE NEXT STEP of an idea, in one sentence, from what is on file."""
-    most = R.need("2.9")
+    most, d = R.need("2.9"), api.ideastore().idea_dir(name, root)
     if status == "shelved":
-        return f"Not passed after round {most}: {name} is SHELVED, with what was tried on file"
+        return (f"NOT PROVEN on the out-of-sample test: a fail is final -- {name} is SHELVED, and it is not re-tuned and re-tested on that period"
+                if (d / "test.json").is_file() else f"Not passed after round {most}: {name} is SHELVED, with what was tried on file")
     if status not in ("idea", "lead"):
-        return api.ideastore().read_idea(name, root).get("next") or ""          # frozen and beyond: the later phases say their own
+        return api.ideastore().read_idea(name, root).get("next") or ""          # tested and beyond: the later phases say their own
+    if status == "lead" and (d / "lock.json").is_file():                        # frozen: the one read is what is left of the history
+        try:
+            read = api.ideastore().read_on_file(name, root=root)
+        except ValueError:                                                      # (the app's word for a log with a line that does not read)
+            read = {"state": "not readable", "utc": "the one-read log has a line that does not read"}
+        return (f"{name} is FROZEN and its read of the test days is on file ({read.get('state')}, {read.get('utc')}): the test days are read once -- "
+                f"bp.py status {name} shows a job that is still running" if read else
+                f"{name} is FROZEN: the out-of-sample test is next and it is ONE read of the test days, never repeated -- bp.py test {name} --confirm, "
+                "only when the owner has said to")
     if last is None:
         return (f"The card is on file and the build is next: bp.py build {name} --reason=\"why round 1 is run\" (round 1 of at most {most}; with --days it is a "
                 "smoke run that gives the code check its store)")
@@ -620,7 +643,7 @@ def _step(name: str, status: str, last, root, checked=None) -> str:
     checked = _checked(name, root) if checked is None else checked
     check = f"bp.py code-check {name}" + (f" --store={key}" if key else "")
     if status == "lead":
-        return (f"Every build line passes and the code is checked: {name} is a LEAD, and the freeze is next (bp.py lock {name}; not built yet)" if checked else
+        return (f"Every build line passes and the code is checked: {name} is a LEAD, and the freeze is next (bp.py lock {name})" if checked else
                 f"Every build line passes: before the freeze, the code check has to pass on the round's home store ({check}, then --looked)")
     return (f"Fails {', '.join(failed)}: round {n + 1} of at most {most} needs its reason first (bp.py build {name} --reason=\"why\"; its random bar is "
             f"{100 * R.need('2.3', n + 1):g} %), or leave the idea" + ("" if checked else f" -- and the code check has not passed yet ({check})"))
@@ -740,19 +763,31 @@ def status(name=None, root=None) -> dict:
         rounds.append({"round": n, "bar": R.need("2.3", n), "reason": f.read_text(encoding="utf-8").strip() if f.is_file() else None, "store": s.get("store"),
                        "passed": b.get("passed"), "failed": b.get("failed")})
         full = {x["line"]: x for x in b.get("lines") or []} or full
+    full = {**full, **{x["line"]: x for x in (_json(d / "test.json") or {}).get("lines") or [] if isinstance(x, dict)}}      # (a tested idea: its 4.x lines)
     card_md = (d / "card.md").read_text(encoding="utf-8") if (d / "card.md").is_file() else None
     rows = [{"line": x["line"], "passed": x["passed"], "number": full.get(x["line"], {}).get("number"), "need": full.get(x["line"], {}).get("need"), "text": x["text"]}
             for x in i["lines"]]
-    job = JOBS.running(name, root)
+    job, lock = JOBS.running(name, root), _json(d / "lock.json")
+    try:
+        read = IS.read_on_file(name, root=root)
+    except ValueError as e:                         # (a one-read log that does not read: said, and the test will refuse)
+        read = {"state": "unreadable", "utc": None, "verdict": str(e)}
+    home = (lock or {}).get("home") or {}
+    rng = ((lock or {}).get("test_range") or {}).get(home.get("market")) or {}
     text = [f"{name} · {head(i)}" + (f" · Lab group {i['group']}" if i["group"] else "")
             + (f" · {len(i['runs'])} tester run{'s' * (len(i['runs']) != 1)}" if i["runs"] else "") + (f" · job {job} is running" if job else ""),
             *(["CARD", *["  " + ln for ln in card_md.splitlines() if ln.strip()]] if card_md else ["NO CARD on file"]),
             *(["ROUNDS", *[f"  round {x['round']} · random bar {100 * x['bar']:g} % · store {x['store']} · "
                            + ("no result on file" if x["passed"] is None else "every line that applies passes" if x["passed"] else "fails " + ", ".join(x["failed"] or []))
                            + f" · reason: {x['reason']}" for x in rounds]] if rounds else []),
+            *([f"FROZEN · lock {lock.get('hash')} of {lock.get('locked_utc')} · round {lock.get('round')} · default variant {lock.get('default')} · test range "
+               f"{home.get('market')} {rng.get('start')} .. {rng.get('end')}"] if lock else []),
+            *([f"TEST DAYS READ · {read.get('state')} {read.get('utc') or ''}".rstrip() + (f" · {read['verdict']}" if read.get("verdict") else "")] if read else []),
             *(["LATEST VERDICT", *["  " + x["text"] for x in rows]] if rows else []),
             *([f"TESTER RUNS: {', '.join(i['runs'])}"] if i["runs"] else [])]
     return api.result("status", name, status=i["status"], phase=i["phase"], round=i["round"], lines=rows, text="\n".join(text),
                       next=_step(name, i["status"], _last(name, root), root),
                       record={"idea": i, "card": card_md, "spec": _json(d / "spec.json"), "check": _json(d / "check.json"), "rounds": rounds, "job": job,
+                              "lock": None if lock is None else {k: lock.get(k) for k in ("hash", "version", "round", "locked_utc", "default", "test_range")},
+                              "read": read,
                               "log": [json.loads(x) for x in (d / "log.jsonl").read_text(encoding="utf-8").splitlines() if x.strip()] if (d / "log.jsonl").is_file() else []})

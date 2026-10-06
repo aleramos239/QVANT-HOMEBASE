@@ -1,7 +1,8 @@
 """cli.py -- the command line of bp.py (toolkit plan, section 4: one command per phase; the command line = the connector tool).
 The connector (homebase/claude_mcp/blueprint_tools.py) writes every command as
     <python> bp.py <command> <the idea's name> --opt=value ... --root=<ideas root> --json
-in this folder; the card comes on stdin (`--spec=-`), nothing else does. A person may leave --root and --json out.
+in this folder; the card comes on stdin (`--spec=-`), and so do an eval's live fills (`--fills=-`). A person may leave --root
+and --json out.
 
   bp.py card <name> --spec=- | --spec=FILE                                PHASE 0: lines 0.1-0.6 off the card ({"name", "card",
                                                                              "run"} as JSON); a whole card is saved in the app
@@ -31,15 +32,48 @@ in this folder; the card comes on stdin (`--spec=-`), nothing else does. A perso
   bp.py job <id> [--wait=S]                                               keep waiting on a build that answered "running": by
                                                                              the id alone; the answer is the build's own
   bp.py pools [--roots=NQ,ES,GC] [--tf=1,5,15,30]                         the random-entry control pools of the build range
-  build, pools: [--workers=N] (default 8, or 4 while the desk trades)
+  bp.py lock <name> [--wait=S]                                            PHASE 3, THE FREEZE (freeze.py): refused unless the
+                                                                             latest round passes 2.1-2.9 and the code check of
+                                                                             its home store is passed; runs the worse-fills
+                                                                             table of the build days, picks the default variant,
+                                                                             writes lock.json under one hash. Prints the hash,
+                                                                             the default and the test range
+  bp.py test <name> --confirm [--wait=S] [--second-look]                  PHASE 4, THE ONE READ of the test days (oos.py): the
+        [--tester=DIR]                                                       read is written to the one-read log FIRST, then
+                                                                             the locked variants, their control and the worse
+                                                                             fills are run, lines 4.1-4.7 are read and saved.
+                                                                             Refused: not frozen, a lock that no longer matches,
+                                                                             no --confirm, a read on file for the idea or for a
+                                                                             same-idea relative (--second-look: the only way
+                                                                             past, labelled so everywhere). A fail is final
+  bp.py seed-reads [--dry-run]                                            the one-read log filled from the OLD read logs, once
+                                                                             (reads.py): the units whose test days were read
+                                                                             before the blueprint. A second run adds nothing
+  bp.py sim <name> --account=ID --attempts=N --fee-budget=USD             PHASE 5, BEFORE THE EVAL IS BOUGHT (propodds.py): the
+                                                                             app's prop simulator on the test-period trades of
+                                                                             an idea that passed its test, OPEN LOSSES COUNTED --
+                                                                             per pre-set size the odds of the eval within 10
+                                                                             trading days and of the maximum payout within 20,
+                                                                             plain and "live is worse"; lines 5.1-5.4. The
+                                                                             attempts and the fee budget are the owner's numbers
+  bp.py eval-card <name> [--fills=-|FILE] [--account=ID]                  PHASE 6, THE EVAL (evalcard.py): refused until a sim
+                                                                             is on file. Without fills: lines 6.1-6.8 as the
+                                                                             rules, and the drawdown table of its own test
+                                                                             history. With the live fills ({"fills": [...]};
+                                                                             the format: bp.py eval-card --help): 6.1-6.5 read
+  bp.py blocks                                                            everything an idea can be built from without writing
+                                                                             code, one line each, and what version 1 refuses
+                                                                             (blocklist.py). Runs nothing
+  build, pools, lock, test: [--workers=N] (default 8, or 4 while the desk trades)
 A SMOKE RUN (build, pools): --days=d1,d2 --cells=x,y --out=DIR --ledger=FILE = named build days and a few exit cells, into
 its own store folder and ledger; never a verdict (`dry_run` true), never saved as a round, never runs_bp/ or ledger.csv.
 With --json a command prints exactly ONE JSON object on stdout, on one line (api.result; plan section 8), otherwise its `text`
 (and, for the commands of an idea's record, the next step); what a run is doing goes to stderr. Exit: 0 = done (lines may
-still fail) · 2 = refused (the reason is printed; `ok` false) · 1 = crashed. --wait=S (build): past S seconds the answer is
-job.state = running and the work goes on (jobs.py); no --wait = the command works in the foreground. --root (or
-HOMEBASE_IDEAS_ROOT) = the app's idea folder, where the jobs are kept too.
-Not built yet: lock, test, sim, eval-card; a tester run as the code check's source (--run-id).
+still fail) · 2 = refused (the reason is printed; `ok` false) · 1 = crashed. --wait=S (build, test): past S seconds the answer
+is job.state = running and the work goes on (jobs.py); no --wait = the command works in the foreground. (lock: its one tape
+pass always runs as a job, and the command waits 240 s by itself.) --root (or HOMEBASE_IDEAS_ROOT) = the app's idea folder,
+where the jobs and the one-read log are kept too.
+Not built yet: a tester run as the code check's source (--run-id).
 """
 from __future__ import annotations
 
@@ -51,10 +85,13 @@ from pathlib import Path
 import judge as J
 
 from . import api
+from . import freeze as FRZ
 from . import jobs as JOBS
+from . import oos as OOS
+from . import reads as READS
 from . import records as REC
 
-NOT_BUILT = ("lock", "test", "sim", "eval-card")                         # the connector's other commands: a later step of the plan
+NOT_BUILT = ()                                                           # the connector's commands that are a later step of the plan: none is left
 ONE_TABLE = ("home", "filter", "round")                                  # options of the one-table build (--spec-file) only
 
 
@@ -106,6 +143,33 @@ def _parser() -> _Parser:
     p = add("pools", "the random-entry control pools of the build range")
     p.add_argument("--roots", default="NQ,ES,GC")
     p.add_argument("--tf", default="1,5,15,30")
+    lk = add("lock", "phase 3: the freeze -- the rule, the variant list, the default variant, the control and the costs under one hash")
+    lk.add_argument("name", help="the idea's name")
+    t = add("test", "phase 4: the ONE read of the test days (2025-07-01 on), lines 4.1-4.7")
+    t.add_argument("name", help="the idea's name")
+    t.add_argument("--confirm", action="store_true", help="the owner has said to run the one read: it cannot be taken back")
+    t.add_argument("--second-look", action="store_true", help="go past a USED read of a relative: the verdict is labelled SECOND LOOK everywhere")
+    t.add_argument("--tester", metavar="DIR", help="the tester's base folder the default variant's test trades go to (default: the app's own)")
+    sr = add("seed-reads", "the one-read log of the test days filled from the old read logs, once")
+    sr.add_argument("--dry-run", action="store_true", help="write nothing: say what would be added")
+    m = add("sim", "phase 5: the prop simulator on the test-period trades, for one account (open losses count)")
+    m.add_argument("name", help="the idea's name")
+    m.add_argument("--account", metavar="ID", help="the account in question: a rule file of the app's prop simulator, e.g. lucid-pro-50k@2026-09-27b (bp.py blocks lists them)")
+    m.add_argument("--attempts", type=int, metavar="N", help="how many evals the owner will buy at most (line 5.4: his number, never a guess)")
+    m.add_argument("--fee-budget", type=float, metavar="USD", help="the owner's total fee budget in dollars (line 5.4: his number, never a guess)")
+    from . import evalcard                          # phases 5 and 6 are loaded when a command line is read, never with this module: a tape pass's workers import it
+    e = sub.add_parser("eval-card", help="phase 6: the eval card -- lines 6.1-6.8 and the drawdown table of its own test history", allow_abbrev=False,
+                       epilog=evalcard.FILLS, formatter_class=argparse.RawDescriptionHelpFormatter)
+    e.add_argument("name", help="the idea's name")
+    e.add_argument("--fills", metavar="-|FILE", help="the live trades of the eval so far, ONE JSON object: - = on stdin, else a file (THE FILLS FORMAT, below)")
+    e.add_argument("--account", metavar="ID", help="the account the card stands on (default: the card's own, else the simulator result saved last)")
+    bl = add("blocks", "everything an idea can be built from without writing code, and what version 1 refuses")
+    for x in (lk, t):
+        x.add_argument("--wait", type=float, metavar="S", help="answer within S seconds; past them the work goes on as a job")
+        x.add_argument("--workers", type=int, help="worker processes (default: 8, or 4 while the desk trades)")
+    for x in (lk, t, sr, m, e, bl):
+        x.add_argument("--root", metavar="DIR", help="the app's idea folder (default HOMEBASE_IDEAS_ROOT, else ~/.homebase/ideas)")
+        x.add_argument("--json", action="store_true", help="print the result as one JSON object")
     for x in (b, p):
         x.add_argument("--workers", type=int, help="worker processes (default: 8, or 4 while the desk trades)")
         x.add_argument("--ledger", metavar="FILE", help="a smoke run's own ledger")
@@ -119,11 +183,31 @@ def _parser() -> _Parser:
     return ap
 
 
-def _job(kw: dict, a) -> dict:
-    """A build that was told how long to wait: a job (jobs.py), its answer inside the wait or `running`."""
-    d = JOBS.new("build", a.name, kw, a.root, a.wait)
+def _job(kw: dict, a, command: str = "build", wait=None) -> dict:
+    """A build (a freeze, a test) that was told how long to wait: a job (jobs.py), its answer inside the wait or `running`."""
+    wait = a.wait if wait is None else wait
+    d = JOBS.new(command, a.name, kw, a.root, wait)
     JOBS.start(d)
-    return JOBS.wait(d.name, a.root, a.wait)
+    return JOBS.wait(d.name, a.root, wait)
+
+
+def _lock(a) -> dict:
+    """`lock <name>`: the freeze. Its one tape pass (the worse-fills table of the build days) runs as a job, because the
+    connector stops a command after 300 s: the command waits --wait seconds (freeze.LOCK_WAIT by itself) and then answers
+    `running`; `lock <name>` again picks that job's wait back up. A freeze with nothing to run answers at once."""
+    wait = FRZ.LOCK_WAIT if a.wait is None else a.wait
+    job = JOBS.running(a.name, a.root)
+    if job and JOBS.command(job, a.root) == "lock":
+        return JOBS.wait(job, a.root, wait)
+    kw = FRZ.start(a.name, a.root, workers=a.workers)       # every refusal that needs no run comes back at once, never as a job
+    return _job(kw, a, "lock", wait) if kw.get("heavy") else FRZ.run(**kw)
+
+
+def _test(a) -> dict:
+    """`test <name> --confirm [--wait=S] [--second-look]`: every refusal, then the read is claimed in the one-read log, then
+    the run -- in the foreground, or as a job (`job <id>` picks its wait back up: nothing is read again)."""
+    kw = OOS.start(a.name, a.confirm, a.second_look, a.root, workers=a.workers, tester=a.tester)
+    return OOS.run(**kw) if a.wait is None else _job(kw, a, "test")
 
 
 def _build(a) -> dict:
@@ -165,9 +249,24 @@ def _card(a) -> dict:
     return REC.card(a.name, spec, a.root)
 
 
+def _fills(a):
+    """`eval-card --fills=-|FILE`: the live fills, ONE JSON object {"fills": [...]} (evalcard.FILLS) -- None without the option."""
+    if a.fills is None:
+        return None
+    where = "on stdin" if a.fills == "-" else a.fills
+    try:
+        raw = sys.stdin.read() if a.fills == "-" else Path(a.fills).read_text(encoding="utf-8")
+        got = json.loads(raw) if raw.strip() else None
+    except (OSError, ValueError) as e:
+        raise J.Refuse(f"the fills {where} {'are not there' if isinstance(e, OSError) else 'do not read as JSON'}: {e}") from None
+    if got is None:
+        raise J.Refuse(f"no fills {where}: ONE JSON object {{\"fills\": [...]}} (the format: bp.py eval-card --help)")
+    return got
+
+
 def _said(r: dict) -> str:
     """A result for a person: its text -- and the next step, for the commands of an idea's record."""
-    return r["text"] + (f"\nNEXT: {r['next']}" if r.get("next") and (r.get("command") in ("card", "status") or "idea" in r) else "")
+    return r["text"] + (f"\nNEXT: {r['next']}" if r.get("next") and (r.get("command") in ("card", "status", "lock", "test", "seed-reads") or "idea" in r) else "")
 
 
 def main(argv=None) -> int:
@@ -187,6 +286,21 @@ def main(argv=None) -> int:
             r = JOBS.wait(a.id, a.root, a.wait)
         elif a.cmd == "pools":
             r = api.pools(_list(a.roots), _list(a.tf), a.workers, a.out, a.ledger, _list(a.days), _list(a.cells))
+        elif a.cmd == "lock":
+            r = _lock(a)
+        elif a.cmd == "test":
+            r = _test(a)
+        elif a.cmd == "seed-reads":
+            r = READS.seed(a.dry_run, a.root)
+        elif a.cmd == "sim":
+            from . import propodds
+            r = propodds.sim(a.name, a.account, a.attempts, a.fee_budget, a.root)
+        elif a.cmd == "eval-card":
+            from . import evalcard
+            r = evalcard.card(a.name, _fills(a), a.root, a.account)
+        elif a.cmd == "blocks":
+            from . import blocklist
+            r = blocklist.blocks()
         else:
             r = api.code_check(a.name, a.store, a.trades, a.run_id, a.same_as, a.looked, a.cell, a.market, _list(a.sessions), a.window, a.max_per_day, a.root, a.out)
     except api.REFUSALS as e:

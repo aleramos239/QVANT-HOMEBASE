@@ -14,7 +14,8 @@ THE IDEA'S RECORD -- the card (phase 0), the build of an idea with its counted r
 steps 5 and 6): `bp.py card`, `bp.py build <name> --reason=...`, `bp.py status`.
 `name` is the IDEA's name, as the connector passes it and as the app files it. A result marked `dry_run` (a dry run on
 stored units, a smoke run on named days) never counts as a verdict: the idea store reads that field.
-Not built yet (plan step 8 on): lock, test, sim, eval-card.
+The later phases are modules of their own: the freeze and the one read (plan step 8), propodds.py = `bp.py sim` (phase 5,
+step 9), evalcard.py = `bp.py eval-card` (phase 6, step 10); blocklist.py = `bp.py blocks`.
 """
 from __future__ import annotations
 
@@ -164,7 +165,7 @@ def build(spec, name=None, reason: str = "", home=None, filt=None, round_: int =
         + ([f"NOTE: {', '.join(old)} {'was' if len(old) == 1 else 'were'} written by other code than today's: after a change to the code the earlier trade "
             "list is reproduced exactly before a new run counts (line 1.6: bp.py code-check <name> --store=<a fresh run> --same-as=<the store>)."] if old else []))
     r["next"] = ("A smoke run is no verdict: run the build on the whole range (no --days)." if days else
-                 "Every build line that applies passes: the idea is a LEAD; the freeze is next (bp.py lock, not built yet)." if not failed else
+                 "Every build line that applies passes: the idea is a LEAD; the freeze is next (bp.py lock: an idea on file, with its card and its code check)." if not failed else
                  f"Fails {', '.join(failed)}: write the next round's reason (at most {R.need('2.9')} rounds, the bar of 2.3 rises each round) or shelve the idea.")
     return r
 
