@@ -143,7 +143,8 @@ def report_sessions(root: str, now: dt.datetime, n: int = REPORT_SESSIONS) -> li
 
 
 def build_report(roots, base: Path, now: dt.datetime, n: int = REPORT_SESSIONS,
-                 cache: dict | None = None) -> dict:
+                 cache: dict | None = None, watch: dict | None = None) -> dict:
+    """The report. `watch`: the data watchdog's last reading (homebase.datawatch), carried as it is."""
     cache = {} if cache is None else cache
     out = {r: [session_entry(base, r, d, cache, now) for d in report_sessions(r, now, n)] for r in roots}
     es = [e for es in out.values() for e in es]
@@ -154,7 +155,8 @@ def build_report(roots, base: Path, now: dt.datetime, n: int = REPORT_SESSIONS,
                "missing_ids": sum(e.get("missing_ids", 0) for e in es),
                "needs_massive": sum(1 for e in es if e.get("needs_massive"))}
     return {"generated_at_utc": A.now_utc(), "archive": str(base), "sessions_per_root": n,
-            "summary": summary, "not_modelled": A.NOT_MODELLED, "roots": out}
+            "summary": summary, **({"watch": watch} if watch else {}),
+            "not_modelled": A.NOT_MODELLED, "roots": out}
 
 
 def summary_line(rep: dict, path: Path) -> str:
@@ -165,14 +167,15 @@ def summary_line(rep: dict, path: Path) -> str:
             f"{s['missing']} missing; {s['needs_massive']} need Massive -> {path}")
 
 
-def write_report(roots, base: Path, now: dt.datetime, path: Path, n: int = REPORT_SESSIONS) -> dict:
+def write_report(roots, base: Path, now: dt.datetime, path: Path, n: int = REPORT_SESSIONS,
+                 watch: dict | None = None) -> dict:
     """Build the report, write it (and its cache beside it) atomically, log the line."""
     cache_path = path.with_name(path.stem + ".cache.json")
     try:
         cache = json.loads(cache_path.read_text())
     except (OSError, ValueError):
         cache = {}
-    rep = build_report(roots, base, now, n, cache)
+    rep = build_report(roots, base, now, n, cache, watch)
     path.parent.mkdir(parents=True, exist_ok=True)
     A.atomic_write(path, (json.dumps(rep, indent=1) + "\n").encode())
     A.atomic_write(cache_path, json.dumps(cache).encode())

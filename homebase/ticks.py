@@ -733,14 +733,15 @@ def missing(root: str, date: dt.date, base: Path, now: dt.datetime, cache: dict,
 
 
 def plan(roots, dates: list[dt.date], base: Path, now: dt.datetime,
-         cache: dict | None = None) -> tuple[dict, list]:
+         cache: dict | None = None, quiet: bool = False) -> tuple[dict, list]:
     """The run's work: ({(root, date): session info}, [jobs]), each job a piece
     of a missing stretch within one UTC day (it leaves the broker's history at
     one moment), in fetch order -- earliest expiry first (the module docstring:
     every root's first hours before any root's long tail), a session's open
     before its later pieces, root priority (ROOTS order), date. A piece already
     gone from the broker is not a job: it is said once, the hour it goes (the
-    coverage report marks it "needs Massive")."""
+    coverage report marks it "needs Massive") -- not at all with `quiet` (the
+    data watchdog reads the same plan at the run's end: homebase.datawatch)."""
     cache = {} if cache is None else cache
     rank = {r: i for i, r in enumerate(ROOTS)}
     sessions, jobs = {}, []
@@ -761,7 +762,7 @@ def plan(roots, dates: list[dt.date], base: Path, now: dt.datetime,
                 for s, e in (utc_segments(_utc(a), _utc(b)) if b > a else [(_utc(a), _utc(b))]):
                     exp = history_expiry(s)
                     if now >= exp:
-                        if now - exp < dt.timedelta(minutes=70):
+                        if now - exp < dt.timedelta(minutes=70) and not quiet:
                             log(f"{root} {date} {info['contract']} {_et_span(s, e)} ({why}): left the "
                                 "broker's history before it was fetched — needs Massive")
                         continue
@@ -960,13 +961,27 @@ REPORT_EVERY = dt.timedelta(hours=12)    # a run with nothing to do still refres
 
 
 def coverage_report(roots, base: Path, sessions: int) -> None:
-    """Write homebase/.state/tick_coverage.json and log its summary line; a
-    failure here is logged, never raised (the run's data is already written)."""
-    from . import tickcoverage                    # it imports this module
+    """Write homebase/.state/tick_coverage.json -- with the data watchdog's last reading in it -- and
+    log its summary line; a failure here is logged, never raised (the run's data is already written)."""
+    from . import datawatch, tickcoverage         # they import this module
     try:
-        tickcoverage.write_report(roots, base, now_et(), state_dir() / "tick_coverage.json", sessions)
+        tickcoverage.write_report(roots, base, now_et(), state_dir() / "tick_coverage.json", sessions,
+                                  watch=datawatch.load(state_dir() / "data_watch.json") or None)
     except Exception as e:  # noqa: BLE001
         log(f"coverage report failed: {type(e).__name__}: {e}")
+
+
+def data_watch(roots, base: Path, cache: dict) -> dict | None:
+    """The data watchdog at the end of a run (homebase.datawatch: is the live feed late, thin or
+    silent; refused merges; what is about to leave the broker): homebase/.state/data_watch.json and,
+    while something is wrong, its line in this log. It only reads the archive. A failure here is
+    logged, never raised (the run's data is already written)."""
+    from . import datawatch                       # it imports this module
+    try:
+        return datawatch.run(roots, base, now_et(), cache, state_dir() / "data_watch.json")
+    except Exception as e:  # noqa: BLE001
+        log(f"data watch failed: {type(e).__name__}: {e}")
+        return None
 
 
 def report_due(path: Path) -> bool:
@@ -1080,9 +1095,10 @@ def _wait_for_token(left: float, poll_s: float, sleep) -> tuple[bool, float]:
 def run(roots, dates, base: Path, sessions: int = 30, *, sleep=time.sleep,
         token_wait_s: float = TOKEN_WAIT_S, token_poll_s: float = TOKEN_POLL_S) -> int:
     """One run of the job (launchd: hourly, on load, 17:20 and 05:30): fetch
-    and merge whatever is missing (record), then the coverage report when the
-    run changed something or the last report is REPORT_EVERY old. Silent when
-    there is nothing to do; never inside 09:20-09:35 ET; a run already in
+    and merge whatever is missing (record), then the data watchdog (data_watch),
+    then the coverage report when the run changed something or the last report
+    is REPORT_EVERY old. Silent when there is nothing to do and the data is
+    fine; never inside 09:20-09:35 ET; a run already in
     progress (the lock) is left to it. A run that fails ONLY for want of a valid md token
     (it ran right after a wake, before the desk reconnected and wrote one) waits for the
     token and retries within itself, every token_poll_s for up to token_wait_s, then gives
@@ -1116,6 +1132,7 @@ def run(roots, dates, base: Path, sessions: int = 30, *, sleep=time.sleep,
                 log(f"run failed: {type(e).__name__}: {e}")
                 rc = 1
             finally:
+                data_watch(roots, base, cache)    # before the cache is saved: what it read of the files is kept
                 try:
                     prune_cache(cache, now_et())
                     tickarchive.atomic_write(cache_path, json.dumps(cache).encode())

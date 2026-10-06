@@ -42,7 +42,9 @@ claude mcp add --scope user \
   overrides the loopback port the same way `HOMEBASE_CHARTS_URL` does for the chart service.
 - DRAFT strategy files: `~/.homebase/strategies/<name>.py` (`HOMEBASE_DRAFTS_DIR` overrides). `set_group`
   writes `groups.json` in the same folder (which group the Lab lists a strategy under) and nothing else.
-- `homebase/.state/tick_coverage.json`, read directly off disk (never over HTTP) for `data_coverage`.
+- `homebase/.state/tick_coverage.json` and `homebase/.state/data_watch.json` (the tick job's data watchdog: live feed
+  late / thin / silent, refused merges, what is about to leave the broker), read directly off disk (never over
+  HTTP) for `data_coverage`; `desk_readiness` adds the watchdog's one line to the desk's own checks.
 - The blueprint toolkit, started as a child process by each `blueprint_*` tool (no service is asked):
   `research/edge-library/bp.py`, run with the research engine's Python (`$HOME/ONYX TRADING/.venv/bin/python`).
   `HOMEBASE_BP` and `HOMEBASE_BP_PYTHON` move them. The ideas it saves live in `~/.homebase/ideas/<name>/`
@@ -62,6 +64,8 @@ version: restart that service (never 09:20–09:35 ET on weekdays).
   refuse and say the chart service needs a restart.
 - **`data_coverage`** reads `homebase/.state/tick_coverage.json`, which the tick job writes
   (`python -m homebase.ticks --coverage` rewrites it). With no file it says so and returns cleanly (no error).
+  The watchdog's part comes from `data_watch.json`, written at the end of every run of the tick job (a new
+  process each hour: no service restart); a reading over 3 hours old is shown as "NOT CHECKED since".
 - **Claude Code itself**: a running session keeps the tool list it started with: after a service restart or
   a code change, start a new session (or `/mcp` reconnect) to pick up new tools and new fields.
 
