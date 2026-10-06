@@ -5,8 +5,9 @@ the Strategy Tester: list/read/write strategies, backtest, heat-map, walk-forwar
 re-scores, runs and trades, and **show on chart** (the open chart page loads the run and scrolls to it).
 It also gives Claude a read of the live desk (`desk_status`, `desk_journal`, `desk_readiness`,
 `data_coverage`, `services_health`) and two safe, non-trading operations (`account_reconnect`,
-`account_remove`), plus a charts-service data export (`export_start`, `export_status`), and the eight
-`blueprint_*` tools that run a strategy idea through the house blueprint, one per phase. **It has no
+`account_remove`), plus a charts-service data export (`export_start`, `export_status`), and the nine
+`blueprint_*` tools that run a strategy idea through the house blueprint: one per phase, the list of
+blocks before them, the status at any time. **It has no
 trading tool of any kind** — nothing here can place or cancel an order, flatten, kill, arm/disarm,
 book/unbook an account, or touch a strategy or chart-trading switch (`homebase/claude_mcp/desk_client.py`'s
 `ALLOWED_GET`/`ALLOWED_POST` is the whole allowlist; `tests/test_claude_mcp.py` pins it structurally).
@@ -25,7 +26,7 @@ claude mcp add --scope user \
   session (or run `/mcp` again).
 - `PYTHONPATH` makes `homebase` importable whatever directory Claude Code starts in. The server imports
   nothing outside the stdlib, so any `python3` (3.9+) works in place of the venv's.
-- Check it: `claude mcp list` should show `homebase ... ✓ Connected`. In a session, `/mcp` lists its 33 tools.
+- Check it: `claude mcp list` should show `homebase ... ✓ Connected`. In a session, `/mcp` lists its 34 tools.
 - Leave `write_strategy` on "ask" (do not allowlist it): it writes Python that a backtest will run. The
   sandbox below contains that code, but the user should still see what Claude writes before it runs.
   `account_remove` is worth leaving on "ask" too, even though it is refused while an account holds a
@@ -73,13 +74,28 @@ version: restart that service (never 09:20–09:35 ET on weekdays).
 
 ## The blueprint tools
 
-`blueprint_card` (phase 0), `blueprint_code_check` (1), `blueprint_build` (2), `blueprint_lock` (3),
-`blueprint_test` (4), `blueprint_sim` (5), `blueprint_eval_card` (6) and `blueprint_status` follow
-`research/edge-library/BLUEPRINT.md`, section 2. Each runs one command of the toolkit
+`blueprint_blocks` (before the card), `blueprint_card` (phase 0), `blueprint_code_check` (1),
+`blueprint_build` (2), `blueprint_lock` (3), `blueprint_test` (4, once), `blueprint_sim` (5),
+`blueprint_eval_card` (6) and `blueprint_status` (any time) follow `research/edge-library/BLUEPRINT.md`,
+section 2, in that order. Each runs one command of the toolkit
 (`<python> bp.py <command> ... --root=<ideas folder> --json`) and returns its text and its pass/fail lines.
 
 - **Nothing is judged in the connector.** The toolkit decides and refuses; exit code 2 comes back as
   "Refused (blueprint <command>): ..." (the tool's error), a toolkit that is not there as "not installed yet".
+- **`blueprint_blocks` comes before the card.** It runs `bp.py blocks` and returns its list: everything an
+  idea can be built from without writing code (entry triggers with their settings, filters, the standard exit
+  table, sessions, bar sizes, markets with their cost floors, Monte Carlo settings, size steps) and what
+  version 1 of the toolkit refuses — a home of "all", the evening session, `limits.trail_atr` /
+  `limits.exit_bars` among them (no tool text offers one of those). It runs nothing and takes no input.
+- **`blueprint_eval_card` takes the live fills in the toolkit's own format** (`bp.py eval-card --help`): one
+  object per live order, oldest first. A trade says `entry_time`, `exit_time`, `side`, `size`, `entry_price`,
+  `exit_price`, `net` and `exit_reason`; `entry_slip_ticks` (or `trigger_price`), `replay`, `fixed` and `note`
+  are optional. An order that did not trade is `{"status": "missed" | "rejected"}`. A field that is not
+  listed is refused by the toolkit. `account` (optional) names the account the card stands on; left out, it
+  is the card's own, else the one of the simulator result saved last.
+- **A line that is neither passed nor failed** is counted as "not judged or does not apply": on an eval card
+  it is not judged yet (6.4 before 10 trades at size), in a build it does not apply (2.7 without a filter).
+  The line's own text says which.
 - **`blueprint_test` reads the test days ONCE.** It needs `confirm: true`; leave it on "ask".
 - **Long commands** (`blueprint_build`, `blueprint_test`) return a job id after `wait_s` (default 120 s);
   the same tool called with that `job_id` keeps waiting.
@@ -88,7 +104,8 @@ version: restart that service (never 09:20–09:35 ET on weekdays).
   Lab group (Ideas, Leads, Proven on history, Proven live, Shelved) are brought up to date. The group moves
   only when the status changes. A `groups.json` that does not read is reported in the tool's text and never
   fails the phase.
-- No chart-service route is involved, so nothing needs a restart: a new session has the tools.
+- No chart-service route is involved, so nothing needs a restart: a new session has the tools
+  (`blueprint_blocks` and the eval card's `account` came with connector 1.4.0).
 
 ## Draft strategies: where their code runs
 

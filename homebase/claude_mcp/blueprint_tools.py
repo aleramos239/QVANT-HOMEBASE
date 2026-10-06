@@ -7,19 +7,22 @@ research engine's Python -- as a child process and returns what it answers. The 
 the toolkit plan's section 8 (research/edge-library/out/blueprint/toolkit_plan.md):
 
     <python> <bp.py> <command> [its arguments] --root=<the idea folder> --json
+      blocks                                   what an idea can be built from                 before the card
       card <name> --spec=-                     stdin: {"name", "card", "run"}                 phase 0
       code-check <name> [--store=KEY | --trades=FILE | --run-id=ID] [--looked]                phase 1
       build <name> --reason=TEXT --wait=S                                                     phase 2
       lock <name>                                                                             phase 3
       test <name> --confirm --wait=S                                                          phase 4
       sim <name> --account=ID --attempts=N --fee-budget=USD                                   phase 5
-      eval-card <name> [--fills=-]             stdin: {"fills": [...]}                        phase 6
+      eval-card <name> [--account=ID] [--fills=-]     stdin: {"fills": [...]}                 phase 6
       status [<name>]
       job <id> --wait=S                        keep waiting on a build or a test
 
     stdout: ONE JSON object {ok, command, name, status, phase, round, lines: [{line, passed, number, need,
     text}], text, next, job: {id, state, progress} | null, saved, error}; logs go to stderr.
     exit 0 = done (lines may still fail) · 2 = refused (`error` says why) · anything else = it crashed.
+    A line's `passed` is true, false or null. null = the line is not judged yet (an eval card before its live
+    trades) or it does not apply (2.7 without a filter): the line's own text says which.
 
 The toolkit is looked for at <repo>/research/edge-library/bp.py and run with
 $HOME/ONYX TRADING/.venv/bin/python; HOMEBASE_BP and HOMEBASE_BP_PYTHON move them. A toolkit that is not
@@ -51,7 +54,7 @@ from .client import ToolError
 ENV_BP, ENV_PYTHON = "HOMEBASE_BP", "HOMEBASE_BP_PYTHON"
 DEFAULT_WAIT_S, MAX_WAIT_S = 120, 3600   # tools.py's own, repeated (it imports this module); a test holds them equal
 GRACE_S = 60.0                           # past --wait: the toolkit's own start-up and saving
-SHORT_S = 300.0                          # a command that is not a job: card, code check, lock, sim, eval card, status
+SHORT_S = 300.0                          # not a job: blocks, card, code check, lock, sim, eval card, status
 RUNNING = ("queued", "running")
 _JOB_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:@-]{0,119}$")
 
@@ -81,12 +84,13 @@ _CARD = {
     "properties": {
         "why": {"type": "string", "description": "0.1 The reason in one sentence: why it should make money."},
         "loser": {"type": "string", "description": "0.1 Who is on the losing side."},
-        "home": {"type": "object", "description": "0.3 Its home. \"all\" where the reason does not single one out.",
-                 "properties": {"market": {"type": "string", "description": "NQ, ES, GC, or all."},
+        "home": {"type": "object", "description": "0.3 Its home: ONE market, session and bar size -- where the reason "
+                                                  "fits best. The others go under neighbors.",
+                 "properties": {"market": {"type": "string", "description": "NQ, ES or GC."},
                                 "session": {"type": "string",
-                                            "description": "asia, london, pre, nyam, mid, pm, eve, or all."},
+                                            "description": "asia, london, pre, nyam, mid or pm."},
                                 "bar": {"type": "string",
-                                        "description": "The bar size in minutes (5, 15, ...), or all."}},
+                                        "description": "The bar size in minutes (5, 15, ...)."}},
                  "required": ["market", "session", "bar"], "additionalProperties": False},
         "neighbors": {"type": "array", "items": {"type": "string"},
                       "description": "0.4 Where else it should work: the next bar sizes, the other sessions or markets "
@@ -113,15 +117,68 @@ _SETTINGS = {
         "exits": {"type": "string", "enum": ["standard"],
                   "description": "Always \"standard\": the table of 8 stops x 4 targets."},
         "limits": {"type": "object", "additionalProperties": True,
-                   "description": "Optional: max_tr (entries per session), dir, exit_bars, trail_atr."}},
+                   "description": "Optional: max_tr (entries per session), dir."}},
     "required": ["family", "params", "exits"], "additionalProperties": True}
+# One live order of an eval, as the toolkit reads it (research/edge-library/blueprint/evalcard.py: FILLS, its KEYS in
+# their order, a trade's first eight required): a trade, or an order that did not trade.
+_WHEN = ["string", "number"]             # a time: ISO 8601 WITH its UTC offset, or epoch milliseconds
+_REPLAY = {
+    "type": "object", "description": "The tester's replay of the SAME trade, once it is known: {\"entry_time\": ..., "
+                                     "\"exit_reason\": ...} -- or {\"no_trade\": true} when the replay did not trade "
+                                     "there. Left out: the trade is not held against the test yet (line 6.1 waits for "
+                                     "it).",
+    "properties": {"entry_time": {"type": _WHEN}, "exit_reason": {"type": "string"}, "no_trade": {"type": "boolean"}},
+    "additionalProperties": False}
+_TRADE = {
+    "type": "object", "description": "A TRADE: an order that filled and is flat again.",
+    "properties": {
+        "status": {"type": "string", "enum": ["filled"], "description": "Left out: a trade is read as filled."},
+        "entry_time": {"type": _WHEN, "description": "When the entry filled: ISO 8601 WITH its UTC offset "
+                                                     "(\"2026-10-06T09:45:02-04:00\"), or epoch milliseconds (the "
+                                                     "desk journal's ts x 1000)."},
+        "exit_time": {"type": _WHEN, "description": "When the trade was flat again, written the same way."},
+        "side": {"type": "string", "description": "\"long\" | \"short\" (the desk's \"Buy\" | \"Sell\" are read too)."},
+        "size": {"type": "integer", "minimum": 1,
+                 "description": "Micros traded: a whole number from 1 (stage A is 1)."},
+        "entry_price": {"type": "number", "description": "The average entry fill price."},
+        "exit_price": {"type": "number", "description": "The average exit fill price."},
+        "net": {"type": "number", "description": "Dollars after commissions, at that size."},
+        "exit_reason": {"type": "string", "description": "How it ended: \"tp\" (target), \"sl\" (stop), \"time\" | "
+                                                         "\"eod\" | \"flat\" (the clock: ONE reason), or any other "
+                                                         "word, compared as it is written."},
+        "entry_slip_ticks": {"type": "number", "description": "The entry fill against its trigger, in ticks, worse = "
+                                                              "positive (the desk's slip_ticks). Left out: give "
+                                                              "trigger_price and it is counted from the two prices. "
+                                                              "Neither: line 6.2 is not read."},
+        "trigger_price": {"type": "number", "description": "The price the entry was to trigger at: read when "
+                                                           "entry_slip_ticks is left out."},
+        "replay": _REPLAY,
+        "fixed": {"type": "string", "description": "A sentence: this trade's mismatch was a bug, and the bug IS FIXED "
+                                                   "(the count goes on)."},
+        "note": {"type": "string", "description": "Free words, kept with the trade."}},
+    "required": ["entry_time", "exit_time", "side", "size", "entry_price", "exit_price", "net", "exit_reason"],
+    "additionalProperties": False}
+_NO_TRADE = {
+    "type": "object", "description": "AN ORDER THAT DID NOT TRADE where the test did, with entry_time, side and replay "
+                                     "when they are known. It is a mismatch (6.1) and, in stage A, the end of that "
+                                     "stage A (6.2).",
+    "properties": {"status": {"type": "string", "enum": ["missed", "rejected"]}, "entry_time": {"type": _WHEN},
+                   **{k: _TRADE["properties"][k] for k in ("side", "replay", "fixed", "note")}},
+    "required": ["status"], "additionalProperties": False}
 
 SPECS = [
+    _spec("blueprint_blocks", "Blueprint, before the card: the blocks, one plain list of everything an idea can be "
+          "built from without writing code -- the entry triggers (families) with their settings, the filters, the "
+          "standard exit table, the sessions, the bar sizes, the markets with their cost floors, the Monte Carlo "
+          "settings and the size steps -- and of what version 1 of the toolkit refuses. Call this before writing an "
+          "idea card (blueprint_card). Runs nothing."),
     _spec("blueprint_card", "Blueprint phase 0, the idea card: write an idea down BEFORE any run -- why it should make "
           "money and who loses, its home, its neighbors and one place it should not work, its main setting with 3-4 "
           "values, both sides or one. Saves the card and the settings in the app, and a record draft in the Lab "
           "(draft_<name>, filed under Ideas). Refused when a line of the card is missing, the exits are not the "
-          "standard table, or there are more than 2 filters.",
+          "standard table, or there are more than 2 filters. Version 1 also refuses a home of \"all\" (it judges ONE "
+          "home table: the others are neighbors), the evening session, and limits.trail_atr / limits.exit_bars (exits "
+          "of their own): blueprint_blocks lists everything it refuses.",
           {"name": _NAME, "card": _CARD, "settings": _SETTINGS}, ["name", "card", "settings"]),
     _spec("blueprint_code_check", "Blueprint phase 1, the code check (build days only): do the trades do what the card "
           "says? It counts entries outside the session window, more than one position at a time or a trade not flat "
@@ -175,11 +232,19 @@ SPECS = [
           ["name", "account", "attempts", "fee_budget"]),
     _spec("blueprint_eval_card", "Blueprint phase 6, the eval: the eval card -- lines 6.1 to 6.8 read on the live "
           "fills so far, and the drawdown table after 10, 20, 30 and 40 trades. Without fills it is the card as it "
-          "stands before the first live trade. Refused until the sim is done.",
+          "stands before the first live trade. THE FILLS: one object per live order of the eval, oldest first. A "
+          "TRADE (an order that filled and is flat again) must say entry_time, exit_time, side, size, entry_price, "
+          "exit_price, net and exit_reason; entry_slip_ticks (or trigger_price), replay, fixed and note are optional. "
+          "AN ORDER THAT DID NOT TRADE where the test did is {\"status\": \"missed\" | \"rejected\"}, with "
+          "entry_time, side and replay when they are known. A field that is not listed is refused. Refused until the "
+          "sim is done.",
           {"name": _NAME,
-           "fills": {"type": "array", "items": {"type": "object"},
-                     "description": "The live trades of the eval so far, oldest first, as the desk recorded them "
-                                    "(desk_journal): one object per trade. Left out: no live trade yet."}}, ["name"]),
+           "fills": {"type": "array", "items": {"anyOf": [_TRADE, _NO_TRADE]},
+                     "description": "The live orders of the eval so far, oldest first, as the desk recorded them "
+                                    "(desk_journal): one object per order. Left out: no live trade yet."},
+           "account": {"type": "string", "description": "The account the card stands on: a rule set id, as given to "
+                                                        "blueprint_sim. Left out: the card's own, else the one of "
+                                                        "the simulator result saved last."}}, ["name"]),
     _spec("blueprint_status", "Blueprint, any phase: where things stand -- every idea with its status (idea, lead, "
           "proven on history, proven live, shelved), phase, round and next step; or one idea (name); or one job "
           "(job_id). Runs nothing.",
@@ -293,7 +358,8 @@ def _lines(r: dict) -> list[str]:
             out.append(said)
     if passed or failed or na:
         out.append(f"Lines: {passed} passed · {len(failed)} FAILED" + (f" ({', '.join(failed)})" if failed else "")
-                   + (f" · {len(na)} {'does' if len(na) == 1 else 'do'} not apply ({', '.join(na)})" if na else ""))
+                   + (f" · {len(na)} not judged or {'does' if len(na) == 1 else 'do'} not apply ({', '.join(na)})"
+                      if na else ""))
     return out
 
 
@@ -369,6 +435,11 @@ class BlueprintMixin:
                               + keep.format(id=repr(job.get("id"))), *notes])
         return _report(r, notes)
 
+    # ---- before the card: the blocks
+
+    def t_blueprint_blocks(self) -> str:
+        return self._finish(self._bp(["blocks"]))
+
     # ---- phase 0: the card
 
     def t_blueprint_card(self, name: str, card: dict, settings: dict) -> str:
@@ -438,13 +509,15 @@ class BlueprintMixin:
 
     # ---- phase 6: the eval
 
-    def t_blueprint_eval_card(self, name: str, fills=None) -> str:
-        _name(name)
+    def t_blueprint_eval_card(self, name: str, fills=None, account=None) -> str:
+        args = ["eval-card", _name(name)]
+        if account is not None:
+            args.append(f"--account={_text(account, 'account')}")
         if fills is None:
-            return self._finish(self._bp(["eval-card", name]))
+            return self._finish(self._bp(args))
         if not isinstance(fills, list) or not all(isinstance(f, dict) for f in fills):
             raise ToolError("fills: the live trades so far, a list of objects")
-        return self._finish(self._bp(["eval-card", name, "--fills=-"], stdin={"fills": fills}))
+        return self._finish(self._bp([*args, "--fills=-"], stdin={"fills": fills}))
 
     # ---- any phase
 
