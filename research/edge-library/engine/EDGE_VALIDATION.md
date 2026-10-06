@@ -1,6 +1,6 @@
 # EDGE_VALIDATION — the edge-library engine vs the Homebase Strategy Tester
 
-Generated 2026-10-05 09:58 ET by `edge_validate.py` (code sha256/16: l2sim.py 50f67baa4337a160, l2ref.py 51f18fb1b8c84bc1, edge_validate.py 8c5e39a19def9a7f). Raw: `out/edge_validation.json`.
+Generated 2026-10-06 00:54 ET by `edge_validate.py` (code sha256/16: l2sim.py 653e964f1fd3adb0, l2ref.py 51f18fb1b8c84bc1, edge_validate.py 8c5e39a19def9a7f). Raw: `out/edge_validation.json`.
 In-sample bundles of the old pilots only (2021-09-22 → 2024-12-31), trade IDENTITY only; nothing dated ≥ 2025-01-01 was read.
 
 ## Verdict: ALL GATES PASS
