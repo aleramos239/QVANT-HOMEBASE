@@ -919,3 +919,7 @@ null_bp,c1-GC-tf1,null,random,GC,1,bp_build,c1,1-10,0,0,320,0,4704568,1224.39,"r
 null_bp,c1-GC-tf5,null,random,GC,5,bp_build,c1,1-10,0,0,320,0,4195442,919.8,"runs_bp/c1-GC-tf5: 10-seed random-entry pool of the build range, all sessions: the control of every idea at this market and bar size",2026-10-06T09:26:16+00:00
 null_bp,c1-GC-tf15,null,random,GC,15,bp_build,c1,1-10,0,0,320,0,3472835,847.98,"runs_bp/c1-GC-tf15: 10-seed random-entry pool of the build range, all sessions: the control of every idea at this market and bar size",2026-10-06T09:40:37+00:00
 null_bp,c1-GC-tf30,null,random,GC,30,bp_build,c1,1-10,0,0,320,0,2604882,778.02,"runs_bp/c1-GC-tf30: 10-seed random-entry pool of the build range, all sessions: the control of every idea at this market and bar size",2026-10-06T09:53:44+00:00
+bp_build,demo_range_break_nq-NQ-tf15,grid,ib_n,NQ,15,bp_build,,,0,128,0,0,145632,102.54,runs_bp/demo_range_break_nq-NQ-tf15: idea demo_range_break_nq,2026-10-06T10:24:51+00:00
+bp_build,demo_range_break_nq-NQ-tf5,grid,ib_n,NQ,5,bp_build,,,0,128,0,0,106080,50.6,runs_bp/demo_range_break_nq-NQ-tf5: idea demo_range_break_nq,2026-10-06T10:25:42+00:00
+bp_build,demo_range_break_nq-NQ-tf30,grid,ib_n,NQ,30,bp_build,,,0,128,0,0,106080,48.27,runs_bp/demo_range_break_nq-NQ-tf30: idea demo_range_break_nq,2026-10-06T10:26:31+00:00
+bp_build,demo_range_break_nq-ES-tf15,grid,ib_n,ES,15,bp_build,,,0,128,0,0,107744,49.32,runs_bp/demo_range_break_nq-ES-tf15: idea demo_range_break_nq,2026-10-06T10:27:21+00:00
