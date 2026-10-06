@@ -12,10 +12,12 @@ the toolkit plan's section 8 (research/edge-library/out/blueprint/toolkit_plan.m
       code-check <name> [--store=KEY | --trades=FILE | --run-id=ID] [--looked]                phase 1
       build <name> --reason=TEXT --wait=S                                                     phase 2
       lock <name>                                                                             phase 3
-      test <name> --confirm --wait=S                                                          phase 4
+      test <name> --confirm [--early-look] --wait=S                                           phase 4
       sim <name> --account=ID --attempts=N --fee-budget=USD                                   phase 5
       eval-card <name> [--account=ID] [--fills=-]     stdin: {"fills": [...]}                 phase 6
       status [<name>]
+      heatmap <name> [--place=home|1|2|...|not_here] [--round=N]     a build round's heat map, as saved
+      mc <name> [--on=build|test]              the Monte Carlo tables of the build or the test, as saved
       job <id> --wait=S                        keep waiting on a build or a test
 
     stdout: ONE JSON object {ok, command, name, status, phase, round, lines: [{line, passed, number, need,
@@ -31,6 +33,13 @@ JSON-RPC stream): it reads the JSON handed to it, or nothing.
 
 Long commands (build, test) follow the tester tools' wait: the toolkit waits `wait_s` (--wait) and then answers
 job.state = running; the same tool called with that job_id keeps waiting (`job <id>`).
+
+heatmap and mc are views: they read what a build or a test saved, run nothing and count no round.
+
+An early look (test --early-look) reads the test days for an idea that is NOT locked, on the owner's clear yes
+(his decision of 2026-10-06: "warn, then run if I say yes"). The toolkit labels its answer ("early_look": true,
+EARLY LOOK) and keeps it beside the idea's own files (early_look/test.json), never as its test.json. It can
+never prove the idea: homebase.ideastore reads no status there, and counts no result that says it is one.
 
 After a command the app's own copies of the idea are brought up to date (homebase.ideastore.sync): idea.json,
 the record block on its Lab draft, the Lab group of its status. That is a mirror, never a gate: a Lab file that
@@ -54,9 +63,11 @@ from .client import ToolError
 ENV_BP, ENV_PYTHON = "HOMEBASE_BP", "HOMEBASE_BP_PYTHON"
 DEFAULT_WAIT_S, MAX_WAIT_S = 120, 3600   # tools.py's own, repeated (it imports this module); a test holds them equal
 GRACE_S = 60.0                           # past --wait: the toolkit's own start-up and saving
-SHORT_S = 300.0                          # not a job: blocks, card, code check, lock, sim, eval card, status
+SHORT_S = 300.0                          # not a job: blocks, card, code check, lock, sim, eval card, status, views
 RUNNING = ("queued", "running")
 _JOB_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:@-]{0,119}$")
+_PLACE_RE = re.compile(r"^(home|not_here|[1-9][0-9]?)$")   # the table a heat map is of, in the toolkit's words
+MC_ON = ("build", "test")                                  # the saved result the Monte Carlo tables are of
 
 
 def toolkit() -> tuple[str, str]:
@@ -213,11 +224,18 @@ SPECS = [
           "and only when the owner has said to: confirm must be true. Reads lines 4.1 to 4.7; all pass = PROVEN ON "
           "HISTORY, approved for a real eval. Long: after wait_s it returns a job id -- call it again with that "
           "job_id to keep waiting (nothing is read again). Refused when the idea is not locked, its lock no longer "
-          "matches, or a read is already on file.",
+          "matches, or a read is already on file. The one exception is AN EARLY LOOK (early_look: true): it reads "
+          "the test days for an idea that is NOT locked, uses them up for that idea, is labelled EARLY LOOK, can "
+          "never prove the idea, and needs the owner's clear yes in chat first -- warn him, then ask (confirm is "
+          "still required).",
           {"name": _NAME,
            "confirm": {"type": "boolean", "description": "Must be true: the owner has said to run the one read. The "
                                                          "test days are read once for an idea, and a read cannot be "
                                                          "taken back."},
+           "early_look": {"type": "boolean", "description": "true = an EARLY LOOK at the test days for an idea that "
+                                                            "is not locked: only after the owner, warned that it "
+                                                            "uses the test days up for this idea and can never "
+                                                            "prove it, said a clear yes in chat. Default false."},
            "wait_s": _WAIT, "job_id": _JOB}, ["name", "confirm"]),
     _spec("blueprint_sim", "Blueprint phase 5, before the eval is bought: the prop simulator on the test-period trades "
           "for one account -- the odds of passing the eval within 10 trading days and of the maximum payout within "
@@ -249,6 +267,22 @@ SPECS = [
           "proven on history, proven live, shelved), phase, round and next step; or one idea (name); or one job "
           "(job_id). Runs nothing.",
           {"name": _NAME, "job_id": {"type": "string", "description": "A job id a build or a test returned."}}),
+    _spec("blueprint_heatmap", "Blueprint, a view of what is saved: the heat map of an idea's build -- one table of a "
+          "build round as a grid: the table of its home, of a neighbor its card names, or of the place it should not "
+          "work. It only reads saved results: it runs nothing and counts no round.",
+          {"name": _NAME,
+           "place": {"type": ["string", "integer"],
+                     "description": "Which table: home (the idea's home), a neighbor by its number on the card (1, 2, "
+                                    "...), or not_here (the place it should not work)."},
+           "round": {"type": "integer", "minimum": 1, "maximum": ideastore.MAX_ROUNDS,
+                     "description": f"A build round that is on file, 1 to {ideastore.MAX_ROUNDS}. Left out: the "
+                                    "latest round."}}, ["name"]),
+    _spec("blueprint_mc", "Blueprint, a view of what is saved: the Monte Carlo tables of an idea -- the reshuffled "
+          "runs of its build, or of its test. It only reads saved results: it runs nothing and counts no round.",
+          {"name": _NAME,
+           "on": {"type": "string", "enum": list(MC_ON),
+                  "description": "build = the tables of the build that is on file; test = the tables of the test that "
+                                 "is on file (this tool never reads the test days itself)."}}, ["name"]),
 ]
 
 
@@ -266,6 +300,14 @@ def _job_id(job_id) -> str:
     if not isinstance(job_id, str) or not _JOB_RE.fullmatch(job_id):
         raise ToolError("job_id: the id a blueprint tool returned")
     return job_id
+
+
+def _place(place) -> str:
+    """The table a heat map is of. A neighbor's number may come as a number."""
+    s = str(place) if type(place) is int else place
+    if not isinstance(s, str) or not _PLACE_RE.fullmatch(s):
+        raise ToolError("place: home, a neighbor's number on the card (1, 2, ...) or not_here")
+    return s
 
 
 def _text(v, key: str) -> str:
@@ -482,13 +524,18 @@ class BlueprintMixin:
 
     # ---- phase 4: the one read of the test days
 
-    def t_blueprint_test(self, name: str, confirm, wait_s=None, job_id=None) -> str:
+    def t_blueprint_test(self, name: str, confirm, early_look=False, wait_s=None, job_id=None) -> str:
         _name(name)
+        if not isinstance(early_look, bool):
+            raise ToolError("early_look: true or false")
         if confirm is not True:
             raise ToolError("confirm: must be true. The test days are read ONCE for an idea, and a read cannot be "
-                            "taken back: run this only for a locked idea, when the owner has said to.")
+                            "taken back: run this only for a locked idea, when the owner has said to"
+                            + (" -- or as an early look, after his clear yes in chat." if early_look else "."))
         wait = _wait_s(wait_s)
         args = ["job", _job_id(job_id)] if job_id is not None else ["test", name, "--confirm"]
+        if early_look and job_id is None:               # a job that is waited on was started as what it is
+            args.append("--early-look")
         r = self._bp([*args, f"--wait={wait}"], timeout=wait + self._bp_grace_s)
         return self._finish(r, f"Call blueprint_test(name={name!r}, confirm=true, job_id={{id}}) to keep waiting: "
                                "nothing is read again.")
@@ -528,3 +575,23 @@ class BlueprintMixin:
             r = self._bp(["job", _job_id(job_id), "--wait=0"], timeout=self._bp_grace_s)
             return self._finish(r, "Call blueprint_status(job_id={id}) to look again.")
         return self._finish(self._bp(["status"] if name is None else ["status", _name(name)]))
+
+    # ---- views of what is saved: they run nothing and count no round
+
+    def t_blueprint_heatmap(self, name: str, place=None, round=None) -> str:  # noqa: A002
+        args = ["heatmap", _name(name)]
+        if place is not None:
+            args.append(f"--place={_place(place)}")
+        if round is not None:
+            if type(round) is not int or not 1 <= round <= ideastore.MAX_ROUNDS:
+                raise ToolError(f"round: a build round that is on file, 1 to {ideastore.MAX_ROUNDS}")
+            args.append(f"--round={round}")
+        return self._finish(self._bp(args))
+
+    def t_blueprint_mc(self, name: str, on=None) -> str:
+        args = ["mc", _name(name)]
+        if on is not None:
+            if on not in MC_ON:
+                raise ToolError(f"on: {' or '.join(MC_ON)}")
+            args.append(f"--on={on}")
+        return self._finish(self._bp(args))

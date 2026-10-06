@@ -1,7 +1,8 @@
-"""The connector's blueprint tools (homebase.claude_mcp.blueprint_tools): the nine tool definitions, the exact
+"""The connector's blueprint tools (homebase.claude_mcp.blueprint_tools): the eleven tool definitions, the exact
 command line each one runs, and what comes back -- against a FAKE toolkit: a small script written here that
 answers each command with the JSON of the toolkit plan's section 8 (a refusal with exit code 2, a crash, a job
-that is still running), and saves a card and a build through homebase.ideastore as the real toolkit does.
+that is still running), and saves a card and a build through homebase.ideastore, and an early look beside the
+idea's own files, as the real toolkit does.
 Temp folders only: the suite's `ideas_root` and `drafts_dir`, and a temp HOME that must stay empty."""
 from __future__ import annotations
 
@@ -150,6 +151,18 @@ if cmd == "test":
         out(result(cmd, ok=False, status=None, error="the one read needs --confirm"), 2)
     if name == "slow_test":
         out(result(cmd, status="lead", phase=4, job={"id": "job-test-7", "state": "queued", "progress": ""}))
+    if "early-look" in opt:
+        on_file = ideastore.exists(name, root)
+        r = result(cmd, status=ideastore.status(name, root) if on_file else "idea", phase=4, early_look=True,
+                   label="EARLY LOOK", lines=[dict(x, text=x["text"] + " [EARLY LOOK]") for x in lines(4, 7)],
+                   text="EARLY LOOK: every line 4.1-4.7 is true. It proves nothing.",
+                   next="The test days are used up for this idea.")
+        if on_file:                                    # beside the idea's own files, never as its lock or its test
+            d = ideastore.idea_dir(name, root) / "early_look"
+            d.mkdir(exist_ok=True)
+            for rel, what in (("lock.json", {"early_look": True, "hash": "e4r1"}), ("test.json", r)):
+                (d / rel).write_text(json.dumps(what))
+        out(r)
     out(result(cmd, status="proven_on_history", phase=4, lines=lines(4, 7), text="PROVEN ON HISTORY",
                next="Before the eval is bought: blueprint_sim."))
 if cmd == "sim":
@@ -163,6 +176,14 @@ if cmd == "eval-card":
                text="%d live fills read for %s" % (n, opt.get("account", "the account of the sim saved last"))))
 if cmd == "status":
     out(result(cmd, status=None, text=("%s: idea, phase 2, round 1" % name) if name else "2 ideas\nnq_orb_pre: idea\ngood_idea: lead"))
+if cmd == "heatmap":
+    place, n = opt.get("place", "home"), int(opt.get("round", 2))
+    out(result(cmd, status="lead", phase=2, round=n, grid=[[412.0, 388.5], [-51.0, 120.25]],
+               text="HEAT MAP of %s, round %d: 3 of 4 cells profitable\n        r1    r2\n  atr1   412   389\n"
+                    "  atr2   -51   120" % (place, n)))
+if cmd == "mc":
+    out(result(cmd, status="lead", phase=2, round=2, text="MONTE CARLO on %s: 1,000 reshuffled runs\n"
+               "  2.1 and 2.2 hold in 810 of them" % opt.get("on", "build")))
 out(result(cmd, ok=False, status=None, error="unknown command " + cmd), 2)
 '''
 
@@ -217,24 +238,26 @@ def tail(ideas_root) -> list[str]:
     return [f"--root={ideas_root}", "--json"]
 
 
-# ---------------------------------------------------------------- the nine tools
+# ---------------------------------------------------------------- the eleven tools
 
 REQUIRED = {"blueprint_blocks": [], "blueprint_card": ["name", "card", "settings"], "blueprint_code_check": ["name"],
             "blueprint_build": ["name"], "blueprint_lock": ["name"], "blueprint_test": ["name", "confirm"],
             "blueprint_sim": ["name", "account", "attempts", "fee_budget"], "blueprint_eval_card": ["name"],
-            "blueprint_status": []}
+            "blueprint_status": [], "blueprint_heatmap": ["name"], "blueprint_mc": ["name"]}
 INPUTS = {"blueprint_blocks": [], "blueprint_card": ["name", "card", "settings"],
           "blueprint_code_check": ["name", "store", "trades_file", "run_id", "looked"],
           "blueprint_build": ["name", "reason", "wait_s", "job_id"], "blueprint_lock": ["name"],
-          "blueprint_test": ["name", "confirm", "wait_s", "job_id"],
+          "blueprint_test": ["name", "confirm", "early_look", "wait_s", "job_id"],
           "blueprint_sim": ["name", "account", "attempts", "fee_budget"],
-          "blueprint_eval_card": ["name", "fills", "account"], "blueprint_status": ["name", "job_id"]}
+          "blueprint_eval_card": ["name", "fills", "account"], "blueprint_status": ["name", "job_id"],
+          "blueprint_heatmap": ["name", "place", "round"], "blueprint_mc": ["name", "on"]}
 PHASE = {"blueprint_blocks": "Blueprint, before the card",
          "blueprint_card": "Blueprint phase 0, the idea card", "blueprint_code_check": "Blueprint phase 1, the code check",
          "blueprint_build": "Blueprint phase 2, the build", "blueprint_lock": "Blueprint phase 3, the freeze",
          "blueprint_test": "Blueprint phase 4, the out-of-sample test",
          "blueprint_sim": "Blueprint phase 5, before the eval is bought", "blueprint_eval_card": "Blueprint phase 6, the eval",
-         "blueprint_status": "Blueprint, any phase"}
+         "blueprint_status": "Blueprint, any phase", "blueprint_heatmap": "Blueprint, a view of what is saved: the heat map",
+         "blueprint_mc": "Blueprint, a view of what is saved: the Monte Carlo tables"}
 
 
 def texts(o) -> list[str]:
@@ -244,9 +267,9 @@ def texts(o) -> list[str]:
     return [t for v in o for t in texts(v)] if isinstance(o, list) else []
 
 
-def test_the_nine_tools_their_inputs_and_what_each_requires():
+def test_the_eleven_tools_their_inputs_and_what_each_requires():
     specs = {s["name"]: s for s in blueprint_tools.SPECS}
-    assert list(specs) == list(REQUIRED) and len(specs) == 9
+    assert list(specs) == list(REQUIRED) and len(specs) == 11
     listed = {s["name"]: s for s in tools.Toolbox().specs()}
     for name, spec in specs.items():
         schema = spec["inputSchema"]
@@ -273,6 +296,35 @@ def test_the_test_tool_says_the_test_days_are_read_once_and_asks_for_an_explicit
     confirm = spec["inputSchema"]["properties"]["confirm"]
     assert confirm["type"] == "boolean" and "once" in confirm["description"].lower()
     assert "confirm" in spec["inputSchema"]["required"]
+
+
+def test_the_test_tool_says_what_an_early_look_is_and_that_it_needs_the_owners_clear_yes():
+    """The owner's decision of 2026-10-06 ("warn, then run if I say yes"): every chat reads what an early look
+    costs before it can ask for one."""
+    spec = next(s for s in blueprint_tools.SPECS if s["name"] == "blueprint_test")
+    assert ("The one exception is AN EARLY LOOK (early_look: true): it reads the test days for an idea that is NOT "
+            "locked, uses them up for that idea, is labelled EARLY LOOK, can never prove the idea, and needs the "
+            "owner's clear yes in chat first -- warn him, then ask (confirm is still required).") in spec["description"]
+    early = spec["inputSchema"]["properties"]["early_look"]
+    assert early["type"] == "boolean" and "early_look" not in spec["inputSchema"]["required"]
+    for said in ("not locked", "uses the test days up for this idea", "can never prove it", "a clear yes in chat",
+                 "Default false."):
+        assert said in early["description"], said
+
+
+def test_the_two_views_say_they_only_read_what_is_saved():
+    specs = {s["name"]: s for s in blueprint_tools.SPECS}
+    for name in ("blueprint_heatmap", "blueprint_mc"):
+        assert specs[name]["description"].endswith("It only reads saved results: it runs nothing and counts no round.")
+        assert "wait_s" not in specs[name]["inputSchema"]["properties"]            # nothing runs: there is no job
+    place, rnd = (specs["blueprint_heatmap"]["inputSchema"]["properties"][k] for k in ("place", "round"))
+    assert place["type"] == ["string", "integer"]
+    for said in ("home (the idea's home)", "its number on the card (1, 2, ...)", "not_here (the place it should not work)"):
+        assert said in place["description"], said
+    assert (rnd["type"], rnd["minimum"], rnd["maximum"]) == ("integer", 1, ideastore.MAX_ROUNDS) == ("integer", 1, 5)
+    assert "Left out: the latest round." in rnd["description"]
+    on = specs["blueprint_mc"]["inputSchema"]["properties"]["on"]
+    assert on["enum"] == ["build", "test"] and "never reads the test days itself" in on["description"]
 
 
 def test_the_blocks_tool_takes_nothing_and_says_to_call_it_before_writing_a_card():
@@ -341,19 +393,20 @@ def test_every_chat_is_told_to_use_them():
     init = rpc(srv, "initialize", {"protocolVersion": "2025-06-18"})["result"]
     assert ("For a strategy idea use the blueprint_* tools (card, code check, build, lock, test, sim, eval card): "
             "they save everything in the app.") in init["instructions"]
-    assert init["serverInfo"]["version"] == protocol.SERVER_VERSION == "1.4.0"
+    assert init["serverInfo"]["version"] == protocol.SERVER_VERSION == "1.5.0"
     listed = [t["name"] for t in rpc(srv, "tools/list")["result"]["tools"]]
-    assert listed[listed.index("blueprint_blocks"):listed.index("blueprint_status") + 1] == list(REQUIRED)
+    assert listed[listed.index("blueprint_blocks"):listed.index("blueprint_mc") + 1] == list(REQUIRED)
 
 
 def test_every_chat_is_told_their_order_and_that_the_lab_groups_fill_themselves():
     text = rpc(protocol.Server(box()), "initialize", {"protocolVersion": "2025-06-18"})["result"]["instructions"]
     assert ("Their order: blueprint_blocks (what an idea can be built from), blueprint_card, blueprint_code_check, "
-            "blueprint_build, blueprint_lock, blueprint_test (once), blueprint_sim, blueprint_eval_card, with "
-            "blueprint_status at any time; they file each idea under its Lab group themselves, so set_group is not "
-            "needed for it.") in text
+            "blueprint_build, blueprint_lock, blueprint_test (once; early look needs the owner's yes), blueprint_sim, "
+            "blueprint_eval_card, with blueprint_status at any time and blueprint_heatmap and blueprint_mc as "
+            "read-only views of what is saved; they file each idea under its Lab group themselves, so set_group is "
+            "not needed for it.") in text
     at = [text.index(name) for name in REQUIRED]                        # the order the tools are listed in
-    assert at == sorted(at) and len(set(at)) == 9
+    assert at == sorted(at) and len(set(at)) == 11
 
 
 # ---------------------------------------------------------------- where the toolkit is
@@ -410,6 +463,12 @@ def test_each_tool_runs_its_command_as_the_contract_has_it(fake, ideas_root):
     assert fake.argv() == ["test", NAME, "--confirm", "--wait=120", *end]
     b.call("blueprint_test", {"name": NAME, "confirm": True, "job_id": "job-test-7", "wait_s": 0})
     assert fake.argv() == ["job", "job-test-7", "--wait=0", *end]
+    b.call("blueprint_test", {"name": NAME, "confirm": True, "early_look": True})
+    assert fake.argv() == ["test", NAME, "--confirm", "--early-look", "--wait=120", *end]
+    b.call("blueprint_test", {"name": NAME, "confirm": True, "early_look": False, "wait_s": 30})
+    assert fake.argv() == ["test", NAME, "--confirm", "--wait=30", *end]
+    b.call("blueprint_test", {"name": NAME, "confirm": True, "early_look": True, "job_id": "job-test-7"})
+    assert fake.argv() == ["job", "job-test-7", "--wait=120", *end]                   # a job is waited on as it was started
     b.call("blueprint_sim", {"name": NAME, "account": ACCOUNT, "attempts": 3, "fee_budget": 345})
     assert fake.argv() == ["sim", NAME, f"--account={ACCOUNT}", "--attempts=3", "--fee-budget=345", *end]
     b.call("blueprint_eval_card", {"name": NAME})
@@ -428,6 +487,19 @@ def test_each_tool_runs_its_command_as_the_contract_has_it(fake, ideas_root):
     assert fake.argv() == ["status", NAME, *end]
     b.call("blueprint_status", {"job_id": "job-stuck"})
     assert fake.argv() == ["job", "job-stuck", "--wait=0", *end]
+    b.call("blueprint_heatmap", {"name": NAME})
+    assert fake.argv() == ["heatmap", NAME, *end] and fake.calls()[-1]["stdin"] == ""
+    b.call("blueprint_heatmap", {"name": NAME, "place": "not_here", "round": 1})
+    assert fake.argv() == ["heatmap", NAME, "--place=not_here", "--round=1", *end]
+    b.call("blueprint_heatmap", {"name": NAME, "place": 2})                           # a neighbor's number, as a number
+    assert fake.argv() == ["heatmap", NAME, "--place=2", *end]
+    b.call("blueprint_heatmap", {"name": NAME, "place": "home", "round": 5})
+    assert fake.argv() == ["heatmap", NAME, "--place=home", "--round=5", *end]
+    b.call("blueprint_mc", {"name": NAME})
+    assert fake.argv() == ["mc", NAME, *end] and fake.calls()[-1]["stdin"] == ""
+    for on in ("build", "test"):
+        b.call("blueprint_mc", {"name": NAME, "on": on})
+        assert fake.argv() == ["mc", NAME, f"--on={on}", *end]
     for call in fake.calls():                                       # the toolkit's own folder, the engine's Python
         assert call["cwd"] == os.path.realpath(fake.script.parent) and call["python"] == sys.executable
         assert call["argv"][-2:] == end
@@ -444,7 +516,8 @@ def test_an_option_cannot_be_smuggled_in_through_a_name_an_id_or_a_reason(fake, 
     b = box()
     for bad in ("--stored", "-x", "nq930", "Bad Name", "", "../x"):
         for tool, more in (("blueprint_lock", {}), ("blueprint_build", {"reason": "r"}), ("blueprint_status", {}),
-                           ("blueprint_test", {"confirm": True})):
+                           ("blueprint_test", {"confirm": True}), ("blueprint_test", {"confirm": True, "early_look": True}),
+                           ("blueprint_heatmap", {}), ("blueprint_mc", {})):
             with pytest.raises(ToolError, match="name"):
                 b.call(tool, {"name": bad, **more})
     for bad in ("--root=/", "-j", "", "a b", 7):
@@ -482,6 +555,22 @@ def test_inputs_that_do_not_read_are_refused_before_anything_starts(fake):
         ("blueprint_eval_card", {"name": NAME, "fills": ["a fill"]}, "fills"),
         ("blueprint_eval_card", {"name": NAME, "account": ""}, "account"),
         ("blueprint_eval_card", {"name": NAME, "fills": FILLS, "account": 7}, "account"),
+        ("blueprint_test", {"name": NAME, "confirm": True, "early_look": "yes"}, "early_look: true or false"),
+        ("blueprint_test", {"name": NAME, "confirm": True, "early_look": 1}, "early_look: true or false"),
+        ("blueprint_test", {"name": NAME, "confirm": True, "early_look": None}, "early_look: true or false"),
+        ("blueprint_heatmap", {}, "name"),
+        ("blueprint_heatmap", {"name": NAME, "place": "the home table"}, "place: home"),
+        ("blueprint_heatmap", {"name": NAME, "place": "--round=9"}, "place: home"),
+        ("blueprint_heatmap", {"name": NAME, "place": 0}, "place: home"),
+        ("blueprint_heatmap", {"name": NAME, "place": True}, "place: home"),
+        ("blueprint_heatmap", {"name": NAME, "place": 1.0}, "place: home"),
+        ("blueprint_heatmap", {"name": NAME, "round": 0}, "round: a build round"),
+        ("blueprint_heatmap", {"name": NAME, "round": 6}, "round: a build round"),
+        ("blueprint_heatmap", {"name": NAME, "round": "2"}, "round: a build round"),
+        ("blueprint_heatmap", {"name": NAME, "round": True}, "round: a build round"),
+        ("blueprint_mc", {"name": NAME, "on": "live"}, "on: build or test"),
+        ("blueprint_mc", {"name": NAME, "on": ["build"]}, "on: build or test"),
+        ("blueprint_mc", {"name": NAME, "wait_s": 5}, "wait_s"),
         ("blueprint_blocks", {"name": NAME}, "name"),
         ("blueprint_status", {"name": NAME, "job_id": "job-1"}, "either"),
         ("blueprint_lock", {}, "name"), ("blueprint_lock", {"name": NAME, "force": True}, "force")]
@@ -540,6 +629,12 @@ def test_the_answer_is_the_toolkits_text_plus_every_pass_fail_line(fake, ideas_r
     assert "Lines: 4 passed · 0 FAILED · 4 not judged or do not apply (6.4, 6.5, 6.6, 6.8)" in text.splitlines()
     assert box().call("blueprint_status", {}).splitlines() == ["Blueprint status", "2 ideas", "nq_orb_pre: idea",
                                                                "good_idea: lead"]
+    assert box().call("blueprint_heatmap", {"name": NAME, "place": 1, "round": 3}).splitlines() == [   # the grid as it is
+        "Blueprint heatmap · nq_orb_pre · LEAD · phase 2 · round 3", "HEAT MAP of 1, round 3: 3 of 4 cells profitable",
+        "        r1    r2", "  atr1   412   389", "  atr2   -51   120"]
+    assert box().call("blueprint_mc", {"name": NAME, "on": "test"}).splitlines() == [
+        "Blueprint mc · nq_orb_pre · LEAD · phase 2 · round 2", "MONTE CARLO on test: 1,000 reshuffled runs",
+        "  2.1 and 2.2 hold in 810 of them"]
     assert "locked all the same" in box().call("blueprint_lock", {"name": "noisy_ok"})   # a stray line before the JSON
 
 
@@ -652,6 +747,38 @@ def test_a_status_the_saved_results_do_not_bear_out_is_said(fake, ideas_root):
     assert "Lab: the saved results read IDEA, not PROVEN ON HISTORY." in text.splitlines()
     assert ideastore.read_idea(NAME)["status"] == "idea" and draftstore.read_groups()["members"] == {
         "draft_nq_orb_pre": "Ideas"}
+
+
+def test_an_early_look_needs_the_yes_is_labelled_and_never_proves_the_idea(fake, ideas_root, drafts_dir):
+    """The owner's decision of 2026-10-06: the test days may be looked at for an idea that is not locked. The
+    answer is the toolkit's, labelled; in the app the idea stays where its build put it, with a note that an
+    early look is on file."""
+    b = box()
+    for name in ("good_idea", NAME):                                          # a lead and an idea: neither is locked
+        b.call("blueprint_card", {"name": name, "card": CARD, "settings": SETTINGS})
+        b.call("blueprint_build", {"name": name, "reason": "the plain idea, as carded"})
+    started = len(fake.calls())
+    for no in (False, None, "yes"):                                           # confirm is still required
+        with pytest.raises(ToolError, match="read ONCE") as e:
+            b.call("blueprint_test", {"name": "good_idea", "confirm": no, "early_look": True})
+        assert "or as an early look, after his clear yes in chat" in str(e.value)
+    assert len(fake.calls()) == started and not (ideas_root / "good_idea" / "early_look").exists()
+    out = b.call("blueprint_test", {"name": "good_idea", "confirm": True, "early_look": True}).splitlines()
+    assert fake.argv() == ["test", "good_idea", "--confirm", "--early-look", "--wait=120", *tail(ideas_root)]
+    assert out[0] == "Blueprint test · good_idea · LEAD · phase 4"
+    assert "EARLY LOOK: every line 4.1-4.7 is true. It proves nothing." in out
+    assert "4.1 PASS words about 4.1 [EARLY LOOK]" in out and "Lines: 7 passed · 0 FAILED" in out
+    assert not any(ln.startswith("Lab:") for ln in out)                       # the status stayed: nothing is filed anew
+    assert json.loads((ideas_root / "good_idea" / "early_look" / "test.json").read_text())["early_look"] is True
+    assert not (ideas_root / "good_idea" / "test.json").exists() and not (ideas_root / "good_idea" / "lock.json").exists()
+    idea = ideastore.read_idea("good_idea")
+    assert (idea["status"], idea["phase"], idea["early_look"], idea["group"]) == ("lead", 2, True, "Leads")
+    assert (drafts_dir / "good_idea.py").read_text().splitlines()[1] == (
+        "# good_idea · LEAD · phase 2 · round 1 · EARLY LOOK on file")
+    out = b.call("blueprint_test", {"name": NAME, "confirm": True, "early_look": True}).splitlines()
+    assert out[0] == "Blueprint test · nq_orb_pre · IDEA · phase 4" and "Lines: 7 passed · 0 FAILED" in out
+    assert (ideastore.read_idea(NAME)["status"], ideastore.read_idea(NAME)["early_look"]) == ("idea", True)
+    assert draftstore.read_groups()["members"] == {"draft_good_idea": "Leads", "draft_nq_orb_pre": "Ideas"}
 
 
 # ---------------------------------------------------------------- nothing here leaves the temp folders
