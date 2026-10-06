@@ -40,6 +40,7 @@ from .desk import Fanout, Quotes, register as register_desk
 from .export import export_router
 from .history import History
 from .hub import Hub, Stream
+from .known import Known
 from .news import News
 from .paper import ROOT as PAPER_ROOT, STRATEGY_ID as PAPER_ID, BacktestJob, PaperRunner, describe as paper_describe
 from .paperbook import DESK_ORIGINS, PaperBooks, _cors, desk_origin_refusal, register as register_paperbook
@@ -434,7 +435,11 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
     burst_book = BurstBook(news_dir, [r for r in configured_roots() if r in roots], contract_tick_size, news.near)
     reaction_book = ReactionBook(news_dir, contract_tick_size)
     store = TickStore(base)
-    history = History(store, cache_dir=sd / "cache")
+    # what the tick job knows (charts/known.py): its coverage report's holes for the chart, its data watchdog's
+    # reading for the strip -- two files it writes beside its log (homebase/.state; a test's own state folder)
+    kd = Path(state) if state else state_dir()
+    known = Known(kd / "tick_coverage.json", kd / "data_watch.json")
+    history = History(store, cache_dir=sd / "cache", known=known)
     # forward PAPER test of the GC NFP+CPI straddle (paper.py): never an order; live only,
     # or a replay forced by --paper-day, which never reads or writes the forward runs.jsonl;
     # paper_backtest (python -m homebase.charts passes paper.spawn_backtest) computes the
@@ -496,6 +501,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
     refill_running: set[str] = set()      # roots whose runner loop is alive (waiting or fetching)
 
     repair_seen: dict[str, tuple | None] = {}   # root -> the archive files' stamp today's tape was built from
+    today_seeded: dict[str, int] = {}           # root -> when (clock ms) today's tape was last built from the files
 
     def reseed(root: str) -> None:
         """Rebuild today's tape for root from disk (after a refill). Runs on
@@ -512,10 +518,13 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         """Hand a loaded session (store.load's; `ticks` overrides its tape) to the hub and the paper runner."""
         if ticks is None:
             ticks = sess.ticks if sess else []
+        today_seeded[root] = clock()
+        holes = known.holes(root, d)        # a session before it that was never recorded (History.info)
         hub.start_today(root, d, ticks, {
             "date": d.isoformat(), "contract": sess.contract if sess else session_contract(root, clock() / 1000),
             "source": "live", "approx": bool(sess and ticks and not sess.bid_ask),
-            "gaps": [[et_wall_s(a), et_wall_s(b)] for a, b in (sess.gaps if sess else [])]})
+            "gaps": [[et_wall_s(a), et_wall_s(b)] for a, b in (sess.gaps if sess else [])],
+            **({"holes": holes} if holes else {})})
         if root == PAPER_ROOT:
             try:        # a restart mid-window (or a gap refill) rebuilds the paper tape from the recording
                 w = paper.window_ms(clock())    # [08:20, 09:56) on an event day, else None: O(log n) slice
@@ -557,9 +566,11 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         the 18:00 roll. History.changed() (a directory listing per root, in a worker thread) names the watched
         sessions whose files moved and drops their memoized bars; every chart of such a root reloads (a chart
         may hold the session through scroll-back) -- at most once per PAST_REDRAW_S a root, a later piece
-        waiting its turn, and never across the 9:30 fire."""
+        waiting its turn, and never across the 9:30 fire. So do the charts of a root whose known holes are no
+        longer what the tick job's coverage report says (Known.refresh, the same worker thread)."""
         for root, _ in await asyncio.to_thread(history.changed):
             past_due.add(root)
+        past_due.update(r for r in await asyncio.to_thread(known.refresh) if r in roots)
         for root in sorted(past_due):
             if time.monotonic() - past_reset_at.get(root, -math.inf) < PAST_REDRAW_S:
                 continue
@@ -764,7 +775,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
     hub = Hub(history, clock)
     # per-chart Bar Replay: its own hubs over its own History memo; never the live hub, recorder, desk or quotes
     replays = BarReplay(store, sd / "cache", roots, lambda: clock(), min_bar=MIN_BAR,
-                        max_studies=MAX_STUDIES, log=log)
+                        max_studies=MAX_STUDIES, log=log, known=known)
     chart_error: list[str | None] = [None]     # the pump's chart work, failing right now
 
     def status() -> dict:
@@ -777,6 +788,13 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         st["depth_recorder"] = None if depth is None or depth.recorder is None else depth.recorder.status()
         if depth is not None and depth.error and not st.get("error"):
             st["error"] = f"depth: {depth.error}"
+        for r, x in (st.get("roots") or {}).items():     # how far behind the wall the root's newest print came in
+            if isinstance(x, dict):
+                x["late_s"] = round(hub.lag_ms[r] / 1000, 1) if r in hub.lag_ms else None
+        st["data"] = None if replay else known.data(clock())    # the tick job's data watchdog, as last read
+        if st["data"] is not None:      # ... and today's hours it found short of their ids, per root (Known.today)
+            st["data"]["today"] = {r: h for r in roots
+                                   if (h := known.today(r, hub.today_date.get(r), today_seeded.get(r), clock()))}
         st["streams"] = len(hub.streams)
         st["clients"] = len(conns)
         st["calendar"] = cal.status()
@@ -900,6 +918,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
 
     @asynccontextmanager
     async def lifespan(_app):
+        known.refresh()                 # two small files, before anything is served; then on the repair poll
         if replay:
             for r, rs in feed.load().items():
                 if r == PAPER_ROOT:
@@ -913,9 +932,10 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                     except Exception as e:  # noqa: BLE001 — paper work must never break the charts
                         log(f"paper seed: {type(e).__name__}: {e}")
                 clf = SideClassifier()
+                holes = known.holes(r, replay)
                 hub.start_today(r, replay, [from_row(x, clf) for x in rs], {
                     "date": replay.isoformat(), "contract": feed.contracts.get(r),
-                    "source": "replay", "approx": False, "gaps": []})
+                    "source": "replay", "approx": False, "gaps": [], **({"holes": holes} if holes else {})})
         else:
             for r in roots:
                 d = session_date(clock(), r)

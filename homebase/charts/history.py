@@ -35,8 +35,9 @@ WATCH_DAYS = 35         # sessions this recent are watched for a fill landing in
 
 
 class History:
-    def __init__(self, store: TickStore, cache_dir: Path | None = None, memo_max: int = 256):
+    def __init__(self, store: TickStore, cache_dir: Path | None = None, memo_max: int = 256, known=None):
         self.store = store
+        self.known = known      # charts.known.Known: the tick job's coverage report, for each session's holes
         self.cache_dir = Path(cache_dir) if cache_dir else state_dir() / "charts" / "cache"
         self.memo: OrderedDict = OrderedDict()
         self.memo_max = memo_max
@@ -121,13 +122,19 @@ class History:
         return out
 
     def info(self, root: str, d: dt.date) -> dict:
-        """What the page needs to label a session honestly. Cheap: no ticks read."""
+        """What the page needs to label a session honestly. Cheap: no ticks read. `holes` (only when it has
+        any): the session's known holes from the tick job's coverage report, [[start_ms, end_ms, kind], ...]
+        with kind lost | filling | thin (charts.known) -- the page draws them as wide as the time they cover."""
         f = self.store.pick(root, d)
         if f is None:
             return {"date": d.isoformat(), "contract": None, "source": None, "approx": False, "gaps": []}
-        return {"date": d.isoformat(), "contract": f.contract,
-                "source": "live" if f.live else "archive", "approx": not f.bid_ask,
-                "gaps": [[et_wall_s(a), et_wall_s(b)] for a, b in self.store.gaps(f)]}
+        out = {"date": d.isoformat(), "contract": f.contract,
+               "source": "live" if f.live else "archive", "approx": not f.bid_ask,
+               "gaps": [[et_wall_s(a), et_wall_s(b)] for a, b in self.store.gaps(f)]}
+        holes = self.known.holes(root, d) if self.known is not None else []
+        if holes:
+            out["holes"] = holes
+        return out
 
     def watch(self, root: str, d: dt.date, later: bool = False) -> None:
         """From now on changed() reports session d when its tick files are no longer as they are now. A

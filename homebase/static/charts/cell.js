@@ -31,6 +31,9 @@ const VOL_TOP = 0.8;    // Volume on the price pane: its bars in the bottom 20%
 const MAIN_TOP = 0.75;  // another pane-type indicator on the price pane: the bottom quarter, on its own scale
 const WHOLE = { type: 'price', precision: 0, minMove: 1 };   // contract counts: -25, not -25.00
 const NOTE_MS = 8000;       // a refused change's reason stays this long in the legend
+const MIN_GAP_S = 5;        // a recording gap shorter than this is not marked: the daily 09:10 socket swap leaves a 3 s
+                            // marker (it may have lost one tick), a reconnect a blip -- not a hole to look at
+const BLANKS_MAX = 20000;   // empty slots one chart adds for its known holes, at most (a 5 s chart of a day-long hole: 16,560)
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const clone = (x) => JSON.parse(JSON.stringify(x));
@@ -40,7 +43,8 @@ function palette() {
   const dark = document.documentElement.getAttribute('data-theme') === 'dark';
   const P = { up: '#089981', down: '#F23645', upA: 'rgba(8,153,129,.5)', downA: 'rgba(242,54,69,.5)', accent: '#2962FF',
     lines: C.LINE_COLORS, vwap: '#9C27B0', band: 'rgba(156,39,176,.45)', cum: '#FF6D00', poc: '#F7A600', warn: '#F7A600',
-    gap: 'rgba(120,123,134,.14)', cross: '#9598A1', crossLabel: '#131722',
+    gap: 'rgba(120,123,134,.14)', gapFill: 'rgba(247,166,0,.16)', gapThin: 'rgba(120,123,134,.07)',   // no data · still filling · thin feed
+    cross: '#9598A1', crossLabel: '#131722',
     handleFill: '#FFFFFF', onAccent: '#FFFFFF',   // drawing handles: white dots in both themes; text on accent / down fills
     profitZone: 'rgba(8,153,129,.20)', lossZone: 'rgba(242,54,69,.20)' };
   return Object.assign(P, dark
@@ -86,6 +90,60 @@ function badgeEl(root, size) {
   return s;
 }
 
+/* The known holes of the chart's sessions -- the tick job's coverage report, sent with each session as
+   [startMs, endMs, kind]: 'lost' (it left the broker), 'filling' (the broker still has it), 'thin' (ticks are
+   there, a good part of the hour's trades is not) -- as one list in time order. */
+function holesOf(sessions) {
+  const out = [];
+  for (const s of sessions || []) for (const h of (s.holes || [])) if (h && h[1] > h[0]) out.push(h);
+  return out.sort((a, b) => a[0] - b[0]);
+}
+
+/* `bars` (time bars, oldest first, none of them a slot) with an empty slot for every bar a lost / filling hole
+   swallowed, so the hole is as wide on the axis as the time it covers: between two bars, each missing bar start
+   (stepped by barMs from the bar before) that lies inside such a hole gets {ms, t, s, blank: kind}. A slot draws
+   nothing; it carries the last close as its O/H/L/C and no volume, so whatever reads a price or a time off the
+   chart's bars reads a real one. Time without bars that is not a known hole (a quiet stretch, the 17:00 hour, a
+   weekend) stays compressed, as it always was. At most `max` slots; the same array when there is none to add. */
+function withBlanks(bars, holes, barMs, max = BLANKS_MAX) {
+  const gaps = (holes || []).filter((h) => h[2] !== 'thin');
+  if (!gaps.length || !(barMs > 0) || bars.length < 2) return bars;
+  const out = [bars[0]];
+  let g = 0, left = max;
+  for (let i = 1; i < bars.length; i++) {
+    const a = bars[i - 1], b = bars[i];
+    if (b.ms - a.ms > barMs && left > 0) {
+      while (g < gaps.length && gaps[g][1] <= a.ms + barMs) g++;   // holes over before the next bar start
+      for (let k = g; k < gaps.length && gaps[k][0] < b.ms; k++) {
+        const [from, to, kind] = gaps[k], end = Math.min(to, b.ms);
+        for (let t = a.ms + Math.max(1, Math.ceil((from - a.ms) / barMs)) * barMs; t < end && left > 0; t += barMs, left--) {
+          out.push({ ms: t, t: a.t + (t - a.ms) / 1000, s: a.s, o: a.c, h: a.c, l: a.c, c: a.c, v: 0, d: 0, n: 0, sv: {}, blank: kind });
+        }
+      }
+    }
+    out.push(b);
+  }
+  return out.length === bars.length ? bars : out;
+}
+
+/* What the gaps layer shades for them: [fromIndex, toIndex, kind] for each run of empty slots and for each run
+   of bars inside a thin hole. */
+function bandsOf(bars, holes) {
+  const thin = (holes || []).filter((h) => h[2] === 'thin'), out = [];
+  let k = 0, run = null;
+  for (let i = 0; i < bars.length; i++) {
+    let kind = bars[i].blank || null;
+    if (!kind && thin.length) {
+      while (k < thin.length && thin[k][1] <= bars[i].ms) k++;
+      if (k < thin.length && thin[k][0] <= bars[i].ms) kind = 'thin';
+    }
+    if (kind && run && run[2] === kind) run[1] = i;
+    else { if (run) out.push(run); run = kind ? [i, i, kind] : null; }
+  }
+  if (run) out.push(run);
+  return out;
+}
+
 /* Time-axis labels like TradingView's: year, month name, day of month, HH:MM(:SS). */
 function tickLabel(t, type, fmt) {
   const d = new Date(t * 1000);
@@ -124,6 +182,7 @@ class Cell {
     this.ov = [];          // this chart's overlays (page.overlays), rebuilt with the chart
     this.replay = null;    // Bar Replay (2026-09-27 plan): null live, else {date, cursorMs, speed, playing, done}
                             // -- set by replayui.js, read by HBTradeUI.effectiveMode (a replaying chart never trades)
+    this.today = []; this.todayKey = '[]';   // the session under way's thin hours, from the status message (setToday)
     this.has = { fp: false, big: false };   // what the bars on screen carry beyond OHLCV: need() as their history was asked
     this.wantFp = false;   // the Level 2 ladder reads this chart's footprint (needFootprint)
     slot.className = 'panel';
@@ -272,6 +331,9 @@ class Cell {
   /* A bar's axis time: its start on the chart time zone's wall clock (by default ET: the server's own t). */
   wall(b) { return this.R.timezone === 'exchange' ? b.t : S.wallSeconds(b.ms, this.R.timezone); }
 
+  /* Bars as the chart holds them: on a time chart, with the empty slots of its sessions' known holes (withBlanks). */
+  slotted(bars) { return this.isTime() ? withBlanks(bars, holesOf(this.sessions), this.barMs()) : bars; }
+
   /* The time zone changed: every bar's axis time again. */
   retime() { const bars = this.bars; this.bars = []; this.realT = new Map(); for (const b of bars) this.append(b); }
 
@@ -350,17 +412,23 @@ class Cell {
      ("Start of data" / "History limit reached"), and scroll-back stops asking. */
   onOlder(m) {
     if (!this.back.take(m) || !this.chart || this.inflight.length) return;
-    const { bars: merged, capped } = window.HBScrollBack.capPrepend(this.bars, m);
+    // the bars as the server knows them (its repaired study values, and the 200,000-bar cap, count these): the
+    // known holes' empty slots are the page's own, laid out afresh below
+    const had = this.bars.length, own = this.bars.some((x) => x.blank) ? this.bars.filter((x) => !x.blank) : this.bars;
+    const { bars: merged, capped } = window.HBScrollBack.capPrepend(own, m);
     if (capped) this.capped = true;
-    const k = merged.length - this.bars.length;
-    if (k) {
+    const added = merged.length - own.length;
+    if (added) {
       const r = this.chart.timeScale().getVisibleLogicalRange();
       // a cropped chunk drops its oldest bars: drop their session labels too, so no gap band or approx.-flow
       // badge ever points at a session that never actually landed on the chart
-      const kept = new Set(merged.slice(0, k).map((b) => b.s));
+      const kept = new Set(merged.slice(0, added).map((b) => b.s));
       this.sessions = window.HBScrollBack.mergeSessions((m.sessions || []).filter((x) => kept.has(x.date)), this.sessions);
       this.bars = []; this.realT = new Map();
-      for (const b of merged) this.append(b);   // axis times again: tick/volume/range bars sit on an index axis
+      // axis times again: tick/volume/range bars sit on an index axis. The empty slots over all the bars: the
+      // older sessions bring their own holes, and one may sit at the join
+      for (const b of this.slotted(merged)) this.append(b);
+      const k = this.bars.length - had;   // slots added in front of the chart's first bar, empty ones included
       this.candles.setData(this.candleData());
       for (const l of this.lines) l.s.setData(this.bars.map((b) => this.point(l, b)));
       if (r) this.chart.timeScale().setVisibleLogicalRange({ from: r.from + k, to: r.to + k });
@@ -496,7 +564,8 @@ class Cell {
     this.keys = new Set(Object.keys(m.studies || {}));
     this.profile = m.profile || null;
     this.bars = []; this.realT = new Map();
-    m.bars.forEach((b, i) => { b.sv = {}; for (const k in m.studies) b.sv[k] = m.studies[k][i]; this.append(b); });
+    m.bars.forEach((b, i) => { b.sv = {}; for (const k in m.studies) b.sv[k] = m.studies[k][i]; });
+    for (const b of this.slotted(m.bars)) this.append(b);
     this.build(view);
     // partial: the server's BUILD_BUDGET_S cut the initial load short (a cold, deep chart). It already
     // dropped the OLDEST sessions, never the newest, so what's on screen is right -- but there may be far
@@ -845,6 +914,11 @@ class Cell {
     if (!n || !this.P) { this.lg.ohlc.replaceChildren(); return; }
     const k = i == null ? n - 1 : Math.max(0, Math.min(i, n - 1)), b = this.bars[k], prev = k > 0 ? this.bars[k - 1] : null;
     const P = this.P, R = this.R, dt = this.dtick();
+    if (b.blank) {   // an empty slot of a known hole: there is no bar to read
+      this.lg.ohlc.replaceChildren(val(b.blank === 'filling' ? 'no data yet — the broker still has it' : 'no data', P.text2));
+      for (const r of this.rows) r.vals.replaceChildren();
+      return;
+    }
     const up = b.c >= (R.prevClose && prev ? prev.c : b.o), col = up ? R.bodyUp : R.bodyDown, ch = C.change(b, prev, dt);
     const F = S.legendFlags(R), parts = [];
     if (F.ohlc) parts.push(...[['O', b.o], ['H', b.h], ['L', b.l], ['C', b.c]].map(([key, v]) => kv(key, C.fmtPrice(v, dt), col)));
@@ -900,6 +974,7 @@ class Cell {
   /* One candle; with "Colour bars based on previous close" it carries its own colours (up/down against the
      previous close), hidden like the series' while the footprint is readable. */
   candle(b, prev) {
+    if (b.blank) return { time: b.tt };   // an empty slot of a known hole: whitespace, the axis keeps its width
     const c = { time: b.tt, open: b.o, high: b.h, low: b.l, close: b.c };
     if (!this.R.prevClose) return c;
     const k = S.barColor(b, prev, this.R);
@@ -915,6 +990,7 @@ class Cell {
 
   point(l, b) {
     const P = this.P, time = b.tt;
+    if (b.blank) return { time };
     if (l.src === '__vol') return { time, value: b.v, color: b.d >= 0 ? P.upA : P.downA };
     if (l.src === '__delta') return { time, value: b.d, color: b.d >= 0 ? P.upA : P.downA };
     const v = b.sv ? b.sv[l.src] : null;
@@ -969,16 +1045,38 @@ class Cell {
     }
   }
 
+  /* The session under way has no coverage report yet. Its hours whose tape is still short of its tick ids come
+     with every status message instead (the tick job's data watchdog, per root: {NQ: [[startMs, endMs, 'thin'], ...]}
+     -- and only while that reading is newer than the tape on screen): the same light band, drawn again only when
+     the reading changes. Nothing known (an older service, a reading out of date): no band. */
+  setToday(byRoot) {
+    const spans = ((byRoot && byRoot[(this.shown || this.cfg).root]) || []).filter((h) => h[2] === 'thin');
+    const key = JSON.stringify(spans);
+    if (key === this.todayKey) return;
+    this.todayKey = key; this.today = spans;
+    if (this.chart && this.gaps) this.drawGaps();
+  }
+
+  /* The "no data" marks of the recording's own gaps (from MIN_GAP_S up; none where a known hole's band follows),
+     and the known holes' bands. A tick / volume / range chart has no time axis to widen: a lost or filling hole
+     is one such mark between the two bars around it. */
   drawGaps() {
-    const idx = [];
+    const idx = [], n = this.bars.length, holes = holesOf([...this.sessions, { holes: this.today }]);
     for (const s of this.sessions) {
-      for (const [a] of (s.gaps || [])) {
+      for (const [a, b] of (s.gaps || [])) {
+        if (b - a < MIN_GAP_S) continue;
         let i = -1;
-        for (let j = 0; j < this.bars.length && this.bars[j].t <= a; j++) i = j;
-        if (i >= 0 && i < this.bars.length - 1) idx.push(i);
+        for (let j = 0; j < n && this.bars[j].t <= a; j++) i = j;
+        if (i >= 0 && i < n - 1 && !this.bars[i + 1].blank) idx.push(i);
       }
     }
-    this.gaps.set(idx);
+    if (!this.isTime()) {
+      for (const [from, to, kind] of holes) {
+        const i = kind === 'thin' ? -1 : window.HBDrawings.barIndexAt(this.bars, from);
+        if (i >= 0 && i < n - 1 && this.bars[i + 1].ms >= to && !idx.includes(i)) idx.push(i);
+      }
+    }
+    this.gaps.set(idx, bandsOf(this.bars, holes));
   }
 
   syncFootprint() {
@@ -1001,5 +1099,5 @@ class Cell {
   }
 }
 
-window.HBCell = { Cell, palette, FONT, badgeEl };
+window.HBCell = { Cell, palette, FONT, badgeEl, holesOf, withBlanks, bandsOf, MIN_GAP_S };
 })();
