@@ -7,6 +7,7 @@ templates/*.json; none is typed in code. A change of a number is a change of the
   exit_menu.json   the standard exit table, 8 stops x 4 targets                                           exit_menu(root)
   control.json     the random tables: 10 seeds, 4,000 draws      montecarlo.json   1,000 runs of whole days, a fixed seed
   costs.json       the cost floor per market, normal and worse fills      sizes.json · idea.json   size steps · the empty spec
+  compute.json     the workers of a run inside and outside desk hours, the day blocks of a tape pass (not a line of the law)
 
 Standard library only: the connector reads the same files. A number the law states once but two files carry (the cost floor,
 the Monte Carlo lines, the worse fills, the flat time) and the ranges (build and test must not share a day) are checked when
@@ -21,7 +22,7 @@ from functools import lru_cache
 from pathlib import Path
 
 T = Path(__file__).resolve().parent / "templates"
-NAMES = ("rules", "ranges", "exit_menu", "control", "montecarlo", "costs", "idea", "sizes")
+NAMES = ("rules", "ranges", "exit_menu", "control", "montecarlo", "costs", "idea", "sizes", "compute")
 OPS = {">": operator.gt, ">=": operator.ge, "<=": operator.le}
 
 

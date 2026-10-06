@@ -420,7 +420,7 @@ def test_build_stored_command():
     assert list(by["2.3"]["controls"]) == ["shift"] and by["2.7"]["filters"][0]["name"] == "day filter A against all days" and by["2.7"]["passed"] is True
     # refusals: exit 2 with the reason, as text and as the same object with ok false; a bad command line is refused the same way
     n = 0
-    for argv, word in ((["build"], "only the dry run on stored units is built"), (["build", "--stored", "nonsense"], "expected <family>"),
+    for argv, word in ((["build"], "the idea's name"), (["build", "--stored", "nonsense"], "expected <family>"),
                        (["build", "--stored", "no_such_family-NQ-tf5-pm"], "no BUILD store"),
                        (["build", "--stored", "ib-NQ-tf15-nyam:mode=fade"], "no judged variant"),
                        (["build", "--stored"], "expected one argument"), (["build", "--stored", "x", "--no-such-option"], "unrecognized"),

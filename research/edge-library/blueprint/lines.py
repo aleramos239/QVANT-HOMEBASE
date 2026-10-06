@@ -16,6 +16,7 @@ TABLE DATA = a dict. tables.py fills it from a store; a test fills it by hand. A
   long, short, n_long, n_short     net and trades of each side, all variants together                               2.6
   filters              [{"name", "avg_trade", "plain_avg_trade", "p_beat": [...]}]: each filter of the unit against the
                        same strategy without it (or {"name", "why"} when that cannot be read); empty = no filter      2.7
+  reason               the reason of this round, as it was written before the run (2.9 also reads `round`)            2.9
 """
 from __future__ import annotations
 
@@ -168,6 +169,17 @@ def monte(t: dict, rng=None) -> dict:
 
 
 BUILD = (heat, floor, beats_random, trades, neighbors, sides, filter_alone, monte)        # lines 2.1 .. 2.8, in the law's order
+
+
+def rounds(t: dict) -> dict:
+    """2.9 Rounds: at most 5, each with its reason written before the run. Read off what the run was started with: its
+    round (the bar of 2.3 rises with it) and the reason given for it. No reason = not met. The line is not read off a
+    table, so it is not in BUILD: a dry run on stored units has no round."""
+    rd, need, why = t.get("round", 1), R.need("2.9"), " ".join(str(t.get("reason") or "").split())
+    R.need("2.3", rd)                               # a round the law does not have (0, 6) is refused, as in 2.3
+    return _row("2.9", bool(R.meets("2.9", rd) and why), rd, need,
+                f"round {rd} of at most {need}" + (f", its reason written before the run: {why}" if why else ": no reason was written before the run"),
+                reason=why or None)
 
 
 # ================================================================ phase 4: the out-of-sample test (its Monte Carlo line)
