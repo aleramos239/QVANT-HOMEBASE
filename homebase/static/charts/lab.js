@@ -15,7 +15,7 @@ const MINUS = '−';
 const SAVE_ICON_LOCK = '<svg class="lb-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
 
 /* ---- state ---- */
-const S = { builtins: [], drafts: [], bufs: new Map(), cur: null, forms: {}, run: null, log: [], seq: 0, busy: false };
+const S = { builtins: [], drafts: [], groups: null, bufs: new Map(), cur: null, forms: {}, run: null, log: [], seq: 0, busy: false };
 const buf = () => (S.cur ? S.bufs.get(S.cur) : null);
 const isDirty = (b) => b.kind !== 'builtin' && (b.kind === 'new' ? !!b.code.trim() : b.code !== b.saved);
 const takenNames = () => [...S.drafts.map((d) => d.name), ...[...S.bufs.values()].filter((b) => b.kind === 'new' && b.name).map((b) => b.name)];
@@ -40,9 +40,15 @@ function paintLog() {
 
 /* ---- loading ---- */
 async function loadLists() {
-  const [a, b] = await Promise.all([send('GET', '/api/tester/strategies'), send('GET', '/api/tester/drafts')]);
+  const [a, b, g] = await Promise.all([send('GET', '/api/tester/strategies'), send('GET', '/api/tester/drafts'), send('GET', '/api/tester/groups')]);
   if (a.ok) S.builtins = (a.json || []).filter((s) => !s.draft);
   if (b.ok) S.drafts = b.json || [];
+  if (g.ok) S.groups = g.json;
+  else if (g.status) {      // a chart service from before groups (404), or a groups file that does not read (409): the plain list
+    S.groups = null;
+    const why = `<span class="err">No groups: ${esc(g.error)}</span>`;
+    if (g.status === 409 && !S.log.some((l) => l.html === why)) log(why);
+  }
   paintLib();
 }
 async function openKey(key) {
@@ -384,10 +390,12 @@ async function newMenu(anchor) {
   const ts = (r.ok && r.json) || [];
   menu(anchor, `<button data-pick="paste"><b>Paste a script</b><small>Insert Python from your clipboard or an editor</small></button>
     <button data-pick="file"><b>Open a .py file…</b><small>Load a script from disk</small></button><hr>
-    <h6>Start from a template</h6>${ts.map((t) => `<button data-pick="t:${esc(t.id)}"><b>${esc(t.title)}</b><small>${esc(t.blurb)}</small></button>`).join('')}`,
+    <h6>Start from a template</h6>${ts.map((t) => `<button data-pick="t:${esc(t.id)}"><b>${esc(t.title)}</b><small>${esc(t.blurb)}</small></button>`).join('')}
+    ${S.groups ? '<hr><button data-pick="group"><b>New group…</b><small>A section of this list to keep strategies under</small></button>' : ''}`,
   async (pick) => {
     if (pick === 'paste') return pasteScript();
     if (pick === 'file') return $('#labFile').click();
+    if (pick === 'group') return nameGroup();
     const t = ts.find((x) => `t:${x.id}` === pick);
     if (t) openScript(t.code, C.suggestName(t.code, takenNames()));
   });
@@ -478,6 +486,83 @@ function deleteDialog(name) {
   });
 }
 
+/* ---- groups: the library in sections ----
+   The groups and who is in them are the server's: one file beside the strategies, and no strategy's own file is
+   ever changed for it. Which sections are folded shut is this browser's. */
+const folded = new Set();
+try { for (const g of JSON.parse(localStorage.getItem('hb_lab_folded') || '[]')) folded.add(String(g)); } catch (_) { /* private mode: all open */ }
+const saveFolded = () => { try { localStorage.setItem('hb_lab_folded', JSON.stringify([...folded])); } catch (_) { /* private mode */ } };
+function foldGroup(el) {
+  const g = el.dataset.g, shut = !folded.has(g);
+  if (shut) folded.add(g); else folded.delete(g);
+  saveFolded();
+  el.setAttribute('aria-expanded', String(!shut));       // in place, without a repaint: the chevron turns
+  el.closest('.lb-g').classList.toggle('folded', shut);
+}
+/* every change answers the whole new state */
+async function regroup(path, body) {
+  const r = await send('POST', `/api/tester/groups${path}`, body);
+  if (r.ok) { S.groups = r.json; paintLib(); }
+  return r;
+}
+/* a row's ⋯: the one group this strategy is listed under */
+function fileMenu(el) {
+  const { id, name } = el.dataset, to = [...S.groups.groups, ''], cur = S.groups.members[id] || '';
+  menu(el, `${to.length > 1 ? `<h6>Move to</h6>${to.map((g, i) => `<button class="row" data-pick="${i}"><span>${esc(g || 'Ungrouped')}</span>${g === cur ? '<small>✓</small>' : ''}</button>`).join('')}<hr>` : ''}
+    <button class="row" data-pick="new"><span>New group…</span></button>`,
+  async (pick) => {
+    if (pick === 'new') return nameGroup('', id, name);
+    if (to[pick] === cur) return;
+    const r = await regroup('/move', { strategy: id, group: to[pick] });
+    if (!r.ok) log(`<span class="err">Not moved: ${esc(r.error)}</span>`);
+  });
+}
+/* a group's ⋯ */
+function groupMenu(el) {
+  const g = el.dataset.g, n = Number(el.dataset.n);
+  menu(el, `<button class="row" data-pick="rename"><span>Rename…</span></button><hr>
+    <button class="row" data-pick="delete"><span>Delete group${n ? '…' : ''}</span></button>`,
+  (pick) => (pick === 'rename' ? nameGroup(g) : dropGroup(g, n)));
+}
+/* One sheet names a group: a new one (it takes along the strategy whose row asked for it), or a rename. */
+function nameGroup(old = '', id = '', strategy = '') {
+  const d = dialog(`<h2>${old ? 'Rename group' : 'New group'}</h2>
+    ${old ? '' : `<p>${id ? `<b>${esc(strategy)}</b> moves into it.` : 'A section of your strategy list. To put a strategy in it, use the ⋯ on its row.'}</p>`}
+    <input id="grName" value="${esc(old)}" placeholder="Name" maxlength="40" spellcheck="false" autocomplete="off" aria-label="Group name">
+    <p class="err" id="grErr" role="alert" hidden></p>
+    <div class="acts"><button class="btn btn-outline" data-x="cancel">Cancel</button><button class="btn btn-default" data-x="go">${old ? 'Rename' : 'Create'}</button></div>`);
+  const inp = $('#grName', d), err = $('#grErr', d);
+  inp.focus(); inp.select();
+  let busy = false;
+  const go = async () => {
+    const name = inp.value.trim().replace(/\s+/g, ' ');
+    if (busy) return;
+    if (!name) { inp.classList.add('bad'); return inp.focus(); }
+    if (name === old) return closeDialog();
+    busy = true;
+    const r = await (old ? regroup('/rename', { name: old, to: name }) : id ? regroup('/move', { strategy: id, group: name }) : regroup('', { name }));
+    busy = false;
+    if (!r.ok) { err.textContent = r.error; err.hidden = false; inp.classList.add('bad'); return inp.focus(); }
+    if (old && folded.delete(old)) { folded.add(name); saveFolded(); paintLib(); }
+    if (d.isConnected) closeDialog();                    // still this sheet (it was not dismissed while the answer came)
+  };
+  d.addEventListener('click', (e) => { const x = e.target.closest('[data-x]'); if (x) { if (x.dataset.x === 'go') go(); else closeDialog(); } });
+  inp.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.repeat) { e.preventDefault(); go(); } });
+  inp.addEventListener('input', () => { inp.classList.remove('bad'); err.hidden = true; });
+}
+/* Deleting a group deletes no strategy: they go back to Ungrouped. An empty group goes without a question. */
+function dropGroup(g, n) {
+  const go = async () => {
+    const r = await regroup('/delete', { name: g });
+    if (!r.ok) return log(`<span class="err">Not deleted: ${esc(r.error)}</span>`);
+    if (folded.delete(g)) saveFolded();
+  };
+  if (!n) return go();
+  const d = dialog(`<h2>Delete the group “${esc(g)}”?</h2><p>Its ${n === 1 ? 'strategy goes' : `${n} strategies go`} back to Ungrouped. No strategy is deleted.</p>
+    <div class="acts"><button class="btn btn-outline" data-x="cancel">Keep it</button><button class="btn btn-default" data-x="go">Delete group</button></div>`);
+  d.addEventListener('click', (e) => { const x = e.target.closest('[data-x]'); if (!x) return; closeDialog(); if (x.dataset.x === 'go') go(); });
+}
+
 /* ---- painting ---- */
 function paintAll() { paintLib(); paintEditor(); paintRes(); }
 
@@ -486,6 +571,7 @@ const ICON_LOCK = '<svg class="lb-ico" viewBox="0 0 24 24" fill="none" stroke="c
 const ICON_PLUS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5.5v13M5.5 12h13"/></svg>';
 const ICON_PLAY = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 4.8v14.4a.9.9 0 0 0 1.36.77l11.7-7.2a.9.9 0 0 0 0-1.54L8.86 4.03a.9.9 0 0 0-1.36.77z" fill="currentColor"/></svg>';
 const ICON_MORE = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5.5" cy="12" r="1.7" fill="currentColor"/><circle cx="12" cy="12" r="1.7" fill="currentColor"/><circle cx="18.5" cy="12" r="1.7" fill="currentColor"/></svg>';
+const ICON_CHEV = '<svg class="lb-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5.5l6.5 6.5L9 18.5"/></svg>';
 function paintLib() {
   const el = $('#labLib .in');
   if (!el) return;
@@ -495,16 +581,25 @@ function paintLib() {
     ...S.drafts.map((d) => {
       const b = S.bufs.get(`d:${d.name}`), dirty = b && isDirty(b);
       const bad = b && b.valid ? !b.valid.ok : !d.ok;
-      return { key: `d:${d.name}`, name: d.name, sub: bad ? 'Needs a fix' : dirty ? 'Edited' : 'Draft', dot: bad ? 'err' : dirty ? 'off' : '', flag: bad ? '!' : '' };
+      return { key: `d:${d.name}`, id: d.id, name: d.name, sub: bad ? 'Needs a fix' : dirty ? 'Edited' : 'Draft', dot: bad ? 'err' : dirty ? 'off' : '', flag: bad ? '!' : '' };
     })];
+  const builtins = S.builtins.map((s) => ({ key: `b:${s.id}`, id: s.id, name: s.name || s.id, sub: s.root || '', lock: true }));
+  const item = (r) => `<button class="lb-item${S.cur === r.key ? ' sel' : ''}" data-key="${esc(r.key)}" aria-current="${S.cur === r.key}"${r.lock ? ' title="Read-only"' : ''}>
+        ${r.lock ? ICON_LOCK : ICON_DOC}<span class="it"><b>${esc(r.name)}</b><small>${esc(r.sub)}</small></span>${r.lock ? '<span></span>' : `<span class="lb-flag">${r.flag}</span>`}</button>`;
+  /* with groups: each one a section that folds, then Ungrouped. A saved strategy's row carries a ⋯ that moves it. */
+  const filed = (r) => (r.id ? `<div class="lb-row">${item(r)}<button class="hb-ib lb-more" data-act="file" data-id="${esc(r.id)}" data-name="${esc(r.name)}" aria-label="Move ${esc(r.name)} to a group" title="Move to a group" aria-haspopup="menu">${ICON_MORE}</button></div>` : item(r));
+  const section = (s) => {
+    if (!s.name && !s.rows.length) return '';
+    const shut = folded.has(s.name), n = s.rows.length;
+    return `<div class="lb-g${shut ? ' folded' : ''}"><div class="lb-gh"><button class="lb-sh" data-act="fold" data-g="${esc(s.name)}" aria-expanded="${!shut}">${ICON_CHEV}<span>${esc(s.name || 'Ungrouped')}</span><i>${n}</i></button>
+        ${s.name ? `<button class="hb-ib lb-more" data-act="group" data-g="${esc(s.name)}" data-n="${n}" aria-label="Rename or delete the group ${esc(s.name)}" title="Rename or delete" aria-haspopup="menu">${ICON_MORE}</button>` : ''}</div>
+      <div class="lb-gb">${s.rows.map(filed).join('') || '<div class="lb-empty">Move a strategy here from its ⋯</div>'}</div></div>`;
+  };
   const top = el.scrollTop;
   el.innerHTML = `<div class="lb-top"><b>Strategies</b><button class="hb-ib" data-act="new" aria-label="New strategy" title="New strategy">${ICON_PLUS}</button></div>
-    ${rows.length ? rows.map((r) => `<button class="lb-item${S.cur === r.key ? ' sel' : ''}" data-key="${esc(r.key)}" aria-current="${S.cur === r.key}">
-        ${ICON_DOC}<span class="it"><b>${esc(r.name)}</b><small>${esc(r.sub)}</small></span><span class="lb-flag">${r.flag}</span></button>`).join('')
-      : '<div class="lb-empty">Nothing here yet. Press + to paste a script or start from a template.</div>'}
-    <div class="lb-sh">Built-in</div>
-    ${S.builtins.map((s) => `<button class="lb-item${S.cur === `b:${s.id}` ? ' sel' : ''}" data-key="b:${esc(s.id)}" aria-current="${S.cur === `b:${s.id}`}" title="Read-only">
-        ${ICON_LOCK}<span class="it"><b>${esc(s.name || s.id)}</b><small>${esc(s.root || '')}</small></span><span></span></button>`).join('')}`;
+    ${rows.length ? '' : '<div class="lb-empty">Nothing here yet. Press + to paste a script or start from a template.</div>'}
+    ${S.groups ? C.sections([...rows, ...builtins], S.groups).map(section).join('')
+      : `${rows.map(item).join('')}<div class="lb-sh">Built-in</div>${builtins.map(item).join('')}`}`;
   el.scrollTop = top;
 }
 
@@ -719,6 +814,9 @@ function act(name, el) {
   else if (name === 'report') { if (root.dataset.report === '1' && P.chart) setReport(false); else showOnChart(true); }
   else if (name === 'review') reviewDialog();
   else if (name === 'save') save(b);
+  else if (name === 'fold') foldGroup(el);
+  else if (name === 'file') fileMenu(el);
+  else if (name === 'group') groupMenu(el);
 }
 root.addEventListener('click', (e) => {
   if (inChart(e)) return;

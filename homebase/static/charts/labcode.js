@@ -1,5 +1,6 @@
 /* Homebase Lab -- the editor's pure half: Python highlighting, the keystroke edits a code editor owes you
-   (Tab, Shift+Tab, Enter, Cmd+/), a name for a pasted script, and the one-line status of a validation.
+   (Tab, Shift+Tab, Enter, Cmd+/), a name for a pasted script, the one-line status of a validation, and the
+   library's rows under their groups.
    No DOM, no fetch: tests/js/labcode.test.mjs runs it headless. lab.js (the page) uses it. */
 (function () {
 'use strict';
@@ -145,7 +146,18 @@ function ago(ms, now) {
   return s < 5 ? 'just now' : s < 60 ? `${s} s ago` : s < 3600 ? `${Math.floor(s / 60)} min ago` : s < 86400 ? `${Math.floor(s / 3600)} h ago` : `${Math.floor(s / 86400)} d ago`;
 }
 
-const api = { highlight, tab, enter, comment, nameError, suggestName, metaLine, statusOf, lineCount, ago, INDENT };
+/* ---- the library's groups ---- */
+/* The list's rows under their groups: [{name, rows}] for each group in its saved order (an empty one too), then the
+   rest under name '' (the list calls it Ungrouped). `groups` is the server's {groups: [names], members: {strategy
+   id: group}}; a row with no id (a script not saved yet) cannot be in a group. */
+function sections(rows, groups) {
+  const out = groups.groups.map((name) => ({ name, rows: [] })), rest = { name: '', rows: [] };
+  const by = new Map(out.map((s) => [s.name, s]));
+  for (const r of rows) (by.get(groups.members[r.id]) || rest).rows.push(r);
+  return [...out, rest];
+}
+
+const api = { highlight, tab, enter, comment, nameError, suggestName, metaLine, statusOf, lineCount, ago, sections, INDENT };
 if (typeof window !== 'undefined') window.HBLabCode = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

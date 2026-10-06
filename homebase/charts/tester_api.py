@@ -15,6 +15,15 @@
     DELETE /api/tester/drafts/{name}     remove it
     POST /api/tester/drafts/{name}/review-request   {run_id?, note?} -> writes a review package (text only) under
                                           ~/.homebase/review-requests; never runs, imports or promotes anything
+    GET  /api/tester/groups              the Lab's strategy groups {groups: [names, in order], members: {strategy
+                                          id: its group}} -- one file beside the drafts (draftstore, groups.json).
+                                          Each write below answers the same shape, and none of them ever edits,
+                                          moves or deletes a strategy file
+    POST /api/tester/groups              {name} -> a new, empty group
+    POST /api/tester/groups/rename       {name, to}
+    POST /api/tester/groups/delete       {name} -> its strategies go back to no group (none is deleted)
+    POST /api/tester/groups/move         {strategy, group} -> that strategy (a built-in or a draft id) is in that
+                                          one group, made when it is new; group null or "" = in no group
     POST /api/tester/show                {run_id | grid_id + cell, focus?: {trade_index | date | time_ms}}
                                           -> tells every open chart page (/ws `tester_show`) to load that run or
                                           heat-map cell into the Strategy Tester and show it on a chart
@@ -309,6 +318,46 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
                 raise HTTPException(409, f"run {rid} is not a run of draft_{name}")
         meta, _, _ = meta_or_error(code)
         return await asyncio.to_thread(reviewpack.create, name, code, meta, bundle, str(body.get("note") or ""))
+
+    # ---- the Lab's groups: which section of the list a strategy is shown under (draftstore, groups.json) --------
+    def grouped(edit: Callable[..., dict], *args) -> dict:
+        try:
+            return edit(*args)
+        except draftstore.GroupsUnreadable as e:       # refused, never shown (or written over) as no groups
+            raise HTTPException(409, str(e)) from None
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+
+    def group_body(request: Request, body: dict, *keys: str) -> list:
+        write_ok(request)
+        json_body(request)
+        if set(body) - set(keys):
+            raise HTTPException(400, "{" + ", ".join(keys) + "}")
+        return [body.get(k) for k in keys]
+
+    @r.get("/groups")
+    def list_groups():
+        return grouped(draftstore.read_groups)
+
+    @r.post("/groups")
+    def add_group(request: Request, body: dict):
+        return grouped(draftstore.add_group, *group_body(request, body, "name"))
+
+    @r.post("/groups/rename")
+    def rename_group(request: Request, body: dict):
+        return grouped(draftstore.rename_group, *group_body(request, body, "name", "to"))
+
+    @r.post("/groups/delete")
+    def delete_group(request: Request, body: dict):
+        return grouped(draftstore.remove_group, *group_body(request, body, "name"))
+
+    @r.post("/groups/move")
+    def move_to_group(request: Request, body: dict):
+        sid, group = group_body(request, body, "strategy", "group")
+        known_ids = builtin_ids() | {draftstore.draft_id(n) for n, _ in draftstore.list_files()}
+        if not isinstance(sid, str) or sid not in known_ids:
+            raise HTTPException(404, f"no strategy {sid!r}")
+        return grouped(draftstore.set_group, sid, group)
 
     @r.post("/show")
     async def show(request: Request):

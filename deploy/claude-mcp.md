@@ -24,7 +24,7 @@ claude mcp add --scope user \
   session (or run `/mcp` again).
 - `PYTHONPATH` makes `homebase` importable whatever directory Claude Code starts in. The server imports
   nothing outside the stdlib, so any `python3` (3.9+) works in place of the venv's.
-- Check it: `claude mcp list` should show `homebase ... ✓ Connected`. In a session, `/mcp` lists its 24 tools.
+- Check it: `claude mcp list` should show `homebase ... ✓ Connected`. In a session, `/mcp` lists its 25 tools.
 - Leave `write_strategy` on "ask" (do not allowlist it): it writes Python that a backtest will run. The
   sandbox below contains that code, but the user should still see what Claude writes before it runs.
   `account_remove` is worth leaving on "ask" too, even though it is refused while an account holds a
@@ -39,7 +39,8 @@ claude mcp add --scope user \
 - `http://127.0.0.1:8850/api/status`, `/api/journal`, `/api/accounts/reconnect`, `/api/accounts/remove`
   only (the desk) — `homebase/claude_mcp/desk_client.py`'s exact allowlist, nothing else. `HOMEBASE_DESK_URL`
   overrides the loopback port the same way `HOMEBASE_CHARTS_URL` does for the chart service.
-- DRAFT strategy files: `~/.homebase/strategies/<name>.py` (`HOMEBASE_DRAFTS_DIR` overrides).
+- DRAFT strategy files: `~/.homebase/strategies/<name>.py` (`HOMEBASE_DRAFTS_DIR` overrides). `set_group`
+  writes `groups.json` in the same folder (which group the Lab lists a strategy under) and nothing else.
 - `homebase/.state/tick_coverage.json`, read directly off disk (never over HTTP) for `data_coverage`.
 
 ## What the tools need from the running services

@@ -3,6 +3,7 @@ or executes a draft -- it only reads and writes text.
 
     <drafts dir> = ~/.homebase/strategies   (HOMEBASE_DRAFTS_DIR overrides it; the test suite always does)
       <name>.py                             one Strategy subclass per file (DRAFT_TEMPLATE below)
+      groups.json                           which group the Lab lists each strategy under (the groups section)
 
 A draft's strategy id is "draft_<name>". No built-in strategy id starts with "draft_" (a test pins it),
 and a name may not equal a built-in module or strategy name, so a draft can never shadow one.
@@ -21,9 +22,11 @@ and never looks here (tests/test_claude_drafts.py pins that).
 from __future__ import annotations
 
 import ast
+import json
 import os
 import re
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -183,6 +186,126 @@ def delete(name: str, base: Path | None = None) -> bool:
         return False
     p.unlink()
     return True
+
+
+# ---------------------------------------------------------------- groups (the Lab's strategy list)
+# One small file beside the drafts says which group a strategy is shown under:
+#     <drafts dir>/groups.json = {"groups": [names, in the order they were made], "members": {strategy id: group}}
+# A strategy id is a built-in's id or a draft's draft_<name>; a strategy is in at most one group. Grouping
+# only ever writes this file: no strategy file is edited, moved or deleted for it.
+
+GROUPS_FILE = "groups.json"
+GROUP_MAX = 40
+_SID_RE = re.compile(r"^[A-Za-z0-9_]{1,80}$")
+_GROUPS_LOCK = threading.Lock()                # one read-change-write at a time (the routes run in worker threads)
+
+
+class GroupsUnreadable(ValueError):
+    """groups.json is on disk and does not read. It is refused, never read as "no groups": the next save
+    would write over whatever is in it."""
+
+
+def groups_path(base: Path | None = None) -> Path:
+    return (Path(base) if base is not None else drafts_dir()) / GROUPS_FILE
+
+
+def validate_group(name) -> str:
+    """A group's name as the list shows it: 1-40 printable characters on one line (runs of spaces become
+    one), and not "Ungrouped" -- what the list calls having no group. ValueError otherwise."""
+    name = " ".join(name.split()) if isinstance(name, str) else ""
+    if not name or len(name) > GROUP_MAX or not name.isprintable():
+        raise ValueError(f"A group's name is 1 to {GROUP_MAX} characters.")
+    if name.casefold() == "ungrouped":
+        raise ValueError('"Ungrouped" is what the list calls strategies in no group. Pick another name.')
+    return name
+
+
+def read_groups(base: Path | None = None) -> dict:
+    """{"groups": [...], "members": {...}} -- both empty while there is no file."""
+    p = groups_path(base)
+    try:
+        raw = json.loads(p.read_text(encoding="utf-8"))
+        if not isinstance(raw, dict) or not isinstance(raw.get("groups", []), list) \
+                or not isinstance(raw.get("members", {}), dict):
+            raise ValueError("expected {groups: [...], members: {...}}")
+        names = [validate_group(g) for g in raw.get("groups", [])]
+        members = {k: validate_group(g) for k, g in raw.get("members", {}).items()}
+    except FileNotFoundError:
+        return {"groups": [], "members": {}}
+    except (OSError, ValueError) as e:
+        raise GroupsUnreadable(f"{p.name} does not read ({e}): fix the file or remove it") from None
+    return {"groups": list(dict.fromkeys(names + list(members.values()))), "members": members}
+
+
+def _edit_groups(change, base: Path | None) -> dict:
+    """Read, change, write: atomically (a temp file, then a replace), and only ever that one file."""
+    with _GROUPS_LOCK:
+        st = read_groups(base)
+        change(st)
+        p = groups_path(base)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp = p.with_name(f".{p.name}.{os.getpid()}.tmp")
+        tmp.write_text(json.dumps(st, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        os.replace(tmp, p)
+    return st
+
+
+def _group_in(st: dict, name, need: bool = False) -> str | None:
+    """The group of that name as it is spelled in the file (capitals do not tell two groups apart)."""
+    key = name.casefold() if isinstance(name, str) else None
+    got = next((g for g in st["groups"] if g.casefold() == key), None)
+    if got is None and need:
+        raise ValueError(f'There is no group named "{name}".')
+    return got
+
+
+def add_group(name, base: Path | None = None) -> dict:
+    """A new, empty group. Every edit here answers the whole new state, as read_groups() does."""
+    name = validate_group(name)
+
+    def change(st):
+        if (taken := _group_in(st, name)) is not None:
+            raise ValueError(f'There is already a group named "{taken}".')
+        st["groups"].append(name)
+    return _edit_groups(change, base)
+
+
+def rename_group(name, to, base: Path | None = None) -> dict:
+    """The group keeps its place in the list and its strategies."""
+    to = validate_group(to)
+
+    def change(st):
+        old = _group_in(st, name, need=True)
+        if (taken := _group_in(st, to)) not in (None, old):
+            raise ValueError(f'There is already a group named "{taken}".')
+        st["groups"][st["groups"].index(old)] = to
+        st["members"] = {k: to if g == old else g for k, g in st["members"].items()}
+    return _edit_groups(change, base)
+
+
+def remove_group(name, base: Path | None = None) -> dict:
+    """Delete a group. Its strategies go back to no group; none of them is deleted."""
+    def change(st):
+        old = _group_in(st, name, need=True)
+        st["groups"].remove(old)
+        st["members"] = {k: g for k, g in st["members"].items() if g != old}
+    return _edit_groups(change, base)
+
+
+def set_group(sid, group, base: Path | None = None) -> dict:
+    """File one strategy under `group` (made when it is new), or under none (None or "")."""
+    if not isinstance(sid, str) or not _SID_RE.fullmatch(sid):
+        raise ValueError("strategy: a built-in's id or a draft's draft_<name>")
+    group = validate_group(group) if group not in (None, "") else None
+
+    def change(st):
+        if group is None:
+            st["members"].pop(sid, None)
+            return
+        if _group_in(st, group) is None:
+            st["groups"].append(group)
+        st["members"][sid] = _group_in(st, group)
+    return _edit_groups(change, base)
 
 
 # ---------------------------------------------------------------- static metadata (never runs the code)

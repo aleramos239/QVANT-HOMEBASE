@@ -55,3 +55,17 @@ test('the other two pages call it Lab too, and the URL is still /backtest', () =
   for (const f of ['index.html', 'charts.html']) assert.match(rd(f), /data-page="backtest">Lab</, f);
   assert.match(rd('charts/app.js'), /:8852\/backtest\$\{q\}/);
 });
+
+test('grouping only ever posts to the groups routes: it never saves, rewrites or deletes a strategy', () => {
+  const g = LAB.slice(LAB.indexOf('/* ---- groups: the library in sections ----'), LAB.indexOf('/* ---- painting ---- */'));
+  assert.ok(g.length > 1500, 'the groups block is there');
+  assert.equal((g.match(/\bsend\(/g) || []).length, 1, 'one place sends');
+  assert.match(g, /send\('POST', `\/api\/tester\/groups\$\{path\}`, body\)/);
+  assert.doesNotMatch(g, /\/drafts|'PUT'|'DELETE'|\bsave\(|deleteDialog/);
+});
+
+test('against a chart service from before groups the list is the plain one it was: no sections, no row menus', () => {
+  assert.match(LAB, /if \(g\.ok\) S\.groups = g\.json;\s*\n\s*else if \(g\.status\) \{[^\n]*\n\s*S\.groups = null;/);
+  assert.match(LAB, /S\.groups \? C\.sections\(\[\.\.\.rows, \.\.\.builtins\], S\.groups\)\.map\(section\)\.join\(''\)\s*\n\s*: `\$\{rows\.map\(item\)\.join\(''\)\}<div class="lb-sh">Built-in<\/div>\$\{builtins\.map\(item\)\.join\(''\)\}`/);
+  assert.match(LAB, /\$\{S\.groups \? '<hr><button data-pick="group">/, 'New group is offered only when there are groups to make');
+});
