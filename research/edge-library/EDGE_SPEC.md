@@ -415,3 +415,19 @@ The judge tool (judge.py, regression-locked to out/v2) with the 10-seed controls
 For the full out-of-sample: all 15 units are scored on 2025 (as pre-registered); the two DEMOTED units do not meet the requirement,
 so their 2025 result is reported as information and they do NOT go to 2026. 2026 is run only for units that are members under the
 rule in force (13) AND pass tests (4)-(6) on 2025.
+
+## ADMISSION v3 = THE BLUEPRINT — owner decision 2026-10-05 night ("lets lock this into the app … i want all strategies or
+## strategy buildings to go off this"). Binding for every stage from here on.
+The contract is `BLUEPRINT.md`, section 2 (written requirements for each phase). Where this file and BLUEPRINT.md differ, BLUEPRINT.md wins.
+REPLACED: the periods (BUILD to 2023 · PICK 2024 · CHECK 2025 · EXAM 2026) -> BUILD 2021-09-22..2025-06-30 · ONE out-of-sample TEST
+2025-07-01..latest complete session, read once for a locked strategy. ADMISSION v2 tests (1)-(6) -> BLUEPRINT lines 2.1-2.9 and
+4.1-4.7 (cost floor NQ $70 / ES $75 / GC $140 after costs · 200 trades · long and short each profitable · neighbors · a filter wins
+alone · Monte Carlo 75 % on build and 90 % on test · beats random tables 95 % rising to 99 % by round 5). The DEEPEN budget of 4
+rounds -> 5 rounds, each with its reason written first. "EXAM once on frozen stacks" -> phase 4 per locked strategy, then phases 5-6.
+UNCHANGED: house rules and compute windows · the intraday (open-loss) breach model · flat by 15:58 · 1-contract runs · the exit menu ·
+costs and the stress definition (2 ticks + 250 ms, + 100 ms late cancel for brackets) · random controls with 10 seeds · the average
+rule and the middle-survivor default · the stack rules · the 5-second share shown on every card · every attempt counted in the ledger.
+NOT BUILT YET: judge.py still implements v2 (its PERIODS and tests). Until it is updated a v2 verdict is NOT a blueprint verdict, and
+no store may be run on 2025-07-01 or later for a unit that is not locked under BLUEPRINT phase 3. The 15 saved strategies have used
+their history under the old periods: they stay NOT PROVEN.
+Evidence behind the lines: out/blueprint/ (gate_backtest.md, protocol_gates.md, mc_gates.md, funnel.md, course_review.md).
