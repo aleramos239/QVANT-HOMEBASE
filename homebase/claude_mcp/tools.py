@@ -2,7 +2,8 @@
 
 Every handler goes through Client (loopback :8852, /api/tester/* only) -- except write_strategy /
 delete_draft, which write/remove one file in the drafts dir through homebase.draftstore (text only;
-the chart service loads drafts in a child process, never in-process).
+the chart service loads drafts in a child process, never in-process), and set_group / list_strategies,
+which write / read the Lab's groups.json beside them the same way (no strategy file changes).
 
 Long jobs (backtest, heatmap, walkforward) poll until done, up to `wait_s` (default 120 s); past that
 they return the job id and its progress, and the same tool called with that id picks the wait back up.
@@ -88,8 +89,8 @@ def _spec(name, description, props=None, required=()):
 
 SPECS = [
     _spec("list_strategies", "List every strategy the Strategy Tester can run: built-ins and DRAFT strategies "
-          "(id draft_<name>), each with its root and its inputs (key, type, default, min..max). A draft that does "
-          "not load is listed with its error."),
+          "(id draft_<name>), each with its root, the group the Lab lists it under (when it is in one) and its "
+          "inputs (key, type, default, min..max). A draft that does not load is listed with its error."),
     _spec("read_strategy", "One strategy's catalog entry (inputs, defaults) and its full source text, plus the "
           "DRAFT template: the rules and the ctx API a new strategy must follow. Read this before write_strategy.",
           {"strategy": {"type": "string", "description": "A strategy id from list_strategies."}}, ["strategy"]),
@@ -167,6 +168,14 @@ SPECS = [
            "code": {"type": "string", "description": "The complete Python source."}}, ["name", "code"]),
     _spec("delete_draft", "Delete a DRAFT strategy's file (its finished runs stay listed).",
           {"name": {"type": "string", "description": "The draft's name (without draft_)."}}, ["name"]),
+    _spec("set_group", "File a strategy (a built-in or a draft) under a named group in the Lab's strategy list, or "
+          "take it out of its group. One group per strategy; a group that does not exist yet is made. Only the "
+          "list changes (groups.json beside the drafts): no strategy file is edited, and nothing about a backtest "
+          "depends on it. list_strategies shows each strategy's group and the groups there are.",
+          {"strategy": {"type": "string", "description": "A strategy id from list_strategies."},
+           "group": {"type": "string", "description": "The group's name (1-40 characters). \"\" or left out: "
+                                                      "in no group (the list shows it under Ungrouped)."}},
+          ["strategy"]),
 ] + DESK_SPECS
 
 
@@ -435,9 +444,17 @@ class Toolbox(DeskMixin):
     # ---- tools
 
     def t_list_strategies(self) -> str:
-        out = []
+        try:
+            groups, unreadable = draftstore.read_groups(), None
+        except ValueError as e:
+            groups, unreadable = {"groups": [], "members": {}}, str(e)
+        out, filed = [], dict.fromkeys(groups["groups"], 0)
         for s in self._catalog():
             head = f"- {s.get('id')}: {s.get('name')} · root {s.get('root', '?')}" + (" · DRAFT" if s.get("draft") else "")
+            g = groups["members"].get(s.get("id"))
+            if g is not None:
+                head += f' · group "{g}"'
+                filed[g] += 1
             if s.get("error"):
                 out.append(f"{head} · DOES NOT LOAD: {s['error']}")
                 continue
@@ -450,6 +467,8 @@ class Toolbox(DeskMixin):
                     rng = f" [{_num(i.get('min'), '{:g}')}..{_num(i.get('max'), '{:g}')}]"
                 ins.append(f"{i.get('key')} ({i.get('type')}) = {i.get('default')}{rng}")
             out.append(f"{head}\n    inputs: {'; '.join(ins) or 'none'}")
+        if out and (filed or unreadable):
+            out.append("Groups: " + (unreadable or ", ".join(f"{g} ({n})" for g, n in filed.items())))
         return "\n".join(out) or "No strategies."
 
     def t_read_strategy(self, strategy: str) -> str:
@@ -699,3 +718,13 @@ class Toolbox(DeskMixin):
         except ValueError as e:
             raise ToolError(str(e)) from None
         return f"Deleted draft {name!r}." if gone else f"No draft {name!r} to delete."
+
+    def t_set_group(self, strategy: str, group: str | None = None) -> str:
+        if not any(s.get("id") == strategy for s in self._catalog()):
+            raise ToolError(f"no strategy {strategy!r} (list_strategies shows the ids)")
+        try:
+            g = draftstore.set_group(strategy, group)["members"].get(strategy)
+        except ValueError as e:
+            raise ToolError(str(e)) from None
+        where = f'in the group "{g}"' if g else "ungrouped"
+        return f"{strategy} is now {where}. The Lab's strategy list shows it there the next time it loads."

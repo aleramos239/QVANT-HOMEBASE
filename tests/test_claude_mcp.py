@@ -388,6 +388,42 @@ def test_write_strategy_and_delete_draft(fake, drafts_dir):
     assert sorted(p.name for p in drafts_dir.iterdir()) == ["bad.py"]
 
 
+def test_set_group_files_a_strategy_and_list_strategies_shows_each_group(fake, drafts_dir):
+    b = box(fake)
+    fake.routes[("GET", "/api/tester/strategies")] = CATALOG + [
+        {"id": "draft_nq_orb", "name": "My draft", "root": "NQ", "draft": True, "inputs": []}]
+    assert "group" not in b.call("list_strategies", {}).lower()          # nothing filed: the listing is as it was
+    text = b.call("set_group", {"strategy": "draft_nq_orb", "group": "Opening range"})
+    assert "draft_nq_orb" in text and '"Opening range"' in text
+    b.call("set_group", {"strategy": "nq930", "group": "opening range"})  # the group that exists, whatever its capitals
+    assert json.loads((drafts_dir / "groups.json").read_text()) == {
+        "groups": ["Opening range"], "members": {"draft_nq_orb": "Opening range", "nq930": "Opening range"}}
+    listed = b.call("list_strategies", {})
+    line = {ln.split(":")[0]: ln for ln in listed.splitlines() if ln.startswith("- ")}
+    assert line["- nq930"].endswith('· group "Opening range"') and "DRAFT" not in line["- nq930"]
+    assert line["- draft_nq_orb"].endswith('· DRAFT · group "Opening range"')
+    assert listed.splitlines()[-1] == "Groups: Opening range (2)"
+    for nothing in ({"group": ""}, {}):                                   # out of its group; the group stays, empty
+        b.call("set_group", {"strategy": "nq930", "group": "Opening range"})
+        assert "ungrouped" in b.call("set_group", {"strategy": "nq930", **nothing})
+    b.call("set_group", {"strategy": "draft_nq_orb"})
+    listed = b.call("list_strategies", {})
+    assert '· group "' not in listed and listed.splitlines()[-1] == "Groups: Opening range (0)"
+    with pytest.raises(ToolError, match="no strategy 'nope'"):
+        b.call("set_group", {"strategy": "nope", "group": "Gold"})
+    with pytest.raises(ToolError, match="Ungrouped"):
+        b.call("set_group", {"strategy": "nq930", "group": "Ungrouped"})
+    assert {r["method"] for r in fake.requests} == {"GET"}                # it writes the one file itself, no route
+    assert sorted(p.name for p in drafts_dir.iterdir()) == ["groups.json"]
+    # a file that does not read: the listing still answers and says so; nothing writes over it
+    (drafts_dir / "groups.json").write_text("{not json")
+    listed = b.call("list_strategies", {})
+    assert "- nq930" in listed and "groups.json" in listed.splitlines()[-1]
+    with pytest.raises(ToolError, match="groups.json"):
+        b.call("set_group", {"strategy": "nq930", "group": "Gold"})
+    assert (drafts_dir / "groups.json").read_text() == "{not json"
+
+
 def test_the_client_refuses_anything_but_loopback_and_tester_routes(monkeypatch):
     monkeypatch.setenv("HOMEBASE_CHARTS_URL", "http://example.com:8852")
     with pytest.raises(ToolError):
@@ -410,7 +446,7 @@ def test_no_tool_can_trade():
     names = tools.Toolbox().names()
     assert names == ["list_strategies", "read_strategy", "backtest", "heatmap", "walkforward", "montecarlo",
                      "prop_eval", "list_prop_rules", "list_runs", "get_run", "trades", "show_on_chart",
-                     "cancel", "write_strategy", "delete_draft", "desk_status", "desk_journal",
+                     "cancel", "write_strategy", "delete_draft", "set_group", "desk_status", "desk_journal",
                      "desk_readiness", "data_coverage", "services_health", "account_reconnect",
                      "account_remove", "export_start", "export_status"]
     for n in names:

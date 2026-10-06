@@ -85,3 +85,17 @@ test('ago reads like a person says it', () => {
   assert.equal(L.ago(0, 5 * 60000), '5 min ago');
   assert.equal(L.ago(0, 3 * 3600000), '3 h ago');
 });
+
+test('the library in sections: each group in its saved order with its rows, then the rest under no name', () => {
+  const rows = [{ key: 'n:1' }, { id: 'draft_a' }, { id: 'draft_b' }, { id: 'nq930' }, { id: 'gc_nfp' }];
+  const groups = { groups: ['Gold', 'Empty', 'Nasdaq'],
+    members: { draft_b: 'Nasdaq', gc_nfp: 'Gold', nq930: 'Nasdaq', draft_deleted: 'Gold', draft_a: 'A group that is gone' } };
+  assert.deepEqual(L.sections(rows, groups), [
+    { name: 'Gold', rows: [{ id: 'gc_nfp' }] },                       // a filed strategy that is no longer listed is not a row
+    { name: 'Empty', rows: [] },                                      // an empty group is still a section
+    { name: 'Nasdaq', rows: [{ id: 'draft_b' }, { id: 'nq930' }] },   // rows keep the order they came in
+    { name: '', rows: [{ key: 'n:1' }, { id: 'draft_a' }] },          // an unsaved script has no id: it cannot be filed
+  ]);
+  assert.deepEqual(L.sections(rows, { groups: [], members: {} }), [{ name: '', rows }]);
+  assert.deepEqual(L.sections([], { groups: ['Gold'], members: {} }), [{ name: 'Gold', rows: [] }, { name: '', rows: [] }]);
+});

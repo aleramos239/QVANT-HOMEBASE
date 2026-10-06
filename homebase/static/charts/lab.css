@@ -218,6 +218,11 @@ body.lab-page { background: var(--panel) !important; }
 .lab-dlg p { margin: 0 0 14px; color: var(--hb-fg2); font-size: var(--hb-fs-body); line-height: 1.5; }
 .lab-dlg textarea { width: 100%; min-height: 84px; padding: 10px 12px; border: 0; border-radius: 12px; background: var(--hb-fill); color: var(--hb-fg); font-size: var(--hb-fs-body); resize: vertical; outline: none; }
 .lab-dlg textarea:focus { box-shadow: 0 0 0 1.5px var(--hb-accent); }
+.lab-dlg input { width: 100%; height: var(--hb-h-lg); padding: 0 12px; border: 0; border-radius: 12px; background: var(--hb-fill); color: var(--hb-fg); font-size: var(--hb-fs-body); outline: none; }
+.lab-dlg h2 + input { margin-top: 8px; }
+.lab-dlg input:focus { box-shadow: 0 0 0 1.5px var(--hb-accent); }
+.lab-dlg input.bad { box-shadow: 0 0 0 1.5px var(--down); }
+.lab-dlg p.err { margin: 8px 2px 0; font-size: var(--hb-fs-sm); color: var(--down); }
 .lab-dlg ul { list-style: none; margin: 0 0 14px; padding: 0; font-size: var(--hb-fs-ui); line-height: 1.7; }
 .lab-dlg li i { display: inline-block; width: 16px; font-style: normal; color: var(--hb-fg2); }
 .lab-dlg li.no { color: var(--hb-fg2); }
@@ -279,6 +284,26 @@ body.lab-page { background: var(--lab-win) !important; font-size: 13px; line-hei
 :root[data-theme="dark"] .lb-item.sel { color: #24160f; background: linear-gradient(180deg, #f1e6dc, #c8b6a6); box-shadow: inset 0 1px 0 rgb(255 255 255 / .8), 0 6px 14px -4px rgb(0 0 0 / .55); }
 :root[data-theme="dark"] .lb-item.sel .it b { color: #24160f; } :root[data-theme="dark"] .lb-item.sel .it small { color: rgb(36 22 15 / .66); }
 .lb-top .hb-ib { width: 32px; height: 32px; background: var(--lab-sheet); box-shadow: 0 0 0 .5px rgb(0 0 0 / .07), 0 1px 2px rgb(0 0 0 / .08), 0 6px 14px -6px rgb(0 0 0 / .16); }
+/* groups: a section folds from its header (a chevron where a row has its icon, the name, how many it holds). On the
+   row or header under the pointer, a ⋯ takes the place of the trailing text: nothing moves, nothing is covered. */
+button.lb-sh { width: 100%; display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding-right: 18px; text-align: left; transition: color 130ms ease; }
+button.lb-sh:hover { color: var(--hb-fg); }
+button.lb-sh span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+button.lb-sh i { font-style: normal; font-weight: 500; }
+.lb-chev { width: 10px; height: 10px; justify-self: center; transition: transform 200ms var(--hb-spring); }
+button.lb-sh[aria-expanded="true"] .lb-chev { transform: rotate(90deg); }
+.lb-g.folded .lb-gb { display: none; }
+.lb-gb .lb-empty { padding: 1px 10px 6px 34px; font-size: 11px; line-height: 14px; text-wrap: balance; }
+.lb-gh, .lb-row { position: relative; }
+.lb-gh .lb-more, .lb-row .lb-more { position: absolute; right: 13px; top: 4px; width: 24px; height: 24px; opacity: 0; }
+.lb-gh .lb-more { top: 9px; }
+.lb-gh .lb-more svg, .lb-row .lb-more svg { width: 14px; height: 14px; }
+.lb-gh:hover .lb-more, .lb-row:hover .lb-more, .lb-gh .lb-more:focus-visible, .lb-row .lb-more:focus-visible { opacity: 1; }
+.lb-gh:has(.lb-more):hover .lb-sh i, .lb-gh:has(.lb-more:focus-visible) .lb-sh i, .lb-row:hover .it small, .lb-row:hover .lb-flag,
+.lb-row:has(.lb-more:focus-visible) .it small, .lb-row:has(.lb-more:focus-visible) .lb-flag { opacity: 0; }
+.lb-item.sel + .lb-more { color: rgb(255 255 255 / .8); } .lb-item.sel + .lb-more:hover { background: rgb(255 255 255 / .16); color: #fff; }
+:root[data-theme="dark"] .lb-item.sel + .lb-more { color: rgb(36 22 15 / .7); } :root[data-theme="dark"] .lb-item.sel + .lb-more:hover { background: rgb(36 22 15 / .1); color: #24160f; }
+@media (prefers-reduced-motion: reduce) { .lb-chev { transition: none; } }
 .doc-name { font-size: 13px; font-weight: 600; } .doc-state { font-size: 11px; }
 .ed-gut, .ed-hl, .ed-ta { font-size: 12px; line-height: 20px; }
 
