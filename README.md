@@ -218,8 +218,14 @@ replaces; the live file is only read). The broker keeps ticks from 00:00 UTC of 
 first hours are gone at 20:00 ET on the session day: the pieces that leave first are fetched first. By day a run spends
 at most 45 pages and never runs 09:20–09:35 ET; the live login only. A run with nothing to do says nothing.
 
-- `homebase/.state/tick_coverage.json`: every root's last 30 sessions hour by hour -- holes, missing tick ids, and
-  what only Massive can still fill ("needs_massive"); one summary line in `ticks.log`. `--coverage` rewrites it.
+- `homebase/.state/data_watch.json`: the data watchdog (`homebase/datawatch.py`), at the end of every run -- per
+  market how late the live feed is, what share of the published tick ids the recording got in the last full hour,
+  silence while the market is open; plus refused merges and what leaves the broker within 6 hours. One line in
+  `ticks.log` while something is wrong. The chart strip and the connector (`data_coverage`, `desk_readiness`) read it.
+- `homebase/.state/tick_coverage.json`: every root's last 30 sessions hour by hour -- holes and missing tick ids,
+  each session classed whole / filling (the broker still has it: until when) / lost ("needs_massive") / vendor gap /
+  not a hole, and what changed since the report before; one summary line in `ticks.log`. `--coverage` rewrites it.
+  The charts draw these holes at their true width.
 - `--rescan`: writes each recent file's hour-by-hour coverage into its manifest (`complete` there checks every hour).
 - `--fill-from-massive --holes [--dry-run]`: the manual, one-shot Massive fill (`homebase/tickmassive.py`).
 
