@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 import os
 import logging
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 
 from .netguard import clean_entry
 from .paths import config_path
@@ -259,20 +259,51 @@ def _defaults() -> AppCfg:
     )
 
 
-def load() -> AppCfg:
+_said: set = set()      # (where, key) of the unknown keys a reader already named in the log
+
+
+def _known(cls, d: dict, where: str, left_out: list) -> dict:
+    """d without the keys `cls` does not have: each named in the log once (the key, never its value)
+    and noted in `left_out`."""
+    names = {f.name for f in fields(cls)}
+    for k in d:
+        if k not in names:
+            left_out.append(k)
+            if (where, k) not in _said:
+                _said.add((where, k))
+                log.warning("config.json: %s has a key this code does not know, left out: %r", where, k)
+    return {k: v for k, v in d.items() if k in names}
+
+
+def load(unknown: str = "raise") -> AppCfg:
     """Defaults overlaid with config.json. Migrates the pre-book single
-    'account' layout into accounts{main} + a book assignment."""
+    'account' layout into accounts{main} + a book assignment.
+
+    A key of an account or a strategy that this code does not know:
+      unknown="raise" (the default: the desk) -- a TypeError, as it always was. The desk must not trade on
+        settings it only half understands (the key may be a safety switch: shadow, only_dates), and it
+        rewrites this file: it would erase the key.
+      unknown="ignore" (a process that only READS which login each account rides: the chart service, the
+        tick job) -- the key is left out and named in the log, once. Such a process is often older than the
+        desk that wrote the file (2026-10-01: the desk restarted on code that writes accounts' "prop"; the
+        chart service, still on the code before it, raised on every reconnect for two hours). A load that
+        left a key out never rewrites the file: its copy of the settings lacks that key."""
     cfg = _defaults()
     p = config_path()
     if not p.exists():
         return cfg
     data = json.loads(p.read_text())
+    left_out: list = []
+
+    def known(cls, d: dict, where: str) -> dict:
+        return _known(cls, d, where, left_out) if unknown == "ignore" else d
+
     cfg.armed = bool(data.get("armed", cfg.armed))
     # the old webhook keys (webhook_secret, hook_port, public_hook_url) are not read: a file that
     # still holds them loads the same, and save() no longer writes them
     for aid, a in (data.get("accounts") or {}).items():
         base = asdict(AccountCfg())
-        cfg.accounts[aid] = AccountCfg(**{**base, **a})
+        cfg.accounts[aid] = AccountCfg(**{**base, **known(AccountCfg, a, f"account {aid}")})
     gone = []
     for name, s in (data.get("strategies") or {}).items():
         if name not in cfg.strategies:       # a removed strategy: nothing runs it, so it leaves the file
@@ -288,7 +319,7 @@ def load() -> AppCfg:
             if int(saved.get("rev") or 0) < int(base["metrics"].get("rev") or 0):
                 saved = {}
             s = {**s, "metrics": {**base["metrics"], **saved}}
-        cfg.strategies[name] = StrategyCfg(**{**base, **s})
+        cfg.strategies[name] = StrategyCfg(**{**base, **known(StrategyCfg, s, f"strategy {name}")})
     cfg.book = {k: list(v) for k, v in (data.get("book") or {}).items() if k in cfg.strategies}
     gone += [k for k in (data.get("book") or {}) if k not in cfg.strategies and k not in gone]
     for name in gone:
@@ -311,7 +342,10 @@ def load() -> AppCfg:
         if not cfg.book:
             cfg.book = {n: [{"account": "main", "qty": s.qty}]
                         for n, s in cfg.strategies.items() if s.enabled}
-    if gone:                                 # clean the file itself, once; a failed write only retries next start
+    if gone and left_out:
+        log.warning("config.json: not rewritten by this process (it left out %d key(s) it does not know)",
+                    len(left_out))
+    elif gone:                               # clean the file itself, once; a failed write only retries next start
         try:
             save(cfg)
         except OSError as e:

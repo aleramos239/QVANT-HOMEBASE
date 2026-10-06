@@ -469,8 +469,10 @@ def md_token(prefer_live: bool = True, strict: bool = False) -> tuple[str, str]:
     login the 9:30 feed rides stays clean; the chart service may prefer the
     demo (Apex eval) login instead. Within the login taken, the token that
     expires last (_freshest). strict (the nightly job): the preferred login
-    or nothing -- never a fallback to the other one."""
-    cfg = config_mod.load()
+    or nothing -- never a fallback to the other one. The config is only read
+    here, and a key this code does not know is left out, not raised (the desk
+    that wrote it may run newer code: homebase.config.load)."""
+    cfg = config_mod.load(unknown="ignore")
     cands = _valid_md_tokens(sorted(cfg.accounts.items(),
                                     key=lambda kv: kv[1].live != prefer_live))
     if not cands:
@@ -491,7 +493,7 @@ def accounts_by_env() -> dict[str, "str | None"]:
     environment mismatch visible before a switch is even attempted -- a None here means that
     login has no valid token, so a switch to it would fail). Per env the account whose token
     expires last, same rule as md_token's own choice."""
-    cfg = config_mod.load()
+    cfg = config_mod.load(unknown="ignore")
     cands = _valid_md_tokens(cfg.accounts.items())
     out: dict[str, "str | None"] = {"live": None, "demo": None}
     for env, live in (("live", True), ("demo", False)):
@@ -1089,7 +1091,7 @@ def _wait_for_token(left: float, poll_s: float, sleep) -> tuple[bool, float]:
             return False, left           # never wait into 09:20-09:35
         sleep(poll_s)
         left -= poll_s
-        if _valid_md_tokens(config_mod.load().accounts.items()):
+        if _valid_md_tokens(config_mod.load(unknown="ignore").accounts.items()):
             return True, left
     return False, 0.0
 

@@ -1267,6 +1267,15 @@ def test_the_charts_job_yields_the_cpu_to_the_trading_app():
     assert job["Label"] == "com.ramosquant.homebase-charts" and job.get("Nice") == 5
 
 
+def test_the_charts_job_may_hold_4096_files_open():
+    """2026-10-02: the service ran out of file descriptors (EMFILE) at launchd's default of 256 while the
+    machine was loaded. The limit was raised in the installed plist by hand -- an install from the template
+    would have put 256 back."""
+    tpl = Path(__file__).resolve().parent.parent / "deploy" / "com.ramosquant.homebase-charts.plist.template"
+    job = plistlib.loads(tpl.read_bytes().replace(b"__REPO__", b"/repo"))
+    assert job["SoftResourceLimits"] == {"NumberOfFiles": 4096}
+
+
 TREND = {"id": "d1", "type": "trend", "color": "#2962FF",
          "points": [{"t": 1790000000000, "p": 30900.25}, {"t": 1790000600000, "p": 30950.0}]}
 HLINE = {"id": "d2", "type": "hline", "points": [{"p": 30925.5}]}

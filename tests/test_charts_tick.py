@@ -70,7 +70,7 @@ def test_bitcoin_contract_spec():
 def test_md_token_prefers_the_requested_login(tmp_path, monkeypatch):
     cfg = SimpleNamespace(accounts={"demo1": SimpleNamespace(live=False),
                                     "live1": SimpleNamespace(live=True)})
-    monkeypatch.setattr(T.config_mod, "load", lambda: cfg)
+    monkeypatch.setattr(T.config_mod, "load", lambda **k: cfg)
     monkeypatch.setattr(T, "state_dir", lambda: tmp_path)
     exp = (dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=1)).isoformat()
     for aid in ("demo1", "live1"):
