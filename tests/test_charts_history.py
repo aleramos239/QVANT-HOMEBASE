@@ -135,3 +135,67 @@ def test_a_repair_landing_in_the_archive_beside_a_live_file_rebuilds_the_cache(t
     write_gz(arch, mk(session_ms(D, 1, 0), [90.0] * 6, first_id=1))         # the repair fetched 3 more
     assert not h.cached("NQ", D)
     assert sum(b.v for b in History(store, cache_dir=tmp_path / "cache").minutes("NQ", D)) == 11
+
+
+# ------------------------------------------------------------------ a past session repaired after its bars were built
+def test_a_fill_landing_in_a_past_session_is_noticed_once_and_its_bars_are_built_again(tmp_path):
+    """history.bars kept a session's bars in memory until the 18:00 roll: a hole the hourly fill repaired in
+    yesterday's archive file stayed on the chart until then (or a restart). changed() stats the files of every
+    session this History built and forgets the ones that moved."""
+    h, store, src = setup(tmp_path, n=100)
+    m1, m5 = BarSpec("time", 60), BarSpec("time", 300)
+    assert sum(b.v for b in h.bars("NQ", m1, D)) == 100 and sum(b.v for b in h.bars("NQ", m5, D)) == 100
+    assert h.changed() == []                                         # nothing moved: nothing to say
+    r = rows(session_ms(D, 9, 30), [100 + 0.25 * (i % 9) for i in range(100)], step_ms=7_000) \
+        + rows(session_ms(D, 11, 0), [101.0] * 40, first_id=5000)   # the fill fetched 40 more trades
+    write_archive(tmp_path / "ticks", "NQ", D, "NQZ6", r)
+    assert h.bars("NQ", m1, D) is h.bars("NQ", m1, D) and sum(b.v for b in h.bars("NQ", m1, D)) == 100   # still memoized
+    assert h.changed() == [("NQ", D)]
+    assert h.changed() == []                                         # said once
+    assert sum(b.v for b in h.bars("NQ", m1, D)) == 140 and sum(b.v for b in h.bars("NQ", m5, D)) == 140   # every bar type
+
+
+def test_a_session_built_for_scroll_back_is_watched_too(tmp_path):
+    h, store, src = setup(tmp_path, n=50)
+    h.bars("NQ", BarSpec("time", 60), D, memo=False)                 # the page holds these bars, not the memo
+    write_archive(tmp_path / "ticks", "NQ", D, "NQZ6",
+                  rows(session_ms(D, 9, 30), [100.0] * 60, step_ms=7_000))
+    assert h.changed() == [("NQ", D)]
+
+
+def test_an_archive_file_appearing_beside_a_past_live_recording_is_a_change(tmp_path):
+    """After the close the tick job merges the live recording into a new archive file: another file to read."""
+    base = tmp_path / "ticks"
+    write_gz(base / "NQ" / "2026" / f"{D}_NQZ6.live.csv.gz", rows(session_ms(D, 9, 30), [100.0] * 5, first_id=100))
+    h = History(TickStore(base), cache_dir=tmp_path / "cache")
+    assert sum(b.v for b in h.bars("NQ", BarSpec("time", 60), D)) == 5 and h.changed() == []
+    write_archive(base, "NQ", D, "NQZ6", rows(session_ms(D, 9, 0), [99.0] * 9, first_id=1), complete=False)
+    assert h.changed() == [("NQ", D)]
+    assert sum(b.v for b in h.bars("NQ", BarSpec("time", 60), D)) == 14
+
+
+def test_the_1800_roll_clears_the_memo_but_the_open_charts_still_hold_the_bars(tmp_path):
+    """clear() (the roll) empties the memo; a chart open since before it still shows the session, so it stays
+    watched. The session that just closed was never built here (it was the live tape): watch() starts it."""
+    h, store, src = setup(tmp_path, n=50)
+    h.bars("NQ", BarSpec("time", 60), D)
+    h.clear()
+    nxt = D + dt.timedelta(days=1)
+    write_gz(tmp_path / "ticks" / "NQ" / "2026" / f"{nxt}_NQZ6.live.csv.gz", rows(session_ms(nxt, 9, 30), [100.0] * 5))
+    h.watch("NQ", nxt, later=True)                                   # on the event loop: no file is touched here
+    assert h.changed() == []                                         # ... the first look only takes its files as they are
+    write_archive(tmp_path / "ticks", "NQ", D, "NQZ6", rows(session_ms(D, 9, 30), [100.0] * 60, step_ms=7_000))
+    write_archive(tmp_path / "ticks", "NQ", nxt, "NQZ6", rows(session_ms(nxt, 9, 0), [99.0] * 9, first_id=900), complete=False)
+    assert h.changed() == [("NQ", D), ("NQ", nxt)]
+
+
+def test_only_recent_sessions_are_watched(tmp_path):
+    """The fill reaches back a month at most (the live recordings it merges): a daily chart's 250 sessions are
+    not all stat'ed every minute."""
+    h, store, src = setup(tmp_path, n=50)
+    old = D - dt.timedelta(days=60)
+    write_archive(tmp_path / "ticks", "NQ", old, "NQU6", rows(session_ms(old, 9, 30), [100.0] * 5))
+    h.bars("NQ", BarSpec("time", 60), old)
+    h.bars("NQ", BarSpec("time", 60), D)
+    write_archive(tmp_path / "ticks", "NQ", old, "NQU6", rows(session_ms(old, 9, 30), [100.0] * 9))
+    assert h.changed() == []

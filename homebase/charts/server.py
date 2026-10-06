@@ -64,6 +64,8 @@ ROLL_GRACE_MS = 60_000        # a 24/7 root rolls at 18:00 with no dead hour: it
 REFILL_BUDGET = 60            # this process's own chart requests per hour
 SEND_QUEUE_MAX = 400
 REPAIR_POLL_S = 60.0           # how often today's archive files are stat'ed for a repair that landed (a stat per root)
+PAST_REDRAW_S = 600.0          # a root's charts reload for a repaired PAST session at most this often: a fill lands piece
+                               # by piece (a merge every few minutes), and each reload rebuilds every chart of the root
 REPAIR_SPLICE_MS = 600_000     # the hub tape's ticks this recent (before a repair load began) may still be unflushed/new
 PAPER_POLL_S = 0.25            # the paper runner is asked this often; it runs at most once a second
 TIMEFRAMES = [["5s", "time:5"], ["15s", "time:15"], ["30s", "time:30"], ["1m", "time:60"],
@@ -546,6 +548,30 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         log(f"{root}: repaired archive picked up -- tape {len(hub.today.get(root, ()))} -> {len(ticks)} ticks")
         _apply_today(root, d, sess, ticks)
 
+    past_due: set[str] = set()                  # roots with a repaired past session their open charts still show as it was
+    past_reset_at: dict[str, float] = {}        # root -> when (time.monotonic) its charts last reloaded for one
+
+    async def _past_check() -> None:
+        """The same for a PAST session: the tick job goes on filling a session's files for a day or two after
+        its close, and history.bars -- and every chart already showing the session -- kept the old bars until
+        the 18:00 roll. History.changed() (a directory listing per root, in a worker thread) names the watched
+        sessions whose files moved and drops their memoized bars; every chart of such a root reloads (a chart
+        may hold the session through scroll-back) -- at most once per PAST_REDRAW_S a root, a later piece
+        waiting its turn, and never across the 9:30 fire."""
+        for root, _ in await asyncio.to_thread(history.changed):
+            past_due.add(root)
+        for root in sorted(past_due):
+            if time.monotonic() - past_reset_at.get(root, -math.inf) < PAST_REDRAW_S:
+                continue
+            await _quiet_wait()
+            past_due.discard(root)
+            past_reset_at[root] = time.monotonic()
+            held = [s for s in hub.streams.values() if s.root == root]
+            for s in held:
+                s.reset = True
+            if held:
+                log(f"{root}: a past session's files changed -- {len(held)} chart stream(s) reload")
+
     async def repair_loop() -> None:
         while True:
             await asyncio.sleep(REPAIR_POLL_S)      # not the `sleep` seam: tests patch it to 0
@@ -554,6 +580,10 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                     await _repair_check(root)
                 except Exception as e:  # noqa: BLE001 — the repair pickup must never take the service down
                     log(f"{root}: repair pickup: {type(e).__name__}: {e}")
+            try:
+                await _past_check()
+            except Exception as e:  # noqa: BLE001 — nor this one
+                log(f"past sessions: repair pickup: {type(e).__name__}: {e}")
 
     async def _quiet_wait() -> None:
         while QUIET[0] <= dt.datetime.fromtimestamp(clock() / 1000, ET).time() < QUIET[1]:

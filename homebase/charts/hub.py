@@ -207,10 +207,13 @@ class Hub:
                 info = dict(self.today_info[root], date=d.isoformat(), gaps=[])
                 self.today[root] = []
                 self.minutes.pop(root, None)
+                self.history.clear()
+                # the open charts go on showing the session that just closed, and the tick job goes on filling
+                # its files for a day: watched from here (History.changed)
+                self.history.watch(root, self.today_date[root], later=True)
                 self.today_date[root] = d
                 self.today_info[root] = info
                 self.clf[root] = SideClassifier()        # a reload starts each session fresh too
-                self.history.clear()
                 for s in streams:
                     s.sessions.append(info)
             tk = from_row(r, self.clf[root])

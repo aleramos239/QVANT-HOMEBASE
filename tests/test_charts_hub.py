@@ -755,3 +755,19 @@ def test_a_straggler_from_an_older_session_does_not_move_the_feeds_clock(tmp_pat
     pumped(hub, clock, today[:5], late_ms=300)
     hub.on_ticks("NQ", rows(session_ms(P, 16, 59), [123.0], first_id=77_777))     # yesterday's: not charted
     assert hub.lag_ms["NQ"] == 300
+
+
+def test_the_session_that_just_closed_is_watched_for_repairs_from_the_roll_on(tmp_path):
+    """The charts open across 18:00 keep showing the session that closed, and the tick job goes on filling its
+    archive file for a day: the roll hands it to History.changed() -- without touching a file on the event loop."""
+    hub, today, _ = setup(tmp_path)
+    hub.start_today("NQ", D, ticks_of(today))
+    listed = []
+    real = hub.store.stamps
+    hub.store.stamps = lambda root, dates: (listed.append(root), real(root, dates))[1]
+    nxt = D + dt.timedelta(days=1)
+    hub.on_ticks("NQ", rows(session_ms(nxt, 18, 1), [300.0], first_id=99_999))
+    assert listed == [] and ("NQ", D) in hub.history._built
+    assert hub.history.changed() == []                       # its files as they are now: the baseline
+    write_archive(tmp_path / "ticks", "NQ", D, "NQZ6", today[:40], complete=False)     # the evening fill lands
+    assert hub.history.changed() == [("NQ", D)]

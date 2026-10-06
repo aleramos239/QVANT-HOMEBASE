@@ -1908,3 +1908,65 @@ def test_a_repair_landing_in_the_archive_reaches_a_running_service_without_a_res
             time.sleep(0.4)                                      # unchanged archive: no re-merge on later polls
             assert len(loaded_in) == n
     assert loaded_in and loop_thread and not any(loaded_in)      # every repair load ran off the event loop's thread
+
+
+# ------------------------------------------------------------------ a past session repaired under an open chart
+class IdleFeed:
+    """A live feed that delivers nothing: the service runs, its loops poll."""
+
+    def __init__(self, roots, on_ticks, on_subscribed=None):
+        self.ws = None
+
+    async def run(self):
+        while True:
+            await asyncio.sleep(0.01)
+
+    def stop(self):
+        pass
+
+    def budget_used(self):
+        return 0
+
+    def count_request(self):
+        pass
+
+    def status(self):
+        return {"mode": "live", "connected": True, "error": None, "roots": {}, "budget_hour": 0, "reconnects": 0}
+
+
+def volume_of(history, d):
+    return sum(b["v"] for b in history["bars"] if b["s"] == d.isoformat())
+
+
+def test_a_fill_landing_in_yesterdays_archive_reloads_the_charts_that_show_it(tmp_path, monkeypatch):
+    """history.bars kept a past session's bars in memory until the 18:00 roll, and the open charts their copy:
+    a hole the hourly fill repaired in YESTERDAY's file stayed on the chart until the roll or a restart. The
+    service notices the file changed (History.changed, off the event loop) and reloads the root's charts."""
+    base = tmp_path / "ticks"
+    early = rows(session_ms(P, 9, 30), [100.0] * 5)
+    write_archive(base, "NQ", P, "NQZ6", early, complete=False)
+    write_gz(base / "NQ" / "2026" / f"{D}_NQZ6.live.csv.gz", rows(session_ms(D, 9, 40), [200.0, 200.25], first_id=100))
+    monkeypatch.setattr("homebase.charts.server.REPAIR_POLL_S", 0.05)
+    monkeypatch.setattr("homebase.charts.server.PAST_REDRAW_S", 2.0)
+    app = create_app(roots=["NQ", "ES"], base=base, feed_factory=IdleFeed, now_ms=lambda: session_ms(D, 9, 45),
+                     state=tmp_path / "state")
+    sub = {"op": "sub", "id": "a", "root": "nq", "spec": "time:60", "studies": []}
+    with TestClient(app, base_url="http://127.0.0.1:8852") as client:
+        with client.websocket_connect("/ws", headers={"host": "localhost:8852"}) as ws:
+            ws.send_json(sub)
+            assert volume_of(next_of(ws, "history"), P) == 5
+            ws.send_json({"op": "sub", "id": "b", "root": "es", "spec": "time:60", "studies": []})
+            next_of(ws, "history")
+            write_archive(base, "NQ", P, "NQZ6", early + rows(session_ms(P, 11, 0), [101.0] * 7, first_id=50),
+                          complete=False)                              # the fill fetched 11:00 ET
+            assert next_within(ws, "reset", within_s=10)["id"] == "a"   # NQ's chart -- not ES's
+            ws.send_json(sub)
+            assert volume_of(next_of(ws, "history"), P) == 12
+            # a fill lands piece by piece: the next piece, seconds later, waits for PAST_REDRAW_S -- no reload storm
+            write_archive(base, "NQ", P, "NQZ6", early + rows(session_ms(P, 11, 0), [101.0] * 9, first_id=50),
+                          complete=False)
+            with pytest.raises(TimeoutError):
+                next_within(ws, "reset", within_s=0.5)
+            assert next_within(ws, "reset", within_s=10)["id"] == "a"
+            ws.send_json(sub)
+            assert volume_of(next_of(ws, "history"), P) == 14
