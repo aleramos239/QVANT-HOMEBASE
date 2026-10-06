@@ -5,6 +5,14 @@ on_clock()/drain() every 250 ms, so a chart gets at most 4 updates a
 second however fast the tape. Each subscriber keeps its own cursor (bars
 already sent), so a chart that joins mid-stream never gets a bar twice.
 
+A quiet market's last time bar is closed by the clock -- the FEED's clock,
+not the wall: each root's newest print says how far behind the wall its
+feed runs (lag_ms), and on_clock() closes that root's bars that much later.
+On a real-time feed that is a fraction of a second. On the exchange's
+delayed feed (600 s: the live login from 2026-10-02) the wall clock closed
+every bar the moment it opened and filed each later print under the wall's
+own minute: every candle ten minutes to the right until a reload.
+
 Threading: prepare() does the heavy part (history + today's bars from a
 snapshot of the tape) in a worker thread; attach() runs on the event loop,
 catches up the ticks that arrived meanwhile, and registers the stream.
@@ -161,6 +169,8 @@ class Hub:
         self.today_date: dict[str, dt.date] = {}
         self.today_info: dict[str, dict] = {}
         self.clf: dict[str, SideClassifier] = {}
+        self.lag_ms: dict[str, int] = {}    # root -> how far behind now_ms() its newest print was when it came in:
+                                            # the feed's own lateness (never negative: a feed is not ahead of the wall)
         self.streams: dict[tuple[str, str], Stream] = {}
         self.minutes: dict[str, Minutes] = {}
         self._minutes_lock = threading.Lock()
@@ -186,10 +196,13 @@ class Hub:
         if root not in self.clf:
             self.start_today(root, session_date(int(rows[0]["ts_ms"]), root), [])
         streams = [s for s in self.streams.values() if s.root == root]
+        newest = None
         for r in rows:
             d = session_date(int(r["ts_ms"]), root)
             if d < self.today_date[root]:
                 continue        # an older session's straggler: charts only roll FORWARD
+            if newest is None or int(r["ts_ms"]) > newest:
+                newest = int(r["ts_ms"])
             if d > self.today_date[root]:               # 18:00 roll: the old session is on disk
                 info = dict(self.today_info[root], date=d.isoformat(), gaps=[])
                 self.today[root] = []
@@ -206,10 +219,15 @@ class Hub:
                 for b in s.builder.add(tk):
                     s.commit(b)
                 s.dirty = True
+        if newest is not None:      # the feed's clock: this delivery's newest print against ours, as it came in
+            self.lag_ms[root] = max(0, self.now_ms() - newest)
 
     def on_clock(self, now_ms: int) -> None:
+        """Close the time bars whose end has passed -- on each root's feed clock: now_ms less how late its
+        feed runs (lag_ms, measured at its last delivery; the module docstring). A late estimate only holds
+        a quiet bar open a little longer; the next print closes it anyway."""
         for s in self.streams.values():
-            for b in s.builder.on_clock(now_ms):
+            for b in s.builder.on_clock(now_ms - self.lag_ms.get(s.root, 0)):
                 s.commit(b)
                 s.dirty = True
 

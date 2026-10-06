@@ -674,3 +674,84 @@ def test_older_without_footprint_and_big_prints_is_the_same_chunk_minus_those_tw
     full = hub.older(s, s.bars[0].t)
     assert full["bars"] and all("fp" in b and "big" in b for b in full["bars"])
     assert hub.older(s, s.bars[0].t, fp=False, big=False) == {**full, "bars": lean(full["bars"])}
+
+
+# ------------------------------------------------------------------ a late feed (2026-10-02: the live login delayed 600 s)
+LATE_MS = 600_000
+
+
+def pumped(hub, clock, rows_, late_ms=LATE_MS, root="NQ"):
+    """Deliver each row `late_ms` after its own time, the service's pump right behind it (clock - 1.5 s)."""
+    for r in rows_:
+        clock[0] = r["ts_ms"] + late_ms
+        hub.on_ticks(root, [r])
+        hub.on_clock(clock[0] - 1500)
+
+
+def test_a_late_feed_closes_its_bars_on_its_own_clock(tmp_path):
+    """Every tick arrives ten minutes after its own time. The pump's clock is the wall: it closed each bar the
+    moment it opened and filed every later print under the wall clock's minute, so the candles sat ten minutes
+    to the right until a reload. A bar closes when the FEED's clock passes its end: live == a rebuild."""
+    hub, today, clock = setup(tmp_path)
+    hub.start_today("NQ", D, [])
+    s = open_stream(hub, keys=("vwap", "cumdelta"))
+    pumped(hub, clock, today)                                    # 150 prints, one a second from 09:30:00
+    assert [b.t for b in s.bars[-2:]] == [session_ms(D, 9, 30), session_ms(D, 9, 31)]
+    assert s.builder.cur.t == session_ms(D, 9, 32) and s.builder.cur.n == 30
+    assert s.payload() == hub.prepare("NQ", M1, ["vwap", "cumdelta"]).stream.payload()
+    assert hub.lag_ms["NQ"] == LATE_MS
+
+
+def test_a_late_quiet_market_still_closes_its_last_bar(tmp_path):
+    hub, today, clock = setup(tmp_path)
+    hub.start_today("NQ", D, [])
+    s = open_stream(hub, keys=())
+    pumped(hub, clock, today[:1])                                # one print at 09:30:00, here at 09:40:00
+    assert s.builder.cur is not None and s.builder.cur.t == session_ms(D, 9, 30)   # the feed's clock: 09:30:00
+    hub.on_clock(clock[0] + 59_000 - 1500)
+    assert s.builder.cur is not None                             # 09:30:59 on the feed's clock: not over yet
+    hub.on_clock(clock[0] + 62_000 - 1500)                       # nothing came, the feed's 09:31:00 has passed
+    assert s.builder.cur is None and s.bars[-1].t == session_ms(D, 9, 30) and s.bars[-1].closed
+
+
+def test_each_root_closes_on_its_own_feed_clock_and_a_feed_back_on_time_is_followed_at_once(tmp_path):
+    hub, today, clock = setup(tmp_path)
+    hub.start_today("NQ", D, [])
+    hub.start_today("ES", D, [])
+    nq, es = open_stream(hub, keys=()), hub.attach(hub.prepare("ES", M1, []))
+    hub.subscribe(es, ("conn", "c2"))
+    clock[0] = today[0]["ts_ms"] + LATE_MS
+    hub.on_ticks("NQ", today[:1])                                # NQ: ten minutes late
+    hub.on_ticks("ES", [dict(today[0], ts_ms=clock[0] - 200, id=1)])     # ES: 200 ms behind the wall
+    hub.on_clock(clock[0] + 62_000 - 1500)
+    assert es.builder.cur is None and nq.builder.cur is None     # each a minute on, by its own clock
+    assert (hub.lag_ms["NQ"], hub.lag_ms["ES"]) == (LATE_MS, 200)
+    clock[0] += 120_000                                          # the real-time data is back on NQ's login
+    hub.on_ticks("NQ", [dict(today[1], ts_ms=clock[0] - 150)])
+    assert hub.lag_ms["NQ"] == 150
+    hub.on_clock(clock[0] + 61_000)
+    assert nq.builder.cur is None and nq.bars[-1].t == (clock[0] - 150) // 60_000 * 60_000
+
+
+def test_a_clock_behind_the_ticks_never_closes_a_bar_early(tmp_path):
+    """A print stamped after this machine's clock (skew): the feed is not ahead of the wall -- no lateness,
+    the pump's own clock decides, as it always did."""
+    hub, today, clock = setup(tmp_path)
+    hub.start_today("NQ", D, [])
+    s = open_stream(hub, keys=())
+    clock[0] = today[0]["ts_ms"] - 400
+    hub.on_ticks("NQ", today[:1])
+    assert hub.lag_ms["NQ"] == 0
+    hub.on_clock(today[0]["ts_ms"] + 59_999)
+    assert s.builder.cur is not None
+    hub.on_clock(today[0]["ts_ms"] + 60_000)
+    assert s.builder.cur is None
+
+
+def test_a_straggler_from_an_older_session_does_not_move_the_feeds_clock(tmp_path):
+    hub, today, clock = setup(tmp_path)
+    hub.start_today("NQ", D, [])
+    open_stream(hub, keys=())
+    pumped(hub, clock, today[:5], late_ms=300)
+    hub.on_ticks("NQ", rows(session_ms(P, 16, 59), [123.0], first_id=77_777))     # yesterday's: not charted
+    assert hub.lag_ms["NQ"] == 300
