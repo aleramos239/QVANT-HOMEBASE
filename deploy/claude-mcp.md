@@ -5,7 +5,8 @@ the Strategy Tester: list/read/write strategies, backtest, heat-map, walk-forwar
 re-scores, runs and trades, and **show on chart** (the open chart page loads the run and scrolls to it).
 It also gives Claude a read of the live desk (`desk_status`, `desk_journal`, `desk_readiness`,
 `data_coverage`, `services_health`) and two safe, non-trading operations (`account_reconnect`,
-`account_remove`), plus a charts-service data export (`export_start`, `export_status`). **It has no
+`account_remove`), plus a charts-service data export (`export_start`, `export_status`), and the eight
+`blueprint_*` tools that run a strategy idea through the house blueprint, one per phase. **It has no
 trading tool of any kind** — nothing here can place or cancel an order, flatten, kill, arm/disarm,
 book/unbook an account, or touch a strategy or chart-trading switch (`homebase/claude_mcp/desk_client.py`'s
 `ALLOWED_GET`/`ALLOWED_POST` is the whole allowlist; `tests/test_claude_mcp.py` pins it structurally).
@@ -24,7 +25,7 @@ claude mcp add --scope user \
   session (or run `/mcp` again).
 - `PYTHONPATH` makes `homebase` importable whatever directory Claude Code starts in. The server imports
   nothing outside the stdlib, so any `python3` (3.9+) works in place of the venv's.
-- Check it: `claude mcp list` should show `homebase ... ✓ Connected`. In a session, `/mcp` lists its 25 tools.
+- Check it: `claude mcp list` should show `homebase ... ✓ Connected`. In a session, `/mcp` lists its 33 tools.
 - Leave `write_strategy` on "ask" (do not allowlist it): it writes Python that a backtest will run. The
   sandbox below contains that code, but the user should still see what Claude writes before it runs.
   `account_remove` is worth leaving on "ask" too, even though it is refused while an account holds a
@@ -42,6 +43,11 @@ claude mcp add --scope user \
 - DRAFT strategy files: `~/.homebase/strategies/<name>.py` (`HOMEBASE_DRAFTS_DIR` overrides). `set_group`
   writes `groups.json` in the same folder (which group the Lab lists a strategy under) and nothing else.
 - `homebase/.state/tick_coverage.json`, read directly off disk (never over HTTP) for `data_coverage`.
+- The blueprint toolkit, started as a child process by each `blueprint_*` tool (no service is asked):
+  `research/edge-library/bp.py`, run with the research engine's Python (`$HOME/ONYX TRADING/.venv/bin/python`).
+  `HOMEBASE_BP` and `HOMEBASE_BP_PYTHON` move them. The ideas it saves live in `~/.homebase/ideas/<name>/`
+  (`HOMEBASE_IDEAS_ROOT` overrides), kept through `homebase/ideastore.py`. An idea folder that was moved
+  writes no Lab draft and no group unless `HOMEBASE_DRAFTS_DIR` says where: it can never write the real Lab.
 
 ## What the tools need from the running services
 
@@ -58,6 +64,25 @@ version: restart that service (never 09:20–09:35 ET on weekdays).
   (`python -m homebase.ticks --coverage` rewrites it). With no file it says so and returns cleanly (no error).
 - **Claude Code itself**: a running session keeps the tool list it started with: after a service restart or
   a code change, start a new session (or `/mcp` reconnect) to pick up new tools and new fields.
+
+## The blueprint tools
+
+`blueprint_card` (phase 0), `blueprint_code_check` (1), `blueprint_build` (2), `blueprint_lock` (3),
+`blueprint_test` (4), `blueprint_sim` (5), `blueprint_eval_card` (6) and `blueprint_status` follow
+`research/edge-library/BLUEPRINT.md`, section 2. Each runs one command of the toolkit
+(`<python> bp.py <command> ... --root=<ideas folder> --json`) and returns its text and its pass/fail lines.
+
+- **Nothing is judged in the connector.** The toolkit decides and refuses; exit code 2 comes back as
+  "Refused (blueprint <command>): ..." (the tool's error), a toolkit that is not there as "not installed yet".
+- **`blueprint_test` reads the test days ONCE.** It needs `confirm: true`; leave it on "ask".
+- **Long commands** (`blueprint_build`, `blueprint_test`) return a job id after `wait_s` (default 120 s);
+  the same tool called with that `job_id` keeps waiting.
+- **Everything is saved in the app.** After each command the idea's `idea.json`, the record block on top of
+  its Lab draft (`draft_<name>`: the card and the latest verdict; the code below it is never touched) and its
+  Lab group (Ideas, Leads, Proven on history, Proven live, Shelved) are brought up to date. The group moves
+  only when the status changes. A `groups.json` that does not read is reported in the tool's text and never
+  fails the phase.
+- No chart-service route is involved, so nothing needs a restart: a new session has the tools.
 
 ## Draft strategies: where their code runs
 
