@@ -1,14 +1,19 @@
 """The user's data rules: what a tester range MEANS, and the record of what it read.
 
-  * Ranges: "research" = the research window 2021-01-01 -> 2024-12-31 (the
-    default); "is_months" = only Jan/Apr/Jul/Oct sessions (inside the research
-    window unless start/end say otherwise); "custom" = start/end as given.
+  * The dates are the house blueprint's (research/edge-library/BLUEPRINT.md, section 2;
+    law since 2026-10-05). BUILD days = 2021-09-22 -> 2025-06-30: all tuning happens
+    here. TEST days = 2025-07-01 -> the latest data: read once, only for a locked strategy.
+  * Ranges: "research" = the build days (the default; the name is older than the
+    blueprint and stays, because every stored run carries it); "is_months" = only
+    Jan/Apr/Jul/Oct sessions (inside the build days unless start/end say otherwise);
+    "custom" = start/end as given. A request already on disk runs the dates it was
+    stored with (stored_range), not today's default.
   * NOTHING here refuses a range for reading late data any more (2026-09-27, the
     user's instruction: "remove all of it"). Every preset and every custom range
     runs. A range that is malformed -- a bad date, a start after its end, an
     unknown kind -- still fails, because it is not a range at all.
-  * A range reaching 2025-01-01 or later is still RECORDED: record() appends
-    {ts, strategy, inputs, range[, run_id]} to spends.jsonl when the run is
+  * A range reaching the test days (2025-07-01 or later) is still RECORDED: record()
+    appends {ts, strategy, inputs, range[, run_id]} to spends.jsonl when the run is
     accepted, so past results stay attributable. The log is WRITE-ONLY -- it is
     never read back to gate a run or to raise a prompt, and record()'s return
     value is ignored by every caller. The app never edits the vault: the assistant
@@ -22,9 +27,9 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-RESEARCH_START = dt.date(2021, 1, 1)
-RESEARCH_END = dt.date(2024, 12, 31)
-HOLDOUT_START = dt.date(2025, 1, 1)
+RESEARCH_START = dt.date(2021, 9, 22)       # the build days: from the archive's first session ...
+RESEARCH_END = dt.date(2025, 6, 30)
+HOLDOUT_START = dt.date(2025, 7, 1)         # ... and the test days, from here to the latest data
 IS_MONTHS = (1, 4, 7, 10)
 KINDS = ("research", "is_months", "custom")
 
@@ -49,7 +54,9 @@ class Range:
     @property
     def label(self) -> str:
         if self.kind == "research" and (self.start, self.end) == (RESEARCH_START, RESEARCH_END):
-            return "Research window 2021–2024"
+            return "Build · Sep 2021 – Jun 2025"
+        if self.kind == "custom" and self.start == HOLDOUT_START:
+            return f"Test · Jul 2025 → {self.end.isoformat()}"
         span = f"{self.start.isoformat()} → {self.end.isoformat()}"
         return f"IS months (Jan/Apr/Jul/Oct) {span}" if self.kind == "is_months" else span
 
@@ -83,10 +90,22 @@ def parse_range(obj) -> Range:
     return Range(kind, start, end)
 
 
+def stored_range(obj) -> Range:
+    """A range read back from a request.json (to_dict()'s shape). A "research" range keeps the dates
+    it was stored with, whatever the build days are in today's code: a request written when the
+    default was 2021-01-01 -> 2024-12-31 (before 2026-10-06, or by a chart service still running
+    that code) runs exactly the days its label names."""
+    rng = parse_range(obj)
+    if rng.kind == "research" and obj and obj.get("start") and obj.get("end"):
+        own = parse_range({"kind": "custom", "start": obj["start"], "end": obj["end"]})
+        return Range(rng.kind, own.start, own.end)
+    return rng
+
+
 def record(path: Path, *, strategy: str, inputs: dict, rng: Range, run_id: str | None = None,
            ts: str | None = None) -> dict | None:
     """Append ONE spend line (never rewrites, never refuses) when `rng` reaches
-    2025-01-01 or later; None when it stays inside the research data. `run_id`, when
+    the test days (2025-07-01 or later); None when it ends before them. `run_id`, when
     given, lets a later caller (execute()'s dedup) recognize a spend it already logged
     for this run — it is left out of the record entirely when not given, matching every
     spend logged before run ids existed.

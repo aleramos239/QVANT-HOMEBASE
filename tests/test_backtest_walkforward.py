@@ -300,14 +300,16 @@ def test_a_month_with_no_eligible_cell_sits_out_flat():
     assert r["stability"]["no_pick"] == 2 and r["stability"]["changes"] == 0 and r["looks"] == 4
 
 
-# ---------------------------------------------------------------- validation: the research window, forced
+# ---------------------------------------------------------------- validation: the build days by default
 
-def test_validate_defaults_to_the_research_window_and_counts_the_steps():
+def test_validate_defaults_to_the_build_days_and_counts_the_steps():
     g = wf.validate_wf(wbody())
     w = g["walkforward"]
     assert w["metric"] == "net_profit" and w["min_trades"] == 5
-    assert w["months"][0] == "2021-01" and w["months"][-1] == "2024-12" and w["n_steps"] == 45
-    assert g["range"]["start"] == "2021-01-01" and g["range"]["end"] == "2024-12-31"
+    # the build days start mid-month (2021-09-22): their first WHOLE month is October
+    assert w["months"][0] == "2021-10" and w["months"][-1] == "2025-06" and len(w["months"]) == 45
+    assert w["n_steps"] == 42
+    assert g["range"]["start"] == "2021-09-22" and g["range"]["end"] == "2025-06-30"
     for c in g["cells"]:
         assert c["req"]["range"]["kind"] == "research" and "holdout" not in c["req"]
     assert wf.validate_wf(wbody(metric="sharpe", min_trades=3))["walkforward"]["metric"] == "sharpe"
@@ -357,9 +359,10 @@ def test_is_months_is_refused_for_a_walkforward():
 
 def test_the_scheme_route_reports_the_step_count_for_a_ratio_and_a_window():
     sc = wf.scheme()
-    assert sc["n_steps"] == 45 and sc["test_months"] == 3 and sc["ratios"] == [1, 2, 3]
-    assert (sc["first_select"], sc["last_select"]) == ("2021-01", "2024-09")
-    assert wf.scheme(test_months=1)["n_steps"] == 47 and wf.scheme(test_months=2)["n_steps"] == 46
+    assert sc["n_steps"] == 42 and sc["test_months"] == 3 and sc["ratios"] == [1, 2, 3]
+    assert (sc["first_select"], sc["last_select"]) == ("2021-10", "2025-03")
+    assert sc["window"] == {"start": "2021-09-22", "end": "2025-06-30"}                 # the build days
+    assert wf.scheme(test_months=1)["n_steps"] == 44 and wf.scheme(test_months=2)["n_steps"] == 43
     w = wf.scheme(start="2025-01-01", end="2026-06-30", test_months=1)
     assert w["n_steps"] == 17 and w["first_select"] == "2025-01" and w["last_select"] == "2026-05"
     short = wf.scheme(start="2024-01-01", end="2024-02-29", test_months=3)
@@ -409,7 +412,7 @@ def test_a_cells_month_slice_equals_a_single_run_over_that_month(tmp_path, gated
 
 # ---------------------------------------------------------------- the manager, with a fake runner child
 
-TRADES = {  # cell index -> the trades.json its fake child writes (full research window, but only 2022-01..05)
+TRADES = {  # cell index -> the trades.json its fake child writes (the full default window, but only 2022-01..05)
     0: five_month_cells()[0], 1: five_month_cells()[1]}
 
 
@@ -479,30 +482,30 @@ def test_the_manager_runs_the_cells_selects_stitches_and_counts_cells_x_steps_lo
     m = WalkForwardManager(tmp_path)
     wid = m.submit(wbody())
     st = m.status(wid)
-    assert st["status"] in ("queued", "running") and st["total"] == 2 and st["walkforward"]["n_steps"] == 45
+    assert st["status"] in ("queued", "running") and st["total"] == 2 and st["walkforward"]["n_steps"] == 42
     assert "progress" in st and "eta_s" in st
     release.set()
     st = wait_wf(m, wid)
     assert st["status"] == "done", st.get("error")
-    assert st["looks_added"] == 90 and st["looks"] == 97                     # 2 cells x 45 selection months
-    assert grid.read_looks(tester_shared / "looks.json") == {"nq930": 97}
+    assert st["looks_added"] == 84 and st["looks"] == 91                     # 2 cells x 42 selection months
+    assert grid.read_looks(tester_shared / "looks.json") == {"nq930": 91}
     assert st["progress"] == 1.0
     for c in st["cells"]:                                                    # never the full-window numbers
         assert "net_profit" not in (c.get("summary") or {}) and "sharpe" not in (c.get("summary") or {})
     assert (m.dir(wid) / "cells" / "00" / "months.json").is_file()           # the per-month cache
     r = m.result(wid)
-    assert r["n_steps"] == 45 and r["looks"] == 90
+    assert r["n_steps"] == 42 and r["looks"] == 84
     by = {s["select"]: s for s in r["steps"]}
     assert by["2022-01"]["cell"] == 0 and by["2022-01"]["oos"]["net_profit"] == -480
     assert by["2022-02"]["cell"] == 1 and by["2022-02"]["oos"]["net_profit"] == -60
-    assert by["2021-06"]["cell"] is None                                     # no trades: nobody qualifies
-    assert r["stitched"]["months"][0] == "2021-02" and r["stitched"]["months"][-1] == "2024-10"
+    assert by["2021-12"]["cell"] is None                                     # no trades: nobody qualifies
+    assert r["stitched"]["months"][0] == "2021-11" and r["stitched"]["months"][-1] == "2025-04"
     assert m.list()[0]["id"] == wid
     with pytest.raises(KeyError):
         m.cell_bundle(wid, 0)                                                # the full-window cells stay unseen
     m2 = WalkForwardManager(tmp_path)                                        # a restart reads it back
-    assert m2.status(wid)["status"] == "done" and m2.result(wid)["looks"] == 90
-    assert grid.read_looks(tester_shared / "looks.json") == {"nq930": 97}   # never counted twice
+    assert m2.status(wid)["status"] == "done" and m2.result(wid)["looks"] == 84
+    assert grid.read_looks(tester_shared / "looks.json") == {"nq930": 91}   # never counted twice
 
 
 def test_a_cancelled_walkforward_counts_no_looks_and_has_no_result(tmp_path, fake, tester_shared):
@@ -591,8 +594,8 @@ def test_a_compare_job_is_the_same_grid_and_counts_every_schemes_steps():
     g, one = wf.validate_wf(wbody(compare=True)), wf.validate_wf(wbody(test_months=3))
     w = g["walkforward"]
     assert w["compare"] is True and w["test_months"] is None and w["ratios"] == [1, 2, 3]
-    assert w["n_steps_by"] == {"1": 47, "2": 46, "3": 45} and w["n_steps"] == 47       # one search: 1:1's months
-    assert w["choice_penalty"] == 3 and w["looks_per_cell"] == 141
+    assert w["n_steps_by"] == {"1": 44, "2": 43, "3": 42} and w["n_steps"] == 44       # one search: 1:1's months
+    assert w["choice_penalty"] == 3 and w["looks_per_cell"] == 132
     assert (w["metric"], w["min_trades"], w["months"]) == ("net_profit", 5, one["walkforward"]["months"])
     # the cells ARE a 1:N job's cells: one full-window run each, whatever the ratio
     assert [c["req"] for c in g["cells"]] == [c["req"] for c in one["cells"]]
@@ -615,9 +618,9 @@ def test_compare_refuses_a_ratio_a_non_bool_and_a_window_too_short_for_1to3():
 
 def test_the_compare_scheme_sums_each_ratios_steps():
     sc = wf.compare_scheme()
-    assert sc["compare"] is True and sc["n_steps"] == 47 and sc["runnable"] is True
-    assert sc["choice_penalty"] == 3 and sc["looks_per_cell"] == 141
-    assert sc["n_steps_by"] == {"1": 47, "2": 46, "3": 45}
+    assert sc["compare"] is True and sc["n_steps"] == 44 and sc["runnable"] is True
+    assert sc["choice_penalty"] == 3 and sc["looks_per_cell"] == 132
+    assert sc["n_steps_by"] == {"1": 44, "2": 43, "3": 42}
     assert wf.compare_scheme("2024-01-01", "2024-03-31")["runnable"] is False
 
 
@@ -746,9 +749,9 @@ def test_a_compare_job_runs_each_cell_once_and_equals_three_separate_walkforward
     st = wait_wf(m, wid)
     assert st["status"] == "done", st.get("error")
     assert len(spawned) == 2                                   # 2 cells run once -- not 3 x 2
-    assert st["looks_added"] == 2 * 47 * 3 and grid.read_looks(tester_shared / "looks.json") == {"nq930": 282}
+    assert st["looks_added"] == 2 * 44 * 3 and grid.read_looks(tester_shared / "looks.json") == {"nq930": 264}
     s = m.compare(wid)
-    assert [c["test_months"] for c in s["schemes"]] == [1, 2, 3] and s["looks"] == 282
+    assert [c["test_months"] for c in s["schemes"]] == [1, 2, 3] and s["looks"] == 264
     with pytest.raises(ValueError, match="comparison"):
         m.result(wid)                                          # a compare job has no single result
     with pytest.raises(ValueError, match="test_months"):
@@ -768,7 +771,7 @@ def test_a_compare_job_runs_each_cell_once_and_equals_three_separate_walkforward
     assert listed[wid]["compare"] is True and listed[sep]["compare"] is False and listed[sep]["test_months"] == 3
     m2 = WalkForwardManager(tmp_path)                          # a restart reads it back, counted once
     assert m2.compare(wid) == s and m2.result(wid, 2) == m.result(wid, 2)
-    assert grid.read_looks(tester_shared / "looks.json") == {"nq930": 282 + 2 * (47 + 46 + 45)}
+    assert grid.read_looks(tester_shared / "looks.json") == {"nq930": 264 + 2 * (44 + 43 + 42)}
 
 
 def test_a_cancelled_compare_job_counts_nothing_and_has_no_results(tmp_path, fake, tester_shared):

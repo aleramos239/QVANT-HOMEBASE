@@ -1,6 +1,6 @@
 """Parameter heat-map grids: one strategy, 2 or 3 inputs with value lists, at most `max_cells`
 (the page's own Max cells box; 60 by default, 400 the hard ceiling),
-over whatever window the request names (the range picker's preset; 2021-2024 by default).
+over whatever window the request names (the range picker's preset; the build days by default).
 
 Every cell is an ordinary tester run -- the request `runner.validate()` builds for a single run
 with the same params, executed by the same `runner exec` child (`--no-lock`: the grid's own
@@ -73,7 +73,7 @@ def expand(axes: list[dict]) -> list[dict]:
 
 def validate_grid(body) -> dict:
     """The grid as it will run: resolved axes + one single-run request per cell, all over the
-    body's own range (2021-2024 when it names none). ValueError (DisciplineError for a malformed
+    body's own range (the build days when it names none). ValueError (DisciplineError for a malformed
     window) with a message for the page on anything refused."""
     if not isinstance(body, dict):
         raise ValueError("the body is a JSON object")

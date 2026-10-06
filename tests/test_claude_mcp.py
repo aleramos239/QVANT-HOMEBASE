@@ -34,7 +34,7 @@ TRADES = [{"date": "2024-03-05", "side": "long", "qty": 1, "entry_ms": 170964900
 COL = {"trades": 2, "net_profit": 187.0, "sharpe": 1.23, "win_rate": 50.0, "profit_factor": 2.7,
        "max_drawdown": -109.0, "avg_trade": 93.5, "t_stat": 0.6}
 BUNDLE = {"run": {"id": RID, "strategy": {"id": "nq930", "name": "NQ 9:30 Straddle", "root": "NQ"},
-                  "inputs": {"offset_pts": 10.0}, "range": {"label": "Research window 2021–2024"}, "qty": 1,
+                  "inputs": {"offset_pts": 10.0}, "range": {"label": "Build · Sep 2021 – Jun 2025"}, "qty": 1,
                   "commission": 4.0, "slippage_ticks": 1.0, "capital": 50000.0, "engine": "x", "fill_law": "tick replay",
                   "coverage": {"sessions": 3, "used": 2, "skipped_by_reason": {"no tape": 1}, "no_trade": []},
                   "report": {"summary": {"all": COL, "long": COL, "short": COL},
@@ -226,8 +226,10 @@ def test_backtest_request_shape_and_summary(fake):
                                "prop_rules": "lucid@1"})
     assert fake.requests[0]["body"] == {"strategy": "nq930", "inputs": {"offset_pts": 12}, "range": {"kind": "research"},
                                         "qty": 2, "prop_rules": "lucid@1"}
-    for want in (RID, "$187", "1.23", "50.0%", "2.70", "-$109", "By year", "pass 50.0%", "show_on_chart"):
+    for want in (RID, "$187", "1.23", "50.0%", "2.70", "-$109", "By year", "pass 50.0%", "show_on_chart",
+                 "Build · Sep 2021 – Jun 2025"):
         assert want in text, want
+    assert "reads the test days" not in text
     b.call("backtest", {"strategy": "nq930", "range": {"preset": "2022-2024"}})
     assert fake.last("POST")["body"]["range"] == {"kind": "custom", "start": "2022-01-01", "end": "2024-12-31"}
     b.call("backtest", {"strategy": "nq930", "range": {"preset": "custom", "start": "2023-01-01", "end": "2023-06-30"}})
@@ -239,11 +241,56 @@ def test_backtest_request_shape_and_summary(fake):
 
 
 def test_range_presets_match_the_page():
-    assert tools.range_body(None) == {"kind": "research"}
-    assert tools.range_body({"preset": "2025-2026"}, today="2026-09-27") == {"kind": "custom", "start": "2025-01-01",
-                                                                             "end": "2026-09-27"}
+    """build (the default) and test are the blueprint's days, and the three copies of their dates agree:
+    the server's rules (backtest/discipline.py), this connector, the page's range pill (tester.js)."""
+    from homebase.backtest import discipline
+    assert tools.range_body(None) == tools.range_body({}) == tools.range_body({"preset": "build"}) == {"kind": "research"}
+    assert tools.range_body({"preset": "test"}, today="2026-10-06") == {"kind": "custom", "start": "2025-07-01",
+                                                                        "end": "2026-10-06"}
     assert tools.range_body({"preset": "all"}, today="2026-09-27") == {"kind": "custom", "start": "2021-01-01",
                                                                        "end": "2026-09-27"}
+    build, test = tools.PRESETS["build"], tools.PRESETS["test"]
+    assert build == (discipline.RESEARCH_START.isoformat(), discipline.RESEARCH_END.isoformat())
+    assert test == (discipline.HOLDOUT_START.isoformat(), None)
+    js = (REPO / "homebase" / "static" / "charts" / "tester.js").read_text()
+    page = {i: (s, e or None) for i, s, e in re.findall(
+        r"\{ id: '(\w+)', label: '[^']*', start: '([\d-]+)', end: (?:'([\d-]+)'|null) \}", js)}
+    assert page == {"research": build, "test": test, "all": tools.PRESETS["all"]}
+
+
+def test_the_old_preset_names_still_run_as_their_own_dates():
+    """A call written before the blueprint's dates (2026-10-06) keeps working. The old names are plain date
+    windows: 2021-2024 is no longer the default, so it no longer rides on {kind: research}."""
+    assert tools.range_body({"preset": "2021-2024"}) == {"kind": "custom", "start": "2021-01-01", "end": "2024-12-31"}
+    assert tools.range_body({"preset": "2022-2024"}) == {"kind": "custom", "start": "2022-01-01", "end": "2024-12-31"}
+    assert tools.range_body({"preset": "2025-2026"}, today="2026-09-27") == {"kind": "custom", "start": "2025-01-01",
+                                                                             "end": "2026-09-27"}
+    preset = tools._RANGE["properties"]["preset"]
+    assert preset["default"] == "build" and preset["enum"][:3] == ["build", "test", "all"]
+    assert {"2021-2024", "2022-2024", "2025-2026", "custom"} <= set(preset["enum"])
+    with pytest.raises(ToolError, match="range.preset"):
+        tools.range_body({"preset": "research"})
+
+
+def test_every_chat_reads_the_blueprints_dates():
+    """The connector's instructions and the range description carry the house law to every chat."""
+    srv = protocol.Server(tools.Toolbox(Client("http://127.0.0.1:1")))
+    text = rpc(srv, "initialize", {"protocolVersion": "2025-06-18"})["result"]["instructions"]
+    desc = tools._RANGE["description"]
+    for t in (text, desc):
+        assert "research/edge-library/BLUEPRINT.md section 2" in t and "research window" not in t
+        assert "build days" in t and "2021-09-22" in t and "2025-06-30" in t
+        assert "test days" in t and "2025-07-01" in t
+        assert "once and only for a locked strategy, never for a quick look or \"all data\"" in t
+    listed = {t["name"]: t for t in rpc(srv, "tools/list")["result"]["tools"]}
+    for name in ("backtest", "heatmap", "walkforward"):
+        assert listed[name]["inputSchema"]["properties"]["range"]["description"] == desc
+
+
+def test_a_run_that_read_the_test_days_says_so():
+    late = {**BUNDLE, "run": {**BUNDLE["run"], "holdout": True, "range": {"label": "Test · Jul 2025 → 2026-10-06"}}}
+    head = tools.bundle_summary(late, {"run_id": RID}).splitlines()[0]
+    assert head.endswith("Test · Jul 2025 → 2026-10-06 · reads the test days")
 
 
 def test_a_long_run_returns_its_id_when_the_wait_runs_out(fake):

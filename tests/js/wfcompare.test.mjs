@@ -34,8 +34,8 @@ const CMP = { compare: true, window: { start: '2021-01', end: '2024-12' }, n_cel
 
 test('the compare mode rides the range pill: label, restore and run body', () => {
   assert.deepEqual(X.WF_MODES, [1, 2, 3, 'compare']);
-  assert.equal(X.pillLabel({ id: 'research', wf: 'compare' }), '2021-2024 · WF compare');
-  assert.equal(X.pillLabel({ id: 'research', wf: 2 }), '2021-2024 · WF 1:2');
+  assert.equal(X.pillLabel({ id: 'research', wf: 'compare' }), 'Build · Sep 2021 – Jun 2025 · WF compare');
+  assert.equal(X.pillLabel({ id: 'research', wf: 2 }), 'Build · Sep 2021 – Jun 2025 · WF 1:2');
   const f = X.restore({ ...X.defaults(STRAT), range: { id: 'research', start: '', end: '', wf: 'compare' } }, STRAT);
   assert.equal(f.range.wf, 'compare');
   assert.ok(X.isWalkforward(f) && X.isWfCompare(f));

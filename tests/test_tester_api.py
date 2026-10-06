@@ -260,7 +260,8 @@ def test_a_grid_goes_from_post_to_cell_bundles_and_counts_its_looks(tmp_path):
         gid = c.post("/api/tester/grid", json=GRID, headers={"origin": "http://localhost:8852"}).json()["id"]
         st = poll_grid(c, gid)
         assert st["status"] == "done" and st["total"] == 4 and st["looks"] == 4
-        assert st["range"]["start"] == "2021-01-01" and st["range"]["end"] == "2024-12-31"
+        assert st["range"]["start"] == "2021-09-22" and st["range"]["end"] == "2025-06-30"   # the build days
+        assert st["range"]["label"] == "Build · Sep 2021 – Jun 2025"
         assert [a["key"] for a in st["axes"]] == ["offset_pts", "sl_pts"]
         cell = st["cells"][3]
         assert cell["params"] == {"offset_pts": 12.0, "sl_pts": 6.0} and "net_profit" in cell["summary"]
@@ -337,12 +338,12 @@ def test_a_walkforward_goes_from_post_to_a_stitched_result_and_counts_cells_x_st
         wid = c.post("/api/tester/walkforward", json=WF, headers={"origin": "http://localhost:8852"}).json()["id"]
         st = poll_wf(c, wid)
         assert st["status"] == "done", st.get("error")
-        assert st["total"] == 2 and st["walkforward"]["n_steps"] == 45 and st["looks_added"] == 90
-        assert st["range"]["start"] == "2021-01-01" and st["range"]["end"] == "2024-12-31"
+        assert st["total"] == 2 and st["walkforward"]["n_steps"] == 42 and st["looks_added"] == 84
+        assert st["range"]["start"] == "2021-09-22" and st["range"]["end"] == "2025-06-30"
         assert all("net_profit" not in (cell.get("summary") or {}) for cell in st["cells"])
-        assert c.get("/api/tester/looks").json() == {"nq930": 90}
+        assert c.get("/api/tester/looks").json() == {"nq930": 84}
         r = c.get(f"/api/tester/walkforward/{wid}/result").json()
-        assert r["n_steps"] == 45 and r["n_cells"] == 2 and r["looks"] == 90
+        assert r["n_steps"] == 42 and r["n_cells"] == 2 and r["looks"] == 84
         by = {s["select"]: s for s in r["steps"]}
         assert by["2024-03"]["cell"] is not None and by["2024-03"]["is"]["trades"] >= 1   # the synthetic March day
         assert by["2024-03"]["oos"]["trades"] == 0                                         # April-June: no tape
@@ -387,13 +388,14 @@ def test_a_queued_walkforward_can_be_cancelled_and_has_no_result(tmp_path, monke
 def test_the_walkforward_scheme_comes_from_the_server(tmp_path):
     with client(tmp_path) as c:
         s = c.get("/api/tester/walkforward-scheme").json()
-        assert s["n_steps"] == 45 and (s["first_select"], s["last_select"]) == ("2021-01", "2024-09")
+        assert s["n_steps"] == 42 and (s["first_select"], s["last_select"]) == ("2021-10", "2025-03")
+        assert s["window"] == {"start": "2021-09-22", "end": "2025-06-30"}                 # the build days
         assert (s["select_months"], s["test_months"], s["step_months"]) == (1, 3, 1)
         assert s["metrics"][0] == ["net_profit", "Net $"] and s["default_min_trades"] == 5
         assert s["ratios"] == [1, 2, 3] and s["default_test_months"] == 3
         # the step count follows the ratio AND the window the picker shows
         one = c.get("/api/tester/walkforward-scheme", params={"test_months": 1}).json()
-        assert one["n_steps"] == 47 and one["test_months"] == 1
+        assert one["n_steps"] == 44 and one["test_months"] == 1
         w = c.get("/api/tester/walkforward-scheme",
                   params={"test_months": 2, "start": "2025-01-01", "end": "2026-06-30"}).json()
         assert w["n_steps"] == 16 and w["window"] == {"start": "2025-01-01", "end": "2026-06-30"}
@@ -473,7 +475,7 @@ def test_a_compare_walkforward_serves_three_schemes_and_their_oos_side_by_side(t
         wid = c.post("/api/tester/walkforward", json={**WF, "compare": True}).json()["id"]
         st = poll_wf(c, wid)
         assert st["status"] == "done", st.get("error")
-        assert st["walkforward"]["compare"] is True and st["looks_added"] == 2 * 47 * 3
+        assert st["walkforward"]["compare"] is True and st["looks_added"] == 2 * 44 * 3
         s = c.get(f"/api/tester/walkforward/{wid}/compare").json()
         assert [x["ratio"] for x in s["schemes"]] == ["1:1", "1:2", "1:3"] and "stitched_is" not in s
         r = c.get(f"/api/tester/walkforward/{wid}/result")
@@ -486,7 +488,7 @@ def test_a_compare_walkforward_serves_three_schemes_and_their_oos_side_by_side(t
         r = c.post("/api/tester/walkforward", json={**WF, "compare": True, "test_months": 1})
         assert r.status_code == 400 and "without test_months" in r.json()["detail"]
         sc = c.get("/api/tester/walkforward-scheme", params={"test_months": "compare"}).json()
-        assert sc["n_steps"] == 47 and sc["looks_per_cell"] == 141 and sc["n_steps_by"] == {"1": 47, "2": 46, "3": 45}
+        assert sc["n_steps"] == 44 and sc["looks_per_cell"] == 132 and sc["n_steps_by"] == {"1": 44, "2": 43, "3": 42}
         one = c.post("/api/tester/walkforward", json={**WF, "test_months": 1}).json()["id"]
         assert poll_wf(c, one)["status"] == "done"
         assert c.get(f"/api/tester/walkforward/{one}/compare").status_code == 409

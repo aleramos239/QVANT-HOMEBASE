@@ -92,12 +92,13 @@ def test_bad_bodies_are_refused():
             validate_grid(bad)
 
 
-def test_the_default_window_is_the_research_window_and_every_cell_gets_it():
+def test_the_default_window_is_the_build_days_and_every_cell_gets_it():
     for g in (validate_grid(gbody()), validate_grid(gbody(range={"kind": "research"}))):
-        assert g["range"]["start"] == "2021-01-01" and g["range"]["end"] == "2024-12-31"
+        assert g["range"]["start"] == "2021-09-22" and g["range"]["end"] == "2025-06-30"
+        assert g["range"]["label"] == "Build · Sep 2021 – Jun 2025" and g["range"]["holdout"] is False
         for c in g["cells"]:
             assert c["req"]["range"]["kind"] == "research"
-            assert (c["req"]["range"]["start"], c["req"]["range"]["end"]) == ("2021-01-01", "2024-12-31")
+            assert (c["req"]["range"]["start"], c["req"]["range"]["end"]) == ("2021-09-22", "2025-06-30")
             assert "holdout" not in c["req"]
 
 
@@ -106,7 +107,7 @@ def test_the_grid_runs_whatever_window_it_is_given():
     preset reaches it, 2025+ included, and every cell runs that same window."""
     for rng, want in (({"kind": "custom", "start": "2022-01-01", "end": "2024-12-31"}, ("2022-01-01", "2024-12-31")),
                       ({"kind": "custom", "start": "2025-01-01", "end": "2026-09-27"}, ("2025-01-01", "2026-09-27")),
-                      ({"kind": "is_months"}, ("2021-01-01", "2024-12-31"))):
+                      ({"kind": "is_months"}, ("2021-09-22", "2025-06-30"))):
         g = validate_grid(gbody(range=rng))
         assert (g["range"]["start"], g["range"]["end"]) == want
         assert g["range"]["kind"] == rng["kind"]

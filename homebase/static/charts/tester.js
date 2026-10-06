@@ -22,13 +22,16 @@ const ISO = /^\d{4}-\d{2}-\d{2}$/;
    A form's range is {id, start, end, wf}. `id` names one of the fixed windows below (or 'custom',
    where start/end are the typed dates). `wf` is null, or a walk-forward ratio 1 | 2 | 3 -- months
    OUT-of-sample per 1 selection month -- which COMPOSES with whichever window is chosen, so
-   "2025-2026 · WF 1:1" is a walk-forward run over 2025-2026. `wf: 'compare'` = the three ratios
-   side by side from one grid run ("2021-2024 · WF compare"). `end: null` in the table means today
-   (ET: the session clock, not the viewer's). 2026-09-27: nothing here refuses a date any more. */
+   "Build · Sep 2021 – Jun 2025 · WF 1:1" is a walk-forward run over the build days. `wf: 'compare'`
+   = the three ratios side by side from one grid run ("… · WF compare"). `end: null` in the table means
+   today (ET: the session clock, not the viewer's). 2026-09-27: nothing here refuses a date any more.
+   The windows are the house blueprint's (research/edge-library/BLUEPRINT.md section 2; the server's
+   copy is backtest/discipline.py, and a test holds the two together): 'research' -- the id is older
+   than the blueprint, and saved forms carry it -- is the BUILD days, where all tuning happens; 'test'
+   is the TEST days, read once and only for a locked strategy. */
 const RANGES = [
-  { id: 'research', label: '2021-2024', start: '2021-01-01', end: '2024-12-31' },
-  { id: '2022-2024', label: '2022-2024', start: '2022-01-01', end: '2024-12-31' },
-  { id: '2025-2026', label: '2025-2026', start: '2025-01-01', end: null },
+  { id: 'research', label: 'Build · Sep 2021 – Jun 2025', start: '2021-09-22', end: '2025-06-30' },
+  { id: 'test', label: 'Test · Jul 2025 →', start: '2025-07-01', end: null },
   { id: 'all', label: 'All (2021-now)', start: '2021-01-01', end: null },
   { id: 'custom', label: 'Custom date range…', start: null, end: null },
 ];
@@ -69,7 +72,7 @@ function prettyDate(iso) {
   return `${MONTHS_SHORT[m - 1]} ${day}, ${y}`;
 }
 /* The pill's text: the preset's own name (or the custom dates), plus the walk-forward scheme when
-   one is on -- "2021-2024 · WF 1:2". */
+   one is on -- "Build · Sep 2021 – Jun 2025 · WF 1:2". */
 function pillLabel(r) {
   const base = !r || r.id !== 'custom' ? preset(r ? r.id : 'research').label
     : (parseDate(r.start) && parseDate(r.end) ? `${prettyDate(r.start)} — ${prettyDate(r.end)}` : 'Custom date range');
@@ -156,10 +159,11 @@ function restore(saved, s) {
   return f;
 }
 /* A finished run's own range back onto a picker preset: the fixed window whose dates it matches,
-   else Custom with those dates. A loaded run is always a single run, so never a walk-forward. */
+   else Custom with those dates -- so a {kind: 'research'} run from before the build days
+   (2021-01-01 -> 2024-12-31) comes back as those dates, never as today's default. A loaded run is
+   always a single run, so never a walk-forward. */
 function rangeFromRun(rng) {
   if (!rng) return { id: 'research', start: '', end: '' };
-  if (rng.kind === 'research') return { id: 'research', start: '', end: '' };
   const hit = RANGES.find((x) => x.id !== 'custom' && x.start === rng.start && rangeSpec(x.id).end === rng.end);
   return hit ? { id: hit.id, start: '', end: '' } : { id: 'custom', start: rng.start || '', end: rng.end || '' };
 }
@@ -185,8 +189,8 @@ function problems(f, s) {
   if (start && end && start > end) return 'The start date is after the end date';
   return null;
 }
-/* The server's own range shape. The default preset stays `{kind: 'research'}` verbatim, so a
-   2021-2024 request is byte for byte the one this tester always sent. */
+/* The server's own range shape. The default preset stays `{kind: 'research'}` verbatim: the server
+   owns the build days' dates, and the request is byte for byte the one this tester always sent. */
 function rangeBody(r) {
   if (!r || r.id === 'research') return { kind: 'research' };
   const { start, end } = rangeDates(r);
@@ -236,7 +240,7 @@ function badges(run) {
   out.push({ text: `${int(c.used)} of ${int(c.sessions)} sessions`, tone: skipped ? 'warn' : 'info', title: why || 'Every session in the range was used' });
   const errs = run.report.skipped_by_error || 0;
   if (errs) out.push({ text: `${errs} strategy error${errs === 1 ? '' : 's'}`, tone: 'err', title: 'Sessions the strategy crashed on (see Properties)' });
-  if (run.holdout) out.push({ text: 'Includes holdout', tone: 'err', title: run.holdout_reason || '' });
+  if (run.holdout) out.push({ text: 'Reads test days', tone: 'err', title: run.holdout_reason || '' });
   return out;
 }
 function propView(p) {

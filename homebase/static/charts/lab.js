@@ -643,11 +643,11 @@ function settingsHtml(b) {
     return `<label title="${esc(i.label)}">${esc(i.label)}</label><input type="number" data-in="${esc(i.key)}" value="${esc(v)}" step="${i.step || 'any'}"${i.min != null ? ` min="${i.min}"` : ''}${i.max != null ? ` max="${i.max}"` : ''} class="${bad ? 'bad' : ''}">`;
   };
   const { start, end } = X.rangeDates(f.range);
-  const spent = end && end >= '2025-01-01';
+  const spent = end && end >= X.rangeSpec('test').start;
   return `<details class="rs-group rs-set"${S.setOpen ? ' open' : ''}><summary><span>Settings</span><span>${esc(X.pillLabel ? X.pillLabel(f.range) : f.range.id)} · ${f.qty} contract${f.qty === 1 ? '' : 's'}</span></summary>
     <div class="grid"><label>Range</label><select data-f="range">${rangeOpts}</select>
       ${f.range.id === 'custom' ? `<label>From</label><input type="text" data-f="start" value="${esc(f.range.start)}" placeholder="YYYY-MM-DD"><label>To</label><input type="text" data-f="end" value="${esc(f.range.end)}" placeholder="YYYY-MM-DD">` : ''}
-      ${spent ? '<div class="warn">This reaches 2025 or later, the data kept back for a final check. Each look is recorded.</div>' : ''}
+      ${spent ? '<div class="warn">This reaches July 2025 or later, the test days: one read, only for a locked strategy. Each look is recorded.</div>' : ''}
       <label>Contracts</label><input type="number" data-f="qty" value="${esc(f.qty)}" min="1" step="1">
       <label title="Dollars per contract, round trip">Fees ($ per contract)</label><input type="number" data-f="commission" value="${esc(f.commission)}" min="0" step="0.25">
       <label>Slippage (ticks)</label><input type="number" data-f="slippage_ticks" value="${esc(f.slippage_ticks)}" min="0" step="1">

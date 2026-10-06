@@ -59,7 +59,7 @@ def checks(meta: dict | None, summary: dict | None) -> list[dict]:
     n = (summary["all"] or {}).get("trades") or 0
     out += [{"id": "ran", "label": "Backtest attached", "ok": True},
             {"id": "trades", "label": f"At least {MIN_TRADES} trades (it has {n})", "ok": n >= MIN_TRADES},
-            {"id": "holdout", "label": "Stays inside the research window (no 2025+ data)",
+            {"id": "holdout", "label": "Stays out of the test days (nothing from 2025-07-01 on)",
              "ok": not summary["holdout"]},
             {"id": "errors", "label": "No session crashed the strategy", "ok": not summary["strategy_errors"]},
             {"id": "costs", "label": "Fees and slippage are on",

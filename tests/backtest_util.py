@@ -25,8 +25,8 @@ def nq_archive(base):
 
 
 # ---- the parity archive: a synthetic NQ tape spread over 2021-2024 -----------------
-# Used by the 2021-2024 byte-parity pin (tests/test_tester_range_parity.py): a research-range
-# run over it must produce the SAME bundle before and after the tester's range rework.
+# Used by the 2021-2024 byte-parity pin (tests/test_tester_range_parity.py): a 2021-01-01 ->
+# 2024-12-31 run over it must produce the SAME bundle before and after the tester's range rework.
 WIN_DAYS = [dt.date(2021, 3, 2), dt.date(2022, 6, 15), dt.date(2023, 9, 20), dt.date(2024, 3, 5)]
 LOSS_DAYS = [dt.date(2021, 7, 14), dt.date(2022, 11, 9), dt.date(2023, 2, 8), dt.date(2024, 8, 21)]
 HOLE_DAYS = [dt.date(2021, 5, 12), dt.date(2024, 3, 6)]

@@ -5,8 +5,8 @@
    and the mini equity + drawdown chart.
 
    The range pill (2026-09-27) is the one place a period is chosen: a button reading the current window
-   that opens a menu of fixed presets (2021-2024, 2022-2024, 2025-2026, All), then the three walk-forward
-   schemes -- 1:1, 1:2, 1:3 -- which COMPOSE with whichever window is showing ("2021-2024 · WF 1:2"), then
+   that opens a menu of fixed presets (Build, the default; Test; All), then the three walk-forward
+   schemes -- 1:1, 1:2, 1:3 -- which COMPOSE with whichever window is showing ("All (2021-now) · WF 1:2"), then
    Custom date range…, a dialog with two plain TEXT fields and a month calendar. There is no native date
    control anywhere here, so the class of bug where <input type="date"> destroys the field under the caret
    cannot come back; refreshHeader still defers a rebuild to blur for the fields that remain.
@@ -607,7 +607,7 @@ function recentRunRow(r) {
     line.textContent = `${stratName} · ${rangeLabel} · ${r.status}`;
   }
   b.appendChild(line);
-  if (r.holdout) b.appendChild(page.mk('span', 'env live', '2025+'));   // this run read past the research window
+  if (r.holdout) b.appendChild(page.mk('span', 'env live', 'Test days'));   // this run read the test days
   if (done) b.onclick = () => { page.closeMenu(); loadRecentRun(r.id); };
   if (!done) return b;      // only a finished run has a report to compare
   const row = page.mk('div', 'menu-row');
@@ -706,7 +706,7 @@ function runChip(run, colorClass, letter) {
   chip.appendChild(page.mk('span', 'tst-cmp-dot'));
   const stratName = ((strategiesList || []).find((s) => s.id === run.strategy.id) || {}).name || run.strategy.name;
   chip.appendChild(document.createTextNode(`${letter}: ${stratName} · ${run.range.label}`));
-  if (run.holdout) chip.appendChild(page.mk('span', 'tst-badge err', '2025+'));
+  if (run.holdout) chip.appendChild(page.mk('span', 'tst-badge err', 'Test days'));
   return chip;
 }
 function compareTable(rows) {
@@ -1722,10 +1722,8 @@ const wfInFlight = () => wfStarting || !!(wf && !X.wfProgress(wf).final);
    job's identity, so switching either one must never leave the other one's result up. */
 function wfMatchesPill() {
   if (!wf || !X.isWalkforward(form)) return false;
-  const want = X.rangeBody(form.range), got = wf.range || {}, cfg = wf.walkforward || {};
-  const wantStart = want.kind === 'research' ? '2021-01-01' : want.start;
-  const wantEnd = want.kind === 'research' ? '2024-12-31' : want.end;
-  return X.wfModeOf(cfg) === form.range.wf && got.start === wantStart && got.end === wantEnd;
+  const want = X.rangeDates(form.range), got = wf.range || {}, cfg = wf.walkforward || {};
+  return X.wfModeOf(cfg) === form.range.wf && got.start === want.start && got.end === want.end;
 }
 const wfDone = () => wfMatchesPill() && wf.status === 'done' && !!wfResult && wfResult.id === wf.id;
 /* The ordinary 1:N result currently on screen: a finished job the pill still describes, whose result has

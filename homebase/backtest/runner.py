@@ -1,7 +1,7 @@
 """Tester runs: validated, each in its OWN process, into a run bundle.
 
     <base> = homebase/.state/tester
-      spends.jsonl              the record of runs that read 2025+ data (discipline.py; never a gate)
+      spends.jsonl              the record of runs that read the test days (discipline.py; never a gate)
       runs/.lock                held (flock) only by a `runner exec` started by hand without --no-lock
       runs/<id>/request.json    the validated request
       runs/<id>/status.json     {status, phase, done, total, error?, pid?, updated}
@@ -135,7 +135,7 @@ def validate(body, *, draft: tuple | None = None) -> dict:
 
 def prepare(body, base: Path) -> str:
     """Validate, create runs/<id>/ (request + queued status), and record the run in the
-    spend log when its range reads 2025+ data (a record, never a gate)."""
+    spend log when its range reads the test days (a record, never a gate)."""
     req = validate(body)
     now = dt.datetime.now()
     rid = f"{now:%Y%m%d-%H%M%S}-{req['strategy']}-{secrets.token_hex(2)}"
@@ -148,7 +148,7 @@ def prepare(body, base: Path) -> str:
     except BaseException:
         shutil.rmtree(d, ignore_errors=True)    # never leave a run folder the page would list as "queued" forever
         raise
-    _record(base / "spends.jsonl", req, rid)    # None inside 2021-2024; a failed write never fails the run
+    _record(base / "spends.jsonl", req, rid)    # None before the test days; a failed write never fails the run
     return rid
 
 
@@ -203,10 +203,10 @@ def execute(run_dir: Path, store: TapeStore) -> dict:
     """Run one prepared request to a bundle (in THIS process). Returns run.json."""
     req = read_json(run_dir / "request.json")
     cls = strategies.get(req["strategy"])
-    rng = discipline.parse_range(req["range"])
+    rng = discipline.stored_range(req["range"])     # the request's OWN dates, even if the default has moved since
     if rng.holdout:
         # Item 5 (the record's edge): prepare() already logged this run for the ordinary
-        # path, but a hand-edited request.json (e.g. a range widened to 2025+ after
+        # path, but a hand-edited request.json (e.g. a range widened into the test days after
         # prepare() ran, then `runner exec` invoked on it directly) never went through
         # prepare() at all -- record it here exactly once per run id, never a second time
         # for the normal path. This still only WRITES: the run proceeds either way.
@@ -282,7 +282,7 @@ def execute(run_dir: Path, store: TapeStore) -> dict:
             "inputs": req["inputs"], "strategy_config": req.get("strategy_config", {}),
             "range": req["range"], "qty": req["qty"],
             "commission": req["commission"], "slippage_ticks": req["slippage_ticks"],
-            # `holdout`: this run READ 2025+ data — a fact on the report, not a permission.
+            # `holdout`: this run READ the test days — a fact on the report, not a permission.
             # `holdout_reason` is retired (always null) and kept only so a bundle keeps its shape.
             "capital": req["capital"], "holdout": rng.holdout, "holdout_reason": None,
             "prop_rules": req["prop_rules"], "propsim_error": prop_error,
