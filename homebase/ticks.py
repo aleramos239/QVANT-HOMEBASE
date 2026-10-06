@@ -19,8 +19,8 @@ a 116-page burst drew "Rate limit exceeded" penalties for the next hour).
 So pages are paced (<= 100/hour: the chart service shares the login). At
 night (outside 08:00-17:05 ET on weekdays) a run goes on until done or 08:00
 and waits out a penalty (p-time, then its p-ticket); by day a run spends at
-most DAY_PAGES pages, never runs 09:20-09:35 ET, and a penalty or a refused
-connection ends it until the next run. The job's requests plus the chart
+most DAY_PAGES pages (DAY_ROOT_PAGES a root), never runs 09:20-09:35 ET, and
+a penalty or a refused connection ends it until the next run. The job's requests plus the chart
 service's (it publishes them, charts/md_usage.json) stay under SHARED_MD_CAP
 an hour. Only the LIVE login's md budget is spent -- never the demo (Apex)
 login the 9:30 feed rides.
@@ -287,71 +287,82 @@ async def fetch_session(ws: TradovateWS, contract: str, start: dt.datetime,
     stats["stop"] says why it stopped -- "reached" (a page went past `start`:
     everything in [start, end] is in), "exhausted" (the buffer ran dry first),
     "deadline" (08:00 ET, when `deadline`), "halted" (`halt()` said so),
-    "expired" (`expiry` passed mid-fetch: the broker no longer has the rest)
-    or "max_pages". penalty_stop: a rate-limit reply raises Penalty at once
-    instead of being waited out (the daytime pass backs off to its next run)."""
+    "expired" (`expiry` passed mid-fetch: the broker no longer has the rest),
+    "max_pages" or "failed". penalty_stop: a rate-limit reply raises Penalty at once
+    instead of being waited out (the daytime pass backs off to its next run).
+    Whatever ends the paging once ticks are in -- the line dropped, no token to
+    reconnect with, a penalty by day, the login's hour spent -- does not lose
+    them: they are returned with stop "failed" and the exception as
+    stats["error"] (None otherwise). Raised only when nothing was paged yet."""
     page_fn = page_fn or fetch_page
     start_ms, end_ms = int(start.timestamp() * 1000), int(end.timestamp() * 1000)
     before, seen, rows, pages, penalties = end_ms, set(), [], 0, 0
     stop, earliest = "max_pages", None
     pacer = ws if isinstance(ws, MDConn) else Pacer()   # one run's socket paces EVERY request it sends
     cap = MAX_PAGES if max_pages is None else min(MAX_PAGES, max_pages)
-    while pages < cap:
-        await pacer.pace()
-        if deadline and deadline_passed():          # checked after the wait: it may cross 08:00
-            log(f"{contract}: deadline {DEADLINE_ET} ET — stopping this session here")
-            stop = "deadline"
-            break
-        if halt is not None and halt():
-            stop = "halted"
-            break
-        if expiry is not None and now_et() >= expiry:
-            stop = "expired"                        # the broker no longer has the rest
-            break
-        pacer.sent()
-        if isinstance(ws, MDConn):
-            sock = await ws.ensure()
-        else:
-            sock = ws
-        try:
-            page = await page_fn(sock, contract, before)
-            penalties = 0
-        except (RuntimeError, ConnectionError, OSError) as e:
-            if isinstance(ws, MDConn) and "not connected" in str(e) and ws.dropped < DROPS_MAX:
-                ws.dropped += 1                     # rebuilt on the next loop, after a backoff
-                await sleep(5 * 2 ** (ws.dropped - 1))
-                continue
-            raise
-        except Penalty as pen:
-            if penalty_stop:
-                raise
-            penalties += 1
-            if penalties > PENALTY_MAX:
-                raise RuntimeError(f"{contract}: {penalties} penalties in a row — {pen}")
-            log(f"{contract}: {pen} — waiting {pen.wait_s + 1:.0f}s, resending with its ticket")
-            await sleep(pen.wait_s + 1)
+    error = None
+    try:
+        while pages < cap:
+            await pacer.pace()
+            if deadline and deadline_passed():          # checked after the wait: it may cross 08:00
+                log(f"{contract}: deadline {DEADLINE_ET} ET — stopping this session here")
+                stop = "deadline"
+                break
+            if halt is not None and halt():
+                stop = "halted"
+                break
+            if expiry is not None and now_et() >= expiry:
+                stop = "expired"                        # the broker no longer has the rest
+                break
             pacer.sent()
+            if isinstance(ws, MDConn):
+                sock = await ws.ensure()
+            else:
+                sock = ws
             try:
-                page = await page_fn(sock, contract, before, ticket=pen.ticket)
-            except Penalty as again:
-                await sleep(max(60.0, again.wait_s))    # budget gone: rest a minute
-                continue
-        pages += 1
-        new = [r for r in page if r["id"] not in seen and r["ts_ms"] >= start_ms
-               and r["ts_ms"] < end_ms + 1]
-        if not page or not any(r["id"] not in seen for r in page):
-            stop = "exhausted"
-            break                                   # buffer exhausted
-        seen.update(r["id"] for r in page)
-        rows.extend(new)
-        earliest = page[0]["ts_ms"]
-        if earliest < start_ms:
-            stop = "reached"
-            break                                   # reached the open
-        before = earliest if earliest < before else before - 1
+                page = await page_fn(sock, contract, before)
+                penalties = 0
+            except (RuntimeError, ConnectionError, OSError) as e:
+                if isinstance(ws, MDConn) and "not connected" in str(e) and ws.dropped < DROPS_MAX:
+                    ws.dropped += 1                     # rebuilt on the next loop, after a backoff
+                    await sleep(5 * 2 ** (ws.dropped - 1))
+                    continue
+                raise
+            except Penalty as pen:
+                if penalty_stop:
+                    raise
+                penalties += 1
+                if penalties > PENALTY_MAX:
+                    raise RuntimeError(f"{contract}: {penalties} penalties in a row — {pen}")
+                log(f"{contract}: {pen} — waiting {pen.wait_s + 1:.0f}s, resending with its ticket")
+                await sleep(pen.wait_s + 1)
+                pacer.sent()
+                try:
+                    page = await page_fn(sock, contract, before, ticket=pen.ticket)
+                except Penalty as again:
+                    await sleep(max(60.0, again.wait_s))    # budget gone: rest a minute
+                    continue
+            pages += 1
+            new = [r for r in page if r["id"] not in seen and r["ts_ms"] >= start_ms
+                   and r["ts_ms"] < end_ms + 1]
+            if not page or not any(r["id"] not in seen for r in page):
+                stop = "exhausted"
+                break                                   # buffer exhausted
+            seen.update(r["id"] for r in page)
+            rows.extend(new)
+            earliest = page[0]["ts_ms"]
+            if earliest < start_ms:
+                stop = "reached"
+                break                                   # reached the open
+            before = earliest if earliest < before else before - 1
+    except Exception as ex:  # noqa: BLE001 — what was paged before it is kept (docstring)
+        if not rows:
+            raise
+        stop, error = "failed", ex
     rows.sort(key=lambda r: (r["ts_ms"], r["id"] or 0))
     complete = bool(rows) and rows[0]["ts_ms"] - start_ms < 5 * 60 * 1000  # within 5 min of the open
-    return rows, {"pages": pages, "complete": complete, "stop": stop, "earliest_ms": earliest}
+    return rows, {"pages": pages, "complete": complete, "stop": stop, "earliest_ms": earliest,
+                  "error": error}
 
 
 def deadline_passed(now: dt.datetime | None = None) -> bool:
@@ -374,12 +385,17 @@ def files_stamp(path: Path) -> list:
     return [tickarchive.live_stamp(path), tickarchive.live_stamp(tickarchive.live_path(path))]
 
 
-def refused_still(cache: dict | None, root: str, date: dt.date, path: Path) -> bool:
+def refused_still(cache: dict | None, root: str, date: dt.date, path: Path,
+                  now: dt.datetime | None = None) -> bool:
     """Was this session's merge refused, and are its files still exactly as then?
-    Then it is left alone (no fetch, no merge) until someone changes them."""
+    Then it is left alone (no fetch, no merge) until someone changes them -- except,
+    with `now`, while the broker's history still has the session: what a refusal
+    throws away is gone for good the hour it leaves the broker (2026-10-05: 28
+    sessions), so until then every run tries again."""
     got = (cache or {}).get(REFUSED, {}).get(f"{root} {date}")
     return bool(got) and got.get("stamp") == files_stamp(path) \
-        and got.get("rules") == tickarchive.MERGE_RULES      # a loosened rule gets a second try
+        and got.get("rules") == tickarchive.MERGE_RULES \
+        and not (now is not None and now < history_expiry(session_bounds(date, root)[1]))
 
 
 def store(root: str, date: dt.date, contract: str, path: Path, start: dt.datetime,
@@ -390,8 +406,9 @@ def store(root: str, date: dt.date, contract: str, path: Path, start: dt.datetim
     (homebase.tickarchive: merge, never replace). `entry` logs the fetch in the
     manifest (one entry, or a list of them). A refused or failed merge leaves every file as it was,
     and is logged either way. Only a refusal (tickarchive.MergeRefused -- the files themselves
-    disagree, or don't verify) is remembered in `cache` with the files' stamps, so the next runs
-    don't re-fetch and re-refuse the same ticks for nothing; a merge that merely FAILED (a transient
+    disagree, or don't verify) is remembered in `cache` with the files' stamps, so that once the
+    broker no longer has the session (refused_still) the runs don't re-read and re-refuse the same
+    ticks for nothing; a merge that merely FAILED (a transient
     read/write error, nothing about the data itself) is never cached refused -- its condition may no
     longer hold by the next run, and caching it would leave a session silently unfilled after the
     disk hiccup (or whatever it was) passed. None either way, or with nothing to write."""
@@ -405,7 +422,7 @@ def store(root: str, date: dt.date, contract: str, path: Path, start: dt.datetim
         refused = isinstance(e, tickarchive.MergeRefused)
         what = "MERGE REFUSED" if refused else "MERGE FAILED"
         log(f"{root} {date} {contract}: {what}, every file left as it was — {type(e).__name__}: {e} "
-            "(left alone until its files change)")
+            "(tried again while the broker still has the session, then left alone until its files change)")
         if cache is not None and refused:
             cache.setdefault(REFUSED, {})[f"{root} {date}"] = {
                 "stamp": files_stamp(path), "rules": tickarchive.MERGE_RULES, "why": f"{type(e).__name__}: {e}", "at": tickarchive.now_utc()}
@@ -416,6 +433,7 @@ def store(root: str, date: dt.date, contract: str, path: Path, start: dt.datetim
 class NoMdToken(RuntimeError):
     """No md token on disk yet -- the desk has not (re)connected and written one. The only
     failure a run waits out; it never logs in to get one."""
+    written: tuple = ()         # the manifests the pass that met it did write (record())
 
 
 def _valid_md_tokens(accounts) -> list:
@@ -618,6 +636,8 @@ class MDConn(Pacer):
 BRIDGE_TICKS = PAGE // 2        # gaps with at most this many held ticks between them are fetched as one
 STALE_MS = 15 * 60 * 1000       # a running session's recording this far behind the clock has stopped
 DAY_PAGES = 45                  # a daytime run's pages: the chart service keeps most of the login's 180/h
+DAY_ROOT_PAGES = 15             # ... and one root's share of them: with the live stream thinned every root needs
+                                # its whole tape from the history, and NQ alone took 38 of the 45 (2026-10-05 14:54)
 QUIET = CHARTS_QUIET            # 09:20-09:35 ET, around the 9:30 fire: not one request (the charts' own)
 _EMPTY = {"runs": []}
 ASKED = "_asked"                # cache key: stretches the broker had nothing for, and no file holds
@@ -650,17 +670,21 @@ def missing(root: str, date: dt.date, base: Path, now: dt.datetime, cache: dict,
             prev_last: int | None = None) -> tuple[list, dict]:
     """([(from_ms, to_ms, why)], info): what session `date` lacks so far. The
     open is proven by the previous session's last tick id + 1 (prev_last) or a
-    history fetch; the close (once the session is over) by a history fetch."""
+    history fetch; the close (once the session is over) by a history fetch.
+    Nothing is asked past the last hour the broker has published in full
+    (tickarchive.published_ms): its history of the hours after is thinned, and
+    2026-10-05 the job planted those thinned rows in the archive itself (NQ's
+    19:00 ET hour asked at 19:58: 84 of 2,166 ids). A later run takes them."""
     start, end = session_bounds(date, root)
     s_ms, e_ms, now_ms = _ms(start), _ms(end), _ms(now)
     grace = SESSION_GRACE_MIN * 60_000
     over = now_ms >= e_ms + grace
-    horizon = e_ms if over else min(e_ms, now_ms - grace)
+    horizon = min(e_ms, tickarchive.published_ms(now_ms))
     contract = symbols.front_month(root, date)
     path = archive_path(root, date, contract, base)
     info = {"root": root, "date": date, "contract": contract, "path": path, "start": start,
             "end": end, "over": over, "last_id": None}
-    if horizon <= s_ms or refused_still(cache, root, date, path):
+    if horizon <= s_ms or refused_still(cache, root, date, path, now):
         return [], info
     fa = tickarchive.file_runs(path, cache) if path.exists() else _EMPTY
     fl = tickarchive.file_runs(tickarchive.live_path(path), cache)
@@ -683,6 +707,8 @@ def missing(root: str, date: dt.date, base: Path, now: dt.datetime, cache: dict,
         # BRIDGE_TICKS between two gaps costs less to page through than a page of its own: one job.
         inner: list = []                    # [from_ms, to_ms, ids missing, ticks in the run after it, gaps]
         for r0, r1 in zip(runs, runs[1:]):
+            if r0[3] >= horizon:
+                break                       # not published yet: a later run's
             g = [r0[3], r1[2], r1[0] - r0[1] - 1, r1[1] - r1[0] + 1, 1]
             if inner and inner[-1][3] <= BRIDGE_TICKS:
                 inner[-1][1:] = [g[1], inner[-1][2] + g[2], g[3], inner[-1][4] + 1]
@@ -694,7 +720,8 @@ def missing(root: str, date: dt.date, base: Path, now: dt.datetime, cache: dict,
             gaps.append((runs[-1][3], e_ms, "the close"))
         elif horizon - runs[-1][3] > STALE_MS:
             gaps.append((runs[-1][3], horizon, "the recording stopped"))
-    return [(x, y, why) for a, b, why in gaps for x, y in tickarchive.uncovered(spans, a, b)], info
+    return [(x, y, why) for a, b, why in gaps if a < horizon
+            for x, y in tickarchive.uncovered(spans, a, min(b, horizon))], info
 
 
 def plan(roots, dates: list[dt.date], base: Path, now: dt.datetime,
@@ -747,28 +774,34 @@ async def record(roots=ROOTS, dates: list[dt.date] | None = None,
     """Fetch what the plan names, merging each piece into its session's archive
     file as it lands, then merge the live recordings no fetch touched. At night
     (outside 08:00-17:05 ET on weekdays) it runs until done or 08:00 and waits
-    out a rate-limit reply; by day it spends at most DAY_PAGES pages, never
-    inside 09:20-09:35 ET, and a rate-limit reply or a refused connection ends
-    it until the next run. Says nothing when there is nothing to do. Returns
-    the last manifest written per session."""
+    out a rate-limit reply; by day it spends at most DAY_PAGES pages
+    (DAY_ROOT_PAGES a root), never inside 09:20-09:35 ET, and a rate-limit reply
+    or a refused connection ends it until the next run. What a fetch had paged
+    when it was cut short is merged all the same. Says nothing when there is
+    nothing to do. Returns the last manifest written per session; raises
+    NoMdToken (once the live recordings are merged) when the desk has no md
+    token on disk -- run() waits for one."""
     now = now or now_et()
     day = deadline_passed(now) if day is None else day
     cache = {} if cache is None else cache
     dates = dates if dates is not None else candidate_dates(now)
     sessions, jobs = plan(roots, dates, base, now, cache)
     written: dict = {}
+    no_token = None             # NoMdToken: raised at the end, for run() to wait for the desk
     if jobs:
         conn = ws if isinstance(ws, MDConn) else MDConn(ws, Budget(cache.setdefault(MD_USED, []),
                                                                     charts_usage, day))
         own = ws is None
         budget = DAY_PAGES if day else None
+        spent: dict = {}            # root -> its pages of this run (by day: DAY_ROOT_PAGES at most)
+        refused: set = set()        # sessions whose merge was refused in this run: no more of their pieces now
         grace = dt.timedelta(minutes=SESSION_GRACE_MIN)
         pending: dict = {}          # (root, date) -> this run's fetched rows and fetch entries, not merged yet
 
         def flush() -> None:
-            """Merge each session's pieces fetched so far -- one merge per session, not per piece.
-            Done before the run moves on to pieces that leave the broker later (what was fetched
-            because it was about to expire is on disk at once) and when the run ends, any way."""
+            """Merge what was fetched and is not on disk yet: each piece as it lands (2026-10-05 a
+            run held 2 h 43 min of pages in memory to merge them at its end), and when the run
+            ends, any way."""
             for k in list(pending):
                 p, st = pending.pop(k), sessions[k]
                 over = now_et() >= st["end"] + grace       # the live recording is final
@@ -779,6 +812,8 @@ async def record(roots=ROOTS, dates: list[dt.date] | None = None,
                     log(f"{st['root']} {st['date']} {st['contract']}: file {man['ticks']:,} ticks"
                         + ("" if man["complete"] else ", PARTIAL"))
                     continue
+                if refused_still(cache, st["root"], st["date"], st["path"]):
+                    refused.add(k)
                 for ent in p["entries"]:
                     vouch = ent["stop"] == "reached" or (ent["stop"] == "exhausted" and (
                         ent["earliest_ms"] is not None or ent.get("confirmed")))
@@ -788,14 +823,28 @@ async def record(roots=ROOTS, dates: list[dt.date] | None = None,
                             else tickarchive.ms_of(ent["from_utc"])
                         cache.setdefault(ASKED, {}).setdefault(f"{st['root']} {st['date']}", []).append(
                             [lo, tickarchive.ms_of(ent["to_utc"])])
-        group = None
+
+        def cut_short(ex: Exception, contract: str, what: str) -> bool:
+            """A fetch ended by `ex`: say so. True when the run ends here (the next run goes on)."""
+            nonlocal no_token
+            if isinstance(ex, NoMdToken):
+                no_token = ex
+                return True
+            if isinstance(ex, Penalty):
+                log(f"rate-limited ({ex}) — backing off until the next run")
+                return True
+            if isinstance(ex, BudgetSpent):
+                log(f"{ex} — the next run goes on")
+                return True
+            log(f"{what}: FAILED {ex}")
+            # the connection (a 429/502, no network) ends the run: the next one retries;
+            # one bad symbol must not stop the night
+            return day or not str(ex).startswith(f"{contract}:")
+
         try:
             for expiry, _, _, date, key, s, e, why in jobs:
                 st = sessions[key]
                 root, contract = st["root"], st["contract"]
-                if expiry != group:
-                    flush()
-                    group = expiry
                 if in_quiet(now_et()) or (budget is not None and budget <= 0):
                     break
                 if not day and deadline_passed():
@@ -804,24 +853,21 @@ async def record(roots=ROOTS, dates: list[dt.date] | None = None,
                 if now_et() >= expiry:
                     log(f"{root} {date} {contract} {_et_span(s, e)}: left the broker's history before its turn")
                     continue
+                left = None if budget is None else min(budget, DAY_ROOT_PAGES - spent.get(root, 0))
+                if key in refused or (left is not None and left <= 0):
+                    continue                # refused just now, or the root has had its pages of this daytime run
                 t0 = time.perf_counter()
                 try:
                     rows, stats = await fetch_session(
-                        conn, contract, s, e, expiry=expiry, max_pages=budget, deadline=not day,
+                        conn, contract, s, e, expiry=expiry, max_pages=left, deadline=not day,
                         halt=lambda: in_quiet(now_et()), penalty_stop=day)
-                except Penalty as pen:
-                    log(f"rate-limited ({pen}) — backing off until the next run")
-                    break
-                except BudgetSpent as bs:
-                    log(f"{bs} — the next run goes on")
-                    break
-                except Exception as ex:  # noqa: BLE001 — one bad symbol must not stop the night
-                    log(f"{root} {date} {contract} {_et_span(s, e)}: FAILED {ex}")
-                    if day or not str(ex).startswith(f"{contract}:"):
-                        break      # the connection (no token, a 429/502, no network): the next run retries
+                except Exception as ex:  # noqa: BLE001 — nothing was paged
+                    if cut_short(ex, contract, f"{root} {date} {contract} {_et_span(s, e)}"):
+                        break
                     continue
                 if budget is not None:
                     budget -= stats["pages"]
+                    spent[root] = spent.get(root, 0) + stats["pages"]
                 entry = {"kind": "history", "from_utc": s.astimezone(UTC).isoformat(),
                          "to_utc": e.astimezone(UTC).isoformat(), "why": why, "stop": stats["stop"],
                          "pages": stats["pages"], "earliest_ms": stats["earliest_ms"], "_n": len(rows)}
@@ -840,12 +886,19 @@ async def record(roots=ROOTS, dates: list[dt.date] | None = None,
                 log(f"{root} {date} {contract} {_et_span(s, e)} ({why}): {len(rows):,} ticks, "
                     f"{stats['pages']} pages, {time.perf_counter() - t0:.0f}s ({stats['stop']})")
                 del rows                                 # one copy in memory, not two (ES: 1.2M ticks)
+                flush()
+                if stats["error"] is not None and cut_short(stats["error"], contract,
+                                                            f"{root} {date} {contract} {_et_span(s, e)}"):
+                    break
         finally:
             flush()
             if own:
                 await conn.close()
     for man in promote_live(roots, base, now_et(), cache=cache):
         written[(man["root"], dt.date.fromisoformat(man["session_date"]))] = man
+    if no_token is not None:
+        no_token.written = tuple(written.values())
+        raise no_token
     return list(written.values())
 
 
@@ -1038,10 +1091,11 @@ def run(roots, dates, base: Path, sessions: int = 30, *, sleep=time.sleep,
                 left = token_wait_s
                 while True:
                     try:
-                        written = asyncio.run(record(roots, dates, base, cache=cache,
-                                                     charts_usage=state_dir() / "charts" / "md_usage.json"))
+                        written += asyncio.run(record(roots, dates, base, cache=cache,
+                                                      charts_usage=state_dir() / "charts" / "md_usage.json"))
                         break
-                    except NoMdToken:
+                    except NoMdToken as ex:
+                        written += ex.written
                         if left == token_wait_s:
                             log(f"no valid md token on disk yet — waiting for the desk "
                                 f"(looking every {token_poll_s:g} s for up to {token_wait_s / 60:g} min)")

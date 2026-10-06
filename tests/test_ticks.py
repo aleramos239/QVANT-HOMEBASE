@@ -316,7 +316,7 @@ def test_session_fetch_survives_a_dead_socket(monkeypatch):
 def test_a_partial_capture_never_shortens_a_full_backfill_file(tmp_path, monkeypatch):
     """The broker still had only the session's last 12 minutes: the Massive
     file's other trades all stay, the broker's rows take over where they are."""
-    NoWait(monkeypatch)
+    NoWait(monkeypatch, now=dt.datetime(2026, 9, 22, 18, 0, tzinfo=ET))    # the close's hour is published
     start, end = T.session_bounds(dt.date(2026, 9, 22))
     s, e = int(start.timestamp() * 1000), int(end.timestamp() * 1000)
     rows = [{"ts_ms": e - i * 60_000, "price": 1.0, "size": 1, "bid": 0.75, "ask": 1.0,
@@ -392,7 +392,7 @@ def test_the_fake_window_reproduces_the_hole_the_old_order_left(monkeypatch):
 
 def test_every_roots_first_hours_are_fetched_before_the_broker_drops_them(tmp_path, monkeypatch):
     d = dt.date(2026, 9, 24)
-    nw = NoWait(monkeypatch, now=dt.datetime(2026, 9, 24, 17, 20, tzinfo=ET))
+    nw = NoWait(monkeypatch, now=dt.datetime(2026, 9, 24, 17, 50, tzinfo=ET))
     broker = HistoryWindow(nw, {c: _minute_ticks(d) for c in ("NQZ6", "ESZ6", "YMZ6")}, page=10)
     monkeypatch.setattr(T, "fetch_page", broker.pager)
     out = run(T.record(roots=("NQ", "ES", "YM"), dates=[d], base=tmp_path, ws=object()))
@@ -407,7 +407,7 @@ def test_every_roots_first_hours_are_fetched_before_the_broker_drops_them(tmp_pa
 
 
 def test_the_plan_orders_segments_by_when_they_leave_the_broker(tmp_path):
-    now = dt.datetime(2026, 9, 24, 17, 20, tzinfo=ET)              # Thursday, after the close
+    now = dt.datetime(2026, 9, 24, 17, 50, tzinfo=ET)              # Thursday, the close's hour published
     sessions, jobs = T.plan(("NQ", "ES"), [dt.date(2026, 9, 23), dt.date(2026, 9, 24)], tmp_path, now)
     got = [(root, date.day, s.astimezone(ET).strftime("%d %H:%M"), e.astimezone(ET).strftime("%d %H:%M"))
            for _, _, _, date, (root, _), s, e, _ in jobs]
@@ -491,8 +491,8 @@ def test_the_night_run_merges_the_live_recording_that_holds_the_lost_hours(tmp_p
     assert lp.read_bytes() == live_bytes
     m = out[0]
     assert m["complete"] and m["ticks"] == len(ticks)
-    assert [(x["kind"], x.get("why")) for x in m["sources"]] == [("history", "11 ticks"),
-                                                                ("history", "the close"), ("live", None)]
+    assert [(x["kind"], x.get("why")) for x in m["sources"]] == [("history", "11 ticks"), ("live", None),
+                                                                ("history", "the close")]   # merged piece by piece
     assert len(broker.asked) == 2                            # one page each: the gap, the close
 
 
@@ -524,8 +524,9 @@ def test_a_live_recording_is_merged_even_when_nothing_is_left_to_fetch(tmp_path,
 def test_the_0530_run_fills_what_the_live_recording_missed_without_merging_it_yet(tmp_path, monkeypatch):
     """05:30, today's session under way: the chart service recorded 18:00-18:04
     and stopped (the machine slept). The broker's ticks since then are fetched
-    into the archive file; the live file, still being written, is merged only
-    after the close -- and the evening asks for nothing it already has."""
+    into the archive file -- up to 04:00, the last hour it has published; the
+    live file, still being written, is merged only after the close -- and the
+    evening asks for nothing it already has."""
     d = dt.date(2026, 9, 24)
     nw = NoWait(monkeypatch, now=dt.datetime(2026, 9, 24, 5, 30, tzinfo=ET))
     ticks = _minute_ticks(d)
@@ -534,11 +535,11 @@ def test_the_0530_run_fills_what_the_live_recording_missed_without_merging_it_ye
     path = T.archive_path("NQ", d, "NQZ6", tmp_path)
     _write_live(path.with_name("2026-09-24_NQZ6.live.csv.gz"), ticks[:5])
     out = run(T.record(roots=("NQ",), dates=[d], base=tmp_path, ws=object()))
-    got = _ids(path)                     # the archive: 18:00 (the open, checked) and 18:04-05:25 fetched
-    assert set(got) | {r["id"] for r in ticks[:5]} == {r["id"] for r in ticks[:686]}      # up to 05:25
+    got = _ids(path)                     # the archive: 18:00 (the open, checked) and 18:04-04:00 fetched
+    assert set(got) | {r["id"] for r in ticks[:5]} == {r["id"] for r in ticks[:601]}      # up to 04:00
     assert {x["kind"] for x in out[0]["sources"]} == {"history"} and not out[0]["complete"]
     early = len(broker.asked)
-    nw.now = dt.datetime(2026, 9, 24, 17, 20, tzinfo=ET)      # after the close: the rest, and the live file
+    nw.now = dt.datetime(2026, 9, 24, 17, 50, tzinfo=ET)      # after the close: the rest, and the live file
     out = run(T.record(roots=("NQ",), dates=[d], base=tmp_path, ws=object()))
     assert _ids(path) == [r["id"] for r in ticks] and out[0]["complete"]
     assert "live" in [x["kind"] for x in out[0]["sources"]]
@@ -548,7 +549,7 @@ def test_the_0530_run_fills_what_the_live_recording_missed_without_merging_it_ye
 
 def test_a_fetch_cut_short_by_the_deadline_resumes_where_it_stopped(tmp_path, monkeypatch):
     d = dt.date(2026, 9, 24)
-    nw = NoWait(monkeypatch, now=dt.datetime(2026, 9, 24, 17, 20, tzinfo=ET))
+    nw = NoWait(monkeypatch, now=dt.datetime(2026, 9, 24, 17, 50, tzinfo=ET))
     ticks = _minute_ticks(d)
     broker = HistoryWindow(nw, {"NQZ6": ticks}, page=100)
     monkeypatch.setattr(T, "fetch_page", broker.pager)
@@ -688,9 +689,11 @@ def test_a_weekday_evening_fetches_every_roots_first_hours_first(tmp_path):
     assert heads == list(T.ROOTS)                                     # every root's 18:00-20:00 ET first
     assert all(s == T.session_bounds(dt.date(2026, 9, 29), key[0])[0] for *_, key, s, e, r in jobs[:15])
     tails = [key[0] for *_, key, s, e, r in jobs[15:]]
-    assert tails == list(T.ROOTS)          # then the rest -- BTC/MBT's up to now, their session runs to 18:00
-    btc = [e for *_, key, s, e, r in jobs if key[0] == "BTC"][-1]
-    assert btc.astimezone(ET).strftime("%H:%M") == "17:15"
+    assert tails == list(T.ROOTS)          # then the rest, every root's up to the last hour the broker has published
+    assert {e.astimezone(ET).strftime("%H:%M") for *_, key, s, e, r in jobs[15:]} == {"16:00"}
+    now = dt.datetime(2026, 9, 29, 17, 50, tzinfo=ET)                 # 17:00 is published: the classic roots' close;
+    _, jobs = T.plan(T.ROOTS, [dt.date(2026, 9, 29)], tmp_path, now)  # BTC/MBT's session runs on to 18:00
+    assert {e.astimezone(ET).strftime("%H:%M") for *_, key, s, e, r in jobs[15:]} == {"17:00"}
 
 
 def test_6j_prices_keep_their_seventh_decimal():
