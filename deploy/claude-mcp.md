@@ -66,6 +66,8 @@ version: restart that service (never 09:20–09:35 ET on weekdays).
   (`python -m homebase.ticks --coverage` rewrites it). With no file it says so and returns cleanly (no error).
   The watchdog's part comes from `data_watch.json`, written at the end of every run of the tick job (a new
   process each hour: no service restart); a reading over 3 hours old is shown as "NOT CHECKED since".
+  A report written before the classes existed (whole / filling / lost / vendor gap / not a hole) is shown the old
+  way, until the tick job writes its next one.
 - **Claude Code itself**: a running session keeps the tool list it started with: after a service restart or
   a code change, start a new session (or `/mcp` reconnect) to pick up new tools and new fields.
 

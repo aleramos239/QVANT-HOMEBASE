@@ -133,6 +133,69 @@ def _watch_lines(st: dict, line: str, stale: bool) -> list[str]:
     return out + [""]
 
 
+NOT_A_HOLE = (("exchange holiday", "exchange holiday"), ("the 17:00 hour", "the 17:00 hour"), ("weekend", "weekend"))
+ROWS_MAX = 100
+
+
+def _classed(rep: dict, roots: list[str]) -> list[str]:
+    """data_coverage for a report whose sessions carry a class (homebase.tickcoverage.CLASSES): the counts,
+    what the broker still has (until when) and what is lost as tables, the vendor's gaps as a list, the
+    not-a-hole sessions as a count by reason, and what changed since the report before."""
+    by_root, s = rep.get("roots") or {}, rep.get("summary") or {}
+    c, fill, lost = s.get("classes") or {}, s.get("filling") or {}, s.get("lost") or {}
+    lines = [f"Coverage as of {_et(rep['generated_at_utc'], '%m-%d %H:%M')} ET · last {rep.get('sessions_per_root')} "
+             f"sessions/root: {c.get('whole', 0)} whole, {c.get('filling', 0)} filling, {c.get('lost', 0)} lost, "
+             f"{c.get('vendor_gap', 0)} vendor gap, {c.get('not_a_hole', 0)} not a hole"]
+    if fill.get("until_utc"):
+        lines.append(f"Still at the broker until {_et(fill['until_utc'], '%m-%d %H:%M')} ET: "
+                     f"{fill.get('hole_hours', 0):g} hole-hours, {fill.get('missing_ids', 0):,} tick ids")
+    lines += [f"Left the broker: {lost.get('hole_hours', 0):g} hole-hours, {lost.get('missing_ids', 0):,} tick ids", ""]
+    rows = {k: [] for k in ("filling", "lost", "vendor_gap", "not_a_hole")}
+    for r in roots:
+        entries = by_root.get(r)
+        if entries is None:
+            lines.append(f"{r}: no entries in the report.")
+            continue
+        counts: dict = {}
+        for e in entries:
+            counts[e.get("class")] = counts.get(e.get("class"), 0) + 1
+            if e.get("class") in rows:
+                rows[e["class"]].append((r, e))
+        lines.append(f"{r}: " + _kv(counts))
+
+    def num(e, key, k):
+        """The session's hole-hours / missing ids of that fate ("hours" / "ids": {"filling": n, "lost": n})."""
+        n = (e.get(key) or {}).get(k)
+        return f"{int(n) if n == int(n) else n:,}" if n else "—"
+    if rows["filling"]:
+        lines += ["", "Filling (the broker still has it):",
+                  _table(["root", "session", "until", "hole hours", "missing ids", "what"],
+                         [[r, e["session"], f"{_et(e['until_utc'], '%m-%d %H:%M')} ET" if e.get("until_utc") else "—",
+                           num(e, "hours", "filling"), num(e, "ids", "filling"), e.get("why", "")]
+                          for r, e in rows["filling"][:ROWS_MAX]])]
+    if rows["lost"]:
+        lines += ["", "Lost (left the broker: only bought data can fill it):",
+                  _table(["root", "session", "hole hours", "missing ids", "what"],
+                         [[r, e["session"], num(e, "hours", "lost"), num(e, "ids", "lost"), e.get("why", "")]
+                          for r, e in rows["lost"][:ROWS_MAX]])]
+    more = sum(max(0, len(rows[k]) - ROWS_MAX) for k in ("filling", "lost"))
+    if more:
+        lines.append(f"... and {more} more.")
+    if rows["vendor_gap"]:
+        lines += ["", "Vendor gap (the bought file itself is empty there): "
+                  + ", ".join(f"{r} {e['session']}" for r, e in rows["vendor_gap"])]
+    if rows["not_a_hole"]:
+        n = len(rows["not_a_hole"])
+        why = [f"{label} {k}" for key, label in NOT_A_HOLE
+               if (k := sum(1 for _, e in rows["not_a_hole"] if key in (e.get("why") or "")))]
+        lines += ["", f"Not a hole: {n} session{'s' if n != 1 else ''} ({', '.join(why) or 'the exchange was closed'})"]
+    if rep.get("changes"):
+        since = f"{_et(rep['previous_generated_at_utc'])} ET" if rep.get("previous_generated_at_utc") \
+            else "the previous report"
+        lines += ["", f"Changed since {since}: " + "; ".join(rep["changes"][:ROWS_MAX])]
+    return lines
+
+
 # ---------------------------------------------------------------- schemas
 
 def _spec(name, description, props=None, required=()):
@@ -156,9 +219,10 @@ SPECS = [
           "strategies armed/assigned, the 9:30 timer gated): ready or not, and every check -- plus one "
           "line from the tick job's data watchdog: is the market data late, thin or silent."),
     _spec("data_coverage", "The data watchdog's last reading (live feed late / thin / silent, refused "
-          "merges, what is about to leave the broker), then tick/depth archive holes per root, session "
-          "and hour, from the last coverage report (homebase/.state/tick_coverage.json), and which "
-          "sessions need a Massive backfill. Says so if no report has been written yet.",
+          "merges, what is about to leave the broker), then the tick archive's last coverage report "
+          "(homebase/.state/tick_coverage.json): every session as whole, filling (the broker still has "
+          "it: until when), lost (only bought data can fill it), vendor gap or not a hole, and what "
+          "changed since the report before. Says so if no report has been written yet.",
           {"root": {"type": "string", "description": "Only this root, e.g. NQ (default: every root)."}}),
     _spec("services_health", "Whether the desk and charts service answer, their launchd PIDs, the "
           "nightly tick job's last log lines, and each recorder's most recent archive file time."),
@@ -292,6 +356,8 @@ class DeskMixin:
         by_root = rep.get("roots") or {}
         roots = [root.upper()] if root else sorted(by_root)
         s = rep.get("summary") or {}
+        if any("class" in e for es in by_root.values() for e in es):
+            return head + "\n".join(_classed(rep, roots))
         lines = [f"Coverage as of {rep.get('generated_at_utc')} · last {rep.get('sessions_per_root')} sessions/root · "
                  f"{s.get('complete', 0)} complete, {s.get('partial', 0)} partial "
                  f"({s.get('hole_hours', 0):g} hole-hours), {s.get('live_only', 0)} live-only, "

@@ -740,8 +740,8 @@ def plan(roots, dates: list[dt.date], base: Path, now: dt.datetime,
     every root's first hours before any root's long tail), a session's open
     before its later pieces, root priority (ROOTS order), date. A piece already
     gone from the broker is not a job: it is said once, the hour it goes (the
-    coverage report marks it "needs Massive") -- not at all with `quiet` (the
-    data watchdog reads the same plan at the run's end: homebase.datawatch)."""
+    coverage report classes it lost) -- not at all with `quiet` (the data
+    watchdog reads the same plan at the run's end: homebase.datawatch)."""
     cache = {} if cache is None else cache
     rank = {r: i for i, r in enumerate(ROOTS)}
     sessions, jobs = {}, []
@@ -961,8 +961,10 @@ REPORT_EVERY = dt.timedelta(hours=12)    # a run with nothing to do still refres
 
 
 def coverage_report(roots, base: Path, sessions: int) -> None:
-    """Write homebase/.state/tick_coverage.json -- with the data watchdog's last reading in it -- and
-    log its summary line; a failure here is logged, never raised (the run's data is already written)."""
+    """Write homebase/.state/tick_coverage.json -- every session classed (whole, filling, lost, vendor
+    gap, not a hole), the data watchdog's last reading in it -- and log its summary line and what
+    changed since the report before; a failure here is logged, never raised (the run's data is already
+    written)."""
     from . import datawatch, tickcoverage         # they import this module
     try:
         tickcoverage.write_report(roots, base, now_et(), state_dir() / "tick_coverage.json", sessions,

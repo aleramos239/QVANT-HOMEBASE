@@ -165,6 +165,43 @@ def test_data_coverage_reads_the_local_report(desk, charts, monkeypatch, tmp_pat
         box(desk, charts).call("data_coverage", {})
 
 
+def test_data_coverage_sorts_the_sessions_by_class(desk, charts, monkeypatch, tmp_path):
+    """A report with classes (tickcoverage.CLASSES): what the broker still has and until when, what is lost,
+    the vendor's own gaps, and how many are not holes at all -- then what changed since the report before."""
+    monkeypatch.setattr("homebase.paths.state_dir", lambda: tmp_path)
+    nq = [{"session": "2026-09-28", "status": "complete", "class": "whole"},
+          {"session": "2026-09-25", "status": "partial", "class": "filling", "until_utc": "2026-09-27T00:00:00+00:00",
+           "hole_hours": 2.0, "missing_ids": 1_500_000, "hours": {"filling": 2.0},
+           "ids": {"filling": 1_499_500, "lost": 500},
+           "why": "500 tick ids have left the broker; the rest is at the broker until 09-26 20:00 ET"},
+          {"session": "2026-09-24", "status": "missing", "class": "lost", "hours": {"lost": 23.0},
+           "why": "nothing recorded, and it has left the broker"},
+          {"session": "2026-09-22", "status": "partial", "class": "vendor_gap", "hole_hours": 2.0, "missing_ids": 0,
+           "why": "the bought file itself has no ticks 13:00-15:00 ET"},
+          {"session": "2026-09-07", "status": "missing", "class": "not_a_hole", "why": "exchange holiday: its trades "
+                                                                                      "are filed under the next session"}]
+    report = {"generated_at_utc": "2026-09-25T21:30:00+00:00", "sessions_per_root": 5,
+              "summary": {"classes": {"whole": 1, "filling": 1, "lost": 1, "vendor_gap": 1, "not_a_hole": 1},
+                          "filling": {"hole_hours": 2.0, "missing_ids": 500, "until_utc": "2026-09-27T00:00:00+00:00"},
+                          "lost": {"hole_hours": 23.0, "missing_ids": 0}},
+              "changes": ["NQ 09-25 new: filling until 09-26 20:00 ET"],
+              "previous_generated_at_utc": "2026-09-25T20:30:00+00:00", "roots": {"NQ": nq}}
+    (tmp_path / "tick_coverage.json").write_text(json.dumps(report))
+    text = box(desk, charts).call("data_coverage", {})
+    assert "Coverage as of 09-25 17:30 ET · last 5 sessions/root: 1 whole, 1 filling, 1 lost, 1 vendor gap, " \
+           "1 not a hole" in text
+    assert "Still at the broker until 09-26 20:00 ET: 2 hole-hours, 500 tick ids" in text
+    assert "Left the broker: 23 hole-hours, 0 tick ids" in text
+    assert "| NQ | 2026-09-25 | 09-26 20:00 ET | 2 | 1,499,500 | 500 tick ids have left the broker; the rest" in text
+    assert "| NQ | 2026-09-24 | 23 | — | nothing recorded, and it has left the broker |" in text
+    assert "Vendor gap (the bought file itself is empty there): NQ 2026-09-22" in text
+    assert "Not a hole: 1 session (exchange holiday 1)" in text
+    assert "Changed since 16:30 ET: NQ 09-25 new: filling until 09-26 20:00 ET" in text
+    assert "Needs Massive" not in text
+    only = box(desk, charts).call("data_coverage", {"root": "es"})
+    assert "ES: no entries in the report." in only and "2026-09-25" not in only
+
+
 WATCH = {"at_utc": "2026-09-29T13:55:00+00:00", "level": "warn", "late_s": 600, "late": ["NQ", "ES"], "thin": ["NQ"],
          "silent": [], "line": "data: the live feed is 10 min late (2 of 2 markets); thin: NQ got 16% of its ticks "
                                "08:00-09:00 ET",
