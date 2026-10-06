@@ -3,7 +3,9 @@
 Every handler goes through Client (loopback :8852, /api/tester/* only) -- except write_strategy /
 delete_draft, which write/remove one file in the drafts dir through homebase.draftstore (text only;
 the chart service loads drafts in a child process, never in-process), and set_group / list_strategies,
-which write / read the Lab's groups.json beside them the same way (no strategy file changes).
+which write / read the Lab's groups.json beside them the same way (no strategy file changes). The
+blueprint_* tools (blueprint_tools.py) ask no service at all: each starts the research toolkit as a child
+process.
 
 Long jobs (backtest, heatmap, walkforward) poll until done, up to `wait_s` (default 120 s); past that
 they return the job id and its progress, and the same tool called with that id picks the wait back up.
@@ -19,6 +21,8 @@ from collections import OrderedDict
 from zoneinfo import ZoneInfo
 
 from .. import draftstore
+from .blueprint_tools import SPECS as BLUEPRINT_SPECS
+from .blueprint_tools import BlueprintMixin
 from .client import Client, ToolError, base_url
 from .desk_tools import SPECS as DESK_SPECS
 from .desk_tools import DeskMixin
@@ -176,7 +180,7 @@ SPECS = [
            "group": {"type": "string", "description": "The group's name (1-40 characters). \"\" or left out: "
                                                       "in no group (the list shows it under Ungrouped)."}},
           ["strategy"]),
-] + DESK_SPECS
+] + BLUEPRINT_SPECS + DESK_SPECS
 
 
 # ---------------------------------------------------------------- formatting
@@ -379,7 +383,7 @@ def _compare_text(wid: str, s: dict) -> str:
     return "\n".join(lines)
 
 
-class Toolbox(DeskMixin):
+class Toolbox(BlueprintMixin, DeskMixin):
     def __init__(self, client: Client | None = None, *, sleep=time.sleep, clock=time.monotonic,
                  poll_s: float = 1.0, desk=None, charts_export=None):
         self._client = client
