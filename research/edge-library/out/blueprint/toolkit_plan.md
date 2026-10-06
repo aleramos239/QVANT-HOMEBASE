@@ -102,3 +102,20 @@ A line reads like `2.2 FAIL average trade $41 (need $70)`. Each command also ret
 ## 7. Known limits of version 1
 The "first look" (entry alone with a time exit) needs a no-stop exit cell: not in version 1. Clock-time ideas, Level 2 filters and
 evening sessions come later. The page's own Monte Carlo and prop tile use the end-of-day rule; `sim` counts open losses: label both.
+
+## 8. The contract between the toolkit and the connector (fixed 2026-10-06 so both sides can be built at once)
+Every command takes `--json` and then prints exactly ONE JSON object on stdout (logs go to stderr):
+```
+{"ok": true|false, "command": "build", "name": "<idea>", "status": "idea|lead|proven_on_history|proven_live|shelved",
+ "phase": 0-6, "round": n|null,
+ "lines": [{"line": "2.2", "passed": true|false|null, "number": 41.0, "need": 70.0, "text": "2.2 FAIL average trade $41 (need $70)"}],
+ "text": "the same result as plain lines for a person", "next": "what to do next, one sentence",
+ "job": {"id": "...", "state": "queued|running|done|error", "progress": "..."} | null,
+ "saved": ["paths written"], "error": null | "why it was refused"}
+```
+Exit code 0 = done (lines may still fail), 2 = refused (`ok` false, `error` says why), 1 = crashed.
+Long commands (`build`, `test`) take `--wait <seconds>`: past that they return `job.state = running`; `bp.py job <id> --json`
+picks the wait back up. `--root <folder>` (or the environment variable `HOMEBASE_IDEAS_ROOT`) moves the idea folder away from
+`~/.homebase/ideas` — tests always use a temp folder. `passed: null` = the line does not apply (say why in `text`).
+The connector finds the toolkit at `<repo>/research/edge-library/bp.py` and runs it with the engine's Python
+(`$HOME/ONYX TRADING/.venv/bin/python`); both paths can be overridden by environment variables (`HOMEBASE_BP`, `HOMEBASE_BP_PYTHON`).
