@@ -4,8 +4,10 @@
 Version 1.0. Every strategy that is built, tested, optimized or judged — in the research engine or in the Homebase tester, by a
 person or by an assistant in any chat — follows section 2. It replaces the admission rules, the periods and the round count of
 `EDGE_SPEC.md` (see its "ADMISSION v3"). Changing a line here needs the owner's word.
-Not yet built to match: `judge.py` still scores the old rules (v2), and the Homebase tester's default dates are still 2021-2024.
-Until they are updated, the requirements of section 2 are checked by hand and a v2 verdict is not a blueprint verdict.
+Built on 2026-10-06 (night): the toolkit `bp.py` runs every phase (`bp.py --help`; plan and decisions in
+`out/blueprint/toolkit_plan.md`), and the Homebase connector offers it to every chat as nine `blueprint_*` tools that save each
+idea in the app (`~/.homebase/ideas`, a Lab draft, a tester run, a Lab group per status). The tester's default dates are the build
+days. `judge.py` still scores the OLD rules (v2) for the old stores: a v2 verdict is not a blueprint verdict.
 Evidence: `out/blueprint/gate_backtest.md`, `protocol_gates.md`, `mc_gates.md`, `funnel.md`, `course_review.md`,
 `out/v2_summary.md`, `out/oos_summary.md`, `out/overfit8/OVERFIT_CHECK.md`. Dollars are 1 contract after costs.
 
@@ -261,15 +263,16 @@ c. **Older history — parked (owner: not now).** Every archive on this Mac star
 
 Never confirmed by the owner, so they stand as defaults: 5.3 (his 2026-10-03 bar) and 5.4 (set per strategy).
 
-Done on 2026-10-05: `EDGE_SPEC.md` "ADMISSION v3", the vault rule note, the `strategy-blueprint` skill and `CLAUDE.md`, so that a
-new chat follows this file. Still to build, in this order (each needs the owner's go-ahead):
-1. The Homebase tester: build and test dates as the default ranges, the connector's instructions, and a checklist that reads
-   section 2 off a heat map.
-2. `judge.py`: build = 22 Sep 2021 - 30 Jun 2025 · lines 2.1 to 2.9 · the out-of-sample test on Jul 2025 - Sep 2026 as one read with
-   lines 4.1 to 4.7 · labels on the cards. Locked by tests.
-3. The code check as a tool: the assertions of phase 1 run on every new block or idea.
-4. An eval card per strategy, filled from the desk journal: replay match, slip, the drawdown table, the average trade.
-5. Then the waiting idea batch (`ideas/specs/r3_*.json`), each idea with its card first.
+Done on 2026-10-05 and 2026-10-06: `EDGE_SPEC.md` "ADMISSION v3", the vault rule note, the `strategy-blueprint` skill and
+`CLAUDE.md`; the tester's dates; the toolkit (`bp.py`: blocks, card, code-check, build, lock, test, sim, eval-card, status) and
+its nine connector tools; the 12 random-entry control pools on the build days (`runs_bp/`).
+Still to build:
+1. In one chart-service restart: an ideas panel on the Lab page, and the tester's own late-fill fields.
+2. Runnable tester drafts: version 1 saves an idea as a RECORD in the Lab (card, settings, verdict), not as code the tester runs.
+   Needed before line 6.1 can be checked against a tester replay.
+3. What version 1 refuses: a home of "all", the evening session, two filters at once, exits of its own, clock-time ideas,
+   Level 2 filters, and the family `va_reclaim`.
+4. Then the waiting idea batch (`ideas/specs/r3_*.json`), each idea with its card first.
 
 The 8 not-proven strategies have used up their history (every period is a second look), so they stay NOT PROVEN.
 Only new unseen days or real fills on paper can change that.

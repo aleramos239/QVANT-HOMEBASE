@@ -427,7 +427,10 @@ rounds -> 5 rounds, each with its reason written first. "EXAM once on frozen sta
 UNCHANGED: house rules and compute windows · the intraday (open-loss) breach model · flat by 15:58 · 1-contract runs · the exit menu ·
 costs and the stress definition (2 ticks + 250 ms, + 100 ms late cancel for brackets) · random controls with 10 seeds · the average
 rule and the middle-survivor default · the stack rules · the 5-second share shown on every card · every attempt counted in the ledger.
-NOT BUILT YET: judge.py still implements v2 (its PERIODS and tests). Until it is updated a v2 verdict is NOT a blueprint verdict, and
-no store may be run on 2025-07-01 or later for a unit that is not locked under BLUEPRINT phase 3. The 15 saved strategies have used
-their history under the old periods: they stay NOT PROVEN.
+BUILT 2026-10-06: the toolkit bp.py (blocks, card, code-check, build, lock, test, sim, eval-card, status) scores BLUEPRINT section 2
+line by line; every threshold is in blueprint/templates/rules.json. Engine switches: bp_build (2021-09-22..2025-06-30) and bp_test
+(2025-07-01..latest, opened only by runner.run_test after the read is claimed in the app's read log). Stores: runs_bp/ (build, and
+the 12 control pools with 10 seeds), runs_bp_test/ (test). AMENDS "write only under W": idea records are saved in the app,
+~/.homebase/ideas/<name>/ (the owner: "saves everything in the app"). judge.py still implements v2 for the old stores: a v2 verdict is
+NOT a blueprint verdict. The 15 saved strategies have used their history under the old periods: they stay NOT PROVEN.
 Evidence behind the lines: out/blueprint/ (gate_backtest.md, protocol_gates.md, mc_gates.md, funnel.md, course_review.md).
