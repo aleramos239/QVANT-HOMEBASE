@@ -1,4 +1,4 @@
-"""The connector's blueprint tools (homebase.claude_mcp.blueprint_tools): the eight tool definitions, the exact
+"""The connector's blueprint tools (homebase.claude_mcp.blueprint_tools): the nine tool definitions, the exact
 command line each one runs, and what comes back -- against a FAKE toolkit: a small script written here that
 answers each command with the JSON of the toolkit plan's section 8 (a refusal with exit code 2, a crash, a job
 that is still running), and saves a card and a build through homebase.ideastore as the real toolkit does.
@@ -9,6 +9,7 @@ import json
 import os
 import pwd
 import queue
+import re
 import subprocess
 import sys
 import threading
@@ -30,8 +31,14 @@ CARD = {"why": "the 08:30 burst carries into the open", "loser": "late faders",
 SETTINGS = {"family": "orb", "params": {"or_min": ["5", "15", "30"]}, "fixed": {"mode": "break"}, "filters": [],
             "exits": "standard", "limits": {"max_tr": 1}}
 ACCOUNT = "lucid-pro-50k@2026-09-27b"
-FILLS = [{"date": "2026-10-01", "side": "long", "net": 120.0, "entry_slip_ticks": 1},
-         {"date": "2026-10-02", "side": "short", "net": -80.0, "entry_slip_ticks": 2}]
+# The live orders of an eval in the toolkit's format (research/edge-library/blueprint/evalcard.py, FILLS): a trade,
+# then an order that did not trade. FIELDS = its KEYS, in its order; a trade's first eight ([1:9]) are required.
+FIELDS = ["status", "entry_time", "exit_time", "side", "size", "entry_price", "exit_price", "net", "exit_reason",
+          "entry_slip_ticks", "trigger_price", "replay", "fixed", "note"]
+FILLS = [{"entry_time": "2026-10-01T08:45:02-04:00", "exit_time": "2026-10-01T09:12:40-04:00", "side": "long",
+          "size": 1, "entry_price": 2655.3, "exit_price": 2657.3, "net": 18.4, "exit_reason": "tp",
+          "entry_slip_ticks": 1, "replay": {"entry_time": "2026-10-01T08:45:00-04:00", "exit_reason": "tp"}},
+         {"status": "missed", "entry_time": "2026-10-02T08:45:00-04:00", "side": "short"}]
 
 FAKE = r'''
 """A fake blueprint toolkit: canned answers in the JSON of the toolkit plan, section 8."""
@@ -91,6 +98,12 @@ if name == "noisy_ok":
     print("a warning some library printed on stdout")
     out(result(cmd, phase=3, text="locked all the same"))
 
+if cmd == "blocks":
+    out(result(cmd, status=None, text="THE BLOCKS: what an idea can be built from without writing code\n"
+               "ENTRY TRIGGERS (settings.family; ONE an idea): 1 runs on the build days\n  orb  the opening range breaks\n"
+               "WHAT VERSION 1 REFUSES\n  the evening session: it comes later",
+               next="Write the idea card from these blocks: bp.py card <name> --spec=-",
+               blocks={"refused": [{"what": "the evening session", "why": "it comes later"}]}, counts={"families": 1, "refused": 1}))
 if cmd == "card":
     spec = json.loads(stdin)
     ideastore.create(name, root, exist_ok=True)
@@ -144,8 +157,10 @@ if cmd == "sim":
                text="account %s, %s attempts, fee budget $%s" % (opt["account"], opt["attempts"], opt["fee-budget"])))
 if cmd == "eval-card":
     n = len(json.loads(stdin)["fills"]) if "fills" in opt else 0
-    out(result(cmd, status="proven_on_history", phase=6, lines=lines(6, 8, na=("6.4", "6.5", "6.6", "6.8")),
-               text="%d live fills read" % n))
+    ls = [dict(x, text=x["text"].replace("words about", "not judged yet:")) if x["passed"] is None else x
+          for x in lines(6, 8, na=("6.4", "6.5", "6.6", "6.8"))]
+    out(result(cmd, status="proven_on_history", phase=6, lines=ls,
+               text="%d live fills read for %s" % (n, opt.get("account", "the account of the sim saved last"))))
 if cmd == "status":
     out(result(cmd, status=None, text=("%s: idea, phase 2, round 1" % name) if name else "2 ideas\nnq_orb_pre: idea\ngood_idea: lead"))
 out(result(cmd, ok=False, status=None, error="unknown command " + cmd), 2)
@@ -202,34 +217,42 @@ def tail(ideas_root) -> list[str]:
     return [f"--root={ideas_root}", "--json"]
 
 
-# ---------------------------------------------------------------- the eight tools
+# ---------------------------------------------------------------- the nine tools
 
-REQUIRED = {"blueprint_card": ["name", "card", "settings"], "blueprint_code_check": ["name"],
+REQUIRED = {"blueprint_blocks": [], "blueprint_card": ["name", "card", "settings"], "blueprint_code_check": ["name"],
             "blueprint_build": ["name"], "blueprint_lock": ["name"], "blueprint_test": ["name", "confirm"],
             "blueprint_sim": ["name", "account", "attempts", "fee_budget"], "blueprint_eval_card": ["name"],
             "blueprint_status": []}
-INPUTS = {"blueprint_card": ["name", "card", "settings"],
+INPUTS = {"blueprint_blocks": [], "blueprint_card": ["name", "card", "settings"],
           "blueprint_code_check": ["name", "store", "trades_file", "run_id", "looked"],
           "blueprint_build": ["name", "reason", "wait_s", "job_id"], "blueprint_lock": ["name"],
           "blueprint_test": ["name", "confirm", "wait_s", "job_id"],
-          "blueprint_sim": ["name", "account", "attempts", "fee_budget"], "blueprint_eval_card": ["name", "fills"],
-          "blueprint_status": ["name", "job_id"]}
-PHASE = {"blueprint_card": "Blueprint phase 0, the idea card", "blueprint_code_check": "Blueprint phase 1, the code check",
+          "blueprint_sim": ["name", "account", "attempts", "fee_budget"],
+          "blueprint_eval_card": ["name", "fills", "account"], "blueprint_status": ["name", "job_id"]}
+PHASE = {"blueprint_blocks": "Blueprint, before the card",
+         "blueprint_card": "Blueprint phase 0, the idea card", "blueprint_code_check": "Blueprint phase 1, the code check",
          "blueprint_build": "Blueprint phase 2, the build", "blueprint_lock": "Blueprint phase 3, the freeze",
          "blueprint_test": "Blueprint phase 4, the out-of-sample test",
          "blueprint_sim": "Blueprint phase 5, before the eval is bought", "blueprint_eval_card": "Blueprint phase 6, the eval",
          "blueprint_status": "Blueprint, any phase"}
 
 
-def test_the_eight_tools_their_inputs_and_what_each_requires():
+def texts(o) -> list[str]:
+    """Every description a chat reads in a tool definition, the nested ones too."""
+    if isinstance(o, dict):
+        return [v for k, v in o.items() if k == "description" and isinstance(v, str)] + [t for v in o.values() for t in texts(v)]
+    return [t for v in o for t in texts(v)] if isinstance(o, list) else []
+
+
+def test_the_nine_tools_their_inputs_and_what_each_requires():
     specs = {s["name"]: s for s in blueprint_tools.SPECS}
-    assert list(specs) == list(REQUIRED) and len(specs) == 8
+    assert list(specs) == list(REQUIRED) and len(specs) == 9
     listed = {s["name"]: s for s in tools.Toolbox().specs()}
     for name, spec in specs.items():
         schema = spec["inputSchema"]
         assert listed[name] is spec and callable(getattr(tools.Toolbox, f"t_{name}"))
         assert schema["required"] == REQUIRED[name], name
-        assert list(schema["properties"]) == INPUTS[name], name            # exactly the inputs of the plan, section 4
+        assert list(schema["properties"]) == INPUTS[name], name            # the inputs of the plan, section 4 (+ --account)
         assert schema["type"] == "object" and schema["additionalProperties"] is False
         assert spec["description"].startswith(PHASE[name]), name               # each says which phase it is
         json.dumps(spec)
@@ -252,14 +275,85 @@ def test_the_test_tool_says_the_test_days_are_read_once_and_asks_for_an_explicit
     assert "confirm" in spec["inputSchema"]["required"]
 
 
+def test_the_blocks_tool_takes_nothing_and_says_to_call_it_before_writing_a_card():
+    spec = blueprint_tools.SPECS[0]
+    assert spec["name"] == "blueprint_blocks" and spec["inputSchema"]["properties"] == {}
+    said = spec["description"]
+    assert "Call this before writing an idea card (blueprint_card)." in said and said.endswith("Runs nothing.")
+    for what in ("everything an idea can be built from without writing code", "entry triggers", "filters",
+                 "standard exit table", "sessions", "bar sizes", "markets with their cost floors",
+                 "Monte Carlo settings", "size steps", "what version 1 of the toolkit refuses"):
+        assert what in said, what
+
+
+def test_no_tool_text_offers_what_version_1_of_the_toolkit_refuses():
+    """The toolkit's version 1 (research/edge-library/blueprint/blocklist.py REFUSED, records.py) refuses a home of
+    "all", the evening session, and limits.trail_atr / limits.exit_bars. The card's description says so in one
+    sentence; no other text of these tools names one of them."""
+    spec = next(s for s in blueprint_tools.SPECS if s["name"] == "blueprint_card")
+    card, settings = (spec["inputSchema"]["properties"][k] for k in ("card", "settings"))
+    home = card["properties"]["home"]
+    assert home["description"].startswith("0.3 Its home: ONE market, session and bar size")
+    assert [home["properties"][k]["description"] for k in ("market", "session", "bar")] == [
+        "NQ, ES or GC.", "asia, london, pre, nyam, mid or pm.", "The bar size in minutes (5, 15, ...)."]
+    assert settings["properties"]["limits"]["description"] == "Optional: max_tr (entries per session), dir."
+    refuses = ('Version 1 also refuses a home of "all" (it judges ONE home table: the others are neighbors), the '
+               "evening session, and limits.trail_atr / limits.exit_bars (exits of their own): blueprint_blocks lists "
+               "everything it refuses.")
+    assert spec["description"].endswith(refuses)
+    said = "\n".join(texts(blueprint_tools.SPECS))
+    assert said.count(refuses) == 1
+    for gone in (r'"all"', r"\bor all\b", r"\beve\b", r"\bevening\b", r"exit_bars", r"trail_atr"):
+        assert not re.search(gone, said.replace(refuses, "")), gone
+
+
+def test_the_eval_card_states_the_fills_format_as_the_toolkit_reads_it():
+    """research/edge-library/blueprint/evalcard.py, FILLS: a trade says its first eight fields and may say the
+    others; an order that did not trade is {status: missed | rejected}; a field that is not listed is refused.
+    The account is the toolkit's own option (--account), and optional as it is there."""
+    spec = next(s for s in blueprint_tools.SPECS if s["name"] == "blueprint_eval_card")
+    props = spec["inputSchema"]["properties"]
+    assert props["fills"]["type"] == "array" and "oldest first" in props["fills"]["description"]
+    trade, lost = props["fills"]["items"]["anyOf"]
+    assert list(trade["properties"]) == FIELDS and trade["required"] == FIELDS[1:9]
+    assert trade["properties"]["status"]["enum"] == ["filled"]
+    assert list(lost["properties"]) == ["status", "entry_time", "side", "replay", "fixed", "note"]
+    assert lost["required"] == ["status"] and lost["properties"]["status"]["enum"] == ["missed", "rejected"]
+    assert trade["additionalProperties"] is False and lost["additionalProperties"] is False
+    replay = trade["properties"]["replay"]
+    assert list(replay["properties"]) == ["entry_time", "exit_reason", "no_trade"] and lost["properties"]["replay"] is replay
+    assert trade["properties"]["size"] == {"type": "integer", "minimum": 1,
+                                           "description": "Micros traded: a whole number from 1 (stage A is 1)."}
+    for f in FILLS:                                                     # the fills these tests send are in the format
+        shape = lost if "status" in f else trade
+        assert set(shape["required"]) <= set(f) <= set(shape["properties"]), f
+    said = spec["description"]
+    assert ("A TRADE (an order that filled and is flat again) must say entry_time, exit_time, side, size, entry_price, "
+            "exit_price, net and exit_reason; entry_slip_ticks (or trigger_price), replay, fixed and note are "
+            "optional.") in said
+    assert ('AN ORDER THAT DID NOT TRADE where the test did is {"status": "missed" | "rejected"}, with entry_time, '
+            "side and replay when they are known. A field that is not listed is refused.") in said
+    assert props["account"]["type"] == "string" and "Left out: the card's own" in props["account"]["description"]
+
+
 def test_every_chat_is_told_to_use_them():
     srv = protocol.Server(box())
     init = rpc(srv, "initialize", {"protocolVersion": "2025-06-18"})["result"]
     assert ("For a strategy idea use the blueprint_* tools (card, code check, build, lock, test, sim, eval card): "
             "they save everything in the app.") in init["instructions"]
-    assert init["serverInfo"]["version"] == protocol.SERVER_VERSION == "1.3.0"
+    assert init["serverInfo"]["version"] == protocol.SERVER_VERSION == "1.4.0"
     listed = [t["name"] for t in rpc(srv, "tools/list")["result"]["tools"]]
-    assert listed[listed.index("blueprint_card"):listed.index("blueprint_status") + 1] == list(REQUIRED)
+    assert listed[listed.index("blueprint_blocks"):listed.index("blueprint_status") + 1] == list(REQUIRED)
+
+
+def test_every_chat_is_told_their_order_and_that_the_lab_groups_fill_themselves():
+    text = rpc(protocol.Server(box()), "initialize", {"protocolVersion": "2025-06-18"})["result"]["instructions"]
+    assert ("Their order: blueprint_blocks (what an idea can be built from), blueprint_card, blueprint_code_check, "
+            "blueprint_build, blueprint_lock, blueprint_test (once), blueprint_sim, blueprint_eval_card, with "
+            "blueprint_status at any time; they file each idea under its Lab group themselves, so set_group is not "
+            "needed for it.") in text
+    at = [text.index(name) for name in REQUIRED]                        # the order the tools are listed in
+    assert at == sorted(at) and len(set(at)) == 9
 
 
 # ---------------------------------------------------------------- where the toolkit is
@@ -293,6 +387,8 @@ def test_a_missing_toolkit_is_a_plain_error_that_says_it_is_not_installed_yet(mo
 
 def test_each_tool_runs_its_command_as_the_contract_has_it(fake, ideas_root):
     b, end = box(), tail(ideas_root)
+    b.call("blueprint_blocks", {})
+    assert fake.argv() == ["blocks", *end] and fake.calls()[-1]["stdin"] == ""
     b.call("blueprint_card", {"name": NAME, "card": CARD, "settings": SETTINGS})
     assert fake.argv() == ["card", NAME, "--spec=-", *end]
     assert json.loads(fake.calls()[-1]["stdin"]) == {"name": NAME, "card": CARD, "run": SETTINGS}
@@ -320,6 +416,11 @@ def test_each_tool_runs_its_command_as_the_contract_has_it(fake, ideas_root):
     assert fake.argv() == ["eval-card", NAME, *end] and fake.calls()[-1]["stdin"] == ""
     b.call("blueprint_eval_card", {"name": NAME, "fills": FILLS})
     assert fake.argv() == ["eval-card", NAME, "--fills=-", *end]
+    assert json.loads(fake.calls()[-1]["stdin"]) == {"fills": FILLS}
+    b.call("blueprint_eval_card", {"name": NAME, "account": ACCOUNT})                 # the account, as sim passes it
+    assert fake.argv() == ["eval-card", NAME, f"--account={ACCOUNT}", *end] and fake.calls()[-1]["stdin"] == ""
+    b.call("blueprint_eval_card", {"name": NAME, "fills": FILLS, "account": ACCOUNT})
+    assert fake.argv() == ["eval-card", NAME, f"--account={ACCOUNT}", "--fills=-", *end]
     assert json.loads(fake.calls()[-1]["stdin"]) == {"fills": FILLS}
     b.call("blueprint_status", {})
     assert fake.argv() == ["status", *end]
@@ -356,6 +457,8 @@ def test_an_option_cannot_be_smuggled_in_through_a_name_an_id_or_a_reason(fake, 
     assert fake.argv() == ["build", NAME, "--reason=-5 ticks: a tighter stop --json", "--wait=120", *tail(ideas_root)]
     b.call("blueprint_code_check", {"name": NAME, "store": "--looked"})
     assert fake.argv() == ["code-check", NAME, "--store=--looked", *tail(ideas_root)]
+    b.call("blueprint_eval_card", {"name": NAME, "account": "--fills=-"})
+    assert fake.argv() == ["eval-card", NAME, "--account=--fills=-", *tail(ideas_root)]
 
 
 def test_inputs_that_do_not_read_are_refused_before_anything_starts(fake):
@@ -377,6 +480,9 @@ def test_inputs_that_do_not_read_are_refused_before_anything_starts(fake):
         ("blueprint_sim", {"name": NAME, "account": ACCOUNT, "attempts": 3, "fee_budget": "a lot"}, "fee_budget"),
         ("blueprint_eval_card", {"name": NAME, "fills": {"net": 1}}, "fills"),
         ("blueprint_eval_card", {"name": NAME, "fills": ["a fill"]}, "fills"),
+        ("blueprint_eval_card", {"name": NAME, "account": ""}, "account"),
+        ("blueprint_eval_card", {"name": NAME, "fills": FILLS, "account": 7}, "account"),
+        ("blueprint_blocks", {"name": NAME}, "name"),
         ("blueprint_status", {"name": NAME, "job_id": "job-1"}, "either"),
         ("blueprint_lock", {}, "name"), ("blueprint_lock", {"name": NAME, "force": True}, "force")]
     for tool, args, msg in bad_calls:
@@ -404,13 +510,18 @@ def test_the_one_read_needs_an_explicit_yes(fake, ideas_root):
 # ---------------------------------------------------------------- what comes back
 
 def test_the_answer_is_the_toolkits_text_plus_every_pass_fail_line(fake, ideas_root, drafts_dir):
+    assert box().call("blueprint_blocks", {}).splitlines() == [                 # the list as the toolkit wrote it
+        "Blueprint blocks", "THE BLOCKS: what an idea can be built from without writing code",
+        "ENTRY TRIGGERS (settings.family; ONE an idea): 1 runs on the build days", "  orb  the opening range breaks",
+        "WHAT VERSION 1 REFUSES", "  the evening session: it comes later",
+        "Next: Write the idea card from these blocks: bp.py card <name> --spec=-"]
     text = box().call("blueprint_build", {"name": NAME, "reason": "the plain idea, as carded"})
     out = text.splitlines()
     assert out[0] == "Blueprint build · nq_orb_pre · IDEA · phase 2 · round 1"
     for i in range(1, 10):                                                      # each line once: the text had three
         mark = "FAIL" if i == 2 else "n/a " if i == 7 else "PASS"
         assert out.count(f"2.{i} {mark} words about 2.{i}") == 1, i
-    assert "Lines: 7 passed · 1 FAILED (2.2) · 1 does not apply (2.7)" in out
+    assert "Lines: 7 passed · 1 FAILED (2.2) · 1 not judged or does not apply (2.7)" in out
     assert out[-1] == "Next: Round 2 needs a reason."
     assert list(drafts_dir.iterdir()) == [] and list(ideas_root.iterdir()) == []   # not an idea on file: no Lab copy
     text = box().call("blueprint_code_check", {"name": NAME})
@@ -423,8 +534,10 @@ def test_the_answer_is_the_toolkits_text_plus_every_pass_fail_line(fake, ideas_r
     text = box().call("blueprint_sim", {"name": NAME, "account": ACCOUNT, "attempts": 3, "fee_budget": 345.5})
     assert f"account {ACCOUNT}, 3 attempts, fee budget $345.5" in text and "PROVEN ON HISTORY · phase 5" in text
     assert "2 live fills read" in box().call("blueprint_eval_card", {"name": NAME, "fills": FILLS})
+    assert f"0 live fills read for {ACCOUNT}" in box().call("blueprint_eval_card", {"name": NAME, "account": ACCOUNT})
     text = box().call("blueprint_eval_card", {"name": NAME})
-    assert "0 live fills read" in text and "Lines: 4 passed · 0 FAILED · 4 do not apply (6.4, 6.5, 6.6, 6.8)" in text
+    assert "0 live fills read" in text and "6.4 n/a  not judged yet: 6.4" in text.splitlines()   # the line's own words
+    assert "Lines: 4 passed · 0 FAILED · 4 not judged or do not apply (6.4, 6.5, 6.6, 6.8)" in text.splitlines()
     assert box().call("blueprint_status", {}).splitlines() == ["Blueprint status", "2 ideas", "nq_orb_pre: idea",
                                                                "good_idea: lead"]
     assert "locked all the same" in box().call("blueprint_lock", {"name": "noisy_ok"})   # a stray line before the JSON
@@ -466,7 +579,8 @@ def test_a_long_build_returns_its_job_and_the_same_tool_keeps_waiting(fake, idea
     text = b.call("blueprint_build", {"name": "slow_idea", "job_id": "job-slow_idea-1"})        # no reason: it is on file
     assert fake.argv() == ["job", "job-slow_idea-1", "--wait=120", *tail(ideas_root)]
     assert text.splitlines()[0] == "Blueprint build · slow_idea · LEAD · phase 2 · round 1"
-    assert "Lines: 8 passed · 0 FAILED · 1 does not apply (2.7)" in text and "Next: Lock it: blueprint_lock." in text
+    assert "Lines: 8 passed · 0 FAILED · 1 not judged or does not apply (2.7)" in text
+    assert "Next: Lock it: blueprint_lock." in text
     text = b.call("blueprint_build", {"name": "slow_idea", "job_id": "job-stuck", "wait_s": 0})
     assert "job job-stuck is still going (running · table 9 of 12)" in text and "job_id='job-stuck'" in text
     with pytest.raises(ToolError, match="job job-broken failed: the engine stopped: no tape for 2024-03-06"):
@@ -578,10 +692,13 @@ def test_the_server_runs_the_toolkit_over_stdio_and_keeps_its_own_stdin(fake, id
         assert got["id"] == 3 and got["result"]["isError"] is True
         assert got["result"]["content"][0]["text"].startswith("Refused (blueprint lock)")
         assert ask(4, "ping") == {"jsonrpc": "2.0", "id": 4, "result": {}}
+        got = ask(5, "tools/call", {"name": "blueprint_blocks", "arguments": {}})
+        assert got["id"] == 5 and got["result"]["isError"] is False
+        assert got["result"]["content"][0]["text"].startswith("Blueprint blocks\nTHE BLOCKS: what an idea can be built")
     finally:
         p.stdin.close()
         try:
             p.wait(timeout=20)
         except subprocess.TimeoutExpired:
             p.kill()
-    assert [c["stdin"] for c in fake.calls()] == ["", ""]
+    assert [c["stdin"] for c in fake.calls()] == ["", "", ""]

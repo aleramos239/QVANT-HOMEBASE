@@ -446,7 +446,7 @@ def test_no_tool_can_trade():
     names = tools.Toolbox().names()
     assert names == ["list_strategies", "read_strategy", "backtest", "heatmap", "walkforward", "montecarlo",
                      "prop_eval", "list_prop_rules", "list_runs", "get_run", "trades", "show_on_chart",
-                     "cancel", "write_strategy", "delete_draft", "set_group", "blueprint_card",
+                     "cancel", "write_strategy", "delete_draft", "set_group", "blueprint_blocks", "blueprint_card",
                      "blueprint_code_check", "blueprint_build", "blueprint_lock", "blueprint_test", "blueprint_sim",
                      "blueprint_eval_card", "blueprint_status", "desk_status", "desk_journal",
                      "desk_readiness", "data_coverage", "services_health", "account_reconnect",

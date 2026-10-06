@@ -14,7 +14,7 @@ from . import tools
 from .client import ToolError
 
 SERVER_NAME = "homebase"
-SERVER_VERSION = "1.3.0"
+SERVER_VERSION = "1.4.0"
 PROTOCOLS = ("2025-06-18", "2025-03-26", "2024-11-05")
 INSTRUCTIONS = (
     "Homebase Strategy Tester: backtest strategies on real tick data (tick replay, pessimistic fills), "
@@ -23,7 +23,12 @@ INSTRUCTIONS = (
     "return their id after wait_s: call the same tool with that id to keep waiting, or cancel it. Strategy "
     "work follows research/edge-library/BLUEPRINT.md section 2 (skill: strategy-blueprint): read it before "
     "the first run. For a strategy idea use the blueprint_* tools (card, code check, build, lock, test, sim, "
-    "eval card): they save everything in the app. The default range is the build days (2021-09-22 to "
+    "eval card): they save everything in the app. "
+    "Their order: blueprint_blocks (what an idea can be built from), blueprint_card, blueprint_code_check, "
+    "blueprint_build, blueprint_lock, blueprint_test (once), blueprint_sim, blueprint_eval_card, with "
+    "blueprint_status at any time; they file each idea under its Lab group themselves, so set_group is not "
+    "needed for it. "
+    "The default range is the build days (2021-09-22 to "
     "2025-06-30), where all tuning happens. "
     "The test days (2025-07-01 on) are read once and only for a locked strategy, never for a quick look or "
     "\"all data\". At most 2 backtests "
