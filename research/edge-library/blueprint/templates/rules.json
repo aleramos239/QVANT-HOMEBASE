@@ -1,0 +1,310 @@
+{
+ "_about": "Every numbered line of BLUEPRINT.md section 2 (house law since 2026-10-05), keyed by its line number. `text` and `number` are that line's two cells, quoted exactly. `need` = the line's numbers as the code reads them (shares as fractions), `op` = how a value is held against `need` (\"above\" / \"more than\" = >, \"or more\" = >=, \"at most\" / \"or less\" = <=). `also` = a number that comes from a reading of the line, not from its words; `note` says which. A change here is a change of the law: it needs the owner's word. Locked by tests/test_blueprint_rules.py.",
+ "0.1": {
+  "text": "The reason, in one sentence: why it should make money and who is on the losing side",
+  "need": {
+   "sentences": 1
+  }
+ },
+ "0.2": {
+  "text": "The rule: one entry trigger, at most 2 filters, exits from the standard table only",
+  "need": {
+   "entry_triggers": 1,
+   "max_filters": 2,
+   "exits": "standard"
+  }
+ },
+ "0.3": {
+  "text": "Its home: market, session and bar size (or \"all\" when the reason does not single one out)"
+ },
+ "0.4": {
+  "text": "Where else it should work (its neighbors), and one place it should NOT work",
+  "need": {
+   "not_here": 1
+  }
+ },
+ "0.5": {
+  "text": "The main setting and its 3-4 values",
+  "need": {
+   "values": [
+    3,
+    4
+   ]
+  }
+ },
+ "0.6": {
+  "text": "Whether it trades both sides or one side only, and why"
+ },
+ "1.1": {
+  "text": "Every trade is entered inside the stated session window"
+ },
+ "1.2": {
+  "text": "One position at a time, and every trade is flat by 15:58 ET (13:13 on half days)",
+  "need": {
+   "positions": 1,
+   "flat_et": "15:58",
+   "flat_et_half_day": "13:13"
+  }
+ },
+ "1.3": {
+  "text": "The number of trades is what the rule implies (for example, never more than the stated maximum per day)"
+ },
+ "1.4": {
+  "text": "With a stop and a target on, winners pay about the target and losers cost about the stop, in dollars; exceptions are listed",
+  "also": {
+   "within_ticks": 2
+  },
+  "note": "\"about\" = within 2 ticks (toolkit_plan.md section 6, decision 3)"
+ },
+ "1.5": {
+  "text": "10 trades are looked at on the chart (the first 5 and 5 at random): entry and exit sit where the rule says. *(10 is my number; the course gives none)*",
+  "need": {
+   "trades": 10,
+   "first": 5,
+   "random": 5
+  }
+ },
+ "1.6": {
+  "text": "After any change to the code, the earlier trade list is reproduced exactly before a new run counts"
+ },
+ "2.1": {
+  "text": "Most settings make money",
+  "number": "more than 60 % of variants profitable",
+  "need": 0.6,
+  "op": ">",
+  "also": {
+   "profitable_above": 0
+  },
+  "note": "profitable = above $0, for a variant and for the average variant: the judge's test (1) and the dry run of section 3 (funnel.py) also ask the average variant to be profitable"
+ },
+ "2.2": {
+  "text": "The average trade is big enough (net of all variants ÷ their trades)",
+  "number": "NQ $70 · ES $75 · gold $140 or more",
+  "need": {
+   "NQ": 70,
+   "ES": 75,
+   "GC": 140
+  },
+  "op": ">=",
+  "note": "dollars per trade after costs, 1 contract; gold = GC"
+ },
+ "2.3": {
+  "text": "It beats random entries with the same stops and targets",
+  "number": "above 95 % of random tables in round 1; 97.5 %, 98.3 %, 98.75 %, 99 % in rounds 2, 3, 4, 5",
+  "need": {
+   "1": 0.95,
+   "2": 0.975,
+   "3": 0.983,
+   "4": 0.9875,
+   "5": 0.99
+  },
+  "op": ">",
+  "note": "by round; \"above\" is strict (toolkit_plan.md section 6, decision 3); the random tables are control.json"
+ },
+ "2.4": {
+  "text": "Enough trades (average variant)",
+  "number": "200 or more",
+  "need": 200,
+  "op": ">=",
+  "note": "a dry run on fewer months than the build also shows \"on pace\" = need x its months / the build's months"
+ },
+ "2.5": {
+  "text": "Its neighbors agree: the same idea on the next bar sizes and in the other sessions it should fit",
+  "number": "half or more of those tables profitable",
+  "need": 0.5,
+  "op": ">="
+ },
+ "2.6": {
+  "text": "Long and short each make money on their own (an idea that is one-sided by its card is judged on that side)",
+  "number": "both above $0",
+  "need": 0,
+  "op": ">",
+  "note": "all variants together; a table with trades on one side only is judged on that side"
+ },
+ "2.7": {
+  "text": "A filter is kept only if it wins alone: the plain version plus that one filter beats the plain version",
+  "number": "higher average trade, and that round's random bar",
+  "also": {
+   "random_line": "2.3"
+  },
+  "note": "higher average trade than the plain version AND line 2.3 at that round's bar"
+ },
+ "2.8": {
+  "text": "Monte Carlo: it still meets 2.1 and 2.2 in most reshuffled runs",
+  "number": "75 % of the runs or more",
+  "need": 0.75,
+  "op": ">=",
+  "also": {
+   "lines": [
+    "2.1",
+    "2.2"
+   ]
+  },
+  "note": "the runs are montecarlo.json"
+ },
+ "2.9": {
+  "text": "Rounds",
+  "number": "at most 5, each with its reason written before the run",
+  "need": 5,
+  "op": "<="
+ },
+ "3.1": {
+  "text": "Saved: the rule, the variant list, the default variant (the middle survivor, never the best), the control and the costs",
+  "note": "the default = the middle of the variants profitable on build and on build with worse fills (toolkit_plan.md section 6, decision 3)"
+ },
+ "3.2": {
+  "text": "From here nothing changes. A change is a new version: back to phase 2, and its earlier unseen read is marked as used"
+ },
+ "4.1": {
+  "text": "Both parts make money on their own: Jul-Dec 2025 and Jan-Sep 2026",
+  "number": "average variant above $0 in each",
+  "need": 0,
+  "op": ">",
+  "note": "the two parts are ranges.json test.parts"
+ },
+ "4.2": {
+  "text": "The whole test: the average and the middle variant make money",
+  "number": "both above $0",
+  "need": 0,
+  "op": ">",
+  "note": "middle variant = the median (toolkit_plan.md section 6, decision 3)"
+ },
+ "4.3": {
+  "text": "The average trade is still big enough",
+  "number": "NQ $70 · ES $75 · gold $140 or more",
+  "need": {
+   "NQ": 70,
+   "ES": 75,
+   "GC": 140
+  },
+  "op": ">="
+ },
+ "4.4": {
+  "text": "It still beats random entries",
+  "number": "above 95 % of random tables",
+  "need": 0.95,
+  "op": ">"
+ },
+ "4.5": {
+  "text": "It still makes money with worse fills",
+  "number": "2 ticks + 250 ms (+ 100 ms late cancel for two-sided brackets)",
+  "need": {
+   "slip_ticks": 2,
+   "latency_ms": 250,
+   "oco_cancel_ms": 100
+  },
+  "also": {
+   "above": 0
+  },
+  "note": "makes money = the average variant above $0 with these fills (costs.json worse)"
+ },
+ "4.6": {
+  "text": "It still makes money without its 3 best days",
+  "number": "above $0",
+  "need": {
+   "best_days": 3,
+   "above": 0
+  },
+  "note": "read on the average variant (toolkit_plan.md section 6, decision 3)"
+ },
+ "4.7": {
+  "text": "Monte Carlo: it makes money in almost all reshuffled runs of the test period",
+  "number": "90 % of the runs or more (the course's line)",
+  "need": 0.9,
+  "op": ">=",
+  "also": {
+   "above": 0
+  },
+  "note": "makes money = the average variant above $0 in a run; the runs are montecarlo.json"
+ },
+ "5.1": {
+  "text": "Both phases are run: passing the eval, and getting paid on the funded account, each at its own best size from the pre-set size steps",
+  "number": "–"
+ },
+ "5.2": {
+  "text": "Both are read on a \"live is worse\" row, not on the plain backtest",
+  "number": "win rate -5 points and winners -15 % *(the course's middle case; my pick)*",
+  "need": {
+   "win_rate": -0.05,
+   "winners": -0.15
+  }
+ },
+ "5.3": {
+  "text": "The odds are good enough to buy",
+  "number": "The owner's bar of 2026-10-03, until he changes it: eval pass within 10 trading days 60 % or more; maximum payout within 20 trading days 75 % or more",
+  "need": {
+   "eval": {
+    "days": 10,
+    "odds": 0.6
+   },
+   "payout": {
+    "days": 20,
+    "odds": 0.75
+   }
+  },
+  "op": ">="
+ },
+ "5.4": {
+  "text": "Written on the eval card before the first eval: how many attempts, and the total fee budget",
+  "number": "set by the owner for each strategy"
+ },
+ "6.1": {
+  "text": "Live equals the test, every day of the eval: each live trade matches the tester's replay of that day. A mismatch is a bug: it is fixed before the count goes on",
+  "number": "same entry time, same exit reason"
+ },
+ "6.2": {
+  "text": "Stage A, the first days at 1 micro: fills are close to the test",
+  "number": "average entry slip 2 ticks or less; no missed or rejected order",
+  "need": {
+   "micros": 1,
+   "entry_slip_ticks": 2,
+   "missed_or_rejected": 0
+  },
+  "op": "<="
+ },
+ "6.3": {
+  "text": "Stage A is passed after 5 clean trades *(my number)*; then the size goes to the simulator's size",
+  "number": "–",
+  "need": {
+   "clean_trades": 5
+  }
+ },
+ "6.4": {
+  "text": "Stage B, at size, read after 10, 20, 30 and 40 trades: drawdown against the Monte Carlo table of its own history",
+  "number": "under the 75th percentile: carry on · at the 75th: cut size · at the 95th: pause and review",
+  "need": {
+   "after_trades": [
+    10,
+    20,
+    30,
+    40
+   ],
+   "cut_percentile": 75,
+   "pause_percentile": 95
+  }
+ },
+ "6.5": {
+  "text": "Stage B: after 40 trades the average trade holds up",
+  "number": "at least half of history; otherwise pause and review",
+  "need": {
+   "after_trades": 40,
+   "share_of_history": 0.5
+  },
+  "op": ">="
+ },
+ "6.6": {
+  "text": "A pause is a review, not a deletion: has this happened in the test history, can it be explained, is it inside normal behaviour",
+  "number": "three yes: resume · otherwise: retire",
+  "need": {
+   "yes": 3
+  }
+ },
+ "6.7": {
+  "text": "During the eval only the size may change, never the rule",
+  "number": "–"
+ },
+ "6.8": {
+  "text": "A bust inside the drawdown table does not retire the strategy; running out of the attempts in 5.4 does",
+  "number": "–"
+ }
+}

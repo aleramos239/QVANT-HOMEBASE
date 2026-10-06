@@ -1,0 +1,37 @@
+{
+ "_about": "Costs. `floor` = the smallest average trade worth running, in dollars per trade after costs at 1 contract (lines 2.2 and 4.3; it repeats rules.json, and rules.py refuses to load when they differ). `normal` = the fills every table is run with: the engine's own defaults (engine/l2sim.py Costs(): $4.00 commission per round turn, 1 tick of slippage on market and stop fills; latency_ms null = the strategy's own order-placement latency, `placement_ms`). `worse` = the worse fills of line 4.5 (l2sim.STRESS: 2 ticks and 250 ms; plus Costs(oco_cancel_ms = 100), the late cancel of the other side, for two-sided brackets only). `contract` = point value in dollars and tick size per market (l2sim.SPECS). Nothing here is a new number: locked to the engine by tests/test_blueprint_rules.py.",
+ "floor": {
+  "NQ": 70,
+  "ES": 75,
+  "GC": 140
+ },
+ "normal": {
+  "commission_rt": 4.0,
+  "slippage_ticks": 1.0,
+  "latency_ms": null,
+  "strict_limit": false,
+  "guard_ms": 0,
+  "oco_cancel_ms": 0,
+  "placement_ms": 85
+ },
+ "worse": {
+  "slip_ticks": 2.0,
+  "latency_ms": 250,
+  "oco_cancel_ms": 100,
+  "oco_for": "two-sided brackets"
+ },
+ "contract": {
+  "NQ": {
+   "point_value": 20.0,
+   "tick": 0.25
+  },
+  "ES": {
+   "point_value": 50.0,
+   "tick": 0.25
+  },
+  "GC": {
+   "point_value": 100.0,
+   "tick": 0.1
+  }
+ }
+}

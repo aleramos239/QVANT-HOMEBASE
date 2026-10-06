@@ -1,0 +1,49 @@
+{
+ "_about": "The standard exit table: 8 stops x 4 targets = 32 exit cells, the same for every idea (engine/l2sim.py MENU_*, menu(root); run_menus runs every cell with hold = day). Cells in menu order: stops outer (`stop_order`, then the listed values), targets inner. A stop is ATR x (Wilder ATR14 on the idea's bar size), fixed points per market, or percent of the entry price; a target is reward:risk from the stop distance, 0 = no target (the trade runs to its stop or to the flat time). Nobody adds or changes a cell after seeing a result. Locked to the engine by tests/test_blueprint_rules.py.",
+ "text": "Variants = the standard exit table (8 stops × 4 targets) × the 3-4 values of the idea's main setting.",
+ "stop_order": [
+  "atr",
+  "pts",
+  "pct"
+ ],
+ "stops": {
+  "atr": [
+   1.5,
+   3.0
+  ],
+  "pts": {
+   "NQ": [
+    10.0,
+    20.0,
+    30.0,
+    45.0
+   ],
+   "ES": [
+    2.5,
+    5.0,
+    8.0,
+    12.0
+   ],
+   "GC": [
+    2.0,
+    3.0,
+    5.0,
+    7.0
+   ]
+  },
+  "pct": [
+   0.1,
+   0.2
+  ]
+ },
+ "targets_r": [
+  0.0,
+  1.0,
+  2.0,
+  3.0
+ ],
+ "cells": 32,
+ "hold": "day",
+ "flat_et": "15:58",
+ "flat_et_half_day": "13:13"
+}

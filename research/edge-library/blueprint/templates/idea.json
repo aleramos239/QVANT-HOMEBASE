@@ -1,0 +1,37 @@
+{
+ "_about": "The empty idea spec (spec.json of out/blueprint/toolkit_plan.md section 3). `card` = the idea card, written before any run; `_card_lines` says which line of phase 0 each field answers. `run` = the settings, in the format of run_idea.py (its markets, bar sizes and sessions come from the card's home and neighbors, its name and reason from `name` and `why`); `exits` stays \"standard\" (line 0.2) and `filters` holds at most 2 (line 0.2). `main_setting` names the key of `run.params` that carries the 3-4 values (line 0.5). `sides` = \"both\" | \"long\" | \"short\".",
+ "_card_lines": {
+  "why": "0.1",
+  "loser": "0.1",
+  "home": "0.3",
+  "neighbors": "0.4",
+  "not_here": "0.4",
+  "main_setting": "0.5",
+  "sides": "0.6",
+  "sides_why": "0.6"
+ },
+ "name": "",
+ "version": 1,
+ "card": {
+  "why": "",
+  "loser": "",
+  "home": {
+   "market": "",
+   "session": "",
+   "bar": ""
+  },
+  "neighbors": [],
+  "not_here": "",
+  "main_setting": "",
+  "sides": "",
+  "sides_why": ""
+ },
+ "run": {
+  "family": "",
+  "params": {},
+  "fixed": {},
+  "filters": [],
+  "exits": "standard",
+  "limits": {}
+ }
+}

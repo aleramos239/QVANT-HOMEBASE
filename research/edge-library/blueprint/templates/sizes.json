@@ -1,0 +1,18 @@
+{
+ "_about": "The pre-set size steps of phase 5 (line 5.1: the eval and the funded account are each read at their own best size FROM THESE STEPS, never at a size tuned by hand). FIRST VERSION, not confirmed by the owner: change the list here, nowhere else. Sizes are micros (1 micro = 1/10 of the contract the tables are run at: library.MICRO_DIV); a step above an account's own maximum is left out for that account. `stage_a` = the size of the first live days (line 6.2).",
+ "unit": "micros",
+ "micros_per_contract": 10,
+ "steps": [
+  1,
+  2,
+  3,
+  5,
+  7,
+  10,
+  15,
+  20,
+  30,
+  40
+ ],
+ "stage_a": 1
+}

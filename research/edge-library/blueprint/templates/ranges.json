@@ -1,0 +1,33 @@
+{
+ "_about": "The days of BLUEPRINT.md: build (phase 2) and the out-of-sample test (phase 4, one read) with its two parts (line 4.1). Dates are session dates, both ends included. `text` is quoted from BLUEPRINT.md. \"latest\" = the latest complete session of the market (Sep 2026); it is frozen per market in lock.json when an idea is locked. `stored_build` = the OLD build days of the stores on disk (the engine's BUILD, 27 of the law's 45 months): dry runs only, never a blueprint verdict.",
+ "build": {
+  "start": "2021-09-22",
+  "end": "2025-06-30",
+  "months": 45,
+  "text": "22 Sep 2021 → 30 Jun 2025 (45 months, 75 %)"
+ },
+ "test": {
+  "start": "2025-07-01",
+  "end": "latest",
+  "months": 15,
+  "text": "1 Jul 2025 → latest complete session, Sep 2026 (15 months, 25 %), one read",
+  "parts": [
+   {
+    "name": "Jul-Dec 2025",
+    "start": "2025-07-01",
+    "end": "2025-12-31"
+   },
+   {
+    "name": "Jan-Sep 2026",
+    "start": "2026-01-01",
+    "end": "latest"
+   }
+  ]
+ },
+ "stored_build": {
+  "start": "2021-09-22",
+  "end": "2023-12-31",
+  "months": 27,
+  "text": "the dry run 27, not 45"
+ }
+}

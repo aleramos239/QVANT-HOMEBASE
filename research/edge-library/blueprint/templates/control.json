@@ -1,0 +1,7 @@
+{
+ "_about": "The random tables of lines 2.3 and 4.4: the same exits, session and days with random entries (the judge's control c1: judge.c1_table, coupled draws, every seed on disk). `seeds` = the real random-entry seeds the law asks for; a line that rests on fewer is marked THIN (judge.THIN_BELOW). `draws` = random tables drawn from them (judge.DRAWS, in blocks of 200). `text` is quoted from BLUEPRINT.md.",
+ "text": "Random tables = the same exits, session and days with random entries: 4,000 draws from 10 seeds.",
+ "kind": "c1",
+ "seeds": 10,
+ "draws": 4000
+}
