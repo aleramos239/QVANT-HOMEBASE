@@ -8,12 +8,14 @@ code. Plan: out/blueprint/toolkit_plan.md. Front door: ../bp.py. judge.py stays 
   runner.py   THE ONE STORE RUNNER of the build range (2021-09-22 .. 2025-06-30): an idea's table and its 10-seed control
               pool in one tape pass per market and bar size -> runs_bp/
   checks.py   the code check: lines 1.1-1.6 on a store or a plain trades file
+  records.py  THE IDEA'S RECORD in the app's idea folder: the card (lines 0.1-0.6), the build with its counted rounds (the
+              card names the tables; the reason is saved before the run; every line 2.1-2.9 is saved), the status
   jobs.py     long commands as jobs: --wait, a detached child, `bp.py job <id>`
   api.py      each command as a function that returns a JSON-ready dict        cli.py    the command line of bp.py
 
 Built so far (plan section 5): the templates (1), lines 2.1-2.8 and the dry run on stored units (2), the runner, the build on
-the new range and the jobs (4), the code check (the toolkit half of 7). Next: the idea's card and rounds on file (5), lock
-and test (8), sim (9), eval card (10).
+the new range and the jobs (4), the idea's card, its rounds and its status on file (5, the toolkit half of 6), the code
+check (the toolkit half of 7). Next: lock and test (8), sim (9), eval card (10).
 """
 import sys
 from pathlib import Path

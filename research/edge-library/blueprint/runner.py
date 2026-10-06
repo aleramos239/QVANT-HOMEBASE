@@ -224,11 +224,33 @@ def run_build(spec, workers=None, out_dir=None, *, ledger=None, days=None, cells
       {key, kind 'pool' | 'unit' | 'filter', root, tf, cells, stage, path, inputs_hash, skipped, ok, trades, code_same}
     skipped = the store was there with the same inputs (no work); ok False = sessions were dropped by a strategy error: no
     store, an error row in the ledger. Refused before anything runs: module docstring.
+    spec = ONE spec, or A LIST of specs that are one idea (an idea's record: one spec per market and bar size, each with
+    the sessions its card names there; records.engine): checked, refused and run as a whole.
     workers None = default_workers(). out_dir None = runs_bp/, ledger None = ledger.csv. `days` + `cells` = A SMOKE RUN on
     named build days and a few exit cells (the tests): it needs its own out_dir and ledger. progress = a callable told what
     the run is doing. dry = every check, no run: the rows of what is there and what would run (ok None)."""
+    sps = [checked(s) for s in (spec if isinstance(spec, list) else [spec])]
+    todo = list({p["key"]: p for sp in sps for p in parts(sp, cells)}.values())      # (a pool two specs share is one store)
+    return _run(todo, workers, out_dir, ledger, days, cells, progress, block, dry, f"idea {sps[0]['name']}")
+
+
+def cell_trades(spec, key: str, cell: str, sess: str, days=None, workers: int = 1) -> list:
+    """THE FULL TRADE ROWS of ONE cell of a unit in ONE session, run again on the build range (or on the named days of a
+    smoke run): a store keeps a trade's time, net and stop distance, not its prices, and a chart needs the prices. The
+    same engine call as the pass that wrote the store, for one instance -- so it is the same trades (the caller holds them
+    against the store). Nothing is written and nothing is booked: no new cell is tried. Refused: a key or a cell that is
+    not the spec's; a strategy error."""
     sp = checked(spec)
-    return _run(parts(sp, cells), workers, out_dir, ledger, days, cells, progress, block, dry, f"idea {sp['name']}")
+    u = next((u for u in RI.spec_units(sp) if u["key"] == key), None)
+    c = next((c for c in u["grid"] if c["id"] == cell), None) if u else None
+    if c is None:
+        raise J.Refuse(f"{key} cell {cell}: not a cell of {sp['name']}")
+    days = seal([d.isoformat() for d in S.sessions(*S.period(PERIOD), u["root"], allow_holdout=PERIOD)] if days is None else days)
+    res = RM.merge(S.run_many(RI.cell_specs(c, [sess]), period=PERIOD, days=days, root=u["root"], workers=max(1, min(int(workers), S.MAX_WORKERS)),
+                              **dict(getattr(_blocks().WRAPPED[sp["family"]], "SCREEN_RUN", {}))))
+    if res["skipped_by_error"]:
+        raise J.Refuse(f"{key} cell {cell}: sessions were dropped by a strategy error")
+    return [t for t in res["trades"] if S.session_of(t["entry_ms"]) == sess]
 
 
 def run_pools(roots, tfs, workers=None, out_dir=None, *, ledger=None, days=None, cells=None, progress=None, block=None, dry=False) -> list:

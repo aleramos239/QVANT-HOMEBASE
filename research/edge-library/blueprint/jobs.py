@@ -3,8 +3,10 @@ it answers job.state = running and the work goes on in a DETACHED child process;
 back up, by the id alone, and answers with the ORIGINAL command's own result object once it is there.
 
     <ideas root>/_jobs/<id>/        the ideas root = --root, else HOMEBASE_IDEAS_ROOT, else ~/.homebase/ideas
-        job.json      {id, command, name, args, wait, state queued | running | done | error, progress, pid, exit, the times}
-        spec.json     the idea's settings as they were when the job was started (a later edit of the file changes no job)
+        job.json      {id, command, name, args, wait, state queued | running | done | error, progress, pid, exit, the times};
+                      a round of an idea's record keeps the round's settings in `args` (records.start: as they were when
+                      the job was started -- a later edit of the card changes no job)
+        spec.json     a one-table build (--spec-file): the spec as it was when the job was started
         result.json   the command's ONE result object, as `bp.py job <id>` prints it
         log.txt       what the child wrote to stderr (the runner's progress, a traceback)
         pid           the child's process id, written by the parent
@@ -36,7 +38,18 @@ ENV = "HOMEBASE_IDEAS_ROOT"
 FOLDER = "_jobs"
 FINAL = ("done", "error")
 ID = re.compile(r"^\d{8}T\d{6}-[0-9a-f]{6}$")
-COMMANDS = {"build": api.build}                       # the commands that run as jobs (plan section 8: build, test)
+
+
+def _build(**kw) -> dict:
+    """A build as a job: a round of an idea's record (records.run: its arguments name the `idea`), or the one-table build
+    of a spec in run_idea's format (api.build)."""
+    if "idea" in kw:
+        from . import records                       # (records starts jobs: it imports this module)
+        return records.run(**kw)
+    return api.build(**kw)
+
+
+COMMANDS = {"build": _build}                          # the commands that run as jobs (plan section 8: build, test)
 
 
 def root(arg=None) -> Path:
@@ -140,6 +153,20 @@ def _alive(d: Path, job: dict) -> bool:
     except OSError:
         pass
     return True
+
+
+def running(name, root_):
+    """The id of a job of this idea whose process is still at work, or None: one build of an idea at a time (a second one
+    would write the same round). A job that never got a process is not at work."""
+    for f in sorted((root(root_) / FOLDER).glob("*/job.json")):
+        d = f.parent
+        try:
+            job = _load(d)
+        except (OSError, ValueError):
+            continue
+        if job.get("name") == name and job.get("state") not in FINAL and (job.get("pid") or (d / "pid").exists()) and _alive(d, job):
+            return job["id"]
+    return None
 
 
 def wait(job_id, root_, seconds=None) -> dict:

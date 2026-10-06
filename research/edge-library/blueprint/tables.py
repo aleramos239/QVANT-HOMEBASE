@@ -18,6 +18,8 @@ THE BLUEPRINT'S OWN BUILD RANGE (2021-09-22 .. 2025-06-30; the stores runner.py 
                  finds seeds through the judge's index of the four old periods, and a store of the build range lies in
                  none of them. The neighbors are the spec's other tables; a filter is held against the plain table of the
                  same spec (judge.base_test). runner.guard is the seal: nothing after 2025-06-30 is read.
+  place(name, root, tf, sess)   one table of an idea by the place its card names: the average variant of a neighbor (line
+                 2.5 of an idea's record reads the neighbors the CARD names: records.py) or of the place it should not work
 """
 from __future__ import annotations
 
@@ -254,6 +256,17 @@ def against_random(st: dict, u: dict, ts: dict, seeds: dict, what: str) -> dict:
     for sd in sorted(seeds):
         stores.setdefault(J.where(seeds[sd][0]), []).append(sd)
     return {**v, "seeds": sorted(seeds), "stores": stores}
+
+
+def place(name: str, root: str, tf, sess: str, filt=None, out_dir=None) -> dict:
+    """ONE table of an idea by its place -- a market, bar size and session the idea's card names (a neighbor of line 2.5, or
+    the place it should NOT work) -- from the store `<name>[__<filter>]-<ROOT>-tf<tf>` the build wrote: its judged variants,
+    the net of its average variant (None: no variant traded there), how many are profitable. The seal is _open's."""
+    out = RUN.RUNS if out_dir is None else Path(out_dir)
+    st, where = _open(out, RI.unit_key({"name": name}, root, tf, filt))
+    ts = J.table_stats(LB.plateau_units(st, sess)[""])
+    return {"table": f"{root}-tf{tf}-{sess}", "store": where, "variants": ts["cells"], "avg_net": ts["avg_net"], "positive": ts["positive"],
+            "profitable": bool(ts["cells"] and ts["avg_net"] > R.rule("2.1")["also"]["profitable_above"])}
 
 
 def built(spec: dict, home=None, filt=None, out_dir=None, days=None, round_: int = 1) -> dict:

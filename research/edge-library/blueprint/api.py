@@ -5,14 +5,16 @@ connector agreed on (toolkit plan, section 8); cli.py prints it, or its `text`.
    "job", "saved", "error"}         ok false = refused, `error` says why · passed null = the line does not apply
 
   build_stored(unit)        phase 2 as a DRY RUN on the old build days, for a unit whose stores are on disk (plan step 2)
-  build(spec, reason, ...)  phase 2 on the build range: runs what is missing (runner.run_build), then lines 2.1-2.9   (step 4)
+  build(spec, reason, ...)  phase 2 on the build range for ONE table of a spec in run_idea's format that has no record
+                            (`--spec-file`): runs what is missing (runner.run_build), then lines 2.1-2.9          (step 4)
   pools(roots, tfs)         the random-entry control pools of the build range, alone
   code_check(name, ...)     phase 1: lines 1.1-1.6 on a store or a trades file (checks.py); saved as the idea's check.json
                             when the app has the idea on file (homebase/ideastore.py), only printed when it has not
+THE IDEA'S RECORD -- the card (phase 0), the build of an idea with its counted rounds, the status -- is records.py (plan
+steps 5 and 6): `bp.py card`, `bp.py build <name> --reason=...`, `bp.py status`.
 `name` is the IDEA's name, as the connector passes it and as the app files it. A result marked `dry_run` (a dry run on
 stored units, a smoke run on named days) never counts as a verdict: the idea store reads that field.
-Not built yet (plan step 5 on): card, the idea's rounds on file, lock, test, sim, eval-card, status. Until idea records are
-read here, build takes the idea's settings as a spec in the format of run_idea.py (`--spec-file`).
+Not built yet (plan step 8 on): lock, test, sim, eval-card.
 """
 from __future__ import annotations
 
@@ -109,17 +111,20 @@ def headline(d: dict) -> str:
 
 def build(spec, name=None, reason: str = "", home=None, filt=None, round_: int = 1, workers=None, out=None, ledger=None, days=None, cells=None,
           block=None, progress=None, dry: bool = False) -> dict:
-    """`bp.py build <name> --reason=...`: PHASE 2 ON THE BUILD RANGE (2021-09-22 .. 2025-06-30). Runs what is missing of the
-    idea's stores (runner.run_build: its table, its filter tables, the 10-seed control pool; a rerun does no work), then
-    reads lines 2.1 to 2.9 for ONE table of the idea, each as pass or fail with its number -- lines 2.1-2.8 with the line
-    functions of the dry run, the random tables drawn by the judge's own functions from the pool's 10 seeds (tables.built).
+    """`bp.py build <name> --reason=... --spec-file=PATH`: PHASE 2 ON THE BUILD RANGE (2021-09-22 .. 2025-06-30) FOR ONE
+    TABLE of a spec that has no record. (An idea on file is built by records.build: its card names the tables, its folder
+    counts the rounds and keeps the results; nothing of that is read or written here, and no round is counted.) Runs what
+    is missing of the spec's stores (runner.run_build: its table, its filter tables, the 10-seed control pool; a rerun
+    does no work), then reads lines 2.1 to 2.9 for ONE table, each as pass or fail with its number -- lines 2.1-2.8 with
+    the line functions of the dry run, the random tables drawn by the judge's own functions from the pool's 10 seeds
+    (tables.built).
       spec     the idea's settings in the format of run_idea.py: a dict, or the path of its JSON file
       name     the idea (default: the spec's name; a later round's spec may be named <name>_<round>: its stores are its own)
       reason   why this round is run, written before the run: line 2.9. No reason = refused
       home     the table that is judged: <ROOT>-tf<tf>-<session> (default: the spec's first market, bar size and session);
                the spec's other tables are its neighbors (2.5)
       filt     <block>_<side>: judge the table with that ONE filter of the spec on, against the plain table (2.7)
-      round_   1 .. 5: the bar of line 2.3 (the idea's record will count the rounds; until then it is said here)
+      round_   1 .. 5: the bar of line 2.3 (said here: only an idea's record counts its rounds)
       workers, out, ledger, days, cells, block, progress    runner.run_build's (days + cells = a smoke run)
       dry      every refusal that needs no run, then stop: what a job is checked with before it is started
     Beyond the agreed keys: unit, home, filter, spec, reason, days, table, stores, failed, not_applicable, thin, passed,

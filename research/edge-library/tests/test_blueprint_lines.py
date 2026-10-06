@@ -424,13 +424,13 @@ def test_build_stored_command():
                        (["build", "--stored", "no_such_family-NQ-tf5-pm"], "no BUILD store"),
                        (["build", "--stored", "ib-NQ-tf15-nyam:mode=fade"], "no judged variant"),
                        (["build", "--stored"], "expected one argument"), (["build", "--stored", "x", "--no-such-option"], "unrecognized"),
-                       (["card", "x"], "invalid choice"), ([], "required")):
+                       (["lock", "x"], "invalid choice"), ([], "required")):       # (a command that is not built yet)
         rc, txt = _run(argv)
         assert rc == 2 and txt.startswith("REFUSED: ") and word in txt, (argv, txt)
         rc, js = _run(argv + ["--json"])
         d = json.loads(js)
         assert rc == 2 and list(d) == list(CONTRACT) and d["ok"] is False and word in d["error"] and (d["lines"], d["saved"], d["job"]) == ([], [], None), d
-        assert d["phase"] == {"build": 2, "card": 0}.get(d["command"]) and d["command"] == (argv[0] if argv else None) and d["text"] == txt.rstrip("\n")
+        assert d["phase"] == {"build": 2, "lock": 3}.get(d["command"]) and d["command"] == (argv[0] if argv else None) and d["text"] == txt.rstrip("\n")
         n += 1
     # the front door itself, as the connector starts it: one JSON object on stdout, exit 0; a refusal exits 2
     import subprocess

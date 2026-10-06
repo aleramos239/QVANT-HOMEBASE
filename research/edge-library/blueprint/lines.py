@@ -14,6 +14,7 @@ TABLE DATA = a dict. tables.py fills it from a store; a test fills it by hand. A
   months               the months the days cover, when fewer than the build's: 2.4 is then also read "on pace"         2.4
   neighbors            [net of the average variant of each neighbor table]                                          2.5
   long, short, n_long, n_short     net and trades of each side, all variants together                               2.6
+  sides                'both' | 'long' | 'short': what the idea's card says (line 0.6); not given = no card             2.6
   filters              [{"name", "avg_trade", "plain_avg_trade", "p_beat": [...]}]: each filter of the unit against the
                        same strategy without it (or {"name", "why"} when that cannot be read); empty = no filter      2.7
   reason               the reason of this round, as it was written before the run (2.9 also reads `round`)            2.9
@@ -129,15 +130,28 @@ def neighbors(t: dict) -> dict:
 
 
 def sides(t: dict) -> dict:
-    """2.6 Long and short each make money on their own, all variants together. A table with trades on one side only is
-    judged on that side (one-sided by its card); a table without a trade is not met. The number is the weaker side."""
-    need = R.need("2.6")
-    S = [(s, float(t[s])) for s in ("long", "short") if t[f"n_{s}"]]
-    ok = bool(S) and all(R.meets("2.6", net) for _, net in S)
-    text = ("no trade" if not S else f"{S[0][0]} only: {_n(S[0][1], unit='$')}, all variants together (need above {_n(need, unit='$')})" if len(S) == 1
-            else f"long {_n(S[0][1], unit='$')}, short {_n(S[1][1], unit='$')}, all variants together (need both above {_n(need, unit='$')})")
-    return _row("2.6", ok, min(net for _, net in S) if S else None, need, text,
-                **{k: (float if k in ("long", "short") else int)(t[k]) for k in ("long", "short", "n_long", "n_short")})
+    """2.6 Long and short each make money on their own, all variants together; a table without a trade is not met. The
+    number is the weaker side. `sides` = what the idea's card says (line 0.6):
+      'long' | 'short'   one-sided by its card: judged on that side; a trade on the other side is not the card's rule
+      'both'             both sides must make money: a side without a trade made none
+      not given          no card (a dry run on stored units): a table with trades on one side only is judged on that side"""
+    need, card = R.need("2.6"), t.get("sides")
+    usd = lambda v: _n(v, unit="$")  # noqa: E731
+    net = {s: float(t[s]) for s in ("long", "short") if t[f"n_{s}"]}
+    more = {k: (float if k in ("long", "short") else int)(t[k]) for k in ("long", "short", "n_long", "n_short")}
+    if not net:
+        return _row("2.6", False, None, need, "no trade", **more)
+    if card in ("long", "short"):
+        other = "short" if card == "long" else "long"
+        text = f"{card} only by its card: " + (f"{usd(net[card])}, all variants together (need above {usd(need)})" if card in net else "no trade on that side") \
+            + (f"; {more['n_' + other]:,} {other} trades are not the card's rule" if other in net else "")
+        return _row("2.6", card in net and R.meets("2.6", net[card]) and other not in net, net.get(card), need, text, **more)
+    if card == "both" or len(net) == 2:
+        said = ", ".join(f"{s} {usd(net[s])}" if s in net else f"{s}: no trade" for s in ("long", "short"))
+        return _row("2.6", len(net) == 2 and all(R.meets("2.6", v) for v in net.values()), min(net.get(s, 0.0) for s in ("long", "short")), need,
+                    f"{said}, all variants together (need both above {usd(need)})", **more)
+    (s, v), = net.items()
+    return _row("2.6", R.meets("2.6", v), v, need, f"{s} only: {usd(v)}, all variants together (need above {usd(need)})", **more)
 
 
 def filter_alone(t: dict) -> dict:
