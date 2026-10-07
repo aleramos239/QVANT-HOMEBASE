@@ -54,7 +54,7 @@ from .store import ARCHIVE, TickStore, splice_tail
 from .studies import make
 from .tick import SideClassifier, from_row
 from .tester_api import tester_router
-from .tickfeed import SwitchInProgress, TickFeed, session_contract
+from .tickfeed import MD_ENVS, SwitchInProgress, TickFeed, session_contract
 
 STATIC = Path(__file__).resolve().parent.parent / "static"
 PUMP_S = 0.25                 # <= 4 updates a second per chart
@@ -665,15 +665,16 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                         continue
                     rows: list[dict] = []
                     reached = to
-                    pages = min(REFILL_MAX_PAGES, REFILL_BUDGET - feed.budget_used())
+                    fd = feed_other if feed_other is not None and root in feed_other.roots else feed
+                    pages = min(REFILL_MAX_PAGES, REFILL_BUDGET - fd.budget_used())
                     if pages > 0:
                         try:
-                            rows, reached = await refill(feed.ws, contract, frm, to, max_pages=pages,
-                                                           sleep=_paced_sleep, on_request=feed.count_request)
+                            rows, reached = await refill(fd.ws, contract, frm, to, max_pages=pages,
+                                                           sleep=_paced_sleep, on_request=fd.count_request)
                         except Exception as e:  # noqa: BLE001 — the missing stretch becomes a marked gap
                             log(f"{root}: refill failed: {e}")
                     else:
-                        log(f"{root}: refill skipped — md budget {feed.budget_used()}/h")
+                        log(f"{root}: refill skipped — md budget {fd.budget_used()}/h")
                     added = recorder.append(root, contract, rows)
                     if reached > frm:
                         for gd, a, b in split_by_session(root, frm, reached):
@@ -705,6 +706,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
 
     # the feed is built AFTER reseed/_refill exist (it takes _refill as its
     # callback); every function above only touches feed/hub/clock when called
+    feed_other = None           # the second md login's socket (settings "md_other_roots"), live only
     if replay:
         def on_replay(root: str, contract: str, rows: list[dict]) -> None:
             if link is not None:
@@ -760,9 +762,20 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                 feed_kwargs["connect_env"] = md_connect
             if recorder is not None:     # the early rebuild's swap: a gap marker, no refill
                 feed_kwargs["on_gap"] = recorder.mark_gap_span
+            # two logins at once: the markets named in settings ("md_other_roots") ride a second
+            # socket on the OTHER login (the live login has CME only; the eval logins carry CBOT and
+            # COMEX too, without Level 2). Read at start-up; none named = one socket, as before.
+            # Level 2 (Depth) stays on the main socket for every root. Only the main socket's
+            # requests are published below: right while the main login is the live one.
+            other = [r for r in settings_store.other_roots() if r in roots]
+            if other and len(other) < len(roots):
+                other_env = next(e for e in MD_ENVS if e != feed_kwargs["md_env"])
+                feed_other = TickFeed(other, on_live, on_subscribed=_refill,
+                                      **{**feed_kwargs, "md_env": other_env})
             # the tick archive job shares the live login's 180/h: it reads this and subtracts it
             feed_kwargs["usage_path"] = sd / "md_usage.json"
-            feed = TickFeed(roots, on_live, on_subscribed=_refill, **feed_kwargs)
+            feed = TickFeed([r for r in roots if feed_other is None or r not in other],
+                            on_live, on_subscribed=_refill, **feed_kwargs)
         else:
             feed = feed_factory(roots, on_live, on_subscribed=_refill)
     # Level 2 rides the live feed's own md socket; replay builds none of it (no
@@ -781,6 +794,14 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
 
     def status() -> dict:
         st = dict(feed.status())
+        if feed_other is not None:      # the second login's markets: in the one list, its state beside it
+            o = feed_other.status()
+            st["roots"] = {**st["roots"], **o["roots"]}
+            st["md_other"] = {"md": o["md"], "roots": list(feed_other.roots), "connected": o["connected"],
+                              "error": o["error"], "md_mismatch": o["md_mismatch"]}
+            why = o["error"] or o["md_mismatch"]
+            if why and not st.get("error"):
+                st["error"] = f"{' '.join(feed_other.roots)} ({o['md']} login): {why}"
         if chart_error[0] and not st.get("error"):
             st["error"] = f"charts: {chart_error[0]}"   # the charts are frozen: say so
         st["recorder"] = None if recorder is None else {
@@ -948,6 +969,8 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                 start_last[r] = last
                 reseed(r)
         tasks = [asyncio.create_task(pump()), asyncio.create_task(feed.run())]
+        if feed_other is not None:
+            tasks.append(asyncio.create_task(feed_other.run()))
         if not replay:
             tasks.append(asyncio.create_task(repair_loop()))
         if calendar_fetch is not None:
@@ -978,6 +1001,8 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             yield
         finally:
             feed.stop()
+            if feed_other is not None:
+                feed_other.stop()
             if depth is not None:
                 depth.stop()
             if link is not None:
