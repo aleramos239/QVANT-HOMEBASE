@@ -779,12 +779,7 @@ def run_test(name: str, read: dict, spec, key: str, sess: str, variants: list, s
     u = next((x for x in RI.spec_units(sp) if x["key"] == key), None)
     if u is None or sess not in sp["sessions"]:
         raise J.Refuse(f"{key} in session {sess}: not a table of {sp['name']}")
-<<<<<<< HEAD
-    if u["filter"] and _blocks().reads(u["filter"], _blocks().L2_BLOCKS):
-        raise J.Refuse(f"{key}: a Level 2 filter cannot be tested yet: the vendor's Level 2 history ends 2026-07-08 and the test days' table is not built")
-=======
     l2 = _blocks().reads(u["filter"], _blocks().L2_BLOCKS)       # a Level 2 filter reads the test days' table (engine/btfeat.py)
->>>>>>> worktree-agent-af83789c29bdf400d
     root, tf, first = u["root"], u["tf"], R.template("ranges")["test"]["start"]
     try:
         a, b = S._date(first), S._date(end)
