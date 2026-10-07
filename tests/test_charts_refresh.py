@@ -1,5 +1,5 @@
-"""The Data tab's "Refresh data" button (homebase/charts/refresh.py): the broker step, then the Massive
-step when its credentials are set, one run at a time, never in the 9:30 window, cancellable, and
+"""The Data tab's "Refresh data" button (homebase/charts/refresh.py): the Tradovate fetch only (nothing
+bought, no Massive), one run at a time, never in the 9:30 window, cancellable, and
 honest about what failed. The processes are fakes -- the tick job itself is tested in test_ticks.py."""
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ class FakeProc:
             self.hold.set()
 
 
-def manager(tmp_path, codes=(0, 0), env=None, clock=WED_NOON, holds=None, cov=None):
+def manager(tmp_path, codes=(0,), clock=WED_NOON, holds=None, cov=None):
     calls = []
     queue = list(codes)
 
@@ -44,7 +44,6 @@ def manager(tmp_path, codes=(0, 0), env=None, clock=WED_NOON, holds=None, cov=No
         return FakeProc(queue[i], holds[i] if holds else None)
 
     m = R.RefreshManager(tmp_path / "state", python="py", cwd=tmp_path, clock=lambda: clock, popen=popen,
-                         env={"MASSIVE_S3_KEY": "k", "MASSIVE_S3_SECRET": "s"} if env is None else env,
                          coverage_path=cov or tmp_path / "cov.json")
     return m, calls
 
@@ -64,35 +63,28 @@ def test_idle_before_any_click(tmp_path):
     assert m.status() == {"status": "idle"}
 
 
-def test_a_click_runs_the_broker_step_then_the_massive_step(tmp_path):
+def test_a_click_runs_the_tick_job_and_nothing_bought(tmp_path):
     m, calls = manager(tmp_path)
     m.start()
     st = wait_final(m)
     assert st["status"] == "done"
-    assert calls == [["py", "-m", "homebase.ticks"], ["py", "-m", "homebase.ticks", "--fill-from-massive", "--holes"]]
-    assert [s["state"] for s in st["steps"]] == ["done", "done"]
-
-
-def test_without_massive_credentials_that_step_is_skipped_and_says_why(tmp_path):
-    m, calls = manager(tmp_path, env={"PATH": "/bin"})
-    m.start()
-    st = wait_final(m)
-    assert st["status"] == "done" and len(calls) == 1
-    assert st["steps"][1]["state"] == "skipped" and "credentials" in st["steps"][1]["note"]
+    assert calls == [["py", "-m", "homebase.ticks"]]                  # no --fill-from-massive, ever
+    assert [x["state"] for x in st["steps"]] == ["done"]
+    assert "Massive" not in json.dumps(st)
 
 
 def test_a_failed_step_stops_the_run_and_names_it(tmp_path):
-    m, calls = manager(tmp_path, codes=(1, 0))
+    m, calls = manager(tmp_path, codes=(1,))
     m.start()
     st = wait_final(m)
     assert st["status"] == "error" and len(calls) == 1
     assert "Fetch missing ticks" in st["note"] and "exit 1" in st["note"]
-    assert [s["state"] for s in st["steps"]] == ["error", "waiting"]
+    assert [s["state"] for s in st["steps"]] == ["error"]
 
 
 def test_only_one_refresh_at_a_time(tmp_path):
     hold = threading.Event()
-    m, _ = manager(tmp_path, codes=(0,) * 4, holds=[hold, None, None, None])
+    m, _ = manager(tmp_path, codes=(0, 0), holds=[hold, None])
     m.start()
     with pytest.raises(ValueError, match="already running"):
         m.start()
@@ -109,16 +101,16 @@ def test_never_in_the_930_window(tmp_path):
     assert calls == [] and m.status() == {"status": "idle"}
 
 
-def test_cancel_ends_the_running_step_and_skips_the_rest(tmp_path):
+def test_cancel_ends_the_running_job(tmp_path):
     hold = threading.Event()
-    m, calls = manager(tmp_path, holds=[hold, None])
+    m, calls = manager(tmp_path, holds=[hold])
     m.start()
     while not calls:
         time.sleep(0.01)
     m.cancel()
     st = wait_final(m)
     assert st["status"] == "cancelled" and len(calls) == 1
-    assert st["steps"][0]["state"] == "cancelled" and st["steps"][1]["state"] == "waiting"
+    assert st["steps"][0]["state"] == "cancelled"
 
 
 def test_the_finished_status_carries_the_coverage_summary(tmp_path):
@@ -145,7 +137,7 @@ def test_a_missing_binary_is_an_error_not_a_crash(tmp_path):
     def popen(argv, **kw):
         raise FileNotFoundError("py")
     m = R.RefreshManager(tmp_path / "state", python="py", cwd=tmp_path, clock=lambda: WED_NOON, popen=popen,
-                         env={}, coverage_path=tmp_path / "cov.json")
+                         coverage_path=tmp_path / "cov.json")
     m.start()
     assert wait_final(m)["status"] == "error"
 
@@ -155,7 +147,7 @@ def client(tmp_path, **kw):
     app = FastAPI()
     app.include_router(R.refresh_router(lambda request: None, tmp_path / "state", python="py", cwd=tmp_path,
                                         clock=lambda: WED_NOON, popen=lambda argv, **k: FakeProc(),
-                                        env={}, coverage_path=tmp_path / "cov.json", **kw))
+                                        coverage_path=tmp_path / "cov.json", **kw))
     return TestClient(app, base_url="http://localhost:8852")
 
 
@@ -174,7 +166,7 @@ def test_a_second_start_is_409(tmp_path):
     app = FastAPI()
     app.include_router(R.refresh_router(lambda request: None, tmp_path / "state", python="py", cwd=tmp_path,
                                         clock=lambda: WED_NOON, popen=lambda argv, **k: FakeProc(hold=hold),
-                                        env={}, coverage_path=tmp_path / "cov.json"))
+                                        coverage_path=tmp_path / "cov.json"))
     c = TestClient(app, base_url="http://localhost:8852")
     assert c.post("/api/refresh").status_code == 200
     r = c.post("/api/refresh")
@@ -190,7 +182,7 @@ def test_the_post_is_behind_the_write_guard(tmp_path):
     app = FastAPI()
     app.include_router(R.refresh_router(refuse, tmp_path / "state", python="py", cwd=tmp_path,
                                         clock=lambda: WED_NOON, popen=lambda argv, **k: FakeProc(),
-                                        env={}, coverage_path=tmp_path / "cov.json"))
+                                        coverage_path=tmp_path / "cov.json"))
     c = TestClient(app, base_url="http://localhost:8852")
     assert c.post("/api/refresh").status_code == 403
     assert c.post("/api/refresh/cancel").status_code == 403

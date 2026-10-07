@@ -1,33 +1,31 @@
-"""The Settings > Data tab's "Refresh data" button: one click runs the tick archive's repair pass
-and then fills what it cannot, in a SEPARATE process (this service also records live ticks, so a
-fetch that waits out the broker's rate limit must never sit on its event loop).
+"""The Settings > Data tab's "Refresh data" button: one click runs the tick archive's repair pass, in a
+SEPARATE process (this service also records live ticks, so a fetch that waits out the broker's rate limit
+must never sit on its event loop).
 
-  1. ``python -m homebase.ticks``                                  the hourly/nightly job, by hand: fetches from
-                                                                   the broker's history exactly what the archive
-                                                                   and the live recording lack, merges it, then
-                                                                   rewrites the coverage report
-  2. ``python -m homebase.ticks --fill-from-massive --holes``      the holes the broker no longer has, from the
-                                                                   bought flat files -- only when the Massive
-                                                                   credentials are in this service's environment;
-                                                                   otherwise the step is skipped and says so
+    ``python -m homebase.ticks``    the hourly/nightly job, by hand: fetches from Tradovate's tick history
+                                    exactly what the archive and the live recording lack, for every root
+                                    (homebase.ticks.ROOTS), merges it, then rewrites the coverage report
 
-Both are the jobs the launchd schedule already runs (deploy/com.ramosquant.homebase-ticks.plist.template) and
-both take the archive's own lock, so a click during the hourly run waits for nothing and breaks nothing: the run
-in progress does the work and step 1 ends at once. Neither opens an order path -- they only read the broker's
-tick history and write ~/futures_ticks. Step 1 never starts 09:20-09:35 ET (it checks itself), and the button
-refuses then too, saying why, rather than start a run that does nothing.
+Tradovate only -- no bought data (Massive) is touched. What has already left Tradovate's history window
+(it serves from 00:00 UTC of the previous UTC day) cannot be filled by this button; the coverage report
+lists it as "lost".
+
+It is the job the launchd schedule already runs (deploy/com.ramosquant.homebase-ticks.plist.template) and
+takes the archive's own lock, so a click during the hourly run breaks nothing: the run in progress does the
+work and this one ends at once. It never opens an order path -- it only reads the broker's tick history and
+writes ~/futures_ticks. It never starts 09:20-09:35 ET (it checks itself), and the button refuses then too,
+saying why, rather than start a run that does nothing.
 
     <state>/refresh/status.json   {status: idle|running|done|error|cancelled, step, steps: [{key, label, state, note}],
                                    started, finished, coverage?}
-    <state>/refresh/log.txt       both steps' output, appended
+    <state>/refresh/log.txt       the job's output, appended
 
-ONE refresh at a time (start() refuses a second); cancel() ends the running step.
+ONE refresh at a time (start() refuses a second); cancel() ends the running job.
 """
 from __future__ import annotations
 
 import datetime as dt
 import json
-import os
 import subprocess
 import sys
 import threading
@@ -47,21 +45,10 @@ def _now() -> str:
     return dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
 
 
-def massive_ready(env=None) -> bool:
-    """Are the flat-file credentials in the environment? (tickmassive's own rule; never read or printed here.)"""
-    env = os.environ if env is None else env
-    return bool(env.get("MASSIVE_S3_KEY") and env.get("MASSIVE_S3_SECRET"))
-
-
-def plan(python: str, env=None) -> list[dict]:
-    """The steps, in order: {key, label, argv, skip?} -- `skip` is why a step will not run."""
-    steps = [{"key": "broker", "label": "Fetch missing ticks from the broker",
-              "argv": [python, "-m", "homebase.ticks"]},
-             {"key": "massive", "label": "Fill the older holes from Massive",
-              "argv": [python, "-m", "homebase.ticks", "--fill-from-massive", "--holes"]}]
-    if not massive_ready(env):
-        steps[1]["skip"] = "Massive credentials are not set for this service"
-    return steps
+def plan(python: str) -> list[dict]:
+    """The steps, in order: {key, label, argv}. One: Tradovate's tick history, nothing bought."""
+    return [{"key": "broker", "label": "Fetch missing ticks from Tradovate",
+             "argv": [python, "-m", "homebase.ticks"]}]
 
 
 def coverage_summary(path: Path) -> dict | None:
@@ -75,12 +62,12 @@ def coverage_summary(path: Path) -> dict | None:
 class RefreshManager:
     def __init__(self, base: Path, *, python: str | None = None, cwd: Path | None = None,
                  clock: Callable[[], dt.datetime] | None = None, popen=subprocess.Popen,
-                 env=None, coverage_path: Path | None = None):
+                 coverage_path: Path | None = None):
         self.dir = Path(base) / "refresh"
         self.dir.mkdir(parents=True, exist_ok=True)
         self.python, self.cwd = python or sys.executable, Path(cwd) if cwd else repo_root()
         self.clock = clock or (lambda: dt.datetime.now(dt.timezone.utc))
-        self.popen, self.env = popen, env
+        self.popen = popen
         self.coverage_path = coverage_path or state_dir() / "tick_coverage.json"
         self._lock = threading.Lock()
         self._proc = None
@@ -109,11 +96,11 @@ class RefreshManager:
                 raise ValueError("a refresh is already running")
             if in_quiet(self.clock()):
                 raise ValueError("not 09:20–09:35 ET on weekdays (the 9:30 window): refresh after 09:35")
-            steps = plan(self.python, self.env)
+            steps = plan(self.python)
             self._cancelled = False
             self._status = {"status": "running", "step": steps[0]["key"], "started": _now(),
                             "steps": [{"key": s["key"], "label": s["label"],
-                                       "state": "skipped" if s.get("skip") else "waiting", "note": s.get("skip", "")}
+                                       "state": "waiting", "note": ""}
                                       for s in steps]}
             self._save()
         threading.Thread(target=self._run, args=(steps,), daemon=True).start()
@@ -131,8 +118,6 @@ class RefreshManager:
         failed = ""
         with open(self.dir / "log.txt", "ab") as log:
             for s in steps:
-                if s.get("skip"):
-                    continue
                 with self._lock:
                     if self._cancelled:
                         break
