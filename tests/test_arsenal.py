@@ -78,3 +78,24 @@ def test_the_catalog_is_saved_and_kept_while_its_files_do_not_change(tmp_path, m
     (tmp_path / "skills" / "demo" / "SKILL.md").write_text("---\nname: demo\ndescription: Changed.\n---\n", encoding="utf-8")
     assert items(arsenal.get(research, (2, 1), path))["demo"]["words"] == "Changed." and len(calls) == 3, "a skill changed: built again"
     assert arsenal.load(tmp_path / "nothing.json") is None
+
+
+def test_the_blocks_are_read_from_a_named_source_checkout_else_a_clean_worktree_of_main_else_this_one(tmp_path, monkeypatch):
+    from homebase.claude_mcp import blueprint_tools as BT
+    monkeypatch.delenv(BT.ENV_BP, raising=False)
+    monkeypatch.delenv(arsenal.ENV_SRC, raising=False)
+    monkeypatch.setattr(arsenal.paths, "repo_root", lambda: tmp_path / "repo")
+    assert arsenal.research_bp() == tmp_path / "repo" / "research" / "edge-library" / "bp.py", "nothing else there: the app's own toolkit"
+    wt = tmp_path / "repo" / arsenal.SRC_WORKTREE / "research" / "edge-library"
+    wt.mkdir(parents=True)
+    (wt / "bp.py").write_text("", encoding="utf-8")
+    assert arsenal.research_bp() == wt / "bp.py", "a clean worktree of main is read when it is there"
+    monkeypatch.setenv(BT.ENV_BP, str(tmp_path / "other" / "bp.py"))
+    assert arsenal.research_bp() == tmp_path / "other" / "bp.py", "a toolkit named outright wins over the worktree"
+    src = tmp_path / "src" / "research" / "edge-library"
+    src.mkdir(parents=True)
+    (src / "bp.py").write_text("", encoding="utf-8")
+    (src / "blueprint").mkdir()
+    (src / "blueprint" / "x.py").write_text("", encoding="utf-8")
+    monkeypatch.setenv(arsenal.ENV_SRC, str(tmp_path / "src"))
+    assert arsenal.research_bp() == src / "bp.py" and arsenal.research_stamp()[0] == str(src / "bp.py") and arsenal.research_stamp()[2] == 2

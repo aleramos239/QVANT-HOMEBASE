@@ -394,11 +394,11 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         """Every tool we have, with its code: {groups, sources, counts, built, notes} (homebase/arsenal.py). Saved in the app
         (~/.homebase/arsenal.json) and built again only when a file it is made from changes."""
         with code_lock:
-            rs = blueprint_tools.toolkit_stamp()
+            rs = arsenal.research_stamp()
             now = arsenal.stamp(rs)
             if code_cache["body"] is None or code_cache["stamp"] != now:
                 try:
-                    code_cache.update(body=arsenal.get(box.block_code, rs), stamp=now)
+                    code_cache.update(body=arsenal.get(arsenal.research, rs), stamp=now)
                 except Exception as e:      # noqa: BLE001 -- the page says why, whatever broke
                     raise HTTPException(503, str(e)) from None
             return code_cache["body"]

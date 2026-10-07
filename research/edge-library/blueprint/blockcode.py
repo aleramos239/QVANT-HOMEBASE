@@ -379,7 +379,10 @@ def helper_items(src: Sources) -> list:
     import importlib
     out = []
     for mod_name in ("indicators", "zones", "ranges", "levels", "flowtab"):
-        m = importlib.import_module(f"engine.{mod_name}")
+        try:
+            m = importlib.import_module(f"engine.{mod_name}")
+        except ImportError:                              # a checkout from before that module: its helpers are not there to list
+            continue
         for n, f in vars(m).items():
             if inspect.isfunction(f) and f.__module__ == m.__name__ and not n.startswith("_"):
                 doc = (inspect.getdoc(f) or "").strip().splitlines()
