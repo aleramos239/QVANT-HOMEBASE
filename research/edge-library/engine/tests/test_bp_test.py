@@ -275,14 +275,19 @@ def test_the_switch_has_one_caller_in_the_whole_code_base():
     assert len(files) > 100 and S.L / "l2sim.py" in files and S.W / "blueprint" / "runner.py" in files and S.W / "judge.py" in files
     hits = {p: [i for i, ln in enumerate(p.read_text(errors="ignore").splitlines(), 1) if USE.search(ln)] for p in files}
     hits = {p: v for p, v in hits.items() if v}
-    assert set(hits) == {S.L / "l2sim.py", S.W / "blueprint" / "runner.py"}, sorted(str(p) for p in hits)      # the engine, and ONE module outside it
+    assert set(hits) == {S.L / "l2sim.py", S.L / "btfeat.py", S.W / "blueprint" / "runner.py"}, sorted(str(p) for p in hits)      # the engine, the Level-2 test loader, and ONE module outside it
+    # btfeat (the test days' Level-2 table) names the switch for its own loader, and that loader is made by run_test alone -- the build's bpfeat never names it
+    assert S.L / "bpfeat.py" in files and not USE.search((S.L / "bpfeat.py").read_text())
+    made = sorted(str(p.relative_to(S.W)) for p in files if p != S.L / "btfeat.py" and "BtL2Features(" in p.read_text(errors="ignore"))
+    assert made == ["blueprint/runner.py"], made
     # ... and in that module every mention lies inside ONE function: run_test
     src = (S.W / "blueprint" / "runner.py").read_text()
     fn = [n for n in ast.walk(ast.parse(src)) if isinstance(n, ast.FunctionDef) and n.name == "run_test"]
     assert len(fn) == 1 and all(fn[0].lineno <= i <= fn[0].end_lineno for i in hits[S.W / "blueprint" / "runner.py"]), hits[S.W / "blueprint" / "runner.py"]
     body = ast.get_source_segment(src, fn[0])
-    assert 'getattr(S, "ALLOW_BT", None)' in body and body.count("allow_holdout=sw") == 4          # the session list, a missing tape, the volume cache, the passes
+    assert 'getattr(S, "ALLOW_BT", None)' in body and body.count("allow_holdout=sw") == 5          # the session list, a missing tape, the volume cache, the swing bars, the passes
     assert "read_on_file" in body and body.index("read_on_file") < body.index("allow_holdout=sw")   # ... each AFTER the claimed read was looked up
+    assert body.count("BtL2Features(") == 1 and body.index("read_on_file") < body.index("BtL2Features(")      # the Level-2 test loader: made here, after the claim
     # run_test itself is called by the test command alone (blueprint/oos.py), and by nothing else
     callers = sorted(str(p.relative_to(S.W)) for p in files if p.is_relative_to(S.W) and re.search(r"\brun_test\(", p.read_text(errors="ignore")))
     assert callers == ["blueprint/oos.py", "blueprint/runner.py"], callers

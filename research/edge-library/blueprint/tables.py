@@ -323,10 +323,23 @@ def built(spec: dict, home=None, filt=None, out_dir=None, days=None, round_: int
                     if a is not None:               # a table without a judged variant is left out (as in the dry run)
                         t["neighbors"].append(a)
     if f:
-        v = J.base_test(st, _open(out, RI.unit_key(spec, root, tf))[0], u, ts["ids"])
-        name = f"filter {f[0]} {f[1]} against the plain version"
-        t["filters"].append({"name": name, "avg_trade": v["per_trade"], "plain_avg_trade": v["base_per_trade"], "p_beat": []} if "per_trade" in v
-                            else {"name": name, "why": v.get("why")})
+        plain_st = _open(out, RI.unit_key(spec, root, tf))[0]
+        blocks = RUN._blocks()
+
+        def held(name, a_st, a_u, b_st, ids):
+            v = J.base_test(a_st, b_st, a_u, ids)
+            t["filters"].append({"name": name, "avg_trade": v["per_trade"], "plain_avg_trade": v["base_per_trade"], "p_beat": []} if "per_trade" in v
+                                else {"name": name, "why": v.get("why")})
+        held(f"filter {' '.join(f)} against the plain version" if len(blocks.parts(f)) == 1 else
+             f"both filters {' and '.join(' '.join(p) for p in blocks.parts(f))} against the plain version", st, u, plain_st, ts["ids"])
+        if len(blocks.parts(f)) > 1:               # two filters on: each must win alone (against plain), and the pair must beat each one alone
+            for one in blocks.parts(f):
+                su = bp_unit(spec, root, tf, sess, label, one)
+                sst = _open(out, su["key"])[0]
+                _labels(sst, su)
+                sids = J.table_stats(J.table(sst, su))["ids"]
+                held(f"filter {' '.join(one)} alone against the plain version", sst, su, plain_st, sids)
+                held(f"both filters against {' '.join(one)} alone", st, u, sst, ts["ids"])
     t["round"], t["months"] = round_, (R.template("ranges")["build"]["months"] if named is None else None)
     return t
 

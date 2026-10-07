@@ -236,7 +236,7 @@ def test_prep_roots_and_markets():
     assert Z.prep_roots("NQ", "liq", None) == ["NQ"] and Z.prep_roots("ES", "orb", ("swept", "with")) == ["ES"]
     assert Z.prep_roots("NQ", "orb", ("smt", "agree")) == ["NQ", "ES"] and Z.prep_roots("ES", "orb", ("smt", "agree")) == ["ES", "NQ"]
     assert Z.prep_roots("NQ", "orb", ("channel", "with")) == [] and Z.prep_roots("NQ", "orb", None) == []
-    assert B.BLOCK_MARKETS == {"smt": ("NQ", "ES")}
+    assert B.BLOCK_MARKETS == {"smt": ("NQ", "ES"), **{b: ("NQ",) for b in Z.RANGE_BLOCKS}}          # the range blocks are NQ only (tests/test_ranges.py)
     assert {"pdz", "ote", "htf15", "htf60", "smt"} <= set(B.FILTERS)
     for blk in ("pdz", "ote", "htf15", "htf60", "smt"):
         assert all((blk, s) in B.PLAIN for s in B.FILTERS[blk]) and B.Blocks.DEFAULTS[f"f_{blk}"] == "off"

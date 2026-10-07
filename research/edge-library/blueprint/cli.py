@@ -93,6 +93,9 @@ and --json out.
   bp.py blocks                                                            everything an idea can be built from without writing
                                                                              code, one line each, and what version 1 refuses
                                                                              (blocklist.py). Runs nothing
+  bp.py blockcode                                                         the same blocks as a browsable list, each with the code
+                                                                             that implements it, found in the engine's source
+                                                                             (blockcode.py; the Lab's Toolkit view). Runs nothing
   build, pools, lock, test: [--workers=N] (default 8, or 4 while the desk trades)
 A SMOKE RUN (build, pools): --days=d1,d2 --cells=x,y --out=DIR --ledger=FILE = named build days and a few exit cells, into
 its own store folder and ledger; never a verdict (`dry_run` true), never saved as a round, never runs_bp/ or ledger.csv.
@@ -205,10 +208,11 @@ def _parser() -> _Parser:
     e.add_argument("--fills", metavar="-|FILE", help="the live trades of the eval so far, ONE JSON object: - = on stdin, else a file (THE FILLS FORMAT, below)")
     e.add_argument("--account", metavar="ID", help="the account the card stands on (default: the card's own, else the simulator result saved last)")
     bl = add("blocks", "everything an idea can be built from without writing code, and what version 1 refuses")
+    bc = add("blockcode", "the same blocks as a browsable list, each with the code that implements it (the Lab's Toolkit view)")
     for x in (lk, t):
         x.add_argument("--wait", type=float, metavar="S", help="answer within S seconds; past them the work goes on as a job")
         x.add_argument("--workers", type=int, help="worker processes (default: 8, or 4 while the desk trades)")
-    for x in (lk, t, sr, m, pf, e, bl, hm, q):
+    for x in (lk, t, sr, m, pf, e, bl, bc, hm, q):
         x.add_argument("--root", metavar="DIR", help="the app's idea folder (default HOMEBASE_IDEAS_ROOT, else ~/.homebase/ideas)")
         x.add_argument("--json", action="store_true", help="print the result as one JSON object")
     for x in (b, p):
@@ -345,6 +349,9 @@ def main(argv=None) -> int:
         elif a.cmd == "blocks":
             from . import blocklist
             r = blocklist.blocks()
+        elif a.cmd == "blockcode":
+            from . import blockcode
+            r = blockcode.toolkit()
         elif a.cmd in ("heatmap", "mc"):
             from . import quick                      # the two views: they read, and run nothing
             r = quick.heatmap(a.name, a.place, a.round, a.root) if a.cmd == "heatmap" else quick.mc(a.name, a.on, a.root)

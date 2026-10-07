@@ -94,7 +94,7 @@ def built(name, root=None, round_=None) -> dict:
         raise J.Refuse(f"round {n} of {name} has no settings on file (rounds/{n}/spec.json: its store, its plan): its tables cannot be found")
     at = next((s.get("path") for s in b.get("stores") or [] if isinstance(s, dict) and s.get("key") == b.get("home_store")), None)
     return {"dir": d, "round": n, "build": b, "plan": plan, "store": rspec["store"], "family": rspec["run"].get("family"),
-            "filter": tuple(plan["filters"][0].split("_", 1)) if plan.get("filters") else None, "folder": Path(at).parent if at else RUN.RUNS}
+            "filter": tuple(REC.rule_filter(plan).split("_", 1)) if plan.get("filters") else None, "folder": Path(at).parent if at else RUN.RUNS}
 
 
 # ================================================================ the heat map

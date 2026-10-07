@@ -347,9 +347,15 @@ Still to build:
    the chart service.)
 2. Runnable tester drafts: version 1 saves an idea as a RECORD in the Lab (card, settings, verdict), not as code the tester runs.
    Needed before line 6.1 can be checked against a tester replay.
-3. What version 1 refuses: a home of "all", the evening session, two filters at once, exits of its own, clock-time ideas,
-   and the family `va_reclaim`. Level 2 filters (NQ only) can be BUILT but not locked or tested (added 2026-10-06; the vendor's
-   Level 2 history ends 2026-07-08 and the test days' table is not built: the owner decides how their test range ends).
+3. What version 1 refuses: a home of "all", exits of its own and clock-time ideas. The evening session (18:00 the evening before the trade date,
+   held to 15:58 of the trade date) and the family `va_reclaim` run under the blueprint since 2026-10-07 (owner's request).
+   Two filters at once are built (owner's request, 2026-10-07; line 0.2 keeps its limit of 2): a card that names two filters runs the plain table,
+   each filter alone and BOTH on; line 2.7 then asks each filter to beat the plain table AND the pair to beat the plain table and each filter alone
+   (the course's lesson: a pair that wins while one of its two fails alone is rejected).
+   Level 2 filters (NQ only) are built, locked and tested like any other filter (added 2026-10-06): the test days'
+   Level 2 table is built (`engine/btfeat.py`, 2025-07-01 .. 2026-07-07: the vendor's Level 2 history ends there) and a Level 2 idea's
+   frozen test range ends at that table's last day, as a delta idea's ends where the flow file ends. From 2026-06-01 the vendor's file holds
+   the 09:30-15:59 ET minutes only (no evening or overnight book), so a Level 2 idea that trades before 09:30 has no signal on those days.
    Added 2026-10-06 at the owner's request (`bp.py blocks` lists them): the entry trigger `fvg` (fair value gap), the four DELTA
    filter blocks (`delta`, `cumdelta`, `sweep`, `bigorder`: NQ, ES and GC, from the tick order flow; their test range ends where the
    flow file ends), the Level 2 filter blocks (`book`, `depth`, `ahead`, `wall`, `stack`) and, batch 1 of the price-and-trend blocks
@@ -359,7 +365,10 @@ Still to build:
    the entry trigger `liq` (sweep or break of a level) and the filter blocks `level` (near / clear) and `swept` (with / against). Their definitions are the docstring of
    `engine/families/blocks.py` and `engine/families/fvg.py`. Batch 3 (first-guess definitions the owner reviews one by one, `engine/zones.py`): the
    filter blocks `pdz` (premium / discount), `ote` (62-79 % retracement zone), `htf15` / `htf60` (15- and 60-minute EMA trend) and `smt` (NQ against ES
-   divergence; NQ and ES only).
+   divergence; NQ and ES only). Batch 4 (first-guess definitions the owner reviews one by one, `engine/indicators.py`; NQ, ES and GC): `bbw`
+   (Bollinger bandwidth tight / wide), `atrp` (ATR percentile high / low), `er` (efficiency ratio trend / chop), `macd` (histogram with / against),
+   `rsidiv` (RSI divergence with / against), `mfi` (Money Flow Index with / against / extreme_against), `deltadiv` (price against net delta over
+   20 bars, with / against; a delta block, so its test range ends where the flow file ends) and `candle` (displace / engulf / reject).
 4. Then the waiting idea batch (`ideas/specs/r3_*.json`), each idea with its card first.
 
 Version 1.1, built on 2026-10-06 (toolkit and app, locked by tests):
