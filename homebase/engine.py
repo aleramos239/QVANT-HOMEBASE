@@ -100,6 +100,7 @@ class DayState:
     pnl: Optional[float] = None        # gross $, set at exit
     note: str = ""
     entry_qty: int = 0                 # entry contracts filled so far
+    exit_qty: int = 0                  # contracts out again so far (exit fills)
     sl_px: Optional[float] = None      # bars strategies: absolute stop / target
     tp_px: Optional[float] = None
     tp_rr: Optional[float] = None      # bars: TP re-derived from the fill at this RR
@@ -887,14 +888,18 @@ class Engine:
                 return
             if st.status == "live" and ev.symbol and cfg.symbol.upper() in ev.symbol.upper() \
                     and ev.side != st.entry_side:
-                st.status = "done"
-                st.exit_fill = ev.price
-                st.exit_reason = self._grade_exit(st, ev.price)
-                st.pnl = self._gross_pnl(st, cfg)
-                self._save()
-                self.journal("exit_fill", strategy=st.strategy, account=st.account,
-                             reason=st.exit_reason, fill=ev.price, pnl=st.pnl)
-                await self._book_close(st, cfg)
+                # an exit can come in pieces, and before the whole entry is in (gc_nfp 2026-10-02:
+                # 1 contract in, 1 out, then the other 3): keep the AVERAGE exit and stay live
+                # until every contract that went in is out again (_close_if_out)
+                q = int(ev.qty or 0) or max(st.entry_qty - st.exit_qty, 1)
+                if ev.price is not None:
+                    st.exit_fill = (ev.price if st.exit_fill is None or not st.exit_qty else
+                                    (st.exit_fill * st.exit_qty + ev.price * q) / (st.exit_qty + q))
+                st.exit_qty += q
+                if not await self._close_if_out(st, cfg, ad):
+                    self._save()
+                    self.journal("exit_part", strategy=st.strategy, account=st.account,
+                                 fill=ev.price, qty=q, out=st.exit_qty, entered=st.entry_qty)
                 return
         # Nothing matched. An entry fill can beat the placement acks — the
         # order is live at the broker before we know its id — so while this
@@ -1016,7 +1021,29 @@ class Engine:
             return None
         sign = 1 if st.entry_side == "Buy" else -1
         pv = point_value(cfg.symbol) or 0.0
-        return round(sign * (st.exit_fill - st.entry_fill) * pv * st.qty, 2)
+        return round(sign * (st.exit_fill - st.entry_fill) * pv * (st.exit_qty or st.qty), 2)
+
+    async def _close_if_out(self, st: DayState, cfg: StrategyCfg, ad: BrokerAdapter) -> bool:
+        """A live run with exit fills: is the trade over? Only when every contract that went in is
+        out again and the entry order can fill no more. An entry the broker already reads Filled
+        counts whole, though its fill pushes may still be on their way. True = closed and booked."""
+        entered = st.entry_qty
+        if st.entry_qty < st.qty:
+            entry = await ad.get_order_status(self._entry_id(st))
+            if entry in WORKING:
+                return False
+            if entry == "Filled":
+                entered = st.qty
+        if st.exit_qty < entered:
+            return False
+        st.status = "done"
+        st.exit_reason = self._grade_exit(st, st.exit_fill)
+        st.pnl = self._gross_pnl(st, cfg)
+        self._save()
+        self.journal("exit_fill", strategy=st.strategy, account=st.account,
+                     reason=st.exit_reason, fill=st.exit_fill, qty=st.exit_qty, pnl=st.pnl)
+        await self._book_close(st, cfg)
+        return True
 
     # --- daily rules: day_take / day_lock (risk.DayBook) ----------------------------------
     def _fee(self, st: DayState, cfg: StrategyCfg) -> float:
@@ -1765,6 +1792,8 @@ class Engine:
                 self.journal("clock_flat" if flat else "clock_flat_failed",
                              strategy=st.strategy, account=st.account, actions=acts,
                              flat_ms=round((self._perf() - t) * 1000, 1))      # timing only
+            if st.status == "live" and st.exit_qty and ad.connected:
+                await self._close_if_out(st, cfg, ad)   # out, and the rest of the entry was cancelled
             if st.status in ("live", "done") and st.entry_side and ad.connected:
                 await self._guard_sibling(st, cfg, ad)
 

@@ -575,6 +575,65 @@ def test_the_fast_check_closes_a_sibling_that_filled(tmp_path):
     assert "both_filled_emergency" in journal_events(tmp_path)
 
 
+def _events(tmp_path, name):
+    return [json.loads(l) for l in (tmp_path / "journal.jsonl").read_text().splitlines()
+            if json.loads(l)["event"] == name]
+
+
+def test_a_trade_that_fills_and_exits_in_pieces_is_one_whole_trade(tmp_path):
+    """gc_nfp, 2026-10-02: the first push was 1 contract in, the next 1 contract out at the target.
+    The desk called the trade over there, on 1 of its contracts, and never saw the rest. The run
+    stays live until every contract that went in is out again; prices are the averages."""
+    eng, ad, _ = mkengine(tmp_path)
+    st = _place(eng, ad)                                # 3 contracts, entries 24510 / 24490
+    ad.order_status[st.upper_id] = "Working"            # the buy stop is still filling
+    _fill(eng, st, "Buy", 1, 24510.0)
+    _fill(eng, st, "Sell", 1, 24525.0, oid="tp-child")  # one out already
+    assert st.status == "live"                          # not over: two more are coming in
+    assert "exit_fill" not in journal_events(tmp_path)
+    _fill(eng, st, "Buy", 2, 24511.5)                   # the rest of the entry: still counted
+    ad.order_status[st.upper_id] = "Filled"
+    assert st.entry_qty == 3 and round(st.entry_fill, 2) == 24511.0
+    _fill(eng, st, "Sell", 1, 24526.0, oid="tp-child")
+    assert st.status == "live"
+    _fill(eng, st, "Sell", 1, 24527.0, oid="tp-child")
+    assert st.status == "done" and st.exit_reason == "tp"
+    assert st.exit_fill == 24526.0                      # the average exit
+    assert st.pnl == 900.0                              # 15 points x $20 x 3 contracts
+    done = _events(tmp_path, "exit_fill")
+    assert len(done) == 1 and done[0]["qty"] == 3 and done[0]["pnl"] == 900.0
+    assert len(_events(tmp_path, "exit_part")) == 2
+    assert len(_events(tmp_path, "day_booked")) == 1    # the day's book hears of it once
+
+
+def test_an_entry_the_broker_reads_filled_is_whole_before_its_pushes_arrive(tmp_path):
+    """The order already reads Filled while only the first fill push has come through: one contract
+    out is not the end of a three-contract trade."""
+    eng, ad, _ = mkengine(tmp_path)
+    st = _place(eng, ad)
+    _fill(eng, st, "Buy", 1, 24510.0)
+    ad.order_status[st.upper_id] = "Filled"
+    _fill(eng, st, "Sell", 1, 24525.0, oid="tp-child")
+    assert st.status == "live"
+    _fill(eng, st, "Sell", 2, 24525.0, oid="tp-child")
+    assert st.status == "done" and st.pnl == 900.0
+
+
+def test_a_part_filled_entry_whose_rest_is_cancelled_ends_on_the_clock(tmp_path):
+    """1 of 3 in, that 1 out, and the rest of the entry is cancelled later with no more fills:
+    the clock closes the run on what really traded."""
+    eng, ad, _ = mkengine(tmp_path)
+    st = _place(eng, ad)
+    ad.order_status[st.upper_id] = "Working"
+    _fill(eng, st, "Buy", 1, 24510.0)
+    _fill(eng, st, "Sell", 1, 24525.0, oid="tp-child")
+    assert st.status == "live"
+    ad.order_status[st.upper_id] = "Canceled"
+    run(eng.clock_tick())
+    assert st.status == "done" and st.pnl == 300.0      # 15 points x $20 x 1 contract
+    assert len(_events(tmp_path, "exit_fill")) == 1
+
+
 def test_sibling_that_fills_after_the_exit_is_flattened(tmp_path):
     """The sell stop outlived the trade and filled later — a new, unmanaged
     short. The clock must close it and cancel its brackets."""
