@@ -84,6 +84,9 @@ FILTER BLOCKS (FILTERS: block -> side -> the inputs that switch it on)
   ote           in | out            f_ote               the 62-79 % retracement zone of that range's leg
   htf15, htf60  with | against      f_htf15 / f_htf60   the close of the last closed 15- / 60-minute bar against its EMA(20) / EMA(8)
   smt           agree | disagree    f_smt               NQ and ES diverge at a new 3-hour extreme (the last 6 5-minute bars against the 36 before)
+  pdz_move, pdz_swing, pdz_leg   with | against     f_pdz_<range>   premium / discount on the owner's three ranges (NQ only; engine/ranges.py): the move in progress,
+                                    the swing pair, the leg rule; the close must be inside the range
+  ote_move, ote_swing, ote_leg   in | out           f_ote_<range>   the 62-79 % zone of the same three ranges (a leg that points the trade's way)
 
   BATCH 4 BLOCKS (NQ, ES and GC; first-guess definitions written in engine/indicators.py before any result, the owner reviews each; the
         idea's own tf bars, closed bars, at the signal bar's close, since the indicator restart; no signal = both sides blocked)
@@ -151,6 +154,7 @@ import indicators as IND
 import l2ref
 import levels as LV
 import l2sim as S
+import ranges as RG
 import zones as Z
 from l2sim import NS, SESS, _hms
 
@@ -208,6 +212,8 @@ FILTERS = {"volatility": {"high": {"f_dvol": "hi"}, "low": {"f_dvol": "lo"}},
            "htf15": {"with": {"f_htf15": "with"}, "against": {"f_htf15": "against"}},
            "htf60": {"with": {"f_htf60": "with"}, "against": {"f_htf60": "against"}},
            "smt": {"agree": {"f_smt": "agree"}, "disagree": {"f_smt": "disagree"}},
+           **{f"pdz_{k}": {"with": {f"f_pdz_{k}": "with"}, "against": {f"f_pdz_{k}": "against"}} for k in RG.KINDS},
+           **{f"ote_{k}": {"in": {f"f_ote_{k}": "in"}, "out": {f"f_ote_{k}": "out"}} for k in RG.KINDS},
            "rvol": {"high": {"f_rvol": "high"}, "low": {"f_rvol": "low"}, "spike": {"f_rvol": "spike"}},
            "volume": {"high": {"f_cvol": "hi"}, "low": {"f_cvol": "lo"}},
            "news": {"yes": {"f_news": "yes"}, "no": {"f_news": "no"}},
@@ -226,7 +232,7 @@ FILTERS = {"volatility": {"high": {"f_dvol": "hi"}, "low": {"f_dvol": "lo"}},
            "candle": {"displace": {"f_candle": "displace"}, "engulf": {"f_candle": "engulf"}, "reject": {"f_candle": "reject"}},
            **{blk: {side: {f"f_{blk}": side} for side in ("with", "against", "with_big", "against_big")} for blk in FLOW_SERIES}}
 L2_BLOCKS = ("book", "depth", "ahead", "wall", "stack")      # NQ only: they read the Level-2 feature table
-BLOCK_MARKETS = {"smt": ("NQ", "ES")}                        # the other blocks that are not for all three markets (SMT compares NQ with ES)
+BLOCK_MARKETS = {"smt": ("NQ", "ES"), **{b: ("NQ",) for b in Z.RANGE_BLOCKS}}                        # the other blocks that are not for all three markets (SMT compares NQ with ES)
 PLAIN = {("volatility", "high"): "only after a day whose range was above its own 20-day median",
          ("volatility", "low"): "only after a day whose range was at or below its own 20-day median",
          ("momentum", "with"): "only when RSI(14) on the idea's bars points the trade's way (long above 50, short below 50)",
@@ -268,6 +274,11 @@ PLAIN.update({("pdz", "with"): "only when the close is cheap for the trade insid
               ("htf60", "against"): "only when the 60-minute trend points against the trade (EMA(8) of 60-minute closes)",
               ("smt", "agree"): "only when NQ and ES diverge at a new extreme in the trade's favour (a long after exactly one made a new 3-hour low, a short after one made a new high)",
               ("smt", "disagree"): "only when NQ and ES diverge at a new extreme against the trade (a long after exactly one made a new high)"})
+for _k, _w in RG.WORDS.items():
+    PLAIN.update({(f"pdz_{_k}", "with"): f"only when the close is cheap for the trade inside {_w} (a long in the lower half, a short in the upper half)",
+                  (f"pdz_{_k}", "against"): f"only when the close is dear for the trade inside {_w} (a long in the upper half, a short in the lower half)",
+                  (f"ote_{_k}", "in"): f"only when the close is in the 62-79 % retracement zone of {_w}, a leg that points the trade's way",
+                  (f"ote_{_k}", "out"): f"only when {_w} points the trade's way and the close is NOT in its 62-79 % retracement zone"})
 for _n in (20, 50):
     PLAIN[(f"ema{_n}", "with")] = f"only when the close is on the trade's side of the EMA({_n}) of the idea's bars (a long needs it above)"
     PLAIN[(f"ema{_n}", "against")] = f"only when the close is on the other side of the EMA({_n}) of the idea's bars"
@@ -648,6 +659,7 @@ class Blocks:
                 "f_ahead": "off", "f_wall": "off", "f_stack": "off",
                 "f_level": "off", "f_swept": "off", "f_ema20": "off", "f_ema50": "off", "f_vwma": "off", "f_avwap": "off", "f_channel": "off", "f_adx": "off", "f_rvol": "off",
                 "f_pdz": "off", "f_ote": "off", "f_htf15": "off", "f_htf60": "off", "f_smt": "off",
+                **{f"f_pdz_{k}": "off" for k in RG.KINDS}, **{f"f_ote_{k}": "off" for k in RG.KINDS},
                 "f_bbw": "off", "f_atrp": "off", "f_er": "off", "f_macd": "off", "f_rsidiv": "off", "f_mfi": "off", "f_deltadiv": "off", "f_candle": "off",
                 **{f"f_{b}": "off" for b in FLOW_SERIES}}
     SCHEMA = {"stop_mode": ("choice", ("atr", "pts", "struct", "pct", "rng")),
@@ -661,6 +673,7 @@ class Blocks:
               "f_pdz": ("choice", ("off", "with", "against")), "f_ote": ("choice", ("off", "in", "out")),
               "f_htf15": ("choice", ("off", "with", "against")), "f_htf60": ("choice", ("off", "with", "against")),
               "f_smt": ("choice", ("off", "agree", "disagree")),
+              **{f"f_pdz_{k}": ("choice", ("off", "with", "against")) for k in RG.KINDS}, **{f"f_ote_{k}": ("choice", ("off", "in", "out")) for k in RG.KINDS},
               "f_bbw": ("choice", ("off", "tight", "wide")), "f_atrp": ("choice", ("off", "high", "low")), "f_er": ("choice", ("off", "trend", "chop")),
               "f_mfi": ("choice", ("off", "with", "against", "extreme_against")), "f_candle": ("choice", ("off", "displace", "engulf", "reject")),
               **{f"f_{b}": ("choice", ("off", "with", "against")) for b in DIR_BLOCKS},
@@ -903,6 +916,15 @@ class Blocks:
             o = Z.ote(self, sd)
             if o is None or o != (p["f_ote"] == "in"):
                 return False
+        for k in RG.KINDS:
+            if p[f"f_pdz_{k}"] != "off":
+                z = Z.pdz_range(self, k)
+                if z is None or (z == "discount") != ((sd > 0) == (p[f"f_pdz_{k}"] == "with")):
+                    return False
+            if p[f"f_ote_{k}"] != "off":
+                o = Z.ote_range(self, sd, k)
+                if o is None or o != (p[f"f_ote_{k}"] == "in"):
+                    return False
         for blk in Z.HTF:
             mode = p[f"f_{blk}"]
             if mode != "off":
