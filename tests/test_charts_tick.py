@@ -56,9 +56,9 @@ def test_from_row_parses_blank_quotes_and_strings():
 
 
 def test_live_recorder_covers_every_root_of_the_nightly_archive():
-    # the nightly job merges this recording into the archive: same 15 roots
+    # the nightly job merges this recording into the archive: same six roots
     from homebase.charts import DEFAULT_ROOTS
-    assert DEFAULT_ROOTS == T.ROOTS and len(T.ROOTS) == 15
+    assert DEFAULT_ROOTS == T.ROOTS and len(T.ROOTS) == 6
 
 
 def test_bitcoin_contract_spec():

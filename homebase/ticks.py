@@ -79,14 +79,14 @@ ET = ZoneInfo("America/New_York")
 UTC = dt.timezone.utc
 HISTORY_UTC_DAYS = 2        # the feed serves ticks from 00:00 UTC of the previous UTC day (docstring)
 # priority order: if the 08:00 deadline cuts a night short, the important
-# ones are done first. The archive's 15 roots (the Massive backfill's too).
+# ones are done first. The app's six roots (cut from 15 on 2026-10-07; what the archive
+# already holds of the others stays on disk, untouched).
 # Budget: with the live recording, a session costs its two edge pages plus a
-# page or so per gap -- ~30-100 pages a night for all 15. With nothing recorded
-# live, a weekday is ~880 pages (NQ ~150, ES ~310, ZN ~160, CL ~58, RTY ~37,
-# GC ~36, NG ~28, YM ~18, 6E/6J/6B/MBT ~50 together, SI 13, HG 9, BTC 2):
-# ~8.8 h at PAGE_INTERVAL_S of the 14.7 h between 17:20 and 08:00, the first
-# hours (~26 pages, ~16 min) first. What a night leaves, the next runs take.
-ROOTS = ("NQ", "ES", "YM", "RTY", "GC", "SI", "CL", "ZN", "NG", "HG", "6E", "6J", "6B", "BTC", "MBT")
+# page or so per gap -- ~30-100 pages a night for all six. With nothing recorded
+# live, a weekday is ~550 pages (NQ ~150, ES ~310, RTY ~37, GC ~36, YM ~18, SI 13):
+# ~5.5 h at PAGE_INTERVAL_S of the 14.7 h between 17:20 and 08:00, the first
+# hours first. What a night leaves, the next runs take.
+ROOTS = ("NQ", "ES", "YM", "RTY", "GC", "SI")
 ARCHIVE = Path.home() / "futures_ticks"
 PAGE = 4096                 # the feed caps a tick request at about this
 MAX_PAGES = 3000            # ~12M ticks — far above any session
