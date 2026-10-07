@@ -362,7 +362,10 @@ Still to build:
    the entry trigger `liq` (sweep or break of a level) and the filter blocks `level` (near / clear) and `swept` (with / against). Their definitions are the docstring of
    `engine/families/blocks.py` and `engine/families/fvg.py`. Batch 3 (first-guess definitions the owner reviews one by one, `engine/zones.py`): the
    filter blocks `pdz` (premium / discount), `ote` (62-79 % retracement zone), `htf15` / `htf60` (15- and 60-minute EMA trend) and `smt` (NQ against ES
-   divergence; NQ and ES only).
+   divergence; NQ and ES only). Batch 4 (first-guess definitions the owner reviews one by one, `engine/indicators.py`; NQ, ES and GC): `bbw`
+   (Bollinger bandwidth tight / wide), `atrp` (ATR percentile high / low), `er` (efficiency ratio trend / chop), `macd` (histogram with / against),
+   `rsidiv` (RSI divergence with / against), `mfi` (Money Flow Index with / against / extreme_against), `deltadiv` (price against net delta over
+   20 bars, with / against; a delta block, so its test range ends where the flow file ends) and `candle` (displace / engulf / reject).
 4. Then the waiting idea batch (`ideas/specs/r3_*.json`), each idea with its card first.
 
 Version 1.1, built on 2026-10-06 (toolkit and app, locked by tests):

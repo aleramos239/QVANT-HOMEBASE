@@ -287,7 +287,7 @@ def run(idea, root=None, frozen=False, round_=None, heavy=None, workers=None, ou
                         "draw_seed": {"build": J.seed_of(u["uid"], f"{RUN.PERIOD}-c1"), "test": J.seed_of(u["uid"], "test-c1")}},
             "montecarlo": {"runs": mc["runs"], "seed": mc["seed"]},
             "code": code(sp["family"]), "stores": {k: store_hash(folder, k) for k in keys},
-            "test_range": {m: _range(m, m == h["market"], RUN._blocks().reads(filt, RUN._blocks().FLOW_SERIES)) for m in markets}}
+            "test_range": {m: _range(m, m == h["market"], RUN._blocks().reads(filt, RUN._blocks().FLOW_BLOCKS)) for m in markets}}
     lock = json.loads(json.dumps(lock))               # as it will read from disk (plain JSON: a number that is not is refused here)
     lock["hash"] = digest(lock)
     path = IS.write_lock(name, lock, root)
@@ -403,7 +403,7 @@ def early(name, root=None, out=None, draws=None) -> dict:
     except J.Refuse as e:
         why = str(e)
     two = bool(RUN._blocks().BASES[sp["family"]][2])
-    flow = RUN._blocks().reads(filt, getattr(RUN._blocks(), "FLOW_SERIES", ()))      # a delta block: the range ends where its data ends (_range, as in run())
+    flow = RUN._blocks().reads(filt, getattr(RUN._blocks(), "FLOW_BLOCKS", ()))      # a delta block: the range ends where its data ends (_range, as in run())
     pool, ctl, mc, costs = RUN.pool_key(h["market"], h["bar"]), R.template("control"), R.template("montecarlo"), R.template("costs")
     keys = [key, pool] + ([T.bp_unit(sp, h["market"], h["bar"], h["session"])["key"]] if f else [])
     lock = {"name": name, "version": rspec.get("version", 1), "locked_utc": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"), "round": n,
