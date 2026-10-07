@@ -127,7 +127,7 @@ def test_an_up_day_is_sold_at_half_the_move_stop_at_the_high_target_at_the_open(
     assert hms(t["entry_ms"] * 10**6) == "09:36:30"                           # the 09:36 bar's first print through 15020
     # the order rested first at the 09:35 level (15010 = half of 15000..15020), then moved to 15020 at the next close
     assert [(hms(t_), side, px, st_, tp_) for t_, side, px, st_, tp_ in log] == [
-        ("09:35:00", "short", 15010.0, 15020.0, 15000.0), ("09:36:00", "short", 15020.0, 15040.0, 15000.0)]
+        ("09:35:00", "short", 15010.0, 15020.0, None), ("09:36:00", "short", 15020.0, 15040.0, None)]   # (the target is the table's)
 
 
 def test_a_down_day_is_bought_the_mirror_way():
@@ -140,7 +140,8 @@ def test_the_level_is_the_setting_and_the_reward_follows_it():
     for lv, px in ((0.4, 15024.0), (0.6, 15016.0)):                           # the move is 40: 15040 - 0.4 x 40, 15040 - 0.6 x 40
         bars = UP[:6] + [(15040.0, 15040.0, px - 0.25, px - 0.25), (px - 0.25, px - 0.25, 15000.0, 15000.0)]
         tr, log = play({"level": lv}, day(bars))
-        assert len(tr) == 1 and abs(tr[0]["entry_price"] - px) <= 0.5 and abs(tr[0]["sl"] - 15040.0) <= 1.0 and abs(tr[0]["tp"] - 15000.0) <= 1.0
+        assert len(tr) == 1 and abs(tr[0]["entry_price"] - px) <= 0.5 and abs(tr[0]["sl"] - 15040.0) <= 1.0
+        assert abs((tr[0]["entry_price"] - tr[0]["tp"]) - (tr[0]["sl"] - tr[0]["entry_price"])) <= 0.01      # tgt_r 1 = 1 x the stop distance
 
 
 def test_the_stop_at_the_extreme_is_hit_when_the_move_goes_on():
@@ -183,10 +184,15 @@ def test_one_trade_a_day():
     assert len(tr) == 1
 
 
-def test_the_table_cell_does_not_change_the_structure():
+def test_the_table_cells_stop_is_ignored_and_its_target_counts():
     a, _ = play({}, day(UP))
-    b, _ = play({"stop_mode": "pts", "stop_val": 5.0, "tgt_r": 3.0}, day(UP))
+    b, _ = play({"stop_mode": "pts", "stop_val": 5.0}, day(UP))
     assert [(t["entry_price"], t["sl"], t["tp"]) for t in a] == [(t["entry_price"], t["sl"], t["tp"]) for t in b] and a
+    for r in (0.5, 2.0):                              # the target is r x the stop distance from the fill
+        (t,), _ = play({"tgt_r": r}, day(UP))
+        assert abs((t["entry_price"] - t["tp"]) - r * (t["sl"] - t["entry_price"])) <= 0.01
+    (t,), _ = play({"tgt_r": 0.0}, day(UP))            # no target: the trade runs to its stop or the flat time
+    assert t["tp"] is None or t["exit_reason"] != "tp"
 
 
 def test_the_five_minute_bar_reads_the_same_candle():
