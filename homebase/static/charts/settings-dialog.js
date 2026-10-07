@@ -189,8 +189,8 @@ function mount(box, host) {
     const btn = button('btn btn-primary', 'Refresh data'), cancel = button('btn btn-ghost', 'Cancel');
     const line = mk('div', 'set-note');
     const note = mk('div', 'set-note',
-      'Fetches the ticks the archive is missing from Tradovate, for all six markets. By day it takes a limited number of '
-      + 'pages; the hourly and nightly runs finish the rest. What Tradovate no longer has cannot be filled.');
+      'Checks the last 3 days for all six markets, fetches the missing ticks from Tradovate and adds them. '
+      + 'Nothing is replaced. Takes a few minutes; the hourly and nightly runs finish the rest. Old gaps Tradovate no longer has stay missing.');
     cancel.hidden = true;
     line.hidden = true;
     refreshBox = { btn, cancel, line };
