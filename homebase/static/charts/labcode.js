@@ -223,8 +223,8 @@ function bpIdeaLine(i) {
   return [String(i.status || 'idea').replace(/_/g, ' ').toUpperCase(), i.phase == null ? null : `phase ${i.phase}`, i.round ? `round ${i.round}` : null].filter(Boolean).join(' · ');
 }
 
-/* ---- the toolkit's blocks: every block of the blueprint toolkit with the code that implements it ----
-   The server (bp.py blockcode) sends {groups: [{id, title, words, items}], sources: {id: {file, start, end, code}}}; an item is
+/* ---- the arsenal: every tool we have, with the code that implements it (blocks, chat tools, skills, scripts) ----
+   The server (homebase/arsenal.py) sends {groups: [{id, title, words, items}], sources: {id: {file, start, end, code}}}; an item is
    {id, name, sub, words, sides?: [{side, words}], markets, runs, why_not, parts: [{label, src}]}. */
 const tkText = (it) => [it.name, it.sub, it.words, ...(it.sides || []).map((x) => `${x.side} ${x.words}`), ...(it.markets || [])].join(' ').toLowerCase();
 /* The groups that have a block matching every word of the search; with no search, all of them. */
@@ -234,8 +234,8 @@ function tkFilter(groups, q) {
   return groups.map((g) => ({ ...g, items: g.items.filter((it) => { const t = tkText(it); return words.every((w) => t.includes(w)); }) })).filter((g) => g.items.length);
 }
 const tkFind = (groups, id) => { for (const g of groups || []) { const it = g.items.find((x) => x.id === id); if (it) return it; } return null; };
-/* "runs" or "not yet: why" */
-const tkStatus = (it) => (it.runs ? { tone: 'ok', text: 'runs' } : { tone: 'no', text: it.why_not ? `not yet: ${it.why_not}` : 'not yet' });
+/* "runs" or "not yet: why"; null for a tool that is not a thing that runs on the build days (a skill, a script, a chat tool) */
+const tkStatus = (it) => (it.runs == null ? null : it.runs ? { tone: 'ok', text: 'runs' } : { tone: 'no', text: it.why_not ? `not yet: ${it.why_not}` : 'not yet' });
 /* The markets a block is for; '' when it is for none in particular (a limit, a session). */
 const tkMarkets = (it) => (it.markets || []).join(' ');
 /* "engine/zones.py:190–198" (the repository's research folder left out) */
@@ -250,7 +250,7 @@ function tkDedent(code) {
 function tkParts(it, sources) {
   return (it.parts || []).filter((p) => sources && sources[p.src]).map((p, i) => {
     const s = sources[p.src];
-    return { n: i + 1, label: p.label, span: tkSpan(s), file: s.file, start: s.start, end: s.end, lines: s.end - s.start + 1, code: tkDedent(s.code) };
+    return { n: i + 1, label: p.label, span: tkSpan(s), file: s.file, start: s.start, end: s.end, lines: s.end - s.start + 1, plain: !!s.plain, note: s.note || '', code: s.plain ? s.code : tkDedent(s.code) };
   });
 }
 /* The line numbers beside a source, one a line: start .. end. */

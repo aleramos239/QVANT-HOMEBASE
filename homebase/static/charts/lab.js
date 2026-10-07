@@ -61,11 +61,11 @@ async function loadBlueprint() {
   S.bp = r.ok ? r.json : { error: r.status === 404 ? 'The chart service is from before the toolkit: restart it once to see the tools here.' : r.error };
   paintLib();
 }
-/* The toolkit's blocks with their code: read from the engine's source by the toolkit itself (bp.py blockcode), so a new block is here with its code. */
+/* The arsenal: every tool we have with its code, read from the code itself (homebase/arsenal.py), so a new tool is here with its code. */
 async function loadToolkit() {
   if (S.tk && !S.tk.error) return;
-  const r = await send('GET', '/api/tester/blueprint/blocks');
-  S.tk = r.ok ? r.json : { error: r.status === 404 ? 'The chart service is from before the toolkit list: restart it once to see the blocks here.' : r.error };
+  const r = await send('GET', '/api/tester/arsenal');
+  S.tk = r.ok ? r.json : { error: r.status === 404 ? 'The chart service is from before the toolkit list: restart it once to see the arsenal here.' : r.error };
   paintLib();
 }
 async function openKey(key) {
@@ -613,7 +613,7 @@ function paintLib() {
       <div class="lb-gb">${s.rows.map(filed).join('') || '<div class="lb-empty">Move a strategy here from its ⋯</div>'}</div></div>`;
   };
   const top = el.scrollTop;
-  const seg = `<div class="lb-seg" role="tablist" aria-label="What this list shows">${[['lib', 'Strategies'], ['bp', 'Blueprint'], ['tk', 'Toolkit']].map(([v, t]) =>
+  const seg = `<div class="lb-seg" role="tablist" aria-label="What this list shows">${[['lib', 'Strategies'], ['bp', 'Blueprint'], ['tk', 'Arsenal']].map(([v, t]) =>
     `<button role="tab" data-act="view" data-v="${v}" aria-selected="${S.view === v}">${t}</button>`).join('')}</div>`;
   if (S.view === 'bp') { el.innerHTML = `<div class="lb-top">${seg}</div>${blueprintList()}`; el.scrollTop = top; return; }
   if (S.view === 'tk') {
@@ -628,26 +628,27 @@ function paintLib() {
   el.scrollTop = top;
 }
 
-/* ---- the toolkit's blocks in the sidebar ----
-   Every block an idea can be built from, in groups that fold; a click opens its code (read-only). Nothing here runs anything. */
+/* ---- the arsenal in the sidebar ----
+   Every tool we have (blocks, chat tools, skills, scripts), in groups that fold; a click opens its code (read-only). Nothing here runs anything. */
 function toolkitHead() {
   const T = S.tk;
   if (!T || T.error) return '';
   const n = T.groups.reduce((a, g) => a + g.items.length, 0);
-  return `<div class="tk-find"><input id="tkQ" type="search" placeholder="Find a block: ${n} in all" value="${esc(S.tkQ)}" spellcheck="false" autocomplete="off" aria-label="Find a block"></div>`;
+  return `<div class="tk-find"><input id="tkQ" type="search" placeholder="Find a tool: ${n} in all" value="${esc(S.tkQ)}" spellcheck="false" autocomplete="off" aria-label="Find a tool"></div>`;
 }
 function toolkitList() {
   const T = S.tk;
-  if (!T) return '<div class="lb-empty">Loading the blocks…</div>';
+  if (!T) return '<div class="lb-empty">Loading the arsenal…</div>';
   if (T.error) return `<div class="lb-empty">${esc(T.error)}</div>`;
   const groups = C.tkFilter(T.groups, S.tkQ), searching = !!S.tkQ.trim();
-  if (!groups.length) return '<div class="lb-empty">No block matches.</div>';
+  if (!groups.length) return '<div class="lb-empty">Nothing matches.</div>';
   const row = (it) => {
     const st = C.tkStatus(it), mk = C.tkMarkets(it);
     return `<button class="tk-row" data-act="tkblock" data-id="${esc(it.id)}" title="Open its code"><span class="tk-nm"><b>${esc(it.name)}</b></span>
-      <span class="tk-wd">${esc(C.tkClip(it.words))}</span><span class="tk-mt">${it.sub ? `<i>${esc(it.sub)}</i>` : ''}${mk ? `<i>${esc(mk)}</i>` : ''}<i class="${st.tone}">${esc(st.text.length > 40 ? st.text.slice(0, 38) + '…' : st.text)}</i></span></button>`;
+      <span class="tk-wd">${esc(C.tkClip(it.words))}</span><span class="tk-mt">${it.sub ? `<i>${esc(it.sub)}</i>` : ''}${mk ? `<i>${esc(mk)}</i>` : ''}${st ? `<i class="${st.tone}">${esc(st.text.length > 40 ? st.text.slice(0, 38) + '…' : st.text)}</i>` : ''}</span></button>`;
   };
-  return groups.map((g) => {
+  const notes = (T.notes || []).map((n) => `<div class="lb-empty err">${esc(n)}</div>`).join('');
+  return notes + groups.map((g) => {
     const key = `tk:${g.id}`, shut = !searching && folded.has(key);
     return `<div class="lb-g${shut ? ' folded' : ''}"><div class="lb-gh"><button class="lb-sh" data-act="fold" data-g="${esc(key)}" aria-expanded="${!shut}" title="${esc(g.words)}">${ICON_CHEV}<span>${esc(g.title)}</span><i>${g.items.length}</i></button></div>
       <div class="lb-gb">${g.items.map(row).join('')}</div></div>`;
@@ -659,11 +660,11 @@ function codeSheet(id) {
   if (!it) return;
   const parts = C.tkParts(it, S.tk.sources), st = C.tkStatus(it), mk = C.tkMarkets(it);
   const sides = (it.sides || []).map((x) => `<li><b>${esc(x.side)}</b> ${esc(x.words)}</li>`).join('');
-  const d = dialog(`<div class="tk-head"><h2>${esc(it.name)}</h2><span class="tk-mt">${mk ? `<i>${esc(mk)}</i>` : ''}<i class="${st.tone}">${esc(st.text)}</i></span></div>
+  const d = dialog(`<div class="tk-head"><h2>${esc(it.name)}</h2><span class="tk-mt">${mk ? `<i>${esc(mk)}</i>` : ''}${st ? `<i class="${st.tone}">${esc(st.text)}</i>` : ''}</span></div>
     ${sides ? `<ul class="tk-sides">${sides}</ul>` : `<p>${esc(it.words)}</p>`}
     ${parts.length > 1 ? `<div class="tk-jump" role="tablist" aria-label="Parts of its code">${parts.map((p) => `<button data-jump="${p.n}" title="${esc(p.label)}">${p.n}. ${esc(p.label.replace(/\s*\(.*$/, '').replace(/^The check.*/, 'The check'))}</button>`).join('')}</div>` : ''}
     <div class="tk-body">${parts.length ? parts.map((p) => `<section class="tk-part" id="tkp${p.n}"><header><b>${p.n}. ${esc(p.label)}</b><code>${esc(p.span)}</code></header>
-      <div class="tk-code"><pre class="tk-gut" aria-hidden="true">${C.tkGutter(p.start, p.end)}</pre><pre class="tk-src" tabindex="0" aria-label="${esc(p.label)}"><code>${C.highlight(p.code)}</code></pre></div></section>`).join('')
+      <div class="tk-code"><pre class="tk-gut" aria-hidden="true">${C.tkGutter(p.start, p.end)}</pre><pre class="tk-src" tabindex="0" aria-label="${esc(p.label)}"><code>${p.plain ? esc(p.code) : C.highlight(p.code)}</code></pre></div>${p.note ? `<small class="tk-note">${esc(p.note)}</small>` : ''}</section>`).join('')
       : '<p>No code was found for this block.</p>'}</div>
     <div class="acts"><button class="btn btn-outline" data-x="cancel">Close</button></div>`);
   d.classList.add('wide', 'tk-dlg');

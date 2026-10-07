@@ -39,6 +39,7 @@ def c(tmp_path, monkeypatch):
     script.write_text(FAKE, encoding="utf-8")
     monkeypatch.setenv("HOMEBASE_BP", str(script))
     monkeypatch.setenv("HOMEBASE_BP_PYTHON", sys.executable)
+    monkeypatch.setenv("HOMEBASE_ARSENAL", str(tmp_path / "arsenal.json"))      # never the owner's own file
     monkeypatch.setattr(tester_api.Slots, "quiet", lambda self: False)      # not the desk's 9:30 window, whenever the tests run
     return TestClient(app(tmp_path), base_url="http://localhost:8852")
 
@@ -98,19 +99,28 @@ def test_what_the_route_refuses(c, monkeypatch):
     assert c.get("/api/tester/blueprint").status_code == 200                      # looking is always allowed
 
 
-def test_the_lab_lists_the_blocks_with_their_code_and_keeps_the_answer_until_the_toolkit_changes(c, tmp_path):
-    r = c.get("/api/tester/blueprint/blocks")
+def test_the_lab_lists_the_arsenal_and_keeps_the_answer_until_a_file_it_is_made_from_changes(c, tmp_path):
+    r = c.get("/api/tester/arsenal")
     assert r.status_code == 200
     got = r.json()
-    assert set(got) == {"groups", "sources", "counts"} and got["groups"][0]["items"][0]["parts"][0]["src"] in got["sources"]
-    assert c.get("/api/tester/blueprint/blocks").json()["counts"] == {"filters": 1}, "unchanged toolkit files: the kept answer, the toolkit is not asked again"
+    by = {g["id"]: g for g in got["groups"]}
+    assert by["filters"]["items"][0]["parts"][0]["src"] in got["sources"], "the research toolkit's blocks, as its command answered"
+    assert {"tester", "blueprint", "desk", "skills", "scripts"} <= set(by) and got["notes"] == []
+    names = {i["name"] for g in got["groups"] for i in g["items"]}
+    assert {"backtest", "blueprint_blocks", "desk_status"} <= names, "every chat tool is in it"
+    hits = lambda: len((tmp_path / "hits.log").read_text())  # noqa: E731 -- how often the fake toolkit was asked
+    assert c.get("/api/tester/arsenal").status_code == 200 and hits() == 1, "unchanged files: the kept answer, the toolkit is not asked again"
     (tmp_path / "blueprint").mkdir()
     (tmp_path / "blueprint" / "new_block.py").write_text("x = 1\n", encoding="utf-8")
-    assert c.get("/api/tester/blueprint/blocks").json()["counts"] == {"filters": 2}, "a new file in the toolkit: read again"
+    assert c.get("/api/tester/arsenal").status_code == 200 and hits() == 2, "a new file in the toolkit: built again"
 
 
-def test_the_blocks_route_says_why_when_the_toolkit_is_missing(c, monkeypatch, tmp_path):
+def test_the_arsenal_is_saved_in_the_app_and_a_missing_toolkit_leaves_the_other_tools_and_says_so(c, monkeypatch, tmp_path):
+    saved = tmp_path / "arsenal.json"
+    c.get("/api/tester/arsenal")
+    assert json.loads(saved.read_text(encoding="utf-8"))["counts"]["tester"] > 0
     monkeypatch.setenv("HOMEBASE_BP", str(tmp_path / "nowhere" / "bp.py"))
-    r = c.get("/api/tester/blueprint/blocks")
-    assert r.status_code == 503 and "not installed" in r.json()["detail"]
-    assert c.get("/api/tester/blueprint/blocks", headers={"host": "evil.example"}).status_code == 403
+    r = c.get("/api/tester/arsenal")
+    assert r.status_code == 200 and any("not installed" in n for n in r.json()["notes"])
+    assert {g["id"] for g in r.json()["groups"]} >= {"tester", "blueprint", "desk"}
+    assert c.get("/api/tester/arsenal", headers={"host": "evil.example"}).status_code == 403
